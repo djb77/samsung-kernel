@@ -1,0 +1,10 @@
+config EXYNOS_VPU_PLATFORM
+	bool "Select Platform"
+	help
+	  This is a selection of platform
+
+config EXYNOS_VPU_EXYNOS8895
+	bool "Use Exynos8895 platform"
+	depends on EXYNOS_VPU_PLATFORM
+	help
+	  This is a exynos8895 platform

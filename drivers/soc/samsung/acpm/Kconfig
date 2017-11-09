@@ -1,0 +1,33 @@
+#
+# ACPM driver configuration
+#
+
+menuconfig EXYNOS_ACPM
+	bool "ACPM driver support"
+	default n
+	help
+	  Enable ACPM support
+
+if EXYNOS_ACPM
+
+config EXYNOS7570_ACPM
+	bool "EXYNOS7570_ACPM support"
+	default y
+	depends on SOC_EXYNOS7570
+	help
+	  Enable ACPM support
+
+config EXYNOS7270_ACPM
+	bool "EXYNOS7270_ACPM support"
+	default y
+	depends on SOC_EXYNOS7270
+	help
+	  Enable ACPM support
+
+config EXYNOS8895_ACPM
+	bool "EXYNOS8895_ACPM support"
+	default y
+	depends on SOC_EXYNOS8895
+	help
+	  Enable ACPM support
+endif

@@ -1,0 +1,23 @@
+obj-y					+= score-lock.o
+obj-y					+= score-debug-print.o
+obj-y					+= score-fw-queue.o
+obj-y					+= score-utils.o
+#obj-y					+= score-queue.o
+obj-y					+= score-debug.o
+obj-y					+= score-dump.o
+obj-y					+= score-binary.o
+obj-y					+= score-framemgr.o
+obj-y					+= score-interface.o
+obj-y					+= score-memory.o
+obj-y					+= score-vertexmgr.o
+obj-y					+= score-buftracker.o
+obj-y					+= score-vertex.o
+obj-y					+= score-system.o
+obj-y					+= score-sysfs.o
+obj-y					+= score-device.o
+obj-y					+= score-cache-ctrl.o
+obj-y					+= score-profiler.o
+obj-$(CONFIG_EXYNOS_SCORE_PLATFORM)	+= platform/
+
+EXTRA_CFLAGS += -Idrivers/vision/include -Idrivers/vision/score/include
+EXTRA_CFLAGS += -Idrivers/vision/vpu/include

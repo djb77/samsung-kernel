@@ -1,0 +1,16 @@
+config EXYNOS_VPU_INTERFACE
+	bool "Select Interface"
+	help
+	  This is VPU interface
+
+config EXYNOS_VPU_LOOPBACK
+	bool "Use Loopback"
+	depends on EXYNOS_VPU_INTERFACE
+	help
+	  This is loopback device
+
+config EXYNOS_VPU_HARDWARE
+	bool "Use Hardware"
+	depends on EXYNOS_VPU_INTERFACE
+	help
+	  This is hardware device

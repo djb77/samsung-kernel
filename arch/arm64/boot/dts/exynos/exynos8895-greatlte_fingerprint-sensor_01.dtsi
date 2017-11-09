@@ -1,0 +1,95 @@
+/*
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/ {
+	pinctrl@164B0000 {
+		btp_irq: btp-irq {
+			samsung,pins = "gpa1-3";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <1>;
+			samsung,pin-drv = <3>;
+		};
+		btp_irqsleep: btp-irqsleep {
+			samsung,pins = "gpa1-3";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <1>;
+			samsung,pin-drv = <3>;
+		};
+		btp_irqidle: btp-irqidle {
+			samsung,pins = "gpa1-3";
+			samsung,pin-function = <0xf>;
+			samsung,pin-pud = <1>;
+			samsung,pin-drv = <3>;
+		};
+	};
+
+	pinctrl@11430000 {
+		btp_wakeup: btp-wakeup {
+			samsung,pins = "gpj1-6";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+	pinctrl@104D0000 {
+		btp_sleep: btp-sleep {
+			samsung,pins = "gpe7-6";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+		btp_hbm: btp-hbm {
+			samsung,pins = "gpf1-4";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
+	/* SPI USI_0 */
+	spi_2: spi@10440000 {
+		status = "okay";
+		secure-mode;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&spi2_bus>;
+		clocks = <&clock GATE_USI00>, <&clock USI00>;
+		clock-names = "spi", "spi_busclk0";
+
+		vfsspi-spi@0 {
+			compatible = "vfsspi,vfs9xxx";
+			reg = <0>;
+			spi-max-frequency = <13000000>;
+			pinctrl-names = "default", "sleep", "idle";
+			pinctrl-0 = <&btp_irq &btp_wakeup &btp_sleep &btp_hbm>;
+			pinctrl-1 = <&btp_irqsleep>;
+			pinctrl-2 = <&btp_irqidle>;
+
+			gpio-controller;
+			#gpio-cells = <2>;
+
+			vfsspi-drdyPin = <&gpa1 3 0x00>;
+			vfsspi-wakeupPin = <&gpj1 6 0x00>;
+			vfsspi-sleepPin = <&gpe7 6 0x00>;
+			vfsspi-hbmPin = <&gpf1 4 0x00>;
+			vfsspi-wog = <1>;
+			vfsspi-chipid = "CPID";
+			controller-data {
+				cs-gpio = <&gpd1 2 0>;
+				samsung,spi-feedback-delay = <0>;
+				samsung,spi-chip-select-mode = <1>;
+			};
+		};
+	};
+};
