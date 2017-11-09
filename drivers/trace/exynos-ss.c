@@ -1038,6 +1038,9 @@ int exynos_ss_post_reboot(void)
 	pr_emerg("exynos-snapshot: normal reboot done\n");
 
 	exynos_ss_save_context(NULL);
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_reboot_handler();
+#endif
 	flush_cache_all();
 
 	return 0;
@@ -2095,9 +2098,6 @@ static int exynos_ss_reboot_handler(struct notifier_block *nb,
 		return 0;
 
 	pr_emerg("exynos-snapshot: normal reboot starting\n");
-#ifdef CONFIG_SEC_DEBUG
-	sec_debug_reboot_handler();
-#endif
 
 	return 0;
 }

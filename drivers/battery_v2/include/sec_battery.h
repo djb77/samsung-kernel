@@ -109,6 +109,7 @@
 #define BATT_MISC_EVENT_TIMEOUT_OPEN_TYPE	0x00000004
 #define BATT_MISC_EVENT_BATT_RESET_SOC		0x00000008
 
+#define SEC_INPUT_VOLTAGE_0V	0
 #define SEC_INPUT_VOLTAGE_5V	5
 #define SEC_INPUT_VOLTAGE_9V	9
 #define SEC_INPUT_VOLTAGE_10V	10
@@ -233,6 +234,11 @@ struct sec_battery_info {
 	struct cisd cisd;
 	bool skip_cisd;
 	bool usb_overheat_check;
+	int prev_volt;
+	int prev_temp;
+	int prev_jig_on;
+	int enable_update_data;
+	int prev_chg_on;
 #endif
 
 	/* battery check */
@@ -261,6 +267,7 @@ struct sec_battery_info {
 	unsigned int chg_limit_recovery_cable;
 	unsigned int vbus_chg_by_siop;
 	unsigned int mix_limit;
+	unsigned int vbus_limit;
 
 	/* temperature check */
 	int temperature;	/* battery temperature */
@@ -602,6 +609,8 @@ enum {
 	CISD_WIRE_COUNT,
 	CISD_WC_DATA,
 	CISD_WC_DATA_JSON,
+	PREV_BATTERY_DATA,
+	PREV_BATTERY_INFO,
 #endif
 #if defined(CONFIG_BATTERY_SBM_DATA)
 	SBM_DATA,

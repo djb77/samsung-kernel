@@ -327,12 +327,21 @@ int fimc_is_devicemgr_stop(struct fimc_is_devicemgr *devicemgr,
 {
 	int ret = 0;
 	struct fimc_is_group *group = NULL;
+	struct fimc_is_group *child_group;
 	struct fimc_is_device_sensor *sensor;
+	u32 stream;
+	int i;
 
 	switch (type) {
 	case FIMC_IS_DEVICE_SENSOR:
 		sensor = (struct fimc_is_device_sensor *)device;
 		group = &sensor->group_sensor;
+		child_group = GET_HEAD_GROUP_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, group);
+		stream = group->instance;
+
+		if (sensor->ischain && child_group)
+			for (i = 0; i < TAG_DATA_MAX; i++)
+				tasklet_kill(&devicemgr->tasklet_sensor_tag[stream][i]);
 
 		if (!test_bit(FIMC_IS_SENSOR_DRIVING, &sensor->state) && sensor->ischain) {
 			ret = fimc_is_ischain_stop_wrap(sensor->ischain, group);

@@ -958,7 +958,7 @@
 				"+USB:OPEN",
 				"+CDP:OPEN",
 				"+Undefined Charging:XXX";
-		muic,afcmode-tx = /bits/ 8 <0x46>;
+		muic,afcmode-tx = /bits/ 8 <0x08>;
 		muic,qc-hv = /bits/ 8 <0x9>;
 	};
 

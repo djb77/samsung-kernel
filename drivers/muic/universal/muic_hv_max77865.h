@@ -239,6 +239,8 @@ extern void max77865_hv_muic_adcmode_oneshot(struct hv_data *phv);
 extern void max77865_muic_prepare_afc_charger(struct hv_data *phv);
 extern bool max77865_muic_check_change_dev_afc_charger
 	(struct hv_data *phv, muic_attached_dev_t new_dev);
+extern void max77865_hv_muic_connect_start(struct hv_data *phv);
+extern void hv_muic_chgdet_ready(struct hv_data *phv);
 
 #endif /* __MAX77865_MUIC_HV_H__ */
 

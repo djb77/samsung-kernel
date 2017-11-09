@@ -40,6 +40,7 @@
 #include "muic_i2c.h"
 #include "muic_vps.h"
 #include "muic_apis.h"
+#include "muic_regmap.h"
 
 #include "muic_hv.h"
 #include "muic_hv_max77865.h"
@@ -50,6 +51,7 @@
 
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
 #include "muic_ccic.h"
+#include <linux/ccic/s2mm005.h>
 #endif
 
 static bool debug_en_checklist = false;
@@ -827,6 +829,10 @@ muic_attached_dev_t hv_muic_check_id_err
 
 	switch(new_dev) {
 	case ATTACHED_DEV_TA_MUIC:
+#if !defined(CONFIG_SEC_FACTORY) && defined(CONFIG_MUIC_SUPPORT_CCIC)
+		if (phv->pmuic->is_ccic_afc_enable == Rp_Abnormal)
+			goto out;
+#endif
 		pr_info("%s:%s cannot change HV(%d)->TA(%d)!\n", MUIC_DEV_NAME,
 			__func__, phv->attached_dev, new_dev);
 		after_new_dev = phv->attached_dev;
@@ -1163,6 +1169,36 @@ void max77865_hv_muic_adcmode_oneshot(struct hv_data *phv)
 	max77865_hv_muic_adcmode_switch(phv, false);
 }
 
+void max77865_hv_muic_connect_start(struct hv_data *phv)
+{
+	pr_info("%s:%s\n", MUIC_HV_DEV_NAME, __func__);
+
+	phv->attached_dev = ATTACHED_DEV_AFC_CHARGER_PREPARE_MUIC;
+
+	/* update MUIC's attached_dev */
+	phv->pmuic->attached_dev = phv->attached_dev;
+
+	max77865_hv_muic_adcmode_always_on(phv);
+	max77865_hv_muic_set_afc_after_prepare(phv);
+	phv->afc_count = 0;
+	phv->is_afc_handshaking = false;
+	/*
+	 * HW Issue(MPing miss)
+	 * check HV state values after 2000ms(2s)
+	 */
+	schedule_delayed_work(&phv->hv_muic_mping_miss_wa,
+			msecs_to_jiffies(MPING_MISS_WA_TIME));
+
+#if defined(CONFIG_MUIC_NOTIFIER)
+	muic_notifier_attach_attached_dev(phv->attached_dev);
+#endif
+
+#if defined(CONFIG_MUIC_SUPPORT_CCIC)
+	if (phv->pmuic->opmode & OPMODE_CCIC)
+		muic_set_legacy_dev(phv->pmuic, phv->attached_dev);
+#endif
+}
+
 static int max77865_hv_muic_handle_attach
 		(struct hv_data *phv, const muic_afc_data_t *new_afc_data)
 {
@@ -1192,14 +1228,21 @@ static int max77865_hv_muic_handle_attach
 
 	switch (new_afc_data->function_num) {
 	case FUNC_TA_TO_PREPARE:
-		max77865_hv_muic_adcmode_always_on(phv);
-		max77865_hv_muic_set_afc_after_prepare(phv);
-		phv->afc_count = 0;
-		phv->is_afc_handshaking = false;
-		/* HW Issue(MPing miss)
-		 * check HV state values after 2000ms(2s) */
-		schedule_delayed_work(&phv->hv_muic_mping_miss_wa,
-				msecs_to_jiffies(MPING_MISS_WA_TIME));
+#if defined(CONFIG_SEC_FACTORY) || !defined(CONFIG_MUIC_SUPPORT_CCIC)
+		pr_info("%s: FACTORY 9V HV Charging Start!\n", __func__);
+		phv->tx_data = MUIC_HV_9V;
+		max77865_hv_muic_connect_start(phv);
+#else
+		if (phv->pmuic->is_ccic_afc_enable == Rp_56K) {
+			pr_info("%s: 9V HV Charging Start!\n", __func__);
+			phv->tx_data = MUIC_HV_9V;
+			max77865_hv_muic_connect_start(phv);
+		} else {
+			pr_info("%s:%s First check PREPARE! AFC 5V noti.\n", MUIC_HV_DEV_NAME, __func__);
+			new_dev = ATTACHED_DEV_AFC_CHARGER_5V_MUIC;
+			noti = true;
+		}
+#endif
 		break;
 	case FUNC_PREPARE_TO_PREPARE_DUPLI:
 		/* attached_dev is changed. MPING Missing did not happened
@@ -2188,10 +2231,16 @@ void hv_muic_change_afc_voltage(muic_data_t *pmuic, int tx_data)
 int muic_afc_set_voltage(int vol)
 {
 	muic_data_t *pmuic = hv_afc.pmuic;
+	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
 
 	if (is_hv_cable(pmuic)) {
-		if (vol == 5) {
-			hv_muic_change_afc_voltage(pmuic, MUIC_HV_5V);			
+		if (vol == 0) {
+			pr_info("%s: TSUB too hot. Chgdet Re-run.\n", __func__);
+			hv_muic_chgdet_ready(pmuic->phv);
+			if (pvendor && pvendor->run_chgdet)
+				pvendor->run_chgdet(pmuic->regmapdesc, 1);
+		} else if (vol == 5) {
+			hv_muic_change_afc_voltage(pmuic, MUIC_HV_5V);
 		} else if (vol == 9) {
 			hv_muic_change_afc_voltage(pmuic, MUIC_HV_9V);
 		} else {
@@ -2467,6 +2516,10 @@ bool hv_do_predetach(struct hv_data *phv, int mdev)
 	pr_info("%s:%s\n", __func__, MUIC_HV_DEV_NAME);
 
 	noti = max77865_muic_check_change_dev_afc_charger(phv, mdev);
+#if !defined(CONFIG_SEC_FACTORY) && defined(CONFIG_MUIC_SUPPORT_CCIC)
+	if (phv->pmuic->is_ccic_afc_enable == Rp_Abnormal)
+		noti = true;
+#endif
 
         if (noti) {
                 max77865_muic_set_afc_ready(phv, false);
@@ -2518,4 +2571,25 @@ void hv_set_afc_by_user(struct hv_data *phv, bool onoff)
 		hv_muic_change_afc_voltage(phv->pmuic, MUIC_HV_9V);
 	else
 		hv_muic_change_afc_voltage(phv->pmuic, MUIC_HV_5V);
+}
+
+void hv_muic_chgdet_ready(struct hv_data *phv)
+{
+	struct i2c_client *i2c = phv->i2c;
+	u8 val = 0;
+	u8 before, after;
+
+	before = muic_i2c_read_byte(i2c, MAX77865_MUIC_REG_CONTROL2_BC);
+	val |= (0x0 << BC_CONTROL2_DPDRV_SHIFT) |
+			(MAX77865_ENABLE_BIT << BC_CONTROL2_DPDNMAN_SHIFT);
+	max77865_hv_muic_write_reg(i2c, MAX77865_MUIC_REG_CONTROL2_BC, val);
+	after = muic_i2c_read_byte(i2c, MAX77865_MUIC_REG_CONTROL2_BC);
+	pr_info("%s:%s BCCTL2:[0x%02x]->[0x%02x]\n", MUIC_HV_DEV_NAME, __func__, before, after);
+
+	before = muic_i2c_read_byte(i2c, MAX77865_MUIC_REG_HVCONTROL2);
+	max77865_hv_muic_write_reg(i2c, MAX77865_MUIC_REG_HVCONTROL2, 0x00);
+	after = muic_i2c_read_byte(i2c, MAX77865_MUIC_REG_HVCONTROL2);
+	pr_info("%s:%s HVCTL2:[0x%02x]->[0x%02x]\n", MUIC_HV_DEV_NAME, __func__, before, after);
+
+	mdelay(80);
 }
