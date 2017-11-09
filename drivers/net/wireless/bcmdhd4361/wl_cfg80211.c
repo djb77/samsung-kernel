@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.c 711073 2017-07-16 11:30:33Z $
+ * $Id: wl_cfg80211.c 716279 2017-08-17 10:35:50Z $
  */
 /* */
 #include <typedefs.h>
@@ -12298,7 +12298,7 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 				}
 
 				WL_ERR(("wl_bss_connect_done succeeded with "
-					MACDBG " %s%s\n", MAC2STRDBG((const u8 *)(&e->addr)),
+					MACDBG " %s%s\n", MAC2STRDBG((const u8*)(&e->addr)),
 					vndr_oui_num > 0 ? "vndr_oui: " : "",
 					vndr_oui_num > 0 ? vndr_oui : ""));
 
@@ -17589,7 +17589,7 @@ static void wl_update_hidden_ap_ie(struct wl_bss_info *bi, const u8 *ie_stream, 
 {
 	u8 *ssidie;
 	int32 ssid_len = MIN(bi->SSID_len, DOT11_MAX_SSID_LEN);
-	int32 remaining_ie_buf_len, available_buffer_len;
+	int32 remaining_ie_buf_len, available_buffer_len, unused_buf_len;
 	/* cfg80211_find_ie defined in kernel returning const u8 */
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == \
 	4 && __GNUC_MINOR__ >= 6))
@@ -17613,25 +17613,29 @@ _Pragma("GCC diagnostic pop")
 	}
 	available_buffer_len = ((int)(*ie_size)) - (ssidie + 2 - ie_stream);
 	remaining_ie_buf_len = available_buffer_len - (int)ssidie[1];
-	if ((ssid_len > ssidie[1]) ||
-		(ssidie[1] > available_buffer_len)) {
+	unused_buf_len = WL_EXTRA_BUF_MAX - (4 + bi->length + *ie_size);
+	if (ssidie[1] > available_buffer_len) {
+		WL_ERR(("%s: skip wl_update_hidden_ap_ie : overflow\n", __FUNCTION__));
 		return;
 	}
 
 
 	if (ssidie[1] != ssid_len) {
 		if (ssidie[1]) {
-			WL_ERR(("%s: Wrong SSID len: %d != %d\n",
+			WL_INFORM(("%s: Wrong SSID len: %d != %d\n",
 				__FUNCTION__, ssidie[1], bi->SSID_len));
 		}
-		if (roam) {
-			WL_ERR(("Changing the SSID Info.\n"));
+		if ((roam && (ssid_len > ssidie[1])) && (unused_buf_len > ssid_len)) {
+			WL_INFORM(("Changing the SSID Info.\n"));
 			memmove(ssidie + ssid_len + 2,
 				(ssidie + 2) + ssidie[1],
 				remaining_ie_buf_len);
 			memcpy(ssidie + 2, bi->SSID, ssid_len);
 			*ie_size = *ie_size + ssid_len - ssidie[1];
 			ssidie[1] = ssid_len;
+		} else if (ssid_len < ssidie[1]) {
+			WL_ERR(("%s: Invalid SSID len: %d < %d\n",
+				__FUNCTION__, ssidie[1], bi->SSID_len));
 		}
 		return;
 	}

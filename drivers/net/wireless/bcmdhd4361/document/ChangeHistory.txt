@@ -1,7 +1,35 @@
-BCM4361 DHD 1.77.37.1 for Android Great Project
+BCM4361 DHD 1.77.44 for Android Great/Dream & J5/J7 & BCM43438 NOS Project
 (Notes: 1.77.x is twigged off from 1.579.235.9)
 
-DHD 1.77.37.1 - 2017.07.14
+DHD 1.77.44 - 2017.08.24
+Others
+ - CS3088602 Reduced value length of WSR counters variable
+ - CS3247015 Fixed disconnection during roaming on CISCO hidden networks
+ - CS3396150 Enabled legacy SCAN wakelock for SDIO Project
+ - CS3429070 Fixed SDIO init CLK issue for Exynos 7580 platform
+ - CS3455796 Changed path of wifi dump-files for DREAM/STAR
+
+
+DHD 1.77.43 - 2017.08.11
+Security Patch
+ - V2017063001 Removed not required IOVAR for SDIO
+ - V2017063002 Added length check in event log handler
+
+Others
+ - CS3088602 Minimized Wifi Statistics Report for host buffer size limitation
+ - CS3247009 Changed FW/NVRAM/BLOB location following ANDROID PLATFORM VERSION
+ - CS3351562 Changed MAC address encoding due to security issue
+
+
+DHD 1.77.37.3 - 2017.07.27
+Others
+ - CS3088602 Add missed 4 values while report to Framework
+ - CS3203998 Fixed to support big data of 11kv
+ - CS3215091 Fixed build error of detect consecutive hang event
+ - CS3255825 Changed path of wifi dump-files only if GREAT
+
+
+DHD 1.77.37.2 - 2017.07.19
 Kernel Panic
  - CS3203896 Fixed kernel panic caused by referred NULL Pointer in dhd_pktlog_pkts_write_file
  - CS3204538 Fixed Kernel panic when D3_ACK timeout is occurred
@@ -9,6 +37,8 @@ Kernel Panic
 Others
  - CS3215091 Detect consecutive hang event from dongle on factory binary
  - CS3221222 Fixed wrong 11kv default setting
+ - CS3265424 CS3160208 Fixed to update correct DHD connection status on AUTO_ROAM operation
+ - CS3265424 CS3214374 Fixed Roaming event drop issue when roaming to same BSSID case
 
 
 DHD 1.77.37 - 2017.07.04

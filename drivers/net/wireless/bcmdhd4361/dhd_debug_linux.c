@@ -23,7 +23,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_debug_linux.c 699163 2017-05-12 05:18:23Z $
+ * $Id: dhd_debug_linux.c 710862 2017-07-14 07:43:59Z $
  */
 
 #include <typedefs.h>

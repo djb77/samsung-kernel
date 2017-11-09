@@ -2,13 +2,13 @@
 * Wifi dongle status logging and report
 *
 * Copyright (C) 1999-2017, Broadcom Corporation
-*
+* 
 *      Unless you and Broadcom execute a separate written software license
 * agreement governing use of this software, this software is licensed to you
 * under the terms of the GNU General Public License version 2 (the "GPL"),
 * available at http://www.broadcom.com/licenses/GPLv2.php, with the
 * following added to such license:
-*
+* 
 *      As a special exception, the copyright holders of this software give you
 * permission to link this software with independent modules, and to copy and
 * distribute the resulting executable under terms of your choice, provided that
@@ -16,14 +16,14 @@
 * the license of that module.  An independent module is a module which is not
 * derived from this software.  The special exception does not apply to any
 * modifications of the software.
-*
+* 
 *      Notwithstanding the above, under no circumstances may you combine this
 * software in any way with any other Broadcom software provided under a license
 * other than the GPL, without Broadcom's express prior written consent.
 *
 * <<Broadcom-WL-IPTag/Open:>>
 *
-* $Id: wl_statreport.c 712080 2017-07-21 09:31:43Z $
+* $Id: wl_statreport.c 715256 2017-08-10 06:34:17Z $
 */
 #include <wlc_types.h>
 #include <bcmutils.h>
@@ -219,7 +219,7 @@ static void wsr_dbg_print_elem(wsr_dbg_elem_t *elem);
 #define DHD_OS_PREALLOC(dhdpub, section, size) ({\
 		int kflags; \
 		void *__ret; \
-		kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL; \
+		kflags = in_atomic() ?GFP_ATOMIC : GFP_KERNEL; \
 		__ret = kzalloc(size, kflags); \
 		__ret; \
 })
@@ -317,7 +317,7 @@ wl_stat_report_gather(void *cfg, void *cnt)
 
 #if defined(WSR_DEBUG)
 	{
-		static int pr_cnt;
+		static int pr_cnt = 0;
 		if ((pr_cnt++) % WSR_DEBUG_PRD == 0) {
 			wsr_dbg_main(wsr_info);
 		}
@@ -1014,22 +1014,22 @@ wsr_serial_uint8(wsr_serial_info_normal_t *info, char *buf, int buf_len, wsr_ele
 
 	ptr = ptr2 = (uint8 *)((char *)elem + info->offset);
 	switch (info->format) {
-	case WSR_DEC:
-		if (info->f_signed) {
-			fmt = " %d";
-		} else {
-			fmt = " %u";
-		}
-		break;
-	case WSR_HEX:
-		fmt = " 0x%02x";
-		break;
-	default:
-		WL_ERR(("UKNOWN FMT\n"));
-		return -1;
+		case WSR_DEC:
+			if (info->f_signed) {
+				fmt = " %d";
+			} else {
+				fmt = " %u";
+			}
+			break;
+		case WSR_HEX:
+			fmt = " 0x%02x";
+			break;
+		default:
+			WL_ERR(("UKNOWN FMT\n"));
+			return -1;
 	}
 
-	bytes_written = scnprintf(buf, buf_len, fmt, info->f_signed?(*ptr2) : (*ptr));
+	bytes_written = scnprintf(buf, buf_len, fmt, info->f_signed?(*ptr2) :(*ptr));
 	return bytes_written;
 }
 
@@ -1054,22 +1054,22 @@ wsr_serial_uint32(wsr_serial_info_normal_t *info, char *buf, int buf_len, wsr_el
 
 	ptr = ptr2 = (uint32 *)((char *)elem + info->offset);
 	switch (info->format) {
-	case WSR_DEC:
-		if (info->f_signed) {
-			fmt = " %d";
-		} else {
-			fmt = " %u";
-		}
-		break;
-	case WSR_HEX:
-		fmt = " 0x%08x";
-		break;
-	default:
-		WL_ERR(("UKNOWN FMT\n"));
-		return -1;
+		case WSR_DEC:
+			if (info->f_signed) {
+				fmt = " %d";
+			} else {
+				fmt = " %u";
+			}
+			break;
+		case WSR_HEX:
+			fmt = " 0x%08x";
+			break;
+		default:
+			WL_ERR(("UKNOWN FMT\n"));
+			return -1;
 	}
 
-	bytes_written = scnprintf(buf, buf_len, fmt, info->f_signed?(*ptr2) : (*ptr));
+	bytes_written = scnprintf(buf, buf_len, fmt, info->f_signed?(*ptr2) :(*ptr));
 	return bytes_written;
 }
 
@@ -1217,27 +1217,27 @@ wsr_serial_normal(char *buf, int *sub_idx, wsr_elem_t **list, int list_cnt)
 	info = &wsr_serial_info_normal_tbl[*sub_idx];
 	/* set sub function */
 	switch (info->type) {
-	case WSR_UINT8:
-		func = wsr_serial_uint8;
-		break;
-	case WSR_UINT32:
-		func = wsr_serial_uint32;
-		break;
-	case WSR_BSSID:
-		func = wsr_serial_bssid;
-		break;
-	case WSR_OUI:
-		func = wsr_serial_oui;
-		break;
-	case WSR_DATE:
-		func = wsr_serial_date;
-		break;
-	case WSR_TIME:
-		func = wsr_serial_time;
-		break;
-	default:
-		WL_ERR(("UNKNOWN SERIALIZE TYPE\n"));
-		return -1;
+		case WSR_UINT8:
+			func = wsr_serial_uint8;
+			break;
+		case WSR_UINT32:
+			func = wsr_serial_uint32;
+			break;
+		case WSR_BSSID:
+			func = wsr_serial_bssid;
+			break;
+		case WSR_OUI:
+			func = wsr_serial_oui;
+			break;
+		case WSR_DATE:
+			func = wsr_serial_date;
+			break;
+		case WSR_TIME:
+			func = wsr_serial_time;
+			break;
+		default:
+			WL_ERR(("UNKNOWN SERIALIZE TYPE\n"));
+			return -1;
 	}
 
 	for (idx = 0; idx < list_cnt; idx++) {
@@ -1470,16 +1470,16 @@ wl_android_stat_report_get_next_mode_record(void *net, char *cmd, int tot_len)
 
 	while (bytes_written + WSR_REPORT_ELEM_PRINT_BUF < wsr_info->trans_buf_len) {
 		switch (wsr_info->seral_state) {
-		case WSR_REPORT_STATE_NORMAL:
-			iter_written = wsr_serial_normal(&cmd[bytes_written],
-				&wsr_info->serial_sub_state, &elem, 1);
-			break;
-		case WSR_REPORT_STATE_WLC:
-			iter_written = wsr_serial_wlc(&cmd[bytes_written],
-				&wsr_info->serial_sub_state, &elem, 1);
-			break;
-		default:
-			goto finished;
+			case WSR_REPORT_STATE_NORMAL:
+				iter_written = wsr_serial_normal(&cmd[bytes_written],
+					&wsr_info->serial_sub_state, &elem, 1);
+				break;
+			case WSR_REPORT_STATE_WLC:
+				iter_written = wsr_serial_wlc(&cmd[bytes_written],
+					&wsr_info->serial_sub_state, &elem, 1);
+				break;
+			default:
+				goto finished;
 		}
 
 		if (iter_written == 0) {
@@ -1545,16 +1545,16 @@ wl_android_stat_report_get_next_mode_item(void *net, char *cmd, int tot_len)
 
 	while (bytes_written + WSR_REPORT_ELEM_PRINT_BUF < wsr_info->trans_buf_len) {
 		switch (wsr_info->seral_state) {
-		case WSR_REPORT_STATE_NORMAL:
-			iter_written = wsr_serial_normal(&cmd[bytes_written],
-				&wsr_info->serial_sub_state, elem, WSR_REPORT_MAX_WPA_CNT);
-			break;
-		case WSR_REPORT_STATE_WLC:
-			iter_written = wsr_serial_wlc(&cmd[bytes_written],
-				&wsr_info->serial_sub_state, elem, WSR_REPORT_MAX_WPA_CNT);
-			break;
-		default:
-			goto finished;
+			case WSR_REPORT_STATE_NORMAL:
+				iter_written = wsr_serial_normal(&cmd[bytes_written],
+					&wsr_info->serial_sub_state, elem, WSR_REPORT_MAX_WPA_CNT);
+				break;
+			case WSR_REPORT_STATE_WLC:
+				iter_written = wsr_serial_wlc(&cmd[bytes_written],
+					&wsr_info->serial_sub_state, elem, WSR_REPORT_MAX_WPA_CNT);
+				break;
+			default:
+				goto finished;
 		}
 
 		if (iter_written == 0) {

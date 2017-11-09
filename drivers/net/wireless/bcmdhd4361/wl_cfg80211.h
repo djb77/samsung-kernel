@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 707629 2017-06-28 09:35:05Z $
+ * $Id: wl_cfg80211.h 710862 2017-07-14 07:43:59Z $
  */
 
 /**
@@ -1772,7 +1772,7 @@ int wl_set_rssi_logging(struct net_device *dev, void *param);
 int wl_get_rssi_per_ant(struct net_device *dev, char *ifname, char *peer_mac, void *param);
 #endif /* SUPPORT_RSSI_LOGGING */
 int wl_cfg80211_iface_count(struct net_device *dev);
-struct net_device *wl_get_ap_netdev(struct bcm_cfg80211 *cfg, char *ifname);
-struct net_device *wl_get_netdev_by_name(struct bcm_cfg80211 *cfg, char *ifname);
+struct net_device* wl_get_ap_netdev(struct bcm_cfg80211 *cfg, char *ifname);
+struct net_device* wl_get_netdev_by_name(struct bcm_cfg80211 *cfg, char *ifname);
 int wl_cfg80211_get_vndr_ouilist(struct bcm_cfg80211 *cfg, uint8 *buf, int max_cnt);
 #endif /* _wl_cfg80211_h_ */

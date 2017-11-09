@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pktlog.c 708528 2017-07-03 11:29:34Z $
+ * $Id: dhd_pktlog.c 709645 2017-07-09 09:29:58Z $
  */
 
 #include <typedefs.h>
@@ -228,7 +228,7 @@ dhd_pktlog_ring_get_nextbuf(dhd_pktlog_ring_t *ringbuf, void **data)
 
 	if (!ring_info->info.pkt) {
 		DHD_ERROR(("%s(): next_pos %d info.pkt NULL\n",
-					__FUNCTION__, ringbuf->next_pos));
+			__FUNCTION__, ringbuf->next_pos));
 		return BCME_ERROR;
 	}
 
@@ -954,10 +954,10 @@ dhd_pktlog_pkts_write_file(dhd_pktlog_ring_t *ringbuf, struct file *w_pcap_fp, i
 		write_frame_len = frame_len + bytes_user_data;
 
 		/* pcap pkt head has incl_len and orig_len */
-		memcpy(p, (char *)&write_frame_len, sizeof(write_frame_len));
+		memcpy(p, (char*)&write_frame_len, sizeof(write_frame_len));
 		p += sizeof(write_frame_len);
 		len += sizeof(write_frame_len);
-		memcpy(p, (char *)&write_frame_len, sizeof(write_frame_len));
+		memcpy(p, (char*)&write_frame_len, sizeof(write_frame_len));
 		p += sizeof(write_frame_len);
 		len += sizeof(write_frame_len);
 
@@ -1046,7 +1046,6 @@ dhd_pktlog_write_file(dhd_pub_t *dhdp)
 	pcap_h.sigfigs = 0x0;
 	pcap_h.snaplen = PKTLOG_PCAP_SNAP_LEN;
 	pcap_h.network = PKTLOG_PCAP_NETWORK_TYPE;
-
 
 	tx_pktlog_ring = dhdp->pktlog->tx_pktlog_ring;
 	rx_pktlog_ring = dhdp->pktlog->rx_pktlog_ring;

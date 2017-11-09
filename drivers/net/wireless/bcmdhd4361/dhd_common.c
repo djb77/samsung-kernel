@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_common.c 707287 2017-06-27 06:44:29Z $
+ * $Id: dhd_common.c 713120 2017-07-28 04:14:04Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -2232,13 +2232,7 @@ wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
 	datalen = ntoh32(event->datalen);
 
 	/* debug dump of event messages */
-	snprintf(eabuf, sizeof(eabuf), "%02x:%02x:%02x:%02x:%02x:%02x",
-	        (uchar)event->addr.octet[0]&0xff,
-	        (uchar)event->addr.octet[1]&0xff,
-	        (uchar)event->addr.octet[2]&0xff,
-	        (uchar)event->addr.octet[3]&0xff,
-	        (uchar)event->addr.octet[4]&0xff,
-	        (uchar)event->addr.octet[5]&0xff);
+	snprintf(eabuf, sizeof(eabuf), MACDBG, MAC2STRDBG(event->addr.octet));
 
 	event_name = bcmevent_get_name(event_type);
 	BCM_REFERENCE(event_name);
@@ -4812,7 +4806,7 @@ dhd_apply_default_clm(dhd_pub_t *dhd, char *clm_path)
 		clm_blob_path = clm_path;
 		DHD_TRACE(("clm path from module param:%s\n", clm_path));
 	} else {
-		clm_blob_path = CONFIG_BCMDHD_CLM_PATH;
+		clm_blob_path = VENDOR_PATH CONFIG_BCMDHD_CLM_PATH;
 	}
 
 	/* If CLM blob file is found on the filesystem, download the file.

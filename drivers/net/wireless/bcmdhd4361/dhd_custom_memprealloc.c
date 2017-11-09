@@ -157,8 +157,8 @@ static void *wlan_static_dhd_pktid_map = NULL;
 static void *wlan_static_dhd_pktid_ioctl_map = NULL;
 static void *wlan_static_dhd_log_dump_buf = NULL;
 static void *wlan_static_dhd_log_dump_buf_ex = NULL;
-static void *wlan_static_dhd_pktlog_dump_buf;
-static void *wlan_static_stat_report_buf;
+static void *wlan_static_dhd_pktlog_dump_buf = NULL;
+static void *wlan_static_stat_report_buf = NULL;
 
 #define GET_STATIC_BUF(section, config_size, req_size, buf) ({\
 	void *__ret; \
@@ -167,9 +167,7 @@ static void *wlan_static_stat_report_buf;
 				" static size(%d)\n", \
 				req_size, config_size); \
 		__ret = NULL; \
-	} else { \
-		__ret = buf; \
-	} \
+	} else { __ret = buf;} \
 	__ret; \
 })
 

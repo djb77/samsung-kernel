@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.c 708525 2017-07-03 11:06:11Z $
+ * $Id: wl_cfgvendor.c 710862 2017-07-14 07:43:59Z $
  */
 
 /*
