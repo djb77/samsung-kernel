@@ -1,0 +1,52 @@
+From 75dba65422495f45131da3443dbc07c945280800 Mon Sep 17 00:00:00 2001
+From: Julian AREVALO <julian.arevalo@trustonic.com>
+Date: Mon, 24 Mar 2014 18:05:47 +0100
+Subject: [PATCH 3/3] [TUI] Block TSP access from NWd during TUI.
+
+---
+ drivers/input/touchscreen/unidisplay_ts.c |   15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/touchscreen/unidisplay_ts.c b/drivers/input/touchscreen/unidisplay_ts.c
+index 05754a2..8fdeefd 100644
+--- a/drivers/input/touchscreen/unidisplay_ts.c
++++ b/drivers/input/touchscreen/unidisplay_ts.c
+@@ -12,6 +12,7 @@
+ #include <linux/delay.h>
+ #include <linux/kthread.h>
+ #include <linux/freezer.h>
++#include <linux/t-base-tui.h>
+ 
+ #include <mach/gpio.h>
+ #include <mach/regs-gpio.h>
+@@ -166,7 +167,12 @@ static int unidisplay_ts_thread(void *kthread)
+ 		if (pendown) {
+ 			u8 addr = 0x10;
+ 			memset(buf, 0, sizeof(buf));
+-			ret = i2c_master_send(tsdata->client, &addr, 1);
++			if (!(TRUSTEDUI_MODE_INPUT_SECURED & trustedui_get_current_mode())) {
++			    ret = i2c_master_send(tsdata->client, &addr, 1);
++			}
++			else {
++			    ret = 0;
++			}
+ 			if (ret != 1) {
+ 				dev_err(&tsdata->client->dev,\
+ 				"Unable to write to i2c touchscreen\n");
+@@ -174,7 +180,12 @@ static int unidisplay_ts_thread(void *kthread)
+ 				timeout = MAX_SCHEDULE_TIMEOUT;
+ 				goto wait_event;
+ 			}
+-			ret = i2c_master_recv(tsdata->client, buf, 9);
++			if (!(TRUSTEDUI_MODE_INPUT_SECURED & trustedui_get_current_mode())) {
++			    ret = i2c_master_recv(tsdata->client, buf, 9);
++			}
++			else {
++			    ret = 0;
++			}
+ 			if (ret != 9) {
+ 				dev_err(&tsdata->client->dev,\
+ 				"Unable to read to i2c touchscreen!\n");
+-- 
+1.7.9.5
+
