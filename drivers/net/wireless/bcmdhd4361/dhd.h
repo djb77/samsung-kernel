@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd.h 712078 2017-07-21 09:18:54Z $
+ * $Id: dhd.h 712557 2017-07-25 08:09:02Z $
  */
 
 /****************
@@ -304,7 +304,7 @@ enum dhd_op_flags {
 #if defined(CUSTOMER_HW4) && defined(PLATFORM_SLP)
 #define CONFIG_BCMDHD_CLM_PATH "/lib/firmware/bcmdhd_clm.blob"
 #else
-#define CONFIG_BCMDHD_CLM_PATH "/system/etc/wifi/bcmdhd_clm.blob"
+#define CONFIG_BCMDHD_CLM_PATH "/etc/wifi/bcmdhd_clm.blob"
 #endif /* CUSTOMER_HW4 && PLATFORM_SLP */
 #endif /* CONFIG_BCMDHD_CLM_PATH */
 #define WL_CCODE_NULL_COUNTRY  "#n"
@@ -606,7 +606,7 @@ extern char *dhd_log_dump_get_timestamp(void);
 
 #if defined(CUSTOMER_HW4)
 #ifndef DHD_COMMON_DUMP_PATH
-#define DHD_COMMON_DUMP_PATH	"/data/media/wifi/log/"
+#define DHD_COMMON_DUMP_PATH	"/data/log/wifi/"
 #endif /* !DHD_COMMON_DUMP_PATH */
 #else
 #define DHD_COMMON_DUMP_PATH	"/installmedia/"
@@ -846,7 +846,7 @@ typedef struct dhd_pub {
 	uint req_hang_type;
 #endif /* DHD_HANG_SEND_UP_TEST */
 #if defined(CONFIG_BCM_DETECT_CONSECUTIVE_HANG)
-	uint hang_count;
+	uint hang_counts;
 #endif /* CONFIG_BCM_DETECT_CONSECUTIVE_HANG */
 #ifdef WLTDLS
 	bool tdls_enable;
@@ -2029,6 +2029,19 @@ extern uint dhd_pktgen_len;
 extern char fw_path2[MOD_PARAM_PATHLEN];
 #endif
 
+#if defined(ANDROID_PLATFORM_VERSION)
+#if (ANDROID_PLATFORM_VERSION < 7)
+#define DHD_LEGACY_FILE_PATH
+#define VENDOR_PATH "/system"
+#elif (ANDROID_PLATFORM_VERSION == 7)
+#define VENDOR_PATH "/system"
+#elif (ANDROID_PLATFORM_VERSION >= 8)
+#define VENDOR_PATH "/vendor"
+#endif /* ANDROID_PLATFORM_VERSION < 7 */
+#else
+#define VENDOR_PATH ""
+#endif /* ANDROID_PLATFORM_VERSION */
+
 #ifdef DHD_LEGACY_FILE_PATH
 #define PLATFORM_PATH	"/data/"
 #elif defined(PLATFORM_SLP)
@@ -2255,7 +2268,7 @@ extern void dhd_os_general_spin_unlock(dhd_pub_t *pub, unsigned long flags);
 
 #ifdef DBG_PKT_MON
 /* Enable DHD PKT MON spin lock/unlock */
-#define DHD_PKT_MON_LOCK(lock, flags)     ((flags) = dhd_os_spin_lock(lock))
+#define DHD_PKT_MON_LOCK(lock, flags)     (flags) = dhd_os_spin_lock(lock)
 #define DHD_PKT_MON_UNLOCK(lock, flags)   dhd_os_spin_unlock(lock, (flags))
 #endif /* DBG_PKT_MON */
 

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: event_log.h 676811 2016-12-24 20:48:46Z $
+ * $Id: event_log.h 711908 2017-07-20 10:37:34Z $
  */
 
 #ifndef _EVENT_LOG_H_
@@ -97,6 +97,8 @@ typedef struct event_log_block {
 	uint32 extra_hdr_info;		/* LSB: 6 bits set id. MSB 24 bits reserved */
 	uint32 event_logs;
 } event_log_block_t;
+#define EVENT_LOG_BLOCK_HDRLEN		8 /* pktlen 2 + count 2 + extra_hdr_info 4 */
+#define NAN_EVENT_LOG_MIN_LENGTH	2 /* Minimum length of Nan event */
 
 typedef enum {
 	SET_DESTINATION_INVALID = -1,

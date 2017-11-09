@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.h 707536 2017-06-28 04:23:48Z $
+ * $Id: dhd_pcie.h 714138 2017-08-03 08:55:55Z $
  */
 
 

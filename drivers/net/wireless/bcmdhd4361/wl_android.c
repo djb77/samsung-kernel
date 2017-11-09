@@ -6920,7 +6920,8 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 	else if (strnicmp(command, CMD_KEEP_ALIVE, strlen(CMD_KEEP_ALIVE)) == 0) {
 		int skip = strlen(CMD_KEEP_ALIVE) + 1;
 		bytes_written = wl_keep_alive_set(net, command + skip, priv_cmd.total_len - skip);
-	} else if (strnicmp(command, CMD_ROAM_OFFLOAD, strlen(CMD_ROAM_OFFLOAD)) == 0) {
+	}
+	else if (strnicmp(command, CMD_ROAM_OFFLOAD, strlen(CMD_ROAM_OFFLOAD)) == 0) {
 		int enable = *(command + strlen(CMD_ROAM_OFFLOAD) + 1) - '0';
 		bytes_written = wl_cfg80211_enable_roam_offload(net, enable);
 	}
@@ -6929,7 +6930,8 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 		char *name = (command + strlen(CMD_INTERFACE_CREATE) +1);
 		WL_INFORM(("Creating %s interface\n", name));
 		bytes_written = wl_cfg80211_interface_create(net, name);
-	} else if (strnicmp(command, CMD_INTERFACE_DELETE, strlen(CMD_INTERFACE_DELETE)) == 0) {
+	}
+	else if (strnicmp(command, CMD_INTERFACE_DELETE, strlen(CMD_INTERFACE_DELETE)) == 0) {
 		char *name = (command + strlen(CMD_INTERFACE_DELETE) +1);
 		WL_INFORM(("Deleteing %s interface\n", name));
 		bytes_written = wl_cfg80211_interface_delete(net, name);
@@ -6955,30 +6957,36 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 #ifdef WBTEXT
 	else if (strnicmp(command, CMD_WBTEXT_ENABLE, strlen(CMD_WBTEXT_ENABLE)) == 0) {
 		bytes_written = wl_android_wbtext(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_WBTEXT_PROFILE_CONFIG,
+	}
+	else if (strnicmp(command, CMD_WBTEXT_PROFILE_CONFIG,
 			strlen(CMD_WBTEXT_PROFILE_CONFIG)) == 0) {
 		char *data = (command + strlen(CMD_WBTEXT_PROFILE_CONFIG) + 1);
 		bytes_written = wl_cfg80211_wbtext_config(net, data, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_WBTEXT_WEIGHT_CONFIG,
+	}
+	else if (strnicmp(command, CMD_WBTEXT_WEIGHT_CONFIG,
 			strlen(CMD_WBTEXT_WEIGHT_CONFIG)) == 0) {
 		char *data = (command + strlen(CMD_WBTEXT_WEIGHT_CONFIG) + 1);
 		bytes_written = wl_cfg80211_wbtext_weight_config(net, data,
 				command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_WBTEXT_TABLE_CONFIG,
+	}
+	else if (strnicmp(command, CMD_WBTEXT_TABLE_CONFIG,
 			strlen(CMD_WBTEXT_TABLE_CONFIG)) == 0) {
 		char *data = (command + strlen(CMD_WBTEXT_TABLE_CONFIG) + 1);
 		bytes_written = wl_cfg80211_wbtext_table_config(net, data,
 				command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_WBTEXT_DELTA_CONFIG,
+	}
+	else if (strnicmp(command, CMD_WBTEXT_DELTA_CONFIG,
 			strlen(CMD_WBTEXT_DELTA_CONFIG)) == 0) {
 		char *data = (command + strlen(CMD_WBTEXT_DELTA_CONFIG) + 1);
 		bytes_written = wl_cfg80211_wbtext_delta_config(net, data,
 				command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_WBTEXT_BTM_TIMER_THRESHOLD,
+	}
+	else if (strnicmp(command, CMD_WBTEXT_BTM_TIMER_THRESHOLD,
 			strlen(CMD_WBTEXT_BTM_TIMER_THRESHOLD)) == 0) {
 		bytes_written = wl_cfg80211_wbtext_btm_timer_threshold(net, command,
 			priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_WBTEXT_BTM_DELTA,
+	}
+	else if (strnicmp(command, CMD_WBTEXT_BTM_DELTA,
 			strlen(CMD_WBTEXT_BTM_DELTA)) == 0) {
 		bytes_written = wl_cfg80211_wbtext_btm_delta(net, command,
 			priv_cmd.total_len);
@@ -6992,7 +7000,8 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 #ifdef WLWFDS
 	else if (strnicmp(command, CMD_ADD_WFDS_HASH, strlen(CMD_ADD_WFDS_HASH)) == 0) {
 		bytes_written = wl_android_set_wfds_hash(net, command, priv_cmd.total_len, 1);
-	} else if (strnicmp(command, CMD_DEL_WFDS_HASH, strlen(CMD_DEL_WFDS_HASH)) == 0) {
+	}
+	else if (strnicmp(command, CMD_DEL_WFDS_HASH, strlen(CMD_DEL_WFDS_HASH)) == 0) {
 		bytes_written = wl_android_set_wfds_hash(net, command, priv_cmd.total_len, 0);
 	}
 #endif /* WLWFDS */
@@ -7006,7 +7015,8 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 	else if (strnicmp(command, CMD_GET_FCC_PWR_LIMIT_2G,
 		strlen(CMD_GET_FCC_PWR_LIMIT_2G)) == 0) {
 		bytes_written = wl_android_get_fcc_pwr_limit_2g(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_SET_FCC_PWR_LIMIT_2G,
+	}
+	else if (strnicmp(command, CMD_SET_FCC_PWR_LIMIT_2G,
 		strlen(CMD_SET_FCC_PWR_LIMIT_2G)) == 0) {
 		bytes_written = wl_android_set_fcc_pwr_limit_2g(net, command, priv_cmd.total_len);
 	}
@@ -7027,32 +7037,38 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 #ifdef SUPPORT_AP_HIGHER_BEACONRATE
 	else if (strnicmp(command, CMD_GET_AP_BASICRATE, strlen(CMD_GET_AP_BASICRATE)) == 0) {
 		bytes_written = wl_android_get_ap_basicrate(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_SET_AP_BEACONRATE, strlen(CMD_SET_AP_BEACONRATE)) == 0) {
+	}
+	else if (strnicmp(command, CMD_SET_AP_BEACONRATE, strlen(CMD_SET_AP_BEACONRATE)) == 0) {
 		bytes_written = wl_android_set_ap_beaconrate(net, command);
 	}
 #endif /* SUPPORT_AP_HIGHER_BEACONRATE */
 #ifdef SUPPORT_AP_RADIO_PWRSAVE
 	else if (strnicmp(command, CMD_SET_AP_RPS_PARAMS, strlen(CMD_SET_AP_RPS_PARAMS)) == 0) {
 		bytes_written = wl_android_set_ap_rps_params(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_SET_AP_RPS, strlen(CMD_SET_AP_RPS)) == 0) {
+	}
+	else if (strnicmp(command, CMD_SET_AP_RPS, strlen(CMD_SET_AP_RPS)) == 0) {
 		bytes_written = wl_android_set_ap_rps(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_GET_AP_RPS, strlen(CMD_GET_AP_RPS)) == 0) {
+	}
+	else if (strnicmp(command, CMD_GET_AP_RPS, strlen(CMD_GET_AP_RPS)) == 0) {
 		bytes_written = wl_android_get_ap_rps(net, command, priv_cmd.total_len);
 	}
 #endif /* SUPPORT_AP_RADIO_PWRSAVE */
 #ifdef SUPPORT_RSSI_LOGGING
 	else if (strnicmp(command, CMD_SET_RSSI_LOGGING, strlen(CMD_SET_RSSI_LOGGING)) == 0) {
 		bytes_written = wl_android_set_rssi_logging(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_GET_RSSI_LOGGING, strlen(CMD_GET_RSSI_LOGGING)) == 0) {
+	}
+	else if (strnicmp(command, CMD_GET_RSSI_LOGGING, strlen(CMD_GET_RSSI_LOGGING)) == 0) {
 		bytes_written = wl_android_get_rssi_logging(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_GET_RSSI_PER_ANT, strlen(CMD_GET_RSSI_PER_ANT)) == 0) {
+	}
+	else if (strnicmp(command, CMD_GET_RSSI_PER_ANT, strlen(CMD_GET_RSSI_PER_ANT)) == 0) {
 		bytes_written = wl_android_get_rssi_per_ant(net, command, priv_cmd.total_len);
 	}
 #endif /* SUPPORT_RSSI_LOGGING */
 #if defined(DHD_ENABLE_BIGDATA_LOGGING)
 	else if (strnicmp(command, CMD_GET_BSS_INFO, strlen(CMD_GET_BSS_INFO)) == 0) {
 		bytes_written = wl_cfg80211_get_bss_info(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_GET_ASSOC_REJECT_INFO, strlen(CMD_GET_ASSOC_REJECT_INFO))
+	}
+	else if (strnicmp(command, CMD_GET_ASSOC_REJECT_INFO, strlen(CMD_GET_ASSOC_REJECT_INFO))
 			== 0) {
 		bytes_written = wl_cfg80211_get_connect_failed_status(net, command,
 				priv_cmd.total_len);
@@ -7108,7 +7124,8 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 	else if (strnicmp(command, CMD_SET_LQCM_ENABLE, strlen(CMD_SET_LQCM_ENABLE)) == 0) {
 		int lqcm_enable = *(command + strlen(CMD_SET_LQCM_ENABLE) + 1) - '0';
 		bytes_written = wl_android_lqcm_enable(net, lqcm_enable);
-	} else if (strnicmp(command, CMD_GET_LQCM_REPORT,
+	}
+	else if (strnicmp(command, CMD_GET_LQCM_REPORT,
 		strlen(CMD_GET_LQCM_REPORT)) == 0) {
 		bytes_written = wl_android_get_lqcm_report(net, command,
 		priv_cmd.total_len);
@@ -7121,7 +7138,8 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 	else if (strnicmp(command, CMD_SET_ADPS, strlen(CMD_SET_ADPS)) == 0) {
 		int skip = strlen(CMD_SET_ADPS) + 1;
 		bytes_written = wl_android_set_adps_mode(net, (const char*)command+skip);
-	} else if (strnicmp(command, CMD_GET_ADPS, strlen(CMD_GET_ADPS)) == 0) {
+	}
+	else if (strnicmp(command, CMD_GET_ADPS, strlen(CMD_GET_ADPS)) == 0) {
 		bytes_written = wl_android_get_adps_mode(net, command, priv_cmd.total_len);
 	}
 #endif /* WLADPS_PRIVATE_CMD */
@@ -7138,19 +7156,25 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 		strlen(CMD_PKTLOG_FILTER_PATTERN_ENABLE)) == 0) {
 		bytes_written =
 			wl_android_pktlog_filter_pattern_enable(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_PKTLOG_FILTER_PATTERN_DISABLE,
+	}
+	else if (strnicmp(command, CMD_PKTLOG_FILTER_PATTERN_DISABLE,
 		strlen(CMD_PKTLOG_FILTER_PATTERN_DISABLE)) == 0) {
 		bytes_written =
 			wl_android_pktlog_filter_pattern_disable(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_PKTLOG_FILTER_ADD, strlen(CMD_PKTLOG_FILTER_ADD)) == 0) {
+	}
+	else if (strnicmp(command, CMD_PKTLOG_FILTER_ADD, strlen(CMD_PKTLOG_FILTER_ADD)) == 0) {
 		bytes_written = wl_android_pktlog_filter_add(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_PKTLOG_FILTER_INFO, strlen(CMD_PKTLOG_FILTER_INFO)) == 0) {
+	}
+	else if (strnicmp(command, CMD_PKTLOG_FILTER_INFO, strlen(CMD_PKTLOG_FILTER_INFO)) == 0) {
 		bytes_written = wl_android_pktlog_filter_info(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_PKTLOG_START, strlen(CMD_PKTLOG_START)) == 0) {
+	}
+	else if (strnicmp(command, CMD_PKTLOG_START, strlen(CMD_PKTLOG_START)) == 0) {
 		bytes_written = wl_android_pktlog_start(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_PKTLOG_STOP, strlen(CMD_PKTLOG_STOP)) == 0) {
+	}
+	else if (strnicmp(command, CMD_PKTLOG_STOP, strlen(CMD_PKTLOG_STOP)) == 0) {
 		bytes_written = wl_android_pktlog_stop(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_PKTLOG_FILTER_EXIST, strlen(CMD_PKTLOG_FILTER_EXIST)) == 0) {
+	}
+	else if (strnicmp(command, CMD_PKTLOG_FILTER_EXIST, strlen(CMD_PKTLOG_FILTER_EXIST)) == 0) {
 		bytes_written = wl_android_pktlog_filter_exist(net, command, priv_cmd.total_len);
 	}
 #endif /* DHD_PKT_LOGGING */

@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_exynos.c 705651 2017-06-19 03:30:41Z $
+ * $Id: dhd_custom_exynos.c 716305 2017-08-17 12:29:29Z $
  */
 #include <linux/device.h>
 #include <linux/gpio.h>
@@ -110,10 +110,11 @@ extern void exynos_pcie_poweroff(int);
 #endif /* CONFIG_MACH_UNIVERSAL5433 */
 #endif /* EXYNOS_PCIE_RC_ONOFF */
 
-#if (defined(CONFIG_MACH_UNIVERSAL3475) || defined(CONFIG_SOC_EXYNOS7870))
+#if (defined(CONFIG_MACH_UNIVERSAL3475) || defined(CONFIG_SOC_EXYNOS7870) || \
+	defined(CONFIG_MACH_UNIVERSAL7580))
 extern struct mmc_host *wlan_mmc;
 extern void mmc_ctrl_power(struct mmc_host *host, bool onoff);
-#endif /* CONFIG_MACH_UNIVERSAL3475 || CONFIG_SOC_EXYNOS7870 */
+#endif /* MACH_UNIVERSAL3475 || SOC_EXYNOS7870 || MACH_UNIVERSAL7580 */
 
 static int
 dhd_wlan_power(int onoff)
@@ -167,10 +168,11 @@ dhd_wlan_power(int onoff)
 			printk(KERN_INFO "%s WLAN SDIO GPIO control error\n", __FUNCTION__);
 	}
 #endif /* CONFIG_MACH_A7LTE */
-#if (defined(CONFIG_MACH_UNIVERSAL3475) || defined(CONFIG_SOC_EXYNOS7870))
+#if (defined(CONFIG_MACH_UNIVERSAL3475) || defined(CONFIG_SOC_EXYNOS7870) || \
+	defined(CONFIG_MACH_UNIVERSAL7580))
 	if (wlan_mmc)
 		mmc_ctrl_power(wlan_mmc, onoff);
-#endif /* CONFIG_MACH_UNIVERSAL3475 || CONFIG_SOC_EXYNOS7870 */
+#endif /* MACH_UNIVERSAL3475 || SOC_EXYNOS7870 || MACH_UNIVERSAL7580 */
 #endif /* EXYNOS_PCIE_RC_ONOFF */
 	return 0;
 }

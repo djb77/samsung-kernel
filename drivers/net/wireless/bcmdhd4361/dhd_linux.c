@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 710632 2017-07-13 12:30:07Z $
+ * $Id: dhd_linux.c 714138 2017-08-03 08:55:55Z $
  */
 
 #include <typedefs.h>
@@ -5573,7 +5573,7 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 #endif /* DHD_RX_DUMP */
 #if defined(DHD_WAKE_STATUS) && defined(DHD_WAKEPKT_DUMP)
 		if (pkt_wake) {
-			prhex("[wakepkt_dump]", (char *)dump_data, MIN(len, 32));
+			prhex("[wakepkt_dump]", (char*)dump_data, MIN(len, 32));
 		}
 #endif /* DHD_WAKE_STATUS && DHD_WAKEPKT_DUMP */
 
@@ -9272,7 +9272,6 @@ bool dhd_update_fw_nv_path(dhd_info_t *dhdinfo)
 	int fw_path_len = sizeof(dhdinfo->fw_path);
 	int nv_path_len = sizeof(dhdinfo->nv_path);
 
-
 	/* Update firmware and nvram path. The path may be from adapter info or module parameter
 	 * The path from adapter info is used for initialization only (as it won't change).
 	 *
@@ -9286,10 +9285,10 @@ bool dhd_update_fw_nv_path(dhd_info_t *dhdinfo)
 	/* set default firmware and nvram path for built-in type driver */
 	if (!dhd_download_fw_on_driverload) {
 #ifdef CONFIG_BCMDHD_FW_PATH
-		fw = CONFIG_BCMDHD_FW_PATH;
+		fw = VENDOR_PATH CONFIG_BCMDHD_FW_PATH;
 #endif /* CONFIG_BCMDHD_FW_PATH */
 #ifdef CONFIG_BCMDHD_NVRAM_PATH
-		nv = CONFIG_BCMDHD_NVRAM_PATH;
+		nv = VENDOR_PATH CONFIG_BCMDHD_NVRAM_PATH;
 #endif /* CONFIG_BCMDHD_NVRAM_PATH */
 	}
 
@@ -9310,8 +9309,10 @@ bool dhd_update_fw_nv_path(dhd_info_t *dhdinfo)
 	 */
 	if (firmware_path[0] != '\0')
 		fw = firmware_path;
+
 	if (nvram_path[0] != '\0')
 		nv = nvram_path;
+
 #ifdef DHD_UCODE_DOWNLOAD
 	if (ucode_path[0] != '\0')
 		uc = ucode_path;
@@ -14148,7 +14149,7 @@ const void  *data, uint32 len, int *send_evt_bytes)
 {
 	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(dev);
 
-	return dhd_process_full_gscan_result(&dhd->pub, data, len, send_evt_bytes);
+	return (dhd_process_full_gscan_result(&dhd->pub, data, len, send_evt_bytes));
 }
 
 void
@@ -15565,7 +15566,19 @@ write_dump_to_file(dhd_pub_t *dhd, uint8 *buf, int size, char *fname)
 	 * file instead of caching it. O_TRUNC flag ensures that file will be re-written
 	 * instead of appending.
 	 */
-	file_mode = O_CREAT | O_WRONLY | O_DIRECT | O_SYNC | O_TRUNC;
+	file_mode = O_CREAT | O_WRONLY | O_SYNC;
+	{
+		struct file *fp = filp_open(memdump_path, file_mode, 0664);
+		/* Check if it is live Brix image having /installmedia, else use /data */
+		if (IS_ERR(fp)) {
+			DHD_ERROR(("open file %s, try /data/\n", memdump_path));
+			snprintf(memdump_path, sizeof(memdump_path), "%s%s_%s_%ld.%ld",
+				"/data/", fname, memdump_type,
+				(unsigned long)curtime.tv_sec, (unsigned long)curtime.tv_usec);
+		} else {
+			filp_close(fp, NULL);
+		}
+	}
 #endif /* CUSTOMER_HW4_DEBUG */
 
 	/* print SOCRAM dump file path */
@@ -16761,12 +16774,17 @@ int dhd_set_ap_isolate(dhd_pub_t *dhdp, uint32 idx, int val)
 }
 
 #ifdef DHD_FW_COREDUMP
+#if defined(CONFIG_X86)
+#define MEMDUMPINFO_LIVE "/installmedia/.memdump.info"
+#define MEMDUMPINFO_INST "/data/.memdump.info"
+#endif /* CONFIG_X86 && OEM_ANDROID */
+
 #ifdef CUSTOMER_HW4_DEBUG
 #define MEMDUMPINFO PLATFORM_PATH".memdump.info"
 #elif (defined(BOARD_PANDA) || defined(__ARM_ARCH_7A__))
 #define MEMDUMPINFO "/data/misc/wifi/.memdump.info"
 #else
-#define MEMDUMPINFO "/installmedia/.memdump.info"
+#define MEMDUMPINFO MEMDUMPINFO_LIVE
 #endif /* CUSTOMER_HW4_DEBUG */
 
 void dhd_get_memdump_info(dhd_pub_t *dhd)
@@ -16780,19 +16798,35 @@ void dhd_get_memdump_info(dhd_pub_t *dhd)
 	fp = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		DHD_ERROR(("%s: File [%s] doesn't exist\n", __FUNCTION__, filepath));
-		goto done;
-	} else {
-		ret = kernel_read(fp, 0, (char *)&mem_val, 4);
-		if (ret < 0) {
-			DHD_ERROR(("%s: File read error, ret=%d\n", __FUNCTION__, ret));
-			filp_close(fp, NULL);
+#if defined(CONFIG_X86)
+		/* Check if it is Live Brix Image */
+		if (strcmp(filepath, MEMDUMPINFO_LIVE) != 0) {
 			goto done;
 		}
-
-		mem_val = bcm_atoi((char *)&mem_val);
-
-		filp_close(fp, NULL);
+		/* Try if it is Installed Brix Image */
+		filepath = MEMDUMPINFO_INST;
+		DHD_ERROR(("%s: Try File [%s]\n", __FUNCTION__, filepath));
+		fp = filp_open(filepath, O_RDONLY, 0);
+		if (IS_ERR(fp)) {
+			DHD_ERROR(("%s: File [%s] doesn't exist\n", __FUNCTION__, filepath));
+			goto done;
+		}
+#else /* Non Brix Android platform */
+		goto done;
+#endif /* CONFIG_X86 && OEM_ANDROID */
 	}
+
+	/* Handle success case */
+	ret = kernel_read(fp, 0, (char *)&mem_val, 4);
+	if (ret < 0) {
+		DHD_ERROR(("%s: File read error, ret=%d\n", __FUNCTION__, ret));
+		filp_close(fp, NULL);
+		goto done;
+	}
+
+	mem_val = bcm_atoi((char *)&mem_val);
+
+	filp_close(fp, NULL);
 
 #ifdef DHD_INIT_DEFAULT_MEMDUMP
 	if (mem_val == 0 || mem_val == DUMP_MEMFILE_MAX)
@@ -18601,7 +18635,7 @@ void
 dhd_set_blob_support(dhd_pub_t *dhdp, char *fw_path)
 {
 	struct file *fp;
-	char *filepath = CONFIG_BCMDHD_CLM_PATH;
+	char *filepath = VENDOR_PATH CONFIG_BCMDHD_CLM_PATH;
 
 	fp = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(fp)) {

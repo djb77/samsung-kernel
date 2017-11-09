@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_msm.c 674523 2016-12-09 04:05:27Z $
+ * $Id: dhd_custom_msm.c 714138 2017-08-03 08:55:55Z $
  *
  */
 
