@@ -57,7 +57,10 @@
 
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
 #include "muic_ccic.h"
+#include <linux/ccic/s2mm005.h>
 #endif
+
+#include "../../battery_v2/include/sec_charging_common.h"
 
 extern void muic_send_dock_intent(int type);
 
@@ -300,21 +303,26 @@ static void muic_handle_attach(muic_data_t *pmuic,
 		else if (pmuic->afc_water_disable)
 			pr_info("%s:%s AFC Disable(%d) by WATER!\n", MUIC_DEV_NAME,
 				__func__, pmuic->afc_water_disable);
+		else if (!pmuic->is_ccic_attach)
+			pr_info("%s:%s AFC Disable(%d), not CC attach!\n", MUIC_DEV_NAME,
+				__func__, pmuic->is_ccic_attach);
+		else if (pmuic->afc_tsub_disable)
+			pr_info("%s:%s AFC Disable(%d) by TSUB too hot!\n", MUIC_DEV_NAME,
+				__func__, pmuic->afc_tsub_disable);
+#if !defined(CONFIG_SEC_FACTORY)
+		else if (pmuic->is_ccic_afc_enable == Rp_Abnormal)
+			pr_info("%s:%s AFC Disable(%d) by CC or SBU short!\n", MUIC_DEV_NAME,
+				__func__, pmuic->is_ccic_afc_enable);
+#endif
 #endif
 		else {
 			if ((pmuic->phv->is_afc_muic_ready == false) &&
 					vps_is_hv_ta(&pmuic->vps)) {
-				/* W/A for protect of CCIC damage when HV charging in case of Rp=0 cable detect */
-				/* MUIC cable confirm after CCIC attach */
-				if (pmuic->is_ccic_attach) {
-					if (pmuic->is_ccic_afc_enable) {
 #if defined(CONFIG_MUIC_UNIVERSAL_MAX77854)
-						max77854_muic_prepare_afc_charger(pmuic->phv);
+				max77854_muic_prepare_afc_charger(pmuic->phv);
 #elif defined(CONFIG_MUIC_UNIVERSAL_MAX77865)
-						max77865_muic_prepare_afc_charger(pmuic->phv);
+				max77865_muic_prepare_afc_charger(pmuic->phv);
 #endif
-					}
-				}
 			}
 		}
 #endif /* CONFIG_MUIC_HV */
@@ -528,6 +536,9 @@ void muic_detect_dev(muic_data_t *pmuic, int irq)
 	struct i2c_client *i2c = pmuic->i2c;
 	u8 val = 0;
 #endif
+#if defined(CONFIG_MUIC_SUPPORT_CCIC)
+	union power_supply_propval tsub_val;
+#endif
 
 	get_vps_data(pmuic, &pmuic->vps);
 
@@ -599,6 +610,16 @@ void muic_detect_dev(muic_data_t *pmuic, int irq)
 				return;
 		} else
 			muic_set_legacy_dev(pmuic, new_dev);
+	}
+
+	if (irq < 0) {
+		pmuic->afc_tsub_disable = false;
+	} else {
+		psy_do_property("battery", get, POWER_SUPPLY_EXT_PROP_SUB_PBA_TEMP_REC, tsub_val);
+		if (!tsub_val.intval)
+			pmuic->afc_tsub_disable = true;
+		else
+			pmuic->afc_tsub_disable = false;
 	}
 #endif
 

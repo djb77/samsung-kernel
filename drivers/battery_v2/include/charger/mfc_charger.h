@@ -708,6 +708,7 @@ struct mfc_charger_data {
 	int led_cover;
 	bool is_probed;
 	bool is_afc_tx;
+	int tx_id;
 };
 
 #endif /* __MFC_CHARGER_H */

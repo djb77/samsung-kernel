@@ -1847,18 +1847,21 @@ static int mfc_chg_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_MAX ... POWER_SUPPLY_EXT_PROP_MAX:
 		switch (ext_psp) {
-			case POWER_SUPPLY_EXT_PROP_WIRELESS_OP_FREQ:
-				val->intval = mfc_get_adc(charger, MFC_ADC_OP_FRQ);
-				pr_info("%s: Operating FQ %dkHz\n", __func__, val->intval);
-				break;
-			case POWER_SUPPLY_EXT_PROP_WIRELESS_TX_CMD:
-				val->intval = charger->pdata->tx_data_cmd;
-				break;
-			case POWER_SUPPLY_EXT_PROP_WIRELESS_TX_VAL:
-				val->intval = charger->pdata->tx_data_val;
-				break;
-			default:
-				return -ENODATA;
+		case POWER_SUPPLY_EXT_PROP_WIRELESS_OP_FREQ:
+			val->intval = mfc_get_adc(charger, MFC_ADC_OP_FRQ);
+			pr_info("%s: Operating FQ %dkHz\n", __func__, val->intval);
+			break;
+		case POWER_SUPPLY_EXT_PROP_WIRELESS_TX_CMD:
+			val->intval = charger->pdata->tx_data_cmd;
+			break;
+		case POWER_SUPPLY_EXT_PROP_WIRELESS_TX_VAL:
+			val->intval = charger->pdata->tx_data_val;
+			break;
+		case POWER_SUPPLY_EXT_PROP_WIRELESS_TX_ID:
+			val->intval = charger->tx_id;
+			break;
+		default:
+			return -ENODATA;
 		}
 		break;
 
@@ -2389,6 +2392,7 @@ static void mfc_wpc_det_work(struct work_struct *work)
 		charger->is_full_status = 0;
 		charger->pdata->capacity = 101;
 		charger->is_afc_tx = false;
+		charger->tx_id = 0;
 
 		value.intval = SEC_WIRELESS_PAD_NONE;
 		psy_do_property("wireless", set,
@@ -2677,6 +2681,7 @@ static void mfc_wpc_isr_work(struct work_struct *work)
 			if (value.intval != MFC_PAD_PREPARE_HV)
 				psy_do_property("wireless", set, POWER_SUPPLY_PROP_ONLINE, value);
 
+			charger->tx_id = val_data;
 			pr_info("%s: TX_ID : 0x%x\n", __func__, val_data);
 			value.intval = val_data;
 			psy_do_property("wireless", set, POWER_SUPPLY_PROP_AUTHENTIC, value);

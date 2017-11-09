@@ -5617,9 +5617,7 @@ static inline int hmp_boost(void)
 
 static inline int hmp_family_boost(void)
 {
-	if (hmp_family_boost_val)
-		return 1;
-	return 0;
+	return 1;
 }
 
 static inline int hmp_semiboost(void)

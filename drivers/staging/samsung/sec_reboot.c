@@ -29,6 +29,10 @@
 #include <linux/sec_abc.h>
 #endif
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
+
 /* function ptr for original arm_pm_restart */
 void (*mach_restart)(enum reboot_mode mode, const char *cmd);
 EXPORT_SYMBOL(mach_restart);
@@ -113,6 +117,9 @@ static void sec_power_off(void)
 		if ((ac_val.intval || water_val.intval || usb_val.intval || wpc_val.intval || (poweroff_try >= 5))) {
 #endif
 			pr_emerg("%s: charger connected or power off failed(%d), reboot!\n", __func__, poweroff_try);
+#ifdef CONFIG_SEC_DEBUG
+			sec_debug_reboot_handler();
+#endif
 			/* To enter LP charging */
 			exynos_pmu_write(EXYNOS_PMU_INFORM2, SEC_POWER_OFF);
 

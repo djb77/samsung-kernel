@@ -695,6 +695,8 @@ int max77865_fg_reset_capacity_by_jig_connection(struct max77865_fuelgauge_data 
 	val.intval = 1;
 	psy_do_property("max77865-charger", set,
 			POWER_SUPPLY_PROP_ENERGY_NOW, val);
+	psy_do_property("battery", set,
+			POWER_SUPPLY_PROP_ENERGY_NOW, val);
 	pr_info("%s: DesignCap = Capacity - 1 (Jig Connection)\n", __func__);
 
 	return max77865_write_word(fuelgauge->i2c, DESIGNCAP_REG,
