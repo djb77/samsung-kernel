@@ -13,8 +13,21 @@
 #ifndef SEC_DEBUG_H 
 #define SEC_DEBUG_H
 
+#include <linux/sizes.h>
 
 #ifdef CONFIG_SEC_DEBUG
+
+enum sec_debug_extra_buf_type {
+	INFO_BUG	= 0,
+	INFO_SYSMMU,		// Debugging Option 1
+	INFO_BUSMON,		// Debugging Option 2
+	INFO_DPM_TIMEOUT,	// Debugging Option 3
+	INFO_EXTRA_4,		// Debugging Option 4
+	INFO_EXTRA_5,		// Debugging Option 5
+	INFO_MAX,
+};
+
+
 extern int  sec_debug_init(void);
 extern void sec_debug_reboot_handler(void);
 extern void sec_debug_panic_handler(void *buf, bool dump);
@@ -27,6 +40,10 @@ extern void sec_debug_disable_printk_process(void);
 extern void sec_getlog_supply_kernel(void *klog_buf);
 extern void sec_getlog_supply_platform(unsigned char *buffer, const char *name);
 
+/* reset extra info */
+extern void sec_debug_store_extra_buf(enum sec_debug_extra_buf_type type, const char *fmt, ...);
+extern void sec_debug_store_fault_addr(unsigned long addr, struct pt_regs *regs);
+extern void sec_debug_store_backtrace(struct pt_regs *regs);
 extern void sec_gaf_supply_rqinfo(unsigned short curr_offset, unsigned short rq_offset);
 #else
 #define sec_debug_init()			(-1)
@@ -101,5 +118,41 @@ extern void sec_debug_save_last_kmsg(unsigned char* head_ptr, unsigned char* cur
 #define CM_OFFSET_LIMIT 1
 int sec_set_param(unsigned long offset, char val);
 #endif /* CONFIG_SEC_PARAM */
+
+/* layout of SDRAM
+	   0: magic (4B)
+      4~1023: panic string (1020B)
+ 0x400~0x7ff: panic Extra Info (1KB)
+0x800~0x1000: panic dumper log
+      0x4000: copy of magic
+ */
+#define SEC_DEBUG_MAGIC_PA 0x80000000
+#define SEC_DEBUG_MAGIC_VA phys_to_virt(SEC_DEBUG_MAGIC_PA)
+#define SEC_DEBUG_EXTRA_INFO_VA SEC_DEBUG_MAGIC_VA+0x400
+#define BUF_SIZE_MARGIN SZ_1K - 0x80
+
+/* store panic extra info
+        "KTIME":""      : kernel time
+        "FAULT":""      : pgd,va,*pgd,*pud,*pmd,*pte
+        "BUG":""        : bug msg
+        "PANIC":""      : panic buffer msg
+        "PC":""         : pc val
+        "LR":""         : link register val
+        "STACK":""      : backtrace
+        "CHIPID":""     : CPU Serial Number
+        "DBG0":""       : Debugging Option 0
+        "DBG1":""       : Debugging Option 1
+        "DBG2":""       : Debugging Option 2
+        "DBG3":""       : Debugging Option 3
+        "DBG4":""       : Debugging Option 4
+        "DBG5":""       : Debugging Option 5
+*/
+struct sec_debug_panic_extra_info {
+	unsigned long fault_addr;
+	char extra_buf[INFO_MAX][SZ_256];
+	unsigned long pc;
+	unsigned long lr;
+	char backtrace[SZ_512];
+};
 
 #endif /* SEC_DEBUG_H */
