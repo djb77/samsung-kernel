@@ -74,6 +74,8 @@
 			battery,wpc_cv_call_vout = <5000>;
 			battery,wpc_cc_call_vout = <5000>;
 			battery,hv_vout_wa = <0x41>; /* WC vout 10.0V */
+			battery,wc_cover_rpp = <0x50>;
+			battery,wc_hv_rpp = <0x40>;
 		};
 	};
 
@@ -201,6 +203,9 @@
 		battery,wc_full_input_limit_current = <100>;
 		battery,wc_cv_current = <820>;
 		battery,wc_cv_pack_current = <630>;
+		battery,wc_hero_stand_cc_cv = <70>;
+		battery,wc_hero_stand_cv_current = <600>;
+		battery,wc_hero_stand_hv_cv_current = <450>;
 
 		battery,mix_high_temp = <420>;
 		battery,mix_high_chg_temp = <500>;

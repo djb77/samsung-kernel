@@ -842,6 +842,10 @@ struct sec_battery_platform_data {
 	int siop_hv_wireless_input_limit_current;
 	int siop_store_hv_wireless_input_limit_current;
 	int siop_hv_wireless_charging_limit_current;
+	int wc_hero_stand_cc_cv;
+	int wc_hero_stand_cv_current;
+	int wc_hero_stand_hv_cv_current;
+
 	int max_input_voltage;
 	int max_input_current;
 	int pre_afc_work_delay;

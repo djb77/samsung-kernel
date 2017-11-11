@@ -35,6 +35,7 @@
 const char *cmd_type_name[] = {
 	[CMD_TYPE_NONE] = "NONE",
 	[CMD_TYPE_DELAY] = "DELAY",
+	[CMD_TYPE_DELAY_NO_SLEEP] = "DELAY_NO_SLEEP",
 	[CMD_TYPE_PINCTL] = "PINCTL",
 	[CMD_PKT_TYPE_NONE] = "PKT_NONE",
 	[SPI_PKT_TYPE_WR] = "SPI_WR",
@@ -484,6 +485,18 @@ static int panel_do_delay(struct panel_device *panel, struct delayinfo *info)
 	return 0;
 }
 
+static int panel_do_delay_no_sleep(struct panel_device *panel, struct delayinfo *info)
+{
+	if (unlikely(!panel || !info)) {
+		panel_err("%s, invalid paramter (panel %p, info %p)\n",
+				__func__, panel, info);
+		return -EINVAL;
+	}
+
+	udelay(info->usec);
+	return 0;
+}
+
 static int panel_do_pinctl(struct panel_device *panel, struct pininfo *info)
 {
 	if (unlikely(!panel || !info)) {
@@ -816,6 +829,9 @@ int panel_do_seqtbl(struct panel_device *panel, struct seqinfo *seqtbl)
 				break;
 			case CMD_TYPE_DELAY:
 				ret = panel_do_delay(panel , (struct delayinfo *)cmdtbl[i]);
+				break;
+			case CMD_TYPE_DELAY_NO_SLEEP:
+				ret = panel_do_delay_no_sleep(panel , (struct delayinfo *)cmdtbl[i]);
 				break;
 			case CMD_TYPE_PINCTL:
 				ret = panel_do_pinctl(panel, (struct pininfo *)cmdtbl[i]);

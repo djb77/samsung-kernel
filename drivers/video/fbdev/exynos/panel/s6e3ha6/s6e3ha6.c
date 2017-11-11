@@ -594,6 +594,49 @@ int getidx_lpm_table(struct maptbl *tbl)
 	return tbl->ncol * row;
 }
 
+#ifdef CONFIG_SUPPORT_POC_FLASH
+void copy_poc_maptbl(struct maptbl *tbl, u8 *dst)
+{
+	struct panel_device *panel;
+	struct panel_info *panel_data;
+	u8 octa_id[PANEL_OCTA_ID_LEN] = { 0, };
+	u8 poc_ctrl[PANEL_POC_CTRL_LEN] = { 0, };
+	u8 poc, gray;
+	int ret;
+
+	if (!tbl || !dst)
+		return;
+
+	panel = (struct panel_device *)tbl->pdata;
+	if (unlikely(!panel))
+		return;
+
+	panel_data = &panel->panel_data;
+
+	ret = resource_copy_by_name(panel_data, octa_id, "octa_id");
+	if (unlikely(ret < 0)) {
+		pr_err("%s failed to copy resource(octa_id)\n", __func__);
+		return;
+	}
+
+	ret = resource_copy_by_name(panel_data, poc_ctrl, "poc_ctrl");
+	if (unlikely(ret < 0)) {
+		pr_err("%s failed to copy resource(poc_ctrl)\n", __func__);
+		return;
+	}
+
+	poc = octa_id[1] & 0x0F;
+	gray = poc_ctrl[3];
+
+	if (poc == 0x00)
+		*dst = 0xFF;
+	else
+		*dst = gray;
+
+	pr_info("%s poc %d, gray %02x\n", __func__, poc, *dst);
+}
+#endif
+
 void copy_common_maptbl(struct maptbl *tbl, u8 *dst)
 {
 	int idx;

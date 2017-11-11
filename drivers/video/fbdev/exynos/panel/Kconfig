@@ -45,6 +45,11 @@ config ACTIVE_CLOCK
 	tristate "Support DDI Active Clock Feature"
 	default n
 
+config SUPPORT_POC_FLASH
+	depends on EXYNOS_DECON_LCD && EXYNOS_DECON_LCD_S6E3HA6
+	tristate "Support display poc flash"
+	default n
+
 config PANEL_BACKLIGHT_PAC_3_0
 	depends on EXYNOS_DECON_LCD
 	tristate "Support baclight PAC 3.0"
@@ -54,3 +59,4 @@ config DISPLAY_USE_INFO
 	depends on EXYNOS_DECON_LCD
 	tristate "Support display use info logging"
 	default n
+

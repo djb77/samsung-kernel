@@ -1391,6 +1391,9 @@ struct maptbl dream2_a3_sa_maptbl[MAX_MAPTBL] = {
 	[ACTIVE_CLK_SELF_DRAWER] = DEFINE_0D_MAPTBL(dream2_a3_sa_self_drawer, init_common_table, NULL, copy_self_drawer),
 	[ACTIVE_CLK_CTRL_UPDATE_MAPTBL] = DEFINE_0D_MAPTBL(dream2_a3_sa_self_clk_update_table, init_common_table, NULL, copy_self_clk_update_maptbl),
 #endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	[POC_ON_MAPTBL] = DEFINE_0D_MAPTBL(dream2_a3_sa_poc_on_table, init_common_table, NULL, copy_poc_maptbl),
+#endif
 };
 
 /* ===================================================================================== */
@@ -1611,12 +1614,17 @@ u8 DREAM2_A3_SA_ISC_02[] = { 0xF6, 0x53 };
 u8 DREAM2_A3_SA_ISC_03[] = { 0xB0, 0x08 };
 u8 DREAM2_A3_SA_ISC_04[] = { 0xF6, 0x80 };
 
+#ifdef CONFIG_SUPPORT_POC_FLASH
+u8 DREAM2_A3_SA_POC_ON[] = { 0xEB, 0xFF, 0x52, 0x00, 0xFF };
+#endif
+
 DEFINE_STATIC_PACKET(dream2_a3_sa_level1_key_enable, DSI_PKT_TYPE_WR, DREAM2_A3_SA_KEY1_ENABLE);
 DEFINE_STATIC_PACKET(dream2_a3_sa_level2_key_enable, DSI_PKT_TYPE_WR, DREAM2_A3_SA_KEY2_ENABLE);
 DEFINE_STATIC_PACKET(dream2_a3_sa_level3_key_enable, DSI_PKT_TYPE_WR, DREAM2_A3_SA_KEY3_ENABLE);
 DEFINE_STATIC_PACKET(dream2_a3_sa_level1_key_disable, DSI_PKT_TYPE_WR, DREAM2_A3_SA_KEY1_DISABLE);
 DEFINE_STATIC_PACKET(dream2_a3_sa_level2_key_disable, DSI_PKT_TYPE_WR, DREAM2_A3_SA_KEY2_DISABLE);
 DEFINE_STATIC_PACKET(dream2_a3_sa_level3_key_disable, DSI_PKT_TYPE_WR, DREAM2_A3_SA_KEY3_DISABLE);
+
 DEFINE_STATIC_PACKET(dream2_a3_sa_sleep_out, DSI_PKT_TYPE_WR, DREAM2_A3_SA_SLEEP_OUT);
 DEFINE_STATIC_PACKET(dream2_a3_sa_sleep_in, DSI_PKT_TYPE_WR, DREAM2_A3_SA_SLEEP_IN);
 DEFINE_STATIC_PACKET(dream2_a3_sa_display_on, DSI_PKT_TYPE_WR, DREAM2_A3_SA_DISPLAY_ON);
@@ -1760,6 +1768,10 @@ DEFINE_STATIC_PACKET(dream2_a3_sa_isc_02, DSI_PKT_TYPE_WR, DREAM2_A3_SA_ISC_02);
 DEFINE_STATIC_PACKET(dream2_a3_sa_isc_03, DSI_PKT_TYPE_WR, DREAM2_A3_SA_ISC_03);
 DEFINE_STATIC_PACKET(dream2_a3_sa_isc_04, DSI_PKT_TYPE_WR, DREAM2_A3_SA_ISC_04);
 
+#ifdef CONFIG_SUPPORT_POC_FLASH
+DEFINE_VARIABLE_PACKET(dream2_a3_sa_poc_on, DSI_PKT_TYPE_WR, DREAM2_A3_SA_POC_ON, &dream2_a3_sa_maptbl[POC_ON_MAPTBL], 4);
+#endif
+
 static DEFINE_PANEL_MDELAY(dream2_a3_sa_wait_5msec, 5);
 static DEFINE_PANEL_MDELAY(dream2_a3_sa_wait_sleep_out, 10);
 static DEFINE_PANEL_MDELAY(dream2_a3_sa_wait_sleep_in, 120);
@@ -1800,6 +1812,12 @@ static void *dream2_a3_sa_init_cmdtbl[] = {
 	&PKTINFO(dream2_a3_sa_omok_zero_black2),
 	&KEYINFO(dream2_a3_sa_level3_key_disable),
 #endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	&KEYINFO(dream2_a3_sa_level2_key_enable),
+	&s6e3ha6_restbl[RES_POC_CTRL],
+	&PKTINFO(dream2_a3_sa_poc_on),
+	&KEYINFO(dream2_a3_sa_level2_key_disable),
+#endif
 	&KEYINFO(dream2_a3_sa_level1_key_enable),
 	&PKTINFO(dream2_a3_sa_set_area),
 	&PKTINFO(dream2_a3_sa_te_on),
@@ -1832,14 +1850,16 @@ static void *dream2_a3_sa_res_init_cmdtbl[] = {
 	&s6e3ha6_restbl[RES_MTP],
 	&s6e3ha6_restbl[RES_DATE],
 	&s6e3ha6_restbl[RES_HBM_GAMMA],
-#ifdef CONFIG_SEC_FACTORY
 	&s6e3ha6_restbl[RES_OCTA_ID],
-#endif
 #ifdef CONFIG_DISPLAY_USE_INFO
 	&s6e3ha6_restbl[RES_CHIP_ID],
 	&s6e3ha6_restbl[RES_SELF_DIAG],
 	&s6e3ha6_restbl[RES_ERR_FG],
 	&s6e3ha6_restbl[RES_DSI_ERR],
+#endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	&s6e3ha6_restbl[RES_POC_CHKSUM],
+	&s6e3ha6_restbl[RES_POC_CTRL],
 #endif
 	&KEYINFO(dream2_a3_sa_level3_key_disable),
 	&KEYINFO(dream2_a3_sa_level2_key_disable),
@@ -1893,6 +1913,14 @@ static void *dream2_a3_sa_hmd_bl_cmdtbl[] = {
 };
 
 static void *dream2_a3_sa_display_on_cmdtbl[] = {
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	&KEYINFO(dream2_a3_sa_level2_key_enable),
+	&KEYINFO(dream2_a3_sa_level3_key_enable),
+	&s6e3ha6_restbl[RES_POC_CHKSUM],
+	&s6e3ha6_restbl[RES_POC_CTRL],
+	&KEYINFO(dream2_a3_sa_level3_key_enable),
+	&KEYINFO(dream2_a3_sa_level2_key_enable),
+#endif
 	&KEYINFO(dream2_a3_sa_level1_key_enable),
 	&PKTINFO(dream2_a3_sa_display_on),
 	&KEYINFO(dream2_a3_sa_level1_key_disable),

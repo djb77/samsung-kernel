@@ -368,6 +368,25 @@ int mfc_get_vout(struct mfc_charger_data *charger)
 
 	return data;
 }
+void mfc_rpp_set(struct mfc_charger_data *charger)
+{
+	u8 data;
+	int ret;
+
+	if (charger->led_cover) {
+		pr_info("%s: LED cover exists. RPP 3/4 (0x%x)\n", __func__, charger->pdata->wc_cover_rpp);
+		mfc_reg_write(charger->client, MFC_RPP_SCALE_COEF_REG, charger->pdata->wc_cover_rpp);
+	} else {
+		pr_info("%s: LED cover not exists. RPP 1/2 (0x%x)\n", __func__, charger->pdata->wc_hv_rpp);
+		mfc_reg_write(charger->client, MFC_RPP_SCALE_COEF_REG, charger->pdata->wc_hv_rpp);
+	}
+	msleep(5);
+	ret = mfc_reg_read(charger->client, MFC_RPP_SCALE_COEF_REG, &data);
+	if (ret < 0) {
+		pr_err("%s: fail to read RPP scaling coefficient. (%d)\n", __func__, ret);
+	} else
+		pr_info("%s: RPP scaling coefficient(0x%x)\n", __func__, data);
+}
 
 void mfc_fod_set(struct mfc_charger_data *charger)
 {
@@ -2059,6 +2078,10 @@ static int mfc_chg_set_property(struct power_supply *psy,
 			pr_info("%s: FOD(%d %d %d %d %d %d %d %d %d %d %d %d)\n", __func__,
 				fod[0], fod[1], fod[2], fod[3], fod[4], fod[5], fod[6], fod[7], fod[8], fod[9], fod[10], fod[11]);
 			break;
+		case POWER_SUPPLY_PROP_FILTER_CFG:
+			charger->led_cover = val->intval;
+			pr_info("%s: LED_COVER(%d)\n", __func__, charger->led_cover);
+			break;
 		case POWER_SUPPLY_PROP_SCOPE:
 			return -ENODATA;
 		default:
@@ -2200,6 +2223,8 @@ static void mfc_wpc_det_work(struct work_struct *work)
 		/* set request afc_tx */
 		mfc_send_command(charger, MFC_REQUEST_AFC_TX);
 
+		/* set rpp scaling factor for LED cover */
+		mfc_rpp_set(charger);
 #if 0
 		/* set request TX_ID */
 		mfc_send_command(charger, MFC_REQUEST_TX_ID);
@@ -2814,6 +2839,20 @@ static int mfc_chg_parse_dt(struct device *dev,
 			pdata->hv_vout_wa = 0;
 		}
 
+		ret = of_property_read_u32(np, "battery,wc_cover_rpp",
+						&pdata->wc_cover_rpp);
+		if (ret < 0) {
+			pr_info("%s: fail to read wc_cover_rpp. \n", __func__);
+			pdata->wc_cover_rpp = 0x55;
+		}
+
+		ret = of_property_read_u32(np, "battery,wc_hv_rpp",
+						&pdata->wc_hv_rpp);
+		if (ret < 0) {
+			pr_info("%s: fail to read wc_hv_rpp. \n", __func__);
+			pdata->wc_hv_rpp = 0x40;
+		}
+
 		/* wpc_det */
 		ret = pdata->wpc_det = of_get_named_gpio_flags(np, "battery,wpc_det",
 				0, &irq_gpio_flags);
@@ -3041,6 +3080,7 @@ static int mfc_charger_probe(
 	charger->chip_id = MFC_CHIP_IDT;
 	charger->is_otg_on = false;
 	charger->vout_step = 0;
+	charger->led_cover = 0;
 
 	mutex_init(&charger->io_lock);
 

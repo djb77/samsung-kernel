@@ -26,6 +26,9 @@
 #ifdef CONFIG_PANEL_AID_DIMMING
 #include "dimming.h"
 #endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+#include "panel_poc.h"
+#endif
 
 extern struct kset *devices_kset;
 
@@ -582,6 +585,99 @@ static ssize_t xtalk_mode_store(struct device *dev,
 
 	dev_info(dev, "%s, xtalk_mode %d\n",
 			__func__, panel_data->props.xtalk_mode);
+
+	return size;
+}
+#endif
+
+#ifdef CONFIG_SUPPORT_POC_FLASH
+static ssize_t poc_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct panel_device *panel = dev_get_drvdata(dev);
+	struct panel_poc_device *poc_dev;
+	struct panel_poc_info *poc_info;
+	int ret;
+
+	if (panel == NULL) {
+		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+	poc_dev = &panel->poc_dev;
+	poc_info = &poc_dev->poc_info;
+
+	ret = set_panel_poc(poc_dev, POC_OP_CHECKPOC);
+	if (unlikely(ret < 0)) {
+		pr_err("%s, failed to chksum (ret %d)\n", __func__, ret);
+		return ret;
+	}
+
+	ret = set_panel_poc(poc_dev, POC_OP_CHECKSUM);
+	if (unlikely(ret < 0)) {
+		pr_err("%s, failed to chksum (ret %d)\n", __func__, ret);
+		return ret;
+	}
+
+	snprintf(buf, PAGE_SIZE, "%d %d %02x\n", poc_info->poc,
+			poc_info->poc_chksum[4], poc_info->poc_ctrl[3]);
+
+	dev_info(dev, "%s poc:%d chk:%d gray:%02x\n", __func__, poc_info->poc,
+			poc_info->poc_chksum[4], poc_info->poc_ctrl[3]);
+
+	return strlen(buf);
+}
+
+static ssize_t poc_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct panel_device *panel = dev_get_drvdata(dev);
+	struct panel_info *panel_data;
+	struct panel_poc_device *poc_dev;
+	struct panel_poc_info *poc_info;
+	int rc, ret;
+	unsigned int value;
+
+	if (panel == NULL) {
+		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+	panel_data = &panel->panel_data;
+	poc_dev = &panel->poc_dev;
+	poc_info = &poc_dev->poc_info;
+
+	rc = kstrtouint(buf, (unsigned int)0, &value);
+	if (rc < 0)
+		return rc;
+
+	if (!IS_VALID_POC_OP(value)) {
+		pr_warn("%s invalid poc_op %d\n", __func__, value);
+		return -EINVAL;
+	}
+
+	if (value == POC_OP_WRITE || value == POC_OP_READ) {
+		pr_warn("%s unsupported poc_op %d\n", __func__, value);
+		return size;
+	}
+
+	if (value == POC_OP_CANCEL) {
+		atomic_set(&poc_dev->cancel, 1);
+	} else {
+		mutex_lock(&panel->io_lock);
+		ret = set_panel_poc(poc_dev, value);
+		if (unlikely(ret < 0)) {
+			pr_err("%s, failed to poc_op %d(ret %d)\n", __func__, value, ret);
+			mutex_unlock(&panel->io_lock);
+			return -EINVAL;
+		}
+		mutex_unlock(&panel->io_lock);
+	}
+
+	mutex_lock(&panel->op_lock);
+	panel_data->props.poc_op = value;
+	mutex_unlock(&panel->op_lock);
+
+	dev_info(dev, "%s poc_op %d\n",
+			__func__, panel_data->props.poc_op);
 
 	return size;
 }
@@ -1466,6 +1562,9 @@ struct device_attribute panel_attrs[] = {
 #endif
 #ifdef CONFIG_SUPPORT_XTALK_MODE
 	__PANEL_ATTR_RW(xtalk_mode, 0664),
+#endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	__PANEL_ATTR_RW(poc, 0660),
 #endif
 	__PANEL_ATTR_RO(color_coordinate, 0444),
 	__PANEL_ATTR_RO(manufacture_date, 0444),

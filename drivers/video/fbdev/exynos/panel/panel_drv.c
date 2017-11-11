@@ -39,6 +39,9 @@
 #ifdef CONFIG_ACTIVE_CLOCK
 #include "active_clock.h"
 #endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+#include "panel_poc.h"
+#endif
 
 static int boot_panel_id = 0;
 int panel_log_level = 6;
@@ -676,6 +679,16 @@ int panel_probe(struct panel_device *panel)
 		return -ENODEV;
 	}
 #endif
+
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	ret = panel_poc_probe(&panel->poc_dev);
+	if (unlikely(ret)) {
+		pr_err("%s, failed to probe poc driver\n", __func__);
+		BUG();
+		return -ENODEV;
+	}
+#endif
+
 	return 0;
 }
 

@@ -41,6 +41,8 @@
 #define PANEL_ID_REG		(0x04)
 #define PANEL_ID_LEN		(3)
 #define PANEL_OCTA_ID_LEN	(20)
+#define PANEL_POC_CHKSUM_LEN	(5)
+#define PANEL_POC_CTRL_LEN	(4)
 #define PANEL_CODE_LEN		(5)
 #define PANEL_COORD_LEN		(4)
 #define PANEL_DATE_LEN		(7)
@@ -83,6 +85,20 @@ struct delayinfo {
 };
 
 #define DLYINFO(_name_) (_name_)
+#define DEFINE_PANEL_UDELAY_NO_SLEEP(_name_, _usec_)	\
+struct delayinfo DLYINFO(_name_) = {	\
+	.name = #_name_,					\
+	.type = CMD_TYPE_DELAY_NO_SLEEP,				\
+	.usec = (_usec_),					\
+}
+
+#define DEFINE_PANEL_MDELAY_NO_SLEEP(_name_, _msec_)	\
+struct delayinfo DLYINFO(_name_) = {	\
+	.name = #_name_,					\
+	.type = CMD_TYPE_DELAY_NO_SLEEP,				\
+	.usec = (_msec_) * 1000,			\
+}
+
 #define DEFINE_PANEL_UDELAY(_name_, _usec_)	\
 struct delayinfo DLYINFO(_name_) = {	\
 	.name = #_name_,					\
@@ -109,6 +125,7 @@ struct pininfo {
 enum {
 	CMD_TYPE_NONE,
 	CMD_TYPE_DELAY,
+	CMD_TYPE_DELAY_NO_SLEEP,
 	CMD_TYPE_PINCTL,
 	CMD_TYPE_TX_PKT_START,
 	CMD_PKT_TYPE_NONE = CMD_TYPE_TX_PKT_START,
@@ -635,6 +652,9 @@ struct panel_properties {
 	u32 lux;
 #ifdef CONFIG_SUPPORT_XTALK_MODE
 	u32 xtalk_mode;
+#endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	u32 poc_op;
 #endif
 	u32 key[MAX_CMD_LEVEL];
 };

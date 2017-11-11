@@ -57,6 +57,7 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(wc_enable),
 	SEC_BATTERY_ATTR(wc_control),
 	SEC_BATTERY_ATTR(wc_control_cnt),
+	SEC_BATTERY_ATTR(led_cover),
 	SEC_BATTERY_ATTR(hv_charger_status),
 	SEC_BATTERY_ATTR(hv_wc_charger_status),
 	SEC_BATTERY_ATTR(hv_charger_set),
@@ -367,7 +368,18 @@ static int sec_bat_get_wireless_current(struct sec_battery_info *battery, int in
 			incurr = battery->pdata->siop_hv_wireless_input_limit_current;
 	}
 
-	/* 6. Full-None state && SIOP_LEVEL 100 */
+	/* 6. Hero Stand Pad CV */
+	if (battery->capacity >= battery->pdata->wc_hero_stand_cc_cv) {
+		if (battery->cable_type == SEC_BATTERY_CABLE_WIRELESS_STAND) {
+			if (incurr > battery->pdata->wc_hero_stand_cv_current)
+				incurr = battery->pdata->wc_hero_stand_cv_current;
+		} else if (battery->cable_type == SEC_BATTERY_CABLE_WIRELESS_HV_STAND) {
+			if (incurr > battery->pdata->wc_hero_stand_hv_cv_current)
+				incurr = battery->pdata->wc_hero_stand_hv_cv_current;
+		}
+	}
+
+	/* 7. Full-None state && SIOP_LEVEL 100 */
 	if (battery->siop_level == 100 &&
 		battery->status == POWER_SUPPLY_STATUS_FULL && battery->charging_mode == SEC_BATTERY_CHARGING_NONE) {
 		incurr = battery->pdata->wc_full_input_limit_current;
@@ -4262,6 +4274,10 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 		battery->wc_enable_cnt_value);
 		break;
+	case LED_COVER:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+		battery->led_cover);
+		break;
 	case HV_CHARGER_STATUS:
 		{
 			int check_val = 0;
@@ -5101,6 +5117,16 @@ ssize_t sec_bat_store_attrs(
 	case WC_CONTROL_CNT:
 		if (sscanf(buf, "%10d\n", &x) == 1) {
 			battery->wc_enable_cnt_value = x;
+			ret = count;
+		}
+		break;
+	case LED_COVER:
+		if (sscanf(buf, "%10d\n", &x) == 1) {
+			pr_info("%s: MFC, LED_COVER(%d)\n", __func__, x);
+			battery->led_cover = x;
+			value.intval = battery->led_cover;
+			psy_do_property(battery->pdata->wireless_charger_name, set,
+					POWER_SUPPLY_PROP_FILTER_CFG, value);
 			ret = count;
 		}
 		break;
@@ -7854,6 +7880,25 @@ static int sec_bat_parse_dt(struct device *dev,
 		pdata->wc_cv_pack_current = 500;
 	}
 
+	ret = of_property_read_u32(np, "battery,wc_hero_stand_cc_cv",
+		&pdata->wc_hero_stand_cc_cv);
+	if (ret) {
+		pr_info("%s : wc_hero_stand_cc_cv is Empty\n", __func__);
+		pdata->wc_hero_stand_cc_cv = 70;
+	}
+	ret = of_property_read_u32(np, "battery,wc_hero_stand_cv_current",
+		&pdata->wc_hero_stand_cv_current);
+	if (ret) {
+		pr_info("%s : wc_hero_stand_cv_current is Empty\n", __func__);
+		pdata->wc_hero_stand_cv_current = 600;
+	}
+	ret = of_property_read_u32(np, "battery,wc_hero_stand_hv_cv_current",
+		&pdata->wc_hero_stand_hv_cv_current);
+	if (ret) {
+		pr_info("%s : wc_hero_stand_hv_cv_current is Empty\n", __func__);
+		pdata->wc_hero_stand_hv_cv_current = 450;
+	}
+
 	ret = of_property_read_u32(np, "battery,sleep_mode_limit_current",
 			&pdata->sleep_mode_limit_current);
 	if (ret)
@@ -8785,6 +8830,8 @@ static int sec_battery_probe(struct platform_device *pdev)
 	battery->cooldown_mode = true;
 #endif
 	battery->skip_swelling = false;
+	battery->led_cover = 0;
+
 	sec_bat_set_current_event(battery, SEC_BAT_CURRENT_EVENT_USB_100MA, SEC_BAT_CURRENT_EVENT_USB_100MA);
 
 	if (lpcharge) {
