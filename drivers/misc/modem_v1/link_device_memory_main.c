@@ -1461,9 +1461,12 @@ static int mem_xmit_boot(struct link_device *ld, struct io_device *iod,
 
 	/**
 	 * Check the size of the boot image
+	 * fix the integer overflow of "mf.m_offset + mf.len" from Jose Duart
 	 */
-	if (mf.size > valid_space) {
-		mif_err("%s: ERR! Invalid binary size %d\n", ld->name, mf.size);
+	if (mf.size > valid_space || mf.len > valid_space
+			|| mf.m_offset > valid_space - mf.len) {
+		mif_err("%s: ERR! Invalid args: size %x, offset %x, len %x\n",
+			ld->name, mf.size, mf.m_offset, mf.len);
 		return -EINVAL;
 	}
 
