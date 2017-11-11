@@ -464,6 +464,10 @@ static noinline void __init_refok rest_init(void)
 	cpu_startup_entry(CPUHP_ONLINE);
 }
 
+#ifdef CONFIG_RKP_KDP
+RKP_RO_AREA int is_boot_recovery = 0;
+#endif
+
 /* Check for early params. */
 static int __init do_early_param(char *param, char *val, const char *unused)
 {
@@ -484,6 +488,15 @@ static int __init do_early_param(char *param, char *val, const char *unused)
 		pr_warn("val = %d\n",*val);
 	        if ((strncmp(val, "1526595585", 10) == 0)) {
 				pr_info("Security Boot Mode \n");
+			}
+	}
+
+#endif
+#ifdef CONFIG_RKP_KDP
+	if ((strncmp(param, "bootmode", 9) == 0)) {
+			//printk("\n RKP22 In Recovery Mode= %d\n",*val);
+			if ((strncmp(val, "2", 2) == 0)) {
+				is_boot_recovery = 1;
 			}
 	}
 #endif

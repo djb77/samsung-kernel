@@ -943,6 +943,35 @@ static ssize_t set_data_injection_enable(struct device *dev,
 	return size;
 }
 
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+static ssize_t show_lcd_check_fold_state(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ssp_data *data  = dev_get_drvdata(dev);
+	return sprintf(buf, "%d\n", data->change_axis);
+	
+}
+
+static ssize_t set_lcd_check_fold_state(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct ssp_data *data = dev_get_drvdata(dev);
+
+	if(folder_state == 1) // folding state
+	{
+		data->change_axis = true;
+		pr_err("[SSP]: %s - change_axis %d\n", __func__, data->change_axis);
+	}
+	else // spread state
+	{
+		data->change_axis = false;
+		pr_err("[SSP]: %s - change_axis %d\n", __func__, data->change_axis);
+	}
+	
+	return size;
+}
+#endif
+
 static DEVICE_ATTR(mcu_rev, S_IRUGO, mcu_revision_show, NULL);
 static DEVICE_ATTR(mcu_name, S_IRUGO, mcu_model_name_show, NULL);
 static DEVICE_ATTR(mcu_update, S_IRUGO, mcu_update_kernel_bin_show, NULL);
@@ -1018,6 +1047,11 @@ static struct device_attribute dev_attr_step_cnt_poll_delay
 static DEVICE_ATTR(data_injection_enable, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_data_injection_enable, set_data_injection_enable);
 
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+static DEVICE_ATTR(lcd_check_fold_state, S_IRUGO | S_IWUSR | S_IWGRP,
+	show_lcd_check_fold_state, set_lcd_check_fold_state);
+#endif
+
 static struct device_attribute *mcu_attrs[] = {
 	&dev_attr_enable,
 	&dev_attr_mcu_rev,
@@ -1044,6 +1078,9 @@ static struct device_attribute *mcu_attrs[] = {
 	&dev_attr_ssp_flush,
 	&dev_attr_shake_cam,
 	&dev_attr_data_injection_enable,
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+	&dev_attr_lcd_check_fold_state,
+#endif
 	NULL,
 };
 
@@ -1064,6 +1101,11 @@ static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 	u8 uBuf[9];
 
 	sensor_type = (cmd & 0xFF);
+
+	if(sensor_type >= SENSOR_MAX){
+		pr_err("[SSP] Invalid sensor_type %d\n", sensor_type);
+		return -EINVAL;
+	}
 
 	if ((cmd >> 8 & 0xFF) != BATCH_IOCTL_MAGIC) {
 		pr_err("[SSP] Invalid BATCH CMD %x\n", cmd);
@@ -1240,6 +1282,17 @@ static struct file_operations ssp_data_injection_fops = {
 	.write = ssp_data_injection_write,
 
 };
+
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+int folder_state;
+int ssp_ckeck_lcd(int state)
+{
+	folder_state = state;
+	pr_info("[SSP] %s folder_state %d \n", __func__, folder_state);
+
+	return folder_state;
+}
+#endif
 
 static void initialize_mcu_factorytest(struct ssp_data *data)
 {

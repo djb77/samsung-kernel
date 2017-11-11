@@ -418,15 +418,17 @@ bool check_wait_event(struct ssp_data *data)
 		//the sensor is registered
 		if((atomic64_read(&data->aSensorEnable) & (1 << sensor))
 			//non batching mode
-			&& data->batchLatencyBuf[sensor] == 0
+			&& data->IsBypassMode[sensor] == 1
 			//there is no sensor event over 3sec
-			&& data->lastTimestamp[sensor] + 3000000000ULL < timestamp)
+			&& data->LastSensorTimeforReset[sensor] + 3000000000ULL < timestamp)
 		{
-			pr_info("%s - sensor(%d) last = %lld, cur = %lld",
-				__func__,sensor,data->lastTimestamp[sensor],timestamp);
+			pr_info("[SSP] %s - sensor(%d) last = %lld, cur = %lld\n",
+				__func__,sensor,data->LastSensorTimeforReset[sensor],timestamp);
 			res = true;
 			data->uNoRespSensorCnt++;
 		}
+		//pr_info("[SSP]test %s - sensor(%d mode %d) last = %lld, cur = %lld\n",
+		//__func__,sensor,data->IsBypassMode[sensor],data->LastSensorTimeforReset[sensor],timestamp);
 	}
 	return res;
 }
@@ -436,9 +438,9 @@ static void debug_work_func(struct work_struct *work)
 	unsigned int uSensorCnt;
 	struct ssp_data *data = container_of(work, struct ssp_data, work_debug);
 
-	ssp_dbg("[SSP]: %s(%u) - Sensor state: 0x%llx, RC: %u, CC: %u, TC: %u NSC: %u\n",
+	ssp_dbg("[SSP]: %s(%u) - Sensor state: 0x%llx, RC: %u, CC: %u, TC: %u NSC: %u EC: %u\n",
 		__func__, data->uIrqCnt, data->uSensorState, data->uResetCnt,
-		data->uComFailCnt, data->uTimeOutCnt, data->uNoRespSensorCnt);
+		data->uComFailCnt, data->uTimeOutCnt, data->uNoRespSensorCnt, data->errorCount);
 
 	for (uSensorCnt = 0; uSensorCnt < SENSOR_MAX; uSensorCnt++)
 		if ((atomic64_read(&data->aSensorEnable) & (1 << uSensorCnt))
@@ -449,7 +451,8 @@ static void debug_work_func(struct work_struct *work)
 		&& (data->batchLatencyBuf[ACCELEROMETER_SENSOR] == 0)
 		&& (data->uIrqCnt == 0) && (data->uTimeOutCnt > 0))
 		|| (data->uTimeOutCnt > LIMIT_TIMEOUT_CNT)
-		|| (check_wait_event(data))) {
+		|| (check_wait_event(data))
+		|| (data->mcuAbnormal == true)) {
 
 		mutex_lock(&data->ssp_enable_mutex);
 			pr_info("[SSP] : %s - uTimeOutCnt(%u), pending(%u)\n",
@@ -460,6 +463,7 @@ static void debug_work_func(struct work_struct *work)
 
 		data->uTimeOutCnt = 0;
 		data->uComFailCnt = 0;
+		data->mcuAbnormal = false;
 	}
 
 	data->uIrqCnt = 0;

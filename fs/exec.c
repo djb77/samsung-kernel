@@ -851,6 +851,11 @@ static int exec_mmap(struct mm_struct *mm)
 	activate_mm(active_mm, mm);
 	tsk->mm->vmacache_seqnum = 0;
 	vmacache_flush(tsk);
+#ifdef CONFIG_RKP_KDP
+	if(rkp_cred_enable){
+		rkp_call(RKP_CMDID(0x43),(unsigned long long)current_cred(), (unsigned long long)mm->pgd,0,0,0);
+	}
+#endif /*CONFIG_RKP_KDP*/
 	task_unlock(tsk);
 	if (old_mm) {
 		up_read(&old_mm->mmap_sem);
@@ -1054,6 +1059,47 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 	task_unlock(tsk);
 	perf_event_comm(tsk, exec);
 }
+#ifdef CONFIG_RKP_NS_PROT
+extern struct super_block *sys_sb;	/* pointer to superblock */
+extern struct super_block *rootfs_sb;	/* pointer to superblock */
+extern int is_boot_recovery;
+
+static int invalid_drive(struct linux_binprm * bprm) 
+{
+	struct super_block *sb =  NULL;
+	struct vfsmount *vfsmnt = NULL;
+	
+	vfsmnt = bprm->file->f_path.mnt;
+	if(!vfsmnt || 
+		!rkp_ro_page((unsigned long)vfsmnt)) {
+		printk("\nInvalid Drive #%s# #%p#\n",bprm->filename,vfsmnt);
+		return 1;
+	} 
+	sb = vfsmnt->mnt_sb;
+
+	if((!is_boot_recovery) &&
+		sb != rootfs_sb   
+		&& sb != sys_sb) {
+		printk("\n Superblock Mismatch #%s# vfsmnt #%p#sb #%p:%p:%p#\n",
+					bprm->filename,vfsmnt,sb,rootfs_sb,sys_sb);
+		return 1;
+	}
+
+	return 0;
+}
+#define RKP_CRED_SYS_ID 1000
+
+static int is_rkp_priv_task(void)
+{
+	struct cred *cred = (struct cred *)current_cred();
+
+	if(cred->uid.val <= (uid_t)RKP_CRED_SYS_ID || cred->euid.val <= (uid_t)RKP_CRED_SYS_ID ||
+		cred->gid.val <= (gid_t)RKP_CRED_SYS_ID || cred->egid.val <= (gid_t)RKP_CRED_SYS_ID ){
+		return 1;
+	}
+	return 0;
+}
+#endif
 
 int flush_old_exec(struct linux_binprm * bprm)
 {
@@ -1072,14 +1118,16 @@ int flush_old_exec(struct linux_binprm * bprm)
 	 * Release all of the old mmap stuff
 	 */
 	acct_arg_size(bprm, 0);
+#ifdef CONFIG_RKP_NS_PROT
+	if(rkp_cred_enable &&
+		is_rkp_priv_task() && 
+		invalid_drive(bprm)) {
+		panic("\n Illegal Execution file_name #%s#\n",bprm->filename);
+	}
+#endif /*CONFIG_RKP_NS_PROT*/
 	retval = exec_mmap(bprm->mm);
 	if (retval)
 		goto out;
-#ifdef CONFIG_RKP_KDP
-	if(rkp_cred_enable){
-		rkp_call(RKP_CMDID(0x43),(unsigned long long)current_cred(), (unsigned long long)bprm->mm->pgd,0,0,0);
-	}
-#endif /*CONFIG_RKP_KDP*/
 
 	bprm->mm = NULL;		/* We're using it now */
 
@@ -1489,10 +1537,13 @@ out_nofile:
 EXPORT_SYMBOL(sec_check_execpath);
 
 #ifdef CONFIG_RKP_KDP
-static int rkp_restrict_fork(void)
+static int rkp_restrict_fork(struct filename *path)
 {
 	struct cred *shellcred;
 
+	if(!strcmp(path->name,"/system/bin/patchoat")){
+		return 0 ;
+	}
 	if(rkp_is_nonroot(current)){
 		shellcred = prepare_creds();
 		if (!shellcred) {
@@ -1791,7 +1842,6 @@ SYSCALL_DEFINE3(execve,
 	if(rkp_cred_enable){
 		rkp_call(RKP_CMDID(0x4b),(u64)path->name,0,0,0,0);
 	}
-	putname(path);
 #endif
 	if(CHECK_ROOT_UID(current)){
 		if(sec_restrict_fork()){
@@ -1799,19 +1849,24 @@ SYSCALL_DEFINE3(execve,
 							"PPID = %d(%s)\n",
 			current->pid, current->comm,
 			current->parent->pid, current->parent->comm);
+#ifdef CONFIG_RKP_KDP
+			putname(path);
+#endif
 			return -EACCES;
 		}
 	}
 #ifdef CONFIG_RKP_KDP
 	if(CHECK_ROOT_UID(current) && rkp_cred_enable) {
-		if(rkp_restrict_fork()){
+		if(rkp_restrict_fork(path)){
 			PRINT_LOG("RKP_KDP Restricted making process. PID = %d(%s) "
 							"PPID = %d(%s)\n",
 			current->pid, current->comm,
 			current->parent->pid, current->parent->comm);
+			putname(path);
 			return -EACCES;
 		}
 	}
+	putname(path);
 #endif
 #endif	// End of CONFIG_SEC_RESTRICT_FORK
 

@@ -33,8 +33,11 @@
 static struct kmem_cache *cred_jar;
 
 #ifdef CONFIG_RKP_KDP
+RKP_RO_AREA int rkp_cred_enable = 0;
+
 static struct kmem_cache *cred_jar_ro;
 struct kmem_cache *tsec_jar;
+struct kmem_cache *usecnt_jar;
 atomic_t init_cred_use_cnt = ATOMIC_INIT(4);
 
 unsigned  int rkp_get_usecount(struct cred *cred)
@@ -195,7 +198,7 @@ static void put_ro_cred(struct cred *cred)
 	free_uid(cred->user);
 	put_user_ns(cred->user_ns);
 	if(cred->use_cnt)
-		kfree(cred->use_cnt);
+		kmem_cache_free(usecnt_jar,(void *)cred->use_cnt);
 	kmem_cache_free(cred_jar_ro, cred);
 }
 #endif
@@ -533,7 +536,7 @@ int copy_creds(struct task_struct *p, unsigned long clone_flags)
 		if (!new_ro)
 			panic("copy_creds(): kmem_cache_alloc() failed");
 
-		use_cnt_ptr = kmalloc(sizeof(atomic_t),GFP_KERNEL);
+		use_cnt_ptr = kmem_cache_alloc(usecnt_jar,GFP_KERNEL);
 		if(!use_cnt_ptr)
 			panic("copy_creds() : Unable to allocate usage pointer\n");
 
@@ -680,7 +683,7 @@ int commit_creds(struct cred *new)
 		if (!new_ro)
 			panic("commit_creds(): kmem_cache_alloc() failed");
 
-		use_cnt_ptr = kmalloc(sizeof(atomic_t),GFP_KERNEL);
+		use_cnt_ptr = kmem_cache_alloc(usecnt_jar,GFP_KERNEL);
 		if(!use_cnt_ptr)
 			panic("commit_creds() : Unable to allocate usage pointer\n");
 		
@@ -798,7 +801,7 @@ const struct cred *override_creds(const struct cred *new)
 		if (!new_ro)
 			panic("override_creds(): kmem_cache_alloc() failed");
 
-		use_cnt_ptr = kmalloc(sizeof(atomic_t),GFP_KERNEL);
+		use_cnt_ptr = kmem_cache_alloc(usecnt_jar,GFP_KERNEL);
 		if(!use_cnt_ptr)
 			panic("override_creds() : Unable to allocate usage pointer\n");
 
@@ -876,7 +879,7 @@ void revert_creds(const struct cred *old)
 				&& (rkp_use_cnt == 2)){
 				rocred_uc_set((rocred), 0);
 				if(rocred->use_cnt)
-					kfree(rocred->use_cnt);
+					kmem_cache_free(usecnt_jar,(void *)rocred->use_cnt);
 				security_cred_free(rocred);
 				kmem_cache_free(cred_jar_ro, (struct cred *)rocred);
 				return;
@@ -897,6 +900,10 @@ void sec_ctor(void *data)
 {
 	/* Dummy constructor to make sure we have separate slabs caches. */
 	//printk("\n initializing sec_ctor = %p \n",data);
+}
+void usecnt_ctor(void *data)
+{
+	/* Dummy constructor to make sure we have separate slabs caches. */
 }
 #endif  /* CONFIG_RKP_KDP */
 
@@ -922,6 +929,11 @@ void __init cred_init(void)
 			panic("Unable to create RO security cache\n");
 		}
 
+		usecnt_jar = kmem_cache_create("usecnt_jar", sizeof(int),
+				0, SLAB_HWCACHE_ALIGN|SLAB_PANIC, usecnt_ctor);
+		if(!usecnt_jar) {
+			panic("Unable to create use count jar\n");
+		}
 		rkp_call(RKP_CMDID(0x42),(unsigned long long )cred_jar_ro->size,(unsigned long long)tsec_jar->size,0,0,0);
 	}
 #endif  /* CONFIG_RKP_KDP */

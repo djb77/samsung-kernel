@@ -21,6 +21,8 @@
 #if defined (CONFIG_SENSORS_SSP_NOBLELTE) \
 	|| defined (CONFIG_SENSORS_SSP_ZENLTE) /* Noble or Zen */
 #define SSP_FIRMWARE_REVISION_STM	15060401
+#elif defined (CONFIG_SENSORS_SSP_VLTE) /* V */
+#define SSP_FIRMWARE_REVISION_STM	15052800
 #else /* Zero */
 #define SSP_FIRMWARE_REVISION_STM	15050700
 #endif
@@ -35,6 +37,8 @@
 #if defined (CONFIG_SENSORS_SSP_NOBLELTE) \
 	|| defined (CONFIG_SENSORS_SSP_ZENLTE) /* Noble or Zen */
 #define BL_FW_NAME			"ssp_stm_noble.fw"
+#elif defined (CONFIG_SENSORS_SSP_VLTE) /* V */
+#define BL_FW_NAME			"ssp_stm_v.fw"
 #else /* Zero */
 #define BL_FW_NAME			"ssp_stm.fw"
 #endif

@@ -221,6 +221,8 @@ int send_instruction(struct ssp_data *data, u8 uInst,
 	char command;
 	int iRet = 0;
 	struct ssp_msg *msg;
+	unsigned int BatchTimeforReset = 0;
+	//u64 current_Ts = 0; 
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
 	u64 timestamp;
 #endif
@@ -240,7 +242,7 @@ int send_instruction(struct ssp_data *data, u8 uInst,
 		command = MSG2SSP_INST_BYPASS_SENSOR_ADD;
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
 		timestamp = get_current_timestamp();
-		data->lastTimestamp[uSensorType] = timestamp;
+		data->lastTimestamp[uSensorType] = data->LastSensorTimeforReset[uSensorType] = timestamp;
 		data->ts_avg_buffer_idx[uSensorType] = 0;
 		data->ts_avg_buffer_cnt[uSensorType] = 0;
 		data->ts_avg_buffer_sum[uSensorType] = 0;
@@ -254,6 +256,8 @@ int send_instruction(struct ssp_data *data, u8 uInst,
 	case CHANGE_DELAY:
 		command = MSG2SSP_INST_CHANGE_DELAY;
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
+		timestamp = get_current_timestamp();
+		data->LastSensorTimeforReset[uSensorType] = timestamp;
 		data->ts_avg_buffer_idx[uSensorType] = 0;
 		data->ts_avg_buffer_cnt[uSensorType] = 0;
 		data->ts_avg_buffer_sum[uSensorType] = 0;
@@ -303,7 +307,19 @@ int send_instruction(struct ssp_data *data, u8 uInst,
 		pr_err("[SSP]: %s - Instruction CMD Fail %d\n", __func__, iRet);
 		return ERROR;
 	}
-
+	
+	if(uInst == ADD_SENSOR || uInst == CHANGE_DELAY)
+	{
+		//current_Ts = get_current_timestamp();
+		memcpy(&BatchTimeforReset, &uSendBuf[4], 4);
+		//pr_info("[SSP] %s timeForRest %d", __func__, BatchTimeforReset);
+		if(BatchTimeforReset == 0)
+			data->IsBypassMode[uSensorType] = 1;
+		else
+			data->IsBypassMode[uSensorType] = 0;
+		
+		//pr_info("[SSP] sensor%d mode%d Time %lld\n", uSensorType, data->IsBypassMode[uSensorType], current_Ts);
+	}
 	return iRet;
 }
 
@@ -314,6 +330,8 @@ int send_instruction_sync(struct ssp_data *data, u8 uInst,
 	int iRet = 0;
 	char buffer[10] = { 0, };
 	struct ssp_msg *msg;
+	unsigned int BatchTimeforReset = 0;
+	//u64 current_Ts = 0; 
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
 	u64 timestamp;
 #endif
@@ -333,7 +351,7 @@ int send_instruction_sync(struct ssp_data *data, u8 uInst,
 		command = MSG2SSP_INST_BYPASS_SENSOR_ADD;
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
 		timestamp = get_current_timestamp();
-		data->lastTimestamp[uSensorType] = timestamp;
+		data->lastTimestamp[uSensorType] = data->LastSensorTimeforReset[uSensorType] = timestamp;
 		data->ts_avg_buffer_idx[uSensorType] = 0;
 		data->ts_avg_buffer_cnt[uSensorType] = 0;
 		data->ts_avg_buffer_sum[uSensorType] = 0;
@@ -347,6 +365,8 @@ int send_instruction_sync(struct ssp_data *data, u8 uInst,
 	case CHANGE_DELAY:
 		command = MSG2SSP_INST_CHANGE_DELAY;
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
+		timestamp = get_current_timestamp();
+		data->LastSensorTimeforReset[uSensorType] = timestamp;
 		data->ts_avg_buffer_idx[uSensorType] = 0;
 		data->ts_avg_buffer_cnt[uSensorType] = 0;
 		data->ts_avg_buffer_sum[uSensorType] = 0;
@@ -396,7 +416,18 @@ int send_instruction_sync(struct ssp_data *data, u8 uInst,
 		pr_err("[SSP]: %s - Instruction CMD Fail %d\n", __func__, iRet);
 		return ERROR;
 	}
-
+	if(uInst == ADD_SENSOR || uInst == CHANGE_DELAY)
+	{
+		//current_Ts = get_current_timestamp();
+		memcpy(&BatchTimeforReset, &uSendBuf[4], 4);
+		//pr_info("[SSP] %s timeForRest %d", __func__, BatchTimeforReset);
+		if(BatchTimeforReset == 0)
+			data->IsBypassMode[uSensorType] = 1;
+		else
+			data->IsBypassMode[uSensorType] = 0;
+		
+		//pr_info("[SSP] sensor%d mode%d Time %lld\n", uSensorType, data->IsBypassMode[uSensorType], current_Ts);
+	}
 	return buffer[0];
 }
 

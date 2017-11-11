@@ -2530,12 +2530,6 @@ int fimc_is_sensor_runtime_suspend(struct device *dev)
 	if (ret)
 		mwarn("v4l2_csi_call(s_power) is fail(%d)", device, ret);
 
-	ret = fimc_is_sensor_g_module(device, &module);
-	if (ret) {
-		merr("fimc_is_sensor_g_module is fail(%d)", device, ret);
-		goto p_err;
-	}
-
 	ret = fimc_is_sensor_gpio_off(device);
 	if (ret)
 		mwarn("fimc_is_sensor_gpio_off is fail(%d)", device, ret);
@@ -2544,14 +2538,18 @@ int fimc_is_sensor_runtime_suspend(struct device *dev)
 	if (ret)
 		mwarn("fimc_is_sensor_iclk_off is fail(%d)", device, ret);
 
-	ret = fimc_is_sensor_mclk_off(device, device->pdata->scenario, module->pdata->mclk_ch);
+	ret = fimc_is_sensor_g_module(device, &module);
 	if (ret)
-		mwarn("fimc_is_sensor_mclk_off is fail(%d)", device, ret);
+		mwarn("fimc_is_sensor_g_module is fail(%d)", device, ret);
+
+	if (module) {
+		ret = fimc_is_sensor_mclk_off(device, device->pdata->scenario, module->pdata->mclk_ch);
+		if (ret)
+			mwarn("fimc_is_sensor_mclk_off is fail(%d)", device, ret);
+	}
 
 	v4l2_device_unregister_subdev(device->subdev_module);
 	device->subdev_module = NULL;
-
-p_err:
 
 #if defined(CONFIG_PM_DEVFREQ)
 	if (test_bit(FIMC_IS_SENSOR_DRIVING, &device->state)) {
