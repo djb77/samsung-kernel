@@ -1,0 +1,17 @@
+#
+# Cypress touchkey configuration
+#
+
+config KEYBOARD_CYPRESS_TOUCH_20075
+	tristate "Cypress touchkey support"
+	help
+	  Say Y here to enable the cypress touchkey.
+
+	  To compile this driver as a module, choose M here.
+	  
+config KEYBOARD_CYPRESS_TOUCH_MBR31X5
+	tristate "Cypress touchkey support"
+	help
+	  Say Y here to enable the cypress touchkey.
+
+	  To compile this driver as a module, choose M here.

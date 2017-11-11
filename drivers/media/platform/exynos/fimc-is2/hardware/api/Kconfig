@@ -1,0 +1,13 @@
+config USE_HW_API_COMMON
+	bool "Use HW API Common library"
+	depends on EXYNOS_FIMC_IS_HARDWARE
+	default y
+	help
+	  Enalbe HW API Common library.
+
+config USE_HOST_FD_LIBRARY
+	bool "Use FD library in host"
+	depends on EXYNOS_FIMC_IS_HARDWARE
+	default n
+	help
+	  Enalbe SW FD library in host.
