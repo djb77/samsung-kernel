@@ -541,6 +541,8 @@ static DEVICE_ATTR(front_checkfw_factory, S_IRUGO, camera_front_checkfw_factory_
 static ssize_t camera_rear_writefw_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+/* Disabled for product. Security Hole */ 
+#if 0
 	struct device *is_dev = &sysfs_core->ischain[0].pdev->dev;
 	int ret = 0;
 
@@ -550,6 +552,9 @@ static ssize_t camera_rear_writefw_show(struct device *dev,
 		return sprintf(buf, "NG\n");
 	else
 		return sprintf(buf, "OK\n");
+#else
+	return sprintf(buf, "OK\n");
+#endif
 }
 #endif
 

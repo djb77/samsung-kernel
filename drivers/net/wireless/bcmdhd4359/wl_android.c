@@ -4790,6 +4790,15 @@ int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 			(rev_info_delim + 1)) {
 			revinfo  = bcm_atoi(rev_info_delim + 1);
 		}
+
+		DHD_ERROR(("%s: country_code %s \n", __FUNCTION__, country_code));
+		if((strncmp(country_code, "SY", 3) == 0) || (strncmp(country_code, "KP", 3) == 0)) {
+			strncpy(country_code, "XZ", 3);
+			revinfo = 11;
+			DHD_ERROR(("%s: change to %s \n", __FUNCTION__, country_code));
+		}
+
+
 		if (wl_check_dongle_idle(wiphy) != TRUE) {
 			DHD_ERROR(("FW is busy to check dongle idle\n"));
 			goto exit;
