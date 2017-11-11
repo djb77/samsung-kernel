@@ -1,0 +1,45 @@
+#
+# (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
+#
+# This program is free software and is provided to you under the terms of the
+# GNU General Public License version 2 as published by the Free Software
+# Foundation, and any use by you of this program is subject to the terms
+# of such GNU licence.
+#
+# A copy of the licence is included with the program, and can also be obtained
+# from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA  02110-1301, USA.
+#
+#
+
+
+menuconfig MALI_T8XX
+	tristate "Mali-T8XX support"
+	default n
+	help
+	  Enable this option to build support for the ARM Mali-T7xx GPU.
+
+	  To compile this driver as a module, choose M here:
+	  this will generate a single module, called mali_kbase.
+
+choice
+	prompt "version Configuration"
+	depends on MALI_T8XX
+	default MALI_R9P0
+	help
+	  Select the gpu support version.
+
+
+
+
+config MALI_R9P0
+	depends on MALI_T8XX
+	bool "r9p0 driver"
+
+endchoice
+
+
+if MALI_R9P0
+source "drivers/gpu/arm/t8xx/r9p0/Kconfig"
+endif
+

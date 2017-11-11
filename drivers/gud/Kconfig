@@ -1,0 +1,9 @@
+#
+# Mobicore Configuration
+#
+
+if SOC_EXYNOS8890
+source "drivers/gud/gud-exynos8890/Kconfig"
+endif
+
+source "drivers/gud/TlcTui/Kconfig"

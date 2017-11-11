@@ -1,0 +1,129 @@
+# drivers/staging/samsung/Kconfig
+#
+# Copyright (c) 2010-2011 Samsung Electronics Co., Ltd.
+#		http://www.samsung.com/
+#
+# Licensed under GPLv2
+
+comment "Samsung TN Features"
+config SEC_EXT
+	bool "Samsung TN extension Feature"
+
+config SEC_SYSFS
+	bool "Samsung sec sysfs Feature"
+	default y
+	depends on SEC_EXT
+	help
+	  Samsung sysfs name 'sec' directory create.
+
+config SEC_REBOOT
+	bool "Samsung TM reboot extension Feature"
+	default y
+	depends on SEC_EXT
+	help
+	  Samsung TN reboot extension feature. Do additional work when reboot.
+
+config SEC_MISC
+        bool "Samsung TM Misc Feature"
+        default n
+        help
+          Samsung TN Misc extension Feature. Do additional work when Misc.
+
+config ARGOS
+	bool "Throughput monitoring Feature"
+	default n
+	help
+	  Check throughput and set appropriate system parameters(CPU freq, affinity, etc)
+
+config SEC_DEBUG
+	bool "Enable TN debugging feature"
+	depends on EXYNOS_SNAPSHOT
+	depends on SEC_REBOOT
+	default y
+	help
+	  Samsung TN debugging feature.
+
+config SEC_FACTORY
+	bool "SAMSUNG Factory build option"
+	default n
+	help
+	  Include some codes for Factory binary.
+
+config SEC_HOTPLUG
+	bool "Control cpu qos for samsung feature"
+	default y
+	depends on SENSORS_FP_LOCKSCREEN_MODE
+	help
+	  Request wakeup with big core for samsung fingerprint
+
+comment "Samsung TN logging feature"
+config SEC_AVC_LOG
+	default n
+	bool "Enable avc audit log support" if EMBEDDED
+	depends on SEC_EXT
+	help
+	  This option enables additional log buffer for audit log.
+
+config SEC_DEBUG_TSP_LOG
+	default n
+	bool "Enable tsp log support" if EMBEDDED
+	depends on SEC_EXT
+	help
+	  This option enables additional log buffer for tsp log.
+
+config SEC_FILE_LEAK_DEBUG
+	bool "Panic when file leak detected"
+	default n
+	help
+	  Panic when file leak detected.
+comment "Samsung TN Power Management Options"
+menuconfig SEC_PM
+	bool "Samsung TN Power Management"
+	default y
+	help
+	  Samsung TN Power Management.
+
+config SEC_PM_DEBUG
+	bool "Enable Samsung TN Power management debug support"
+	default y
+	depends on SEC_PM
+	help
+	  Enable Samsung TN Power management debug support.
+
+config USER_RESET_DEBUG
+	bool "USER RESET debug feature"
+	default n
+	help
+	  This option enables debugging log for User Reset.
+	  This option provides reset history log in user version.
+	  This option enable proc/reset_reason support
+
+comment "BSP Feature"
+menuconfig SEC_BSP
+	bool "Samsung TN BSP Feature"
+	default n
+	depends on SEC_EXT
+	help
+	  Samsung TN BSP Feature.
+
+config SEC_INITCALL_DEBUG
+	bool "Enable Samsung initcall debug support"
+	default n
+	depends on SEC_DEBUG && !SAMSUNG_PRODUCT_SHIP
+	help
+	  Enable Samsung initcall debug support.
+
+comment "PARAM Feature"
+config SEC_PARAM
+	bool "Samsung TN Param Feature"
+	default n
+	depends on SEC_DEBUG
+	help
+	  Samsung TN Param Feature.
+
+config CM_OFFSET
+	int "Charging Mode Offset"
+	default 0
+	depends on SEC_PARAM
+	help
+	  set Charging Mode Offset when you enable SEC_PARAM.
