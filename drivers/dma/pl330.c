@@ -1581,7 +1581,7 @@ static void dma_pl330_rqcb(struct dma_pl330_desc *desc, enum pl330_op_err err)
 	pch = desc->pchan;
 
 	/* If desc aborted */
-	if (!pch || !pch->thread)
+	if (!pch)
 		return;
 
 	spin_lock_irqsave(&pch->lock, flags);
