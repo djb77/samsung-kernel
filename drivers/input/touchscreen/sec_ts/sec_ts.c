@@ -701,7 +701,7 @@ static int sec_ts_i2c_read_bulk(struct sec_ts_data *ts, u8 *data, int len)
 
 	return -EIO;
 }
-static int sec_ts_read_from_sponge(struct sec_ts_data *ts, u8 *data)
+static int sec_ts_read_from_sponge(struct sec_ts_data *ts, u8 *data, int len)
 {
 	int ret;
 
@@ -709,7 +709,7 @@ static int sec_ts_read_from_sponge(struct sec_ts_data *ts, u8 *data)
 	if (ret < 0)
 		input_err(true, &ts->client->dev, "%s: fail to read sponge command\n", __func__);
 
-	ret = sec_ts_i2c_read(ts, SEC_TS_CMD_SPONGE_READ_PARAM, (u8 *)data, sizeof((u8 *)(data)));
+	ret = sec_ts_i2c_read(ts, SEC_TS_CMD_SPONGE_READ_PARAM, (u8 *)data, len);
 	if (ret < 0)
 		input_err(true, &ts->client->dev, "%s: fail to read sponge command\n", __func__);
 
@@ -1002,6 +1002,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 	}
 
 	do {
+		s16 max_force_p = 0;
 		event_buff = read_event_buff[curr_pos];
 		event_id = event_buff[0] & 0x3;
 
@@ -1143,10 +1144,20 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 						|| (ts->coord[t_id].ttype == SEC_TS_TOUCHTYPE_GLOVE)) {
 
 					if (ts->coord[t_id].action == SEC_TS_COORDINATE_ACTION_RELEASE) {
+						u8 rbuf[2] = {0, };
+
 						do_gettimeofday(&ts->time_released[t_id]);
-						
+
 						if (ts->time_longest < (ts->time_released[t_id].tv_sec - ts->time_pressed[t_id].tv_sec))
 							ts->time_longest = (ts->time_released[t_id].tv_sec - ts->time_pressed[t_id].tv_sec);
+
+						ret = sec_ts_i2c_read(ts, SEC_TS_READ_FORCE_SIG_MAX_VAL, rbuf, 2);
+						if (ret < 0)
+							input_err(true, &ts->client->dev,
+									"%s: fail to read max_pressure data\n",
+									__func__);
+						else
+							max_force_p = (rbuf[0] & 0xFF) << 8 | (rbuf[1] & 0xFF);
 
 						input_mt_slot(ts->input_dev, t_id);
 						if (ts->plat_data->support_mt_pressure)
@@ -1236,7 +1247,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 			if ((p_gesture_status->eid == 0x02) && (p_gesture_status->stype == 0x00)) {
 				u8 sponge[3] = { 0 };
 
-				ret = sec_ts_read_from_sponge(ts, sponge);
+				ret = sec_ts_read_from_sponge(ts, sponge, 3);
 				if (ret < 0)
 					input_err(true, &ts->client->dev, "%s: fail to read sponge data\n", __func__);
 
@@ -1249,7 +1260,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 					if (sponge[1] & SEC_TS_MODE_SPONGE_AOD) {
 						u8 data[5] = { 0x0A, 0x00, 0x00, 0x00, 0x00 };
 
-						ret = sec_ts_read_from_sponge(ts, data);
+						ret = sec_ts_read_from_sponge(ts, data, 5);
 						if (ret < 0)
 							input_err(true, &ts->client->dev, "%s: fail to read sponge data\n", __func__);
 
@@ -1307,10 +1318,10 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 			} else if (ts->coord[t_id].action == SEC_TS_COORDINATE_ACTION_RELEASE) {
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 				input_info(true, &ts->client->dev,
-					"%s[R] tID:%d mc:%d tc:%d lx:%d ly:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d P%02XT%04X\n",
+					"%s[R] tID:%d mc:%d tc:%d lx:%d ly:%d f:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d P%02XT%04X\n",
 					ts->dex_name,
 					t_id, ts->coord[t_id].mcount, ts->touch_count,
-					ts->coord[t_id].x, ts->coord[t_id].y,
+					ts->coord[t_id].x, ts->coord[t_id].y, max_force_p,
 					ts->plat_data->img_version_of_ic[2],
 					ts->plat_data->img_version_of_ic[3],
 					ts->cal_status, ts->nv, ts->tspid_val,
@@ -1318,10 +1329,10 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 					ts->cal_count, ts->tune_fix_ver );
 #else
 				input_info(true, &ts->client->dev,
-					"%s[R] tID:%d mc:%d tc:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d P%02XT%04X F%02X%02X\n",
+					"%s[R] tID:%d mc:%d tc:%d f:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d P%02XT%04X F%02X%02X\n",
 					ts->dex_name,
 					t_id, ts->coord[t_id].mcount, ts->touch_count,
-					ts->plat_data->img_version_of_ic[2],
+					max_force_p, ts->plat_data->img_version_of_ic[2],
 					ts->plat_data->img_version_of_ic[3],
 					ts->cal_status, ts->nv, ts->tspid_val,
 					ts->tspicid_val, ts->coord[t_id].palm_count,
@@ -1331,6 +1342,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 				ts->coord[t_id].action = SEC_TS_COORDINATE_ACTION_NONE;
 				ts->coord[t_id].mcount = 0;
 				ts->coord[t_id].palm_count = 0;
+				max_force_p = 0;
 			}
 		}
 

@@ -82,6 +82,8 @@
 #define EVENTID_GESTURE_WAKEUP				0xE2
 #define EVENTID_GESTURE_HOME				0xE6
 #define EVENTID_PRESSURE				0xE7
+#define EVENTID_PRESSURE_MAX				0xE9
+
 
 #define EVENTID_ERROR_FLASH_CORRUPTION		0x03
 
@@ -119,6 +121,7 @@
 #define READ_STATUS					0x84
 #define READ_ONE_EVENT					0x85
 #define READ_ALL_EVENT					0x86
+#define READ_FORCE_RECAL_COUNT			0x8C
 
 #define SLEEPIN						0x90
 #define SLEEPOUT					0x91
@@ -181,6 +184,7 @@
 #define FTS_CMD_OFFSET_PRESSURE_LEVEL			0x5E
 #define FTS_CMD_OFFSET_PRESSURE_THD_HIGH		0x84
 #define FTS_CMD_OFFSET_PRESSURE_THD_LOW			0x86
+#define FTS_CMD_SPONGE_LP_DUMP			0x01F0
 
 #define FTS_RETRY_COUNT					10
 #define FTS_DELAY_NVWRITE				50
@@ -603,6 +607,7 @@ struct fts_ts_info {
 	struct mutex device_mutex;
 	bool touch_stopped;
 	bool reinit_done;
+	unsigned int pressure_max;
 
 	unsigned char data[FTS_EVENT_SIZE * FTS_FIFO_MAX];
 	unsigned char ddi_type;

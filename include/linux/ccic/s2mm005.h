@@ -196,7 +196,7 @@ typedef union
                     IS_DFP:1,
                     RP_CurrentLvl:2,
                     VBUS_CC_Short:1,
-                    RSP_BYTE3:1,
+                    VBUS_SBU_Short:1,
                     RESET:1;
 	}BITS;
 } FUNC_STATE_Type;
@@ -214,7 +214,9 @@ typedef union
                     RUN_DRY:1,
                     removing_charge_by_sbu_low:1,
                     BOOTING_RUN_DRY:1,
-                    RSP_BYTE:24;
+                    Sleep_Cable_Detect:1, /* b8 */
+                    PDSTATE29_SBU_DONE:1, /* b9 */
+                    RSP_BYTE:22;
 	} BITS;
 } LP_STATE_Type;
 
@@ -793,7 +795,7 @@ typedef enum
 
 typedef enum
 {
-	Rp_None = 0,
+	Rp_Sbu_check = 0,
 	Rp_56K = 1,	/* 80uA */
 	Rp_22K = 2,	/* 180uA */
 	Rp_10K = 3,	/* 330uA */

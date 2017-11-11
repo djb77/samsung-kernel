@@ -112,11 +112,15 @@ long vertex_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 	case VS4L_VERTEXIOC_QBUF:
 		{
+#if 0
 			ret = ops->vertexioc_qbuf(file, parg);
 			if (ret) {
 				vision_err("vertexioc_qbuf is fail(%d)\n", ret);
 				goto p_err;
 			}
+#endif
+			ret = -EINVAL;
+			vision_info("SCore:qbuf is not supported at 64-bit\n");
 		}
 		break;
 	case VS4L_VERTEXIOC_DQBUF:

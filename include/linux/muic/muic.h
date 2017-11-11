@@ -223,18 +223,19 @@ struct muic_platform_data {
 #endif
 
 	/* muic switch dev register function for DockObserver */
-	void (*init_switch_dev_cb) (void);
-	void (*cleanup_switch_dev_cb) (void);
+	void (*init_switch_dev_cb)(void);
+	void (*cleanup_switch_dev_cb)(void);
 
 	/* muic GPIO control function */
-	int (*init_gpio_cb) (int switch_sel);
-	int (*set_gpio_usb_sel) (int usb_path);
-	int (*set_gpio_uart_sel) (int uart_path);
-	int (*set_safeout) (int safeout_path);
+	int (*init_gpio_cb)(int switch_sel);
+	void (*jig_uart_cb)(int jig_state);
+	int (*set_gpio_usb_sel)(int usb_path);
+	int (*set_gpio_uart_sel)(int uart_path);
+	int (*set_safeout)(int safeout_path);
 
 	/* muic path switch function for rustproof */
-	void (*set_path_switch_suspend) (struct device *dev);
-	void (*set_path_switch_resume) (struct device *dev);
+	void (*set_path_switch_suspend)(struct device *dev);
+	void (*set_path_switch_resume)(struct device *dev);
 };
 
 int get_switch_sel(void);

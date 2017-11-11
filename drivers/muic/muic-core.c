@@ -56,6 +56,10 @@ extern int f_opmode;
 static struct switch_dev switch_dock = {
 	.name = "dock",
 };
+
+struct switch_dev switch_uart3 = {
+	.name = "uart3",    /* sys/class/switch/uart3/state */
+};
 #endif /* CONFIG_SWITCH */
 
 #if defined(CONFIG_MUIC_NOTIFIER)
@@ -68,6 +72,15 @@ void muic_send_dock_intent(int type)
 	switch_set_state(&switch_dock, type);
 #endif
 }
+
+static void muic_jig_uart_cb(int jig_state)
+{
+	pr_info("%s: MUIC uart type(%d)\n", __func__, jig_state);
+#ifdef CONFIG_SWITCH
+	switch_set_state(&switch_uart3, jig_state);
+#endif
+}
+
 static int muic_dock_attach_notify(int type, const char *name)
 {
 	pr_info("%s: %s\n", __func__, name);
@@ -262,6 +275,13 @@ static void muic_init_switch_dev_cb(void)
 				__func__, ret);
 		return;
 	}
+
+	ret = switch_dev_register(&switch_uart3);
+	if (ret < 0) {
+		pr_err("%s: Failed to register uart3 switch(%d)\n",
+				__func__, ret);
+		return;
+	}
 #endif /* CONFIG_SWITCH */
 
 #if defined(CONFIG_MUIC_NOTIFIER)
@@ -393,6 +413,7 @@ struct muic_platform_data muic_pdata = {
 	.init_switch_dev_cb	= muic_init_switch_dev_cb,
 	.cleanup_switch_dev_cb	= muic_cleanup_switch_dev_cb,
 	.init_gpio_cb		= muic_init_gpio_cb,
+	.jig_uart_cb		= muic_jig_uart_cb,
 #if defined(CONFIG_USE_SAFEOUT)
 	.set_safeout		= muic_set_safeout,
 #endif /* CONFIG_USE_SAFEOUT */
