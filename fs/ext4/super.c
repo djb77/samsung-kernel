@@ -54,6 +54,8 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/ext4.h>
 
+void (*ufs_debug_func)(void *) = NULL;
+
 static struct ext4_lazy_init *ext4_li_info;
 static struct mutex ext4_li_mtx;
 static int ext4_mballoc_ready;
@@ -398,8 +400,10 @@ static void ext4_handle_error(struct super_block *sb, char* buf)
 		if (EXT4_SB(sb)->s_journal &&
 		  !(EXT4_SB(sb)->s_journal->j_flags & JBD2_REC_ERR))
 			return;
-		panic("EXT4-fs (device %s): panic! %s\n",
-			sb->s_id, buf?buf:"no message");
+		if (ufs_debug_func)
+			ufs_debug_func(NULL);
+		panic("EXT4(%s:%s\n",
+			sb->s_id, buf?buf:"no message)");
 	}
 }
 
@@ -423,8 +427,8 @@ void __ext4_error(struct super_block *sb, const char *function,
 		       sb->s_id, function, line, current->comm, &vaf);
 		page_buf = (char *)__get_free_page(GFP_ATOMIC);
 		if (page_buf)
-			sprintf(page_buf, "%s %s:%u: %pV",
-					"***Keep this device after RDX, do not reboot***", function, line, &vaf);
+			sprintf(page_buf, "%s:%u:%pV)Keep this device after RDX, do not reboot",
+					function, line, &vaf);
 		else
 			printk(KERN_ERR "__ext4_error: failed to allocate page buf for panic msg\n");
 		va_end(args);
@@ -462,8 +466,8 @@ void __ext4_error_inode(struct inode *inode, const char *function,
 			       current->comm, &vaf);
 		page_buf = (char *)__get_free_page(GFP_ATOMIC);
 		if (page_buf)
-			sprintf(page_buf, "%s %s:%u: %pV",
-					"***Keep this device after RDX, do not reboot***", function, line, &vaf);
+			sprintf(page_buf, "%s:%u:%pV)Keep this device after RDX, do not reboot",
+					function, line, &vaf);
 		else
 			printk(KERN_ERR "__ext4_error: failed to allocate page buf for panic msg\n");
 		va_end(args);
@@ -508,8 +512,8 @@ void __ext4_error_file(struct file *file, const char *function,
 			       current->comm, path, &vaf);
 		page_buf = (char *)__get_free_page(GFP_ATOMIC);
 		if (page_buf)
-			sprintf(page_buf, "%s %s:%u: %pV",
-					"***Keep this device after RDX, do not reboot***", function, line, &vaf);
+			sprintf(page_buf, "%s:%u:%pV)Keep this device after RDX, do not reboot",
+					function, line, &vaf);
 		else
 			printk(KERN_ERR "__ext4_error: failed to allocate page buf for panic msg\n");
 		va_end(args);
@@ -636,6 +640,8 @@ void __ext4_abort(struct super_block *sb, const char *function,
 		if (EXT4_SB(sb)->s_journal &&
 		  !(EXT4_SB(sb)->s_journal->j_flags & JBD2_REC_ERR))
 			return;
+		if (ufs_debug_func)
+			ufs_debug_func(NULL);
 		panic("EXT4-fs panic from previous error\n");
 	}
 }
@@ -725,8 +731,8 @@ __acquires(bitlock)
 		printk(KERN_CONT "%pV\n", &vaf);
 		page_buf = (char *)__get_free_page(GFP_ATOMIC);
 		if (page_buf)
-			sprintf(page_buf, "%s %s:%u: %pV",
-					"***Keep this device after RDX, do not reboot***", function, line, &vaf);
+			sprintf(page_buf, "%s:%u:%pV)Keep this device after RDX, do not reboot",
+					function, line, &vaf);
 		else
 			printk(KERN_ERR "__ext4_error: failed to allocate page buf for panic msg\n");
 		va_end(args);
@@ -2886,7 +2892,7 @@ static struct ext4_li_request *ext4_li_request_new(struct super_block *sb,
 	 * spread the inode table initialization requests
 	 * better.
 	 */
-	elr->lr_next_sched = jiffies + (60 * HZ) + (prandom_u32() %
+	elr->lr_next_sched = jiffies + (prandom_u32() %
 				(EXT4_DEF_LI_MAX_START_DELAY * HZ));
 	return elr;
 }

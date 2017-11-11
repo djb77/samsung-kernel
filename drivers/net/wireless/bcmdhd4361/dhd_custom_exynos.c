@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_exynos.c 679506 2017-01-16 08:22:12Z $
+ * $Id: dhd_custom_exynos.c 691173 2017-03-21 04:43:59Z $
  */
 #include <linux/device.h>
 #include <linux/gpio.h>
@@ -58,6 +58,10 @@
 #include <mach/gpio.h>
 #endif /* !CONFIG_ARCH_SWA100 && !CONFIG_MACH_UNIVERSAL7580 */
 #endif /* CONFIG_64BIT */
+
+#ifdef CONFIG_MACH_UNIVERSAL7580
+#include <mach/irqs.h>
+#endif /* CONFIG_MACH_UNIVERSAL7580 */
 
 #include <linux/sec_sysfs.h>
 

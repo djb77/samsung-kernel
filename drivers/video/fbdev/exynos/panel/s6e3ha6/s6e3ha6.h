@@ -421,6 +421,7 @@ int getidx_adjust_ldu_maptbl(struct maptbl *tbl);
 int getidx_color_coordinate_maptbl(struct maptbl *tbl);
 void copy_color_coordinate_maptbl(struct maptbl *tbl, u8 *dst);
 void copy_scr_white_maptbl(struct maptbl *tbl, u8 *dst);
+void copy_adjust_ldu_maptbl(struct maptbl *tbl, u8 *dst);
 int getidx_trans_maptbl(struct pkt_update_info *pktui);
 int getidx_mdnie_0_maptbl(struct pkt_update_info *pktui);
 int getidx_mdnie_1_maptbl(struct pkt_update_info *pktui);

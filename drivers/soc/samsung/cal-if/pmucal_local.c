@@ -62,7 +62,7 @@ int pmucal_local_enable(unsigned int pd_id)
  */
 int pmucal_local_disable(unsigned int pd_id)
 {
-	int ret;
+	int ret, i;
 
 	exynos_ss_pmu(pd_id, __func__, ESS_FLAG_IN);
 
@@ -86,6 +86,11 @@ int pmucal_local_disable(unsigned int pd_id)
 	if (ret) {
 		pr_err("%s %s: error on handling disable sequence. (pd_id : %d)\n",
 				PMUCAL_PREFIX, __func__, pd_id);
+		for (i = 0; i < pmucal_pd_list[pd_id].num_save; i++) {
+			pr_err("%s[0x%x] = 0x%x\n", pmucal_pd_list[pd_id].save[i].sfr_name,
+							pmucal_pd_list[pd_id].save[i].offset,
+							pmucal_pd_list[pd_id].save[i].value);
+		}
 		return ret;
 	}
 

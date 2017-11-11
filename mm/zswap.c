@@ -41,6 +41,7 @@
 #include <linux/swapops.h>
 #include <linux/writeback.h>
 #include <linux/pagemap.h>
+#include <linux/sec_debug.h>
 
 #ifdef CONFIG_ZSWAP_SAME_PAGE_SHARING
 #include <linux/jhash.h>
@@ -1412,6 +1413,54 @@ static void hexdump(char *title, u8 *data, int len)
 	printk("\n");
 }
 
+static void check_single_bitflip(struct zswap_entry *entry,
+		unsigned char *src, size_t src_size, unsigned char *dst)
+{
+	struct crypto_comp *tfm;
+	unsigned int dlen;
+	int byte_offset, bit_offset, type;
+	int i, j, ret, success = 0;
+	char debug_msg[32];
+
+	for (i = 0; i < src_size; i++) {
+		for (j = 0; j < 8; j++) {
+			unsigned char org_byte = src[i];
+			unsigned char tmp_byte = src[i];
+
+			if (((tmp_byte >> j) & 0x1) == 0x1)
+				tmp_byte &= ~(1 << j);
+			else
+				tmp_byte |= (1 << j);
+			src[i] = tmp_byte;
+
+			dlen = PAGE_SIZE;
+			tfm = *get_cpu_ptr(entry->pool->tfm);
+			ret = crypto_comp_decompress(tfm, src, src_size, dst, &dlen);
+			put_cpu_ptr(entry->pool->tfm);
+
+			if (ret == 0) {
+				if (success == 0) {
+					type = ((org_byte >> j) & 0x1);
+					byte_offset = (i / 4) * 4;
+					bit_offset = ((i % 4) * 8) + j;
+				}
+				if (success < 99)
+					success++;
+			}
+			src[i] = org_byte;
+		}
+	}
+
+	if (success)
+		sprintf(debug_msg, "%02d/0x%16p/%02d/%d", success, src + byte_offset, bit_offset, type);
+	else
+		sprintf(debug_msg, "%02d/0x%16p", success, src);
+
+	sec_debug_set_extra_info_zswap(debug_msg);
+
+	return;
+}
+
 /*
  * returns 0 if the page was successfully decompressed
  * return -1 on entry not found or error
@@ -1486,6 +1535,11 @@ static int zswap_frontswap_load(unsigned type, pgoff_t offset,
 		if (dlen)
 			hexdump("dest buffer", dst, dlen);
 		printk("zswap_comp_op returned %d\n", ret);
+#ifdef CONFIG_ZSWAP_SAME_PAGE_SHARING
+		check_single_bitflip(entry, src, entry->zhandle->length, dst);
+#else
+		check_single_bitflip(entry, src, entry->length, dst);
+#endif
 	}
 
 	kunmap_atomic(dst);

@@ -78,6 +78,7 @@
 #define ESS_LOG_STRING_LENGTH		SZ_128
 #define ESS_MMU_REG_OFFSET		SZ_512
 #define ESS_CORE_REG_OFFSET		SZ_512
+#define ESS_CORE_PC_OFFSET		0x600
 #define ESS_LOG_MAX_NUM			SZ_1K
 #define ESS_API_MAX_NUM			SZ_2K
 #define ESS_EX_MAX_NUM			SZ_8
@@ -105,6 +106,7 @@
 #define S5P_VA_SS_EMERGENCY_REASON	(S5P_VA_SS_BASE + 0x300)
 #define S5P_VA_SS_CORE_POWER_STAT	(S5P_VA_SS_BASE + 0x400)
 #define S5P_VA_SS_CORE_PANIC_STAT	(S5P_VA_SS_BASE + 0x500)
+#define S5P_VA_SS_CORE_LAST_PC		(S5P_VA_SS_BASE + 0x600)
 
 /* S5P_VA_SS_BASE + 0xC00 -- 0xFFF is reserved */
 #define S5P_VA_SS_PANIC_STRING		(S5P_VA_SS_BASE + 0xC00)
@@ -477,8 +479,7 @@ struct exynos_ss_desc {
 #ifdef CONFIG_EXYNOS_SNAPSHOT_SFRDUMP
 	struct list_head sfrdump_list;
 #endif
-	spinlock_t lock;
-
+	raw_spinlock_t lock;
 	unsigned int kevents_num;
 	unsigned int log_kernel_num;
 	unsigned int log_platform_num;
@@ -488,6 +489,8 @@ struct exynos_ss_desc {
 	bool need_header;
 
 	unsigned int callstack;
+	unsigned long hardlockup_core_mask;
+	unsigned long hardlockup_core_pc[ESS_NR_CPUS];
 	int hardlockup;
 	int no_wdt_dev;
 };
@@ -738,6 +741,27 @@ static void exynos_ss_report_reason(unsigned int val)
 		__raw_writel(val, S5P_VA_SS_EMERGENCY_REASON);
 }
 
+unsigned long exynos_ss_get_last_pc_paddr(void)
+{
+	/*
+	 * Basically we want to save the pc value to non-cacheable region
+	 * if ESS is enabled. But we should also consider cases that are not so.
+	 */
+
+	if (exynos_ss_get_enable("log_kevents", true))
+		return (exynos_ss_get_item_paddr("log_kevents") + ESS_CORE_PC_OFFSET);
+	else
+		return virt_to_phys((void *)ess_desc.hardlockup_core_pc);
+}
+
+unsigned long exynos_ss_get_last_pc(unsigned int cpu)
+{
+	if (exynos_ss_get_enable("log_kevents", true))
+		return __raw_readq(S5P_VA_SS_CORE_LAST_PC + cpu * 8);
+	else
+		return ess_desc.hardlockup_core_pc[cpu];
+}
+
 unsigned long exynos_ss_get_spare_vaddr(unsigned int offset)
 {
 	return (unsigned long)(S5P_VA_SS_SPARE_BASE + offset);
@@ -792,9 +816,9 @@ int exynos_ss_set_hardlockup(int val)
 	if (unlikely(!ess_base.enabled))
 		return 0;
 
-	spin_lock_irqsave(&ess_desc.lock, flags);
+	raw_spin_lock_irqsave(&ess_desc.lock, flags);
 	ess_desc.hardlockup = val;
-	spin_unlock_irqrestore(&ess_desc.lock, flags);
+	raw_spin_unlock_irqrestore(&ess_desc.lock, flags);
 	return 0;
 }
 EXPORT_SYMBOL(exynos_ss_set_hardlockup);
@@ -829,9 +853,114 @@ int exynos_ss_prepare_panic(void)
 }
 EXPORT_SYMBOL(exynos_ss_prepare_panic);
 
+void exynos_ss_hook_hardlockup_entry(void *v_regs)
+{
+	int cpu = get_current_cpunum();
+
+	if (!ess_base.enabled ||
+		!ess_desc.hardlockup_core_mask) {
+		return;
+	}
+
+	/* re-check the cpu number which is lockup */
+	if (ess_desc.hardlockup_core_mask & BIT(cpu)) {
+		int ret;
+		unsigned long last_pc;
+		struct pt_regs *regs;
+		unsigned long timeout = USEC_PER_SEC;
+
+		do {
+			/*
+			 * If one cpu is occurred to lockup,
+			 * others are going to output its own information
+			 * without side-effect.
+			 */
+			ret = do_raw_spin_trylock(&ess_desc.lock);
+			if (!ret)
+				udelay(1);
+		} while (!ret && timeout--);
+
+		last_pc = exynos_ss_get_last_pc(cpu);
+
+		regs = (struct pt_regs *)v_regs;
+
+		/* Replace real pc value even if it is invalid */
+		regs->pc = last_pc;
+
+		/* Then, we expect bug() function works well */
+		pr_emerg("\n--------------------------------------------------------------------------\n"
+			"      Debugging Information for Hardlockup core - CPU %d"
+			"\n--------------------------------------------------------------------------\n\n", cpu);
+	}
+}
+
+void exynos_ss_hook_hardlockup_exit(void)
+{
+	int cpu = get_current_cpunum();
+
+	if (!ess_base.enabled ||
+		!ess_desc.hardlockup_core_mask) {
+		return;
+	}
+
+	/* re-check the cpu number which is lockup */
+	if (ess_desc.hardlockup_core_mask & BIT(cpu)) {
+		/* clear bit to complete replace */
+		ess_desc.hardlockup_core_mask &= ~(BIT(cpu));
+		/*
+		 * If this unlock function does not make a side-effect
+		 * even it's not lock
+		 */
+		do_raw_spin_unlock(&ess_desc.lock);
+	}
+}
+
+static void exynos_ss_recall_hardlockup_core(void)
+{
+	int i, ret;
+	unsigned long cpu_mask = 0, tmp_bit = 0;
+	unsigned long last_pc_addr = 0, timeout;
+
+	for (i = 0; i < ESS_NR_CPUS; i++) {
+		if (i == get_current_cpunum())
+			continue;
+		tmp_bit = cpu_online_mask->bits[ESS_NR_CPUS/SZ_64] & (1 << i);
+		if (tmp_bit)
+			cpu_mask |= tmp_bit;
+	}
+
+	if (!cpu_mask)
+		goto out;
+
+	last_pc_addr = exynos_ss_get_last_pc_paddr();
+
+	pr_emerg("exynos-snapshot: core hardlockup mask information: 0x%lx\n", cpu_mask);
+	ess_desc.hardlockup_core_mask = cpu_mask;
+
+	/* Setup for generating NMI interrupt to unstopped CPUs */
+	ret = exynos_smc(SMC_CMD_KERNEL_PANIC_NOTICE,
+			 cpu_mask,
+			 (unsigned long)exynos_ss_bug,
+			 last_pc_addr);
+	if (ret) {
+		pr_emerg("exynos-snapshot: failed to generate NMI, "
+			 "not support to dump information of core\n");
+		ess_desc.hardlockup_core_mask = 0;
+		goto out;
+	}
+
+	/* Wait up to 3 seconds for NMI interrupt */
+	timeout = USEC_PER_SEC * 3;
+	while (ess_desc.hardlockup_core_mask != 0 && timeout--)
+		udelay(1);
+out:
+	return;
+}
+
 int exynos_ss_post_panic(void)
 {
 	if (ess_base.enabled) {
+		exynos_ss_recall_hardlockup_core();
 		exynos_ss_dump_sfr();
 		exynos_ss_save_context(NULL);
 		flush_cache_all();
@@ -846,7 +975,7 @@ int exynos_ss_post_panic(void)
 			if (ess_desc.hardlockup || num_online_cpus() > 1) {
 			/* for stall cpu */
 				while(1)
-				wfi();
+					wfi();
 			}
 #endif
 		}
@@ -2073,7 +2202,7 @@ static int __init exynos_ss_init_desc(void)
 	/* initialize ess_desc */
 	memset((struct exynos_ss_desc *)&ess_desc, 0, sizeof(struct exynos_ss_desc));
 	ess_desc.callstack = CONFIG_EXYNOS_SNAPSHOT_CALLSTACK;
-	spin_lock_init(&ess_desc.lock);
+	raw_spin_lock_init(&ess_desc.lock);
 #ifdef CONFIG_EXYNOS_SNAPSHOT_SFRDUMP
 	INIT_LIST_HEAD(&ess_desc.sfrdump_list);
 #endif

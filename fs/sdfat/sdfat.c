@@ -4547,11 +4547,12 @@ static int sdfat_read_root(struct inode *inode)
 	SDFAT_I(inode)->fid.start_clu = fsi->root_dir;
 	SDFAT_I(inode)->fid.flags = 0x01;
 	SDFAT_I(inode)->fid.type = TYPE_DIR;
+	SDFAT_I(inode)->fid.version = 0;
 	SDFAT_I(inode)->fid.rwoffset = 0;
 	SDFAT_I(inode)->fid.hint_bmap.off = -1;
-
 	SDFAT_I(inode)->fid.hint_stat.eidx = 0;
 	SDFAT_I(inode)->fid.hint_stat.clu = fsi->root_dir;
+	SDFAT_I(inode)->fid.hint_femp.eidx = -1;
 
 	SDFAT_I(inode)->target = NULL;
 

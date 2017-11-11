@@ -313,6 +313,11 @@ static int gpu_context_init(struct kbase_device *kbdev)
 	if (gpu_trace_init(kbdev) != 0)
 		return -1;
 #endif
+
+#ifdef CONFIG_MALI_ASV_CALIBRATION_SUPPORT
+	platform->gpu_auto_cali_status = false;
+#endif
+
 	return 0;
 }
 

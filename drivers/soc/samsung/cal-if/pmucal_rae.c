@@ -134,6 +134,10 @@ void pmucal_rae_save_seq(struct pmucal_seq *seq, unsigned int seq_size)
 			pmucal_rae_read(&seq[i]);
 			seq[i].need_restore = true;
 			break;
+		case PMUCAL_READ:
+			pmucal_rae_read(&seq[i]);
+			seq[i].need_restore = false;
+			break;
 		case PMUCAL_CHECK_SKIP:
 		case PMUCAL_COND_CHECK_SKIP:
 		case PMUCAL_WAIT:

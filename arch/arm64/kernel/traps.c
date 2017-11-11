@@ -31,6 +31,7 @@
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/syscalls.h>
+#include <linux/exynos-ss.h>
 #include <soc/samsung/exynos-condbg.h>
 
 #include <asm/atomic.h>
@@ -55,8 +56,6 @@ static const char *handler[] = {
 };
 
 int show_unhandled_signals = 1;
-static unsigned long do_dump_flag1;
-static unsigned long do_dump_flag2;
 
 /*
  * Dump out the contents of some memory nicely...
@@ -490,41 +489,7 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs, unsigned int esr
 	if (!user_mode(regs))
 		sec_debug_set_extra_info_fault(-1, regs);
 #endif
-	arm64_notify_die("Oops - undefined instruction in el0", regs, &info, esr);
-}
-
-asmlinkage void __exception do_undefinstr_el1(struct pt_regs *regs, unsigned int esr, unsigned long elr)
-{
-	siginfo_t info;
-	void __user *pc = (void __user *)instruction_pointer(regs);
-	u32 cpu = raw_smp_processor_id();
-
-	/* check for AArch32 breakpoint instructions */
-	if (!aarch32_break_handler(regs))
-		return;
-
-	if (call_undef_hook(regs) == 0)
-		return;
-
-	if (sec_debug_get_debug_level() &&
-			cpu >= 4 && cpu <= 7) {
-		s3c2410wdt_set_emergency_reset(1);
-		do_dump_flag1 = esr;
-		do_dump_flag2 = elr;
-		asm ("b .");
-	}
-
-	if (unhandled_signal(current, SIGILL) && show_unhandled_signals_ratelimited())
-		pr_info("%s[%d]: undefined instruction: pc=%p (0x%x)\n",
-			current->comm, task_pid_nr(current), pc, esr);
-	dump_instr(KERN_INFO, regs);
-
-	info.si_signo = SIGILL;
-	info.si_errno = 0;
-	info.si_code  = ILL_ILLOPC;
-	info.si_addr  = pc;
-
-	arm64_notify_die("Oops - undefined instruction in el1", regs, &info, esr);
+	arm64_notify_die("Oops - undefined instruction", regs, &info, esr);
 }
 
 long compat_arm_syscall(struct pt_regs *regs);
@@ -596,16 +561,6 @@ const char *esr_get_class_string(u32 esr)
 	return esr_class_str[esr >> ESR_ELx_EC_SHIFT];
 }
 
-asmlinkage void __exception do_iabt(struct pt_regs *regs, unsigned int esr, unsigned long far)
-{
-	if (sec_debug_get_debug_level()) {
-		s3c2410wdt_set_emergency_reset(1);
-		do_dump_flag1 = esr;
-		do_dump_flag2 = far;
-		asm("b .");
-	}
-}
-
 /*
  * bad_mode handles the impossible case in the exception vector.
  */
@@ -672,6 +627,12 @@ static int bug_handler(struct pt_regs *regs, unsigned int esr)
 {
 	if (user_mode(regs))
 		return DBG_HOOK_ERROR;
+
+	/*
+	 * If recalling hardlockup core has been run before,
+	 * PC value must be replaced to real PC value.
+	 */
+	exynos_ss_hook_hardlockup_entry((void *)regs);
 
 	switch (report_bug(regs->pc, regs)) {
 	case BUG_TRAP_TYPE_BUG:

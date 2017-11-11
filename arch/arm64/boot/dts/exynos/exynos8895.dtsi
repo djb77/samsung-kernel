@@ -478,6 +478,10 @@
 
 			user-default-qos = <715000>;
 
+			/* auto calibration value */
+			auto-cal-freq = <1053000>;
+			auto-cal-duration = <400>;	/* ms */
+
 			dm-constraints {
 				mif-perf {
 					const-type = <CONSTRAINT_MIN>;
@@ -517,6 +521,10 @@
 			pm_qos-min-class = <5>;
 			pm_qos-max-class = <6>;
 			pm_qos-jigbooting = <1469000>;
+
+			/* auto calibration value */
+			auto-cal-freq = <1703000>;
+			auto-cal-duration = <400>;	/* ms */
 
 			dm-constraints {
 				mif-perf {
@@ -4917,6 +4925,25 @@
 			input_booster,head_times = <130 0>;
 			input_booster,tail_times = <0 500>;
 			input_booster,phase_times = <0 0>;
+		};
+		booster_key@9 {
+			input_booster,label = "KEY_TWO";
+			input_booster,type = <9>;	/* BOOSTER_DEVICE_KEY */
+
+			input_booster,levels = <1>;
+
+			/* Frequency table */
+			/* for level	:	1_Head */
+			input_booster,cpu_freqs = <1469000>;
+			input_booster,hmp_boost = <1>;
+			input_booster,kfc_freqs = <0>;
+			input_booster,mif_freqs = <0>;
+			input_booster,int_freqs = <0>;
+
+			/* Time table */
+			input_booster,head_times = <700>;
+			input_booster,tail_times = <700>;
+			input_booster,phase_times = <0>;
 		}; // Input Booster -
 		/* If you need to add new key type, add it this position */
 	};

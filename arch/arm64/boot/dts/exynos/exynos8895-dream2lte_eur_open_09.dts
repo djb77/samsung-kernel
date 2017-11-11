@@ -28,6 +28,17 @@
 	model_info-hw_rev_end = <9>;
 	compatible = "samsung, SM-G955F rev03/rev04", "samsung,EXYNOS8895";
 
+	spi_3: spi@10460000 {
+		status = "okay";
+		cs47l93: cs47l93@0 {
+			cirrus,accdet {
+				acc@1 {
+					cirrus,hpdet-ext-res = <3300>;
+				};
+			};
+		};
+	};
+
 	spi_10: spi@108C0000{
 		#address-cells = <1>;
 		#size-cells = <0>;

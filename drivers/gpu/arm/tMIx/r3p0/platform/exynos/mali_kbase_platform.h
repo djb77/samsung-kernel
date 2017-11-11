@@ -334,6 +334,10 @@ struct exynos_context {
 	bool is_pm_qos_init;
 #endif /* CONFIG_MALI_PM_QOS */
 	const struct kbase_pm_policy *cur_policy;
+
+#ifdef CONFIG_MALI_ASV_CALIBRATION_SUPPORT
+	bool gpu_auto_cali_status;
+#endif
 };
 
 struct kbase_device *gpu_get_device_structure(void);

@@ -187,6 +187,8 @@ int s5p_mfc_init_decode(struct s5p_mfc_ctx *ctx)
 		reg |= (0x1 << S5P_FIMV_D_SEI_ENABLE_CONTENT_LIGHT_SHIFT);
 		reg |= (0x1 << S5P_FIMV_D_SEI_ENABLE_MASTERING_DISPLAY_SHIFT);
 	}
+	reg |= (0x1 << S5P_FIMV_D_SEI_ENABLE_RECOVERY_PARSING_SHIFT);
+
 	MFC_WRITEL(reg, S5P_FIMV_D_SEI_ENABLE);
 	mfc_debug(2, "SEI enable was set, 0x%x\n", MFC_READL(S5P_FIMV_D_SEI_ENABLE));
 

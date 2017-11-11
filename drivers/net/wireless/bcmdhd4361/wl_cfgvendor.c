@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.c 681171 2017-01-25 05:27:08Z $
+ * $Id: wl_cfgvendor.c 693258 2017-03-31 18:14:37Z $
  */
 
 /*
@@ -2512,9 +2512,9 @@ wl_cfgvendor_dbg_get_mem_dump(struct wiphy *wiphy,
 {
 	int ret = BCME_OK, rem, type;
 	int buf_len = 0;
-	void __user *user_buf = NULL;
+	uintptr_t user_buf = (uintptr_t)NULL;
 	const struct nlattr *iter;
-	char *mem_buf;
+	char *mem_buf = NULL;
 	struct sk_buff *skb;
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 
@@ -2522,10 +2522,24 @@ wl_cfgvendor_dbg_get_mem_dump(struct wiphy *wiphy,
 		type = nla_type(iter);
 		switch (type) {
 			case DEBUG_ATTRIBUTE_FW_DUMP_LEN:
-				buf_len = nla_get_u32(iter);
+				/* Check if the iter is valid and
+				 * buffer length is not already initialized.
+				 */
+				if ((nla_len(iter) == sizeof(uint32)) &&
+					!buf_len) {
+					buf_len = nla_get_u32(iter);
+				} else {
+					ret = BCME_ERROR;
+					goto exit;
+				}
 				break;
 			case DEBUG_ATTRIBUTE_FW_DUMP_DATA:
-				user_buf = (void __user *)(unsigned long) nla_get_u64(iter);
+				if (nla_len(iter) != sizeof(uint64)) {
+					WL_ERR(("Invalid len\n"));
+					ret = BCME_ERROR;
+					goto exit;
+				}
+				user_buf = (uintptr_t)nla_get_u64(iter);
 				break;
 			default:
 				WL_ERR(("Unknown type: %d\n", type));
@@ -2557,7 +2571,7 @@ wl_cfgvendor_dbg_get_mem_dump(struct wiphy *wiphy,
 		else
 #endif /* CONFIG_COMPAT */
 		{
-			ret = copy_to_user(user_buf, mem_buf, buf_len);
+			ret = copy_to_user((void*)user_buf, mem_buf, buf_len);
 			if (ret) {
 				WL_ERR(("failed to copy memdump into user buffer : %d\n", ret));
 				goto free_mem;

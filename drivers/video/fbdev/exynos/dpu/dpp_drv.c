@@ -310,6 +310,8 @@ static void dpp_get_params(struct dpp_device *dpp, struct dpp_params_info *p)
 
 	if (p->format == DECON_PIXEL_FORMAT_NV12N)
 		p->addr[1] = NV12N_CBCR_BASE(p->addr[0], p->src.f_w, p->src.f_h);
+	if (p->format == DECON_PIXEL_FORMAT_NV12N_10B)
+		p->addr[1] = NV12N_10B_CBCR_BASE(p->addr[0], p->src.f_w, p->src.f_h);
 
 	src_w = p->src.w;
 	src_h = p->src.h;
@@ -435,12 +437,14 @@ static int dpp_check_format(struct dpp_device *dpp, struct dpp_params_info *p)
 	case DECON_PIXEL_FORMAT_XBGR_8888:
 	case DECON_PIXEL_FORMAT_RGBX_8888:
 	case DECON_PIXEL_FORMAT_BGRX_8888:
+	case DECON_PIXEL_FORMAT_RGBA_5551:
 	case DECON_PIXEL_FORMAT_RGB_565:
 	case DECON_PIXEL_FORMAT_NV12:
 	case DECON_PIXEL_FORMAT_NV12M:
 	case DECON_PIXEL_FORMAT_NV21:
 	case DECON_PIXEL_FORMAT_NV21M:
 	case DECON_PIXEL_FORMAT_NV12N:
+	case DECON_PIXEL_FORMAT_NV12N_10B:
 		break;
 	default:
 		dpp_err("Unsupported Format\n");

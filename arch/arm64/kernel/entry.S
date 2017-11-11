@@ -318,8 +318,6 @@ el1_sync:
 	kernel_entry 1
 	mrs	x1, esr_el1			// read the syndrome register
 	lsr	x24, x1, #ESR_ELx_EC_SHIFT	// exception class
-	cmp	x24, #ESR_ELx_EC_IABT_CUR	// instruction abort in EL1
-	b.eq	el1_iabt
 	cmp	x24, #ESR_ELx_EC_DABT_CUR	// data abort in EL1
 	b.eq	el1_da
 	cmp	x24, #ESR_ELx_EC_SYS64		// configurable trap
@@ -333,13 +331,6 @@ el1_sync:
 	cmp	x24, #ESR_ELx_EC_BREAKPT_CUR	// debug exception in EL1
 	b.ge	el1_dbg
 	b	el1_inv
-el1_iabt:
-	// TODO: add support for undefined instructions in kernel mode
-	enable_dbg
-	mov	x0, sp
-	mrs	x2, far_el1
-	b	do_iabt
-
 el1_da:
 	/*
 	 * Data abort handling
@@ -384,9 +375,7 @@ el1_undef:
 	enable_dbg
 	mov	x0, sp
 	mrs	x1, esr_el1			// read the syndrome register
-	mrs	x2, elr_el1
-
-	b	do_undefinstr_el1
+	b	do_undefinstr
 el1_dbg:
 	/*
 	 * Debug exception handling

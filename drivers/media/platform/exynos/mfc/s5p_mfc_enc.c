@@ -54,26 +54,30 @@ static int mfc_enc_check_ctrl_val(struct s5p_mfc_ctx *ctx, struct v4l2_control *
 	c = mfc_enc_get_ctrl(ctrl->id);
 	if (!c)
 		return -EINVAL;
+
 	if (ctrl->id == V4L2_CID_MPEG_VIDEO_GOP_SIZE
 	    && ctrl->value > c->maximum) {
 		mfc_info_ctx("GOP_SIZE is changed to max(%d -> %d)\n",
                                 ctrl->value, c->maximum);
 		ctrl->value = c->maximum;
 	}
+
 	if (ctrl->id == V4L2_CID_MPEG_VIDEO_H264_HIERARCHICAL_CODING_LAYER) {
 		if ((ctrl->value & ~(1 << 16)) < c->minimum || (ctrl->value & ~(1 << 16)) > c->maximum
 		    || (c->step != 0 && (ctrl->value & ~(1 << 16)) % c->step != 0)) {
-			mfc_err_ctx("Invalid control value (%#x)\n", ctrl->value);
+			mfc_err_ctx("Invalid control value for %#x (%#x)\n", ctrl->id, ctrl->value);
 			return -ERANGE;
 		} else {
 			return 0;
 		}
 	}
+
 	if (ctrl->value < c->minimum || ctrl->value > c->maximum
 	    || (c->step != 0 && ctrl->value % c->step != 0)) {
-		mfc_err_ctx("Invalid control value (%#x)\n", ctrl->value);
+		mfc_err_ctx("Invalid control value for %#x (%#x)\n", ctrl->id, ctrl->value);
 		return -ERANGE;
 	}
+
 	if (!FW_HAS_ROI_CONTROL(dev) && ctrl->id == \
 			V4L2_CID_MPEG_VIDEO_ROI_CONTROL) {
 		mfc_err_ctx("Not support feature(0x%x) for F/W\n", ctrl->id);
@@ -1320,7 +1324,7 @@ static int mfc_enc_set_param(struct s5p_mfc_ctx *ctx, struct v4l2_control *ctrl)
 		p->codec.vp9.intra_pu_split_disable = ctrl->value;
 		break;
 	case V4L2_CID_MPEG_VIDEO_DISABLE_IVF_HEADER:
-		p->codec.vp9.ivf_header = ctrl->value;
+		p->ivf_header_disable = ctrl->value;
 		break;
 	case V4L2_CID_MPEG_VIDEO_HEVC_I_FRAME_QP:
 		p->codec.hevc.rc_frame_qp = ctrl->value;
@@ -1686,7 +1690,7 @@ static int vidioc_g_ext_ctrls(struct file *file, void *priv,
 			break;
 		}
 
-		mfc_debug(2, "[%d] id: 0x%08x, value: %d", i, ext_ctrl->id, ext_ctrl->value);
+		mfc_debug(2, "[%d] id: 0x%08x, value: %d\n", i, ext_ctrl->id, ext_ctrl->value);
 	}
 
 	return ret;
@@ -1752,7 +1756,7 @@ static int vidioc_try_ext_ctrls(struct file *file, void *priv,
 			break;
 		}
 
-		mfc_debug(2, "[%d] id: 0x%08x, value: %d", i, ext_ctrl->id, ext_ctrl->value);
+		mfc_debug(2, "[%d] id: 0x%08x, value: %d\n", i, ext_ctrl->id, ext_ctrl->value);
 	}
 
 	return ret;

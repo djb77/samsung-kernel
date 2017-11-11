@@ -10,6 +10,7 @@
 #include "cmucal.h"
 #include "vclk.h"
 #include "ra.h"
+#include "acpm_dvfs.h"
 
 #define FVMAP_SIZE		(SZ_8K)
 
@@ -261,6 +262,9 @@ int fvmap_init(void __iomem *sram_base)
 	sram_fvmap_base = sram_base;
 	pr_info("%s:fvmap initialize %p\n", __func__, sram_base);
 	fvmap_copy_from_sram(map_base, sram_base);
+
+	if (IS_ENABLED(CONFIG_VDD_AUTO_CAL))
+		exynos_acpm_vdd_auto_calibration(1);
 
 	return 0;
 }

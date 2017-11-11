@@ -63,6 +63,12 @@
 				0x00002000 0x00006000 /* AIF3RXDAT / GPIO15 */
 				0x00002000 0x00006000 /* AIF3LRCLK / GPIO16 */
 			>;
+
+			cirrus,accdet {
+				acc@1 {
+					cirrus,hpdet-ext-res = <3300>;
+				};
+			};
 		};
 	};
 

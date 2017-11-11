@@ -80,6 +80,7 @@ extern unsigned reset_reason;
 
 enum sec_debug_extra_buf_type {
 	INFO_KTIME,
+	INFO_BIN,
 	INFO_FAULT,
 	INFO_BUG,
 	INFO_PANIC,
@@ -92,7 +93,7 @@ enum sec_debug_extra_buf_type {
 	INFO_BUSMON,
 	INFO_DPM,
 	INFO_SMPL,
-	INFO_SLUB,
+	INFO_ETC,
 	INFO_ESR,
 	INFO_MERR,
 	INFO_PCB,
@@ -104,6 +105,8 @@ enum sec_debug_extra_buf_type {
 	INFO_LR0,
 	INFO_LEVEL,
 	INFO_DECON,
+	INFO_WAKEUP,
+	INFO_BATT,
 	INFO_MAX,
 };
 
@@ -179,10 +182,37 @@ extern void sec_debug_set_extra_info_sysmmu(char *str);
 extern void sec_debug_set_extra_info_busmon(char *str);
 extern void sec_debug_set_extra_info_dpm_timeout(char *devname);
 extern void sec_debug_set_extra_info_smpl(unsigned int count);
-extern void sec_debug_set_extra_info_slub_error(char *cachename);
 extern void sec_debug_set_extra_info_esr(unsigned int esr);
 extern void sec_debug_set_extra_info_merr(void);
 extern void sec_debug_set_extra_info_decon(unsigned int err);
+extern void sec_debug_set_extra_info_batt(int cap, int volt, int temp, int curr);
+extern void sec_debug_set_extra_info_ufs_error(char *str);
+extern void sec_debug_set_extra_info_zswap(char *str);
+extern void sec_debug_set_extra_info_mfc_error(char *str);
+
+#else
+
+#define sec_debug_init_extra_info(a)	do { } while (0)
+#define sec_debug_finish_extra_info()	do { } while (0)
+#define sec_debug_store_extra_info()	do { } while (0)
+#define sec_debug_set_extra_info_ktime()	do { } while (0)
+#define sec_debug_set_extra_info_fault(a, b)	do { } while (0)
+#define sec_debug_set_extra_info_bug(a, b)	do { } while (0)
+#define sec_debug_set_extra_info_panic(a)	do { } while (0)
+#define sec_debug_set_extra_info_backtrace(a)	do { } while (0)
+#define sec_debug_set_extra_info_evt_version()	do { } while (0)
+#define sec_debug_set_extra_info_sysmmu(a)	do { } while (0)
+#define sec_debug_set_extra_info_busmon(a)	do { } while (0)
+#define sec_debug_set_extra_info_dpm_timeout(a)	do { } while (0)
+#define sec_debug_set_extra_info_smpl(a)	do { } while (0)
+#define sec_debug_set_extra_info_esr(a)		do { } while (0)
+#define sec_debug_set_extra_info_merr()		do { } while (0)
+#define sec_debug_set_extra_info_decon(a)	do { } while (0)
+#define sec_debug_set_extra_info_batt(a, b, c, d)	do { } while (0)
+#define sec_debug_set_extra_info_ufs_error(a)	do { } while (0)
+#define sec_debug_set_extra_info_zswap(a)	do { } while (0)
+#define sec_debug_set_extra_info_mfc_error(a)	do { } while (0)
+
 #endif /* CONFIG_SEC_DEBUG_EXTRA_INFO */
 
 #ifdef CONFIG_SEC_DEBUG_AUTO_SUMMARY

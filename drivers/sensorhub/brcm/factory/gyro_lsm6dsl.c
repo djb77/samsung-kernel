@@ -92,7 +92,7 @@ int gyro_open_calibration(struct ssp_data *data)
 	return iRet;
 }
 
-int save_gyro_caldata(struct ssp_data *data, s16 *iCalData)
+int save_gyro_caldata(struct ssp_data *data, s32 *iCalData)
 {
 	int iRet = 0;
 	struct file *cal_filp = NULL;
@@ -132,7 +132,7 @@ int set_gyro_cal(struct ssp_data *data)
 {
 	int iRet = 0;
 	struct ssp_msg *msg;
-	s16 gyro_cal[3];
+	s32 gyro_cal[3];
 	if (!(data->uSensorState & (1 << GYROSCOPE_SENSOR))) {
 		pr_info("[SSP]: %s - Skip this function!!!"\
 			", gyro sensor is not connected(0x%llx)\n",
@@ -150,12 +150,12 @@ int set_gyro_cal(struct ssp_data *data)
 		return -ENOMEM;
 	}
 	msg->cmd = MSG2SSP_AP_MCU_SET_GYRO_CAL;
-	msg->length = 6;
+	msg->length = sizeof(gyro_cal);
 	msg->options = AP2HUB_WRITE;
-	msg->buffer = (char*) kzalloc(6, GFP_KERNEL);
+	msg->buffer = (char *) kzalloc(sizeof(gyro_cal), GFP_KERNEL);
 
 	msg->free_buffer = 1;
-	memcpy(msg->buffer, gyro_cal, 6);
+	memcpy(msg->buffer, gyro_cal, sizeof(gyro_cal));
 
 	iRet = ssp_spi_async(data, msg);
 
@@ -238,7 +238,7 @@ static ssize_t lsm6dsl_gyro_selftest(struct device *dev,
 	long avg[3] = {0,}, rms[3] = {0,};
 	int gyro_bias[3] = {0,};
 	s16 shift_ratio[3] = {0,}; //self_diff value
-	s16 iCalData[3] = {0,};
+	s32 iCalData[3] = {0,};
 	char a_name[3][2] = { "X", "Y", "Z" };
 	int iRet = 0;
 	int bias_thresh = DEF_BIAS_LSB_THRESH_SELF;

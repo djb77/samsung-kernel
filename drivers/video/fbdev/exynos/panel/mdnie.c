@@ -457,7 +457,7 @@ static void mdnie_update_scr_white_mode(struct mdnie_info *mdnie)
 	int mdnie_mode = mdnie_current_state(mdnie);
 
 	if (mdnie_mode == MDNIE_SCENARIO_MODE) {
-		if (IS_LDU_MODE(mdnie)) {
+		if ((IS_LDU_MODE(mdnie)) && (mdnie->props.scenario != EBOOK_MODE)) {
 			mdnie->props.scr_white_mode = SCR_WHITE_MODE_ADJUST_LDU;
 		} else if (mdnie->props.update_sensorRGB &&
 				mdnie->props.mode == AUTO &&

@@ -40,6 +40,11 @@ int gpu_pm_qos_command(struct exynos_context *platform, gpu_pmqos_state state)
 
 	DVFS_ASSERT(platform);
 
+#ifdef CONFIG_MALI_ASV_CALIBRATION_SUPPORT
+	if (platform->gpu_auto_cali_status)
+		return 0;
+#endif
+
 	if (!platform->devfreq_status)
 		return 0;
 

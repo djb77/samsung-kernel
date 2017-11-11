@@ -1339,7 +1339,7 @@
 					cirrus,micd-dbtime = <0x1>;
 					cirrus,micd-timeout-ms = <1000>;
 					cirrus,micd-force-micbias;
-					cirrus,hpdet-short-circuit-imp = <3>;
+					cirrus,hpdet-short-circuit-imp = <2>;
 					cirrus,micd-ranges = <
 						116 226
 						173 582

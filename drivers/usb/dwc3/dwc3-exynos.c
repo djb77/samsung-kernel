@@ -471,7 +471,7 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 
 	int			ret;
 
-	pr_info("%s: +++\n", __func__);
+	dev_info(dev, "%s: +\n", __func__);
 	exynos = devm_kzalloc(dev, sizeof(*exynos), GFP_KERNEL);
 	if (!exynos)
 		return -ENOMEM;
@@ -564,7 +564,7 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 		goto err4;
 	}
 
-	pr_info("%s: ---\n", __func__);
+	dev_info(dev, "%s: -\n", __func__);
 	return 0;
 
 err4:
@@ -603,6 +603,21 @@ static int dwc3_exynos_remove(struct platform_device *pdev)
 		regulator_disable(exynos->vdd10);
 
 	return 0;
+}
+
+static void dwc3_exynos_shutdown(struct platform_device *pdev)
+{
+	struct dwc3_exynos	*exynos = platform_get_drvdata(pdev);
+	struct device		*dev = &pdev->dev;
+	struct dwc3_exynos_rsw	*rsw = &exynos->rsw;
+	struct otg_fsm		*fsm = rsw->fsm;
+
+	dev_info(dev, "%s +\n", __func__);
+
+	fsm->reset = 1;
+	dwc3_otg_run_sm(rsw->fsm);
+
+	dev_info(dev, "%s -\n", __func__);
 }
 
 #ifdef CONFIG_PM
@@ -712,6 +727,7 @@ static const struct dev_pm_ops dwc3_exynos_dev_pm_ops = {
 static struct platform_driver dwc3_exynos_driver = {
 	.probe		= dwc3_exynos_probe,
 	.remove		= dwc3_exynos_remove,
+	.shutdown	= dwc3_exynos_shutdown,
 	.driver		= {
 		.name	= "exynos-dwc3",
 		.of_match_table = exynos_dwc3_match,

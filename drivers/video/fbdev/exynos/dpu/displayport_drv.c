@@ -746,15 +746,30 @@ static int displayport_read_branch_revision(struct displayport_device *displaypo
 static int displayport_link_status_read(void)
 {
 	u8 val[DPCP_LINK_SINK_STATUS_FIELD_LENGTH] = {0, };
+	int count = 10;
 
-	displayport_reg_dpcd_read_burst(DPCD_ADD_SINK_COUNT,
-			DPCP_LINK_SINK_STATUS_FIELD_LENGTH, val);
+	do {
+		displayport_reg_dpcd_read(DPCD_ADD_SINK_COUNT, 1, val);
+		displayport_info("Read SINK_COUNT %02X\n", val[0]);
+		if((val[0] & (SINK_COUNT1 | SINK_COUNT2)) != 0)
+			break;
+		msleep(20);
+	} while(--count > 0);
+
+	displayport_reg_dpcd_read_burst(DPCD_ADD_DEVICE_SERVICE_IRQ_VECTOR,
+			DPCP_LINK_SINK_STATUS_FIELD_LENGTH - 1, &val[1]);
 
 	displayport_info("Read link status %02x %02x %02x %02x %02x %02x\n",
-			val[0], val[1], val[2], val[3], val[4], val[5]);
+				val[0], val[1], val[2], val[3], val[4], val[5]);
 
 	if ((val[0] & val[1] & val[2] & val[3] & val[4] & val[5]) == 0xff)
 		return -EINVAL;
+
+	if (count == 0)
+		return -EINVAL;
+
+	if (count < 10 && count > 0)
+		msleep(10);/* need delay after SINK count is changed to 1 */
 
 	if (val[1] == AUTOMATED_TEST_REQUEST) {
 		u8 data = 0;
@@ -793,9 +808,11 @@ static int displayport_link_training(void)
 	displayport_reg_dpcd_read(DPCD_ADD_MAX_DOWNSPREAD, 1, &val);
 	displayport_dbg("DPCD_ADD_MAX_DOWNSPREAD = %x\n", val);
 
-	if (val & NO_AUX_HANDSHAKE_LINK_TRANING)
+	if (val & NO_AUX_HANDSHAKE_LINK_TRANING) {
 		ret = displayport_fast_link_training();
-	else
+		if (ret < 0)
+			ret = displayport_full_link_training();
+	} else
 		ret = displayport_full_link_training();
 
 	mutex_unlock(&displayport->training_lock);
@@ -905,6 +922,8 @@ HPD_FAIL:
 	phy_power_off(displayport->phy);
 	if (wake_lock_active(&displayport->dp_wake_lock))
 			wake_unlock(&displayport->dp_wake_lock);
+	displayport->hpd_current_state = 0;
+	displayport->hpd_state = HPD_UNPLUG;
 	mutex_unlock(&displayport->hpd_lock);
 
 	return;

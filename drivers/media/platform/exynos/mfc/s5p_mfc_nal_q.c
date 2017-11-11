@@ -473,6 +473,7 @@ void s5p_mfc_nal_q_stop_if_started(struct s5p_mfc_dev *dev)
 	if (s5p_mfc_wait_for_done_dev(dev,
 				S5P_FIMV_R2H_CMD_COMPLETE_QUEUE_RET)) {
 		mfc_err_dev("NAL Q: Failed to stop qeueue during get hwlock\n");
+		dev->logging_data->cause |= (1 << MFC_CAUSE_FAIL_STOP_NAL_Q_FOR_OTHER);
 		s5p_mfc_dump_info_and_stop_hw(dev);
 	}
 
@@ -1085,7 +1086,7 @@ static void mfc_nal_q_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err
 		if (dst_mb) {
 			mfc_debug(2, "NAL Q: find display buf, index: %d\n", dst_mb->vb.vb2_buf.index);
 			/* Check if this is the buffer we're looking for */
-			mfc_debug(2, "NAL Q: buf addr: 0x%08llx, disp addr: 0x%08llx",
+			mfc_debug(2, "NAL Q: buf addr: 0x%08llx, disp addr: 0x%08llx\n",
 				s5p_mfc_mem_get_daddr_vb(&dst_mb->vb.vb2_buf, 0), dspl_y_addr);
 
 			index = dst_mb->vb.vb2_buf.index;
@@ -1108,7 +1109,7 @@ static void mfc_nal_q_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err
 		if (ref_mb) {
 			mfc_debug(2, "NAL Q: find display buf, index: %d\n", ref_mb->vb.vb2_buf.index);
 			/* Check if this is the buffer we're looking for */
-			mfc_debug(2, "NAL Q: buf addr: 0x%08llx, disp addr: 0x%08llx",
+			mfc_debug(2, "NAL Q: buf addr: 0x%08llx, disp addr: 0x%08llx\n",
 				s5p_mfc_mem_get_daddr_vb(&ref_mb->vb.vb2_buf, 0), dspl_y_addr);
 
 			index = ref_mb->vb.vb2_buf.index;
@@ -1117,6 +1118,7 @@ static void mfc_nal_q_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err
 
 			/* Set reserved2 bits in order to inform SEI information */
 			ref_mb->vb.reserved2 = 0;
+
 			if (is_content_light) {
 				ref_mb->vb.reserved2 |= (1 << 0);
 				mfc_debug(2, "NAL Q: content light level parsed\n");
@@ -1126,9 +1128,11 @@ static void mfc_nal_q_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err
 				mfc_debug(2, "NAL Q: mastering display colour parsed\n");
 			}
 			if (is_video_signal_type) {
-				ref_mb->vb.reserved2 |= (1 << 2);
+				ref_mb->vb.reserved2 |= (1 << 4);
 				mfc_debug(2, "NAL Q: video signal type parsed\n");
 				if (is_colour_description) {
+					ref_mb->vb.reserved2 |= (1 << 2);
+					mfc_debug(2, "NAL Q: matrix coefficients parsed\n");
 					ref_mb->vb.reserved2 |= (1 << 3);
 					mfc_debug(2, "NAL Q: colour description parsed\n");
 				}

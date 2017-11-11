@@ -21,6 +21,8 @@ struct acpm_dvfs {
 #define MARGIN_REQ      2
 #define COLDTEMP_REQ    3
 #define POLICY_REQ      4
+#define DATA_INIT	5
+#define AUTOCAL_START   6
 
 #ifdef CONFIG_ACPM_DVFS
 extern int exynos_acpm_set_rate(unsigned int id, unsigned long rate);
@@ -28,6 +30,7 @@ extern unsigned long exynos_acpm_get_rate(unsigned int id);
 extern void exynos_acpm_set_device(void *dev);
 extern int exynos_acpm_set_volt_margin(unsigned int id, int volt);
 extern int exynos_acpm_set_cold_temp(unsigned int id, bool is_cold_temp);
+extern int exynos_acpm_vdd_auto_calibration(unsigned int enable);
 #else
 static inline int exynos_acpm_set_rate(unsigned int id, unsigned long rate)
 {
@@ -51,6 +54,11 @@ static inline int exynos_acpm_set_volt_margin(unsigned int id, int volt);
 static inline int exynos_acpm_set_cold_temp(unsigned int id, bool is_cold_temp);
 {
 	return 0;
+}
+
+static inline int exynos_acpm_vdd_auto_calibration(unsigned int enable)
+{
+	return -1;
 }
 #endif
 #endif

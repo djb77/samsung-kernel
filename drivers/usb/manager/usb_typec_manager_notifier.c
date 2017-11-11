@@ -44,9 +44,6 @@ static int manager_notifier_init(void);
 
 struct device *manager_device;
 manager_data_t typec_manager;
-#ifdef MANAGER_WATER_EVENT_ENABLE
-static DECLARE_COMPLETION(ccic_attach_done);
-#endif
 void set_usb_enumeration_state(int state);
 static void cable_type_check_work(bool state, int time);
 void calc_water_duration_time(void);
@@ -488,9 +485,6 @@ static int manager_handle_ccic_notification(struct notifier_block *nb,
 				if(typec_manager.ccic_attach_state == CCIC_NOTIFY_ATTACH){
 					pr_info("usb: [M] %s: CCIC_NOTIFY_ATTACH\n", __func__);
 					typec_manager.water_det = 0;
-#ifdef MANAGER_WATER_EVENT_ENABLE
-					complete(&ccic_attach_done);
-#endif
 					typec_manager.pd_con_state = 0;
 				} else { /* CCIC_NOTIFY_DETACH */
 					pr_info("usb: [M] %s: CCIC_NOTIFY_DETACH (pd=%d, cable_type=%d)\n", __func__,
@@ -526,7 +520,6 @@ static int manager_handle_ccic_notification(struct notifier_block *nb,
 			if(!typec_manager.water_det) {
 					typec_manager.water_det = 1;
 					typec_manager.water_count++;
-					complete(&ccic_attach_done);
 
 					muic_noti.src = CCIC_NOTIFY_DEV_CCIC;
 					muic_noti.dest = CCIC_NOTIFY_DEV_MUIC;
@@ -709,13 +702,6 @@ static int manager_handle_vbus_notification(struct notifier_block *nb,
 		typec_manager.muic_attach_state_without_ccic);
 
 	typec_manager.vbus_state = vbus_type;
-
-#ifdef MANAGER_WATER_EVENT_ENABLE
-	init_completion(&ccic_attach_done);
-	if ((typec_manager.water_det == 1) && (vbus_type == STATUS_VBUS_HIGH) )
-		wait_for_completion_timeout(&ccic_attach_done,
-					    msecs_to_jiffies(2000));
-#endif
 
 	switch (vbus_type) {
 	case STATUS_VBUS_HIGH:

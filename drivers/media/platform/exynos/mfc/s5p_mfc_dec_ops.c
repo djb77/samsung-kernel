@@ -55,11 +55,11 @@ struct s5p_mfc_ctrl_cfg mfc_ctrl_list[] = {
 	},
 	/* CRC related definitions are based on non-H.264 type */
 	{
-		.type = MFC_CTRL_TYPE_GET_SRC,
+		.type = MFC_CTRL_TYPE_GET_DST,
 		.id = V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_LUMA,
 		.is_volatile = 0,
 		.mode = MFC_CTRL_MODE_SFR,
-		.addr = S5P_FIMV_D_DECODED_FIRST_PLANE_CRC,
+		.addr = S5P_FIMV_D_DISPLAY_FIRST_PLANE_CRC,
 		.mask = 0xFFFFFFFF,
 		.shft = 0,
 		.flag_mode = MFC_CTRL_MODE_NONE,
@@ -67,11 +67,11 @@ struct s5p_mfc_ctrl_cfg mfc_ctrl_list[] = {
 		.flag_shft = 0,
 	},
 	{
-		.type = MFC_CTRL_TYPE_GET_SRC,
+		.type = MFC_CTRL_TYPE_GET_DST,
 		.id = V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_CHROMA,
 		.is_volatile = 0,
 		.mode = MFC_CTRL_MODE_SFR,
-		.addr = S5P_FIMV_D_DECODED_SECOND_PLANE_CRC,
+		.addr = S5P_FIMV_D_DISPLAY_SECOND_PLANE_CRC,
 		.mask = 0xFFFFFFFF,
 		.shft = 0,
 		.flag_mode = MFC_CTRL_MODE_NONE,
@@ -79,7 +79,43 @@ struct s5p_mfc_ctrl_cfg mfc_ctrl_list[] = {
 		.flag_shft = 0,
 	},
 	{
-		.type = MFC_CTRL_TYPE_GET_SRC,
+		.type = MFC_CTRL_TYPE_GET_DST,
+		.id = V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_CHROMA1,
+		.is_volatile = 0,
+		.mode = MFC_CTRL_MODE_SFR,
+		.addr = S5P_FIMV_D_DISPLAY_THIRD_PLANE_CRC,
+		.mask = 0xFFFFFFFF,
+		.shft = 0,
+		.flag_mode = MFC_CTRL_MODE_NONE,
+		.flag_addr = 0,
+		.flag_shft = 0,
+	},
+	{
+		.type = MFC_CTRL_TYPE_GET_DST,
+		.id = V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_2BIT_LUMA,
+		.is_volatile = 0,
+		.mode = MFC_CTRL_MODE_SFR,
+		.addr = S5P_FIMV_D_DISPLAY_FIRST_PLANE_2BIT_CRC,
+		.mask = 0xFFFFFFFF,
+		.shft = 0,
+		.flag_mode = MFC_CTRL_MODE_NONE,
+		.flag_addr = 0,
+		.flag_shft = 0,
+	},
+	{
+		.type = MFC_CTRL_TYPE_GET_DST,
+		.id = V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_2BIT_CHROMA,
+		.is_volatile = 0,
+		.mode = MFC_CTRL_MODE_SFR,
+		.addr = S5P_FIMV_D_DISPLAY_SECOND_PLANE_2BIT_CRC,
+		.mask = 0xFFFFFFFF,
+		.shft = 0,
+		.flag_mode = MFC_CTRL_MODE_NONE,
+		.flag_addr = 0,
+		.flag_shft = 0,
+	},
+	{
+		.type = MFC_CTRL_TYPE_GET_DST,
 		.id = V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_LUMA_BOT,
 		.is_volatile = 0,
 		.mode = MFC_CTRL_MODE_SFR,
@@ -91,7 +127,7 @@ struct s5p_mfc_ctrl_cfg mfc_ctrl_list[] = {
 		.flag_shft = 0,
 	},
 	{
-		.type = MFC_CTRL_TYPE_GET_SRC,
+		.type = MFC_CTRL_TYPE_GET_DST,
 		.id = V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_CHROMA_BOT,
 		.is_volatile = 0,
 		.mode = MFC_CTRL_MODE_SFR,
@@ -103,11 +139,11 @@ struct s5p_mfc_ctrl_cfg mfc_ctrl_list[] = {
 		.flag_shft = 0,
 	},
 	{
-		.type = MFC_CTRL_TYPE_GET_SRC,
+		.type = MFC_CTRL_TYPE_GET_DST,
 		.id = V4L2_CID_MPEG_MFC51_VIDEO_CRC_GENERATED,
 		.is_volatile = 0,
 		.mode = MFC_CTRL_MODE_SFR,
-		.addr = S5P_FIMV_D_DECODED_STATUS,
+		.addr = S5P_FIMV_D_DISPLAY_STATUS,
 		.mask = 0x1,
 		.shft = 6,
 		.flag_mode = MFC_CTRL_MODE_NONE,
@@ -753,10 +789,19 @@ static int s5p_mfc_dec_get_buf_ctrls_val_nal_q_dec(struct s5p_mfc_ctx *ctx,
 			value = pOutStr->DisplayStatus;
 			break;
 		case V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_LUMA:
-			value = pOutStr->DecodedFirstCrc;
+			value = pOutStr->DisplayFirstCrc;
 			break;
 		case V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_CHROMA:
-			value = pOutStr->DecodedSecondCrc;
+			value = pOutStr->DisplaySecondCrc;
+			break;
+		case V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_CHROMA1:
+			value = pOutStr->DisplayThirdCrc;
+			break;
+		case V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_2BIT_LUMA:
+			value = pOutStr->DisplayFirst2BitCrc;
+			break;
+		case V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_2BIT_CHROMA:
+			value = pOutStr->DisplaySecond2BitCrc;
 			break;
 		case V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_LUMA_BOT:
 			value = pOutStr->DecodedFirstCrc;
@@ -765,7 +810,7 @@ static int s5p_mfc_dec_get_buf_ctrls_val_nal_q_dec(struct s5p_mfc_ctx *ctx,
 			value = pOutStr->DecodedSecondCrc;
 			break;
 		case V4L2_CID_MPEG_MFC51_VIDEO_CRC_GENERATED:
-			value = pOutStr->DecodedStatus;
+			value = pOutStr->DisplayStatus;
 			break;
 		case V4L2_CID_MPEG_VIDEO_H264_SEI_FP_AVAIL:
 			value = pOutStr->SeiAvail;

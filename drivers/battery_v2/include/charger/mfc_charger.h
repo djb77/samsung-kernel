@@ -227,6 +227,7 @@ enum {
 	MFC_VOUT_9V, // 4
 	MFC_VOUT_10V, // 5 
 	MFC_VOUT_5_5V,		/* CC-CV */
+	MFC_VOUT_5V_STEP,
 	MFC_VOUT_9V_STEP,
 };
 
@@ -618,7 +619,6 @@ struct mfc_charger_platform_data {
 	int wpc_en;
 	int irq_wpc_int;
 	int cs100_status;
-	int vout_status;
 	int wireless_cc_cv;
 	int siop_level;
 	u8 capacity;
@@ -691,6 +691,7 @@ struct mfc_charger_data {
 	struct delayed_work	wpc_afc_vout_work;
 	struct delayed_work	wpc_fw_booting_work;
 	struct delayed_work	wpc_vout_step_work;
+	struct delayed_work	wpc_cm_fet_work;
 
 	u16 addr;
 	int size;
@@ -699,9 +700,12 @@ struct mfc_charger_data {
 	int is_mst_on; /* mst */
 	int chip_id;
 	int fw_cmd;
-	int vout_mode;
+	int current_vout;
+	int target_vout;
 	int mst_off_lock;
-	bool is_otg_on;
+	bool is_otg_on; /* otg without wireless charging */
+	bool is_wc_otg_on; /* otg with wireless charging */
+	bool is_overtemp;
 	int led_cover;
 };
 

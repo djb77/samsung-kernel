@@ -4470,11 +4470,7 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 		if (udev->wusb == 0) {
 			for (operations = 0; operations < SET_ADDRESS_TRIES; ++operations) {
 				retval = hub_set_address(udev, devnum);
-#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
-				if (retval >= 0 || retval == -ETIME)
-#else
 				if (retval >= 0)
-#endif
 					break;
 				msleep(200);
 			}
@@ -4866,11 +4862,7 @@ loop:
 		release_devnum(udev);
 		hub_free_dev(udev);
 		usb_put_dev(udev);
-#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
-		if ((status == -ENOTCONN) || (status == -ENOTSUPP) || (status == -ETIME))
-#else
 		if ((status == -ENOTCONN) || (status == -ENOTSUPP))
-#endif
 			break;
 	}
 	if (hub->hdev->parent ||

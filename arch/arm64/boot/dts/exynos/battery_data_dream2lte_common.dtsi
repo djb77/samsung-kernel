@@ -224,7 +224,7 @@
 		battery,recharge_check_count = <1>;
 		battery,recharge_condition_type = <4>; /* SEC_BATTERY_RECHARGE_CONDITION_VCELL */
 		battery,recharge_condition_soc = <98>;
-		battery,recharge_condition_vcell = <4300>;
+		battery,recharge_condition_vcell = <4280>;
 
 		battery,charging_total_time = <14400>;
 		battery,hv_charging_total_time = <10800>;
@@ -237,8 +237,8 @@
 		battery,chg_float_voltage_conv = <10>;
 
 		battery,swelling_high_temp_block = <410>;
-		battery,swelling_high_temp_recov = <360>;
-		battery,swelling_wc_high_temp_recov = <380>;
+		battery,swelling_high_temp_recov = <390>;
+		battery,swelling_wc_high_temp_recov = <390>;
 		battery,swelling_low_temp_block_1st = <150>;
 		battery,swelling_low_temp_recov_1st = <200>;
 		battery,swelling_low_temp_block_2nd = <50>;
@@ -271,19 +271,19 @@
 		battery,siop_store_hv_wireless_input_limit_current = <450>;
 
 		battery,ttf_hv_charge_current = <2500>;
-		battery,ttf_hv_wireless_charge_current = <1350>;
-		battery,ttf_wireless_charge_current = <950>;
+		battery,ttf_hv_wireless_charge_current = <1200>;
+		battery,ttf_wireless_charge_current = <900>;
 
 		battery,pd_charging_charge_power = <15000>;
 		battery,max_charging_current = <2500>;
 		battery,battery_full_capacity = <3500>;
 
 		/* cycle, chg_float_voltage, recharge_condition_vcell, full_condition_vcell, full_condition_soc */
-		battery,age_data = <0 43500 4300 4250 93
-				200 43250 4275 4225 92
-				250 43125 4262 4212 91
-				300 42875 4237 4187 90
-				1000 42375 4187 4137 89>;
+		battery,age_data = <0 43500 4280 4250 93
+				200 43250 4255 4225 92
+				250 43125 4242 4212 91
+				300 42875 4217 4187 90
+				1000 42375 4167 4137 89>;
 
 		battery,max_input_voltage = <12000>; /* mV */
 		battery,max_input_current = <3000>;  /* mA */
@@ -321,7 +321,7 @@
 		fuelgauge,qrtable20 = <0x0A01>;
 		fuelgauge,qrtable30 = <0x0902>;
 		fuelgauge,fg_resistor = <2>;
-		fuelgauge,capacity = <0x0DC6>;
+		fuelgauge,capacity = <0x0DC5>;
 		/*fuelgauge,auto_discharge_en;*/
 		fuelgauge,discharge_temp_threshold = <600>;
 		fuelgauge,discharge_volt_threshold = <4200>;

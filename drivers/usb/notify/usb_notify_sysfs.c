@@ -55,6 +55,7 @@ const char USB_HW_Param_Print[USB_CCIC_HW_PARAM_MAX][MAX_HWPARAM_STRING] = {
 	{"CC_DEX"},
 	{"CC_WTIME"},
 	{"CC_WVBUS"},
+	{"CC_VER"},
 };
 
 struct notify_data {
@@ -71,6 +72,7 @@ int get_usb310_count(void);
 int get_usb210_count(void);
 unsigned long get_waterDet_duration(void);
 int get_waterChg_count(void);
+unsigned long long show_ccic_version(void);
 #endif
 
 static int is_valid_cmd(char *cur_cmd, char *prev_cmd)
@@ -299,8 +301,9 @@ static ssize_t usb_hw_param_show(struct device *dev,
 	n->hw_param[USB_CLIENT_HIGH_SPEED_COUNT] += get_usb210_count();
 	n->hw_param[USB_CCIC_WATER_TIME_DURATION] += get_waterDet_duration();
 	n->hw_param[USB_CCIC_WATER_VBUS_COUNT] += get_waterChg_count();
+	n->hw_param[USB_CCIC_VERSION] = show_ccic_version();
 #endif
-	for (index = 0; index < USB_CCIC_HW_PARAM_MAX-1; index++) {
+	for (index = 0; index < USB_CCIC_HW_PARAM_MAX - 1; index++) {
 		ret += sprintf(buf + ret, "%llu ", n->hw_param[index]);
 	}
 	ret += sprintf(buf + ret, "%llu\n", n->hw_param[index]);
@@ -316,6 +319,7 @@ static ssize_t usb_hw_param_store(
 	struct usb_notify_dev *udev = (struct usb_notify_dev *)
 		dev_get_drvdata(dev);
 	struct otg_notify *n = udev->o_notify;
+	unsigned long long prev_hw_param[USB_CCIC_HW_PARAM_MAX] = {0, };
 
 	int index = 0;
 	size_t ret = -ENOMEM;
@@ -331,10 +335,17 @@ static ssize_t usb_hw_param_store(
 		goto error;
 	}
 
-	for (index = 0; index < USB_CCIC_HW_PARAM_MAX; index++) {
+	for (index = 0; index < (USB_CCIC_HW_PARAM_MAX - 1); index++) {
 		token = strsep(&str, " ");
 		if (token)
-			n->hw_param[index] += strtoull(token, NULL, 10);
+			prev_hw_param[index] = strtoull(token, NULL, 10);
+
+		if (!token || (prev_hw_param[index] > 10000))
+			goto error;
+	}
+
+	for (index = 0; index < (USB_CCIC_HW_PARAM_MAX - 1); index++) {
+		n->hw_param[index] += prev_hw_param[index];
 		pr_info("%s - hw_param[%d] : %llu\n",
 			__func__, index, n->hw_param[index]);
 	}
@@ -350,12 +361,38 @@ static ssize_t hw_param_show(struct device *dev,
 	struct otg_notify *n = udev->o_notify;
 	int index, ret = 0;
 
-	for (index = 0; index < USB_CCIC_HW_PARAM_MAX-1; index++) {
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+		n->hw_param[USB_CCIC_WATER_INT_COUNT] += get_ccic_water_count();
+		n->hw_param[USB_CCIC_DRY_INT_COUNT] += get_ccic_dry_count();
+		n->hw_param[USB_CLIENT_SUPER_SPEED_COUNT] += get_usb310_count();
+		n->hw_param[USB_CLIENT_HIGH_SPEED_COUNT] += get_usb210_count();
+		n->hw_param[USB_CCIC_WATER_TIME_DURATION] += get_waterDet_duration();
+		n->hw_param[USB_CCIC_WATER_VBUS_COUNT] += get_waterChg_count();
+		n->hw_param[USB_CCIC_VERSION] = show_ccic_version();
+#endif
+
+	for (index = 0; index < USB_CCIC_HW_PARAM_MAX - 1; index++) {
 		ret += sprintf(buf + ret, "\"%s\":\"%llu\",",
 			USB_HW_Param_Print[index], n->hw_param[index]);
 	}
-	ret += sprintf(buf + ret, "\"%s\":\"%llu\"\n",
-			USB_HW_Param_Print[index], n->hw_param[index]);
+	/* CCIC FW version */
+	ret += sprintf(buf + ret, "\"%s\":\"",
+		USB_HW_Param_Print[index]);
+	/* HW Version */
+	ret += sprintf(buf + ret, "%02X%02X%02X%02X",
+		*((unsigned char*)&(n->hw_param[index])+3),
+		*((unsigned char*)&(n->hw_param[index])+2),
+		*((unsigned char*)&(n->hw_param[index])+1),
+		*((unsigned char*)&(n->hw_param[index])+0));
+	/* SW Main Version */
+	ret += sprintf(buf + ret, "%02X%02X%02X",
+		*((unsigned char*)&(n->hw_param[index])+6),
+		*((unsigned char*)&(n->hw_param[index])+5),
+		*((unsigned char*)&(n->hw_param[index])+4));
+	/* SW Boot Version */
+	ret += sprintf(buf + ret, "%02X",
+		*((unsigned char*)&(n->hw_param[index])+7));
+	ret += sprintf(buf + ret, "\"\n");
 	pr_info("%s - ret : %d\n", __func__, ret);
 
 	return ret;

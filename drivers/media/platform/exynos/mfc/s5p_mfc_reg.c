@@ -421,9 +421,6 @@ int s5p_mfc_set_dynamic_dpb(struct s5p_mfc_ctx *ctx, struct s5p_mfc_buf *dst_mb)
 	mfc_debug(2, "ADDING Flag after: 0x%lx\n", dec->available_dpb);
 	mfc_debug(2, "Dst addr [%d] = 0x%08llx\n", dst_index, dst_mb->planes.raw[0]);
 
-	/* decoder dst buffer CFW PROT */
-	s5p_mfc_protect_dpb(ctx, dst_mb);
-
 	/* for debugging about black bar detection */
 	if (FW_HAS_BLACK_BAR_DETECT(dev) && dec->detect_black_bar) {
 		for (i = 0; i < raw->num_planes; i++) {
@@ -437,6 +434,9 @@ int s5p_mfc_set_dynamic_dpb(struct s5p_mfc_ctx *ctx, struct s5p_mfc_buf *dst_mb)
 		if (dec->frame_cnt >= 30)
 			dec->frame_cnt = 0;
 	}
+
+	/* decoder dst buffer CFW PROT */
+	s5p_mfc_protect_dpb(ctx, dst_mb);
 
 	for (i = 0; i < raw->num_planes; i++) {
 		MFC_WRITEL(raw->plane_size[i],

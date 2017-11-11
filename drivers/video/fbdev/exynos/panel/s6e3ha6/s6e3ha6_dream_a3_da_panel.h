@@ -1392,6 +1392,9 @@ struct maptbl dream_a3_da_maptbl[MAX_MAPTBL] = {
 	[ACTIVE_CLK_SELF_DRAWER] = DEFINE_0D_MAPTBL(dream_a3_da_self_drawer, init_common_table, NULL, copy_self_drawer),
 	[ACTIVE_CLK_CTRL_UPDATE_MAPTBL] = DEFINE_0D_MAPTBL(dream_a3_da_self_clk_update_table, init_common_table, NULL, copy_self_clk_update_maptbl),
 #endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	[POC_ON_MAPTBL] = DEFINE_0D_MAPTBL(dream_a3_da_poc_on_table, init_common_table, NULL, copy_poc_maptbl),
+#endif
 };
 
 /* ===================================================================================== */
@@ -1511,16 +1514,10 @@ u8 DREAM_A3_DA_TSET_MPS_ELVSS[] = {
 	0x19,	/* temperature 25 */
 	0xDC,	/* MPS_CON : ACL OFF */
 	0x0A,	/* ELVSS : MAX */
-};
-
-u8 DREAM_A3_DA_TSET_ELVSS_TEMP_0[] = {
-	0xB0,
-	0x17
-};
-
-u8 DREAM_A3_DA_TSET_ELVSS_TEMP_1[] = {
-	0xB5,
-	0x0C	/* ELVSS TEMP */
+	0x01, 0x01, 0x34, 0x67, 0x9A, 0xCD, 0x01, 0x22,
+	0x33, 0x44, 0x00, 0x00, 0x08, 0x88, 0xFF, 0x0F,
+	0x01, 0x11, 0x11, 0x10,
+	0x0C,	/* ELVSS TEMP */
 };
 
 u8 DREAM_A3_DA_VGH_VINT[] = {
@@ -1605,6 +1602,43 @@ u8 DREAM_A3_DA_ISC_02[] = { 0xF6, 0x53 };
 u8 DREAM_A3_DA_ISC_03[] = { 0xB0, 0x08 };
 u8 DREAM_A3_DA_ISC_04[] = { 0xF6, 0x80 };
 
+#ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
+u8 DREAM_A3_DA_GRAYSPOT_ON_01[] = {
+	0xF6,
+	0x43, 0x04, 0x57, 0x13, 0xAA, 0x00
+};
+u8 DREAM_A3_DA_GRAYSPOT_ON_02[] = {
+	0xB5,
+	0x19, 0xCC, 0x0A, 0x01, 0x01, 0x34, 0x67, 0x9A,
+	0xCD, 0x01, 0x22, 0x33, 0x44, 0x00, 0x00, 0x08,
+	0x88, 0xFF, 0x0F, 0x01, 0x11, 0x11, 0x10, 0x1F
+};
+u8 DREAM_A3_DA_GRAYSPOT_ON_03[] = {
+	0xCB,
+	0x04, 0x01, 0x00, 0x00, 0x00, 0x60, 0x80, 0x00,
+	0x00, 0x10, 0x02
+};
+u8 DREAM_A3_DA_GRAYSPOT_OFF_01[] = {
+	0xF6,
+	0x43, 0x04, 0x57, 0x13, 0xAA, 0xBF
+};
+u8 DREAM_A3_DA_GRAYSPOT_OFF_02[] = {
+	0xB5,
+	0x19, 0xCC, 0x0A, 0x01, 0x01, 0x34, 0x67, 0x9A,
+	0xCD, 0x01, 0x22, 0x33, 0x44, 0x00, 0x00, 0x08,
+	0x88, 0xFF, 0x0F, 0x01, 0x11, 0x11, 0x10, 0x1F
+};
+u8 DREAM_A3_DA_GRAYSPOT_OFF_03[] = {
+	0xCB,
+	0x04, 0x01, 0x00, 0x00, 0x00, 0x60, 0x80, 0x00,
+	0x00, 0x0C, 0x06
+};
+#endif
+
+#ifdef CONFIG_SUPPORT_POC_FLASH
+u8 DREAM_A3_DA_POC_ON[] = { 0xEB, 0xFF, 0x52, 0x00, 0xFF };
+#endif
+
 DEFINE_STATIC_PACKET(dream_a3_da_level1_key_enable, DSI_PKT_TYPE_WR, DREAM_A3_DA_KEY1_ENABLE);
 DEFINE_STATIC_PACKET(dream_a3_da_level2_key_enable, DSI_PKT_TYPE_WR, DREAM_A3_DA_KEY2_ENABLE);
 DEFINE_STATIC_PACKET(dream_a3_da_level3_key_enable, DSI_PKT_TYPE_WR, DREAM_A3_DA_KEY3_ENABLE);
@@ -1657,12 +1691,10 @@ static struct pkt_update_info PKTUI(dream_a3_da_tset_mps_elvss)[] = {
 	{ .offset = 1, .maptbl = &dream_a3_da_maptbl[TSET_MAPTBL] },
 	{ .offset = 2, .maptbl = &dream_a3_da_maptbl[MPS_MAPTBL] },
 	{ .offset = 3, .maptbl = &dream_a3_da_maptbl[ELVSS_MAPTBL] },
+	{ .offset = 24, .maptbl = &dream_a3_da_maptbl[ELVSS_TEMP_MAPTBL] },
 };
 static DEFINE_PACKET(dream_a3_da_tset_mps_elvss, DSI_PKT_TYPE_WR, DREAM_A3_DA_TSET_MPS_ELVSS,
 		PKTUI(dream_a3_da_tset_mps_elvss), ARRAY_SIZE(PKTUI(dream_a3_da_tset_mps_elvss)));
-
-DEFINE_STATIC_PACKET(dream_a3_da_tset_elvss_temp_0, DSI_PKT_TYPE_WR, DREAM_A3_DA_TSET_ELVSS_TEMP_0);
-DEFINE_VARIABLE_PACKET(dream_a3_da_tset_elvss_temp_1, DSI_PKT_TYPE_WR, DREAM_A3_DA_TSET_ELVSS_TEMP_1, &dream_a3_da_maptbl[ELVSS_TEMP_MAPTBL], 1);
 
 #ifdef CONFIG_SUPPORT_HMD
 /* Command for hmd on */
@@ -1754,6 +1786,26 @@ DEFINE_STATIC_PACKET(dream_a3_da_isc_02, DSI_PKT_TYPE_WR, DREAM_A3_DA_ISC_02);
 DEFINE_STATIC_PACKET(dream_a3_da_isc_03, DSI_PKT_TYPE_WR, DREAM_A3_DA_ISC_03);
 DEFINE_STATIC_PACKET(dream_a3_da_isc_04, DSI_PKT_TYPE_WR, DREAM_A3_DA_ISC_04);
 
+#ifdef CONFIG_SUPPORT_POC_FLASH
+DEFINE_VARIABLE_PACKET(dream_a3_da_poc_on, DSI_PKT_TYPE_WR, DREAM_A3_DA_POC_ON, &dream_a3_da_maptbl[POC_ON_MAPTBL], 4);
+#endif
+
+#ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
+DEFINE_STATIC_PACKET(dream_a3_da_grayspot_on_01, DSI_PKT_TYPE_WR, DREAM_A3_DA_GRAYSPOT_ON_01);
+DEFINE_STATIC_PACKET(dream_a3_da_grayspot_on_02, DSI_PKT_TYPE_WR, DREAM_A3_DA_GRAYSPOT_ON_02);
+DEFINE_STATIC_PACKET(dream_a3_da_grayspot_on_03, DSI_PKT_TYPE_WR, DREAM_A3_DA_GRAYSPOT_ON_03);
+DEFINE_STATIC_PACKET(dream_a3_da_grayspot_off_01, DSI_PKT_TYPE_WR, DREAM_A3_DA_GRAYSPOT_OFF_01);
+static struct pkt_update_info PKTUI(dream_a3_da_grayspot_off_02)[] = {
+	{ .offset = 1, .maptbl = &dream_a3_da_maptbl[TSET_MAPTBL] },
+	{ .offset = 2, .maptbl = &dream_a3_da_maptbl[MPS_MAPTBL] },
+	{ .offset = 3, .maptbl = &dream_a3_da_maptbl[ELVSS_MAPTBL] },
+	{ .offset = 24, .maptbl = &dream_a3_da_maptbl[ELVSS_TEMP_MAPTBL] },
+};
+static DEFINE_PACKET(dream_a3_da_grayspot_off_02, DSI_PKT_TYPE_WR, DREAM_A3_DA_GRAYSPOT_OFF_02,
+		PKTUI(dream_a3_da_grayspot_off_02), ARRAY_SIZE(PKTUI(dream_a3_da_grayspot_off_02)));
+DEFINE_STATIC_PACKET(dream_a3_da_grayspot_off_03, DSI_PKT_TYPE_WR, DREAM_A3_DA_GRAYSPOT_OFF_03);
+#endif
+
 static DEFINE_PANEL_MDELAY(dream_a3_da_wait_5msec, 5);
 static DEFINE_PANEL_MDELAY(dream_a3_da_wait_sleep_out, 10);
 static DEFINE_PANEL_MDELAY(dream_a3_da_wait_sleep_in, 120);
@@ -1794,6 +1846,12 @@ static void *dream_a3_da_init_cmdtbl[] = {
 	&PKTINFO(dream_a3_da_omok_zero_black2),
 	&KEYINFO(dream_a3_da_level3_key_disable),
 #endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	&KEYINFO(dream_a3_da_level2_key_enable),
+	&s6e3ha6_restbl[RES_POC_CTRL],
+	&PKTINFO(dream_a3_da_poc_on),
+	&KEYINFO(dream_a3_da_level2_key_disable),
+#endif
 	&KEYINFO(dream_a3_da_level1_key_enable),
 	&PKTINFO(dream_a3_da_set_area),
 	&PKTINFO(dream_a3_da_te_on),
@@ -1826,14 +1884,16 @@ static void *dream_a3_da_res_init_cmdtbl[] = {
 	&s6e3ha6_restbl[RES_MTP],
 	&s6e3ha6_restbl[RES_DATE],
 	&s6e3ha6_restbl[RES_HBM_GAMMA],
-#ifdef CONFIG_SEC_FACTORY
 	&s6e3ha6_restbl[RES_OCTA_ID],
-#endif
 #ifdef CONFIG_DISPLAY_USE_INFO
 	&s6e3ha6_restbl[RES_CHIP_ID],
 	&s6e3ha6_restbl[RES_SELF_DIAG],
 	&s6e3ha6_restbl[RES_ERR_FG],
 	&s6e3ha6_restbl[RES_DSI_ERR],
+#endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	&s6e3ha6_restbl[RES_POC_CHKSUM],
+	&s6e3ha6_restbl[RES_POC_CTRL],
 #endif
 	&KEYINFO(dream_a3_da_level3_key_disable),
 	&KEYINFO(dream_a3_da_level2_key_disable),
@@ -1845,8 +1905,6 @@ static void *dream_a3_da_set_bl_cmdtbl[] = {
 	&PKTINFO(dream_a3_da_gamma),
 	&PKTINFO(dream_a3_da_aor),
 	&PKTINFO(dream_a3_da_tset_mps_elvss),
-	&PKTINFO(dream_a3_da_tset_elvss_temp_0),
-	&PKTINFO(dream_a3_da_tset_elvss_temp_1),
 	&PKTINFO(dream_a3_da_vgh_vint),
 	&PKTINFO(dream_a3_da_acl_control),
 	&PKTINFO(dream_a3_da_acl_onoff),
@@ -1990,6 +2048,26 @@ static void *dream_a3_da_mcd_off_cmdtbl[] = {
 	&KEYINFO(dream_a3_da_level2_key_disable),
 };
 
+#ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
+static void *dream_a3_da_grayspot_on_cmdtbl[] = {
+	&KEYINFO(dream_a3_da_level2_key_enable),
+	&PKTINFO(dream_a3_da_grayspot_on_01),
+	&PKTINFO(dream_a3_da_grayspot_on_02),
+	&PKTINFO(dream_a3_da_grayspot_on_03),
+	&PKTINFO(dream_a3_da_gamma_update_enable),
+	&KEYINFO(dream_a3_da_level2_key_disable),
+};
+
+static void *dream_a3_da_grayspot_off_cmdtbl[] = {
+	&KEYINFO(dream_a3_da_level2_key_enable),
+	&PKTINFO(dream_a3_da_grayspot_off_01),
+	&PKTINFO(dream_a3_da_grayspot_off_02),
+	&PKTINFO(dream_a3_da_grayspot_off_03),
+	&PKTINFO(dream_a3_da_gamma_update_enable),
+	&KEYINFO(dream_a3_da_level2_key_disable),
+};
+#endif
+
 static void *dream_a3_da_active_clk_img_cmdtbl[] = {
 	&PKTINFO(dream_a3_da_active_clk_img_pkt),
 };
@@ -2053,6 +2131,10 @@ static struct seqinfo dream_a3_da_seqtbl[MAX_PANEL_SEQ] = {
 	[PANEL_ACTIVE_CLK_IMG_SEQ] = SEQINFO_INIT("active-clk-img-seq", dream_a3_da_active_clk_img_cmdtbl),
 	[PANEL_ACTIVE_CLK_CTRL_SEQ] = SEQINFO_INIT("active-clk-ctrl-seq", dream_a3_da_active_clk_ctrl_cmdtbl),
 	[PANEL_ACTIVE_CLK_UPDATE_SEQ] = SEQINFO_INIT("active-clk-update-seq", dream_a3_da_active_clk_update_cmdtbl),
+#endif
+#ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
+	[PANEL_GRAYSPOT_ON_SEQ] = SEQINFO_INIT("grayspot-on-seq", dream_a3_da_grayspot_on_cmdtbl),
+	[PANEL_GRAYSPOT_OFF_SEQ] = SEQINFO_INIT("grayspot-off-seq", dream_a3_da_grayspot_off_cmdtbl),
 #endif
 	[PANEL_DUMP_SEQ] = SEQINFO_INIT("dump-seq", dream_a3_da_dump_cmdtbl),
 	[PANEL_DUMMY_SEQ] = SEQINFO_INIT("dummy-seq", dream_a3_da_dummy_cmdtbl),

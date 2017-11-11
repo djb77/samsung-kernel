@@ -387,10 +387,7 @@ void fts_execute_autotune(struct fts_ts_info *info)
 	fts_fw_wait_for_event(info, STATUS_EVENT_FLASH_WRITE_CONFIG);
 
 	/* Reset FTS */
-	info->fts_systemreset(info);
-	fts_delay(20);
-	/* wait for ready event */
-	info->fts_wait_for_ready(info);
+	info->fts_systemreset(info, 30);
 }
 
 void fts_fw_init(struct fts_ts_info *info, bool magic_cal)
@@ -583,7 +580,8 @@ int fts_fw_update_on_probe(struct fts_ts_info *info)
 #ifdef PAT_CONTROL
 	if ((info->fw_main_version_of_ic < info->fw_main_version_of_bin)
 		|| ((info->config_version_of_ic < info->config_version_of_bin))
-		|| ((info->fw_version_of_ic < info->fw_version_of_bin)))
+		|| ((info->fw_version_of_ic < info->fw_version_of_bin))
+		|| (info->boot_crc_check_fail == FTS_BOOT_CRC_FAIL))
 		retval = FTS_NEED_FW_UPDATE;
 	else
 		retval = FTS_NOT_ERROR;
@@ -637,7 +635,8 @@ int fts_fw_update_on_probe(struct fts_ts_info *info)
 #else
 	if ((info->fw_main_version_of_ic < info->fw_main_version_of_bin)
 		|| ((info->config_version_of_ic < info->config_version_of_bin))
-		|| ((info->fw_version_of_ic < info->fw_version_of_bin)))
+		|| ((info->fw_version_of_ic < info->fw_version_of_bin))
+		|| (info->boot_crc_check_fail == FTS_BOOT_CRC_FAIL))
 		retval = fts_fw_updater(info, fw_data, restore_cal);
 	else
 		retval = FTS_NOT_ERROR;
@@ -680,8 +679,7 @@ static int fts_load_fw_from_kernel(struct fts_ts_info *info,
 
 	disable_irq(info->irq);
 
-	info->fts_systemreset(info);
-	info->fts_wait_for_ready(info);
+	info->fts_systemreset(info, 10);
 
 	/* use virtual pat_control - magic cal 1 */
 	retval = fts_fw_updater(info, fw_data, 1);
@@ -747,8 +745,7 @@ static int fts_load_fw_from_ums(struct fts_ts_info *info)
 
 				disable_irq(info->irq);
 
-				info->fts_systemreset(info);
-				info->fts_wait_for_ready(info);
+				info->fts_systemreset(info, 10);
 
 				input_info(true, info->dev,
 					"%s: [UMS] Firmware Ver: 0x%04X, Main Version : 0x%04X\n",
@@ -832,8 +829,7 @@ static int fts_load_fw_from_ffu(struct fts_ts_info *info)
 
 	disable_irq(info->irq);
 
-	info->fts_systemreset(info);
-	info->fts_wait_for_ready(info);
+	info->fts_systemreset(info, 10);
 
 	/* use virtual pat_control - magic cal 0 */
 	retval = fts_fw_updater(info, fw_data, 0);

@@ -475,14 +475,22 @@ int gpu_inter_frame_power_off(struct exynos_context *platform)
 }
 
 #ifdef CONFIG_MALI_ASV_CALIBRATION_SUPPORT
-extern int gpu_asv_calibration_start(void);
-extern int gpu_asv_calibration_stop(void);
+struct workqueue_struct *gpu_asv_cali_wq = NULL;
+struct delayed_work gpu_asv_cali_stop_work;
 
 int gpu_asv_calibration_start(void)
 {
+	struct exynos_context *platform = (struct exynos_context *) pkbdev->platform_context;
+
+	if (!platform) {
+		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "%s: platform context is null\n", __func__);
+		return -ENODEV;
+	}
+
 	gpu_control_power_policy_set(pkbdev, "always_on");
 	gpu_dvfs_clock_lock(GPU_DVFS_MAX_LOCK, ASV_CALI_LOCK, 546);
 	gpu_dvfs_clock_lock(GPU_DVFS_MIN_LOCK, ASV_CALI_LOCK, 546);
+	gpu_pm_qos_command(platform, GPU_CONTROL_PM_QOS_RESET);
 	return 0;
 }
 
@@ -491,6 +499,46 @@ int gpu_asv_calibration_stop(void)
 	gpu_dvfs_clock_lock(GPU_DVFS_MAX_UNLOCK, ASV_CALI_LOCK, 0);
 	gpu_dvfs_clock_lock(GPU_DVFS_MIN_UNLOCK, ASV_CALI_LOCK, 0);
 	gpu_control_power_policy_set(pkbdev, "demand");
+	return 0;
+}
+
+static void gpu_asv_calibration_stop_callback(struct work_struct *data)
+{
+	struct exynos_context *platform = (struct exynos_context *) pkbdev->platform_context;
+
+	if (!platform) {
+		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "%s: platform context is null\n", __func__);
+		return;
+	}
+
+	gpu_dvfs_clock_lock(GPU_DVFS_MAX_UNLOCK, ASV_CALI_LOCK, 0);
+	gpu_dvfs_clock_lock(GPU_DVFS_MIN_UNLOCK, ASV_CALI_LOCK, 0);
+	gpu_control_power_policy_set(pkbdev, "demand");
+	platform->gpu_auto_cali_status = false;
+}
+
+int gpu_asv_calibration_start_wq(void)
+{
+	struct exynos_context *platform = (struct exynos_context *) pkbdev->platform_context;
+
+	if (!platform) {
+		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "%s: platform context is null\n", __func__);
+		return -ENODEV;
+	}
+
+	platform->gpu_auto_cali_status = true;
+	gpu_control_power_policy_set(pkbdev, "always_on");
+	gpu_dvfs_clock_lock(GPU_DVFS_MAX_LOCK, ASV_CALI_LOCK, 546);
+	gpu_dvfs_clock_lock(GPU_DVFS_MIN_LOCK, ASV_CALI_LOCK, 546);
+
+	if (NULL == gpu_asv_cali_wq) {
+		INIT_DELAYED_WORK(&gpu_asv_cali_stop_work, gpu_asv_calibration_stop_callback);
+		gpu_asv_cali_wq = create_workqueue("g3d_asv_cali");
+
+		queue_delayed_work_on(0, gpu_asv_cali_wq,
+				&gpu_asv_cali_stop_work, msecs_to_jiffies(15000));	/* 15 second */
+	}
+
 	return 0;
 }
 #endif

@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_msgbuf.c 685101 2017-02-15 11:02:19Z $
+ * $Id: dhd_msgbuf.c 692885 2017-03-30 02:17:31Z $
  */
 
 
@@ -2794,6 +2794,16 @@ dhd_prot_reset(dhd_pub_t *dhd)
 #ifdef IOCTLRESP_USE_CONSTMEM
 	DHD_NATIVE_TO_PKTID_RESET_IOCTL(dhd, prot->pktid_map_handle_ioctl);
 #endif /* IOCTLRESP_USE_CONSTMEM */
+#ifdef DMAMAP_STATS
+	dhd->dma_stats.txdata = dhd->dma_stats.txdata_sz = 0;
+	dhd->dma_stats.rxdata = dhd->dma_stats.rxdata_sz = 0;
+#ifndef IOCTLRESP_USE_CONSTMEM
+	dhd->dma_stats.ioctl_rx = dhd->dma_stats.ioctl_rx_sz = 0;
+#endif /* IOCTLRESP_USE_CONSTMEM */
+	dhd->dma_stats.event_rx = dhd->dma_stats.event_rx_sz = 0;
+	dhd->dma_stats.info_rx = dhd->dma_stats.info_rx_sz = 0;
+	dhd->dma_stats.tsbuf_rx = dhd->dma_stats.tsbuf_rx_sz = 0;
+#endif /* DMAMAP_STATS */
 } /* dhd_prot_reset */
 
 #if defined(DHD_LB_RXP)
@@ -3252,6 +3262,28 @@ dhd_prot_packet_get(dhd_pub_t *dhd, uint32 pktid, uint8 pkttype, bool free_pktid
 					secdma, 0);
 			else
 				DMA_UNMAP(dhd->osh, pa, (uint) len, DMA_RX, 0, dmah);
+#ifdef DMAMAP_STATS
+			switch (pkttype) {
+#ifndef IOCTLRESP_USE_CONSTMEM
+				case PKTTYPE_IOCTL_RX:
+					dhd->dma_stats.ioctl_rx--;
+					dhd->dma_stats.ioctl_rx_sz -= len;
+					break;
+#endif /* IOCTLRESP_USE_CONSTMEM */
+				case PKTTYPE_EVENT_RX:
+					dhd->dma_stats.event_rx--;
+					dhd->dma_stats.event_rx_sz -= len;
+					break;
+				case PKTTYPE_INFO_RX:
+					dhd->dma_stats.info_rx--;
+					dhd->dma_stats.info_rx_sz -= len;
+					break;
+				case PKTTYPE_TSBUF_RX:
+					dhd->dma_stats.tsbuf_rx--;
+					dhd->dma_stats.tsbuf_rx_sz -= len;
+					break;
+			}
+#endif /* DMAMAP_STATS */
 		}
 	}
 
@@ -3406,6 +3438,10 @@ dhd_prot_rxbuf_post(dhd_pub_t *dhd, uint16 count, bool use_rsv_pktid)
 			ASSERT(0);
 			break;
 		}
+#ifdef DMAMAP_STATS
+		dhd->dma_stats.rxdata++;
+		dhd->dma_stats.rxdata_sz += pktlen[i];
+#endif /* DMAMAP_STATS */
 
 		PKTPULL(dhd->osh, p, prot->rx_metadata_offset);
 		pktlen[i] = PKTLEN(dhd->osh, p);
@@ -3645,7 +3681,10 @@ dhd_prot_infobufpost(dhd_pub_t *dhd)
 			ASSERT(0);
 			break;
 		}
-
+#ifdef DMAMAP_STATS
+		dhd->dma_stats.info_rx++;
+		dhd->dma_stats.info_rx_sz += pktlen;
+#endif /* DMAMAP_STATS */
 		pktlen = PKTLEN(dhd->osh, p);
 
 		/* Common msg header */
@@ -3859,6 +3898,27 @@ dhd_prot_rxbufpost_ctrl(dhd_pub_t *dhd, uint8 msg_type)
 			ASSERT(0);
 			goto free_pkt_return;
 		}
+
+#ifdef DMAMAP_STATS
+		switch (buf_type) {
+#ifndef IOCTLRESP_USE_CONSTMEM
+			case PKTTYPE_IOCTL_RX:
+				dhd->dma_stats.ioctl_rx++;
+				dhd->dma_stats.ioctl_rx_sz += pktlen;
+				break;
+#endif /* !IOCTLRESP_USE_CONSTMEM */
+			case PKTTYPE_EVENT_RX:
+				dhd->dma_stats.event_rx++;
+				dhd->dma_stats.event_rx_sz += pktlen;
+				break;
+			case PKTTYPE_TSBUF_RX:
+				dhd->dma_stats.tsbuf_rx++;
+				dhd->dma_stats.tsbuf_rx_sz += pktlen;
+				break;
+			default:
+				break;
+		}
+#endif /* DMAMAP_STATS */
 
 	}
 #ifdef PCIE_INB_DW
@@ -4222,6 +4282,10 @@ dhd_prot_process_msgbuf_rxcpl(dhd_pub_t *dhd, uint bound)
 			else
 				DMA_UNMAP(dhd->osh, pa, (uint) len, DMA_RX, 0, dmah);
 
+#ifdef DMAMAP_STATS
+			dhd->dma_stats.rxdata--;
+			dhd->dma_stats.rxdata_sz -= len;
+#endif /* DMAMAP_STATS */
 			DHD_INFO(("id 0x%04x, offset %d, len %d, idx %d, phase 0x%02x, "
 				"pktdata %p, metalen %d\n",
 				ltoh32(msg->cmn_hdr.request_id),
@@ -4942,6 +5006,10 @@ workq_ring_full:
 				secdma, offset);
 		} else
 			DMA_UNMAP(dhd->osh, pa, (uint) len, DMA_RX, 0, dmah);
+#ifdef DMAMAP_STATS
+		dhd->dma_stats.txdata--;
+		dhd->dma_stats.txdata_sz -= len;
+#endif /* DMAMAP_STATS */
 #ifdef DBG_PKT_MON
 		if (dhd->d11_tx_status) {
 			uint16 tx_status;
@@ -5193,16 +5261,9 @@ dhd_prot_txdata(dhd_pub_t *dhd, void *PKTBUF, uint8 ifidx)
 	txdesc = (host_txbuf_post_t *)
 		dhd_prot_alloc_ring_space(dhd, ring, 1, &alloced, FALSE);
 	if (txdesc == NULL) {
-#if defined(DHD_PCIE_PKTID)
-		void *dmah;
-		void *secdma;
-		/* Free up the PKTID. physaddr and pktlen will be garbage. */
-		DHD_PKTID_TO_NATIVE(dhd, dhd->prot->pktid_tx_map, pktid,
-			pa, pktlen, dmah, secdma, PKTTYPE_NO_CHECK);
-#endif /* DHD_PCIE_PKTID */
 		DHD_INFO(("%s:%d: HTOD Msgbuf Not available TxCount = %d\n",
 			__FUNCTION__, __LINE__, prot->active_tx_count));
-		goto err_no_res_pktfree;
+		goto err_free_pktid;
 	}
 
 #ifdef DBG_PKT_MON
@@ -5238,10 +5299,16 @@ dhd_prot_txdata(dhd_pub_t *dhd, void *PKTBUF, uint8 ifidx)
 #endif /* #ifndef BCM_SECURE_DMA */
 
 	if (PHYSADDRISZERO(pa)) {
-		DHD_ERROR(("Something really bad, unless 0 is a valid phyaddr\n"));
+		DHD_ERROR(("%s: Something really bad, unless 0 is "
+			"a valid phyaddr for pa\n", __FUNCTION__));
 		ASSERT(0);
+		goto err_rollback_idx;
 	}
 
+#ifdef DMAMAP_STATS
+	dhd->dma_stats.txdata++;
+	dhd->dma_stats.txdata_sz += pktlen;
+#endif /* DMAMAP_STATS */
 	/* No need to lock. Save the rest of the packet's metadata */
 	DHD_NATIVE_TO_PKTID_SAVE(dhd, dhd->prot->pktid_tx_map, PKTBUF, pktid,
 	    pa, pktlen, DMA_TX, NULL, ring->dma_buf.secdma, PKTTYPE_DATA_TX);
@@ -5297,8 +5364,33 @@ dhd_prot_txdata(dhd_pub_t *dhd, void *PKTBUF, uint8 ifidx)
 #endif /* #ifndef BCM_SECURE_DMA */
 
 		if (PHYSADDRISZERO(meta_pa)) {
-			DHD_ERROR(("Something really bad, unless 0 is a valid phyaddr\n"));
+			/* Unmap the data pointer to a DMA-able address */
+			if (SECURE_DMA_ENAB(dhd->osh)) {
+
+				int offset = 0;
+				BCM_REFERENCE(offset);
+
+				if (prot->tx_metadata_offset) {
+					offset = prot->tx_metadata_offset + ETHER_HDR_LEN;
+				}
+
+				SECURE_DMA_UNMAP(dhd->osh, pa, pktlen,
+					DMA_TX, 0, DHD_DMAH_NULL, ring->dma_buf.secdma, offset);
+			}
+#ifndef BCM_SECURE_DMA
+			else {
+				DMA_UNMAP(dhd->osh, pa, pktlen, DMA_TX, 0, DHD_DMAH_NULL);
+			}
+#endif /* #ifndef BCM_SECURE_DMA */
+#ifdef TXP_FLUSH_NITEMS
+			/* update pend_items_count */
+			ring->pend_items_count--;
+#endif /* TXP_FLUSH_NITEMS */
+
+			DHD_ERROR(("%s: Something really bad, unless 0 is "
+				"a valid phyaddr for meta_pa\n", __FUNCTION__));
 			ASSERT(0);
+			goto err_rollback_idx;
 		}
 
 		/* Adjust the data pointer back to original value */
@@ -5352,7 +5444,31 @@ dhd_prot_txdata(dhd_pub_t *dhd, void *PKTBUF, uint8 ifidx)
 
 	return BCME_OK;
 
+err_rollback_idx:
+	/* roll back write pointer for unprocessed message */
+	if (ring->wr == 0) {
+		ring->wr = ring->max_items - 1;
+	} else {
+		ring->wr--;
+		if (ring->wr == 0) {
+			DHD_INFO(("%s: flipping the phase now\n", ring->name));
+			ring->current_phase = ring->current_phase ?
+				0 : BCMPCIE_CMNHDR_PHASE_BIT_INIT;
+		}
+	}
+
+err_free_pktid:
+#if defined(DHD_PCIE_PKTID)
+	{
+		void *dmah;
+		void *secdma;
+		/* Free up the PKTID. physaddr and pktlen will be garbage. */
+		DHD_PKTID_TO_NATIVE(dhd, dhd->prot->pktid_tx_map, pktid,
+			pa, pktlen, dmah, secdma, PKTTYPE_NO_CHECK);
+	}
+
 err_no_res_pktfree:
+#endif /* DHD_PCIE_PKTID */
 
 
 

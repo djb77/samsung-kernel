@@ -3935,12 +3935,9 @@ static int xhci_setup_device(struct usb_hcd *hcd, struct usb_device *udev,
 		ret = -EINVAL;
 		break;
 	}
-	if (ret){
-#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
-		if(ret != -ETIME)
-#endif
+	if (ret)
 		goto out;
-	}
+
 	temp_64 = xhci_read_64(xhci, &xhci->op_regs->dcbaa_ptr);
 	xhci_dbg_trace(xhci, trace_xhci_dbg_address,
 			"Op regs DCBAA ptr = %#016llx", temp_64);

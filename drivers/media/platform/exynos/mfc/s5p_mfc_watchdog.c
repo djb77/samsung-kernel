@@ -9,6 +9,9 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  */
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+#include <linux/sec_debug.h>
+#endif
 
 #include "s5p_mfc_watchdog.h"
 
@@ -70,6 +73,76 @@ static void mfc_dump_regs(struct s5p_mfc_dev *dev)
 			buf_size->dbg_info_buf, false);
 		printk("...\n");
 	}
+}
+
+const u32 s5p_mfc_logging_sfr_set1[MFC_SFR_LOGGING_COUNT_SET1] = {
+	0x1000, 0x1004, 0x100C, 0x1010
+};
+
+const u32 s5p_mfc_logging_sfr_set2[MFC_SFR_LOGGING_COUNT_SET2] = {
+	0x0070, 0x10B4, 0x2020, 0x2028,
+	0x204C, 0x20B4, 0x3000, 0x3004,
+	0x3010, 0x301C, 0x3110, 0x5A54,
+	0x5A80, 0x5A88, 0x5A94, 0x6038,
+	0x6050, 0x6168, 0x7018, 0x7110,
+	0x7114, 0xF088, 0xFFD0
+};
+
+int mfc_change_hex_to_ascii(u32 hex, u32 byte, char *ascii, int idx)
+{
+	int i;
+	char tmp;
+
+	for (i = 0; i < byte; i++) {
+		if (idx >= MFC_LOGGING_DATA_SIZE) {
+			pr_err("logging data size exceed: %d\n", idx);
+			return idx;
+		}
+
+		tmp = (hex >> ((byte - 1 - i) * 4)) & 0xF;
+		if (tmp > 9) {
+			ascii[idx] = tmp + 'a' - 0xa;
+		} else if (tmp <= 9 || tmp >= 0) {
+			ascii[idx] = tmp + '0';
+		} else {
+			ascii[idx] = 'X';
+			pr_err("strange value: %d\n", tmp);
+		}
+		idx++;
+	}
+
+	/* space */
+	ascii[idx] = ' ';
+
+	return ++idx;
+}
+
+static void mfc_save_logging_sfr(struct s5p_mfc_dev *dev)
+{
+	char *errorinfo;
+	int i, idx = 0;
+
+	pr_err("-----------logging MFC error info-----------\n");
+	errorinfo = dev->logging_data->errorinfo;
+	for (i = 0; i < MFC_SFR_LOGGING_COUNT_SET1; i++)
+		dev->logging_data->SFRs_set1[i] = MFC_READL(s5p_mfc_logging_sfr_set1[i]);
+	for (i = 0; i < MFC_SFR_LOGGING_COUNT_SET2; i++)
+		dev->logging_data->SFRs_set2[i] = MFC_READL(s5p_mfc_logging_sfr_set2[i]);
+
+	idx = mfc_change_hex_to_ascii(dev->logging_data->cause, 8, errorinfo, idx);
+	idx = mfc_change_hex_to_ascii(dev->logging_data->fault_status, 2, errorinfo, idx);
+	idx = mfc_change_hex_to_ascii(dev->logging_data->fault_trans_info, 8, errorinfo, idx);
+	idx = mfc_change_hex_to_ascii(dev->logging_data->fault_addr, 8, errorinfo, idx);
+	for (i = 0; i < MFC_SFR_LOGGING_COUNT_SET1; i++)
+		idx = mfc_change_hex_to_ascii(dev->logging_data->SFRs_set1[i], 2, errorinfo, idx);
+	for (i = 0; i < MFC_SFR_LOGGING_COUNT_SET2; i++)
+		idx = mfc_change_hex_to_ascii(dev->logging_data->SFRs_set2[i], 8, errorinfo, idx);
+
+	pr_err("%s\n", errorinfo);
+
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	sec_debug_set_extra_info_mfc_error(errorinfo);
+#endif
 }
 
 static void mfc_display_state(struct s5p_mfc_dev *dev)
@@ -191,6 +264,7 @@ void s5p_mfc_dump_info_and_stop_hw(struct s5p_mfc_dev *dev)
 	MFC_TRACE_DEV("** mfc will stop!!!\n");
 	mfc_display_state(dev);
 	mfc_print_trace(dev);
+	mfc_save_logging_sfr(dev);
 	mfc_dump_regs(dev);
 	exynos_sysmmu_show_status(dev->device);
 	BUG();
@@ -218,12 +292,15 @@ void s5p_mfc_watchdog_worker(struct work_struct *work)
 		cmd = s5p_mfc_check_int_cmd(dev);
 	if (cmd) {
 		if (atomic_read(&dev->watchdog_tick_cnt) == (3 * WATCHDOG_TICK_CNT_TO_START_WATCHDOG)) {
-			mfc_err_dev("MFC driver waited for upward of 8sec\n");
+			mfc_err_dev("MFC driver waited for upward of %dsec\n",
+						3 * WATCHDOG_TICK_CNT_TO_START_WATCHDOG);
+			dev->logging_data->cause |= (1 << MFC_CAUSE_NO_SCHEDULING);
 		} else {
 			mfc_err_dev("interrupt(%d) is occured, wait scheduling\n", cmd);
 			return;
 		}
 	} else {
+		dev->logging_data->cause |= (1 << MFC_CAUSE_NO_INTERRUPT);
 		mfc_err_dev("Driver timeout error handling\n");
 	}
 

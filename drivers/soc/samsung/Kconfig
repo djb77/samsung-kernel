@@ -109,6 +109,12 @@ config ACPM_DVFS
 	help
 	  Support ACPM DVFS for Exynos SoC.
 
+config VDD_AUTO_CAL
+	bool "Exynos VDD_AUTO CALIBRATION"
+	depends on ACPM_DVFS
+	help
+	  Support VDD auto calibration for Exynos SoC.
+
 config USI
 	bool "Enable Universal Serial Interface"
 	default n
@@ -139,13 +145,6 @@ config EXYNOS_CONTENT_PATH_PROTECTION
 
 source "drivers/soc/samsung/acpm/Kconfig"
 source "drivers/soc/samsung/exynos-hdcp/Kconfig"
-
-config EXYNOS_SAVE_PANIC_CORE
-	bool "Support Panic Core Save"
-	depends on EXYNOS_SNAPSHOT
-	default n
-	help
-	  Enable exynos_bcm driver support
 
 config EXYNOS_MCINFO
 	bool "Exynos memory controller information"

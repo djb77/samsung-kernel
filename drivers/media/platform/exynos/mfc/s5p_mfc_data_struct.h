@@ -36,6 +36,9 @@
 #define MFC_MAX_BUFFERS			32
 #define MFC_MAX_EXTRA_BUF		10
 #define MFC_TIME_INDEX			15
+#define MFC_SFR_LOGGING_COUNT_SET1	4
+#define MFC_SFR_LOGGING_COUNT_SET2	23
+#define MFC_LOGGING_DATA_SIZE		256
 
 /* Maximum number of temporal layers */
 #define VIDEO_MAX_TEMPORAL_LAYERS	7
@@ -161,10 +164,10 @@ enum mfc_buf_usage_type {
 };
 
 enum mfc_buf_process_type {
-	MFCBUFPROC_DEFAULT 		= 0x0,
-	MFCBUFPROC_COPY 		= (1 << 0),
-	MFCBUFPROC_SHARE 		= (1 << 1),
-	MFCBUFPROC_META 		= (1 << 2),
+	MFCBUFPROC_DEFAULT		= 0x0,
+	MFCBUFPROC_COPY			= (1 << 0),
+	MFCBUFPROC_SHARE		= (1 << 1),
+	MFCBUFPROC_META			= (1 << 2),
 	MFCBUFPROC_ANBSHARE		= (1 << 3),
 	MFCBUFPROC_ANBSHARE_NV12L	= (1 << 4),
 };
@@ -182,6 +185,33 @@ enum s5p_mfc_ctrl_mode {
 };
 
 struct s5p_mfc_ctx;
+
+enum s5p_mfc_debug_cause {
+	MFC_CAUSE_0WRITE_PAGE_FAULT		= 0,
+	MFC_CAUSE_0READ_PAGE_FAULT		= 1,
+	MFC_CAUSE_1WRITE_PAGE_FAULT		= 2,
+	MFC_CAUSE_1READ_PAGE_FAULT		= 3,
+	MFC_CAUSE_NO_INTERRUPT			= 4,
+	MFC_CAUSE_NO_SCHEDULING			= 5,
+	MFC_CAUSE_FAIL_STOP_NAL_Q		= 6,
+	MFC_CAUSE_FAIL_STOP_NAL_Q_FOR_OTHER	= 7,
+	MFC_CAUSE_FAIL_CLOSE_INST		= 8,
+	MFC_CAUSE_FAIL_SLEEP			= 9,
+	MFC_CAUSE_FAIL_WAKEUP			= 10,
+	MFC_CAUSE_FAIL_RISC_ON			= 11,
+	MFC_CAUSE_FAIL_DPB_FLUSH		= 12,
+	MFC_CAUSE_FAIL_CHACHE_FLUSH		= 13,
+};
+
+struct s5p_mfc_debug {
+	u32	cause;
+	u8	fault_status;
+	u32	fault_trans_info;
+	u32	fault_addr;
+	u8	SFRs_set1[MFC_SFR_LOGGING_COUNT_SET1];
+	u32	SFRs_set2[MFC_SFR_LOGGING_COUNT_SET2];
+	char	errorinfo[MFC_LOGGING_DATA_SIZE];
+};
 
 /**
  * struct s5p_mfc_buf - MFC buffer
@@ -351,6 +381,8 @@ struct s5p_mfc_dev {
 #endif
 
 	void __iomem		*regs_base;
+	void __iomem		*sysmmu0_base;
+	void __iomem		*sysmmu1_base;
 	int			irq;
 	struct resource		*mfc_mem;
 
@@ -358,8 +390,10 @@ struct s5p_mfc_dev {
 	struct s5p_mfc_fw	fw;
 	struct s5p_mfc_variant	*variant;
 	struct s5p_mfc_platdata	*pdata;
+	struct s5p_mfc_debug	*logging_data;
 
 	int num_inst;
+	int num_enc;
 
 	struct mutex mfc_mutex;
 
@@ -544,7 +578,6 @@ struct s5p_mfc_vp9_enc_params {
 	u8 num_hier_layer;
 	u8 max_partition_depth;
 	u8 intra_pu_split_disable;
-	u8 ivf_header;
 };
 
 /**
@@ -663,6 +696,7 @@ struct s5p_mfc_enc_params {
 	u8 fixed_target_bit;
 	u8 num_hier_max_layer;
 	u8 roi_enable;
+	u8 ivf_header_disable;	/* VP8, VP9 */
 
 	u16 rc_frame_delta;	/* MFC6.1 Only */
 

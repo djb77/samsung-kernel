@@ -490,6 +490,7 @@ struct t_input_booster_device_tree_gender	mouse_wheel_booster_dt = {6,1,};	// ty
 struct t_input_booster_device_tree_gender	pen_booster_dt = {7,1,};		// type : 7,  level : 1
 struct t_input_booster_device_tree_gender	hover_booster_dt = {7,1,};		// type : 7,  level : 1
 struct t_input_booster_device_tree_gender	gamepad_booster_dt = {8,1,};		// type : 8,  level : 1
+struct t_input_booster_device_tree_gender	key_two_booster_dt = {9,1,};			// type : 9,  level : 1
 struct t_input_booster_device_tree_infor	*device_tree_infor = NULL;
 
 int ndevice_in_dt;
@@ -553,6 +554,7 @@ struct t_input_booster	mouse_wheel_booster;
 struct t_input_booster	pen_booster;
 struct t_input_booster	hover_booster;
 struct t_input_booster	gamepad_booster;
+struct t_input_booster	key_two_booster;
 
 int input_count = 0, key_back = 0, key_home = 0, key_recent = 0;
 

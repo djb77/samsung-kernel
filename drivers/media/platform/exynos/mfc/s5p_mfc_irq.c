@@ -113,6 +113,8 @@ static void mfc_handle_frame_all_extracted(struct s5p_mfc_ctx *ctx)
 			vb2_set_plane_payload(&dst_mb->vb.vb2_buf, i, 0);
 
 		dst_mb->vb.sequence = (ctx->sequence++);
+		dst_mb->vb.reserved2 = 0;
+
 		if (is_interlace) {
 			interlace_type = s5p_mfc_get_interlace_type();
 			if (interlace_type)
@@ -270,12 +272,15 @@ static void mfc_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err)
 		if (!CODEC_NOT_CODED(ctx))
 			return;
 	}
+
 	if (CODEC_INTERLACED(ctx))
 		is_interlace = s5p_mfc_is_interlace_picture();
+
 	if (FW_HAS_VIDEO_SIGNAL_TYPE(dev)) {
 		is_video_signal_type = s5p_mfc_get_video_signal_type();
 		is_colour_description = s5p_mfc_get_colour_description();
 	}
+
 	if (FW_HAS_SEI_INFO_FOR_HDR(dev)) {
 		is_content_light = s5p_mfc_get_sei_avail_content_light();
 		is_display_colour = s5p_mfc_get_sei_avail_mastering_display();
@@ -349,14 +354,17 @@ static void mfc_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err)
 
 			/* Set reserved2 bits in order to inform SEI information */
 			ref_mb->vb.reserved2 = 0;
+
 			if (is_content_light) {
 				ref_mb->vb.reserved2 |= (1 << 0);
 				mfc_debug(2, "content light level parsed\n");
 			}
+
 			if (is_display_colour) {
 				ref_mb->vb.reserved2 |= (1 << 1);
 				mfc_debug(2, "mastering display colour parsed\n");
 			}
+
 			if (is_video_signal_type) {
 				ref_mb->vb.reserved2 |= (1 << 4);
 				mfc_debug(2, "video signal type parsed\n");
@@ -367,6 +375,7 @@ static void mfc_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err)
 					mfc_debug(2, "colour description parsed\n");
 				}
 			}
+
 			if (dec->black_bar_updated) {
 				ref_mb->vb.reserved2 |= (1 << 5);
 				mfc_debug(3, "black bar detected\n");
@@ -896,6 +905,8 @@ static int mfc_handle_stream(struct s5p_mfc_ctx *ctx)
 			mfc_debug(2, "[%d] enc dst buf un-prot_flag: %#lx\n",
 					index, ctx->stream_protect_flag);
 		}
+	} else if (strm_size == 0 && slice_type == S5P_FIMV_E_SLICE_TYPE_SKIPPED) {
+		/* TO-DO: skipped frame should be handled */
 	}
 
 	if (enc->in_slice) {
@@ -1185,7 +1196,7 @@ static int mfc_handle_seq_enc(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_buf *dst_mb;
 	int ret;
 
-	mfc_debug(2, "seq header size: %d", s5p_mfc_get_enc_strm_size());
+	mfc_debug(2, "seq header size: %d\n", s5p_mfc_get_enc_strm_size());
 
 	if ((p->seq_hdr_mode == V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE) ||
 	    (p->seq_hdr_mode == V4L2_MPEG_VIDEO_HEADER_MODE_AT_THE_READY)) {

@@ -359,6 +359,7 @@ enum sc_ft {
 	SC_FT_240,
 	SC_FT_480,
 	SC_FT_720,
+	SC_FT_960,
 	SC_FT_1080,
 	SC_FT_MAX,
 };

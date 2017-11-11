@@ -191,9 +191,10 @@ void dwc3_core_config(struct dwc3 *dwc)
  */
 static int dwc3_core_soft_reset(struct dwc3 *dwc)
 {
-	u32		reg;
-	int		retries = 1000;
-	int		ret;
+	u32 	reg;
+	int 	retries = 1000;
+	int 	ret;
+	int 	try_cnt = 0;
 
 	ret = phy_power_on(dwc->usb3_generic_phy);
 	if (ret < 0)
@@ -221,10 +222,12 @@ static int dwc3_core_soft_reset(struct dwc3 *dwc)
 	if (dwc->dr_mode == USB_DR_MODE_HOST)
 		return 0;
 
+reset_dctl:
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 	reg |= DWC3_DCTL_CSFTRST;
 	dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 
+	retries = 1000;
 	do {
 		reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 		if (!(reg & DWC3_DCTL_CSFTRST))
@@ -233,7 +236,8 @@ static int dwc3_core_soft_reset(struct dwc3 *dwc)
 		udelay(1);
 	} while (--retries);
 
-	return -ETIMEDOUT;
+	ret = -ETIMEDOUT;
+	goto err_usb3phy_init;
 
 reset_check:
 	if (!dwc->suspend_clk_freq)
@@ -242,31 +246,34 @@ reset_check:
 	reg = dwc3_readl(dwc->regs, DWC3_GCTL);
 	reg &= ~DWC3_GCTL_PWRDNSCALE_MASK;
 	reg |= DWC3_GCTL_PWRDNSCALE(dwc->suspend_clk_freq/(16*1000));
+	reg &= ~0xc0;
 	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
 
-	reg = dwc3_readl(dwc->regs, DWC3_GCTL);
-	if (reg)
-		return 0;
+	/* check for CSR Timeout */
+	retries = 50;
+	do {
+		dwc3_writel(dwc->regs, DWC3_GEVNTADRLO(0), DWC3_MAGIC_LO);
+		reg = dwc3_readl(dwc->regs, DWC3_GEVNTADRLO(0));
+		if (reg == DWC3_MAGIC_LO)
+			return 0;
+		udelay(1);
+	} while(--retries); 
+	dev_err(dwc->dev, "ERR!! GEVNTADRL0 r/w fail\n");
 
 	reg = dwc3_readl(dwc->regs, DWC3_GSTS);
 	if (reg & DWC3_GSTS_CSR_TIMEOUT)
 		dev_err(dwc->dev, "%s: CSR Timeout !!\n", __func__);
 
-	dev_info(dwc->dev, "DCTL Reset again !!\n");
+	if (++try_cnt > MAX_RETRY_CNT) {
+		dev_err(dwc->dev, "PHY Reset again !!\n");
+		ret = -ETIMEDOUT;
+	} else {
+		dev_err(dwc->dev, "DCTL Reset again !!\n");
+		goto reset_dctl;
+	}
 
-	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
-	reg |= DWC3_DCTL_CSFTRST;
-	dwc3_writel(dwc->regs, DWC3_DCTL, reg);
-
-	do {
-		reg = dwc3_readl(dwc->regs, DWC3_DCTL);
-		if (!(reg & DWC3_DCTL_CSFTRST))
-			return 0;
-
-		udelay(1);
-	} while (--retries);
-
-	return -ETIMEDOUT;
+err_usb3phy_init:
+	phy_exit(dwc->usb3_generic_phy);
 
 err_usb2phy_init:
 	phy_exit(dwc->usb2_generic_phy);
@@ -723,6 +730,7 @@ int dwc3_core_init(struct dwc3 *dwc)
 	u32			hwparams4 = dwc->hwparams.hwparams4;
 	u32			reg;
 	struct dwc3_otg		*dotg = dwc->dotg;
+	int			retries = 2;
 	int			ret;
 
 	reg = dwc3_readl(dwc->regs, DWC3_GSNPSID);
@@ -762,10 +770,16 @@ int dwc3_core_init(struct dwc3 *dwc)
 	if (ret)
 		goto err0;
 
-	ret = dwc3_core_soft_reset(dwc);
-	if (ret)
-		goto err0;
-
+	while (retries--) {
+		ret = dwc3_core_soft_reset(dwc);
+		if ((ret == -ETIMEDOUT) && retries)
+			continue;
+		else if (!ret)
+			break;
+		else if (ret)
+			goto err0;
+	}
+	
 	if (dotg) {
 		phy_tune(dwc->usb2_generic_phy, dotg->otg.state);
 		phy_tune(dwc->usb3_generic_phy, dotg->otg.state);
@@ -1548,3 +1562,4 @@ MODULE_ALIAS("platform:dwc3");
 MODULE_AUTHOR("Felipe Balbi <balbi@ti.com>");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DesignWare USB3 DRD Controller Driver");
+

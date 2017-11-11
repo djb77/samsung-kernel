@@ -698,7 +698,7 @@ static s32 search_empty_slot(struct super_block *sb, HINT_FEMP_T *hint_femp, CHA
 		dentry = hint_femp->eidx;
 
 		if (num_entries <= hint_femp->count) {
-			IMSG("%s: empty slot(HIT) - found "
+			MMSG("%s: empty slot(HIT) - found "
 				"(clu : 0x%08x eidx : %d)\n",
 				__func__, hint_femp->cur.dir, hint_femp->eidx);
 			hint_femp->eidx = -1;
@@ -708,11 +708,11 @@ static s32 search_empty_slot(struct super_block *sb, HINT_FEMP_T *hint_femp, CHA
 
 			return dentry + (num_entries - 1);
 		}
-		IMSG("%s: empty slot(HIT) - search from "
+		MMSG("%s: empty slot(HIT) - search from "
 		       "(clu : 0x%08x eidx : %d)\n",
 			__func__, hint_femp->cur.dir, hint_femp->eidx);
 	} else {
-		IMSG("%s: empty slot(MISS) - search from "
+		MMSG("%s: empty slot(MISS) - search from "
 			"(clu:0x%08x eidx : 0)\n",
 			__func__, p_dir->dir);
 
@@ -832,10 +832,6 @@ static s32 find_empty_entry(struct inode *inode, CHAIN_T *p_dir, s32 num_entries
 		if (dentry == -EIO)
 			break;
 
-//		if (fsi->vol_type == EXFAT) {
-//			if (p_dir->dir != fsi->root_dir)
-//				size = i_size_read(inode);
-//		} else if ((fid->size >> DENTRY_SIZE_BITS) >= MAX_FAT_DENTRIES) {
 		if ((fid->size >> DENTRY_SIZE_BITS) >= MAX_FAT_DENTRIES) {
 			/* FAT spec allows a dir to grow upto 65536 dentries */
 			return -ENOSPC;

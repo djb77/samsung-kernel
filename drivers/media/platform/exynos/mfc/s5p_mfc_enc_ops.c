@@ -1115,6 +1115,7 @@ static int s5p_mfc_enc_set_buf_ctrls_val(struct s5p_mfc_ctx *ctx, struct list_he
 			MFC_WRITEL(value, S5P_FIMV_E_PICTURE_PROFILE);
 			p->codec.h264.level = buf_ctrl->val;
 		}
+
 		if (buf_ctrl->id == V4L2_CID_MPEG_VIDEO_H264_PROFILE) {
 			value = MFC_READL(S5P_FIMV_E_PICTURE_PROFILE);
 			buf_ctrl->old_val |= value & 0xFF00;
@@ -1144,6 +1145,7 @@ static int s5p_mfc_enc_set_buf_ctrls_val(struct s5p_mfc_ctx *ctx, struct list_he
 			mfc_debug(3, "Temporal SVC: EXTENSION0 %#x, EXTENSION1 %#x\n",
 						value, value2);
 		}
+
 		/* per buffer QP setting change */
 		if (buf_ctrl->id == V4L2_CID_MPEG_MFC_CONFIG_QP)
 			p->config_qp = buf_ctrl->val;

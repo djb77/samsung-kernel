@@ -110,6 +110,7 @@
 #define DATA_PACKET_SIZE	960
 #endif
 #define MAX_SSP_PACKET_SIZE	1000 // this packet size related when AP send ssp packet to MCU.
+#define SSP_INSTRUCTION_PACKET  9
 
 #define SSP_DEBUG_TIME_FLAG_ON        "SSP:DEBUG_TIME=1"
 #define SSP_DEBUG_TIME_FLAG_OFF        "SSP:DEBUG_TIME=0"
@@ -179,6 +180,7 @@ enum {
 #define MSG2SSP_INST_LIBRARY_REMOVE		0xB2
 #define MSG2SSP_INST_LIB_NOTI		0xB4
 #define MSG2SSP_INST_LIB_DATA		0xC1
+#define MSG2SSP_INST_CURRENT_TIMESTAMP	0xa7
 
 #define MSG2SSP_AP_MCU_SET_GYRO_CAL		0xCD
 #define MSG2SSP_AP_MCU_SET_ACCEL_CAL		0xCE
@@ -230,6 +232,8 @@ enum {
 #define MSG2SSP_AP_MOBEAM_STOP			0x35
 #define MSG2SSP_AP_GEOMAG_LOGGING		0x36
 #define MSG2SSP_AP_SENSOR_LPF			0x37
+#define MSG2AP_INST_TIMESTAMP_OFFSET	0xa8
+
 
 #define MSG2SSP_AP_IRDATA_SEND		0x38
 #define MSG2SSP_AP_IRDATA_SEND_RESULT 0x39
@@ -498,6 +502,19 @@ struct sensor_value {
 			s16 y;
 			s16 z;
 		};
+		struct {
+			s32 x;
+			s32 y;
+			s32 z;
+		} gyro;
+		struct {
+			s32 x;
+			s32 y;
+			s32 z;
+			s32 offset_x;
+			s32 offset_y;
+			s32 offset_z;
+		} uncal_gyro;
 		struct {		/*calibrated mag, gyro*/
 			s16 cal_x;
 			s16 cal_y;
@@ -571,9 +588,9 @@ struct sensor_value {
 extern struct class *sensors_event_class;
 
 struct calibraion_data {
-	s16 x;
-	s16 y;
-	s16 z;
+	s32 x;
+	s32 y;
+	s32 z;
 };
 
 struct grip_calibration_data {
@@ -956,6 +973,10 @@ struct ssp_data {
     u8 dhrAccelScaleRange;
 
     bool resetting;
+
+/* variables for timestamp sync */
+    struct delayed_work work_ssp_tiemstamp_sync;
+    u64 timestamp_offset;
 };
 
 #if defined (CONFIG_SENSORS_SSP_VLTE)
@@ -1053,7 +1074,7 @@ int mag_store_hwoffset(struct ssp_data *);
 int set_hw_offset(struct ssp_data *);
 int get_hw_offset(struct ssp_data *);
 int set_gyro_cal(struct ssp_data *);
-int save_gyro_caldata(struct ssp_data *, s16 *);
+int save_gyro_caldata(struct ssp_data *, s32 *);
 int set_accel_cal(struct ssp_data *);
 int initialize_magnetic_sensor(struct ssp_data *data);
 int set_sensor_position(struct ssp_data *);
@@ -1174,5 +1195,8 @@ int ssp_ckeck_lcd(int);
 
 int send_sensor_dump_command(struct ssp_data *data, u8 sensor_type);
 int send_all_sensor_dump_command(struct ssp_data *data);
+
+void ssp_timestamp_sync_work_func(struct work_struct *work);
+void ssp_reset_work_func(struct work_struct *work);
 
 #endif

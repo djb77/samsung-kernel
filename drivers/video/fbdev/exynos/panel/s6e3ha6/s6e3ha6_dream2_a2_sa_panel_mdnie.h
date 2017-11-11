@@ -1607,7 +1607,7 @@ struct maptbl dream2_a2_sa_mdnie_scr_white_maptbl[] = {
 	[MDNIE_COLOR_COORDINATE_MAPTBL] =
 		DEFINE_2D_MAPTBL(dream2_a2_sa_color_coordinate_table, init_color_coordinate_table, getidx_color_coordinate_maptbl, copy_color_coordinate_maptbl),
 	[MDNIE_ADJUST_LDU_MAPTBL] =
-		DEFINE_3D_MAPTBL(dream2_a2_sa_adjust_ldu_table, init_common_table, getidx_adjust_ldu_maptbl, copy_scr_white_maptbl),
+		DEFINE_3D_MAPTBL(dream2_a2_sa_adjust_ldu_table, init_common_table, getidx_adjust_ldu_maptbl, copy_adjust_ldu_maptbl),
 	[MDNIE_SENSOR_RGB_MAPTBL] =
 		DEFINE_2D_MAPTBL(dream2_a2_sa_sensor_rgb_table, init_sensor_rgb_table, getidx_common_maptbl, copy_scr_white_maptbl),
 };

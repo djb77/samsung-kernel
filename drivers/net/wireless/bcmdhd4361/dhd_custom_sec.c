@@ -359,6 +359,7 @@ void get_customized_country_code(void *adapter, char *country_iso_code, wl_count
 #define RSDBINFO	PLATFORM_PATH".rsdb.info"
 #define LOGTRACEINFO	PLATFORM_PATH".logtrace.info"
 #define ADPSINFO	PLATFORM_PATH".adps.info"
+#define SOFTAPINFO	PLATFORM_PATH".softap.info"
 
 #ifdef DHD_PM_CONTROL_FROM_FILE
 extern bool g_pm_control;
@@ -965,7 +966,7 @@ dhd_force_disable_singlcore_scan(dhd_pub_t *dhd)
 }
 #endif /* FORCE_DISABLE_SINGLECORE_SCAN */
 
-#if defined(ARGOS_CPU_SCHEDULER)
+#if defined(ARGOS_CPU_SCHEDULER) && defined(CONFIG_SCHED_HMP)
 void
 set_irq_cpucore(unsigned int irq, cpumask_var_t default_cpu_mask,
 	cpumask_var_t affinity_cpu_mask)
@@ -1066,3 +1067,95 @@ void dhd_adps_mode_from_file(dhd_pub_t *dhd)
 	return;
 }
 #endif /* ADPS_MODE_FROM_FILE */
+
+#ifdef GEN_SOFTAP_INFO_FILE
+#define SOFTAP_INFO_FILE_FIRST_LINE	"#.softap.info"
+#define SOFTAP_INFO_BUF_SZ	512
+/*
+ * # Whether both wifi and hotspot can be turned on at the same time?
+ * DualBandConcurrency
+ * # 5Ghz band support?
+ * 5G
+ * # How many clients can be connected?
+ * maxClient
+ * # Does hotspot support PowerSave mode?
+ * PowerSave
+ * # Does android_net_wifi_set_Country_Code_Hal feature supported?
+ * HalFn_setCountryCodeHal
+ * # Does android_net_wifi_getValidChannels supported?
+ * HalFn_getValidChannels
+ */
+const char *softap_info_items[] = {
+	"DualBandConcurrency", "5G", "maxClient", "PowerSave",
+	"HalFn_setCountryCodeHal", "HalFn_getValidChannels", NULL
+};
+#if defined(BCM4361_CHIP)
+const char *softap_info_values[] = {
+	"yes", "yes", "10", "yes", "yes", "yes", NULL
+};
+#elif defined(BCM43455_CHIP)
+const char *softap_info_values[] = {
+	"no", "yes", "10", "no", "yes", "yes", NULL
+};
+#elif defined(BCM43430_CHIP)
+const char *softap_info_values[] = {
+	"no", "no", "10", "no", "yes", "yes", NULL
+};
+#else
+const char *softap_info_values[] = {
+	"UNDEF", "UNDEF", "UNDEF", "UNDEF", "UNDEF", "UNDEF", NULL
+};
+#endif /* defined(BCM4361_CHIP) */
+#endif /* GEN_SOFTAP_INFO_FILE */
+
+#ifdef GEN_SOFTAP_INFO_FILE
+uint32 sec_save_softap_info(void)
+{
+	struct file *fp = NULL;
+	char *filepath = SOFTAPINFO;
+	char temp_buf[SOFTAP_INFO_BUF_SZ];
+	int ret = -1, idx = 0, rem = 0, written = 0;
+	char *pos = NULL;
+
+	DHD_TRACE(("[WIFI_SEC] %s: Entered.\n", __FUNCTION__));
+	memset(temp_buf, 0, sizeof(temp_buf));
+
+	fp = filp_open(filepath, O_RDONLY, 0);
+	if (IS_ERR(fp) || (fp == NULL)) {
+		DHD_ERROR(("[WIFI_SEC] %s: %s File open failed.(%ld)\n",
+			SOFTAPINFO, __FUNCTION__, PTR_ERR(fp)));
+	} else {
+		filp_close(fp, NULL);
+		DHD_ERROR(("[WIFI_SEC] %s already saved.\n", SOFTAPINFO));
+		return 0;
+	}
+
+	pos = temp_buf;
+	rem = sizeof(temp_buf);
+	written = snprintf(pos, sizeof(temp_buf), "%s\n",
+		SOFTAP_INFO_FILE_FIRST_LINE);
+	do {
+		int len = strlen(softap_info_items[idx]) +
+			strlen(softap_info_values[idx]) + 2;
+		pos += written;
+		rem -= written;
+		if (len > rem) {
+			break;
+		}
+		written = snprintf(pos, rem, "%s=%s\n",
+			softap_info_items[idx], softap_info_values[idx]);
+	} while (softap_info_items[++idx] != NULL);
+
+	fp = filp_open(filepath, O_RDWR | O_CREAT, 0664);
+	if (IS_ERR(fp) || (fp == NULL)) {
+		DHD_ERROR(("[WIFI_SEC] %s: %s File open failed.\n",
+			SOFTAPINFO, __FUNCTION__));
+	} else {
+		ret = write_filesystem(fp, fp->f_pos, temp_buf, strlen(temp_buf));
+		DHD_INFO(("[WIFI_SEC] %s done. ret : %d\n", __FUNCTION__, ret));
+		DHD_ERROR(("[WIFI_SEC] save %s file.\n", SOFTAPINFO));
+		filp_close(fp, NULL);
+	}
+	return ret;
+}
+#endif /* GEN_SOFTAP_INFO_FILE */

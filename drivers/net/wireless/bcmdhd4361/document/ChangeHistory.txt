@@ -1,5 +1,52 @@
-BCM4361 DHD 1.77.9 for Android Dream & J5/J7 Project
+BCM4361 DHD 1.77.17.1 for Android Dream & J5/J7 & BCM43438 NOS Project
 (Notes: 1.77.x is twigged off from 1.579.235.9)
+
+DHD 1.77.17.1 - 2017.05.08
+New Feature
+ - CS2459522 Created .softap.info file when boot-up time for SoftAP information - Default disable
+ - Comment out ADPS define at Makefile
+
+Kernel Panic
+ - CS2471281 Fixed null pointer reference exception during interface down
+ - CS2472873 Fixed to prevent accessing  CPU hotplug call back before initialization
+ - CS2472525 Avoid to trigger Kernel panic on abnormal devices during device initialization
+ - CS2477559 Implement exception handling routines if DMA mapping error for TX data packet is happened
+ 
+Others
+ - CS2456626 Enabled SETBAND API
+ - CS2470635 Enabled frameburst on SDIO platform
+ - CS2471300 Fixed Buffer overflow issue
+ - CS2473469 Added force disconnect when continuously update DPM event
+ - CS2474767 Fixed compile error for Dream project
+ - CS2476640 Added to control tcpack_suppress as throughput on BCM43455
+ - CS2555123 Fixed page fault issue in dhd_wl_ioctl()
+ - CS2642368 Fixed type casting issue in wl_android_send_action_frame()
+ - CVE-2017-0568 Fixed vulnerability issues
+ - CVE-2017-0570 Fixed vulnerability issues
+ - CVE-2017-0574 Fixed vulnerability issues
+ - Enabled Random MAC address scan by default for all WIFI chip
+ - Fixed length variable overflow issue
+ - Fixed wrong event message print log issue
+ - Fixed SoftAP interface delete issue observed while running APSTA stability test
+
+
+DHD 1.77.12 - 2017.03.22
+Others
+ - CSP:1122174 Fixed to clean up dongle arp table when using arp request host offloading option
+ - CSP:1136579 Removed gtk_key_info set fail error log
+ - Fixed memory buffer overrun with interworking IE
+
+
+DHD 1.77.11 - 2017.03.17
+Others
+ - Removed unnecessary country code list in translate_custom_table
+ - Supported A3 project for BCM43438
+
+
+DHD 1.77.9.1 - 2017.03.28
+Kernel Panic
+ - CSP:1139481 Fixed null pointer reference exception during interface down
+
 
 DHD 1.77.9 - 2017.03.14
 Kernel Panic
@@ -7,7 +54,7 @@ Kernel Panic
  - CSP:1133633 Disabled Host PCIe IRQ to avoid continuous IRQ handling
 
 Others
- - CSP:1128803 Reverted - Set timer to check null BSSID status of profile was continued
+ - CSP:1128803 Removed checking NULL BSSID in dhd profile
  - CSP:1129196 Changed SDIO Max Tx Glom Size and Fixed sg list entries limit exceed issue
  - CSP:1129696 Added "P2P" label for argos  to schedule PCIe interrupt on CPU core 5
  - Prevent BSSID mismatch issue between driver and dongle
