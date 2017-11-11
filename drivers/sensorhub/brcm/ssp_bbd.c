@@ -651,14 +651,16 @@ int callback_bbd_on_packet(void *ssh_data, const char *buf, size_t size)
 		*/
 		required = (remain < ssp_pkt.required)?
 		      		remain : ssp_pkt.required;
-		BUG_ON(ssp_pkt.rxlen + required >= MAX_SSP_DATA_SIZE);
-
+		//BUG_ON(ssp_pkt.rxlen + required >= MAX_SSP_DATA_SIZE);
+        if(ssp_pkt.rxlen + required >= MAX_SSP_DATA_SIZE)
+            return -1;
+        
 		memcpy(&ssp_pkt.buf[ssp_pkt.rxlen], buf + idx, required);
 		ssp_pkt.rxlen += required;
 		ssp_pkt.required -= required;
 		idx += required;
 
-		BUG_ON(ssp_pkt.required < 0);
+		//BUG_ON(ssp_pkt.required < 0);
 		if (ssp_pkt.required)
 			continue;
 
