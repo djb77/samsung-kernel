@@ -735,31 +735,24 @@ static int esa_fw_startup(void)
 	/* wait for fw ready */
 	ret = wait_event_interruptible_timeout(esa_wq, si.fw_ready, HZ / 2);
 	if (!ret) {
-		pr_info("%s: Retry CA5 Initialization\n", __func__);
-		lpass_reset(LPASS_IP_CA5, LPASS_OP_RESET);
-		udelay(20);
-		lpass_reset(LPASS_IP_CA5, LPASS_OP_NORMAL);
-		ret = wait_event_interruptible_timeout(esa_wq, si.fw_ready, HZ / 2);
-		if (!ret) {
 #ifdef CONFIG_SOC_EXYNOS8890
-			u32 cfg;
-			void __iomem	*cmu_reg;
-			cmu_reg = ioremap(0x114C0000, SZ_4K);
-			cfg = readl(cmu_reg + 0x800); /* Check CA5 clock */
-			iounmap(cmu_reg);
-			esa_err("%s: fw not ready!!! (%d), clk = %x\n", __func__,
-				readl(si.mailbox + LAST_CHECKPT), cfg);
+		u32 cfg;
+		void __iomem	*cmu_reg;
+		cmu_reg = ioremap(0x114C0000, SZ_4K);
+		cfg = readl(cmu_reg + 0x800); /* Check CA5 clock */
+		iounmap(cmu_reg);
+		esa_err("%s: fw not ready!!! (%d), clk = %x\n", __func__,
+			readl(si.mailbox + LAST_CHECKPT), cfg);
 #else
-			esa_err("%s: fw not ready!!! (%d)\n", __func__,
-				readl(si.mailbox + LAST_CHECKPT));
+		esa_err("%s: fw not ready!!! (%d)\n", __func__,
+			readl(si.mailbox + LAST_CHECKPT));
 #endif
-			lpass_reset(LPASS_IP_CA5, LPASS_OP_RESET);
-			if (!check_esa_compr_state())
-				lpass_update_lpclock(LPCLK_CTRLID_OFFLOAD, false);
-			lpass_update_lpclock(LPCLK_CTRLID_LEGACY, false);
-			si.fw_use_dram = false;
-			return -EBUSY;
-		}
+		lpass_reset(LPASS_IP_CA5, LPASS_OP_RESET);
+		if (!check_esa_compr_state())
+			lpass_update_lpclock(LPCLK_CTRLID_OFFLOAD, false);
+		lpass_update_lpclock(LPCLK_CTRLID_LEGACY, false);
+		si.fw_use_dram = false;
+		return -EBUSY;
 	}
 
 #ifndef CONFIG_SND_SAMSUNG_SEIREN_OFFLOAD

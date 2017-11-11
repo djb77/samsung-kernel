@@ -138,6 +138,7 @@ err_free_table:
 	sg_free_table(table);
 err_free:
 	kfree(table);
+	ion_debug_heap_usage_show(heap);
 	return ret;
 }
 
