@@ -54,6 +54,8 @@
 #include "muic_ccic.h"
 #endif
 
+extern void muic_send_dock_intent(int type);
+
 static void muic_handle_attach(muic_data_t *pmuic,
 			muic_attached_dev_t new_dev, int adc, u8 vbvolt)
 {
@@ -90,9 +92,16 @@ static void muic_handle_attach(muic_data_t *pmuic,
 		}
 		break;
 	case ATTACHED_DEV_OTG_MUIC:
-	/* OTG -> LANHUB, meaning TA is attached to LANHUB(OTG) */
+	/* OTG -> LANHUB, meaning TA is attached to LANHUB(OTG)
+	   OTG -> GAMEPAD, meaning Earphone is detached to GAMEPAD(OTG) */
 		if (new_dev == ATTACHED_DEV_USB_LANHUB_MUIC) {
 			pr_info("%s:%s OTG+TA=>LANHUB. Do not detach OTG.\n",
+					__func__, MUIC_DEV_NAME);
+			noti_f = false;
+			break;
+		}
+		else if (new_dev == ATTACHED_DEV_GAMEPAD_MUIC) {
+			pr_info("%s:%s OTG+No Earphone=>GAMEPAD. Do not detach OTG.\n",
 					__func__, MUIC_DEV_NAME);
 			noti_f = false;
 			break;
@@ -101,6 +110,11 @@ static void muic_handle_attach(muic_data_t *pmuic,
 		if (new_dev == pmuic->attached_dev) {
 			noti_f = false;
 			break;
+
+		/* Treat unexpected situations on disconnection */
+		} else if (pmuic->is_gamepad && (adc == ADC_OPEN)) {
+			pmuic->is_gamepad = false;
+			muic_send_dock_intent(MUIC_DOCK_DETACHED);
 		}
 	case ATTACHED_DEV_USB_LANHUB_MUIC:
 		if (new_dev != pmuic->attached_dev) {
@@ -204,6 +218,18 @@ static void muic_handle_attach(muic_data_t *pmuic,
 			ret = detach_ps_cable(pmuic);
 		}
 		break;
+	case ATTACHED_DEV_GAMEPAD_MUIC:
+		if (new_dev == ATTACHED_DEV_OTG_MUIC) {
+			pr_info("%s:%s GAMEPAD+Earphone=>OTG. Do not detach gamepad.\n",
+					__func__, MUIC_DEV_NAME);
+			noti_f = false;
+
+			/* We have to inform the framework of this change
+			  * if USB does not send a noti of gamepad to muic.
+			  */
+			muic_send_dock_intent(MUIC_DOCK_GAMEPAD_WITH_EARJACK);
+		}
+		break;		
 	case ATTACHED_DEV_UNDEFINED_CHARGING_MUIC:
 	case ATTACHED_DEV_UNDEFINED_RANGE_MUIC:
 		break;
@@ -294,6 +320,9 @@ static void muic_handle_attach(muic_data_t *pmuic,
 		com_to_open_with_vbus(pmuic);
 		pmuic->attached_dev = new_dev;
 		break;
+	case ATTACHED_DEV_GAMEPAD_MUIC:
+		ret = attach_gamepad(pmuic, new_dev);
+		break;
 	default:
 		pr_warn("%s:%s unsupported dev=%d, adc=0x%x, vbus=%c\n",
 				MUIC_DEV_NAME, __func__, new_dev, adc,
@@ -339,6 +368,10 @@ static void muic_handle_detach(muic_data_t *pmuic)
 		ret = detach_usb(pmuic);
 		break;
 	case ATTACHED_DEV_OTG_MUIC:
+		if (pmuic->is_gamepad) {
+			pmuic->is_gamepad = false;
+			muic_send_dock_intent(MUIC_DOCK_DETACHED);
+		}
 	case ATTACHED_DEV_USB_LANHUB_MUIC:
 		ret = detach_otg_usb(pmuic);
 		break;
@@ -389,6 +422,9 @@ static void muic_handle_detach(muic_data_t *pmuic)
 	case ATTACHED_DEV_UNDEFINED_RANGE_MUIC:		
 		pr_info("%s:%s UNDEFINED_RANGE\n", MUIC_DEV_NAME, __func__);
 		pmuic->attached_dev = ATTACHED_DEV_NONE_MUIC;
+		break;
+	case ATTACHED_DEV_GAMEPAD_MUIC:
+		ret = detach_gamepad(pmuic);
 		break;
 	default:
 		pr_info("%s:%s invalid attached_dev type(%d)\n", MUIC_DEV_NAME,

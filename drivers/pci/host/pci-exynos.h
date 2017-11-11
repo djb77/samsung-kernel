@@ -77,6 +77,11 @@ struct exynos_pcie {
 #ifdef CONFIG_PM_DEVFREQ
 	unsigned int		int_min_lock;
 #endif
+	int			l1ss_ctrl_id_state;
+	struct workqueue_struct *pcie_wq_l1ss;
+	struct delayed_work     work_l1ss;
+	int			boot_cnt;
+	int			work_l1ss_cnt;
 };
 
 /* PCIe ELBI registers */

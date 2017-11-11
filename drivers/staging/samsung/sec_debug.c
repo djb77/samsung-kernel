@@ -196,11 +196,12 @@ int __init sec_debug_init(void)
 	size_t size = SZ_4K;
 	size_t base = SEC_DEBUG_MAGIC_PA;
 
-
+/* 
 	if (!sec_debug_level.en.kernel_fault) {
 		pr_info("sec_debug: disabled due to debug level (0x%x)\n", sec_debug_level.uint_val);
 		return -1;
 	}
+*/
 
 #ifdef CONFIG_NO_BOOTMEM
 	if (!memblock_is_region_reserved(base, size) &&

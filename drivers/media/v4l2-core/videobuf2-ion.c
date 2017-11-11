@@ -741,6 +741,28 @@ static void vb2_ion_put_userptr(void *mem_priv)
 	kfree(buf);
 }
 
+static int vb2_ion_verify_userptr(unsigned long vaddr, void *mem_priv)
+{
+	struct vb2_ion_buf *buf = mem_priv;
+	struct vm_area_struct *vma = find_vma(current->mm, vaddr);
+	struct dma_buf *dbuf;
+
+	if (!vma || !vma->vm_file)
+		return 1;
+
+	dbuf = get_dma_buf_file(vma->vm_file);
+	if (!dbuf)
+		return 1;
+
+	/*
+	 * We just compare the pointer values
+	 * but the contents of the data pointed by them
+	 */
+	dma_buf_put(dbuf);
+
+	return (dbuf == buf->dma_buf) ? 0 : 1;
+}
+
 const struct vb2_mem_ops vb2_ion_memops = {
 	.alloc		= vb2_ion_alloc,
 	.put		= vb2_ion_put,
@@ -754,6 +776,7 @@ const struct vb2_mem_ops vb2_ion_memops = {
 	.get_userptr	= vb2_ion_get_userptr,
 	.put_userptr	= vb2_ion_put_userptr,
 	.num_users	= vb2_ion_num_users,
+	.verify_userptr	= vb2_ion_verify_userptr,
 };
 EXPORT_SYMBOL_GPL(vb2_ion_memops);
 

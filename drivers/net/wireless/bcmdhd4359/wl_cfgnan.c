@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgnan.c 559908 2015-05-29 02:44:45Z $
+ * $Id: wl_cfgnan.c 612549 2016-01-14 07:39:32Z $
  */
 
 #include <bcmutils.h>
@@ -559,7 +559,6 @@ wl_cfgnan_support_handler(struct net_device *ndev,
 	struct bcm_cfg80211 *cfg, char *cmd, int size, nan_cmd_data_t *cmd_data)
 {
 	wl_nan_ioc_t *nanioc = NULL;
-	uint8 *pxtlv;
 	s32 ret = BCME_OK;
 	u16 kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
 	uint16 nanioc_size = sizeof(wl_nan_ioc_t) + NAN_IOCTL_BUF_SIZE;
@@ -581,7 +580,6 @@ wl_cfgnan_support_handler(struct net_device *ndev,
 	/* nan support */
 	nanioc->version = htod16(WL_NAN_IOCTL_VERSION);
 	nanioc->id = htod16(WL_NAN_CMD_ENABLE);
-	pxtlv = nanioc->data;
 	nanioc->len = htod16(BCM_XTLV_HDR_SIZE + 1);
 	nanioc_size = sizeof(wl_nan_ioc_t) + sizeof(bcm_xtlv_t);
 	ret = wldev_iovar_getbuf(ndev, "nan", nanioc, nanioc_size,
@@ -1791,7 +1789,6 @@ wl_cfgnan_notify_proxd_status(struct bcm_cfg80211 *cfg,
 {
 	s32 ret = BCME_OK;
 	wl_nan_ranging_event_data_t *rdata;
-	s32 status;
 	u16 data_len;
 	s32 event_type;
 	s32 event_num;
@@ -1806,7 +1803,6 @@ wl_cfgnan_notify_proxd_status(struct bcm_cfg80211 *cfg,
 		return -EINVAL;
 	}
 
-	status = ntoh32(event->reason);
 	event_type = ntoh32(event->event_type);
 	event_num = ntoh32(event->reason);
 	data_len = ntoh32(event->datalen);
@@ -1995,7 +1991,6 @@ wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
 		}
 
 		if (tlv_data.vend_info.data && tlv_data.vend_info.dlen) {
-			struct ether_addr *ea;
 			u8 *temp_data = tlv_data.vend_info.data;
 			uint32 bitmap;
 			u16 dlen = tlv_data.vend_info.dlen;
@@ -2015,10 +2010,11 @@ wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
 
 			if (*(temp_data + 6) == NAN_VENDOR_TYPE_RTT) {
 				temp_data += NAN_VENDOR_HDR_SIZE;
-				ea = (struct ether_addr *)temp_data;
 				temp_data += ETHER_ADDR_LEN;
 				mapcontrol = *temp_data++;
 				proto = *temp_data++;
+				BCM_REFERENCE(mapcontrol);
+				BCM_REFERENCE(proto);
 				bitmap = *(uint32 *)temp_data;
 				temp_data += 4;
 				chanspec = *(chanspec_t *)temp_data;

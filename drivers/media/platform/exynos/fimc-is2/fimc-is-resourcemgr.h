@@ -49,6 +49,8 @@ struct fimc_is_dvfs_ctrl {
 	int cur_cam_qos;
 	int cur_i2c_qos;
 	int cur_disp_qos;
+	int cur_hpg_qos;
+	int cur_hmp_bst;
 	u32 dvfs_table_idx;
 	u32 dvfs_table_max;
 	ulong state;
@@ -106,6 +108,7 @@ struct fimc_is_resourcemgr {
 	u32					cluster0;
 	u32					cluster1;
 	u32					hal_version;
+	u32					vdis_mode;
 #ifdef ENABLE_FW_SHARE_DUMP
 	ulong					fw_share_dump_buf;
 #endif

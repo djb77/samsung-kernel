@@ -291,6 +291,9 @@ struct mem_link_device {
 	unsigned int mbx_cp2ap_wakelock;	/* MBOX# for wakelock */
 	unsigned int irq_cp2ap_wakelock;	/* INTR# for wakelock */
 
+	unsigned int mbx_cp2ap_pcie_l1ss_disable;	/* MBOX# for pcie */
+	unsigned int irq_cp2ap_pcie_l1ss_disable;	/* INTR# for pcie */
+
 	unsigned int *ap_clk_table;
 	unsigned int ap_clk_cnt;
 

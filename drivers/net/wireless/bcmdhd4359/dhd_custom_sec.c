@@ -235,7 +235,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"IE", "IE", 5},
 	{"IL", "IL", 14},
 	{"IT", "IT", 4},
-	{"JP", "JP", 45},
 	{"JO", "JO", 3},
 	{"KE", "SA", 0},
 	{"KW", "KW", 5},
@@ -307,8 +306,15 @@ const struct cntry_locales_custom translate_custom_table[] = {
 #else
 	{"KR", "KR", 48},
 #endif
+#ifdef DHD_SUPPORT_JP968_RU988_UA16
+	{"JP", "JP", 968},
+	{"RU", "RU", 988},
+	{"UA", "UA", 16},
+#else
+	{"JP", "JP", 45},
 	{"RU", "RU", 13},
 	{"UA", "UA", 8},
+#endif /* DHD_SUPPORT_JP968_RU988_UA16 */
 	{"GT", "GT", 1},
 	{"MN", "MN", 1},
 	{"NI", "NI", 2},
@@ -324,7 +330,13 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"UM", "PR", 38},
 	/* Support FCC 15.407 (Part 15E) Changes, effective June 2 2014 */
 	/* US/988, Q2/993 country codes with higher power on UNII-1 5G band */
+#if defined(DHD_SUPPORT_US_949)
+	{"US", "US", 949},
+#elif defined(DHD_SUPPORT_US_945)
+	{"US", "US", 945},
+#else
 	{"US", "US", 988},
+#endif
 	{"CU", "US", 988},
 	{"CA", "Q2", 993},
 #endif /* default ccode/regrev */

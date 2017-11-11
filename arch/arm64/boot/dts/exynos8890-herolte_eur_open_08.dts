@@ -201,7 +201,7 @@
 			ssp,prox-hi_thresh = <2000>;
 			ssp,prox-low_thresh = <1400>;
 			ssp-ap-rev = <1>;
-			ssp-mag-array = <9930 866 (-228) 263 9197 121 (-135) 387 10378>;
+			ssp-mag-array = <9787 662 79 290 9460 27 200 (-33) 10632>;
 			ssp-glass-type = <0>;
 
 			controller-data {

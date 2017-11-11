@@ -113,13 +113,21 @@ static void mfc_qos_operate(struct s5p_mfc_ctx *ctx, int opr_type, int idx)
 		break;
 	case MFC_QOS_EXTRA:
 #ifdef CONFIG_EXYNOS8890_BTS_OPTIMIZATION
-		if (idx == 1 && (dev->extra_qos != EXTRA_LIMIT_CLK)) {
+		if (idx == 1 && (dev->extra_qos != EXTRA_LIMIT_CLK) && dev->is_only_h264_enc) {
+			if (dev->extra_qos == EXTRA_NO_LIMIT_MO) {
+				bts_ext_scenario_set(TYPE_MFC, TYPE_HIGHPERF, false);
+				mfc_debug(2, "QoS extra: changed MO remove -> clk limit\n");
+			}
 			/* limit clock for QoS table [1] */
 			cal_dfs_ext_ctrl(dvfs_int, cal_dfs_rate_lock, true);
 			dev->extra_qos = EXTRA_LIMIT_CLK;
 			MFC_TRACE_CTX("** QOS extra: limit clk\n");
 			mfc_info_ctx("QoS extra: limit clk\n");
 		} else if (idx > 7 && (dev->extra_qos != EXTRA_NO_LIMIT_MO)) {
+			if (dev->extra_qos == EXTRA_LIMIT_CLK) {
+				cal_dfs_ext_ctrl(dvfs_int, cal_dfs_rate_lock, false);
+				mfc_debug(2, "QoS extra: changed clk limit -> MO remove\n");
+			}
 			/* remove MO limitation for QoS table[8]~[11] */
 			bts_ext_scenario_set(TYPE_MFC, TYPE_HIGHPERF, true);
 			dev->extra_qos = EXTRA_NO_LIMIT_MO;
@@ -220,9 +228,18 @@ void s5p_mfc_qos_on(struct s5p_mfc_ctx *ctx)
 	}
 
 	dev->has_enc_ctx = 0;
+	dev->is_only_h264_enc = 1;
 	list_for_each_entry(qos_ctx, &dev->qos_queue, qos_list) {
-		if (qos_ctx->type == MFCINST_ENCODER)
-			dev->has_enc_ctx = 1;
+		if (qos_ctx->type == MFCINST_ENCODER) {
+ 			dev->has_enc_ctx = 1;
+		}
+		if ((qos_ctx->codec_mode != S5P_FIMV_CODEC_H264_ENC)
+				&& (qos_ctx->codec_mode != S5P_FIMV_CODEC_H264_MVC_ENC)) {
+			dev->is_only_h264_enc = 0;
+			mfc_debug(2, "is not 264 encoder: %d\n", qos_ctx->codec_mode);
+		} else {
+			mfc_debug(2, "is 264 encoder: %d\n", qos_ctx->codec_mode);
+		}
 	}
 
 	mfc_qos_add_or_update(ctx, total_mb);
@@ -255,9 +272,18 @@ void s5p_mfc_qos_off(struct s5p_mfc_ctx *ctx)
 	}
 
 	dev->has_enc_ctx = 0;
+	dev->is_only_h264_enc = 1;
 	list_for_each_entry(qos_ctx, &dev->qos_queue, qos_list) {
-		if (qos_ctx->type == MFCINST_ENCODER)
+		if (qos_ctx->type == MFCINST_ENCODER) {
 			dev->has_enc_ctx = 1;
+		}
+		if ((qos_ctx->codec_mode != S5P_FIMV_CODEC_H264_ENC)
+				&& (qos_ctx->codec_mode != S5P_FIMV_CODEC_H264_MVC_ENC)) {
+			dev->is_only_h264_enc = 0;
+			mfc_debug(2, "is not 264 encoder: %d\n", qos_ctx->codec_mode);
+		} else {
+			mfc_debug(2, "is 264 encoder: %d\n", qos_ctx->codec_mode);
+		}
 	}
 
 	if (list_empty(&dev->qos_queue))

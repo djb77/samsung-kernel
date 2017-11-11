@@ -103,9 +103,6 @@ static int jd_run_atom(struct kbase_jd_atom *katom)
 		} else if (kbase_process_soft_job(katom) == 0) {
 			kbase_finish_soft_job(katom);
 			katom->status = KBASE_JD_ATOM_STATE_COMPLETED;
-		} else {
-			/* The job has not completed */
-			list_add_tail(&katom->dep_item[0], &kctx->waiting_soft_jobs);
 		}
 		return 0;
 	}
@@ -1324,8 +1321,7 @@ bool jd_submit_atom(struct kbase_context *kctx,
 			ret = jd_done_nolock(katom, NULL);
 			goto out;
 		}
-		/* The job has not yet completed */
-		list_add_tail(&katom->dep_item[0], &kctx->waiting_soft_jobs);
+
 		ret = false;
 	} else if ((katom->core_req & BASEP_JD_REQ_ATOM_TYPE) != BASE_JD_REQ_DEP) {
 		katom->status = KBASE_JD_ATOM_STATE_IN_JS;
@@ -1927,6 +1923,7 @@ void kbase_jd_zap_context(struct kbase_context *kctx)
 	 * queued outside the job scheduler.
 	 */
 
+	hrtimer_cancel(&kctx->soft_event_timeout);
 	list_for_each_safe(entry, tmp, &kctx->waiting_soft_jobs) {
 		katom = list_entry(entry, struct kbase_jd_atom, dep_item[0]);
 		kbase_cancel_soft_job(katom);

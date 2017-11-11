@@ -33,6 +33,7 @@
 
 #include <linux/shm_ipc.h>
 #include <linux/mcu_ipc.h>
+#include <linux/exynos-pci-ctrl.h>
 
 #include "modem_prj.h"
 #include "modem_utils.h"
@@ -1853,6 +1854,26 @@ static inline u16 read_ap2cp_irq(struct mem_link_device *mld)
 	return mbox_get_value(mld->mbx_ap2cp_msg);
 }
 
+#define SHMEM_SRINFO_OFFSET 0xF00 /* 4KB - 0x100 */
+#define SHMEM_SRINFO_SBD_OFFSET 0xFF00 /* 64KB - 0x100 */
+#define SHMEM_SRINFO_SIZE 0x100
+#define SHMEM_SRINFO_DATA_STR 64
+
+struct shmem_srinfo {
+	unsigned int size;
+	char buf[0];
+};
+
+static char *shmem_get_srinfo_address(struct link_device *ld)
+{
+	struct mem_link_device *mld = ld_to_mem_link_device(ld);
+	unsigned offs = (mld->link_dev.sbd_ipc) ?
+		SHMEM_SRINFO_SBD_OFFSET : SHMEM_SRINFO_OFFSET;
+	char *base = mld->base + offs;
+
+	return base;
+}
+
 /* not in use */
 static int shmem_ioctl(struct link_device *ld, struct io_device *iod,
 		       unsigned int cmd, unsigned long arg)
@@ -1876,6 +1897,44 @@ static int shmem_ioctl(struct link_device *ld, struct io_device *iod,
 		if (copy_to_user(dst, &mem_info, size))
 			return -EFAULT;
 
+		break;
+	}
+
+	case IOCTL_MODEM_GET_SHMEM_SRINFO:
+	{
+		struct shmem_srinfo __user *sr_arg =
+			(struct shmem_srinfo __user *)arg;
+		unsigned count, size = SHMEM_SRINFO_SIZE;
+
+		if (copy_from_user(&count, &sr_arg->size, sizeof(unsigned)))
+			return -EFAULT;
+
+		mif_info("get srinfo:%s, size = %d\n", iod->name, count);
+
+		size = min(size, count);
+		if (copy_to_user(&sr_arg->size, &size, sizeof(unsigned)))
+			return -EFAULT;
+
+		if (copy_to_user(sr_arg->buf, shmem_get_srinfo_address(ld),
+			size))
+			return -EFAULT;
+		break;
+	}
+
+	case IOCTL_MODEM_SET_SHMEM_SRINFO:
+	{
+		struct shmem_srinfo __user *sr_arg =
+			(struct shmem_srinfo __user *)arg;
+		unsigned count, size = SHMEM_SRINFO_SIZE;
+
+		if (copy_from_user(&count, &sr_arg->size, sizeof(unsigned)))
+			return -EFAULT;
+
+		mif_info("set srinfo:%s, size = %d\n", iod->name, count);
+
+		if (copy_from_user(shmem_get_srinfo_address(ld), sr_arg->buf,
+			min(count, size)))
+			return -EFAULT;
 		break;
 	}
 
@@ -2114,6 +2173,25 @@ static void shmem_cp2ap_wakelock_handler(void *data)
 	}
 }
 
+static void shmem_cp2ap_pcie_l1ss_disable_handler(void *data)
+{
+	struct mem_link_device *mld = (struct mem_link_device *)data;
+	unsigned int req;
+	mif_err("%s\n", __func__);
+
+	req = mbox_get_value(mld->mbx_cp2ap_pcie_l1ss_disable);
+
+	if (req == 1) {
+		exynos_pcie_l1ss_ctrl(0, PCIE_L1SS_CTRL_MODEM_IF);
+		mif_err("cp requests pcie l1ss disable\n");
+	} else if (req == 0) {
+		exynos_pcie_l1ss_ctrl(1, PCIE_L1SS_CTRL_MODEM_IF);
+		mif_err("cp requests pcie l1ss enable\n");
+	} else {
+		mif_err("unsupported request: pcie_l1ss_disable\n");
+	}
+}
+
 static void remap_4mb_map_to_ipc_dev(struct mem_link_device *mld)
 {
 	struct link_device *ld = &mld->link_dev;
@@ -2205,60 +2283,6 @@ static int shmem_rx_setup(struct link_device *ld)
 	return 0;
 }
 
-#define SHMEM_SRINFO_OFFSET 0xF00 /* 4KB - 0x100 */
-#define SHMEM_SRINFO_SBD_OFFSET 0xFF00 /* 64KB - 0x100 */
-#define SHMEM_SRINFO_SIZE 0x100
-#define SHMEM_SRINFO_DATA_STR 64
-static ssize_t shmem_read_srinfo(struct file *file, char __user *buf,
-				size_t len, loff_t *offset)
-{
-	struct mem_link_device *mld = PDE_DATA(file_inode(file));
-	unsigned offs = (mld->link_dev.sbd_ipc) ? SHMEM_SRINFO_SBD_OFFSET
-		: SHMEM_SRINFO_OFFSET;
-	char *base = mld->base + offs;
-	ssize_t count = SHMEM_SRINFO_SIZE;
-
-	if (*offset >= count)
-		return 0;
-
-	mif_info("user :0x%p, info addr: 0x%p, size: %lx\n",
-		buf, base, count);
-
-	if (copy_to_user(buf, base, count))
-		return -EFAULT;
-
-	*offset += count;
-
-	return count;
-}
-
-static const struct file_operations shmem_srinfo_fops = {
-	.owner		= THIS_MODULE,
-	.read		= shmem_read_srinfo,
-};
-
-static void shmem_create_baseband_procfs(struct mem_link_device *mld)
-{
-	struct proc_dir_entry *base, *entry;
-
-	base = proc_mkdir("baseband", NULL);
-	if (!base) {
-		mif_err("proc: baseband create fail\n");
-		return;
-	}
-
-	/* CP Silent reset reason info */
-	entry = proc_create_data("sr_info", 0, base, &shmem_srinfo_fops, mld);
-	if (!entry) {
-		mif_err("proc: sr_info create fail\n");
-		return;
-	}
-	proc_set_size(entry, SHMEM_SRINFO_SIZE);
-
-	/* TODO: shmem dump ? */
-
-	return;
-}
 
 struct link_device *shmem_create_link_device(struct platform_device *pdev)
 {
@@ -2555,6 +2579,17 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 		goto error;
 	}
 
+	mld->mbx_cp2ap_pcie_l1ss_disable = modem->mbx->mbx_cp2ap_pcie_l1ss_disable;
+	mld->irq_cp2ap_pcie_l1ss_disable = modem->mbx->irq_cp2ap_pcie_l1ss_disable;
+
+	err = mbox_request_irq(mld->irq_cp2ap_pcie_l1ss_disable,
+			shmem_cp2ap_pcie_l1ss_disable_handler, mld);
+	if (err) {
+		mif_err("%s: ERR! mbox_request_irq(%u) fail (%d)\n",
+			ld->name, mld->irq_cp2ap_pcie_l1ss_disable, err);
+		goto error;
+	}
+
 	/**
 	 * For TX Flow-control command from CP
 	 */
@@ -2569,8 +2604,6 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 			ld->name, mld->irq_cp2ap_status, err);
 		goto error;
 	}
-
-	shmem_create_baseband_procfs(mld);
 
 	mld->pktlog = create_pktlog("shmem");
 	if (!mld->pktlog)

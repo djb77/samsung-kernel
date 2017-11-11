@@ -422,6 +422,25 @@ struct kbase_uk_prfcnt_values {
 	u32 size;
 };
 
+/**
+ * struct kbase_uk_soft_event_update - User/Kernel space data exchange structure
+ * @header:     UK structure header
+ * @evt:        the GPU address containing the event
+ * @new_status: the new event status, must be either BASE_JD_SOFT_EVENT_SET or
+ *              BASE_JD_SOFT_EVENT_RESET
+ * @flags:      reserved for future uses, must be set to 0
+ *
+ * This structure is used to update the status of a software event. If the
+ * event's status is set to BASE_JD_SOFT_EVENT_SET, any job currently waiting
+ * on this event will complete.
+ */
+struct kbase_uk_soft_event_update {
+	union uk_header header;
+	/* IN */
+	u64 evt;
+	u32 new_status;
+	u32 flags;
+};
 
 enum kbase_uk_function_id {
 	KBASE_FUNC_MEM_ALLOC = (UK_FUNC_ID + 0),
@@ -489,6 +508,8 @@ enum kbase_uk_function_id {
 #ifdef SUPPORT_MALI_NO_MALI
 	KBASE_FUNC_SET_PRFCNT_VALUES = (UK_FUNC_ID + 37),
 #endif
+
+	KBASE_FUNC_SOFT_EVENT_UPDATE = (UK_FUNC_ID + 38),
 
 /* MALI_SEC_INTEGRATION */
 //#ifdef MALI_SEC_HWCNT

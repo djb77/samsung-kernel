@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_common.c 611507 2016-01-11 11:14:39Z $
+ * $Id: dhd_common.c 619484 2016-02-17 02:14:06Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -1859,6 +1859,56 @@ dhd_eventmsg_print(dhd_pub_t *dhd_pub, void *event_data, void *raw_event_ptr,
 
 #endif /* SHOW_LOGTRACE */
 
+#define SDB_ENABLE_AP	0x01
+#define SDB_ENABLE_P2P	0x02
+#define SDB_IS_AP(i)	(i & SDB_ENABLE_AP)
+#define SDB_IS_P2P(i)	(i & SDB_ENABLE_P2P)
+
+#define WLC_RSDB_MODE_AUTO_MASK 0x80
+#define WLC_RSDB_EXTRACT_MODE(val) ((int8)((val) & (~(WLC_RSDB_MODE_AUTO_MASK))))
+
+static void
+wl_event_sdb_transition_print(void *event_data, const char *event_name)
+{
+	wl_event_sdb_trans_t *rdata;
+	wl_event_sdb_data_t *value;
+	char *sta_mode = "";
+	int i;
+	char chanbuf[CHANSPEC_STR_LEN];
+	rdata = (wl_event_sdb_trans_t *)event_data;
+
+	if (!rdata) {
+		DHD_ERROR(("%s: event_data is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	if (rdata->version != WL_EVENT_SDB_TRANSITION_VER) {
+		DHD_ERROR(("%s: invalid Version(%d)\n", __FUNCTION__, rdata->version));
+		return;
+	}
+
+	if (rdata->rsdb_mode & WLC_RSDB_MODE_AUTO_MASK) {
+		DHD_ERROR((" RSDB Mode : Auto, "));
+	}
+	DHD_ERROR(("Current RSDB Mode : %d\n", WLC_RSDB_EXTRACT_MODE(rdata->rsdb_mode)));
+
+	for (i = 0; i < rdata->enable_bsscfg; i++) {
+		value = &rdata->values[i];
+
+		if (SDB_IS_P2P(value->is_iftype)) {
+			sta_mode = SDB_IS_AP(value->is_iftype) ? "P2P_GO" : "P2P_GC";
+		} else {
+			sta_mode = SDB_IS_AP(value->is_iftype) ? "SoftAP" : "Station";
+		}
+
+		wf_chspec_ntoa_ex(value->chanspec, chanbuf);
+		DHD_ERROR((" wlc%d <%s> \"%s\", %s(0x%04x)\n",
+			value->wlunit, sta_mode,
+			value->ssidbuf, chanbuf, value->chanspec));
+	}
+}
+
+
 static void
 wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
 	void *raw_event_ptr, char *eventmask)
@@ -2073,6 +2123,11 @@ wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
 		       event_name, event_type, eabuf, (int)status));
 #endif
 	}
+		break;
+	case WLC_E_SDB_TRANSITION:
+		DHD_EVENT(("MACEVENT: %s, status %d, reason %d\n",
+			event_name, (int)status, (int)reason));
+		wl_event_sdb_transition_print(event_data, event_name);
 		break;
 	default:
 		DHD_EVENT(("MACEVENT: %s %d, MAC %s, status %d, reason %d, auth %d\n",
@@ -3153,9 +3208,7 @@ dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd)
 	int ret = -1;
 	int dtim_period = 0;
 	int ap_beacon = 0;
-#ifndef ENABLE_MAX_DTIM_IN_SUSPEND
 	int allowed_skip_dtim_cnt = 0;
-#endif /* !ENABLE_MAX_DTIM_IN_SUSPEND */
 	/* Check if associated */
 	if (dhd_is_associated(dhd, 0, NULL) == FALSE) {
 		DHD_TRACE(("%s NOT assoc ret %d\n", __FUNCTION__, ret));
@@ -3181,35 +3234,37 @@ dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd)
 		goto exit;
 	}
 
-#ifdef ENABLE_MAX_DTIM_IN_SUSPEND
-	bcn_li_dtim = (int) (MAX_DTIM_ALLOWED_INTERVAL / (ap_beacon * dtim_period));
-	if (bcn_li_dtim == 0) {
-		bcn_li_dtim = 1;
-	}
-#else /* ENABLE_MAX_DTIM_IN_SUSPEND */
-	/* attemp to use platform defined dtim skip interval */
-	bcn_li_dtim = dhd->suspend_bcn_li_dtim;
+	if (dhd->max_dtim_enable) {
+		bcn_li_dtim = (int) (MAX_DTIM_ALLOWED_INTERVAL / (ap_beacon * dtim_period));
+		if (bcn_li_dtim == 0) {
+			bcn_li_dtim = 1;
+		}
+	} else {
+		/* attemp to use platform defined dtim skip interval */
+		bcn_li_dtim = dhd->suspend_bcn_li_dtim;
 
-	/* check if sta listen interval fits into AP dtim */
-	if (dtim_period > CUSTOM_LISTEN_INTERVAL) {
-		/* AP DTIM to big for our Listen Interval : no dtim skiping */
-		bcn_li_dtim = NO_DTIM_SKIP;
-		DHD_ERROR(("%s DTIM=%d > Listen=%d : too big ...\n",
-			__FUNCTION__, dtim_period, CUSTOM_LISTEN_INTERVAL));
-		goto exit;
-	}
+		/* check if sta listen interval fits into AP dtim */
+		if (dtim_period > CUSTOM_LISTEN_INTERVAL) {
+			/* AP DTIM to big for our Listen Interval : no dtim skiping */
+			bcn_li_dtim = NO_DTIM_SKIP;
+			DHD_ERROR(("%s DTIM=%d > Listen=%d : too big ...\n",
+				__FUNCTION__, dtim_period, CUSTOM_LISTEN_INTERVAL));
+			goto exit;
+		}
 
-	if ((dtim_period * ap_beacon * bcn_li_dtim) > MAX_DTIM_ALLOWED_INTERVAL) {
-		 allowed_skip_dtim_cnt = MAX_DTIM_ALLOWED_INTERVAL / (dtim_period * ap_beacon);
-		 bcn_li_dtim = (allowed_skip_dtim_cnt != 0) ? allowed_skip_dtim_cnt : NO_DTIM_SKIP;
-	}
+		if ((dtim_period * ap_beacon * bcn_li_dtim) > MAX_DTIM_ALLOWED_INTERVAL) {
+			allowed_skip_dtim_cnt =
+				MAX_DTIM_ALLOWED_INTERVAL / (dtim_period * ap_beacon);
+			bcn_li_dtim =
+				(allowed_skip_dtim_cnt != 0) ? allowed_skip_dtim_cnt : NO_DTIM_SKIP;
+		}
 
-	if ((bcn_li_dtim * dtim_period) > CUSTOM_LISTEN_INTERVAL) {
-		/* Round up dtim_skip to fit into STAs Listen Interval */
-		bcn_li_dtim = (int)(CUSTOM_LISTEN_INTERVAL / dtim_period);
-		DHD_TRACE(("%s agjust dtim_skip as %d\n", __FUNCTION__, bcn_li_dtim));
+		if ((bcn_li_dtim * dtim_period) > CUSTOM_LISTEN_INTERVAL) {
+			/* Round up dtim_skip to fit into STAs Listen Interval */
+			bcn_li_dtim = (int)(CUSTOM_LISTEN_INTERVAL / dtim_period);
+			DHD_TRACE(("%s agjust dtim_skip as %d\n", __FUNCTION__, bcn_li_dtim));
+		}
 	}
-#endif /* ENABLE_MAX_DTIM_IN_SUSPEND */
 
 	DHD_ERROR(("%s beacon=%d bcn_li_dtim=%d DTIM=%d Listen=%d\n",
 		__FUNCTION__, ap_beacon, bcn_li_dtim, dtim_period, CUSTOM_LISTEN_INTERVAL));

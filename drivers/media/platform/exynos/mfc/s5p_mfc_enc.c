@@ -41,7 +41,8 @@
 #define MFC_ENC_AVG_FPS_MODE
 
 #define ENC_HIGH_FPS	(70000)
-#define ENC_MAX_FPS	(30000)
+#define ENC_DEFAULT_FPS	(30000)
+#define ENC_MAX_FPS	(120000)
 #define ENC_AVG_FRAMES	(10)
 
 static struct s5p_mfc_fmt *find_format(struct v4l2_format *f, unsigned int t)
@@ -1953,12 +1954,17 @@ static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 				if (ctx->avg_framerate > ENC_HIGH_FPS) {
 					if (ctx->frame_count == ENC_AVG_FRAMES) {
 						mfc_debug(2, "force fps: %d\n", ENC_MAX_FPS);
+						ctx->framerate = ENC_MAX_FPS;
 						ctx->is_max_fps = 1;
+						s5p_mfc_qos_on(ctx);
 					}
 					goto out;
 				}
 			} else {
-				ctx->last_framerate = ENC_MAX_FPS;
+				if (ctx->is_max_fps)
+					ctx->last_framerate = ENC_MAX_FPS;
+				else
+					ctx->last_framerate = ENC_DEFAULT_FPS;
 				mfc_debug(2, "fps set to %d\n", ctx->last_framerate);
 			}
 calc_again:
@@ -3753,7 +3759,7 @@ int s5p_mfc_init_enc_ctx(struct s5p_mfc_ctx *ctx)
 	ctx->src_queue_cnt_nal_q = 0;
 	ctx->dst_queue_cnt_nal_q = 0;
 
-	ctx->framerate = ENC_MAX_FPS;
+	ctx->framerate = ENC_DEFAULT_FPS;
 	ctx->qos_ratio = 100;
 #ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	INIT_LIST_HEAD(&ctx->qos_list);

@@ -190,6 +190,7 @@
 
 /* RX Data Command Register, RX Data_COM (0x51) */
 #define P9220_RX_DATA_COM_UNKNOWN			0x00
+#define P9220_RX_DATA_COM_TX_ID				0x01
 #define P9220_RX_DATA_COM_CHG_STATUS		0x05
 #define P9220_RX_DATA_COM_AFC_SET			0x06
 #define P9220_RX_DATA_COM_AFC_DEBOUCE		0x07
@@ -234,7 +235,8 @@
 #define P9220_VOUT_6V_VAL					0x19
 #define P9220_VOUT_7V_VAL					0x23
 #define P9220_VOUT_8V_VAL					0x2d
-#define P9220_VOUT_9V_VAL					0x37
+/* We set VOUT to 10V actually for HERO for RE/CE standard authentication */
+#define P9220_VOUT_9V_VAL					0x41
 
 #define P9220_FW_RESULT_DOWNLOADING			2
 #define P9220_FW_RESULT_PASS				1
@@ -251,8 +253,22 @@ enum {
 	P9220_PAD_MODE_WPC_AFC,
 	P9220_PAD_MODE_WPC_PACK,
 	P9220_PAD_MODE_WPC_PACK_TA,
+	P9220_PAD_MODE_WPC_STAND,
+	P9220_PAD_MODE_WPC_STAND_HV,
 	P9220_PAD_MODE_PMA,
 	P9220_PAD_MODE_TX,
+};
+
+/* PAD Vout */
+enum {
+	PAD_VOUT_5V = 0,
+	PAD_VOUT_9V,
+	PAD_VOUT_10V,
+	PAD_VOUT_12V,
+	PAD_VOUT_18V,
+	PAD_VOUT_19V,
+	PAD_VOUT_20V,
+	PAD_VOUT_24V,
 };
 
 /* vout settings */
@@ -296,6 +312,7 @@ enum {
 	P9220_FAN_CONTROL_ON,
 	P9220_FAN_CONTROL_OFF,
 	P9220_REQUEST_AFC_TX,
+	P9220_REQUEST_TX_ID,
 };
 
 enum p9220_irq_source {
@@ -462,6 +479,8 @@ struct p9220_charger_data {
 
 	u16 addr;
 	int size;
+	int is_afc;
+	int pad_vout;
 };
 
 #endif /* __p9220_CHARGER_H */

@@ -1446,7 +1446,6 @@ extern int vfs_rmdir(struct inode *, struct dentry *);
 extern int vfs_unlink(struct inode *, struct dentry *, struct inode **);
 extern int vfs_rename(struct inode *, struct dentry *, struct inode *, struct dentry *, struct inode **, unsigned int);
 extern int vfs_whiteout(struct inode *, struct dentry *);
-extern long do_unlinkat(int, const char __user *, bool);
 
 /*
  * VFS dentry helper functions.
@@ -1581,7 +1580,6 @@ struct inode_operations {
 
 	/* WARNING: probably going away soon, do not use! */
 	int (*dentry_open)(struct dentry *, struct file *, const struct cred *);
-	struct inode * (*get_lower_inode)(struct inode *);
 } ____cacheline_aligned;
 
 ssize_t rw_copy_check_uvector(int type, const struct iovec __user * uvector,
@@ -1623,7 +1621,7 @@ struct super_operations {
 	int (*bdev_try_to_free_page)(struct super_block*, struct page*, gfp_t);
 	long (*nr_cached_objects)(struct super_block *, int);
 	long (*free_cached_objects)(struct super_block *, long, int);
-	long (*unlink_callback)(struct inode *, char *);
+	long (*unlink_callback)(struct super_block *, char *);
 };
 
 /*

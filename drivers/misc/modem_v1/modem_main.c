@@ -494,6 +494,8 @@ static int parse_dt_mbox_pdata(struct device *dev, struct device_node *np,
 		mbox->irq_cp2ap_perf_req_int);
 	mif_dt_read_u32 (np, "mif,irq_cp2ap_active", mbox->irq_cp2ap_active);
 	mif_dt_read_u32 (np, "mif,irq_cp2ap_wakelock", mbox->irq_cp2ap_wakelock);
+	mif_dt_read_u32 (np, "mif,irq_cp2ap_pcie_l1ss_disable",
+		mbox->irq_cp2ap_pcie_l1ss_disable);
 
 	mif_dt_read_u32 (np, "mbx_ap2cp_msg", mbox->mbx_ap2cp_msg);
 	mif_dt_read_u32 (np, "mbx_cp2ap_msg", mbox->mbx_cp2ap_msg);
@@ -508,6 +510,8 @@ static int parse_dt_mbox_pdata(struct device *dev, struct device_node *np,
 	mif_dt_read_u32 (np, "mbx_cp2ap_dvfsreq_int", mbox->mbx_cp2ap_perf_req_int);
 	mif_dt_read_u32 (np, "mbx_cp2ap_active", mbox->mbx_cp2ap_active);
 	mif_dt_read_u32 (np, "mbx_cp2ap_wakelock", mbox->mbx_cp2ap_wakelock);
+	mif_dt_read_u32 (np, "mbx_cp2ap_pcie_l1ss_disable",
+		mbox->mbx_cp2ap_pcie_l1ss_disable);
 	mif_dt_read_u32 (np, "mbx_ap2cp_sec", mbox->mbx_ap2cp_sec);
 	mif_dt_read_u32 (np, "mbx_ap2cp_usec", mbox->mbx_ap2cp_usec);
 	mif_dt_read_u32 (np, "mbx_ap2cp_et_dac_cal", mbox->mbx_ap2cp_et_dac_cal);

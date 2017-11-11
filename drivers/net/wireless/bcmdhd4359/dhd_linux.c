@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 611507 2016-01-11 11:14:39Z $
+ * $Id: dhd_linux.c 619484 2016-02-17 02:14:06Z $
  */
 
 #include <typedefs.h>
@@ -1384,6 +1384,7 @@ static int dhd_pm_callback(struct notifier_block *nfb, unsigned long action, voi
 	dhd_info_t *dhdinfo = (dhd_info_t*)container_of(nfb, struct dhd_info, pm_notifier);
 
 	BCM_REFERENCE(dhdinfo);
+	BCM_REFERENCE(suspend);
 
 	switch (action) {
 	case PM_HIBERNATION_PREPARE:
@@ -1397,16 +1398,15 @@ static int dhd_pm_callback(struct notifier_block *nfb, unsigned long action, voi
 		break;
 	}
 
-#if defined(SUPPORT_P2P_GO_PS)
-#ifdef PROP_TXSTATUS
+#if defined(SUPPORT_P2P_GO_PS) && defined(PROP_TXSTATUS)
 	if (suspend) {
 		DHD_OS_WAKE_LOCK_WAIVE(&dhdinfo->pub);
 		dhd_wlfc_suspend(&dhdinfo->pub);
 		DHD_OS_WAKE_LOCK_RESTORE(&dhdinfo->pub);
-	} else
+	} else {
 		dhd_wlfc_resume(&dhdinfo->pub);
-#endif /* PROP_TXSTATUS */
-#endif /* defined(SUPPORT_P2P_GO_PS) */
+	}
+#endif /* defined(SUPPORT_P2P_GO_PS) && defined(PROP_TXSTATUS) */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && (LINUX_VERSION_CODE <= \
 	KERNEL_VERSION(2, 6, 39))
@@ -5377,7 +5377,6 @@ dhd_ethtool(dhd_info_t *dhd, void *uaddr)
 
 static bool dhd_check_hang(struct net_device *net, dhd_pub_t *dhdp, int error)
 {
-	dhd_info_t *dhd;
 
 	if (!dhdp) {
 		DHD_ERROR(("%s: dhdp is NULL\n", __FUNCTION__));
@@ -5387,9 +5386,8 @@ static bool dhd_check_hang(struct net_device *net, dhd_pub_t *dhdp, int error)
 	if (!dhdp->up)
 		return FALSE;
 
-	dhd = (dhd_info_t *)dhdp->info;
 #if !defined(BCMPCIE)
-	if (dhd->thr_dpc_ctl.thr_pid < 0) {
+	if (dhdp->info->thr_dpc_ctl.thr_pid < 0) {
 		DHD_ERROR(("%s : skipped due to negative pid - unloading?\n", __FUNCTION__));
 		return FALSE;
 	}
@@ -7966,6 +7964,11 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	dhd_tdls_set_mode(dhd, false);
 #endif /* WLTDLS */
 	dhd->suspend_bcn_li_dtim = CUSTOM_SUSPEND_BCN_LI_DTIM;
+#ifdef ENABLE_MAX_DTIM_IN_SUSPEND
+	dhd->max_dtim_enable = TRUE;
+#else
+	dhd->max_dtim_enable = FALSE;
+#endif /* ENABLE_MAX_DTIM_IN_SUSPEND */
 	DHD_TRACE(("Enter %s\n", __FUNCTION__));
 	dhd->op_mode = 0;
 #ifdef CUSTOMER_HW4_DEBUG
@@ -8697,6 +8700,7 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #ifdef BT_WIFI_HANDOVER
 		setbit(eventmask_msg->mask, WLC_E_BT_WIFI_HANDOVER_REQ);
 #endif /* BT_WIFI_HANDOVER */
+		setbit(eventmask_msg->mask, WLC_E_SDB_TRANSITION);
 
 		/* Write updated Event mask */
 		eventmask_msg->ver = EVENTMSGS_VER;
@@ -10720,6 +10724,30 @@ int net_os_set_suspend_bcn_li_dtim(struct net_device *dev, int val)
 
 	if (dhd)
 		dhd->pub.suspend_bcn_li_dtim = val;
+
+	return 0;
+}
+
+int net_os_set_max_dtim_enable(struct net_device *dev, int val)
+{
+	dhd_info_t *dhd = DHD_DEV_INFO(dev);
+
+	if (dhd) {
+#ifdef ENABLE_MAX_DTIM_IN_SUSPEND
+		DHD_ERROR(("%s: use MAX bcn_li_dtim in suspend %s\n",
+			__FUNCTION__, (val ? "Enable" : "Disable")));
+		if (val) {
+			dhd->pub.max_dtim_enable = TRUE;
+		} else {
+			dhd->pub.max_dtim_enable = FALSE;
+		}
+#else /* ENABLE_MAX_DTIM_IN_SUSPEND */
+		DHD_ERROR(("%s: max_dtim_enable always FALSE\n", __FUNCTION__));
+		dhd->pub.max_dtim_enable = FALSE;
+#endif /* ENABLE_MAX_DTIM_IN_SUSPEND */
+	} else {
+		return -1;
+	}
 
 	return 0;
 }

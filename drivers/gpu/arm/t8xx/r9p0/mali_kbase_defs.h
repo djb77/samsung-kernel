@@ -1240,6 +1240,7 @@ struct kbase_context {
 	struct kbase_mem_pool mem_pool;
 
 	struct list_head waiting_soft_jobs;
+	spinlock_t waiting_soft_jobs_lock;
 #ifdef CONFIG_KDS
 	struct list_head waiting_kds_resource;
 #endif
@@ -1328,6 +1329,8 @@ struct kbase_context {
 	/* true if context is counted in kbdev->js_data.nr_contexts_runnable */
 	bool ctx_runnable_ref;
 
+	/* Waiting soft-jobs will fail when this timer expires */
+	struct hrtimer soft_event_timeout;
 	/* MALI_SEC_INTEGRATION */
 	int ctx_status;
 	bool ctx_need_qos;

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.c 605796 2015-12-11 13:45:36Z $
+ * $Id: wl_cfgvendor.c 612549 2016-01-14 07:39:32Z $
  */
 
 /*
@@ -634,7 +634,7 @@ wl_cfgvendor_hotlist_cfg(struct wiphy *wiphy,
 	int err = 0;
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	gscan_hotlist_scan_params_t *hotlist_params;
-	int tmp, tmp1, tmp2, type, j = 0, dummy;
+	int tmp, tmp1, tmp2, type, j = 0;
 	const struct nlattr *outer, *inner, *iter;
 	uint8 flush = 0;
 	struct bssid_t *pbssid;
@@ -666,7 +666,6 @@ wl_cfgvendor_hotlist_cfg(struct wiphy *wiphy,
 								         (int8) nla_get_u8(inner);
 								break;
 							case GSCAN_ATTRIBUTE_RSSI_HIGH:
-								dummy = (int8) nla_get_u8(inner);
 								break;
 							default:
 								WL_ERR(("ATTR unknown %d\n",

@@ -343,6 +343,7 @@ struct s5p_mfc_dev {
 
 	bool has_job;
 	int extra_qos;
+	bool is_only_h264_enc;
 
 	nal_queue_handle *nal_q_handle;
 };

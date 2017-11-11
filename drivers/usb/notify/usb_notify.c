@@ -23,7 +23,6 @@
 #include <linux/usb_notify.h>
 #include "dock_notify.h"
 #include "usb_notify_sysfs.h"
-#include <linux/muic/muic.h>
 
 #define DEFAULT_OVC_POLL_SEC 3
 
@@ -102,6 +101,7 @@ static int check_event_type(enum otg_notify_events event)
 	case NOTIFY_EVENT_SMTD_EXT_CURRENT:
 	case NOTIFY_EVENT_MMD_EXT_CURRENT:
 	case NOTIFY_EVENT_DEVICE_CONNECT:
+	case NOTIFY_EVENT_GAMEPAD_CONNECT:
 		ret |= NOTIFY_EVENT_EXTRA;
 		break;
 	case NOTIFY_EVENT_VBUS:
@@ -111,6 +111,7 @@ static int check_event_type(enum otg_notify_events event)
 		break;
 	case NOTIFY_EVENT_HOST:
 	case NOTIFY_EVENT_HMT:
+	case NOTIFY_EVENT_GAMEPAD:
 		ret |= (NOTIFY_EVENT_STATE | NOTIFY_EVENT_NEED_VBUSDRIVE
 				| NOTIFY_EVENT_DELAY | NOTIFY_EVENT_NEED_HOST);
 		break;
@@ -169,6 +170,8 @@ static const char *event_string(enum otg_notify_events event)
 		return virt ? "mmdock(virtual)" : "mmdock";
 	case NOTIFY_EVENT_HMT:
 		return virt ? "hmt(virtual)" : "hmt";
+	case NOTIFY_EVENT_GAMEPAD:
+		return virt ? "gamepad(virtual)" : "gamepad";
 	case NOTIFY_EVENT_DRIVE_VBUS:
 		return "drive_vbus";
 	case NOTIFY_EVENT_ALL_DISABLE:
@@ -189,6 +192,8 @@ static const char *event_string(enum otg_notify_events event)
 		return "mmd_ext_current";
 	case NOTIFY_EVENT_DEVICE_CONNECT:
 		return "device_connect";
+	case NOTIFY_EVENT_GAMEPAD_CONNECT:
+		return "gamepad_connect";
 	default:
 		return "undefined";
 	}
@@ -533,6 +538,7 @@ int do_notify_blockstate(struct otg_notify *notify, unsigned long event,
 	case NOTIFY_EVENT_MMDOCK:
 	case NOTIFY_EVENT_SMARTDOCK_TA:
 	case NOTIFY_EVENT_AUDIODOCK:
+	case NOTIFY_EVENT_GAMEPAD:
 		if (notify->unsupport_host) {
 			pr_err("This model doesn't support usb host\n");
 			goto skip;
@@ -584,6 +590,7 @@ static void otg_notify_state(unsigned long event, int enable)
 	struct otg_notify *notify = NULL;
 	int type = 0;
 	int virtual = 0;
+	unsigned long prev_c_type = 0;
 
 	if (!u_notify) {
 		pr_err("u_notify is NULL\n");
@@ -598,6 +605,7 @@ static void otg_notify_state(unsigned long event, int enable)
 		pr_err("notify is NULL\n");
 		goto no_save_event;
 	}
+	prev_c_type = u_notify->c_type;
 
 	virtual = IS_VIRTUAL(event);
 	event = PHY_EVENT(event);
@@ -680,12 +688,19 @@ static void otg_notify_state(unsigned long event, int enable)
 		break;
 	case NOTIFY_EVENT_HMT:
 	case NOTIFY_EVENT_HOST:
+	case NOTIFY_EVENT_GAMEPAD:
 		if (notify->unsupport_host) {
 			pr_err("This model doesn't support usb host\n");
 			goto err2;
 		}
 		u_notify->diable_v_drive = 0;
 		if (enable) {
+			if (prev_c_type == NOTIFY_EVENT_HMT ||
+				prev_c_type == NOTIFY_EVENT_HOST || 
+				prev_c_type == NOTIFY_EVENT_GAMEPAD) {
+				pr_err("now host mode, skip this command\n");
+				goto err2;
+			}
 			u_notify->ndev.mode = NOTIFY_HOST_MODE;
 			if (notify->is_wakelock)
 				wake_lock(&u_notify->wlock);
@@ -811,7 +826,8 @@ static void otg_notify_state(unsigned long event, int enable)
 				&& event != NOTIFY_EVENT_HOST) {
 		if (enable) {
 			if (notify->device_check_sec) {
-				u_notify->is_device = 0;
+				if(prev_c_type != NOTIFY_EVENT_HOST)
+					u_notify->is_device = 0;
 				u_notify->check_work_complete = 0;
 				schedule_delayed_work(&u_notify->check_work,
 					notify->device_check_sec*HZ);
@@ -822,6 +838,7 @@ static void otg_notify_state(unsigned long event, int enable)
 				pr_info("%s check work cancel\n", __func__);
 				cancel_delayed_work_sync(&u_notify->check_work);
 			}
+			u_notify->is_device = 0;
 		}
 	}
 err2:
@@ -898,6 +915,12 @@ static void extra_notify_state(unsigned long event, int enable)
 	case NOTIFY_EVENT_DEVICE_CONNECT:
 		u_notify->is_device = 1;
 		pr_info("%s device connect\n", __func__);
+		break;
+	case NOTIFY_EVENT_GAMEPAD_CONNECT:
+		pr_info("%s gamepad usb device connected\n", __func__);
+		if (u_notify->c_type == NOTIFY_EVENT_HOST ||
+			u_notify->c_type == NOTIFY_EVENT_GAMEPAD)
+			send_external_notify(EXTERNAL_NOTIFY_DEVICE_CONNECT, 1);
 		break;
 	default:
 		break;
@@ -1038,7 +1061,7 @@ static void device_connect_check(struct work_struct *work)
 
 	pr_info("%s start. is_device=%d\n", __func__, u_notify->is_device);
 	if (!u_notify->is_device) {
-		muic_set_hmt_status(1);
+		send_external_notify(EXTERNAL_NOTIFY_3S_NODEVICE, 1);
 		if (n->vbus_drive)
 			n->vbus_drive(0);		
 	}

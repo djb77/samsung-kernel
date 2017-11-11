@@ -771,12 +771,12 @@ void kbase_gpu_slot_update(struct kbase_device *kbdev)
 
 			case KBASE_ATOM_GPU_RB_WAITING_SECURE_MODE:
 				/* Only submit if head atom or previous atom
-				* already submitted */
+				 * already submitted */
 				if (idx == 1 &&
 					(katom[0]->gpu_rb_state != KBASE_ATOM_GPU_RB_SUBMITTED &&
-					 katom[0]->gpu_rb_state != KBASE_ATOM_GPU_RB_NOT_IN_SLOT_RB))
+					katom[0]->gpu_rb_state != KBASE_ATOM_GPU_RB_NOT_IN_SLOT_RB))
 					break;
-					
+
 				if (kbase_gpu_in_secure_mode(kbdev) != kbase_jd_katom_is_secure(katom[idx])) {
 					int err = 0;
 

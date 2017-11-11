@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_sdio.c 593728 2015-10-19 09:20:32Z $
+ * $Id: dhd_sdio.c 615406 2016-01-27 12:49:23Z $
  */
 
 #include <typedefs.h>
@@ -9052,7 +9052,7 @@ concate_revision_bcm43349(dhd_bus_t *bus, char *fw_path, char *nv_path)
 
 static int concate_revision_bcm43241(dhd_bus_t *bus, char *fw_path, char *nv_path)
 {
-	uint32 chip_id, chip_ver;
+	uint32 chip_ver;
 #if defined(SUPPORT_MULTIPLE_CHIPS)
 	char chipver_tag[10] = "_43241";
 #else
@@ -9061,7 +9061,6 @@ static int concate_revision_bcm43241(dhd_bus_t *bus, char *fw_path, char *nv_pat
 
 	DHD_TRACE(("%s: BCM43241 Multiple Revision Check\n", __FUNCTION__));
 
-	chip_id = bus->sih->chip;
 	chip_ver = bus->sih->chiprev;
 
 	if (chip_ver == 2) {
@@ -9082,13 +9081,12 @@ static int concate_revision_bcm43241(dhd_bus_t *bus, char *fw_path, char *nv_pat
 
 static int concate_revision_bcm4350(dhd_bus_t *bus, char *fw_path, char *nv_path)
 {
-	uint32 chip_id, chip_ver;
+	uint32 chip_ver;
 #if defined(SUPPORT_MULTIPLE_CHIPS)
 	char chipver_tag[10] = {0, };
 #else
 	char chipver_tag[4] = {0, };
 #endif /* defined(SUPPORT_MULTIPLE_CHIPS) */
-	chip_id = bus->sih->chip;
 	chip_ver = bus->sih->chiprev;
 
 #if defined(SUPPORT_MULTIPLE_CHIPS)
@@ -9112,7 +9110,7 @@ static int concate_revision_bcm4350(dhd_bus_t *bus, char *fw_path, char *nv_path
 
 static int concate_revision_bcm4354(dhd_bus_t *bus, char *fw_path, char *nv_path)
 {
-	uint32 chip_id, chip_ver;
+	uint32 chip_ver;
 #if defined(SUPPORT_MULTIPLE_CHIPS)
 	char chipver_tag[10] = "_4354";
 #else
@@ -9121,7 +9119,6 @@ static int concate_revision_bcm4354(dhd_bus_t *bus, char *fw_path, char *nv_path
 #endif /* !CUSTOMER_HW4 */
 #endif /* SUPPORT_MULTIPLE_CHIPS */
 
-	chip_id = bus->sih->chip;
 	chip_ver = bus->sih->chiprev;
 #if !defined(SUPPORT_MULTIPLE_CHIPS) && defined(CUSTOMER_HW4)
 	DHD_INFO(("----- CHIP 4354, ver=%x -----\n", chip_ver));

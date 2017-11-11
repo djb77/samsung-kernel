@@ -34,6 +34,11 @@ static int fimc_is_ischain_mcs_bypass(struct fimc_is_subdev *leader,
 	BUG_ON(!leader);
 	BUG_ON(!device);
 
+	if (test_bit(FIMC_IS_ISCHAIN_REPROCESSING, &device->state)) {
+		mswarn("reprocessing cannot connect to VRA\n", device, leader);
+		goto p_err;
+	}
+
 	group = &device->group_mcs;
 
 	switch (group->junction->vid) {

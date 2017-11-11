@@ -1903,6 +1903,7 @@ static void clear_cover_mode(void *device_data)
 		if (ts->cmd_param[0] > 1) {
 			ts->flip_enable = true;
 			ts->cover_type = ts->cmd_param[1];
+			ts->cover_cmd = (u8)ts->cover_type;
 		} else {
 			ts->flip_enable = false;
 		}

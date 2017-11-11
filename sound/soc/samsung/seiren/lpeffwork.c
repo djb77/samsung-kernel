@@ -90,7 +90,10 @@ static ssize_t lpeff_show(struct device *dev,
 	u32 arg7, arg8, arg9, arg10, arg11, arg12;
 
 	mutex_lock(&esa_mutex);
-	pm_runtime_get_sync(&g_si.pdev->dev);
+	if (pm_runtime_get_sync(&g_si.pdev->dev) < 0) {
+		mutex_unlock(&esa_mutex);
+		return 0;
+	}
 
 	if (g_effect_addr) {
 		elpe_cmd = readl(g_effect_addr + ELPE_BASE + ELPE_CMD);

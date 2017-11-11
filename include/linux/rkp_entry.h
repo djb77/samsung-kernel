@@ -73,7 +73,7 @@
 #define   TIMA_ROBUF_SIZE       0x7f8000 /* 8MB - RKP_SEC_LOG_SIZE - RKP_DASHBOARD_SIZE)*/
 
 #define RKP_RBUF_VA      (phys_to_virt(TIMA_ROBUF_START))
-#define RO_PAGES  0x7f8 // (TIMA_ROBUF_SIZE/PAGE_SIZE)
+#define RO_PAGES  (TIMA_ROBUF_SIZE >> PAGE_SHIFT) // (TIMA_ROBUF_SIZE/PAGE_SIZE)
 #define CRED_JAR_RO "cred_jar_ro"
 #define TSEC_JAR	"tsec_jar"
 #define VFSMNT_JAR	"vfsmnt_cache"

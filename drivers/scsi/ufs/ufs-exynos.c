@@ -1158,6 +1158,9 @@ static void exynos_ufs_config_phy_cap_attr(struct exynos_ufs *ufs)
 			ufshcd_dme_set(hba,
 				UIC_ARG_MIB_SEL(RX_ADV_GRANULARITY_CAP, i), 0);
 
+			ufshcd_dme_set(hba,
+				UIC_ARG_MIB_SEL(TX_ADV_GRANULARITY_CAP, i), 0);
+
 			if (ufs->rx_min_actv_time_cap)
 				ufshcd_dme_set(hba,
 					UIC_ARG_MIB_SEL(RX_MIN_ACTIVATETIME_CAP, i),

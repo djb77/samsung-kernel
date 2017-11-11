@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pno.c 606280 2015-12-15 05:28:25Z $
+ * $Id: dhd_pno.c 612549 2016-01-14 07:39:32Z $
  */
 
 #if defined(GSCAN_SUPPORT) && !defined(PNO_SUPPORT)
@@ -1085,7 +1085,6 @@ dhd_pno_enable(dhd_pub_t *dhd, int enable)
 static wlc_ssid_ext_t *
 dhd_pno_get_legacy_pno_ssid(dhd_pub_t *dhd, dhd_pno_status_info_t *pno_state)
 {
-	int err = BCME_OK;
 	int i;
 	struct dhd_pno_ssid *iter, *next;
 	dhd_pno_params_t	*_params1 = &pno_state->pno_params_arr[INDEX_OF_LEGACY_PARAMS];
@@ -1096,7 +1095,6 @@ dhd_pno_get_legacy_pno_ssid(dhd_pub_t *dhd, dhd_pno_status_info_t *pno_state)
 	if (p_ssid_list == NULL) {
 		DHD_ERROR(("%s : failed to allocate wlc_ssid_ext_t array (count: %d)",
 			__FUNCTION__, _params1->params_legacy.nssid));
-		err = BCME_ERROR;
 		pno_state->pno_mode &= ~DHD_PNO_LEGACY_MODE;
 		goto exit;
 	}
@@ -3770,7 +3768,7 @@ int
 dhd_pno_event_handler(dhd_pub_t *dhd, wl_event_msg_t *event, void *event_data)
 {
 	int err = BCME_OK;
-	uint status, event_type, flags, datalen;
+	uint event_type;
 	dhd_pno_status_info_t *_pno_state;
 	NULL_CHECK(dhd, "dhd is NULL", err);
 	NULL_CHECK(dhd->pno_state, "pno_state is NULL", err);
@@ -3781,9 +3779,6 @@ dhd_pno_event_handler(dhd_pub_t *dhd, wl_event_msg_t *event, void *event_data)
 		goto exit;
 	}
 	event_type = ntoh32(event->event_type);
-	flags = ntoh16(event->flags);
-	status = ntoh32(event->status);
-	datalen = ntoh32(event->datalen);
 	DHD_PNO(("%s enter : event_type :%d\n", __FUNCTION__, event_type));
 	switch (event_type) {
 	case WLC_E_PFN_BSSID_NET_FOUND:

@@ -105,7 +105,11 @@ extern bool vps_name_to_mdev(const char *name, int *sdev);
 extern void vps_update_supported_attr(muic_attached_dev_t mdev, bool supported);
 extern bool vps_is_supported_dev(muic_attached_dev_t mdev);
 extern int vps_find_attached_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, int *pintr);
+#if defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+static inline void vps_show_table(void){}
+#else
 extern void vps_show_table(void);
+#endif
 extern void vps_show_supported_list(void);
 extern int vps_resolve_dev(muic_data_t *pmuic, muic_attached_dev_t *pbuf, int *pintr);
 extern bool vps_is_hv_ta(vps_data_t *pvps);

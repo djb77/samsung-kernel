@@ -2367,6 +2367,7 @@ static int decon_reg_set_win_update_config(struct decon_device *decon, struct de
 		decon_reg_ddi_partial_cmd(decon, &regs->update_win);
 		ret = decon_win_update_disp_config(decon, &regs->update_win);
 	}
+
 	return ret;
 }
 #endif
@@ -2929,12 +2930,6 @@ end:
 			decon_free_dma_buf(decon, &regs->dma_buf_data[MAX_DECON_WIN][j]);
 	}
 
-#if defined(CONFIG_LCD_ESD_IDLE_MODE)
-	if (decon->pdata->out_type == DECON_OUT_DSI) {
-		decon_esd_idle_mode_cmd(decon);
-	}
-#endif
-
 	sw_sync_timeline_inc(decon->timeline, 1);
 
 	decon_cfw_buf_release(decon, regs);
@@ -3225,6 +3220,11 @@ windows_config:
 				&decon->update_regs_work);
 	}
 err:
+#if defined(CONFIG_LCD_ESD_IDLE_MODE)
+	if (decon->pdata->out_type == DECON_OUT_DSI) {
+		decon_esd_idle_mode_cmd(decon);
+	}
+#endif
 	mutex_unlock(&decon->output_lock);
 	return ret;
 }

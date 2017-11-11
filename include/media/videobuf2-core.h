@@ -76,6 +76,12 @@ struct vb2_threadio_data;
  *		it) is the only user.
  * @mmap:	setup a userspace mapping for a given memory buffer under
  *		the provided virtual memory region.
+ * @verify_userptr: verify the given user address is really acquired by the
+ *		previous get_userptr. If it is required to check if the given
+ *		address and length is the same as the previous qbuf but the
+ *		mapping has been changed. If the given user address is verified
+ *		by the prevous get_userptr call, it should return 0. Otherwise,
+ *		it should return non-zero value.
  *
  * Required ops for USERPTR types: get_userptr, put_userptr.
  * Required ops for MMAP types: alloc, put, num_users, mmap.
@@ -107,6 +113,7 @@ struct vb2_mem_ops {
 	unsigned int	(*num_users)(void *buf_priv);
 
 	int		(*mmap)(void *buf_priv, struct vm_area_struct *vma);
+	int		(*verify_userptr)(unsigned long vaddr, void *buf_priv);
 };
 
 struct vb2_plane {

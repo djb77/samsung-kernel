@@ -439,10 +439,20 @@ static int compr_open(struct snd_compr_stream *cstream)
 #ifdef AUDIO_PERF
 	prtd->start_time[OPEN_T] = sched_clock();
 #endif
-	esa_compr_open();
+	ret = esa_compr_open();
+	if (ret) {
+		pr_err("%s: could not open audio firmware(%d)\n", __func__, ret);
+		goto compr_audio_firmware_open_err;
+	}
+
 	return 0;
 
+compr_audio_firmware_open_err:
+	if (substream->runtime)
+		kfree(substream->runtime->hw_constraints.rules);
+	kfree(substream->runtime);
 compr_audio_processor_alloc_err:
+	kfree(prtd->ap);
 	kfree(prtd);
 	esa_compr_set_state(false);
 	return ret;

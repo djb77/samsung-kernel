@@ -938,6 +938,7 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 		case 0x001: map_key_clear(KEY_START_NOTA_CMD);		break;
 		case 0x002: map_key_clear(KEY_START_TA_CMD);		break;
 		case 0x003: map_key_clear(KEY_ONGOING_TA_CMD);		break;
+		case 0x004: map_key_clear(KEY_TA_STATUS_CMD);		break;
 		default: goto ignore;
 		}
 		break;

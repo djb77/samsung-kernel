@@ -366,6 +366,8 @@ struct seiren_info {
 	void __iomem	*effect_ram;
 	bool		effect_on;
 	unsigned int	out_sample_rate;
+	int		left_vol;
+	int		right_vol;
 #endif
 	bool		fx_ext_on;
 	unsigned char	*fx_work_buf;
@@ -435,7 +437,7 @@ struct audio_processor {
 };
 
 extern int esa_compr_set_param(struct audio_processor *ap, uint8_t **buffer);
-extern void esa_compr_open(void);
+extern int esa_compr_open(void);
 extern void esa_compr_close(void);
 extern int esa_compr_send_buffer(const size_t copy_size,
 					struct audio_processor *ap);

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: 802.11e.h 518342 2014-12-01 23:21:41Z $
+ * $Id: 802.11e.h 572688 2015-07-20 17:49:21Z $
  */
 
 #ifndef _802_11e_H_
@@ -36,7 +36,6 @@
 
 /* This marks the start of a packed structure section. */
 #include <packed_section_start.h>
-
 
 /* WME Traffic Specification (TSPEC) element */
 #define WME_TSPEC_HDR_LEN           2           /* WME TSPEC header length */

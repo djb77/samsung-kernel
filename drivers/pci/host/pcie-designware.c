@@ -23,6 +23,7 @@
 #include <linux/pci_regs.h>
 #include <linux/platform_device.h>
 #include <linux/types.h>
+#include <linux/exynos-pci-ctrl.h>
 
 #include "pcie-designware.h"
 #include "pci-exynos.h"
@@ -356,17 +357,29 @@ int dw_pcie_link_up(struct pcie_port *pp)
 
 void dw_pcie_config_l1ss(struct pcie_port *pp)
 {
+	struct exynos_pcie *exynos_pcie = to_exynos_pcie(pp);
 	u32 val;
 	void __iomem *ep_dbi_base = pp->va_cfg0_base;
 	u32 exp_cap_off = EXP_CAP_ID_OFFSET;
 
-	/* Enable L1SS on Root Complex */
-	val = readl(ep_dbi_base + 0xbc);
-	val &= ~0x3;
-	val |= 0x142;
-	writel(val, ep_dbi_base + 0xBC);
-	val = readl(ep_dbi_base + 0x248);
-	writel(val | 0xa0f, ep_dbi_base + 0x248);
+	if(exynos_pcie->l1ss_ctrl_id_state == 0) { 
+		/* Enable L1SS on Root Complex */
+		val = readl(ep_dbi_base + 0xbc);
+		val &= ~0x3;
+		val |= 0x142;
+		writel(val, ep_dbi_base + 0xBC);
+		val = readl(ep_dbi_base + 0x248);
+		writel(val | 0xa0f, ep_dbi_base + 0x248);
+		dev_err(pp->dev, "l1ss enabled(0x%x)\n", exynos_pcie->l1ss_ctrl_id_state);
+	} else { 
+		/* disable L1SS on Root Complex */
+		val = readl(ep_dbi_base + 0xbc);
+		writel(val & ~0x3, ep_dbi_base + 0xBC);
+		val = readl(ep_dbi_base + 0x248);
+		writel(val & ~0xf, ep_dbi_base + 0x248);
+		dev_err(pp->dev, "l1ss disabled(0x%x)\n", exynos_pcie->l1ss_ctrl_id_state);
+	}
+
 	writel(PORT_LINK_TPOWERON_130US, ep_dbi_base + 0x24C);
 	writel(0x10031003, ep_dbi_base + 0x1B4);
 	val = readl(ep_dbi_base + 0xD4);

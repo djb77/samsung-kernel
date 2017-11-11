@@ -1850,6 +1850,12 @@ static int __init exynos_ss_fixmap(void)
 
 	/* output the information of exynos-snapshot */
 	exynos_ss_output();
+
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_save_last_kmsg(ess_items[ess_desc.log_kernel_num].head_ptr,
+				 ess_items[ess_desc.log_kernel_num].curr_ptr);
+#endif
+
 	return 0;
 }
 
@@ -2478,11 +2484,35 @@ void __exynos_ss_printkl(size_t msg, size_t val)
 }
 #endif
 
-#include "android_logger.h"
+/* This defines are for PSTORE */
+#define ESS_LOGGER_LEVEL_HEADER 	(1)
+#define ESS_LOGGER_LEVEL_PREFIX 	(2)
+#define ESS_LOGGER_LEVEL_TEXT		(3)
+#define ESS_LOGGER_LEVEL_MAX		(4)
+#define ESS_LOGGER_SKIP_COUNT		(4)
+#define ESS_LOGGER_STRING_PAD		(1)
+#define ESS_LOGGER_HEADER_SIZE		(68)
 
-#define LOGGER_SKIP_COUNT		(4)
-#define LOGGER_STRING_PAD		(1)
-#define LOGGER_HEADER_SIZE		(68)
+#define ESS_LOG_ID_MAIN 		(0)
+#define ESS_LOG_ID_RADIO		(1)
+#define ESS_LOG_ID_EVENTS		(2)
+#define ESS_LOG_ID_SYSTEM		(3)
+#define ESS_LOG_ID_CRASH		(4)
+#define ESS_LOG_ID_KERNEL		(5)
+
+typedef struct __attribute__((__packed__)) {
+    uint8_t magic;
+    uint16_t len;
+    uint16_t uid;
+    uint16_t pid;
+} ess_pmsg_log_header_t;
+
+typedef struct __attribute__((__packed__)) {
+	unsigned char id;
+	uint16_t tid;
+	int32_t tv_sec;
+	int32_t tv_nsec;
+} ess_android_log_header_t;
 
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
 typedef struct ess_logger {
@@ -2520,21 +2550,21 @@ static int exynos_ss_combine_pmsg(char *buffer, size_t count, unsigned int level
 		return -ENOMEM;
 
 	switch(level) {
-	case LOGGER_LEVEL_HEADER:
+	case ESS_LOGGER_LEVEL_HEADER:
 		{
 			struct tm tmBuf;
 			u64 tv_kernel;
 			unsigned int logbuf_len;
 			unsigned long rem_nsec;
 
-			if (logger.id == LOG_ID_EVENTS)
+			if (logger.id == ESS_LOG_ID_EVENTS)
 				break;
 
 			tv_kernel = local_clock();
 			rem_nsec = do_div(tv_kernel, 1000000000);
 			time_to_tm(logger.tv_sec, 0, &tmBuf);
 
-			logbuf_len = snprintf(logbuf, LOGGER_HEADER_SIZE,
+			logbuf_len = snprintf(logbuf, ESS_LOGGER_HEADER_SIZE,
 					"\n[%5lu.%06lu][%d:%16s] %02d-%02d %02d:%02d:%02d.%03d %5d %5d  ",
 					(unsigned long)tv_kernel, rem_nsec / 1000,
 					raw_smp_processor_id(), current->comm,
@@ -2545,31 +2575,31 @@ static int exynos_ss_combine_pmsg(char *buffer, size_t count, unsigned int level
 			logger.func_hook_logger("log_platform", logbuf, logbuf_len);
 		}
 		break;
-	case LOGGER_LEVEL_PREFIX:
+	case ESS_LOGGER_LEVEL_PREFIX:
 		{
 			static const char* kPrioChars = "!.VDIWEFS";
 			unsigned char prio = logger.msg[0];
 
-			if (logger.id == LOG_ID_EVENTS)
+			if (logger.id == ESS_LOG_ID_EVENTS)
 				break;
 
 			logbuf[0] = prio < strlen(kPrioChars) ? kPrioChars[prio] : '?';
 			logbuf[1] = ' ';
 
-			logger.func_hook_logger("log_platform", logbuf, LOGGER_LEVEL_PREFIX);
+			logger.func_hook_logger("log_platform", logbuf, ESS_LOGGER_LEVEL_PREFIX);
 		}
 		break;
-	case LOGGER_LEVEL_TEXT:
+	case ESS_LOGGER_LEVEL_TEXT:
 		{
-			char *eatnl = buffer + count - LOGGER_STRING_PAD;
+			char *eatnl = buffer + count - ESS_LOGGER_STRING_PAD;
 
-			if (logger.id == LOG_ID_EVENTS)
+			if (logger.id == ESS_LOG_ID_EVENTS)
 				break;
-			if (count == LOGGER_SKIP_COUNT && *eatnl != '\0')
+			if (count == ESS_LOGGER_SKIP_COUNT && *eatnl != '\0')
 				break;
 
 			memcpy((void *)logbuf, buffer, count);
-			eatnl = logbuf + count - LOGGER_STRING_PAD;
+			eatnl = logbuf + count - ESS_LOGGER_STRING_PAD;
 
 			/* Mark End of String for safe to buffer */
 			*eatnl = '\0';
@@ -2591,8 +2621,8 @@ static int exynos_ss_combine_pmsg(char *buffer, size_t count, unsigned int level
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
 int exynos_ss_hook_pmsg(char *buffer, size_t count)
 {
-	android_log_header_t header;
-	android_pmsg_log_header_t pmsg_header;
+	ess_android_log_header_t header;
+	ess_pmsg_log_header_t pmsg_header;
 
 	if (!logger.buffer)
 		return -ENOMEM;
@@ -2600,8 +2630,8 @@ int exynos_ss_hook_pmsg(char *buffer, size_t count)
 	switch(count) {
 	case sizeof(pmsg_header):
 		memcpy((void *)&pmsg_header, buffer, count);
-		if (pmsg_header.magic != LOGGER_MAGIC) {
-			exynos_ss_combine_pmsg(buffer, count, LOGGER_LEVEL_TEXT);
+		if (pmsg_header.magic != 'l') {
+			exynos_ss_combine_pmsg(buffer, count, ESS_LOGGER_LEVEL_TEXT);
 		} else {
 			/* save logger data */
 			logger.pid = pmsg_header.pid;
@@ -2614,24 +2644,24 @@ int exynos_ss_hook_pmsg(char *buffer, size_t count)
 		memcpy((void *)&header, buffer, count);
 		logger.id = header.id;
 		logger.tid = header.tid;
-		logger.tv_sec = header.realtime.tv_sec;
-		logger.tv_nsec  = header.realtime.tv_nsec;
+		logger.tv_sec = header.tv_sec;
+		logger.tv_nsec  = header.tv_nsec;
 		if (logger.id < 0 || logger.id > 7) {
 			/* write string */
-			exynos_ss_combine_pmsg(buffer, count, LOGGER_LEVEL_TEXT);
+			exynos_ss_combine_pmsg(buffer, count, ESS_LOGGER_LEVEL_TEXT);
 		} else {
 			/* write header */
-			exynos_ss_combine_pmsg(buffer, count, LOGGER_LEVEL_HEADER);
+			exynos_ss_combine_pmsg(buffer, count, ESS_LOGGER_LEVEL_HEADER);
 		}
 		break;
 	case sizeof(unsigned char):
 		logger.msg[0] = buffer[0];
 		/* write char for prefix */
-		exynos_ss_combine_pmsg(buffer, count, LOGGER_LEVEL_PREFIX);
+		exynos_ss_combine_pmsg(buffer, count, ESS_LOGGER_LEVEL_PREFIX);
 		break;
 	default:
 		/* write string */
-		exynos_ss_combine_pmsg(buffer, count, LOGGER_LEVEL_TEXT);
+		exynos_ss_combine_pmsg(buffer, count, ESS_LOGGER_LEVEL_TEXT);
 		break;
 	}
 

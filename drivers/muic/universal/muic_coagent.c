@@ -6,7 +6,12 @@
 #include <linux/delay.h>
 #include <linux/kthread.h>
 #include <linux/semaphore.h>
+#include <linux/platform_device.h>
+#include <linux/delay.h>
+#include <linux/muic/muic.h>
 
+#include "muic-internal.h"
+#include "muic_apis.h"
 #include "muic_coagent.h"
 
 struct kfifo fifo;
@@ -15,7 +20,7 @@ struct coagent {
 	struct mutex		co_mutex;
 	struct task_struct	*co_thread;
 	int co_number;
-	void *owner_ctx; /* context for MUIC */
+	muic_data_t *pmuic; /* context for MUIC */
 
 	struct kfifo fifo;
 	struct semaphore read_sem;
@@ -23,6 +28,67 @@ struct coagent {
 };
 
 static struct coagent base_coagent;
+
+extern bool muic_is_online(void);
+
+void coagent_update_ctx(muic_data_t *pmuic)
+{
+	struct coagent *pco = &base_coagent;
+
+	pr_info("%s\n", __func__);
+
+	pco->pmuic = pmuic;
+}
+
+static int coagent_cmd_gamepad(struct coagent *pco, int status)
+{
+	pr_info("%s: status=[%s]\n", __func__,
+		(status == COA_STATUS_OK) ? "OK" : "NOK");
+
+	if (!muic_is_online()) {
+		pr_info("%s: MUIC is not online.\n", __func__);
+		return -1;
+	}
+
+	if (!pco->pmuic) {
+		pr_info("%s: MUIC ctx is not ready.\n", __func__);
+		return -1;
+	}
+
+	if ((pco->pmuic->attached_dev != ATTACHED_DEV_GAMEPAD_MUIC) &&
+		(pco->pmuic->attached_dev != ATTACHED_DEV_OTG_MUIC)) {
+		pr_info("%s: Abnormal state for USB's gampad Noti. [%d]\n",
+			__func__, pco->pmuic->attached_dev);
+		return -1;
+	}
+
+	if (status == COA_STATUS_OK) {
+		if (get_adc_scan_mode(pco->pmuic) != ADC_SCANMODE_CONTINUOUS) {
+			/* The interrupts occurred during mode change will be discarded. */
+			pco->pmuic->discard_interrupt = true;
+			set_adc_scan_mode(pco->pmuic, ADC_SCANMODE_CONTINUOUS);
+			msleep(200);
+			pco->pmuic->discard_interrupt = false;
+		}
+	} else 
+		pr_info("%s: discarded.\n", __func__);
+
+	return 0;
+}
+
+static int coagent_cmd_handler(struct coagent *pco, int cmd, int param)
+{
+
+	switch (cmd) {
+	case COA_GAMEPAD_STATUS:
+		coagent_cmd_gamepad(pco, param);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
 
 int coagent_in(unsigned int *pbuf)
 {
@@ -67,7 +133,8 @@ static int __init init_fifo_test(void)
 	pr_info("%s: queue_available1: %u\n", __func__, kfifo_avail(&(pco->fifo)));	
 	/* enqueue */
 	for (i=0; i<2; i++) {
-		val = i*10;
+		val = 5 + i;
+		val |= (4 + i) << COAGENT_PARAM_BITS;
 		coagent_in(&val);
 	}
 
@@ -88,7 +155,7 @@ static void __exit exit_fifo_test(void)
 static int coagent_thread(void *data)
 {
 	struct coagent *pco = (struct coagent *)data;
-	int i = 0;
+	uint i = 0;
 	int r;
 	unsigned int rx_data = 0, cmd = 0, param = 0;
 
@@ -117,8 +184,11 @@ static int coagent_thread(void *data)
 		cmd = COAGENT_CMD(rx_data);
 		param = COAGENT_PARAM(rx_data);
 
-		pr_info("%s: [%2d] cmd=%d, param=%d\n", __func__, i++,  cmd, param);
+		pr_info("%s: [%2d - %d/%d] cmd=%d, param=%d\n", __func__, i++,
+			kfifo_len(&(pco->fifo)), kfifo_avail(&(pco->fifo)),
+			cmd, param);
 
+		coagent_cmd_handler(pco, cmd, param);
 	}
 
 out_error:

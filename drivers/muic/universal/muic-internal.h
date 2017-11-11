@@ -136,7 +136,6 @@ typedef union _muic_vps_t {
 	char vps_data[120];
 }vps_data_t;
 
-
 /* muic chip specific internal data structure
  * that setted at muic-xxxx.c file
  */
@@ -171,7 +170,7 @@ typedef struct _muic_data_t {
 	u8 muic_vendor;			/* Vendor ID */
 	u8 muic_version;		/* Version ID */
 
-	bool			is_usb_ready;
+	bool			is_gamepad;
 	bool			is_factory_start;
 	bool			is_rustproof;
 	bool			is_otg_test;
@@ -180,8 +179,14 @@ typedef struct _muic_data_t {
 
 	bool			is_muic_ready;
 	bool			undefined_range;
+	bool			discard_interrupt;
 
 	struct hv_data		*phv;
+
+#if defined(CONFIG_USB_EXTERNAL_NOTIFY)
+	/* USB Notifier */
+	struct notifier_block	usb_nb;
+#endif
 
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
 	/* legacy TA or USB for CCIC */

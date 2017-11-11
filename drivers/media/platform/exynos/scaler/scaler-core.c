@@ -1940,12 +1940,12 @@ static const struct v4l2_ctrl_config sc_custom_ctrl[] = {
 		.ops = &sc_ctrl_ops,
 		.id = V4L2_CID_CSC_EQ,
 		.name = "Set CSC equation",
-		.type = V4L2_CTRL_TYPE_BOOLEAN,
+		.type = V4L2_CTRL_TYPE_INTEGER,
 		.flags = V4L2_CTRL_FLAG_SLIDER,
 		.step = 1,
-		.min = SC_CSC_601,
-		.max = SC_CSC_709,
-		.def = SC_CSC_601,
+		.min =  V4L2_COLORSPACE_DEFAULT,
+		.max = V4L2_COLORSPACE_DCI_P3,
+		.def = V4L2_COLORSPACE_DEFAULT,
 	}, {
 		.ops = &sc_ctrl_ops,
 		.id = V4L2_CID_CSC_RANGE,
@@ -3202,7 +3202,7 @@ static int sc_m2m1shot_prepare_operation(struct m2m1shot_context *m21ctx,
 		ctx->flip_rot_cfg |= SCALER_FLIP_Y_EN;
 
 	ctx->csc.csc_eq = !(shot->op.op & M2M1SHOT_OP_CSC_709) ?
-						SC_CSC_601 : SC_CSC_709;
+						V4L2_COLORSPACE_SMPTE170M : V4L2_COLORSPACE_REC709;
 	ctx->csc.csc_range = !(shot->op.op & M2M1SHOT_OP_CSC_WIDE) ?
 						SC_CSC_NARROW : SC_CSC_WIDE;
 	ctx->pre_multi = !!(shot->op.op & M2M1SHOT_OP_PREMULTIPLIED_ALPHA);

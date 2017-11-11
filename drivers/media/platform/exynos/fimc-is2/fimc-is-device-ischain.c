@@ -34,6 +34,7 @@
 #include <linux/syscalls.h>
 #include <linux/bug.h>
 #include <linux/smc.h>
+#include <linux/exynos-pci-ctrl.h>
 
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
@@ -80,6 +81,7 @@ extern struct fimc_is_sysfs_debug sysfs_debug;
 extern struct pm_qos_request exynos_isp_qos_int;
 extern struct pm_qos_request exynos_isp_qos_mem;
 extern struct pm_qos_request exynos_isp_qos_cam;
+extern struct pm_qos_request exynos_isp_qos_hpg;
 
 extern const struct fimc_is_subdev_ops fimc_is_subdev_3aa_ops;
 extern const struct fimc_is_subdev_ops fimc_is_subdev_3ac_ops;
@@ -2215,7 +2217,7 @@ int fimc_is_ischain_runtime_suspend(struct device *dev)
 	struct exynos_platform_fimc_is *pdata;
 
 #if defined(CONFIG_PM_DEVFREQ)
-	int int_qos, mif_qos, cam_qos;
+	int int_qos, mif_qos, cam_qos, hpg_qos;
 #endif
 	pdata = dev_get_platdata(dev);
 	if (!pdata)
@@ -2235,6 +2237,7 @@ int fimc_is_ischain_runtime_suspend(struct device *dev)
 	exynos7_update_media_scenario(TYPE_CAM, false, 0);
 	/* Qurgent on */
 	bts_ext_scenario_set(TYPE_CAM, TYPE_URGENT_OFF, false);
+	exynos_pcie_l1ss_ctrl(1, PCIE_L1SS_CTRL_CAMERA);
 #endif
 
 	ret = pdata->clk_off(&pdev->dev);
@@ -2247,6 +2250,7 @@ int fimc_is_ischain_runtime_suspend(struct device *dev)
 	int_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_INT, FIMC_IS_SN_MAX);
 	mif_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_MIF, FIMC_IS_SN_MAX);
 	cam_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_CAM, START_DVFS_LEVEL);
+	hpg_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_HPG, START_DVFS_LEVEL);
 
 	if (int_qos > 0)
 		pm_qos_remove_request(&exynos_isp_qos_int);
@@ -2254,6 +2258,10 @@ int fimc_is_ischain_runtime_suspend(struct device *dev)
 		pm_qos_remove_request(&exynos_isp_qos_mem);
 	if (cam_qos > 0)
                 pm_qos_remove_request(&exynos_isp_qos_cam);
+	if (hpg_qos > 0)
+                pm_qos_remove_request(&exynos_isp_qos_hpg);
+	if (core->resourcemgr.dvfs_ctrl.cur_hmp_bst)
+                set_hmp_boost(0);
 #endif
 
 	info("FIMC_IS runtime suspend out\n");
@@ -2268,7 +2276,7 @@ int fimc_is_ischain_runtime_resume(struct device *dev)
 	struct exynos_platform_fimc_is *pdata;
 
 #if defined(CONFIG_PM_DEVFREQ)
-	int int_qos, mif_qos, cam_qos;
+	int int_qos, mif_qos, cam_qos, hpg_qos;
 #endif
 	pdata = dev_get_platdata(dev);
 	if (!pdata)
@@ -2299,6 +2307,7 @@ int fimc_is_ischain_runtime_resume(struct device *dev)
 	int_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_INT, START_DVFS_LEVEL);
         mif_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_MIF, START_DVFS_LEVEL);
         cam_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_CAM, START_DVFS_LEVEL);
+        hpg_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_HPG, START_DVFS_LEVEL);
 
         /* DEVFREQ lock */
         if (int_qos > 0)
@@ -2307,9 +2316,11 @@ int fimc_is_ischain_runtime_resume(struct device *dev)
                 pm_qos_add_request(&exynos_isp_qos_mem, PM_QOS_BUS_THROUGHPUT, mif_qos);
         if (cam_qos > 0)
                 pm_qos_add_request(&exynos_isp_qos_cam, PM_QOS_CAM_THROUGHPUT, cam_qos);
+        if (hpg_qos > 0)
+                pm_qos_add_request(&exynos_isp_qos_hpg, PM_QOS_CPU_ONLINE_MIN, hpg_qos);
 
-        info("[RSC] %s: QoS LOCK [INT(%d), MIF(%d), CAM(%d)]\n",
-		__func__, int_qos, mif_qos, cam_qos);
+        info("[RSC] %s: QoS LOCK [INT(%d), MIF(%d), CAM(%d), HPG(%d)]\n",
+		__func__, int_qos, mif_qos, cam_qos, hpg_qos);
 #endif
 
 	/* Clock on */
@@ -2328,6 +2339,7 @@ int fimc_is_ischain_runtime_resume(struct device *dev)
 	exynos7_update_media_scenario(TYPE_CAM, true, 0);
 	/* Qurgent off */
 	bts_ext_scenario_set(TYPE_CAM, TYPE_URGENT_OFF, true);
+	exynos_pcie_l1ss_ctrl(0, PCIE_L1SS_CTRL_CAMERA);
 #endif
 
 p_err:
@@ -2822,7 +2834,8 @@ static int fimc_is_ischain_chg_setfile(struct fimc_is_device_ischain *device)
 	}
 
 p_err:
-	minfo("[ISC:D] %s(%d):%d\n", device, __func__, device->setfile, ret);
+	minfo("[ISC:D] %s(%d):%d\n", device, __func__,
+		device->setfile & FIMC_IS_SETFILE_MASK, ret);
 	return ret;
 }
 #endif
@@ -3815,7 +3828,8 @@ static int fimc_is_ischain_start(struct fimc_is_device_ischain *device)
 	set_bit(FIMC_IS_ISCHAIN_START, &device->state);
 
 p_err:
-	minfo("[ISC:D] %s(%d):%d\n", device, __func__, device->setfile, ret);
+	minfo("[ISC:D] %s(%d):%d\n", device, __func__,
+		device->setfile & FIMC_IS_SETFILE_MASK, ret);
 	return ret;
 }
 

@@ -90,6 +90,12 @@ extern void sec_initcall_debug_add(initcall_t fn,
 	unsigned long long duration);
 #endif
 
+#ifdef CONFIG_SEC_DEBUG_LAST_KMSG
+extern void sec_debug_save_last_kmsg(unsigned char* head_ptr, unsigned char* curr_ptr);
+#else
+#define sec_debug_save_last_kmsg(a, b)		do { } while(0)
+#endif
+
 #ifdef CONFIG_SEC_PARAM
 #define CM_OFFSET CONFIG_CM_OFFSET
 #define CM_OFFSET_LIMIT 1
