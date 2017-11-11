@@ -37,7 +37,7 @@ struct dlp_struct {
 	bool lock;
 	char* extensions;
 	struct list_head list;
-	spinlock_t list_lock;
+	struct mutex list_mutex;
 };
 struct dlp_struct dlp_info;
 
@@ -48,7 +48,7 @@ static void dlp_dump_list(void) {
 	
 	printk("============ debug ============\n");	
 
-	spin_lock(&dlp_info.list_lock);
+	mutex_lock(&dlp_info.list_mutex);
 	
 	list_for_each(entry, &dlp_info.list) {
 		tmp = list_entry(entry, struct dlp_struct, list);
@@ -61,7 +61,7 @@ static void dlp_dump_list(void) {
 			printk("DLP : extensions : (empty)\n");
 		}
 	}
-	spin_unlock(&dlp_info.list_lock);	
+	mutex_unlock(&dlp_info.list_mutex);	
 }
 #endif
 
@@ -69,18 +69,18 @@ static struct dlp_struct *dlp_find_list(int user_id) {
 	struct list_head *entry;
 	struct dlp_struct *tmp;
 
-	spin_lock(&dlp_info.list_lock);
+	mutex_lock(&dlp_info.list_mutex);
 	printk("DLP: user_id %d\n", user_id);
 	list_for_each(entry, &dlp_info.list) {
 		tmp = list_entry(entry, struct dlp_struct, list);
 		printk("DLP: tmp->user_id %d\n", tmp->user_id);
 		if(tmp->user_id == user_id) {
 			printk("DLP: found user_id %d\n", user_id); // TODO : deleted
-			spin_unlock(&dlp_info.list_lock);
+			mutex_unlock(&dlp_info.list_mutex);
 			return tmp;
 		}
 	}
-	spin_unlock(&dlp_info.list_lock);
+	mutex_unlock(&dlp_info.list_mutex);
 
 	return NULL;
 }
@@ -109,12 +109,12 @@ static struct dlp_struct *dlp_add_info(int user_id){
 	new_item->lock = false;
 	new_item->extensions = NULL;
 
-	spin_lock_init(&new_item->list_lock);
+	mutex_init(&new_item->list_mutex);
 	INIT_LIST_HEAD(&new_item->list);
 
-	spin_lock(&dlp_info.list_lock);
+	mutex_lock(&dlp_info.list_mutex);
 	list_add_tail(&new_item->list, &dlp_info.list);
-	spin_unlock(&dlp_info.list_lock);
+	mutex_unlock(&dlp_info.list_mutex);
 
 	return new_item;
 }
@@ -137,9 +137,9 @@ static int dlp_lock_setting(void __user *argp, bool lock) {
 			return -EFAULT;
 		}
 	}
-	spin_lock(&dlp_info.list_lock);
+	mutex_lock(&dlp_info.list_mutex);
 	tmp->lock = lock;
-	spin_unlock(&dlp_info.list_lock);
+	mutex_unlock(&dlp_info.list_mutex);
 
 	return 0;
 };
@@ -166,7 +166,7 @@ static int dlp_extension_setting(void __user *argp) {
 	}
 
 	/* Delete old extensions and create new */
-	spin_lock(&dlp_info.list_lock);
+	mutex_lock(&dlp_info.list_mutex);
 	if(tmp->extensions) {
 		kfree(tmp->extensions);
 		tmp->extensions = NULL;
@@ -175,16 +175,16 @@ static int dlp_extension_setting(void __user *argp) {
 	if(strlen(dlp_ext_set.extensions)) {
 		tmp->extensions = kmalloc(strlen(dlp_ext_set.extensions)+1, GFP_KERNEL);
 		if (!tmp->extensions) {
-			spin_unlock(&dlp_info.list_lock);
+			mutex_unlock(&dlp_info.list_mutex);
 			return -EFAULT;
 		}
 	} else {
-		spin_unlock(&dlp_info.list_lock);
+		mutex_unlock(&dlp_info.list_mutex);
 		return 0;
 	}
 
 	strcpy(tmp->extensions, dlp_ext_set.extensions);
-	spin_unlock(&dlp_info.list_lock);
+	mutex_unlock(&dlp_info.list_mutex);
 
 	return 0;
 }
@@ -262,9 +262,9 @@ int dlp_isInterestedFile(int user_id, const char *filename){
 	printk("DLP: extension = %s\n", item->extensions);
 
 	strcat(lower, ","); // add comma, so that we compare each ext fully (doc vs. docx)
-	spin_lock(&dlp_info.list_lock);
+	mutex_lock(&dlp_info.list_mutex);
 	ret = strstr(item->extensions, lower);
-	spin_unlock(&dlp_info.list_lock);
+	mutex_unlock(&dlp_info.list_mutex);
 	if (ret) {
 		return 0;
 	} else {
@@ -294,7 +294,7 @@ static int __init dlp_ioctl_init(void) {
 	}
 
 	INIT_LIST_HEAD(&dlp_info.list);
-	spin_lock_init(&dlp_info.list_lock);
+	mutex_init(&dlp_info.list_mutex);
 
 	printk("DLP: dlp_ioctl initialized\n");
 
