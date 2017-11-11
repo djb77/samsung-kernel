@@ -949,6 +949,9 @@ static int decon_win_update_disp_config(struct decon_device *decon,
 int decon_tui_protection(struct decon_device *decon, bool tui_en)
 {
 	int ret = 0;
+	struct dsim_device *dsim;
+	struct decon_param p;
+	struct decon_mode_info psr;
 	struct v4l2_subdev *sd = decon->mdev->vpp_sd[IDMA_G0];
 	int win_idx;
 
@@ -999,6 +1002,14 @@ int decon_tui_protection(struct decon_device *decon, bool tui_en)
 		mutex_lock(&decon->output_lock);
 		ret = v4l2_subdev_call(sd, core, ioctl, VPP_TUI_PROTECT,
 				(unsigned long *)false);
+
+		decon_reg_release_resource_instantly(decon->id);
+		dsim = container_of(decon->output_sd, struct dsim_device, sd);
+		dsim_reg_funtion_reset(dsim->id);
+		decon_to_init_param(decon, &p);
+		decon_reg_init(decon->id, decon->pdata->out_idx, &p);
+		decon_to_psr_info(decon, &psr);
+		decon_reg_set_int(decon->id, &psr, 1);
 
 		decon->pdata->out_type = DECON_OUT_DSI;
 		mutex_unlock(&decon->output_lock);

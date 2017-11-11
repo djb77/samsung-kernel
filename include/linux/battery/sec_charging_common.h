@@ -193,6 +193,12 @@ enum sec_battery_wpc_pad_state {
 	SEC_BATTERY_WPC_TEMP_HIGH,
 };
 
+/* bat_temp state */
+enum sec_battery_bat_temp_state {
+	SEC_BATTERY_MIX_TEMP_NONE = 0,
+	SEC_BATTERY_MIX_TEMP_HIGH,
+};
+
 /* heat_limit state */
 enum sec_battery_wc_heat_state {
 	SEC_BATTERY_WC_HEAT_NONE = 0, /* (9V, 1A), (9V, 600mA) */
@@ -660,6 +666,7 @@ struct sec_battery_platform_data {
 	unsigned int chg_temp_check; /* Control the charging current depending on the chg_thm */
 	unsigned int chg_thermal_source; /* To confirm the charger temperature */
 	unsigned int wpc_temp_check;
+	unsigned int mix_temp_check;
 	unsigned int wpc_thermal_source; /* To confirm the wpc temperature */
 	unsigned int slave_chg_temp_check;
 	unsigned int slave_thermal_source; /* To confirm the slave charger temperature */
@@ -703,6 +710,14 @@ struct sec_battery_platform_data {
 	unsigned int wc_cv_current;
 	unsigned int wpc_skip_check_time;
 	unsigned int wpc_skip_check_capacity;
+	int mix_high_tbat;
+	int mix_high_tchg;
+	int mix_high_tbat_recov;
+	unsigned int mix_input_limit_current;
+	int mix_high_tbat_hv;
+	int mix_high_tchg_hv;
+	int mix_high_tbat_recov_hv;
+	unsigned int mix_input_limit_current_hv;
 
 	/* If these is NOT full check type or NONE full check type,
 	 * it is skipped

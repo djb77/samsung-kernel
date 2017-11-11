@@ -156,6 +156,9 @@ struct sec_battery_info {
 	/* wpc temperature and pad status check */
 	bool pad_limit;
 
+	/* bat temperature check */
+	bool mix_limit;
+
 	/* temperature check */
 	int temperature;	/* battery temperature */
 	int temper_amb;		/* target temperature */

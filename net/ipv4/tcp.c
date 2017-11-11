@@ -1312,7 +1312,7 @@ new_segment:
 #ifdef CONFIG_MPTCP
 					((mptcp(tp) && !tp->mpcb->dss_csum) || !mptcp(tp)) &&
 				    (mptcp(tp) ||
-#endif 
+#endif
 						sk->sk_route_caps & NETIF_F_ALL_CSUM)
 #ifdef CONFIG_MPTCP
 					)
@@ -1525,7 +1525,7 @@ static int tcp_peek_sndq(struct sock *sk, struct msghdr *msg, int len)
  * a window update.
  */
 #ifndef CONFIG_MPTCP
-static 
+static
 #endif
 void tcp_cleanup_rbuf(struct sock *sk, int copied)
 {
@@ -2140,7 +2140,7 @@ static const unsigned char new_state[16] = {
 };
 
 #ifndef CONFIG_MPTCP
-static 
+static
 #endif
 int tcp_close_state(struct sock *sk)
 {
@@ -3473,11 +3473,10 @@ restart:
 			sk->sk_err = ETIMEDOUT;
 			sk->sk_error_report(sk);
 
-#ifdef CONFIG_MPTCP
 			if (!sock_owned_by_user(sk) &&
 			    sk->sk_state != TCP_CLOSE)
-#endif
 			tcp_done(sk);
+
 			bh_unlock_sock(sk);
 			local_bh_enable();
 			sock_put(sk);

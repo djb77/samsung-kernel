@@ -1784,7 +1784,9 @@ static void sec_bat_chg_temperature_check(
 	if (battery->skip_chg_temp_check || battery->pdata->slave_chg_temp_check || battery->skip_wpc_temp_check)
 		return;
 
-	if (battery->siop_level >= 100 && battery->pdata->chg_temp_check &&
+	if ((battery->siop_level >= 100) &&
+			(battery->mix_limit == SEC_BATTERY_MIX_TEMP_NONE) &&
+			(battery->pdata->chg_temp_check) &&
 			((battery->cable_type == POWER_SUPPLY_TYPE_HV_MAINS) ||
 			 (battery->cable_type == POWER_SUPPLY_TYPE_HV_ERR) ||
 			 (battery->cable_type == POWER_SUPPLY_TYPE_HV_MAINS_12V))) {
@@ -1969,6 +1971,59 @@ static void sec_bat_chg_temperature_check(
 		battery->wpc_temp_mode = false;
 	} else if (battery->pad_limit != SEC_BATTERY_WPC_TEMP_NONE) {
 		battery->pad_limit = SEC_BATTERY_WPC_TEMP_NONE;
+	}
+}
+
+static void sec_bat_mix_temperature_check(
+	struct sec_battery_info *battery) {
+	union power_supply_propval value;
+	int mix_high_tbat, mix_high_tchg, mix_high_tbat_recov;
+	unsigned int mix_input_limit_current;
+
+	if (battery->skip_chg_temp_check)
+		return;
+
+	if ((battery->cable_type == POWER_SUPPLY_TYPE_HV_MAINS) ||
+		(battery->cable_type == POWER_SUPPLY_TYPE_HV_ERR) ||
+		(battery->cable_type == POWER_SUPPLY_TYPE_MAINS)) {
+
+		if ((battery->cable_type == POWER_SUPPLY_TYPE_HV_MAINS) ||
+			(battery->cable_type == POWER_SUPPLY_TYPE_HV_ERR)) {
+			mix_high_tbat = battery->pdata->mix_high_tbat_hv;
+			mix_high_tchg = battery->pdata->mix_high_tchg_hv;
+			mix_high_tbat_recov = battery->pdata->mix_high_tbat_recov_hv;
+			mix_input_limit_current = battery->pdata->mix_input_limit_current_hv;
+		} else {
+			mix_high_tbat = battery->pdata->mix_high_tbat;
+			mix_high_tchg = battery->pdata->mix_high_tchg;
+			mix_high_tbat_recov = battery->pdata->mix_high_tbat_recov;
+			mix_input_limit_current = battery->pdata->mix_input_limit_current;
+		}
+
+		if (battery->siop_level >= 100) {
+			if ((battery->mix_limit == SEC_BATTERY_MIX_TEMP_NONE) &&
+				(battery->temperature >= mix_high_tbat) &&
+				(battery->chg_temp >= mix_high_tchg) &&
+				(battery->wired_input_current > battery->pdata->mix_input_limit_current)) {
+				battery->mix_limit = SEC_BATTERY_MIX_TEMP_HIGH;
+				value.intval = battery->pdata->mix_input_limit_current;
+				psy_do_property(battery->pdata->charger_name, set,
+						POWER_SUPPLY_PROP_CURRENT_MAX, value);
+				battery->wired_input_current = battery->pdata->mix_input_limit_current;
+				dev_info(battery->dev,"%s: Input current is reduced by Temp(tbat:%d, tchg:%d)\n",
+						__func__, battery->temperature, battery->chg_temp);
+			} else if ((battery->mix_limit != SEC_BATTERY_MIX_TEMP_NONE) &&
+					(battery->temperature < mix_high_tbat_recov)) {
+				battery->mix_limit = SEC_BATTERY_MIX_TEMP_NONE;
+				sec_bat_set_charging_current(battery);
+				dev_info(battery->dev,"%s: Input current is recovered by Temp(tbat:%d)\n",
+						__func__, battery->temperature);
+			}
+		} else {
+			battery->mix_limit = SEC_BATTERY_MIX_TEMP_NONE;
+		}
+	} else if (battery->mix_limit != SEC_BATTERY_MIX_TEMP_NONE) {
+		battery->mix_limit = SEC_BATTERY_MIX_TEMP_NONE;
 	}
 }
 #endif
@@ -3214,6 +3269,9 @@ static void sec_bat_siop_work(struct work_struct *work)
 
 	sec_bat_set_charging_current(battery);
 #if !defined(CONFIG_SEC_FACTORY)
+	if (battery->pdata->mix_temp_check)
+		sec_bat_mix_temperature_check(battery);
+
 	if ((battery->pdata->chg_temp_check || battery->pdata->wpc_temp_check) && battery->siop_level >= 100)
 		sec_bat_chg_temperature_check(battery);
 #endif
@@ -3594,6 +3652,10 @@ static void sec_bat_monitor_work(
 		battery->pdata->monitor_additional_check();
 
 #if !defined(CONFIG_SEC_FACTORY)
+	/* 7. battery temperature check */
+	if (battery->pdata->mix_temp_check)
+		sec_bat_mix_temperature_check(battery);
+
 	/* 7. charger temperature check */
 	if (battery->pdata->chg_temp_check | battery->pdata->wpc_temp_check)
 		sec_bat_chg_temperature_check(battery);
@@ -4759,6 +4821,7 @@ ssize_t sec_bat_store_attrs(
 			dev_info(battery->dev,
 					"%s: siop level: %d\n", __func__, x);
 			battery->chg_limit = SEC_BATTERY_CHG_TEMP_NONE;
+			battery->mix_limit = SEC_BATTERY_MIX_TEMP_NONE;
 			battery->wpc_temp_mode = false;
 			if (x == battery->siop_level && battery->capacity > 5) {
 				dev_info(battery->dev,
@@ -6803,6 +6866,69 @@ static int sec_bat_parse_dt(struct device *dev,
 			&pdata->sleep_mode_limit_current);
 	if (ret)
 		pr_info("%s : sleep_mode_limit_current is Empty\n", __func__);
+	
+	ret = of_property_read_u32(np, "battery,mix_temp_check",
+		&pdata->mix_temp_check);
+	if (ret)
+		pr_info("%s : mix_temp_check is Empty\n", __func__);
+
+	if (pdata->mix_temp_check) {
+		ret = of_property_read_u32(np, "battery,mix_high_tbat",
+			&pdata->mix_high_tbat);
+		if (ret) {
+			pdata->mix_high_tbat = 999;
+			pr_info("%s : bat_high_temp is Empty\n", __func__);
+		}
+
+		ret = of_property_read_u32(np, "battery,mix_high_tchg",
+			&pdata->mix_high_tchg);
+		if (ret) {
+			pdata->mix_high_tchg = 999;
+			pr_info("%s : mix_high_tchg is Empty\n", __func__);
+		}		
+
+		ret = of_property_read_u32(np, "battery,mix_high_tbat_recov",
+			&pdata->mix_high_tbat_recov);
+		if (ret) {
+			pdata->mix_high_tbat_recov = 999;
+			pr_info("%s : mix_high_tbat_recov is Empty\n", __func__);
+		}
+
+		ret = of_property_read_u32(np, "battery,mix_input_limit_current",
+			&pdata->mix_input_limit_current);
+		if (ret) {
+			pdata->mix_input_limit_current = 1800;
+			pr_info("%s : mix_input_limit_current is Empty\n", __func__);
+		}
+
+		ret = of_property_read_u32(np, "battery,mix_high_tbat_hv",
+			&pdata->mix_high_tbat_hv);
+		if (ret) {
+			pdata->mix_high_tbat_hv = 999;
+			pr_info("%s : bat_high_temp_hv is Empty\n", __func__);
+		}
+
+		ret = of_property_read_u32(np, "battery,mix_high_tchg_hv",
+			&pdata->mix_high_tchg_hv);
+		if (ret) {
+			pdata->mix_high_tchg_hv = 999;
+			pr_info("%s : mix_high_tchg_hv is Empty\n", __func__);
+		}
+
+		ret = of_property_read_u32(np, "battery,mix_high_tbat_recov_hv",
+			&pdata->mix_high_tbat_recov_hv);
+		if (ret) {
+			pdata->mix_high_tbat_recov_hv = 999;
+			pr_info("%s : mix_high_tbat_recov_hv is Empty\n", __func__);
+		}
+
+		ret = of_property_read_u32(np, "battery,mix_input_limit_current_hv",
+			&pdata->mix_input_limit_current_hv);
+		if (ret) {
+			pdata->mix_input_limit_current_hv = 1667;
+			pr_info("%s : mix_input_limit_current_hv is Empty\n", __func__);
+		}
+	}
 
 	ret = of_property_read_u32(np, "battery,inbat_voltage",
 			&pdata->inbat_voltage);
@@ -7594,6 +7720,7 @@ static int sec_battery_probe(struct platform_device *pdev)
 	battery->chg_limit = SEC_BATTERY_CHG_TEMP_NONE;
 	battery->wc_heat_limit = SEC_BATTERY_WC_HEAT_NONE;
 	battery->pad_limit = SEC_BATTERY_WPC_TEMP_NONE;
+	battery->mix_limit = SEC_BATTERY_MIX_TEMP_NONE;
 
 	battery->temp_highlimit_threshold =
 		pdata->temp_highlimit_threshold_normal;

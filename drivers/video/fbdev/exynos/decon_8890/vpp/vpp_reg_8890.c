@@ -629,6 +629,7 @@ void vpp_constraints_params(struct vpp_size_constraints *vc,
 
 void vpp_reg_init(u32 id)
 {
+	vpp_reg_set_sw_reset(id);
 	vpp_reg_set_realtime_path(id);
 	vpp_reg_set_framedone_irq(id, false);
 	vpp_reg_set_deadlock_irq(id, false);

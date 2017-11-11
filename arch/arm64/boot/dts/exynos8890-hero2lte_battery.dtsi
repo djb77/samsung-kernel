@@ -195,6 +195,16 @@
 		battery,wc_heating_time = <300>; /* 5min */
 		battery,wc_cv_current = <820>;
 
+		battery,mix_temp_check = <1>;
+		battery,mix_high_tbat = <400>;
+		battery,mix_high_tchg = <500>;
+		battery,mix_high_tbat_recov = <370>;
+		battery,mix_input_limit_current = <100>;
+		battery,mix_high_tbat_hv = <420>;
+		battery,mix_high_tchg_hv = <500>;
+		battery,mix_high_tbat_recov_hv = <390>;
+		battery,mix_input_limit_current_hv = <100>;
+
 		/* SEC_BATTERY_FULL_CONDITION_SOC |
 		   SEC_BATTERY_FULL_CONDITION_NOTIMEFULL |
 		   SEC_BATTERY_FULL_CONDITION_VCELL */
