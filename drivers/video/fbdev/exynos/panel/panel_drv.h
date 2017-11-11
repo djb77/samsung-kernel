@@ -28,6 +28,9 @@
 #include "panel.h"
 #include "mdnie.h"
 #include "copr.h"
+#ifdef CONFIG_SUPPORT_POC_FLASH
+#include "panel_poc.h"
+#endif
 
 extern int panel_log_level;
 
@@ -246,6 +249,10 @@ struct panel_device {
 	struct act_clock_dev act_clk_dev;
 #endif
 	struct host_cb reset_cb;
+
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	struct panel_poc_device poc_dev;
+#endif
 
 	ktime_t ktime_panel_on;
 	ktime_t ktime_panel_off;

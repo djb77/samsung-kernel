@@ -37,6 +37,10 @@ static const char * const dpui_key_name[] = {
 	[DPUI_KEY_PNVLO3E] = "PNVLO3E",
 	[DPUI_KEY_PNESDE] = "PNESDE",
 	[DPUI_KEY_PNSDRE] = "PNSDRE",
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	[DPUI_KEY_PNPOCT] = "PNPOCT",
+	[DPUI_KEY_PNPOCF] = "PNPOCF",
+#endif
 };
 
 static const char * const dpui_type_name[] = {
@@ -68,6 +72,10 @@ static struct dpui_info dpui = {
 		DPUI_FIELD_INIT(DPUI_LOG_LEVEL_INFO, DPUI_TYPE_PANEL, DPUI_VAR_U32, DPUI_AUTO_CLEAR_ON, "0", DPUI_KEY_PNVLO3E),
 		DPUI_FIELD_INIT(DPUI_LOG_LEVEL_INFO, DPUI_TYPE_PANEL, DPUI_VAR_U32, DPUI_AUTO_CLEAR_ON, "0", DPUI_KEY_PNESDE),
 		DPUI_FIELD_INIT(DPUI_LOG_LEVEL_INFO, DPUI_TYPE_PANEL, DPUI_VAR_U32, DPUI_AUTO_CLEAR_ON, "0", DPUI_KEY_PNSDRE),
+#ifdef CONFIG_SUPPORT_POC_FLASH
+		DPUI_FIELD_INIT(DPUI_LOG_LEVEL_INFO, DPUI_TYPE_PANEL, DPUI_VAR_S32, DPUI_AUTO_CLEAR_OFF, "-1", DPUI_KEY_PNPOCT),
+		DPUI_FIELD_INIT(DPUI_LOG_LEVEL_INFO, DPUI_TYPE_PANEL, DPUI_VAR_S32, DPUI_AUTO_CLEAR_OFF, "-1", DPUI_KEY_PNPOCF),
+#endif
 
 		/* common hw parameter - for debug */
 		/* TODO : debug hw param will be be added */
@@ -200,11 +208,12 @@ static int __set_dpui_field(enum dpui_key key, char *buf, int size)
 		return -EINVAL;
 	}
 
-	if (size > MAX_DPUI_VAL_LEN) {
+	if (size > MAX_DPUI_VAL_LEN - 1) {
 		pr_err("%s exceed dpui value size (%d)\n", __func__, size);
 		return -EINVAL;
 	}
 	memcpy(dpui.field[key].buf, buf, size);
+	dpui.field[key].buf[size] = '\0';
 	dpui.field[key].initialized = true;
 
 	return 0;

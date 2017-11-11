@@ -4393,6 +4393,119 @@ static int abox_ima_init(struct device *dev, struct abox_data *data)
 	return 0;
 }
 
+static void __abox_control_l2c(struct abox_data *data, bool enable)
+{
+	ABOX_IPC_MSG msg;
+	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
+	struct device *dev = &data->pdev->dev;
+
+	if (data->l2c_enabled == enable)
+		return;
+
+	dev_info(dev, "%s(%d)\n", __func__, enable);
+
+	data->l2c_controlled = false;
+
+	msg.ipcid = IPC_SYSTEM;
+	system_msg->msgtype = ABOX_START_L2C_CONTROL;
+	system_msg->param1 = enable ? 1 : 0;
+
+	if (enable) {
+		vts_acquire_sram(data->pdev_vts, 0);
+
+		abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 1, 0);
+		wait_event_timeout(data->ipc_wait_queue,
+				data->l2c_controlled, LIMIT_IN_JIFFIES);
+		if (!data->l2c_controlled)
+			dev_err(dev, "l2c enable failed\n");
+	} else {
+		abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 1, 0);
+		wait_event_timeout(data->ipc_wait_queue,
+				data->l2c_controlled, LIMIT_IN_JIFFIES);
+		if (!data->l2c_controlled)
+			dev_err(dev, "l2c disable failed\n");
+
+		vts_release_sram(data->pdev_vts, 0);
+	}
+
+	data->l2c_enabled = enable;
+}
+
+static void abox_l2c_work_func(struct work_struct *work)
+{
+	struct abox_data *data = container_of(work, struct abox_data, l2c_work);
+	struct platform_device *pdev = data->pdev;
+	struct device *dev = &pdev->dev;
+	size_t length = ARRAY_SIZE(data->l2c_requests);
+	struct abox_l2c_request *request;
+	bool enable = false;
+
+	dev_dbg(dev, "%s\n", __func__);
+
+	for (request = data->l2c_requests;
+			request - data->l2c_requests < length
+			&& request->id;
+			request++) {
+		if (request->on) {
+			enable = true;
+			break;
+		}
+	}
+
+	__abox_control_l2c(data, enable);
+}
+
+int abox_request_l2c(struct device *dev, struct abox_data *data,
+		void *id, bool on)
+{
+	struct abox_l2c_request *request;
+	size_t length = ARRAY_SIZE(data->l2c_requests);
+
+	dev_info(dev, "%s(%p, %d)\n", __func__, id, on);
+
+	for (request = data->l2c_requests;
+			request - data->l2c_requests < length
+			&& request->id && request->id != id;
+			request++) {
+	}
+
+	request->id = id;
+	request->on = on;
+
+	if (request - data->l2c_requests >= ARRAY_SIZE(data->l2c_requests)) {
+		dev_err(dev, "%s: out of index. id=%p, on=%d\n",
+				__func__, id, on);
+		return -ENOMEM;
+	}
+
+	schedule_work(&data->l2c_work);
+
+	return 0;
+}
+
+int abox_request_l2c_sync(struct device *dev, struct abox_data *data,
+		void *id, bool on)
+{
+	abox_request_l2c(dev, data, id, on);
+	flush_work(&data->l2c_work);
+	return 0;
+}
+
+static void abox_clear_l2c_requests(struct device *dev, struct abox_data *data)
+{
+	struct abox_l2c_request *req;
+	size_t len = ARRAY_SIZE(data->l2c_requests);
+
+	dev_info(dev, "%s\n", __func__);
+
+	for (req = data->l2c_requests; req - data->l2c_requests < len &&
+			req->id; req++) {
+		req->on = false;
+	}
+
+	__abox_control_l2c(data, false);
+}
+
 static int abox_enable(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
@@ -4502,6 +4615,7 @@ static int abox_disable(struct device *dev)
 		data->calliope_state = CALLIOPE_ENABLED;
 		break;
 	}
+	abox_clear_l2c_requests(dev, data);
 	flush_work(&data->boot_done_work);
 	flush_work(&data->l2c_work);
 
@@ -4530,106 +4644,6 @@ static int abox_disable(struct device *dev)
 
 	abox_gic_disable_irq(&data->pdev_gic->dev);
 
-	return 0;
-}
-
-static void __abox_control_l2c(struct abox_data *data, bool enable)
-{
-	ABOX_IPC_MSG msg;
-	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
-	struct device *dev = &data->pdev->dev;
-
-	if (data->l2c_enabled == enable)
-		return;
-
-	dev_info(dev, "%s(%d)\n", __func__, enable);
-
-	data->l2c_controlled = false;
-
-	msg.ipcid = IPC_SYSTEM;
-	system_msg->msgtype = ABOX_START_L2C_CONTROL;
-	system_msg->param1 = enable ? 1 : 0;
-
-	if (enable) {
-		vts_acquire_sram(data->pdev_vts, 0);
-
-		abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 1, 0);
-		wait_event_timeout(data->ipc_wait_queue,
-				data->l2c_controlled, LIMIT_IN_JIFFIES);
-		if (!data->l2c_controlled) {
-			dev_err(dev, "l2c enable failed\n");
-		}
-	} else {
-		abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 1, 0);
-		wait_event_timeout(data->ipc_wait_queue,
-				data->l2c_controlled, LIMIT_IN_JIFFIES);
-		if (!data->l2c_controlled) {
-			dev_err(dev, "l2c disable failed\n");
-		}
-
-		vts_release_sram(data->pdev_vts, 0);
-	}
-
-	data->l2c_enabled = enable;
-}
-
-static void abox_l2c_work_func(struct work_struct *work)
-{
-	struct abox_data *data = container_of(work, struct abox_data, l2c_work);
-	struct platform_device *pdev = data->pdev;
-	struct device *dev = &pdev->dev;
-	size_t length = ARRAY_SIZE(data->l2c_requests);
-	struct abox_l2c_request *request;
-	bool enable = false;
-
-	dev_dbg(dev, "%s\n", __func__);
-
-	for (request = data->l2c_requests;
-			request - data->l2c_requests < length
-			&& request->id;
-			request++) {
-		if (request->on) {
-			enable = true;
-			break;
-		}
-	}
-
-	__abox_control_l2c(data, enable);
-}
-
-int abox_request_l2c(struct device *dev, struct abox_data *data,
-		void *id, bool on)
-{
-	struct abox_l2c_request *request;
-	size_t length = ARRAY_SIZE(data->l2c_requests);
-
-	dev_info(dev, "%s(%p, %d)\n", __func__, id, on);
-
-	for (request = data->l2c_requests;
-			request - data->l2c_requests < length
-			&& request->id && request->id != id;
-			request++) {
-	}
-
-	request->id = id;
-	request->on = on;
-
-	if (request - data->l2c_requests >= ARRAY_SIZE(data->l2c_requests)) {
-		dev_err(dev, "%s: out of index. id=%p, on=%d\n",
-				__func__, id, on);
-		return -ENOMEM;
-	}
-
-	schedule_work(&data->l2c_work);
-
-	return 0;
-}
-
-int abox_request_l2c_sync(struct device *dev, struct abox_data *data,
-		void *id, bool on)
-{
-	abox_request_l2c(dev, data, id, on);
-	flush_work(&data->l2c_work);
 	return 0;
 }
 

@@ -194,7 +194,7 @@
 #define MFC_FW_TIMER_CODE_5					0xC5
 #define MFC_FW_TIMER_CODE_6					0xC6
 #define MFC_FW_TIMER_CODE_7					0xC7
-
+#define MFC_RPP_SCALE_COEF_REG					0xF0
 enum {
 	MFC_PAD_NONE = 0,
 	MFC_PAD_WPC,				/* 1 */
@@ -652,6 +652,8 @@ struct mfc_charger_platform_data {
 	int wpc_cc_call_vout;
 	int opfq_cnt;
 	int hv_vout_wa;
+	int wc_cover_rpp;
+	int wc_hv_rpp;
 };
 
 #define mfc_charger_platform_data_t \
@@ -699,6 +701,7 @@ struct mfc_charger_data {
 	int vout_step;
 	int mst_off_lock;
 	bool is_otg_on;
+	int led_cover;
 };
 
 #endif /* __MFC_CHARGER_H */

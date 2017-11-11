@@ -2886,7 +2886,7 @@ static struct ext4_li_request *ext4_li_request_new(struct super_block *sb,
 	 * spread the inode table initialization requests
 	 * better.
 	 */
-	elr->lr_next_sched = jiffies + (prandom_u32() %
+	elr->lr_next_sched = jiffies + (60 * HZ) + (prandom_u32() %
 				(EXT4_DEF_LI_MAX_START_DELAY * HZ));
 	return elr;
 }

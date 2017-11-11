@@ -71,6 +71,10 @@ enum dpui_key {
 	DPUI_KEY_PNVLO3E,	/* panel VLOUT3 error count */
 	DPUI_KEY_PNESDE,	/* panel ESD error count */
 	DPUI_KEY_PNSDRE,	/* panel OTP loading error count */
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	DPUI_KEY_PNPOCT,	/* panel POC try count */
+	DPUI_KEY_PNPOCF,	/* panel POC fail count */
+#endif
 	MAX_DPUI_KEY,
 };
 

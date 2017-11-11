@@ -666,8 +666,23 @@ retry:
 			return -EPIPE;
 		}
 	} else {
-		dev_info(dev, "%s: Link up:%x\n", __func__,
-			 exynos_elb_readl(exynos_pcie, PCIE_ELBI_RDLH_LINKUP));
+
+		val = exynos_elb_readl(exynos_pcie, PCIE_ELBI_RDLH_LINKUP) & 0x1f;
+		if (val >= 0x0d && val <= 0x14) {
+			dev_info(dev, "%s: Link up:%x\n", __func__, val);
+		} else {
+			dev_info(dev, "%s: Link state:%x\n", __func__, val);
+			dev_info(dev, "%s: Before set perst, gpio val = %d\n",
+					__func__, gpio_get_value(exynos_pcie->perst_gpio));
+			gpio_set_value(exynos_pcie->perst_gpio, 0);
+			dev_info(dev, "%s: After set perst, gpio val = %d\n",
+					__func__, gpio_get_value(exynos_pcie->perst_gpio));
+			/* LTSSM disable */
+			exynos_elb_writel(exynos_pcie, PCIE_ELBI_LTSSM_DISABLE,
+					PCIE_APP_LTSSM_ENABLE);
+			exynos_pcie_phy_clock_enable(pp, 0);
+			goto retry;
+		}
 
 		val = exynos_elb_readl(exynos_pcie, PCIE_IRQ_PULSE);
 		exynos_elb_writel(exynos_pcie, val, PCIE_IRQ_PULSE);
@@ -835,9 +850,16 @@ static int exynos_pcie_rd_own_conf(struct pcie_port *pp, int where, int size,
 	struct exynos_pcie *exynos_pcie = to_exynos_pcie(pp);
 	int is_linked = 0;
 	int ret = 0;
+	u32 reg_val;
 
 	if (exynos_pcie->state == STATE_LINK_UP)
 		is_linked = 1;
+
+	reg_val = exynos_elb_readl(exynos_pcie, PCIE_ELBI_RDLH_LINKUP) & 0x1f;
+	if (reg_val >= 0x0d && reg_val <= 0x14)
+		is_linked = 1;
+	else
+		is_linked = 0;
 
 	if (is_linked == 0) {
 		if (exynos_pcie->phy_ops.phy_check_rx_elecidle != NULL)
@@ -862,9 +884,16 @@ static int exynos_pcie_wr_own_conf(struct pcie_port *pp, int where, int size,
 	struct exynos_pcie *exynos_pcie = to_exynos_pcie(pp);
 	int is_linked = 0;
         int ret = 0;
+        u32 reg_val;
 
 	if (exynos_pcie->state == STATE_LINK_UP)
 		is_linked = 1;
+
+	reg_val = exynos_elb_readl(exynos_pcie, PCIE_ELBI_RDLH_LINKUP) & 0x1f;
+	if (reg_val >= 0x0d && reg_val <= 0x14)
+		is_linked = 1;
+	else
+		is_linked = 0;
 
 	if (is_linked == 0) {
 		if (exynos_pcie->phy_ops.phy_check_rx_elecidle != NULL)
@@ -1449,45 +1478,47 @@ void exynos_pcie_config_l1ss(struct pcie_port *pp)
 	exynos_pcie_prog_viewport_mem_outbound(pp);
 
 	spin_lock_irqsave(&exynos_pcie->conf_lock, flags);
-	if (exynos_pcie->l1ss_ctrl_id_state == 0) {
-		/* Enable L1SS on Root Complex */
-		val = readl(ep_dbi_base + 0xbc);
-		val &= ~0x3;
-		val |= 0x142;
-		writel(val, ep_dbi_base + 0xBC);
-		val = readl(ep_dbi_base + 0x248);
-		writel(val | 0xa0f, ep_dbi_base + 0x248);
-		dev_err(pp->dev, "l1ss enabled(0x%x)\n", exynos_pcie->l1ss_ctrl_id_state);
-	} else {
-		/* disable L1SS on Root Complex */
-		val = readl(ep_dbi_base + 0xbc);
-		writel(val & ~0x3, ep_dbi_base + 0xBC);
-		val = readl(ep_dbi_base + 0x248);
-		writel(val & ~0xf, ep_dbi_base + 0x248);
-		dev_err(pp->dev, "l1ss disabled(0x%x)\n", exynos_pcie->l1ss_ctrl_id_state);
+	if (exynos_pcie->atu_ok == 1) {
+		if (exynos_pcie->l1ss_ctrl_id_state == 0) {
+			/* Enable L1SS on Root Complex */
+			val = readl(ep_dbi_base + 0xbc);
+			val &= ~0x3;
+			val |= 0x142;
+			writel(val, ep_dbi_base + 0xBC);
+			val = readl(ep_dbi_base + 0x248);
+			writel(val | 0xa0f, ep_dbi_base + 0x248);
+			dev_err(pp->dev, "l1ss enabled(0x%x)\n", exynos_pcie->l1ss_ctrl_id_state);
+		} else {
+			/* disable L1SS on Root Complex */
+			val = readl(ep_dbi_base + 0xbc);
+			writel(val & ~0x3, ep_dbi_base + 0xBC);
+			val = readl(ep_dbi_base + 0x248);
+			writel(val & ~0xf, ep_dbi_base + 0x248);
+			dev_err(pp->dev, "l1ss disabled(0x%x)\n", exynos_pcie->l1ss_ctrl_id_state);
+		}
+		spin_unlock_irqrestore(&exynos_pcie->conf_lock, flags);
+
+		writel(PORT_LINK_TPOWERON_130US, ep_dbi_base + 0x24C);
+		writel(0x10031003, ep_dbi_base + 0x1B4);
+		val = readl(ep_dbi_base + 0xD4);
+		writel(val | (1 << 10), ep_dbi_base + 0xD4);
+
+		exynos_pcie_rd_own_conf(pp, PCIE_LINK_L1SS_CONTROL, 4, &val);
+		val |= PORT_LINK_TCOMMON_32US | PORT_LINK_L1SS_ENABLE;
+		exynos_pcie_wr_own_conf(pp, PCIE_LINK_L1SS_CONTROL, 4, val);
+		exynos_pcie_wr_own_conf(pp, PCIE_LINK_L1SS_CONTROL2, 4,
+				PORT_LINK_TPOWERON_130US);
+		val = PORT_LINK_L1SS_T_PCLKACK | PORT_LINK_L1SS_T_L1_2 |
+			PORT_LINK_L1SS_T_POWER_OFF;
+		exynos_pcie_wr_own_conf(pp, PCIE_LINK_L1SS_OFF, 4, val);
+
+		exynos_pcie_rd_own_conf(pp, exp_cap_off + PCI_EXP_LNKCTL, 4, &val);
+		val &= ~PCI_EXP_LNKCTL_ASPMC;
+		val |= PCI_EXP_LNKCTL_CCC | PCI_EXP_LNKCTL_ASPM_L1;
+		exynos_pcie_wr_own_conf(pp, exp_cap_off + PCI_EXP_LNKCTL, 4, val);
+		exynos_pcie_wr_own_conf(pp, exp_cap_off + PCI_EXP_DEVCTL2, 4,
+				PCI_EXP_DEVCTL2_LTR_EN);
 	}
-	spin_unlock_irqrestore(&exynos_pcie->conf_lock, flags);
-
-	writel(PORT_LINK_TPOWERON_130US, ep_dbi_base + 0x24C);
-	writel(0x10031003, ep_dbi_base + 0x1B4);
-	val = readl(ep_dbi_base + 0xD4);
-	writel(val | (1 << 10), ep_dbi_base + 0xD4);
-
-	exynos_pcie_rd_own_conf(pp, PCIE_LINK_L1SS_CONTROL, 4, &val);
-	val |= PORT_LINK_TCOMMON_32US | PORT_LINK_L1SS_ENABLE;
-	exynos_pcie_wr_own_conf(pp, PCIE_LINK_L1SS_CONTROL, 4, val);
-	exynos_pcie_wr_own_conf(pp, PCIE_LINK_L1SS_CONTROL2, 4,
-					PORT_LINK_TPOWERON_130US);
-	val = PORT_LINK_L1SS_T_PCLKACK | PORT_LINK_L1SS_T_L1_2 |
-	      PORT_LINK_L1SS_T_POWER_OFF;
-	exynos_pcie_wr_own_conf(pp, PCIE_LINK_L1SS_OFF, 4, val);
-
-	exynos_pcie_rd_own_conf(pp, exp_cap_off + PCI_EXP_LNKCTL, 4, &val);
-	val &= ~PCI_EXP_LNKCTL_ASPMC;
-	val |= PCI_EXP_LNKCTL_CCC | PCI_EXP_LNKCTL_ASPM_L1;
-	exynos_pcie_wr_own_conf(pp, exp_cap_off + PCI_EXP_LNKCTL, 4, val);
-	exynos_pcie_wr_own_conf(pp, exp_cap_off + PCI_EXP_DEVCTL2, 4,
-					PCI_EXP_DEVCTL2_LTR_EN);
 }
 
 int exynos_pcie_poweron(int ch_num)
@@ -1753,6 +1784,14 @@ void exynos_pcie_send_pme_turn_off(struct exynos_pcie *exynos_pcie)
 
 	if (count >= MAX_TIMEOUT)
 		dev_err(dev, "cannot receive L23_READY DLLP packet\n");
+
+	exynos_elb_writel(exynos_pcie, 0x1, PCIE_APP_REQ_EXIT_L1);
+	val = exynos_elb_readl(exynos_pcie, PCIE_APP_REQ_EXIT_L1_MODE);
+	val &= ~APP_REQ_EXIT_L1_MODE;
+	val |= L1_REQ_NAK_CONTROL_MASTER;
+	exynos_elb_writel(exynos_pcie, val, PCIE_APP_REQ_EXIT_L1_MODE);
+	exynos_elb_writel(exynos_pcie, 0x0, 0xa8);
+	exynos_elb_writel(exynos_pcie, 0x0, PCIE_APP_REQ_EXIT_L1);
 }
 
 void exynos_pcie_pm_suspend(int ch_num)

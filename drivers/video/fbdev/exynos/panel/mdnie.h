@@ -59,7 +59,7 @@ typedef u8 mdnie_t;
 #define GET_MSB_8BIT(x)		((x >> 8) & (BIT(8) - 1))
 #define GET_LSB_8BIT(x)		((x >> 0) & (BIT(8) - 1))
 
-#define MIN_WRGB_OFS	(-19)
+#define MIN_WRGB_OFS	(-40)
 #define MAX_WRGB_OFS	(0)
 #define IS_VALID_WRGB_OFS(_ofs_)	(((int)(_ofs_) <= MAX_WRGB_OFS) && ((int)(_ofs_) >= (MIN_WRGB_OFS)))
 
