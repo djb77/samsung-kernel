@@ -20,6 +20,7 @@
 		#define PWR_GPU		2
 
 		compatible = "samsung,exynos-snapshot";
+		ess_boot_logging = <4300>;
 		dump-info@0x0 {
 			sfr-dump-list = "sfr-dump-cmu", "sfr-dump-gic", "sfr-dump-cmu-imem","sfr-dump-fsys-blk",
 					"sfr-dump-smc0", "sfr-dump-smc1", "sfr-dump-smc2", "sfr-dump-smc3",

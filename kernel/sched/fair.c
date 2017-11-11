@@ -8409,7 +8409,7 @@ static int idle_balance(struct rq *this_rq)
 	rcu_read_unlock();
 
 	// implement idle pull for HMP
-	if (!pulled_task) {
+	if (!pulled_task && this_rq->nr_running == 0) {
 		pulled_task = hmp_idle_pull(this_cpu);
 	}
 
@@ -9248,6 +9248,19 @@ static int hmp_idle_pull_cpu_stop(void *data)
 	 * Bjorn Helgaas on a 128-cpu setup.
 	 */
 	BUG_ON(busiest_rq == target_rq);
+
+	/*
+	 * Target CPU may be the offlined by Big Turbo stopper
+	 * just before invoking this function.
+	 *
+	 * TO BE : idle_balance->hmp_idle_pull -> hmp_idle_pull_cpu_stop
+	 * AS IS : idle_balance ......> hmp_idle_pull ...> hmp_idle_pull_cpu_stop
+	 *             stop machine ran in somewhere
+	 *			between idle_balance and hmp_idle_pull_cpu_stop
+	 */
+	if (!cpu_online(target_cpu)) {
+		goto out_unlock;
+	}
 
 	/* move a task from busiest_rq to target_rq */
 	double_lock_balance(busiest_rq, target_rq);

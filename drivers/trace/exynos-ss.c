@@ -102,6 +102,9 @@ extern int dhd_dongle_mem_dump(void);
 /* S5P_VA_SS_BASE + 0xC00 -- 0xFFF is reserved */
 #define S5P_VA_SS_PANIC_STRING		(S5P_VA_SS_BASE + 0xC00)
 
+
+int ess_boot_logging = 5000;
+
 struct exynos_ss_base {
 	size_t size;
 	size_t vaddr;
@@ -121,7 +124,7 @@ struct exynos_ss_item {
 struct exynos_ss_log {
 	struct task_log {
 		unsigned long long time;
-		unsigned long sp;
+		unsigned long ttbr0_el1;
 		struct task_struct *task;
 #if defined(CONFIG_SEC_DUMP_SUMMARY)	
 		unsigned long task_comm_addr;
@@ -130,6 +133,8 @@ struct exynos_ss_log {
 		char *task_comm;
 
 	} task[ESS_NR_CPUS][ESS_LOG_MAX_NUM];
+
+	struct task_log task_boot[ESS_NR_CPUS][ESS_LOG_MAX_NUM * 2];
 
 	struct work_log {
 		unsigned long long time;
@@ -166,7 +171,7 @@ struct exynos_ss_log {
 		unsigned long val;
 		unsigned int preempt;
 		int en;
-	} irq[ESS_NR_CPUS][ESS_LOG_MAX_NUM * 2];
+	} irq[ESS_NR_CPUS][ESS_LOG_MAX_NUM];
 
 #ifdef CONFIG_EXYNOS_SNAPSHOT_IRQ_EXIT
 	struct irq_exit_log {
@@ -301,6 +306,7 @@ struct exynos_ss_log {
 
 struct exynos_ss_log_idx {
 	atomic_t task_log_idx[ESS_NR_CPUS];
+	atomic_t task_boot_idx[ESS_NR_CPUS];
 	atomic_t work_log_idx[ESS_NR_CPUS];
 	atomic_t cpuidle_log_idx[ESS_NR_CPUS];
 	atomic_t suspend_log_idx[ESS_NR_CPUS];
@@ -1982,6 +1988,12 @@ static int exynos_ss_init_dt_parse(struct device_node *np)
 	}
 	of_node_put(np);
 #endif
+
+	if (of_property_read_u32(np, "ess_boot_logging", &ess_boot_logging)) {
+		pr_warn("ess_boot_logging property is omitted!\n");
+	}
+	pr_warn("ess_boot_logging is %d\n", ess_boot_logging);
+
 	/* TODO: adding more dump information */
 	return ret;
 }
@@ -2044,21 +2056,39 @@ early_initcall(exynos_ss_init);
 void __exynos_ss_task(int cpu, void *v_task)
 {
 	struct exynos_ss_item *item = &ess_items[ess_desc.kevents_num];
+	unsigned long val;
 
 	if (unlikely(!ess_base.enabled || !item->entry.enabled))
 		return;
 	{
-		unsigned long i = atomic_inc_return(&ess_idx.task_log_idx[cpu]) &
-				    (ARRAY_SIZE(ess_log->task[0]) - 1);
-
-		ess_log->task[cpu][i].time = cpu_clock(cpu);
-		ess_log->task[cpu][i].sp = (unsigned long) current_stack_pointer;
-		ess_log->task[cpu][i].task = (struct task_struct *)v_task;
+		unsigned long idx = atomic_inc_return(&ess_idx.task_log_idx[cpu]);
+		unsigned long i;
+		unsigned long long time;
+		time = cpu_clock(cpu);
+		if (unlikely(ess_boot_logging)) {
+			i = idx & (ARRAY_SIZE(ess_log->task_boot[0]) - 1);
+			ess_log->task_boot[cpu][i].time = cpu_clock(cpu);
+			asm volatile("mrs %0,   ttbr0_el1" : "=r" (val));
+			ess_log->task_boot[cpu][i].ttbr0_el1 = (unsigned long) val;
+			ess_log->task_boot[cpu][i].task = (struct task_struct *)v_task;
 #if defined(CONFIG_SEC_DUMP_SUMMARY)		
-		ess_log->task[cpu][i].pid = ((struct task_struct *)v_task)->pid;
-		ess_log->task[cpu][i].task_comm_addr = virt_to_phys(((struct task_struct *)v_task)->comm);
+			ess_log->task_boot[cpu][i].pid = ((struct task_struct *)v_task)->pid;
+			ess_log->task_boot[cpu][i].task_comm_addr = virt_to_phys(((struct task_struct *)v_task)->comm);
 #endif
-		ess_log->task[cpu][i].task_comm = ((struct task_struct *)v_task)->comm;
+			ess_log->task_boot[cpu][i].task_comm = ess_log->task_boot[cpu][i].task->comm;
+		} else {
+			i = idx & (ARRAY_SIZE(ess_log->task[0]) - 1);
+			ess_log->task[cpu][i].time = time;
+			asm volatile("mrs %0,   ttbr0_el1" : "=r" (val));
+			ess_log->task[cpu][i].ttbr0_el1 = (unsigned long) val;
+			ess_log->task[cpu][i].task = (struct task_struct *)v_task;
+#if defined(CONFIG_SEC_DUMP_SUMMARY)		
+			ess_log->task[cpu][i].pid = ((struct task_struct *)v_task)->pid;
+			ess_log->task[cpu][i].task_comm_addr = virt_to_phys(((struct task_struct *)v_task)->comm);
+#endif
+			ess_log->task[cpu][i].task_comm = ess_log->task[cpu][i].task->comm;
+		}
+ 
 	}
 }
 
@@ -2543,7 +2573,7 @@ void exynos_ss_summary_set_sched_log_buf(struct sec_debug_summary *summary_info)
 		summary_info->kernel.sched_log.irq_buf_paddr = 
 			virt_to_phys(ess_info.info_event) + offsetof(struct exynos_ss_log, irq);
 		summary_info->kernel.sched_log.irq_struct_sz = sizeof(struct irq_log);
-		summary_info->kernel.sched_log.irq_array_cnt = ESS_LOG_MAX_NUM*2;
+		summary_info->kernel.sched_log.irq_array_cnt = ESS_LOG_MAX_NUM;
 
 		pr_info("%s, irq_buf_paddr:0x%lx size:0x%x\n", __func__, 
 			summary_info->kernel.sched_log.irq_buf_paddr, summary_info->kernel.sched_log.irq_struct_sz );

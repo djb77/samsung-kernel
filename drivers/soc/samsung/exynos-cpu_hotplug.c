@@ -88,6 +88,7 @@ static struct {
 	 * cpu_up() or cpu_down(). In this case, use workqueue.
 	 */
 	struct workqueue_struct	*workqueue;
+	struct workqueue_struct	*panic_workqueue;
 
 	/*
 	 * During reuesting cpu hotplug by other drivers, cpu hotplug framework
@@ -95,6 +96,7 @@ static struct {
 	 * hotplug using delayed work.
 	 */
 	struct delayed_work	delayed_work;
+	struct delayed_work	panic_work;
 
 	/* cpu_hotplug kobject */
 	struct kobject		*kobj;
@@ -229,6 +231,14 @@ out:
 static void cpu_hotplug_work(struct work_struct *work)
 {
 	do_cpu_hotplug(NULL);
+}
+
+extern int ess_boot_logging;
+
+static void force_panic_work(struct work_struct *work)
+{
+	pr_err("force panic by force_panic_work\n");
+	ess_boot_logging = 0;
 }
 
 static int control_cpu_hotplug(bool enable)
@@ -488,12 +498,16 @@ static int __init cpu_hotplug_init(void)
 {
 	/* Initialize delayed work */
 	INIT_DELAYED_WORK(&cpu_hotplug.delayed_work, cpu_hotplug_work);
+	INIT_DELAYED_WORK(&cpu_hotplug.panic_work, force_panic_work);
 
 	/* Initialize workqueue */
 	cpu_hotplug.workqueue = alloc_workqueue("%s", WQ_HIGHPRI | WQ_UNBOUND |\
 					WQ_MEM_RECLAIM | WQ_FREEZABLE,
 					1, "exynos_cpu_hotplug");
-	if (!cpu_hotplug.workqueue)
+	cpu_hotplug.panic_workqueue = alloc_workqueue("%s", WQ_HIGHPRI | WQ_UNBOUND |\
+					WQ_MEM_RECLAIM | WQ_FREEZABLE,
+					1, "exynos_force_panic");
+	if (!cpu_hotplug.workqueue || !cpu_hotplug.panic_workqueue)
 		return -ENOMEM;
 
 	/* Parse data from device tree */
@@ -510,6 +524,10 @@ static int __init cpu_hotplug_init(void)
 
 	/* Enable cpu_hotplug */
 	update_enable_flag(true);
+
+	pr_info("After %dms, force stop logging happend\n", ess_boot_logging);
+	queue_delayed_work(cpu_hotplug.panic_workqueue, &cpu_hotplug.panic_work,
+							msecs_to_jiffies(ess_boot_logging));
 
 	return 0;
 }

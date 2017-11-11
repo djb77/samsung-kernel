@@ -683,6 +683,20 @@ static void lpass_release_pad(void)
 	lpass_release_pad_reg();
 }
 
+#ifdef CONFIG_SOC_EXYNOS8890
+static int __attribute__((unused)) lpass_sysmmu_fault_handler(struct iommu_domain *domain,
+	struct device *dev, unsigned long iova, int flags, void *token)
+{
+	if (lpass.mem && lpass.sram_fw_back) {
+		memcpy(lpass.sram_fw_back, lpass.mem, SRAM_SIZE);
+	} else {
+		pr_err("LPASS driver failed to save sram region \n");
+	}
+
+	return 0;
+}
+#endif
+
 static void ass_enable(void)
 {
 	int ret = 0;
@@ -1330,6 +1344,13 @@ static int lpass_probe(struct platform_device *pdev)
 #endif
 
 	exynos_pm_register_notifier(&lpass_lpa_nb);
+#ifdef CONFIG_SOC_EXYNOS8890
+	iovmm_set_fault_handler(&lpass.pdev->dev,
+				lpass_sysmmu_fault_handler, NULL);
+	lpass.sram_fw_back = kzalloc(SRAM_SIZE, GFP_KERNEL);
+	if (!lpass.sram_fw_back)
+		pr_err("LPASS driver failed to allocate memory for SRAM FW Backup\n");
+#endif
 
 	pr_info("%s: LPASS driver was registerd successfully\n", __func__);
 	return 0;
@@ -1353,6 +1374,9 @@ static int lpass_remove(struct platform_device *pdev)
 	iounmap(lpass.regs_s);
 #ifndef CONFIG_SOC_EXYNOS8890
 	iounmap(lpass.mem);
+#endif
+#ifdef CONFIG_SOC_EXYNOS8890
+	kfree(lpass.sram_fw_back);
 #endif
 	return 0;
 }

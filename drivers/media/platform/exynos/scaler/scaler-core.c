@@ -1334,32 +1334,14 @@ static int sc_prepare_2nd_scaling(struct sc_ctx *ctx,
 	if (*v_ratio > SCALE_RATIO_CONST(4, 1))
 		crop.height = ((src_height + 7) / 8) * 2;
 
-	if (crop.height < limit->min_h) {
-		if (SCALE_RATIO(limit->min_h, ctx->d_frame.crop.height)
-						> SCALE_RATIO_CONST(4, 1)) {
-			dev_err(sc->dev, "Failed height scale down %d -> %d\n",
-				src_height, ctx->d_frame.crop.height);
-
-			free_intermediate_frame(ctx);
-			return -EINVAL;
-		}
+	if (crop.height < limit->min_h)
 		crop.height = limit->min_h;
-	}
 
 	if (*h_ratio > SCALE_RATIO_CONST(4, 1))
 		crop.width = ((src_width + 7) / 8) * 2;
 
-	if (crop.width < limit->min_w) {
-		if (SCALE_RATIO(limit->min_w, ctx->d_frame.crop.width)
-						> SCALE_RATIO_CONST(4, 1)) {
-			dev_err(sc->dev, "Failed width scale down %d -> %d\n",
-				src_width, ctx->d_frame.crop.width);
-
-			free_intermediate_frame(ctx);
-			return -EINVAL;
-		}
+	if (crop.width < limit->min_w)
 		crop.width = limit->min_w;
-	}
 
 	pixfmt = target_fmt->pixelformat;
 
