@@ -901,6 +901,8 @@ static ssize_t eol_test_result_store(struct device *dev,
 	if (buf_len > MAX_EOL_RESULT)
 		buf_len = MAX_EOL_RESULT;
 
+	mutex_lock(&data->storelock);
+
 	if (data->eol_test_result != NULL)
 		kfree(data->eol_test_result);
 
@@ -908,9 +910,13 @@ static ssize_t eol_test_result_store(struct device *dev,
 	if (data->eol_test_result == NULL) {
 		pr_err("max86900_%s - couldn't allocate memory\n",
 			__func__);
+		mutex_unlock(&data->storelock);
 		return -ENOMEM;
 	}
 	strncpy(data->eol_test_result, buf, buf_len);
+
+	mutex_unlock(&data->storelock);
+	
 	pr_info("max86900_%s - result = %s, buf_len(%u)\n", __func__, data->eol_test_result, buf_len);
 	data->eol_test_status = 1;
 	return size;
@@ -1004,15 +1010,21 @@ static ssize_t max86900_lib_ver_store(struct device *dev,
 	if (buf_len > MAX_LIB_VER)
 		buf_len = MAX_LIB_VER;
 
+	mutex_lock(&data->storelock);
+
 	if (data->lib_ver != NULL)
 		kfree(data->lib_ver);
 
 	data->lib_ver = kzalloc(sizeof(char) * buf_len, GFP_KERNEL);
 	if (data->lib_ver == NULL) {
 		pr_err("%s - couldn't allocate memory\n", __func__);
+		mutex_unlock(&data->storelock);
 		return -ENOMEM;
 	}
 	strncpy(data->lib_ver, buf, buf_len);
+
+	mutex_unlock(&data->storelock);
+
 	pr_info("%s - lib_ver = %s\n", __func__, data->lib_ver);
 	return size;
 }
@@ -1176,6 +1188,7 @@ int max86900_probe(struct i2c_client *client, const struct i2c_device_id *id )
 
 	mutex_init(&data->i2clock);
 	mutex_init(&data->activelock);
+	mutex_init(&data->storelock);
 
 	data->dev = &client->dev;
 

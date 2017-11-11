@@ -80,6 +80,7 @@ struct max86900_device_data
 	struct input_dev *hrm_input_dev;
 	struct mutex i2clock;
 	struct mutex activelock;
+	struct mutex storelock;
 	struct regulator *vdd_1p8;
 	struct regulator *vdd_3p3;
 	const char *vldo39;

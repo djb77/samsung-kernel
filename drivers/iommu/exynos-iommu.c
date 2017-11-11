@@ -31,6 +31,10 @@
 
 #include "exynos-iommu.h"
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
+
 #define CFG_MASK	0x01101FBC /* Selecting bit 24, 20, 12-7, 5-2 */
 
 #define PB_INFO_NUM(reg)	((reg) & 0xFF)
@@ -648,15 +652,26 @@ static void show_fault_information(struct sysmmu_drvdata *drvdata,
 	unsigned int info;
 	phys_addr_t pgtable;
 	int fault_id = SYSMMU_FAULT_ID(flags);
+	char temp_buf[SZ_128];
 
 	pgtable = __raw_readl(drvdata->sfrbase + REG_PT_BASE_PPN);
 	pgtable <<= PAGE_SHIFT;
+
+
+	snprintf(temp_buf, SZ_128, "%s %s %s at %#010lx (page table @ %pa)",
+		dev_name(drvdata->sysmmu),
+		(flags & IOMMU_FAULT_WRITE) ? "WRITE" : "READ",
+		sysmmu_fault_name[fault_id], fault_addr, &pgtable);
 
 	pr_crit("----------------------------------------------------------\n");
 	pr_crit("%s %s %s at %#010lx (page table @ %pa)\n",
 		dev_name(drvdata->sysmmu),
 		(flags & IOMMU_FAULT_WRITE) ? "WRITE" : "READ",
 		sysmmu_fault_name[fault_id], fault_addr, &pgtable);
+
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_store_extra_buf(INFO_SYSMMU, "%s", temp_buf);	
+#endif
 
 	if (fault_id == SYSMMU_FAULT_UNKNOWN) {
 		pr_crit("The fault is not caused by this System MMU.\n");

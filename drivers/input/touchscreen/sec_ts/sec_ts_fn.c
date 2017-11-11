@@ -318,6 +318,11 @@ static ssize_t cmd_store(struct device *dev, struct device_attribute *attr,
 		return -EINVAL;
 	}
 
+	if (strlen(buf) >= CMD_STR_LEN) {		
+		tsp_debug_err(true, &ts->client->dev, "%s: cmd length is over (%s,%d)!!\n", __func__, buf, (int)strlen(buf));
+		return -EINVAL;
+	}
+
 #if 1
 	if (ts->cmd_is_running == true) {
 		tsp_debug_err(true, &ts->client->dev, "%s: other cmd is running.\n", __func__);

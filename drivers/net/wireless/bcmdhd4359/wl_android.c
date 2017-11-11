@@ -925,13 +925,13 @@ static int wl_android_get_roam_trigger(
 	int roam_trigger[2] = {0, 0};
 
 	roam_trigger[1] = WLC_BAND_2G;
-	if (wldev_ioctl(dev, WLC_GET_ROAM_TRIGGER, roam_trigger,
-		sizeof(roam_trigger), 0)) {
+		if (wldev_ioctl(dev, WLC_GET_ROAM_TRIGGER, roam_trigger,
+			sizeof(roam_trigger), 0)) {
 		roam_trigger[1] = WLC_BAND_5G;
 		if (wldev_ioctl(dev, WLC_GET_ROAM_TRIGGER, roam_trigger,
 			sizeof(roam_trigger), 0))
 			return -1;
-	}
+		}
 
 	bytes_written = snprintf(command, total_len, "%s %d",
 		CMD_ROAMTRIGGER_GET, roam_trigger[0]);
@@ -1909,7 +1909,7 @@ static int wl_android_wbtext(struct net_device *dev, char *command, int total_le
 			DHD_ERROR(("%s: Failed to set wbtext error = %d\n",
 				__FUNCTION__, error));
 		}
-	}
+			}
 	return error;
 }
 
@@ -1967,8 +1967,9 @@ wls_parse_batching_cmd(struct net_device *dev, char *command, int total_len)
 					" <> params\n", __FUNCTION__));
 					goto exit;
 				}
-					while ((token2 = strsep(&pos2,
-					PNO_PARAM_CHANNEL_DELIMETER)) != NULL) {
+
+				while ((token2 = strsep(&pos2, PNO_PARAM_CHANNEL_DELIMETER))
+						!= NULL) {
 					if (token2 == NULL || !*token2)
 						break;
 					if (*token2 == '\0')
@@ -1979,11 +1980,18 @@ wls_parse_batching_cmd(struct net_device *dev, char *command, int total_len)
 						DHD_PNO(("band : %s\n",
 							(*token2 == 'A')? "A" : "B"));
 					} else {
+						if ((batch_params.nchan >= WL_NUMCHANNELS) ||
+							(i >= WL_NUMCHANNELS)) {
+							DHD_ERROR(("Too many nchan %d\n",
+								batch_params.nchan));
+							err = BCME_BUFTOOSHORT;
+							goto exit;
+						}
 						batch_params.chan_list[i++] =
-						simple_strtol(token2, NULL, 0);
+							simple_strtol(token2, NULL, 0);
 						batch_params.nchan++;
 						DHD_PNO(("channel :%d\n",
-						batch_params.chan_list[i-1]));
+							batch_params.chan_list[i-1]));
 					}
 				 }
 			} else if (!strncmp(param, PNO_PARAM_RTT, strlen(PNO_PARAM_RTT))) {
@@ -3922,11 +3930,11 @@ int wl_android_set_ibss_routetable(struct net_device *dev, char *command, int to
 		err = -EINVAL;
 		goto exit;
 	}
-        if (entries > MAX_IBSS_ROUTE_TBL_ENTRY) {
-                WL_ERR(("Invalid entries number %u\n", entries));
-                err = -EINVAL;
-                goto exit;
-        }
+	if (entries > MAX_IBSS_ROUTE_TBL_ENTRY) {
+		WL_ERR(("Invalid entries number %u\n", entries));
+		err = -EINVAL;
+		goto exit;
+	}
 
 	WL_INFORM(("Routing table count:%u\n", entries));
 	route_tbl->num_entry = entries;
@@ -4306,7 +4314,7 @@ wl_android_murx_bfe_cap(struct net_device *dev, int val)
 	if ((err = wldev_ioctl(dev, WLC_GET_BSSID, &bssid, ETHER_ADDR_LEN, false)) < 0) {
 		WL_ERR(("Failed to get bssid, error=%d\n", err));
 		return err;
-	}
+}
 
 	bzero(&params, sizeof(wl_reassoc_params_t));
 	memcpy(&params.bssid, &bssid, ETHER_ADDR_LEN);

@@ -37,6 +37,10 @@
 #include "../base.h"
 #include "power.h"
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
+
 typedef int (*pm_callback_t)(struct device *);
 
 /*
@@ -437,6 +441,10 @@ static void dpm_watchdog_handler(unsigned long data)
 {
 	struct dpm_watchdog *wd = (void *)data;
 
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_store_extra_buf(INFO_DPM_TIMEOUT, "%s", dev_name(wd->dev));
+#endif
+	
 	dev_emerg(wd->dev, "**** DPM device timeout ****\n");
 	show_stack(wd->tsk, NULL);
 	panic("%s %s: unrecoverable failure\n",
