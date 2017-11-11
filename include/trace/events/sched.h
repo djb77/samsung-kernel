@@ -737,6 +737,33 @@ TRACE_EVENT(sched_hmp_migrate,
 			__entry->dest, __entry->force)
 );
 
+TRACE_EVENT(sched_hmp_migrate_compensation,
+
+	TP_PROTO(struct task_struct *tsk, int dest, int force, int load),
+
+	TP_ARGS(tsk, dest, force, load),
+
+	TP_STRUCT__entry(
+		__array(char, comm, TASK_COMM_LEN)
+		__field(pid_t, pid)
+		__field(int,  dest)
+		__field(int,  force)
+		__field(int,  load)
+	),
+
+	TP_fast_assign(
+	memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
+		__entry->pid   = tsk->pid;
+		__entry->dest  = dest;
+		__entry->force = force;
+		__entry->load = load;
+	),
+
+	TP_printk("comm=%s pid=%d dest=%d force=%d, load=%d",
+			__entry->comm, __entry->pid,
+			__entry->dest, __entry->force, __entry->load)
+);
+
 TRACE_EVENT(sched_hmp_offload_abort,
 
 	TP_PROTO(int cpu, int data, char *label),
