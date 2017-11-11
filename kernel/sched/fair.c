@@ -2314,9 +2314,17 @@ struct hmp_global_attr {
 };
 
 #ifdef CONFIG_HMP_FREQUENCY_INVARIANT_SCALE
+#ifdef CONFIG_SCHED_HMP_DOWN_MIGRATION_COMPENSATION
+#define HMP_DATA_SYSFS_MAX 20
+#else
 #define HMP_DATA_SYSFS_MAX 14
+#endif
+#else
+#ifdef CONFIG_SCHED_HMP_DOWN_MIGRATION_COMPENSATION
+#define HMP_DATA_SYSFS_MAX 19
 #else
 #define HMP_DATA_SYSFS_MAX 13
+#endif
 #endif
 
 struct hmp_data_struct {
@@ -2698,6 +2706,38 @@ unsigned int hmp_down_threshold = 256;
 
 unsigned int hmp_semiboost_up_threshold = 400;
 unsigned int hmp_semiboost_down_threshold = 150;
+
+#ifdef CONFIG_SCHED_HMP_DOWN_MIGRATION_COMPENSATION
+#include <linux/pm_qos.h>
+#include <linux/irq_work.h>
+static void hmp_do_dwcompensation(int cpu, unsigned long load);
+static void hmp_dwcompensation_update_thr(void);
+
+typedef enum {
+	DWCOM_LV_HIGH,
+	DWCOM_LV_MID,
+	DWCOM_LV_LOW,
+	DWCOM_LV_END,
+} dwcomp_level;
+
+struct dwcom_dat {
+	struct pm_qos_request pm_qos;
+	int freq;
+	int threshold;
+};
+
+static struct {
+	struct workqueue_struct *workqueue;
+	struct work_struct work;
+	struct irq_work irq_work;
+	struct dwcom_dat data[DWCOM_LV_END];
+	int enabled;
+	int timeout;
+	int threshold;
+	unsigned int last_lv;
+} hmp_dwcompensation;
+#endif
+
 
 /*
  * Needed to determine heaviest tasks etc.
@@ -5215,12 +5255,24 @@ static int hmp_semiboost_up_threshold_from_sysfs(int value)
 
 static int hmp_down_threshold_from_sysfs(int value)
 {
-	if ((value > 1024) || (value < 0))
-		return -EINVAL;
+	unsigned long flags;
+	int ret = 0;
 
-	hmp_down_threshold = value;
+	raw_spin_lock_irqsave(&hmp_sysfs_lock, flags);
 
-	return 0;
+	if ((value > 1024) || (value < 0)) {
+		ret = -EINVAL;
+	} else {
+		hmp_down_threshold = value;
+#ifdef CONFIG_SCHED_HMP_DOWN_MIGRATION_COMPENSATION
+		hmp_dwcompensation.threshold = hmp_down_threshold / 2;
+		hmp_dwcompensation_update_thr();
+#endif
+	}
+
+	raw_spin_unlock_irqrestore(&hmp_sysfs_lock, flags);
+
+	return ret;
 }
 
 static int hmp_semiboost_down_threshold_from_sysfs(int value)
@@ -5355,6 +5407,107 @@ static int hmp_aggressive_yield_from_sysfs(int value)
 
 	return ret;
 }
+
+#ifdef CONFIG_SCHED_HMP_DOWN_MIGRATION_COMPENSATION
+static int hmp_dwcompensation_enabled_sysfs(int value)
+{
+	int lv;
+
+	if (value > 0) {
+		hmp_dwcompensation.enabled = 1;
+		pr_info("hmp_dwcompensation is enabled\n");
+	} else {
+		hmp_dwcompensation.enabled = 0;
+		for (lv = 0; lv < DWCOM_LV_END; lv++)
+			pm_qos_update_request(&hmp_dwcompensation.data[lv].pm_qos, 0);
+
+		pr_info("hmp_dwcompensation is disabled\n");
+	}
+
+	return 0;
+}
+
+static int hmp_dwcompensation_timeout_sysfs(int value)
+{
+	int lv;
+
+	if (value > 0) {
+		hmp_dwcompensation.timeout = value;
+	} else {
+		hmp_dwcompensation.timeout = 0;
+		hmp_dwcompensation.enabled = 0;
+
+		for (lv = 0; lv < DWCOM_LV_END; lv++)
+			pm_qos_update_request(&hmp_dwcompensation.data[lv].pm_qos, 0);
+
+		pr_info("hmp_dwcompensation is disabled\n");
+	}
+
+	return 0;
+}
+
+static int hmp_dwcompensation_high_freq_sysfs(int value)
+{
+	int ret = 0;
+
+	if (value >= 0) {
+		hmp_dwcompensation.data[DWCOM_LV_HIGH].freq = value;
+	} else {
+		pr_info("enter invalid value\n");
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
+static int hmp_dwcompensation_mid_freq_sysfs(int value)
+{
+	int ret = 0;
+
+	if (value >= 0) {
+		hmp_dwcompensation.data[DWCOM_LV_MID].freq = value;
+	} else {
+		pr_info("enter invalid value\n");
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
+static int hmp_dwcompensation_low_freq_sysfs(int value)
+{
+	int ret = 0;
+
+	if (value >= 0) {
+		hmp_dwcompensation.data[DWCOM_LV_LOW].freq = value;
+	} else {
+		pr_info("enter invalid value\n");
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
+static int hmp_dwcompensation_threshold_sysfs(int value)
+{
+	unsigned long flags;
+	int ret = 0;
+
+	raw_spin_lock_irqsave(&hmp_sysfs_lock, flags);
+
+	if (value > 0 && value < 1024 && value < hmp_down_threshold) {
+		hmp_dwcompensation.threshold = value;
+		hmp_dwcompensation_update_thr();
+	} else {
+		pr_info("enter invalid value\n");
+		ret = -EINVAL;
+	}
+
+	raw_spin_unlock_irqrestore(&hmp_sysfs_lock, flags);
+
+	return ret;
+}
+#endif
 
 int set_hmp_boost(int enable)
 {
@@ -5512,7 +5665,37 @@ static int hmp_attr_init(void)
 		&hmp_aggressive_yield,
 		NULL,
 		hmp_aggressive_yield_from_sysfs);
+#ifdef CONFIG_SCHED_HMP_DOWN_MIGRATION_COMPENSATION
+	hmp_attr_add("down_compensation_enabled",
+		&hmp_dwcompensation.enabled,
+		NULL,
+		hmp_dwcompensation_enabled_sysfs);
 
+	hmp_attr_add("down_compensation_timeout",
+		&hmp_dwcompensation.timeout,
+		NULL,
+		hmp_dwcompensation_timeout_sysfs);
+
+	hmp_attr_add("down_compensation_high_freq",
+		&hmp_dwcompensation.data[DWCOM_LV_HIGH].freq,
+		NULL,
+		hmp_dwcompensation_high_freq_sysfs);
+
+	hmp_attr_add("down_compensation_mid_freq",
+		&hmp_dwcompensation.data[DWCOM_LV_MID].freq,
+		NULL,
+		hmp_dwcompensation_mid_freq_sysfs);
+
+	hmp_attr_add("down_compensation_low_freq",
+		&hmp_dwcompensation.data[DWCOM_LV_LOW].freq,
+		NULL,
+		hmp_dwcompensation_low_freq_sysfs);
+
+	hmp_attr_add("down_compensation_threshold",
+		&hmp_dwcompensation.threshold,
+		NULL,
+		hmp_dwcompensation_threshold_sysfs);
+#endif
 #ifdef CONFIG_HMP_FREQUENCY_INVARIANT_SCALE
 	/* default frequency-invariant scaling ON */
 	hmp_data.freqinvar_load_scale_enabled = 1;
@@ -5787,6 +5970,18 @@ unlock:
 		 */
 		if (new_cpu < NR_CPUS && new_cpu != prev_cpu) {
 			hmp_next_down_delay(&p->se, new_cpu);
+#ifdef CONFIG_SCHED_HMP_DOWN_MIGRATION_COMPENSATION
+			/*
+			 * if load_avg_ratio is higher than hmp_dwcompensation.threshold,
+			 * request pm_qos to slower domain for performance compensation
+			 */
+			if (hmp_dwcompensation.enabled &&
+				p->se.avg.load_avg_ratio >= hmp_dwcompensation.threshold) {
+				hmp_do_dwcompensation(new_cpu, p->se.avg.load_avg_ratio);
+				trace_sched_hmp_migrate_compensation(p, new_cpu,
+					HMP_MIGRATE_WAKEUP, p->se.avg.load_avg_ratio);
+			}
+#endif
 			trace_sched_hmp_migrate(p, new_cpu, HMP_MIGRATE_WAKEUP);
 			return new_cpu;
 		}
@@ -10437,3 +10632,109 @@ void hp_event_switched_from(struct sched_entity *se)
 }
 #endif
 #endif /* CONFIG_SCHED_HP_EVENT */
+
+#ifdef CONFIG_SCHED_HMP_DOWN_MIGRATION_COMPENSATION
+static void hmp_dwcompensation_irq_work(struct irq_work *irq_work)
+{
+	queue_work(hmp_dwcompensation.workqueue, &hmp_dwcompensation.work);
+}
+
+static void hmp_dwcompensation_work(struct work_struct *work)
+{
+	int lv = hmp_dwcompensation.last_lv;
+
+	hmp_dwcompensation.last_lv = DWCOM_LV_LOW;
+
+	pm_qos_update_request_timeout(&hmp_dwcompensation.data[lv].pm_qos,
+			hmp_dwcompensation.data[lv].freq,
+			hmp_dwcompensation.timeout * USEC_PER_MSEC);
+}
+
+static void hmp_do_dwcompensation(int cpu, unsigned long load)
+{
+	int lv;
+
+	/* find proper compensation level */
+	for (lv = 0; lv < DWCOM_LV_END; lv++)
+		if (load >= hmp_dwcompensation.data[lv].threshold)
+			break;
+
+	if (lv < hmp_dwcompensation.last_lv)
+		 hmp_dwcompensation.last_lv = lv;
+
+	irq_work_queue_on(&hmp_dwcompensation.irq_work, cpu);
+}
+
+static void hmp_dwcompensation_update_thr(void)
+{
+	int temp, lv;
+
+	temp = (hmp_down_threshold - hmp_dwcompensation.threshold) / DWCOM_LV_END;
+	for (lv = 0; lv < DWCOM_LV_END; lv++)
+		/* compensation range is divided fairly by compensation level */
+		hmp_dwcompensation.data[lv].threshold =
+			hmp_dwcompensation.threshold + (temp * (DWCOM_LV_END - lv - 1));
+}
+
+static int __init hmp_dwcompensation_init(void)
+{
+	struct device_node *hmp_param_node;
+	int lv;
+
+	hmp_dwcompensation.enabled = 0;
+
+	hmp_param_node = of_find_node_by_path("/cpus/hmp");
+	if (!hmp_param_node) {
+		pr_warn("%s hmp node is not exist!\n",__func__);
+		return -ENOENT;
+	}
+
+	if (of_property_read_u32(hmp_param_node, "down_compensation_timeout",
+					&hmp_dwcompensation.timeout))
+		pr_warn("%s missing hmp dwcompensation_timeout property\n",__func__);
+
+	if (of_property_read_u32(hmp_param_node, "down_compensation_high_freq",
+					&hmp_dwcompensation.data[DWCOM_LV_HIGH].freq))
+		pr_warn("%s missing hmp dwcompensation_high_freq property\n",__func__);
+
+	if (of_property_read_u32(hmp_param_node, "down_compensation_mid_freq",
+					&hmp_dwcompensation.data[DWCOM_LV_MID].freq))
+		pr_warn("%s missing hmp dwcompensation_mid_freq property\n",__func__);
+
+	if (of_property_read_u32(hmp_param_node, "down_compensation_low_freq",
+					&hmp_dwcompensation.data[DWCOM_LV_LOW].freq))
+		pr_warn("%s missing hmp dwcompensation_low_freq property\n",__func__);
+
+	/*
+	 * calculate threshold. base threshold is half of down threshold
+	 * because load is decayed about 1/2 for 32ms.
+	 */
+	hmp_dwcompensation.threshold = hmp_down_threshold / 2;
+	hmp_dwcompensation_update_thr();
+
+	for (lv = 0; lv < DWCOM_LV_END; lv++)
+		pm_qos_add_request(&hmp_dwcompensation.data[lv].pm_qos,
+						PM_QOS_CLUSTER0_FREQ_MIN, 0);
+
+	init_irq_work(&hmp_dwcompensation.irq_work, hmp_dwcompensation_irq_work);
+	INIT_WORK(&hmp_dwcompensation.work, hmp_dwcompensation_work);
+	hmp_dwcompensation.workqueue = alloc_workqueue("%s", WQ_HIGHPRI | WQ_UNBOUND |\
+					WQ_MEM_RECLAIM | WQ_FREEZABLE,
+					1, "hmp_down_compensation_workq");
+
+	/* print hmp down-migration compensation information */
+	pr_info("HMP: down-migration compensation initialized \n");
+	pr_info("HMP: dwcompensation: base threshold:%d, timeout: %d \n",
+			hmp_dwcompensation.threshold, hmp_dwcompensation.timeout);
+	for (lv = 0; lv < DWCOM_LV_END; lv++)
+		pr_info("HMP: dwcompensation: lv:%d, freq: %d, threshold: %d \n",
+					lv, hmp_dwcompensation.data[lv].freq,
+					hmp_dwcompensation.data[lv].threshold);
+
+	hmp_dwcompensation.last_lv = DWCOM_LV_LOW;
+	hmp_dwcompensation.enabled = 1;
+
+	return 0;
+}
+late_initcall(hmp_dwcompensation_init);
+#endif	/* CONFIG_HMP_DOWN_MIGRATION_COMPENSATOIN */

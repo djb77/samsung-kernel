@@ -623,6 +623,14 @@ config SCHED_HMP_LITTLE_PACKING
 	  packing_limit: runqueue load ratio where a RQ is considered
 	    to be full. Default is NICE_0_LOAD * 9/8.
 
+config SCHED_HMP_DOWN_MIGRATION_COMPENSATION
+	bool "(EXPERIMENTAL) HMP down migration compensation"
+	depends on SCHED_HMP
+	help
+	  Enables down migration compensation. The down-migration compensation
+	  guarantees proper performance to the down-migrated task by frequency
+	  qos lock.
+
 config NR_CPUS
 	int "Maximum number of CPUs (2-64)"
 	range 2 64

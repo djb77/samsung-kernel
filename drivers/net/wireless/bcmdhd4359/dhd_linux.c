@@ -597,9 +597,6 @@ typedef struct dhd_info {
 #if defined(DHD_LB)
 	/* CPU Load Balance dynamic CPU selection */
 
-	/* Variable that tracks the currect CPUs available for candidacy */
-	cpumask_var_t cpumask_curr_avail;
-
 	/* Primary and secondary CPU mask */
 	cpumask_var_t cpumask_primary, cpumask_secondary; /* configuration */
 	cpumask_var_t cpumask_primary_new, cpumask_secondary_new; /* temp */
@@ -840,7 +837,6 @@ dhd_lb_set_default_cpus(dhd_info_t *dhd)
 static void
 dhd_cpumasks_deinit(dhd_info_t *dhd)
 {
-	free_cpumask_var(dhd->cpumask_curr_avail);
 	free_cpumask_var(dhd->cpumask_primary);
 	free_cpumask_var(dhd->cpumask_primary_new);
 	free_cpumask_var(dhd->cpumask_secondary);
@@ -854,8 +850,7 @@ dhd_cpumasks_init(dhd_info_t *dhd)
 	uint32 cpus;
 	int ret = 0;
 
-	if (!alloc_cpumask_var(&dhd->cpumask_curr_avail, GFP_KERNEL) ||
-		!alloc_cpumask_var(&dhd->cpumask_primary, GFP_KERNEL) ||
+	if (!alloc_cpumask_var(&dhd->cpumask_primary, GFP_KERNEL) ||
 		!alloc_cpumask_var(&dhd->cpumask_primary_new, GFP_KERNEL) ||
 		!alloc_cpumask_var(&dhd->cpumask_secondary, GFP_KERNEL) ||
 		!alloc_cpumask_var(&dhd->cpumask_secondary_new, GFP_KERNEL)) {
@@ -864,7 +859,6 @@ dhd_cpumasks_init(dhd_info_t *dhd)
 		goto fail;
 	}
 
-	cpumask_copy(dhd->cpumask_curr_avail, cpu_online_mask);
 	cpumask_clear(dhd->cpumask_primary);
 	cpumask_clear(dhd->cpumask_secondary);
 
@@ -926,10 +920,10 @@ void dhd_select_cpu_candidacy(dhd_info_t *dhd)
 	 * to primary CPU. So no conditional checks.
 	 */
 	cpumask_and(dhd->cpumask_primary_new, dhd->cpumask_primary,
-		dhd->cpumask_curr_avail);
+		cpu_online_mask);
 
 	cpumask_and(dhd->cpumask_secondary_new, dhd->cpumask_secondary,
-		dhd->cpumask_curr_avail);
+		cpu_online_mask);
 
 	primary_available_cpus = cpumask_weight(dhd->cpumask_primary_new);
 
@@ -994,27 +988,10 @@ void dhd_select_cpu_candidacy(dhd_info_t *dhd)
 int
 dhd_cpu_callback(struct notifier_block *nfb, unsigned long action, void *hcpu)
 {
-	unsigned int cpu = (unsigned int)(long)hcpu;
-
 	dhd_info_t *dhd = container_of(nfb, dhd_info_t, cpu_notifier);
-
-	switch (action)
-	{
-		case CPU_ONLINE:
-			DHD_LB_STATS_INCR(dhd->cpu_online_cnt[cpu]);
-			cpumask_set_cpu(cpu, dhd->cpumask_curr_avail);
-			dhd_select_cpu_candidacy(dhd);
-			break;
-
-		case CPU_DOWN_PREPARE:
-		case CPU_DOWN_PREPARE_FROZEN:
-			DHD_LB_STATS_INCR(dhd->cpu_offline_cnt[cpu]);
-			cpumask_clear_cpu(cpu, dhd->cpumask_curr_avail);
-			dhd_select_cpu_candidacy(dhd);
-			break;
-		default:
-			break;
-	}
+		/* Select candidate CPU from every CPU callback event */
+   		dhd_select_cpu_candidacy(dhd);
+		
 
 	return NOTIFY_OK;
 }
