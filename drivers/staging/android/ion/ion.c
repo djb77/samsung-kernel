@@ -156,6 +156,40 @@ static inline void ion_buffer_page_clean(struct page **page)
 	*page = (struct page *)((unsigned long)(*page) & ~(1UL));
 }
 
+void ion_debug_heap_usage_show(struct ion_heap *heap)
+{
+	struct scatterlist *sg;
+	struct sg_table *table;
+	struct rb_node *n;
+	struct page *page;
+	struct ion_device *dev = heap->dev;
+	int i;
+	ion_phys_addr_t paddr;
+
+	/* show the usage for only contiguous buffer */
+	if ((heap->type != ION_HEAP_TYPE_CARVEOUT)
+			&& (heap->type != ION_HEAP_TYPE_DMA))
+		return;
+
+	pr_err("[HEAP %16s (id %4d) DETAIL USAGE]\n", heap->name, heap->id);
+
+	mutex_lock(&dev->buffer_lock);
+	for (n = rb_first(&dev->buffers); n; n = rb_next(n)) {
+		struct ion_buffer *buffer = rb_entry(n, struct ion_buffer,
+						     node);
+		if (buffer->heap->id != heap->id)
+			continue;
+		table = buffer->sg_table;
+		for_each_sg(table->sgl, sg, table->nents, i) {
+			page = sg_page(sg);
+			paddr = PFN_PHYS(page_to_pfn(page));
+			pr_err("[%16lx--%16lx] %16zu\n",
+				paddr, paddr + sg->length, buffer->size);
+		}
+	}
+	mutex_unlock(&dev->buffer_lock);
+}
+
 #ifdef CONFIG_ION_EXYNOS_STAT_LOG
 static inline void ION_EVENT_ALLOC(struct ion_buffer *buffer, ktime_t begin)
 {
@@ -660,8 +694,10 @@ static int ion_handle_add(struct ion_client *client, struct ion_handle *handle)
 	struct ion_handle *entry;
 
 	id = idr_alloc(&client->idr, handle, 1, 0, GFP_KERNEL);
-	if (id < 0)
+	if (id < 0) {
+		pr_err("%s: Fail to get bad id (ret %d)\n", __func__, id);
 		return id;
+	}
 
 	handle->id = id;
 
@@ -1752,8 +1788,14 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 						data.allocation.align,
 						data.allocation.heap_id_mask,
 						data.allocation.flags);
-		if (IS_ERR(handle))
+		if (IS_ERR(handle)) {
+			pr_err("%s: len %zu align %zu heap_id_mask %u flags %x (ret %ld)\n",
+				__func__, data.allocation.len,
+				data.allocation.align,
+				data.allocation.heap_id_mask,
+				data.allocation.flags, PTR_ERR(handle));
 			return PTR_ERR(handle);
+		}
 
 		data.allocation.handle = handle->id;
 
