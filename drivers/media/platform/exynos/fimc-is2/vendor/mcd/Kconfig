@@ -82,6 +82,12 @@ config CAMERA_HERO
         default n
         help
           This camera is hero project.
+config CAMERA_VJFLTE
+        bool "This camera is vjflte project"
+        depends on VENDER_MCD
+        default n
+        help
+          This camera is vjflte project.
 config OIS_USE_RUMBA_S4
         bool "Use RUMBA S4 ois driver IC"
         depends on OIS_USE

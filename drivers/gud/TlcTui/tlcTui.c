@@ -137,8 +137,8 @@ static uint32_t send_cmd_to_user(uint32_t command_id)
 	* the command. */
 	if (atomic_read(&fileopened)) {
 	/* S.LSI : Clean up previous response. */
-	complete(&io_comp);
-	reinit_completion(&io_comp);
+//	complete_all(&io_comp);
+//	INIT_COMPLETION(io_comp);
 
 		/* Unlock the ioctl thread (IOCTL_WAIT) in order to let the
 		* client know that there is a command to process. */

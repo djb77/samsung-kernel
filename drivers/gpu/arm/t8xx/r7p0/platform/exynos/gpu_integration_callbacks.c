@@ -181,7 +181,9 @@ int gpu_vendor_dispatch(struct kbase_context *kctx, void * const args, u32 args_
 #ifdef CONFIG_USE_VSYNC_SKIP
 			struct kbase_uk_tmu_skip *tskip = args;
 			int thermistor = sec_therm_get_ap_temperature();
-			u32 i, t_index = tskip->num_ratiometer;
+			u32 i, t_index;
+			tskip->num_ratiometer = MIN(tskip->num_ratiometer, TMU_INDEX_MAX);
+			t_index = tskip->num_ratiometer;
 
 			for (i = 0; i < tskip->num_ratiometer; i++)
 				if (thermistor >= tskip->temperature[i])

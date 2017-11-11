@@ -1076,13 +1076,14 @@ static ssize_t sec_ts_regread_show(struct device *dev, struct device_attribute *
 
 	disable_irq(ts->client->irq);
 
+	mutex_lock(&ts->device_mutex);
+
 	read_lv1_buff = (u8 *)kzalloc(sizeof(u8)*lv1_readsize, GFP_KERNEL);
 	if (!read_lv1_buff) {
 		tsp_debug_err(true, &ts->client->dev, "%s kzalloc failed\n", __func__);
 		goto malloc_err;
 	}
 
-	mutex_lock(&ts->device_mutex);
 	remain = lv1_readsize;
 	offset = 0;
 	do
@@ -1135,11 +1136,18 @@ static ssize_t sec_ts_gesture_status_show(struct device *dev, struct device_attr
 
 static ssize_t sec_ts_regreadsize_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
 {
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+
+	mutex_lock(&ts->device_mutex);
+
 	lv1cmd = buf[0];
 	lv1_readsize = ((unsigned int)buf[4] << 24) |
 			((unsigned int)buf[3]<<16) |((unsigned int) buf[2]<<8) |((unsigned int)buf[1]<<0);
 	lv1_readoffset = 0;
 	lv1_readremain = 0;
+
+	mutex_unlock(&ts->device_mutex);
+
 	return size;
 }
 

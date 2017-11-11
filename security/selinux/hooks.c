@@ -112,9 +112,9 @@ extern void rkp_free_security(unsigned long tsec);
 u8 rkp_ro_page(unsigned long addr);
 static inline unsigned int cmp_sec_integrity(const struct cred *cred,struct mm_struct *mm)
 {
-	return ((cred->bp_task != current) /*|| 
+	return ((cred->bp_task != current) || 
 			(mm && (!( in_interrupt() || in_softirq())) && 
-			(mm->pgd != cred->bp_pgd))*/);
+			(mm->pgd != cred->bp_pgd)));
 			
 }
 extern struct cred init_cred;
@@ -178,7 +178,7 @@ extern struct security_operations *security_ops;
 static atomic_t selinux_secmark_refcount = ATOMIC_INIT(0);
 
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
-int selinux_enforcing;
+RKP_RO_AREA int selinux_enforcing;
 
 static int __init enforcing_setup(char *str)
 {
@@ -210,7 +210,7 @@ static int __init selinux_enabled_setup(char *str)
 }
 __setup("selinux=", selinux_enabled_setup);
 #else
-int selinux_enabled = 1;
+RKP_RO_AREA int selinux_enabled = 1;
 #endif
 
 static struct kmem_cache *sel_inode_cache;
@@ -293,14 +293,12 @@ static inline u32 cred_sid(const struct cred *cred)
 static inline u32 task_sid(const struct task_struct *task)
 {
 	u32 sid;
-#ifdef CONFIG_RKP_KDP
-	const struct task_security_struct *tsec;
-#endif
+
 	rcu_read_lock();
 #ifdef CONFIG_RKP_KDP
 	if(rkp_cred_enable) {
-		while((u64)(tsec = __task_cred(task)->security) == (u64)0x07);
-		sid = tsec->sid;
+		while((u64)(__task_cred(task)->security) == (u64)0x07);
+		sid = cred_sid(__task_cred(task));
 	}
 	else
 		sid = cred_sid(__task_cred(task));
@@ -6911,7 +6909,7 @@ static int selinux_key_getsecurity(struct key *key, char **_buffer)
 
 #endif
 
-static struct security_operations selinux_ops = {
+RKP_RO_AREA static struct security_operations selinux_ops = {
 	.name =				"selinux",
 
 	.binder_set_context_mgr =	selinux_binder_set_context_mgr,

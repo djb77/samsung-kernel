@@ -2114,7 +2114,9 @@ static ssize_t maxdsm_read(struct file *filep, char __user *buf,
 	maxdsm_read_all();
 
 	/* copy params to user */
-	ret = copy_to_user(buf, maxdsm.param, count);
+	ret = copy_to_user(buf, maxdsm.param,
+			sizeof(uint32_t) * maxdsm.param_size < count ?
+			sizeof(uint32_t) * maxdsm.param_size : count);
 	if (ret)
 		pr_err("%s: copy_to_user failed - %d\n", __func__, ret);
 

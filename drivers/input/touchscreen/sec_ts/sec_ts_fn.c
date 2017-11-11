@@ -408,7 +408,7 @@ static ssize_t cmd_store(struct device *dev, struct device_attribute *attr,
 				start = pos + 1;
 			}
 			pos++;
-		} while (pos - buf <= length);
+		} while ((pos - buf <= length) && (param_cnt < CMD_PARAM_NUM));
 	}
 
 	tsp_debug_err(true, &ts->client->dev, "%s: Command = %s\n", __func__, buf);
