@@ -22,6 +22,8 @@
 #include "ddi_spi.h"
 #endif
 
+extern struct kset *devices_kset;
+
 #if defined(CONFIG_SEC_FACTORY) && defined(CONFIG_EXYNOS_DECON_LCD_MCD)
 static struct lcd_seq_info SEQ_MCD_ON_SET[] = {
 	{(u8 *)SEQ_MCD_ON_SET1, ARRAY_SIZE(SEQ_MCD_ON_SET1), 0},
@@ -786,6 +788,19 @@ static ssize_t window_type_show(struct device *dev,
 	struct panel_private *priv = dev_get_drvdata(dev);
 
 	sprintf(buf, "%02x %02x %02x\n", priv->id[0], priv->id[1], priv->id[2]);
+
+	return strlen(buf);
+}
+
+static ssize_t SVC_OCTA_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct panel_private *priv = dev_get_drvdata(dev);
+
+	sprintf(buf, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\n",
+		priv->date[0] , priv->date[1], priv->date[2], priv->date[3], priv->date[4],
+		priv->date[5],priv->date[6], (priv->coordinate[0] &0xFF00)>>8,priv->coordinate[0] &0x00FF,
+		(priv->coordinate[1]&0xFF00)>>8,priv->coordinate[1]&0x00FF);
 
 	return strlen(buf);
 }
@@ -1589,6 +1604,7 @@ static DEVICE_ATTR(ldu_correction, 0664, ldu_correction_show, ldu_correction_sto
 static DEVICE_ATTR(auto_brightness_level, 0444, auto_brightness_level_show, NULL);
 static DEVICE_ATTR(lcd_type, 0444, lcd_type_show, NULL);
 static DEVICE_ATTR(window_type, 0444, window_type_show, NULL);
+static DEVICE_ATTR(SVC_OCTA, 0444, SVC_OCTA_show, NULL);
 static DEVICE_ATTR(manufacture_code, 0444, manufacture_code_show, NULL);
 static DEVICE_ATTR(cell_id, 0444, cell_id_show, NULL);
 static DEVICE_ATTR(brightness_table, 0444, brightness_table_show, NULL);
@@ -1608,6 +1624,8 @@ static DEVICE_ATTR(aid_log, 0444, aid_log_show, NULL);
 void lcd_init_sysfs(struct dsim_device *dsim)
 {
 	int ret = -1;
+	struct kernfs_node* SVC_sd;
+	struct kobject* SVC;
 
 	ret = device_create_file(&dsim->lcd->dev, &dev_attr_lcd_type);
 	if (ret < 0)
@@ -1719,6 +1737,33 @@ void lcd_init_sysfs(struct dsim_device *dsim)
 		dev_err(&dsim->lcd->dev, "failed to add sysfs entries, %d\n", __LINE__);
 #endif
 
+
+	ret = device_create_file(&dsim->lcd->dev, &dev_attr_SVC_OCTA);
+	if (ret < 0)
+		dev_err(&dsim->lcd->dev, "failed to add sysfs entries, %d\n", __LINE__);
+
+	/* to /sys/devices/svc/ */
+	SVC_sd = sysfs_get_dirent(devices_kset->kobj.sd, "svc");
+	if(IS_ERR_OR_NULL(SVC_sd)) {
+		SVC = kobject_create_and_add("svc", &devices_kset->kobj);
+		if(IS_ERR_OR_NULL(SVC))
+			dsim_err("failed to create /sys/devices/svc already exist svc : 0x%p\n", SVC);
+		else
+			dsim_err("success to create /sys/devices/svc svc : 0x%p\n", SVC);
+	} else {
+		SVC = (struct kobject*)SVC_sd->priv;
+		dsim_info("success to find svc_sd : 0x%p  svc : 0x%p\n", SVC_sd, SVC);
+	}
+
+	if(!IS_ERR_OR_NULL(SVC)) {
+		ret = sysfs_create_link(SVC, &dsim->lcd->dev.kobj, "OCTA");
+		if(ret)
+			dsim_err("failed to create svc/OCTA/ \n");
+		else
+			dsim_info("success to create svc/OCTA/ \n");
+	} else {
+		dsim_err("failed to find svc kobject\n");
+	}
 }
 
 

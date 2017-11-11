@@ -54,6 +54,7 @@
 #include <linux/muic/muic_notifier.h>
 #endif
 
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #undef CONFIG_HAS_EARLYSUSPEND
 #endif
