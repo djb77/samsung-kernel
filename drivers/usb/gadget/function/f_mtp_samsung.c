@@ -1376,7 +1376,8 @@ mtpg_function_unbind(struct usb_configuration *c, struct usb_function *f)
 	struct usb_request *req;
 
 	printk(KERN_DEBUG "[%s]\tline = [%d]\n", __func__, __LINE__);
-
+	
+	strings_dev_mtp[F_MTP_IDX].id = 0;
 	while ((req = mtpg_req_get(dev, &dev->rx_idle)))
 		mtpg_request_free(req, dev->bulk_out);
 
@@ -1397,7 +1398,8 @@ mtpg_function_bind(struct usb_configuration *c, struct usb_function *f)
 	struct usb_request	*req;
 	struct usb_ep		*ep;
 	int			i, id;
-
+	int			status = 0;
+	
 	/* Allocate string descriptor numbers ... note that string
 	 * contents can be overridden by the composite_dev glue.
 	 */
@@ -1410,6 +1412,14 @@ mtpg_function_bind(struct usb_configuration *c, struct usb_function *f)
 	}
 
 	mtpg_interface_desc.bInterfaceNumber = id;
+
+	if (strings_dev_mtp[F_MTP_IDX].id == 0) {
+		status = usb_string_id(c->cdev);
+		if (status < 0)
+			return status;
+		strings_dev_mtp[F_MTP_IDX].id = status;
+		mtpg_interface_desc.iInterface = status;
+	}
 
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_mtpg_in_desc);
 	if (!ep) {

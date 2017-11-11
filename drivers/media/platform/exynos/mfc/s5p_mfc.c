@@ -16,6 +16,7 @@
 #include <video/videonode.h>
 #include <linux/of.h>
 #include <linux/smc.h>
+#include <linux/cpuidle.h>
 
 #include "s5p_mfc_common.h"
 
@@ -232,6 +233,7 @@ static void mfc_deinit_enc_ctx(struct s5p_mfc_ctx *ctx)
 static int mfc_init_enc_ctx(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_enc *enc;
+	struct s5p_mfc_enc_params *p;
 	int ret = 0;
 	int i;
 
@@ -265,6 +267,11 @@ static int mfc_init_enc_ctx(struct s5p_mfc_ctx *ctx)
 	s5p_mfc_qos_reset_framerate(ctx);
 
 	ctx->qos_ratio = 100;
+
+	/* disable IVF header by default (VP8, VP9) */
+	p = &enc->params;
+	p->ivf_header_disable = 1;
+
 #ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	INIT_LIST_HEAD(&ctx->qos_list);
 #endif
@@ -308,6 +315,7 @@ fail_enc_init:
 	return 0;
 }
 
+extern int set_hmp_family_boost(int enable);
 /* Open an MFC node */
 static int s5p_mfc_open(struct file *file)
 {
@@ -335,6 +343,18 @@ static int s5p_mfc_open(struct file *file)
 	}
 
 	dev->num_inst++;	/* It is guarded by mfc_mutex in vfd */
+
+	/* for family boost */
+	if (node == MFCNODE_ENCODER) {
+		dev->num_enc++;
+		mfc_debug(1, "encoder count: %d\n", dev->num_enc);
+		if (dev->num_enc == 1) {
+			disable_priv_cpuidle();
+			mfc_debug(1, "call cpuidle_pause()\n");
+			set_hmp_family_boost(1);
+			mfc_debug(1, "call set_hmp_family_boost(1)\n");
+		}
+	}
 
 	/* Allocate memory for context */
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
@@ -568,6 +588,16 @@ err_vdev:
 
 err_ctx_alloc:
 	dev->num_inst--;
+	if (node == MFCNODE_ENCODER) {
+		dev->num_enc--;
+		mfc_debug(1, "encoder count: %c\n", dev->num_enc);
+		if (dev->num_enc == 0) {
+			set_hmp_family_boost(0);
+			mfc_debug(1, "call set_hmp_family_boost(0)\n");
+			enable_priv_cpuidle();
+			mfc_debug(1, "call cpuidle_resume()\n");
+		}
+	}
 
 err_node_type:
 	mfc_info_dev("MFC driver open is failed [%d:%d]\n",
@@ -664,6 +694,7 @@ static int s5p_mfc_release(struct file *file)
 			if (s5p_mfc_wait_for_done_ctx(ctx,
 				S5P_FIMV_R2H_CMD_CLOSE_INSTANCE_RET)) {
 				mfc_err_ctx("waiting once more but timed out\n");
+				dev->logging_data->cause |= (1 << MFC_CAUSE_FAIL_CLOSE_INST);
 				s5p_mfc_dump_info_and_stop_hw(dev);
 			}
 		}
@@ -673,6 +704,18 @@ static int s5p_mfc_release(struct file *file)
 	if (ctx->is_drm)
 		dev->num_drm_inst--;
 	dev->num_inst--;
+
+	/* for family boost */
+	if (ctx->type == MFCINST_ENCODER && !ctx->is_drm) {
+		dev->num_enc--;
+		mfc_debug(1, "encoder count: %c\n", dev->num_enc);
+		if (dev->num_enc == 0) {
+			set_hmp_family_boost(0);
+			mfc_debug(1, "call set_hmp_family_boost(0)\n");
+			enable_priv_cpuidle();
+			mfc_debug(1, "call cpuidle_resume()\n");
+		}
+	}
 
 	if (dev->num_inst == 0) {
 		s5p_mfc_deinit_hw(dev);
@@ -875,6 +918,26 @@ int s5p_mfc_sysmmu_fault_handler(struct iommu_domain *iodmn, struct device *devi
 
 	dev = (struct s5p_mfc_dev *)param;
 	s5p_mfc_dump_buffer_info(dev, addr);
+
+	if (MFC_MMU0_READL(MFC_MMU_INTERRUPT_STATUS)) {
+		if (MFC_MMU0_READL(MFC_MMU_FAULT_TRANS_INFO) & MFC_MMU_FAULT_TRANS_INFO_RW_MASK)
+			dev->logging_data->cause |= (1 << MFC_CAUSE_0WRITE_PAGE_FAULT);
+		else
+			dev->logging_data->cause |= (1 << MFC_CAUSE_0READ_PAGE_FAULT);
+		dev->logging_data->fault_status = MFC_MMU0_READL(MFC_MMU_INTERRUPT_STATUS);
+		dev->logging_data->fault_trans_info = MFC_MMU0_READL(MFC_MMU_FAULT_TRANS_INFO);
+	} else if (MFC_MMU1_READL(MFC_MMU_INTERRUPT_STATUS)) {
+		if (MFC_MMU1_READL(MFC_MMU_FAULT_TRANS_INFO) & MFC_MMU_FAULT_TRANS_INFO_RW_MASK)
+			dev->logging_data->cause |= (1 << MFC_CAUSE_1WRITE_PAGE_FAULT);
+		else
+			dev->logging_data->cause |= (1 << MFC_CAUSE_1READ_PAGE_FAULT);
+		dev->logging_data->fault_status = MFC_MMU1_READL(MFC_MMU_INTERRUPT_STATUS);
+		dev->logging_data->fault_trans_info = MFC_MMU1_READL(MFC_MMU_FAULT_TRANS_INFO);
+	} else {
+		mfc_err_dev("there isn't any fault interrupt of MFC\n");
+	}
+	dev->logging_data->fault_addr = addr;
+
 	s5p_mfc_dump_info_and_stop_hw(dev);
 
 	return 0;
@@ -980,6 +1043,18 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to ioremap address region\n");
 		ret = -ENOENT;
 		goto err_ioremap;
+	}
+	dev->sysmmu0_base = ioremap(MFC_MMU0_BASE_ADDR, MFC_MMU_SIZE);
+	if (dev->sysmmu0_base == NULL) {
+		dev_err(&pdev->dev, "failed to ioremap sysmmu0 address region\n");
+		ret = -ENOENT;
+		goto err_ioremap_mmu0;
+	}
+	dev->sysmmu1_base = ioremap(MFC_MMU1_BASE_ADDR, MFC_MMU_SIZE);
+	if (dev->sysmmu1_base == NULL) {
+		dev_err(&pdev->dev, "failed to ioremap sysmmu1 address region\n");
+		ret = -ENOENT;
+		goto err_ioremap_mmu1;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
@@ -1218,10 +1293,19 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 
 	vb2_ion_attach_iommu(dev->alloc_ctx);
 
+	dev->logging_data = devm_kzalloc(&pdev->dev, sizeof(struct s5p_mfc_debug), GFP_KERNEL);
+	if (!dev->logging_data) {
+		dev_err(&pdev->dev, "no memory for logging data\n");
+		ret = -ENOMEM;
+		goto err_alloc_debug;
+	}
+
 	pr_debug("%s--\n", __func__);
 	return 0;
 
 /* Deinit MFC if probe had failed */
+err_alloc_debug:
+	vb2_ion_detach_iommu(dev->alloc_ctx);
 #ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
 alloc_ctx_sh_fail:
 	vb2_ion_destroy_context(dev->alloc_ctx_drm_fw);
@@ -1257,6 +1341,10 @@ err_v4l2_dev:
 	free_irq(dev->irq, dev);
 err_req_irq:
 err_res_irq:
+	iounmap(dev->sysmmu1_base);
+err_ioremap_mmu1:
+	iounmap(dev->sysmmu0_base);
+err_ioremap_mmu0:
 	iounmap(dev->regs_base);
 err_ioremap:
 	release_mem_region(dev->mfc_mem->start, resource_size(dev->mfc_mem));
@@ -1298,7 +1386,10 @@ static int s5p_mfc_remove(struct platform_device *pdev)
 	mfc_debug(2, "Will now deinit HW\n");
 	s5p_mfc_deinit_hw(dev);
 	vb2_ion_destroy_context(dev->alloc_ctx);
+	vb2_ion_detach_iommu(dev->alloc_ctx);
 	free_irq(dev->irq, dev);
+	iounmap(dev->sysmmu1_base);
+	iounmap(dev->sysmmu0_base);
 	iounmap(dev->regs_base);
 	release_mem_region(dev->mfc_mem->start, resource_size(dev->mfc_mem));
 	s5p_mfc_pm_final(dev);

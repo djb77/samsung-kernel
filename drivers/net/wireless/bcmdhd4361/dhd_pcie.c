@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.c 688368 2017-03-06 07:11:43Z $
+ * $Id: dhd_pcie.c 696007 2017-04-25 04:30:05Z $
  */
 
 
@@ -165,7 +165,6 @@ extern void dhd_prot_set_h2d_max_txpost(dhd_pub_t *dhd, uint16 max_txpost);
 /* IOVar table */
 enum {
 	IOV_INTR = 1,
-	IOV_MEMBYTES,
 	IOV_MEMSIZE,
 	IOV_SET_DOWNLOAD_STATE,
 	IOV_DEVRESET,
@@ -232,7 +231,6 @@ enum {
 
 const bcm_iovar_t dhdpcie_iovars[] = {
 	{"intr",	IOV_INTR,	0,	0, IOVT_BOOL,	0 },
-	{"membytes",	IOV_MEMBYTES,	0,	0, IOVT_BUFFER,	2 * sizeof(int) },
 	{"memsize",	IOV_MEMSIZE,	0,	0, IOVT_UINT32,	0 },
 	{"dwnldstate",	IOV_SET_DOWNLOAD_STATE,	0,	0, IOVT_BOOL,	0 },
 	{"vars",	IOV_VARS,	0,	0, IOVT_BUFFER,	0 },
@@ -2789,6 +2787,7 @@ dhdpcie_checkdied(dhd_bus_t *bus, char *data, uint size)
 	char *str = NULL;
 	pciedev_shared_t *local_pciedev_shared = bus->pcie_sh;
 	struct bcmstrbuf strbuf;
+	unsigned long flags;
 
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
 
@@ -2816,6 +2815,9 @@ dhdpcie_checkdied(dhd_bus_t *bus, char *data, uint size)
 		bcmerror = BCME_NOMEM;
 		goto done;
 	}
+	DHD_GENERAL_LOCK(bus->dhd, flags);
+	DHD_BUS_BUSY_SET_IN_CHECKDIED(bus->dhd);
+	DHD_GENERAL_UNLOCK(bus->dhd, flags);
 
 	if ((bcmerror = dhdpcie_readshared(bus)) < 0) {
 		goto done;
@@ -2908,9 +2910,6 @@ dhdpcie_checkdied(dhd_bus_t *bus, char *data, uint size)
 		}
 #endif /* REPORT_FATAL_TIMEOUTS */
 
-		/* wake up IOCTL wait event */
-		dhd_wakeup_ioctl_event(bus->dhd, IOCTL_RETURN_ON_TRAP);
-
 		dhd_prot_debug_info_print(bus->dhd);
 
 #if defined(DHD_FW_COREDUMP)
@@ -2921,10 +2920,18 @@ dhdpcie_checkdied(dhd_bus_t *bus, char *data, uint size)
 		}
 #endif /* DHD_FW_COREDUMP */
 
+		/* wake up IOCTL wait event */
+		dhd_wakeup_ioctl_event(bus->dhd, IOCTL_RETURN_ON_TRAP);
+
 		dhd_schedule_reset(bus->dhd);
 
 
 	}
+
+	DHD_GENERAL_LOCK(bus->dhd, flags);
+	DHD_BUS_BUSY_CLEAR_IN_CHECKDIED(bus->dhd);
+	dhd_os_busbusy_wake(bus->dhd);
+	DHD_GENERAL_UNLOCK(bus->dhd, flags);
 
 done:
 	if (mbuffer)
@@ -4431,92 +4438,6 @@ dhdpcie_bus_doiovar(dhd_bus_t *bus, const bcm_iovar_t *vi, uint32 actionid, cons
 		int_val = (int32)bus->ramsize;
 		bcopy(&int_val, arg, val_size);
 		break;
-	case IOV_SVAL(IOV_MEMBYTES):
-	case IOV_GVAL(IOV_MEMBYTES):
-	{
-		uint32 address;		/* absolute backplane address */
-		uint size, dsize;
-		uint8 *data;
-
-		bool set = (actionid == IOV_SVAL(IOV_MEMBYTES));
-
-		ASSERT(plen >= 2*sizeof(int));
-
-		address = (uint32)int_val;
-		bcopy((char *)params + sizeof(int_val), &int_val, sizeof(int_val));
-		size = (uint)int_val;
-
-		/* Do some validation */
-		dsize = set ? plen - (2 * sizeof(int)) : len;
-		if (dsize < size) {
-			DHD_ERROR(("%s: error on %s membytes, addr 0x%08x size %d dsize %d\n",
-			           __FUNCTION__, (set ? "set" : "get"), address, size, dsize));
-			bcmerror = BCME_BADARG;
-			break;
-		}
-
-		DHD_INFO(("%s: Request to %s %d bytes at address 0x%08x\n dsize %d ", __FUNCTION__,
-		          (set ? "write" : "read"), size, address, dsize));
-
-		/* check if CR4 */
-		if (si_setcore(bus->sih, ARMCR4_CORE_ID, 0) ||
-		    si_setcore(bus->sih, SYSMEM_CORE_ID, 0)) {
-			/* if address is 0, store the reset instruction to be written in 0 */
-			if (set && address == bus->dongle_ram_base) {
-				bus->resetinstr = *(((uint32*)params) + 2);
-			}
-		} else {
-		/* If we know about SOCRAM, check for a fit */
-		if ((bus->orig_ramsize) &&
-		    ((address > bus->orig_ramsize) || (address + size > bus->orig_ramsize)))
-		{
-			uint8 enable, protect, remap;
-			si_socdevram(bus->sih, FALSE, &enable, &protect, &remap);
-			if (!enable || protect) {
-				DHD_ERROR(("%s: ramsize 0x%08x doesn't have %d bytes at 0x%08x\n",
-					__FUNCTION__, bus->orig_ramsize, size, address));
-				DHD_ERROR(("%s: socram enable %d, protect %d\n",
-					__FUNCTION__, enable, protect));
-				bcmerror = BCME_BADARG;
-				break;
-			}
-
-			if (!REMAP_ENAB(bus) && (address >= SOCDEVRAM_ARM_ADDR)) {
-				uint32 devramsize = si_socdevram_size(bus->sih);
-				if ((address < SOCDEVRAM_ARM_ADDR) ||
-					(address + size > (SOCDEVRAM_ARM_ADDR + devramsize))) {
-					DHD_ERROR(("%s: bad address 0x%08x, size 0x%08x\n",
-						__FUNCTION__, address, size));
-					DHD_ERROR(("%s: socram range 0x%08x,size 0x%08x\n",
-						__FUNCTION__, SOCDEVRAM_ARM_ADDR, devramsize));
-					bcmerror = BCME_BADARG;
-					break;
-				}
-				/* move it such that address is real now */
-				address -= SOCDEVRAM_ARM_ADDR;
-				address += SOCDEVRAM_BP_ADDR;
-				DHD_INFO(("%s: Request to %s %d bytes @ Mapped address 0x%08x\n",
-					__FUNCTION__, (set ? "write" : "read"), size, address));
-			} else if (REMAP_ENAB(bus) && REMAP_ISADDR(bus, address) && remap) {
-				/* Can not access remap region while devram remap bit is set
-				 * ROM content would be returned in this case
-				 */
-				DHD_ERROR(("%s: Need to disable remap for address 0x%08x\n",
-					__FUNCTION__, address));
-				bcmerror = BCME_ERROR;
-				break;
-			}
-		}
-		}
-
-		/* Generate the actual data pointer */
-		data = set ? (uint8*)params + 2 * sizeof(int): (uint8*)arg;
-
-		/* Call to do the transfer */
-		bcmerror = dhdpcie_bus_membytes(bus, set, address, data, size);
-
-		break;
-	}
 
 #ifdef BCM_BUZZZ
 	/* Dump dongle side buzzz trace to console */

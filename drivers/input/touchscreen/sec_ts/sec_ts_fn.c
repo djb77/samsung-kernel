@@ -1153,7 +1153,7 @@ static void module_on_master(void *device_data)
 
  	if (ts->input_dev->disabled) {
 		sec_ts_set_lowpowermode(ts, TO_LOWPOWER_MODE);
-		ts->power_status = SEC_TS_STATE_LPM_RESUME;
+		ts->power_status = SEC_TS_STATE_LPM;
 	}
 
 	if (ret == 0)
@@ -3167,7 +3167,7 @@ static void set_pressure_strength(void *device_data)
 	data[1] = 0;
 	data[2] = ts->pressure_cal_delta + 1;
 	
-	ret= ts->sec_ts_i2c_write(ts, SEC_TS_CMD_NVM, buff, 3);
+	ret= ts->sec_ts_i2c_write(ts, SEC_TS_CMD_NVM, data, 3);
 	if (ret < 0)
 		input_err(true, &ts->client->dev,
 			"%s: nvm write failed. ret: %d\n", __func__, ret);

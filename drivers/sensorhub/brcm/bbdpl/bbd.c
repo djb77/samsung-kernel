@@ -598,7 +598,7 @@ static ssize_t bbd_common_read(struct file *filp, char __user *buf, size_t size,
 	size_t rd_size=0;
 
 	BUG_ON(minor >= BBD_DEVICE_INDEX);
-	pr_info("%s[%s]++\n", __func__, bbd.priv[minor].name);
+	//pr_info("%s[%s]++\n", __func__, bbd.priv[minor].name);
 
 	mutex_lock(&bbd.priv[minor].lock);
 
@@ -623,7 +623,7 @@ static ssize_t bbd_common_read(struct file *filp, char __user *buf, size_t size,
 #ifdef DEBUG_1HZ_STAT
 	bbd_update_stat(STAT_RX_LHD, rd_size);
 #endif
-	pr_info("%s[%s]--\n", __func__, bbd.priv[minor].name);
+	//pr_info("%s[%s]--\n", __func__, bbd.priv[minor].name);
 	return rd_size;
 }
 

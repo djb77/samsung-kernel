@@ -28,6 +28,7 @@
 #define CONFIG_SUPPORT_PANEL_SWAP
 #define CONFIG_SUPPORT_XTALK_MODE
 #endif
+#define CONFIG_SUPPORT_GRAYSPOT_TEST
 
 #define to_panel_device(_m_)	container_of(_m_, struct panel_device, _m_)
 
@@ -526,6 +527,10 @@ enum PANEL_SEQ {
 	PANEL_ACTIVE_CLK_CTRL_SEQ,
 	PANEL_ACTIVE_CLK_UPDATE_SEQ,
 #endif
+#ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
+	PANEL_GRAYSPOT_ON_SEQ,
+	PANEL_GRAYSPOT_OFF_SEQ,
+#endif
 	PANEL_DUMP_SEQ,
 	PANEL_DUMMY_SEQ,
 	MAX_PANEL_SEQ,
@@ -655,6 +660,9 @@ struct panel_properties {
 #endif
 #ifdef CONFIG_SUPPORT_POC_FLASH
 	u32 poc_op;
+#endif
+#ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
+	u32 grayspot;
 #endif
 	u32 key[MAX_CMD_LEVEL];
 };

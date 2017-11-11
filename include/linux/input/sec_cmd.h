@@ -73,6 +73,7 @@ struct sec_cmd_data {
 #ifdef USE_SEC_CMD_QUEUE
 	struct kfifo		cmd_queue;
 	struct mutex		fifo_lock;
+	struct delayed_work	cmd_work;
 #endif
 };
 

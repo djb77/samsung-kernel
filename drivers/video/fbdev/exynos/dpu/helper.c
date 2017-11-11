@@ -147,6 +147,7 @@ u32 dpu_get_bpp(enum decon_pixel_format fmt)
 	case DECON_PIXEL_FORMAT_YUV420M:
 	case DECON_PIXEL_FORMAT_YVU420M:
 	case DECON_PIXEL_FORMAT_NV12N:
+	case DECON_PIXEL_FORMAT_NV12N_10B:
 		return 12;
 
 	default:
@@ -170,6 +171,7 @@ int dpu_get_plane_cnt(enum decon_pixel_format format)
 	case DECON_PIXEL_FORMAT_RGBA_5551:
 	case DECON_PIXEL_FORMAT_RGB_565:
 	case DECON_PIXEL_FORMAT_NV12N:
+	case DECON_PIXEL_FORMAT_NV12N_10B:
 		return 1;
 
 	case DECON_PIXEL_FORMAT_NV16:

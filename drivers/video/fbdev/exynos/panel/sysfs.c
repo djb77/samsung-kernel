@@ -603,12 +603,18 @@ static ssize_t poc_show(struct device *dev,
 		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
 		return -EINVAL;
 	}
+
+	if (!IS_PANEL_ACTIVE(panel)) {
+		panel_err("%s:panel is not active\n", __func__);
+		return -EAGAIN;
+	}
+
 	poc_dev = &panel->poc_dev;
 	poc_info = &poc_dev->poc_info;
 
 	ret = set_panel_poc(poc_dev, POC_OP_CHECKPOC);
 	if (unlikely(ret < 0)) {
-		pr_err("%s, failed to chksum (ret %d)\n", __func__, ret);
+		pr_err("%s, failed to chkpoc (ret %d)\n", __func__, ret);
 		return ret;
 	}
 
@@ -678,6 +684,61 @@ static ssize_t poc_store(struct device *dev,
 
 	dev_info(dev, "%s poc_op %d\n",
 			__func__, panel_data->props.poc_op);
+
+	return size;
+}
+#endif
+
+#ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
+static ssize_t grayspot_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct panel_info *panel_data;
+	struct panel_device *panel = dev_get_drvdata(dev);
+
+	if (panel == NULL) {
+		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+	panel_data = &panel->panel_data;
+
+	sprintf(buf, "%u\n", panel_data->props.grayspot);
+
+	return strlen(buf);
+}
+
+static ssize_t grayspot_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	int value, rc, ret;
+	struct panel_info *panel_data;
+	struct panel_device *panel = dev_get_drvdata(dev);
+
+	if (panel == NULL) {
+		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+	panel_data = &panel->panel_data;
+
+	rc = kstrtouint(buf, (unsigned int)0, &value);
+	if (rc < 0)
+		return rc;
+
+	if (panel_data->props.grayspot == value)
+		return size;
+
+	mutex_lock(&panel->op_lock);
+	panel_data->props.grayspot = value;
+	mutex_unlock(&panel->op_lock);
+
+	ret = panel_do_seqtbl_by_index(panel,
+			value ? PANEL_GRAYSPOT_ON_SEQ : PANEL_GRAYSPOT_OFF_SEQ);
+	if (unlikely(ret < 0)) {
+		pr_err("%s, failed to write grayspot on/off seq\n", __func__);
+		return ret;
+	}
+	dev_info(dev, "%s, grayspot %s\n",
+			__func__, panel_data->props.grayspot ? "on" : "off");
 
 	return size;
 }
@@ -1565,6 +1626,9 @@ struct device_attribute panel_attrs[] = {
 #endif
 #ifdef CONFIG_SUPPORT_POC_FLASH
 	__PANEL_ATTR_RW(poc, 0660),
+#endif
+#ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
+	__PANEL_ATTR_RW(grayspot, 0664),
 #endif
 	__PANEL_ATTR_RO(color_coordinate, 0444),
 	__PANEL_ATTR_RO(manufacture_date, 0444),

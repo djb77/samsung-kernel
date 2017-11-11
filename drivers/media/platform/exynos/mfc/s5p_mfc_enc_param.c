@@ -528,7 +528,7 @@ int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 				S5P_FIMV_E_HIERARCHICAL_QP_LAYER0 + i * 4);
 		MFC_WRITEL(p_264->hier_bit_layer[i],
 				S5P_FIMV_E_HIERARCHICAL_BIT_RATE_LAYER0 + i * 4);
-		mfc_debug(3, "Temporal SVC: layer[%d] QP: %#x, bitrate: %#x\n",
+		mfc_debug(3, "Temporal SVC: layer[%d] QP: %#x, bitrate: %d\n",
 					i, p_264->hier_qp_layer[i],
 					p_264->hier_bit_layer[i]);
 	}
@@ -804,7 +804,8 @@ int s5p_mfc_set_enc_params_vp8(struct s5p_mfc_ctx *ctx)
 	reg &= ~(0x1 << 11);
 	reg |= (p_vp8->hier_qp_enable & 0x1) << 11;
 	/* Disable IVF header */
-	reg |= (0x1 << 12);
+	reg &= ~(0x1 << 12);
+	reg |= ((p->ivf_header_disable & 0x1) << 12);
 	MFC_WRITEL(reg, S5P_FIMV_E_VP8_OPTION);
 
 	reg = MFC_READL(S5P_FIMV_E_VP8_GOLDEN_FRAME_OPTION);
@@ -921,9 +922,9 @@ int s5p_mfc_set_enc_params_vp9(struct s5p_mfc_ctx *ctx)
 	/* Temporal SVC - hier qp enable */
 	reg &= ~(0x1 << 11);
 	reg |= ((p_vp9->hier_qp_enable & 0x1) << 11);
-	/* Disable IFV header */
+	/* Disable IVF header */
 	reg &= ~(0x1 << 12);
-	reg |= ((p_vp9->ivf_header & 0x1) << 12);
+	reg |= ((p->ivf_header_disable & 0x1) << 12);
 	MFC_WRITEL(reg, S5P_FIMV_E_VP9_OPTION);
 
 	reg = MFC_READL(S5P_FIMV_E_VP9_GOLDEN_FRAME_OPTION);

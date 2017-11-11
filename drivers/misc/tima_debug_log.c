@@ -185,10 +185,22 @@ ssize_t	tima_read(struct file *filep, char __user *buf, size_t size, loff_t *off
 	else if( !strcmp(filep->f_path.dentry->d_iname, "tima_debug_log"))
 		tima_log_addr = tima_debug_log_addr;
 #ifdef CONFIG_TIMA_RKP
-	else if( !strcmp(filep->f_path.dentry->d_iname, "tima_debug_rkp_log"))
+	else if(!strcmp(filep->f_path.dentry->d_iname, "tima_debug_rkp_log")) {
+		if (*offset >= TIMA_DEBUG_LOG_SIZE) {
+			return -EINVAL;
+		} else if (*offset + size > TIMA_DEBUG_LOG_SIZE) {
+			size = (TIMA_DEBUG_LOG_SIZE) - *offset;
+		}
 		tima_log_addr = tima_debug_rkp_log_addr;
-	else
+	}
+	else if(!strcmp(filep->f_path.dentry->d_iname, "tima_secure_rkp_log")) {
+		if (*offset >= TIMA_SEC_LOG_SIZE) {
+			return -EINVAL;
+		} else if (*offset + size > TIMA_SEC_LOG_SIZE) {
+			size = (TIMA_SEC_LOG_SIZE) - *offset;
+		}
 		tima_log_addr = tima_secure_rkp_log_addr;
+	}
 #endif
 	if (copy_to_user(buf, (const char *)tima_log_addr + (*offset), size)) {
 		printk(KERN_ERR"Copy to user failed\n");

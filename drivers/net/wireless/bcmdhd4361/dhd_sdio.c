@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_sdio.c 685082 2017-02-15 10:04:17Z $
+ * $Id: dhd_sdio.c 694819 2017-04-17 11:12:00Z $
  */
 
 #include <typedefs.h>
@@ -2960,7 +2960,6 @@ enum {
 	IOV_SDREG,
 	IOV_SBREG,
 	IOV_SDCIS,
-	IOV_MEMBYTES,
 	IOV_RAMSIZE,
 	IOV_RAMSTART,
 #ifdef DHD_DEBUG
@@ -3015,7 +3014,6 @@ const bcm_iovar_t dhdsdio_iovars[] = {
 	{"idletime",	IOV_IDLETIME,	0, 0,	IOVT_INT32,	0 },
 	{"idleclock",	IOV_IDLECLOCK,	0, 0,	IOVT_INT32,	0 },
 	{"sd1idle",	IOV_SD1IDLE,	0, 0,	IOVT_BOOL,	0 },
-	{"membytes",	IOV_MEMBYTES,	0, 0,	IOVT_BUFFER,	2 * sizeof(int) },
 	{"ramsize",	IOV_RAMSIZE,	0, 0,	IOVT_UINT32,	0 },
 	{"ramstart",	IOV_RAMSTART,	0, 0,	IOVT_UINT32,	0 },
 	{"dwnldstate",	IOV_SET_DOWNLOAD_STATE,	0, 0,	IOVT_BOOL,	0 },
@@ -4000,94 +3998,6 @@ dhdsdio_doiovar(dhd_bus_t *bus, const bcm_iovar_t *vi, uint32 actionid, const ch
 		break;
 
 
-	case IOV_SVAL(IOV_MEMBYTES):
-	case IOV_GVAL(IOV_MEMBYTES):
-	{
-		uint32 address;
-		uint size, dsize;
-		uint8 *data;
-
-		bool set = (actionid == IOV_SVAL(IOV_MEMBYTES));
-
-		ASSERT(plen >= 2*sizeof(int));
-
-		address = (uint32)int_val;
-		bcopy((char *)params + sizeof(int_val), &int_val, sizeof(int_val));
-		size = (uint)int_val;
-
-		/* Do some validation */
-		dsize = set ? plen - (2 * sizeof(int)) : len;
-		if (dsize < size) {
-			DHD_ERROR(("%s: error on %s membytes, addr 0x%08x size %d dsize %d\n",
-			           __FUNCTION__, (set ? "set" : "get"), address, size, dsize));
-			bcmerror = BCME_BADARG;
-			break;
-		}
-
-		DHD_INFO(("%s: Request to %s %d bytes at address 0x%08x\n", __FUNCTION__,
-		          (set ? "write" : "read"), size, address));
-
-		/* check if CR4 */
-		if (si_setcore(bus->sih, ARMCR4_CORE_ID, 0)) {
-			/*
-			 * If address is start of RAM (i.e. a downloaded image),
-			 * store the reset instruction to be written in 0
-			 */
-			if (set && address == bus->dongle_ram_base) {
-				bus->resetinstr = *(((uint32*)params) + 2);
-			}
-		} else {
-		/* If we know about SOCRAM, check for a fit */
-		if ((bus->orig_ramsize) &&
-		    ((address > bus->orig_ramsize) || (address + size > bus->orig_ramsize)))
-		{
-			uint8 enable, protect, remap;
-			si_socdevram(bus->sih, FALSE, &enable, &protect, &remap);
-			if (!enable || protect) {
-				DHD_ERROR(("%s: ramsize 0x%08x doesn't have %d bytes at 0x%08x\n",
-					__FUNCTION__, bus->orig_ramsize, size, address));
-				DHD_ERROR(("%s: socram enable %d, protect %d\n",
-					__FUNCTION__, enable, protect));
-				bcmerror = BCME_BADARG;
-				break;
-			}
-
-			if (!REMAP_ENAB(bus) && (address >= SOCDEVRAM_ARM_ADDR)) {
-				uint32 devramsize = si_socdevram_size(bus->sih);
-				if ((address < SOCDEVRAM_ARM_ADDR) ||
-					(address + size > (SOCDEVRAM_ARM_ADDR + devramsize))) {
-					DHD_ERROR(("%s: bad address 0x%08x, size 0x%08x\n",
-						__FUNCTION__, address, size));
-					DHD_ERROR(("%s: socram range 0x%08x,size 0x%08x\n",
-						__FUNCTION__, SOCDEVRAM_ARM_ADDR, devramsize));
-					bcmerror = BCME_BADARG;
-					break;
-				}
-				/* move it such that address is real now */
-				address -= SOCDEVRAM_ARM_ADDR;
-				address += SOCDEVRAM_BP_ADDR;
-				DHD_INFO(("%s: Request to %s %d bytes @ Mapped address 0x%08x\n",
-					__FUNCTION__, (set ? "write" : "read"), size, address));
-			} else if (REMAP_ENAB(bus) && REMAP_ISADDR(bus, address) && remap) {
-				/* Can not access remap region while devram remap bit is set
-				 * ROM content would be returned in this case
-				 */
-				DHD_ERROR(("%s: Need to disable remap for address 0x%08x\n",
-					__FUNCTION__, address));
-				bcmerror = BCME_ERROR;
-				break;
-			}
-		}
-		}
-
-		/* Generate the actual data pointer */
-		data = set ? (uint8*)params + 2 * sizeof(int): (uint8*)arg;
-
-		/* Call to do the transfer */
-		bcmerror = dhdsdio_membytes(bus, set, address, data, size);
-
-		break;
-	}
 
 	case IOV_GVAL(IOV_RAMSIZE):
 		int_val = (int32)bus->ramsize;

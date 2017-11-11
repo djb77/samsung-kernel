@@ -1507,13 +1507,6 @@ struct xhci_hub {
 	u8	psi_uid_count;
 };
 
-/*
- * Sometimes deadlock occurred between hub_event and remove_hcd.
- * In order to prevent it, waiting for completion of hub_event was added.
- * This is a timeout (1sec) value for the waiting.
- */
-#define XHCI_HUB_EVENT_TIMEOUT	(1000)
-
 /* There is one xhci_hcd structure per controller */
 struct xhci_hcd {
 	struct usb_hcd *main_hcd;
@@ -1565,7 +1558,12 @@ struct xhci_hcd {
 #define CMD_RING_STATE_STOPPED         (1 << 2)
 	struct list_head        cmd_list;
 	unsigned int		cmd_ring_reserved_trbs;
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+	struct delayed_work	cmd_timer;
+	struct completion	cmd_ring_stop_completion;
+#else
 	struct timer_list	cmd_timer;
+#endif
 	struct xhci_command	*current_cmd;
 	struct xhci_ring	*event_ring;
 	struct xhci_erst	erst;
@@ -1931,8 +1929,11 @@ void xhci_queue_config_ep_quirk(struct xhci_hcd *xhci,
 		unsigned int slot_id, unsigned int ep_index,
 		struct xhci_dequeue_state *deq_state);
 void xhci_stop_endpoint_command_watchdog(unsigned long arg);
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+void xhci_handle_command_timeout(struct work_struct *work);
+#else
 void xhci_handle_command_timeout(unsigned long data);
-
+#endif
 void xhci_ring_ep_doorbell(struct xhci_hcd *xhci, unsigned int slot_id,
 		unsigned int ep_index, unsigned int stream_id);
 void xhci_cleanup_command_queue(struct xhci_hcd *xhci);

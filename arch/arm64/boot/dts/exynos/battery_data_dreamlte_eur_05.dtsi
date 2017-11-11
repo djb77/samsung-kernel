@@ -19,7 +19,7 @@
 		io-channel-ranges;
 	};
 	max77865-fuelgauge {
-		fuelgauge,capacity = <0x188D>;
+		fuelgauge,capacity = <0x188C>;
 	};
 };
 

@@ -112,6 +112,7 @@ const_debug unsigned int sysctl_sched_migration_cost = 500000UL;
  * (default: 10msec)
  */
 unsigned int __read_mostly sysctl_sched_shares_window = 10000000UL;
+unsigned int sysctl_sched_wakeup_to_idle_cpu = 0;
 
 #ifdef CONFIG_CFS_BANDWIDTH
 /*
@@ -6637,6 +6638,9 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 	int want_affine = 0;
 	int sync = wake_flags & WF_SYNC;
 	int thread_pid;
+
+	if(sysctl_sched_wakeup_to_idle_cpu)
+		sd_flag |= SD_BALANCE_WAKE;
 
 	if (sd_flag & SD_BALANCE_WAKE)
 #ifdef CONFIG_CPU_FREQ_GOV_SCHEDUTIL

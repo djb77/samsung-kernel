@@ -118,6 +118,32 @@ int exynos_acpm_set_cold_temp(unsigned int id, bool is_cold_temp)
 	return ret;
 }
 
+int exynos_acpm_vdd_auto_calibration(unsigned int enable)
+{
+	struct ipc_config config;
+	unsigned int cmd[4];
+	unsigned long long before, after, latency;
+	int ret;
+
+	config.cmd = cmd;
+	config.response = true;
+	config.indirection = false;
+	config.cmd[0] = enable;
+	config.cmd[1] = 0;
+	config.cmd[2] = AUTOCAL_START;
+	config.cmd[3] = 0;
+
+	before = sched_clock();
+	ret = acpm_ipc_send_data(acpm_dvfs.ch_num, &config);
+	after = sched_clock();
+	latency = after - before;
+	if (ret)
+		pr_err("%s:auto calibration start latency = %llu ret = %d",
+			__func__, latency, ret);
+
+	return ret;
+}
+
 static void acpm_noti_mif_callback(unsigned int *cmd, unsigned int size)
 {
 	pr_info("%s : req %d KHz\n", __func__, cmd[1]);

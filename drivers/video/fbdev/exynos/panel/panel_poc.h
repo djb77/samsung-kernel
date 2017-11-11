@@ -35,6 +35,18 @@
 #define POC_TOTAL_FAIL_COUNT_FILE_PATH	("/efs/etc/poc/totalfailcount")
 #endif
 
+#ifdef CONFIG_POC_DREAM
+#define ERASE_WAIT_COUNT	(180)
+#define WR_DONE_UDELAY		(4000)
+#define QD_DONE_MDELAY		(30)
+#define RD_DONE_UDELAY		(200)
+#else
+#define ERASE_WAIT_COUNT	(41)
+#define WR_DONE_UDELAY		(800)
+#define QD_DONE_MDELAY		(10)
+#define RD_DONE_UDELAY		(200)
+#endif
+
 enum poc_flash_state {
 	POC_FLASH_STATE_UNKNOWN = -1,
 	POC_FLASH_STATE_NOT_USE = 0,

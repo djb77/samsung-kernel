@@ -417,6 +417,8 @@ int s5p_mfc_alloc_codec_buffers(struct s5p_mfc_ctx *ctx)
 			return -ENOMEM;
 		}
 		ctx->codec_buffer_allocated = 1;
+	} else if (ctx->codec_mode == S5P_FIMV_CODEC_MPEG2_DEC) {
+		ctx->codec_buffer_allocated = 1;
 	}
 
 	mfc_debug_leave();

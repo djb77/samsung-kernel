@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd.h 685046 2017-02-15 08:10:34Z $
+ * $Id: dhd.h 696007 2017-04-25 04:30:05Z $
  */
 
 /****************
@@ -126,6 +126,7 @@ enum dhd_bus_state {
 #define DHD_BUS_BUSY_RPM_ALL                 (DHD_BUS_BUSY_RPM_SUSPEND_DONE | \
 		DHD_BUS_BUSY_RPM_SUSPEND_IN_PROGRESS | \
 		DHD_BUS_BUSY_RPM_RESUME_IN_PROGRESS)
+#define DHD_BUS_BUSY_IN_CHECKDIED            0x800
 
 #define DHD_BUS_BUSY_SET_IN_TX(dhdp) \
 	(dhdp)->dhd_bus_busy_state |= DHD_BUS_BUSY_IN_TX
@@ -149,6 +150,8 @@ enum dhd_bus_state {
 	(dhdp)->dhd_bus_busy_state |= DHD_BUS_BUSY_RPM_SUSPEND_DONE
 #define DHD_BUS_BUSY_SET_RPM_RESUME_IN_PROGRESS(dhdp) \
 	(dhdp)->dhd_bus_busy_state |= DHD_BUS_BUSY_RPM_RESUME_IN_PROGRESS
+#define DHD_BUS_BUSY_SET_IN_CHECKDIED(dhdp) \
+	(dhdp)->dhd_bus_busy_state |= DHD_BUS_BUSY_IN_CHECKDIED
 
 #define DHD_BUS_BUSY_CLEAR_IN_TX(dhdp) \
 	(dhdp)->dhd_bus_busy_state &= ~DHD_BUS_BUSY_IN_TX
@@ -172,6 +175,8 @@ enum dhd_bus_state {
 	(dhdp)->dhd_bus_busy_state &= ~DHD_BUS_BUSY_RPM_SUSPEND_DONE
 #define DHD_BUS_BUSY_CLEAR_RPM_RESUME_IN_PROGRESS(dhdp) \
 	(dhdp)->dhd_bus_busy_state &= ~DHD_BUS_BUSY_RPM_RESUME_IN_PROGRESS
+#define DHD_BUS_BUSY_CLEAR_IN_CHECKDIED(dhdp) \
+	(dhdp)->dhd_bus_busy_state &= ~DHD_BUS_BUSY_IN_CHECKDIED
 
 #define DHD_BUS_BUSY_CHECK_IN_TX(dhdp) \
 	((dhdp)->dhd_bus_busy_state & DHD_BUS_BUSY_IN_TX)
@@ -197,6 +202,8 @@ enum dhd_bus_state {
 	((dhdp)->dhd_bus_busy_state & DHD_BUS_BUSY_RPM_RESUME_IN_PROGRESS)
 #define DHD_BUS_BUSY_CHECK_RPM_ALL(dhdp) \
 	((dhdp)->dhd_bus_busy_state & DHD_BUS_BUSY_RPM_ALL)
+#define DHD_BUS_BUSY_CHECK_IN_CHECKDIED(dhdp) \
+	((dhdp)->dhd_bus_busy_state & DHD_BUS_BUSY_IN_CHECKDIED)
 #define DHD_BUS_BUSY_CHECK_IDLE(dhdp) \
 		((dhdp)->dhd_bus_busy_state == 0)
 
@@ -470,6 +477,25 @@ enum {
 	TCPACK_SUP_HOLD,
 	TCPACK_SUP_LAST_MODE
 };
+
+#ifdef ARGOS_CPU_SCHEDULER
+#define TCPACK_SUP_DEFAULT	TCPACK_SUP_OFF
+#ifdef BCMSDIO
+#define TCPACK_SUP_ON		TCPACK_SUP_DELAYTX
+#elif defined(BCMPCIE)
+#define TCPACK_SUP_ON		TCPACK_SUP_HOLD
+#else
+#define TCPACK_SUP_ON		TCPACK_SUP_OFF
+#endif /* BCMSDIO */
+#else
+#ifdef BCMSDIO
+#define TCPACK_SUP_DEFAULT	TCPACK_SUP_DELAYTX
+#elif defined(BCMPCIE)
+#define TCPACK_SUP_DEFAULT	TCPACK_SUP_HOLD
+#else
+#define TCPACK_SUP_DEFAULT	TCPACK_SUP_OFF
+#endif /* BCMSDIO */
+#endif /* ARGOS_CPU_SCHEDULER */
 #endif /* DHDTCPACK_SUPPRESS */
 
 #if defined(TRAFFIC_MGMT_DWM)
@@ -619,6 +645,24 @@ struct module_metadata {
 	u64 data_addr;	/* address of module data in host */
 };
 #endif
+
+#ifdef DMAMAP_STATS
+typedef struct dmamap_stats {
+	uint64 txdata;
+	uint64 txdata_sz;
+	uint64 rxdata;
+	uint64 rxdata_sz;
+	uint64 ioctl_rx;
+	uint64 ioctl_rx_sz;
+	uint64 event_rx;
+	uint64 event_rx_sz;
+	uint64 info_rx;
+	uint64 info_rx_sz;
+	uint64 tsbuf_rx;
+	uint64 tsbuf_rx_sz;
+} dma_stats_t;
+#endif /* DMAMAP_STATS */
+
 /* Common structure for module and instance linkage */
 typedef struct dhd_pub {
 	/* Linkage ponters */
@@ -673,6 +717,11 @@ typedef struct dhd_pub {
 	ulong rx_readahead_cnt;	/* Number of packets where header read-ahead was used. */
 	ulong tx_realloc;	/* Number of tx packets we had to realloc for headroom */
 	ulong fc_packets;       /* Number of flow control pkts recvd */
+
+#ifdef DMAMAP_STATS
+	/* DMA Mapping statistics */
+	dma_stats_t dma_stats;
+#endif /* DMAMAP_STATS */
 
 	/* Last error return */
 	int bcmerror;
@@ -1908,6 +1957,15 @@ extern uint dhd_force_tx_queueing;
 #define CUSTOM_ASSOC_RETRY_MAX			DEFAULT_ASSOC_RETRY_MAX
 #endif /* DEFAULT_ASSOC_RETRY_MAX */
 
+#if defined(BCMSDIO) || defined(DISABLE_FRAMEBURST)
+#define DEFAULT_FRAMEBURST_SET			0
+#else
+#define DEFAULT_FRAMEBURST_SET			1
+#endif /* BCMSDIO */
+
+#ifndef CUSTOM_FRAMEBURST_SET
+#define CUSTOM_FRAMEBURST_SET			DEFAULT_FRAMEBURST_SET
+#endif /* CUSTOM_FRAMEBURST_SET */
 
 #ifdef WLTDLS
 #ifndef CUSTOM_TDLS_IDLE_MODE_SETTING

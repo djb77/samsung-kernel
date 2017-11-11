@@ -312,6 +312,12 @@ config SENSORS_HRM_MAX869_ENHANCED_EOL
 	help
 	  If you want to apply enhanced eol process, it should be set.
 
+config MAX86902_THRESHOLD
+	int "MAX86902 HRM sensor finger detection threshold"
+	default 70000
+	help
+	  If you want to change finger detection threshold, it should be set.
+
 config SENSOR_SSP_PROXIMTY_FOR_WINDOW_TYPE
 	tristate "PROXIMITY THRESHOLD FOR WINDOW_TYPE"
 	default n

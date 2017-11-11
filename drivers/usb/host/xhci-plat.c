@@ -278,11 +278,9 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct usb_hcd	*hcd = platform_get_drvdata(dev);
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 	struct clk *clk = xhci->clk;
-	int timeout = 0;
-
-	pr_info("%s \n", __func__);
 
 #if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+	pr_info("%s \n", __func__);
 	/* In order to prevent kernel panic */
 	if(!pm_runtime_suspended(&xhci->shared_hcd->self.root_hub->dev)) {
 		pr_info("%s, shared_hcd pm_runtime_forbid\n", __func__);
@@ -292,23 +290,7 @@ static int xhci_plat_remove(struct platform_device *dev)
 		pr_info("%s, main_hcd pm_runtime_forbid\n", __func__);
 		pm_runtime_forbid(&xhci->main_hcd->self.root_hub->dev);
 	}
-#endif
-	/*
-	 * Sometimes deadlock occurred in this function.
-	 * So, below waiting for completion of hub_event was added.
-	 */
-	while (xhci->shared_hcd->is_in_hub_event || hcd->is_in_hub_event) {
-		msleep(10);
-		timeout += 10;
-		if (timeout >= XHCI_HUB_EVENT_TIMEOUT) {
-			xhci_err(xhci,
-				"ERROR: hub_event completion timeout\n");
-			break;
-		}
-	}
-	xhci_dbg(xhci, "%s: waited %dmsec", __func__, timeout);
 
-#if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
 	manager_notifier_unregister(&xhci->ccic_xhci_nb);
 #endif
 	usb_remove_hcd(xhci->shared_hcd);

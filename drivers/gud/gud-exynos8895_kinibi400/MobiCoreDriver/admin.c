@@ -147,6 +147,8 @@ static int request_send(u32 command, const struct mc_uuid_t *uuid, bool is_gp,
 {
 	int counter = 10;
 	int ret = 0;
+	/* ExySp */
+	unsigned long timeout = msecs_to_jiffies(10 * 1000); /* 10 seconds */
 
 	/* Prepare request */
 	mutex_lock(&g_request.states_mutex);
@@ -195,7 +197,12 @@ static int request_send(u32 command, const struct mc_uuid_t *uuid, bool is_gp,
 	mc_dev_devel("request sent");
 
 	/* Wait for header (could be interruptible, but then needs more work) */
-	wait_for_completion(&g_request.server_complete);
+	/* ExySp */
+	if (wait_for_completion_timeout(&g_request.server_complete, timeout) == 0) {
+		mc_dev_err("daemon is not responding\n");
+		ret = -EPIPE;
+		goto end;
+	}
 	mc_dev_devel("response received");
 
 	/* Server should be waiting with some data for us */

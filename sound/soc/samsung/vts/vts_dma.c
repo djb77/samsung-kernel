@@ -181,19 +181,6 @@ static int vts_platform_open(struct snd_pcm_substream *substream)
 			dev_err(dev, "%s: MIC control configuration failed\n", __func__);
 			pm_runtime_put_sync(dev);
 		}
-	} else {
-		if (data->vts_data->vts_state ==
-			 VTS_STATE_RECOG_TRIGGERED) {
-			wake_unlock(&data->vts_data->wake_lock);
-			dev_info(dev, "%s VTS Trigger wake_lock released\n",
-					__func__);
-			data->vts_data->vts_state =
-				 VTS_STATE_SEAMLESS_REC_STARTED;
-		} else {
-			dev_info(dev, "%s NOT Triggered State\n",
-					__func__);
-			result = -EINVAL;
-		}
 	}
 
 	return result;
@@ -221,9 +208,6 @@ static int vts_platform_close(struct snd_pcm_substream *substream)
 					VTS_MICCONF_FOR_RECORD, false);
 		if (IS_ERR_VALUE(result))
 			dev_warn(dev, "%s: MIC control configuration failed\n", __func__);
-	} else if (data->vts_data->vts_state ==
-			 VTS_STATE_SEAMLESS_REC_STARTED) {
-		data->vts_data->vts_state = VTS_STATE_SEAMLESS_REC_STOPPED;
 	}
 
 	pm_runtime_put_sync(dev);

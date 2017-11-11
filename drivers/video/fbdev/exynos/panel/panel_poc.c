@@ -61,7 +61,11 @@ static u8 POC_PGM_ENABLE[] = { 0xC0, 0x02 };
 static u8 POC_PGM_DISABLE[] = { 0xC0, 0x00 };
 static u8 POC_EXECUTE[] = { 0xC0, 0x03 };
 static u8 POC_WR_ENABLE[] = { 0xC1, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, BDIV };
+#ifdef CONFIG_POC_DREAM
+static u8 POC_QD_ENABLE[] = { 0xC1, 0x00, 0x01, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10 };
+#else
 static u8 POC_QD_ENABLE[] = { 0xC1, 0x00, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x10 };
+#endif
 static u8 POC_WR_STT[] = { 0xC1, 0x00, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, BDIV };
 static u8 POC_WR_END[] = { 0xC1, 0x00, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, BDIV };
 static u8 POC_RD_STT[] = { 0xC1, 0x00, 0x6B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, BDIV, 0x01 };
@@ -81,10 +85,8 @@ DEFINE_STATIC_PACKET(poc_wr_stt, DSI_PKT_TYPE_WR, POC_WR_STT);
 DEFINE_STATIC_PACKET(poc_wr_end, DSI_PKT_TYPE_WR, POC_WR_END);
 
 static DEFINE_PANEL_UDELAY_NO_SLEEP(poc_wait_exec, EXEC_USEC);
-static DEFINE_PANEL_UDELAY_NO_SLEEP(poc_wait_rd_done, 200);
-//static DEFINE_PANEL_UDELAY_NO_SLEEP(poc_wait_wr_done, 800);
-static DEFINE_PANEL_MDELAY(poc_wait_qd_status, 10);
-//static DEFINE_PANEL_MDELAY(poc_wait_erase, 4100);
+static DEFINE_PANEL_UDELAY_NO_SLEEP(poc_wait_rd_done, RD_DONE_UDELAY);
+static DEFINE_PANEL_MDELAY(poc_wait_qd_status, QD_DONE_MDELAY);
 
 #ifdef POC_DEBUG
 int sprintf_hex_to_str(u8 *dst, u8 *src, int size)
@@ -146,7 +148,7 @@ int poc_erase_do_seqtbl(struct panel_device *panel)
 		pr_err("%s, failed to poc-erase-seq\n", __func__);
 		goto out_poc_erase;
 	}
-	for (i = 0; i < 41; i++) {
+	for (i = 0; i < ERASE_WAIT_COUNT; i++) {
 		msleep(100);
 		if (atomic_read(&poc_dev->cancel)) {
 			pr_err("%s, stopped by user at erase\n", __func__);
@@ -358,7 +360,7 @@ int poc_write_data(struct panel_device *panel, u8 *data, u32 addr, u32 size)
 				pr_err("%s, failed to write poc-wr-exit seq\n", __func__);
 				goto out_poc_write;
 			}
-			udelay(800);
+			udelay(WR_DONE_UDELAY);
 		}
 	}
 
@@ -418,6 +420,16 @@ static int poc_get_poc_chksum(struct panel_device *panel)
 		return -EINVAL;
 	}
 
+	mutex_lock(&panel->op_lock);
+	panel_set_key(panel, 3, true);
+	ret = panel_resource_update_by_name(panel, "poc_chksum");
+	panel_set_key(panel, 3, false);
+	mutex_unlock(&panel->op_lock);
+	if (unlikely(ret < 0)) {
+		pr_err("%s failed to update resource(poc_chksum)\n", __func__);
+		return ret;
+	}
+
 	ret = resource_copy_by_name(panel_data, poc_info->poc_chksum, "poc_chksum");
 	if (unlikely(ret < 0)) {
 		pr_err("%s failed to copy resource(poc_chksum)\n", __func__);
@@ -442,6 +454,16 @@ static int poc_get_poc_ctrl(struct panel_device *panel)
 	if (sizeof(poc_info->poc_ctrl) != PANEL_POC_CTRL_LEN) {
 		pr_err("%s invalid poc control length\n", __func__);
 		return -EINVAL;
+	}
+
+	mutex_lock(&panel->op_lock);
+	panel_set_key(panel, 3, true);
+	ret = panel_resource_update_by_name(panel, "poc_ctrl");
+	panel_set_key(panel, 3, false);
+	mutex_unlock(&panel->op_lock);
+	if (unlikely(ret < 0)) {
+		pr_err("%s failed to update resource(poc_ctrl)\n", __func__);
+		return ret;
 	}
 
 	ret = resource_copy_by_name(panel_data, poc_info->poc_ctrl, "poc_ctrl");
@@ -567,6 +589,8 @@ int set_panel_poc(struct panel_poc_device *poc_dev, u32 cmd)
 	struct panel_poc_info *poc_info = &poc_dev->poc_info;
 	struct panel_device *panel = to_panel_device(poc_dev);
 	int ret= 0;
+	struct timespec cur_ts, last_ts, delta_ts;
+	s64 elapsed_msec;
 
 	if (cmd >= MAX_POC_OP) {
 		panel_err("%s invalid poc_op %d\n", __func__, cmd);
@@ -574,6 +598,7 @@ int set_panel_poc(struct panel_poc_device *poc_dev, u32 cmd)
 	}
 
 	panel_info("%s %s +\n", __func__, poc_op[cmd]);
+	ktime_get_ts(&last_ts);
 
 	switch (cmd) {
 		case POC_OP_ERASE:
@@ -711,7 +736,11 @@ int set_panel_poc(struct panel_poc_device *poc_dev, u32 cmd)
 			break;
 	}
 
-	panel_info("%s %s -\n", __func__, poc_op[cmd]);
+	ktime_get_ts(&cur_ts);
+	delta_ts = timespec_sub(cur_ts, last_ts);
+	elapsed_msec = timespec_to_ns(&delta_ts) / 1000000;
+	panel_info("%s %s (elapsed %lld.%03lld sec) -\n", __func__, poc_op[cmd],
+			elapsed_msec / 1000, elapsed_msec % 1000);
 
 	return 0;
 };

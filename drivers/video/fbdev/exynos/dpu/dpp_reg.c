@@ -1279,6 +1279,9 @@ int dpp_reg_set_format(u32 id, struct dpp_params_info *p)
 		fmt = IDMA_IMG_FORMAT_RGB565;
 		break;
 	/* TODO: add ARGB1555 & ARGB4444 */
+	case DECON_PIXEL_FORMAT_RGBA_5551:
+		fmt = IDMA_IMG_FORMAT_ARGB1555;
+		break;
 	case DECON_PIXEL_FORMAT_NV12:
 	case DECON_PIXEL_FORMAT_NV12M:
 		fmt = IDMA_IMG_FORMAT_YUV420_2P;
@@ -1287,6 +1290,7 @@ int dpp_reg_set_format(u32 id, struct dpp_params_info *p)
 	case DECON_PIXEL_FORMAT_NV21:
 	case DECON_PIXEL_FORMAT_NV21M:
 	case DECON_PIXEL_FORMAT_NV12N:
+	case DECON_PIXEL_FORMAT_NV12N_10B:
 		fmt = IDMA_IMG_FORMAT_YVU420_2P;
 		fmt_type = 1;
 		break;

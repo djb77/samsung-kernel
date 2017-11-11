@@ -1465,7 +1465,7 @@ static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 			/* if sensor is not running state, enable will be called.
 			   MCU return fail when receive chage delay inst during NO_SENSOR STATE */
 			if (data->aiCheckStatus[sensor_type] == RUNNING_SENSOR_STATE) {
-				ret = send_instruction_sync(data, CHANGE_DELAY, sensor_type, uBuf, 9);
+				ret = send_instruction(data, CHANGE_DELAY, sensor_type, uBuf, 9);
 			}
 			if (ret > 0) { // ret 1 is success
 				data->batchOptBuf[sensor_type] = (u8)batch.flag;
@@ -1473,7 +1473,7 @@ static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 				data->adDelayBuf[sensor_type] = batch.delay;
 			}
 		} else { /* real batch, DRY RUN */
-			ret = send_instruction_sync(data, CHANGE_DELAY, sensor_type, uBuf, 9);
+			ret = send_instruction(data, CHANGE_DELAY, sensor_type, uBuf, 9);
 			if (ret > 0) { // ret 1 is success
 				data->batchOptBuf[sensor_type] = (u8)batch.flag;
 				data->batchLatencyBuf[sensor_type] = timeout_ms;

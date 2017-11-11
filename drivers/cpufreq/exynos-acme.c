@@ -1305,42 +1305,11 @@ static __init int get_jig_status(char *arg)
 early_param("jig", get_jig_status);
 #endif
 
-static __init int init_pm_qos(struct exynos_cpufreq_domain *domain,
+static __init void set_boot_qos(struct exynos_cpufreq_domain *domain,
 					struct device_node *dn)
 {
 	unsigned int boot_qos, val;
-	int freq, ret;
-
-	ret = of_property_read_u32(dn, "pm_qos-min-class",
-					&domain->pm_qos_min_class);
-	if (ret)
-		return ret;
-
-	ret = of_property_read_u32(dn, "pm_qos-max-class",
-					&domain->pm_qos_max_class);
-	if (ret)
-		return ret;
-
-	domain->pm_qos_min_notifier.notifier_call = exynos_cpufreq_pm_qos_callback;
-	domain->pm_qos_min_notifier.priority = INT_MAX;
-	domain->pm_qos_max_notifier.notifier_call = exynos_cpufreq_pm_qos_callback;
-	domain->pm_qos_max_notifier.priority = INT_MAX;
-
-	pm_qos_add_notifier(domain->pm_qos_min_class,
-				&domain->pm_qos_min_notifier);
-	pm_qos_add_notifier(domain->pm_qos_max_class,
-				&domain->pm_qos_max_notifier);
-
-	pm_qos_add_request(&domain->min_qos_req,
-			domain->pm_qos_min_class, domain->min_freq);
-	pm_qos_add_request(&domain->max_qos_req,
-			domain->pm_qos_max_class, domain->max_freq);
-	pm_qos_add_request(&domain->user_min_qos_req,
-			domain->pm_qos_min_class, domain->min_freq);
-	pm_qos_add_request(&domain->user_max_qos_req,
-			domain->pm_qos_max_class, domain->max_freq);
-	pm_qos_add_request(&domain->user_min_qos_wo_boost_req,
-			domain->pm_qos_min_class, domain->min_freq);
+	int freq;
 
 	/*
 	 * Basically booting pm_qos is set to max frequency of domain.
@@ -1373,6 +1342,34 @@ static __init int init_pm_qos(struct exynos_cpufreq_domain *domain,
 		val = max(val, domain->min_freq);
 		boot_qos = min(val, boot_qos);
 	}
+/*
+ * Featuring VDD auto calibration code,
+ * because VDD auto calibration will be used selectively depending on the project.
+ */
+#ifdef CONFIG_VDD_AUTO_CAL
+	else {
+		unsigned int auto_cal_qos;
+
+		/*
+		 * If thernmal condition is ok
+		 * and auto calibration is defined in Device Tree,
+		 * booting pm_qos should set to defined auto-cal-freq
+		 * for defined auto-cal-duration.
+		 */
+		if (!of_property_read_u32(dn, "auto-cal-freq", &auto_cal_qos) &&
+				!of_property_read_u32(dn, "auto-cal-duration", &val)) {
+			/*
+			 * auto-cal qos use user_qos_req,
+			 * because user_qos_req isn't used in booting time.
+			 */
+			pm_qos_update_request_timeout(&domain->user_min_qos_req,
+					auto_cal_qos, val * USEC_PER_MSEC);
+			pm_qos_update_request_timeout(&domain->user_max_qos_req,
+					auto_cal_qos, val * USEC_PER_MSEC);
+		}
+
+	}
+#endif
 
 	pm_qos_update_request_timeout(&domain->min_qos_req,
 			boot_qos, 40 * USEC_PER_SEC);
@@ -1393,6 +1390,45 @@ static __init int init_pm_qos(struct exynos_cpufreq_domain *domain,
 			__func__, val, domain->id);
 	}
 #endif
+}
+
+static __init int init_pm_qos(struct exynos_cpufreq_domain *domain,
+					struct device_node *dn)
+{
+	int ret;
+
+	ret = of_property_read_u32(dn, "pm_qos-min-class",
+					&domain->pm_qos_min_class);
+	if (ret)
+		return ret;
+
+	ret = of_property_read_u32(dn, "pm_qos-max-class",
+					&domain->pm_qos_max_class);
+	if (ret)
+		return ret;
+
+	domain->pm_qos_min_notifier.notifier_call = exynos_cpufreq_pm_qos_callback;
+	domain->pm_qos_min_notifier.priority = INT_MAX;
+	domain->pm_qos_max_notifier.notifier_call = exynos_cpufreq_pm_qos_callback;
+	domain->pm_qos_max_notifier.priority = INT_MAX;
+
+	pm_qos_add_notifier(domain->pm_qos_min_class,
+				&domain->pm_qos_min_notifier);
+	pm_qos_add_notifier(domain->pm_qos_max_class,
+				&domain->pm_qos_max_notifier);
+
+	pm_qos_add_request(&domain->min_qos_req,
+			domain->pm_qos_min_class, domain->min_freq);
+	pm_qos_add_request(&domain->max_qos_req,
+			domain->pm_qos_max_class, domain->max_freq);
+	pm_qos_add_request(&domain->user_min_qos_req,
+			domain->pm_qos_min_class, domain->min_freq);
+	pm_qos_add_request(&domain->user_max_qos_req,
+			domain->pm_qos_max_class, domain->max_freq);
+	pm_qos_add_request(&domain->user_min_qos_wo_boost_req,
+			domain->pm_qos_min_class, domain->min_freq);
+
+	set_boot_qos(domain, dn);
 
 	return 0;
 }

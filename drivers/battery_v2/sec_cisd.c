@@ -30,7 +30,7 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 	struct tm cur_date;
 #endif
 
-	if (battery->factory_mode || battery->is_jig_on) {
+	if (battery->factory_mode || battery->is_jig_on || battery->skip_cisd) {
 		dev_dbg(battery->dev, "%s: No need to check in factory mode\n",
 			__func__);
 		return ret;
@@ -203,6 +203,7 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 			pcisd->cc_start_time, pcisd->lcd_off_start_time, battery->charging_passed_time,
 			battery->charging_fullcharged_time, pcisd->charging_end_time, pcisd->state);
 
+#if 0
 		if (is_cisd_check_type(battery->cable_type) && incur_val.intval > pcisd->current_max_thres &&
 			chgcur_val.intval > pcisd->charging_current_thres && battery->current_now > 0 &&
 			battery->siop_level == 100 && battery->charging_mode == SEC_BATTERY_CHARGING_1ST) {
@@ -247,6 +248,7 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 			pcisd->recharge_count = 0;
 			pcisd->charging_end_time = 0;
 		}
+#endif
 
 		if (battery->siop_level != 100 ||
 			battery->current_now < 0 || (battery->status != POWER_SUPPLY_STATUS_FULL)) {
@@ -257,6 +259,7 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 		}
 
 		now_ts = ktime_to_timespec(ktime_get_boottime());
+#if 0
 		/* check cisd leak case */
 		if ((!(pcisd->state & CISD_STATE_LEAK_A) && !(pcisd->state & CISD_STATE_LEAK_B)) &&
 			pcisd->lcd_off_start_time &&
@@ -278,6 +281,7 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 				pcisd->data[CISD_DATA_LEAKAGE_D]++;
 			}
 		}
+#endif
 		
 #if !defined(CONFIG_QH_ALGORITHM)
 		if (!(pcisd->state & (CISD_STATE_LEAK_E|CISD_STATE_LEAK_F|CISD_STATE_LEAK_G))
@@ -435,7 +439,7 @@ void sec_battery_cisd_init(struct sec_battery_info *battery)
 	battery->cisd.leakage_e_time = 3600; /* 60 min */
 	battery->cisd.leakage_f_time = 7200; /* 120 min */
 	battery->cisd.leakage_g_time = 14400; /* 240 min */
-	battery->cisd.current_max_thres = 900;
+	battery->cisd.current_max_thres = 1600;
 	battery->cisd.charging_current_thres = 1000;
 	battery->cisd.current_avg_thres = 1000;
 #if defined(CONFIG_QH_ALGORITHM)
@@ -466,7 +470,7 @@ void sec_battery_cisd_init(struct sec_battery_info *battery)
 	battery->cisd.overflow_cap_thr = capfull_val.intval > battery->pdata->cisd_cap_limit ?
 		capfull_val.intval : battery->pdata->cisd_cap_limit;
 
-	battery->cisd.ab_vbat_max_count = 1; /* should be 1 */
+	battery->cisd.ab_vbat_max_count = 2; /* should be 1 */
 	battery->cisd.ab_vbat_check_count = 0;
 	battery->cisd.max_voltage_thr = battery->pdata->max_voltage_thr;
 	battery->cisd.cisd_alg_index = 6;

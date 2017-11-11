@@ -59,10 +59,6 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/ipi.h>
 
-#ifdef CONFIG_EXYNOS_SAVE_PANIC_CORE
-#include <linux/smc.h>
-#endif
-
 /*
  * as from 2.5, kernels no longer have an init_tasks structure
  * so we need some other way of telling a new secondary core
@@ -812,13 +808,11 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 		pr_debug("%s: IPI_WAKEUP\n", __func__);
 		break;
 
-#ifdef CONFIG_EXYNOS_SAVE_PANIC_CORE
 	case IPI_SGI_15_IRQ:
 		pr_debug("%s: Interrupt masking bit of core [%dth] is cleared by "
 			"force EL3 to print out kernel panic message.\n"
 			, __func__, smp_processor_id());
 		break;
-#endif
 	default:
 		pr_crit("CPU%u: Unknown IPI message 0x%x\n", cpu, ipinr);
 		break;
@@ -847,10 +841,6 @@ extern const struct cpumask *const cpu_online_mask;
 void smp_send_stop(void)
 {
 	unsigned long timeout;
-#ifdef CONFIG_EXYNOS_SAVE_PANIC_CORE
-	int i;
-	unsigned long cpu_mask = 0, tmp_bit;
-#endif
 
 	if (num_online_cpus() > 1) {
 		cpumask_t mask;
@@ -868,33 +858,6 @@ void smp_send_stop(void)
 
 	if (num_online_cpus() > 1) {
 		pr_warning("SMP: failed to stop secondary CPUs\n");
-#ifdef CONFIG_EXYNOS_SAVE_PANIC_CORE
-		for(i = 0; i < CONFIG_NR_CPUS; i++) {
-			if (i == smp_processor_id()) {
-				/* skip current core */
-				continue;
-			}
-
-			tmp_bit = cpu_online_mask->bits[CONFIG_NR_CPUS/64] & (1 << i);
-			if (tmp_bit)
-				cpu_mask |= tmp_bit;
-		}
-
-		pr_info("%s: core_mask is 0x%lx\n", __func__, cpu_mask);
-		/* some cores did not stop well.
-		   call SMC_CMD_KERNEL_PANIC_NOTICE. */
-		exynos_smc(SMC_CMD_KERNEL_PANIC_NOTICE, cpu_mask, 0, 0);
-
-		/* Wait up to 5 seconds for other CPUs to stop */
-		timeout = USEC_PER_SEC * 5;
-		while (num_online_cpus() > 1 && timeout--)
-			udelay(1);
-
-		if (num_online_cpus() > 1)
-			pr_warning("SMP: failed to stop secondary CPUs again\n");
-		else
-			pr_info("SMP: completed to stop secondary CPUS\n");
-#endif
 	} else {
 		pr_info("SMP: completed to stop secondary CPUS\n");
 	}

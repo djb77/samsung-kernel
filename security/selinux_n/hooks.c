@@ -180,7 +180,7 @@ unsigned int rkp_get_offset_bp_cred(void)
 static atomic_t selinux_secmark_refcount = ATOMIC_INIT(0);
 
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
-int selinux_enforcing;
+RKP_RO_AREA int selinux_enforcing;
 
 static int __init enforcing_setup(char *str)
 {

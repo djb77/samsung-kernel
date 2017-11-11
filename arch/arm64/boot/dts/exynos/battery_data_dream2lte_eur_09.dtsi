@@ -22,7 +22,7 @@
 	max77865-fuelgauge {
 		fuelgauge,qrtable20 = <0x1780>;
 		fuelgauge,qrtable30 = <0x1400>;
-		fuelgauge,capacity = <0x19AF>;
+		fuelgauge,capacity = <0x19AE>;
 		fuelgauge,fg_resistor = <1>;
 		fuelgauge,v_empty = <0xAA64>; /* Empty: 3260mV, Recover: 3480mV */
 		fuelgauge,jig_low_active;

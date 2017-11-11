@@ -104,12 +104,16 @@
 
 #define BATT_MISC_EVENT_UNDEFINED_RANGE_TYPE	0x00000001
 #define BATT_MISC_EVENT_WIRELESS_BACKPACK_TYPE	0x00000002
-#define BATT_MISC_EVENT_TIMEOUT_OPEN_TYPE		0x00000004
+#define BATT_MISC_EVENT_TIMEOUT_OPEN_TYPE	0x00000004
+#define BATT_MISC_EVENT_BATT_RESET_SOC		0x00000008
 
 #define SEC_INPUT_VOLTAGE_5V	5
 #define SEC_INPUT_VOLTAGE_9V	9
 #define SEC_INPUT_VOLTAGE_10V	10
 #define SEC_INPUT_VOLTAGE_12V	12
+
+#define HV_CHARGER_STATUS_STANDARD1	12000 /* mW */
+#define HV_CHARGER_STATUS_STANDARD2	20000 /* mW */
 
 #if defined(CONFIG_CCIC_NOTIFIER)
 struct sec_bat_pdic_info {
@@ -224,6 +228,7 @@ struct sec_battery_info {
 
 #if defined(CONFIG_BATTERY_CISD)
 	struct cisd cisd;
+	bool skip_cisd;
 #if defined(CONFIG_QH_ALGORITHM)
 	int cisd_qh_current_high_thr;
 	int cisd_qh_current_low_thr;
@@ -380,8 +385,6 @@ struct sec_battery_info {
 #endif
 #if defined(CONFIG_CALC_TIME_TO_FULL)
 	int timetofull;
-	bool complete_timetofull;
-	struct delayed_work timetofull_work;
 #endif
 	struct delayed_work slowcharging_work;
 #if defined(CONFIG_BATTERY_AGE_FORECAST)

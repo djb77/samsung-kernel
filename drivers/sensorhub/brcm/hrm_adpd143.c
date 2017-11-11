@@ -41,7 +41,7 @@ extern int hrm_info;
 #define VENDOR					"ADI"
 
 #define VENDOR_VERISON			"2"
-#define VERSION					"27"
+#define VERSION					"29"
 
 #define ADPD143_SLAVE_ADDR		0x64
 
@@ -107,6 +107,7 @@ extern int hrm_info;
 
 #define I2C_RETRY_DELAY			0
 #define I2C_RETRIES				100
+#define I2C_FAIL_TIME_SEC		30
 
 #define MAX_BUFFER				128
 #define GLOBAL_OP_MODE_OFF		0 /* standby */
@@ -695,6 +696,8 @@ static int __adpd_i2c_reg_read(struct adpd_device_data *adpd_data, u8 reg_addr, 
 	int err;
 	int tries = 0;
 	int icnt = 0;
+	struct timeval prev_tv;
+	struct timeval curr_tv;
 
 	struct i2c_msg msgs[] = {
 		{
@@ -710,13 +713,20 @@ static int __adpd_i2c_reg_read(struct adpd_device_data *adpd_data, u8 reg_addr, 
 			.buf = (s8 *)buf,
 		},
 	};
+	do_gettimeofday(&prev_tv);
 
 	do {
 		err = i2c_transfer(adpd_data->client->adapter, msgs, 2);
 		if (err != 2)
 			msleep_interruptible(I2C_RETRY_DELAY);
-		if (err < 0)
-			HRM_dbg("%s - i2c_transfer read error = %d\n", __func__, err);
+		if (err < 0) {
+			HRM_info("%s - i2c_transfer read error = %d\n", __func__, err);
+			do_gettimeofday(&curr_tv);
+			if ((curr_tv.tv_sec - prev_tv.tv_sec) > I2C_FAIL_TIME_SEC) {
+				HRM_dbg("%s - i2c_transfer read time error\n", __func__);
+				break;
+			}
+		}
 	} while ((err != 2) && (++tries < I2C_RETRIES));
 
 	if (err != 2) {
@@ -742,6 +752,8 @@ static int __adpd_i2c_reg_write(struct adpd_device_data *adpd_data, u8 reg_addr,
 	int tries = 0;
 	unsigned short data_to_write = cpu_to_be16(data);
 	char buf[4];
+	struct timeval prev_tv;
+	struct timeval curr_tv;
 
 	buf[0] = (s8) reg_addr;
 	memcpy(buf + 1, &data_to_write, sizeof(unsigned short));
@@ -749,13 +761,20 @@ static int __adpd_i2c_reg_write(struct adpd_device_data *adpd_data, u8 reg_addr,
 	msgs[0].flags = adpd_data->client->flags & I2C_M_TEN;
 	msgs[0].len = 1 + (1 * sizeof(unsigned short));
 	msgs[0].buf = buf;
+	do_gettimeofday(&prev_tv);
 
 	do {
 		err = i2c_transfer(adpd_data->client->adapter, msgs, 1);
 		if (err != 1)
 			msleep_interruptible(I2C_RETRY_DELAY);
-		if (err < 0)
-			HRM_dbg("%s - i2c_transfer write error = %d\n", __func__, err);
+		if (err < 0) {
+			HRM_info("%s - i2c_transfer write error = %d\n", __func__, err);
+			do_gettimeofday(&curr_tv);
+			if ((curr_tv.tv_sec - prev_tv.tv_sec) > I2C_FAIL_TIME_SEC) {
+				HRM_dbg("%s - i2c_transfer write time error\n", __func__);
+				break;
+			}
+		}
 	} while ((err != 1) && (++tries < I2C_RETRIES));
 
 	if (err != 1) {

@@ -1451,10 +1451,11 @@ static int sc_prepare_2nd_scaling(struct sc_ctx *ctx,
 	return 0;
 }
 
-static struct sc_dnoise_filter sc_filter_tab[4] = {
+static struct sc_dnoise_filter sc_filter_tab[5] = {
 	{SC_FT_240,   426,  240},
 	{SC_FT_480,   854,  480},
 	{SC_FT_720,  1280,  720},
+	{SC_FT_960,  1920,  960},
 	{SC_FT_1080, 1920, 1080},
 };
 

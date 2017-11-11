@@ -799,10 +799,8 @@ static int decon_disable(struct decon_device *decon)
 		decon->bts.ops->bts_update_qos_scen(decon, 0);
 	}
 
-	if (decon->dt.out_type == DECON_OUT_DSI) {
-		pm_relax(decon->dev);
-		dev_warn(decon->dev, "pm_relax");
-	}
+	pm_relax(decon->dev);
+	dev_warn(decon->dev, "pm_relax");
 
 	if (decon->dt.psr_mode != DECON_VIDEO_MODE) {
 		if (decon->res.pinctrl && decon->res.hw_te_off) {
@@ -1317,6 +1315,9 @@ static int decon_set_win_buffer(struct decon_device *decon,
 	u32 alpha_length;
 	struct decon_rect r;
 	struct sync_fence *fence = NULL;
+	u32 config_size = 0;
+	u32 alloc_size = 0;
+	u32 byte_per_pixel = 4;
 
 	ret = decon_check_limitation(decon, idx, config);
 	if (ret)
@@ -1344,6 +1345,28 @@ static int decon_set_win_buffer(struct decon_device *decon,
 			goto err_fdget;
 		}
 		decon_dbg("fence_fd(%d), fence(%p)\n", config->fence_fd, fence);
+	}
+
+	/*
+	 * To avoid SysMMU page fault due to small buffer allocation
+	 * bpp = 12 : (NV12, NV21) check LUMA side for simplication
+	 * bpp = 16 : (RGB16 formats)
+	 * bpp = 32 : (RGB32 formats)
+	 */
+	if (dpu_get_bpp(config->format) == 12)
+		byte_per_pixel = 1;
+	else if (dpu_get_bpp(config->format) == 16)
+		byte_per_pixel = 2;
+	else
+		byte_per_pixel = 4;
+
+	config_size = config->src.f_w * config->src.f_h * byte_per_pixel;
+	alloc_size = (u32)(regs->dma_buf_data[idx][0].dma_buf->size);
+	if (config_size > alloc_size) {
+		decon_err("alloc buf size is less than required size ([w%d] alloc=%x : cfg=%x)\n",
+				idx, alloc_size, config_size);
+		ret = -EINVAL;
+		goto err_fdget;
 	}
 
 	alpha_length = dpu_get_alpha_len(config->format);
@@ -1952,6 +1975,36 @@ static void decon_update_regs_handler(struct kthread_work *work)
 	}
 }
 
+static int decon_get_active_win_count(struct decon_device *decon,
+		struct decon_win_config_data *win_data)
+{
+	int i;
+	int win_cnt = 0;
+	struct decon_win_config *config;
+	struct decon_win_config *win_config = win_data->config;
+
+	for (i = 0; i < decon->dt.max_win; i++) {
+		config = &win_config[i];
+
+		switch (config->state) {
+		case DECON_WIN_STATE_DISABLED:
+			break;
+
+		case DECON_WIN_STATE_COLOR:
+		case DECON_WIN_STATE_BUFFER:
+			win_cnt++;
+			break;
+
+		default:
+			decon_warn("DECON:WARN:%s:unrecognized window state %u",
+					__func__, config->state);
+			break;
+		}
+	}
+
+	return win_cnt;
+}
+
 static void decon_set_full_size_win(struct decon_device *decon,
 	struct decon_win_config *config)
 {
@@ -2092,6 +2145,7 @@ int check_decon_state(struct decon_device *decon)
 static int decon_set_win_config(struct decon_device *decon,
 		struct decon_win_config_data *win_data)
 {
+	int num_of_window = 0;
 	struct decon_reg_data *regs;
 	int ret = 0;
 
@@ -2120,6 +2174,7 @@ static int decon_set_win_config(struct decon_device *decon,
 		ret = dsu_win_config(decon, win_data->config, regs);
 	}
 #endif
+/*
 	dpu_prepare_win_update_config(decon, win_data, regs);
 
 	ret = decon_prepare_win_config(decon, win_data, regs);
@@ -2128,6 +2183,9 @@ static int decon_set_win_config(struct decon_device *decon,
 
 	decon_hiber_block(decon);
 	if (regs->num_of_window) {
+*/
+	num_of_window = decon_get_active_win_count(decon, win_data);
+	if (num_of_window) {
 		win_data->fence = decon_create_fence(decon);
 		if (win_data->fence < 0)
 			goto err_prepare;
@@ -2141,6 +2199,14 @@ static int decon_set_win_config(struct decon_device *decon,
 		goto err_prepare;
 #endif
 	}
+
+	dpu_prepare_win_update_config(decon, win_data, regs);
+
+	ret = decon_prepare_win_config(decon, win_data, regs);
+	if (ret)
+		goto err_prepare;
+
+	decon_hiber_block(decon);
 
 	mutex_lock(&decon->up.lock);
 	list_add_tail(&regs->list, &decon->up.list);
@@ -2451,6 +2517,15 @@ static int decon_ioctl(struct fb_info *info, unsigned int cmd,
 			ret = -EFAULT;
 			break;
 		}
+		mutex_lock(&decon->lock);
+		if (decon->state != DECON_STATE_ON) {
+			decon_err("DECON:WRN:%s:decon%d is not active:cmd=%d\n",
+				__func__, decon->id, cmd);
+			ret = -EIO;
+			mutex_unlock(&decon->lock);
+			break;
+		}
+		mutex_unlock(&decon->lock);
 		decon_reg_set_start_crc(decon->id, crc_start);
 		break;
 
@@ -2459,10 +2534,28 @@ static int decon_ioctl(struct fb_info *info, unsigned int cmd,
 			ret = -EFAULT;
 			break;
 		}
+		mutex_lock(&decon->lock);
+		if (decon->state != DECON_STATE_ON) {
+			decon_err("DECON:WRN:%s:decon%d is not active:cmd=%d\n",
+				__func__, decon->id, cmd);
+			ret = -EIO;
+			mutex_unlock(&decon->lock);
+			break;
+		}
+		mutex_unlock(&decon->lock);
 		decon_reg_set_select_crc_bits(decon->id, crc_bit);
 		break;
 
 	case S3CFB_GET_CRC_DATA:
+		mutex_lock(&decon->lock);
+		if (decon->state != DECON_STATE_ON) {
+			decon_err("DECON:WRN:%s:decon%d is not active:cmd=%d\n",
+				__func__, decon->id, cmd);
+			ret = -EIO;
+			mutex_unlock(&decon->lock);
+			break;
+		}
+		mutex_unlock(&decon->lock);
 		decon_reg_get_crc_data(decon->id, &crc_data[0], &crc_data[1]);
 		if (copy_to_user((u32 __user *)arg, &crc_data[0], sizeof(u32))) {
 			ret = -EFAULT;
@@ -3257,8 +3350,6 @@ static int decon_initial_display(struct decon_device *decon, bool is_colormap)
 	struct v4l2_subdev *sd = NULL;
 	struct decon_mode_info psr;
 	struct dsim_device *dsim;
-	struct dsim_device *dsim1;
-	int ret;
 
 	if (decon->id || (decon->dt.out_type != DECON_OUT_DSI)) {
 		decon->state = DECON_STATE_INIT;
@@ -3353,7 +3444,6 @@ static int decon_initial_display(struct decon_device *decon, bool is_colormap)
 	if (decon->dt.dsi_mode == DSI_MODE_DUAL_DSI) {
 		decon_info("2nd LCD is on\n");
 		msleep(1);
-		dsim1 = container_of(decon->out_sd[1], struct dsim_device, sd);
 	}
 
 	decon_reg_start(decon->id, &psr);
@@ -3365,15 +3455,6 @@ static int decon_initial_display(struct decon_device *decon, bool is_colormap)
 decon_init_done:
 
 	decon->state = DECON_STATE_INIT;
-
-	/* [W/A] prevent sleep enter during LCD on */
-	ret = device_init_wakeup(decon->dev, true);
-	if (ret) {
-		dev_err(decon->dev, "failed to init wakeup device\n");
-		return -EINVAL;
-	}
-	pm_stay_awake(decon->dev);
-	dev_warn(decon->dev, "pm_stay_awake");
 
 	return 0;
 }
@@ -3484,8 +3565,20 @@ static int decon_probe(struct platform_device *pdev)
 #endif
 	if (decon->id != 2) {	/* for decon2 + displayport start in winconfig. */
 		ret = decon_initial_display(decon, false);
-		if (ret)
+		if (ret) {
+			dev_err(decon->dev, "failed to init decon_initial_display\n");
 			goto err_display;
+		}
+		/* [W/A] prevent sleep enter during LCD on */
+		ret = device_init_wakeup(decon->dev, true);
+		if (ret) {
+			dev_err(decon->dev, "failed to init wakeup device\n");
+			goto err_display;
+		}
+		if (decon->dt.out_type == DECON_OUT_DSI) {
+			pm_stay_awake(decon->dev);
+			dev_warn(decon->dev, "pm_stay_awake");
+		}
 	}
 
 	decon_info("decon%d registered successfully", decon->id);

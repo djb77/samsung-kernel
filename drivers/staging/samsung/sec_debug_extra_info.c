@@ -20,23 +20,24 @@
 #include <asm/stacktrace.h>
 #include <asm/esr.h>
 
-
+#define SZ_96	0x00000060
 struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 	.item = {
 		{"KTIME",	"", SZ_8},
+		{"BIN",		"", SZ_16},
 		{"FAULT",	"", SZ_32},
 		{"BUG",		"", SZ_64},
-		{"PANIC",	"", SZ_64},
+		{"PANIC",	"", SZ_96},
 		{"PC",		"", SZ_64},
 		{"LR",		"", SZ_64},
 		{"STACK",	"", SZ_256},
 		{"RR",		"", SZ_8},
 		{"EVT",		"", SZ_8},
-		{"SMU",		"", SZ_32},
+		{"SMU",		"", SZ_64},
 		{"BUS",		"", SZ_128},
 		{"DPM",		"", SZ_32},
 		{"SMP",		"", SZ_8},
-		{"SLB",		"", SZ_32},
+		{"ETC",		"", SZ_256},
 		{"ESR",		"", SZ_64},
 		{"MER",		"", SZ_8},
 		{"PCB",		"", SZ_8},
@@ -48,6 +49,8 @@ struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 		{"LR0",		"", SZ_128},
 		{"LEV",		"", SZ_4},
 		{"DCN",		"", SZ_32},
+		{"WAK",		"", SZ_16},
+		{"BAT",		"", SZ_32},
 	}
 };
 
@@ -69,6 +72,18 @@ void sec_debug_init_extra_info(struct sec_debug_shared_info *sec_debug_info)
 
 	if (sec_debug_extra_info)
 		memcpy(sec_debug_extra_info, &sec_debug_extra_info_init, sizeof(sec_debug_extra_info_init));
+}
+
+/******************************************************************************
+ * sec_debug_clear_extra_info() - function to clear each extra info field
+ *
+ * This function simply clear the specified field of sec_debug_panic_extra_info.
+******************************************************************************/
+
+void sec_debug_clear_extra_info(enum sec_debug_extra_buf_type type)
+{
+	if (sec_debug_extra_info)
+		strcpy(sec_debug_extra_info->item[type].val, "");
 }
 
 /******************************************************************************
@@ -106,6 +121,9 @@ void sec_debug_store_extra_info(void)
 
 	/* initialize extra info output buffer */
 	memset((void *)SEC_DEBUG_EXTRA_INFO_VA, 0, SZ_1K);
+
+	if (!sec_debug_extra_info)
+		return;
 
 	ptr += sprintf(ptr, "\"%s\":\"%s\"", sec_debug_extra_info->item[0].key,
 		sec_debug_extra_info->item[0].val);
@@ -180,6 +198,11 @@ void sec_debug_set_extra_info_backtrace(struct pt_regs *regs)
 	struct stackframe frame;
 	int offset = 0;
 	int sym_name_len;
+
+	if (!sec_debug_extra_info)
+		return;
+	if (strlen(sec_debug_extra_info->item[INFO_STACK].val))
+		return;
 
 	pr_crit("sec_debug_store_backtrace\n");
 
@@ -263,12 +286,32 @@ void sec_debug_set_extra_info_smpl(unsigned int count)
 }
 
 /******************************************************************************
- * sec_debug_set_extra_info_slub_error
+ * sec_debug_set_extra_info_ufs_error
 ******************************************************************************/
 
-void sec_debug_set_extra_info_slub_error(char *cachename)
+void sec_debug_set_extra_info_ufs_error(char *str)
 {
-	sec_debug_set_extra_info(INFO_SLUB, "%s", cachename);
+	sec_debug_set_extra_info(INFO_ETC, "%s", str);
+}
+
+/******************************************************************************
+ * sec_debug_set_extra_info_zswap
+******************************************************************************/
+
+void sec_debug_set_extra_info_zswap(char *str)
+{
+	sec_debug_set_extra_info(INFO_ETC, "%s", str);
+}
+
+/******************************************************************************
+ * sec_debug_set_extra_info_mfc_error
+******************************************************************************/
+
+void sec_debug_set_extra_info_mfc_error(char *str)
+{
+	sec_debug_clear_extra_info(INFO_STACK); /* erase STACK */
+	sec_debug_set_extra_info(INFO_STACK, "MFC ERROR");
+	sec_debug_set_extra_info(INFO_ETC, "%s", str);
 }
 
 /******************************************************************************
@@ -297,6 +340,16 @@ void sec_debug_set_extra_info_merr(void)
 void sec_debug_set_extra_info_decon(unsigned int err)
 {
 	sec_debug_set_extra_info(INFO_DECON, "%08x", err);
+}
+
+/******************************************************************************
+ * sec_debug_set_extra_info_batt
+******************************************************************************/
+
+void sec_debug_set_extra_info_batt(int cap, int volt, int temp, int curr)
+{
+	sec_debug_clear_extra_info(INFO_BATT);
+	sec_debug_set_extra_info(INFO_BATT, "%03d/%04d/%04d/%06d", cap, volt, temp, curr);
 }
 
 void sec_debug_finish_extra_info(void)

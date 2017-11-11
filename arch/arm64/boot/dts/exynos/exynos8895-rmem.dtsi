@@ -22,11 +22,6 @@
 			reg = <0x0 0x80002000 0x2000>;
 		};
 
-		array_dump {
-			compatible = "exynos8895,array_dump";
-			reg = <0x0 0x92200000 0x400000>;
-		};
-
 		seclog_mem {
 			compatible = "exynos8895,seclog";
 			reg = <0x0 0xC0000000 0x10000>;

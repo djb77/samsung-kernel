@@ -50,6 +50,11 @@ config SUPPORT_POC_FLASH
 	tristate "Support display poc flash"
 	default n
 
+config POC_DREAM
+	depends on EXYNOS_DECON_LCD && EXYNOS_DECON_LCD_S6E3HA6 && SUPPORT_POC_FLASH
+	tristate "Support display poc dream"
+	default n
+
 config PANEL_BACKLIGHT_PAC_3_0
 	depends on EXYNOS_DECON_LCD
 	tristate "Support baclight PAC 3.0"

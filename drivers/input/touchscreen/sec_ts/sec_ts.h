@@ -390,8 +390,7 @@ enum grip_set_data {
 
 typedef enum {
 	SEC_TS_STATE_POWER_OFF = 0,
-	SEC_TS_STATE_LPM_SUSPEND,
-	SEC_TS_STATE_LPM_RESUME,
+	SEC_TS_STATE_LPM,
 	SEC_TS_STATE_POWER_ON
 } TOUCH_POWER_MODE;
 
@@ -864,8 +863,9 @@ extern void set_grip_data_to_ic(struct sec_ts_data *ts, u8 flag);
 extern void sec_ts_set_grip_type(struct sec_ts_data *ts, u8 set_type);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-extern void trustedui_mode_on(void);
-extern void trustedui_mode_off(void);
+//extern void trustedui_mode_on(void);
+//extern void trustedui_mode_off(void);
+extern int tui_force_close(uint32_t arg);
 #endif
 
 #endif

@@ -94,6 +94,11 @@
 /* MALI_SEC_INTEGRATION */
 #include <backend/gpu/mali_kbase_pm_internal.h>
 
+/* MALI_SEC_INTEGRATION */
+#ifdef CONFIG_MALI_ASV_CALIBRATION_SUPPORT
+#include "./platform/exynos/gpu_control.h"
+#endif
+
 /* GPU IRQ Tags */
 #define	JOB_IRQ_TAG	0
 #define MMU_IRQ_TAG	1
@@ -4022,6 +4027,11 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 			"Probed as %s\n", dev_name(kbdev->mdev.this_device));
 
 	kbase_dev_nr++;
+
+/* MALI_SEC_INTEGRATION */
+#ifdef CONFIG_MALI_ASV_CALIBRATION_SUPPORT
+    gpu_asv_calibration_start_wq();
+#endif
 
 	return err;
 }

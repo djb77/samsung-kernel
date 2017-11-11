@@ -112,8 +112,10 @@ void panic(const char *fmt, ...)
 	 * stop themself or will wait until they are stopped by the 1st CPU
 	 * with smp_send_stop().
 	 */
-	if (!spin_trylock(&panic_lock))
+	if (!spin_trylock(&panic_lock)) {
+		exynos_ss_hook_hardlockup_exit();
 		panic_smp_self_stop();
+	}
 
 	console_verbose();
 	bust_spinlocks(1);

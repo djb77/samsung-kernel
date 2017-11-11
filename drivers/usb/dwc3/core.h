@@ -153,6 +153,10 @@
 #define DWC3_OEVTEN		0xcc0C
 #define DWC3_OSTS		0xcc10
 
+/* magic key for CSR timeout */
+#define DWC3_MAGIC_LO		0x1234
+#define MAX_RETRY_CNT		2
+
 /* Bit fields */
 
 /* Global Configuration Register */

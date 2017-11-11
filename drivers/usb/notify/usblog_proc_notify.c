@@ -957,6 +957,14 @@ void store_ccic_version(unsigned char *hw, unsigned char *sw_main,
 }
 EXPORT_SYMBOL(store_ccic_version);
 
+unsigned long long show_ccic_version(void)
+{
+	unsigned long long ret = 0;
+	memcpy(&ret, &usblog_root.ccic_ver, 8);
+	return ret;
+}
+EXPORT_SYMBOL(show_ccic_version);
+
 int register_usblog_proc(void)
 {
 	int ret = 0;

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 680309 2017-01-19 12:00:05Z $
+ * $Id: wl_cfg80211.h 692301 2017-03-27 11:55:31Z $
  */
 
 /**
@@ -1554,6 +1554,7 @@ extern s32 wl_cfg80211_get_bss_info(struct net_device *dev, char* cmd, int total
 extern s32 wl_cfg80211_get_connect_failed_status(struct net_device *dev, char* cmd, int total_len);
 #endif /* DHD_ENABLE_BIGDATA_LOGGING */
 extern struct bcm_cfg80211 *wl_get_cfg(struct net_device *ndev);
+extern s32 wl_cfg80211_set_if_band(struct net_device *ndev, int band);
 
 #define SCAN_BUF_CNT	2
 #define SCAN_BUF_NEXT	1

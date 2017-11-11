@@ -51,6 +51,15 @@ bool tui_cover_mode_on = false;
 extern phys_addr_t hal_tui_video_space_alloc(void);
 extern int decon_lpd_block_exit(struct decon_device *decon);
 
+#if defined(CONFIG_TOUCHSCREEN_SEC_TS) || defined(CONFIG_TOUCHSCREEN_SEC_TS_Y661)
+extern void trustedui_mode_on(void);
+extern void trustedui_mode_off(void);
+#endif
+#if defined(CONFIG_TOUCHSCREEN_FTS)
+extern void trustedui_mode_stm_on(void);
+#endif
+
+
 #ifdef CONFIG_TRUSTED_UI_TOUCH_ENABLE
 static int tsp_irq_num = 718; // default value
 
@@ -358,6 +367,19 @@ uint32_t hal_tui_deactivate(void)
 	pr_info(KERN_ERR "Disable touch!\n");
 	disable_irq(tsp_irq_num);
 
+#if defined(CONFIG_TOUCHSCREEN_SEC_TS) || defined(CONFIG_TOUCHSCREEN_SEC_TS_Y661)
+	tui_delay(5);
+	trustedui_mode_on();
+	tui_delay(95);
+#endif
+
+#if defined(CONFIG_TOUCHSCREEN_FTS)
+	tui_delay(5);
+	trustedui_mode_stm_on();
+	tui_delay(95);
+#endif
+
+
 	pr_info(KERN_ERR "tsp_irq_num =%d\n",tsp_irq_num);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI_FB_BLANK
@@ -416,7 +438,13 @@ uint32_t hal_tui_activate(void)
 
 	//switch_set_state(&tui_switch, TRUSTEDUI_MODE_OFF);
 	enable_irq(tsp_irq_num);
-	
+
+#if defined(CONFIG_TOUCHSCREEN_SEC_TS_Y661)
+	tui_delay(5);
+	trustedui_mode_off();
+	tui_delay(95);
+#endif
+
 	/* Clear linux TUI flag */
 	trustedui_set_mode(TRUSTEDUI_MODE_OFF);
 

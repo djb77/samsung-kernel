@@ -19,7 +19,7 @@
 		io-channel-ranges;
 	};
 	max77865-fuelgauge {
-		fuelgauge,capacity = <0x172E>;
+		fuelgauge,capacity = <0x172D>;
 		fuelgauge,qrtable20 = <0x1680>;
 		fuelgauge,qrtable30 = <0x1180>;
 		fuelgauge,fg_resistor = <1>;

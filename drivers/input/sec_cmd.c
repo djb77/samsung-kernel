@@ -34,13 +34,22 @@ void sec_cmd_set_cmd_exit(struct sec_cmd_data *data)
 		mutex_unlock(&data->cmd_lock);
 
 		data->cmd_state = SEC_CMD_STATUS_RUNNING;
-		sec_cmd_store_function(data);
+		schedule_work(&data->cmd_work.work);
 
 	} else {
 		mutex_unlock(&data->fifo_lock);
 	}
 #endif
 }
+
+#if defined USE_SEC_CMD_QUEUE
+static void cmd_exit_work(struct work_struct *work)
+{
+	struct sec_cmd_data *data = container_of(work, struct sec_cmd_data, cmd_work.work);
+
+	sec_cmd_store_function(data);
+}
+#endif
 
 void sec_cmd_set_default_result(struct sec_cmd_data *data)
 {
@@ -449,6 +458,8 @@ int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 		goto err_alloc_queue;
 	}
 	mutex_init(&data->fifo_lock);
+
+	INIT_DELAYED_WORK(&data->cmd_work, cmd_exit_work);
 #endif
 
 	if (devt == SEC_CLASS_DEVT_TSP) {
@@ -531,6 +542,9 @@ void sec_cmd_exit(struct sec_cmd_data *data, int devt)
 	mutex_unlock(&data->fifo_lock);
 	mutex_destroy(&data->fifo_lock);
 	kfifo_free(&data->cmd_queue);
+
+	cancel_delayed_work_sync(&data->cmd_work);
+	flush_delayed_work(&data->cmd_work);
 #endif
 	mutex_destroy(&data->cmd_lock);
 	list_del(&data->cmd_list_head);

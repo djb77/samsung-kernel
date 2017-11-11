@@ -131,7 +131,7 @@ extern void dhd_free_module_memory(struct dhd_bus *bus, struct module_metadata *
 extern void* dhd_alloc_module_memory(struct dhd_bus *bus, uint32_t size,
 	struct module_metadata *hmem);
 #endif /* HOFFLOAD_MODULES */
-#ifdef WLADPS
+#if defined(WLADPS) || defined(WLADPS_PRIVATE_CMD)
 #define ADPS_ENABLE	1
 #define ADPS_DISABLE	0
 typedef struct bcm_iov_buf {
@@ -142,5 +142,5 @@ typedef struct bcm_iov_buf {
 } bcm_iov_buf_t;
 
 int dhd_enable_adps(dhd_pub_t *dhd, uint8 on);
-#endif
+#endif /* WLADPS || WLADPS_PRIVATE_CMD */
 #endif /* __DHD_LINUX_H__ */

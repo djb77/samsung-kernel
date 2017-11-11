@@ -851,12 +851,11 @@ out_unlock:
 	kbase_gpu_vm_unlock(katom->kctx);
 
 out_cleanup:
-	kfree(buffers);
-	kfree(user_buffers);
-
 	/* Frees allocated memory for kbase_debug_copy_job struct, including
 	 * members, and sets jc to 0 */
-	kbase_debug_copy_finish(katom);
+	kbase_debug_copy_finish(katom);	
+	kfree(user_buffers);
+
 	return ret;
 }
 

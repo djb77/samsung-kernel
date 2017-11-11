@@ -537,6 +537,7 @@ static void s5p_mfc_dec_stop_streaming(struct vb2_queue *q)
 
 		if (s5p_mfc_wait_for_done_ctx(ctx, S5P_FIMV_R2H_CMD_DPB_FLUSH_RET)) {
 			mfc_err_ctx("time out during DPB flush\n");
+			dev->logging_data->cause |= (1 << MFC_CAUSE_FAIL_DPB_FLUSH);
 			s5p_mfc_dump_info_and_stop_hw(dev);
 		}
 

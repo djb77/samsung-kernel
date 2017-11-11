@@ -81,6 +81,7 @@ static unsigned int cache_err_cnt;
 static unsigned int codediff_cnt;
 static unsigned long pcb_offset;
 static unsigned long smd_offset;
+static unsigned int lpddr4_size;
 
 static int __init sec_hw_param_get_hw_rev(char *arg)
 {
@@ -137,6 +138,14 @@ static int __init sec_hw_param_smd_offset(char *arg)
 }
 
 early_param("sec_debug.smd_offset", sec_hw_param_smd_offset);
+
+static int __init sec_hw_param_lpddr4_size(char *arg)
+{
+	get_option(&arg, &lpddr4_size);
+	return 0;
+}
+
+early_param("sec_debug.lpddr4_size", sec_hw_param_lpddr4_size);
 
 static u32 chipid_reverse_value(u32 value, u32 bitcnt)
 {
@@ -225,10 +234,7 @@ static ssize_t sec_hw_param_ap_info_show(struct kobject *kobj,
 		     "\"ASV_MIF\":\"%d\",", asv_ids_information(mifg));
 	info_size +=
 	    snprintf((char *)(buf + info_size), DATA_SIZE - info_size,
-		     "\"IDS_BIG\":\"%d\",", asv_ids_information(bids));
-	info_size +=
-	    snprintf((char *)(buf + info_size), DATA_SIZE - info_size,
-		     "\"PARAM0\":\"\"");
+		     "\"IDS_BIG\":\"%d\"", asv_ids_information(bids));
 
 	return info_size;
 }
@@ -242,6 +248,9 @@ static ssize_t sec_hw_param_ddr_info_show(struct kobject *kobj,
 	info_size +=
 	    snprintf((char *)(buf), DATA_SIZE, "\"DDRV\":\"%s\",",
 		     get_dram_manufacturer());
+	info_size +=
+	    snprintf((char *)(buf + info_size), DATA_SIZE - info_size,
+		     "\"LPDDR4\":\"%dGB\",", lpddr4_size);
 	info_size +=
 	    snprintf((char *)(buf + info_size), DATA_SIZE - info_size,
 		     "\"C2D\":\"\",");
@@ -307,28 +316,52 @@ static ssize_t sec_hw_param_thermal_info_show(struct kobject *kobj,
 		sum = thermal_data_info[zone].times[ACTIVE_TIMES] + 
 			thermal_data_info[zone].times[PASSIVE_TIMES] + 
 			thermal_data_info[zone].times[HOT_TIMES];
-		per[zone][0] = (thermal_data_info[zone].times[ACTIVE_TIMES] * 1000) / sum;
-		per[zone][1] = (thermal_data_info[zone].times[PASSIVE_TIMES] * 1000) / sum;
-		per[zone][2] = (thermal_data_info[zone].times[HOT_TIMES] * 1000) / sum;
+		if (sum) {
+			per[zone][0] = (thermal_data_info[zone].times[ACTIVE_TIMES] * 1000) / sum;
+			per[zone][1] = (thermal_data_info[zone].times[PASSIVE_TIMES] * 1000) / sum;
+			per[zone][2] = (thermal_data_info[zone].times[HOT_TIMES] * 1000) / sum;
+		}
+		else {
+			per[zone][0] = per[zone][1] = per[zone][2] = 0;
+		}
 	}
 
 	sum = 0;	// MNGS
 	for (idx = 0; idx <= thermal_data_info[0].max_level; idx++)
 		sum += thermal_data_info[0].freq_level[idx];
-	for (idx = 0; idx <= thermal_data_info[0].max_level; idx++)
-		freq[0][idx] = (thermal_data_info[0].freq_level[idx] * 1000) / sum;
+	if (sum) {
+		for (idx = 0; idx <= thermal_data_info[0].max_level; idx++)
+			freq[0][idx] = (thermal_data_info[0].freq_level[idx] * 1000) / sum;
+	}
+	else {
+		for (idx = 0; idx <= thermal_data_info[0].max_level; idx++)
+			freq[0][idx] = 0;
+	}
 
 	sum = 0;	// APO
 	for (idx = 0; idx <= thermal_data_info[1].max_level; idx++)
 		sum += thermal_data_info[1].freq_level[idx];
-	for (idx = 0; idx <= thermal_data_info[1].max_level; idx++)
-		freq[1][idx] = (thermal_data_info[1].freq_level[idx] * 1000) / sum;
+	if (sum) {
+		for (idx = 0; idx <= thermal_data_info[1].max_level; idx++)
+			freq[1][idx] = (thermal_data_info[1].freq_level[idx] * 1000) / sum;
+	}
+	else {
+		for (idx = 0; idx <= thermal_data_info[1].max_level; idx++)
+			freq[1][idx] = 0;
+	}
+		
 
 	sum = 0;	// GPU
 	for (idx = 0; idx <= thermal_data_info[2].max_level; idx++)
 		sum += thermal_data_info[2].freq_level[idx];
-	for (idx = 0; idx <= thermal_data_info[2].max_level; idx++)
-		freq[2][idx] = (thermal_data_info[2].freq_level[idx] * 1000) / sum;
+	if (sum) {
+		for (idx = 0; idx <= thermal_data_info[2].max_level; idx++)
+			freq[2][idx] = (thermal_data_info[2].freq_level[idx] * 1000) / sum;
+	}
+	else {
+		for (idx = 0; idx <= thermal_data_info[2].max_level; idx++)
+			freq[2][idx] = 0;
+	}
 
 // MNGS
 	info_size +=

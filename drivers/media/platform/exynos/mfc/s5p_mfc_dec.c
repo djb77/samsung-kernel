@@ -348,7 +348,6 @@ static int vidioc_s_fmt_vid_out_mplane(struct file *file, void *priv,
 	int ret = 0;
 	struct v4l2_pix_format_mplane *pix_mp = &f->fmt.pix_mp;
 	int i;
-	struct s5p_mfc_ctx_ctrl *ctx_ctrl;
 
 	mfc_debug_enter();
 
@@ -423,31 +422,6 @@ static int vidioc_s_fmt_vid_out_mplane(struct file *file, void *priv,
 	}
 
 	if (dec->crc_enable && (IS_H264_DEC(ctx) || IS_H264_MVC_DEC(ctx))) {
-		/* CRC related control types should be changed by the codec mode. */
-		mfc_debug(5, "ctx_ctrl is changed for H.264\n");
-		list_for_each_entry(ctx_ctrl, &ctx->ctrls, list) {
-			switch (ctx_ctrl->id) {
-			case V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_LUMA:
-				ctx_ctrl->type = MFC_CTRL_TYPE_GET_DST;
-				ctx_ctrl->addr = S5P_FIMV_D_DISPLAY_FIRST_PLANE_CRC;
-				break;
-			case V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_CHROMA:
-				ctx_ctrl->type = MFC_CTRL_TYPE_GET_DST;
-				ctx_ctrl->addr = S5P_FIMV_D_DISPLAY_SECOND_PLANE_CRC;
-				break;
-			case V4L2_CID_MPEG_MFC51_VIDEO_CRC_GENERATED:
-				ctx_ctrl->type = MFC_CTRL_TYPE_GET_DST;
-				ctx_ctrl->addr = S5P_FIMV_D_DISPLAY_STATUS;
-				break;
-			case V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_LUMA_BOT:
-			case V4L2_CID_MPEG_MFC51_VIDEO_CRC_DATA_CHROMA_BOT:
-				ctx_ctrl->type = MFC_CTRL_TYPE_GET_DST;
-				break;
-			default:
-				break;
-			}
-		}
-
 		/* Reinitialize controls for source buffers */
 		for (i = 0; i < MFC_MAX_BUFFERS; i++) {
 			if (test_bit(i, &ctx->src_ctrls_avail)) {
@@ -1198,7 +1172,7 @@ static int vidioc_g_ext_ctrls(struct file *file, void *priv,
 			break;
 		}
 
-		mfc_debug(2, "[%d] id: 0x%08x, value: %d", i, ext_ctrl->id, ext_ctrl->value);
+		mfc_debug(2, "[%d] id: 0x%08x, value: %d\n", i, ext_ctrl->id, ext_ctrl->value);
 	}
 
 	return ret;

@@ -1539,6 +1539,7 @@ int fimc_is_sensor_open(struct fimc_is_device_sensor *device,
 	struct fimc_is_group *group;
 	struct fimc_is_core *core;
 	int rsccount;
+	int ret_fallback;
 
 	BUG_ON(!device);
 	BUG_ON(!device->subdev_csi);
@@ -1623,7 +1624,7 @@ int fimc_is_sensor_open(struct fimc_is_device_sensor *device,
 
 		ret = fimc_is_resource_put(device->resourcemgr, device->instance);
 		if (ret)
-			merr("fimc_is_resource_put is fail", device);
+			merr("fimc_is_resource_put is fail(%d)", device, ret);
 
 	}
 
@@ -1650,24 +1651,24 @@ int fimc_is_sensor_open(struct fimc_is_device_sensor *device,
 	return 0;
 
 err_devicemgr_open:
-	ret = fimc_is_resource_put(device->resourcemgr, device->instance);
-	if (ret)
-		merr("fimc_is_resource_put is fail", device);
+	ret_fallback = fimc_is_resource_put(device->resourcemgr, device->instance);
+	if (ret_fallback)
+		merr("fimc_is_resource_put is fail(%d)", device, ret_fallback);
 
 err_resource_get:
-	ret = fimc_is_subdev_internal_close((void *)device, FIMC_IS_DEVICE_SENSOR);
-	if (ret)
-		merr("fimc_is_sensor_subdev_internal_close is fail(%d)", device, ret);
+	ret_fallback = fimc_is_subdev_internal_close((void *)device, FIMC_IS_DEVICE_SENSOR);
+	if (ret_fallback)
+		merr("fimc_is_sensor_subdev_internal_close is fail(%d)", device, ret_fallback);
 
 err_subdev_internal_open:
-	ret = fimc_is_flite_close(device->subdev_flite);
-	if (ret)
-		merr("fimc_is_flite_close is fail(%d)", device, ret);
+	ret_fallback = fimc_is_flite_close(device->subdev_flite);
+	if (ret_fallback)
+		merr("fimc_is_flite_close is fail(%d)", device, ret_fallback);
 
 err_flite_open:
-	ret = fimc_is_csi_close(device->subdev_csi);
-	if (ret)
-		merr("fimc_is_flite_close is fail(%d)", device, ret);
+	ret_fallback = fimc_is_csi_close(device->subdev_csi);
+	if (ret_fallback)
+		merr("fimc_is_flite_close is fail(%d)", device, ret_fallback);
 
 err_csi_open:
 err_camif_open:

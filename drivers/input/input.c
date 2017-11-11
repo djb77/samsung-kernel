@@ -425,6 +425,7 @@ DECLARE_TIMEOUT_FUNC(mouse);
 DECLARE_TIMEOUT_FUNC(mouse_wheel);
 DECLARE_TIMEOUT_FUNC(pen);
 DECLARE_TIMEOUT_FUNC(hover);
+DECLARE_TIMEOUT_FUNC(key_two);
 
 // ********** Define Set Booster Functions ********** //
 DECLARE_SET_BOOSTER_FUNC(touch);
@@ -436,6 +437,7 @@ DECLARE_SET_BOOSTER_FUNC(mouse);
 DECLARE_SET_BOOSTER_FUNC(mouse_wheel);
 DECLARE_SET_BOOSTER_FUNC(pen);
 DECLARE_SET_BOOSTER_FUNC(hover);
+DECLARE_SET_BOOSTER_FUNC(key_two);
 
 // ********** Define Reet Booster Functions ********** //
 DECLARE_RESET_BOOSTER_FUNC(touch);
@@ -447,6 +449,7 @@ DECLARE_RESET_BOOSTER_FUNC(mouse);
 DECLARE_RESET_BOOSTER_FUNC(mouse_wheel);
 DECLARE_RESET_BOOSTER_FUNC(pen);
 DECLARE_RESET_BOOSTER_FUNC(hover);
+DECLARE_RESET_BOOSTER_FUNC(key_two);
 
 // ********** Define State Functions ********** //
 DECLARE_STATE_FUNC(idle)
@@ -591,6 +594,11 @@ void input_booster(struct input_dev *dev)
 					RUN_BOOSTER(key, (input_events[i].value) ? BOOSTER_ON : BOOSTER_OFF );
 					DetectedCategory = true;
 					break;
+				case KEY_WINK :
+					pr_debug("[Input Booster] key_two KEY EVENT - %s\n", (input_events[i].value) ? "PRESS" : "RELEASE");
+					RUN_BOOSTER(key_two, (input_events[i].value) ? BOOSTER_ON : BOOSTER_OFF );
+					DetectedCategory = true;
+					break;
 				default :
 					break;
 			}
@@ -651,6 +659,7 @@ void input_booster(struct input_dev *dev)
 					input_booster_disable(&mouse_wheel_booster);
 					input_booster_disable(&pen_booster);
 					input_booster_disable(&hover_booster);
+					input_booster_disable(&key_two_booster);
 					pr_debug("[Input Booster] *****************************\n[Input Booster] All boosters are reset  %d\n[Input Booster] *****************************\n", lcdoffcounter);
 				}
 #endif
@@ -795,6 +804,7 @@ void input_booster_init()
 	INIT_BOOSTER(mouse_wheel)
 	INIT_BOOSTER(pen)
 	INIT_BOOSTER(hover)
+	INIT_BOOSTER(key_two)
 	multitouch_booster.change_on_release = 1;
 
 	// ********** Initialize Sysfs **********
@@ -821,6 +831,7 @@ void input_booster_init()
 		INIT_SYSFS_DEVICE(mouse_wheel)
 		INIT_SYSFS_DEVICE(pen)
 		INIT_SYSFS_DEVICE(hover)
+		INIT_SYSFS_DEVICE(key_two)
 	}
 }
 #endif  // Input Booster -

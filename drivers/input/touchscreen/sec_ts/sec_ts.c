@@ -942,7 +942,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 	int curr_pos;
 	int remain_event_count = 0;
 
-	if (ts->power_status == SEC_TS_STATE_LPM_SUSPEND) {
+	if (ts->power_status == SEC_TS_STATE_LPM) {
 
 		wake_lock_timeout(&ts->wakelock, msecs_to_jiffies(3 * MSEC_PER_SEC));
 		/* waiting for blsp block resuming, if not occurs i2c error */
@@ -2083,6 +2083,7 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	wake_lock_init(&ts->wakelock, WAKE_LOCK_SUSPEND, "tsp_wakelock");
 	init_completion(&ts->resume_done);
+	complete_all(&ts->resume_done);
 
 	if (pdata->always_lpmode)
 		ts->lowpower_mode |= SEC_TS_MODE_SPONGE_FORCE_KEY;
@@ -2614,6 +2615,21 @@ static int sec_ts_input_open(struct input_dev *dev)
 	ts->input_closed = false;
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+		input_err(true, &ts->client->dev, "%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+			input_err(true, &ts->client->dev, "%s TUI flag force clear!\n",	__func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
+
 #ifdef CONFIG_SECURE_TOUCH
 	secure_touch_stop(ts, 0);
 #endif
@@ -2644,6 +2660,21 @@ static void sec_ts_input_close(struct input_dev *dev)
 	ts->input_closed = true;
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+		input_err(true, &ts->client->dev, "%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+			input_err(true, &ts->client->dev, "%s TUI flag force clear!\n",	__func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
+
 #ifdef CONFIG_SECURE_TOUCH
 	secure_touch_stop(ts, 1);
 #endif
@@ -2656,8 +2687,7 @@ static void sec_ts_input_close(struct input_dev *dev)
 #endif
 	if (ts->lowpower_mode) {
 		sec_ts_set_lowpowermode(ts, TO_LOWPOWER_MODE);
-
-		ts->power_status = SEC_TS_STATE_LPM_RESUME;
+		ts->power_status = SEC_TS_STATE_LPM;
 	} else {
 		sec_ts_stop_device(ts);
 	}
@@ -2849,10 +2879,8 @@ static int sec_ts_pm_suspend(struct device *dev)
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 
-	if (ts->lowpower_mode) {
-		ts->power_status = SEC_TS_STATE_LPM_SUSPEND;
+	if (ts->lowpower_mode)
 		reinit_completion(&ts->resume_done);
-	}
 
 	return 0;
 }
@@ -2861,10 +2889,8 @@ static int sec_ts_pm_resume(struct device *dev)
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 
-	if (ts->lowpower_mode) {
-		ts->power_status = SEC_TS_STATE_LPM_RESUME;
+	if (ts->lowpower_mode)
 		complete_all(&ts->resume_done);
-	}
 
 	return 0;
 }
@@ -2878,14 +2904,16 @@ void trustedui_mode_on(void)
 
 	sec_ts_unlocked_release_all_finger(tsp_info);
 }
+EXPORT_SYMBOL(trustedui_mode_on);
+
 
 void trustedui_mode_off(void)
 {
 	if (!tsp_info)
 		return;
 }
+EXPORT_SYMBOL(trustedui_mode_off);
 #endif
-
 
 static const struct i2c_device_id sec_ts_id[] = {
 	{ SEC_TS_I2C_NAME, 0 },

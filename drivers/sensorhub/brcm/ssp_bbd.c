@@ -629,6 +629,27 @@ static inline void bbd_complete_ssp_msg(struct ssp_data *data, struct ssp_msg *m
 	clean_msg(msg);
 }
 
+static inline void bbd_send_timestamp(void)
+{
+		struct ssp_msg msg;
+		unsigned char *bmsg = kzalloc(SSP_INSTRUCTION_PACKET + sizeof(s64), GFP_KERNEL);
+		struct timespec curr_ts = ktime_to_timespec(ktime_get_boottime());
+		s64 timestamp = timespec_to_ns(&curr_ts);
+
+		msg.cmd = MSG2SSP_INST_CURRENT_TIMESTAMP; //you should modify this to proper command
+		msg.options = AP2HUB_WRITE;
+		msg.length = sizeof(s64);
+
+		memcpy(bmsg, &msg, SSP_INSTRUCTION_PACKET);
+		memcpy(bmsg + SSP_INSTRUCTION_PACKET, &timestamp, sizeof(s64));
+
+		bbd_send_packet(bmsg, SSP_INSTRUCTION_PACKET + sizeof(s64));
+
+		kfree(bmsg);
+}
+
+static int count = 1;
+
 int callback_bbd_on_packet(void *ssh_data, const char *buf, size_t size)
 {
 	struct ssp_data *data = (struct ssp_data *)ssh_data;
@@ -690,6 +711,8 @@ int callback_bbd_on_packet(void *ssh_data, const char *buf, size_t size)
 			case HUB2AP_WRITE:
 				ssp_pkt.state = WAITFOR_PKT_COMPLETE;
 				memcpy(&ssp_pkt.required, &ssp_pkt.buf[2], 2);
+				if (count++ % 3 == 0)
+					bbd_send_timestamp();
 				break;
 			case AP2HUB_WRITE:
 				if (!(msg = bbd_find_ssp_msg(data)))
@@ -727,17 +750,18 @@ unlock:
 			/* packet completed!! */
 			switch (ssp_pkt.type) {
 			case AP2HUB_READ:
-				BUG_ON(ssp_pkt.msg == NULL);
-				BUG_ON(ssp_pkt.rxlen != ssp_pkt.msg->length);
-				memcpy(ssp_pkt.msg->buffer, ssp_pkt.buf,
-					       	ssp_pkt.rxlen);
-				bbd_complete_ssp_msg(data, ssp_pkt.msg);
-				ssp_pkt.msg = NULL;
-
-				ssp_pkt.islocked = false;
+				//BUG_ON(ssp_pkt.msg == NULL);
+				//BUG_ON(ssp_pkt.rxlen != ssp_pkt.msg->length);
+                if (ssp_pkt.msg != NULL) {
+                    memcpy(ssp_pkt.msg->buffer, ssp_pkt.buf,ssp_pkt.rxlen);
+                    bbd_complete_ssp_msg(data, ssp_pkt.msg);
+                    ssp_pkt.msg = NULL;
+                }
+                ssp_pkt.islocked = false;
 				mutex_unlock(&data->pending_mutex);
 				break;
 			case HUB2AP_WRITE:
+				DEBUG_SHOW_HEX_RECV(ssp_pkt.buf, ssp_pkt.rxlen)
 				data->timestamp = get_current_timestamp();
 				parse_dataframe(data, ssp_pkt.buf, ssp_pkt.rxlen);
 				break;

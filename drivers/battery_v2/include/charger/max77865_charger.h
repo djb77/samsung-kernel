@@ -234,6 +234,7 @@ struct max77865_charger_data {
 	struct wake_lock chgin_wake_lock;
 	struct wake_lock wc_current_wake_lock;
 	struct wake_lock aicl_wake_lock;
+	struct wake_lock otg_wake_lock;
 
 	unsigned int	is_charging;
 	unsigned int	charging_type;

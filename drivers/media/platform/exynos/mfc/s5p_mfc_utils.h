@@ -45,7 +45,7 @@ static inline enum s5p_mfc_node_type s5p_mfc_get_node_type(struct file *file)
 	enum s5p_mfc_node_type node_type;
 
 	if (!vdev) {
-		mfc_err_dev("failed to get video_device");
+		mfc_err_dev("failed to get video_device\n");
 		return MFCNODE_INVALID;
 	}
 

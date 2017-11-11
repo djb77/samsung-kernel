@@ -110,8 +110,8 @@ config MALI_EXYNOS_SECURE_RENDERING
       Support Secure Rendering on Exynos SoC
 
 config MALI_ASV_CALIBRATION_SUPPORT
-	bool "Enable GPU BTS"
-	depends on MALI_TMIX && MALI_RT_PM && MALI_DVFS
+	bool "Enable GPU ASV AUTO CALIBRATION"
+	depends on MALI_TMIX && MALI_RT_PM && MALI_DVFS && VDD_AUTO_CAL
 	default y
-	 help
+	help
 	  Choose this option to enable AUTO_CALIBRATION_SUPPORT in the Mali tMIX DDK.

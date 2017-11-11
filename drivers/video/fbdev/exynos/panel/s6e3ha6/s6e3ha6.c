@@ -631,9 +631,9 @@ void copy_poc_maptbl(struct maptbl *tbl, u8 *dst)
 	if (poc == 0x00)
 		*dst = 0xFF;
 	else
-		*dst = gray;
+		*dst = (gray == 0x33) ? 0x64 : gray;
 
-	pr_info("%s poc %d, gray %02x\n", __func__, poc, *dst);
+	pr_info("%s poc %d, gray %02x->%02x\n", __func__, poc, gray, *dst);
 }
 #endif
 
@@ -1154,6 +1154,42 @@ void copy_scr_white_maptbl(struct maptbl *tbl, u8 *dst)
 #ifdef DEBUG_PANEL
 		panel_info("%s cur_wrgb[%d] %d(%02X)\n",
 				__func__, i, mdnie->props.cur_wrgb[i], mdnie->props.cur_wrgb[i]);
+#endif
+	}
+}
+
+void copy_adjust_ldu_maptbl(struct maptbl *tbl, u8 *dst)
+{
+	struct mdnie_info *mdnie;
+	int i, idx;
+	u8 value;
+
+	if (unlikely(!tbl || !dst))
+		return;
+
+	mdnie = (struct mdnie_info *)tbl->pdata;
+	idx = maptbl_getidx(tbl);
+	if (idx < 0 || (idx + MAX_COLOR > sizeof_maptbl(tbl))) {
+		panel_err("%s invalid index %d\n", __func__, idx);
+		return;
+	}
+
+	if (tbl->ncol != MAX_COLOR) {
+		panel_err("%s invalid maptbl size %d\n", __func__, tbl->ncol);
+		return;
+	}
+
+	for (i = 0; i < tbl->ncol; i++, dst += 2) {
+		value = tbl->arr[idx + i] +
+			(((mdnie->props.mode == AUTO) && (mdnie->props.scenario != EBOOK_MODE)) ?
+				mdnie->props.def_wrgb_ofs[i] : 0);
+		mdnie->props.cur_wrgb[i] = value;
+		*dst = value;
+
+#ifdef DEBUG_PANEL
+		panel_info("%s cur_wrgb[%d] %d(%02X) (orig:0x%02X offset:%d)\n",
+				__func__, i, mdnie->props.cur_wrgb[i], mdnie->props.cur_wrgb[i],
+				tbl->arr[idx + i], mdnie->props.def_wrgb_ofs[i]);
 #endif
 	}
 }

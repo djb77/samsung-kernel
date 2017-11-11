@@ -47,6 +47,7 @@
 #include <scsi/ufs/ioctl.h>
 
 #include <crypto/fmp.h>
+#include <linux/sec_debug.h>
 
 #include "ufshcd.h"
 #include "unipro.h"
@@ -104,6 +105,9 @@
 			_ret = ufshcd_disable_vreg(_dev, _vreg);        \
 		_ret;                                                   \
 	})
+
+/* Called by FS */
+extern void (*ufs_debug_func)(void *);
 
 static u32 ufs_query_desc_max_size[] = {
 	QUERY_DESC_DEVICE_MAX_SIZE,
@@ -7471,6 +7475,57 @@ static struct devfreq_dev_profile ufs_devfreq_profile = {
 #endif
 
 /**
+ * ufs_sec_send_errinfo - Send UFS Error Information to AP
+ * Format : U0H0L0X0Q0R0W0F0
+ * U : UTP cmd ERRor count
+ * H : HWRESET count
+ * L : Link startup failure count
+ * X : Link Lost Error count
+ * Q : UTMR QUERY_TASK error count
+ * R : READ error count
+ * W : WRITE error count
+ * F : Device Fatal Error count
+ **/
+static void ufs_sec_send_errinfo (void *data) {
+	static struct ufs_hba *hba = NULL;
+	struct SEC_UFS_counting *err_info;
+	char buf[16];
+
+	if (data) {
+		hba = (struct ufs_hba *)data;
+		return;
+	}
+	if (!hba) {
+		printk(KERN_ERR "%s: hba is not initialized\n", __func__);
+		return;
+	}
+	if (&(hba->SEC_err_info))
+	{
+		err_info = &(hba->SEC_err_info);
+		sprintf(buf, "U%dH%dL%dX%dQ%dR%dW%dF%d", 
+				(err_info->UTP_count.UTP_err > 9) 				/* UTP Error */
+				? 9 : err_info->UTP_count.UTP_err,
+				(err_info->op_count.HW_RESET_count > 9) 		/* HW Reset */
+				? 9 : err_info->op_count.HW_RESET_count,
+				(err_info->op_count.link_startup_count > 9) 	/* Link Startup Fail */
+				? 9 : err_info->op_count.link_startup_count,
+				(err_info->Fatal_err_count.LLE > 9) 			/* Link Lost */
+				? 9 : err_info->Fatal_err_count.LLE,
+				(err_info->UTP_count.UTMR_query_task_count > 9)	/* Query task */
+				? 9 : err_info->UTP_count.UTMR_query_task_count,
+				(err_info->UTP_count.UTR_read_err > 9) 			/* UTRR */
+				? 9 : err_info->UTP_count.UTR_read_err,
+				(err_info->UTP_count.UTR_write_err > 9 ) 		/* UTRW */
+				? 9 : err_info->UTP_count.UTR_write_err,
+				(err_info->Fatal_err_count.DFE > 9 				/* Device Fatal Error */
+				? 9 : err_info->Fatal_err_count.DFE));
+		printk(KERN_ERR "%s: Send UFS information to AP : %s\n", __func__, buf);
+		sec_debug_set_extra_info_ufs_error(buf);
+	}
+	return;
+}
+
+/**
  * ufshcd_init - Driver initialization routine
  * @hba: per-adapter instance
  * @mmio_base: base register address
@@ -7588,6 +7643,10 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 		hba->clk_scaling.window_start_t = 0;
 	}
 #endif
+
+	/* init ufs_sec_debug function */
+	ufs_sec_send_errinfo(hba);
+	ufs_debug_func = ufs_sec_send_errinfo;
 
 	/* Hold auto suspend until async scan completes */
 	pm_runtime_get_sync(dev);

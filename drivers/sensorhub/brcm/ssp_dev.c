@@ -617,6 +617,25 @@ void ssp_motor_work_func(struct work_struct *work)
 }
 #endif
 
+
+void ssp_timestamp_sync_work_func(struct work_struct *work)
+{
+	struct ssp_data *data = container_of((struct delayed_work *)work,
+					struct ssp_data, work_ssp_tiemstamp_sync);
+    struct ssp_msg *msg = kzalloc(sizeof(*msg), GFP_KERNEL);
+
+    msg->cmd = MSG2AP_INST_TIMESTAMP_OFFSET;
+    msg->length = sizeof(data->timestamp_offset);
+    msg->options = AP2HUB_WRITE;
+    msg->buffer = (char *) kzalloc(sizeof(data->timestamp_offset), GFP_KERNEL);
+
+    pr_info("handle_timestamp_sync: %lld\n", data->timestamp_offset);
+    memcpy(msg->buffer, &(data->timestamp_offset), sizeof(data->timestamp_offset));
+
+    ssp_spi_sync(data, msg, 1000);
+	//pr_info("[SSP] %s : Motor state %d, iRet %d\n",__func__, data->motor_state, iRet);
+}
+
 static int ssp_probe(struct spi_device *spi)
 {
 	struct ssp_data *data;
@@ -817,6 +836,7 @@ static int ssp_probe(struct spi_device *spi)
 	INIT_WORK(&data->work_ssp_motor, ssp_motor_work_func);
 #endif
 
+    INIT_DELAYED_WORK(&data->work_ssp_tiemstamp_sync, ssp_timestamp_sync_work_func);
 	goto exit;
 
 #ifdef CONFIG_SSP_MOTOR_CALLBACK

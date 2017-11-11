@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_android.c 684350 2017-02-13 05:30:25Z $
+ * $Id: wl_android.c 696664 2017-04-27 13:30:34Z $
  */
 
 #include <linux/module.h>
@@ -486,6 +486,11 @@ static const wl_natoe_sub_cmd_t natoe_cmd_list[] = {
 #ifdef SET_PCIE_IRQ_CPU_CORE
 #define CMD_PCIE_IRQ_CORE	"PCIE_IRQ_CORE"
 #endif /* SET_PCIE_IRQ_CPU_CORE */
+
+#ifdef WLADPS_PRIVATE_CMD
+#define CMD_SET_ADPS	"SET_ADPS"
+#define CMD_GET_ADPS	"GET_ADPS"
+#endif /* WLADPS_PRIVATE_CMD */
 
 #ifdef WL_GENL
 static s32 wl_genl_handle_msg(struct sk_buff *skb, struct genl_info *info);
@@ -1744,7 +1749,7 @@ int wl_android_send_action_frame(struct net_device *dev, char *command, int tota
 
 	params = (android_wifi_af_params_t *)(command + strlen(CMD_SENDACTIONFRAME) + 1);
 
-	if (params->len > ANDROID_WIFI_ACTION_FRAME_SIZE) {
+	if ((uint16)params->len > ANDROID_WIFI_ACTION_FRAME_SIZE) {
 		DHD_ERROR(("%s: Requested action frame len was out of range(%d)\n",
 			__FUNCTION__, params->len));
 		goto send_action_frame_out;
@@ -1797,7 +1802,7 @@ int wl_android_send_action_frame(struct net_device *dev, char *command, int tota
 
 	action_frame->packetId = 0;
 	memcpy(&action_frame->da, &tmp_bssid, ETHER_ADDR_LEN);
-	action_frame->len = params->len;
+	action_frame->len = (uint16)params->len;
 	memcpy(action_frame->data, params->data, action_frame->len);
 
 	error = wldev_iovar_setbuf(dev, "actframe", af_params,
@@ -2423,7 +2428,7 @@ static int wl_android_set_pno_setup(struct net_device *dev, char *command, int t
 		str_ptr += sizeof(cmd_tlv_t);
 		tlv_size_left -= sizeof(cmd_tlv_t);
 
-		if ((nssid = wl_iw_parse_ssid_list_tlv(&str_ptr, ssids_local,
+		if ((nssid = wl_parse_ssid_list_tlv(&str_ptr, ssids_local,
 			MAX_PFN_LIST_COUNT, &tlv_size_left)) <= 0) {
 			DHD_ERROR(("SSID is not presented or corrupted ret=%d\n", nssid));
 			goto exit_proc;
@@ -5669,6 +5674,74 @@ wl_android_get_snr(struct net_device *dev, char *command, int total_len)
 	DHD_INFO(("%s: command result is %s\n", __FUNCTION__, command));
 	return bytes_written;
 }
+#ifdef WLADPS_PRIVATE_CMD
+static int
+wl_android_set_adps_mode(struct net_device *dev, const char* string_num)
+{
+	int err = 0, adps_mode;
+	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(dev);
+
+	adps_mode = bcm_atoi(string_num);
+
+	if ((adps_mode < 0) && (1 < adps_mode)) {
+		WL_ERR(("%s: Invalid value %d.\n", __FUNCTION__, adps_mode));
+		return -EINVAL;
+	}
+
+	err = dhd_enable_adps(dhdp, adps_mode);
+	if (err != BCME_OK) {
+		WL_ERR(("failed to set adps mode %d, error = %d\n", adps_mode, err));
+		return -EIO;
+	}
+	return err;
+}
+static int
+wl_android_get_adps_mode(
+	struct net_device *dev, char *command, int total_len)
+{
+	int bytes_written, err = 0;
+	int len;
+	char buf[WLC_IOCTL_SMLEN];
+
+	bcm_iov_buf_t iov_buf;
+	bcm_iov_buf_t *ptr = NULL;
+	wl_adps_params_v1_t *data = NULL;
+
+	uint8 *pdata = NULL;
+	uint8 band, mode = 0;
+
+	memset(&iov_buf, 0, sizeof(iov_buf));
+
+	len = OFFSETOF(bcm_iov_buf_t, data) + sizeof(*data);
+
+	iov_buf.version = WL_ADPS_IOV_VER;
+	iov_buf.len = sizeof(band);
+	iov_buf.id = WL_ADPS_IOV_MODE;
+
+	pdata = (uint8 *)&iov_buf.data;
+
+	for (band = 1; band <= MAX_BANDS; band++) {
+		pdata[0] = band;
+		err = wldev_iovar_getbuf(dev, "adps", &iov_buf, len,
+			buf, WLC_IOCTL_SMLEN, NULL);
+		if (err != BCME_OK) {
+			WL_ERR(("%s fail to get adps band %d(%d).\n",
+					__FUNCTION__, band, err));
+			return -EIO;
+		}
+		ptr = (bcm_iov_buf_t *) buf;
+		data = (wl_adps_params_v1_t *) ptr->data;
+		mode = data->mode;
+		if (mode != OFF) {
+			break;
+		}
+	}
+
+	bytes_written = snprintf(command, total_len, "%s %d",
+		CMD_GET_ADPS, mode);
+	return bytes_written;
+}
+#endif /* WLADPS_PRIVATE_CMD */
 
 
 int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
@@ -5887,7 +5960,7 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 			bytes_written = wldev_set_band(net, band);
 		}
 #else
-		bytes_written = wldev_set_band(net, band);
+		bytes_written = wl_cfg80211_set_if_band(net, band);
 #endif /* WL_HOST_BAND_MGMT */
 #ifdef ROAM_CHANNEL_CACHE
 		wl_update_roamscan_cache_by_band(net, band);
@@ -6546,6 +6619,15 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 	else if (strnicmp(command, CMD_GET_SNR, strlen(CMD_GET_SNR)) == 0) {
 		bytes_written = wl_android_get_snr(net, command, priv_cmd.total_len);
 	}
+#ifdef WLADPS_PRIVATE_CMD
+	else if (strnicmp(command, CMD_SET_ADPS, strlen(CMD_SET_ADPS)) == 0) {
+		int skip = strlen(CMD_SET_ADPS) + 1;
+		bytes_written = wl_android_set_adps_mode(net, (const char*)command+skip);
+	}
+	else if (strnicmp(command, CMD_GET_ADPS, strlen(CMD_GET_ADPS)) == 0) {
+		bytes_written = wl_android_get_adps_mode(net, command, priv_cmd.total_len);
+	}
+#endif /* WLADPS_PRIVATE_CMD */
 	else {
 		DHD_ERROR(("Unknown PRIVATE command %s - ignored\n", command));
 		bytes_written = scnprintf(command, sizeof("FAIL"), "FAIL");
