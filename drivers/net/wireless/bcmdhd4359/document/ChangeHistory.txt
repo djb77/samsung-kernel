@@ -1,4 +1,108 @@
-BCM4359 DHD 1.363.59.209 for Android Zen/Noble/Hero/Grace Project
+BCM4359 DHD 1.363.59.219 for Android Zen/Noble/Hero/Grace Project
+
+DHD 1.363.59.219 - 2017.09.04
+Others
+ - CS3247015 Fixed disconnection during roaming on CISCO hidden networks
+ - CS3420505 Fixed ANT selection issue from W2018 project
+ - CS3420505 Fixed wrong nvram loading issue from W2018 project
+
+
+DHD 1.363.59.217 - 2017.08.07
+Kernel Panic
+ - CS2714944 Fixed the Kernel Panic during dynamic TCP ACK suppress mode change in SDIO platform
+ - CS2864574 Fixed PCIE LINK DOWN issue by changing PCIE RC API
+ - CS3204538 Fixed Kernel panic when D3_ACK timeout is occurred
+
+Security Patch
+ - CVE-2017-0705 Added boundary check in wl_cfgvendor_significant_change_cfg()
+ - CVE-2017-0706 Added boundary check in wl_cfg80211_mgmt_tx()
+ - CVE-2017-0786 V2017060101 Added boundary check in wl_escan_handler()
+ - CVE-2017-0788 V2017053103 Added boundary check in dhd_handle_hotlist_scan_evt()
+ - CVE-2017-0789 V2017053102 Fixed Heap overflow in dhd_handle_swc_evt()
+ - CVE-2017-0790 V2017053101 Added boundary check in dhd_process_full_gscan_result()
+ - CVE-2017-0791 V2017052302 Added event length check in wl_notify_rx_mgmt_frame()
+ - V2017063001 Removed not required IOVAR for SDIO
+ - Enhanced event length check in is_wlc_event_frame()
+ - Fixed overflow issue in wl_android_set_ibss_beacon_ouidata()
+
+Others
+ - CS2470635 Enabled frameburst on SDIO platform
+ - CS2472434 Fixed roam failure on PMF required APs
+ - CS2768376 Added cfg_vendor_event support API for Kernel 4.1 version
+ - CS2768376 Enabled MSM8998 architecture and SMMU related feature on DHD 1.363.59
+ - CS2879933 Added to prevent calling netsted connection request
+ - CS2901316 Fixed to send up common error code for Android-O VTS
+ - CS2901316 Fixed to use proper chipset number when parsing link stats
+ - CS3018308 Fixed repetitive connection drops of clients with Mobile Hotspot
+ - CS3351562 Changed MAC address encoding due to security issue
+ - Added P2P IE length check code in wl_find_listen_channel()
+ - Removed unused files (bt_amp_hci.h/802.11_bta.h)
+
+
+DHD 1.363.59.215 - 2017.05.12
+Kernel Panic
+ - CS2472525 Avoid to trigger Kernel panic on abnormal devices during device initialization
+ - CS2472873 Fixed to prevent accessing CPU hotplug call back before initialization
+ - CS2477559 Implement exception handling routines if DMA mapping error for TX data packet is happened
+ - CS2716890 Fixed Scan timeout issue with blocking suspend during P2P scan
+
+Security Patch
+ - CVE-2017-0568 V2017051814 Fixed buffer overrun in wl_run_escan()
+ - CVE-2017-0570 V2017051815 Removed unused file (wl_iw.c/wl_iw.h)
+ - CVE-2017-0633 V2017022301 Enhanced wrong buffer usage in IOCTL path
+ - CVE-2017-0740 V2017030901 Fixed length overflow issue in dhd_wl_ioctl() function
+
+Others
+ - CS2454876 Fixed the reassociation failure during MU-MIMO switching if the AP enabled MFP(802.11w) feature
+ - CS2471300 Fixed Buffer overflow issue
+ - CS2555123 Fixed page fault issue in dhd_wl_ioctl()
+ - CS2642368 Fixed type casting issue in wl_android_send_action_frame()
+ - CS2675989 Fixed reverse-order of EAP-Failure and deauth packet
+ - CVE-2017-0633 Enhanced wrong buffer usage in IOCTL path
+ - Enabled Random MAC address scan by default for all WIFI chip
+
+
+DHD 1.363.59.212 - 2017.03.24
+Others
+ - CSP:1120070 Added recovery method when reading shared memory is failed
+
+
+DHD 1.363.59.211 - 2017.03.03
+Others
+ - CSP:1112125 Added MSM8998 architecture define to deferred init call
+ - CSP:1123852 Refactoring Blob download feature for coexistence with blob, non blob FW
+ - CSP:1125601 Invalidate PCI configuration saved state in order to reduce PCI resume latency
+ - CSP:1128493 Added wakelock during get BSSID from dongle on wl_cfg80211_get_station() function
+ - Added exception case of CLM Blob file checking logic about MFG mode
+ - Removed unnecessary country code list in translate_custom_table
+
+
+DHD 1.363.59.210 - 2017.02.10
+New Feature
+ - Enabled COUNTRY_SINGLE_REGREV feature
+   (This patch should be sync up with FW 9.75.155.46_Blob or higher version)
+
+Kernel Panic
+ - CSP:1100314 Fixed the calculation of read/write offset for debug ring to avoid the possibility of buffer overflow
+ - CSP:1115833 Fixed kernel freeze issue due to tasklet count mismatch
+ - CSP:1125179 Enabled dongle_isolation for Exynos7420 platform
+
+Others
+ - CSP:1093614 Fixed Prevent warning issues
+ - CSP:1103989 Unnecessary mpc setting code is removed
+ - CSP:1106625 Fixed blob download malloc buffer size calculation code
+ - CSP:1110320 HANG event recovery simulation
+ - CSP:1115484 Fixed build error with GSCAN code
+ - CSP:1115484 Fixed vulnerability issues
+ - CSP:1115750 Added to fix country miss setting
+ - CSP:1118451 Prevent to duplicate connection request without disconnection
+ - CSP:1118705 Link Status HAL API support for 32bit platfom on 64bit kernel
+ - CSP:1124363 Fixed idlecount update missing of RuntimePM
+ - CSP:1125141 Enhance the PKTID error handler
+ - Added error log for chip id mismatch error
+ - Added ICMP dump log
+ - Enabled "SUPPORT_TRIGGER_HANG_EVENT" for hang test
+
 
 DHD 1.363.59.209 - 2016.12.19
 Others
@@ -214,10 +318,12 @@ DHD 1.363.59.181 - 2016.05.31
 Kernel Panic
  - CSP:1056983 Fix un-synchronized WiFi off & event processing
 
+Security Patch
+ - CVE-2017-0573 V2017051816 Fixed size overflow issue in wl_android_set_roampref()
+
 Others
  - CSP:1009440 Fixed extra vulnerability issues
  - CSP:1042751 Changed event handler using workqueue
- - CSP:1044652 Security patch to prevent stack overflow
  - CSP:1045659 Fixed prevent issue for wl_cfgvendor_start_mkeep_alive()
  - CSP:1049317 Fixed the private command for roam trigger to support wbtext
  - CSP:1051331 Fixed validation for SSID length and privileges issue
@@ -435,7 +541,7 @@ Others
 DHD 1.363.59.115 - 2015. 11.28
 Kernel Panic
  - CSP:995972 Fixed the Kernel panic problem when PCIe linkdown event is triggered from PCIe host
- - CSP:996436 Fix can’t handle TX retrying during Runtime Resume
+ - CSP:996436 Fix can?�t handle TX retrying during Runtime Resume
 
 Others
  - CSP:994862 Fixed LIVELOCK issue : Adding 64bit cache alignment
@@ -630,7 +736,7 @@ Others
 DHD 1.363.59.44 - 2015. 07. 10
 Others
  - CSP:943472 - DHDTCPACK_SUPPRESS control by interface type
-   (Add ‘DHDTCPACK_SUPPRESS_STAP2P_ONLY’ in Makefile to disable it for SoftAP)
+   (Add ?�DHDTCPACK_SUPPRESS_STAP2P_ONLY??in Makefile to disable it for SoftAP)
 
 
 DHD 1.363.59.43 - 2015. 07. 07
@@ -675,7 +781,7 @@ Kernel Panic
 
 DHD 1.363.59.35 - 2015. 06. 26
 Others
- - CSP:937081 – Fixed never disconnected issue
+ - CSP:937081 ??Fixed never disconnected issue
  - Added debug logs for DHCP packets
  - Added debug logs for flowring Delete sequence
  - Enabled PS mode for Oxygen
@@ -683,7 +789,7 @@ Others
 
 DHD 1.363.59.34 - 2015. 06. 26
 Kernel Panic
- - CSP:936767 – Fixed spinlock initialization
+ - CSP:936767 ??Fixed spinlock initialization
 
 Others
  - Deleted roam timeout timer immediatly when roaming fail event is received
@@ -691,7 +797,7 @@ Others
 
 DHD 1.363.59.33 - 2015. 06. 24
 Kernel Panic
- - CSP:936767 – Fixed spinlock initialization
+ - CSP:936767 ??Fixed spinlock initialization
 
 Others
  - Changed WLC_E_TRACE enable/disable method (using /data/.logtrace.info)
@@ -700,8 +806,8 @@ Others
 
 DHD 1.363.59.31 - 2015. 06. 22
 Others
- - CSP: 935340 – Prevent calling disassociation when it’s already in disconnected state
- - CSP: 936698 – Prevent deleting p2p discovery interface when going into suspend mode with ‘Keep Wi-Fi on during sleep - Never’ setting.
+ - CSP: 935340 ??Prevent calling disassociation when it?�s already in disconnected state
+ - CSP: 936698 ??Prevent deleting p2p discovery interface when going into suspend mode with ?�Keep Wi-Fi on during sleep - Never??setting.
  - Disable WLC_E_TRACE by default
  - Disabled PS mode for Oxygen
  - Optimized SCAN wakelock
@@ -829,5 +935,4 @@ DHD 1.363.55 - 2015. 05. 21
 DHD 1.363.33.2 - 2015. 04. 30
 
 - Initial Release for BCM4359 Zen/Noble Project
-
 

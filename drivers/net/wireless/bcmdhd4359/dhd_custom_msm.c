@@ -1,7 +1,7 @@
 /*
  * Platform Dependent file for Qualcomm MSM/APQ
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_custom_msm.c 602811 2015-11-28 15:13:42Z $
+ * $Id: dhd_custom_msm.c 699795 2017-05-16 11:24:51Z $
  *
  */
 
@@ -38,9 +38,9 @@
 #include <linux/fcntl.h>
 #include <linux/fs.h>
 #include <linux/of_gpio.h>
-#ifdef CONFIG_ARCH_MSM8996
+#if defined(CONFIG_ARCH_MSM8996) || defined(CONFIG_ARCH_MSM8998)
 #include <linux/msm_pcie.h>
-#endif /* CONFIG_ARCH_MSM8996 */
+#endif /* CONFIG_ARCH_MSM8996 || CONFIG_ARCH_MSM8998 */
 
 #ifdef CONFIG_BROADCOM_WIFI_RESERVED_MEM
 extern int dhd_init_wlan_mem(void);
@@ -96,10 +96,6 @@ dhd_wifi_init_gpio(void)
 	/* Wait for WIFI_TURNON_DELAY due to power stability */
 	msleep(WIFI_TURNON_DELAY);
 
-#ifdef CONFIG_ARCH_MSM8996
-	msm_pcie_enumerate(MSM_PCIE_CH_NUM);
-#endif /* CONFIG_ARCH_MSM8996 */
-
 	/* ========== WLAN_HOST_WAKE ============ */
 	wlan_host_wake_up = of_get_named_gpio(root_node, "wlan-host-wake-gpio", 0);
 	printk(KERN_INFO "%s: gpio_wlan_power : %d\n", __FUNCTION__, wlan_host_wake_up);
@@ -116,6 +112,11 @@ dhd_wifi_init_gpio(void)
 
 	gpio_direction_input(wlan_host_wake_up);
 	wlan_host_wake_irq = gpio_to_irq(wlan_host_wake_up);
+
+#if defined(CONFIG_BCM4359) || defined(CONFIG_BCM4361)
+	printk(KERN_INFO "%s: Call msm_pcie_enumerate\n", __FUNCTION__);
+	msm_pcie_enumerate(MSM_PCIE_CH_NUM);
+#endif /* CONFIG_BCM4359 || CONFIG_BCM4361 */
 
 	return 0;
 }
@@ -219,7 +220,7 @@ fail:
 	printk(KERN_INFO"%s: FINISH.......\n", __FUNCTION__);
 	return ret;
 }
-#if defined(CONFIG_ARCH_MSM8996)
+#if defined(CONFIG_ARCH_MSM8996) || defined(CONFIG_ARCH_MSM8998)
 #if defined(CONFIG_DEFERRED_INITCALLS)
 deferred_module_init(dhd_wlan_init);
 #else
@@ -227,4 +228,4 @@ late_initcall(dhd_wlan_init);
 #endif /* CONFIG_DEFERRED_INITCALLS */
 #else
 device_initcall(dhd_wlan_init);
-#endif /* CONFIG_ARCH_MSM8996 */
+#endif /* CONFIG_ARCH_MSM8996 || CONFIG_ARCH_MSM8998 */
