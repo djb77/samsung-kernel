@@ -138,6 +138,9 @@
 #define VFSSPI_IOCTL_SET_LOCKSCREEN     _IOW(VFSSPI_IOCTL_MAGIC,	\
 							22, unsigned int)
 #endif
+/* To control the power */
+#define VFSSPI_IOCTL_POWER_CONTROL     _IOW(VFSSPI_IOCTL_MAGIC,	\
+							23, unsigned int)
 /* get sensor orienation from the SPI driver*/
 #define VFSSPI_IOCTL_GET_SENSOR_ORIENT	\
 	_IOR(VFSSPI_IOCTL_MAGIC, 18, unsigned int)

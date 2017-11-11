@@ -812,10 +812,16 @@ static int arizona_suspend(struct device *dev)
 {
 	struct arizona *arizona = dev_get_drvdata(dev);
 
+#ifdef CONFIG_MFD_ARIZONA_DEFERRED_RESUME
+	cancel_work_sync(&arizona->deferred_resume_work);
+#endif
+
 	dev_dbg(arizona->dev, "Early suspend, disabling IRQ\n");
 
-	disable_irq(arizona->irq);
-	arizona->irq_sem = 1;
+	if (!arizona->irq_sem) {
+		disable_irq(arizona->irq);
+		arizona->irq_sem = 1;
+	}
 
 	return 0;
 }
@@ -825,9 +831,11 @@ static int arizona_resume_noirq(struct device *dev)
 	struct arizona *arizona = dev_get_drvdata(dev);
 
 	dev_dbg(arizona->dev, "Early resume, disabling IRQ\n");
-	disable_irq(arizona->irq);
 
-	arizona->irq_sem = 1;
+	if (!arizona->irq_sem) {
+		disable_irq(arizona->irq);
+		arizona->irq_sem = 1;
+	}
 
 	return 0;
 }

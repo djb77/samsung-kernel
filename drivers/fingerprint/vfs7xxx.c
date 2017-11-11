@@ -1058,6 +1058,8 @@ static long vfsspi_ioctl(struct file *filp, unsigned int cmd,
 		pr_info("%s VFSSPI_IOCTL_POWER_OFF\n", __func__);
 		vfsspi_ioctl_power_off(vfsspi_device);
 		break;
+	case VFSSPI_IOCTL_POWER_CONTROL:
+		break;
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
 	case VFSSPI_IOCTL_DISABLE_SPI_CLOCK:
 		ret_val = vfsspi_ioctl_disable_spi_clock(vfsspi_device);
