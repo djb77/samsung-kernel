@@ -46,11 +46,8 @@ bool suspend_state;
 
 bool wakeup_by_key(void) {
 	if (irq_in_suspend) {
-		if (wakeup_reason == KEY_HOMEPAGE) {
-			irq_in_suspend = false;
-			wakeup_reason = 0;
+		if (wakeup_reason == KEY_HOMEPAGE)
 			return true;
-		}
 	}
 	return false;
 }

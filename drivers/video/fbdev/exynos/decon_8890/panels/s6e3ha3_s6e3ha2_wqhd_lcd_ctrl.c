@@ -4230,12 +4230,6 @@ static int s6e3ha3_wqhd_init(struct dsim_device *dsim)
 		goto init_exit;
 	}
 
-	ret = dsim_write_hl_data(dsim, S6E3HA3_SEQ_TSP_TE, ARRAY_SIZE(S6E3HA3_SEQ_TSP_TE));
-	if (ret < 0) {
-		dsim_err("%s : fail to write CMD : SEQ_TSP_TE\n", __func__);
-		goto init_exit;
-	}
-
 	ret = dsim_write_hl_data(dsim, S6E3HA3_SEQ_PCD, ARRAY_SIZE(S6E3HA3_SEQ_PCD));
 	if (ret < 0) {
 		dsim_err("%s : fail to write CMD : S6E3HA3_SEQ_PCD\n", __func__);
@@ -4253,13 +4247,7 @@ static int s6e3ha3_wqhd_init(struct dsim_device *dsim)
 		dsim_err("%s : fail to write CMD : S6E3HA3_SEQ_PCD\n", __func__);
 		goto init_exit;
 	}
-/*
-	ret = dsim_write_hl_data(dsim, S6E3HA3_SEQ_FREQ_CALIBRATION, ARRAY_SIZE(S6E3HA3_SEQ_FREQ_CALIBRATION));
-	if (ret < 0) {
-		dsim_err("%s : fail to write CMD : S6E3HA3_SEQ_PCD\n", __func__);
-		goto init_exit;
-	}
-*/
+
 #ifndef CONFIG_PANEL_AID_DIMMING
 	/* Brightness Setting */
 	ret = dsim_write_hl_data(dsim, S6E3HA3_SEQ_GAMMA_CONDITION_SET, ARRAY_SIZE(S6E3HA3_SEQ_GAMMA_CONDITION_SET));
@@ -5079,12 +5067,6 @@ static int s6e3hf4_wqhd_init(struct dsim_device *dsim)
 	ret = dsim_write_hl_data(dsim, S6E3HF4_SEQ_TE_ON, ARRAY_SIZE(S6E3HF4_SEQ_TE_ON));
 	if (ret < 0) {
 		dsim_err("%s : fail to write CMD : SEQ_TE_ON\n", __func__);
-		goto init_exit;
-	}
-
-	ret = dsim_write_hl_data(dsim, S6E3HF4_SEQ_TSP_TE, ARRAY_SIZE(S6E3HF4_SEQ_TSP_TE));
-	if (ret < 0) {
-		dsim_err("%s : fail to write CMD : SEQ_TSP_TE\n", __func__);
 		goto init_exit;
 	}
 
