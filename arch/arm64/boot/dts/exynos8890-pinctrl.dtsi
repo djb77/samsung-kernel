@@ -151,6 +151,7 @@
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
+			samsung,pin-con-pdn = <3>;
 		};
 
 		hs_i2c15_apm: hs-i2c15-apm {
@@ -158,6 +159,7 @@
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
+			samsung,pin-con-pdn = <3>;
 		};
 	};
 

@@ -172,7 +172,7 @@ static void muic_handle_attach(muic_data_t *pmuic,
 			ret = detach_jig_uart_boot_off(pmuic);
 		}
 		break;
-
+	case ATTACHED_DEV_JIG_UART_ON_VB_MUIC:
 	case ATTACHED_DEV_JIG_UART_ON_MUIC:
 		if (new_dev != pmuic->attached_dev) {
 			pr_warn("%s:%s new(%d)!=attached(%d), assume detach\n",
@@ -277,6 +277,7 @@ static void muic_handle_attach(muic_data_t *pmuic,
 	case ATTACHED_DEV_JIG_UART_OFF_MUIC:
 		new_dev = attach_jig_uart_boot_off(pmuic, new_dev, vbvolt);
 		break;
+	case ATTACHED_DEV_JIG_UART_ON_VB_MUIC:
 	case ATTACHED_DEV_JIG_UART_ON_MUIC:
 		/* Keep AP UART path and
 		 *  call attach_deskdock to wake up the device in the Facory Build Binary.
@@ -385,6 +386,7 @@ static void muic_handle_detach(muic_data_t *pmuic)
 	case ATTACHED_DEV_JIG_UART_OFF_MUIC:
 		ret = detach_jig_uart_boot_off(pmuic);
 		break;
+	case ATTACHED_DEV_JIG_UART_ON_VB_MUIC:
 	case ATTACHED_DEV_JIG_UART_ON_MUIC:
 		if (pmuic->is_factory_start)
 			ret = detach_deskdock(pmuic);

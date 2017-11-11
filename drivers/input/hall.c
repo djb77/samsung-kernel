@@ -397,7 +397,6 @@ static int hall_probe(struct platform_device *pdev)
 	input->evbit[0] |= BIT_MASK(EV_SW);
 
 	ddata->event_val = SW_FLIP;
-
 	input_set_capability(input, EV_SW, ddata->event_val);
 
 	input->open = hall_open;

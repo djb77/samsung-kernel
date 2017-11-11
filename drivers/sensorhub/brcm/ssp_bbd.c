@@ -281,6 +281,7 @@ void bbd_mcu_ready_work_func(struct work_struct *work)
 	msleep(1000);
 	dprint("MCU is ready.(work_queue)\n");
 
+	mutex_lock(&data->ssp_enable_mutex);
 	clean_pending_list(data);
 
 	ssp_enable(data, true);
@@ -291,10 +292,13 @@ retries:
 		if (++retries > 3) {
 			pr_err("[SSPBBD] fail to initialize mcu\n");
 			ssp_enable(data, false);
+			mutex_unlock(&data->ssp_enable_mutex);
 			return;
 		}
 		goto retries;
 	}
+	mutex_unlock(&data->ssp_enable_mutex);
+
 	dprint("mcu is initiialized (retries=%d)\n", retries);
 
 	/* recover previous state */

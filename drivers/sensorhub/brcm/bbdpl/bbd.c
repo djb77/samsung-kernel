@@ -34,6 +34,7 @@
 #include <linux/suspend.h>
 #include <linux/notifier.h>
 #include <linux/of.h>
+#include <linux/string.h>
 #include "bbd.h"
 
 #ifdef CONFIG_SENSORS_SSP
@@ -74,6 +75,21 @@ struct bbd_cdev_priv {
 	wait_queue_head_t poll_wait;		/* for poll */
 };
 
+#define CONFIG_LHD_KILLER
+
+struct lhd_killer {
+	bool enabled;
+	long timeout_sec;
+
+	struct task_struct *lhd;
+	atomic_t resetting;
+
+	bool timer_enabled;
+	struct timer_list timer;
+	struct work_struct work;
+	struct workqueue_struct *workq;
+};
+
 struct bbd_device {
 	struct kobject *kobj;			/* for sysfs register */
 	struct class *class;			/* for device_create */
@@ -86,6 +102,7 @@ struct bbd_device {
 	void *ssp_priv;				/* private data pointer */
 	bbd_callbacks *ssp_cb;			/* callbacks for SSP */
 
+	struct lhd_killer lk;
 };
 
 /*
@@ -227,6 +244,64 @@ void bbd_disable_stat(void)
 	stat1hz.enabled = false;
 }
 #endif /* DEBUG_1HZ_STAT */
+
+#ifdef CONFIG_LHD_KILLER
+
+static void bbd_lk_work(struct work_struct *work)
+{
+	if (bbd.lk.timer_enabled)
+		bbd_mcu_reset();
+}
+
+static void bbd_lk_timer_func(unsigned long p)
+{
+	if (bbd.lk.workq)
+		queue_work(bbd.lk.workq, &bbd.lk.work);
+}
+
+static void bbd_enable_lk(void)
+{
+	printk("%s timeout:%ld sec\n", __func__, bbd.lk.timeout_sec);
+	if (bbd.lk.timer_enabled) {
+		printk("%s() lhd kill timer aready enabled. reset timer\n", __func__);
+		del_timer_sync(&bbd.lk.timer);
+	}
+
+	INIT_WORK(&bbd.lk.work, bbd_lk_work);
+	setup_timer(&bbd.lk.timer, bbd_lk_timer_func, 0);
+	mod_timer(&bbd.lk.timer, jiffies + HZ*bbd.lk.timeout_sec);
+	bbd.lk.timer_enabled = true;
+}
+
+static void bbd_disable_lk(void)
+{
+	printk("%s \n", __func__);
+	if (!bbd.lk.timer_enabled) {
+		printk("%s() lhd killer already disabled. skipping.\n", __func__);
+		return;
+	}
+	del_timer_sync(&bbd.lk.timer);
+	bbd.lk.timer_enabled = false;
+}
+
+static void bbd_init_lk(void)
+{
+	memset(&bbd.lk, 0, sizeof(bbd.lk));
+	bbd.lk.enabled = true;
+	bbd.lk.timeout_sec = 10;
+	bbd.lk.workq = create_singlethread_workqueue("BBD_LHD_KILLER");
+}
+
+static void bbd_exit_lk(void)
+{
+	bbd_disable_lk();
+	if (bbd.lk.workq) {
+		flush_workqueue(bbd.lk.workq);
+		destroy_workqueue(bbd.lk.workq);
+		bbd.lk.workq = 0;
+	}
+}
+#endif
 //--------------------------------------------------------------
 //
 //               SHMD Interface Functions
@@ -337,7 +412,15 @@ int bbd_mcu_reset(void)
 	if (bbd.ssp_cb && bbd.ssp_cb->on_mcu_reset)
 		bbd.ssp_cb->on_mcu_reset(bbd.ssp_priv);
 
-	return bbd_on_read(BBD_MINOR_CONTROL, BBD_CTRL_RESET_REQ, strlen(BBD_CTRL_RESET_REQ)+1);
+	if (bbd.lk.enabled) {
+		/* to fix lhd hang issue, we don't use lhd's control interface to reset mcu.  */
+		if (bbd.lk.lhd == NULL || atomic_read(&bbd.lk.resetting))
+			return -1;
+
+		atomic_set(&bbd.lk.resetting, 1);
+		return send_sig(SIGKILL, bbd.lk.lhd, 0);
+	} else
+		return bbd_on_read(BBD_MINOR_CONTROL, BBD_CTRL_RESET_REQ, strlen(BBD_CTRL_RESET_REQ)+1);
 }
 EXPORT_SYMBOL(bbd_mcu_reset);
 
@@ -404,6 +487,14 @@ ssize_t bbd_control(const char *buf, ssize_t len)
 	} else if (strstr(buf, SSI_DEBUG_OFF)) {
 		ssi_dbg = false;
 #endif
+#ifdef CONFIG_LHD_KILLER
+	} else if (strstr(buf, BBD_CTRL_PASSTHRU_ON)) {
+		printk("[SSPBBD] PatchTimer Start\n");
+		bbd_enable_lk();
+	} else if (strstr(buf, BBD_CTRL_PASSTHRU_OFF)) {
+		printk("[SSPBBD] Patch Done Timer Off\n");
+		bbd_disable_lk();
+#endif /* CONFIG_LHD_KILLER */
 	} else if (bbd.ssp_cb && bbd.ssp_cb->on_control) {
 		/* Tell SHMD about the unknown control string */
 		bbd.ssp_cb->on_control(bbd.ssp_priv, buf);
@@ -447,6 +538,8 @@ int bbd_common_open(struct inode *inode, struct file *filp)
 	filp->private_data = &bbd;
 
 	pr_info("%s--\n", __func__);
+	bbd.lk.lhd = current;
+	atomic_set(&bbd.lk.resetting, 0);
 	return 0;
 }
 
@@ -670,12 +763,39 @@ static ssize_t show_sysfs_bbd_pl(struct device *dev, struct device_attribute *at
 	return 0;
 }
 
-static DEVICE_ATTR(bbd,     0220, NULL,                store_sysfs_bbd_control);
-static DEVICE_ATTR(pl,      0440, show_sysfs_bbd_pl,       NULL);
+static ssize_t store_sysfs_lk_timeout(struct device *dev, struct device_attribute *attr, const char *buf, size_t len)
+{
+	int status = kstrtol(buf, 0, &bbd.lk.timeout_sec);
+    if(bbd.lk.timeout_sec < 10)
+        bbd.lk.timeout_sec = 10; //base timeout 10sec
+	return status ? : len;
+}
+static ssize_t show_sysfs_lk_timeout(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "timeout for lhd killer : %ld sec\n", bbd.lk.timeout_sec);
+}
+static ssize_t store_sysfs_lk_enable(struct device *dev, struct device_attribute *attr, const char *buf, size_t len)
+{
+	if (len)
+		bbd.lk.enabled = buf[0] == '0' ? false : true;
+
+	return len;
+}
+static ssize_t show_sysfs_lk_enable(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "lhd killer %s\n", bbd.lk.enabled ? "enabled" : "disabled");
+}
+
+static DEVICE_ATTR(bbd, 0220, NULL,                store_sysfs_bbd_control);
+static DEVICE_ATTR(pl, 0440, show_sysfs_bbd_pl,       NULL);
+static DEVICE_ATTR(lk_timeout, 0660, show_sysfs_lk_timeout, store_sysfs_lk_timeout);
+static DEVICE_ATTR(lk_enable, 0660, show_sysfs_lk_enable, store_sysfs_lk_enable);
 
 static struct attribute *bbd_attributes[] = {
 	&dev_attr_bbd.attr,
 	&dev_attr_pl.attr,
+	&dev_attr_lk_timeout.attr,
+	&dev_attr_lk_enable.attr,
 	NULL
 };
 
@@ -1002,7 +1122,11 @@ int bbd_init(struct device* dev)
 #ifdef DEBUG_1HZ_STAT
 	bbd_init_stat();
 #endif
-        return 0;
+
+#ifdef CONFIG_LHD_KILLER
+	bbd_init_lk();
+#endif
+	return 0;
 
 free_kobj:
 	kobject_put(bbd.kobj);
@@ -1050,6 +1174,10 @@ static void __exit bbd_exit(void)
 
 #ifdef DEBUG_1HZ_STAT
 	bbd_exit_stat();
+#endif
+
+#ifdef CONFIG_LHD_KILLER
+	bbd_exit_lk();
 #endif
 	/* Remove class */
 	class_destroy(bbd.class);	

@@ -39,6 +39,9 @@
 #include "mm.h"
 
 #include <linux/vmalloc.h>
+#ifdef CONFIG_SENTINEL
+#include <linux/sentinel.h>
+#endif
 
 #ifdef CONFIG_RKP_KDP
 __attribute__((section (".tima.rkp.ro"))) int rkp_cred_enable = 0;
@@ -236,15 +239,19 @@ static void __init alloc_init_pte(pmd_t *pmd, unsigned long addr,
 {
 	pte_t *pte;
 
-#ifdef CONFIG_TIMA_RKP
+#if defined(CONFIG_TIMA_RKP) && !defined(CONFIG_SENTINEL)
 	if(pmd_block(*pmd))
 		return block_to_pages(pmd, addr, end, pfn);
 #endif
 	if (pmd_none(*pmd)) {
+#ifdef CONFIG_SENTINEL
+		pte = sentinel_early_alloc(PTRS_PER_PTE * sizeof(pte_t), addr);
+#else
 		pte = early_alloc(PTRS_PER_PTE * sizeof(pte_t));
+#endif
 		__pmd_populate(pmd, __pa(pte), PMD_TYPE_TABLE);
 	}
-#ifndef CONFIG_TIMA_RKP
+#if !defined(CONFIG_TIMA_RKP) && !defined(CONFIG_SENTINEL)
 	BUG_ON(pmd_bad(*pmd));
 #endif
 
@@ -280,9 +287,17 @@ static void __init alloc_init_pmd(pud_t *pud, unsigned long addr,
 	 */
 	if (pud_none(*pud) || pud_bad(*pud)) {
 #ifdef CONFIG_TIMA_RKP
+#ifdef CONFIG_SENTINEL
+		pmd = sentinel_early_alloc(PTRS_PER_PMD * sizeof(pmd_t), addr);
+#else
 		pmd = rkp_ro_alloc();
+#endif
 #else	/* !CONFIG_TIMA_RKP */
+#ifdef CONFIG_SENTINEL
+		pmd = sentinel_early_alloc(PTRS_PER_PMD * sizeof(pmd_t), addr);
+#else
 		pmd = early_alloc(PTRS_PER_PMD * sizeof(pmd_t));
+#endif
 #endif
 		pud_populate(&init_mm, pud, pmd);
 	}
@@ -411,7 +426,9 @@ static void __init map_mem(void)
 	phys_addr_t end;
 
 #ifdef CONFIG_TIMA_RKP
+#ifndef CONFIG_SENTINEL
 	phys_addr_t mid = 0xBF000000;
+#endif
 	int do_memset = 0;
 #endif
 	/*
@@ -456,16 +473,41 @@ static void __init map_mem(void)
 
 #ifdef CONFIG_TIMA_RKP
 	if (!do_memset) {
+#ifdef CONFIG_SENTINEL
+		create_mapping(start, __phys_to_virt(start), SENTINEL_MEMBLOCK_SIZE);
+		while (start < end) {
+			create_mapping(start, __phys_to_virt(start), PAGE_SIZE);
+			start += PAGE_SIZE;
+		}
+		memset((void*)RKP_RBUF_VA, 0, TIMA_ROBUF_SIZE);
+#else
 		create_mapping(start, __phys_to_virt(start), mid - start);
 		memset((void*)RKP_RBUF_VA, 0, TIMA_ROBUF_SIZE);
 		create_mapping(mid, __phys_to_virt(mid), end - mid);
+#endif
 		do_memset = 1;
 	}
 	else {
+#ifdef CONFIG_SENTINEL
+		create_mapping(start, __phys_to_virt(start), SENTINEL_MEMBLOCK_SIZE);
+		while (start < end) {
+			create_mapping(start, __phys_to_virt(start), PAGE_SIZE);
+			start += PAGE_SIZE;
+		}
+#else
 		create_mapping(start, __phys_to_virt(start), end - start);
+#endif
 	}
 #else /* !CONFIG_TIMA_RKP */
+#ifdef CONFIG_SENTINEL
+		create_mapping(start, __phys_to_virt(start), SENTINEL_MEMBLOCK_SIZE);
+		while (start < end) {
+			create_mapping(start, __phys_to_virt(start), PAGE_SIZE);
+			start += PAGE_SIZE;
+		}
+#else
 		create_mapping(start, __phys_to_virt(start), end - start);
+#endif
 #endif
 	}
 

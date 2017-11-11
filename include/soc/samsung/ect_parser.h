@@ -249,7 +249,7 @@ struct ect_margin_header
 struct ect_timing_param_size
 {
 	unsigned int memory_size;
-	unsigned int parameter_key;
+	unsigned long long parameter_key;
 	unsigned int offset;
 
 	int num_of_timing_param;
@@ -351,7 +351,7 @@ struct ect_mif_thermal_level *ect_mif_thermal_get_level(void *block, int mr4_lev
 struct ect_ap_thermal_function *ect_ap_thermal_get_function(void *block, char *function_name);
 struct ect_margin_domain *ect_margin_get_domain(void *block, char *domain_name);
 struct ect_timing_param_size *ect_timing_param_get_size(void *block, int size);
-struct ect_timing_param_size *ect_timing_param_get_key(void *block, unsigned int key);
+struct ect_timing_param_size *ect_timing_param_get_key(void *block, unsigned long long key);
 struct ect_minlock_domain *ect_minlock_get_domain(void *block, char *domain_name);
 struct ect_gen_param_table *ect_gen_param_get_table(void *block, char *table_name);
 struct ect_bin *ect_binary_get_bin(void *block, char *binary_name);
@@ -374,7 +374,7 @@ static inline struct ect_mif_thermal_level *ect_mif_thermal_get_level(void *bloc
 static inline struct ect_ap_thermal_function *ect_ap_thermal_get_function(void *block, char *function_name) { return NULL; }
 static inline struct ect_margin_domain *ect_margin_get_domain(void *block, char *domain_name) { return NULL; }
 static inline struct ect_timing_param_size *ect_timing_param_get_size(void *block, int size) { return NULL; }
-static inline struct ect_timing_param_size *ect_timing_param_get_key(void *block, unsigned int key) { return NULL; }
+static inline struct ect_timing_param_size *ect_timing_param_get_key(void *block, unsigned long long key) { return NULL; }
 static inline struct ect_minlock_domain *ect_minlock_get_domain(void *block, char *domain_name) { return NULL; }
 static inline struct ect_gen_param_table *ect_gen_param_get_table(void *block, char *table_name) { return NULL; }
 static inline struct ect_bin *ect_binary_get_bin(void *block, char *binary_name) { return NULL; }

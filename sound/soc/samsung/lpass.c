@@ -232,6 +232,7 @@ bool lpass_i2s_master_mode(void)
 void update_cp_available(bool cpen)
 {
 	cp_available = cpen;
+	pr_info("%s: cp_available = %d\n", __func__, cp_available);
 }
 
 bool is_cp_aud_enabled(void)

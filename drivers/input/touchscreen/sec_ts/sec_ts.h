@@ -601,6 +601,11 @@ void sec_ts_release_all_finger(struct sec_ts_data *ts);
 void sec_ts_delay(unsigned int ms);
 int sec_ts_fn_init(struct sec_ts_data *ts);
 
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+extern void trustedui_mode_on(void);
+#endif
+
 extern unsigned int lcdtype;
 
 #ifdef CONFIG_BATTERY_SAMSUNG

@@ -37,6 +37,7 @@
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 #include <linux/t-base-tui.h>
+struct sec_ts_data *tui_tsp_info;
 #endif
 
 #ifdef CONFIG_OF
@@ -1560,6 +1561,10 @@ static int sec_ts_setup_drv_data(struct i2c_client *client)
 	INIT_DELAYED_WORK(&ts->read_nv_work, sec_ts_read_nv_work);
 	i2c_set_clientdata(client, ts);
 
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	tui_tsp_info = ts;
+#endif
+
 	return ret;
 }
 #ifdef SEC_TS_SUPPORT_SPONGELIB
@@ -2189,6 +2194,13 @@ static int sec_ts_pm_resume(struct device *dev)
 	mutex_unlock(&ts->input_dev->mutex);
 
 	return 0;
+}
+#endif
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+void trustedui_mode_on(void){
+	//tsp_debug_info(true, &tui_tsp_info->client->dev, "%s, release all finger..", __func__);
+	sec_ts_release_all_finger(tui_tsp_info);
 }
 #endif
 

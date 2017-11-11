@@ -1627,9 +1627,12 @@ static int shmem_xmit_boot(struct link_device *ld, struct io_device *iod,
 
 	/**
 	 * Check the size of the boot image
+	 * fix the integer overflow of "mf.m_offset + mf.len" from Jose Duart
 	 */
-	if (mf.size > valid_space) {
-		mif_err("%s: ERR! Invalid binary size %d\n", ld->name, mf.size);
+	if (mf.size > valid_space || mf.len > valid_space
+			|| mf.m_offset > valid_space - mf.len) {
+		mif_err("%s: ERR! Invalid args: size %x, offset %x, len %x\n",
+			ld->name, mf.size, mf.m_offset, mf.len);
 		return -EINVAL;
 	}
 
@@ -1881,25 +1884,6 @@ static int shmem_ioctl(struct link_device *ld, struct io_device *iod,
 	mif_err("%s: cmd 0x%08X\n", ld->name, cmd);
 
 	switch (cmd) {
-	case IOCTL_MODEM_GET_SHMEM_INFO:
-	{
-		struct shdmem_info mem_info;
-		void __user *dst;
-		unsigned long size;
-
-		mif_err("%s: IOCTL_MODEM_GET_SHMEM_INFO\n", ld->name);
-
-		mem_info.base = shm_get_phys_base();
-		mem_info.size = shm_get_phys_size();
-		dst = (void __user *)arg;
-		size = sizeof(struct shdmem_info);
-
-		if (copy_to_user(dst, &mem_info, size))
-			return -EFAULT;
-
-		break;
-	}
-
 	case IOCTL_MODEM_GET_SHMEM_SRINFO:
 	{
 		struct shmem_srinfo __user *sr_arg =

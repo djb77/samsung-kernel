@@ -715,6 +715,7 @@ int fts_get_version_info(struct fts_ts_info *info)
 	regAdd[0] = 0xd0;
 	regAdd[1] = 0x00;
 	regAdd[2] = 0x5A;
+	if(info->stm_ver == STM_VER7) regAdd[2] = 0x52;
 
 	rc = fts_read_reg(info, regAdd, 3, (unsigned char *)data, 3);
 	if (!rc)
@@ -1107,7 +1108,7 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 		case EVENTID_GESTURE_WAKEUP:
 			tsp_debug_info(true, &info->client->dev, "EVENTID_GESTURE_WAKEUP detected![EventID=%x]\n", EventID);
 			
-			info->scrub_id = 0x07;	// defined in Istor & JF-synaptics
+			info->scrub_id = 0x07;	// defined in VLTE-Istor & JF-synaptics
 		
 			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
 			input_sync(info->input_dev);
@@ -1639,11 +1640,12 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 					info->flip_enable, info->mshover_enabled, info->mainscr_disable);
 			}else{
 				tsp_debug_info(true, &info->client->dev,
-					"[R] tID:%d mc: %d tc:%d lx: %d ly: %d Ver[%02X%04X%01X%01X%01X]\n",
+					"[R] tID:%d mc: %d tc:%d lx: %d ly: %d Ver[%02X%04X%01X%01X%01X] NV[%X]\n",
 					TouchID, info->finger[TouchID].mcount, info->touch_count,
 					info->finger[TouchID].lx, info->finger[TouchID].ly,
 					info->panel_revision, info->fw_main_version_of_ic,
-					info->flip_enable, info->mshover_enabled, info->mainscr_disable);
+					info->flip_enable, info->mshover_enabled, info->mainscr_disable,
+					info->test_result.data[0]);
 			}
 #else
 			if (strncmp(info->board->model_name, "G928", 4) == 0) {
@@ -1655,10 +1657,11 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 					info->flip_enable, info->mshover_enabled, info->mainscr_disable);
 			}else{
 				tsp_debug_info(true, &info->client->dev,
-					"[R] tID:%d mc: %d tc:%d Ver[%02X%04X%01X%01X%01X]\n",
+					"[R] tID:%d mc: %d tc:%d Ver[%02X%04X%01X%01X%01X] NV[%X]\n",
 					TouchID, info->finger[TouchID].mcount, info->touch_count,
 					info->panel_revision, info->fw_main_version_of_ic,
-					info->flip_enable, info->mshover_enabled, info->mainscr_disable);
+					info->flip_enable, info->mshover_enabled, info->mainscr_disable,
+					info->test_result.data[0]);
 			}
 #endif
 			info->finger[TouchID].mcount = 0;
@@ -2024,13 +2027,9 @@ static int fts_parse_dt(struct i2c_client *client)
 	}
 #endif
 
-	if((strncmp(pdata->project_name, "valley", 6) == 0)){
+	if((lcdtype & LCD_ID2_MODEL_MASK) == MODEL_HEROPLUS){
 		pdata->stm_ver = STM_VER7;
-		tsp_debug_err(true, dev,"%s:FTS7AD56 - VALLEY STM_VER(0x%2X)\n", __func__, pdata->stm_ver);
-		tsp_debug_err(true, dev, "max_coords[%d,%d]\n", pdata->max_x, pdata->max_y);
-	}else if((lcdtype & LCD_ID2_MODEL_MASK) == MODEL_HEROPLUS){
-		pdata->stm_ver = STM_VER7;
-		tsp_debug_err(true, dev,"%s:FTS7AD56 - HEROPLUS STM_VER(0x%2X)\n", __func__, pdata->stm_ver);
+		tsp_debug_err(true, dev,"%s:FTS7AD56 - STM_VER(0x%2X)\n", __func__, pdata->stm_ver);
 		pdata->max_x = 1439;
 		pdata->max_y = 2559;
 		pdata->grip_area = 0;
@@ -2044,14 +2043,6 @@ static int fts_parse_dt(struct i2c_client *client)
 	if (of_property_read_u32(np, "stm,device_num", &pdata->device_num))
 		tsp_debug_err(true, dev, "Failed to get device_num property\n");
 
-	/* only for multi tsp models. */
-	if ((strncmp(pdata->project_name, "valley", 6) == 0)){
-		if(pdata->device_num == 0)
-			dev->init_name = "main tsp";
-		else
-			dev->init_name = "sub  tsp";
-	}
-
 	pdata->panel_revision = (lcdtype & 0xF000) >> 12;
 	tsp_debug_info(true, dev,
 		"irq :%d, irq_type: 0x%04x, max[x,y]: [%d,%d], grip_area :%d, project/model_name: %s/%s, panel_revision: %d, lcdtype: 0x%06X, gesture: %d, device_num: %d\n",
@@ -2062,6 +2053,18 @@ static int fts_parse_dt(struct i2c_client *client)
 	return retval;
 }
 #endif
+
+static void fts_read_nv_work(struct work_struct *work)
+{
+	struct fts_ts_info *info = container_of(work, struct fts_ts_info,
+							work_read_nv.work);
+
+	if (info->stm_ver == STM_VER7)
+		fts_get_tsp_test_result(info);
+
+	tsp_debug_info(true, &info->client->dev, "%s: fac_nv:%02X\n", __func__, info->test_result.data[0]);
+}
+
 
 static int fts_setup_drv_data(struct i2c_client *client)
 {
@@ -2150,6 +2153,8 @@ static int fts_setup_drv_data(struct i2c_client *client)
 #endif
 	info->delay_time = 300;
 	INIT_DELAYED_WORK(&info->reset_work, fts_reset_work);
+	INIT_DELAYED_WORK(&info->work_read_nv, fts_read_nv_work);
+
 
 #ifdef CONFIG_SEC_DEBUG_TSP_LOG
 	INIT_DELAYED_WORK(&info->debug_work, dump_tsp_rawdata);
@@ -2177,6 +2182,7 @@ static int fts_setup_drv_data(struct i2c_client *client)
 #ifdef CONFIG_BATTERY_SAMSUNG
 extern unsigned int lpcharge;
 #endif
+
 static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 {
 	int retval;
@@ -2447,6 +2453,7 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 #endif
 
 	device_init_wakeup(&client->dev, true);
+	schedule_delayed_work(&info->work_read_nv, msecs_to_jiffies(100));
 
 	return 0;
 

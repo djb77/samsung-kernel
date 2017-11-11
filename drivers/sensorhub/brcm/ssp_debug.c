@@ -424,13 +424,12 @@ static void debug_work_func(struct work_struct *work)
 		&& (data->uIrqCnt == 0) && (data->uTimeOutCnt > 0))
 		|| (data->uTimeOutCnt > LIMIT_TIMEOUT_CNT)) {
 
-		if (data->uResetCnt < LIMIT_RESET_CNT) {
+		mutex_lock(&data->ssp_enable_mutex);
 			pr_info("[SSP] : %s - uTimeOutCnt(%u), pending(%u)\n",
 				__func__, data->uTimeOutCnt,
 				!list_empty(&data->pending_list));
 			reset_mcu(data);
-		} else
-			ssp_enable(data, false);
+		mutex_unlock(&data->ssp_enable_mutex);
 
 		data->uTimeOutCnt = 0;
 		data->uComFailCnt = 0;

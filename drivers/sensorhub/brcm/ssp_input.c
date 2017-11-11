@@ -100,7 +100,6 @@ void report_acc_data(struct ssp_data *data, struct sensor_value *accdata)
 	data->buf[ACCELEROMETER_SENSOR].x = accdata->x;
 	data->buf[ACCELEROMETER_SENSOR].y = accdata->y;
 	data->buf[ACCELEROMETER_SENSOR].z = accdata->z;
-	
 	accel_buf[0] = data->buf[ACCELEROMETER_SENSOR].x;
 	accel_buf[1] = data->buf[ACCELEROMETER_SENSOR].y;
 	accel_buf[2] = data->buf[ACCELEROMETER_SENSOR].z;

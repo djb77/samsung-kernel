@@ -102,7 +102,7 @@
 #else
 #define DATA_PACKET_SIZE	960
 #endif
-#define MAX_SSP_PACKET_SIZE	1000 // this packet size related when AP send ssp packet to MCU.
+#define MAX_SSP_PACKET_SIZE	1000 // this packet size related when AP send ssp packet to MCU. 
 
 /* SSP Binary Type */
 enum {
@@ -654,7 +654,7 @@ struct ssp_data {
 	struct work_struct work_bbd_on_packet;
 	struct workqueue_struct *bbd_mcu_ready_wq;
 	struct work_struct work_bbd_mcu_ready;
-
+	
 #if defined(CONFIG_SSP_MOTOR)
 	struct workqueue_struct *ssp_motor_wq;
 	struct work_struct work_ssp_motor;
@@ -836,6 +836,7 @@ struct ssp_data {
 	struct mutex comm_mutex;
 	struct mutex pending_mutex;
 	struct mutex enable_mutex;
+	struct mutex ssp_enable_mutex; 
 
 #if defined(CONFIG_SENSORS_SSP_YAS532) || defined(CONFIG_SENSORS_SSP_YAS537)
 	s16 *static_matrix;

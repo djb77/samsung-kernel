@@ -411,6 +411,9 @@ static struct max77854_rgb_platform_data
 		case 4:
 			strcpy(octa, "_pg");
 			break;
+		case 5:
+			strcpy(octa, "_bp");
+			break;
 		default:
 			break;
 		}

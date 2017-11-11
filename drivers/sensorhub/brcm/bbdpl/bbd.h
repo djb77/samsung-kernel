@@ -42,6 +42,8 @@ enum {
 #define ESW_CTRL_CRASHED	"ESW:CRASHED"
 #define BBD_CTRL_DEBUG_ON       "BBD:DEBUG=1"
 #define BBD_CTRL_DEBUG_OFF      "BBD:DEBUG=0"
+#define BBD_CTRL_PASSTHRU_ON    "BBD:PassThru=1"
+#define BBD_CTRL_PASSTHRU_OFF   "BBD:PassThru=0"
 #define SSP_DEBUG_ON		"SSP:DEBUG=1"
 #define SSP_DEBUG_OFF		"SSP:DEBUG=0"
 #define SSI_DEBUG_ON		"SSI:DEBUG=1"
