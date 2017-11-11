@@ -83,16 +83,22 @@ static kek_pack_t *find_kek_pack(int engine_id) {
 	return NULL;
 }
 
-static int __add_kek(kek_pack_t *pack, kek_t *kek, kek_item_t *item) {
+static int __add_kek(kek_pack_t *pack, kek_t *kek) {
+	kek_item_t *item;
 
 	if(kek == NULL) return -EINVAL;
 	if(pack == NULL) return -EINVAL;
+
+	item = kmalloc(sizeof(kek_item_t), GFP_KERNEL);
+	if(item == NULL) return -ENOMEM;
 
 	INIT_LIST_HEAD(&item->list);
 	item->kek_type = kek->type;
 	memcpy(&item->kek, kek, sizeof(kek_t));
 
+	spin_lock(&pack->kek_list_lock);
 	list_add_tail(&item->list, &pack->kek_list_head);
+	spin_unlock(&pack->kek_list_lock);
 
     KEK_PACK_LOGD("item %p\n", item);
 
@@ -104,14 +110,18 @@ static kek_item_t *find_kek_item(kek_pack_t *pack, int kek_type) {
 
 	if(pack == NULL) return NULL;
 
+	spin_lock(&pack->kek_list_lock);
 	list_for_each(entry, &pack->kek_list_head) {
 		kek_item_t *item = list_entry(entry, kek_item_t, list);
 
 		if(item->kek_type == kek_type) {
 			KEK_PACK_LOGD("Found kek-item : %d\n", kek_type);
+			spin_unlock(&pack->kek_list_lock);
+
 			return item;
 		}
 	}
+	spin_unlock(&pack->kek_list_lock);
 
 	KEK_PACK_LOGD("Can't find kek %d : %d\n", kek_type, pack->engine_id);
 
@@ -180,26 +190,14 @@ void del_kek_pack(int engine_id) {
 int add_kek(int engine_id, kek_t *kek) {
 	int rc;
 	kek_pack_t *pack;
-	kek_item_t *item;
 
 	KEK_PACK_LOGD("entered\n");
 	pack = find_kek_pack(engine_id);
 	if(pack == NULL) return -ENOENT;
 
-	item = kmalloc(sizeof(kek_item_t), GFP_KERNEL);
-	if(item == NULL) {
-		rc = -ENOMEM;
-	} else {
-		spin_lock(&pack->kek_list_lock);
-		if(find_kek_item(pack, kek->type)) {
-			spin_unlock(&pack->kek_list_lock);		
-			return -EEXIST;
-		}
-		rc = __add_kek(pack, kek, item);
+	if(find_kek_item(pack, kek->type)) return -EEXIST;
 
-		spin_unlock(&pack->kek_list_lock);
-	}
-
+	rc = __add_kek(pack, kek);
 	if(rc) KEK_PACK_LOGE("%s failed. rc = %d", __func__, rc);
 
 	return rc;
@@ -214,13 +212,10 @@ int del_kek(int engine_id, int kek_type) {
 	pack = find_kek_pack(engine_id);
 	if(pack == NULL) return -ENOENT;
 
-	spin_lock(&pack->kek_list_lock);
 	item = find_kek_item(pack, kek_type);
-	if(item == NULL) {
-		spin_unlock(&pack->kek_list_lock);
-		return -ENOENT;
-	}
+	if(item == NULL) return -ENOENT;
 
+	spin_lock(&pack->kek_list_lock);
 	del_kek_item(item);
 	spin_unlock(&pack->kek_list_lock);
 
@@ -258,9 +253,8 @@ kek_t *get_kek(int engine_id, int kek_type, int *rc) {
 	    *rc = -EACCES;
 	    return NULL;
 	}
-	spin_lock(&pack->kek_list_lock);
+
 	item = find_kek_item(pack, kek_type);
-	spin_unlock(&pack->kek_list_lock);
 	if(item) {
 		kek_t *kek = kmalloc(sizeof(kek_t), GFP_KERNEL);
 		if(kek == NULL){
@@ -302,9 +296,8 @@ int is_kek(int engine_id, int kek_type) {
 
 	pack = find_kek_pack(engine_id);
 	if(pack == NULL) return 0;
-	spin_lock(&pack->kek_list_lock);
+
 	item = find_kek_item(pack, kek_type);
-	spin_unlock(&pack->kek_list_lock);
 	if(item) {
 		return 1;
 	}
