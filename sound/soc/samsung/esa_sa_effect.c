@@ -12,6 +12,9 @@
 const DECLARE_TLV_DB_LINEAR(compr_vol_gain,  0, COMPRESSED_LR_VOL_MAX_STEPS);
 struct compr_pdata aud_vol;
 
+extern int check_esa_compr_state(void);
+extern void esa_compr_save_volume(int left, int right);
+
 static int esa_ctl_sa_info(struct snd_kcontrol *kcontrol,
 			   struct snd_ctl_elem_info *uinfo)
 {
@@ -297,9 +300,13 @@ int esa_compr_set_volume(struct audio_processor *ap, int left, int right)
 {
 	void __iomem *mailbox;
 
+	esa_compr_save_volume(left, right);
+
 	mailbox = esa_compr_get_mem();
-	writel(left, mailbox + COMPR_LEFT_VOL);
-	writel(right, mailbox + COMPR_RIGHT_VOL);
+	if (check_esa_compr_state()) {
+		writel(left, mailbox + COMPR_LEFT_VOL);
+		writel(right, mailbox + COMPR_RIGHT_VOL);
+	}
 
 	return 0;
 }

@@ -108,6 +108,10 @@ IOCTL commands
 
 #define IOCTL_LINK_DEVICE_RESET		_IO('o', 0x44)
 
+#ifdef CONFIG_LINK_DEVICE_SHMEM
+#define IOCTL_MODEM_GET_SHMEM_SRINFO	_IO('o', 0x45)
+#define IOCTL_MODEM_SET_SHMEM_SRINFO	_IO('o', 0x46)
+#endif
 /* ioctl command for IPC Logger */
 #define IOCTL_MIF_LOG_DUMP		_IO('o', 0x51)
 #define IOCTL_MIF_DPRAM_DUMP		_IO('o', 0x52)

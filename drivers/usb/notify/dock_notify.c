@@ -84,6 +84,21 @@ static int check_essential_device(struct usb_device *dev, int index)
 	return ret;
 }
 
+static int check_gamepad_device(struct usb_device *dev)
+{
+	int ret = 0;
+
+ 	pr_info("%s : product=%s\n", __func__, dev->product);
+
+	if (!dev->product)
+		return ret;
+
+	if (!strnicmp(dev->product , "Gamepad for SAMSUNG", 19))
+		ret = 1;
+
+	return ret;
+}
+
 static int is_notify_hub(struct usb_device *dev)
 {
 	struct dev_table *id;
@@ -192,6 +207,10 @@ static int call_device_notify(struct usb_device *dev)
 	if (dev->bus->root_hub != dev) {
 		pr_info("%s device\n", __func__);
 		send_otg_notify(o_notify, NOTIFY_EVENT_DEVICE_CONNECT, 1);
+
+		if(check_gamepad_device(dev)) {
+			send_otg_notify(o_notify, NOTIFY_EVENT_GAMEPAD_CONNECT, 1);
+		}
 	} else
 		pr_info("%s root hub\n", __func__);
 

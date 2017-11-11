@@ -297,6 +297,7 @@ int kbase_pm_policy_init(struct kbase_device *kbdev)
 			CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	kbdev->pm.backend.gpu_poweroff_timer.function =
 			kbasep_pm_do_gpu_poweroff_callback;
+	/* MALI_SEC_INTEGRATION */
 	kbdev->pm.backend.pm_current_policy = policy_list[2];
 	kbdev->pm.backend.pm_current_policy->init(kbdev);
 	kbdev->pm.gpu_poweroff_time =

@@ -138,6 +138,10 @@ enum is_subscenario_id {
 	ISS_SUB_SCENARIO_FRONT_VT1_STILL_CAPTURE = 39,	/* 39: front camera VT1 still capture */
 };
 
+enum is_scenario_is {
+	FIMC_IS_SCENARIO_SWVDIS = 1,
+};
+
 enum is_system_control_id {
 	IS_SYS_CLOCK_GATE	= 0,
 	IS_SYS_END		= 1,

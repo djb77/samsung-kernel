@@ -349,6 +349,7 @@ struct modem_mbox {
 	unsigned int mbx_ap2cp_sec;	/* AP Time(sec)	*/
 	unsigned int mbx_ap2cp_usec;	/* AP_Time(usec) */
 	unsigned int mbx_cp2ap_wakelock; /* Wakelock for VoLTE */
+	unsigned int mbx_cp2ap_pcie_l1ss_disable; /* Wakelock for pcie */
 
 	unsigned int int_ap2cp_msg;
 	unsigned int int_ap2cp_active;
@@ -360,6 +361,7 @@ struct modem_mbox {
 	unsigned int irq_cp2ap_wakeup;
 	unsigned int irq_cp2ap_status;
 	unsigned int irq_cp2ap_wakelock;
+	unsigned int irq_cp2ap_pcie_l1ss_disable;
 
 	/* Performance request */
 	unsigned int mbx_ap2cp_perf_req;

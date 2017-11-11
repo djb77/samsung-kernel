@@ -514,25 +514,43 @@ static struct sc_csc_tab sc_no_csc = {
 };
 
 static struct sc_csc_tab sc_y2r = {
-	/* (0,1) 601 Narrow */
+	
+	/* REC.601 Narrow */	
 	{ 0x254, 0x000, 0x331, 0x254, 0xF38, 0xE60, 0x254, 0x409, 0x000 },
-	/* (0,1) 601 Wide */
+	/* REC.601 Wide */	
 	{ 0x200, 0x000, 0x2BE, 0x200, 0xF54, 0xE9B, 0x200, 0x377, 0x000 },
-	/* (0,1) 709 Narrow */
+	/* REC.709 Narrow */
 	{ 0x254, 0x000, 0x331, 0x254, 0xF38, 0xE60, 0x254, 0x409, 0x000 },
-	/* (0,1) 709 Wide */
+	/* REC.709 Wide */
 	{ 0x200, 0x000, 0x314, 0x200, 0xFA2, 0xF15, 0x200, 0x3A2, 0x000 },
+	/* BT.2020 Narrow */
+	{ 0x254, 0x000, 0x36F, 0x254, 0xF9E, 0xEAC, 0x254, 0x461, 0x000 },
+	/* BT.2020 Wide */
+	{ 0x200, 0x000, 0x2F3, 0x200, 0xFAC, 0xEDB, 0x200, 0x3C3, 0x000 },
+	/* DCI-P3 Narrow */
+	{ 0x254, 0x000, 0x3AE, 0x254, 0xF96, 0xEEE, 0x254, 0x456, 0x000 },
+	/* DCI-P3 Wide */
+	{ 0x200, 0x000, 0x329, 0x200, 0xFA5, 0xF15, 0x200, 0x3B9, 0x000 },
 };
 
 static struct sc_csc_tab sc_r2y = {
-	/* (1,0) 601 Narrow */
+	
+	/* REC.601 Narrow */
 	{ 0x084, 0x102, 0x032, 0xFB4, 0xF6B, 0x0E1, 0x0E1, 0xF44, 0xFDC },
-	/* (1,0) 601 Wide  */
+	/* REC.601 Wide  */
 	{ 0x099, 0x12D, 0x03A, 0xFA8, 0xF52, 0x106, 0x106, 0xF25, 0xFD6 },
-	/* (1,0) 709 Narrow */
+	/* REC.709 Narrow */
 	{ 0x05E, 0x13A, 0x020, 0xFCC, 0xF53, 0x0E1, 0x0E1, 0xF34, 0xFEC },
-	/* (1,0) 709 Wide */
+	/* REC.709 Wide */
 	{ 0x06D, 0x16E, 0x025, 0xFC4, 0xF36, 0x106, 0x106, 0xF12, 0xFE8 },
+	/* TODO: BT.2020 Narrow */
+	{ 0x087, 0x15B, 0x01E, 0xFB9, 0xF47, 0x100, 0x100, 0xF15, 0xFEB },
+	/* BT.2020 Wide */
+	{ 0x087, 0x15B, 0x01E, 0xFB9, 0xF47, 0x100, 0x100, 0xF15, 0xFEB },
+	/* TODO: DCI-P3 Narrow */
+	{ 0x06B, 0x171, 0x023, 0xFC6, 0xF3A, 0x100, 0x100, 0xF16, 0xFEA },
+	/* DCI-P3 Wide */
+	{ 0x06B, 0x171, 0x023, 0xFC6, 0xF3A, 0x100, 0x100, 0xF16, 0xFEA },
 };
 
 static struct sc_csc_tab *sc_csc_list[] = {
@@ -715,16 +733,26 @@ void sc_hwset_csc_coef(struct sc_dev *sc, enum sc_csc_idx idx,
 	if (idx == NO_CSC) {
 		csc_eq_val = sc_csc_list[idx]->narrow_601;
 	} else {
-		if (csc->csc_eq == SC_CSC_601) {
-			if (csc->csc_range == SC_CSC_NARROW)
-				csc_eq_val = sc_csc_list[idx]->narrow_601;
-			else
-				csc_eq_val = sc_csc_list[idx]->wide_601;
-		} else {
+		if (csc->csc_eq == V4L2_COLORSPACE_REC709) {
 			if (csc->csc_range == SC_CSC_NARROW)
 				csc_eq_val = sc_csc_list[idx]->narrow_709;
 			else
 				csc_eq_val = sc_csc_list[idx]->wide_709;
+		} else if (csc->csc_eq == V4L2_COLORSPACE_BT2020) {
+			if (csc->csc_range == SC_CSC_NARROW)
+				csc_eq_val = sc_csc_list[idx]->narrow_2020;
+			else
+				csc_eq_val = sc_csc_list[idx]->wide_2020;
+		} else if (csc->csc_eq == V4L2_COLORSPACE_DCI_P3) {
+			if (csc->csc_range == SC_CSC_NARROW)
+				csc_eq_val = sc_csc_list[idx]->narrow_p3;
+			else
+				csc_eq_val = sc_csc_list[idx]->wide_p3;
+		} else {
+			if (csc->csc_range == SC_CSC_NARROW)
+				csc_eq_val = sc_csc_list[idx]->narrow_601;
+			else
+				csc_eq_val = sc_csc_list[idx]->wide_601;
 		}
 	}
 

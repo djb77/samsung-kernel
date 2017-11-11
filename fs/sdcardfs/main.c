@@ -286,7 +286,10 @@ static int sdcardfs_read_super(struct super_block *sb, const char *dev_name,
 	sb->s_time_gran = 1;
 
 	sb->s_magic = SDCARDFS_SUPER_MAGIC;
-	sb->s_op = &sdcardfs_sops;
+	if (sb_info->options.type != TYPE_NONE)
+		sb->s_op = &sdcardfs_multimount_sops;
+	else
+		sb->s_op = &sdcardfs_sops;
 
 	/* see comment next to the definition of sdcardfs_d_alloc_root */
 	sb->s_root = sdcardfs_d_alloc_root(sb);

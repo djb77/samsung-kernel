@@ -60,7 +60,6 @@ void muic_send_dock_intent(int type)
 	switch_set_state(&switch_dock, type);
 #endif
 }
-
 static int muic_dock_attach_notify(int type, const char *name)
 {
 	pr_info("%s: %s\n", __func__, name);
@@ -142,6 +141,14 @@ static int muic_handle_dock_notification(struct notifier_block *nb,
 			return muic_dock_attach_notify(type, name);
 		}
 		else if (action == MUIC_NOTIFY_CMD_DETACH)
+			return muic_dock_detach_notify();
+		break;
+	case ATTACHED_DEV_GAMEPAD_MUIC:
+		if (action == MUIC_NOTIFY_CMD_ATTACH) {
+			type = MUIC_DOCK_GAMEPAD;
+			name = "Gamepad Attach";
+			return muic_dock_attach_notify(type, name);
+		} else if (action == MUIC_NOTIFY_CMD_DETACH)
 			return muic_dock_detach_notify();
 		break;
 	default:

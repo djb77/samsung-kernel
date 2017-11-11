@@ -89,6 +89,7 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 	mutex_init(&kctx->reg_lock);
 
 	INIT_LIST_HEAD(&kctx->waiting_soft_jobs);
+	spin_lock_init(&kctx->waiting_soft_jobs_lock);
 #ifdef CONFIG_KDS
 	INIT_LIST_HEAD(&kctx->waiting_kds_resource);
 #endif
@@ -126,6 +127,9 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 
 	mutex_init(&kctx->vinstr_cli_lock);
 
+	hrtimer_init(&kctx->soft_event_timeout, CLOCK_MONOTONIC,
+		     HRTIMER_MODE_REL);
+	kctx->soft_event_timeout.function = &kbasep_soft_event_timeout_worker;
 	/* MALI_SEC_INTEGRATION */
 	if (kbdev->vendor_callbacks->create_context)
 		kbdev->vendor_callbacks->create_context(kctx);

@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: siutils.c 552034 2015-04-24 19:00:35Z $
+ * $Id: siutils.c 619559 2016-02-17 07:51:45Z $
  */
 
 #include <bcm_cfg.h>
@@ -302,6 +302,11 @@ si_buscore_setup(si_info_t *sii, chipcregs_t *cc, uint bustype, uint32 savewin,
 			uint pmucoreidx;
 			pmuregs_t *pmu;
 			pmucoreidx = si_findcoreidx(&sii->pub, PMU_CORE_ID, 0);
+			if (!GOODIDX(pmucoreidx)) {
+				SI_ERROR(("si_buscore_setup: si_findcoreidx failed\n"));
+				return FALSE;
+			}
+
 			pmu = si_setcoreidx(&sii->pub, pmucoreidx);
 			sii->pub.pmucaps = R_REG(sii->osh, &pmu->pmucapabilities);
 			si_setcoreidx(&sii->pub, SI_CC_IDX);

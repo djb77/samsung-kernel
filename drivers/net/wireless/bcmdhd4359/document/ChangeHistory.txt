@@ -1,4 +1,25 @@
-BCM4359 DHD 1.363.59.149 for Android Zen/Noble/Hero Project
+BCM4359 DHD 1.363.59.153 for Android Zen/Noble/Hero Project
+
+DHD 1.363.59.153 - 2016. 2. 19
+Others
+   - CSP:1009274 Enabled WL_SCAN_TIMER_INTERVAL_MS as default
+   - CSP:1010684 Added Kernel log for RSDB mode switch status
+   - Added country code US/949 and US/945
+     (This patch should be sync up with FW 9.75.155.26 or higher version)
+
+DHD 1.363.59.152 - 2016. 2. 4
+Others
+   - CSP:1000296 Fixed confusing debug log about RCC cached channel
+   - CSP:1009274 Changed scan time interval from 10 to 25 seconds
+   - CSP:1013303 Reset the last roamed BSSID after connection
+   - CSP:1015275 Fixed CCX enable issue after OKC enabled
+   - Added additional conditions to enable or disable ARPOE for STA/SoftAP concurrency mode
+   - Check dongle idle state only for P2P interface 
+   - Code cleaned up for WAKELOCK
+   - Fixed Dereference before null check
+   - Fixed unused but set variable warning
+
+
 DHD 1.363.59.149 - 2016. 1. 13
 Kernel Panic
    - CSP:1006546 Avoid slub poison(0x6B6B6B6B) pointer access in dhd_set_mcast_list_handler()
@@ -6,7 +27,7 @@ Kernel Panic
 Others
    - CSP:1009390 Move some MFP configurations to appropriate postions for supporting MFP with SoftAP
    - Disable ARP_OL_SNOOP Mode in packet filter
-   - Fixed Vulnerability issue from Google patch
+
 
 DHD 1.363.59.148 - 2016. 1. 9
 Kernel Panic
@@ -15,7 +36,9 @@ Kernel Panic
    - CSP:1005282 Dongle memdump API for debugging abnormal access
 Others
    - CSP:1009390 Move some MFP configurations to appropriate postions for supporting MFP with SoftAP
+   - CSP:1009440 Fixed potential buffer overflow issue 
    - Force reassoc when MURX capability is changed via ANDROID private command
+
 
 DHD 1.363.59.144 - 2016. 1. 7
 Others   

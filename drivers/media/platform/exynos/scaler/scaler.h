@@ -70,8 +70,6 @@ extern int sc_log_level;
 /* CSC equation */
 #define SC_CSC_NARROW	0
 #define SC_CSC_WIDE	1
-#define SC_CSC_601	0
-#define SC_CSC_709	1
 
 /* Scaler Crop Fixed Point value */
 #define SC_CROP_FRACT_SHIFT	15
@@ -133,6 +131,10 @@ struct sc_csc_tab {
 	int wide_601[9];
 	int narrow_709[9];
 	int wide_709[9];
+	int narrow_2020[9];
+	int wide_2020[9];
+	int narrow_p3[9];
+	int wide_p3[9];
 };
 
 enum sc_clk_status {
@@ -329,7 +331,7 @@ struct sc_wdt {
 };
 
 struct sc_csc {
-	bool			csc_eq;
+	unsigned int	csc_eq;
 	bool			csc_range;
 };
 

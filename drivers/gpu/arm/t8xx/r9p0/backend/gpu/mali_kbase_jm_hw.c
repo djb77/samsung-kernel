@@ -60,13 +60,17 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 	struct kbase_context *kctx;
 	u32 cfg;
 	u64 jc_head = katom->jc;
+#ifdef MALI_SEC_HWCNT_VERT
 	struct exynos_context *platform;
+#endif
 
 	KBASE_DEBUG_ASSERT(kbdev);
 	KBASE_DEBUG_ASSERT(katom);
 
 	kctx = katom->kctx;
+#ifdef MALI_SEC_HWCNT_VERT
 	platform = (struct exynos_context *) kbdev->platform_context;
+#endif
 
 	/* Command register must be available */
 	KBASE_DEBUG_ASSERT(kbasep_jm_is_js_free(kbdev, js, kctx));

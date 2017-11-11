@@ -115,9 +115,9 @@ static struct vps_cfg cfg_CHARGING_CABLE = {
 	.name = "Charging Cable",
 	.attr = MATTR(VCOM_OPEN, VB_ANY),
 };
-static struct vps_cfg cfg_UNIVERSAL_MMDOCK = {
-	.name = "Universal Multimedia dock",
-	.attr = MATTR(VCOM_USB, VB_HIGH),
+static struct vps_cfg cfg_GAMEPAD = {
+	.name = "Game Pad",
+	.attr = MATTR(VCOM_USB, VB_ANY),
 };
 static struct vps_cfg cfg_TYPE1_CHG = {
 	.name = "TYPE1 Charger",
@@ -176,7 +176,7 @@ static struct vps_tbl_data vps_table[] = {
 	[MDEV(AUDIODOCK)]		= {0x12, "64.9K",	&cfg_AUDIODOCK,},
 	[MDEV(USB_LANHUB)]		= {0x13, "80.07K",	&cfg_USB_LANHUB,},
 	[MDEV(CHARGING_CABLE)]	= {0x14, "102K",	&cfg_CHARGING_CABLE,},
-	[MDEV(UNIVERSAL_MMDOCK)]	= {0x15, "121K",	&cfg_UNIVERSAL_MMDOCK,},
+	[MDEV(GAMEPAD)]		= {0x15, "121K",	&cfg_GAMEPAD,},
 	/* 0x16: UART Cable */
 	[MDEV(TYPE1_CHG)]		= {0x17, "200K",	&cfg_TYPE1_CHG,},
 	[MDEV(JIG_USB_OFF)]		= {0x18, "255K",	&cfg_JIG_USB_OFF,},
@@ -211,6 +211,11 @@ static bool vps_is_acceptable(muic_data_t *pmuic, int adc)
 {
 	if (pmuic->attached_dev == ATTACHED_DEV_HMT_MUIC) {
 		if ((adc == ADC_OPEN) || (adc == ADC_HMT))
+			return true;
+		else
+			return false;
+	} else if (pmuic->attached_dev == ATTACHED_DEV_GAMEPAD_MUIC) {
+		if ((adc == ADC_OPEN) || (adc == ADC_GAMEPAD) || (adc == ADC_GND))
 			return true;
 		else
 			return false;
@@ -249,7 +254,7 @@ bool vps_name_to_mdev(const char *name, int *sdev)
 		return false;
 	}
 
-	pr_info("%s:%s->[%2d]\n", __func__, pvps->cfg->name, mdev);
+	pr_debug("%s:%s->[%2d]\n", __func__, pvps->cfg->name, mdev);
 
 	*sdev = mdev;
 
@@ -438,7 +443,14 @@ int vps_find_attached_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, int *pi
 
 	pr_debug("%s\n",__func__);
 
-	if ((pmsr->t.vbvolt == VB_HIGH) && pmsr->t.chgdetrun) {
+
+	if (pmuic->discard_interrupt) {
+		pr_info("%s:%s Under ADC mode change.\n", MUIC_DEV_NAME, __func__);
+		return -1;
+	}
+
+	if ((pmsr->t.vbvolt == VB_HIGH) && pmsr->t.chgdetrun &&
+		(pmsr->t.adc != ADC_AUDIODOCK)) {
 		pr_info("%s:%s chgdet is running.\n", MUIC_DEV_NAME, __func__);
 		return -1;
 	}
@@ -567,9 +579,7 @@ int vps_find_attached_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, int *pi
 	return ret;
 }
 
-#if defined(CONFIG_BUILD_TYPE_USER) && !defined(CONFIG_SEC_FACTORY_BUILD)
-void vps_show_table(void){}
-#else
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 void vps_show_table(void)
 {
 	struct vps_tbl_data *pvps;
@@ -807,8 +817,8 @@ static int resolve_dedicated_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, 
 				pr_info("%s : ADC OPEN DETECTED\n", MUIC_DEV_NAME);
 			}
 			break;
-		case ADC_UNIVERSAL_MMDOCK:
-			pr_info("%s : ADC UNIVERSAL_MMDOCK Discarded\n", MUIC_DEV_NAME);
+		case ADC_GAMEPAD:
+			pr_info("%s : ADC GAMEPAD Discarded\n", MUIC_DEV_NAME);
 			break;
 
 		case ADC_RESERVED_VZW:

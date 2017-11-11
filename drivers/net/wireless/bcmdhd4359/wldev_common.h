@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wldev_common.h 556083 2015-05-12 14:03:00Z $
+ * $Id: wldev_common.h 619484 2016-02-17 02:14:06Z $
  */
 #ifndef __WLDEV_COMMON_H__
 #define __WLDEV_COMMON_H__
@@ -105,6 +105,7 @@ extern int net_os_wake_lock_timeout_enable(struct net_device *dev, int val);
 extern int net_os_set_dtim_skip(struct net_device *dev, int val);
 extern int net_os_set_suspend_disable(struct net_device *dev, int val);
 extern int net_os_set_suspend(struct net_device *dev, int val, int force);
+extern int net_os_set_max_dtim_enable(struct net_device *dev, int val);
 extern int wl_iw_parse_ssid_list_tlv(char** list_str, wlc_ssid_ext_t* ssid,
 	int max, int *bytes_left);
 

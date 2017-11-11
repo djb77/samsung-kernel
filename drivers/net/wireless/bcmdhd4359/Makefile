@@ -118,6 +118,8 @@ DHDCFLAGS += -DDHD_TRACE_WAKE_LOCK
 DHDCFLAGS += -DBCMASSERT_LOG
 # Collect Current Assoc/Reject Status for Big Data logging
 DHDCFLAGS += -DDHD_ENABLE_BIGDATA_LOGGING
+# Enable SI utility error log
+DHDCFLAGS += -DBCMDBG_ERR
 
 # Print 8021X
 DHDCFLAGS += -DDHD_8021X_DUMP
@@ -246,6 +248,8 @@ DHDCFLAGS += -DFCC_PWR_LIMIT_2G
 # WFA Certification feature
 DHDCFLAGS += -DUSE_WFA_CERT_CONF
 
+DHDCFLAGS += -DCUSTOMER_SCAN_TIMEOUT_SETTING
+
 ##############################
 # Android Platform Definition
 ##############################
@@ -359,6 +363,16 @@ ifeq ($(filter y,$(CONFIG_ARCH_MSM8996) $(CONFIG_SOC_EXYNOS8890)),y)
   DHDCFLAGS := $(filter-out -DSOFTAP_SEND_HANGEVT,$(DHDCFLAGS))
  # CLM
   DHDCFLAGS += -DDHD_SUPPORT_GB_999
+endif
+
+ifeq ($(filter y,$(CONFIG_WLAN_HERO) $(CONFIG_SEC_HEROQLTE_PROJECT)),y)
+  DHDCFLAGS += -DDHD_SUPPORT_US_949
+  DHDCFLAGS += -DDHD_SUPPORT_JP968_RU988_UA16
+endif
+
+ifeq ($(filter y,$(CONFIG_WLAN_HERO2) $(CONFIG_SEC_HERO2QLTE_PROJECT)),y)
+  DHDCFLAGS += -DDHD_SUPPORT_US_945
+  DHDCFLAGS += -DDHD_SUPPORT_JP968_RU988_UA16
 endif
 
  # RSDB mode from file config
@@ -838,6 +852,8 @@ DHDCFLAGS += -include "dhd_sec_feature.h"
 EXTRA_CFLAGS += $(DHDCFLAGS) -DDHD_DEBUG
 EXTRA_CFLAGS += -DSRCBASE=\"$(src)\"
 EXTRA_CFLAGS += -I$(src)/include/ -I$(src)/
+EXTRA_CFLAGS += $(call cc-option, -Wunused-but-set-variable)
+EXTRA_CFLAGS += $(call cc-option, -Wmaybe-uninitialized)
 KBUILD_CFLAGS += -I$(LINUXDIR)/include -I$(shell pwd)
 
 DHDOFILES := dhd_pno.o dhd_common.o dhd_ip.o dhd_custom_gpio.o dhd_custom_sec.o \

@@ -775,7 +775,7 @@ copy_failed:
 			if (sizeof(*sn) != args_size)
 				goto bad_size;
 
-			if (sn->sset.basep_sset.mem_handle & ~PAGE_MASK) {
+			if (sn->sset.basep_sset.mem_handle.basep.handle & ~PAGE_MASK) {
 				dev_warn(kbdev->dev, "kbase_dispatch case KBASE_FUNC_SYNC: sn->sset.basep_sset.mem_handle: passed parameter is invalid");
 				ukh->ret = MALI_ERROR_FUNCTION_FAILED;
 				break;
@@ -1188,6 +1188,32 @@ copy_failed:
 			break;
 		}
 
+	case KBASE_FUNC_SOFT_EVENT_UPDATE:
+		{
+			struct kbase_uk_soft_event_update *update = args;
+
+			if (sizeof(*update) != args_size)
+				goto bad_size;
+
+			if (((update->new_status != BASE_JD_SOFT_EVENT_SET) &&
+			    (update->new_status != BASE_JD_SOFT_EVENT_RESET)) ||
+			    (update->flags != 0))
+				goto out_bad;
+
+			if (kbasep_write_soft_event_status(
+						kctx, update->evt,
+						update->new_status) != 0) {
+				ukh->ret = MALI_ERROR_FUNCTION_FAILED;
+				break;
+			}
+
+			if (update->new_status == BASE_JD_SOFT_EVENT_SET)
+				kbasep_complete_triggered_soft_events(
+						kctx, update->evt);
+
+			break;
+		}
+
 	/* MALI_SEC_INTEGRATION */
 #ifdef MALI_SEC_HWCNT
 	case KBASE_FUNC_HWCNT_UTIL_SETUP:
@@ -1203,6 +1229,7 @@ copy_failed:
 	case KBASE_FUNC_NON_SECURE_WORLD_RENDERING :
 		ukh->id = id;
 		return gpu_vendor_dispatch(kctx, args, args_size);
+
 
 	default:
 		dev_err(kbdev->dev, "unknown ioctl %u", id);
@@ -2002,6 +2029,70 @@ static ssize_t set_core_mask(struct device *dev, struct device_attribute *attr, 
  * Writing to it will set the current core mask.
  */
 static DEVICE_ATTR(core_mask, S_IRUGO | S_IWUSR, show_core_mask, set_core_mask);
+
+/**
+ * set_soft_event_timeout() - Store callback for the soft_event_timeout sysfs
+ * file.
+ *
+ * @dev: The device this sysfs file is for.
+ * @attr: The attributes of the sysfs file.
+ * @buf: The value written to the sysfs file.
+ * @count: The number of bytes written to the sysfs file.
+ *
+ * This allows setting the timeout for software event jobs. Waiting jobs will
+ * be cancelled after this period expires. This is expressed in milliseconds.
+ *
+ * Return: count if the function succeeded. An error code on failure.
+ */
+static ssize_t set_soft_event_timeout(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct kbase_device *kbdev;
+	int soft_event_timeout_ms;
+
+	kbdev = to_kbase_device(dev);
+	if (!kbdev)
+		return -ENODEV;
+
+	if ((kstrtoint(buf, 0, &soft_event_timeout_ms) != 0) ||
+	    (soft_event_timeout_ms <= 0))
+		return -EINVAL;
+
+	atomic_set(&kbdev->js_data.soft_event_timeout_ms,
+		   soft_event_timeout_ms);
+
+	return count;
+}
+
+/**
+ * show_soft_event_timeout() - Show callback for the soft_event_timeout sysfs
+ * file.
+ *
+ * This will return the timeout for the software event jobs.
+ *
+ * @dev: The device this sysfs file is for.
+ * @attr: The attributes of the sysfs file.
+ * @buf: The output buffer for the sysfs file contents.
+ *
+ * Return: The number of bytes output to buf.
+ */
+static ssize_t show_soft_event_timeout(struct device *dev,
+				       struct device_attribute *attr,
+				       char * const buf)
+{
+	struct kbase_device *kbdev;
+
+	kbdev = to_kbase_device(dev);
+	if (!kbdev)
+		return -ENODEV;
+
+	return scnprintf(buf, PAGE_SIZE, "%i\n",
+			 atomic_read(&kbdev->js_data.soft_event_timeout_ms));
+}
+
+static DEVICE_ATTR(soft_event_timeout, S_IRUGO | S_IWUSR,
+		   show_soft_event_timeout, set_soft_event_timeout);
 
 /** Store callback for the @c js_timeouts sysfs file.
  *
@@ -3616,6 +3707,7 @@ static struct attribute *kbase_attrs[] = {
 	&dev_attr_force_replay.attr,
 #endif
 	&dev_attr_js_timeouts.attr,
+	&dev_attr_soft_event_timeout.attr,
 	&dev_attr_gpuinfo.attr,
 	&dev_attr_dvfs_period.attr,
 	&dev_attr_pm_poweroff.attr,

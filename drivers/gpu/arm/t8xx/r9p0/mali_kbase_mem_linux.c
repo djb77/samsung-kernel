@@ -831,8 +831,9 @@ u64 kbase_mem_alias(struct kbase_context *kctx, u64 *flags, u64 stride,
 
 	/* validate and add src handles */
 	for (i = 0; i < nents; i++) {
-		if (ai[i].handle < BASE_MEM_FIRST_FREE_ADDRESS) {
-			if (ai[i].handle != BASE_MEM_WRITE_ALLOC_PAGES_HANDLE)
+		if (ai[i].handle.basep.handle < BASE_MEM_FIRST_FREE_ADDRESS) {
+			if (ai[i].handle.basep.handle !=
+			    BASEP_MEM_WRITE_ALLOC_PAGES_HANDLE)
 				goto bad_handle; /* unsupported magic handle */
 			if (!ai[i].length)
 				goto bad_handle; /* must be > 0 */
@@ -844,7 +845,9 @@ u64 kbase_mem_alias(struct kbase_context *kctx, u64 *flags, u64 stride,
 			struct kbase_va_region *aliasing_reg;
 			struct kbase_mem_phy_alloc *alloc;
 
-			aliasing_reg = kbase_region_tracker_find_region_base_address(kctx, (ai[i].handle >> PAGE_SHIFT) << PAGE_SHIFT);
+			aliasing_reg = kbase_region_tracker_find_region_base_address(
+				kctx,
+				(ai[i].handle.basep.handle >> PAGE_SHIFT) << PAGE_SHIFT);
 
 			/* validate found region */
 			if (!aliasing_reg)
@@ -1682,8 +1685,8 @@ int kbase_mmap(struct file *file, struct vm_area_struct *vma)
 	rcu_read_unlock();
 
 	switch (vma->vm_pgoff) {
-	case PFN_DOWN(BASE_MEM_INVALID_HANDLE):
-	case PFN_DOWN(BASE_MEM_WRITE_ALLOC_PAGES_HANDLE):
+	case PFN_DOWN(BASEP_MEM_INVALID_HANDLE):
+	case PFN_DOWN(BASEP_MEM_WRITE_ALLOC_PAGES_HANDLE):
 		/* Illegal handle for direct map */
 		err = -EINVAL;
 		goto out_unlock;

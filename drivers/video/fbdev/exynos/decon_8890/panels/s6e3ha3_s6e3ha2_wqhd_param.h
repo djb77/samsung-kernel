@@ -1143,6 +1143,11 @@ static const unsigned char S6E3HA3_SEQ_ELVSS_GLOBAL[] = {
         0x15
 };
 
+static const unsigned char S6E3HA3_SEQ_INIT_MPS_ELVSS[] = {
+        0xB5,
+        0xBC, 0x4A
+};
+
 static const unsigned char S6E3HA3_SEQ_ELVSS[] = {
         0xB5,
         0x0A                    /* ELVSS: MAX */

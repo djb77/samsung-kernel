@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 611070 2016-01-08 14:42:18Z $
+ * $Id: wl_cfg80211.h 615406 2016-01-27 12:49:23Z $
  */
 
 /**
@@ -589,6 +589,21 @@ typedef struct wl_if_event_info {
 #define GET_BSS_INFO_LEN 90
 #endif /* DHD_ENABLE_BIGDATA_LOGGING */
 
+#ifdef WES_SUPPORT
+#ifdef CUSTOMER_SCAN_TIMEOUT_SETTING
+#define DEFAULT_SCAN_CHANNEL_TIME	40
+#define DEFAULT_SCAN_HOME_TIME	45
+#define DEFAULT_SCAN_HOME_AWAY_TIME	100
+#define CUSTOMER_WL_SCAN_TIMER_INTERVAL_MS	25000 /* Scan timeout */
+enum wl_custom_scan_time_type {
+	WL_CUSTOM_SCAN_CHANNEL_TIME = 0,
+	WL_CUSTOM_SCAN_HOME_TIME,
+	WL_CUSTOM_SCAN_HOME_AWAY_TIME
+};
+extern s32 wl_cfg80211_custom_scan_time(enum wl_custom_scan_time_type type, int time);
+#endif /* CUSTOMER_SCAN_TIMEOUT_SETTING */
+#endif /* WES_SUPPORT */
+
 /* private data of cfg80211 interface */
 struct bcm_cfg80211 {
 	struct wireless_dev *wdev;	/* representing cfg cfg80211 device */
@@ -764,6 +779,13 @@ struct bcm_cfg80211 {
 	uint8 *bip_pos;
 	int mfp_mode;
 #endif /* MFP */
+#ifdef WES_SUPPORT
+#ifdef CUSTOMER_SCAN_TIMEOUT_SETTING
+	int custom_scan_channel_time;
+	int custom_scan_home_time;
+	int custom_scan_home_away_time;
+#endif /* CUSTOMER_SCAN_TIMEOUT_SETTING */
+#endif /* WES_SUPPORT */
 };
 
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == \
@@ -1288,16 +1310,16 @@ wl_get_netinfo_by_wdev(struct bcm_cfg80211 *cfg, struct wireless_dev *wdev)
 #elif defined(WLAN_AKM_SUITE_FT_PSK)
 #define IS_AKM_SUITE_FT(sec) (sec->wpa_auth == WLAN_AKM_SUITE_FT_PSK)
 #else
-#define IS_AKM_SUITE_FT(sec) false
+#define IS_AKM_SUITE_FT(sec) ({BCM_REFERENCE(sec); FALSE;})
 #endif /* WLAN_AKM_SUITE_FT_8021X && WLAN_AKM_SUITE_FT_PSK */
 #else
-#define IS_AKM_SUITE_FT(sec) false
+#define IS_AKM_SUITE_FT(sec) ({BCM_REFERENCE(sec); FALSE;})
 #endif /* WLFBT */
 
 #ifdef BCMCCX
 #define IS_AKM_SUITE_CCKM(sec) (sec->wpa_auth == WLAN_AKM_SUITE_CCKM)
 #else
-#define IS_AKM_SUITE_CCKM(sec) false
+#define IS_AKM_SUITE_CCKM(sec) ({BCM_REFERENCE(sec); FALSE;})
 #endif /* BCMCCX */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 0, 0))

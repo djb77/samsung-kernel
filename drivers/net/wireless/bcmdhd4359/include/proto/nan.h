@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: nan.h 559300 2015-05-27 07:00:19Z $
+ * $Id: nan.h 581725 2015-08-25 10:43:26Z $
  */
 #ifndef _NAN_H_
 #define _NAN_H_
@@ -83,8 +83,11 @@
 #define NAN_MAP_ID_LEN           1	/* MAP ID length to signify band */
 #define NAN_OPERATING_CLASS_LEN  1	/* operating class field length from NAN FAM */
 #define NAN_CHANNEL_NUM_LEN      1	/* channel number field length 1 byte */
-#define NAN_MAP_ID_2G            0
-#define NAN_MAP_ID_5G            1
+
+#define NAN_MAP_ID_2G   2  /* NAN Further Avail Map ID for band 2.4G */
+#define NAN_MAP_ID_5G   5  /* NAN Further Avail Map ID for band 5G */
+#define NAN_MAP_NUM_IDS 2  /* Max number of NAN Further Avail Map IDs supported */
+
 #define NAN_AVAIL_ENTRY_LEN_RES0 7      /* Avail entry len in FAM attribute for resolution 16TU */
 #define NAN_AVAIL_ENTRY_LEN_RES1 5      /* Avail entry len in FAM attribute for resolution 32TU */
 #define NAN_AVAIL_ENTRY_LEN_RES2 4      /* Avail entry len in FAM attribute for resolution 64TU */
@@ -240,7 +243,6 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_avail_entry_s {
 	uint8 opclass;
 	/* channel number */
 	uint8 chan;
-	uint8 map_id;
 	/*  avail bmp, var len */
 	uint8 avail_bmp[1];
 } BWL_POST_PACKED_STRUCT wifi_nan_avail_entry_t;
@@ -341,6 +343,10 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_conn_cap_attr_s {
 	uint16	len;
 	uint16	conn_cap_bmp;	/* Connection capability bitmap */
 } BWL_POST_PACKED_STRUCT wifi_nan_conn_cap_attr_t;
+
+#define NAN_SLOT_RES_16TU 16
+#define NAN_SLOT_RES_32TU 32
+#define NAN_SLOT_RES_64TU 64
 
 /* This marks the end of a packed structure section. */
 #include <packed_section_end.h>

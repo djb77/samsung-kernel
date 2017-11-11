@@ -42,7 +42,11 @@
 /* Support UK9 IOCTLS */
 #define BASE_LEGACY_UK9_SUPPORT 1
 
-typedef u64 base_mem_handle;
+typedef struct base_mem_handle {
+	struct {
+		u64 handle;
+	} basep;
+} base_mem_handle;
 
 #include "mali_base_mem_priv.h"
 #include "mali_kbase_profiling_gator_api.h"
@@ -61,6 +65,10 @@ typedef u64 base_mem_handle;
 #define BASEP_JD_SEM_WORD_NR(x)         ((x) >> BASEP_JD_SEM_PER_WORD_LOG2)
 #define BASEP_JD_SEM_MASK_IN_WORD(x)    (1 << ((x) & (BASEP_JD_SEM_PER_WORD - 1)))
 #define BASEP_JD_SEM_ARRAY_SIZE         BASEP_JD_SEM_WORD_NR(BASE_JD_ATOM_COUNT)
+
+/* Set/reset values for a software event */
+#define BASE_JD_SOFT_EVENT_SET             ((unsigned char)1)
+#define BASE_JD_SOFT_EVENT_RESET           ((unsigned char)0)
 
 #define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 3
 
@@ -224,14 +232,32 @@ struct base_mem_import_user_buffer {
 };
 
 /**
- * @brief Invalid memory handle type.
- * Return value from functions returning @a base_mem_handle on error.
+ * @brief Invalid memory handle.
+ *
+ * Return value from functions returning @ref base_mem_handle on error.
+ *
+ * @warning @ref base_mem_handle_new_invalid must be used instead of this macro
+ *          in C++ code or other situations where compound literals cannot be used.
  */
-#define BASE_MEM_INVALID_HANDLE                (0ull  << 12)
+#define BASE_MEM_INVALID_HANDLE ((base_mem_handle) { {BASEP_MEM_INVALID_HANDLE} })
+
+/**
+ * @brief Special write-alloc memory handle.
+ *
+ * A special handle is used to represent a region where a special page is mapped
+ * with a write-alloc cache setup, typically used when the write result of the
+ * GPU isn't needed, but the GPU must write anyway.
+ *
+ * @warning @ref base_mem_handle_new_write_alloc must be used instead of this macro
+ *          in C++ code or other situations where compound literals cannot be used.
+ */
+#define BASE_MEM_WRITE_ALLOC_PAGES_HANDLE ((base_mem_handle) { {BASEP_MEM_WRITE_ALLOC_PAGES_HANDLE} })
+
+#define BASEP_MEM_INVALID_HANDLE               (0ull  << 12)
 #define BASE_MEM_MMU_DUMP_HANDLE               (1ull  << 12)
 #define BASE_MEM_TRACE_BUFFER_HANDLE           (2ull  << 12)
 #define BASE_MEM_MAP_TRACKING_HANDLE           (3ull  << 12)
-#define BASE_MEM_WRITE_ALLOC_PAGES_HANDLE      (4ull  << 12)
+#define BASEP_MEM_WRITE_ALLOC_PAGES_HANDLE     (4ull  << 12)
 /* reserved handles ..-64<<PAGE_SHIFT> for future special handles */
 #define BASE_MEM_COOKIE_BASE                   (64ul  << 12)
 #define BASE_MEM_FIRST_FREE_ADDRESS            ((BITS_PER_LONG << 12) + \
@@ -239,6 +265,7 @@ struct base_mem_import_user_buffer {
 
 /* Mask to detect 4GB boundary alignment */
 #define BASE_MEM_MASK_4GB  0xfffff000UL
+
 
 /* Bit mask of cookies used for for memory allocation setup */
 #define KBASE_COOKIE_MASK  ~1UL /* bit 0 is reserved */
@@ -477,8 +504,20 @@ typedef u16 base_jd_core_req;
  */
 #define BASE_JD_REQ_SOFT_REPLAY                 (BASE_JD_REQ_SOFT_JOB | 0x4)
 
+/**
+ * SW only requirement: event wait/trigger job.
+ *
+ * - BASE_JD_REQ_SOFT_EVENT_WAIT: this job will block until the event is set.
+ * - BASE_JD_REQ_SOFT_EVENT_SET: this job sets the event, thus unblocks the
+ *   other waiting jobs. It completes immediately.
+ * - BASE_JD_REQ_SOFT_EVENT_RESET: this job resets the event, making it
+ *   possible for other jobs to wait upon. It completes immediately.
+ */
+#define BASE_JD_REQ_SOFT_EVENT_WAIT             (BASE_JD_REQ_SOFT_JOB | 0x5)
+#define BASE_JD_REQ_SOFT_EVENT_SET              (BASE_JD_REQ_SOFT_JOB | 0x6)
+#define BASE_JD_REQ_SOFT_EVENT_RESET            (BASE_JD_REQ_SOFT_JOB | 0x7)
 //#ifdef CONFIG_MALI_DVFS_USER
-#define BASE_JD_REQ_SOFT_DVFS                   (BASE_JD_REQ_SOFT_JOB | 0x5)
+#define BASE_JD_REQ_SOFT_DVFS                   (BASE_JD_REQ_SOFT_JOB | 0x8)
 //#endif
 
 /**

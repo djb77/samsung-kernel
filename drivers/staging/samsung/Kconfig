@@ -71,6 +71,13 @@ config SEC_DEBUG_TSP_LOG
 	help
 	  This option enables additional log buffer for tsp log.
 
+config SEC_DEBUG_LAST_KMSG
+	default y
+	bool "Enable /proc/last_kmsg support" if EMBEDDED
+	depends on SEC_DEBUG
+	help
+	  This option enables /proc/last_kmsg support.
+
 config SEC_FILE_LEAK_DEBUG
 	bool "Panic when file leak detected"
 	default n

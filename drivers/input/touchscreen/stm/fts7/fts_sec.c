@@ -1,7 +1,5 @@
 #ifdef SEC_TSP_FACTORY_TEST
 
-#define FTS_SUPPORT_PARTIAL_DOWNLOAD_TEMP
-
 
 #define TSP_FACTEST_RESULT_PASS		2
 #define TSP_FACTEST_RESULT_FAIL		1
@@ -72,11 +70,6 @@ static void set_status_pureautotune(void *device_data);
 static void get_status_pureautotune(void *device_data);
 static void get_status_afe(void *device_data);
 #endif
-#ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD_TEMP
-static void set_status_pureautotune(void *device_data);
-static void get_status_pureautotune(void *device_data);
-static void get_status_afe(void *device_data);
-#endif
 static void get_cx_data(void *device_data);
 static void run_cx_data_read(void *device_data);
 static void get_cx_all_data(void *device_data);
@@ -112,6 +105,7 @@ static void active_sleep_enable(void *device_data);
 static void second_screen_enable(void *device_data);
 static void set_longpress_enable(void *device_data);
 static void set_sidescreen_x_length(void *device_data);
+static void set_tunning_data(void *device_data);
 static void set_dead_zone(void *device_data);
 static void dead_zone_enable(void *device_data);
 static void select_wakeful_edge(void *device_data);
@@ -205,11 +199,6 @@ struct ft_cmd ft_commands[] = {
 	{FT_CMD("get_status_pureautotune", get_status_pureautotune),},
 	{FT_CMD("get_status_afe", get_status_afe),},
 #endif
-#ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD_TEMP
-		{FT_CMD("set_status_pureautotune", set_status_pureautotune),},
-		{FT_CMD("get_status_pureautotune", get_status_pureautotune),},
-		{FT_CMD("get_status_afe", get_status_afe),},
-#endif
 	{FT_CMD("get_cx_data", get_cx_data),},
 	{FT_CMD("run_cx_data_read", run_cx_data_read),},
 	{FT_CMD("get_cx_all_data", get_cx_all_data),},
@@ -244,6 +233,7 @@ struct ft_cmd ft_commands[] = {
 	{FT_CMD("second_screen_enable", second_screen_enable),},
 	{FT_CMD("set_longpress_enable", set_longpress_enable),},
 	{FT_CMD("set_sidescreen_x_length", set_sidescreen_x_length),},
+	{FT_CMD("set_tunning_data", set_tunning_data),},
 	{FT_CMD("set_dead_zone", set_dead_zone),},
 	{FT_CMD("dead_zone_enable", dead_zone_enable),},
 	{FT_CMD("select_wakeful_edge", select_wakeful_edge),},
@@ -1443,7 +1433,8 @@ static void run_rawcap_read(void *device_data)
 	short max = 0x8000;
 #ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD
 	//unsigned char regAdd[4] = {0xB0, 0x04, 0x49, 0x00}; // it's for Zero Prj
-	unsigned char regAdd[4] = {0xB0, 0x04, 0x48, 0x00}; // it's for Noble & Zero2 Prj
+	//unsigned char regAdd[4] = {0xB0, 0x04, 0x48, 0x00}; // it's for Noble & Zero2 Prj
+	unsigned char regAdd[4] = {0xB0, 0x02, 0xE1, 0x00}; // it's for Hero2 Prj
 #endif
 	set_default_result(info);
 
@@ -2190,6 +2181,8 @@ static void fts_read_self_raw_frame(struct fts_ts_info *info, unsigned short oAd
 	unsigned short max_tx_self_raw_data = 0;
 	unsigned short min_rx_self_raw_data = 0xFFFF;
 	unsigned short max_rx_self_raw_data = 0;
+	unsigned char cmd[4] = { 0xB0, 0x01, 0x3D, 0x0C };	// Don't enter to IDLE for FTS7
+
 
 	if (info->touch_stopped) {
 		tsp_debug_info(true, &info->client->dev, "%s: [ERROR] Touch is stopped\n",
@@ -2200,13 +2193,28 @@ static void fts_read_self_raw_frame(struct fts_ts_info *info, unsigned short oAd
 		return;
 	}
 
-//	fts_command(info, SLEEPIN); // Sleep In for INT disable
+	fts_systemreset(info);
+	fts_delay(50);
+	fts_wait_for_ready(info);
+
+	if (info->stm_ver != STM_VER7)
+	{
+		fts_command(info, SLEEPOUT);
+		fts_delay(50);
+	}
+	else	// For STM7
+	{
+		fts_write_reg(info, &cmd[0], 4);
+		fts_delay(50);
+	}
+
+	fts_command(info, SENSEON);
+	fts_delay(50);
 
 	disable_irq(info->irq);
 	fts_interrupt_set(info, INT_DISABLE);
 	//fts_command(info, SENSEOFF);
-	
-	fts_delay(50);
+
 
 #ifdef FTS_SUPPORT_TOUCH_KEY
 	if (info->board->support_mskey) {
@@ -2544,83 +2552,6 @@ static void get_status_afe(void *device_data)
 	tsp_debug_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
 }
 #endif
-
-#ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD_TEMP
-static void set_status_pureautotune(void *device_data)
-{
-	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
-	char buff[CMD_STR_LEN] = { 0 };
-
-	set_default_result(info);
-	if (info->touch_stopped) {
-		tsp_debug_info(true, &info->client->dev, "%s: [ERROR] Touch is stopped\n",
-			__func__);
-		snprintf(buff, sizeof(buff), "%s", "TSP turned off");
-		set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
-		info->cmd_state = CMD_STATUS_NOT_APPLICABLE;
-		return;
-	}
-
-	tsp_debug_info(true, info->dev, "%s: set PureAutotune Information !! TEMP\n",__func__);
-
-	snprintf(buff, sizeof(buff), "%s", "OK");
-
-	info->cmd_state = CMD_STATUS_OK;
-	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
-	tsp_debug_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
-}
-
-static void get_status_pureautotune(void *device_data)
-{
-	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
-	char buff[CMD_STR_LEN] = { 0 };
-	int retVal = 0;
-
-	set_default_result(info);
-	if (info->touch_stopped) {
-		tsp_debug_info(true, &info->client->dev, "%s: [ERROR] Touch is stopped\n",
-			__func__);
-		snprintf(buff, sizeof(buff), "%s", "TSP turned off");
-		set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
-		info->cmd_state = CMD_STATUS_NOT_APPLICABLE;
-		return;
-	}
-
-	tsp_debug_info(true, info->dev, "%s: get PureAutotune Information !! TEMP\n",__func__);
-
-	retVal = 1;
-	snprintf(buff, sizeof(buff), "%d", retVal);
-	info->cmd_state = CMD_STATUS_OK;
-	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
-	tsp_debug_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
-}
-
-static void get_status_afe(void *device_data)
-{
-	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
-	char buff[CMD_STR_LEN] = { 0 };
-	int retVal = 0;
-
-	set_default_result(info);
-	if (info->touch_stopped) {
-		tsp_debug_info(true, &info->client->dev, "%s: [ERROR] Touch is stopped\n",
-			__func__);
-		snprintf(buff, sizeof(buff), "%s", "TSP turned off");
-		set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
-		info->cmd_state = CMD_STATUS_NOT_APPLICABLE;
-		return;
-	}
-
-	tsp_debug_info(true, info->dev, "%s: get AFE Information !! TEMP\n",__func__);
-	retVal = 1;
-
-	snprintf(buff, sizeof(buff), "%d", retVal);
-	info->cmd_state = CMD_STATUS_OK;
-	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
-	tsp_debug_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
-}
-#endif
-
 
 
 #define FTS_MAX_TX_LENGTH		44
@@ -3280,70 +3211,56 @@ static void run_key_cx_data_read(void *device_data)
 }
 #endif
 
-static void set_tsp_test_result(void *device_data)
+int fts_get_tsp_test_result(struct fts_ts_info *info)
 {
-	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
-	char buff[CMD_STR_LEN] = { 0 };
-	unsigned char regAdd[4] = {0xB0, 0x07, 0xE7, 0x00};
+	unsigned char cmd[3] = {0xD0, 0x00, 0x56};
+	unsigned char buff[4] = { 0 };
+	int ret;
 
-	if (info->stm_ver == STM_VER7)
-	{
-		regAdd[2] = 0xEB;
+	fts_systemreset(info);
+	fts_wait_for_ready(info);
+
+	ret = info->fts_read_reg(info, cmd, 3, &buff[0], 2);
+	if (ret < 0) {
+		tsp_debug_err(true, &info->client->dev,
+			"%s failed. ret: %d\n", __func__, ret);
+		ret = -EINVAL;
+		goto out;
 	}
+	info->test_result.data[0] = buff[1];
 
-	set_default_result(info);
-
-	if (info->cmd_param[0] < TSP_FACTEST_RESULT_NONE
-				|| info->cmd_param[0] > TSP_FACTEST_RESULT_PASS) {
-		snprintf(buff, sizeof(buff), "%s", "NG");
-		info->cmd_state = CMD_STATUS_FAIL;
-		return;
-	}
-
-	if (info->touch_stopped) {
-		tsp_debug_info(true, &info->client->dev, "%s: [ERROR] Touch is stopped\n",
-			__func__);
-		snprintf(buff, sizeof(buff), "%s", "TSP turned off");
-		set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
-		info->cmd_state = CMD_STATUS_NOT_APPLICABLE;
-		return;
-	}
-
-	disable_irq(info->irq);
-	fts_interrupt_set(info, INT_DISABLE);
-
-	regAdd[3] = info->cmd_param[0];
-	fts_write_reg(info, &regAdd[0], 4);
-	fts_delay(100);
-	fts_command(info, FTS_CMD_SAVE_FWCONFIG);
-
-	fts_delay(230);
-	fts_fw_wait_for_event(info, STATUS_EVENT_FLASH_WRITE_CONFIG);
-
-	enable_irq(info->irq);
+out:
+	fts_command(info, FLUSHBUFFER);
+	fts_delay(10);
+	info->fts_command(info, SENSEON);
+#ifdef FTS_SUPPORT_TOUCH_KEY
+	if (info->board->support_mskey)
+		fts_command(info, FTS_CMD_KEY_SENSE_ON);
+#endif
 	fts_interrupt_set(info, INT_ENABLE);
 
-	snprintf(buff, sizeof(buff), "%s", "OK");
-	info->cmd_state = CMD_STATUS_OK;
-	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
-	tsp_debug_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
+	return ret;
 }
+EXPORT_SYMBOL(fts_get_tsp_test_result);
 
 static void get_tsp_test_result(void *device_data)
 {
 	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
-	unsigned char cmd[4] = {0xB2, 0x07, 0xE7, 0x01};
-	int timeout = 0;
-
-	if (info->stm_ver == STM_VER7)
-	{
-		cmd[2] = 0xEB;
-	}
+	char buff[CMD_STR_LEN] = { 0 };
+	int ret;
 
 	set_default_result(info);
 
+	if (info->stm_ver != STM_VER7) {
+		tsp_debug_info(true, &info->client->dev, "%s: not_support_cmd\n",
+			__func__);
+		snprintf(buff, sizeof(buff), "%s", "NA");
+		set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
+		info->cmd_state = CMD_STATUS_NOT_APPLICABLE;
+		return;
+	}
+
 	if (info->touch_stopped) {
-		char buff[CMD_STR_LEN] = { 0 };
 		tsp_debug_info(true, &info->client->dev, "%s: [ERROR] Touch is stopped\n",
 			__func__);
 		snprintf(buff, sizeof(buff), "%s", "TSP turned off");
@@ -3352,17 +3269,138 @@ static void get_tsp_test_result(void *device_data)
 		return;
 	}
 
-	fts_command(info, FLUSHBUFFER);
-	fts_write_reg(info, &cmd[0], 4);
+	ret = fts_get_tsp_test_result(info);
+	if (ret < 0) {
+		tsp_debug_info(true, &info->client->dev, "%s: failed to get result\n",
+			__func__);
+		snprintf(buff, sizeof(buff), "%s", "NG");
+		set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
+			info->cmd_state = CMD_STATUS_FAIL;
+	} else {
+		if (info->test_result.data[0] == 0xFF) {
+			tsp_debug_info(true, &info->client->dev,
+				"%s: clear factory_result as zero\n",
+				__func__);
+			info->test_result.data[0] = 0;
+		}
+
+		snprintf(buff, sizeof(buff), "M:%s, M:%d, A:%s, A:%d",
+				info->test_result.module_result == 0 ? "NONE" :
+				info->test_result.module_result == 1 ? "FAIL" : "PASS",
+				info->test_result.module_count,
+				info->test_result.assy_result == 0 ? "NONE" :
+				info->test_result.assy_result == 1 ? "FAIL" : "PASS",
+				info->test_result.assy_count);
+
+		set_cmd_result(info, buff, strlen(buff));
+		info->cmd_state = CMD_STATUS_OK;
+	}
+}
+
+/* FACTORY TEST RESULT SAVING FUNCTION
+ * bit 3 ~ 0 : OCTA Assy
+ * bit 7 ~ 4 : OCTA module
+ * param[0] : OCTA module(1) / OCTA Assy(2)
+ * param[1] : TEST NONE(0) / TEST FAIL(1) / TEST PASS(2) : 2 bit
+ */
+static int fts_set_tsp_test_result(struct fts_ts_info *info)
+{
+	unsigned char regAdd[3] = {0xC7, 0x01, 0x00};
+	int ret;
+
+	tsp_debug_info(true, &info->client->dev, "%s: [0x%X] M:%s, M:%d, A:%s, A:%d\n",
+		__func__, info->test_result.data[0],
+		info->test_result.module_result == 0 ? "NONE" :
+		info->test_result.module_result == 1 ? "FAIL" : "PASS",
+		info->test_result.module_count,
+		info->test_result.assy_result == 0 ? "NONE" :
+		info->test_result.assy_result == 1 ? "FAIL" : "PASS",
+		info->test_result.assy_count);
+
+	regAdd[2] = info->test_result.data[0];
+
+	ret = fts_write_reg(info, &regAdd[0], 3);
+	if (ret < 0) {
+		tsp_debug_err(true, &info->client->dev,
+			"%s failed. ret: %d\n", __func__, ret);
+		return -EINVAL;
+	}
+
+//	fts_delay(100);
+	fts_command(info, FTS_CMD_SAVE_CX_TUNING);
+
+	fts_delay(230);
+	fts_fw_wait_for_event(info, STATUS_EVENT_FLASH_WRITE_CXTUNE_VALUE);
+
+	return 0;
+}
+
+static void set_tsp_test_result(void *device_data)
+{
+	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
+	char buff[CMD_STR_LEN] = { 0 };
+	int ret;
+
+	set_default_result(info);
+
+	if (info->stm_ver != STM_VER7) {
+		tsp_debug_info(true, &info->client->dev, "%s: not_support_cmd\n",
+			__func__);
+		snprintf(buff, sizeof(buff), "%s", "NA");
+		set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
+		info->cmd_state = CMD_STATUS_NOT_APPLICABLE;
+		return;
+	}
+
+	if (info->touch_stopped) {
+		tsp_debug_info(true, &info->client->dev, "%s: [ERROR] Touch is stopped\n",
+			__func__);
+		snprintf(buff, sizeof(buff), "%s", "TSP turned off");
+		set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
+		info->cmd_state = CMD_STATUS_NOT_APPLICABLE;
+		return;
+	}
+
+	ret = fts_get_tsp_test_result(info);
+	if (ret < 0) {
+		tsp_debug_err(true, &info->client->dev, "%s: [ERROR] failed to get_tsp_test_result\n",
+			__func__);
+		snprintf(buff, sizeof(buff), "%s", "NG");
+		set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
+		info->cmd_state = CMD_STATUS_FAIL;
+		return;
+	}
 	info->cmd_state = CMD_STATUS_RUNNING;
 
-	while (info->cmd_state == CMD_STATUS_RUNNING) {
-		if (timeout++>30) {
-			info->cmd_state = CMD_STATUS_FAIL;
-			break;
-		}
-		fts_delay(10);
+	if (info->test_result.data[0] == 0xFF) {
+		tsp_debug_info(true, &info->client->dev,
+			"%s: clear factory_result as zero\n",
+			__func__);
+		info->test_result.data[0] = 0;
 	}
+
+	if (info->cmd_param[0] == TEST_OCTA_ASSAY) {
+		info->test_result.assy_result = info->cmd_param[1];
+		if (info->test_result.assy_count < 3)
+			info->test_result.assy_count++;
+
+	} else if (info->cmd_param[0] == TEST_OCTA_MODULE) {
+		info->test_result.module_result = info->cmd_param[1];
+		if (info->test_result.module_count < 3)
+			info->test_result.module_count++;
+	}
+
+	ret = fts_set_tsp_test_result(info);
+	if (ret < 0) {
+		snprintf(buff, sizeof(buff), "%s", "NG");
+		info->cmd_state = CMD_STATUS_FAIL;
+	} else {
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	info->cmd_state = CMD_STATUS_OK;
+	}
+
+	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
+	tsp_debug_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
 }
 
 #ifdef FTS_SUPPORT_HOVER
@@ -4054,6 +4092,56 @@ static void set_sidescreen_x_length(void *device_data)
 		snprintf(buff, sizeof(buff), "%s", "OK");
 		info->cmd_state = CMD_STATUS_OK;
 	}
+	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
+
+	mutex_lock(&info->cmd_lock);
+	info->cmd_is_running = false;
+	mutex_unlock(&info->cmd_lock);
+	info->cmd_state = CMD_STATUS_WAITING;
+
+	tsp_debug_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
+}
+
+static void set_tunning_data(void *device_data)
+{
+	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
+	char buff[CMD_STR_LEN] = { 0 };
+	int i, ret;
+	unsigned char regAdd[3] = {0xC6, 0x00, 0x00};
+
+	set_default_result(info);
+	memset(buff, 0, sizeof(buff));
+
+	for (i = 0; i < 4; i++) {
+		if (info->cmd_param[i]) {
+			if (i == 0)
+				regAdd[1] = 0x02;
+			else if (i == 1)
+				regAdd[1] = 0x03;
+			else if (i == 2)
+				regAdd[1] = 0x05;
+			else
+				regAdd[1] = 0x07;
+
+			regAdd[2] = info->cmd_param[i];
+
+			ret = fts_write_reg(info, regAdd, 3);
+			if (ret < 0) {
+				tsp_debug_err(true, &info->client->dev, "%s: write tunning data failed!\n", __func__);
+				snprintf(buff, sizeof(buff), "%s", "NG");
+				info->cmd_state = CMD_STATUS_FAIL;
+				goto out;
+			} else
+				tsp_debug_dbg(true, &info->client->dev, "%s: write tunning data:%d, %d, %d, ret:%d\n", __func__,
+					regAdd[0], regAdd[1], regAdd[2], ret);
+
+			fts_delay(5);
+		}
+	}
+
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	info->cmd_state = CMD_STATUS_OK;
+out:
 	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
 
 	mutex_lock(&info->cmd_lock);
@@ -5124,6 +5212,11 @@ static void run_force_calibration(void *device_data)
 		snprintf(buff, sizeof(buff), "NG_FINGER_ON");
 		info->cmd_state = CMD_STATUS_FAIL;
 	} else {
+#ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD
+		info->cmd_param[0] = 1;
+		set_status_pureautotune(device_data);
+		set_default_result(info);
+#endif
 		snprintf(buff, sizeof(buff), "%s", "OK");
 		info->cmd_state = CMD_STATUS_OK;
 	}

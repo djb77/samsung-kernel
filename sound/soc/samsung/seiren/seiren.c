@@ -179,6 +179,8 @@ int esa_compr_send_cmd(int32_t cmd, struct audio_processor* ap)
 #ifdef CONFIG_SND_ESA_SA_EFFECT
 		spin_lock(&si.cmd_lock);
 		writel(si.out_sample_rate, si.mailbox + COMPR_PARAM_RATE);
+		writel(si.left_vol, si.mailbox + COMPR_LEFT_VOL);
+		writel(si.right_vol, si.mailbox + COMPR_RIGHT_VOL);
 		spin_unlock(&si.cmd_lock);
 #endif
 		break;
@@ -406,6 +408,15 @@ void esa_compr_ctrl_fxintr(bool fxon)
 }
 
 #ifdef CONFIG_SND_ESA_SA_EFFECT
+void esa_compr_save_volume(int left, int right)
+{
+	esa_debug("%s output volume l = %d, r = %d \n",
+			__func__, left, right);
+	si.left_vol = left;
+	si.right_vol = right;
+	return;
+}
+
 void esa_compr_set_sample_rate(u32 rate)
 {
 	esa_debug("%s output sample_rate %d \n", __func__, rate);
@@ -419,13 +430,18 @@ u32 esa_compr_get_sample_rate(void)
 }
 #endif
 
-void esa_compr_open(void)
+int esa_compr_open(void)
 {
+	int ret;
 	void __iomem	*cmu_reg;
 	u32 cfg;
 
 	pm_qos_update_request(&si.ca5_int_qos, OFFLOAD_INT_LOCK_FREQ);
-	pm_runtime_get_sync(&si.pdev->dev);
+	ret = pm_runtime_get_sync(&si.pdev->dev);
+	if (ret < 0) {
+		pm_qos_update_request(&si.ca5_int_qos, 0);
+		return ret;
+	}
 
 	cmu_reg = ioremap(0x114C0000, SZ_4K);
 	cfg = readl(cmu_reg + 0x404) & ~(0xF);
@@ -435,6 +451,8 @@ void esa_compr_open(void)
 	cfg = readl(cmu_reg + 0x400) & ~(0xF); /* CA5: 410MHz */
 	writel(cfg, cmu_reg + 0x400);
 	iounmap(cmu_reg);
+
+	return 0;
 }
 
 void esa_compr_close(void)
@@ -702,8 +720,11 @@ static int esa_fw_startup(void)
 
 	if (!si.fwmem_loaded) {
 		lpass_update_lpclock(LPCLK_CTRLID_OFFLOAD, false);
-		return -EAGAIN;
+		/* audio firmware hasn't beed loaded yet.
+		   there is nothing to do */
+		return 0;
 	}
+
 	/* Not to enter SICD_AUD */
 	lpass_update_lpclock(LPCLK_CTRLID_LEGACY, true);
 	/* power on */
@@ -854,10 +875,10 @@ int esa_effect_write(int type, int *value, int count)
 	int i, *effect_value;
 	int ret = 0;
 
-	if (!check_esa_compr_state())
+	if (!check_esa_compr_state() ||
+	   (pm_runtime_get_sync(&si.pdev->dev) < 0))
 		return 0;
 
-	pm_runtime_get_sync(&si.pdev->dev);
 	effect_value = value;
 
 	if (!si.effect_ram) {
@@ -1033,7 +1054,10 @@ static ssize_t esa_write(struct file *file, const char *buffer,
 	int response, consumed_size = 0;
 
 	mutex_lock(&esa_mutex);
-	pm_runtime_get_sync(&si.pdev->dev);
+	if (pm_runtime_get_sync(&si.pdev->dev) < 0) {
+		mutex_unlock(&esa_mutex);
+		return 0;
+	}
 
 	if (rtd->obuf0_filled && rtd->obuf1_filled) {
 		esa_err("%s: There is no unfilled obuf\n", __func__);
@@ -1119,7 +1143,10 @@ static ssize_t esa_read(struct file *file, char *buffer,
 	bool *obuf_filled_;
 
 	mutex_lock(&esa_mutex);
-	pm_runtime_get_sync(&si.pdev->dev);
+	if (pm_runtime_get_sync(&si.pdev->dev) < 0) {
+		mutex_unlock(&esa_mutex);
+		return 0;
+	}
 
 	/* select OBUF0 or OBUF1 */
 	if (rtd->select_obuf == 0) {
@@ -1622,7 +1649,10 @@ static long esa_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				rtd->idx, param, cmd);
 
 	mutex_lock(&esa_mutex);
-	pm_runtime_get_sync(&si.pdev->dev);
+	if (pm_runtime_get_sync(&si.pdev->dev) < 0) {
+		mutex_unlock(&esa_mutex);
+		return 0;
+	}
 
 	switch (cmd) {
 	case SEIREN_IOCTL_CH_CREATE:
@@ -1760,7 +1790,10 @@ ssize_t esa_copy(unsigned long hwbuf, ssize_t size)
 	int i, cnt, ret;
 
 	mutex_lock(&esa_mutex);
-	pm_runtime_get_sync(&si.pdev->dev);
+	if (pm_runtime_get_sync(&si.pdev->dev) < 0) {
+		mutex_unlock(&esa_mutex);
+		return 0;
+	}
 
 	cnt = size / FX_BUF_SIZE;
 	if (cnt && (size - (FX_BUF_SIZE * cnt))) {
@@ -1807,7 +1840,10 @@ static ssize_t esa_read(struct file *file, char *buffer,
 	int ret;
 
 	mutex_lock(&esa_mutex);
-	pm_runtime_get_sync(&si.pdev->dev);
+	if (pm_runtime_get_sync(&si.pdev->dev) < 0) {
+		mutex_unlock(&esa_mutex);
+		return 0;
+	}
 
 	if (!si.fx_ext_on) {
 		esa_debug("%s: fx ext not enabled\n", __func__);
@@ -1850,7 +1886,10 @@ static ssize_t esa_write(struct file *file, const char *buffer,
 	int ret;
 
 	mutex_lock(&esa_mutex);
-	pm_runtime_get_sync(&si.pdev->dev);
+	if (pm_runtime_get_sync(&si.pdev->dev) < 0) {
+		mutex_unlock(&esa_mutex);
+		return 0;
+	}
 
 	if (!si.fx_ext_on) {
 		esa_debug("%s: fx ext not enabled\n", __func__);
@@ -1890,7 +1929,10 @@ static long esa_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int ret = 0;
 
 	mutex_lock(&esa_mutex);
-	pm_runtime_get_sync(&si.pdev->dev);
+	if (pm_runtime_get_sync(&si.pdev->dev) < 0) {
+		mutex_unlock(&esa_mutex);
+		return 0;
+	}
 
 	switch (cmd) {
 	case SEIREN_IOCTL_FX_EXT:
@@ -2150,6 +2192,8 @@ static int esa_do_suspend(struct device *dev)
 
 static int esa_do_resume(struct device *dev)
 {
+	int ret;
+
 	si.pm_on = true;
 
 	lpass_update_lpclock(LPCLK_CTRLID_OFFLOAD, true);
@@ -2166,7 +2210,14 @@ static int esa_do_resume(struct device *dev)
 	}
 #endif
 	clk_prepare_enable(si.clk_ca5);
-	esa_fw_startup();
+	ret = esa_fw_startup();
+	if (ret) {
+		si.pm_on = false;
+		clk_disable_unprepare(si.clk_ca5);
+		lpass_put_sync(dev);
+		lpass_update_lpclock(LPCLK_CTRLID_OFFLOAD, false);
+		return ret;
+	}
 	esa_update_qos();
 
 	return 0;

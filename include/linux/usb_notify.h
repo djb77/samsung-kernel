@@ -11,6 +11,7 @@
 
 #include <linux/notifier.h>
 #include <linux/host_notify.h>
+#include <linux/external_notify.h>
 
 enum otg_notify_events {
 	NOTIFY_EVENT_NONE,
@@ -24,6 +25,7 @@ enum otg_notify_events {
 	NOTIFY_EVENT_LANHUB_TA,
 	NOTIFY_EVENT_MMDOCK,
 	NOTIFY_EVENT_HMT,
+	NOTIFY_EVENT_GAMEPAD,
 	NOTIFY_EVENT_DRIVE_VBUS,
 	NOTIFY_EVENT_ALL_DISABLE,
 	NOTIFY_EVENT_HOST_DISABLE,
@@ -33,6 +35,7 @@ enum otg_notify_events {
 	NOTIFY_EVENT_SMTD_EXT_CURRENT,
 	NOTIFY_EVENT_MMD_EXT_CURRENT,
 	NOTIFY_EVENT_DEVICE_CONNECT,
+	NOTIFY_EVENT_GAMEPAD_CONNECT,
 	NOTIFY_EVENT_VBUSPOWER,
 	NOTIFY_EVENT_VIRTUAL,
 };
@@ -90,7 +93,7 @@ struct otg_notify {
 	int auto_drive_vbus;
 	int booting_delay_sec;
 	int disable_control;
-	int device_check_sec;;
+	int device_check_sec;
 	const char *muic_name;
 	int (*pre_gpio)(int gpio, int use);
 	int (*post_gpio)(int gpio, int use);
@@ -137,5 +140,4 @@ static inline struct otg_notify *get_otg_notify(void) {return NULL; }
 static inline int set_otg_notify(struct otg_notify *n) {return 0; }
 static inline void put_otg_notify(struct otg_notify *n) {}
 #endif
-
 #endif /* __LINUX_USB_NOTIFY_H__ */

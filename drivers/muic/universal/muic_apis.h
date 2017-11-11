@@ -29,6 +29,9 @@ extern int attach_ps_cable(muic_data_t *pmuic,
 extern int attach_mmdock(muic_data_t *pmuic,
 			muic_attached_dev_t new_dev, u8 vbvolt);
 extern int detach_mmdock(muic_data_t *pmuic);
+extern int attach_gamepad(muic_data_t *pmuic,
+			muic_attached_dev_t new_dev);
+extern int detach_gamepad(muic_data_t *pmuic);
 extern int attach_deskdock(muic_data_t *pmuic,
 			muic_attached_dev_t new_dev);
 extern int detach_deskdock(muic_data_t *pmuic);

@@ -168,3 +168,15 @@ config BCMDHD_PREALLOC_MEMDUMP
 	depends on BROADCOM_WIFI_RESERVED_MEM
 	---help---
 	  Preallocated memory support for dongle memory dump
+
+config WLAN_HERO
+	bool "model code for hero"
+	depends on BROADCOM_WIFI
+	---help---
+	  This is configuration for USA regrev
+
+config WLAN_HERO2
+	bool "model code for hero2"
+	depends on BROADCOM_WIFI
+	---help---
+	  This is configuration for USA regrev

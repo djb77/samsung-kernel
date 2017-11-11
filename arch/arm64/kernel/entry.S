@@ -163,6 +163,23 @@ alloc_function_entry_magic_number entry_magic
 	ldr	x23, [sp, #S_SP]		// load return stack pointer
 
 #ifdef CONFIG_ARM64_ERRATUM_845719
+#ifdef CONFIG_SOC_EXYNOS8890
+	/*
+	 * Skip "Cortex-A53: 845719" on MNGS.
+	 */
+	mrs	x29, midr_el1
+	lsr	x29, x29, #0x04
+	and	x29, x29, #0xfff
+	cmp	x29, #0xd03
+	b.eq	2f
+
+	tlbi	vaae1, xzr
+	dsb	sy
+	isb
+
+	b	3f
+2:
+#endif
 	alternative_insn						\
 	"nop",								\
 	"tbz x22, #4, 1f",						\
@@ -178,6 +195,7 @@ alloc_function_entry_magic_number entry_magic
 	"msr contextidr_el1, xzr; 1:",					\
 	ARM64_WORKAROUND_845719
 #endif
+3:
 #endif
 	.endif
 	.if	\ret

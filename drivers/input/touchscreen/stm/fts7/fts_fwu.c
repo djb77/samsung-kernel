@@ -71,6 +71,11 @@ bool get_PureAutotune_status(struct fts_ts_info *info)
 	regAdd[0] = 0xd0;
 	regAdd[1] = 0x00;
 	regAdd[2] = 0x58;
+	if (info->stm_ver == STM_VER7)
+	{
+		regAdd[2] = 0x4E;
+	}
+
 	/*
 	regAdd[0] = 0xb3;
 	regAdd[1] = 0x00;
@@ -107,6 +112,10 @@ static bool get_AFE_status(struct fts_ts_info *info)
 	regAdd[0] = 0xd0;
 	regAdd[1] = 0x00;
 	regAdd[2] = 0x5A;
+	if (info->stm_ver == STM_VER7)
+	{
+		regAdd[2] = 0x53;
+	}
 
 	rc = info->fts_read_reg(info, regAdd, 3, buf, 4);
 	if (!rc)

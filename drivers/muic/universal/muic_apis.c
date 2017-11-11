@@ -508,13 +508,11 @@ int detach_otg_usb(muic_data_t *pmuic)
 	if (pvendor && pvendor->enable_chgdet)
 		pvendor->enable_chgdet(pmuic->regmapdesc, 1);
 
-	else {
-		/* disable RAW DATA mode */
-		set_adc_scan_mode(pmuic,ADC_SCANMODE_ONESHOT);
+	if (get_switch_mode(pmuic) != SWMODE_AUTO)
+		set_switch_mode(pmuic, SWMODE_AUTO);
 
-		/* set AUTO SW mode */
-		set_switch_mode(pmuic,SWMODE_AUTO);
-	}
+	if (get_adc_scan_mode(pmuic) != ADC_SCANMODE_ONESHOT)
+		set_adc_scan_mode(pmuic, ADC_SCANMODE_ONESHOT);
 
 	pmuic->attached_dev = ATTACHED_DEV_NONE_MUIC;
 
@@ -590,6 +588,60 @@ int detach_ps_cable(muic_data_t *pmuic)
 	pmuic->attached_dev = ATTACHED_DEV_NONE_MUIC;
 
 	return ret;
+}
+
+
+/* Do the followings on attachment.
+  * 1. Do not run charger detection.
+  * 2. Set AP USB path
+  * 3. Set continuous adc scan mode with USB's notification.
+  */
+int attach_gamepad(muic_data_t *pmuic,
+			muic_attached_dev_t new_dev)
+{
+	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
+	int ret = 0;
+
+	if (pmuic->attached_dev == new_dev) {
+		pr_info("%s:%s duplicated(gamepad)\n", MUIC_DEV_NAME, __func__);
+		return ret;
+	}
+
+	pr_info("%s:%s\n", MUIC_DEV_NAME, __func__);
+
+	if (pvendor && pvendor->enable_chgdet)
+		pvendor->enable_chgdet(pmuic->regmapdesc, 0); 
+
+	ret = switch_to_ap_usb(pmuic);
+
+	pmuic->attached_dev = new_dev;
+
+	return 0;
+}
+
+int detach_gamepad(muic_data_t *pmuic)
+{
+	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
+	int ret = 0;
+
+	pr_info("%s:%s attached_dev type(%d)\n", MUIC_DEV_NAME, __func__,
+			pmuic->attached_dev);
+
+	ret = com_to_open_with_vbus(pmuic);
+	if (ret < 0) {
+		pr_err("%s:%s fail.(%d)\n", MUIC_DEV_NAME, __func__, ret);
+		return ret;
+	}
+
+	if (pvendor && pvendor->enable_chgdet)
+		pvendor->enable_chgdet(pmuic->regmapdesc, 1);
+
+	set_adc_scan_mode(pmuic, ADC_SCANMODE_ONESHOT);
+
+	pmuic->is_gamepad = false;
+	pmuic->attached_dev = ATTACHED_DEV_NONE_MUIC;
+
+	return 0;
 }
 
 int attach_mmdock(muic_data_t *pmuic,

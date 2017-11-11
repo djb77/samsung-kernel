@@ -742,6 +742,7 @@ int kbasep_js_devdata_init(struct kbase_device * const kbdev)
 		DEFAULT_JS_CFS_CTX_RUNTIME_INIT_SLICES;
 	jsdd->cfs_ctx_runtime_min_slices =
 		DEFAULT_JS_CFS_CTX_RUNTIME_MIN_SLICES;
+	atomic_set(&jsdd->soft_event_timeout_ms, DEFAULT_JS_SOFT_EVENT_TIMEOUT);
 
 	dev_dbg(kbdev->dev, "JS Config Attribs: ");
 	dev_dbg(kbdev->dev, "\tscheduling_period_ns:%u",
@@ -768,6 +769,8 @@ int kbasep_js_devdata_init(struct kbase_device * const kbdev)
 			jsdd->cfs_ctx_runtime_init_slices);
 	dev_dbg(kbdev->dev, "\tcfs_ctx_runtime_min_slices:%u",
 			jsdd->cfs_ctx_runtime_min_slices);
+	dev_dbg(kbdev->dev, "\tsoft_event_timeout:%i",
+		atomic_read(&jsdd->soft_event_timeout_ms));
 
 	if (!(jsdd->soft_stop_ticks < jsdd->hard_stop_ticks_ss &&
 			jsdd->hard_stop_ticks_ss < jsdd->gpu_reset_ticks_ss &&

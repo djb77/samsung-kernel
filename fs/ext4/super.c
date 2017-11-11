@@ -4396,7 +4396,7 @@ static void ext4_init_journal_params(struct super_block *sb, journal_t *journal)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 #ifdef CONFIG_JOURNAL_DATA_TAG
-	struct hd_struct *bd_part;
+	struct hd_struct *part;
 #endif
 
 	journal->j_commit_interval = sbi->s_commit_interval;
@@ -4414,9 +4414,17 @@ static void ext4_init_journal_params(struct super_block *sb, journal_t *journal)
 		journal->j_flags &= ~JBD2_ABORT_ON_SYNCDATA_ERR;
 
 #ifdef CONFIG_JOURNAL_DATA_TAG
-	bd_part = sb->s_bdev->bd_part;
-	if (bd_part->info && !strncmp(bd_part->info->volname, "USERDATA", 8))
+	part = sb->s_bdev->bd_part;
+	if (part->info && !strncmp(part->info->volname, "USERDATA", 8)) {
 		journal->j_flags |= JBD2_JOURNAL_TAG;
+		printk("Setting journal tag on volname[%s]\n", 
+			part->info->volname);
+	} else if (!part->info && journal->j_maxlen >= 32768) {
+		/* maybe dm device &&  journal size > 128MB */
+		journal->j_flags |= JBD2_JOURNAL_TAG;
+		printk("Setting journal tag on volname[(null)] "
+		       "journal size %u MB\n", journal->j_maxlen * 4 / 1024);
+	}
 	else
 		journal->j_flags &= ~JBD2_JOURNAL_TAG;
 #endif

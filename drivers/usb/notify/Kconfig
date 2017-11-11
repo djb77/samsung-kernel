@@ -50,3 +50,11 @@ config USB_HMT_SAMSUNG_INPUT
 	  Some samsung smart phones support gear vr.
           The samsung gear vr need some special hid input codes.
           This feature enables special hid input codes.
+          
+ config USB_EXTERNAL_NOTIFY
+	boolean "USB external notify"
+	depends on USB_NOTIFY_LAYER
+	help
+	  Added usb external notify.
+          The usb external notify broadcast special situation to muic and charger.
+

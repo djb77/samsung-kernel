@@ -32,6 +32,7 @@
 		mif,irq_cp2ap_perf_req_mif = <6>;
 		mif,irq_cp2ap_perf_req_int = <7>;
 		mif,irq_cp2ap_wakelock = <8>;
+		mif,irq_cp2ap_pcie_l1ss_disable = <9>;
 
 		mbx_ap2cp_msg = <0>;
 		mbx_cp2ap_msg = <1>;
@@ -49,6 +50,7 @@
 		mbx_ap2cp_mif_value = <13>;
 		mbx_ap2cp_sec = <14>;
 		mbx_ap2cp_usec = <15>;
+		mbx_cp2ap_pcie_l1ss_disable = <17>;
 		mbx_ap2cp_et_dac_cal = <32>;
 		mbx_ap2cp_info_value = <33>;
 		mbx_ap2cp_lock_value = <39>;

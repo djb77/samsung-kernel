@@ -611,10 +611,12 @@ static long tdmb_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			mutex_unlock(&tdmb_lock);
 			break;
 		}
-		fig_freq = ((struct ensemble_info_type *)arg)->ensem_freq;
-		DPRINTK("IOCTL_TDMB_SCAN_FREQ_SYNC %ld\n", fig_freq);
-
 		ensemble_info = vmalloc(sizeof(struct ensemble_info_type));
+		if(copy_from_user(ensemble_info, (void *)arg, sizeof(struct ensemble_info_type)))
+			DPRINTK("cmd(%x):copy_from_user failed\n", cmd);
+		else
+			fig_freq = ensemble_info->ensem_freq;
+		DPRINTK("IOCTL_TDMB_SCAN_FREQ_SYNC %ld\n", fig_freq);
 		memset((char *)ensemble_info, 0x00\
 			, sizeof(struct ensemble_info_type));
 

@@ -28,6 +28,7 @@
 #include <linux/mfd/arizona/core.h>
 
 #include <sound/soc.h>
+#include <sound/soc-dapm.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/initval.h>
@@ -162,7 +163,6 @@ struct arizona_machine_priv {
 	u32 amp_type;
 
 #if defined(CONFIG_SND_SOC_MAXIM_DSM_CAL)
-	int dsm_cal_read_cnt;
 	int dsm_cal_rdc;
 	int dsm_cal_temp;
 #endif
@@ -569,7 +569,7 @@ static int get_voice_tracking_info(struct snd_kcontrol *kcontrol,
 
 	ucontrol->value.enumerated.item[0] = (energy_l | energy_r);
 
-	dev_info(card->dev, "get voice tracking info :0x%08x\n",
+	dev_dbg(card->dev, "get voice tracking info :0x%08x\n",
 			ucontrol->value.enumerated.item[0]);
 
 	return 0;
@@ -581,7 +581,7 @@ static int set_voice_tracking_info(struct snd_kcontrol *kcontrol,
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct snd_soc_card *card = codec->component.card;
 
-	dev_info(card->dev, "set voice tracking info\n");
+	dev_dbg(card->dev, "set voice tracking info\n");
 	return  0;
 }
 
@@ -633,47 +633,66 @@ static int set_voice_trigger_info(struct snd_kcontrol *kcontrol,
 #if defined(CONFIG_SND_SOC_MAXIM_DSM_CAL)
 #define DSM_RDC_ROOM_TEMP	0x2A005C
 #define DSM_AMBIENT_TEMP	0x2A0182
-static int lucky_get_dsm_cal_info(struct snd_soc_card *card)
+static int lucky_dsm_cal_apply(struct snd_soc_card *card)
 {
 	struct arizona_machine_priv *priv = card->drvdata;
+	static bool is_get_temp = false;
+	static bool is_get_rdc = false;
+	static int get_temp_try_cnt = 3;
+	static int get_rdc_try_cnt = 3;
 	int ret;
 
-	ret = maxdsm_cal_get_temp(&priv->dsm_cal_temp);
-	dev_info(card->dev, "temp = 0x%x, ret = %d\n", priv->dsm_cal_temp, ret);
-	if (ret < 0)
-		return ret;
-
-	ret = maxdsm_cal_get_rdc(&priv->dsm_cal_rdc);
-	dev_info(card->dev, "rdc = 0x%x, ret = %d\n", priv->dsm_cal_rdc, ret);
-	if (ret < 0)
-		return ret;
-
-	if (ret == 0) {
-		priv->dsm_cal_rdc = -1;
-		priv->dsm_cal_temp = -1;
+	if (get_temp_try_cnt > 0) {
+		ret = maxdsm_cal_get_temp(&priv->dsm_cal_temp);
+		if (ret == 0 && priv->dsm_cal_temp > 0) {
+			is_get_temp = true;
+			get_temp_try_cnt = 0;
+		} else {
+			if (ret == -ENOENT) {
+				dev_dbg(card->dev,
+					"No such file or directory\n");
+				get_temp_try_cnt = 0;
+				return -1;
+			} else if (ret == -EBUSY) {
+				dev_dbg(card->dev,
+					"Device or resource busy\n");
+			}
+			get_temp_try_cnt--;
+			return -1;
+		}
 	}
-	priv->dsm_cal_read_cnt = 1;
 
-	return ret;
-}
+	if (is_get_temp && get_rdc_try_cnt > 0) {
+		ret = maxdsm_cal_get_rdc(&priv->dsm_cal_rdc);
+		if (ret == 0 && priv->dsm_cal_rdc > 0) {
+			is_get_rdc = true;
+			get_rdc_try_cnt = 0;
+		} else {
+			if (ret == -ENOENT) {
+				dev_dbg(card->dev,
+					"No such file or directory\n");
+				get_rdc_try_cnt = 0;
+				return -1;
+			} else if (ret == -EBUSY) {
+				dev_dbg(card->dev,
+					"Device or resource busy\n");
+			}
+			get_rdc_try_cnt--;
+			return -1;
+		}
+	}
 
-static int lucky_set_dsm_cal_info(struct snd_soc_card *card)
-{
-	struct arizona_machine_priv *priv = card->drvdata;
-	int ret = 0;
-
-	dev_info(card->dev, "rdc=%d, temp = %d\n",
-					priv->dsm_cal_rdc, priv->dsm_cal_temp);
-
-	if (priv->dsm_cal_temp >= 0 && priv->dsm_cal_rdc >= 0) {
-		dev_info(card->dev, "write dsm_cal values properly\n");
+	if (is_get_temp && is_get_rdc) {
 		regmap_write(priv->regmap_dsp, DSM_AMBIENT_TEMP,
-				(unsigned int)priv->dsm_cal_temp);
+					(unsigned int)priv->dsm_cal_temp);
 		regmap_write(priv->regmap_dsp, DSM_RDC_ROOM_TEMP,
-				(unsigned int)priv->dsm_cal_rdc);
-	}
+					(unsigned int)priv->dsm_cal_rdc);
+		dev_info(card->dev, "set rdc = %d, temperature = %d\n",
+					priv->dsm_cal_rdc, priv->dsm_cal_temp);
+	} else
+		dev_info(card->dev, "dsm works with default calibration\n");
 
-	return ret;
+	return 0;
 }
 #endif
 
@@ -692,10 +711,7 @@ static int lucky_external_amp(struct snd_soc_dapm_widget *w,
 		if (priv->amp_type == AMP_TYPE_MAX98505 ||
 			priv->amp_type == AMP_TYPE_MAX98506) {
 #if defined(CONFIG_SND_SOC_MAXIM_DSM_CAL)
-			if (priv->dsm_cal_read_cnt == 0)
-				lucky_get_dsm_cal_info(card);
-			if (priv->dsm_cal_read_cnt == 1)
-				lucky_set_dsm_cal_info(card);
+			lucky_dsm_cal_apply(card);
 #endif
 		}
 		if (priv->amp_type == AMP_TYPE_CS35L33) {
@@ -761,6 +777,91 @@ static const struct snd_kcontrol_new lucky_codec_controls[] = {
 		get_voice_trigger_info, set_voice_trigger_info),
 };
 
+static int lucky_spk_set_asyncclk(struct snd_soc_dapm_widget *w,
+		struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_card *card = w->dapm->card;
+	struct arizona_machine_priv *priv = card->drvdata;
+	int ret;
+
+	if (priv->codec->component.active)
+		return 0;
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+
+		dev_dbg(card->dev, "%s\n", __func__);
+
+		/* Set ASYNCCLK FLL  */
+		ret = snd_soc_codec_set_pll(priv->codec, priv->asyncclk.fll_ref_id,
+					    priv->asyncclk.fll_ref_src,
+					    priv->asyncclk.fll_ref_in,
+					    priv->asyncclk.fll_ref_out);
+		if (ret != 0)
+			dev_err(card->dev,
+				 "Failed to start ASYNCCLK FLL REF: %d\n", ret);
+
+		ret = snd_soc_codec_set_pll(priv->codec, priv->asyncclk.fll_id,
+					    priv->asyncclk.mclk.id,
+					    priv->asyncclk.mclk.rate,
+					    priv->asyncclk.fll_out);
+		if (ret != 0)
+			dev_err(card->dev, "Failed to start ASYNCCLK FLL: %d\n", ret);
+
+		/* Set ASYNCCLK from FLL */
+		ret = snd_soc_codec_set_sysclk(priv->codec, priv->asyncclk.clk_id,
+					       priv->asyncclk.src_id,
+					       priv->asyncclk.rate,
+					       SND_SOC_CLOCK_IN);
+		if (ret < 0)
+			dev_err(card->dev,
+					 "Unable to set ASYNCCLK to FLL: %d\n", ret);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static struct snd_soc_dapm_widget *lucky_dapm_find_widget(
+			struct snd_soc_dapm_context *dapm, const char *pin,
+			bool search_other_contexts)
+{
+	struct snd_soc_dapm_widget *w;
+	struct snd_soc_dapm_widget *fallback = NULL;
+
+	list_for_each_entry(w, &dapm->card->widgets, list) {
+		if (!strcmp(w->name, pin)) {
+			if (w->dapm == dapm)
+				return w;
+			else
+				fallback = w;
+		}
+	}
+
+	if (search_other_contexts)
+		return fallback;
+
+	return NULL;
+}
+
+static int snd_soc_dapm_set_subseq(struct snd_soc_dapm_context *dapm,
+				const char *pin, int subseq)
+{
+	struct snd_soc_dapm_widget *w =
+				lucky_dapm_find_widget(dapm, pin, false);
+
+	if (!w) {
+		dev_err(dapm->dev, "%s: unknown pin %s\n", __func__, pin);
+		return -EINVAL;
+	}
+
+	w->subseq = subseq;
+
+	return 0;
+}
+
 static const struct snd_kcontrol_new lucky_controls[] = {
 	SOC_DAPM_PIN_SWITCH("HP"),
 	SOC_DAPM_PIN_SWITCH("SPK"),
@@ -776,6 +877,9 @@ static const struct snd_kcontrol_new lucky_controls[] = {
 const struct snd_soc_dapm_widget lucky_dapm_widgets[] = {
 	SND_SOC_DAPM_HP("HP", NULL),
 	SND_SOC_DAPM_SPK("SPK", lucky_external_amp),
+	SND_SOC_DAPM_SUPPLY("ASYNC_AMP", SND_SOC_NOPM,
+			0, 0, lucky_spk_set_asyncclk,
+			SND_SOC_DAPM_PRE_PMU),
 	SND_SOC_DAPM_SPK("RCV", NULL),
 
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
@@ -806,6 +910,7 @@ const struct snd_soc_dapm_route lucky_cs47l91_dapm_routes[] = {
 
 	/* "HiFi Capture" is capture stream of maxim_amp dai */
 	{ "HiFi Capture", NULL, "VI SENSING" },
+	{ "VI SENSING", NULL, "ASYNC_AMP" },
 
 	{ "IN3L", NULL, "FM In" },
 	{ "IN3R", NULL, "FM In" },
@@ -1609,6 +1714,8 @@ static int lucky_late_probe(struct snd_soc_card *card)
 		return ret;
 	}
 
+	snd_soc_dapm_set_subseq(&card->dapm, "SPK", 1);
+
 	snd_soc_dapm_ignore_suspend(&card->dapm, "Main Mic");
 	snd_soc_dapm_ignore_suspend(&card->dapm, "Sub Mic");
 	snd_soc_dapm_ignore_suspend(&card->dapm, "Third Mic");
@@ -1750,7 +1857,7 @@ static int lucky_late_probe(struct snd_soc_card *card)
 	if (priv->regmap_dsp) {
 #if defined(CONFIG_SND_SOC_MAXIM_DSM_CAL)
 		if (priv->amp_type == AMP_TYPE_MAX98505 ||
-			priv->amp_type == AMP_TYPE_MAX98506 )
+			priv->amp_type == AMP_TYPE_MAX98506)
 			maxdsm_cal_set_regmap(priv->regmap_dsp);
 #endif
 #if defined(CONFIG_SND_SOC_CIRRUS_AMP_CAL)

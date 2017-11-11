@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: 802.11.h 556559 2015-05-14 01:48:17Z $
+ * $Id: 802.11.h 612861 2016-01-15 07:57:02Z $
  */
 
 #ifndef _802_11_H_
@@ -469,6 +469,25 @@ BWL_PRE_PACKED_STRUCT struct dot11_channel_switch_wrapper {
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_channel_switch_wrapper dot11_chan_switch_wrapper_ie_t;
 
+typedef enum wide_bw_chan_width {
+	WIDE_BW_CHAN_WIDTH_20	= 0,
+	WIDE_BW_CHAN_WIDTH_40	= 1,
+	WIDE_BW_CHAN_WIDTH_80	= 2,
+	WIDE_BW_CHAN_WIDTH_160	= 3,
+	WIDE_BW_CHAN_WIDTH_80_80	= 4
+} wide_bw_chan_width_t;
+
+/**  Wide Bandwidth Channel IE data structure */
+BWL_PRE_PACKED_STRUCT struct dot11_wide_bw_channel {
+	uint8 id;				/* id DOT11_MNG_WIDE_BW_CHANNEL_ID */
+	uint8 len;				/* length of IE */
+	uint8 channel_width;			/* channel width */
+	uint8 center_frequency_segment_0;	/* center frequency segment 0 */
+	uint8 center_frequency_segment_1;	/* center frequency segment 1 */
+} BWL_POST_PACKED_STRUCT;
+typedef struct dot11_wide_bw_channel dot11_wide_bw_chan_ie_t;
+
+#define DOT11_WIDE_BW_IE_LEN     3       /* length of IE data, not including 2 byte header */
 /** VHT Transmit Power Envelope IE data structure */
 BWL_PRE_PACKED_STRUCT struct dot11_vht_transmit_power_envelope {
 	uint8 id;				/* id DOT11_MNG_WIDE_BW_CHANNEL_SWITCH_ID */
@@ -742,6 +761,13 @@ typedef uint8 ac_bitmap_t;	/* AC bitmap of (1 << AC_xx) */
 #define AC_BITMAP_SET(ab, ac)	(((ab) |= (1 << (ac))))
 #define AC_BITMAP_RESET(ab, ac) (((ab) &= ~(1 << (ac))))
 
+/* Management PKT Lifetime indices */
+/* Removing flag checks 'BCMINTERNAL || WLTEST'
+ * while merging MERGE BIS120RC4 to DINGO2
+ */
+#define MGMT_ALL		0xffff
+#define MGMT_AUTH_LT	FC_SUBTYPE_AUTH
+#define MGMT_ASSOC_LT	FC_SUBTYPE_ASSOC_REQ
 
 /** WME Information Element (IE) */
 BWL_PRE_PACKED_STRUCT struct wme_ie {
@@ -1399,6 +1425,20 @@ typedef struct ti_ie ti_ie_t;
 #define DOT11_MNG_PROPR_ID			221
 /* should start using this one instead of above two */
 #define DOT11_MNG_VS_ID				221	/* d11 management Vendor Specific IE */
+
+#define DOT11_MNG_ID_EXT_ID			255 /* Element ID Extension 11mc D4.3 */
+#define DOT11_MNG_FTM_SYNC_INFO_ID		9	/* 11mc D4.3 */
+
+#define DOT11_MNG_IE_ID_EXT_MATCH(_ie, _id) (\
+	((_ie)->id == DOT11_MNG_ID_EXT_ID) && \
+	((_ie)->len > 0) && \
+	((_id) == ((uint8 *)(_ie) + TLV_HDR_LEN)[0]))
+
+#define DOT11_MNG_IE_ID_EXT_INIT(_ie, _id, _len) do {\
+		(_ie)->id = DOT11_MNG_ID_EXT_ID; \
+		(_ie)->len = _len; \
+		(_ie)->id_ext = _id; \
+	} while (0)
 
 /* Rate Defines */
 
@@ -2658,12 +2698,6 @@ typedef struct dot11_rmrep_bcn dot11_rmrep_bcn_t;
 /* Sub-element IDs for Frame Report */
 #define DOT11_RMREP_FRAME_COUNT_REPORT 1
 
-/* Statistics Group Report: Group IDs */
-#define DOT11_RRM_STATS_GRP_ID_0	0
-
-/* Statistics Group Report: Group Data length  */
-#define DOT11_RRM_STATS_RPT_LEN_GRP_ID_0	28
-
 /* Channel load request */
 BWL_PRE_PACKED_STRUCT struct dot11_rmreq_chanload {
 	uint8 id;
@@ -2791,7 +2825,159 @@ BWL_PRE_PACKED_STRUCT struct dot11_rmrep_stat {
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_rmrep_stat dot11_rmrep_stat_t;
 
-/** Transmit stream/category measurement request */
+/* Statistics Group Report: Group IDs */
+enum {
+	DOT11_RRM_STATS_GRP_ID_0 = 0,
+	DOT11_RRM_STATS_GRP_ID_1,
+	DOT11_RRM_STATS_GRP_ID_2,
+	DOT11_RRM_STATS_GRP_ID_3,
+	DOT11_RRM_STATS_GRP_ID_4,
+	DOT11_RRM_STATS_GRP_ID_5,
+	DOT11_RRM_STATS_GRP_ID_6,
+	DOT11_RRM_STATS_GRP_ID_7,
+	DOT11_RRM_STATS_GRP_ID_8,
+	DOT11_RRM_STATS_GRP_ID_9,
+	DOT11_RRM_STATS_GRP_ID_10,
+	DOT11_RRM_STATS_GRP_ID_11,
+	DOT11_RRM_STATS_GRP_ID_12,
+	DOT11_RRM_STATS_GRP_ID_13,
+	DOT11_RRM_STATS_GRP_ID_14,
+	DOT11_RRM_STATS_GRP_ID_15,
+	DOT11_RRM_STATS_GRP_ID_16
+};
+
+/* Statistics Group Report: Group Data length  */
+#define DOT11_RRM_STATS_RPT_LEN_GRP_ID_0	28
+typedef struct rrm_stat_group_0 {
+	uint32	txfrag;
+	uint32	txmulti;
+	uint32	txfail;
+	uint32	rxframe;
+	uint32	rxmulti;
+	uint32	rxbadfcs;
+	uint32	txframe;
+} rrm_stat_group_0_t;
+
+#define DOT11_RRM_STATS_RPT_LEN_GRP_ID_1	24
+typedef struct rrm_stat_group_1 {
+	uint32	txretry;
+	uint32	txretries;
+	uint32	rxdup;
+	uint32	txrts;
+	uint32	rtsfail;
+	uint32	ackfail;
+} rrm_stat_group_1_t;
+
+/* group 2-9 use same qos data structure (tid 0-7), total 52 bytes */
+#define DOT11_RRM_STATS_RPT_LEN_GRP_ID_2_9	52
+typedef struct rrm_stat_group_qos {
+	uint32	txfrag;
+	uint32	txfail;
+	uint32	txretry;
+	uint32	txretries;
+	uint32	rxdup;
+	uint32	txrts;
+	uint32	rtsfail;
+	uint32	ackfail;
+	uint32	rxfrag;
+	uint32	txframe;
+	uint32	txdrop;
+	uint32	rxmpdu;
+	uint32	rxretries;
+} rrm_stat_group_qos_t;
+
+/* dot11BSSAverageAccessDelay Group (only available at an AP): 8 byte */
+#define DOT11_RRM_STATS_RPT_LEN_GRP_ID_10	8
+typedef BWL_PRE_PACKED_STRUCT struct rrm_stat_group_10 {
+	uint8	apavgdelay;
+	uint8	avgdelaybe;
+	uint8	avgdelaybg;
+	uint8	avgdelayvi;
+	uint8	avgdelayvo;
+	uint16	stacount;
+	uint8	chanutil;
+} BWL_POST_PACKED_STRUCT rrm_stat_group_10_t;
+
+/* AMSDU, 40 bytes */
+#define DOT11_RRM_STATS_RPT_LEN_GRP_ID_11	40
+typedef struct rrm_stat_group_11 {
+	uint32	txamsdu;
+	uint32	amsdufail;
+	uint32	amsduretry;
+	uint32	amsduretries;
+	uint32	txamsdubyte_h;
+	uint32	txamsdubyte_l;
+	uint32	amsduackfail;
+	uint32	rxamsdu;
+	uint32	rxamsdubyte_h;
+	uint32	rxamsdubyte_l;
+} rrm_stat_group_11_t;
+
+/* AMPDU, 36 bytes */
+#define DOT11_RRM_STATS_RPT_LEN_GRP_ID_12	36
+typedef struct rrm_stat_group_12 {
+	uint32	txampdu;
+	uint32	txmpdu;
+	uint32	txampdubyte_h;
+	uint32	txampdubyte_l;
+	uint32	rxampdu;
+	uint32	rxmpdu;
+	uint32	rxampdubyte_h;
+	uint32	rxampdubyte_l;
+	uint32	ampducrcfail;
+} rrm_stat_group_12_t;
+
+/* BACK etc, 36 bytes */
+#define DOT11_RRM_STATS_RPT_LEN_GRP_ID_13	36
+typedef struct rrm_stat_group_13 {
+	uint32	rximpbarfail;
+	uint32	rxexpbarfail;
+	uint32	chanwidthsw;
+	uint32	txframe20mhz;
+	uint32	txframe40mhz;
+	uint32	rxframe20mhz;
+	uint32	rxframe40mhz;
+	uint32	psmpgrantdur;
+	uint32	psmpuseddur;
+} rrm_stat_group_13_t;
+
+/* RD Dual CTS etc, 36 bytes */
+#define DOT11_RRM_STATS_RPT_LEN_GRP_ID_14	36
+typedef struct rrm_stat_group_14 {
+	uint32	grantrdgused;
+	uint32	grantrdgunused;
+	uint32	txframeingrantrdg;
+	uint32	txbyteingrantrdg_h;
+	uint32	txbyteingrantrdg_l;
+	uint32	dualcts;
+	uint32	dualctsfail;
+	uint32	rtslsi;
+	uint32	rtslsifail;
+} rrm_stat_group_14_t;
+
+/* bf and STBC etc, 20 bytes */
+#define DOT11_RRM_STATS_RPT_LEN_GRP_ID_15	20
+typedef struct rrm_stat_group_15 {
+	uint32	bfframe;
+	uint32	stbccts;
+	uint32	stbcctsfail;
+	uint32	nonstbccts;
+	uint32	nonstbcctsfail;
+} rrm_stat_group_15_t;
+
+/* RSNA, 28 bytes */
+#define DOT11_RRM_STATS_RPT_LEN_GRP_ID_16	28
+typedef struct rrm_stat_group_16 {
+	uint32	rsnacmacicverr;
+	uint32	rsnacmacreplay;
+	uint32	rsnarobustmgmtccmpreplay;
+	uint32	rsnatkipicverr;
+	uint32	rsnatkipicvreplay;
+	uint32	rsnaccmpdecrypterr;
+	uint32	rsnaccmpreplay;
+} rrm_stat_group_16_t;
+
+/* Transmit stream/category measurement request */
 BWL_PRE_PACKED_STRUCT struct dot11_rmreq_tx_stream {
 	uint8 id;
 	uint8 len;
@@ -2930,19 +3116,20 @@ BWL_PRE_PACKED_STRUCT struct dot11_rmreq_ftm_range {
 typedef struct dot11_rmreq_ftm_range dot11_rmreq_ftm_range_t;
 #define DOT11_RMREQ_FTM_RANGE_LEN 8
 
+#define DOT11_FTM_RANGE_LEN		3
 BWL_PRE_PACKED_STRUCT struct dot11_ftm_range_entry {
 	uint32 start_tsf;		/* 4 lsb of tsf */
 	struct ether_addr bssid;
-	uint16 range;
-	uint16 max_err;
+	uint8 range[DOT11_FTM_RANGE_LEN];
+	uint8 max_err[DOT11_FTM_RANGE_LEN];
 	uint8  rsvd;
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_ftm_range_entry dot11_ftm_range_entry_t;
 #define DOT11_FTM_RANGE_ENTRY_MAX_COUNT   15
 
 enum {
-	DOT11_FTM_RANGE_ERROR_AP_INCAPABLE = 3,
-	DOT11_FTM_RANGE_ERROR_AP_FAILED = 4,
+	DOT11_FTM_RANGE_ERROR_AP_INCAPABLE = 2,
+	DOT11_FTM_RANGE_ERROR_AP_FAILED = 3,
 	DOT11_FTM_RANGE_ERROR_TX_FAILED = 8,
 	DOT11_FTM_RANGE_ERROR_MAX
 };
@@ -2993,6 +3180,7 @@ typedef struct dot11_rmreq_pause_time dot11_rmreq_pause_time_t;
 #define DOT11_NGBR_BSSTRANS_PREF_SE_ID	3
 #define DOT11_NGBR_BSS_TERM_DUR_SE_ID	4
 #define DOT11_NGBR_BEARING_SE_ID	5
+#define DOT11_NGBR_WIDE_BW_CHAN_SE_ID	6
 
 /** Neighbor Report, BSS Transition Candidate Preference subelement */
 BWL_PRE_PACKED_STRUCT struct dot11_ngbr_bsstrans_pref_se {
@@ -3442,6 +3630,11 @@ typedef struct ht_prop_cap_ie ht_prop_cap_ie_t;
 #define HT_CAP_TX_BF_CAP_EXPLICIT_COMPRESSED_FB_MASK 0x18000
 #define HT_CAP_TX_BF_CAP_EXPLICIT_COMPRESSED_FB_SHIFT 15
 
+#define HT_CAP_MCS_FLAGS_SUPP_BYTE 12 /* byte offset in HT Cap Supported MCS for various flags */
+#define HT_CAP_MCS_RX_8TO15_BYTE_OFFSET                1
+#define HT_CAP_MCS_FLAGS_TX_RX_UNEQUAL              0x02
+#define HT_CAP_MCS_FLAGS_MAX_SPATIAL_STREAM_MASK    0x0C
+
 #define VHT_MAX_MPDU		11454	/* max mpdu size for now (bytes) */
 #define VHT_MPDU_MSDU_DELTA	56		/* Difference in spec - vht mpdu, amsdu len */
 /* Max AMSDU len - per spec */
@@ -3558,6 +3751,13 @@ typedef struct ht_prop_add_ie ht_prop_add_ie_t;
 					== DOT11N_TXBURST)	/* Tx Burst present */
 #define DOT11N_OBSS_NONHT_PRESENT(add_ie)	((ltoh16_ua(&add_ie->opmode) & DOT11N_OBSS_NONHT) \
 					== DOT11N_OBSS_NONHT)	/* OBSS Non-HT present */
+/* Macros for HT MCS filed access */
+#define HT_CAP_MCS_BITMASK(supp_mcs)                 \
+	((supp_mcs)[HT_CAP_MCS_RX_8TO15_BYTE_OFFSET])
+#define HT_CAP_MCS_TX_RX_UNEQUAL(supp_mcs)          \
+	((supp_mcs)[HT_CAP_MCS_FLAGS_SUPP_BYTE] & HT_CAP_MCS_FLAGS_TX_RX_UNEQUAL)
+#define HT_CAP_MCS_TX_STREAM_SUPPORT(supp_mcs)          \
+		((supp_mcs)[HT_CAP_MCS_FLAGS_SUPP_BYTE] & HT_CAP_MCS_FLAGS_MAX_SPATIAL_STREAM_MASK)
 
 BWL_PRE_PACKED_STRUCT struct obss_params {
 	uint16	passive_dwell;
@@ -4091,6 +4291,42 @@ BWL_PRE_PACKED_STRUCT struct dot11_ftm {
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_ftm dot11_ftm_t;
 
+
+#define DOT11_FTM_ERR_NOT_CONT_OFFSET 1
+#define DOT11_FTM_ERR_NOT_CONT_MASK 0x80
+#define DOT11_FTM_ERR_NOT_CONT_SHIFT 7
+#define DOT11_FTM_ERR_NOT_CONT(_err) (((_err)[DOT11_FTM_ERR_NOT_CONT_OFFSET] & \
+	DOT11_FTM_ERR_NOT_CONT_MASK) >> DOT11_FTM_ERR_NOT_CONT_SHIFT)
+#define DOT11_FTM_ERR_SET_NOT_CONT(_err, _val) do {\
+	uint8 _err2 = (_err)[DOT11_FTM_ERR_NOT_CONT_OFFSET]; \
+	_err2 &= ~DOT11_FTM_ERR_NOT_CONT_MASK; \
+	_err2 |= ((_val) << DOT11_FTM_ERR_NOT_CONT_SHIFT) & DOT11_FTM_ERR_NOT_CONT_MASK; \
+	(_err)[DOT11_FTM_ERR_NOT_CONT_OFFSET] = _err2; \
+} while (0)
+
+#define DOT11_FTM_ERR_MAX_ERR_OFFSET 0
+#define DOT11_FTM_ERR_MAX_ERR_MASK 0x7fff
+#define DOT11_FTM_ERR_MAX_ERR_SHIFT 0
+#define DOT11_FTM_ERR_MAX_ERR(_err) (((((_err)[1] & 0x7f) << 8) | (_err)[0]))
+#define DOT11_FTM_ERR_SET_MAX_ERR(_err, _val) do {\
+	uint16 _val2; \
+	uint16 _not_cont; \
+	_val2 =  (((_val) & DOT11_FTM_ERR_MAX_ERR_MASK) << DOT11_FTM_ERR_MAX_ERR_SHIFT); \
+	_val2 = (_val2 > 0x3fff) ? 0 : _val2; /* not expecting > 16ns error */ \
+	_not_cont = DOT11_FTM_ERR_NOT_CONT(_err); \
+	(_err)[0] = _val2 & 0xff; \
+	(_err)[1] = (_val2 >> 8) & 0xff; \
+	DOT11_FTM_ERR_SET_NOT_CONT(_err, _not_cont); \
+} while (0)
+
+#if defined(DOT11_FTM_ERR_ROM_COMPAT)
+/* incorrect defs - here for ROM compatibiity */
+#undef DOT11_FTM_ERR_NOT_CONT_OFFSET
+#undef DOT11_FTM_ERR_NOT_CONT_MASK
+#undef DOT11_FTM_ERR_NOT_CONT_SHIFT
+#undef DOT11_FTM_ERR_NOT_CONT
+#undef DOT11_FTM_ERR_SET_NOT_CONT
+
 #define DOT11_FTM_ERR_NOT_CONT_OFFSET 0
 #define DOT11_FTM_ERR_NOT_CONT_MASK 0x0001
 #define DOT11_FTM_ERR_NOT_CONT_SHIFT 0
@@ -4103,6 +4339,12 @@ typedef struct dot11_ftm dot11_ftm_t;
 	(_err)[DOT11_FTM_ERR_NOT_CONT_OFFSET] = _err2; \
 } while (0)
 
+#undef DOT11_FTM_ERR_MAX_ERR_OFFSET
+#undef DOT11_FTM_ERR_MAX_ERR_MASK
+#undef DOT11_FTM_ERR_MAX_ERR_SHIFT
+#undef DOT11_FTM_ERR_MAX_ERR
+#undef DOT11_FTM_ERR_SET_MAX_ERR
+
 #define DOT11_FTM_ERR_MAX_ERR_OFFSET 0
 #define DOT11_FTM_ERR_MAX_ERR_MASK 0xfff7
 #define DOT11_FTM_ERR_MAX_ERR_SHIFT 1
@@ -4114,6 +4356,7 @@ typedef struct dot11_ftm dot11_ftm_t;
 	(_err)[0] = _val2 & 0xff; \
 	(_err)[1] = _val2 >> 8 & 0xff; \
 } while (0)
+#endif /* DOT11_FTM_ERR_ROM_COMPAT */
 
 BWL_PRE_PACKED_STRUCT struct dot11_ftm_params {
 	uint8 id;		/* DOT11_MNG_FTM_PARAM_ID 8.4.2.166 11mcd2.6/2014 - revisit */
@@ -4158,6 +4401,10 @@ typedef struct dot11_ftm_params dot11_ftm_params_t;
 #define FTM_PARAMS_NBURST(_p) (1 << FTM_PARAMS_NBURSTEXP(_p))
 
 enum {
+	FTM_PARAMS_NBURSTEXP_NOPREF = 15
+};
+
+enum {
 	FTM_PARAMS_BURSTTMO_NOPREF = 15
 };
 
@@ -4182,6 +4429,10 @@ enum {
 	(_p)->info[FTM_PARAMS_MINDELTA_OFFSET] = (_delta) / 100; \
 } while (0)
 
+enum {
+	FTM_PARAMS_MINDELTA_NOPREF = 0
+};
+
 #define FTM_PARAMS_PARTIAL_TSF(_p) ((_p)->info[4] << 8 | (_p)->info[3])
 #define FTM_PARAMS_SET_PARTIAL_TSF(_p, _partial_tsf) do { \
 	(_p)->info[3] = (_partial_tsf) & 0xff; \
@@ -4193,6 +4444,22 @@ enum {
 #define FTM_PARAMS_PARTIAL_TSF_BIT_LEN 16
 #define FTM_PARAMS_PARTIAL_TSF_MAX 0xffff
 
+/* FTM can indicate upto 62k TUs forward and 1k TU backward */
+#define FTM_PARAMS_TSF_FW_HI (63487 << 10)	/* in micro sec */
+#define FTM_PARAMS_TSF_BW_LOW (64512 << 10)	/* in micro sec */
+#define FTM_PARAMS_TSF_BW_HI (65535 << 10)	/* in micro sec */
+#define FTM_PARAMS_TSF_FW_MAX FTM_PARAMS_TSF_FW_HI
+#define FTM_PARAMS_TSF_BW_MAX (FTM_PARAMS_TSF_BW_HI - FTM_PARAMS_TSF_BW_LOW)
+
+#define FTM_PARAMS_PTSFNOPREF_OFFSET 5
+#define FTM_PARAMS_PTSFNOPREF_MASK 0x1
+#define FTM_PARAMS_PTSFNOPREF_SHIFT 0
+#define FTM_PARAMS_PTSFNOPREF(_p) FTM_PARAMS_FIELD(_p, FTM_PARAMS_PTSFNOPREF_OFFSET, \
+	FTM_PARAMS_PTSFNOPREF_MASK, FTM_PARAMS_PTSFNOPREF_SHIFT)
+#define FTM_PARAMS_SET_PTSFNOPREF(_p, _nopref) FTM_PARAMS_SET_FIELD(_p, \
+	FTM_PARAMS_PTSFNOPREF_OFFSET, FTM_PARAMS_PTSFNOPREF_MASK, \
+	FTM_PARAMS_PTSFNOPREF_SHIFT, _nopref)
+
 #define FTM_PARAMS_ASAP_OFFSET 5
 #define FTM_PARAMS_ASAP_MASK 0x4
 #define FTM_PARAMS_ASAP_SHIFT 2
@@ -4201,6 +4468,7 @@ enum {
 #define FTM_PARAMS_SET_ASAP(_p, _asap) FTM_PARAMS_SET_FIELD(_p, \
 	FTM_PARAMS_ASAP_OFFSET, FTM_PARAMS_ASAP_MASK, FTM_PARAMS_ASAP_SHIFT, _asap)
 
+/* FTM1 - AKA ASAP Capable */
 #define FTM_PARAMS_FTM1_OFFSET 5
 #define FTM_PARAMS_FTM1_MASK 0x02
 #define FTM_PARAMS_FTM1_SHIFT 1
@@ -4218,6 +4486,10 @@ enum {
 	FTM_PARAMS_FTMS_PER_BURST_OFFSET, FTM_PARAMS_FTMS_PER_BURST_MASK, \
 	FTM_PARAMS_FTMS_PER_BURST_SHIFT, _nftms)
 
+enum {
+	FTM_PARAMS_FTMS_PER_BURST_NOPREF = 0
+};
+
 #define FTM_PARAMS_CHAN_INFO_OFFSET 6
 #define FTM_PARAMS_CHAN_INFO_MASK 0xfc
 #define FTM_PARAMS_CHAN_INFO_SHIFT 2
@@ -4234,6 +4506,10 @@ enum {
 } while (0)
 
 #define FTM_PARAMS_BURST_PERIOD_MS(_p) (FTM_PARAMS_BURST_PERIOD(_p) * 100)
+
+enum {
+	FTM_PARAMS_BURST_PERIOD_NOPREF = 0
+};
 
 /* FTM status values - last updated from 11mcD4.0 */
 enum {
@@ -4272,6 +4548,49 @@ enum {
 	FTM_PARAMS_CHAN_INFO_MAX		= 63
 };
 
+/* tag_ID/length/value_buffer tuple */
+typedef BWL_PRE_PACKED_STRUCT struct {
+	uint8	id;
+	uint8	len;
+	uint8	data[1];
+} BWL_POST_PACKED_STRUCT ftm_vs_tlv_t;
+
+#define FTM_TPK_LEN		16
+#define FTM_RI_RR_BUF_LEN	32
+#define FTM_TPK_RI_RR_LEN	13
+#define FTM_TPK_DIGEST_LEN	32
+#define FTM_TPK_BUFFER_LEN	128
+#define FTM_TPK_RI_PHY_LEN	7
+#define FTM_TPK_RR_PHY_LEN	7
+#define FTM_TPK_DATA_BUFFER_LEN 88
+
+
+BWL_PRE_PACKED_STRUCT struct dot11_ftm_vs_params {
+	uint8 id;						/* DOT11_MNG_VS_ID */
+	uint8 len;
+	uint8 oui[3];					/* Proprietary OUI, BRCM_PROP_OUI */
+	uint8 bcm_vs_id;
+	ftm_vs_tlv_t ftm_tpk_ri_rr[1];			/* ftm_TPK_ri_rr place holder */
+} BWL_POST_PACKED_STRUCT;
+typedef struct dot11_ftm_vs_params dot11_ftm_vs_tpk_ri_rr_params_t;
+
+#define DOT11_FTM_VS_LEN  (sizeof(dot11_ftm_vs_tpk_ri_rr_params_t) - TLV_HDR_LEN)
+
+BWL_PRE_PACKED_STRUCT struct dot11_ftm_sync_info {
+	uint8 id;		/* Extended - 255 11mc D4.3  */
+	uint8 len;
+	uint8 id_ext;
+	uint8 tsf_sync_info[4];
+} BWL_POST_PACKED_STRUCT;
+typedef struct dot11_ftm_sync_info dot11_ftm_sync_info_t;
+
+/* ftm tsf sync info ie len - includes id ext */
+#define DOT11_FTM_SYNC_INFO_IE_LEN (sizeof(dot11_ftm_sync_info_t) - TLV_HDR_LEN)
+
+#define DOT11_FTM_IS_SYNC_INFO_IE(_ie) (\
+	DOT11_MNG_IE_ID_EXT_MATCH(_ie, DOT11_MNG_FTM_SYNC_INFO) && \
+	(_ie)->len == DOT11_FTM_SYNC_INFO_IE_LEN)
+
 /* 802.11u interworking access network options */
 #define IW_ANT_MASK					0x0f
 #define IW_INTERNET_MASK				0x10
@@ -4288,6 +4607,12 @@ enum {
 #define IW_ANT_EMERGENCY_SERVICES_NETWORK		5
 #define IW_ANT_TEST_NETWORK				14
 #define IW_ANT_WILDCARD_NETWORK				15
+
+#define IW_ANT_LEN			1
+#define IW_VENUE_LEN			2
+#define IW_HESSID_LEN			6
+#define IW_HESSID_OFF			(IW_ANT_LEN + IW_VENUE_LEN)
+#define IW_MAX_LEN			(IW_ANT_LEN + IW_VENUE_LEN + IW_HESSID_LEN)
 
 /* 802.11u advertisement protocol */
 #define ADVP_ANQP_PROTOCOL_ID				0

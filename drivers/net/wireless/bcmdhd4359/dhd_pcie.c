@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.c 610670 2016-01-07 13:11:14Z $
+ * $Id: dhd_pcie.c 612549 2016-01-14 07:39:32Z $
  */
 
 
@@ -1063,14 +1063,13 @@ bool dhd_bus_watchdog(dhd_pub_t *dhd)
 #if defined(SUPPORT_MULTIPLE_REVISION)
 static int concate_revision_bcm4358(dhd_bus_t *bus, char *fw_path, char *nv_path)
 {
-	uint32 chip_id, chip_ver;
+	uint32 chip_ver;
 #if defined(SUPPORT_MULTIPLE_CHIPS)
 	char chipver_tag[20] = "_4358";
 #else
 	char chipver_tag[10] = {0, };
 #endif /* SUPPORT_MULTIPLE_CHIPS */
 
-	chip_id = si_chipid(bus->sih);
 	chip_ver = bus->sih->chiprev;
 	if (chip_ver == 0) {
 		DHD_ERROR(("----- CHIP 4358 A0 -----\n"));
@@ -1117,14 +1116,13 @@ static int concate_revision_bcm4358(dhd_bus_t *bus, char *fw_path, char *nv_path
 
 static int concate_revision_bcm4359(dhd_bus_t *bus, char *fw_path, char *nv_path)
 {
-	uint32 chip_id, chip_ver;
+	uint32 chip_ver;
 	char chipver_tag[10] = {0, };
 #if defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK) && \
 	defined(SUPPORT_BCM4359_MIXED_MODULES)
 	int module_type = -1;
 #endif /* SUPPORT_MULTIPLE_MODULE_CIS && USE_CID_CHECK && SUPPORT_BCM4359_MIXED_MODULES */
 
-	chip_id = si_chipid(bus->sih);
 	chip_ver = bus->sih->chiprev;
 	if (chip_ver == 4) {
 		DHD_ERROR(("----- CHIP 4359 B0 -----\n"));

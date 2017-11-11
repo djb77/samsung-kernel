@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmevent.c 530174 2015-01-29 09:47:55Z $
+ * $Id: bcmevent.c 618906 2016-02-12 11:26:15Z $
  */
 
 #include <typedefs.h>
@@ -182,6 +182,7 @@ static const bcmevent_name_str_t bcmevent_names[] = {
 	BCMEVENT_NAME(WLC_E_CSA_FAILURE_IND),
 	BCMEVENT_NAME(WLC_E_RMC_EVENT),
 	BCMEVENT_NAME(WLC_E_DPSTA_INTF_IND),
+	BCMEVENT_NAME(WLC_E_SDB_TRANSITION),
 };
 
 

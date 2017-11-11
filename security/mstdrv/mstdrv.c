@@ -129,7 +129,7 @@ static ssize_t store_mst_drv(struct device *dev,
 				result = exynos_smc(r0, r1, r2, r3);
 				printk(KERN_INFO "MST_LDO_DRV]]] Track2 data transmit to infinity after smc : %d\n", result);
 				of_mst_hw_onoff(0);
-				mdelay(1000);
+				mdelay(1500);
 			}
 			break;
 		case '5':

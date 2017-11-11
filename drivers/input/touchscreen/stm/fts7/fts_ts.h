@@ -56,7 +56,7 @@
 #define TOUCH_OPEN_DWORK_TIME 10
 #endif
 
-//#define FTS_SUPPORT_PARTIAL_DOWNLOAD
+#define FTS_SUPPORT_PARTIAL_DOWNLOAD
 
 #undef FTS_SUPPROT_MULTIMEDIA
 #undef TSP_RUN_AUTOTUNE_DEFAULT
@@ -255,7 +255,7 @@
 #define FTS_MODE_DIRECT_INDICATOR			(1 << 3)
 
 #define TSP_BUF_SIZE 3000
-#define CMD_STR_LEN 32
+#define CMD_STR_LEN 256
 #define CMD_RESULT_STR_LEN 3000
 #define CMD_PARAM_NUM 8
 
@@ -371,6 +371,45 @@ enum BRUSH_MODE {
 };
 #endif
 
+/* ----------------------------------------
+ * write 0xE4 [ 11 | 10 | 01 | 00 ]
+ * MSB <-------------------> LSB
+ * read 0xE4
+ * mapping sequnce : LSB -> MSB
+ * struct sec_ts_test_result {
+ * * assy : front + OCTA assay
+ * * module : only OCTA
+ *	 union {
+ *		 struct {
+ *			 u8 assy_count:2;		-> 00
+ *			 u8 assy_result:2;		-> 01
+ *			 u8 module_count:2;	-> 10
+ *			 u8 module_result:2;	-> 11
+ *		 } __attribute__ ((packed));
+ *		 unsigned char data[1];
+ *	 };
+ *};
+ * ---------------------------------------- */
+struct fts_ts_test_result {
+	union {
+		struct {
+			u8 assy_count:2;
+			u8 assy_result:2;
+			u8 module_count:2;
+			u8 module_result:2;
+		} __attribute__ ((packed));
+		unsigned char data[1];
+	};
+};
+
+#define TEST_OCTA_MODULE	1
+#define TEST_OCTA_ASSAY		2
+
+#define TEST_OCTA_NONE		0
+#define TEST_OCTA_FAIL		1
+#define TEST_OCTA_PASS		2
+
+
 struct fts_ts_info {
 	struct device *dev;
 	struct i2c_client *client;
@@ -408,6 +447,7 @@ struct fts_ts_info {
 	struct delayed_work cover_cmd_work;
 	int delayed_cmd_param[2];
 #endif
+	struct fts_ts_test_result test_result;
 
 	bool hover_ready;
 	bool hover_enabled;
@@ -468,6 +508,7 @@ struct fts_ts_info {
 #ifdef USE_OPEN_DWORK
 	struct delayed_work open_work;
 #endif
+	struct delayed_work work_read_nv;
 
 #ifdef FTS_SUPPORT_NOISE_PARAM
 	struct fts_noise_param noise_param;
@@ -538,5 +579,6 @@ int fts_irq_enable(struct fts_ts_info *info, bool enable);
 #ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD
 bool get_PureAutotune_status(struct fts_ts_info *info);
 #endif
+int fts_get_tsp_test_result(struct fts_ts_info *info);
 
 #endif				//_LINUX_FTS_TS_H_

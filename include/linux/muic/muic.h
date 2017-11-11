@@ -46,6 +46,8 @@ enum {
 	MUIC_DOCK_SMARTDOCK	= 102,
 	MUIC_DOCK_HMT		= 105,
 	MUIC_DOCK_ABNORMAL	= 106,
+	MUIC_DOCK_GAMEPAD	= 107,
+	MUIC_DOCK_GAMEPAD_WITH_EARJACK	= 108,
 };
 
 /* MUIC Path */
@@ -93,6 +95,7 @@ typedef enum {
 	ADC_USB_LANHUB		= 0x13, /* 0x10011 80.07K ohm */
 	ADC_CHARGING_CABLE	= 0x14,	/* 0x10100 102K ohm */
 	ADC_UNIVERSAL_MMDOCK	= 0x15, /* 0x10101 121K ohm */
+	ADC_GAMEPAD		= 0x15, /* 0x10101 121K ohm */
 	ADC_UART_CABLE		= 0x16, /* 0x10110 150K ohm */
 	ADC_CEA936ATYPE1_CHG	= 0x17,	/* 0x10111 200K ohm */
 	ADC_JIG_USB_OFF		= 0x18, /* 0x11000 255K ohm */
@@ -178,6 +181,7 @@ typedef enum {
 	ATTACHED_DEV_UNSUPPORTED_ID_VB_MUIC,
 	ATTACHED_DEV_UNDEFINED_RANGE_MUIC,
 	ATTACHED_DEV_RDU_TA_MUIC,
+	ATTACHED_DEV_GAMEPAD_MUIC,
 	ATTACHED_DEV_UNKNOWN_MUIC,
 	ATTACHED_DEV_NUM,
 } muic_attached_dev_t;
@@ -233,5 +237,4 @@ struct muic_platform_data {
 int get_switch_sel(void);
 int get_afc_mode(void);
 void muic_set_hmt_status(int status);
-int muic_get_hmt_status(void);
 #endif /* __MUIC_H__ */

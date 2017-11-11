@@ -155,6 +155,9 @@ static int parse_dvfs_data(struct exynos_platform_fimc_is *pdata, struct device_
 
 		sprintf(buf, "%s%s", fimc_is_dvfs_dt_arr[i].parse_scenario_nm, "i2c");
 		DT_READ_U32(np, buf, pdata->dvfs_data[index][fimc_is_dvfs_dt_arr[i].scenario_id][FIMC_IS_DVFS_I2C]);
+
+		sprintf(buf, "%s%s", fimc_is_dvfs_dt_arr[i].parse_scenario_nm, "hpg");
+		DT_READ_U32(np, buf, pdata->dvfs_data[index][fimc_is_dvfs_dt_arr[i].scenario_id][FIMC_IS_DVFS_HPG]);
 	}
 
 #ifdef DBG_DUMP_DVFS_DT
@@ -164,6 +167,7 @@ static int parse_dvfs_data(struct exynos_platform_fimc_is *pdata, struct device_
 		probe_info("[%d][%d][CAM] = %d", index, i, pdata->dvfs_data[index][i][FIMC_IS_DVFS_CAM]);
 		probe_info("[%d][%d][MIF] = %d", index, i, pdata->dvfs_data[index][i][FIMC_IS_DVFS_MIF]);
 		probe_info("[%d][%d][I2C] = %d", index, i, pdata->dvfs_data[index][i][FIMC_IS_DVFS_I2C]);
+		probe_info("[%d][%d][HPG] = %d", index, i, pdata->dvfs_data[index][i][FIMC_IS_DVFS_HPG]);
 	}
 #endif
 	return 0;

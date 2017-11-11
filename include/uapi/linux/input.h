@@ -804,14 +804,15 @@ struct input_keymap_entry {
 #define BTN_TRIGGER_HAPPY39		0x2e6
 #define BTN_TRIGGER_HAPPY40		0x2e7
 
-/* 0x2f1~2f8 is key event for specail event. */
+/* 0x2f1~2f8 is key event for special event. */
 #define KEY_CP_GRIP	0x2f1	/* grip sensor for CP */
 #define KEY_TSP_NONE_KEY2	0x2f2	/* grip sensor for WIFI */
 #ifdef CONFIG_USB_HMT_SAMSUNG_INPUT
+#define KEY_TA_STATUS_CMD		0x2f3
 #define KEY_START_NOTA_CMD		0x2fc
 #define KEY_START_TA_CMD		0x2fd
 #define KEY_ONGOING_TA_CMD		0x2fe
-#define KEY_HMT_CMD_START		KEY_START_NOTA_CMD
+#define KEY_HMT_CMD_START		KEY_TA_STATUS_CMD
 #endif
 
 /* We avoid low common keys in module aliases so they don't get huge. */

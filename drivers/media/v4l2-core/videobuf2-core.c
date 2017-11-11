@@ -1381,6 +1381,14 @@ static int __qbuf_userptr(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 	__fill_vb2_buffer(vb, b, planes);
 
 	for (plane = 0; plane < vb->num_planes; ++plane) {
+		/* Skip the plane if already verified */
+		if (vb->v4l2_planes[plane].m.userptr &&
+		    vb->v4l2_planes[plane].m.userptr == planes[plane].m.userptr
+		    && vb->v4l2_planes[plane].length == planes[plane].length
+		    && call_memop(vb, verify_userptr, planes[plane].m.userptr,
+					    vb->planes[plane].mem_priv) == 0)
+			continue;
+
 		dprintk(3, "userspace address for plane %d changed, "
 				"reacquiring memory\n", plane);
 

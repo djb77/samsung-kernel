@@ -911,10 +911,10 @@ static int kbase_do_syncset(struct kbase_context *kctx,
 
 	/* find the region where the virtual address is contained */
 	reg = kbase_region_tracker_find_region_enclosing_address(kctx,
-			sset->mem_handle);
+			sset->mem_handle.basep.handle);
 	if (!reg) {
 		dev_warn(kctx->kbdev->dev, "Can't find region at VA 0x%016llX",
-				sset->mem_handle);
+				sset->mem_handle.basep.handle);
 		err = -EINVAL;
 		goto out_unlock;
 	}
@@ -928,7 +928,7 @@ static int kbase_do_syncset(struct kbase_context *kctx,
 	map = kbasep_find_enclosing_cpu_mapping_of_region(reg, start, size);
 	if (!map) {
 		dev_warn(kctx->kbdev->dev, "Can't find CPU mapping 0x%016lX for VA 0x%016llX",
-				start, sset->mem_handle);
+				start, sset->mem_handle.basep.handle);
 		err = -EINVAL;
 		goto out_unlock;
 	}

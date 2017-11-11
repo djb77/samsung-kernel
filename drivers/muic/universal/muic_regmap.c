@@ -280,7 +280,12 @@ static int muic_update_regmapdata(struct regmap_desc *pdesc, int size)
 
 	return 0;
 }
-
+#if defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+static int muic_show_regmapdata(struct regmap_desc *pdesc, regmap_t *p)
+{
+	return 0;
+}
+#else
 static int muic_show_regmapdata(struct regmap_desc *pdesc, regmap_t *p)
 {
 	char buf[128];
@@ -306,6 +311,7 @@ static int muic_show_regmapdata(struct regmap_desc *pdesc, regmap_t *p)
 
 	return 0;
 }
+#endif
 
 static int muic_update_regmap(struct regmap_desc *pdesc)
 {

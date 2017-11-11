@@ -24,11 +24,11 @@
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
- * 
+ *
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: eapol.h 518342 2014-12-01 23:21:41Z $
+ * $Id: eapol.h 596466 2015-11-02 00:41:50Z $
  */
 
 #ifndef _eapol_h_

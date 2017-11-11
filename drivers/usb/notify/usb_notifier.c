@@ -292,6 +292,14 @@ static int usb_handle_notification(struct notifier_block *nb,
 		else
 			pr_err("%s - ACTION Error!\n", __func__);
 		break;
+	case ATTACHED_DEV_GAMEPAD_MUIC:
+		if (action == MUIC_NOTIFY_CMD_DETACH) {
+			send_otg_notify(o_notify, NOTIFY_EVENT_GAMEPAD, 0);
+		} else if (action == MUIC_NOTIFY_CMD_ATTACH) {
+			send_otg_notify(o_notify, NOTIFY_EVENT_GAMEPAD, 1);
+		} else
+			pr_err("%s - ACTION Error!\n", __func__);
+		break;
 	default:
 		break;
 	}

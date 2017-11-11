@@ -20,6 +20,7 @@ obj-$(CONFIG_MUIC_TSU6721)		+= tsu6721-muic.o
 
 # MUIC_UNIVERSAL
 obj-$(CONFIG_MUIC_SUPPORT_CCIC)	+= universal/muic_ccic.o
+obj-$(CONFIG_MUIC_UNIVERSAL)	+= universal/muic_usb.o
 obj-$(CONFIG_MUIC_UNIVERSAL)	+= universal/muic_coagent.o
 obj-$(CONFIG_MUIC_UNIVERSAL)	+= universal/muic_task.o
 obj-$(CONFIG_MUIC_UNIVERSAL)	+= universal/muic_state.o

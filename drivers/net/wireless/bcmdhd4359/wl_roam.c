@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_roam.c 599089 2015-11-12 10:41:33Z $
+ * $Id: wl_roam.c 613173 2016-01-18 03:01:57Z $
  */
 
 
@@ -376,8 +376,6 @@ void update_roam_cache(struct bcm_cfg80211 *cfg, int ioctl_ver)
 	error = wldev_iovar_getbuf(dev, "roamscan_channels", 0, 0,
 		(void *)&channel_list, sizeof(channel_list), NULL);
 
-	WL_DBG(("%d AP, %d cache item(s), err=%d\n", n_roam_cache, channel_list.n, error));
-
 	error = wldev_get_ssid(dev, &ssid);
 	if (error) {
 		WL_ERR(("Failed to get SSID, err=%d\n", error));
@@ -408,6 +406,8 @@ void update_roam_cache(struct bcm_cfg80211 *cfg, int ioctl_ver)
 			WL_ERR(("Failed to update roamscan channels, error = %d\n", error));
 		}
 	}
+
+	WL_DBG(("%d AP, %d cache item(s), err=%d\n", n_roam_cache, channel_list.n, error));
 }
 
 void wl_update_roamscan_cache_by_band(struct net_device *dev, int band)

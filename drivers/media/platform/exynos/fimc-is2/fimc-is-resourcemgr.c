@@ -53,6 +53,7 @@ struct pm_qos_request exynos_isp_qos_int;
 struct pm_qos_request exynos_isp_qos_mem;
 struct pm_qos_request exynos_isp_qos_cam;
 struct pm_qos_request exynos_isp_qos_disp;
+struct pm_qos_request exynos_isp_qos_hpg;
 struct pm_qos_request exynos_isp_qos_cluster0_min;
 struct pm_qos_request exynos_isp_qos_cluster0_max;
 struct pm_qos_request exynos_isp_qos_cluster1_min;

@@ -210,12 +210,6 @@ struct panel_private {
 	unsigned int interpolation;
 	unsigned int weakness_hbm_comp;
 
-/*variable for A2 Line */
-	struct delayed_work octa_a2_read_data_work;
-	struct workqueue_struct	*octa_a2_read_data_work_q;
-	unsigned int octa_a2_read_cnt;
-	char* strDatFile;
-
 	int esd_disable;
 };
 
