@@ -65,6 +65,14 @@ enum sec_battery_usb_conf {
 	USB_CURRENT_SUPER_SPEED = 900,
 };
 
+enum sec_battery_rp_curr {
+	RP_CURRENT_RP1 = 500,
+	RP_CURRENT_RP2 = 1500,
+	RP_CURRENT_RP3 = 3000,
+	RP_CURRENT_DEFAULT_IN = 1800,
+	RP_CURRENT_DEFAULT_OUT = 2100,
+};
+
 enum power_supply_ext_health {
 	POWER_SUPPLY_HEALTH_VSYS_OVP = POWER_SUPPLY_HEALTH_MAX,
 	POWER_SUPPLY_HEALTH_VBAT_OVP,	

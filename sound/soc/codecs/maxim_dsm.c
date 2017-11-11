@@ -952,8 +952,16 @@ void maxdsm_log_update(const void *byte_log_array,
 		const void *int_log_max_array)
 {
 	struct timeval tv;
+	uint32_t log_max_prev_array[LOGMAX_BUFSIZE];
+	uint32_t int_log_overcnt_array[2];
+	int i;
 
 	mutex_lock(&maxdsm_log_lock);
+
+	for (i = 0; i < 2; i++) {
+		log_max_prev_array[i] = maxdsm_int_log_max_array[i];
+		int_log_overcnt_array[i] = maxdsm_int_log_array[i];
+	}
 
 	memcpy(maxdsm_byte_log_array,
 			byte_log_array, sizeof(maxdsm_byte_log_array));
@@ -968,6 +976,14 @@ void maxdsm_log_update(const void *byte_log_array,
 	memcpy(maxdsm_int_log_max_array,
 			int_log_max_array, sizeof(maxdsm_int_log_max_array));
 
+	for (i = 0; i < 2; i++) {
+		if (log_max_prev_array[i] > maxdsm_int_log_max_array[i]) { /* [0] : excu max, [1] : temp max */
+			maxdsm_int_log_max_array[i] = log_max_prev_array[i];
+		}
+		maxdsm_int_log_array[i] += int_log_overcnt_array[i]; /* accumulate overcnt [0] : temp overcnt, [1] : excu overcnt */
+	}
+
+
 	do_gettimeofday(&tv);
 	time_to_tm(tv.tv_sec, 0, &maxdsm_log_timestamp);
 
@@ -975,6 +991,10 @@ void maxdsm_log_update(const void *byte_log_array,
 		maxdsm_log_present = 1;
 
 	maxdsm_log_max_present = 1;
+
+	dbg_maxdsm("[MAX|OVCNT] EX [%d|%d] TEMP [%d|%d]",
+			maxdsm_int_log_max_array[0], maxdsm_int_log_array[1],
+			maxdsm_int_log_max_array[1], maxdsm_int_log_array[0]);
 
 	mutex_unlock(&maxdsm_log_lock);
 }
@@ -1121,6 +1141,28 @@ void maxdsm_log_max_prepare(struct maxim_dsm_log_max_values *values)
 }
 
 EXPORT_SYMBOL_GPL(maxdsm_log_max_prepare);
+void maxdsm_log_max_refresh(int values)
+{
+	switch (values) {
+	case SPK_EXCURSION_MAX:
+		maxdsm_int_log_max_array[0] = 0;
+		break;
+	case SPK_TEMP_MAX:
+		maxdsm_int_log_max_array[1] = 0;
+		break;
+	case SPK_EXCURSION_OVERCNT:
+		maxdsm_int_log_array[1] = 0;
+		break;
+	case SPK_TEMP_OVERCNT:
+		maxdsm_int_log_array[0] = 0;
+		break;
+	default:
+		dbg_maxdsm("Not proper argument for refresh logging max value[%d].",values);
+		break;
+	}
+}
+
+EXPORT_SYMBOL_GPL(maxdsm_log_max_refresh);
 
 ssize_t maxdsm_log_prepare(char *buf)
 {

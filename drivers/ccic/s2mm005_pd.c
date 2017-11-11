@@ -106,7 +106,7 @@ void vbus_turn_on_ctrl(bool enable)
 }
 
 static int s2mm005_src_capacity_information(const struct i2c_client *i2c, uint32_t *RX_SRC_CAPA_MSG,
-		PDIC_SINK_STATUS * pd_sink_status)
+		PDIC_SINK_STATUS * pd_sink_status, uint8_t *do_power_nego)
 {
 	uint32_t RdCnt;
 	uint32_t PDO_cnt;
@@ -148,6 +148,10 @@ static int s2mm005_src_capacity_information(const struct i2c_client *i2c, uint32
 			MSG_FIXED_SUPPLY = (SRC_FIXED_SUPPLY_Typedef *)&RX_SRC_CAPA_MSG[PDO_cnt + 1];
 			if(MSG_FIXED_SUPPLY->Voltage_Unit <= (AVAILABLE_VOLTAGE/UNIT_FOR_VOLTAGE))
 				available_pdo_num = PDO_cnt + 1;
+			if (!(*do_power_nego) &&
+				(pd_sink_status->power_list[PDO_cnt+1].max_voltage != MSG_FIXED_SUPPLY->Voltage_Unit * UNIT_FOR_VOLTAGE ||
+				pd_sink_status->power_list[PDO_cnt+1].max_current != MSG_FIXED_SUPPLY->Maximum_Current * UNIT_FOR_CURRENT))
+				*do_power_nego = 1;
 			pd_sink_status->power_list[PDO_cnt+1].max_voltage = MSG_FIXED_SUPPLY->Voltage_Unit * UNIT_FOR_VOLTAGE;
 			pd_sink_status->power_list[PDO_cnt+1].max_current = MSG_FIXED_SUPPLY->Maximum_Current * UNIT_FOR_CURRENT;
 
@@ -198,7 +202,7 @@ void process_pd(void *data, u8 plug_attach_done, u8 *pdic_attach, MSG_IRQ_STATUS
 	REQUEST_FIXED_SUPPLY_STRUCT_Typedef *request_power_number;
 
 	printk("%s\n",__func__);
-	rp_currentlvl = (usbpd_data->func_state >> 3) & 0x3;
+	rp_currentlvl = ((usbpd_data->func_state >> 27) & 0x3);
 	is_src = (usbpd_data->func_state >> 1) & 0x1;
 	dev_info(&i2c->dev, "rp_currentlvl:0x%02X, is_source:0x%02X\n", rp_currentlvl, is_src);
 
@@ -216,21 +220,16 @@ void process_pd(void *data, u8 plug_attach_done, u8 *pdic_attach, MSG_IRQ_STATUS
 #endif
 	}
 
-	if (MSG_IRQ_State->BITS.Ctrl_Flag_Get_Sink_Cap)
-	{
-		pd_noti.event = PDIC_NOTIFY_EVENT_PD_SINK_CAP;
-		pd_noti.sink_status.selected_pdo_num = 0;
-		pr_info(" %s : SRC requested SINK Cap\n", __func__);
-	}
-
 	if (MSG_IRQ_State->BITS.Data_Flag_SRC_Capability)
 	{
 		uint8_t ReadMSG[32];
 		int available_pdo_num;
+		uint8_t do_power_nego = 0;
+		pd_noti.event = PDIC_NOTIFY_EVENT_PD_SINK;
 
 		REG_ADD = REG_RX_SRC_CAPA_MSG;
 		s2mm005_read_byte(i2c, REG_ADD, ReadMSG, 32);
-		available_pdo_num = s2mm005_src_capacity_information(i2c, (uint32_t *)ReadMSG, &pd_noti.sink_status);
+		available_pdo_num = s2mm005_src_capacity_information(i2c, (uint32_t *)ReadMSG, &pd_noti.sink_status, &do_power_nego);
 
 		REG_ADD = REG_TX_REQUEST_MSG;
 		s2mm005_read_byte(i2c, REG_ADD, ReadMSG, 32);
@@ -250,26 +249,55 @@ void process_pd(void *data, u8 plug_attach_done, u8 *pdic_attach, MSG_IRQ_STATUS
 					pd_noti.sink_status.selected_pdo_num = pd_noti.sink_status.current_pdo_num;
 				}
 			} else {
-				pr_info(" %s : PDO(%d) is selected, but same with previous list, so skip\n",
+				if (do_power_nego) {
+					pr_info(" %s : PDO(%d) is selected, but power negotiation is requested\n",
 						__func__, pd_noti.sink_status.selected_pdo_num);
+					pd_noti.sink_status.selected_pdo_num = 0;
+					pd_noti.event = PDIC_NOTIFY_EVENT_PD_SINK_CAP;
+				} else {
+					pr_info(" %s : PDO(%d) is selected, but same with previous list, so skip\n",
+						__func__, pd_noti.sink_status.selected_pdo_num);
+				}
 			}
 			*pdic_attach = 1;
-			if (pd_noti.event != PDIC_NOTIFY_EVENT_PD_SINK_CAP)
-				pd_noti.event = PDIC_NOTIFY_EVENT_PD_SINK;
 		} else {
 			pr_info(" %s : PDO is not selected\n", __func__);
 		}
+	}
+
+	if (MSG_IRQ_State->BITS.Ctrl_Flag_Get_Sink_Cap)
+	{
+		pr_info(" %s : SRC requested SINK Cap\n", __func__);
 	}
 
 	/* notify to battery */
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 	if (plug_attach_done) {
 		if (*pdic_attach) {
-			ccic_event_work(usbpd_data, CCIC_NOTIFY_DEV_BATTERY, CCIC_NOTIFY_ID_POWER_STATUS, *pdic_attach, 0, 0);
-		}
-		else if (pd_noti.event != PDIC_NOTIFY_EVENT_PD_SINK_CAP)
-			pd_noti.event = PDIC_NOTIFY_EVENT_CCIC_ATTACH;
+			/* PD charger is detected by PDIC */
+		} else if (!is_src && (usbpd_data->pd_state == State_PE_SNK_Wait_for_Capabilities ||
+			usbpd_data->pd_state == State_ErrorRecovery) &&
+			rp_currentlvl != pd_noti.sink_status.rp_currentlvl &&
+			rp_currentlvl >= RP_CURRENT_LEVEL_DEFAULT) {
+			if (rp_currentlvl == RP_CURRENT_LEVEL3) {
+				/* 5V/3A RP charger is detected by CCIC */
+				pd_noti.sink_status.rp_currentlvl = RP_CURRENT_LEVEL3;
+				pd_noti.event = PDIC_NOTIFY_EVENT_CCIC_ATTACH;
+			} else if (rp_currentlvl == RP_CURRENT_LEVEL2) {
+				/* 5V/1.5A RP charger is detected by CCIC */
+				pd_noti.sink_status.rp_currentlvl = RP_CURRENT_LEVEL2;
+				pd_noti.event = PDIC_NOTIFY_EVENT_CCIC_ATTACH;
+			} else if (rp_currentlvl == RP_CURRENT_LEVEL_DEFAULT) {
+				/* 5V/0.5A RP charger is detected by CCIC */
+				pd_noti.sink_status.rp_currentlvl = RP_CURRENT_LEVEL_DEFAULT;
+				pd_noti.event = PDIC_NOTIFY_EVENT_CCIC_ATTACH;
+			} else
+				return;
+		} else
+			return;
+		ccic_event_work(usbpd_data, CCIC_NOTIFY_DEV_BATTERY, CCIC_NOTIFY_ID_POWER_STATUS, *pdic_attach, 0, 0);
 	} else {
+		pd_noti.sink_status.rp_currentlvl = RP_CURRENT_LEVEL_NONE;
 		pd_noti.sink_status.selected_pdo_num = 0;
 		pd_noti.event = PDIC_NOTIFY_EVENT_DETACH;
 	}

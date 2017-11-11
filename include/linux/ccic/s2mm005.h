@@ -186,13 +186,17 @@ typedef union
 	}BYTES;
     struct {
         uint32_t    PD_State:8,
-                    RSP_BYTE1:8,
+                    CC1_PLUG_STATE:3,
+                    RSP_BYTE1:1,
+                    CC2_PLUG_STATE:3,
+                    RSP_BYTE2:1,
                     PD_Next_State:8,
                     ATTACH_DONE:1,
                     IS_SOURCE:1,
                     IS_DFP:1,
                     RP_CurrentLvl:2,
-                    RSP_BYTE2:2,
+                    VBUS_CC_Short:1,
+                    RSP_BYTE3:1,
                     RESET:1;
 	}BITS;
 } FUNC_STATE_Type;
@@ -786,6 +790,15 @@ typedef enum
 	HOST_ON_BY_RD = 1, // Rd detection
 	HOST_ON_BY_RID000K = 2, // RID000K detection
 } CCIC_HOST_REASON;
+
+typedef enum
+{
+	Rp_None = 0,
+	Rp_56K = 1,	/* 80uA */
+	Rp_22K = 2,	/* 180uA */
+	Rp_10K = 3,	/* 330uA */
+	Rp_Abnormal = 4,
+} CCIC_RP_CurrentLvl;
 
 #define S2MM005_REG_MASK(reg, mask)	((reg & mask##_MASK) >> mask##_SHIFT)
 

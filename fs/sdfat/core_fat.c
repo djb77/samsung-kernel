@@ -608,15 +608,17 @@ static inline s32 __get_dentries_per_clu(FS_INFO_T *fsi, s32 clu)
 	return fsi->dentries_per_clu;
 }
 
-static s32 fat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, HINT_T *hint_stat, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *p_dosname, u32 type)
+static s32 fat_find_dir_entry(struct super_block *sb, FILE_ID_T *fid, CHAIN_T *p_dir, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *p_dosname, u32 type)
 {
 	s32 i, rewind = 0, dentry = 0, end_eidx = 0;
 	s32 chksum = 0, lfn_ord = 0, lfn_len = 0;
-	s32 dentries_per_clu;
+	s32 dentries_per_clu, num_empty = 0;
 	u32 entry_type;
 	u16 entry_uniname[14], *uniname = NULL;
 	CHAIN_T clu;
 	DENTRY_T *ep;
+	HINT_T *hint_stat = &fid->hint_stat;
+	HINT_FEMP_T candi_empty;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
 	/*
@@ -633,6 +635,8 @@ static s32 fat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, HINT_T *hi
 		dentry = hint_stat->eidx;
 		end_eidx = dentry;
 	}
+
+	candi_empty.eidx = -1;
 
 	MMSG("lookup dir= %s\n", p_dosname->name);
 rewind:
@@ -658,6 +662,9 @@ rewind:
 				u32 cur_chksum = (s32)ext_ep->checksum;
 				s32 len = 13;
 				u16 unichar;
+
+				num_empty = 0;
+				candi_empty.eidx = -1;
 
 				/* check whether new lfn or not */
 				if (cur_ord & MSDOS_LAST_LFN) {
@@ -735,6 +742,10 @@ rewind:
 				u32 cur_chksum = (s32)calc_chksum_1byte(
 							(void *) dos_ep->name,
 							DOS_NAME_LENGTH, 0);
+
+				num_empty = 0;
+				candi_empty.eidx = -1;
+
 				MMSG("checking dir= %c%c%c%c%c%c%c%c%c%c%c\n",
 					dos_ep->name[0], dos_ep->name[1],
 					dos_ep->name[2], dos_ep->name[3],
@@ -763,13 +774,35 @@ rewind:
 				}
 
 				/* DO HANDLE MISMATCHED SFN, FALL THROUGH */
-			} else if (entry_type == TYPE_UNUSED) {
-				goto not_found;
-			}
+			} else if ((entry_type == TYPE_UNUSED) || (entry_type == TYPE_DELETED)) {
+				num_empty++;
+				if (candi_empty.eidx == -1) {
+					if (num_empty == 1) {
+						candi_empty.cur.dir = clu.dir;
+						candi_empty.cur.size = clu.size;
+						candi_empty.cur.flags = clu.flags;
+					}
 
+					if (num_empty >= num_entries) {
+						candi_empty.eidx = dentry - (num_empty - 1);
+						ASSERT(0 <= candi_empty.eidx);
+						candi_empty.count = num_empty;
+
+						if ((fid->hint_femp.eidx == -1) ||
+								(candi_empty.eidx <= fid->hint_femp.eidx)) {
+							memcpy(&fid->hint_femp,
+									&candi_empty,
+									sizeof(HINT_FEMP_T));
+						}
+					}
+				}
+
+				if (entry_type == TYPE_UNUSED)
+					goto not_found;
+				/* FALL THROUGH */
+			}
 reset_dentry_set:
-			/* TYPE_DELETED OR TYPE_VOLUME */
-			/* OR MISMATCHED SFN */
+			/* TYPE_DELETED, TYPE_VOLUME OR MISMATCHED SFN */
 			lfn_ord = 0;
 			lfn_len = 0;
 			chksum = 0;
@@ -790,6 +823,13 @@ not_found:
 		rewind = 1;
 		dentry = 0;
 		clu.dir = p_dir->dir;
+		/* reset dentry set */
+		lfn_ord = 0;
+		lfn_len = 0;
+		chksum = 0;
+		/* reset empty hint_*/
+		num_empty = 0;
+		candi_empty.eidx = -1;
 		goto rewind;
 	}
 
@@ -946,21 +986,15 @@ invalid_lfn:
 /* Find if the shortname exists
    and check if there are free entries
 */
-static s32 __fat_find_shortname_entry(struct super_block *sb, CHAIN_T *p_dir, u8 *p_dosname, s32 *offset, int n_entry_needed)
+static s32 __fat_find_shortname_entry(struct super_block *sb, CHAIN_T *p_dir, u8 *p_dosname, s32 *offset, __attribute__((unused))int n_entry_needed)
 {
 	u32 type;
 	s32 i, dentry = 0;
-	s32 hint_n_empty = 0, hint_clu = 0;
 	s32 dentries_per_clu;
 	DENTRY_T *ep = NULL;
 	DOS_DENTRY_T *dos_ep = NULL;
 	CHAIN_T clu = *p_dir;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
-	if ((fsi->hint_uentry.dir == p_dir->dir)
-			&& (fsi->hint_uentry.n_entry >= n_entry_needed)) {
-		n_entry_needed = 0;		// No need for search
-	}
 
 	if (offset)
 		*offset = -1;
@@ -977,48 +1011,6 @@ static s32 __fat_find_shortname_entry(struct super_block *sb, CHAIN_T *p_dir, u8
 				return -EIO;
 
 			type = fat_get_entry_type(ep);
-			if (n_entry_needed > 0) {
-				/* Update unused hint */
-
-				if (type == TYPE_DELETED) {
-					if (hint_n_empty == 0)
-						hint_clu = clu.dir;
-
-					hint_n_empty++;
-				} else if (type == TYPE_UNUSED) {
-					/* Hint entry = end of dir */
-					if (hint_n_empty == 0)
-						hint_clu = clu.dir;
-
-					if (fsi->hint_uentry.entry == -1) {
-						fsi->hint_uentry.dir = p_dir->dir;
-						fsi->hint_uentry.entry = dentry - hint_n_empty;
-						fsi->hint_uentry.n_entry = INT_MAX;
-
-						fsi->hint_uentry.clu.dir = hint_clu;
-						fsi->hint_uentry.clu.size = clu.size;
-						fsi->hint_uentry.clu.flags = clu.flags;
-
-						MMSG("find_shortname: uentry_hint added (clu:0x%08x ent:%d) UNUSED\n", fsi->hint_uentry.clu.dir, fsi->hint_uentry.entry);
-					}
-				} else {
-					if ((fsi->hint_uentry.entry == -1) \
-							&& (hint_n_empty >= n_entry_needed)) {
-						/* Hint entry = an empty entry */
-						fsi->hint_uentry.dir = p_dir->dir;
-						fsi->hint_uentry.entry = dentry - hint_n_empty;
-						fsi->hint_uentry.n_entry = hint_n_empty;
-
-						fsi->hint_uentry.clu.dir = hint_clu;
-						fsi->hint_uentry.clu.size = clu.size;
-						fsi->hint_uentry.clu.flags = clu.flags;
-
-						MMSG("find_shortname: uentry_hint added (clu:0x%08x ent:%d)\n", fsi->hint_uentry.clu.dir, fsi->hint_uentry.entry);
-					}
-
-					hint_n_empty = 0;
-				}
-			}
 
 			if ((type == TYPE_FILE) || (type == TYPE_DIR))  {
 				dos_ep = (DOS_DENTRY_T *)ep;

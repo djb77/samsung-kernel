@@ -133,6 +133,7 @@
 #define VTS_IRQ_AP_SET_REC_BUFFER	(25)
 #define VTS_IRQ_AP_START_REC		(26)
 #define VTS_IRQ_AP_STOP_REC		(27)
+#define VTS_IRQ_AP_RESTART_RECOGNITION	(29)
 #define VTS_IRQ_AP_TEST_COMMAND		(31)
 
 #define VTS_IRQ_LIMIT			(32)
@@ -202,6 +203,17 @@ enum vts_micconf_type {
 	VTS_MICCONF_FOR_TRIGGER	= 1,
 };
 
+enum vts_state_machine {
+	VTS_STATE_NONE			= 0,	//runtime_suspended state
+	VTS_STATE_VOICECALL		= 1,	//sram L2Cache voicecall state
+	VTS_STATE_IDLE			= 2,	//runtime_resume state
+	VTS_STATE_RECOG_STARTED		= 3,	//Voice Recognization started
+	VTS_STATE_RECOG_TRIGGERED	= 4,	//Voice Recognize triggered
+	VTS_STATE_SEAMLESS_REC_STARTED	= 5,	//seamless record started
+	VTS_STATE_SEAMLESS_REC_STOPPED	= 6,	//seamless record started
+	VTS_STATE_RECOG_STOPPED		= 7,	//Voice Recognization stopped
+};
+
 struct vts_data {
 	struct platform_device *pdev;
 	void __iomem *sfr_base;
@@ -250,6 +262,8 @@ struct vts_data {
 	u32 amicgain;
 	char *sramlog_baseaddr;
 	u32 running_ipc;
+	struct wake_lock wake_lock;
+	unsigned int vts_state;
 };
 
 struct vts_platform_data {

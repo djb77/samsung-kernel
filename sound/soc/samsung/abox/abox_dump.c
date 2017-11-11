@@ -41,6 +41,7 @@ struct abox_dump_buffer_info {
 };
 
 static struct device *abox_dump_dev_abox __read_mostly;
+static struct abox_dump_buffer_info abox_dump_list[BUFFER_MAX];
 static LIST_HEAD(abox_dump_list_head);
 
 static struct abox_dump_buffer_info *abox_dump_get_buffer_info(int id)
@@ -243,44 +244,25 @@ static void abox_dump_auto_dump_work_func(struct work_struct *work)
 	}
 }
 
-static struct abox_dump_buffer_info abox_dump_buffer_info_new;
-
 void abox_dump_register_buffer_work_func(struct work_struct *work)
 {
 	struct device *dev;
 	int id;
-	struct snd_dma_buffer buffer;
 	struct abox_dump_buffer_info *info;
-	char name[NAME_LENGTH];
 
-	dev = abox_dump_buffer_info_new.dev;
-	id = abox_dump_buffer_info_new.id;
-	strncpy(name, abox_dump_buffer_info_new.name, sizeof(abox_dump_buffer_info_new.name) - 1);
-	buffer = abox_dump_buffer_info_new.buffer;
-	abox_dump_buffer_info_new.dev = NULL;
-	abox_dump_buffer_info_new.id = 0;
-	abox_dump_buffer_info_new.name[0] = '\0';
+	dev_dbg(dev, "%s\n", __func__);
 
-	dev_info(dev, "%s[%d]\n", __func__, id);
+	for (info = &abox_dump_list[0]; (info - &abox_dump_list[0]) <
+			ARRAY_SIZE(abox_dump_list); info++) {
+		id = info->id;
+		if (info->dev && !abox_dump_get_buffer_info(id)) {
+			dev_info(dev, "%s[%d]\n", __func__, id);
 
-	if (dev == NULL || id < 0) {
-		dev_err(dev, "dev(%p) or id(%d) is wrong\n", dev, id);
-		return;
+			list_add_tail(&info->list, &abox_dump_list_head);
+			platform_device_register_simple("samsung-abox-dump",
+					id, NULL, 0);
+		}
 	}
-
-	info = vmalloc(sizeof(*info));
-	mutex_init(&info->lock);
-	info->id = id;
-	strncpy(info->name, name, sizeof(info->name) - 1);
-	info->dev = dev;
-	info->buffer = buffer;
-	info->substream = NULL;
-	info->started = false;
-	info->auto_started = false;
-	INIT_WORK(&info->auto_work, abox_dump_auto_dump_work_func);
-
-	list_add_tail(&info->list, &abox_dump_list_head);
-	platform_device_register_simple("samsung-abox-dump", id, NULL, 0);
 }
 
 static DECLARE_WORK(abox_dump_register_buffer_work, abox_dump_register_buffer_work_func);
@@ -291,24 +273,25 @@ int abox_dump_register_buffer(struct device *dev, int id, const char *name, void
 
 	dev_dbg(dev, "%s[%d] %p(%pa)\n", __func__, id, area, &addr);
 
-	if (abox_dump_buffer_info_new.dev != NULL ||
-			abox_dump_buffer_info_new.id > 0) {
-		return -EBUSY;
+	if (id < 0 || id >= ARRAY_SIZE(abox_dump_list)) {
+		dev_err(dev, "invalid id: %d\n", id);
+		return -EINVAL;
 	}
 
-	list_for_each_entry(info, &abox_dump_list_head, list) {
-		if (info->id == id) {
-			dev_dbg(dev, "already registered dump: %d\n", id);
-			return 0;
-		}
+	if (abox_dump_get_buffer_info(id)) {
+		dev_dbg(dev, "already registered dump: %d\n", id);
+		return 0;
 	}
 
-	abox_dump_dev_abox = abox_dump_buffer_info_new.dev = dev;
-	abox_dump_buffer_info_new.id = id;
-	strncpy(abox_dump_buffer_info_new.name, name, sizeof(abox_dump_buffer_info_new.name) - 1);
-	abox_dump_buffer_info_new.buffer.area = area;
-	abox_dump_buffer_info_new.buffer.addr = addr;
-	abox_dump_buffer_info_new.buffer.bytes = bytes;
+	info = &abox_dump_list[id];
+	mutex_init(&info->lock);
+	info->id = id;
+	strncpy(info->name, name, sizeof(info->name) - 1);
+	info->buffer.area = area;
+	info->buffer.addr = addr;
+	info->buffer.bytes = bytes;
+	INIT_WORK(&info->auto_work, abox_dump_auto_dump_work_func);
+	abox_dump_dev_abox = info->dev = dev;
 	schedule_work(&abox_dump_register_buffer_work);
 
 	return 0;
@@ -545,8 +528,7 @@ static int abox_dump_platform_new(struct snd_soc_pcm_runtime *runtime)
 
 static void abox_dump_platform_free(struct snd_pcm *pcm)
 {
-	struct snd_soc_pcm_runtime *runtime =
-			pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream->private_data;
+	struct snd_soc_pcm_runtime *runtime = pcm->private_data;
 	struct device *dev = runtime->platform->dev;
 	int id = to_platform_device(dev)->id;
 

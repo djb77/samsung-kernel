@@ -60,7 +60,7 @@
 			battery,wpc_det = <&gpa2 0 0>;
 			battery,mst_en = <&gpf0 1 0>;
 			battery,mst_pwr_en = <&gpf0 0 0>;
-
+			battery,wpc_en = <&gpe6 2 0>;
 			battery,charger_name = "max77865-charger";
 			battery,fuelgauge_name = "max77865-fuelgauge";
 			battery,wireless_charger_name = "mfc-charger";

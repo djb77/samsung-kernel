@@ -21,6 +21,7 @@
 #include <linux/proc_fs.h>
 #include <linux/delay.h>
 #include <linux/regmap.h>
+#include <linux/wakelock.h>
 
 #include <asm-generic/delay.h>
 
@@ -60,6 +61,7 @@ static void update_mask_value(volatile void __iomem *sfr,
 
 #define LIMIT_IN_JIFFIES (msecs_to_jiffies(1000))
 #define DMIC_CLK_RATE (768000)
+#define VTS_TRIGGERED_TIMEOUT_MS (5000)
 
 /* For only external static functions */
 static struct vts_data *p_vts_data;
@@ -365,6 +367,7 @@ int vts_acquire_sram(struct platform_device *pdev, int vts)
 	if (!vts) {
 		pm_runtime_get_sync(&pdev->dev);
 		data->voicecall_enabled = true;
+		data->vts_state = VTS_STATE_VOICECALL;
 	}
 
 	writel((vts ? 0 : 1) << VTS_MEM_SEL_OFFSET, data->sfr_base + VTS_SHARED_MEM_CTRL);
@@ -379,13 +382,21 @@ int vts_release_sram(struct platform_device *pdev, int vts)
 
 	dev_info(&pdev->dev, "%s(%d)\n", __func__, vts);
 
-	writel(0 << VTS_MEM_SEL_OFFSET, data->sfr_base + VTS_SHARED_MEM_CTRL);
-	clear_bit(0, &data->sram_acquired);
+	if (test_bit(0, &data->sram_acquired) &&
+		(data->voicecall_enabled || vts)) {
+		writel(0 << VTS_MEM_SEL_OFFSET,
+			data->sfr_base + VTS_SHARED_MEM_CTRL);
+		clear_bit(0, &data->sram_acquired);
 
-	if (!vts) {
-		pm_runtime_put_sync(&pdev->dev);
-		data->voicecall_enabled = false;
-	}
+		if (!vts) {
+			pm_runtime_put_sync(&pdev->dev);
+			data->voicecall_enabled = false;
+		}
+		dev_info(&pdev->dev, "%s(%d) completed\n",
+				__func__, vts);
+	} else
+		dev_warn(&pdev->dev, "%s(%d) already released\n",
+				__func__, vts);
 
 	return 0;
 }
@@ -710,7 +721,8 @@ static int vts_start_recognization(struct device *dev, int start)
 
 	if ((data->exec_mode == VTS_VOICE_TRIGGER_MODE ||
 		data->exec_mode == VTS_SOUND_DETECT_MODE ||
-		data->exec_mode == VTS_VT_ALWAYS_ON_MODE) &&
+		data->exec_mode == VTS_VT_ALWAYS_ON_MODE ||
+		(data->exec_mode == VTS_OFF_MODE && !start)) &&
 		(TRIGGER_NONE < active_trigger && active_trigger < TRIGGER_COUNT)) {
 		start = !!start;
 		if (start) {
@@ -774,6 +786,7 @@ static int vts_start_recognization(struct device *dev, int start)
 				return result;
 			}
 
+			data->vts_state = VTS_STATE_RECOG_STARTED;
 			dev_info(dev, "%s start=%d, active_trigger=%d\n", __func__, start, active_trigger);
 
 		}else if (!start){
@@ -796,6 +809,7 @@ static int vts_start_recognization(struct device *dev, int start)
 							 __func__);
 				return result;
 			}
+			data->vts_state = VTS_STATE_RECOG_STOPPED;
 		}
 
 	} else {
@@ -1147,6 +1161,9 @@ static irqreturn_t vts_voice_triggered_handler(int irq, void *dev_id)
 		}
 
 		kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, envp);
+		wake_lock_timeout(&data->wake_lock,
+				VTS_TRIGGERED_TIMEOUT_MS);
+		data->vts_state = VTS_STATE_RECOG_TRIGGERED;
 	}
 
 	return IRQ_HANDLED;
@@ -1225,14 +1242,31 @@ void vts_register_dma(struct platform_device *pdev_vts,
 static int vts_suspend(struct device *dev)
 {
 	struct vts_data *data = dev_get_drvdata(dev);
+	u32 values[3] = {0,0,0};
+	int result = 0;
 
 	if (data->vts_ready) {
+		if (data->running &&
+			data->vts_state == VTS_STATE_RECOG_TRIGGERED) {
+			result = vts_start_ipc_transaction(dev, data,
+					VTS_IRQ_AP_RESTART_RECOGNITION,
+					&values, 0, 1);
+			if (IS_ERR_VALUE(result)) {
+				dev_err(dev, "%s restarted trigger failed\n",
+					__func__);
+				goto error_ipc;
+			}
+			data->vts_state = VTS_STATE_RECOG_STARTED;
+		}
+
 		/* enable vts wakeup source interrupts */
 		enable_irq_wake(data->irq[VTS_IRQ_VTS_VOICE_TRIGGERED]);
 		enable_irq_wake(data->irq[VTS_IRQ_VTS_ERROR]);
 		dev_info(dev, "%s: Enable VTS Wakeup source irqs\n", __func__);
 	}
-	return 0;
+
+error_ipc:
+	return result;
 }
 
 static int vts_resume(struct device *dev)
@@ -1424,6 +1458,7 @@ static int vts_runtime_suspend(struct device *dev)
 	data->micclk_init_cnt = 0;
 	data->mic_ready = 0;
 	data->vts_ready = 0;
+	data->vts_state = VTS_STATE_NONE;
 	dev_info(dev, "%s Exit \n", __func__);
 	return 0;
 }
@@ -1516,6 +1551,7 @@ static int vts_runtime_resume(struct device *dev)
 	dev_info(dev, "%s Exit \n", __func__);
 
 	data->running = true;
+	data->vts_state = VTS_STATE_IDLE;
 	return 0;
 
 error_firmware:
@@ -1721,6 +1757,7 @@ static int samsung_vts_probe(struct platform_device *pdev)
 	/* initialize micbias setting count */
 	data->micclk_init_cnt = 0;
 	data->mic_ready = 0;
+	data->vts_state = VTS_STATE_NONE;
 
 	platform_set_drvdata(pdev, data);
 	data->pdev = pdev;
@@ -1729,6 +1766,7 @@ static int samsung_vts_probe(struct platform_device *pdev)
 	init_waitqueue_head(&data->ipc_wait_queue);
 	spin_lock_init(&data->ipc_spinlock);
 	mutex_init(&data->ipc_mutex);
+	wake_lock_init(&data->wake_lock, WAKE_LOCK_SUSPEND, "vts");
 
 	data->pinctrl = devm_pinctrl_get(dev);
 	if (IS_ERR(data->pinctrl)) {

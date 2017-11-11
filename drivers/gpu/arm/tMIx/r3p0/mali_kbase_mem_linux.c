@@ -1709,8 +1709,20 @@ static void kbase_cpu_vm_open(struct vm_area_struct *vma)
 
 	KBASE_DEBUG_ASSERT(map);
 	KBASE_DEBUG_ASSERT(map->count > 0);
-	/* non-atomic as we're under Linux' mm lock */
-	map->count++;
+
+	/* MALI_SEC_INTEGRATION */
+	if (map->kctx)
+	{
+		kbase_gpu_vm_lock(map->kctx);
+		/* non-atomic as we're under Linux' mm lock */
+		map->count++;
+		kbase_gpu_vm_unlock(map->kctx);
+	}
+	else
+	{
+		/* non-atomic as we're under Linux' mm lock */
+		map->count++;
+	}
 }
 
 static void kbase_cpu_vm_close(struct vm_area_struct *vma)
@@ -1720,14 +1732,18 @@ static void kbase_cpu_vm_close(struct vm_area_struct *vma)
 	KBASE_DEBUG_ASSERT(map);
 	KBASE_DEBUG_ASSERT(map->count > 0);
 
-	/* non-atomic as we're under Linux' mm lock */
-	if (--map->count)
-		return;
-
 	KBASE_DEBUG_ASSERT(map->kctx);
 	KBASE_DEBUG_ASSERT(map->alloc);
 
 	kbase_gpu_vm_lock(map->kctx);
+
+	/* MALI_SEC_INTEGRATION */
+	/* non-atomic as we're under Linux' mm lock */
+	if (--map->count)
+	{
+		kbase_gpu_vm_unlock(map->kctx);
+		return;
+	}
 
 	if (map->free_on_close) {
 		KBASE_DEBUG_ASSERT((map->region->flags & KBASE_REG_ZONE_MASK) ==

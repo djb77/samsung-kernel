@@ -711,21 +711,28 @@ static s32 __extract_uni_name_from_name_entry(NAME_DENTRY_T *ep, u16 *uniname, s
 
 } /* end of __extract_uni_name_from_name_entry */
 
+#define DIRENT_STEP_FILE	(0)
+#define DIRENT_STEP_STRM	(1)
+#define DIRENT_STEP_NAME	(2)
+#define DIRENT_STEP_SECD	(3)
+
 /* return values of exfat_find_dir_entry()
  * >= 0 : return dir entiry position with the name in dir
  * -EEXIST : (root dir, ".") it is the root dir itself
  * -ENOENT : entry with the name does not exist
  * -EIO    : I/O error
  */
-static s32 exfat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, HINT_T *hint_stat, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *unused, u32 type)
+static s32 exfat_find_dir_entry(struct super_block *sb, FILE_ID_T *fid, CHAIN_T *p_dir, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *unused, u32 type)
 {
-	s32 i, rewind = 0, dentry = 0, end_eidx = 0, num_ext_entries = 0, len;
-	s32 order = 0, is_feasible_entry = false;
+	s32 i, rewind = 0, dentry = 0, end_eidx = 0, num_ext = 0, len;
+	s32 order, step, name_len;
 	s32 dentries_per_clu, num_empty = 0;
 	u32 entry_type;
 	u16 entry_uniname[16], *uniname = NULL, unichar;
 	CHAIN_T clu;
 	DENTRY_T *ep;
+	HINT_T *hint_stat = &fid->hint_stat;
+	HINT_FEMP_T candi_empty;
 	FILE_DENTRY_T *file_ep;
 	STRM_DENTRY_T *strm_ep;
 	NAME_DENTRY_T *name_ep;
@@ -751,10 +758,10 @@ static s32 exfat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, HINT_T *
 		end_eidx = dentry;
 	}
 
-	fsi->hint_uentry.dir = p_dir->dir;
-	fsi->hint_uentry.entry = -1;
-
+	candi_empty.eidx = -1;
 rewind:
+	order = 0;
+	step = DIRENT_STEP_FILE;
 	while (!IS_CLUS_EOF(clu.dir)) {
 		i = dentry & (dentries_per_clu - 1);
 		for (; i < dentries_per_clu; i++, dentry++) {
@@ -768,73 +775,104 @@ rewind:
 			entry_type = exfat_get_entry_type(ep);
 
 			if ((entry_type == TYPE_UNUSED) || (entry_type == TYPE_DELETED)) {
-				is_feasible_entry = false;
+				step = DIRENT_STEP_FILE;
 
-				if (fsi->hint_uentry.entry == -1) {
-					num_empty++;
-
+				num_empty++;
+				if (candi_empty.eidx == -1) {
 					if (num_empty == 1) {
-						fsi->hint_uentry.clu.dir = clu.dir;
-						fsi->hint_uentry.clu.size = clu.size;
-						fsi->hint_uentry.clu.flags = clu.flags;
+						candi_empty.cur.dir = clu.dir;
+						candi_empty.cur.size = clu.size;
+						candi_empty.cur.flags = clu.flags;
 					}
-					if ((num_empty >= num_entries) || (entry_type == TYPE_UNUSED)) {
-						fsi->hint_uentry.entry = dentry - (num_empty-1);
+
+					if (num_empty >= num_entries) {
+						candi_empty.eidx = dentry - (num_empty - 1);
+						ASSERT(0 <= candi_empty.eidx);
+						candi_empty.count = num_empty;
+
+						if ((fid->hint_femp.eidx == -1) ||
+							(candi_empty.eidx <= fid->hint_femp.eidx)) {
+							memcpy(&fid->hint_femp,
+								&candi_empty,
+								sizeof(HINT_FEMP_T));
+						}
 					}
 				}
 
-				if (entry_type == TYPE_UNUSED) {
+				if (entry_type == TYPE_UNUSED)
 					goto not_found;
+				continue;
+			}
+
+			num_empty = 0;
+			candi_empty.eidx = -1;
+
+			if ((entry_type == TYPE_FILE) || (entry_type == TYPE_DIR)) {
+				step = DIRENT_STEP_FILE;
+				if ((type == TYPE_ALL) || (type == entry_type)) {
+					file_ep = (FILE_DENTRY_T *) ep;
+					num_ext = file_ep->num_ext;
+					step = DIRENT_STEP_STRM;
 				}
-			} else {
-				num_empty = 0;
+				continue;
+			}
 
-				if ((entry_type == TYPE_FILE) || (entry_type == TYPE_DIR)) {
-					if ((type == TYPE_ALL) || (type == entry_type)) {
-						file_ep = (FILE_DENTRY_T *) ep;
-						num_ext_entries = file_ep->num_ext;
-						is_feasible_entry = true;
-					} else {
-						is_feasible_entry = false;
+			if (entry_type == TYPE_STREAM) {
+				if (step != DIRENT_STEP_STRM) {
+					step = DIRENT_STEP_FILE;
+					continue;
+				}
+				step = DIRENT_STEP_FILE;
+				strm_ep = (STRM_DENTRY_T *) ep;
+				if ((p_uniname->name_hash == le16_to_cpu(strm_ep->name_hash)) &&
+						(p_uniname->name_len == strm_ep->name_len)) {
+					step = DIRENT_STEP_NAME;
+					order = 1;
+					name_len = 0;
+				}
+				continue;
+			}
+
+			if (entry_type == TYPE_EXTEND) {
+				if (step != DIRENT_STEP_NAME) {
+					step = DIRENT_STEP_FILE;
+					continue;
+				}
+				name_ep = (NAME_DENTRY_T *) ep;
+
+				if ((++order) == 2)
+					uniname = p_uniname->name;
+				else
+					uniname += 15;
+
+				len = __extract_uni_name_from_name_entry(name_ep, entry_uniname, order);
+				name_len += len;
+
+				unichar = *(uniname+len);
+				*(uniname+len) = 0x0;
+
+				if (nls_cmp_uniname(sb, uniname, entry_uniname)) {
+					step = DIRENT_STEP_FILE;
+				} else if (name_len == p_uniname->name_len) {
+					if (order == num_ext) {
+						//fid->hint_femp.eidx = -1;
+						goto found;
 					}
-				} else if (entry_type == TYPE_STREAM) {
-					if (is_feasible_entry) {
-						strm_ep = (STRM_DENTRY_T *) ep;
-						if ((p_uniname->name_hash == le16_to_cpu(strm_ep->name_hash)) &&
-							(p_uniname->name_len == strm_ep->name_len)) {
-							order = 1;
-						} else {
-							is_feasible_entry = false;
-						}
-					}
-				} else if (entry_type == TYPE_EXTEND) {
-					if (is_feasible_entry) {
-						name_ep = (NAME_DENTRY_T *) ep;
+					step = DIRENT_STEP_SECD;
+				}
 
-						if ((++order) == 2)
-							uniname = p_uniname->name;
-						else
-							uniname += 15;
+				*(uniname+len) = unichar;
+				continue;
+			}
 
-						len = __extract_uni_name_from_name_entry(name_ep, entry_uniname, order);
-
-						unichar = *(uniname+len);
-						*(uniname+len) = 0x0;
-
-						if (nls_cmp_uniname(sb, uniname, entry_uniname)) {
-							is_feasible_entry = false;
-						} else if (order == num_ext_entries) {
-							fsi->hint_uentry.dir = CLUS_EOF;
-							fsi->hint_uentry.entry = -1;
-							goto found;
-						}
-
-						*(uniname+len) = unichar;
-					}
-				} else {
-					is_feasible_entry = false;
+			if (entry_type & (TYPE_CRITICAL_SEC | TYPE_BENIGN_SEC)) {
+				if (step == DIRENT_STEP_SECD) {
+					if (++order == num_ext)
+						goto found;
+					continue;
 				}
 			}
+			step = DIRENT_STEP_FILE;
 		}
 
 		if (clu.flags == 0x03) {
@@ -856,6 +894,9 @@ not_found:
 		rewind = 1;
 		dentry = 0;
 		clu.dir = p_dir->dir;
+		/* reset empty hint */
+		num_empty = 0;
+		candi_empty.eidx = -1;
 		goto rewind;
 	}
 
@@ -881,13 +922,13 @@ found:
 			/* just initialized hint_stat */
 			hint_stat->clu = p_dir->dir;
 			hint_stat->eidx = 0;
-			return (dentry - num_ext_entries);
+			return (dentry - num_ext);
 		}
 	}
 
 	hint_stat->clu = clu.dir;
 	hint_stat->eidx = dentry + 1;
-	return (dentry - num_ext_entries);
+	return (dentry - num_ext);
 } /* end of exfat_find_dir_entry */
 
 /* returns -EIO on error */

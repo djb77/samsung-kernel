@@ -156,7 +156,8 @@ int ccic_notifier_notify(CC_NOTI_TYPEDEF *p_noti, void *pd, int pdic_attach)
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->rprd);
 
 		if (pd != NULL) {
-			if (!((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->attach) {
+			if (!((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->attach &&
+				((struct pdic_notifier_struct *)pd)->event != PDIC_NOTIFY_EVENT_CCIC_ATTACH) {
 				((struct pdic_notifier_struct *)pd)->event = PDIC_NOTIFY_EVENT_DETACH;
 			}
 			ccic_notifier.ccic_template.pd = pd;

@@ -26,6 +26,11 @@
 
 extern struct device *ccic_device;
 extern struct pdic_notifier_struct pd_noti;
+
+#if defined(CONFIG_BATTERY_SAMSUNG)
+extern unsigned int lpcharge;
+#endif
+
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 static enum dual_role_property fusb_drp_properties[] = {
 	DUAL_ROLE_PROP_MODE,
@@ -660,6 +665,7 @@ static int s2mm005_usbpd_probe(struct i2c_client *i2c,
 	uint8_t cnt;
 	u8 W_DATA[8];
 	u8 R_DATA[4];
+	u8 W_CHG_INFO[3]={0,};
 	u8 temp, ftrim;
 	struct s2mm005_version chip_swver, fw_swver, hwver;
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
@@ -932,6 +938,17 @@ static int s2mm005_usbpd_probe(struct i2c_client *i2c,
 		dev_err(&i2c->dev, "Failed to request IRQ %d, error %d\n", usbpd_data->irq, ret);
 		goto err_init_irq;
 	}
+		
+#if defined(CONFIG_BATTERY_SAMSUNG)
+			W_CHG_INFO[0] = 0x0f;
+			W_CHG_INFO[1] = 0x0c;
+			if (lpcharge)
+				W_CHG_INFO[2] = 0x1; // lpcharge	
+			else
+				W_CHG_INFO[2] = 0x0; // normal
+			
+			s2mm005_write_byte(usbpd_data->i2c, 0x10, &W_CHG_INFO[0], 3); // send info to ccic	
+#endif
 
 	s2mm005_int_clear(usbpd_data);
 	return ret;

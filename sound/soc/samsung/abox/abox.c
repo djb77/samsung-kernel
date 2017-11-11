@@ -3050,7 +3050,7 @@ int abox_request_cpu_gear(struct device *dev, struct abox_data *data, void *id, 
 		return -ENOMEM;
 	}
 
-	schedule_work(&data->change_cpu_gear_work);
+	queue_work(system_freezable_wq, &data->change_cpu_gear_work);
 
 	return 0;
 }
@@ -3060,6 +3060,22 @@ int abox_request_cpu_gear_sync(struct device *dev, struct abox_data *data, void 
 	int result = abox_request_cpu_gear(dev, data, id, gear);
 	flush_work(&data->change_cpu_gear_work);
 	return result;
+}
+
+static void abox_clear_cpu_gear_requests(struct device *dev, struct abox_data *data)
+{
+	struct abox_qos_request *req;
+	size_t len = ARRAY_SIZE(data->ca7_gear_requests);
+
+	dev_info(dev, "%s\n", __func__);
+
+	for (req = data->ca7_gear_requests; req - data->ca7_gear_requests < len
+			&& req->id; req++) {
+		if (req->value < CPU_GEAR_LOWER_LIMIT) {
+			req->value = CPU_GEAR_LOWER_LIMIT;
+			abox_request_cpu_gear(dev, data, req->id, req->value);
+		}
+	}
 }
 
 static void abox_change_mif_freq_work_func(struct work_struct *work)
@@ -4616,6 +4632,7 @@ static int abox_disable(struct device *dev)
 		break;
 	}
 	abox_clear_l2c_requests(dev, data);
+	abox_clear_cpu_gear_requests(dev, data);
 	flush_work(&data->boot_done_work);
 	flush_work(&data->l2c_work);
 
