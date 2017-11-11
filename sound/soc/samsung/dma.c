@@ -176,6 +176,10 @@ static void audio_buffdone(void *data)
 		return;
 
 	prtd = substream->runtime->private_data;
+
+	if (!prtd->params || !prtd->params->ch)
+		return;
+
 	if (prtd->state & ST_RUNNING) {
 		prtd->params->ops->getposition(prtd->params->ch, &src, &dst);
 		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)

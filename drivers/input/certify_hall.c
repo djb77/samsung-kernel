@@ -261,7 +261,15 @@ static int certify_hall_probe(struct platform_device *pdev)
 
 	input->evbit[0] |= BIT_MASK(EV_SW);
 
+#ifdef CONFIG_V_HALL_FOLDING
+#ifdef CONFIG_HALL_SW_LID
+	ddata->event_val = SW_LID;
+#else
+	ddata->event_val = SW_BACKFOLDING;
+#endif
+#else
 	ddata->event_val = SW_CERTIFYHALL;
+#endif
 
 	input_set_capability(input, EV_SW, ddata->event_val);
 

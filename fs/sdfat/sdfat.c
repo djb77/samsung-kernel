@@ -1009,8 +1009,8 @@ static int __sdfat_revalidate_common(struct dentry *dentry)
 {
 	int ret = 1;
 	spin_lock(&dentry->d_lock);
-	if (!__check_dstate_locked(dentry) &&
-		(dentry->d_time != dentry->d_parent->d_inode->i_version)) {
+	if ((!dentry->d_inode) && (!__check_dstate_locked(dentry) &&
+		(dentry->d_time != dentry->d_parent->d_inode->i_version))) {
 		ret = 0;
 	}
 	spin_unlock(&dentry->d_lock);
@@ -1039,7 +1039,7 @@ static int __sdfat_revalidate_ci(struct dentry *dentry, unsigned int flags)
 	 */
 	if (dentry->d_inode)
 		return 1;
-
+#if 0	/* Blocked below code for lookup_one_len() called by stackable FS */
 	/*
 	 * This may be nfsd (or something), anyway, we can't see the
 	 * intent of this. So, since this can be for creation, drop it.
@@ -1054,7 +1054,7 @@ static int __sdfat_revalidate_ci(struct dentry *dentry, unsigned int flags)
 	 */
 	if (flags & (LOOKUP_CREATE | LOOKUP_RENAME_TARGET))
 		return 0;
-
+#endif
 	return __sdfat_revalidate_common(dentry);
 }
 
@@ -2797,6 +2797,8 @@ static void sdfat_truncate(struct inode *inode, loff_t old_size)
 	struct super_block *sb = inode->i_sb;
 	struct sdfat_sb_info *sbi = SDFAT_SB(sb);
 	FS_INFO_T *fsi = &(sbi->fsi);
+	unsigned int blocksize = 1 << inode->i_blkbits;
+	loff_t aligned_size;
 	int err;
 
 	__lock_super(sb);
@@ -2843,39 +2845,19 @@ out:
 	 * so that it's possible to utilize i_size_ondisk in fsapi_truncate
 	 */
 
+	aligned_size = i_size_read(inode);
+	if (aligned_size & (blocksize - 1)) {
+		aligned_size |= (blocksize - 1);
+		aligned_size++;
+	}
+
 	if (SDFAT_I(inode)->i_size_ondisk > i_size_read(inode)) {
-		SDFAT_I(inode)->i_size_ondisk = i_size_read(inode);
+		SDFAT_I(inode)->i_size_ondisk = aligned_size;
 	}
 	sdfat_debug_check_clusters(inode);
 
-	if (SDFAT_I(inode)->i_size_aligned > i_size_read(inode)) {
-		unsigned int blocksize = 1 << inode->i_blkbits;
-		SDFAT_I(inode)->i_size_aligned = i_size_read(inode);
-
-		if ((inode->i_mapping->a_ops != &sdfat_da_aops) && \
-			(SDFAT_I(inode)->i_size_aligned & (blocksize - 1))) {
-		   /* Delayed alloc. is OFF then align-up
-		    *
-		    * Note: This doesn't affect the operation of the FS
-		    * (because i_size_aligned is meaningless w/o DA)
-		    *
-		    * We want to keep the condition of 'i_size or 
-		    * i_size_ondisk <= i_size_aligned'
-		    *
-		    * If we truncate and write small bytes in the same block,
-		    * i_size and i_size_ondisk will be increased 
-		    * (after write_begin)
-		    * But i_size_aligned will be same (old i_size) because 
-		    * no new block added.
-		    *
-		    * Therefore, w/o this aligning-up
-		    * i_size_aligned can be smaller than 
-		    * i_size_ondisk in those cases.
-		    */
-			SDFAT_I(inode)->i_size_aligned |= (blocksize-1);
-			SDFAT_I(inode)->i_size_aligned++;
-		}
-	}
+	if (SDFAT_I(inode)->i_size_aligned > i_size_read(inode))
+		SDFAT_I(inode)->i_size_aligned = aligned_size;
 
 	/* After truncation :
 	 * 1) Delayed allocation is OFF
@@ -3531,8 +3513,8 @@ static int sdfat_write_end(struct file *file, struct address_space *mapping,
 	/* FOR GRACEFUL ERROR HANDLING */
 	if (SDFAT_I(inode)->i_size_aligned < i_size_read(inode)) {
 		sdfat_fs_error(inode->i_sb, "invalid size(size(%llu) "
-			"> aligned(%llu)\n", SDFAT_I(inode)->i_size_aligned, 
-			i_size_read(inode));
+			"> aligned(%llu)\n", i_size_read(inode),
+			SDFAT_I(inode)->i_size_aligned);
 		sdfat_debug_bug_on(1);
 	}
 
@@ -4027,14 +4009,23 @@ static int sdfat_statfs(struct dentry *dentry, struct kstatfs *buf)
 
 static int sdfat_remount(struct super_block *sb, int *flags, char *data)
 {
+	unsigned long prev_sb_flags;
 	char *orig_data = kstrdup(data, GFP_KERNEL);
+	struct sdfat_sb_info *sbi = SDFAT_SB(sb);
+	FS_INFO_T *fsi = &(sbi->fsi);
+
 	*flags |= MS_NODIRATIME;
+
+	prev_sb_flags = sb->s_flags;
 
 	sdfat_remount_syncfs(sb);
 
 	fsapi_set_vol_flags(sb, VOL_CLEAN, 1);
 
-	sdfat_log_msg(sb, KERN_INFO, "re-mounted. Opts: %s", orig_data);
+	sdfat_log_msg(sb, KERN_INFO, "re-mounted(%s->%s), eio=0x%x, Opts: %s",
+		(prev_sb_flags & MS_RDONLY) ? "ro" : "rw",
+		(*flags & MS_RDONLY) ? "ro" : "rw",
+		fsi->prev_eio, orig_data);
 	kfree(orig_data);	
 	return 0;
 }
@@ -4445,7 +4436,7 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 				if(!strcmp(tmpstr, FS_TYPE_STR[i])) {
 					opts->fs_type = (unsigned char)i;
 					sdfat_log_msg(sb, KERN_ERR,
-						"set fs-type by option : %s",
+						"set fs-type by option    : %s",
 						FS_TYPE_STR[i]);
 					break;
 				}
@@ -4826,6 +4817,7 @@ error:
 	}
 
 	sdfat_destroy_inodecache();
+	fsapi_shutdown();
 
 	printk(KERN_ERR "[SDFAT] failed to initialize FS driver "
 			"(err:%d)\n", err);

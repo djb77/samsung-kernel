@@ -276,6 +276,9 @@ static s32 fat12_ent_set(struct super_block *sb, u32 loc, u32 content)
 				return -EIO;
 
 			fat_sector = fcache_getblk(sb, ++sec);
+			if (!fat_sector)
+				return -EIO;
+
 			fat_sector[0] = (u8)((fat_sector[0] & 0xF0) | (content >> 8));
 		} else {
 			fat_entry = &(fat_sector[off]);

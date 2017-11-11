@@ -1563,12 +1563,13 @@ s32 fscore_init(void)
 	if (ret)
 		return ret;
 
-	return 0;
+	return extent_cache_init();
 }
 
 /* make free all memory-alloced global buffers */
 s32 fscore_shutdown(void)
 {
+	extent_cache_shutdown();
 	return 0;
 }
 

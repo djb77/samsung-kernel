@@ -55,6 +55,11 @@
 #include <linux/muic/muic_notifier.h>
 #endif
 
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+#include <linux/hall.h>
+#endif
+
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #undef CONFIG_HAS_EARLYSUSPEND
 #endif
@@ -922,6 +927,11 @@ struct ssp_data {
 	u8 data_injection_enable;
 	struct miscdevice ssp_data_injection_device;
 
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+	struct notifier_block hall_ic_nb;
+	int change_axis;
+#endif
+
 #if defined(CONFIG_SSP_MOTOR)
 	int motor_state;
 #endif
@@ -950,6 +960,10 @@ struct ssp_data {
 	bool sensor_dump_flag_proximity;
 	struct sensor_value prev_lightdata;
 };
+
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+extern int folder_state;
+#endif
 
 struct ssp_big {
 	struct ssp_data *data;
@@ -1161,6 +1175,10 @@ int get_time(struct ssp_data *);
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
 u64 get_current_timestamp(void);
 void ssp_reset_batching_resources(struct ssp_data *data);
+#endif
+
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+int ssp_ckeck_lcd(int);
 #endif
 
 int send_sensor_dump_command(struct ssp_data *data, u8 sensor_type);

@@ -290,9 +290,6 @@ typedef struct __FS_INFO_T {
 	s32       reserved_clusters;  // # of reserved clusters (DA)
 	void        *amap;                  // AU Allocation Map
 
-	/* extent cache */
-	struct kmem_cache *extent_cache_cachep;
-
 	/* fat cache */
 	struct {
 		cache_ent_t pool[FAT_CACHE_SIZE];

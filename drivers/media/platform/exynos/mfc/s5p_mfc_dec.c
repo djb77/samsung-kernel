@@ -2356,11 +2356,11 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 				} else {
 					mfc_info_ctx("can't parsing CSD!, state = %d\n", ctx->state);
 				}
-				spin_lock_irq(&dev->condlock);
-				set_bit(ctx->num, &dev->ctx_work_bits);
-				spin_unlock_irq(&dev->condlock);
-				s5p_mfc_try_run(dev);
 				if (condition) {
+					spin_lock_irq(&dev->condlock);
+					set_bit(ctx->num, &dev->ctx_work_bits);
+					spin_unlock_irq(&dev->condlock);
+					s5p_mfc_try_run(dev);					
 					if (s5p_mfc_wait_for_done_ctx(ctx, condition)) {
 						mfc_err_ctx("special parsing time out\n");
 						s5p_mfc_cleanup_timeout_and_try_run(ctx);

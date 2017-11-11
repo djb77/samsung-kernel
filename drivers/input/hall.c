@@ -145,6 +145,20 @@ static struct attribute_group hall_attr_group = {
 	.attrs = hall_attrs,
 };
 
+#ifdef CONFIG_V_HALL_FOLDING
+BLOCKING_NOTIFIER_HEAD(hall_ic_notifier_list);
+
+void hall_ic_register_notify(struct notifier_block *nb) {
+	blocking_notifier_chain_register(&hall_ic_notifier_list, nb);
+}
+EXPORT_SYMBOL(hall_ic_register_notify);
+
+void hall_ic_unregister_notify(struct notifier_block *nb) {
+	blocking_notifier_chain_unregister(&hall_ic_notifier_list, nb);
+}
+EXPORT_SYMBOL(hall_ic_unregister_notify);
+#endif
+
 #ifdef CONFIG_SEC_FACTORY
 static void flip_cover_work(struct work_struct *work)
 {
@@ -168,6 +182,10 @@ static void flip_cover_work(struct work_struct *work)
 
 		input_report_switch(ddata->input, ddata->event_val, flip_cover);
 		input_sync(ddata->input);
+
+#ifdef CONFIG_V_HALL_FOLDING
+		blocking_notifier_call_chain(&hall_ic_notifier_list, flip_cover, NULL);
+#endif
 	}
 }
 #else
@@ -238,6 +256,10 @@ static void flip_cover_work(struct work_struct *work)
 
 	input_report_switch(ddata->input, ddata->event_val, flip_cover);
 	input_sync(ddata->input);
+
+#ifdef CONFIG_V_HALL_FOLDING
+	blocking_notifier_call_chain(&hall_ic_notifier_list, flip_cover, NULL);
+#endif
 }
 #endif
 #endif
@@ -267,6 +289,13 @@ static irqreturn_t flip_cover_detect(int irq, void *dev_id)
 
 	printk(KERN_DEBUG "keys:%s flip_status : %d\n",
 		 __func__, flip_status);
+
+#ifdef CONFIG_V_HALL_FOLDING
+	if ((system_state == SYSTEM_POWER_OFF) || (system_state == SYSTEM_RESTART)) {
+		printk(KERN_DEBUG "[keys] %s don't need to work hall irq\n", __func__);
+		return IRQ_HANDLED;
+	}
+#endif
 
 	__flip_cover_detect(ddata, flip_status);
 
@@ -396,7 +425,11 @@ static int hall_probe(struct platform_device *pdev)
 
 	input->evbit[0] |= BIT_MASK(EV_SW);
 
+#ifdef CONFIG_V_HALL_FOLDING
+	ddata->event_val = SW_FOLDING;
+#else
 	ddata->event_val = SW_FLIP;
+#endif
 	input_set_capability(input, EV_SW, ddata->event_val);
 
 	input->open = hall_open;

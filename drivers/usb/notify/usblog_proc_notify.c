@@ -739,7 +739,7 @@ void event_store_usblog_notify(int type, unsigned long *param1, int *param2)
 	ev_buffer->event = *param1;
 	ev_buffer->enable = *param2;
 
-	*target_index = (*target_index+1)%USBLOG_MAX_BUF2_SIZE;
+	*target_index = (*target_index+1)%USBLOG_MAX_BUF_SIZE;
 	(*target_count)++;
 err:
 	return;

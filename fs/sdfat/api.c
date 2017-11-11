@@ -94,16 +94,10 @@ s32 fsapi_mount(struct super_block *sb)
 	if (err)
 		goto out;
 
-	err = extent_cache_init(sb);
-	if (err)
-		goto out;
-
 	err = fscore_mount(sb);
 out:
-	if (err) {
-		extent_cache_shutdown(sb);
+	if (err)
 		meta_cache_shutdown(sb);
-	}
 
 	/* release the core lock for file system critical section */
 	mutex_unlock(&_lock_core);
@@ -122,7 +116,6 @@ s32 fsapi_umount(struct super_block *sb)
 
 	mutex_lock(&(SDFAT_SB(sb)->s_vlock));
 	err = fscore_umount(sb);
-	extent_cache_shutdown(sb);
 	meta_cache_shutdown(sb);
 	mutex_unlock(&(SDFAT_SB(sb)->s_vlock));
 

@@ -417,6 +417,14 @@ int amap_create(struct super_block *sb, u32 pack_ratio, u32 sect_per_au, u32 hid
 	/* Allocate AU info table */
 	n_au_table = (amap->n_au + N_AU_PER_TABLE - 1) / N_AU_PER_TABLE;
 	amap->au_table = kmalloc(sizeof(AU_INFO_T *) * n_au_table, GFP_NOIO);
+
+	if (!amap->au_table) {
+		sdfat_msg(sb, KERN_ERR,
+			"failed to alloc amap->au_table\n");
+		kfree(amap);
+		return -ENOMEM;
+	}
+
 	for (i = 0; i < n_au_table; i++)
 		amap->au_table[i] = (AU_INFO_T *)get_zeroed_page(GFP_NOIO);
 
