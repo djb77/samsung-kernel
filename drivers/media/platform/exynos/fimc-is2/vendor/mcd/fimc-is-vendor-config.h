@@ -17,10 +17,6 @@
 #include "fimc-is-vendor-config_hero.h"
 #elif defined(CONFIG_CAMERA_GRACE)
 #include "fimc-is-vendor-config_grace.h"
-#elif defined(CONFIG_CAMERA_VJFLTE)
-#include "fimc-is-vendor-config_vjflte.h"
-#elif defined(CONFIG_CAMERA_ULTE)
-#include "fimc-is-vendor-config_ulte.h"
 #else
 #include "fimc-is-vendor-config_hero.h" /* Default */
 #endif

@@ -88,18 +88,6 @@ config CAMERA_GRACE
         default n
         help
           This camera is grace project.
-config CAMERA_VJFLTE
-        bool "This camera is vjflte project"
-        depends on VENDER_MCD
-        default n
-        help
-          This camera is vjflte project.
-config CAMERA_ULTE
-        bool "This camera is ulte project"
-        depends on VENDER_MCD
-        default n
-        help
-          This camera is ulte project.
 config OIS_USE_RUMBA_S4
         bool "Use RUMBA S4 ois driver IC"
         depends on OIS_USE
