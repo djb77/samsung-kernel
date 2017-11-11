@@ -46,6 +46,7 @@
 #elif defined(CONFIG_MUIC_UNIVERSAL_MAX77865)
 #include "muic_hv.h"
 #include "muic_hv_max77865.h"
+#include "muic_regmap_max77865.h"
 #endif
 
 #include "muic-internal.h"
@@ -274,16 +275,22 @@ static void muic_handle_attach(muic_data_t *pmuic,
 			pr_info("%s:%s AFC Disable(%d) by WATER!\n", MUIC_DEV_NAME,
 				__func__, pmuic->afc_water_disable);
 #endif
-                else {
-                        if ((pmuic->phv->is_afc_muic_ready == false) &&
-				vps_is_hv_ta(&pmuic->vps)) {
+		else {
+			if ((pmuic->phv->is_afc_muic_ready == false) &&
+					vps_is_hv_ta(&pmuic->vps)) {
+				/* W/A for protect of CCIC damage when HV charging in case of Rp=0 cable detect */
+				/* MUIC cable confirm after CCIC attach */
+				if (pmuic->is_ccic_attach) {
+					if (pmuic->is_ccic_afc_enable) {
 #if defined(CONFIG_MUIC_UNIVERSAL_MAX77854)
-                                max77854_muic_prepare_afc_charger(pmuic->phv);
+						max77854_muic_prepare_afc_charger(pmuic->phv);
 #elif defined(CONFIG_MUIC_UNIVERSAL_MAX77865)
-				max77865_muic_prepare_afc_charger(pmuic->phv);
+						max77865_muic_prepare_afc_charger(pmuic->phv);
 #endif
-                       	}
-                }
+					}
+				}
+			}
+		}
 #endif /* CONFIG_MUIC_HV */
 		attach_ta(pmuic);
 		mdelay(150);
@@ -463,28 +470,21 @@ static void muic_handle_detach(muic_data_t *pmuic)
 }
 
 #if defined(CONFIG_SEC_FACTORY) && defined(CONFIG_MUIC_UNIVERSAL_MAX77865)
-#define MAX77865_MUIC_REG_CONTROL2	(0x1A)
-#define CONTROL2_CPEN_SHIFT		2
-#define CONTROL2_CPEN_MASK		(0x1 << CONTROL2_CPEN_SHIFT)
-#define CONTROL2_CPEN_ENABLE		(0x25)
-#define CONTROL2_CPEN_DISABLE		(0x21)
-
 static void muic_cpen_set(muic_data_t *pmuic, bool set)
 {
 	struct i2c_client *i2c = pmuic->i2c;
 	u8 val1 = 0, val2 = 0;
-	int ret;
 
 	val1 = muic_i2c_read_byte(i2c, MAX77865_MUIC_REG_CONTROL2);
 
 	if (set) {
 		pr_info("%s:%s: CPEN enable\n", MUIC_DEV_NAME, __func__);
-		ret = muic_i2c_write_byte(i2c, MAX77865_MUIC_REG_CONTROL2, CONTROL2_CPEN_ENABLE);
+		muic_i2c_write_byte(i2c, MAX77865_MUIC_REG_CONTROL2, CONTROL2_CPEN_ENABLE);
 		msleep(60);
 	}
 	else {
 		pr_info("%s:%s: CPEN disable\n", MUIC_DEV_NAME, __func__);
-		ret = muic_i2c_write_byte(i2c, MAX77865_MUIC_REG_CONTROL2, CONTROL2_CPEN_DISABLE);
+		muic_i2c_write_byte(i2c, MAX77865_MUIC_REG_CONTROL2, CONTROL2_CPEN_DISABLE);
 	}
 
 	val2 = muic_i2c_read_byte(i2c, MAX77865_MUIC_REG_CONTROL2);

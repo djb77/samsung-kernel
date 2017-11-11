@@ -355,6 +355,13 @@ s32 fat_ent_get(struct super_block *sb, u32 loc, u32 *content)
 		return err;
 	}
 
+	if (*content && !IS_CLUS_EOF(*content) &&
+		(*content < CLUS_BASE || fsi->num_clusters <= *content)) {
+		sdfat_fs_error(sb, "invalid access to FAT (entry 0x%08x) "
+			"bogus content (0x%08x)", loc, *content);
+		return -EIO;
+	}
+
 	return 0;
 }
 

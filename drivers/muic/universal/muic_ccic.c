@@ -42,9 +42,11 @@
 #include "muic_apis.h"
 #include "muic_debug.h"
 #include "muic_regmap.h"
+#include "muic_vps.h"
 
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
 #include <linux/ccic/ccic_notifier.h>
+#include <linux/ccic/s2mm005.h>
 #endif
 #if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
 #include <linux/usb/manager/usb_typec_manager_notifier.h>
@@ -224,6 +226,9 @@ static void mdev_handle_ccic_detach(muic_data_t *pmuic)
 #if defined(CONFIG_MUIC_HV_MAX77854) || defined(CONFIG_MUIC_HV_MAX77865)
 	hv_do_detach(pmuic->phv);
 #endif
+	pmuic->is_ccic_attach = false;
+	pmuic->is_ccic_afc_enable = false;
+
 	if (pdesc->ccic_evt_rprd) {
 		if (pvendor && pvendor->enable_chgdet)
 			pvendor->enable_chgdet(pmuic->regmapdesc, 1);
@@ -471,6 +476,14 @@ static int muic_handle_ccic_ATTACH(muic_data_t *pmuic, CC_NOTI_ATTACH_TYPEDEF *p
 	/* Attached */
 	if (pdesc->ccic_evt_attached == MUIC_CCIC_NOTI_ATTACH) {
 		pr_info("%s: Attach\n", __func__);
+		pmuic->is_ccic_attach = true;
+		switch (pnoti->cable_type) {
+		case Rp_56K:
+			pmuic->is_ccic_afc_enable = true;
+			break;
+		default:
+			break;
+		}
 
 		if (pdesc->ccic_evt_roleswap) {
 			pr_info("%s: roleswap event, attach USB\n", __func__);
@@ -502,6 +515,27 @@ static int muic_handle_ccic_ATTACH(muic_data_t *pmuic, CC_NOTI_ATTACH_TYPEDEF *p
 		if (pmuic->afc_water_disable) {
 			pr_info("%s: Water is not detected, AFC Enable\n", __func__);
 			pmuic->afc_water_disable = false;
+		}
+
+		/* W/A for protect of CCIC damage when HV charging in case of Rp=0 cable detect */
+		/* CCIC attach after MUIC cable confirm */
+		if (pmuic->attached_dev == ATTACHED_DEV_TA_MUIC) {
+#if defined(CONFIG_MUIC_HV_MAX77854) || defined(CONFIG_MUIC_HV_MAX77865)
+			if (pmuic->pdata->afc_disable)
+				pr_info("%s:%s AFC Disable(%d) by USER!\n", MUIC_DEV_NAME,
+					__func__, pmuic->pdata->afc_disable);
+			else if ((pmuic->phv->is_afc_muic_ready == false) &&
+					vps_is_hv_ta(&pmuic->vps)) {
+				if (pmuic->is_ccic_afc_enable) {
+					pmuic->phv->is_afc_muic_prepare = true;
+#if defined(CONFIG_MUIC_HV_MAX77854)
+					max77854_muic_prepare_afc_charger(pmuic->phv);
+#elif defined(CONFIG_MUIC_HV_MAX77865)
+					max77865_muic_prepare_afc_charger(pmuic->phv);
+#endif
+				}
+			}
+#endif
 		}
 
 		/* W/A for Incomplete insertion case */

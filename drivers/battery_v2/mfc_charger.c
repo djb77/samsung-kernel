@@ -351,7 +351,7 @@ void mfc_set_vout(struct mfc_charger_data *charger, int vout)
 			break;
 	}
 
-	pr_info("%s vout read = %d mV \n", __func__,  mfc_get_adc(charger, MFC_ADC_VOUT));
+	pr_info("%s vout(%d) read = %d mV \n", __func__, vout, mfc_get_adc(charger, MFC_ADC_VOUT));
 	charger->pdata->vout_status = vout;
 }
 
@@ -1813,17 +1813,39 @@ static void mfc_wpc_vout_step_work(struct work_struct *work)
 {
 	struct mfc_charger_data *charger =
 		container_of(work, struct mfc_charger_data, wpc_vout_step_work.work);
+	static int vout_step = 10;
 	int vout = 0;
 
-	charger->vout_step--;
-	if (charger->vout_step >= 0x5) {
-		vout = charger->vout_step - 5; /* refer to MFC_VOUT_5V enum type */
-		pr_info("%s: set Vout(%dV), (0x%x)\n", __func__, charger->vout_step, mfc_idt_vout_val[vout]);
-		mfc_set_vout(charger, vout);
-		queue_delayed_work(charger->wqueue, &charger->wpc_vout_step_work, msecs_to_jiffies(250));
-	} else {
-		wake_unlock(&charger->wpc_vout_step_lock);
+	pr_info("%s: start - vout_mode(%d)\n", __func__, charger->vout_mode);
+	switch (charger->vout_mode) {
+	case WIRELESS_VOUT_5V:
+	{
+		vout_step--;
+		if (vout_step >= 5) {
+			mfc_set_vout(charger, vout_step - 5);
+			cancel_delayed_work(&charger->wpc_vout_step_work);
+			queue_delayed_work(charger->wqueue,
+				&charger->wpc_vout_step_work, msecs_to_jiffies(250));
+		} else {
+			wake_unlock(&charger->wpc_vout_step_lock);
+		}
 	}
+		return;
+	case WIRELESS_VOUT_9V:
+	case WIRELESS_VOUT_9V_OTG:
+		vout = MFC_VOUT_9V;
+		break;
+	case WIRELESS_VOUT_10V:
+		vout = MFC_VOUT_10V;
+		break;
+	default:
+		goto finish_step_work;
+	}
+	mfc_set_vout(charger, vout);
+
+finish_step_work:
+	vout_step = 10;
+	wake_unlock(&charger->wpc_vout_step_lock);
 }
 
 #if defined(CONFIG_UPDATE_BATTERY_DATA)
@@ -1961,36 +1983,25 @@ static int mfc_chg_set_property(struct power_supply *psy,
 				if ((charger->pdata->cable_type == MFC_PAD_WPC_AFC ||
 					charger->pdata->cable_type == MFC_PAD_WPC_STAND_HV ||
 					charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV) && (vout > 8000)) {
-					charger->vout_step = 10;
-					if(!delayed_work_pending(&charger->wpc_vout_step_work)) {
-						pr_info("%s: call vout down step\n", __func__);
-						wake_lock(&charger->wpc_vout_step_lock);
-						queue_delayed_work(charger->wqueue, &charger->wpc_vout_step_work, 0);
-					}
+					charger->vout_mode = val->intval;
+					pr_info("%s: call vout down step\n", __func__);
+					cancel_delayed_work(&charger->wpc_vout_step_work);
+					wake_lock(&charger->wpc_vout_step_lock);
+					queue_delayed_work(charger->wqueue,
+						&charger->wpc_vout_step_work, msecs_to_jiffies(250));
 				} else
 					mfc_set_vout(charger, MFC_VOUT_5V);
 				pr_info("%s: Wireless Vout forced set to 5V\n", __func__);
-			} else if (val->intval == WIRELESS_VOUT_9V) {
-				if(delayed_work_pending(&charger->wpc_vout_step_work)) {
-					wake_unlock(&charger->wpc_vout_step_lock);
-					cancel_delayed_work(&charger->wpc_vout_step_work);
-				}
-				mfc_set_vout(charger, MFC_VOUT_9V);
-				pr_info("%s: Wireless Vout forced set to 9V\n", __func__);
-			} else if (val->intval == WIRELESS_VOUT_10V) {
-				if(delayed_work_pending(&charger->wpc_vout_step_work)) {
-					wake_unlock(&charger->wpc_vout_step_lock);
-					cancel_delayed_work(&charger->wpc_vout_step_work);
-				}
-				mfc_set_vout(charger, MFC_VOUT_10V);
-				pr_info("%s: Wireless Vout forced set to 10V\n", __func__);
-			} else if (val->intval == WIRELESS_VOUT_9V_OTG) {
-				if(delayed_work_pending(&charger->wpc_vout_step_work)) {
-					wake_unlock(&charger->wpc_vout_step_lock);
-					cancel_delayed_work(&charger->wpc_vout_step_work);
-				}
-				mfc_set_vout(charger, MFC_VOUT_9V);
-				pr_info("%s: Wireless Vout forced set to 9V OTG\n", __func__);
+			} else if (val->intval == WIRELESS_VOUT_9V ||
+					val->intval == WIRELESS_VOUT_9V_OTG ||
+					val->intval == WIRELESS_VOUT_10V) {
+				charger->vout_mode = val->intval;
+				cancel_delayed_work(&charger->wpc_vout_step_work);
+				wake_lock(&charger->wpc_vout_step_lock);
+				queue_delayed_work(charger->wqueue,
+					&charger->wpc_vout_step_work, msecs_to_jiffies(250));
+				pr_info("%s: Wireless Vout forced set to 9V or 10V or 9V OTG(%d)\n",
+					__func__, val->intval);
 			} else if (val->intval == WIRELESS_PAD_FAN_OFF) {
 				pr_info("%s: fan off \n",__func__);
 				mfc_fan_control(charger, 0);
@@ -2879,6 +2890,13 @@ static int mfc_chg_parse_dt(struct device *dev,
 			dev_err(dev, "%s : can't mst_pwr_en\r\n", __FUNCTION__);
 		}
 
+		/* wpc_en (MFC EN) */
+		ret = pdata->wpc_en = of_get_named_gpio_flags(np, "battery,wpc_en",
+				0, &irq_gpio_flags);
+		if (ret < 0) {
+			dev_err(dev, "%s : can't wpc_en\r\n", __FUNCTION__);
+		}
+
 		return ret;
 	}
 }
@@ -3079,7 +3097,7 @@ static int mfc_charger_probe(
 	charger->is_mst_on = MST_MODE_0;
 	charger->chip_id = MFC_CHIP_IDT;
 	charger->is_otg_on = false;
-	charger->vout_step = 0;
+	charger->vout_mode = WIRELESS_VOUT_5V;
 	charger->led_cover = 0;
 
 	mutex_init(&charger->io_lock);

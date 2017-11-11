@@ -27,4 +27,10 @@
 #define MAX77865_REG_CCDET          (0x15)
 #define CCDET_RESTORE               (0x00)
 
+#define MAX77865_MUIC_REG_CONTROL2  (0x1A)
+#define CONTROL2_CPEN_SHIFT         2
+#define CONTROL2_CPEN_MASK          (0x1 << CONTROL2_CPEN_SHIFT)
+#define CONTROL2_CPEN_ENABLE        (0x25)
+#define CONTROL2_CPEN_DISABLE       (0x21)
+
 #endif

@@ -109,6 +109,30 @@ void acc_detach_check(struct work_struct *wk)
 	}
 }
 
+void set_enable_powernego(int mode)
+{
+	struct s2mm005_data *usbpd_data;
+	u8 W_DATA[2];
+
+	if (!ccic_device)
+		return;
+	usbpd_data = dev_get_drvdata(ccic_device);
+	if (!usbpd_data)
+		return;
+
+	if (mode) {
+		W_DATA[0] = 0x3;
+		W_DATA[1] = 0x42;
+		s2mm005_write_byte(usbpd_data->i2c, 0x10, &W_DATA[0], 2);
+		pr_info("%s : Power nego start\n", __func__);
+	} else {
+		W_DATA[0] = 0x3;
+		W_DATA[1] = 0x42;
+		s2mm005_write_byte(usbpd_data->i2c, 0x10, &W_DATA[0], 2);
+		pr_info("%s : Power nego stop\n", __func__);
+	}
+}
+
 void set_enable_alternate_mode(int mode)
 {
 	struct s2mm005_data *usbpd_data;
@@ -167,7 +191,8 @@ void set_enable_alternate_mode(int mode)
 				s2mm005_write_byte(usbpd_data->i2c, 0x10, &W_DATA[0], 2);
 				pr_info("%s : alternate mode is started! \n",	__func__);
 				prev_alternate_mode = ALTERNATE_MODE_START;
-			} else if(mode & ALTERNATE_MODE_STOP) {
+				set_enable_powernego(1);
+			} else if (mode & ALTERNATE_MODE_STOP) {
 				W_DATA[0] = 0x3;
 				W_DATA[1] = 0x33;
 				s2mm005_write_byte(usbpd_data->i2c, 0x10, &W_DATA[0], 2);
@@ -198,6 +223,7 @@ void set_clear_discover_mode(void)
 
 	pr_info("%s : clear discover mode! \n", __func__);
 }
+
 void set_host_turn_on_event(int mode)
 {
 	struct s2mm005_data *usbpd_data;
@@ -217,7 +243,8 @@ void set_host_turn_on_event(int mode)
 		usbpd_data->host_turn_on_event = 0;
 	}
 }
-static int process_check_accessory(void * data)
+
+static int process_check_accessory(void *data)
 {
 	struct s2mm005_data *usbpd_data = data;
 #if defined(CONFIG_USB_HOST_NOTIFY)

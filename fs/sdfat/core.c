@@ -283,6 +283,7 @@ out:
 static s32 __find_last_cluster(struct super_block *sb, CHAIN_T *p_chain, u32* ret_clu)
 {
 	u32 clu, next;
+	s32 count = 0;
 	next = p_chain->dir;
 
 	if (p_chain->flags == 0x03) {
@@ -291,11 +292,20 @@ static s32 __find_last_cluster(struct super_block *sb, CHAIN_T *p_chain, u32* re
 	}
 		
 	do {
+		count++;
 		clu = next;
 		if (fat_ent_get_safe(sb, clu, &next))
 			return -EIO;
 	} while (!IS_CLUS_EOF(next));
-	
+
+	if (p_chain->size != count) {
+		sdfat_fs_error(sb, "bogus directory size "
+				"(clus : ondisk(%d) != counted(%d))",
+				p_chain->size, count);
+		sdfat_debug_bug_on(1);
+		return -EIO;
+	}
+
 	*ret_clu = clu;
 	return 0;
 }
@@ -577,6 +587,13 @@ s32 walk_fat_chain(struct super_block *sb, CHAIN_T *p_dir, s32 byte_offset, u32 
 		while (clu_offset > 0) {
 			if (get_next_clus_safe(sb, &cur_clu))
 				return -EIO;
+			if (IS_CLUS_EOF(cur_clu)) {
+				sdfat_fs_error(sb, "invalid dentry access "
+					"beyond EOF (clu : %u, eidx : %d)",
+					p_dir->dir,
+					byte_offset >> DENTRY_SIZE_BITS);
+				return -EIO;
+			}
 			clu_offset--;
 		}
 	}
@@ -653,8 +670,11 @@ DENTRY_T *get_dentry_in_dir(struct super_block *sb, CHAIN_T *p_dir, s32 entry, u
 	return (DENTRY_T *)(buf + off);
 } /* end of get_dentry_in_dir */
 
+/* used only in search empty_slot() */
+#define CNT_UNUSED_NOHIT	(-1)
+#define CNT_UNUSED_HIT		(-2)
 /* search EMPTY CONTINUOUS "num_entries" entries */
-static s32 search_empty_slot(struct super_block *sb, CHAIN_T *p_dir, s32 num_entries)
+static s32 search_empty_slot(struct super_block *sb, HINT_FEMP_T *hint_femp, CHAIN_T *p_dir, s32 num_entries)
 {
 	s32 i, dentry, num_empty = 0;
 	s32 dentries_per_clu;
@@ -668,22 +688,33 @@ static s32 search_empty_slot(struct super_block *sb, CHAIN_T *p_dir, s32 num_ent
 	else
 		dentries_per_clu = fsi->dentries_per_clu;
 
-	if (fsi->hint_uentry.dir == p_dir->dir) {
-		MMSG("%s: uentry HIT (clu:0x%08x ent:%d)\n", __func__,
-			fsi->hint_uentry.clu.dir, fsi->hint_uentry.entry);
-		if (fsi->hint_uentry.entry == -1)
-			return -ENOSPC;
+	ASSERT(-1 <= hint_femp->eidx);
 
-		clu.dir = fsi->hint_uentry.clu.dir;
-		clu.size = fsi->hint_uentry.clu.size;
-		clu.flags = fsi->hint_uentry.clu.flags;
+	if (hint_femp->eidx != -1) {
+		clu.dir = hint_femp->cur.dir;
+		clu.size = hint_femp->cur.size;
+		clu.flags = hint_femp->cur.flags;
 
-		dentry = fsi->hint_uentry.entry;
+		dentry = hint_femp->eidx;
+
+		if (num_entries <= hint_femp->count) {
+			IMSG("%s: empty slot(HIT) - found "
+				"(clu : 0x%08x eidx : %d)\n",
+				__func__, hint_femp->cur.dir, hint_femp->eidx);
+			hint_femp->eidx = -1;
+
+			if (fsi->vol_type == EXFAT)
+				return dentry;
+
+			return dentry + (num_entries - 1);
+		}
+		IMSG("%s: empty slot(HIT) - search from "
+		       "(clu : 0x%08x eidx : %d)\n",
+			__func__, hint_femp->cur.dir, hint_femp->eidx);
 	} else {
-		MMSG("%s: uentry MISS (clu:0x%08x => 0x%08x)\n", __func__,
-				fsi->hint_uentry.dir, p_dir->dir);
-		fsi->hint_uentry.dir = CLUS_EOF;
-		fsi->hint_uentry.entry = -1;
+		IMSG("%s: empty slot(MISS) - search from "
+			"(clu:0x%08x eidx : 0)\n",
+			__func__, p_dir->dir);
 
 		clu.dir = p_dir->dir;
 		clu.size = p_dir->size;
@@ -706,36 +737,49 @@ static s32 search_empty_slot(struct super_block *sb, CHAIN_T *p_dir, s32 num_ent
 
 			type = fsi->fs_func->get_entry_type(ep);
 
-			if (type == TYPE_UNUSED) {
+			if ((type == TYPE_UNUSED) || (type == TYPE_DELETED)) {
 				num_empty++;
-				if (fsi->hint_uentry.entry == -1) {
-					fsi->hint_uentry.dir = p_dir->dir;
-					fsi->hint_uentry.entry = dentry;
-					fsi->hint_uentry.n_entry = INT_MAX;
+				if (hint_femp->eidx == -1) {
+					hint_femp->eidx = dentry;
+					hint_femp->count = CNT_UNUSED_NOHIT;
 
-					fsi->hint_uentry.clu.dir = clu.dir;
-					fsi->hint_uentry.clu.size = clu.size;
-					fsi->hint_uentry.clu.flags = clu.flags;
+					hint_femp->cur.dir = clu.dir;
+					hint_femp->cur.size = clu.size;
+					hint_femp->cur.flags = clu.flags;
 				}
-			} else if (type == TYPE_DELETED) {
-				num_empty++;
+
+				if ((type == TYPE_UNUSED) &&
+					(hint_femp->count != CNT_UNUSED_HIT)) {
+					hint_femp->count = CNT_UNUSED_HIT;
+				}
 			} else {
-				/* TODO : Check whether bogus dentry exists or not
-				 * after unused dentry
-				 * hint_uentry means empty slot not TYPE_UNUSED
-				 */
+				if ((hint_femp->eidx != -1) &&
+						(hint_femp->count == CNT_UNUSED_HIT)) {
+					/* unused empty group means
+					 * an empty group which includes
+					 * unused dentry
+					 */
+					sdfat_fs_error(sb,
+						"found bogus dentry(%d) "
+						"beyond unused empty group(%d) "
+						"(start_clu : %u, cur_clu : %u)\n",
+						dentry, hint_femp->eidx, p_dir->dir,
+						clu.dir);
+					return -EIO;
+				}
+
 				num_empty = 0;
+				hint_femp->eidx = -1;
 			}
 
 			if (num_empty >= num_entries) {
-				/* INVALIDATE */
-				fsi->hint_uentry.dir = CLUS_EOF;
-				fsi->hint_uentry.entry = -1;
+				/* found and invalidate hint_femp */
+				hint_femp->eidx = -1;
 
 				if (fsi->vol_type == EXFAT)
 					return (dentry - (num_entries-1));
-				else
-					return dentry;
+
+				return dentry;
 			}
 		}
 
@@ -769,23 +813,35 @@ static s32 find_empty_entry(struct inode *inode, CHAIN_T *p_dir, s32 num_entries
 	struct super_block *sb = inode->i_sb;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 	FILE_ID_T *fid = &(SDFAT_I(inode)->fid);
+	HINT_FEMP_T hint_femp;
+
+	hint_femp.eidx = -1;
+
+	ASSERT(-1 <= fid->hint_femp.eidx);
+
+	if (fid->hint_femp.eidx != -1) {
+		memcpy(&hint_femp, &fid->hint_femp, sizeof(HINT_FEMP_T));
+		fid->hint_femp.eidx = -1;
+	}
 
 	/* FAT16 root_dir */
 	if (IS_CLUS_FREE(p_dir->dir))
-		return search_empty_slot(sb, p_dir, num_entries);
+		return search_empty_slot(sb, &hint_femp, p_dir, num_entries);
 
-	while ((dentry = search_empty_slot(sb, p_dir, num_entries)) < 0) {
+	while ((dentry = search_empty_slot(sb, &hint_femp, p_dir, num_entries)) < 0) {
 		if (dentry == -EIO)
 			break;
 
-		if (fsi->vol_type == EXFAT) {
-			if (p_dir->dir != fsi->root_dir)
-				size = i_size_read(inode);
-		} else if ((fid->size >> DENTRY_SIZE_BITS) >= MAX_FAT_DENTRIES) {
+//		if (fsi->vol_type == EXFAT) {
+//			if (p_dir->dir != fsi->root_dir)
+//				size = i_size_read(inode);
+//		} else if ((fid->size >> DENTRY_SIZE_BITS) >= MAX_FAT_DENTRIES) {
+		if ((fid->size >> DENTRY_SIZE_BITS) >= MAX_FAT_DENTRIES) {
 			/* FAT spec allows a dir to grow upto 65536 dentries */
 			return -ENOSPC;
 		}
 
+		/* we trust p_dir->size regardless of FAT type */
 		if (__find_last_cluster(sb, p_dir, &last_clu))
 			return -EIO;
 
@@ -793,7 +849,7 @@ static s32 find_empty_entry(struct inode *inode, CHAIN_T *p_dir, s32 num_entries
 		 * Allocate new cluster to this directory
 		 */
 		clu.dir = last_clu + 1;
-		clu.size = 0;
+		clu.size = 0; /* UNUSED */
 		clu.flags = p_dir->flags;
 
 		/* (0) check if there are reserved clusters 
@@ -819,46 +875,49 @@ static s32 find_empty_entry(struct inode *inode, CHAIN_T *p_dir, s32 num_entries
 			 */
 			chain_cont_cluster(sb, p_dir->dir, p_dir->size);
 			p_dir->flags = 0x01;
-			fsi->hint_uentry.clu.flags = 0x01;
+			hint_femp.cur.flags = 0x01;
 		}
 		if (clu.flags == 0x01)
 			if (fat_ent_set(sb, last_clu, clu.dir))
 				return -EIO;
 
-		if (fsi->hint_uentry.entry == -1) {
-			fsi->hint_uentry.dir = p_dir->dir;
-			fsi->hint_uentry.entry = p_dir->size << (fsi->cluster_size_bits - DENTRY_SIZE_BITS);
+		if (hint_femp.eidx == -1) {
+			/* the special case that new dentry
+			 * should be allocated from the start of new cluster
+			 */
 
-			fsi->hint_uentry.clu.dir = clu.dir;
-			fsi->hint_uentry.clu.size = 0;
-			fsi->hint_uentry.clu.flags = clu.flags;
+			hint_femp.eidx = p_dir->size <<
+				(fsi->cluster_size_bits - DENTRY_SIZE_BITS);
+			hint_femp.count = fsi->dentries_per_clu;
+
+			hint_femp.cur.dir = clu.dir;
+			hint_femp.cur.size = 0;
+			hint_femp.cur.flags = clu.flags;
 		}
-		fsi->hint_uentry.clu.size++;
+		hint_femp.cur.size++;
 		p_dir->size++;
+		size = (p_dir->size << fsi->cluster_size_bits);
 
 		/* (3) update the directory entry */
-		if (fsi->vol_type == EXFAT) {
-			if (p_dir->dir != fsi->root_dir) {
-				size += fsi->cluster_size;
+		if ((fsi->vol_type == EXFAT) && (p_dir->dir != fsi->root_dir)) {
+			ep = get_dentry_in_dir(sb,
+					&(fid->dir), fid->entry+1, &sector);
+			if (!ep)
+				return -EIO;
+			fsi->fs_func->set_entry_size(ep, size);
+			fsi->fs_func->set_entry_flag(ep, p_dir->flags);
+			if (dcache_modify(sb, sector))
+				return -EIO;
 
-				ep = get_dentry_in_dir(sb, &(fid->dir), fid->entry+1, &sector);
-				if (!ep)
-					return -EIO;
-				fsi->fs_func->set_entry_size(ep, size);
-				fsi->fs_func->set_entry_flag(ep, p_dir->flags);
-				if (dcache_modify(sb, sector))
-					return -EIO;
-
-				if (update_dir_chksum(sb, &(fid->dir), fid->entry))
-					return -EIO;
-			}
+			if (update_dir_chksum(sb, &(fid->dir), fid->entry))
+				return -EIO;
 		}
 
 		/* directory inode should be updated in here */
-		i_size_write(inode, i_size_read(inode)+fsi->cluster_size);
+		i_size_write(inode, (loff_t)size);
 		SDFAT_I(inode)->i_size_ondisk += fsi->cluster_size;
 		SDFAT_I(inode)->i_size_aligned += fsi->cluster_size;
-		SDFAT_I(inode)->fid.size += fsi->cluster_size;
+		SDFAT_I(inode)->fid.size = size;
 		SDFAT_I(inode)->fid.flags = p_dir->flags;
 		inode->i_blocks += 1 << (fsi->cluster_size_bits - sb->s_blocksize_bits);
 	}
@@ -1158,7 +1217,8 @@ static s32 __resolve_path(struct inode *inode, const u8 *path, CHAIN_T *p_dir, U
 	if ((lossy && !lookup) || !namelen)
 		return -EINVAL;
 
-	fid->size = i_size_read(inode);
+	sdfat_debug_bug_on(fid->size != i_size_read(inode));
+//	fid->size = i_size_read(inode);
 
 	p_dir->dir = fid->start_clu;
 	p_dir->size = (s32)(fid->size >> fsi->cluster_size_bits);
@@ -1215,15 +1275,8 @@ static s32 create_dir(struct inode *inode, CHAIN_T *p_dir, UNI_NAME_T *p_uniname
 	if (ret)
 		return ret;
 
-	if (fsi->vol_type == EXFAT) {
-		size = fsi->cluster_size;
-	} else {
-		/* for the consistency of DIR entry size (non-zero) */
-		if (fsi->vol_type == FAT32)
-			size = fsi->cluster_size;
-		else
-			size = 0;
-
+	size = fsi->cluster_size;
+	if (fsi->vol_type != EXFAT) {
 		/* initialize the . and .. entry
 		   Information for . points to itself
 		   Information for .. points to parent dir */
@@ -1282,6 +1335,7 @@ static s32 create_dir(struct inode *inode, CHAIN_T *p_dir, UNI_NAME_T *p_uniname
 	fid->version = 0;
 	fid->hint_stat.eidx = 0;
 	fid->hint_stat.clu = fid->start_clu;
+	fid->hint_femp.eidx = -1;
 
 	return 0;
 } /* end of create_dir */
@@ -1331,6 +1385,7 @@ static s32 create_file(struct inode *inode, CHAIN_T *p_dir, UNI_NAME_T *p_uninam
 	fid->version = 0;
 	fid->hint_stat.eidx = 0;
 	fid->hint_stat.clu = fid->start_clu;
+	fid->hint_femp.eidx = -1;
 
 	return 0;
 } /* end of create_file */
@@ -1883,11 +1938,12 @@ s32 fscore_lookup(struct inode *inode, u8 *path, FILE_ID_T *fid)
 		dir_fid->hint_stat.clu = dir.dir;
 		dir_fid->hint_stat.eidx = 0;
 		dir_fid->version = (u32)(inode->i_version & 0xffffffff);
+		dir_fid->hint_femp.eidx = -1;
 	}
 
 	/* search the file name for directories */
-	dentry = fsi->fs_func->find_dir_entry(sb, &dir, &dir_fid->hint_stat,
-				&uni_name, num_entries, &dos_name, TYPE_ALL);
+	dentry = fsi->fs_func->find_dir_entry(sb, dir_fid, &dir, &uni_name,
+				num_entries, &dos_name, TYPE_ALL);
 
 	if ((dentry < 0) && (dentry != -EEXIST))
 		return dentry; /* -error value */
@@ -1934,6 +1990,19 @@ s32 fscore_lookup(struct inode *inode, u8 *path, FILE_ID_T *fid)
 			fid->start_clu = fsi->fs_func->get_entry_clu0(ep2);
 		}
 
+		if ((fid->type == TYPE_DIR) && (fsi->vol_type != EXFAT)) {
+			s32 num_clu = 0;
+			CHAIN_T tmp_dir;
+
+			tmp_dir.dir = fid->start_clu;
+			tmp_dir.flags = fid->flags;
+			tmp_dir.size = 0; /* UNUSED */
+
+			if (__count_num_clusters(sb, &tmp_dir, &num_clu))
+				return -EIO;
+			fid->size = (u64)num_clu << fsi->cluster_size_bits;
+		}
+
 		/* FOR GRACEFUL ERROR HANDLING */
 		if (IS_CLUS_FREE(fid->start_clu)) {
 			sdfat_fs_error(sb,
@@ -1952,6 +2021,7 @@ s32 fscore_lookup(struct inode *inode, u8 *path, FILE_ID_T *fid)
 	fid->version = 0;
 	fid->hint_stat.eidx = 0;
 	fid->hint_stat.clu = fid->start_clu;
+	fid->hint_femp.eidx = -1;
 
 	TMSG("%s exited successfully\n", __func__);
 	return 0;
@@ -2530,6 +2600,7 @@ s32 fscore_truncate(struct inode *inode, u64 old_size, u64 new_size)
 	/* hint_stat will be used if this is directory. */
 	fid->hint_stat.eidx = 0;
 	fid->hint_stat.clu = fid->start_clu;
+	fid->hint_femp.eidx = -1;
 
 	/* free the clusters */
 	if (fsi->fs_func->free_cluster(sb, &clu, evict))
@@ -2779,8 +2850,13 @@ out:
 } /* end of fscore_remove */
 
 
-/* get the information of a given file 
+/*
+ * Get the information of a given file
  * REMARK : This function does not need any file name on linux
+ *
+ * info.Size means the value saved on disk.
+ * But root directory doesn`t have real dentry,
+ * so the size of root directory returns calculated one exceptively.
  */
 s32 fscore_read_inode(struct inode *inode, DIR_ENTRY_T *info)
 {
@@ -2810,11 +2886,7 @@ s32 fscore_read_inode(struct inode *inode, DIR_ENTRY_T *info)
 
 		dir.dir = fsi->root_dir;
 		dir.flags = 0x01;
-		dir.size = 0;
-		/*
-		 * NOTE :
-		 * If "dir.flags" has 0x01, "dir.size" is meaningles.
-		 */
+		dir.size = 0; /* UNUSED */
 
 		/* FAT16 root_dir */
 		if (IS_CLUS_FREE(fsi->root_dir)) {
@@ -2888,15 +2960,15 @@ s32 fscore_read_inode(struct inode *inode, DIR_ENTRY_T *info)
 		dir.size = fid->size >> fsi->cluster_size_bits;
 		/*
 		 * NOTE :
-		 * If "dir.flags" has 0x01, "dir.size" is meaningles.
+		 * If "dir.flags" has 0x01, "dir.size" is meaningless.
 		 */
 
-		if (info->Size == 0) {
-			s32 num_clu;
-			if (__count_num_clusters(sb, &dir, &num_clu))
-				return -EIO;
-			info->Size = (u64)num_clu << fsi->cluster_size_bits;
-		}
+//		if (info->Size == 0) {
+//			s32 num_clu;
+//			if (__count_num_clusters(sb, &dir, &num_clu))
+//				return -EIO;
+//			info->Size = (u64)num_clu << fsi->cluster_size_bits;
+//		}
 
 		count = __count_dos_name_entries(sb, &dir, TYPE_DIR, &dotcnt);
 		if (count < 0)
@@ -3351,7 +3423,7 @@ out:
 /* read a directory entry from the opened directory */
 s32 fscore_readdir(struct inode *inode, DIR_ENTRY_T *dir_entry)
 {
-	s32 i, dentry, clu_offset;
+	s32 i, clu_offset;
 	s32 dentries_per_clu, dentries_per_clu_bits = 0;
 	u32 type, sector;
 	CHAIN_T dir, clu;
@@ -3361,6 +3433,7 @@ s32 fscore_readdir(struct inode *inode, DIR_ENTRY_T *dir_entry)
 	struct super_block *sb = inode->i_sb;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 	FILE_ID_T *fid = &(SDFAT_I(inode)->fid);
+	s32 dentry = (s32) fid->rwoffset;
 
 	/* check if the given file ID is opened */
 	if (fid->type != TYPE_DIR)
@@ -3374,9 +3447,8 @@ s32 fscore_readdir(struct inode *inode, DIR_ENTRY_T *dir_entry)
 		dir.dir = fid->start_clu;
 		dir.size = (s32)(fid->size >> fsi->cluster_size_bits);
 		dir.flags = fid->flags;
+		sdfat_debug_bug_on(dentry >= (dir.size * fsi->dentries_per_clu));
 	}
-
-	dentry = (s32) fid->rwoffset;
 
 	if (IS_CLUS_FREE(dir.dir)) { /* FAT16 root_dir */
 		dentries_per_clu = fsi->dentries_in_root;
@@ -3513,7 +3585,7 @@ s32 fscore_readdir(struct inode *inode, DIR_ENTRY_T *dir_entry)
 
 	dir_entry->NameBuf.lfn[0] = '\0';
 
-	fid->rwoffset = (s64) ++dentry;
+	fid->rwoffset = (s64) dentry;
 
 	return 0;
 } /* end of fscore_readdir */

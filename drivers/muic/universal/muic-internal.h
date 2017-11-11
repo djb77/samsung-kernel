@@ -234,6 +234,8 @@ typedef struct _muic_data_t {
 	bool			afc_water_disable;
 
 	int			rid;
+	bool			is_ccic_attach;
+	bool			is_ccic_afc_enable;
 #endif
 }muic_data_t;
 

@@ -161,6 +161,13 @@ typedef struct {
 	u32 cache_valid_id;	// for avoiding the race between alloc and free
 } EXTENT_T;
 
+/* first empty entry hint information */
+typedef struct {
+	s32 eidx;		// entry index of a directory
+	s32 count;		// count of continuous empty entry
+	CHAIN_T cur;		// the cluster that first empty slot exists in
+} HINT_FEMP_T;
+
 /* file id structure */
 typedef struct {
 	CHAIN_T dir;
@@ -176,6 +183,7 @@ typedef struct {
 	EXTENT_T extent;	// extent cache for a file
 	HINT_T	hint_bmap;	// hint for cluster last accessed
 	HINT_T	hint_stat;	// hint for entry index we try to lookup next time
+	HINT_FEMP_T hint_femp;	// hint for first empty entry
 } FILE_ID_T;
 
 typedef struct {
@@ -194,14 +202,6 @@ typedef struct {
 	DATE_TIME_T AccessTimestamp;
 	DENTRY_NAMEBUF_T NameBuf;
 } DIR_ENTRY_T;
-
-/* unused entry hint information */
-typedef struct {
-	u32 dir;
-	s32 entry;
-	s32 n_entry;
-	CHAIN_T clu;
-} UENTRY_T;
 
 /* cache information */
 typedef struct __cache_entry {
@@ -230,7 +230,7 @@ typedef struct {
 	s32      (*count_used_clusters)(struct super_block *sb, u32* ret_count);
 	s32      (*init_dir_entry)(struct super_block *sb, CHAIN_T *p_dir, s32 entry, u32 type,u32 start_clu, u64 size);
 	s32      (*init_ext_entry)(struct super_block *sb, CHAIN_T *p_dir, s32 entry, s32 num_entries, UNI_NAME_T *p_uniname, DOS_NAME_T *p_dosname);
-	s32      (*find_dir_entry)(struct super_block *sb, CHAIN_T *p_dir, HINT_T *hint_stat, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *p_dosname, u32 type);
+	s32      (*find_dir_entry)(struct super_block *sb, FILE_ID_T *fid, CHAIN_T *p_dir, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *p_dosname, u32 type);
 	s32      (*delete_dir_entry)(struct super_block *sb, CHAIN_T *p_dir, s32 entry, s32 offset, s32 num_entries);
 	void     (*get_uniname_from_ext_entry)(struct super_block *sb, CHAIN_T *p_dir, s32 entry, u16 *uniname);
 	s32      (*count_ext_entries)(struct super_block *sb, CHAIN_T *p_dir, s32 entry, DENTRY_T *p_entry);
@@ -280,7 +280,6 @@ typedef struct __FS_INFO_T {
 
 	u32      clu_srch_ptr;           // cluster search pointer
 	u32      used_clusters;          // number of used clusters
-	UENTRY_T    hint_uentry;            // unused entry hint information
 
 	u32      prev_eio;            // block device operation error flag
 

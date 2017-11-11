@@ -475,10 +475,11 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs, unsigned int esr
 	if (call_undef_hook(regs) == 0)
 		return;
 
-	if (unhandled_signal(current, SIGILL) && show_unhandled_signals_ratelimited())
+	if (unhandled_signal(current, SIGILL) && show_unhandled_signals_ratelimited()) {
 		pr_info("%s[%d]: undefined instruction: pc=%p (0x%x)\n",
 			current->comm, task_pid_nr(current), pc, esr);
-	dump_instr(KERN_INFO, regs);
+		dump_instr(KERN_INFO, regs);
+	}
 
 	info.si_signo = SIGILL;
 	info.si_errno = 0;

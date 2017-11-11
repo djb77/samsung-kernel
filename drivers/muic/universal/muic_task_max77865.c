@@ -288,9 +288,9 @@ static irqreturn_t muic_irq_thread(int irq, void *data)
 		else if (pmuic->phv->is_charger_ready == false && irq != pmuic->phv->irq_vdnmon)
 			pr_info("%s:%s not ready yet(charger_ready[%c])\n",
 				MUIC_HV_DEV_NAME, __func__, (pmuic->phv->is_charger_ready ? 'T' : 'F'));
-		else if (pmuic->phv->afc_disable)
+		else if (pmuic->pdata->afc_disable)
 			pr_info("%s:%s AFC disable by USER (afc_disable[%c]\n",
-				MUIC_HV_DEV_NAME, __func__, (pmuic->phv->afc_disable ? 'T' : 'F'));
+				MUIC_HV_DEV_NAME, __func__, (pmuic->pdata->afc_disable ? 'T' : 'F'));
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
 		else if (pmuic->afc_water_disable)
 			pr_info("%s:%s AFC disable by WATER (afc_water_disable[%c]\n",
@@ -474,6 +474,8 @@ static int muic_probe(struct platform_device *pdev)
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
 	pmuic->opmode = get_ccic_info() & 0x0F;
 	pmuic->afc_water_disable = false;
+	pmuic->is_ccic_attach = false;
+	pmuic->is_ccic_afc_enable = false;
 #if defined(CONFIG_SEC_FACTORY)
 	f_opmode = pmuic->opmode;
 #endif

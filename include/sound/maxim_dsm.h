@@ -471,6 +471,16 @@ struct maxim_dsm {
 #define USE_DSM_UPDATE_CAL
 #define USE_DSM_LOG
 #define USE_DSM_DEBUG
+
+#ifdef USE_DSM_LOG
+enum {
+	SPK_EXCURSION_MAX,
+	SPK_TEMP_MAX,
+	SPK_EXCURSION_OVERCNT,
+	SPK_TEMP_OVERCNT,
+};
+#endif
+
 #endif /* CONFIG_SND_SOC_MAXIM_DSM */
 
 int maxdsm_init(void);
@@ -526,6 +536,7 @@ void maxdsm_log_update(const void *byte_log_array,
 		const void *int_log_max_array);
 ssize_t maxdsm_log_prepare(char *buf);
 void maxdsm_log_max_prepare(struct maxim_dsm_log_max_values *values);
+void maxdsm_log_max_refresh(int values);
 void maxdsm_cal_update(const void *byte_log_array,
 		const void *int_log_array,
 		const void *after_prob_byte_log_array,

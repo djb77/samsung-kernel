@@ -186,6 +186,7 @@ static ssize_t max98506_log_spk_excu_max_show(struct device *dev,
 	struct maxim_dsm_log_max_values values;
 
 	maxdsm_log_max_prepare(&values);
+	maxdsm_log_max_refresh(SPK_EXCURSION_MAX);
 	return sprintf(buf, "%d", values.excursion_max);
 }
 
@@ -208,6 +209,7 @@ static ssize_t max98506_log_spk_excu_overcnt_show(struct device *dev,
 	struct maxim_dsm_log_max_values values;
 
 	maxdsm_log_max_prepare(&values);
+	maxdsm_log_max_refresh(SPK_EXCURSION_OVERCNT);
 	return sprintf(buf, "%d", values.excursion_overcnt);
 }
 
@@ -219,6 +221,7 @@ static ssize_t max98506_log_spk_temp_max_show(struct device *dev,
 	struct maxim_dsm_log_max_values values;
 
 	maxdsm_log_max_prepare(&values);
+	maxdsm_log_max_refresh(SPK_TEMP_MAX);
 	return sprintf(buf, "%d", values.coil_temp_max);
 }
 
@@ -241,6 +244,7 @@ static ssize_t max98506_log_spk_temp_overcnt_show(struct device *dev,
 	struct maxim_dsm_log_max_values values;
 
 	maxdsm_log_max_prepare(&values);
+	maxdsm_log_max_refresh(SPK_TEMP_OVERCNT);
 
 	return sprintf(buf, "%d", values.coil_temp_overcnt);
 }

@@ -34,7 +34,7 @@
 #define EXFAT_SUPER_MAGIC       (0x2011BAB0UL)
 #endif /* EXFAT_SUPER_MAGIC */
 
-#define SDFAT_SUPER_MAGIC       (0x2014CABEUL)
+#define SDFAT_SUPER_MAGIC       (0x5EC5DFA4UL)
 #define SDFAT_ROOT_INO          1
 
 /* FAT types */

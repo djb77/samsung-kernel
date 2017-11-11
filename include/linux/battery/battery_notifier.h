@@ -88,11 +88,20 @@ typedef struct _power_list {
 	int max_current;
 } POWER_LIST;
 
+typedef enum
+{
+	RP_CURRENT_LEVEL_NONE = 0,
+	RP_CURRENT_LEVEL_DEFAULT,
+	RP_CURRENT_LEVEL2,
+	RP_CURRENT_LEVEL3,
+} RP_CURRENT_LEVEL;
+
 typedef struct _pdic_sink_status {
 	POWER_LIST power_list[MAX];
 	int available_pdo_num; // the number of available PDO
 	int selected_pdo_num; // selected number of PDO to change
 	int current_pdo_num; // current number of PDO
+	unsigned int rp_currentlvl; // rp current level by ccic
 } PDIC_SINK_STATUS;
 
 struct pdic_notifier_struct {
