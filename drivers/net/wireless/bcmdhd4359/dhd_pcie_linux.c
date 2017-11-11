@@ -1,7 +1,7 @@
 /*
  * Linux DHD Bus Module for PCIE
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie_linux.c 666716 2016-10-24 10:55:43Z $
+ * $Id: dhd_pcie_linux.c 699795 2017-05-16 11:24:51Z $
  */
 
 
@@ -54,6 +54,12 @@
 #ifdef CONFIG_ARCH_MSM
 #ifdef CONFIG_PCI_MSM
 #include <linux/msm_pcie.h>
+#ifdef USE_SMMU_ARCH_MSM
+#include <asm/dma-iommu.h>
+#include <linux/iommu.h>
+#include <linux/of.h>
+#include <linux/platform_device.h>
+#endif /* USE_SMMU_ARCH_MSM */
 #else
 #include <mach/msm_pcie.h>
 #endif /* CONFIG_PCI_MSM */
@@ -102,6 +108,9 @@ typedef struct dhdpcie_info
 #ifdef BCMPCIE_OOB_HOST_WAKE
 	void *os_cxt;			/* Pointer to per-OS private data */
 #endif /* BCMPCIE_OOB_HOST_WAKE */
+#ifdef USE_SMMU_ARCH_MSM
+	void *smmu_cxt;
+#endif /* USE_SMMU_ARCH_MSM */
 } dhdpcie_info_t;
 
 
@@ -126,6 +135,14 @@ typedef struct dhdpcie_os_info {
 	void			*dev;		/* handle to the underlying device */
 } dhdpcie_os_info_t;
 #endif /* BCMPCIE_OOB_HOST_WAKE */
+
+#ifdef USE_SMMU_ARCH_MSM
+typedef struct dhdpcie_smmu_info {
+	struct dma_iommu_mapping *smmu_mapping;
+	dma_addr_t smmu_iova_start;
+	size_t smmu_iova_len;
+} dhdpcie_smmu_info_t;
+#endif /* USE_SMMU_ARCH_MSM */
 
 /* function declarations */
 static int __devinit
@@ -191,6 +208,106 @@ static struct pci_driver dhdpcie_driver = {
 };
 
 int dhdpcie_init_succeeded = FALSE;
+
+#ifdef USE_SMMU_ARCH_MSM
+static int dhdpcie_smmu_init(struct pci_dev *pdev, void *smmu_cxt)
+{
+	struct dma_iommu_mapping *mapping;
+	struct device_node *root_node = NULL;
+	dhdpcie_smmu_info_t *smmu_info = (dhdpcie_smmu_info_t *)smmu_cxt;
+	int smmu_iova_address[2];
+	char *wlan_node = "android,bcmdhd_wlan";
+	char *wlan_smmu_node = "wlan-smmu-iova-address";
+	int atomic_ctx = 1;
+	int s1_bypass = 1;
+	int ret = 0;
+
+	DHD_ERROR(("%s: SMMU initialize\n", __FUNCTION__));
+
+	root_node = of_find_compatible_node(NULL, NULL, wlan_node);
+	if (!root_node) {
+		WARN(1, "failed to get device node of BRCM WLAN\n");
+		return -ENODEV;
+	}
+
+	if (of_property_read_u32_array(root_node, wlan_smmu_node,
+		smmu_iova_address, 2) == 0) {
+		DHD_ERROR(("%s : get SMMU start address 0x%x, size 0x%x\n",
+			__FUNCTION__, smmu_iova_address[0], smmu_iova_address[1]));
+		smmu_info->smmu_iova_start = smmu_iova_address[0];
+		smmu_info->smmu_iova_len = smmu_iova_address[1];
+	} else {
+		printf("%s : can't get smmu iova address property\n",
+			__FUNCTION__);
+		return -ENODEV;
+	}
+
+	if (smmu_info->smmu_iova_len <= 0) {
+		DHD_ERROR(("%s: Invalid smmu iova len %d\n",
+			__FUNCTION__, (int)smmu_info->smmu_iova_len));
+		return -EINVAL;
+	}
+
+	DHD_ERROR(("%s : SMMU init start\n", __FUNCTION__));
+	mapping = arm_iommu_create_mapping(&platform_bus_type,
+		smmu_info->smmu_iova_start, smmu_info->smmu_iova_len);
+	if (IS_ERR(mapping)) {
+		DHD_ERROR(("%s: create mapping failed, err = %d\n",
+			__FUNCTION__, ret));
+		ret = PTR_ERR(mapping);
+		goto map_fail;
+	}
+
+	ret = iommu_domain_set_attr(mapping->domain,
+		DOMAIN_ATTR_ATOMIC, &atomic_ctx);
+	if (ret) {
+		DHD_ERROR(("%s: set atomic_ctx attribute failed, err = %d\n",
+			__FUNCTION__, ret));
+		goto set_attr_fail;
+	}
+
+	ret = iommu_domain_set_attr(mapping->domain,
+		DOMAIN_ATTR_S1_BYPASS, &s1_bypass);
+	if (ret < 0) {
+		DHD_ERROR(("%s: set s1_bypass attribute failed, err = %d\n",
+			__FUNCTION__, ret));
+		goto set_attr_fail;
+	}
+
+	ret = arm_iommu_attach_device(&pdev->dev, mapping);
+	if (ret) {
+		DHD_ERROR(("%s: attach device failed, err = %d\n",
+			__FUNCTION__, ret));
+		goto attach_fail;
+	}
+
+	smmu_info->smmu_mapping = mapping;
+
+	return ret;
+
+attach_fail:
+set_attr_fail:
+	arm_iommu_release_mapping(mapping);
+map_fail:
+	return ret;
+}
+
+static void dhdpcie_smmu_remove(struct pci_dev *pdev, void *smmu_cxt)
+{
+	dhdpcie_smmu_info_t *smmu_info;
+
+	if (!smmu_cxt) {
+		return;
+	}
+
+	smmu_info = (dhdpcie_smmu_info_t *)smmu_cxt;
+	if (smmu_info->smmu_mapping) {
+		arm_iommu_detach_device(&pdev->dev);
+		arm_iommu_release_mapping(smmu_info->smmu_mapping);
+		smmu_info->smmu_mapping = NULL;
+	}
+}
+#endif /* USE_SMMU_ARCH_MSM */
 
 #ifdef DHD_PCIE_RUNTIMEPM
 static int dhdpcie_pm_suspend(struct device *dev)
@@ -325,6 +442,7 @@ static int dhdpcie_suspend_dev(struct pci_dev *dev)
 		DHD_ERROR(("%s: pci_set_power_state error %d\n",
 			__FUNCTION__, ret));
 	}
+	dev->state_saved = FALSE;
 	return ret;
 }
 
@@ -340,6 +458,7 @@ static int dhdpcie_resume_dev(struct pci_dev *dev)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0))
 	bus->pci_d3hot_done = 0;
 #endif /* OEM_ANDROID && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
+	dev->state_saved = TRUE;
 	pci_restore_state(dev);
 	err = pci_enable_device(dev);
 	if (err) {
@@ -367,6 +486,9 @@ static int dhdpcie_resume_host_dev(dhd_bus_t *bus)
 #ifdef CONFIG_ARCH_MSM
 	bcmerror = dhdpcie_start_host_pcieclock(bus);
 #endif /* CONFIG_ARCH_MSM */
+#ifdef CONFIG_ARCH_TEGRA
+	bcmerror = tegra_pcie_pm_resume();
+#endif /* CONFIG_ARCH_TEGRA */
 	if (bcmerror < 0) {
 		DHD_ERROR(("%s: PCIe RC resume failed!!! (%d)\n",
 			__FUNCTION__, bcmerror));
@@ -393,6 +515,9 @@ static int dhdpcie_suspend_host_dev(dhd_bus_t *bus)
 #ifdef CONFIG_ARCH_MSM
 	bcmerror = dhdpcie_stop_host_pcieclock(bus);
 #endif	/* CONFIG_ARCH_MSM */
+#ifdef CONFIG_ARCH_TEGRA
+	bcmerror = tegra_pcie_pm_suspend();
+#endif /* CONFIG_ARCH_TEGRA */
 	return bcmerror;
 }
 
@@ -421,7 +546,12 @@ int dhdpcie_pci_suspend_resume(dhd_bus_t *bus, bool state)
 		dhdpcie_pme_active(bus->osh, state);
 #endif /* !BCMPCIE_OOB_HOST_WAKE */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
+#if defined(DHD_HANG_SEND_UP_TEST)
+		if (bus->is_linkdown ||
+			bus->dhd->req_hang_type == HANG_REASON_PCIE_RC_LINK_UP_FAIL) {
+#else /* DHD_HANG_SEND_UP_TEST */
 		if (bus->is_linkdown) {
+#endif /* DHD_HANG_SEND_UP_TEST */
 			bus->dhd->hang_reason = HANG_REASON_PCIE_RC_LINK_UP_FAIL;
 			dhd_os_send_hang_message(bus->dhd);
 		}
@@ -558,6 +688,11 @@ dhdpcie_pci_remove(struct pci_dev *pdev)
 	/* pcie os info detach */
 	MFREE(osh, pch->os_cxt, sizeof(dhdpcie_os_info_t));
 #endif /* BCMPCIE_OOB_HOST_WAKE */
+#ifdef USE_SMMU_ARCH_MSM
+	/* smmu info detach */
+	dhdpcie_smmu_remove(pdev, pch->smmu_cxt);
+	MFREE(osh, pch->smmu_cxt, sizeof(dhdpcie_smmu_info_t));
+#endif /* USE_SMMU_ARCH_MSM */
 	/* pcie info detach */
 	dhdpcie_detach(pch);
 	/* osl detach */
@@ -760,6 +895,9 @@ int dhdpcie_init(struct pci_dev *pdev)
 #ifdef BCMPCIE_OOB_HOST_WAKE
 	dhdpcie_os_info_t	*dhdpcie_osinfo = NULL;
 #endif /* BCMPCIE_OOB_HOST_WAKE */
+#ifdef USE_SMMU_ARCH_MSM
+	dhdpcie_smmu_info_t	*dhdpcie_smmu_info = NULL;
+#endif /* USE_SMMU_ARCH_MSM */
 
 	do {
 		/* osl attach */
@@ -811,6 +949,25 @@ int dhdpcie_init(struct pci_dev *pdev)
 		}
 #endif /* BCMPCIE_OOB_HOST_WAKE */
 
+#ifdef USE_SMMU_ARCH_MSM
+		/* allocate private structure for using SMMU */
+		dhdpcie_smmu_info = MALLOC(osh, sizeof(dhdpcie_smmu_info_t));
+		if (dhdpcie_smmu_info == NULL) {
+			DHD_ERROR(("%s: MALLOC of dhdpcie_smmu_info_t failed\n",
+				__FUNCTION__));
+			break;
+		}
+		bzero(dhdpcie_smmu_info, sizeof(dhdpcie_smmu_info_t));
+		dhdpcie_info->smmu_cxt = (void *)dhdpcie_smmu_info;
+
+		/* Initialize smmu structure */
+		if (dhdpcie_smmu_init(pdev, dhdpcie_info->smmu_cxt) < 0) {
+			DHD_ERROR(("%s: Failed to initialize SMMU\n",
+				__FUNCTION__));
+			break;
+		}
+#endif /* USE_SMMU_ARCH_MSM */
+
 		/* Find the PCI resources, verify the  */
 		/* vendor and device ID, map BAR regions and irq,  update in structures */
 		if (dhdpcie_scan_resource(dhdpcie_info)) {
@@ -851,6 +1008,7 @@ int dhdpcie_init(struct pci_dev *pdev)
 		exynos_pcie_register_event(&bus->pcie_event);
 #endif /* CONFIG_SOC_EXYNOS8890 */
 #endif /* EXYNOS_PCIE_LINKDOWN_RECOVERY */
+		bus->read_shm_fail = false;
 #endif /* SUPPORT_LINKDOWN_RECOVERY */
 
 		if (bus->intr) {
@@ -917,6 +1075,13 @@ int dhdpcie_init(struct pci_dev *pdev)
 		MFREE(osh, dhdpcie_osinfo, sizeof(dhdpcie_os_info_t));
 	}
 #endif /* BCMPCIE_OOB_HOST_WAKE */
+
+#ifdef USE_SMMU_ARCH_MSM
+	if (dhdpcie_smmu_info) {
+		MFREE(osh, dhdpcie_smmu_info, sizeof(dhdpcie_smmu_info_t));
+		dhdpcie_info->smmu_cxt = NULL;
+	}
+#endif /* USE_SMMU_ARCH_MSM */
 
 	if (dhdpcie_info)
 		dhdpcie_detach(dhdpcie_info);

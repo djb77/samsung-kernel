@@ -1,7 +1,7 @@
 /*
  * Linux DHD Bus Module for PCIE
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.h 648967 2016-07-14 09:15:06Z $
+ * $Id: dhd_pcie.h 688650 2017-03-07 09:54:17Z $
  */
 
 
@@ -225,6 +225,7 @@ typedef struct dhd_bus {
 #endif /* CONFIG_ARCH_MSM */
 	struct_pcie_register_event pcie_event;
 #endif /* CONFIG_ARCH_MSM || (EXYNOS_PCIE_LINKDOWN_RECOVERY && CONFIG_SOC_EXYNOS8890) */
+	bool read_shm_fail;
 #endif /* SUPPORT_LINKDOWN_RECOVERY */
 #ifdef DHD_PCIE_RUNTIMEPM
 	int32 idlecount;                /* Activity timeout counter */
@@ -306,6 +307,11 @@ extern int exynos_pcie_pm_suspend(int ch_num);
 extern int exynos_pcie_pm_resume(int ch_num);
 #endif /* CONFIG_MACH_UNIVERSAL5433 */
 #endif /* USE_EXYNOS_PCIE_RC_PMPATCH */
+
+#ifdef CONFIG_ARCH_TEGRA
+extern int tegra_pcie_pm_suspend(void);
+extern int tegra_pcie_pm_resume(void);
+#endif /* CONFIG_ARCH_TEGRA */
 
 extern int dhd_buzzz_dump_dngl(dhd_bus_t *bus);
 #endif /* dhd_pcie_h */

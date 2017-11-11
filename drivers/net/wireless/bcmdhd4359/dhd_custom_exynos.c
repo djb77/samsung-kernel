@@ -1,7 +1,7 @@
 /*
  * Platform Dependent file for Samsung Exynos
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_custom_exynos.c 672228 2016-11-25 07:39:42Z $
+ * $Id: dhd_custom_exynos.c 713559 2017-07-31 14:15:14Z $
  */
 #include <linux/device.h>
 #include <linux/gpio.h>
@@ -83,11 +83,11 @@ extern struct device *mmc_dev_for_wlan;
 #define SAMSUNG_PCIE_CH_NUM 0
 #endif
 #ifdef CONFIG_MACH_UNIVERSAL5433
-extern void exynos_pcie_poweron(void);
-extern void exynos_pcie_poweroff(void);
+extern void exynos_pcie_pm_resume(void);
+extern void exynos_pcie_pm_suspend(void);
 #else
-extern void exynos_pcie_poweron(int);
-extern void exynos_pcie_poweroff(int);
+extern void exynos_pcie_pm_resume(int);
+extern void exynos_pcie_pm_suspend(int);
 #endif /* CONFIG_MACH_UNIVERSAL5433 */
 #endif /* EXYNOS_PCIE_RC_ONOFF */
 
@@ -115,7 +115,7 @@ dhd_wlan_power(int onoff)
 
 #ifdef EXYNOS_PCIE_RC_ONOFF
 	if (!onoff) {
-		exynos_pcie_poweroff(SAMSUNG_PCIE_CH_NUM);
+		exynos_pcie_pm_suspend(SAMSUNG_PCIE_CH_NUM);
 	}
 
 	if (gpio_direction_output(wlan_pwr_on, onoff)) {
@@ -125,7 +125,7 @@ dhd_wlan_power(int onoff)
 	}
 
 	if (onoff) {
-		exynos_pcie_poweron(SAMSUNG_PCIE_CH_NUM);
+		exynos_pcie_pm_resume(SAMSUNG_PCIE_CH_NUM);
 	}
 #else
 #ifdef CONFIG_MACH_A7LTE
@@ -220,7 +220,7 @@ dhd_wlan_init_gpio(void)
 	gpio_export_link(wlan_dev, "WLAN_REG_ON", wlan_pwr_on);
 	msleep(WIFI_TURNON_DELAY);
 #ifdef EXYNOS_PCIE_RC_ONOFF
-	exynos_pcie_poweron(SAMSUNG_PCIE_CH_NUM);
+	exynos_pcie_pm_resume(SAMSUNG_PCIE_CH_NUM);
 #endif /* EXYNOS_PCIE_RC_ONOFF */
 
 	/* ========== WLAN_HOST_WAKE ============ */

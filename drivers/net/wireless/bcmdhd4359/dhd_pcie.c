@@ -1,7 +1,7 @@
 /*
  * DHD Bus Module for PCIE
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.c 672945 2016-11-30 08:58:34Z $
+ * $Id: dhd_pcie.c 709874 2017-07-11 02:20:54Z $
  */
 
 
@@ -173,12 +173,6 @@ enum {
 	IOV_SLEEP_ALLOWED,
 	IOV_PCIE_DMAXFER,
 	IOV_PCIE_SUSPEND,
-	IOV_PCIEREG,
-	IOV_PCIECFGREG,
-	IOV_PCIECOREREG,
-	IOV_PCIESERDESREG,
-	IOV_BAR0_SECWIN_REG,
-	IOV_SBREG,
 	IOV_DONGLEISOLATION,
 	IOV_LTRSLEEPON_UNLOOAD,
 	IOV_METADATA_DBG,
@@ -214,12 +208,6 @@ const bcm_iovar_t dhdpcie_iovars[] = {
 	{"cc_nvmshadow", IOV_CC_NVMSHADOW, 0, IOVT_BUFFER, 0 },
 	{"ramsize",	IOV_RAMSIZE,	0,	IOVT_UINT32,	0 },
 	{"ramstart",	IOV_RAMSTART,	0,	IOVT_UINT32,	0 },
-	{"pciereg",	IOV_PCIEREG,	0,	IOVT_BUFFER,	2 * sizeof(int32) },
-	{"pciecfgreg",	IOV_PCIECFGREG,	0,	IOVT_BUFFER,	2 * sizeof(int32) },
-	{"pciecorereg",	IOV_PCIECOREREG,	0,	IOVT_BUFFER,	2 * sizeof(int32) },
-	{"pcieserdesreg",	IOV_PCIESERDESREG,	0,	IOVT_BUFFER,	3 * sizeof(int32) },
-	{"bar0secwinreg",	IOV_BAR0_SECWIN_REG,	0,	IOVT_BUFFER,	sizeof(sdreg_t) },
-	{"sbreg",	IOV_SBREG,	0,	IOVT_BUFFER,	sizeof(sdreg_t) },
 	{"pcie_dmaxfer",	IOV_PCIE_DMAXFER,	0,	IOVT_BUFFER,	3 * sizeof(int32) },
 	{"pcie_suspend", IOV_PCIE_SUSPEND,	0,	IOVT_UINT32,	0 },
 #ifdef PCIE_OOB
@@ -456,7 +444,7 @@ dhdpcie_bus_intstatus(dhd_bus_t *bus)
 
 		/* Is device removed. intstatus & intmask read 0xffffffff */
 		if (intstatus == (uint32)-1) {
-			DHD_ERROR(("%s: !!!!!!Device Removed or dead chip.\n", __FUNCTION__));
+			DHD_ERROR(("%s: Device is removed or Link is down.\n", __FUNCTION__));
 			intstatus = 0;
 #ifdef CUSTOMER_HW4_DEBUG
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
@@ -1352,6 +1340,11 @@ dhd_bus_download_firmware(struct dhd_bus *bus, osl_t *osh,
 		return BCME_BADARG;
 	}
 #endif /* SUPPORT_MULTIPLE_REVISION */
+
+#if defined(DHD_BLOB_EXISTENCE_CHECK)
+	dhd_set_blob_support(bus->dhd, bus->fw_path);
+#endif /* DHD_BLOB_EXISTENCE_CHECK */
+
 	DHD_ERROR(("%s: firmware path=%s, nvram path=%s\n",
 		__FUNCTION__, bus->fw_path, bus->nv_path));
 
@@ -2032,9 +2025,6 @@ printbuf:
 	if (bus->pcie_sh->flags & (PCIE_SHARED_ASSERT | PCIE_SHARED_TRAP)) {
 		printf("%s: %s\n", __FUNCTION__, strbuf.origbuf);
 
-		/* wake up IOCTL wait event */
-		dhd_wakeup_ioctl_event(bus->dhd, IOCTL_RETURN_ON_TRAP);
-
 #if defined(DHD_FW_COREDUMP)
 		/* save core dump or write to a file */
 		if (bus->dhd->memdump_enabled) {
@@ -2043,6 +2033,9 @@ printbuf:
 		}
 #endif /* DHD_FW_COREDUMP */
 
+
+		/* wake up IOCTL wait event */
+		dhd_wakeup_ioctl_event(bus->dhd, IOCTL_RETURN_ON_TRAP);
 
 	}
 
@@ -3121,38 +3114,6 @@ done:
 #define PCIE_GEN2(sih) ((BUSTYPE((sih)->bustype) == PCI_BUS) &&	\
 	((sih)->buscoretype == PCIE2_CORE_ID))
 
-static bool
-pcie2_mdiosetblock(dhd_bus_t *bus, uint blk)
-{
-	uint mdiodata, mdioctrl, i = 0;
-	uint pcie_serdes_spinwait = 200;
-
-	mdioctrl = MDIOCTL2_DIVISOR_VAL | (0x1F << MDIOCTL2_REGADDR_SHF);
-	mdiodata = (blk << MDIODATA2_DEVADDR_SHF) | MDIODATA2_DONE;
-
-	si_corereg(bus->sih, bus->sih->buscoreidx, PCIE2_MDIO_CONTROL, ~0, mdioctrl);
-	si_corereg(bus->sih, bus->sih->buscoreidx, PCIE2_MDIO_WR_DATA, ~0, mdiodata);
-
-	OSL_DELAY(10);
-	/* retry till the transaction is complete */
-	while (i < pcie_serdes_spinwait) {
-		uint mdioctrl_read = si_corereg(bus->sih, bus->sih->buscoreidx, PCIE2_MDIO_WR_DATA,
-			0, 0);
-		if (!(mdioctrl_read & MDIODATA2_DONE)) {
-			break;
-		}
-		OSL_DELAY(1000);
-		i++;
-	}
-
-	if (i >= pcie_serdes_spinwait) {
-		DHD_ERROR(("pcie_mdiosetblock: timed out\n"));
-		return FALSE;
-	}
-
-	return TRUE;
-}
-
 
 int
 dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)
@@ -3263,6 +3224,9 @@ dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)
 				}
 #endif /* CONFIG_ARCH_MSM */
 				bus->is_linkdown = 0;
+#ifdef SUPPORT_LINKDOWN_RECOVERY
+				bus->read_shm_fail = false;
+#endif /* SUPPORT_LINKDOWN_RECOVERY */
 				bus->pci_d3hot_done = 0;
 				bcmerror = dhdpcie_bus_enable_device(bus);
 				if (bcmerror) {
@@ -3320,50 +3284,6 @@ done:
 	return bcmerror;
 }
 
-static int
-pcie2_mdioop(dhd_bus_t *bus, uint physmedia, uint regaddr, bool write, uint *val,
-	bool slave_bypass)
-{
-	uint pcie_serdes_spinwait = 200, i = 0, mdio_ctrl;
-	uint32 reg32;
-
-	pcie2_mdiosetblock(bus, physmedia);
-
-	/* enable mdio access to SERDES */
-	mdio_ctrl = MDIOCTL2_DIVISOR_VAL;
-	mdio_ctrl |= (regaddr << MDIOCTL2_REGADDR_SHF);
-
-	if (slave_bypass)
-		mdio_ctrl |= MDIOCTL2_SLAVE_BYPASS;
-
-	if (!write)
-		mdio_ctrl |= MDIOCTL2_READ;
-
-	si_corereg(bus->sih, bus->sih->buscoreidx, PCIE2_MDIO_CONTROL, ~0, mdio_ctrl);
-
-	if (write) {
-		reg32 =  PCIE2_MDIO_WR_DATA;
-		si_corereg(bus->sih, bus->sih->buscoreidx, PCIE2_MDIO_WR_DATA, ~0,
-			*val | MDIODATA2_DONE);
-	} else
-		reg32 =  PCIE2_MDIO_RD_DATA;
-
-	/* retry till the transaction is complete */
-	while (i < pcie_serdes_spinwait) {
-		uint done_val =  si_corereg(bus->sih, bus->sih->buscoreidx, reg32, 0, 0);
-		if (!(done_val & MDIODATA2_DONE)) {
-			if (!write) {
-				*val = si_corereg(bus->sih, bus->sih->buscoreidx,
-					PCIE2_MDIO_RD_DATA, 0, 0);
-				*val = *val & MDIODATA2_MASK;
-			}
-			return 0;
-		}
-		OSL_DELAY(1000);
-		i++;
-	}
-	return -1;
-}
 
 static int
 dhdpcie_bus_doiovar(dhd_bus_t *bus, const bcm_iovar_t *vi, uint32 actionid, const char *name,
@@ -3405,138 +3325,6 @@ dhdpcie_bus_doiovar(dhd_bus_t *bus, const bcm_iovar_t *vi, uint32 actionid, cons
 	case IOV_SVAL(IOV_VARS):
 		bcmerror = dhdpcie_downloadvars(bus, arg, len);
 		break;
-
-	case IOV_SVAL(IOV_PCIEREG):
-		si_corereg(bus->sih, bus->sih->buscoreidx, OFFSETOF(sbpcieregs_t, configaddr), ~0,
-			int_val);
-		si_corereg(bus->sih, bus->sih->buscoreidx, OFFSETOF(sbpcieregs_t, configdata), ~0,
-			int_val2);
-		break;
-
-	case IOV_GVAL(IOV_PCIEREG):
-		si_corereg(bus->sih, bus->sih->buscoreidx, OFFSETOF(sbpcieregs_t, configaddr), ~0,
-			int_val);
-		int_val = si_corereg(bus->sih, bus->sih->buscoreidx,
-			OFFSETOF(sbpcieregs_t, configdata), 0, 0);
-		bcopy(&int_val, arg, sizeof(int_val));
-		break;
-
-	case IOV_SVAL(IOV_PCIECOREREG):
-		si_corereg(bus->sih, bus->sih->buscoreidx, int_val, ~0, int_val2);
-		break;
-	case IOV_GVAL(IOV_BAR0_SECWIN_REG):
-	{
-		sdreg_t sdreg;
-		uint32 addr, size;
-
-		bcopy(params, &sdreg, sizeof(sdreg));
-
-		addr = sdreg.offset;
-		size = sdreg.func;
-
-		if (si_backplane_access(bus->sih, addr, size, &int_val, TRUE) != BCME_OK) {
-			DHD_ERROR(("Invalid size/addr combination \n"));
-			bcmerror = BCME_ERROR;
-			break;
-		}
-		bcopy(&int_val, arg, sizeof(int32));
-		break;
-	}
-
-	case IOV_SVAL(IOV_BAR0_SECWIN_REG):
-	{
-		sdreg_t sdreg;
-		uint32 addr, size;
-
-		bcopy(params, &sdreg, sizeof(sdreg));
-
-		addr = sdreg.offset;
-		size = sdreg.func;
-		if (si_backplane_access(bus->sih, addr, size, &sdreg.value, FALSE) != BCME_OK) {
-			DHD_ERROR(("Invalid size/addr combination \n"));
-			bcmerror = BCME_ERROR;
-		}
-		break;
-	}
-
-	case IOV_GVAL(IOV_SBREG):
-	{
-		sdreg_t sdreg;
-		uint32 addr, size;
-
-		bcopy(params, &sdreg, sizeof(sdreg));
-
-		addr = sdreg.offset | SI_ENUM_BASE;
-		size = sdreg.func;
-
-		if (si_backplane_access(bus->sih, addr, size, &int_val, TRUE) != BCME_OK) {
-			DHD_ERROR(("Invalid size/addr combination \n"));
-			bcmerror = BCME_ERROR;
-			break;
-		}
-		bcopy(&int_val, arg, sizeof(int32));
-		break;
-	}
-
-	case IOV_SVAL(IOV_SBREG):
-	{
-		sdreg_t sdreg;
-		uint32 addr, size;
-
-		bcopy(params, &sdreg, sizeof(sdreg));
-
-		addr = sdreg.offset | SI_ENUM_BASE;
-		size = sdreg.func;
-		if (si_backplane_access(bus->sih, addr, size, &sdreg.value, FALSE) != BCME_OK) {
-			DHD_ERROR(("Invalid size/addr combination \n"));
-			bcmerror = BCME_ERROR;
-		}
-		break;
-	}
-
-	case IOV_GVAL(IOV_PCIESERDESREG):
-	{
-		uint val;
-		if (!PCIE_GEN2(bus->sih)) {
-			DHD_ERROR(("supported only in pcie gen2\n"));
-			bcmerror = BCME_ERROR;
-			break;
-		}
-
-		if (!pcie2_mdioop(bus, int_val, int_val2, FALSE, &val, FALSE)) {
-			bcopy(&val, arg, sizeof(int32));
-		} else {
-			DHD_ERROR(("pcie2_mdioop failed.\n"));
-			bcmerror = BCME_ERROR;
-		}
-		break;
-	}
-
-	case IOV_SVAL(IOV_PCIESERDESREG):
-		if (!PCIE_GEN2(bus->sih)) {
-			DHD_ERROR(("supported only in pcie gen2\n"));
-			bcmerror = BCME_ERROR;
-			break;
-		}
-		if (pcie2_mdioop(bus, int_val, int_val2, TRUE, &int_val3, FALSE)) {
-			DHD_ERROR(("pcie2_mdioop failed.\n"));
-			bcmerror = BCME_ERROR;
-		}
-		break;
-	case IOV_GVAL(IOV_PCIECOREREG):
-		int_val = si_corereg(bus->sih, bus->sih->buscoreidx, int_val, 0, 0);
-		bcopy(&int_val, arg, sizeof(int_val));
-		break;
-
-	case IOV_SVAL(IOV_PCIECFGREG):
-		OSL_PCI_WRITE_CONFIG(bus->osh, int_val, 4, int_val2);
-		break;
-
-	case IOV_GVAL(IOV_PCIECFGREG):
-		int_val = OSL_PCI_READ_CONFIG(bus->osh, int_val, 4);
-		bcopy(&int_val, arg, sizeof(int_val));
-		break;
-
 	case IOV_SVAL(IOV_PCIE_LPBK):
 		bcmerror = dhdpcie_bus_lpback_req(bus, int_val);
 		break;
@@ -4032,6 +3820,15 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 			dhdpcie_oob_intr_set(bus, TRUE);
 #endif /* BCMPCIE_OOB_HOST_WAKE */
 		} else if (timeleft == 0) {
+			uint32 intstatus = 0;
+
+			/* Check if PCIe bus status is valid */
+			intstatus = si_corereg(bus->sih,
+				bus->sih->buscoreidx, PCIMailBoxInt, 0, 0);
+			if (intstatus == (uint32)-1) {
+				/* Invalidate PCIe bus status */
+				bus->is_linkdown = 1;
+			}
 			bus->dhd->d3ack_timeout_occured = TRUE;
 			bus->dhd->d3ackcnt_timeout++;
 			DHD_ERROR(("%s: resumed on timeout for D3 ACK d3_inform_cnt %d \n",
@@ -4050,8 +3847,8 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 			/* resume all interface network queue. */
 			dhd_bus_start_queue(bus);
 			DHD_GENERAL_UNLOCK(bus->dhd, flags);
-			DHD_ERROR(("%s: Event HANG send up "
-						"due to PCIe linkdown\n", __FUNCTION__));
+			DHD_ERROR(("%s: Event HANG send up due to D3_ACK timeout\n",
+				__FUNCTION__));
 #ifdef SUPPORT_LINKDOWN_RECOVERY
 #ifdef CONFIG_ARCH_MSM
 			bus->no_cfg_restore = 1;
@@ -4832,7 +4629,7 @@ dhd_bus_dpc(struct dhd_bus *bus)
 		return 0;
 	}
 #ifdef DHD_PCIE_RUNTIMEPM
-        bus->idlecount = 0;
+	bus->idlecount = 0;
 #endif /* DHD_PCIE_RUNTIMEPM */
 	bus->dhd->dhd_bus_busy_state |= DHD_BUS_BUSY_IN_DPC;
 	DHD_GENERAL_UNLOCK(bus->dhd, flags);
@@ -4945,8 +4742,17 @@ dhdpcie_handle_mb_data(dhd_bus_t *bus)
 		/* what should we do */
 		DHD_INFO_HW4(("D2H_MB_DATA: D3 ACK\n"));
 		if (!bus->wait_for_d3_ack) {
+#if defined(DHD_HANG_SEND_UP_TEST)
+			if (bus->dhd->req_hang_type == HANG_REASON_D3_ACK_TIMEOUT) {
+				DHD_ERROR(("TEST HANG: Skip to process D3 ACK\n"));
+			} else {
+				bus->wait_for_d3_ack = 1;
+				dhd_os_d3ack_wake(bus->dhd);
+			}
+#else /* DHD_HANG_SEND_UP_TEST */
 			bus->wait_for_d3_ack = 1;
 			dhd_os_d3ack_wake(bus->dhd);
+#endif /* DHD_HANG_SEND_UP_TEST */
 		}
 	}
 }
@@ -5018,6 +4824,31 @@ dhdpci_bus_read_frames(dhd_bus_t *bus)
 	}
 	DHD_PERIM_UNLOCK_ALL((bus->dhd->fwder_unit % FWDER_MAX_UNIT));
 
+#ifdef SUPPORT_LINKDOWN_RECOVERY
+	if (bus->read_shm_fail) {
+		/* Read interrupt state once again to confirm linkdown */
+		int intstatus = si_corereg(bus->sih, bus->sih->buscoreidx, PCIMailBoxInt, 0, 0);
+		if (intstatus != (uint32)-1) {
+			DHD_ERROR(("%s: read SHM failed but intstatus is valid\n", __FUNCTION__));
+			if (bus->dhd->memdump_enabled) {
+				DHD_OS_WAKE_LOCK(bus->dhd);
+				bus->dhd->memdump_type = DUMP_TYPE_READ_SHM_FAIL;
+				dhd_bus_mem_dump(bus->dhd);
+				DHD_OS_WAKE_UNLOCK(bus->dhd);
+			}
+			bus->dhd->hang_reason = HANG_REASON_PCIE_LINK_DOWN;
+			dhd_os_send_hang_message(bus->dhd);
+		} else {
+			DHD_ERROR(("%s: Link is Down.\n", __FUNCTION__));
+#ifdef CONFIG_ARCH_MSM
+			bus->no_cfg_restore = 1;
+#endif /* CONFIG_ARCH_MSM */
+			bus->is_linkdown = 1;
+			bus->dhd->hang_reason = HANG_REASON_PCIE_LINK_DOWN;
+			dhd_os_send_hang_message(bus->dhd);
+		}
+	}
+#endif /* SUPPORT_LINKDOWN_RECOVERY */
 	return more;
 }
 

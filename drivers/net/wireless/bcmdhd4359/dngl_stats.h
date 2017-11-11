@@ -2,7 +2,7 @@
  * Common stats definitions for clients of dongle
  * ports
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dngl_stats.h 668337 2016-11-03 01:32:05Z $
+ * $Id: dngl_stats.h 681269 2017-01-25 10:59:55Z $
  */
 
 #ifndef _dngl_stats_h_
@@ -132,7 +132,7 @@ typedef struct {
 			/* HT/VHT it would be mcs index */
 	uint32 reserved;   /* reserved */
 	uint32 bitrate;    /* units of 100 Kbps */
-} wifi_rate_v2;
+} wifi_rate;
 
 typedef struct {
 	uint32 preamble   :3;   /* 0: OFDM, 1:CCK, 2:HT 3:VHT 4..7 reserved */
@@ -144,8 +144,7 @@ typedef struct {
 					*/
 	uint32 reserved  :16;   /* reserved */
 	uint32 bitrate;         /* units of 100 Kbps */
-} wifi_rate;
-
+} wifi_rate_v1;
 
 /* channel statistics */
 typedef struct {
@@ -212,27 +211,26 @@ typedef struct {
 
 /* per rate statistics */
 typedef struct {
-	wifi_rate rate;     /* rate information */
+	wifi_rate_v1 rate;     /* rate information */
 	uint32 tx_mpdu;        /* number of successfully transmitted data pkts (ACK rcvd) */
 	uint32 rx_mpdu;        /* number of received data pkts */
 	uint32 mpdu_lost;      /* number of data packet losses (no ACK) */
 	uint32 retries;        /* total number of data pkt retries */
 	uint32 retries_short;  /* number of short data pkt retries */
 	uint32 retries_long;   /* number of long data pkt retries */
-} wifi_rate_stat;
+} wifi_rate_stat_v1;
 
 typedef struct {
 	uint16 version;
 	uint16 length;
-	uint32 tx_mpdu;
-	uint32 rx_mpdu;
-	uint32 mpdu_lost;
-	uint32 retries;
-	uint32 retries_short;
-	uint32 retries_long;
-	wifi_rate_v2 rate;
-} wifi_rate_stat_v2;
-
+	uint32 tx_mpdu;        /* number of successfully transmitted data pkts (ACK rcvd) */
+	uint32 rx_mpdu;        /* number of received data pkts */
+	uint32 mpdu_lost;      /* number of data packet losses (no ACK) */
+	uint32 retries;        /* total number of data pkt retries */
+	uint32 retries_short;  /* number of short data pkt retries */
+	uint32 retries_long;   /* number of long data pkt retries */
+	wifi_rate rate;
+} wifi_rate_stat;
 
 /* access categories */
 typedef enum {
@@ -334,5 +332,52 @@ typedef struct {
 	uint32 num_peers;                        /* number of peers */
 	wifi_peer_info peer_info[1];           /* per peer statistics */
 } wifi_iface_stat;
+
+#ifdef CONFIG_COMPAT
+/* interface statistics */
+typedef struct {
+	compat_uptr_t iface;          /* wifi interface */
+	wifi_interface_info info;             /* current state of the interface */
+	uint32 beacon_rx;                     /* access point beacon received count from
+					       * connected AP
+					       */
+	uint64 average_tsf_offset;	/* average beacon offset encountered (beacon_TSF - TBTT)
+					* The average_tsf_offset field is used so as to calculate
+					* the typical beacon contention time on the channel as well
+					* may be used to debug beacon synchronization and related
+					* power consumption issue
+					*/
+	uint32 leaky_ap_detected;	/* indicate that this AP
+					* typically leaks packets beyond
+					* the driver guard time.
+					*/
+	uint32 leaky_ap_avg_num_frames_leaked;	/* average number of frame leaked by AP after
+					* frame with PM bit set was ACK'ed by AP
+					*/
+	uint32 leaky_ap_guard_time;		/* guard time currently in force
+					* (when implementing IEEE power management
+					* based on frame control PM bit), How long
+					* driver waits before shutting down the radio and after
+					* receiving an ACK for a data frame with PM bit set)
+					*/
+	uint32 mgmt_rx;                       /* access point mgmt frames received count from
+				       * connected AP (including Beacon)
+				       */
+	uint32 mgmt_action_rx;                /* action frames received count */
+	uint32 mgmt_action_tx;                /* action frames transmit count */
+	wifi_rssi rssi_mgmt;                  /* access Point Beacon and Management frames RSSI
+					       * (averaged)
+					       */
+	wifi_rssi rssi_data;                  /* access Point Data Frames RSSI (averaged) from
+					       * connected AP
+					       */
+	wifi_rssi rssi_ack;                   /* access Point ACK RSSI (averaged) from
+					       * connected AP
+					       */
+	wifi_wmm_ac_stat ac[WIFI_AC_MAX];     /* per ac data packet statistics */
+	uint32 num_peers;                        /* number of peers */
+	wifi_peer_info peer_info[1];           /* per peer statistics */
+} compat_wifi_iface_stat;
+#endif /* CONFIG_COMPAT */
 
 #endif /* _dngl_stats_h_ */

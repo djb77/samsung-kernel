@@ -3,7 +3,7 @@
  * Provides type definitions and function prototypes used to link the
  * DHD OS, bus, and protocol modules.
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_msgbuf.c 675075 2016-12-14 05:07:30Z $
+ * $Id: dhd_msgbuf.c 692883 2017-03-30 02:05:44Z $
  */
 
 
@@ -1062,7 +1062,7 @@ static INLINE uint32 dhd_pktid_map_avail_cnt(dhd_pktid_map_handle_t *handle);
 
 /* Allocate a unique pktid against which a pkt and some metadata is saved */
 static INLINE uint32 dhd_pktid_map_reserve(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle,
-	void *pkt);
+	void *pkt, dhd_pkttype_t pkttype);
 static INLINE void dhd_pktid_map_save(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle,
 	void *pkt, uint32 nkey, dmaaddr_t pa, uint32 len, uint8 dma,
 	void *dmah, void *secdma, dhd_pkttype_t pkttype);
@@ -1202,7 +1202,8 @@ typedef struct dhd_pktid_map {
 #define DHD_NATIVE_TO_PKTID_FINI_IOCTL(dhd, map)  dhd_pktid_map_fini_ioctl((dhd), (map))
 
 /* Convert a packet to a pktid, and save pkt pointer in busy locker */
-#define DHD_NATIVE_TO_PKTID_RSV(dhd, map, pkt)    dhd_pktid_map_reserve((dhd), (map), (pkt))
+#define DHD_NATIVE_TO_PKTID_RSV(dhd, map, pkt, pkttype)	\
+	dhd_pktid_map_reserve((dhd), (map), (pkt), (pkttype))
 
 /* Reuse a previously reserved locker to save packet params */
 #define DHD_NATIVE_TO_PKTID_SAVE(dhd, map, pkt, nkey, pa, len, dir, dmah, secdma, pkttype) \
@@ -1649,7 +1650,8 @@ dhd_pktid_map_avail_cnt(dhd_pktid_map_handle_t *handle)
  */
 
 static INLINE uint32
-__dhd_pktid_map_reserve(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, void *pkt)
+__dhd_pktid_map_reserve(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, void *pkt,
+	dhd_pkttype_t pkttype)
 {
 	uint32 nkey;
 	dhd_pktid_map_t *map;
@@ -1666,6 +1668,16 @@ __dhd_pktid_map_reserve(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, void *pk
 
 	ASSERT(map->avail <= map->items);
 	nkey = map->keys[map->avail]; /* fetch a free locker, pop stack */
+
+	if ((map->avail > map->items) || (nkey > map->items)) {
+		map->failures++;
+		DHD_ERROR(("%s:%d: failed to allocate a new pktid,"
+			" map->avail<%u>, nkey<%u>, pkttype<%u>\n",
+			__FUNCTION__, __LINE__, map->avail, nkey,
+			pkttype));
+		return DHD_PKTID_INVALID; /* failed alloc request */
+	}
+
 	locker = &map->lockers[nkey]; /* save packet metadata in locker */
 	map->avail--;
 	locker->pkt = pkt; /* pkt is saved, other params not yet saved. */
@@ -1688,7 +1700,8 @@ __dhd_pktid_map_reserve(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, void *pk
  * Wrapper that takes the required lock when called directly.
  */
 static INLINE uint32
-dhd_pktid_map_reserve(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, void *pkt)
+dhd_pktid_map_reserve(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle,
+	void *pkt, dhd_pkttype_t pkttype)
 {
 	dhd_pktid_map_t *map;
 	uint32 flags;
@@ -1697,7 +1710,7 @@ dhd_pktid_map_reserve(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, void *pkt)
 	ASSERT(handle != NULL);
 	map = (dhd_pktid_map_t *)handle;
 	flags = DHD_PKTID_LOCK(map->pktid_lock);
-	ret = __dhd_pktid_map_reserve(dhd, handle, pkt);
+	ret = __dhd_pktid_map_reserve(dhd, handle, pkt, pkttype);
 	DHD_PKTID_UNLOCK(map->pktid_lock, flags);
 
 	return ret;
@@ -1715,6 +1728,12 @@ __dhd_pktid_map_save(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, void *pkt,
 	map = (dhd_pktid_map_t *)handle;
 
 	ASSERT((nkey != DHD_PKTID_INVALID) && (nkey <= DHD_PKIDMAP_ITEMS(map->items)));
+
+	if ((nkey == DHD_PKTID_INVALID) || (nkey > DHD_PKIDMAP_ITEMS(map->items))) {
+		DHD_ERROR(("%s:%d: Error! saving invalid pktid<%u> pkttype<%u>\n",
+			__FUNCTION__, __LINE__, nkey, pkttype));
+		return;
+	}
 
 	locker = &map->lockers[nkey];
 
@@ -1775,7 +1794,7 @@ dhd_pktid_map_alloc(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, void *pkt,
 
 	flags = DHD_PKTID_LOCK(map->pktid_lock);
 
-	nkey = __dhd_pktid_map_reserve(dhd, handle, pkt);
+	nkey = __dhd_pktid_map_reserve(dhd, handle, pkt, pkttype);
 	if (nkey != DHD_PKTID_INVALID) {
 		__dhd_pktid_map_save(dhd, handle, pkt, nkey, pa,
 			len, dir, dmah, secdma, pkttype);
@@ -1813,6 +1832,12 @@ dhd_pktid_map_free(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, uint32 nkey,
 	flags = DHD_PKTID_LOCK(map->pktid_lock);
 
 	ASSERT((nkey != DHD_PKTID_INVALID) && (nkey <= DHD_PKIDMAP_ITEMS(map->items)));
+
+	if ((nkey == DHD_PKTID_INVALID) && (nkey > DHD_PKIDMAP_ITEMS(map->items))) {
+		DHD_ERROR(("%s:%d: Error! Try to free invalid pktid<%u>, pkttype<%d>\n",
+		           __FUNCTION__, __LINE__, nkey, pkttype));
+		return NULL;
+	}
 
 	locker = &map->lockers[nkey];
 
@@ -2048,7 +2073,7 @@ dhd_pktid_to_native(dhd_pktid_map_handle_t *map, uint32 pktid32,
 	return pktptr32;
 }
 
-#define DHD_NATIVE_TO_PKTID_RSV(dhd, map, pkt)  DHD_PKTID32(pkt)
+#define DHD_NATIVE_TO_PKTID_RSV(dhd, map, pkt, pkttype)  DHD_PKTID32(pkt)
 
 #define DHD_NATIVE_TO_PKTID_SAVE(dhd, map, pkt, nkey, pa, len, dma_dir, dmah, secdma, pkttype) \
 	({ BCM_REFERENCE(dhd); BCM_REFERENCE(nkey); BCM_REFERENCE(dma_dir); \
@@ -4105,7 +4130,8 @@ dhd_prot_txdata(dhd_pub_t *dhd, void *PKTBUF, uint8 ifidx)
 	DHD_GENERAL_LOCK(dhd, flags);
 
 	/* Create a unique 32-bit packet id */
-	pktid = DHD_NATIVE_TO_PKTID_RSV(dhd, dhd->prot->pktid_map_handle, PKTBUF);
+	pktid = DHD_NATIVE_TO_PKTID_RSV(dhd, dhd->prot->pktid_map_handle,
+		PKTBUF, PKTTYPE_DATA_TX);
 #if defined(DHD_PCIE_PKTID)
 	if (pktid == DHD_PKTID_INVALID) {
 		DHD_ERROR(("Pktid pool depleted.\n"));
@@ -4123,16 +4149,9 @@ dhd_prot_txdata(dhd_pub_t *dhd, void *PKTBUF, uint8 ifidx)
 	txdesc = (host_txbuf_post_t *)
 		dhd_prot_alloc_ring_space(dhd, ring, 1, &alloced, FALSE);
 	if (txdesc == NULL) {
-#if defined(DHD_PCIE_PKTID)
-		void *dmah;
-		void *secdma;
-		/* Free up the PKTID. physaddr and pktlen will be garbage. */
-		DHD_PKTID_TO_NATIVE(dhd, dhd->prot->pktid_map_handle, pktid,
-			pa, pktlen, dmah, secdma, PKTTYPE_NO_CHECK);
-#endif /* DHD_PCIE_PKTID */
 		DHD_INFO(("%s:%d: HTOD Msgbuf Not available TxCount = %d\n",
 			__FUNCTION__, __LINE__, prot->active_tx_count));
-		goto err_no_res_pktfree;
+		goto err_free_pktid;
 	}
 
 	/* Extract the data pointer and length information */
@@ -4162,8 +4181,10 @@ dhd_prot_txdata(dhd_pub_t *dhd, void *PKTBUF, uint8 ifidx)
 	}
 
 	if (PHYSADDRISZERO(pa)) {
-		DHD_ERROR(("Something really bad, unless 0 is a valid phyaddr\n"));
+		DHD_ERROR(("%s: Something really bad, unless 0 is "
+			"a valid phyaddr for pa\n", __FUNCTION__));
 		ASSERT(0);
+		goto err_rollback_idx;
 	}
 
 	/* No need to lock. Save the rest of the packet's metadata */
@@ -4220,8 +4241,32 @@ dhd_prot_txdata(dhd_pub_t *dhd, void *PKTBUF, uint8 ifidx)
 		}
 
 		if (PHYSADDRISZERO(meta_pa)) {
-			DHD_ERROR(("Something really bad, unless 0 is a valid phyaddr\n"));
+			/* Unmap the data pointer to a DMA-able address */
+			if (SECURE_DMA_ENAB(dhd->osh)) {
+				int offset = 0;
+				BCM_REFERENCE(offset);
+
+				if (prot->tx_metadata_offset) {
+					offset = prot->tx_metadata_offset + ETHER_HDR_LEN;
+				}
+
+				SECURE_DMA_UNMAP(dhd->osh, pa, pktlen,
+					DMA_TX, 0, DHD_DMAH_NULL, ring->dma_buf.secdma, offset);
+			}
+#ifndef BCM_SECURE_DMA
+			else {
+				DMA_UNMAP(dhd->osh, pa, pktlen, DMA_TX, 0, DHD_DMAH_NULL);
+			}
+#endif /* #ifndef BCM_SECURE_DMA */
+#ifdef TXP_FLUSH_NITEMS
+			/* update pend_items_count */
+			ring->pend_items_count--;
+#endif /* TXP_FLUSH_NITEMS */
+
+			DHD_ERROR(("%s: Something really bad, unless 0 is "
+				"a valid phyaddr for meta_pa\n", __FUNCTION__));
 			ASSERT(0);
+			goto err_rollback_idx;
 		}
 
 		/* Adjust the data pointer back to original value */
@@ -4272,7 +4317,26 @@ dhd_prot_txdata(dhd_pub_t *dhd, void *PKTBUF, uint8 ifidx)
 
 	return BCME_OK;
 
+err_rollback_idx:
+	/* roll back write pointer for unprocessed message */
+	if (ring->wr == 0) {
+		ring->wr = ring->max_items - 1;
+	} else {
+		ring->wr--;
+	}
+
+err_free_pktid:
+#if defined(DHD_PCIE_PKTID)
+	{
+		void *dmah;
+		void *secdma;
+		/* Free up the PKTID. physaddr and pktlen will be garbage. */
+		DHD_PKTID_TO_NATIVE(dhd, dhd->prot->pktid_map_handle, pktid,
+			pa, pktlen, dmah, secdma, PKTTYPE_NO_CHECK);
+	}
+
 err_no_res_pktfree:
+#endif /* DHD_PCIE_PKTID */
 
 
 
@@ -5824,15 +5888,13 @@ dhd_prot_get_read_addr(dhd_pub_t *dhd, msgbuf_ring_t *ring, uint32 *available_le
 		return NULL;
 	}
 
-	ASSERT(items < ring->max_items);
-
 	/*
 	 * Note that there are builds where Assert translates to just printk
 	 * so, even if we had hit this condition we would never halt. Now
 	 * dhd_prot_process_msgtype can get into an big loop if this
 	 * happens.
 	 */
-	if (items >= ring->max_items) {
+	if (items > ring->max_items) {
 		DHD_ERROR(("\r\n======================= \r\n"));
 		DHD_ERROR(("%s(): ring %p, ring->name %s, ring->max_items %d, items %d \r\n",
 			__FUNCTION__, ring, ring->name, ring->max_items, items));
@@ -5841,7 +5903,23 @@ dhd_prot_get_read_addr(dhd_pub_t *dhd, msgbuf_ring_t *ring, uint32 *available_le
 			dhd->busstate, dhd->bus->suspended, dhd->bus->wait_for_d3_ack));
 		DHD_ERROR(("\r\n======================= \r\n"));
 
+#ifdef SUPPORT_LINKDOWN_RECOVERY
+		if (wr > ring->max_items) {
+			dhd->bus->read_shm_fail = true;
+		}
+#else
+#endif /* SUPPORT_LINKDOWN_RECOVERY */
+
 		*available_len = 0;
+#ifdef DHD_FW_COREDUMP
+		if (dhd->memdump_enabled) {
+			/* collect core dump */
+			dhd->memdump_type = DUMP_TYPE_RESUMED_ON_INVALID_RING_RDWR;
+			dhd_bus_mem_dump(dhd);
+		}
+#else
+		ASSERT(0);
+#endif /* DHD_FW_COREDUMP */
 		return NULL;
 	}
 

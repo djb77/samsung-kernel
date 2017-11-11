@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 Vendor Extension Code
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.h 667889 2016-10-31 09:35:36Z $
+ * $Id: wl_cfgvendor.h 681269 2017-01-25 10:59:55Z $
  */
 
 
@@ -60,6 +60,14 @@
 #define GSCAN_ATTR_SET4				40
 #define GSCAN_ATTR_SET5				50
 #define GSCAN_ATTR_SET6				60
+#define GSCAN_ATTR_SET7				70
+#define GSCAN_ATTR_SET8				80
+#define GSCAN_ATTR_SET9				90
+#define GSCAN_ATTR_SET10			100
+#define GSCAN_ATTR_SET11			110
+#define GSCAN_ATTR_SET12			120
+#define GSCAN_ATTR_SET13			130
+
 
 typedef enum {
 	/* don't use 0 as a valid subcommand */
@@ -186,6 +194,11 @@ enum gscan_attributes {
     GSCAN_ATTRIBUTE_MIN_BREACHING,
     GSCAN_ATTRIBUTE_SIGNIFICANT_CHANGE_BSSIDS,
     GSCAN_ATTRIBUTE_SIGNIFICANT_CHANGE_FLUSH,
+
+    /* Adaptive scan attributes */
+    GSCAN_ATTRIBUTE_BUCKET_STEP_COUNT = GSCAN_ATTR_SET12,
+    GSCAN_ATTRIBUTE_BUCKET_MAX_PERIOD,
+
     GSCAN_ATTRIBUTE_MAX
 };
 
@@ -304,5 +317,19 @@ extern int wl_cfgvendor_send_hotlist_event(struct wiphy *wiphy,
 static INLINE int cfgvendor_attach(struct wiphy *wiphy) { return 0; }
 static INLINE int cfgvendor_detach(struct wiphy *wiphy) { return 0; }
 #endif /* defined(WL_VENDOR_EXT_SUPPORT) */
+
+#ifdef CONFIG_COMPAT
+#define COMPAT_ASSIGN_VALUE(normal_structure, member, value)	\
+	do { \
+		if (compat_task_state) {	\
+			compat_ ## normal_structure.member = value; \
+		} else { \
+			normal_structure.member = value; \
+		} \
+	} while (0)
+#else
+#define COMPAT_ASSIGN_VALUE(normal_structure, member, value) \
+	normal_structure.member = value;
+#endif /* CONFIG_COMPAT */
 
 #endif /* _wl_cfgvendor_h_ */
