@@ -897,7 +897,8 @@ static int max77854_chg_get_property(struct power_supply *psy,
 			val->intval == POWER_SUPPLY_TYPE_WIRELESS_PACK ||
 			val->intval == POWER_SUPPLY_TYPE_WIRELESS_PACK_TA ||
 			val->intval == POWER_SUPPLY_TYPE_WIRELESS_STAND ||
-			val->intval == POWER_SUPPLY_TYPE_WIRELESS_HV_STAND)
+			val->intval == POWER_SUPPLY_TYPE_WIRELESS_HV_STAND ||
+			val->intval == POWER_SUPPLY_TYPE_HV_WIRELESS_ETX)
 			val->intval = max77854_get_input_current_type(charger, POWER_SUPPLY_TYPE_WIRELESS);
 		else
 			val->intval = max77854_get_input_current_type(charger, POWER_SUPPLY_TYPE_MAINS);
@@ -1087,7 +1088,8 @@ static int max77854_chg_set_property(struct power_supply *psy,
 		/* CHGIN-OTG */
 		if (val->intval) {
 			if (charger->cable_type == POWER_SUPPLY_TYPE_WIRELESS ||
-				charger->cable_type == POWER_SUPPLY_TYPE_HV_WIRELESS) {
+				charger->cable_type == POWER_SUPPLY_TYPE_HV_WIRELESS ||
+				charger->cable_type == POWER_SUPPLY_TYPE_WIRELESS_HV_STAND) {
 				pr_info("%s: OTG enabled on HV_WC, set 5V", __func__);
 				value.intval = WIRELESS_VOUT_5V;
 				psy_do_property(charger->pdata->wireless_charger_name, set,
@@ -1124,7 +1126,8 @@ static int max77854_chg_set_property(struct power_supply *psy,
 			max77854_write_reg(charger->i2c,
 				MAX77854_CHG_REG_INT_MASK, chg_int_state);
 
-			if (charger->cable_type == POWER_SUPPLY_TYPE_HV_WIRELESS) {
+			if (charger->cable_type == POWER_SUPPLY_TYPE_HV_WIRELESS ||
+				charger->cable_type == POWER_SUPPLY_TYPE_WIRELESS_HV_STAND) {
 				pr_info("%s: OTG disabled on HV_WC, set 9V", __func__);
 				value.intval = WIRELESS_VOUT_9V_OTG;
 				psy_do_property(charger->pdata->wireless_charger_name, set,
@@ -1269,7 +1272,8 @@ static int max77854_otg_set_property(struct power_supply *psy,
 			max77854_write_reg(charger->i2c,
 				MAX77854_CHG_REG_INT_MASK, chg_int_state);
 
-			if (charger->cable_type == POWER_SUPPLY_TYPE_HV_WIRELESS) {
+			if (charger->cable_type == POWER_SUPPLY_TYPE_HV_WIRELESS ||
+				charger->cable_type == POWER_SUPPLY_TYPE_WIRELESS_HV_STAND) {
 				pr_info("%s: OTG disabled on HV_WC, set 9V", __func__);
 				value.intval = WIRELESS_VOUT_9V_OTG;
 				psy_do_property(charger->pdata->wireless_charger_name, set,

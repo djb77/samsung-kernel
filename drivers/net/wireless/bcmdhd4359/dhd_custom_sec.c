@@ -41,6 +41,7 @@
 
 #include <linux/fcntl.h>
 #include <linux/fs.h>
+#include <linux/list.h>
 
 struct dhd_info;
 extern int _dhd_set_mac_address(struct dhd_info *dhd,
@@ -51,6 +52,11 @@ struct cntry_locales_custom {
 	char custom_locale[WLC_CNTRY_BUF_SZ]; /* Custom firmware locale */
 	int32 custom_locale_rev; /* Custom local revisin default -1 */
 };
+
+typedef struct ether_mac_entry {
+	struct list_head list;
+	uint8 mac[ETHER_ADDR_LEN];
+} ether_mac_entry_t;
 
 /* Locale table for sec */
 const struct cntry_locales_custom translate_custom_table[] = {
@@ -306,15 +312,15 @@ const struct cntry_locales_custom translate_custom_table[] = {
 #else
 	{"KR", "KR", 48},
 #endif
-#ifdef DHD_SUPPORT_JP968_RU988_UA16
 	{"JP", "JP", 968},
-	{"RU", "RU", 988},
+#ifdef DHD_SUPPORT_JP968_RU986_UA16
+	{"RU", "RU", 986},
 	{"UA", "UA", 16},
 #else
 	{"JP", "JP", 45},
 	{"RU", "RU", 13},
 	{"UA", "UA", 8},
-#endif /* DHD_SUPPORT_JP968_RU988_UA16 */
+#endif /* DHD_SUPPORT_JP968_RU986_UA16 */
 	{"GT", "GT", 1},
 	{"MN", "MN", 1},
 	{"NI", "NI", 2},
@@ -926,6 +932,56 @@ static int dhd_write_mac_file(const char *filepath, const char *buf, int buf_len
 	return 0;
 }
 
+static
+ether_mac_entry_t *dhd_alloc_ether_mac_entry(dhd_pub_t *dhd, const uint8 *mac)
+{
+	ether_mac_entry_t *entry;
+
+	entry = MALLOC(dhd->osh, sizeof(ether_mac_entry_t));
+	if (!entry) {
+		DHD_ERROR(("%s: failed to alloc\n", __FUNCTION__));
+		return NULL;
+	}
+
+	strncpy(entry->mac, mac, ETHER_ADDR_LEN);
+
+	return entry;
+}
+
+static
+void dhd_free_ether_mac_entry(dhd_pub_t *dhd, struct list_head *list)
+{
+	ether_mac_entry_t *entry;
+
+	while (!list_empty(list)) {
+		entry = list_entry(list->next, ether_mac_entry_t, list);
+		list_del(&entry->list);
+
+		MFREE(dhd->osh, entry, sizeof(ether_mac_entry_t));
+	}
+}
+
+static
+ether_mac_entry_t *dhd_verify_mac_addr(dhd_pub_t *dhd, struct list_head *head)
+{
+	ether_mac_entry_t *cur;
+	ether_mac_entry_t *next;
+
+	list_for_each_entry(cur, head, list) {
+		list_for_each_entry(next, &cur->list, list) {
+			if (!strncmp(cur->mac, next->mac, ETHER_ADDR_LEN)) {
+				return cur;
+			}
+
+			if (next->list.next == head) {
+				break;
+			}
+		}
+	}
+
+	return NULL;
+}
+
 int dhd_check_module_mac(dhd_pub_t *dhd, struct ether_addr *mac)
 {
 	int ret = -1;
@@ -938,6 +994,12 @@ int dhd_check_module_mac(dhd_pub_t *dhd, struct ether_addr *mac)
 	cis_rw_t *cish = (cis_rw_t *)&cis_buf[8];
 	struct file *fp_mac = NULL;
 
+	struct list_head list;
+	ether_mac_entry_t *mac_entry;
+	uint8 mac_entry_count = 0;
+
+	INIT_LIST_HEAD(&list);
+
 	cish->source = 0;
 	cish->byteoff = 0;
 	cish->nbytes = sizeof(cis_buf);
@@ -949,6 +1011,26 @@ int dhd_check_module_mac(dhd_pub_t *dhd, struct ether_addr *mac)
 		DHD_INFO(("[WIFI_SEC] %s: CIS reading failed, ret=%d\n",
 			__FUNCTION__, ret));
 
+		fp_mac = filp_open(macfilepath, O_RDONLY, 0);
+		if (!IS_ERR(fp_mac)) {
+			DHD_ERROR(("[WIFI_SEC] Get Mac address in .mac.info \n"));
+			kernel_read(fp_mac, fp_mac->f_pos, mac_buf, sizeof(mac_buf));
+			filp_close(fp_mac, NULL);
+
+			sscanf(mac_buf, "%02X:%02X:%02X:%02X:%02X:%02X",
+				(unsigned int *)&(mac->octet[0]), (unsigned int *)&(mac->octet[1]),
+				(unsigned int *)&(mac->octet[2]), (unsigned int *)&(mac->octet[3]),
+				(unsigned int *)&(mac->octet[4]), (unsigned int *)&(mac->octet[5]));
+
+			ret = _dhd_set_mac_address(dhd->info, 0, mac);
+			if (ret  == 0) {
+				DHD_INFO(("[WIFI_SEC] %s: MACID is overwritten\n",__FUNCTION__));
+			} else {
+				DHD_ERROR(("[WIFI_SEC] %s: _dhd_set_mac_address() failed, error=%d\n", __FUNCTION__, ret));
+			}
+		} else {
+			DHD_ERROR(("[WIFI_SEC] %s: Can't read .mac.info file error=%ld \n", __FUNCTION__, PTR_ERR(fp_mac)));
+		}
 		sprintf(otp_mac_buf, "%02X:%02X:%02X:%02X:%02X:%02X\n",
 			mac->octet[0], mac->octet[1], mac->octet[2],
 			mac->octet[3], mac->octet[4], mac->octet[5]);
@@ -968,25 +1050,58 @@ int dhd_check_module_mac(dhd_pub_t *dhd, struct ether_addr *mac)
 					cis_buf[idx + 1] == 7) {
 					macaddr_idx = idx + 3;
 					/* found MAC Address tuple */
-					break;
+					mac_entry = dhd_alloc_ether_mac_entry(dhd,
+							&cis_buf[macaddr_idx]);
+					if (mac_entry) {
+						list_add_tail(&mac_entry->list, &list);
+						mac_entry_count++;
+					}
+					idx += (ETHER_ADDR_LEN + 2);
 				}
 			}
 		}
-		if (idx < max) {
-			sprintf(otp_mac_buf, "%02X:%02X:%02X:%02X:%02X:%02X\n",
-				cis_buf[macaddr_idx], cis_buf[macaddr_idx + 1],
-				cis_buf[macaddr_idx + 2], cis_buf[macaddr_idx + 3],
-				cis_buf[macaddr_idx + 4], cis_buf[macaddr_idx + 5]);
-			DHD_ERROR(("[WIFI_SEC] MAC address is taken from OTP\n"));
 
+		if (!list_empty(&list)) {
+			if (mac_entry_count == 1) {
+				sprintf(otp_mac_buf, "%02X:%02X:%02X:%02X:%02X:%02X\n",
+					cis_buf[macaddr_idx], cis_buf[macaddr_idx + 1],
+					cis_buf[macaddr_idx + 2], cis_buf[macaddr_idx + 3],
+					cis_buf[macaddr_idx + 4], cis_buf[macaddr_idx + 5]);
+
+				memcpy(mac->octet, &cis_buf[macaddr_idx], ETHER_ADDR_LEN);
+				DHD_ERROR(("[WIFI_SEC] MAC address is taken from OTP\n"));
+			} else {
+				mac_entry = dhd_verify_mac_addr(dhd, &list);
+				if (mac_entry) {
+					sprintf(otp_mac_buf, "%02X:%02X:%02X:%02X:%02X:%02X\n",
+						mac_entry->mac[0], mac_entry->mac[1],
+						mac_entry->mac[2], mac_entry->mac[3],
+						mac_entry->mac[4], mac_entry->mac[5]);
+
+					memcpy(mac->octet, mac_entry->mac, ETHER_ADDR_LEN);
+					DHD_ERROR(("[WIFI_SEC] MAC address is taken from OTP\n"));
+				} else {
+					DHD_ERROR(("[WIFI_SEC] fail to verify OTP stored mac address\n"));
+					goto default_mac;
+				}
+			}
 		} else {
+default_mac:
 			sprintf(otp_mac_buf, "%02X:%02X:%02X:%02X:%02X:%02X\n",
 				mac->octet[0], mac->octet[1], mac->octet[2],
 				mac->octet[3], mac->octet[4], mac->octet[5]);
 			DHD_ERROR(("[WIFI_SEC] %s: Cannot find MAC address info from OTP,"
-					" Check module mac by initial value: " MACDBG "\n",
-					__FUNCTION__, MAC2STRDBG(mac->octet)));
+				" Check module mac by initial value: " MACDBG "\n",
+				__FUNCTION__, MAC2STRDBG(mac->octet)));
 		}
+		ret = _dhd_set_mac_address(dhd->info, 0, mac);
+		if (ret == 0) {
+			DHD_INFO(("[WIFI_SEC] %s: MACID is overwritten in MFG mode\n",__FUNCTION__));
+		} else {
+			DHD_ERROR(("[WIFI_SEC] %s: _dhd_set_mac_address() failed,"
+				" error=%d in MFG mode\n", __FUNCTION__, ret));
+		}
+		dhd_free_ether_mac_entry(dhd, &list);
 	}
 
 	fp_mac = filp_open(macfilepath, O_RDONLY, 0);
@@ -999,6 +1114,8 @@ int dhd_check_module_mac(dhd_pub_t *dhd, struct ether_addr *mac)
 			DHD_ERROR(("[WIFI_SEC] file MAC is wrong. Write OTP MAC in .mac.info \n"));
 			dhd_write_mac_file(macfilepath, otp_mac_buf, sizeof(otp_mac_buf));
 		}
+	} else {
+		DHD_ERROR(("[WIFI_SEC] %s: Can't read .mac.info file error=%ld \n", __FUNCTION__, PTR_ERR(fp_mac)));
 	}
 
 	return ret;

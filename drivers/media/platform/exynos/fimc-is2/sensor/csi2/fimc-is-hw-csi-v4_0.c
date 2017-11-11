@@ -214,6 +214,11 @@ int csi_hw_s_control(u32 __iomem *base_reg, u32 id, u32 value)
 		fimc_is_hw_set_field(base_reg, &csi_regs[CSIS_R_LINE_INTR_CH0],
 				&csi_fields[CSIS_F_LINE_INTR_CH_N], value);
 		break;
+	case CSIS_CTRL_DMA_ABORT_REQ:
+		/* dma abort req */
+		fimc_is_hw_set_field(base_reg, &csi_regs[CSIS_R_DMA_CMN_CTRL],
+				&csi_fields[CSIS_F_DMA_ABORT_REQ], value);
+		break;
 	default:
 		err("control id is invalid(%d)", id);
 		break;
@@ -484,12 +489,19 @@ bool csi_hw_g_output_dma_enable(u32 __iomem *base_reg, u32 vc)
 
 bool csi_hw_g_output_cur_dma_enable(u32 __iomem *base_reg, u32 vc)
 {
+	u32 val = fimc_is_hw_get_reg(base_reg, &csi_regs[CSIS_R_DMA0_ACT_CTRL + (vc * 15)]);
 	/* if DMA_DISABLE field value is 1, this means dma output is disabled */
-	if (fimc_is_hw_get_field(base_reg, &csi_regs[CSIS_R_DMA0_ACT_CTRL + (vc * 15)],
-			&csi_fields[CSIS_F_ACTIVE_DMA_N_DISABLE]))
-		return false;
-	else
-		return true;
+	bool dma_disable = fimc_is_hw_get_field_value(val, &csi_fields[CSIS_F_ACTIVE_DMA_N_DISABLE]);
+
+	/*
+	 * HACK: active_dma_n_disable filed has reset value(0x0), it means that dma enable was default
+	 * So, if frameptr was 0x7(reset value), it means that dma was disable in the vc.
+	 * CSIS driver control the frameptr by one.
+	 */
+	if (fimc_is_hw_get_field_value(val, &csi_fields[CSIS_F_ACTIVE_DMA_N_FRAMEPTR]) == 0x7)
+		dma_disable = true;
+
+	return !dma_disable;
 }
 
 void csi_hw_set_start_addr(u32 __iomem *base_reg, u32 number, u32 addr)

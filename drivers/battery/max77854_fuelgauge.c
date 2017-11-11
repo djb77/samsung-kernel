@@ -1203,7 +1203,8 @@ static void max77854_fg_get_scaled_capacity(
 
 	if (fuelgauge->cable_type == POWER_SUPPLY_TYPE_HV_MAINS ||
 		fuelgauge->cable_type == POWER_SUPPLY_TYPE_HV_ERR ||
-		fuelgauge->cable_type == POWER_SUPPLY_TYPE_HV_WIRELESS)
+		fuelgauge->cable_type == POWER_SUPPLY_TYPE_HV_WIRELESS ||
+		fuelgauge->cable_type == POWER_SUPPLY_TYPE_WIRELESS_HV_STAND)
 		current_standard = CAPACITY_SCALE_HV_CURRENT;
 	else
 		current_standard = CAPACITY_SCALE_DEFAULT_CURRENT;
@@ -1225,7 +1226,7 @@ static void max77854_fg_get_scaled_capacity(
 
 		max_temp = fuelgauge->capacity_max;
 		curr = max77854_get_fuelgauge_value(fuelgauge, FG_CURRENT_AVG);
-		topoff = fuelgauge->pdata->charging_current[cable_val.intval].full_check_current_1st;
+		topoff = fuelgauge->pdata->charging_current[POWER_SUPPLY_TYPE_MAINS].full_check_current_1st;
 		capacity_threshold = topoff + CAPACITY_MAX_CONTROL_THRESHOLD;
 
 		pr_info("%s : curr(%d) topoff(%d) capacity_max(%d)\n", __func__, curr, topoff, max_temp);
@@ -1435,7 +1436,7 @@ static int calc_ttf(struct max77854_fuelgauge_data *fuelgauge, union power_suppl
 		if (charge_current >= cv_data[i].fg_current)
 			break;
 	}
-	if (cv_data[i].soc  < soc) {
+	if (cv_data[i].soc  < soc || !strcmp(chg_val2.strval, "EOC")) {
 		for (i = 0; i < fuelgauge->cv_data_lenth; i++) {
 			if (soc <= cv_data[i].soc)
 				break;
