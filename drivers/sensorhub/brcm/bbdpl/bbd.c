@@ -82,12 +82,14 @@ struct lhd_killer {
 	long timeout_sec;
 
 	struct task_struct *lhd;
-	atomic_t resetting;
+	bool resetting;
 
 	bool timer_enabled;
 	struct timer_list timer;
 	struct work_struct work;
 	struct workqueue_struct *workq;
+    spinlock_t lock;
+
 };
 
 struct bbd_device {
@@ -290,6 +292,7 @@ static void bbd_init_lk(void)
 	bbd.lk.enabled = true;
 	bbd.lk.timeout_sec = 10;
 	bbd.lk.workq = create_singlethread_workqueue("BBD_LHD_KILLER");
+    spin_lock_init(&bbd.lk.lock);
 }
 
 static void bbd_exit_lk(void)
@@ -413,12 +416,20 @@ int bbd_mcu_reset(void)
 		bbd.ssp_cb->on_mcu_reset(bbd.ssp_priv);
 
 	if (bbd.lk.enabled) {
+        int ret;
 		/* to fix lhd hang issue, we don't use lhd's control interface to reset mcu.  */
-		if (bbd.lk.lhd == NULL || atomic_read(&bbd.lk.resetting))
-			return -1;
-
-		atomic_set(&bbd.lk.resetting, 1);
-		return send_sig(SIGKILL, bbd.lk.lhd, 0);
+        spin_lock(&bbd.lk.lock);
+		if (bbd.lk.lhd == NULL || bbd.lk.resetting)
+		{
+			pr_err("[SSP] lhd is NULL or resetting");
+			ret = -1;
+		}   
+        else {
+            bbd.lk.resetting = true;
+            ret = send_sig(SIGKILL, bbd.lk.lhd, 0);
+        }
+        spin_unlock(&bbd.lk.lock);
+        return ret;
 	} else
 		return bbd_on_read(BBD_MINOR_CONTROL, BBD_CTRL_RESET_REQ, strlen(BBD_CTRL_RESET_REQ)+1);
 }
@@ -538,8 +549,12 @@ int bbd_common_open(struct inode *inode, struct file *filp)
 	filp->private_data = &bbd;
 
 	pr_info("%s--\n", __func__);
-	bbd.lk.lhd = current;
-	atomic_set(&bbd.lk.resetting, 0);
+    if (minor == BBD_MINOR_SENSOR) {
+        spin_lock(&bbd.lk.lock);
+        bbd.lk.lhd = current;
+        bbd.lk.resetting = false;
+        spin_unlock(&bbd.lk.lock);
+    }
 	return 0;
 }
 
@@ -554,6 +569,11 @@ static int bbd_common_release(struct inode *inode, struct file *filp)
 
 	pr_info("%s[%s]++\n", __func__, bbd.priv[minor].name);
 	bbd.priv[minor].busy = false;
+    if (minor == BBD_MINOR_SENSOR) {
+        spin_lock(&bbd.lk.lock);
+        bbd.lk.lhd = NULL;
+        spin_unlock(&bbd.lk.lock);
+    }
 	pr_info("%s[%s]--\n", __func__, bbd.priv[minor].name);
 	return 0;
 }

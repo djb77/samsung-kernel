@@ -90,7 +90,11 @@ void get_derived_permission(struct dentry *parent, struct dentry *dentry)
 				/* App-specific directories inside; let anyone traverse */
 				info->perm = PERM_ANDROID;
 				info->under_android = true;
-			}
+			} else if (!strcasecmp(dentry->d_name.name, "knox")) {
+				info->perm = PERM_ANDROID_KNOX;
+				info->d_gid = AID_SDCARD_R;
+				info->under_android = false;
+           		}
 			break;
 		case PERM_ANDROID:
 			if (!strcasecmp(dentry->d_name.name, "data")) {
@@ -116,6 +120,47 @@ void get_derived_permission(struct dentry *parent, struct dentry *dentry)
 				info->d_uid = multiuser_get_uid(parent_info->userid, appid);
 			}
 			break;
+		/** KNOX permission */
+		case PERM_ANDROID_KNOX:
+			info->perm = PERM_ANDROID_KNOX_USER;
+	        	info->userid = simple_strtoul(dentry->d_name.name, NULL, 10);
+	        	info->d_gid = AID_SDCARD_R;
+	        	info->under_android = false;
+	        break;
+
+		case PERM_ANDROID_KNOX_USER:
+			if (!strcasecmp(dentry->d_name.name, "Android")) {
+					info->perm = PERM_ANDROID_KNOX_ANDROID;
+					info->under_android = false;
+			}
+		break;
+		case PERM_ANDROID_KNOX_ANDROID:
+			if (!strcasecmp(dentry->d_name.name, "data")) {
+				info->perm = PERM_ANDROID_KNOX_DATA;
+				info->under_android = false;
+			} else if (!strcasecmp(dentry->d_name.name, "shared")) {
+			info->perm = PERM_ANDROID_KNOX_SHARED;
+			info->d_gid = AID_SDCARD_RW;
+			info->d_uid = multiuser_get_uid(parent_info->userid, 0);
+			info->under_android = false;
+		}
+		break;
+
+		case PERM_ANDROID_KNOX_SHARED:
+		break;
+
+		case PERM_ANDROID_KNOX_DATA:
+			appid = get_appid(sbi->pkgl_id, dentry->d_name.name);
+			info->perm = PERM_ANDROID_KNOX_PACKAGE_DATA;
+		if (appid != 0) {
+			info->d_uid = multiuser_get_uid(parent_info->userid, appid);
+		} else {
+			info->d_uid = multiuser_get_uid(parent_info->userid, 0);
+		}
+			info->under_android = false;
+		break;
+		case PERM_ANDROID_KNOX_PACKAGE_DATA:
+		break;
 	}
 } 
 
@@ -146,6 +191,9 @@ void fix_derived_permission(struct inode *inode) {
         /* Top of multi-user view should always be visible to ensure
          * secondary users can traverse inside. */
 		visible_mode = 00711;
+	} else if (info->perm == PERM_ANDROID_KNOX_PACKAGE_DATA
+	        && !info->under_android) {
+		visible_mode = visible_mode & ~00006;
 	} else if (info->under_android) {
 		if (info->d_gid == AID_SDCARD_RW) {
 			visible_mode = visible_mode & ~00006;

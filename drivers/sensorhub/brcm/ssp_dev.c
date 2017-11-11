@@ -198,6 +198,7 @@ static void initialize_variable(struct ssp_data *data)
 	data->bIsReset = false;
 #endif
 	initialize_function_pointer(data);
+	data->uNoRespSensorCnt = 0;
 }
 
 int initialize_mcu(struct ssp_data *data)
@@ -308,12 +309,6 @@ irqreturn_t ssp_mcu_host_wake_irq_handler(int irq, void *device)
 
 	u64 timestamp = get_current_timestamp();
 	unsigned int tmp = 0U;
-
-	if(data->bIsReset){
-		data->bIsReset = false;
-		pr_info("[SSP_RST] reset enable ignor first irq\n");
-		return IRQ_HANDLED;
-	}
 	
 	/** HIFI Sensor **/
 	/* Use buffer idx from 1 to 999, 0, 1 ... */

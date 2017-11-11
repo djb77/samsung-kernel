@@ -3020,7 +3020,10 @@ static int decon_clear_set_colormap(struct decon_device *decon,
 		}
 	}
 	win_config[0].state = DECON_WIN_STATE_COLOR;
+	win_config[0].fence_fd = -1;	
 	win_config[0].color = 0;
+	win_config[0].dst.x = 0;
+	win_config[0].dst.y = 0;
 	win_config[0].dst.w = decon->lcd_info->xres;
 	win_config[0].dst.h = decon->lcd_info->yres;
 	win_config[0].dst.f_w = decon->lcd_info->xres;
@@ -3375,6 +3378,13 @@ int decon_doze_enable(struct decon_device *decon)
 		decon_esd_enable_interrupt(decon);
 
 	if (!decon->id && !decon->eint_status) {
+		struct irq_desc *desc = irq_to_desc(decon->irq);
+		/* Pending IRQ clear */
+		if (desc->irq_data.chip->irq_ack) {
+			desc->irq_data.chip->irq_ack(&desc->irq_data);
+			desc->istate &= ~IRQS_PENDING;
+		}
+
 		enable_irq(decon->irq);
 		decon->eint_status = 1;
 	}
