@@ -37,9 +37,6 @@
 #include <asm/stacktrace.h>
 #include <asm/exception.h>
 #include <asm/system_misc.h>
-#ifdef CONFIG_SEC_DEBUG
-#include <linux/sec_debug.h>
-#endif
 
 #ifdef CONFIG_RKP_CFP_ROPP
 #include <linux/rkp_cfp.h>
@@ -247,9 +244,6 @@ void die(const char *str, struct pt_regs *regs, int err)
 	enum bug_trap_type bug_type = BUG_TRAP_TYPE_NONE;
 	struct thread_info *thread = current_thread_info();
 	int ret;
-#if defined(CONFIG_SEC_DEBUG)
-	char buf[SZ_256];
-#endif
 
 	oops_enter();
 
@@ -273,18 +267,14 @@ void die(const char *str, struct pt_regs *regs, int err)
 	oops_exit();
 
 #if defined(CONFIG_SEC_DEBUG)
-	sec_debug_store_backtrace(regs);
-
-	if(sec_debug_get_debug_level() && regs)
-		snprintf(buf, sizeof(buf), "%s\nPC is at %pS\nLR is at %pS\n",
-			in_interrupt() ? "Fatal exception in interrupt" : "Fatal exception",
-			(void *)regs->pc, compat_user_mode(regs) ? (void *)regs->compat_lr : (void *)regs->regs[30]);
-	else
-		snprintf(buf, sizeof(buf), "%s\n",
-			in_interrupt() ? "Fatal exception in interrupt" : "Fatal exception");
-		
-	if (in_interrupt() || panic_on_oops)
-		panic(buf);
+	if (in_interrupt())
+		panic("%s\nPC is at %pS\nLR is at %pS",
+				"Fatal exception in interrupt", (void *)regs->pc,
+				compat_user_mode(regs) ? (void *)regs->compat_lr : (void *)regs->regs[30]);
+	if (panic_on_oops)
+		panic("%s\nPC is at %pS\nLR is at %pS",
+				"Fatal exception", (void *)regs->pc,
+				compat_user_mode(regs) ? (void *)regs->compat_lr : (void *)regs->regs[30]);
 #else
 	if (in_interrupt())
 		panic("Fatal exception in interrupt");
@@ -401,10 +391,6 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 	info.si_errno = 0;
 	info.si_code  = ILL_ILLOPC;
 	info.si_addr  = pc;
-
-#ifdef CONFIG_SEC_DEBUG
-	sec_debug_store_fault_addr(-1, regs);
-#endif
 
 	arm64_notify_die("Oops - undefined instruction", regs, &info, 0);
 }

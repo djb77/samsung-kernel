@@ -37,9 +37,6 @@
 #include <asm/system_misc.h>
 #include <asm/pgtable.h>
 #include <asm/tlbflush.h>
-#ifdef CONFIG_SEC_DEBUG
-#include <linux/sec_debug.h>
-#endif
 
 static int safe_fault_in_progress = 0;
 static const char *fault_name(unsigned int esr);
@@ -118,11 +115,6 @@ static void __do_kernel_fault(struct mm_struct *mm, unsigned long addr,
 	 * No handler, we'll have to terminate things with extreme prejudice.
 	 */
 	bust_spinlocks(1);
-
-#ifdef CONFIG_SEC_DEBUG
-	sec_debug_store_fault_addr(addr, regs);
-#endif
-	
 	pr_alert("Unable to handle kernel %s at virtual address %08lx\n",
 		 (addr < PAGE_SIZE) ? "NULL pointer dereference" :
 		 "paging request", addr);
@@ -502,10 +494,6 @@ asmlinkage void __exception do_mem_abort(unsigned long addr, unsigned int esr,
 
 	if (!inf->fn(addr, esr, regs))
 		return;
-
-#ifdef CONFIG_SEC_DEBUG
-	sec_debug_store_fault_addr(addr, regs);
-#endif
 
 	pr_alert("Unhandled fault: %s (0x%08x) at 0x%016lx\n",
 		 inf->name, esr, addr);
