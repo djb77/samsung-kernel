@@ -62,7 +62,11 @@ static int mmc_queue_thread(void *d)
 
 		spin_lock_irq(q->queue_lock);
 		set_current_state(TASK_INTERRUPTIBLE);
-		req = blk_fetch_request(q);
+		if (mq->mqrq_prev->req &&
+				(mq->card && (mq->card->type == MMC_TYPE_SD)))
+			req = NULL;
+		else
+			req = blk_fetch_request(q);
 		mq->mqrq_cur->req = req;
 		spin_unlock_irq(q->queue_lock);
 
