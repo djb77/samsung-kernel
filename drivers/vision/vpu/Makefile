@@ -1,0 +1,20 @@
+obj-y					+= vpu-debug.o
+obj-y					+= vpu-binary.o
+obj-y					+= vpu-time.o
+obj-y					+= vpu-framemgr.o
+obj-y					+= vpu-graph.o
+obj-y					+= vpu-graphmgr.o
+obj-y					+= vpu-queue.o
+obj-y					+= vpu-vertex.o
+obj-y					+= vpuo-vertex.o
+obj-y					+= vpuo-chain.o
+obj-y					+= vpuo-pu.o
+obj-y					+= vpu-device.o
+obj-y					+= vpu-memory.o
+obj-y					+= vpu-system.o
+obj-y					+= vpu-io.o
+obj-$(CONFIG_EXYNOS_VPU_INTERFACE)	+= interface/
+obj-$(CONFIG_EXYNOS_VPU_ALLOCATOR)	+= resource/
+obj-$(CONFIG_EXYNOS_VPU_PLATFORM)	+= platform/
+
+EXTRA_CFLAGS += -Idrivers/vision/include -Idrivers/vision/vpu/include

@@ -1,0 +1,11 @@
+config EXYNOS_SCORE_PLATFORM
+	bool "Select Platform"
+	select EXYNOS_SCORE_EXYNOS8895
+	help
+	  This is a selection of platform
+
+config EXYNOS_SCORE_EXYNOS8895
+	bool "Use Exynos8895 platform"
+	depends on EXYNOS_SCORE_PLATFORM
+	help
+	  This is a exynos8895 platform
