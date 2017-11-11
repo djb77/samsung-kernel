@@ -389,7 +389,7 @@ cmd_parsing(const char *buf, unsigned short cnt, unsigned short *data)
 		}
 
 		if (parsing_cnt < cnt)
-			*(data + parsing_cnt) = (unsigned short)val;
+			*(data + parsing_cnt) = val;
 		else
 			break;
 		parsing_cnt++;
