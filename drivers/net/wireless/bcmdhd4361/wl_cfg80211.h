@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 692301 2017-03-27 11:55:31Z $
+ * $Id: wl_cfg80211.h 720601 2017-09-11 13:06:44Z $
  */
 
 /**
@@ -97,6 +97,13 @@ do {	\
 		DHD_LOG_DUMP_WRITE args;	\
 	}	\
 } while (0)
+#define WL_ERR_KERN(args)	\
+do {	\
+	if (wl_dbg_level & WL_DBG_ERR) {	\
+		printk(KERN_INFO CFG80211_ERROR_TEXT "%s : ", __func__);	\
+		printk args;	\
+	}	\
+} while (0)
 #define	WL_ERR_MEM(args)	\
 do {	\
 	if (wl_dbg_level & WL_DBG_ERR) {	\
@@ -121,6 +128,7 @@ do {										\
 			printk args;						\
 		}								\
 } while (0)
+#define WL_ERR_KERN(args) WL_ERR(args)
 #define WL_ERR_MEM(args) WL_ERR(args)
 #define WL_ERR_EX(args) WL_ERR(args)
 #endif /* DHD_LOG_DUMP */
@@ -132,6 +140,7 @@ do {										\
 			printk args;						\
 		}								\
 } while (0)
+#define WL_ERR_KERN(args) WL_ERR(args)
 #define WL_ERR_MEM(args) WL_ERR(args)
 #define WL_ERR_EX(args) WL_ERR(args)
 #endif /* defined(DHD_DEBUG) */
@@ -653,6 +662,37 @@ typedef struct ap_rps_info {
 } ap_rps_info_t;
 #endif /* SUPPORT_AP_RADIO_PWRSAVE */
 
+#ifdef SUPPORT_RSSI_SUM_REPORT
+#define RSSILOG_FLAG_FEATURE_SW		0x1
+#define RSSILOG_FLAG_REPORT_READY	0x2
+typedef struct rssilog_set_param {
+	uint8 enable;
+	uint8 rssi_threshold;
+	uint8 time_threshold;
+	uint8 pad;
+} rssilog_set_param_t;
+
+typedef struct rssilog_get_param {
+	uint8 report_count;
+	uint8 enable;
+	uint8 rssi_threshold;
+	uint8 time_threshold;
+} rssilog_get_param_t;
+
+typedef struct rssi_ant_param {
+	struct ether_addr ea;
+	chanspec_t chanspec;
+} rssi_ant_param_t;
+
+typedef struct wl_rssi_ant_mimo {
+	uint32 version;
+	uint32 count;
+	int8 rssi_ant[WL_RSSI_ANT_MAX];
+	int8 rssi_sum;
+	int8 PAD[3];
+} wl_rssi_ant_mimo_t;
+#endif /* SUPPORT_RSSI_SUM_REPORT */
+
 #if defined(DHD_ENABLE_BIGDATA_LOGGING)
 #define GET_BSS_INFO_LEN 90
 #endif /* DHD_ENABLE_BIGDATA_LOGGING */
@@ -691,6 +731,7 @@ struct bcm_cfg80211 {
 	struct completion iface_disable;
 	struct completion wait_next_af;
 	struct mutex usr_sync;	/* maily for up/down synchronization */
+	struct mutex if_sync;	/* maily for iface op synchronization */
 	struct mutex scan_complete;	/* serialize scan_complete call */
 	struct wl_scan_results *bss_list;
 	struct wl_scan_results *scan_results;
@@ -864,6 +905,11 @@ struct bcm_cfg80211 {
 #ifdef WBTEXT
 	struct list_head wbtext_bssid_list;
 #endif /* WBTEXT */
+	struct list_head vndr_oui_list;
+
+#ifdef STAT_REPORT
+	void *stat_report_info;
+#endif
 };
 
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == \
@@ -1729,6 +1775,13 @@ int wl_set_ap_rps(struct net_device *dev, bool enable, char *ifname);
 int wl_update_ap_rps_params(struct net_device *dev, ap_rps_info_t* rps, char *ifname);
 void wl_cfg80211_init_ap_rps(struct bcm_cfg80211 *cfg);
 #endif /* SUPPORT_AP_RADIO_PWRSAVE */
+#ifdef SUPPORT_RSSI_SUM_REPORT
+int wl_get_rssi_logging(struct net_device *dev, void *param);
+int wl_set_rssi_logging(struct net_device *dev, void *param);
+int wl_get_rssi_per_ant(struct net_device *dev, char *ifname, char *peer_mac, void *param);
+#endif /* SUPPORT_RSSI_SUM_REPORT */
 int wl_cfg80211_iface_count(struct net_device *dev);
 struct net_device* wl_get_ap_netdev(struct bcm_cfg80211 *cfg, char *ifname);
+struct net_device* wl_get_netdev_by_name(struct bcm_cfg80211 *cfg, char *ifname);
+int wl_cfg80211_get_vndr_ouilist(struct bcm_cfg80211 *cfg, uint8 *buf, int max_cnt);
 #endif /* _wl_cfg80211_h_ */

@@ -32,7 +32,6 @@ struct score_device {
 	struct device			*dev;
 	struct platform_device		*pdev;
 	unsigned long			state;
-	atomic_t			power;
 
 	struct score_vertexmgr		vertexmgr;
 	struct score_vertex		vertex;

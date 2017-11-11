@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.h 680277 2017-01-19 08:21:55Z $
+ * $Id: dhd_pcie.h 714138 2017-08-03 08:55:55Z $
  */
 
 
@@ -388,6 +388,9 @@ typedef struct dhd_bus {
 #if defined(PCIE_OOB) || defined(PCIE_INB_DW)
 	bool  ds_enabled;
 #endif
+#ifdef DHD_PCIE_RUNTIMEPM
+	bool chk_pm;	/* To avoid counting of wake up from Runtime PM */
+#endif /* DHD_PCIE_RUNTIMEPM */
 } dhd_bus_t;
 
 /* function declarations */

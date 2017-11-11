@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_cfg80211.c 676977 2016-12-27 17:27:09Z $
+ * $Id: dhd_cfg80211.c 699163 2017-05-12 05:18:23Z $
  */
 
 #include <linux/vmalloc.h>
@@ -171,7 +171,7 @@ wl_dongle_up(struct net_device *ndev)
 	s32 err = 0;
 	u32 local_up = 0;
 
-	err = wldev_ioctl(ndev, WLC_UP, &local_up, sizeof(local_up), true);
+	err = wldev_ioctl_set(ndev, WLC_UP, &local_up, sizeof(local_up));
 	if (unlikely(err)) {
 		WL_ERR(("WLC_UP error (%d)\n", err));
 	}
@@ -184,7 +184,7 @@ wl_dongle_down(struct net_device *ndev)
 	s32 err = 0;
 	u32 local_down = 0;
 
-	err = wldev_ioctl(ndev, WLC_DOWN, &local_down, sizeof(local_down), true);
+	err = wldev_ioctl_set(ndev, WLC_DOWN, &local_down, sizeof(local_down));
 	if (unlikely(err)) {
 		WL_ERR(("WLC_DOWN error (%d)\n", err));
 	}

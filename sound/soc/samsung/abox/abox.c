@@ -2964,6 +2964,34 @@ static void abox_check_call_cpu_gear(struct device *dev,
 	}
 }
 
+static void abox_notify_cpu_gear(struct abox_data *data, unsigned int freq)
+{
+	struct device *dev = &data->pdev->dev;
+	ABOX_IPC_MSG msg;
+	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
+	unsigned long long time = sched_clock();
+	unsigned long rem = do_div(time, NSEC_PER_SEC);
+
+	switch (data->calliope_state) {
+	case CALLIOPE_ENABLING:
+	case CALLIOPE_ENABLED:
+		dev_dbg(dev, "%s\n", __func__);
+
+		msg.ipcid = IPC_SYSTEM;
+		system_msg->msgtype = ABOX_CHANGED_GEAR;
+		system_msg->param1 = (int)freq;
+		system_msg->param2 = (int)time; /* SEC */
+		system_msg->param3 = (int)rem; /* NSEC */
+		abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 0, 0);
+		break;
+	case CALLIOPE_DISABLING:
+	case CALLIOPE_DISABLED:
+	default:
+		/* notification to passing by context is not needed */
+		break;
+	}
+}
+
 static void abox_change_cpu_gear(struct device *dev, struct abox_data *data)
 {
 	struct abox_qos_request *request;
@@ -3027,6 +3055,8 @@ static void abox_change_cpu_gear(struct device *dev, struct abox_data *data)
 			pm_qos_update_request(&abox_pm_qos_int, 0);
 		}
 	}
+
+	abox_notify_cpu_gear(data, clk_get_rate(data->clk_ca7) * 1000);
 }
 
 static void abox_change_cpu_gear_work_func(struct work_struct *work)

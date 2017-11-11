@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: 802.11.h 677080 2016-12-28 19:10:53Z $
+ * $Id: 802.11.h 700693 2017-05-20 20:29:07Z $
  */
 
 #ifndef _802_11_H_
@@ -264,7 +264,10 @@ BWL_PRE_PACKED_STRUCT struct dot11_auth {
 	uint16			seq;		/* sequence control */
 	uint16			status;		/* status code */
 } BWL_POST_PACKED_STRUCT;
-#define DOT11_AUTH_FIXED_LEN	6		/* length of auth frame without challenge IE */
+#define DOT11_AUTH_FIXED_LEN		6	/* length of auth frame without challenge IE */
+#define DOT11_AUTH_SEQ_STATUS_LEN	4	/* length of auth frame without challenge IE and
+						 * without algorithm
+						 */
 
 BWL_PRE_PACKED_STRUCT struct dot11_assoc_req {
 	uint16			capability;	/* capability information */
@@ -399,6 +402,17 @@ BWL_PRE_PACKED_STRUCT struct dot11_action_frmhdr {
 	uint8	data[1];
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_action_frmhdr dot11_action_frmhdr_t;
+
+/* Action Field length */
+#define DOT11_ACTION_CATEGORY_LEN	1
+#define DOT11_ACTION_ACTION_LEN		1
+#define DOT11_ACTION_DIALOG_TOKEN_LEN	1
+#define DOT11_ACTION_CAPABILITY_LEN	2
+#define DOT11_ACTION_STATUS_CODE_LEN	2
+#define DOT11_ACTION_REASON_CODE_LEN	2
+#define DOT11_ACTION_TARGET_CH_LEN	1
+#define DOT11_ACTION_OPER_CLASS_LEN	1
+
 #define DOT11_ACTION_FRMHDR_LEN	2
 
 /** CSA IE data structure */
@@ -659,6 +673,16 @@ BWL_PRE_PACKED_STRUCT struct dot11_lci_subelement {
 	uint8 lci_data[1];
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_lci_subelement dot11_lci_subelement_t;
+
+BWL_PRE_PACKED_STRUCT struct dot11_colocated_bssid_list_se {
+	uint8 sub_id;
+	uint8 length;
+	uint8 max_bssid_ind; /* MaxBSSID Indicator */
+	struct ether_addr bssid[1]; /* variable */
+} BWL_POST_PACKED_STRUCT;
+typedef struct dot11_colocated_bssid_list_se dot11_colocated_bssid_list_se_t;
+#define DOT11_LCI_COLOCATED_BSSID_LIST_FIXED_LEN     3
+#define DOT11_LCI_COLOCATED_BSSID_SUBELEM_ID         7
 
 BWL_PRE_PACKED_STRUCT struct dot11_civic_subelement {
 	uint8 type;  /* type of civic location */
@@ -943,6 +967,22 @@ typedef struct ti_ie ti_ie_t;
 #define TI_TYPE_REASSOC_DEADLINE	1
 #define TI_TYPE_KEY_LIFETIME		2
 
+#ifndef CISCO_AIRONET_OUI
+#define CISCO_AIRONET_OUI	"\x00\x40\x96"	/* Cisco AIRONET OUI */
+#endif
+/* QoS FastLane IE. */
+BWL_PRE_PACKED_STRUCT struct ccx_qfl_ie {
+	uint8	id;		/* 221, DOT11_MNG_VS_ID */
+	uint8	length;		/* 5 */
+	uint8	oui[3];		/* 00:40:96 */
+	uint8	type;		/* 11 */
+	uint8	data;
+} BWL_POST_PACKED_STRUCT;
+typedef struct ccx_qfl_ie ccx_qfl_ie_t;
+#define CCX_QFL_IE_TYPE	11
+#define CCX_QFL_ENABLE_SHIFT	5
+#define CCX_QFL_ENALBE (1 << CCX_QFL_ENABLE_SHIFT)
+
 /* WME Action Codes */
 #define WME_ADDTS_REQUEST	0	/* WME ADDTS request */
 #define WME_ADDTS_RESPONSE	1	/* WME ADDTS response */
@@ -962,6 +1002,10 @@ typedef struct ti_ie ti_ie_t;
 #define DOT11_OPEN_SYSTEM	0	/* d11 open authentication */
 #define DOT11_SHARED_KEY	1	/* d11 shared authentication */
 #define DOT11_FAST_BSS		2	/* d11 fast bss authentication */
+#define DOT11_SAE		3	/* d11 simultaneous authentication of equals */
+#define DOT11_FILS_SKEY_PFS	4	/* d11 fils shared key authentication w/o pfs */
+#define DOT11_FILS_SKEY		5	/* d11 fils shared key authentication w/ pfs */
+#define DOT11_FILS_PKEY		6	/* d11 fils public key authentication */
 #define DOT11_CHALLENGE_LEN	128	/* d11 challenge text length */
 
 /* Frame control macros */
@@ -1434,8 +1478,9 @@ typedef struct ti_ie ti_ie_t;
 #define DOT11_MNG_CHANNEL_SWITCH_WRAPPER_ID	196	/* Channel Switch Wrapper IE */
 #define DOT11_MNG_AID_ID			197	/* Association ID  IE */
 #define	DOT11_MNG_OPER_MODE_NOTIF_ID		199	/* d11 mgmt VHT oper mode notif */
-#define DOT11_MNG_HE_CAP_ID			201
-#define DOT11_MNG_HE_OP_ID			202
+#define DOT11_MNG_RNR_ID			201
+#define DOT11_MNG_HE_CAP_ID			202
+#define DOT11_MNG_HE_OP_ID			203
 #define DOT11_MNG_FTM_PARAMS_ID			206
 #define DOT11_MNG_TWT_ID			216	/* 11ah D5.0 */
 #define DOT11_MNG_WPA_ID			221	/* d11 management WPA id */
@@ -1452,8 +1497,16 @@ typedef struct ti_ie ti_ie_t;
 #define DOT11_MNG_RAPS_ID	(DOT11_MNG_ID_EXT_ID+11)  /* OFDMA Random Access Parameter Set */
 
 /* FILS ext ids */
-#define FILS_REQ_PARAMS_EXT_ID	2
+#define FILS_REQ_PARAMS_EXT_ID		2
 #define DOT11_MNG_FILS_REQ_PARAMS	(DOT11_MNG_ID_EXT_ID + FILS_REQ_PARAMS_EXT_ID)
+#define FILS_SESSION_EXT_ID		4
+#define DOT11_MNG_FILS_SESSION		(DOT11_MNG_ID_EXT_ID + FILS_SESSION_EXT_ID)
+#define FILS_HLP_CONTAINER_EXT_ID		5
+#define DOT11_MNG_FILS_HLP_CONTAINER		(DOT11_MNG_ID_EXT_ID + FILS_HLP_CONTAINER_EXT_ID)
+#define FILS_WRAPPED_DATA_EXT_ID	8
+#define DOT11_MNG_FILS_WRAPPED_DATA	(DOT11_MNG_ID_EXT_ID + FILS_WRAPPED_DATA_EXT_ID)
+#define FILS_NONCE_EXT_ID		13
+#define DOT11_MNG_FILS_NONCE		(DOT11_MNG_ID_EXT_ID + FILS_NONCE_EXT_ID)
 
 #define DOT11_MNG_IE_ID_EXT_MATCH(_ie, _id) (\
 	((_ie)->id == DOT11_MNG_ID_EXT_ID) && \
@@ -1498,13 +1551,14 @@ typedef struct ti_ie ti_ie_t;
 #define DOT11_RATE_MASK                 0x7F /* mask for numeric part of rate */
 
 /* BSS Membership Selector parameters
- * 802.11-2012 and 802.11ac_D4.0 sec 8.4.2.3
+ * 802.11-2016 (and 802.11ax-D1.1), Sec 9.4.2.3
  * These selector values are advertised in Supported Rates and Extended Supported Rates IEs
  * in the supported rates list with the Basic rate bit set.
  * Constants below include the basic bit.
  */
 #define DOT11_BSS_MEMBERSHIP_HT         0xFF  /* Basic 0x80 + 127, HT Required to join */
 #define DOT11_BSS_MEMBERSHIP_VHT        0xFE  /* Basic 0x80 + 126, VHT Required to join */
+#define DOT11_BSS_MEMBERSHIP_HE         0xFD  /* Basic 0x80 + 125, HE Required to join */
 
 /* ERP info element bit values */
 #define DOT11_MNG_ERP_LEN			1	/* ERP is currently 1 byte long */
@@ -1603,9 +1657,13 @@ BWL_PRE_PACKED_STRUCT struct dot11_extcap {
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_extcap dot11_extcap_t;
 
-/* VHT Operating mode bit fields -  (11ac D3.0 - 8.4.1.50) */
+/* VHT Operating mode bit fields -  (11ac D8.0/802.11-2016 - 9.4.1.53) */
 #define DOT11_OPER_MODE_CHANNEL_WIDTH_SHIFT 0
 #define DOT11_OPER_MODE_CHANNEL_WIDTH_MASK 0x3
+#define DOT11_OPER_MODE_160_8080_BW_SHIFT 2
+#define DOT11_OPER_MODE_160_8080_BW_MASK 0x04
+#define DOT11_OPER_MODE_NOLDPC_SHIFT 3
+#define DOT11_OPER_MODE_NOLDPC_MASK 0x08
 #define DOT11_OPER_MODE_RXNSS_SHIFT 4
 #define DOT11_OPER_MODE_RXNSS_MASK 0x70
 #define DOT11_OPER_MODE_RXNSS_TYPE_SHIFT 7
@@ -1618,9 +1676,22 @@ typedef struct dot11_extcap dot11_extcap_t;
 	((chanw) << DOT11_OPER_MODE_CHANNEL_WIDTH_SHIFT &\
 		 DOT11_OPER_MODE_CHANNEL_WIDTH_MASK))
 
+#define DOT11_D8_OPER_MODE(type, nss, ldpc, bw160_8080, chanw) (\
+	((type) << DOT11_OPER_MODE_RXNSS_TYPE_SHIFT &\
+		 DOT11_OPER_MODE_RXNSS_TYPE_MASK) |\
+	(((nss) - 1) << DOT11_OPER_MODE_RXNSS_SHIFT & DOT11_OPER_MODE_RXNSS_MASK) |\
+	((ldpc) << DOT11_OPER_MODE_NOLDPC_SHIFT & DOT11_OPER_MODE_NOLDPC_MASK) |\
+	((bw160_8080) << DOT11_OPER_MODE_160_8080_BW_SHIFT &\
+		 DOT11_OPER_MODE_160_8080_BW_MASK) |\
+	((chanw) << DOT11_OPER_MODE_CHANNEL_WIDTH_SHIFT &\
+		 DOT11_OPER_MODE_CHANNEL_WIDTH_MASK))
+
 #define DOT11_OPER_MODE_CHANNEL_WIDTH(mode) \
 	(((mode) & DOT11_OPER_MODE_CHANNEL_WIDTH_MASK)\
 		>> DOT11_OPER_MODE_CHANNEL_WIDTH_SHIFT)
+#define DOT11_OPER_MODE_160_8080(mode) \
+	(((mode) & DOT11_OPER_MODE_160_8080_BW_MASK)\
+		>> DOT11_OPER_MODE_160_8080_BW_SHIFT)
 #define DOT11_OPER_MODE_RXNSS(mode) \
 	((((mode) & DOT11_OPER_MODE_RXNSS_MASK)		\
 		>> DOT11_OPER_MODE_RXNSS_SHIFT) + 1)
@@ -1633,6 +1704,7 @@ typedef struct dot11_extcap dot11_extcap_t;
 #define DOT11_OPER_MODE_80MHZ 2
 #define DOT11_OPER_MODE_160MHZ 3
 #define DOT11_OPER_MODE_8080MHZ 3
+#define DOT11_OPER_MODE_1608080MHZ 1
 
 #define DOT11_OPER_MODE_CHANNEL_WIDTH_20MHZ(mode) (\
 	((mode) & DOT11_OPER_MODE_CHANNEL_WIDTH_MASK) == DOT11_OPER_MODE_20MHZ)
@@ -1641,9 +1713,9 @@ typedef struct dot11_extcap dot11_extcap_t;
 #define DOT11_OPER_MODE_CHANNEL_WIDTH_80MHZ(mode) (\
 	((mode) & DOT11_OPER_MODE_CHANNEL_WIDTH_MASK) == DOT11_OPER_MODE_80MHZ)
 #define DOT11_OPER_MODE_CHANNEL_WIDTH_160MHZ(mode) (\
-	((mode) & DOT11_OPER_MODE_CHANNEL_WIDTH_MASK) == DOT11_OPER_MODE_160MHZ)
+	((mode) & DOT11_OPER_MODE_160_8080_BW_MASK))
 #define DOT11_OPER_MODE_CHANNEL_WIDTH_8080MHZ(mode) (\
-	((mode) & DOT11_OPER_MODE_CHANNEL_WIDTH_MASK) == DOT11_OPER_MODE_8080MHZ)
+	((mode) & DOT11_OPER_MODE_160_8080_BW_MASK))
 
 /* Operating mode information element 802.11ac D3.0 - 8.4.2.168 */
 BWL_PRE_PACKED_STRUCT struct dot11_oper_mode_notif_ie {
@@ -1682,6 +1754,7 @@ typedef struct dot11_oper_mode_notif_ie dot11_oper_mode_notif_ie_t;
 #define DOT11_ACTION_CAT_SELFPROT	15	/* category for Mesh, self protected */
 #define DOT11_ACTION_NOTIFICATION	17
 #define DOT11_ACTION_CAT_VHT		21	/* VHT action */
+#define DOT11_ACTION_CAT_S1G		22	/* S1G action */
 #define DOT11_ACTION_CAT_HE		27	/* HE action frame */
 #define DOT11_ACTION_CAT_FILS		26	/* FILS action frame */
 #define DOT11_ACTION_CAT_VSP		126	/* protected vendor specific */
@@ -3568,11 +3641,6 @@ typedef int vht_group_id_t;
 #define VHT_N_SERVICE           16	/* bits in SERVICE field */
 #define VHT_N_TAIL               6	/* tail bits per BCC encoder */
 
-#define HE_LTF_1_GI_1_6us		(0)
-#define HE_LTF_2_GI_0_8us		(1)
-#define HE_LTF_2_GI_1_6us		(2)
-#define HE_LTF_4_GI_3_2us		(3)
-
 /** dot11Counters Table - 802.11 spec., Annex D */
 typedef struct d11cnt {
 	uint32		txfrag;		/* dot11TransmittedFragmentCount */
@@ -3913,6 +3981,8 @@ typedef struct ht_prop_add_ie ht_prop_add_ie_t;
 #define HT_OPMODE_NONGF	0x0004	/* protection mode non-GF */
 #define DOT11N_TXBURST		0x0008	/* Tx burst limit */
 #define DOT11N_OBSS_NONHT	0x0010	/* OBSS Non-HT STA present */
+#define HT_OPMODE_CCFS2_MASK	0x1fe0	/* Channel Center Frequency Segment 2 mask */
+#define HT_OPMODE_CCFS2_SHIFT	5	/* Channel Center Frequency Segment 2 shift */
 
 /* misc_bites defn's */
 #define HT_BASIC_STBC_MCS	0x007f	/* basic STBC MCS */
@@ -3944,7 +4014,14 @@ typedef struct ht_prop_add_ie ht_prop_add_ie_t;
 					== DOT11N_TXBURST)	/* Tx Burst present */
 #define DOT11N_OBSS_NONHT_PRESENT(add_ie)	((ltoh16_ua(&add_ie->opmode) & DOT11N_OBSS_NONHT) \
 					== DOT11N_OBSS_NONHT)	/* OBSS Non-HT present */
-/* Macros for HT MCS filed access */
+#define HT_OPMODE_CCFS2_GET(add_ie)	((ltoh16_ua(&(add_ie)->opmode) & HT_OPMODE_CCFS2_MASK) \
+					>> HT_OPMODE_CCFS2_SHIFT)	/* get CCFS2 */
+#define HT_OPMODE_CCFS2_SET(add_ie, ccfs2)	do { /* set CCFS2 */ \
+	(add_ie)->opmode &= htol16(~HT_OPMODE_CCFS2_MASK); \
+	(add_ie)->opmode |= htol16(((ccfs2) << HT_OPMODE_CCFS2_SHIFT) & HT_OPMODE_CCFS2_MASK); \
+} while (0)
+
+/* Macros for HT MCS field access */
 #define HT_CAP_MCS_BITMASK(supp_mcs)                 \
 	((supp_mcs)[HT_CAP_MCS_RX_8TO15_BYTE_OFFSET])
 #define HT_CAP_MCS_TX_RX_UNEQUAL(supp_mcs)          \
@@ -4037,6 +4114,16 @@ typedef struct vht_cap_ie vht_cap_ie_t;
 #define VHT_CAP_INFO_AMPDU_MAXLEN_EXP_SHIFT     23
 #define VHT_CAP_INFO_LINK_ADAPT_CAP_MASK        0x0c000000
 #define VHT_CAP_INFO_LINK_ADAPT_CAP_SHIFT       26
+#define VHT_CAP_INFO_EXT_NSS_BW_SUP_MASK        0xc0000000
+#define VHT_CAP_INFO_EXT_NSS_BW_SUP_SHIFT       30
+
+/* get Extended NSS BW Support passing vht cap info */
+#define VHT_CAP_EXT_NSS_BW_SUP(cap_info) \
+	(((cap_info) & VHT_CAP_INFO_EXT_NSS_BW_SUP_MASK) >> VHT_CAP_INFO_EXT_NSS_BW_SUP_SHIFT)
+
+/* VHT CAP INFO extended NSS BW support - refer to IEEE 802.11 REVmc D8.0 Figure 9-559 */
+#define VHT_CAP_INFO_EXT_NSS_BW_HALF_160	1 /* 160MHz at half NSS CAP */
+#define VHT_CAP_INFO_EXT_NSS_BW_HALF_160_80P80	2 /* 160 & 80p80 MHz at half NSS CAP */
 
 /* VHT Supported MCS Set - 64-bit - in VHT Cap IE */
 #define VHT_CAP_SUPP_MCS_RX_HIGHEST_RATE_MASK   0x1fff
@@ -4045,6 +4132,13 @@ typedef struct vht_cap_ie vht_cap_ie_t;
 
 #define VHT_CAP_SUPP_MCS_TX_HIGHEST_RATE_MASK   0x1fff
 #define VHT_CAP_SUPP_MCS_TX_HIGHEST_RATE_SHIFT  0
+
+/* defines for field(s) in vht_cap_ie->rx_max_rate */
+#define VHT_CAP_MAX_NSTS_MASK			0xe000
+#define VHT_CAP_MAX_NSTS_SHIFT			13
+
+/* defines for field(s) in vht_cap_ie->tx_max_rate */
+#define VHT_CAP_EXT_NSS_BW_CAP			0x2000
 
 #define VHT_CAP_MCS_MAP_0_7                     0
 #define VHT_CAP_MCS_MAP_0_8                     1
@@ -4146,8 +4240,8 @@ typedef struct vht_op_ie vht_op_ie_t;
 typedef enum vht_op_chan_width {
 	VHT_OP_CHAN_WIDTH_20_40	= 0,
 	VHT_OP_CHAN_WIDTH_80	= 1,
-	VHT_OP_CHAN_WIDTH_160	= 2,
-	VHT_OP_CHAN_WIDTH_80_80	= 3
+	VHT_OP_CHAN_WIDTH_160	= 2, /* deprecated - IEEE 802.11 REVmc D8.0 Table 11-25 */
+	VHT_OP_CHAN_WIDTH_80_80	= 3  /* deprecated - IEEE 802.11 REVmc D8.0 Table 11-25 */
 } vht_op_chan_width_t;
 
 /* AID length */
@@ -4215,6 +4309,10 @@ typedef struct vht_features_ie_hdr vht_features_ie_hdr_t;
 #define WPS_OUI_TYPE		4
 
 /* ************* WFA definitions. ************* */
+#if defined(WL_LEGACY_P2P)
+#define MAC_OUI			"\x00\x17\xF2"	/* MACOSX OUI */
+#define MAC_OUI_TYPE_P2P	5
+#endif 
 
 #ifdef P2P_IE_OVRD
 #define WFA_OUI			MAC_OUI
@@ -4255,6 +4353,8 @@ typedef struct vht_features_ie_hdr vht_features_ie_hdr_t;
 #define RSN_AKM_SHA256_1X	5	/* SHA256 key derivation, using 802.1X */
 #define RSN_AKM_SHA256_PSK	6	/* SHA256 key derivation, using Pre-shared Key */
 #define RSN_AKM_TPK		7	/* TPK(TDLS Peer Key) handshake */
+#define RSN_AKM_FILS_SHA256	14	/* SHA256 key derivation, using FILS */
+#define RSN_AKM_FILS_SHA384	15	/* SHA384 key derivation, using FILS */
 
 /* OSEN authenticated key managment suite */
 #define OSEN_AKM_UNSPECIFIED	RSN_AKM_UNSPECIFIED	/* Over 802.1x */
@@ -4782,6 +4882,7 @@ enum {
 	FTM_VS_TLV_SEC_PARAMS = 3,		/* security parameters (in either) */
 	FTM_VS_TLV_SEQ_PARAMS = 4,		/* toast parameters (FTM_REQ, BRCM proprietary) */
 	FTM_VS_TLV_MF_BUF = 5,			/* multi frame buffer - may span ftm vs ie's */
+	FTM_VS_TLV_TIMING_PARAMS = 6            /* timing adjustments */
 	/* add additional types above */
 };
 
@@ -4791,11 +4892,16 @@ enum {
 #define FTM_TPK_LEN            16
 #define FTM_RI_RR_BUF_LEN      32
 #define FTM_TPK_RI_RR_LEN      13
+#define FTM_TPK_RI_RR_LEN_SECURE_2_0    28
 #define FTM_TPK_DIGEST_LEN     32
 #define FTM_TPK_BUFFER_LEN     128
 #define FTM_TPK_RI_PHY_LEN     7
 #define FTM_TPK_RR_PHY_LEN     7
 #define FTM_TPK_DATA_BUFFER_LEN 88
+#define FTM_TPK_LEN_SECURE_2_0          32
+#define FTM_TPK_RI_PHY_LEN_SECURE_2_0  14
+#define FTM_TPK_RR_PHY_LEN_SECURE_2_0  14
+
 
 BWL_PRE_PACKED_STRUCT struct dot11_ftm_vs_params {
 	uint8 id;                       /* DOT11_MNG_VS_ID */
@@ -4972,6 +5078,13 @@ typedef struct dot11_ftm_sync_info dot11_ftm_sync_info_t;
 /* 802.11u 3GPP PLMN */
 #define G3PP_GUD_VERSION				0
 #define G3PP_PLMN_LIST_IE				0
+
+/* AP Location Public ID Info encoding */
+#define PUBLIC_ID_URI_FQDN_SE_ID		0
+/* URI/FQDN Descriptor field values */
+#define LOCATION_ENCODING_HELD			1
+#define LOCATION_ENCODING_SUPL			2
+#define URI_FQDN_SIZE					255
 
 /** hotspot2.0 indication element (vendor specific) */
 BWL_PRE_PACKED_STRUCT struct hs20_ie {

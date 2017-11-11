@@ -234,6 +234,61 @@ void abox_dbg_report_status(struct device *dev, bool ok)
 	kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, envp);
 }
 
+int abox_dbg_get_error_count(struct device *dev)
+{
+	int count = atomic_read(&abox_error_count);
+
+	dev_dbg(dev, "%s: %d\n", __func__, count);
+
+	return count;
+}
+
+static ssize_t calliope_sram_read(struct file *file, struct kobject *kobj,
+		struct bin_attribute *battr, char *buf,
+		loff_t off, size_t size)
+{
+	struct device *dev = kobj_to_dev(kobj);
+
+	dev_dbg(dev, "%s(%lld, %zu)\n", __func__, off, size);
+
+	memcpy_fromio(buf, battr->private + off, size);
+	return size;
+}
+
+static ssize_t calliope_iva_read(struct file *file, struct kobject *kobj,
+		struct bin_attribute *battr, char *buf,
+		loff_t off, size_t size)
+{
+	struct device *dev = kobj_to_dev(kobj);
+
+	dev_dbg(dev, "%s(%lld, %zu)\n", __func__, off, size);
+
+	memcpy(buf, battr->private + off, size);
+	return size;
+}
+
+static ssize_t calliope_dram_read(struct file *file, struct kobject *kobj,
+		struct bin_attribute *battr, char *buf,
+		loff_t off, size_t size)
+{
+	struct device *dev = kobj_to_dev(kobj);
+
+	dev_dbg(dev, "%s(%lld, %zu)\n", __func__, off, size);
+
+	memcpy(buf, battr->private + off, size);
+	return size;
+}
+
+/* size will be updated later */
+static BIN_ATTR_RO(calliope_sram, 0);
+static BIN_ATTR_RO(calliope_iva, IVA_FIRMWARE_SIZE);
+static BIN_ATTR_RO(calliope_dram, DRAM_FIRMWARE_SIZE);
+static struct bin_attribute *calliope_bin_attrs[] = {
+	&bin_attr_calliope_sram,
+	&bin_attr_calliope_iva,
+	&bin_attr_calliope_dram,
+};
+
 static ssize_t gpr_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -273,7 +328,7 @@ static int samsung_abox_debug_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device *abox_dev = dev->parent;
 	struct abox_data *data = dev_get_drvdata(abox_dev);
-	int ret;
+	int i, ret;
 
 	dev_dbg(dev, "%s\n", __func__);
 
@@ -287,6 +342,18 @@ static int samsung_abox_debug_probe(struct platform_device *pdev)
 	data->dump_base = phys_to_virt(abox_rmem->base);
 	data->dump_base_phys = abox_rmem->base;
 	ret = device_create_file(dev, &dev_attr_gpr);
+	bin_attr_calliope_sram.size = data->sram_size;
+	bin_attr_calliope_sram.private = data->sram_base;
+	bin_attr_calliope_iva.private = data->iva_base;
+	bin_attr_calliope_dram.private = data->dram_base;
+	for (i = 0; i < ARRAY_SIZE(calliope_bin_attrs); i++) {
+		struct bin_attribute *battr = calliope_bin_attrs[i];
+
+		ret = device_create_bin_file(dev, battr);
+		if (IS_ERR_VALUE(ret))
+			dev_warn(dev, "Failed to create file: %s\n",
+					battr->attr.name);
+	}
 
 	return ret;
 }

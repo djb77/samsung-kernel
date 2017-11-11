@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.h 681171 2017-01-25 05:27:08Z $
+ * $Id: wl_cfgvendor.h 698895 2017-05-11 02:55:17Z $
  */
 
 
@@ -467,6 +467,67 @@ typedef enum gscan_complete_event {
 	WIFI_SCAN_THRESHOLD_NUM_SCANS,
 	WIFI_SCAN_BUFFER_THR_BREACHED
 } gscan_complete_event_t;
+
+#ifdef DHD_WAKE_STATUS
+enum wake_stat_attributes {
+	WAKE_STAT_ATTRIBUTE_TOTAL_CMD_EVENT,
+	WAKE_STAT_ATTRIBUTE_CMD_EVENT_WAKE,
+	WAKE_STAT_ATTRIBUTE_CMD_EVENT_COUNT,
+	WAKE_STAT_ATTRIBUTE_CMD_EVENT_COUNT_USED,
+	WAKE_STAT_ATTRIBUTE_TOTAL_DRIVER_FW,
+	WAKE_STAT_ATTRIBUTE_DRIVER_FW_WAKE,
+	WAKE_STAT_ATTRIBUTE_DRIVER_FW_COUNT,
+	WAKE_STAT_ATTRIBUTE_DRIVER_FW_COUNT_USED,
+	WAKE_STAT_ATTRIBUTE_TOTAL_RX_DATA_WAKE,
+	WAKE_STAT_ATTRIBUTE_RX_UNICAST_COUNT,
+	WAKE_STAT_ATTRIBUTE_RX_MULTICAST_COUNT,
+	WAKE_STAT_ATTRIBUTE_RX_BROADCAST_COUNT,
+	WAKE_STAT_ATTRIBUTE_RX_ICMP_PKT,
+	WAKE_STAT_ATTRIBUTE_RX_ICMP6_PKT,
+	WAKE_STAT_ATTRIBUTE_RX_ICMP6_RA,
+	WAKE_STAT_ATTRIBUTE_RX_ICMP6_NA,
+	WAKE_STAT_ATTRIBUTE_RX_ICMP6_NS,
+	WAKE_STAT_ATTRIBUTE_IPV4_RX_MULTICAST_ADD_CNT,
+	WAKE_STAT_ATTRIBUTE_IPV6_RX_MULTICAST_ADD_CNT,
+	WAKE_STAT_ATTRIBUTE_OTHER_RX_MULTICAST_ADD_CNT
+};
+
+typedef struct rx_data_cnt_details_t {
+	int rx_unicast_cnt;		/* Total rx unicast packet which woke up host */
+	int rx_multicast_cnt;   /* Total rx multicast packet which woke up host */
+	int rx_broadcast_cnt;   /* Total rx broadcast packet which woke up host */
+} RX_DATA_WAKE_CNT_DETAILS;
+
+typedef struct rx_wake_pkt_type_classification_t {
+	int icmp_pkt;   /* wake icmp packet count */
+	int icmp6_pkt;  /* wake icmp6 packet count */
+	int icmp6_ra;   /* wake icmp6 RA packet count */
+	int icmp6_na;   /* wake icmp6 NA packet count */
+	int icmp6_ns;   /* wake icmp6 NS packet count */
+} RX_WAKE_PKT_TYPE_CLASSFICATION;
+
+typedef struct rx_multicast_cnt_t {
+	int ipv4_rx_multicast_addr_cnt; /* Rx wake packet was ipv4 multicast */
+	int ipv6_rx_multicast_addr_cnt; /* Rx wake packet was ipv6 multicast */
+	int other_rx_multicast_addr_cnt; /* Rx wake packet was non-ipv4 and non-ipv6 */
+} RX_MULTICAST_WAKE_DATA_CNT;
+
+typedef struct wlan_driver_wake_reason_cnt_t {
+	int total_cmd_event_wake;    /* Total count of cmd event wakes */
+	int *cmd_event_wake_cnt;     /* Individual wake count array, each index a reason */
+	int cmd_event_wake_cnt_sz;   /* Max number of cmd event wake reasons */
+	int cmd_event_wake_cnt_used; /* Number of cmd event wake reasons specific to the driver */
+	int total_driver_fw_local_wake;    /* Total count of drive/fw wakes, for local reasons */
+	int *driver_fw_local_wake_cnt;     /* Individual wake count array, each index a reason */
+	int driver_fw_local_wake_cnt_sz;   /* Max number of local driver/fw wake reasons */
+	/* Number of local driver/fw wake reasons specific to the driver */
+	int driver_fw_local_wake_cnt_used;
+	int total_rx_data_wake;     /* total data rx packets, that woke up host */
+	RX_DATA_WAKE_CNT_DETAILS rx_wake_details;
+	RX_WAKE_PKT_TYPE_CLASSFICATION rx_wake_pkt_classification_info;
+	RX_MULTICAST_WAKE_DATA_CNT rx_multicast_wake_pkt_info;
+} WLAN_DRIVER_WAKE_REASON_CNT;
+#endif /* DHD_WAKE_STATUS */
 
 /* Capture the BRCM_VENDOR_SUBCMD_PRIV_STRINGS* here */
 #define BRCM_VENDOR_SCMD_CAPA	"cap"

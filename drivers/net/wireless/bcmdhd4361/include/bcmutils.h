@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmutils.h 674174 2016-12-07 06:09:24Z $
+ * $Id: bcmutils.h 713120 2017-07-28 04:14:04Z $
  */
 
 #ifndef	_bcmutils_h_
@@ -651,8 +651,8 @@ DECLARE_MAP_API(8, 2, 3, 3U, 0x00FF) /* setbit8() and getbit8() */
 #define MACDBG "%02x:%02x:%02x:%02x:%02x:%02x"
 #define MAC2STRDBG(ea) (ea)[0], (ea)[1], (ea)[2], (ea)[3], (ea)[4], (ea)[5]
 #else
-#define MACDBG				"%02x:%02x:%02x"
-#define MAC2STRDBG(ea) (ea)[0], (ea)[4], (ea)[5]
+#define MACDBG				"%02x:%02x:%x"
+#define MAC2STRDBG(ea) (ea)[0], (ea)[4], ((ea)[5] & 0x0f)
 #endif /* SIMPLE_MAC_PRINT */
 
 /* bcm_format_flags() bit description structure */
@@ -990,6 +990,18 @@ C_bcm_count_leading_zeros(uint32 u32arg)
 	}
 	return (32U - shifts);
 }
+
+#ifdef BCM_ASLR_HEAP
+
+#define BCM_NVRAM_OFFSET_TCM	4
+#define BCM_NVRAM_IMG_COMPRS_FACTOR	4
+#define BCM_RNG_SIGNATURE	0xFEEDC0DE
+
+typedef struct bcm_rand_metadata {
+	uint32 signature;	/* host fills it in, FW verfies before reading rand */
+	uint32 count;	/* number of 4byte wide random numbers */
+} bcm_rand_metadata_t;
+#endif /* BCM_ASLR_HEAP */
 
 #ifdef BCMDRIVER
 /*

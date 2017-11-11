@@ -1023,6 +1023,7 @@ static irqreturn_t csi_isr(int irq, void *data)
 	int dma_frame_end;
 	struct csis_irq_src irq_src;
 	int ret;
+	u32 vc;
 
 	csi = data;
 	memset(&irq_src, 0x0, sizeof(struct csis_irq_src));
@@ -1082,6 +1083,12 @@ static irqreturn_t csi_isr(int irq, void *data)
 		if (csi->sw_checker != EXPECT_FRAME_START) {
 			warn("[CSIS%d] Lost end interupt\n",
 					csi->instance);
+
+			/* to prevent SYS.MMU falut */
+			csi_hw_s_control(csi->base_reg, CSIS_CTRL_DMA_ABORT_REQ, true);
+			for (vc = CSI_VIRTUAL_CH_0; vc < CSI_VIRTUAL_CH_MAX; vc++)
+				csi_s_output_dma(csi, vc, false);
+
 			goto clear_status;
 		}
 		csi_frame_start_inline(csi);

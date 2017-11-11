@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd.h 696007 2017-04-25 04:30:05Z $
+ * $Id: dhd.h 712557 2017-07-25 08:09:02Z $
  */
 
 /****************
@@ -304,7 +304,7 @@ enum dhd_op_flags {
 #if defined(CUSTOMER_HW4) && defined(PLATFORM_SLP)
 #define CONFIG_BCMDHD_CLM_PATH "/lib/firmware/bcmdhd_clm.blob"
 #else
-#define CONFIG_BCMDHD_CLM_PATH "/system/etc/wifi/bcmdhd_clm.blob"
+#define CONFIG_BCMDHD_CLM_PATH "/etc/wifi/bcmdhd_clm.blob"
 #endif /* CUSTOMER_HW4 && PLATFORM_SLP */
 #endif /* CONFIG_BCMDHD_CLM_PATH */
 #define WL_CCODE_NULL_COUNTRY  "#n"
@@ -365,7 +365,9 @@ enum dhd_prealloc_index {
 	DHD_PREALLOC_PKTID_MAP = 13,
 	DHD_PREALLOC_PKTID_MAP_IOCTL = 14,
 	DHD_PREALLOC_DHD_LOG_DUMP_BUF = 15,
-	DHD_PREALLOC_DHD_LOG_DUMP_BUF_EX = 16
+	DHD_PREALLOC_DHD_LOG_DUMP_BUF_EX = 16,
+	DHD_PREALLOC_DHD_PKTLOG_DUMP_BUF = 17,
+	DHD_PREALLOC_STAT_REPORT_BUF = 18
 };
 
 enum dhd_dongledump_mode {
@@ -416,7 +418,8 @@ enum dhd_hang_reason {
 	HANG_REASON_PCIE_PKTID_ERROR = 0x800A,
 	HANG_REASON_PCIE_LINK_DOWN = 0x8805,
 	HANG_REASON_INVALID_EVENT_OR_DATA = 0x8806,
-	HANG_REASON_MAX = 0x8807
+	HANG_REASON_UNKNOWN = 0x8807,
+	HANG_REASON_MAX = 0x8808
 };
 
 enum dhd_rsdb_scan_features {
@@ -602,7 +605,9 @@ extern char *dhd_log_dump_get_timestamp(void);
 #endif /* DHD_LOG_DUMP */
 
 #if defined(CUSTOMER_HW4)
+#ifndef DHD_COMMON_DUMP_PATH
 #define DHD_COMMON_DUMP_PATH	"/data/log/wifi/"
+#endif /* !DHD_COMMON_DUMP_PATH */
 #else
 #define DHD_COMMON_DUMP_PATH	"/installmedia/"
 #endif /* CUSTOMER_HW4 */
@@ -840,6 +845,9 @@ typedef struct dhd_pub {
 #if defined(DHD_HANG_SEND_UP_TEST)
 	uint req_hang_type;
 #endif /* DHD_HANG_SEND_UP_TEST */
+#if defined(CONFIG_BCM_DETECT_CONSECUTIVE_HANG)
+	uint hang_counts;
+#endif /* CONFIG_BCM_DETECT_CONSECUTIVE_HANG */
 #ifdef WLTDLS
 	bool tdls_enable;
 #endif
@@ -981,9 +989,9 @@ typedef struct dhd_pub {
 	/* timesync link */
 	struct dhd_ts *ts;
 	bool	d2h_hostrdy_supported;
-#ifdef DBG_PKT_MON
+#if defined(DBG_PKT_MON) || defined(DHD_PKT_LOGGING)
 	bool d11_tx_status;
-#endif /* DBG_PKT_MON */
+#endif /* DBG_PKT_MON || DHD_PKT_LOGGING */
 	uint16 ndo_version;		/* ND offload version supported */
 #ifdef NDO_CONFIG_SUPPORT
 	bool ndo_enable;		/* ND offload feature enable */
@@ -1029,6 +1037,12 @@ typedef struct dhd_pub {
 #endif /* WLADPS_SEAK_AP_WAR */
 	bool ext_trap_data_supported;
 	uint32 *extended_trap_data;
+#ifdef DHD_PKT_LOGGING
+	struct dhd_pktlog *pktlog;
+#endif /* DHD_PKT_LOGGING */
+#if defined(STAT_REPORT)
+	void *stat_report_info;
+#endif
 } dhd_pub_t;
 
 typedef struct {
@@ -1378,7 +1392,8 @@ typedef enum dhd_attach_states
 	DHD_ATTACH_STATE_EARLYSUSPEND_DONE = 0x100,
 	DHD_ATTACH_TIMESYNC_ATTACH_DONE = 0x200,
 	DHD_ATTACH_LOGTRACE_INIT = 0x400,
-	DHD_ATTACH_STATE_DONE = 0x800
+	DHD_ATTACH_STATE_LB_ATTACH_DONE = 0x800,
+	DHD_ATTACH_STATE_DONE = 0x1000
 } dhd_attach_states_t;
 
 /* Value -1 means we are unsuccessful in creating the kthread. */
@@ -1416,13 +1431,7 @@ extern void dhd_store_conn_status(uint32 event, uint32 status, uint32 reason);
 
 extern bool dhd_prec_enq(dhd_pub_t *dhdp, struct pktq *q, void *pkt, int prec);
 
-#ifdef DHD_WAKE_STATUS
-/* Receive frame for delivery to OS.  Callee disposes of rxp. */
-extern void dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *rxp, int numpkt, uint8 chan,
-	int pkt_wake, wake_counts_t *wcp);
-#else
 extern void dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *rxp, int numpkt, uint8 chan);
-#endif /* DHD_WAKE_STATUS */
 
 /* Return pointer to interface name */
 extern char *dhd_ifname(dhd_pub_t *dhdp, int idx);
@@ -1742,6 +1751,7 @@ extern uint dhd_bus_chip_id(dhd_pub_t *dhdp);
 extern uint dhd_bus_chiprev_id(dhd_pub_t *dhdp);
 extern uint dhd_bus_chippkg_id(dhd_pub_t *dhdp);
 #endif /* defined(BCMSDIO) || defined(BCMPCIE) */
+int dhd_bus_get_fw_mode(dhd_pub_t *dhdp);
 
 #if defined(KEEP_ALIVE)
 extern int dhd_keep_alive_onoff(dhd_pub_t *dhd);
@@ -1789,7 +1799,8 @@ extern int dhd_bssidx2idx(dhd_pub_t *dhdp, uint32 bssidx);
 extern struct net_device *dhd_linux_get_primary_netdev(dhd_pub_t *dhdp);
 
 extern bool dhd_is_concurrent_mode(dhd_pub_t *dhd);
-extern int dhd_iovar(dhd_pub_t *pub, int ifidx, char *name, char *cmd_buf, uint cmd_len, int set);
+int dhd_iovar(dhd_pub_t *pub, int ifidx, char *name, char *param_buf, uint param_len,
+		char *res_buf, uint res_len, int set);
 extern int dhd_getiovar(dhd_pub_t *pub, int ifidx, char *name, char *cmd_buf,
 		uint cmd_len, char **resptr, uint resp_len);
 
@@ -2018,6 +2029,19 @@ extern uint dhd_pktgen_len;
 extern char fw_path2[MOD_PARAM_PATHLEN];
 #endif
 
+#if defined(ANDROID_PLATFORM_VERSION)
+#if (ANDROID_PLATFORM_VERSION < 7)
+#define DHD_LEGACY_FILE_PATH
+#define VENDOR_PATH "/system"
+#elif (ANDROID_PLATFORM_VERSION == 7)
+#define VENDOR_PATH "/system"
+#elif (ANDROID_PLATFORM_VERSION >= 8)
+#define VENDOR_PATH "/vendor"
+#endif /* ANDROID_PLATFORM_VERSION < 7 */
+#else
+#define VENDOR_PATH ""
+#endif /* ANDROID_PLATFORM_VERSION */
+
 #ifdef DHD_LEGACY_FILE_PATH
 #define PLATFORM_PATH	"/data/"
 #elif defined(PLATFORM_SLP)
@@ -2241,6 +2265,12 @@ extern void dhd_os_general_spin_unlock(dhd_pub_t *pub, unsigned long flags);
 #define DHD_TDLS_LOCK(lock, flags)       (flags) = dhd_os_spin_lock(lock)
 #define DHD_TDLS_UNLOCK(lock, flags)     dhd_os_spin_unlock((lock), (flags))
 #endif /* WLTDLS */
+
+#ifdef DBG_PKT_MON
+/* Enable DHD PKT MON spin lock/unlock */
+#define DHD_PKT_MON_LOCK(lock, flags)     (flags) = dhd_os_spin_lock(lock)
+#define DHD_PKT_MON_UNLOCK(lock, flags)   dhd_os_spin_unlock(lock, (flags))
+#endif /* DBG_PKT_MON */
 
 #define DHD_LINUX_GENERAL_LOCK(dhdp, flags)	DHD_GENERAL_LOCK(dhdp, flags)
 #define DHD_LINUX_GENERAL_UNLOCK(dhdp, flags)	DHD_GENERAL_UNLOCK(dhdp, flags)
@@ -2532,4 +2562,11 @@ extern void dhd_make_hang_with_reason(struct net_device *dev, const char *string
 extern void dhd_set_blob_support(dhd_pub_t *dhdp, char *fw_path);
 #endif /* DHD_BLOB_EXISTENCE_CHECK */
 
+#ifdef DHD_WAKE_STATUS
+wake_counts_t* dhd_get_wakecount(dhd_pub_t *dhdp);
+#endif /* DHD_WAKE_STATUS */
+
+#ifdef BCM_ASLR_HEAP
+extern uint32 dhd_get_random_number(void);
+#endif /* BCM_ASLR_HEAP */
 #endif /* _dhd_h_ */

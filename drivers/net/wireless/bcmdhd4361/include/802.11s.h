@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: 802.11s.h 674150 2016-12-07 03:14:40Z $
+ * $Id: 802.11s.h 700076 2017-05-17 14:42:22Z $
  */
 
 #ifndef _802_11s_h_
@@ -290,7 +290,7 @@ BWL_PRE_PACKED_STRUCT struct dot11_mcsp_body {
 	uint8 ttl;           /* remaining number of hops allowed for this element. */
 	uint8 flags;         /* attributes of this channel switch attempt */
 	uint8 reason;        /* reason for the mesh channel switch */
-	uint8 precedence;    /* random value in the range 0 to 65535 */
+	uint16 precedence;    /* random value in the range 0 to 65535 */
 } BWL_POST_PACKED_STRUCT;
 
 #define DOT11_MCSP_TTL_DEFAULT          1
@@ -306,7 +306,7 @@ BWL_PRE_PACKED_STRUCT struct dot11_mesh_csp {
 	struct dot11_mcsp_body body; /* body of the ie */
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_mesh_csp dot11_mesh_csp_ie_t;
-#define DOT11_MESH_CSP_IE_LEN    4       /* length of mesh channel switch parameter IE body */
+#define DOT11_MESH_CSP_IE_LEN    5       /* length of mesh channel switch parameter IE body */
 
 /* This marks the end of a packed structure section. */
 #include <packed_section_end.h>
