@@ -82,6 +82,7 @@ static void get_timestamp(struct ssp_data *data, char *pchRcvDataFrame,
 	unsigned int idxTimestamp = 0;
 	unsigned int time_delta_us = 0;
 	u64 time_delta_ns = 0;
+	u64 cur_timestamp = get_current_timestamp();
 
 	memset(&time_delta_us, 0, 4);
 	memcpy(&time_delta_us, pchRcvDataFrame + *iDataIdx, 4);
@@ -176,7 +177,9 @@ static void get_timestamp(struct ssp_data *data, char *pchRcvDataFrame,
 						if(data->lastTimestamp[sensor_type] > data->ts_index_buffer[tmpIndex])
 						{
 							//pr_err("[SSP_TIM] %d after avg + DT %lld", sensor_type, time_delta_ns);
-							data->lastTimestamp[sensor_type] = data->lastTimestamp[sensor_type] + time_delta_ns;
+							pr_err("[SSP] %s - %d using delta last=%llu buf=%llu delta=%llu\n",
+								__func__,sensor_type,data->lastTimestamp[sensor_type],data->ts_index_buffer[tmpIndex],tmp_ts_delta);
+							data->lastTimestamp[sensor_type] = data->lastTimestamp[sensor_type] + tmp_ts_delta;
 						}
 						else
 						{
@@ -185,7 +188,19 @@ static void get_timestamp(struct ssp_data *data, char *pchRcvDataFrame,
 						}
 					} else {
 						//pr_err("[SSP_TIM] %d +avg %lld\n",sensor_type, tmp_ts_avg);
-						data->lastTimestamp[sensor_type] = data->lastTimestamp[sensor_type] + tmp_ts_avg;
+						if(data->lastTimestamp[sensor_type] + tmp_ts_avg + 5000000000ULL < cur_timestamp)
+						{
+							pr_info("[SSP] %s - %d 5s buf=%llu cur=%llu\n",__func__,sensor_type,data->ts_index_buffer[tmpIndex],cur_timestamp);
+							data->lastTimestamp[sensor_type] = data->ts_index_buffer[tmpIndex];
+						}
+						else if(data->lastTimestamp[sensor_type] + tmp_ts_avg > cur_timestamp)
+						{						
+							pr_info("[SSP] %s - %d curtime cur=%llu last=%llu buf=%llu avg=%llu\n",
+								__func__,sensor_type,cur_timestamp,data->lastTimestamp[sensor_type],data->ts_index_buffer[tmpIndex],tmp_ts_avg);
+							data->lastTimestamp[sensor_type] = cur_timestamp;
+						}						
+						else
+							data->lastTimestamp[sensor_type] = data->lastTimestamp[sensor_type] + tmp_ts_avg;
 					}
 					data->ts_prev_index[sensor_type] = idxTimestamp;// KEEP LAST INDEX;
 				}
@@ -763,7 +778,6 @@ int parse_dataframe(struct ssp_data *data, char *pchRcvDataFrame, int iLength)
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING // HIFI batch
 	u16 batch_event_count;
 	u16 batch_mode;
-	u64 ts = 0;
 #else
 	struct ssp_time_diff sensortime;
 	sensortime.time_diff = 0;
@@ -809,11 +823,6 @@ int parse_dataframe(struct ssp_data *data, char *pchRcvDataFrame, int iLength)
 				pr_err("[SSP]: %s batch count error (%d)\n", __func__, batch_event_count);
 			data->reportedData[sensor_type] = true;
 			//pr_err("[SSP]: (%d / %d)\n", iDataIdx, iLength);
-			ts = get_current_timestamp();
-			if(ts > 10000000000ULL + data->lastTimestamp[sensor_type]) {
-				data->lastTimestamp[sensor_type] = ts;
-				pr_err("[SSP_PARSE] %d late 10 sec sync to %lld\n",sensor_type, ts);
-			}
 			break;
 		case MSG2AP_INST_DEBUG_DATA:
 			sensor_type = print_mcu_debug(pchRcvDataFrame, &iDataIdx, iLength);

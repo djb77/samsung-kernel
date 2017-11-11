@@ -693,9 +693,6 @@ static ssize_t store_max77854_rgb_blink(struct device *dev,
 		}
 	}
 
-	/*Set LED blink mode*/
-	max77854_rgb_blink(dev, delay_on_time, delay_off_time);
-
 	if (led_r_brightness) {
 		max77854_rgb_set_state(&max77854_rgb->led[RED], led_r_brightness, LED_BLINK);
 	}
@@ -705,6 +702,9 @@ static ssize_t store_max77854_rgb_blink(struct device *dev,
 	if (led_b_brightness) {
 		max77854_rgb_set_state(&max77854_rgb->led[BLUE], led_b_brightness, LED_BLINK);
 	}
+
+	/*Set LED blink mode*/
+	max77854_rgb_blink(dev, delay_on_time, delay_off_time);
 
 	pr_info("leds-max77854-rgb: %s, delay_on_time: %d, delay_off_time: %d, color: 0x%x, lowpower: %i\n", 
 			__func__, delay_on_time, delay_off_time, led_brightness, led_lowpower_mode);

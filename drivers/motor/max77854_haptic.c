@@ -57,11 +57,9 @@ struct max77854_haptic_drvdata {
 	struct kthread_worker kworker;
 	struct kthread_work kwork;
 	struct mutex mutex;
-	bool running;
 	u32 intensity;
 	u32 timeout;
 	int duty;
-	atomic_t cnt;
 };
 
 #if defined(CONFIG_MOTOR_DRV_SENSOR)
@@ -266,38 +264,52 @@ static void haptic_enable(struct timed_output_dev *tout_dev, int value)
 
 	flush_kthread_worker(&drvdata->kworker);
 	ret = hrtimer_cancel(timer);
-	if (ret)
-		atomic_dec(&drvdata->cnt);
+
 	value = min_t(int, value, (int)drvdata->pdata->max_timeout);
 	drvdata->timeout = value;
 	pr_debug("%u %ums\n", drvdata->duty, value);
 	if (value > 0) {
 		mutex_lock(&drvdata->mutex);
-		atomic_inc(&drvdata->cnt);
-		if (!drvdata->running) {
-#if defined(CONFIG_MOTOR_DRV_SENSOR)
-			if (sensorCallback != NULL)
-				sensorCallback(true);
-			else {
-				pr_info("%s sensorCallback is null.start\n", __func__);
-				sensorCallback = getMotorCallback();
-				sensorCallback(true);
-			}
-#endif
-			pwm_config(drvdata->pwm, duty, period);
-			ret = pwm_enable(drvdata->pwm);
-			if (ret)
-				pr_err("%s: error to enable pwm %d\n", __func__, ret);
-			max77854_haptic_i2c(drvdata, true);
-			drvdata->running = true;
-		}
-		mutex_unlock(&drvdata->mutex);
-	}
-	queue_kthread_work(&drvdata->kworker, &drvdata->kwork);
 
-	if (value > 0)
+#if defined(CONFIG_MOTOR_DRV_SENSOR)
+		if (sensorCallback != NULL)
+			sensorCallback(true);
+		else {
+			pr_info("%s sensorCallback is null.start\n", __func__);
+			sensorCallback = getMotorCallback();
+			sensorCallback(true);
+		}
+#endif
+		pwm_config(drvdata->pwm, duty, period);
+		ret = pwm_enable(drvdata->pwm);
+		if (ret)
+			pr_err("%s: error to enable pwm %d\n", __func__, ret);
+		max77854_haptic_i2c(drvdata, true);
+
+		mutex_unlock(&drvdata->mutex);
 		hrtimer_start(timer, ns_to_ktime((u64)drvdata->timeout * NSEC_PER_MSEC),
 			HRTIMER_MODE_REL);
+	}
+	else if (value == 0) {
+		mutex_lock(&drvdata->mutex);
+
+		max77854_haptic_i2c(drvdata, false);
+		pwm_config(drvdata->pwm, period >> 1, period);
+		pwm_disable(drvdata->pwm);
+
+#if defined(CONFIG_MOTOR_DRV_SENSOR)
+		if (sensorCallback != NULL)
+			sensorCallback(false);
+		else {
+			pr_debug("%s sensorCallback is null.start\n", __func__);
+			sensorCallback = getMotorCallback();
+			sensorCallback(true);
+		}
+#endif
+		pr_debug("off\n");
+
+		mutex_unlock(&drvdata->mutex);
+	}
 }
 
 static enum hrtimer_restart haptic_timer_func(struct hrtimer *timer)
@@ -305,7 +317,6 @@ static enum hrtimer_restart haptic_timer_func(struct hrtimer *timer)
 	struct max77854_haptic_drvdata *drvdata
 		= container_of(timer, struct max77854_haptic_drvdata, timer);
 
-	atomic_dec(&drvdata->cnt);
 	queue_kthread_work(&drvdata->kworker, &drvdata->kwork);
 	return HRTIMER_NORESTART;
 }
@@ -317,25 +328,22 @@ static void haptic_work(struct kthread_work *work)
 	int period = drvdata->pdata->period;
 
 	mutex_lock(&drvdata->mutex);
-	if (!atomic_read(&drvdata->cnt)) {
-		if (!drvdata->running)
-			goto out;
-		max77854_haptic_i2c(drvdata, false);
-		pwm_config(drvdata->pwm, period >> 1, period);
-		pwm_disable(drvdata->pwm);
-		drvdata->running = false;
+
+	max77854_haptic_i2c(drvdata, false);
+	pwm_config(drvdata->pwm, period >> 1, period);
+	pwm_disable(drvdata->pwm);
+
 #if defined(CONFIG_MOTOR_DRV_SENSOR)
-		if (sensorCallback != NULL)
-			sensorCallback(false);
-		else {
-			pr_debug("%s sensorCallback is null.start\n", __func__);
-			sensorCallback = getMotorCallback();
-			sensorCallback(true);
-		}
-#endif
-		pr_debug("off\n");
+	if (sensorCallback != NULL)
+		sensorCallback(false);
+	else {
+		pr_debug("%s sensorCallback is null.start\n", __func__);
+		sensorCallback = getMotorCallback();
+		sensorCallback(true);
 	}
-out:
+#endif
+	pr_debug("off\n");
+
 	mutex_unlock(&drvdata->mutex);
 }
 
@@ -478,7 +486,6 @@ static int max77854_haptic_probe(struct platform_device *pdev)
 	drvdata->pdata = pdata;
 	drvdata->intensity = 8000;
 	drvdata->duty = pdata->duty;
-	atomic_set(&drvdata->cnt, 0);
 
 	init_kthread_worker(&drvdata->kworker);
 	mutex_init(&drvdata->mutex);

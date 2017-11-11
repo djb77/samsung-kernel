@@ -2045,7 +2045,7 @@ static int decon_set_wb_buffer(struct decon_device *decon,
 			ret = -ENOMEM;
 			goto fail_map;
 		}
-		if (win_config->protection) {
+		if (config->protection) {
 			cfw_buf_list_create(decon->ion_client, handle,
 					regs, ODMA_WB);
 		}

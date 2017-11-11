@@ -358,6 +358,7 @@ int p9220_get_adc(struct p9220_charger_data *charger, int adc_type)
 
 void p9220_set_vout(struct p9220_charger_data *charger, int vout)
 {
+	union power_supply_propval value;
 	switch (vout) {
 		case P9220_VOUT_5V:
 			p9220_reg_write(charger->client, P9220_VOUT_SET_REG, P9220_VOUT_5V_VAL);
@@ -370,6 +371,11 @@ void p9220_set_vout(struct p9220_charger_data *charger, int vout)
 			pr_info("%s vout read = %d mV \n", __func__,  p9220_get_adc(charger, P9220_ADC_VOUT));
 			break;
 		case P9220_VOUT_9V:
+			psy_do_property("battery", get, POWER_SUPPLY_PROP_CHARGE_COUNTER_SHADOW, value);
+			if (value.intval == POWER_SUPPLY_TYPE_OTG || value.intval == POWER_SUPPLY_TYPE_POWER_SHARING) {
+				pr_info("%s wire_status = %d. do not set VOUT 9V \n", __func__,  value.intval);
+				break;
+			}
 			/* We set VOUT to 10V actually for HERO for RE/CE standard authentication */
 			p9220_reg_write(charger->client, P9220_VOUT_SET_REG, P9220_VOUT_9V_VAL);
 			msleep(100);
@@ -556,7 +562,6 @@ void p9220_send_packet(struct p9220_charger_data *charger, u8 header, u8 rx_data
 void p9220_send_command(struct p9220_charger_data *charger, int cmd_mode)
 {
 	u8 data_val[4];
-	union power_supply_propval value;
 
 	switch (cmd_mode) {
 		case P9220_AFC_CONF_5V:
@@ -574,17 +579,14 @@ void p9220_send_command(struct p9220_charger_data *charger, int cmd_mode)
 			break;
 		case P9220_AFC_CONF_9V:
 			pr_info("%s set 9V \n", __func__);
-			psy_do_property("battery", get, POWER_SUPPLY_PROP_CHARGE_COUNTER_SHADOW, value);
 
 			data_val[0] = 0x2c;
 			p9220_send_packet(charger, P9220_HEADER_AFC_CONF, P9220_RX_DATA_COM_AFC_SET, data_val, 1);
 			msleep(120);
 
-			if (value.intval == POWER_SUPPLY_TYPE_OTG || value.intval == POWER_SUPPLY_TYPE_POWER_SHARING) {
-				pr_info("%s wire_status = %d. do not set VOUT 9V \n", __func__,  value.intval);
-				break;
-			} else
-				p9220_set_vout(charger, P9220_VOUT_9V);
+			/* Enable Clamp1, Clamp2 for WPC 9W */
+			p9220_reg_update(charger->client, P9220_MOD_DEPTH_REG, 0x30, 0x30);
+			p9220_set_vout(charger, P9220_VOUT_9V);
 			pr_info("%s vout read = %d \n", __func__,  p9220_get_adc(charger, P9220_ADC_VOUT));
 
 			p9220_reg_read(charger->client, P9220_RX_DATA_COMMAND, &data_val[0]);
@@ -1718,6 +1720,7 @@ static void p9220_wpc_det_work(struct work_struct *work)
 
 		cancel_delayed_work(&charger->wpc_isr_work);
 		cancel_delayed_work(&charger->wpc_opfq_work);
+		cancel_delayed_work(&charger->wpc_tx_id_work);
 	}
 
 	pr_info("%s: w(%d to %d)\n", __func__,
@@ -1757,17 +1760,30 @@ static void p9220_wpc_isr_work(struct work_struct *work)
 			break;
 		case 0x1:
 			pr_info("%s data = 0x%x, might be 9V irq \n", __func__, val_data);
-			for(i = 0; i < CMD_CNT; i++) {
-				p9220_send_command(charger, P9220_AFC_CONF_9V);
-				msleep(300);
-				if (p9220_get_adc(charger, P9220_ADC_VOUT) > 0) {
-					charger->pdata->cable_type = P9220_PAD_MODE_WPC_AFC;
-					value.intval = SEC_WIRELESS_PAD_WPC_HV;
-					psy_do_property("wireless", set,
-						POWER_SUPPLY_PROP_ONLINE, value);
-					/* Enable Clamp1, Clamp2 for WPC 9W */
-					p9220_reg_update(charger->client, P9220_MOD_DEPTH_REG, 0x30, 0x30);
+			if (!gpio_get_value(charger->pdata->wpc_det)) {
+				wake_unlock(&charger->wpc_wake_lock);
+				return;
+			}
+
+			p9220_send_command(charger, P9220_AFC_CONF_9V);
+			msleep(500);
+			charger->pdata->cable_type = P9220_PAD_MODE_WPC_AFC;
+			value.intval = SEC_WIRELESS_PAD_WPC_HV;
+			psy_do_property("wireless", set,
+				POWER_SUPPLY_PROP_ONLINE, value);
+				
+			for(i = 0; i < CMD_CNT - 1; i++) {
+				if (!gpio_get_value(charger->pdata->wpc_det)) {
+					wake_unlock(&charger->wpc_wake_lock);
+					return;
+				}
+				if (p9220_get_adc(charger, P9220_ADC_VOUT) > 7500) {
+					pr_info("%s 9V set is done \n", __func__);
 					break;
+				} else {
+					pr_info("%s send AFC_CONF_9V again \n", __func__);
+					p9220_send_command(charger, P9220_AFC_CONF_9V);
+					msleep(500);				
 				}
 			}
 
@@ -1805,7 +1821,7 @@ static void p9220_wpc_isr_work(struct work_struct *work)
 			pr_info("%s: unsupport : 0x%x", __func__, data);
 		}
 
-		p9220_send_command(charger, P9220_REQUEST_TX_ID);
+		queue_delayed_work(charger->wqueue, &charger->wpc_tx_id_work, msecs_to_jiffies(1000));
 	} else if (cmd_data == 0x01) {
 		switch (val_data) {
 		case 0x00:
@@ -1840,6 +1856,16 @@ static void p9220_wpc_isr_work(struct work_struct *work)
 	}
 
 	wake_unlock(&charger->wpc_wake_lock);
+}
+
+static void p9220_wpc_tx_id_work(struct work_struct *work)
+{
+	struct p9220_charger_data *charger =
+		container_of(work, struct p9220_charger_data, wpc_tx_id_work.work);
+
+	pr_info("%s\n",__func__);
+	
+	p9220_send_command(charger, P9220_REQUEST_TX_ID);
 }
 
 static irqreturn_t p9220_wpc_det_irq_thread(int irq, void *irq_data)
@@ -1890,11 +1916,8 @@ static irqreturn_t p9220_wpc_irq_thread(int irq, void *irq_data)
 		if(charger->pdata->cable_type == P9220_PAD_MODE_WPC_STAND ||
 			charger->pdata->cable_type == P9220_PAD_MODE_WPC_STAND_HV)
 			pr_info("%s Don't run ISR_WORK for NO ACK ! \n", __func__);
-		else if(!delayed_work_pending(&charger->wpc_isr_work) &&
-			charger->pdata->cable_type != P9220_PAD_MODE_NONE)
-			queue_delayed_work(charger->wqueue, &charger->wpc_isr_work, 0);
-		else
-			pr_info("%s Don't run ISR_WORK for PAD_NONE ! \n", __func__);
+		else if(!delayed_work_pending(&charger->wpc_isr_work))
+			queue_delayed_work(charger->wqueue, &charger->wpc_isr_work, msecs_to_jiffies(1000));
 	}
 
 	if(irq_src[1] & P9220_STAT_OVER_CURR_MASK) {
@@ -2125,6 +2148,7 @@ static int p9220_charger_probe(
 	struct p9220_charger_data *charger;
 	p9220_charger_platform_data_t *pdata = client->dev.platform_data;
 	int ret = 0;
+	int wc_w_state_irq;
 
 	dev_info(&client->dev,
 		"%s: p9220 Charger Driver Loading\n", __func__);
@@ -2195,6 +2219,7 @@ static int p9220_charger_probe(
 	/* wpc_irq */
 	if (charger->pdata->irq_wpc_int) {
 		INIT_DELAYED_WORK(&charger->wpc_isr_work, p9220_wpc_isr_work);	
+		INIT_DELAYED_WORK(&charger->wpc_tx_id_work, p9220_wpc_tx_id_work);	
 	}
 
 	ret = power_supply_register(&client->dev, &charger->psy_chg);
@@ -2245,21 +2270,21 @@ static int p9220_charger_probe(
 		}
 	}
 
+	wc_w_state_irq = gpio_get_value(charger->pdata->wpc_int);
+	pr_info("%s wc_w_state_irq = %d\n", __func__, wc_w_state_irq);
 	if (gpio_get_value(charger->pdata->wpc_det)) {
-		int wc_w_state_irq;
 		u8 irq_src[2];
-		msleep(250);
 		pr_info("%s: Charger interrupt occured during lpm \n", __func__);
 
 		p9220_reg_read(charger->client, P9220_INT_L_REG, &irq_src[0]);
 		p9220_reg_read(charger->client, P9220_INT_H_REG, &irq_src[1]);
-		wc_w_state_irq = gpio_get_value(charger->pdata->wpc_int);
-		pr_info("%s wc_w_state_irq = %d\n", __func__, wc_w_state_irq);
 		/* clear intterupt */
 		p9220_reg_write(charger->client, P9220_INT_CLEAR_L_REG, irq_src[0]); // clear int
 		p9220_reg_write(charger->client, P9220_INT_CLEAR_H_REG, irq_src[1]); // clear int
 		p9220_set_cmd_reg(charger, 0x20, P9220_CMD_CLEAR_INT_MASK); // command
 		queue_delayed_work(charger->wqueue, &charger->wpc_det_work, 0);
+		if(!wc_w_state_irq && !delayed_work_pending(&charger->wpc_isr_work))
+			queue_delayed_work(charger->wqueue, &charger->wpc_isr_work, msecs_to_jiffies(2000));
 	}
 
 	ret = sysfs_create_group(&charger->psy_chg.dev->kobj, &p9220_attr_group);

@@ -52,6 +52,8 @@ int bbd_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 	int status = 0;
 	bool msg_dead = false, ssp_down = false;
 	bool use_no_irq = false;
+	int ssp_packet_size = msg->length;
+	int ssp_msg_type = msg->options  & SSP_SPI_MASK;
 
 	if (data == NULL || msg == NULL) {
 		pr_err("%s():[SSPBBD] data or msg is NULL\n", __func__);
@@ -77,12 +79,15 @@ int bbd_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 
 	mutex_lock(&data->pending_mutex);
 
-	if (bbd_send_packet((unsigned char *)msg, 9) > 0) {
+	if ((ssp_msg_type != AP2HUB_WRITE || ssp_packet_size <= MAX_SSP_PACKET_SIZE) && bbd_send_packet((unsigned char *)msg, 9) > 0) {
 		status = 1;
 		DEBUG_SHOW_HEX_SEND(msg, 9)
 	} else {
 		pr_err("[SSP]: %s bbd_send_packet fail!!\n", __func__);
-		data->uTimeOutCnt++;
+		if (ssp_packet_size <= MAX_SSP_PACKET_SIZE)
+			data->uTimeOutCnt++;
+		else
+			pr_err("[SSPBBD]: packet size of ssp must be less than %d, but %d\n", MAX_SSP_PACKET_SIZE, (int)msg->length); 
 		clean_msg(msg);
 		mutex_unlock(&data->pending_mutex);
 		mutex_unlock(&data->comm_mutex);

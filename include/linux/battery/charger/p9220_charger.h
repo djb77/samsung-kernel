@@ -476,6 +476,7 @@ struct p9220_charger_data {
 	struct delayed_work	wpc_det_work;
 	struct delayed_work	wpc_opfq_work;
 	struct delayed_work	wpc_isr_work;
+	struct delayed_work	wpc_tx_id_work;
 
 	u16 addr;
 	int size;

@@ -25,6 +25,9 @@
 #include <linux/sec_sysfs.h>
 #include <linux/uaccess.h>
 #include "sec_ts.h"
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+#include <linux/t-base-tui.h>
+#endif
 
 #define tostring(x) (#x)
 
@@ -132,6 +135,10 @@ static void second_screen_enable(void *device_data);
 static void set_log_level(void *device_data);
 static void set_tunning_data(void *device_data);
 static void not_support_cmd(void *device_data);
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+extern int tui_force_close(uint32_t arg);
+#endif
 
 struct ft_cmd ft_cmds[] = {
 	{FT_CMD("fw_update", fw_update),},
@@ -1904,6 +1911,17 @@ static void clear_cover_mode(void *device_data)
 			ts->flip_enable = true;
 			ts->cover_type = ts->cmd_param[1];
 			ts->cover_cmd = (u8)ts->cover_type;
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+			if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+				sec_ts_delay(100);
+				tui_force_close(1);
+				sec_ts_delay(200);
+				if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+					trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+					trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+				}
+			}
+#endif // CONFIG_TRUSTONIC_TRUSTED_UI
 		} else {
 			ts->flip_enable = false;
 		}

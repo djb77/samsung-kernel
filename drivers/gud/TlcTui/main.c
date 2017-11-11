@@ -39,6 +39,19 @@
 /* Static variables */
 static struct cdev tui_cdev;
 
+int tui_force_close(uint32_t arg)
+{
+	int ret = 0;
+
+	pr_info("Force TUI_IO_NOTIFY %d\n", arg);
+
+	if (tlc_notify_event(arg))
+		ret = 0;
+	else
+		ret = -EFAULT;
+}
+EXPORT_SYMBOL(tui_force_close);
+
 static long tui_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 {
 	int ret = -ENOTTY;

@@ -102,6 +102,7 @@
 #else
 #define DATA_PACKET_SIZE	960
 #endif
+#define MAX_SSP_PACKET_SIZE	1000 // this packet size related when AP send ssp packet to MCU.
 
 /* SSP Binary Type */
 enum {
