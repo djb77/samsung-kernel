@@ -177,10 +177,10 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		tasksize = get_mm_rss(p->mm);
 #if defined(CONFIG_ZSWAP)
 		if (atomic_read(&zswap_stored_pages)) {
-			lowmem_print(1, "shown tasksize : %d\n", tasksize);
+			lowmem_print(3, "shown tasksize : %d\n", tasksize);
 			tasksize += (int)zswap_pool_pages * get_mm_counter(p->mm, MM_SWAPENTS)
 				/ atomic_read(&zswap_stored_pages);
-			lowmem_print(1, "real tasksize : %d\n", tasksize);
+			lowmem_print(3, "real tasksize : %d\n", tasksize);
 		}
 #endif
 		task_unlock(p);

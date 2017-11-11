@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmevent.h 676796 2016-12-24 18:16:02Z $
+ * $Id: bcmevent.h 700076 2017-05-17 14:42:22Z $
  *
  */
 
@@ -267,7 +267,8 @@ typedef union bcm_event_msg_u {
 #define WLC_E_TEMP_THROTTLE		154	/* Temperature throttling control event */
 #define WLC_E_LINK_QUALITY		155     /* Link quality measurement complete */
 #define WLC_E_BSSTRANS_RESP		156	/* BSS Transition Response received */
-#define WLC_E_HE_TWT_SETUP		157	/* HE TWT Setup Complete event */
+#define WLC_E_TWT_SETUP			157	/* TWT Setup Complete event */
+#define WLC_E_HE_TWT_SETUP		157	/* TODO:Remove after merging TWT changes to trunk */
 #define WLC_E_NAN_CRITICAL		158	/* NAN Critical Event */
 #define WLC_E_NAN_NON_CRITICAL		159	/* NAN Non-Critical Event */
 #define WLC_E_RADAR_DETECTED		160	/* Radar Detected event */
@@ -279,9 +280,13 @@ typedef union bcm_event_msg_u {
 											* tx/rxchain
 											*/
 #define WLC_E_FBT			166	/* FBT event */
-#define WLC_E_LAST			167	/* highest val + 1 for range checking */
-#if (WLC_E_LAST > 167)
-#error "WLC_E_LAST: Invalid value for last event; must be <= 166."
+#define WLC_E_PFN_SCAN_BACKOFF	167	/* PFN SCAN Backoff event */
+#define WLC_E_PFN_BSSID_SCAN_BACKOFF	168	/* PFN BSSID SCAN BAckoff event */
+#define WLC_E_AGGR_EVENT		169	/* Aggregated event */
+#define WLC_E_TVPM_MITIGATION		171	/* Change in mitigation applied by TVPM */
+#define WLC_E_LAST			172	/* highest val + 1 for range checking */
+#if (WLC_E_LAST > 172)
+#error "WLC_E_LAST: Invalid value for last event; must be <= 172."
 #endif /* WLC_E_LAST */
 
 /* define an API for getting the string name of an event */
@@ -728,6 +733,7 @@ typedef enum wl_nan_events {
 	WL_NAN_EVENT_RNG_RPT_IND		= 28,	/* Range Report */
 	WL_NAN_EVENT_RNG_TERM_IND		= 29,	/* Range Termination */
 	WL_NAN_EVENT_PEER_DATAPATH_SEC_INST	= 30,   /* Peer's DP sec install */
+	WL_NAN_EVENT_TXS			= 31,   /* for tx status of follow-up and SDFs */
 	WL_NAN_EVENT_INVALID				/* delimiter for max value */
 } nan_app_events_e;
 
@@ -838,6 +844,7 @@ typedef struct {
 #define WL_EVENT_FBT_VER_1		1
 
 #define WL_E_FBT_TYPE_FBT_OTD_AUTH	1
+#define WL_E_FBT_TYPE_FBT_OTA_AUTH	2
 
 /* event structure for WLC_E_FBT */
 typedef struct {
@@ -920,5 +927,35 @@ typedef enum {
 } wl_chansw_reason_t;
 
 #define CHANSW_REASON(reason)	(1 << reason)
+
+#define EVENT_AGGR_DATA_HDR_LEN	8
+
+typedef struct event_aggr_data {
+	uint16  num_events; /* No of events aggregated */
+	uint16	len;	/* length of the aggregated events, excludes padding */
+	uint8	pad[4]; /* Padding to make aggr event packet header aligned
+					 * on 64-bit boundary, for a 64-bit host system.
+					 */
+	uint8	data[];	/* Aggregate buffer containing Events */
+} event_aggr_data_t;
+
+
+/* WLC_E_TVPM_MITIGATION event structure version */
+#define WL_TVPM_MITIGATION_VERSION 1
+
+/* TVPM mitigation on/off status bits */
+#define WL_TVPM_MITIGATION_TXDC		0x1
+#define WL_TVPM_MITIGATION_TXPOWER	0x2
+#define WL_TVPM_MITIGATION_TXCHAINS	0x4
+
+/* Event structure for WLC_E_TVPM_MITIGATION */
+typedef struct wl_event_tvpm_mitigation {
+	uint16 version;		/* structure version */
+	uint16 length;		/* length of this structure */
+	uint32 timestamp_ms;	/* millisecond timestamp */
+	uint8 slice;		/* slice number */
+	uint8 pad;
+	uint16 on_off;		/* mitigation status bits */
+} wl_event_tvpm_mitigation_t;
 
 #endif /* _BCMEVENT_H_ */

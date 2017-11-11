@@ -75,8 +75,10 @@ static int score_device_suspend(struct device *dev)
 	device = dev_get_drvdata(dev);
 	system = &device->system;
 
-	score_fw_queue_block(&device->fw_dev);
-	score_system_suspend(system);
+	if (score_system_active(system)) {
+		score_fw_queue_block(&device->fw_dev);
+		score_system_suspend(system);
+	}
 
 	return ret;
 }
@@ -90,8 +92,10 @@ static int score_device_resume(struct device *dev)
 	device = dev_get_drvdata(dev);
 	system = &device->system;
 
-	score_fw_queue_unblock(&device->fw_dev);
-	score_system_resume(system);
+	if (score_system_active(system)) {
+		score_fw_queue_unblock(&device->fw_dev);
+		score_system_resume(system);
+	}
 
 	return ret;
 }
@@ -103,7 +107,6 @@ static int score_device_runtime_suspend(struct device *dev)
 
 	device = dev_get_drvdata(dev);
 	score_system_runtime_suspend(&device->system);
-	atomic_set(&device->power, 0);
 
 	return ret;
 }
@@ -115,9 +118,6 @@ static int score_device_runtime_resume(struct device *dev)
 
 	device = dev_get_drvdata(dev);
 	ret = score_system_runtime_resume(&device->system);
-	if (!ret) {
-		atomic_set(&device->power, 1);
-	}
 
 	return ret;
 }
@@ -237,14 +237,15 @@ static int __attribute__((unused)) score_fault_handler(struct iommu_domain *doma
 	device = dev_get_drvdata(dev);
 	system = &device->system;
 
-	// for debug (change OFFSET, SIZE if you want)
-	//pr_err("sfr %X \n", readl(system->regs + OFFSET));
-	//
-	//print_hex_dump(KERN_INFO, "PREFIX LOG", DUMP_PREFIX_OFFSET, 32, 4,
-	//	system->regs + OFFSET, SIZE, false);
+	if (score_system_active(system)) {
+		/* for debug (change OFFSET, SIZE if you want) */
+		/* pr_err("sfr %X \n", readl(system->regs + OFFSET)); */
+		/* print_hex_dump(KERN_INFO, "PREFIX LOG", DUMP_PREFIX_OFFSET,
+		   32, 4, system->regs + OFFSET, SIZE, false); */
 
-	score_dump_sfr(system->regs);
-	score_print_flush(system);
+		score_dump_sfr(system->regs);
+		score_print_flush(system);
+	}
 
 	return -EINVAL;
 }
@@ -350,7 +351,6 @@ static int score_device_probe(struct platform_device *pdev)
 	device->pdev = pdev;
 	device->dev = &pdev->dev;
 	dev_set_drvdata(device->dev, device);
-	atomic_set(&device->power, 0);
 
 	ret = score_system_probe(&device->system, pdev);
 	if (ret)
@@ -457,17 +457,16 @@ static void score_device_shutdown(struct platform_device *pdev)
 	struct device *dev;
 	struct score_device *device;
 
+	struct score_system *system;
+	struct score_framemgr *iframemgr;
+	unsigned long flags;
+
 	dev = &pdev->dev;
 	device = dev_get_drvdata(dev);
+	system = &device->system;
 
 	device->state = BIT(SCORE_DEVICE_STATE_SUSPEND);
-
-	if (atomic_read(&device->power)) {
-		struct score_system *system;
-		struct score_framemgr *iframemgr;
-		unsigned long flags;
-
-		system = &device->system;
+	if (score_system_active(system)) {
 		iframemgr = &system->interface.framemgr;
 
 		spin_lock_irqsave(&iframemgr->slock, flags);

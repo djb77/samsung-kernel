@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_memprealloc.c 669363 2016-11-09 06:59:02Z $
+ * $Id: dhd_custom_memprealloc.c 707595 2017-06-28 08:28:30Z $
  */
 
 #include <linux/device.h>
@@ -53,6 +53,8 @@
 #define WLAN_STATIC_DHD_PKTID_IOCTL_MAP	14
 #define WLAN_STATIC_DHD_LOG_DUMP_BUF	15
 #define WLAN_STATIC_DHD_LOG_DUMP_BUF_EX	16
+#define WLAN_STATIC_DHD_PKTLOG_DUMP_BUF	17
+#define WLAN_STATIC_STAT_REPORT_BUF		18
 
 #define WLAN_SCAN_BUF_SIZE		(64 * 1024)
 
@@ -121,6 +123,10 @@
 #define DHD_LOG_DUMP_BUF_SIZE	(1024 * 1024)
 #define DHD_LOG_DUMP_BUF_EX_SIZE	(8 * 1024)
 
+#define DHD_PKTLOG_DUMP_BUF_SIZE	(64 * 1024)
+
+#define DHD_STAT_REPORT_BUF_SIZE	(128 * 1024)
+
 #define WLAN_DHD_WLFC_HANGER_MAXITEMS		3072
 #define WLAN_DHD_WLFC_HANGER_ITEM_SIZE		32
 #define WLAN_DHD_WLFC_HANGER_SIZE	((WLAN_DHD_WLFC_HANGER_ITEM_SIZE) + \
@@ -151,6 +157,19 @@ static void *wlan_static_dhd_pktid_map = NULL;
 static void *wlan_static_dhd_pktid_ioctl_map = NULL;
 static void *wlan_static_dhd_log_dump_buf = NULL;
 static void *wlan_static_dhd_log_dump_buf_ex = NULL;
+static void *wlan_static_dhd_pktlog_dump_buf = NULL;
+static void *wlan_static_stat_report_buf = NULL;
+
+#define GET_STATIC_BUF(section, config_size, req_size, buf) ({\
+	void *__ret; \
+	if (req_size > config_size) {\
+		pr_err("request " #section " size(%lu) is bigger than" \
+				" static size(%d)\n", \
+				req_size, config_size); \
+		__ret = NULL; \
+	} else { __ret = buf;} \
+	__ret; \
+})
 
 void
 *dhd_wlan_mem_prealloc(int section, unsigned long size)
@@ -256,6 +275,21 @@ void
 			return NULL;
 		}
 		return wlan_static_dhd_log_dump_buf_ex;
+	}
+
+	if (section == WLAN_STATIC_DHD_PKTLOG_DUMP_BUF) {
+		if (size > DHD_PKTLOG_DUMP_BUF_SIZE) {
+			pr_err("request DHD_PKTLOG_DUMP_BUF size(%lu) is bigger then"
+					" static size(%d).\n",
+					size, DHD_PKTLOG_DUMP_BUF_SIZE);
+			return NULL;
+		}
+		return wlan_static_dhd_pktlog_dump_buf;
+	}
+
+	if (section == WLAN_STATIC_STAT_REPORT_BUF) {
+		return GET_STATIC_BUF(WLAN_STATIC_STAT_REPORT_BUF,
+			DHD_STAT_REPORT_BUF_SIZE, size, wlan_static_stat_report_buf);
 	}
 
 	if ((section < 0) || (section >= PREALLOC_WLAN_SEC_NUM)) {
@@ -385,6 +419,18 @@ dhd_init_wlan_mem(void)
 	}
 #endif /* CONFIG_BCMDHD_PREALLOC_MEMDUMP */
 
+	wlan_static_dhd_pktlog_dump_buf = kmalloc(DHD_PKTLOG_DUMP_BUF_SIZE, GFP_KERNEL);
+	if (!wlan_static_dhd_pktlog_dump_buf) {
+		pr_err("Failed to alloc wlan_static_dhd_pktlog_dump_buf\n");
+		goto err_mem_alloc;
+	}
+
+	wlan_static_stat_report_buf = kmalloc(DHD_STAT_REPORT_BUF_SIZE, GFP_KERNEL);
+	if (!wlan_static_stat_report_buf) {
+		pr_err("Failed to alloc wlan_static_stat_report_buf\n");
+		goto err_mem_alloc;
+	}
+
 	pr_err("%s: WIFI MEM Allocated\n", __FUNCTION__);
 	return 0;
 
@@ -437,6 +483,14 @@ err_mem_alloc:
 
 	if (wlan_static_scan_buf0) {
 		kfree(wlan_static_scan_buf0);
+	}
+
+	if (wlan_static_dhd_pktlog_dump_buf) {
+		kfree(wlan_static_dhd_pktlog_dump_buf);
+	}
+
+	if (wlan_static_stat_report_buf) {
+		kfree(wlan_static_stat_report_buf);
 	}
 
 	pr_err("Failed to mem_alloc for WLAN\n");

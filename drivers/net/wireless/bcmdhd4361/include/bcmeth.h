@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmeth.h 565501 2015-06-22 14:29:02Z $
+ * $Id: bcmeth.h 701825 2017-05-26 16:45:27Z $
  */
 
 /*
@@ -97,6 +97,7 @@
 
 #define BCMILCP_BCM_SUBTYPEHDR_MINLENGTH	8
 #define BCMILCP_BCM_SUBTYPEHDR_VERSION		0
+#define BCMILCP_BCM_SUBTYPE_EVENT_DATA_PAD	2
 
 /* These fields are stored in network order */
 typedef BWL_PRE_PACKED_STRUCT struct bcmeth_hdr

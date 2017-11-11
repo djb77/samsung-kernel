@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_msgbuf.c 692885 2017-03-30 02:17:31Z $
+ * $Id: dhd_msgbuf.c 704361 2017-06-13 08:50:38Z $
  */
 
 
@@ -66,6 +66,10 @@
 
 #include <hnd_debug.h>
 #include <hnd_armtrap.h>
+
+#ifdef DHD_PKT_LOGGING
+#include <dhd_pktlog.h>
+#endif /* DHD_PKT_LOGGING */
 
 extern char dhd_version[];
 extern char fw_version[];
@@ -4214,10 +4218,6 @@ dhd_prot_process_msgbuf_rxcpl(dhd_pub_t *dhd, uint bound)
 	int i;
 	uint8 sync;
 
-#ifdef DHD_WAKE_STATUS
-	int pkt_wake = bcmpcie_set_get_wake(dhd->bus, 0);
-#endif
-
 	while (1) {
 		if (dhd_is_device_removed(dhd))
 			break;
@@ -4374,11 +4374,7 @@ dhd_prot_process_msgbuf_rxcpl(dhd_pub_t *dhd, uint bound)
 #elif defined(DHD_RX_CHAINING)
 			dhd_rxchain_frame(dhd, pkt, ifidx);
 #else
-#ifdef DHD_WAKE_STATUS
-			dhd_bus_rx_frame(dhd->bus, pkt, ifidx, 1, pkt_wake);
-#else
 			dhd_bus_rx_frame(dhd->bus, pkt, ifidx, 1);
-#endif /* DHD_WAKE_STATUS */
 #endif /* DHD_LB_RXP */
 		}
 
@@ -4388,11 +4384,7 @@ dhd_prot_process_msgbuf_rxcpl(dhd_pub_t *dhd, uint bound)
 #elif defined(DHD_RX_CHAINING)
 			dhd_rxchain_frame(dhd, pkt_newidx, if_newidx);
 #else
-#ifdef DHD_WAKE_STATUS
-			dhd_bus_rx_frame(dhd->bus, pkt_newidx, if_newidx, 1, pkt_wake);
-#else
 			dhd_bus_rx_frame(dhd->bus, pkt_newidx, if_newidx, 1);
-#endif /* DHD_WAKE_STATUS */
 #endif /* DHD_LB_RXP */
 		}
 
@@ -5010,7 +5002,7 @@ workq_ring_full:
 		dhd->dma_stats.txdata--;
 		dhd->dma_stats.txdata_sz -= len;
 #endif /* DMAMAP_STATS */
-#ifdef DBG_PKT_MON
+#if defined(DBG_PKT_MON) || defined(DHD_PKT_LOGGING)
 		if (dhd->d11_tx_status) {
 			uint16 tx_status;
 
@@ -5019,9 +5011,11 @@ workq_ring_full:
 			pkt_fate = (tx_status == WLFC_CTL_PKTFLAG_DISCARD) ? TRUE : FALSE;
 
 			DHD_DBG_PKT_MON_TX_STATUS(dhd, pkt, pktid, tx_status);
+#ifdef DHD_PKT_LOGGING
+			DHD_PKTLOG_TXS(dhd, pkt, pktid, tx_status);
+#endif /* DHD_PKT_LOGGING */
 		}
-#endif /* DBG_PKT_MON */
-
+#endif /* DBG_PKT_MON || DHD_PKT_LOGGING */
 #if defined(BCMPCIE)
 		dhd_txcomplete(dhd, pkt, pkt_fate);
 #endif 
@@ -5073,10 +5067,6 @@ dhd_prot_event_process(dhd_pub_t *dhd, void *msg)
 	unsigned long flags;
 	dhd_prot_t *prot = dhd->prot;
 
-#ifdef DHD_WAKE_STATUS
-	int pkt_wake = bcmpcie_set_get_wake(dhd->bus, 0);
-#endif
-
 	/* Event complete header */
 	evnt = (wlevent_req_msg_t *)msg;
 	bufid = ltoh32(evnt->cmn_hdr.request_id);
@@ -5111,11 +5101,7 @@ dhd_prot_event_process(dhd_pub_t *dhd, void *msg)
 
 	PKTSETLEN(dhd->osh, pkt, buflen);
 
-#ifdef DHD_WAKE_STATUS
-	dhd_bus_rx_frame(dhd->bus, pkt, ifidx, 1, pkt_wake);
-#else
 	dhd_bus_rx_frame(dhd->bus, pkt, ifidx, 1);
-#endif /* DHD_WAKE_STATUS */
 }
 
 /** called on MSG_TYPE_INFO_BUF_CMPLT message received from dongle */
@@ -5128,9 +5114,6 @@ dhd_prot_process_infobuf_complete(dhd_pub_t *dhd, void* buf)
 	void * pkt;
 	unsigned long flags;
 
-#ifdef DHD_WAKE_STATUS
-	int pkt_wake = bcmpcie_set_get_wake(dhd->bus, 0);
-#endif
 	resp = (info_buf_resp_t *)buf;
 	pktid = ltoh32(resp->cmn_hdr.request_id);
 	buflen = ltoh16(resp->info_data_len);
@@ -5169,11 +5152,7 @@ dhd_prot_process_infobuf_complete(dhd_pub_t *dhd, void* buf)
 	 * special ifidx of -1.  This is just internal to dhd to get the data to
 	 * dhd_linux.c:dhd_rx_frame() from here (dhd_prot_infobuf_cmplt_process).
 	 */
-#ifdef DHD_WAKE_STATUS
-	dhd_bus_rx_frame(dhd->bus, pkt, DHD_EVENT_IF /* ifidx HACK */, 1, pkt_wake);
-#else
 	dhd_bus_rx_frame(dhd->bus, pkt, DHD_EVENT_IF /* ifidx HACK */, 1);
-#endif /* DHD_WAKE_STATUS */
 }
 
 /** Stop protocol: sync w/dongle state. */
@@ -5269,6 +5248,9 @@ dhd_prot_txdata(dhd_pub_t *dhd, void *PKTBUF, uint8 ifidx)
 #ifdef DBG_PKT_MON
 	DHD_DBG_PKT_MON_TX(dhd, PKTBUF, pktid);
 #endif /* DBG_PKT_MON */
+#ifdef DHD_PKT_LOGGING
+	DHD_PKTLOG_TX(dhd, PKTBUF, pktid);
+#endif /* DHD_PKT_LOGGING */
 
 
 	/* Extract the data pointer and length information */
@@ -8526,19 +8508,11 @@ dhd_rxchain_commit(dhd_pub_t *dhd)
 	dhd_prot_t *prot = dhd->prot;
 	rxchain_info_t *rxchain = &prot->rxchain;
 
-#ifdef DHD_WAKE_STATUS
-	int pkt_wake = bcmpcie_set_get_wake(dhd->bus, 0);
-#endif /* DHD_WAKE_STATUS */
-
 	if (rxchain->pkt_count == 0)
 		return;
 
 	/* Release the packets to dhd_linux */
-#ifdef DHD_WAKE_STATUS
-	dhd_bus_rx_frame(dhd->bus, rxchain->pkthead, rxchain->ifidx, rxchain->pkt_count, pkt_wake);
-#else
 	dhd_bus_rx_frame(dhd->bus, rxchain->pkthead, rxchain->ifidx, rxchain->pkt_count);
-#endif /* DHD_WAKE_STATUS */
 
 	/* Reset the chain */
 	dhd_rxchain_reset(rxchain);

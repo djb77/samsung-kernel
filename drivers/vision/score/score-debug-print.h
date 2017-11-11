@@ -32,6 +32,7 @@ struct score_print_buf {
 struct score_system;
 
 void score_print_probe(struct score_system *system);
+void score_print_release(struct score_system *system);
 int score_print_open(struct score_system *system);
 void score_print_close(struct score_system *system);
 void score_print_flush(struct score_system *system);

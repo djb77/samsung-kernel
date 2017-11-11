@@ -615,7 +615,7 @@ static int set_vtsactive_phrase(struct snd_kcontrol *kcontrol,
 
 	vtsactive_phrase = ucontrol->value.integer.value[0];
 
-	if (vtsactive_phrase > 2) {
+	if (vtsactive_phrase < 0 || vtsactive_phrase > 2) {
 		dev_err(codec->dev,
 		"Invalid VTS Trigger Key phrase =%d", vtsactive_phrase);
 		return 0;

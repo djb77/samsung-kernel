@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: event_log_tag.h 676145 2016-12-20 20:14:56Z $
+ * $Id: event_log_tag.h 700681 2017-05-20 16:37:38Z $
  */
 
 #ifndef _EVENT_LOG_TAG_H_
@@ -171,17 +171,28 @@
 #define EVENT_LOG_TAG_4WAYHANDSHAKE		143
 #define EVENT_LOG_TAG_MSCHPROFILE_TLV		144
 #define EVENT_LOG_TAG_ADPS			145
-#define EVENT_LOG_TAG_MBO_DBG          146
-#define EVENT_LOG_TAG_MBO_INFO         147
-#define EVENT_LOG_TAG_MBO_ERR          148
-#define EVENT_LOG_TAG_TXDELAY          149
+#define EVENT_LOG_TAG_MBO_DBG			146
+#define EVENT_LOG_TAG_MBO_INFO			147
+#define EVENT_LOG_TAG_MBO_ERR			148
+#define EVENT_LOG_TAG_TXDELAY			149
 #define EVENT_LOG_TAG_BCNTRIM_INFO		150
 #define EVENT_LOG_TAG_BCNTRIM_TRACE		151
-#define EVENT_LOG_TAG_OPS_INFO		152
-#define EVENT_LOG_TAG_STATS	153
+#define EVENT_LOG_TAG_OPS_INFO			152
+#define EVENT_LOG_TAG_STATS			153
+#define EVENT_LOG_TAG_BAM			154
+#define EVENT_LOG_TAG_TXFAIL			155
+#define EVENT_LOG_TAG_AWDL_CONFIG_DBG		156
+#define EVENT_LOG_TAG_AWDL_SYNC_DBG		157
+#define EVENT_LOG_TAG_AWDL_PEER_DBG		158
+#define EVENT_LOG_TAG_RANDMAC_INFO		159
+#define EVENT_LOG_TAG_RANDMAC_DBG		160
+#define EVENT_LOG_TAG_RANDMAC_ERR		161
+#define EVENT_LOG_TAG_AWDL_DFSP_DBG		162
+#define EVENT_LOG_TAG_TPA_ERR			163
+#define EVENT_LOG_TAG_TPA_INFO			164
 
 /* EVENT_LOG_TAG_MAX	= Set to the same value of last tag, not last tag + 1 */
-#define EVENT_LOG_TAG_MAX			153
+#define EVENT_LOG_TAG_MAX			164
 /* Note: New event should be added/reserved in trunk before adding it to branches */
 
 

@@ -22,9 +22,10 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
+ *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: nan.h 676796 2016-12-24 18:16:02Z $
+ * $Id: nan.h 700076 2017-05-17 14:42:22Z $
  */
 #ifndef _NAN_H_
 #define _NAN_H_
@@ -79,21 +80,37 @@
 #define NAN_ATTR_LEN_OFF	1
 #define NAN_ATTR_DATA_OFF	3
 
-#define NAN_ATTR_ID_LEN		 1	/* ID field length */
-#define NAN_ATTR_LEN_LEN	 2	/* Length field length */
+#define NAN_ATTR_ID_LEN		 1u	/* ID field length */
+#define NAN_ATTR_LEN_LEN	 2u	/* Length field length */
 #define NAN_ATTR_HDR_LEN	 (NAN_ATTR_ID_LEN + NAN_ATTR_LEN_LEN)
 #define NAN_ENTRY_CTRL_LEN       1      /* Entry control field length from FAM attribute */
 #define NAN_MAP_ID_LEN           1	/* MAP ID length to signify band */
 #define NAN_OPERATING_CLASS_LEN  1	/* operating class field length from NAN FAM */
 #define NAN_CHANNEL_NUM_LEN      1	/* channel number field length 1 byte */
 
+/* NAN slot duration / period */
+#define NAN_MIN_TU		16
+#define NAN_TU_PER_DW		512
+#define NAN_MAX_DW		16
+#define NAN_MAX_TU		(NAN_MAX_DW * NAN_TU_PER_DW)
+
+#define NAN_SLOT_DUR_0TU	0
+#define NAN_SLOT_DUR_16TU	16
+#define NAN_SLOT_DUR_32TU	32
+#define NAN_SLOT_DUR_64TU	64
+#define NAN_SLOT_DUR_128TU	128
+#define NAN_SLOT_DUR_256TU	256
+#define NAN_SLOT_DUR_512TU	512
+#define NAN_SLOT_DUR_1024TU	1024
+#define NAN_SLOT_DUR_2048TU	2048
+#define NAN_SLOT_DUR_4096TU	4096
+#define NAN_SLOT_DUR_8192TU	8192
+
 #define NAN_MAP_ID_2G   2  /* NAN Further Avail Map ID for band 2.4G */
 #define NAN_MAP_ID_5G   5  /* NAN Further Avail Map ID for band 5G */
 #define NAN_MAP_NUM_IDS 2  /* Max number of NAN Further Avail Map IDs supported */
 
-/* map id is 4 bits */
-#define NAN_CMN_MAP_ID_LEN_BITS	4
-/* siz eof ndc id */
+/* size of ndc id */
 #define NAN_DATA_NDC_ID_SIZE 6
 
 #define NAN_AVAIL_ENTRY_LEN_RES0 7      /* Avail entry len in FAM attribute for resolution 16TU */
@@ -154,9 +171,16 @@ enum {
 	NAN_ATTR_CIPHER_SUITE_INFO = 34,
 	NAN_ATTR_SEC_CTX_ID_INFO = 35,
 	NAN_ATTR_SHARED_KEY_DESC = 36,
+	NAN_ATTR_MCAST_SCHED_CHANGE = 37,
+	NAN_ATTR_MCAST_SCHED_OWNER_CHANGE = 38,
+	NAN_ATTR_PUBLIC_AVAILABILITY = 39,
+	NAN_ATTR_SUB_SVC_ID_LIST = 40,
+	/* change NAN_ATTR_MAX_ID to max ids + 1, excluding NAN_ATTR_VENDOR_SPECIFIC.
+	 * This is used in nan_parse.c
+	 */
+	NAN_ATTR_MAX_ID		= NAN_ATTR_SUB_SVC_ID_LIST + 1,
 
-	NAN_ATTR_VENDOR_SPECIFIC = 221,
-	NAN_ATTR_NAN_MGMT	= 222	/* NAN Mgmt Attr (TBD; not in spec yet) */
+	NAN_ATTR_VENDOR_SPECIFIC = 221
 };
 
 enum wifi_nan_avail_resolution {
@@ -383,6 +407,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ranging_info_attr_s {
 	uint16 last_movement;
 
 } BWL_POST_PACKED_STRUCT wifi_nan_ranging_info_attr_t;
+
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ranging_setup_attr_hdr_s {
 	uint8 id;			/* 0x1B */
 	uint16 len;			/* length that follows */
@@ -395,28 +420,16 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ranging_setup_attr_hdr_s {
 	uint8 reason;
 } BWL_POST_PACKED_STRUCT wifi_nan_ranging_setup_attr_hdr_t;
 
-/* Common time structure used in NAN Availability, NDC, Immutable schedules */
-typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_time_bitmap_s {
-	uint16 ctrl;		/* Time bitmap control */
-	uint8 len;		/* Time bitmap length */
-	uint8 bitmap[1];	/* Time bitmap */
-} BWL_POST_PACKED_STRUCT wifi_nan_time_bitmap_t;
-
-typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ranging_time_bitmap_s {
-	uint8 map_id;			/* Map ID to which this bit map corresponds */
-	wifi_nan_time_bitmap_t time_bmp;
-} BWL_POST_PACKED_STRUCT wifi_nan_ranging_time_bitmap_t;
-
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ranging_setup_attr_s {
 
 	wifi_nan_ranging_setup_attr_hdr_t setup_attr_hdr;
 	/* Below fields not required when frm type = termination */
 	uint8 ranging_ctrl; /* Bit 0: ranging report required or not */
 	uint8 ftm_params[3];
-	wifi_nan_ranging_time_bitmap_t range_tbm; /* Ranging timebit map info */
+	uint8 data[];	/* schedule entry list */
 } BWL_POST_PACKED_STRUCT wifi_nan_ranging_setup_attr_t;
-#define NAN_RANGE_SETUP_ATTR_OFFSET_TBM_INFO (OFFSETOF(wifi_nan_ranging_setup_attr_t, range_tbm))
 
+#define NAN_RANGE_SETUP_ATTR_OFFSET_TBM_INFO (OFFSETOF(wifi_nan_ranging_setup_attr_t, data))
 
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ranging_report_attr_s {
 	uint8 id;			/* 0x1C */
@@ -436,7 +449,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ranging_report_attr_s {
 /* Ranging control flags */
 #define NAN_RNG_REPORT_REQUIRED		0x01
 #define NAN_RNG_FTM_PARAMS_PRESENT	0x02
-#define NAN_RNG_AVAIL_INFO_PRESENT	0X04
+#define NAN_RNG_SCHED_ENTRY_PRESENT	0X04
 
 /* Location info flags */
 #define NAN_RNG_LOCATION_FLAGS_LOCAL_CORD		0x1
@@ -496,6 +509,9 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ranging_report_attr_s {
 #define NAN_CONN_CAPABILITY_IBSS	0x0010
 #define NAN_CONN_CAPABILITY_MESH	0x0020
 
+#define NAN_DEFAULT_MAP_ID		0	/* nan default map id */
+#define NAN_DEFAULT_MAP_CTRL		0	/* nan default map control */
+
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_conn_cap_attr_s {
 	/* Attribute ID - 0x04. */
 	uint8 id;
@@ -504,15 +520,11 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_conn_cap_attr_s {
 	uint16	conn_cap_bmp;	/* Connection capability bitmap */
 } BWL_POST_PACKED_STRUCT wifi_nan_conn_cap_attr_t;
 
-#define NAN_SLOT_RES_16TU 16
-#define NAN_SLOT_RES_32TU 32
-#define NAN_SLOT_RES_64TU 64
-#define NAN_SLOT_RES_128TU 128
-
 /* NAN Element container Attribute */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_container_attr_s {
 	uint8 id;	/* id - 0x20 */
 	uint16 len;	/* Total length of following IEs */
+	uint8 map_id;	/* map id */
 	uint8 data[1];	/* Data pointing to one or more IEs */
 } BWL_POST_PACKED_STRUCT wifi_nan_container_attr_t;
 
@@ -522,15 +534,23 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_container_attr_s {
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_avail_attr_s {
 	uint8 id;	/* id - 0x12 */
 	uint16 len;	/* total length */
+	uint8 seqid;	/* sequence id */
 	uint16 ctrl;	/* attribute control */
 	uint8 entry[1];	/* availability entry list */
 } BWL_POST_PACKED_STRUCT wifi_nan_avail_attr_t;
+
+/* for processing/building time bitmap info in nan_avail_entry */
+typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_time_bitmap_s {
+	uint16 ctrl;		/* Time bitmap control */
+	uint8 len;		/* Time bitmap length */
+	uint8 bitmap[];	/* Time bitmap */
+} BWL_POST_PACKED_STRUCT wifi_nan_time_bitmap_t;
 
 /* Availability Entry format */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_avail_entry_attr_s {
 	uint16 len;		/* Length */
 	uint16 entry_cntrl;	/* Entry Control */
-	uint8 var[1];		/* Time bitmap fields and channel entry list */
+	uint8 var[];		/* Time bitmap and channel entry list */
 } BWL_POST_PACKED_STRUCT wifi_nan_avail_entry_attr_t;
 
 /* FAC Channel Entry  (section 10.7.19.1.5) */
@@ -541,16 +561,36 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_chan_entry_s {
 	uint8 aux_chan[0];			/* Auxiliary Channel bitmap */
 } BWL_POST_PACKED_STRUCT wifi_nan_chan_entry_t;
 
+/* Channel entry */
+typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_channel_entry_s {
+	uint8 opclass;		/* Operating class */
+	uint16 chan_bitmap;	/* Channel bitmap */
+	uint8 prim_bitmap;	/* Primary channel bitmap */
+	uint16 aux_bitmap;	/* Time bitmap length */
+} BWL_POST_PACKED_STRUCT wifi_nan_channel_entry_t;
+
+/* Type of  Availability: committed */
+#define NAN_ENTRY_CNTRL_TYPE_COMM_AVAIL_MASK	0x1
+/* Type of  Availability: potential */
+#define NAN_ENTRY_CNTRL_TYPE_POTEN_AVAIL_MASK	0x2
+/* Type of  Availability: conditional */
+#define NAN_ENTRY_CNTRL_TYPE_COND_AVAIL_MASK	0x4
+
 #define NAN_AVAIL_CTRL_MAP_ID_MASK		0x000F
 #define NAN_AVAIL_CTRL_MAP_ID(_ctrl)		((_ctrl) & NAN_AVAIL_CTRL_MAP_ID_MASK)
 #define NAN_AVAIL_CTRL_COMM_CHANGED_MASK	0x0010
 #define NAN_AVAIL_CTRL_COMM_CHANGED(_ctrl)	((_ctrl) & NAN_AVAIL_CTRL_COMM_CHANGED_MASK)
 #define NAN_AVAIL_CTRL_POTEN_CHANGED_MASK	0x0020
 #define NAN_AVAIL_CTRL_POTEN_CHANGED(_ctrl)	((_ctrl) & NAN_AVAIL_CTRL_POTEN_CHANGED_MASK)
-#define NAN_AVAIL_CTRL_SEQ_ID_MASK		0xFF00
-#define NAN_AVAIL_CTRL_SEQ_ID_SHIFT		8
-#define NAN_AVAIL_CTRL_SEQ_ID(_ctrl)		(((_ctrl) & NAN_AVAIL_CTRL_SEQ_ID_MASK) \
-		>> NAN_AVAIL_CTRL_SEQ_ID_SHIFT)
+#define NAN_AVAIL_CTRL_PUBLIC_CHANGED_MASK	0x0040
+#define NAN_AVAIL_CTRL_PUBLIC_CHANGED(_ctrl)	((_ctrl) & NAN_AVAIL_CTRL_PUBLIC_CHANGED_MASK)
+#define NAN_AVAIL_CTRL_NDC_CHANGED_MASK		0x0080
+#define NAN_AVAIL_CTRL_NDC_CHANGED(_ctrl)	((_ctrl) & NAN_AVAIL_CTRL_NDC_CHANGED_MASK)
+#define NAN_AVAIL_CTRL_MCAST_CHANGED_MASK	0x0100
+#define NAN_AVAIL_CTRL_MCAST_CHANGED(_ctrl)	((_ctrl) & NAN_AVAIL_CTRL_MCAST_CHANGED_MASK)
+#define NAN_AVAIL_CTRL_MCAST_CHG_CHANGED_MASK	0x0200
+#define NAN_AVAIL_CTRL_MCAST_CHG_CHANGED(_ctrl)	((_ctrl) & NAN_AVAIL_CTRL_MCAST_CHG_CHANGED_MASK)
+#define NAN_AVAIL_CTRL_CHANGED_FLAGS_MASK	0x03f0
 
 #define NAN_AVAIL_ENTRY_CTRL_AVAIL_TYPE_MASK 0x07
 #define NAN_AVAIL_ENTRY_CTRL_AVAIL_TYPE(_flags) ((_flags) & NAN_AVAIL_ENTRY_CTRL_AVAIL_TYPE_MASK)
@@ -558,6 +598,10 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_chan_entry_s {
 #define NAN_AVAIL_ENTRY_CTRL_USAGE_SHIFT 3
 #define NAN_AVAIL_ENTRY_CTRL_USAGE(_flags) (((_flags) & NAN_AVAIL_ENTRY_CTRL_USAGE_MASK) \
 	>> NAN_AVAIL_ENTRY_CTRL_USAGE_SHIFT)
+#define NAN_AVAIL_ENTRY_CTRL_UTIL_MASK 0x1E0
+#define NAN_AVAIL_ENTRY_CTRL_UTIL_SHIFT 5
+#define NAN_AVAIL_ENTRY_CTRL_UTIL(_flags) (((_flags) & NAN_AVAIL_ENTRY_CTRL_UTIL_MASK) \
+	>> NAN_AVAIL_ENTRY_CTRL_UTIL_SHIFT)
 #define NAN_AVAIL_ENTRY_CTRL_RX_NSS_MASK 0xF00
 #define NAN_AVAIL_ENTRY_CTRL_RX_NSS_SHIFT 8
 #define NAN_AVAIL_ENTRY_CTRL_RX_NSS(_flags) (((_flags) & NAN_AVAIL_ENTRY_CTRL_RX_NSS_MASK) \
@@ -714,19 +758,6 @@ enum
 #define NDL_ATTR_IM_TIME_BMP_CTRL_LEN	2
 #define NDL_ATTR_IM_TIME_BMP_LEN_LEN	1
 
-/* immutable schedule - as per r21 */
-typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndl_im_sched_field_s {
-	uint8 no_of_im_entries;
-	uint8 var[];
-} BWL_POST_PACKED_STRUCT wifi_nan_ndl_im_sched_field_t;
-
-typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndl_im_sched_entry_s {
-	uint8 map_id;		/* map id */
-	uint16 tbmp_ctrl;	/* time bitmap control */
-	uint8 tbmp_len;		/* time bitmap len */
-	uint8 tbmp[];		/* time bitmap - Optional */
-} BWL_POST_PACKED_STRUCT wifi_nan_ndl_im_sched_entry_t;
-
 /*
  * NDL Control field - Table xx
  */
@@ -738,8 +769,22 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndl_im_sched_entry_s {
 #define NDL_ATTR_CTRL_NDC_ATTR_PRESENT_SHIFT	2
 #define NDL_ATTR_CTRL_QOS_ATTR_PRESENT_MASK		0x08
 #define NDL_ATTR_CTRL_QOS_ATTR_PRESENT_SHIFT	3
+#define NDL_ATTR_CTRL_MAX_IDLE_PER_PRESENT_MASK		0x10	/* max idle period */
+#define NDL_ATTR_CTRL_MAX_IDLE_PER_PRESENT_SHIFT	4
+#define NDL_ATTR_CTRL_NDL_TYPE_MASK				0x20	/* NDL type */
+#define NDL_ATTR_CTRL_NDL_TYPE_SHIFT			5
+#define NDL_ATTR_CTRL_NDL_SETUP_REASON_MASK		0xC0	/* NDL Setup Reason */
+#define NDL_ATTR_CTRL_NDL_SETUP_REASON_SHIFT	6
 
-#define NAN_NDL_TYPE_MASK	0x0F
+/* NDL setup Reason */
+#define NDL_ATTR_CTRL_NDL_TYPE_S_NDL	0x0	/* S-NDL */
+#define NDL_ATTR_CTRL_NDL_TYPE_P_NDL	0x1	/* P-NDL */
+
+/* NDL setup Reason */
+#define NDL_ATTR_CTRL_NDL_SETUP_REASON_NDP_RANG	0x0	/* NDP or Ranging */
+#define NDL_ATTR_CTRL_NDL_SETUP_REASON_FSD_GAS	0x1	/* FSD using GAS */
+
+#define NAN_NDL_TYPE_MASK				0x0F
 #define NDL_ATTR_TYPE_STATUS_REQUEST	0x00
 #define NDL_ATTR_TYPE_STATUS_RESPONSE	0x01
 #define NDL_ATTR_TYPE_STATUS_CONFIRM	0x02
@@ -755,6 +800,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndl_im_sched_entry_s {
 #define NAN_NDL_CONFIRM(_ndl)		(((_ndl)->type_status & NAN_NDL_TYPE_MASK) == \
 								NDL_ATTR_TYPE_STATUS_CONFIRM)
 
+
 #define NAN_NDL_STATUS_SHIFT	4
 #define NAN_NDL_STATUS_MASK	0xF0
 #define NAN_NDL_CONT(_ndl)	(((_ndl)->type_status & NAN_NDL_STATUS_MASK) == \
@@ -769,8 +815,14 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndl_im_sched_entry_s {
 #define NDL_ATTR_CTRL_IMSCHED_PRESENT	(1 << NDL_ATTR_CTRL_IM_SCHED_PRESENT_SHIFT)
 #define NDL_ATTR_CTRL_NDC_PRESENT		(1 << NDL_ATTR_CTRL_NDC_ATTR_PRESENT_SHIFT)
 #define NDL_ATTR_CTRL_NDL_QOS_PRESENT	(1 << NDL_ATTR_CTRL_QOS_ATTR_PRESENT_SHIFT)
+#define NDL_ATTR_CTRL_MAX_IDLE_PER_PRESENT	(1 << NDL_ATTR_CTRL_MAX_IDLE_PER_PRESENT_SHIFT)
 
-#define NDL_ATTR_PEERID_LEN		1
+#define NA_NDL_IS_IMMUT_PRESENT(ndl) (((ndl)->ndl_ctrl) & NDL_ATTR_CTRL_IMSCHED_PRESENT)
+#define NA_NDL_IS_PEER_ID_PRESENT(ndl) (((ndl)->ndl_ctrl) & NDL_ATTR_CTRL_PEER_ID_PRESENT)
+#define NA_NDL_IS_MAX_IDLE_PER_PRESENT(ndl) (((ndl)->ndl_ctrl) & NDL_ATTR_CTRL_MAX_IDLE_PER_PRESENT)
+
+#define NDL_ATTR_PEERID_LEN				1
+#define NDL_ATTR_MAX_IDLE_PERIOD_LEN	2
 
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndl_attr_s {
 	uint8 id;		/* NAN_ATTR_NAN_NDL = 0x17 */
@@ -783,27 +835,32 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndl_attr_s {
 } BWL_POST_PACKED_STRUCT wifi_nan_ndl_attr_t;
 
 /*
- * NDL QoS Attribute  WFA Tech. Spec ver 1.0.r12 (section 10.7.19.4)
+ * NDL QoS Attribute  WFA Tech. Spec ver r26
  */
-#define NDL_QOS_ATTR_MAX_LATENCY_LEN        3
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndl_qos_attr_s {
 	uint8 id;		/* NAN_ATTR_NAN_NDL_QOS = 24 */
 	uint16 len;		/* Length of the attribute field following */
 	uint8 min_slots;	/* Min. number of FAW slots needed per DW interval */
-	uint8 max_latency[NDL_QOS_ATTR_MAX_LATENCY_LEN];  /* Max interval between non-cont FAW */
+	uint16 max_latency;  /* Max interval between non-cont FAW */
 } BWL_POST_PACKED_STRUCT wifi_nan_ndl_qos_attr_t;
+
+/* no preference to min time slots */
+#define NAN_NDL_QOS_MIN_SLOT_NO_PREF	0
+/* no preference to no. of slots between two non-contiguous slots */
+#define NAN_NDL_QOS_MAX_LAT_NO_PREF		0xFFFF
 
 /* Device Capability Attribute */
 
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_dev_cap_s {
 	uint8 id;		/* 0x0F */
 	uint16 len;		/* Length */
+	uint8 map_id;		/* map id */
 	uint16 commit_dw_info;	/* Committed DW Info */
 	uint8 bands_supported;	/* Supported Bands */
 	uint8 op_mode;		/* Operation Mode */
 	uint8 num_antennas;	/* Bit 0-3 tx, 4-7 rx */
 	uint16 chan_switch_time;	/* Max channel switch time in us */
-	uint8 capabilities;	/* Bit-0 is 1 if DFS Master, Bits 1-7 reserved */
+	uint8 capabilities;	/* DFS Master, Extended key id etc */
 } BWL_POST_PACKED_STRUCT wifi_nan_dev_cap_t;
 
 /* Awake DW Info field format */
@@ -820,11 +877,6 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_dev_cap_s {
 #define NAN_DEV_CAP_AWAKE_DW_5G_SHIFT	3
 
 /* Device Capability Attribute Format */
-
-/* Operation Mode: HT */
-#define NAN_DEV_CAP_HT_OPER_MODE_MASK	0x01
-/* Operation Mode: VHT */
-#define NAN_DEV_CAP_VHT_OPER_MODE_MASK	0x02
 
 /* Committed DW Info field format */
 /* 2.4GHz DW */
@@ -856,12 +908,22 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_dev_cap_s {
 #define NAN_DEV_CAP_TX_ANT_MASK			0x0F
 #define NAN_DEV_CAP_RX_ANT_MASK			0xF0
 
+/* Device capabilities */
+
+/* DFS master capability */
+#define NAN_DEV_CAP_DFS_MASTER_MASK		0x01
+#define NAN_DEV_CAP_DFS_MASTER_SHIFT	0
+/* extended iv cap */
+#define NAN_DEV_CAP_EXT_KEYID_MASK		0x02
+#define NAN_DEV_CAP_EXT_KEYID_SHIFT		1
+
 /* Band IDs */
 enum {
 	NAN_BAND_ID_TVWS		= 0,
-	NAN_BAND_ID_SIG			= 1,
-	NAN_BAND_ID_2G			= 2,
-	NAN_BAND_ID_5G			= 4,
+	NAN_BAND_ID_SIG			= 1,	/* Sub 1 GHz */
+	NAN_BAND_ID_2G			= 2,	/* 2.4 GHz */
+	NAN_BAND_ID_3G			= 3,	/* 3.6 GHz */
+	NAN_BAND_ID_5G			= 4,	/* 4.9 & 5 GHz */
 	NAN_BAND_ID_60G			= 5
 };
 typedef uint8 nan_band_id_t;
@@ -892,6 +954,9 @@ typedef uint8 nan_band_id_t;
 #define NAN_ULW_CTRL_TYPE_BAND		0
 #define NAN_ULW_CTRL_TYPE_CHAN_NOAUX	1
 #define NAN_ULW_CTRL_TYPE_CHAN_AUX	2
+
+#define NAN_ULW_CNT_DOWN_NO_EXPIRE	0xFF	/* ULWs doen't end until next sched update */
+#define NAN_ULW_CNT_DOWN_CANCEL		0x0		/* cancel remaining ulws */
 
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ulw_attr_s {
 	uint8 id;
@@ -967,6 +1032,11 @@ typedef BWL_PRE_PACKED_STRUCT struct nan2_pub_act_frame_s {
 #define NAN_REASON_FTM_PARAM_INCAP		0x4
 #define NAN_REASON_NO_MOVEMENT			0x5
 #define NAN_REASON_INVALID_AVAIL		0x6
+#define NAN_REASON_IMMUT_UNACCEPT		0x7
+#define NAN_REASON_SEC_POLICY			0x8
+#define NAN_REASON_QOS_UNACCEPT			0x9
+#define NAN_REASON_NDP_REJECT			0xa
+#define NAN_REASON_NDL_UNACCEPTABLE		0xb
 
 /* nan 2.0 qos (not attribute) */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndp_qos_s {
@@ -978,7 +1048,6 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndp_qos_s {
 
 /* NDP control bitmap defines */
 #define NAN_NDP_CTRL_CONFIRM_REQUIRED		0x01
-#define NAN_NDP_CTRL_EXPLICIT_CONFIRM		0x02
 #define NAN_NDP_CTRL_SECURTIY_PRESENT		0x04
 #define NAN_NDP_CTRL_PUB_ID_PRESENT		0x08
 #define NAN_NDP_CTRL_RESP_NDI_PRESENT		0x10
@@ -1042,27 +1111,83 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndp_attr_s {
 #define NAN_RNG_REJECT(_rsua)	(((_rsua)->type_status & NAN_RNG_STATUS_MASK) == \
 									NAN_RNG_STATUS_REJECT)
 
+/* schedule entry */
+typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_sched_entry_s {
+	uint8 map_id;		/* map id */
+	uint16 tbmp_ctrl;	/* time bitmap control */
+	uint8 tbmp_len;		/* time bitmap len */
+	uint8 tbmp[];		/* time bitmap - Optional */
+} BWL_POST_PACKED_STRUCT wifi_nan_sched_entry_t;
+
+#define NAN_SCHED_ENTRY_MIN_SIZE	OFFSETOF(wifi_nan_sched_entry_t, tbmp)
+#define NAN_SCHED_ENTRY_SIZE(_entry)	(NAN_SCHED_ENTRY_MIN_SIZE + (_entry)->tbmp_len)
+
+/* for dev cap, element container etc. */
+#define NAN_DEV_ELE_MAPID_CTRL_MASK		0x1
+#define NAN_DEV_ELE_MAPID_CTRL_SHIFT	0
+#define NAN_DEV_ELE_MAPID_MASK		0x1E
+#define NAN_DEV_ELE_MAPID_SHIFT		1
+
+#define NAN_DEV_ELE_MAPID_CTRL_SET(_mapid_field, value) \
+	do {(_mapid_field) &= ~NAN_DEV_ELE_MAPID_CTRL_MASK; \
+		(_mapid_field) |= ((value << NAN_DEV_ELE_MAPID_CTRL_SHIFT) & \
+		NAN_DEV_ELE_MAPID_CTRL_MASK); \
+	} while (0);
+
+#define NAN_DEV_ELE_MAPID_CTRL_GET(_mapid_field) \
+	(((_mapid_field) & NAN_DEV_ELE_MAPID_CTRL_MASK) >> \
+	NAN_DEV_ELE_MAPID_CTRL_SHIFT)
+
+#define NAN_DEV_ELE_MAPID_SET(_mapid_field, value) \
+	do {(_mapid_field) &= ~NAN_DEV_ELE_MAPID_MASK; \
+		(_mapid_field) |= ((value << NAN_DEV_ELE_MAPID_SHIFT) & \
+		NAN_DEV_ELE_MAPID_MASK); \
+	} while (0);
+
+#define NAN_DEV_ELE_MAPID_GET(_mapid_field) \
+	(((_mapid_field) & NAN_DEV_ELE_MAPID_MASK) >> \
+	NAN_DEV_ELE_MAPID_SHIFT)
+
+/* schedule entry map id handling */
+#define NAN_SCHED_ENTRY_MAPID_MASK		0x0F
+#define NAN_SCHED_ENTRY_MAPID_SHIFT		0
+
+#define NAN_SCHED_ENTRY_MAPID_SET(_mapid_field, value) \
+	do {(_mapid_field) &= ~NAN_SCHED_ENTRY_MAPID_MASK; \
+		(_mapid_field) |= ((value << NAN_SCHED_ENTRY_MAPID_SHIFT) & \
+		NAN_SCHED_ENTRY_MAPID_MASK); \
+	} while (0);
+
+#define NAN_SCHED_ENTRY_MAPID_GET(_mapid_field) \
+	(((_mapid_field) & NAN_SCHED_ENTRY_MAPID_MASK) >> \
+	NAN_SCHED_ENTRY_MAPID_SHIFT)
+
 /* NDC attribute */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndc_attr_s {
 	uint8 id;
 	uint16 len;
 	uint8 ndc_id[NAN_DATA_NDC_ID_SIZE];
-	uint8 sched_cntrl;
-	uint16 tbmp_ctrl;	/* time bitmap control */
-	uint8 tbmp_len;		/* time bitmap len */
-	uint8 tbmp[];		/* time bitmap - Optional */
+	uint8 attr_cntrl;
+	uint8 var[];
 } BWL_POST_PACKED_STRUCT wifi_nan_ndc_attr_t;
 
-/* Schedule control subfield of NDC attr */
-/* Schedule indication */
-#define NAN_NDC_ATTR_SCHED_IND_MASK	0x1E
-#define NAN_NDC_ATTR_SCHED_IND_SHIFT 1
+/* Attribute control subfield of NDC attr */
 /* Proposed NDC */
-#define NAN_NDC_ATTR_PROPOSED_NDC_MASK	0x40
-#define NAN_NDC_ATTR_PROPOSED_NDC_SHIFT 6
+#define NAN_NDC_ATTR_PROPOSED_NDC_MASK	0x1
+#define NAN_NDC_ATTR_PROPOSED_NDC_SHIFT 0
+
+/* get & set */
+#define NAN_NDC_GET_PROPOSED_FLAG(_attr)	\
+	(((_attr)->attr_cntrl & NAN_NDC_ATTR_PROPOSED_NDC_MASK) >>	\
+	NAN_NDC_ATTR_PROPOSED_NDC_SHIFT)
+#define NAN_NDC_SET_PROPOSED_FLAG(_attr, value) \
+	do {((_attr)->attr_cntrl &= ~NAN_NDC_ATTR_PROPOSED_NDC_MASK); \
+		((_attr)->attr_cntrl |=	\
+		(((value) << NAN_NDC_ATTR_PROPOSED_NDC_SHIFT) & NAN_NDC_ATTR_PROPOSED_NDC_MASK)); \
+	} while (0)
 
 /* Service descriptor extension attribute */
-typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_svc_descriptor_ext_attr_t {
+typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_svc_desc_ext_attr_s {
 	/* Attribute ID - 0x11 */
 	uint8 id;
 	/* Length of the following fields in the attribute */
@@ -1071,12 +1196,12 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_svc_descriptor_ext_attr_t {
 	uint8 instance_id;
 	/* SDE control field */
 	uint16 control;
-	/* Range limit - ingress */
-	uint16 range_ingress;
-	/* Range limit - egress */
-	uint16 range_egress;
-} BWL_POST_PACKED_STRUCT wifi_nan_svc_descriptor_ext_attr_t;
-#define NAN_SDE_ATTR_LEN (sizeof(wifi_nan_svc_descriptor_ext_attr_t))
+	/* range limit, svc upd indicator etc. */
+	uint8 var[];
+} BWL_POST_PACKED_STRUCT wifi_nan_svc_desc_ext_attr_t;
+
+#define NAN_SDE_ATTR_MIN_LEN OFFSETOF(wifi_nan_svc_desc_ext_attr_t, var)
+
 /* SDEA control field bit definitions and access macros */
 #define NAN_SDE_CF_FSD_REQUIRED		(1 << 0)
 #define NAN_SDE_CF_FSD_GAS		(1 << 1)
@@ -1087,6 +1212,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_svc_descriptor_ext_attr_t {
 #define NAN_SDE_CF_SECURITY_REQUIRED	(1 << 6)
 #define NAN_SDE_CF_RANGING_REQUIRED	(1 << 7)
 #define NAN_SDE_CF_RANGE_PRESENT	(1 << 8)
+#define NAN_SDE_CF_SVC_UPD_IND_PRESENT	(1 << 9)
 #define NAN_SDE_FSD_REQUIRED(_sde)	((_sde)->control & NAN_SDE_CF_FSD_REQUIRED)
 #define NAN_SDE_FSD_GAS(_sde)		((_sde)->control & NAN_SDE_CF_FSD_GAS)
 #define NAN_SDE_DP_REQUIRED(_sde)	((_sde)->control & NAN_SDE_CF_DP_REQUIRED)
@@ -1096,6 +1222,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_svc_descriptor_ext_attr_t {
 #define NAN_SDE_SECURITY_REQUIRED(_sde)	((_sde)->control & NAN_SDE_CF_SECURITY_REQUIRED)
 #define NAN_SDE_RANGING_REQUIRED(_sde)	((_sde)->control & NAN_SDE_CF_RANGING_REQUIRED)
 #define NAN_SDE_RANGE_PRESENT(_sde)	((_sde)->control & NAN_SDE_CF_RANGE_PRESENT)
+#define NAN_SDE_SVC_UPD_IND_PRESENT(_sde)	((_sde)->control & NAN_SDE_CF_SVC_UPD_IND_PRESENT)
 
 /* nan2 security */
 
@@ -1139,6 +1266,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_sec_cipher_suite_info_attr_s {
 
 /* nan2 security context identifier attribute field */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_sec_ctx_id_field_s {
+	uint16 sec_ctx_id_type_len;	/* length of security ctx identifier */
 	uint8 sec_ctx_id_type;
 	uint8 inst_id;	/* Instance Id */
 	uint8 var[];	/* security ctx identifier */
@@ -1261,8 +1389,9 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_sec_ncssk_key_desc_attr_s {
 		NAN_SEC_NCSSK_DESC_KEY_SMK_MSG_MASK);} while (0)
 
 #define NAN_SEC_NCSSK_IEEE80211_KDESC_TYPE	2	/* IEEE 802.11 Key Descriptor Type */
-#define NAN_SEC_NCSSK_KEY_DESC_VER		0	/* NCSSK-128/256 */
+#define NAN_SEC_NCSSK_KEY_DESC_VER			0	/* NCSSK-128/256 */
 #define NAN_SEC_NCSSK_KEY_TYPE_PAIRWISE		1	/* Pairwise */
+#define NAN_SEC_NCSSK_LIFETIME_KDE			7	/* Lifetime KDE type */
 
 /* TODO include MTK related attributes */
 
@@ -1311,26 +1440,11 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_mcast_sched_attr_s {
 	uint8 id; /* 0x16 */
 	uint16 len;
 	uint8 nmsg_id[NAN_NMSG_ID_LEN];
-	uint8 sched_cntrl;
-	uint8 var[0]; /* For Storing Time Bitmap */
+	uint8 attr_cntrl;
+	uint8 sched_own[ETHER_ADDR_LEN];
+	uint8 var[]; /* multicast sched entry list (schedule_entry_list) */
 } BWL_POST_PACKED_STRUCT wifi_nan_mcast_sched_attr_t;
 
-/* ********************************************
-* OBSOLETE/DUPLICATES - DO NOT USE BELOW
-**********************************************
-*/
-/* Time Bitmap Control field: Bit Duration - Incorrect. */
-typedef enum
-{
-	NAN_TIME_BMP_CTRL_BIT_DUR_DUR_16TU = 0,
-	NAN_TIME_BMP_CTRL_BIT_DUR_DUR_32TU = 1,
-	NAN_TIME_BMP_CTRL_BIT_DUR_DUR_48TU = 2,
-	NAN_TIME_BMP_CTRL_BIT_DUR_DUR_64TU = 3,
-	NAN_TIME_BMP_CTRL_BIT_DUR_DUR_80TU = 4,
-	NAN_TIME_BMP_CTRL_BIT_DUR_DUR_96TU = 5,
-	NAN_TIME_BMP_CTRL_BIT_DUR_DUR_112TU = 6,
-	NAN_TIME_BMP_CTRL_BIT_DUR_DUR_128TU = 7
-} nan_time_bmp_ctrl_bit_dur_t;
 
 /* FAC Channel Entry  (section 10.7.19.1.5) */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_fac_chan_entry_s {
@@ -1340,158 +1454,13 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_fac_chan_entry_s {
 	uint16 aux_chan;			/* Auxiliary Channel bitmap */
 } BWL_POST_PACKED_STRUCT wifi_nan_fac_chan_entry_t;
 
-/* Channel Entry List Present bit in Entry Control Filed is obsolete (WFA NAN Spec 1.0 r21) */
-#define NAN_AVAIL_ENTRY_CTRL_LIST_PRESENT_MASK 0x4000
-#define NAN_AVAIL_ENTRY_CTRL_LIST_PRESENT_SHIFT 14
-#define NAN_AVAIL_ENTRY_CTRL_LIST_PRESENT(_flags) (((_flags) & \
-	NAN_AVAIL_ENTRY_CTRL_LIST_PRESENT_MASK) >> NAN_AVAIL_ENTRY_CTRL_LIST_PRESENT_SHIFT)
-
-/* NDP Information Element (internal) */
-typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndp_setup_s {
-	uint8 id;		/* 221 */
-	uint8 len;		/* Length */
-	uint8 oui[DOT11_OUI_LEN];	/* "\x00\x10\x18" BRCM OUI */
-	uint8 type;		/* NAN_OUI_TYPE 0x13 */
-	uint8 subtype;		/* NAN_DATA_NDP_SETUP */
-	uint8 msg_type;		/* NDP Req, NDP Resp etc. */
-	uint8 pub_inst_id;	/* publish instance id */
-	struct ether_addr peer_mac_addr; /* publisher mac addr (aka peer mgmt address) */
-	struct ether_addr data_if_addr;	/* local data i/f address */
-	uint8 msg_status;
-	uint8 ndp_ctrl;
-	uint8 security;
-	wifi_nan_ndp_qos_t qos;	/* qos info */
-	uint8 var[1];		/* NDP specific info */
-} BWL_POST_PACKED_STRUCT wifi_nan_ndp_setup_t;
-
-/* NAN mgmt information element */
-typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_mgmt_setup_s {
-	uint8 id;		/* 221 */
-	uint8 len;		/* Length */
-	uint8 oui[DOT11_OUI_LEN];	/* "\x00\x10\x18" BRCM OUI */
-	uint8 type;		/* NAN_OUI_TYPE 0x13 */
-	uint8 subtype;		/* NAN_DATA_MGMT_SETUP */
-	uint8 msg_type;		/* Mgmt Req, Mgmt Resp etc. */
-	uint8 msg_status;
-} BWL_POST_PACKED_STRUCT wifi_nan_mgmt_setup_t;
-
-/* NAN Mgmt Request */
-#define NAN_MGMT_SETUP_MSG_REQ	1	/* don't use 0 */
-/* NAN Mgmt Response */
-#define NAN_MGMT_SETUP_MSG_RESP	2
-
-/* NAN Mgmt Setup Status */
-#define NAN_MGMT_SETUP_STATUS_OK	0
-#define NAN_MGMT_SETUP_STATUS_FAIL	1
-#define NAN_MGMT_SETUP_STATUS_REJECT	2
-
-/* NDL Schedule request */
-#define NAN_MGMT_FRM_SUBTYPE_NDL_UPDATE_REQ	17	/* Not part of spec. ver 1.0.r12 */
-/* NDL Schedule response */
-#define	NAN_MGMT_FRM_SUBTYPE_NDL_UPDATE_RESP	18	/* Not part of spec. ver 1.0.r12 */
-
-/* NAN2 Management */
-/* TODO: Remove this once nan_mgmt module is removed */
-#define NAN_MGMT_FRM_SUBTYPE_MGMT		0
-
-/* NAN 2.0 NDP Setup */
-#define NAN_DATA_NDP_SETUP  0	 /* arbitrary value */
-/* NAN 2.0 Mgmt Setup */
-#define NAN_DATA_MGMT_SETUP 1	 /* arbitrary value */
-/* NAN 2.0 NDL Setup */
-#define NAN_DATA_NDL_SETUP 2	 /* arbitrary value */
-
-/*
- * Period
- * Indicate the repeat interval of the following bitmap.
- * when set to 0, the indicated bitmap is not repeated.
- * When set to non-zero, the repeat interval is:
- * 1:128 TU, 2: 256 TU, 3: 512 TU, 4: 1024 TU, 5: 2048 TU, 6: 4096 TU, 7: 8192 TU
-*/
-#define NAN_DATA_MAX_AVAIL_INTRVL	7	/* no. of period intervals supported */
-
-/* no. of peer devices supported TODO make it tunable */
-#define NAN_DATA_PEER_DEV_SUPPORT	8
-/* no. of instaces supported (ndp, mgmt) */
-#define NAN_DATA_NDP_INST_SUPPORT	16
-/* instaces supported (same as ndp) */
-#define NAN_DATA_MGMT_INST_SUPPORT	NAN_DATA_NDP_INST_SUPPORT
-#define NAN_DATA_NDL_INST_SUPPORT	NAN_DATA_PEER_DEV_SUPPORT
-/* ndc base schedule cannot be more than ndl instances */
-#define NAN_DATA_NDC_INST_SUPPORT	NAN_DATA_PEER_DEV_SUPPORT
-
-/* NAN 2.0 (section 5.7.18.2): NAN availability attribute */
-
-/* NAN Availability Attribute */
-typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_availability_attr_s {
-	uint8 id;				/* TBD */
-	uint16 len;				/* length that follows */
-	uint8 attr_cntrl[3];			/* attribute control */
-	uint8 avail_entry_list[1];		/* availability entry list */
-} BWL_POST_PACKED_STRUCT wifi_nan_availability_attr_t;
-
-/* Channel entry */
-typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_channel_entry_s {
-	uint8 opclass;		/* Operating class */
-	uint16 chan_bitmap;	/* Channel bitmap */
-	uint8 prim_bitmap;	/* Primary channel bitmap */
-	uint16 aux_bitmap;	/* Time bitmap length */
-} BWL_POST_PACKED_STRUCT wifi_nan_channel_entry_t;
-
-/* GAS Sechdule Request */
-#define NAN_MGMT_FRM_SUBTYPE_GAS_SCHED_REQ	14	/* Not part of spec. ver 1.0.r12 */
-/* GAS Sechdule Response */
-#define NAN_MGMT_FRM_SUBTYPE_GAS_SCHED_RESP	15	/* Not part of spec. ver 1.0.r12 */
-
-/* DUPLICATES */
-/* Type of  Availability: committed */
-#define NAN_ENTRY_CNTRL_TYPE_COMM_AVAIL_MASK	0x1
-/* Type of  Availability: potential */
-#define NAN_ENTRY_CNTRL_TYPE_POTEN_AVAIL_MASK	0x2
-/* Type of  Availability: conditional */
-#define NAN_ENTRY_CNTRL_TYPE_COND_AVAIL_MASK	0x4
-
-/* Rx Nss */
-#define NAN_ENTRY_CNTRL_RX_NSS_MASK		0x1E00
-#define NAN_ENTRY_CNTRL_RX_NSS_SHIFT		9
-/* Paged Resource block */
-#define NAN_ENTRY_CNTRL_PAGED_RSC_BLK_MASK	0x2000
-#define NAN_ENTRY_CNTRL_PAGED_RSC_BLK_SHIFT	13
-/* Time Bitmap Present */
-#define NAN_ENTRY_CNTRL_TIME_BMP_PRSNT_MASK	0x4000
-#define NAN_ENTRY_CNTRL_TIME_BMP_PRSNT_SHIFT	14
-/* Channel Entry Present */
-#define NAN_ENTRY_CNTRL_CHAN_ENTRY_PRSNT_MASK	0x8000
-#define NAN_ENTRY_CNTRL_CHAN_ENTRY_PRSNT_SHIFT	15
-/* Reserved */
-#define NAN_ENTRY_CNTRL_RESERVED_MASK		0xFF0000
-#define NAN_ENTRY_CNTRL_RESERVED_SHIFT		16
-
+/* TODO move this from nan.h */
 #define NAN_ALL_NAN_MGMT_FRAMES (NAN_FRM_SCHED_AF | \
 	NAN_FRM_NDP_AF | NAN_FRM_NDL_AF | \
 	NAN_FRM_DISC_BCN | NAN_FRM_SYNC_BCN | \
 	NAN_FRM_SVC_DISC | NAN_FRM_RNG_REQ_AF | \
 	NAN_FRM_RNG_RESP_AF | NAN_FRM_RNG_REPORT_AF | \
 	NAN_FRM_RNG_TERM_AF)
-
-/* obsoleted by spec r21 */
-typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndl_im_sched_ctrl_s {
-	uint8 sched_ctrl;		/* Schedule control */
-	uint16 bitmap_ctrl;		/* Optional field */
-	uint8 time_bitmap_len;		/* Optional field */
-	uint8 time_bitmap[];		/* Optional field */
-} BWL_POST_PACKED_STRUCT wifi_nan_ndl_im_sched_ctrl_t;
-
-#define NDL_ATTR_IM_SCHED_CTRL_LEN		1
-#define NDL_ATTR_IM_SCHED_CTRL_SCHED_IND_MASK 0x1E
-#define NDL_ATTR_IM_SCHED_CTRL_SCHED_IND_SHIFT	1
-#define NDL_ATTR_IM_SCHED_CTRL_TIME_BMP_PRSNT_MASK	0x20
-#define NDL_ATTR_IM_SCHED_CTRL_TIME_BMP_PRSNT_SHIFT	5
-
-/* Attribute Control field */
-#define NAN_ATTR_CNTRL_MAP_ID_MASK	0x0F	/* Map Id */
-#define NAN_ATTR_CNTRL_RSVD_MASK	0xF0	/* Reserved */
-#define NAN_ATTR_CNTRL_SEQ_ID_MASK	0xFF	/* Seq Id */
 
 /* This marks the end of a packed structure section. */
 #include <packed_section_end.h>

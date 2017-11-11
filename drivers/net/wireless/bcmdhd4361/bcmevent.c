@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmevent.c 694770 2017-04-17 04:21:19Z $
+ * $Id: bcmevent.c 707287 2017-06-27 06:44:29Z $
  */
 
 #include <typedefs.h>
@@ -165,7 +165,6 @@ static const bcmevent_name_str_t bcmevent_names[] = {
 #endif /* WLAIBSS */
 #ifdef GSCAN_SUPPORT
 	BCMEVENT_NAME(WLC_E_PFN_GSCAN_FULL_RESULT),
-	BCMEVENT_NAME(WLC_E_PFN_SWC),
 	BCMEVENT_NAME(WLC_E_PFN_SSID_EXT),
 #endif /* GSCAN_SUPPORT */
 #ifdef WLBSSLOAD_REPORT
@@ -294,7 +293,7 @@ is_wlc_event_frame(void *pktdata, uint pktlen, uint16 exp_usr_subtype,
 	 */
 	evlen = (uint16)(pktend - (uint8 *)&bcm_event->bcm_hdr.version);
 	evend = (uint8 *)&bcm_event->bcm_hdr.version + evlen;
-	if (evend > pktend) {
+	if (evend != pktend) {
 		err = BCME_BADLEN;
 		goto done;
 	}
@@ -324,7 +323,8 @@ is_wlc_event_frame(void *pktdata, uint pktlen, uint16 exp_usr_subtype,
 
 		/* ensure data length in event is not beyond the packet. */
 		data_len = ntoh32_ua((void *)&bcm_event->event.datalen);
-		if (data_len > (pktlen - sizeof(bcm_event_t))) {
+		if ((sizeof(bcm_event_t) + data_len +
+			BCMILCP_BCM_SUBTYPE_EVENT_DATA_PAD) != pktlen) {
 			err = BCME_BADLEN;
 			goto done;
 		}
@@ -351,7 +351,8 @@ is_wlc_event_frame(void *pktdata, uint pktlen, uint16 exp_usr_subtype,
 
 		/* ensure data length in event is not beyond the packet. */
 		data_len = ntoh16_ua((void *)&((bcm_dngl_event_t *)pktdata)->dngl_event.datalen);
-		if (data_len > (pktlen - sizeof(bcm_dngl_event_t))) {
+		if ((sizeof(bcm_dngl_event_t) + data_len +
+			BCMILCP_BCM_SUBTYPE_EVENT_DATA_PAD) != pktlen) {
 			err = BCME_BADLEN;
 			goto done;
 		}

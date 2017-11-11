@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie_linux.c 688366 2017-03-06 06:58:55Z $
+ * $Id: dhd_pcie_linux.c 714138 2017-08-03 08:55:55Z $
  */
 
 
@@ -381,6 +381,7 @@ static int dhdpcie_pm_prepare(struct device *dev)
 		DHD_DISABLE_RUNTIME_PM(bus->dhd);
 	}
 
+	bus->chk_pm = TRUE;
 	return 0;
 }
 
@@ -403,8 +404,10 @@ static int dhdpcie_pm_resume(struct device *dev)
 	DHD_BUS_BUSY_SET_RESUME_IN_PROGRESS(bus->dhd);
 	DHD_GENERAL_UNLOCK(bus->dhd, flags);
 
-	if (!bus->dhd->dongle_reset)
+	if (!bus->dhd->dongle_reset) {
 		ret = dhdpcie_set_suspend_resume(bus, FALSE);
+		bus->chk_pm = FALSE;
+	}
 
 	DHD_GENERAL_LOCK(bus->dhd, flags);
 	DHD_BUS_BUSY_CLEAR_RESUME_IN_PROGRESS(bus->dhd);
@@ -1257,6 +1260,11 @@ int dhdpcie_init(struct pci_dev *pdev)
 		}
 #endif /* USE_SMMU_ARCH_MSM */
 
+#ifdef DHD_WAKE_STATUS
+		/* Initialize pcie_lock */
+		spin_lock_init(&dhdpcie_info->pcie_lock);
+#endif /* DHD_WAKE_STATUS */
+
 		/* Find the PCI resources, verify the  */
 		/* vendor and device ID, map BAR regions and irq,  update in structures */
 		if (dhdpcie_scan_resource(dhdpcie_info)) {
@@ -1828,6 +1836,15 @@ static irqreturn_t wlan_oob_irq(int irq, void *data)
 	DHD_TRACE(("%s: IRQ Triggered\n", __FUNCTION__));
 	bus = (dhd_bus_t *)data;
 	dhdpcie_oob_intr_set(bus, FALSE);
+#ifdef DHD_WAKE_STATUS
+#ifdef DHD_PCIE_RUNTIMEPM
+	/* This condition is for avoiding counting of wake up from Runtime PM */
+	if (bus->chk_pm)
+#endif /* DHD_PCIE_RUNTIMPM */
+	{
+		bcmpcie_set_get_wake(bus, 1);
+	}
+#endif /* DHD_WAKE_STATUS */
 #ifdef DHD_PCIE_RUNTIMEPM
 	dhdpcie_runtime_bus_wake(bus->dhd, FALSE, wlan_oob_irq);
 #endif /* DHD_PCIE_RUNTIMPM */

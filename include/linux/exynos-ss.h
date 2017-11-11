@@ -36,6 +36,7 @@ extern int exynos_ss_post_reboot(void);
 extern int exynos_ss_set_hardlockup(int);
 extern int exynos_ss_get_hardlockup(void);
 extern unsigned int exynos_ss_get_item_size(char *);
+extern unsigned long exynos_ss_get_item_vaddr(char *);
 extern unsigned int exynos_ss_get_item_paddr(char *);
 extern bool exynos_ss_dumper_one(void *, char *, size_t, size_t *);
 extern void exynos_ss_panic_handler_safe(void);
@@ -214,6 +215,10 @@ void exynos_ss_dump_sfr(void);
 #define exynos_ss_hook_hardlockup_entry(a) do { } while(0)
 #define exynos_ss_hook_hardlockup_exit() do { } while(0)
 
+static inline unsigned long exynos_ss_get_item_vaddr(char *name)
+{
+	return 0;
+}
 static inline bool exynos_ss_dumper_one(void *v_dumper,
 				char *line, size_t size, size_t *len)
 {

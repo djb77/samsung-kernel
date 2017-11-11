@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_bus.h 683604 2017-02-08 11:19:43Z $
+ * $Id: dhd_bus.h 698895 2017-05-11 02:55:17Z $
  */
 
 #ifndef _dhd_bus_h_
@@ -197,14 +197,7 @@ extern void dhd_bus_ringbell(struct dhd_bus *bus, uint32 value);
 extern void dhd_bus_ringbell_2(struct dhd_bus *bus, uint32 value, bool devwake);
 extern void dhd_bus_cmn_readshared(struct dhd_bus *bus, void* data, uint8 type, uint16 ringid);
 extern uint32 dhd_bus_get_sharedflags(struct dhd_bus *bus);
-
-#ifdef DHD_WAKE_STATUS
-extern void dhd_bus_rx_frame(struct dhd_bus *bus, void* pkt, int ifidx, uint pkt_count,
-	int pkt_wake);
-#else
 extern void dhd_bus_rx_frame(struct dhd_bus *bus, void* pkt, int ifidx, uint pkt_count);
-#endif /* DHD_WAKE_STATUS */
-
 extern void dhd_bus_start_queue(struct dhd_bus *bus);
 extern void dhd_bus_stop_queue(struct dhd_bus *bus);
 extern dhd_mb_ring_t dhd_bus_get_mbintr_fn(struct dhd_bus *bus);
@@ -290,4 +283,8 @@ extern uint16 dhd_get_chipid(dhd_pub_t *dhd);
 
 extern int dhd_get_idletime(dhd_pub_t *dhd);
 
+#ifdef DHD_WAKE_STATUS
+extern wake_counts_t* dhd_bus_get_wakecount(dhd_pub_t *dhd);
+extern int dhd_bus_get_bus_wake(dhd_pub_t * dhd);
+#endif /* DHD_WAKE_STATUS */
 #endif /* _dhd_bus_h_ */

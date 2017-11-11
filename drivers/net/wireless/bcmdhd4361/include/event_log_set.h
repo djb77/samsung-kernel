@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: event_log_set.h 585396 2015-09-10 09:04:56Z $
+ * $Id: event_log_set.h 700076 2017-05-17 14:42:22Z $
  */
 
 #ifndef _EVENT_LOG_SET_H_
@@ -41,6 +41,13 @@
 #define EVENT_LOG_SET_PSM	2
 #define EVENT_LOG_SET_ERROR	3
 #define EVENT_LOG_SET_MEM_API	4
+/* Share the set with MEM_API for now to limit ROM invalidation.
+ * The above set is used in dingo only
+ * On trunk, MSCH should move to a different set.
+ */
+#define EVENT_LOG_SET_MSCH_PROFILER	4
 #define EVENT_LOG_SET_ECOUNTERS 5	/* Host to instantiate this for ecounters. */
+#define EVENT_LOG_SET_6	6	/* Instantiated by host for channel switch logs */
+#define EVENT_LOG_SET_7	7	/* Instantiated by host for AMPDU stats */
 
 #endif /* _EVENT_LOG_SET_H_ */

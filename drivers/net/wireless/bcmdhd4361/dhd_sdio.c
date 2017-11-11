@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_sdio.c 694819 2017-04-17 11:12:00Z $
+ * $Id: dhd_sdio.c 705650 2017-06-19 03:00:50Z $
  */
 
 #include <typedefs.h>
@@ -754,6 +754,11 @@ static int _dhdsdio_download_btfw(struct dhd_bus *bus);
 #include <dhd_ulp.h>
 static int dhd_bus_ulp_reinit_fw(dhd_bus_t *bus);
 #endif /* DHD_ULP */
+
+#ifdef DHD_WAKE_STATUS
+int bcmsdh_get_total_wake(bcmsdh_info_t *bcmsdh);
+int bcmsdh_set_get_wake(bcmsdh_info_t *bcmsdh, int flag);
+#endif /* DHD_WAKE_STATUS */
 
 static void
 dhdsdio_tune_fifoparam(struct dhd_bus *bus)
@@ -4850,8 +4855,10 @@ dhd_bus_stop(struct dhd_bus *bus, bool enforce_mutex)
 		 */
 		dhd_tcpack_info_tbl_clean(bus->dhd);
 #endif /* DHDTCPACK_SUPPRESS */
+		dhd_os_sdlock_txq(bus->dhd);
 		/* Clear the data packet queues */
 		pktq_flush(osh, &bus->txq, TRUE);
+		dhd_os_sdunlock_txq(bus->dhd);
 	}
 
 	/* Clear any held glomming stuff */
@@ -4889,7 +4896,6 @@ dhd_txglom_enable(dhd_pub_t *dhdp, bool enable)
 	 */
 	dhd_bus_t *bus = dhdp->bus;
 #ifdef BCMSDIOH_TXGLOM
-	char buf[256];
 	uint32 rxglom;
 	int32 ret;
 
@@ -4902,9 +4908,8 @@ dhd_txglom_enable(dhd_pub_t *dhdp, bool enable)
 
 	if (enable) {
 		rxglom = 1;
-		memset(buf, 0, sizeof(buf));
-		bcm_mkiovar("bus:rxglom", (void *)&rxglom, 4, buf, sizeof(buf));
-		ret = dhd_wl_ioctl_cmd(dhdp, WLC_SET_VAR, buf, sizeof(buf), TRUE, 0);
+		ret = dhd_iovar(dhdp, 0, "bus:rxglom", (char *)&rxglom, sizeof(rxglom), NULL, 0,
+				TRUE);
 		if (ret >= 0)
 			bus->txglom_enable = TRUE;
 		else {
@@ -5270,13 +5275,8 @@ int
 dhd_process_pkt_reorder_info(dhd_pub_t *dhd, uchar *reorder_info_buf, uint reorder_info_len,
 	void **pkt, uint32 *pkt_count);
 
-#ifdef DHD_WAKE_STATUS
-static uint8
-dhdsdio_rxglom(dhd_bus_t *bus, uint8 rxseq, int pkt_wake)
-#else
 static uint8
 dhdsdio_rxglom(dhd_bus_t *bus, uint8 rxseq)
-#endif /* DHD_WAKE_STATUS */
 {
 	uint16 dlen, totlen;
 	uint8 *dptr, num = 0;
@@ -5687,13 +5687,7 @@ dhdsdio_rxglom(dhd_bus_t *bus, uint8 rxseq)
 				} while (temp);
 				if (cnt) {
 					dhd_os_sdunlock(bus->dhd);
-#ifdef DHD_WAKE_STATUS
-					dhd_rx_frame(bus->dhd, idx, list_head[idx], cnt, 0,
-						pkt_wake, &bus->wake_counts);
-					pkt_wake = 0;
-#else
 					dhd_rx_frame(bus->dhd, idx, list_head[idx], cnt, 0);
-#endif /* DHD_WAKE_STATUS */
 					dhd_os_sdlock(bus->dhd);
 				}
 			}
@@ -5737,10 +5731,6 @@ dhdsdio_readframes(dhd_bus_t *bus, uint maxframes, bool *finished)
 
 #if defined(DHD_DEBUG) || defined(SDTEST)
 	bool sdtest = FALSE;	/* To limit message spew from test mode */
-#endif
-
-#ifdef DHD_WAKE_STATUS
-	int pkt_wake = bcmsdh_set_get_wake(bus->sdh, 0);
 #endif
 
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
@@ -5836,12 +5826,7 @@ dhdsdio_readframes(dhd_bus_t *bus, uint maxframes, bool *finished)
 			uint8 cnt;
 			DHD_GLOM(("%s: calling rxglom: glomd %p, glom %p\n",
 			          __FUNCTION__, bus->glomd, bus->glom));
-#ifdef DHD_WAKE_STATUS
-			cnt = dhdsdio_rxglom(bus, rxseq, pkt_wake);
-			pkt_wake = 0;
-#else
 			cnt = dhdsdio_rxglom(bus, rxseq);
-#endif /* DHD_WAKE_STATUS */
 			DHD_GLOM(("%s: rxglom returned %d\n", __FUNCTION__, cnt));
 			rxseq += cnt - 1;
 			rxleft = (rxleft > cnt) ? (rxleft - cnt) : 1;
@@ -6431,12 +6416,7 @@ deliver:
 
 		/* Unlock during rx call */
 		dhd_os_sdunlock(bus->dhd);
-#ifdef DHD_WAKE_STATUS
-		dhd_rx_frame(bus->dhd, ifidx, pkt, pkt_count, chan, pkt_wake, &bus->wake_counts);
-		pkt_wake = 0;
-#else
 		dhd_rx_frame(bus->dhd, ifidx, pkt, pkt_count, chan);
-#endif /* DHD_WAKE_STATUS */
 		dhd_os_sdlock(bus->dhd);
 	}
 	rxcount = maxframes - rxleft;
@@ -9951,6 +9931,38 @@ concate_revision_bcm43455(dhd_bus_t *bus, char *fw_path, char *nv_path)
 }
 #endif /* SUPPORT_MULTIPLE_CHIP_4345X */
 
+static int
+concate_revision_bcm43430(dhd_bus_t *bus, char *fw_path, char *nv_path)
+{
+
+	uint chipver;
+	char chipver_tag[4] = {0, };
+
+	DHD_TRACE(("%s: BCM43430 Multiple Revision Check\n", __FUNCTION__));
+	if (bus->sih->chip != BCM43430_CHIP_ID) {
+		DHD_ERROR(("%s:Chip is not BCM43430\n", __FUNCTION__));
+		return BCME_ERROR;
+	}
+	chipver = bus->sih->chiprev;
+	DHD_ERROR(("CHIP VER = [0x%x]\n", chipver));
+	if (chipver == 0x0) {
+		DHD_ERROR(("----- CHIP bcm4343S -----\n"));
+		strcat(chipver_tag, "_3s");
+	} else if (chipver == 0x1) {
+		DHD_ERROR(("----- CHIP bcm43438 -----\n"));
+	} else if (chipver == 0x2) {
+		DHD_ERROR(("----- CHIP bcm43436L -----\n"));
+		strcat(chipver_tag, "_36");
+	} else {
+		DHD_ERROR(("----- CHIP bcm43430 unknown revision %d -----\n",
+			chipver));
+	}
+
+	strcat(fw_path, chipver_tag);
+	strcat(nv_path, chipver_tag);
+	return 0;
+}
+
 int
 concate_revision(dhd_bus_t *bus, char *fw_path, char *nv_path)
 {
@@ -9999,6 +10011,9 @@ concate_revision(dhd_bus_t *bus, char *fw_path, char *nv_path)
 		res = concate_revision_bcm43455(bus, fw_path, nv_path);
 		break;
 #endif /* SUPPORT_MULTIPLE_CHIP_4345X */
+	case BCM43430_CHIP_ID:
+		res = concate_revision_bcm43430(bus, fw_path, nv_path);
+		break;
 	default:
 		DHD_ERROR(("REVISION SPECIFIC feature is not required\n"));
 		return res;
@@ -10567,3 +10582,19 @@ int dhd_get_idletime(dhd_pub_t *dhd)
 {
 	return dhd->bus->idletime;
 }
+
+#ifdef DHD_WAKE_STATUS
+wake_counts_t*
+dhd_bus_get_wakecount(dhd_pub_t *dhd)
+{
+	if (!dhd->bus) {
+		return NULL;
+	}
+	return &dhd->bus->wake_counts;
+}
+int
+dhd_bus_get_bus_wake(dhd_pub_t *dhd)
+{
+	return bcmsdh_set_get_wake(dhd->bus->sdh, 0);
+}
+#endif /* DHD_WAKE_STATUS */

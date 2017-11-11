@@ -930,6 +930,7 @@ void score_system_release(struct score_system *system)
 	struct device *dev = &system->pdev->dev;
 
 	score_dump_release();
+	score_print_release(system);
 	score_exynos_release(&system->exynos);
 	score_interface_release(&system->interface, dev, system->irq0);
 	score_memory_release(&system->memory);

@@ -1,32 +1,190 @@
-BCM4361 DHD 1.77.17.3 for Android Dream NOS Project
+BCM4361 DHD 1.77.48 for Android Great/Dream & J5/J7 & BCM43438 NOS Project
 (Notes: 1.77.x is twigged off from 1.579.235.9)
 
-DHD 1.77.17.3 - 2017.07.21
+DHD 1.77.48 - 2017.09.21
+Kernel Panic
+ - CS3275366 Fixed kernel panic issue when returning invalid dongle ram size
+ - CS3341471 Fixed kernel panic from ASSERT during driver initialization
+ - Fixed kernel panic during connection test on debugging mode
+
 Others
+ - CS3274682 Fixed low performance of NAS download due to CPU migration
+ - CS3291870 Fixed the current consumption issue on SoftAP due to the wl_wdwake wakelock (Available for SDIO projects)
+ - CS3409811 Supported private command of clearing pktlogging data for security
+ - CS3483269 Extended dongle_isolation for all customer platform using PCIe bus
+ - CS3508335 Limited some security information in debug_dump
+ - CS3509434 Added WLC_E_SET_SSID fail custom reason code
+ - CS3558874 Added Assoc Reject - WLC_E_STATUS_NO_NETWORKS status code for Assoc Reject Bigdata
+ - CS3585868 Integrated GREAT Android N OS features into DREAM/GREAT Android O OS project
+ - CS3591398 Enabled TCP ACK suppress enable/disable log message
+ - Support RSSI summation report feature (Available for Android O or later version)
+
+
+DHD 1.77.44 - 2017.08.24
+Others
+ - CS3088602 Reduced value length of WSR counters variable
+ - CS3247015 Fixed disconnection during roaming on CISCO hidden networks
+ - CS3396150 Enabled legacy SCAN wakelock for SDIO Project
+ - CS3429070 Fixed SDIO init CLK issue for Exynos 7580 platform
+ - CS3455796 Changed path of wifi dump-files for DREAM/STAR
+
+
+DHD 1.77.43 - 2017.08.11
+Security Patch
+ - V2017063001 Removed not required IOVAR for SDIO
+ - V2017063002 Added length check in event log handler
+
+Others
+ - CS3088602 Minimized Wifi Statistics Report for host buffer size limitation
+ - CS3247009 Changed FW/NVRAM/BLOB location following ANDROID PLATFORM VERSION
+ - CS3351562 Changed MAC address encoding due to security issue
+
+
+DHD 1.77.37.3 - 2017.07.27
+Others
+ - CS3088602 Add missed 4 values while report to Framework
+ - CS3203998 Fixed to support big data of 11kv
+ - CS3215091 Fixed build error of detect consecutive hang event
+ - CS3255825 Changed path of wifi dump-files only if GREAT
+
+
+DHD 1.77.37.2 - 2017.07.19
+Kernel Panic
+ - CS3203896 Fixed kernel panic caused by referred NULL Pointer in dhd_pktlog_pkts_write_file
+ - CS3204538 Fixed Kernel panic when D3_ACK timeout is occurred
+
+Others
+ - CS3215091 Detect consecutive hang event from dongle on factory binary
  - CS3221222 Fixed wrong 11kv default setting
  - CS3265424 CS3160208 Fixed to update correct DHD connection status on AUTO_ROAM operation
  - CS3265424 CS3214374 Fixed Roaming event drop issue when roaming to same BSSID case
 
 
-DHD 1.77.17.2 - 2017.07.07
+DHD 1.77.37 - 2017.07.04
+New Feature
+ - CS2955162 Supported RSSI Logging 
+   (This implementation should be sync up with FW 13.38.30 or higher version)
+ - CS3088602 Introduced Wifi Statistics Report for Big data logging
+
+Kernel Panic
+ - CS1812549 Fixed kernel panic for GETSTAINFO command
+ - CS3114183 Fixed kernel panic that filp_close() referred NULL Pointer in dhd_pktlog_write_file()
+ - CS3179018 Changed log level of scan warn event log to prevent scan time out
+
+Security Patch
+ - CVE-2017-0705 Added boundary check in wl_cfgvendor_significant_change_cfg()
+ - CVE-2017-0706 Added boundary check in wl_cfg80211_mgmt_tx()
+ - V2017053101 Added boundary check in dhd_process_full_gscan_result()
+ - V2017053102 Fixed Heap overflow in dhd_handle_swc_evt()
+ - V2017053103 Added boundary check in dhd_handle_hotlist_scan_evt()
+ - V2017053104 Added boundary check in dhd_pno_process_epno_result()
+ - V2017060101 Added boundary check in wl_escan_handler()
+ - Fixed overflow issue in wl_android_set_ibss_beacon_ouidata()
+ 
+Others
+ - CS1760272 Added BCM43430 FW/NVRAM dual operation
+ - CS2459522 Re-enabled GEN_SOFTAP_INFO_FILE feature
+ - CS2554190 Enhanced Packet Logging feature - Used Pre-allocated buffer pool & Added private command & Added packet failure reason into pcap
+ - CS2901316 Fixed to send up common error code for Android-O VTS
+ - CS2901316 Fixed to use proper chipset number when parsing link stats
+ - CS3057710 Added spin lock for Packet Monitoring and Debugability feature - Avoid packet fetching on invalid states
+ - CS3057710 Disabled Android Packet Monitoring
+ - CS3059107 Fixed build error on BCM43455 A8 platform
+ - CS3092630 Added to HEX dump for host wake packet
+ - CS3093675 Fixed prevent issue in dhd_pktlog.c file
+ - CS3121464 Added to check invalid hang reason
+ - Added log for packet monitor entry functions
+
+
+DHD 1.77.27.12 - 2017.06.20
+New Feature
+ - CS2554190 Enabled Packet Logging feature for Great Project
+
+Kernel Panic
+ - CS2931791 Fixed kernel panic when flushing packet in Tx queue for SDIO interface
+ - CS3024217 Fixed the Kernel panic when Kernel calls the CPU hotplug notification function during driver initialization
+ 
+Security Patch
+ - Enhanced event length check in is_wlc_event_frame()
+ - V2017052301 Added event length check in dhd_rtt_event_handler()
+ - V2017052302 Added event length check in wl_notify_rx_mgmt_frame()
+
+Others
+ - CS2934714 Fixed MFG firmware loading failure with single nvram file
+ - CS3018308 Fixed repetitive connection drops of clients with Mobile Hotspot
+ - Added log for scan timeout issue
+ - Disabled Preempt when scan results sent to host - avoid scan timeout issue
+ - Provide roaming reason when WLC_E_ROAM_PREP event has occurred
+   (This patch should be sync up with FW 13.38.30 or higher version)
+ - Sync up Makefile/Kconfig with Samsung requirement
+
+
+DHD 1.77.24 - 2017.06.02
+Kernel Panic
+ - Fixed Kernel Panic in wl_event_handler() while doing STA+P2P stress test
+
+Security Patch
+ - Supported Heap ASLR(Address Space Layout Randomization) in dongle. Heap ASLR will be enabled when firmware supports it
+
+Others
+ - Fixed incorrect nvram path modification routines to support Murata module
+
+
+DHD 1.77.22 - 2017.05.25
+Kernel Panic
+ - CS2714944 Fixed the Kernel Panic during dynamic TCP ACK suppress mode change in SDIO platform
+
 Others
  - CS2595140 Added an Android private command for setting ADPS
- - CS2791743 Fixed duplicated tx_error counter summation
- - CS3171448 Fixed Disconnection issue with Samsung CELL AP by disabling SETBAND
+ - CS2675989 Fixed reverse-order of EAP-Failure and deauth packet
  - 11kv - Fixed BTM capability check
+ - Unified one DHD for Dream & Great Project with CONFIG_WLAN_GREAT define
 
 
-DHD 1.77.17.1 - 2017.05.08
+DHD 1.77.21 - 2017.05.19
 New Feature
- - CS2459522 Created .softap.info file when boot-up time for SoftAP information - Default disable
+ - CS2459522 Disabled GEN_SOFTAP_INFO_FILE feature in Makefile
  - Comment out ADPS define at Makefile
+
+Kernel Panic
+ - CS2472525 Avoid to trigger Kernel panic on abnormal devices during device initialization
+ - CS2716890 Fixed Scan timeout issue with blocking suspend during P2P scan
+
+Security Patch
+ - CVE-2017-0633 V2017022301 Enhanced wrong buffer usage in IOCTL path
+
+Others
+ - CS2454032 Changed to implement wake stat support
+ - CS2460373 Added WIFI_LOGGER feature in Makefile
+ - CS2472434 Fixed roam failure on PMF required APs
+ - CS2475910 Print last roaming event log when link down is happened
+ - CS2642368 Fixed type casting issue in wl_android_send_action_frame()
+ - CS2761292 Added dhd rxq sdlock operation
+ - CS2769153 Fixed compile error on exymos5433 sdio model
+ - CS2791743 Fixed duplicated tx_error counter summation
+ - CS2793328 Relocated WLAN onoff delay on dhd_wlan_init_gpio()
+ - Added max payload length check in dhd_dbg_msgtrace_log_parser() function
+ - Changed the nvram file name to nvram.txt to support single nvram file
+ - Fixed assoc state sync issue between wpa_supplicant & DHD driver
+ - Fixed SoftAP interface delete issue observed while running APSTA stability test
+ - Fixed the spinlock related problem in the DHD_WAKE_STATUS feature
+
+
+DHD 1.77.16 - 2017.05.01
+New Feature
+ - CS2459522 Created .softap.info file when boot-up time for SoftAP information
 
 Kernel Panic
  - CS2471281 Fixed null pointer reference exception during interface down
  - CS2472873 Fixed to prevent accessing  CPU hotplug call back before initialization
- - CS2472525 Avoid to trigger Kernel panic on abnormal devices during device initialization
  - CS2477559 Implement exception handling routines if DMA mapping error for TX data packet is happened
- 
+
+Security Patch
+ - CVE-2017-0568 V2017051814 Fixed buffer overrun in wl_run_escan()
+ - CVE-2017-0570 V2017051815 Removed unused file (wl_iw.c/wl_iw.h)
+ - CVE-2017-0574 V2017051817 Fixed vulnerability issues
+ - CVE-2017-0740 V2017030901 Fixed length overflow issue in dhd_wl_ioctl() function
+
 Others
  - CS2456626 Enabled SETBAND API
  - CS2470635 Enabled frameburst on SDIO platform
@@ -35,14 +193,14 @@ Others
  - CS2474767 Fixed compile error for Dream project
  - CS2476640 Added to control tcpack_suppress as throughput on BCM43455
  - CS2555123 Fixed page fault issue in dhd_wl_ioctl()
- - CS2642368 Fixed type casting issue in wl_android_send_action_frame()
- - CVE-2017-0568 Fixed vulnerability issues
- - CVE-2017-0570 Fixed vulnerability issues
- - CVE-2017-0574 Fixed vulnerability issues
+ - Enabled CAC by default and modified CAC dynamically based on the interface
  - Enabled Random MAC address scan by default for all WIFI chip
- - Fixed length variable overflow issue
  - Fixed wrong event message print log issue
- - Fixed SoftAP interface delete issue observed while running APSTA stability test
+
+
+DHD 1.77.12.1 - 2017.03.27
+Others
+ - CSP:1138026 Fixed compile error for Dream project
 
 
 DHD 1.77.12 - 2017.03.22
