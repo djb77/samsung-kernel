@@ -39,7 +39,6 @@
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 #include <linux/t-base-tui.h>
 struct sec_ts_data *tui_tsp_info;
-extern int tui_force_close(uint32_t arg);
 #ifdef CONFIG_EPEN_WACOM_W9018
 extern void epen_disable_mode(int mode);
 #endif
@@ -2234,20 +2233,6 @@ static int sec_ts_input_open(struct input_dev *dev)
 
 	input_info(true, &ts->client->dev, "%s, wet:%d, dive:%d\n", __func__, ts->wet_mode, ts->dive_mode);
 
-#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
-		input_err(true, &ts->client->dev, "%s TUI cancel event call!\n", __func__);
-		msleep(100);
-		tui_force_close(1);
-		msleep(200);
-		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
-			input_err(true, &ts->client->dev, "%s TUI flag force clear!\n",	__func__);
-			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
-			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
-		}
-	}
-#endif
-
 	if (ts->lowpower_status) {
 #ifdef USE_OPEN_POWER_RESET
 		sec_ts_stop_device(ts);
@@ -2277,20 +2262,6 @@ static void sec_ts_input_close(struct input_dev *dev)
 	struct sec_ts_data *ts = input_get_drvdata(dev);
 
 	input_info(true, &ts->client->dev, "%s, wet:%d, dive:%d\n", __func__, ts->wet_mode, ts->dive_mode);
-
-#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
-		input_err(true, &ts->client->dev, "%s TUI cancel event call!\n", __func__);
-		msleep(100);
-		tui_force_close(1);
-		msleep(200);
-		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
-			input_err(true, &ts->client->dev, "%s TUI flag force clear!\n",	__func__);
-			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
-			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
-		}
-	}
-#endif
 
 	cancel_delayed_work(&ts->reset_work);
 
