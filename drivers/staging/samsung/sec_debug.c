@@ -30,6 +30,7 @@
 #include <soc/samsung/exynos-pmu.h>
 #include <soc/samsung/exynos-powermode.h>
 #include <linux/soc/samsung/exynos-soc.h>
+#include <asm/stacktrace.h>
 
 #define EXYNOS_INFORM2 0x808
 #define EXYNOS_INFORM3 0x80c
@@ -101,15 +102,8 @@ static int __init sec_debug_user_fault_init(void)
 }
 device_initcall(sec_debug_user_fault_init);
 
-
-/* layout of SDRAM
-	   0: magic (4B)
-      4~1023: panic string (1020B)
- 1024~0x1000: panic dumper log
-      0x4000: copy of magic
- */
-#define SEC_DEBUG_MAGIC_PA 0x80000000
-#define SEC_DEBUG_MAGIC_VA phys_to_virt(SEC_DEBUG_MAGIC_PA)
+static struct sec_debug_panic_extra_info panic_extra_info;
+extern struct exynos_chipid_info exynos_soc_info;
 
 enum sec_debug_upload_magic_t {
 	UPLOAD_MAGIC_INIT		= 0x0,
@@ -133,15 +127,200 @@ static unsigned reset_reason = RR_N;
 module_param_named(reset_reason, reset_reason, uint, 0644);
 #endif
 
+static void sec_debug_init_panic_extra_info(void)
+{
+	int i;
+
+	memset(&panic_extra_info, 0, sizeof(struct sec_debug_panic_extra_info));
+	
+	panic_extra_info.fault_addr = -1;
+	panic_extra_info.pc = -1;
+	panic_extra_info.lr = -1;
+
+	for(i = 0; i < INFO_MAX; i++)
+		strncpy(panic_extra_info.extra_buf[i], "N/A", 3);
+	
+	strncpy(panic_extra_info.backtrace, "N/A\",\n", 6);
+}
+
+static void sec_debug_store_panic_extra_info(char* str)
+{
+	/* store panic extra info
+			"KTIME":""		: kernel time
+			"FAULT":""		: pgd,va,*pgd,*pud,*pmd,*pte
+			"BUG":""			: bug msg
+			"PANIC":""		: panic buffer msg
+			"PC":"" 			: pc val
+			"LR":"" 			: link register val
+			"STACK":""		: backtrace
+			"CHIPID":"" 		: CPU Serial Number
+			"DBG0":""		: Debugging Option 0
+			"DBG1":""		: Debugging Option 1
+			"DBG2":""		: Debugging Option 2
+			"DBG3":""		: Debugging Option 3
+			"DBG4":""		: Debugging Option 4
+			"DBG5":""		: Debugging Option 5
+	*/
+	
+	int i;
+	int panic_string_offset = 0;
+	int cp_len;
+	unsigned long rem_nsec;
+	u64 ts_nsec = local_clock();
+	
+	rem_nsec = do_div(ts_nsec, 1000000000);
+
+	cp_len = strlen(str);
+	if(str[cp_len-1] == '\n')
+		str[cp_len-1] = '\0';
+
+	memset((void*)SEC_DEBUG_EXTRA_INFO_VA, 0, SZ_1K);
+
+	panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA, 
+		"\"KTIME\":\"%lu.%06lu\",\n", (unsigned long)ts_nsec, rem_nsec / 1000);	
+
+	if(panic_extra_info.fault_addr != -1)
+		panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset, 
+			"\"FAULT\":\"0x%lx\",\n", panic_extra_info.fault_addr);
+	else
+		panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset, 
+			"\"FAULT\":\"\",\n");
+
+	panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset,
+		"\"BUG\":\"%s\",\n", panic_extra_info.extra_buf[INFO_BUG]);
+
+	panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset, 
+		"\"PANIC\":\"%s\",\n", str);
+	
+	if(panic_extra_info.pc != -1)
+		panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset, 
+			"\"PC\":\"%pS\",\n", (void*)panic_extra_info.pc);
+	else
+		panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset, 
+			"\"PC\":\"\",\n");
+			
+	if(panic_extra_info.lr != -1)
+		panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset, 
+			"\"LR\":\"%pS\",\n", (void*)panic_extra_info.lr);
+	else
+		panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset, 
+			"\"LR\":\"\",\n");
+
+	cp_len = strlen(panic_extra_info.backtrace);
+
+	if(panic_string_offset + cp_len > BUF_SIZE_MARGIN)
+		cp_len = BUF_SIZE_MARGIN - panic_string_offset;
+
+	if(cp_len > 0) {
+		panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset, 
+		"\"STACK\":\"");
+		strncpy((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset, panic_extra_info.backtrace, cp_len);
+		panic_string_offset += cp_len;
+	}
+	else {
+		panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset,
+			"\"STACK\":\"N/A\",\n");
+	}
+
+	panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset, "\"CHIPID\":\"\",\n");
+
+	panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA  + panic_string_offset, 
+		"\"DBG0\":\"%d.%d\"", (exynos_soc_info.product_id>>4) & 0xf, (exynos_soc_info.product_id & 0xf));		
+
+	for(i = 1; i < INFO_MAX; i++) {
+		if(panic_string_offset + strlen(panic_extra_info.extra_buf[i]) < BUF_SIZE_MARGIN)
+			panic_string_offset += sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset,
+				",\n\"DBG%d\":\"%s\"", i, panic_extra_info.extra_buf[i]);
+		else {
+			panic_string_offset += snprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset,
+				BUF_SIZE_MARGIN - panic_string_offset, ",\n\"DBG%d\":\"%s\"", i, panic_extra_info.extra_buf[i]);
+		}
+	}
+	sprintf((char *)SEC_DEBUG_EXTRA_INFO_VA + panic_string_offset, "\n");
+}
+
+void sec_debug_store_fault_addr(unsigned long addr, struct pt_regs *regs)
+{
+	printk("sec_debug_store_fault_addr 0x%lx\n", addr);
+	
+	panic_extra_info.fault_addr = addr;
+	if(regs) {
+		panic_extra_info.pc = regs->pc;
+		panic_extra_info.lr = compat_user_mode(regs) ? regs->compat_lr : regs->regs[30];
+	}
+}
+
+void sec_debug_store_extra_buf(enum sec_debug_extra_buf_type type, const char *fmt, ...)
+{	
+	va_list args;
+	int len;
+
+	if(!strncmp(panic_extra_info.extra_buf[type], "N/A", 3))
+		len = 0;
+	else
+		len = strlen(panic_extra_info.extra_buf[type]);
+
+	printk("sec_debug_store_extra_buf type %d, len %d\n", type, len);
+	
+	va_start(args, fmt);
+	vsnprintf(&panic_extra_info.extra_buf[type][len], SZ_256 - len, fmt, args);
+	va_end(args);
+}
+
+void sec_debug_store_backtrace(struct pt_regs *regs)
+{
+	char buf[64];
+	struct stackframe frame;
+	int offset = 0;
+	int sym_name_len;
+
+	printk("sec_debug_store_backtrace\n");
+
+	if (regs) {
+		frame.fp = regs->regs[29];
+		frame.sp = regs->sp;
+		frame.pc = regs->pc;
+	} else {
+		frame.fp = (unsigned long)__builtin_frame_address(0);
+		frame.sp = current_stack_pointer;
+		frame.pc = (unsigned long)sec_debug_store_backtrace;
+	}
+	
+	while (1) {
+		unsigned long where = frame.pc;
+		int ret;
+
+		ret = unwind_frame(&frame);
+		if (ret < 0)
+			break;
+
+		snprintf(buf, sizeof(buf), "%pf", (void *)where);
+		sym_name_len = strlen(buf);	
+
+		if(offset + sym_name_len > SZ_1K)
+			break;
+
+		if(offset)
+			offset += sprintf((char*)panic_extra_info.backtrace+offset, " : ");
+
+		sprintf((char*)panic_extra_info.backtrace+offset, "%s", buf);		
+		offset += sym_name_len;
+	}
+	sprintf((char*)panic_extra_info.backtrace+offset, "\",\n");
+	
+}
+
 static void sec_debug_set_upload_magic(unsigned magic, char *str)
 {
 	pr_emerg("sec_debug: set magic code (0x%x)\n", magic);
 
 	*(unsigned int *)SEC_DEBUG_MAGIC_VA = magic;
-	*(unsigned int *)(SEC_DEBUG_MAGIC_VA + SZ_4K -4) = magic;
+	*(unsigned int *)(SEC_DEBUG_MAGIC_VA + SZ_4K - 4) = magic;
 
-	if (str)
+	if (str) {
 		strncpy((char *)SEC_DEBUG_MAGIC_VA + 4, str, SZ_1K - 4);
+		sec_debug_store_panic_extra_info(str);
+	}
 }
 
 static void sec_debug_set_upload_cause(enum sec_debug_upload_cause_t type)
@@ -153,7 +332,7 @@ static void sec_debug_set_upload_cause(enum sec_debug_upload_cause_t type)
 #if 1 
 static void sec_debug_kmsg_dump(struct kmsg_dumper *dumper, enum kmsg_dump_reason reason)
 {
-	char *ptr = (char *)SEC_DEBUG_MAGIC_VA + SZ_1K;
+	char *ptr = (char *)SEC_DEBUG_MAGIC_VA + SZ_2K;
 #if 0
 	int total_chars = SZ_4K - SZ_1K;
 	int total_lines = 50;
@@ -183,7 +362,7 @@ static void sec_debug_kmsg_dump(struct kmsg_dumper *dumper, enum kmsg_dump_reaso
 	while (l2-- > 0)
 		*ptr++ = *s2++;
 #endif
-	kmsg_dump_get_buffer(dumper, true, ptr, SZ_4K - SZ_1K, NULL);
+	kmsg_dump_get_buffer(dumper, true, ptr, SZ_4K - SZ_2K, NULL);
 
 }
 static struct kmsg_dumper sec_dumper = {
@@ -196,6 +375,8 @@ int __init sec_debug_init(void)
 	size_t size = SZ_4K;
 	size_t base = SEC_DEBUG_MAGIC_PA;
 
+	/* clear traps info */
+	memset((void*)SEC_DEBUG_MAGIC_VA + 4, 0, SZ_1K - 4);
 /* 
 	if (!sec_debug_level.en.kernel_fault) {
 		pr_info("sec_debug: disabled due to debug level (0x%x)\n", sec_debug_level.uint_val);
@@ -212,6 +393,7 @@ int __init sec_debug_init(void)
 		pr_info("sec_debug: succeed to reserve dedicated memory (0x%zx, 0x%zx)\n", base, size);
 
 		sec_debug_set_upload_magic(UPLOAD_MAGIC_PANIC, NULL);
+		sec_debug_init_panic_extra_info();
 	} else
 		goto out;
 
@@ -535,7 +717,6 @@ void sec_debug_panic_handler(void *buf, bool dump)
 #endif
 }
 
-
 void sec_debug_check_crash_key(unsigned int code, int value)
 {
 	static bool volup_p;
@@ -629,10 +810,35 @@ static int set_reset_reason_proc_show(struct seq_file *m, void *v)
 	return 0;
 }
 
+static int set_reset_extra_info_proc_show(struct seq_file *m, void *v)
+{
+	char buf[SZ_1K];
+
+	memcpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
+
+	if(reset_reason == RR_K)
+		seq_printf(m,buf);
+
+	return 0;
+}
+
 static int sec_reset_reason_proc_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, set_reset_reason_proc_show, NULL);
 }
+
+static int sec_reset_extra_info_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, set_reset_extra_info_proc_show, NULL);
+}
+
+
+static const struct file_operations sec_reset_extra_info_proc_fops = {
+	.open = sec_reset_extra_info_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
 
 static const struct file_operations sec_reset_reason_proc_fops = {
 	.open = sec_reset_reason_proc_open,
@@ -651,6 +857,14 @@ static int __init sec_debug_reset_reason_init(void)
 	if (!entry)
 		return -ENOMEM;
 
+	entry = proc_create("reset_reason_extra_info", S_IWUGO, NULL,
+		&sec_reset_extra_info_proc_fops);
+
+	if (!entry)
+		return -ENOMEM;
+
+	proc_set_size(entry, SZ_1K);
+	
 	return 0;
 }
 
