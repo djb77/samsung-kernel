@@ -143,6 +143,7 @@ struct vclk_dfs_ops {
 	int (*cpu_idle_clock_down)(unsigned int enable);
 	int (*ctrl_clk_gate)(unsigned int enable);
 	int (*get_margin_param)(unsigned int id);
+	int (*rate_lock)(unsigned int para);
 };
 
 struct pwrcal_vclk_dfs {

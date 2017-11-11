@@ -342,7 +342,7 @@ struct s5p_mfc_dev {
 	int has_enc_ctx;
 
 	bool has_job;
-	bool extra_mo;
+	int extra_qos;
 
 	nal_queue_handle *nal_q_handle;
 };
