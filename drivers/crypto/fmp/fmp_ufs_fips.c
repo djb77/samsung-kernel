@@ -266,14 +266,17 @@ static dev_t find_devt_for_selftest(struct device *dev)
 	struct block_device *bdev;
 	fmode_t fmode = FMODE_WRITE | FMODE_READ;
 
+	memset(size_list, 0, sizeof(size_list));
+	memset(devt_list, 0, sizeof(devt_list));
+
 	do {
-		for (i = 0; i < MAX_SCAN_PART; i++) {
+		for (i = 1; i < MAX_SCAN_PART; i++) {
 			devt_scan = blk_lookup_devt("sda", i);
 			bdev = blkdev_get_by_dev(devt_scan, fmode, NULL);
 			if (IS_ERR(bdev))
 				continue;
 			else {
-				size_list[idx++] = (uint64_t)i_size_read(bdev->bd_inode);
+				size_list[idx] = (uint64_t)i_size_read(bdev->bd_inode);
 				devt_list[idx++] = devt_scan;
 			}
 		}
@@ -293,6 +296,9 @@ static dev_t find_devt_for_selftest(struct device *dev)
 					devt = devt_list[i];
 			}
 		}
+
+		bdev = blkdev_get_by_dev(devt, fmode, NULL);
+		dev_info(dev, "FMP fips driver found sda%d for self-test\n", bdev->bd_part->partno);
 
 		return devt;
 	} while (count < 100);

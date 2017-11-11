@@ -510,9 +510,11 @@ int ssp_motor_callback(int state)
 	int iRet = 0;
 	
 	ssp_data_info->motor_state = state;
-	iRet = send_motor_state(ssp_data_info);
 
-	pr_info("[SSP] %s : Motor state %d, iRet %d\n",__func__, state, iRet);
+	queue_work(ssp_data_info->ssp_motor_wq,
+			&ssp_data_info->work_ssp_motor);
+
+	pr_info("[SSP] %s : Motor state %d\n",__func__, state);
 
 	return iRet;
 }
@@ -523,6 +525,15 @@ int (*getMotorCallback(void))(int)
 	return ssp_motor_callback;
 }
 
+void ssp_motor_work_func(struct work_struct *work)
+{
+	int iRet = 0;
+	struct ssp_data *data = container_of(work,
+					struct ssp_data, work_ssp_motor);
+
+	iRet = send_motor_state(data);
+	pr_info("[SSP] %s : Motor state %d, iRet %d\n",__func__, data->motor_state, iRet);
+}
 #endif
 
 static int ssp_probe(struct spi_device *spi)
@@ -696,15 +707,30 @@ static int ssp_probe(struct spi_device *spi)
 	iRet = 0;
 	mutex_init(&shutdown_lock);
 
-#if defined(CONFIG_SSP_MOTOR)
+#ifdef CONFIG_SSP_MOTOR
 	pr_info("[SSP]: %s motor callback set!", __func__);
 	set_ssp_data_info(data);
 	//register motor
 	setMotorCallback(ssp_motor_callback);
+
+	data->ssp_motor_wq =
+		create_singlethread_workqueue("ssp_motor_wq");
+	if (!data->ssp_motor_wq) {
+		iRet = -1;
+		pr_err("[SSP]: %s - could not create motor workqueue\n",
+			__func__);
+		goto err_create_motor_workqueue;
+	}
+	
+	INIT_WORK(&data->work_ssp_motor, ssp_motor_work_func);
 #endif
 
 	goto exit;
 
+#ifdef CONFIG_SSP_MOTOR
+err_create_motor_workqueue:
+	destroy_workqueue(data->ssp_motor_wq);
+#endif
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
 /* Test PIN for Camera - Gyro Sync */
 err_request_irq:
@@ -778,6 +804,13 @@ static void ssp_shutdown(struct spi_device *spi)
 #endif
 	data->bbd_on_packet_wq = NULL;
 	data->bbd_mcu_ready_wq = NULL;
+
+#ifdef CONFIG_SSP_MOTOR
+	cancel_work_sync(&data->work_ssp_motor);
+	destroy_workqueue(data->ssp_motor_wq);
+
+	data->ssp_motor_wq = NULL;
+#endif
 
 	mutex_unlock(&shutdown_lock);
 

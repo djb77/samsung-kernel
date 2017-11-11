@@ -654,6 +654,11 @@ struct ssp_data {
 	struct workqueue_struct *bbd_mcu_ready_wq;
 	struct work_struct work_bbd_mcu_ready;
 
+#if defined(CONFIG_SSP_MOTOR)
+	struct workqueue_struct *ssp_motor_wq;
+	struct work_struct work_ssp_motor;
+#endif
+
 #ifdef SSP_BBD_USE_SEND_WORK
 	struct workqueue_struct *bbd_send_packet_wq;
 	struct work_struct work_bbd_send_packet;
@@ -1047,6 +1052,9 @@ int bbd_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 #ifdef SSP_BBD_USE_SEND_WORK
 void bbd_send_packet_work_func(struct work_struct *work);
 #endif	/* SSP_BBD_USE_SEND_WORK  */
+#ifdef CONFIG_SSP_MOTOR
+void ssp_motor_work_func(struct work_struct *work);
+#endif
 int set_time(struct ssp_data *);
 int get_time(struct ssp_data *);
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
