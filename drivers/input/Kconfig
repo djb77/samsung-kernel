@@ -236,13 +236,6 @@ config SENSORS_HALL_FOLDER
 	help
 	  Say Y here to use HALL IC for FOLDER.
 
-config V_HALL_FOLDING
-	bool "Valley HALL for Folding work"
-	depends on HALL
-	default n
-	help
-	  Say Y here to use Valley HALL IC for Folding work.
-
 config HALL_SW_LID
 	bool "Send event SW_LID"
 	default n
