@@ -503,6 +503,11 @@ void process_cc_attach(void * data,u8 *plug_attach_done)
 			Func_DATA.BYTES.RSP_BYTE1,
 			Func_DATA.BYTES.PD_State);
 
+		if(!usbpd_data->pd_state && Func_DATA.BYTES.PD_State && Func_DATA.BITS.VBUS_CC_Short) {
+			if (o_notify)
+					o_notify->hw_param[USB_CCIC_VBUS_CC_SHORT_COUNT]++;
+		}
+
 		usbpd_data->pd_state = Func_DATA.BYTES.PD_State;
 		usbpd_data->func_state = Func_DATA.DATA;
 
@@ -612,14 +617,19 @@ void process_cc_attach(void * data,u8 *plug_attach_done)
 				usbpd_data->is_host = HOST_OFF;
 				msleep(300);
 			}
-			/* muic */
-			ccic_event_work(usbpd_data,
-					CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_ATTACH,
-					1/*attach*/, 0/*rprd*/, Func_DATA.BITS.VBUS_CC_Short? Rp_Abnormal:Func_DATA.BITS.RP_CurrentLvl);
 
-			if (Func_DATA.BITS.VBUS_CC_Short && (usbpd_data->pd_state == State_ErrorRecovery)) {
-				if (o_notify)
-					o_notify->hw_param[USB_CCIC_VBUS_CC_SHORT_COUNT]++;
+			if(Lp_DATA.BITS.PDSTATE29_SBU_DONE )
+			{
+				dev_info(&i2c->dev, "%s sbu check done(%d,%d)\n", __func__, Func_DATA.BITS.VBUS_CC_Short ,Func_DATA.BITS.VBUS_SBU_Short);
+				ccic_event_work(usbpd_data,
+					CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_ATTACH,
+					1/*attach*/, 0/*rprd*/,
+					(Func_DATA.BITS.VBUS_CC_Short || Func_DATA.BITS.VBUS_SBU_Short) ? Rp_Abnormal:Func_DATA.BITS.RP_CurrentLvl);					
+			} else {
+				/* muic */
+				ccic_event_work(usbpd_data,
+						CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_ATTACH,
+						1/*attach*/, 0/*rprd*/, Rp_Sbu_check);
 			}
 
 			if (usbpd_data->is_client == CLIENT_OFF && usbpd_data->is_host == HOST_OFF) {

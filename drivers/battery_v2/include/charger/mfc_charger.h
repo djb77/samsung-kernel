@@ -227,8 +227,6 @@ enum {
 	MFC_VOUT_9V, // 4
 	MFC_VOUT_10V, // 5 
 	MFC_VOUT_5_5V,		/* CC-CV */
-	MFC_VOUT_5V_STEP,
-	MFC_VOUT_9V_STEP,
 };
 
 /* System Operating Mode Register, Sys_Op_Mode (0x2B) */
@@ -619,6 +617,7 @@ struct mfc_charger_platform_data {
 	int wpc_en;
 	int irq_wpc_int;
 	int cs100_status;
+	int vout_status;
 	int wireless_cc_cv;
 	int siop_level;
 	u8 capacity;
@@ -678,7 +677,7 @@ struct mfc_charger_data {
 	struct wake_lock wpc_update_lock;
 	struct wake_lock wpc_opfq_lock;
 	struct wake_lock wpc_afc_vout_lock;
-	struct wake_lock wpc_vout_step_lock;
+	struct wake_lock wpc_vout_mode_lock;
 	struct workqueue_struct *wqueue;
 	struct work_struct	wcin_work;
 	struct delayed_work	wpc_det_work;
@@ -690,7 +689,7 @@ struct mfc_charger_data {
 	struct delayed_work	wpc_fw_update_work;
 	struct delayed_work	wpc_afc_vout_work;
 	struct delayed_work	wpc_fw_booting_work;
-	struct delayed_work	wpc_vout_step_work;
+	struct delayed_work	wpc_vout_mode_work;
 	struct delayed_work	wpc_cm_fet_work;
 
 	u16 addr;
@@ -700,13 +699,13 @@ struct mfc_charger_data {
 	int is_mst_on; /* mst */
 	int chip_id;
 	int fw_cmd;
-	int current_vout;
-	int target_vout;
+	int vout_mode;
+	int is_full_status;
 	int mst_off_lock;
-	bool is_otg_on; /* otg without wireless charging */
-	bool is_wc_otg_on; /* otg with wireless charging */
-	bool is_overtemp;
+	bool is_otg_on;
 	int led_cover;
+	bool is_probed;
+	bool is_afc_tx;
 };
 
 #endif /* __MFC_CHARGER_H */

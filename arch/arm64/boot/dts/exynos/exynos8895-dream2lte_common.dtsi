@@ -949,7 +949,7 @@
 				"+USB:OPEN",
 				"+CDP:OPEN",
 				"+Undefined Charging:XXX";
-		muic,afcmode-tx = /bits/ 8 <0x46>;
+		muic,afcmode-tx = /bits/ 8 <0x08>;
 		muic,qc-hv = /bits/ 8 <0x9>;
 	};
 
@@ -3191,13 +3191,11 @@
 		boot_device@1 {
 			net_boost,label="IPC";
 			net_boost,node="rmnet0 rmnet1 rmnet2 rmnet3 rmnet4 rmnet5 rmnet6 rmnet7 umts_dm0";
-			net_boost,table_size = <5>;
+			net_boost,table_size = <3>;
 			net_boost,table= <
 				100 0 0 1053000 0 845000 0 0 1 0
 				150 0 0 1248000 0 1014000 0 0 1 0
-				200 0 0 1456000 0 1540000 0 0 1 0
-				300 0 0 1690000 0 1794000 0 0 1 0
-				400 12610000 0 1690000 0 1794000 0 0 1 0
+				200 12610000 0 1690000 0 1794000 0 0 1 0
 				>;
 		};
 		/* Example

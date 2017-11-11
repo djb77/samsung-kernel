@@ -527,6 +527,110 @@ static ssize_t pressure_enable_strore(struct device *dev,
 	return count;
 }
 
+static ssize_t get_lp_dump(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	u8 string_data[8] = {0, };
+	u16 current_index;
+	int i, ret;
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
+		return snprintf(buf, SEC_CMD_BUF_SIZE, "TSP turned off");
+	}
+
+	string_data[0] = SEC_TS_CMD_SPONGE_LP_DUMP & 0xFF;
+	string_data[1] = (SEC_TS_CMD_SPONGE_LP_DUMP & 0xFF00) >> 8;
+
+	disable_irq(ts->client->irq);
+
+	ret = ts->sec_ts_read_sponge(ts, string_data, 2);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: Failed to read rect\n", __func__);
+		snprintf(buf, SEC_CMD_BUF_SIZE, "NG, Failed to read rect");
+		goto out;
+	}
+
+	current_index = (string_data[1] & 0xFF) << 8 | (string_data[0] & 0xFF);
+	if (current_index > 1000 || current_index < 500) {
+		input_err(true, &ts->client->dev,
+				"Failed to Sponge LP log %d\n", current_index);
+		snprintf(buf, SEC_CMD_BUF_SIZE,
+				"NG, Failed to Sponge LP log, current_index=%d",
+				current_index);
+		goto out;
+	}
+
+	input_info(true, &ts->client->dev,
+			"%s: DEBUG current_index = %d\n", __func__, current_index);
+
+	/* sponge has 62 stacks for LP dump */
+	for (i = 61; i >= 0; i--) {
+		u16 data0, data1, data2, data3;
+		char buff[30] = {0, };
+		u16 string_addr;
+
+		string_addr = current_index - (8 * i);
+		if (string_addr < 500)
+			string_addr += SEC_TS_CMD_SPONGE_LP_DUMP;
+		string_data[0] = string_addr & 0xFF;
+		string_data[1] = (string_addr & 0xFF00) >> 8;
+
+		ret = ts->sec_ts_read_sponge(ts, string_data, 8);
+		if (ret < 0) {
+			input_err(true, &ts->client->dev,
+					"%s: Failed to read rect\n", __func__);
+			snprintf(buf, SEC_CMD_BUF_SIZE,
+					"NG, Failed to read rect, addr=%d",
+					string_addr);
+			goto out;
+		}
+
+		data0 = (string_data[1] & 0xFF) << 8 | (string_data[0] & 0xFF);
+		data1 = (string_data[3] & 0xFF) << 8 | (string_data[2] & 0xFF);
+		data2 = (string_data[5] & 0xFF) << 8 | (string_data[4] & 0xFF);
+		data3 = (string_data[7] & 0xFF) << 8 | (string_data[6] & 0xFF);
+		if (data0 || data1 || data2 || data3) {
+			snprintf(buff, sizeof(buff),
+					"%d: %04x%04x%04x%04x\n",
+					string_addr, data0, data1, data2, data3);
+			strncat(buf, buff, sizeof(buff));
+		}
+	}
+
+out:
+	enable_irq(ts->client->irq);
+	return strlen(buf);
+}
+
+static ssize_t get_force_recal_count(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	u8 rbuf[4] = {0, };
+	u32 recal_count;
+	int ret;
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
+		return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", -ENODEV);
+	}
+
+	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_FORCE_RECAL_COUNT, rbuf, 4);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+				"%s: Failed to read\n", __func__);
+		return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", -EIO);
+	}
+
+	recal_count = (rbuf[0] & 0xFF) << 24 | (rbuf[1] & 0xFF) << 16 |
+			(rbuf[2] & 0xFF) << 8 | (rbuf[3] & 0xFF);
+
+	return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", recal_count);
+}
+
 static DEVICE_ATTR(ito_check, S_IRUGO, read_ito_check_show, NULL);
 static DEVICE_ATTR(raw_check, S_IRUGO, read_raw_check_show, NULL);
 static DEVICE_ATTR(multi_count, S_IRUGO | S_IWUSR | S_IWGRP, read_multi_count_show, clear_multi_count_store);
@@ -539,6 +643,8 @@ static DEVICE_ATTR(z_value, S_IRUGO | S_IWUSR | S_IWGRP, read_z_value_show, clea
 static DEVICE_ATTR(module_id, S_IRUGO, read_module_id_show, NULL);
 static DEVICE_ATTR(vendor, S_IRUGO, read_vendor_show, NULL);
 static DEVICE_ATTR(pressure_enable, S_IRUGO | S_IWUSR | S_IWGRP, pressure_enable_show, pressure_enable_strore);
+static DEVICE_ATTR(get_lp_dump, S_IRUGO, get_lp_dump, NULL);
+static DEVICE_ATTR(force_recal_count, S_IRUGO, get_force_recal_count, NULL);
 
 static struct attribute *cmd_attributes[] = {
 	&dev_attr_scrub_pos.attr,
@@ -554,6 +660,8 @@ static struct attribute *cmd_attributes[] = {
 	&dev_attr_module_id.attr,
 	&dev_attr_vendor.attr,
 	&dev_attr_pressure_enable.attr,
+	&dev_attr_get_lp_dump.attr,
+	&dev_attr_force_recal_count.attr,
 	NULL,
 };
 
@@ -3869,7 +3977,7 @@ static void get_aod_rect(void *device_data)
 
 	if (ts->use_sponge) {
 		disable_irq(ts->client->irq);
-		ret = ts->sec_ts_read_sponge(ts, data);
+		ret = ts->sec_ts_read_sponge(ts, data, 8);
 		if (ret < 0) {
 			input_err(true, &ts->client->dev, "%s: Failed to read rect\n", __func__);
 			goto NG;

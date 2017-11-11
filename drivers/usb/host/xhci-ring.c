@@ -373,14 +373,14 @@ static int xhci_abort_cmd_ring(struct xhci_hcd *xhci)
 	 * larger problems with the xHC and assert HCRST.
 	 */
 	ret = xhci_handshake(&xhci->op_regs->cmd_ring,
-			CMD_RING_RUNNING, 0, 5 * 1000 * 1000);
+			CMD_RING_RUNNING, 0, 5 * 100 * 1000);
 	if (ret < 0) {
 		/* we are about to kill xhci, give it one more chance */
 		xhci_write_64(xhci, temp_64 | CMD_RING_ABORT,
 			      &xhci->op_regs->cmd_ring);
 		udelay(1000);
 		ret = xhci_handshake(&xhci->op_regs->cmd_ring,
-				     CMD_RING_RUNNING, 0, 3 * 1000 * 1000);
+				     CMD_RING_RUNNING, 0, 5 * 100 * 1000);
 #if defined (CONFIG_USB_HOST_SAMSUNG_FEATURE)
 		if (ret < 0) {
 			xhci_err(xhci, "Stopped the command ring failed, "
@@ -396,10 +396,9 @@ static int xhci_abort_cmd_ring(struct xhci_hcd *xhci)
 	 * but the completion event in never sent. Wait 2 secs (arbitrary
 	 * number) to handle those cases after negation of CMD_RING_RUNNING.
 	 */
-	spin_unlock_irqrestore(&xhci->lock, flags);
+
 	ret = wait_for_completion_timeout(&xhci->cmd_ring_stop_completion,
 					  msecs_to_jiffies(2000));
-	spin_lock_irqsave(&xhci->lock, flags);
 	if (!ret) {
 		xhci_info(xhci, "No stop event for abort, ring start fail?\n");
 		xhci_cleanup_command_queue(xhci);
@@ -1379,6 +1378,7 @@ void xhci_handle_command_timeout(unsigned long data)
 	if ((xhci->cmd_ring_state & CMD_RING_STATE_RUNNING) &&
 	    (hw_ring_state & CMD_RING_RUNNING))  {
 #if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+		spin_unlock_irqrestore(&xhci->lock, flags);
 		/* Prevent new doorbell, and start command abort */
 		xhci->cmd_ring_state = CMD_RING_STATE_ABORTED;
 		xhci_info(xhci, "Command timeout\n");
@@ -1386,12 +1386,12 @@ void xhci_handle_command_timeout(unsigned long data)
 		if (unlikely(ret == -ESHUTDOWN)) {
 			xhci_err(xhci, "Abort command ring failed\n");
 			xhci_cleanup_command_queue(xhci);
-			spin_unlock_irqrestore(&xhci->lock, flags);
-			usb_hc_died(xhci_to_hcd(xhci)->primary_hcd);
+			if (!(xhci->xhc_state & XHCI_STATE_REMOVING))
+				usb_hc_died(xhci_to_hcd(xhci)->primary_hcd);
 			xhci_err(xhci, "xHCI host controller is dead.\n");
 			return;
 		}
-		goto time_out_completed;
+		return;
 	}
 	/* host removed. Bail out */
 	if (xhci->xhc_state & XHCI_STATE_REMOVING) {

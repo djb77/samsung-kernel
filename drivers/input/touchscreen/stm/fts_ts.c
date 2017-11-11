@@ -1545,6 +1545,10 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 				data[EventNum * FTS_EVENT_SIZE+6],
 				data[EventNum * FTS_EVENT_SIZE+7]);
 			break;
+		case EVENTID_PRESSURE_MAX:
+			info->pressure_max = (data[EventNum * FTS_EVENT_SIZE + 2] & 0xFF) << 8 |
+									(data[EventNum * FTS_EVENT_SIZE + 1] & 0xFF);
+			break;
 
 		case EVENTID_GESTURE_HOME:
 			info->scrub_x = (data[4] & 0xFF) << 8 | (data[3] & 0xFF);
@@ -2084,19 +2088,19 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 		else if (EventID == EVENTID_LEAVE_POINTER) {
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 			input_info(true, &info->client->dev,
-				"%s[R] tID:%d mc:%d tc:%d lx:%d ly:%d Ver[%02X%04X|%01X] P%02XT%04X[%02X] F%02X%02X C%02X\n",
-				info->dex_name,
-				TouchID, info->finger[TouchID].mcount, info->touch_count,
-				info->finger[TouchID].lx, info->finger[TouchID].ly,
+				"%s[R] tID:%d mc:%d tc:%d lx:%d ly:%d f:%d Ver[%02X%04X|%01X] P%02XT%04X[%02X] F%02X%02X C%02X\n",
+				info->dex_name, TouchID, info->finger[TouchID].mcount,
+				info->touch_count, info->finger[TouchID].lx,
+				info->finger[TouchID].ly, info->pressure_max,
 				info->panel_revision, info->fw_main_version_of_ic,
 				info->flip_enable, info->cal_count, info->tune_fix_ver,
 				info->test_result.data[0], info->pressure_cal_base,
 				info->pressure_cal_delta, info->nv_crc_fail_count);
 #else
 			input_info(true, &info->client->dev,
-				"%s[R] tID:%d mc:%d tc:%d Ver[%02X%04X|%01X] P%02XT%04X[%02X] F%02X%02X, C%02X\n",
-				info->dex_name,
-				TouchID, info->finger[TouchID].mcount, info->touch_count,
+				"%s[R] tID:%d mc:%d tc:%d f:%d Ver[%02X%04X|%01X] P%02XT%04X[%02X] F%02X%02X, C%02X\n",
+				info->dex_name, TouchID, info->finger[TouchID].mcount,
+				info->touch_count, info->pressure_max,
 				info->panel_revision, info->fw_main_version_of_ic,
 				info->flip_enable, info->cal_count, info->tune_fix_ver,
 				info->test_result.data[0], info->pressure_cal_base,

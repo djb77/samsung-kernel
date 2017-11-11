@@ -188,14 +188,18 @@
 		battery,chg_input_limit_current = <1000>;
 		battery,chg_charging_limit_current = <1250>; 
 
-		battery,wpc_high_temp = <410>;
-		battery,wpc_high_temp_recovery = <400>;
-		battery,wpc_charging_limit_current = <450>;
+		/* TEMP_CONTROL_SOURCE_BAT_THM = WPC_THM */
+		battery,wpc_temp_control_source = <1>;
+		battery,wpc_high_temp = <380>;
+		battery,wpc_high_temp_recovery = <360>;
+		battery,wpc_charging_limit_current = <600>;
 		battery,wpc_lcd_on_high_temp = <430>;
 		battery,wpc_lcd_on_high_temp_rec = <300>;
+		battery,wpc_lcd_on_charging_limit_current = <450>;
 
-		battery,wpc_store_high_temp = <410>;
-		battery,wpc_store_high_temp_recovery = <400>;
+		battery,wpc_store_high_temp = <380>;
+		battery,wpc_store_high_temp_recovery = <360>;
+		battery,wpc_store_charging_limit_current = <400>;
 		battery,wpc_store_lcd_on_high_temp = <380>;
 		battery,wpc_store_lcd_on_high_temp_rec = <300>;
 
