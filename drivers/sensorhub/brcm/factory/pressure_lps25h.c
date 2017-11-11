@@ -69,6 +69,8 @@ int pressure_open_calibration(struct ssp_data *data)
 	if (iErr < 0) {
 		pr_err("[SSP]: %s - Can't read the cal data from file (%d)\n",
 			__func__, iErr);
+        filp_close(cal_filp, current->files);
+        set_fs(old_fs);
 		return iErr;
 	}
 	filp_close(cal_filp, current->files);

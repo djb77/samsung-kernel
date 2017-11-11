@@ -61,32 +61,31 @@ struct extent_cache_id {
 	u32 dcluster;
 };
 
-static void init_once(void *foo)
+static struct kmem_cache *extent_cache_cachep;
+
+static void init_once(void *c)
 {
-	struct extent_cache *cache = (struct extent_cache *)foo;
+	struct extent_cache *cache = (struct extent_cache *)c;
 
 	INIT_LIST_HEAD(&cache->cache_list);
 }
 
-s32 extent_cache_init(struct super_block *sb)
+s32 extent_cache_init(void)
 {
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
-	fsi->extent_cache_cachep = kmem_cache_create("sdfat_extent_cache",
+	extent_cache_cachep = kmem_cache_create("sdfat_extent_cache",
 				sizeof(struct extent_cache),
 				0, SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD,
 				init_once);
-	if (!fsi->extent_cache_cachep)
+	if (!extent_cache_cachep)
 		return -ENOMEM;
 	return 0;
 }
 
-void extent_cache_shutdown(struct super_block *sb)
+void extent_cache_shutdown(void)
 {
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-	if (!fsi->extent_cache_cachep)
+	if (!extent_cache_cachep)
 		return;
-	kmem_cache_destroy(fsi->extent_cache_cachep);
+	kmem_cache_destroy(extent_cache_cachep);
 }
 
 void extent_cache_init_inode(struct inode *inode)
@@ -99,19 +98,15 @@ void extent_cache_init_inode(struct inode *inode)
 	INIT_LIST_HEAD(&extent->cache_lru);
 }
 
-static inline struct extent_cache *extent_cache_alloc(struct super_block *sb)
+static inline struct extent_cache *extent_cache_alloc(void)
 {
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-	return kmem_cache_alloc(fsi->extent_cache_cachep, GFP_NOFS);
+	return kmem_cache_alloc(extent_cache_cachep, GFP_NOFS);
 }
 
-static inline void extent_cache_free(struct super_block *sb,
-	       				struct extent_cache *cache)
+static inline void extent_cache_free(struct extent_cache *cache)
 {
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
 	BUG_ON(!list_empty(&cache->cache_list));
-	kmem_cache_free(fsi->extent_cache_cachep, cache);
+	kmem_cache_free(extent_cache_cachep, cache);
 }
 
 static inline void extent_cache_update_lru(struct inode *inode,
@@ -183,7 +178,6 @@ static struct extent_cache *extent_cache_merge(struct inode *inode,
 
 static void extent_cache_add(struct inode *inode, struct extent_cache_id *new)
 {
-	struct super_block *sb = inode->i_sb;
 	EXTENT_T *extent = &(SDFAT_I(inode)->fid.extent);
 
 	struct extent_cache *cache, *tmp;
@@ -202,7 +196,7 @@ static void extent_cache_add(struct inode *inode, struct extent_cache_id *new)
 			extent->nr_caches++;
 			spin_unlock(&extent->cache_lru_lock);
 
-			tmp = extent_cache_alloc(sb);
+			tmp = extent_cache_alloc();
 			if (!tmp) {
 				spin_lock(&extent->cache_lru_lock);
 				extent->nr_caches--;
@@ -214,7 +208,7 @@ static void extent_cache_add(struct inode *inode, struct extent_cache_id *new)
 			cache = extent_cache_merge(inode, new);
 			if (cache != NULL) {
 				extent->nr_caches--;
-				extent_cache_free(sb, tmp);
+				extent_cache_free(tmp);
 				goto out_update_lru;
 			}
 			cache = tmp;
@@ -246,7 +240,7 @@ static void __extent_cache_inval_inode(struct inode *inode)
 				   struct extent_cache, cache_list);
 		list_del_init(&cache->cache_list);
 		extent->nr_caches--;
-		extent_cache_free(inode->i_sb, cache);
+		extent_cache_free(cache);
 	}
 	/* Update. The copy of caches before this id is discarded. */
 	extent->cache_valid_id++;
@@ -309,12 +303,17 @@ s32 extent_get_clus(struct inode *inode, s32 cluster, s32 *fclus,
 	if ((cluster == 0) || IS_CLUS_EOF(*dclus))
 		return 0;
 
+	cache_init(&cid, -1, -1);
+
 	if (extent_cache_lookup(inode, cluster, &cid, fclus, dclus) < 0) {
 		/*
 		 * dummy, always not contiguous
 		 * This is reinitialized by cache_init(), later.
 		 */
-		cache_init(&cid, -1, -1);
+		ASSERT((cid.id == EXTENT_CACHE_VALID)
+			&& (cid.fcluster == -1)
+			&& (cid.dcluster == -1)
+			&& (cid.nr_contig == 0));
 	}
 
 	if (*fclus == cluster)
@@ -324,9 +323,9 @@ s32 extent_get_clus(struct inode *inode, s32 cluster, s32 *fclus,
 		/* prevent the infinite loop of cluster chain */
 		if (*fclus > limit) {
 			sdfat_fs_error(sb,
-					"%s: detected the cluster chain loop"
-					" (i_pos %d)", __func__,
-					(*fclus));
+				"%s: detected the cluster chain loop"
+				" (i_pos %d)", __func__,
+				(*fclus));
 			return -EIO;
 		}
 

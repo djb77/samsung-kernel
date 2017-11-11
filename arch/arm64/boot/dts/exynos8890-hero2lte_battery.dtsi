@@ -264,10 +264,10 @@
 
 		/* cycle, chg_float_voltage, recharge_condition_vcell, full_condition_vcell, full_condition_soc */
 		battery,age_data = <0 43500 4300 4250 93
-			200 43250 4275 4225 89
-			250 43125 4262 4212 85
-			300 42875 4237 4187 80
-			1000 42375 4187 4137 75>;
+			200 43250 4275 4225 92
+			250 43125 4262 4212 91
+			300 42875 4237 4187 90
+			1000 42375 4187 4137 89>;
 
 		battery,enable_coil_temp = <1>;
 

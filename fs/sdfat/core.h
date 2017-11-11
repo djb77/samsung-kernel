@@ -199,8 +199,8 @@ u8  calc_chksum_1byte(void *data, s32 len, u8 chksum);
 u16 calc_chksum_2byte(void *data, s32 len, u16 chksum, s32 type);
 
 /* extent.c */
-s32 extent_cache_init(struct super_block *sb);
-void extent_cache_shutdown(struct super_block *sb);
+s32 extent_cache_init(void);
+void extent_cache_shutdown(void);
 void extent_cache_init_inode(struct inode *inode);
 void extent_cache_inval_inode(struct inode *inode);
 s32 extent_get_clus(struct inode *inode, s32 cluster, s32 *fclus,

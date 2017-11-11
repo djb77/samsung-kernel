@@ -587,6 +587,16 @@ static int exynos_cpuidle_muic_notifier(struct notifier_block *nb,
 }
 #endif
 
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+static int ssp_hall_ic_notify(struct notifier_block *nb,
+				unsigned long action, void *v)
+{
+	pr_info("[SSP] %s is called : fold state %lu\n", __func__, action);
+	ssp_ckeck_lcd((int) action);
+	return 0;
+}
+#endif
+
 #if defined(CONFIG_SSP_MOTOR)
 static struct ssp_data *ssp_data_info = NULL;
 void set_ssp_data_info(struct ssp_data *data)
@@ -797,6 +807,12 @@ static int ssp_probe(struct spi_device *spi)
 		exynos_cpuidle_muic_notifier, MUIC_NOTIFY_DEV_CPUIDLE);
 #endif
 
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+	data->hall_ic_nb.notifier_call = ssp_hall_ic_notify;
+	hall_ic_register_notify(&data->hall_ic_nb);
+#endif
+
+
 	pr_info("[SSP]: %s - probe success!\n", __func__);
 
 	enable_debug_timer(data);
@@ -879,6 +895,10 @@ static void ssp_shutdown(struct spi_device *spi)
 		pr_err("[SSP]: %s MSG2SSP_AP_STATUS_SHUTDOWN failed\n",
 			__func__);
 	*/
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+	// hall_ic unregister
+	hall_ic_unregister_notify(&data->hall_ic_nb);
+#endif
 	mutex_lock(&data->ssp_enable_mutex);
 	ssp_enable(data, false);
 	clean_pending_list(data);
