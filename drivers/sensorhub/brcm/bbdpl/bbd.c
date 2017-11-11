@@ -139,12 +139,16 @@ static unsigned char bbd_patch[] =
 	#else
 	#include "n_os/bbd_patch_file_grace.h"
 	#endif
+#elif defined (CONFIG_SENSORS_SSP_HAECHI)
+#include "bbd_patch_file_haechi.h"
 #elif defined (CONFIG_SENSORS_SSP_LUCKY)
 	#if ANDROID_VERSION < 70000
 	#include "m_os/bbd_patch_file_lucky.h"
 	#else
 	#include "n_os/bbd_patch_file_lucky.h"
 	#endif
+#elif defined (CONFIG_SENSORS_SSP_VLTE)
+#include "bbd_patch_file_valley.h"
 #endif
 };
 
