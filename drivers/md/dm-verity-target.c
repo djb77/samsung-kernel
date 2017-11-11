@@ -206,7 +206,7 @@ static void verity_hash_at_level(struct dm_verity *v, sector_t block, int level,
  */
 #ifdef SEC_HEX_DEBUG
 static int verity_handle_err(struct dm_verity *v, enum verity_block_type type,
-			     unsigned long long block, struct dm_verity_io *io)
+			     unsigned long long block, struct dm_verity_io *io , struct bvec_iter *iter)
 {
 	char verity_env[DM_VERITY_ENV_LENGTH];
 	char *envp[] = { verity_env, NULL };
@@ -214,12 +214,17 @@ static int verity_handle_err(struct dm_verity *v, enum verity_block_type type,
 	struct dm_buffer *buf;
 	struct mapped_device *md = dm_table_get_md(v->ti->table);
 	struct bio *bio = dm_bio_from_per_bio_data(io, v->ti->per_bio_data_size);
-	struct bio_vec bv = bio_iter_iovec(bio, *(&io->iter));
+	struct bio_vec bv ;
 	u8 *data;
 	u8 *page;
 
 	/* Corruption should be visible in device status in all modes */
 	v->hash_failed = 1;
+
+	if(block == 0){
+		DMERR("%s: block 0 is superblock. Skipping verity_handle_err" , v->data_dev->name);
+			return 0 ;
+	}
 
 	if (v->corrupted_errs >= DM_VERITY_MAX_CORRUPTED_ERRS)
 		goto out;
@@ -245,8 +250,8 @@ static int verity_handle_err(struct dm_verity *v, enum verity_block_type type,
 		print_block_data(0, (unsigned char *)(verity_io_real_digest(v, io)), 0, v->digest_size);
 		print_block_data(0, (unsigned char *)(verity_io_want_digest(v, io)), 0, v->digest_size);
 		print_block_data((unsigned long long)block, (unsigned char *)data, 0, PAGE_SIZE);
-	}
-	else if(!(strcmp(type_str, "data"))){
+	}else if(!(strcmp(type_str, "data"))){
+		bv= bio_iter_iovec(bio, *iter);
 		page = kmap_atomic(bv.bv_page);
 		print_block_data(0, (unsigned char *)(verity_io_real_digest(v, io)), 0, v->digest_size);
 		print_block_data(0, (unsigned char *)(verity_io_want_digest(v, io)), 0, v->digest_size);
@@ -382,7 +387,7 @@ static int verity_verify_level(struct dm_verity *v, struct dm_verity_io *io,
 #ifdef SEC_HEX_DEBUG
 			else if (verity_handle_err(v,
 						   DM_VERITY_BLOCK_TYPE_METADATA,
-						   hash_block, io)) {
+						   hash_block, io, NULL)) {
 #else
 			else if (verity_handle_err(v,
 						   DM_VERITY_BLOCK_TYPE_METADATA,
@@ -591,7 +596,7 @@ static int verity_verify_io(struct dm_verity_io *io)
 				continue;
 #ifdef SEC_HEX_DEBUG
 			else if (verity_handle_err(v, DM_VERITY_BLOCK_TYPE_DATA,
-						   io->block + b, io)) {
+						   io->block + b, io , &start)) {
 #else
 			else if (verity_handle_err(v, DM_VERITY_BLOCK_TYPE_DATA,
 						   io->block + b)) {
