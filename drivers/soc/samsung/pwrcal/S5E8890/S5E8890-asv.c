@@ -13,15 +13,7 @@
 #endif
 #ifdef PWRCAL_TARGET_FW
 #include <mach/ect_parser.h>
-#define S5P_VA_APM_SRAM			((void *)0x11200000)
 #endif
-
-#define EXYNOS_MAILBOX_RCC_MIN_MAX(x)	(S5P_VA_APM_SRAM + (0x3700) + (x * 0x4))
-#define EXYNOS_MAILBOX_ATLAS_RCC(x)	(S5P_VA_APM_SRAM + (0x3730) + (x * 0x4))
-#define EXYNOS_MAILBOX_APOLLO_RCC(x)	(S5P_VA_APM_SRAM + (0x3798) + (x * 0x4))
-#define EXYNOS_MAILBOX_G3D_RCC(x)	(S5P_VA_APM_SRAM + (0x37EC) + (x * 0x4))
-#define EXYNOS_MAILBOX_MIF_RCC(x)	(S5P_VA_APM_SRAM + (0x381C) + (x * 0x4))
-
 
 enum dvfs_id {
 	cal_asv_dvfs_big,
@@ -52,12 +44,6 @@ struct asv_table_list {
 
 #define FORCE_ASV_MAGIC		0x57E90000
 static unsigned int force_asv_group[num_of_dvfs];
-
-#define APM_OTP_ADDRESS		0x101E9018
-#define APM_TABLE_BASE		0x11203700
-#define APM_FUSE_TABLE_BASE	APM_TABLE_BASE
-#define APM_RCC_TABLE_BASE	(APM_TABLE_BASE + 0x0030)
-static void *apm_sram_base;
 
 struct asv_tbl_info {
 	unsigned mngs_asv_group:4;
@@ -129,11 +115,6 @@ static struct asv_table_list *pwrcal_int_asv_table;
 static struct asv_table_list *pwrcal_cam_asv_table;
 static struct asv_table_list *pwrcal_disp_asv_table;
 static struct asv_table_list *pwrcal_g3dm_asv_table;
-
-static struct asv_table_list *pwrcal_big_rcc_table;
-static struct asv_table_list *pwrcal_little_rcc_table;
-static struct asv_table_list *pwrcal_g3d_rcc_table;
-static struct asv_table_list *pwrcal_mif_rcc_table;
 
 static struct pwrcal_vclk_dfs *asv_dvfs_big;
 static struct pwrcal_vclk_dfs *asv_dvfs_little;
@@ -676,77 +657,6 @@ static int dfsg3d_set_ema(unsigned int volt)
 	return 0;
 }
 
-static int asv_rcc_set_table(void)
-{
-	int i;
-	int lv, max_lv, asv;
-	unsigned int *p;
-	unsigned long tmp;
-
-	if (!apm_sram_base) {
-#ifdef PWRCAL_TARGET_LINUX
-		apm_sram_base = (void *)ioremap(APM_TABLE_BASE, SZ_4K);
-#else
-		apm_sram_base = (void *)APM_TABLE_BASE;
-#endif
-	}
-
-	p = (unsigned int *)(apm_sram_base);
-	for (i = 0; i < 8; i++) {
-#ifdef PWRCAL_TARGET_LINUX
-		exynos_smc_readsfr((unsigned long)(APM_OTP_ADDRESS + 0x4 * i), &tmp);
-#else
-#if (CONFIG_STARTUP_EL_MODE == STARTUP_EL3)
-		tmp = *((volatile unsigned int *)(unsigned long)(APM_OTP_ADDRESS + 0x4 * i));
-#else
-		smc_readsfr((unsigned long)(APM_OTP_ADDRESS + 0x4 * i), &tmp);
-#endif
-#endif
-		*(p + i) = (unsigned int)tmp;
-	}
-
-	p = (unsigned int *)(apm_sram_base + 0x0030);
-	max_lv = asv_dvfs_big->table->num_of_lv;
-	if (max_lv > 25)
-		max_lv = 25;
-	for (lv = 0; lv < max_lv; lv++) {
-		asv = get_asv_group(cal_asv_dvfs_big, lv);
-		*(p + lv) = pwrcal_big_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv];
-	}
-
-	p = (unsigned int *)(apm_sram_base + 0x0098);
-	max_lv = asv_dvfs_little->table->num_of_lv;
-	if (max_lv > 20)
-		max_lv = 20;
-	for (lv = 0; lv < max_lv; lv++) {
-		asv = get_asv_group(cal_asv_dvfs_little, lv);
-		*(p + lv) = pwrcal_little_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv];
-	}
-
-	p = (unsigned int *)(apm_sram_base + 0x00EC);
-	max_lv = asv_dvfs_g3d->table->num_of_lv;
-	if (max_lv > 11)
-		max_lv = 11;
-	for (lv = 0; lv < max_lv; lv++) {
-		asv = get_asv_group(cal_asv_dvfs_g3d, lv);
-		*(p + lv) = pwrcal_g3d_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv];
-	}
-
-	p = (unsigned int *)(apm_sram_base + 0x011C);
-	max_lv = asv_dvfs_mif->table->num_of_lv;
-	if (max_lv > 16)
-		max_lv = 16;
-	for (lv = 0; lv < max_lv; lv++) {
-		asv = get_asv_group(cal_asv_dvfs_mif, lv);
-		*(p + lv) = pwrcal_mif_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv];
-	}
-
-	p = (unsigned int *)(apm_sram_base + 0x0160);
-	*p = (unsigned int)asv_tbl_info.asv_table_ver;
-
-	return 0;
-}
-
 unsigned int pwrcal_get_dram_manufacturer(void);
 static void asv_voltage_init_table(struct asv_table_list **asv_table, struct pwrcal_vclk_dfs *dfs)
 {
@@ -793,7 +703,7 @@ static void asv_voltage_init_table(struct asv_table_list **asv_table, struct pwr
 	if (margin_block)
 		margin_domain = ect_margin_get_domain(margin_block, dfs->vclk.name);
 
-	*asv_table = kzalloc(sizeof(struct asv_table_list) * max_asv_version, GFP_KERNEL);
+	*asv_table = kzalloc(sizeof(struct asv_table_list) * (max_asv_version + 1), GFP_KERNEL);
 	if (*asv_table == NULL)
 		return;
 
@@ -835,62 +745,6 @@ static void asv_voltage_init_table(struct asv_table_list **asv_table, struct pwr
 	}
 }
 
-static void asv_rcc_init_table(struct asv_table_list **rcc_table, struct pwrcal_vclk_dfs *dfs)
-
-{
-	int i, j, k;
-	void *rcc_block;
-	struct ect_rcc_domain *domain;
-	struct ect_rcc_table *table;
-	struct asv_table_entry *rcc_entry;
-	unsigned int max_asv_version = 0;
-
-	rcc_block = ect_get_block("RCC");
-	if (rcc_block == NULL)
-		return;
-
-	domain = ect_rcc_get_domain(rcc_block, dfs->vclk.name);
-	if (domain == NULL)
-		return;
-
-	for (i = 0; i < domain->num_of_table; i++) {
-		table = &domain->table_list[i];
-		if (table->table_version > max_asv_version)
-			max_asv_version = table->table_version;
-	}
-
-	*rcc_table = kzalloc(sizeof(struct asv_table_list) * max_asv_version, GFP_KERNEL);
-	if (*rcc_table == NULL)
-		return;
-
-	for (i = 0; i <= max_asv_version; ++i) {
-		for (j = 0; j < domain->num_of_table; j++) {
-			table = &domain->table_list[j];
-			if (table->table_version == i)
-				break;
-		}
-
-		(*rcc_table)[i].table_size = domain->num_of_table;
-		(*rcc_table)[i].table = kzalloc(sizeof(struct asv_table_entry) * domain->num_of_level, GFP_KERNEL);
-		if ((*rcc_table)[i].table == NULL)
-			return;
-
-		for (j = 0; j < domain->num_of_level; ++j) {
-			rcc_entry = &(*rcc_table)[i].table[j];
-
-			rcc_entry->index = domain->level_list[j];
-			rcc_entry->voltage = kzalloc(sizeof(unsigned int) * domain->num_of_group, GFP_KERNEL);
-
-			for (k = 0; k < domain->num_of_group; ++k) {
-				if (table->rcc != NULL)
-					rcc_entry->voltage[k] = table->rcc[j * domain->num_of_group + k];
-				else
-					rcc_entry->voltage[k] = table->rcc_compact[j * domain->num_of_group + k];
-			}
-		}
-	}
-}
-
 static void asv_voltage_table_init(void)
 {
 	asv_voltage_init_table(&pwrcal_big_asv_table, asv_dvfs_big);
@@ -901,14 +755,6 @@ static void asv_voltage_table_init(void)
 	asv_voltage_init_table(&pwrcal_cam_asv_table, asv_dvfs_cam);
 	asv_voltage_init_table(&pwrcal_disp_asv_table, asv_dvfs_disp);
 	asv_voltage_init_table(&pwrcal_g3dm_asv_table, asv_dvs_g3dm);
-}
-
-static void asv_rcc_table_init(void)
-{
-	asv_rcc_init_table(&pwrcal_big_rcc_table, asv_dvfs_big);
-	asv_rcc_init_table(&pwrcal_little_rcc_table, asv_dvfs_little);
-	asv_rcc_init_table(&pwrcal_g3d_rcc_table, asv_dvfs_g3d);
-	asv_rcc_init_table(&pwrcal_mif_rcc_table, asv_dvfs_mif);
 }
 
 static void asv_ssa_init(void)
@@ -1051,14 +897,8 @@ static int asv_init(void)
 	pwrcal_disp_asv_table = NULL;
 	pwrcal_g3dm_asv_table = NULL;
 
-	pwrcal_big_rcc_table = NULL;
-	pwrcal_little_rcc_table = NULL;
-	pwrcal_g3d_rcc_table = NULL;
-	pwrcal_mif_rcc_table = NULL;
-
 	asv_get_asvinfo();
 	asv_voltage_table_init();
-	asv_rcc_table_init();
 	asv_ssa_init();
 
 	return 0;
@@ -1086,44 +926,6 @@ static void asv_print_info(void)
 
 	pr_info("g3d_mcs0 : %d\n", asv_tbl_info.g3d_mcs0);
 	pr_info("g3d_mcs1 : %d\n", asv_tbl_info.g3d_mcs1);
-}
-
-static void rcc_print_info(void)
-{
-	int lv, max_lv, asv;
-
-	pr_info("==== RCC Table ====\n");
-	max_lv = asv_dvfs_big->table->num_of_lv;
-	if (max_lv > 25)
-		max_lv = 25;
-	for (lv = 0; lv < max_lv; lv++) {
-		asv = get_asv_group(cal_asv_dvfs_big, lv);
-		pr_info("big rcc [%d] : %d\n", lv, pwrcal_big_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv]);
-	}
-
-	max_lv = asv_dvfs_little->table->num_of_lv;
-	if (max_lv > 20)
-		max_lv = 20;
-	for (lv = 0; lv < max_lv; lv++) {
-		asv = get_asv_group(cal_asv_dvfs_little, lv);
-		pr_info("little rcc [%d] : %d\n", lv, pwrcal_little_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv]);
-	}
-
-	max_lv = asv_dvfs_g3d->table->num_of_lv;
-	if (max_lv > 11)
-		max_lv = 11;
-	for (lv = 0; lv < max_lv; lv++) {
-		asv = get_asv_group(cal_asv_dvfs_g3d, lv);
-		pr_info("g3d rcc [%d] : %d\n", lv, pwrcal_g3d_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv]);
-	}
-
-	max_lv = asv_dvfs_mif->table->num_of_lv;
-	if (max_lv > 16)
-		max_lv = 16;
-	for (lv = 0; lv < max_lv; lv++) {
-		asv = get_asv_group(cal_asv_dvfs_mif, lv);
-		pr_info("mif rcc [%d] : %d\n", lv, pwrcal_mif_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv]);
-	}
 }
 
 static int asv_get_grp(unsigned int id, unsigned int lv)
@@ -1223,7 +1025,6 @@ enum asv_group {
 	asv_max_lv,
 	dvfs_freq,
 	dvfs_voltage,
-	dvfs_rcc,
 	dvfs_group,
 	table_group,	
 	num_of_asc,
@@ -1231,7 +1032,7 @@ enum asv_group {
 
 int asv_get_information(enum dvfs_id id, enum asv_group grp, unsigned int lv) {
 
-	int max_lv, volt, group, rcc, asv;
+	int max_lv, volt, group, asv;
 	void *asv_block;
 	struct ect_voltage_domain *domain;
 
@@ -1249,7 +1050,6 @@ int asv_get_information(enum dvfs_id id, enum asv_group grp, unsigned int lv) {
 			volt = get_asv_voltage(cal_asv_dvfs_big, lv);
 			group = asv_tbl_info.mngs_asv_group;
 			asv = get_asv_group(cal_asv_dvfs_big, lv);
-			rcc = pwrcal_big_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv];
 			break;
 		case cal_asv_dvfs_little:
 			max_lv = asv_dvfs_little->table->num_of_lv;
@@ -1257,7 +1057,6 @@ int asv_get_information(enum dvfs_id id, enum asv_group grp, unsigned int lv) {
 			volt = get_asv_voltage(cal_asv_dvfs_little, lv);
 			group = asv_tbl_info.apollo_asv_group;
 			asv = get_asv_group(cal_asv_dvfs_little, lv);
-			rcc = pwrcal_little_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv];
 			break;
 		case cal_asv_dvfs_g3d:
 			max_lv = asv_dvfs_g3d->table->num_of_lv;
@@ -1265,7 +1064,6 @@ int asv_get_information(enum dvfs_id id, enum asv_group grp, unsigned int lv) {
 			volt = get_asv_voltage(cal_asv_dvfs_little, lv);
 			group = asv_tbl_info.g3d_asv_group;
 			asv = get_asv_group(cal_asv_dvfs_g3d, lv);
-			rcc = pwrcal_g3d_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv];
 			break;
 		case cal_asv_dvfs_mif:
 			max_lv = asv_dvfs_mif->table->num_of_lv;
@@ -1273,35 +1071,30 @@ int asv_get_information(enum dvfs_id id, enum asv_group grp, unsigned int lv) {
 			volt = get_asv_voltage(cal_asv_dvfs_little, lv);
 			group = asv_tbl_info.mif_asv_group;
 			asv = get_asv_group(cal_asv_dvfs_mif, lv);
-			rcc = pwrcal_mif_rcc_table[asv_tbl_info.asv_table_ver].table[lv].voltage[asv];
 			break;
 		case cal_asv_dvfs_int:
 			max_lv = asv_dvfs_int->table->num_of_lv;
 			domain = ect_asv_get_domain(asv_block, "dvfs_int");
 			volt = get_asv_voltage(cal_asv_dvfs_little, lv);
 			group = asv_tbl_info.int_asv_group;
-			rcc = 0;
 			break;
 		case cal_asv_dvfs_cam:
 			max_lv = asv_dvfs_cam->table->num_of_lv;
 			domain = ect_asv_get_domain(asv_block, "dvfs_cam");
 			volt = get_asv_voltage(cal_asv_dvfs_little, lv);
 			group = asv_tbl_info.disp_asv_group;
-			rcc = 0;
 			break;
 		case cal_asv_dvfs_disp:
 			max_lv = asv_dvfs_disp->table->num_of_lv;
 			domain = ect_asv_get_domain(asv_block, "dvfs_disp");
 			volt = get_asv_voltage(cal_asv_dvfs_little, lv);
 			group = asv_tbl_info.disp_asv_group;
-			rcc = 0;
 			break;
 		case cal_asv_dvs_g3dm:
 			max_lv = asv_dvs_g3dm->table->num_of_lv;
 			domain = ect_asv_get_domain(asv_block, "dvs_g3dm");
 			volt = get_asv_voltage(cal_asv_dvs_g3dm, lv);
 			group = 0;
-			rcc = 0;
 			break;
 		default:
 			break;
@@ -1313,8 +1106,6 @@ int asv_get_information(enum dvfs_id id, enum asv_group grp, unsigned int lv) {
 		return domain->level_list[lv] * 1000;
 	else if (grp == dvfs_voltage)
 		return volt;
-	else if (grp == dvfs_rcc) /* Not defined this function*/
-		return rcc;
 	else if (grp == dvfs_group)
 		return group;
 	else if (grp == table_group)
@@ -1332,12 +1123,10 @@ notfused:
 
 struct cal_asv_ops cal_asv_ops = {
 	.print_asv_info = asv_print_info,
-	.print_rcc_info = rcc_print_info,
 	.set_grp = asv_set_grp,
 	.get_grp = asv_get_grp,
 	.set_tablever = asv_set_tablever,
 	.get_tablever = asv_get_tablever,
-	.set_rcc_table = asv_rcc_set_table,
 	.asv_init = asv_init,
 	.asv_pmic_info = asv_get_pmic_info,
 	.get_ids_info = asv_get_ids_info,

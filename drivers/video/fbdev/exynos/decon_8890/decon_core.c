@@ -3004,6 +3004,33 @@ static void decon_win_config_dump(struct decon_device *decon,
 	}
 }
 
+static int decon_clear_set_colormap(struct decon_device *decon,
+		struct decon_win_config *win_config)
+{
+	int i;
+	struct decon_win_config *update_config = &win_config[DECON_WIN_UPDATE_IDX];
+
+	for (i = 0; i < decon->pdata->max_win; i++) {
+		struct decon_win_config *config = &win_config[i];
+		switch (config->state) {
+			case DECON_WIN_STATE_DISABLED:
+				break;
+			default:
+				return 0;
+		}
+	}
+	win_config[0].state = DECON_WIN_STATE_COLOR;
+	win_config[0].color = 0;
+	win_config[0].dst.w = decon->lcd_info->xres;
+	win_config[0].dst.h = decon->lcd_info->yres;
+	win_config[0].dst.f_w = decon->lcd_info->xres;
+	win_config[0].dst.f_h = decon->lcd_info->yres;
+	win_config[0].idma_type = decon->default_idma;
+	update_config->state = DECON_WIN_STATE_DISABLED;
+
+	return 0;
+}
+
 static int decon_set_win_config(struct decon_device *decon,
 		struct decon_win_config_data *win_data)
 {
@@ -3103,6 +3130,7 @@ windows_config:
 
 	}
 
+	decon_clear_set_colormap(decon, win_config);
 #ifdef CONFIG_FB_WINDOW_UPDATE
 	if (decon->pdata->out_type == DECON_OUT_DSI)
 		decon_set_win_update_config(decon, win_config, regs);

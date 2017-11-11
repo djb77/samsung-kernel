@@ -282,10 +282,11 @@
 		fuelgauge,repeated_fuelalert;
 		fuelgauge,using_temp_compensation;
 		fuelgauge,low_temp_limit = <100>;
-		fuelgauge,low_temp_recovery = <120>;
 		fuelgauge,using_hw_vempty;
 		fuelgauge,v_empty = <0xA561>; /* Empty: 3260mV, Recover: 3480mV */
 		fuelgauge,v_empty_origin = <0x7D54>; /* Empty: 2500mV, Recover: 3360mV */
+		fuelgauge,sw_v_empty_voltage = <3200>;
+		fuelgauge,sw_v_empty_recover_voltage = <3550>;
 		fuelgauge,qrtable20 = <0x0903>;
 		fuelgauge,qrtable30 = <0x0901>;
 		fuelgauge,fg_resistor = <1>;

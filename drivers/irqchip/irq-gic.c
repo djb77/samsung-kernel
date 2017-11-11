@@ -288,6 +288,8 @@ static void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 		irqstat = readl_relaxed(cpu_base + GIC_CPU_INTACK);
 		irqnr = irqstat & GICC_IAR_INT_ID_MASK;
 
+		dmb(ish);
+
 		if (likely(irqnr > 15 && irqnr < 1021)) {
 			handle_domain_irq(gic->domain, irqnr, regs);
 			continue;

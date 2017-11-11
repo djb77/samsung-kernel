@@ -65,6 +65,7 @@
 
 #define FLAG_LAST_FRAME		0x80000000
 #define FLAG_EMPTY_DATA		0x40000000
+#define FLAG_CSD		0x20000000
 #define MFC_MAX_INTERVAL	(2 * USEC_PER_SEC)
 
 /* MFC conceal color is black */
@@ -197,7 +198,14 @@
 #define need_to_continue(ctx)			\
 	((ctx->state == MFCINST_DPB_FLUSHING) ||\
 	(ctx->state == MFCINST_ABORT_INST) ||	\
-	(ctx->state == MFCINST_RETURN_INST))
+	(ctx->state == MFCINST_RETURN_INST) ||	\
+	(ctx->state == MFCINST_SPECIAL_PARSING) ||	\
+	(ctx->state == MFCINST_SPECIAL_PARSING_NAL))
+#define need_to_special_parsing(ctx)		\
+	((ctx->state == MFCINST_GOT_INST) ||	\
+	 (ctx->state == MFCINST_HEAD_PARSED))
+#define need_to_special_parsing_nal(ctx)	\
+	(ctx->state == MFCINST_RUNNING)
 
 /* Extra information for Decoder */
 #define	DEC_SET_DUAL_DPB		(1 << 0)

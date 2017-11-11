@@ -25,6 +25,18 @@ static void ect_parse_integer(void **address, void *value)
 	*address += sizeof(uint32_t);
 }
 
+static void ect_parse_integer64(void **address, void *value)
+{
+	unsigned int top, half;
+
+	half = __raw_readl(*address);
+	*address += sizeof(uint32_t);
+	top = __raw_readl(*address);
+	*address += sizeof(uint32_t);
+
+       *(unsigned long long *)value = ((unsigned long long)top << 32 | half);
+}
+
 static int ect_parse_string(void **address, char **value, unsigned int *length)
 {
 	ect_parse_integer(address, length);
@@ -710,8 +722,13 @@ static int ect_parse_timing_param_header(void *address, struct ect_info *info)
 	for (i = 0; i < ect_timing_param_header->num_of_size; ++i) {
 		ect_timing_param_size = &ect_timing_param_header->size_list[i];
 
-		ect_parse_integer(&address, &ect_timing_param_size->memory_size);
-		ect_timing_param_size->parameter_key = ect_timing_param_size->memory_size;
+		if (ect_timing_param_header->parser_version >= 3) {
+			ect_parse_integer64(&address, &ect_timing_param_size->parameter_key);
+			ect_timing_param_size->memory_size = (unsigned int)ect_timing_param_size->parameter_key;
+		} else {
+			ect_parse_integer(&address, &ect_timing_param_size->memory_size);
+			ect_timing_param_size->parameter_key = ect_timing_param_size->memory_size;
+		}
 
 		ect_parse_integer(&address, &ect_timing_param_size->offset);
 	}
@@ -1576,7 +1593,7 @@ static int ect_dump_timing_parameter(struct seq_file *s, void *data)
 	for (i = 0; i < ect_timing_param_header->num_of_size; ++i) {
 		size = &ect_timing_param_header->size_list[i];
 
-		seq_printf(s, "\t\t[PARAMETER KEY] : %x\n", size->parameter_key);
+		seq_printf(s, "\t\t[PARAMETER KEY] : %p\n", (void *)size->parameter_key);
 		seq_printf(s, "\t\t[NUM OF TIMING PARAMETER] : %d\n", size->num_of_timing_param);
 		seq_printf(s, "\t\t[NUM OF LEVEL] : %d\n", size->num_of_level);
 
@@ -1989,7 +2006,7 @@ struct ect_timing_param_size *ect_timing_param_get_size(void *block, int dram_si
 	return NULL;
 }
 
-struct ect_timing_param_size *ect_timing_param_get_key(void *block, unsigned int key)
+struct ect_timing_param_size *ect_timing_param_get_key(void *block, unsigned long long key)
 {
 	int i;
 	struct ect_timing_param_header *header;

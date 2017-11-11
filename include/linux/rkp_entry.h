@@ -39,6 +39,7 @@
 
 #define RKP_INIT	 RKP_CMDID(0)
 #define RKP_DEF_INIT	 RKP_CMDID(1)
+#define RKP_DEBUG	 RKP_CMDID(2)
 
 #define RKP_INIT_MAGIC 0x5afe0001
 #define RKP_VMM_BUFFER 0x600000

@@ -316,6 +316,12 @@ static void disable_armidleclockdown(void)
 	pwrcal_setbit(PWR_CTRL3_APOLLO, 0, 0); // PWR_CTRL3[0] USE_L2QACTIVE = 0
 }
 
+#define PAD_AUTOMATIC_WAKEUP		(0x1 << 29)
+static void automatic_wakeup_init(void)
+{
+	pwrcal_writel(PAD_RETENTION_MIF_OPTION, PAD_AUTOMATIC_WAKEUP);
+}
+
 static void pwrcal_syspwr_init(void)
 {
 	init_pmu_feedback();
@@ -328,6 +334,7 @@ static void pwrcal_syspwr_init(void)
 	init_ps_hold_setting();
 	enable_armidleclockdown();
 	smc_get_init_phycgen();
+	automatic_wakeup_init();
 }
 
 
@@ -2277,6 +2284,9 @@ static void pwrcal_syspwr_prepare(int mode)
 		pwrcal_setbit(WAKEUP_MASK, 30, 1);
 		pwrcal_setbit(MEMORY_TOP_OPTION, 4, 0);
 		set_pmu_central_seq_mif(true);
+
+		pr_info("%s : %s mode \n", __func__,
+				is_cp_aud_enabled()? "CP_CALL": "SLEEP");
 		if (is_cp_aud_enabled() && !(pwrcal_readl(MAILBOX_EVS_MODE))) {
 			mif_use_cp_pll = 1;
 			enable_cppll_sharing_bus012_disable();
@@ -2301,7 +2311,6 @@ void set_pmu_pad_retention_release(void)
 	pwrcal_writel(PAD_RETENTION_EBIA_OPTION, PAD_INITIATE_WAKEUP);
 	pwrcal_writel(PAD_RETENTION_EBIB_OPTION, PAD_INITIATE_WAKEUP);
 	pwrcal_writel(PAD_RETENTION_SPI_OPTION, PAD_INITIATE_WAKEUP);
-	pwrcal_writel(PAD_RETENTION_MIF_OPTION, PAD_INITIATE_WAKEUP);
 	pwrcal_writel(PAD_RETENTION_BOOTLDO_0_OPTION, PAD_INITIATE_WAKEUP);
 	pwrcal_writel(PAD_RETENTION_UFS_OPTION, PAD_INITIATE_WAKEUP);
 	pwrcal_writel(PAD_RETENTION_USB_OPTION, PAD_INITIATE_WAKEUP);

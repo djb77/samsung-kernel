@@ -1037,7 +1037,7 @@ int s5p_mfc_set_dec_stream_buffer(struct s5p_mfc_ctx *ctx, dma_addr_t buf_addr,
 	mfc_debug(2, "strm_size: 0x%08x cpb_buf_size: %zu offset: 0x%08x\n",
 			strm_size, cpb_buf_size, start_num_byte);
 
-	if (ctx->state == MFCINST_GOT_INST && strm_size == 0)
+	if (strm_size == 0)
 		mfc_info_ctx("stream size is 0\n");
 
 	MFC_WRITEL(strm_size, S5P_FIMV_D_STREAM_DATA_SIZE);

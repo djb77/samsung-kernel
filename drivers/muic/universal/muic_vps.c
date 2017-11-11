@@ -343,6 +343,10 @@ int resolve_twin_mdev(int mdev, bool vbus)
 			pr_info("%s: mdev:%d vbus:%d\n",__func__, mdev, vbus);
 			return MDEV(DESKDOCK_VB);
 		}
+		else if (mdev == MDEV(JIG_UART_ON)) {
+			pr_info("%s: mdev:%d vbus:%d\n",__func__, mdev, vbus);
+			return MDEV(JIG_UART_ON_VB);
+		}
 	}
 
 	return 0;
@@ -498,11 +502,6 @@ int vps_find_attached_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, int *pi
 
 		pr_info("%s:%s vps table match found at [1]mdev:%d(%s)\n",
 				MUIC_DEV_NAME, __func__, mdev, pvps->cfg->name);
-		//Fixme.
-		if (mdev == MDEV(TYPE2_CHG)) {
-			pr_info("%s:%s Converting TYPE2_CHG -> TA\n", MUIC_DEV_NAME, __func__);
-			mdev = ATTACHED_DEV_TA_MUIC;
-		}
 
 		new_dev = chgdet_dev ? chgdet_dev : mdev;
 

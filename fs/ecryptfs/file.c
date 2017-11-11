@@ -580,6 +580,17 @@ out:
 		sdp_fs_command_free(cmd);
 	}
 #endif
+#ifdef CONFIG_SDP
+	if (rc && (rc != -ENOENT)) {
+		cmd = sdp_fs_command_alloc(FSOP_AUDIT_FAIL_ACCESS,
+				current->tgid, mount_crypt_stat->userid, mount_crypt_stat->partition_id,
+				inode->i_ino, GFP_KERNEL);
+		if(cmd) {
+			sdp_fs_request(cmd, NULL);
+			sdp_fs_command_free(cmd);
+		}
+	}
+#endif
 	return rc;
 }
 

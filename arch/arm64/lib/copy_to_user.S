@@ -41,6 +41,11 @@ end	.req	x5
 ENTRY(__copy_to_user)
 	add	x5, x0, x2		// upper user buffer boundary
 
+	ldr	x3, =exynos_soc_info
+	ldr	w4, [x3, #4]
+	and	w4, w4, #(3 << 4)
+	cmp	w4, #(1 << 5)
+	b.eq	.Loriginal_copy		// skip sw prefetch if rev is 0x20
 	mrs	x3, midr_el1
 	ubfx	x3, x3, #24, #8
 	cmp	x3, #0x53

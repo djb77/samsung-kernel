@@ -35,6 +35,12 @@ config ARGOS
 	help
 	  Check throughput and set appropriate system parameters(CPU freq, affinity, etc)
 
+config SENTINEL
+	bool "Memory Protection"
+	default n
+	help
+	  Memory Protection
+
 config SEC_DEBUG
 	bool "Enable TN debugging feature"
 	depends on EXYNOS_SNAPSHOT

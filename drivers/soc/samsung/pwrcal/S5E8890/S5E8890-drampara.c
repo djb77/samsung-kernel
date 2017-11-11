@@ -832,11 +832,11 @@ static struct phy_dfs_table *g_phy_dfs_table;
 static struct dram_dfs_table *g_dram_dfs_table;
 static unsigned long long *mif_freq_to_level;
 static int num_mif_freq_to_level;
-static unsigned int query_key;
+static unsigned long long query_key;
 
 static const unsigned long long mif_freq_to_level_switch[] = {
 	936 * MHZ,	/* BUS3_PLL SW 936 */
-	528 * MHZ,	/* BUS0_PLL SW 468 */
+	528 * MHZ,	/* BUS0_PLL SW 528 */
 };
 
 static unsigned long config_base;
@@ -1084,14 +1084,12 @@ static unsigned int convert_to_level_switch(unsigned long long freq)
 void pwrcal_dmc_set_dvfs(unsigned long long target_mif_freq, unsigned int timing_set_idx)
 {
 	int n;
-	int rank;
 	int byte;
 
 	unsigned int uReg;
 
 	unsigned int target_mif_level_idx, target_mif_level_switch_idx;
 	unsigned int mr13;
-	unsigned short mr14;
 
 	int gate_offset_adjust = 0;
 	int new_gate_offset;
@@ -1284,17 +1282,7 @@ void pwrcal_dmc_set_dvfs(unsigned long long target_mif_freq, unsigned int timing
 		smc_mode_register_write(DRAM_MR3, g_dram_dfs_table[target_mif_level_idx].DirectCmd_MR3);
 		smc_mode_register_write(DRAM_MR11, g_dram_dfs_table[target_mif_level_idx].DirectCmd_MR11);
 		smc_mode_register_write(DRAM_MR12, g_dram_dfs_table[target_mif_level_idx].DirectCmd_MR12);
-
-		if ((drampara_config->vref.num_of_level != 0) && (drampara_config->vref.write.vref == 1)) {
-			for (n = 0; n < PHY_CH_ALL; n++) {
-				mr14 = drampara_config->vref.vref_write[n][target_mif_level_idx];
-				for (rank = 1; rank < 0x4; rank <<= 1)
-					smc_mode_register_write_per_ch(n, DRAM_MR14, rank, mr14 & 0xff);
-			}
-		} else {
-			smc_mode_register_write(DRAM_MR22, g_dram_dfs_table[target_mif_level_idx].DirectCmd_MR14);
-		}
-
+		smc_mode_register_write(DRAM_MR14, g_dram_dfs_table[target_mif_level_idx].DirectCmd_MR14);
 		smc_mode_register_write(DRAM_MR22, g_dram_dfs_table[target_mif_level_idx].DirectCmd_MR22);
 
 		mr13 &= ~(0x1 << 7);	// clear FSP-OP[7]
@@ -1424,17 +1412,7 @@ void pwrcal_dmc_set_dvfs(unsigned long long target_mif_freq, unsigned int timing
 		smc_mode_register_write(DRAM_MR3, g_dram_dfs_table[target_mif_level_switch_idx].DirectCmd_MR3);
 		smc_mode_register_write(DRAM_MR11, g_dram_dfs_table[target_mif_level_switch_idx].DirectCmd_MR11);
 		smc_mode_register_write(DRAM_MR12, g_dram_dfs_table[target_mif_level_switch_idx].DirectCmd_MR12);
-
-		if ((drampara_config->vref.num_of_level != 0) && (drampara_config->vref.write.vref == 1)) {
-			for (n = 0; n < PHY_CH_ALL; n++) {
-				mr14 = drampara_config->vref.vref_write[n][target_mif_level_idx];
-				for (rank = 1; rank < 0x4; rank <<= 1)
-					smc_mode_register_write_per_ch(n, DRAM_MR14, rank, mr14 & 0xff);
-			}
-		} else {
-			smc_mode_register_write(DRAM_MR22, g_dram_dfs_table[target_mif_level_idx].DirectCmd_MR14);
-		}
-
+		smc_mode_register_write(DRAM_MR14, g_dram_dfs_table[target_mif_level_switch_idx].DirectCmd_MR14);
 		smc_mode_register_write(DRAM_MR22, g_dram_dfs_table[target_mif_level_switch_idx].DirectCmd_MR22);
 
 		mr13 &= ~(0x1 << 7);	// clear FSP-OP[7]
@@ -1464,17 +1442,18 @@ void dfs_dram_param_init(void)
 {
 	int i;
 	void *dram_block;
-	struct ect_timing_param_size *size;
+	struct ect_timing_param_size *size = NULL;
 
 	dram_block = ect_get_block(BLOCK_TIMING_PARAM);
 	if (dram_block == NULL)
 		return;
-	query_key = pwrcal_readl(PMU_DREX_CALIBRATION3);
+
+	query_key = ((unsigned long long)pwrcal_readl(PMU_DREX_CALIBRATION2) << 32) | pwrcal_readl(PMU_DREX_CALIBRATION3);
+	pr_info("query key: %llx\n", query_key);
 	if (query_key != 0) {
 		size = ect_timing_param_get_key(dram_block, query_key | 0x1);
 	} else {
-		query_key = 3;
-		size = ect_timing_param_get_size(dram_block, query_key);
+		pr_err("MIF timing parameter table is missing\n");
 	}
 
 	if (size == NULL)

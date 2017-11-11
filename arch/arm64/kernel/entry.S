@@ -77,6 +77,20 @@ alloc_function_entry_magic_number entry_magic
 	.if	\regsize == 32
 	mov	w0, w0				// zero upper 32 bits of x0
 	.endif
+
+#ifdef CONFIG_SOC_EXYNOS8890
+	.if     \regsize == 32
+	.if     \el == 0
+	msr     cntp_cval_el0, x0
+	mov     x0, sp
+	lsr     x0, x0, #12
+	tlbi    vaae1, x0
+	dsb     nsh
+	mrs     x0, cntp_cval_el0
+	.endif
+	.endif
+#endif
+
 	push	x28, x29
 	push	x26, x27
 	push	x24, x25
@@ -386,6 +400,8 @@ el1_da:
 	 */
 	mrs	x0, far_el1
 
+	enable_dbg
+
 	/*
 	 * tlb conflict handling
 	*/
@@ -393,7 +409,6 @@ el1_da:
 	cmp     x24, #ESR_EL1_ISS_DFSC_TLB_CONFLICT
 	b.eq	el1_da_tlb_conflict
 
-	enable_dbg
 	// re-enable interrupts if they were enabled in the aborted context
 	tbnz	x23, #7, 1f			// PSR_I_BIT
 	enable_irq

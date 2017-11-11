@@ -404,6 +404,13 @@ config TIMA_RKP
 	help
 	  this enables realtime kernel protection
 
+config TIMA_RKP_DEBUG
+	depends on TIMA_RKP
+	default n
+	bool "Support SS Sentinel for debugging"
+	help
+	  this enables to support sentinel
+
 config RKP_KDP
 	bool "Protection for cred structure"
 	depends on TIMA_RKP

@@ -692,6 +692,9 @@ asmlinkage __visible void __init start_kernel(void)
 #ifdef CONFIG_TIMA_RKP
 	vmm_init();
 	rkp_init();
+#ifdef CONFIG_TIMA_RKP_DEBUG
+	rkp_call(RKP_DEBUG, 0, 0, 0, 0, 0);
+#endif
 #ifdef CONFIG_RELOCATABLE_KERNEL
 	rkp_call(KASLR_MEM_RESERVE, kaslr_mem, kaslr_size, 0, 0, 0); 
 #endif 

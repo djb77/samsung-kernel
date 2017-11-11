@@ -2324,26 +2324,53 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 			mfc_debug(2, "Decoding can be started now\n");
 		}
 	} else if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-		if (ctx->is_drm && ctx->stream_protect_flag) {
+		while (!list_empty(&ctx->src_queue)) {
 			struct s5p_mfc_buf *src_buf;
-			int i;
+			int index, csd, condition = 0;
 
-			mfc_debug(2, "stream_protect_flag(%#lx) will be released\n",
-					ctx->stream_protect_flag);
-			list_for_each_entry(src_buf, &ctx->src_queue, list) {
-				i = src_buf->vb.v4l2_buf.index;
-				if (test_bit(i, &ctx->stream_protect_flag)) {
-					if (s5p_mfc_stream_buf_prot(ctx, src_buf, false))
-						mfc_err_ctx("failed to CFW_UNPROT\n");
-					else
-						clear_bit(i, &ctx->stream_protect_flag);
+			src_buf = list_entry(ctx->src_queue.next, struct s5p_mfc_buf, list);
+			index = src_buf->vb.v4l2_buf.index;
+			csd = src_buf->vb.v4l2_buf.reserved2 & FLAG_CSD ? 1 : 0;
+
+			if (csd) {
+				spin_unlock_irqrestore(&dev->irqlock, flags);
+				s5p_mfc_clean_ctx_int_flags(ctx);
+				if (need_to_special_parsing(ctx)) {
+					s5p_mfc_change_state(ctx, MFCINST_SPECIAL_PARSING);
+					condition = S5P_FIMV_R2H_CMD_SEQ_DONE_RET;
+					mfc_info_ctx("try to special parsing! (before NAL_START)\n");
+				} else if (need_to_special_parsing_nal(ctx)) {
+					s5p_mfc_change_state(ctx, MFCINST_SPECIAL_PARSING_NAL);
+					condition = S5P_FIMV_R2H_CMD_FRAME_DONE_RET;
+					mfc_info_ctx("try to special parsing! (after NAL_START)\n");
+				} else {
+					mfc_info_ctx("can't parsing CSD!, state = %d\n", ctx->state);
 				}
-				mfc_debug(2, "[%d] dec src buf un-prot_flag: %#lx\n",
-						i, ctx->stream_protect_flag);
+				spin_lock_irq(&dev->condlock);
+				set_bit(ctx->num, &dev->ctx_work_bits);
+				spin_unlock_irq(&dev->condlock);
+				s5p_mfc_try_run(dev);
+				if (condition) {
+					if (s5p_mfc_wait_for_done_ctx(ctx, condition)) {
+						mfc_err_ctx("special parsing time out\n");
+						s5p_mfc_cleanup_timeout_and_try_run(ctx);
+					}
+				}
+				spin_lock_irqsave(&dev->irqlock, flags);
 			}
+			if (ctx->is_drm && test_bit(index, &ctx->stream_protect_flag)) {
+				if (s5p_mfc_stream_buf_prot(ctx, src_buf, false))
+					mfc_err_ctx("failed to CFW_UNPROT\n");
+				else
+					clear_bit(index, &ctx->stream_protect_flag);
+				mfc_debug(2, "[%d] dec src buf un-prot flag: %#lx\n",
+						index, ctx->stream_protect_flag);
+			}
+			vb2_set_plane_payload(&src_buf->vb, 0, 0);
+			vb2_buffer_done(&src_buf->vb, VB2_BUF_STATE_ERROR);
+			list_del(&src_buf->list);
 		}
 
-		s5p_mfc_cleanup_queue(&ctx->src_queue);
 		INIT_LIST_HEAD(&ctx->src_queue);
 		ctx->src_queue_cnt = 0;
 

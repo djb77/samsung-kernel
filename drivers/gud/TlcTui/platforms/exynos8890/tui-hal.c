@@ -27,6 +27,9 @@
 #include "dciTui.h"
 #include "tlcTui.h"
 #include "tui-hal.h"
+#ifdef CONFIG_TRUSTED_UI_TOUCH_ENABLE
+#include "../../../input/touchscreen/sec_ts/sec_ts.h"
+#endif
 
 /* I2C register for reset */
 #define HSI2C7_PA_BASE_ADDRESS	0x14E10000
@@ -319,7 +322,7 @@ uint32_t hal_tui_deactivate(void)
 	disable_irq(tsp_irq_num);
 	pr_info(KERN_ERR "Disable touch! tsp_irq_num = %d\n", tsp_irq_num);
 
-#if 0 // defined(CONFIG_TOUCHSCREEN_FTS) || defined(CONFIG_TOUCHSCREEN_FTS5AD56)
+#if defined(CONFIG_TOUCHSCREEN_SEC_TS)
 	tui_delay(5);
 	trustedui_mode_on();
 	tui_delay(95);

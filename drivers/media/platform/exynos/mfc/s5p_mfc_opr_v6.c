@@ -100,6 +100,9 @@ static int s5p_mfc_init_decode(struct s5p_mfc_ctx *ctx)
 	if (FW_HAS_CONCEAL_CONTROL(dev))
 		reg |= (0x3 << S5P_FIMV_D_OPT_CONCEAL_CONTROL);
 
+	/* Parsing all including PPS */
+	reg |= (0x1 << S5P_FIMV_D_OPT_SPECIAL_PARSING_SHIFT);
+
 	MFC_WRITEL(reg, S5P_FIMV_D_DEC_OPTIONS);
 
 	if (FW_HAS_CONCEAL_CONTROL(dev))
@@ -1277,6 +1280,7 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 			ret = s5p_mfc_run_dec_last_frames(ctx);
 			break;
 		case MFCINST_RUNNING:
+		case MFCINST_SPECIAL_PARSING_NAL:
 			ret = s5p_mfc_run_dec_frame(ctx);
 			break;
 		case MFCINST_INIT:
@@ -1286,6 +1290,7 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 			ret = s5p_mfc_close_inst(ctx);
 			break;
 		case MFCINST_GOT_INST:
+		case MFCINST_SPECIAL_PARSING:
 			ret = s5p_mfc_run_init_dec(ctx);
 			break;
 		case MFCINST_HEAD_PARSED:

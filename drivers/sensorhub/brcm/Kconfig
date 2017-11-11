@@ -388,6 +388,22 @@ config SENSORS_SX9310_CP_LDO_CONTROL
 	  Say Y here if you control grip power in cp.
 	  Say N here if you do not use grip power in cp.
 
+config SENSORS_HERO2
+	depends on SENSORS_SX9310
+	tristate "SX9310 driver"
+	default n
+	help
+	  Say Y here if you accept HERO2 Grip sensor
+	  Say N here if you do not access HERO2 Grip Sensor
+
+config SENSORS_CAN
+	depends on SENSORS_SX9310
+	tristate "SX9310 driver"
+	default n
+	help
+	  Say Y here if you accept HERO CAN Grip sensor
+	  Say N here if you do not access HERO CAN Grip Sensor
+
 config SENSORS_SSP_INTERRUPT_GYRO_SENSOR
          tristate "Sensors ssp interrpt gyro"
          default n
@@ -401,7 +417,7 @@ config SENSORS_SSP_HIFI_BATCHING
          depends on SPI
          help
          	If you want to use hifi batching, it should be set.
-
+         	
 config SENSORS_SSP_NOBLELTE
 	tristate "NOBLE Proejct"
 	default n

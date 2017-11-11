@@ -25,21 +25,31 @@ menuconfig MALI_T8XX
 choice
 	prompt "version Configuration"
 	depends on MALI_T8XX
-	default MALI_R9P0
+	default MALI_R12P0
 	help
 	  Select the gpu support version.
 
-
-
+config MALI_R7P0
+	depends on MALI_T8XX
+	bool "r7p0 driver"
 
 config MALI_R9P0
 	depends on MALI_T8XX
 	bool "r9p0 driver"
 
+config MALI_R12P0
+	depends on MALI_T8XX
+	bool "r12p0 driver"
 endchoice
 
+if MALI_R7P0
+source "drivers/gpu/arm/t8xx/r7p0/Kconfig"
+endif
 
 if MALI_R9P0
 source "drivers/gpu/arm/t8xx/r9p0/Kconfig"
 endif
 
+if MALI_R12P0
+source "drivers/gpu/arm/t8xx/r12p0/Kconfig"
+endif
