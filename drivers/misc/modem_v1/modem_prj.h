@@ -318,7 +318,11 @@ struct io_device {
 	struct miscdevice  miscdev;
 	struct net_device *ndev;
 	struct list_head node_ndev;
+#ifdef CONFIG_LINK_DEVICE_NAPI
 	struct napi_struct napi;
+	int napi_weight;
+	unsigned int rx_poll_count;
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	/* ID and Format for channel on the link */
 	unsigned int id;
@@ -509,6 +513,15 @@ struct link_device {
 
 	/* Reset buffer & dma_addr for zerocopy */
 	void (*reset_zerocopy)(struct link_device *ld);
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	/* Poll function for NAPI */
+	int (*poll_recv_on_iod)(struct link_device *ld, struct io_device *iod,
+			int budget);
+
+	int (*enable_rx_int)(struct link_device *ld);
+	int (*disable_rx_int)(struct link_device *ld);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 };
 
 #define pm_to_link_device(pm)	container_of(pm, struct link_device, pm)

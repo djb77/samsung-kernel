@@ -2424,8 +2424,8 @@ static const struct of_device_id exynos_devfreq_match[] = {
 MODULE_DEVICE_TABLE(of, exynos_devfreq_match);
 
 static const struct dev_pm_ops exynos_devfreq_pm_ops = {
-	.suspend = exynos_devfreq_suspend,
-	.resume = exynos_devfreq_resume,
+	.suspend_late = exynos_devfreq_suspend,
+	.resume_early = exynos_devfreq_resume,
 };
 
 static struct platform_driver exynos_devfreq_driver = {

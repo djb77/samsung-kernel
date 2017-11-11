@@ -17,4 +17,10 @@ config HDCP2_EMULATION_MODE
 	help
 	  Enable HDCP2 emulation mode support
 
+config HDCP2_SUPPORT_IIA
+	bool "HDCP2 IIA protocol support"
+	default n
+	help
+	  Enable HDCP2 IIA protocol support
+
 endif

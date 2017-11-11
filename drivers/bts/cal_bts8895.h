@@ -65,6 +65,7 @@
 #define BTS_MAX_MO				0xffff
 
 struct bts_status {
+	bool scen_en;
 	unsigned int priority;
 	bool disable;
 	bool bypass_en;

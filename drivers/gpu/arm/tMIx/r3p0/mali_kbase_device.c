@@ -479,6 +479,10 @@ bool check_trace_code(enum kbase_trace_code code)
 		case KBASE_TRACE_CODE(LSI_CHECKSUM):
 		case KBASE_TRACE_CODE(LSI_GPU_MAX_LOCK):
 		case KBASE_TRACE_CODE(LSI_GPU_MIN_LOCK):
+		case KBASE_TRACE_CODE(LSI_ZAP_TIMEOUT):
+		case KBASE_TRACE_CODE(LSI_RESET_GPU_EARLY_DUPE):
+		case KBASE_TRACE_CODE(LSI_RESET_RACE_DETECTED_EARLY_OUT):
+		case KBASE_TRACE_CODE(LSI_PM_SUSPEND):
 			return true;
 		default:
 			return false;

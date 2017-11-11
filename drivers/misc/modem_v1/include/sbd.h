@@ -503,19 +503,19 @@ static inline struct sbd_ring_buffer *sbd_id2rb(struct sbd_link_device *sl,
 	return (id < MAX_LINK_CHANNELS) ? &sl->ipc_dev[id].rb[dir] : NULL;
 }
 
-static inline bool rb_empty(struct sbd_ring_buffer *rb)
-{
-	return circ_empty(*rb->rp, *rb->wp);
-}
-
 static inline bool zerocopy_adaptor_empty(struct zerocopy_adaptor *zdptr)
 {
-	return circ_empty(zdptr->pre_rp, *zdptr->wp);
+	return circ_empty(zdptr->pre_rp, *zdptr->rp);
 }
 
-static inline unsigned int rb_space(struct sbd_ring_buffer *rb)
+static inline bool rb_empty(struct sbd_ring_buffer *rb)
 {
-	return circ_get_space(rb->len, *rb->wp, *rb->rp);
+	BUG_ON(!rb);
+
+	if (rb->zdptr)
+		return zerocopy_adaptor_empty(rb->zdptr);
+	else
+		return circ_empty(*rb->rp, *rb->wp);
 }
 
 static inline unsigned int zerocopy_adaptor_space(struct zerocopy_adaptor *zdptr)
@@ -523,9 +523,14 @@ static inline unsigned int zerocopy_adaptor_space(struct zerocopy_adaptor *zdptr
 	return circ_get_space(zdptr->len, *zdptr->wp, zdptr->pre_rp);
 }
 
-static inline unsigned int rb_usage(struct sbd_ring_buffer *rb)
+static inline unsigned int rb_space(struct sbd_ring_buffer *rb)
 {
-	return circ_get_usage(rb->len, *rb->wp, *rb->rp);
+	BUG_ON(!rb);
+
+	if (rb->zdptr)
+		return zerocopy_adaptor_space(rb->zdptr);
+	else
+		return circ_get_space(rb->len, *rb->wp, *rb->rp);
 }
 
 static inline unsigned int zerocopy_adaptor_usage(struct zerocopy_adaptor *zdptr)
@@ -533,14 +538,29 @@ static inline unsigned int zerocopy_adaptor_usage(struct zerocopy_adaptor *zdptr
 	return circ_get_usage(zdptr->len, *zdptr->rp, zdptr->pre_rp);
 }
 
-static inline unsigned int rb_full(struct sbd_ring_buffer *rb)
+static inline unsigned int rb_usage(struct sbd_ring_buffer *rb)
 {
-	return (rb_space(rb) == 0);
+	BUG_ON(!rb);
+
+	if (rb->zdptr)
+		return zerocopy_adaptor_usage(rb->zdptr);
+	else
+		return circ_get_usage(rb->len, *rb->wp, *rb->rp);
 }
 
 static inline unsigned int zerocopy_adaptor_full(struct zerocopy_adaptor *zdptr)
 {
 	return (zerocopy_adaptor_space(zdptr) == 0);
+}
+
+static inline unsigned int rb_full(struct sbd_ring_buffer *rb)
+{
+	BUG_ON(!rb);
+
+	if (rb->zdptr)
+		return zerocopy_adaptor_full(rb->zdptr);
+	else
+		return (rb_space(rb) == 0);
 }
 
 int create_sbd_link_device(struct link_device *ld, struct sbd_link_device *sl,

@@ -818,7 +818,6 @@ int fimc_is_resource_open(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type,
 		result = &core->sensor[RESOURCE_TYPE_SENSOR3];
 		resource->pdev = core->sensor[RESOURCE_TYPE_SENSOR3].pdev;
 		break;
-#if (FIMC_IS_SENSOR_COUNT > 4)
 	case RESOURCE_TYPE_SENSOR4:
 		result = &core->sensor[RESOURCE_TYPE_SENSOR4];
 		resource->pdev = core->sensor[RESOURCE_TYPE_SENSOR4].pdev;
@@ -827,7 +826,6 @@ int fimc_is_resource_open(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type,
 		result = &core->sensor[RESOURCE_TYPE_SENSOR5];
 		resource->pdev = core->sensor[RESOURCE_TYPE_SENSOR5].pdev;
 		break;
-#endif
 	case RESOURCE_TYPE_ISCHAIN:
 		for (stream = 0; stream < FIMC_IS_STREAM_COUNT; ++stream) {
 			ischain = &core->ischain[stream];

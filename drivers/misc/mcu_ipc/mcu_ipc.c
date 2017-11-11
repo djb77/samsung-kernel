@@ -19,6 +19,7 @@
 #include <linux/of_platform.h>
 #include <linux/dma-mapping.h>
 #include <linux/delay.h>
+#include <linux/bitops.h>
 
 #include "regs-mcu_ipc.h"
 #include "mcu_ipc.h"
@@ -29,10 +30,20 @@ static irqreturn_t mcu_ipc_handler(int irq, void *data)
 	u32 id;
 
 	id = ((struct mcu_ipc_drv_data *)data)->id;
+
+	spin_lock(&mcu_dat[id].reg_lock);
+
+	/* Check raised interrupts */
 	irq_stat = mcu_ipc_readl(id, EXYNOS_MCU_IPC_INTSR0) & 0xFFFF0000;
+
+
+	/* Only clear and handle unmasked interrupts */
+	irq_stat &= mcu_dat[id].unmasked_irq << 16;
+
 
 	/* Interrupt Clear */
 	mcu_ipc_writel(id, irq_stat, EXYNOS_MCU_IPC_INTCR0);
+	spin_unlock(&mcu_dat[id].reg_lock);
 
 	for (i = 0; i < 16; i++) {
 		if (irq_stat & (1 << (i + 16))) {
@@ -55,26 +66,148 @@ static irqreturn_t mcu_ipc_handler(int irq, void *data)
 int mbox_request_irq(enum mcu_ipc_region id, u32 int_num,
 					void (*handler)(void *), void *data)
 {
+	unsigned long flags;
+
 	if ((!handler) || (int_num > 15))
 		return -EINVAL;
+
+	spin_lock_irqsave(&mcu_dat[id].reg_lock, flags);
 
 	mcu_dat[id].hd[int_num].data = data;
 	mcu_dat[id].hd[int_num].handler = handler;
 	mcu_dat[id].registered_irq |= 1 << (int_num + 16);
+	set_bit(int_num, &mcu_dat[id].unmasked_irq);
+
+	spin_unlock_irqrestore(&mcu_dat[id].reg_lock, flags);
 
 	return 0;
 }
 EXPORT_SYMBOL(mbox_request_irq);
 
+/*
+ * mbox_enable_irq
+ *
+ * This function unmasks a single mailbox interrupt.
+ */
+int mbox_enable_irq(enum mcu_ipc_region id, u32 int_num)
+{
+	unsigned long flags;
+	unsigned long tmp;
+
+	/* The irq should have been registered. */
+	if (!(mcu_dat[id].registered_irq & BIT(int_num + 16)))
+		return -EINVAL;
+
+	spin_lock_irqsave(&mcu_dat[id].reg_lock, flags);
+
+	tmp = mcu_ipc_readl(id, EXYNOS_MCU_IPC_INTMR0);
+
+	/* Clear the mask if it was set. */
+	if (test_and_clear_bit(int_num + 16, &tmp))
+		mcu_ipc_writel(id, tmp, EXYNOS_MCU_IPC_INTMR0);
+
+	/* Mark the irq as unmasked */
+	set_bit(int_num, &mcu_dat[id].unmasked_irq);
+
+	spin_unlock_irqrestore(&mcu_dat[id].reg_lock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL(mbox_enable_irq);
+
+/*
+ * mbox_check_irq
+ *
+ * This function is used to check the state of the mailbox interrupt
+ * when the interrupt after the interrupt has been masked. This can be
+ * used to check if a new interrupt has been set after being masked. A
+ * masked interrupt will have its status set but will not generate a hard
+ * interrupt. This function will check and clear the status.
+ */
+int mbox_check_irq(enum mcu_ipc_region id, u32 int_num)
+{
+	unsigned long flags;
+	u32 irq_stat;
+
+	/* Interrupt must have been registered. */
+	if (!(mcu_dat[id].registered_irq & BIT(int_num + 16)))
+		return -EINVAL;
+
+	spin_lock_irqsave(&mcu_dat[id].reg_lock, flags);
+
+	/* Interrupt must have been masked. */
+	if (test_bit(int_num, &mcu_dat[id].unmasked_irq)) {
+		spin_unlock_irqrestore(&mcu_dat[id].reg_lock, flags);
+		return -EINVAL;
+	}
+
+	/* Check and clear the interrupt status bit. */
+	irq_stat = mcu_ipc_readl(id, EXYNOS_MCU_IPC_INTSR0) & BIT(int_num + 16);
+	if (irq_stat)
+		mcu_ipc_writel(id, irq_stat, EXYNOS_MCU_IPC_INTCR0);
+
+	spin_unlock_irqrestore(&mcu_dat[id].reg_lock, flags);
+
+	return irq_stat != 0;
+}
+EXPORT_SYMBOL(mbox_check_irq);
+
+/*
+ * mbox_disable_irq
+ *
+ * This function masks and single mailbox interrupt.
+ */
+int mbox_disable_irq(enum mcu_ipc_region id, u32 int_num)
+{
+	unsigned long flags;
+	unsigned long irq_mask;
+
+	/* The interrupt must have been registered. */
+	if (!(mcu_dat[id].registered_irq & BIT(int_num + 16)))
+		return -EINVAL;
+
+	/* Set the mask */
+	spin_lock_irqsave(&mcu_dat[id].reg_lock, flags);
+
+	irq_mask = mcu_ipc_readl(id, EXYNOS_MCU_IPC_INTMR0);
+
+	/* Set the mask if it was not already set */
+	if (!test_and_set_bit(int_num + 16, &irq_mask)) {
+		mcu_ipc_writel(id, irq_mask, EXYNOS_MCU_IPC_INTMR0);
+
+		udelay(5);
+
+		/* Reset the status bit to signal interrupt needs handling */
+		mcu_ipc_writel(id, BIT(int_num + 16), EXYNOS_MCU_IPC_INTGR0);
+
+		udelay(5);
+	}
+
+	/* Remove the irq from the umasked irqs */
+	clear_bit(int_num, &mcu_dat[id].unmasked_irq);
+
+	spin_unlock_irqrestore(&mcu_dat[id].reg_lock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL(mbox_disable_irq);
+
 int mcu_ipc_unregister_handler(enum mcu_ipc_region id, u32 int_num,
 								void (*handler)(void *))
 {
+	unsigned long flags;
+
 	if (!handler || (mcu_dat[id].hd[int_num].handler != handler))
 		return -EINVAL;
+
+	spin_lock_irqsave(&mcu_dat[id].reg_lock, flags);
 
 	mcu_dat[id].hd[int_num].data = NULL;
 	mcu_dat[id].hd[int_num].handler = NULL;
 	mcu_dat[id].registered_irq &= ~(1 << (int_num + 16));
+	clear_bit(int_num, &mcu_dat[id].unmasked_irq);
+
+	spin_unlock_irqrestore(&mcu_dat[id].reg_lock, flags);
 
 	return 0;
 }
@@ -293,6 +426,7 @@ static int mcu_ipc_probe(struct platform_device *pdev)
 #endif
 
 	spin_lock_init(&mcu_dat[id].lock);
+	spin_lock_init(&mcu_dat[id].reg_lock);
 
 	dev_err(&pdev->dev, "%s: mcu_ipc probe done.\n", __func__);
 

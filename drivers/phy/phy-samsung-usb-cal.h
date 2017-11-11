@@ -28,12 +28,27 @@
 #define EXYNOS_USBCON_VER_02_0_1	0x0201	/* JF EVT0 2.0 Host	*/
 #define EXYNOS_USBCON_VER_02_1_0	0x0210
 #define EXYNOS_USBCON_VER_02_1_1	0x0211	/* JF EVT1 2.0 Host	*/
+#define EXYNOS_USBCON_VER_02_1_2	0x0212  /* Katmai EVT0 */
 #define EXYNOS_USBCON_VER_02_MAX	0x02FF
+
+#define EXYNOS_USBCON_VER_03_0_0	0x0300	/* Lhotse, Lassen HS */
+#define EXYNOS_USBCON_VER_03_0_1	0x0301	/* Super Speed			*/
+#define EXYNOS_USBCON_VER_03_MAX	0x03FF
+
+#define EXYNOS_USBCON_VER_04_0_0	0x0400	/* Lhotse - USB/DP  */
+#define EXYNOS_USBCON_VER_04_MAX	0x04FF
+
+/* Sub phy control - not include System/Link control */
+#define EXYNOS_USBCON_VER_05_0_0	0x0500	/* High Speed Only	*/
+#define EXYNOS_USBCON_VER_05_1_0	0x0510	/* Super Speed		*/
+#define EXYNOS_USBCON_VER_05_3_0	0x0530	/* Super Speed Dual PHY	*/
+#define EXYNOS_USBCON_VER_05_MAX	0x05FF
 
 #define EXYNOS_USBCON_VER_F2_0_0	0xF200
 #define EXYNOS_USBCON_VER_F2_MAX	0xF2FF
 
 #define EXYNOS_USBCON_VER_MAJOR_VER_MASK	0xFF00
+#define EXYNOS_USBCON_VER_SS_CAP		0x0010
 
 enum exynos_usbphy_mode {
 	USBPHY_MODE_DEV = 0,
@@ -52,6 +67,7 @@ enum exynos_usbphy_refclk {
 	USBPHY_REFCLK_DIFF_19_2MHZ = 0x80 | 0x38,
 
 	USBPHY_REFCLK_EXT_50MHZ = 0x07,
+	USBPHY_REFCLK_EXT_26MHZ = 0x06,
 	USBPHY_REFCLK_EXT_24MHZ = 0x05,
 	USBPHY_REFCLK_EXT_20MHZ = 0x04,
 	USBPHY_REFCLK_EXT_12MHZ = 0x02,
@@ -90,7 +106,20 @@ enum exynos_usbphy_tune_para {
 	USBPHY_TUNE_SS_LOS_MASK_VAL = 0x4 | 0x10000,
 	USBPHY_TUNE_SS_FIX_EQ = 0x5 | 0x10000,
 	USBPHY_TUNE_SS_RX_EQ = 0x6 | 0x10000,
+
+	USBPHY_TUNE_COMBO = 0x20000,
+	USBPHY_TUNE_COMBO_TX_AMP	= USBPHY_TUNE_COMBO | 0x0,
+	USBPHY_TUNE_COMBO_TX_EMPHASIS	= USBPHY_TUNE_COMBO | 0x1,
+	USBPHY_TUNE_COMBO_TX_IDRV	= USBPHY_TUNE_COMBO | 0x2,
+	USBPHY_TUNE_COMBO_TX_ACCDRV	= USBPHY_TUNE_COMBO | 0x3,
 };
+
+struct exynos_usb_tune_param {
+	char name[20];
+	u32 value;
+};
+
+#define EXYNOS_USB_TUNE_LAST	0x4C415354
 
 /* HS PHY tune parameter */
 struct exynos_usbphy_hs_tune {
@@ -104,9 +133,9 @@ struct exynos_usbphy_hs_tune {
 	u8 rx_sqrx;
 	u8 compdis;
 	u8 otg;
-	bool enalbe_user_imp;
+	bool enable_user_imp;
 	u8 user_imp_value;
-	enum exynos_usbphy_utmi utim_clk;
+	enum exynos_usbphy_utmi utmi_clk;
 };
 
 /* SS PHY tune parameter */
@@ -130,6 +159,8 @@ struct exynos_usbphy_ss_tune {
 	/* RX equalizer mode */
 	u8 enable_fixed_rxeq_mode;
 	u8 fix_rxeq_value;
+	/* Decrease TX Impedance */
+	u8 decrease_ss_tx_imp;
 
 	u8 set_crport_level_en;
 	u8 set_crport_mpll_charge_pump;
@@ -153,12 +184,15 @@ struct exynos_usbphy_ss_tune {
  */
 
 struct exynos_usbphy_info {
+	/* Device Information */
+	struct device *dev;
+
 	u32	version;
 	enum exynos_usbphy_refclk refclk;
 	enum exynos_usbphy_refsel refsel;
 
 	bool use_io_for_ovc;
-	bool common_block_enable;
+	bool common_block_disable;
 	bool not_used_vbus_pad;
 
 	void __iomem *regs_base;
@@ -169,6 +203,9 @@ struct exynos_usbphy_info {
 	/* SS PHY tune parameter */
 	struct exynos_usbphy_ss_tune *ss_tune;
 
+	/* Tune Parma list */
+	struct exynos_usb_tune_param *tune_param;
+
 	/* multiple phy */
 	int	hw_version;
 	void __iomem *regs_base_2nd;
@@ -176,6 +213,12 @@ struct exynos_usbphy_info {
 
 	/* Alternative PHY REF_CLK source */
 	bool alt_ref_clk;
+
+	/* Remote Wake-up Advisor */
+	unsigned hs_rewa :1;
+
+	/* Dual PHY */
+	bool dual_phy;
 };
 
 

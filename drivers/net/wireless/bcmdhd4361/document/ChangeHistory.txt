@@ -1,5 +1,20 @@
-BCM4361 DHD 1.77.17.1 for Android Dream & J5/J7 & BCM43438 NOS Project
+BCM4361 DHD 1.77.17.3 for Android Dream NOS Project
 (Notes: 1.77.x is twigged off from 1.579.235.9)
+
+DHD 1.77.17.3 - 2017.07.21
+Others
+ - CS3221222 Fixed wrong 11kv default setting
+ - CS3265424 CS3160208 Fixed to update correct DHD connection status on AUTO_ROAM operation
+ - CS3265424 CS3214374 Fixed Roaming event drop issue when roaming to same BSSID case
+
+
+DHD 1.77.17.2 - 2017.07.07
+Others
+ - CS2595140 Added an Android private command for setting ADPS
+ - CS2791743 Fixed duplicated tx_error counter summation
+ - CS3171448 Fixed Disconnection issue with Samsung CELL AP by disabling SETBAND
+ - 11kv - Fixed BTM capability check
+
 
 DHD 1.77.17.1 - 2017.05.08
 New Feature
@@ -131,6 +146,11 @@ New Feature
 Kernel Panic
  - Fixed Kernel Panic during STA-GO connection test case
 
+11kv
+ - Fixed to send BTM query in dongle
+ - Override WNM Max Idle period to keep alive period
+ - Update RCC with channels in neighbor report response
+
 Others
  - CSP:1104911 Added to get hostapd_cli STA_INFO command
  - CSP:1111618 Disabled WLADPS_SEAK_AP_WAR feature
@@ -144,11 +164,6 @@ Others
  - Added Private command for LQCM
  - Added to control scan suppress during RF test mode
  - Enhanced more for nested connection case handling
-
-11kv
- - Fixed to send BTM query in dongle
- - Override WNM Max Idle period to keep alive period
- - Update RCC with channels in neighbor report response
 
 
 DHD 1.579.235.7 - 2017.01.19

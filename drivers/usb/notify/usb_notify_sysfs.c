@@ -55,6 +55,7 @@ const char USB_HW_Param_Print[USB_CCIC_HW_PARAM_MAX][MAX_HWPARAM_STRING] = {
 	{"CC_DEX"},
 	{"CC_WTIME"},
 	{"CC_WVBUS"},
+	{"CC_CSHORT"},
 	{"CC_VER"},
 };
 
@@ -423,7 +424,6 @@ static ssize_t hw_param_store(
 error:
 	return ret;
 }
-
 static DEVICE_ATTR(disable, 0664, disable_show, disable_store);
 static DEVICE_ATTR(support, 0444, support_show, NULL);
 static DEVICE_ATTR(otg_speed, 0444, otg_speed_show, NULL);

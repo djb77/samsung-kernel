@@ -205,6 +205,7 @@
 				iod,links = <0x200>;
 				iod,attrs = <0x180>;		/* ATTR_SBD_IPC (0x80) | ATTR_NO_LINK_HDR(0x100) */
 				iod,app = "NET";
+				iod,napi_weight = <64>;
 				iod,ul_num_buffers = <0>;
 				iod,ul_buffer_size = <2048>;
 				iod,dl_num_buffers = <0>;
@@ -218,6 +219,7 @@
 				iod,links = <0x200>;
 				iod,attrs = <0x180>;
 				iod,app = "NET";
+				iod,napi_weight = <64>;
 				iod,ul_num_buffers = <0>;
 				iod,ul_buffer_size = <2048>;
 				iod,dl_num_buffers = <0>;
@@ -231,6 +233,7 @@
 				iod,links = <0x200>;
 				iod,attrs = <0x180>;
 				iod,app = "NET";
+				iod,napi_weight = <64>;
 				iod,ul_num_buffers = <0>;
 				iod,ul_buffer_size = <2048>;
 				iod,dl_num_buffers = <0>;
@@ -244,6 +247,7 @@
 				iod,links = <0x200>;
 				iod,attrs = <0x180>;
 				iod,app = "NET";
+				iod,napi_weight = <64>;
 				iod,ul_num_buffers = <0>;
 				iod,ul_buffer_size = <2048>;
 				iod,dl_num_buffers = <0>;
@@ -256,6 +260,7 @@
 				iod,io_type = <1>;
 				iod,links = <0x200>;
 				iod,attrs = <0x180>;	/* ATTR_NO_LINK_HDR(0x100) | ATTR_SBD_IPC (0x80) */
+				iod,napi_weight = <64>;
 				iod,ul_num_buffers = <0>;
 				iod,ul_buffer_size = <2048>;
 				iod,dl_num_buffers = <0>;
@@ -268,6 +273,7 @@
 				iod,io_type = <1>;
 				iod,links = <0x200>;
 				iod,attrs = <0x180>;
+				iod,napi_weight = <64>;
 				iod,ul_num_buffers = <0>;
 				iod,ul_buffer_size = <2048>;
 				iod,dl_num_buffers = <0>;
@@ -280,6 +286,7 @@
 				iod,io_type = <1>;
 				iod,links = <0x200>;
 				iod,attrs = <0x180>;
+				iod,napi_weight = <64>;
 				iod,ul_num_buffers = <0>;
 				iod,ul_buffer_size = <2048>;
 				iod,dl_num_buffers = <0>;
@@ -292,6 +299,7 @@
 				iod,io_type = <1>;
 				iod,links = <0x200>;
 				iod,attrs = <0x180>;
+				iod,napi_weight = <64>;
 				iod,ul_num_buffers = <0>;
 				iod,ul_buffer_size = <2048>;
 				iod,dl_num_buffers = <0>;

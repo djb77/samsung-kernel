@@ -129,7 +129,15 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 	const unsigned long as_bit_mask = (1UL << num_as) - 1;
 	unsigned long flags;
 	u32 new_mask;
+	/* MALI_SEC_INTEGRATION */
+	u32 org_mask;
 	u32 tmp;
+
+	/* MALI_SEC_INTEGRATION */
+	/* previous content of as struct */
+	enum kbase_mmu_fault_type fault_type;
+	u32 fault_status;
+	u64 fault_addr;
 
 	/* bus faults */
 	u32 bf_bits = (irq_stat >> busfault_shift) & as_bit_mask;
@@ -141,6 +149,8 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 	/* remember current mask */
 	spin_lock_irqsave(&kbdev->mmu_mask_change, flags);
 	new_mask = kbase_reg_read(kbdev, MMU_REG(MMU_IRQ_MASK), NULL);
+	/* MALI_SEC_INTEGRATION */
+	org_mask = new_mask;
 	/* mask interrupts for now */
 	kbase_reg_write(kbdev, MMU_REG(MMU_IRQ_MASK), 0, NULL);
 	spin_unlock_irqrestore(&kbdev->mmu_mask_change, flags);
@@ -149,6 +159,8 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 		struct kbase_as *as;
 		int as_no;
 		struct kbase_context *kctx;
+		/* MALI_SEC_INTEGRATION */
+		int caught_bug;
 
 		/*
 		 * the while logic ensures we have a bit set, no need to check
@@ -165,6 +177,9 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 		 */
 		kctx = kbasep_js_runpool_lookup_ctx(kbdev, as_no);
 
+		/* MALI_SEC_INTEGRATION */
+		/* save for later */
+		fault_addr = as->fault_addr;
 
 		/* find faulting address */
 		as->fault_addr = kbase_reg_read(kbdev,
@@ -189,11 +204,28 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 		/* report the fault to debugfs */
 		kbase_as_fault_debugfs_new(kbdev, as_no);
 
+		/* MALI_SEC_INTEGRATION */
+		/* save for later */
+		fault_status = as->fault_status;
+
 		/* record the fault status */
 		as->fault_status = kbase_reg_read(kbdev,
 						  MMU_AS_REG(as_no,
 							AS_FAULTSTATUS),
 						  kctx);
+
+		/* MALI_SEC_INTEGRATION */
+		if (as->fault_type != KBASE_MMU_FAULT_TYPE_UNKNOWN) {
+			int new_fault = (bf_bits & (1 << as_no)) ?
+					KBASE_MMU_FAULT_TYPE_BUS :
+					KBASE_MMU_FAULT_TYPE_PAGE;
+			dev_err(kbdev->dev,
+				"New fault of type 0x%x while fault 0x%x is pending\n",
+				new_fault,
+				(int)as->fault_type);
+		}
+		/* save for later */
+		fault_type = as->fault_type;
 
 		/* find the fault type */
 		as->fault_type = (bf_bits & (1 << as_no)) ?
@@ -230,8 +262,33 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 
 		/* Process the interrupt for this address space */
 		spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
-		kbase_mmu_interrupt_process(kbdev, kctx, as);
+		/* MALI_SEC_INTEGRATION */
+		caught_bug = kbase_mmu_interrupt_process(kbdev, kctx, as);
 		spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
+
+		/* MALI_SEC_INTEGRATION */
+		if (caught_bug < 0) {
+			dev_err(kbdev->dev,
+				"Caught bug, queue_work rejected\n");
+			dev_err(kbdev->dev,
+				"irq_mask was 0x%lx, now reduced down to 0x%lx\n",
+				(unsigned long)org_mask,
+				(unsigned long)new_mask);
+			dev_err(kbdev->dev,
+				"Previous fault_type = %d, new fault_type = %d\n",
+				(int)fault_type,
+				(int)as->fault_type);
+			dev_err(kbdev->dev,
+				"Previous fault_status = 0x%lx, new fault_status = 0x%lx\n",
+				(unsigned long)fault_status,
+				(unsigned long)as->fault_status);
+			dev_err(kbdev->dev,
+				"Previous fault_addr = 0x%llx, new fault_addr = 0x%llx\n",
+				(unsigned long long)fault_addr,
+				(unsigned long long)as->fault_addr);
+			//BUG(); /* we've reproduced the bug, crash and generate ramdump */
+			kbasep_js_runpool_release_ctx(kbdev, kctx);
+		}
 	}
 
 	/* reenable interrupts */

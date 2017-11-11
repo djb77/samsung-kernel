@@ -229,11 +229,7 @@ struct sec_battery_info {
 #if defined(CONFIG_BATTERY_CISD)
 	struct cisd cisd;
 	bool skip_cisd;
-#if defined(CONFIG_QH_ALGORITHM)
-	int cisd_qh_current_high_thr;
-	int cisd_qh_current_low_thr;
-	bool qh_start;
-#endif
+	bool usb_overheat_check;
 #endif
 
 	/* battery check */
@@ -297,6 +293,8 @@ struct sec_battery_info {
 	unsigned int temp_high_cnt;
 	unsigned int temp_low_cnt;
 	unsigned int temp_recover_cnt;
+
+	unsigned int wa_float_cnt;
 
 	/* charging */
 	unsigned int charging_mode;
@@ -592,8 +590,11 @@ enum {
 #if defined(CONFIG_BATTERY_CISD)
 	CISD_DATA,
 	CISD_DATA_JSON,
+	CISD_DATA_D_JSON,
 	CISD_WIRE_COUNT,
-#endif	
+	CISD_WC_DATA,
+	CISD_WC_DATA_JSON,
+#endif
 #if defined(CONFIG_BATTERY_SBM_DATA)
 	SBM_DATA,
 #endif

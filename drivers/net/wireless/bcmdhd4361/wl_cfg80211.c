@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.c 696861 2017-04-28 11:55:02Z $
+ * $Id: wl_cfg80211.c 711608 2017-07-19 02:48:59Z $
  */
 /* */
 #include <typedefs.h>
@@ -12066,7 +12066,6 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 				wl_clr_drv_status(cfg, DISCONNECTING, ndev);
 				/* Not in 'CONNECTED' state, clear it */
 				wl_clr_drv_status(cfg, CONNECTED, ndev);
-				wl_clr_drv_status(cfg, CONNECTING, ndev);
 				return 0;
 			}
 
@@ -12198,8 +12197,7 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 				}
 #ifdef WBTEXT
 				/* when STA was disconnected, clear join pref and set wbtext */
-				if (ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_STATION &&
-						dhdp->wbtext_support) {
+				if (ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_STATION) {
 					char smbuf[WLC_IOCTL_SMLEN];
 					char clear[] = { 0x01, 0x02, 0x00, 0x00, 0x03,
 						0x02, 0x00, 0x00, 0x04, 0x02, 0x00, 0x00 };
@@ -12910,8 +12908,10 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	struct ieee80211_supported_band *band;
 	struct ieee80211_channel *notify_channel = NULL;
 	u32 freq;
+#ifdef BCM4359_CHIP
 	struct channel_info ci;
 	u32 cur_channel;
+#endif /* BCM4359_CHIP */
 #endif /* LINUX_VERSION > 2.6.39 || WL_COMPAT_WIRELESS */
 #if defined(WLADPS_SEAK_AP_WAR) || defined(WBTEXT)
 	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
@@ -12927,12 +12927,14 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	BCM_REFERENCE(dhdp);
 #endif /* WLADPS_SEAK_AP_WAR */
 
+	curbssid = wl_read_prof(cfg, ndev, WL_PROF_BSSID);
+	channel = (u32 *)wl_read_prof(cfg, ndev, WL_PROF_CHAN);
+#ifdef BCM4359_CHIP
 	/* Skip calling cfg80211_roamed If the channels are same and
 	 * the current bssid/last_roamed_bssid & the new bssid are same
 	 * Also clear timer roam_timeout.
+	 * Only used on BCM4359 devices.
 	 */
-	curbssid = wl_read_prof(cfg, ndev, WL_PROF_BSSID);
-	channel = (u32 *)wl_read_prof(cfg, ndev, WL_PROF_CHAN);
 	if ((wldev_ioctl(ndev, WLC_GET_CHANNEL, &ci,
 			sizeof(ci), false)) < 0) {
 		WL_ERR(("Failed to get current channel !"));
@@ -12949,6 +12951,7 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 #endif  /* DHD_LOSSLESS_ROAMING */
 		return  err;
 	}
+#endif /* BCM4359_CHIP */
 
 	wl_get_assoc_ies(cfg, ndev);
 	wl_update_prof(cfg, ndev, NULL, (const void *)(e->addr.octet), WL_PROF_BSSID);

@@ -1,4 +1,4 @@
-#include <linux/printk.h>
+#include <linux/string.h>
 #include "cmucal.h"
 
 #define get_node(list, idx)		(GET_IDX(list[idx].id) == idx ? \

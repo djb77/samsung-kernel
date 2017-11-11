@@ -459,9 +459,25 @@ static struct snd_pcm_ops abox_dump_platform_ops = {
 
 static void abox_dump_register_card_work_func(struct work_struct *work)
 {
+	int i;
+
 	pr_debug("%s\n", __func__);
 
 	snd_soc_unregister_card(&abox_dump_card);
+	for (i = 0; i < abox_dump_card.num_links; i++) {
+		struct snd_soc_dai_link *link = &abox_dump_card.dai_link[i];
+
+		if (link->name)
+			continue;
+
+		link->name = link->stream_name =
+				kasprintf(GFP_KERNEL, "dummy%d", i);
+		link->cpu_name = "snd-soc-dummy";
+		link->cpu_dai_name = "snd-soc-dummy-dai";
+		link->codec_name = "snd-soc-dummy";
+		link->codec_dai_name = "snd-soc-dummy-dai";
+		link->no_pcm = 1;
+	}
 	snd_soc_register_card(&abox_dump_card);
 }
 
@@ -471,21 +487,20 @@ static void abox_dump_add_dai_link(struct device *dev)
 {
 	int id = to_platform_device(dev)->id;
 	struct abox_dump_buffer_info *info = abox_dump_get_buffer_info(id);
-	struct snd_soc_dai_link *link = &abox_dump_dai_links[abox_dump_card.num_links++];
-	char stream_name[NAME_LENGTH];
+	struct snd_soc_dai_link *link = &abox_dump_dai_links[id];
 
 	dev_dbg(dev, "%s[%d]\n", __func__, id);
 
-	if (abox_dump_card.num_links > ARRAY_SIZE(abox_dump_dai_links)) {
+	if (id > ARRAY_SIZE(abox_dump_dai_links)) {
 		dev_err(dev, "Too many dump request\n");
 		return;
 	}
 
-	snprintf(stream_name, sizeof(stream_name), "%s", info->name);
+	cancel_delayed_work_sync(&abox_dump_register_card_work);
 
 	abox_dump_card.dev = dev;
-	link->name = devm_kmemdup(dev, stream_name, sizeof(stream_name), GFP_KERNEL);
-	link->stream_name = devm_kmemdup(dev, stream_name, sizeof(stream_name), GFP_KERNEL);
+	kfree(link->name);
+	link->name = link->stream_name = kstrdup(info->name, GFP_KERNEL);
 	link->cpu_name = "snd-soc-dummy";
 	link->cpu_dai_name = "snd-soc-dummy-dai";
 	link->platform_name = dev_name(dev);
@@ -493,8 +508,13 @@ static void abox_dump_add_dai_link(struct device *dev)
 	link->codec_dai_name = "snd-soc-dummy-dai";
 	link->ignore_suspend = 1;
 	link->ignore_pmdown_time = 1;
+	link->no_pcm = 0;
 	link->capture_only = true;
-	schedule_delayed_work(&abox_dump_register_card_work, msecs_to_jiffies(10 * MSEC_PER_SEC));
+
+	if (abox_dump_card.num_links <= id)
+		abox_dump_card.num_links = id + 1;
+
+	schedule_delayed_work(&abox_dump_register_card_work, HZ);
 }
 
 static int abox_dump_platform_probe(struct snd_soc_platform *platform)

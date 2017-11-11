@@ -24,6 +24,7 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <soc/samsung/pmu-cp.h>
+#include <trace/events/napi.h>
 
 #include "modem_prj.h"
 #include "modem_utils.h"
@@ -343,10 +344,14 @@ static int rx_multi_pdp(struct sk_buff *skb)
 	mif_pkt(iod->id, "IOD-RX", skb);
 #endif
 
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	ret = netif_receive_skb(skb);
+#else /* !CONFIG_LINK_DEVICE_NAPI */
 	if (in_interrupt())
 		ret = netif_rx(skb);
 	else
 		ret = netif_rx_ni(skb);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	if (ret != NET_RX_SUCCESS) {
 		mif_err_limited("%s: %s<-%s: ERR! netif_rx fail\n",
@@ -1105,6 +1110,7 @@ static int vnet_open(struct net_device *ndev)
 		}
 	}
 	list_add(&iod->node_ndev, &iod->msd->activated_ndev_list);
+
 	netif_start_queue(ndev);
 
 	mif_err("%s (opened %d) by %s\n",
