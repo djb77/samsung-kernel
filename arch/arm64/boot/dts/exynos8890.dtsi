@@ -1852,7 +1852,7 @@
 		ip_ver = <14>;
 		clock_rate = <400000000>;
 		min_rate = <100000>;
-		num_qos_steps = <9>;
+		num_qos_steps = <12>;
 		mfc_qos_table {
 			mfc_qos_variant_0 {
 				thrd_mb = <0>;
@@ -1863,7 +1863,34 @@
 				freq_kfc = <0>;
 				has_enc_table = <0>;
 			};
-			mfc_qos_variant_1 {		/* Enc table */
+			mfc_qos_variant_1 {		/* Emc table */
+				thrd_mb = <108000>;
+				freq_mfc = <168000>;
+				freq_int = <127000>;
+				freq_mif = <286000>;
+				freq_cpu = <0>;
+				freq_kfc = <0>;
+				has_enc_table = <0>;
+			};
+			mfc_qos_variant_2 {
+				thrd_mb = <108000>;
+				freq_mfc = <168000>;
+				freq_int = <127000>;
+				freq_mif = <286000>;
+				freq_cpu = <0>;
+				freq_kfc = <0>;
+				has_enc_table = <1>;
+			};
+			mfc_qos_variant_3 {
+				thrd_mb = <244800>;
+				freq_mfc = <168000>;
+				freq_int = <127000>;
+				freq_mif = <286000>;
+				freq_cpu = <0>;
+				freq_kfc = <0>;
+				has_enc_table = <0>;
+			};
+			mfc_qos_variant_4 {		/* Enc table */
 				thrd_mb = <489600>;
 				freq_mfc = <264000>;
 				freq_int = <200000>;
@@ -1872,7 +1899,7 @@
 				freq_kfc = <0>;
 				has_enc_table = <0>;
 			};
-			mfc_qos_variant_2 {
+			mfc_qos_variant_5 {
 				thrd_mb = <489600>;
 				freq_mfc = <264000>;
 				freq_int = <200000>;
@@ -1881,7 +1908,7 @@
 				freq_kfc = <0>;
 				has_enc_table = <1>;
 			};
-			mfc_qos_variant_3 {		/* Enc table */
+			mfc_qos_variant_6 {		/* Enc table */
 				thrd_mb = <979200>;
 				freq_mfc = <400000>;
 				freq_int = <336000>;
@@ -1890,7 +1917,7 @@
 				freq_kfc = <0>;
 				has_enc_table = <0>;
 			};
-			mfc_qos_variant_4 {
+			mfc_qos_variant_7 {
 				thrd_mb = <979200>;
 				freq_mfc = <400000>;
 				freq_int = <336000>;
@@ -1899,7 +1926,7 @@
 				freq_kfc = <0>;
 				has_enc_table = <1>;
 			};
-			mfc_qos_variant_5 {		/* Enc table */
+			mfc_qos_variant_8 {		/* Enc table */
 				thrd_mb = <1468800>;
 				freq_mfc = <598000>;
 				freq_int = <690000>;
@@ -1908,7 +1935,7 @@
 				freq_kfc = <0>;
 				has_enc_table = <0>;
 			};
-			mfc_qos_variant_6 {
+			mfc_qos_variant_9 {
 				thrd_mb = <1468800>;
 				freq_mfc = <598000>;
 				freq_int = <690000>;
@@ -1917,7 +1944,7 @@
 				freq_kfc = <0>;
 				has_enc_table = <1>;
 			};
-			mfc_qos_variant_7 {		/* Enc table */
+			mfc_qos_variant_10 {		/* Enc table */
 				thrd_mb = <1958400>;
 				freq_mfc = <598000>;
 				freq_int = <690000>;
@@ -1926,7 +1953,7 @@
 				freq_kfc = <0>;
 				has_enc_table = <0>;
 			};
-			mfc_qos_variant_8 {
+			mfc_qos_variant_11 {
 				thrd_mb = <1958400>;
 				freq_mfc = <598000>;
 				freq_int = <690000>;

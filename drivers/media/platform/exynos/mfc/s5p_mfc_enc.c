@@ -41,7 +41,7 @@
 #define MFC_ENC_AVG_FPS_MODE
 
 #define ENC_HIGH_FPS	(70000)
-#define ENC_MAX_FPS	(120000)
+#define ENC_MAX_FPS	(30000)
 #define ENC_AVG_FRAMES	(10)
 
 static struct s5p_mfc_fmt *find_format(struct v4l2_format *f, unsigned int t)

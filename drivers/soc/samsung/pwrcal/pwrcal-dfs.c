@@ -526,11 +526,20 @@ int dfs_get_target_rate_table(struct dfs_table *dfs,
 }
 
 
+#ifdef CONFIG_SOC_EXYNOS8890
+extern spinlock_t dfs_int_spinlock;
+DFS_EXTERN(dvfs_int)
+#endif
 int dfs_set_rate(struct vclk *vclk, unsigned long to)
 {
 	struct pwrcal_vclk_dfs *dfs;
 	unsigned long ret = -1;
+#ifdef CONFIG_SOC_EXYNOS8890
+	unsigned long flag = 0;
 
+	if (vclk == &vclk_dvfs_int.vclk)
+		spin_lock_irqsave(&dfs_int_spinlock, flag);
+#endif
 	dfs = to_dfs(vclk);
 
 /*	pr_info("(%s) set from (%ldHz) to (%ldHz) start\n",
@@ -544,6 +553,11 @@ int dfs_set_rate(struct vclk *vclk, unsigned long to)
 
 	ret = 0;
 out:
+#ifdef CONFIG_SOC_EXYNOS8890
+	if (vclk == &vclk_dvfs_int.vclk)
+		spin_unlock_irqrestore(&dfs_int_spinlock, flag);
+#endif
+
 	if (ret)
 		pr_err("dfs_set_rate error (%s) from(%ld) to(%ld)\n",
 				vclk->name, vclk->vfreq, to);
@@ -556,10 +570,20 @@ unsigned long dfs_get_rate(struct vclk *vclk)
 {
 	struct pwrcal_vclk_dfs *dfs;
 	unsigned long ret = 0;
+#ifdef CONFIG_SOC_EXYNOS8890
+	unsigned long flag = 0;
 
+	if (vclk == &vclk_dvfs_int.vclk)
+		spin_lock_irqsave(&dfs_int_spinlock, flag);
+#endif
 	dfs = to_dfs(vclk);
+
 	ret =  (unsigned long)get_rate(dfs->table);
 
+#ifdef CONFIG_SOC_EXYNOS8890
+	if (vclk == &vclk_dvfs_int.vclk)
+		spin_unlock_irqrestore(&dfs_int_spinlock, flag);
+#endif
 	return ret;
 }
 

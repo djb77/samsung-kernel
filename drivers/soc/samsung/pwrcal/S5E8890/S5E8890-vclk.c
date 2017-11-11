@@ -117,7 +117,7 @@ static struct pwrcal_clk_set pxmxdx_isp0_tpu_grp[] = {
 static struct pwrcal_clk_set pxmxdx_isp0_trex_grp[] = {
 	{CLK(ISP0_MUX_ACLK_ISP0_TREX_528_USER),	1,	0},
 	{CLK(ISP0_DIV_PCLK_ISP0_TREX_264),	1,	-1},
-	{CLK(ISP0_DIV_PCLK_ISP0_TREX_132),	1,	-1},
+	{CLK(ISP0_DIV_PCLK_ISP0_TREX_132),	3,	-1},
 	{CLK(TOP_MUXGATE_ACLK_ISP0_TREX_528),	1,	0},
 	{CLK_NONE,				0,	0},
 };
@@ -168,7 +168,7 @@ static struct pwrcal_clk_set pxmxdx_cam0_3aa1_grp[] = {
 static struct pwrcal_clk_set pxmxdx_cam0_trex_grp[] = {
 	{CLK(CAM0_MUX_ACLK_CAM0_TREX_528_USER),	1,	0},
 	{CLK(CAM0_DIV_PCLK_CAM0_TREX_264),	1,	-1},
-	{CLK(CAM0_DIV_PCLK_CAM0_TREX_132),	1,	-1},
+	{CLK(CAM0_DIV_PCLK_CAM0_TREX_132),	3,	-1},
 	{CLK(TOP_MUXGATE_ACLK_CAM0_TREX_528),	1,	0},
 	{CLK_NONE,				0,	0},
 };
