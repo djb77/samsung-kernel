@@ -198,7 +198,7 @@ void process_pd(void *data, u8 plug_attach_done, u8 *pdic_attach, MSG_IRQ_STATUS
 	struct s2mm005_data *usbpd_data = data;
 	struct i2c_client *i2c = usbpd_data->i2c;
 	uint16_t REG_ADD;
-	uint8_t rp_currentlvl, is_src;
+	uint8_t rp_currentlvl, is_src, i;
 	REQUEST_FIXED_SUPPLY_STRUCT_Typedef *request_power_number;
 
 	printk("%s\n",__func__);
@@ -297,6 +297,10 @@ void process_pd(void *data, u8 plug_attach_done, u8 *pdic_attach, MSG_IRQ_STATUS
 			return;
 		ccic_event_work(usbpd_data, CCIC_NOTIFY_DEV_BATTERY, CCIC_NOTIFY_ID_POWER_STATUS, *pdic_attach, 0, 0);
 	} else {
+		for (i = 0; i < MAX; i++) {
+			pd_noti.sink_status.power_list[i].max_current = 0;
+			pd_noti.sink_status.power_list[i].max_voltage = 0;
+		}
 		pd_noti.sink_status.rp_currentlvl = RP_CURRENT_LEVEL_NONE;
 		pd_noti.sink_status.selected_pdo_num = 0;
 		pd_noti.event = PDIC_NOTIFY_EVENT_DETACH;

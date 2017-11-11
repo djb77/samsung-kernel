@@ -845,6 +845,9 @@ static enum hrtimer_restart zap_timeout_callback(struct hrtimer *timer)
 	if (reset_data->stage == -1)
 		goto out;
 
+	/* MALI_SEC_INTEGRATION */
+	KBASE_TRACE_ADD(kbdev, LSI_ZAP_TIMEOUT, NULL, NULL, 0, 0);
+
 #if KBASE_GPU_RESET_EN
 	if (kbase_prepare_to_reset_gpu(kbdev)) {
 		dev_err(kbdev->dev, "Issueing GPU soft-reset because jobs failed to be killed (within %d ms) as part of context termination (e.g. process exit)\n",
@@ -882,8 +885,14 @@ void kbase_jm_wait_for_zero_jobs(struct kbase_context *kctx)
 	 * (due to kbase_job_zap_context(), we also guarentee it's not in the JS
 	 * policy queue either */
 	wait_event(kctx->jctx.zero_jobs_wait, kctx->jctx.job_nr == 0);
-	wait_event(kctx->jctx.sched_info.ctx.is_scheduled_wait,
-		   !kbase_ctx_flag(kctx, KCTX_SCHEDULED));
+
+	/* MALI_SEC_INTEGRATION */
+	if (!wait_event_timeout(kctx->jctx.sched_info.ctx.is_scheduled_wait,
+		!kbase_ctx_flag(kctx, KCTX_SCHEDULED), (unsigned int) msecs_to_jiffies(3000))) { /* 3sec timeout -> BUG() */
+		dev_err(kbdev->dev,
+				"%s: kctx scheduled out fail during 3sec\n", __func__);
+		BUG();
+	}
 
 	spin_lock_irqsave(&reset_data.lock, flags);
 	if (reset_data.stage == 1) {
@@ -1436,6 +1445,10 @@ static void kbasep_try_reset_gpu_early_locked(struct kbase_device *kbdev)
 	if (atomic_cmpxchg(&kbdev->hwaccess.backend.reset_gpu,
 			KBASE_RESET_GPU_COMMITTED, KBASE_RESET_GPU_HAPPENING) !=
 						KBASE_RESET_GPU_COMMITTED) {
+		/* MALI_SEC_INTEGRATION */
+		KBASE_TRACE_ADD(kbdev, LSI_RESET_GPU_EARLY_DUPE, NULL, NULL, 0, atomic_read(&kbdev->hwaccess.backend.reset_gpu));
+		dev_err(kbdev->dev,
+				"%s: unexpected reset race\n", __func__);
 		/* Reset has already occurred */
 		return;
 	}
@@ -1479,6 +1492,10 @@ bool kbase_prepare_to_reset_gpu_locked(struct kbase_device *kbdev)
 						KBASE_RESET_GPU_PREPARED) !=
 						KBASE_RESET_GPU_NOT_PENDING) {
 		/* Some other thread is already resetting the GPU */
+		/* MALI_SEC_INTEGRATION */
+		KBASE_TRACE_ADD(kbdev, LSI_RESET_RACE_DETECTED_EARLY_OUT, NULL, NULL, 0, atomic_read(&kbdev->hwaccess.backend.reset_gpu));
+		dev_err(kbdev->dev,
+				"%s: unexpected reset race\n", __func__);
 		return false;
 	}
 

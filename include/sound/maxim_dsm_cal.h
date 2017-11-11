@@ -48,14 +48,26 @@ struct maxim_dsm_cal_values {
 	int count;
 };
 
+struct maxim_dsm_info_v_validation {
+	int duration;
+};
+
+struct maxim_dsm_values_v_validation {
+	uint32_t status;
+	int v_validation;
+};
+
 struct maxim_dsm_cal {
 	struct device *dev;
 	struct class *class;
 	struct mutex mutex;
 	struct workqueue_struct *wq;
 	struct delayed_work work;
+	struct delayed_work work_v_validation;
 	struct maxim_dsm_cal_values values;
 	struct maxim_dsm_cal_info info;
+	struct maxim_dsm_info_v_validation info_v_validation;
+	struct maxim_dsm_values_v_validation values_v_validation;
 	struct regmap *regmap;
 	uint32_t platform_type;
 };

@@ -676,8 +676,28 @@ void itmon_set_errcnt(int cnt)
 	}
 }
 
+static void itmon_post_handler_to_notifier(struct itmon_dev *itmon,
+					   unsigned int trans_type)
+{
+	struct itmon_platdata *pdata = itmon->pdata;
+	struct itmon_traceinfo *traceinfo = &pdata->traceinfo[trans_type];
+
+	/* After treatment by port */
+	if (!traceinfo->port || strlen(traceinfo->port) < 1)
+		return;
+
+	itmon->notifier_info.port = traceinfo->port;
+	itmon->notifier_info.master = traceinfo->master;
+	itmon->notifier_info.dest = traceinfo->dest;
+	itmon->notifier_info.read = traceinfo->read;
+	itmon->notifier_info.target_addr = traceinfo->target_addr;
+	itmon->notifier_info.errcode = traceinfo->errcode;
+
+	/* call notifier_call_chain of itmon */
+	atomic_notifier_call_chain(&itmon_notifier_list, 0, &itmon->notifier_info);
+}
+
 static void itmon_post_handler_by_master(struct itmon_dev *itmon,
-					struct itmon_nodeinfo *node,
 					unsigned int trans_type)
 {
 	struct itmon_platdata *pdata = itmon->pdata;
@@ -1069,7 +1089,6 @@ static void itmon_route_tracedata(struct itmon_dev *itmon)
 		pr_auto(ASL3, " Raw Register Information(ITMON Internal Information)\n\n");
 
 	for (trans_type = 0; trans_type < TRANS_TYPE_NUM; trans_type++) {
-		itmon_post_handler_by_master(itmon, node, trans_type);
 		for (i = M_NODE; i < NODE_TYPE; i++) {
 			list_for_each_entry_safe(node, next_node, &pdata->tracelist[trans_type], list) {
 				if (i == node->type) {
@@ -1085,6 +1104,11 @@ static void itmon_route_tracedata(struct itmon_dev *itmon)
 	if (pdata->traceinfo[TRANS_TYPE_READ].dirty ||
 		pdata->traceinfo[TRANS_TYPE_WRITE].dirty)
 		pr_auto(ASL3, "--------------------------------------------------------------------------\n");
+
+	for (trans_type = 0; trans_type < TRANS_TYPE_NUM; trans_type++) {
+		itmon_post_handler_to_notifier(itmon, trans_type);
+		itmon_post_handler_by_master(itmon, trans_type);
+	}
 }
 
 static void itmon_trace_data(struct itmon_dev *itmon,

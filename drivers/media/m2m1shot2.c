@@ -1330,6 +1330,7 @@ static int m2m1shot2_get_target(struct m2m1shot2_context *ctx,
 			img->flags &= ~M2M1SHOT2_IMGFLAG_ACQUIRE_FENCE;
 			m2m1shot2_put_buffer(ctx, dst->memory,
 						img->plane, img->num_planes);
+			img->memory = M2M1SHOT2_BUFTYPE_NONE;
 			return -EINVAL;
 		}
 

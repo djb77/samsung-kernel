@@ -132,6 +132,10 @@ void page_fault_worker(struct work_struct *data)
 
 	kbdev = container_of(faulting_as, struct kbase_device, as[as_no]);
 
+	/* MALI_SEC_INTEGRATION */
+	/* clear the type to mark we've arrived in the fault worker */
+	faulting_as->fault_type = KBASE_MMU_FAULT_TYPE_UNKNOWN;
+
 	/* Grab the context that was already refcounted in kbase_mmu_interrupt().
 	 * Therefore, it cannot be scheduled out of this AS until we explicitly release it
 	 */
@@ -1468,6 +1472,10 @@ void bus_fault_worker(struct work_struct *data)
 
 	kbdev = container_of(faulting_as, struct kbase_device, as[as_no]);
 
+	/* MALI_SEC_INTEGRATION */
+	/* clear the type to mark we've arrived in the fault worker */
+	faulting_as->fault_type = KBASE_MMU_FAULT_TYPE_UNKNOWN;
+
 	/* Grab the context that was already refcounted in kbase_mmu_interrupt().
 	 * Therefore, it cannot be scheduled out of this AS until we explicitly release it
 	 */
@@ -1763,6 +1771,10 @@ static void kbase_mmu_report_fault_and_kill(struct kbase_context *kctx,
 		kctx->pid);
 
 	/* MALI_SEC_INTEGRATION */
+	if(kbdev->vendor_callbacks->update_status)
+		kbdev->vendor_callbacks->update_status(kbdev, "completion_code", exception_type);
+
+	/* MALI_SEC_INTEGRATION */
 	if( kbdev->vendor_callbacks->debug_pagetable_info)
 		kbdev->vendor_callbacks->debug_pagetable_info(kctx, as->fault_addr);
 
@@ -1976,9 +1988,12 @@ void kbase_as_poking_timer_release_atom(struct kbase_device *kbdev, struct kbase
 	katom->poking = 0;
 }
 
-void kbase_mmu_interrupt_process(struct kbase_device *kbdev, struct kbase_context *kctx, struct kbase_as *as)
+/* MALI_SEC_INTEGRATION */
+int kbase_mmu_interrupt_process(struct kbase_device *kbdev, struct kbase_context *kctx, struct kbase_as *as)
 {
 	struct kbasep_js_device_data *js_devdata = &kbdev->js_data;
+	/* MALI_SEC_INTEGRATION */
+	int err = 0;
 
 	lockdep_assert_held(&kbdev->hwaccess_lock);
 
@@ -2017,8 +2032,8 @@ void kbase_mmu_interrupt_process(struct kbase_device *kbdev, struct kbase_contex
 				kbase_reset_gpu_locked(kbdev);
 		}
 #endif /* KBASE_GPU_RESET_EN */
-
-		return;
+		/* MALI_SEC_INTEGRATION */
+		return err;
 	}
 
 	if (kbase_as_has_bus_fault(as)) {
@@ -2055,14 +2070,23 @@ void kbase_mmu_interrupt_process(struct kbase_device *kbdev, struct kbase_contex
 		 */
 		KBASE_DEBUG_ASSERT(0 == object_is_on_stack(&as->work_busfault));
 		WARN_ON(work_pending(&as->work_busfault));
-		queue_work(as->pf_wq, &as->work_busfault);
-		atomic_inc(&kbdev->faults_pending);
+		/* MALI_SEC_INTEGRATION */
+		if (!queue_work(as->pf_wq, &as->work_busfault))
+			err = -EEXIST;
+		else
+			atomic_inc(&kbdev->faults_pending);
 	} else {
 		KBASE_DEBUG_ASSERT(0 == object_is_on_stack(&as->work_pagefault));
 		WARN_ON(work_pending(&as->work_pagefault));
-		queue_work(as->pf_wq, &as->work_pagefault);
-		atomic_inc(&kbdev->faults_pending);
+		/* MALI_SEC_INTEGRATION */
+		if (!queue_work(as->pf_wq, &as->work_pagefault))
+			err = -EEXIST;
+		else
+			atomic_inc(&kbdev->faults_pending);
 	}
+
+	/* MALI_SEC_INTEGRATION */
+	return err;
 }
 
 void kbase_flush_mmu_wqs(struct kbase_device *kbdev)

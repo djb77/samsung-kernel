@@ -627,7 +627,8 @@ static uint8_t maxdsm_byte_log_array[BEFORE_BUFSIZE];
 static uint32_t maxdsm_int_log_array[BEFORE_BUFSIZE];
 static uint8_t maxdsm_after_prob_byte_log_array[AFTER_BUFSIZE];
 static uint32_t maxdsm_after_prob_int_log_array[AFTER_BUFSIZE];
-static uint32_t maxdsm_int_log_max_array[LOGMAX_BUFSIZE];  
+static uint32_t maxdsm_int_log_max_array[LOGMAX_BUFSIZE];  /* excursion, coil temp, rdc, Fc */
+static uint32_t maxdsm_abnormal_mute;
 
 static struct param_info g_lbi[MAX_LOG_BUFFER_POS] = {
 	{
@@ -831,7 +832,8 @@ static void maxdsm_read_all(void)
 						g_pbi[pbi_idx - 1].addr);
 			}
 		} else {
-			dbg_maxdsm("failed regmap read...please check the maxdsm.param_size [%d] !!!",maxdsm.param_size);
+			dbg_maxdsm("failed regmap read...please check the maxdsm.param_size [%d] !!!",
+				maxdsm.param_size);
 		}
 		break;
 		}
@@ -866,7 +868,8 @@ static void maxdsm_write_all(void)
 						g_pbi[pbi_idx - 1].addr);
 			}
 		} else {
-			dbg_maxdsm("failed regmap write...please check the maxdsm.param_size [%d] !!!",maxdsm.param_size);
+			dbg_maxdsm("failed regmap write...please check the maxdsm.param_size [%d] !!!",
+				maxdsm.param_size);
 		}
 		break;
 		}
@@ -963,38 +966,42 @@ void maxdsm_log_update(const void *byte_log_array,
 		int_log_overcnt_array[i] = maxdsm_int_log_array[i];
 	}
 
-	memcpy(maxdsm_byte_log_array,
-			byte_log_array, sizeof(maxdsm_byte_log_array));
-	memcpy(maxdsm_int_log_array,
-			int_log_array, sizeof(maxdsm_int_log_array));
-	memcpy(maxdsm_after_prob_byte_log_array,
-			after_prob_byte_log_array,
-			sizeof(maxdsm_after_prob_byte_log_array));
-	memcpy(maxdsm_after_prob_int_log_array,
-			after_prob_int_log_array,
-			sizeof(maxdsm_after_prob_int_log_array));
+	if (((uint8_t *)byte_log_array)[0] & 0x3) {
+
+		memcpy(maxdsm_byte_log_array,
+				byte_log_array, sizeof(maxdsm_byte_log_array));
+		memcpy(maxdsm_int_log_array,
+				int_log_array, sizeof(maxdsm_int_log_array));
+		memcpy(maxdsm_after_prob_byte_log_array,
+				after_prob_byte_log_array,
+				sizeof(maxdsm_after_prob_byte_log_array));
+		memcpy(maxdsm_after_prob_int_log_array,
+				after_prob_int_log_array,
+				sizeof(maxdsm_after_prob_int_log_array));
+		maxdsm_abnormal_mute = maxdsm_int_log_max_array[2]; /* abnormal mute */
+
+		maxdsm_log_present = 1;
+	}
+
 	memcpy(maxdsm_int_log_max_array,
 			int_log_max_array, sizeof(maxdsm_int_log_max_array));
 
 	for (i = 0; i < 2; i++) {
-		if (log_max_prev_array[i] > maxdsm_int_log_max_array[i]) { /* [0] : excu max, [1] : temp max */
+		if (log_max_prev_array[i] > maxdsm_int_log_max_array[i]) {  /* [0] : excu max, [1] : temp max */
 			maxdsm_int_log_max_array[i] = log_max_prev_array[i];
 		}
-		maxdsm_int_log_array[i] += int_log_overcnt_array[i]; /* accumulate overcnt [0] : temp overcnt, [1] : excu overcnt */
+	   /* accumulate overcnt [0] : temp overcnt, [1] : excu overcnt */
+		maxdsm_int_log_array[i] = ((uint32_t *)int_log_array)[i] + int_log_overcnt_array[i];
 	}
-
 
 	do_gettimeofday(&tv);
 	time_to_tm(tv.tv_sec, 0, &maxdsm_log_timestamp);
 
-	if (maxdsm_byte_log_array[0] & 0x3)
-		maxdsm_log_present = 1;
-
 	maxdsm_log_max_present = 1;
 
 	dbg_maxdsm("[MAX|OVCNT] EX [%d|%d] TEMP [%d|%d]",
-			maxdsm_int_log_max_array[0], maxdsm_int_log_array[1],
-			maxdsm_int_log_max_array[1], maxdsm_int_log_array[0]);
+		maxdsm_int_log_max_array[0], maxdsm_int_log_array[1],
+		maxdsm_int_log_max_array[1], maxdsm_int_log_array[0]);
 
 	mutex_unlock(&maxdsm_log_lock);
 }
@@ -1073,6 +1080,7 @@ EXPORT_SYMBOL_GPL(maxdsm_get_dump_status);
 
 void maxdsm_update_param(void)
 {
+	memset(maxdsm.param, 0x00, maxdsm.param_size * sizeof(uint32_t));
 	switch (maxdsm.platform_type) {
 	case PLATFORM_TYPE_A:
 		maxdsm_regmap_write(g_lbi[WRITE_PROTECT].addr, 1);
@@ -1091,7 +1099,6 @@ void maxdsm_update_param(void)
 			new_log_avail |= 0x1;
 		break;
 	case PLATFORM_TYPE_C:
-		maxdsm_read_all();
 		maxim_dsm_read(PARAM_DSM_5_0_ABOX_GET_LOGGING,
 					sizeof(maxdsm_byte_log_array)+
 					sizeof(maxdsm_int_log_array)+
@@ -1141,6 +1148,7 @@ void maxdsm_log_max_prepare(struct maxim_dsm_log_max_values *values)
 }
 
 EXPORT_SYMBOL_GPL(maxdsm_log_max_prepare);
+
 void maxdsm_log_max_refresh(int values)
 {
 	switch (values) {
@@ -1157,11 +1165,10 @@ void maxdsm_log_max_refresh(int values)
 		maxdsm_int_log_array[0] = 0;
 		break;
 	default:
-		dbg_maxdsm("Not proper argument for refresh logging max value[%d].",values);
-		break;
+		dbg_maxdsm("Not proper argument for refresh logging max value[%d].", values);
+			break;
 	}
 }
-
 EXPORT_SYMBOL_GPL(maxdsm_log_max_refresh);
 
 ssize_t maxdsm_log_prepare(char *buf)
@@ -1193,8 +1200,7 @@ ssize_t maxdsm_log_prepare(char *buf)
 
 	uint32_t coil_temp_log_max;
 	uint32_t excur_log_max;
-	uint32_t rdc_log_max;
-	uint32_t freq_log_max;
+	uint32_t abnormal_mute;
 
 	int param_excur_limit = PARAM_A_EXCUR_LIMIT;
 	int param_thermal_limit = PARAM_A_THERMAL_LIMIT;
@@ -1282,9 +1288,8 @@ ssize_t maxdsm_log_prepare(char *buf)
 		= &after_int_log_array[LOG_BUFFER_ARRAY_SIZE*3];
 
 	coil_temp_log_max = int_log_max_array[0];
-	excur_log_max     = int_log_max_array[1];
-	rdc_log_max       = int_log_max_array[2];
-	freq_log_max      = int_log_max_array[3];
+	excur_log_max = int_log_max_array[1];
+	abnormal_mute = maxdsm_abnormal_mute;
 
 	if (log_available > 0 &&
 			(ex_seq_count_temp != seq_count_temp
@@ -1362,6 +1367,11 @@ ssize_t maxdsm_log_prepare(char *buf)
 	if ((log_available & 0x2) == 0x2) {
 		rc += snprintf(buf+rc, PAGE_SIZE,
 				"*** Temperature Limit was exceeded.\n");
+
+		if (abnormal_mute == 1)
+			rc += snprintf(buf+rc, PAGE_SIZE,
+					"*** mute caused by detect circuit cutoff or Rdc's value beyond the limit.\n");
+
 		rc += snprintf(buf+rc, PAGE_SIZE,
 				"Seq:%d, log_available=%d, version_id:3.1.%d\n",
 				seq_count_temp, log_available, version_id);
@@ -1645,13 +1655,13 @@ int maxdsm_update_feature_en_adc(int apply)
 }
 EXPORT_SYMBOL_GPL(maxdsm_update_feature_en_adc);
 
-int maxdsm_set_feature_en(int on)
+int maxdsm_set_feature_en(int on, uint32_t wflag)
 {
 	int index, ret = 0;
 	struct param_set_data data = {
 		.name = PARAM_FEATURE_SET,
 		.value = 0,
-		.wflag = FLAG_WRITE_FEATURE_ONLY,
+		.wflag = wflag,
 	};
 
 	maxdsm.filter_set = DSM_ID_FILTER_GET_AFE_PARAMS;
@@ -1691,7 +1701,14 @@ int maxdsm_set_feature_en(int on)
 				index, maxdsm_saved_params[index].value);
 	}
 
-	return maxdsm_set_param(&data, 1);
+	if (wflag == PARAM_WRITE_V_VALIDATION) {
+		ret = maxdsm_set_param(&data, 1);
+		maxdsm.tx_port_id |= 1 << 31;
+		ret = maxdsm_set_param(&data, 1);
+		maxdsm.tx_port_id &= ~(1 << 31);
+	} else
+		ret = maxdsm_set_param(&data, 1);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(maxdsm_set_feature_en);
 
@@ -1712,13 +1729,10 @@ int maxdsm_set_cal_mode(int on)
 
 	maxdsm.param[DSM_API_SETGET_WRITE_FLAG] = FLAG_WRITE_FEATURE_ONLY;
 
-	if (on)
-	{
-		if (maxdsm.param[DSM_API_SETGET_ENABLE_SMART_PT]) //SPT enabled
-		{
+	if (on)	{
+		if (maxdsm.param[DSM_API_SETGET_ENABLE_SMART_PT]) { /* SPT enabled */
 			maxdsm_spt_saved_params[index].value = maxdsm.param[DSM_API_SETGET_ENABLE_SMART_PT];
-
-		}else {  //SPT disabled
+		} else {  /* SPT disabled */
 			if (maxdsm.param[DSM_API_SETGET_ENABLE_RDC_CAL]) {
 				dbg_maxdsm("already Rdc cal mode!!!return!!");
 				return ret;
@@ -1734,8 +1748,7 @@ int maxdsm_set_cal_mode(int on)
 		dbg_maxdsm("maxdsm.param[%d]=0x%08x -> for enabled Rdc cal mode",
 				DSM_API_SETGET_ENABLE_RDC_CAL, maxdsm.param[DSM_API_SETGET_ENABLE_RDC_CAL]);
 
-	} else
-	{
+	} else {
 		maxdsm.param[DSM_API_SETGET_ENABLE_SMART_PT] = maxdsm_spt_saved_params[index].value;
 		maxdsm.param[DSM_API_SETGET_ENABLE_RDC_CAL] = 0;
 
@@ -1752,6 +1765,61 @@ int maxdsm_set_cal_mode(int on)
 }
 EXPORT_SYMBOL_GPL(maxdsm_set_cal_mode);
 
+int maxdsm_set_v_validation_mode(int on)
+{
+	int index, ret = 0;
+
+	maxdsm_read_all();
+
+	index = maxdsm_find_index_of_saved_params(
+				maxdsm_spt_saved_params,
+				sizeof(maxdsm_spt_saved_params)
+					/ sizeof(struct param_set_data),
+				DSM_API_SETGET_ENABLE_SMART_PT);
+
+	if (index < 0 || (maxdsm.platform_type != PLATFORM_TYPE_C))
+		return -ENODATA;
+
+	maxdsm.param[DSM_API_SETGET_WRITE_FLAG] = PARAM_WRITE_V_VALIDATION;
+
+	if (on) {
+		if (maxdsm.param[DSM_API_SETGET_ENABLE_SMART_PT]) { /* SPT enabled */
+			maxdsm_spt_saved_params[index].value = maxdsm.param[DSM_API_SETGET_ENABLE_SMART_PT];
+
+		} else {  /* SPT disabled */
+			if (maxdsm.param[DSM_API_SETGET_ENABLE_RDC_CAL]) {
+				dbg_maxdsm("already Rdc cal mode!!!return!!");
+				return ret;
+			}
+		}
+		maxdsm.param[DSM_API_SETGET_ENABLE_SMART_PT] = 0;
+		maxdsm.param[DSM_API_SETGET_ENABLE_RDC_CAL] = 1;
+
+		dbg_maxdsm("maxdsm.param[%d]=0x%08x -> for diabled SPT",
+				DSM_API_SETGET_ENABLE_SMART_PT, maxdsm.param[DSM_API_SETGET_ENABLE_SMART_PT]);
+		dbg_maxdsm("maxdsm_spt_saved_params[%d].value=0x%08x",
+				index, maxdsm_spt_saved_params[index].value);
+		dbg_maxdsm("maxdsm.param[%d]=0x%08x -> for enabled Rdc cal mode",
+				DSM_API_SETGET_ENABLE_RDC_CAL, maxdsm.param[DSM_API_SETGET_ENABLE_RDC_CAL]);
+
+	} else {
+		maxdsm.param[DSM_API_SETGET_ENABLE_SMART_PT] = maxdsm_spt_saved_params[index].value;
+		maxdsm.param[DSM_API_SETGET_ENABLE_RDC_CAL] = 0;
+
+		dbg_maxdsm("maxdsm.param[%d]=0x%08x -> for recovering SPT",
+				DSM_API_SETGET_ENABLE_SMART_PT, maxdsm.param[DSM_API_SETGET_ENABLE_SMART_PT]);
+		dbg_maxdsm("maxdsm_spt_saved_params[%d].value=0x%08x",
+				index, maxdsm_spt_saved_params[index].value);
+		dbg_maxdsm("maxdsm.param[%d]=0x%08x -> for disabled Rdc cal mode",
+				DSM_API_SETGET_ENABLE_RDC_CAL, maxdsm.param[DSM_API_SETGET_ENABLE_RDC_CAL]);
+	}
+
+	maxdsm_write_all();
+	return ret;
+}
+EXPORT_SYMBOL_GPL(maxdsm_set_v_validation_mode);
+
+
 int maxdsm_set_rdc_temp(int rdc, int temp)
 {
 	int ret = 0;
@@ -1759,24 +1827,24 @@ int maxdsm_set_rdc_temp(int rdc, int temp)
 	dbg_maxdsm("rdc=0x%08x temp=0x%08x", rdc, temp);
 
 	switch (maxdsm.platform_type) {
-		case PLATFORM_TYPE_B:
-			maxdsm.tx_port_id |= 1 << 31;
-			maxdsm.param[PARAM_WRITE_FLAG] = FLAG_WRITE_RDC_CAL_ONLY;
-			maxdsm.param[PARAM_VOICE_COIL] = rdc;
-			maxdsm.param[PARAM_AMBIENT_TEMP] = temp << 19;
-			maxdsm.filter_set = DSM_ID_FILTER_SET_AFE_CNTRLS;
-			ret = maxdsm_dsm_open(&maxdsm);
-			maxdsm.tx_port_id &= ~(1 << 31);
-			break;
-		case PLATFORM_TYPE_C:
-			maxdsm.param[DSM_API_SETGET_WRITE_FLAG] = FLAG_WRITE_RDC_CAL_ONLY;
-			maxdsm.param[DSM_API_SETGET_RDC_AT_ROOMTEMP] = rdc<<8;
-			maxdsm.param[DSM_API_SETGET_COLDTEMP] = temp << 19;
-			maxdsm_write_all();
-			break;
-		default:
-			dbg_maxdsm("Invalid platform type[%d]!!",maxdsm.platform_type);
-			break;
+	case PLATFORM_TYPE_B:
+		maxdsm.tx_port_id |= 1 << 31;
+		maxdsm.param[PARAM_WRITE_FLAG] = FLAG_WRITE_RDC_CAL_ONLY;
+		maxdsm.param[PARAM_VOICE_COIL] = rdc;
+		maxdsm.param[PARAM_AMBIENT_TEMP] = temp << 19;
+		maxdsm.filter_set = DSM_ID_FILTER_SET_AFE_CNTRLS;
+		ret = maxdsm_dsm_open(&maxdsm);
+		maxdsm.tx_port_id &= ~(1 << 31);
+		break;
+	case PLATFORM_TYPE_C:
+		maxdsm.param[DSM_API_SETGET_WRITE_FLAG] = FLAG_WRITE_RDC_CAL_ONLY;
+		maxdsm.param[DSM_API_SETGET_RDC_AT_ROOMTEMP] = rdc<<8;
+		maxdsm.param[DSM_API_SETGET_COLDTEMP] = temp << 19;
+		maxdsm_write_all();
+		break;
+	default:
+		dbg_maxdsm("Invalid platform type[%d]!!", maxdsm.platform_type);
+		break;
 	}
 
 	return ret;
@@ -1794,6 +1862,19 @@ int maxdsm_set_dsm_onoff_status(int on)
 			.wflag = FLAG_WRITE_ONOFF_ONLY,
 		},
 	};
+
+	switch (maxdsm.platform_type) {
+	case PLATFORM_TYPE_A:
+	case PLATFORM_TYPE_B:
+		break;
+	case PLATFORM_TYPE_C:
+		data[0].name = DSM_API_SETGET_ENABLE;
+		data[0].wflag = FLAG_WRITE_ALL;
+		break;
+	default:
+		dbg_maxdsm("Invalid platform type[%d]!!", maxdsm.platform_type);
+		break;
+	}
 
 	ret = maxdsm_set_param(
 			data,
@@ -1814,40 +1895,66 @@ uint32_t maxdsm_get_dcresistance(void)
 {
 	uint32_t dcresistance = 0;
 	switch (maxdsm.platform_type) {
-		case PLATFORM_TYPE_B:
-			maxdsm.tx_port_id |= 1 << 31;
-			maxdsm.filter_set = DSM_ID_FILTER_GET_AFE_PARAMS;
-			maxdsm_dsm_open(&maxdsm);
-			maxdsm.tx_port_id &= ~(1 << 31);
-			dcresistance = maxdsm.param[PARAM_RDC];
-			break;
-		case PLATFORM_TYPE_C:
-			maxdsm_read_all();
-			dcresistance = maxdsm.param[DSM_API_GET_ADAPTIVE_DC_RES];
-			break;
-		default:
-			dbg_maxdsm("Invalid platform type[%d]!!",maxdsm.platform_type);
-			break;
+	case PLATFORM_TYPE_B:
+		maxdsm.tx_port_id |= 1 << 31;
+		maxdsm.filter_set = DSM_ID_FILTER_GET_AFE_PARAMS;
+		maxdsm_dsm_open(&maxdsm);
+		maxdsm.tx_port_id &= ~(1 << 31);
+		dcresistance = maxdsm.param[PARAM_RDC];
+		break;
+	case PLATFORM_TYPE_C:
+		maxdsm_read_all();
+		dcresistance = maxdsm.param[DSM_API_GET_ADAPTIVE_DC_RES];
+		break;
+	default:
+		dbg_maxdsm("Invalid platform type[%d]!!", maxdsm.platform_type);
+		break;
 	}
 
 	return dcresistance;
 }
 EXPORT_SYMBOL_GPL(maxdsm_get_dcresistance);
 
+uint32_t maxdsm_get_v_validation(void)
+{
+	uint32_t v_validation = 0;
+
+	switch (maxdsm.platform_type) {
+	case PLATFORM_TYPE_B:
+		maxdsm.tx_port_id |= 1 << 31;
+		maxdsm.filter_set = DSM_ID_FILTER_GET_AFE_PARAMS;
+		maxdsm_dsm_open(&maxdsm);
+		maxdsm.tx_port_id &= ~(1 << 31);
+		v_validation = maxdsm.param[PARAM_V_VALIDATION];
+		break;
+	case PLATFORM_TYPE_C:
+		maxdsm_read_all();
+		v_validation = maxdsm.param[DSM_API_GET_V_VALIDATION];
+		break;
+	default:
+		dbg_maxdsm("Invalid platform type[%d]!!", maxdsm.platform_type);
+		break;
+	}
+
+	return v_validation;
+}
+EXPORT_SYMBOL_GPL(maxdsm_get_v_validation);
+
+
 uint32_t maxdsm_get_dsm_onoff_status(void)
 {
 	uint32_t dsm_onoff = 0;
 
 	switch (maxdsm.platform_type) {
-		case PLATFORM_TYPE_B:
-			dsm_onoff = maxdsm.param[PARAM_ONOFF];
-			break;
-		case PLATFORM_TYPE_C:
-			dsm_onoff = maxdsm.param[DSM_API_SETGET_ENABLE];
-			break;
-		default:
-			dbg_maxdsm("Invalid platform type[%d]!!",maxdsm.platform_type);
-			break;
+	case PLATFORM_TYPE_B:
+		dsm_onoff = maxdsm.param[PARAM_ONOFF];
+		break;
+	case PLATFORM_TYPE_C:
+		dsm_onoff = maxdsm.param[DSM_API_SETGET_ENABLE];
+		break;
+	default:
+		dbg_maxdsm("Invalid platform type[%d]!!", maxdsm.platform_type);
+		break;
 	}
 	return dsm_onoff;
 }
@@ -1906,8 +2013,8 @@ int maxdsm_update_param_info(struct maxim_dsm *maxdsm)
 		15, 27, 29,
 		/* STIMPEDMODEL_CEFS_A1, A2, B0, B1, B2 */
 		30, 30, 27, 27, 27,
-		/* STIMPEDEMODEL_FLAG, Q_NOTCH, POWER */
-		0, 0, 8,
+		/* STIMPEDEMODEL_FLAG, Q_NOTCH, POWER , v_validation */
+		0, 0, 8, 0,
 	};
 
 	uint32_t binfo_a_v35[A_V35_SIZE] = {
@@ -1960,9 +2067,8 @@ int maxdsm_update_param_info(struct maxim_dsm *maxdsm)
 		22, 23, 24, 8,
 	};
 
-	for (i=0;i<PARAM_DSM_5_0_MAX;i++) {
+	for (i = 0; i < PARAM_DSM_5_0_MAX; i++)
 		binfo_c_v50[i] = 0;
-	}
 
 	/* Try to get parameter size. */
 	switch (maxdsm->version) {
@@ -2183,7 +2289,7 @@ int maxdsm_set_pilot_signal_state(int on)
 
 		/* set pilot signal on/off */
 		maxdsm.param[DSM_API_SETGET_WRITE_FLAG] = FLAG_WRITE_FEATURE_ONLY;
-  		maxdsm.param[DSM_API_SETGET_PILOT_ENABLE] = on;
+		maxdsm.param[DSM_API_SETGET_PILOT_ENABLE] = on;
 		maxdsm_write_all();
 
 		/* check feature_set parameter */
@@ -2252,7 +2358,8 @@ int maxdsm_update_caldata(int on)
 				}
 			}
 		} else {
-			dbg_maxdsm("failed update caldata...please check the platform A maxdsm.param_size [%d] !!!",maxdsm.param_size);
+			dbg_maxdsm("failed update caldata...please check the platform A maxdsm.param_size [%d] !!!",
+				maxdsm.param_size);
 		}
 		break;
 	case PLATFORM_TYPE_B:
@@ -2267,7 +2374,8 @@ int maxdsm_update_caldata(int on)
 			maxdsm.filter_set = DSM_ID_FILTER_SET_AFE_CNTRLS;
 			maxdsm_dsm_open(&maxdsm);
 		} else {
-			dbg_maxdsm("failed update caldata...please check the platform B maxdsm.param_size [%d] !!!",maxdsm.param_size);
+			dbg_maxdsm("failed update caldata...please check the platform B maxdsm.param_size [%d] !!!",
+				maxdsm.param_size);
 		}
 		break;
 	}
@@ -2284,23 +2392,24 @@ static void maxdsm_store_caldata(void)
 {
 	int x;
 	switch (maxdsm.platform_type) {
-		case PLATFORM_TYPE_A:
-		case PLATFORM_TYPE_B:
-			if (maxdsm.param_size <= PARAM_A_DSM_4_0_MAX) {
-				for (x = 0; x < (maxdsm.param_size >> 1); x++) {
-					g_pbi[x].val = maxdsm.param[x<<1];
-					dbg_maxdsm("[%d]: 0x%08x",
-							x, g_pbi[x].val);
-				}
-
-				maxdsm.update_cal = 1;
-			} else {
-				dbg_maxdsm("failed store caldata...please check the maxdsm.param_size [%d] !!!",maxdsm.param_size);
+	case PLATFORM_TYPE_A:
+	case PLATFORM_TYPE_B:
+		if (maxdsm.param_size <= PARAM_A_DSM_4_0_MAX) {
+			for (x = 0; x < (maxdsm.param_size >> 1); x++) {
+				g_pbi[x].val = maxdsm.param[x<<1];
+				dbg_maxdsm("[%d]: 0x%08x",
+						x, g_pbi[x].val);
 			}
-			break;
-		default:
-			x=0;
-			break;
+
+			maxdsm.update_cal = 1;
+		} else {
+			dbg_maxdsm("failed store caldata...please check the maxdsm.param_size [%d] !!!",
+				maxdsm.param_size);
+		}
+		break;
+	default:
+		x = 0;
+		break;
 	}
 }
 #endif /* USE_DSM_UPDATE_CAL */

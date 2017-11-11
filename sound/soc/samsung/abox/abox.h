@@ -325,6 +325,7 @@
 #define ABOX_CPU_GEAR_CALL_VSS		(0xCA11)
 #define ABOX_CPU_GEAR_CALL_KERNEL	(0xCA12)
 #define ABOX_CPU_GEAR_CALL		ABOX_CPU_GEAR_CALL_VSS
+#define ABOX_CPU_GEAR_BOOT		(0xB00D)
 #define ABOX_CPU_GEAR_LOWER_LIMIT	(12)
 
 #define ABOX_DMA_TIMEOUT_US		(40000)
@@ -524,6 +525,7 @@ struct abox_data {
 	struct work_struct l2c_work;
 	struct notifier_block pm_nb;
 	struct notifier_block modem_nb;
+	struct notifier_block itmon_nb;
 	int pm_qos_int[5];
 	struct ima_client *ima_client;
 	void *ima_vaddr;

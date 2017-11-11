@@ -196,6 +196,9 @@ void kbase_pm_suspend(struct kbase_device *kbdev)
 	 * go up briefly before going down again. However, once it reaches zero it
 	 * will stay there - guaranteeing that we've idled all pm references */
 
+	/* MALI_SEC_INTEGRATION */
+	KBASE_TRACE_ADD(kbdev, LSI_PM_SUSPEND, NULL, NULL, 0, 0);
+
 	/* Suspend job scheduler and associated components, so that it releases all
 	 * the PM active count references */
 	kbasep_js_suspend(kbdev);

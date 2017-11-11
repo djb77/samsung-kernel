@@ -492,6 +492,15 @@ struct mem_link_device {
 	struct crash_reason crash_reason;
 
 	struct notifier_block reboot_nb;
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	struct net_device dummy_net;
+	struct napi_struct mld_napi;
+	unsigned int rx_int_enable;
+	unsigned int rx_int_count;
+	unsigned int rx_poll_count;
+	unsigned long long rx_int_disabled_time;
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 };
 
 #define to_mem_link_device(ld) \

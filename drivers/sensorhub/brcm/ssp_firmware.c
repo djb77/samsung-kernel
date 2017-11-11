@@ -15,7 +15,7 @@
 #include "ssp.h"
 
 #if defined (CONFIG_SENSORS_SSP_DREAM)
-#define SSP_FIRMWARE_REVISION_BCM	17070500
+#define SSP_FIRMWARE_REVISION_BCM	17080200  /*Dream Android N*/
 #else
 #define SSP_FIRMWARE_REVISION_BCM	00000000
 #endif

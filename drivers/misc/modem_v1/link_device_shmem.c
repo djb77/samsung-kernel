@@ -40,6 +40,7 @@
 #include <soc/samsung/ect_parser.h>
 #endif
 
+#include <trace/events/napi.h>
 #include "modem_prj.h"
 #include "modem_utils.h"
 #include "link_device_memory.h"
@@ -1486,7 +1487,8 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 }
 
 #define FREE_RB_BUF_COUNT 200
-static int rx_net_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb, int budget)
+static int rx_net_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb,
+		int budget, int *work_done)
 {
 	int rcvd = 0;
 	struct link_device *ld = rb->ld;
@@ -1496,10 +1498,10 @@ static int rx_net_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb, int b
 	int use_memcpy = 0;
 
 #ifdef CONFIG_LINK_DEVICE_NAPI
-	num_frames = min_t(unsigned int, zerocopy_adaptor_usage(zdptr), budget);
-#else
-	num_frames = zerocopy_adaptor_usage(zdptr);
-#endif
+	num_frames = min_t(unsigned int, rb_usage(rb), budget);
+#else /* !CONFIG_LINK_DEVICE_NAPI */
+	num_frames = rb_usage(rb);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	if (mld->force_use_memcpy || (num_frames > ld->mif_buff_mng->free_cell_count)
 		|| (FREE_RB_BUF_COUNT > circ_get_space(zdptr->len, *(zdptr->rp), *(zdptr->wp)))) {
@@ -1532,12 +1534,18 @@ static int rx_net_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb, int b
 			ld->name, iod->name, mc->name, rcvd, num_frames);
 	}
 
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	*work_done = rcvd;
+	allocate_data_in_advance(zdptr);
+#else /* !CONFIG_LINK_DEVICE_NAPI */
 	start_datalloc_timer(mld, &zdptr->datalloc_timer);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	return rcvd;
 }
 
-static int rx_net_frames_from_rb(struct sbd_ring_buffer *rb, int budget)
+static int rx_net_frames_from_rb(struct sbd_ring_buffer *rb, int budget,
+		int *work_done)
 {
 	int rcvd = 0;
 	struct link_device *ld = rb->ld;
@@ -1546,9 +1554,9 @@ static int rx_net_frames_from_rb(struct sbd_ring_buffer *rb, int budget)
 
 #ifdef CONFIG_LINK_DEVICE_NAPI
 	num_frames = min_t(unsigned int, rb_usage(rb), budget);
-#else
+#else /* !CONFIG_LINK_DEVICE_NAPI */
 	num_frames = rb_usage(rb);
-#endif
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	while (rcvd < num_frames) {
 		struct sk_buff *skb;
@@ -1571,6 +1579,10 @@ static int rx_net_frames_from_rb(struct sbd_ring_buffer *rb, int budget)
 		mif_err("%s: %s<-%s: WARN! rcvd %d < num_frames %d\n",
 			ld->name, iod->name, mc->name, rcvd, num_frames);
 	}
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	*work_done = rcvd;
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	return rcvd;
 }
@@ -1674,36 +1686,63 @@ static int rx_ipc_frames_from_rb(struct sbd_ring_buffer *rb)
 	return rcvd;
 }
 
-int mem_netdev_poll(struct napi_struct *napi, int budget)
+#ifdef CONFIG_LINK_DEVICE_NAPI
+static int shmem_poll_recv_on_iod(struct link_device *ld, struct io_device *iod,
+		int budget)
 {
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	struct sbd_ring_buffer *rb = sbd_ch2rb(&mld->sbd_link_dev, iod->id, RX);
 	int rcvd;
-	struct vnet *vnet = netdev_priv(napi->dev);
-	struct mem_link_device *mld =
-		container_of(vnet->ld, struct mem_link_device, link_dev);
-	struct sbd_ring_buffer *rb =
-		sbd_ch2rb(&mld->sbd_link_dev, vnet->iod->id, RX);
+	int ret;
+
+	iod->rx_poll_count++;
 
 	if (rb->zerocopy)
-		rcvd = rx_net_frames_from_zerocopy_adaptor(rb, budget);
+		ret = rx_net_frames_from_zerocopy_adaptor(rb, budget, &rcvd);
 	else
-		rcvd = rx_net_frames_from_rb(rb, budget);
+		ret = rx_net_frames_from_rb(rb, budget, &rcvd);
 
-	/* no more ring buffer to process */
-	if (rcvd < budget) {
-		napi_complete(napi);
-		/* To do: enable mailbox irq */
-	}
-
-	mif_debug("%d pkts\n", rcvd);
+	if (IS_ERR_VALUE(ret))
+		mif_err("RX error (%d)\n", ret);
 
 	return rcvd;
 }
 
+static ktime_t rx_int_enable_time;
+static ktime_t rx_int_disable_time;
+
+static int shmem_enable_rx_int(struct link_device *ld)
+{
+	struct mem_link_device *mld = to_mem_link_device(ld);
+
+	mld->rx_int_enable = 1;
+	if (rx_int_disable_time.tv64) {
+		rx_int_enable_time = ktime_get();
+		mld->rx_int_disabled_time += ktime_to_us(
+			ktime_sub(rx_int_enable_time, rx_int_disable_time));
+		rx_int_enable_time.tv64 = 0;
+		rx_int_disable_time.tv64 = 0;
+	}
+	return mbox_enable_irq(MCU_CP, mld->irq_cp2ap_msg);
+}
+
+static int shmem_disable_rx_int(struct link_device *ld)
+{
+	struct mem_link_device *mld = to_mem_link_device(ld);
+
+	mld->rx_int_enable = 0;
+	rx_int_disable_time = ktime_get();
+	return mbox_disable_irq(MCU_CP, mld->irq_cp2ap_msg);
+}
+#endif /* CONFIG_LINK_DEVICE_NAPI */
+
 static int recv_sbd_ipc_frames(struct mem_link_device *mld,
-				struct mem_snapshot *mst)
+				struct mem_snapshot *mst, int budget)
 {
 	struct sbd_link_device *sl = &mld->sbd_link_dev;
 	int i;
+	int total_ps_rcvd = 0;
+	int total_non_ps_rcvd = 0;
 
 	for (i = 0; i < sl->num_channels; i++) {
 		struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, RX);
@@ -1713,27 +1752,25 @@ static int recv_sbd_ipc_frames(struct mem_link_device *mld,
 			continue;
 
 		if (likely(sipc_ps_ch(rb->ch))) {
-#ifdef CONFIG_LINK_DEVICE_NAPI
-			/* To do: disable mailbox irq */
-			if (napi_schedule_prep(&rb->iod->napi))
-				__napi_schedule(&rb->iod->napi);
-#else
 			if (rb->zerocopy)
-				rcvd = rx_net_frames_from_zerocopy_adaptor(rb, 0);
+				rcvd = rx_net_frames_from_zerocopy_adaptor(rb,
+						budget, &rcvd);
 			else
-				rcvd = rx_net_frames_from_rb(rb, 0);
-#endif
+				rcvd = rx_net_frames_from_rb(rb, budget, &rcvd);
+			budget -= rcvd;
+			total_ps_rcvd += rcvd;
 		} else {
 			if (rb->zerocopy)
 				rcvd = rx_ipc_frames_from_zerocopy_adaptor(rb);
 			else
 				rcvd = rx_ipc_frames_from_rb(rb);
+			total_non_ps_rcvd += rcvd;
 		}
 
 		if (rcvd < 0)
 			return rcvd;
 	}
-	return 0;
+	return total_ps_rcvd;
 }
 
 static void shmem_oom_handler_work(struct work_struct *ws)
@@ -1754,9 +1791,11 @@ static void shmem_oom_handler_work(struct work_struct *ws)
 	tasklet_schedule(&mld->rx_tsk);
 }
 
-static void ipc_rx_func(struct mem_link_device *mld)
+static int ipc_rx_func(struct mem_link_device *mld, int budget)
 {
 	u32 qlen = mld->msb_rxq.qlen;
+	int total_ps_rcvd = 0;
+	int ps_rcvd = 0;
 
 	while (qlen-- > 0) {
 		struct mst_buff *msb;
@@ -1772,9 +1811,15 @@ static void ipc_rx_func(struct mem_link_device *mld)
 		if (cmd_valid(intr))
 			mld->cmd_handler(mld, int2cmd(intr));
 
-		if (sbd_active(&mld->sbd_link_dev))
-			ret = recv_sbd_ipc_frames(mld, &msb->snapshot);
-		else
+		if (sbd_active(&mld->sbd_link_dev)) {
+			ps_rcvd = recv_sbd_ipc_frames(mld,
+					&msb->snapshot, budget);
+			if (ps_rcvd >= 0)
+				total_ps_rcvd += ps_rcvd;
+			else
+				ret = ps_rcvd;
+
+		} else
 			ret = recv_ipc_frames(mld, &msb->snapshot);
 
 		if (ret == -ENOMEM) {
@@ -1785,13 +1830,12 @@ static void ipc_rx_func(struct mem_link_device *mld)
 				queue_work(ld->rx_wq,
 						&mld->page_reclaim_work);
 			}
-			return;
+			return 0;
 		}
 		msb_free(msb);
 	}
 
-	if (mld->msb_rxq.qlen)
-		tasklet_schedule(&mld->rx_tsk);
+	return total_ps_rcvd;
 }
 
 static void udl_rx_work(struct work_struct *ws)
@@ -1800,7 +1844,7 @@ static void udl_rx_work(struct work_struct *ws)
 
 	mld = container_of(ws, struct mem_link_device, udl_rx_dwork.work);
 
-	ipc_rx_func(mld);
+	ipc_rx_func(mld, 0);
 }
 
 static void shmem_rx_task(unsigned long data)
@@ -1810,7 +1854,7 @@ static void shmem_rx_task(unsigned long data)
 	struct modem_ctl *mc = ld->mc;
 
 	if (likely(cp_online(mc)))
-		ipc_rx_func(mld);
+		ipc_rx_func(mld, 0);
 	else
 		queue_delayed_work(ld->rx_wq, &mld->udl_rx_dwork, 0);
 }
@@ -2095,12 +2139,115 @@ exit:
 	return err;
 }
 
+#ifdef CONFIG_LINK_DEVICE_NAPI
+static int shmem_enqueue_snapshot(struct mem_link_device *mld);
+
+/*
+ * mld_rx_int_poll
+ *
+ * This NAPI poll function does not handle reception of any network frames.
+ * It is used for servicing CP2AP commands and FMT RX frames while the RX
+ * mailbox interrupt is masked. When the mailbox interrupt is masked, CP can
+ * set the interrupt but the AP will not react. However, the interrupt status
+ * bit will still be set, so we can poll the status bit to handle new RX
+ * interrupts.
+ * If the RAW NAPI functions are no longer scheduled at the end of this poll
+ * function, we can enable the mailbox interrupt and stop polling.
+ */
+static int mld_rx_int_poll(struct napi_struct *napi, int budget)
+{
+	struct mem_link_device *mld = container_of(napi, struct mem_link_device,
+			mld_napi);
+	struct link_device *ld = &mld->link_dev;
+	struct modem_ctl *mc = ld->mc;
+	struct sbd_link_device *sl = &mld->sbd_link_dev;
+	int total_ps_rcvd = 0;
+	int ps_rcvd = 0;
+	int i;
+	int ret;
+	int total_budget;
+
+	ret = mbox_check_irq(MCU_CP, mld->irq_cp2ap_msg);
+	if (IS_ERR_VALUE(ret))
+		goto dummy_poll_complete;
+
+	mld->rx_poll_count++;
+
+	if (ret) {
+		/* If there was a new interrupt,
+		 * do what irq_handler would have done.
+		 */
+		if (shmem_enqueue_snapshot(mld))
+			goto dummy_poll_complete;
+
+		if (likely(cp_online(mc)))
+			total_ps_rcvd = ipc_rx_func(mld, budget);
+		else
+			queue_delayed_work(ld->rx_wq, &mld->udl_rx_dwork, 0);
+
+		if (total_ps_rcvd) {
+			if (total_ps_rcvd < budget) {
+				napi_complete_done(napi, total_ps_rcvd);
+				ld->enable_rx_int(ld);
+			}
+			return total_ps_rcvd;
+		} else
+			goto dummy_poll_complete;
+	} else {
+		/* Leave interrupt disabled
+		 * and poll if NET polling is not finished.
+		 */
+		total_budget = budget;
+		for (i = 0; i < sl->num_channels; i++) {
+			struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, RX);
+
+			if (likely(sipc_ps_ch(rb->ch))) {
+				ps_rcvd = shmem_poll_recv_on_iod(ld,
+						rb->iod, budget);
+				budget -= ps_rcvd;
+				total_ps_rcvd += ps_rcvd;
+			}
+		}
+
+		if (total_ps_rcvd) {
+			if (total_ps_rcvd < total_budget) {
+				napi_complete_done(napi, total_ps_rcvd);
+				ld->enable_rx_int(ld);
+			}
+		} else {
+			napi_complete(napi);
+			ld->enable_rx_int(ld);
+		}
+
+		return total_ps_rcvd;
+	}
+
+dummy_poll_complete:
+	napi_complete(napi);
+	ld->enable_rx_int(ld);
+
+	return 0;
+}
+
+static void sync_net_dev(struct link_device *ld)
+{
+	struct mem_link_device *mld = to_mem_link_device(ld);
+
+	napi_synchronize(&mld->mld_napi);
+	mif_info("%s\n", netdev_name(&mld->dummy_net));
+}
+#endif /* CONFIG_LINK_DEVICE_NAPI */
+
 static int shmem_start_download(struct link_device *ld, struct io_device *iod)
 {
 	struct mem_link_device *mld = to_mem_link_device(ld);
 
 	if (ld->sbd_ipc && mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP))
 		sbd_deactivate(&mld->sbd_link_dev);
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	sync_net_dev(ld);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	reset_ipc_map(mld);
 
@@ -2157,6 +2304,10 @@ static int shmem_start_upload(struct link_device *ld, struct io_device *iod)
 
 	if (ld->sbd_ipc && mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP))
 		sbd_deactivate(&mld->sbd_link_dev);
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	sync_net_dev(ld);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	reset_ipc_map(mld);
 
@@ -2400,33 +2551,53 @@ static void shmem_tx_state_handler(void *data)
 	}
 }
 
-static void shmem_irq_handler(void *data)
+static int shmem_enqueue_snapshot(struct mem_link_device *mld)
 {
-	struct mem_link_device *mld = (struct mem_link_device *)data;
 	struct mst_buff *msb;
 	struct link_device *ld = &mld->link_dev;
 	struct modem_ctl *mc = ld->mc;
 
 	msb = mem_take_snapshot(mld, RX);
 	if (!msb)
-		return;
+		return -ENOMEM;
 
 	if (unlikely(!int_valid(msb->snapshot.int2ap))) {
 		mif_err("%s: ERR! invalid intr 0x%X\n",
 				ld->name, msb->snapshot.int2ap);
 		msb_free(msb);
-		return;
+		return -EINVAL;
 	}
 
 	if (unlikely(!rx_possible(mc))) {
 		mif_err("%s: ERR! %s.state == %s\n", ld->name, mc->name,
 			mc_state(mc));
 		msb_free(msb);
-		return;
+		return -EINVAL;
 	}
 
 	msb_queue_tail(&mld->msb_rxq, msb);
+
+	return 0;
+}
+
+static void shmem_irq_handler(void *data)
+{
+	struct mem_link_device *mld = (struct mem_link_device *)data;
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	mld->rx_int_count++;
+	if (napi_schedule_prep(&mld->mld_napi)) {
+		struct link_device *ld = &mld->link_dev;
+
+		ld->disable_rx_int(ld);
+		__napi_schedule(&mld->mld_napi);
+	}
+#else /* !CONFIG_LINK_DEVICE_NAPI */
+	if (shmem_enqueue_snapshot(mld))
+		return;
+
 	tasklet_schedule(&mld->rx_tsk);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 }
 
 static struct pm_qos_request pm_qos_req_mif;
@@ -2963,6 +3134,189 @@ static const struct attribute_group shmem_group = {		\
 	.name = "shmem",
 };
 
+#ifdef CONFIG_LINK_DEVICE_NAPI
+static char *napi_state_string[8] = {
+	"NAPI_STATE_COMPLETE",
+	"NAPI_STATE_SCHED",
+	"NAPI_STATE_DISABLE",
+	"NAPI_STATE_NPSVC",
+	"NAPI_STATE_HASHED",
+};
+
+static ssize_t rx_napi_list_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+	struct napi_struct *n;
+	struct net_device *netdev;
+	struct sbd_link_device *sl;
+	int i;
+	ssize_t count = 0;
+
+	modem = (struct modem_data *)dev->platform_data;
+	netdev = &modem->mld->dummy_net;
+	sl = &modem->mld->sbd_link_dev;
+
+	count += sprintf(&buf[count],
+		"[%s`s napi_list]\n", netdev_name(netdev));
+	list_for_each_entry(n, &netdev->napi_list, dev_list)
+		count += sprintf(&buf[count],
+				"state:%s(%ld), weight:%d, poll:0x%p\n",
+				napi_state_string[n->state], n->state,
+				n->weight, (void *)n->poll);
+
+	for (i = 0; i < sl->num_channels; i++) {
+		struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, RX);
+
+		if (likely(sipc_ps_ch(rb->ch))) {
+			netdev = rb->iod->ndev;
+			count += sprintf(&buf[count],
+				"[%s`s napi_list]\n", netdev_name(netdev));
+			list_for_each_entry(n, &netdev->napi_list, dev_list)
+				count += sprintf(&buf[count],
+					"state:%s(%ld), weight:%d, poll:0x%p\n",
+					napi_state_string[n->state], n->state,
+					n->weight, (void *)n->poll);
+		}
+	}
+	return count;
+}
+
+static ssize_t rx_int_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+
+	modem = (struct modem_data *)dev->platform_data;
+	return sprintf(buf, "%d\n", modem->mld->rx_int_enable);
+}
+
+static ssize_t rx_int_count_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+
+	modem = (struct modem_data *)dev->platform_data;
+	return sprintf(buf, "%d\n", modem->mld->rx_int_count);
+}
+
+static ssize_t rx_int_count_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct modem_data *modem;
+	int val = 0;
+	int ret;
+
+	modem = (struct modem_data *)dev->platform_data;
+	ret = sscanf(buf, "%u", &val);
+
+	if (val == 0)
+		modem->mld->rx_int_count = 0;
+	return count;
+}
+
+static ssize_t rx_poll_count_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+	struct io_device *iod;
+	struct sbd_link_device *sl;
+	struct mem_link_device *mld;
+	ssize_t count = 0;
+	int i;
+
+	modem = (struct modem_data *)dev->platform_data;
+	sl = &modem->mld->sbd_link_dev;
+	mld = modem->mld;
+
+	count += sprintf(&buf[count],
+		"%s: %d\n", netdev_name(&mld->dummy_net), mld->rx_poll_count);
+
+	for (i = 0; i < sl->num_channels; i++) {
+		struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, RX);
+
+		if (likely(sipc_ps_ch(rb->ch))) {
+			iod = rb->iod;
+			count += sprintf(&buf[count],
+				"%s: %d\n", iod->name, iod->rx_poll_count);
+		}
+	}
+	return count;
+}
+
+static ssize_t rx_poll_count_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct modem_data *modem;
+	struct io_device *iod;
+	struct sbd_link_device *sl;
+	struct mem_link_device *mld;
+	int i;
+
+	modem = (struct modem_data *)dev->platform_data;
+	sl = &modem->mld->sbd_link_dev;
+	mld = modem->mld;
+
+	for (i = 0; i < sl->num_channels; i++) {
+		struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, RX);
+
+		if (likely(sipc_ps_ch(rb->ch))) {
+			iod = rb->iod;
+			iod->rx_poll_count = 0;
+		}
+	}
+	mld->rx_poll_count = 0;
+	return count;
+}
+
+static ssize_t rx_int_disabled_time_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+
+	modem = (struct modem_data *)dev->platform_data;
+	return sprintf(buf, "%lld\n", modem->mld->rx_int_disabled_time);
+}
+
+static ssize_t rx_int_disabled_time_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct modem_data *modem;
+	int val = 0;
+	int ret;
+
+	modem = (struct modem_data *)dev->platform_data;
+	ret = sscanf(buf, "%u", &val);
+
+	if (val == 0)
+		modem->mld->rx_int_disabled_time = 0;
+	return count;
+}
+
+static DEVICE_ATTR_RO(rx_napi_list);
+static DEVICE_ATTR_RO(rx_int_enable);
+static DEVICE_ATTR_RW(rx_int_count);
+static DEVICE_ATTR_RW(rx_poll_count);
+static DEVICE_ATTR_RW(rx_int_disabled_time);
+
+static struct attribute *napi_attrs[] = {
+	&dev_attr_rx_napi_list.attr,
+	&dev_attr_rx_int_enable.attr,
+	&dev_attr_rx_int_count.attr,
+	&dev_attr_rx_poll_count.attr,
+	&dev_attr_rx_int_disabled_time.attr,
+	NULL,
+};
+
+static const struct attribute_group napi_group = {
+	.attrs = napi_attrs,
+	.name = "napi",
+};
+#endif
+
 struct link_device *shmem_create_link_device(struct platform_device *pdev)
 {
 	struct modem_data *modem;
@@ -3072,6 +3426,16 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 	ld->close_tx = shmem_close_tx;
 	ld->crash_reason = shmem_crash_reason;
 	ld->airplane_mode = shmem_airplane_mode;
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	ld->poll_recv_on_iod = shmem_poll_recv_on_iod;
+
+	ld->enable_rx_int = shmem_enable_rx_int;
+	ld->disable_rx_int = shmem_disable_rx_int;
+
+	init_dummy_netdev(&mld->dummy_net);
+	netif_napi_add(&mld->dummy_net, &mld->mld_napi, mld_rx_int_poll, 64);
+	napi_enable(&mld->mld_napi);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	INIT_LIST_HEAD(&ld->list);
 
@@ -3355,7 +3719,12 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 	mld->tx_period_ms = TX_PERIOD_MS;
 
 	if (sysfs_create_group(&pdev->dev.kobj, &shmem_group))
-		mif_err("failed to create tx_period_ms node\n");
+		mif_err("failed to create sysfs node related shmem\n");
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	if (sysfs_create_group(&pdev->dev.kobj, &napi_group))
+		mif_err("failed to create sysfs node related napi\n");
+#endif
 
 	/* Initialize MIF buffer */
 	if (modem->buff_offset != 0 && modem->buff_size != 0) {

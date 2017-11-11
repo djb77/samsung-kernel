@@ -388,8 +388,8 @@ static void exynos_usbdrd_fill_hstune(struct exynos_usbdrd_phy *phy_drd,
 			hs_tune->rx_sqrx	 = 0x7;
 			hs_tune->compdis	 = 0x0;
 			hs_tune->otg		 = 0x4;
-			hs_tune->enalbe_user_imp = false;
-			hs_tune->utim_clk	 = USBPHY_UTMI_PHYCLOCK;
+			hs_tune->enable_user_imp = false;
+			hs_tune->utmi_clk	 = USBPHY_UTMI_PHYCLOCK;
 		}
 		break;
 
@@ -405,8 +405,8 @@ static void exynos_usbdrd_fill_hstune(struct exynos_usbdrd_phy *phy_drd,
 			hs_tune->rx_sqrx	 = 0x3;
 			hs_tune->compdis	 = 0x2;
 			hs_tune->otg		 = 0x3;
-			hs_tune->enalbe_user_imp = false;
-			hs_tune->utim_clk	 = USBPHY_UTMI_PHYCLOCK;
+			hs_tune->enable_user_imp = false;
+			hs_tune->utmi_clk	 = USBPHY_UTMI_PHYCLOCK;
 		}
 		break;
 	default:
@@ -484,7 +484,6 @@ static void exynos_usbdrd_set_sstune(struct exynos_usbdrd_phy *phy_drd,
 
 	}
 }
-
 
 /*
  * Sets the default PHY tuning values for super-speed connection.
@@ -629,20 +628,20 @@ static int exynos_usbdrd_get_phyinfo(struct exynos_usbdrd_phy *phy_drd)
 			phy_drd->usbphy_info.refsel =
 						USBPHY_REFSEL_DIFF_INTERNAL;
 			phy_drd->usbphy_info.use_io_for_ovc = true;
-			phy_drd->usbphy_info.common_block_enable = false;
+			phy_drd->usbphy_info.common_block_disable = false;
 		} else {
 			phy_drd->usbphy_info.version = EXYNOS_USBCON_VER_02_1_1;
 			phy_drd->usbphy_info.refsel =
 						USBPHY_REFCLK_EXT_12MHZ;
 			phy_drd->usbphy_info.use_io_for_ovc = false;
-			phy_drd->usbphy_info.common_block_enable = false;
+			phy_drd->usbphy_info.common_block_disable = false;
 		}
 		break;
 	case TYPE_EXYNOS8895:
 		phy_drd->usbphy_info.version = EXYNOS_USBCON_VER_01_1_1;
-		phy_drd->usbphy_info.refsel = USBPHY_REFSEL_DIFF_INTERNAL;
-		phy_drd->usbphy_info.use_io_for_ovc = true;
-		phy_drd->usbphy_info.common_block_enable = false;
+		phy_drd->usbphy_info.refsel = USBPHY_REFSEL_CLKCORE;
+		phy_drd->usbphy_info.use_io_for_ovc = false;
+		phy_drd->usbphy_info.common_block_disable = false;
 
 		phy_drd->usbphy_info.regs_base_2nd = phy_drd->reg_phy2;
 		phy_drd->usbphy_info.used_phy_port = 0;

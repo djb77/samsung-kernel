@@ -265,7 +265,7 @@ static int maxdsm_cal_start_calibration(
 		break;
 	case PLATFORM_TYPE_B:
 #ifdef CONFIG_SND_SOC_MAXIM_DSM
-		if (maxdsm_set_feature_en(1))
+		if (maxdsm_set_feature_en(1, FLAG_WRITE_FEATURE_ONLY))
 			ret = -EAGAIN;
 #endif /* CONFIG_SND_SOC_MAXIM_DSM */
 		break;
@@ -278,6 +278,42 @@ static int maxdsm_cal_start_calibration(
 	}
 
 	mdc->info.previous_jiffies = jiffies;
+
+	return ret;
+}
+
+static int maxdsm_start_v_validation(
+		struct maxim_dsm_cal *mdc)
+{
+	int ret = 0;
+	uint32_t version = 0;
+
+#ifdef CONFIG_SND_SOC_MAXIM_DSM
+	mdc->platform_type = maxdsm_get_platform_type();
+	version = maxdsm_get_version();
+#else
+	mdc->platform_type = 0;
+	version = 0;
+#endif /* CONFIG_SND_SOC_MAXIM_DSM */
+	dbg_maxdsm("platform_type=%d, version=%d", mdc->platform_type, version);
+
+	switch (mdc->platform_type) {
+	case PLATFORM_TYPE_A:
+
+		break;
+	case PLATFORM_TYPE_B:
+#ifdef CONFIG_SND_SOC_MAXIM_DSM
+		if (maxdsm_set_feature_en(1, PARAM_WRITE_V_VALIDATION))
+			ret = -EAGAIN;
+#endif /* CONFIG_SND_SOC_MAXIM_DSM */
+		break;
+	case PLATFORM_TYPE_C:
+		if (maxdsm_set_v_validation_mode(1))
+			ret = -EAGAIN;
+		break;
+	default:
+		break;
+	}
 
 	return ret;
 }
@@ -354,7 +390,7 @@ static int maxdsm_cal_end_calibration(
 		break;
 	case PLATFORM_TYPE_B:
 #ifdef CONFIG_SND_SOC_MAXIM_DSM
-		if (maxdsm_set_feature_en(0))
+		if (maxdsm_set_feature_en(0, FLAG_WRITE_FEATURE_ONLY))
 			ret = -EAGAIN;
 #endif /* CONFIG_SND_SOC_MAXIM_DSM */
 		break;
@@ -366,6 +402,36 @@ static int maxdsm_cal_end_calibration(
 		break;
 	}
 
+	return ret;
+}
+
+static int maxdsm_v_validation_end(
+		struct maxim_dsm_cal *mdc)
+{
+	int version, ret = 0;
+
+#ifdef CONFIG_SND_SOC_MAXIM_DSM
+	version = maxdsm_get_version();
+#else
+	version = 0;
+#endif /* CONFIG_SND_SOC_MAXIM_DSM */
+
+	switch (mdc->platform_type) {
+	case PLATFORM_TYPE_A:
+		break;
+	case PLATFORM_TYPE_B:
+#ifdef CONFIG_SND_SOC_MAXIM_DSM
+		if (maxdsm_set_feature_en(0, PARAM_WRITE_V_VALIDATION))
+			ret = -EAGAIN;
+#endif /* CONFIG_SND_SOC_MAXIM_DSM */
+		break;
+	case PLATFORM_TYPE_C:
+		if (maxdsm_set_v_validation_mode(0))
+			ret = -EAGAIN;
+		break;
+	default:
+		break;
+	}
 	return ret;
 }
 
@@ -477,17 +543,18 @@ static void maxdsm_cal_work(struct work_struct *work)
 	dcresistance = maxdsm_cal_read_dcresistance(mdc);
 	if (stereo) {
 		dcresistance_r = maxdsm_cal_read_dcresistance_r(mdc);
-		if ( dcresistance
+		if (dcresistance
 			&& !(mdc->info.min > dcresistance || mdc->info.max < dcresistance)
-			&& ((mdc->info.duration - mdc->info.remaining) > mdc->info.ignored_t) ) {
+			&& ((mdc->info.duration - mdc->info.remaining) > mdc->info.ignored_t)) {
 			mdc->values.avg += dcresistance;
-			if (dcresistance_r) mdc->values.avg_r += dcresistance_r;
+			if (dcresistance_r)
+				mdc->values.avg_r += dcresistance_r;
 			mdc->values.count++;
 		}
 	} else {
-		if ( dcresistance
+		if (dcresistance
 			&& !(mdc->info.min > dcresistance || mdc->info.max < dcresistance)
-			&& ((mdc->info.duration - mdc->info.remaining) > mdc->info.ignored_t) ) {
+			&& ((mdc->info.duration - mdc->info.remaining) > mdc->info.ignored_t)) {
 			mdc->values.avg += dcresistance;
 			mdc->values.count++;
 		}
@@ -525,6 +592,30 @@ static void maxdsm_cal_work(struct work_struct *work)
 	mutex_unlock(&mdc->mutex);
 }
 
+static void maxdsm_v_validation_work(struct work_struct *work)
+{
+	struct maxim_dsm_cal *mdc;
+	uint32_t v_validation = 0;
+	int ret = 0;
+
+	mdc = container_of(work, struct maxim_dsm_cal, work_v_validation.work);
+
+	mutex_lock(&mdc->mutex);
+
+	ret = maxdsm_v_validation_end(mdc);
+	if (ret) {
+		pr_err("%s: A error occurred in finishing v validation\n",
+				__func__);
+		return;
+	}
+	v_validation = maxdsm_get_v_validation();
+	dbg_maxdsm("v_validation=%d ", v_validation);
+	mdc->values_v_validation.v_validation = v_validation;
+
+	mdc->values_v_validation.status = 0;
+	mutex_unlock(&mdc->mutex);
+}
+
 static int maxdsm_cal_check(
 		struct maxim_dsm_cal *mdc, int action)
 {
@@ -536,7 +627,7 @@ static int maxdsm_cal_check(
 	if (action) {
 		mdc->info.remaining = mdc->info.duration;
 		mdc->values.count = mdc->values.avg = 0;
-		mdc->values.avg_r =0;
+		mdc->values.avg_r = 0;
 		ret = maxdsm_cal_start_calibration(mdc);
 		if (ret)
 			return ret;
@@ -547,6 +638,27 @@ static int maxdsm_cal_check(
 
 	return ret;
 }
+
+static int maxdsm_v_validation_check(
+		struct maxim_dsm_cal *mdc, int action)
+{
+	int ret = 0;
+
+	if (delayed_work_pending(&mdc->work_v_validation))
+		cancel_delayed_work(&mdc->work_v_validation);
+
+	if (action) {
+		ret = maxdsm_start_v_validation(mdc);
+		if (ret)
+			return ret;
+		queue_delayed_work(mdc->wq,
+				&mdc->work_v_validation,
+				msecs_to_jiffies(mdc->info_v_validation.duration));
+	}
+
+	return ret;
+}
+
 
 static ssize_t maxdsm_cal_min_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -598,6 +710,23 @@ static ssize_t maxdsm_cal_duration_store(struct device *dev,
 }
 static DEVICE_ATTR(duration, S_IRUGO | S_IWUSR | S_IWGRP,
 		maxdsm_cal_duration_show, maxdsm_cal_duration_store);
+
+static ssize_t maxdsm_cal_v_duration_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d", g_mdc->info_v_validation.duration);
+}
+
+static ssize_t maxdsm_cal_v_duration_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	if (kstrtou32(buf, 0, &g_mdc->info_v_validation.duration))
+		dev_err(dev,
+			"%s: Failed converting from str to u32.\n", __func__);
+	return size;
+}
+static DEVICE_ATTR(v_duration, 0664,
+		maxdsm_cal_v_duration_show, maxdsm_cal_v_duration_store);
 
 static ssize_t maxdsm_cal_rdc_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -788,6 +917,51 @@ static ssize_t maxdsm_cal_status_store(struct device *dev,
 static DEVICE_ATTR(status, S_IRUGO | S_IWUSR | S_IWGRP,
 	maxdsm_cal_status_show, maxdsm_cal_status_store);
 
+static ssize_t maxdsm_cal_v_validation_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d", g_mdc->values_v_validation.v_validation);
+	/* 0 : no-implementation 1 : success 0xCC(204) : fail */
+}
+
+static DEVICE_ATTR(v_validation, 0444, maxdsm_cal_v_validation_show, NULL);
+
+static ssize_t maxdsm_cal_v_status_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%s\n",
+			g_mdc->values_v_validation.status ? "Enabled" : "Disabled");
+}
+
+static ssize_t maxdsm_cal_v_status_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	int status = 0;
+
+	if (!kstrtou32(buf, 0, &status)) {
+		status = status > 0 ? 1 : 0;
+		if (status == g_mdc->values_v_validation.status) {
+			dbg_maxdsm("Already run. It will be ignored.");
+		} else {
+			mutex_lock(&g_mdc->mutex);
+			g_mdc->values_v_validation.status = status;
+			mutex_unlock(&g_mdc->mutex);
+			if (maxdsm_v_validation_check(g_mdc, status)) {
+				pr_err("%s: The codec was connected?\n",
+						__func__);
+				mutex_lock(&g_mdc->mutex);
+				g_mdc->values_v_validation.status = 0;
+				mutex_unlock(&g_mdc->mutex);
+			}
+		}
+	}
+
+	return size;
+}
+
+static DEVICE_ATTR(v_status, 0664,
+	maxdsm_cal_v_status_show, maxdsm_cal_v_status_store);
+
 static struct attribute *maxdsm_cal_attr[] = {
 	&dev_attr_min.attr,
 	&dev_attr_max.attr,
@@ -798,6 +972,9 @@ static struct attribute *maxdsm_cal_attr[] = {
 	&dev_attr_interval.attr,
 	&dev_attr_ignored_t.attr,
 	&dev_attr_status.attr,
+	&dev_attr_v_status.attr,
+	&dev_attr_v_validation.attr,
+	&dev_attr_v_duration.attr,
 	NULL,
 };
 
@@ -822,6 +999,7 @@ static int __init maxdsm_cal_init(void)
 	}
 
 	INIT_DELAYED_WORK(&g_mdc->work, maxdsm_cal_work);
+	INIT_DELAYED_WORK(&g_mdc->work_v_validation, maxdsm_v_validation_work);
 	mutex_init(&g_mdc->mutex);
 
 	mdc->info.min = 0;
@@ -833,6 +1011,7 @@ static int __init maxdsm_cal_init(void)
 	mdc->values.rdc = 0xFFFFFFFF;
 	mdc->values.rdc_r = 0xFFFFFFFF;
 	mdc->values.temp = 0xFFFFFFFF;
+	mdc->info_v_validation.duration = 1000; /* 1 secs */
 	mdc->platform_type = 0xFFFFFFFF;
 
 	if (!g_class)

@@ -900,6 +900,7 @@ static int panel_doze(struct panel_device *panel)
 {
 	int ret = 0;
 	struct panel_state *state = &panel->state;
+	struct panel_bl_device *panel_bl = &panel->panel_bl;
 
 	if (state->connect_panel == PANEL_DISCONNECT) {
 		panel_warn("PANEL:WANR:%s:panel disconnected\n", __func__);
@@ -930,12 +931,14 @@ static int panel_doze(struct panel_device *panel)
 				__func__);
 			}
 #endif
+			mutex_lock(&panel_bl->lock);
 			ret = __panel_seq_set_alpm(panel);
 			if (ret) {
 				panel_err("PANEL:ERR:%s, failed to write alpm\n",
 					__func__);
 			}
 			state->cur_state = PANEL_STATE_ALPM;
+			mutex_unlock(&panel_bl->lock);
 			break;
 		default:
 			break;

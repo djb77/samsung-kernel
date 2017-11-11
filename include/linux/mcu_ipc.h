@@ -41,6 +41,9 @@ enum mcu_ipc_region {
 
 int mbox_request_irq(enum mcu_ipc_region id, u32 int_num,
 		void (*handler)(void *), void *data);
+int mbox_enable_irq(enum mcu_ipc_region id, u32 int_num);
+int mbox_check_irq(enum mcu_ipc_region id, u32 int_num);
+int mbox_disable_irq(enum mcu_ipc_region id, u32 int_num);
 int mcu_ipc_unregister_handler(enum mcu_ipc_region id, u32 int_num,
 		void (*handler)(void *));
 void mbox_set_interrupt(enum mcu_ipc_region id, u32 int_num);

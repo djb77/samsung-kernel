@@ -166,6 +166,9 @@ static struct io_device *create_io_device(struct platform_device *pdev,
 	iod->attrs = io_t->attrs;
 	iod->app = io_t->app;
 	iod->max_tx_size = io_t->ul_buffer_size;
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	iod->napi_weight = io_t->napi_weight;
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 	iod->net_typ = pdata->modem_net;
 	iod->use_handover = pdata->use_handover;
 	iod->ipc_version = pdata->ipc_version;
@@ -558,6 +561,10 @@ static int parse_dt_iodevs_pdata(struct device *dev, struct device_node *np,
 		/* mif_dt_read_string(child, "iod,app", iod->app); */
 		mif_dt_read_u32_noerr(child, "iod,max_tx_size",
 				iod->ul_buffer_size);
+#ifdef CONFIG_LINK_DEVICE_NAPI
+		mif_dt_read_u32_noerr(child, "iod,napi_weight",
+				iod->napi_weight);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 		if (iod->attrs & IODEV_ATTR(ATTR_SBD_IPC)) {
 			mif_dt_read_u32(child, "iod,ul_num_buffers",

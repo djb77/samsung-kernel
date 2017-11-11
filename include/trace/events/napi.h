@@ -17,8 +17,8 @@ TRACE_EVENT(napi_poll,
 	TP_ARGS(napi),
 
 	TP_STRUCT__entry(
-		__field(	struct napi_struct *,	napi)
-		__string(	dev_name, napi->dev ? napi->dev->name : NO_DEV)
+		__field(struct napi_struct *, napi)
+		__string(dev_name, napi->dev ? napi->dev->name : NO_DEV)
 	),
 
 	TP_fast_assign(
@@ -28,6 +28,48 @@ TRACE_EVENT(napi_poll,
 
 	TP_printk("napi poll on napi struct %p for device %s",
 		__entry->napi, __get_str(dev_name))
+);
+
+TRACE_EVENT(napi_schedule,
+
+	TP_PROTO(struct napi_struct *napi),
+
+	TP_ARGS(napi),
+
+	TP_STRUCT__entry(
+		__field(struct napi_struct *, napi)
+		__string(dev_name, napi->dev ? napi->dev->name : NO_DEV)
+	),
+
+	TP_fast_assign(
+		__entry->napi = napi;
+		__assign_str(dev_name, napi->dev ? napi->dev->name : NO_DEV);
+	),
+
+	TP_printk("napi schedule on napi struct %p for device %s",
+		__entry->napi, __get_str(dev_name))
+);
+
+TRACE_EVENT(napi_complete,
+
+	TP_PROTO(struct napi_struct *napi, int rcvd),
+
+	TP_ARGS(napi, rcvd),
+
+	TP_STRUCT__entry(
+		__field(struct napi_struct *, napi)
+		__field(int, rcvd)
+		__string(dev_name, napi->dev ? napi->dev->name : NO_DEV)
+	),
+
+	TP_fast_assign(
+		__entry->napi = napi;
+		__entry->rcvd = rcvd;
+		__assign_str(dev_name, napi->dev ? napi->dev->name : NO_DEV);
+	),
+
+	TP_printk("napi complete(rcvd: %d) on napi struct %p for device %s",
+		__entry->rcvd, __entry->napi, __get_str(dev_name))
 );
 
 #undef NO_DEV

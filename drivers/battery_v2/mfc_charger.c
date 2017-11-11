@@ -2658,6 +2658,10 @@ static void mfc_wpc_isr_work(struct work_struct *work)
 
 			if (value.intval != MFC_PAD_PREPARE_HV)
 				psy_do_property("wireless", set, POWER_SUPPLY_PROP_ONLINE, value);
+
+			pr_info("%s: TX_ID : 0x%x\n", __func__, val_data);
+			value.intval = val_data;
+			psy_do_property("wireless", set, POWER_SUPPLY_PROP_AUTHENTIC, value);
 		}
 	}
 	wake_unlock(&charger->wpc_wake_lock);

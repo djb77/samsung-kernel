@@ -345,12 +345,11 @@ static void mdnie_coordinate_tune_rgb(struct mdnie_info *mdnie, int x, int y, u8
 
 	if (((x - 2991) * (x - 2991) + (y - 3148) * (y - 3148)) <= 225) {
 		tune_x = 0;
-		tune_y = 0;		
-	}
-	else {
+		tune_y = 0;
+	} else {
 		tune_x = mdnie_coordinate_tune_x(mdnie, x, y);
 		tune_y = mdnie_coordinate_tune_y(mdnie, x, y);
-	}	
+	}
 
 	for (i = 0; i < MAX_CAL_LINE; i++)
 		result[i] = COLOR_OFFSET_FUNC(x, y,
@@ -1234,6 +1233,69 @@ static int mdnie_register_fb(struct mdnie_info *mdnie)
 }
 
 #ifdef CONFIG_DISPLAY_USE_INFO
+#define MDNIE_WOFS_ORG_PATH ("/efs/FactoryApp/mdnie")
+static int mdnie_get_efs(char *filename, int *value)
+{
+	mm_segment_t old_fs;
+	struct file *filp = NULL;
+	int fsize = 0, nread, rc, ret = 0;
+	u8 buf[128];
+
+	if (!filename || !value) {
+		pr_err("%s invalid parameter\n", __func__);
+		return -EINVAL;
+	}
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	filp = filp_open(filename, O_RDONLY, 0440);
+	if (IS_ERR(filp)) {
+		ret = PTR_ERR(filp);
+		if (ret == -ENOENT)
+			pr_err("%s file(%s) not exist\n", __func__, filename);
+		else
+			pr_info("%s file(%s) open error(ret %d)\n",
+					__func__, filename, ret);
+		set_fs(old_fs);
+		return -ENOENT;
+	}
+
+	if (filp->f_path.dentry && filp->f_path.dentry->d_inode)
+		fsize = filp->f_path.dentry->d_inode->i_size;
+
+	if (fsize == 0 || fsize > ARRAY_SIZE(buf)) {
+		pr_err("%s invalid file(%s) size %d\n",
+				__func__, filename, fsize);
+		ret = -EEXIST;
+		goto exit;
+	}
+
+	memset(buf, 0, sizeof(buf));
+	nread = vfs_read(filp, (char __user *)buf, fsize, &filp->f_pos);
+	if (nread != fsize) {
+		pr_err("%s failed to read (ret %d)\n", __func__, nread);
+		ret = -EIO;
+		goto exit;
+	}
+
+	rc = sscanf(buf, "%d %d %d", &value[0], &value[1], &value[2]);
+	if (rc != 3) {
+		pr_err("%s failed to kstrtoint %d\n", __func__, rc);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	pr_info("%s %s(size %d) : %d %d %d\n",
+			__func__, filename, fsize, value[0], value[1], value[2]);
+
+exit:
+	filp_close(filp, current->files);
+	set_fs(old_fs);
+
+	return ret;
+}
+
 static int dpui_notifier_callback(struct notifier_block *self,
 				 unsigned long event, void *data)
 {
@@ -1242,6 +1304,7 @@ static int dpui_notifier_callback(struct notifier_block *self,
 	struct panel_info *panel_data;
 	char tbuf[MAX_DPUI_VAL_LEN];
 	u8 coordinate[PANEL_COORD_LEN] = { 0, };
+	int def_wrgb_ofs_org[3] = { 0, };
 	int size;
 
 	mdnie = container_of(self, struct mdnie_info, dpui_notif);
@@ -1268,6 +1331,15 @@ static int dpui_notifier_callback(struct notifier_block *self,
 			mdnie->props.def_wrgb_ofs[2]);
 	set_dpui_field(DPUI_KEY_WOFS_B, tbuf, size);
 
+	mdnie_get_efs(MDNIE_WOFS_ORG_PATH, def_wrgb_ofs_org);
+
+	size = snprintf(tbuf, MAX_DPUI_VAL_LEN, "%d", def_wrgb_ofs_org[0]);
+	set_dpui_field(DPUI_KEY_WOFS_R_ORG, tbuf, size);
+	size = snprintf(tbuf, MAX_DPUI_VAL_LEN, "%d", def_wrgb_ofs_org[1]);
+	set_dpui_field(DPUI_KEY_WOFS_G_ORG, tbuf, size);
+	size = snprintf(tbuf, MAX_DPUI_VAL_LEN, "%d", def_wrgb_ofs_org[2]);
+	set_dpui_field(DPUI_KEY_WOFS_B_ORG, tbuf, size);
+
 	mutex_unlock(&mdnie->lock);
 
 	return 0;
@@ -1277,7 +1349,7 @@ static int mdnie_register_dpui(struct mdnie_info *mdnie)
 {
 	memset(&mdnie->dpui_notif, 0, sizeof(mdnie->dpui_notif));
 	mdnie->dpui_notif.notifier_call = dpui_notifier_callback;
-	return dpui_logging_register(&mdnie->dpui_notif, DPUI_TYPE_MDNIE);
+	return dpui_logging_register(&mdnie->dpui_notif, DPUI_TYPE_PANEL);
 }
 #endif /* CONFIG_DISPLAY_USE_INFO */
 

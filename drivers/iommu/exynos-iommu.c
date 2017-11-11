@@ -504,6 +504,7 @@ static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
 	unsigned int itype;
 	unsigned long addr = -1;
 	int flags = 0;
+	int ret;
 
 	dev_info(drvdata->sysmmu, "%s:%d: irq(%d) happened\n", __func__, __LINE__, irq);
 
@@ -542,7 +543,14 @@ static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
 	}
 
 	show_fault_information(drvdata, flags, addr);
-	atomic_notifier_call_chain(&drvdata->fault_notifiers, addr, &flags);
+	ret = atomic_notifier_call_chain(&drvdata->fault_notifiers, addr, &flags);
+	if (ret == -EAGAIN) {
+		u32 clear_mask = __raw_readl(drvdata->sfrbase + REG_INT_STATUS);
+
+		__raw_writel(clear_mask, drvdata->sfrbase + REG_INT_CLEAR);
+		pr_err("Fault occurred, but try again!\n");
+		return IRQ_HANDLED;
+	}
 
 	panic("Unrecoverable System MMU Fault!!");
 
@@ -1075,7 +1083,7 @@ static const struct dev_pm_ops sysmmu_pm_ops = {
 	SET_LATE_SYSTEM_SLEEP_PM_OPS(exynos_sysmmu_suspend, exynos_sysmmu_resume)
 };
 
-static const struct of_device_id sysmmu_of_match[] __initconst = {
+static const struct of_device_id sysmmu_of_match[] = {
 	{ .compatible	= "samsung,exynos-sysmmu", },
 	{ },
 };
@@ -1604,15 +1612,16 @@ static int sysmmu_fault_notifier(struct notifier_block *nb,
 {
 	struct owner_fault_info *info;
 	struct exynos_iommu_owner *owner = NULL;
+	int ret = 0;
 
 	info = container_of(nb, struct owner_fault_info, nb);
 	owner = info->master->archdata.iommu;
 
 	if (owner && owner->fault_handler)
-		owner->fault_handler(owner->domain, owner->master,
+		ret = owner->fault_handler(owner->domain, owner->master,
 			fault_addr, (unsigned long)data, owner->token);
 
-	return 0;
+	return ret;
 }
 
 int exynos_iommu_add_fault_handler(struct device *master,

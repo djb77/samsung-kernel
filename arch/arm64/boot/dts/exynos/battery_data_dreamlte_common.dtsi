@@ -291,6 +291,7 @@
 		battery,recharging_expired_time = <5400>;
 
 		battery,cisd_max_voltage_thr = <4400>; /* battery ovp detection voltage */
+		battery,cisd_alg_index = <7>;
 
 		io-channels = <&exynos_adc 1>, <&exynos_adc 3>, <&exynos_adc 11>, <&exynos_adc 4>, <&exynos_adc 1>;
 		io-channel-names = "adc-temp", "adc-chg-temp", "adc-in-bat", "adc-wpc-temp", "adc-usb-temp";

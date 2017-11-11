@@ -31,8 +31,15 @@
 #define POC_CHKSUM_RES_LEN		(1)
 #define POC_CHKSUM_LEN		(POC_CHKSUM_DATA_LEN + POC_CHKSUM_RES_LEN)
 #ifdef CONFIG_DISPLAY_USE_INFO
+#ifdef CONFIG_SEC_FACTORY
+#define POC_TOTAL_TRY_COUNT_FILE_PATH	("/efs/FactoryApp/poc_totaltrycount")
+#define POC_TOTAL_FAIL_COUNT_FILE_PATH	("/efs/FactoryApp/poc_totalfailcount")
+#else
 #define POC_TOTAL_TRY_COUNT_FILE_PATH	("/efs/etc/poc/totaltrycount")
 #define POC_TOTAL_FAIL_COUNT_FILE_PATH	("/efs/etc/poc/totalfailcount")
+#endif
+#define POC_INFO_FILE_PATH	("/efs/FactoryApp/poc_info")
+#define POC_USER_FILE_PATH	("/efs/FactoryApp/poc_user")
 #endif
 
 #ifdef CONFIG_POC_DREAM
@@ -141,16 +148,6 @@ struct panel_poc_device {
 #define IOC_SET_POC_ERASE	_IOR('A', 110, __u32)		/* ERASE POC FLASH */
 #define IOC_SET_POC_TEST	_IOR('A', 112, __u32)		/* POC FLASH TEST - ERASE/WRITE/READ/COMPARE */
 
-extern int poc_erase_do_seqtbl(struct panel_device *);
-extern int poc_read_data(struct panel_device *, u8 *, u32, u32);
-extern int poc_write_data(struct panel_device *, u8 *, u32, u32);
-extern int poc_flash_do_seqtbl(struct panel_device *, int);
-extern int poc_test_pattern(u8 *buf, int size, int pattern);
-extern int poc_test_verification(u8 *buf, int size, int pattern);
-extern int poc_verification(u8 *buf1, u8 *buf2, int size);
-extern int poc_img_backup(struct panel_device *panel, int size);
-extern int poc_checksum_do_seqtbl(struct panel_device *panel, u8 *);
-extern int poc_check_flash_do_seqtbl(struct panel_device *panel, u8 *buf);
 extern int panel_poc_probe(struct panel_poc_device *poc_dev);
 extern int set_panel_poc(struct panel_poc_device *poc_dev, u32 cmd);
 

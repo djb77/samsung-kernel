@@ -851,8 +851,11 @@ static inline void kbase_clear_dma_addr(struct page *p)
 * @param[in] kctx    The @ref kbase_context for the faulting address space if
 *                    one was found.
 * @param[in] as      The address space that has the fault
+*
+* Return: 0 on success, error on failure
 */
-void kbase_mmu_interrupt_process(struct kbase_device *kbdev,
+/* MALI_SEC_INTEGRATION */
+int kbase_mmu_interrupt_process(struct kbase_device *kbdev,
 		struct kbase_context *kctx, struct kbase_as *as);
 
 /**

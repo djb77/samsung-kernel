@@ -485,6 +485,7 @@ static int panel_set_brightness(struct backlight_device *bd)
 	int ret = 0;
 	int brightness = bd->props.brightness;
 	struct panel_bl_device *panel_bl = bl_get_data(bd);
+	struct panel_device *panel = to_panel_device(panel_bl);
 
 	mutex_lock(&panel_bl->lock);
 	if (brightness < UI_MIN_BRIGHTNESS || brightness > EXTEND_BRIGHTNESS) {
@@ -501,6 +502,14 @@ static int panel_set_brightness(struct backlight_device *bd)
 		ret = -EINVAL;
 		goto exit_set;
 	}
+
+#ifdef CONFIG_SUPPORT_DOZE
+	if (panel->state.cur_state == PANEL_STATE_ALPM) {
+		pr_info("%s bl-%d plat_br:%d - store in LPM MODE\n",
+				__func__, PANEL_BL_SUBDEV_TYPE_DISP, brightness);
+		goto exit_set;
+	}
+#endif
 
 	ret = panel_bl_set_brightness(panel_bl, PANEL_BL_SUBDEV_TYPE_DISP, 1);
 	if (ret) {

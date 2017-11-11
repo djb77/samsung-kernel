@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 696861 2017-04-28 11:55:02Z $
+ * $Id: dhd_linux.c 708413 2017-07-01 13:18:20Z $
  */
 
 #include <typedefs.h>

@@ -58,7 +58,9 @@ static char *hdcp_link_st_str[] = {
 	NULL
 };
 
+#if defined(CONFIG_HDCP2_SUPPORT_IIA)
 static uint32_t inst_num;
+#endif
 int state_init_flag;
 
 enum hdcp_result hdcp_session_open(struct hdcp_sess_info *ss_info)
@@ -196,6 +198,7 @@ enum hdcp_result hdcp_link_close(struct hdcp_link_info *lk_info)
 	return HDCP_SUCCESS;
 }
 
+#if defined(CONFIG_HDCP2_SUPPORT_IIA)
 static enum hdcp_result hdcp_link_authenticate(struct hdcp_msg_info *msg_info){
 	struct hdcp_session_node *ss_node;
 	struct hdcp_link_node *lk_node;
@@ -601,6 +604,7 @@ static int hdcp_release(struct inode *inode, struct file *file)
 	kfree(info);
 	return 0;
 }
+#endif
 
 static int __init hdcp_init(void)
 {
@@ -641,6 +645,7 @@ static void __exit hdcp_exit(void)
 	hdcp_tee_close();
 }
 
+#if defined(CONFIG_HDCP2_SUPPORT_IIA)
 static const struct file_operations hdcp_fops = {
 	.owner		= THIS_MODULE,
 	.open		= hdcp_open,
@@ -648,11 +653,14 @@ static const struct file_operations hdcp_fops = {
 	.compat_ioctl = hdcp_ioctl,
 	.unlocked_ioctl = hdcp_ioctl,
 };
+#endif
 
 struct miscdevice hdcp = {
 	.minor	= MISC_DYNAMIC_MINOR,
 	.name	= EXYNOS_HDCP_DEV_NAME,
+#if defined(CONFIG_HDCP2_SUPPORT_IIA)
 	.fops	= &hdcp_fops,
+#endif
 };
 
 module_init(hdcp_init);

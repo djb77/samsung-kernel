@@ -616,6 +616,12 @@ void process_cc_attach(void * data,u8 *plug_attach_done)
 			ccic_event_work(usbpd_data,
 					CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_ATTACH,
 					1/*attach*/, 0/*rprd*/, Func_DATA.BITS.VBUS_CC_Short? Rp_Abnormal:Func_DATA.BITS.RP_CurrentLvl);
+
+			if (Func_DATA.BITS.VBUS_CC_Short && (usbpd_data->pd_state == State_ErrorRecovery)) {
+				if (o_notify)
+					o_notify->hw_param[USB_CCIC_VBUS_CC_SHORT_COUNT]++;
+			}
+
 			if (usbpd_data->is_client == CLIENT_OFF && usbpd_data->is_host == HOST_OFF) {
 				/* usb */
 				usbpd_data->is_client = CLIENT_ON;

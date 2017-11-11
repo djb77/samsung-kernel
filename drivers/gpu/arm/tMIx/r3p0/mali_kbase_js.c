@@ -2893,7 +2893,6 @@ void kbase_js_zap_context(struct kbase_context *kctx)
 
 		dev_dbg(kbdev->dev, "Zap: Ctx %p Release (may or may not schedule out immediately)",
 									kctx);
-
 		kbasep_js_runpool_release_ctx(kbdev, kctx);
 	}
 
