@@ -1915,7 +1915,7 @@ int ecryptfs_parse_packet_set(struct ecryptfs_crypt_stat *crypt_stat,
 					&packet_size);
 			if (rc) {
 				ecryptfs_printk(KERN_ERR, "Error parsing "
-						"dek packet\n");
+						"dek packet %d\n", rc);
 			rc = -EIO;
 			goto out_wipe_list;
 			}
