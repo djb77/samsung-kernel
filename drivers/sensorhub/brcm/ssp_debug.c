@@ -18,7 +18,7 @@
 
 
 
-#define SSP_DEBUG_TIMER_SEC		(10 * HZ)
+#define SSP_DEBUG_TIMER_SEC		(5 * HZ)
 
 #define LIMIT_RESET_CNT			40
 #define LIMIT_TIMEOUT_CNT		3
@@ -242,9 +242,6 @@ void reset_mcu(struct ssp_data *data)
 	ssp_enable(data, false);
 	clean_pending_list(data);
 	bbd_mcu_reset();
-#ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
-	ssp_reset_batching_resources(data);
-#endif
 }
 
 void sync_sensor_state(struct ssp_data *data)
@@ -404,15 +401,44 @@ static void print_sensordata(struct ssp_data *data, unsigned int uSensor)
 		break;
 	}
 }
+/*
+	check_sensor_event
+	- return 
+		true : there is no accel or light sensor event over 5sec when sensor is registered
+*/
+bool check_wait_event(struct ssp_data *data)
+{
+	u64 timestamp = get_current_timestamp();
+	int check_sensors[2] = {ACCELEROMETER_SENSOR, LIGHT_SENSOR};
+	int i, sensor; 
+	bool res = false;
+	for(i = 0 ; i < 2 ; i++)
+	{
+		sensor = check_sensors[i];
+		//the sensor is registered
+		if((atomic64_read(&data->aSensorEnable) & (1 << sensor))
+			//non batching mode
+			&& data->batchLatencyBuf[sensor] == 0
+			//there is no sensor event over 3sec
+			&& data->lastTimestamp[sensor] + 3000000000ULL < timestamp)
+		{
+			pr_info("%s - sensor(%d) last = %lld, cur = %lld",
+				__func__,sensor,data->lastTimestamp[sensor],timestamp);
+			res = true;
+			data->uNoRespSensorCnt++;
+		}
+	}
+	return res;
+}
 
 static void debug_work_func(struct work_struct *work)
 {
 	unsigned int uSensorCnt;
 	struct ssp_data *data = container_of(work, struct ssp_data, work_debug);
 
-	ssp_dbg("[SSP]: %s(%u) - Sensor state: 0x%llx, RC: %u, CC: %u, TC: %u\n",
+	ssp_dbg("[SSP]: %s(%u) - Sensor state: 0x%llx, RC: %u, CC: %u, TC: %u NSC: %u\n",
 		__func__, data->uIrqCnt, data->uSensorState, data->uResetCnt,
-		data->uComFailCnt, data->uTimeOutCnt);
+		data->uComFailCnt, data->uTimeOutCnt, data->uNoRespSensorCnt);
 
 	for (uSensorCnt = 0; uSensorCnt < SENSOR_MAX; uSensorCnt++)
 		if ((atomic64_read(&data->aSensorEnable) & (1 << uSensorCnt))
@@ -422,7 +448,8 @@ static void debug_work_func(struct work_struct *work)
 	if (((atomic64_read(&data->aSensorEnable) & (1 << ACCELEROMETER_SENSOR))
 		&& (data->batchLatencyBuf[ACCELEROMETER_SENSOR] == 0)
 		&& (data->uIrqCnt == 0) && (data->uTimeOutCnt > 0))
-		|| (data->uTimeOutCnt > LIMIT_TIMEOUT_CNT)) {
+		|| (data->uTimeOutCnt > LIMIT_TIMEOUT_CNT)
+		|| (check_wait_event(data))) {
 
 		mutex_lock(&data->ssp_enable_mutex);
 			pr_info("[SSP] : %s - uTimeOutCnt(%u), pending(%u)\n",

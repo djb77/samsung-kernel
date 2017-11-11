@@ -301,6 +301,11 @@ retries:
 
 	dprint("mcu is initiialized (retries=%d)\n", retries);
 
+#ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
+	/* initialize variables for timestamp */
+	ssp_reset_batching_resources(data);
+#endif
+
 	/* recover previous state */
 	sync_sensor_state(data);
 	ssp_sensorhub_report_notice(data, MSG2SSP_AP_STATUS_RESET);
