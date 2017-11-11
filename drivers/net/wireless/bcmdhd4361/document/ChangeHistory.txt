@@ -1,0 +1,262 @@
+BCM4361 DHD 1.77.9 for Android Dream & J5/J7 Project
+(Notes: 1.77.x is twigged off from 1.579.235.9)
+
+DHD 1.77.9 - 2017.03.14
+Kernel Panic
+ - CSP:1133051 Fixed livelock issue from unterminated tasklet
+ - CSP:1133633 Disabled Host PCIe IRQ to avoid continuous IRQ handling
+
+Others
+ - CSP:1128803 Reverted - Set timer to check null BSSID status of profile was continued
+ - CSP:1129196 Changed SDIO Max Tx Glom Size and Fixed sg list entries limit exceed issue
+ - CSP:1129696 Added "P2P" label for argos  to schedule PCIe interrupt on CPU core 5
+ - Prevent BSSID mismatch issue between driver and dongle
+
+
+DHD 1.77.7 - 2017.02.20
+Kernel Panic
+ - CSP:1128508 Skip dumping core registers in EP side if PCIe link is down
+
+Others
+ - CSP:1122486 Enhanced validate code for CID tuple parsing
+ - CSP:1125601 Invalidate PCI configuration saved state in order to reduce PCI resume latency
+ - CSP:1128080 Fixed data traffic can't reachable issue after suspend state for SDIO project
+ - CSP:1128215 Fixed nvram loading issue for murata module
+ - CSP:1128493 Added wakelock during get BSSID from dongle on wl_cfg80211_get_station() function
+ - CSP:1128803 Set timer to check null BSSID status of profile was continued
+ - Changed NAPI & PCIe IRQ CPU core number for Max TPUT (MSM 8998 Platform)
+
+
+DHD 1.77.6 - 2017.02.13
+Others
+ - CSP:1126094 Block private command SETBAND
+ - CSP:1127636 Fixed WAPI connection failure
+ - Added exception case of CLM Blob file checking logic about MFG mode
+
+
+DHD 1.77.5 - 2017.02.12
+Kernel Panic
+ - CSP:1126904 Block SOCRAM dump request if bus status is in suspend or suspend in progress
+ - Avoid kernel panic due to wrong ifidx during if create
+
+Others
+ - CSP:1126670 Removed Hard coded number from ARGOS_CPU_SCHDULER
+ - CSP:1126945 Blocking SSSR dump when memdump option is 0
+ - CSP:1127862 Changing TXFL wake lock to timeout wake lock
+
+
+DHD 1.77.4 - 2017.02.10
+Others
+ - CSP:1126670 Removed Hard coded number of PCIe IRQ for affinity set on MSM8998
+ - Refactoring Blob download feature for runtime checking Blob/Non-Blob FW
+
+
+DHD 1.77.3 - 2017.02.06
+Others
+ - CSP:1096716 Fixed long BT deactivation time
+ - CSP:1124360 Sync up about support chip revision for BCM4345X
+ - CSP:1124967 Avoid dongle trap by multiple interface creation request
+ - CSP:1125141 Enhance the PKTID error handler
+ - CSP:1125601 Invalidate PCI configuration saved state in order to reduce PCI resume latency
+ - CSP:1126094 Fixed to set roam trigger when 11kv was off
+
+
+DHD 1.77.2 - 2017.01.30
+Kernel Panic
+ - CSP:1124968 Block accessing EP's core register if host fails PCIe bus linkup
+
+Others
+ - CSP:1118705 Link Status HAL API support for 32bit platfom on 64bit kernel
+ - CSP:1121807 Adding more debug logs for resumed on timeout issue debugging
+ - CSP:1124007 Changed ram_dump file path
+ - CSP:1124363 Fix idlecount update missing of RuntimePM
+ - CSP:1124608 Fixed the turn on failure in SoftAP only mode
+ - CSP:1121807 Adding more debug logs for resumed on timeout issue debugging
+ - Change ARGOS IRQ number (162) for Exynos 8895 platform
+
+Note: 1.77.x is twigged off from 1.579.235.9
+
+
+DHD 1.579.235.9 - 2017.01.24
+New Feature
+ - Added to Enable/Disable ADPS mode from ".adps.info" file
+
+Kernel Panic
+ - Fixed Kernel Panic during STA-GO connection test case
+
+Others
+ - CSP:1104911 Added to get hostapd_cli STA_INFO command
+ - CSP:1111618 Disabled WLADPS_SEAK_AP_WAR feature
+ - CSP:1114400 Added private command for getting SNR
+ - CSP:1115484 Fixed vulnerability issues
+ - CSP:1120070 Added recovery method when reading shared memory is failed
+ - CSP:1122141 Changed GFP flags usage in osl_alloc_skb()
+ - CSP:1122486 Fixed potential buffer overflow issue in concate_revision_bcm4361()
+ - CSP:1122535 Recovery PCIe bus if host fails to read shared memory
+ - CSP:1122888 Implement the logtrace packet flush handler to fix the scan timeout issue
+ - Added Private command for LQCM
+ - Added to control scan suppress during RF test mode
+ - Enhanced more for nested connection case handling
+
+11kv
+ - Fixed to send BTM query in dongle
+ - Override WNM Max Idle period to keep alive period
+ - Update RCC with channels in neighbor report response
+
+
+DHD 1.579.235.7 - 2017.01.19
+Kernel Panic
+ - CSP:1119451 Block transmitting packets while host is in suspend state
+
+Others
+ - CSP:1089681 Fixed build error on dhd_custom_exynos.c file
+ - CSP:1089681 Fixed L1ss doesn't work issue on Exynos8895 platform
+ - CSP:1110320 HANG event recovery simulation
+ - CSP:1117906 Changed log level for rxglom on SDIO platform
+ - CSP:1118380 Added file sync routine during socram file dump
+ - CSP:1118451 Prevent to duplicate connection request without disconnection
+ - CSP:1118705 Fixed miss match struct wifi_interface_info between DHD and HAL library
+ - CSP:1118926 Fixed for memory leakage in dhd_preinit_ioctls
+ - CSP:1122174 Disabled ARP host auto reply option
+ - 11kv - Enabled BSS Max Idle Period
+ - Disabled Packet monitoring and debug ability
+ - Enabled "SUPPORT_TRIGGER_HANG_EVENT" for hang test
+ - Enhance nested connection case handling
+ - Fixed D3 ACK timeout HANG send up issue
+ - Fixed missing mutex unlock in wl_cfg80211_tdls_config
+ - Fixed vulnerability issues
+ - Re-factorize MSM CFG function selection
+ - Removed unused file list
+
+
+DHD 1.579.233 - 2017.01.05
+Kernel Panic
+ - CSP:1115833 Fixed kernel freeze issue due to tasklet count mismatch
+
+Others
+ - CSP:1109459 Supported split ARGOS table
+ - CSP:1117264, 1114969 Modified IRQ affinity code to support Exynos & Qcom platform
+ - CSP:1117291 Enabled Dongle memdump operation for BCM43455
+ - CSP:1118062 Added PCI config space restore check log during resume device
+ - CSP:1118325 Disabled Rx temperature feature
+ - 11kv - Added Android private command for BTM delta and disassociation timer threshold
+ - 11kv - Send BTM query after join/roam if AP doesnt support neighbor report
+ - Changed debug log level in dhd_find_sta function for performance degradation
+ - Changed hang reason code - PCIe link down
+ - Enabled MACEVENT logs by default
+ - Fixed ADPS issue for RF test
+ - Fixed for erroneous return code in set radio power save function
+ - Changed include file location
+
+
+DHD 1.579.231 - 2016.12.23
+Kernel Panic
+ - CSP:1113202 Fixed race condition between runtime suspend and socram dump
+ - CSP:1114716 Increased P2P Provision Discovery Response dwell time
+ - Fixed CPU stall in smp_call_function_single on TX Load Balancing
+
+Others
+ - CSP:1089681 Fixed PCIe link down issue with changing L1ss sequence during WiFi on
+ - CSP:1100087 Added get_valid_channel by HAL command on SoftAP
+ - CSP:1109793 Fixed compile error for BCM4345X project
+ - CSP:1109793 Fixed connection fail with specific AP
+ - CSP:1110795 Added check reason of file_open error
+ - CSP:1111136 Added TDLS LOCK/UNLOCK to protect tdls peer list
+ - CSP:1111618 Added WAR for avoid data stuck issue in D-Link825 AP
+ - CSP:1112125 Added MSM8998 architecture define to deferred init call
+ - CSP:1113518 Fixed WiFi turn on failure issue due to d3 ack failure handling
+ - CSP:1115484 Fixed vulnerability issues
+ - CSP:1115750 Fixed disconnect issue during country code setting time
+ - 11kv - Changed WBTEXT policy as real product case
+ - 11kv - Send neighbor report request after join
+ - Disabled OCL feature during RF test mode
+ - Enabled COUNTRY_SINGLE_REGREV feature for BCM43455 Project
+   (This patch should be sync up with FW 7.120.1 or higher version)
+
+
+DHD 1.579.216 - 2016.12.07
+New Feature
+ - Enabled CLM SINGLE REGREV feature
+   (This patch should be sync up with FW 13.35.42 or higher version)
+
+Kernel Panic
+ - CSP:1104692 Fixed pktid audit failure issue with adding memory barrier
+
+Others
+ - CSP:1099699 Fixed DUT reset for link stats on framework
+ - CSP:1104452 Fixed for P2P connection failure due to M1 packet goes up with wrong interface
+ - CSP:1104795 Disabled ADPS when turn on RF TEST mode
+ - CSP:1106625 Fixed blob download malloc buffer size calculation code
+ - CSP:1108217 Changed mem allocation flag to GFP_ATOMIC in NAPI histogram dump
+ - 11kv - Fixed Makefile dependency
+ - Activated TSQ_MULTIPLIER to solve poor TCP/TX throughput
+ - Disabled RA filter when APF was supported
+ - Modified radio power save API along with the firmware change which enabled per-band radio power save setting 
+   (This patch should be sync up with FW 13.35.42 or higher version)
+ - Re-factorize MSM CFG function selection
+
+
+DHD 1.579.195 - 2016.11.16
+Others
+ - CSP:1091903 Fixed dialog token error in BTM query
+ - CSP:1097948 DHD info file path changed above android 7.0 version
+ - CSP:1099452 Fixed checking WBTEXT support on dongle
+ - CSP:1100087 Added to set Country code by HAL
+ - CSP:1100314 Added exception handling codes to debug PKTID AUDIT failure
+ - CSP:1100314 Enhanced read/write offset calculation for debug ring to fix the memory corruption problems
+ - CSP:1102277 Fixed get feature by HAL
+ - CSP:1102660 Removed SMMU hardware cache coherency related configuration code for MSM8998 platform
+ - 11kv - Send BTM query after join
+ - Added ICMP dump log
+ - Fixed to read cid info from module tuple
+ - Fixed to use same nvram file for Murata ES 3.0 and 3.1
+ - Increased static pool size from 64 to 128 for Scan timeout issue
+ - Supported nvram file name extension for Murata module
+ - Use the pre-allocated buffer pool for INFO ring to avoid memory fragmentation
+
+
+DHD 1.579.184 - 2016.10.26
+New Feature
+ - Enabled ADPS(Advanced Dynamic Power Save) Feature
+
+Kernel Panic
+ - CSP:1094253 Fixed Kernel Panic by registering Invalid netdev interface
+ - CSP:1096852 Changed kmalloc flags depending on interrupt state
+ - CSP:1098885 Enhance event log processing to avoid the possibility of buffer overflow
+
+Others
+ - CSP:1095855 Improved DHD_LOG_DUMP feature in order to logging for throttle log
+ - CSP:1096927 Fixed Prevent defect issue - NULL Referencing
+ - CSP:1097702 Fixed SSID length check on cfg80211_get_bss()
+ - CSP:1100314 Fixed the calculation of read/write offset for debug ring to avoid the possibility of buffer overflow
+ - CSP:1101214 Changed default CID info for BCM4361B0 chip
+ - Temporarily Disabled Android DEBUGABILITY feature
+ - Added to disable APF in suspend mode when HOSTAP mode
+ - Enhanced the functionality of dongle register dump
+ - Fix not turning RPM on SoftAP
+ - Fixed the D3_ACK timeout issue
+ - Updated BCM4361 module information
+
+
+DHD 1.579.167 - 2016.10.07
+Kernel Panic
+ - CSP:1092776 Replace API for file writing to prevent kernel panic
+ - CSP:1093684 Fixed kernel panic issue by curbssid null status in wl_cfg80211_is_event_from_connected_bssid()
+
+Others
+ - CSP:1070541 Added Private driver commands for high rate beacon transmission in softAP mode
+ - CSP:1070541 Added Private driver commands for radio power save in softAP mode
+ - CSP:1070553 Supported Private DRIVER commands to grab the RSSI of associated STAs in virtual interface softAP
+ - CSP:1093614 Fixed host memory leak issue by missing cfg80211_put_bss()
+ - CSP:1093614 Fixed Prevent warning issues
+ - CSP:1093851 Changed DHD information file path for N OS
+ - CSP:1094025 Fixed DHCP failure on WiFi-Sharing mode
+ - Block deauth packet for WPS disorder issue
+ - Disable running memdump by default regardless of '.memdump.info'
+ - Fixed legacy connection failure
+
+
+DHD 1.579.152 - 2016.09.22
+- Initial Release for BCM4361 Dream Project
+
+

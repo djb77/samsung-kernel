@@ -1,0 +1,60 @@
+comment "Samsung Modem Interface Driver for Memory-type Interface"
+menuconfig SEC_MODEM_IF
+	bool "Samsung Mobile EXYNOS Modem Interface"
+	default n
+	---help---
+	  Samsung Modem Interface Driver.
+
+if SEC_MODEM_IF
+
+menu "Configuration MODEM"
+config LTE_MODEM_CMC221
+	bool "modem chip : SEC CMC221"
+	default n
+
+config UMTS_MODEM_SS222
+	bool "modem chip : SEC SS222"
+	default n
+
+config LTE_MODEM_S5E4270
+	bool "modem chip : LSI S5E4270(onechip)"
+	default n
+
+config LTE_MODEM_S5E7580
+	bool "modem chip : LSI S5E7580(onechip)"
+	default n
+
+config LTE_MODEM_S5E7890
+	bool "modem chip : LSI S5E7890(onechip)"
+	default n
+
+config LTE_MODEM_S5E8890
+	bool "modem chip : LSI S5E8890(onechip)"
+	default n
+endmenu
+
+config LINK_DEVICE_SHMEM
+	bool "modem driver link device shared memory"
+	default y
+
+config CP_SECURE_BOOT
+	bool "Support CP Secure Boot"
+	default n
+
+config DEBUG_MODEM_IF
+	bool "enable modem if debug option"
+	default n
+
+config WORKQUEUE_FRONT
+	bool "IPC: SPI workqueue front"
+	default n
+
+config SIM_DETECT
+	bool "SIM_DETECT pin"
+	default n
+
+config SIM_SLOT_SWITCH
+	bool "SIM_SLOT_SWITCH"
+	default n
+
+endif

@@ -1,0 +1,10 @@
+config EXYNOS_VPU_TRANSLATOR
+	bool "Select Translator"
+	help
+	  This is translator selection
+
+config EXYNOS_VPU_TRANSLATOR_V21
+	bool "Use V2.1"
+	depends on EXYNOS_VPU_TRANSLATOR
+	help
+	  This is translator version 2.1
