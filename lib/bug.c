@@ -45,6 +45,9 @@
 #include <linux/kernel.h>
 #include <linux/bug.h>
 #include <linux/sched.h>
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
 
 extern const struct bug_entry __start___bug_table[], __stop___bug_table[];
 
@@ -153,6 +156,11 @@ enum bug_trap_type report_bug(unsigned long bugaddr, struct pt_regs *regs)
 #endif
 		warning = (bug->flags & BUGFLAG_WARNING) != 0;
 	}
+
+#ifdef CONFIG_SEC_DEBUG
+	if(file)
+		sec_debug_store_extra_buf(INFO_BUG, "%s:%u!", file, line);
+#endif
 
 	if (warning) {
 		/* this is a WARN_ON rather than BUG/BUG_ON */
