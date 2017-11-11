@@ -23,6 +23,139 @@
 #include "regs-mcu_ipc.h"
 #include "mcu_ipc.h"
 
+#ifdef CONFIG_MCU_IPC_LOG
+#define LOG_MAX_NUM	SZ_4K
+#define LOG_DIR_RX	0
+#define LOG_DIR_TX	1
+
+struct mailbox_log {
+	int mcu_int;
+
+	atomic_t gic_mbox_rx_idx;
+	atomic_t mbox_idx;
+
+	struct gic_mbox_rx {
+		unsigned long long time;
+		unsigned int count;
+	} gic_mbox_rx_log[LOG_MAX_NUM];
+
+	struct mbox_rx_tx {
+		unsigned long long time;
+		int dir;
+		unsigned int count_rx;
+		unsigned int count_tx;
+		u32 intgr0;
+		u32 intmr0;
+		u32 intsr0;
+		u32 intmsr0;
+	} mbox_rx_tx_log[LOG_MAX_NUM * 2];
+};
+
+static struct mailbox_log mbx_log;
+
+#ifdef CONFIG_ARM64
+static inline unsigned long pure_arch_local_irq_save(void)
+{
+	unsigned long flags;
+
+	asm volatile(
+		"mrs	%0, daif		// arch_local_irq_save\n"
+		"msr	daifset, #2"
+		: "=r" (flags)
+		:
+		: "memory");
+
+	return flags;
+}
+
+static inline void pure_arch_local_irq_restore(unsigned long flags)
+{
+	asm volatile(
+		"msr    daif, %0                // arch_local_irq_restore"
+		:
+		: "r" (flags)
+		: "memory");
+}
+#else
+static inline unsigned long arch_local_irq_save(void)
+{
+	unsigned long flags;
+
+	asm volatile(
+		"	mrs	%0, cpsr	@ arch_local_irq_save\n"
+		"	cpsid	i"
+		: "=r" (flags) : : "memory", "cc");
+	return flags;
+}
+
+static inline void arch_local_irq_restore(unsigned long flags)
+{
+	asm volatile(
+		"	msr	cpsr_c, %0	@ local_irq_restore"
+		:
+		: "r" (flags)
+		: "memory", "cc");
+}
+#endif
+
+void mbox_check_mcu_irq(int irq)
+{
+	unsigned long flags;
+	static unsigned int count;
+
+	if (mbx_log.mcu_int != irq)
+		return;
+
+	flags = pure_arch_local_irq_save();
+	{
+		unsigned long i;
+		int cpu = get_current_cpunum();
+
+		i = atomic_inc_return(&mbx_log.gic_mbox_rx_idx) &
+			(ARRAY_SIZE(mbx_log.gic_mbox_rx_log) - 1);
+
+		mbx_log.gic_mbox_rx_log[i].time = cpu_clock(cpu);
+		mbx_log.gic_mbox_rx_log[i].count = count++;
+	}
+	pure_arch_local_irq_restore(flags);
+
+}
+EXPORT_SYMBOL_GPL(mbox_check_mcu_irq);
+
+static void mbox_save_rx_tx_log(int dir)
+{
+	unsigned long flags;
+	static unsigned int count_rx;
+	static unsigned int count_tx;
+
+	flags = pure_arch_local_irq_save();
+	{
+		unsigned long i;
+		int cpu = get_current_cpunum();
+
+		i = atomic_inc_return(&mbx_log.mbox_idx) &
+			(ARRAY_SIZE(mbx_log.mbox_rx_tx_log) - 1);
+
+		mbx_log.mbox_rx_tx_log[i].time = cpu_clock(cpu);
+		mbx_log.mbox_rx_tx_log[i].dir = dir;
+		if (dir == LOG_DIR_RX)
+			mbx_log.mbox_rx_tx_log[i].count_rx = count_rx++;
+		else
+			mbx_log.mbox_rx_tx_log[i].count_tx = count_tx++;
+
+		mbx_log.mbox_rx_tx_log[i].intgr0 =
+			mcu_ipc_readl(EXYNOS_MCU_IPC_INTGR0);
+		mbx_log.mbox_rx_tx_log[i].intmr0 =
+			mcu_ipc_readl(EXYNOS_MCU_IPC_INTMR0);
+		mbx_log.mbox_rx_tx_log[i].intsr0 =
+			mcu_ipc_readl(EXYNOS_MCU_IPC_INTSR0);
+		mbx_log.mbox_rx_tx_log[i].intmsr0 =
+			mcu_ipc_readl(EXYNOS_MCU_IPC_INTMSR0);
+	}
+	pure_arch_local_irq_restore(flags);
+}
+#endif
+
 static irqreturn_t mcu_ipc_handler(int irq, void *data)
 {
 	u32 irq_stat, i;
@@ -32,6 +165,9 @@ static irqreturn_t mcu_ipc_handler(int irq, void *data)
 		goto exit;
 	}
 
+#ifdef CONFIG_MCU_IPC_LOG
+	mbox_save_rx_tx_log(LOG_DIR_RX);
+#endif
 	irq_stat = mcu_ipc_readl(EXYNOS_MCU_IPC_INTSR0) & 0xFFFF0000;
 	/* Interrupt Clear */
 	mcu_ipc_writel(irq_stat, EXYNOS_MCU_IPC_INTCR0);
@@ -92,6 +228,10 @@ void mbox_set_interrupt(u32 int_num)
 	/* generate interrupt */
 	if (int_num < 16)
 		mcu_ipc_writel(0x1 << int_num, EXYNOS_MCU_IPC_INTGR1);
+
+#ifdef CONFIG_MCU_IPC_LOG
+	mbox_save_rx_tx_log(LOG_DIR_TX);
+#endif
 }
 EXPORT_SYMBOL(mbox_set_interrupt);
 
@@ -253,6 +393,10 @@ static int mcu_ipc_probe(struct platform_device *pdev)
 		dev_err(dev, "Can't request MCU_IPC IRQ\n");
 		goto unmap_ioaddr;
 	}
+
+#ifdef CONFIG_MCU_IPC_LOG
+	mbx_log.mcu_int = mcu_ipc_irq;
+#endif
 
 	mcu_ipc_clear_all_interrupt();
 

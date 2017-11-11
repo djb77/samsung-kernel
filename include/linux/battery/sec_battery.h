@@ -82,6 +82,12 @@
 
 #define BATT_MISC_EVENT_UNDEFINED_RANGE_TYPE	0x00000001
 
+enum store_mode_type {
+	STORE_MODE_NONE = 0,
+	STORE_MODE_LDU_RDU = 1,
+	STORE_MODE_RDU_TA = 2,
+};
+
 struct adc_sample_info {
 	unsigned int cnt;
 	int total_adc;
@@ -266,7 +272,7 @@ struct sec_battery_info {
 	/* test mode */
 	int test_mode;
 	bool factory_mode;
-	bool store_mode;
+	unsigned int store_mode;
 	bool ignore_store_mode;
 	bool slate_mode;
 
