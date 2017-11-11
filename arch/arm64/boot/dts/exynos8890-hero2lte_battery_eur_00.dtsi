@@ -42,7 +42,7 @@
 		battery,slave_chg_temp_table_data = <700 650 630 600 580 550 500 450 430 400 350
 					    300 250 200 150 100 50 0 (-30) (-50) (-100) (-150) (-200)>;
 
-		battery,fast_charging_current = <1900 450 450 1900 800 1200 1000 460 1200 450 1900 1900 1900 1600 1900 450 450 400 700 1300 300 1000 1500 450 1900 1900 1000 1900 80 1800 1000 1400 450 1000 1900>;
+		battery,fast_charging_current = <1900 450 450 1900 800 1200 1000 460 1200 450 1900 1900 1900 1600 1900 450 450 400 700 1300 300 1000 1500 450 1900 1900 1000 1900 80 1800 1000 1400 450 1000 1900 1900 1900>;
 
 		io-channels = <&exynos_adc 1>, <&exynos_adc 3>, <&exynos_adc 6>, <&exynos_adc 3>, <&exynos_adc 5>;
 		io-channel-names = "adc-temp", "adc-chg-temp", "adc-in-bat", "adc-wpc-temp", "adc-slave-chg-temp";
