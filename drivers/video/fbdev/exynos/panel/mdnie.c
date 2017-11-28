@@ -25,9 +25,6 @@
 #include "panel_drv.h"
 #include "mdnie.h"
 #include "copr.h"
-#ifdef CONFIG_EXYNOS_DECON_LCD_TUNING
-#include "tuning.h"
-#endif
 #ifdef CONFIG_DISPLAY_USE_INFO
 #include "dpui.h"
 #endif
@@ -398,15 +395,6 @@ static int panel_set_mdnie(struct panel_device *panel)
 	if (!IS_PANEL_ACTIVE(panel))
 		return 0;
 
-#ifdef CONFIG_EXYNOS_DECON_LCD_TUNING
-	if (mdnie->props.tuning) {
-		pr_info("%s, do tuning-seq\n", __func__);
-		ret = tfile_do_seqtbl(panel, mdnie->props.tfilepath);
-		if (unlikely(ret < 0))
-			pr_err("%s, failed to write tuning seqtbl\n", __func__);
-		goto set_mdnie_exit;
-	}
-#endif
 	pr_info("%s, do mdnie-seq\n", __func__);
 
 	ret = 0;
@@ -415,7 +403,6 @@ static int panel_set_mdnie(struct panel_device *panel)
 	if (unlikely(ret < 0))
 		pr_err("%s, failed to write seqtbl\n", __func__);
 
-set_mdnie_exit:
 	mutex_unlock(&panel->op_lock);
 
 	return ret;
@@ -623,71 +610,6 @@ static ssize_t scenario_store(struct device *dev,
 
 	return count;
 }
-
-#ifdef CONFIG_EXYNOS_DECON_LCD_TUNING
-static ssize_t tuning_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	char *pos = buf;
-
-	pos += sprintf(pos, "++ %s: %s\n", __func__, mdnie->props.tfilepath);
-
-	if (!mdnie->props.tuning) {
-		pos += sprintf(pos, "tunning mode is off\n");
-		goto exit;
-	}
-
-	if (strncmp(mdnie->props.tfilepath, MDNIE_SYSFS_PREFIX,
-				sizeof(MDNIE_SYSFS_PREFIX) - 1)) {
-		pos += sprintf(pos, "file path is invalid, %s\n", mdnie->props.tfilepath);
-		goto exit;
-	}
-
-exit:
-	pos += sprintf(pos, "-- %s\n", __func__);
-
-	return pos - buf;
-}
-
-
-static ssize_t tuning_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	unsigned int value;
-	int ret;
-
-	if (sysfs_streq(buf, "0") || sysfs_streq(buf, "1")) {
-		ret = kstrtouint(buf, 0, &value);
-		if (ret < 0)
-			return ret;
-
-		mdnie->props.tuning = !!value;
-		if (!value)
-			memset(mdnie->props.tfilepath, 0, sizeof(mdnie->props.tfilepath));
-		dev_info(dev, "%s: %s\n", __func__, mdnie->props.tuning ? "enable" : "disable");
-	} else {
-		if (!mdnie->props.tuning)
-			return count;
-
-		if (count > (sizeof(mdnie->props.tfilepath) - sizeof(MDNIE_SYSFS_PREFIX))) {
-			dev_err(dev, "filename %s is too long\n", mdnie->props.tfilepath);
-			return -ENOMEM;
-		}
-
-		mutex_lock(&mdnie->lock);
-		memset(mdnie->props.tfilepath, 0, sizeof(mdnie->props.tfilepath));
-		snprintf(mdnie->props.tfilepath, sizeof(MDNIE_SYSFS_PREFIX) + count - 1, "%s%s", MDNIE_SYSFS_PREFIX, buf);
-		mutex_unlock(&mdnie->lock);
-		dev_info(dev, "%s: %s\n", __func__, mdnie->props.tfilepath);
-
-		mdnie_update(mdnie);
-	}
-
-	return count;
-}
-#endif /* CONFIG_EXYNOS_DECON_LCD_TUNING */
 
 static ssize_t accessibility_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -1137,9 +1059,6 @@ static ssize_t hmt_color_temperature_store(struct device *dev,
 struct device_attribute mdnie_dev_attrs[] = {
 	__PANEL_ATTR_RW(mode, 0664),
 	__PANEL_ATTR_RW(scenario, 0664),
-#ifdef CONFIG_EXYNOS_DECON_LCD_TUNING
-	__PANEL_ATTR_RW(tuning, 0664),
-#endif
 	__PANEL_ATTR_RW(accessibility, 0664),
 	__PANEL_ATTR_RW(bypass, 0664),
 	__PANEL_ATTR_RW(lux, 0000),

@@ -8,7 +8,6 @@
 obj-$(CONFIG_EXYNOS_MIPI_DSIM) += panel.o panel_bl.o dimming.o panel_drv.o
 obj-$(CONFIG_EXYNOS_DECON_LCD_S6E3HF4) += s6e3hf4/s6e3hf4.o
 obj-$(CONFIG_EXYNOS_DECON_LCD_S6E3HA6) += s6e3ha6/s6e3ha6.o
-obj-$(CONFIG_EXYNOS_DECON_LCD_TUNING) += tuning.o
 obj-$(CONFIG_EXYNOS_DECON_MDNIE_LITE) += mdnie.o
 obj-$(CONFIG_EXYNOS_DECON_LCD_SYSFS) += sysfs.o
 obj-$(CONFIG_EXYNOS_DECON_LCD_SPI) += spi.o
