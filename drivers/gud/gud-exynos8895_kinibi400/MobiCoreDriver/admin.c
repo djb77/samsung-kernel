@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -84,6 +84,12 @@ static struct tee_object *tee_object_alloc(bool is_sp_trustlet, size_t length)
 		/* Need space for lengths info and containers */
 		header_length = sizeof(struct mc_blob_len_info);
 		size += header_length + 3 * MAX_SO_CONT_SIZE;
+	}
+
+	/* Check size for overflow */
+	if (size < length) {
+		mc_dev_err("cannot allocate object of size %zu", length);
+		return NULL;
 	}
 
 	/* Allocate memory */
@@ -248,6 +254,8 @@ static int request_receive(void *address, u32 size)
 
 	/* Check server state */
 	bool server_ok;
+	/* ExySp */
+	unsigned long timeout = msecs_to_jiffies(10 * 1000); /* 10 seconds */
 
 	mutex_lock(&g_request.states_mutex);
 	server_ok = (g_request.server_state == RESPONSE_SENT) ||
@@ -269,7 +277,11 @@ static int request_receive(void *address, u32 size)
 	complete(&g_request.client_complete);
 
 	/* Wait for data (far too late to be interruptible) */
-	wait_for_completion(&g_request.server_complete);
+	/* ExySp */
+	if (wait_for_completion_timeout(&g_request.server_complete, timeout) == 0) {
+		mc_dev_err("request_receive::daemon is not responding\n");
+		return -EPIPE;
+	}
 
 	/* Reset reception buffer */
 	g_request.buffer = NULL;
@@ -479,6 +491,20 @@ static int tee_object_make(u32 spid, struct tee_object *obj)
 
 err:
 	return ret;
+}
+
+struct tee_object *tee_object_copy(uintptr_t address, size_t length)
+{
+	struct tee_object *obj;
+
+	/* Allocate memory */
+	obj = tee_object_alloc(false, length);
+	if (!obj)
+		return ERR_PTR(-ENOMEM);
+
+	/* Copy trustlet */
+	memcpy(obj->data, (void *)address, length);
+	return obj;
 }
 
 struct tee_object *tee_object_read(u32 spid, uintptr_t address, size_t length)

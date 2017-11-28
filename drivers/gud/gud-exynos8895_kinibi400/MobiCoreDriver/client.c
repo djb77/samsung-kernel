@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,6 +17,11 @@
 #include <linux/mm.h>
 #include <linux/err.h>
 #include <linux/sched.h>	/* struct task_struct */
+#include <linux/version.h>
+#if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
+#include <linux/sched/mm.h>	/* get_task_mm */
+#include <linux/sched/task.h>	/* put_task_struct */
+#endif
 #include <net/sock.h>		/* sockfd_lookup */
 #include <linux/file.h>		/* fput */
 
@@ -666,8 +671,7 @@ end:
  */
 int client_open_trustlet(struct tee_client *client, u32 *session_id, u32 spid,
 			 uintptr_t trustlet, size_t trustlet_len,
-			 uintptr_t tci, size_t tci_len,
-			 int client_fd)
+			 uintptr_t tci, size_t tci_len, int client_fd)
 {
 	struct tee_object *obj;
 	struct mc_identity identity = {
@@ -676,6 +680,10 @@ int client_open_trustlet(struct tee_client *client, u32 *session_id, u32 spid,
 	u32 sid = 0;
 	int err = 0;
 
+	if (client_is_kernel(client))
+		/* Create secure object from kernel-space trustlet binary */
+		obj = tee_object_copy(trustlet, trustlet_len);
+	else
 	/* Create secure object from user-space trustlet binary */
 	obj = tee_object_read(spid, trustlet, trustlet_len);
 	if (IS_ERR(obj)) {
@@ -1162,7 +1170,7 @@ static void cbuf_vm_close(struct vm_area_struct *vmarea)
 	cbuf_put(cbuf);
 }
 
-static struct vm_operations_struct cbuf_vm_ops = {
+static const struct vm_operations_struct cbuf_vm_ops = {
 	.open = cbuf_vm_open,
 	.close = cbuf_vm_close,
 };

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -27,6 +27,10 @@
 #include <linux/freezer.h>
 #include <asm/barrier.h>
 #include <linux/irq.h>
+#include <linux/version.h>
+#if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
+#include <linux/sched/clock.h>	/* local_clock */
+#endif
 
 #include "public/mc_user.h"
 #include "public/mc_admin.h"
@@ -46,7 +50,7 @@
 /* respond timeout for MCP notification, in secs */
 #define MCP_TIMEOUT		10
 /* ExySp */
-#define MCP_RETRIES		2
+#define MCP_RETRIES		5
 #define MCP_NF_QUEUE_SZ		8
 
 static struct {
@@ -63,7 +67,7 @@ static struct {
 	/* Wait timeout */
 	u32			timeout;
 	/* Log of last MCP commands */
-#define MCP_LOG_SIZE 256
+#define MCP_LOG_SIZE 1024
 	struct mutex		last_mcp_cmds_mutex; /* Log protection */
 	struct mcp_command_info {
 		u64			cpu_clk;	/* Kernel time */
@@ -254,8 +258,8 @@ static inline int wait_mcp_notification(void)
 		int ret;
 
 		/*
-		* Wait non-interruptible to keep MCP synchronised even if caller
-		* is interrupted by signal.
+		 * Wait non-interruptible to keep MCP synchronised even if
+		 * caller is interrupted by signal.
 		*/
 		ret = wait_for_completion_timeout(&l_ctx.complete, timeout);
 		if (ret > 0)

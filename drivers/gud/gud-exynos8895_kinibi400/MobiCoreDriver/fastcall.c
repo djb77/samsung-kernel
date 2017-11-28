@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -18,6 +18,11 @@
 #include <linux/cpu.h>
 #include <linux/moduleparam.h>
 #include <linux/debugfs.h>
+#include <linux/sched.h>	/* local_clock */
+#include <linux/version.h>
+#if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
+#include <linux/sched/clock.h>	/* local_clock */
+#endif
 #include <linux/uaccess.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
@@ -126,7 +131,7 @@ struct smc_log_entry {
 	struct mc_fc_as_in as_in;
 };
 
-#define SMC_LOG_SIZE 256
+#define SMC_LOG_SIZE 1024
 static struct smc_log_entry smc_log[SMC_LOG_SIZE];
 static int smc_log_index;
 
@@ -444,11 +449,19 @@ static bool mc_fastcall(void *data)
 		.data = data,
 	};
 
+#if KERNEL_VERSION(4, 9, 0) <= LINUX_VERSION_CODE
+	if (!kthread_queue_work(&fastcall_worker, &fc_work.work))
+		return false;
+
+	/* If work is queued or executing, wait for it to finish execution */
+	kthread_flush_work(&fc_work.work);
+#else
 	if (!queue_kthread_work(&fastcall_worker, &fc_work.work))
 		return false;
 
 	/* If work is queued or executing, wait for it to finish execution */
 	flush_kthread_work(&fc_work.work);
+#endif
 #else
 	struct fastcall_work fc_work = {
 		.data = data,
@@ -465,9 +478,8 @@ static bool mc_fastcall(void *data)
 
 int mc_fastcall_init(void)
 {
+	cpumask_t new_msk = CPU_MASK_CPU0;
 	int ret = mc_clock_init();
-	/* ExySp */
-	cpumask_t msk = CPU_MASK_CPU0;
 
 	if (ret)
 		return ret;
@@ -483,9 +495,7 @@ int mc_fastcall_init(void)
 	}
 
 	/* this thread MUST run on CPU 0 at startup */
-	/* ExySp */
-	//set_cpus_allowed(fastcall_thread, CPU_MASK_CPU0);
-	set_cpus_allowed_ptr(fastcall_thread, &msk);
+	set_cpus_allowed_ptr(fastcall_thread, &new_msk);
 
 	wake_up_process(fastcall_thread);
 #ifdef TBASE_CORE_SWITCHER

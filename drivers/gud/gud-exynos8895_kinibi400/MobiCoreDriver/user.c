@@ -17,6 +17,7 @@
 #include <linux/device.h>
 #include <linux/export.h>
 #include <linux/fs.h>
+#include <linux/mm_types.h>	/* struct vm_area_struct */
 
 #include "public/mc_user.h"
 
