@@ -68,7 +68,7 @@ static const struct file_operations sec_debug_reset_reason_proc_fops = {
 
 static int sec_debug_reset_reason_store_lastkmsg_proc_show(struct seq_file *m, void *v)
 {
-	if (reset_reason == RR_K || reset_reason == RR_D)
+	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P)
 		seq_puts(m, "1\n");
 	else
 		seq_puts(m, "0\n");

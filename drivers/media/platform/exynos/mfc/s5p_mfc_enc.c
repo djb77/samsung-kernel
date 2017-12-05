@@ -1606,6 +1606,15 @@ static int mfc_enc_set_ctrl_val(struct s5p_mfc_ctx *ctx, struct v4l2_control *ct
 							return -EINVAL;
 						}
 				}
+				if (ctx_ctrl->id == V4L2_CID_MPEG_MFC51_VIDEO_I_PERIOD_CH &&
+						p->i_frm_ctrl_mode) {
+					ctx_ctrl->val = ctx_ctrl->val * (p->num_b_frame + 1);
+					if (ctx_ctrl->val >= 0x3FFFFFFF) {
+						mfc_info_ctx("I frame interval is bigger than max: %d\n",
+								ctx_ctrl->val);
+						ctx_ctrl->val = 0x3FFFFFFF;
+					}
+				}
 				if (ctx_ctrl->id == V4L2_CID_MPEG_VIDEO_H264_LEVEL)
 					ctx_ctrl->val = mfc_enc_h264_level((enum v4l2_mpeg_video_h264_level)(ctrl->value));
 				if (ctx_ctrl->id == V4L2_CID_MPEG_VIDEO_H264_PROFILE)

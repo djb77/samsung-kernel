@@ -50,6 +50,46 @@ int s5p_mfc_set_slice_mode(struct s5p_mfc_ctx *ctx)
 	return 0;
 }
 
+static void mfc_set_gop_size(struct s5p_mfc_ctx *ctx, int ctrl_mode)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+	struct s5p_mfc_enc *enc = ctx->enc_priv;
+	struct s5p_mfc_enc_params *p = &enc->params;
+	unsigned int reg = 0;
+
+	if (ctrl_mode) {
+		p->i_frm_ctrl_mode = 1;
+		p->i_frm_ctrl = p->gop_size * (p->num_b_frame + 1);
+		if (p->i_frm_ctrl >= 0x3FFFFFFF) {
+			mfc_info_ctx("I frame interval is bigger than max: %d\n",
+					p->i_frm_ctrl);
+			p->i_frm_ctrl = 0x3FFFFFFF;
+		}
+	} else {
+		p->i_frm_ctrl_mode = 0;
+		p->i_frm_ctrl = p->gop_size;
+	}
+
+	mfc_debug(2, "I frame interval: %d, (P: %d, B: %d), ctrl mode: %d\n",
+			p->i_frm_ctrl, p->gop_size,
+			p->num_b_frame, p->i_frm_ctrl_mode);
+
+	/* pictype : IDR period, number of B */
+	reg = MFC_READL(S5P_FIMV_E_GOP_CONFIG);
+	reg &= ~(0xFFFF);
+	reg |= p->i_frm_ctrl & 0xFFFF;
+	reg &= ~(0x1 << 19);
+	reg |= p->i_frm_ctrl_mode << 19;
+	reg &= ~(0x3 << 16);
+	reg |= (p->num_b_frame << 16);
+	MFC_WRITEL(reg, S5P_FIMV_E_GOP_CONFIG);
+
+	reg = MFC_READL(S5P_FIMV_E_GOP_CONFIG2);
+	reg &= ~(0x3FFF);
+	reg |= (p->i_frm_ctrl >> 16) & 0x3FFF;
+	MFC_WRITEL(reg, S5P_FIMV_E_GOP_CONFIG2);
+}
+
 static void mfc_set_default_params(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
@@ -146,17 +186,6 @@ static int mfc_set_enc_params(struct s5p_mfc_ctx *ctx)
 	MFC_WRITEL(ctx->img_height, S5P_FIMV_E_CROPPED_FRAME_HEIGHT);
 	/** cropped offset */
 	MFC_WRITEL(0x0, S5P_FIMV_E_FRAME_CROP_OFFSET);
-
-	/* pictype : IDR period */
-	reg = MFC_READL(S5P_FIMV_E_GOP_CONFIG);
-	reg &= ~(0xFFFF);
-	reg |= p->gop_size & 0xFFFF;
-	MFC_WRITEL(reg, S5P_FIMV_E_GOP_CONFIG);
-
-	reg = MFC_READL(S5P_FIMV_E_GOP_CONFIG2);
-	reg &= ~(0x3FFF);
-	reg |= (p->gop_size >> 16) & 0x3FFF;
-	MFC_WRITEL(reg, S5P_FIMV_E_GOP_CONFIG2);
 
 	/* multi-slice control */
 	/* multi-slice MB number or bit size */
@@ -315,12 +344,13 @@ int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 
 	mfc_set_enc_params(ctx);
 
-	/* pictype : number of B */
-	reg = MFC_READL(S5P_FIMV_E_GOP_CONFIG);
-	/** num_b_frame - 0 ~ 2 */
-	reg &= ~(0x3 << 16);
-	reg |= (p->num_b_frame << 16);
-	MFC_WRITEL(reg, S5P_FIMV_E_GOP_CONFIG);
+	if (p_264->num_hier_layer & 0x7) {
+		/* set gop_size without i_frm_ctrl mode */
+		mfc_set_gop_size(ctx, 0);
+	} else {
+		/* set gop_size with i_frm_ctrl mode */
+		mfc_set_gop_size(ctx, 1);
+	}
 
 	/* UHD encoding case */
 	if(IS_UHD_RES(ctx)) {
@@ -616,12 +646,8 @@ int s5p_mfc_set_enc_params_mpeg4(struct s5p_mfc_ctx *ctx)
 
 	mfc_set_enc_params(ctx);
 
-	/* pictype : number of B */
-	reg = MFC_READL(S5P_FIMV_E_GOP_CONFIG);
-	/** num_b_frame - 0 ~ 2 */
-	reg &= ~(0x3 << 16);
-	reg |= (p->num_b_frame << 16);
-	MFC_WRITEL(reg, S5P_FIMV_E_GOP_CONFIG);
+	/* set gop_size with I_FRM_CTRL mode */
+	mfc_set_gop_size(ctx, 1);
 
 	/* profile & level */
 	reg = 0;
@@ -715,6 +741,9 @@ int s5p_mfc_set_enc_params_h263(struct s5p_mfc_ctx *ctx)
 
 	mfc_set_enc_params(ctx);
 
+	/* set gop_size with I_FRM_CTRL mode */
+	mfc_set_gop_size(ctx, 1);
+
 	/* profile & level */
 	reg = 0;
 	/** profile */
@@ -787,6 +816,14 @@ int s5p_mfc_set_enc_params_vp8(struct s5p_mfc_ctx *ctx)
 	mfc_debug_enter();
 
 	mfc_set_enc_params(ctx);
+
+	if (p_vp8->num_hier_layer & 0x3) {
+		/* set gop_size without i_frm_ctrl mode */
+		mfc_set_gop_size(ctx, 0);
+	} else {
+		/* set gop_size with i_frm_ctrl mode */
+		mfc_set_gop_size(ctx, 1);
+	}
 
 	/* profile*/
 	reg = 0;
@@ -907,6 +944,14 @@ int s5p_mfc_set_enc_params_vp9(struct s5p_mfc_ctx *ctx)
 
 	mfc_set_enc_params(ctx);
 
+	if (p_vp9->num_hier_layer & 0x3) {
+		/* set gop_size without i_frm_ctrl mode */
+		mfc_set_gop_size(ctx, 0);
+	} else {
+		/* set gop_size with i_frm_ctrl mode */
+		mfc_set_gop_size(ctx, 1);
+	}
+
 	/* profile*/
 	reg = 0;
 	reg |= (p_vp9->vp9_version) ;
@@ -1021,12 +1066,13 @@ int s5p_mfc_set_enc_params_hevc(struct s5p_mfc_ctx *ctx)
 
 	mfc_set_enc_params(ctx);
 
-	/* pictype : number of B */
-	reg = MFC_READL(S5P_FIMV_E_GOP_CONFIG);
-	/** num_b_frame - 0 ~ 2 */
-	reg &= ~(0x3 << 16);
-	reg |= (p->num_b_frame << 16);
-	MFC_WRITEL(reg, S5P_FIMV_E_GOP_CONFIG);
+	if (p_hevc->num_hier_layer & 0x7) {
+		/* set gop_size without i_frm_ctrl mode */
+		mfc_set_gop_size(ctx, 0);
+	} else {
+		/* set gop_size with i_frm_ctrl mode */
+		mfc_set_gop_size(ctx, 1);
+	}
 
 	/* UHD encoding case */
 	if ((ctx->img_width == 3840) && (ctx->img_height == 2160)) {

@@ -236,6 +236,9 @@ struct muic_platform_data {
 	/* muic path switch function for rustproof */
 	void (*set_path_switch_suspend)(struct device *dev);
 	void (*set_path_switch_resume)(struct device *dev);
+
+	/* muic cable data collecting function */
+	void (*init_cable_data_collect_cb)(void);
 };
 
 int get_switch_sel(void);

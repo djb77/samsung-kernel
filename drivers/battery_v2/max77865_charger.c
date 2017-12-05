@@ -1036,7 +1036,8 @@ static int max77865_chg_set_property(struct power_supply *psy,
 						  MAX77865_CHG_REG_INT_MASK, &reg_data);
 				pr_info("%s : enable aicl : 0x%x\n", __func__, reg_data);
 			}
-		} else if (is_hv_wire_type(charger->cable_type)) {
+		} else if (is_hv_wire_type(charger->cable_type) ||
+			(charger->cable_type == SEC_BATTERY_CABLE_HV_TA_CHG_LIMIT)) {
 			/* Disable AICL IRQ */
 			if (charger->irq_aicl_enabled == 1) {
 				u8 reg_data;

@@ -268,8 +268,9 @@ int fimc_is_hw_3aa_disable(struct fimc_is_hw_ip *hw_ip, u32 instance, ulong hw_m
 	if (!test_bit_variables(hw_ip->id, &hw_map))
 		return 0;
 
-	info_hw("[%d][ID:%d]3aa_disable: Vvalid(%d)\n", instance, hw_ip->id,
-		atomic_read(&hw_ip->status.Vvalid));
+	info_hw("[%d][ID:%d]3aa_disable: Vvalid(%d), H/W is %s\n", instance, hw_ip->id,
+		atomic_read(&hw_ip->status.Vvalid),
+		test_bit(HW_RUN, &hw_ip->state) ? "Enabled" : "Disabled");
 
 	BUG_ON(!hw_ip->priv_info);
 	hw_3aa = (struct fimc_is_hw_3aa *)hw_ip->priv_info;
@@ -290,15 +291,19 @@ int fimc_is_hw_3aa_disable(struct fimc_is_hw_ip *hw_ip, u32 instance, ulong hw_m
 		/* TODO: need to divide each task index */
 		for (i = 0; i < TASK_INDEX_MAX; i++) {
 			BUG_ON(!hw_3aa->lib_support);
-			if (hw_3aa->lib_support->task_taaisp[i].task == NULL)
+			if (hw_3aa->lib_support->task_taaisp[i].task == NULL) {
 				err_hw("task is null");
-			else
+			} else {
+				info_hw("starting flush ddk works for %s...",
+					hw_3aa->lib_support->task_taaisp[i].task->comm);
 				flush_kthread_worker(&hw_3aa->lib_support->task_taaisp[i].worker);
+				pr_cont(" done!\n");
+			}
 		}
 
 		fimc_is_lib_isp_stop(hw_ip, &hw_3aa->lib[instance], instance);
 	} else {
-		dbg_hw("[%d]already disabled (%d)\n", instance, hw_ip->id);
+		dbg_hw("[%d][ID:%d] already disabled\n", instance, hw_ip->id);
 	}
 
 	if (atomic_read(&hw_ip->rsccount) > 1)

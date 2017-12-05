@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_common.c 713120 2017-07-28 04:14:04Z $
+ * $Id: dhd_common.c 719896 2017-09-07 04:13:03Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -807,9 +807,8 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifidx, wl_ioctl_t *ioc, void *buf, int len)
 	if (dhd_os_proto_block(dhd_pub))
 	{
 #ifdef DHD_LOG_DUMP
-		int slen, i, val, rem, lval, min_len;
-		char *pval, *pos, *msg;
-		char tmp[64];
+		int slen, val, lval, min_len;
+		char *msg, tmp[64];
 
 		/* WLC_GET_VAR */
 		if (ioc->cmd == WLC_GET_VAR) {
@@ -885,6 +884,9 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifidx, wl_ioctl_t *ioc, void *buf, int len)
 					bcopy((msg + slen), &lval, min_len);
 				}
 			}
+			if (!strncmp(msg, "cur_etheraddr", strlen("cur_etheraddr"))) {
+				lval = 0;
+			}
 			DHD_ERROR_MEM(("%s: cmd: %d, msg: %s, val: 0x%x, len: %d, set: %d\n",
 				ioc->cmd == WLC_GET_VAR ? "WLC_GET_VAR" : "WLC_SET_VAR",
 				ioc->cmd, msg, lval, ioc->len, ioc->set));
@@ -892,23 +894,10 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifidx, wl_ioctl_t *ioc, void *buf, int len)
 			slen = ioc->len;
 			if (buf != NULL) {
 				val = *(int*)buf;
-				pval = (char*)buf;
-				pos = tmp;
-				rem = sizeof(tmp);
-				memset(tmp, 0, sizeof(tmp));
-				for (i = 0; i < slen; i++) {
-					if (rem <= 3) {
-						/* At least 2 byte required + 1 byte(NULL) */
-						break;
-					}
-					pos += snprintf(pos, rem, "%02x ", pval[i]);
-					rem = sizeof(tmp) - (int)(pos - tmp);
-				}
 				/* Do not dump for WLC_GET_MAGIC and WLC_GET_VERSION */
 				if (ioc->cmd != WLC_GET_MAGIC && ioc->cmd != WLC_GET_VERSION)
-					DHD_ERROR_MEM(("WLC_IOCTL: cmd: %d, val: %d(%s), "
-						"len: %d, set: %d\n",
-						ioc->cmd, val, tmp, ioc->len, ioc->set));
+					DHD_ERROR_MEM(("WLC_IOCTL: cmd: %d, val: %d, len: %d, "
+					"set: %d\n", ioc->cmd, val, ioc->len, ioc->set));
 			} else {
 				DHD_ERROR_MEM(("WLC_IOCTL: cmd: %d, buf is NULL\n", ioc->cmd));
 			}
@@ -2684,9 +2673,6 @@ wl_process_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata, uint pktlen
 	uint evlen;
 	int ret;
 	uint16 usr_subtype;
-	char macstr[ETHER_ADDR_STR_LEN];
-
-	BCM_REFERENCE(macstr);
 
 	ret = wl_host_event_get_data(pktdata, pktlen, &evu);
 	if (ret != BCME_OK) {
@@ -2926,8 +2912,8 @@ wl_process_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata, uint pktlen
 				__FUNCTION__, type, flags, status, role, del_sta));
 
 			if (del_sta) {
-				DHD_MAC_TO_STR((event->addr.octet), macstr);
-				DHD_EVENT(("%s: Deleting STA %s\n", __FUNCTION__, macstr));
+				DHD_EVENT(("%s: Deleting STA " MACDBG "\n",
+					__FUNCTION__, MAC2STRDBG(event->addr.octet)));
 
 				dhd_del_sta(dhd_pub, dhd_ifname2idx(dhd_pub->info,
 					event->ifname), &event->addr.octet);

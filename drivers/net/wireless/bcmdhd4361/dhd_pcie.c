@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.c 710862 2017-07-14 07:43:59Z $
+ * $Id: dhd_pcie.c 720800 2017-09-12 07:03:05Z $
  */
 
 
@@ -891,10 +891,10 @@ dhdpcie_dongle_attach(dhd_bus_t *bus)
 		goto fail;
 	}
 
+#ifndef DONGLE_ENABLE_ISOLATION
 	/* Enable CLKREQ# */
 	dhdpcie_clkreq(bus->osh, 1, 1);
 
-#ifndef DONGLE_ENABLE_ISOLATION
 	/*
 	 * Issue CC watchdog to reset all the cores on the chip - similar to rmmod dhd
 	 * This is required to avoid spurious interrupts to the Host and bring back
@@ -996,6 +996,12 @@ dhdpcie_dongle_attach(dhd_bus_t *bus)
 	bus->ramsize = bus->orig_ramsize;
 	if (dhd_dongle_memsize)
 		dhdpcie_bus_dongle_setmemsize(bus, dhd_dongle_memsize);
+
+	if (bus->ramsize > DONGLE_TCM_MAP_SIZE) {
+		DHD_ERROR(("%s : invalid ramsize %d(0x%x) is returned from dongle\n",
+				__FUNCTION__, bus->ramsize, bus->ramsize));
+		goto fail;
+	}
 
 	DHD_ERROR(("DHD: dongle ram size is set to %d(orig %d) at 0x%x\n",
 	           bus->ramsize, bus->orig_ramsize, bus->dongle_ram_base));
@@ -1243,8 +1249,10 @@ dhdpcie_bus_release_dongle(dhd_bus_t *bus, osl_t *osh, bool dongle_isolation, bo
 			 pcie_serdes_iddqdisable(bus->osh, bus->sih,
 			                         (sbpcieregs_t *) bus->regs);
 
+#ifndef DONGLE_ENABLE_ISOLATION
 		/* Disable CLKREQ# */
 		dhdpcie_clkreq(bus->osh, 1, 0);
+#endif /* !DONGLE_ENABLE_ISOLATION */
 
 		if (bus->sih != NULL) {
 			si_detach(bus->sih);

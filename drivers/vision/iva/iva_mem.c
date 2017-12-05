@@ -650,8 +650,10 @@ static int iva_mem_ion_free_param(struct iva_proc *proc,
 	struct iva_dev_data	*iva = proc->iva_data;
 	struct device		*dev = iva->dev;
 
+	mutex_lock(&proc->proc_mem_lock);
 	iva_map_node = iva_mem_find_proc_map_with_fd(proc, ion_param->shared_fd);
 	if (!iva_map_node) {
+		mutex_unlock(&proc->proc_mem_lock);
 		dev_err(dev, "%s() shared_fd(%d) is not found in list !!!\n",
 				__func__, ion_param->shared_fd);
 		return -EINVAL;
@@ -661,8 +663,10 @@ static int iva_mem_ion_free_param(struct iva_proc *proc,
 	if (ret) {
 		dev_warn(dev, "%s() shared_fd(%d) alloced outside.\n",
 				__func__, ion_param->shared_fd);
+		mutex_unlock(&proc->proc_mem_lock);
 		return -EINVAL;
 	}
+	mutex_unlock(&proc->proc_mem_lock);
 	return 0;
 }
 

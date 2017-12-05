@@ -737,7 +737,7 @@ static int dpp_dump_buffer_data(struct dpp_device *dpp)
 
 		for (i = 0; i < 3; i++) {
 			decon = get_decon_drvdata(i);
-			if (decon == NULL)
+			if (decon == NULL || decon->id == 2)
 				continue;
 
 			decon->frm_status |= DPU_FRM_SYSMMU_FAULT;

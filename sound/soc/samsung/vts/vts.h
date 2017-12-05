@@ -228,14 +228,17 @@ enum vts_micconf_type {
 };
 
 enum vts_state_machine {
-	VTS_STATE_NONE			= 0,	//runtime_suspended state
-	VTS_STATE_VOICECALL		= 1,	//sram L2Cache voicecall state
-	VTS_STATE_IDLE			= 2,	//runtime_resume state
-	VTS_STATE_RECOG_STARTED		= 3,	//Voice Recognization started
-	VTS_STATE_RECOG_TRIGGERED	= 4,	//Voice Recognize triggered
-	VTS_STATE_SEAMLESS_REC_STARTED	= 5,	//seamless record started
-	VTS_STATE_SEAMLESS_REC_STOPPED	= 6,	//seamless record started
-	VTS_STATE_RECOG_STOPPED		= 7,	//Voice Recognization stopped
+	VTS_STATE_NONE			= 0,	/* runtime_suspended state */
+	VTS_STATE_VOICECALL		= 1,	/* sram L2Cache call state */
+	VTS_STATE_RUNTIME_RESUMING	= 2,	/* runtime_resume started */
+	VTS_STATE_RUNTIME_RESUMED	= 3,	/* runtime_resume done */
+	VTS_STATE_RECOG_STARTED		= 4,	/* Recognization started */
+	VTS_STATE_RECOG_TRIGGERED	= 5,	/* Recognize triggered */
+	VTS_STATE_SEAMLESS_REC_STARTED	= 6,	/* seamless record started */
+	VTS_STATE_SEAMLESS_REC_STOPPED	= 7,	/* seamless record stopped */
+	VTS_STATE_RECOG_STOPPED		= 8,	/* Recognization stopped */
+	VTS_STATE_RUNTIME_SUSPENDING	= 9,	/* runtime_suspend started */
+	VTS_STATE_RUNTIME_SUSPENDED	= 10,	/* runtime_suspend done */
 };
 
 struct vts_model_bin_info {
@@ -297,6 +300,7 @@ struct vts_data {
 	unsigned int vts_state;
 	struct vts_model_bin_info svoice_info;
 	struct vts_model_bin_info google_info;
+	spinlock_t state_spinlock;
 };
 
 struct vts_platform_data {

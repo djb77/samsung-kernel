@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pktlog.c 709645 2017-07-09 09:29:58Z $
+ * $Id: dhd_pktlog.c 717188 2017-08-23 11:47:08Z $
  */
 
 #include <typedefs.h>
@@ -137,6 +137,7 @@ dhd_pktlog_ring_init(int size)
 	ring->next_pos = 0;
 
 	ring->start = TRUE;
+	ring->pktlog_minmize = FALSE;
 
 	DHD_ERROR(("%s(): pktlog ring init success\n", __FUNCTION__));
 
@@ -882,6 +883,51 @@ dhd_pktlog_filter_matched(dhd_pktlog_filter_t *filter, char *data, uint32 pktlog
 	return FALSE;
 }
 
+/* Ethernet Type MAC Header 12 bytes + Frame payload 10 bytes */
+#define PKTLOG_MINIMIZE_REPORT_LEN 22
+
+static char pktlog_minmize_mask_table[] = {
+	0xff, 0x00, 0x00, 0x00, 0xff, 0x0f, /* Ethernet Type MAC Header - Destination MAC Address */
+	0xff, 0x00, 0x00, 0x00, 0xff, 0x0f, /* Ethernet Type MAC Header - Source MAC Address */
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, /* Ethernet Type MAC Header - Ether Type - 2 bytes */
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, /* Frame payload */
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0xff, 0xff, /* UDP port number offset - bytes as 0xff */
+	0xff, 0xff,
+};
+
+static inline void
+dhd_pktlog_minimize_report(char *pkt, uint32 frame_len)
+{
+	int i;
+	int table_len;
+	int report_len;
+	int remain_len;
+	char *p_table;
+
+	table_len = sizeof(pktlog_minmize_mask_table);
+	report_len =  table_len;
+	p_table = &pktlog_minmize_mask_table[0];
+
+	if (frame_len < PKTLOG_MINIMIZE_REPORT_LEN) {
+		return;
+	}
+
+	if (frame_len < table_len) {
+		report_len = PKTLOG_MINIMIZE_REPORT_LEN;
+	}
+
+	remain_len = frame_len - report_len;
+
+	for (i = 0; i < report_len; i++) {
+		pkt[i] = pkt[i] & p_table[i];
+	}
+
+	if (remain_len) {
+		memset(&pkt[report_len], 0x00, remain_len);
+	}
+}
+
 static int
 dhd_pktlog_pkts_write_file(dhd_pktlog_ring_t *ringbuf, struct file *w_pcap_fp, int *total_cnt)
 {
@@ -962,6 +1008,9 @@ dhd_pktlog_pkts_write_file(dhd_pktlog_ring_t *ringbuf, struct file *w_pcap_fp, i
 		len += sizeof(write_frame_len);
 
 		memcpy(p, PKTDATA(ringbuf->dhdp->osh, report_ptr->info.pkt), frame_len);
+		if (ringbuf->pktlog_minmize) {
+			dhd_pktlog_minimize_report(p, frame_len);
+		}
 		p += frame_len;
 		len += frame_len;
 

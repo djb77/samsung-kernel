@@ -69,15 +69,131 @@ static void update_mask_value(volatile void __iomem *sfr,
 /* For only external static functions */
 static struct vts_data *p_vts_data;
 
+/* vts mailbox interface functions */
+int vts_mailbox_generate_interrupt(
+	const struct platform_device *pdev,
+	int hw_irq)
+{
+	struct vts_data *data = p_vts_data;
+	struct device *dev = data ? (data->pdev ?
+				&data->pdev->dev : NULL) : NULL;
+	unsigned long flag;
+	int result = 0;
+
+	if (!data || !dev) {
+		dev_warn(dev, "%s: VTS not Initialized\n", __func__);
+		return -EINVAL;
+	}
+
+	spin_lock_irqsave(&data->state_spinlock, flag);
+	/* Check VTS state before accessing mailbox */
+	if (data->vts_state == VTS_STATE_RUNTIME_SUSPENDED ||
+		data->vts_state == VTS_STATE_VOICECALL ||
+		data->vts_state == VTS_STATE_NONE) {
+		dev_warn(dev, "%s: VTS wrong state [%d]\n", __func__,
+			data->vts_state);
+		result = -EINVAL;
+		goto out;
+	}
+
+	result = mailbox_generate_interrupt(pdev, hw_irq);
+
+out:
+	spin_unlock_irqrestore(&data->state_spinlock, flag);
+	return result;
+}
+
+void vts_mailbox_write_shared_register(
+	const struct platform_device *pdev,
+	const u32 *values,
+	int start,
+	int count)
+{
+	struct vts_data *data = p_vts_data;
+	struct device *dev = data ? (data->pdev ?
+				&data->pdev->dev : NULL) : NULL;
+	unsigned long flag;
+
+	if (!data || !dev) {
+		dev_warn(dev, "%s: VTS not Initialized\n", __func__);
+		return;
+	}
+
+	spin_lock_irqsave(&data->state_spinlock, flag);
+	/* Check VTS state before accessing mailbox */
+	if (data->vts_state == VTS_STATE_RUNTIME_SUSPENDED ||
+		data->vts_state == VTS_STATE_VOICECALL ||
+		data->vts_state == VTS_STATE_NONE) {
+		dev_warn(dev, "%s: VTS wrong state [%d]\n", __func__,
+			data->vts_state);
+		goto out;
+	}
+
+	mailbox_write_shared_register(pdev, values, start, count);
+
+out:
+	spin_unlock_irqrestore(&data->state_spinlock, flag);
+}
+
+void vts_mailbox_read_shared_register(
+	const struct platform_device *pdev,
+	u32 *values,
+	int start,
+	int count)
+{
+	struct vts_data *data = p_vts_data;
+	struct device *dev = data ? (data->pdev ?
+				&data->pdev->dev : NULL) : NULL;
+	unsigned long flag;
+
+	if (!data || !dev) {
+		dev_warn(dev, "%s: VTS not Initialized\n", __func__);
+		return;
+	}
+
+	spin_lock_irqsave(&data->state_spinlock, flag);
+	/* Check VTS state before accessing mailbox */
+	if (data && (data->vts_state == VTS_STATE_RUNTIME_SUSPENDED ||
+		data->vts_state == VTS_STATE_VOICECALL ||
+		data->vts_state == VTS_STATE_NONE)) {
+		dev_warn(dev, "%s: VTS wrong state [%d]\n", __func__,
+			data->vts_state);
+		goto out;
+	}
+
+	mailbox_read_shared_register(pdev, values, start, count);
+
+out:
+	spin_unlock_irqrestore(&data->state_spinlock, flag);
+}
+
 static int vts_start_ipc_transaction_atomic(struct device *dev, struct vts_data *data, int msg, u32 (*values)[3], int sync)
 {
 	long result = 0;
 	u32 ack_value = 0;
 	volatile enum ipc_state *state = &data->ipc_state_ap;
+	unsigned long flag;
 
 	dev_info(dev, "%s:++ msg:%d, values: 0x%08x, 0x%08x, 0x%08x\n",
 					__func__, msg, (*values)[0],
 					(*values)[1], (*values)[2]);
+
+	/* Check VTS state before processing IPC,
+	 * in VTS_STATE_RUNTIME_SUSPENDING state only Power Down IPC
+	 * can be processed
+	 */
+	spin_lock_irqsave(&data->state_spinlock, flag);
+	if ((data->vts_state == VTS_STATE_RUNTIME_SUSPENDING &&
+		msg != VTS_IRQ_AP_POWER_DOWN) ||
+		data->vts_state == VTS_STATE_RUNTIME_SUSPENDED ||
+		data->vts_state == VTS_STATE_VOICECALL ||
+		data->vts_state == VTS_STATE_NONE) {
+		dev_warn(dev, "%s: VTS IP %s state\n", __func__,
+			(data->vts_state == VTS_STATE_VOICECALL ?
+			"VoiceCall" : "Suspended"));
+		return -EINVAL;
+	}
+	spin_unlock_irqrestore(&data->state_spinlock, flag);
 
 	if (pm_runtime_suspended(dev)) {
 		dev_warn(dev, "%s: VTS IP is in suspended state, IPC cann't be processed \n", __func__);
@@ -92,8 +208,8 @@ static int vts_start_ipc_transaction_atomic(struct device *dev, struct vts_data 
 	spin_lock(&data->ipc_spinlock);
 
 	*state = SEND_MSG;
-	mailbox_write_shared_register(data->pdev_mailbox, *values, 0, 3);
-	mailbox_generate_interrupt(data->pdev_mailbox, msg);
+	vts_mailbox_write_shared_register(data->pdev_mailbox, *values, 0, 3);
+	vts_mailbox_generate_interrupt(data->pdev_mailbox, msg);
 	data->running_ipc = msg;
 
 	if (sync) {
@@ -101,7 +217,8 @@ static int vts_start_ipc_transaction_atomic(struct device *dev, struct vts_data 
 		for (i = 1000; i && (*state != SEND_MSG_OK) &&
 				(*state != SEND_MSG_FAIL) &&
 				(ack_value != (0x1 << msg)); i--) {
-			mailbox_read_shared_register(data->pdev_mailbox, &ack_value, 3, 1);
+			vts_mailbox_read_shared_register(data->pdev_mailbox,
+							&ack_value, 3, 1);
 			dev_dbg(dev, "%s ACK-value: 0x%08x\n", __func__, ack_value);
 			udelay(50);
 		}
@@ -120,7 +237,8 @@ static int vts_start_ipc_transaction_atomic(struct device *dev, struct vts_data 
 
 	/* Clear running IPC & ACK value */
 	ack_value = 0x0;
-	mailbox_write_shared_register(data->pdev_mailbox, &ack_value, 3, 1);
+	vts_mailbox_write_shared_register(data->pdev_mailbox,
+						&ack_value, 3, 1);
 	data->running_ipc = 0;
 	*state = IDLE;
 
@@ -139,8 +257,10 @@ int vts_start_ipc_transaction(struct device *dev, struct vts_data *data,
 static int vts_ipc_ack(struct vts_data *data, u32 result)
 {
 	pr_debug("%s(%p, %u)\n", __func__, data, result);
-	mailbox_write_shared_register(data->pdev_mailbox, &result, 0, 1);
-	mailbox_generate_interrupt(data->pdev_mailbox, VTS_IRQ_AP_IPC_RECEIVED);
+	vts_mailbox_write_shared_register(data->pdev_mailbox,
+						&result, 0, 1);
+	vts_mailbox_generate_interrupt(data->pdev_mailbox,
+					VTS_IRQ_AP_IPC_RECEIVED);
 	return 0;
 }
 
@@ -352,6 +472,7 @@ int vts_acquire_sram(struct platform_device *pdev, int vts)
 {
 	struct vts_data *data = platform_get_drvdata(pdev);
 	int previous;
+	unsigned long flag;
 
 	dev_info(&pdev->dev, "%s(%d)\n", __func__, vts);
 
@@ -370,7 +491,9 @@ int vts_acquire_sram(struct platform_device *pdev, int vts)
 	if (!vts) {
 		pm_runtime_get_sync(&pdev->dev);
 		data->voicecall_enabled = true;
+		spin_lock_irqsave(&data->state_spinlock, flag);
 		data->vts_state = VTS_STATE_VOICECALL;
+		spin_unlock_irqrestore(&data->state_spinlock, flag);
 	}
 
 	writel((vts ? 0 : 1) << VTS_MEM_SEL_OFFSET, data->sfr_base + VTS_SHARED_MEM_CTRL);
@@ -799,7 +922,7 @@ static int set_vtsactive_phrase(struct snd_kcontrol *kcontrol,
 
 	vtsactive_phrase = ucontrol->value.integer.value[0];
 
-	if (vtsactive_phrase > 2) {
+	if (vtsactive_phrase < 0 || vtsactive_phrase > 2) {
 		dev_err(codec->dev,
 		"Invalid VTS Trigger Key phrase =%d", vtsactive_phrase);
 		return 0;
@@ -1097,7 +1220,8 @@ static irqreturn_t vts_error_handler(int irq, void *dev_id)
 	struct vts_data *data = platform_get_drvdata(pdev);
 	u32 error_code;
 
-	mailbox_read_shared_register(data->pdev_mailbox, &error_code, 3, 1);
+	vts_mailbox_read_shared_register(data->pdev_mailbox,
+						&error_code, 3, 1);
 	vts_ipc_ack(data, 1);
 
 	dev_err(dev, "Error occurred on VTS: 0x%x\n", (int)error_code);
@@ -1129,7 +1253,8 @@ static irqreturn_t vts_ipc_received_handler(int irq, void *dev_id)
 	struct vts_data *data = platform_get_drvdata(pdev);
 	u32 result;
 
-	mailbox_read_shared_register(data->pdev_mailbox, &result, 3, 1);
+	vts_mailbox_read_shared_register(data->pdev_mailbox,
+						&result, 3, 1);
 	dev_dbg(dev, "VTS received IPC: 0x%x\n", result);
 
 	switch (data->ipc_state_ap) {
@@ -1163,8 +1288,8 @@ static irqreturn_t vts_voice_triggered_handler(int irq, void *dev_id)
 
 	if (data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER) ||
 		data->mic_ready & (0x1 << VTS_MICCONF_FOR_GOOGLE)) {
-		mailbox_read_shared_register(data->pdev_mailbox, &id,
-						 3, 1);
+		vts_mailbox_read_shared_register(data->pdev_mailbox,
+						&id, 3, 1);
 		vts_ipc_ack(data, 1);
 
 		frame_count = (u32)(id & GENMASK(15, 0));
@@ -1207,7 +1332,7 @@ static irqreturn_t vts_trigger_period_elapsed_handler(int irq, void *dev_id)
 
 	if (data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER) ||
 		data->mic_ready & (0x1 << VTS_MICCONF_FOR_GOOGLE)) {
-		mailbox_read_shared_register(data->pdev_mailbox,
+		vts_mailbox_read_shared_register(data->pdev_mailbox,
 					 &pointer, 2, 1);
 		dev_dbg(dev, "%s:[%s] Base: %08x pointer:%08x\n",
 			 __func__, (platform_data->id ? "VTS-RECORD" :
@@ -1234,7 +1359,7 @@ static irqreturn_t vts_record_period_elapsed_handler(int irq, void *dev_id)
 	u32 pointer;
 
 	if (data->mic_ready & (0x1 << VTS_MICCONF_FOR_RECORD)) {
-		mailbox_read_shared_register(data->pdev_mailbox,
+		vts_mailbox_read_shared_register(data->pdev_mailbox,
 						 &pointer, 1, 1);
 		dev_dbg(dev, "%s:[%s] Base: %08x pointer:%08x\n",
 			 __func__,
@@ -1444,8 +1569,13 @@ static int vts_runtime_suspend(struct device *dev)
 	unsigned int status = 0;
 	u32 values[3] = {0,0,0};
 	int result = 0;
+	unsigned long flag;
 
 	dev_info(dev, "%s \n", __func__);
+
+	spin_lock_irqsave(&data->state_spinlock, flag);
+	data->vts_state = VTS_STATE_RUNTIME_SUSPENDING;
+	spin_unlock_irqrestore(&data->state_spinlock, flag);
 
 	vts_save_register(data);
 
@@ -1476,9 +1606,18 @@ static int vts_runtime_suspend(struct device *dev)
 		}
 		vts_release_sram(pdev, 1);
 		clk_disable(data->clk_dmic);
+
+		spin_lock_irqsave(&data->state_spinlock, flag);
+		data->vts_state = VTS_STATE_RUNTIME_SUSPENDED;
+		spin_unlock_irqrestore(&data->state_spinlock, flag);
+
 		vts_cpu_enable(false);
 		vts_cpu_power(false);
 		data->running = false;
+	} else {
+		spin_lock_irqsave(&data->state_spinlock, flag);
+		data->vts_state = VTS_STATE_RUNTIME_SUSPENDED;
+		spin_unlock_irqrestore(&data->state_spinlock, flag);
 	}
 
 	data->enabled = false;
@@ -1490,7 +1629,6 @@ static int vts_runtime_suspend(struct device *dev)
 	data->micclk_init_cnt = 0;
 	data->mic_ready = 0;
 	data->vts_ready = 0;
-	data->vts_state = VTS_STATE_NONE;
 	dev_info(dev, "%s Exit \n", __func__);
 	return 0;
 }
@@ -1504,6 +1642,7 @@ static int vts_runtime_resume(struct device *dev)
 
 	dev_info(dev, "%s \n", __func__);
 
+	data->vts_state = VTS_STATE_RUNTIME_RESUMING;
 	data->enabled = true;
 
 	vts_restore_register(data);
@@ -1582,7 +1721,7 @@ static int vts_runtime_resume(struct device *dev)
 	dev_info(dev, "%s Exit \n", __func__);
 
 	data->running = true;
-	data->vts_state = VTS_STATE_IDLE;
+	data->vts_state = VTS_STATE_RUNTIME_RESUMED;
 	return 0;
 
 error_firmware:
@@ -1926,6 +2065,7 @@ static int samsung_vts_probe(struct platform_device *pdev)
 
 	init_waitqueue_head(&data->ipc_wait_queue);
 	spin_lock_init(&data->ipc_spinlock);
+	spin_lock_init(&data->state_spinlock);
 	mutex_init(&data->ipc_mutex);
 	wake_lock_init(&data->wake_lock, WAKE_LOCK_SUSPEND, "vts");
 
@@ -2140,6 +2280,9 @@ static int samsung_vts_probe(struct platform_device *pdev)
 	atomic_notifier_chain_register(&panic_notifier_list, &vts_panic_notifier);
 
 	device_init_wakeup(dev, true);
+
+	of_platform_populate(np, NULL, NULL, dev);
+
 	dev_info(dev, "Probed successfully\n");
 
 error:

@@ -67,9 +67,7 @@ void gpu_create_context(void *ctx)
 
 	kctx = (struct kbase_context *)ctx;
 	KBASE_DEBUG_ASSERT(kctx != NULL);
-
 	kctx->ctx_status = CTX_UNINITIALIZED;
-	kctx->ctx_need_qos = false;
 
 	get_task_comm(current_name, current);
 	strncpy((char *)(&kctx->name), current_name, CTX_NAME_SIZE);
@@ -83,6 +81,9 @@ void gpu_destroy_context(void *ctx)
 {
 	struct kbase_context *kctx;
 	struct kbase_device *kbdev;
+#ifdef CONFIG_SCHED_HMP
+	struct exynos_context *platform;
+#endif
 
 	kctx = (struct kbase_context *)ctx;
 	KBASE_DEBUG_ASSERT(kctx != NULL);
@@ -94,41 +95,22 @@ void gpu_destroy_context(void *ctx)
 
 	kctx->ctx_status = CTX_DESTROYED;
 
-	if (kctx->ctx_need_qos)
-	{
-#ifdef CONFIG_SCHED_HMP
-		int i, policy_count;
-		const struct kbase_pm_policy *const *policy_list;
-		struct exynos_context *platform;
-		platform = (struct exynos_context *) kbdev->platform_context;
-#endif
 #ifdef CONFIG_MALI_DVFS
-		gpu_dvfs_boost_lock(GPU_DVFS_BOOST_UNSET);
+	gpu_dvfs_boost_lock(GPU_DVFS_BOOST_UNSET);
 #endif
 #ifdef CONFIG_SCHED_HMP
-		/* set policy back */
-		policy_count = kbase_pm_list_policies(&policy_list);
-		if (platform->cur_policy){
-			for (i = 0; i < policy_count; i++) {
-				if (sysfs_streq(policy_list[i]->name, platform->cur_policy->name)) {
-					kbase_pm_set_policy(kbdev, policy_list[i]);
-					break;
-				}
-			}
-		}
-		else{
-			for (i = 0; i < policy_count; i++) {
-				if (sysfs_streq(policy_list[i]->name, "demand")) {
-					kbase_pm_set_policy(kbdev, policy_list[i]);
-					break;
-				}
-			}
-		}
+	platform = (struct exynos_context *) kbdev->platform_context;
+	mutex_lock(&platform->gpu_sched_hmp_lock);
+
+	if (platform->ctx_need_qos)
+	{
+		platform->ctx_need_qos = false;
 		set_hmp_boost(0);
 		set_hmp_aggressive_up_migration(false);
 		set_hmp_aggressive_yield(false);
-#endif
 	}
+	mutex_unlock(&platform->gpu_sched_hmp_lock);
+#endif
 #ifdef CONFIG_MALI_DVFS_USER
 	gpu_dvfs_check_destroy_context(kctx);
 #endif
@@ -175,32 +157,20 @@ int gpu_vendor_dispatch(struct kbase_context *kctx, void * const args, u32 args_
 		{
 #if defined(CONFIG_MALI_PM_QOS) || defined(CONFIG_SCHED_HMP)
 			struct exynos_context *platform;
+			platform = (struct exynos_context *) kbdev->platform_context;
 #endif
 #ifdef CONFIG_SCHED_HMP
-			int i, policy_count;
-			const struct kbase_pm_policy *const *policy_list;
-			platform = (struct exynos_context *) kbdev->platform_context;
-#endif /* CONFIG_SCHED_HMP */
-			if (!kctx->ctx_need_qos) {
-				kctx->ctx_need_qos = true;
-#ifdef CONFIG_SCHED_HMP
-				/* set policy to always_on */
-				policy_count = kbase_pm_list_policies(&policy_list);
-				platform->cur_policy = kbase_pm_get_policy(kbdev);
-				for (i = 0; i < policy_count; i++) {
-					if (sysfs_streq(policy_list[i]->name, "always_on")) {
-						kbase_pm_set_policy(kbdev, policy_list[i]);
-						break;
-					}
-				}
+			mutex_lock(&platform->gpu_sched_hmp_lock);
+			if (!platform->ctx_need_qos) {
+				platform->ctx_need_qos = true;
 				/* set hmp boost */
 				set_hmp_boost(1);
 				set_hmp_aggressive_up_migration(true);
 				set_hmp_aggressive_yield(true);
-#endif /* CONFIG_SCHED_HMP */
 			}
+			mutex_unlock(&platform->gpu_sched_hmp_lock);
+#endif /* CONFIG_SCHED_HMP */
 #ifdef CONFIG_MALI_PM_QOS
-			platform = (struct exynos_context *) kbdev->platform_context;
 			gpu_pm_qos_command(platform, GPU_CONTROL_PM_QOS_EGL_SET);
 #endif /* CONFIG_MALI_PM_QOS */
 			break;
@@ -210,36 +180,22 @@ int gpu_vendor_dispatch(struct kbase_context *kctx, void * const args, u32 args_
 		{
 #if defined(CONFIG_MALI_PM_QOS) || defined(CONFIG_SCHED_HMP)
 			struct exynos_context *platform;
+			platform = (struct exynos_context *) kbdev->platform_context;
 #endif
 #ifdef CONFIG_SCHED_HMP
-			int i, policy_count;
-			const struct kbase_pm_policy *const *policy_list;
-			platform = (struct exynos_context *) kbdev->platform_context;
-#endif /* CONFIG_SCHED_HMP */
-			if (kctx->ctx_need_qos) {
-				kctx->ctx_need_qos = false;
-#ifdef CONFIG_SCHED_HMP
-				if (platform->cur_policy) {
-					/* set policy back */
-					policy_count = kbase_pm_list_policies(&policy_list);
-					for (i = 0; i < policy_count; i++) {
-						if (sysfs_streq(policy_list[i]->name, platform->cur_policy->name)) {
-							kbase_pm_set_policy(kbdev, policy_list[i]);
-							break;
-						}
-					}
-					platform->cur_policy = NULL;
-				}
+			mutex_lock(&platform->gpu_sched_hmp_lock);
+			if (platform->ctx_need_qos) {
+				platform->ctx_need_qos = false;
 				/* unset hmp boost */
 				set_hmp_boost(0);
 				set_hmp_aggressive_up_migration(false);
 				set_hmp_aggressive_yield(false);
+			}
+			mutex_unlock(&platform->gpu_sched_hmp_lock);
 #endif /* CONFIG_SCHED_HMP */
 #ifdef CONFIG_MALI_PM_QOS
-				platform = (struct exynos_context *) kbdev->platform_context;
-				gpu_pm_qos_command(platform, GPU_CONTROL_PM_QOS_EGL_RESET);
+			gpu_pm_qos_command(platform, GPU_CONTROL_PM_QOS_EGL_RESET);
 #endif /* CONFIG_MALI_PM_QOS */
-			}
 			break;
 		}
 	default:
@@ -316,8 +272,7 @@ void gpu_update_status(void *dev, char *str, u32 val)
 {
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
-	int i, fault_count = 0;
-	char *env[2] = {"FEATURE=GPUI", NULL};
+	int i;
 
 	kbdev = (struct kbase_device *)dev;
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
@@ -372,13 +327,7 @@ void gpu_update_status(void *dev, char *str, u32 val)
 		platform->gpu_exception_count[GPU_RESET]++;
 
 	for(i = GPU_JOB_CONFIG_FAULT; i < GPU_EXCEPTION_LIST_END; i++)
-		fault_count += platform->gpu_exception_count[i];
-
-	if(fault_count == 5)
-	{
-		kobject_uevent_env(&kbdev->dev->kobj, KOBJ_CHANGE, env);
-	}
-
+		platform->fault_count += platform->gpu_exception_count[i];
 }
 
 #define KBASE_MMU_PAGE_ENTRIES	512

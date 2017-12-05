@@ -182,6 +182,7 @@ struct fimc_is_lib_vra {
 
 	/* VRA orientation data */
 	enum fimc_is_lib_vra_dir		orientation[VRA_TOTAL_SENSORS];
+	spinlock_t				slock;
 
 #ifdef VRA_DMA_TEST_BY_IMAGE
 	void					*test_input_buffer;

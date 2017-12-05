@@ -156,7 +156,7 @@ int fimc_is_sensor_deinit_module(struct fimc_is_module_enum *module)
 	sensor = v4l2_get_subdev_hostdata(module->subdev);
 
 	core = sensor->private_data;
-	
+
 #ifdef CONFIG_COMPANION_DIRECT_USE
 	sensor_peri = (struct fimc_is_device_sensor_peri *)module->private_data;
 	if (sensor_peri->actuator) {
@@ -857,7 +857,7 @@ static int fimc_is_sensor_stop(struct fimc_is_device_sensor *device)
 		struct fimc_is_device_ischain *ischain;
 
 #ifndef ENABLE_IS_CORE
-		retry = 10;
+		retry = 14;
 
 		while (--retry && test_bit(FIMC_IS_SENSOR_WAIT_STREAMING, &device->state)) {
 			mwarn(" waiting first pixel..\n", device);
@@ -1874,7 +1874,7 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 	module->ext.sensor_con.csi_ch = device->pdata->csi_ch;
 	module->ext.sensor_con.csi_ch |= 0x0100;
 
-#if defined(CONFIG_USE_DIRECT_IS_CONTROL) 
+#if defined(CONFIG_USE_DIRECT_IS_CONTROL)
 	sensor_peri = (struct fimc_is_device_sensor_peri *)module->private_data;
 	/* set cis data */
 	{
@@ -1939,7 +1939,7 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 
 	fimc_is_sensor_peri_init_work(sensor_peri);
 
-#if defined(CONFIG_COMPANION_DIRECT_USE) 
+#if defined(CONFIG_COMPANION_DIRECT_USE)
 	/* set preproc data */
 	if (device->preprocessor && module->ext.preprocessor_con.product_name == device->preprocessor->id) {
 		u32 i2c_channel = module->ext.preprocessor_con.peri_info1.peri_setting.i2c.channel;
@@ -3629,7 +3629,7 @@ MODULE_DEVICE_TABLE(of, exynos_fimc_is_sensor_match);
 
 static struct platform_driver fimc_is_sensor_driver = {
 	.probe		= fimc_is_sensor_probe,
-	.remove 	= fimc_is_sensor_remove,
+	.remove		= fimc_is_sensor_remove,
 	.driver = {
 		.name	= FIMC_IS_SENSOR_DEV_NAME,
 		.owner	= THIS_MODULE,

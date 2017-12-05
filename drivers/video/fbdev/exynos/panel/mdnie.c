@@ -464,7 +464,7 @@ static void mdnie_update_scr_white_mode(struct mdnie_info *mdnie)
 				 mdnie->props.scenario == EBOOK_MODE)) {
 			mdnie->props.scr_white_mode = SCR_WHITE_MODE_SENSOR_RGB;
 			mdnie->props.update_sensorRGB = false;
-		} else if (mdnie->props.scenario <= EMAIL_MODE &&
+		} else if (mdnie->props.scenario <= SCENARIO_MAX &&
 				mdnie->props.scenario != EBOOK_MODE) {
 			mdnie->props.scr_white_mode =
 				SCR_WHITE_MODE_COLOR_COORDINATE;
@@ -702,7 +702,8 @@ static ssize_t accessibility_store(struct device *dev,
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
 	unsigned int s[12] = {0, };
-	int i, value, ret;
+	unsigned int value;
+	int i, ret;
 
 	ret = sscanf(buf, "%d %x %x %x %x %x %x %x %x %x %x %x %x",
 		&value, &s[0], &s[1], &s[2], &s[3],

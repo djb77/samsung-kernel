@@ -944,6 +944,18 @@ static int abox_rdma_compr_get_hw_params(struct snd_compr_stream *stream,
 		dev_info(dev, "%s: 48kHz 16bit\n", __func__);
 		break;
 	case 1:
+		/* 48kHz 24bit */
+		hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min =
+				48000;
+		snd_mask_reset(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+				SNDRV_PCM_FORMAT_S16);
+		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+				SNDRV_PCM_FORMAT_S24);
+		snd_mask_reset(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+				SNDRV_PCM_FORMAT_S32);
+		dev_info(dev, "%s: 48kHz 24bit\n", __func__);
+		break;
+	case 2:
 		/* 192kHz 24bit */
 		hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min =
 				192000;
@@ -955,7 +967,7 @@ static int abox_rdma_compr_get_hw_params(struct snd_compr_stream *stream,
 				SNDRV_PCM_FORMAT_S32);
 		dev_info(dev, "%s: 192kHz 24bit\n", __func__);
 		break;
-	case 2:
+	case 3:
 		/* 384kHz 32bit */
 		hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min =
 				384000;
@@ -1074,6 +1086,7 @@ static int abox_rdma_compr_format_get(struct snd_kcontrol *kcontrol,
 
 static const char * const abox_rdma_compr_format_text[] = {
 	"48kHz 16bit",
+	"48kHz 24bit",
 	"192kHz 24bit",
 	"384kHz 32bit",
 };

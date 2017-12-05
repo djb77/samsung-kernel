@@ -94,6 +94,8 @@ cpumask_var_t affinity_cpu_mask;
 cpumask_var_t default_cpu_mask;
 #endif
 
+extern bool lockup_noti;
+
 /**
  * dwc3_gadget_set_test_mode - Enables USB2 Test Modes
  * @dwc: pointer to our context structure
@@ -3165,6 +3167,10 @@ static void dwc3_process_event_entry(struct dwc3 *dwc,
 		/* depevt */
 		return dwc3_endpoint_interrupt(dwc, &event->depevt);
 	}
+
+	if (lockup_noti)
+		pr_err("%s: event->type.type: 0x%08X devt->type: 0x%08X\n",
+					__func__, (int)event->type.type, (int)event->devt.type);
 
 	switch (event->type.type) {
 	case DWC3_EVENT_TYPE_DEV:

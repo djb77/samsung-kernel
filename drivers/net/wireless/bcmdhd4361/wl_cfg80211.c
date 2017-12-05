@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.c 716279 2017-08-17 10:35:50Z $
+ * $Id: wl_cfg80211.c 721152 2017-09-13 11:53:35Z $
  */
 /* */
 #include <typedefs.h>
@@ -5007,7 +5007,8 @@ wl_cfg80211_set_mfp(struct bcm_cfg80211 *cfg,
 	/* Parse the wpa2ie to decode the MFP capablity */
 	if (((wpa2_ie = bcm_parse_tlvs((u8 *)sme->ie, sme->ie_len,
 			DOT11_MNG_RSN_ID)) != NULL) &&
-			(wl_cfg80211_get_rsn_capa(wpa2_ie, &rsn_cap) == 0)) {
+			(wl_cfg80211_get_rsn_capa(wpa2_ie, &rsn_cap) == 0) && rsn_cap) {
+		WL_DBG(("rsn_cap 0x%x%x\n", rsn_cap[0], rsn_cap[1]));
 		/* Check for MFP cap in the RSN capability field */
 		if (rsn_cap[0] & RSN_CAP_MFPR) {
 			mfp = WL_MFP_REQUIRED;
@@ -5036,8 +5037,8 @@ wl_cfg80211_set_mfp(struct bcm_cfg80211 *cfg,
 		}
 	}
 
-	WL_DBG((" mfp:%d wpa2_ie ptr:%p rsn_cap 0x%x%x fw mfp support:%d\n",
-		mfp, wpa2_ie, rsn_cap[0], rsn_cap[1], fw_support));
+	WL_DBG((" mfp:%d wpa2_ie ptr:%p rsn_cap %p fw_support:%d\n",
+		mfp, wpa2_ie, rsn_cap, fw_support));
 
 	if (fw_support == false) {
 		if (mfp) {
@@ -5736,13 +5737,19 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		cfg->ioctl_buf, WLC_IOCTL_MAXLEN, bssidx, &cfg->ioctl_buf_sync);
 
 	if (cfg->rcc_enabled) {
-		WL_ERR(("Connecting with" MACDBG " ssid \"%s\", len (%d) with rcc channels \n\n",
-			MAC2STRDBG((u8*)(&ext_join_params->assoc.bssid)),
+		WL_ERR_KERN(("Connecting with" MACDBG " ssid \"%s\", len (%d) with rcc "
+			"channels \n\n", MAC2STRDBG((u8*)(&ext_join_params->assoc.bssid)),
 			ext_join_params->ssid.SSID, ext_join_params->ssid.SSID_len));
+		WL_ERR_MEM(("Connecting with " MACDBG " ssid \"%s\", len (%d) with rcc "
+			"channels \n\n", MAC2STRDBG((u8*)(&ext_join_params->assoc.bssid)),
+			"*****", ext_join_params->ssid.SSID_len));
 	} else {
-		WL_ERR(("Connecting with" MACDBG " ssid \"%s\", len (%d) channel=%d\n\n",
+		WL_ERR_KERN(("Connecting with" MACDBG " ssid \"%s\", len (%d) channel=%d\n\n",
 			MAC2STRDBG((u8*)(&ext_join_params->assoc.bssid)),
 			ext_join_params->ssid.SSID, ext_join_params->ssid.SSID_len, cfg->channel));
+		WL_ERR_MEM(("Connecting with " MACDBG " ssid \"%s\", len (%d) channel=%d\n\n",
+			MAC2STRDBG((u8*)(&ext_join_params->assoc.bssid)),
+			"*****", ext_join_params->ssid.SSID_len, cfg->channel));
 	}
 
 	kfree(ext_join_params);
@@ -6517,11 +6524,13 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 #endif
 {
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
-	scb_val_t scb_val;
 	s32 rssi;
 	s32 rate;
 	s32 err = 0;
 	sta_info_t *sta;
+#ifdef SUPPORT_RSSI_SUM_REPORT
+	wl_rssi_ant_mimo_t rssi_ant_mimo;
+#endif /* SUPPORT_RSSI_SUM_REPORT */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0)) || defined(WL_COMPAT_WIRELESS)
 	s8 eabuf[ETHER_ADDR_STR_LEN];
 #endif
@@ -6652,15 +6661,29 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 #endif
 		}
 
-		memset(&scb_val, 0, sizeof(scb_val));
-		scb_val.val = 0;
-		err = wldev_ioctl_get(dev, WLC_GET_RSSI, &scb_val,
-			sizeof(scb_val_t));
+#ifdef SUPPORT_RSSI_SUM_REPORT
+		/* Query RSSI sum across antennas */
+		memset(&rssi_ant_mimo, 0, sizeof(rssi_ant_mimo));
+		err = wl_get_rssi_per_ant(dev, dev->name, NULL, &rssi_ant_mimo);
 		if (err) {
-			WL_ERR(("Could not get rssi (%d)\n", err));
+			WL_ERR(("Could not get rssi sum (%d)\n", err));
 			goto get_station_err;
 		}
-		rssi = wl_rssi_offset(dtoh32(scb_val.val));
+		rssi = rssi_ant_mimo.rssi_sum;
+		if (rssi == 0)
+#endif /* SUPPORT_RSSI_SUM_REPORT */
+		{
+			scb_val_t scb_val;
+			memset(&scb_val, 0, sizeof(scb_val));
+			scb_val.val = 0;
+			err = wldev_ioctl_get(dev, WLC_GET_RSSI, &scb_val,
+				sizeof(scb_val_t));
+			if (err) {
+				WL_ERR(("Could not get rssi (%d)\n", err));
+				goto get_station_err;
+			}
+			rssi = wl_rssi_offset(dtoh32(scb_val.val));
+		}
 		sinfo->filled |= STA_INFO_BIT(INFO_SIGNAL);
 		sinfo->signal = rssi;
 		WL_DBG(("RSSI %d dBm\n", rssi));
@@ -8002,9 +8025,9 @@ wl_cfg80211_mgmt_tx(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 				sizeof(scb_val_t));
 			if (err < 0)
 				WL_ERR(("WLC_SCB_DEAUTHENTICATE_FOR_REASON error %d\n", err));
-			WL_ERR(("Disconnect STA : %s scb_val.val %d\n",
-				bcm_ether_ntoa((const struct ether_addr *)mgmt->da, eabuf),
-				scb_val.val));
+			WL_ERR(("Disconnect STA : " MACDBG " scb_val.val %d\n",
+				MAC2STRDBG(bcm_ether_ntoa((const struct ether_addr *)mgmt->da,
+				eabuf)), scb_val.val));
 
 			if (num_associated > 0 && ETHER_ISBCAST(mgmt->da))
 				wl_delay(400);
@@ -9784,9 +9807,9 @@ wl_cfg80211_del_station(
 	}
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) */
 #endif /* CUSTOM_BLOCK_DEAUTH_AT_EAP_FAILURE */
-	WL_ERR(("Disconnect STA : %s scb_val.val %d\n",
-		bcm_ether_ntoa((const struct ether_addr *)mac_addr, eabuf),
-		scb_val.val));
+	WL_ERR(("Disconnect STA : " MACDBG " scb_val.val %d\n",
+		MAC2STRDBG(bcm_ether_ntoa((const struct ether_addr *)mac_addr,
+		eabuf)), scb_val.val));
 
 	if (num_associated > 0 && ETHER_ISBCAST(mac_addr))
 		wl_delay(400);
@@ -11705,14 +11728,23 @@ exit:
 }
 
 #if defined(DHD_ENABLE_BIGDATA_LOGGING)
-#define MAX_ASSOC_REJECT_ERR_STATUS 5
+enum {
+	BIGDATA_ASSOC_REJECT_NO_ACK = 1,
+	BIGDATA_ASSOC_REJECT_FAIL = 2,
+	BIGDATA_ASSOC_REJECT_UNSOLICITED = 3,
+	BIGDATA_ASSOC_REJECT_TIMEOUT = 4,
+	BIGDATA_ASSOC_REJECT_ABORT = 5,
+	BIGDATA_ASSOC_REJECT_NO_NETWWORKS = 6,
+	BIGDATA_ASSOC_REJECT_MAX = 50
+};
+
 int wl_get_connect_failed_status(struct bcm_cfg80211 *cfg, const wl_event_msg_t *e)
 {
 	u32 status = ntoh32(e->status);
 
 	cfg->assoc_reject_status = 0;
 
-	if (status == WLC_E_STATUS_FAIL) {
+	if (status != WLC_E_STATUS_SUCCESS) {
 		WL_ERR(("auth assoc status event=%d e->status %d e->reason %d \n",
 			ntoh32(cfg->event_auth_assoc.event_type),
 			(int)ntoh32(cfg->event_auth_assoc.status),
@@ -11720,26 +11752,33 @@ int wl_get_connect_failed_status(struct bcm_cfg80211 *cfg, const wl_event_msg_t 
 
 		switch ((int)ntoh32(cfg->event_auth_assoc.status)) {
 			case WLC_E_STATUS_NO_ACK:
-				cfg->assoc_reject_status = 1;
+				cfg->assoc_reject_status = BIGDATA_ASSOC_REJECT_NO_ACK;
 				break;
 			case WLC_E_STATUS_FAIL:
-				cfg->assoc_reject_status = 2;
+				cfg->assoc_reject_status = BIGDATA_ASSOC_REJECT_FAIL;
 				break;
 			case WLC_E_STATUS_UNSOLICITED:
-				cfg->assoc_reject_status = 3;
+				cfg->assoc_reject_status = BIGDATA_ASSOC_REJECT_UNSOLICITED;
 				break;
 			case WLC_E_STATUS_TIMEOUT:
-				cfg->assoc_reject_status = 4;
+				cfg->assoc_reject_status = BIGDATA_ASSOC_REJECT_TIMEOUT;
 				break;
 			case WLC_E_STATUS_ABORT:
-				cfg->assoc_reject_status = 5;
+				cfg->assoc_reject_status = BIGDATA_ASSOC_REJECT_ABORT;
 				break;
+			case WLC_E_STATUS_SUCCESS:
+				if (status == WLC_E_STATUS_NO_NETWORKS) {
+					cfg->assoc_reject_status =
+						BIGDATA_ASSOC_REJECT_NO_NETWWORKS;
+					break;
+				}
 			default:
+				cfg->assoc_reject_status = BIGDATA_ASSOC_REJECT_MAX;
 				break;
 		}
 		if (cfg->assoc_reject_status) {
 			if (ntoh32(cfg->event_auth_assoc.event_type) == WLC_E_ASSOC) {
-				cfg->assoc_reject_status += MAX_ASSOC_REJECT_ERR_STATUS;
+				cfg->assoc_reject_status += BIGDATA_ASSOC_REJECT_MAX;
 			}
 		}
 	}
@@ -12187,7 +12226,7 @@ int wl_get_bss_info(struct bcm_cfg80211 *cfg, struct net_device *dev, uint8 *mac
 	}
 	cfg->roam_count = 0;
 
-	WL_ERR(("BSSID:" MACDBG " SSID %s \n", MAC2STRDBG(eabuf), bi->SSID));
+	WL_ERR(("BSSID:" MACDBG " SSID %s \n", MAC2STRDBG(eabuf), "*****"));
 	WL_ERR(("freq:%d, BW:%s, RSSI:%d dBm, Rate:%d Mbps, 11mode:%d, stream:%d,"
 				"MU-MIMO:%d, Passpoint:%d, SNR:%d, Noise:%d, \n"
 				"akm:%s, roam:%s, 11kv:%d/%d \n",
@@ -12401,6 +12440,11 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 
 				if (event == WLC_E_DEAUTH_IND || event == WLC_E_DISASSOC_IND)
 					reason = ntoh32(e->reason);
+#ifdef SET_SSID_FAIL_CUSTOM_RC
+				if (event == WLC_E_SET_SSID) {
+					reason = SET_SSID_FAIL_CUSTOM_RC;
+				}
+#endif /* SET_SSID_FAIL_CUSTOM_RC */
 				/* WLAN_REASON_UNSPECIFIED is used for hang up event in Android */
 				reason = (reason == WLAN_REASON_UNSPECIFIED)? 0 : reason;
 
@@ -12801,8 +12845,9 @@ wl_check_pmstatus(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 	uint32 cur_dpm_upd_time = 0;
 	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
 	s32 rssi;
-	scb_val_t scb_val;
-
+#ifdef SUPPORT_RSSI_SUM_REPORT
+	wl_rssi_ant_mimo_t rssi_ant_mimo;
+#endif /* SUPPORT_RSSI_SUM_REPORT */
 	ndev = cfgdev_to_wlc_ndev(cfgdev, cfg);
 
 	pbuf = kzalloc(WLC_IOCTL_MEDLEN, GFP_KERNEL);
@@ -12826,13 +12871,26 @@ wl_check_pmstatus(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 
 	if (dhd->early_suspended) {
 		/* LCD off */
-		memset(&scb_val, 0, sizeof(scb_val_t));
-		scb_val.val = 0;
-		err = wldev_ioctl_get(ndev, WLC_GET_RSSI, &scb_val, sizeof(scb_val_t));
+#ifdef SUPPORT_RSSI_SUM_REPORT
+		/* Query RSSI sum across antennas */
+		memset(&rssi_ant_mimo, 0, sizeof(rssi_ant_mimo));
+		err = wl_get_rssi_per_ant(ndev, ndev->name, NULL, &rssi_ant_mimo);
 		if (err) {
-			WL_ERR(("Could not get rssi (%d)\n", err));
+			WL_ERR(("Could not get rssi sum (%d)\n", err));
 		}
-		rssi = wl_rssi_offset(dtoh32(scb_val.val));
+		rssi = rssi_ant_mimo.rssi_sum;
+		if (rssi == 0)
+#endif /* SUPPORT_RSSI_SUM_REPORT */
+		{
+			scb_val_t scb_val;
+			memset(&scb_val, 0, sizeof(scb_val_t));
+			scb_val.val = 0;
+			err = wldev_ioctl_get(ndev, WLC_GET_RSSI, &scb_val, sizeof(scb_val_t));
+			if (err) {
+				WL_ERR(("Could not get rssi (%d)\n", err));
+			}
+			rssi = wl_rssi_offset(dtoh32(scb_val.val));
+		}
 		WL_ERR(("[%s] RSSI %d dBm\n", ndev->name, rssi));
 		if (rssi > DPM_UPD_LMT_RSSI) {
 			return err;
@@ -16194,6 +16252,7 @@ s32 wl_cfg80211_attach(struct net_device *ndev, void *context)
 	INIT_LIST_HEAD(&cfg->wbtext_bssid_list);
 #endif /* WBTEXT */
 	INIT_LIST_HEAD(&cfg->vndr_oui_list);
+	spin_lock_init(&cfg->vndr_oui_sync);
 	spin_lock_init(&cfg->net_list_sync);
 	ndev->ieee80211_ptr = wdev;
 	SET_NETDEV_DEV(ndev, wiphy_dev(wdev->wiphy));
@@ -19807,20 +19866,23 @@ wl_vndr_ies_check_duplicate_vndr_oui(struct bcm_cfg80211 *cfg,
 	struct parsed_vndr_ie_info *vndr_info)
 {
 	wl_vndr_oui_entry_t *oui_entry = NULL;
+	unsigned long flags;
 
+	spin_lock_irqsave(&cfg->vndr_oui_sync, flags);
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-qual"
 #endif
 	list_for_each_entry(oui_entry, &cfg->vndr_oui_list, list) {
 		if (!memcmp(oui_entry->oui, vndr_info->vndrie.oui, DOT11_OUI_LEN)) {
+			spin_unlock_irqrestore(&cfg->vndr_oui_sync, flags);
 			return TRUE;
 		}
 	}
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
-
+	spin_unlock_irqrestore(&cfg->vndr_oui_sync, flags);
 	return FALSE;
 }
 
@@ -19829,6 +19891,7 @@ wl_vndr_ies_add_vendor_oui_list(struct bcm_cfg80211 *cfg,
 	struct parsed_vndr_ie_info *vndr_info)
 {
 	wl_vndr_oui_entry_t *oui_entry = NULL;
+	unsigned long flags;
 
 	oui_entry = kmalloc(sizeof(*oui_entry), GFP_KERNEL);
 	if (oui_entry == NULL) {
@@ -19839,7 +19902,9 @@ wl_vndr_ies_add_vendor_oui_list(struct bcm_cfg80211 *cfg,
 	memcpy(oui_entry->oui, vndr_info->vndrie.oui, DOT11_OUI_LEN);
 
 	INIT_LIST_HEAD(&oui_entry->list);
+	spin_lock_irqsave(&cfg->vndr_oui_sync, flags);
 	list_add_tail(&oui_entry->list, &cfg->vndr_oui_list);
+	spin_unlock_irqrestore(&cfg->vndr_oui_sync, flags);
 
 	return TRUE;
 }
@@ -19848,7 +19913,9 @@ static void
 wl_vndr_ies_clear_vendor_oui_list(struct bcm_cfg80211 *cfg)
 {
 	wl_vndr_oui_entry_t *oui_entry = NULL;
+	unsigned long flags;
 
+	spin_lock_irqsave(&cfg->vndr_oui_sync, flags);
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-qual"
@@ -19863,6 +19930,7 @@ wl_vndr_ies_clear_vendor_oui_list(struct bcm_cfg80211 *cfg)
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
+	spin_unlock_irqrestore(&cfg->vndr_oui_sync, flags);
 }
 
 static int
@@ -19879,6 +19947,7 @@ wl_vndr_ies_get_vendor_oui(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 
 	char *pos = vndr_oui;
 	u32 remained_buf_len = vndr_oui_len;
+	unsigned long flags;
 
 	if (!conn_info->resp_ie_len) {
 		return BCME_ERROR;
@@ -19904,12 +19973,14 @@ wl_vndr_ies_get_vendor_oui(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	}
 
 	if (vndr_oui) {
+		spin_lock_irqsave(&cfg->vndr_oui_sync, flags);
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-qual"
 #endif
 		list_for_each_entry(oui_entry, &cfg->vndr_oui_list, list) {
 			if (remained_buf_len < VNDR_OUI_STR_LEN) {
+				spin_unlock_irqrestore(&cfg->vndr_oui_sync, flags);
 				return BCME_ERROR;
 			}
 			pos += snprintf(pos, VNDR_OUI_STR_LEN, "%02X-%02X-%02X ",
@@ -19919,6 +19990,7 @@ wl_vndr_ies_get_vendor_oui(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
+		spin_unlock_irqrestore(&cfg->vndr_oui_sync, flags);
 	}
 
 	return vndr_oui_num;
@@ -19929,7 +20001,9 @@ wl_cfg80211_get_vndr_ouilist(struct bcm_cfg80211 *cfg, uint8 *buf, int max_cnt)
 {
 	wl_vndr_oui_entry_t *oui_entry = NULL;
 	int cnt = 0;
+	unsigned long flags;
 
+	spin_lock_irqsave(&cfg->vndr_oui_sync, flags);
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-qual"
@@ -19938,6 +20012,7 @@ wl_cfg80211_get_vndr_ouilist(struct bcm_cfg80211 *cfg, uint8 *buf, int max_cnt)
 		memcpy(buf, oui_entry->oui, DOT11_OUI_LEN);
 		cnt++;
 		if (cnt >= max_cnt) {
+			spin_unlock_irqrestore(&cfg->vndr_oui_sync, flags);
 			return cnt;
 		}
 		buf += DOT11_OUI_LEN;
@@ -19945,6 +20020,7 @@ wl_cfg80211_get_vndr_ouilist(struct bcm_cfg80211 *cfg, uint8 *buf, int max_cnt)
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
+	spin_unlock_irqrestore(&cfg->vndr_oui_sync, flags);
 	return cnt;
 }
 
@@ -21936,7 +22012,7 @@ wl_cfg80211_set_cac(struct bcm_cfg80211 *cfg, int enable)
 }
 #endif /* SUPPORT_SET_CAC */
 
-#ifdef SUPPORT_RSSI_LOGGING
+#ifdef SUPPORT_RSSI_SUM_REPORT
 int
 wl_get_rssi_per_ant(struct net_device *dev, char *ifname, char *peer_mac, void *param)
 {
@@ -22033,4 +22109,4 @@ wl_set_rssi_logging(struct net_device *dev, void *param)
 
 	return err;
 }
-#endif /* SUPPORT_RSSI_LOGGING */
+#endif /* SUPPORT_RSSI_SUM_REPORT */

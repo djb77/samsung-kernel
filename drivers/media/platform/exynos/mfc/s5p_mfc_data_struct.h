@@ -700,6 +700,9 @@ struct s5p_mfc_enc_params {
 
 	u16 rc_frame_delta;	/* MFC6.1 Only */
 
+	u32 i_frm_ctrl_mode;
+	u32 i_frm_ctrl;
+
 	union {
 		struct s5p_mfc_h264_enc_params h264;
 		struct s5p_mfc_mpeg4_enc_params mpeg4;

@@ -140,6 +140,10 @@ struct fimc_is_resourcemgr {
 	spinlock_t			shared_meta_lock;
 	struct camera2_shot			shared_shot;
 #endif
+#ifdef ENABLE_KERNEL_LOG_DUMP
+	unsigned long long			kernel_log_time;
+	void					*kernel_log_buf;
+#endif
 };
 
 int fimc_is_resourcemgr_probe(struct fimc_is_resourcemgr *resourcemgr, void *private_data);

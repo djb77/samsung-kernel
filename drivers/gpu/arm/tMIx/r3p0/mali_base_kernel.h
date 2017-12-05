@@ -1167,22 +1167,15 @@ typedef struct base_jd_event_v2 {
 } base_jd_event_v2;
 
 /**
- * Padding required to ensure that the @ref struct base_dump_cpu_gpu_counters structure fills
- * a full cache line.
- */
-
-#define BASE_CPU_GPU_CACHE_LINE_PADDING (36)
-
-
-/**
  * @brief Structure for BASE_JD_REQ_SOFT_DUMP_CPU_GPU_COUNTERS jobs.
  *
- * This structure is stored into the memory pointed to by the @c jc field of @ref base_jd_atom.
+ * This structure is stored into the memory pointed to by the @c jc field
+ * of @ref base_jd_atom.
  *
- * This structure must be padded to ensure that it will occupy whole cache lines. This is to avoid
- * cases where access to pages containing the structure is shared between cached and un-cached
- * memory regions, which would cause memory corruption.  Here we set the structure size to be 64 bytes
- * which is the cache line for ARM A15 processors.
+ * It must not occupy the same CPU cache line(s) as any neighboring data.
+ * This is to avoid cases where access to pages containing the structure
+ * is shared between cached and un-cached memory regions, which would
+ * cause memory corruption.
  */
 
 typedef struct base_dump_cpu_gpu_counters {
@@ -1190,10 +1183,8 @@ typedef struct base_dump_cpu_gpu_counters {
 	u64 cycle_counter;
 	u64 sec;
 	u32 usec;
-	u8 padding[BASE_CPU_GPU_CACHE_LINE_PADDING];
+	u8 padding[36];
 } base_dump_cpu_gpu_counters;
-
-
 
 /** @} end group base_user_api_job_dispatch */
 

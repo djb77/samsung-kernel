@@ -232,7 +232,9 @@ struct exynos_context {
 	struct mutex gpu_clock_lock;
 	struct mutex gpu_dvfs_handler_lock;
 	spinlock_t gpu_dvfs_spinlock;
-
+#ifdef CONFIG_SCHED_HMP
+	struct mutex gpu_sched_hmp_lock;
+#endif
 	/* clock & voltage related variables */
 	int clk_g3d_status;
 #ifdef CONFIG_MALI_RT_PM
@@ -311,6 +313,7 @@ struct exynos_context {
 	bool early_clk_gating_status;
 	bool dvs_status;
 	bool dvs_is_enabled;
+	bool inter_frame_pm_feature;
 	bool inter_frame_pm_status;
 	bool inter_frame_pm_is_poweron;
 
@@ -346,6 +349,7 @@ struct exynos_context {
 	int debug_level;
 	int trace_level;
 
+	int fault_count;
 	int gpu_exception_count[GPU_EXCEPTION_LIST_END];
 	int balance_retry_count[BMAX_RETRY_CNT];
 	gpu_attribute *attrib;
@@ -360,6 +364,10 @@ struct exynos_context {
 
 #ifdef CONFIG_MALI_ASV_CALIBRATION_SUPPORT
 	bool gpu_auto_cali_status;
+#endif
+
+#ifdef CONFIG_SCHED_HMP
+	bool ctx_need_qos;
 #endif
 };
 

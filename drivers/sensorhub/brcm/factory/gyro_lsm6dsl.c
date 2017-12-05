@@ -561,10 +561,10 @@ static ssize_t gyro_calibration_info_show(struct device *dev,
 
 void set_GyroCalibrationInfoData(char *pchRcvDataFrame, int *iDataIdx)
 {
-	if (gyroCalDataIndx < (CALDATATOTALMAX - 1)) {
+	if (gyroCalDataIndx < (CALDATATOTALMAX - 1))
 		memcpy(gyroCalDataInfo[++gyroCalDataIndx],  pchRcvDataFrame + *iDataIdx, CALDATAFIELDLENGTH);
-		*iDataIdx += CALDATAFIELDLENGTH;
-	}
+
+	*iDataIdx += CALDATAFIELDLENGTH;
 }
 
 static DEVICE_ATTR(name, 0440, gyro_name_show, NULL);

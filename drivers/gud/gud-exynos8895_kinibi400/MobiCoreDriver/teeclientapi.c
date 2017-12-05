@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -555,8 +555,8 @@ void teec_request_cancellation(struct teec_operation *operation)
 
 	mc_dev_devel("== %s() ==============", __func__);
 
-	wait_event_interruptible(operations_wq, operation->started);
-	if (signal_pending(current)) {
+	ret = wait_event_interruptible(operations_wq, operation->started);
+	if (ret == -ERESTARTSYS) {
 		mc_dev_devel("signal received");
 		return;
 	}

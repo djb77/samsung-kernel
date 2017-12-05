@@ -512,7 +512,7 @@ int fimc_is_set_mshot_frame(u32 instance,
 		if (j < frame->num_buffers)
 			hw_frame->type = SHOT_TYPE_MULTI;
 		else /* last buffer */
-	 		hw_frame->type = frame->type;
+			hw_frame->type = frame->type;
 
 		hw_frame->planes	= 1;
 		hw_frame->num_buffers	= 1;
@@ -1967,7 +1967,6 @@ int fimc_is_hardware_open(struct fimc_is_hardware *hardware, u32 hw_id,
 	int hw_slot = -1;
 	struct fimc_is_hw_ip *hw_ip = NULL;
 	u32 size = 0;
-	int i;
 
 	BUG_ON(!hardware);
 
@@ -2015,8 +2014,7 @@ int fimc_is_hardware_open(struct fimc_is_hardware *hardware, u32 hw_id,
 	if (atomic_inc_return(&hw_ip->rsccount) == 1) {
 		memset(hw_ip->debug_info, 0x00, sizeof(struct hw_debug_info) * DEBUG_FRAME_COUNT);
 		memset(hw_ip->setfile, 0x00, sizeof(struct fimc_is_hw_ip_setfile) * SENSOR_POSITION_END);
-		for (i = 0; i < SENSOR_POSITION_END; i++)
-			hw_ip->setfile[i].applied_scenario = -1;
+		hw_ip->applied_scenario = -1;
 		hw_ip->debug_index[0] = 0;
 		hw_ip->debug_index[1] = 0;
 		atomic_set(&hw_ip->count.fs, 0);
@@ -3085,7 +3083,7 @@ int fimc_is_hardware_apply_setfile(struct fimc_is_hardware *hardware, u32 instan
 		}
 
 		sensor_position = hardware->sensor_position[instance];
-		hw_ip->setfile[sensor_position].applied_scenario = scenario;
+		hw_ip->applied_scenario = scenario;
 	}
 
 	return ret;

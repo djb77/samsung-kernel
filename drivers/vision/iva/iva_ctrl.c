@@ -521,6 +521,7 @@ static int iva_ctrl_open(struct inode *inode, struct file *filp)
 	proc->iva_data	= iva;
 	proc->state	= 0;
 
+	mutex_init(&proc->proc_mem_lock);
 	hash_init(proc->h_mem_map);
 
 	mutex_lock(&iva->proc_mutex);
@@ -566,6 +567,7 @@ static int iva_ctrl_release(struct inode *inode, struct file *filp)
 		iva_deinit(iva);
 
 	iva_mem_force_to_free_proc_mapped_list(proc);
+	mutex_destroy(&proc->proc_mem_lock);
 
 	put_task_struct(proc->tsk);
 

@@ -141,6 +141,8 @@ struct pmucal_seq pmucal_lpm_init[] = {
 	PMUCAL_SEQ_DESC(PMUCAL_WRITE, "CLKSTOP_CMU_MIF_DURATION2", 0x16480000, 0x2918, (0xf << 16), (0x1 << 16), 0, 0, 0xffffffff, 0),
 	PMUCAL_SEQ_DESC(PMUCAL_WRITE, "CLKSTOP_CMU_APM_DURATION2", 0x16480000, 0x8178, (0xf << 16), (0x1 << 16), 0, 0, 0xffffffff, 0),
 	PMUCAL_SEQ_DESC(PMUCAL_WRITE, "CLKSTOP_OPEN_CMU_APM_DURATION2", 0x16480000, 0x8198, (0xf << 16), (0x1 << 16), 0, 0, 0xffffffff, 0),
+	PMUCAL_SEQ_DESC(PMUCAL_WRITE, "CLUSTER0_L2_OPTION", 0x16480000, 0x2608, (0x1 << 16), (0x1 << 16), 0, 0, 0xffffffff, 0),
+	PMUCAL_SEQ_DESC(PMUCAL_WRITE, "CLUSTER1_L2_OPTION", 0x16480000, 0x2628, (0x1 << 16), (0x1 << 16), 0, 0, 0xffffffff, 0),
 };
 unsigned int pmucal_lpm_init_size = ARRAY_SIZE(pmucal_lpm_init);
 /* individual sequence descriptor for each power mode - enter, exit, early_wakeup */

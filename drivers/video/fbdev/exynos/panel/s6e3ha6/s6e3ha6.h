@@ -391,12 +391,12 @@ enum {
 	DUMP_SELF_DIAG,
 };
 
-void show_rddpm(struct dumpinfo *info);
-void show_rddsm(struct dumpinfo *info);
-void show_err(struct dumpinfo *info);
-void show_err_fg(struct dumpinfo *info);
-void show_dsi_err(struct dumpinfo *info);
-void show_self_diag(struct dumpinfo *info);
+static void show_rddpm(struct dumpinfo *info);
+static void show_rddsm(struct dumpinfo *info);
+static void show_err(struct dumpinfo *info);
+static void show_err_fg(struct dumpinfo *info);
+static void show_dsi_err(struct dumpinfo *info);
+static void show_self_diag(struct dumpinfo *info);
 
 static struct dumpinfo s6e3ha6_dmptbl[] = {
 	[DUMP_RDDPM] = DUMPINFO_INIT(rddpm, &s6e3ha6_restbl[RES_RDDPM], show_rddpm),

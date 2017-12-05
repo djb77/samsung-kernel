@@ -3080,7 +3080,8 @@ static ssize_t mfc_store_addr(struct device *dev,
 	struct power_supply *psy = dev_get_drvdata(dev);
 	struct mfc_charger_data *charger = power_supply_get_drvdata(psy);
 	int x;
-	if (sscanf(buf, "0x%10x\n", &x) == 1) {
+
+	if (sscanf(buf, "0x%4x\n", &x) == 1) {
 		charger->addr = x;
 	}
 	return count;
@@ -3092,6 +3093,7 @@ static ssize_t mfc_show_addr(struct device *dev,
 {
 	struct power_supply *psy = dev_get_drvdata(dev);
 	struct mfc_charger_data *charger = power_supply_get_drvdata(psy);
+
 	return sprintf(buf, "0x%x\n", charger->addr);
 }
 
@@ -3102,7 +3104,8 @@ static ssize_t mfc_store_size(struct device *dev,
 	struct power_supply *psy = dev_get_drvdata(dev);
 	struct mfc_charger_data *charger = power_supply_get_drvdata(psy);
 	int x;
-	if (sscanf(buf, "%10d\n", &x) == 1) {
+
+	if (sscanf(buf, "%5d\n", &x) == 1) {
 		charger->size = x;
 	}
 	return count;
@@ -3127,8 +3130,8 @@ static ssize_t mfc_store_data(struct device *dev,
 
 	if (sscanf(buf, "0x%10x", &x) == 1) {
 		u8 data = x;
-		if (mfc_reg_write(charger->client, charger->addr, data) < 0)
-		{
+
+		if (mfc_reg_write(charger->client, charger->addr, data) < 0) {
 			dev_info(charger->dev,
 					"%s: addr: 0x%x write fail\n", __func__, charger->addr);
 		}
@@ -3142,20 +3145,25 @@ static ssize_t mfc_show_data(struct device *dev,
 {
 	struct power_supply *psy = dev_get_drvdata(dev);
 	struct mfc_charger_data *charger = power_supply_get_drvdata(psy);
-	u8 data;
-	int i, count = 0;;
-	if (charger->size == 0)
-		charger->size = 1;
+	int count = 0;;
 
-	for (i = 0; i < charger->size; i++) {
-		if (mfc_reg_read(charger->client, charger->addr+i, &data) < 0) {
-			dev_info(charger->dev,
-					"%s: read fail\n", __func__);
-			count += sprintf(buf+count, "addr: 0x%x read fail\n", charger->addr+i);
-			continue;
+	if (charger->size == 0) {
+		charger->size = 1;
+	} else if (charger->size + charger->addr <= 0xFFFF) {
+		u8 data;
+		int i;
+
+		for (i = 0; i < charger->size; i++) {
+			if (mfc_reg_read(charger->client, charger->addr + i, &data) < 0) {
+				dev_info(charger->dev,
+						"%s: read fail\n", __func__);
+				count += sprintf(buf + count, "addr: 0x%x read fail\n", charger->addr + i);
+				continue;
+			}
+			count += sprintf(buf + count, "addr: 0x%x, data: 0x%x\n", charger->addr + i, data);
 		}
-		count += sprintf(buf+count, "addr: 0x%x, data: 0x%x\n", charger->addr+i,data);
 	}
+
 	return count;
 }
 
