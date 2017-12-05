@@ -338,9 +338,9 @@ void decon_create_timeline(struct decon_device *decon, char *name)
 		decon->timeline_max = 1;
 }
 
-int decon_create_fence(struct decon_device *decon, struct decon_reg_data *regs)
+int decon_create_fence(struct decon_device *decon,
+		struct sync_fence **fence, struct decon_reg_data *regs)
 {
-	struct sync_fence *fence;
 	struct sync_pt *pt;
 	int fd = -EMFILE;
 
@@ -351,8 +351,8 @@ int decon_create_fence(struct decon_device *decon, struct decon_reg_data *regs)
 		goto err;
 	}
 
-	fence = sync_fence_create("display", pt);
-	if (!fence) {
+	*fence = sync_fence_create("display", pt);
+	if (!(*fence)) {
 		decon_err("%s: failed to create fence\n", __func__);
 		sync_pt_free(pt);
 		goto err;
@@ -364,10 +364,10 @@ int decon_create_fence(struct decon_device *decon, struct decon_reg_data *regs)
 	fd = get_unused_fd_flags(0);
 	if (fd < 0) {
 		decon_err("%s: failed to get unused fd\n", __func__);
+		sync_fence_put(*fence);
 		goto err;
 	}
 
-	sync_fence_install(fence, fd);
 	return fd;
 
 err:
@@ -375,16 +375,139 @@ err:
 	return fd;
 }
 
-void decon_wait_fence(struct sync_fence *fence)
+void decon_install_fence(struct sync_fence *fence, int fd)
+{
+	sync_fence_install(fence, fd);
+}
+
+int decon_print_fence_err(struct decon_device *decon, struct seq_file *s)
+{
+	int i, idx;
+	u64 time, before_time;
+	ktime_t cur_time = ktime_get();
+	struct disp_fence_err *fence_err;
+
+	idx = (decon->fence_err_cnt - 1) % FENCE_ERR_LIST_CNT;
+
+	if (s != NULL)
+		seq_printf(s, "- Fence Error History (Total Cnt: %d) -\n",
+			decon->fence_err_cnt);
+	else
+		decon_info("- Fence Error History (Total Cnt: %d) -\n",
+			decon->fence_err_cnt);
+
+	if (decon->fence_err_cnt <= 0)
+		return 0;
+
+	fence_err = &decon->first_fence_err;
+	time = ktime_to_ms(fence_err->time);
+	before_time = ktime_to_ms(ktime_sub(cur_time, fence_err->time));
+	if (s != NULL)
+		seq_printf(s, "1st : %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+			fence_err->name, fence_err->win_id, fence_err->status,
+			time / 1000, time % 1000,
+			before_time / 1000, before_time % 1000);
+	else
+		decon_info("1st: %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+			fence_err->name, fence_err->win_id, fence_err->status,
+			time / 1000, time % 1000,
+			before_time / 1000, before_time % 1000);
+
+
+	for (i = idx ; i >= 0; i--) {
+		fence_err = &decon->fence_err_list[i];
+		if (fence_err == NULL) {
+			decon_err("DECON:ERR:%s:fence_err_list is null\n", __func__);
+			goto exit_dump;
+		}
+
+		time = ktime_to_ms(fence_err->time);
+		before_time = ktime_to_ms(ktime_sub(cur_time, fence_err->time));
+		if (s != NULL)
+			seq_printf(s, "F: %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+
+		else
+			decon_info("F: %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+
+	}
+
+	for (i = FENCE_ERR_LIST_CNT - 1; i >= idx + 1; i--) {
+		fence_err = &decon->fence_err_list[i];
+		if (fence_err == NULL) {
+			decon_err("DECON:ERR:%s:fence_err_list is null\n", __func__);
+			goto exit_dump;
+		}
+
+		time = ktime_to_ms(fence_err->time);
+		before_time = ktime_to_ms(ktime_sub(cur_time, fence_err->time));
+		if (s != NULL)
+			seq_printf(s, "F: %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+
+		else
+			decon_info("F: %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+	}
+exit_dump:
+	return 0;
+}
+
+
+#define FENCE_NAME_MAX	32
+#define FENCE_NAME_STR_MAX (FENCE_NAME_MAX - 1)
+
+void decon_fence_err_log(struct decon_device *decon, int idx, struct sync_fence *fence)
+
+{
+	int err_idx;
+	int namelen;
+
+	namelen = strlen(fence->name);
+	if (namelen > FENCE_NAME_STR_MAX)
+		namelen = FENCE_NAME_STR_MAX;
+
+	if (decon->fence_err_cnt == 0) {
+		decon->first_fence_err.win_id = idx;
+		decon->first_fence_err.time = ktime_get();
+		decon->first_fence_err.status = atomic_read(&fence->status);
+		memset(decon->first_fence_err.name, 0, FENCE_NAME_MAX);
+		strncpy(decon->first_fence_err.name, fence->name, namelen);
+	}
+
+	err_idx = decon->fence_err_cnt % FENCE_ERR_LIST_CNT;
+	decon->fence_err_list[err_idx].win_id = idx;
+	decon->fence_err_list[err_idx].time = ktime_get();
+	decon->fence_err_list[err_idx].status = atomic_read(&fence->status);
+	memset(decon->fence_err_list[err_idx].name, 0, FENCE_NAME_MAX);
+	strncpy(decon->fence_err_list[err_idx].name, fence->name, namelen);
+
+	decon->fence_err_cnt += 1;
+
+	decon_print_fence_err(decon, NULL);
+}
+
+
+int decon_wait_fence(struct sync_fence *fence)
 {
 	int err = 0;
 
 	snprintf(acquire_fence_log, ACQUIRE_FENCE_LEN, "%p:%s:%d",
 			fence, fence->name, atomic_read(&fence->status));
-
 	err = sync_fence_wait(fence, 900);
 	if (err < 0)
 		decon_warn("%s: error waiting on acquire fence: %d\n", acquire_fence_log, err);
+
+	return err;
 }
 
 void decon_signal_fence(struct decon_device *decon)

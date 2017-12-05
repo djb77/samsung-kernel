@@ -610,7 +610,7 @@ static int __init sec_tsp_raw_data_late_init(void)
 	if (!sec_tsp_raw_data_buf)
 		return 0;
 
-	entry2 = proc_create("tsp_raw_data", S_IFREG | S_IRUSR | S_IRGRP,
+	entry2 = proc_create("tsp_raw_data", S_IFREG | S_IRUGO,
 			     NULL, &tsp_raw_data_file_ops);
 	if (!entry2) {
 		pr_err("%s: failed to create proc entry of tsp_raw_data\n", __func__);

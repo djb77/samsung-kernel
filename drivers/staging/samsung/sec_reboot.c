@@ -135,6 +135,12 @@ static void sec_power_off(void)
 		if (gpio_get_value(powerkey_gpio)) {
 			exynos_acpm_reboot();
 
+#ifdef CONFIG_SEC_DEBUG
+			/* Clear magic code in power off */
+			pr_emerg("%s: Clear magic code in power off!\n", __func__);
+			sec_debug_reboot_handler();
+			flush_cache_all();
+#endif
 			pr_emerg("%s: set PS_HOLD low\n", __func__);
 			exynos_pmu_update(EXYNOS_PMU_PS_HOLD_CONTROL, 0x1<<8, 0x0);
 

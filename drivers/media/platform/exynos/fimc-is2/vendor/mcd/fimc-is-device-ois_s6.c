@@ -1945,7 +1945,6 @@ int fimc_is_ois_shift_compensation_s6(struct v4l2_subdev *subdev, int position, 
 	struct fimc_is_device_sensor *device = NULL;
 	u32 setfile;
 	u32 scene;
-	u32 sub_scene;
 
 	BUG_ON(!subdev);
 
@@ -1973,10 +1972,9 @@ int fimc_is_ois_shift_compensation_s6(struct v4l2_subdev *subdev, int position, 
 		goto p_err;
 	}
 
-	sub_scene = (setfile & FIMC_IS_SETFILE_MASK);
 	scene = (setfile & FIMC_IS_SCENARIO_MASK) >> FIMC_IS_SCENARIO_SHIFT;
 #ifdef OIS_SHIFT_ENABLE
-	if ((sub_scene == ISS_SUB_SCENARIO_FHD_60FPS) || (scene == FIMC_IS_SCENARIO_SWVDIS)
+	if ((scene == FIMC_IS_SCENARIO_FHD_60FPS) || (scene == FIMC_IS_SCENARIO_SWVDIS)
 		|| (scene == FIMC_IS_SCENARIO_AUTO_DUAL)) /* scene == FIMC_IS_SCENARIO_SWVDIS : UHD */
 		ois_centering_shift_enable = true;
 	else

@@ -26,8 +26,8 @@
 struct fimc_is_vender {
 	char fw_path[FIMC_IS_PATH_LEN];
 	char request_fw_path[FIMC_IS_PATH_LEN];
-	char setfile_path[FIMC_IS_PATH_LEN];
-	char request_setfile_path[FIMC_IS_PATH_LEN];
+	char setfile_path[SENSOR_POSITION_END][FIMC_IS_PATH_LEN];
+	char request_setfile_path[SENSOR_POSITION_END][FIMC_IS_PATH_LEN];
 	void *private_data;
 	int companion_crc_error;
 };
@@ -107,7 +107,7 @@ int fimc_is_vender_cal_load(struct fimc_is_vender *vender, void *module_data);
 int fimc_is_vender_module_sel(struct fimc_is_vender *vender, void *module_data);
 int fimc_is_vender_module_del(struct fimc_is_vender *vender, void *module_data);
 int fimc_is_vender_fw_sel(struct fimc_is_vender *vender);
-int fimc_is_vender_setfile_sel(struct fimc_is_vender *vender, char *setfile_name);
+int fimc_is_vender_setfile_sel(struct fimc_is_vender *vender, char *setfile_name, int position);
 int fimc_is_vender_preprocessor_gpio_on_sel(struct fimc_is_vender *vender, u32 scenario, u32 *gpio_scenario);
 int fimc_is_vender_preprocessor_gpio_on(struct fimc_is_vender *vender, u32 scenario, u32 gpio_scenario);
 int fimc_is_vender_sensor_gpio_on_sel(struct fimc_is_vender *vender, u32 scenario, u32 *gpio_scenario);

@@ -35,6 +35,7 @@ int s5p_mfc_nal_q_check_enable(struct s5p_mfc_dev *dev)
 {
 	struct s5p_mfc_ctx *temp_ctx;
 	struct s5p_mfc_dec *dec = NULL;
+	struct s5p_mfc_enc *enc = NULL;
 	int i;
 
 	mfc_debug_enter();
@@ -67,7 +68,7 @@ int s5p_mfc_nal_q_check_enable(struct s5p_mfc_dev *dev)
 				mfc_debug(2, "There is a last frame. index: %d\n", i);
 				return 0;
 			}
-			/* NAL-Q doesn't support multi-frame */
+			/* NAL-Q doesn't support multi-frame, interlaced, black bar */
 			if (temp_ctx->type == MFCINST_DECODER) {
 				dec = temp_ctx->dec_priv;
 				if (!dec) {
@@ -88,6 +89,17 @@ int s5p_mfc_nal_q_check_enable(struct s5p_mfc_dev *dev)
 				}
 				if (dec->detect_black_bar) {
 					mfc_debug(2, "black bar detection is enabled\n");
+					return 0;
+				}
+			/* NAL-Q doesn't support fixed byte(slice mode) */
+			} else if (temp_ctx->type == MFCINST_ENCODER) {
+				enc = temp_ctx->enc_priv;
+				if (!enc) {
+					mfc_debug(2, "There is no enc\n");
+					return 0;
+				}
+				if (enc->slice_mode == V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_FIXED_BYTES) {
+					mfc_debug(2, "There is fixed bytes option(slice mode)\n");
 					return 0;
 				}
 			}

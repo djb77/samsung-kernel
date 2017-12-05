@@ -105,6 +105,7 @@ struct iva_proc {
 	pid_t			tid;
 	struct iva_dev_data	*iva_data;
 	unsigned long		state;
+	struct mutex		proc_mem_lock;  /* memory lock per process */
 	DECLARE_HASHTABLE(h_mem_map, 9);	/* 512 */
 };
 

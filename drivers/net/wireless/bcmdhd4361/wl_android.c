@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_android.c 707629 2017-06-28 09:35:05Z $
+ * $Id: wl_android.c 720601 2017-09-11 13:06:44Z $
  */
 
 #include <linux/module.h>
@@ -346,11 +346,11 @@ typedef struct android_wifi_af_params {
 #define CMD_SET_AP_RPS_PARAMS				"SET_AP_RPS_PARAMS"
 #endif /* SUPPORT_AP_RADIO_PWRSAVE */
 
-#ifdef SUPPORT_RSSI_LOGGING
+#ifdef SUPPORT_RSSI_SUM_REPORT
 #define CMD_SET_RSSI_LOGGING				"SET_RSSI_LOGGING"
 #define CMD_GET_RSSI_LOGGING				"GET_RSSI_LOGGING"
 #define CMD_GET_RSSI_PER_ANT				"GET_RSSI_PER_ANT"
-#endif /* SUPPORT_RSSI_LOGGING */
+#endif /* SUPPORT_RSSI_SUM_REPORT */
 
 #define CMD_GET_SNR							"GET_SNR"
 
@@ -515,6 +515,8 @@ static const wl_natoe_sub_cmd_t natoe_cmd_list[] = {
 #define CMD_PKTLOG_START	"PKTLOG_START"
 #define CMD_PKTLOG_STOP		"PKTLOG_STOP"
 #define CMD_PKTLOG_FILTER_EXIST "PKTLOG_FILTER_EXIST"
+#define CMD_PKTLOG_MINMIZE_ENABLE	"PKTLOG_MINMIZE_ENABLE"
+#define CMD_PKTLOG_MINMIZE_DISABLE	"PKTLOG_MINMIZE_DISABLE"
 #endif /* DHD_PKT_LOGGING */
 
 #if defined(STAT_REPORT)
@@ -5635,7 +5637,7 @@ wl_android_set_ap_rps_params(struct net_device *dev, char *command, int total_le
 }
 #endif /* SUPPORT_AP_RADIO_PWRSAVE */
 
-#ifdef SUPPORT_RSSI_LOGGING
+#ifdef SUPPORT_RSSI_SUM_REPORT
 int
 wl_android_get_rssi_per_ant(struct net_device *dev, char *command, int total_len)
 {
@@ -5812,7 +5814,7 @@ wl_android_get_rssi_logging(struct net_device *dev, char *command, int total_len
 
 	return bytes_written;
 }
-#endif /* SUPPORT_RSSI_LOGGING */
+#endif /* SUPPORT_RSSI_SUM_REPORT */
 
 #ifdef SET_PCIE_IRQ_CPU_CORE
 void
@@ -6240,6 +6242,62 @@ wl_android_pktlog_filter_exist(struct net_device *dev, char *command, int total_
 		bytes_written = snprintf(command, total_len, "FALSE");
 		DHD_ERROR(("%s: pktlog filter pattern id: %d is not existed\n", __FUNCTION__, id));
 	}
+
+	return bytes_written;
+}
+
+static int
+wl_android_pktlog_minmize_enable(struct net_device *dev, char *command, int total_len)
+{
+	int bytes_written = 0;
+	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(dev);
+
+	if (!dhdp || !dhdp->pktlog) {
+		DHD_PKT_LOG(("%s(): dhdp=%p pktlog=%p\n",
+			__FUNCTION__, dhdp, (dhdp ? dhdp->pktlog : NULL)));
+		return -EINVAL;
+	}
+
+	if (!dhdp->pktlog->tx_pktlog_ring || !dhdp->pktlog->rx_pktlog_ring) {
+		DHD_PKT_LOG(("%s(): tx_pktlog_ring=%p rx_pktlog_ring=%p\n",
+			__FUNCTION__, dhdp->pktlog->tx_pktlog_ring, dhdp->pktlog->rx_pktlog_ring));
+		return -EINVAL;
+	}
+
+	dhdp->pktlog->tx_pktlog_ring->pktlog_minmize = TRUE;
+	dhdp->pktlog->rx_pktlog_ring->pktlog_minmize = TRUE;
+
+	bytes_written = snprintf(command, total_len, "OK");
+
+	DHD_ERROR(("%s: pktlog pktlog_minmize enable\n", __FUNCTION__));
+
+	return bytes_written;
+}
+
+static int
+wl_android_pktlog_minmize_disable(struct net_device *dev, char *command, int total_len)
+{
+	int bytes_written = 0;
+	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(dev);
+
+	if (!dhdp || !dhdp->pktlog) {
+		DHD_PKT_LOG(("%s(): dhdp=%p pktlog=%p\n",
+			__FUNCTION__, dhdp, (dhdp ? dhdp->pktlog : NULL)));
+		return -EINVAL;
+	}
+
+	if (!dhdp->pktlog->tx_pktlog_ring || !dhdp->pktlog->rx_pktlog_ring) {
+		DHD_PKT_LOG(("%s(): tx_pktlog_ring=%p rx_pktlog_ring=%p\n",
+			__FUNCTION__, dhdp->pktlog->tx_pktlog_ring, dhdp->pktlog->rx_pktlog_ring));
+		return -EINVAL;
+	}
+
+	dhdp->pktlog->tx_pktlog_ring->pktlog_minmize = FALSE;
+	dhdp->pktlog->rx_pktlog_ring->pktlog_minmize = FALSE;
+
+	bytes_written = snprintf(command, total_len, "OK");
+
+	DHD_ERROR(("%s: pktlog pktlog_minmize disable\n", __FUNCTION__));
 
 	return bytes_written;
 }
@@ -7053,7 +7111,7 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 		bytes_written = wl_android_get_ap_rps(net, command, priv_cmd.total_len);
 	}
 #endif /* SUPPORT_AP_RADIO_PWRSAVE */
-#ifdef SUPPORT_RSSI_LOGGING
+#ifdef SUPPORT_RSSI_SUM_REPORT
 	else if (strnicmp(command, CMD_SET_RSSI_LOGGING, strlen(CMD_SET_RSSI_LOGGING)) == 0) {
 		bytes_written = wl_android_set_rssi_logging(net, command, priv_cmd.total_len);
 	}
@@ -7063,7 +7121,7 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 	else if (strnicmp(command, CMD_GET_RSSI_PER_ANT, strlen(CMD_GET_RSSI_PER_ANT)) == 0) {
 		bytes_written = wl_android_get_rssi_per_ant(net, command, priv_cmd.total_len);
 	}
-#endif /* SUPPORT_RSSI_LOGGING */
+#endif /* SUPPORT_RSSI_SUM_REPORT */
 #if defined(DHD_ENABLE_BIGDATA_LOGGING)
 	else if (strnicmp(command, CMD_GET_BSS_INFO, strlen(CMD_GET_BSS_INFO)) == 0) {
 		bytes_written = wl_cfg80211_get_bss_info(net, command, priv_cmd.total_len);
@@ -7177,6 +7235,14 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 	else if (strnicmp(command, CMD_PKTLOG_FILTER_EXIST, strlen(CMD_PKTLOG_FILTER_EXIST)) == 0) {
 		bytes_written = wl_android_pktlog_filter_exist(net, command, priv_cmd.total_len);
 	}
+	else if (strnicmp(command, CMD_PKTLOG_MINMIZE_ENABLE,
+		strlen(CMD_PKTLOG_MINMIZE_ENABLE)) == 0) {
+		bytes_written = wl_android_pktlog_minmize_enable(net, command, priv_cmd.total_len);
+	}
+	else if (strnicmp(command, CMD_PKTLOG_MINMIZE_DISABLE,
+		strlen(CMD_PKTLOG_MINMIZE_DISABLE)) == 0) {
+		bytes_written = wl_android_pktlog_minmize_disable(net, command, priv_cmd.total_len);
+	}
 #endif /* DHD_PKT_LOGGING */
 #if defined(STAT_REPORT)
 	else if (strnicmp(command, CMD_STAT_REPORT_GET_START,
@@ -7206,6 +7272,10 @@ int wl_android_init(void)
 		memset(iface_name, 0, IFNAMSIZ);
 		bcm_strncpy_s(iface_name, IFNAMSIZ, "wlan", IFNAMSIZ);
 	}
+
+#ifdef CUSTOMER_HW4_DEBUG
+	g_assert_type = 1;
+#endif /* CUSTOMER_HW4_DEBUG */
 
 #ifdef WL_GENL
 	wl_genl_init();

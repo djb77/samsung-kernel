@@ -50,6 +50,9 @@
 
 #define WSR_CNT_SIZE	(1300 + 256)
 
+/* restrict maximum value less than 100M to reduce string length */
+#define WSR_CNT_VALUE_MAX	100000000
+
 #define WSR_NONSEC_TO_SEC		1000000000
 #define WSR_REPORT_YEAR_MUL	10000
 #define WSR_REPORT_MON_MUL		100
@@ -60,6 +63,8 @@
 
 #define WSR_MAX_OUI	3
 #define OUI_PAD_LEN (4 - (WSR_MAX_OUI * DOT11_OUI_LEN) % 4)
+
+#define WSR_MINIMIZE_REPORT
 
 /* logging connection info to follow up connection changes */
 typedef struct stat_report_conn {
@@ -968,13 +973,16 @@ wsr_serial_info_normal_tbl[] = {
 	WSR_SERIAL_ADPS(ADPS_MODE, mode, WSR_DEC, WSR_UINT8, FALSE),
 	WSR_SERIAL_ADPS(ADPS_LFAG, flags, WSR_HEX, WSR_UINT8, FALSE),
 	WSR_SERIAL_ADPS(ADPS_STEP, current_step, WSR_DEC, WSR_UINT8, FALSE),
+#ifndef WSR_MINIMIZE_REPORT
 	WSR_SERIAL_ADPS(ADPS_DH, duration_high, WSR_DEC, WSR_UINT32, FALSE),
 	WSR_SERIAL_ADPS(ADPS_DL, duration_low, WSR_DEC, WSR_UINT32, FALSE),
 	WSR_SERIAL_ADPS(ADPS_CH, counts_high, WSR_DEC, WSR_UINT32, FALSE),
 	WSR_SERIAL_ADPS(ADPS_CL, counts_low, WSR_DEC, WSR_UINT32, FALSE),
+#endif /* WSR_MINIMIZE_REPORT */
 
 	/* TX PWR */
 	WSR_SERIAL_TXP(SAR_ENAB, sar_enable, WSR_DEC, WSR_UINT8, FALSE),
+#ifndef WSR_MINIMIZE_REPORT
 	WSR_SERIAL_TXP(RSDB_MOD, phy_rsdb_mode, WSR_DEC, WSR_UINT8, FALSE),
 	WSR_SERIAL_TXP(SAR_2G_C0, sar_limit_2g_core0, WSR_DEC, WSR_UINT8, FALSE),
 	WSR_SERIAL_TXP(SAR_2G_C1, sar_limit_2g_core1, WSR_DEC, WSR_UINT8, FALSE),
@@ -983,6 +991,7 @@ wsr_serial_info_normal_tbl[] = {
 	WSR_SERIAL_TXP(FCC, fcc_enable, WSR_DEC, WSR_UINT8, FALSE),
 	WSR_SERIAL_TXP(FCC_CH12, fccpwrch12, WSR_DEC, WSR_UINT8, FALSE),
 	WSR_SERIAL_TXP(FCC_CH13, fccpwrch13, WSR_DEC, WSR_UINT8, FALSE),
+#endif /* WSR_MINIMIZE_REPORT */
 	WSR_SERIAL_TXP(BSS_L_MAX, bss_local_max, WSR_DEC, WSR_UINT8, FALSE),
 	WSR_SERIAL_TXP(BSS_L_CST, bss_local_constraint, WSR_DEC, WSR_UINT8, FALSE),
 	WSR_SERIAL_TXP(DSSS_1M, dsss_1mbps_2g, WSR_DEC, WSR_UINT8, FALSE),
@@ -1267,13 +1276,17 @@ typedef struct {
 static wsr_serial_info_count_t
 wsr_serial_info_wlc_tbl[] = {
 	/* counts of wlc */
+#ifndef WSR_MINIMIZE_REPORT
 	WSR_SERIAL_WLC(txframe),
+#endif /* WSR_MINIMIZE_REPORT */
 	WSR_SERIAL_WLC(txretrans),
 	WSR_SERIAL_WLC(txfail),
+#ifndef WSR_MINIMIZE_REPORT
 	WSR_SERIAL_WLC(rxframe),
 	WSR_SERIAL_WLC(txphyerr),
 	WSR_SERIAL_WLC(rxnobuf),
 	WSR_SERIAL_WLC(rxrtry),
+#endif /* WSR_MINIMIZE_REPORT */
 	WSR_SERIAL_WLC(txprobereq),
 	WSR_SERIAL_WLC(rxprobersp),
 	WSR_SERIAL_MAC(txallfrm),
@@ -1283,7 +1296,9 @@ wsr_serial_info_wlc_tbl[] = {
 	WSR_SERIAL_MAC(txucast),
 	WSR_SERIAL_MAC(rxrsptmout),
 	WSR_SERIAL_MAC(txrtsfail),
+#ifndef WSR_MINIMIZE_REPORT
 	WSR_SERIAL_MAC(txphyerror),
+#endif /* WSR_MINIMIZE_REPORT */
 	WSR_SERIAL_MAC(rxstrt),
 	WSR_SERIAL_MAC(rxbadplcp),
 	WSR_SERIAL_MAC(rxcrsglitch),
@@ -1306,6 +1321,7 @@ wsr_serial_info_wlc_tbl[] = {
 	WSR_SERIAL_MAC(rxrtsocast),
 	WSR_SERIAL_MAC(rxctsocast),
 	WSR_SERIAL_MAC(rxdtmcast),
+#ifndef WSR_MINIMIZE_REPORT
 	WSR_SERIAL_WLC(rxmpdu_mu),
 	WSR_SERIAL_WLC(txassocreq),
 	WSR_SERIAL_WLC(txreassocreq),
@@ -1324,6 +1340,7 @@ wsr_serial_info_wlc_tbl[] = {
 	WSR_SERIAL_MAC(txackfrm),
 	WSR_SERIAL_MAC(txampdu),
 	WSR_SERIAL_MAC(txmpdu),
+#endif /* WSR_MINIMIZE_REPORT */
 	{"", 0, 0}
 };
 
@@ -1375,7 +1392,8 @@ wsr_serial_wlc(char *buf, int *sub_idx, wsr_elem_t **list, int list_cnt)
 		} else {
 			ptr = (uint32 *)(cntptr + info->offset);
 			bytes_written += scnprintf(&tmp_buf[bytes_written],
-				WSR_REPORT_ELEM_PRINT_BUF - bytes_written, " %u", *ptr);
+				WSR_REPORT_ELEM_PRINT_BUF - bytes_written, " %u",
+				(*ptr) % WSR_CNT_VALUE_MAX);
 		}
 	}
 

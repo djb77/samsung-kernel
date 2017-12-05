@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,8 +17,8 @@
 #include <linux/slab.h>
 #include <linux/device.h>
 #include <linux/debugfs.h>
+#include <linux/version.h>
 
-#include "platform.h"	/* DEBUGFS_CREATE_BOOL_TAKES_A_BOOL */
 #include "main.h"
 #include "fastcall.h"
 #include "logging.h"
@@ -72,7 +72,7 @@ static struct logging_ctx {
 	u16	prev_source;		/* Previous Log source */
 	char	line[LOG_LINE_SIZE + 1];/* Log Line buffer */
 	u32	line_len;		/* Log Line buffer current length */
-#ifndef DEBUGFS_CREATE_BOOL_TAKES_A_BOOL
+#if KERNEL_VERSION(4, 4, 0) > LINUX_VERSION_CODE
 	/* ExySp */
 	//u32	enabled;		/* Log can be disabled via debugfs */
 	bool	enabled;		/* Log can be disabled via debugfs */

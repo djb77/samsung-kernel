@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pktlog.h 712044 2017-07-21 05:44:24Z $
+ * $Id: dhd_pktlog.h 717188 2017-08-23 11:47:08Z $
  */
 
 #ifndef __DHD_PKTLOG_H_
@@ -72,6 +72,7 @@ typedef struct dhd_pktlog_ring
 	uint16 prev_pos;
 	uint16 next_pos;
 	uint32 start;
+	uint32 pktlog_minmize;
 } dhd_pktlog_ring_t;
 
 typedef struct dhd_pktlog_filter_info

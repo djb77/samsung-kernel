@@ -58,7 +58,11 @@ usb_hw_param_print[USB_CCIC_HW_PARAM_MAX][MAX_HWPARAM_STRING] = {
 	{"CC_DEX"},
 	{"CC_WTIME"},
 	{"CC_WVBUS"},
+	{"CC_WVTIME"},
 	{"CC_CSHORT"},
+	{"M_AFCNAK"},
+	{"M_AFCERR"},
+	{"M_DCDTMO"},
 	{"CC_VER"},
 };
 #endif
@@ -307,6 +311,9 @@ static ssize_t usb_hw_param_show(struct device *dev,
 	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_COUNT);
 	if (p_param)
 		*p_param += get_waterChg_count();
+	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_TIME_DURATION);
+	if (p_param)
+		*p_param += get_wVbus_duration();
 	p_param = get_hw_param(n, USB_CCIC_VERSION);
 #if defined(CONFIG_USB_NOTIFY_PROC_LOG)
 	if (p_param)
@@ -397,6 +404,9 @@ static ssize_t hw_param_show(struct device *dev,
 	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_COUNT);
 	if (p_param)
 		*p_param += get_waterChg_count();
+	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_TIME_DURATION);
+	if (p_param)
+		*p_param += get_wVbus_duration();
 	p_param = get_hw_param(n, USB_CCIC_VERSION);
 #if defined(CONFIG_USB_NOTIFY_PROC_LOG)
 	if (p_param)

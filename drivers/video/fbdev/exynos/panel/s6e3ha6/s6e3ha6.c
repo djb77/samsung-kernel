@@ -1399,8 +1399,8 @@ int getidx_mdnie_scr_white_maptbl(struct pkt_update_info *pktui)
 
 
 #ifdef CONFIG_LOGGING_BIGDATA_BUG
-unsigned int g_rddpm = 0xff;
-unsigned int g_rddsm = 0xff;
+static unsigned int g_rddpm = 0xff;
+static unsigned int g_rddsm = 0xff;
 
 unsigned int get_panel_bigdata(void)
 {
@@ -1413,12 +1413,18 @@ unsigned int get_panel_bigdata(void)
 #endif
 
 
-void show_rddpm(struct dumpinfo *info)
+static void show_rddpm(struct dumpinfo *info)
 {
 	int ret;
-	u8 rddpm = 0;
+	struct resinfo *res = info->res;
+	u8 rddpm[S6E3HA6_RDDPM_LEN] = { 0, };
 
-	ret = resource_copy(&rddpm, info->res);
+	if (!res || ARRAY_SIZE(rddpm) != res->dlen) {
+		pr_err("%s invalid resource\n", __func__);
+		return;
+	}
+
+	ret = resource_copy(rddpm, info->res);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to copy rddpm resource\n", __func__);
 		return;
@@ -1426,25 +1432,31 @@ void show_rddpm(struct dumpinfo *info)
 
 	panel_info("========== SHOW PANEL [0Ah:RDDPM] INFO ==========\n");
 	panel_info("* Reg Value : 0x%02x, Result : %s\n",
-			rddpm, (rddpm == 0x9C) ? "GOOD" : "NG");
-	panel_info("* Bootster Mode : %s\n", rddpm & 0x80 ? "ON (GD)" : "OFF (NG)");
-	panel_info("* Idle Mode     : %s\n", rddpm & 0x40 ? "ON (NG)" : "OFF (GD)");
-	panel_info("* Partial Mode  : %s\n", rddpm & 0x20 ? "ON" : "OFF");
-	panel_info("* Sleep Mode    : %s\n", rddpm & 0x10 ? "OUT (GD)" : "IN (NG)");
-	panel_info("* Normal Mode   : %s\n", rddpm & 0x08 ? "OK (GD)" : "SLEEP (NG)");
-	panel_info("* Display ON    : %s\n", rddpm & 0x04 ? "ON (GD)" : "OFF (NG)");
+			rddpm[0], (rddpm[0] == 0x9C) ? "GOOD" : "NG");
+	panel_info("* Bootster Mode : %s\n", rddpm[0] & 0x80 ? "ON (GD)" : "OFF (NG)");
+	panel_info("* Idle Mode     : %s\n", rddpm[0] & 0x40 ? "ON (NG)" : "OFF (GD)");
+	panel_info("* Partial Mode  : %s\n", rddpm[0] & 0x20 ? "ON" : "OFF");
+	panel_info("* Sleep Mode    : %s\n", rddpm[0] & 0x10 ? "OUT (GD)" : "IN (NG)");
+	panel_info("* Normal Mode   : %s\n", rddpm[0] & 0x08 ? "OK (GD)" : "SLEEP (NG)");
+	panel_info("* Display ON    : %s\n", rddpm[0] & 0x04 ? "ON (GD)" : "OFF (NG)");
 	panel_info("=================================================\n");
 #ifdef CONFIG_LOGGING_BIGDATA_BUG
-	g_rddpm = (unsigned int)rddpm;
+	g_rddpm = (unsigned int)rddpm[0];
 #endif
 }
 
-void show_rddsm(struct dumpinfo *info)
+static void show_rddsm(struct dumpinfo *info)
 {
 	int ret;
-	u8 rddsm = 0;
+	struct resinfo *res = info->res;
+	u8 rddsm[S6E3HA6_RDDSM_LEN] = { 0, };
 
-	ret = resource_copy(&rddsm, info->res);
+	if (!res || ARRAY_SIZE(rddsm) != res->dlen) {
+		pr_err("%s invalid resource\n", __func__);
+		return;
+	}
+
+	ret = resource_copy(rddsm, info->res);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to copy rddsm resource\n", __func__);
 		return;
@@ -1452,18 +1464,24 @@ void show_rddsm(struct dumpinfo *info)
 
 	panel_info("========== SHOW PANEL [0Eh:RDDSM] INFO ==========\n");
 	panel_info("* Reg Value : 0x%02x, Result : %s\n",
-			rddsm, (rddsm == 0x80) ? "GOOD" : "NG");
-	panel_info("* TE Mode : %s\n", rddsm & 0x80 ? "ON(GD)" : "OFF(NG)");
+			rddsm[0], (rddsm[0] == 0x80) ? "GOOD" : "NG");
+	panel_info("* TE Mode : %s\n", rddsm[0] & 0x80 ? "ON(GD)" : "OFF(NG)");
 	panel_info("=================================================\n");
 #ifdef CONFIG_LOGGING_BIGDATA_BUG
-	g_rddsm = (unsigned int)rddsm;
+	g_rddsm = (unsigned int)rddsm[0];
 #endif
 }
 
-void show_err(struct dumpinfo *info)
+static void show_err(struct dumpinfo *info)
 {
 	int ret;
+	struct resinfo *res = info->res;
 	u8 err[S6E3HA6_ERR_LEN] = { 0, }, err_15_8, err_7_0;
+
+	if (!res || ARRAY_SIZE(err) != res->dlen) {
+		pr_err("%s invalid resource\n", __func__);
+		return;
+	}
 
 	ret = resource_copy(err, info->res);
 	if (unlikely(ret < 0)) {
@@ -1533,13 +1551,18 @@ void show_err(struct dumpinfo *info)
 	panel_info("==================================================\n");
 }
 
-void show_err_fg(struct dumpinfo *info)
+static void show_err_fg(struct dumpinfo *info)
 {
 	int ret;
+	u8 err_fg[S6E3HA6_ERR_FG_LEN] = { 0, };
 	struct resinfo *res = info->res;
-	u8 err_fg = 0;
 
-	ret = resource_copy(&err_fg, res);
+	if (!res || ARRAY_SIZE(err_fg) != res->dlen) {
+		pr_err("%s invalid resource\n", __func__);
+		return;
+	}
+
+	ret = resource_copy(err_fg, res);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to copy err_fg resource\n", __func__);
 		return;
@@ -1547,35 +1570,40 @@ void show_err_fg(struct dumpinfo *info)
 
 	panel_info("========== SHOW PANEL [EEh:ERR_FG] INFO ==========\n");
 	panel_info("* Reg Value : 0x%02x, Result : %s\n",
-			err_fg, (err_fg & 0x4C) ? "NG" : "GOOD");
+			err_fg[0], (err_fg[0] & 0x4C) ? "NG" : "GOOD");
 
-	if (err_fg & 0x04) {
+	if (err_fg[0] & 0x04) {
 		panel_info("* VLOUT3 Error\n");
 		inc_dpui_u32_field(DPUI_KEY_PNVLO3E, 1);
 	}
 
-	if (err_fg & 0x08) {
+	if (err_fg[0] & 0x08) {
 		panel_info("* ELVDD Error\n");
 		inc_dpui_u32_field(DPUI_KEY_PNELVDE, 1);
 	}
 
-	if (err_fg & 0x40) {
+	if (err_fg[0] & 0x40) {
 		panel_info("* VLIN1 Error\n");
 		inc_dpui_u32_field(DPUI_KEY_PNVLI1E, 1);
 	}
 
 	panel_info("==================================================\n");
 
-	inc_dpui_u32_field(DPUI_KEY_PNESDE, (err_fg & 0x4D) ? 1 : 0);
+	inc_dpui_u32_field(DPUI_KEY_PNESDE, (err_fg[0] & 0x4D) ? 1 : 0);
 }
 
-void show_dsi_err(struct dumpinfo *info)
+static void show_dsi_err(struct dumpinfo *info)
 {
 	int ret;
 	struct resinfo *res = info->res;
-	u8 dsi_err = 0;
+	u8 dsi_err[S6E3HA6_DSI_ERR_LEN] = { 0, };
 
-	ret = resource_copy(&dsi_err, res);
+	if (!res || ARRAY_SIZE(dsi_err) != res->dlen) {
+		pr_err("%s invalid resource\n", __func__);
+		return;
+	}
+
+	ret = resource_copy(dsi_err, res);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to copy dsi_err resource\n", __func__);
 		return;
@@ -1583,21 +1611,21 @@ void show_dsi_err(struct dumpinfo *info)
 
 	panel_info("========== SHOW PANEL [05h:DSIE_CNT] INFO ==========\n");
 	panel_info("* Reg Value : 0x%02x, Result : %s\n",
-			dsi_err, (dsi_err) ? "NG" : "GOOD");
-	if (dsi_err)
-		panel_info("* DSI Error Count : %d\n", dsi_err);
+			dsi_err[0], (dsi_err[0]) ? "NG" : "GOOD");
+	if (dsi_err[0])
+		panel_info("* DSI Error Count : %d\n", dsi_err[0]);
 	panel_info("====================================================\n");
 
-	inc_dpui_u32_field(DPUI_KEY_PNDSIE, dsi_err);
+	inc_dpui_u32_field(DPUI_KEY_PNDSIE, dsi_err[0]);
 }
 
-void show_self_diag(struct dumpinfo *info)
+static void show_self_diag(struct dumpinfo *info)
 {
 	int ret;
 	struct resinfo *res = info->res;
-	u8 self_diag = 0;
+	u8 self_diag[S6E3HA6_SELF_DIAG_LEN] = { 0, };
 
-	ret = resource_copy(&self_diag, res);
+	ret = resource_copy(self_diag, res);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to copy self_diag resource\n", __func__);
 		return;
@@ -1605,10 +1633,10 @@ void show_self_diag(struct dumpinfo *info)
 
 	panel_info("========== SHOW PANEL [0Fh:SELF_DIAG] INFO ==========\n");
 	panel_info("* Reg Value : 0x%02x, Result : %s\n",
-			self_diag, (self_diag & 0x80) ? "GOOD" : "NG");
-	if ((self_diag & 0x80) == 0)
+			self_diag[0], (self_diag[0] & 0x80) ? "GOOD" : "NG");
+	if ((self_diag[0] & 0x80) == 0)
 		panel_info("* OTP Reg Loading Error\n");
 	panel_info("=====================================================\n");
 
-	inc_dpui_u32_field(DPUI_KEY_PNSDRE, (self_diag & 0x80) ? 0 : 1);
+	inc_dpui_u32_field(DPUI_KEY_PNSDRE, (self_diag[0] & 0x80) ? 0 : 1);
 }

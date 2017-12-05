@@ -482,7 +482,7 @@ int fimc_is_itf_sys_ctl_wrap(struct fimc_is_device_ischain *device,
 int fimc_is_itf_sensor_mode_wrap(struct fimc_is_device_ischain *device,
 	struct fimc_is_sensor_cfg *cfg)
 {
-#ifdef USE_RTA_BINARY 
+#ifdef USE_RTA_BINARY
     void *data = NULL;
 
     dbg_hw("%s\n", __func__);
@@ -547,12 +547,17 @@ bool check_setfile_change(struct fimc_is_group *group_leader,
 	}
 
 	sensor_position = hardware->sensor_position[instance];
-	if ((atomic_read(&hw_ip->instance) != instance)
-		|| (scenario != hw_ip->setfile[sensor_position].applied_scenario)) {
+	/* If the 3AA hardware is shared between front preview and reprocessing instance, (e.g. PIP)
+	   apply_setfile funciton needs to be called for sensor control. There is two options to check
+	   this, one is to check instance change and the other is to check scenario(setfile_index) change.
+	   The scenario(setfile_index) is different front preview instance and reprocessing instance.
+	   So, second option is more efficient way to support PIP scenario.
+	 */
+	if (scenario != hw_ip->applied_scenario) {
 		info_hw("[%d][G:0x%x,0x%x,0x%x][ID:%d]%s: scenario(%d->%d), instance(%d->%d)\n",
 			instance, GROUP_ID(group_leader->id), GROUP_ID(group_ischain->id),
 			GROUP_ID(group->id), hw_ip->id, __func__,
-			hw_ip->setfile[sensor_position].applied_scenario, scenario,
+			hw_ip->applied_scenario, scenario,
 			atomic_read(&hw_ip->instance), instance);
 		return true;
 	}

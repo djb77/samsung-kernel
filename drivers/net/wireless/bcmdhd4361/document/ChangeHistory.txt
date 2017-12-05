@@ -1,5 +1,24 @@
-BCM4361 DHD 1.77.44 for Android Great/Dream & J5/J7 & BCM43438 NOS Project
+BCM4361 DHD 1.77.48 for Android Great/Dream & J5/J7 & BCM43438 NOS Project
 (Notes: 1.77.x is twigged off from 1.579.235.9)
+
+DHD 1.77.48 - 2017.09.21
+Kernel Panic
+ - CS3275366 Fixed kernel panic issue when returning invalid dongle ram size
+ - CS3341471 Fixed kernel panic from ASSERT during driver initialization
+ - Fixed kernel panic during connection test on debugging mode
+
+Others
+ - CS3274682 Fixed low performance of NAS download due to CPU migration
+ - CS3291870 Fixed the current consumption issue on SoftAP due to the wl_wdwake wakelock (Available for SDIO projects)
+ - CS3409811 Supported private command of clearing pktlogging data for security
+ - CS3483269 Extended dongle_isolation for all customer platform using PCIe bus
+ - CS3508335 Limited some security information in debug_dump
+ - CS3509434 Added WLC_E_SET_SSID fail custom reason code
+ - CS3558874 Added Assoc Reject - WLC_E_STATUS_NO_NETWORKS status code for Assoc Reject Bigdata
+ - CS3585868 Integrated GREAT Android N OS features into DREAM/GREAT Android O OS project
+ - CS3591398 Enabled TCP ACK suppress enable/disable log message
+ - Support RSSI summation report feature (Available for Android O or later version)
+
 
 DHD 1.77.44 - 2017.08.24
 Others
@@ -132,14 +151,14 @@ Kernel Panic
  - CS2716890 Fixed Scan timeout issue with blocking suspend during P2P scan
 
 Security Patch
- - CS2642368 Fixed type casting issue in wl_android_send_action_frame()
- - CVE-2017-0633 Enhanced wrong buffer usage in IOCTL path
+ - CVE-2017-0633 V2017022301 Enhanced wrong buffer usage in IOCTL path
 
 Others
  - CS2454032 Changed to implement wake stat support
  - CS2460373 Added WIFI_LOGGER feature in Makefile
  - CS2472434 Fixed roam failure on PMF required APs
  - CS2475910 Print last roaming event log when link down is happened
+ - CS2642368 Fixed type casting issue in wl_android_send_action_frame()
  - CS2761292 Added dhd rxq sdlock operation
  - CS2769153 Fixed compile error on exymos5433 sdio model
  - CS2791743 Fixed duplicated tx_error counter summation
@@ -160,6 +179,12 @@ Kernel Panic
  - CS2472873 Fixed to prevent accessing  CPU hotplug call back before initialization
  - CS2477559 Implement exception handling routines if DMA mapping error for TX data packet is happened
 
+Security Patch
+ - CVE-2017-0568 V2017051814 Fixed buffer overrun in wl_run_escan()
+ - CVE-2017-0570 V2017051815 Removed unused file (wl_iw.c/wl_iw.h)
+ - CVE-2017-0574 V2017051817 Fixed vulnerability issues
+ - CVE-2017-0740 V2017030901 Fixed length overflow issue in dhd_wl_ioctl() function
+
 Others
  - CS2456626 Enabled SETBAND API
  - CS2470635 Enabled frameburst on SDIO platform
@@ -168,12 +193,8 @@ Others
  - CS2474767 Fixed compile error for Dream project
  - CS2476640 Added to control tcpack_suppress as throughput on BCM43455
  - CS2555123 Fixed page fault issue in dhd_wl_ioctl()
- - CVE-2017-0568 Fixed vulnerability issues
- - CVE-2017-0570 Fixed vulnerability issues
- - CVE-2017-0574 Fixed vulnerability issues
  - Enabled CAC by default and modified CAC dynamically based on the interface
  - Enabled Random MAC address scan by default for all WIFI chip
- - Fixed length variable overflow issue
  - Fixed wrong event message print log issue
 
 

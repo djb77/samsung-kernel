@@ -36,6 +36,12 @@ static int fimc_is_ischain_mcs_bypass(struct fimc_is_subdev *leader,
 
 	group = &device->group_mcs;
 
+	if (!group->junction) {
+		merr("group->junction(NULL)\n", device);
+		ret = -EINVAL;
+		goto p_err;
+	}
+
 	switch (group->junction->vid) {
 	case FIMC_IS_VIDEO_M0P_NUM:
 		param_out = PARAM_MCS_OUTPUT0;
@@ -113,6 +119,12 @@ static int fimc_is_ischain_mcs_cfg(struct fimc_is_subdev *leader,
 	queue = GET_SUBDEV_QUEUE(leader);
 	if (!queue) {
 		merr("queue is NULL", device);
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	if (!group->junction) {
+		merr("group->junction(NULL)\n", device);
 		ret = -EINVAL;
 		goto p_err;
 	}

@@ -610,10 +610,11 @@ static int decon_debug_info_show(struct seq_file *s, void *unused)
 {
 	struct decon_device *decon = s->private;
 
-	decon_dump_recovery_list(decon, s);
-
-	decon_show_debug_info(decon, s);
-
+	if (decon != NULL) {
+		decon_dump_recovery_list(decon, s);
+		decon_show_debug_info(decon, s);
+		decon_print_fence_err(decon, s);
+	}
 	return 0;
 }
 

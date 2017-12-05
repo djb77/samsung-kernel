@@ -221,6 +221,14 @@ int sensor_ak7371_actuator_init(struct v4l2_subdev *subdev, u32 val)
 	pr_info("[%s] time %lu us", __func__, (end.tv_sec - st.tv_sec) * 1000000 + (end.tv_usec - st.tv_usec));
 #endif
 
+#ifdef CAMERA_REAR2
+	/* Add the setting delay for preventing i2c fail issue.
+	 * If this device is not sharing the i2c bus with others,
+	 * this delay could be removed.
+	 */
+	if (actuator->id == ACTUATOR_NAME_AK7371)
+		usleep_range(600, 610);
+#endif
 p_err:
 	I2C_MUTEX_UNLOCK(actuator->i2c_lock);
 	return ret;
@@ -415,7 +423,18 @@ static int sensor_ak7371_actuator_set_active(struct v4l2_subdev *subdev, int ena
 		if (ret < 0)
 			goto p_err;
 	}
-
+#ifdef CAMERA_REAR2
+	/* Add the setting delay for preventing i2c fail issue.
+	 * If this device is not sharing the i2c bus with others,
+	 * this delay could be removed.
+	 */
+	/* Add the setting delay for preventing i2c fail issue.
+	 * If this device is not sharing the i2c bus with others,
+	 * this delay could be removed.
+	 */
+	if (actuator->id == ACTUATOR_NAME_AK7371)
+		usleep_range(600, 610);
+#endif
 p_err:
 	I2C_MUTEX_UNLOCK(actuator->i2c_lock);
 	return ret;

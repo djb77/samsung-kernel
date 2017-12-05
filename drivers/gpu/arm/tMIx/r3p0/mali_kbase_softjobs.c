@@ -36,9 +36,8 @@
 #include <linux/ktime.h>
 #include <linux/pfn.h>
 #include <linux/sched.h>
-
-/* Mask to check cache alignment of data structures */
-#define KBASE_CACHE_ALIGNMENT_MASK		((1<<L1_CACHE_SHIFT)-1)
+#include <linux/kernel.h>
+#include <linux/cache.h>
 
 /**
  * @file mali_kbase_softjobs.c
@@ -1292,6 +1291,8 @@ int kbase_process_soft_job(struct kbase_jd_atom *katom)
 {
 	/* MALI_SEC_INTEGRATION */
 	unsigned long flags;
+	struct sync_fence *fence;
+	struct device *dev = katom->kctx->kbdev->dev;
 
 	switch (katom->core_req & BASE_JD_REQ_SOFT_JOB_TYPE) {
 	case BASE_JD_REQ_SOFT_DUMP_CPU_GPU_TIME:
@@ -1300,6 +1301,17 @@ int kbase_process_soft_job(struct kbase_jd_atom *katom)
 	case BASE_JD_REQ_SOFT_FENCE_TRIGGER:
 		KBASE_DEBUG_ASSERT(katom->fence != NULL);
 		katom->event_code = kbase_fence_trigger(katom, katom->event_code == BASE_JD_EVENT_DONE ? 0 : -EFAULT);
+
+		/* MALI_SEC_INTEGRATION */
+		if (katom->event_code == BASE_JD_EVENT_JOB_CANCELLED) {
+			spin_lock_irqsave(&katom->fence_lock, flags);
+			fence = katom->fence;
+			atomic_dec(&fence->status);
+			dev_warn(dev, "Other katom was failed in same kctx[%p]\n", katom->kctx);
+			dev_warn(dev, "So, fence[%p] error occured %d\n", fence, atomic_read(&fence->status));
+			spin_unlock_irqrestore(&katom->fence_lock, flags);
+		}
+
 		/* Release the reference as we don't need it any more */
 		sync_fence_put(katom->fence);
 		/* MALI_SEC_INTEGRATION */
@@ -1382,7 +1394,7 @@ int kbase_prepare_soft_job(struct kbase_jd_atom *katom)
 	switch (katom->core_req & BASE_JD_REQ_SOFT_JOB_TYPE) {
 	case BASE_JD_REQ_SOFT_DUMP_CPU_GPU_TIME:
 		{
-			if (0 != (katom->jc & KBASE_CACHE_ALIGNMENT_MASK))
+			if (!IS_ALIGNED(katom->jc, cache_line_size()))
 				return -EINVAL;
 		}
 		break;

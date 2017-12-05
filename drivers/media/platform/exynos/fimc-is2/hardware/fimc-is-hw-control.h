@@ -207,7 +207,6 @@ struct setfile_table_entry {
 
 struct fimc_is_hw_ip_setfile {
 	int				version;
-	u32				applied_scenario;
 	/* the number of setfile each sub ip has */
 	u32				using_count;
 	/* which subindex is used at this scenario */
@@ -269,6 +268,7 @@ struct fimc_is_hw_ip {
 	/* control interface */
 	struct fimc_is_interface_ischain	*itfc;
 	struct fimc_is_hw_ip_setfile		setfile[SENSOR_POSITION_END];
+	u32					applied_scenario;
 	/* for dump sfr */
 	u8					*sfr_dump;
 	u8					*sfr_b_dump;

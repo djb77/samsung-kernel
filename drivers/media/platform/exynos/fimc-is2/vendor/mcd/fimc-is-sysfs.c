@@ -429,7 +429,7 @@ static ssize_t camera_front_camfw_show(struct device *dev,
 	char command_ack[20] = {0, };
 
 	fimc_is_vender_check_hw_init_running();
-
+	fimc_is_sec_get_sysfs_finfo_front(&front_finfo);
 	if (force_caldata_dump || !front_finfo->is_check_cal_reload) {
 		struct fimc_is_vender_specific *specific = sysfs_core->vender.private_data;
 
@@ -760,7 +760,7 @@ static ssize_t camera_rear_camfw_show(struct device *dev,
 	core_pdata = dev_get_platdata(fimc_is_dev);
 
 	fimc_is_vender_check_hw_init_running();
-
+	fimc_is_sec_get_sysfs_finfo(&finfo);
 	if (force_caldata_dump || !finfo->is_check_cal_reload) {
 		struct fimc_is_vender_specific *specific = sysfs_core->vender.private_data;
 

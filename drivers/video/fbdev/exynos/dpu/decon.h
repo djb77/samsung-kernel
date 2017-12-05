@@ -1142,6 +1142,14 @@ struct disp_err_recovery {
 	unsigned char err;
 	unsigned int frm_status;
 };
+#define FENCE_ERR_LIST_CNT			10
+
+struct disp_fence_err {
+	char name[32];
+	ktime_t time;
+	int status;
+	unsigned int win_id;
+};
 enum {
 	DECON_DISP_OFF = 0,
 	DECON_DISP_ON,
@@ -1255,6 +1263,9 @@ struct decon_device {
 
 	int recovery_idx;
 	struct disp_err_recovery recovery_list[DISP_RECOVERY_LIST_CNT];
+	int fence_err_cnt;
+	struct disp_fence_err first_fence_err;
+	struct disp_fence_err fence_err_list[FENCE_ERR_LIST_CNT];
 };
 
 static inline struct decon_device *get_decon_drvdata(u32 id)
@@ -1592,8 +1603,12 @@ void decon_dump(struct decon_device *decon, u32 dump_lv);
 void decon_to_psr_info(struct decon_device *decon, struct decon_mode_info *psr);
 void decon_to_init_param(struct decon_device *decon, struct decon_param *p);
 void decon_create_timeline(struct decon_device *decon, char *name);
-int decon_create_fence(struct decon_device *decon, struct decon_reg_data *regs);
-void decon_wait_fence(struct sync_fence *fence);
+int decon_create_fence(struct decon_device *decon,
+		struct sync_fence **fence, struct decon_reg_data *regs);
+void decon_install_fence(struct sync_fence *fence, int fd);
+int decon_wait_fence(struct sync_fence *fence);
+void decon_fence_err_log(struct decon_device *decon, int idx, struct sync_fence *fence);
+int decon_print_fence_err(struct decon_device *decon, struct seq_file *s);
 void decon_signal_fence(struct decon_device *decon);
 
 bool decon_intersect(struct decon_rect *r1, struct decon_rect *r2);

@@ -89,6 +89,8 @@ endif
 	DHDCFLAGS += -DDHD_ALLOC_COHERENT_MEM_FROM_ATOMIC_POOL
 	# Enable Link down recovery
 	DHDCFLAGS += -DSUPPORT_LINKDOWN_RECOVERY
+	# Enable Dongle Isolation
+	DHDCFLAGS += -DDONGLE_ENABLE_ISOLATION
 	# Enable Firmware Coredump
 	DHDCFLAGS += -DDHD_FW_COREDUMP
         # Enable PKTID AUDIT
@@ -287,6 +289,9 @@ DHDCFLAGS += -DDHD_BLOB_EXISTENCE_CHECK
 # Random mac scan
 DHDCFLAGS += -DSUPPORT_RANDOM_MAC_SCAN
 
+# WLC_E_SET_SSID fail
+DHDCFLAGS += -DSET_SSID_FAIL_CUSTOM_RC=100
+
 # Android Version Check from Platform source
 ifneq ($(PLATFORM_VERSION),)
 MAJOR_VERSION := $(shell echo $(PLATFORM_VERSION) | cut -d "." -f 1)
@@ -394,17 +399,28 @@ endif
 ifeq ($(filter y,$(CONFIG_ARCH_MSM8996) $(CONFIG_ARCH_MSM8998) $(CONFIG_SOC_EXYNOS8890) $(CONFIG_SOC_EXYNOS8895) $(CONFIG_ARCH_TEGRA)),y)
 # Runtime PM
   DHDCFLAGS += -DDHD_PCIE_RUNTIMEPM -DMAX_IDLE_COUNT=11 -DCUSTOM_DHD_RUNTIME_MS=100
-# Enable Dongle Isolation
-  DHDCFLAGS += -DDONGLE_ENABLE_ISOLATION
 # Disable SOFTAP_SEND_HANGEVT
   DHDCFLAGS := $(filter-out -DSOFTAP_SEND_HANGEVT,$(DHDCFLAGS))
 # Enable LQCM
   DHDCFLAGS += -DSUPPORT_LQCM
 endif
+ifeq ($(filter y,$(CONFIG_ARCH_MSM8996) $(CONFIG_ARCH_MSM8998) $(CONFIG_SOC_EXYNOS8890) $(CONFIG_SOC_EXYNOS8895)), y)
+# DHD_LB_IRQSET - CPU migration by IRQ Affinity Set
+  DHDCFLAGS += -DDHD_LB_IRQSET
+endif
 # Generate .softap.info
   DHDCFLAGS += -DGEN_SOFTAP_INFO_FILE
 
-ifeq ($(filter y,$(CONFIG_WLAN_GREAT) $(CONFIG_SEC_GREATQLTE_PROJECT)),y)
+ifneq ($(PLATFORM_VERSION),)
+# DREAM Android N OS should not use below features
+ifeq ($(shell expr $(PLATFORM_VERSION) \< 8.0),1)
+ifneq ($(filter y,$(CONFIG_WLAN_GREAT) $(CONFIG_SEC_GREATQLTE_PROJECT)),y)
+ DREAM_NOS_DISCARD_FEATURES := y
+endif
+endif
+
+# Feature Set used for GREAT N OS and Android O OS
+ifneq ($(DREAM_NOS_DISCARD_FEATURES),y)
 # Debugaility
   DHDCFLAGS += -DDEBUGABILITY
   DHDCFLAGS += -DDHD_PKT_LOGGING
@@ -417,15 +433,26 @@ ifeq ($(filter y,$(CONFIG_WLAN_GREAT) $(CONFIG_SEC_GREATQLTE_PROJECT)),y)
   DHDCFLAGS += -DWL_LASTEVT
 # Use single nvram file
   DHDCFLAGS += -DDHD_USE_SINGLE_NVRAM_FILE
-# RSSI Logging
-  DHDCFLAGS += -DSUPPORT_RSSI_LOGGING
 #STAT REPORT
 #stat report shall be defined only if LINK STAT is defined
   DHDCFLAGS += -DSTAT_REPORT
 #define temp static only when SDK doesn't support static memory for STAT REPORT
 #  DHDCFLAGS += -DSTAT_REPORT_TEMP_STATIC
 endif
+
+# RSSI_SUM_REPORT is used over Android O OS only
+ifeq ($(shell expr $(PLATFORM_VERSION) \>= 8.0),1)
+# RSSI Logging
+  DHDCFLAGS += -DSUPPORT_RSSI_SUM_REPORT
+endif
+endif
+
+# Use Legacy dump path
+ifneq ($(USE_LEGACY_DUMP_PATH),)
+  DHDCFLAGS += -DDHD_COMMON_DUMP_PATH="\"/data/media/wifi/log/\""
+else
   DHDCFLAGS += -DDHD_COMMON_DUMP_PATH="\"/data/log/wifi/\""
+endif
 
 ifeq ($(CONFIG_BCM4361),y)
   DHDCFLAGS += -DENABLE_INSMOD_NO_FW_LOAD
