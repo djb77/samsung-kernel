@@ -16,17 +16,17 @@
 #include "exynos8895-greatlte_svcled.dtsi"
 #include "ccic-s2mm005_great_00.dtsi"
 #include "exynos8895-greatlte_mst_00.dtsi"
-#include "exynos8895-greatlte_gpio_00.dtsi"
-#include "exynos8895-greatlte_fingerprint-sensor_00.dtsi"
+#include "exynos8895-greatlte_gpio_05.dtsi"
+#include "exynos8895-greatlte_fingerprint-sensor_02.dtsi"
 
 / {
-	model = "Samsung Great rev00 board based on EXYNOS8895";
+	model = "Samsung SM-N950F board based on EXYNOS8895";
 	model_info-chip = <8895>;
 	model_info-platform = "android";
 	model_info-subtype = "samsung";
-	model_info-hw_rev = <0>;
-	model_info-hw_rev_end = <0>;
-	compatible = "samsung, Great rev00", "samsung,EXYNOS8895";
+	model_info-hw_rev = <5>;
+	model_info-hw_rev_end = <5>;
+	compatible = "samsung, SM-N950F rev05", "samsung,EXYNOS8895";
 
 	spi_3: spi@10460000 {
 		status = "okay";
@@ -68,11 +68,11 @@
 			ssp-mcu-req = <&gpe6 1 0x00>;
 			ssp-mcu-resp = <&gpi1 5 0x00>;
 			ssp-batch-wake-irq = <&gpa2 5 0x00>;
-			ssp-acc-position = <5>;
+			ssp-acc-position = <3>;
 			ssp-mag-position = <6>;
 			ssp-sns-combination = <0>;
 			ssp-ap-rev = <1>;
-			ssp-mag-array = /bits/ 8 <100 87 219 208 135 0 99 213 55 215 72 51 78 0 70 245 158 14 211 185 254 65 189 8 22 203>;
+			ssp-mag-array = /bits/ 8 <124 84 219 252 147 75 0 88 213 55 44 69 99 43 255 195 0 194 78 252 191 254 48 35 8 26 151>;
 			ssp-glass-type = <0>;
 			ssp-mag-type = <1>;
 			ssp-vdd-mcu-1p8 = "vdd_mcu_1p8";
@@ -115,18 +115,9 @@
 	hsi2c@10900000 {
 		s2mpb02_pmic@59 {
 			regulators {
-				_buck1_reg: s2mpb02-buck1 {
-					regulator-name = "S2MPB02_BUCK1";
-					regulator-min-microvolt = <1300000>;
-					regulator-max-microvolt = <1300000>;
+				_buck2_reg: s2mpb02-buck2 {
 					regulator-always-on;
 					regulator-boot-on;
-				};
-
-				_buck2_reg: s2mpb02-buck2 {
-					regulator-name = "VDDD_CORE_0.8V_COMP";
-					regulator-min-microvolt = <650000>;
-					regulator-max-microvolt = <850000>;
 				};
 			};
 		};
@@ -150,42 +141,6 @@
 		};
 	};
 
-	/* tsp-id:1 & oled_id:0 = stm */
-	/* tsp-id:1 & oled_id:1 = lsi */
-	hsi2c_23: hsi2c@108E0000 {
-		status = "okay";
-		samsung,reset-before-trans;
-
-		touchscreen@48 {	/* lsi */
-			sec,tsp-icid_gpio = <&gpi1 2 0>; /* oled_id */
-			sec,icid_match_value = <1>;
-		};
-
-		touchscreen@49 {
-			status = "okay";
-			compatible = "stm,fts_touch";
-			reg = <0x49>;
-			pinctrl-names = "on_state", "off_state";
-			pinctrl-0 = <&attn_irq>;
-			pinctrl-1 = <&attn_input>;
-			pressure-sensor = "Y";
-			stm,tsp-icid_gpio = <&gpi1 2 0>; /* oled_id */
-			stm,icid_match_value = <0>;
-			stm,tsp-id_gpio = <&gpe6 5 0>;
-			stm,irq_gpio = <&gpa1 0 0>;
-			stm,irq_type = <8200>;
-			stm,max_coords = <1439 2959>;	/* x y */
-			stm,regulator_dvdd = "tsp_io";
-			stm,regulator_avdd = "tsp_avdd";
-			stm,use_pressure = <1>;
-			stm,pat_function = <1>;
-			stm,project_name = "GREAT", "N950";
-			stm,firmware_name = "tsp_stm/fts8cd56_dream2.fw", "tsp_stm/fts8cd56_dream2.fw";
-			stm,afe_base = <0x9D84>;
-			support_dex_mode;
-		};
-	};
-
 	hsi2c_26: hsi2c@10910000 {
 		status = "okay";
 		hrmsensor@57 {
@@ -201,12 +156,6 @@
 			hrmsensor,vdd_1p8 = "HRM_1.8V_AP";
 			hrmsensor,led_3p3 = "HRM_3.3V_AP";
 			hrmsensor,i2c_1p8 = "VDD_NFC_1P8";
-		};
-	};
-
-	hsi2c_10: hsi2c@10490000 {
-		wacom@56 {
-			wacom,fw_path = "epen/w9018_great_1coil.fw";
 		};
 	};
 
@@ -298,9 +247,5 @@
 
 	panel_0: panel_drv@001 {
 		gpio,lcd-reset = <&gpa0 5 0x1>;
-	};
-
-	sec_thermistor@7 {
-		status = "disabled";
 	};
 };
