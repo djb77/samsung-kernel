@@ -6946,7 +6946,8 @@ static int sec_bat_cable_check(struct sec_battery_info *battery,
 		if (is_hv_wire_type(battery->cable_type) &&
 		    (battery->chg_limit || battery->vbus_chg_by_siop)) {
 			current_cable_type = SEC_BATTERY_CABLE_HV_TA_CHG_LIMIT;
-		} else if (battery->current_event & SEC_BAT_CURRENT_EVENT_AFC) {
+		} else if (battery->current_event & SEC_BAT_CURRENT_EVENT_AFC &&
+			battery->pdic_info.sink_status.rp_currentlvl == RP_CURRENT_LEVEL_DEFAULT) {
 			current_cable_type = SEC_BATTERY_CABLE_PREPARE_TA;
 		} else {
 			current_cable_type = SEC_BATTERY_CABLE_TA;
@@ -7184,7 +7185,8 @@ static int usb_typec_handle_notification(struct notifier_block *nb,
 			cmd = "ATTACH";
 			battery->muic_cable_type = usb_typec_info.cable_type;
 			cable_type = sec_bat_cable_check(battery, battery->muic_cable_type);
-			if (battery->pdic_info.sink_status.rp_currentlvl >= RP_CURRENT_LEVEL_DEFAULT &&
+			if (battery->cable_type != cable_type &&
+				battery->pdic_info.sink_status.rp_currentlvl >= RP_CURRENT_LEVEL_DEFAULT &&
 				(cable_type == SEC_BATTERY_CABLE_USB || cable_type == SEC_BATTERY_CABLE_TA)) {
 				sec_bat_set_rp_current(battery, cable_type);
 			} else if ((struct pdic_notifier_struct *)usb_typec_info.pd != NULL &&

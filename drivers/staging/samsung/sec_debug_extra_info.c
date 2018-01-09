@@ -67,7 +67,7 @@ void sec_debug_init_extra_info(struct sec_debug_shared_info *sec_debug_info)
 	if (sec_debug_info)
 		sec_debug_extra_info = &sec_debug_info->sec_debug_extra_info;
 
-	if (reset_reason == RR_K || reset_reason == RR_D)
+	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P)
 		sec_debug_store_extra_info();
 
 	if (sec_debug_extra_info)
@@ -365,7 +365,7 @@ static int set_debug_reset_extra_info_proc_show(struct seq_file *m, void *v)
 
 	memcpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 
-	if (reset_reason == RR_K || reset_reason == RR_D)
+	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P)
 		seq_printf(m, buf);
 	else
 		return -ENOENT;

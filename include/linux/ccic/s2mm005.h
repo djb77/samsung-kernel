@@ -52,6 +52,7 @@
 #define REG_RX_SRC_CAPA_MSG	0x0260
 
 #define CCIC_FW_VERSION_INVALID -1
+#define CCIC_I2C_VALUE_INVALID 274
 
 /******************************************************************************/
 /* definitions & structures                                                   */
@@ -827,6 +828,7 @@ struct s2mm005_data {
 	int s2mm005_om;
 	int s2mm005_sda;
 	int s2mm005_scl;
+	int s2mm005_i2c_err;
 	u32 hw_rev;
 	struct mutex i2c_mutex;
 	u8 attach;
