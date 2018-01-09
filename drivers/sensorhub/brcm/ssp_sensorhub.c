@@ -100,7 +100,7 @@ static ssize_t ssp_sensorhub_write(struct file *file, const char __user *buf,
 	int ret = 0;
 	char *buffer;
 
-	if (unlikely(count < 2)) {
+	if (unlikely(count <= 2)) {
 		sensorhub_err("library data length err(%d)", (u32)count);
 		return -EINVAL;
 	}

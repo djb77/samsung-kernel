@@ -226,98 +226,6 @@ static ssize_t muic_show_usb_state(struct device *dev,
 	return 0;
 }
 
-#ifdef DEBUG_MUIC
-static ssize_t muic_show_registers(struct device *dev,
-					   struct device_attribute *attr,
-					   char *buf)
-{
-	muic_data_t *pmuic = dev_get_drvdata(dev);
-	char mesg[256] = "";
-
-	mutex_lock(&pmuic->muic_mutex);
-	muic_read_reg_dump(pmuic, mesg);
-	mutex_unlock(&pmuic->muic_mutex);
-	pr_info("%s:%s\n", __func__, mesg);
-
-	return sprintf(buf, "%s\n", mesg);
-}
-
-static char reg_dump_buf[256];
-static ssize_t muic_show_reg_sel(struct device *dev,
-					   struct device_attribute *attr,
-					   char *buf)
-{
-	pr_info("%s:%s\n", __func__, reg_dump_buf);
-
-	return sprintf(buf, "%s\n", reg_dump_buf);
-}
-
-static ssize_t muic_set_reg_sel(struct device *dev,
-					  struct device_attribute *attr,
-					  const char *buf, size_t count)
-{
-	muic_data_t *pmuic = dev_get_drvdata(dev);
-	int len = strlen(buf);
-	unsigned int reg_base = 0, reg_num = 0;
-	int ret = -EINVAL, i = 0;
-
-#if 0 /* For the compatibility in 64 bit */
-	pr_info("%s:%s -> %s(%d, %d)\n", MUIC_DEV_NAME, __func__,
-		buf, count, len);
-#endif
-	if (len < 6) {
-		ret = kstrtoint(buf, 0, &reg_base);
-		if (ret) {
-			pr_err("%s: Undefined Regs\n", __func__);
-			goto err;
-		}
-		reg_num = 1;
-	} else if (len < 10) {
-		char *ptr;
-		char reg_buf[8];
-
-		strcpy(reg_buf, buf);
-		ptr = strstr(reg_buf, "++");
-		*ptr = 0x00;
-		ret = kstrtoint(reg_buf, 0, &reg_base);
-		if (ret) {
-			pr_err("%s: Undefined Regs\n", __func__);
-			goto err;
-		}
-		ret = kstrtoint(ptr + 2, 0, &reg_num);
-		if (ret) {
-			pr_err("%s: Undefined Regs\n", __func__);
-			goto err;
-		}
-	} else {
-		pr_err("%s: Undefined Regs\n", __func__);
-		goto err;
-	}
-
-	pr_info(" (reg_base,reg_num) = (0x%02x,%d)\n", reg_base, reg_num);
-
-	memset(reg_dump_buf, 0x00, sizeof(reg_dump_buf));
-
-	while (reg_num--) {
-		mutex_lock(&pmuic->muic_mutex);
-		ret = muic_i2c_read_byte(pmuic->i2c, reg_base + i);
-		mutex_unlock(&pmuic->muic_mutex);
-		if (ret < 0) {
-			pr_err("%s:%s err read %d\n", MUIC_DEV_NAME, __func__,
-					reg_base);
-			goto err;
-		}
-		pr_info(" [%02x] : %02x\n", reg_base, ret);
-
-		sprintf(reg_dump_buf + strlen(reg_dump_buf),
-			" [%02x] : %02x\n", reg_base + i++, ret);
-	}
-
-err:
-	return count;
-}
-#endif
-
 #if defined(CONFIG_USB_HOST_NOTIFY)
 static ssize_t muic_show_otg_test(struct device *dev,
 					   struct device_attribute *pattr,
@@ -675,10 +583,6 @@ static DEVICE_ATTR(uart_sel, 0664, muic_show_uart_sel,
 static DEVICE_ATTR(usb_sel, 0664,
 		muic_show_usb_sel, muic_set_usb_sel);
 static DEVICE_ATTR(adc, 0664, muic_show_adc, NULL);
-#ifdef DEBUG_MUIC
-static DEVICE_ATTR(reg_dump, 0664, muic_show_registers, NULL);
-static DEVICE_ATTR(reg_sel, 0664, muic_show_reg_sel, muic_set_reg_sel);
-#endif
 static DEVICE_ATTR(usb_state, 0664, muic_show_usb_state, NULL);
 #if defined(CONFIG_USB_HOST_NOTIFY)
 static DEVICE_ATTR(otg_test, 0664,
@@ -709,10 +613,6 @@ static struct attribute *muic_attributes[] = {
 	&dev_attr_uart_sel.attr,
 	&dev_attr_usb_sel.attr,
 	&dev_attr_adc.attr,
-#ifdef DEBUG_MUIC
-	&dev_attr_reg_dump.attr,
-	&dev_attr_reg_sel.attr,
-#endif
 	&dev_attr_usb_state.attr,
 #if defined(CONFIG_USB_HOST_NOTIFY)
 	&dev_attr_otg_test.attr,

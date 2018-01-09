@@ -389,7 +389,8 @@ int s2mm005_flash(struct s2mm005_data *usbpd_data, unsigned int input)
 			pr_err("%s: failed to open %s.\n", __func__,
 				      CCIC_DEFAULT_UMS_FW);
 			ret = -ENOENT;
-			goto done;
+			set_fs(old_fs);
+			return ret;
 		}
 
 		fw_size = fp->f_path.dentry->d_inode->i_size;
@@ -466,7 +467,6 @@ int s2mm005_flash(struct s2mm005_data *usbpd_data, unsigned int input)
 
 	}
 	}
-done:
 	return ret;
 }
 

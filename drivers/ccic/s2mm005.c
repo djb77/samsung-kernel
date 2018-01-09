@@ -485,8 +485,9 @@ int s2mm005_fw_ver_check(void * data)
 	struct s2mm005_data *usbpd_data = data;
 	struct s2mm005_version chip_swver, hwver;
 
-	if ((usbpd_data->firm_ver[1] == 0xFF && usbpd_data->firm_ver[2] == 0xFF) 
-		|| (usbpd_data->firm_ver[1] == 0x00 && usbpd_data->firm_ver[2] == 0x00)) {
+	if ((usbpd_data->firm_ver[1] == 0xFF && usbpd_data->firm_ver[2] == 0xFF)
+		|| (usbpd_data->firm_ver[1] == 0x00 && usbpd_data->firm_ver[2] == 0x00)
+		|| (usbpd_data->firm_ver[3] != 0x07)) {
 		s2mm005_get_chip_hwversion(usbpd_data, &hwver);
 		pr_err("%s CHIP HWversion %2x %2x %2x %2x\n", __func__,
 			hwver.main[2] , hwver.main[1], hwver.main[0], hwver.boot);
@@ -496,7 +497,8 @@ int s2mm005_fw_ver_check(void * data)
 		       chip_swver.main[2] , chip_swver.main[1], chip_swver.main[0], chip_swver.boot);
 
 	if ((chip_swver.main[0] == 0xFF && chip_swver.main[1] == 0xFF)
-		|| (chip_swver.main[0] == 0x00 && chip_swver.main[1] == 0x00)) {
+		|| (chip_swver.main[0] == 0x00 && chip_swver.main[1] == 0x00)
+		|| (chip_swver.boot != 0x07)) {
 			pr_err("%s Invalid FW version\n", __func__);
 			return CCIC_FW_VERSION_INVALID;
 		}
@@ -578,7 +580,10 @@ static irqreturn_t s2mm005_usbpd_irq_thread(int irq, void *data)
 	}
 
 	// Send attach event
-	process_cc_attach(usbpd_data,&plug_attach_done);	
+	process_cc_attach(usbpd_data, &plug_attach_done);
+
+	if (usbpd_data->s2mm005_i2c_err < 0)
+		goto i2cErr;
 
 	if(usbpd_data->water_det || !usbpd_data->run_dry || !usbpd_data->booting_run_dry){
 		process_cc_water_det(usbpd_data);
@@ -594,6 +599,7 @@ static irqreturn_t s2mm005_usbpd_irq_thread(int irq, void *data)
 	// RID processing
 	process_cc_rid(usbpd_data);
 
+i2cErr:
 ver_err:
 water:
 	/* ========================================== */

@@ -460,7 +460,7 @@ static ssize_t sec_hw_param_extra_info_show(struct kobject *kobj,
 {
 	ssize_t info_size = 0;
 
-	if (reset_reason == RR_K || reset_reason == RR_D) {
+	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
 		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 		info_size = strlen(buf);
 	}

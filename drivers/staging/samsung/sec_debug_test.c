@@ -32,6 +32,7 @@ static void simulate_DFREE(void);
 static void simulate_DREF(void);
 static void simulate_MCRPT(void);
 static void simulate_LOMEM(void);
+static void simulate_WRITE_RO(void);
 
 enum {
 	FORCE_KERNEL_PANIC = 0,      /* KP */
@@ -44,6 +45,7 @@ enum {
 	FORCE_DANGLING_REFERENCE,    /* DREF */
 	FORCE_MEMORY_CORRUPTION,     /* MCRPT */
 	FORCE_LOW_MEMEMORY,          /* LOMEM */
+	FORCE_WRITE_RO,		/* WRITE RODATA */
 	NR_FORCE_ERROR,
 };
 
@@ -68,6 +70,7 @@ struct force_error force_error_vector = {
 		{"danglingref", &simulate_DREF},
 		{"memcorrupt",  &simulate_MCRPT},
 		{"lowmem",      &simulate_LOMEM},
+		{"writero",	&simulate_WRITE_RO},
 	}
 };
 
@@ -180,6 +183,16 @@ static void simulate_LOMEM(void)
 	while (kmalloc(128 * 1024, GFP_KERNEL)) /* SVACE: intended */
 		i++;
 	pr_crit("Allocated %d KB!\n", i * 128);
+}
+
+static void simulate_WRITE_RO(void)
+{
+	unsigned long *ptr;
+
+	pr_crit("%s()\n", __func__);
+
+	ptr = (unsigned long *)simulate_WRITE_RO;
+	*ptr ^= 0x12345678;
 }
 
 int sec_debug_force_error(const char *val, struct kernel_param *kp)
