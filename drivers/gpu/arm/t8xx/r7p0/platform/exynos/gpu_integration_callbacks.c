@@ -419,7 +419,7 @@ int gpu_memory_seq_show(struct seq_file *sfile, void *data)
 			/* output the memory usage and cap for each kctx
 			* opened on this device */
 
-			ret = seq_printf(sfile, "  (%24s), %s-0x%p    %12u  %10u\n", \
+			ret = seq_printf(sfile, "  (%24s), %s-0x%pK    %12u  %10u\n", \
 				element->kctx->name, \
 				"kctx", \
 				element->kctx, \
