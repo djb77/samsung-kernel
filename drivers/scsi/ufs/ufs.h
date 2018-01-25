@@ -131,7 +131,7 @@ enum {
 	UPIU_TASK_ATTR_ACA	= 0x03,
 };
 
-#ifdef COMMAND_PRIORITY
+#ifdef CUSTOMIZE_UPIU_FLAGS
 /* UPIU Task Attributes */
 enum {
 	UPIU_COMMAND_PRIORITY_HIGH	= 0x4,

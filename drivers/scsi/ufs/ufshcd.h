@@ -65,8 +65,7 @@
 #include <scsi/scsi_eh.h>
 #include <scsi/scsi_ioctl.h>
 
-#define COMMAND_PRIORITY
-#define HEAD_OF_Q_FEATURE
+#define CUSTOMIZE_UPIU_FLAGS
 
 #include "ufs.h"
 #include "ufshci.h"
