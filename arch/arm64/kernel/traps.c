@@ -35,6 +35,7 @@
 #include <soc/samsung/exynos-condbg.h>
 
 #include <asm/atomic.h>
+#include <asm/barrier.h>
 #include <asm/bug.h>
 #include <asm/debug-monitors.h>
 #include <asm/esr.h>
@@ -490,6 +491,38 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs, unsigned int esr
 		sec_debug_set_extra_info_fault(-1, regs);
 #endif
 	arm64_notify_die("Oops - undefined instruction", regs, &info, esr);
+}
+
+static void cntvct_read_handler(unsigned int esr, struct pt_regs *regs)
+{
+	int rt = (esr & ESR_ELx_SYS64_ISS_RT_MASK) >> ESR_ELx_SYS64_ISS_RT_SHIFT;
+
+	isb();
+	if (rt != 31)
+		regs->regs[rt] = arch_counter_get_cntvct();
+	regs->pc += 4;
+}
+
+static void cntfrq_read_handler(unsigned int esr, struct pt_regs *regs)
+{
+	int rt = (esr & ESR_ELx_SYS64_ISS_RT_MASK) >> ESR_ELx_SYS64_ISS_RT_SHIFT;
+
+	if (rt != 31)
+		asm volatile("mrs %0, cntfrq_el0" : "=r" (regs->regs[rt]));
+	regs->pc += 4;
+}
+
+asmlinkage void __exception do_sysinstr(unsigned int esr, struct pt_regs *regs)
+{
+	if ((esr & ESR_ELx_SYS64_ISS_SYS_OP_MASK) == ESR_ELx_SYS64_ISS_SYS_CNTVCT) {
+		cntvct_read_handler(esr, regs);
+		return;
+	} else if ((esr & ESR_ELx_SYS64_ISS_SYS_OP_MASK) == ESR_ELx_SYS64_ISS_SYS_CNTFRQ) {
+		cntfrq_read_handler(esr, regs);
+		return;
+	}
+
+	do_undefinstr(regs, 0);
 }
 
 long compat_arm_syscall(struct pt_regs *regs);

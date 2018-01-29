@@ -1,0 +1,83 @@
+/*
+ * SAMSUNG EXYNOS device tree source for reserved-memory
+ *
+ * Copyright (c) 2015 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+/memreserve/ 0xE0000000 0x1900000;
+
+/ {
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <1>;
+		ranges;
+
+		dram_test {
+			compatible = "exynos8895,dram_test";
+			reg = <0x0 0x80002000 0x2000>;
+		};
+
+		seclog_mem {
+			compatible = "exynos8895,seclog";
+			reg = <0x0 0xC0000000 0x10000>;
+		};
+
+		camera {
+			compatible = "exynos8890-ion,camera";
+			reg = <0x0 0xC0010000 0xE400000>;
+			id = <10>;
+		};
+
+		secure_camera {
+			compatible = "exynos8890-ion,secure_camera";
+			ion,secure;
+			reg = <0x0 0xD0000000 0x1400000>;
+			id = <11>;
+		};
+
+		abox_rmem: abox_rmem@0xEA800000 {
+			compatible = "exynos,abox_rmem";
+			reg = <0x0 0xEA800000 0x400000>;
+		};
+
+		/* NOTE: reusable region should be aligned by 4MiB */
+		video_stream {
+			compatible = "exynos8890-ion,vstream";
+			ion,secure;
+			ion,reusable;
+			/* TUI : 2560x1440 32bpp 3frames = 2560*1440*(32/8)*3 */
+			/* DRM : 0x3800000				      */
+			/* 0x3C00000 = ALIGN(max(0x3840000, 0x3800000), 4MiB) */
+			reg = <0x0 0xE6C00000 0x3C00000>;
+			id = <3>;
+			compat-id = <25 31>;
+		};
+
+		crypto {
+			compatible = "exynos8890-ion,crypto";
+			ion,reusable;
+			reg = <0x0 0xF3400000 0x1800000>;
+			id = <1>;
+		};
+
+		modem_if {
+			compatible = "exynos,modem_if";
+			reg = <0x0 0xF4C00000 0x9000000>;
+		};
+
+		cp_ram_logging {
+			compatible = "exynos,cp_ram_logging";
+			reg = <0x0 0xFDC00000 0x2000000>;
+		};
+
+		gnss_if {
+			compatible = "exynos,gnss_if";
+			reg = <0x0 0xFFC00000 0x400000>;
+		};
+	};
+};
