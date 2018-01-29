@@ -1,0 +1,179 @@
+/*
+ * SAMSUNG UNIVERSAL8890 board device tree source
+ *
+ * Copyright (c) 2014 Samsung Electronics Co., Ltd.
+ *             http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/ {
+	/* modem_interface_driver: Samsung Electronics Jungfrau */
+	mif2_pdata {
+		compatible = "sec_modem,modem_pdata";
+		status = "okay";
+		mif,gpio_cp_on = <&gpe7 3 0x1>;
+		mif,gpio_cp_boot_noti = <&gpe7 2 0xf>;
+		mif,gpio_cp_reset = <&gpa4 0 0x1>; /* 5G_SYS_RST_N */
+
+		mif,5g_ap_wakeup = <&gpa1 1 0xf>; /* 5G_AP_WAKEUP */
+
+		mif,gpio_pda_active = <&gpa3 0 0x1>; /* AP_ACTIVE */
+		mif,gpio_phone_active = <&gpa2 1 0xf>;	/* 5G_ACTIVE */
+
+		mif,gpio_buck_en1 = <&gpf1 0 0x1>;	/* 5G_BUCK_EN */
+		mif,gpio_buck_en2 = <&gpe7 7 0x1>;
+
+		/*
+		 * mif,5g_ap_active = <&gpd2 0 0xf>;
+		 * mif,ap_5g_active = <&gpd2 1 0x1>;
+		 */
+
+		mif,name = "ss5g";
+		mif,modem_net = <0>;		/* UMTS_NETWORK */
+		mif,modem_type = <16>;		/* SEC_SS5G */
+		mif,use_handover = <0>;		/* not used */
+		mif,ipc_version = <50>;		/* SIPC 5.0 */
+		mif,link_types = <0x808>;	/* LINKDEV_PCI | LINKDEV_SPI */
+		mif,link_name = "pci";
+		mif,link_attrs = <0x7C9>;
+		/* XMIT_BTDLR(0x400) | DUMP_ALIGNED (0x200) |
+		 * BOOT_ALIGNED (0x100) | MEM_DUMP (0x80) |
+		 * MEM_BOOT (0x40) | DPRAM_MAGIC (0x08) |
+		 * SBD_IPC (0x01)
+		 */
+		mif,num_iodevs = <6>;
+		mif,dummy_num_rmnets = <0>;
+
+		mif,regulator_ldo1 = "VDDA_0P9_5G";
+		mif,regulator_ldo2 = "VDD_AFE_0P9_5G_L2";
+		mif,regulator_ldo3 = "VDD_AFE_0P9_5G_L3";
+		mif,regulator_ldo4 = "VDD_CPU_M_5G";
+		mif,regulator_ldo5 = "VDD_PCIE_VP_0P9_5G";
+		mif,regulator_ldo11 = "VDD_IO_1P8_5G";
+		mif,regulator_ldo12 = "VDD_SIM_5G";
+		mif,regulator_ldo13 = "VDD_AFE_1P8_5G";
+		mif,regulator_ldo14 = "VDD_EFUSE_1P98_5G";
+		mif,regulator_ldo15 = "VDDA_1P8_5G";
+		mif,regulator_ldo16 = "VDD_DRAM_1P8_5G";
+		mif,regulator_ldo17 = "VDD_PCIE_VPH_1P8_5G";
+		mif,regulator_sw2= "VDDQ_DDR_1P2_5G";
+
+		iodevs {
+			io_device_0 {
+				iod,name = "umts_boot0";
+				iod,id = <216>;
+				iod,format = <4>;		/* IPC_BOOT */
+				iod,io_type = <0>;
+				iod,links = <0x808>;
+				iod,tx_link = <11>;  /* LINKDEV_PCI */
+				iod,attrs = <0x02>;
+				iod,app = "CBD";
+			};
+			io_device_1 {
+				iod,name = "umts_ipc0";
+				iod,id = <235>;
+				iod,format = <0>;
+				iod,io_type = <0>;		/* IODEV_MISC */
+				iod,links = <0x800>;
+				iod,attrs = <0x82>;
+				/* ATTR_SBD_IPC (0x80) | ATTR_SIPC5 */
+				iod,app = "RIL";
+				iod,ul_num_buffers = <4>;
+				iod,ul_buffer_size = <8192>;
+				iod,dl_num_buffers = <4>;
+				iod,dl_buffer_size = <8192>;
+			};
+			io_device_2 {
+				iod,name = "rmnet0";
+				iod,id = <10>;
+				iod,format = <1>;
+				iod,io_type = <1>;
+				iod,links = <0x800>;
+				iod,attrs = <0x180>;
+				/* ATTR_SBD_IPC (0x80) |
+				 * ATTR_NO_LINK_HDR(0x100)
+				 */
+				iod,app = "NET";
+				iod,ul_num_buffers = <512>;
+				iod,ul_buffer_size = <8192>;
+				iod,dl_num_buffers = <1024>;
+				iod,dl_buffer_size = <8192>;
+			};
+			io_device_3 {
+				iod,name = "umts_rfs0";
+				iod,id = <245>;
+				iod,format = <1>;		/* IPC_RFS */
+				iod,io_type = <0>;
+				iod,links = <0x800>;
+				iod,attrs = <0x82>;
+				iod,app = "RFS";
+				iod,ul_num_buffers = <16>;
+				iod,ul_buffer_size = <8192>;
+				iod,dl_num_buffers = <512>;
+				iod,dl_buffer_size = <8192>;
+			};
+			io_device_4 {
+				iod,name = "umts_dm0";
+				iod,id = <28>;
+				iod,format = <1>;
+				iod,io_type = <0>;
+				iod,links = <0x800>;
+				iod,attrs = <0x82>;
+				iod,app = "DIAG";
+				iod,ul_num_buffers = <16>;
+				iod,ul_buffer_size = <8192>;
+				iod,dl_num_buffers = <128>;
+				iod,dl_buffer_size = <8192>;
+			};
+			io_device_5 {
+				iod,name = "umts_router";
+				iod,id = <25>;
+				iod,format = <1>;
+				iod,io_type = <0>;
+				iod,links = <0x800>;
+				iod,attrs = <0x82>;
+				iod,app = "Data Router";
+				iod,ul_num_buffers = <16>;
+				iod,ul_buffer_size = <2048>;
+				iod,dl_num_buffers = <16>;
+				iod,dl_buffer_size = <2048>;
+			};
+		};
+	}; /* end of mif_pdata */
+
+	pcie1@116B0000 {
+		status = "okay";
+	};
+
+	/*spi_6: spi@14da0000 { for modem booting */
+	spi_9: spi@108A0000 {
+
+		/*
+		 * Requested by Next Generation Communications Business Team.
+		 */
+		/delete-property/ swap-mode;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&spi9_bus>, <&spi9_cs>;
+		/* pinctrl-0 = <&spi6_bus>, <&spi6_cs_func>; */
+		status = "okay";
+
+		spidev@0 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			compatible = "spi_boot_link";
+			reg = <0x0>;
+			spi-max-frequency = <13000000>;
+
+			controller-data {
+				cs-gpio = <&gpe2 2 0>;
+				samsung,spi-feedback-delay = <0>;
+				/* samsung,spi-chip-select-mode = <0>; */
+			};
+		};
+	};
+};
