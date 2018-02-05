@@ -84,3 +84,7 @@ config SCSI_UFS_EXYNOS
 	  If you have a controller with this interface, say Y or M here.
 
 	  If unsure, say N.
+
+config NO_ORDERED_DISCARD
+	bool "Do not set ordered flag on discard"
+	default n

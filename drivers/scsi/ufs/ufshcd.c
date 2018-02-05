@@ -485,8 +485,10 @@ static void set_customized_upiu_flags(struct ufshcd_lrb *lrbp, u32 *upiu_flags)
 		if (lrbp->cmd->request->cmd_flags & REQ_WRITE) {
 			if (lrbp->cmd->request->cmd_flags & REQ_FLUSH)
 				*upiu_flags |= UPIU_TASK_ATTR_HEADQ;
+#ifndef CONFIG_NO_ORDERED_DISCARD
 			else if (lrbp->cmd->request->cmd_flags & REQ_DISCARD)
 				*upiu_flags |= UPIU_TASK_ATTR_ORDERED;
+#endif
 			else if (lrbp->cmd->request->cmd_flags & REQ_SYNC)
 				*upiu_flags |= UPIU_COMMAND_PRIORITY_HIGH;
 		} else {
