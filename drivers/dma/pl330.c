@@ -2145,6 +2145,10 @@ static void pl330_tasklet(unsigned long data)
 	struct dma_pl330_desc *desc, *_dt;
 	unsigned long flags;
 
+	/* If pch and thread is empty */
+	if (!pch || !pch->thread)
+		return;
+
 	spin_lock_irqsave(&pch->lock, flags);
 
 	/* Pick up ripe tomatoes */
