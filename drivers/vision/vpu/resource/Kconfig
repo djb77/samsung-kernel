@@ -1,0 +1,16 @@
+config EXYNOS_VPU_ALLOCATOR
+	bool "Select Resource allocator"
+	help
+	  This is hardware mapper version
+
+config EXYNOS_VPU_ALC_DEFAULT
+	bool "Use Default"
+	depends on EXYNOS_VPU_ALLOCATOR
+	help
+	  This is default allocator
+
+config EXYNOS_VPU_ALC_HWMAPPER
+	bool "Use Hwmapper"
+	depends on EXYNOS_VPU_ALLOCATOR
+	help
+	  This is hardware allocator

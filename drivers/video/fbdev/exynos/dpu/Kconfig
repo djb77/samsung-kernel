@@ -1,0 +1,99 @@
+config EXYNOS_DECON_8895
+	bool "Samsung Exynos8895 Display system (DPP, DECON, MIPI, HDMI)"
+	default y
+	depends on FB
+
+if EXYNOS_DECON_8895
+config EXYNOS_DECON_FB
+	bool "Samsung DECON Framebuffer driver"
+	depends on EXYNOS_DECON_8895
+	select MEDIA_EXYNOS
+	default y
+	help
+	  Say Y here if you want support for the DECON in Samsung S5P SoCs.
+	  This device produce image data to one of output interfaces.
+
+config EXYNOS_DPP
+	bool "Samsung Exynos Display Post Processor driver"
+	depends on EXYNOS_DECON_8895
+	default y
+
+config EXYNOS_MIPI_DSIM
+	bool "Samsung Exynos MIPI-DSI driver"
+	depends on EXYNOS_DECON_8895
+	default y
+	help
+	  Enable MIPI-DSI driver.
+
+config EXYNOS_MIPI_DISPLAYPORT
+	bool "Samsung Exynos DISPLAYPORT driver"
+	depends on EXYNOS_DECON_8895
+	default y
+	help
+	  Enable DISPLAYPORT driver.
+
+config EXYNOS_ZEBU_EMUL_DISP
+	bool "Zebu Emulator Display driver"
+	depends on EXYNOS_DECON_8895
+	default y
+
+config FB_WINDOW_UPDATE
+        bool "DECON window update mode"
+        depends on EXYNOS_DECON_8895
+        default n
+
+config DECON_BLOCKING_MODE
+	bool "DECON blocking mode"
+        depends on EXYNOS_DECON_8895
+        default y
+
+config DECON_EVENT_LOG
+	bool "Display sub-system event logger (DECON/DSIM/DPP)"
+        depends on DEBUG_INFO && EXYNOS_DECON_8895
+        default y
+
+config DECON_HIBER
+	bool "DECON hiber mode"
+        depends on EXYNOS_DECON_8895
+        default n
+
+config SUPPORT_DOZE
+	bool "Suppot Doze mode to aod service"
+	depends on EXYNOS_DECON_8895
+	default n
+
+config SUPPORT_DSU
+	bool "Support DSU(Multi Resolution)"
+	depends on EXYNOS_DECON_8895
+	default n
+
+config SUPPORT_HMD
+	bool "Support HMD(Head Mount Display - VR)"
+	depends on EXYNOS_DECON_8895
+	default n
+	
+config DECON_SELF_REFRESH
+	bool "Support video emulation for daydream"
+	depends on EXYNOS_DECON_8895
+	default n
+
+config DISPLAYPORT_ENG
+	bool "Enable Displayport eng binary"
+	default n
+
+config LOGGING_BIGDATA_BUG
+	bool "Logging extra information when decon bug"
+	depends on EXYNOS_DECON_8895
+	default y
+
+config SUPPORT_INDISPLAY
+	bool "Support HBM for indisplay"
+	depends on EXYNOS_DECON_8895
+	default n
+
+config DUMPSTATE_LOGGING
+	bool "Support DumpState Logging"
+	depends on EXYNOS_DECON_8895
+	default y
+source "drivers/video/fbdev/exynos/dpu/dp_logger/Kconfig"
+endif

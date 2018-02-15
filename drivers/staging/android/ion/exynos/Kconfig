@@ -1,0 +1,4 @@
+config ION_EXYNOS_OF
+	depends on OF
+	bool "Setup ION with Device Tree"
+	default n

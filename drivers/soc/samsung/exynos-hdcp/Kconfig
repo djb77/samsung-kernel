@@ -1,0 +1,26 @@
+#
+# HDCP driver configuration
+#
+
+menuconfig EXYNOS_HDCP2
+	bool "HDCP2 driver support"
+	depends on PHY_EXYNOS_DISPLAYPORT
+	default y
+	help
+	  Enable HDCP2 support
+
+if EXYNOS_HDCP2
+
+config HDCP2_EMULATION_MODE
+	bool "HDCP2 emulation mode support"
+	default n
+	help
+	  Enable HDCP2 emulation mode support
+
+config HDCP2_SUPPORT_IIA
+	bool "HDCP2 IIA protocol support"
+	default n
+	help
+	  Enable HDCP2 IIA protocol support
+
+endif

@@ -1,0 +1,177 @@
+#
+# EXYNOS Soc drivers
+#
+menuconfig SOC_SAMSUNG
+	bool "SAMSUNG SOC drivers support"
+
+if SOC_SAMSUNG
+config EXYNOS_CHIPID
+	bool "Exynos Chip ID Driver Support"
+	depends on ARCH_EXYNOS
+	select SOC_BUS
+
+config EXYNOS_PMU
+	bool "Exynos Power Management Unit Driver Support"
+	depends on ARCH_EXYNOS
+	select REG_MAP
+
+config EXYNOS_REBOOT
+	bool "Exynos Chip Reboot Driver Support"
+	depends on ARCH_EXYNOS
+
+config PWRCAL
+	bool "Exynos Power Chip Abstraction Layer"
+	help
+	Support Power CAL for Exynos SoC.
+
+config ECT
+	bool "Enable Exynos Characteristic Table File"
+	default n
+	depends on ARCH_EXYNOS
+
+config ECT_DUMP
+	bool "Enable Exynos Characteristic Table File Dump sysfs"
+	default n
+	depends on ECT
+
+config EXYNOS_PD
+	bool "Exynos PM domain Support"
+	depends on ARCH_EXYNOS
+	depends on PM
+	select PM_GENERIC_DOMAINS
+
+config EXYNOS_BCM
+	bool "EXYNOS_BCM driver support"
+	help
+	  Enable exynos_bcm driver support
+
+config EXYNOS_RGT
+	bool "Exynos Regulator Debug Support"
+	depends on REGULATOR
+	depends on DEBUG_FS
+	depends on OF
+	help
+	  dummy device driver for debugging samsung PMIC
+
+config EXYNOS_WD_DVFS
+	bool "EXYNOS WD DVFS driver support"
+	default n
+	help
+	  Enable exynos wd dvfs support
+
+config SAMSUNG_DMADEV
+	bool
+	select ARM_AMBA
+	select DMADEVICES
+	select PL330_DMA if (ARCH_EXYNOS8)
+	help
+	  Use DMA device engine for PL330 DMAC.
+
+config EXYNOS_HOTPLUG_GOVERNOR
+	bool "Enable Exynos dynamic hotplug governor"
+
+config SCHED_HP_EVENT
+	bool "Gathers scheduler events to decide hotplug in/out"
+	depends on EXYNOS_HOTPLUG_GOVERNOR
+	default y
+
+config EXYNOS_PM_DVS
+       bool "Enable Exynos dynamic voltage setting"
+       default n
+
+config CAL_IF
+	bool "Exynos Chip Abstraction Layer Interface"
+	help
+	  Support CMU CAL for Exynos SoC.
+
+config PMUCAL
+	bool "Exynos PMU Chip Abstraction Layer"
+	depends on CAL_IF
+	default y
+	help
+	 Support PMUCAL for Exynos SoC.
+
+config CMUCAL
+	bool "Exynos CMU Chip Abstraction Layer"
+	depends on CAL_IF
+	default y
+	help
+	  Support CMUCAL for Exynos SoC.
+
+config CMUCAL_DEBUG
+	bool "CMUCAL Debug Interface"
+	depends on CMUCAL
+
+config ACPM_DVFS
+	bool "Exynos ACPM DVFS manager"
+	depends on CAL_IF && CMUCAL
+	default y
+	help
+	  Support ACPM DVFS for Exynos SoC.
+
+config VDD_AUTO_CAL
+	bool "Exynos VDD_AUTO CALIBRATION"
+	depends on ACPM_DVFS
+	help
+	  Support VDD auto calibration for Exynos SoC.
+
+config USI
+	bool "Enable Universal Serial Interface"
+	default n
+
+config EXYNOS_SECURE_LOG
+	bool "Exynos Secure Log"
+	default y
+	help
+	  Support Exynos Secure Log
+
+config EXYNOS_KERNEL_PROTECTION
+	bool "Exynos Kernel Code Protection"
+	help
+	  Support Exynos Kernel Code Protection
+
+config EXYNOS_SDM
+	bool "Exynos Security Dump Manager Support"
+	depends on EXYNOS_SNAPSHOT
+	default y
+	help
+	  Exynos Security Dump Manager
+
+config EXYNOS_CONTENT_PATH_PROTECTION
+	bool "Exynos Content Path Protection"
+	default y
+	help
+	  Enable content path protection of EXYNOS.
+
+source "drivers/soc/samsung/acpm/Kconfig"
+source "drivers/soc/samsung/exynos-hdcp/Kconfig"
+
+config EXYNOS_MCINFO
+	bool "Exynos memory controller information"
+	default n
+
+config MCINFO_SYSFS
+	bool "Exynos memory controller information sysfs"
+	depends on EXYNOS_MCINFO
+	default	y if SYSFS
+
+config EXYNOS_DVFS_MANAGER
+	bool "Exynos DVFS Manager"
+	default n
+	depends on ARCH_EXYNOS
+	help
+	  Enable DVFS Manager for Exynos SoC.
+	  This module controls constraint between each DVFS domains.
+
+config EXYNOS_EARLY_TMU
+	bool "Exynos Early TMU"
+	default n
+	help
+	  Enable Exynos Early TMU for Exynos SoC.
+
+config SENSORS_FP_USI_NUMBER
+	depends on SENSORS_FINGERPRINT
+	int "Fingerprint usi gpio number"
+	default 0
+
+endif #SOC_SAMSUNG

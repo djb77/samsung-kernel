@@ -1,0 +1,12 @@
+menuconfig EXYNOS_SCORE
+        bool "SCORE driver"
+        select EXYNOS_SCORE_PLATFORM
+        select EXYNOS_SCORE_INTERFACE
+        help
+          This is a SCORE Driver
+
+if EXYNOS_SCORE
+
+source "drivers/vision/score/platform/Kconfig"
+
+endif
