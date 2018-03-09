@@ -228,9 +228,6 @@ struct dw_mci {
 
 	/* Sfr dump */
 	struct dw_mci_sfe_ram_dump	*sfr_dump;
-
-	/* S/W Timeout check */
-	bool sw_timeout_chk;
 };
 
 /* DMA ops for Internal/External DMAC interface */

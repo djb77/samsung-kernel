@@ -1,7 +1,7 @@
 /*
  * EVENT_LOG system definitions
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2016, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: event_log_tag.h 700675 2017-05-20 14:54:04Z $
+ * $Id: event_log_tag.h 636987 2016-05-11 08:04:24Z $
  */
 
 #ifndef _EVENT_LOG_TAG_H_
@@ -158,41 +158,12 @@
 #define EVENT_LOG_TAG_AMPDU_ERROR		130
 #define EVENT_LOG_TAG_KM_ERROR			131
 #define EVENT_LOG_TAG_DFS			132
-#define EVENT_LOG_TAG_REGULATORY		133
-#define EVENT_LOG_TAG_CSA			134
-#define EVENT_LOG_TAG_WNM_BSSTRANS_ERR		135
-#define EVENT_LOG_TAG_SUP_INFO			136
-#define EVENT_LOG_TAG_SUP_ERROR			137
-#define EVENT_LOG_TAG_CHANCTXT_TRACE		138
-#define EVENT_LOG_TAG_CHANCTXT_INFO		139
-#define EVENT_LOG_TAG_CHANCTXT_ERROR		140
-#define EVENT_LOG_TAG_CHANCTXT_WARN		141
-#define EVENT_LOG_TAG_MSCHPROFILE		142
-#define EVENT_LOG_TAG_4WAYHANDSHAKE		143
-#define EVENT_LOG_TAG_MSCHPROFILE_TLV		144
-#define EVENT_LOG_TAG_ADPS			145
-#define EVENT_LOG_TAG_MBO_DBG			146
-#define EVENT_LOG_TAG_MBO_INFO			147
-#define EVENT_LOG_TAG_MBO_ERR			148
-#define EVENT_LOG_TAG_TXDELAY			149
-#define EVENT_LOG_TAG_BCNTRIM_INFO		150
-#define EVENT_LOG_TAG_BCNTRIM_TRACE		151
-#define EVENT_LOG_TAG_OPS_INFO			152
-#define EVENT_LOG_TAG_STATS			153
-#define EVENT_LOG_TAG_BAM			154
-#define EVENT_LOG_TAG_TXFAIL			155
-#define EVENT_LOG_TAG_AWDL_CONFIG_DBG		156
-#define EVENT_LOG_TAG_AWDL_SYNC_DBG		157
-#define EVENT_LOG_TAG_AWDL_PEER_DBG		158
-#define EVENT_LOG_TAG_RANDMAC_INFO		159
-#define EVENT_LOG_TAG_RANDMAC_DBG		160
-#define EVENT_LOG_TAG_RANDMAC_ERR		161
-#define EVENT_LOG_TAG_AWDL_DFSP_DBG		162
-#define EVENT_LOG_TAG_TPA_ERR			163
-#define EVENT_LOG_TAG_TPA_INFO			164
+#define EVENT_LOG_TAG_REGULATORY	133
+#define EVENT_LOG_TAG_CSA				134
+#define EVENT_LOG_TAG_WNM_BSSTRANS_ERR	135
 
 /* EVENT_LOG_TAG_MAX	= Set to the same value of last tag, not last tag + 1 */
-#define EVENT_LOG_TAG_MAX			164
+#define EVENT_LOG_TAG_MAX			135
 /* Note: New event should be added/reserved in trunk before adding it to branches */
 
 

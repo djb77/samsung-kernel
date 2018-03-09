@@ -85,7 +85,4 @@ void mcu_ipc_send_command(u32 int_num, u16 cmd);
 u32 mbox_get_value(u32 mbx_num);
 void mbox_set_value(u32 mbx_num, u32 msg);
 
-#ifdef CONFIG_MCU_IPC_LOG
-void mbox_check_mcu_irq(int irq);
-#endif
 #endif

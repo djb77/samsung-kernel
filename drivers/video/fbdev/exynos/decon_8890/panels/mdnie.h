@@ -192,7 +192,10 @@ struct mdnie_info {
 	unsigned int coordinate[2];
 };
 
+extern int mdnie_calibration(int *r);
+extern int mdnie_open_file(const char *path, char **fp);
 extern int mdnie_register(struct device *p, void *data, mdnie_w w, mdnie_r r, unsigned int *coordinate, struct mdnie_tune *tune);
+extern uintptr_t mdnie_request_table(char *path, struct mdnie_table *s);
 extern ssize_t attr_store_for_each(struct class *cls, const char *name, const char *buf, size_t size);
 extern struct class *get_mdnie_class(void);
 

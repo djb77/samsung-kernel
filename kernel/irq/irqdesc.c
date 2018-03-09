@@ -16,7 +16,6 @@
 #include <linux/bitmap.h>
 #include <linux/irqdomain.h>
 #include <linux/exynos-ss.h>
-#include <linux/mcu_ipc.h>
 
 #include "internals.h"
 
@@ -387,9 +386,7 @@ int __handle_domain_irq(struct irq_domain *domain, unsigned int hwirq,
 	if (lookup)
 		irq = irq_find_mapping(domain, hwirq);
 #endif
-#ifdef CONFIG_MCU_IPC_LOG
-	mbox_check_mcu_irq(irq);
-#endif
+
 	/*
 	 * Some hardware gives randomly wrong interrupts.  Rather
 	 * than crashing, do something sensible.

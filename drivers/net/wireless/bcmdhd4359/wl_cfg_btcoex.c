@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver - Dongle Host Driver (DHD) related
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2016, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg_btcoex.c 697414 2017-05-03 14:48:20Z $
+ * $Id: wl_cfg_btcoex.c 638301 2016-05-17 09:06:40Z $
  */
 
 #include <net/rtnetlink.h>
@@ -94,7 +94,7 @@ dev_wlc_intvar_get_reg(struct net_device *dev, char *name,
 
 	bcm_mkiovar(name, (char *)(&reg), sizeof(reg),
 		(char *)(&var), sizeof(var.buf));
-	error = wldev_ioctl_get(dev, WLC_GET_VAR, (char *)(&var), sizeof(var.buf));
+	error = wldev_ioctl(dev, WLC_GET_VAR, (char *)(&var), sizeof(var.buf), false);
 
 	*retval = dtoh32(var.val);
 	return (error);
@@ -107,7 +107,7 @@ dev_wlc_bufvar_set(struct net_device *dev, char *name, char *buf, int len)
 
 	bcm_mkiovar(name, buf, len, ioctlbuf_local, sizeof(ioctlbuf_local));
 
-	return (wldev_ioctl_set(dev, WLC_SET_VAR, ioctlbuf_local, sizeof(ioctlbuf_local)));
+	return (wldev_ioctl(dev, WLC_SET_VAR, ioctlbuf_local, sizeof(ioctlbuf_local), true));
 }
 /*
 get named driver variable to uint register value and return error indication

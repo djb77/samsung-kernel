@@ -1444,6 +1444,9 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 		return -EINVAL;
 	}
 
+	if (!po->running)
+		return -EINVAL;
+
 	if (po->fanout)
 		return -EALREADY;
 
@@ -1481,10 +1484,7 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 		list_add(&match->list, &fanout_list);
 	}
 	err = -EINVAL;
-
-	spin_lock(&po->bind_lock);
-	if (po->running &&
-	    match->type == type &&
+	if (match->type == type &&
 	    match->prot_hook.type == po->prot_hook.type &&
 	    match->prot_hook.dev == po->prot_hook.dev) {
 		err = -ENOSPC;
@@ -1495,11 +1495,6 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 			__fanout_link(sk, po);
 			err = 0;
 		}
-	}
-	spin_unlock(&po->bind_lock);
-	if (err && !atomic_read(&match->sk_ref)) {
-		list_del(&match->list);
-		kfree(match);
 	}
 out:
 	mutex_unlock(&fanout_mutex);
@@ -3306,17 +3301,12 @@ packet_setsockopt(struct socket *sock, int level, int optname, char __user *optv
 
 		if (optlen != sizeof(val))
 			return -EINVAL;
+		if (po->rx_ring.pg_vec || po->tx_ring.pg_vec)
+			return -EBUSY;
 		if (copy_from_user(&val, optval, sizeof(val)))
 			return -EFAULT;
-		lock_sock(sk);
-		if (po->rx_ring.pg_vec || po->tx_ring.pg_vec) {
-			ret = -EBUSY;
-		} else {
-			po->tp_reserve = val;
-			ret = 0;
-		}
-		release_sock(sk);
-		return ret;
+		po->tp_reserve = val;
+		return 0;
 	}
 	case PACKET_LOSS:
 	{

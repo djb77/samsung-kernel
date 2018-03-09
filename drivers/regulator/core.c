@@ -1722,8 +1722,6 @@ static void regulator_ena_gpio_free(struct regulator_dev *rdev)
 				gpiod_put(pin->gpiod);
 				list_del(&pin->list);
 				kfree(pin);
-				rdev->ena_pin = NULL;
-				return;
 			} else {
 				pin->request_count--;
 			}

@@ -1,7 +1,7 @@
 /*
  * Customer HW 4 dependant file
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2016, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -48,6 +48,8 @@ struct cntry_locales_custom {
 	int32 custom_locale_rev; /* Custom local revisin default -1 */
 };
 
+#if !defined(DHD_USE_CLMINFO_PARSER)
+/* Locale table for sec */
 const struct cntry_locales_custom translate_custom_table[] = {
 #if defined(BCM4330_CHIP) || defined(BCM4334_CHIP) || defined(BCM43241_CHIP)
 	/* 4330/4334/43241 */
@@ -97,6 +99,7 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"",   "XZ", 1},	/* Universal if Country code is unknown or empty */
 	{"IR", "XZ", 1},	/* Universal if Country code is IRAN, (ISLAMIC REPUBLIC OF) */
 	{"SD", "XZ", 1},	/* Universal if Country code is SUDAN */
+	{"SY", "XZ", 1},	/* Universal if Country code is SYRIAN ARAB REPUBLIC */
 	{"GL", "XZ", 1},	/* Universal if Country code is GREENLAND */
 	{"PS", "XZ", 1},	/* Universal if Country code is PALESTINIAN TERRITORY, OCCUPIED */
 	{"TL", "XZ", 1},	/* Universal if Country code is TIMOR-LESTE (EAST TIMOR) */
@@ -141,6 +144,7 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"",   "XZ", 11},	/* Universal if Country code is unknown or empty */
 	{"IR", "XZ", 11},	/* Universal if Country code is IRAN, (ISLAMIC REPUBLIC OF) */
 	{"SD", "XZ", 11},	/* Universal if Country code is SUDAN */
+	{"SY", "XZ", 11},	/* Universal if Country code is SYRIAN ARAB REPUBLIC */
 	{"GL", "XZ", 11},	/* Universal if Country code is GREENLAND */
 	{"PS", "XZ", 11},	/* Universal if Country code is PALESTINIAN TERRITORY, OCCUPIED */
 	{"TL", "XZ", 11},	/* Universal if Country code is TIMOR-LESTE (EAST TIMOR) */
@@ -337,6 +341,9 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"CA", "Q2", 993},
 #endif /* default ccode/regrev */
 };
+#else
+struct cntry_locales_custom translate_custom_table[NUM_OF_COUNTRYS];
+#endif /* DHD_USE_CLMINFO_PARSER */
 
 /* Customized Locale convertor
 *  input : ISO 3166-1 country abbreviation
@@ -379,6 +386,7 @@ void sec_control_pm(dhd_pub_t *dhd, uint *power_mode)
 	struct file *fp = NULL;
 	char *filepath = PSMINFO;
 	char power_val = 0;
+	char iovbuf[WL_EVENTING_MASK_LEN + 12];
 	int ret = 0;
 #ifdef DHD_ENABLE_LPC
 	uint32 lpc = 0;
@@ -403,6 +411,7 @@ void sec_control_pm(dhd_pub_t *dhd, uint *power_mode)
 #ifdef ROAM_ENABLE
 			uint roamvar = 1;
 #endif
+			uint32 ocl_enable = 0;
 			uint32 wl_updown = 1;
 
 			*power_mode = PM_OFF;
@@ -410,18 +419,23 @@ void sec_control_pm(dhd_pub_t *dhd, uint *power_mode)
 			dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)power_mode,
 				sizeof(uint), TRUE, 0);
 			/* Turn off MPC in AP mode */
-			dhd_iovar(dhd, 0, "mpc", (char *)power_mode, sizeof(*power_mode), NULL, 0,
-					TRUE);
+			bcm_mkiovar("mpc", (char *)power_mode, 4,
+				iovbuf, sizeof(iovbuf));
+			dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf,
+				sizeof(iovbuf), TRUE, 0);
 			g_pm_control = TRUE;
 #ifdef ROAM_ENABLE
 			/* Roaming off of dongle */
-			dhd_iovar(dhd, 0, "roam_off", (char *)&roamvar, sizeof(roamvar), NULL, 0,
-					TRUE);
+			bcm_mkiovar("roam_off", (char *)&roamvar, 4,
+				iovbuf, sizeof(iovbuf));
+			dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf,
+				sizeof(iovbuf), TRUE, 0);
 #endif
 #ifdef DHD_ENABLE_LPC
 			/* Set lpc 0 */
-			ret = dhd_iovar(dhd, 0, "lpc", (char *)&lpc, sizeof(lpc), NULL, 0, TRUE);
-			if (ret < 0) {
+			bcm_mkiovar("lpc", (char *)&lpc, 4, iovbuf, sizeof(iovbuf));
+			if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf,
+				sizeof(iovbuf), TRUE, 0)) < 0) {
 				DHD_ERROR(("[WIFI_SEC] %s: Set lpc failed  %d\n",
 				__FUNCTION__, ret));
 			}
@@ -437,17 +451,14 @@ void sec_control_pm(dhd_pub_t *dhd, uint *power_mode)
 				DHD_ERROR(("[WIFI_SEC] %s: WLC_UP faield %d\n", __FUNCTION__, ret));
 			}
 
-			{
-				uint32 ocl_enable = 0;
-				ret = dhd_iovar(dhd, 0, "ocl_enable", (char *)&ocl_enable,
-						sizeof(ocl_enable), NULL, 0, TRUE);
-				if (ret < 0) {
-					DHD_ERROR(("[WIFI_SEC] %s: Set ocl_enable %d failed %d\n",
+			bcm_mkiovar("ocl_enable", (char *)&ocl_enable, 4, iovbuf, sizeof(iovbuf));
+			if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf,
+					sizeof(iovbuf), TRUE, 0)) < 0) {
+				DHD_ERROR(("[WIFI_SEC] %s: Set ocl_enable %d failed %d\n",
 						__FUNCTION__, ocl_enable, ret));
-				} else {
-					DHD_ERROR(("[WIFI_SEC] %s: Set ocl_enable %d OK %d\n",
+			} else {
+				DHD_ERROR(("[WIFI_SEC] %s: Set ocl_enable %d succeeded %d\n",
 						__FUNCTION__, ocl_enable, ret));
-				}
 			}
 
 			if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_DOWN, (char *)&wl_updown,
@@ -473,11 +484,10 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 	int ret = -1;
 	uint32 ant_val = 0;
 	uint32 btc_mode = 0;
-	wl_config_t rsdb_mode;
+	uint32 rsdb_mode = 0;
 	char *filepath = ANTINFO;
+	char iovbuf[WLC_IOCTL_SMLEN];
 	uint chip_id = dhd_bus_chip_id(dhd);
-
-	memset(&rsdb_mode, 0, sizeof(rsdb_mode));
 
 	/* Check if this chip can support MIMO */
 	if (chip_id != BCM4324_CHIP_ID &&
@@ -521,8 +531,8 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 
 	/* bt coex mode off */
 	if (dhd_get_fw_mode(dhd->info) == DHD_FLAG_MFG_MODE) {
-		ret = dhd_iovar(dhd, 0, "btc_mode", (char *)&btc_mode, sizeof(btc_mode), NULL, 0,
-				TRUE);
+		bcm_mkiovar("btc_mode", (char *)&btc_mode, 4, iovbuf, sizeof(iovbuf));
+		ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
 		if (ret) {
 			DHD_ERROR(("[WIFI_SEC] %s: Fail to execute dhd_wl_ioctl_cmd(): "
 				"btc_mode, ret=%d\n",
@@ -533,8 +543,9 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 
 	/* rsdb mode off */
 	DHD_ERROR(("[WIFI_SEC] %s: %s the RSDB mode!\n",
-		__FUNCTION__, rsdb_mode.config ? "Enable" : "Disable"));
-	ret = dhd_iovar(dhd, 0, "rsdb_mode", (char *)&rsdb_mode, sizeof(rsdb_mode), NULL, 0, TRUE);
+		__FUNCTION__, rsdb_mode ? "Enable" : "Disable"));
+	bcm_mkiovar("rsdb_mode", (char *)&rsdb_mode, 4, iovbuf, sizeof(iovbuf));
+	ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
 	if (ret) {
 		DHD_ERROR(("[WIFI_SEC] %s: Fail to execute dhd_wl_ioctl_cmd(): "
 			"rsdb_mode, ret=%d\n", __FUNCTION__, ret));
@@ -542,14 +553,16 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 	}
 
 	/* Select Antenna */
-	ret = dhd_iovar(dhd, 0, "txchain", (char *)&ant_val, sizeof(ant_val), NULL, 0, TRUE);
+	bcm_mkiovar("txchain", (char *)&ant_val, 4, iovbuf, sizeof(iovbuf));
+	ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
 	if (ret) {
 		DHD_ERROR(("[WIFI_SEC] %s: Fail to execute dhd_wl_ioctl_cmd(): txchain, ret=%d\n",
 			__FUNCTION__, ret));
 		return ret;
 	}
 
-	ret = dhd_iovar(dhd, 0, "rxchain", (char *)&ant_val, sizeof(ant_val), NULL, 0, TRUE);
+	bcm_mkiovar("rxchain", (char *)&ant_val, 4, iovbuf, sizeof(iovbuf));
+	ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
 	if (ret) {
 		DHD_ERROR(("[WIFI_SEC] %s: Fail to execute dhd_wl_ioctl_cmd(): rxchain, ret=%d\n",
 			__FUNCTION__, ret));
@@ -571,11 +584,9 @@ int dhd_rsdb_mode_from_file(dhd_pub_t *dhd)
 {
 	struct file *fp = NULL;
 	int ret = -1;
-	wl_config_t rsdb_mode;
-	uint32 rsdb_configuration = 0;
+	uint32 rsdb_mode = 0;
 	char *filepath = RSDBINFO;
-
-	memset(&rsdb_mode, 0, sizeof(rsdb_mode));
+	char iovbuf[WLC_IOCTL_SMLEN];
 
 	/* Read RSDB on/off request from the file */
 	fp = filp_open(filepath, O_RDONLY, 0);
@@ -583,31 +594,32 @@ int dhd_rsdb_mode_from_file(dhd_pub_t *dhd)
 		DHD_ERROR(("[WIFI_SEC] %s: File [%s] doesn't exist\n", __FUNCTION__, filepath));
 		return ret;
 	} else {
-		ret = kernel_read(fp, 0, (char *)&rsdb_configuration, 4);
+		ret = kernel_read(fp, 0, (char *)&rsdb_mode, 4);
 		if (ret < 0) {
 			DHD_ERROR(("[WIFI_SEC] %s: File read error, ret=%d\n", __FUNCTION__, ret));
 			filp_close(fp, NULL);
 			return ret;
 		}
 
-		rsdb_mode.config = bcm_atoi((char *)&rsdb_configuration);
+		rsdb_mode = bcm_atoi((char *)&rsdb_mode);
 
-		DHD_ERROR(("[WIFI_SEC] %s: RSDB mode from file = %d\n",
-			__FUNCTION__, rsdb_mode.config));
+		DHD_ERROR(("[WIFI_SEC] %s: RSDB mode from file = %d\n", __FUNCTION__, rsdb_mode));
 		filp_close(fp, NULL);
 
 		/* Check value from the file */
-		if (rsdb_mode.config > 2) {
+		if (rsdb_mode > 2) {
 			DHD_ERROR(("[WIFI_SEC] %s: Invalid value %d read from the file %s\n",
-				__FUNCTION__, rsdb_mode.config, filepath));
+				__FUNCTION__, rsdb_mode, filepath));
 			return -1;
 		}
 	}
 
-	if (rsdb_mode.config == 0) {
-		ret = dhd_iovar(dhd, 0, "rsdb_mode", (char *)&rsdb_mode, sizeof(rsdb_mode), NULL, 0,
-				TRUE);
-		if (ret < 0) {
+	if (rsdb_mode == 0) {
+		bcm_mkiovar("rsdb_mode", (char *)&rsdb_mode, sizeof(rsdb_mode),
+			iovbuf, sizeof(iovbuf));
+
+		if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR,
+				iovbuf, sizeof(iovbuf), TRUE, 0)) < 0) {
 			DHD_ERROR(("[WIFI_SEC] %s: rsdb_mode ret= %d\n", __FUNCTION__, ret));
 		} else {
 			DHD_ERROR(("[WIFI_SEC] %s: rsdb_mode to MIMO(RSDB OFF) succeeded\n",
@@ -900,6 +912,7 @@ dhd_force_disable_singlcore_scan(dhd_pub_t *dhd)
 	int ret = 0;
 	struct file *fp = NULL;
 	char *filepath = PLATFORM_PATH".cid.info";
+	s8 iovbuf[WL_EVENTING_MASK_LEN + 12];
 	char vender[10] = {0, };
 	uint32 pm_bcnrx = 0;
 	uint32 scan_ps = 0;
@@ -916,13 +929,13 @@ dhd_force_disable_singlcore_scan(dhd_pub_t *dhd)
 		if (ret > 0 && NULL != strstr(vender, "wisol")) {
 			DHD_ERROR(("wisol module : set pm_bcnrx=0, set scan_ps=0\n"));
 
-			ret = dhd_iovar(dhd, 0, "pm_bcnrx", (char *)&pm_bcnrx, sizeof(pm_bcnrx),
-					NULL, 0, TRUE);
+			bcm_mkiovar("pm_bcnrx", (char *)&pm_bcnrx, 4, iovbuf, sizeof(iovbuf));
+			ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
 			if (ret < 0)
 				DHD_ERROR(("Set pm_bcnrx error (%d)\n", ret));
 
-			ret = dhd_iovar(dhd, 0, "scan_ps", (char *)&scan_ps, sizeof(scan_ps), NULL,
-					0, TRUE);
+			bcm_mkiovar("scan_ps", (char *)&scan_ps, 4, iovbuf, sizeof(iovbuf));
+			ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
 			if (ret < 0)
 				DHD_ERROR(("Set scan_ps error (%d)\n", ret));
 		}

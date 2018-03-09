@@ -3927,7 +3927,6 @@ static void sec_bat_cable_work(struct work_struct *work)
 		battery->health = POWER_SUPPLY_HEALTH_GOOD;
 		battery->wpc_temp_mode = false;
 		battery->chg_limit = SEC_BATTERY_CHG_TEMP_NONE;
-		battery->store_mode &= ~STORE_MODE_RDU_TA;
 
 #if defined(CONFIG_CALC_TIME_TO_FULL)
 		cancel_delayed_work(&battery->timetofull_work);
@@ -5122,7 +5121,7 @@ ssize_t sec_bat_store_attrs(
 					battery->pdata->wpc_high_temp -= 30;
 					battery->pdata->wpc_high_temp_recovery -= 30;
 				}	
-				battery->store_mode |= STORE_MODE_LDU_RDU;
+				battery->store_mode = true;
 				if(battery->capacity <= 5) {
 					battery->ignore_store_mode = true;
 				} else {
@@ -6457,7 +6456,7 @@ static int sec_bat_cable_check(struct sec_battery_info *battery,
 		current_cable_type = POWER_SUPPLY_TYPE_USB;
 		break;
 	case ATTACHED_DEV_RDU_TA_MUIC:
-		battery->store_mode |= STORE_MODE_RDU_TA;
+		battery->store_mode = true;
 	case ATTACHED_DEV_TA_MUIC:
 	case ATTACHED_DEV_CARDOCK_MUIC:
 	case ATTACHED_DEV_DESKDOCK_VB_MUIC:
@@ -8020,7 +8019,7 @@ static int sec_battery_probe(struct platform_device *pdev)
 	battery->cable_type = POWER_SUPPLY_TYPE_BATTERY;
 	battery->test_mode = 0;
 	battery->factory_mode = false;
-	battery->store_mode = STORE_MODE_NONE;
+	battery->store_mode = false;
 	battery->ignore_store_mode = false;
 	battery->slate_mode = false;
 	battery->is_hc_usb = false;
@@ -8218,7 +8217,7 @@ static int sec_battery_probe(struct platform_device *pdev)
 					POWER_SUPPLY_PROP_CHARGE_TYPE, value);
 
 #if defined(CONFIG_STORE_MODE) && !defined(CONFIG_SEC_FACTORY)
-	battery->store_mode |= STORE_MODE_LDU_RDU;
+	battery->store_mode = true;
 	if (battery->capacity <= 5)
 		battery->ignore_store_mode = true;
 
