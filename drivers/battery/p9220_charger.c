@@ -513,7 +513,7 @@ void p9220_set_cmd_reg(struct p9220_charger_data *charger, u8 val, u8 mask)
 				break;
 		}
 		i++;
-    } while ((temp != 0) && (i < 3));
+	}while(temp != 0);
 }
 
 void p9220_send_eop(struct p9220_charger_data *charger, int health_mode)

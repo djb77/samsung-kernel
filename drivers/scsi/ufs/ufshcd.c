@@ -478,26 +478,6 @@ static inline int ufshcd_get_lists_status(u32 reg)
 	return (((reg) & (0xFF)) >> 1) ^ (0x07);
 }
 
-#ifdef CUSTOMIZE_UPIU_FLAGS
-static void set_customized_upiu_flags(struct ufshcd_lrb *lrbp, u32 *upiu_flags)
-{
-	if (lrbp->command_type == UTP_CMD_TYPE_SCSI) {
-		if (lrbp->cmd->request->cmd_flags & REQ_WRITE) {
-			if (lrbp->cmd->request->cmd_flags & REQ_FLUSH)
-				*upiu_flags |= UPIU_TASK_ATTR_HEADQ;
-#ifndef CONFIG_NO_ORDERED_DISCARD
-			else if (lrbp->cmd->request->cmd_flags & REQ_DISCARD)
-				*upiu_flags |= UPIU_TASK_ATTR_ORDERED;
-#endif
-			else if (lrbp->cmd->request->cmd_flags & REQ_SYNC)
-				*upiu_flags |= UPIU_COMMAND_PRIORITY_HIGH;
-		} else {
-			*upiu_flags |= UPIU_COMMAND_PRIORITY_HIGH;
-		}
-	}
-}
-#endif
-
 /**
  * ufshcd_get_uic_cmd_result - Get the UIC command result
  * @hba: Pointer to adapter instance
@@ -1382,15 +1362,46 @@ static void ufshcd_prepare_req_desc_hdr(struct ufshcd_lrb *lrbp,
 	if (cmd_dir == DMA_FROM_DEVICE) {
 		data_direction = UTP_DEVICE_TO_HOST;
 		*upiu_flags = UPIU_CMD_FLAGS_READ;
+#ifdef COMMAND_PRIORITY
+		/*
+		 *	UFS header FLAGS bit3 meant for command priority
+		 *			0 - Normal priority
+		 *			1 - High priority
+		 *
+		 * Set High Priority for SYNC reads
+		 */
+		if (lrbp->command_type == UTP_CMD_TYPE_SCSI) {
+			*upiu_flags |= UPIU_COMMAND_PRIORITY_HIGH;
+		}
+#endif
 	} else if (cmd_dir == DMA_TO_DEVICE) {
 		data_direction = UTP_HOST_TO_DEVICE;
 		*upiu_flags = UPIU_CMD_FLAGS_WRITE;
+#ifdef COMMAND_PRIORITY
+		/*
+		 * Set High Priority for SYNC writes
+		 */
+		if ((lrbp->command_type == UTP_CMD_TYPE_SCSI) &&
+			(lrbp->cmd->request->cmd_flags & REQ_SYNC) &&
+			!(lrbp->cmd->request->cmd_flags & REQ_FLUSH)) {
+			*upiu_flags |= UPIU_COMMAND_PRIORITY_HIGH;
+		}
+#endif
 	} else {
 		data_direction = UTP_NO_DATA_TRANSFER;
 		*upiu_flags = UPIU_CMD_FLAGS_NONE;
 	}
 
-	set_customized_upiu_flags(lrbp,upiu_flags);
+#ifdef HEAD_OF_Q_FEATURE
+	/*
+	 * Set HEAD_OF_QUEUE for FLUSH request (REQ_FLUSH)
+	 *	UFS header FLAGS bit0,1 denotes TASK_ATTRIBUTE
+	 */
+	if ((lrbp->command_type == UTP_CMD_TYPE_SCSI) &&
+			(lrbp->cmd->request->cmd_flags & REQ_FLUSH)) {
+		*upiu_flags |= UPIU_TASK_ATTR_HEADQ;
+	}
+#endif
 
 	dword_0 = data_direction | (lrbp->command_type
 				<< UPIU_COMMAND_TYPE_OFFSET);

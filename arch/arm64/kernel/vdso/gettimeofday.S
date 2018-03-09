@@ -217,29 +217,15 @@ ENDPROC(__kernel_clock_getres)
 ENTRY(__do_get_tspec)
 	.cfi_startproc
 
-	/*
-	 * Read the virtual counter.
-	 * ARM64_ERRATUM_858921
-	 */
-	isb
-	mrs	x15, cntvct_el0
-	isb
-	mrs	x10, cntvct_el0
-
-	/*
-	 * if bit[32] is different, keep the first value x15
-	 * if bit[32] is the same, keep the second value x10.
-	 */
-	eor	x13, x10, x15
-	and	x13, x13, #0x100000000
-	cmp	x13, xzr
-	csel	x15, x15, x10, ne
-
 	/* Read from the vDSO data page. */
 	ldr	x10, [vdso_data, #VDSO_CS_CYCLE_LAST]
 	ldp	x13, x14, [vdso_data, #VDSO_XTIME_CLK_SEC]
 	ldp	w11, w12, [vdso_data, #VDSO_CS_MULT]
 	seqcnt_read w9
+
+	/* Read the virtual counter. */
+	isb
+	mrs	x15, cntvct_el0
 
 	/* Calculate cycle delta and convert to ns. */
 	sub	x10, x15, x10

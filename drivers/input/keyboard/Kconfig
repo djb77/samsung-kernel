@@ -681,11 +681,5 @@ config KEYBOARD_ABOV_FT16XX_TOUCH
 	help
 	  Say Y here if you want to use ABOV MC96FT16XX chip as touchkey.
 
-config KEYBOARD_ABOV_FT16XX_TOUCH_VALLEY
-	tristate "Abov FT16XX touchkey for valley"
-	depends on I2C
-	help
-	  Say Y here if you want to use ABOV MC96FT16XX chip as touchkey.
-
 source "drivers/input/keyboard/cypress/Kconfig"
 endif

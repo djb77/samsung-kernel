@@ -1,7 +1,7 @@
 /*
  * DHD Bus Module for SDIO
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2016, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_sdio.c 697414 2017-05-03 14:48:20Z $
+ * $Id: dhd_sdio.c 615406 2016-01-27 12:49:23Z $
  */
 
 #include <typedefs.h>
@@ -4529,6 +4529,7 @@ dhd_txglom_enable(dhd_pub_t *dhdp, bool enable)
 	 */
 	dhd_bus_t *bus = dhdp->bus;
 #ifdef BCMSDIOH_TXGLOM
+	char buf[256];
 	uint32 rxglom;
 	int32 ret;
 
@@ -4541,8 +4542,9 @@ dhd_txglom_enable(dhd_pub_t *dhdp, bool enable)
 
 	if (enable) {
 		rxglom = 1;
-		ret = dhd_iovar(dhdp, 0, "bus:rxglom", (char *)&rxglom, sizeof(rxglom), NULL, 0,
-				TRUE);
+		memset(buf, 0, sizeof(buf));
+		bcm_mkiovar("bus:rxglom", (void *)&rxglom, 4, buf, sizeof(buf));
+		ret = dhd_wl_ioctl_cmd(dhdp, WLC_SET_VAR, buf, sizeof(buf), TRUE, 0);
 		if (ret >= 0)
 			bus->txglom_enable = TRUE;
 		else {
@@ -8079,10 +8081,6 @@ dhdsdio_download_firmware(struct dhd_bus *bus, osl_t *osh, void *sdh)
 		return BCME_BADARG;
 	}
 #endif /* SUPPORT_MULTIPLE_REVISION */
-
-#if defined(DHD_BLOB_EXISTENCE_CHECK)
-	dhd_set_blob_support(bus->dhd, bus->fw_path);
-#endif /* DHD_BLOB_EXISTENCE_CHECK */
 
 	DHD_TRACE_HW4(("%s: firmware path=%s, nvram path=%s\n",
 		__FUNCTION__, bus->fw_path, bus->nv_path));

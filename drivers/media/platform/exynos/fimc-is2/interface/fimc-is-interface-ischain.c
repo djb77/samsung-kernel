@@ -1627,7 +1627,7 @@ static void wq_func_group_xxx(struct fimc_is_groupmgr *groupmgr,
 			panic("G%d overflow", group->id);
 #else
 			err("G%d overflow", group->id);
-			/* fimc_is_resource_dump(); */
+			fimc_is_resource_dump();
 #endif
 		}
 	}

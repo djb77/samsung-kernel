@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2016, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 701923 2017-05-30 02:40:59Z $
+ * $Id: wl_cfg80211.h 668473 2016-11-03 13:40:32Z $
  */
 
 /**
@@ -312,9 +312,8 @@ enum wl_status {
 	 * a expire timer without actual listen state.
 	 * if set, other scan request does not need to abort scan.
 	 */
-	WL_STATUS_FAKE_REMAINING_ON_CHANNEL,
+	WL_STATUS_FAKE_REMAINING_ON_CHANNEL
 #endif /* WL_CFG80211_VSDB_PRIORITIZE_SCAN_REQUEST */
-	WL_STATUS_NESTED_CONNECT
 };
 
 /* wi-fi mode */
@@ -1360,9 +1359,6 @@ wl_get_netinfo_by_wdev(struct bcm_cfg80211 *cfg, struct wireless_dev *wdev)
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 0, 0))
 #define STA_INFO_BIT(info) (1ul << NL80211_STA_ ## info)
-#ifdef strnicmp
-#undef strnicmp
-#endif /* strnicmp */
 #define strnicmp(str1, str2, len) strncasecmp((str1), (str2), (len))
 #else
 #define STA_INFO_BIT(info) (STATION_ ## info)

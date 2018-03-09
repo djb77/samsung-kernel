@@ -1,7 +1,7 @@
 /*
  * Customer code to add GPIO control during WLAN start/stop
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2016, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_gpio.c 692237 2017-03-27 08:14:12Z $
+ * $Id: dhd_custom_gpio.c 591129 2015-10-07 05:22:14Z $
  */
 
 #include <typedefs.h>
@@ -36,6 +36,9 @@
 #include <dhd_linux.h>
 
 #include <wlioctl.h>
+#if defined(WL_WIRELESS_EXT)
+#include <wl_iw.h>
+#endif
 
 #define WL_ERROR(x) printf x
 #define WL_TRACE(x)

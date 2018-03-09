@@ -104,11 +104,5 @@ config SENSORS_SSP_ZENLTE
 	help
 	  If you want to use zen project, it should be set.
 
-config SENSORS_SSP_VLTE
-	tristate "Sensors ssp for v project"
-	default n
-	help
-	  If you want to use v project, it should be set.
-
 source "drivers/sensorhub/stm/factory/Kconfig"
 source "drivers/sensorhub/brcm/max_notchfilter/Kconfig"

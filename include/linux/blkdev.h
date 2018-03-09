@@ -1171,12 +1171,8 @@ static inline struct request *blk_map_queue_find_tag(struct blk_queue_tag *bqt,
 }
 
 #define BLKDEV_DISCARD_SECURE  0x01    /* secure discard */
-#define BLKDEV_DISCARD_SYNC    0x02    /* sync discard   */
 
 extern int blkdev_issue_flush(struct block_device *, gfp_t, sector_t *);
-extern int __blkdev_issue_discard(struct block_device *bdev, sector_t sector,
-		sector_t nr_sects, gfp_t gfp_mask, unsigned long flags,
-		struct bio **biop);
 extern int blkdev_issue_discard(struct block_device *bdev, sector_t sector,
 		sector_t nr_sects, gfp_t gfp_mask, unsigned long flags);
 extern int blkdev_issue_write_same(struct block_device *bdev, sector_t sector,

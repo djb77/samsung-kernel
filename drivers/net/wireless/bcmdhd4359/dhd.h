@@ -4,7 +4,7 @@
  * Provides type definitions and function prototypes used to link the
  * DHD OS, bus, and protocol modules.
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2016, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd.h 708917 2017-07-05 08:33:11Z $
+ * $Id: dhd.h 674353 2016-12-08 04:07:44Z $
  */
 
 /****************
@@ -124,7 +124,8 @@ enum dhd_bus_state {
 typedef enum download_type {
 	FW,
 	NVRAM,
-	CLM_BLOB
+	CLM_BLOB,
+	CLMINFO
 } download_type_t;
 
 
@@ -178,6 +179,7 @@ enum dhd_op_flags {
 #endif
 #define MAX_NVRAMBUF_SIZE	(16 * 1024) /* max nvram buf size */
 #define MAX_CLM_BUF_SIZE	(32 * 1024) /* max clm blob size */
+#define MAX_CLMINFO_BUF_SIZE	(4 * 1024) /* max clminfo buf size */
 #ifdef DHD_DEBUG
 #define DHD_JOIN_MAX_TIME_DEFAULT 10000 /* ms: Max time out for joining AP */
 #define DHD_SCAN_DEF_TIMEOUT 10000 /* ms: Max time out for scan in progress */
@@ -249,11 +251,7 @@ enum dhd_dongledump_type {
 	DUMP_TYPE_BY_SYSDUMP,
 	DUMP_TYPE_BY_LIVELOCK,
 	DUMP_TYPE_AP_LINKUP_FAILURE,
-	DUMP_TYPE_AP_ABNORMAL_ACCESS,
-	DUMP_TYPE_RESUMED_ON_INVALID_RING_RDWR,
-#ifdef SUPPORT_LINKDOWN_RECOVERY
-	DUMP_TYPE_READ_SHM_FAIL
-#endif /* SUPPORT_LINKDOWN_RECOVERY */
+	DUMP_TYPE_AP_ABNORMAL_ACCESS
 };
 
 enum dhd_hang_reason {
@@ -267,9 +265,7 @@ enum dhd_hang_reason {
 	HANG_REASON_P2P_IFACE_DEL_FAILURE = 0x8007,
 	HANG_REASON_HT_AVAIL_ERROR = 0x8008,
 	HANG_REASON_PCIE_RC_LINK_UP_FAIL = 0x8009,
-	HANG_REASON_PCIE_PKTID_ERROR = 0x800A,
-	HANG_REASON_INVALID_EVENT_OR_DATA = 0x8806,
-	HANG_REASON_MAX = 0x8807
+	HANG_REASON_MAX = 0x800a
 };
 
 enum dhd_rsdb_scan_features {
@@ -501,9 +497,6 @@ typedef struct dhd_pub {
 #ifdef CUSTOM_COUNTRY_CODE
 	u32 dhd_cflags;
 #endif /* CUSTOM_COUNTRY_CODE */
-#if defined(DHD_BLOB_EXISTENCE_CHECK)
-	bool is_blob;			/* Checking for existance of Blob file */
-#endif /* DHD_BLOB_EXISTENCE_CHECK */
 	bool force_country_change;
 	char eventmask[WL_EVENTING_MASK_LEN];
 	int	op_mode;				/* STA, HostAPD, WFD, SoftAP */
@@ -578,9 +571,6 @@ typedef struct dhd_pub {
 #endif /* BCMPCIE */
 	bool hang_report;		/* enable hang report by default */
 	uint16 hang_reason;		/* reason codes for HANG event */
-#if defined(DHD_HANG_SEND_UP_TEST)
-	uint req_hang_type;
-#endif /* DHD_HANG_SEND_UP_TEST */
 #ifdef WLTDLS
 	bool tdls_enable;
 #endif
@@ -1127,9 +1117,9 @@ extern void dhd_os_tcpackunlock(dhd_pub_t *pub, unsigned long flags);
 extern int dhd_customer_oob_irq_map(void *adapter, unsigned long *irq_flags_ptr);
 extern int dhd_customer_gpio_wlan_ctrl(void *adapter, int onoff);
 extern int dhd_custom_get_mac_address(void *adapter, unsigned char *buf);
-#if defined(CUSTOM_COUNTRY_CODE)
+#ifdef CUSTOM_COUNTRY_CODE
 extern void get_customized_country_code(void *adapter, char *country_iso_code,
-	wl_country_t *cspec, u32 flags);
+wl_country_t *cspec, u32 flags);
 #else
 extern void get_customized_country_code(void *adapter, char *country_iso_code, wl_country_t *cspec);
 #endif /* CUSTOM_COUNTRY_CODE */
@@ -1320,8 +1310,7 @@ extern int dhd_os_busbusy_wait_negation(dhd_pub_t * pub, uint * condition);
 extern int dhd_os_busbusy_wake(dhd_pub_t * pub);
 
 extern bool dhd_is_concurrent_mode(dhd_pub_t *dhd);
-int dhd_iovar(dhd_pub_t *pub, int ifidx, char *name, char *param_buf, uint param_len,
-		char *res_buf, uint res_len, int set);
+extern int dhd_iovar(dhd_pub_t *pub, int ifidx, char *name, char *cmd_buf, uint cmd_len, int set);
 typedef enum cust_gpio_modes {
 	WLAN_RESET_ON,
 	WLAN_RESET_OFF,
@@ -1467,15 +1456,6 @@ extern uint dhd_force_tx_queueing;
 #define CUSTOM_ASSOC_RETRY_MAX			DEFAULT_ASSOC_RETRY_MAX
 #endif /* DEFAULT_ASSOC_RETRY_MAX */
 
-#if defined(BCMSDIO) || defined(DISABLE_FRAMEBURST)
-#define DEFAULT_FRAMEBURST_SET			0
-#else
-#define DEFAULT_FRAMEBURST_SET			1
-#endif /* BCMSDIO */
-
-#ifndef CUSTOM_FRAMEBURST_SET
-#define CUSTOM_FRAMEBURST_SET			DEFAULT_FRAMEBURST_SET
-#endif /* CUSTOM_FRAMEBURST_SET */
 
 #ifdef WLTDLS
 #ifndef CUSTOM_TDLS_IDLE_MODE_SETTING
@@ -1751,6 +1731,10 @@ void dhd_free_download_buffer(dhd_pub_t	*dhd, void *buffer, int length);
 int dhd_download_clm_blob(dhd_pub_t *dhd, unsigned char *image, uint32 len);
 
 int dhd_apply_default_clm(dhd_pub_t *dhd, char *clm_path);
+#ifdef DHD_USE_CLMINFO_PARSER
+int dhd_get_clminfo(dhd_pub_t *dhd, char *clm_path);
+#define NUM_OF_COUNTRYS 150
+#endif /* DHD_USE_CLMINFO_PARSER */
 
 #define dhd_is_device_removed(x) FALSE
 #define dhd_os_ind_firmware_stall(x)
@@ -1878,12 +1862,5 @@ void argos_config_mumimo_reset(void);
 #define DHD_SUPPORT_64BIT
 /* by default disabled for other platforms, can enable appropriate macro to enable 64 bit support */
 #endif /* (linux || LINUX) && CONFIG_64BIT */
-#if defined(DHD_HANG_SEND_UP_TEST)
-extern void dhd_make_hang_with_reason(struct net_device *dev, const char *string_num);
-#endif /* DHD_HANG_SEND_UP_TEST */
-
-#if defined(DHD_BLOB_EXISTENCE_CHECK)
-extern void dhd_set_blob_support(dhd_pub_t *dhdp, char *fw_path);
-#endif /* DHD_BLOB_EXISTENCE_CHECK */
 
 #endif /* _dhd_h_ */

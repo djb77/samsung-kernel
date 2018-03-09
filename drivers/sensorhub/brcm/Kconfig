@@ -513,17 +513,6 @@ config SENSORS_SSP_HIFI_BATCHING
          help
          	If you want to use hifi batching, it should be set.
          	
-config SENSORS_SSP_VLTE
-	tristate "V Proejct"
-	default n
-	depends on SPI
-	help
-	  Binary file for ssp driver.
-          If you say yes here you get V project support for
-       	  factory test.
- 	  To compile this driver as a module, choose M here: the
- 	  module will be called ssp.
-
 config SENSORS_SSP_NOBLELTE
 	tristate "NOBLE Proejct"
 	default n

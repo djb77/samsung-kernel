@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver - Dongle Host Driver (DHD) related
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2016, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_cfg80211.c 697414 2017-05-03 14:48:20Z $
+ * $Id: dhd_cfg80211.c 591285 2015-10-07 11:56:29Z $
  */
 
 #include <linux/vmalloc.h>
@@ -169,9 +169,9 @@ static s32
 wl_dongle_up(struct net_device *ndev)
 {
 	s32 err = 0;
-	u32 local_up = 0;
+	u32 up = 0;
 
-	err = wldev_ioctl_set(ndev, WLC_UP, &local_up, sizeof(local_up));
+	err = wldev_ioctl(ndev, WLC_UP, &up, sizeof(up), true);
 	if (unlikely(err)) {
 		WL_ERR(("WLC_UP error (%d)\n", err));
 	}
@@ -182,9 +182,9 @@ static s32
 wl_dongle_down(struct net_device *ndev)
 {
 	s32 err = 0;
-	u32 local_down = 0;
+	u32 down = 0;
 
-	err = wldev_ioctl_set(ndev, WLC_DOWN, &local_down, sizeof(local_down));
+	err = wldev_ioctl(ndev, WLC_DOWN, &down, sizeof(down), true);
 	if (unlikely(err)) {
 		WL_ERR(("WLC_DOWN error (%d)\n", err));
 	}
@@ -226,7 +226,7 @@ int dhd_cfgvendor_priv_string_handler(struct bcm_cfg80211 *cfg, struct wireless_
 {
 	struct net_device *ndev = NULL;
 	dhd_pub_t *dhd;
-	dhd_ioctl_t ioc = { 0, NULL, 0, 0, 0, 0, 0};
+	dhd_ioctl_t ioc = { 0 };
 	int ret = 0;
 	int8 index;
 
@@ -255,7 +255,6 @@ int dhd_cfgvendor_priv_string_handler(struct bcm_cfg80211 *cfg, struct wireless_
 	ioc.len = nlioc->len;
 	ioc.set = nlioc->set;
 	ioc.driver = nlioc->magic;
-	ioc.buf = buf;
 	ret = dhd_ioctl_process(dhd, index, &ioc, buf);
 	if (ret) {
 		WL_TRACE(("dhd_ioctl_process return err %d\n", ret));
