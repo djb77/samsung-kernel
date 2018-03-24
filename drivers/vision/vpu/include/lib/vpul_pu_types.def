@@ -1,0 +1,42 @@
+/**
+ *  \file vpul_pu_types.def
+ * Each line in file describes a PU type by the following fields:
+ *  PU type, pointer to function for calculating number of MPRBs needed, is pre-load needed
+ * This file is used to build different LUTs in VPUL code in consistent matter.
+ */
+
+VPU_PU_TYPE(VPU_PU_TYPE_NONE,		vpu_resource_no_mprbs_needed,	0 ) /*!<None		   */
+VPU_PU_TYPE(VPU_PU_TYPE_DMAIN,		vpu_resource_no_mprbs_needed,	0 ) /*!<DMA input client */
+VPU_PU_TYPE(VPU_PU_TYPE_DMAOT,		vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_SALB,		vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_CALB,		vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_ROIS,		vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_CROP,		vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_MDE,		vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_MAP2LIST,	vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_NMS,		vpu_resource_calc_num_mprbs_for_nms, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_SLF5,		vpu_resource_calc_num_mprbs_for_slf, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_SLF7,		vpu_resource_calc_num_mprbs_for_slf, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_GLF5,		vpu_resource_calc_num_mprbs_for_glf5, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_CCM,		vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_LUT,		vpu_resource_calc_num_mprbs_for_lut, 1)
+VPU_PU_TYPE(VPU_PU_TYPE_INTEGRAL,	vpu_resource_calc_num_mprbs_for_intimg, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_UPSCALER,	vpu_resource_calc_num_mprbs_for_upsc, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_DNSCALER,	vpu_resource_calc_num_mprbs_for_downsc, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_JOINER,		vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_SPLITTER,	vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_DUPLICATOR,	vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_DUPLICATOR_WIDE,vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_HISTOGRAM,	vpu_resource_calc_num_mprbs_for_histog, 1)
+VPU_PU_TYPE(VPU_PU_TYPE_NLF,		vpu_resource_calc_num_mprbs_for_nlf, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_FASTDEPTH,	vpu_resource_calc_num_mprbs_for_fdepth, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_DISPARITY,	vpu_resource_calc_num_mprbs_for_dispar, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_INPAINT,	vpu_resource_calc_num_mprbs_for_inpnt, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_CNN,		vpu_resource_calc_num_mprbs_for_cnn, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_FLAMORB,	vpu_resource_calc_num_mprbs_for_flmorb, 1)
+VPU_PU_TYPE(VPU_PU_TYPE_FIFO,		vpu_resource_calc_num_mprbs_for_fifo, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_TN1,		vpu_resource_no_mprbs_needed, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_TN2,		vpu_resource_calc_num_mprbs_for_tn2, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_TN3,		vpu_resource_calc_num_mprbs_for_tn3, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_TN4,		vpu_resource_calc_num_mprbs_for_tn4, 0)
+VPU_PU_TYPE(VPU_PU_TYPE_TN5,		vpu_resource_calc_num_mprbs_for_tn5, 0)

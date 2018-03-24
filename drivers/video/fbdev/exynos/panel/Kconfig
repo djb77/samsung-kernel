@@ -1,0 +1,91 @@
+config EXYNOS_DECON_LCD
+	depends on EXYNOS_DECON_8895
+	bool "Select LCD panel driver"
+
+config EXYNOS_DECON_MDNIE_LITE
+	depends on EXYNOS_DECON_LCD
+	tristate "Support MDNIE LITE"
+	default n
+
+config EXYNOS_DECON_LCD_SYSFS
+	depends on EXYNOS_DECON_LCD
+	tristate "Support LCD SYSFS"
+	default y
+
+config EXYNOS_DECON_LCD_SPI
+	depends on EXYNOS_DECON_LCD
+	tristate "Support LCD SPI"
+	default n
+
+config EXYNOS_DECON_LCD_COPR
+	depends on EXYNOS_DECON_LCD
+	tristate "Support COPR"
+	default n
+
+config EXYNOS_DECON_LCD_TUNING
+	depends on EXYNOS_DECON_LCD
+	tristate "Support LCD TUNING"
+	default n
+
+config PANEL_AID_DIMMING
+	depends on EXYNOS_DECON_LCD
+	tristate "Support AID Dimming"
+	default n
+
+config EXYNOS_DECON_LCD_S6E3HF4
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSIM
+	tristate "S6E3HF4 AMOLED WQHD LCD driver(1440 x 2560)"
+
+config EXYNOS_DECON_LCD_S6E3HA6
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSIM
+	tristate "S6E3HA6 AMOLED LCD DRIVER"
+
+config ACTIVE_CLOCK
+	depends on EXYNOS_DECON_LCD && EXYNOS_DECON_LCD_S6E3HA6
+	tristate "Support DDI Active Clock Feature"
+	default n
+
+config SUPPORT_POC_FLASH
+	depends on EXYNOS_DECON_LCD && EXYNOS_DECON_LCD_S6E3HA6
+	tristate "Support display poc flash"
+	default n
+
+config PANEL_POC_2_0
+	depends on EXYNOS_DECON_LCD && SUPPORT_POC_FLASH
+	tristate "Support display poc 2.0"
+	default n
+
+config POC_DREAM
+	depends on EXYNOS_DECON_LCD && EXYNOS_DECON_LCD_S6E3HA6 && SUPPORT_POC_FLASH
+	tristate "Support display poc dream"
+	default n
+
+config POC_DREAM2
+	depends on EXYNOS_DECON_LCD && EXYNOS_DECON_LCD_S6E3HA6 && SUPPORT_POC_FLASH
+	tristate "Support display poc dream2"
+	default n
+
+config SUPPORT_GRAM_CHECKSUM
+	depends on EXYNOS_DECON_LCD && SEC_FACTORY
+	tristate "Support GRAM Checksum"
+	default n
+
+config SUPPORT_PANEL_SPI_SHORT_TEST
+	depends on EXYNOS_DECON_LCD && EXYNOS_DECON_LCD_SPI && SEC_FACTORY
+	tristate "Support panel spi short test"
+	default n
+
+config PANEL_BACKLIGHT_PAC_3_0
+	depends on EXYNOS_DECON_LCD
+	tristate "Support baclight PAC 3.0"
+	default n
+
+config DISPLAY_USE_INFO
+	depends on EXYNOS_DECON_LCD
+	tristate "Support display use info logging"
+	default n
+
+config SUPPORT_HDR
+	depends on EXYNOS_DECON_LCD
+	tristate "Support HDR Param"
+	default y

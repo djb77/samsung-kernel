@@ -1,0 +1,113 @@
+* EXYNOS - USI(Universal Serial Interface) devicetree making guide
+
+The USI can operate as UART, HSI2C and SPI.
+So the configuration for one specific function
+should be needed with SYSREG(System Registers).
+
+To configure USI port as one specific function,
+function string(ex, "spi" or "hsi2c0" or "hsi2c1" or "spi" or "uart" or
+"hsi2c0_hsi2c1" or "uart_hsi2c1")
+should be declared in "usi_mode" property in board devicetree file.
+
+Becuase USI configuration can differ from board schematic.
+
+* Required SoC Specific Properties:
+
+ - compatible: should be one of the following.
+   - samsung,exynos-usi: for exynos7, exynos8 platforms.
+
+ - reg: physical base address of the SYSREG for specific USI port
+	and length of memory mapped region.
+
+* Required Board Specific Properties:
+ - usi_mode: function string for one specific IP operation.
+             hsi2c0: for HSI2C0
+             hsi2c1: for HSI2C1
+             spi: for SPI
+             uart: for UART
+             hsi2c0_hsi2c1: for HSI2C0 and HSI2C1
+             uart_hsi2c1: for UART(without hardware flow control) and HSI2C1
+
+   In case of HSI2C function of USI,
+   hsi2c0 and hsi2c1 should be declared in according to board schemetic.
+   If shemetic describes USI pin as "XUSI##_SDA0" and XUSI##_SCL0",
+   we need to use "hsi2c0" for usi_mode.
+   If shemetic describes USI pin as "XUSI##_SDA1" and XUSI##_SCL1",
+   we need to use "hsi2c1" for usi_mode.
+   If shemetic describes USI pin as "XUSI##_SDA0" and XUSI##_SCL0",
+   and there is also "XUSI##_SDA1" and XUSI##_SCL1",
+   we need to use "hsi2c0_hsi2c1" for usi_mode.
+
+* Exsamples:
+
+ - SoC Specific Portion
+
+	/* USI_0 */
+	usi_0: usi@10421000 {
+		       compatible = "samsung,exynos-usi";
+		       reg = <0x0 0x10421000 0x4>;
+		       /* usi_mode = "hsi2c0" or "hsi2c1" or "spi" or "uart"
+			  or "hsi2c0_hsi2c1" or "uart_hsi2c1"    */
+		       status = "disabled";
+       };
+
+	/* USI_1 */
+	usi_1: usi@10421004 {
+		       compatible = "samsung,exynos-usi";
+		       reg = <0x0 0x10421004 0x4>;
+		       /* usi_mode = "hsi2c0" or "hsi2c1" or "spi" or "uart"
+			  or "hsi2c0_hsi2c1" or "uart_hsi2c1"    */
+		       status = "disabled";
+       };
+
+	/* USI_2 */
+	usi_2: usi@10421008 {
+		       compatible = "samsung,exynos-usi";
+		       reg = <0x0 0x10421008 0x4>;
+		       /* usi_mode = "hsi2c0" or "hsi2c1" or "spi" or "uart"
+			  or "hsi2c0_hsi2c1" or "uart_hsi2c1"    */
+		       status = "disabled";
+       };
+
+ - Board Specific Portion
+
+	/* USI MODE SETTINGS
+
+	   usi_mode = "hsi2c0" or "hsi2c1" or "spi" or "uart"
+			or "hsi2c0_hsi2c1" or "uart_hsi2c1"
+	*/
+
+	usi_0: usi@10421000 {
+		 usi_mode = "spi";
+		 status = "okay";
+	 };
+
+	usi_1: usi@10421004 {
+		       usi_mode = "spi";
+		       status = "okay";
+	};
+
+	usi_2: usi@10421008 {
+		       usi_mode = "hsi2c0";
+		       status = "okay";
+	};
+
+
+If USI configuration was done successfully, the booting log will be shown as below.
+
+[    0.700485]  [1:      swapper/0:    1] usi 10421000.usi: usi_probe() mode:4
+[    0.702369]  [1:      swapper/0:    1] usi 10421004.usi: usi_probe() mode:4
+[    0.704134]  [1:      swapper/0:    1] usi 10421008.usi: usi_probe() mode:1
+
+This means the usi_0 was set as "spi" and usi_1 was set as "spi" and
+usi_2 was set as "hsi2c0".
+
+The mode values are as below.
+
+/* USI mode */
+#define USI_HSI2C0_SINGLE_MODE          0x1
+#define USI_HSI2C1_SINGLE_MODE          0x2
+#define USI_HSI2C0_HSI2C1_DUAL_MODE     0x3
+#define USI_SPI_SINGLE_MODE             0x4
+#define USI_UART_SINGLE_MODE            0x8
+#define USI_UART_HSI2C1_DUAL_MODE       0xA

@@ -1,0 +1,52 @@
+#
+# Exynos Video configuration
+#
+
+menuconfig EXYNOS_VIDEO
+	bool "Exynos Video driver support"
+	depends on ARCH_S5PV210 || ARCH_EXYNOS
+	help
+	  This enables support for EXYNOS Video device.
+
+if EXYNOS_VIDEO
+
+#
+# MIPI DSI driver
+#
+
+config EXYNOS_MIPI_DSI
+	bool "EXYNOS MIPI DSI driver support."
+	select GENERIC_PHY
+	help
+	  This enables support for MIPI-DSI device.
+
+config EXYNOS_LCD_S6E8AX0
+	bool "S6E8AX0 MIPI AMOLED LCD Driver"
+	depends on EXYNOS_MIPI_DSI && BACKLIGHT_CLASS_DEVICE
+	depends on (LCD_CLASS_DEVICE = y)
+	default n
+	help
+	  If you have an S6E8AX0 MIPI AMOLED LCD Panel, say Y to enable its
+	  LCD control driver.
+
+config EXYNOS_DUAL_DISPLAY
+	bool "EXYNOS Dual Display Driver Support."
+	depends on SOC_EXYNOS8895
+	default n
+
+config EXYNOS_SINGLE_DISPLAY
+	bool "EXYNOS Single Display Driver Support."
+	depends on SOC_EXYNOS8895
+	default y
+
+if SOC_EXYNOS8895
+if EXYNOS_SINGLE_DISPLAY
+source "drivers/video/fbdev/exynos/dpu/Kconfig"
+source "drivers/video/fbdev/exynos/panel/Kconfig"
+endif # EXYNOS_SINGLE_DISPLAY
+if EXYNOS_DUAL_DISPLAY
+source "drivers/video/fbdev/exynos/dual_dpu/Kconfig"
+source "drivers/video/fbdev/exynos/dual_panel/Kconfig"
+endif #EXYNOS_DUAL_DISPLAY
+endif # SOC_EXYNOS8895
+endif # EXYNOS_VIDEO
