@@ -461,6 +461,21 @@ void dma_reg_set_in_flip(u32 id, u32 flip)
 	dma_write_mask(id, IDMA_IN_CON, val, mask);
 }
 
+u32 dma_reg_get_afbc_en(u32 id)
+{
+	u32 val;
+
+	if ((id != IDMA_VGF0) && (id != IDMA_VGF1))
+		return 0;
+
+	/* 0x800 : dma shadow offset */
+	val = dma_read(id, IDMA_IN_CON + 0x800);
+	if (val & IDMA_AFBC_EN)
+		return 1;
+	else
+		return 0;
+}
+
 void dma_reg_set_afbc_en(u32 id, u32 en)
 {
 	u32 val = en ? ~0 : 0;

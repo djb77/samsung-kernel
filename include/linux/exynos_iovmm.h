@@ -102,6 +102,32 @@ struct sysmmu_prefbuf {
 	unsigned long config;
 };
 
+/* Fault information of SysMMU */
+#define SYSMMU_FI_VALID_PGTABLE		(1 << 0)
+#define SYSMMU_FI_VALID_TLB		(1 << 1)
+#define SYSMMU_FI_VALID_SBB		(1 << 2)
+
+struct _sysmmu_fi {
+	struct device *sysmmu;
+	bool is_secure;
+	bool has_lv2;
+	u32 fault_addr;
+	u32 lv1_entry;
+	u32 lv2_entry;
+	u32 tlb_ppn;
+	u32 tlb_attr;
+	u32 sbb_link;
+	u32 sbb_attr;
+	u32 flags;
+	u32 map_start;
+	u32 map_end;
+	u32 unmap_start;
+	u32 unmap_end;
+	struct timeval fault_time;
+	struct timeval map_time;
+	struct timeval unmap_time;
+};
+
 #if defined(CONFIG_EXYNOS_IOVMM)
 int iovmm_activate(struct device *dev);
 void iovmm_deactivate(struct device *dev);
@@ -289,7 +315,8 @@ void exynos_sysmmu_show_ppc_event(struct device *dev);
  */
 void iovmm_set_fault_handler(struct device *dev,
 			     iommu_fault_handler_t handler, void *token);
-
+bool iovmm_address_verifier(struct device *dev,
+				dma_addr_t iova, struct _sysmmu_fi *fi);
 #else
 #define sysmmu_set_prefetch_buffer_property(dev, inplanes, onplnes, ipoption, opoption) \
 					(0)

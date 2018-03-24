@@ -546,10 +546,17 @@ config EXYNOS_IMA
 
 config TIMA_LOG
 	tristate "Support for dumping TIMA log"
-	depends on TIMA_RKP
+	depends on RKP
 	default y
 	help
 	  This option enables support for dumping TIMA log.
+
+config FAN_G761
+	bool "GMT Fan Driver"
+	depends on I2C
+	default n
+	help
+	  This driver is for Fan
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"

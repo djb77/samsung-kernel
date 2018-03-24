@@ -17,6 +17,7 @@
 #include <linux/input.h>
 #endif
 #include <linux/sec_ext.h>
+#include <linux/sec_debug.h>
 #include "../../battery_v2/include/sec_battery.h"
 #include <linux/sec_batt.h>
 
@@ -26,7 +27,7 @@
 #include <soc/samsung/exynos-pmu.h>
 #include <soc/samsung/acpm_ipc_ctrl.h>
 #if defined(CONFIG_SEC_ABC)
-#include <linux/sec_abc.h>
+#include <linux/sti/abc_common.h>
 #endif
 
 #ifdef CONFIG_SEC_DEBUG
@@ -184,13 +185,20 @@ static void sec_reboot(enum reboot_mode reboot_mode, const char *cmd)
 		else if (!strcmp(cmd, "em_mode_force_user"))
 			exynos_pmu_write(EXYNOS_PMU_INFORM3, SEC_RESET_REASON_EM_FUSE);
 #if defined(CONFIG_SEC_ABC)
-		else if (!strcmp(cmd, "user_dram_test") && (sec_abc_get_magic() == ABC_ENABLE_MAGIC))
+		else if (!strcmp(cmd, "user_dram_test") && sec_abc_get_enabled())
 			exynos_pmu_write(EXYNOS_PMU_INFORM3, SEC_RESET_USER_DRAM_TEST);
 #endif
 		else if (!strncmp(cmd, "emergency", 9))
 			exynos_pmu_write(EXYNOS_PMU_INFORM3, SEC_RESET_REASON_EMERGENCY);
-		else if (!strncmp(cmd, "debug", 5) && !kstrtoul(cmd + 5, 0, &value))
+		else if (!strncmp(cmd, "debug", 5) && !kstrtoul(cmd + 5, 0, &value)) {
 			exynos_pmu_write(EXYNOS_PMU_INFORM3, SEC_RESET_SET_DEBUG | value);
+#ifdef CONFIG_SEC_DEBUG
+			if ((value == 0x494d) || (value == 0x4948) || (value == 0x5541))
+				sec_debug_set_debug_level(1);
+			else if (value == 0x4f4c)
+				sec_debug_set_debug_level(0);
+#endif
+		}
 		else if (!strncmp(cmd, "swsel", 5) && !kstrtoul(cmd + 5, 0, &value))
 			exynos_pmu_write(EXYNOS_PMU_INFORM3, SEC_RESET_SET_SWSEL | value);
 		else if (!strncmp(cmd, "sud", 3) && !kstrtoul(cmd + 3, 0, &value))

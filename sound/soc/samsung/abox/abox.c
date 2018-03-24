@@ -5110,6 +5110,8 @@ static int abox_disable(struct device *dev)
 
 	abox_gic_disable_irq(&data->pdev_gic->dev);
 
+	cancel_work_sync(&data->change_cpu_gear_work);
+
 	return 0;
 }
 

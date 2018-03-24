@@ -83,13 +83,17 @@ struct cam_hw_param_collector {
 	struct cam_hw_param iris_hwparam;
 } __attribute__((__packed__));
 
-void fimc_is_sec_init_err_cnt_file(struct cam_hw_param *hw_param);
+void fimc_is_sec_init_err_cnt(struct cam_hw_param *hw_param);
+void fimc_is_sec_get_hw_param(struct cam_hw_param **hw_param, u32 position);
+bool fimc_is_sec_is_valid_moduleid(char *moduleid);
+
+#ifdef CAMERA_HW_BIG_DATA_FILE_IO
 bool fimc_is_sec_need_update_to_file(void);
 void fimc_is_sec_copy_err_cnt_from_file(void);
 void fimc_is_sec_copy_err_cnt_to_file(void);
-void fimc_is_sec_get_hw_param(struct cam_hw_param **hw_param, u32 position);
-bool fimc_is_sec_is_valid_moduleid(char* moduleid);
 #endif
+
+#endif /* USE_CAMERA_HW_BIG_DATA */
 
 void fimc_is_vendor_csi_stream_on(struct fimc_is_device_csi *csi);
 void fimc_is_vender_csi_err_handler(struct fimc_is_device_csi *csi);

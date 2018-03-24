@@ -786,6 +786,43 @@ static ssize_t xtalk_mode_store(struct device *dev,
 }
 #endif
 
+#ifdef CONFIG_DSC_DECODE_CRC
+static ssize_t dsc_decode_crc_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int ret;
+	u8 crc[2] = {0, 0};
+	struct panel_info *panel_data;
+	struct panel_device *panel = dev_get_drvdata(dev);
+
+	if (panel == NULL) {
+		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+	panel_data = &panel->panel_data;
+
+	panel_info("%s :was called\n", __func__);
+
+	ret = panel_do_seqtbl_by_index(panel, PANEL_DSC_DECODE_CRC);
+	if (unlikely(ret < 0)) {
+		pr_err("%s, failed to write dsc-decode-crc seq\n", __func__);
+		goto exit_show;
+	}
+
+	ret = resource_copy_by_name(panel_data, crc, "dsc_crc");
+	if (ret < 0) {
+		pr_err("%s, failed to read dsc crc\n", __func__);
+		goto exit_show;
+	}
+exit_show:
+	panel_info("%s : crc value : %x %x\n", __func__, crc[0], crc[1]);
+
+	sprintf(buf, "%x", crc[0] << 8 | crc[1]);
+
+	return strlen(buf);
+}
+#endif
+
 #ifdef CONFIG_SUPPORT_POC_FLASH
 static ssize_t poc_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -1982,6 +2019,9 @@ struct device_attribute panel_attrs[] = {
 	__PANEL_ATTR_RO(SVC_OCTA_CHIPID, 0444),
 #ifdef CONFIG_SUPPORT_XTALK_MODE
 	__PANEL_ATTR_RW(xtalk_mode, 0664),
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+	__PANEL_ATTR_RO(dsc_decode_crc, 0444),
 #endif
 #ifdef CONFIG_SUPPORT_MST
 	__PANEL_ATTR_RW(mst, 0664),

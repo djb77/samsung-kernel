@@ -15,7 +15,7 @@
 
 #include "ssp_sensorhub.h"
 
-static void ssp_sensorhub_log(const char *func_name,
+void ssp_sensorhub_log(const char *func_name,
 				const char *data, int length)
 {
 	char buf[6];
@@ -271,6 +271,38 @@ static struct file_operations const ssp_sensorhub_fops = {
 
 void ssp_sensorhub_report_notice(struct ssp_data *ssp_data, char notice)
 {
+#if ANDROID_VERSION >= 80000
+	struct sensor_value sensorsdata;
+	int size = 0, index = 0;
+	char reportData[4] = {0x02, 0x01, 0x00, 0x00};
+
+	memset(&sensorsdata, 0, sizeof(struct sensor_value));
+
+	if (notice == MSG2SSP_AP_STATUS_RESET) {
+		reportData[2] = MSG2SSP_AP_STATUS_RESET;
+		if (ssp_data->IsMcuCrashed == true) {
+			reportData[3] = MCU_CRASHED;
+			ssp_data->IsMcuCrashed = false;
+		} else if (ssp_data->intendedMcuReset == true) {
+			reportData[3] = MCU_INTENDED_RESET;
+			ssp_data->intendedMcuReset = false;
+		} else
+			reportData[3] = KERNEL_RESET;
+		size = 4;
+	} else {
+		reportData[2] = notice;
+		size = 3;
+	}
+	memcpy(&sensorsdata.scontext_buf[index], &size, sizeof(int));
+	index += sizeof(int);
+	index += sizeof(short);//always start index is 0
+	size--;
+	memcpy(&sensorsdata.scontext_buf[index], &size, sizeof(short));
+	index += sizeof(short);
+	memcpy(&sensorsdata.scontext_buf[index], reportData, size + 1);
+
+	report_scontext_data(ssp_data, &sensorsdata);
+#else
 	struct ssp_sensorhub_data *hub_data = ssp_data->hub_data;
 
 	if (notice == MSG2SSP_AP_STATUS_RESET) {
@@ -286,7 +318,7 @@ void ssp_sensorhub_report_notice(struct ssp_data *ssp_data, char notice)
 		input_report_rel(hub_data->sensorhub_input_dev, NOTICE, notice);
 
 	input_sync(hub_data->sensorhub_input_dev);
-
+#endif
 	if (notice == MSG2SSP_AP_STATUS_WAKEUP)
 		sensorhub_info("wake up");
 	else if (notice == MSG2SSP_AP_STATUS_SLEEP)

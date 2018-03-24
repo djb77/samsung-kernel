@@ -483,6 +483,7 @@ int fimc_is_hw_vra_enable(struct fimc_is_hw_ip *hw_ip, u32 instance,
 
 	set_bit(HW_RUN, &hw_ip->state);
 	set_bit(HW_VRA_CH1_START, &hw_ip->state);
+	atomic_inc(&hw_ip->run_rsccount);
 
 	return ret;
 }
@@ -499,7 +500,19 @@ int fimc_is_hw_vra_disable(struct fimc_is_hw_ip *hw_ip, u32 instance,
 	if (!test_bit_variables(hw_ip->id, &hw_map))
 		return 0;
 
-	if (atomic_read(&hw_ip->rsccount) > 1)
+	hw_vra = (struct fimc_is_hw_vra *)hw_ip->priv_info;
+	if (unlikely(!hw_vra)) {
+		err_hw("[%d][ID:%d]priv_info is NULL", instance, hw_ip->id);
+		return -EINVAL;
+	}
+
+	ret = fimc_is_lib_vra_stop_instance(&hw_vra->lib_vra, instance);
+	if (ret) {
+		err_hw("[%d][ID:%d]lib_vra_stop_instance is fail (%d)", instance, hw_ip->id, ret);
+		return ret;
+	}
+
+	if (atomic_dec_return(&hw_ip->run_rsccount) > 0)
 		return 0;
 
 	info_hw("[%d][ID:%d]vra_disable: Vvalid(%d)\n", instance, hw_ip->id,

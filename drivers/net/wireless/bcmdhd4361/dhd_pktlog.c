@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pktlog.c 717188 2017-08-23 11:47:08Z $
+ * $Id: dhd_pktlog.c 735507 2017-12-11 01:31:34Z $
  */
 
 #include <typedefs.h>
@@ -669,7 +669,7 @@ dhd_pktlog_filter_existed(dhd_pktlog_filter_t *filter, char *arg, uint32 *id)
 int
 dhd_pktlog_filter_add(dhd_pktlog_filter_t *filter, char *arg)
 {
-	uint32 mask_size, pattern_size;
+	int32 mask_size, pattern_size;
 	char *offset, *bitmask, *pattern;
 	uint32 id = 0;
 
@@ -708,11 +708,19 @@ dhd_pktlog_filter_add(dhd_pktlog_filter_t *filter, char *arg)
 	/* parse filter bitmask */
 	mask_size = wl_pattern_atoh(bitmask,
 			(char *) &filter->info[filter->list_cnt].mask[0]);
-
+	if (mask_size == -1) {
+		DHD_ERROR(("Rejecting: %s\n", bitmask));
+		return BCME_ERROR;
+	}
 
 	/* parse filter pattern */
 	pattern_size = wl_pattern_atoh(pattern,
 			(char *) &filter->info[filter->list_cnt].pattern[0]);
+	if (pattern_size == -1) {
+		DHD_ERROR(("Rejecting: %s\n", pattern));
+		return BCME_ERROR;
+	}
+
 	prhex("filter", (char *)&filter->info[filter->list_cnt].pattern[0],
 			(pattern_size * 2));
 

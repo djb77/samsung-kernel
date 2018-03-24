@@ -61,7 +61,6 @@
 #include "fimc-is-clk-gate.h"
 #include "fimc-is-dvfs.h"
 #include "fimc-is-device-preprocessor.h"
-#include "fimc-is-interface-fd.h"
 #include "fimc-is-vender-specific.h"
 #include "exynos-fimc-is-module.h"
 
@@ -1833,6 +1832,7 @@ static int fimc_is_itf_init_process_start(struct fimc_is_device_ischain *device)
 	return ret;
 }
 
+#ifdef ENABLE_IS_CORE
 static int fimc_is_itf_init_process_stop(struct fimc_is_device_ischain *device)
 {
 	int ret = 0;
@@ -1862,6 +1862,7 @@ static int fimc_is_itf_init_process_stop(struct fimc_is_device_ischain *device)
 #endif
 	return ret;
 }
+#endif
 
 int fimc_is_itf_i2c_lock(struct fimc_is_device_ischain *this,
 	int i2c_clk, bool lock)
@@ -2209,10 +2210,8 @@ int fimc_is_ischain_runtime_suspend(struct device *dev)
 #if defined (CONFIG_HOTPLUG_CPU) && defined (FIMC_IS_ONLINE_CPU_MIN)
 	pm_qos_remove_request(&exynos_isp_qos_cpu_online_min);
 #endif
-#if !defined(ENABLE_IS_CORE)
 	fimc_is_hardware_runtime_suspend(&core->hardware);
-#endif
-#ifdef USE_CAMERA_HW_BIG_DATA
+#ifdef CAMERA_HW_BIG_DATA_FILE_IO
 	if (fimc_is_sec_need_update_to_file())
 		fimc_is_sec_copy_err_cnt_to_file();
 #endif
@@ -3489,7 +3488,7 @@ static int fimc_is_ischain_init(struct fimc_is_device_ischain *device,
 		}
 	}
 
-#ifdef CONFIG_COMPANION_USE
+#if defined(CONFIG_COMPANION_USE) && defined(ENABLE_IS_CORE)
 	if (module->ext.preprocessor_con.product_name != PREPROCESSOR_NAME_NOTHING) {
 		int waiting = 0;
 
@@ -3557,6 +3556,7 @@ static int fimc_is_ischain_init(struct fimc_is_device_ischain *device,
 		goto p_err;
 	}
 
+#ifdef ENABLE_IS_CORE
 	if (!test_bit(FIMC_IS_ISCHAIN_REPROCESSING, &device->state)) {
 		ret = fimc_is_itf_stream_off(device);
 		if (ret) {
@@ -3570,6 +3570,7 @@ static int fimc_is_ischain_init(struct fimc_is_device_ischain *device,
 		merr("fimc_is_itf_init_process_stop is fail", device);
 		goto p_err;
 	}
+#endif
 
 #ifdef MEASURE_TIME
 #ifdef MONITOR_TIME

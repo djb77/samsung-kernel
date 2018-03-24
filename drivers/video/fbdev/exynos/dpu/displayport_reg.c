@@ -19,6 +19,7 @@ pms_info pms_parameters[] = {    /*  P     M     S   Divide */
 	/* PIXEL_CLOCK_33_750 */  {0x0D, 0x21C, 0x05, 0x01},
 	/* PIXEL_CLOCK_71_000 */  {0x0D, 0x238, 0x04, 0x01},
 	/* PIXEL_CLOCK_74_250 */  {0x0D, 0x252, 0x04, 0x01},
+	/* PIXEL_CLOCK_97_750 */  {0x0D, 0x187, 0x03, 0x01},
 	/* PIXEL_CLOCK_108_000 */ {0x0D, 0x1B0, 0x03, 0x01},
 	/* PIXEL_CLOCK_138_500 */ {0x0D, 0x22A, 0x03, 0x01},
 	/* PIXEL_CLOCK_148_500 */ {0x0D, 0x252, 0x03, 0x01},
@@ -46,6 +47,8 @@ videoformat_info videoformat_parameters[] = {
 	{v1280x720p_50Hz,     1980, 1280,  5,  5, 20,  750,  720,  440,  40, 220, 50, PIXEL_CLOCK_74_250,   19, SYNC_POSITIVE, SYNC_POSITIVE},
 	{v1280x720p_60Hz,     1650, 1280,  5,  5, 20,  750,  720,  110,  40, 220, 60, PIXEL_CLOCK_74_250,    4, SYNC_POSITIVE, SYNC_POSITIVE},	
 	{v1280x1024p_60Hz,    1688, 1280,  1,  3, 38, 1066, 1024,   48, 112, 248, 60, PIXEL_CLOCK_108_000,   4, SYNC_POSITIVE, SYNC_POSITIVE},
+	{v1600x900p_59_98Hz,  1760, 1600,  3,  5, 18,  926,  900,   48,  32,  80, 59, PIXEL_CLOCK_97_750,    0, SYNC_POSITIVE, SYNC_POSITIVE},
+	{v1600x900p_60Hz,     1800, 1600,  1,  3, 96, 1000,  900,   24,  80,  96, 60, PIXEL_CLOCK_108_000,   0, SYNC_POSITIVE, SYNC_POSITIVE},
 	{v1920x1080p_24Hz,    2750, 1920,  4,  5, 36, 1125, 1080,  638,  44, 148, 24, PIXEL_CLOCK_74_250,   32, SYNC_POSITIVE, SYNC_POSITIVE},
 	{v1920x1080p_25Hz,    2640, 1920,  4,  5, 36, 1125, 1080,  528,  44, 148, 25, PIXEL_CLOCK_74_250,   33, SYNC_POSITIVE, SYNC_POSITIVE},
 	{v1920x1080p_30Hz,    2200, 1920,  4,  5, 36, 1125, 1080,   88,  44, 148, 30, PIXEL_CLOCK_74_250,   34, SYNC_POSITIVE, SYNC_POSITIVE},
@@ -1058,6 +1061,80 @@ int displayport_reg_dpcd_read_burst(u32 address, u32 length, u8 *data)
 			break;
 		}
 	}
+
+	return ret;
+}
+
+int displayport_reg_i2c_write(u32 address, u32 length, u8 *data)
+{
+	int ret;
+	struct displayport_device *displayport = get_displayport_drvdata();
+	int retry_cnt = AUX_RETRY_COUNT;
+
+	mutex_lock(&displayport->aux_lock);
+
+	while (retry_cnt > 0) {
+		displayport_reg_set_aux_ch_command(I2C_WRITE);
+		displayport_reg_set_aux_ch_address(address);
+		displayport_reg_set_aux_ch_address_only_command(1);
+		ret = displayport_reg_set_aux_ch_operation_enable();
+		displayport_reg_set_aux_ch_address_only_command(0);
+
+		displayport_reg_aux_ch_buf_clr();
+		displayport_reg_aux_defer_ctrl(1);
+		displayport_reg_set_aux_reply_timeout();
+		displayport_reg_set_aux_ch_address_only_command(0);
+		displayport_reg_set_aux_ch_command(I2C_WRITE);
+		displayport_reg_set_aux_ch_address(address);
+		displayport_reg_set_aux_ch_length(length);
+		displayport_reg_aux_ch_send_buf(data, length);
+		ret = displayport_reg_set_aux_ch_operation_enable();
+
+		if (ret == 0) {
+			displayport_reg_set_aux_ch_command(I2C_WRITE);
+			displayport_reg_set_aux_ch_address(EDID_ADDRESS);
+			displayport_reg_set_aux_ch_address_only_command(1);
+			ret = displayport_reg_set_aux_ch_operation_enable();
+			displayport_reg_set_aux_ch_address_only_command(0);
+			displayport_dbg("address only request in i2c write\n");
+		}
+
+		if (ret == 0)
+			break;
+
+		retry_cnt--;
+	}
+
+	mutex_unlock(&displayport->aux_lock);
+
+	return ret;
+}
+
+int displayport_reg_i2c_read(u32 address, u32 length, u8 *data)
+{
+	int ret;
+	struct displayport_device *displayport = get_displayport_drvdata();
+	int retry_cnt = AUX_RETRY_COUNT;
+
+	mutex_lock(&displayport->aux_lock);
+	while (retry_cnt > 0) {
+		displayport_reg_set_aux_ch_command(I2C_READ);
+		displayport_reg_set_aux_ch_address(address);
+		displayport_reg_set_aux_ch_length(length);
+		displayport_reg_aux_ch_buf_clr();
+		displayport_reg_aux_defer_ctrl(1);
+		displayport_reg_set_aux_reply_timeout();
+		ret = displayport_reg_set_aux_ch_operation_enable();
+
+		if (ret == 0)
+			break;
+		retry_cnt--;
+	}
+
+	if (ret == 0)
+		displayport_reg_aux_ch_received_buf(data, length);
+
+	mutex_unlock(&displayport->aux_lock);
 
 	return ret;
 }

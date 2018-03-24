@@ -88,7 +88,7 @@ static int abox_ctl_put(struct snd_kcontrol *kcontrol,
 	struct abox_ctl_eq_switch *params = (void *)kcontrol->private_value;
 	int i;
 
-	dev_dbg(dev, "%s: %s\n", __func__, kcontrol->id.name);
+	dev_info(dev, "%s: %s\n", __func__, kcontrol->id.name);
 
 	pm_runtime_get_sync(dev);
 	for (i = 0; i < params->count; i++) {
@@ -98,7 +98,7 @@ static int abox_ctl_put(struct snd_kcontrol *kcontrol,
 				(i * sizeof(u32)));
 		val = (unsigned int)ucontrol->value.integer.value[i];
 		snd_soc_component_write(component, reg, val);
-		dev_dbg(dev, "%s[%d] <= %u\n", kcontrol->id.name, i, val);
+		dev_info(dev, "%s[%d] <= %u\n", kcontrol->id.name, i, val);
 	}
 	snd_soc_component_write(component, params->base, CHANGE_BIT);
 	pm_runtime_put_autosuspend(dev);

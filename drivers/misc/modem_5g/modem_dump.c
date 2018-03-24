@@ -21,9 +21,9 @@
 static int save_dump_file(struct link_device *ld, struct io_device *iod,
 		unsigned long arg, u8 __iomem *dump_base, size_t dump_size)
 {
-	size_t copied = 0;
 	struct sk_buff *skb;
-	unsigned int alloc_size = 0xE00;
+	size_t copied = 0;
+	size_t alloc_size = 0xE00;
 	int ret;
 
 	if (dump_size == 0 || dump_base == NULL) {
@@ -101,6 +101,28 @@ int save_acpm_dump(struct link_device *ld, struct io_device *iod,
 	}
 
 	return save_dump_file(ld, iod, arg, mld->acpm_base, acpm_size);
+}
+
+int save_cplog_dump(struct link_device *ld, struct io_device *iod,
+		unsigned long arg)
+{
+	void __iomem *cplog_base;
+	size_t cplog_size;
+
+	if (!shm_get_cplog_flag()) {
+		mif_err("cplog is not on. Skip cplog dump\n");
+		return 0;
+	}
+
+	cplog_base = shm_get_cplog_region();
+	cplog_size = shm_get_cplog_size();
+
+	if (cplog_size == 0 || cplog_base == 0) {
+		mif_err("ERR! save_cplog_dump fail!\n");
+		return -EFAULT;
+	}
+
+	return save_dump_file(ld, iod, arg, cplog_base, cplog_size);
 }
 
 int save_shmem_dump(struct link_device *ld, struct io_device *iod,

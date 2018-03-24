@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmutils.h 713120 2017-07-28 04:14:04Z $
+ * $Id: bcmutils.h 735359 2017-12-08 10:56:04Z $
  */
 
 #ifndef	_bcmutils_h_
@@ -651,9 +651,12 @@ DECLARE_MAP_API(8, 2, 3, 3U, 0x00FF) /* setbit8() and getbit8() */
 #define MACDBG "%02x:%02x:%02x:%02x:%02x:%02x"
 #define MAC2STRDBG(ea) (ea)[0], (ea)[1], (ea)[2], (ea)[3], (ea)[4], (ea)[5]
 #else
-#define MACDBG				"%02x:%02x:%x"
-#define MAC2STRDBG(ea) (ea)[0], (ea)[4], ((ea)[5] & 0x0f)
+#define MACDBG				"%02x:xx:xx:xx:x%x:%02x"
+#define MAC2STRDBG(ea) (ea)[0], ((ea)[4] & 0xf), (ea)[5]
 #endif /* SIMPLE_MAC_PRINT */
+
+#define MACOUIDBG "%02x:%x:%02x"
+#define MACOUI2STRDBG(ea) (ea)[0], (ea)[1] & 0xf, (ea)[2]
 
 /* bcm_format_flags() bit description structure */
 typedef struct bcm_bit_desc {

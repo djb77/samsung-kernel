@@ -164,6 +164,8 @@
 #define FROM_AF_CAL_D1_ADDR                 0x3C2C
 #define FROM_AF2_CAL_MACRO_ADDR             0x6830	/* REAR SECOND SENSOR (TELE) */
 #define FROM_AF2_CAL_D1_ADDR                0x682C	/* REAR SECOND SENSOR (TELE) */
+#define FROM_PAF_OFFSET_FAR_ADDR            0x34C0  /* REAR PAF OFFSET FAR (WIDE) */
+#define FROM_PAF_OFFSET_FAR_SIZE            234
 
 #define CHECKSUM_SEED_COMP_FW_LY		0x21EFC		/* rear : SONY(imx333) front : S.LSI(3H1) */
 #define CHECKSUM_SEED_COMP_FW_LS		0x3BFFC		/* rear : SONY(imx333) front : Sony(IMX320) */

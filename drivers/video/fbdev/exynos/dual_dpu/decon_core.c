@@ -236,7 +236,7 @@ return value
 2. 27 ~ 24 : decon eing pend register
 3. 23 ~ 16 : dsim underrun count
 4. 15 ~  8 : 0x0e panel register
-5.  7 ~  0 : 0x0a panel register 
+5.  7 ~  0 : 0x0a panel register
 */
 
 unsigned int gen_decon_bug_bigdata(struct decon_device *decon)
@@ -244,14 +244,14 @@ unsigned int gen_decon_bug_bigdata(struct decon_device *decon)
 	struct dsim_device *dsim;
 	unsigned int value, panel_value;
 	unsigned int underrun_cnt = 0;
-	
+
 	/* for decon id */
 	value = decon->id << 28;
 
 	if (decon->id == 0) {
 		/* for eint pend value */
 		value |= (decon->eint_pend & 0x0f) << 24;
-		
+
 		/* for underrun count */
 		dsim = container_of(decon->out_sd[0], struct dsim_device, sd);
 		if (dsim != NULL) {
@@ -688,6 +688,7 @@ static int decon_enable(struct decon_device *decon)
 		if (videoformat_parameters[g_displayport_videoformat].pixel_clock >= PIXEL_CLOCK_533_000) {
 			decon->bts.ops->bts_update_qos_mif(decon, 1540*1000);
 			decon->bts.ops->bts_update_qos_int(decon, 533*1000);
+			decon->bts.ops->bts_update_qos_disp(decon, 356*1000);
 			decon->bts.ops->bts_update_qos_scen(decon, 1);
 		}
 		else if (videoformat_parameters[g_displayport_videoformat].pixel_clock > PIXEL_CLOCK_148_500) {
@@ -706,18 +707,25 @@ static int decon_enable(struct decon_device *decon)
 
 	pm_stay_awake(decon->dev);
 	dev_warn(decon->dev, "pm_stay_awake");
-	ret = v4l2_subdev_call(decon->out_sd[0], video, s_stream, 1);
-	if (ret) {
-		decon_err("starting stream failed for %s\n",
-				decon->out_sd[0]->name);
-	}
 
 	if (decon->dt.dsi_mode == DSI_MODE_DUAL_DSI) {
-		decon_info("enabled 2nd DSIM and LCD for dual DSI mode\n");
+		decon_info("enabled 2nd DSIM(1) and LCD for dual DSI mode\n");
 		ret = v4l2_subdev_call(decon->out_sd[1], video, s_stream, 1);
 		if (ret) {
 			decon_err("starting stream failed for %s\n",
 					decon->out_sd[1]->name);
+		}
+		decon_info("enabled 1st DSIM(0) and LCD for dual DSI mode\n");
+		ret = v4l2_subdev_call(decon->out_sd[0], video, s_stream, 1);
+		if (ret) {
+			decon_err("starting stream failed for %s\n",
+					decon->out_sd[0]->name);
+		}
+	} else {
+		ret = v4l2_subdev_call(decon->out_sd[0], video, s_stream, 1);
+		if (ret) {
+			decon_err("starting stream failed for %s\n",
+					decon->out_sd[0]->name);
 		}
 	}
 
@@ -844,6 +852,7 @@ static int decon_disable(struct decon_device *decon)
 
 		decon->bts.ops->bts_update_qos_mif(decon, 0);
 		decon->bts.ops->bts_update_qos_int(decon, 0);
+		decon->bts.ops->bts_update_qos_disp(decon, 0);
 		decon->bts.ops->bts_update_qos_scen(decon, 0);
 	}
 
@@ -1042,7 +1051,7 @@ int decon_wait_for_vsync(struct decon_device *decon, u32 timeout)
 			decon_err("decon%d wait for vsync timeout(p:0x%x)\n",
 				decon->id, readl(decon->d.eint_pend));
 #endif
-			
+
 		} else {
 			decon_err("decon%d wait for vsync timeout\n", decon->id);
 		}
@@ -1880,13 +1889,17 @@ static void decon_update_regs(struct decon_device *decon,
 
 sub_disp_on:
 			if (state_sub->disp_on == PANEL_DISPLAY_OFF) {
-				if ((decon->dual.status == ALONE_OFF) || (decon->dual.status == OFF_OFF))
+				if ((decon->dual.status == ALONE_OFF) ||
+						(decon->dual.status == OFF_OFF))
 					goto disp_on_done;
-
-				ret = v4l2_subdev_call(decon->panel_sd[1], core, ioctl,
-						PANEL_IOC_DISP_ON, (void *)&disp_on);
-				if (ret)
-					decon_err("DECON:ERR:%s:failed to disp on\n", __func__);
+#ifdef CONFIG_EXYNOS_DUAL_DISPLAY
+				if (decon->lcd_info->op_mode == DSI_DDDD_MODE) {
+					if (v4l2_subdev_call(decon->panel_sd[1], core, ioctl,
+						PANEL_IOC_DISP_ON, (void *)&disp_on))
+						decon_err("DECON:ERR:%s:failed to disp on\n",
+							__func__);
+				}
+#endif
 			}
 #if 0
 #ifdef CONFIG_DECON_SELF_REFRESH
@@ -2030,7 +2043,7 @@ static void decon_update_regs_handler(struct kthread_work *work)
 	}
 }
 
-static void decon_set_full_size_win(struct decon_device *decon,
+void decon_set_full_size_win(struct decon_device *decon,
 	struct decon_win_config *config)
 {
 	config->dst.x = 0;
@@ -2102,7 +2115,6 @@ static int decon_prepare_win_config(struct decon_device *decon,
 				config->color |= (0xFF << 24);
 				win_regs->colormap = config->color;
 
-				decon_set_full_size_win(decon, config);
 				decon_win_conig_to_regs_param(0, config, win_regs,
 						config->idma_type, i);
 				ret = 0;

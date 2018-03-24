@@ -67,17 +67,65 @@ static struct cam_hw_param_collector cam_hwparam_collector;
 static bool mipi_err_check;
 static bool need_update_to_file;
 
+void fimc_is_sec_init_err_cnt(struct cam_hw_param *hw_param)
+{
+	info("%s\n", __func__);
+
+	if (hw_param) {
+		memset(hw_param, 0, sizeof(struct cam_hw_param));
+#ifdef CAMERA_HW_BIG_DATA_FILE_IO
+		fimc_is_sec_copy_err_cnt_to_file();
+#endif
+	}
+}
+
+void fimc_is_sec_get_hw_param(struct cam_hw_param **hw_param, u32 position)
+{
+	switch (position) {
+	case SENSOR_POSITION_REAR:
+		*hw_param = &cam_hwparam_collector.rear_hwparam;
+		break;
+	case SENSOR_POSITION_REAR2:
+		*hw_param = &cam_hwparam_collector.rear2_hwparam;
+		break;
+	case SENSOR_POSITION_FRONT:
+		*hw_param = &cam_hwparam_collector.front_hwparam;
+		break;
+	case SENSOR_POSITION_SECURE:
+		*hw_param = &cam_hwparam_collector.iris_hwparam;
+		break;
+	default:
+		need_update_to_file = false;
+		return;
+	}
+	need_update_to_file = true;
+}
+
+bool fimc_is_sec_is_valid_moduleid(char *moduleid)
+{
+	int i = 0;
+
+	if (moduleid == NULL || strlen(moduleid) < 5)
+		goto err;
+
+	for (i = 0; i < 5; i++) {
+		if (!((moduleid[i] > 47 && moduleid[i] < 58) || // 0 to 9
+			(moduleid[i] > 64 && moduleid[i] < 91))) {  // A to Z
+			goto err;
+		}
+	}
+
+	return true;
+
+err:
+	warn("invalid moduleid\n");
+	return false;
+}
+
+#ifdef CAMERA_HW_BIG_DATA_FILE_IO
 bool fimc_is_sec_need_update_to_file(void)
 {
 	return need_update_to_file;
-}
-
-void fimc_is_sec_init_err_cnt_file(struct cam_hw_param *hw_param)
-{
-	if (hw_param) {
-		memset(hw_param, 0, sizeof(struct cam_hw_param));
-		fimc_is_sec_copy_err_cnt_to_file();
-	}
 }
 
 void fimc_is_sec_copy_err_cnt_to_file(void)
@@ -87,6 +135,8 @@ void fimc_is_sec_copy_err_cnt_to_file(void)
 	long nwrite = 0;
 	bool ret = false;
 	int old_mask = 0;
+
+	info("%s\n", __func__);
 
 	if (current && current->fs) {
 		old_fs = get_fs();
@@ -130,6 +180,8 @@ void fimc_is_sec_copy_err_cnt_from_file(void)
 	long nread = 0;
 	bool ret = false;
 
+	info("%s\n", __func__);
+
 	ret = fimc_is_sec_file_exist(CAM_HW_ERR_CNT_FILE_PATH);
 
 	if (ret) {
@@ -149,52 +201,9 @@ void fimc_is_sec_copy_err_cnt_from_file(void)
 		set_fs(old_fs);
 	}
 }
-
-void fimc_is_sec_get_hw_param(struct cam_hw_param **hw_param, u32 position)
-{
-	switch (position) {
-		case SENSOR_POSITION_REAR:
-			*hw_param = &cam_hwparam_collector.rear_hwparam;
-			break;
-		case SENSOR_POSITION_REAR2:
-			*hw_param = &cam_hwparam_collector.rear2_hwparam;
-			break;
-		case SENSOR_POSITION_FRONT:
-			*hw_param = &cam_hwparam_collector.front_hwparam;
-			break;
-		case SENSOR_POSITION_SECURE:
-			*hw_param = &cam_hwparam_collector.iris_hwparam;
-			break;
-		default:
-			need_update_to_file = false;
-			return;
-	}
-	need_update_to_file = true;
-}
-
-bool fimc_is_sec_is_valid_moduleid(char* moduleid)
-{
-	int i = 0;
-
-	if (moduleid == NULL || strlen(moduleid) < 5) {
-		goto err;
-	}
-
-	for (i = 0; i < 5; i++)
-	{
-		if (!((moduleid[i] > 47 && moduleid[i] < 58) || // 0 to 9
-			(moduleid[i] > 64 && moduleid[i] < 91))) {  // A to Z
-			goto err;
-		}
-	}
-
-	return true;
-
-err:
-	warn("invalid moduleid\n");
-	return false;
-}
 #endif
+
+#endif /* USE_CAMERA_HW_BIG_DATA */
 
 void fimc_is_vendor_csi_stream_on(struct fimc_is_device_csi *csi)
 {
@@ -569,7 +578,7 @@ int fimc_is_vender_hw_init(struct fimc_is_vender *vender)
 	info("hw init start\n");
 
 	is_hw_init_running = true;
-#ifdef USE_CAMERA_HW_BIG_DATA
+#ifdef CAMERA_HW_BIG_DATA_FILE_IO
 	need_update_to_file = false;
 	fimc_is_sec_copy_err_cnt_from_file();
 #endif

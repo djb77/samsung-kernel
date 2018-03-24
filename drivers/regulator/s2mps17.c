@@ -232,7 +232,7 @@ static int s2m_set_ramp_delay(struct regulator_dev *rdev, int ramp_delay)
 		break;
 	case S2MPS17_BUCK8:
 	case S2MPS17_BUCK9:
-/*	case S2MPS17_BB1:*/
+	case S2MPS17_BB1:
 		ramp_shift = 0;
 		break;
 	default:
@@ -535,10 +535,9 @@ static struct regulator_desc regulators[S2MPS17_REGULATOR_MAX] = {
 	_BUCK(_STEP3), _REG(_B11OUT), _REG(_B11CTRL), _TIME(_BUCK11)),
 	BUCK_DESC("BUCK12", _BUCK(12), &_buck_ops(), _BUCK(_MIN1),
 	_BUCK(_STEP1), _REG(_B12OUT1), _REG(_B12CTRL), _TIME(_BUCK12)),
-/*	BUCK_DESC("BB", S2MPS17_BB1, &_buck_ops(), _BUCK(_MIN1),
-	_BUCK(_STEP1), _REG(_BB1OUT), _REG(_BB1CTRL),
+	BUCK_DESC("BB", S2MPS17_BB1, &_buck_ops(), _BUCK(_MIN3),
+	_BUCK(_STEP3), _REG(_BB1OUT), _REG(_BB1CTRL),
 	_TIME(_BB)),
-*/
 };
 #ifdef CONFIG_OF
 static int s2mps17_pmic_dt_parse_pdata(struct s2mps17_dev *iodev,

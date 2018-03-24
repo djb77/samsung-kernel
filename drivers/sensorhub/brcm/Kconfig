@@ -535,6 +535,16 @@ config SENSORS_CAN
 	  Say Y here if you accept HERO CAN Grip sensor
 	  Say N here if you do not access HERO CAN Grip Sensor
 
+config SENSORS_SX9320_MULTI
+	depends on I2C
+	tristate "SX9320 driver"
+	default n
+	help
+	  Say Y here if you use four sx9320 multi.
+	  This option enables additional grip sensors using
+	  SemTech sx9320 device driver especially in multi grip.
+	  Say N here if you do not use four sx9320.
+
 config SENSORS_SX9320
 	depends on I2C
 	tristate "SX9320 driver"

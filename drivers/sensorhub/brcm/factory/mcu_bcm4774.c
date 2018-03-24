@@ -143,13 +143,13 @@ ssize_t mcu_sleep_factorytest_store(struct device *dev,
 
 	return size;
 }
+struct sensor_value fsb[SENSOR_MAX];
 
 ssize_t mcu_sleep_factorytest_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	int iDataIdx, iSensorData = 0;
 	struct ssp_data *data = dev_get_drvdata(dev);
-	struct sensor_value fsb[SENSOR_MAX];
 	u16 chLength = 0;
 
 	memcpy(&chLength, buffer, 2);

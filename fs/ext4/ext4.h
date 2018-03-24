@@ -1237,6 +1237,8 @@ struct ext4_super_block {
 	__le64	s_kbytes_written;	/* nr of lifetime kilobytes written */
 	__le32	s_snapshot_inum;	/* Inode number of active snapshot */
 	__le32	s_snapshot_id;		/* sequential ID of active snapshot */
+#define s_sec_r_blocks_count	s_snapshot_r_blocks_count
+#define ext4_sec_r_blocks_count(es)	(le64_to_cpu(es->s_sec_r_blocks_count))
 	__le64	s_snapshot_r_blocks_count; /* reserved blocks for active
 					      snapshot's future use */
 	__le32	s_snapshot_list;	/* inode number of the head of the

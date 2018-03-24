@@ -336,6 +336,8 @@ void wacom_i2c_set_survey_mode(struct wacom_i2c *, int mode);
 
 void wacom_set_scan_mode(struct wacom_i2c *, int mode);
 
+int wacom_open_test(struct wacom_i2c *wac_i2c);
+
 int wacom_sec_init(struct wacom_i2c *);
 void wacom_sec_remove(struct wacom_i2c *);
 

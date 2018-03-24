@@ -107,6 +107,13 @@ static ssize_t sec_ts_regread_show(struct device *dev, struct device_attribute *
 
 	mutex_lock(&ts->device_mutex);
 
+	if ((lv1_readsize <= 0) || (lv1_readsize > PAGE_SIZE)) {
+		input_err(true, &ts->client->dev, "%s: invalid lv1_readsize = %d\n",
+						__func__, lv1_readsize);
+		lv1_readsize = 0;
+		goto malloc_err;
+	}
+
 	read_lv1_buff = kzalloc(lv1_readsize, GFP_KERNEL);
 	if (!read_lv1_buff)
 		goto malloc_err;
@@ -153,9 +160,9 @@ static ssize_t sec_ts_gesture_status_show(struct device *dev, struct device_attr
 	mutex_lock(&ts->device_mutex);
 	memcpy(buf, ts->gesture_status, sizeof(ts->gesture_status));
 	input_info(true, &ts->client->dev,
-				"%s: GESTURE STATUS %x %x %x %x %x %x\n", __func__,
-				ts->gesture_status[0], ts->gesture_status[1], ts->gesture_status[2],
-				ts->gesture_status[3], ts->gesture_status[4], ts->gesture_status[5]);
+			"%s: GESTURE STATUS %x %x %x %x %x %x\n", __func__,
+			ts->gesture_status[0], ts->gesture_status[1], ts->gesture_status[2],
+			ts->gesture_status[3], ts->gesture_status[4], ts->gesture_status[5]);
 	mutex_unlock(&ts->device_mutex);
 
 	return sizeof(ts->gesture_status);
@@ -169,7 +176,7 @@ static ssize_t sec_ts_regreadsize_store(struct device *dev, struct device_attrib
 
 	lv1cmd = buf[0];
 	lv1_readsize = ((unsigned int)buf[4] << 24) |
-			((unsigned int)buf[3] << 16) | ((unsigned int) buf[2] << 8) | ((unsigned int)buf[1] << 0);
+		((unsigned int)buf[3] << 16) | ((unsigned int) buf[2] << 8) | ((unsigned int)buf[1] << 0);
 	lv1_readoffset = 0;
 	lv1_readremain = 0;
 
@@ -188,7 +195,7 @@ static ssize_t sec_ts_enter_recovery_store(struct device *dev, struct device_att
 	ret = kstrtoul(buf, 10, &on);
 	if (ret != 0) {
 		input_err(true, &ts->client->dev, "%s: failed to read:%d\n",
-					__func__, ret);
+				__func__, ret);
 		return -EINVAL;
 	}
 

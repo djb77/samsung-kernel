@@ -1040,6 +1040,7 @@ struct decon_bts_ops {
 	void (*bts_release_bw)(struct decon_device *decon);
 	void (*bts_update_qos_mif)(struct decon_device *decon, u32 mif_freq);
 	void (*bts_update_qos_int)(struct decon_device *decon, u32 int_freq);
+	void (*bts_update_qos_disp)(struct decon_device *decon, u32 disp_freq);
 	void (*bts_update_qos_scen)(struct decon_device *decon, u32 val);
 	void (*bts_deinit)(struct decon_device *decon);
 };
@@ -1060,6 +1061,7 @@ struct decon_bts {
 	struct pm_qos_request int_qos;
 	struct pm_qos_request disp_qos;
 	u32 scen_updated;
+	u32 disp_freq_minlock;
 };
 
 enum {

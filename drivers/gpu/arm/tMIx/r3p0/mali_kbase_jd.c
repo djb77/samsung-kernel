@@ -1490,7 +1490,7 @@ while (false)
 KBASE_EXPORT_TEST_API(kbase_jd_submit);
 
 #if defined(CONFIG_SEC_ABC)
-#include <linux/sec_abc.h>
+#include <linux/sti/abc_common.h>
 #endif
 
 void kbase_jd_done_worker(struct work_struct *data)

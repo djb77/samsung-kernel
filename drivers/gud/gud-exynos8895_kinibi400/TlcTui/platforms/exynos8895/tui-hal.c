@@ -245,10 +245,19 @@ uint32_t hal_tui_alloc(
 		handle[i] = ion_alloc(client, SZ_16M + SZ_1M, SZ_256K,
 				EXYNOS_ION_HEAP_VIDEO_STREAM_MASK, 0);
 		if (IS_ERR_OR_NULL(handle[i])) {
-			pr_err("[%s:%d] ION memory allocation fail.[err:%lx]\n", __func__, __LINE__, PTR_ERR(handle[i]));
-			//panic("[yurak] alloc fail panic\n");
-			hal_tui_free();
-			return ret;
+			pr_err("[%s:%d] ION mem alloc fail-VSTREAM MASK.[err:%lx]\n",
+					__func__, __LINE__, PTR_ERR(handle[i]));
+
+			/*Second Try to TUI MASK*/
+			handle[i] = ion_alloc(client, SZ_16M + SZ_1M, SZ_256K,
+					EXYNOS_ION_HEAP_TUI_MASK, 0);
+			if (IS_ERR_OR_NULL(handle[i])) {
+				pr_err("[%s:%d] ION mem alloc fail-TUI MASK.[err:%lx]\n",
+						__func__, __LINE__, PTR_ERR(handle[i]));
+				//panic("[yurak] alloc fail panic\n");
+				hal_tui_free();
+				return ret;
+			}
 		}
 		ion_phys(client, handle[i], (unsigned long *)&phys_addr, &phy_size);
 		allocbuffer[i].pa = (uint64_t)phys_addr;

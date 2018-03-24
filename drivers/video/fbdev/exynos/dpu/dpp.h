@@ -366,6 +366,7 @@ static inline void dpp_select_format(struct dpp_device *dpp,
 u32 dma_reg_get_irq_status(u32 id);
 void dma_reg_clear_irq(u32 id, u32 irq);
 void dma_reg_clear_irq_all(u32 id);
+u32 dma_reg_get_afbc_en(u32 id);
 /* BIST mode */
 void dma_reg_set_test_pattern(u32 id, u32 pat_id, u32 pat_dat[4]);
 void dma_reg_set_ch_map(u32 id, u32 dpp_id, u32 to_pat);

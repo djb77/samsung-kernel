@@ -47,10 +47,13 @@ static bool __need_migrate_cma_page(struct page *page,
 	if (!(flags & FOLL_CMA))
 		return false;
 
-	migrate_prep_local();
-
-	if (!PageLRU(page))
-		return false;
+	if (!PageLRU(page)) {
+		migrate_prep_local();
+		if (WARN_ON(!PageLRU(page))) {
+			dump_page(page, "non-lru cma page");
+			return false;
+		}
+	}
 
 	return true;
 }
@@ -600,6 +603,9 @@ long __get_user_pages(struct task_struct *tsk, struct mm_struct *mm,
 	if (!(gup_flags & FOLL_FORCE))
 		gup_flags |= FOLL_NUMA;
 
+	if ((gup_flags & FOLL_CMA) != 0)
+		migrate_prep();
+
 	do {
 		struct page *page;
 		unsigned int foll_flags = gup_flags;
@@ -890,6 +896,10 @@ __always_inline long __get_user_pages_unlocked(struct task_struct *tsk, struct m
 {
 	long ret;
 	int locked = 1;
+
+	if ((gup_flags & FOLL_CMA) != 0)
+		migrate_prep();
+
 	down_read(&mm->mmap_sem);
 	ret = __get_user_pages_locked(tsk, mm, start, nr_pages, write, force,
 				      pages, NULL, &locked, false, gup_flags);
@@ -1479,7 +1489,6 @@ int __get_user_pages_fast(unsigned long start, int nr_pages, int write,
 	 * We do not adopt an rcu_read_lock(.) here as we also want to
 	 * block IPIs that come from THPs splitting.
 	 */
-
 	local_irq_save(flags);
 	pgdp = pgd_offset(mm, addr);
 	do {

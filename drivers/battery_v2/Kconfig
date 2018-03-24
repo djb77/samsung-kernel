@@ -394,6 +394,13 @@ config WIRELESS_CHARGER_HIGH_VOLTAGE
 	  Say Y here to enable support for the wireless charger charger
 	  driver.
 
+config WIRELESS_NO_HV
+	tristate "wireless no hv"
+	depends on BATTERY_SAMSUNG && I2C
+	help
+	  Say Y here to disable HV wireless charging
+	  driver.
+
 config CS100_JPNCONCEPT
 	tristate "cs100 command support"
 	depends on BATTERY_SAMSUNG && I2C

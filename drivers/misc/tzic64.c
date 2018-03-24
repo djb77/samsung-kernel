@@ -28,9 +28,6 @@
 #include <linux/types.h>
 //#include <asm/smc.h>
 
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-#include <linux/rkp_cfp.h>
-#endif
 #define TZIC_DEV "tzic"
 #define SMC_CMD_STORE_BINFO	 (-201)
 
@@ -55,14 +52,8 @@ uint32_t exynos_smc1(uint32_t cmd, uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	register uint32_t reg3 __asm__("x3") = arg3;
 
 	__asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		PRE_SMC_INLINE
-#endif
 	        "dsb    sy\n"
 	        "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		POST_SMC_INLINE
-#endif
 	        : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 	
 	);
@@ -79,14 +70,8 @@ uint32_t exynos_smc_new(uint32_t cmd, uint32_t arg1, uint32_t arg2, uint32_t arg
 	register uint32_t reg3 __asm__("x3") = arg3;
 
 	__asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		PRE_SMC_INLINE
-#endif
 	        "dsb    sy\n"
 	        "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		POST_SMC_INLINE
-#endif
 	        : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 	
 	);
@@ -111,14 +96,8 @@ int exynos_smc_read_oemflag(uint32_t ctrl_word, uint32_t *val)
 		reg1 = 1;
 		reg2 = idx;
 		__asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-			PRE_SMC_INLINE
-#endif
 		        "dsb    sy\n"
 		        "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-			POST_SMC_INLINE
-#endif
 		        : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 		
 		);
@@ -131,14 +110,8 @@ int exynos_smc_read_oemflag(uint32_t ctrl_word, uint32_t *val)
 	reg2 = idx;
 
 	__asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		PRE_SMC_INLINE
-#endif
 	        "dsb    sy\n"
 	        "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		POST_SMC_INLINE
-#endif
 	        : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 	
 	);
@@ -168,14 +141,8 @@ int exynos_smc_read_oemflag_new(uint32_t getflag, uint32_t *val)
    reg3 = idx;
 
 	__asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		PRE_SMC_INLINE
-#endif
 	        "dsb    sy\n"
 	        "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		POST_SMC_INLINE
-#endif
 	        : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 	
 	);
@@ -250,7 +217,6 @@ static long tzic_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		LOG(KERN_INFO "[oemflag]changing core failed!\n");
 		return -1;
 	}
-	LOG(KERN_INFO "[oemflag]CPU 0\n");
 	switch(cmd){
 #ifdef CONFIG_TZDEV
 		case IOCTL_IRS_CMD:
@@ -382,15 +348,12 @@ static long tzic_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 
  return_default:
 	gotoAllCpu();
-	LOG(KERN_INFO "[oemflag]ALL CPU (default)\n");
 	return 0;
  return_new_from:
 	gotoAllCpu();
-	LOG(KERN_INFO "[oemflag]ALL CPU (new_from)\n");
 	return copy_from_user( &param, (void *)arg, sizeof(param) );
  return_new_to:
 	gotoAllCpu();
-	LOG(KERN_INFO "[oemflag]ALL CPU (new_to)\n");
 	return copy_to_user( (void *)arg, &param, sizeof(param) );
 }
 
@@ -458,15 +421,9 @@ static int gotoCpu0(void)
 	int ret = 0;
 	struct cpumask mask = CPU_MASK_CPU0;
 
-	LOG(KERN_INFO "System has %d CPU's, we are on CPU #%d\n"
-	    "\tBinding this process to CPU #0.\n"
-	    "\tactive mask is %lx, setting it to mask=%lx\n",
-	    nr_cpu_ids,
-	    raw_smp_processor_id(), cpu_active_mask->bits[0], mask.bits[0]);
 	ret = set_cpus_allowed_ptr(current, &mask);
 	if (0 != ret)
 		LOG(KERN_INFO "set_cpus_allowed_ptr=%d.\n", ret);
-	LOG(KERN_INFO "And now we are on CPU #%d\n", raw_smp_processor_id());
 
 	return ret;
 }
@@ -476,15 +433,9 @@ static int gotoAllCpu(void)
 	int ret = 0;
 	struct cpumask mask = CPU_MASK_ALL;
 
-	LOG(KERN_INFO "System has %d CPU's, we are on CPU #%d\n"
-	    "\tBinding this process to CPU #0.\n"
-	    "\tactive mask is %lx, setting it to mask=%lx\n",
-	    nr_cpu_ids,
-	    raw_smp_processor_id(), cpu_active_mask->bits[0], mask.bits[0]);
 	ret = set_cpus_allowed_ptr(current, &mask);
 	if (0 != ret)
 		LOG(KERN_INFO "set_cpus_allowed_ptr=%d.\n", ret);
-	LOG(KERN_INFO "And now we are on CPU #%d\n", raw_smp_processor_id());
 
 	return ret;
 }

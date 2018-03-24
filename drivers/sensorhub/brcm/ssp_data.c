@@ -28,6 +28,7 @@
 #define MSG2AP_INST_MAG_CAL             0x09
 #define MSG2AP_INST_SENSOR_INIT_DONE	0x0a
 #define MSG2AP_INST_COLLECT_BIGDATA          0x0b
+#define MSG2AP_INST_SCONTEXT_DATA		0x0c
 
 #define CAL_DATA_FOR_BIG                             0x01
 
@@ -181,7 +182,19 @@ static void get_light_flicker_sensordata(char *pchRcvDataFrame, int *iDataIdx,
 	memcpy(&sensorsdata->light_flicker, pchRcvDataFrame + *iDataIdx, 2);
 	*iDataIdx += 2;
 }
-
+#if ANDROID_VERSION >= 80000
+static void get_light_cct_sensordata(char *pchRcvDataFrame, int *iDataIdx,
+	struct sensor_value *sensorsdata)
+{
+#ifdef CONFIG_SENSORS_SSP_LIGHT_REPORT_LUX
+	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 18);
+	*iDataIdx += 18;
+#else
+	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 10);
+	*iDataIdx += 10;
+#endif
+}
+#endif
 static void get_pressure_sensordata(char *pchRcvDataFrame, int *iDataIdx,
 	struct sensor_value *sensorsdata)
 {
@@ -278,7 +291,14 @@ static void get_pickup_sensordata(char *pchRcvDataFrame, int *iDataIdx,
 	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 1);
 	*iDataIdx += 1;
 }
-
+#if ANDROID_VERSION >= 80000
+static void get_ucal_accel_sensordata(char *pchRcvDataFrame, int *iDataIdx,
+	struct sensor_value *sensorsdata)
+{
+	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 12);
+	*iDataIdx += 12;
+}
+#endif
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING // HIFI batch
 
 /*
@@ -307,7 +327,11 @@ bool ssp_check_buffer(struct ssp_data *data)
 			(sensor_type != PRESSURE_SENSOR) &&
 			(sensor_type != GAME_ROTATION_VECTOR) &&
 			(sensor_type != PROXIMITY_SENSOR) &&
-			(sensor_type != META_SENSOR)) {
+			(sensor_type != META_SENSOR)
+#if ANDROID_VERSION >= 80000
+			&& (sensor_type != ACCEL_UNCALIB_SENSOR)
+#endif
+			) {
 			pr_err("[SSP]: %s - Mcu data frame1 error %d, idx_data %d\n", __func__,
 					sensor_type, idx_data - 1);
 			res = false;
@@ -324,7 +348,12 @@ bool ssp_check_buffer(struct ssp_data *data)
 #else
 		idx_data += 20;
 #endif
+                        break;
+#if ANDROID_VERSION >= 80000
+                case ACCEL_UNCALIB_SENSOR:
+                        idx_data += 20;
 			break;
+#endif
 		case PRESSURE_SENSOR:
 			idx_data += 14;
 			break;
@@ -389,7 +418,11 @@ void ssp_batch_resume_check(struct ssp_data *data)
 				(sensor_type != GEOMAGNETIC_UNCALIB_SENSOR) &&
 				(sensor_type != PRESSURE_SENSOR) &&
 				(sensor_type != GAME_ROTATION_VECTOR) &&
-				(sensor_type != PROXIMITY_SENSOR)) {
+				(sensor_type != PROXIMITY_SENSOR)
+#if ANDROID_VERSION >= 80000
+			&& (sensor_type != ACCEL_UNCALIB_SENSOR)
+#endif
+			) {
 				pr_err("[SSP]: %s - Mcu data frame1 error %d, idx_data %d\n", __func__,
 						sensor_type, idx_data - 1);
 				data->bIsResumed = false;
@@ -408,6 +441,9 @@ void ssp_batch_resume_check(struct ssp_data *data)
 			case GAME_ROTATION_VECTOR:
 			case PRESSURE_SENSOR:
 			case PROXIMITY_SENSOR:
+#if ANDROID_VERSION >= 80000
+                        case ACCEL_UNCALIB_SENSOR:
+#endif
 				data->lastTimestamp[sensor_type] = delta_time_us;
 				break;
 			}
@@ -447,14 +483,17 @@ void ssp_batch_report(struct ssp_data *data)
 			(sensor_type != GEOMAGNETIC_UNCALIB_SENSOR) &&
 			(sensor_type != PRESSURE_SENSOR) &&
 			(sensor_type != GAME_ROTATION_VECTOR) &&
-			(sensor_type != PROXIMITY_SENSOR)) {
+			(sensor_type != PROXIMITY_SENSOR)
+#if ANDROID_VERSION >= 80000
+			&& (sensor_type != ACCEL_UNCALIB_SENSOR)
+#endif
+			) {
 			pr_err("[SSP]: %s - Mcu data frame1 error %d, idx_data %d\n", __func__,
 					sensor_type, idx_data - 1);
 			return;
 		}
 
-		if (count%25 == 0)
-			usleep_range(1000, 1000);
+		usleep_range(150, 151);
 		//ssp_dbg("[SSP_BAT] cnt %d\n", count);
 		data->get_sensor_data[sensor_type](data->batch_event.batch_data, &idx_data, &sensor_data);
 
@@ -639,7 +678,7 @@ int parse_dataframe(struct ssp_data *data, char *pchRcvDataFrame, int iLength)
 				//Check sensor is enabled, before report sensordata
 				u64 AddedSensorState = (u64)atomic64_read(&data->aSensorEnable);
 
-				if (AddedSensorState & (1<<sensor_type)
+				if (AddedSensorState & (1ULL << sensor_type)
 				|| sensor_type == GEOMAGNETIC_RAW
 				|| sensor_type == PROXIMITY_RAW)
 					data->report_sensor_data[sensor_type](data, &sensorsdata);
@@ -717,6 +756,13 @@ int parse_dataframe(struct ssp_data *data, char *pchRcvDataFrame, int iLength)
 				break;
 			}
 			break;
+#if ANDROID_VERSION >= 80000
+		case MSG2AP_INST_SCONTEXT_DATA:
+			memcpy(sensorsdata.scontext_buf, pchRcvDataFrame + iDataIdx, SCONTEXT_DATA_SIZE);
+			report_scontext_data(data, &sensorsdata);
+			iDataIdx += SCONTEXT_DATA_SIZE;
+				break;
+#endif
 		default:
 			goto error_return;
 		}
@@ -758,6 +804,10 @@ void initialize_function_pointer(struct ssp_data *data)
 	data->get_sensor_data[LIGHT_SENSOR] = get_light_sensordata;
 #ifdef CONFIG_SENSORS_SSP_IRDATA_FOR_CAMERA
 	data->get_sensor_data[LIGHT_IR_SENSOR] = get_light_ir_sensordata;
+#endif
+#if ANDROID_VERSION >= 80000
+	data->get_sensor_data[LIGHT_CCT_SENSOR] = get_light_cct_sensordata;
+	data->get_sensor_data[ACCEL_UNCALIB_SENSOR] = get_ucal_accel_sensordata;
 #endif
 	data->get_sensor_data[TEMPERATURE_HUMIDITY_SENSOR] =
 		get_temp_humidity_sensordata;
@@ -815,7 +865,10 @@ void initialize_function_pointer(struct ssp_data *data)
 
 	data->report_sensor_data[BULK_SENSOR] = NULL;
 	data->report_sensor_data[GPS_SENSOR] = NULL;
-
+#if ANDROID_VERSION >= 80000
+	data->report_sensor_data[LIGHT_CCT_SENSOR] = report_light_cct_data;
+	data->report_sensor_data[ACCEL_UNCALIB_SENSOR] = report_uncalib_accel_data;
+#endif
 	data->ssp_big_task[BIG_TYPE_DUMP] = ssp_dump_task;
 	data->ssp_big_task[BIG_TYPE_READ_LIB] = ssp_read_big_library_task;
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING // HIFI batch

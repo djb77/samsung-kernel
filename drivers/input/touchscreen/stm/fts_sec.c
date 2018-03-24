@@ -111,6 +111,7 @@ static void set_pressure_strength_clear(void *device_data);
 static void get_pressure_threshold(void *device_data);
 static void set_pressure_user_level(void *device_data);
 static void get_pressure_user_level(void *device_data);
+static void set_pressure_setting_mode_enable(void *device_data);
 #endif
 
 static void set_tsp_test_result(void *device_data);
@@ -219,6 +220,7 @@ struct sec_cmd ft_commands[] = {
 	{SEC_CMD("get_pressure_threshold", get_pressure_threshold),},
 	{SEC_CMD("set_pressure_user_level", set_pressure_user_level),},
 	{SEC_CMD("get_pressure_user_level", get_pressure_user_level),},
+	{SEC_CMD("set_pressure_setting_mode_enable", set_pressure_setting_mode_enable),},
 #endif
 	{SEC_CMD("set_tsp_test_result", set_tsp_test_result),},
 	{SEC_CMD("get_tsp_test_result", get_tsp_test_result),},
@@ -539,6 +541,8 @@ static ssize_t pressure_enable_show(struct device *dev,
 	return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
 }
 
+/* Factory & game tools	: OFF value [0] / ON value [1]	*/
+/* Settings		: OFF value [2] / ON value [3]	*/
 static ssize_t pressure_enable_store(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *buf, size_t count)
@@ -558,11 +562,24 @@ static ssize_t pressure_enable_store(struct device *dev,
 	if (ret != 0)
 		return ret;
 
-	if (value == 1) {
-		info->lowpower_flag |= FTS_MODE_PRESSURE;
-	} else {
-		info->lowpower_flag &= ~FTS_MODE_PRESSURE;
+	if (!info->board->support_pressure) {
+		input_err(true, &info->client->dev, "%s: Not support pressure[%d]\n",
+				__func__, value);
+		return -EINVAL;
 	}
+
+	input_info(true, &info->client->dev, "%s: caller_id[%d]\n", __func__, value);
+
+	if (value == 1 || value == 3) {
+		info->lowpower_flag |= FTS_MODE_PRESSURE;
+	} else if (value == 0 || value == 2) {
+		info->lowpower_flag &= ~FTS_MODE_PRESSURE;
+	} else {
+		input_err(true, &info->client->dev, "%s: Abnormal input value[%d]\n",
+				__func__, value);
+		return -EINVAL;
+	}
+	info->pressure_caller_id = value;
 
 #ifdef FTS_SUPPORT_STRINGLIB
 	ret = info->fts_write_to_string(info, &addr, &info->lowpower_flag, sizeof(info->lowpower_flag));
@@ -570,8 +587,204 @@ static ssize_t pressure_enable_store(struct device *dev,
 		input_err(true, &info->client->dev, "%s: failed. ret: %d\n", __func__, ret);
 #endif
 
-	input_info(true, &info->client->dev, "%s: %d\n", __func__, value);
 	return count;
+}
+
+static ssize_t read_ambient_info_show(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct fts_ts_info *info = container_of(sec, struct fts_ts_info, sec);
+
+	input_info(true, &info->client->dev, "%s: max: %d(%d,%d), min: %d(%d,%d)\n", __func__,
+			info->max_baseline, info->max_baseline_tx, info->max_baseline_rx,
+			info->min_baseline, info->min_baseline_tx, info->min_baseline_rx);
+	return snprintf(buf, SEC_CMD_BUF_SIZE,
+			"\"TAMB_MAX\":\"%d\",\"TAMB_MAX_TX\":\"%d\",\"TAMB_MAX_RX\":\"%d\","
+			"\"TAMB_MIN\":\"%d\",\"TAMB_MIN_TX\":\"%d\",\"TAMB_MIN_RX\":\"%d\"",
+			info->max_baseline, info->max_baseline_tx, info->max_baseline_rx,
+			info->min_baseline, info->min_baseline_tx, info->min_baseline_rx);
+}
+
+static ssize_t read_ambient_channel_info_show(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct fts_ts_info *info = container_of(sec, struct fts_ts_info, sec);
+	char *buffer;
+	int ret;
+	int i;
+	char temp[30];
+
+	buffer = vmalloc((info->ForceChannelLength + info->SenseChannelLength) * 25);
+	if (!buffer)
+		return -ENOMEM;
+
+	memset(buffer, 0x00, (info->ForceChannelLength + info->SenseChannelLength) * 25);
+
+	for (i = 0; i < info->ForceChannelLength; i++) {
+		snprintf(temp, sizeof(temp), "\"TAMB_TX%02d\":\"%d\",",
+				i, info->baseline_tx[i]);
+		strncat(buffer, temp, sizeof(temp));
+	}
+
+	for (i = 0; i < info->SenseChannelLength; i++) {
+		snprintf(temp, sizeof(temp), "\"TAMB_RX%02d\":\"%d\"",
+				i, info->baseline_rx[i]);
+		if (strnlen(buffer, (info->ForceChannelLength + info->SenseChannelLength) * 25) <= 893) {
+			strncat(buffer, temp, sizeof(temp));
+			if (i  != (info->SenseChannelLength - 1))
+				strncat(buffer, ",", 2);
+		}
+	}
+
+	ret = snprintf(buf, (info->ForceChannelLength + info->SenseChannelLength) * 25, buffer);
+
+	input_info(true, &info->client->dev, "%s: %s\n", __func__, buffer);
+	vfree(buffer);
+
+	return ret;
+}
+
+static ssize_t read_ambient_channel_delta_show(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct fts_ts_info *info = container_of(sec, struct fts_ts_info, sec);
+	char *buffer;
+	int ret;
+	int i;
+	char temp[30];
+
+	buffer = vmalloc((info->ForceChannelLength + info->SenseChannelLength) * 25);
+	if (!buffer)
+		return -ENOMEM;
+
+	memset(buffer, 0x00, (info->ForceChannelLength + info->SenseChannelLength) * 25);
+
+	for (i = 0; i < info->ForceChannelLength; i++) {
+		snprintf(temp, sizeof(temp), "\"TCDT%02d\":\"%d\",",
+				i, info->baseline_tx_delta[i]);
+		strncat(buffer, temp, sizeof(temp));
+	}
+
+	for (i = 0; i < info->SenseChannelLength; i++) {
+		snprintf(temp, sizeof(temp), "\"TCDR%02d\":\"%d\"",
+				i, info->baseline_rx_delta[i]);
+		strncat(buffer, temp, sizeof(temp));
+		if (i  != (info->SenseChannelLength - 1))
+			strncat(buffer, ",", 2);
+	}
+
+	ret = snprintf(buf, (info->ForceChannelLength + info->SenseChannelLength) * 25, buffer);
+
+	input_info(true, &info->client->dev, "%s: %s\n", __func__, buffer);
+	vfree(buffer);
+
+	return ret;
+}
+
+static ssize_t get_lp_dump(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct fts_ts_info *info = container_of(sec, struct fts_ts_info, sec);
+	u8 string_data[8] = {0, };
+	u16 current_index;
+	int i, ret;
+	unsigned short string_addr;
+
+	if (info->touch_stopped) {
+		input_err(true, &info->client->dev, "%s: Touch is stopped!\n", __func__);
+		return snprintf(buf, SEC_CMD_BUF_SIZE, "TSP turned off");
+	}
+
+	string_addr = FTS_CMD_STRING_ACCESS + FTS_CMD_SPONGE_LP_DUMP;
+
+	disable_irq(info->client->irq);
+
+	ret = info->fts_read_from_string(info, &string_addr, string_data, 2);
+	if (ret < 0) {
+		input_err(true, &info->client->dev, "%s: Failed to read rect\n", __func__);
+		snprintf(buf, SEC_CMD_BUF_SIZE, "NG, Failed to read rect");
+		goto out;
+	}
+
+	current_index = (string_data[1] & 0xFF) << 8 | (string_data[0] & 0xFF);
+	if (current_index > 1000 || current_index < 500) {
+		input_err(true, &info->client->dev,
+				"Failed to Sponge LP log %d\n", current_index);
+		snprintf(buf, SEC_CMD_BUF_SIZE,
+				"NG, Failed to Sponge LP log, current_index=%d",
+				current_index);
+		goto out;
+	}
+
+	input_info(true, &info->client->dev,
+			"%s: DEBUG current_index = %d\n", __func__, current_index);
+
+	/* sponge has 62 stacks for LP dump */
+	for (i = 61; i >= 0; i--) {
+		u16 data0, data1, data2, data3;
+		char buff[30] = {0, };
+		u16 string_addr;
+
+		string_addr = current_index - (8 * i);
+		if (string_addr < 500)
+			string_addr += FTS_CMD_SPONGE_LP_DUMP;
+
+		string_addr += FTS_CMD_STRING_ACCESS;
+
+		ret = info->fts_read_from_string(info, &string_addr, string_data, 8);
+		if (ret < 0) {
+			input_err(true, &info->client->dev,
+					"%s: Failed to read rect\n", __func__);
+			snprintf(buf, SEC_CMD_BUF_SIZE,
+					"NG, Failed to read rect, addr=%d",
+					string_addr);
+			goto out;
+		}
+
+		data0 = (string_data[1] & 0xFF) << 8 | (string_data[0] & 0xFF);
+		data1 = (string_data[3] & 0xFF) << 8 | (string_data[2] & 0xFF);
+		data2 = (string_data[5] & 0xFF) << 8 | (string_data[4] & 0xFF);
+		data3 = (string_data[7] & 0xFF) << 8 | (string_data[6] & 0xFF);
+		if (data0 || data1 || data2 || data3) {
+			snprintf(buff, sizeof(buff),
+					"%d: %04x%04x%04x%04x\n",
+					(string_addr - FTS_CMD_STRING_ACCESS), data0, data1, data2, data3);
+			strncat(buf, buff, sizeof(buff));
+		}
+	}
+
+out:
+	enable_irq(info->client->irq);
+	return strlen(buf);
+}
+
+static ssize_t get_force_recal_count(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct fts_ts_info *info = container_of(sec, struct fts_ts_info, sec);
+	u8 rbuf[3] = {0, };
+	u32 recal_count;
+	int ret;
+
+	if (info->touch_stopped) {
+		input_err(true, &info->client->dev, "%s: Touch is stopped!\n", __func__);
+		return snprintf(buf, SEC_CMD_BUF_SIZE, "TSP turned off");
+	}
+
+	ret = info->fts_get_sysinfo_data(info, READ_FORCE_RECAL_COUNT, 2, rbuf);
+	if (ret < 0) {
+		input_err(true, &info->client->dev,
+				"%s: Failed to read\n", __func__);
+		return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", -EIO);
+	}
+
+	recal_count = (rbuf[1] & 0xFF) << 8 | (rbuf[0] & 0xFF);
+
+	return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", recal_count);
 }
 
 static DEVICE_ATTR(ito_check, S_IRUGO, read_ito_check_show, NULL);
@@ -587,6 +800,11 @@ static DEVICE_ATTR(all_touch_count, S_IRUGO | S_IWUSR | S_IWGRP, read_all_touch_
 static DEVICE_ATTR(z_value, S_IRUGO | S_IWUSR | S_IWGRP, read_z_value_show, clear_z_value_store);
 static DEVICE_ATTR(scrub_pos, S_IRUGO, fts_scrub_position, NULL);
 static DEVICE_ATTR(pressure_enable, S_IRUGO | S_IWUSR | S_IWGRP, pressure_enable_show, pressure_enable_store);
+static DEVICE_ATTR(read_ambient_info, 0444, read_ambient_info_show, NULL);
+static DEVICE_ATTR(read_ambient_channel_info, 0444, read_ambient_channel_info_show, NULL);
+static DEVICE_ATTR(read_ambient_channel_delta, 0444, read_ambient_channel_delta_show, NULL);
+static DEVICE_ATTR(get_lp_dump, 0444, get_lp_dump, NULL);
+static DEVICE_ATTR(force_recal_count, 0444, get_force_recal_count, NULL);
 
 static struct attribute *sec_touch_facotry_attributes[] = {
 	&dev_attr_scrub_pos.attr,
@@ -602,6 +820,11 @@ static struct attribute *sec_touch_facotry_attributes[] = {
 	&dev_attr_all_touch_count.attr,
 	&dev_attr_z_value.attr,
 	&dev_attr_pressure_enable.attr,
+	&dev_attr_read_ambient_info.attr,
+	&dev_attr_read_ambient_channel_info.attr,
+	&dev_attr_read_ambient_channel_delta.attr,
+	&dev_attr_get_lp_dump.attr,
+	&dev_attr_force_recal_count.attr,
 	NULL,
 };
 
@@ -776,7 +999,7 @@ void fts_print_frame(struct fts_ts_info *info, short *min, short *max)
 		strncat(pStr, pTmp, 6);
 	}
 
-	input_info(true, &info->client->dev, "%s\n", pStr);
+	input_raw_info(true, &info->client->dev, "%s\n", pStr);
 
 	memset(pStr, 0x0, 6 * (info->SenseChannelLength + 1));
 	snprintf(pTmp, 2, " +");
@@ -788,7 +1011,7 @@ void fts_print_frame(struct fts_ts_info *info, short *min, short *max)
 
 	}
 
-	input_info(true, &info->client->dev, "%s\n", pStr);
+	input_raw_info(true, &info->client->dev, "%s\n", pStr);
 
 	for (i = 0; i < info->ForceChannelLength; i++) {
 		memset(pStr, 0x0, 6 * (info->SenseChannelLength + 1));
@@ -808,7 +1031,7 @@ void fts_print_frame(struct fts_ts_info *info, short *min, short *max)
 			}
 			strncat(pStr, pTmp, 6);
 		}
-		input_info(true, &info->client->dev, "%s\n", pStr);
+		input_raw_info(true, &info->client->dev, "%s\n", pStr);
 	}
 
 	kfree(pStr);
@@ -830,7 +1053,11 @@ int fts_read_frame(struct fts_ts_info *info, unsigned char type, short *min,
 	unsigned char *pRead = NULL;
 	int rc = 0;
 	int ret = 0;
-	int i = 0;
+	int i = 0, j = 0;
+	short tx_max[TOUCH_TX_CHANNEL_NUM];
+	short tx_min[TOUCH_TX_CHANNEL_NUM];
+	short rx_max[TOUCH_RX_CHANNEL_NUM];
+	short rx_min[TOUCH_RX_CHANNEL_NUM];
 
 	pRead = kzalloc(BUFFER_MAX, GFP_KERNEL);
 	if (pRead == NULL) {
@@ -897,23 +1124,81 @@ int fts_read_frame(struct fts_ts_info *info, unsigned char type, short *min,
 
 	switch (type) {
 	case TYPE_RAW_DATA:
-		input_info(true, &info->client->dev, "%s: [Raw Data : 0x%X%X]\n", __func__, pFrameAddress[0],
+		input_raw_info(true, &info->client->dev, "%s: [Raw Data : 0x%X%X]\n", __func__, pFrameAddress[0],
 			FrameAddress);
 		break;
 	case TYPE_FILTERED_DATA:
-		input_info(true, &info->client->dev, "%s: [Filtered Data : 0x%X%X]\n", __func__,
+		input_raw_info(true, &info->client->dev, "%s: [Filtered Data : 0x%X%X]\n", __func__,
 			pFrameAddress[0], FrameAddress);
 		break;
 	case TYPE_STRENGTH_DATA:
-		input_info(true, &info->client->dev, "%s: [Strength Data : 0x%X%X]\n", __func__,
+		input_raw_info(true, &info->client->dev, "%s: [Strength Data : 0x%X%X]\n", __func__,
 			pFrameAddress[0], FrameAddress);
 		break;
 	case TYPE_BASELINE_DATA:
-		input_info(true, &info->client->dev, "%s: [Baseline Data : 0x%X%X]\n", __func__,
+		input_raw_info(true, &info->client->dev, "%s: [Baseline Data : 0x%X%X]\n", __func__,
 			pFrameAddress[0], FrameAddress);
 		break;
 	}
 	fts_print_frame(info, min, max);
+
+	/* bigdata */
+	for (i = 0; i < TOUCH_TX_CHANNEL_NUM; i++) {
+		tx_max[i] = -30000;
+		tx_min[i] = 30000;
+	}
+
+	for (i = 0; i < TOUCH_RX_CHANNEL_NUM; i++) {
+		rx_max[i] = -30000;
+		rx_min[i] = 30000;
+	}
+
+	if (type == TYPE_BASELINE_DATA) {
+		info->max_baseline = -30000;
+		info->max_baseline_tx = 0;
+		info->max_baseline_rx = 0;
+		info->min_baseline = 30000;
+		info->min_baseline_tx = 0;
+		info->min_baseline_rx = 0;
+
+		for (i = 0; i < info->ForceChannelLength; i++) {
+			for (j = 0; j < info->SenseChannelLength; j++) {
+				if (info->max_baseline < info->pFrame[(i * info->SenseChannelLength) + j]) {
+					info->max_baseline = info->pFrame[(i * info->SenseChannelLength) + j];
+					info->max_baseline_tx = i;
+					info->max_baseline_rx = j;
+				}
+
+				if (info->min_baseline > info->pFrame[(i * info->SenseChannelLength) + j]) {
+					info->min_baseline = info->pFrame[(i * info->SenseChannelLength) + j];
+					info->min_baseline_tx = i;
+					info->min_baseline_rx = j;
+				}
+
+				if ((i * info->SenseChannelLength + j) / info->SenseChannelLength == i) {
+					info->baseline_tx[i] += info->pFrame[(i * info->SenseChannelLength) + j];
+					tx_max[i] = max(tx_max[i], info->pFrame[(i * info->SenseChannelLength) + j]);
+					tx_min[i] = min(tx_min[i], info->pFrame[(i * info->SenseChannelLength) + j]);
+				}
+
+				if ((i * info->SenseChannelLength + j) % info->SenseChannelLength == j) {
+					info->baseline_rx[j] += info->pFrame[(i * info->SenseChannelLength) + j];
+					rx_max[j] = max(rx_max[j], info->pFrame[(i * info->SenseChannelLength) + j]);
+					rx_min[j] = min(rx_min[j], info->pFrame[(i * info->SenseChannelLength) + j]);
+				}
+			}
+		}
+
+		for (i = 0; i < info->ForceChannelLength; i++) {
+			info->baseline_tx[i] /= info->SenseChannelLength;
+			info->baseline_tx_delta[i] = tx_max[i] - tx_min[i];
+		}
+
+		for (i = 0; i < info->SenseChannelLength; i++) {
+			info->baseline_rx[i] /= info->ForceChannelLength;
+			info->baseline_rx_delta[i] = rx_max[i] - rx_min[i];
+		}
+	}
 
 ErrorExit:
 	return rc;
@@ -2329,7 +2614,7 @@ static void run_cx_data_read(void *device_data)
 			snprintf(pTmp, sizeof(pTmp), "%3d", ReadData[j][i + 1]);
 			strncat(pStr, pTmp, 4 * rx_num);
 		}
-		input_info(true, &info->client->dev, "%s\n", pStr);
+		input_raw_info(true, &info->client->dev, "%s\n", pStr);
 	}
 
 	if (info->cx_data) {
@@ -3876,6 +4161,42 @@ out_get_user_level:
 	sec->cmd_state = SEC_CMD_STATUS_FAIL;
 	input_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
 }
+
+static void set_pressure_setting_mode_enable(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct fts_ts_info *info = container_of(sec, struct fts_ts_info, sec);
+	char buff[SEC_CMD_STR_LEN] = { 0 };
+
+	sec_cmd_set_default_result(sec);
+
+	if (sec->cmd_param[0] < 0 || sec->cmd_param[0] > 1) {
+		input_err(true, &info->client->dev, "%s: not support param\n", __func__);
+		goto NG;
+	}
+
+	if (info->touch_stopped) {
+		input_err(true, &info->client->dev, "%s: [ERROR] Touch is stopped\n", __func__);
+		goto NG;
+	}
+
+	info->pressure_setting_mode = sec->cmd_param[0];
+
+	input_info(true, &info->client->dev,
+				"%s: %s\n", __func__, info->pressure_setting_mode ? "enabled" : "disabled");
+
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec_cmd_set_cmd_exit(sec);
+	return;
+
+NG:
+	snprintf(buff, sizeof(buff), "%s", "NG");
+	sec->cmd_state = SEC_CMD_STATUS_FAIL;
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec_cmd_set_cmd_exit(sec);
+}
 #endif
 
 int fts_get_tsp_test_result(struct fts_ts_info *info)
@@ -4290,7 +4611,7 @@ int fts_get_factory_debug_information(struct fts_ts_info *info)
 			data[2] = 0x00;
 		info->nv_crc_fail_count = data[2];
 
-		input_info(true, &info->client->dev,
+		input_raw_info(true, &info->client->dev,
 			"%s: pressure base:%X, delta:%X, crc fail count:%X\n", __func__,
 			info->pressure_cal_base, info->pressure_cal_delta,
 			info->nv_crc_fail_count);
@@ -4400,7 +4721,7 @@ int get_nvm_data(struct fts_ts_info *info, int type, unsigned char *nvdata)
 		goto err_mode;
 	}
 
-	input_info(true, &info->client->dev, "%s: [%d][%d] (0x%02X), 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
+	input_raw_info(true, &info->client->dev, "%s: [%d][%d] (0x%02X), 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
 		__func__, type, nvm_data[type].length, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
 
 	memcpy(nvdata, &data[1], nvm_data[type].length);

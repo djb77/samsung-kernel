@@ -35,6 +35,7 @@
 #define WACOM_FW_SIZE		131072
 
 #define COM_QUERY_RETRY		3
+#define WACOM_I2C_RETRY		3
 
 #define WACOM_FW_PATH_SDCARD	"/sdcard/FIRMWARE/WACOM/wacom_firm.fw"
 
@@ -72,7 +73,10 @@ void forced_release(struct wacom_i2c *wac_i2c)
 		input_report_key(wac_i2c->input_dev, BTN_STYLUS, 0);
 		input_report_key(wac_i2c->input_dev, BTN_TOUCH, 0);
 	}
+
 	input_report_abs(wac_i2c->input_dev, ABS_PRESSURE, 0);
+	input_sync(wac_i2c->input_dev);
+
 	input_report_abs(wac_i2c->input_dev, ABS_DISTANCE, 0);
 	input_report_key(wac_i2c->input_dev, BTN_TOOL_RUBBER, 0);
 	input_report_key(wac_i2c->input_dev, BTN_TOOL_PEN, 0);
@@ -90,11 +94,26 @@ int wacom_i2c_send(struct wacom_i2c *wac_i2c,
 		   const char *buf, int count, bool mode)
 {
 	struct i2c_client *client = mode ? wac_i2c->client_boot : wac_i2c->client;
+	int retry = WACOM_I2C_RETRY;
 	int ret;
 
-	ret = i2c_master_send(client, buf, count);
-	if (ret < 0)
-		wac_i2c->i2c_fail_count++;
+	do {
+		if (!wac_i2c->power_enable) {
+			input_err(true, &wac_i2c->client->dev, "%s: Power status off\n",
+					__func__);
+			return -EIO;
+		}
+
+		ret = i2c_master_send(client, buf, count);
+		if (ret == count)
+			break;
+
+		if (retry < WACOM_I2C_RETRY) {
+			input_err(true, &wac_i2c->client->dev, "%s: I2C retry(%d)",
+					__func__, WACOM_I2C_RETRY - retry);
+			wac_i2c->i2c_fail_count++;
+		}
+	} while (--retry);
 
 	return ret;
 }
@@ -102,11 +121,26 @@ int wacom_i2c_send(struct wacom_i2c *wac_i2c,
 int wacom_i2c_recv(struct wacom_i2c *wac_i2c, char *buf, int count, bool mode)
 {
 	struct i2c_client *client = mode ? wac_i2c->client_boot : wac_i2c->client;
+	int retry = WACOM_I2C_RETRY;
 	int ret;
 
-	ret = i2c_master_recv(client, buf, count);
-	if (ret < 0)
-		wac_i2c->i2c_fail_count++;
+	do {
+		if (!wac_i2c->power_enable) {
+			input_err(true, &wac_i2c->client->dev, "%s: Power status off\n",
+					__func__);
+			return -EIO;
+		}
+
+		ret = i2c_master_recv(client, buf, count);
+		if (ret == count)
+			break;
+
+		if (retry < WACOM_I2C_RETRY) {
+			input_err(true, &wac_i2c->client->dev, "%s: I2C retry(%d)",
+					__func__, WACOM_I2C_RETRY - retry);
+			wac_i2c->i2c_fail_count++;
+		}
+	} while (--retry);
 
 	return ret;
 }
@@ -1013,6 +1047,8 @@ int wacom_i2c_coord(struct wacom_i2c *wac_i2c)
 			input_report_key(wac_i2c->input_dev, BTN_STYLUS, 0);
 			input_report_key(wac_i2c->input_dev, BTN_TOUCH, 0);
 			input_report_abs(wac_i2c->input_dev, ABS_PRESSURE, 0);
+			input_sync(wac_i2c->input_dev);
+
 			input_report_abs(wac_i2c->input_dev, ABS_DISTANCE, 0);
 			input_report_key(wac_i2c->input_dev,
 					 BTN_TOOL_RUBBER, 0);
@@ -1073,7 +1109,7 @@ int wacom_i2c_coord(struct wacom_i2c *wac_i2c)
 				   x, y, wac_i2c->mcount, pressure, wac_i2c->tool,
 				   wac_i2c->battery_saving_mode, wac_i2c->dex_mode, wac_i2c->dp_connect_state);
 #else
-			input_info(true, &client->dev, "Pressed mc:%d ps:%d dex:%d dp:%d\n",
+			input_info(true, &client->dev, "[P] mc:%d ps:%d dex:%d dp:%d\n",
 				   wac_i2c->mcount, wac_i2c->battery_saving_mode,
 				   wac_i2c->dex_mode, wac_i2c->dp_connect_state);
 #endif
@@ -1085,7 +1121,7 @@ int wacom_i2c_coord(struct wacom_i2c *wac_i2c)
 				   wac_i2c->dex_mode, wac_i2c->dp_connect_state,
 				   wac_i2c->wac_feature->fw_version);
 #else
-			input_info(true, &client->dev, "Released mc:%d dex:%d dp:%d [0x%x]\n",
+			input_info(true, &client->dev, "[R] mc:%d dex:%d dp:%d [0x%x]\n",
 				   wac_i2c->mcount, wac_i2c->dex_mode, wac_i2c->dp_connect_state,
 				   wac_i2c->wac_feature->fw_version);
 #endif
@@ -1109,6 +1145,8 @@ int wacom_i2c_coord(struct wacom_i2c *wac_i2c)
 				input_report_key(wac_i2c->input_dev, BTN_TOUCH, 0);
 			}
 			input_report_abs(wac_i2c->input_dev, ABS_PRESSURE, 0);
+			input_sync(wac_i2c->input_dev);
+
 			input_report_abs(wac_i2c->input_dev, ABS_DISTANCE, 0);
 			input_report_key(wac_i2c->input_dev,
 					 BTN_TOOL_RUBBER, 0);
@@ -1151,7 +1189,7 @@ int wacom_i2c_coord(struct wacom_i2c *wac_i2c)
 					   x, y, wac_i2c->mcount, wac_i2c->dex_mode,
 					   wac_i2c->dp_connect_state, wac_i2c->wac_feature->fw_version);
 #else
-				input_info(true, &client->dev, "Released mc:%d dex:%d dp:%d [0x%x] & hover out\n",
+				input_info(true, &client->dev, "[R] mc:%d dex:%d dp:%d [0x%x] & hover out\n",
 					   wac_i2c->mcount, wac_i2c->dex_mode,
 					   wac_i2c->dp_connect_state, wac_i2c->wac_feature->fw_version);
 #endif
@@ -1434,7 +1472,7 @@ out_power_on:
 void wacom_sleep_sequence(struct wacom_i2c *wac_i2c)
 {
 	struct i2c_client *client = wac_i2c->client;
-	int retry = 3;
+	int retry = 1;
 
 	mutex_lock(&wac_i2c->lock);
 
@@ -1914,7 +1952,7 @@ static void wacom_i2c_resume_work(struct work_struct *work)
 	    container_of(work, struct wacom_i2c, resume_work.work);
 	struct i2c_client *client = wac_i2c->client;
 	u8 irq_state = 0;
-	int retry = 3;
+	int retry = 1;
 	int ret = 0;
 
 reset:
@@ -2315,6 +2353,8 @@ err_update_load_fw:
 	return 0;
 }
 
+static int wacom_i2c_remove(struct i2c_client *client);
+
 static void wacom_i2c_update_work(struct work_struct *work)
 {
 	struct wacom_i2c *wac_i2c =
@@ -2334,8 +2374,10 @@ static void wacom_i2c_update_work(struct work_struct *work)
 		wac_i2c->do_crc_check = false;
 
 		ret = wacom_checksum(wac_i2c);
-		if (ret)
+		if (ret) {
+			input_info(true, &client->dev, "crc ok, do not update\n");
 			goto err_update_fw;
+		}
 
 		input_info(true, &client->dev, "crc err, do update\n");
 	}
@@ -2371,8 +2413,19 @@ err_update_fw:
 	wake_unlock(&wac_i2c->fw_wakelock);
 end_fw_update:
 	wacom_i2c_unload_fw(wac_i2c);
+
+	ret = wacom_open_test(wac_i2c);
+	if (ret)
+		input_err(true, &client->dev, "open test check failed\n");
+
 	wacom_enable_irq(wac_i2c, true);
 	wacom_enable_pdct_irq(wac_i2c, true);
+
+	if (feature->update_status == FW_UPDATE_FAIL) {
+		input_err(true, &client->dev,
+				"%s : failed to download FW & unload wacom driver\n", __func__);
+		wacom_i2c_remove(wac_i2c->client);
+	}
 }
 
 static void wacom_usb_typec_work(struct work_struct *work)
@@ -2829,6 +2882,7 @@ static int wacom_i2c_probe(struct i2c_client *client,
 
 	/* Power on */
 	wacom_power(wac_i2c, true);
+	wac_i2c->screen_on = true;
 	/* need to delay for query */
 	msleep(100);
 
@@ -3011,20 +3065,28 @@ static int wacom_i2c_remove(struct i2c_client *client)
 
 	input_info(true, &wac_i2c->client->dev, "%s called!\n", __func__);
 
-	wacom_sleep_sequence(wac_i2c);
-
 	device_init_wakeup(&client->dev, false);
 
-	wacom_power(wac_i2c, false);
+	wacom_enable_irq(wac_i2c, false);
+	wacom_enable_pdct_irq(wac_i2c, false);
 
-	wacom_sec_remove(wac_i2c);
+	wacom_power(wac_i2c, false);
 
 	wake_lock_destroy(&wac_i2c->fw_wakelock);
 	mutex_destroy(&wac_i2c->irq_lock);
 	mutex_destroy(&wac_i2c->update_lock);
 	mutex_destroy(&wac_i2c->lock);
 
+	wacom_sec_remove(wac_i2c);
+
 	i2c_unregister_device(wac_i2c->client_boot);
+
+	if (&wac_i2c->pdata->support_dex) {
+		input_unregister_device(wac_i2c->input_dev_pad);
+		wac_i2c->input_dev = wac_i2c->input_dev_pen;
+	}
+
+	input_unregister_device(wac_i2c->input_dev);
 
 	return 0;
 }

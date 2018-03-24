@@ -737,8 +737,8 @@ void decon_set_protected_content(struct decon_device *decon,
 /* id : VGF0=0, VGF1=1 */
 void dpu_dump_data_to_console(void *v_addr, int buf_size, int id)
 {
-	dpp_info("=== (IDMA_VGF%d) Frame Buffer Data(128 Bytes) ===\n",
-		id == IDMA_VGF0 ? 0 : 1);
+	dpp_info("=== (IDMA_VGF%d) Frame Buffer Data(%d Bytes) ===\n",
+		id == IDMA_VGF0 ? 0 : 1, BUF_DUMP_SIZE);
 
 	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_ADDRESS, 32, 4,
 			v_addr, buf_size, false);

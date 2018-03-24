@@ -23,7 +23,7 @@
 
 #ifndef __BATTERY_NOTIFIER_H__
 #define __BATTERY_NOTIFIER_H__
-#define MAX 7
+#define MAX_PDO_NUM 7
 
 typedef enum {
 	CHARGER_NOTIFY = 0,
@@ -97,7 +97,7 @@ typedef enum
 } RP_CURRENT_LEVEL;
 
 typedef struct _pdic_sink_status {
-	POWER_LIST power_list[MAX];
+	POWER_LIST power_list[MAX_PDO_NUM+1];
 	int available_pdo_num; // the number of available PDO
 	int selected_pdo_num; // selected number of PDO to change
 	int current_pdo_num; // current number of PDO

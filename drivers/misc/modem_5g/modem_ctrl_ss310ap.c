@@ -20,6 +20,7 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/mcu_ipc.h>
+#include <linux/shm_ipc.h>
 #include <linux/smc.h>
 #include <linux/modem_notifier.h>
 #include <soc/samsung/pmu-cp.h>
@@ -133,9 +134,6 @@ static void cp_active_handler(void *arg)
 		if (old_state == STATE_ONLINE)
 			modem_notify_event(MODEM_EVENT_EXIT);
 
-		/* Disable debug Snapshot */
-		mif_set_snapshot(false);
-
 		list_for_each_entry(iod, &mc->modem_state_notify_list, list) {
 			if (iod && atomic_read(&iod->opened) > 0)
 				iod->modem_state_changed(iod, new_state);
@@ -201,6 +199,9 @@ static int init_mailbox_regs(struct modem_ctl *mc)
 	unsigned int sbi_ds_det_mask, sbi_ds_det_pos;
 	unsigned int sbi_sys_rev_mask, sbi_sys_rev_pos;
 	int sys_rev, ds_det, i;
+#ifdef CONFIG_CP_RAM_LOGGING
+	unsigned int sbi_ext_backtrace_mask, sbi_ext_backtrace_pos;
+#endif
 #if defined(CONFIG_SOC_EXYNOS8895) && defined(CONFIG_EXYNOS_DECON_FB)
 	unsigned int sbi_device_type_mask, sbi_device_type_pos;
 	unsigned int value = 0;
@@ -267,6 +268,16 @@ static int init_mailbox_regs(struct modem_ctl *mc)
 
 		mif_info("sys_rev:%d, ds_det:%u (0x%x)\n",
 				sys_rev, ds_det, mbox_get_value(MCU_CP, mbx_ap_status));
+
+#ifdef CONFIG_CP_RAM_LOGGING
+		mif_dt_read_u32(np, "sbi_ext_backtrace_mask",
+				sbi_ext_backtrace_mask);
+		mif_dt_read_u32(np, "sbi_ext_backtrace_pos",
+				sbi_ext_backtrace_pos);
+
+		mbox_update_value(MCU_CP, mbx_ap_status, shm_get_cplog_flag(),
+			sbi_ext_backtrace_mask, sbi_ext_backtrace_pos);
+#endif
 	} else {
 		mif_info("non-DT project, can't set system_rev\n");
 	}
@@ -324,6 +335,8 @@ static int ss310ap_off(struct modem_ctl *mc)
 {
 	mif_err("+++\n");
 
+	mbox_set_interrupt(MCU_CP, mc->int_cp_wakeup);
+	msleep(5);
 	exynos_set_cp_power_onoff(CP_POWER_OFF);
 
 	mif_err("---\n");
@@ -354,6 +367,8 @@ static int ss310ap_shutdown(struct modem_ctl *mc)
 	}
 
 exit:
+	mbox_set_interrupt(MCU_CP, mc->int_cp_wakeup);
+	msleep(5);
 	exynos_set_cp_power_onoff(CP_POWER_OFF);
 	mif_err("---\n");
 	return 0;
@@ -377,9 +392,13 @@ static int ss310ap_reset(struct modem_ctl *mc)
 	if (mc->phone_state == STATE_ONLINE)
 		modem_notify_event(MODEM_EVENT_RESET);
 
+	/* Change phone state to OFFLINE */
+	mc->phone_state = STATE_OFFLINE;
+
 	if (exynos_get_cp_power_status() > 0) {
 		mif_err("CP aleady Power on, try reset\n");
 		mbox_set_interrupt(MCU_CP, mc->int_cp_wakeup);
+		msleep(5);
 		exynos_cp_reset();
 		mbox_sw_reset(MCU_CP);
 	}
@@ -508,6 +527,9 @@ static int ss310ap_dump_start(struct modem_ctl *mc)
 		mif_err("ERR! %s->dump_start not exist\n", ld->name);
 		return -EFAULT;
 	}
+
+	/* Change phone state to CRASH_EXIT */
+	mc->phone_state = STATE_CRASH_EXIT;
 
 	err = ld->dump_start(ld, mc->bootd);
 	if (err)

@@ -124,7 +124,6 @@ config JOURNAL_DATA_TAG_DEBUG
 	---help---
 	Enable FS journal tagging debug. If unsure, say N.
 
-
 menu "Partition Types"
 
 source "block/partitions/Kconfig"

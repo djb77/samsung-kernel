@@ -32,8 +32,6 @@ pr_info("[MAX98506_DEBUG] %s: " format "\n", __func__, ## args)
 #define msg_maxim(format, args...)
 #endif /* DEBUG_MAX98506 */
 
-struct max98506_priv *g_max98506;
-
 static int max98506_regmap_write(struct max98506_priv *max98506,
 	unsigned int reg,
 			       unsigned int val)
@@ -695,7 +693,7 @@ static void max98506_spk_enable(struct max98506_priv *max98506,
 				MAX98506_R038_GLOBAL_ENABLE,
 				MAX98506_EN_MASK,
 				0x00);
-		usleep_range(10000, 11000);
+		usleep_range(15000, 16000);
 	}
 
 #ifdef CONFIG_SND_SOC_MAXIM_DSM
@@ -836,7 +834,7 @@ static int max98506_volume_step_put(struct snd_kcontrol *kcontrol,
 	 * Under step 7 : Disable
 	 * Over step 7  : Enable
 	 */
-	if (sel >= MAX98506_VSTEP_MAX) {
+	if (sel >= MAX98506_VSTEP_MAX || sel < 0) {
 		msg_maxim("Unknown value %d", sel);
 		return -EINVAL;
 	}
@@ -1100,7 +1098,7 @@ static inline int max98506_rate_value(int rate, int clock, u8 *value)
 	}
 
 	msg_maxim("sample rate is %d, returning %d",
-		rate_table[i < ARRAY_SIZE(rate_table) ? i : ARRAY_SIZE(rate_table)].rate, *value);
+		rate_table[i < ARRAY_SIZE(rate_table) ? i : ARRAY_SIZE(rate_table) - 1].rate, *value);
 
 	return ret;
 }
@@ -1414,25 +1412,8 @@ static int max98506_dai_mute_stream(struct snd_soc_dai *dai,
 #endif
 #endif
 
-	if ((dai->codec != g_max98506->codec) || (!max98506->regmap)) {
-		/* check the null pointer max98506->regmap or invalid dai information comparison with g_max98506->codec which is set by max98506_probe*/
-		if (!dai->codec)
-			msg_maxim("dai->codec is null\n");
-		else
-			msg_maxim("dai->codec : %p\n", dai->codec);
-
-		if (!g_max98506->codec)
-			msg_maxim("g_max98506->codec is null\n");
-		else
-			msg_maxim("g_max98506->codec : %p\n", g_max98506->codec);
-	}
-
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		if (g_max98506->codec)
-			msg_maxim("max98506_spk_enable mute=%d, g_max98506->codec : %p\n", mute, g_max98506->codec);
-		else
-			msg_maxim("max98506_spk_enable mute=%d\n", mute);
-
+		msg_maxim("max98506_spk_enable mute=%d\n", mute);
 		max98506_spk_enable(max98506, mute != 0 ? 0 : 1);
 	}
 
@@ -1803,8 +1784,6 @@ static int max98506_probe(struct snd_soc_codec *codec)
 	msg_maxim("g_class=%p %p", g_class, max98506->dev_log_class);
 #endif /* USE_DSM_LOG */
 
-	g_max98506 = max98506;
-
 err_version:
 	msg_maxim("exit %d", ret);
 
@@ -2105,8 +2084,6 @@ static int max98506_i2c_remove(struct i2c_client *client)
 
 	snd_soc_unregister_codec(&client->dev);
 
-	if (pdata->sub_reg != 0)
-		i2c_unregister_device(max98506->sub_i2c);
 	devm_kfree(&client->dev, pdata);
 	devm_kfree(&client->dev, max98506);
 
@@ -2139,6 +2116,7 @@ static struct i2c_driver max98506_i2c_driver = {
 		.name = "max98506",
 		.owner = THIS_MODULE,
 		.of_match_table = max98506_dt_ids,
+		.suppress_bind_attrs = true,
 	},
 	.probe  = max98506_i2c_probe,
 	.remove = max98506_i2c_remove,

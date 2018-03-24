@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_proto.h 678890 2017-01-11 11:48:36Z $
+ * $Id: dhd_proto.h 727682 2017-10-23 04:45:57Z $
  */
 
 #ifndef _dhd_proto_h_
@@ -136,7 +136,8 @@ extern int dhdmsgbuf_lpbk_req(dhd_pub_t *dhd, uint len);
 extern void dhd_prot_rx_dataoffset(dhd_pub_t *dhd, uint32 offset);
 extern int dhd_prot_txdata(dhd_pub_t *dhd, void *p, uint8 ifidx);
 extern int dhdmsgbuf_dmaxfer_req(dhd_pub_t *dhd,
-	uint len, uint srcdelay, uint destdelay, uint d11_lpbk);
+	uint len, uint srcdelay, uint destdelay, uint d11_lpbk, uint core_num);
+extern dma_xfer_status_t dhdmsgbuf_dmaxfer_status(dhd_pub_t *dhd);
 
 extern void dhd_dma_buf_init(dhd_pub_t *dhd, void *dma_buf,
 	void *va, uint32 len, dmaaddr_t pa, void *dmah, void *secdma);

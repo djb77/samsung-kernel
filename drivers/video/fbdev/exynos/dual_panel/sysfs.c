@@ -893,13 +893,12 @@ static ssize_t alpm_store(struct device *dev,
 	sscanf(buf, "%9d", &value);
 
 	panel_info("PANEL:INFO:%s:mode : %d\n", __func__, value);
+#ifdef CONFIG_SUPPORT_DOZE
 #ifdef CONFIG_SEC_FACTORY
 	if (factory_set_alpm(panel, value))
 		panel_err("PANEL:ERR:%s:failed to set factory alpm\n", __func__);
 	goto exit_store;
 #endif
-
-#ifdef CONFIG_SUPPORT_DOZE
 	if (set_alpm_mode(panel, value)) {
 		panel_err("PANEL:ERR:%s:failed to set alpm\n", __func__);
 		goto exit_store;
@@ -907,7 +906,7 @@ static ssize_t alpm_store(struct device *dev,
 #endif
 	panel_data->props.alpm_mode = value;
 
-#if defined(CONFIG_SEC_FACTORY) || defined(CONFIG_SUPPORT_DOZE)
+#if defined(CONFIG_SUPPORT_DOZE)
 exit_store:
 #endif
 	mutex_unlock(&panel->io_lock);
@@ -1340,7 +1339,7 @@ static ssize_t read_copr_show(struct device *dev,
 }
 #endif
 
-#if 0 
+#if 0
 #ifdef CONFIG_ACTIVE_CLOCK
 static ssize_t active_clock_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -1548,7 +1547,7 @@ struct device_attribute panel_attrs[] = {
 #endif
 	__PANEL_ATTR_RW(alpm, 0664),
 	__PANEL_ATTR_RW(fingerprint, 0644),
-#if 0 
+#if 0
 #ifdef CONFIG_ACTIVE_CLOCK
 	__PANEL_ATTR_RW(active_clock, 0644),
 	__PANEL_ATTR_RW(active_blink, 0644),

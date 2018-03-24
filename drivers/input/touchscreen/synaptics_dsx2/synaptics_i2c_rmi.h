@@ -39,7 +39,7 @@
 /* Define related with driver feature */
 #define FACTORY_MODE
 #define PROXIMITY_MODE
-//#define EDGE_SWIPE
+#define EDGE_SWIPE
 #define USE_SHUTDOWN_CB
 
 #define CHECK_PR_NUMBER
@@ -307,8 +307,8 @@
 #define F51_DATA_6_SIZE (2)	/* DETECTION_FLAG2 */
 
 #ifdef EDGE_SWIPE
+#define BRUSH_Z_DATA			63	/* for ArtCanvas */
 #define EDGE_SWIPE_WIDTH_MAX	255
-#define EDGE_SWIPE_PALM_MAX		1
 
 #define EDGE_SWIPE_WITDH_X_OFFSET	5
 #define EDGE_SWIPE_AREA_OFFSET	7

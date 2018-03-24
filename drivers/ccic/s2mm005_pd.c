@@ -111,6 +111,7 @@ static int s2mm005_src_capacity_information(const struct i2c_client *i2c, uint32
 	uint32_t PDO_cnt;
 	uint32_t PDO_sel;
 	int available_pdo_num = 0;
+	int num_of_obj = 0;
 
 	MSG_HEADER_Type *MSG_HDR;
 	SRC_FIXED_SUPPLY_Typedef *MSG_FIXED_SUPPLY;
@@ -136,7 +137,8 @@ static int s2mm005_src_capacity_information(const struct i2c_client *i2c, uint32
 	dev_info(&i2c->dev, "    Rsvd2_msg_header        : %d\n",MSG_HDR->Rsvd2_msg_header );
 	dev_info(&i2c->dev, "    Message_Type            : %d\n",MSG_HDR->Message_Type );
 
-	for(PDO_cnt = 0;PDO_cnt < MSG_HDR->Number_of_obj;PDO_cnt++)
+	num_of_obj = MSG_HDR->Number_of_obj > MAX_PDO_NUM ? MAX_PDO_NUM : MSG_HDR->Number_of_obj;
+	for(PDO_cnt = 0;PDO_cnt < num_of_obj;PDO_cnt++)
 	{
 		PDO_sel = (RX_SRC_CAPA_MSG[PDO_cnt + 1] >> 30) & 0x3;
 		dev_info(&i2c->dev, "    =================\n");
@@ -308,7 +310,7 @@ void process_pd(void *data, u8 plug_attach_done, u8 *pdic_attach, MSG_IRQ_STATUS
 #endif
 		ccic_event_work(usbpd_data, CCIC_NOTIFY_DEV_BATTERY, CCIC_NOTIFY_ID_POWER_STATUS, *pdic_attach, 0, 0);
 	} else {
-		for (i = 0; i < MAX; i++) {
+		for (i = 0; i < MAX_PDO_NUM + 1; i++) {
 			pd_noti.sink_status.power_list[i].max_current = 0;
 			pd_noti.sink_status.power_list[i].max_voltage = 0;
 		}

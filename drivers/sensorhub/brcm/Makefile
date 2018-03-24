@@ -4,7 +4,7 @@
 
 # Each configuration option enables a list of files.
 obj-$(CONFIG_SENSORS_SSP)		+= ssp_dev.o ssp_i2c.o ssp_data.o ssp_sysfs.o\
-						ssp_input.o ssp_firmware.o ssp_debug.o ssp_dump.o
+						ssp_firmware.o ssp_debug.o ssp_dump.o
 obj-$(CONFIG_SENSORS_SYSFS)		+= sensors_core.o
 
 obj-$(CONFIG_IIO)			+= ssp_iio_ring.o ssp_iio_trigger.o
@@ -50,6 +50,7 @@ obj-$(CONFIG_SENSORS_ADPD142)		+= adpd142.o
 obj-$(CONFIG_SENSORS_ADPD143)		+= adpd143.o
 obj-$(CONFIG_SENSORS_SX9310)		+= sx9310.o
 obj-$(CONFIG_SENSORS_SX9320)		+= sx9320.o
+obj-$(CONFIG_SENSORS_SX9320_MULTI)	+= sx9320_multi2.o sx9320_multi3.o sx9320_multi4.o
 
 obj-$(CONFIG_SENSORS_HRM_MAX86902)	+= hrm_max86902.o
 obj-$(CONFIG_SENSORS_HRM_ADPD143)	+= hrm_adpd143.o
@@ -58,3 +59,16 @@ obj-$(CONFIG_SENSORS_HRMSENSOR)		+= hrmsensor.o
 obj-$(CONFIG_SENSORS_SSP_BBD)           += ssp_bbd.o factory/mcu_bcm4774.o
 obj-$(CONFIG_SENSORS_SSP_BBD)           += bbdpl/
 obj-$(CONFIG_SSP_MOTOR_CALLBACK)        += ssp_motorcallback.o
+
+CURRENT_ANDROID_VERSION := $(shell echo $(ANDROID_VERSION))
+CURRENT_ANDROID_MAJOR_VERSION := $(shell echo $(ANDROID_MAJOR_VERSION))
+
+$(warning ANDROID_MAJOR_VERSION : $(CURRENT_ANDROID_MAJOR_VERSION))
+$(warning ANDROID_PLATFORM_VERSION : $(CURRENT_ANDROID_VERSION))
+
+
+ifeq ($(shell echo $(ANDROID_MAJOR_VERSION)),n)
+	obj-$(CONFIG_SENSORS_SSP) += ssp_input.o
+else
+	obj-$(CONFIG_SENSORS_SSP) += ssp_iio.o
+endif

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_roam.c 662434 2016-09-29 12:21:46Z $
+ * $Id: wl_roam.c 731718 2017-11-14 08:10:43Z $
  */
 
 
@@ -39,7 +39,7 @@
 #endif
 #include <wldev_common.h>
 
-#define MAX_ROAM_CACHE		100
+#define MAX_ROAM_CACHE		200
 #define MAX_SSID_BUFSIZE	36
 
 #define ROAMSCAN_MODE_NORMAL	0
@@ -121,12 +121,14 @@ int set_roamscan_mode(struct net_device *dev, int mode)
 	return error;
 }
 
-int get_roamscan_channel_list(struct net_device *dev, unsigned char channels[])
+int get_roamscan_channel_list(struct net_device *dev, unsigned char channels[],
+	int n_channels)
 {
 	int n = 0;
+	int max_channel_number = MIN(n_channels, n_roam_cache);
 
 	if (roamscan_mode == ROAMSCAN_MODE_WES) {
-		for (n = 0; n < n_roam_cache; n++) {
+		for (n = 0; n < max_channel_number; n++) {
 			channels[n] = roam_cache[n].chanspec & WL_CHANSPEC_CHAN_MASK;
 
 			WL_DBG(("channel[%d] - [%02d] \n", n, channels[n]));
@@ -249,7 +251,7 @@ static bool is_duplicated_channel(const chanspec_t *channels, int n_channels, ch
 }
 
 int get_roam_channel_list(int target_chan,
-	chanspec_t *channels, const wlc_ssid_t *ssid, int ioctl_ver)
+	chanspec_t *channels, int n_channels, const wlc_ssid_t *ssid, int ioctl_ver)
 {
 	int i, n = 1;
 	char chanbuf[CHANSPEC_STR_LEN];
@@ -280,6 +282,10 @@ int get_roam_channel_list(int target_chan,
 				WL_DBG(("%s: Chanspec = %s\n", __FUNCTION__,
 					wf_chspec_ntoa_ex(ch, chanbuf)));
 				channels[n++] = ch;
+				if (n >= n_channels) {
+					WL_ERR(("Too many roam scan channels\n"));
+					return n;
+				}
 			}
 		}
 
@@ -303,6 +309,10 @@ int get_roam_channel_list(int target_chan,
 			WL_DBG(("%s: Chanspec = %s\n", __FUNCTION__,
 				wf_chspec_ntoa_ex(ch, chanbuf)));
 			channels[n++] = ch;
+			if (n >= n_channels) {
+				WL_ERR(("Too many roam scan channels\n"));
+				return n;
+			}
 		}
 	}
 

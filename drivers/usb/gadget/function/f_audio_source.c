@@ -408,14 +408,24 @@ static void audio_send(struct audio_dev *audio)
 			length1 = audio->buffer_end - audio->buffer_pos;
 		else
 			length1 = length;
-		memcpy(req->buf, audio->buffer_pos, length1);
+
+		if (audio->buffer_pos)
+			memcpy(req->buf, audio->buffer_pos, length1);
+		else
+			return;
+
 		if (length1 < length) {
 			/* Wrap around and copy remaining length
 			 * at beginning of buffer.
 			 */
 			length2 = length - length1;
-			memcpy(req->buf + length1, audio->buffer_start,
-					length2);
+
+			if (audio->buffer_start)
+				memcpy(req->buf + length1, audio->buffer_start,
+						length2);
+			else
+				return;
+
 			audio->buffer_pos = audio->buffer_start + length2;
 		} else {
 			audio->buffer_pos += length1;
@@ -806,6 +816,7 @@ static int audio_pcm_playback_trigger(struct snd_pcm_substream *substream,
 	struct audio_dev *audio = substream->runtime->private_data;
 	int ret = 0;
 
+	pr_info("%s - cmd:%d\n", __func__, cmd);
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:

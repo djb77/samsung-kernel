@@ -416,6 +416,12 @@ enum v4l2_mpeg_video_hevc_hierarchical_coding_type {
 					(V4L2_CID_MPEG_MFC_BASE + 194)
 #define V4L2_CID_MPEG_MFC_H264_NUM_OF_LTR			\
 					(V4L2_CID_MPEG_MFC_BASE + 195)
+#define V4L2_CID_MPEG_VIDEO_WEIGHTED_ENABLE			\
+					(V4L2_CID_MPEG_MFC_BASE + 196)
+#define V4L2_CID_MPEG_VIDEO_YSUM				\
+					(V4L2_CID_MPEG_MFC_BASE + 197)
+#define V4L2_CID_MPEG_VIDEO_RATIO_OF_INTRA			\
+					(V4L2_CID_MPEG_MFC_BASE + 198)
 
 /* QP BOUND interface */
 #define V4L2_CID_MPEG_VIDEO_H264_MAX_QP_P			\

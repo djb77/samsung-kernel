@@ -1569,7 +1569,7 @@ static void android_work(struct work_struct *data)
 	}
 
 	if (!uevent_sent) {
-		pr_info("%s: did not send uevent (%d %d %p)\n", __func__,
+		pr_info("%s: did not send uevent (%d %d %pK)\n", __func__,
 			gi->connected, gi->sw_connected, cdev->config);
 	}
 }
@@ -1918,6 +1918,7 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 
 		if (!gadget) {
 			pr_info("usb: %s: Gadget is NULL: %p\n", __func__, gadget);
+			mutex_unlock(&dev->lock);
 			return -ENODEV;
 		}
 

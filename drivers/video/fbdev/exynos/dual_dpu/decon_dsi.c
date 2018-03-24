@@ -1013,12 +1013,14 @@ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 			PANEL_IOC_DISP_ON, (void *)&disp_on))
 				decon_err("DECON:ERR:%s:failed to disp on\n",
 				__func__);
-		if (decon->dt.dsi_mode == DSI_MODE_DUAL_DSI) {
+#ifdef CONFIG_EXYNOS_DUAL_DISPLAY
+		if (decon->lcd_info->op_mode == DSI_DDDD_MODE) {
 			if (v4l2_subdev_call(decon->panel_sd[1], core, ioctl,
 					PANEL_IOC_DISP_ON, (void *)&disp_on))
 			decon_err("DECON:ERR:%s:failed to disp on\n",
 					__func__);
 		}
+#endif
 	}
 	mutex_unlock(&decon->lock);
 

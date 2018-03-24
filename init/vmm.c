@@ -40,45 +40,16 @@
 #define VMM_MODE_AARCH32 0
 #define VMM_MODE_AARCH64 1
 
+
+char * __initdata vmm;
+size_t __initdata vmm_size;
+
 extern char _svmm;
 extern char _evmm;
 extern char _vmm_disable;
 
-char *vmm;
-size_t vmm_size;
-
-int vmm_entry(void *);
-
-int _vmm_goto_EL2(int magic, void *label, int offset, int mode, void *base, int size);
-
-int vmm_resolve(void *binary, _Elf_Sym *sym, _Elf_Sxword *value) {
-
-	char *name;
-	char *strtab;
-	size_t strtabsz;
-
-	printk(KERN_ALERT "%s\n", __FUNCTION__);
-
-	if(ld_get_dynamic_strtab(binary, &strtab, &strtabsz)) { return -1; }
-
-	if(ld_get_string(strtab, sym->st_name, &name)) { return -1; }
-
-	printk(KERN_ALERT "name: %s\n", name);
-
-	return -1;
-}
-
-int vmm_translate(void *binary, void *in, void **out) {
-
-	printk(KERN_ALERT "%s\n", __FUNCTION__);
-
-	*out = (void *)virt_to_phys(in);
-
-	return 0;
-}
-
-int vmm_disable(void) {
-
+int __init vmm_disable(void)
+{
 	_vmm_goto_EL2(VMM_64BIT_SMC_CALL_MAGIC, (void *)virt_to_phys(&_vmm_disable), VMM_STACK_OFFSET, VMM_MODE_AARCH64, NULL, 0);
 
 	printk(KERN_ALERT "%s\n", __FUNCTION__);
@@ -86,8 +57,8 @@ int vmm_disable(void) {
 	return 0;
 }
 
-int vmm_entry(void *head_text_base) {
-
+static int __init vmm_entry(void *head_text_base)
+{
 	typedef int (*_main_)(void);
 
 	int status;
@@ -109,8 +80,9 @@ int vmm_entry(void *head_text_base) {
 
 	return 0;
 }
-int vmm_init(void) {
 
+int __init vmm_init(void)
+{
 	size_t bss_size = 0,head_text_size = 0;
 	u64 bss_base = 0,head_text_base = 0;
 	void *base;
@@ -135,7 +107,8 @@ int vmm_init(void) {
 	
 
 	memset((void *)phys_to_virt(bss_base), 0, (size_t)bss_size);
-	memset(&_svmm, 0, (size_t)(&_evmm - &_svmm));
+	//Now vmm will be freed by free_initmem, no need to zero out
+	//memset(&_svmm, 0, (size_t)(&_evmm - &_svmm));
 
 	vmm_entry((void *)head_text_base);
 

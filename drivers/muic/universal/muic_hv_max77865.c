@@ -974,8 +974,8 @@ static void max77865_hv_muic_set_afc_after_prepare
 
 	max77865_hv_muic_write_reg(i2c, MAX77865_MUIC_REG_HVTXBYTE, value);
 
-	/* Set HVCONTROL2 = Enable MTxEn, MPing, DP06En, HVDigEn */
-	max77865_hv_muic_write_reg(i2c, MAX77865_MUIC_REG_HVCONTROL2, 0x1B);
+	/* Set HVCONTROL2 = Enable MPingEnb, MTxEn, MPing, DP06En, HVDigEn */
+	max77865_hv_muic_write_reg(i2c, MAX77865_MUIC_REG_HVCONTROL2, 0x5B);
 }
 
 static void max77865_hv_muic_set_afc_charger_handshaking
@@ -1294,17 +1294,7 @@ static int max77865_hv_muic_handle_attach
 		}
 		break;
 	case FUNC_PREPARE_DUPLI_TO_AFC_5V:
-		if (!phv->is_afc_handshaking) {
-			max77865_hv_muic_set_afc_charger_handshaking(phv);
-			if (!mping_missed)
-				phv->is_afc_handshaking = true;
-		}
-		if (phv->afc_count > AFC_CHARGER_WA_PING) {
-			max77865_hv_muic_afc_control_ping(phv, false);
-		} else {
-			max77865_hv_muic_afc_control_ping(phv, true);
-			noti = false;
-		}
+		noti = false;
 		break;
 	case FUNC_PREPARE_DUPLI_TO_AFC_ERR_V:
 		if (phv->afc_count > AFC_CHARGER_WA_PING) {
@@ -1354,12 +1344,8 @@ static int max77865_hv_muic_handle_attach
 		pr_info("%s:%s cancel_delayed_work(dev %d), Mping missing wa\n",
 			MUIC_HV_DEV_NAME, __func__, new_dev);
 		cancel_delayed_work(&phv->hv_muic_mping_miss_wa);
-		if (phv->afc_count > AFC_CHARGER_WA_PING) {
-			max77865_hv_muic_afc_control_ping(phv, false);
-		} else {
-			max77865_hv_muic_afc_control_ping(phv, true);
+		if (phv->afc_count <= AFC_CHARGER_WA_PING)
 			noti = false;
-		}
 		break;
 	case FUNC_AFC_5V_TO_AFC_9V:
 		/* attached_dev is changed. MPING Missing did not happened
@@ -1753,7 +1739,6 @@ static bool muic_check_gpstatus_vbadc
 		case VBADC_10V_11V:
 		case VBADC_11V_12V:
 		case VBADC_12V_13V:
-		case VBADC_13V:
 			ret = true;
 			goto out;
 		default:
@@ -1764,14 +1749,12 @@ static bool muic_check_gpstatus_vbadc
 
 	if (tmp_afc_data->gpstatus_vbadc == VBADC_AFC_ERR_V_NOT_0) {
 		switch (vbadc) {
-		case VBADC_6V_7V:
-		case VBADC_7V_8V:
 #if !defined(CONFIG_MUIC_HV_12V)
 		case VBADC_10V_11V:
 		case VBADC_11V_12V:
 		case VBADC_12V_13V:
-		case VBADC_13V:
 #endif
+		case VBADC_13V:
 			ret = true;
 			goto out;
 		default:
@@ -1782,14 +1765,12 @@ static bool muic_check_gpstatus_vbadc
 	if (tmp_afc_data->gpstatus_vbadc == VBADC_AFC_ERR_V) {
 		switch (vbadc) {
 		case VBADC_VBDET:
-		case VBADC_6V_7V:
-		case VBADC_7V_8V:
 #if !defined(CONFIG_MUIC_HV_12V)
 		case VBADC_10V_11V:
 		case VBADC_11V_12V:
 		case VBADC_12V_13V:
-		case VBADC_13V:
 #endif
+		case VBADC_13V:
 			ret = true;
 			goto out;
 		default:
@@ -1830,12 +1811,10 @@ static bool muic_check_gpstatus_vbadc
 		case VBADC_7V_8V:
 		case VBADC_8V_9V:
 		case VBADC_9V_10V:
-#if !defined(CONFIG_MUIC_HV_12V)
 		case VBADC_10V_11V:
 		case VBADC_11V_12V:
 		case VBADC_12V_13V:
 		case VBADC_13V:
-#endif
 			ret = true;
 			goto out;
 		default:

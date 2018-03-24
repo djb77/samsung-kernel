@@ -1888,6 +1888,10 @@ static DEFINE_PANEL_UDELAY(great_a3_sa_wait_1_frame_in_60hz, 16700);
 static DEFINE_PANEL_UDELAY(great_a3_sa_wait_1_frame_in_30hz, 33400);
 static DEFINE_PANEL_MDELAY(great_a3_sa_wait_100msec, 100);
 static DEFINE_PANEL_MDELAY(great_a3_sa_wait_124msec, 124);
+#ifdef CONFIG_DSC_DECODE_CRC
+static DEFINE_PANEL_MDELAY(great_a3_sa_wait_110msec,  110);
+static DEFINE_PANEL_MDELAY(great_a3_sa_wait_20msec,  20);
+#endif
 
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
 static DEFINE_PANEL_MDELAY(great_a3_sa_wait_120msec, 120);
@@ -1970,6 +1974,34 @@ static void *great_a3_sa_res_init_cmdtbl[] = {
 	&KEYINFO(great_a3_sa_level2_key_disable),
 	&KEYINFO(great_a3_sa_level1_key_disable),
 };
+
+#ifdef CONFIG_DSC_DECODE_CRC
+u8 GREAT_A3_SA_DSC_CRC_GPARAM[] = {
+	0xB0,
+	0x43
+};
+u8 GREAT_A3_SA_DSC_CRC_ON[] = {
+	0xD8,
+	0x10,
+};
+
+DEFINE_STATIC_PACKET(great_a3_sa_dsc_crc_gparam, DSI_PKT_TYPE_WR, GREAT_A3_SA_DSC_CRC_GPARAM);
+DEFINE_STATIC_PACKET(great_a3_sa_dsc_crc_on, DSI_PKT_TYPE_WR, GREAT_A3_SA_DSC_CRC_ON);
+
+static void *great_a3_sa_dsc_decode_crc_cmdtbl[] = {
+	&KEYINFO(great_a3_sa_level2_key_enable),
+	&KEYINFO(great_a3_sa_level3_key_enable),
+	&DLYINFO(great_a3_sa_wait_110msec),
+	&PKTINFO(great_a3_sa_dsc_crc_gparam),
+	&PKTINFO(great_a3_sa_dsc_crc_on),
+	&DLYINFO(great_a3_sa_wait_20msec),
+	&DLYINFO(great_a3_sa_wait_20msec),
+	&DLYINFO(great_a3_sa_wait_20msec),
+	&s6e3ha6_restbl[RES_DSC_DECODE_CRC],
+	&KEYINFO(great_a3_sa_level3_key_disable),
+	&KEYINFO(great_a3_sa_level2_key_disable),
+};
+#endif
 
 static void *great_a3_sa_set_bl_cmdtbl[] = {
 	&KEYINFO(great_a3_sa_level2_key_enable),
@@ -2284,6 +2316,9 @@ static struct seqinfo great_a3_sa_seqtbl[MAX_PANEL_SEQ] = {
 #ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
 	[PANEL_GRAYSPOT_ON_SEQ] = SEQINFO_INIT("grayspot-on-seq", great_a3_sa_grayspot_on_cmdtbl),
 	[PANEL_GRAYSPOT_OFF_SEQ] = SEQINFO_INIT("grayspot-off-seq", great_a3_sa_grayspot_off_cmdtbl),
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+	[PANEL_DSC_DECODE_CRC] = SEQINFO_INIT("dsc-decode-crc", great_a3_sa_dsc_decode_crc_cmdtbl),
 #endif
 	[PANEL_DUMP_SEQ] = SEQINFO_INIT("dump-seq", great_a3_sa_dump_cmdtbl),
 	[PANEL_DUMMY_SEQ] = SEQINFO_INIT("dummy-seq", great_a3_sa_dummy_cmdtbl),

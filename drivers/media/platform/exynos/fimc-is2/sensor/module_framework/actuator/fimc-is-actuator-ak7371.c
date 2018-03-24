@@ -428,10 +428,6 @@ static int sensor_ak7371_actuator_set_active(struct v4l2_subdev *subdev, int ena
 	 * If this device is not sharing the i2c bus with others,
 	 * this delay could be removed.
 	 */
-	/* Add the setting delay for preventing i2c fail issue.
-	 * If this device is not sharing the i2c bus with others,
-	 * this delay could be removed.
-	 */
 	if (actuator->id == ACTUATOR_NAME_AK7371)
 		usleep_range(600, 610);
 #endif

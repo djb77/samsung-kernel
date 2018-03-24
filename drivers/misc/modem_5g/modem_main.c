@@ -38,6 +38,8 @@
 #include <linux/delay.h>
 #include <linux/wakelock.h>
 #include <linux/mfd/syscon.h>
+#include <linux/of_reserved_mem.h>
+#include <linux/dma-contiguous.h>
 
 #ifdef CONFIG_LINK_DEVICE_SHMEM
 #include <linux/shm_ipc.h>
@@ -88,9 +90,10 @@ static struct modem_shared *create_modem_shared_data(
 	memset(msd->storage.addr, 0, size + (MAX_MIF_SEPA_SIZE * 2));
 	memcpy(msd->storage.addr, MIF_SEPARATOR, strlen(MIF_SEPARATOR));
 	msd->storage.addr += MAX_MIF_SEPA_SIZE;
-	memcpy(msd->storage.addr, &size, MAX_MIF_SEPA_SIZE);
+	memcpy(msd->storage.addr, &size, sizeof(int));
 	msd->storage.addr += MAX_MIF_SEPA_SIZE;
 	spin_lock_init(&msd->lock);
+	spin_lock_init(&msd->active_list_lock);
 
 	mif_info("created modem_shared_data\n");
 
@@ -168,6 +171,9 @@ static struct io_device *create_io_device(struct platform_device *pdev,
 	iod->attrs = io_t->attrs;
 	iod->app = io_t->app;
 	iod->max_tx_size = io_t->ul_buffer_size;
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	iod->napi_weight = io_t->napi_weight;
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 	iod->net_typ = pdata->modem_net;
 	iod->use_handover = pdata->use_handover;
 	iod->ipc_version = pdata->ipc_version;
@@ -187,6 +193,9 @@ static struct io_device *create_io_device(struct platform_device *pdev,
 
 	/* link between io device and modem shared */
 	iod->msd = msd;
+
+	if (iod->format == IPC_FMT && iod->id == SIPC5_CH_ID_FMT_0)
+		init_ipc_iods(iod);
 
 	/* add iod to rb_tree */
 	if (iod->format != IPC_RAW)
@@ -496,6 +505,9 @@ static int parse_dt_mbox_pdata(struct device *dev, struct device_node *np,
 	mif_dt_read_u32 (np, "sbi_pda_active_pos", mbox->sbi_pda_active_pos);
 	mif_dt_read_u32 (np, "sbi_ap_status_mask", mbox->sbi_ap_status_mask);
 	mif_dt_read_u32 (np, "sbi_ap_status_pos", mbox->sbi_ap_status_pos);
+	mif_dt_read_u32 (np, "sbi_crash_type_mask", mbox->sbi_crash_type_mask);
+	mif_dt_read_u32 (np, "sbi_crash_type_pos", mbox->sbi_crash_type_pos);
+
 	mif_dt_read_u32 (np, "sbi_ap2cp_kerneltime_sec_mask",
 			mbox->sbi_ap2cp_kerneltime_sec_mask);
 	mif_dt_read_u32 (np, "sbi_ap2cp_kerneltime_sec_pos",
@@ -508,6 +520,7 @@ static int parse_dt_mbox_pdata(struct device *dev, struct device_node *np,
 	return ret;
 }
 
+#if defined(CONFIG_LINK_DEVICE_PCI)
 static int parse_dt_regulator_pdata(struct device *dev, struct device_node *np,
 					struct modem_data *pdata)
 {
@@ -541,8 +554,23 @@ static int parse_dt_regulator_pdata(struct device *dev, struct device_node *np,
 		mif_err("fail to request gpio %s:%d\n", "BUCK_EN1", ret);
 	gpio_direction_output(pdata->gpio_buck_en1, 0);
 
+	/* GPIO_RFB_LDO_EN */
+	pdata->gpio_rfb_ldo_en = of_get_named_gpio(np,
+						"mif,gpio_rfb_ldo_en", 0);
+	if (!gpio_is_valid(pdata->gpio_rfb_ldo_en)) {
+		mif_err("rfb_ldo_en: Invalied gpio pins\n");
+		return -EINVAL;
+	}
+
+	mif_err("gpio_rfb_ldo_en: %d\n", pdata->gpio_rfb_ldo_en);
+	ret = gpio_request(pdata->gpio_rfb_ldo_en, "RFB_LDO_EN");
+	if (ret)
+		mif_err("fail to request gpio %s:%d\n", "RFB_LDO_EN", ret);
+	gpio_direction_output(pdata->gpio_rfb_ldo_en, 0);
+
 	return ret;
 }
+#endif
 
 static int parse_dt_iodevs_pdata(struct device *dev, struct device_node *np,
 				 struct modem_data *pdata)
@@ -573,6 +601,10 @@ static int parse_dt_iodevs_pdata(struct device *dev, struct device_node *np,
 		/* mif_dt_read_string(child, "iod,app", iod->app); */
 		mif_dt_read_u32_noerr(child, "iod,max_tx_size",
 				iod->ul_buffer_size);
+#ifdef CONFIG_LINK_DEVICE_NAPI
+		mif_dt_read_u32_noerr(child, "iod,napi_weight",
+				iod->napi_weight);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 		if (iod->attrs & IODEV_ATTR(ATTR_SBD_IPC)) {
 			mif_dt_read_u32(child, "iod,ul_num_buffers",
@@ -679,6 +711,7 @@ error:
 	return -ENOSYS;
 }
 
+#if defined(CONFIG_LINK_DEVICE_PCI)
 static int parse_pci_dt_pdata(struct device *dev,
 				 struct modem_data *pdata)
 {
@@ -724,6 +757,7 @@ static int parse_pci_dt_pdata(struct device *dev,
 error:
 	return -ENOSYS;
 }
+#endif
 
 static int parse_dt_common_pdata(struct device_node *np,
 				 struct modem_data *pdata)
@@ -741,16 +775,28 @@ static int parse_dt_common_pdata(struct device_node *np,
 
 	mif_dt_read_u32(np, "mif,num_iodevs", pdata->num_iodevs);
 
+	if (!(pdata->link_types & LINKTYPE(LINKDEV_PCI))) {
+		mif_dt_read_u32(np, "mif,buff_offset", pdata->buff_offset);
+		mif_dt_read_u32(np, "mif,buff_size", pdata->buff_size);
+
+		mif_dt_read_u32(np, "mif,bufpool_2nd_base", pdata->bufpool_2nd_base);
+		mif_dt_read_u32(np, "mif,bufpool_2nd_size", pdata->bufpool_2nd_size);
+	}
+
 //	if (pdata->link_types & LINKTYPE(LINKDEV_SHMEM))
 //		parse_dt_pdata = parse_shmem_dt_pdata;
+#if defined(CONFIG_LINK_DEVICE_PCI)
 	if (pdata->link_types & LINKTYPE(LINKDEV_PCI)) {
 		mif_info("link is PCI\n");
 		parse_dt_pdata = parse_pci_dt_pdata;
 //		mif_dt_read_u32(np, "mif,dummy_num_rmnets", pdata->dummy_num_rmnets);
 	} else {
+#endif
 		mif_info("link is SHMEM\n");
 		parse_dt_pdata = parse_shmem_dt_pdata;
+#if defined(CONFIG_LINK_DEVICE_PCI)
 	}
+#endif
 
 	return 0;
 }
@@ -948,9 +994,10 @@ static int modem_probe(struct platform_device *pdev)
 	struct modem_shared *msd;
 	struct modem_ctl *modemctl;
 	struct io_device **iod;
-	unsigned size;
+	size_t size;
 	struct link_device *ld;
 	enum mif_sim_mode sim_mode;
+	int err;
 
 	mif_err("%s: +++ (%s)\n",
 		pdev->name, CONFIG_OPTION_REGION);
@@ -1031,18 +1078,32 @@ static int modem_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, modemctl);
 
+	/* reserved buff pool memory init */
+	of_reserved_mem_device_init(dev);
+
+#ifdef CONFIG_CP_RAM_LOGGING
+	/* Send SMC call if cp_ram_logging function is enabled */
+	if (shm_get_cplog_flag())
+		security_request_cp_ram_logging();
+#endif
 	kfree(iod);
 
 	if (sysfs_create_groups(&dev->kobj, modem_groups))
 		mif_err("failed to create modem groups node\n");
+
+	err = mif_init_argos_notifier();
+	if (err < 0)
+		mif_err("failed to initialize argos_notifier(%d)\n", err);
 
 	mif_err("%s: ---\n", pdev->name);
 	return 0;
 
 free_iod:
 	for (i = 0; i < pdata->num_iodevs; i++) {
-		if (iod[i])
+		if (iod[i]) {
+			sipc5_deinit_io_device(iod[i]);
 			devm_kfree(dev, iod[i]);
+		}
 	}
 	kfree(iod);
 
@@ -1062,8 +1123,7 @@ static void modem_shutdown(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct modem_ctl *mc = dev_get_drvdata(dev);
 
-	if (mc->ops.modem_shutdown)
-		mc->ops.modem_shutdown(mc);
+	mc->ops.modem_shutdown(mc);
 	mc->phone_state = STATE_OFFLINE;
 
 	clean_vss_magic_code();
@@ -1074,9 +1134,12 @@ static void modem_shutdown(struct platform_device *pdev)
 static int modem_suspend(struct device *pdev)
 {
 	struct modem_ctl *mc = dev_get_drvdata(pdev);
-	struct modem_mbox *mbox __maybe_unused = mc->mdm_data->mbx;
-	struct modem_data *pdata = pdev->platform_data;
-	struct utc_time t __maybe_unused;
+	struct modem_mbox *mbox;
+	struct utc_time t;
+	struct link_device *ld = get_current_link(mc->bootd);
+
+	if (ld->link_type == LINKDEV_SHMEM)
+		mbox = mc->mdm_data->mbx;
 
 #if !defined(CONFIG_LINK_DEVICE_HSIC)
 	if (mc->gpio_pda_active)
@@ -1088,7 +1151,7 @@ static int modem_suspend(struct device *pdev)
 	mipi_lli_suspend();
 #endif
 
-	if (pdata->link_types == LINKTYPE(LINKDEV_SHMEM)) {
+	if (ld->link_type == LINKDEV_SHMEM) {
 		get_utc_time(&t);
 		mif_err("time = %d.%d\n", t.sec + (t.min * 60), t.us);
 		mbox_update_value(MCU_CP, mbox->mbx_ap2cp_kerneltime,
@@ -1114,10 +1177,12 @@ static int modem_suspend(struct device *pdev)
 static int modem_resume(struct device *pdev)
 {
 	struct modem_ctl *mc = dev_get_drvdata(pdev);
-#ifdef CONFIG_LINK_DEVICE_SHMEM
-	struct modem_mbox *mbox = mc->mdm_data->mbx;
+	struct modem_mbox *mbox;
 	struct utc_time t;
-#endif
+	struct link_device *ld = get_current_link(mc->bootd);
+
+	if (ld->link_type == LINKDEV_SHMEM)
+		mbox = mc->mdm_data->mbx;
 
 	set_wakeup_packet_log(false);
 
@@ -1138,22 +1203,22 @@ static int modem_resume(struct device *pdev)
 	}
 #endif
 
-#ifdef CONFIG_LINK_DEVICE_SHMEM
-	get_utc_time(&t);
-	mif_err("time = %d.%d\n", t.sec + (t.min * 60), t.us);
-	mbox_update_value(MCU_CP, mbox->mbx_ap2cp_kerneltime,
-			t.sec + (t.min * 60),
-			mbox->sbi_ap2cp_kerneltime_sec_mask,
-			mbox->sbi_ap2cp_kerneltime_sec_pos);
-	mbox_update_value(MCU_CP, mbox->mbx_ap2cp_kerneltime, t.us,
-			mbox->sbi_ap2cp_kerneltime_usec_mask,
-			mbox->sbi_ap2cp_kerneltime_usec_pos);
+	if (ld->link_type == LINKDEV_SHMEM) {
+		get_utc_time(&t);
+		mif_err("time = %d.%d\n", t.sec + (t.min * 60), t.us);
+		mbox_update_value(MCU_CP, mbox->mbx_ap2cp_kerneltime,
+				t.sec + (t.min * 60),
+				mbox->sbi_ap2cp_kerneltime_sec_mask,
+				mbox->sbi_ap2cp_kerneltime_sec_pos);
+		mbox_update_value(MCU_CP, mbox->mbx_ap2cp_kerneltime, t.us,
+				mbox->sbi_ap2cp_kerneltime_usec_mask,
+				mbox->sbi_ap2cp_kerneltime_usec_pos);
 
-	mif_err("%s: pda_active:1\n", mc->name);
-	mbox_update_value(MCU_CP, mc->mbx_ap_status, 1,
-			mc->sbi_pda_active_mask, mc->sbi_pda_active_pos);
-	mbox_set_interrupt(MCU_CP, mc->int_pda_active);
-#endif
+		mif_err("%s: pda_active:1\n", mc->name);
+		mbox_update_value(MCU_CP, mc->mbx_ap_status, 1,
+				mc->sbi_pda_active_mask, mc->sbi_pda_active_pos);
+		mbox_set_interrupt(MCU_CP, mc->int_pda_active);
+	}
 
 	mif_err("%s\n", mc->name);
 
@@ -1171,6 +1236,7 @@ static struct platform_driver modem_driver = {
 		.name = "mif_sipc5",
 		.owner = THIS_MODULE,
 		.pm = &modem_pm_ops,
+		.suppress_bind_attrs = true,
 #ifdef CONFIG_OF
 		.of_match_table = of_match_ptr(sec_modem_match),
 #endif

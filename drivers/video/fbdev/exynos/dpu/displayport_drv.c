@@ -32,6 +32,7 @@
 
 #include "displayport.h"
 #include "decon.h"
+#include "secdp_aux_control.h"
 
 #define PIXELCLK_2160P30HZ 297000000 /* UHD 30hz */
 #define PIXELCLK_1080P60HZ 148500000 /* FHD 60Hz */
@@ -928,17 +929,25 @@ void displayport_hpd_changed(int state)
 		displayport->dyn_range = VESA_RANGE;
 		displayport->hpd_state = HPD_PLUG;
 		displayport->auto_test_mode = 0;
+		displayport->best_video = EDID_DEFAULT_TIMINGS_IDX;
 		/* PHY power on */
 		phy_power_on(displayport->phy);
 		displayport_reg_init(); /* for AUX ch read/write. */
 		msleep(10);
+
+#ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
+		if (displayport->dex_state == DEX_ON)
+			secdp_bigdata_save_item(BD_DP_MODE, "DEX");
+		if (displayport->dex_state == DEX_OFF)
+			secdp_bigdata_save_item(BD_DP_MODE, "MIRROR");
+#endif
 
 		/* for Link CTS : (4.2.2.3) EDID Read */
 		if (displayport_link_status_read()) {
 			displayport_err("link_status_read fail\n");
 			goto HPD_FAIL;
 		}
-		
+
 		if (displayport_read_branch_revision(displayport))
 			displayport_err("branch_revision_read fail\n");
 
@@ -1360,8 +1369,13 @@ static void displayport_hpd_irq_work(struct work_struct *work)
 		}
 
 		if ((val[1] & CP_IRQ) == CP_IRQ) {
+			u8 cpirq_bit = CP_IRQ;
+
 			displayport_info("hdcp22: detect CP_IRQ\n");
 			ret = displayport_hdcp22_irq_handler();
+
+			displayport_reg_dpcd_write(DPCD_ADD_DEVICE_SERVICE_IRQ_VECTOR, 1, &cpirq_bit);
+
 			if (ret == 0)
 				return;
 		}
@@ -1377,6 +1391,11 @@ static void displayport_hpd_irq_work(struct work_struct *work)
 			secdp_bigdata_inc_error_cnt(ERR_INF_IRQHPD);
 #endif
 			displayport_link_training();
+
+			hdcp_dplink_set_reauth();
+			displayport_hdcp22_enable(0);
+			queue_delayed_work(displayport->hdcp2_wq,
+					&displayport->hdcp22_work, msecs_to_jiffies(2000));
 		}
 
 		return;
@@ -1394,10 +1413,14 @@ static void displayport_hpd_irq_work(struct work_struct *work)
 		}
 
 		if ((val[1] & CP_IRQ) == CP_IRQ && displayport->hdcp_ver == HDCP_VERSION_1_3) {
+			u8 cpirq_bit = CP_IRQ;
+
 			displayport_info("detect CP_IRQ\n");
 			hdcp13_info.cp_irq_flag = 1;
 			hdcp13_info.link_check = LINK_CHECK_NEED;
 			HDCP13_Link_integrity_check();
+
+			displayport_reg_dpcd_write(DPCD_ADD_DEVICE_SERVICE_IRQ_VECTOR, 1, &cpirq_bit);
 
 			if (hdcp13_info.auth_state == HDCP13_STATE_FAIL) {
 				queue_delayed_work(displayport->dp_wq,
@@ -1418,6 +1441,10 @@ static void displayport_hpd_irq_work(struct work_struct *work)
 			secdp_bigdata_inc_error_cnt(ERR_INF_IRQHPD);
 #endif
 			displayport_link_training();
+
+			hdcp13_info.auth_state = HDCP13_STATE_NOT_AUTHENTICATED;
+			queue_delayed_work(displayport->dp_wq,
+					&displayport->hdcp13_work, msecs_to_jiffies(2000));
 		}
 	} else {
 		displayport_reg_dpcd_read(DPCD_ADD_DEVICE_SERVICE_IRQ_VECTOR, 1, val);
@@ -1555,10 +1582,8 @@ static int displayport_make_spd_infoframe_data(struct infoframe *avi_infoframe)
 	avi_infoframe->version_number = 0x1;
 	avi_infoframe->length = 25;
 
-	strncpy(&avi_infoframe->data[0],"SEC.MCD", 7);
-	strncpy(&avi_infoframe->data[8],"GALAXY", 6);
-	
-	/* avi_infoframe->data[24] = 0xA; BD player*/
+	strncpy(&avi_infoframe->data[0], "SEC.MCB", 8);
+	strncpy(&avi_infoframe->data[8], "GALAXY", 7);
 
 	return 0;
 }
@@ -1604,6 +1629,19 @@ int displayport_audio_config(struct displayport_audio_config_data *audio_config_
 			audio_config_data->audio_enable, audio_config_data->audio_channel_cnt,
 			audio_config_data->audio_fs, audio_config_data->audio_bit,
 			audio_config_data->audio_packed_mode, audio_config_data->audio_word_length);
+
+#ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
+	{
+		int bit[] = {16, 20, 24};
+		int fs[] = {32000, 44100, 48000, 88200, 96000, 176400, 192000};
+
+		secdp_bigdata_save_item(BD_AUD_CH, audio_config_data->audio_channel_cnt);
+		if (audio_config_data->audio_fs >= 0 && audio_config_data->audio_fs < 7)
+			secdp_bigdata_save_item(BD_AUD_FREQ, fs[audio_config_data->audio_fs]);
+		if (audio_config_data->audio_bit >= 0 && audio_config_data->audio_bit < 3)
+			secdp_bigdata_save_item(BD_AUD_BIT, bit[audio_config_data->audio_bit]);
+	}
+#endif
 
 	/* channel mapping: FL, FR, C, SW, RL, RR */
 	displayport_write(Audio_Packet_Data_Re_arrangement_Register, 0x87653421);
@@ -2011,8 +2049,14 @@ static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
 	struct displayport_device *displayport = container_of(sd, struct displayport_device, sd);
 
 	if (timings->index >= displayport_pre_cnt) {
-		displayport_dbg("displayport_enum_dv_timings -EOVERFLOW\n");
+		displayport_warn("request index is too big\n");
 		return -E2BIG;
+	}
+
+	if (displayport->dex_setting && !displayport_supported_presets[timings->index].dex_support) {
+		displayport_info("not supported video_format : %s in dex mode\n",
+				displayport_supported_presets[timings->index].name);
+		return -EINVAL;
 	}
 
 	/* reduce the timing by lane count and link rate */
@@ -2022,7 +2066,7 @@ static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
 		return -E2BIG;
 	}
 
-	if ((check_dex_support(displayport)) && reduced_resolution && reduced_resolution < 
+	if (reduced_resolution && reduced_resolution <
 			displayport_supported_presets[timings->index].dv_timings.bt.pixelclock) {
 		displayport_info("reduced_resolution: %llu\n", reduced_resolution);
 		return -E2BIG;
@@ -2311,6 +2355,8 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 			dp_logger_set_max_count(150);
 #ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
 			secdp_bigdata_connection();
+			secdp_bigdata_save_item(BD_ADT_VID, displayport->ven_id);
+			secdp_bigdata_save_item(BD_ADT_PID, displayport->prod_id);
 #endif
 			if(check_dex_support(displayport))
 				displayport_info("Dex mode supported product connected\n");
@@ -2654,27 +2700,224 @@ static ssize_t displayport_test_bist_store(struct class *dev,
 }
 static CLASS_ATTR(bist, 0664, displayport_test_bist_show, displayport_test_bist_store);
 
-static ssize_t displayport_test_show(struct class *class,
+static ssize_t displayport_audio_test_show(struct class *class,
+		struct class_attribute *attr, char *buf)
+{
+	int bit = 0;
+	int sample = 0;
+	int channel = 0;
+	int tmp_ch;
+
+	edid_get_test_audio_data(&tmp_ch, &sample, &bit);
+
+	while (tmp_ch && channel < 9) {
+		channel++;
+		tmp_ch >>= 1;
+	}
+	if (channel > 8)
+		return sprintf(buf, "not set(ch, bit, sample)\n");
+
+	switch (bit) {
+	case FB_AUDIO_16BIT:
+		bit = 16;
+		break;
+	case FB_AUDIO_20BIT:
+		bit = 20;
+		break;
+	case FB_AUDIO_24BIT:
+		bit = 24;
+	}
+
+	switch (sample) {
+	case FB_AUDIO_32KHZ:
+		sample = 32;
+		break;
+	case FB_AUDIO_44KHZ:
+		sample = 44;
+		break;
+	case FB_AUDIO_48KHZ:
+		sample = 48;
+		break;
+	case FB_AUDIO_88KHZ:
+		sample = 88;
+		break;
+	case FB_AUDIO_96KHZ:
+		sample = 96;
+		break;
+	case FB_AUDIO_176KHZ:
+		sample = 176;
+		break;
+	case FB_AUDIO_192KHZ:
+		sample = 192;
+		break;
+	}
+
+	return sprintf(buf, "channel: %d, bit rate: %d, sample rate: %d\n",
+				channel, bit, sample);
+}
+static ssize_t displayport_audio_test_store(struct class *dev,
+			struct class_attribute *attr,
+			const char *buf, size_t size)
+{
+	int val[6] = {0,};
+	int ch, sf, br;
+
+	get_options(buf, 4, val);
+	if (val[0] != 3) {
+		displayport_info("invalid input. set default\n");
+		edid_set_test_audio_data(-1, 0, 0);
+
+		return size;
+	}
+
+	if (val[1] > 0 && val[1] <= 8)
+		ch = (1 << (val[1] - 1));
+	else
+		ch = 2;
+
+	switch (val[2]) {
+	case 16:
+		br = FB_AUDIO_16BIT;
+		break;
+	case 20:
+		br = FB_AUDIO_20BIT;
+		break;
+	case 24:
+		br = FB_AUDIO_24BIT;
+		break;
+	default:
+		br = FB_AUDIO_16BIT;
+	}
+
+	switch (val[3]) {
+	case 32:
+		sf = FB_AUDIO_32KHZ;
+		break;
+	case 44:
+		sf = FB_AUDIO_44KHZ;
+		break;
+	case 48:
+		sf = FB_AUDIO_48KHZ;
+		break;
+	case 88:
+		sf = FB_AUDIO_88KHZ;
+		break;
+	case 96:
+		sf = FB_AUDIO_96KHZ;
+		break;
+	case 176:
+		sf = FB_AUDIO_176KHZ;
+		break;
+	case 192:
+		sf = FB_AUDIO_192KHZ;
+		break;
+	default:
+		sf = FB_AUDIO_48KHZ;
+	}
+
+	edid_set_test_audio_data(ch, sf, br);
+
+	return size;
+}
+static CLASS_ATTR(audio_test, 0664, displayport_audio_test_show, displayport_audio_test_store);
+
+void displayport_pm_test(int pwr)
+{
+	u8 val[2] = {SET_POWER_NORMAL, SET_POWER_DOWN};
+	u8 val1 = 0;
+
+	if (!displayport_get_hpd_state())
+		return;
+
+	displayport_info("set power state for CTS(%d)", pwr);
+	if (pwr) {
+		displayport_reg_dpcd_write(DPCD_ADD_SET_POWER, 1, &val[0]);
+		displayport_link_training();
+	} else
+		displayport_reg_dpcd_write(DPCD_ADD_SET_POWER, 1, &val[1]);
+
+	displayport_reg_dpcd_read(DPCD_ADD_SET_POWER, 1, &val1);
+	displayport_info("set power state for DPCD_ADD_SET_POWER(%d)", val1);
+}
+
+static ssize_t displayport_dp_test_show(struct class *class,
 		struct class_attribute *attr,
 		char *buf)
 {
 	struct displayport_device *displayport = get_displayport_drvdata();
+	int size;
 
-	return snprintf(buf, PAGE_SIZE, "displayport gpio oe %d, sel %d, direction %d\n",
+	size = snprintf(buf, PAGE_SIZE, "0: HPD test\n");
+	size += snprintf(buf + size, PAGE_SIZE - size, "1: uevent test\n");
+	size += snprintf(buf + size, PAGE_SIZE - size, "2: CTS power management test\n");
+	size += snprintf(buf + size, PAGE_SIZE - size, "3: set lane count, link rate\n");
+#ifdef CONFIG_DISPLAYPORT_ENG
+	size += snprintf(buf + size, PAGE_SIZE - size, "4: hdcp13 restart\n");
+#endif
+	size += snprintf(buf + size, PAGE_SIZE - size, "\n# gpio oe %d, sel %d, direction %d\n",
 			gpio_get_value(displayport->gpio_sw_oe),
 			gpio_get_value(displayport->gpio_sw_sel),
 			gpio_get_value(displayport->gpio_usb_dir));
-}
-static ssize_t displayport_test_store(struct class *dev,
-		struct class_attribute *attr,
-		const char *buf, size_t size)
-{
-	/*	struct displayport_device *displayport = get_displayport_drvdata(); */
 
 	return size;
 }
 
-static CLASS_ATTR(dp, 0664, displayport_test_show, displayport_test_store);
+static ssize_t displayport_dp_test_store(struct class *dev,
+		struct class_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct displayport_device *displayport = get_displayport_drvdata();
+	int val[8] = {0,};
+
+	get_options(buf, 4, val);
+
+	switch (val[1]) {
+	case 0:
+		if (val[2] == 0 || val[2] == 1)
+			displayport_hpd_changed(val[2]);
+		break;
+	case 1:
+		if (val[2] == 0 || val[2] == 1)
+			displayport_set_switch_state(displayport, val[2]);
+		break;
+	case 2:
+		if (val[2] == 0 || val[2] == 1)
+			displayport_pm_test(val[2]);
+		break;
+	case 3:/*lane count, link rate*/
+		displayport_info("test lane: %d, link rate: 0x%x\n", val[2], val[3]);
+		if ((val[2] == 1 || val[2] == 2 || val[2] == 4) &&
+			(val[3] == 6 || val[3] == 0xa || val[3] == 0x14)) {
+			g_displayport_debug_param.lane_cnt = val[2];
+			g_displayport_debug_param.link_rate = val[3];
+			g_displayport_debug_param.param_used = 1;
+		} else {
+			g_displayport_debug_param.lane_cnt = 0;
+			g_displayport_debug_param.link_rate = 0;
+			g_displayport_debug_param.param_used = 0;
+		}
+		break;
+	case 4:
+#ifdef CONFIG_DISPLAYPORT_ENG
+		if (displayport->hdcp_ver == HDCP_VERSION_2_2) {
+			hdcp_dplink_set_reauth();
+			displayport_hdcp22_enable(0);
+			queue_delayed_work(displayport->hdcp2_wq, &displayport->hdcp22_work,
+					msecs_to_jiffies(0));
+		} else if (displayport->hdcp_ver == HDCP_VERSION_1_3) {
+			hdcp13_info.auth_state = HDCP13_STATE_FAIL;
+			queue_delayed_work(displayport->dp_wq,
+					&displayport->hdcp13_work, msecs_to_jiffies(0));
+		}
+#endif
+		break;
+	default:
+		break;
+	};
+
+	return size;
+}
+static CLASS_ATTR(dp_test, 0664, displayport_dp_test_show, displayport_dp_test_store);
 
 extern int forced_resolution;
 static ssize_t displayport_forced_resolution_show(struct class *class,
@@ -2784,42 +3027,52 @@ static ssize_t displayport_dex_store(struct class *dev,
 	int dex_run;
 	int need_reconnect = 0;
 
-	get_options(buf, 4, val);
+	get_options(buf, 2, val);
 
 	displayport->dex_setting = (val[1] & 0xF0) >> 4;
 	dex_run = (val[1] & 0x0F);
 
-	displayport_info("dex set:0x%X, hpd:%d, state:%d\n", val[1],
-			displayport->hpd_current_state, displayport->dex_state);
+	displayport_info("dex state:%d, setting:%d, run:%d, hpd:%d\n",
+			displayport->dex_state, displayport->dex_setting,
+			dex_run, displayport->hpd_current_state);
 
 #if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
 	if (!displayport->notifier_registered) {
 		displayport->notifier_registered = 1;
 		displayport_info("notifier registered in dex\n");
 		cancel_delayed_work_sync(&displayport->notifier_register_work);
-		if (displayport->dex_setting == 1)
-			reduced_resolution = PIXELCLK_1080P60HZ;
 		manager_notifier_register(&displayport->dp_typec_nb,
 			usb_typec_displayport_notification, MANAGER_NOTIFY_CCIC_DP);
 		goto dex_exit;
 	}
 #endif
-	if (displayport->dex_state != dex_run && displayport->dex_state != DEX_RECONNECTING &&
-			check_dex_support(displayport))
+	/* if current state is not new state, then reconnect */
+	if (displayport->dex_state != dex_run &&
+			displayport->dex_state != DEX_RECONNECTING)
 		need_reconnect = 1;
+
+	/* if current resolution is dex supported, then do not reconnect */
+	if (displayport_supported_presets[g_displayport_videoformat].dex_support &&
+			displayport->dex_setting)
+		need_reconnect = 0;
+
+	/* if current resolution is best, then do not reconnect */
+	if (!displayport->dex_setting && g_displayport_videoformat == displayport->best_video)
+		need_reconnect = 0;
+
+
 	displayport->dex_state = dex_run;
 
-	if (displayport->dex_setting == 1) {
-		reduced_resolution = PIXELCLK_1080P60HZ;
-		if (g_displayport_videoformat <= v1920x1080p_60Hz) {
-			displayport_info("not need to reconnect\n");
-			goto dex_exit;
-		}
-	} else
-		reduced_resolution = 0;
+#ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
+		if (displayport->dex_state == DEX_ON)
+			secdp_bigdata_save_item(BD_DP_MODE, "DEX");
+		else if (displayport->dex_state == DEX_OFF)
+			secdp_bigdata_save_item(BD_DP_MODE, "MIRROR");
+#endif
 
 	/* reconnect if setting was mirroring(0) and dex is running(1), */
 	if (displayport->hpd_current_state && need_reconnect) {
+		displayport_info("reconnecting to dex mode\n");
 		displayport->dex_state = DEX_RECONNECTING;
 		displayport_hpd_changed(0);
 		msleep(1000);
@@ -2828,7 +3081,9 @@ static ssize_t displayport_dex_store(struct class *dev,
 	}
 
 dex_exit:
-	displayport_info("dex reduced_resolution %llu\n", reduced_resolution);
+	displayport_info("dex exit: state:%d, setting:%d\n",
+			displayport->dex_state, displayport->dex_setting);
+
 	return size;
 }
 static CLASS_ATTR(dex, 0664, displayport_dex_show, displayport_dex_store);
@@ -2925,6 +3180,47 @@ static void displayport_notifier_register_work(struct work_struct *work)
 	}
 }
 #endif
+
+/* for aux control */
+static ssize_t displayport_i2c_write(void *buffer, size_t size)
+{
+	int ret;
+
+	ret = displayport_reg_i2c_write(0x50, (u32)size, buffer);
+	displayport_dbg("auxdev: i2c write size(%zu) ret(%d)\n", size, ret);
+
+	return ret == 0 ? size : 0;
+}
+
+static ssize_t displayport_i2c_read(void *buffer, size_t size)
+{
+	int ret;
+
+	ret = displayport_reg_i2c_read(0x50, (u32)size, buffer);
+	displayport_dbg("auxdev: i2c write size(%zu) ret(%d)\n", size, ret);
+
+	return ret == 0 ? size : 0;
+}
+
+static ssize_t displayport_dpcd_write(unsigned int offset, void *buffer, size_t size)
+{
+	int ret;
+
+	ret = displayport_reg_dpcd_write_burst(offset, (u32)size, buffer);
+	displayport_dbg("auxdev: dpcd write offset(%d) size(%zu) ret(%d)\n", offset, size, ret);
+
+	return ret == 0 ? size : 0;
+}
+
+static ssize_t displayport_dpcd_read(unsigned int offset, void *buffer, size_t size)
+{
+	int ret;
+
+	ret = displayport_reg_dpcd_read_burst(offset, (u32)size, buffer);
+	displayport_dbg("auxdev: dpcd read offset(%d) size(%zu) ret(%d)\n", offset, size, ret);
+
+	return ret == 0 ? size : 0;
+}
 
 static int displayport_probe(struct platform_device *pdev)
 {
@@ -3030,9 +3326,12 @@ static int displayport_probe(struct platform_device *pdev)
 		ret = class_create_file(dp_class, &class_attr_bist);
 		if (ret)
 			displayport_err("failed to create attr_bist\n");
-		ret = class_create_file(dp_class, &class_attr_dp);
+		ret = class_create_file(dp_class, &class_attr_audio_test);
 		if (ret)
-			displayport_err("failed to create attr_test\n");
+			displayport_err("failed to create attr_audio_test\n");
+		ret = class_create_file(dp_class, &class_attr_dp_test);
+		if (ret)
+			displayport_err("failed to create attr_dp_test\n");
 		ret = class_create_file(dp_class, &class_attr_forced_resolution);
 		if (ret)
 			displayport_err("failed to create attr_dp_forced_resolution\n");
@@ -3067,6 +3366,11 @@ static int displayport_probe(struct platform_device *pdev)
 	displayport->bist_used = 0;
 	displayport->bist_type = COLOR_BAR;
 	displayport->dyn_range = CEA_RANGE;
+
+	/* add aux control */
+	secdp_aux_dev_init(displayport_i2c_write, displayport_i2c_read,
+		displayport_dpcd_write, displayport_dpcd_read, displayport_get_hpd_state);
+
 	displayport_info("displayport driver has been probed.\n");
 
 	return 0;

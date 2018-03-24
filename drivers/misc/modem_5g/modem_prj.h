@@ -100,6 +100,7 @@ IOCTL commands
 #define IOCTL_MODEM_SET_TX_LINK		_IO('o', 0x37)
 #define IOCTL_LINK_SWITCH_TO_4G		_IO('o', 0x38)
 #define IOCTL_LINK_SWITCH_TO_5G		_IO('o', 0x39)
+#define IOCTL_LINK_SWITCH_IPC		_IO('o', 0x42)
 
 #define IOCTL_MODEM_RAMDUMP_START	_IO('o', 0xCE)
 #define IOCTL_MODEM_RAMDUMP_STOP	_IO('o', 0xCF)
@@ -122,6 +123,15 @@ IOCTL commands
 #ifdef CONFIG_LINK_DEVICE_PCI
 #define IOCTL_MODEM_WAIT_CLEAR_COMMAND	_IO('o', 0x49)
 #define IOCTL_MODEM_WAIT_BOOT_NOTI	_IO('o', 0x50)
+
+#define	OFFSET_FILE_SIZE	(0x00080014)
+#define CP2AP_CMD_REG		(0x00080008)
+#define CP2AP_CMD_DTD		(0x80000000)	/* Dump Transfer Done */
+#define CP2AP_CMD_DTC		(0x40000000)	/* Dump Transfer Completed */
+
+#define BAR4_MAX_SIZE		(0x00200000)	/* 2MB */
+
+#define HIGGS_HW_REV_ADDR	(0x0008001C)
 #endif
 
 /* ioctl command for IPC Logger */
@@ -134,6 +144,7 @@ IOCTL commands
 #define IOCTL_MODEM_AIRPLANE_MODE	_IO('o', 0x56)	/* Set Airplane mode on/off */
 #define IOCTL_VSS_FULL_DUMP		_IO('o', 0x57)	/* For vss dump */
 #define IOCTL_ACPM_FULL_DUMP		_IO('o', 0x58)  /* for acpm memory dump */
+#define IOCTL_CPLOG_FULL_DUMP		_IO('o', 0x59)  /* for cplog memory dump */
 
 /*
 Definitions for IO devices
@@ -223,6 +234,7 @@ enum cp_boot_mode {
 	CP_BOOT_MODE_NORMAL,
 	CP_BOOT_MODE_DUMP,
 	CP_BOOT_RE_INIT,
+	CP_BOOT_REQ_CP_RAM_LOGGING = 5,
 	MAX_CP_BOOT_MODE
 };
 
@@ -259,7 +271,11 @@ static inline bool sipc_ps_ch(u8 ch)
 #define sipc5_is_not_reserved_channel(ch) \
 	((ch) != 0 && (ch) != 5 && (ch) != 6 && (ch) != 27 && (ch) != 255)
 
+#if defined(CONFIG_MODEM_IF_LEGACY_QOS) || defined(CONFIG_MODEM_IF_QOS)
 #define MAX_NDEV_TX_Q 2
+#else
+#define MAX_NDEV_TX_Q 1
+#endif
 #define MAX_NDEV_RX_Q 1
 /* mark value for high priority packet, hex QOSH */
 #define RAW_HPRIO	0x514F5348
@@ -346,7 +362,11 @@ struct io_device {
 	struct miscdevice  miscdev;
 	struct net_device *ndev;
 	struct list_head node_ndev;
+#ifdef CONFIG_LINK_DEVICE_NAPI
 	struct napi_struct napi;
+	int napi_weight;
+	unsigned int rx_poll_count;
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	/* ID and Format for channel on the link */
 	unsigned int id;
@@ -424,10 +444,6 @@ struct io_device {
 	 * you MUST use skbpriv(skb)->ld in mc, link, etc..
 	 */
 	struct link_device *__current_link;
-
-#ifdef CONFIG_LINK_DEVICE_NAPI
-    struct timespec flush_time;
-#endif
 };
 #define to_io_device(misc) container_of(misc, struct io_device, miscdev)
 
@@ -444,6 +460,7 @@ struct link_device {
 	enum modem_link link_type;
 	struct modem_ctl *mc;
 	struct modem_shared *msd;
+	struct device *dev;
 
 	char *name;
 	bool sbd_ipc;
@@ -456,14 +473,10 @@ struct link_device {
 	struct modem_data *mdm_data;
 
 	/* TX queue of socket buffers */
-	struct sk_buff_head sk_fmt_tx_q;
-	struct sk_buff_head sk_raw_tx_q;
-	struct sk_buff_head *skb_txq[MAX_SIPC_DEVICES];
+	struct sk_buff_head skb_txq[MAX_SIPC_MAP];
 
 	/* RX queue of socket buffers */
-	struct sk_buff_head sk_fmt_rx_q;
-	struct sk_buff_head sk_raw_rx_q;
-	struct sk_buff_head *skb_rxq[MAX_SIPC_DEVICES];
+	struct sk_buff_head skb_rxq[MAX_SIPC_MAP];
 
 	/* Stop/resume control for network ifaces */
 	spinlock_t netif_lock;
@@ -479,6 +492,12 @@ struct link_device {
 
 	struct workqueue_struct *rx_wq;
 	struct delayed_work rx_delayed_work;
+
+	/* MIF buffer management */
+	struct mif_buff_mng *mif_buff_mng;
+
+	/* Save reason of forced crash */
+	unsigned int crash_type;
 
 	int (*init_comm)(struct link_device *ld, struct io_device *iod);
 	void (*terminate_comm)(struct link_device *ld, struct io_device *iod);
@@ -517,6 +536,11 @@ struct link_device {
 	/* method for ACPM dump when CP crash */
 	int (*acpm_dump)(struct link_device *ld, struct io_device *iod,
 				unsigned long arg);
+
+	/* method for CPLOG dump when CP crash */
+	int (*cplog_dump)(struct link_device *ld, struct io_device *iod,
+				unsigned long arg);
+
 	/* IOCTL extension */
 	int (*ioctl)(struct link_device *ld, struct io_device *iod,
 		     unsigned int cmd, unsigned long arg);
@@ -535,6 +559,18 @@ struct link_device {
 	/* Set airplane mode for power saving */
 	int (*airplane_mode)(struct link_device *ld, struct io_device *iod,
 			unsigned long arg);
+
+	/* Reset buffer & dma_addr for zerocopy */
+	void (*reset_zerocopy)(struct link_device *ld);
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	/* Poll function for NAPI */
+	int (*poll_recv_on_iod)(struct link_device *ld, struct io_device *iod,
+			int budget);
+
+	int (*enable_rx_int)(struct link_device *ld);
+	int (*disable_rx_int)(struct link_device *ld);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 };
 
 #define pm_to_link_device(pm)	container_of(pm, struct link_device, pm)
@@ -636,6 +672,11 @@ struct modem_ctl {
 	/* completion for waiting for CP Boot/Enuermation initialization */
 	struct completion boot_noti;
 
+	/* completion for waiting for CP dump int */
+	struct completion dump_cmpl;
+
+	bool boot_on;
+
 	unsigned int gpio_cp_on;
 	unsigned int gpio_cp_off;
 	unsigned int gpio_reset_req_n;
@@ -653,9 +694,11 @@ struct modem_ctl {
 	/* for AP-CP power management (PM) handshaking */
 	unsigned int gpio_ap_wakeup;
 	unsigned int irq_ap_wakeup;
+	struct modem_irq irq_wakeup;
 
 	unsigned int gpio_cp_boot_noti;
 	unsigned int irq_cp_boot_noti;
+	struct modem_irq irq_boot_noti;
 
 	unsigned int gpio_ap_status;
 	unsigned int int_ap_status;
@@ -762,6 +805,7 @@ struct modem_ctl {
 	const char *regulator_sw2;
 
 	unsigned int gpio_buck_en1;
+	unsigned int gpio_rfb_ldo_en;
 };
 
 static inline bool cp_offline(struct modem_ctl *mc)
@@ -805,7 +849,17 @@ static inline bool rx_possible(struct modem_ctl *mc)
 }
 
 int sipc5_init_io_device(struct io_device *iod);
+void sipc5_deinit_io_device(struct io_device *iod);
 
+#if defined(CONFIG_RPS) && defined(CONFIG_ARGOS)
+extern struct net init_net;
+extern int sec_argos_register_notifier(struct notifier_block *n, char *label);
+extern int sec_argos_unregister_notifier(struct notifier_block *n, char *label);
+
+int mif_init_argos_notifier(void);
+#else
+int mif_init_argos_notifier(void) { return 0; }
+#endif
 int pci_netdev_poll(struct napi_struct *napi, int budget);
 
 #endif

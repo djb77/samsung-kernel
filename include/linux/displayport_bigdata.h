@@ -22,6 +22,13 @@ enum DP_BD_ITEM_LIST {
 	BD_ORIENTATION,
 	BD_RESOLUTION,
 	BD_EDID,
+	BD_ADT_VID,
+	BD_ADT_PID,
+	BD_DP_MODE,
+	BD_SINK_NAME,
+	BD_AUD_CH,
+	BD_AUD_FREQ,
+	BD_AUD_BIT,
 	BD_ITEM_MAX,
 };
 
@@ -31,5 +38,4 @@ void secdp_bigdata_clr_error_cnt(enum DP_BD_ITEM_LIST err);
 void secdp_bigdata_connection(void);
 void secdp_bigdata_disconnection(void);
 void secdp_bigdata_init(struct class *dp_class);
-
 #endif /* DISPLAYPORT_BIGDATA_H */

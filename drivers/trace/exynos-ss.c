@@ -783,6 +783,13 @@ unsigned long exynos_ss_get_spare_paddr(unsigned int offset)
 	return kevent_vaddr;
 }
 
+static u32 exynos_ss_get_reason(void)
+{
+	if (exynos_ss_get_enable("log_kevents", true))
+		return	__raw_readl(S5P_VA_SS_EMERGENCY_REASON);
+	return -1;
+}
+
 unsigned int exynos_ss_get_item_size(char* name)
 {
 	unsigned long i;
@@ -845,6 +852,8 @@ int exynos_ss_prepare_panic(void)
 
 	if (unlikely(!ess_base.enabled))
 		return 0;
+
+	exynos_ss_report_reason(ESS_SIGN_PANIC);
 	/*
 	 * kick watchdog to prevent unexpected reset during panic sequence
 	 * and it prevents the hang during panic sequence by watchedog
@@ -907,6 +916,11 @@ void exynos_ss_hook_hardlockup_entry(void *v_regs)
 		pr_emerg("\n--------------------------------------------------------------------------\n"
 			"      Debugging Information for Hardlockup core - CPU %d"
 			"\n--------------------------------------------------------------------------\n\n", cpu);
+
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+		sec_debug_set_extra_info_backtrace_cpu(v_regs, cpu);
+#endif
+
 	}
 }
 
@@ -1205,7 +1219,7 @@ int exynos_ss_save_core(void *v_regs)
 }
 EXPORT_SYMBOL(exynos_ss_save_core);
 
-int exynos_ss_save_context(void *v_regs)
+int __exynos_ss_save_context(void *v_regs, unsigned int val)
 {
 	unsigned long flags;
 	struct pt_regs *regs = (struct pt_regs *)v_regs;
@@ -1222,7 +1236,7 @@ int exynos_ss_save_context(void *v_regs)
 		exynos_ss_save_system(per_cpu(ess_mmu_reg, smp_processor_id()));
 		exynos_ss_save_core(regs);
 		exynos_ss_dump();
-		exynos_ss_set_core_panic_stat(ESS_SIGN_PANIC, smp_processor_id());
+		exynos_ss_set_core_panic_stat(val, smp_processor_id());
 		pr_emerg("exynos-snapshot: context saved(CPU:%d)\n",
 							smp_processor_id());
 	} else
@@ -1231,6 +1245,16 @@ int exynos_ss_save_context(void *v_regs)
 
 	flush_cache_all();
 	local_irq_restore(flags);
+	return 0;
+}
+
+int exynos_ss_save_context(void *v_regs)
+{
+	u32 val = 0;
+
+	val = exynos_ss_get_reason();
+	pr_emerg("exynos-snapshot: exynos_ss_get_reason 0x%X (CPU:%d)\n", val, smp_processor_id());
+	__exynos_ss_save_context(v_regs, val);
 	return 0;
 }
 EXPORT_SYMBOL(exynos_ss_save_context);
@@ -1468,7 +1492,7 @@ static inline struct task_struct *get_next_thread(struct task_struct *tsk)
 				thread_group);
 }
 
-static void exynos_ss_dump_task_info(void)
+void exynos_ss_dump_task_info(void)
 {
 	struct task_struct *frst_tsk;
 	struct task_struct *curr_tsk;
@@ -1506,6 +1530,7 @@ static void exynos_ss_dump_task_info(void)
 	}
 	pr_info(" ----------------------------------------------------------------------------------------------------------------------------\n");
 }
+EXPORT_SYMBOL(exynos_ss_dump_task_info);
 
 #ifdef CONFIG_EXYNOS_SNAPSHOT_SFRDUMP
 static bool exynos_ss_check_pmu(struct exynos_ss_sfrdump *sfrdump,

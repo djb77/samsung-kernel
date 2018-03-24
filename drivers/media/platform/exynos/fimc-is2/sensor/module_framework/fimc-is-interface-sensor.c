@@ -1803,7 +1803,9 @@ int copy_sensor_ctl(struct fimc_is_sensor_interface *itf,
 			sensor_peri->ois->coef = (u8)shot->uctl.lensUd.oisCoefVal;
 		}
 
+#ifdef USE_NEW_PER_FRAME_CONTROL
 		cis_data->video_mode = shot->ctl.aa.vendor_videoMode;
+#endif
 
 		if (shot->uctl.companionUd.wdr_mode == COMPANION_WDR_ON ||
 				shot->uctl.companionUd.wdr_mode == COMPANION_WDR_AUTO ||

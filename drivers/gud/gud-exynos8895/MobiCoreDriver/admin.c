@@ -101,6 +101,12 @@ static struct tee_object *tee_object_alloc(bool is_sp_trustlet, size_t length)
 		size += header_length + 3 * MAX_SO_CONT_SIZE;
 	}
 
+	/* Check size for overflow */
+	if (size < length) {
+		mc_dev_err("cannot allocate object of size %zu", length);
+		return NULL;
+	}
+
 	/* Allocate memory */
 	obj = vzalloc(size);
 	if (!obj)

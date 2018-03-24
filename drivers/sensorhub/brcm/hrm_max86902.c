@@ -37,7 +37,7 @@ extern int hrm_info;
 #define MAX86909_CHIP_NAME		"MAX86909"
 
 #define VENDOR_VERISON		"1"
-#define VERSION				"17"
+#define VERSION				"20"
 
 #define MAX86900_SLAVE_ADDR			0x51
 #define MAX86900A_SLAVE_ADDR		0x57
@@ -676,6 +676,9 @@ struct  max86902_selftest_data {
 
 struct max869_device_data {
 	struct i2c_client *client;
+#ifdef CONFIG_SPI_TO_I2C_FPGA
+	struct platform_device *pdev;
+#endif
 	struct mutex flickerdatalock;
 	struct miscdevice miscdev;
 	s32 hrm_mode;
@@ -774,6 +777,7 @@ struct max869_device_data {
 	int fifo_index;
 	int fifo_cnt;
 	int vdd_oor_cnt;
+	u16 agc_sample_cnt[2];
 };
 
 #ifdef CONFIG_SENSORS_HRM_MAX869_NEW_EOL
@@ -799,8 +803,8 @@ static void __max869_plus_str(char *integer_operand, char *decimal_operand, char
 
 
 static struct max869_device_data *max869_data;
+static struct hrm_device_data *hrm_data;
 static u8 agc_is_enabled = 1;
-static uint64_t agc_count;
 
 static int __max869_write_default_regs(void)
 {
@@ -828,6 +832,20 @@ static int __max869_write_reg(struct max869_device_data *device,
 		},
 	};
 #endif
+	if (hrm_data == NULL) {
+		HRM_dbg("%s - write error, hrm_data is null\n", __func__);
+		err = -EFAULT;
+		return err;
+	}
+
+	mutex_lock(&hrm_data->suspendlock);
+
+	if (!hrm_data->pm_state) {
+		HRM_dbg("%s - write error, pm suspend\n", __func__);
+		err = -EFAULT;
+		mutex_unlock(&hrm_data->suspendlock);
+		return err;
+	}
 
 	do {
 #ifdef CONFIG_SPI_TO_I2C_FPGA
@@ -840,6 +858,8 @@ static int __max869_write_reg(struct max869_device_data *device,
 		if (err < 0)
 			HRM_dbg("%s - i2c_transfer error = %d\n", __func__, err);
 	} while ((err != num) && (++tries < MAX86900_I2C_MAX_RETRIES));
+
+	mutex_unlock(&hrm_data->suspendlock);
 
 	if (err != num) {
 		HRM_dbg("%s -write transfer error:%d\n", __func__, err);
@@ -877,6 +897,21 @@ static int __max869_read_reg(struct max869_device_data *data,
 		},
 	};
 #endif
+	if (hrm_data == NULL) {
+		HRM_dbg("%s - read error, hrm_data is null\n", __func__);
+		err = -EFAULT;
+		return err;
+	}
+
+	mutex_lock(&hrm_data->suspendlock);
+
+	if (!hrm_data->pm_state) {
+		HRM_dbg("%s - read error, pm suspend\n", __func__);
+		err = -EFAULT;
+		mutex_unlock(&hrm_data->suspendlock);
+		return err;
+	}
+
 	do {
 #ifdef CONFIG_SPI_TO_I2C_FPGA
 		err = fpga_i2c_exp_read(0x02, data->client->addr, addr, 1, buffer, length);
@@ -889,6 +924,8 @@ static int __max869_read_reg(struct max869_device_data *data,
 		if (err < 0)
 			HRM_dbg("%s - i2c_transfer error = %d\n", __func__, err);
 	} while ((err != num) && (++tries < MAX86900_I2C_MAX_RETRIES));
+
+	mutex_unlock(&hrm_data->suspendlock);
 
 	if (err != num) {
 		HRM_dbg("%s -read transfer error:%d\n", __func__, err);
@@ -1926,6 +1963,9 @@ static int agc_adj_calculator(struct max869_device_data *data,
 			/ (led_drive_current_value);
 	*set_led_to_absolute_count = led_drive_current_value
 			+ *change_led_by_absolute_count;
+
+	if (*set_led_to_absolute_count > MAX86902_MAX_CURRENT)
+		*set_led_to_absolute_count = MAX86902_MAX_CURRENT;
 	return 0;
 }
 
@@ -1940,9 +1980,12 @@ int __max869_hrm_agc(struct max869_device_data *data, int counts, int led_num)
 		return -EIO;
 
 	data->agc_sum[led_num] += counts;
-	if ((data->sample_cnt + 1) % data->agc_min_num_samples)
+	data->agc_sample_cnt[led_num]++;
+
+	if (data->agc_sample_cnt[led_num] < data->agc_min_num_samples)
 		return 0;
 
+	data->agc_sample_cnt[led_num] = 0;
 	avg = data->agc_sum[led_num] / data->agc_min_num_samples;
 	data->agc_sum[led_num] = 0;
 
@@ -5314,7 +5357,11 @@ err_of_read_chipid:
 	return -EINVAL;
 }
 
+#ifdef CONFIG_SPI_TO_I2C_FPGA
+int max869_init_device(struct i2c_client *client, struct platform_device *pdev)
+#else
 int max869_init_device(struct i2c_client *client)
+#endif
 {
 	int err = 0;
 
@@ -5346,10 +5393,24 @@ int max869_init_device(struct i2c_client *client)
 	mutex_init(&max869_data->flickerdatalock);
 
 	max869_data->threshold_default = MAX86902_THRESHOLD_DEFAULT;
+#ifdef CONFIG_SPI_TO_I2C_FPGA
+	max869_data->pdev = pdev;
+#endif
 	max869_data->client = client;
 #ifndef CONFIG_SENSORS_HRM_MAX869_NEW_EOL
 	max869_data->self_mode = SELF_MODE_400HZ;
 #endif
+
+#ifdef CONFIG_SPI_TO_I2C_FPGA
+	hrm_data = platform_get_drvdata(max869_data->pdev);
+#else
+	hrm_data = i2c_get_clientdata(max869_data->client);
+#endif
+	if (hrm_data == NULL) {
+		err = -EIO;
+		HRM_dbg("%s couldn't get hrm_data\n", __func__);
+		goto err_get_hrm_data;
+	}
 
 	err = __max869_init_var(max869_data);
 	if (err < 0) {
@@ -5367,6 +5428,7 @@ int max869_init_device(struct i2c_client *client)
 
 	goto done;
 
+err_get_hrm_data:
 err_init_fail:
 	mutex_destroy(&max869_data->flickerdatalock);
 	kfree(max869_data->flicker_data);
@@ -5429,7 +5491,8 @@ int max869_enable(enum hrm_mode mode)
 		agc_cur_s = S_INIT;
 	}
 
-	agc_count = 0;
+	max869_data->agc_sample_cnt[0] = 0;
+	max869_data->agc_sample_cnt[1] = 0;
 
 	return err;
 }

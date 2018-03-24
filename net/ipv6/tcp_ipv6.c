@@ -260,7 +260,7 @@ int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	fl6.flowi6_mark = sk->sk_mark;
 	fl6.fl6_dport = usin->sin6_port;
 	fl6.fl6_sport = inet->inet_sport;
-	fl6.flowi6_uid = sock_i_uid(sk);
+	fl6.flowi6_uid = sk->sk_uid;
 
 	opt = rcu_dereference_protected(np->opt, sock_owned_by_user(sk));
 	final_p = fl6_update_dst(&fl6, opt, &final);
@@ -924,6 +924,7 @@ static void tcp_v6_send_response(const struct sock *sk, struct sk_buff *skb, u32
 	fl6.flowi6_mark = IP6_REPLY_MARK(net, skb->mark);
 	fl6.fl6_dport = t1->dest;
 	fl6.fl6_sport = t1->source;
+	fl6.flowi6_uid = sock_net_uid(net, sk && sk_fullsock(sk) ? sk : NULL);
 	security_skb_classify_flow(skb, flowi6_to_flowi(&fl6));
 
 	/* Pass a socket to ip6_dst_lookup either it is for RST
@@ -1538,6 +1539,7 @@ static void tcp_v6_restore_cb(struct sk_buff *skb)
 		sizeof(struct inet6_skb_parm));
 }
 
+#define RC_RETRY_CNT 3
 static int tcp_v6_rcv(struct sk_buff *skb)
 {
 	const struct tcphdr *th;
@@ -1548,6 +1550,7 @@ static int tcp_v6_rcv(struct sk_buff *skb)
 #endif
 	int ret;
 	struct net *net = dev_net(skb->dev);
+	unsigned int retry_cnt = RC_RETRY_CNT;
 
 	if (skb->pkt_type != PACKET_HOST)
 		goto discard_it;
@@ -1593,6 +1596,22 @@ process:
 	if (!sk)
 		goto no_tcp_socket;
 #endif
+	/* FIXME: SEC patch for P171206-06874 */
+	if (sk->sk_state == TCP_NEW_SYN_RECV) {
+		struct request_sock *req = inet_reqsk(sk);
+		if (atomic_read(&req->rsk_refcnt) > (2+1) && retry_cnt > 0) {
+			reqsk_put(req);
+			if (retry_cnt == RC_RETRY_CNT)
+				NET_INC_STATS_BH(net, LINUX_MIB_TCPRACECNDREQSK);
+			retry_cnt--;
+			udelay(500);
+
+			goto lookup;
+		}
+
+		if (!retry_cnt)
+			NET_INC_STATS_BH(net, LINUX_MIB_TCPRACECNDREQSKDROP);
+	}
 
 	if (sk->sk_state == TCP_NEW_SYN_RECV) {
 		struct request_sock *req = inet_reqsk(sk);

@@ -2023,12 +2023,6 @@ static void decon_reg_init_probe(u32 id, u32 dsi_idx, struct decon_param *p)
 		decon_reg_set_dispif_size(id, lcd_info->xres, lcd_info->yres);
 	}
 
-	decon_reg_update_req_global(id);
-
-	if (psr->psr_mode == DECON_MIPI_COMMAND_MODE) {
-		decon_reg_set_trigger(id, psr, DECON_TRIG_DISABLE);
-	}
-
 	decon_reg_get_data_path(id, &d_path, &e_path);
 	decon_dbg("%s: decon%d, enhance path(0x%x), data path(0x%x)\n",
 			__func__, id, e_path, d_path);

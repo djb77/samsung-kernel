@@ -581,7 +581,8 @@ static int log_store(int facility, int level,
 
 #ifdef CONFIG_PRINTK_PROCESS
 	if (printk_process) {
-		strncpy(msg->process, current->comm, sizeof(msg->process));
+		strncpy(msg->process, current->comm, sizeof(msg->process)-1);
+		msg->process[sizeof(msg->process)-1]='\0';
 		msg->pid = task_pid_nr(current);
 		msg->cpu = smp_processor_id();
 		msg->in_interrupt = in_interrupt() ? 1 : 0;

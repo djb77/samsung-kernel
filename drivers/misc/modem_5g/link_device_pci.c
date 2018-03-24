@@ -75,79 +75,16 @@ MODULE_DEVICE_TABLE(pci, modem_pcie_device_id);
 MODULE_DEVICE_TABLE(of, modem_pcie_match);
 
 struct wake_lock test_wlock;
-static int pm_enable = 0;
+static int pm_enable = 1;
 module_param(pm_enable, int, S_IRUGO);
 MODULE_PARM_DESC(pm_enable, "5G(PCI) PM enable");
 
 atomic_t test_napi;
 
-//모든 static 등 함수 block
 #if 1
 
 #ifdef GROUP_MEM_LINK_COMMAND
 
-#ifdef DEBUG_TX_TEST
-static irqreturn_t modem_pci_irq_handler(int irq, void *data)
-{
-	struct mem_link_device *mld = (struct mem_link_device *)data;
-	struct sbd_link_device *sl;
-	struct sbd_ring_buffer *rb;
-
-	u16 in, out;
-	u8 *tmp;
-	struct sbd_ring_buffer *ul_rb;
-
-	mif_err("+++\n");
-
-	if (!mld)
-		goto error;
-
-	sl = &mld->sbd_link_dev;
-	if (!sl)
-		goto error;
-
-	rb = &sl->ipc_dev[1].rb[DL];
-	if (!rb)
-		goto error;
-
-	/*
-	 DL intr register clear
-	 */
-	tmp = (u8 *)sl->shmem_intr;
-	*(tmp + PCI_BAR0_DL0_IRQ) = 0;
-
-	in = *rb->rp;
-	out = *rb->wp;
-
-	mif_err("rb[DL] in:%d, out:%d\n", in, out);
-
-	ul_rb = &sl->ipc_dev[1].rb[UL];
-
-	mif_err("(orig) rb[UL] in:%d, out:%d\n", *ul_rb->rp, *ul_rb->wp);
-	while (in != out) {
-		struct sk_buff *skb, *ul_skb;
-
-		skb = skb_dequeue(&rb->skb_q);
-		ul_skb = skb_dequeue(&ul_rb->skb_q);
-
-		if (skb != rb->dma_buffer[in].va_buffer) {
-			mif_err("skb is not matched!([%d]-skb:%p, va_buffer:%p)\n",
-				out, skb, rb->dma_buffer[in].va_buffer);
-		}
-
-		in += 1;
-	}
-
-	*rb->rp = in;
-	mif_err("---\n");
-
-	return IRQ_HANDLED;
-error:
-	mif_err("xxx\n");
-
-	return IRQ_HANDLED;
-}
-#else
 static irqreturn_t modem_pci_irq_handler(int irq, void *data)
 {
 	struct mem_link_device *mld = (struct mem_link_device *)data;
@@ -231,7 +168,6 @@ static irqreturn_t modem_pci_irq_handler(int irq, void *data)
 #endif
 	return IRQ_HANDLED;
 }
-#endif
 
 static inline void reset_ipc_map(struct mem_link_device *mld)
 {
@@ -292,8 +228,6 @@ static inline bool ipc_active(struct mem_link_device *mld)
 {
 	struct link_device *ld = &mld->link_dev;
 	struct modem_ctl *mc = ld->mc;
-
-	return true;
 
 	if (unlikely(!cp_online(mc))) {
 		mif_err("%s<->%s: %s.state %s != ONLINE <%pf>\n",
@@ -1871,6 +1805,11 @@ static int modem_pci_init_comm(struct link_device *ld, struct io_device *iod)
 			} else {
 				mif_err("%s not opened yet\n", check_iod->name);
 			}
+		} else {
+			mif_err("%s: %s->INIT_END->%s\n",
+					ld->name, iod->name, mc->name);
+			send_ipc_irq(mld, cmd2int(CMD_INIT_END));
+			atomic_set(&mld->cp_boot_done, 1);
 		}
 		break;
 
@@ -1881,14 +1820,69 @@ static int modem_pci_init_comm(struct link_device *ld, struct io_device *iod)
 	return 0;
 }
 
+static int release_sbd_dma(struct sbd_link_device *sl, struct sbd_ring_buffer *rb,
+			enum direction dir, struct sbd_link_attr *link_attr)
+{
+	struct sk_buff *skb;
+	dma_addr_t dma_addr;
+
+	if (!skb_queue_empty(&rb->skb_q)) {
+		mif_info("rx skb_q is not empty! flush it...\n");
+		while ((skb = skb_dequeue(&rb->skb_q))) {
+			dma_addr = skbpriv(skb)->dma_addr;
+			dma_unmap_single(&(sl->pdev->dev), dma_addr,
+					skb->len, (dir == DL) ? DMA_FROM_DEVICE : DMA_TO_DEVICE);
+			/* TODO : usually dma_unmap_single used to refer
+			 * rb->dma_local_desc[out].size.
+			 * is this could be mismatched with skb->len ?
+			 */
+			if (dir == DL)
+				kfree_skb(skb);
+		}
+	}
+
+	kfree(rb->dma_local_desc);
+	rb->dma_local_desc = NULL;
+
+	kfree(rb->dma_buffer);
+	rb->dma_buffer = NULL;
+
+	return 0;
+}
+
 static void modem_pci_terminate_comm(struct link_device *ld, struct io_device *iod)
 {
-#ifdef CONFIG_LINK_CONTROL_MSG_IOSM
 	struct mem_link_device *mld = to_mem_link_device(ld);
+	struct sbd_link_device *sl = &mld->sbd_link_dev;
+	struct modem_ctl *mc = ld->mc;
+	int i;
 
-	if (mld->iosm)
-		tx_iosm_message(mld, IOSM_A2C_CLOSE_CH, (u32 *)&iod->id);
-#endif
+	if (!sbd_active(sl))
+		return;
+
+	flush_workqueue(sl->rx_alloc_work_queue);
+	flush_workqueue(sl->tx_alloc_work_queue);
+
+	disable_irq(mld->pdev->irq);
+	sbd_deactivate(sl);
+	mif_disable_irq(&mc->irq_wakeup);
+	mif_disable_irq(&mc->irq_boot_noti);
+
+	for (i = 0; i < sl->num_channels; i++) {
+		struct sbd_link_attr *link_attr = sl->link_attr;
+		struct sbd_ipc_device *ipc_dev = sl->ipc_dev;
+		struct sbd_ring_buffer *rb;
+
+		rb = &ipc_dev[i].rb[UL];
+		release_sbd_dma(sl, rb, UL, &link_attr[i]);
+
+		rb = &ipc_dev[i].rb[DL];
+		release_sbd_dma(sl, rb, DL, &link_attr[i]);
+	}
+
+	kfree(sl->local_rbps);
+	sl->local_rbps = NULL;
+	mc->boot_on = false;
 }
 
 static int modem_pci_init_descriptor(struct link_device *ld)
@@ -1908,11 +1902,14 @@ static int modem_pci_init_descriptor(struct link_device *ld)
 		return ret;
 	}
 
+	atomic_set(&mld->forced_cp_crash, 0);
+	enable_irq(mld->pdev->irq);
+
 	return 0;
 }
 
 static int modem_pci_send(struct link_device *ld, struct io_device *iod,
-		    struct sk_buff *skb)
+		struct sk_buff *skb)
 {
 	struct mem_link_device *mld = to_mem_link_device(ld);
 	struct modem_ctl *mc = ld->mc;
@@ -2036,7 +2033,7 @@ static int modem_pci_xmit_boot(struct link_device *ld, struct io_device *iod,
 			return -EFAULT;
 		}
 		mif_info("BOOT_COMMAND: addr 0x%X, value 0x%X\n", boot_command.addr, boot_command.value);
-		memcpy(bar2_base + boot_command.addr - 0xC000000, &(boot_command.value), sizeof(u32));
+		*((u32 *)(bar2_base + boot_command.addr - 0xC000000)) |= boot_command.value;
 		break;
 	case SS5G_BOOT_DATA:
 		err = copy_from_user(&boot_data, (const void __user *)arg, sizeof(boot_data));
@@ -2127,43 +2124,120 @@ static int modem_pci_update_firm_info(struct link_device *ld, struct io_device *
 	return 0;
 }
 
-static int modem_pci_force_dump(struct link_device *ld, struct io_device *iod)
+int modem_pci_force_dump(struct link_device *ld, struct io_device *iod)
+{
+	struct modem_ctl *mc = ld->mc;
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	int ret = 0;
+
+	mif_err("AP force crash!\n");
+	if (atomic_inc_return(&mld->forced_cp_crash) > 1) {
+		mif_err("%s: ALREADY in progress <%pf>\n",
+			ld->name, CALLER);
+		return ret;
+	}
+
+	gpio_set_value(mc->gpio_ap_dump_int, 1);
+	if (!wait_for_completion_timeout(&mc->dump_cmpl, 2 * HZ)) {
+		mif_err("CP_DUMP_INT completion timeout!\n");
+		ret = -ETIMEDOUT;
+	}
+	msleep(1000);
+	gpio_set_value(mc->gpio_ap_dump_int, 0);
+
+	mc->bootd->modem_state_changed(mc->bootd, STATE_CRASH_EXIT);
+	return ret;
+}
+EXPORT_SYMBOL(modem_pci_force_dump);
+
+static int modem_pci_stop_upload(struct link_device *ld, struct io_device *iod,
+		unsigned long arg)
 {
 	struct mem_link_device *mld = to_mem_link_device(ld);
-	mif_err("+++\n");
-	modem_pci_forced_cp_crash(mld);
-	mif_err("---\n");
+	u8 *bar2_base = mld->base - mld->bar2_offset;
+
+	u32 *cp2ap_cmd = (u32 *)(bar2_base + CP2AP_CMD_REG);
+	unsigned int remain = 0, spin = 10;
+	int ret = 0;
+
+	ret = copy_from_user(&remain, (const void __user *)arg, sizeof(u32));
+	if (ret < 0) {
+		mif_err("ERR! %s[%d]\n", __func__, __LINE__);
+		return -EFAULT;
+	}
+	mif_info("Remaining dump size : 0x%X\n", remain);
+
+	/* This function is going to clear DTD flag because one dump transfer is done.
+	 * If there are no more data, receiving dump is ended.
+	 * So we need to check DTC(Dump Transfer Complete) flag to verify it.
+	 * Otherwise, function will be returned because we already cleared DTD.
+	 */
+	*cp2ap_cmd &= (~CP2AP_CMD_DTD);
+
+	if (remain <= 0) {
+		while ((spin-- > 0) && ((*cp2ap_cmd & CP2AP_CMD_DTC) != CP2AP_CMD_DTC))
+			msleep(500);
+		if (spin <= 0) {
+			mif_err("ERR! Dump transfer clear flag not set (DTC:0x%X)\n",
+					*cp2ap_cmd);
+			return -ETIMEDOUT;
+		}
+
+		*cp2ap_cmd &= (~CP2AP_CMD_DTC);
+		mif_info("Dump transfer is completed!\n");
+	}
 	return 0;
 }
 
-static int modem_pci_start_upload(struct link_device *ld, struct io_device *iod)
+static int modem_pci_start_upload(struct link_device *ld, struct io_device *iod,
+		unsigned long arg)
 {
 	struct mem_link_device *mld = to_mem_link_device(ld);
+	u8 *bar2_base = mld->base - mld->bar2_offset;
+	u8 *bar4_base = mld->boot_base;
+	u32 *cp2ap_cmd = (u32 *)(bar2_base + CP2AP_CMD_REG);
 
-	if (ld->sbd_ipc && mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP))
-		sbd_deactivate(&mld->sbd_link_dev);
+	int spin = 10, ret = 0, len = 0;
+	static int ss5g_dump_size;
 
-	reset_ipc_map(mld);
-
-	if (mld->attrs & LINK_ATTR(LINK_ATTR_DUMP_ALIGNED))
-		ld->aligned = true;
-	else
-		ld->aligned = false;
-
-	if (mld->dpram_magic) {
-		unsigned int magic;
-
-		set_magic(mld, MEM_DUMP_MAGIC);
-		magic = get_magic(mld);
-		if (magic != MEM_DUMP_MAGIC) {
-			mif_err("%s: ERR! magic 0x%08X != DUMP_MAGIC 0x%08X\n",
-				ld->name, magic, MEM_DUMP_MAGIC);
-			return -EFAULT;
-		}
-		mif_err("%s: magic == 0x%08X\n", ld->name, magic);
+	if (ss5g_dump_size < 0) {
+		mif_err("ERR! ss5g_dump_size is invalid value : 0x%X\n",
+				ss5g_dump_size);
+		ret = -EFAULT;
+		goto exit;
 	}
 
-	return 0;
+	while ((spin-- > 0) && ((*cp2ap_cmd & CP2AP_CMD_DTD) != CP2AP_CMD_DTD))
+		msleep(500);
+	if (spin <= 0) {
+		mif_info("Waiting DTD timed out! (DTD[31]:0x%X)\n", *cp2ap_cmd);
+		ret = -ETIMEDOUT;
+		goto exit;
+	}
+
+	/* Check if this request is a first one.
+	 * Because CP will send full size of a dump at this time.
+	 * If then, kernel will return the size and be finished.
+	 * Otherwise, it will send dump data to user.
+	 */
+	if (!ss5g_dump_size) {
+		len = ss5g_dump_size = *((u32 *)(bar2_base + OFFSET_FILE_SIZE));
+		mif_info("Higgs full dump size = 0x%X\n", ss5g_dump_size);
+	} else {
+		len = (ss5g_dump_size > BAR4_MAX_SIZE) ? BAR4_MAX_SIZE : ss5g_dump_size;
+		ret = copy_to_user((void __user *)arg, bar4_base, len);
+		if (ret < 0) {
+			mif_err("ERR! %s[%d]\n", __func__, __LINE__);
+			goto exit;
+		}
+
+		ss5g_dump_size -= len;
+		mif_info("Dump copied! remained size : 0x%X\n", ss5g_dump_size);
+	}
+
+	return len;
+exit:
+	return ret;
 }
 
 static int modem_pci_full_dump(struct link_device *ld, struct io_device *iod,
@@ -2572,18 +2646,20 @@ struct link_device *pci_create_link_device(struct platform_device *pdev)
 	ld->shmem_dump = modem_pci_full_dump;
 	ld->force_dump = modem_pci_force_dump;
 
-	if (mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP))
-		ld->dump_start = modem_pci_start_upload;
+	ld->dump_update = modem_pci_start_upload;
+	ld->dump_finish = modem_pci_stop_upload;
 
 	ld->close_tx = modem_pci_close_tx;
 
 	INIT_LIST_HEAD(&ld->list);
 
+#if 0
 	skb_queue_head_init(&ld->sk_fmt_tx_q);
 	skb_queue_head_init(&ld->sk_raw_tx_q);
 
 	skb_queue_head_init(&ld->sk_fmt_rx_q);
 	skb_queue_head_init(&ld->sk_raw_rx_q);
+#endif
 
 	spin_lock_init(&ld->netif_lock);
 	atomic_set(&ld->netif_stopped, 0);
@@ -2639,9 +2715,12 @@ struct link_device *pci_create_link_device(struct platform_device *pdev)
 	mld->pktlog = create_pktlog("modem_pci");
 	if (!mld->pktlog)
 		mif_err("packet log device create fail\n");
-	
+
 #endif
 	modem_pcie_init(mld);
+
+	/* Link mem_link_device to modem_data */
+	modem->mld = mld;
 
 	if (linkdev_change_sysfs_register(&pdev->dev))
 		mif_err("WARN! linkdev sysfs create failed\n");
@@ -2659,27 +2738,23 @@ error:
 
 void modem_pcie_link_state_cb(struct exynos_pcie_notify *notify)
 {
-	struct modem_pcie_dev_info *mpdev_info;
-	struct mem_link_device *mld;
+	struct link_device *ld = notify->data;
+	struct modem_ctl *mc = ld->mc;
 
 	if (NULL == notify || NULL == notify->data) {
 		mif_err("Incomplete handle received!\n");
 		return;
 	}
 
-	mpdev_info = notify->data;
-
-	mld = container_of(mpdev_info, struct mem_link_device, modem_pcie_dev);
-
 	switch (notify->event) {
 	case EXYNOS_PCIE_EVENT_LINKDOWN:
-		mif_err("<KTG> PCIE link down event\n");
+		mc->bootd->modem_state_changed(mc->bootd, STATE_CRASH_EXIT);
 		break;
 	case EXYNOS_PCIE_EVENT_LINKUP:
-		mif_err("<KTG> PCIE link up event\n");
+		mif_err("PCIE link up event\n");
 		break;
 	case EXYNOS_PCIE_EVENT_WAKEUP:
-		mif_err("<KTG> PCIE wake up event\n");
+		mif_err("PCIE wake up event\n");
 		break;
 	default:
 		break;
@@ -2697,52 +2772,65 @@ void modem_pcie_link_state_cb(struct exynos_pcie_notify *notify)
 static int pcie_dev_init(struct pci_dev *pdev,
 			 struct modem_pcie_dev_info *mpdev_info)
 {
-	int i;
+	int i, ret = 0;
 	unsigned int bar_usage_flag = MODEM_PCI_BAR_USAGE;
 
-	/* Enable the device */
-	if (pci_enable_device(pdev)) {
-		mif_err("Cannot enable PCI device!\n");
-		return -ENODEV;
+	ret = pci_enable_device(pdev);
+	if (ret) {
+		mif_err("pci_enable_device error %d\n", ret);
+		return ret;
 	}
 
-	/* PCI Bar addr */
-	for (i = 0; i < MAX_BAR_NUM; i++)
-	{
+	for (i = 0; i < MAX_BAR_NUM; i++) {
 		if (bar_usage_flag & (1 << i)) {
 			mpdev_info->bar_base[i] = ioremap_nocache(pci_resource_start(pdev, i),
 					pci_resource_len(pdev, i));
 			mpdev_info->bar_end[i] = mpdev_info->bar_base[i] +
 				pci_resource_len(pdev, i);
+
 			if (!mpdev_info->bar_base[i]) {
-				mif_err("Failed to register for pcie resources[BAR %d]\n",
-									i);
-				return -ENODEV;
+				mif_err("Failed to register for pcie resources[BAR %d]\n", i);
+				return -ENOMEM;
 			}
 
-			if (pci_request_region(pdev, i, MODEM_PCI_BAR_NAME"")) {
+			ret = pci_request_region(pdev, i, MODEM_PCI_BAR_NAME"");
+			if (ret) {
 				mif_err("Could not request BAR %d region!\n", i);
+				return ret;
 			}
-
-			mif_err("Modem PCI BAR [%d] (%s) : start: %p, end: %p\n",
-						i,
-						pdev->driver->name,
-						mpdev_info->bar_base[i],
-						mpdev_info->bar_end[i]);
+			mif_info("Modem PCI BAR [%d] (%s) : start: %p, end: %p\n", i,
+				pdev->driver->name, mpdev_info->bar_base[i], mpdev_info->bar_end[i]);
 		}
 	}
-
 	mpdev_info->pdev = pdev;
 
-	if (pdev->vendor != MODEM_PCIE_VENDOR_ID) {
-		mif_err("chipmatch failed!\n");
-
-		pci_disable_device(pdev);
+	pci_set_master(pdev);
+	pci_save_state(pdev);
+	mpdev_info->default_state = pci_store_saved_state(pdev);
+	if (mpdev_info->default_state == NULL) {
+		mif_err("pci_store_saved_state returns NULL\n");
 		return -ENODEV;
 	}
 
-	/* Set PCI master (for DMA) */
-	pci_set_master(pdev);
+	return 0;
+}
+
+static int pcie_dev_remove(struct pci_dev *pdev,
+				struct modem_pcie_dev_info *mpdev_info)
+{
+	int i;
+	unsigned int bar_usage_flag = MODEM_PCI_BAR_USAGE;
+
+	pci_load_and_free_saved_state(pdev, &mpdev_info->default_state);
+	pci_disable_device(pdev);
+	mpdev_info->pdev = NULL;
+	for (i = 0; i < MAX_BAR_NUM; i++) {
+		if (bar_usage_flag & (1 << i)) {
+			pci_release_region(pdev, i);
+			iounmap(mpdev_info->bar_base[i]);
+			mpdev_info->bar_end[i] = NULL;
+		}
+	}
 
 	return 0;
 }
@@ -2772,14 +2860,15 @@ static int modem_pcie_probe(struct pci_dev *pdev,
 			 EXYNOS_PCIE_EVENT_WAKEUP);
 	mpdev_info->mp_link_evt.user = pdev;
 	mpdev_info->mp_link_evt.callback = modem_pcie_link_state_cb;
-	mpdev_info->mp_link_evt.notify.data = mpdev_info;
+	mpdev_info->mp_link_evt.notify.data = ld;
 	ret = exynos_pcie_register_event(&mpdev_info->mp_link_evt);
 	if (ret)
 		mif_err("Failed to register for link notifications (%d)\n", ret);
 #endif
-	if (pcie_dev_init(pdev, mpdev_info)) {
+	ret = pcie_dev_init(pdev, mpdev_info);
+	if (ret) {
 		mif_err("Modem PCIe Enumeration failed\n");
-		return -ENODEV;
+		return ret;
 	}
 
 #if 1
@@ -2846,8 +2935,6 @@ static int modem_pcie_probe(struct pci_dev *pdev,
 		else
 			ld->aligned = false;
 
-		sbd_activate(&mld->sbd_link_dev);
-
 #ifdef CONFIG_LINK_DEVICE_NAPI
 		INIT_WORK(&mld->polling_timer, polling_timer_func);
 
@@ -2877,9 +2964,110 @@ error:
 
 void modem_pcie_remove(struct pci_dev *pdev)
 {
-	exynos_pcie_poweroff(MODEM_PCIE_CH_NUM);
+	struct mem_link_device *mld;
+	struct modem_pcie_dev_info *mpdev_info;
 
+	mif_info("\n");
+	mld = container_of(pdev->driver, struct mem_link_device, pdev_drv);
+	mpdev_info = &mld->modem_pcie_dev;
+
+	pcie_dev_remove(pdev, mpdev_info);
+
+	exynos_pcie_poweroff(MODEM_PCIE_CH_NUM);
 	return;
+}
+
+static int modem_pcie_suspend(struct pci_dev *pdev, pm_message_t state)
+{
+	struct mem_link_device *mld = container_of(pdev->driver, struct mem_link_device, pdev_drv);
+	struct link_device *ld = &mld->link_dev;
+	struct modem_ctl *mc = ld->mc;
+	int ret = 0, cnt = 0;
+
+	mif_info("\n");
+
+	/* Step #1. suspend by mailbox */
+	*(mld->bar0 + INBOX_62) = PCI_REQ_SUSPEND;
+
+	while (*(mld->bar0 + OUTBOX_63) != PCI_RES_SUSPEND) {
+		mif_info("INBOX #62: %x, OUTBOX #63: %x\n",
+				*(mld->bar0 + INBOX_62), *(mld->bar0 + OUTBOX_63));
+		msleep(10);
+		if (cnt++ >= 20) {
+			mif_info("didn't get suspend from cp");
+			mc->bootd->modem_state_changed(mc->bootd, STATE_CRASH_EXIT);
+		}
+	}
+
+	/* Step #2. PCIE suspend */
+	pci_save_state(pdev);
+	mld->modem_pcie_dev.state = pci_store_saved_state(pdev);
+	if (pci_is_enabled(pdev))
+		pci_disable_device(pdev);
+	exynos_pcie_pm_suspend(MODEM_PCIE_CH_NUM);
+
+	/* Step #3. suspend by wakeup control */
+	gpio_set_value(mc->gpio_cp_wakeup, 0);
+	while (gpio_get_value(mc->gpio_ap_wakeup)) {
+		mif_info("waiting ap wakeup low.. cp_wakeup: %d, ap_wakeup: %d, cnt: %d\n",
+				gpio_get_value(mc->gpio_cp_wakeup), gpio_get_value(mc->gpio_ap_wakeup), cnt);
+		msleep(10);
+		if (cnt++ >= 20) {
+			mif_info("didn't get ap wakeup low");
+			mc->bootd->modem_state_changed(mc->bootd, STATE_CRASH_EXIT);
+		}
+	}
+
+	return ret;
+}
+
+static int modem_pcie_resume(struct pci_dev *pdev)
+{
+	struct mem_link_device *mld = container_of(pdev->driver, struct mem_link_device, pdev_drv);
+	struct link_device *ld = &mld->link_dev;
+	struct modem_ctl *mc = ld->mc;
+	int ret = 0, cnt = 0;
+
+	mif_info("\n");
+
+	/* Step #1. resume by wakeup control */
+	gpio_set_value(mc->gpio_cp_wakeup, 1);
+
+	while (!gpio_get_value(mc->gpio_ap_wakeup)) {
+		mif_info("waiting ap wakeup high.. cp_wakeup: %d, ap_wakeup: %d, cnt: %d\n",
+				gpio_get_value(mc->gpio_cp_wakeup), gpio_get_value(mc->gpio_ap_wakeup), cnt);
+		msleep(10);
+		if (cnt++ >= 20) {
+			mif_info("didn't get ap wakeup high");
+			mc->bootd->modem_state_changed(mc->bootd, STATE_CRASH_EXIT);
+		}
+	}
+
+	/* Step #2. PCIE resume*/
+	exynos_pcie_pm_resume(MODEM_PCIE_CH_NUM);
+	pci_load_and_free_saved_state(pdev, &mld->modem_pcie_dev.state);
+	pci_restore_state(pdev);
+	ret = pci_enable_device(pdev);
+	if (ret) {
+		mif_err("pci_enable_device error %d\n", ret);
+		return ret;
+	}
+	pci_set_master(pdev);
+
+	/* Step #3. resume by mailbox */
+	*(mld->bar0 + INBOX_62) = PCI_REQ_RESUME;
+
+	while (*(mld->bar0 + OUTBOX_63) != PCI_RES_RESUME) {
+		mif_info("INBOX #62: %x, OUTBOX #63: %x\n",
+				*(mld->bar0 + INBOX_62), *(mld->bar0 + OUTBOX_63));
+		msleep(10);
+		if (cnt++ >= 20) {
+			mif_info("didn't get resume from cp");
+			mc->bootd->modem_state_changed(mc->bootd, STATE_CRASH_EXIT);
+		}
+	}
+
+	return ret;
 }
 
 struct pci_driver modem_pcie_driver = {
@@ -2887,8 +3075,8 @@ struct pci_driver modem_pcie_driver = {
 	.id_table = modem_pcie_device_id,
 	.probe = modem_pcie_probe,
 	.remove = modem_pcie_remove,
-	.suspend = NULL,
-	.resume = NULL,
+	.suspend = modem_pcie_suspend,
+	.resume = modem_pcie_resume,
 	.driver = {
 		.name = "modem_pcie_drv",
 		.of_match_table = of_match_ptr(modem_pcie_match),
@@ -2897,6 +3085,7 @@ struct pci_driver modem_pcie_driver = {
 
 int modem_pcie_init(struct mem_link_device *mld)
 {
+	mld->pdev = NULL;
 	mld->pdev_drv = modem_pcie_driver;
 
 	if (pci_register_driver(&mld->pdev_drv)) {
@@ -2909,4 +3098,3 @@ int modem_pcie_init(struct mem_link_device *mld)
 
 	return 0;
 }
-

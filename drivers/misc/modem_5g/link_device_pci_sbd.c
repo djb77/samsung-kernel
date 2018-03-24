@@ -776,6 +776,7 @@ int init_pci_sbd_link(struct sbd_link_device *sl)
 
 		print_sbd_config(sl);
 	}
+	sbd_activate(sl);
 
 	return err;
 }
@@ -935,6 +936,23 @@ static ssize_t dbgfs_bar4_pci_log(struct file *file,
 	return buf_size;
 }
 
+static ssize_t dbgfs_ap_force_dump(struct file *file,
+		const char __user *data, size_t count, loff_t *ppos)
+{
+	struct sbd_link_device *sl = file->private_data;
+	struct link_device *ld = sl->ld;
+	struct io_device *iod = link_get_iod_with_channel(sl->ld,
+					SIPC5_CH_ID_BOOT_1);
+
+	if (!ld || !iod)
+		return -EINVAL;
+
+	mif_info("[MIF] %s called\n", __func__);
+	modem_pci_force_dump(ld, iod);
+
+	return count;
+}
+
 static const struct file_operations dbgfs_bar4_frame_fops = {
 	.open = simple_open,
 	.read = dbgfs_bar4_pci_log,
@@ -953,6 +971,12 @@ static const struct file_operations dbgfs_bar0_frame_fops = {
 	.owner = THIS_MODULE
 };
 
+static const struct file_operations dbgfs_ap_force_dump_fops = {
+	.open = simple_open,
+	.write = dbgfs_ap_force_dump,
+	.owner = THIS_MODULE
+};
+
 int create_pci_sbd_link_device(struct link_device *ld, struct sbd_link_device *sl,
 			   u8 *shmem_base, unsigned int shmem_size)
 {
@@ -960,6 +984,7 @@ int create_pci_sbd_link_device(struct link_device *ld, struct sbd_link_device *s
 	int num_iodevs;
 	struct modem_io_t *iodevs;
 	struct mem_link_device *mld;
+	struct dentry *d;
 
 	if (!ld || !sl || !shmem_base)
 		return -EINVAL;
@@ -998,6 +1023,8 @@ int create_pci_sbd_link_device(struct link_device *ld, struct sbd_link_device *s
 				sl->dbgfs_dir, sl, &dbgfs_bar2_frame_fops);
 	sl->pci_bar0_map_dbgfs = debugfs_create_file("pci_bar0_map_log", S_IRUGO,
 				sl->dbgfs_dir, sl, &dbgfs_bar0_frame_fops);
+	d = debugfs_create_file("ap_force_dump", 0220,
+				sl->dbgfs_dir, sl, &dbgfs_ap_force_dump_fops);
 
 	/*
 	 * It will be dedicated to RX dma buffer allocation
@@ -1313,7 +1340,7 @@ int pci_sbd_tx_clear(struct sbd_ring_buffer *rb)
 	while (in != local_in) {
 		skb = (struct sk_buff *)rb->dma_buffer[local_in].va_buffer;
 		if (!skb) {
-			mif_err("ERR! skb is NULL in tx_clear! RB {ch:%d} rp:%d(local_rp:%d), wp:%d\n",
+			mif_err_limited("ERR! skb is NULL in tx_clear! RB {ch:%d} rp:%d(local_rp:%d), wp:%d\n",
 				rb->ch, *rb->rp, *rb->local_rp, *rb->wp);
 
 			goto next;
@@ -1344,4 +1371,3 @@ next:
 @}
 */
 #endif
-

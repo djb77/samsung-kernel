@@ -60,6 +60,7 @@
 //#endif
 
 #include "ssp_dump.h"
+#include "sensor_list.h"
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #undef CONFIG_HAS_EARLYSUSPEND
@@ -400,53 +401,6 @@ enum {
 	ADD_LIBRARY,
 };
 
-/* SENSOR_TYPE */
-enum {
-	ACCELEROMETER_SENSOR = 0,
-	GYROSCOPE_SENSOR,
-	GEOMAGNETIC_UNCALIB_SENSOR,
-	GEOMAGNETIC_RAW,
-	GEOMAGNETIC_SENSOR,
-	PRESSURE_SENSOR,
-	GESTURE_SENSOR,
-	PROXIMITY_SENSOR,
-	TEMPERATURE_HUMIDITY_SENSOR,
-	LIGHT_SENSOR,
-	PROXIMITY_RAW,
-#ifdef CONFIG_SENSORS_SSP_SX9306
-	GRIP_SENSOR,
-	ORIENTATION_SENSOR,
-#else
-	ORIENTATION_SENSOR = 12,
-#endif
-	STEP_DETECTOR = 13,
-	SIG_MOTION_SENSOR,
-	GYRO_UNCALIB_SENSOR,
-	GAME_ROTATION_VECTOR = 16,
-	ROTATION_VECTOR,
-	STEP_COUNTER,
-	BIO_HRM_RAW,
-	BIO_HRM_RAW_FAC,
-	BIO_HRM_LIB,
-	SHAKE_CAM = 23,
-#ifdef CONFIG_SENSORS_SSP_IRDATA_FOR_CAMERA
-	LIGHT_IR_SENSOR = 24,
-#endif
-#ifdef CONFIG_SENSORS_SSP_INTERRUPT_GYRO_SENSOR
-	INTERRUPT_GYRO_SENSOR = 25,
-#endif
-	TILT_DETECTOR,
-	PICKUP_GESTURE,
-	BULK_SENSOR,
-	GPS_SENSOR,
-	PROXIMITY_ALERT_SENSOR,
-	LIGHT_FLICKER_SENSOR,
-	SENSOR_MAX,
-#ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
-	META_SENSOR = 200,
-#endif
-};
-
 struct meta_data_event {
 	s32 what;
 	s32 sensor;
@@ -558,6 +512,7 @@ struct sensor_value {
 		u32 step_diff;
 		u8 tilt_detector;
 		u8 pickup_gesture;
+		u8 scontext_buf[SCONTEXT_DATA_SIZE];
 		struct meta_data_event meta_data;
 	};
 	u64 timestamp;
@@ -663,6 +618,10 @@ struct ssp_time_diff {
 #endif
 
 struct ssp_data {
+	struct iio_dev *indio_dev[SENSOR_MAX];
+	struct iio_dev *indio_scontext_dev;
+	struct iio_dev *meta_indio_dev;
+
 	struct iio_dev *accel_indio_dev;
 	struct iio_dev *gyro_indio_dev;
 	struct iio_dev *uncal_gyro_indio_dev;
@@ -1125,6 +1084,11 @@ void report_shake_cam_data(struct ssp_data *data, struct sensor_value *shake_cam
 void report_bulk_comp_data(struct ssp_data *data);
 void report_tilt_data(struct ssp_data *data, struct sensor_value *tilt_data);
 void report_pickup_data(struct ssp_data *data, struct sensor_value *pickup_data);
+#if ANDROID_VERSION >= 80000
+void report_light_cct_data(struct ssp_data *data, struct sensor_value *lightdata);
+void report_scontext_data(struct ssp_data *data, struct sensor_value *scontextbuf);
+void report_uncalib_accel_data(struct ssp_data *data, struct sensor_value *acceldata);
+#endif
 unsigned int get_module_rev(struct ssp_data *data);
 void reset_mcu(struct ssp_data *data);
 int sensors_register(struct device *dev, void *drvdata,

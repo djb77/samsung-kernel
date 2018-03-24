@@ -62,6 +62,7 @@ obj-$(CONFIG_SEC_MODEM_IF)  += modem_if/
 obj-$(CONFIG_SEC_SIPC_MODEM_IF)	+= modem_v1/
 obj-$(CONFIG_SEC_SIPC_HIGGS_MODEM_IF)	+= modem_5g/
 obj-$(CONFIG_EXYNOS_IMA)	+= exynos_ima.o
+obj-$(CONFIG_FAN_G761)		+= g761.o
 
 # Secure OS Mobicore Interface
 obj-$(CONFIG_TRUSTONIC_TEE)	+= tzic64.o

@@ -326,14 +326,17 @@ static void shmem_forced_cp_crash(struct mem_link_device *mld,
 
 	/* Update crash type to msg box */
 	mbox_update_value(MCU_CP, ap_status, mld->crash_reason.owner, 
-			mld->sbi_crash_type_mask, mld->sbi_crash_type_pos);
+			mc->sbi_crash_type_mask, mc->sbi_crash_type_pos);
 
 	/* Send CRASH_EXIT command to a CP */
 	send_ipc_irq(mld, cmd2int(CMD_CRASH_EXIT));
 
 	clean_vss_magic_code();
 
-	mif_err("%s->%s: CP_CRASH_REQ <%pf>\n", ld->name, mc->name, CALLER);
+	mif_err("%s->%s: CP_CRASH_REQ by %d, %s <%pf>\n",
+				ld->name, mc->name,
+				crash_reason_owner, crash_reason_string,
+				CALLER);
 }
 
 #endif

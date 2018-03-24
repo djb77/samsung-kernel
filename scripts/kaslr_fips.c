@@ -77,12 +77,16 @@ int patch_rela(char *file, uint64 rela_start, uint64 rela_end, uint64 dynsym_sta
 	Elf64_Rela rela_entry;
 	Elf64_Sym  sym_entry;
 	uint64 addr = 0, value = 0;
-
+	size_t read_size = 0;
 	for (; rs_offset < re_offset; rs_offset += sizeof(Elf64_Rela)){
 		//seek and read the rela entry
-		if(0 != fseek(fp, rs_offset, SEEK_SET)) return -1;
+		if(0 != fseek(fp, rs_offset, SEEK_SET)){
+			fclose(fp);
+			return -1;
+		}
 
-		fread((void*) &rela_entry, sizeof(rela_entry), 1, fp);
+		read_size = fread((void*) &rela_entry, sizeof(rela_entry), 1, fp);
+		if(0 == read_size) continue;
 		/*printf("%llx, %llx\n", ELF64_R_TYPE(rela_entry.r_info), R_AARCH64_RELATIVE);*/
 		addr = rela_entry.r_offset;
 		if (0x0 == addr) continue;
@@ -99,8 +103,13 @@ int patch_rela(char *file, uint64 rela_start, uint64 rela_end, uint64 dynsym_sta
 			uint64 sym_offset = ds_offset + sym_index * (sizeof(Elf64_Sym));
 
 			//seek to the start of the symbol table entry
-			if (0 !=fseek(fp, sym_offset, SEEK_SET)) return -1;
-			fread((void*) &sym_entry, sizeof(sym_entry), 1, fp);
+			if (0 !=fseek(fp, sym_offset, SEEK_SET)){
+				fclose(fp);
+				return -1;
+			}
+			read_size = fread((void*) &sym_entry, sizeof(sym_entry), 1, fp);
+			if(0 == read_size) continue;
+			
 			value = sym_entry.st_value + rela_entry.r_addend + offset;
 		} else {
 		  //	printf("Try to patch none supported type %llx\n", (uint64)ELF64_R_TYPE(rela_entry.r_info));
@@ -109,9 +118,15 @@ int patch_rela(char *file, uint64 rela_start, uint64 rela_end, uint64 dynsym_sta
 		/*(uint64)rela_entry.r_info, */
 		/*(uint64)rela_entry.r_addend, */
 		/*addr - VA_TO_FILE, value);*/
-		if (0 != fseek(fp, addr - va_to_file, SEEK_SET)) return -1;
+		if (0 != fseek(fp, addr - va_to_file, SEEK_SET)){
+			fclose(fp);
+			return -1;
+		}
 
-		if (fwrite((const void *) &value, sizeof(uint64), 1, fp) != 1) return -1;
+		if (fwrite((const void *) &value, sizeof(uint64), 1, fp) != 1){
+			fclose(fp);
+			return -1;
+		}
 	}
 
 	fclose(fp);

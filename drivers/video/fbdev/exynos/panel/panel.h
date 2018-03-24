@@ -27,9 +27,12 @@
 #ifdef CONFIG_SEC_FACTORY
 #define CONFIG_SUPPORT_PANEL_SWAP
 #define CONFIG_SUPPORT_XTALK_MODE
+#define CONFIG_DSC_DECODE_CRC
 #endif
 #define CONFIG_SUPPORT_MST
 #define CONFIG_SUPPORT_GRAYSPOT_TEST
+
+
 
 #define to_panel_device(_m_)	container_of(_m_, struct panel_device, _m_)
 
@@ -542,6 +545,9 @@ enum PANEL_SEQ {
 #ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
 	PANEL_GRAYSPOT_ON_SEQ,
 	PANEL_GRAYSPOT_OFF_SEQ,
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+	PANEL_DSC_DECODE_CRC,
 #endif
 	PANEL_DUMP_SEQ,
 	PANEL_DUMMY_SEQ,

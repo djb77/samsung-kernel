@@ -665,7 +665,7 @@ out:
 	return ret;
 }
 
-/* START_OF_KNOX_VPN */
+/* START_OF_KNOX_NPA */
 /** The function sets the domain name associated with the socket. **/
 static int sock_set_domain_name(struct sock *sk, char __user *optval,
                 int optlen)
@@ -693,7 +693,28 @@ static int sock_set_domain_name(struct sock *sk, char __user *optval,
 out:
     return ret;
 }
-/* END_OF_KNOX_VPN */
+
+static int sock_set_dns_uid(struct sock *sk, char __user *optval,
+                int optlen)
+{
+    int ret = -EADDRNOTAVAIL;
+
+    if (optlen < 0)
+		goto out;
+
+    if (optlen == sizeof(uid_t)) {
+		uid_t dns_uid;
+		ret = -EFAULT;
+		if (copy_from_user(&dns_uid, optval, sizeof(dns_uid)))
+	    	goto out;
+		memcpy(&sk->knox_dns_uid,&dns_uid,sizeof(sk->knox_dns_uid));
+		ret = 0;	
+    }
+
+out:
+	return ret;
+}
+/* END_OF_KNOX_NPA */
 
 static inline void sock_valbool_flag(struct sock *sk, int bit, int valbool)
 {
@@ -743,10 +764,12 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	if (optname == SO_BINDTODEVICE)
 		return sock_setbindtodevice(sk, optval, optlen);
 
-    /* START_OF_KNOX_VPN */
+    /* START_OF_KNOX_NPA */
     if (optname == SO_SET_DOMAIN_NAME)
         return sock_set_domain_name(sk, optval, optlen);
-    /* END_OF_KNOX_VPN */
+    if (optname == SO_SET_DNS_UID)
+	return sock_set_dns_uid(sk, optval, optlen);
+    /* END_OF_KNOX_NPA */
 
 	if (optlen < sizeof(int))
 		return -EINVAL;
@@ -1514,10 +1537,10 @@ struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
 
 		sock_update_classid(sk);
 		sock_update_netprioidx(sk);
-        /* START_OF_KNOX_VPN */
+        /* START_OF_KNOX_NPA */
         sk->knox_uid = current->cred->uid.val;
         sk->knox_pid = current->tgid;
-        /* END_OF_KNOX_VPN */
+        /* END_OF_KNOX_NPA */
 	}
 
 	return sk;
@@ -2471,8 +2494,11 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 		sk->sk_type	=	sock->type;
 		sk->sk_wq	=	sock->wq;
 		sock->sk	=	sk;
-	} else
-		sk->sk_wq	=	NULL;
+		sk->sk_uid	=	SOCK_INODE(sock)->i_uid;
+	} else {
+ 		sk->sk_wq	=	NULL;
+		sk->sk_uid	=	make_kuid(sock_net(sk)->user_ns, 0);
+	}
 
 	rwlock_init(&sk->sk_callback_lock);
 	lockdep_set_class_and_name(&sk->sk_callback_lock,

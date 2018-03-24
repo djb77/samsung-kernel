@@ -75,6 +75,8 @@
 #define CSI_SCENARIO_TELE		(2)
 #define CSI_SCENARIO_SECURE		(3)
 //#define CSI_SCENARIO_SEN_REAR	(0)
+
+//#define CAMERA_HW_BIG_DATA_FILE_IO
 #endif
 
 #ifdef CONFIG_OIS_USE_RUMBA_S6

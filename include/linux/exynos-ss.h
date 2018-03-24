@@ -46,6 +46,7 @@ extern unsigned long exynos_ss_get_last_pc(unsigned int cpu);
 extern unsigned long exynos_ss_get_last_pc_paddr(void);
 extern void exynos_ss_hook_hardlockup_entry(void *v_regs);
 extern void exynos_ss_hook_hardlockup_exit(void);
+extern void exynos_ss_dump_task_info(void);
 
 #ifdef CONFIG_EXYNOS_DRAMTEST
 extern int disable_mc_powerdn(void);
@@ -208,6 +209,7 @@ void exynos_ss_dump_sfr(void);
 #define exynos_ss_get_last_pc_paddr()	do { } while(0)
 #define exynos_ss_hook_hardlockup_entry(a) do { } while(0)
 #define exynos_ss_hook_hardlockup_exit() do { } while(0)
+#define exynos_ss_dump_task_info()	do { } while (0)
 
 static inline unsigned long exynos_ss_get_item_vaddr(char *name)
 {

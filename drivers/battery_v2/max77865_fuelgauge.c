@@ -248,6 +248,8 @@ static int max77865_fg_write_temp(struct max77865_fuelgauge_data *fuelgauge,
 		__func__, temperature, data[1], data[0]);
 
 	fuelgauge->temperature = temperature;
+	if (!fuelgauge->vempty_init_flag)
+		fuelgauge->vempty_init_flag = true;
 	return temperature;
 }
 
@@ -1595,7 +1597,7 @@ static int max77865_fg_get_property(struct power_supply *psy,
 			val->intval /= 10;
 
 			/* SW/HW V Empty setting */
-			if (fuelgauge->using_hw_vempty) {
+			if (fuelgauge->using_hw_vempty && fuelgauge->vempty_init_flag) {
 				if (fuelgauge->temperature <= (int)fuelgauge->low_temp_limit) {
 					if (fuelgauge->raw_capacity <= 50) {
 						if (fuelgauge->vempty_mode != VEMPTY_MODE_HW) {
@@ -1686,6 +1688,10 @@ static int max77865_fg_get_property(struct power_supply *psy,
 		max77865_bulk_read(fuelgauge->i2c, FILTER_CFG_REG, 2, data);
 		val->intval = data[1] << 8 | data[0];
 		pr_debug("%s: FilterCFG=0x%04X\n", __func__, data[1] << 8 | data[0]);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		val->intval = max77865_fg_read_repcap(fuelgauge) * 1000;
+		pr_info("%s: Remaining Capacity=%d uAh\n", __func__, val->intval);
 		break;
 #if defined(CONFIG_BATTERY_SBM_DATA)
 	case POWER_SUPPLY_PROP_MAX ... POWER_SUPPLY_EXT_PROP_MAX:
@@ -2287,9 +2293,9 @@ static int max77865_fuelgauge_probe(struct platform_device *pdev)
 	}
 
 	/* SW/HW init code. SW/HW V Empty mode must be opposite ! */
-	fuelgauge->temperature = 300; /* default value */
+	fuelgauge->vempty_init_flag = false; /* default value */
 	pr_info("%s: SW/HW V empty init \n", __func__);
-	max77865_fg_set_vempty(fuelgauge, VEMPTY_MODE_HW);
+	max77865_fg_set_vempty(fuelgauge, VEMPTY_MODE_SW);
 
 	fuelgauge_cfg.drv_data = fuelgauge;
 

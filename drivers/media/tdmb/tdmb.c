@@ -316,7 +316,11 @@ static void tdmb_make_ring_buffer(void)
 	if (size % PAGE_SIZE) /* klaatu hard coding */
 		size = size + size % PAGE_SIZE;
 
-	ts_ring = kmalloc(size, GFP_KERNEL);
+	ts_ring = kzalloc(size, GFP_KERNEL);
+	if (!ts_ring) {
+		DPRINTK("RING Buff Create Fail\n");
+		return;
+	}
 	DPRINTK("RING Buff Create OK\n");
 }
 
@@ -331,6 +335,10 @@ static int tdmb_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	vma->vm_flags |= VM_RESERVED;
 	size = vma->vm_end - vma->vm_start;
+	if (size > TDMB_RING_BUFFER_MAPPING_SIZE) {
+		DPRINTK("over size given : %lx\n", size);
+		return -EAGAIN;
+	}
 	DPRINTK("size given : %lx\n", size);
 
 #if TDMB_PRE_MALLOC
@@ -342,7 +350,11 @@ static int tdmb_mmap(struct file *filp, struct vm_area_struct *vma)
 		if (size % PAGE_SIZE) /* klaatu hard coding */
 			size = size + size % PAGE_SIZE;
 
-		ts_ring = kmalloc(size, GFP_KERNEL);
+		ts_ring = kzalloc(size, GFP_KERNEL);
+		if (!ts_ring) {
+			DPRINTK("RING Buff ReAlloc Fail\n");
+			return -ENOMEM;
+		}
 #if TDMB_PRE_MALLOC
 	}
 #endif

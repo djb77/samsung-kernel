@@ -29,6 +29,9 @@
 #include <video/mipi_display.h>
 #include <linux/regulator/consumer.h>
 #include <media/v4l2-dv-timings.h>
+#ifdef CONFIG_COMBO_REDRIVER
+#include <linux/combo_redriver/ptn36502.h> /*re-driver IC*/
+#endif
 
 #include "displayport.h"
 #include "decon.h"
@@ -275,17 +278,17 @@ Voltage_Swing_Retry:
 	displayport_dbg("lane_cr_done = %x\n", lane_cr_done);
 
 	if (lane_cnt == 0x04) {
-		if (lane_cr_done == 0x0F) {
+		if ((lane_cr_done & 0xF) == 0x0F) {
 			displayport_dbg("lane_cr_done\n");
 			goto EQ_Training_Start;
 		}
 	} else if (lane_cnt == 0x02) {
-		if (lane_cr_done == 0x03) {
+		if ((lane_cr_done & 0x03) == 0x03) {
 			displayport_dbg("lane_cr_done\n");
 			goto EQ_Training_Start;
 		}
 	} else if (lane_cnt == 0x01) {
-		if (lane_cr_done == 0x01) {
+		if ((lane_cr_done & 0x01) == 0x01) {
 			displayport_dbg("lane_cr_done\n");
 			goto EQ_Training_Start;
 		}
@@ -410,13 +413,13 @@ EQ_Training_Retry:
 	interlane_align_done |= (val[2] & INTERLANE_ALIGN_DONE);
 
 	if (lane_cnt == 0x04) {
-		if (lane_cr_done != 0x0F)
+		if ((lane_cr_done & 0x0F) != 0x0F)
 			goto Check_Link_rate;
 	} else if (lane_cnt == 0x02) {
-		if (lane_cr_done != 0x03)
+		if ((lane_cr_done & 0x03) != 0x03)
 			goto Check_Link_rate;
 	} else {
-		if (lane_cr_done != 0x01)
+		if ((lane_cr_done & 0x01) != 0x01)
 			goto Check_Link_rate;
 	}
 
@@ -428,8 +431,9 @@ EQ_Training_Retry:
 	max_link_rate = link_rate;
 
 	if (lane_cnt == 0x04) {
-		if ((lane_channel_eq_done == 0x0F) && (lane_symbol_locked_done == 0x0F)
-				&& (interlane_align_done == 1)) {
+		if (((lane_channel_eq_done & 0x0F) == 0x0F) &&
+				((lane_symbol_locked_done & 0x0F) == 0x0F) &&
+				(interlane_align_done == 1)) {
 			displayport_reg_set_training_pattern(NORAMAL_DATA);
 
 			val[0] = 0x00;	/* SCRAMBLING_ENABLE, NORMAL_DATA */
@@ -441,8 +445,9 @@ EQ_Training_Retry:
 			return ret;
 		}
 	} else if (lane_cnt == 0x02) {
-		if ((lane_channel_eq_done == 0x03) && (lane_symbol_locked_done == 0x03)
-				&& (interlane_align_done == 1)) {
+		if (((lane_channel_eq_done & 0x03) == 0x03) &&
+				((lane_symbol_locked_done & 0x03) == 0x03) &&
+				(interlane_align_done == 1)) {
 			displayport_reg_set_training_pattern(NORAMAL_DATA);
 
 			val[0] = 0x00;	/* SCRAMBLING_ENABLE, NORMAL_DATA */
@@ -454,8 +459,9 @@ EQ_Training_Retry:
 			return ret;
 		}
 	} else {
-		if ((lane_channel_eq_done == 0x01) && (lane_symbol_locked_done == 0x01)
-				&& (interlane_align_done == 1)) {
+		if (((lane_channel_eq_done & 0x01) == 0x01) &&
+				((lane_symbol_locked_done & 0x01)  == 0x01) &&
+				(interlane_align_done == 1)) {
 			displayport_reg_set_training_pattern(NORAMAL_DATA);
 
 			val[0] = 0x00;	/* SCRAMBLING_ENABLE, NORMAL_DATA */
@@ -592,17 +598,17 @@ static int displayport_fast_link_training(void)
 	if (lane_cnt == 0x04) {
 		if (lane_cr_done != 0x0F) {
 			displayport_err("Fast Link Training Fail : lane_cnt %d -", lane_cnt);
-			return -EINVAL;
+			goto err_exit;
 		}
 	} else if (lane_cnt == 0x02) {
 		if (lane_cr_done != 0x03) {
 			displayport_err("Fast Link Training Fail : lane_cnt %d -", lane_cnt);
-			return -EINVAL;
+			goto err_exit;
 		}
 	} else {
 		if (lane_cr_done != 0x01) {
 			displayport_err("Fast Link Training Fail : lane_cnt %d -", lane_cnt);
-			return -EINVAL;
+			goto err_exit;
 		}
 	}
 
@@ -637,17 +643,17 @@ static int displayport_fast_link_training(void)
 	if (lane_cnt == 0x04) {
 		if (lane_cr_done != 0x0F) {
 			displayport_err("Fast Link Training Fail : lane_cnt %d -", lane_cnt);
-			return -EINVAL;
+			goto err_exit;
 		}
 	} else if (lane_cnt == 0x02) {
 		if (lane_cr_done != 0x03) {
 			displayport_err("Fast Link Training Fail : lane_cnt %d -", lane_cnt);
-			return -EINVAL;
+			goto err_exit;
 		}
 	} else {
 		if (lane_cr_done != 0x01)
 			displayport_err("Fast Link Training Fail : lane_cnt %d -", lane_cnt);
-		return -EINVAL;
+		goto err_exit;
 	}
 
 	displayport_info("lane_cr_done = %x\n", lane_cr_done);
@@ -698,6 +704,9 @@ static int displayport_fast_link_training(void)
 	displayport_reg_dpcd_write(DPCD_ADD_TRANING_PATTERN_SET, 1, &val);
 
 	displayport_err("Fast Link Training Fail -");
+
+err_exit:
+
 	return -EINVAL;
 }
 
@@ -716,15 +725,23 @@ static int displayport_check_dfp_type(void)
 
 static void displayport_link_sink_status_read(void)
 {
-	u8 val[DPCP_LINK_SINK_STATUS_FIELD_LENGTH] = {0, };
+	u8 val[DPCD_BUF_SIZE] = {0, };
 
-	displayport_reg_dpcd_read_burst(DPCD_ADD_SINK_COUNT,
-			DPCP_LINK_SINK_STATUS_FIELD_LENGTH, val);
-	displayport_info("Read link status %02x %02x %02x %02x %02x %02x\n",
+	displayport_reg_dpcd_read_burst(DPCD_ADD_REVISION_NUMBER, DPCD_BUF_SIZE, val);
+
+	displayport_info("Read DPCD REV NUM 0_5 %02x %02x %02x %02x %02x %02x\n",
 			val[0], val[1], val[2], val[3], val[4], val[5]);
-
-	displayport_reg_dpcd_read_burst(DPCD_ADD_LINK_BW_SET, 2, val);
-	displayport_info("Read link rate %02x, count %02x\n", val[0], val[1]);
+	displayport_info("Read DPCD REV NUM 6_B %02x %02x %02x %02x %02x %02x\n",
+			val[6], val[7], val[8], val[9], val[10], val[11]);
+/*
+ *	displayport_reg_dpcd_read_burst(DPCD_ADD_SINK_COUNT,
+ *			DPCP_LINK_SINK_STATUS_FIELD_LENGTH, val);
+ *	displayport_info("Read link status %02x %02x %02x %02x %02x %02x\n",
+ *			val[0], val[1], val[2], val[3], val[4], val[5]);
+ *
+ *	displayport_reg_dpcd_read_burst(DPCD_ADD_LINK_BW_SET, 2, val);
+ *	displayport_info("Read link rate %02x, count %02x\n", val[0], val[1]);
+ */
 }
 
 static int displayport_read_branch_revision(struct displayport_device *displayport)
@@ -748,6 +765,8 @@ static int displayport_link_status_read(void)
 	u8 val[DPCP_LINK_SINK_STATUS_FIELD_LENGTH] = {0, };
 	int count = 10;
 
+	/* for Link CTS : Branch Device Detection*/
+	displayport_link_sink_status_read();
 	do {
 		displayport_reg_dpcd_read(DPCD_ADD_SINK_COUNT, 1, val);
 		displayport_info("Read SINK_COUNT %02X\n", val[0]);
@@ -763,6 +782,9 @@ static int displayport_link_status_read(void)
 				val[0], val[1], val[2], val[3], val[4], val[5]);
 
 	if ((val[0] & val[1] & val[2] & val[3] & val[4] & val[5]) == 0xff)
+		return -EINVAL;
+
+	if (count == 0)
 		return -EINVAL;
 
 	if (count < 10 && count > 0)
@@ -814,8 +836,6 @@ static int displayport_link_training(void)
 
 	mutex_unlock(&displayport->training_lock);
 
-	displayport_link_sink_status_read(); /* for Link CTS : (4.2.2.7) Branch Device Detection*/
-
 	return ret;
 }
 
@@ -854,7 +874,7 @@ void displayport_hpd_changed(int state)
 		displayport->bpc = BPC_8;	/*default setting*/
 		displayport->bist_used = 0;
 		displayport->bist_type = COLOR_BAR;
-		displayport->dyn_range = CEA_RANGE;
+		displayport->dyn_range = VESA_RANGE;
 		displayport->hpd_state = HPD_PLUG;
 		displayport->auto_test_mode = 0;
 		/* PHY power on */
@@ -878,11 +898,13 @@ void displayport_hpd_changed(int state)
 			goto HPD_FAIL;
 		}
 		displayport->dfp_type = displayport_check_dfp_type();
-		if (displayport->dfp_type != DFP_TYPE_DP &&
-				displayport->dfp_type != DFP_TYPE_HDMI) {
-			displayport_err("not supported DFT type\n");
-			goto HPD_FAIL;
-		}
+		/* Enable it! if you want to prevent output according to type
+		 * if (displayport->dfp_type != DFP_TYPE_DP &&
+		 *		displayport->dfp_type != DFP_TYPE_HDMI) {
+		 *	displayport_err("not supported DFT type\n");
+		 *	goto HPD_FAIL;
+		 * }
+		 */
 		displayport_set_switch_state(displayport, 1);
 		timeout = wait_event_interruptible_timeout(displayport->dp_wait,
 			(displayport->state == DISPLAYPORT_STATE_ON), msecs_to_jiffies(1000));
@@ -919,6 +941,8 @@ HPD_FAIL:
 	phy_power_off(displayport->phy);
 	if (wake_lock_active(&displayport->dp_wake_lock))
 			wake_unlock(&displayport->dp_wake_lock);
+	displayport->hpd_current_state = 0;
+	displayport->hpd_state = HPD_UNPLUG;
 	mutex_unlock(&displayport->hpd_lock);
 
 	return;
@@ -971,24 +995,23 @@ static int displayport_check_dpcd_lane_status(u8 lane0_1_status,
 			val[0], (val[1] & MAX_LANE_COUNT));
 
 	if ((link_rate != val[0]) || (lane_cnt != (val[1] & MAX_LANE_COUNT))) {
-		displayport_err("%s(%d)\n", __func__, __LINE__);
+		displayport_err("%s() link rate, lane_cnt error\n", __func__);
 		return -EINVAL;
 	}
 
 	if ((lane_align_status & INTERLANE_ALIGN_DONE) != INTERLANE_ALIGN_DONE) {
-		displayport_err("%s(%d)\n", __func__, __LINE__);
-		return -EINVAL;
+		displayport_err("%s() interlane align error\n", __func__);
 	}
 
 	if ((lane_align_status & LINK_STATUS_UPDATE) == LINK_STATUS_UPDATE) {
-		displayport_err("%s(%d)\n", __func__, __LINE__);
+		displayport_err("%s() link status update req\n", __func__);
 		return -EINVAL;
 	}
 
 	if (lane_cnt >= 1) {
 		if ((lane0_1_status & (LANE0_CR_DONE | LANE0_CHANNEL_EQ_DONE | LANE0_SYMBOL_LOCKED))
 				!= (LANE0_CR_DONE | LANE0_CHANNEL_EQ_DONE | LANE0_SYMBOL_LOCKED)) {
-			displayport_err("%s(%d)\n", __func__, __LINE__);
+			displayport_err("%s() lane0 status error\n", __func__);
 			return -EINVAL;
 		}
 	}
@@ -996,7 +1019,7 @@ static int displayport_check_dpcd_lane_status(u8 lane0_1_status,
 	if (lane_cnt >= 2) {
 		if ((lane0_1_status & (LANE1_CR_DONE | LANE1_CHANNEL_EQ_DONE | LANE1_SYMBOL_LOCKED))
 				!= (LANE1_CR_DONE | LANE1_CHANNEL_EQ_DONE | LANE1_SYMBOL_LOCKED)) {
-			displayport_err("%s(%d)\n", __func__, __LINE__);
+			displayport_err("%s() lane1 status error\n", __func__);
 			return -EINVAL;
 		}
 	}
@@ -1004,16 +1027,57 @@ static int displayport_check_dpcd_lane_status(u8 lane0_1_status,
 	if (lane_cnt == 4) {
 		if ((lane2_3_status & (LANE2_CR_DONE | LANE2_CHANNEL_EQ_DONE | LANE2_SYMBOL_LOCKED))
 				!= (LANE2_CR_DONE | LANE2_CHANNEL_EQ_DONE | LANE2_SYMBOL_LOCKED)) {
-			displayport_err("%s(%d)\n", __func__, __LINE__);
+			displayport_err("%s() lane2 stat error\n", __func__);
 			return -EINVAL;
 		}
 
 		if ((lane2_3_status & (LANE3_CR_DONE | LANE3_CHANNEL_EQ_DONE | LANE3_SYMBOL_LOCKED))
 				!= (LANE3_CR_DONE | LANE3_CHANNEL_EQ_DONE | LANE3_SYMBOL_LOCKED)) {
-			displayport_err("%s(%d)\n", __func__, __LINE__);
+			displayport_err("%s() lane3 status error\n", __func__);
 			return -EINVAL;
 		}
 	}
+
+	return 0;
+}
+
+static int displayport_automated_test_set_lane_req(u8 *val)
+{
+	u8 drive_current[MAX_LANE_CNT];
+	u8 pre_emphasis[MAX_LANE_CNT];
+	u8 voltage_swing_lane[MAX_LANE_CNT];
+	u8 pre_emphasis_lane[MAX_LANE_CNT];
+	u8 max_reach_value[MAX_LANE_CNT];
+	u8 val2[MAX_LANE_CNT];
+	int i;
+
+	voltage_swing_lane[0] = (val[0] & VOLTAGE_SWING_LANE0);
+	pre_emphasis_lane[0] = (val[0] & PRE_EMPHASIS_LANE0) >> 2;
+	voltage_swing_lane[1] = (val[0] & VOLTAGE_SWING_LANE1) >> 4;
+	pre_emphasis_lane[1] = (val[0] & PRE_EMPHASIS_LANE1) >> 6;
+
+	voltage_swing_lane[2] = (val[1] & VOLTAGE_SWING_LANE2);
+	pre_emphasis_lane[2] = (val[1] & PRE_EMPHASIS_LANE2) >> 2;
+	voltage_swing_lane[3] = (val[1] & VOLTAGE_SWING_LANE3) >> 4;
+	pre_emphasis_lane[3] = (val[1] & PRE_EMPHASIS_LANE3) >> 6;
+
+	for (i = 0; i < 4; i++) {
+		drive_current[i] = voltage_swing_lane[i];
+		pre_emphasis[i] = pre_emphasis_lane[i];
+
+		displayport_info("AutoTest: swing[%d] = %x\n", i, drive_current[i]);
+		displayport_info("AutoTest: pre_emphasis[%d] = %x\n", i, pre_emphasis[i]);
+	}
+	displayport_reg_set_voltage_and_pre_emphasis((u8 *)drive_current, (u8 *)pre_emphasis);
+	displayport_get_voltage_and_pre_emphasis_max_reach((u8 *)drive_current,
+			(u8 *)pre_emphasis, (u8 *)max_reach_value);
+
+	val2[0] = (pre_emphasis[0]<<3) | drive_current[0] | max_reach_value[0];
+	val2[1] = (pre_emphasis[1]<<3) | drive_current[1] | max_reach_value[1];
+	val2[2] = (pre_emphasis[2]<<3) | drive_current[2] | max_reach_value[2];
+	val2[3] = (pre_emphasis[3]<<3) | drive_current[3] | max_reach_value[3];
+	displayport_info("AutoTest: set %02x %02x %02x %02x\n", val2[0], val2[1], val2[2], val2[3]);
+	displayport_reg_dpcd_write_burst(DPCD_ADD_TRANING_LANE0_SET, 4, val2);
 
 	return 0;
 }
@@ -1105,6 +1169,9 @@ static int displayport_Automated_Test_Request(void)
 		msleep(120);
 		displayport_reg_dpcd_read(DPCD_ADD_ADJUST_REQUEST_LANE0_1, 2, val);
 		displayport_info("ADJUST_REQUEST_LANE0_1 %02x %02x\n", val[0], val[1]);
+
+		/*set swing, preemp*/
+		displayport_automated_test_set_lane_req(val);
 
 		displayport_reg_dpcd_read(DCDP_ADD_PHY_TEST_PATTERN, 4, val);
 		displayport_info("PHY_TEST_PATTERN %02x %02x %02x %02x\n", val[0], val[1], val[2], val[3]);
@@ -1208,7 +1275,7 @@ static int displayport_hdcp22_irq_handler(void)
 		ret = hdcp_dplink_set_rp_ready();
 	} else {
 		displayport_info("undefined RxStatus(0x%x). ignore\n", rxstatus);
-		ret = 0;
+		ret = -EINVAL;
 	}
 
 	return ret;
@@ -1218,6 +1285,9 @@ static void displayport_hpd_irq_work(struct work_struct *work)
 {
 	u8 val[DPCP_LINK_SINK_STATUS_FIELD_LENGTH] = {0, };
 	struct displayport_device *displayport = get_displayport_drvdata();
+
+	if (displayport->state == DISPLAYPORT_STATE_SHUTDOWN)
+		return;
 
 	if (!displayport->hpd_current_state) {
 		displayport_info("HPD IRQ work: hpd is low\n");
@@ -1240,19 +1310,19 @@ static void displayport_hpd_irq_work(struct work_struct *work)
 
 		if ((val[1] & CP_IRQ) == CP_IRQ) {
 			displayport_info("hdcp22: detect CP_IRQ\n");
-			displayport_hdcp22_irq_handler();
-		} else {
-			displayport_info("hdcp22: detect hpd_irq!!!!\n");
+			ret = displayport_hdcp22_irq_handler();
+			if (ret == 0)
+				return;
+		}
 
-			if ((val[1] & AUTOMATED_TEST_REQUEST) == AUTOMATED_TEST_REQUEST) {
-				if (displayport_Automated_Test_Request() == 0)
-					return;
-			}
+		if ((val[1] & AUTOMATED_TEST_REQUEST) == AUTOMATED_TEST_REQUEST) {
+			if (displayport_Automated_Test_Request() == 0)
+				return;
+		}
 
-			if (displayport_check_dpcd_lane_status(val[2], val[3], val[4]) != 0) {
-				displayport_info("link training in HPD IRQ work\n");
-				displayport_link_training();
-			}
+		if (displayport_check_dpcd_lane_status(val[2], val[3], val[4]) != 0) {
+			displayport_info("link training in HPD IRQ work\n");
+			displayport_link_training();
 		}
 		return;
 	}
@@ -1277,8 +1347,9 @@ static void displayport_hpd_irq_work(struct work_struct *work)
 			if (hdcp13_info.auth_state == HDCP13_STATE_FAIL) {
 				queue_delayed_work(displayport->dp_wq,
 					&displayport->hdcp13_work, msecs_to_jiffies(2000));
+			} else {
+				return;
 			}
-			return;
 		}
 
 		if ((val[1] & AUTOMATED_TEST_REQUEST) == AUTOMATED_TEST_REQUEST) {
@@ -1641,7 +1712,7 @@ static int displayport_enable(struct displayport_device *displayport)
 		if (displayport->dfp_type != DFP_TYPE_DP)
 			bpc = BPC_8;
 
-		displayport_reg_set_video_configuration(bpc);
+		displayport_reg_set_video_configuration(bpc, dyn_range);
 	}
 
 	displayport_set_avi_infoframe();
@@ -1740,6 +1811,27 @@ static int displayport_timing2conf(struct v4l2_dv_timings *timings)
 	return -EINVAL;
 }
 
+static void displayport_dv_timings_to_str(const struct v4l2_dv_timings *t, char *str, int size)
+{
+	const struct v4l2_bt_timings *bt = &t->bt;
+	u32 htot, vtot;
+	u32 fps;
+
+	if (t->type != V4L2_DV_BT_656_1120)
+		return;
+
+	htot = V4L2_DV_BT_FRAME_WIDTH(bt);
+	vtot = V4L2_DV_BT_FRAME_HEIGHT(bt);
+	if (bt->interlaced)
+		vtot /= 2;
+
+	fps = (htot * vtot) > 0 ? div_u64((100 * (u64)bt->pixelclock),
+				(htot * vtot)) : 0;
+
+	snprintf(str, size - 1, "%ux%u%s%u.%u", bt->width, bt->height,
+			bt->interlaced ? "i" : "p", fps / 100, fps % 100);
+}
+
 static int displayport_s_dv_timings(struct v4l2_subdev *sd,
 		struct v4l2_dv_timings *timings)
 {
@@ -1747,22 +1839,17 @@ static int displayport_s_dv_timings(struct v4l2_subdev *sd,
 	struct decon_device *decon = get_decon_drvdata(2);
 	videoformat displayport_setting_videoformat;
 	int ret = 0;
+	char timingstr[32] = {0x0, };
 
-	v4l2_print_dv_timings("Displayport:", " set ", timings, false);
+	displayport_dv_timings_to_str(timings, timingstr, sizeof(timingstr));
+	displayport_info("set timing %s\n", timingstr);
+
 	ret = displayport_timing2conf(timings);
 	if (ret < 0) {
 		displayport_err("displayport timings not supported\n");
 		return -EINVAL;
 	}
 	displayport_setting_videoformat = ret;
-
-	if (displayport->bist_used == 0) {
-		displayport->bpc = BPC_8;
-		/*fail safe mode (640x480) with 6 bpc*/
-		if (displayport_setting_videoformat == v640x480p_60Hz)
-			displayport->bpc = BPC_6;
-	}
-
 	g_displayport_videoformat = displayport_setting_videoformat;
 	displayport->cur_timings = *timings;
 
@@ -1785,7 +1872,7 @@ static int displayport_g_dv_timings(struct v4l2_subdev *sd,
 	return 0;
 }
 
-static u64 displayport_get_max_pixelclock(void)
+static bool displayport_check_bandwidth(u64 px)
 {
 	u64 pc;
 	u64 pc1lane;
@@ -1799,8 +1886,23 @@ static u64 displayport_get_max_pixelclock(void)
 	}
 
 	pc = max_lane_cnt * pc1lane;
+	/* apply color depth, 24bpp == 1:1 */
+	switch (displayport_drvdata->bpc) {
+	case BPC_6:
+		px = px / 8 * 6;
+		break;
+	case BPC_8:
+	case BPC_10:
+	case BPC_12:
+	case BPC_16:
+		break;
+	}
+	if (px > pc) {
+		displayport_info("pixel clock %llu : %llu\n", px, pc);
+		return -1;
+	}
 
-	return pc;
+	return 0;
 }
 
 static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
@@ -1814,10 +1916,9 @@ static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
 	}
 
 	/* reduce the timing by lane count and link rate */
-	if (displayport_supported_presets[timings->index].dv_timings.bt.pixelclock >
-			displayport_get_max_pixelclock()) {
-		displayport_info("Max pixelclock = %llu, lane:%d, rate:0x%x\n",
-				displayport_get_max_pixelclock(), max_lane_cnt, max_link_rate);
+	if (displayport_check_bandwidth(displayport_supported_presets[timings->index].dv_timings.bt.pixelclock)) {
+		displayport_info("Over the bandwidth for lane:%d, rate:0x%x\n",
+				max_lane_cnt, max_link_rate);
 		return -E2BIG;
 	}
 
@@ -1928,7 +2029,6 @@ static int displayport_parse_dt(struct displayport_device *displayport, struct d
 		displayport_err("failed to get displayport aux vdd\n");
 		displayport->aux_vdd = NULL;
 	}
-
 	displayport->gpio_sw_oe = of_get_named_gpio(np, "dp,aux_sw_oe", 0);
 	ret = gpio_request(displayport->gpio_sw_oe, "dp_aux_sw_oe");
 	if (ret)
@@ -1941,7 +2041,6 @@ static int displayport_parse_dt(struct displayport_device *displayport, struct d
 		if (ret)
 			displayport_err("failed to get gpio dp_sbu_sw_sel\n");
 	}
-
 	displayport->gpio_usb_dir = of_get_named_gpio(np, "dp,usb_con_sel", 0);
 	displayport_info("%s done\n", __func__);
 
@@ -2038,7 +2137,11 @@ static void displayport_aux_sel(struct displayport_device *displayport)
 	if (gpio_is_valid(displayport->gpio_usb_dir) &&
 			gpio_is_valid(displayport->gpio_sw_sel)) {
 		displayport->dp_sw_sel = gpio_get_value(displayport->gpio_usb_dir);
+#ifndef CONFIG_COMBO_REDRIVER
 		gpio_direction_output(displayport->gpio_sw_sel, !(displayport->dp_sw_sel));
+#else
+		gpio_direction_output(displayport->gpio_sw_sel, 0);/*aux controlled by redriver*/
+#endif
 		displayport_info("Get direction from ccic %d\n", displayport->dp_sw_sel);
 	} else if (gpio_is_valid(displayport->gpio_usb_dir)) {
 		/* for old H/W - AUX switch is controlled by CCIC */
@@ -2053,7 +2156,7 @@ bool check_dex_support(struct displayport_device *displayport)
 			&& displayport->prod_id == DEXDOCK_PRODUCT_ID)
 		return true;
 
-#ifdef CONFIG_DISPLAYPORT_ENG 
+#ifdef CONFIG_DISPLAYPORT_ENG
 	return true;
 #else
 	return false;
@@ -2067,7 +2170,10 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 	struct displayport_device *displayport = container_of(nb,
 			struct displayport_device, dp_typec_nb);
 	CC_NOTI_TYPEDEF usb_typec_info = *(CC_NOTI_TYPEDEF *)data;
-	
+
+	if (displayport->state == DISPLAYPORT_STATE_SHUTDOWN)
+		return 0;
+
 	if (usb_typec_info.dest != CCIC_NOTIFY_DEV_DP)
 		return 0;
 
@@ -2088,6 +2194,10 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 			displayport->ccic_hpd = false;
 			displayport_hpd_changed(0);
 			displayport_aux_onoff(displayport, 0);
+
+#ifdef CONFIG_COMBO_REDRIVER
+			ptn36502_config(INIT_MODE, 0);
+#endif
 			break;
 		case CCIC_NOTIFY_ATTACH:
 			displayport->ven_id = usb_typec_info.sub2;
@@ -2095,8 +2205,11 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 
 			if(check_dex_support(displayport))
 				displayport_info("Dex mode supported product connected\n");
-
 			displayport_aux_onoff(displayport, 1);
+
+#ifdef CONFIG_COMBO_REDRIVER
+			ptn36502_config(DP4_LANE_MODE, DFP);
+#endif
 			break;
 		default:
 			break;
@@ -2625,6 +2738,24 @@ static ssize_t displayport_dex_ver_show(struct class *class,
 
 static CLASS_ATTR(dex_ver, 0444, displayport_dex_ver_show, NULL);
 
+static ssize_t displayport_monitor_info_show(struct class *class,
+		struct class_attribute *attr, char *buf)
+{
+	struct displayport_device *displayport = get_displayport_drvdata();
+	int ret = 0;
+
+	ret = scnprintf(buf, PAGE_SIZE, "%s,0x%x,0x%x\n",
+			displayport->edid_manufacturer, displayport->edid_product,
+						displayport->edid_serial);
+	displayport_info("manufacturer : %s product : %x serial num : %x\n",
+		displayport->edid_manufacturer, displayport->edid_product,
+						displayport->edid_serial);
+
+	return ret;
+}
+
+static CLASS_ATTR(monitor_info, 0444, displayport_monitor_info_show, NULL);
+
 static ssize_t displayport_aux_sw_sel_store(struct class *dev,
 		struct class_attribute *attr, const char *buf, size_t size)
 {
@@ -2803,6 +2934,9 @@ static int displayport_probe(struct platform_device *pdev)
 		ret = class_create_file(dp_class, &class_attr_dex_ver);
 		if (ret)
 			displayport_err("failed to create attr_dp_dex_ver\n");
+		ret = class_create_file(dp_class, &class_attr_monitor_info);
+		if (ret)
+			displayport_err("failed to create attr_dp_monitor_info\n");
 		ret = class_create_file(dp_class, &class_attr_dp_sbu_sw_sel);
 		if (ret)
 			displayport_err("failed to create class_attr_dp_sbu_sw_sel\n");
@@ -2835,7 +2969,19 @@ static void displayport_shutdown(struct platform_device *pdev)
 	/* DPU_EVENT_LOG(DPU_EVT_DP_SHUTDOWN, &displayport->sd, ktime_set(0, 0)); */
 	displayport_info("%s + state:%d\n", __func__, displayport->state);
 
+	if (!displayport)
+		return;
+
+	displayport->hpd_current_state = 0;
+	cancel_delayed_work_sync(&displayport->hpd_plug_work);
+	cancel_delayed_work_sync(&displayport->hpd_unplug_work);
+	cancel_delayed_work_sync(&displayport->hpd_irq_work);
+	cancel_delayed_work_sync(&displayport->hdcp13_work);
+	cancel_delayed_work_sync(&displayport->hdcp22_work);
+	cancel_delayed_work_sync(&displayport->hdcp13_integrity_check_work);
+
 	displayport_disable(displayport);
+	displayport->state = DISPLAYPORT_STATE_SHUTDOWN;
 
 	displayport_info("%s -\n", __func__);
 }

@@ -703,6 +703,9 @@ static int mfc_enc_ext_info(struct s5p_mfc_ctx *ctx)
 	val |= ENC_SET_FIXED_SLICE;
 	val |= ENC_SET_PVC_MODE;
 
+	if (FW_HAS_RATIO_INTRA_CTRL(dev))
+		val |= ENC_SET_RATIO_OF_INTRA;
+
 	return val;
 }
 
@@ -1503,6 +1506,9 @@ static int mfc_enc_set_param(struct s5p_mfc_ctx *ctx, struct v4l2_control *ctrl)
 		break;
 	case V4L2_CID_MPEG_MFC90_VIDEO_HEVC_SIGN_DATA_HIDING:
 		break;
+	case V4L2_CID_MPEG_VIDEO_RATIO_OF_INTRA:
+		p->ratio_intra = ctrl->value;
+		break;
 	default:
 		mfc_err_ctx("Invalid control: 0x%08x\n", ctrl->id);
 		ret = -EINVAL;
@@ -1576,6 +1582,7 @@ static int mfc_enc_set_ctrl_val(struct s5p_mfc_ctx *ctx, struct v4l2_control *ct
 	case V4L2_CID_MPEG_MFC_H264_BASE_PRIORITY:
 	case V4L2_CID_MPEG_MFC_CONFIG_QP:
 	case V4L2_CID_MPEG_VIDEO_ROI_CONTROL:
+	case V4L2_CID_MPEG_VIDEO_RATIO_OF_INTRA:
 		list_for_each_entry(ctx_ctrl, &ctx->ctrls, list) {
 			if (!(ctx_ctrl->type & MFC_CTRL_TYPE_SET))
 				continue;

@@ -302,12 +302,22 @@ static int mfc_set_enc_params(struct s5p_mfc_ctx *ctx)
 		reg = MFC_READL(S5P_FIMV_E_RC_MODE);
 		reg &= ~(0x3);
 
-		if (p->rc_reaction_coeff <= CBR_I_LIMIT_MAX)
-			reg = S5P_FIMV_E_RC_CBR_I_LIMIT;
-		else if (p->rc_reaction_coeff <= CBR_FIX_MAX)
-			reg = S5P_FIMV_E_RC_CBR_FIX;
-		else
-			reg = S5P_FIMV_E_RC_VBR;
+		if (p->rc_reaction_coeff <= CBR_I_LIMIT_MAX) {
+			reg |= S5P_FIMV_E_RC_CBR_I_LIMIT;
+			/*
+			 * Ratio of intra for max frame size
+			 * is controled when only CBR_I_LIMIT mode.
+			 * And CBR_I_LIMIT mode is valid for H.264, HEVC codec
+			 */
+			if (p->ratio_intra) {
+				reg &= ~(0xFF << 8);
+				reg |= ((p->ratio_intra & 0xff) << 8);
+			}
+		} else if (p->rc_reaction_coeff <= CBR_FIX_MAX) {
+			reg |= S5P_FIMV_E_RC_CBR_FIX;
+		} else {
+			reg |= S5P_FIMV_E_RC_VBR;
+		}
 
 		if (p->rc_mb) {
 			reg &= ~(0x3 << 4);

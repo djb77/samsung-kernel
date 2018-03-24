@@ -65,7 +65,8 @@ extern struct displayport_device *displayport_drvdata;
 enum displayport_state {
 	DISPLAYPORT_STATE_INIT,
 	DISPLAYPORT_STATE_ON,
-	DISPLAYPORT_STATE_OFF
+	DISPLAYPORT_STATE_OFF,
+	DISPLAYPORT_STATE_SHUTDOWN
 };
 
 enum displayport_dynamic_range_type {
@@ -383,7 +384,9 @@ typedef enum {
 	PIXEL_CLOCK_71_000,
 	PIXEL_CLOCK_74_250,
 	PIXEL_CLOCK_108_000,
+	PIXEL_CLOCK_138_500,
 	PIXEL_CLOCK_148_500,
+	PIXEL_CLOCK_209_500,
 	PIXEL_CLOCK_234_000,
 	PIXEL_CLOCK_241_500,
 	PIXEL_CLOCK_297_000,
@@ -410,8 +413,10 @@ typedef enum {
 	v1920x1080p_24Hz,
 	v1920x1080p_25Hz,
 	v1920x1080p_30Hz,
+	v1920x1080p_59Hz,
 	v1920x1080p_50Hz,
 	v1920x1080p_60Hz,
+	v2048x1536p_60Hz,
 	v1920x1440p_60Hz,
 	v2560x1440p_59Hz,
 	v2560x1440p_60Hz,
@@ -575,6 +580,9 @@ struct displayport_device {
 	int dex_state;
 	int dex_setting;
 	u8 dex_ver[2];
+	u8  edid_manufacturer[4];
+	u32 edid_product;
+	u32 edid_serial;
 };
 
 struct displayport_debug_param {
@@ -661,6 +669,20 @@ struct displayport_supported_preset {
 	.type = V4L2_DV_BT_656_1120, \
 	V4L2_INIT_BT_TIMINGS(2560, 1440, 0, V4L2_DV_HSYNC_POS_POL, \
 		241500000, 48, 32, 80, 3, 5, 33, 0, 0, 0, \
+		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
+}
+
+#define V4L2_DV_BT_CVT_2048X1536P60_ADDED { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(2048, 1536, 0, V4L2_DV_HSYNC_POS_POL, \
+		209250000, 48, 32, 80, 3, 4, 37, 0, 0, 0, \
+		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
+}
+
+#define V4L2_DV_BT_CVT_1920X1080P59_ADDED { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(1920, 1080, 0, V4L2_DV_HSYNC_POS_POL, \
+		138500000, 48, 44, 68, 3, 5, 23, 0, 0, 0, \
 		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
 }
 
@@ -859,7 +881,7 @@ u32 displayport_reg_get_interrupt_and_clear(u32 interrupt_status_register);
 void displayport_reg_start(void);
 void displayport_reg_video_mute(u32 en);
 void displayport_reg_stop(void);
-void displayport_reg_set_video_configuration(u8 bpc);
+void displayport_reg_set_video_configuration(u8 bpc, u8 range);
 int displayport_reg_dpcd_write(u32 address, u32 length, u8 *data);
 int displayport_reg_dpcd_read(u32 address, u32 length, u8 *data);
 int displayport_reg_dpcd_write_burst(u32 address, u32 length, u8 *data);

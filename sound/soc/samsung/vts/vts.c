@@ -34,7 +34,7 @@
 #include <sound/samsung/vts.h>
 #include <soc/samsung/exynos-pmu.h>
 #if defined(CONFIG_SEC_ABC)
-#include <linux/sec_abc.h>
+#include <linux/sti/abc_common.h>
 #endif
 
 #include "vts.h"
@@ -191,6 +191,7 @@ static int vts_start_ipc_transaction_atomic(struct device *dev, struct vts_data 
 		dev_warn(dev, "%s: VTS IP %s state\n", __func__,
 			(data->vts_state == VTS_STATE_VOICECALL ?
 			"VoiceCall" : "Suspended"));
+		spin_unlock_irqrestore(&data->state_spinlock, flag);
 		return -EINVAL;
 	}
 	spin_unlock_irqrestore(&data->state_spinlock, flag);
@@ -659,6 +660,12 @@ static int vts_start_recognization(struct device *dev, int start)
 				 * load svoice model.bin @ offset 0x2A800
 				 * file before starting recognition
 				 */
+				if (data->svoice_info.actual_sz > SOUND_MODEL_SVOICE_SIZE_MAX) {
+					dev_err(dev, "Failed %s Requested size[0x%zx] > supported[0x%x]\n",
+					"svoice.bin", data->svoice_info.actual_sz,
+					SOUND_MODEL_SVOICE_SIZE_MAX);
+					return -EINVAL;
+				}
 				memcpy(data->sram_base + 0x2A800, data->svoice_info.data,
 					data->svoice_info.actual_sz);
 				dev_info(dev, "svoice.bin Binary uploaded size=%zu\n",
@@ -670,6 +677,12 @@ static int vts_start_recognization(struct device *dev, int start)
 				 * load google model.bin @ offset 0x32B00
 				 * file before starting recognition
 				 */
+				if (data->google_info.actual_sz > SOUND_MODEL_GOOGLE_SIZE_MAX) {
+					dev_err(dev, "Failed %s Requested size[0x%zx] > supported[0x%x]\n",
+					"google.bin", data->google_info.actual_sz,
+					SOUND_MODEL_GOOGLE_SIZE_MAX);
+					return -EINVAL;
+				}
 				memcpy(data->sram_base + 0x32B00, data->google_info.data,
 					data->google_info.actual_sz);
 				dev_info(dev, "google.bin Binary uploaded size=%zu\n",

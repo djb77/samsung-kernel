@@ -489,10 +489,10 @@ static ssize_t ccic_send_attention_message(struct device *dev,
 	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
 	int cmd = 0;
 
-    if (!usbpd_data) {
-        pr_err("usbpd_data is NULL\n");
-        return -ENODEV;
-    }
+	if (!usbpd_data) {
+		pr_err("usbpd_data is NULL\n");
+		return -ENODEV;
+	}
 
 	sscanf(buf, "%d", &cmd);
 	pr_info("%s cmd=%d\n", __func__, cmd);
@@ -688,6 +688,45 @@ static ssize_t ccic_water_show(struct device *dev,
 }
 static DEVICE_ATTR(water, 0444, ccic_water_show, NULL);
 
+static ssize_t ccic_usbpd_ids_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+	int retval = 0;
+
+	if (!usbpd_data) {
+		pr_err("%s usbpd_data is null!!\n", __func__);
+		return -ENODEV;
+	}
+	retval = sprintf(buf, "%04x:%04x\n",
+		le16_to_cpu(usbpd_data->Vendor_ID),
+		le16_to_cpu(usbpd_data->Product_ID));
+	pr_info("usb: %s : %s",
+		__func__, buf);
+
+	return retval;
+}
+static DEVICE_ATTR(usbpd_ids, 0444, ccic_usbpd_ids_show, NULL);
+
+static ssize_t ccic_usbpd_type_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+	int retval = 0;
+
+	if (!usbpd_data) {
+		pr_err("%s usbpd_data is null!!\n", __func__);
+		return -ENODEV;
+	}
+	retval = sprintf(buf, "%d\n", usbpd_data->acc_type);
+	pr_info("usb: %s : %d",
+		__func__, usbpd_data->acc_type);
+
+	return retval;
+}
+
+static DEVICE_ATTR(usbpd_type, 0444, ccic_usbpd_type_show, NULL);
+
 static struct attribute *ccic_attributes[] = {
 	&dev_attr_cur_version.attr,
 	&dev_attr_src_version.attr,
@@ -709,6 +748,8 @@ static struct attribute *ccic_attributes[] = {
 	&dev_attr_dna_audio_uvdm.attr,
 	&dev_attr_dex_fan_uvdm.attr,
 	&dev_attr_acc_device_version.attr,
+	&dev_attr_usbpd_ids.attr,
+	&dev_attr_usbpd_type.attr,
 #endif
 	&dev_attr_control_gpio.attr,
 	&dev_attr_water.attr,

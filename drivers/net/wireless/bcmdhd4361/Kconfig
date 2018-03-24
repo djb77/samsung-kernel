@@ -82,6 +82,13 @@ config BCM43241
 	  This module adds support for wireless adapters based on
 	  Broadcom 43241 chipset.
 
+config BCM43456
+        tristate "Broadcom 43456 wireless cards support"
+        depends on BROADCOM_WIFI
+        ---help---
+          This module adds support for wireless adapters based on
+          Broadcom 43456 chipset.
+
 config BCM43455
         tristate "Broadcom 43455 wireless cards support"
         depends on BROADCOM_WIFI
@@ -125,7 +132,7 @@ config BROADCOM_WIFI_RESERVED_MEM
 
 config WIFI_BROADCOM_COB
         bool "BROADCOM WIFI COB"
-        depends on (BCM43455 || BCM4343 || BCM43454 || BCM43012)
+        depends on (BCM43456 || BCM43455 || BCM4343 || BCM43454 || BCM43012)
         ---help---
           This is a configuration for Broadcom WIFI COB Type.
 

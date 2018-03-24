@@ -66,6 +66,15 @@ enum dev_format {
 	MAX_DEV_FORMAT,
 };
 
+enum legacy_ipc_map {
+	IPC_MAP_FMT = 0,
+#ifdef CONFIG_MODEM_IF_LEGACY_QOS
+	IPC_MAP_HPRIO_RAW,
+#endif
+	IPC_MAP_NORM_RAW,
+	MAX_SIPC_MAP,
+};
+
 #define MAX_SIPC_DEVICES	(IPC_RFS + 1)	/* FMT, RAW, RFS */
 #define MAX_SIPC5_DEVICES	(IPC_RAW + 1)	/* FMT, RAW */
 
@@ -264,6 +273,7 @@ enum iodev_attr_bit {
 	ATTR_NO_CHECK_MAXQ,     /* no need to check rxq overflow condition */
 	ATTR_DUALSIM,		/* support Dual SIM */
 	ATTR_OPTION_REGION,	/* region & operator info */
+	ATTR_ZEROCOPY,		/* suppoert Zerocopy : 0x1 << 12*/
 };
 #define IODEV_ATTR(b)	(0x1 << b)
 
@@ -296,6 +306,9 @@ struct modem_io_t {
 	u32 attrs;
 	char *app;
 	char *option_region;
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	int napi_weight;
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 #if 1/*defined(CONFIG_LINK_DEVICE_MEMORY_SBD)*/
 	unsigned int ul_num_buffers;
 	unsigned int ul_buffer_size;
@@ -411,6 +424,9 @@ struct modem_mbox {
 	unsigned int sbi_uart_noti_mask;
 	unsigned int sbi_uart_noti_pos;
 
+	unsigned int sbi_crash_type_mask;
+	unsigned int sbi_crash_type_pos;
+
 	/* Clk table Info */
 	unsigned int *ap_clk_table;
 	unsigned int ap_clk_cnt;
@@ -470,11 +486,20 @@ struct modem_data {
 #ifdef CONFIG_LINK_DEVICE_SHMEM
 	struct modem_mbox *mbx;
 	struct mem_link_device *mld;
+
+	/* MIF buffer information */
+	unsigned int buff_offset;
+	unsigned int buff_size;
+
+	/* buff pool 2nd information */
+	unsigned long int bufpool_2nd_base;
+	unsigned int bufpool_2nd_size;
 #endif
 
 #ifdef CONFIG_LINK_DEVICE_PCI
 	unsigned int gpio_cp_boot_noti;
 	unsigned int gpio_buck_en1;
+	unsigned int gpio_rfb_ldo_en;
 
 	const char *regulator_ldo1;
 	const char *regulator_ldo2;

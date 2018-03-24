@@ -530,33 +530,33 @@ static int manager_handle_ccic_notification(struct notifier_block *nb,
 		}
 		p_noti.dest = CCIC_NOTIFY_DEV_BATTERY;
 		if(typec_manager.pd == NULL)
-			typec_manager.pd = p_noti.pd;		
+			typec_manager.pd = p_noti.pd;
 		break;
 	case CCIC_NOTIFY_ID_ATTACH:		// for MUIC
-			if(typec_manager.ccic_attach_state != p_noti.sub1) {
-				/*attach*/
+			if (typec_manager.ccic_attach_state != p_noti.sub1) {
 				typec_manager.ccic_attach_state = p_noti.sub1;
 				typec_manager.muic_data_refresh = 0;
 				typec_manager.is_UFPS = 0;
 				if(typec_manager.ccic_attach_state == CCIC_NOTIFY_ATTACH){
 					pr_info("usb: [M] %s: CCIC_NOTIFY_ATTACH\n", __func__);
 					typec_manager.water_det = 0;
+				}
+			}
+
+			if (typec_manager.ccic_attach_state == CCIC_NOTIFY_DETACH) {
+				pr_info("usb: [M] %s: CCIC_NOTIFY_DETACH (pd=%d, cable_type=%d)\n", __func__,
+					typec_manager.pd_con_state, typec_manager.cable_type);
+				cable_type_check_work(false, 0);
+				if (typec_manager.pd_con_state) {
 					typec_manager.pd_con_state = 0;
-				} else { /* CCIC_NOTIFY_DETACH */
-					pr_info("usb: [M] %s: CCIC_NOTIFY_DETACH (pd=%d, cable_type=%d)\n", __func__,
-						typec_manager.pd_con_state, typec_manager.cable_type);
-					cable_type_check_work(false, 0);
-					if(typec_manager.pd_con_state) {
-						typec_manager.pd_con_state = 0;
-						bat_noti.src = CCIC_NOTIFY_DEV_CCIC;
-						bat_noti.dest = CCIC_NOTIFY_DEV_BATTERY;
-						bat_noti.id = CCIC_NOTIFY_ID_ATTACH;
-						bat_noti.attach = CCIC_NOTIFY_DETACH;
-						bat_noti.rprd = 0;
-						bat_noti.cable_type = ATTACHED_DEV_UNOFFICIAL_ID_ANY_MUIC; // temp
-						bat_noti.pd = NULL;
-						manager_notifier_notify(&bat_noti);
-					}
+					bat_noti.src = CCIC_NOTIFY_DEV_CCIC;
+					bat_noti.dest = CCIC_NOTIFY_DEV_BATTERY;
+					bat_noti.id = CCIC_NOTIFY_ID_ATTACH;
+					bat_noti.attach = CCIC_NOTIFY_DETACH;
+					bat_noti.rprd = 0;
+					bat_noti.cable_type = ATTACHED_DEV_UNOFFICIAL_ID_ANY_MUIC; // temp
+					bat_noti.pd = NULL;
+					manager_notifier_notify(&bat_noti);
 				}
 			}
 		break;
@@ -719,7 +719,7 @@ static int manager_handle_muic_notification(struct notifier_block *nb,
 		typec_manager.cable_type = MANAGER_NOTIFY_MUIC_NONE;
 	}
 
-	if(!(p_noti.attach) && typec_manager.pd_con_state) {
+	if (!(p_noti.attach) && typec_manager.ccic_attach_state && typec_manager.pd_con_state) {
 		/* If PD charger + detach case is ignored */
 		pr_info("usb: [M] %s: PD charger detached case\n", __func__);
 	} else {

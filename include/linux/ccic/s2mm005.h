@@ -51,6 +51,7 @@
 #define REG_RX_SRC_CAPA_MSG	0x0260
 
 #define CCIC_FW_VERSION_INVALID -1
+#define CCIC_I2C_VALUE_INVALID 274
 
 /******************************************************************************/
 /* definitions & structures                                                   */
@@ -829,6 +830,7 @@ struct s2mm005_data {
 	int s2mm005_om;
 	int s2mm005_sda;
 	int s2mm005_scl;
+	int s2mm005_i2c_err;
 	u32 hw_rev;
 	struct mutex i2c_mutex;
 	u8 attach;
@@ -839,6 +841,7 @@ struct s2mm005_data {
 	int p_prev_rid;
 	int prev_rid;
 	int cur_rid;
+	int water_detect_support;
 	int water_det;
 	int run_dry;
 	int booting_run_dry;
@@ -876,6 +879,10 @@ struct s2mm005_data {
 	int host_turn_on_event;
 	int host_turn_on_wait_time;
 	int is_samsung_accessory_enter_mode;
+	int is_in_first_sec_uvdm_req;
+	int is_in_sec_uvdm_out;
+	struct completion uvdm_out_wait;
+	struct completion uvdm_longpacket_in_wait;
 #endif
 	int manual_lpm_mode;
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)

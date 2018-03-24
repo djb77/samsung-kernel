@@ -397,6 +397,43 @@ int panel_bl_get_acl_opr(struct panel_bl_device *panel_bl)
 	return panel_bl->props.acl_opr;
 }
 
+int panel_bl_set_hbm_cmd(struct panel_bl_device *panel_bl, int prev_brightness)
+{
+	int retVal = 0;
+	int current_hbm = 0, prev_hbm = 0, ret = 0;
+	struct panel_device *panel;
+
+	panel = to_panel_device(panel_bl);
+
+	if (IS_HBM_BRIGHTNESS(panel_bl->subdev[PANEL_BL_SUBDEV_TYPE_DISP].brightness) ||
+		IS_EXT_HBM_BRIGHTNESS(panel_bl->subdev[PANEL_BL_SUBDEV_TYPE_DISP].brightness)) {
+		current_hbm = 1;
+	}
+	if (IS_HBM_BRIGHTNESS(prev_brightness) ||
+		IS_EXT_HBM_BRIGHTNESS(prev_brightness)) {
+		prev_hbm = 1;
+	}
+
+	if (current_hbm && prev_hbm)
+		retVal = 1;						// do nothing
+	else if (current_hbm) {
+		ret = panel_do_seqtbl_by_index(panel, PANEL_HBM_ON_SEQ);			// hbm on
+		if (unlikely(ret < 0))
+			pr_err("%s, failed to write seqtbl\n", __func__);
+		retVal = 1;
+	} else if (prev_hbm) {
+		ret = panel_do_seqtbl_by_index(panel, PANEL_HBM_OFF_SEQ); 		// hbm off
+		if (unlikely(ret < 0))
+			pr_err("%s, failed to write seqtbl\n", __func__);
+		retVal = 0;
+	} else {
+		retVal = 0;
+	}
+	// 1 is hbm on state, 0 is hbm off state
+	return retVal;
+}
+
+
 void g_tracing_mark_write(char id, char *str1, int value);
 int panel_bl_set_brightness(struct panel_bl_device *panel_bl, int id, int force)
 {
@@ -485,8 +522,7 @@ static int panel_set_brightness(struct backlight_device *bd)
 	int ret = 0;
 	int brightness = bd->props.brightness;
 	struct panel_bl_device *panel_bl = bl_get_data(bd);
-
-	return ret;
+	int current_hbm, prev_brightness = 0;
 
 	mutex_lock(&panel_bl->lock);
 	if (brightness < UI_MIN_BRIGHTNESS || brightness > EXTEND_BRIGHTNESS) {
@@ -494,6 +530,8 @@ static int panel_set_brightness(struct backlight_device *bd)
 		ret = -EINVAL;
 		goto exit_set;
 	}
+
+	prev_brightness = panel_bl->subdev[PANEL_BL_SUBDEV_TYPE_DISP].brightness;
 
 	panel_bl->subdev[PANEL_BL_SUBDEV_TYPE_DISP].brightness = brightness;
 
@@ -503,13 +541,15 @@ static int panel_set_brightness(struct backlight_device *bd)
 		ret = -EINVAL;
 		goto exit_set;
 	}
+	current_hbm = panel_bl_set_hbm_cmd(panel_bl, prev_brightness);
 
-	ret = panel_bl_set_brightness(panel_bl, PANEL_BL_SUBDEV_TYPE_DISP, 1);
-	if (ret) {
-		pr_err("%s : fail to set brightness\n", __func__);
-		goto exit_set;
+	if (!current_hbm) {
+		ret = panel_bl_set_brightness(panel_bl, PANEL_BL_SUBDEV_TYPE_DISP, 1);
+		if (ret) {
+			pr_err("%s : fail to set brightness\n", __func__);
+			goto exit_set;
+		}
 	}
-
 exit_set:
 	mutex_unlock(&panel_bl->lock);
 	return ret;

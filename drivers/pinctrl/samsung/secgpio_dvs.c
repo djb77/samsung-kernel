@@ -40,15 +40,15 @@ static ssize_t checked_secgpio_sleep_read_details(
 static ssize_t secgpio_checked_sleepgpio_read(
 	struct device *dev, struct device_attribute *attr, char *buf);
 
-static DEVICE_ATTR(gpioinit_check, 0660,
+static DEVICE_ATTR(gpioinit_check, 0444,
 	checked_init_secgpio_file_read, NULL);
-static DEVICE_ATTR(gpiosleep_check, 0660,
+static DEVICE_ATTR(gpiosleep_check, 0444,
 	checked_sleep_secgpio_file_read, NULL);
-static DEVICE_ATTR(check_init_detail, 0660,
+static DEVICE_ATTR(check_init_detail, 0444,
 	checked_secgpio_init_read_details, NULL);
-static DEVICE_ATTR(check_sleep_detail, 0660,
+static DEVICE_ATTR(check_sleep_detail, 0444,
 	checked_secgpio_sleep_read_details, NULL);
-static DEVICE_ATTR(checked_sleepGPIO, 0660,
+static DEVICE_ATTR(checked_sleepGPIO, 0444,
 	secgpio_checked_sleepgpio_read, NULL);
 
 static struct attribute *secgpio_dvs_attributes[] = {

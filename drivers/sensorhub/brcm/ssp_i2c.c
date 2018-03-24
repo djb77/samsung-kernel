@@ -870,7 +870,7 @@ u64 get_sensor_scanning_info(struct ssp_data *data)
 
 	data->sensor_state[SENSOR_MAX] = '\0';
 	for (z = 0; z < SENSOR_MAX; z++)
-		data->sensor_state[SENSOR_MAX - 1 - z] = (result & (1 << z)) ? '1' : '0';
+		data->sensor_state[SENSOR_MAX - 1 - z] = (result & (1ULL << z)) ? '1' : '0';
 	pr_err("[SSP]: state: %s\n", data->sensor_state);
 
 	return result;

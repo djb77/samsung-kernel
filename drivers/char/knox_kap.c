@@ -25,9 +25,6 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-#include <linux/rkp_cfp.h>
-#endif
 #define SMC_CMD_KAP_CALL                (0x83000009)
 #define SMC_CMD_KAP_STATUS                (0x8300000A)
 
@@ -42,14 +39,8 @@ u64 exynos_smc64(u64 cmd, u64 arg1, u64 arg2, u64 arg3)
         register u64 reg3 __asm__("x3") = arg3;
 
         __asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		PRE_SMC_INLINE
-#endif
                 "dsb    sy\n"
                 "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		POST_SMC_INLINE
-#endif
                 : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 
         );

@@ -59,6 +59,12 @@ int sec_debug_get_debug_level(void)
 	return sec_debug_level.uint_val;
 }
 
+void sec_debug_set_debug_level(unsigned int val)
+{
+	pr_info("set debug level from %x to %x\n", sec_debug_level.uint_val, val);
+	sec_debug_level.uint_val = val;
+}
+
 static void sec_debug_user_fault_dump(void)
 {
 	if (sec_debug_level.en.kernel_fault == 1 &&

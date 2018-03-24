@@ -555,6 +555,26 @@ static void mfc_handle_ref_frame(struct s5p_mfc_ctx *ctx)
 	}
 }
 
+static void mfc_handle_reuse_buffer(struct s5p_mfc_ctx *ctx)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+	struct s5p_mfc_dec *dec = ctx->dec_priv;
+	unsigned int prev_flag, released_flag = 0;
+	int i;
+
+	prev_flag = dec->dynamic_used;
+	dec->dynamic_used = s5p_mfc_get_dec_used_flag();
+	released_flag = prev_flag & (~dec->dynamic_used);
+
+	if (!released_flag)
+		return;
+
+	/* reuse not referenced buf anymore */
+	for (i = 0; i < MFC_MAX_DPBS; i++)
+		if (released_flag & (1 << i))
+			s5p_mfc_move_reuse_buffer(ctx, i);
+}
+
 /* Handle frame decoding interrupt */
 static void mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 			unsigned int reason, unsigned int err)
@@ -671,11 +691,17 @@ static void mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 	}
 
 	switch (dst_frame_status) {
-	case S5P_FIMV_DEC_STATUS_DECODING_ONLY:
-		dec->dynamic_used |= s5p_mfc_get_dec_used_flag();
-		/* Fall through */
 	case S5P_FIMV_DEC_STATUS_DECODING_DISPLAY:
 		mfc_handle_ref_frame(ctx);
+		break;
+	case S5P_FIMV_DEC_STATUS_DECODING_ONLY:
+		mfc_handle_ref_frame(ctx);
+		/*
+		 * Some cases can have many decoding only frames like VP9
+		 * alt-ref frame. So need handling release buffer
+		 * because of DPB full.
+		 */
+		mfc_handle_reuse_buffer(ctx);
 		break;
 	default:
 		break;
@@ -1255,9 +1281,20 @@ irqreturn_t s5p_mfc_top_half_irq(int irq, void *priv)
 
 	reason = s5p_mfc_get_int_reason();
 	err = s5p_mfc_get_int_err();
+
+	dev->last_int = reason;
+	dev->last_int_time = ktime_to_timeval(ktime_get());
+
+	if ((reason == S5P_FIMV_R2H_CMD_SEQ_DONE_RET) ||
+		(reason == S5P_FIMV_R2H_CMD_INIT_BUFFERS_RET) ||
+		(reason == S5P_FIMV_R2H_CMD_FRAME_DONE_RET) ||
+		(reason == S5P_FIMV_R2H_CMD_QUEUE_DONE_RET))
+		ctx->frame_cnt++;
+
 	mfc_debug(2, "[c:%d] Int reason: %d (err: %d)\n",
 			dev->curr_ctx, reason, err);
 	MFC_TRACE_CTX("<< INT(top): %d\n", reason);
+	MFC_TRACE_LOG_CTX("I%d", reason);
 
 	return IRQ_WAKE_THREAD;
 }

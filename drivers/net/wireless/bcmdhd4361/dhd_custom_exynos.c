@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_exynos.c 716305 2017-08-17 12:29:29Z $
+ * $Id: dhd_custom_exynos.c 731653 2017-11-14 03:29:19Z $
  */
 #include <linux/device.h>
 #include <linux/gpio.h>
@@ -111,10 +111,12 @@ extern void exynos_pcie_poweroff(int);
 #endif /* EXYNOS_PCIE_RC_ONOFF */
 
 #if (defined(CONFIG_MACH_UNIVERSAL3475) || defined(CONFIG_SOC_EXYNOS7870) || \
-	defined(CONFIG_MACH_UNIVERSAL7580))
+	defined(CONFIG_MACH_UNIVERSAL7580) || defined(CONFIG_SOC_EXYNOS7885))
 extern struct mmc_host *wlan_mmc;
 extern void mmc_ctrl_power(struct mmc_host *host, bool onoff);
-#endif /* MACH_UNIVERSAL3475 || SOC_EXYNOS7870 || MACH_UNIVERSAL7580 */
+#endif /* MACH_UNIVERSAL3475 || SOC_EXYNOS7870 ||
+	* MACH_UNIVERSAL7580 || SOC_EXYNOS7885
+	*/
 
 static int
 dhd_wlan_power(int onoff)
@@ -169,10 +171,12 @@ dhd_wlan_power(int onoff)
 	}
 #endif /* CONFIG_MACH_A7LTE */
 #if (defined(CONFIG_MACH_UNIVERSAL3475) || defined(CONFIG_SOC_EXYNOS7870) || \
-	defined(CONFIG_MACH_UNIVERSAL7580))
+	defined(CONFIG_MACH_UNIVERSAL7580) || defined(CONFIG_SOC_EXYNOS7885))
 	if (wlan_mmc)
 		mmc_ctrl_power(wlan_mmc, onoff);
-#endif /* MACH_UNIVERSAL3475 || SOC_EXYNOS7870 || MACH_UNIVERSAL7580 */
+#endif /* MACH_UNIVERSAL3475 || SOC_EXYNOS7870 ||
+	* MACH_UNIVERSAL7580 || SOC_EXYNOS7885
+	*/
 #endif /* EXYNOS_PCIE_RC_ONOFF */
 	return 0;
 }

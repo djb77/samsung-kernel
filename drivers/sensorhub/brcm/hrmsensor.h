@@ -35,6 +35,9 @@
 
 #define HRM_ON		1
 #define HRM_OFF		0
+#define PM_RESUME	1
+#define PM_SUSPEND	0
+
 #define NAME_LEN		32
 #define MAX_BUF_LEN	512
 
@@ -72,6 +75,15 @@ enum hrm_mode {
 	MODE_UNKNOWN		= 9,
 };
 
+struct hrm_enable_count {
+	s32 hrm_cnt;
+	s32 amb_cnt;
+	s32 prox_cnt;
+	s32 sdk_cnt;
+	s32 cgm_cnt;
+	s32 unkn_cnt;
+};
+
 struct hrm_output_data {
 	enum hrm_mode mode;
 	s32 main_num;
@@ -85,7 +97,11 @@ struct hrm_output_data {
 struct hrm_func {
 	int (*i2c_read)(u32 reg, u32 *value, u32 *size);
 	int (*i2c_write)(u32 reg, u32 value);
+#ifdef CONFIG_SPI_TO_I2C_FPGA
+	int (*init_device)(struct i2c_client *client, struct platform_device *pdev);
+#else
 	int (*init_device)(struct i2c_client *client);
+#endif
 	int (*deinit_device)(void);
 	int (*enable)(enum hrm_mode);
 	int (*disable)(enum hrm_mode);
@@ -120,6 +136,7 @@ struct hrm_device_data {
 	struct input_dev *hrm_input_dev;
 	struct mutex i2clock;
 	struct mutex activelock;
+	struct mutex suspendlock;
 	struct pinctrl *hrm_pinctrl;
 	struct pinctrl_state *pins_sleep;
 	struct pinctrl_state *pins_idle;
@@ -128,6 +145,7 @@ struct hrm_device_data {
 	char *i2c_1p8;
 	struct hrm_func *h_func;
 	enum hrm_mode hrm_enabled_mode;
+	enum hrm_mode hrm_prev_mode;
 	u8 regulator_state;
 	s32 hrm_int;
 	s32 hrm_en;
@@ -139,10 +157,12 @@ struct hrm_device_data {
 	u8 eol_test_status;
 	u32 reg_read_buf;
 	u8 debug_mode;
+	struct hrm_enable_count mode_cnt;
 	char *lib_ver;
 #ifdef CONFIG_ARCH_MSM
 	struct pm_qos_request pm_qos_req_fpm;
 #endif
+	bool pm_state;
 };
 
 extern int sensors_create_symlink(struct input_dev *inputdev);

@@ -114,17 +114,6 @@ RKP_RO_AREA struct cred init_cred = {
 #endif /*CONFIG_RKP_KDP*/
 };
 
-#ifdef CONFIG_RKP_KDP
-void rkp_get_init_cred(void)
-{
-        if (rkp_ro_page((unsigned long)&init_cred))
-				rocred_uc_inc((&init_cred));
-		else 
-                atomic_inc(&init_cred.usage);
-}
-EXPORT_SYMBOL(rkp_get_init_cred);
-#endif /*CONFIG_RKP_KDP*/
-
 static inline void set_cred_subscribers(struct cred *cred, int n)
 {
 #ifdef CONFIG_DEBUG_CREDENTIALS

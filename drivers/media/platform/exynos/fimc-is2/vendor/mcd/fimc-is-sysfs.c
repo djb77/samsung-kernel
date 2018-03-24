@@ -2233,6 +2233,32 @@ static ssize_t camera_rear_afcal_show(struct device *dev,
 #endif
 }
 
+static ssize_t camera_rear_paf_offset_far_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+#ifdef FROM_PAF_OFFSET_FAR_ADDR
+	char *cal_buf;
+	char tempbuf[10];
+	int i;
+
+	memset(tempbuf, 0, 10);
+	read_from_firmware_version(SENSOR_POSITION_REAR);
+	fimc_is_sec_get_cal_buf(&cal_buf);
+
+	for (i = 0; i < FROM_PAF_OFFSET_FAR_SIZE / 2 - 1; i++) {
+		sprintf(tempbuf, "%d,", *((s16 *)&cal_buf[FROM_PAF_OFFSET_FAR_ADDR + 2 * i]));
+		strncat(buf, tempbuf, strlen(tempbuf));
+		memset(tempbuf, 0, 10);
+	}
+
+	sprintf(tempbuf, "%d", *((s16 *)&cal_buf[FROM_PAF_OFFSET_FAR_ADDR + 2 * i]));
+	strncat(buf, tempbuf, strlen(tempbuf));
+	strncat(buf, "\n", strlen("\n"));
+#endif
+	return strlen(buf);
+}
+static DEVICE_ATTR(rear_paf_offset_far, S_IRUGO, camera_rear_paf_offset_far_show, NULL);
+
 static ssize_t camera_rear_sensorid_exif_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -2566,7 +2592,7 @@ static ssize_t rear_camera_hw_param_store(struct device *dev,
 		fimc_is_sec_get_hw_param(&ec_param, SENSOR_POSITION_REAR);
 
 		if (ec_param)
-			fimc_is_sec_init_err_cnt_file(ec_param);
+			fimc_is_sec_init_err_cnt(ec_param);
 	}
 
 	return count;
@@ -2602,7 +2628,7 @@ static ssize_t front_camera_hw_param_store(struct device *dev,
 		fimc_is_sec_get_hw_param(&ec_param, SENSOR_POSITION_FRONT);
 
 		if (ec_param)
-			fimc_is_sec_init_err_cnt_file(ec_param);
+			fimc_is_sec_init_err_cnt(ec_param);
 	}
 
 	return count;
@@ -2638,7 +2664,7 @@ static ssize_t rear2_camera_hw_param_store(struct device *dev,
 		fimc_is_sec_get_hw_param(&ec_param, SENSOR_POSITION_REAR2);
 
 		if (ec_param)
-			fimc_is_sec_init_err_cnt_file(ec_param);
+			fimc_is_sec_init_err_cnt(ec_param);
 	}
 
 	return count;
@@ -2667,7 +2693,7 @@ static ssize_t iris_camera_hw_param_store(struct device *dev,
 		fimc_is_sec_get_hw_param(&ec_param, SENSOR_POSITION_SECURE);
 
 		if (ec_param)
-			fimc_is_sec_init_err_cnt_file(ec_param);
+			fimc_is_sec_init_err_cnt(ec_param);
 	}
 
 	return count;
@@ -3297,6 +3323,10 @@ int fimc_is_create_sysfs(struct fimc_is_core *core)
 			printk(KERN_ERR "failed to create rear device file, %s\n",
 					dev_attr_rear_camfw_all.attr.name);
 		}
+		if (device_create_file(camera_rear_dev, &dev_attr_rear_paf_offset_far) < 0) {
+			printk(KERN_ERR "failed to create rear device file, %s\n",
+					dev_attr_rear_paf_offset_far.attr.name);
+		}
 	}
 
 #if defined (CONFIG_OIS_USE)
@@ -3471,6 +3501,7 @@ int fimc_is_destroy_sysfs(struct fimc_is_core *core)
 		device_remove_file(camera_rear_dev, &dev_attr_rear_hwparam);
 #endif
 		device_remove_file(camera_rear_dev, &dev_attr_rear_camfw_all);
+		device_remove_file(camera_rear_dev, &dev_attr_rear_paf_offset_far);
 	}
 
 #if defined (CONFIG_OIS_USE)

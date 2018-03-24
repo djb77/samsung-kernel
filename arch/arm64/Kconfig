@@ -657,15 +657,15 @@ config TIMA_LKMAUTH
 	  TIMA authenticates loaded kernel modules. Disable it if you don't
 	  want TIMA enabled.
 
-config TIMA_RKP
+config RKP
+	depends on !SEC_FACTORY
 	default n
-	bool "Samsung KNOX realtime kernel protection depends on TIMA"
+	bool "Samsung KNOX realtime kernel protection"
 	help
 	  this enables realtime kernel protection
 
-config TIMA_RKP_DEBUG
-	depends on !SEC_FACTORY
-	depends on TIMA_RKP
+config RKP_DEBUG
+	depends on RKP
 	default n
 	bool "Support SS Sentinel for debugging"
 	help
@@ -673,15 +673,13 @@ config TIMA_RKP_DEBUG
 
 config RKP_KDP
 	bool "Protection for cred structure"
-	depends on !SEC_FACTORY
-	depends on TIMA_RKP
+	depends on RKP
 	default n
 	help
 	  Prevents unauthorized cred modification.
 
 config RKP_NS_PROT
 	bool "Protection for namespace structure"
-	depends on !SEC_FACTORY
 	depends on RKP_KDP
 	default n
 	help
@@ -689,7 +687,6 @@ config RKP_NS_PROT
 
 config RKP_DMAP_PROT
 	bool "Page Double Mapping protection"
-	depends on !SEC_FACTORY
 	depends on RKP_KDP
 	default n
 	help
@@ -697,7 +694,7 @@ config RKP_DMAP_PROT
 
 config RKP_6G
 	bool "Support 6G"
-	depends on TIMA_RKP
+	depends on RKP
 	default n
 	help
 	  support 6G
@@ -716,7 +713,7 @@ menu "Control Flow Protection"
 
 config RKP_CFP
 	bool "JOPP and ROPP"
-	# depends on TIMA_RKP
+	# depends on RKP
 	default n
 
 config RKP_CFP_JOPP
@@ -729,32 +726,6 @@ config RKP_CFP_JOPP_MAGIC
 	depends on RKP_CFP && RKP_CFP_JOPP
 	default "0x00be7bad"
 
-config RKP_CFP_ROPP
-	bool "ROP Prevention"
-	select RKP_CFP
-	select RKP_CFP_FIX_SMC_BUG
-	default n
-
-choice
-	prompt "ROPP key"
-	default RKP_CFP_ROPP_RANDOM_KEY
-	depends on RKP_CFP && RKP_CFP_ROPP
-
-config RKP_CFP_ROPP_HYPKEY
-	bool "Use hypervisor for key secure storage"
-
-config RKP_CFP_ROPP_RANDOM_KEY
-	bool "Use pseudo random key"
-
-config RKP_CFP_ROPP_ZERO_KEY
-	bool "Use zero key"
-
-endchoice
-
-config RKP_CFP_FIX_SMC_BUG
-	bool "Fix SMC compatibility issue"
-	depends on RKP_CFP_ROPP
-	default n
 endmenu
 
 #

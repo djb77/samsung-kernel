@@ -40,11 +40,14 @@
 #include <linux/delay.h>
 #include <linux/wakelock.h>
 #include <linux/exynos-ss.h>
+#include <linux/bitops.h>
+#include <linux/smc.h>
+#include <soc/samsung/pmu-cp.h>
+#include <soc/samsung/exynos-modem-ctrl.h>
 
+#include <soc/samsung/acpm_ipc_ctrl.h>
 #include "modem_prj.h"
 #include "modem_utils.h"
-
-#include "link_device_memory.h"
 
 #define CMD_SUSPEND	((u16)(0x00CA))
 #define CMD_RESUME	((u16)(0x00CB))
@@ -81,6 +84,7 @@ static const char *hex = "0123456789abcdef";
 
 static struct raw_notifier_head cp_crash_notifier;
 
+struct mif_buff_mng *g_mif_buff_mng;
 #ifdef CONFIG_LINK_DEVICE_PCI
 
 static unsigned int tp_period = 0;
@@ -96,6 +100,8 @@ module_param(tp_size, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(tp_size, "PCIe TP test period");
 
 struct rmnet_iod_storage rmnet_iod = {{RMNET_LINK_4G,}, };
+struct io_device *ipc_iods[MAX_IPC_LINK];
+int current_mode;
 
 unsigned int get_test_tp_size(void)
 {
@@ -108,27 +114,18 @@ int start_cp_iperf_server(u8 ch)
 	struct io_device *iod;
 	struct link_device *ld;
 	struct mem_link_device *mld;
-	struct sbd_link_device *sl;
+	u16 pkt_size = tp_size, pkt_cnt = tp_unit;
+	u32 val = 0;
 
 	iod = rmnet_iod.iod_pot[RMNET_LINK_5G].rmnet[id];
 	ld = get_current_link(iod);
-
 	mld = to_mem_link_device(ld);
-	sl = &mld->sbd_link_dev;
 
-	//period
-	*((u32 *)(sl->shmem_intr) + 28) = tp_period;
+	val = pkt_size << 16;
+	val |= pkt_cnt;
 
-	//units
-	*((u32 *)(sl->shmem_intr) + 29) = tp_unit;
-
-	//size
-	*((u32 *)(sl->shmem_intr) + 30) = tp_size;
-
-	mif_err("<KTG> cp setting - period:%d, unit:%d, size:%d\n", tp_period, tp_unit, tp_size);
-	mif_err("<KTG> start CP iperf! iod:%s, ld:%s {ch:%d, id%d}\n", iod->name, ld->name, ch, id);
-
-	*((u32 *)(sl->shmem_intr) + 0x73) = 0x80000000;
+	mif_info("started! %X\n", val);
+	*(mld->bar0 + 62) = val;
 
 	return 0;
 }
@@ -170,6 +167,49 @@ int get_rmnet_iod_current_ld(u8 ch)
 		return rmnet_iod.current_link[ch];
 
 	return -EINVAL;
+}
+
+void init_ipc_iods(struct io_device *iod)
+{
+	mif_info("%s called\n", __func__);
+	if (iod->link_types == 0x800) {
+		mif_info("5g iod: %s\n", iod->name);
+		ipc_iods[IPC_LINK_5G] = iod;
+	} else if (iod->link_types == 0x200) {
+		mif_info("4g iod: %s\n", iod->name);
+		ipc_iods[IPC_LINK_4G] = iod;
+	}
+}
+
+void set_current_mode(int mode)
+{
+	switch (mode) {
+	case IPC_LINK_5G:
+		break;
+	case IPC_LINK_4G:
+	default:
+		mode = IPC_LINK_4G;
+	}
+	current_mode = mode;
+	mif_info("current_mode: %d\n", current_mode);
+}
+
+int ipc_iod_change(struct file *filp)
+{
+	struct io_device *iod = (struct io_device *)filp->private_data;
+	struct link_device *ld = get_current_link(iod);
+
+	mif_info("before iod: %s, ld: %s\n", iod->name, ld->name);
+
+	filp->private_data = (void *)ipc_iods[current_mode];
+	// filp->private_data = (void *)ipc_iods[to];
+	// iod->msd->ch2iod[SIPC5_CH_ID_FMT_0] = iod;
+
+	iod = (struct io_device *)filp->private_data;
+	ld = get_current_link(iod);
+	mif_info("after  iod: %s, ld: %s\n", iod->name, ld->name);
+
+	return 0;
 }
 
 int rmnet_iod_change_with_channel(u8 ch, u8 to)
@@ -262,7 +302,7 @@ static ssize_t store_linkdev(struct device *d, struct device_attribute *attr,
 		rmnet_iod_change_with_channel(10, RMNET_LINK_5G);
 		break;
 	default:
-		start_cp_iperf_server(11);
+		start_cp_iperf_server(mode);
 		break;
 	}
 
@@ -284,13 +324,13 @@ static inline void ts2utc(struct timespec *ts, struct utc_time *utc)
 	struct tm tm;
 
 	time_to_tm((ts->tv_sec - (sys_tz.tz_minuteswest * 60)), 0, &tm);
-	utc->year = 1900 + tm.tm_year;
+	utc->year = 1900 + (u32)tm.tm_year;
 	utc->mon = 1 + tm.tm_mon;
 	utc->day = tm.tm_mday;
 	utc->hour = tm.tm_hour;
 	utc->min = tm.tm_min;
 	utc->sec = tm.tm_sec;
-	utc->us = ns2us(ts->tv_nsec);
+	utc->us = (u32)ns2us(ts->tv_nsec);
 }
 
 void get_utc_time(struct utc_time *utc)
@@ -445,7 +485,7 @@ static inline void dump2hex(char *buff, size_t buff_size,
 {
 	char *dest = buff;
 	size_t len;
-	int i;
+	size_t i;
 
 	if (buff_size < (data_len * 3))
 		len = buff_size / 3;
@@ -528,13 +568,16 @@ void mif_pkt(u8 ch, const char *tag, struct sk_buff *skb)
 int pr_buffer(const char *tag, const char *data, size_t data_len,
 							size_t max_len)
 {
+	struct sk_buff *skb = (struct sk_buff *)data;
+	struct io_device *iod = skbpriv(skb)->iod;
 	size_t len = min(data_len, max_len);
 	unsigned char str[len ? len * 3 : 1]; /* 1 <= sizeof <= max_len*3 */
-	dump2hex(str, (len ? len * 3 : 1), data, len);
+
+	dump2hex(str, (len ? len * 3 : 1), skb->data, len);
 
 	/* don't change this printk to mif_debug for print this as level7 */
-	return pr_info("%s: %s(%ld): %s%s\n", MIF_TAG, tag, (long)data_len,
-			str, (len == data_len) ? "" : " ...");
+	return pr_info("%s: %s[%s] (%ld): %s%s\n", MIF_TAG, tag, iod->name,
+			(long)data_len, str, (len == data_len) ? "" : " ...");
 }
 
 /* flow control CM from CP, it use in serial devices */
@@ -773,7 +816,7 @@ __be32 ipv4str_to_be32(const char *ipv4str, size_t count)
 	char *next = ipstr;
 	int i;
 
-	strncpy(ipstr, ipv4str, ARRAY_SIZE(ipstr));
+	strlcpy(ipstr, ipv4str, ARRAY_SIZE(ipstr));
 
 	for (i = 0; i < 4; i++) {
 		char *p;
@@ -1389,9 +1432,252 @@ void __ref modemctl_notify_event(enum modemctl_event evt)
 
 void mif_set_snapshot(bool enable)
 {
+	if (!enable)
+		acpm_stop_log();
 	exynos_ss_set_enable("log_kevents", enable);
 }
+
+struct mif_buff_mng *init_mif_buff_mng(unsigned char *buffer_start,
+	unsigned int buffer_size, unsigned int cell_size)
+{
+	struct mif_buff_mng *bm;
+
+	if (buffer_start == NULL || buffer_size == 0 || cell_size == 0) {
+		mif_err("init_mif_buff_mng parameter ERR!\n");
+		return NULL;
+	}
+
+	mif_info("Init mif_buffer management - buffer:%p, size:%u, cell_size:%u\n",
+		buffer_start, buffer_size, cell_size);
+
+	bm = kzalloc(sizeof(struct mif_buff_mng), GFP_KERNEL);
+	if (bm == NULL)
+		return NULL;
+
+	bm->buffer_start = buffer_start;
+	bm->buffer_end = buffer_start + buffer_size;
+	bm->buffer_size = buffer_size;
+	bm->cell_size = cell_size;
+	bm->cell_count = buffer_size / cell_size;
+	bm->free_cell_count = bm->cell_count;
+	bm->used_cell_count = 0;
+
+	bm->current_map_index = 0;
+	bm->buffer_map_size = (unsigned int)(bm->cell_count /
+			MIF_BITS_FOR_MAP_CELL) + 1;
+	bm->buffer_map = kzalloc((MIF_BUFF_MAP_CELL_SIZE * bm->buffer_map_size),
+		GFP_KERNEL);
+	if (bm->buffer_map == NULL) {
+		kfree(bm);
+		return NULL;
+	}
+
+	mif_info("cell_count:%u, map_size:%u, map_size_byte:%lu  buff_map:%p\n"
+		, bm->cell_count, bm->buffer_map_size,
+		(sizeof(unsigned int) * bm->buffer_map_size), bm->buffer_map);
+
+#ifdef MIF_BUFF_DEBUG
+	mif_info("MIF_BUFF_MAP_CELL_SIZE:%lu\n", MIF_BUFF_MAP_CELL_SIZE);
+	mif_info("MIF_BITS_FOR_BYTE:%u\n", MIF_BITS_FOR_BYTE);
+	mif_info("MIF_BITS_FOR_MAP_CELL:%lu\n", MIF_BITS_FOR_MAP_CELL);
+#endif
+
+	spin_lock_init(&bm->lock);
+
+	return bm;
+}
+
+void exit_mif_buff_mng(struct mif_buff_mng *bm)
+{
+	if (bm) {
+		kfree(bm->buffer_map);
+		kfree(bm);
+	}
+}
+
+void *alloc_mif_buff(struct mif_buff_mng *bm)
+{
+	unsigned char *buff_allocated;
+	unsigned int i, j, location;
+	int find_flag = false;
+	unsigned long flags;
+	uint64_t test_map;
+	int last_bit_set;
+
+	if (bm == NULL || bm->buffer_map == NULL)
+		return NULL;
+
+	if (bm->free_cell_count == 0) {
+#ifdef MIF_BUFF_DEBUG
+		mif_info("ERR allocation fail\n");
+#endif
+		return NULL;
+	}
+
+	spin_lock_irqsave(&bm->lock, flags);
+
+	for (i = bm->current_map_index ; i < bm->buffer_map_size; i++) {
+		test_map = (uint64_t) bm->buffer_map[i];
+		test_map = ~test_map;
+		last_bit_set = fls64(test_map);
+
+		if (last_bit_set == 0)
+			continue;
+		else
+			j = MIF_BITS_FOR_MAP_CELL - last_bit_set;
+
+		location = (i * MIF_BITS_FOR_MAP_CELL) + j;
+
+		if (location >= bm->cell_count)
+			break;
+
+		find_flag = true;
+		bm->buffer_map[i] |= (uint64_t)(MIF_64BIT_FIRST_BIT >> j);
+		bm->current_map_index = i;
+
+#ifdef MIF_BUFF_DEBUG
+		mif_info("map: %016llx\n", bm->buffer_map[i]);
+		mif_info("i:%d j:%d location:%d\n", i, j, location);
+#endif
+		break;
+	}
+
+	if (find_flag == false) {
+		for (i = 0 ; i < bm->current_map_index; i++) {
+			test_map = (uint64_t) bm->buffer_map[i];
+			test_map = ~test_map;
+			last_bit_set = fls64(test_map);
+
+			if (last_bit_set == 0)
+				continue;
+			else
+				j = MIF_BITS_FOR_MAP_CELL - last_bit_set;
+
+			location = (i * MIF_BITS_FOR_MAP_CELL) + j;
+
+			if (location >= bm->cell_count)
+				break;
+
+			find_flag = true;
+			bm->buffer_map[i] |= (uint64_t)(MIF_64BIT_FIRST_BIT >> j);
+			bm->current_map_index = i;
+
+#ifdef MIF_BUFF_DEBUG
+			mif_info("map: %016llx\n", bm->buffer_map[i]);
+			mif_info("i:%d j:%d location:%d\n", i, j, location);
+#endif
+			break;
+		}
+
+	}
+
+	if (find_flag == false) {
+#ifdef MIF_BUFF_DEBUG
+		mif_info("ERR allocation fail\n");
+#endif
+		spin_unlock_irqrestore(&bm->lock, flags);
+		return NULL;
+	}
+
+	buff_allocated = bm->buffer_start;
+	buff_allocated += (location * bm->cell_size);
+
+	bm->free_cell_count--;
+	bm->used_cell_count++;
+
+	spin_unlock_irqrestore(&bm->lock, flags);
+
+#ifdef MIF_BUFF_DEBUG
+	mif_info("location:%d cell_size:%u\n", location, bm->cell_size);
+	mif_info("buffer_allocated:%p\n", buff_allocated);
+	mif_info("used/free: %u/%u\n", get_mif_buff_used_count(bm),
+			get_mif_buff_free_count(bm));
+#endif
+
+	return (void *)buff_allocated;
+}
+
+int free_mif_buff(struct mif_buff_mng *bm, void *buffer)
+{
+	unsigned char *uc_buffer = (unsigned char *)buffer;
+	unsigned int addr_diff;
+	int i, j, location;
+	unsigned long flags;
+
+	if (bm == NULL)
+		return -1;
+
+	if (buffer == NULL)
+		return 0;
+
+	addr_diff = (unsigned int)(uc_buffer - bm->buffer_start);
+
+	if (addr_diff > bm->buffer_size) {
+		mif_err("ERR Buffer:%p is not my pool one.\n", uc_buffer);
+		return -1;
+	}
+
+	location = addr_diff / bm->cell_size;
+	i = location / MIF_BITS_FOR_MAP_CELL;
+	j = location % MIF_BITS_FOR_MAP_CELL;
+
+#ifdef MIF_BUFF_DEBUG
+	mif_info("uc_buff:%p diff:%u\n", uc_buffer, addr_diff);
+	mif_info("location:%d i:%d j:%d\n", location, i, j);
+#endif
+
+	if ((bm->buffer_map[i] & (MIF_64BIT_FIRST_BIT >> j)) == 0) {
+		mif_err("ERR Buffer:%p is allready freed\n", uc_buffer);
+		return -1;
+	}
+
+	spin_lock_irqsave(&bm->lock, flags);
+
+	bm->buffer_map[i] &= ~(MIF_64BIT_FIRST_BIT >> j);
+	bm->free_cell_count++;
+	bm->used_cell_count--;
+
+	spin_unlock_irqrestore(&bm->lock, flags);
+
+#ifdef MIF_BUFF_DEBUG
+	mif_info("used/free: %u/%u\n", get_mif_buff_used_count(bm),
+			get_mif_buff_free_count(bm));
+#endif
+	return 0;
+}
+
+static inline bool is_zerocopy_buffer(struct sk_buff *skb)
+{
+	if (g_mif_buff_mng == NULL)
+		return false;
+
+	if (((g_mif_buff_mng->buffer_start <= skb->head) &&
+			(skb->head < g_mif_buff_mng->buffer_end)))
+		return true;
+	else
+		return false;
+}
+
 bool __skb_free_head_cp_zerocopy(struct sk_buff *skb)
 {
-	return false;
+	if (!is_zerocopy_buffer(skb))
+		return false;
+
+	free_mif_buff(g_mif_buff_mng, skb->head);
+	return true;
+}
+
+int security_request_cp_ram_logging(void)
+{
+	int err;
+
+	mif_err("SMC: CP_BOOT_REQ_CP_RAM_LOGGING\n");
+
+	exynos_smc(SMC_ID_CLK, SSS_CLK_ENABLE, 0, 0);
+	err = exynos_smc(SMC_ID, CP_BOOT_REQ_CP_RAM_LOGGING, 0, 0);
+	exynos_smc(SMC_ID_CLK, SSS_CLK_DISABLE, 0, 0);
+
+	mif_err("SMC: return_value=%d\n", err);
+
+	return err;
 }

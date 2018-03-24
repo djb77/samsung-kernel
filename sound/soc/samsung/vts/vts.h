@@ -155,9 +155,15 @@
 #define VTSFW_VERSION_OFFSET	(0x7c)
 #define DETLIB_VERSION_OFFSET	(0x78)
 
+/* svoice net(0x8000) & grammar(0x300) binary sizes defined in firmware */
+#define SOUND_MODEL_SVOICE_SIZE_MAX (0x8000 + 0x300)
+
+/* google binary size defined in firmware */
+#define SOUND_MODEL_GOOGLE_SIZE_MAX (0xB500)
+
 /* VTS Model Binary Max buffer sizes */
-#define VTS_MODEL_SVOICE_BIN_MAXSZ	(SZ_64K)
-#define VTS_MODEL_GOOGLE_BIN_MAXSZ	(SZ_64K)
+#define VTS_MODEL_SVOICE_BIN_MAXSZ     (SOUND_MODEL_SVOICE_SIZE_MAX)
+#define VTS_MODEL_GOOGLE_BIN_MAXSZ     (SOUND_MODEL_GOOGLE_SIZE_MAX)
 
 enum ipc_state {
 	IDLE,

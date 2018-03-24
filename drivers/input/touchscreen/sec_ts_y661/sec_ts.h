@@ -218,6 +218,7 @@
 #define SEC_TS_CMD_SPONGE_WRITE_PARAM			0x91
 #define SEC_TS_CMD_SPONGE_READ_PARAM			0x92
 #define SEC_TS_CMD_SPONGE_NOTIFY_PACKET			0x93
+#define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_DATA		0x5A
 #define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_LEVEL		0x5E
 #define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_THD_HIGH	0x84
 #define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_THD_LOW	0x86
@@ -657,12 +658,12 @@ struct sec_ts_data {
 	long time_longest;
 
 	u8 lowpower_mode;
-	u8 lowpower_status;
 	s8 pressure_caller_id;
 	u8 dex_mode;
 	char *dex_name;
 	u8 brush_mode;
 	u8 touchable_area;
+	u8 pressure_setting_mode;
 	volatile u8 touch_noise_status;
 	volatile bool input_closed;
 
@@ -836,6 +837,32 @@ struct sec_ts_plat_data {
 	bool support_dex;
 	bool support_sidegesture;
 };
+
+typedef struct {
+	u32 signature;			/* signature */
+	u32 version;			/* version */
+	u32 totalsize;			/* total size */
+	u32 checksum;			/* checksum */
+	u32 img_ver;			/* image file version */
+	u32 img_date;			/* image file date */
+	u32 img_description;		/* image file description */
+	u32 fw_ver;			/* firmware version */
+	u32 fw_date;			/* firmware date */
+	u32 fw_description;		/* firmware description */
+	u32 para_ver;			/* parameter version */
+	u32 para_date;			/* parameter date */
+	u32 para_description;		/* parameter description */
+	u32 num_chunk;			/* number of chunk */
+	u32 reserved1;
+	u32 reserved2;
+} fw_header;
+
+typedef struct {
+	u32 signature;
+	u32 addr;
+	u32 size;
+	u32 reserved;
+} fw_chunk;
 
 int sec_ts_stop_device(struct sec_ts_data *ts);
 int sec_ts_start_device(struct sec_ts_data *ts);

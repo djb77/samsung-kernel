@@ -270,8 +270,6 @@ void dpp_op_timer_handler(unsigned long arg)
 {
 	struct dpp_device *dpp = (struct dpp_device *)arg;
 
-	dpp_dump_registers(dpp, DPU_DUMP_LV0);
-
 	if (dpp->config->compression)
 		dpp_info("Compression Source is %s of DPP[%d]\n",
 			dpp->config->dpp_parm.comp_src == DPP_COMP_SRC_G2D ?
@@ -542,6 +540,14 @@ static int dpp_set_config(struct dpp_device *dpp)
 
 	mutex_lock(&dpp->lock);
 
+	/* parameters from decon driver are translated for dpp driver */
+	dpp_get_params(dpp, &params);
+
+	/* all parameters must be passed dpp hw limitation */
+	ret = dpp_check_limitation(dpp, &params);
+	if (ret)
+		goto err;
+
 	if (dpp->state == DPP_STATE_OFF) {
 		dpp_dbg("dpp%d is started\n", dpp->id);
 #if defined(CONFIG_PM)
@@ -559,14 +565,6 @@ static int dpp_set_config(struct dpp_device *dpp)
 		dma_reg_set_debug(dpp->id);
 		dma_reg_set_common_debug(dpp->id);
 	}
-
-	/* parameters from decon driver are translated for dpp driver */
-	dpp_get_params(dpp, &params);
-
-	/* all parameters must be passed dpp hw limitation */
-	ret = dpp_check_limitation(dpp, &params);
-	if (ret)
-		goto err;
 
 	/* set all parameters to dpp hw */
 	dpp_reg_configure_params(dpp->id, &params);
@@ -629,8 +627,7 @@ static int dpp_s_stream(struct v4l2_subdev *sd, int enable)
 	return 0;
 }
 
-static int dpp_dump_buffer_data(struct dpp_device *dpp);
-
+static int dpp_dump_buffer_data(struct dpp_device *dpp, u32 smmu);
 
 static long dpp_subdev_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 {
@@ -663,8 +660,10 @@ static long dpp_subdev_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg
 		val = (unsigned long)arg;
 		dpp_dump_registers(dpp, (u32)val);
 
-		dpp_info("=== DUMP : Current DMA Buffer :\n");
-		dpp_dump_buffer_data(dpp);
+		if (dpp->id == IDMA_VGF0 || dpp->id == IDMA_VGF1) {
+			dpp_info("=== DUMP : Current DMA Buffer :\n");
+			dpp_dump_buffer_data(dpp, 0);
+		}
 
 		break;
 
@@ -725,48 +724,49 @@ static void dpp_init_subdev(struct dpp_device *dpp)
 	v4l2_set_subdevdata(sd, dpp);
 }
 
-static int dpp_dump_buffer_data(struct dpp_device *dpp)
+/* smmu : '1' means that it was called from sysmmu_fault_handler */
+static int dpp_dump_buffer_data(struct dpp_device *dpp, u32 smmu)
 {
 	int i;
 	int id_idx = 0;
-	int dump_size = 128;
 	struct decon_device *decon;
 	struct dpu_afbc_info *afbc_info;
+	const char *id_str[2] = {"VGF0", "VGF1"};
+	int f_idx;
 
-	if (dpp->state == DPP_STATE_ON) {
+	if (dpp->state != DPP_STATE_ON)
+		return 0;
 
-		for (i = 0; i < 3; i++) {
-			decon = get_decon_drvdata(i);
-			if (decon == NULL || decon->id == 2)
-				continue;
+	for (i = 0; i < MAX_DECON_CNT; i++) {
+		decon = get_decon_drvdata(i);
+		if (decon_reg_get_rsc_dma_info(i, dpp->id) != i)
+			continue;
 
+		if (smmu)
 			decon->frm_status |= DPU_FRM_SYSMMU_FAULT;
 
-			if (dpp->id == IDMA_VGF1)
-				id_idx = 1;
+		f_idx = (decon->id == 1 || smmu) ? 0 : 1;
+		id_idx = (dpp->id == IDMA_VGF1) ? 1 : 0;
+		afbc_info = &decon->d.afbc_info[f_idx];
 
-			afbc_info = &decon->d.afbc_info;
-			if (!afbc_info->is_afbc[id_idx])
-				continue;
+		afbc_info->is_afbc[id_idx] = dma_reg_get_afbc_en(dpp->id);
+		if (!afbc_info->is_afbc[id_idx]) {
+			dpp_info("%s is Non-AFBC format\n", id_str[id_idx]);
+			continue;
+		}
 
-			if (afbc_info->size[id_idx] > 2048)
-				dump_size = 128;
-			else
-				dump_size = afbc_info->size[id_idx] / 16;
+		if (!afbc_info->v_addr[id_idx])
+			continue;
 
-			dpp_info("Base(0x%p), KV(0x%p), size(%d), sgl(0x%p)\n",
+		dpp_info("Base(0x%p), KV(0x%p) gBuf(0x%p), size(%d), sgl(0x%p)\n",
 				(void *)afbc_info->dma_addr[id_idx],
 				afbc_info->v_addr[id_idx],
+				(void *)afbc_buf_data[f_idx][id_idx],
 				afbc_info->size[id_idx],
 				afbc_info->sgl[id_idx]);
 
-			if (!afbc_info->v_addr[id_idx])
-				continue;
-
-			dpu_dump_data_to_console(
-				afbc_info->v_addr[id_idx],
-				dump_size, dpp->id);
-		}
+		dpu_dump_data_to_console((void *)afbc_buf_data[f_idx][id_idx],
+				min(afbc_info->size[id_idx] / 16, BUF_DUMP_SIZE), dpp->id);
 	}
 
 	return 0;
@@ -970,7 +970,7 @@ static int dpp_sysmmu_fault_handler(struct iommu_domain *domain,
 		dpp_info("dpp%d sysmmu fault handler\n", dpp->id);
 		dpp_dump_registers(dpp, DPU_DUMP_LV0);
 
-		dpp_dump_buffer_data(dpp);
+		dpp_dump_buffer_data(dpp, 1);
 	}
 
 	return 0;

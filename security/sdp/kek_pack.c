@@ -254,7 +254,10 @@ int del_kek(int engine_id, int kek_type) {
 kek_t *get_kek(int engine_id, int kek_type, int *rc) {
 	kek_pack_t *pack;
 	kek_item_t *item;
-    int userid = from_kuid(&init_user_ns, current_uid()) / PER_USER_RANGE;
+	kek_t *kek;
+#ifndef CONFIG_SDP_KEY_DUMP
+	int userid = from_kuid(&init_user_ns, current_uid()) / PER_USER_RANGE;
+#endif
 
 	KEK_PACK_LOGD("entered [%d]\n", from_kuid(&init_user_ns, current_uid()));
 
@@ -264,9 +267,10 @@ kek_t *get_kek(int engine_id, int kek_type, int *rc) {
 	    return NULL;
 	}
 
+#ifndef CONFIG_SDP_KEY_DUMP
 	// Across user engine access denied for Knox containers.
 	if(!is_root() &&
-			(pack->user_id >= 100 && pack->user_id < 200) &&
+			(pack->user_id >= 10 && pack->user_id < 200) &&
 	        (pack->user_id != userid)) {
 	    KEK_PACK_LOGE("Permission denied to get kek\n");
 	    KEK_PACK_LOGE("pack->user_id[%d] != userid[%d]\n",
@@ -275,19 +279,22 @@ kek_t *get_kek(int engine_id, int kek_type, int *rc) {
 	    *rc = -EACCES;
 	    return NULL;
 	}
+#endif
+	kek = kmalloc(sizeof(kek_t), GFP_KERNEL);
+	if (kek == NULL) {
+		*rc = -ENOMEM;
+		return NULL;
+	}
 	spin_lock(&pack->kek_list_lock);
 	item = find_kek_item(pack, kek_type);
-	spin_unlock(&pack->kek_list_lock);
-	if(item) {
-		kek_t *kek = kmalloc(sizeof(kek_t), GFP_KERNEL);
-		if(kek == NULL){
-		    *rc = -ENOMEM;
-		    return NULL;
-		}
-
+	if (item) {
 		*rc = 0;
 		memcpy(kek, &item->kek, sizeof(kek_t));
+		spin_unlock(&pack->kek_list_lock);
 		return kek;
+	} else {
+		spin_unlock(&pack->kek_list_lock);
+		kzfree(kek);
 	}
 
     *rc = -ENOENT;

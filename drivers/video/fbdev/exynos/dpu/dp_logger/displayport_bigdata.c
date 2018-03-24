@@ -97,6 +97,13 @@ void secdp_bigdata_init(struct class *dp_class)
 	secdp_bigdata_init_item(BD_ORIENTATION, "ORIENTATION", STR, 10);
 	secdp_bigdata_init_item(BD_RESOLUTION, "RESOLUTION", STR, 20);
 	secdp_bigdata_init_item(BD_EDID, "EDID", STR, EDID_BUF_SIZE);
+	secdp_bigdata_init_item(BD_ADT_VID, "ADT_VID", HEX);
+	secdp_bigdata_init_item(BD_ADT_PID, "ADT_PID", HEX);
+	secdp_bigdata_init_item(BD_DP_MODE, "DP_MODE", STR, 10);
+	secdp_bigdata_init_item(BD_SINK_NAME, "SINK_NAME", STR, 14);
+	secdp_bigdata_init_item(BD_AUD_CH, "AUD_CH", INT);
+	secdp_bigdata_init_item(BD_AUD_FREQ, "AUD_FREQ", INT);
+	secdp_bigdata_init_item(BD_AUD_BIT, "AUD_BIT", INT);
 
 	secdp_bigdata_init_error(ERR_AUX, "ERR_AUX", 3);
 	secdp_bigdata_init_error(ERR_EDID, "ERR_EDID", 1);
@@ -357,4 +364,3 @@ void secdp_bigdata_disconnection(void)
 		secdp_bigdata_save_data();
 
 }
-

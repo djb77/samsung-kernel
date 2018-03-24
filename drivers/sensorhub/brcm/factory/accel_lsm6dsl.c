@@ -339,16 +339,16 @@ static ssize_t accel_reactive_alert_show(struct device *dev,
 static ssize_t accel_hw_selftest_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	char chTempBuf[8] = { 2, 0, };
+	char chTempBuf[14] = { 2, 0, };
 	s8 init_status = 0, result = -1;
-	s16 shift_ratio[3] = { 0, };
+	s16 shift_ratio[3] = { 0, }, shift_ratio_N[3] = {0, };
 	int iRet;
 	struct ssp_data *data = dev_get_drvdata(dev);
 	struct ssp_msg *msg;
 
 	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
 	msg->cmd = ACCELEROMETER_FACTORY;
-	msg->length = 8;
+	msg->length = 14;
 	msg->options = AP2HUB_READ;
 	msg->data = chTempBuf[0];
 	msg->buffer = chTempBuf;
@@ -364,15 +364,19 @@ static ssize_t accel_hw_selftest_show(struct device *dev,
 	shift_ratio[0] = (s16)((chTempBuf[2] << 8) + chTempBuf[1]);
 	shift_ratio[1] = (s16)((chTempBuf[4] << 8) + chTempBuf[3]);
 	shift_ratio[2] = (s16)((chTempBuf[6] << 8) + chTempBuf[5]);
-	result = chTempBuf[7];
+	//negative Axis
+	shift_ratio_N[0] = (s16)((chTempBuf[8] << 8) + chTempBuf[7]);
+	shift_ratio_N[1] = (s16)((chTempBuf[10] << 8) + chTempBuf[9]);
+	shift_ratio_N[2] = (s16)((chTempBuf[12] << 8) + chTempBuf[11]);
+	result = chTempBuf[13];
 
-	pr_info("[SSP] %s - %d, %d, %d, %d, %d\n", __func__,
-		init_status, result, shift_ratio[0], shift_ratio[1], shift_ratio[2]);
+	pr_info("[SSP] %s - %d, %d, %d, %d, %d, %d, %d, %d\n", __func__,
+		init_status, result, shift_ratio[0], shift_ratio[1], shift_ratio[2],
+		shift_ratio_N[0], shift_ratio_N[1], shift_ratio_N[2]);
 
-	return sprintf(buf, "%d,%d,%d,%d\n", result,
-		shift_ratio[0],
-		shift_ratio[1],
-		shift_ratio[2]);
+	return sprintf(buf, "%d,%d,%d,%d,%d,%d,%d\n", result,
+		shift_ratio[0],	shift_ratio[1],	shift_ratio[2],
+		shift_ratio_N[0], shift_ratio_N[1], shift_ratio_N[2]);
 exit:
 	return sprintf(buf, "%d,%d,%d,%d\n", -5, 0, 0, 0);
 }

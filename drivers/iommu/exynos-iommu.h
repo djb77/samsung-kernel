@@ -23,6 +23,8 @@
 
 #include <linux/exynos_iovmm.h>
 
+#include "exynos-iommu-log.h"
+
 typedef u32 sysmmu_iova_t;
 typedef u32 sysmmu_pte_t;
 
@@ -219,6 +221,7 @@ struct exynos_iommu_domain {
 	struct list_head clients_list;	/* list of exynos_iommu_owner.client */
 	atomic_t *lv2entcnt;	/* free lv2 entry counter for each section */
 	spinlock_t lock;		/* lock for modifying clients_list */
+	struct exynos_iommu_event_log log;
 };
 
 /*
@@ -281,6 +284,7 @@ struct sysmmu_drvdata {
 	struct atomic_notifier_head fault_notifiers;
 	struct tlb_props tlb_props;
 	bool is_suspended;
+	struct exynos_iommu_event_log log;
 };
 
 struct exynos_vm_region {
@@ -306,6 +310,7 @@ struct exynos_iovmm {
 	unsigned int num_unmap;
 	const char *domain_name;
 	struct iommu_group *group;
+	struct exynos_iommu_event_log log;
 };
 
 void exynos_sysmmu_tlb_invalidate(struct iommu_domain *domain, dma_addr_t start,
@@ -384,6 +389,11 @@ static inline sysmmu_pte_t *section_entry(
 				sysmmu_pte_t *pgtable, sysmmu_iova_t iova)
 {
 	return (sysmmu_pte_t *)(pgtable + lv1ent_offset(iova));
+}
+
+static inline struct exynos_iommu_domain *to_exynos_domain(struct iommu_domain *dom)
+{
+	return container_of(dom, struct exynos_iommu_domain, domain);
 }
 
 #if defined(CONFIG_EXYNOS_IOVMM)

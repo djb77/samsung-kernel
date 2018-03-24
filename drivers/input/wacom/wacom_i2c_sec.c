@@ -210,7 +210,7 @@ static ssize_t epen_checksum_result_show(struct device *dev,
 	return ret;
 }
 
-static int wacom_open_test(struct wacom_i2c *wac_i2c)
+int wacom_open_test(struct wacom_i2c *wac_i2c)
 {
 	struct i2c_client *client = wac_i2c->client;
 	u8 cmd = 0;
@@ -578,9 +578,26 @@ void epen_disable_mode(int mode)
 {
 	struct wacom_i2c *wac_i2c = wacom_get_drv_data(NULL);
 	struct i2c_client *client = wac_i2c->client;
+	static int depth;
 
-	input_info(true, &client->dev, "%s: %d\n", __func__, mode);
+	input_info(true, &client->dev, "%s: %d(%d)\n", __func__, mode, depth);
 
+	if (mode) {
+		if (!depth++)
+			goto out;
+	} else {
+		if (!(--depth))
+			goto out;
+
+		if (depth < 0)
+			depth = 0;
+	}
+
+	input_info(true, &client->dev, "%s: %d(%d)!\n", __func__, mode, depth);
+
+	return;
+
+out:
 	wac_i2c->epen_blocked = mode;
 
 	if (!wac_i2c->power_enable && wac_i2c->epen_blocked) {
@@ -590,6 +607,8 @@ void epen_disable_mode(int mode)
 	}
 
 	wacom_select_survey_mode(wac_i2c, wac_i2c->screen_on);
+
+	input_info(true, &client->dev, "%s: %d(%d)!\n", __func__, mode, depth);
 }
 EXPORT_SYMBOL(epen_disable_mode);
 
@@ -782,6 +801,22 @@ static ssize_t epen_clear_i2c_fail_count_store(struct device *dev,
 	return count;
 }
 
+static ssize_t epen_connection_check_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct wacom_i2c *wac_i2c = dev_get_drvdata(dev);
+	struct i2c_client *client = wac_i2c->client;
+
+	input_info(true, &client->dev, "%s: SDCONN:%d,SECCNT:%d,SADCVAL:%d\n",
+			__func__, wac_i2c->connection_check,
+			wac_i2c->fail_channel, wac_i2c->min_adc_val);
+
+	return snprintf(buf, PAGE_SIZE, "SDCONN:%d,SECCNT:%d,SADCVAL:%d",
+			wac_i2c->connection_check, wac_i2c->fail_channel,
+			wac_i2c->min_adc_val);
+}
+
 #ifdef CONFIG_SEC_FACTORY
 static ssize_t epen_fac_garage_mode_enable(struct device *dev,
 					   struct device_attribute *attr,
@@ -957,6 +992,8 @@ static DEVICE_ATTR(abnormal_reset_count, (S_IRUGO | S_IWUSR | S_IWGRP),
 		   epen_clear_abnormal_reset_count_store);
 static DEVICE_ATTR(i2c_fail_count, (S_IRUGO | S_IWUSR | S_IWGRP),
 		   epen_i2c_fail_count_show, epen_clear_i2c_fail_count_store);
+static DEVICE_ATTR(epen_connection_check, 0444,
+		   epen_connection_check_show, NULL);
 #ifdef CONFIG_SEC_FACTORY
 static DEVICE_ATTR(epen_fac_garage_mode, (S_IRUGO | S_IWUSR | S_IWGRP),
 		   epen_fac_garage_mode_show, epen_fac_garage_mode_enable);
@@ -985,6 +1022,7 @@ static struct attribute *epen_attributes[] = {
 	&dev_attr_dex_rate.attr,
 	&dev_attr_abnormal_reset_count.attr,
 	&dev_attr_i2c_fail_count.attr,
+	&dev_attr_epen_connection_check.attr,
 #ifdef CONFIG_SEC_FACTORY
 	&dev_attr_epen_fac_garage_mode.attr,
 	&dev_attr_epen_fac_garage_rawdata.attr,

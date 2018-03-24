@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_msgbuf.c 704361 2017-06-13 08:50:38Z $
+ * $Id: dhd_msgbuf.c 733632 2017-11-29 08:46:58Z $
  */
 
 
@@ -295,6 +295,7 @@ typedef struct dhd_dmaxfer {
 	bool          in_progress;
 	uint64        start_usec;
 	uint32	      d11_lpbk;
+	int           status;
 } dhd_dmaxfer_t;
 
 /**
@@ -646,6 +647,8 @@ static void BCMFASTPATH dhd_rxchain_commit(dhd_pub_t *dhd);
 #define DHD_PKT_CTF_MAX_CHAIN_LEN	64
 
 #endif /* DHD_RX_CHAINING */
+
+#define DHD_LPBKDTDUMP_ON()	(dhd_msg_level & DHD_LPBKDTDUMP_VAL)
 
 static void dhd_prot_h2d_sync_init(dhd_pub_t *dhd);
 
@@ -5772,7 +5775,7 @@ dmaxfer_free_prev_dmaaddr(dhd_pub_t *dhdp, dmaxref_mem_map_t *dmmap)
 int dmaxfer_prepare_dmaaddr(dhd_pub_t *dhd, uint len,
 	uint srcdelay, uint destdelay, dhd_dmaxfer_t *dmaxfer)
 {
-	uint i;
+	uint i = 0, j = 0;
 	if (!dmaxfer)
 		return BCME_ERROR;
 
@@ -5790,10 +5793,24 @@ int dmaxfer_prepare_dmaaddr(dhd_pub_t *dhd, uint len,
 
 	dmaxfer->len = len;
 
-	/* Populate source with a pattern */
-	for (i = 0; i < dmaxfer->len; i++) {
-		((uint8*)dmaxfer->srcmem.va)[i] = i % 256;
+	/* Populate source with a pattern like below
+	 * 0x00000000
+	 * 0x01010101
+	 * 0x02020202
+	 * 0x03030303
+	 * 0x04040404
+	 * 0x05050505
+	 * ...
+	 * 0xFFFFFFFF
+	 */
+	while (i < dmaxfer->len) {
+		((uint8*)dmaxfer->srcmem.va)[i] = j % 256;
+		i++;
+		if (i % 4 == 0) {
+			j++;
+		}
 	}
+
 	OSL_CACHE_FLUSH(dmaxfer->srcmem.va, dmaxfer->len);
 
 	dmaxfer->srcdelay = srcdelay;
@@ -5810,32 +5827,67 @@ dhd_msgbuf_dmaxfer_process(dhd_pub_t *dhd, void *msg)
 	pcie_dmaxfer_cmplt_t *cmplt = (pcie_dmaxfer_cmplt_t *)msg;
 
 	BCM_REFERENCE(cmplt);
-	DHD_INFO(("DMA status: %d\n", cmplt->compl_hdr.status));
+	end_usec = OSL_SYSUPTIME_US();
+
+	DHD_ERROR(("DMA loopback status: %d\n", cmplt->compl_hdr.status));
+	prot->dmaxfer.status = cmplt->compl_hdr.status;
 	OSL_CACHE_INV(prot->dmaxfer.dstmem.va, prot->dmaxfer.len);
 	if (prot->dmaxfer.srcmem.va && prot->dmaxfer.dstmem.va) {
 		if (memcmp(prot->dmaxfer.srcmem.va,
-		        prot->dmaxfer.dstmem.va, prot->dmaxfer.len)) {
+			prot->dmaxfer.dstmem.va, prot->dmaxfer.len) ||
+			cmplt->compl_hdr.status != BCME_OK) {
+			DHD_ERROR(("DMA loopback failed\n"));
 			prhex("XFER SRC: ",
 			    prot->dmaxfer.srcmem.va, prot->dmaxfer.len);
 			prhex("XFER DST: ",
 			    prot->dmaxfer.dstmem.va, prot->dmaxfer.len);
-		        DHD_ERROR(("DMA failed\n"));
+			prot->dmaxfer.status = BCME_ERROR;
 		}
 		else {
-			if (prot->dmaxfer.d11_lpbk) {
+			switch (prot->dmaxfer.d11_lpbk) {
+			case M2M_DMA_LPBK: {
+				DHD_ERROR(("DMA successful pcie m2m DMA loopback\n"));
+				} break;
+			case D11_LPBK: {
 				DHD_ERROR(("DMA successful with d11 loopback\n"));
-			} else {
-				DHD_ERROR(("DMA successful without d11 loopback\n"));
+				} break;
+			case BMC_LPBK: {
+				DHD_ERROR(("DMA successful with bmc loopback\n"));
+				} break;
+			case M2M_NON_DMA_LPBK: {
+				DHD_ERROR(("DMA successful pcie m2m NON DMA loopback\n"));
+				} break;
+			case D11_HOST_MEM_LPBK: {
+				DHD_ERROR(("DMA successful d11 host mem loopback\n"));
+				} break;
+			case BMC_HOST_MEM_LPBK: {
+				DHD_ERROR(("DMA successful bmc host mem loopback\n"));
+				} break;
+			default: {
+				DHD_ERROR(("Invalid loopback option\n"));
+				} break;
 			}
+
+			if (DHD_LPBKDTDUMP_ON()) {
+				/* debug info print of the Tx and Rx buffers */
+				dhd_prhex("XFER SRC: ", prot->dmaxfer.srcmem.va,
+					prot->dmaxfer.len, DHD_INFO_VAL);
+				dhd_prhex("XFER DST: ", prot->dmaxfer.dstmem.va,
+					prot->dmaxfer.len, DHD_INFO_VAL);
 		}
 	}
-	end_usec = OSL_SYSUPTIME_US();
+	}
+
 	dhd_prepare_schedule_dmaxfer_free(dhd);
 	end_usec -= prot->dmaxfer.start_usec;
-	DHD_ERROR(("DMA loopback %d bytes in %llu usec, %u kBps\n",
-		prot->dmaxfer.len, end_usec,
-		(prot->dmaxfer.len * (1000 * 1000 / 1024) / (uint32)(end_usec + 1))));
+	if (end_usec)
+		DHD_ERROR(("DMA loopback %d bytes in %lu usec, %u kBps\n",
+			prot->dmaxfer.len, (unsigned long)end_usec,
+			(prot->dmaxfer.len * (1000 * 1000 / 1024) / (uint32)end_usec)));
 	dhd->prot->dmaxfer.in_progress = FALSE;
+
+	dhd->bus->dmaxfer_complete = TRUE;
+	dhd_os_dmaxfer_wake(dhd);
 }
 
 /** Test functionality.
@@ -5844,7 +5896,8 @@ dhd_msgbuf_dmaxfer_process(dhd_pub_t *dhd, void *msg)
  * by a spinlock.
  */
 int
-dhdmsgbuf_dmaxfer_req(dhd_pub_t *dhd, uint len, uint srcdelay, uint destdelay, uint d11_lpbk)
+dhdmsgbuf_dmaxfer_req(dhd_pub_t *dhd, uint len, uint srcdelay, uint destdelay,
+	uint d11_lpbk, uint core_num)
 {
 	unsigned long flags;
 	int ret = BCME_OK;
@@ -5856,22 +5909,24 @@ dhdmsgbuf_dmaxfer_req(dhd_pub_t *dhd, uint len, uint srcdelay, uint destdelay, u
 
 	if (prot->dmaxfer.in_progress) {
 		DHD_ERROR(("DMA is in progress...\n"));
-		return ret;
+		return BCME_ERROR;
 	}
+
+	if (d11_lpbk >= MAX_LPBK) {
+		DHD_ERROR(("loopback mode should be either"
+			" 0-PCIE_M2M_DMA, 1-D11, 2-BMC or 3-PCIE_M2M_NonDMA\n"));
+		return BCME_ERROR;
+	}
+
+	DHD_GENERAL_LOCK(dhd, flags);
 
 	prot->dmaxfer.in_progress = TRUE;
 	if ((ret = dmaxfer_prepare_dmaaddr(dhd, xferlen, srcdelay, destdelay,
 	        &prot->dmaxfer)) != BCME_OK) {
 		prot->dmaxfer.in_progress = FALSE;
+		DHD_GENERAL_UNLOCK(dhd, flags);
 		return ret;
 	}
-
-#ifdef PCIE_INB_DW
-	if (dhd_prot_inc_hostactive_devwake_assert(dhd->bus) != BCME_OK)
-		return BCME_ERROR;
-#endif /* PCIE_INB_DW */
-
-	DHD_GENERAL_LOCK(dhd, flags);
 
 	dmap = (pcie_dma_xfer_params_t *)
 		dhd_prot_alloc_ring_space(dhd, ring, 1, &alloced, FALSE);
@@ -5880,9 +5935,6 @@ dhdmsgbuf_dmaxfer_req(dhd_pub_t *dhd, uint len, uint srcdelay, uint destdelay, u
 		dmaxfer_free_dmaaddr(dhd, &prot->dmaxfer);
 		prot->dmaxfer.in_progress = FALSE;
 		DHD_GENERAL_UNLOCK(dhd, flags);
-#ifdef PCIE_INB_DW
-		dhd_prot_dec_hostactive_ack_pending_dsreq(dhd->bus);
-#endif
 		return BCME_NOMEM;
 	}
 
@@ -5900,22 +5952,35 @@ dhdmsgbuf_dmaxfer_req(dhd_pub_t *dhd, uint len, uint srcdelay, uint destdelay, u
 	dmap->xfer_len = htol32(prot->dmaxfer.len);
 	dmap->srcdelay = htol32(prot->dmaxfer.srcdelay);
 	dmap->destdelay = htol32(prot->dmaxfer.destdelay);
-	prot->dmaxfer.d11_lpbk = d11_lpbk ? 1 : 0;
-	dmap->flags = (prot->dmaxfer.d11_lpbk << PCIE_DMA_XFER_FLG_D11_LPBK_SHIFT)
-			& PCIE_DMA_XFER_FLG_D11_LPBK_MASK;
+	prot->dmaxfer.d11_lpbk = d11_lpbk;
+	dmap->flags = (((core_num & PCIE_DMA_XFER_FLG_CORE_NUMBER_MASK)
+			<< PCIE_DMA_XFER_FLG_CORE_NUMBER_SHIFT) |
+			((prot->dmaxfer.d11_lpbk & PCIE_DMA_XFER_FLG_D11_LPBK_MASK)
+			<< PCIE_DMA_XFER_FLG_D11_LPBK_SHIFT));
+	prot->dmaxfer.start_usec = OSL_SYSUPTIME_US();
 
 	/* update ring's WR index and ring doorbell to dongle */
-	prot->dmaxfer.start_usec = OSL_SYSUPTIME_US();
 	dhd_prot_ring_write_complete(dhd, ring, dmap, 1);
-	DHD_GENERAL_UNLOCK(dhd, flags);
-#ifdef PCIE_INB_DW
-	dhd_prot_dec_hostactive_ack_pending_dsreq(dhd->bus);
-#endif
 
-	DHD_INFO(("DMA Started...\n"));
+	DHD_GENERAL_UNLOCK(dhd, flags);
+
+	DHD_ERROR(("DMA loopback Started...\n"));
 
 	return BCME_OK;
 } /* dhdmsgbuf_dmaxfer_req */
+
+dma_xfer_status_t
+dhdmsgbuf_dmaxfer_status(dhd_pub_t *dhd)
+{
+	dhd_prot_t *prot = dhd->prot;
+
+	if (prot->dmaxfer.in_progress)
+		return DMA_XFER_IN_PROGRESS;
+	else if (prot->dmaxfer.status == BCME_OK)
+		return DMA_XFER_SUCCESS;
+	else
+		return DMA_XFER_FAILED;
+}
 
 /** Called in the process of submitting an ioctl to the dongle */
 static int

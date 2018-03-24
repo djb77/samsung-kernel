@@ -750,7 +750,8 @@ void dsim_reg_get_num_of_slice(u32 id, u32 *num_of_slice)
 
 void dsim_reg_set_multi_slice(u32 id, struct decon_lcd *lcd_info)
 {
-	u32 multi_slice, val;
+	u32 multi_slice = 1;
+	u32 val;
 
 	/* if multi-slice(2~4 slices) DSC compression is used in video mode
 	 * MULTI_SLICE_PACKET configuration must be matched to DDI's configuration */

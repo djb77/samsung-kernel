@@ -89,9 +89,8 @@ struct bio {
 #if defined(CONFIG_FMP_DM_CRYPT) || defined(CONFIG_FMP_EXT4CRYPT_FS)
 	int			private_enc_mode;
 	int			private_algo_mode;
-	unsigned char           *key;
+	unsigned char		*key;
 	unsigned int		key_length;
-	int			private_enc_algo;
 #endif
 	/*
 	 * When using dircet-io (O_DIRECT), we can't get the inode from a bio
@@ -140,12 +139,15 @@ struct bio {
 #define BIO_JOURNAL_TAG_MASK   ((1UL << BIO_JOURNAL) | (1UL << BIO_JMETA))
 #endif
 
+#define BIO_BYPASS	13
+
 /*
  * Flags starting here get preserved by bio_reset() - this includes
  * BIO_POOL_IDX()
  */
-#define BIO_RESET_BITS	13  /* should be larger then BIO_JMETA */
-#define BIO_OWNS_VEC	13	/* bio_free() should free bvec */
+#define BIO_RESET_BITS	14  /* should be larger then BIO_JMETA */
+#define BIO_OWNS_VEC	14	/* bio_free() should free bvec */
+
 
 /*
  * top 4 bits of bio flags indicate the pool this bio came from

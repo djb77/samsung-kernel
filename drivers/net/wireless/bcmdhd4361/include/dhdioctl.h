@@ -28,7 +28,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhdioctl.h 675190 2016-12-14 15:27:52Z $
+ * $Id: dhdioctl.h 727682 2017-10-23 04:45:57Z $
  */
 
 #ifndef _dhdioctl_h_
@@ -54,6 +54,12 @@ enum {
 	BUS_TYPE_SDIO, /* for SDIO dongles */
 	BUS_TYPE_PCIE /* for PCIE dongles */
 };
+
+typedef enum {
+	DMA_XFER_SUCCESS = 0,
+	DMA_XFER_IN_PROGRESS,
+	DMA_XFER_FAILED
+} dma_xfer_status_t;
 
 
 /* per-driver magic numbers */
@@ -111,6 +117,9 @@ enum {
 #define DHD_PKT_MON_VAL		0x2000000
 #define DHD_PKT_MON_DUMP_VAL	0x4000000
 #define DHD_ERROR_MEM_VAL	0x8000000
+#define DHD_DNGL_IOVAR_SET_VAL	0x10000000 /**< logs the setting of dongle iovars */
+#define DHD_LPBKDTDUMP_VAL	0x20000000
+#define DHD_ECNTR_VAL	0x40000000
 
 #ifdef SDTEST
 /* For pktgen iovar */

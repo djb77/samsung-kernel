@@ -460,9 +460,11 @@ static int maxdsm_cal_get_temp_from_power_supply(void)
 
 static void maxdsm_cal_completed(struct maxim_dsm_cal *mdc)
 {
+#ifdef WRITE_SPEAKER_CAL_VALUE_AT_KERNEL
 	char rdc[12] = {0,};
 	char rdc_r[12] = {0,};
 	char temp[12] = {0,};
+#endif
 	int ret, stereo = 0;
 
 #ifdef CONFIG_SND_SOC_MAXIM_DSM
@@ -492,6 +494,7 @@ static void maxdsm_cal_completed(struct maxim_dsm_cal *mdc)
         mdc->values.rdc = (mdc->values.rdc >> 8);
     }
 
+#ifdef WRITE_SPEAKER_CAL_VALUE_AT_KERNEL
 	sprintf(rdc, "%x", mdc->values.rdc);
 	sprintf(rdc_r, "%x", mdc->values.rdc_r);
 	sprintf(temp, "%x",
@@ -513,7 +516,7 @@ static void maxdsm_cal_completed(struct maxim_dsm_cal *mdc)
 		if (ret < 0)
 			mdc->values.rdc_r = ret;
 	}
-
+#endif
 	mdc->values.status = 0;
 
 	if (stereo)
@@ -734,6 +737,9 @@ static ssize_t maxdsm_cal_rdc_show(struct device *dev,
 	char rdc[12] = {0,};
 	int ret;
 
+	dbg_maxdsm("temp = %d, rdc=0x%08x",
+		g_mdc->values.temp, g_mdc->values.rdc);
+
 	if (g_mdc->values.rdc == 0xFFFFFFFF) {
 		ret = maxdsm_cal_read_file(
 				FILEPATH_RDC_CAL, rdc, sizeof(rdc));
@@ -773,6 +779,9 @@ static ssize_t maxdsm_cal_rdc_r_show(struct device *dev,
 {
 	char rdc_r[12] = {0,};
 	int ret;
+
+	dbg_maxdsm("temp = %d, rdc_r = 0x%08x",
+		g_mdc->values.temp, g_mdc->values.rdc_r);
 
 	if (g_mdc->values.rdc_r == 0xFFFFFFFF) {
 		ret = maxdsm_cal_read_file(

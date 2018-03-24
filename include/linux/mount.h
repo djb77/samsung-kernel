@@ -70,7 +70,17 @@ struct vfsmount {
 	struct mount *bp_mount;	/* pointer to mount*/
 #endif
 	int mnt_flags;
+	void *data;
 };
+
+#ifdef CONFIG_RKP_NS_PROT
+struct vfsmount_offset {
+	u64 bp_mount_offset;
+	u64 mnt_sb_offset;
+	u64 mnt_flags_offset;
+	u64 data_offset;
+};
+#endif
 
 struct file; /* forward dec */
 struct path;

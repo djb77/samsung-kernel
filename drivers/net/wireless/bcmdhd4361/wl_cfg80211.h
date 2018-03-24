@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 720601 2017-09-11 13:06:44Z $
+ * $Id: wl_cfg80211.h 736724 2017-12-18 08:39:54Z $
  */
 
 /**
@@ -251,6 +251,10 @@ do {									\
 
 #ifndef WL_SCB_MAX_PROBE
 #define WL_SCB_MAX_PROBE	3
+#endif
+
+#ifndef WL_PSPRETEND_RETRY_LIMIT
+#define WL_PSPRETEND_RETRY_LIMIT 1
 #endif
 
 #ifndef WL_MIN_PSPRETEND_THRESHOLD
@@ -697,6 +701,19 @@ typedef struct wl_rssi_ant_mimo {
 #define GET_BSS_INFO_LEN 90
 #endif /* DHD_ENABLE_BIGDATA_LOGGING */
 
+#ifdef DHD_LB_IRQSET
+#if defined(CONFIG_ARCH_MSM8998) || defined(CONFIG_ARCH_SDM845)
+/*
+ * XXX : This duration is for specific platform Hotplug operation
+ * This platform has all big cores hot-plugging operation
+ * after 22 secs. from system boot time by force
+ * For this platform, we set IRQ affinity again.
+ * and set IRQ once again after connection is done.
+ */
+#define WL_IRQSET
+#endif /* CONFIG_ARCH_MSM8998 | CONFIG_ARCH_SDM845) */
+#endif /* DHD_LB_IRQSET */
+
 #ifdef WES_SUPPORT
 #ifdef CUSTOMER_SCAN_TIMEOUT_SETTING
 #define CUSTOMER_WL_SCAN_TIMER_INTERVAL_MS	25000 /* Scan timeout */
@@ -825,6 +842,9 @@ struct bcm_cfg80211 {
 	struct mutex event_sync;	/* maily for up/down synchronization */
 	bool disable_roam_event;
 	struct delayed_work pm_enable_work;
+#ifdef WL_IRQSET
+	struct delayed_work irq_set_work;
+#endif /* WL_IRQSET */
 	struct workqueue_struct *event_workq;   /* workqueue for event */
 	struct work_struct event_work;		/* work item for event */
 	struct mutex pm_sync;	/* mainly for pm work synchronization */
@@ -907,7 +927,6 @@ struct bcm_cfg80211 {
 #endif /* WBTEXT */
 	struct list_head vndr_oui_list;
 	spinlock_t vndr_oui_sync;	/* to protect vndr_oui_list */
-
 #ifdef STAT_REPORT
 	void *stat_report_info;
 #endif

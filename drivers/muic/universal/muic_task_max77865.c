@@ -480,6 +480,7 @@ static int muic_probe(struct platform_device *pdev)
 	pmuic->afc_tsub_disable = false;
 	pmuic->is_ccic_attach = false;
 	pmuic->is_ccic_afc_enable = 0;
+	pmuic->is_ccic_rp56_enable = false;
 #if defined(CONFIG_SEC_FACTORY)
 	f_opmode = pmuic->opmode;
 #endif

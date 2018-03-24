@@ -717,8 +717,10 @@ static void csi_err_print(struct fimc_is_device_csi *csi)
 #ifdef OVERFLOW_PANIC_ENABLE_CSIS
 #ifdef USE_CAMERA_HW_BIG_DATA
 				fimc_is_vender_csi_err_handler(csi);
+#ifdef CAMERA_HW_BIG_DATA_FILE_IO
 				fimc_is_sec_copy_err_cnt_to_file();
-#endif				
+#endif
+#endif /* USE_CAMERA_HW_BIG_DATA */
 				panic("CSIS error!! %s", err_str);
 #endif
 				break;
@@ -727,8 +729,10 @@ static void csi_err_print(struct fimc_is_device_csi *csi)
 #ifdef OVERFLOW_PANIC_ENABLE_CSIS
 #ifdef USE_CAMERA_HW_BIG_DATA
 				fimc_is_vender_csi_err_handler(csi);
+#ifdef CAMERA_HW_BIG_DATA_FILE_IO
 				fimc_is_sec_copy_err_cnt_to_file();
-#endif				
+#endif
+#endif /* USE_CAMERA_HW_BIG_DATA */
 				panic("CSIS error!! %s", err_str);
 #endif
 				break;
@@ -737,8 +741,10 @@ static void csi_err_print(struct fimc_is_device_csi *csi)
 #ifdef OVERFLOW_PANIC_ENABLE_CSIS
 #ifdef USE_CAMERA_HW_BIG_DATA
 				fimc_is_vender_csi_err_handler(csi);
+#ifdef CAMERA_HW_BIG_DATA_FILE_IO
 				fimc_is_sec_copy_err_cnt_to_file();
-#endif				
+#endif
+#endif /* USE_CAMERA_HW_BIG_DATA */
 				panic("CSIS error!! %s", err_str);
 #endif
 				break;

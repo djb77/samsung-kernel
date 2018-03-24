@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pno.c 707287 2017-06-27 06:44:29Z $
+ * $Id: dhd_pno.c 735359 2017-12-08 10:56:04Z $
  */
 
 #if defined(GSCAN_SUPPORT) && !defined(PNO_SUPPORT)
@@ -1114,7 +1114,11 @@ dhd_pno_stop_for_ssid(dhd_pub_t *dhd)
 		goto exit;
 	}
 	DHD_PNO(("%s enter\n", __FUNCTION__));
+	/* If pno mode is PNO_LEGACY_MODE clear the pno values and unset the DHD_PNO_LEGACY_MODE */
+	_params = &_pno_state->pno_params_arr[INDEX_OF_LEGACY_PARAMS];
+	_dhd_pno_reinitialize_prof(dhd, _params, DHD_PNO_LEGACY_MODE);
 	_pno_state->pno_mode &= ~DHD_PNO_LEGACY_MODE;
+
 #ifdef GSCAN_SUPPORT
 	if (_pno_state->pno_mode & DHD_PNO_GSCAN_MODE) {
 		struct dhd_pno_gscan_params *gscan_params;
@@ -2725,13 +2729,8 @@ _dhd_pno_get_gscan_batch_from_fw(dhd_pub_t *dhd)
 
 				DHD_PNO(("\tSSID : "));
 				DHD_PNO(("\n"));
-				DHD_PNO(("\tBSSID: %02x:%02x:%02x:%02x:%02x:%02x\n",
-					result->macaddr.octet[0],
-					result->macaddr.octet[1],
-					result->macaddr.octet[2],
-					result->macaddr.octet[3],
-					result->macaddr.octet[4],
-					result->macaddr.octet[5]));
+				DHD_PNO(("\tBSSID: "MACDBG"\n",
+					MAC2STRDBG(result->macaddr.octet)));
 				DHD_PNO(("\tchannel: %d, RSSI: %d, timestamp: %d ms\n",
 					plnetinfo->pfnsubnet.channel,
 					plnetinfo->RSSI, plnetinfo->timestamp));
@@ -3093,13 +3092,8 @@ _dhd_pno_get_for_batch(dhd_pub_t *dhd, char *buf, int bufsize, int reason)
 			for (j = 0; j < plnetinfo->pfnsubnet.SSID_len; j++)
 				DHD_PNO(("%c", plnetinfo->pfnsubnet.u.SSID[j]));
 			DHD_PNO(("\n"));
-			DHD_PNO(("\tBSSID: %02x:%02x:%02x:%02x:%02x:%02x\n",
-				plnetinfo->pfnsubnet.BSSID.octet[0],
-				plnetinfo->pfnsubnet.BSSID.octet[1],
-				plnetinfo->pfnsubnet.BSSID.octet[2],
-				plnetinfo->pfnsubnet.BSSID.octet[3],
-				plnetinfo->pfnsubnet.BSSID.octet[4],
-				plnetinfo->pfnsubnet.BSSID.octet[5]));
+			DHD_PNO(("\tBSSID: "MACDBG"\n",
+				MAC2STRDBG(plnetinfo->pfnsubnet.BSSID.octet)));
 			DHD_PNO(("\tchannel: %d, RSSI: %d, timestamp: %d ms\n",
 				plnetinfo->pfnsubnet.channel,
 				plnetinfo->RSSI, plnetinfo->timestamp));
@@ -3801,12 +3795,9 @@ dhd_pno_process_epno_result(dhd_pub_t *dhd, const void *data, uint32 event, int 
 			}
 			memcpy(ssid, results[i].ssid, results[i].ssid_len);
 			ssid[results[i].ssid_len] = '\0';
-			DHD_PNO(("ssid - %s bssid %02x:%02x:%02x:%02x:%02x:%02x "
-			        "ch %d rssi %d flags %d\n", ssid,
-			        bssid->octet[0], bssid->octet[1],
-			        bssid->octet[2], bssid->octet[3],
-			        bssid->octet[4], bssid->octet[5],
-			        results[i].channel, results[i].rssi, results[i].flags));
+			DHD_PNO(("ssid - %s bssid "MACDBG" ch %d rssi %d flags %d\n",
+				ssid, MAC2STRDBG(bssid->octet), results[i].channel,
+				results[i].rssi, results[i].flags));
 		}
 	}
 	*size = mem_needed;
@@ -3888,14 +3879,10 @@ dhd_handle_hotlist_scan_evt(dhd_pub_t *dhd, const void *event_data,
 		hotlist_found_array->ssid[plnetinfo->pfnsubnet.SSID_len] = '\0';
 
 		memcpy(&hotlist_found_array->macaddr, &plnetinfo->pfnsubnet.BSSID, ETHER_ADDR_LEN);
-		DHD_PNO(("\t%s %02x:%02x:%02x:%02x:%02x:%02x rssi %d\n", hotlist_found_array->ssid,
-		hotlist_found_array->macaddr.octet[0],
-		hotlist_found_array->macaddr.octet[1],
-		hotlist_found_array->macaddr.octet[2],
-		hotlist_found_array->macaddr.octet[3],
-		hotlist_found_array->macaddr.octet[4],
-		hotlist_found_array->macaddr.octet[5],
-		hotlist_found_array->rssi));
+		DHD_PNO(("\t%s "MACDBG" rssi %d\n",
+			hotlist_found_array->ssid,
+			MAC2STRDBG(hotlist_found_array->macaddr.octet),
+			hotlist_found_array->rssi));
 	}
 
 

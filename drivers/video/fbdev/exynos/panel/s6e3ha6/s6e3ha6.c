@@ -1103,6 +1103,41 @@ int init_mdnie_night_mode_table(struct maptbl *tbl)
 	return 0;
 }
 
+int init_mdnie_color_lens_table(struct maptbl *tbl)
+{
+	struct mdnie_info *mdnie;
+	struct maptbl *color_lens_maptbl;
+
+	if (tbl == NULL) {
+		panel_err("PANEL:ERR:%s:maptbl is null\n", __func__);
+		return -EINVAL;
+	}
+
+	if (tbl->pdata == NULL) {
+		panel_err("PANEL:ERR:%s:pdata is null\n", __func__);
+		return -EINVAL;
+	}
+
+	mdnie = tbl->pdata;
+
+	color_lens_maptbl = mdnie_find_etc_maptbl(mdnie, MDNIE_ETC_COLOR_LENS_MAPTBL);
+	if (!color_lens_maptbl) {
+		panel_err("%s, COLOR_LENS_MAPTBL not found\n", __func__);
+		return -EINVAL;
+	}
+
+	if (sizeof_maptbl(tbl) < (S6E3HA6_COLOR_LENS_OFS +
+			sizeof_row(color_lens_maptbl))) {
+		panel_err("%s invalid size (maptbl_size %d, color_lens_maptbl_size %d)\n",
+			__func__, sizeof_maptbl(tbl), sizeof_row(color_lens_maptbl));
+		return -EINVAL;
+	}
+
+	maptbl_copy(color_lens_maptbl, &tbl->arr[S6E3HA6_COLOR_LENS_OFS]);
+
+	return 0;
+}
+
 void update_current_scr_white(struct maptbl *tbl, u8 *dst)
 {
 	struct mdnie_info *mdnie;
@@ -1212,6 +1247,24 @@ int getidx_adjust_ldu_maptbl(struct maptbl *tbl)
 		return -EINVAL;
 	}
 	return maptbl_index(tbl, wcrd_type[mdnie->props.mode], mdnie->props.ldu, 0);
+}
+
+int getidx_color_lens_maptbl(struct maptbl *tbl)
+{
+	struct mdnie_info *mdnie = (struct mdnie_info *)tbl->pdata;
+
+	if (!IS_COLOR_LENS_MODE(mdnie))
+		return -EINVAL;
+
+	if ((mdnie->props.color_lens_color < 0) || (mdnie->props.color_lens_color >= COLOR_LENS_COLOR_MAX)) {
+		pr_err("%s, out of color lens color range %d\n", __func__, mdnie->props.color_lens_color);
+		return -EINVAL;
+	}
+	if ((mdnie->props.color_lens_level < 0) || (mdnie->props.color_lens_level >= COLOR_LENS_LEVEL_MAX)) {
+		pr_err("%s, out of color lens level range %d\n", __func__, mdnie->props.color_lens_level);
+		return -EINVAL;
+	}
+	return maptbl_index(tbl, mdnie->props.color_lens_color, mdnie->props.color_lens_level, 0);
 }
 
 void copy_color_coordinate_maptbl(struct maptbl *tbl, u8 *dst)

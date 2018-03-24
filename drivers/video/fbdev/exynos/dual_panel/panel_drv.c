@@ -122,10 +122,9 @@ static int __set_panel_power(struct panel_device *panel, int power)
 			}
 		}
 		usleep_range(10000, 10000);
-		gpio_set_value(pad->gpio_reset, 1);
-		usleep_range(5000, 5000);
 	} else {
 		gpio_set_value(pad->gpio_reset, 0);
+		usleep_range(1000, 1500);
 		for (i = REGULATOR_MAX - 1; i >= 0; i--) {
 			ret = regulator_disable(pad->regulator[i]);
 			if (ret) {
@@ -140,6 +139,32 @@ set_err:
 	return ret;
 }
 
+static int __set_panel_reset(struct panel_device *panel)
+{
+	struct panel_pad *pad = &panel->pad;
+	int ret = 0;
+
+	if (pad == NULL) {
+		panel_err("PANEL:ERR:%s:pad is null\n", __func__);
+		goto set_err;
+	}
+	pr_info("%s %d\n", __func__, panel->id);
+
+	if (panel->state.power == PANEL_POWER_ON) {
+		gpio_set_value(pad->gpio_reset, 1);
+		usleep_range(5000, 5100);
+		gpio_set_value(pad->gpio_reset, 0);
+		usleep_range(5000, 5100);
+		gpio_set_value(pad->gpio_reset, 1);
+		usleep_range(5000, 5100);
+	} else {
+		panel_warn("PANEL:WARN:%s: power off state.. skip..\n", __func__);
+		goto set_err;
+	}
+
+set_err:
+	return ret;
+}
 
 int __panel_seq_display_on(struct panel_device *panel)
 {
@@ -763,7 +788,7 @@ static int panel_sleep_in(struct panel_device *panel)
 do_exit:
 	return ret;
 }
-
+int power_skip;
 static int panel_power_on(struct panel_device *panel)
 {
 	int ret = 0;
@@ -782,6 +807,36 @@ static int panel_power_on(struct panel_device *panel)
 			goto do_exit;
 		}
 		state->cur_state = PANEL_STATE_ON;
+		power_skip = 0;
+	} else {
+		power_skip = 1;
+		panel_err("PANEL::%s:panel state on power skip\n",
+					__func__);
+	}
+	return 0;
+
+do_exit:
+	return ret;
+}
+static int panel_set_reset(struct panel_device *panel)
+{
+	int ret = 0;
+	struct panel_state *state = &panel->state;
+
+	if (state->connect_panel == PANEL_DISCONNECT) {
+		panel_warn("PANEL:WANR:%s:panel disconnected\n", __func__);
+		goto do_exit;
+	}
+	if (power_skip) {
+		panel_err("PANEL:%s:panel reset skip\n",
+					__func__);
+				goto do_exit;
+	}
+	ret = __set_panel_reset(panel);
+	if (ret) {
+		panel_err("PANEL:ERR:%s:failed to panel reset\n",
+			__func__);
+		goto do_exit;
 	}
 	return 0;
 
@@ -1127,6 +1182,14 @@ static int panel_ioctl_display_on(struct panel_device *panel, void *arg)
 	return ret;
 }
 
+static int panel_ioctl_set_reset(struct panel_device *panel)
+{
+	int ret = 0;
+
+	ret = panel_set_reset(panel);
+	return ret;
+}
+
 static int panel_ioctl_set_power(struct panel_device *panel, void *arg)
 {
 	int ret = 0;
@@ -1209,7 +1272,10 @@ static long panel_core_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg
 			panel_info("PANEL:INFO:%s:%d:PANEL_IOC_SET_POWER\n", __func__, panel->id);
 			ret = panel_ioctl_set_power(panel, arg);
 			break;
-
+		case PANEL_IOC_SET_PANEL_RESET:
+			panel_info("PANEL:INFO:%s:%d:PANEL_IOC_SET_PANEL_RESET\n", __func__, panel->id);
+			ret = panel_ioctl_set_reset(panel);
+			break;
 		case PANEL_IOC_PANEL_DUMP :
 			panel_info("PANEL:INFO:%s:%d:PANEL_IOC_PANEL_DUMP\n", __func__, panel->id);
 			ret = panel_debug_dump(panel);
@@ -1954,7 +2020,7 @@ static int panel_drv_probe(struct platform_device *pdev)
 		goto probe_err;
 	}
 	panel->dev = dev;
-
+	power_skip = 0;
 	panel->state.init_at = PANEL_INIT_BOOT;
 	panel->state.connect_panel = PANEL_CONNECT;
 	panel->state.cur_state = PANEL_STATE_OFF;

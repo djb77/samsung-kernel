@@ -25,9 +25,6 @@
 #include "panel_drv.h"
 #include "mdnie.h"
 #include "copr.h"
-#ifdef CONFIG_EXYNOS_DECON_LCD_TUNING
-#include "tuning.h"
-#endif
 #ifdef CONFIG_DISPLAY_USE_INFO
 #include "dpui.h"
 #endif
@@ -399,15 +396,6 @@ static int panel_set_mdnie(struct panel_device *panel)
 	if (!IS_PANEL_ACTIVE(panel))
 		return 0;
 
-#ifdef CONFIG_EXYNOS_DECON_LCD_TUNING
-	if (mdnie->props.tuning) {
-		pr_info("%s, do tuning-seq\n", __func__);
-		ret = tfile_do_seqtbl(panel, mdnie->props.tfilepath);
-		if (unlikely(ret < 0))
-			pr_err("%s, failed to write tuning seqtbl\n", __func__);
-		goto set_mdnie_exit;
-	}
-#endif
 	pr_info("%s, do mdnie-seq\n", __func__);
 
 	ret = 0;
@@ -416,7 +404,6 @@ static int panel_set_mdnie(struct panel_device *panel)
 	if (unlikely(ret < 0))
 		pr_err("%s, failed to write seqtbl\n", __func__);
 
-set_mdnie_exit:
 	mutex_unlock(&panel->op_lock);
 
 	return ret;
@@ -625,71 +612,6 @@ static ssize_t scenario_store(struct device *dev,
 	return count;
 }
 
-#ifdef CONFIG_EXYNOS_DECON_LCD_TUNING
-static ssize_t tuning_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	char *pos = buf;
-
-	pos += sprintf(pos, "++ %s: %s\n", __func__, mdnie->props.tfilepath);
-
-	if (!mdnie->props.tuning) {
-		pos += sprintf(pos, "tunning mode is off\n");
-		goto exit;
-	}
-
-	if (strncmp(mdnie->props.tfilepath, MDNIE_SYSFS_PREFIX,
-				sizeof(MDNIE_SYSFS_PREFIX) - 1)) {
-		pos += sprintf(pos, "file path is invalid, %s\n", mdnie->props.tfilepath);
-		goto exit;
-	}
-
-exit:
-	pos += sprintf(pos, "-- %s\n", __func__);
-
-	return pos - buf;
-}
-
-
-static ssize_t tuning_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	unsigned int value;
-	int ret;
-
-	if (sysfs_streq(buf, "0") || sysfs_streq(buf, "1")) {
-		ret = kstrtouint(buf, 0, &value);
-		if (ret < 0)
-			return ret;
-
-		mdnie->props.tuning = !!value;
-		if (!value)
-			memset(mdnie->props.tfilepath, 0, sizeof(mdnie->props.tfilepath));
-		dev_info(dev, "%s: %s\n", __func__, mdnie->props.tuning ? "enable" : "disable");
-	} else {
-		if (!mdnie->props.tuning)
-			return count;
-
-		if (count > (sizeof(mdnie->props.tfilepath) - sizeof(MDNIE_SYSFS_PREFIX))) {
-			dev_err(dev, "filename %s is too long\n", mdnie->props.tfilepath);
-			return -ENOMEM;
-		}
-
-		mutex_lock(&mdnie->lock);
-		memset(mdnie->props.tfilepath, 0, sizeof(mdnie->props.tfilepath));
-		snprintf(mdnie->props.tfilepath, sizeof(MDNIE_SYSFS_PREFIX) + count - 1, "%s%s", MDNIE_SYSFS_PREFIX, buf);
-		mutex_unlock(&mdnie->lock);
-		dev_info(dev, "%s: %s\n", __func__, mdnie->props.tfilepath);
-
-		mdnie_update(mdnie);
-	}
-
-	return count;
-}
-#endif /* CONFIG_EXYNOS_DECON_LCD_TUNING */
-
 static ssize_t accessibility_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -703,7 +625,8 @@ static ssize_t accessibility_store(struct device *dev,
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
 	unsigned int s[12] = {0, };
-	int i, value, ret;
+	unsigned int value;
+	int i, ret;
 
 	ret = sscanf(buf, "%d %x %x %x %x %x %x %x %x %x %x %x %x",
 		&value, &s[0], &s[1], &s[2], &s[3],
@@ -812,62 +735,62 @@ static ssize_t mdnie_show(struct device *dev,
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
 	int maptbl_index = mdnie_get_maptbl_index(mdnie);
 	int i, mdnie_mode = mdnie_current_state(mdnie);
-	char *p = buf;
+	unsigned int len = 0;
 
 	if (!IS_MDNIE_ENABLED(mdnie)) {
 		dev_err(mdnie->dev, "mdnie state is off\n");
 		return -EINVAL;
 	}
 
-	p += sprintf(p, "mdnie %s-mode, maptbl %s(%d)\n",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "mdnie %s-mode, maptbl %s(%d)\n",
 			mdnie_mode_name[mdnie_mode], (maptbl_index < 0) ?
 			"invalid" : mdnie_maptbl_name[maptbl_index], maptbl_index);
-	p += sprintf(p, "accessibility %s(%d), hdr %d, hmd %d, hbm %d\n",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "accessibility %s(%d), hdr %d, hmd %d, hbm %d\n",
 			accessibility_name[mdnie->props.accessibility],
 			mdnie->props.accessibility, mdnie->props.hdr,
 			mdnie->props.hmd, mdnie->props.hbm);
-	p += sprintf(p, "scenario %s(%d), mode %s(%d)\n",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "scenario %s(%d), mode %s(%d)\n",
 			scenario_name[mdnie->props.scenario], mdnie->props.scenario,
 			scenario_mode_name[mdnie->props.mode], mdnie->props.mode);
-	p += sprintf(p, "scr_white_mode %s\n",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "scr_white_mode %s\n",
 			scr_white_mode_name[mdnie->props.scr_white_mode]);
-	p += sprintf(p, "mdnie_ldu %d, coord x %d, y %d area Q%d\n",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "mdnie_ldu %d, coord x %d, y %d area Q%d\n",
 			mdnie->props.ldu, mdnie->props.wcrd_x, mdnie->props.wcrd_y,
 			mdnie_coordinate_area(mdnie, mdnie->props.wcrd_x, mdnie->props.wcrd_y) + 1);
-	p += sprintf(p, "coord_wrgb[adpt] r:%d(%02X) g:%d(%02X) b:%d(%02X)\n",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "coord_wrgb[adpt] r:%d(%02X) g:%d(%02X) b:%d(%02X)\n",
 			mdnie->props.coord_wrgb[WCRD_TYPE_ADAPTIVE][0], mdnie->props.coord_wrgb[WCRD_TYPE_ADAPTIVE][0],
 			mdnie->props.coord_wrgb[WCRD_TYPE_ADAPTIVE][1], mdnie->props.coord_wrgb[WCRD_TYPE_ADAPTIVE][1],
 			mdnie->props.coord_wrgb[WCRD_TYPE_ADAPTIVE][2], mdnie->props.coord_wrgb[WCRD_TYPE_ADAPTIVE][2]);
-	p += sprintf(p, "coord_wrgb[d65] r:%d(%02X) g:%d(%02X) b:%d(%02X)\n",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "coord_wrgb[d65] r:%d(%02X) g:%d(%02X) b:%d(%02X)\n",
 			mdnie->props.coord_wrgb[WCRD_TYPE_D65][0], mdnie->props.coord_wrgb[WCRD_TYPE_D65][0],
 			mdnie->props.coord_wrgb[WCRD_TYPE_D65][1], mdnie->props.coord_wrgb[WCRD_TYPE_D65][1],
 			mdnie->props.coord_wrgb[WCRD_TYPE_D65][2], mdnie->props.coord_wrgb[WCRD_TYPE_D65][2]);
-	p += sprintf(p, "cur_wrgb r:%d(%02X) g:%d(%02X) b:%d(%02X)\n",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "cur_wrgb r:%d(%02X) g:%d(%02X) b:%d(%02X)\n",
 			mdnie->props.cur_wrgb[0], mdnie->props.cur_wrgb[0],
 			mdnie->props.cur_wrgb[1], mdnie->props.cur_wrgb[1],
 			mdnie->props.cur_wrgb[2], mdnie->props.cur_wrgb[2]);
-	p += sprintf(p, "ssr_wrgb r:%d(%02X) g:%d(%02X) b:%d(%02X)\n",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "ssr_wrgb r:%d(%02X) g:%d(%02X) b:%d(%02X)\n",
 			mdnie->props.ssr_wrgb[0], mdnie->props.ssr_wrgb[0],
 			mdnie->props.ssr_wrgb[1], mdnie->props.ssr_wrgb[1],
 			mdnie->props.ssr_wrgb[2], mdnie->props.ssr_wrgb[2]);
-	p += sprintf(p, "def_wrgb r:%d(%02X) g:%d(%02X) b:%d(%02X), offset r:%d g:%d b:%d\n",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "def_wrgb r:%d(%02X) g:%d(%02X) b:%d(%02X), offset r:%d g:%d b:%d\n",
 			mdnie->props.def_wrgb[0], mdnie->props.def_wrgb[0],
 			mdnie->props.def_wrgb[1], mdnie->props.def_wrgb[1],
 			mdnie->props.def_wrgb[2], mdnie->props.def_wrgb[2],
 			mdnie->props.def_wrgb_ofs[0], mdnie->props.def_wrgb_ofs[1],
 			mdnie->props.def_wrgb_ofs[2]);
 
-	p += sprintf(p, "scr : ");
+	len += scnprintf(buf + len, PAGE_SIZE - len, "scr : ");
 	if (mdnie->props.sz_scr) {
 		for (i = 0; i < mdnie->props.sz_scr; i++)
-			p += sprintf(p, "%02x ", mdnie->props.scr[i]);
+			len += scnprintf(buf + len, PAGE_SIZE - len, "%02x ", mdnie->props.scr[i]);
 	} else {
-		p += sprintf(p, "none");
+		len += scnprintf(buf + len, PAGE_SIZE - len, "none");
 	}
-	p += sprintf(p, "\n");
+	len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
 
 
-	p += sprintf(p, "night_mode %s, level %d\n",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "night_mode %s, level %d\n",
 			mdnie->props.night ? "on" : "off",
 			mdnie->props.night_level);
 
@@ -875,7 +798,7 @@ static ssize_t mdnie_show(struct device *dev,
 	mdnie_coordinate_tune_test(mdnie);
 #endif
 
-	return (p - buf);
+	return len;
 }
 
 static ssize_t sensorRGB_show(struct device *dev,
@@ -1138,9 +1061,6 @@ static ssize_t hmt_color_temperature_store(struct device *dev,
 struct device_attribute mdnie_dev_attrs[] = {
 	__PANEL_ATTR_RW(mode, 0664),
 	__PANEL_ATTR_RW(scenario, 0664),
-#ifdef CONFIG_EXYNOS_DECON_LCD_TUNING
-	__PANEL_ATTR_RW(tuning, 0664),
-#endif
 	__PANEL_ATTR_RW(accessibility, 0664),
 	__PANEL_ATTR_RW(bypass, 0664),
 	__PANEL_ATTR_RW(lux, 0000),

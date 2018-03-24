@@ -63,7 +63,7 @@ static inline void __pte_free_tlb(struct mmu_gather *tlb, pgtable_t pte,
 }
 
 #if CONFIG_PGTABLE_LEVELS > 2
-#ifndef CONFIG_TIMA_RKP
+#ifndef CONFIG_RKP
 static inline void __pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmdp,
 				  unsigned long addr)
 {
@@ -87,7 +87,7 @@ static inline void __pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmdp,
 #endif
 
 #if CONFIG_PGTABLE_LEVELS > 3
-#ifndef CONFIG_TIMA_RKP
+#ifndef CONFIG_RKP
 static inline void __pud_free_tlb(struct mmu_gather *tlb, pud_t *pudp,
 				  unsigned long addr)
 {

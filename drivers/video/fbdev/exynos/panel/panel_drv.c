@@ -513,6 +513,7 @@ static struct common_panel_info *panel_detect(struct panel_device *panel)
 	int ret = 0;
 	struct common_panel_info *info;
 	struct panel_info *panel_data;
+	bool detect = true;
 
 	if (panel == NULL) {
 		panel_err("%s, panel is null\n", __func__);
@@ -529,7 +530,7 @@ static struct common_panel_info *panel_detect(struct panel_device *panel)
  	ret = read_panel_id(panel, id);
 	if (unlikely(ret < 0)) {
 		panel_err("%s, failed to read id(ret %d)\n", __func__, ret);
-		return NULL;
+		detect = false;
 	}
 
 	panel_id = (id[0] << 16) | (id[1] << 8) | id[2];
@@ -537,6 +538,14 @@ static struct common_panel_info *panel_detect(struct panel_device *panel)
 
 	panel_dbg("%s, ldi_name %s, panel_id 0x%08X\n",
 			__func__, panel_data->ldi_name, panel_id);
+
+#ifdef CONFIG_SUPPORT_PANEL_SWAP
+	if ((boot_panel_id >= 0) && (detect == true)) {
+		boot_panel_id = (id[0] << 16) | (id[1] << 8) | id[2];
+		panel_info("PANEL:INFO:%s:boot_panel_id : 0x%x\n",
+				__func__, boot_panel_id);
+	}
+#endif
 
 	info = find_panel(panel, panel_id);
 	if (unlikely(!info)) {
@@ -2097,7 +2106,7 @@ static struct platform_driver panel_driver = {
 static int __init get_boot_panel_id(char *arg)
 {
 	get_option(&arg, &boot_panel_id);
-	panel_info("PANEL:INFO:%s:boot_panel id : 0x%x\n",
+	panel_info("PANEL:INFO:%s:boot_panel_id : 0x%x\n",
 			__func__, boot_panel_id);
 
 	return 0;

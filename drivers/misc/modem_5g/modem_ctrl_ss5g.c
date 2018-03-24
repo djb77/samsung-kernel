@@ -46,7 +46,9 @@ static inline int change_cp_pmu_manual_reset(void) {return 0; }
 static struct modem_ctl *g_mc;
 extern void exynos_pcie_poweron(int);
 extern void exynos_pcie_poweroff(int);
-static int ap_wakeup, phone_active, cp_boot_noti;
+static int phone_active, cp_boot_noti, cp_dump_int;
+
+static int sys_rev;
 
 #if 0
 static irqreturn_t cp_wdt_handler(int irq, void *arg)
@@ -170,31 +172,27 @@ static int get_ds_detect(struct device_node *np)
 #endif
 #endif
 
-static int ss5g_on(struct modem_ctl *mc)
+static int __init console_setup(char *str)
 {
-	//int ret;
+	get_option(&str, &sys_rev);
+	mif_info("board_rev : %d\n", sys_rev);
 
-	mif_err("+++\n");
+	return 0;
+}
+__setup("androidboot.hw_rev=", console_setup);
 
-#if 0
-	/* Enable debug Snapshot */
-	mif_set_snapshot(true);
+static int ss5g_reset(struct modem_ctl *mc)
+{
+	exynos_pcie_poweroff(MODEM_PCIE_CH_NUM);
 
-	mc->phone_state = STATE_OFFLINE;
+	gpio_set_value(mc->gpio_cp_reset, 1);
+	msleep(50);
+	gpio_set_value(mc->gpio_cp_reset, 0);
+	msleep(50);
+	gpio_set_value(mc->gpio_cp_reset, 1);
 
-	if (exynos_get_cp_power_status(mc) > 0) {
-		mif_err("CP aleady Power on, Just start!\n");
-		exynos_cp_release(mc);
-	} else {
-		exynos_set_cp_power_onoff(mc, CP_POWER_ON);
-	}
+	mif_enable_irq(&mc->irq_boot_noti);
 
-	msleep(300);
-	ret = change_cp_pmu_manual_reset();
-	mif_err("change_mr_reset -> %d\n", ret);
-#endif
-
-	mif_err("---\n");
 	return 0;
 }
 
@@ -239,7 +237,7 @@ exit:
 	return 0;
 }
 
-static int ss5g_reset(struct modem_ctl *mc)
+static int ss5g_on(struct modem_ctl *mc)
 {
 	struct regulator *regulator_ldo1;
 	struct regulator *regulator_ldo2;
@@ -255,6 +253,10 @@ static int ss5g_reset(struct modem_ctl *mc)
 	struct regulator *regulator_ldo17;
 	struct regulator *regulator_sw2;
 	int ret;
+
+	gpio_set_value(mc->gpio_rfb_ldo_en, 1);
+	mif_info("rfb_ldo_en: %d\n", gpio_get_value(mc->gpio_rfb_ldo_en));
+	usleep_range(500, 1000);
 
 	regulator_ldo1 = regulator_get(NULL, mc->regulator_ldo1);
 	if (IS_ERR(regulator_ldo1)) {
@@ -398,39 +400,38 @@ static int ss5g_reset(struct modem_ctl *mc)
 	}
 	usleep_range(200, 500);
 
-	gpio_set_value(mc->gpio_cp_reset, 1);
-	msleep(50);
-	gpio_set_value(mc->gpio_cp_reset, 0);
-	msleep(50);
-	gpio_set_value(mc->gpio_cp_reset, 1);
-
 	return 0;
 }
 
 static int ss5g_boot_on(struct modem_ctl *mc)
 {
-#if 0
-	struct link_device *ld = get_current_link(mc->iod);
-	struct io_device *iod;
+	struct link_device *ld = get_current_link(mc->bootd);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	struct pci_dev *pdev = mld->pdev;
+	struct modem_pcie_dev_info *mpdev_info = &mld->modem_pcie_dev;
+	struct pci_saved_state *state = mpdev_info->default_state;
+	int ret = 0;
+	u8 *bar2_base;
 
-	mif_err("+++\n");
+	exynos_pcie_poweron(MODEM_PCIE_CH_NUM);
 
-	if (ld->boot_on)
-		ld->boot_on(ld, mc->bootd);
-
-	init_completion(&mc->init_cmpl);
-	init_completion(&mc->off_cmpl);
-
-	list_for_each_entry(iod, &mc->modem_state_notify_list, list) {
-		if (iod && atomic_read(&iod->opened) > 0)
-			iod->modem_state_changed(iod, STATE_BOOTING);
+	if (pdev && state) {
+		/* PCI device was died unexpectedly, or it is going to dump mode */
+		mif_err("CP pci has been already attached\n");
+		pci_load_saved_state(pdev, mpdev_info->default_state);
+		pci_restore_state(pdev);
+		ret = pci_enable_device(pdev);
+		if (ret) {
+			mif_err("pci_enable_device error %d\n", ret);
+			return ret;
+		}
+		pci_set_master(pdev);
 	}
 
-	mif_err("---\n");
-#endif
+	bar2_base = mld->base - mld->bar2_offset;
+	memcpy(bar2_base + HIGGS_HW_REV_ADDR, &sys_rev, sizeof(u32));
 
-#define MODEM_PCIE_CH_NUM	(1)
-	exynos_pcie_poweron(MODEM_PCIE_CH_NUM);
+	mc->boot_on = true;
 
 	return 0;
 }
@@ -555,7 +556,7 @@ static void handle_wake_work(struct work_struct *work)
 	struct modem_ctl *mc = container_of(work, struct modem_ctl, dwork.work);
 	struct link_device *ld;
 
-	ld = get_current_link(mc->iod);
+	ld = get_current_link(mc->bootd);
 	if (ld)
 		ld->init_descriptor(ld);
 	else
@@ -567,38 +568,70 @@ static void handle_boot_noti_work(struct work_struct *work)
 	struct modem_ctl *mc = container_of(work, struct modem_ctl, work);
 
 	complete_all(&mc->boot_noti);
-	mif_info("[5GDBG] complete boot noti\n");
-}
-
-static irqreturn_t handle_wake_irq(int irq, void *data)
-{
-	struct modem_ctl *mc = data;
-
-	mif_info("[5GDBG] %s ---->, gpio_get_value(%d)\n", __func__, gpio_get_value(ap_wakeup));
-	if (gpio_get_value(ap_wakeup))
-		schedule_delayed_work(&mc->dwork, 0);
-
-	return IRQ_HANDLED;
+	mif_info("complete boot noti\n");
 }
 
 static irqreturn_t handle_active_irq(int irq, void *data)
 {
-	mif_info("[5GDBG] %s ---->, gpio_get_value(%d)\n", __func__, gpio_get_value(phone_active));
-	mif_info("[5GDBG] %s <----, gpio_get_value(%d)\n", __func__, gpio_get_value(phone_active));
+	mif_info("gpio_get_value(%d)\n", gpio_get_value(phone_active));
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t handle_cp_boot_noti_irq(int irq, void *data)
 {
 	struct modem_ctl *mc = data;
+	struct link_device *ld;
+	struct mem_link_device *mld = NULL;
 
-	mif_info("[5GDBG] %s <---- , gpio_get_value(%d)\n", __func__, gpio_get_value(cp_boot_noti));
+	mif_info("gpio_get_value(%d)\n", gpio_get_value(cp_boot_noti));
 
-	if (gpio_get_value(cp_boot_noti))
+	if (!mc->iod) {
+		mif_info("iod null\n");
+		return IRQ_HANDLED;
+	}
+	ld = get_current_link(mc->iod);
+	if (!ld) {
+		mif_info("ld null\n");
+		return IRQ_HANDLED;
+	}
+	mld = to_mem_link_device(ld);
+	if (!mld) {
+		mif_info("mld null\n");
+		return IRQ_HANDLED;
+	}
+
+	if (!mc->boot_on && gpio_get_value(cp_boot_noti))
 		schedule_work(&mc->work);
+	else if (mc->boot_on && gpio_get_value(cp_boot_noti))
+		schedule_delayed_work(&mc->dwork, 0);
 
 	return IRQ_HANDLED;
 }
+
+static irqreturn_t handle_cp_dump_int(int irq, void *data)
+{
+	struct modem_ctl *mc = data;
+
+	mif_info("cp_dump_int (%d), ap_dump_int(%d)\n",
+			gpio_get_value(cp_dump_int),
+			gpio_get_value(mc->gpio_ap_dump_int));
+
+	if (mc->phone_state != STATE_ONLINE) {
+		mif_err("CP status is not ONLINE. ignoring CP_DUMP_INT...\n");
+		return IRQ_HANDLED;
+	}
+
+	if (gpio_get_value(mc->gpio_ap_dump_int)) {
+		mif_err("AP force crash!\n");
+		complete_all(&mc->dump_cmpl);
+	} else {
+		mif_err("CP crash!\n");
+		mc->bootd->modem_state_changed(mc->bootd, STATE_CRASH_EXIT);
+	}
+
+	return IRQ_HANDLED;
+}
+
 
 /* TEMP:
  * Get pdata to modemctl device.
@@ -609,6 +642,7 @@ static int ss5g_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 {
 	struct device *dev = mc->dev;
 	struct device_node *np;
+	unsigned long flags = IRQF_NO_SUSPEND | IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
 	int ret;
 
 	mc->gpio_phone_active = pdata->gpio_phone_active;
@@ -629,6 +663,7 @@ static int ss5g_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 	mc->regulator_sw2 = pdata->regulator_sw2;
 
 	mc->gpio_buck_en1 = pdata->gpio_buck_en1;
+	mc->gpio_rfb_ldo_en = pdata->gpio_rfb_ldo_en;
 
 	/* TEMP:
 	 * request_irq and others except just move pdata to mc
@@ -640,26 +675,20 @@ static int ss5g_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 		return -EINVAL;
 	}
 
-	/* 5G_AP_WAKEUP irq */
-	ap_wakeup = of_get_named_gpio(np, "mif,5g_ap_wakeup", 0);
-	if (gpio_is_valid(ap_wakeup)) {
-		mif_err("[5GDBG] ap_wakeup %d\n", gpio_get_value(ap_wakeup));
-		mc->irq_ap_wakeup = gpio_to_irq(ap_wakeup);
-		ret = request_irq(mc->irq_ap_wakeup, handle_wake_irq,
-				IRQF_NO_SUSPEND | IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
-				"5g_ap_wakeup", mc);
-		if (ret) {
-			mif_err("failed to request_irq:%d\n", ret);
-			return ret;
-		}
+	/* 5G_AP_WAKEUP */
+	mc->gpio_ap_wakeup = of_get_named_gpio(np, "mif,5g_ap_wakeup", 0);
+	if (!gpio_is_valid(mc->gpio_ap_wakeup)) {
+		mif_err("failed to get 5g_ap_wakeup\n");
+		return -EINVAL;
 	}
-	ret = enable_irq_wake(mc->irq_ap_wakeup);
-	if (ret) {
-		mif_err("failed to enable_irq_wake:%d\n", ret);
-		/* Temporary skip
-		 * return ret;
-		 */
+
+	/* AP_5G_WAKEUP */
+	mc->gpio_cp_wakeup = of_get_named_gpio(np, "mif,ap_5g_wakeup", 0);
+	if (!gpio_is_valid(mc->gpio_cp_wakeup)) {
+		mif_err("invalid gpio_cp_wakeup\n");
+		return -EINVAL;
 	}
+	gpio_direction_output(mc->gpio_cp_wakeup, 1);
 
 	/* 5G_ACTIVE irq */
 	mc->irq_phone_active = gpio_to_irq(mc->gpio_phone_active);
@@ -677,6 +706,32 @@ static int ss5g_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 		return ret;
 	}
 
+	/* AP DUMP_INT */
+	mc->gpio_ap_dump_int = of_get_named_gpio(np, "mif,ap_dump_int", 0);
+	if (!gpio_is_valid(mc->gpio_ap_dump_int)) {
+		mif_err("cp_rst: Invalied gpio pins\n");
+		return -EINVAL;
+	}
+	ret = gpio_request(mc->gpio_ap_dump_int, "AP_DUMP_INT");
+	if (ret)
+		mif_err("fail to request gpio %s:%d\n", "AP_DUMP_INT", ret);
+	gpio_direction_output(mc->gpio_ap_dump_int, 0);
+
+	/* CP DUMP INT */
+	cp_dump_int = of_get_named_gpio(np, "mif,cp_dump_int", 0);
+	ret = gpio_request(cp_dump_int, "CP_DUMP_INT");
+	if (ret)
+		mif_err("fail to request gpio %s:%d\n", "CP_DUMP_INT", ret);
+
+	mc->gpio_cp_dump_int = gpio_to_irq(cp_dump_int);
+	ret = request_irq(mc->gpio_cp_dump_int, handle_cp_dump_int,
+			IRQF_NO_SUSPEND | IRQF_TRIGGER_RISING,
+			"cp_dump_int", mc);
+	if (ret) {
+		mif_err("failed to request_irq:%d\n", ret);
+		return ret;
+	}
+
 #ifdef CONFIG_LINK_DEVICE_PCI
 	cp_boot_noti = of_get_named_gpio(np, "mif,gpio_cp_boot_noti", 0);
 	if (!gpio_is_valid(cp_boot_noti)) {
@@ -689,9 +744,8 @@ static int ss5g_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 		mif_err("fail to request gpio %s:%d\n", "CP_BOOT_NOTI", ret);
 
 	mc->irq_cp_boot_noti = gpio_to_irq(cp_boot_noti);
-	ret = request_irq(mc->irq_cp_boot_noti, handle_cp_boot_noti_irq,
-			IRQF_NO_SUSPEND | IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
-			"5g_cp_boot_noti", mc);
+	mif_init_irq(&mc->irq_boot_noti, mc->irq_cp_boot_noti, "5g_cp_boot_noti", flags);
+	ret = mif_request_irq(&mc->irq_boot_noti, handle_cp_boot_noti_irq, mc);
 	if (ret) {
 		mif_err("failed to request_irq:%d\n", ret);
 		return ret;
@@ -699,6 +753,7 @@ static int ss5g_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 
 	board_gpio_export(mc->dev, cp_boot_noti,
 			false, "gpio_cp_boot_noti");
+	mif_disable_irq(&mc->irq_boot_noti);
 #endif
 
 	board_gpio_export(mc->dev, pdata->gpio_phone_active,
@@ -717,12 +772,14 @@ int ss5g_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 	ss5g_get_ops(mc);
 	ret = ss5g_get_pdata(mc, pdata);
 	if (ret) {
-		mif_err("[5GDBG] %s[%d] ret = %d\n", __func__, __LINE__, ret);
+		mif_err("ss5g_get_pdata error! %d\n", ret);
+		return -ENODEV;
 	}
 	dev_set_drvdata(mc->dev, mc);
 
 	init_completion(&mc->init_cmpl);
 	init_completion(&mc->boot_noti);
+	init_completion(&mc->dump_cmpl);
 	init_completion(&mc->off_cmpl);
 	INIT_WORK(&mc->work, handle_boot_noti_work);
 	INIT_DELAYED_WORK(&mc->dwork, handle_wake_work);
@@ -736,5 +793,7 @@ int ss5g_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 #endif
 
 	mc->phone_state = STATE_OFFLINE;
+	mc->boot_on = false;
+
 	return 0;
 }

@@ -82,6 +82,7 @@ static unsigned int codediff_cnt;
 static unsigned long pcb_offset;
 static unsigned long smd_offset;
 static unsigned int lpddr4_size;
+static char warranty = 'D';
 
 #if 1	/* DDR training result structure */
 #define KC_DDR_TRN_DATA_BASE 0x16509000
@@ -256,6 +257,14 @@ static int __init sec_hw_param_lpddr4_size(char *arg)
 
 early_param("sec_debug.lpddr4_size", sec_hw_param_lpddr4_size);
 
+static int __init sec_hw_param_bin(char *arg)
+{
+	warranty = (char)*arg;
+	return 0;
+}
+
+early_param("sec_debug.bin", sec_hw_param_bin);
+
 static u32 chipid_reverse_value(u32 value, u32 bitcnt)
 {
 	int tmp, ret = 0;
@@ -317,6 +326,9 @@ static ssize_t sec_hw_param_ap_info_show(struct kobject *kobj,
 	chipid_dec_to_36(tmp, lot_id);
 
 	info_size += snprintf(buf, DATA_SIZE, "\"HW_REV\":\"%d\",", sec_hw_rev);
+	info_size +=
+	    snprintf((char *)(buf + info_size), DATA_SIZE - info_size,
+		     "\"BIN\":\"%c\",", warranty);
 	info_size +=
 	    snprintf((char *)(buf + info_size), DATA_SIZE - info_size,
 		     "\"LOT_ID\":\"%s\",", lot_id);
@@ -461,6 +473,49 @@ static ssize_t sec_hw_param_extra_info_show(struct kobject *kobj,
 	ssize_t info_size = 0;
 
 	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+		sec_debug_store_extra_info_A();
+		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
+		info_size = strlen(buf);
+	}
+
+	return info_size;
+}
+
+static ssize_t sec_hw_param_extrb_info_show(struct kobject *kobj,
+					    struct kobj_attribute *attr, char *buf)
+{
+	ssize_t info_size = 0;
+
+	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+		sec_debug_store_extra_info_B();
+		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
+		info_size = strlen(buf);
+	}
+
+	return info_size;
+}
+
+static ssize_t sec_hw_param_extrc_info_show(struct kobject *kobj,
+						struct kobj_attribute *attr, char *buf)
+{
+	ssize_t info_size = 0;
+
+	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+		sec_debug_store_extra_info_C();
+		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
+		info_size = strlen(buf);
+	}
+
+	return info_size;
+}
+
+static ssize_t sec_hw_param_extrm_info_show(struct kobject *kobj,
+						struct kobj_attribute *attr, char *buf)
+{
+	ssize_t info_size = 0;
+
+	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+		sec_debug_store_extra_info_M();
 		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 		info_size = strlen(buf);
 	}
@@ -657,6 +712,15 @@ static struct kobj_attribute sec_hw_param_ddr_info_attr =
 static struct kobj_attribute sec_hw_param_extra_info_attr =
 	__ATTR(extra_info, 0440, sec_hw_param_extra_info_show, NULL);
 
+static struct kobj_attribute sec_hw_param_extrb_info_attr =
+	__ATTR(extrb_info, 0440, sec_hw_param_extrb_info_show, NULL);
+
+static struct kobj_attribute sec_hw_param_extrc_info_attr =
+	__ATTR(extrc_info, 0440, sec_hw_param_extrc_info_show, NULL);
+
+static struct kobj_attribute sec_hw_param_extrm_info_attr =
+	__ATTR(extrm_info, 0440, sec_hw_param_extrm_info_show, NULL);
+
 static struct kobj_attribute sec_hw_param_pcb_info_attr =
         __ATTR(pcb_info, 0660, NULL, sec_hw_param_pcb_info_store);
 
@@ -670,6 +734,9 @@ static struct attribute *sec_hw_param_attributes[] = {
 	&sec_hw_param_ap_info_attr.attr,
 	&sec_hw_param_ddr_info_attr.attr,
 	&sec_hw_param_extra_info_attr.attr,
+	&sec_hw_param_extrb_info_attr.attr,
+	&sec_hw_param_extrc_info_attr.attr,
+	&sec_hw_param_extrm_info_attr.attr,
 	&sec_hw_param_pcb_info_attr.attr,
 	&sec_hw_param_smd_info_attr.attr,
 	&sec_hw_param_thermal_info_attr.attr,

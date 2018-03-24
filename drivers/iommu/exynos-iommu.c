@@ -10,6 +10,7 @@
 
 #include <linux/clk.h>
 #include <linux/dma-mapping.h>
+#include <linux/debugfs.h>
 #include <linux/err.h>
 #include <linux/highmem.h>
 #include <linux/io.h>
@@ -43,15 +44,35 @@
 #define IOVA_OVFL(addr, size)	((((addr) + (size)) > 0xFFFFFFFF) ||	\
 				((addr) + (size) < (addr)))
 
+struct _sysmmu_fi sysmmu_fi;
+
+void display_sysmmu_fault_info(struct _sysmmu_fi *fi)
+{
+	dev_info(fi->sysmmu, "[%06ld.%06ld][%s] fault information\n",
+			fi->fault_time.tv_sec, fi->fault_time.tv_usec,
+			fi->is_secure ? "Secure" : "Normal");
+	dev_info(fi->sysmmu, " fault addr: %#x\n", fi->fault_addr);
+	dev_info(fi->sysmmu, " LV1 entry: %#x\n", fi->lv1_entry);
+	if (fi->has_lv2)
+		dev_info(fi->sysmmu, " LV2 entry: %#x\n", fi->lv2_entry);
+	dev_info(fi->sysmmu, "TLB PPN: %#x, ATTR: %#x\n",
+			fi->tlb_ppn, fi->tlb_attr);
+	if (fi->has_lv2)
+		dev_info(fi->sysmmu, "SBB LINK: %#x, ATTR: %#x\n",
+			fi->sbb_link, fi->sbb_attr);
+	dev_info(fi->sysmmu, "Flags: %#x\n", fi->flags);
+	dev_info(fi->sysmmu, "Last mapp  : [%#010x, %#010x] @ %06ld.%06ld\n",
+			fi->map_start, fi->map_end,
+			fi->map_time.tv_sec, fi->map_time.tv_usec);
+	dev_info(fi->sysmmu, "Last unmap : [%#010x, %#010x] @ %06ld.%06ld\n",
+			fi->unmap_start, fi->unmap_end,
+			fi->unmap_time.tv_sec, fi->unmap_time.tv_usec);
+}
+
 static struct kmem_cache *lv2table_kmem_cache;
 
 static struct sysmmu_drvdata *sysmmu_drvdata_list;
 static struct exynos_iommu_owner *sysmmu_owner_list;
-
-static struct exynos_iommu_domain *to_exynos_domain(struct iommu_domain *dom)
-{
-	return container_of(dom, struct exynos_iommu_domain, domain);
-}
 
 struct sysmmu_list_data {
 	struct device *sysmmu;
@@ -71,6 +92,8 @@ struct owner_fault_info {
 	struct notifier_block nb;
 };
 
+static struct dentry *exynos_sysmmu_debugfs_root;
+
 int exynos_client_add(struct device_node *np, struct exynos_iovmm *vmm_data)
 {
 	struct exynos_client *client = kzalloc(sizeof(*client), GFP_KERNEL);
@@ -86,6 +109,12 @@ int exynos_client_add(struct device_node *np, struct exynos_iovmm *vmm_data)
 	spin_unlock(&exynos_client_lock);
 
 	return 0;
+}
+
+static int iova_from_sent(sysmmu_pte_t *base, sysmmu_pte_t *sent)
+{
+	return ((unsigned long)sent - (unsigned long)base) *
+				(SECT_SIZE / sizeof(sysmmu_pte_t));
 }
 
 #define has_sysmmu(dev)		((dev)->archdata.iommu != NULL)
@@ -152,13 +181,20 @@ static void __sysmmu_tlb_invalidate(struct sysmmu_drvdata *drvdata,
 	__raw_writel(iova, sfrbase + REG_FLUSH_RANGE_START);
 	__raw_writel(size - 1 + iova, sfrbase + REG_FLUSH_RANGE_END);
 	writel(0x1, sfrbase + REG_MMU_FLUSH_RANGE);
+	SYSMMU_EVENT_LOG_TLB_INV_RANGE(SYSMMU_DRVDATA_TO_LOG(drvdata),
+					iova, iova + size);
 }
 
-static void __sysmmu_set_ptbase(void __iomem *sfrbase, phys_addr_t pfn_pgtable)
+static void __sysmmu_set_ptbase(struct sysmmu_drvdata *drvdata,
+					phys_addr_t pfn_pgtable)
 {
+	void * __iomem sfrbase = drvdata->sfrbase;
+
 	writel_relaxed(pfn_pgtable, sfrbase + REG_PT_BASE_PPN);
 
 	__sysmmu_tlb_invalidate_all(sfrbase);
+	SYSMMU_EVENT_LOG_TLB_INV_ALL(
+			SYSMMU_DRVDATA_TO_LOG(drvdata));
 }
 
 void exynos_sysmmu_tlb_invalidate(struct iommu_domain *iommu_domain,
@@ -201,15 +237,24 @@ void exynos_sysmmu_tlb_invalidate(struct iommu_domain *iommu_domain,
 }
 
 
+#define is_tlb_entry_for_addr(addr, entry)	\
+				(((addr) >> 12) == ((entry) & 0xFFFFF))
+#define is_sbb_entry_for_addr(addr, entry)	\
+				(((addr) >> 20) == (((entry) >> 8) & 0xFFF))
 static unsigned int dump_set_associative_tlb(void __iomem *sfrbase,
 						int idx_way, int idx_set)
 {
 	if (MMU_TLB_ENTRY_VALID(__raw_readl(sfrbase + REG_TLB_ATTR))) {
+		u32 vpn = __raw_readl(sfrbase + REG_TLB_VPN);
+		u32 ppn = __raw_readl(sfrbase + REG_TLB_PPN);
+		u32 attr = __raw_readl(sfrbase + REG_TLB_ATTR);
 		pr_crit("[%02d][%02d] VPN: %#010x, PPN: %#010x, ATTR: %#010x\n",
-			idx_way, idx_set,
-			__raw_readl(sfrbase + REG_TLB_VPN),
-			__raw_readl(sfrbase + REG_TLB_PPN),
-			__raw_readl(sfrbase + REG_TLB_ATTR));
+			idx_way, idx_set, vpn, ppn, attr);
+		if (is_tlb_entry_for_addr(sysmmu_fi.fault_addr, vpn)) {
+			sysmmu_fi.tlb_ppn = ppn;
+			sysmmu_fi.tlb_attr = attr;
+			sysmmu_fi.flags |= SYSMMU_FI_VALID_TLB;
+		}
 		return 1;
 	}
 	return 0;
@@ -220,6 +265,7 @@ static void dump_sysmmu_tlb(void __iomem *sfrbase)
 {
 	int i, j, k;
 	u32 capa = __raw_readl(sfrbase + REG_MMU_CAPA_V7);
+	u32 vpn, link, attr;
 	unsigned int cnt;
 
 	pr_auto(ASL4, "TLB has %d way, %d set. SBB has %d entries.\n",
@@ -243,11 +289,17 @@ static void dump_sysmmu_tlb(void __iomem *sfrbase)
 	for (i = 0, cnt = 0; i < (1 << MMU_CAPA_NUM_SBB_ENTRY(capa)); i++) {
 		__raw_writel(i, sfrbase + REG_SBB_READ);
 		if (MMU_SBB_ENTRY_VALID(__raw_readl(sfrbase + REG_SBB_VPN))) {
+			vpn = __raw_readl(sfrbase + REG_SBB_VPN);
+			link = __raw_readl(sfrbase + REG_SBB_LINK);
+			attr = __raw_readl(sfrbase + REG_SBB_ATTR);
 			pr_auto(ASL4, "[%02d] VPN: %#010x, PPN: %#010x, ATTR: %#010x\n",
-				i, __raw_readl(sfrbase + REG_SBB_VPN),
-				__raw_readl(sfrbase + REG_SBB_LINK),
-				__raw_readl(sfrbase + REG_SBB_ATTR));
+				i, vpn, link, attr);
 			cnt++;
+			if (is_sbb_entry_for_addr(sysmmu_fi.fault_addr, vpn)) {
+				sysmmu_fi.sbb_link = link;
+				sysmmu_fi.sbb_attr = attr;
+				sysmmu_fi.flags |= SYSMMU_FI_VALID_SBB;
+			}
 		}
 	}
 	if (!cnt)
@@ -323,6 +375,11 @@ static void show_secure_fault_information(struct sysmmu_drvdata *drvdata,
 	char temp_buf[SZ_128];
 #endif
 
+	sysmmu_fi.fault_time = ktime_to_timeval(ktime_get());
+	sysmmu_fi.sysmmu = drvdata->sysmmu;
+	sysmmu_fi.is_secure = true;
+	sysmmu_fi.fault_addr = (u32)fault_addr;
+
 	pgtable = __secure_info_read(sfrbase + REG_PT_BASE_PPN);
 	pgtable <<= PAGE_SHIFT;
 
@@ -363,10 +420,14 @@ static void show_secure_fault_information(struct sysmmu_drvdata *drvdata,
 		sysmmu_pte_t *ent;
 		ent = section_entry(phys_to_virt(pgtable), fault_addr);
 		pr_auto(ASL4, "Lv1 entry: %#010x\n", *ent);
+		sysmmu_fi.lv1_entry = (u32)*ent;
+		sysmmu_fi.flags |= SYSMMU_FI_VALID_PGTABLE;
 
 		if (lv1ent_page(ent)) {
 			ent = page_entry(ent, fault_addr);
 			pr_auto(ASL4, "Lv2 entry: %#010x\n", *ent);
+			sysmmu_fi.has_lv2 = true;
+			sysmmu_fi.lv2_entry = (u32)*ent;
 		}
 	}
 
@@ -396,6 +457,11 @@ static void show_fault_information(struct sysmmu_drvdata *drvdata,
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
 	char temp_buf[SZ_128];
 #endif
+
+	sysmmu_fi.fault_time = ktime_to_timeval(ktime_get());
+	sysmmu_fi.sysmmu = drvdata->sysmmu;
+	sysmmu_fi.is_secure = false;
+	sysmmu_fi.fault_addr = (u32)fault_addr;
 
 	pgtable = __raw_readl(drvdata->sfrbase + REG_PT_BASE_PPN);
 	pgtable <<= PAGE_SHIFT;
@@ -448,10 +514,14 @@ static void show_fault_information(struct sysmmu_drvdata *drvdata,
 		sysmmu_pte_t *ent;
 		ent = section_entry(phys_to_virt(pgtable), fault_addr);
 		pr_auto(ASL4, "Lv1 entry: %#010x\n", *ent);
+		sysmmu_fi.lv1_entry = (u32)*ent;
+		sysmmu_fi.flags |= SYSMMU_FI_VALID_PGTABLE;
 
 		if (lv1ent_page(ent)) {
 			ent = page_entry(ent, fault_addr);
 			pr_auto(ASL4, "Lv2 entry: %#010x\n", *ent);
+			sysmmu_fi.has_lv2 = true;
+			sysmmu_fi.lv2_entry = (u32)*ent;
 		}
 	}
 
@@ -491,7 +561,7 @@ irqreturn_t exynos_sysmmu_irq_secure(int irq, void *dev_id)
 
 	show_secure_fault_information(drvdata, flags, addr);
 
-	atomic_notifier_call_chain(&drvdata->fault_notifiers, addr, &flags);
+	atomic_notifier_call_chain(&drvdata->fault_notifiers, addr, &sysmmu_fi);
 
 	BUG();
 
@@ -543,6 +613,7 @@ static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
 	}
 
 	show_fault_information(drvdata, flags, addr);
+	ret = atomic_notifier_call_chain(&drvdata->fault_notifiers, addr, &sysmmu_fi);
 	ret = atomic_notifier_call_chain(&drvdata->fault_notifiers, addr, &flags);
 	if (ret == -EAGAIN) {
 		u32 clear_mask = __raw_readl(drvdata->sfrbase + REG_INT_STATUS);
@@ -792,6 +863,14 @@ static int __init exynos_sysmmu_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(dev);
 
+	ret = exynos_iommu_init_event_log(SYSMMU_DRVDATA_TO_LOG(data),
+				SYSMMU_LOG_LEN);
+	if (!ret)
+		sysmmu_add_log_to_debugfs(exynos_sysmmu_debugfs_root,
+				SYSMMU_DRVDATA_TO_LOG(data), dev_name(dev));
+	else
+		return ret;
+
 	data->version = get_hw_version(dev, data->sfrbase);
 
 	ret = sysmmu_parse_dt(data->sysmmu, data);
@@ -821,13 +900,9 @@ static void __sysmmu_disable_nocount(struct sysmmu_drvdata *drvdata)
 	writel_relaxed(0, drvdata->sfrbase + REG_MMU_CFG);
 	sysmmu_control(drvdata->sfrbase, false);
 
-	exynos_ss_printk("Disable %s: MMU_CTRL: %#x, MMU_CFG: %#x, MMU_STATUS: %#x\n",
-		dev_name(drvdata->sysmmu),
-		__raw_readl(drvdata->sfrbase + REG_MMU_CTRL),
-		__raw_readl(drvdata->sfrbase + REG_MMU_CFG),
-		__raw_readl(drvdata->sfrbase + REG_MMU_STATUS));
-
 	clk_disable(drvdata->clk);
+
+	SYSMMU_EVENT_LOG_DISABLE(SYSMMU_DRVDATA_TO_LOG(drvdata));
 }
 
 static bool __sysmmu_disable(struct sysmmu_drvdata *drvdata)
@@ -978,15 +1053,11 @@ static void __sysmmu_enable_nocount(struct sysmmu_drvdata *drvdata)
 
 	__sysmmu_init_config(drvdata);
 
-	__sysmmu_set_ptbase(drvdata->sfrbase, drvdata->pgtable / PAGE_SIZE);
+	__sysmmu_set_ptbase(drvdata, drvdata->pgtable / PAGE_SIZE);
 
 	sysmmu_control(drvdata->sfrbase, true);
 
-	exynos_ss_printk("Enable %s: MMU_CTRL: %#x, MMU_CFG: %#x, MMU_STATUS: %#x\n",
-		dev_name(drvdata->sysmmu),
-		__raw_readl(drvdata->sfrbase + REG_MMU_CTRL),
-		__raw_readl(drvdata->sfrbase + REG_MMU_CFG),
-		__raw_readl(drvdata->sfrbase + REG_MMU_STATUS));
+	SYSMMU_EVENT_LOG_ENABLE(SYSMMU_DRVDATA_TO_LOG(drvdata));
 }
 
 static int __sysmmu_enable(struct sysmmu_drvdata *drvdata, phys_addr_t pgtable)
@@ -1116,6 +1187,9 @@ static struct iommu_domain *exynos_iommu_domain_alloc(unsigned type)
 	if (!domain->lv2entcnt)
 		goto err_counter;
 
+	if (exynos_iommu_init_event_log(IOMMU_PRIV_TO_LOG(domain), IOMMU_LOG_LEN))
+		goto err_init_event_log;
+
 	pgtable_flush(domain->pgtable, domain->pgtable + NUM_LV1ENTRIES);
 
 	spin_lock_init(&domain->lock);
@@ -1129,6 +1203,8 @@ static struct iommu_domain *exynos_iommu_domain_alloc(unsigned type)
 
 	return &domain->domain;
 
+err_init_event_log:
+	free_pages((unsigned long)domain->lv2entcnt, 2);
 err_counter:
 	free_pages((unsigned long)domain->pgtable, 2);
 err_pgtable:
@@ -1201,6 +1277,7 @@ static int exynos_iommu_attach_device(struct iommu_domain *iommu_domain,
 
 	dev_dbg(master, "%s: Attached IOMMU with pgtable %pa %s\n",
 		__func__, &pagetable, (ret == 0) ? "" : ", again");
+	SYSMMU_EVENT_LOG_IOMMU_ATTACH(IOMMU_PRIV_TO_LOG(domain), master);
 
 	return 0;
 }
@@ -1228,11 +1305,13 @@ static void exynos_iommu_detach_device(struct iommu_domain *iommu_domain,
 	}
 	spin_unlock_irqrestore(&domain->lock, flags);
 
-	if (found)
+	if (found) {
 		dev_dbg(master, "%s: Detached IOMMU with pgtable %pa\n",
 					__func__, &pagetable);
-	else
+		SYSMMU_EVENT_LOG_IOMMU_DETACH(IOMMU_PRIV_TO_LOG(domain), master);
+	} else {
 		dev_err(master, "%s: No IOMMU is attached\n", __func__);
+	}
 }
 
 static sysmmu_pte_t *alloc_lv2entry(struct exynos_iommu_domain *domain,
@@ -1269,6 +1348,8 @@ static sysmmu_pte_t *alloc_lv2entry(struct exynos_iommu_domain *domain,
 			atomic_set(pgcounter, NUM_LV2ENTRIES);
 			pgtable_flush(pent, pent + NUM_LV2ENTRIES);
 			pgtable_flush(sent, sent + 1);
+			SYSMMU_EVENT_LOG_IOMMU_ALLOCSLPD(IOMMU_PRIV_TO_LOG(domain),
+					iova & SECT_MASK);
 		} else {
 			/* Pre-allocated entry is not used, so free it. */
 			kmem_cache_free(lv2table_kmem_cache, pent);
@@ -1451,6 +1532,10 @@ unmap_flpd:
 					page_entry(sent, 0));
 			atomic_set(lv2entcnt, 0);
 			*sent = 0;
+
+			SYSMMU_EVENT_LOG_IOMMU_FREESLPD(
+					IOMMU_PRIV_TO_LOG(domain),
+					iova_from_sent(domain->pgtable, sent));
 		}
 		spin_unlock_irqrestore(&domain->pgtablelock, flags);
 	}
@@ -1619,7 +1704,8 @@ static int sysmmu_fault_notifier(struct notifier_block *nb,
 
 	if (owner && owner->fault_handler)
 		ret = owner->fault_handler(owner->domain, owner->master,
-			fault_addr, (unsigned long)data, owner->token);
+			fault_addr, (unsigned long)data,
+			owner->token ? owner->token : data);
 
 	return ret;
 }
@@ -1761,6 +1847,7 @@ int exynos_iommu_runtime_suspend(struct device *master)
 
 		drvdata = dev_get_drvdata(list->sysmmu);
 
+		SYSMMU_EVENT_LOG_POWEROFF(SYSMMU_DRVDATA_TO_LOG(drvdata));
 		spin_lock_irqsave(&drvdata->lock, flags);
 		if (put_sysmmu_runtime_active(drvdata) && is_sysmmu_active(drvdata))
 			__sysmmu_disable_nocount(drvdata);
@@ -1786,6 +1873,8 @@ int exynos_iommu_runtime_resume(struct device *master)
 		struct sysmmu_drvdata *drvdata;
 
 		drvdata = dev_get_drvdata(list->sysmmu);
+
+		SYSMMU_EVENT_LOG_POWERON(SYSMMU_DRVDATA_TO_LOG(drvdata));
 
 		spin_lock_irqsave(&drvdata->lock, flags);
 		if (get_sysmmu_runtime_active(drvdata) && is_sysmmu_active(drvdata))
@@ -1820,6 +1909,10 @@ static int __init exynos_iommu_init(void)
 		pr_err("%s: Failed to create kmem cache\n", __func__);
 		return -ENOMEM;
 	}
+
+	exynos_sysmmu_debugfs_root = debugfs_create_dir("sysmmu", NULL);
+	if (!exynos_sysmmu_debugfs_root)
+		pr_err("%s: Failed to create debugfs entry\n", __func__);
 
 	ret = platform_driver_register(&exynos_sysmmu_driver);
 	if (ret) {

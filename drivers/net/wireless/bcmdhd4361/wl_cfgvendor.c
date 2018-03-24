@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.c 710862 2017-07-14 07:43:59Z $
+ * $Id: wl_cfgvendor.c 730790 2017-11-08 11:44:12Z $
  */
 
 /*
@@ -206,22 +206,24 @@ wl_cfgvendor_set_rand_mac_oui(struct wiphy *wiphy,
 	int err = 0;
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	int type;
-	uint8 random_mac_oui[DOT11_OUI_LEN];
 
 	type = nla_type(data);
 
 	if (type == ANDR_WIFI_ATTRIBUTE_RANDOM_MAC_OUI) {
-		memcpy(random_mac_oui, nla_data(data), DOT11_OUI_LEN);
-
-		err = dhd_dev_cfg_rand_mac_oui(bcmcfg_to_prmry_ndev(cfg), random_mac_oui);
+		if (nla_len(data) != DOT11_OUI_LEN) {
+			WL_ERR(("nla_len not matched.\n"));
+			err = -EINVAL;
+			goto exit;
+		}
+		err = dhd_dev_cfg_rand_mac_oui(bcmcfg_to_prmry_ndev(cfg), nla_data(data));
 
 		if (unlikely(err))
 			WL_ERR(("Bad OUI, could not set:%d \n", err));
 
 	} else {
-		err = -1;
+		err = -EINVAL;
 	}
-
+exit:
 	return err;
 }
 #ifdef CUSTOM_FORCE_NODFS_FLAG
@@ -1731,55 +1733,100 @@ wl_cfgvendor_set_bssid_pref(struct wiphy *wiphy,
 	wl_bssid_pref_list_t *bssids;
 	int tmp, tmp1, tmp2, type;
 	const struct nlattr *outer, *inner, *iter;
-	uint32 flush = 0, i = 0, num = 0;
+	uint32 flush = 0, num = 0;
+	uint8 bssid_found = 0, rssi_found = 0;
 
 	/* Assumption: NUM attribute must come first */
 	nla_for_each_attr(iter, data, len, tmp2) {
 		type = nla_type(iter);
 		switch (type) {
 			case GSCAN_ATTRIBUTE_NUM_BSSID:
-				num = nla_get_u32(iter);
-				if (num > MAX_BSSID_PREF_LIST_NUM) {
-					WL_ERR(("Too many Preferred BSSIDs!\n"));
+				if (num) {
+					WL_ERR(("attempt overide bssid num.\n"));
 					err = -EINVAL;
+					goto exit;
+				}
+				if (nla_len(iter) != sizeof(uint32)) {
+					WL_ERR(("nla_len not match\n"));
+					err = -EINVAL;
+					goto exit;
+				}
+				num = nla_get_u32(iter);
+				if (num == 0 || num > MAX_BSSID_PREF_LIST_NUM) {
+					WL_ERR(("wrong BSSID num:%d\n", num));
+					err = -EINVAL;
+					goto exit;
+				}
+				if ((bssid_pref = create_bssid_pref_cfg(num)) == NULL) {
+					WL_ERR(("Can't malloc memory\n"));
+					err = -ENOMEM;
 					goto exit;
 				}
 				break;
 			case GSCAN_ATTRIBUTE_BSSID_PREF_FLUSH:
-				flush = nla_get_u32(iter);
-				break;
-			case GSCAN_ATTRIBUTE_BSSID_PREF_LIST:
-				if (!num)
-					return -EINVAL;
-				if ((bssid_pref = create_bssid_pref_cfg(num)) == NULL) {
-					WL_ERR(("%s: Can't malloc memory\n", __FUNCTION__));
-					err = -ENOMEM;
+				if (nla_len(iter) != sizeof(uint32)) {
+					WL_ERR(("nla_len not match\n"));
+					err = -EINVAL;
 					goto exit;
 				}
-				bssid_pref->count = num;
+				flush = nla_get_u32(iter);
+				if (flush != 1) {
+					WL_ERR(("wrong flush value\n"));
+					err = -EINVAL;
+					goto exit;
+				}
+				break;
+			case GSCAN_ATTRIBUTE_BSSID_PREF_LIST:
+				if (!num || !bssid_pref) {
+					WL_ERR(("bssid list count not set\n"));
+					err = -EINVAL;
+					goto exit;
+				}
+				bssid_pref->count = 0;
 				bssids = bssid_pref->bssids;
 				nla_for_each_nested(outer, iter, tmp) {
-					if (i >= num) {
-						WL_ERR(("CFGs don't seem right!\n"));
+					if (bssid_pref->count >= num) {
+						WL_ERR(("too many bssid list\n"));
 						err = -EINVAL;
 						goto exit;
 					}
+					bssid_found = 0;
+					rssi_found = 0;
 					nla_for_each_nested(inner, outer, tmp1) {
 						type = nla_type(inner);
 						switch (type) {
 							case GSCAN_ATTRIBUTE_BSSID_PREF:
-								memcpy(&(bssids[i].bssid),
+							if (nla_len(inner) != ETHER_ADDR_LEN) {
+								WL_ERR(("nla_len not match.\n"));
+								err = -EINVAL;
+								goto exit;
+							}
+							memcpy(&(bssids[bssid_pref->count].bssid),
 								  nla_data(inner), ETHER_ADDR_LEN);
 								/* not used for now */
-								bssids[i].flags = 0;
+							bssids[bssid_pref->count].flags = 0;
+							bssid_found = 1;
 								break;
 							case GSCAN_ATTRIBUTE_RSSI_MODIFIER:
-								bssids[i].rssi_factor =
+							if (nla_len(inner) != sizeof(uint32)) {
+								WL_ERR(("nla_len not match.\n"));
+								err = -EINVAL;
+								goto exit;
+							}
+							bssids[bssid_pref->count].rssi_factor =
 								       (int8) nla_get_u32(inner);
+							rssi_found = 1;
 								break;
+						default:
+							WL_ERR(("wrong type:%d\n", type));
+							err = -EINVAL;
+							goto exit;
 						}
+						if (bssid_found && rssi_found) {
+							break;
 					}
-					i++;
+					}
+					bssid_pref->count++;
 				}
 				break;
 			default:
@@ -1818,53 +1865,88 @@ wl_cfgvendor_set_bssid_blacklist(struct wiphy *wiphy,
 	int err = 0;
 	int type, tmp;
 	const struct nlattr *iter;
-	uint32 mem_needed = 0, flush = 0, i = 0, num = 0;
+	uint32 mem_needed = 0, flush = 0, num = 0;
 
 	/* Assumption: NUM attribute must come first */
 	nla_for_each_attr(iter, data, len, tmp) {
 		type = nla_type(iter);
 		switch (type) {
 			case GSCAN_ATTRIBUTE_NUM_BSSID:
+				if (num != 0) {
+					WL_ERR(("attempt to change BSSID num\n"));
+					err = -EINVAL;
+					goto exit;
+				}
+				if (nla_len(iter) != sizeof(uint32)) {
+					WL_ERR(("not matching nla_len.\n"));
+					err = -EINVAL;
+					goto exit;
+				}
 				num = nla_get_u32(iter);
-				if (num > MAX_BSSID_BLACKLIST_NUM) {
-					WL_ERR(("Too many Blacklist BSSIDs!\n"));
+				if (num == 0 || num > MAX_BSSID_BLACKLIST_NUM) {
+					WL_ERR(("wrong BSSID count:%d\n", num));
+					err = -EINVAL;
+					goto exit;
+				}
+					if (!blacklist) {
+					mem_needed = OFFSETOF(maclist_t, ea) +
+						sizeof(struct ether_addr) * (num);
+						blacklist = (maclist_t *)
+						kzalloc(mem_needed, GFP_KERNEL);
+						if (!blacklist) {
+						WL_ERR(("kzalloc failed.\n"));
+							err = -ENOMEM;
+							goto exit;
+						}
+					}
+				break;
+			case GSCAN_ATTRIBUTE_BSSID_BLACKLIST_FLUSH:
+				if (nla_len(iter) != sizeof(uint32)) {
+					WL_ERR(("not matching nla_len.\n"));
+						err = -EINVAL;
+						goto exit;
+					}
+				flush = nla_get_u32(iter);
+				if (flush != 1) {
+					WL_ERR(("flush arg is worng:%d\n", flush));
 					err = -EINVAL;
 					goto exit;
 				}
 				break;
-			case GSCAN_ATTRIBUTE_BSSID_BLACKLIST_FLUSH:
-				flush = nla_get_u32(iter);
-				break;
 			case GSCAN_ATTRIBUTE_BLACKLIST_BSSID:
-				if (num) {
-					if (!blacklist) {
-						mem_needed = sizeof(maclist_t) +
-						     sizeof(struct ether_addr) * (num - 1);
-						blacklist = (maclist_t *)
-						      kmalloc(mem_needed, GFP_KERNEL);
-						if (!blacklist) {
-							WL_ERR(("%s: Can't malloc %d bytes\n",
-							     __FUNCTION__, mem_needed));
-							err = -ENOMEM;
-							goto exit;
-						}
-						blacklist->count = num;
-					}
-					if (i >= num) {
-						WL_ERR(("CFGs don't seem right!\n"));
-						err = -EINVAL;
-						goto exit;
-					}
-					memcpy(&(blacklist->ea[i]),
-					  nla_data(iter), ETHER_ADDR_LEN);
-					i++;
+				if (num == 0 || !blacklist) {
+					WL_ERR(("number of BSSIDs not received.\n"));
+					err = -EINVAL;
+					goto exit;
 				}
+				if (nla_len(iter) != ETHER_ADDR_LEN) {
+					WL_ERR(("not matching nla_len.\n"));
+					err = -EINVAL;
+					goto exit;
+				}
+				if (blacklist->count >= num) {
+					WL_ERR(("too many BSSIDs than expected:%d\n",
+						blacklist->count));
+					err = -EINVAL;
+					goto exit;
+				}
+				memcpy(&(blacklist->ea[blacklist->count]), nla_data(iter),
+						ETHER_ADDR_LEN);
+				blacklist->count++;
 				break;
 			default:
-				WL_ERR(("%s: No such attribute %d\n", __FUNCTION__, type));
+			WL_ERR(("No such attribute:%d\n", type));
 				break;
 			}
 	}
+
+	if (blacklist && (blacklist->count != num)) {
+		WL_ERR(("not matching bssid count:%d to expected:%d\n",
+				blacklist->count, num));
+		err = -EINVAL;
+		goto exit;
+	}
+
 	err = dhd_dev_set_blacklist_bssid(bcmcfg_to_prmry_ndev(cfg),
 	          blacklist, mem_needed, flush);
 exit:
@@ -1880,70 +1962,122 @@ wl_cfgvendor_set_ssid_whitelist(struct wiphy *wiphy,
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	wl_ssid_whitelist_t *ssid_whitelist = NULL;
 	wlc_ssid_t *ssid_elem;
-	int tmp, tmp2, mem_needed = 0, type;
-	const struct nlattr *inner, *iter;
-	uint32 flush = 0, i = 0, num = 0;
+	int tmp, tmp1, mem_needed = 0, type;
+	const struct nlattr *iter, *iter1;
+	uint32 flush = 0, num = 0;
+	int ssid_found = 0;
 
 	/* Assumption: NUM attribute must come first */
-	nla_for_each_attr(iter, data, len, tmp2) {
+	nla_for_each_attr(iter, data, len, tmp) {
 		type = nla_type(iter);
 		switch (type) {
 			case GSCAN_ATTRIBUTE_NUM_WL_SSID:
+			if (num != 0) {
+				WL_ERR(("try to change SSID num\n"));
+				err = -EINVAL;
+				goto exit;
+			}
+			if (nla_len(iter) != sizeof(uint32)) {
+				WL_ERR(("not matching nla_len.\n"));
+				err = -EINVAL;
+				goto exit;
+			}
 				num = nla_get_u32(iter);
-				if (num > MAX_SSID_WHITELIST_NUM) {
-					WL_ERR(("Too many WL SSIDs!\n"));
+			if (num == 0 || num > MAX_SSID_WHITELIST_NUM) {
+				WL_ERR(("wrong SSID count:%d\n", num));
 					err = -EINVAL;
 					goto exit;
 				}
-				mem_needed = sizeof(wl_ssid_whitelist_t);
-				if (num)
-					mem_needed += (num - 1) * sizeof(ssid_info_t);
+			mem_needed = sizeof(wl_ssid_whitelist_t) +
+				sizeof(wlc_ssid_t) * num;
 				ssid_whitelist = (wl_ssid_whitelist_t *)
 				        kzalloc(mem_needed, GFP_KERNEL);
 				if (ssid_whitelist == NULL) {
-					WL_ERR(("%s: Can't malloc %d bytes\n",
-					      __FUNCTION__, mem_needed));
+				WL_ERR(("failed to alloc mem\n"));
 					err = -ENOMEM;
 					goto exit;
 				}
-				ssid_whitelist->ssid_count = num;
 				break;
 			case GSCAN_ATTRIBUTE_WL_SSID_FLUSH:
+			if (nla_len(iter) != sizeof(uint32)) {
+				WL_ERR(("not matching nla_len.\n"));
+				err = -EINVAL;
+				goto exit;
+			}
 				flush = nla_get_u32(iter);
+			if (flush != 1) {
+				WL_ERR(("flush arg worng:%d\n", flush));
+				err = -EINVAL;
+				goto exit;
+			}
 				break;
 			case GSCAN_ATTRIBUTE_WHITELIST_SSID_ELEM:
 				if (!num || !ssid_whitelist) {
 					WL_ERR(("num ssid is not set!\n"));
-					return -EINVAL;
+				err = -EINVAL;
+				goto exit;
 				}
-				if (i >= num) {
-					WL_ERR(("CFGs don't seem right!\n"));
+			if (ssid_whitelist->ssid_count >= num) {
+				WL_ERR(("too many SSIDs:%d\n",
+					ssid_whitelist->ssid_count));
 					err = -EINVAL;
 					goto exit;
 				}
-				ssid_elem = &ssid_whitelist->ssids[i];
-				nla_for_each_nested(inner, iter, tmp) {
-					type = nla_type(inner);
+
+			ssid_elem = &ssid_whitelist->ssids[
+					ssid_whitelist->ssid_count];
+			ssid_found = 0;
+			nla_for_each_nested(iter1, iter, tmp1) {
+				type = nla_type(iter1);
 					switch (type) {
+				case GSCAN_ATTRIBUTE_WL_SSID_LEN:
+					if (nla_len(iter1) != sizeof(uint32)) {
+						WL_ERR(("not match nla_len\n"));
+						err = -EINVAL;
+						goto exit;
+					}
+					ssid_elem->SSID_len = nla_get_u32(iter1);
+					if (ssid_elem->SSID_len >
+							DOT11_MAX_SSID_LEN) {
+						WL_ERR(("wrong SSID len:%d\n",
+							ssid_elem->SSID_len));
+						err = -EINVAL;
+						goto exit;
+					}
+					break;
 						case GSCAN_ATTRIBUTE_WHITELIST_SSID:
-							memcpy(ssid_elem->SSID,
-							  nla_data(inner),
-							  DOT11_MAX_SSID_LEN);
+					if (ssid_elem->SSID_len == 0) {
+						WL_ERR(("SSID_len not received\n"));
+						err = -EINVAL;
+						goto exit;
+					}
+					if (nla_len(iter1) != ssid_elem->SSID_len) {
+						WL_ERR(("not match nla_len\n"));
+						err = -EINVAL;
+						goto exit;
+					}
+					memcpy(ssid_elem->SSID, nla_data(iter1),
+							ssid_elem->SSID_len);
+					ssid_found = 1;
 							break;
-						case GSCAN_ATTRIBUTE_WL_SSID_LEN:
-							ssid_elem->SSID_len = (uint8)
-							        nla_get_u32(inner);
+				}
+				if (ssid_found) {
+					ssid_whitelist->ssid_count++;
 							break;
 					}
 				}
-				i++;
 				break;
 			default:
-				WL_ERR(("%s: No such attribute %d\n", __FUNCTION__, type));
+			WL_ERR(("No such attribute: %d\n", type));
 				break;
 		}
 	}
 
+	if (ssid_whitelist && (ssid_whitelist->ssid_count != num)) {
+		WL_ERR(("not matching ssid count:%d to expected:%d\n",
+				ssid_whitelist->ssid_count, num));
+		err = -EINVAL;
+	}
 	err = dhd_dev_set_whitelist_ssid(bcmcfg_to_prmry_ndev(cfg),
 	          ssid_whitelist, mem_needed, flush);
 exit:

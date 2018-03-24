@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_android.c 720601 2017-09-11 13:06:44Z $
+ * $Id: wl_android.c 732190 2017-11-16 04:30:08Z $
  */
 
 #include <linux/module.h>
@@ -223,8 +223,6 @@
 
 #define CMD_OKC_SET_PMK         "SET_PMK"
 #define CMD_OKC_ENABLE          "OKC_ENABLE"
-
-#define ANDROID_WIFI_MAX_ROAM_SCAN_CHANNELS 100
 
 typedef struct android_wifi_reassoc_params {
 	unsigned char bssid[18];
@@ -644,6 +642,9 @@ static int lock_cookie_wifi = 'W' | 'i'<<8 | 'F'<<16 | 'i'<<24;	/* cookie is "Wi
 
 extern bool ap_fw_loaded;
 extern char iface_name[IFNAMSIZ];
+#ifdef DHD_PM_CONTROL_FROM_FILE
+extern bool g_pm_control;
+#endif	/* DHD_PM_CONTROL_FROM_FILE */
 
 /**
  * Local (static) functions and variables
@@ -1379,9 +1380,9 @@ int wl_android_set_roam_scan_control(struct net_device *dev, char *command, int 
 int wl_android_get_roam_scan_channels(struct net_device *dev, char *command, int total_len)
 {
 	int bytes_written = 0;
-	unsigned char channels[ANDROID_WIFI_MAX_ROAM_SCAN_CHANNELS] = {0};
+	unsigned char channels[MAX_ROAM_CHANNEL] = {0};
 	int channel_cnt = 0;
-	char channel_info[10 + (ANDROID_WIFI_MAX_ROAM_SCAN_CHANNELS * 3)] = {0};
+	char channel_info[10 + (MAX_ROAM_CHANNEL * 3)] = {0};
 	int channel_info_len = 0;
 	int i = 0;
 
@@ -5899,6 +5900,11 @@ wl_android_set_adps_mode(struct net_device *dev, const char* string_num)
 {
 	int err = 0, adps_mode;
 	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(dev);
+#ifdef DHD_PM_CONTROL_FROM_FILE
+	if (g_pm_control) {
+		return -EPERM;
+	}
+#endif	/* DHD_PM_CONTROL_FROM_FILE */
 
 	adps_mode = bcm_atoi(string_num);
 
@@ -6554,13 +6560,6 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 			(rev_info_delim + 1)) {
 			revinfo  = bcm_atoi(rev_info_delim + 1);
 		}
-
-		DHD_ERROR(("%s: country_code %s \n", __FUNCTION__, country_code));
-		if((strncmp(country_code, "SY", 3) == 0) || (strncmp(country_code, "KP", 3) == 0)) {
-			strncpy(country_code, "XZ", 3);
-			DHD_ERROR(("%s: change to XZ %s \n", __FUNCTION__, country_code));
-		} 
-
 		bytes_written = wldev_set_country(net, country_code, true, true, revinfo);
 #ifdef CUSTOMER_HW4_PRIVATE_CMD
 #ifdef FCC_PWR_LIMIT_2G

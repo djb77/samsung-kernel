@@ -1316,6 +1316,73 @@ static ssize_t sd_detection_maxmode_show(struct device *dev,
 	dev_info(host->dev, "%s : Max supported Host Speed Mode = %s\n", __func__, uhs_bus_speed_mode);
 	return  sprintf(buf, "%s\n", uhs_bus_speed_mode);
 }
+
+static ssize_t sdcard_summary_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct dw_mci *host = dev_get_drvdata(dev);
+	struct mmc_card *card;
+	const char *uhs_bus_speed_mode = "";
+	static const char *const uhs_speeds[] = {
+		[UHS_SDR12_BUS_SPEED] 	= "SDR12",
+		[UHS_SDR25_BUS_SPEED] 	= "SDR25",
+		[UHS_SDR50_BUS_SPEED] 	= "SDR50",
+		[UHS_SDR104_BUS_SPEED] 	= "SDR104",
+		[UHS_DDR50_BUS_SPEED] 	= "DDR50",
+	};
+	static const char *const unit[] = {"KB", "MB", "GB", "TB"};
+	unsigned int size, serial;
+	int	digit = 1;
+	char ret_size[6];
+
+	if (host->cur_slot && host->cur_slot->mmc && host->cur_slot->mmc->card) {
+		card = host->cur_slot->mmc->card;
+
+		/* MANID */
+		/* SERIAL */
+		serial = card->cid.serial & (0x0000FFFF);
+
+		/*SIZE*/
+		if (card->csd.read_blkbits == 9) 		/* 1 Sector = 512 Bytes */
+			size = (card->csd.capacity) >> 1;
+		else if (card->csd.read_blkbits == 11)	/* 1 Sector = 2048 Bytes */
+			size = (card->csd.capacity) << 1;
+		else 									/* 1 Sector = 1024 Bytes */
+			size = card->csd.capacity;
+
+		if (size >= 190000000 && size <= 210000000) {	/* QUIRK 200GB SD Card */
+			sprintf(ret_size, "200GB");
+		} else {
+			while ((size >> 1) > 0) {
+				size = size >> 1;
+				digit++;
+			}
+			sprintf(ret_size, "%d%s", 1 << (digit%10), unit[digit/10]);
+		}
+
+		/* SPEEDMODE */
+		if (mmc_card_uhs(card))
+			uhs_bus_speed_mode = uhs_speeds[card->sd_bus_speed];
+		else if (mmc_card_hs(card))
+			uhs_bus_speed_mode = "HS";
+		else
+			uhs_bus_speed_mode = "DS";
+
+		/* SUMMARY */
+		dev_info(host->dev, "MANID : 0x%02X, SERIAL : %04X, SIZE : %s, SPEEDMODE : %s\n",
+				card->cid.manfid, serial, ret_size, uhs_bus_speed_mode);
+		return sprintf(buf, "\"MANID\":\"0x%02X\",\"SERIAL\":\"%04X\""\
+				",\"SIZE\":\"%s\",\"SPEEDMODE\":\"%s\"\n",
+				card->cid.manfid, serial, ret_size, uhs_bus_speed_mode);
+	} else {
+		/* SUMMARY : No SD Card Case */
+		dev_info(host->dev, "%s : No SD Card\n", __func__);
+		return sprintf(buf, "\"MANID\":\"NoCard\",\"SERIAL\":\"NoCard\""\
+				",\"SIZE\":\"NoCard\",\"SPEEDMODE\":\"NoCard\"\n");
+	}
+}
+
+
 static ssize_t sd_detection_curmode_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -1415,6 +1482,7 @@ static DEVICE_ATTR(status, 0444, sd_detection_cmd_show, NULL);
 static DEVICE_ATTR(cd_cnt, 0444, sd_detection_cnt_show, NULL);
 static DEVICE_ATTR(max_mode, 0444, sd_detection_maxmode_show, NULL);
 static DEVICE_ATTR(current_mode, 0444, sd_detection_curmode_show, NULL);
+static DEVICE_ATTR(sdcard_summary, 0444, sdcard_summary_show, NULL);
 static DEVICE_ATTR(sd_count, 0444, sd_count_show, NULL);
 static DEVICE_ATTR(sd_data, 0444, sd_data_show, NULL);
 
@@ -1443,6 +1511,10 @@ static int dw_mci_exynos_request_ext_irq(struct dw_mci *host,
 			if (device_create_file(sd_detection_cmd_dev,
 						&dev_attr_current_mode) < 0)
 				pr_err("Fail to create current_mode sysfs file\n");
+
+			if (device_create_file(sd_detection_cmd_dev,
+						&dev_attr_sdcard_summary) < 0)
+				pr_err("Fail to create sdcard_summary sysfs file\n");
 		}
 		if (!sd_info_cmd_dev) {
 			sd_info_cmd_dev = sec_device_create(host, "sdinfo");

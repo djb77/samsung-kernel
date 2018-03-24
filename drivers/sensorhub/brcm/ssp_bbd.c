@@ -275,6 +275,7 @@ int callback_bbd_on_mcu_ready(void *ssh_data, bool ready)
 			data->resetCntGPSisOn++;
 		memset(&ssp_pkt, 0, sizeof(ssp_pkt));
 		ssp_pkt.required = 4;
+		wake_lock_timeout(&data->ssp_wake_lock, HZ);
 		queue_work(data->bbd_mcu_ready_wq, &data->work_bbd_mcu_ready);
 	} else {
 		/* Disable SSP */

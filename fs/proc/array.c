@@ -546,9 +546,6 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 	else
 		seq_put_decimal_ll(m, ' ', 0);
 
-	seq_putc(m, ' ');
-	seq_printf(m, "%*pb", cpumask_pr_args(&task->cpus_allowed));
-
 	seq_putc(m, '\n');
 	if (mm)
 		mmput(mm);

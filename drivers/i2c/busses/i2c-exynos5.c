@@ -373,10 +373,20 @@ static void recover_gpio_pins(struct exynos5_i2c *i2c)
 				break;
 			}
 		}
-		if (clk_cnt == 100)
-			dev_err(i2c->dev, "SDA line is not recovered!!!\n");
-	}
 
+		if (clk_cnt == 100) {
+
+			if (i2c->control_sda) {
+				dev_err(i2c->dev, "Set SDA line high for 5ms\n");
+				gpio_direction_output(gpio_sda, 1);
+				udelay(5000);
+				goto sda_recover_scheme;
+			}
+
+			dev_err(i2c->dev, "SDA line is not recovered!!!\n");
+		}
+	}
+sda_recover_scheme:
 	/* Change I2C GPIO as default function */
 	change_i2c_gpio(i2c);
 }
@@ -1609,6 +1619,11 @@ static int exynos5_i2c_probe(struct platform_device *pdev)
 		i2c->reset_before_trans = 1;
 	else
 		i2c->reset_before_trans = 0;
+
+	if (of_get_property(np, "samsung,control-sda", NULL))
+		i2c->control_sda = 1;
+	else
+		i2c->control_sda = 0;
 
 	i2c->idle_ip_index = exynos_get_idle_ip_index(dev_name(&pdev->dev));
 

@@ -1,19 +1,6 @@
 /*
- * Copyright (C) 2013 Samsung Electronics. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <linux/module.h>
@@ -43,8 +30,11 @@
 
 #define VENDOR_NAME              "SEMTECH"
 #define MODEL_NAME               "SX9320"
+#if defined(CONFIG_SENSORS_SX9320_MULTI)
+#define MODULE_NAME              "grip_sensor_multi1"
+#else
 #define MODULE_NAME              "grip_sensor"
-
+#endif
 #define I2C_M_WR                 0 /* for i2c Write */
 #define I2c_M_RD                 1 /* for i2c Read */
 
@@ -58,7 +48,7 @@
 #define REF_SENSOR               2
 
 #define DIFF_READ_NUM            10
-#define GRIP_LOG_TIME            30 /* sec */
+#define GRIP_LOG_TIME            15 /* 30 sec */
 #define PHX_STATUS_REG           SX9320_STAT0_PROXSTAT_PH0_FLAG
 #define RAW_DATA_BLOCK_SIZE      (SX9320_REGOFFSETLSB - SX9320_REGUSEMSB + 1)
 
@@ -129,6 +119,7 @@ struct sx9320_p {
 	s16 avg;
 	s32 diff;
 	s32 max_diff;
+	s32 max_normal_diff;
 	u16 offset;
 	u16 freq;
 
@@ -1087,14 +1078,19 @@ static ssize_t sx9320_irq_count_show(struct device *dev,
 	struct sx9320_p *data = dev_get_drvdata(dev);
 
 	int result = 0;
+	s32 max_diff_val = 0;
 
-	if (data->irq_count)
+	if (data->irq_count) {
 		result = -1;
+		max_diff_val = data->max_diff;
+	} else {
+		max_diff_val = data->max_normal_diff;
+	}
 
 	pr_info("[SX9320]: %s - called\n", __func__);
 
 	return snprintf(buf, PAGE_SIZE, "%d,%d,%d\n",
-		result, data->irq_count, data->max_diff);
+		result, data->irq_count, max_diff_val);
 }
 
 static ssize_t sx9320_irq_count_store(struct device *dev,
@@ -1119,6 +1115,7 @@ static ssize_t sx9320_irq_count_store(struct device *dev,
 		data->abnormal_mode = ON;
 		data->irq_count = 0;
 		data->max_diff = 0;
+		data->max_normal_diff = 0;
 	} else {
 		pr_err("[SX9320]: %s - unknown value %d\n", __func__, onoff);
 	}
@@ -1130,51 +1127,48 @@ static ssize_t sx9320_irq_count_store(struct device *dev,
 	return count;
 }
 
-static DEVICE_ATTR(menual_calibrate, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(menual_calibrate, 0664,
 		sx9320_get_offset_calibration_show,
 		sx9320_set_offset_calibration_store);
-static DEVICE_ATTR(register_write, S_IWUSR | S_IWGRP,
-		NULL, sx9320_register_write_store);
-static DEVICE_ATTR(register_read, S_IRUGO,
-		sx9320_register_read_show, NULL);
-static DEVICE_ATTR(readback, S_IRUGO, sx9320_read_data_show, NULL);
-static DEVICE_ATTR(reset, S_IRUGO, sx9320_sw_reset_show, NULL);
-static DEVICE_ATTR(name, S_IRUGO, sx9320_name_show, NULL);
-static DEVICE_ATTR(vendor, S_IRUGO, sx9320_vendor_show, NULL);
-static DEVICE_ATTR(mode, S_IRUGO, sx9320_touch_mode_show, NULL);
-static DEVICE_ATTR(raw_data, S_IRUGO, sx9320_raw_data_show, NULL);
-static DEVICE_ATTR(diff_avg, S_IRUGO, sx9320_diff_avg_show, NULL);
-static DEVICE_ATTR(useful_avg, S_IRUGO, sx9320_useful_avg_show, NULL);
-static DEVICE_ATTR(calibration, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(register_write, 0220, NULL, sx9320_register_write_store);
+static DEVICE_ATTR(register_read, 0444,	sx9320_register_read_show, NULL);
+static DEVICE_ATTR(readback, 0444, sx9320_read_data_show, NULL);
+static DEVICE_ATTR(reset, 0444, sx9320_sw_reset_show, NULL);
+static DEVICE_ATTR(name, 0444, sx9320_name_show, NULL);
+static DEVICE_ATTR(vendor, 0444, sx9320_vendor_show, NULL);
+static DEVICE_ATTR(mode, 0444, sx9320_touch_mode_show, NULL);
+static DEVICE_ATTR(raw_data, 0444, sx9320_raw_data_show, NULL);
+static DEVICE_ATTR(diff_avg, 0444, sx9320_diff_avg_show, NULL);
+static DEVICE_ATTR(useful_avg, 0444, sx9320_useful_avg_show, NULL);
+static DEVICE_ATTR(calibration, 0664,
 		sx9320_calibration_show, sx9320_calibration_store);
-static DEVICE_ATTR(onoff, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(onoff, 0664,
 		sx9320_onoff_show, sx9320_onoff_store);
-static DEVICE_ATTR(threshold, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(threshold, 0664,
 		sx9320_threshold_show, sx9320_threshold_store);
-static DEVICE_ATTR(normal_threshold, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(normal_threshold, 0664,
 		sx9320_normal_threshold_show, sx9320_normal_threshold_store);
-static DEVICE_ATTR(freq, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(freq, 0664,
 		sx9320_freq_show, sx9320_freq_store);
-static DEVICE_ATTR(ch_state, S_IRUGO, sx9320_ch_state_show, NULL);
-static DEVICE_ATTR(body_threshold, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(ch_state, 0444, sx9320_ch_state_show, NULL);
+static DEVICE_ATTR(body_threshold, 0664,
 		sx9320_body_threshold_show, sx9320_body_threshold_store);
 
-static DEVICE_ATTR(avg_negfilt, S_IRUGO, sx9320_avgnegfilt_show, NULL);
-static DEVICE_ATTR(avg_posfilt, S_IRUGO, sx9320_avgposfilt_show, NULL);
-static DEVICE_ATTR(avg_thresh, S_IRUGO, sx9320_avgthresh_show, NULL);
-static DEVICE_ATTR(rawfilt, S_IRUGO, sx9320_rawfilt_show, NULL);
-static DEVICE_ATTR(sampling_freq, S_IRUGO, sx9320_sampling_freq_show, NULL);
-static DEVICE_ATTR(scan_period, S_IRUGO, sx9320_scan_period_show, NULL);
-static DEVICE_ATTR(gain, S_IRUGO, sx9320_gain_show, NULL);
-static DEVICE_ATTR(range, S_IRUGO, sx9320_range_show, NULL);
-static DEVICE_ATTR(analog_gain, S_IRUGO, sx9320_again_show, NULL);
-static DEVICE_ATTR(phase, S_IRUGO, sx9320_phase_show, NULL);
-static DEVICE_ATTR(hysteresis, S_IRUGO, sx9320_hysteresis_show, NULL);
-static DEVICE_ATTR(irq_count, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(avg_negfilt, 0444, sx9320_avgnegfilt_show, NULL);
+static DEVICE_ATTR(avg_posfilt, 0444, sx9320_avgposfilt_show, NULL);
+static DEVICE_ATTR(avg_thresh, 0444, sx9320_avgthresh_show, NULL);
+static DEVICE_ATTR(rawfilt, 0444, sx9320_rawfilt_show, NULL);
+static DEVICE_ATTR(sampling_freq, 0444, sx9320_sampling_freq_show, NULL);
+static DEVICE_ATTR(scan_period, 0444, sx9320_scan_period_show, NULL);
+static DEVICE_ATTR(gain, 0444, sx9320_gain_show, NULL);
+static DEVICE_ATTR(range, 0444, sx9320_range_show, NULL);
+static DEVICE_ATTR(analog_gain, 0444, sx9320_again_show, NULL);
+static DEVICE_ATTR(phase, 0444, sx9320_phase_show, NULL);
+static DEVICE_ATTR(hysteresis, 0444, sx9320_hysteresis_show, NULL);
+static DEVICE_ATTR(irq_count, 0664,
 		sx9320_irq_count_show, sx9320_irq_count_store);
 
-static DEVICE_ATTR(grip_flush, S_IWUSR | S_IWGRP, NULL,
-	sx9320_grip_flush_store);
+static DEVICE_ATTR(grip_flush, 0220, NULL, sx9320_grip_flush_store);
 
 static struct device_attribute *sensor_attrs[] = {
 	&dev_attr_menual_calibrate,
@@ -1266,9 +1260,9 @@ static ssize_t sx9320_flush_store(struct device *dev,
 	return count;
 }
 
-static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(enable, 0664,
 		sx9320_enable_show, sx9320_enable_store);
-static DEVICE_ATTR(flush, S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(flush, 0220,
 		NULL, sx9320_flush_store);
 
 static struct attribute *sx9320_attributes[] = {
@@ -1383,11 +1377,17 @@ static void sx9320_debug_work_func(struct work_struct *work)
 		hall_flag = 1;
 
 	if (atomic_read(&data->enable) == ON) {
-		if (data->debug_count >= GRIP_LOG_TIME) {
+		if (data->abnormal_mode) {
 			sx9320_get_data(data);
-			data->debug_count = 0;
+			if (data->max_normal_diff < data->diff)
+				data->max_normal_diff = data->diff;
 		} else {
-			data->debug_count++;
+			if (data->debug_count >= GRIP_LOG_TIME) {
+				sx9320_get_data(data);
+				data->debug_count = 0;
+			} else {
+				data->debug_count++;
+			}
 		}
 	}
 

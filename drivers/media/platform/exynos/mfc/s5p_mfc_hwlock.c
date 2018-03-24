@@ -336,22 +336,22 @@ int s5p_mfc_release_hwlock_dev(struct s5p_mfc_dev *dev)
 		dev->hwlock.wl_count--;
 
 		if (listable_wq->dev) {
-			mfc_err_dev("Device with hwlock is waiting for hwlock agian!\n");
-			ret = -1;
+			mfc_debug(2, "Waking up dev\n");
+			dev->hwlock.dev = 1;
 		} else {
 			mfc_debug(2, "Waking up another ctx\n");
 			set_bit(listable_wq->ctx->num, &dev->hwlock.bits);
-
-			dev->hwlock.transfer_owner = 1;
-
-			MFC_TRACE_DEV_HWLOCK("release_hwlock_dev: wakeup.\n");
-			MFC_TRACE_DEV_HWLOCK(">>dev:0x%lx, bits:0x%lx, owned:%d, wl:%d, trans:%d\n",
-					dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
-					dev->hwlock.wl_count, dev->hwlock.transfer_owner);
-
-			wake_up(&listable_wq->wait_queue);
-			ret = 1;
 		}
+
+		dev->hwlock.transfer_owner = 1;
+
+		MFC_TRACE_DEV_HWLOCK("release_hwlock_dev: wakeup.\n");
+		MFC_TRACE_DEV_HWLOCK(">>dev:0x%lx, bits:0x%lx, owned:%d, wl:%d, trans:%d\n",
+				dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
+				dev->hwlock.wl_count, dev->hwlock.transfer_owner);
+
+		wake_up(&listable_wq->wait_queue);
+		ret = 1;
 	}
 
 	mfc_print_hwlock(dev);

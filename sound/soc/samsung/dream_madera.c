@@ -502,9 +502,12 @@ static int set_auxpdm_hiz_mode(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct snd_soc_card *card = codec->component.card;
 	struct exynos8895_drvdata *drvdata = codec->component.card->drvdata;
 
 	drvdata->hiz_val = ucontrol->value.integer.value[0];
+
+	dev_info(card->dev, "%s ev: %d\n", __func__, drvdata->hiz_val);
 
 	if (drvdata->hiz_val) {
 		if (drvdata->spkpdm_gpio) {

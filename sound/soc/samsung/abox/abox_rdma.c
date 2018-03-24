@@ -33,7 +33,7 @@
 #include "abox_gic.h"
 #include "abox.h"
 
-#undef COMPR_USE_COPY
+#define COMPR_USE_COPY
 #define COMPR_USE_FIXED_MEMORY
 #define USE_FIXED_MEMORY
 #define STR (SNDRV_PCM_STREAM_PLAYBACK)
@@ -793,53 +793,6 @@ static int abox_rdma_compr_pointer(struct snd_compr_stream *stream,
 	return 0;
 }
 
-#ifdef COMPR_USE_COPY
-static int abox_compr_write_data(struct snd_compr_stream *stream,
-	       const char __user *buf, size_t count)
-{
-	void *dstn;
-	size_t copy;
-	struct snd_compr_runtime *runtime = stream->runtime;
-	/* 64-bit Modulus */
-	u64 app_pointer = div64_u64(runtime->total_bytes_available,
-				    runtime->buffer_size);
-	app_pointer = runtime->total_bytes_available -
-		      (app_pointer * runtime->buffer_size);
-
-	dstn = runtime->buffer + app_pointer;
-	pr_debug("copying %ld at %lld\n",
-			(unsigned long)count, app_pointer);
-	if (count < runtime->buffer_size - app_pointer) {
-		if (copy_from_user(dstn, buf, count))
-			return -EFAULT;
-	} else {
-		copy = runtime->buffer_size - app_pointer;
-		if (copy_from_user(dstn, buf, copy))
-			return -EFAULT;
-		if (copy_from_user(runtime->buffer, buf + copy, count - copy))
-			return -EFAULT;
-	}
-	/* if DSP cares, let it know data has been written */
-	if (stream->ops->ack)
-		stream->ops->ack(stream, count);
-	return count;
-}
-
-static int abox_rdma_compr_copy(struct snd_compr_stream *stream,
-		char __user *buf, size_t count)
-{
-	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct snd_soc_platform *platform = rtd->platform;
-	struct device *dev = platform->dev;
-	struct abox_platform_data *platform_data = dev_get_drvdata(dev);
-	int id = platform_data->id;
-
-	dev_info(dev, "%s[%d]\n", __func__, id);
-
-	return abox_compr_write_data(stream, buf, count);
-}
-#endif
-
 static int abox_rdma_compr_mmap(struct snd_compr_stream *stream,
 		struct vm_area_struct *vma)
 {
@@ -883,6 +836,53 @@ static int abox_rdma_compr_ack(struct snd_compr_stream *stream, size_t bytes)
 
 	return ret;
 }
+
+#ifdef COMPR_USE_COPY
+static int abox_compr_write_data(struct snd_compr_stream *stream,
+	       const char __user *buf, size_t count)
+{
+	void *dstn;
+	size_t copy;
+	struct snd_compr_runtime *runtime = stream->runtime;
+	/* 64-bit Modulus */
+	u64 app_pointer = div64_u64(runtime->total_bytes_available,
+				    runtime->buffer_size);
+	app_pointer = runtime->total_bytes_available -
+		      (app_pointer * runtime->buffer_size);
+	dstn = runtime->buffer + app_pointer;
+
+	pr_debug("copying %ld at %lld\n",
+			(unsigned long)count, app_pointer);
+
+	if (count < runtime->buffer_size - app_pointer) {
+		if (copy_from_user(dstn, buf, count))
+			return -EFAULT;
+	} else {
+		copy = runtime->buffer_size - app_pointer;
+		if (copy_from_user(dstn, buf, copy))
+			return -EFAULT;
+		if (copy_from_user(runtime->buffer, buf + copy, count - copy))
+			return -EFAULT;
+	}
+	abox_rdma_compr_ack(stream, count);
+
+	return count;
+}
+
+static int abox_rdma_compr_copy(struct snd_compr_stream *stream,
+		char __user *buf, size_t count)
+{
+	struct snd_soc_pcm_runtime *rtd = stream->private_data;
+	struct snd_soc_platform *platform = rtd->platform;
+	struct device *dev = platform->dev;
+	struct abox_platform_data *platform_data = dev_get_drvdata(dev);
+	int id = platform_data->id;
+
+	dev_dbg(dev, "%s[%d]\n", __func__, id);
+
+	return abox_compr_write_data(stream, buf, count);
+}
+#endif
 
 static int abox_rdma_compr_get_caps(struct snd_compr_stream *stream,
 		struct snd_compr_caps *caps)
@@ -1014,7 +1014,7 @@ static int abox_rdma_compr_vol_put(struct snd_kcontrol *kcontrol,
 
 	volumes[0] = (unsigned int)ucontrol->value.integer.value[0];
 	volumes[1] = (unsigned int)ucontrol->value.integer.value[1];
-	dev_dbg(dev, "%s[%d]: left_vol=%d right_vol=%d\n",
+	dev_info(dev, "%s[%d]: left_vol=%d right_vol=%d\n",
 			__func__, id, volumes[0], volumes[1]);
 
 	abox_rdma_mailbox_write(dev, mc->reg, volumes[0]);
@@ -1470,6 +1470,11 @@ static int abox_rdma_mmap(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 
 	dev_info(dev, "%s[%d]\n", __func__, id);
+
+	/* Increased cpu gear for sound camp.
+	 * Only sound camp uses mmap now.
+	 */
+	abox_request_cpu_gear(dev, data->abox_data, dev, 2);
 
 	return dma_mmap_writecombine(dev, vma,
 			runtime->dma_area,

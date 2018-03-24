@@ -30,6 +30,9 @@
 #if defined(CONFIG_USB_HOST_NOTIFY)
 #include <linux/usb_notify.h>
 #endif
+#if defined(CONFIG_COMBO_REDRIVER)
+#include <linux/combo_redriver/ptn36502.h>
+#endif
 
 #if defined(CONFIG_BATTERY_SAMSUNG)
 extern unsigned int lpcharge;
@@ -134,6 +137,10 @@ void ccic_event_work(void *data, int dest, int id, int attach, int event, int su
 
 	pr_info("usb: %s\n", __func__);
 	event_work = kmalloc(sizeof(struct ccic_state_work), GFP_ATOMIC);
+	if (!event_work) {
+		pr_err("%s: failed to alloc for event_work\n", __func__);
+		return;
+	}
 	INIT_WORK(&event_work->ccic_work, ccic_event_notifier);
 
 	event_work->dest = dest;
@@ -414,19 +421,54 @@ void process_cc_water(void * data, LP_STATE_Type *Lp_DATA)
 	/* read reg for water and dry state */
 	REG_ADD = 0x60;
 	R_len = 4;
-	s2mm005_read_byte(i2c, REG_ADD, Lp_DATA->BYTE, R_len);
+	usbpd_data->s2mm005_i2c_err = s2mm005_read_byte(i2c, REG_ADD, Lp_DATA->BYTE, R_len);
 	dev_info(&i2c->dev, "%s: WATER reg:0x%02X WATER=%d DRY=%d\n", __func__,
 		Lp_DATA->BYTE[0],
 		Lp_DATA->BITS.WATER_DET,
 		Lp_DATA->BITS.RUN_DRY);
 
-#if defined(CONFIG_BATTERY_SAMSUNG)
-	if (usbpd_data->firm_ver[3] == 0x7 && usbpd_data->firm_ver[2] >= 0x22) { /* temp code */
-		if (lpcharge) {
-			dev_info(&i2c->dev, "%s: BOOTING_RUN_DRY=%d\n", __func__,
-				Lp_DATA->BITS.BOOTING_RUN_DRY);
-			usbpd_data->booting_run_dry  = Lp_DATA->BITS.BOOTING_RUN_DRY;
+	if (!usbpd_data->water_detect_support) {
+		dev_info(&i2c->dev, "%s: It does not support water detection\n", __func__);
+		return;
+	}
+
+	if (usbpd_data->s2mm005_i2c_err < 0) {
+		pr_err("%s : i2c err : ret = %d\n", __func__, usbpd_data->s2mm005_i2c_err);
+
+		Lp_DATA->BITS.WATER_DET = 0;
+		Lp_DATA->BITS.RUN_DRY = 1;
+		Lp_DATA->BITS.BOOTING_RUN_DRY = usbpd_data->booting_run_dry;
+
+	} else {
+		if (Lp_DATA->BITS.WATER_DET == 0
+			&& Lp_DATA->BITS.RUN_DRY == 0
+			&& Lp_DATA->BITS.BOOTING_RUN_DRY == 0) {
+
+			usbpd_data->s2mm005_i2c_err = s2mm005_read_byte(i2c, REG_ADD, Lp_DATA->BYTE, R_len);
+			dev_info(&i2c->dev, "Re: %s: WATER reg:0x%02X WATER=%d DRY=%d\n", __func__,
+				Lp_DATA->BYTE[0],
+				Lp_DATA->BITS.WATER_DET,
+				Lp_DATA->BITS.RUN_DRY);
+
+			if (!Lp_DATA->BITS.AUTO_LP_ENABLE_BIT) {
+				if (Lp_DATA->BITS.WATER_DET == 1 || Lp_DATA->BITS.RUN_DRY == 0)
+					usbpd_data->s2mm005_i2c_err = -CCIC_I2C_VALUE_INVALID;
+			}
+
+			if (usbpd_data->s2mm005_i2c_err < 0) {
+				pr_err("%s : i2c err : ret = %d\n", __func__, usbpd_data->s2mm005_i2c_err);
+				Lp_DATA->BITS.WATER_DET = 0;
+				Lp_DATA->BITS.RUN_DRY = 1;
+				Lp_DATA->BITS.BOOTING_RUN_DRY = usbpd_data->booting_run_dry;
+			}
 		}
+	}
+
+#if defined(CONFIG_BATTERY_SAMSUNG)
+	if (lpcharge) {
+		dev_info(&i2c->dev, "%s: BOOTING_RUN_DRY=%d\n", __func__,
+			Lp_DATA->BITS.BOOTING_RUN_DRY);
+		usbpd_data->booting_run_dry  = Lp_DATA->BITS.BOOTING_RUN_DRY;
 	}
 #endif
 
@@ -444,8 +486,7 @@ void process_cc_water(void * data, LP_STATE_Type *Lp_DATA)
 			0/*attach*/, 0, 0);
 	}
 
-	if (usbpd_data->firm_ver[3] >= 0x7)
-		usbpd_data->run_dry = Lp_DATA->BITS.RUN_DRY;
+	usbpd_data->run_dry = Lp_DATA->BITS.RUN_DRY;
 
 	/* check for water case */
 	if ((Lp_DATA->BITS.WATER_DET & !usbpd_data->water_det)) {
@@ -487,27 +528,34 @@ void process_cc_attach(void * data,u8 *plug_attach_done)
 			CCIC_NOTIFY_DEV_BATTERY, CCIC_NOTIFY_ID_WATER,
 			1/*attach*/, 0, 0);
 
-		REG_ADD = 0x20;
-		R_len = 4;
-		s2mm005_read_byte(i2c, REG_ADD, Func_DATA.BYTE, R_len);
-		dev_info(&i2c->dev, "Rsvd_H:0x%02X   PD_Nxt_State:0x%02X   Rsvd_L:0x%02X   PD_State:%02d\n",
-			Func_DATA.BYTES.RSP_BYTE2,
-			Func_DATA.BYTES.PD_Next_State,
-			Func_DATA.BYTES.RSP_BYTE1,
-			Func_DATA.BYTES.PD_State);
-
+		if (usbpd_data->s2mm005_i2c_err >= 0) {
+			REG_ADD = 0x20;
+			R_len = 4;
+			s2mm005_read_byte(i2c, REG_ADD, Func_DATA.BYTE, R_len);
+			dev_info(&i2c->dev, "Rsvd_H:0x%02X   PD_Nxt_State:0x%02X   Rsvd_L:0x%02X   PD_State:%02d\n",
+				Func_DATA.BYTES.RSP_BYTE2,
+				Func_DATA.BYTES.PD_Next_State,
+				Func_DATA.BYTES.RSP_BYTE1,
+				Func_DATA.BYTES.PD_State);
+		}
 		return;
 	} else {
-		REG_ADD = 0x20;
-		R_len = 4;
+		if (usbpd_data->s2mm005_i2c_err < 0) {
+			if (usbpd_data->pd_state == State_PE_Initial_detach)
+				return;
 
-		s2mm005_read_byte(i2c, REG_ADD, Func_DATA.BYTE, R_len);
-		dev_info(&i2c->dev, "Rsvd_H:0x%02X   PD_Nxt_State:0x%02X   Rsvd_L:0x%02X   PD_State:%02d\n",
-			Func_DATA.BYTES.RSP_BYTE2,
-			Func_DATA.BYTES.PD_Next_State,
-			Func_DATA.BYTES.RSP_BYTE1,
-			Func_DATA.BYTES.PD_State);
+			Func_DATA.DATA = 0;
+		} else {
+			REG_ADD = 0x20;
+			R_len = 4;
 
+			s2mm005_read_byte(i2c, REG_ADD, Func_DATA.BYTE, R_len);
+			dev_info(&i2c->dev, "Rsvd_H:0x%02X   PD_Nxt_State:0x%02X   Rsvd_L:0x%02X   PD_State:%02d\n",
+				Func_DATA.BYTES.RSP_BYTE2,
+				Func_DATA.BYTES.PD_Next_State,
+				Func_DATA.BYTES.RSP_BYTE1,
+				Func_DATA.BYTES.PD_State);
+		}
 #if defined(CONFIG_USB_HW_PARAM)
 		if (!usbpd_data->pd_state && Func_DATA.BYTES.PD_State && Func_DATA.BITS.VBUS_CC_Short)
 					inc_hw_param(o_notify, USB_CCIC_VBUS_CC_SHORT_COUNT);
@@ -593,6 +641,10 @@ void process_cc_attach(void * data,u8 *plug_attach_done)
 				ccic_event_work(usbpd_data,
 					CCIC_NOTIFY_DEV_USB, CCIC_NOTIFY_ID_USB,
 					1/*attach*/, USB_STATUS_NOTIFY_ATTACH_DFP/*drp*/, 0);
+#if defined(CONFIG_COMBO_REDRIVER)
+				mdelay(8);
+				ptn36502_config(USB3_ONLY_MODE, DFP);
+#endif
 				/* add to turn on external 5V */
 #if defined(CONFIG_USB_HOST_NOTIFY)
 				if (is_blocked(o_notify, NOTIFY_BLOCK_TYPE_HOST))
@@ -667,6 +719,9 @@ void process_cc_attach(void * data,u8 *plug_attach_done)
 				ccic_event_work(usbpd_data,
 						CCIC_NOTIFY_DEV_USB, CCIC_NOTIFY_ID_USB,
 						1/*attach*/, USB_STATUS_NOTIFY_ATTACH_UFP/*drp*/, 0);
+#if defined(CONFIG_COMBO_REDRIVER)
+				ptn36502_config(USB3_ONLY_MODE, UFP);
+#endif
 			}
 			break;
 		case State_PE_PRS_SRC_SNK_Transition_to_off:
@@ -704,6 +759,9 @@ void process_cc_attach(void * data,u8 *plug_attach_done)
 		ccic_event_work(usbpd_data,
 			CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_ATTACH,
 			0/*attach*/, 0/*rprd*/, 0);
+#if defined(CONFIG_COMBO_REDRIVER)
+		ptn36502_config(INIT_MODE, 0);
+#endif
 		if(usbpd_data->is_host > HOST_OFF || usbpd_data->is_client > CLIENT_OFF) {
 			if(usbpd_data->is_host > HOST_OFF || usbpd_data->power_role == DUAL_ROLE_PROP_PR_SRC)
 				vbus_turn_on_ctrl(0);

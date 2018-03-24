@@ -47,6 +47,7 @@ static void simulate_BUSMON_ERROR(char *arg);
 static void simulate_UNALIGNED(char *arg);
 static void simulate_WRITE_RO(char *arg);
 static void simulate_OVERFLOW(char *arg);
+static void simulate_SVC(char *arg);
 
 enum {
 	FORCE_KERNEL_PANIC = 0,      /* KP */
@@ -73,6 +74,7 @@ enum {
 	FORCE_UNALIGNED,	     /* UNALIGNED WRITE */
 	FORCE_WRITE_RO,		     /* WRITE RODATA */
 	FORCE_OVERFLOW, 	     /* STACK OVERFLOW */
+	FORCE_SVC,			/* SUPERVISOR CALL */
 	NR_FORCE_ERROR,
 };
 
@@ -111,6 +113,7 @@ struct force_error force_error_vector = {
 		{"unaligned",	&simulate_UNALIGNED},
 		{"writero",	&simulate_WRITE_RO},
 		{"overflow",	&simulate_OVERFLOW},
+		{"svc",		&simulate_SVC},
 	}
 };
 
@@ -219,7 +222,7 @@ static void simulate_PABRT(char *arg)
 static void simulate_UNDEF(char *arg)
 {
 	pr_crit("%s()\n", __func__);
-	asm volatile(".word 0xe7f001f2\n\t");
+	asm volatile(".word 0xdeadc0de\n\t");
 	unreachable();
 }
 
@@ -384,6 +387,13 @@ static void simulate_OVERFLOW(char *arg)
 	pr_crit("%s()\n", __func__);
 
 	recursive_loop(100);
+}
+
+static void simulate_SVC(char *arg)
+{
+	pr_crit("%s()\n", __func__);
+
+	asm("svc #0x0");
 }
 
 int sec_debug_force_error(const char *val, struct kernel_param *kp)

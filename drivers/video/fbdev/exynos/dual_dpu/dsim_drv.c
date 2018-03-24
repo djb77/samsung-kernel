@@ -87,7 +87,7 @@ static void dsim_dump(struct dsim_device *dsim)
 {
 	dsim_info("=== DSIM SFR DUMP ===\n");
 	__dsim_dump(dsim);
-#if 0 
+#if 0
 	if (dsim_ioctl_panel(dsim, PANEL_IOC_PANEL_DUMP, NULL))
 		dsim_err("DSIM:ERR:%s:failed to panel dump\n", __func__);
 #endif
@@ -299,8 +299,8 @@ int dsim_read_data(struct dsim_device *dsim, u8 id, u8 addr, u8 *buf, u16 size)
 
 	size_buf[0] = (u8)size & 0xff;
 	size_buf[1] = (u8)(size >> 8) & 0xff;
-	
-	
+
+
 	reinit_completion(&dsim->rd_comp);
 
 	/* Init RX FIFO before read and clear DSIM_INTSRC */
@@ -479,7 +479,7 @@ int mipi_write_gen_cmd(struct dsim_device *dsim, u8 dsi, const u8 *cmd, int size
 fail_write_command:
 	return ret;
 
-#if 0 
+#if 0
 	int ret;
 	u8 cmd_buf[DSIM_FIFO_SIZE];
 	u8 g_param[2] = {0xB0, 0x00};
@@ -512,7 +512,7 @@ fail_write_command:
 			dsim_err("DISP:ERR:%s:failed to write global command\n", __func__);
 			goto err_write_gen_cmd;
 		}
-	
+
 		cmd_buf[0] = cmd[0];
 
 		//tx_size = min(remind_size, DSIM_FIFO_SIZE - 1);
@@ -575,7 +575,7 @@ int mipi_write_pps_cmd(struct dsim_device *dsim, const u8 *cmd, int size)
 			dsim_err("DISP:ERR:%s:failed to write global command\n", __func__);
 			goto err_write_gen_cmd;
 		}
-	
+
 		cmd_buf[0] = 0x9E;
 
 		//tx_size = min(remind_size, DSIM_FIFO_SIZE - 1);
@@ -611,7 +611,7 @@ int mipi_write_side_ram(struct dsim_device *dsim, const u8 *cmd, int size)
 	int ret;
 	u8 cmd_buf[DSIM_FIFO_SIZE];
 	u32 t_tx_size, tx_size, remind_size;
-	u32 fifo_size, tmp;	
+	u32 fifo_size, tmp;
 
 	dsim_info("%s : was called : %d\n", __func__, size);
 
@@ -666,7 +666,7 @@ int mipi_write_cmd(u32 id, u8 cmd_id, const u8 *cmd, int size)
 
 	if (id >= MAX_DSIM_CNT) {
 		dsim_err("ERR:DSIM:%s:invalid id : %d\n", __func__, id);
-		return -EINVAL;		
+		return -EINVAL;
 	}
 
 	dsim = dsim_drvdata[id];
@@ -674,7 +674,7 @@ int mipi_write_cmd(u32 id, u8 cmd_id, const u8 *cmd, int size)
 		dsim_err("ERR:DSIM:%s:dsim is NULL\n", __func__);
 		return -ENODEV;
 	}
-	
+
 	decon_hiber_block_exit(decon);
 
 	if (dsim->state != DSIM_STATE_ON) {
@@ -683,7 +683,7 @@ int mipi_write_cmd(u32 id, u8 cmd_id, const u8 *cmd, int size)
 		ret = -EINVAL;
 		goto err_write_cmd;
 	}
-	
+
 	switch (cmd_id) {
 		case MIPI_DSI_DSC_PPS:
 			ret = mipi_write_pps_cmd(dsim, cmd, size);
@@ -726,7 +726,7 @@ int mipi_read_cmd(u32 id, u8 addr, u8 *buf, int size)
 
 	if (id >= MAX_DSIM_CNT) {
 		dsim_err("ERR:DSIM:%s:invalid id : %d\n", __func__, id);
-		return -EINVAL;		
+		return -EINVAL;
 	}
 
 	dsim = dsim_drvdata[id];
@@ -938,7 +938,7 @@ int dsim_reg_ready(struct dsim_device *dsim)
 		//goto ready_err;
 	}
 	dsim_reg_set_lanes(dsim->id, dsim->data_lane, 1);
-	
+
 	/* Wait for 200us~ for Dphy stable time and slave acknowlegement */
  	udelay(300);
 
@@ -973,13 +973,19 @@ static int dsim_init_enable(struct dsim_device *dsim)
 			dsim_err("DSIM:ERR:%s:failed to panel on\n", __func__);
 		}
 	}
-	
+
 	ret = dsim_reg_ready(dsim);
 
 	if (dsim->state != DSIM_STATE_ON) {
 		dsim_err("DSIM:ERR:%s:failed to dsim_reg_ready : wrong state : %d\n"
 			, __func__, dsim->state);
 		goto init_err;
+	}
+	if (dsim->panel_state->power == PANEL_POWER_ON) {
+		// panel reset
+		ret = dsim_ioctl_panel(dsim, PANEL_IOC_SET_PANEL_RESET, NULL);
+		if (ret)
+			dsim_err("DSIM:ERR:%s:failed to panel on\n", __func__);
 	}
 
 	dsim_reg_start(dsim->id);
@@ -994,7 +1000,7 @@ static int dsim_init_enable(struct dsim_device *dsim)
 	} else {
 		dsim_info("DSIM:INFO:dsim ready @ bootloader side\n");
 	}
-#endif	
+#endif
 	ret = 0;
 
 init_err:
@@ -1005,7 +1011,7 @@ static int dsim_enable(struct dsim_device *dsim)
 {
 	int ret = 0;
 	int power_on = 1;
-
+	bool skip_poweron = false;
 	if (dsim->state == DSIM_STATE_ON) {
 #ifdef CONFIG_SUPPORT_DOZE
 		ret = dsim_ioctl_panel(dsim, PANEL_IOC_SLEEP_OUT, NULL);
@@ -1016,26 +1022,32 @@ static int dsim_enable(struct dsim_device *dsim)
 		return 0;
 	}
 	if ((dsim->lcd_info->op_mode == 2) && (dsim->id != 0)) {
-		goto skip_power_on;
+		skip_poweron = true;
 	}
 
-	ret = dsim_ioctl_panel(dsim, PANEL_IOC_SET_POWER, (void *)&power_on);
-	if (ret) {
-		dsim_err("DSIM:ERR:%s:failed to panel on\n", __func__);
+	if (!skip_poweron) {
+		ret = dsim_ioctl_panel(dsim, PANEL_IOC_SET_POWER, (void *)&power_on);
+		if (ret)
+			dsim_err("DSIM:ERR:%s:failed to panel on\n", __func__);
 	}
-skip_power_on:
 	ret = dsim_reg_ready(dsim);
 	if (ret) {
 		dsim_err("DSIM:ERR:%s:failed to dsim reg ready\n", __func__);
 		goto enable_err;
 	}
-
+	if (!skip_poweron) {
+		if (dsim->panel_state->power == PANEL_POWER_ON) {
+			// panel reset
+			ret = dsim_ioctl_panel(dsim, PANEL_IOC_SET_PANEL_RESET, NULL);
+			if (ret)
+				dsim_err("DSIM:ERR:%s:failed to panel on\n", __func__);
+		}
+	}
 	dsim->state = DSIM_STATE_ON;
 	dsim_reg_start(dsim->id);
 
-	if ((dsim->lcd_info->op_mode == 2) && (dsim->id != 0)) {
+	if (skip_poweron)
 		goto skip_sleep_out;
-	}
 
 	ret = dsim_ioctl_panel(dsim, PANEL_IOC_SLEEP_OUT, NULL);
 	if (ret) {
@@ -1045,6 +1057,8 @@ skip_sleep_out:
 enable_err:
 	return ret;
 }
+
+
 
 static int dsim_disable(struct dsim_device *dsim)
 {
@@ -1064,7 +1078,7 @@ static int dsim_disable(struct dsim_device *dsim)
 	if ((dsim->lcd_info->op_mode == 2) && (dsim->id != 0)) {
 		goto skip_sleep_in;
 	}
-	
+
 	ret = dsim_ioctl_panel(dsim, PANEL_IOC_SLEEP_IN, NULL);
 	if (ret) {
 		dsim_err("DSIM:ERR:%s:failed to panel off\n", __func__);
@@ -1085,7 +1099,7 @@ skip_sleep_in:
 	if ((dsim->lcd_info->op_mode == 2) && (dsim->id != 0)) {
 		goto skip_power_off;
 	}
-	
+
 	power_off = 0;
 	ret = dsim_ioctl_panel(dsim, PANEL_IOC_SET_POWER, (void*)&power_off);
 	if (ret) {
@@ -1134,7 +1148,7 @@ static int dsim_doze(struct dsim_device *dsim)
 	if (ret) {
 		dsim_err("DSIM:ERR:%s:failed to panel on\n", __func__);
 	}
-	
+
 doze_err:
 	return ret;
 }
@@ -1354,7 +1368,7 @@ static void dsim_init_subdev(struct dsim_device *dsim)
 	v4l2_set_subdevdata(sd, dsim);
 }
 
-#if 0 
+#if 0
 static int __match_panel_v4l2_subdev(struct device *dev, void *data)
 {
 	struct panel_device *panel;
@@ -1364,11 +1378,11 @@ static int __match_panel_v4l2_subdev(struct device *dev, void *data)
 
 	panel = (struct panel_device *)dev_get_drvdata(dev);
 	if (panel == NULL) {
-		dsim_err("DSIM:ERR:%s:failed to get panel's v4l2 sub dev\n", __func__);	
+		dsim_err("DSIM:ERR:%s:failed to get panel's v4l2 sub dev\n", __func__);
 	}
 	dsim->panel_sd = &panel->sd;
-	
-	return 0;	
+
+	return 0;
 }
 #endif
 
@@ -1433,7 +1447,7 @@ static int dsim_panel_put_ops(struct dsim_device *dsim)
 		return ret;
 	}
 
-	return ret;	
+	return ret;
 }
 
 
@@ -1450,7 +1464,7 @@ static int __find_panel_v4l2_subdev(struct device *dev, void *data)
 
 	panel = (struct panel_device *)dev_get_drvdata(dev);
 	if (panel == NULL) {
-		dsim_err("DSIM:ERR:%s:failed to get panel's v4l2 sub dev\n", __func__);	
+		dsim_err("DSIM:ERR:%s:failed to get panel's v4l2 sub dev\n", __func__);
 	}
 	sprintf(sd_name, "panel-sd.%d", dsim->id);
 
@@ -1459,7 +1473,7 @@ static int __find_panel_v4l2_subdev(struct device *dev, void *data)
 		dsim->panel_sd = &panel->sd;
 		dsim_info("DSIM:INFO:matched panel drv name : %s\n", dsim->panel_sd->name);
 	}
-	return 0;	
+	return 0;
 }
 
 
@@ -1488,7 +1502,7 @@ static int dsim_probe_panel(struct dsim_device *dsim)
 		dsim_err("DSIM:ERR:%sfailed to find driver\n", __func__);
 		return -ENODEV;
 	}
-	
+
 	ret = dsim_panel_probe(dsim);
 	if (ret) {
 		dsim_err("DSIM:ERR:%s:failed to probe panel", __func__);
@@ -1516,7 +1530,7 @@ do_exit:
 static int dsim_cmd_sysfs_write(struct dsim_device *dsim, bool on)
 {
 	int ret = 0;
-	char write_buf;	
+	char write_buf;
 
 	if (on)
 		write_buf = MIPI_DCS_SET_DISPLAY_ON;
@@ -1624,7 +1638,7 @@ static int dsim_parse_dt(struct dsim_device *dsim, struct device *dev)
 	}
 
 	dsim->dev = dev;
-#if 0 
+#if 0
 	dsim_get_gpios(dsim);
 
 	dsim_parse_lcd_info(dsim);
@@ -1696,7 +1710,7 @@ static int dsim_init_resources(struct dsim_device *dsim, struct platform_device 
 		dsim_err("failed to get version addr\n");
 		return -EINVAL;
 	}
-	
+
 	return 0;
 }
 
@@ -1759,7 +1773,7 @@ static int dsim_probe(struct platform_device *pdev)
 	dsim_init_enable(dsim);
 
 	/* TODO: If you want to enable DSIM BIST mode. you must turn on LCD here */
-#if 0 
+#if 0
 	ret = call_panel_ops(dsim, probe, dsim);
 	/* call_panel_ops(dsim, displayon, dsim); */
 #else

@@ -27,6 +27,7 @@ void s5p_mfc_cmd_host2risc(struct s5p_mfc_dev *dev, int cmd)
 	MFC_TRACE_DEV(">> CMD : %d, (dev:0x%lx, bits:%lx, owned:%d, wl:%d, trans:%d)\n",
 			cmd, dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
 			dev->hwlock.wl_count, dev->hwlock.transfer_owner);
+	MFC_TRACE_LOG_DEV("C%d", cmd);
 
 	trace_mfc_frame_start(dev->curr_ctx, cmd, 0, 0);
 	/* Reset RISC2HOST command except nal q stop command */
@@ -42,6 +43,9 @@ void s5p_mfc_cmd_host2risc(struct s5p_mfc_dev *dev, int cmd)
 		s5p_mfc_dbg_set_addr(dev);
 		s5p_mfc_dbg_enable(dev);
 	}
+
+	dev->last_cmd = cmd;
+	dev->last_cmd_time = ktime_to_timeval(ktime_get());
 
 	/* Issue the command */
 	MFC_WRITEL(cmd, S5P_FIMV_HOST2RISC_CMD);

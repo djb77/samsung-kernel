@@ -388,6 +388,8 @@ struct mmc_host {
 	} embedded_sdio_data;
 #endif
 
+	int			pm_progress;	/* pm_notify is in progress */
+
 	unsigned long		private[0] ____cacheline_aligned;
 };
 

@@ -29,7 +29,7 @@
 #include "mm.h"
 
 static struct kmem_cache *pgd_cache;
-#ifndef CONFIG_TIMA_RKP
+#ifndef CONFIG_RKP
 pgd_t *pgd_alloc(struct mm_struct *mm)
 {
 	if (PGD_SIZE == PAGE_SIZE)
@@ -53,7 +53,7 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 	return ret;
 }
 #endif
-#ifndef  CONFIG_TIMA_RKP
+#ifndef CONFIG_RKP
 void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 {
 	if (PGD_SIZE == PAGE_SIZE)
@@ -69,7 +69,8 @@ void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 		rkp_call(RKP_PGD_FREE, (unsigned long)pgd, 0, 0, 0, 0);
 	/* if pgd memory come from read only buffer, the put it back */
 	/*TODO: use a macro*/
-	if((unsigned long)pgd >= (unsigned long)RKP_RBUF_VA && (unsigned long)pgd < ((unsigned long)RKP_RBUF_VA +  TIMA_ROBUF_SIZE))
+	if ((unsigned long)pgd >= (unsigned long)RKP_RBUF_VA &&
+		(unsigned long)pgd < ((unsigned long)RKP_RBUF_VA + RKP_ROBUF_SIZE))
 		rkp_ro_free((void*)pgd);
 	else
 	{

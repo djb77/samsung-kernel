@@ -217,6 +217,8 @@ static int verity_handle_err(struct dm_verity *v, enum verity_block_type type,
 	u8 *data;
 	u8 *page;
 
+	int i;
+	char hex_str[65] = {0, };
 	/* Corruption should be visible in device status in all modes */
 	v->hash_failed = 1;
 	
@@ -242,8 +244,12 @@ static int verity_handle_err(struct dm_verity *v, enum verity_block_type type,
 		BUG();
 	}
 
-	DMERR("%s: %s block %llu is corrupted", v->data_dev->name, type_str,
-		block);
+	DMERR("%s: %s block %llu is corrupted", v->data_dev->name, type_str, block);
+	
+	for(i=0 ; i < v->salt_size; i++){
+		sprintf(hex_str + (i * 2), "%02x", *(v->salt + i)); 	
+	}
+	DMERR("dm-verity salt: %s", hex_str);
 
 	if(!(strcmp(type_str, "metadata"))){
 		data = dm_bufio_read(v->bufio, block, &buf);

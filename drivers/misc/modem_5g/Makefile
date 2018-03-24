@@ -29,3 +29,9 @@ obj-$(CONFIG_LINK_DEVICE_SPI) += link_device_spi.o
 obj-$(CONFIG_LINK_CONTROL_MSG_IOSM) += link_ctrlmsg_iosm.o
 obj-$(CONFIG_LINK_CONTROL_MSG_COMMAND) += link_ctrlmsg_command.o
 obj-$(CONFIG_DEBUG_PKTLOG) += modem_pktlog.o
+
+ifeq ($(CONFIG_RPS), y)
+ifeq ($(CONFIG_ARGOS), y)
+obj-y += modem_argos_notifier.o
+endif
+endif

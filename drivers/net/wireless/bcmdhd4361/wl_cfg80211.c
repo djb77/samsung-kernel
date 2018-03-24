@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.c 721152 2017-09-13 11:53:35Z $
+ * $Id: wl_cfg80211.c 742436 2018-01-22 08:33:32Z $
  */
 /* */
 #include <typedefs.h>
@@ -798,6 +798,10 @@ static s32 wl_update_bss_info(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 static chanspec_t wl_cfg80211_get_shared_freq(struct wiphy *wiphy);
 s32 wl_cfg80211_channel_to_freq(u32 channel);
 
+#ifdef WL_IRQSET
+static void wl_irq_set_work_handler(struct work_struct *work);
+#define IRQ_SET_DURATION 23000
+#endif /* WL_IRQSET */
 
 static void wl_cfg80211_work_handler(struct work_struct *work);
 static s32 wl_add_keyext(struct wiphy *wiphy, struct net_device *dev,
@@ -885,8 +889,8 @@ int dhd_start_xmit(struct sk_buff *skb, struct net_device *net);
 int init_roam_cache(struct bcm_cfg80211 *cfg, int ioctl_ver);
 void reset_roam_cache(struct bcm_cfg80211 *cfg);
 void add_roam_cache(struct bcm_cfg80211 *cfg, wl_bss_info_t *bi);
-int  get_roam_channel_list(int target_chan,
-	chanspec_t *channels, const wlc_ssid_t *ssid, int ioctl_ver);
+int  get_roam_channel_list(int target_chan, chanspec_t *channels,
+	int n_channels, const wlc_ssid_t *ssid, int ioctl_ver);
 void print_roam_cache(struct bcm_cfg80211 *cfg);
 void set_roam_band(int band);
 void update_roam_cache(struct bcm_cfg80211 *cfg, int ioctl_ver);
@@ -1190,7 +1194,7 @@ static void wl_add_remove_pm_enable_work(struct bcm_cfg80211 *cfg,
 	 * work getting scheduled.
 	 */
 	if (delayed_work_pending(&cfg->pm_enable_work)) {
-		cancel_delayed_work_sync(&cfg->pm_enable_work);
+		cancel_delayed_work(&cfg->pm_enable_work);
 		DHD_PM_WAKE_UNLOCK(cfg->pub);
 	}
 
@@ -5300,11 +5304,6 @@ static u8 connect_req_bssid[6];
 static u8 broad_bssid[6];
 #endif /* ESCAN_RESULT_PATCH */
 
-
-#ifdef ROAM_CHANNEL_CACHE
-#define MAX_ROAM_CACHE_NUM 100
-#endif /* ROAM_CHANNEL_CACHE */
-
 #if defined(CUSTOM_SET_CPUCORE) || defined(CONFIG_TCPACK_FASTTX)
 static bool wl_get_chan_isvht80(struct net_device *net, dhd_pub_t *dhd)
 {
@@ -5389,7 +5388,7 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 	struct ether_addr bssid;
 	s32 bssidx = -1;
 #ifdef ROAM_CHANNEL_CACHE
-	chanspec_t chanspec_list[MAX_ROAM_CACHE_NUM];
+	chanspec_t chanspec_list[MAX_ROAM_CHANNEL];
 #endif /* ROAM_CHANNEL_CACHE */
 #if (defined(BCM4334_CHIP) || defined(BCM4359_CHIP) || !defined(ESCAN_RESULT_PATCH))
 	int wait_cnt;
@@ -5399,7 +5398,7 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 	BCM_REFERENCE(dhdp);
 
 #ifdef ROAM_CHANNEL_CACHE
-	memset(chanspec_list, 0, (sizeof(chanspec_t) * MAX_ROAM_CACHE_NUM));
+	memset(chanspec_list, 0, (sizeof(chanspec_t) * MAX_ROAM_CHANNEL));
 #endif /* ROAM_CHANNEL_CACHE */
 #if defined(SUPPORT_RANDOM_MAC_SCAN)
 	wl_cfg80211_set_random_mac(dev, FALSE);
@@ -5609,7 +5608,7 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		memcpy(ssid.SSID, sme->ssid, sme->ssid_len);
 		ssid.SSID_len = sme->ssid_len;
 		chan_cnt = get_roam_channel_list(cfg->channel, chanspec_list,
-			&ssid, ioctl_version);
+			MAX_ROAM_CHANNEL, &ssid, ioctl_version);
 		WL_DBG(("Using roam cache channel set. channel count:%d \n", chan_cnt));
 	}
 #endif /* ROAM_CHANNEL_CACHE */
@@ -6665,7 +6664,7 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 		/* Query RSSI sum across antennas */
 		memset(&rssi_ant_mimo, 0, sizeof(rssi_ant_mimo));
 		err = wl_get_rssi_per_ant(dev, dev->name, NULL, &rssi_ant_mimo);
-		if (err) {
+		if (err && err != BCME_UNSUPPORTED) {
 			WL_ERR(("Could not get rssi sum (%d)\n", err));
 			goto get_station_err;
 		}
@@ -9881,6 +9880,7 @@ wl_cfg80211_set_scb_timings(
 	int err;
 	u32 ps_pretend;
 	wl_scb_probe_t scb_probe;
+	u32 ps_pretend_retries;
 
 	bzero(&scb_probe, sizeof(wl_scb_probe_t));
 	scb_probe.scb_timeout = WL_SCB_TIMEOUT;
@@ -9892,6 +9892,20 @@ wl_cfg80211_set_scb_timings(
 	if (unlikely(err)) {
 		WL_ERR(("set 'scb_probe' failed, error = %d\n", err));
 		return err;
+	}
+
+	ps_pretend_retries = WL_PSPRETEND_RETRY_LIMIT;
+	err = wldev_iovar_setint(dev, "pspretend_retry_limit", ps_pretend_retries);
+	if (unlikely(err)) {
+		if (err == BCME_UNSUPPORTED) {
+			/* Ignore error if fw doesn't support the iovar */
+			WL_DBG(("set 'pspretend_retry_limit %d' failed, error = %d\n",
+				ps_pretend_retries, err));
+		} else {
+			WL_ERR(("set 'pspretend_retry_limit %d' failed, error = %d\n",
+				ps_pretend_retries, err));
+			return err;
+		}
 	}
 
 	ps_pretend = MAX(WL_SCB_MAX_PROBE / 2, WL_MIN_PSPRETEND_THRESHOLD);
@@ -11237,8 +11251,9 @@ static s32 wl_inform_bss(struct bcm_cfg80211 *cfg)
 		add_roam_cache(cfg, bi);
 #endif /* ROAM_CHANNEL_CACHE */
 		err = wl_inform_single_bss(cfg, bi, false);
-		if (unlikely(err))
-			break;
+		if (unlikely(err)) {
+			WL_ERR(("bss inform failed\n"));
+		}
 	}
 	preempt_enable();
 #ifdef ROAM_CHANNEL_CACHE
@@ -11355,7 +11370,8 @@ static s32 wl_inform_single_bss(struct bcm_cfg80211 *cfg, struct wl_bss_info *bi
 	cbss = cfg80211_inform_bss_frame(wiphy, channel, mgmt,
 		le16_to_cpu(notif_bss_info->frame_len), signal, aflags);
 	if (unlikely(!cbss)) {
-		WL_ERR(("cfg80211_inform_bss_frame error\n"));
+		WL_ERR(("cfg80211_inform_bss_frame error bssid " MACDBG " channel %d \n",
+			MAC2STRDBG((u8*)(&bi->BSSID)), notif_bss_info->channel));
 		err = -EINVAL;
 		goto out_err;
 	}
@@ -12237,21 +12253,18 @@ int wl_get_bss_info(struct bcm_cfg80211 *cfg, struct net_device *dev, uint8 *mac
 
 	if (ie) {
 		snprintf(cfg->bss_info, GET_BSS_INFO_LEN,
-				"%02x:%02x:%02x %d %s %d %s %d %d %d %d %d %d %s %s %d %d",
-				eabuf[0], eabuf[1], eabuf[2],
-				freq, wf_chspec_to_bw_str(bi->chanspec),
-				dtoh32(bi->RSSI), rate_str, mode_80211, nss,
-				ie_mu_mimo_cap, ie_11u_rel_num,
-				bi->SNR, bi->phy_noise, akm_str, roam_count_str,
+				MACOUIDBG" %d %s %d %s %d %d %d %d %d %d %s %s %d %d",
+				MACOUI2STRDBG(eabuf), freq, wf_chspec_to_bw_str(bi->chanspec),
+				dtoh32(bi->RSSI), rate_str, mode_80211, nss, ie_mu_mimo_cap,
+				ie_11u_rel_num, bi->SNR, bi->phy_noise, akm_str, roam_count_str,
 				support_11kv, flag_11kv);
 	} else {
 		//ie_mu_mimo_cap and ie_11u_rel_num is unknow.
 		snprintf(cfg->bss_info, GET_BSS_INFO_LEN,
-				"%02x:%02x:%02x %d %s %d %s %d %d x x %d %d %s %s x x",
-				eabuf[0], eabuf[1], eabuf[2],
-				freq, wf_chspec_to_bw_str(bi->chanspec),
-				dtoh32(bi->RSSI), rate_str, mode_80211, nss,
-				bi->SNR, bi->phy_noise, akm_str, roam_count_str);
+				MACOUIDBG" %d %s %d %s %d %d x x %d %d %s %s x x",
+				MACOUI2STRDBG(eabuf), freq, wf_chspec_to_bw_str(bi->chanspec),
+				dtoh32(bi->RSSI), rate_str, mode_80211, nss, bi->SNR,
+				bi->phy_noise, akm_str, roam_count_str);
 	}
 
 	CFG80211_PUT_BSS(wiphy, bss);
@@ -12327,6 +12340,7 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 					wl_bss_roaming_done(cfg, ndev, e, data);
 				}
 
+				wl_bss_connect_done(cfg, ndev, e, data, true);
 				if (ndev == bcmcfg_to_prmry_ndev(cfg)) {
 					vndr_oui_num = wl_vndr_ies_get_vendor_oui(cfg,
 						ndev, vndr_oui, ARRAYSIZE(vndr_oui));
@@ -12340,8 +12354,6 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 					MACDBG " %s%s\n", MAC2STRDBG((const u8*)(&e->addr)),
 					vndr_oui_num > 0 ? "vndr_oui: " : "",
 					vndr_oui_num > 0 ? vndr_oui : ""));
-
-				wl_bss_connect_done(cfg, ndev, e, data, true);
 				WL_DBG(("joined in BSS network \"%s\"\n",
 					((struct wlc_ssid *)
 					 wl_read_prof(cfg, ndev, WL_PROF_SSID))->SSID));
@@ -12434,19 +12446,23 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 			if (wl_get_drv_status(cfg, CONNECTED, ndev)) {
 				scb_val_t scbval;
 				u8 *curbssid = wl_read_prof(cfg, ndev, WL_PROF_BSSID);
-				s32 reason = 0;
+				uint32 reason = 0;
 				struct ether_addr bssid_dongle = {{0, 0, 0, 0, 0, 0}};
 				struct ether_addr bssid_null = {{0, 0, 0, 0, 0, 0}};
 
-				if (event == WLC_E_DEAUTH_IND || event == WLC_E_DISASSOC_IND)
+				if (event == WLC_E_DEAUTH_IND || event == WLC_E_DISASSOC_IND) {
 					reason = ntoh32(e->reason);
+					if (reason > WLC_E_DEAUTH_MAX_REASON) {
+						WL_ERR(("Event %d original reason is %d, "
+							"changed 0xFF\n", event, reason));
+						reason = WLC_E_DEAUTH_MAX_REASON;
+					}
+				}
 #ifdef SET_SSID_FAIL_CUSTOM_RC
 				if (event == WLC_E_SET_SSID) {
 					reason = SET_SSID_FAIL_CUSTOM_RC;
 				}
 #endif /* SET_SSID_FAIL_CUSTOM_RC */
-				/* WLAN_REASON_UNSPECIFIED is used for hang up event in Android */
-				reason = (reason == WLAN_REASON_UNSPECIFIED)? 0 : reason;
 
 				WL_ERR(("link down if %s may call cfg80211_disconnected. "
 					"event : %d, reason=%d from " MACDBG "\n",
@@ -13109,7 +13125,7 @@ static s32 wl_ch_to_chanspec(struct net_device *dev, int ch, struct wl_join_para
 			/* If ROAM CACHE is enabled, use the cached channel list */
 			int n_channels;
 			n_channels = get_roam_channel_list(ch, join_params->params.chanspec_list,
-				&join_params->ssid, ioctl_version);
+				MAX_ROAM_CHANNEL, &join_params->ssid, ioctl_version);
 			join_params->params.chanspec_num = htod32(n_channels);
 			*join_params_size += WL_ASSOC_PARAMS_FIXED_SIZE +
 				join_params->params.chanspec_num * sizeof(chanspec_t);
@@ -13326,7 +13342,10 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	wl_get_assoc_ies(cfg, ndev);
 	wl_update_prof(cfg, ndev, NULL, (const void *)(e->addr.octet), WL_PROF_BSSID);
 	curbssid = wl_read_prof(cfg, ndev, WL_PROF_BSSID);
-	wl_update_bss_info(cfg, ndev, true);
+	if ((err = wl_update_bss_info(cfg, ndev, true)) != BCME_OK) {
+		WL_ERR(("failed to update bss info, err=%d\n", err));
+		goto fail;
+	}
 	wl_update_pmklist(ndev, cfg->pmk_list, err);
 
 	channel = (u32 *)wl_read_prof(cfg, ndev, WL_PROF_CHAN);
@@ -13388,6 +13407,7 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	}
 #endif /* WBTEXT */
 
+fail:
 	return err;
 }
 
@@ -13439,6 +13459,9 @@ wl_bss_connect_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	s32 err = 0;
 	u8 *curbssid = wl_read_prof(cfg, ndev, WL_PROF_BSSID);
 	dhd_pub_t *dhdp;
+#ifdef WL_IRQSET
+	int delta_time = 0;
+#endif /* WL_IRQSET */
 
 	dhdp = (dhd_pub_t *)(cfg->pub);
 	BCM_REFERENCE(dhdp);
@@ -13518,6 +13541,14 @@ wl_bss_connect_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 				dhd_set_cpucore(dhdp, TRUE);
 			}
 #endif /* CUSTOM_SET_CPUCORE */
+#ifdef WL_IRQSET
+			dhd_irq_set_affinity(dhdp);
+			delta_time = IRQ_SET_DURATION - local_clock() / USEC_PER_SEC;
+			if (delta_time > 0) {
+			    schedule_delayed_work(&cfg->irq_set_work,
+				    msecs_to_jiffies((const unsigned int)delta_time));
+			}
+#endif /* WL_IRQSET */
 			memset(&cfg->last_roamed_addr, 0, ETHER_ADDR_LEN);
 		}
 
@@ -16307,6 +16338,9 @@ s32 wl_cfg80211_attach(struct net_device *ndev, void *context)
 #endif /* WL_ENABLE_P2P_IF || WL_NEWCFG_PRIVCMD_SUPPORT */
 
 	INIT_DELAYED_WORK(&cfg->pm_enable_work, wl_cfg80211_work_handler);
+#ifdef WL_IRQSET
+	INIT_DELAYED_WORK(&cfg->irq_set_work, wl_irq_set_work_handler);
+#endif /* WL_IRQSET */
 	mutex_init(&cfg->pm_sync);
 
 #if defined(STAT_REPORT)
@@ -16331,6 +16365,9 @@ void wl_cfg80211_detach(struct bcm_cfg80211 *cfg)
 		return;
 
 	wl_add_remove_pm_enable_work(cfg, WL_PM_WORKQ_DEL);
+#ifdef WL_IRQSET
+	cancel_delayed_work_sync(&cfg->irq_set_work);
+#endif /* WL_IRQSET */
 
 #if defined(COEX_DHCP)
 	wl_cfg80211_btcoex_deinit();
@@ -17214,6 +17251,9 @@ static s32 __wl_cfg80211_down(struct bcm_cfg80211 *cfg)
 
 	/* Delete pm_enable_work */
 	wl_add_remove_pm_enable_work(cfg, WL_PM_WORKQ_DEL);
+#ifdef WL_IRQSET
+	cancel_delayed_work_sync(&cfg->irq_set_work);
+#endif /* WL_IRQSET */
 
 	/* clear all the security setting on primary Interface */
 	wl_cfg80211_clear_security(cfg);
@@ -17503,12 +17543,15 @@ int wl_cfg80211_hang(struct net_device *dev, u16 reason)
 s32 wl_cfg80211_down(struct net_device *dev)
 {
 	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
-	s32 err;
+	s32 err = BCME_ERROR;
 
 	WL_DBG(("In\n"));
-	mutex_lock(&cfg->usr_sync);
-	err = __wl_cfg80211_down(cfg);
-	mutex_unlock(&cfg->usr_sync);
+
+	if (cfg) {
+		mutex_lock(&cfg->usr_sync);
+		err = __wl_cfg80211_down(cfg);
+		mutex_unlock(&cfg->usr_sync);
+	}
 
 	return err;
 }
@@ -19760,10 +19803,9 @@ wl_cfg80211_parse_vndr_ies(u8 *parse, u32 len,
 			memcpy(&parsed_info->vndrie, vndrie, sizeof(vndr_ie_t));
 			vndr_ies->count = count;
 
-			WL_DBG(("\t ** OUI %02x %02x %02x, type 0x%02x len:%d\n",
-			parsed_info->vndrie.oui[0], parsed_info->vndrie.oui[1],
-			parsed_info->vndrie.oui[2], parsed_info->vndrie.data[0],
-			parsed_info->ie_len));
+			WL_DBG(("\t ** OUI "MACOUIDBG", type 0x%02x len:%d\n",
+				MACOUI2STRDBG(parsed_info->vndrie.oui),
+				parsed_info->vndrie.data[0], parsed_info->ie_len));
 		}
 end:
 		ie = bcm_next_tlv(ie, &remained_len);
@@ -19789,10 +19831,8 @@ wl_find_vndr_ies_specific_vender(struct bcm_cfg80211 *cfg,
 				vndr_info_list = &vndr_ies.ie_info[i];
 				if (!bcmp(vndr_info_list->vndrie.oui,
 						(u8*)vndr_oui, DOT11_OUI_LEN)) {
-					WL_ERR(("Find OUI %02x %02x %02x\n",
-						vndr_info_list->vndrie.oui[0],
-						vndr_info_list->vndrie.oui[1],
-						vndr_info_list->vndrie.oui[2]));
+					WL_ERR(("Find OUI "MACOUIDBG"\n",
+						MACOUI2STRDBG(vndr_info_list->vndrie.oui)));
 					ret = TRUE;
 					break;
 				}
@@ -20206,10 +20246,9 @@ _Pragma("GCC diagnostic pop")
 				struct parsed_vndr_ie_info *vndrie_info =
 				&old_vndr_ies.ie_info[i];
 
-				WL_INFORM(("DELETED ID : %d, Len: %d , OUI:%02x:%02x:%02x\n",
+				WL_INFORM(("DELETED ID : %d, Len: %d , OUI:"MACOUIDBG"\n",
 					vndrie_info->vndrie.id, vndrie_info->vndrie.len,
-					vndrie_info->vndrie.oui[0], vndrie_info->vndrie.oui[1],
-					vndrie_info->vndrie.oui[2]));
+					MACOUI2STRDBG(vndrie_info->vndrie.oui)));
 
 				del_add_ie_buf_len = wl_cfgp2p_vndr_ie(cfg, curr_ie_buf,
 					pktflag, vndrie_info->vndrie.oui,
@@ -20235,11 +20274,10 @@ _Pragma("GCC diagnostic pop")
 				struct parsed_vndr_ie_info *vndrie_info =
 					&new_vndr_ies.ie_info[i];
 
-				WL_INFORM(("ADDED ID : %d, Len: %d(%d), OUI:%02x:%02x:%02x\n",
+				WL_INFORM(("ADDED ID : %d, Len: %d(%d), OUI:"MACOUIDBG"\n",
 					vndrie_info->vndrie.id, vndrie_info->vndrie.len,
 					vndrie_info->ie_len - 2,
-					vndrie_info->vndrie.oui[0], vndrie_info->vndrie.oui[1],
-					vndrie_info->vndrie.oui[2]));
+					MACOUI2STRDBG(vndrie_info->vndrie.oui)));
 
 				del_add_ie_buf_len = wl_cfgp2p_vndr_ie(cfg, curr_ie_buf,
 					pktflag, vndrie_info->vndrie.oui,
@@ -21944,10 +21982,8 @@ wl_cfg80211_recv_nbr_resp(struct net_device *dev, uint8 *body, int body_len)
 		}
 
 		ch = CH20MHZ_CHSPEC(nbr_rep_ie->channel);
-		WL_DBG(("ch:%d, bssid:%02x:%02x:%02x:%02x:%02x:%02x\n",
-			ch, nbr_rep_ie->bssid.octet[0], nbr_rep_ie->bssid.octet[1],
-			nbr_rep_ie->bssid.octet[2],	nbr_rep_ie->bssid.octet[3],
-			nbr_rep_ie->bssid.octet[4],	nbr_rep_ie->bssid.octet[5]));
+		WL_DBG(("ch:%d, bssid:"MACDBG"\n",
+			ch, MAC2STRDBG(nbr_rep_ie->bssid.octet)));
 
 		/* get RCC list */
 		error = wldev_iovar_getbuf(dev, "roamscan_channels", 0, 0,
@@ -22110,3 +22146,14 @@ wl_set_rssi_logging(struct net_device *dev, void *param)
 	return err;
 }
 #endif /* SUPPORT_RSSI_SUM_REPORT */
+#ifdef WL_IRQSET
+static void wl_irq_set_work_handler(struct work_struct * work)
+{
+    struct bcm_cfg80211 *cfg = NULL;
+    BCM_SET_CONTAINER_OF(cfg, work, struct bcm_cfg80211, irq_set_work.work);
+
+    if (cfg) {
+		dhd_irq_set_affinity(cfg->pub);
+    }
+}
+#endif /* WL_IRQSET */

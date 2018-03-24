@@ -406,6 +406,11 @@ static int abox_wdma_mmap(struct snd_pcm_substream *substream,
 
 	dev_info(dev, "%s[%d]\n", __func__, id);
 
+	/* Increased cpu gear for sound camp.
+	 * Only sound camp uses mmap now.
+	 */
+	abox_request_cpu_gear(dev, data->abox_data, dev, 2);
+
 	return dma_mmap_writecombine(dev, vma,
 			runtime->dma_area,
 			runtime->dma_addr,

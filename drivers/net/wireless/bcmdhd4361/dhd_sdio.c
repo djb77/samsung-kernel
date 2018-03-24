@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_sdio.c 705650 2017-06-19 03:00:50Z $
+ * $Id: dhd_sdio.c 733461 2017-11-28 12:05:07Z $
  */
 
 #include <typedefs.h>
@@ -2536,6 +2536,9 @@ dhdsdio_sendfromq(dhd_bus_t *bus, uint maxframes)
 #ifdef DHD_LOSSLESS_ROAMING
 	uint8 *pktdata;
 	struct ether_header *eh;
+#ifdef BDC
+	struct bdc_header *bdc_header;
+#endif
 #endif /* DHD_LOSSLESS_ROAMING */
 
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
@@ -2580,6 +2583,7 @@ dhdsdio_sendfromq(dhd_bus_t *bus, uint maxframes)
 			pktdata = (uint8 *)PKTDATA(osh, pkts[i]);
 #ifdef BDC
 			/* Skip BDC header */
+			bdc_header = (struct bdc_header *)pktdata;
 			pktdata += BDC_HEADER_LEN + ((struct bdc_header *)pktdata)->dataOffset;
 #endif
 			eh = (struct ether_header *)pktdata;
@@ -2589,6 +2593,11 @@ dhdsdio_sendfromq(dhd_bus_t *bus, uint maxframes)
 				/* Restore to original priority for 802.1X packet */
 				if (prio == PRIO_8021D_NC) {
 					PKTSETPRIO(pkts[i], dhd->prio_8021x);
+#ifdef BDC
+					/* Restore to original priority in BDC header */
+					bdc_header->priority =
+						(dhd->prio_8021x & BDC_PRIORITY_MASK);
+#endif
 				}
 			}
 #endif /* DHD_LOSSLESS_ROAMING */
@@ -7609,6 +7618,8 @@ dhdsdio_chipmatch(uint16 chipid)
 		return TRUE;
 	if (chipid == BCM4358_CHIP_ID)
 		return TRUE;
+	if (chipid == BCM43569_CHIP_ID)
+		return TRUE;
 	if (chipid == BCM43430_CHIP_ID)
 		return TRUE;
 	if (chipid == BCM43018_CHIP_ID)
@@ -7619,7 +7630,6 @@ dhdsdio_chipmatch(uint16 chipid)
 		return TRUE;
 	if (chipid == BCM4364_CHIP_ID)
 			return TRUE;
-
 	if (chipid == BCM43012_CHIP_ID)
 		return TRUE;
 
@@ -8295,6 +8305,7 @@ dhdsdio_probe_attach(struct dhd_bus *bus, osl_t *osh, void *sdh, void *regsva,
 			case BCM4350_CHIP_ID:
 			case BCM4354_CHIP_ID:
 			case BCM4358_CHIP_ID:
+			case BCM43569_CHIP_ID:
 				bus->dongle_ram_base = CR4_4350_RAM_BASE;
 				break;
 			case BCM4360_CHIP_ID:
@@ -9910,6 +9921,7 @@ static int
 concate_revision_bcm43455(dhd_bus_t *bus, char *fw_path, char *nv_path)
 {
 	char chipver_tag[10] = {0, };
+	uint32 chip_rev = 0;
 #ifdef SUPPORT_MULTIPLE_BOARD_REV_FROM_DT
 	int base_system_rev_for_nv = 0;
 #endif /* SUPPORT_MULTIPLE_BOARD_REV_FROM_DT */
@@ -9918,6 +9930,15 @@ concate_revision_bcm43455(dhd_bus_t *bus, char *fw_path, char *nv_path)
 	if (bus->sih->chip != BCM4345_CHIP_ID) {
 		DHD_ERROR(("%s:Chip is not BCM43455!\n", __FUNCTION__));
 		return -1;
+	}
+
+	chip_rev = bus->sih->chiprev;
+	if (chip_rev == 0x9) {
+		DHD_ERROR(("----- CHIP 43456 -----\n"));
+		strcat(fw_path, "_c5");
+		strcat(nv_path, "_c5");
+	} else {
+		DHD_ERROR(("----- CHIP 43455  -----\n"));
 	}
 #ifdef SUPPORT_MULTIPLE_BOARD_REV_FROM_DT
 	base_system_rev_for_nv = dhd_get_system_rev();

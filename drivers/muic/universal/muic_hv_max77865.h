@@ -140,7 +140,7 @@
 #define HVRXBYTE_MAX			16
 
 /* MAX77865 AFC charger W/A Check NUM */
-#define AFC_CHARGER_WA_PING		3
+#define AFC_CHARGER_WA_PING		5
 
 /* MAX77865 MPing miss SW Workaround - delay time */
 #define MPING_MISS_WA_TIME		2000

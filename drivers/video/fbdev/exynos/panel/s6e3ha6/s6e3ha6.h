@@ -151,6 +151,9 @@
 #define S6E3HA6_NIGHT_MODE_OFS	(S6E3HA6_SCR_CR_OFS)
 #define S6E3HA6_NIGHT_MODE_LEN	(24)
 
+#define S6E3HA6_COLOR_LENS_OFS	(S6E3HA6_SCR_CR_OFS)
+#define S6E3HA6_COLOR_LENS_LEN	(24)
+
 #define S6E3HA6_TRANS_MODE_OFS	(16)
 #define S6E3HA6_TRANS_MODE_LEN	(1)
 #endif /* CONFIG_EXYNOS_DECON_MDNIE_LITE */
@@ -231,7 +234,9 @@ enum {
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
 	READ_GRAM_CHECKSUM,
 #endif
-
+#ifdef CONFIG_DSC_DECODE_CRC
+	READ_DSC_CRC,
+#endif
 };
 
 enum {
@@ -261,6 +266,9 @@ enum {
 #endif
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
 	RES_GRAM_CHECKSUM,
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+	RES_DSC_DECODE_CRC,
 #endif
 
 };
@@ -294,6 +302,12 @@ static u8 S6E3HA6_POC_CTRL[S6E3HA6_POC_CTRL_LEN];
 static u8 S6E3HA6_GRAM_CHECKSUM[S6E3HA6_GRAM_CHECKSUM_LEN];
 #endif
 
+#ifdef CONFIG_DSC_DECODE_CRC
+#define S6E3HA6_DSC_CRC_REG 0x14
+#define S6E3HA6_DSC_CRC_OFS 0
+#define S6E3HA6_DSC_CRC_LEN 2
+static u8 S6E3HA6_DSC_CRC[S6E3HA6_DSC_CRC_LEN];
+#endif
 static struct rdinfo s6e3ha6_rditbl[] = {
 	[READ_ID] = RDINFO_INIT(id, DSI_PKT_TYPE_RD, S6E3HA6_ID_REG, S6E3HA6_ID_OFS, S6E3HA6_ID_LEN),
 	[READ_COORDINATE] = RDINFO_INIT(coordinate, DSI_PKT_TYPE_RD, S6E3HA6_COORDINATE_REG, S6E3HA6_COORDINATE_OFS, S6E3HA6_COORDINATE_LEN),
@@ -321,6 +335,10 @@ static struct rdinfo s6e3ha6_rditbl[] = {
 #endif
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
 	[READ_GRAM_CHECKSUM] = RDINFO_INIT(gram_checksum, DSI_PKT_TYPE_RD, S6E3HA6_GRAM_CHECKSUM_REG, S6E3HA6_GRAM_CHECKSUM_OFS, S6E3HA6_GRAM_CHECKSUM_LEN),
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+	[READ_DSC_CRC] = RDINFO_INIT(dsc_crc, DSI_PKT_TYPE_RD,
+		S6E3HA6_DSC_CRC_REG, S6E3HA6_DSC_CRC_OFS, S6E3HA6_DSC_CRC_LEN),
 #endif
 };
 
@@ -351,6 +369,9 @@ static DEFINE_RESUI(poc_ctrl, &s6e3ha6_rditbl[READ_POC_CTRL], 0);
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
 static DEFINE_RESUI(gram_checksum, &s6e3ha6_rditbl[READ_GRAM_CHECKSUM], 0);
 #endif
+#ifdef CONFIG_DSC_DECODE_CRC
+static DEFINE_RESUI(dsc_crc, &s6e3ha6_rditbl[READ_DSC_CRC], 0);
+#endif
 
 static struct resinfo s6e3ha6_restbl[] = {
 	[RES_ID] = RESINFO_INIT(id, S6E3HA6_ID, RESUI(id)),
@@ -379,6 +400,9 @@ static struct resinfo s6e3ha6_restbl[] = {
 #endif
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
 	[RES_GRAM_CHECKSUM] = RESINFO_INIT(gram_checksum, S6E3HA6_GRAM_CHECKSUM, RESUI(gram_checksum)),
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+	[RES_DSC_DECODE_CRC] = RESINFO_INIT(dsc_crc, S6E3HA6_DSC_CRC, RESUI(dsc_crc)),
 #endif
 };
 
@@ -458,6 +482,8 @@ int getidx_mdnie_hdr_maptbl(struct maptbl *tbl);
 int getidx_mdnie_trans_mode_maptbl(struct maptbl *tbl);
 int init_mdnie_night_mode_table(struct maptbl *tbl);
 int getidx_mdnie_night_mode_maptbl(struct maptbl *tbl);
+int init_mdnie_color_lens_table(struct maptbl *tbl);
+int getidx_color_lens_maptbl(struct maptbl *tbl);
 int init_color_coordinate_table(struct maptbl *);
 int init_sensor_rgb_table(struct maptbl *tbl);
 int getidx_adjust_ldu_maptbl(struct maptbl *tbl);

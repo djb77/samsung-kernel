@@ -1,5 +1,140 @@
-BCM4361 DHD 1.77.48 for Android Great/Dream & J5/J7 & BCM43438 NOS Project
+BCM4361 DHD 1.77.59 for Android Great/Dream & BCM4345X & BCM4343X Project
 (Notes: 1.77.x is twigged off from 1.579.235.9)
+
+DHD 1.77.59 - 2017.12.22
+Others
+ - CS4139777(By Kwak Hogil) Fixed call mute issue during LCD Off(Changed Packet filter ID 107)
+ - CS4163743(By Kwak Hogil) Fixed code defect for wl_pattern_atoh() with invalid return value
+ - Changed MAC masking pattern and masking position to sync up with Firmware masking pattern
+ - Enhanced SoftAP/P2PGO keep alive to avoid unexpected keep alive disconnection
+ - Fixed a possible memory leak in dhdpcie_bus_write_vars
+ - Fixed missed SSID/MAC filtering in log for security reason
+ - Fixed parsing issue on wl_parse_ssid_list_tlv() for PNO setup
+
+
+DHD 1.77.58 - 2017.12.18
+Major Issue
+ - CS4083402(By Jeong Min Cheol) Added to define DHD_2G_ONLY_SUPPORT
+     * Issue summary
+       To support for 2.4G band only model requirement
+     * Analysis / Root cause
+       In order to support 2.4G band, it needs to block 5G band setting.
+     * Solution
+       In order to enable this feature, it needs to define CONFIG_WLAN_5GDISABLE in kernel config
+
+ - Added to define DHD_DISABLE_VHTMODE
+     * Issue summary
+       To support for 802.11ac disable model requirement
+     * Analysis / Root cause
+       In order to support 802.11ac disable, it needs to disable vhtmode
+     * Solution
+       In order to enable this feature, it needs to define CONFIG_WLAN_VHTDISABLE in kernel config
+
+Kernel Panic
+ - CS3959621(By Kim Gwang Min) Added debug log in ISR for debugging dpc un-scheduling issue
+ - CS3959621(By Kim Gwang Min) Fixed watchdog reset due to deadlock path from PM handler
+
+Others
+ - CS3898979(By Yoon Jae Ho) Fixed unintended hang issue by invalid deauth reason code from specific AP
+ - Enabled an Android private command for setting ADPS on BCM43456
+ - Fixed connection fail if BDC is enabled in DHD and CAC is enabled in both STA and AP (SDIO only)
+
+
+DHD 1.77.56.1 - 2017.11.30
+Others
+ - Fixed link down by null BSSID during roaming
+
+
+DHD 1.77.56 - 2017.11.30
+Major Issue
+ - CS3928981 Fixed to allocate 64KB for WLAN_DHD_WLFC_BUF_SIZE on 32bit platform also
+     * Issue summary
+       A8/43455/NOS, couldn't operate screen mirroring over WFD only under the VSDB/MCC       
+     * Analysis / Root cause
+       For a smooth VSDB/TX operation, PROP_TXSTATUS(WLFC) feature is being used
+       However, not enough pre-allocated memory for WLFC was allocated on 32bit platform
+       So VSDB/TX regression issue happened due to low pre-allocated memory size (16KB)        
+     * Solution
+       For WLFC_BUF_SIZE, pre-allocates 64KB for 32bit platform also
+
+ - CS4011220 Block ADPS enable private command at RF test mode
+     * Issue summary
+       Have a trouble to measure RF performance at RF test mode by ADPS
+     * Analysis / Root cause
+       During RF test mode, PM 0 is set to disable WiFi dongle PM operation including ADPS,
+       but “ADPS enable“ private command was called after setting PM 0 so ADPS was run again
+       This issue happened after enabling ADPS by default
+     * Solution
+       Block “ADPS enable” private command when PM 0 is set for RF test mode
+
+ - CS4034777 Enabled ARGOS notification callback for DHD TCP ACK suppress
+     * Issue summary
+       Low TPUT issue occurred in TCP long RTT environment
+     * Analysis / Root cause
+       The reason is that DHD TCP ACK suppress was always enabled because ARGOS feature was removed in DHD
+     * Solution
+       Turn off DHD TCP ACK suppress by default and enable ARGOS notification callback to control DHD TCP ACK suppress by current TPUT
+
+ - Configure 64bit DMA mask for MSM8998 (Default enabled: it can be controlled by the SET_DMA_MASK_64BIT  definition in the Makefile)
+     * Issue summary
+       Kernel allocated the memory in swiotlb region for DMA mapping since the default DMA mask is set to 32bit
+     * Analysis / Root cause
+       It's configured to 64bit mask for DMA mapping to check if  kernel allocates the memory for DMA mapping to different region and TPUT is improved
+     * Solution
+       Based on the kernel DMA mapping guidance, DHD configure DMA mask to 64bit
+
+Security Patch
+ - CVE-2017-13161 V2017092501 Fixed buffer overrun issue in wl_parse_ssid_list_tlv()
+ - CVE-2017-13213 V2017081501 Fixed buffer overrun issue in wl_cfgvendor_set_bssid_blacklist()
+ - V2017081701 Fixed buffer overrun issue in wl_cfgvendor_set_ssid_whitelist()
+ - V2017082201 Fixed buffer overrun issue in wl_cfgvendor_set_rand_mac_oui()
+ - V2017082202 Fixed buffer overrun issue in wl_cfgvendor_set_bssid_pref()
+
+Others
+ - CS3742062 Added STP / XID packet filter
+ - CS3863852 Added log to detect abnormal skb operation
+ - CS3914585 Fixed RCC channel missing issue when scan result is more than 100
+ - CS3927468 Added Bring-up patch for BCM43569
+ - CS3976846 Clear the bus state related flags for recovery during turning on Wi-Fi
+ - Block processing the rest of ring buffers once PCIe bus enters low power state
+ - Enabled feature for the Dongle memory loopback test and the PCIE Non DMA M2M loopback test when CONFIG_SEC_FACTORY enabled case
+   (It should be sync up FW version with IGU35RC65_REL_13_38_45(GREAT), IGU3565T38RC13_REL_13_41_13(DREAM) or higher version)
+ - Fixed memory leak in PNO stop command
+
+
+DHD 1.77.55.1 - 2017.11.10
+Others
+ - Disabled FW corruption test and PCIE Non DMA M2M loopback test in Makefile
+   (For enabling it, please modify Makefile and sync up FW version with IGU35RC65_REL_13_38_45(GREAT), IGU3565T38RC13_REL_13_41_13(DREAM) or higher version)
+
+
+DHD 1.77.55 - 2017.11.10
+Others
+ - CS3750290 Fixed mis-merged Makefile for BCM43456 Bring-up patch
+ - CS3962099 Fixed lockup corner case of Non-DMA M2M loopback test
+
+
+DHD 1.77.54 - 2017.11.03
+New Feature
+ - CS3688359 Added PCIe M2M non DMA loopback test in MFG mode
+
+Kernel Panic
+ - CS3830411 Fixed cpu lock up during de-init tcpack suppress module
+
+Security Patch
+ - CS3621122 Fixed vulnerability issue by dhd_parse_logstrs_file() which contains problematic code
+
+Others
+ - CS3509434 Changed beacon receive timeout
+ - CS3558828 Added NDO_CONFIG_SUPPORT
+ - CS3661384 Disabled WLAN_REASON_UNSPECIFIED reason code used as hang event code
+ - CS3685473 TPUT enhancement for A8 project (Exynos 5433 + BCM43455)
+ - CS3724694 Cancel roaming process when BSS was not matched
+ - CS3750290 Added BCM43456 Bring-up patch
+ - CS3799104 Added lock to protect vndr_oui_list
+ - CS3863852 Added log to detect abnormal skb operation
+ - Cleaned up the memory allocation logic of DHD_FW_MEM_CORRUPTION feature
+
 
 DHD 1.77.48 - 2017.09.21
 Kernel Panic

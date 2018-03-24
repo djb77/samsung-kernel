@@ -769,6 +769,24 @@ static int fimc_is_lib_vra_fwalgs_stop(struct fimc_is_lib_vra *lib_vra)
 	return 0;
 }
 
+int fimc_is_lib_vra_stop_instance(struct fimc_is_lib_vra *lib_vra, u32 instance)
+{
+	if (unlikely(!lib_vra)) {
+		err_lib("lib_vra is NULL");
+		return -EINVAL;
+	}
+
+	if (instance >= VRA_TOTAL_SENSORS) {
+		err_lib("invalid instance");
+		return -EINVAL;
+	}
+
+	lib_vra->all_face_num[instance] = 0;
+	clear_bit(VRA_INST_APPLY_TUNE_SET, &lib_vra->inst_state[instance]);
+
+	return 0;
+}
+
 int fimc_is_lib_vra_stop(struct fimc_is_lib_vra *lib_vra)
 {
 	int ret;
@@ -1238,7 +1256,7 @@ int fimc_is_lib_vra_apply_tune(struct fimc_is_lib_vra *lib_vra,
 	struct fimc_is_lib_vra_tune_data *vra_tune, u32 instance)
 {
 	struct fimc_is_lib_vra_tune_data tune;
-	struct api_vra_tune_data *info_tune, dbg_tune;
+	struct api_vra_tune_data *info_tune, dbg_tune = {};
 	struct fimc_is_lib_vra_frame_lock *info_frame;
 	enum api_vra_orientation dbg_orientation;
 	bool dma_test = false;
@@ -1303,7 +1321,7 @@ int fimc_is_lib_vra_apply_tune(struct fimc_is_lib_vra *lib_vra,
 		err_lib("[%d]set_parameter is fail, cnt(%d)", instance, cnt);
 		spin_unlock_irqrestore(&lib_vra->slock, flag);
 
-		goto debug_info;
+		goto err_s_param;
 	}
 
 	cnt = CALL_VRAOP(lib_vra, get_parameter, lib_vra->fr_work_heap,
@@ -1313,14 +1331,27 @@ int fimc_is_lib_vra_apply_tune(struct fimc_is_lib_vra *lib_vra,
 		err_lib("[%d]get_parameter is fail, cnt(%d)", instance, cnt);
 		spin_unlock_irqrestore(&lib_vra->slock, flag);
 
-		goto debug_info;
+		goto err_g_param;
 	}
 
 	spin_unlock_irqrestore(&lib_vra->slock, flag);
 
 	return 0;
 
-debug_info:
+err_g_param:
+	info_lib("===== VRA get parameter =====\n"
+		"\t tracking_mode(%#x), enable_features(%#x)\n"
+		"\t min_face_size(%#x), max_face_count(%#x)\n"
+		"\t full_frame_detection_freq(%#x), face_priority(%#x)\n"
+		"\t disable_frontal_rot_mask(%#x), disable_profile_rot_mask(%#x)\n"
+		"\t working_point(%#x), tracking_smoothness(%#x)\n",
+		dbg_tune.tracking_mode, dbg_tune.enable_features,
+		dbg_tune.min_face_size, dbg_tune.max_face_count,
+		dbg_tune.full_frame_detection_freq, dbg_tune.face_priority,
+		dbg_tune.disable_frontal_rot_mask, dbg_tune.disable_profile_rot_mask,
+		dbg_tune.working_point, dbg_tune.tracking_smoothness);
+
+err_s_param:
 	info_lib("===== VRA set parameter =====\n"
 		"\t tracking_mode(%#x), enable_features(%#x)\n"
 		"\t min_face_size(%#x), max_face_count(%#x)\n"
@@ -1336,18 +1367,6 @@ debug_info:
 		info_tune->working_point, info_tune->tracking_smoothness,
 		info_frame->lock_frame_num, info_frame->init_frames_per_lock,
 		info_frame->normal_frames_per_lock);
-
-	info_lib("===== VRA get parameter =====\n"
-		"\t tracking_mode(%#x), enable_features(%#x)\n"
-		"\t min_face_size(%#x), max_face_count(%#x)\n"
-		"\t full_frame_detection_freq(%#x), face_priority(%#x)\n"
-		"\t disable_frontal_rot_mask(%#x), disable_profile_rot_mask(%#x)\n"
-		"\t working_point(%#x), tracking_smoothness(%#x)\n",
-		dbg_tune.tracking_mode, dbg_tune.enable_features,
-		dbg_tune.min_face_size, dbg_tune.max_face_count,
-		dbg_tune.full_frame_detection_freq, dbg_tune.face_priority,
-		dbg_tune.disable_frontal_rot_mask, dbg_tune.disable_profile_rot_mask,
-		dbg_tune.working_point, dbg_tune.tracking_smoothness);
 
 	return 0;
 }

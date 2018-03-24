@@ -118,7 +118,7 @@ SECTIONS
 	EXCEPTION_TABLE(8)
 	NOTES
 	ALIGN_DEBUG_RO
-#ifdef CONFIG_TIMA_RKP
+#ifdef CONFIG_RKP
 	. = ALIGN(PAGE_SIZE);
 	.rkp.bitmap : {
 		rkp_pgt_bitmap = .;
@@ -127,18 +127,15 @@ SECTIONS
 	. = ALIGN(PAGE_SIZE);
 	.rkp.dblmap : {
 		rkp_map_bitmap = .;
-		*(.rkp.dblmap) 
+		*(.rkp.dblmap)
 	}
 #ifdef CONFIG_RKP_KDP
-	 /* Creating a new section to store task credentials */
 	. = ALIGN(PAGE_SIZE);
-	.rkp.prot.page : {
+	.rkp.ro.area : {
 		__rkp_ro_start = .;
 	}
-	. = __rkp_ro_start + 0x4000;
-	. = ALIGN(PAGE_SIZE);
+	__rkp_ro_end = .;
 #endif /* CONFIG_RKP_KDP*/
-	.vmm : { *(.vmm*) }
 	. = ALIGN(PAGE_SIZE);
 	idmap_pg_dir = .;
 	. += IDMAP_DIR_SIZE;
@@ -212,7 +209,7 @@ SECTIONS
 
 	BSS_SECTION(0, 0, 0)
 
-#ifndef CONFIG_TIMA_RKP
+#ifndef CONFIG_RKP
 	. = ALIGN(PAGE_SIZE);
 	idmap_pg_dir = .;
 	. += IDMAP_DIR_SIZE;

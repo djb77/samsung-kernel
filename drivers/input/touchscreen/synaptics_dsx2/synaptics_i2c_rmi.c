@@ -702,10 +702,7 @@ static void synaptics_rmi4_release_all_finger(struct synaptics_rmi4_data *rmi4_d
 		if (rmi4_data->finger[ii].state) {
 			rmi4_data->finger[ii].print_type = TOUCH_RELEASE_FORCED;
 #ifdef EDGE_SWIPE
-			input_report_abs(rmi4_data->input_dev, ABS_MT_PALM, 0);
-#endif
-#ifdef TSP_SUPPROT_MULTIMEDIA
-			input_report_abs(rmi4_data->input_dev,ABS_MT_PRESSURE, 0);
+			input_report_abs(rmi4_data->input_dev, ABS_MT_CUSTOM, 0);
 #endif
 		}
 		input_mt_report_slot_state(rmi4_data->input_dev, MT_TOOL_FINGER, 0);
@@ -905,7 +902,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_f12_finger_data *data;
 	struct synaptics_rmi4_f12_finger_data *finger_data;
 	bool new_finger_pressed = false;
-#ifdef EDGE_SWIPE
+#if defined(EDGE_SWIPE) && !defined(CONFIG_SEC_FACTORY)
 	struct synaptics_rmi4_f51_handle *f51 = rmi4_data->f51;
 #endif
 	unsigned char tool_type = MT_TOOL_FINGER;
@@ -994,7 +991,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 		input_mt_slot(rmi4_data->input_dev, finger);
 #ifdef TSP_SUPPROT_MULTIMEDIA
 		if (!finger_status)
-			input_report_abs(rmi4_data->input_dev,ABS_MT_PRESSURE, 0);
+			input_report_abs(rmi4_data->input_dev, ABS_MT_CUSTOM, 0);
 #endif
 		input_mt_report_slot_state(rmi4_data->input_dev, tool_type, finger_status ? true : false);
 
@@ -1023,20 +1020,6 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			z = finger_data->z;
 #endif
 
-#ifdef EDGE_SWIPE
-			if (f51) {
-#if !defined(CONFIG_SEC_FACTORY)
-				if (f51->proximity_controls & HAS_EDGE_SWIPE) {
-					if (finger_status == OBJECT_PALM) {
-						wx = f51->edge_swipe_data.wx;
-						wy = f51->edge_swipe_data.wy;
-					}
-					input_report_abs(rmi4_data->input_dev,
-							ABS_MT_PALM, f51->edge_swipe_data.palm);
-				}
-#endif
-			}
-#endif
 			if (rmi4_data->board->x_flip)
 				x = rmi4_data->sensor_max_x - x;
 			if (rmi4_data->board->y_flip)
@@ -1060,7 +1043,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 #endif
 #ifdef TSP_SUPPROT_MULTIMEDIA
 			if (!(rmi4_data->use_velocity||rmi4_data->use_brush)) {
-				z = (z > 0) ? 255 : 0;
+				z = (z > 0) ? BRUSH_Z_DATA : 0;
 			}
 			rmi4_data->finger[finger].z = z;
 #endif
@@ -1078,9 +1061,17 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 					ABS_MT_TOUCH_MAJOR, max(wx, wy));
 			input_report_abs(rmi4_data->input_dev,
 					ABS_MT_TOUCH_MINOR, min(wx, wy));
-#if defined(TSP_SUPPROT_MULTIMEDIA) || defined(REPORT_2D_Z)
-			input_report_abs(rmi4_data->input_dev,
-					ABS_MT_PRESSURE, z);
+#if defined(EDGE_SWIPE) && !defined(CONFIG_SEC_FACTORY)
+			if (f51) {
+				if (f51->proximity_controls & HAS_EDGE_SWIPE) {
+					if (finger_status == OBJECT_PALM) {
+						wx = f51->edge_swipe_data.wx;
+						wy = f51->edge_swipe_data.wy;
+					}
+					input_report_abs(rmi4_data->input_dev,
+							ABS_MT_CUSTOM, (z << 1) | f51->edge_swipe_data.palm);
+				}
+			}
 #endif
 
 #ifdef REPORT_ORIENTATION
@@ -3235,11 +3226,6 @@ static int synaptics_rmi4_set_input_device(struct synaptics_rmi4_data *rmi4_data
 			ABS_MT_TOUCH_MINOR, 0,
 			rmi4_data->max_touch_width, 0, 0);
 #endif
-#if defined(TSP_SUPPROT_MULTIMEDIA) || defined(REPORT_2D_Z)
-	input_set_abs_params(rmi4_data->input_dev,
-			ABS_MT_PRESSURE, 0,
-			DSX_PRESSURE_MAX, 0, 0);
-#endif
 #ifdef REPORT_ORIENTATION
 	input_set_abs_params(rmi4_data->input_dev,
 			ABS_MT_ORIENTATION, 0, 1, 0, 0);
@@ -3255,8 +3241,7 @@ static int synaptics_rmi4_set_input_device(struct synaptics_rmi4_data *rmi4_data
 			HOVER_Z_MAX, 0, 0);
 #ifdef EDGE_SWIPE
 	input_set_abs_params(rmi4_data->input_dev,
-			ABS_MT_PALM, 0,
-			EDGE_SWIPE_PALM_MAX, 0, 0);
+			ABS_MT_CUSTOM, 0, 0xFFFF, 0, 0);
 #endif
 	setup_timer(&rmi4_data->f51_finger_timer,
 			synaptics_rmi4_f51_finger_timer,
@@ -3965,9 +3950,6 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	}
 
 err_tsp_reboot:
-	rmi4_data->board->power(rmi4_data, true);
-	rmi4_data->board->power(rmi4_data, false);
-	msleep(SYNAPTICS_POWER_MARGIN_TIME);
 	rmi4_data->board->power(rmi4_data, true);
 	msleep(SYNAPTICS_POWER_MARGIN_TIME);
 

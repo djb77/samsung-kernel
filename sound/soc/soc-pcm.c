@@ -32,7 +32,7 @@
 #include <sound/soc-dpcm.h>
 #include <sound/initval.h>
 #if defined(CONFIG_SEC_ABC)
-#include <linux/sec_abc.h>
+#include <linux/sti/abc_common.h>
 #endif
 
 #define DPCM_MAX_BE_USERS	8

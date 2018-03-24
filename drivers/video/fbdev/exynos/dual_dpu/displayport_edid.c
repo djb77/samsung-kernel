@@ -24,7 +24,7 @@
 #define EDID_EXTENSION_FLAG	0x7E
 #define EDID_NATIVE_FORMAT	0x83
 #define EDID_BASIC_AUDIO	(1 << 6)
-
+#define EDID_COLOR_DEPTH	0x14
 int forced_resolution = -1;
 
 /* displayport_supported_presets[] is to be arranged in the order of pixel clock */
@@ -32,15 +32,17 @@ struct displayport_supported_preset displayport_supported_presets[] = {
 	{V4L2_DV_BT_DMT_640X480P60,      640, 480,  60, FB_VMODE_NONINTERLACED,   1, "640x480p@60"},
 	{V4L2_DV_BT_CEA_720X480P59_94,	 720, 480,  59, FB_VMODE_NONINTERLACED,   2, "720x480p@60"},
 	{V4L2_DV_BT_CEA_720X576P50,      720, 576,  50, FB_VMODE_NONINTERLACED,  17, "720x576p@50"},
+	{V4L2_DV_BT_DMT_1280X800P60_RB,	    1280,  800, 60, FB_VMODE_NONINTERLACED,   0, "1280x800p@60_RB"},
 	{V4L2_DV_BT_CEA_1280X720P50,	    1280,  720, 50, FB_VMODE_NONINTERLACED,  19, "1280x720p@50"},
 	{V4L2_DV_BT_CEA_1280X720P60,	    1280,  720, 60, FB_VMODE_NONINTERLACED,   4, "1280x720p@60"},
-	{V4L2_DV_BT_DMT_1280X800P60_RB,	    1280,  800, 60, FB_VMODE_NONINTERLACED,   0, "1280x800p@60_RB"},
 	{V4L2_DV_BT_DMT_1280X1024P60,	    1280, 1024, 60, FB_VMODE_NONINTERLACED,   0, "1280x1024p@60"},
 	{V4L2_DV_BT_CEA_1920X1080P24,	    1920, 1080, 24, FB_VMODE_NONINTERLACED,  32, "1920x1080p@24"},
 	{V4L2_DV_BT_CEA_1920X1080P25,	    1920, 1080, 25, FB_VMODE_NONINTERLACED,  33, "1920x1080p@25"},
 	{V4L2_DV_BT_CEA_1920X1080P30,	    1920, 1080, 30, FB_VMODE_NONINTERLACED,  34, "1920x1080p@30"},
+	{V4L2_DV_BT_CVT_1920X1080P59_ADDED, 1920, 1080, 59, FB_VMODE_NONINTERLACED,   0, "1920x1080p@59"},
 	{V4L2_DV_BT_CEA_1920X1080P50,	    1920, 1080, 50, FB_VMODE_NONINTERLACED,  31, "1920x1080p@50"},
 	{V4L2_DV_BT_CEA_1920X1080P60,	    1920, 1080, 60, FB_VMODE_NONINTERLACED,  16, "1920x1080p@60"},
+	{V4L2_DV_BT_CVT_2048X1536P60_ADDED, 2048, 1536, 60, FB_VMODE_NONINTERLACED,   0, "2048x1536p@60"},
 	{V4L2_DV_BT_DMT_1920X1440P60,	    1920, 1440, 60, FB_VMODE_NONINTERLACED,   0, "1920x1440p@60"},
 	{V4L2_DV_BT_CVT_2560X1440P59_ADDED, 2560, 1440, 59, FB_VMODE_NONINTERLACED,   0, "2560x1440p@59"},
 	{V4L2_DV_BT_CVT_2560X1440P60_ADDED, 2560, 1440, 60, FB_VMODE_NONINTERLACED,   0, "2560x1440p@60"},
@@ -202,8 +204,11 @@ static bool edid_find_preset(const struct fb_videomode *mode, bool first)
 {
 	int i;
 
+	displayport_dbg("EDID: %dx%d@%dHz\n", mode->xres, mode->yres, mode->refresh);
+
 	for (i = 0; i < displayport_pre_cnt; i++) {
-		if (mode->refresh == displayport_supported_presets[i].refresh &&
+		if ((mode->refresh == displayport_supported_presets[i].refresh ||
+			mode->refresh == displayport_supported_presets[i].refresh - 1) &&
 			mode->xres == displayport_supported_presets[i].xres &&
 			mode->yres == displayport_supported_presets[i].yres &&
 			mode->vmode == displayport_supported_presets[i].vmode) {
@@ -441,6 +446,17 @@ int edid_update(struct displayport_device *hdev)
 	for (i = 0; i < specs.modedb_len; i++)
 		first = edid_find_preset(&specs.modedb[i], first);
 
+	/* color depth */
+	if (edid[EDID_COLOR_DEPTH] & 0x80) {
+		if (((edid[EDID_COLOR_DEPTH] & 0x70) >> 4) == 1)
+			hdev->bpc = BPC_6;
+	}
+
+	/* vendor block */
+	memcpy(hdev->edid_manufacturer, specs.manufacturer, sizeof(specs.manufacturer));
+	hdev->edid_product = specs.model;
+	hdev->edid_serial = specs.serial;
+
 	/* number of 128bytes blocks to follow */
 	if (block_cnt <= 1)
 		goto out;
@@ -471,12 +487,12 @@ int edid_update(struct displayport_device *hdev)
 			audio_bit_rates = sad.bit_rates;
 		} else if (basic_audio) {
 			audio_channels = 2;
-			audio_sample_rates = FB_AUDIO_44KHZ; /*default audio info*/
+			audio_sample_rates = FB_AUDIO_48KHZ; /*default audio info*/
 			audio_bit_rates = FB_AUDIO_16BIT;
 		}
 	}
 
-	displayport_info("misc:0x%X, Audio ch:0x%X, sf:0x%X, br:0x%X",
+	displayport_info("misc:0x%X, Audio ch:0x%X, sf:0x%X, br:0x%X\n",
 			edid_misc, audio_channels, audio_sample_rates, audio_bit_rates);
 
 out:
@@ -484,6 +500,7 @@ out:
 	if (forced_resolution >= 0 || first) {
 		displayport_info("edid_use_default_preset\n");
 		edid_use_default_preset();
+		hdev->bpc = BPC_6;
 	}
 
 	if (block_cnt == -EPROTO)

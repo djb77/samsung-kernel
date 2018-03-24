@@ -282,4 +282,7 @@ struct panel_device {
 #define PANEL_IOC_SET_DSU				_IOW(PANEL_IOC_BASE, 14, struct dsu_info *)
 #endif
 #define PANEL_IOC_REG_RESET_CB			_IOR(PANEL_IOC_BASE, 15, struct host_cb *)
+
+#define PANEL_IOC_SET_PANEL_RESET		_IO(PANEL_IOC_BASE, 16)
+
 #endif //__PANEL_DRV_H__

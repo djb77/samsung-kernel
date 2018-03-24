@@ -31,11 +31,6 @@
 #include <net/netfilter/nf_log.h>
 #include "../../netfilter/xt_repldata.h"
 
-#ifdef CONFIG_ONESHOT_UID
-#include <net/netfilter/oneshot_uid.h>
-#include <linux/spinlock.h>
-#endif
-
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Netfilter Core Team <coreteam@netfilter.org>");
 MODULE_DESCRIPTION("IPv4 packet filter");
@@ -398,9 +393,6 @@ ipt_do_table(struct sk_buff *skb,
 					verdict = (unsigned int)(-v) - 1;
 					break;
 				}
-#ifdef CONFIG_ONESHOT_UID
-stackpopup:
-#endif
 
 				if (stackidx == 0) {
 					e = get_entry(table_base,
@@ -423,25 +415,6 @@ stackpopup:
 			}
 
 			e = get_entry(table_base, v);
-#ifdef CONFIG_ONESHOT_UID
-			if (unlikely(e == table_base +
-				oneshot_uid_ipv4.myrule_offset))
-				if (table == oneshot_uid_ipv4.myfilter_table &&
-				    read_trylock(&oneshot_uid_ipv4.lock)) {
-					xt_ematch_foreach(ematch, e) {
-						acpar.match =
-							ematch->u.kernel.match;
-						acpar.matchinfo = ematch->data;
-						if (!oneshot_uid_checkmap(
-							&oneshot_uid_ipv4, skb,
-							&acpar)) {
-							read_unlock(&oneshot_uid_ipv4.lock);
-							goto stackpopup;
-						}
-					}
-					read_unlock(&oneshot_uid_ipv4.lock);
-				}
-#endif
 			continue;
 		}
 
@@ -836,13 +809,6 @@ translate_table(struct net *net, struct xt_table_info *newinfo, void *entry0,
 	struct ipt_entry *iter;
 	unsigned int i;
 	int ret = 0;
-	
-#ifdef CONFIG_ONESHOT_UID
-	int ourchain = ONESHOT_UID_FIND_NONE;
-	unsigned int rulenum = 0;
-	const void *previous_ematch = NULL;
-	const struct xt_entry_match *ematch;
-#endif
 
 	newinfo->size = repl->size;
 	newinfo->number = repl->num_entries;
@@ -855,10 +821,6 @@ translate_table(struct net *net, struct xt_table_info *newinfo, void *entry0,
 
 	duprintf("translate_table: size %u\n", newinfo->size);
 	i = 0;
-	
-#ifdef CONFIG_ONESHOT_UID
-	write_lock(&oneshot_uid_ipv4.lock);
-#endif
 
 	/* Walk through entries, checking offsets. */
 	xt_entry_foreach(iter, entry0, newinfo->size) {
@@ -868,59 +830,14 @@ translate_table(struct net *net, struct xt_table_info *newinfo, void *entry0,
 						 repl->underflow,
 						 repl->valid_hooks);
 		if (ret != 0) {
-#ifdef CONFIG_ONESHOT_UID
-			write_unlock(&oneshot_uid_ipv4.lock);
-#endif
 			return ret;
 		}
 		++i;
 		if (strcmp(ipt_get_target(iter)->u.user.name,
 		    XT_ERROR_TARGET) == 0) {
 			++newinfo->stacksize;
-#ifdef CONFIG_ONESHOT_UID
-			if (ourchain != ONESHOT_UID_FINE_END) {
-				struct xt_standard_target *xt_target =
-						(void *) ipt_get_target(iter);
-				if (ourchain == ONESHOT_UID_FIND_UIDCHAIN) {
-					oneshot_uid_cleanup_unusedmem(
-							&oneshot_uid_ipv4);
-					ourchain = ONESHOT_UID_FINE_END;
-				} else if (strcmp(xt_target->target.data,
-						RULE_STANDBY_UID) == 0) {
-					oneshot_uid_ipv4.myfilter_table =
-						net->ipv4.iptable_filter;
-					rulenum = 0;
-					ourchain = ONESHOT_UID_FIND_UIDCHAIN;
-					oneshot_uid_resetmap(&oneshot_uid_ipv4);
-				}
-			}
-		} else if (ourchain == ONESHOT_UID_FIND_UIDCHAIN) {
-			if (previous_ematch) {
-				int ret = oneshot_uid_addrule_to_map(&oneshot_uid_ipv4,
-							     previous_ematch);
-				if (ret == -ENOMEM) {
-					ourchain = ONESHOT_UID_FINE_END;
-					oneshot_uid_ipv4.myfilter_table = NULL;
-					oneshot_uid_ipv4.myrule_offset = 0;
-					pr_err("iptables: oneshot_uid failed to alloc memory\n");
-					continue;
-				}
-			}
-
-			xt_ematch_foreach(ematch, iter) {
-				previous_ematch = ematch->data;
-			}
-
-			if (rulenum == 0)
-				oneshot_uid_ipv4.myrule_offset =
-						((void *)iter - entry0);
-			rulenum++;
-#endif
 		}
 	}
-#ifdef CONFIG_ONESHOT_UID
-	write_unlock(&oneshot_uid_ipv4.lock);
-#endif
 
 	if (i != repl->num_entries) {
 		duprintf("translate_table: %u not %u entries\n",

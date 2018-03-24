@@ -493,18 +493,17 @@ static ssize_t haptic_engine_show(struct device *dev,
 	struct max77865_haptic_drvdata *drvdata
 		= container_of(tdev, struct max77865_haptic_drvdata, tout_dev);
 	int i = 0;
-	char *bufp = buf;
+	size_t size = 0;
 
-	bufp += snprintf(bufp, VIB_BUFSIZE, "\n");
-	for (i = 0; i < drvdata->packet_size && drvdata->f_packet_en; i++) {
-		bufp+= snprintf(bufp, VIB_BUFSIZE, "%u,", drvdata->test_pac[i].time);
-		bufp+= snprintf(bufp, VIB_BUFSIZE, "%u,", drvdata->test_pac[i].intensity);
-		bufp+= snprintf(bufp, VIB_BUFSIZE, "%u,", drvdata->test_pac[i].freq);
-		bufp+= snprintf(bufp, VIB_BUFSIZE, "%u,", drvdata->test_pac[i].overdrive);
+	for (i = 0; i < drvdata->packet_size && drvdata->f_packet_en &&
+			((4 * VIB_BUFSIZE + size) < PAGE_SIZE); i++) {
+		size += snprintf(&buf[size], VIB_BUFSIZE, "%u,", drvdata->test_pac[i].time);
+		size += snprintf(&buf[size], VIB_BUFSIZE, "%u,", drvdata->test_pac[i].intensity);
+		size += snprintf(&buf[size], VIB_BUFSIZE, "%u,", drvdata->test_pac[i].freq);
+		size += snprintf(&buf[size], VIB_BUFSIZE, "%u,", drvdata->test_pac[i].overdrive);
 	}
-	bufp += snprintf(bufp, VIB_BUFSIZE, "\n");
 
-	return strlen(buf);
+	return size;
 }
 
 static DEVICE_ATTR(haptic_engine, 0660, haptic_engine_show, haptic_engine_store);

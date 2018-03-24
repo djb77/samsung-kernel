@@ -46,15 +46,18 @@
 #include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/i2c.h>
+#include <linux/exynos-ss.h>
+#include <linux/sec_debug.h>
 
 #include "sec_nfc.h"
 #include "./nfc_logger/nfc_logger.h"
 
 #define SEC_NFC_GET_INFO(dev) i2c_get_clientdata(to_i2c_client(dev))
 enum sec_nfc_irq {
+	SEC_NFC_SKIP = -1,
 	SEC_NFC_NONE,
 	SEC_NFC_INT,
-	SEC_NFC_SKIP,
+	SEC_NFC_READ_TIMES,
 };
 
 struct sec_nfc_i2c_info {
@@ -114,7 +117,7 @@ static irqreturn_t sec_nfc_irq_thread_fn(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-	info->i2c_info.read_irq = SEC_NFC_INT;
+	info->i2c_info.read_irq += SEC_NFC_READ_TIMES;
 	mutex_unlock(&info->i2c_info.read_mutex);
 
 	wake_up_interruptible(&info->i2c_info.read_wait);
@@ -145,6 +148,13 @@ static ssize_t sec_nfc_read(struct file *file, char __user *buf,
 	}
 
 	mutex_lock(&info->i2c_info.read_mutex);
+	if (count == 0)	{
+		if (info->i2c_info.read_irq >= SEC_NFC_INT)
+			info->i2c_info.read_irq--;
+		mutex_unlock(&info->i2c_info.read_mutex);
+		goto out;
+	}
+
 	irq = info->i2c_info.read_irq;
 	mutex_unlock(&info->i2c_info.read_mutex);
 	if (irq == SEC_NFC_NONE) {
@@ -180,7 +190,12 @@ static ssize_t sec_nfc_read(struct file *file, char __user *buf,
 		goto read_error;
 	}
 
-	info->i2c_info.read_irq = SEC_NFC_NONE;
+	if (info->i2c_info.read_irq >= SEC_NFC_INT)
+		info->i2c_info.read_irq--;
+
+	if (info->i2c_info.read_irq == SEC_NFC_READ_TIMES)
+		wake_up_interruptible(&info->i2c_info.read_wait);
+
 	mutex_unlock(&info->i2c_info.read_mutex);
 
 	if (copy_to_user(buf, info->i2c_info.buf, ret)) {
@@ -285,7 +300,7 @@ static unsigned int sec_nfc_poll(struct file *file, poll_table *wait)
 
 	mutex_lock(&info->i2c_info.read_mutex);
 	irq = info->i2c_info.read_irq;
-	if (irq == SEC_NFC_INT)
+	if (irq == SEC_NFC_READ_TIMES)
 		ret = (POLLIN | POLLRDNORM);
 	mutex_unlock(&info->i2c_info.read_mutex);
 
@@ -498,6 +513,7 @@ static void dumpdelaycpu(void *dummy)
 	unsigned long flags;
 
 	spin_lock_irqsave(&show_lock, flags);
+	pr_err("[NFC DEBUG] preempt_count : %d", preempt_count());
 	show_stack(NULL, NULL);
 	spin_unlock_irqrestore(&show_lock, flags);
 }
@@ -517,7 +533,12 @@ static long sec_nfc_ioctl(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case SEC_NFC_DEBUG:
-		smp_call_function(dumpdelaycpu, NULL, 0);
+		if ((sec_debug_get_debug_level() & 0x1) == 0x1) {
+			pr_err("[NFC DEBUG] preempt_count : %d", preempt_count());
+			show_stack(NULL, NULL);
+			smp_call_function(dumpdelaycpu, NULL, 0);
+			exynos_ss_dump_task_info();
+		}
 		break;
 	case SEC_NFC_SET_MODE:
 		if (info->mode == new)
@@ -1048,6 +1069,7 @@ static sec_nfc_driver_type sec_nfc_driver = {
 		.pm = &sec_nfc_pm_ops,
 #endif
 		.of_match_table = nfc_match_table,
+		.suppress_bind_attrs = true,
 	},
 };
 

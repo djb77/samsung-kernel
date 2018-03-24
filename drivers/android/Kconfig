@@ -44,13 +44,6 @@ config ANDROID_BINDER_IPC_32BIT
 
 	  Note that enabling this will break newer Android user-space.
 
-config SEC_TRACE_BINDERCNT
-	bool "Trace process binder count"
-	default n
-	---help---
-	  This feature can be used to monitor binder transactions count to
-	  a designated process.
-
 endif # if ANDROID
 
 endmenu

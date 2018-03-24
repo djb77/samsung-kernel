@@ -235,8 +235,6 @@ static int ufshcd_send_request_sense(struct ufs_hba *hba,
 extern int fmp_ufs_map_sg(struct ufshcd_sg_entry *prd_table, struct scatterlist *sg,
 				int enc_mode, uint32_t idx,
 				uint32_t sector, struct bio *bio);
-extern int fmp_encrypted;
-
 #if defined(CONFIG_FIPS_FMP)
 extern int fmp_map_sg_st(struct ufs_hba *hba, struct ufshcd_sg_entry *prd_table,
 					struct scatterlist *sg, int enc_mode,
@@ -1434,6 +1432,26 @@ ufshcd_send_uic_cmd(struct ufs_hba *hba, struct uic_command *uic_cmd)
 	return ret;
 }
 
+#ifdef CUSTOMIZE_UPIU_FLAGS
+SIO_PATCH_VERSION(UPIU_customize, 1, 0, "");
+
+static void set_customized_upiu_flags(struct ufshcd_lrb *lrbp, u32 *upiu_flags)
+{
+	if (lrbp->command_type == UTP_CMD_TYPE_SCSI) {
+		if (lrbp->cmd->request->cmd_flags & REQ_WRITE) {
+			if (lrbp->cmd->request->cmd_flags & REQ_FLUSH)
+				*upiu_flags |= UPIU_TASK_ATTR_HEADQ;
+			else if (lrbp->cmd->request->cmd_flags & REQ_DISCARD)
+				*upiu_flags |= UPIU_TASK_ATTR_ORDERED;
+			else if (lrbp->cmd->request->cmd_flags & REQ_SYNC)
+				*upiu_flags |= UPIU_COMMAND_PRIORITY_HIGH;
+		} else {
+			*upiu_flags |= UPIU_COMMAND_PRIORITY_HIGH;
+		}
+	}
+}
+#endif
+
 #if defined(CONFIG_FMP_UFS)
 static void get_enc_mode_from_bio(struct bio *bio, int *enc_mode)
 {
@@ -1447,9 +1465,7 @@ static void get_enc_mode_from_bio(struct bio *bio, int *enc_mode)
 		return;
 	return;
 }
-#endif
 
-#if defined(CONFIG_FMP_UFS)
 static void get_enc_mode_from_page(struct page *page, int *enc_mode)
 {
 	/* Anonymous page */
@@ -1465,33 +1481,6 @@ static void get_enc_mode_from_page(struct page *page, int *enc_mode)
 #endif
 	if (page->mapping->private_enc_mode == FMP_FILE_ENC_MODE)
 		*enc_mode |= UFS_FILE_ENC_MODE;
-	return;
-}
-
-static void check_fmp_encrypted_for_meta_data(struct ufs_hba *hba,
-					struct scsi_cmnd *cmd)
-{
-	struct bio *bio;
-	char *volname;
-
-	if (!cmd || !cmd->request || !cmd->request->bio)
-		return;
-	bio = cmd->request->bio;
-
-	if (!cmd->request->part || !cmd->request->part->info)
-		return;
-
-	volname = cmd->request->part->info->volname;
-	if (strncmp(volname, "userdata", sizeof("userdata")))
-		return;
-
-	if (fmp_encrypted && (bio->bi_rw & REQ_META)) {
-		dev_warn(hba->dev, "FMP doesn't work even if device is encrypted.\n");
-		dev_warn(hba->dev, "direction(%d) sector(%ld) bio enc_mode(%d)\n",
-				cmd->sc_data_direction, bio->bi_iter.bi_sector,
-				bio->private_enc_mode);
-	}
-
 	return;
 }
 #endif
@@ -1551,9 +1540,6 @@ static int ufshcd_map_sg(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 			if (!enc_mode) {
 				SET_DAS(&prd_table[i], CLEAR);
 				SET_FAS(&prd_table[i], CLEAR);
-#if defined(CONFIG_UFS_FMP_DM_CRYPT)
-			check_fmp_encrypted_for_meta_data(hba, cmd);
-#endif
 			} else {
 				unsigned long flags;
 				ret = fmp_ufs_map_sg(prd_table, sg, enc_mode, i, sector, cmd->request->bio);
@@ -1703,48 +1689,15 @@ static void ufshcd_prepare_req_desc_hdr(struct ufshcd_lrb *lrbp,
 	if (cmd_dir == DMA_FROM_DEVICE) {
 		data_direction = UTP_DEVICE_TO_HOST;
 		*upiu_flags = UPIU_CMD_FLAGS_READ;
-#ifdef COMMAND_PRIORITY
-		/*
-		 *	UFS header FLAGS bit3 meant for command priority
-		 *			0 - Normal priority
-		 *			1 - High priority
-		 *
-		 * Set High Priority for SYNC reads
-		 */
-		if (lrbp->command_type == UTP_CMD_TYPE_SCSI) {
-			*upiu_flags |= UPIU_COMMAND_PRIORITY_HIGH;
-		}
-#endif
 	} else if (cmd_dir == DMA_TO_DEVICE) {
 		data_direction = UTP_HOST_TO_DEVICE;
 		*upiu_flags = UPIU_CMD_FLAGS_WRITE;
-#ifdef COMMAND_PRIORITY
-		/*
-		 * Set High Priority for SYNC writes
-		 */
-#define FLUSH_DISCARD (REQ_FLUSH | REQ_DISCARD)
-		if ((lrbp->command_type == UTP_CMD_TYPE_SCSI) &&
-			(lrbp->cmd->request->cmd_flags & REQ_SYNC) &&
-			!(lrbp->cmd->request->cmd_flags & FLUSH_DISCARD)) {
-			*upiu_flags |= UPIU_COMMAND_PRIORITY_HIGH;
-#undef FLUSH_DISCARD
-		}
-#endif
 	} else {
 		data_direction = UTP_NO_DATA_TRANSFER;
 		*upiu_flags = UPIU_CMD_FLAGS_NONE;
 	}
 
-#ifdef HEAD_OF_Q_FEATURE
-	/*
-	 * Set HEAD_OF_QUEUE for FLUSH request (REQ_FLUSH)
-	 *	UFS header FLAGS bit0,1 denotes TASK_ATTRIBUTE
-	 */
-	if ((lrbp->command_type == UTP_CMD_TYPE_SCSI) &&
-			(lrbp->cmd->request->cmd_flags & REQ_FLUSH)) {
-		*upiu_flags |= UPIU_TASK_ATTR_HEADQ;
-	}
-#endif
+	set_customized_upiu_flags(lrbp, upiu_flags);
 
 	dword_0 = data_direction | (lrbp->command_type
 				<< UPIU_COMMAND_TYPE_OFFSET);
@@ -5234,6 +5187,7 @@ clean:
 	spin_unlock_irqrestore(host->host_lock, flags);
 
 	clear_bit_unlock(tag, &hba->lrb_in_use);
+	ufshcd_release(hba);
 	wake_up(&hba->dev_cmd.tag_wq);
 
 out:

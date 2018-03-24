@@ -30,6 +30,7 @@ typedef u8 mdnie_t;
 
 #define SCENARIO_IS_VALID(idx)		(IS_DMB(idx) || IS_SCENARIO(idx))
 #define IS_NIGHT_MODE_ON(idx)		(idx == NIGHT_MODE_ON)
+#define IS_COLOR_LENS_ON(idx)		(idx == COLOR_LENS_ON)
 #define IS_HDR(idx)			(idx >= HDR_ON && idx < HDR_MAX)
 #define IS_LIGHT_NOTIFICATION(idx)			(idx >= LIGHT_NOTIFICATION_ON && idx < LIGHT_NOTIFICATION_MAX)
 
@@ -47,6 +48,7 @@ typedef u8 mdnie_t;
 #define IS_HDR_MODE(_mdnie_)			(((_mdnie_)->props.hdr >= HDR_ON) && ((_mdnie_)->props.hdr < HDR_MAX))
 #define IS_HMD_MODE(_mdnie_)			(((_mdnie_)->props.hmd >= HMD_MDNIE_ON) && ((_mdnie_)->props.hmd < HMD_MDNIE_MAX))
 #define IS_NIGHT_MODE(_mdnie_)			(((_mdnie_)->props.night >= NIGHT_MODE_ON) && ((_mdnie_)->props.night < NIGHT_MODE_MAX))
+#define IS_COLOR_LENS_MODE(_mdnie_)		(((_mdnie_)->props.color_lens >= COLOR_LENS_ON) && ((_mdnie_)->props.color_lens < COLOR_LENS_MAX))
 #define IS_HBM_MODE(_mdnie_)			(((_mdnie_)->props.hbm >= HBM_ON) && ((_mdnie_)->props.hbm < HBM_MAX))
 #define IS_DMB_MODE(_mdnie_)			((_mdnie_)->props.scenario == DMB_NORMAL_MODE)
 #define IS_SCENARIO_MODE(_mdnie_)		(((_mdnie_)->props.scenario >= UI_MODE && (_mdnie_)->props.scenario <= VIDEO_NORMAL_MODE) || \
@@ -73,6 +75,7 @@ enum {
 	MDNIE_BYPASS_MODE,
 	MDNIE_ACCESSIBILITY_MODE,
 	MDNIE_LIGHT_NOTIFICATION_MODE,
+	MDNIE_COLOR_LENS_MODE,
 	MDNIE_HDR_MODE,
 	MDNIE_HMD_MODE,
 	MDNIE_NIGHT_MODE,
@@ -166,6 +169,41 @@ enum NIGHT_LEVEL {
 	NIGHT_LEVEL_2900K,
 	NIGHT_LEVEL_2500K,
 	MAX_NIGHT_LEVEL,
+};
+
+enum COLOR_LENS {
+	COLOR_LENS_OFF,
+	COLOR_LENS_ON,
+	COLOR_LENS_MAX
+};
+
+enum COLOR_LENS_COLOR {
+	COLOR_LENS_COLOR_BLUE,
+	COLOR_LENS_COLOR_AZURE,
+	COLOR_LENS_COLOR_CYAN,
+	COLOR_LENS_COLOR_SPRING_GREEN,
+	COLOR_LENS_COLOR_GREEN,
+	COLOR_LENS_COLOR_CHARTREUSE_GREEN,
+	COLOR_LENS_COLOR_YELLOW,
+	COLOR_LENS_COLOR_ORANGE,
+	COLOR_LENS_COLOR_RED,
+	COLOR_LENS_COLOR_ROSE,
+	COLOR_LENS_COLOR_MAGENTA,
+	COLOR_LENS_COLOR_VIOLET,
+	COLOR_LENS_COLOR_MAX
+};
+
+enum COLOR_LENS_LEVEL {
+	COLOR_LENS_LEVEL_20P,
+	COLOR_LENS_LEVEL_25P,
+	COLOR_LENS_LEVEL_30P,
+	COLOR_LENS_LEVEL_35P,
+	COLOR_LENS_LEVEL_40P,
+	COLOR_LENS_LEVEL_45P,
+	COLOR_LENS_LEVEL_50P,
+	COLOR_LENS_LEVEL_55P,
+	COLOR_LENS_LEVEL_60P,
+	COLOR_LENS_LEVEL_MAX,
 };
 
 enum HDR {
@@ -269,6 +307,8 @@ enum MDNIE_MAPTBL {
 	MDNIE_NIGHT_MAPTBL,
 	/* LIGHT_NOTIFICATION */
 	MDNIE_LIGHT_NOTIFICATION_MAPTBL,
+	/* COLOR LENS */
+	MDNIE_COLOR_LENS_MAPTBL,
 	MAX_MDNIE_MAPTBL,
 };
 
@@ -290,6 +330,7 @@ enum {
 	MDNIE_ETC_NONE_MAPTBL,
 	MDNIE_ETC_TRANS_MAPTBL,
 	MDNIE_ETC_NIGHT_MAPTBL,
+	MDNIE_ETC_COLOR_LENS_MAPTBL,
 	MAX_MDNIE_ETC_MAPTBL,
 };
 
@@ -356,6 +397,8 @@ struct mdnie_tune {
 	u8 vtx[MAX_WCRD_TYPE][MAX_CCRD_PT][MAX_COLOR];
 	u32 num_ldu_mode;
 	u32 num_night_level;
+	u32 num_color_lens_color;
+	u32 num_color_lens_level;
 };
 
 struct mdnie_properties {
@@ -367,6 +410,9 @@ struct mdnie_properties {
 	enum HMD_MODE hmd;
 	enum NIGHT_MODE night;
 	enum NIGHT_LEVEL night_level;
+	enum COLOR_LENS color_lens;
+	enum COLOR_LENS_COLOR color_lens_color;
+	enum COLOR_LENS_LEVEL color_lens_level;
 	enum HDR hdr;
 	enum LIGHT_NOTIFICATION light_notification;
 	enum ACCESSIBILITY accessibility;
@@ -392,6 +438,8 @@ struct mdnie_properties {
 
 	u32 num_ldu_mode;
 	u32 num_night_level;
+	u32 num_color_lens_color;
+	u32 num_color_lens_level;
 	struct cal_line line[MAX_CAL_LINE];
 	struct cal_coef coef[MAX_QUAD];
 	u32 cal_x_center;

@@ -300,7 +300,16 @@ static unsigned int __bpf_prog_run(void *ctx, const struct bpf_insn *insn)
 	void *ptr;
 	int off;
 #ifdef CONFIG_RKP_CFP_JOPP
-	volatile const void *jumpto;
+	int i;
+	const void *jumpto, *biggest, *smallest;
+
+	biggest = smallest = jumptable[0];
+	for (i = 1; i < 256; i++) {
+		if (smallest > jumptable[i])
+			smallest = jumptable[i];
+		if (biggest < jumptable[i])
+			biggest = jumptable[i];
+	}
 #endif
 #define CONT	 ({ insn++; goto select_insn; })
 #define CONT_JMP ({ insn++; goto select_insn; })
@@ -316,8 +325,9 @@ select_insn:
 #ifdef CONFIG_RKP_CFP_JOPP
 	//make sure jump to addr is sanitized before goto
 	jumpto = (jumptable[insn->code]);
-	if (unlikely(jumpto < &&ALU_ADD_X || jumpto > &&default_label)) 
+	if (unlikely(jumpto < smallest || jumpto > biggest))
 		panic("attempt to exploit jump table");
+
 	goto *jumpto;
 #else
 	goto *jumptable[insn->code];

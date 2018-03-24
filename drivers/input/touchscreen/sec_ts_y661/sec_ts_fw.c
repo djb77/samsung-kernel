@@ -21,32 +21,6 @@ enum {
 	FFU,
 };
 
-typedef struct {
-	u32 signature;			/* signature */
-	u32 version;			/* version */
-	u32 totalsize;			/* total size */
-	u32 checksum;			/* checksum */
-	u32 img_ver;			/* image file version */
-	u32 img_date;			/* image file date */
-	u32 img_description;		/* image file description */
-	u32 fw_ver;			/* firmware version */
-	u32 fw_date;			/* firmware date */
-	u32 fw_description;		/* firmware description */
-	u32 para_ver;			/* parameter version */
-	u32 para_date;			/* parameter date */
-	u32 para_description;		/* parameter description */
-	u32 num_chunk;			/* number of chunk */
-	u32 reserved1;
-	u32 reserved2;
-} fw_header;
-
-typedef struct {
-	u32 signature;
-	u32 addr;
-	u32 size;
-	u32 reserved;
-} fw_chunk;
-
 static int sec_ts_enter_fw_mode(struct sec_ts_data *ts)
 {
 	int ret;

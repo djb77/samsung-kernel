@@ -1774,7 +1774,7 @@ int fimc_is_ois_init_s4(struct v4l2_subdev *subdev)
 	u8 cal_data[2];
 	u8 shift_available = 0;
 #ifdef USE_CAMERA_HW_BIG_DATA
-	struct cam_hw_param *hw_param;
+	struct cam_hw_param *hw_param = NULL;
 	struct fimc_is_device_sensor *device = NULL;
 #endif
 

@@ -41,7 +41,7 @@
 
 static struct tp s6e3ha2_tp[S6E3HA2_NR_TP] = {
 	{ .level = 0, .volt_src = VREG_OUT, .name = "VT", .center = { 0x0, 0x0, 0x0 }, .numerator = 0, .denominator = 860 },
-	{ .level = 3, .volt_src = V0_OUT, .name = "V3", .center = { 0x80, 0x80, 0x80 }, .numerator = 64, .denominator = 320 },
+	{ .level = 3, .volt_src = VREG_OUT, .name = "V3", .center = { 0x80, 0x80, 0x80 }, .numerator = 64, .denominator = 320 },
 	{ .level = 11, .volt_src = VT_OUT, .name = "V11", .center = { 0x80, 0x80, 0x80 }, .numerator = 64, .denominator = 320 },
 	{ .level = 23, .volt_src = VT_OUT, .name = "V23", .center = { 0x80, 0x80, 0x80 }, .numerator = 64, .denominator = 320 },
 	{ .level = 35, .volt_src = VT_OUT, .name = "V35", .center = { 0x80, 0x80, 0x80 }, .numerator = 64, .denominator = 320 },

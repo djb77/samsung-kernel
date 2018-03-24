@@ -40,6 +40,7 @@
 #include <soc/samsung/ect_parser.h>
 #endif
 
+#include <trace/events/napi.h>
 #include "modem_prj.h"
 #include "modem_utils.h"
 #include "link_device_memory.h"
@@ -114,7 +115,7 @@ static inline void reset_ipc_map(struct mem_link_device *mld)
 {
 	int i;
 
-	for (i = 0; i < MAX_SIPC5_DEVICES; i++) {
+	for (i = 0; i < MAX_SIPC_MAP; i++) {
 		struct mem_ipc_device *dev = mld->dev[i];
 
 		set_txq_head(dev, 0);
@@ -136,7 +137,7 @@ static int shmem_reset_ipc_link(struct mem_link_device *mld)
 
 	reset_ipc_map(mld);
 
-	for (i = 0; i < MAX_SIPC5_DEVICES; i++) {
+	for (i = 0; i < MAX_SIPC_MAP; i++) {
 		struct mem_ipc_device *dev = mld->dev[i];
 
 		skb_queue_purge(dev->skb_txq);
@@ -201,7 +202,7 @@ static inline void purge_txq(struct mem_link_device *mld)
 	struct link_device *ld = &mld->link_dev;
 	int i;
 
-	/* Purge the skb_txq in every IPC device (IPC_FMT, IPC_RAW, etc.) */
+	/* Purge the skb_txq in every rb */
 	if (ld->sbd_ipc) {
 		struct sbd_link_device *sl = &mld->sbd_link_dev;
 
@@ -211,7 +212,8 @@ static inline void purge_txq(struct mem_link_device *mld)
 		}
 	}
 
-	for (i = 0; i < MAX_SIPC5_DEVICES; i++) {
+	/* Purge the skb_txq in every IPC device (IPC_MAP_FMT, IPC_MAP_HPRIO_RAW, etc.) */
+	for (i = 0; i < MAX_SIPC_MAP; i++) {
 		struct mem_ipc_device *dev = mld->dev[i];
 		skb_queue_purge(dev->skb_txq);
 	}
@@ -285,6 +287,7 @@ static void shmem_forced_cp_crash(struct mem_link_device *mld,
 {
 	struct link_device *ld = &mld->link_dev;
 	struct modem_ctl *mc = ld->mc;
+	unsigned int ap_status = mc->mbx_ap_status;
 
 	/* Disable normal IPC */
 	set_magic(mld, MEM_CRASH_MAGIC);
@@ -307,27 +310,26 @@ static void shmem_forced_cp_crash(struct mem_link_device *mld,
 
 	mld->crash_reason.owner = crash_reason_owner;
 	strlcpy(mld->crash_reason.string, crash_reason_string,
-		MEM_CRASH_REASON_SIZE);
+		CRASH_REASON_SIZE);
 
-	if (mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP)) {
-		stop_net_ifaces(ld);
+	stop_net_ifaces(ld);
 
-		if (mld->debug_info)
-			mld->debug_info();
+	if (mld->debug_info)
+		mld->debug_info();
 
-		/**
-		 * If there is no CRASH_ACK from CP in a timeout,
-		 * handle_no_cp_crash_ack() will be executed.
-		 */
-		mif_add_timer(&mld->crash_ack_timer, FORCE_CRASH_ACK_TIMEOUT,
-			      handle_no_cp_crash_ack, (unsigned long)mld);
+	/**
+	 * If there is no CRASH_ACK from CP in a timeout,
+	 * handle_no_cp_crash_ack() will be executed.
+	 */
+	mif_add_timer(&mld->crash_ack_timer, FORCE_CRASH_ACK_TIMEOUT,
+		      handle_no_cp_crash_ack, (unsigned long)mld);
 
-		/* Send CRASH_EXIT command to a CP */
-		send_ipc_irq(mld, cmd2int(CMD_CRASH_EXIT));
-	} else {
-		shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
-			"Crash by shmem_forced_cp_crash()");
-	}
+	/* Update crash type to msg box */
+	mbox_update_value(MCU_CP, ap_status, mld->crash_reason.owner,
+			mld->sbi_crash_type_mask, mld->sbi_crash_type_pos);
+
+	/* Send CRASH_EXIT command to a CP */
+	send_ipc_irq(mld, cmd2int(CMD_CRASH_EXIT));
 
 	clean_vss_magic_code();
 
@@ -711,7 +713,7 @@ static enum hrtimer_restart tx_timer_func(struct hrtimer *timer)
 	}
 #endif
 
-	for (i = 0; i < MAX_SIPC5_DEVICES; i++) {
+	for (i = 0; i < MAX_SIPC_MAP; i++) {
 		struct mem_ipc_device *dev = mld->dev[i];
 		int ret;
 
@@ -722,7 +724,7 @@ static enum hrtimer_restart tx_timer_func(struct hrtimer *timer)
 					need_schedule = true;
 					continue;
 				} else {
-					shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+					shmem_forced_cp_crash(mld, CRASH_REASON_MIF_TX_ERR,
 						"check_tx_flow_ctrl error");
 					need_schedule = false;
 					goto exit;
@@ -741,7 +743,7 @@ static enum hrtimer_restart tx_timer_func(struct hrtimer *timer)
 				mask |= msg_mask(dev);
 				continue;
 			} else {
-				shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+				shmem_forced_cp_crash(mld, CRASH_REASON_MIF_TX_ERR,
 					"tx_frames_to_dev error");
 				need_schedule = false;
 				goto exit;
@@ -756,7 +758,7 @@ static enum hrtimer_restart tx_timer_func(struct hrtimer *timer)
 	}
 
 	if (!need_schedule) {
-		for (i = 0; i < MAX_SIPC5_DEVICES; i++) {
+		for (i = 0; i < MAX_SIPC_MAP; i++) {
 			if (!txq_empty(mld->dev[i])) {
 				need_schedule = true;
 				break;
@@ -812,6 +814,58 @@ static inline void cancel_tx_timer(struct mem_link_device *mld,
 		hrtimer_cancel(timer);
 
 	spin_unlock_irqrestore(&mc->lock, flags);
+}
+
+static inline void start_datalloc_timer(struct mem_link_device *mld,
+				  struct hrtimer *timer)
+{
+	struct link_device *ld = &mld->link_dev;
+	struct modem_ctl *mc = ld->mc;
+	unsigned long flags;
+
+	spin_lock_irqsave(&mc->lock, flags);
+
+	if (unlikely(cp_offline(mc)))
+		goto exit;
+
+	if (!hrtimer_is_queued(timer)) {
+		ktime_t ktime = ktime_set(0, ms2ns(DATALLOC_PERIOD_MS));
+		hrtimer_start(timer, ktime, HRTIMER_MODE_REL);
+	}
+
+exit:
+	spin_unlock_irqrestore(&mc->lock, flags);
+}
+
+static inline void __cancel_datalloc_timer(struct mem_link_device *mld,
+				   struct hrtimer *timer)
+{
+	struct link_device *ld = &mld->link_dev;
+	struct modem_ctl *mc = ld->mc;
+	unsigned long flags;
+
+	spin_lock_irqsave(&mc->lock, flags);
+
+	if (hrtimer_active(timer))
+		hrtimer_cancel(timer);
+
+	spin_unlock_irqrestore(&mc->lock, flags);
+}
+
+static inline void cancel_datalloc_timer(struct mem_link_device *mld)
+{
+	struct sbd_link_device *sl = &mld->sbd_link_dev;
+	struct sbd_ipc_device *ipc_dev = sl->ipc_dev;
+	int i;
+
+	for (i = 0; i < sl->num_channels; i++) {
+		struct sbd_ring_buffer *rb = &ipc_dev[i].rb[DL];
+		if (rb->zerocopy) {
+			struct zerocopy_adaptor *zdptr = rb->zdptr;
+			__cancel_datalloc_timer(mld, &zdptr->datalloc_timer);
+		}
+	}
+
 }
 
 static int tx_frames_to_rb(struct sbd_ring_buffer *rb)
@@ -876,15 +930,31 @@ static enum hrtimer_restart sbd_tx_timer_func(struct hrtimer *timer)
 		struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, TX);
 		int ret;
 
-		ret = tx_frames_to_rb(rb);
+		if (unlikely(sbd_under_tx_flow_ctrl(rb))) {
+			ret = sbd_check_tx_flow_ctrl(rb);
+			if (ret < 0) {
+				if (ret == -EBUSY || ret == -ETIME) {
+					need_schedule = true;
+					continue;
+				} else {
+					shmem_forced_cp_crash(mld,
+						CRASH_REASON_MIF_TX_ERR,
+						"check_sbd_tx_flow_ctrl error");
+					need_schedule = false;
+					goto exit;
+				}
+			}
+		}
 
+		ret = tx_frames_to_rb(rb);
 		if (unlikely(ret < 0)) {
 			if (ret == -EBUSY || ret == -ENOSPC) {
 				need_schedule = true;
+				sbd_txq_stop(rb);
 				mask = MASK_SEND_DATA;
 				continue;
 			} else {
-				shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+				shmem_forced_cp_crash(mld, CRASH_REASON_MIF_TX_ERR,
 					"tx_frames_to_rb error");
 				need_schedule = false;
 				goto exit;
@@ -926,6 +996,37 @@ exit:
 		ktime_t ktime = ktime_set(0, mld->tx_period_ms * NSEC_PER_MSEC);
 		hrtimer_start(timer, ktime, HRTIMER_MODE_REL);
 	}
+
+	return HRTIMER_NORESTART;
+}
+
+enum hrtimer_restart datalloc_timer_func(struct hrtimer *timer)
+{
+	struct zerocopy_adaptor *zdptr =
+		container_of(timer, struct zerocopy_adaptor, datalloc_timer);
+	struct sbd_ring_buffer *rb = zdptr->rb;
+	struct link_device *ld = rb->ld;
+	struct mem_link_device *mld = ld_to_mem_link_device(ld);
+	struct modem_ctl *mc = ld->mc;
+	bool need_schedule = false;
+	unsigned long flags;
+
+	spin_lock_irqsave(&mc->lock, flags);
+	if (unlikely(!ipc_active(mld))) {
+		spin_unlock_irqrestore(&mc->lock, flags);
+		goto exit;
+	}
+	spin_unlock_irqrestore(&mc->lock, flags);
+
+	if (-ENOMEM == allocate_data_in_advance(zdptr)) {
+		need_schedule = true;
+	}
+
+	if (need_schedule) {
+		ktime_t ktime = ktime_set(0, ms2ns(DATALLOC_PERIOD_MS));
+		hrtimer_start(timer, ktime, HRTIMER_MODE_REL);
+	}
+exit:
 
 	return HRTIMER_NORESTART;
 }
@@ -988,7 +1089,7 @@ static int xmit_ipc_to_dev(struct mem_link_device *mld, enum sipc_ch_id ch,
 	struct link_device *ld = &mld->link_dev;
 	struct io_device *iod = skbpriv(skb)->iod;
 	struct modem_ctl *mc = ld->mc;
-	struct mem_ipc_device *dev = mld->dev[dev_id(ch)];
+	struct mem_ipc_device *dev = mld->dev[get_mmap_idx(ch, skb)];
 	struct sk_buff_head *skb_txq;
 
 	if (!dev) {
@@ -1097,7 +1198,7 @@ static int xmit_udl(struct mem_link_device *mld, struct io_device *iod,
 		    enum sipc_ch_id ch, struct sk_buff *skb)
 {
 	int ret;
-	struct mem_ipc_device *dev = mld->dev[IPC_RAW];
+	struct mem_ipc_device *dev = mld->dev[IPC_MAP_NORM_RAW];
 	int count = skb->len;
 	int tried = 0;
 
@@ -1143,7 +1244,7 @@ static void pass_skb_to_demux(struct mem_link_device *mld, struct sk_buff *skb)
 	if (unlikely(!iod)) {
 		mif_err("%s: ERR! No IOD for CH.%d\n", ld->name, ch);
 		dev_kfree_skb_any(skb);
-		shmem_forced_cp_crash(mld, MEM_CRASH_REASON_RIL,
+		shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RIL_BAD_CH,
 			"ERR! No IOD for CH.XX in pass_skb_to_demux()");
 		return;
 	}
@@ -1165,7 +1266,7 @@ static inline void link_to_demux(struct mem_link_device  *mld)
 {
 	int i;
 
-	for (i = 0; i < MAX_SIPC5_DEVICES; i++) {
+	for (i = 0; i < MAX_SIPC_MAP; i++) {
 		struct mem_ipc_device *dev = mld->dev[i];
 		struct sk_buff_head *skb_rxq = dev->skb_rxq;
 
@@ -1262,7 +1363,7 @@ bad_msg:
 		ld->name, arrow(RX), ld->mc->name,
 		hdr[0], hdr[1], hdr[2], hdr[3]);
 	set_rxq_tail(dev, in);	/* Reset tail (out) pointer */
-	shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+	shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 		"ERR! BAD MSG from CP in rxq_read()");
 
 no_mem:
@@ -1300,7 +1401,7 @@ static int rx_frames_from_dev(struct mem_link_device *mld,
 				ld->name, dev->name, ch, get_rxq_tail(dev));
 			pr_skb("CRASH", skb);
 			dev_kfree_skb_any(skb);
-			shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+			shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 				"ERR! No IOD from CP in rx_frames_from_dev()");
 			break;
 		}
@@ -1332,7 +1433,7 @@ static int recv_ipc_frames(struct mem_link_device *mld,
 	int i;
 	u16 intr = mst->int2ap;
 
-	for (i = 0; i < MAX_SIPC5_DEVICES; i++) {
+	for (i = 0; i < MAX_SIPC_MAP; i++) {
 		struct mem_ipc_device *dev = mld->dev[i];
 		int rcvd;
 
@@ -1361,13 +1462,20 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 	struct link_device *ld = &mld->link_dev;
 	struct skbuff_private *priv;
 	struct io_device *iod;
+	struct modem_ctl *mc = ld->mc;
 	int ret;
+
+	if (unlikely(!cp_online(mc))) {
+		mif_err_limited("ERR! CP not online!, skb:%p\n", skb);
+		dev_kfree_skb_any(skb);
+		return;
+	}
 
 	priv = skbpriv(skb);
 	if (unlikely(!priv)) {
 		mif_err("%s: ERR! No PRIV in skb@%p\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
-		shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+		shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 			"ERR! No PRIV in pass_skb_to_net()");
 		return;
 	}
@@ -1376,7 +1484,7 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 	if (unlikely(!iod)) {
 		mif_err("%s: ERR! No IOD in skb@%p\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
-		shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+		shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 			"ERR! No IOD in pass_skb_to_net()");
 		return;
 	}
@@ -1394,7 +1502,66 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 	}
 }
 
-static int rx_net_frames_from_rb(struct sbd_ring_buffer *rb, int budget)
+#define FREE_RB_BUF_COUNT 200
+static int rx_net_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb,
+		int budget, int *work_done)
+{
+	int rcvd = 0;
+	struct link_device *ld = rb->ld;
+	struct mem_link_device *mld = ld_to_mem_link_device(ld);
+	struct zerocopy_adaptor *zdptr = rb->zdptr;
+	unsigned int num_frames;
+	int use_memcpy = 0;
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	num_frames = min_t(unsigned int, rb_usage(rb), budget);
+#else /* !CONFIG_LINK_DEVICE_NAPI */
+	num_frames = rb_usage(rb);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
+
+	if (mld->force_use_memcpy || (num_frames > ld->mif_buff_mng->free_cell_count)
+		|| (FREE_RB_BUF_COUNT > circ_get_space(zdptr->len, *(zdptr->rp), *(zdptr->wp)))) {
+		use_memcpy = 1;
+		mld->memcpy_packet_count++;
+	} else {
+		use_memcpy = 0;
+		mld->zeromemcpy_packet_count++;
+	}
+
+	while (rcvd < num_frames) {
+		struct sk_buff *skb;
+
+		skb = sbd_pio_rx_zerocopy_adaptor(rb, use_memcpy);
+		if (!skb)
+			break;
+
+		/* The $rcvd must be accumulated here, because $skb can be freed
+		   in pass_skb_to_net(). */
+		rcvd++;
+
+		pass_skb_to_net(mld, skb);
+	}
+
+	if (rcvd < num_frames) {
+		struct io_device *iod = rb->iod;
+		struct link_device *ld = rb->ld;
+		struct modem_ctl *mc = ld->mc;
+		mif_err("%s: %s<-%s: WARN! rcvd %d < num_frames %d\n",
+			ld->name, iod->name, mc->name, rcvd, num_frames);
+	}
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	*work_done = rcvd;
+	allocate_data_in_advance(zdptr);
+#else /* !CONFIG_LINK_DEVICE_NAPI */
+	start_datalloc_timer(mld, &zdptr->datalloc_timer);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
+
+	return rcvd;
+}
+
+static int rx_net_frames_from_rb(struct sbd_ring_buffer *rb, int budget,
+		int *work_done)
 {
 	int rcvd = 0;
 	struct link_device *ld = rb->ld;
@@ -1403,9 +1570,9 @@ static int rx_net_frames_from_rb(struct sbd_ring_buffer *rb, int budget)
 
 #ifdef CONFIG_LINK_DEVICE_NAPI
 	num_frames = min_t(unsigned int, rb_usage(rb), budget);
-#else
+#else /* !CONFIG_LINK_DEVICE_NAPI */
 	num_frames = rb_usage(rb);
-#endif
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	while (rcvd < num_frames) {
 		struct sk_buff *skb;
@@ -1428,6 +1595,64 @@ static int rx_net_frames_from_rb(struct sbd_ring_buffer *rb, int budget)
 		mif_err("%s: %s<-%s: WARN! rcvd %d < num_frames %d\n",
 			ld->name, iod->name, mc->name, rcvd, num_frames);
 	}
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	*work_done = rcvd;
+#endif /* CONFIG_LINK_DEVICE_NAPI */
+
+	return rcvd;
+}
+
+static int rx_ipc_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb)
+{
+	int rcvd = 0;
+	struct link_device *ld = rb->ld;
+	struct mem_link_device *mld = ld_to_mem_link_device(ld);
+	struct zerocopy_adaptor *zdptr = rb->zdptr;
+	unsigned int num_frames = zerocopy_adaptor_usage(zdptr);
+
+	while (rcvd < num_frames) {
+		struct sk_buff *skb;
+
+		skb = sbd_pio_rx_zerocopy_adaptor(rb, 0);
+		if (!skb) {
+#ifdef DEBUG_MODEM_IF
+			panic("skb alloc failed.");
+#else
+			shmem_forced_cp_crash(mld, CRASH_REASON_MIF_ZMC,
+				"ERR! ZMC alloc failed");
+#endif
+			break;
+		}
+
+		/* The $rcvd must be accumulated here, because $skb can be freed
+		   in pass_skb_to_demux(). */
+		rcvd++;
+
+		if (skbpriv(skb)->lnk_hdr) {
+			u8 ch = rb->ch;
+			u8 fch = sipc5_get_ch(skb->data);
+			if (fch != ch) {
+				mif_err("frm.ch:%d != rb.ch:%d\n", fch, ch);
+				pr_skb("CRASH", skb);
+				dev_kfree_skb_any(skb);
+				shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
+					"frm.ch is not same with rb.ch");
+				continue;
+			}
+		}
+
+		pass_skb_to_demux(mld, skb);
+	}
+
+	if (rcvd < num_frames) {
+		struct io_device *iod = rb->iod;
+		struct modem_ctl *mc = ld->mc;
+		mif_err("%s: %s<-%s: WARN! rcvd %d < num_frames %d\n",
+			ld->name, iod->name, mc->name, rcvd, num_frames);
+	}
+
+	start_datalloc_timer(mld, &zdptr->datalloc_timer);
 
 	return rcvd;
 }
@@ -1460,8 +1685,8 @@ static int rx_ipc_frames_from_rb(struct sbd_ring_buffer *rb)
 				mif_err("frm.ch:%d != rb.ch:%d\n", fch, ch);
 				pr_skb("CRASH", skb);
 				dev_kfree_skb_any(skb);
-				shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
-					"frm.ch != rb.ch in rx_ipc_frames_from_rb()");
+				shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
+					"frm.ch is not same with rb.ch");
 				continue;
 			}
 		}
@@ -1478,33 +1703,63 @@ static int rx_ipc_frames_from_rb(struct sbd_ring_buffer *rb)
 	return rcvd;
 }
 
-int mem_netdev_poll(struct napi_struct *napi, int budget)
+#ifdef CONFIG_LINK_DEVICE_NAPI
+static int shmem_poll_recv_on_iod(struct link_device *ld, struct io_device *iod,
+		int budget)
 {
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	struct sbd_ring_buffer *rb = sbd_ch2rb(&mld->sbd_link_dev, iod->id, RX);
 	int rcvd;
-	struct vnet *vnet = netdev_priv(napi->dev);
-	struct mem_link_device *mld =
-		container_of(vnet->ld, struct mem_link_device, link_dev);
-	struct sbd_ring_buffer *rb =
-		sbd_ch2rb(&mld->sbd_link_dev, vnet->iod->id, RX);
+	int ret;
 
-	rcvd = rx_net_frames_from_rb(rb, budget);
+	iod->rx_poll_count++;
 
-	/* no more ring buffer to process */
-	if (rcvd < budget) {
-		napi_complete(napi);
-		/* To do: enable mailbox irq */
-	}
+	if (rb->zerocopy)
+		ret = rx_net_frames_from_zerocopy_adaptor(rb, budget, &rcvd);
+	else
+		ret = rx_net_frames_from_rb(rb, budget, &rcvd);
 
-	mif_debug("%d pkts\n", rcvd);
+	if (IS_ERR_VALUE(ret))
+		mif_err("RX error (%d)\n", ret);
 
 	return rcvd;
 }
 
+static ktime_t rx_int_enable_time;
+static ktime_t rx_int_disable_time;
+
+static int shmem_enable_rx_int(struct link_device *ld)
+{
+	struct mem_link_device *mld = to_mem_link_device(ld);
+
+	mld->rx_int_enable = 1;
+	if (rx_int_disable_time.tv64) {
+		rx_int_enable_time = ktime_get();
+		mld->rx_int_disabled_time += ktime_to_us(
+			ktime_sub(rx_int_enable_time, rx_int_disable_time));
+		rx_int_enable_time.tv64 = 0;
+		rx_int_disable_time.tv64 = 0;
+	}
+	return mbox_enable_irq(MCU_CP, mld->irq_cp2ap_msg);
+}
+
+static int shmem_disable_rx_int(struct link_device *ld)
+{
+	struct mem_link_device *mld = to_mem_link_device(ld);
+
+	mld->rx_int_enable = 0;
+	rx_int_disable_time = ktime_get();
+	return mbox_disable_irq(MCU_CP, mld->irq_cp2ap_msg);
+}
+#endif /* CONFIG_LINK_DEVICE_NAPI */
+
 static int recv_sbd_ipc_frames(struct mem_link_device *mld,
-				struct mem_snapshot *mst)
+				struct mem_snapshot *mst, int budget)
 {
 	struct sbd_link_device *sl = &mld->sbd_link_dev;
 	int i;
+	int total_ps_rcvd = 0;
+	int total_non_ps_rcvd = 0;
 
 	for (i = 0; i < sl->num_channels; i++) {
 		struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, RX);
@@ -1514,21 +1769,25 @@ static int recv_sbd_ipc_frames(struct mem_link_device *mld,
 			continue;
 
 		if (likely(sipc_ps_ch(rb->ch))) {
-#ifdef CONFIG_LINK_DEVICE_NAPI
-			/* To do: disable mailbox irq */
-			if (napi_schedule_prep(&rb->iod->napi))
-				__napi_schedule(&rb->iod->napi);
-#else
-			rcvd = rx_net_frames_from_rb(rb, 0);
-#endif
+			if (rb->zerocopy)
+				rcvd = rx_net_frames_from_zerocopy_adaptor(rb,
+						budget, &rcvd);
+			else
+				rcvd = rx_net_frames_from_rb(rb, budget, &rcvd);
+			budget -= rcvd;
+			total_ps_rcvd += rcvd;
 		} else {
-			rcvd = rx_ipc_frames_from_rb(rb);
+			if (rb->zerocopy)
+				rcvd = rx_ipc_frames_from_zerocopy_adaptor(rb);
+			else
+				rcvd = rx_ipc_frames_from_rb(rb);
+			total_non_ps_rcvd += rcvd;
 		}
 
 		if (rcvd < 0)
 			return rcvd;
 	}
-	return 0;
+	return total_ps_rcvd;
 }
 
 static void shmem_oom_handler_work(struct work_struct *ws)
@@ -1549,9 +1808,11 @@ static void shmem_oom_handler_work(struct work_struct *ws)
 	tasklet_schedule(&mld->rx_tsk);
 }
 
-static void ipc_rx_func(struct mem_link_device *mld)
+static int ipc_rx_func(struct mem_link_device *mld, int budget)
 {
 	u32 qlen = mld->msb_rxq.qlen;
+	int total_ps_rcvd = 0;
+	int ps_rcvd = 0;
 
 	while (qlen-- > 0) {
 		struct mst_buff *msb;
@@ -1567,9 +1828,15 @@ static void ipc_rx_func(struct mem_link_device *mld)
 		if (cmd_valid(intr))
 			mld->cmd_handler(mld, int2cmd(intr));
 
-		if (sbd_active(&mld->sbd_link_dev))
-			ret = recv_sbd_ipc_frames(mld, &msb->snapshot);
-		else
+		if (sbd_active(&mld->sbd_link_dev)) {
+			ps_rcvd = recv_sbd_ipc_frames(mld,
+					&msb->snapshot, budget);
+			if (ps_rcvd >= 0)
+				total_ps_rcvd += ps_rcvd;
+			else
+				ret = ps_rcvd;
+
+		} else
 			ret = recv_ipc_frames(mld, &msb->snapshot);
 
 		if (ret == -ENOMEM) {
@@ -1580,13 +1847,12 @@ static void ipc_rx_func(struct mem_link_device *mld)
 				queue_work(ld->rx_wq,
 						&mld->page_reclaim_work);
 			}
-			return;
+			return 0;
 		}
 		msb_free(msb);
 	}
 
-	if (mld->msb_rxq.qlen)
-		tasklet_schedule(&mld->rx_tsk);
+	return total_ps_rcvd;
 }
 
 static void udl_rx_work(struct work_struct *ws)
@@ -1595,7 +1861,7 @@ static void udl_rx_work(struct work_struct *ws)
 
 	mld = container_of(ws, struct mem_link_device, udl_rx_dwork.work);
 
-	ipc_rx_func(mld);
+	ipc_rx_func(mld, 0);
 }
 
 static void shmem_rx_task(unsigned long data)
@@ -1605,7 +1871,7 @@ static void shmem_rx_task(unsigned long data)
 	struct modem_ctl *mc = ld->mc;
 
 	if (likely(cp_online(mc)))
-		ipc_rx_func(mld);
+		ipc_rx_func(mld, 0);
 	else
 		queue_delayed_work(ld->rx_wq, &mld->udl_rx_dwork, 0);
 }
@@ -1757,6 +2023,7 @@ static void shmem_boot_on(struct link_device *ld, struct io_device *iod)
 		sbd_deactivate(&mld->sbd_link_dev);
 #endif
 		cancel_tx_timer(mld, &mld->sbd_tx_timer);
+		cancel_datalloc_timer(mld);
 
 		if (mld->iosm) {
 			memset(mld->base + CMD_RGN_OFFSET, 0, CMD_RGN_SIZE);
@@ -1777,7 +2044,7 @@ static int shmem_xmit_boot(struct link_device *ld, struct io_device *iod,
 	int err;
 	struct modem_firmware mf;
 	void __iomem *v_base;
-	unsigned valid_space;
+	size_t valid_space;
 
 	/**
 	 * Get the information about the boot image
@@ -1889,12 +2156,115 @@ exit:
 	return err;
 }
 
+#ifdef CONFIG_LINK_DEVICE_NAPI
+static int shmem_enqueue_snapshot(struct mem_link_device *mld);
+
+/*
+ * mld_rx_int_poll
+ *
+ * This NAPI poll function does not handle reception of any network frames.
+ * It is used for servicing CP2AP commands and FMT RX frames while the RX
+ * mailbox interrupt is masked. When the mailbox interrupt is masked, CP can
+ * set the interrupt but the AP will not react. However, the interrupt status
+ * bit will still be set, so we can poll the status bit to handle new RX
+ * interrupts.
+ * If the RAW NAPI functions are no longer scheduled at the end of this poll
+ * function, we can enable the mailbox interrupt and stop polling.
+ */
+static int mld_rx_int_poll(struct napi_struct *napi, int budget)
+{
+	struct mem_link_device *mld = container_of(napi, struct mem_link_device,
+			mld_napi);
+	struct link_device *ld = &mld->link_dev;
+	struct modem_ctl *mc = ld->mc;
+	struct sbd_link_device *sl = &mld->sbd_link_dev;
+	int total_ps_rcvd = 0;
+	int ps_rcvd = 0;
+	int i;
+	int ret;
+	int total_budget;
+
+	ret = mbox_check_irq(MCU_CP, mld->irq_cp2ap_msg);
+	if (IS_ERR_VALUE(ret))
+		goto dummy_poll_complete;
+
+	mld->rx_poll_count++;
+
+	if (ret) {
+		/* If there was a new interrupt,
+		 * do what irq_handler would have done.
+		 */
+		if (shmem_enqueue_snapshot(mld))
+			goto dummy_poll_complete;
+
+		if (likely(cp_online(mc)))
+			total_ps_rcvd = ipc_rx_func(mld, budget);
+		else
+			queue_delayed_work(ld->rx_wq, &mld->udl_rx_dwork, 0);
+
+		if (total_ps_rcvd) {
+			if (total_ps_rcvd < budget) {
+				napi_complete_done(napi, total_ps_rcvd);
+				ld->enable_rx_int(ld);
+			}
+			return total_ps_rcvd;
+		} else
+			goto dummy_poll_complete;
+	} else {
+		/* Leave interrupt disabled
+		 * and poll if NET polling is not finished.
+		 */
+		total_budget = budget;
+		for (i = 0; i < sl->num_channels; i++) {
+			struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, RX);
+
+			if (likely(sipc_ps_ch(rb->ch))) {
+				ps_rcvd = shmem_poll_recv_on_iod(ld,
+						rb->iod, budget);
+				budget -= ps_rcvd;
+				total_ps_rcvd += ps_rcvd;
+			}
+		}
+
+		if (total_ps_rcvd) {
+			if (total_ps_rcvd < total_budget) {
+				napi_complete_done(napi, total_ps_rcvd);
+				ld->enable_rx_int(ld);
+			}
+		} else {
+			napi_complete(napi);
+			ld->enable_rx_int(ld);
+		}
+
+		return total_ps_rcvd;
+	}
+
+dummy_poll_complete:
+	napi_complete(napi);
+	ld->enable_rx_int(ld);
+
+	return 0;
+}
+
+static void sync_net_dev(struct link_device *ld)
+{
+	struct mem_link_device *mld = to_mem_link_device(ld);
+
+	napi_synchronize(&mld->mld_napi);
+	mif_info("%s\n", netdev_name(&mld->dummy_net));
+}
+#endif /* CONFIG_LINK_DEVICE_NAPI */
+
 static int shmem_start_download(struct link_device *ld, struct io_device *iod)
 {
 	struct mem_link_device *mld = to_mem_link_device(ld);
 
 	if (ld->sbd_ipc && mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP))
 		sbd_deactivate(&mld->sbd_link_dev);
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	sync_net_dev(ld);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	reset_ipc_map(mld);
 
@@ -1938,9 +2308,11 @@ static int shmem_update_firm_info(struct link_device *ld, struct io_device *iod,
 static int shmem_force_dump(struct link_device *ld, struct io_device *iod)
 {
 	struct mem_link_device *mld = to_mem_link_device(ld);
+	u32 crash_type = ld->crash_type;
+
 	mif_err("+++\n");
-	shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
-		"shmem_force_dump() is called");
+	shmem_forced_cp_crash(mld, crash_type,
+		"forced crash is called by ioctl command");
 	mif_err("---\n");
 	return 0;
 }
@@ -1951,6 +2323,10 @@ static int shmem_start_upload(struct link_device *ld, struct io_device *iod)
 
 	if (ld->sbd_ipc && mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP))
 		sbd_deactivate(&mld->sbd_link_dev);
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	sync_net_dev(ld);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	reset_ipc_map(mld);
 
@@ -2013,7 +2389,7 @@ static int shmem_airplane_mode(struct link_device *ld, struct io_device *iod,
 	struct modem_ctl *mc = ld->mc;
 	struct mem_link_device *mld = to_mem_link_device(ld);
 
-	mc->airplane_mode = arg;
+	mc->airplane_mode = (unsigned int)arg;
 	mif_info("Set airplane mode: %d\n", mc->airplane_mode);
 
 	if (mc->airplane_mode)
@@ -2151,7 +2527,7 @@ static int shmem_ioctl(struct link_device *ld, struct io_device *iod,
 
 		mif_info("Clear CP boot log\n");
 		memset(base, 0, SHMEM_BOOTLOG_BUFF);
-		
+
 		break;
 	}
 
@@ -2172,7 +2548,10 @@ static void shmem_tx_state_handler(void *data)
 
 	int2ap_status = mld->recv_cp2ap_status(mld);
 
-	switch (int2ap_status & 0x0010) {
+	/* Change SHM_FLOWCTL to MASK_TX_FLOWCTRL */
+	int2ap_status = (int2ap_status & SHM_FLOWCTL_BIT) << 2;
+
+	switch (int2ap_status & (SHM_FLOWCTL_BIT << 2)) {
 	case MASK_TX_FLOWCTL_SUSPEND:
 		if (!chk_same_cmd(mld, int2ap_status))
 			tx_flowctrl_suspend(mld);
@@ -2194,33 +2573,53 @@ static void shmem_tx_state_handler(void *data)
 	}
 }
 
-static void shmem_irq_handler(void *data)
+static int shmem_enqueue_snapshot(struct mem_link_device *mld)
 {
-	struct mem_link_device *mld = (struct mem_link_device *)data;
 	struct mst_buff *msb;
 	struct link_device *ld = &mld->link_dev;
 	struct modem_ctl *mc = ld->mc;
 
 	msb = mem_take_snapshot(mld, RX);
 	if (!msb)
-		return;
+		return -ENOMEM;
 
 	if (unlikely(!int_valid(msb->snapshot.int2ap))) {
 		mif_err("%s: ERR! invalid intr 0x%X\n",
 				ld->name, msb->snapshot.int2ap);
 		msb_free(msb);
-		return;
+		return -EINVAL;
 	}
 
 	if (unlikely(!rx_possible(mc))) {
 		mif_err("%s: ERR! %s.state == %s\n", ld->name, mc->name,
 			mc_state(mc));
 		msb_free(msb);
-		return;
+		return -EINVAL;
 	}
 
 	msb_queue_tail(&mld->msb_rxq, msb);
+
+	return 0;
+}
+
+static void shmem_irq_handler(void *data)
+{
+	struct mem_link_device *mld = (struct mem_link_device *)data;
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	mld->rx_int_count++;
+	if (napi_schedule_prep(&mld->mld_napi)) {
+		struct link_device *ld = &mld->link_dev;
+
+		ld->disable_rx_int(ld);
+		__napi_schedule(&mld->mld_napi);
+	}
+#else /* !CONFIG_LINK_DEVICE_NAPI */
+	if (shmem_enqueue_snapshot(mld))
+		return;
+
 	tasklet_schedule(&mld->rx_tsk);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 }
 
 static struct pm_qos_request pm_qos_req_mif;
@@ -2476,10 +2875,10 @@ static void remap_4mb_map_to_ipc_dev(struct mem_link_device *mld)
 	/* To share ECT clock table with CP */
 	mld->clk_table = (u32 __iomem *)map->reserved;
 
-	/* IPC_FMT */
-	dev = &mld->ipc_dev[IPC_FMT];
+	/* IPC_MAP_FMT */
+	dev = &mld->ipc_dev[IPC_MAP_FMT];
 
-	dev->id = IPC_FMT;
+	dev->id = IPC_MAP_FMT;
 	strcpy(dev->name, "FMT");
 
 	spin_lock_init(&dev->txq.lock);
@@ -2500,19 +2899,57 @@ static void remap_4mb_map_to_ipc_dev(struct mem_link_device *mld)
 	dev->req_ack_mask = MASK_REQ_ACK_FMT;
 	dev->res_ack_mask = MASK_RES_ACK_FMT;
 
-	dev->skb_txq = &ld->sk_fmt_tx_q;
-	dev->skb_rxq = &ld->sk_fmt_rx_q;
+	dev->skb_txq = &ld->skb_txq[IPC_MAP_FMT];
+	dev->skb_rxq = &ld->skb_rxq[IPC_MAP_FMT];
+	skb_queue_head_init(dev->skb_txq);
+	skb_queue_head_init(dev->skb_rxq);
 
 	dev->req_ack_cnt[TX] = 0;
 	dev->req_ack_cnt[RX] = 0;
 
-	mld->dev[IPC_FMT] = dev;
+	mld->dev[IPC_MAP_FMT] = dev;
 
-	/* IPC_RAW */
-	dev = &mld->ipc_dev[IPC_RAW];
+#ifdef CONFIG_MODEM_IF_LEGACY_QOS
+	/* IPC_MAP_HPRIO_RAW */
+	dev = &mld->ipc_dev[IPC_MAP_HPRIO_RAW];
 
-	dev->id = IPC_RAW;
-	strcpy(dev->name, "RAW");
+	dev->id = IPC_MAP_HPRIO_RAW;
+	strcpy(dev->name, "HPRIO_RAW");
+
+	spin_lock_init(&dev->txq.lock);
+	atomic_set(&dev->txq.busy, 0);
+	dev->txq.head = &map->raw_hprio_tx_head;
+	dev->txq.tail = &map->raw_hprio_tx_tail;
+	dev->txq.buff = &map->raw_hprio_tx_buff[0];
+	dev->txq.size = SHM_4M_RAW_HPRIO_TX_BUFF_SZ;
+
+	spin_lock_init(&dev->rxq.lock);
+	atomic_set(&dev->rxq.busy, 0);
+	dev->rxq.head = &map->raw_hprio_rx_head;
+	dev->rxq.tail = &map->raw_hprio_rx_tail;
+	dev->rxq.buff = &map->raw_hprio_rx_buff[0];
+	dev->rxq.size = SHM_4M_RAW_HPRIO_RX_BUFF_SZ;
+
+	dev->msg_mask = MASK_SEND_RAW;
+	dev->req_ack_mask = MASK_REQ_ACK_RAW;
+	dev->res_ack_mask = MASK_RES_ACK_RAW;
+
+	dev->skb_txq = &ld->skb_txq[IPC_MAP_HPRIO_RAW];
+	dev->skb_rxq = &ld->skb_rxq[IPC_MAP_HPRIO_RAW];
+	skb_queue_head_init(dev->skb_txq);
+	skb_queue_head_init(dev->skb_rxq);
+
+	dev->req_ack_cnt[TX] = 0;
+	dev->req_ack_cnt[RX] = 0;
+
+	mld->dev[IPC_MAP_HPRIO_RAW] = dev;
+#endif
+
+	/* IPC_MAP_NORM_RAW */
+	dev = &mld->ipc_dev[IPC_MAP_NORM_RAW];
+
+	dev->id = IPC_MAP_NORM_RAW;
+	strcpy(dev->name, "NORM_RAW");
 
 	spin_lock_init(&dev->txq.lock);
 	atomic_set(&dev->txq.busy, 0);
@@ -2532,13 +2969,15 @@ static void remap_4mb_map_to_ipc_dev(struct mem_link_device *mld)
 	dev->req_ack_mask = MASK_REQ_ACK_RAW;
 	dev->res_ack_mask = MASK_RES_ACK_RAW;
 
-	dev->skb_txq = &ld->sk_raw_tx_q;
-	dev->skb_rxq = &ld->sk_raw_rx_q;
+	dev->skb_txq = &ld->skb_txq[IPC_MAP_NORM_RAW];
+	dev->skb_rxq = &ld->skb_rxq[IPC_MAP_NORM_RAW];
+	skb_queue_head_init(dev->skb_txq);
+	skb_queue_head_init(dev->skb_rxq);
 
 	dev->req_ack_cnt[TX] = 0;
 	dev->req_ack_cnt[RX] = 0;
 
-	mld->dev[IPC_RAW] = dev;
+	mld->dev[IPC_MAP_NORM_RAW] = dev;
 }
 
 static int shmem_rx_setup(struct link_device *ld)
@@ -2588,7 +3027,7 @@ static ssize_t tx_period_ms_store(struct device *dev,
 	return ret;
 }
 
-static int rb_ch_id;
+static int rb_ch_id = 8;
 static ssize_t rb_info_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -2601,12 +3040,13 @@ static ssize_t rb_info_show(struct device *dev,
 	rb_rx = sbd_id2rb(sl, rb_ch_id, RX);
 
 	if (rb_tx->len && rb_rx->len)
-		return sprintf(buf, "rb_ch_id(%s) = %d (of %d)\n"
+		return sprintf(buf, "rb_ch_id = %d (total: %d)\n"
 				"TX(len: %d, rp: %d, wp: %d, space: %d, usage: %d)\n"
-				"RX(len: %d, rp: %d, wp: %d, space: %d, usage: %d)\n",
-				rb_tx->iod->name, rb_ch_id, sl->num_channels,
+				"RX(len: %d, rp: %d, pre_rp: %d,wp: %d, space: %d, usage: %d)\n",
+				rb_ch_id, sl->num_channels,
 				rb_tx->len, *rb_tx->rp, *rb_tx->wp, rb_space(rb_tx) + 1, rb_usage(rb_tx),
-				rb_rx->len, *rb_rx->rp, *rb_rx->wp, rb_space(rb_rx) + 1, rb_usage(rb_tx));
+				rb_rx->len, *rb_rx->rp, rb_rx->zerocopy ? rb_rx->zdptr->pre_rp : -1,
+				*rb_rx->wp, rb_space(rb_rx) + 1, rb_usage(rb_tx));
 	else
 		return sprintf(buf, "rb_ch_id = %d(of %d), TX(empty), RX(empty)\n",
 				rb_ch_id, sl->num_channels);
@@ -2634,12 +3074,80 @@ static ssize_t rb_info_store(struct device *dev,
 	return ret;
 }
 
+static ssize_t zmc_count_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+	modem = (struct modem_data *)dev->platform_data;
+
+	return sprintf(buf, "memcpy_packet(%d)/zeromemcpy_packet(%d)\n",
+			modem->mld->memcpy_packet_count, modem->mld->zeromemcpy_packet_count);
+}
+
+static ssize_t zmc_count_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct modem_data *modem;
+	int val = 0;
+	int ret;
+	modem = (struct modem_data *)dev->platform_data;
+	ret = sscanf(buf, "%u", &val);
+
+	if (val == 0) {
+		modem->mld->memcpy_packet_count = 0;
+		modem->mld->zeromemcpy_packet_count = 0;
+	}
+
+	return count;
+}
+
+static ssize_t mif_buff_mng_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "used(%d)/free(%d)/total(%d)\n",
+			g_mif_buff_mng->used_cell_count, g_mif_buff_mng->free_cell_count,
+			g_mif_buff_mng->cell_count);
+}
+
+static ssize_t force_use_memcpy_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+	modem = (struct modem_data *)dev->platform_data;
+	return sprintf(buf, "%d\n", modem->mld->force_use_memcpy);
+}
+
+static ssize_t force_use_memcpy_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+
+	struct modem_data *modem;
+	int val = 0;
+	int ret;
+	modem = (struct modem_data *)dev->platform_data;
+	ret = sscanf(buf, "%u", &val);
+
+	if (val == 0)
+		modem->mld->force_use_memcpy = 0;
+	else if (val == 1)
+		modem->mld->force_use_memcpy = 1;
+	return count;
+}
+
 static DEVICE_ATTR_RW(tx_period_ms);
 static DEVICE_ATTR_RW(rb_info);
+static DEVICE_ATTR_RO(mif_buff_mng);
+static DEVICE_ATTR_RW(zmc_count);
+static DEVICE_ATTR_RW(force_use_memcpy);
 
 static struct attribute *shmem_attrs[] = {
 	&dev_attr_tx_period_ms.attr,
 	&dev_attr_rb_info.attr,
+	&dev_attr_mif_buff_mng.attr,
+	&dev_attr_zmc_count.attr,
+	&dev_attr_force_use_memcpy.attr,
 	NULL,
 };
 
@@ -2647,6 +3155,189 @@ static const struct attribute_group shmem_group = {		\
 	.attrs = shmem_attrs,					\
 	.name = "shmem",
 };
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+static char *napi_state_string[8] = {
+	"NAPI_STATE_COMPLETE",
+	"NAPI_STATE_SCHED",
+	"NAPI_STATE_DISABLE",
+	"NAPI_STATE_NPSVC",
+	"NAPI_STATE_HASHED",
+};
+
+static ssize_t rx_napi_list_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+	struct napi_struct *n;
+	struct net_device *netdev;
+	struct sbd_link_device *sl;
+	int i;
+	ssize_t count = 0;
+
+	modem = (struct modem_data *)dev->platform_data;
+	netdev = &modem->mld->dummy_net;
+	sl = &modem->mld->sbd_link_dev;
+
+	count += sprintf(&buf[count],
+		"[%s`s napi_list]\n", netdev_name(netdev));
+	list_for_each_entry(n, &netdev->napi_list, dev_list)
+		count += sprintf(&buf[count],
+				"state:%s(%ld), weight:%d, poll:0x%p\n",
+				napi_state_string[n->state], n->state,
+				n->weight, (void *)n->poll);
+
+	for (i = 0; i < sl->num_channels; i++) {
+		struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, RX);
+
+		if (likely(sipc_ps_ch(rb->ch))) {
+			netdev = rb->iod->ndev;
+			count += sprintf(&buf[count],
+				"[%s`s napi_list]\n", netdev_name(netdev));
+			list_for_each_entry(n, &netdev->napi_list, dev_list)
+				count += sprintf(&buf[count],
+					"state:%s(%ld), weight:%d, poll:0x%p\n",
+					napi_state_string[n->state], n->state,
+					n->weight, (void *)n->poll);
+		}
+	}
+	return count;
+}
+
+static ssize_t rx_int_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+
+	modem = (struct modem_data *)dev->platform_data;
+	return sprintf(buf, "%d\n", modem->mld->rx_int_enable);
+}
+
+static ssize_t rx_int_count_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+
+	modem = (struct modem_data *)dev->platform_data;
+	return sprintf(buf, "%d\n", modem->mld->rx_int_count);
+}
+
+static ssize_t rx_int_count_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct modem_data *modem;
+	int val = 0;
+	int ret;
+
+	modem = (struct modem_data *)dev->platform_data;
+	ret = sscanf(buf, "%u", &val);
+
+	if (val == 0)
+		modem->mld->rx_int_count = 0;
+	return count;
+}
+
+static ssize_t rx_poll_count_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+	struct io_device *iod;
+	struct sbd_link_device *sl;
+	struct mem_link_device *mld;
+	ssize_t count = 0;
+	int i;
+
+	modem = (struct modem_data *)dev->platform_data;
+	sl = &modem->mld->sbd_link_dev;
+	mld = modem->mld;
+
+	count += sprintf(&buf[count],
+		"%s: %d\n", netdev_name(&mld->dummy_net), mld->rx_poll_count);
+
+	for (i = 0; i < sl->num_channels; i++) {
+		struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, RX);
+
+		if (likely(sipc_ps_ch(rb->ch))) {
+			iod = rb->iod;
+			count += sprintf(&buf[count],
+				"%s: %d\n", iod->name, iod->rx_poll_count);
+		}
+	}
+	return count;
+}
+
+static ssize_t rx_poll_count_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct modem_data *modem;
+	struct io_device *iod;
+	struct sbd_link_device *sl;
+	struct mem_link_device *mld;
+	int i;
+
+	modem = (struct modem_data *)dev->platform_data;
+	sl = &modem->mld->sbd_link_dev;
+	mld = modem->mld;
+
+	for (i = 0; i < sl->num_channels; i++) {
+		struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, RX);
+
+		if (likely(sipc_ps_ch(rb->ch))) {
+			iod = rb->iod;
+			iod->rx_poll_count = 0;
+		}
+	}
+	mld->rx_poll_count = 0;
+	return count;
+}
+
+static ssize_t rx_int_disabled_time_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_data *modem;
+
+	modem = (struct modem_data *)dev->platform_data;
+	return sprintf(buf, "%lld\n", modem->mld->rx_int_disabled_time);
+}
+
+static ssize_t rx_int_disabled_time_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct modem_data *modem;
+	int val = 0;
+	int ret;
+
+	modem = (struct modem_data *)dev->platform_data;
+	ret = sscanf(buf, "%u", &val);
+
+	if (val == 0)
+		modem->mld->rx_int_disabled_time = 0;
+	return count;
+}
+
+static DEVICE_ATTR_RO(rx_napi_list);
+static DEVICE_ATTR_RO(rx_int_enable);
+static DEVICE_ATTR_RW(rx_int_count);
+static DEVICE_ATTR_RW(rx_poll_count);
+static DEVICE_ATTR_RW(rx_int_disabled_time);
+
+static struct attribute *napi_attrs[] = {
+	&dev_attr_rx_napi_list.attr,
+	&dev_attr_rx_int_enable.attr,
+	&dev_attr_rx_int_count.attr,
+	&dev_attr_rx_poll_count.attr,
+	&dev_attr_rx_int_disabled_time.attr,
+	NULL,
+};
+
+static const struct attribute_group napi_group = {
+	.attrs = napi_attrs,
+	.name = "napi",
+};
+#endif
 
 struct link_device *shmem_create_link_device(struct platform_device *pdev)
 {
@@ -2724,6 +3415,8 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 
 	ld->mdm_data = modem;
 
+	ld->dev = &pdev->dev;
+
 	/*
 	Set up link device methods
 	*/
@@ -2732,6 +3425,7 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 	ld->init_comm = shmem_init_comm;
 	ld->terminate_comm = shmem_terminate_comm;
 	ld->send = shmem_send;
+	ld->reset_zerocopy = NULL;
 
 	ld->boot_on = shmem_boot_on;
 	if (mld->attrs & LINK_ATTR(LINK_ATTR_MEM_BOOT)) {
@@ -2746,6 +3440,7 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 	ld->force_dump = shmem_force_dump;
 	ld->vss_dump = save_vss_dump;
 	ld->acpm_dump = save_acpm_dump;
+	ld->cplog_dump = save_cplog_dump;
 
 	if (mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP))
 		ld->dump_start = shmem_start_upload;
@@ -2753,14 +3448,18 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 	ld->close_tx = shmem_close_tx;
 	ld->crash_reason = shmem_crash_reason;
 	ld->airplane_mode = shmem_airplane_mode;
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	ld->poll_recv_on_iod = shmem_poll_recv_on_iod;
+
+	ld->enable_rx_int = shmem_enable_rx_int;
+	ld->disable_rx_int = shmem_disable_rx_int;
+
+	init_dummy_netdev(&mld->dummy_net);
+	netif_napi_add(&mld->dummy_net, &mld->mld_napi, mld_rx_int_poll, 64);
+	napi_enable(&mld->mld_napi);
+#endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	INIT_LIST_HEAD(&ld->list);
-
-	skb_queue_head_init(&ld->sk_fmt_tx_q);
-	skb_queue_head_init(&ld->sk_raw_tx_q);
-
-	skb_queue_head_init(&ld->sk_fmt_rx_q);
-	skb_queue_head_init(&ld->sk_raw_rx_q);
 
 	spin_lock_init(&ld->netif_lock);
 	atomic_set(&ld->netif_stopped, 0);
@@ -2864,6 +3563,13 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 	}
 	mif_err("acpm_base=%p acpm_size:0x%X\n", mld->acpm_base,
 			mld->acpm_size);
+
+	/**
+	 * Initialize memory maps for Zero Memory Copy
+	 */
+	shm_get_zmb_region();
+	mif_err("zmb_base=%p zmb_size:0x%X\n", shm_get_zmb_region(),
+			shm_get_zmb_size());
 
 	remap_4mb_map_to_ipc_dev(mld);
 
@@ -3035,7 +3741,23 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 	mld->tx_period_ms = TX_PERIOD_MS;
 
 	if (sysfs_create_group(&pdev->dev.kobj, &shmem_group))
-		mif_err("failed to create tx_period_ms node\n");
+		mif_err("failed to create sysfs node related shmem\n");
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+	if (sysfs_create_group(&pdev->dev.kobj, &napi_group))
+		mif_err("failed to create sysfs node related napi\n");
+#endif
+
+	/* Initialize MIF buffer */
+	if (modem->buff_offset != 0 && modem->buff_size != 0) {
+		mif_info("MIF buffer offset:%X size:%X\n", modem->buff_offset,
+			modem->buff_size);
+		ld->mif_buff_mng = init_mif_buff_mng(
+			(unsigned char *)shm_get_zmb_region(),
+			shm_get_zmb_size(),
+			MIF_BUFF_DEFAULT_CELL_SIZE);
+		g_mif_buff_mng = ld->mif_buff_mng;
+	}
 
 	mif_err("---\n");
 	return ld;

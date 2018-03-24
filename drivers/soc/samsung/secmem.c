@@ -226,7 +226,9 @@ static long secmem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	case (uint32_t)IRIS_IOCTL_CPU_SPEEDUP:
 	{
 		int onoff = 0;
+#if defined(CONFIG_SECURE_OS_BOOSTER_API)
 		int ret_val = 0;
+#endif
 		if (copy_from_user(&onoff, (void *)arg,
 			sizeof(unsigned int)) != 0) {
 			pr_err("%s Failed copy from user.(CPU_SPEEDUP)\n", __func__);

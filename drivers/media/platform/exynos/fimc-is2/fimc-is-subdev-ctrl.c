@@ -15,7 +15,6 @@
 #include "fimc-is-core.h"
 #include "fimc-is-param.h"
 #include "fimc-is-device-ischain.h"
-#include "fimc-is-interface-fd.h"
 #include "fimc-is-debug.h"
 
 struct fimc_is_subdev * video2subdev(enum fimc_is_subdev_device_type device_type,

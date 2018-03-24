@@ -14,6 +14,8 @@ extern void dump_page_badflags(struct page *page, const char *reason,
 void dump_vma(const struct vm_area_struct *vma);
 void dump_mm(const struct mm_struct *mm);
 
+void show_page_inode(struct page *page);
+
 #ifdef CONFIG_DEBUG_VM
 #define VM_BUG_ON(cond) BUG_ON(cond)
 #define VM_BUG_ON_PAGE(cond, page)					\

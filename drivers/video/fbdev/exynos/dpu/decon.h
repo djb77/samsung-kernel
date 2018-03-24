@@ -49,6 +49,10 @@ extern struct decon_device *decon_drvdata[MAX_DECON_CNT];
 extern int decon_log_level;
 extern struct decon_bts_ops decon_bts_control;
 
+#define DPU_FRM_CNT	2
+#define BUF_DUMP_SIZE	64
+extern unsigned long afbc_buf_data[DPU_FRM_CNT][2][BUF_DUMP_SIZE];
+
 #define DECON_MODULE_NAME	"exynos-decon"
 #define MAX_NAME_SIZE		32
 #define MAX_PLANE_CNT		3
@@ -767,6 +771,7 @@ struct decon_reg_data {
 #ifdef CONFIG_SUPPORT_INDISPLAY
 	bool finger_layer;
 #endif
+	bool clear_for_doze;
 };
 
 struct decon_win_config_data {
@@ -1010,9 +1015,8 @@ struct decon_debug {
 	atomic_t event_log_idx;
 	dpu_log_level_t event_log_level;
 #endif
-	struct dpu_afbc_info afbc_info;
-	struct dpu_afbc_info prev_afbc_info;
-	struct decon_dma_buf_data dma_buf_data[MAX_DECON_WIN];
+	struct dpu_afbc_info afbc_info[DPU_FRM_CNT];
+	struct decon_dma_buf_data dma_buf_data[DPU_FRM_CNT][MAX_DECON_WIN];
 	int conti_recovery_cnt;
 
 #ifdef CONFIG_DUMPSTATE_LOGGING

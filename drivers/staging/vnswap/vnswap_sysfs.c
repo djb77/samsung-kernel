@@ -19,6 +19,8 @@
 
 #include "vnswap.h"
 
+static DEFINE_MUTEX(vnswap_sysfs_mutex);
+
 static ssize_t disksize_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -35,7 +37,9 @@ static ssize_t disksize_store(struct device *dev,
 	if (ret)
 		return ret;
 
+	mutex_lock(&vnswap_sysfs_mutex);
 	vnswap_init_disksize(disksize);
+	mutex_unlock(&vnswap_sysfs_mutex);
 	return len;
 }
 
@@ -53,13 +57,16 @@ static ssize_t swap_filename_show(struct device *dev,
 static ssize_t swap_filename_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t len)
 {
+	mutex_lock(&vnswap_sysfs_mutex);
 	if (!vnswap_device) {
 		pr_err("%s %d: vnswap_device is null\n", __func__, __LINE__);
+		mutex_unlock(&vnswap_sysfs_mutex);
 		return len;
 	}
 	if (len > MAX_BACKING_STORAGE_FILENAME_LEN) {
 		pr_err("%s %d: too long backing_storage_filename\n",
 				__func__, __LINE__);
+		mutex_unlock(&vnswap_sysfs_mutex);
 		return len;
 	}
 	vnswap_device->backing_storage_filename[len] = '\0';
@@ -69,6 +76,7 @@ static ssize_t swap_filename_store(struct device *dev,
 			"(%s, %d, %s)\n",
 			__func__, __LINE__,
 			buf, len, vnswap_device->backing_storage_filename);
+	mutex_unlock(&vnswap_sysfs_mutex);
 	return len;
 }
 
@@ -83,14 +91,18 @@ static ssize_t init_backing_storage_show(struct device *dev,
 static ssize_t init_backing_storage_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t len)
 {
+	mutex_lock(&vnswap_sysfs_mutex);
 	vnswap_init_backing_storage();
+	mutex_unlock(&vnswap_sysfs_mutex);
 	return len;
 }
 
 static ssize_t deinit_backing_storage_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t len)
 {
+	mutex_lock(&vnswap_sysfs_mutex);
 	vnswap_deinit_backing_storage();
+	mutex_unlock(&vnswap_sysfs_mutex);
 	return len;
 }
 

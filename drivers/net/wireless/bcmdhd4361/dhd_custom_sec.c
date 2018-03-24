@@ -97,7 +97,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"",   "XZ", 1},	/* Universal if Country code is unknown or empty */
 	{"IR", "XZ", 1},	/* Universal if Country code is IRAN, (ISLAMIC REPUBLIC OF) */
 	{"SD", "XZ", 1},	/* Universal if Country code is SUDAN */
-	{"SY", "XZ", 1},	/* Universal if Country code is SYRIAN ARAB REPUBLIC */
 	{"GL", "XZ", 1},	/* Universal if Country code is GREENLAND */
 	{"PS", "XZ", 1},	/* Universal if Country code is PALESTINIAN TERRITORY, OCCUPIED */
 	{"TL", "XZ", 1},	/* Universal if Country code is TIMOR-LESTE (EAST TIMOR) */
@@ -142,7 +141,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"",   "XZ", 11},	/* Universal if Country code is unknown or empty */
 	{"IR", "XZ", 11},	/* Universal if Country code is IRAN, (ISLAMIC REPUBLIC OF) */
 	{"SD", "XZ", 11},	/* Universal if Country code is SUDAN */
-	{"SY", "XZ", 11},	/* Universal if Country code is SYRIAN ARAB REPUBLIC */
 	{"GL", "XZ", 11},	/* Universal if Country code is GREENLAND */
 	{"PS", "XZ", 11},	/* Universal if Country code is PALESTINIAN TERRITORY, OCCUPIED */
 	{"TL", "XZ", 11},	/* Universal if Country code is TIMOR-LESTE (EAST TIMOR) */
@@ -172,7 +170,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"",   "XZ", 11},	/* Universal if Country code is unknown or empty */
 	{"IR", "XZ", 11},	/* Universal if Country code is IRAN, (ISLAMIC REPUBLIC OF) */
 	{"SD", "XZ", 11},	/* Universal if Country code is SUDAN */
-	{"SY", "XZ", 11},	/* Universal if Country code is SYRIAN ARAB REPUBLIC */
 	{"PS", "XZ", 11},	/* Universal if Country code is PALESTINIAN TERRITORY, OCCUPIED */
 	{"TL", "XZ", 11},	/* Universal if Country code is TIMOR-LESTE (EAST TIMOR) */
 	{"MH", "XZ", 11},	/* Universal if Country code is MARSHALL ISLANDS */
@@ -1079,7 +1076,7 @@ const char *softap_info_items[] = {
 const char *softap_info_values[] = {
 	"yes", "yes", "10", "yes", "yes", "yes", NULL
 };
-#elif defined(BCM43455_CHIP)
+#elif defined(BCM43455_CHIP) || defined(BCM43456_CHIP)
 const char *softap_info_values[] = {
 	"no", "yes", "10", "no", "yes", "yes", NULL
 };

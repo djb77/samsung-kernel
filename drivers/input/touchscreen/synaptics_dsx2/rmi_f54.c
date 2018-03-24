@@ -2021,10 +2021,10 @@ int synaptics_rmi4_fw_update_on_probe(struct synaptics_rmi4_data *rmi4_data)
 	if (synaptics_skip_firmware_update_v7(rmi4_data, fw_entry))
 		goto done;
 
-/*	retval = synaptics_fw_updater(rmi4_data, fw_data);
+	retval = synaptics_fw_updater(rmi4_data, fw_data);
 	if (retval)
 		tsp_debug_err(true, &rmi4_data->i2c_client->dev, "%s: failed update firmware\n",
-				__func__);*/
+				__func__);
 done:
 	if (fw_entry)
 		release_firmware(fw_entry);

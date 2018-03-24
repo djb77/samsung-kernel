@@ -206,9 +206,11 @@ config SEC_NAD_API
 	help
 	  Samsung TN NAD Feature, Support NAD API to check gpio pull-up registance
 
-comment "Samsung ABC Options"
-config SEC_ABC
-	bool "Samsung TN ABC Feature"
+config SEC_NAD_BALANCER
+	bool "Samsung TN NAD Balancer Feature"
+	depends on SEC_NAD
 	default n
 	help
-	  Samsung TN ABC Feature
+	  This option enables Samsung TN NAD Balancer Feature.
+	  This option also can generate thread to change dvfs frequency. It helps keep balancing
+	  between user and factory binary.

@@ -1487,6 +1487,7 @@ u8 DREAM2_A2_SA_DISABLE_ACTIVE_CLK[] = {
 	0xE3,
 	0x00, 0x00
 };
+#if 0
 u8 DREAM2_A2_SA_SET_SELF_DRAWER[] = {
 	0xE2,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -1499,7 +1500,7 @@ u8 DREAM2_A2_SA_SET_SELF_DRAWER[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
 };
-
+#endif
 u8 DREAM2_A2_SA_DISABLE_SELF_DRAWER[] = {
 	0xE2,
 	0x00, 0x00
@@ -1732,7 +1733,9 @@ DEFINE_VARIABLE_PACKET(dream2_a2_sa_lpm_mode, DSI_PKT_TYPE_WR, DREAM2_A2_SA_LPM_
 
 #ifdef CONFIG_ACTIVE_CLOCK
 DEFINE_VARIABLE_PACKET(dream2_a2_sa_enable_active_clk, DSI_PKT_TYPE_WR, DREAM2_A2_SA_ENABLE_ACTIVE_CLK, &dream2_a2_sa_maptbl[ACTIVE_CLK_CTRL_MAPTBL], 1);
+#if 0
 DEFINE_VARIABLE_PACKET(dream2_a2_sa_set_self_drawer, DSI_PKT_TYPE_WR, DREAM2_A2_SA_SET_SELF_DRAWER, &dream2_a2_sa_maptbl[ACTIVE_CLK_SELF_DRAWER], 1);
+#endif
 DEFINE_VARIABLE_PACKET(dream2_a2_sa_update_active_clk, DSI_PKT_TYPE_WR, DREAM2_A2_SA_UPDATE_ACTIVE_CLK, &dream2_a2_sa_maptbl[ACTIVE_CLK_CTRL_UPDATE_MAPTBL], 1);
 DEFINE_STATIC_PACKET(dream2_a2_sa_disable_self_drawer, DSI_PKT_TYPE_WR, DREAM2_A2_SA_DISABLE_SELF_DRAWER);
 DEFINE_STATIC_PACKET(dream2_a2_sa_disable_active_clk, DSI_PKT_TYPE_WR, DREAM2_A2_SA_DISABLE_ACTIVE_CLK);
@@ -2222,14 +2225,18 @@ static void *dream2_a2_sa_active_clk_img_cmdtbl[] = {
 static void *dream2_a2_sa_active_clk_ctrl_cmdtbl[] = {
 	&KEYINFO(dream2_a2_sa_level2_key_enable),
 	&PKTINFO(dream2_a2_sa_enable_active_clk),
+#if 0
 	&PKTINFO(dream2_a2_sa_set_self_drawer),
+#endif
 	&KEYINFO(dream2_a2_sa_level2_key_disable),
 };
 
 static void *dream2_a2_sa_active_clk_update_cmdtbl[] = {
 	&KEYINFO(dream2_a2_sa_level2_key_enable),
 	&PKTINFO(dream2_a2_sa_enable_active_clk),
+#if 0
 	&PKTINFO(dream2_a2_sa_set_self_drawer),
+#endif
 	&DLYINFO(dream2_a2_sa_wait_1_frame_in_30hz),
 	&PKTINFO(dream2_a2_sa_update_active_clk),
 	&KEYINFO(dream2_a2_sa_level2_key_disable),

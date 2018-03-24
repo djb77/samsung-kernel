@@ -3157,6 +3157,9 @@ int fimc_is_sensor_front_stop(struct fimc_is_device_sensor *device)
 	struct v4l2_subdev *subdev_csi;
 	struct fimc_is_core *core;
 	struct fimc_is_dual_info *dual_info;
+#if defined(CONFIG_SECURE_CAMERA_USE)
+	int smc_ret;
+#endif
 
 	BUG_ON(!device);
 
@@ -3232,6 +3235,37 @@ int fimc_is_sensor_front_stop(struct fimc_is_device_sensor *device)
 #endif
 
 p_err:
+#if defined(CONFIG_SECURE_CAMERA_USE)
+	if (device->pdata->scenario == SENSOR_SCENARIO_SECURE) {
+		if (device->smc_state == FIMC_IS_SENSOR_SMC_PREPARE) {
+			smc_ret = exynos_smc(MC_SECURE_CAMERA_UNPREPARE, 0, 0, 0);
+			if (smc_ret != 0) {
+				merr("[SMC] MC_SECURE_CAMERA_UNPREPARE fail(%d)\n", device, smc_ret);
+			} else {
+				minfo("[SMC] Call MC_SECURE_CAMERA_UNPREPARE ret(%d) / smc_state(%d->%d)\n",
+						device, smc_ret, device->smc_state, FIMC_IS_SENSOR_SMC_UNPREPARE);
+				device->smc_state = FIMC_IS_SENSOR_SMC_UNPREPARE;
+			}
+		}
+
+		core = (struct fimc_is_core *)device->private_data;
+		mutex_lock(&core->secure_state_lock);
+		if (core->secure_state == FIMC_IS_STATE_SECURED) {
+			mdbgd_sensor("configure ischain to unsecure\n", device);
+
+			smc_ret = exynos_smc(MC_SECURE_CAMERA_SYSREG_PROT, 0, 0, 0);
+			if (smc_ret) {
+				merr("[SMC] failed to unsecure fimc-is: (%d)",
+									device, smc_ret);
+			} else {
+				core->secure_state = FIMC_IS_STATE_UNSECURE;
+				minfo("[SMC] be unsecured fimc-is\n", device);
+			}
+		}
+		mutex_unlock(&core->secure_state_lock);
+	}
+#endif
+
 	minfo("[FRT:D] %s():%d\n", device, __func__, ret);
 	mutex_unlock(&device->mlock_state);
 	return ret;

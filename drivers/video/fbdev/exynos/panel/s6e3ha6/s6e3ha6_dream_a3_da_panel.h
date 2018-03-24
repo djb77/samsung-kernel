@@ -1490,7 +1490,7 @@ u8 DREAM_A3_DA_DISABLE_ACTIVE_CLK[] = {
 	0xE3,
 	0x00, 0x00
 };
-
+#if 0
 u8 DREAM_A3_DA_SET_SELF_DRAWER[] = {
 	0xE2,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -1503,7 +1503,7 @@ u8 DREAM_A3_DA_SET_SELF_DRAWER[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
 };
-
+#endif
 u8 DREAM_A3_DA_DISABLE_SELF_DRAWER[] = {
 	0xE2,
 	0x00, 0x00
@@ -1726,7 +1726,9 @@ DEFINE_VARIABLE_PACKET(dream_a3_da_lpm_mode, DSI_PKT_TYPE_WR, DREAM_A3_DA_LPM_MO
 
 #ifdef CONFIG_ACTIVE_CLOCK
 DEFINE_VARIABLE_PACKET(dream_a3_da_enable_active_clk, DSI_PKT_TYPE_WR, DREAM_A3_DA_ENABLE_ACTIVE_CLK, &dream_a3_da_maptbl[ACTIVE_CLK_CTRL_MAPTBL], 1);
+#if 0
 DEFINE_VARIABLE_PACKET(dream_a3_da_set_self_drawer, DSI_PKT_TYPE_WR, DREAM_A3_DA_SET_SELF_DRAWER, &dream_a3_da_maptbl[ACTIVE_CLK_SELF_DRAWER], 1);
+#endif
 DEFINE_VARIABLE_PACKET(dream_a3_da_update_active_clk, DSI_PKT_TYPE_WR, DREAM_A3_DA_UPDATE_ACTIVE_CLK, &dream_a3_da_maptbl[ACTIVE_CLK_CTRL_UPDATE_MAPTBL], 1);
 DEFINE_STATIC_PACKET(dream_a3_da_disable_self_drawer, DSI_PKT_TYPE_WR, DREAM_A3_DA_DISABLE_SELF_DRAWER);
 DEFINE_STATIC_PACKET(dream_a3_da_disable_active_clk, DSI_PKT_TYPE_WR, DREAM_A3_DA_DISABLE_ACTIVE_CLK);
@@ -2216,14 +2218,18 @@ static void *dream_a3_da_active_clk_img_cmdtbl[] = {
 static void *dream_a3_da_active_clk_ctrl_cmdtbl[] = {
 	&KEYINFO(dream_a3_da_level2_key_enable),
 	&PKTINFO(dream_a3_da_enable_active_clk),
+#if 0
 	&PKTINFO(dream_a3_da_set_self_drawer),
+#endif
 	&KEYINFO(dream_a3_da_level2_key_disable),
 };
 
 static void *dream_a3_da_active_clk_update_cmdtbl[] = {
 	&KEYINFO(dream_a3_da_level2_key_enable),
 	&PKTINFO(dream_a3_da_enable_active_clk),
+#if 0
 	&PKTINFO(dream_a3_da_set_self_drawer),
+#endif
 	&DLYINFO(dream_a3_da_wait_1_frame_in_30hz),
 	&PKTINFO(dream_a3_da_update_active_clk),
 	&KEYINFO(dream_a3_da_level2_key_disable),

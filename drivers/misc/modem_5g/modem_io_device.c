@@ -24,6 +24,7 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <soc/samsung/pmu-cp.h>
+#include <trace/events/napi.h>
 
 #include "modem_prj.h"
 #include "modem_utils.h"
@@ -543,8 +544,16 @@ static int misc_open(struct inode *inode, struct file *filp)
 
 	filp->private_data = (void *)iod;
 
+	if (iod->format == IPC_FMT && iod->id == SIPC5_CH_ID_FMT_0) {
+		ipc_iod_change(filp);
+		iod = (struct io_device *)filp->private_data;
+		msd = iod->msd;
+	}
+
 	atomic_inc(&iod->opened);
 
+	mif_err("++ %s (opened %d) by %s\n",
+		iod->name, atomic_read(&iod->opened), current->comm);
 	list_for_each_entry(ld, &msd->link_dev_list, list) {
 		if (IS_CONNECTED(iod, ld) && ld->init_comm) {
 			ret = ld->init_comm(ld, iod);
@@ -557,7 +566,7 @@ static int misc_open(struct inode *inode, struct file *filp)
 		}
 	}
 
-	mif_err("%s (opened %d) by %s\n",
+	mif_err("-- %s (opened %d) by %s\n",
 		iod->name, atomic_read(&iod->opened), current->comm);
 
 	return 0;
@@ -656,6 +665,7 @@ static long misc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	enum modem_state p_state;
 	unsigned long size;
 	int tx_link;
+	int ret;
 
 	switch (cmd) {
 	case IOCTL_MODEM_ON:
@@ -677,7 +687,10 @@ static long misc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	case IOCTL_MODEM_RESET:
 		if (mc->ops.modem_reset) {
 			mif_err("%s: IOCTL_MODEM_RESET\n", iod->name);
-			return mc->ops.modem_reset(mc);
+			ret = mc->ops.modem_reset(mc);
+			if (ld->reset_zerocopy)
+				ld->reset_zerocopy(ld);
+			return ret;
 		}
 		mif_err("%s: !mc->ops.modem_reset\n", iod->name);
 		return -EINVAL;
@@ -754,8 +767,10 @@ static long misc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	case IOCTL_MODEM_FORCE_CRASH_EXIT:
 		if (mc->ops.modem_force_crash_exit) {
-			mif_err("%s: IOCTL_MODEM_FORCE_CRASH_EXIT\n",
-				iod->name);
+			if (arg)
+				ld->crash_type = arg;
+			mif_err("%s: IOCTL_MODEM_FORCE_CRASH_EXIT (%d)\n",
+				iod->name, ld->crash_type);
 			return mc->ops.modem_force_crash_exit(mc);
 		}
 		mif_err("%s: !mc->ops.modem_force_crash_exit\n", iod->name);
@@ -860,6 +875,13 @@ static long misc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		else
 			return -EINVAL;
 
+	case IOCTL_CPLOG_FULL_DUMP:
+		mif_info("%s: IOCTL_CPLOG_FULL_DUMP\n", iod->name);
+		if (ld->cplog_dump)
+			return ld->cplog_dump(ld, iod, arg);
+		else
+			return -EINVAL;
+
 	case IOCTL_MODEM_SET_TX_LINK:
 		mif_info("%s: IOCTL_MODEM_SET_TX_LINK\n", iod->name);
 		if (copy_from_user(&tx_link, (void __user *)arg, sizeof(int)))
@@ -883,6 +905,67 @@ static long misc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			mif_info("%s tx_link change success\n",	ld->name);
 		}
 		return 0;
+
+#if defined(CONFIG_LINK_DEVICE_PCI)
+	case IOCTL_LINK_SWITCH_IPC:
+		{
+			int mode;
+
+			mif_info("%s: IOCTL_LINK_SWITCH_IPC\n", iod->name);
+			if (copy_from_user(&mode, (void __user *)arg, sizeof(int))) {
+				mif_info("%s: error\n", iod->name);
+				return -EFAULT;
+			}
+			mif_info("%s: IOCTL_LINK_SWITCH_IPC: mode: %d\n",
+					iod->name, mode);
+
+			set_current_mode(mode);
+		}
+		return 0;
+	case IOCTL_LINK_SWITCH_TO_4G:
+		{
+			int rmnet_ch;
+
+			mif_info("%s: IOCTL_LINK_SWITCH_TO_4G\n", iod->name);
+			if (copy_from_user(&rmnet_ch, (void __user *)arg, sizeof(int)))
+				return -EFAULT;
+
+			mif_info("before rmnet%d current ld:%d\n",
+				rmnet_ch,
+				get_rmnet_iod_current_ld(rmnet_ch));
+
+			if (!rmnet_iod_change_with_channel(rmnet_ch, RMNET_LINK_4G)) {
+				mif_info("after rmnet%d current ld:%d\n",
+					rmnet_ch,
+					get_rmnet_iod_current_ld(rmnet_ch));
+				return 0;
+			}
+			return -EINVAL;
+		}
+		return 0;
+
+	case IOCTL_LINK_SWITCH_TO_5G:
+		{
+			int rmnet_ch;
+
+			mif_info("%s: IOCTL_LINK_SWITCH_TO_5G\n", iod->name);
+			if (copy_from_user(&rmnet_ch, (void __user *)arg, sizeof(int)))
+				return -EFAULT;
+
+			mif_info("before rmnet%d current ld:%d\n",
+				rmnet_ch,
+				get_rmnet_iod_current_ld(rmnet_ch));
+
+			if (!rmnet_iod_change_with_channel(rmnet_ch, RMNET_LINK_5G)) {
+				mif_info("after rmnet%d current ld:%d\n",
+					rmnet_ch,
+					get_rmnet_iod_current_ld(rmnet_ch));
+				return 0;
+			}
+			return -EINVAL;
+		}
+		return 0;
+#endif
 
 	case IOCTL_SECURITY_REQ:
 		if (ld->security_req) {
@@ -938,6 +1021,8 @@ static ssize_t misc_write(struct file *filp, const char __user *data,
 	unsigned int copied = 0, tot_frame = 0, copied_frm = 0;
 	unsigned int remains;
 	unsigned int alloc_size;
+	/* 64bit prevent */
+	unsigned int cnt = (unsigned int)count;
 #ifdef DEBUG_MODEM_IF
 	struct timespec ts;
 #endif
@@ -957,15 +1042,15 @@ static ssize_t misc_write(struct file *filp, const char __user *data,
 	}
 
 	if (iod->link_header) {
-		cfg = sipc5_build_config(iod, ld, count);
+		cfg = sipc5_build_config(iod, ld, cnt);
 		headroom = sipc5_get_hdr_len(&cfg);
 	} else {
 		cfg = 0;
 		headroom = 0;
 	}
 
-	while (copied < count) {
-		remains = count - copied;
+	while (copied < cnt) {
+		remains = cnt - copied;
 		alloc_size = min_t(unsigned int, remains + headroom,
 			iod->max_tx_size ?: remains + headroom);
 
@@ -1022,7 +1107,7 @@ static ssize_t misc_write(struct file *filp, const char __user *data,
 		if (cfg) {
 			buff = skb_push(skb, headroom);
 			sipc5_build_header(iod, buff, cfg,
-					tx_bytes, count - copied);
+					tx_bytes, cnt - copied);
 		}
 
 		/* Apply padding */
@@ -1140,9 +1225,6 @@ static int vnet_open(struct net_device *ndev)
 	list_add(&iod->node_ndev, &iod->msd->activated_ndev_list);
 	netif_start_queue(ndev);
 
-#ifdef CONFIG_LINK_DEVICE_NAPI
-    napi_enable(&iod->napi);
-#endif
 
 	mif_err("%s (opened %d) by %s\n",
 		iod->name, atomic_read(&iod->opened), current->comm);
@@ -1169,10 +1251,6 @@ static int vnet_stop(struct net_device *ndev)
 	list_del(&iod->node_ndev);
 	spin_unlock(&msd->active_list_lock);
 	netif_stop_queue(ndev);
-
-#ifdef CONFIG_LINK_DEVICE_NAPI
-    napi_disable(&iod->napi);
-#endif
 
 	mif_err("%s (opened %d) by %s\n",
 		iod->name, atomic_read(&iod->opened), current->comm);
@@ -1332,7 +1410,7 @@ drop:
 static u16 vnet_select_queue(struct net_device *dev, struct sk_buff *skb,
 		void *accel_priv, select_queue_fallback_t fallback)
 {
-	return (skb && skb->mark == RAW_HPRIO) ? 1 : 0;
+	return (skb && skb->priomark == RAW_HPRIO) ? 1 : 0;
 }
 
 static int dummy_net_open(struct net_device *ndev)
@@ -1509,12 +1587,23 @@ int sipc5_init_io_device(struct io_device *iod)
 			return -ENOMEM;
 		}
 
+#if defined(CONFIG_LINK_DEVICE_PCI)
+		if (!strncmp(iod->name, "dummy", 5)) {
+			insert_rmnet_iod_with_channel(iod, RMNET_LINK_5G);
+			goto jump_reg;
+		} else
+			insert_rmnet_iod_with_channel(iod, RMNET_LINK_4G);
+#endif
+
 		ret = register_netdev(iod->ndev);
 		if (ret) {
 			mif_info("%s: ERR! register_netdev fail\n", iod->name);
 			free_netdev(iod->ndev);
 		}
 
+#if defined(CONFIG_LINK_DEVICE_PCI)
+jump_reg:
+#endif
 		mif_debug("iod 0x%p\n", iod);
 		vnet = netdev_priv(iod->ndev);
 		mif_debug("vnet 0x%p\n", vnet);
@@ -1562,3 +1651,36 @@ int sipc5_init_io_device(struct io_device *iod)
 
 	return ret;
 }
+
+void sipc5_deinit_io_device(struct io_device *iod)
+{
+	mif_err("%s: io_typ=%d\n", iod->name, iod->io_typ);
+
+	wake_lock_destroy(&iod->wakelock);
+
+	/* De-register misc or net device */
+	switch (iod->io_typ) {
+	case IODEV_MISC:
+		if (iod->id == SIPC_CH_ID_CPLOG1) {
+			unregister_netdev(iod->ndev);
+			free_netdev(iod->ndev);
+		}
+
+		misc_deregister(&iod->miscdev);
+		break;
+
+	case IODEV_NET:
+		unregister_netdev(iod->ndev);
+		free_netdev(iod->ndev);
+		break;
+
+	case IODEV_DUMMY:
+		device_remove_file(iod->miscdev.this_device, &attr_waketime);
+		device_remove_file(iod->miscdev.this_device, &attr_loopback);
+		device_remove_file(iod->miscdev.this_device, &attr_txlink);
+
+		misc_deregister(&iod->miscdev);
+		break;
+	}
+}
+

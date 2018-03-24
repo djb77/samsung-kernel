@@ -821,6 +821,27 @@ static const unsigned int cs47l92_aec_loopback_values[] = {
 	0, 1, 2, 3, 4, 5, 8, 9
 };
 
+static int cs47l92_auxpdm_ena(struct snd_soc_dapm_widget *w,
+			      struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+	struct madera_priv *priv = snd_soc_codec_get_drvdata(codec);
+	struct madera *madera = priv->madera;
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		dev_info(madera->dev, "AUXPDM Enable\n");
+		break;
+	case SND_SOC_DAPM_PRE_PMD:
+		dev_info(madera->dev, "AUXPDM Disable\n");
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
 static const struct soc_enum cs47l92_aec_loopback =
 	SOC_VALUE_ENUM_SINGLE(MADERA_DAC_AEC_CONTROL_1,
 			      MADERA_AEC1_LOOPBACK_SRC_SHIFT, 0xf,
@@ -1004,8 +1025,10 @@ SND_SOC_DAPM_PGA("SPD1TX2", MADERA_SPD1_TX_CONTROL,
 SND_SOC_DAPM_OUT_DRV("SPD1", MADERA_SPD1_TX_CONTROL,
 		     MADERA_SPD1_ENA_SHIFT, 0, NULL, 0),
 
-SND_SOC_DAPM_SWITCH("AUXPDM1 Output", MADERA_AUXPDM1_CTRL_0,
-		    MADERA_AUXPDM1_ENABLE_SHIFT, 0, &cs47l92_auxpdm1_switch),
+SND_SOC_DAPM_SWITCH_E("AUXPDM1 Output", MADERA_AUXPDM1_CTRL_0,
+		      MADERA_AUXPDM1_ENABLE_SHIFT, 0, &cs47l92_auxpdm1_switch,
+		      cs47l92_auxpdm_ena,
+		      SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_PRE_PMD),
 
 /* mux_in widgets : arranged in the order of sources
    specified in MADERA_MIXER_INPUT_ROUTES */
@@ -1862,8 +1885,14 @@ static struct snd_soc_dai_driver cs47l92_dai[] = {
 static irqreturn_t madera_irq_boot_done(int irq, void *data)
 {
 	struct madera *madera = data;
+	unsigned int val = 0;
+	int ret;
 
-	dev_warn(madera->dev, "Boot done\n");
+	ret = regmap_read(madera->regmap, MADERA_CTRL_SCRATCH, &val);
+	if (ret != 0)
+		dev_warn(madera->dev, "Failed to read scratch reg: %d\n", ret);
+
+	dev_warn(madera->dev, "Boot done: 0x%x\n", val);
 
 	return IRQ_HANDLED;
 }
