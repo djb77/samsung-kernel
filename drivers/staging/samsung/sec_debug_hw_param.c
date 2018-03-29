@@ -472,7 +472,8 @@ static ssize_t sec_hw_param_extra_info_show(struct kobject *kobj,
 {
 	ssize_t info_size = 0;
 
-	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+	if (reset_reason == RR_K || reset_reason == RR_D || 
+		reset_reason == RR_P || reset_reason == RR_S) {
 		sec_debug_store_extra_info_A();
 		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 		info_size = strlen(buf);
@@ -486,7 +487,8 @@ static ssize_t sec_hw_param_extrb_info_show(struct kobject *kobj,
 {
 	ssize_t info_size = 0;
 
-	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+	if (reset_reason == RR_K || reset_reason == RR_D || 
+		reset_reason == RR_P || reset_reason == RR_S) {
 		sec_debug_store_extra_info_B();
 		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 		info_size = strlen(buf);
@@ -500,7 +502,8 @@ static ssize_t sec_hw_param_extrc_info_show(struct kobject *kobj,
 {
 	ssize_t info_size = 0;
 
-	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+	if (reset_reason == RR_K || reset_reason == RR_D || 
+		reset_reason == RR_P || reset_reason == RR_S) {
 		sec_debug_store_extra_info_C();
 		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 		info_size = strlen(buf);
@@ -514,7 +517,8 @@ static ssize_t sec_hw_param_extrm_info_show(struct kobject *kobj,
 {
 	ssize_t info_size = 0;
 
-	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+	if (reset_reason == RR_K || reset_reason == RR_D || 
+		reset_reason == RR_P || reset_reason == RR_S) {
 		sec_debug_store_extra_info_M();
 		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 		info_size = strlen(buf);

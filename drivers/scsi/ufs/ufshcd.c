@@ -235,8 +235,6 @@ static int ufshcd_send_request_sense(struct ufs_hba *hba,
 extern int fmp_ufs_map_sg(struct ufshcd_sg_entry *prd_table, struct scatterlist *sg,
 				int enc_mode, uint32_t idx,
 				uint32_t sector, struct bio *bio);
-extern int fmp_encrypted;
-
 #if defined(CONFIG_FIPS_FMP)
 extern int fmp_map_sg_st(struct ufs_hba *hba, struct ufshcd_sg_entry *prd_table,
 					struct scatterlist *sg, int enc_mode,
@@ -1467,9 +1465,7 @@ static void get_enc_mode_from_bio(struct bio *bio, int *enc_mode)
 		return;
 	return;
 }
-#endif
 
-#if defined(CONFIG_FMP_UFS)
 static void get_enc_mode_from_page(struct page *page, int *enc_mode)
 {
 	/* Anonymous page */
@@ -1485,33 +1481,6 @@ static void get_enc_mode_from_page(struct page *page, int *enc_mode)
 #endif
 	if (page->mapping->private_enc_mode == FMP_FILE_ENC_MODE)
 		*enc_mode |= UFS_FILE_ENC_MODE;
-	return;
-}
-
-static void check_fmp_encrypted_for_meta_data(struct ufs_hba *hba,
-					struct scsi_cmnd *cmd)
-{
-	struct bio *bio;
-	char *volname;
-
-	if (!cmd || !cmd->request || !cmd->request->bio)
-		return;
-	bio = cmd->request->bio;
-
-	if (!cmd->request->part || !cmd->request->part->info)
-		return;
-
-	volname = cmd->request->part->info->volname;
-	if (strncmp(volname, "userdata", sizeof("userdata")))
-		return;
-
-	if (fmp_encrypted && (bio->bi_rw & REQ_META)) {
-		dev_warn(hba->dev, "FMP doesn't work even if device is encrypted.\n");
-		dev_warn(hba->dev, "direction(%d) sector(%ld) bio enc_mode(%d)\n",
-				cmd->sc_data_direction, bio->bi_iter.bi_sector,
-				bio->private_enc_mode);
-	}
-
 	return;
 }
 #endif
@@ -1571,9 +1540,6 @@ static int ufshcd_map_sg(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 			if (!enc_mode) {
 				SET_DAS(&prd_table[i], CLEAR);
 				SET_FAS(&prd_table[i], CLEAR);
-#if defined(CONFIG_UFS_FMP_DM_CRYPT)
-			check_fmp_encrypted_for_meta_data(hba, cmd);
-#endif
 			} else {
 				unsigned long flags;
 				ret = fmp_ufs_map_sg(prd_table, sg, enc_mode, i, sector, cmd->request->bio);

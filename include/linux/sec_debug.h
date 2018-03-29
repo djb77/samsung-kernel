@@ -127,6 +127,8 @@ enum sec_debug_extra_buf_type {
 	INFO_PWROFF,
 	INFO_PINT1,
 	INFO_PINT2,
+	INFO_PINT5,
+	INFO_PINT6,
 	INFO_RVD1,
 	INFO_RVD2,
 	INFO_RVD3,

@@ -1673,6 +1673,7 @@ EXPORT_SYMBOL(tcp_prequeue);
  *	From tcp_input.c
  */
 
+#define RC_RETRY_CNT 3
 int tcp_v4_rcv(struct sk_buff *skb)
 {
 	const struct iphdr *iph;
@@ -1683,6 +1684,7 @@ int tcp_v4_rcv(struct sk_buff *skb)
 #endif
 	int ret;
 	struct net *net = dev_net(skb->dev);
+	unsigned int retry_cnt = RC_RETRY_CNT;
 
 	if (skb->pkt_type != PACKET_HOST)
 		goto discard_it;
@@ -1749,6 +1751,33 @@ process:
 	if (!sk)
 		goto no_tcp_socket;
 #endif
+	/* 
+	 * FIXME: SEC patch for P171206-06874
+	 * If ACK packets for three-way handshake are received at the same time by multi core,
+	 * each core will try to access request socket and create new socket to establish TCP connection.
+	 * But, there is no synchronization scheme to avoid race condition for request socket,
+	 * 2nd attempt that create new socket will be fail, it caused 2nd ACK packet discard.
+	 * 
+	 * For that reason,
+	 * If 2nd ACK packet contained meaningful data, it caused unintended packet drop.
+	 * so, 2nd core should wait at this point until new socket was created by 1st core.
+	 * */
+	if (sk->sk_state == TCP_NEW_SYN_RECV) {
+		struct request_sock *req = inet_reqsk(sk);
+		if (atomic_read(&req->rsk_refcnt) > (2+1) && retry_cnt > 0) {
+			reqsk_put(req);
+			if (retry_cnt == RC_RETRY_CNT)
+				NET_INC_STATS_BH(net, LINUX_MIB_TCPRACECNDREQSK);
+			retry_cnt--;
+			udelay(500);
+
+			goto lookup;
+		}
+
+		if (!retry_cnt)
+			NET_INC_STATS_BH(net, LINUX_MIB_TCPRACECNDREQSKDROP);
+	}
+
 	if (sk->sk_state == TCP_NEW_SYN_RECV) {
 		struct request_sock *req = inet_reqsk(sk);
 		struct sock *nsk;
