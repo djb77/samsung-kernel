@@ -41,6 +41,9 @@
 
 #define CFP_JOPP_INIT		RKP_CMDID(0x98)
 
+#define MOAB_PING		RKP_CMDID(0x9a)
+#define MOAB_PONG		RKP_CMDID(0x9b)
+
 #define RKP_INIT_MAGIC		0x5afe0001
 #define RKP_VMM_BUFFER		0x600000
 #define RKP_RO_BUFFER		UL(0x800000)

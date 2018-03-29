@@ -11713,11 +11713,11 @@ samsung,tmu_sensor_type = <0x0>;
   io-channel-ranges;
  };
  max77865-fuelgauge {
-  fuelgauge,capacity = <0x172D>;
-  fuelgauge,qrtable20 = <0x1680>;
-  fuelgauge,qrtable30 = <0x1180>;
+  fuelgauge,capacity = <0x172F>;
+  fuelgauge,qrtable20 = <0x0900>;
+  fuelgauge,qrtable30 = <0x0880>;
   fuelgauge,fg_resistor = <1>;
-  fuelgauge,v_empty = <0xAA64>;
+  fuelgauge,v_empty = <0xAA5F>;
   fuelgauge,jig_low_active;
  };
 };

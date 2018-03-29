@@ -599,18 +599,31 @@ const char *esr_get_class_string(u32 esr)
  */
 asmlinkage void bad_mode(struct pt_regs *regs, int reason, unsigned int esr)
 {
+#ifdef CONFIG_RKP
+	u64 hint = 0;
+#endif
 	siginfo_t info;
 	void __user *pc = (void __user *)instruction_pointer(regs);
 	console_verbose();
 
+#ifndef CONFIG_RKP
 	pr_crit("Bad mode in %s handler detected, code 0x%08x -- %s\n",
 		handler[reason], esr, esr_get_class_string(esr));
 	__show_regs(regs);
+#else
+	rkp_call(MOAB_PONG, (u64)&hint, 0, 0, 0, 0);
+	pr_crit("Bad mode in %s handler detected, code 0x%08x -- %s %llx\n",
+		handler[reason], esr, esr_get_class_string(esr), hint);
+	__show_regs(regs);
+#endif
 
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
 	if (!user_mode(regs)) {
 		sec_debug_set_extra_info_fault(BAD_MODE_FAULT, (unsigned long)regs->pc, regs);
 		sec_debug_set_extra_info_esr(esr);
+#ifdef CONFIG_RKP
+		sec_debug_set_extra_info_hint(hint);
+#endif
 	}
 #endif
 
