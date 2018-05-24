@@ -976,6 +976,19 @@ int fimc_is_resource_get(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type)
 		goto p_err;
 	}
 
+#ifdef ENABLE_KERNEL_LOG_DUMP
+	/* to secure kernel log when there was an instance that remain open */
+	{
+		struct fimc_is_resource *resource_ischain;
+
+		resource_ischain = GET_RESOURCE(resourcemgr, RESOURCE_TYPE_ISCHAIN);
+		if ((rsc_type != RESOURCE_TYPE_ISCHAIN) && rsccount == 1) {
+			if (atomic_read(&resource_ischain->rsccount) == 1)
+				fimc_is_kernel_log_dump(false);
+		}
+	}
+#endif
+
 	if (rsccount == 0) {
 		pm_stay_awake(&core->pdev->dev);
 
@@ -1343,14 +1356,6 @@ int fimc_is_resource_put(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type)
 
 	atomic_dec(&resource->rsccount);
 	atomic_dec(&core->rsccount);
-
-#ifdef ENABLE_KERNEL_LOG_DUMP
-	/* to secure kernel log when there was an instance that remain open */
-	if ((rsc_type == RESOURCE_TYPE_ISCHAIN)
-			&& (atomic_read(&resource->rsccount) == 0)
-			&& (atomic_read(&core->rsccount) == 1))
-		fimc_is_kernel_log_dump(false);
-#endif
 
 p_err:
 	info("[RSC] rsctype: %d, rsccount: device[%d], core[%d]\n", rsc_type,

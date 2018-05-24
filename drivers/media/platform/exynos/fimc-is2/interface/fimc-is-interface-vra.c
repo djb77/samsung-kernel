@@ -769,6 +769,24 @@ static int fimc_is_lib_vra_fwalgs_stop(struct fimc_is_lib_vra *lib_vra)
 	return 0;
 }
 
+int fimc_is_lib_vra_stop_instance(struct fimc_is_lib_vra *lib_vra, u32 instance)
+{
+	if (unlikely(!lib_vra)) {
+		err_lib("lib_vra is NULL");
+		return -EINVAL;
+	}
+
+	if (instance > VRA_TOTAL_SENSORS) {
+		err_lib("invalid instance");
+		return -EINVAL;
+	}
+
+	lib_vra->all_face_num[instance] = 0;
+	clear_bit(VRA_INST_APPLY_TUNE_SET, &lib_vra->inst_state[instance]);
+
+	return 0;
+}
+
 int fimc_is_lib_vra_stop(struct fimc_is_lib_vra *lib_vra)
 {
 	int ret;

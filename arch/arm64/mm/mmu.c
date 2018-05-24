@@ -121,7 +121,7 @@ void *rkp_ro_alloc(void)
 	spin_lock_irqsave(&ro_rkp_pages_lock,flags);
 
 	for (i = 0, j = ro_alloc_last; i < (RO_PAGES) ; i++) {
-		j =  (j+i) %(RO_PAGES); 
+		j =  (j+1) %(RO_PAGES); 
 		if (!ro_pages_stat[j]) {
 			ro_pages_stat[j] = 1;
 			ro_alloc_last = j+1;
