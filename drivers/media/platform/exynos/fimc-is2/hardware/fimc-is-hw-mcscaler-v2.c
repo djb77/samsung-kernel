@@ -381,6 +381,8 @@ int fimc_is_hw_mcsc_enable(struct fimc_is_hw_ip *hw_ip, u32 instance, ulong hw_m
 		return -EINVAL;
 	}
 
+	atomic_inc(&hw_ip->run_rsccount);
+
 	if (test_bit(HW_RUN, &hw_ip->state))
 		return ret;
 
@@ -433,7 +435,7 @@ int fimc_is_hw_mcsc_disable(struct fimc_is_hw_ip *hw_ip, u32 instance, ulong hw_
 	if (!test_bit_variables(hw_ip->id, &hw_map))
 		return 0;
 
-	if (atomic_read(&hw_ip->rsccount) > 1)
+	if (atomic_dec_return(&hw_ip->run_rsccount) > 0)
 		return 0;
 
 	info_hw("[%d][ID:%d]mcsc_disable: Vvalid(%d)\n", instance, hw_ip->id,

@@ -2022,6 +2022,7 @@ int fimc_is_hardware_open(struct fimc_is_hardware *hardware, u32 hw_id,
 		atomic_set(&hw_ip->count.fe, 0);
 		atomic_set(&hw_ip->count.dma, 0);
 		atomic_set(&hw_ip->status.Vvalid, V_BLANK);
+		atomic_set(&hw_ip->run_rsccount, 0);
 		setup_timer(&hw_ip->shot_timer, fimc_is_hardware_shot_timer, (unsigned long)hw_ip);
 
 		set_bit(HW_OPEN, &hw_ip->state);
@@ -2133,6 +2134,7 @@ int fimc_is_hardware_close(struct fimc_is_hardware *hardware,u32 hw_id, u32 inst
 	atomic_set(&hw_ip->fcount, 0);
 	atomic_set(&hw_ip->instance, 0);
 	hw_ip->internal_fcount = 0;
+	atomic_set(&hw_ip->run_rsccount, 0);
 
 	del_timer_sync(&hw_ip->shot_timer);
 
@@ -3133,7 +3135,18 @@ int fimc_is_hardware_runtime_resume(struct fimc_is_hardware *hardware)
 
 int fimc_is_hardware_runtime_suspend(struct fimc_is_hardware *hardware)
 {
-	return 0;
+	int ret;
+	int hw_slot = -1;
+	struct fimc_is_hw_ip *hw_ip = NULL;
+
+	BUG_ON(!hardware);
+
+	for (hw_slot = 0; hw_slot < HW_SLOT_MAX; hw_slot++) {
+		hw_ip = &hardware->hw_ip[hw_slot];
+		ret = fimc_is_hw_g_state(hw_ip->regs, hw_ip->id);
+	}
+
+	return ret;
 }
 
 void fimc_is_hardware_clk_gate(struct fimc_is_hw_ip *hw_ip, u32 instance,

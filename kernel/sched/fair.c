@@ -5619,7 +5619,7 @@ static inline int hmp_boost(void)
 
 static inline int hmp_family_boost(struct task_struct *p)
 {
-	return is_top_task(p);
+	return (is_top_task(p) | hmp_family_boost_val);
 }
 
 static inline int hmp_semiboost(void)
@@ -6599,7 +6599,8 @@ static int hmp_is_family_in_fastest_domain(struct task_struct *p)
 		struct sched_entity *thread_se = &thread_p->se;
 		if (thread_se->avg.hmp_load_avg >= hmp_down_threshold &&
 				hmp_cpu_is_fastest(task_cpu(thread_p))) {
-			if (!task_running(cpu_rq(task_cpu(thread_p)), thread_p)) {
+			if (!task_running(cpu_rq(task_cpu(thread_p)), thread_p) &&
+				!hmp_family_boost_val) {
 				u64 delta;
 				u64 now = cpu_rq(task_cpu(p))->clock_task;
 

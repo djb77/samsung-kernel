@@ -2595,6 +2595,11 @@ static void sec_ts_reset_work(struct work_struct *work)
 		}
 	}
 	ts->reset_is_on_going = false;
+
+	if (ts->power_status == SEC_TS_STATE_POWER_ON) {
+		if (ts->fix_active_mode)
+			sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
+	}
 }
 #endif
 
@@ -2740,6 +2745,9 @@ static int sec_ts_input_open(struct input_dev *dev)
 
 	/* because edge and dead zone will recover soon */
 	sec_ts_set_grip_type(ts, ONLY_EDGE_HANDLER);
+
+	if (ts->fix_active_mode)
+		sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
 
 	return 0;
 }

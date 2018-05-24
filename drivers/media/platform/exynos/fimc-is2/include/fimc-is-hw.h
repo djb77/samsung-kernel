@@ -305,6 +305,7 @@ int fimc_is_hw_slot_id(int hw_id);
 int fimc_is_get_hw_list(int group_id, int *hw_list);
 int fimc_is_hw_s_ctrl(void *itfc_data, int hw_id, enum hw_s_ctrl_id id, void *val);
 int fimc_is_hw_g_ctrl(void *itfc_data, int hw_id, enum hw_g_ctrl_id id, void *val);
+u32 fimc_is_hw_g_state(void __iomem *regs, u32 hw_id);
 int fimc_is_hw_query_cap(void *cap_data, int hw_id);
 int fimc_is_hw_shared_meta_update(struct fimc_is_device_ischain *device,
 		struct fimc_is_group *group, struct fimc_is_frame *frame, int shot_done_flag);

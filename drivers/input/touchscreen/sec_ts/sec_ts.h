@@ -792,6 +792,7 @@ struct sec_ts_data {
 #endif
 	short pressure_data[TYPE_RAWDATA_MAX][PRESSURE_CHANNEL_NUM];
 	int debug_flag;
+	int fix_active_mode;
 
 	int (*sec_ts_i2c_write)(struct sec_ts_data *ts, u8 reg, u8 *data, int len);
 	int (*sec_ts_i2c_read)(struct sec_ts_data *ts, u8 reg, u8 *data, int len);

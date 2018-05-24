@@ -1968,3 +1968,57 @@ void __iomem *fimc_is_hw_get_sysreg(ulong core_regs)
 
 	return ioremap_nocache(SYSREG_CAM_BASE_ADDR, 0x10000);
 }
+
+u32 fimc_is_hw_g_state(void __iomem *regs, u32 hw_id)
+{
+	u32 reg_val = 0, sfr_offset;
+
+	if (!regs) {
+		err_itfc("[ID:%d]%s: regs = NULL\n", hw_id, __func__);
+		return 0;
+	}
+
+	switch (hw_id) {
+	case DEV_HW_3AA0: /* 3AAW */
+	case DEV_HW_3AA1:
+	case DEV_HW_ISP0: /* ISPLP */
+	case DEV_HW_ISP1: /* ISPHQ */
+		sfr_offset = 0x0; /* global_enable */
+		reg_val = readl(regs + sfr_offset);
+		info_itfc("[ID:%d]%s: [0x%04X:0x%08X]\n", hw_id, __func__, sfr_offset, reg_val);
+		/* fall through */
+	case DEV_HW_TPU0:
+	case DEV_HW_TPU1:
+		sfr_offset = 0x24; /* idleness_status */
+		reg_val = readl(regs + sfr_offset);
+		info_itfc("[ID:%d]%s: [0x%04X:0x%08X]\n", hw_id, __func__, sfr_offset, reg_val);
+		break;
+	case DEV_HW_MCSC0:
+		sfr_offset = 0x0; /* global_enable */
+		reg_val = readl(regs + sfr_offset);
+		info_itfc("[ID:%d]%s: [0x%04X:0x%08X]\n", hw_id, __func__, sfr_offset, reg_val);
+
+		sfr_offset = 0x794; /* running_status */
+		reg_val = readl(regs + sfr_offset);
+		info_itfc("[ID:%d]%s: [0x%04X:0x%08X]\n", hw_id, __func__, sfr_offset, reg_val);
+		break;
+	case DEV_HW_MCSC1:
+		sfr_offset = 0x4; /* global_enable */
+		reg_val = readl(regs + sfr_offset);
+		info_itfc("[ID:%d]%s: [0x%04X:0x%08X]\n", hw_id, __func__, sfr_offset, reg_val);
+
+		sfr_offset = 0x794; /* running_status */
+		reg_val = readl(regs + sfr_offset);
+		info_itfc("[ID:%d]%s: [0x%04X:0x%08X]\n", hw_id, __func__, sfr_offset, reg_val);
+		break;
+	case DEV_HW_VRA:
+		sfr_offset = 0x3010; /* idleness_status */
+		reg_val = readl(regs + sfr_offset);
+		info_itfc("[ID:%d]%s: [0x%04X:0x%08X]\n", hw_id, __func__, sfr_offset, reg_val);
+		break;
+	default:
+		break;
+	}
+
+	return reg_val;
+}
