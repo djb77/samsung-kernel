@@ -56,7 +56,7 @@ struct mm_struct;
 
 #ifdef CONFIG_RKP_KDP
 /* For understand size of struct cred*/
-#include <linux/rkp_entry.h>
+#include <linux/rkp.h>
 #endif /*CONFIG_RKP_KDP*/
 
 

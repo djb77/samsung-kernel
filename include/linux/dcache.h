@@ -229,6 +229,7 @@ struct dentry_operations {
 #define DCACHE_MAY_FREE			0x00800000
 #define DCACHE_FALLTHRU			0x01000000 /* Fall through to lower layer */
 #define DCACHE_OP_SELECT_INODE		0x02000000 /* Unioned entry: dcache op selects inode */
+#define DCACHE_ENCRYPTED_WITH_KEY	0x04000000 /* dir is encrypted with a valid key */
 #define DCACHE_OP_REAL			0x08000000
 #define DCACHE_WILL_INVALIDATE		0x80000000 /* will be invalidated */
 
@@ -603,6 +604,18 @@ static inline struct inode *vfs_select_inode(struct dentry *dentry,
 		inode = dentry->d_op->d_select_inode(dentry, open_flags);
 
 	return inode;
+}
+
+/**
+ * d_real_inode - Return the real inode
+ * @dentry: The dentry to query
+ *
+ * If dentry is on an union/overlay, then return the underlying, real inode.
+ * Otherwise return d_inode().
+ */
+static inline struct inode *d_real_inode(struct dentry *dentry)
+{
+	return d_backing_inode(d_real(dentry));
 }
 
 struct name_snapshot {

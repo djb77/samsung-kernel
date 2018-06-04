@@ -110,14 +110,10 @@ int mfc_change_hex_to_ascii(u32 hex, u32 byte, char *ascii, int idx)
 		}
 
 		tmp = (hex >> ((byte - 1 - i) * 4)) & 0xF;
-		if (tmp > 9) {
+		if (tmp > 9)
 			ascii[idx] = tmp + 'a' - 0xa;
-		} else if (tmp <= 9 || tmp >= 0) {
+		else if (tmp <= 9)
 			ascii[idx] = tmp + '0';
-		} else {
-			ascii[idx] = 'X';
-			pr_err("strange value: %d\n", tmp);
-		}
 		idx++;
 	}
 

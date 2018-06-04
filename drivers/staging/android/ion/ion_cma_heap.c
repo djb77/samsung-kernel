@@ -96,12 +96,18 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 		info->prot_desc.flags = heap->id;
 		info->prot_desc.chunk_size = size;
 		info->prot_desc.bus_address = info->handle;
-		ion_secure_protect(buffer);
+		ret = ion_secure_protect(buffer);
+		if (ret) {
+			pr_err("%s: Failed to protect buffer of %zu bytes\n",
+			       __func__, size);
+			goto err_protect;
+		}
 	}
 
 	dev_dbg(dev, "Allocate buffer %p\n", buffer);
 	return 0;
-
+err_protect:
+	sg_free_table(&info->table);
 free_mem:
 	dma_release_from_contiguous(dev, page,
 			(PAGE_ALIGN(size) >> PAGE_SHIFT));

@@ -295,27 +295,27 @@ static int vclk_debug_create_one(struct vclk *vclk, struct dentry *pdentry)
 
 	vclk->dentry = d;
 
-	d = debugfs_create_x32("vclk_id", S_IRUGO, vclk->dentry,
+	d = debugfs_create_x32("vclk_id", S_IRUSR, vclk->dentry,
 			(u32 *)&vclk->id);
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_u32("vclk_rate", S_IRUGO, vclk->dentry,
+	d = debugfs_create_u32("vclk_rate", S_IRUSR, vclk->dentry,
 			(u32 *)&vclk->vrate);
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_u32("vclk_num_rates", S_IRUGO, vclk->dentry,
+	d = debugfs_create_u32("vclk_num_rates", S_IRUSR, vclk->dentry,
 			(u32 *)&vclk->num_rates);
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_u32("vclk_num_list", S_IRUGO, vclk->dentry,
+	d = debugfs_create_u32("vclk_num_list", S_IRUSR, vclk->dentry,
 			(u32 *)&vclk->num_list);
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_file("vclk_table", S_IRUGO, vclk->dentry, vclk,
+	d = debugfs_create_file("vclk_table", S_IRUSR, vclk->dentry, vclk,
 				&vclk_table_fops);
 	if (!d)
 		return -ENOMEM;
@@ -381,17 +381,17 @@ static int __init vclk_debug_init(void)
 		vclk_debug_create_one(vclk, rootdir);
 	}
 
-	d = debugfs_create_file("clk_info", 0644, rootdir, NULL,
+	d = debugfs_create_file("clk_info", 0600, rootdir, NULL,
 				&clk_info_fops);
 	if (!d)
 		return -ENOMEM;
 
-	d = debugfs_create_file("dvfs_domain", 0644, rootdir, NULL,
+	d = debugfs_create_file("dvfs_domain", 0600, rootdir, NULL,
 				&dvfs_domain_fops);
 	if (!d)
 		return -ENOMEM;
 
-	d = debugfs_create_file("set_margin", 0644, rootdir, NULL,
+	d = debugfs_create_file("set_margin", 0600, rootdir, NULL,
 				&set_margin_fops);
 	if (!d)
 		return -ENOMEM;

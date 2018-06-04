@@ -41,7 +41,7 @@ extern int hrm_info;
 #define VENDOR					"ADI"
 
 #define VENDOR_VERISON			"2"
-#define VERSION					"32"
+#define VERSION					"33"
 
 #define ADPD143_SLAVE_ADDR		0x64
 
@@ -201,6 +201,8 @@ extern int hrm_info;
 #define SF_IR_CH	100
 #define ADPD_READ_REGFILE_PATH "/data/HRM/ADPD_READ_REG.txt"
 #define ADPD_WRITE_REGFILE_PATH "/data/HRM/ADPD_WRITE_REG.txt"
+
+#define TRIM_SET_VALUE	-10
 
 struct adpd_platform_data {
 	unsigned short config_size;
@@ -2166,6 +2168,7 @@ OBJ_PROXIMITY_STATUS __adpd_checkObjProximity(unsigned *dataInA, unsigned *dataI
 }
 
 /* read & write efs for hrm sensor */
+/*
 static int __adpd_osc_trim_efs_register_open(struct adpd_device_data *adpd_data)
 {
 	struct file *osc_filp = NULL;
@@ -2279,7 +2282,7 @@ static int __adpd_write_osc_trim_efs_register(struct adpd_device_data *adpd_data
 
 	return osc_trim_err;
 }
-
+*/
 static void __adpd_clr_intr_status(struct adpd_device_data *adpd_data, unsigned short mode)
 {
 	__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, adpd_data->intr_status_val);
@@ -2411,12 +2414,18 @@ static int __adpd_configuration(struct adpd_device_data *adpd_data, unsigned cha
 
 		__adpd_reg_write(adpd_data, addr, data);
 	}
-
+	if (adpd_data->oscRegValue) {
+		__adpd_reg_write(adpd_data, ADPD_OSC32K_ADDR, adpd_data->oscRegValue);
+		HRM_info("%s - oscRegValue : 0x%04x\n", __func__, adpd_data->oscRegValue);
+	} else {
+		HRM_dbg("%s - need running eol test\n", __func__);
+	}
+/*
 	if (adpd_data->oscRegValue || __adpd_osc_trim_efs_register_open(adpd_data) >= 0)
 		__adpd_reg_write(adpd_data, ADPD_OSC32K_ADDR, adpd_data->oscRegValue);
 
 	HRM_info("%s - oscRegValue : 0x%04x\n", __func__, adpd_data->oscRegValue);
-
+*/
 	return ret;
 }
 
@@ -3215,11 +3224,14 @@ static EOL_state __adpd_stepEOL(unsigned *dataInA, unsigned *dataInB)
 		break;
 
 	case ST_EOL_CLOCK_CAL_DONE:
+		adpd_data->oscRegValue = __adpd_reg_read(adpd_data, OSC_TRIM_32K_REG);
 		HRM_dbg("******************Clock Calibration Finished : %dhz, 0x%04x*****************\n", adpd_data->eol_res_odr, adpd_data->oscRegValue);
-		if (__adpd_write_osc_trim_efs_register(adpd_data) < 0) {
-			adpd_data->eol_res_odr = 0;
-			HRM_dbg("******************Write osc_trim_file to efs error : %dhz*****************\n", adpd_data->eol_res_odr);
-		}
+		adpd_data->sum_slot_a = TRIM_SET_VALUE;
+		adpd_data->sum_slot_b = adpd_data->oscRegValue;
+//		if (__adpd_write_osc_trim_efs_register(adpd_data) < 0) {
+//			adpd_data->eol_res_odr = 0;
+//			HRM_dbg("******************Write osc_trim_file to efs error : %dhz*****************\n", adpd_data->eol_res_odr);
+//		}
 	case ST_EOL_LOW_DC_INIT:
 		HRM_dbg("******************Low DC Statistics Init : %d*****************\n", adpd_data->eol_counter);
 	case ST_EOL_LOW_DC_RUNNING:
@@ -4541,8 +4553,15 @@ int adpd_read_data(struct hrm_output_data *data)
 			} else {
 				if (adpd_data->cnt_enable < CNT_ENABLE_SKIP_SAMPLE)
 					adpd_data->cnt_enable++;
-				data->main_num = 0;
-				data->sub_num = 0;
+				if (adpd_data->sum_slot_a == TRIM_SET_VALUE) {
+					data->trim_set_flag = 1;
+					data->data_main[0] = adpd_data->sum_slot_b;
+					adpd_data->sum_slot_a = 0;
+					adpd_data->sum_slot_b = 0;
+				} else {
+					data->main_num = 0;
+					data->sub_num = 0;
+				}
 			}
 			break;
 
@@ -4907,3 +4926,12 @@ int adpd_get_sensor_info(char *sensor_info_data)
 										adpd_data->slot_data[1], adpd_data->slot_data[2], adpd_data->slot_data[3]);
 }
 
+int adpd_set_osc_trim(u16 trim_val)
+{
+	mutex_lock(&adpd_data->mutex);
+	adpd_data->oscRegValue = trim_val;
+	mutex_unlock(&adpd_data->mutex);	
+	HRM_dbg("%s - oscRegValue : 0x%04x\n", __func__, adpd_data->oscRegValue);
+
+	return 0;
+}

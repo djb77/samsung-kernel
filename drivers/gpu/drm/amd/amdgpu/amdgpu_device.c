@@ -1760,8 +1760,11 @@ int amdgpu_resume_kms(struct drm_device *dev, bool resume, bool fbcon)
 	}
 
 	r = amdgpu_late_init(adev);
-	if (r)
+	if (r) {
+		if (fbcon)
+			console_unlock();
 		return r;
+	}
 
 	/* pin cursors */
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
@@ -1793,7 +1796,23 @@ int amdgpu_resume_kms(struct drm_device *dev, bool resume, bool fbcon)
 	}
 
 	drm_kms_helper_poll_enable(dev);
+
+	/*
+	 * Most of the connector probing functions try to acquire runtime pm
+	 * refs to ensure that the GPU is powered on when connector polling is
+	 * performed. Since we're calling this from a runtime PM callback,
+	 * trying to acquire rpm refs will cause us to deadlock.
+	 *
+	 * Since we're guaranteed to be holding the rpm lock, it's safe to
+	 * temporarily disable the rpm helpers so this doesn't deadlock us.
+	 */
+#ifdef CONFIG_PM
+	dev->dev->power.disable_depth++;
+#endif
 	drm_helper_hpd_irq_event(dev);
+#ifdef CONFIG_PM
+	dev->dev->power.disable_depth--;
+#endif
 
 	if (fbcon) {
 		amdgpu_fbdev_set_suspend(adev, 0);

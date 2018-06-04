@@ -1974,6 +1974,7 @@ static int panel_dpui_notifier_callback(struct notifier_block *self,
 	struct dpui_info *dpui = data;
 	char tbuf[MAX_DPUI_VAL_LEN];
 	u8 panel_datetime[7] = { 0, };
+	u8 panel_coord[4] = { 0, };
 	u8 panel_chip_id[5] = { 0, };
 	int size;
 
@@ -2012,6 +2013,13 @@ static int panel_dpui_notifier_callback(struct notifier_block *self,
 			panel_chip_id[0], panel_chip_id[1], panel_chip_id[2],
 			panel_chip_id[3], panel_chip_id[4]);
 	set_dpui_field(DPUI_KEY_CHIPID, tbuf, size);
+
+	resource_copy_by_name(panel_data, panel_coord, "coordinate");
+	size = snprintf(tbuf, MAX_DPUI_VAL_LEN, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+		panel_datetime[0], panel_datetime[1], panel_datetime[2], panel_datetime[3],
+		panel_datetime[4], panel_datetime[5], panel_datetime[6],
+		panel_coord[0], panel_coord[1], panel_coord[2], panel_coord[3]);
+	set_dpui_field(DPUI_KEY_CELLID, tbuf, size);
 
 	return 0;
 }

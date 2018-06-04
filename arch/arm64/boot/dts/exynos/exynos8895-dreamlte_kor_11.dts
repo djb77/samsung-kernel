@@ -1,0 +1,258 @@
+/*
+ * SAMSUNG EXYNOS8895 board device tree source
+ *
+ * Copyright (c) 2016 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+/dts-v1/;
+#include "exynos8895-dreamlte_common.dtsi"
+#include "battery_data_dreamlte_eur_09.dtsi"
+#include "exynos8895-dreamlte_motor.dtsi"
+#include "exynos8895-dreamlte_svcled.dtsi"
+#include "ccic-s2mm005_01.dtsi"
+#include "exynos8895-dreamlte_mst_00.dtsi"
+#include "exynos8895-dreamlte_gpio_kor_10.dtsi"
+#include "exynos8895-dreamlte_kor-tdmb-00.dtsi"
+#include "exynos8895-dreamlte_fingerprint-sensor_10.dtsi"
+
+/ {
+	model = "Samsung DREAMLTE KOR rev07 board based on EXYNOS8895";
+	model_info-chip = <8895>;
+	model_info-platform = "android";
+	model_info-subtype = "samsung";
+	model_info-hw_rev = <11>;
+	model_info-hw_rev_end = <255>;
+	compatible = "samsung, DREAMLTE KOR rev07", "samsung,EXYNOS8895";
+
+	spi_10: spi@108C0000{
+		#address-cells = <1>;
+		#size-cells = <0>;
+	
+		pinctrl-names = "default";
+		pinctrl-0 = <&spi1_mosi_sck_ssn &spi1_miso>;
+
+		num-cs = <1>;
+		status = "okay";
+/*
+		dma-mode;
+		dmas = <&pdma0 21 0
+			&pdma0 20 0>;
+*/
+		BCM4773@0 {
+			compatible = "ssp,BCM4773";
+			reg = <0>;
+			spi-max-frequency = <26000000>;
+			spi-cpol;
+			spi-cpha;
+			pinctrl-names = "default";
+			pinctrl-0 = <&ssp_host_req &ssp_mcu_req &ssp_mcu_resp &ssp_batch_wake_irq &ssp_pwr_en>;
+		
+			gpio-controller;
+			#gpio-cells = <2>;
+			ssp-host-req = <&gpa3 4 0x00>;
+			ssp-mcu-req = <&gpe6 1 0x00>;
+			ssp-mcu-resp = <&gpi1 5 0x00>;
+			ssp-batch-wake-irq = <&gpa2 5 0x00>;
+			ssp-acc-position = <0>;
+			ssp-mag-position = <6>;
+			ssp-sns-combination = <0>;
+			ssp-ap-rev = <1>;
+			ssp-mag-array = /bits/ 8 <20 83 45 32 49 183 0 170 211 55 41 26 208 126 255 209 0 85 45 154 190 253 81 78 9 128 179>;
+			ssp-glass-type = <0>;
+			ssp-mag-type = <1>;
+			ssp-vdd-mcu-1p8 = "vdd_mcu_1p8";
+			
+			controller-data {
+				cs-gpio = <&gpe2 6 0>;
+				samsung,spi-feedback-delay = <0>;
+			};
+		};
+	};
+
+	gps {
+		compatible = "samsung,exynos54xx-bcm4753";
+
+		pinctrl-names = "hub_en";
+		pinctrl-0 = <&ssp_gps_pwr_en>;
+
+		gpios = <&gpf0 3 0x0>;
+		status = "okay";
+	};
+
+	hsi2c_9: hsi2c@10480000 {
+		sx9320-i2c@22 {
+			status = "disabled";
+		};
+	};
+
+	speedy@15B50000{
+		status = "okay";
+		s2mps17mfd@00 {
+			regulators {
+                                ldo31_reg: LDO31 {
+					regulator-name = "VDD_2P6_MUX";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <3300000>;
+					regulator-always-on;
+					regulator-initial-mode = <3>;
+				};
+				ldo34_reg: LDO34 {
+					regulator-name = "tsp_io";
+					regulator-min-microvolt = <1850000>;
+					regulator-max-microvolt = <1850000>;
+					regulator-boot-on;
+				};
+				ldo35_reg: LDO35 {
+					regulator-name = "tsp_avdd";
+					regulator-min-microvolt = <3000000>;
+					regulator-max-microvolt = <3000000>;
+					regulator-boot-on;
+				};
+				ldo36_reg: LDO36 {
+					regulator-name = "VDD_1.8V_ESE";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+				};
+				ldo38_reg: LDO38 {
+					regulator-name = "vdd_mcu_1p8";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+				};
+			};
+		};
+	};
+
+	sec_thermistor@2 {
+		status = "disabled";
+	};
+
+	sec_thermistor@10 {
+		compatible = "samsung,sec-pa-thermistor";
+		status = "okay";
+
+		adc_array = <327 347 367 388 410 433 456 482 507 534
+			562 591 621 651 684 717 750 786 821 858
+			896 935 975 1016 1057 1100 1143 1187 1231 1277
+			1323 1369 1416 1463 1511 1559 1608 1657 1706 1755
+			1804 1853 1902 1951 2000 2048 2096 2144 2192 2239
+			2285 2332 2378 2421 2467 2510 2553 2596 2637 2678
+			2719 2758 2797 2833 2872 2906 2942 2976 3011 3042
+			3074 3106 3136 3165 3195 3222 3249 3277 3302 3327
+			3352 3375 3397 3420 3441 3461 3482 3502 3520 3538
+			3557 3573 3591 3607 3620 3636 3650 3666 3680 3691
+			3705 3716 3730 3741 3752 3761 3773 3782 3793 3802
+			3812>;
+
+		temp_array =
+			<(-200) (-190) (-180) (-170) (-160) (-150) (-140) (-130) (-120) (-110)
+			(-100) (-90) (-80) (-70) (-60) (-50) (-40) (-30) (-20) (-10)
+			0 10 20 30 40 50 60 70 80 90
+			100 110 120 130 140 150 160 170 180 190
+			200 210 220 230 240 250 260 270 280 290
+			300 310 320 330 340 350 360 370 380 390
+			400 410 420 430 440 450 460 470 480 490
+			500 510 520 530 540 550 560 570 580 590
+			600 610 620 630 640 650 660 670 680 690
+			700 710 720 730 740 750 760 770 780 790
+			800 810 820 830 840 850 860 870 880 890
+			900>;
+
+		io-channels = <&exynos_adc 10>;
+		io-channel-names = "adc-pa-temp";
+		io-channel-ranges;
+	};
+
+	pinctrl@164B0000 {
+		dp_irq: dp_irq {
+			samsung,pins = "gpa3-1";
+			samsung,pin-function = <3>;
+			samsung,pin-pud = <0>;
+		};
+	};
+
+	speedy@15B50000{
+		status = "okay";
+		s2mps17mfd@00 {
+			regulators {
+				ldo6_reg: LDO6 {
+					regulator-name = "vdd_ldo6";
+					regulator-min-microvolt = <3100000>;
+					regulator-max-microvolt = <3100000>;
+					regulator-ramp-delay = <12000>;
+				};
+				ldo37_reg: LDO37 {
+						regulator-name = "VDD_DP_1P8";
+						regulator-min-microvolt = <1800000>;
+						regulator-max-microvolt = <1800000>;
+					};
+			};
+		};
+	};
+
+	displayport: displayport@0x11090000 {
+		dp,aux_sw_oe = <&gpi1 3 0>;
+		dp,sbu_sw_sel = <&gpe7 5 0>;
+		dp,usb_con_sel = <&gpi1 7 0>;
+		/*dp,aux_vdd = "VDD_DP_1P8";*/
+		dp,hpd_gpio_irq;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&dp_irq>;
+	};
+
+	panel_0: panel_drv@001 {
+		gpio,lcd-reset = <&gpa0 5 0x1>;
+	};
+
+	hsi2c@10870000 {
+		status = "okay";
+		s2dos03_pmic@60 {
+			regulators {
+				dp_ldo2: s2dos03-ldo2 {
+					regulator-name = "HRM_1.8V_AP";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+				};
+				dp_ldo4: s2dos03-ldo4 {
+					regulator-name = "HRM_3.3V_AP";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <3300000>;
+				};
+			};
+		};
+	};
+
+	hsi2c_23: hsi2c@108E0000 {
+		touchscreen@48 {	/* lsi */
+			status = "okay";
+			sec,firmware_name = "tsp_sec/y761_dream1.fw", "tsp_sec/y761_dream1.fw";
+		};
+
+		touchscreen@49 {	/* stm */
+			status = "disabled";
+		};
+	};
+
+	hsi2c_26: hsi2c@10910000 {
+		status = "okay";
+		hrmsensor@57 {
+			compatible = "hrmsensor";
+			reg = <0x57>;
+			interrupt-parent = <&gpe6>;
+			interrupts = <6 0 0>;
+			pinctrl-names = "default", "sleep", "idle";
+			pinctrl-0 = <&hrm_irq>;
+			pinctrl-1 = <&hrm_irqsleep>;
+			pinctrl-2 = <&hrm_irqidle>;
+			hrmsensor,hrm_int-gpio = <&gpe6 6 0>;
+			hrmsensor,vdd_1p8 = "HRM_1.8V_AP";
+			hrmsensor,led_3p3 = "HRM_3.3V_AP";
+			hrmsensor,i2c_1p8 = "VDD_NFC_1P8";
+		};
+	};
+};

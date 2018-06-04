@@ -32,7 +32,7 @@
 #include <linux/init.h>
 #include <linux/uaccess.h>
 #include <linux/highmem.h>
-#include <asm/mmu_context.h>
+#include <linux/mmu_context.h>
 #include <linux/interrupt.h>
 #include <linux/capability.h>
 #include <linux/completion.h>
@@ -2181,6 +2181,10 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	trace_sched_task_load_contrib(p, p->se.avg.load_avg);
 #endif
 
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	p->se.cfs_rq			= NULL;
+#endif
+
 #ifdef CONFIG_SCHEDSTATS
 	memset(&p->se.statistics, 0, sizeof(p->se.statistics));
 #endif
@@ -2449,6 +2453,7 @@ void wake_up_new_task(struct task_struct *p)
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
 	/* Initialize new task's runnable average */
 	init_entity_runnable_average(&p->se);
+	init_rt_entity_runnable_average(&p->rt);
 #ifdef CONFIG_SCHED_HMP
 	trace_sched_task_runnable_ratio(p, p->se.avg.hmp_load_avg);
 #endif
@@ -3844,10 +3849,6 @@ extern struct cpumask hmp_slow_cpu_mask;
 static void __setscheduler(struct rq *rq, struct task_struct *p,
 			   const struct sched_attr *attr, bool keep_boost)
 {
-#ifdef CONFIG_SCHED_HMP
-	struct cpumask mask;
-#endif
-
 	__setscheduler_params(p, attr);
 
 	/*
@@ -3864,9 +3865,8 @@ static void __setscheduler(struct rq *rq, struct task_struct *p,
 	else if (rt_prio(p->prio)) {
 		p->sched_class = &rt_sched_class;
 #ifdef CONFIG_SCHED_HMP
-		cpumask_andnot(&mask, &p->cpus_allowed, &hmp_fast_cpu_mask);
-		if (!cpumask_empty(&mask))
-			do_set_cpus_allowed(p, &mask);
+		if (cpumask_equal(&p->cpus_allowed, cpu_all_mask))
+			do_set_cpus_allowed(p, &hmp_slow_cpu_mask);
 #endif
 	} else
 		p->sched_class = &fair_sched_class;
@@ -8000,7 +8000,7 @@ void sched_move_task(struct task_struct *tsk)
 	tg = autogroup_task_group(tsk, tg);
 	tsk->sched_task_group = tg;
 
-#ifdef CONFIG_FAIR_GROUP_SCHED
+#if defined(CONFIG_FAIR_GROUP_SCHED) || defined(CONFIG_RT_GROUP_SCHED)
 	if (tsk->sched_class->task_move_group)
 		tsk->sched_class->task_move_group(tsk);
 	else
@@ -8795,7 +8795,6 @@ struct cgroup_subsys cpu_cgrp_subsys = {
 	.fork		= cpu_cgroup_fork,
 	.can_attach	= cpu_cgroup_can_attach,
 	.attach		= cpu_cgroup_attach,
-	.allow_attach   = subsys_cgroup_allow_attach,
 	.legacy_cftypes	= cpu_files,
 	.early_init	= 1,
 };

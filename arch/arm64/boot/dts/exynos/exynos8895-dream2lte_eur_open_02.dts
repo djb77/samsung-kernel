@@ -1,0 +1,457 @@
+/*
+ * SAMSUNG EXYNOS8895 board device tree source
+ *
+ * Copyright (c) 2016 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+/dts-v1/;
+#include "exynos8895-dream2lte_common.dtsi"
+#include "battery_data_dream2lte-cl54_common.dtsi"
+#include "exynos8895-dream2lte_motor.dtsi"
+#include "exynos8895-dream2lte_svcled.dtsi"
+#include "ccic-s2mm005_00.dtsi"
+#include "exynos8895-dreamlte_mst_00.dtsi"
+#include "exynos8895-dream2lte_gpio_02.dtsi"
+
+/ {
+	model = "Samsung DREAM2LTE EUR rev00A board based on EXYNOS8895";
+	model_info-chip = <8895>;
+	model_info-platform = "android";
+	model_info-subtype = "samsung";
+	model_info-hw_rev = <2>;
+	model_info-hw_rev_end = <2>;
+	compatible = "samsung, DREAM2LTE EUR rev00A", "samsung,EXYNOS8895";
+
+	pinctrl@164B0000 {
+		ssp_batch_wake_irq: ssp-batch-wake-irq {
+			samsung,pins = "gpa3-1";
+			samsung,pin-function = <0xf>;
+			samsung,pin-pud = <1>;
+			samsung,pin-drv = <3>;
+		};
+	};
+
+	spi_3: spi@10460000 {
+		status = "okay";
+		cs47l93: cs47l93@0 {
+			cirrus,dmic-ref = <1 2>;
+			cirrus,inmode = <
+				2 0 2 0 /* IN1 */
+				2 2 0 0 /* IN2 */
+			>;
+
+			cirrus,gpio-defaults = <
+				0xffffffff 0xffffffff /* GPIO1 */
+				0xffffffff 0xffffffff /* GPIO2 */
+				0x00002001 0x00009000 /* SPKCLK1 /   GPIO3 */
+				0x00002001 0x00009000 /* SPKDAT /    GPIO4 */
+				0x00002000 0x00006000 /* AIF1TXDAT / GPIO5 */
+				0x00002000 0x00006000 /* AIF1BCLK /  GPIO6 */
+				0x00002000 0x00006000 /* AIF1RXDAT / GPIO7 */
+				0x00002000 0x00006000 /* AIF1LRCLK / GPIO8 */
+				0x00002001 0x00009000 /* AIF2TXDAT / GPIO9 */
+				0x00002001 0x00009000 /* AIF2BCLK /  GPIO10 */
+				0x00002001 0x00009000 /* AIF2RXDAT / GPIO11 */
+				0x00002000 0x00006000 /* AIF2LRCLK / GPIO12 */
+				0x00002000 0x00006000 /* AIF3TXDAT / GPIO13 */
+				0x00002000 0x00006000 /* AIF3BCLK /  GPIO14 */
+				0x00002000 0x00006000 /* AIF3RXDAT / GPIO15 */
+				0x00002000 0x00006000 /* AIF3LRCLK / GPIO16 */
+			>;
+
+			cirrus,accdet {
+				acc@1 {
+					cirrus,hpdet-ext-res = <3300>;
+				};
+			};
+		};
+	};
+
+	spi_10: spi@108C0000{
+		#address-cells = <1>;
+		#size-cells = <0>;
+	
+		pinctrl-names = "default";
+		pinctrl-0 = <&spi1_mosi_sck_ssn &spi1_miso>;
+
+		num-cs = <1>;
+		status = "okay";
+/*
+		dma-mode;
+		dmas = <&pdma0 21 0
+			&pdma0 20 0>;
+*/
+		BCM4773@0 {
+			compatible = "ssp,BCM4773";
+			reg = <0>;
+			spi-max-frequency = <26000000>;
+			spi-cpol;
+			spi-cpha;
+			pinctrl-names = "default";
+			pinctrl-0 = <&ssp_host_req &ssp_mcu_req &ssp_mcu_resp &ssp_batch_wake_irq>;
+		
+			gpio-controller;
+			#gpio-cells = <2>;
+			ssp-host-req = <&gpa3 4 0x00>;
+			ssp-mcu-req = <&gpe6 1 0x00>;
+			ssp-mcu-resp = <&gpi1 5 0x00>;
+			ssp-batch-wake-irq = <&gpa3 1 0x00>;
+			ssp-acc-position = <5>;
+			ssp-mag-position = <1>;
+			ssp-sns-combination = <0>;
+			ssp-ap-rev = <1>;
+			ssp-mag-array = /bits/ 8 <253 90 57 192 88 65 2 134 202 56 62 202 185 40 254 156 2 108 98 193 184 4 28 181 12 82 172>;
+			ssp-glass-type = <0>;
+			ssp-mag-type = <1>;
+
+			controller-data {
+				cs-gpio = <&gpe2 6 0>;
+				samsung,spi-feedback-delay = <0>;
+			};
+		};
+	};
+
+	sound {
+		status = "okay";
+		spkpdm-gpio;
+
+		samsung,routing = "HEADSETMIC", "MICBIAS2A",
+				 "IN1BL", "HEADSETMIC",
+				 "DMIC1", "MICBIAS1A",
+				 "IN1AL", "DMIC1",
+				 "DMIC2", "MICBIAS1B",
+				 "IN2AL", "DMIC2",
+				 "VTS PAD DPDM", "DMIC1",
+				 "RECEIVER", "HPOUT3L",
+				 "RECEIVER", "HPOUT3R",
+				 "RECEIVER", "HPOUT4L",
+				 "RECEIVER", "HPOUT4R",
+				 "HEADPHONE", "HPOUT2L",
+				 "HEADPHONE", "HPOUT2R",
+				 "BLUETOOTH SPK", "ABOX UAIF3 Playback",
+				 "ABOX UAIF3 Capture", "BLUETOOTH MIC",
+				 "VOUTPUT", "ABOX UAIF0 Playback",
+				 "ABOX UAIF1 Capture", "VINPUT1",
+				 "ABOX UAIF4 Capture", "VINPUT2",
+				 "SPEAKER", "HiFi Playback",
+				 "VOUTPUTCALL", "ABOX UAIF2 Playback",
+				 "ABOX UAIF2 Capture", "VINPUTCALL",
+				 "VTS Virtual Output", "VTS Virtual Output Mux";
+
+		mixer-paths = "mixer_paths_r00.xml";
+	};
+
+	gps {
+		compatible = "samsung,exynos54xx-bcm4753";
+
+		pinctrl-names = "hub_en";
+		pinctrl-0 = <&ssp_gps_pwr_en>;
+
+		gpios = <&gpf0 3 0x0>;
+		status = "okay";
+	};
+	
+	dwmmc2@11500000 {
+		card-detect-invert;
+	};
+
+	speedy@15B50000{
+		status = "okay";
+		s2mps17mfd@00 {
+			regulators {
+				ldo31_reg: LDO31 {
+					regulator-name = "vdd_ldo31";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <3375000>;
+					regulator-always-on;
+					regulator-ramp-delay = <12000>;
+					regulator-initial-mode = <2>;
+				};
+				ldo34_reg: LDO34 {
+					regulator-name = "HRM_1.8V_AP";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+				};
+				ldo35_reg: LDO35 {
+					regulator-name = "HRM_3.3V_AP";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <3300000>;
+				};
+				ldo36_reg: LDO36 {
+					regulator-name = "VDD_MOTOR_3P3";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <3300000>;
+					regulator-boot-on;
+					regulator-always-on;
+					regulator-ramp-delay = <12000>;
+				};
+				ldo41_reg: LDO41 {
+					regulator-name = "VDD_SUB_CAM_A2P8";
+					regulator-min-microvolt = <2800000>;
+					regulator-max-microvolt = <2800000>;
+				};
+			};
+		};
+	};
+
+	hsi2c_26: hsi2c@10910000 {
+		status = "okay";
+		hrmsensor@57 {
+			compatible = "hrmsensor";
+			reg = <0x57>;
+			interrupt-parent = <&gpe6>;
+			interrupts = <6 0 0>;
+			pinctrl-names = "default", "sleep", "idle";
+			pinctrl-0 = <&hrm_irq>;
+			pinctrl-1 = <&hrm_irqsleep>;
+			pinctrl-2 = <&hrm_irqidle>;
+			hrmsensor,hrm_int-gpio = <&gpe6 6 0>;
+			hrmsensor,vdd_1p8 = "HRM_1.8V_AP";
+			hrmsensor,led_3p3 = "HRM_3.3V_AP";
+			hrmsensor,i2c_1p8 = "VDD_NFC_1P8";
+		};
+	};
+
+	pinctrl@164B0000 {
+		max77854_irq: max77854-irq {
+			samsung,pins = "gpa1-6";
+			samsung,pin-function = <0xf>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
+	hsi2c@10970000 {
+		 status = "okay";
+
+		 max77854@66 {
+			compatible = "maxim,max77854";
+			pinctrl-names = "default";
+			pinctrl-0 = <&max77854_irq &pwm_tout1>;
+			reg = <0x66>;
+			max77854,irq-gpio = <&gpa1 6 1>;
+			muic-universal,irq-gpio = <&gpa1 6 1>;
+			muic-universal,chip_name = "max,max77854";
+			max77854,wakeup;
+			muic,undefined_range;
+
+			regulators {
+				ESAFEOUT1 {
+					regulator-compatible = "safeout1";
+					regulator-name = "safeout1_range";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <4900000>;
+					regulator-boot-on;
+				};
+
+				ESAFEOUT2 {
+					regulator-compatible = "safeout2";
+					regulator-name = "safeout2_range";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <4900000>;
+				};
+			};
+		};
+	};
+
+	displayport: displayport@0x11090000 {
+		dp,aux_sw_oe = <&gpi1 3 0>;
+		dp,usb_con_sel = <&gpi1 7 0>;
+		dp,aux_vdd = "VDD_DP_3P3";
+	};
+	
+	hsi2c_3: hsi2c@109B0000 {
+		 gpios = <&gpc2 4 0 &gpc2 5 0>;
+		 status = "okay";
+		 clock-frequency = <400000>;
+		 samsung,reset-before-trans;
+
+		 pinctrl-names = "default","on_i2c","off_i2c";
+		 pinctrl-0 = <&hsi2c3_bus_in>;
+		 pinctrl-1 = <&hsi2c3_bus>;
+		 pinctrl-2 = <&hsi2c3_bus_in>;
+
+		 fimc-is-3m3@2D {
+			 compatible = "samsung,exynos5-fimc-is-cis-3m3";
+			 reg = <0x2D>; /* 1 bit right shift */
+			 id = <2>; /* matching sensor id */
+			 setfile = "default";
+		 };
+	};
+
+	hsi2c_4: hsi2c@109C0000 {
+		gpios = <&gpc2 6 0 &gpc2 7 0>;
+		status = "okay";
+		clock-frequency = <400000>;
+		samsung,reset-before-trans;
+
+		pinctrl-names = "default","on_i2c","off_i2c";
+		pinctrl-0 = <&hsi2c4_bus_in>;
+		pinctrl-1 = <&hsi2c4_bus>;
+		pinctrl-2 = <&hsi2c4_bus_in>;
+
+		fimc-is-actuator@0F {
+			compatible = "samsung,exynos5-fimc-is-actuator-ak7371";
+			reg = <0x0F>;
+			id = <2>; /* matching sensor id */
+			place = <2>; /* 0: Back  1: Front  2: Tele*/
+		};
+	};
+
+	hsi2c_24: hsi2c@108F0000 {
+		fimc-is-secure@10 {
+			power_seq_id = <0>;  /* [0: < Rev0.2], [1: > Rev0.2] */
+		};
+	};
+
+	fimc_is_sensor_imx333: fimc-is_sensor_imx333@34 {
+		status = "okay";
+		gpio_cam_af_2p8_en = <&gpf1 0 0x1>; /* tele AF for factory */
+		gpio_camio_1p8_en = <&gpe7 7 0x1>; /* F-Rom IO LDO*/
+		power_seq_id = <1>;  /* S6 Compatible (HWrev0~8) */
+
+		ois {
+			product_name = <1>; /* RUMBA-S4 */
+			i2c_addr = <0x48>;
+			i2c_ch = <1>; /* I2C 1 */
+		};
+	};
+
+	fimc_is_sensor_2l2: fimc-is_sensor_2l2@5A {
+		status = "okay";
+		gpio_cam_af_2p8_en = <&gpf1 0 0x1>; /* tele AF for factory */
+		gpio_camio_1p8_en = <&gpe7 7 0x1>; /* F-Rom IO LDO*/
+		power_seq_id = <1>;  /* S6 Compatible (HWrev0~8) */
+
+		ois {
+			product_name = <1>; /* RUMBA-S4 */
+			i2c_addr = <0x48>;
+			i2c_ch = <1>; /* I2C 1 */
+		};
+	};
+
+	fimc_is_sensor_3m3: fimc-is_sensor_3m3@5A {
+		compatible = "samsung,sensor-module-3m3";
+
+		pinctrl-names = "pin0", "pin1", "pin2", "default", "release";
+		pinctrl-0 = <>;
+		pinctrl-1 = <&fimc_is_mclk0_out &fimc_is_mclk2_out>;
+		pinctrl-2 = <&fimc_is_mclk0_fn &fimc_is_mclk2_fn>;
+		pinctrl-3 = <&sub_cam_en_out &sub_cam_1p0_out &sub_cam_io_out &sub_cam_af_out &sub_cam_rst_out>;
+		pinctrl-4 = <>;
+
+		position = <2>;	/* Rear:0. Front:1, Tele:2 */
+		id = <2>; /* bns_id */
+		mclk_ch = <0>;
+		sensor_i2c_ch = <2>; /* I2C 2 */
+		sensor_i2c_addr = <0x5A>;
+
+		gpio_mclk = <&gpk0 0 0x1>; /* mclk shared with wide-cam */
+		gpio_reset = <&gpc1 2 0x1>; /* sensor reset */
+		gpio_ois_reset = <&gpe6 0 0x1>; /* ois reset */
+		gpio_camio_1p8_en = <&gpe7 7 0x1>;
+		gpio_cam_1p0_en = <&gpe6 3 0x1>;
+		gpio_cam_af_2p8_en = <&gpf1 0 0x1>;
+		gpio_cam_2p8_en = <&gpa4 0 0x1>;
+
+		power_seq_id = <0>;  /* [0: < Rev0.2], [1: > Rev0.2] */
+
+		status = "okay";
+
+		af {
+			product_name = <17>; /* ak7371 for TELE*/
+			i2c_addr = <0x1E>;
+			i2c_ch = <3>; /* I2C 3 */
+		};
+
+		flash {
+			product_name = <100>; /* NOTHING */
+		};
+
+		preprocessor {
+			product_name = <100>; /* NOTHING */
+		};
+
+		internal_vc {
+			vc_list = <1 1>;  /* channel, data_type */
+		};
+	};
+
+	fimc_is@13140000 {
+		pinctrl-names = "default","release";
+		pinctrl-0 = <&fimc_is_flash_is &fimc_is_mclk0_out &fimc_is_mclk1_out &fimc_is_mclk2_out &fimc_is_mclk3_out>;
+		pinctrl-1 = <>;
+
+		vender {
+			rear_sensor_id = <112>; /* 2L1:29 IMX260:109 IMX333:112*/
+			front_sensor_id = <111>; /* IMX320 : 111 3H1 : 31 */
+			rear_second_sensor_id = <33>;
+			secure_sensor_id = <254>; /* 5E6:254 */
+			use_module_check;
+			use_ois_hsi2c;
+			use_ois;
+			/*skip_cal_loading;*/
+			check_sensor_vendor;
+			f_rom_power = <1>; /* 0:Wide, 1:Tele */
+
+			max_camera_num = <4>;
+			camera_info0 {                          // 0 : rear
+				isp = <0>;                      /* 0 : INT , 1 : EXT , 2 : SOC */
+				cal_memory = <1>;               /* 0 : N , 1 : FROM , 2 : EEPROM , 3 : OTP  */
+				read_version = <0>;             /* 0 : SYSFS , 1 : CAMON */
+				core_voltage = <1>;             /* 0 : N , 1 : Y  */
+				upgrade = <0>;          /* 0 : N , 1 : SYSFS , 2 : CAMON */
+				fw_write = <0>;         /* 0 : N,  1 : OS, 2 : SD, 3 : ALL */
+				fw_dump = <0>;          /* 0 : N , 1 : Y  */
+				companion = <1>;                /* 0 : N , 1 : Y  */
+				ois = <1>;                      /* 0 : N , 1 : Y  */
+				valid = <1>;					/* 0 : INVALID , 1 : VALID   */
+		        };
+			camera_info1 {                          // 1 : front
+				isp = <0>;                      /* 0 : INT , 1 : EXT , 2 : SOC */
+				cal_memory = <2>;               /* 0 : N , 1 : FROM , 2 : EEPROM , 3 : OTP  */
+				read_version = <0>;             /* 0 : SYSFS , 1 : CAMON */
+				core_voltage = <0>;             /* 0 : N , 1 : Y  */
+				upgrade = <0>;          /* 0 : N , 1 : SYSFS , 2 : CAMON */
+				fw_write = <0>;         /* 0 : N,  1 : OS, 2 : SD, 3 : ALL */
+				fw_dump = <0>;          /* 0 : N , 1 : Y  */
+				companion = <1>;                /* 0 : N , 1 : Y  */
+				ois = <0>;                      /* 0 : N , 1 : Y  */
+				valid = <1>;					/* 0 : INVALID , 1 : VALID   */
+		        };
+			camera_info2 {                          // 2 : tele
+				isp = <0>;                      /* 0 : INT , 1 : EXT , 2 : SOC */
+				cal_memory = <1>;               /* 0 : N , 1 : FROM , 2 : EEPROM , 3 : OTP  */
+				read_version = <0>;             /* 0 : SYSFS , 1 : CAMON */
+				core_voltage = <0>;             /* 0 : N , 1 : Y  */
+				upgrade = <0>;          /* 0 : N , 1 : SYSFS , 2 : CAMON */
+				fw_write = <0>;         /* 0 : N,  1 : OS, 2 : SD, 3 : ALL */
+				fw_dump = <0>;          /* 0 : N , 1 : Y  */
+				companion = <0>;                /* 0 : N , 1 : Y  */
+				ois = <0>;                      /* 0 : N , 1 : Y  */
+				valid = <0>;					/* 0 : INVALID , 1 : VALID   */
+		        };
+			camera_info3 {				// 3 : iris
+				isp = <2>;			/* 0 : INT , 1 : EXT , 2 : SOC */
+				cal_memory = <0>;		/* 0 : N , 1 : FROM , 2 : EEPROM , 3 : OTP  */
+				read_version = <1>;		/* 0 : SYSFS , 1 : CAMON */
+				core_voltage = <0>;		/* 0 : N , 1 : Y  */
+				upgrade = <0>;		/* 0 : N , 1 : SYSFS , 2 : CAMON */
+				fw_write = <0>;		/* 0 : N,  1 : OS, 2 : SD, 3 : ALL */
+				fw_dump = <0>;		/* 0 : N , 1 : Y  */
+				companion = <0>;		/* 0 : N , 1 : Y  */
+				ois = <0>;			/* 0 : N , 1 : Y  */
+				valid = <1>;					/* 0 : INVALID , 1 : VALID   */
+			};
+		};
+	};
+	
+	phy@10E00000 {
+	    phy_revert;
+	};
+};

@@ -91,6 +91,7 @@ extern void percpu_up_write(struct percpu_rw_semaphore *);
 
 extern int __percpu_init_rwsem(struct percpu_rw_semaphore *,
 				const char *, struct lock_class_key *);
+
 extern void percpu_free_rwsem(struct percpu_rw_semaphore *);
 
 #define percpu_init_rwsem(sem)					\

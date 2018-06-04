@@ -29,17 +29,10 @@
 #include "mm.h"
 
 static struct kmem_cache *pgd_cache;
-#ifndef CONFIG_RKP
+
 pgd_t *pgd_alloc(struct mm_struct *mm)
 {
-	if (PGD_SIZE == PAGE_SIZE)
-		return (pgd_t *)__get_free_page(PGALLOC_GFP);
-	else
-		return kmem_cache_alloc(pgd_cache, PGALLOC_GFP);
-}
-#else
-pgd_t *pgd_alloc(struct mm_struct *mm)
-{
+#ifdef CONFIG_RKP
 	pgd_t *ret = NULL;
 	ret = (pgd_t *) rkp_ro_alloc();
 	if (!ret) {
@@ -47,54 +40,57 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 			ret = (pgd_t *)__get_free_page(PGALLOC_GFP);
 		else
 			ret = kmem_cache_alloc(pgd_cache, PGALLOC_GFP);
-		}
+	}
 
 	if(unlikely(!ret)) {
 		pr_warn("%s: pgd alloc is failed\n", __func__);
 		return ret;
 	}
 
-	if (rkp_started)
+	if (rkp_started) {
 		rkp_call(RKP_PGD_NEW, (unsigned long)ret, 0, 0, 0, 0);
+	}
 	return ret;
-}
-#endif
-#ifndef CONFIG_RKP
-void pgd_free(struct mm_struct *mm, pgd_t *pgd)
-{
-	if (PGD_SIZE == PAGE_SIZE)
-		free_page((unsigned long)pgd);
-	else
-		kmem_cache_free(pgd_cache, pgd);
-}
 #else
+	if (PGD_SIZE == PAGE_SIZE)
+		return (pgd_t *)__get_free_page(PGALLOC_GFP);
+	else
+		return kmem_cache_alloc(pgd_cache, PGALLOC_GFP);
+#endif
+}
+
 void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 {
-
+#ifdef CONFIG_RKP
 	if (rkp_started)
 		rkp_call(RKP_PGD_FREE, (unsigned long)pgd, 0, 0, 0, 0);
 	/* if pgd memory come from read only buffer, the put it back */
 	/*TODO: use a macro*/
 	if ((unsigned long)pgd >= (unsigned long)RKP_RBUF_VA &&
 		(unsigned long)pgd < ((unsigned long)RKP_RBUF_VA + RKP_ROBUF_SIZE))
-		rkp_ro_free((void*)pgd);
-	else
-	{
+		rkp_ro_free((void *)pgd);
+	else {
 		if (PGD_SIZE == PAGE_SIZE)
 			free_page((unsigned long)pgd);
 		else
 			kmem_cache_free(pgd_cache, pgd);
 	}
-}
+#else
+	if (PGD_SIZE == PAGE_SIZE)
+		free_page((unsigned long)pgd);
+	else
+		kmem_cache_free(pgd_cache, pgd);
 #endif
-static int __init pgd_cache_init(void)
+}
+
+void __init pgd_cache_init(void)
 {
+	if (PGD_SIZE == PAGE_SIZE)
+		return;
+
 	/*
 	 * Naturally aligned pgds required by the architecture.
 	 */
-	if (PGD_SIZE != PAGE_SIZE)
-		pgd_cache = kmem_cache_create("pgd_cache", PGD_SIZE, PGD_SIZE,
-					      SLAB_PANIC, NULL);
-	return 0;
+	pgd_cache = kmem_cache_create("pgd_cache", PGD_SIZE, PGD_SIZE,
+				      SLAB_PANIC, NULL);
 }
-core_initcall(pgd_cache_init);

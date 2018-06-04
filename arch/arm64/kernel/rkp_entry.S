@@ -19,7 +19,6 @@
 
 
 #include <linux/linkage.h>
-#include <linux/rkp_entry.h>
 
 ENTRY(rkp_call)
 	hvc	#0

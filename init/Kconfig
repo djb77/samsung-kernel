@@ -26,6 +26,16 @@ config IRQ_WORK
 config BUILDTIME_EXTABLE_SORT
 	bool
 
+config THREAD_INFO_IN_TASK
+	bool
+	help
+	  Select this to move thread_info off the stack into task_struct.  To
+	  make this work, an arch will need to remove all thread_info fields
+	  except flags and fix any runtime bugs.
+
+	  One subtle change that will be needed is to use try_get_task_stack()
+	  and put_task_stack() in save_thread_stack_tsk() and get_wchan().
+
 menu "General setup"
 
 config BROKEN
@@ -391,6 +401,16 @@ config IRQ_TIME_ACCOUNTING
 	  If in doubt, say N here.
 
 endchoice
+
+config SCHED_WALT
+        bool "Support window based load tracking"
+        depends on SMP
+        depends on FAIR_GROUP_SCHED
+        help
+	  This feature will allow the scheduler to maintain a tunable window
+	  based set of metrics for tasks and runqueues. These metrics can be
+	  used to guide task placement as well as task frequency requirements
+	  for cpufreq governors.
 
 config BSD_PROCESS_ACCT
 	bool "BSD Process Accounting"
@@ -1281,6 +1301,19 @@ config SCHED_TUNE
 
 	  If unsure, say N.
 
+config SCHED_USE_FLUID_RT
+	bool "Enable Fluid RT scheduler feature"
+	depends on SMP
+	default n
+	help
+		Basically, the Fluid RT selects the core by a task priority as usual.
+		But beyond the basic behavior, FRT performs the load balancing of
+		RT task by core selection with reference to utilization of rq.
+		And in some circumstances, she allows the task with lower priority
+		to preempt the higher one based on weighted load.
+
+		Say N if unsure.
+
 config SYSFS_DEPRECATED
 	bool "Enable deprecated sysfs features to support old userspace tools"
 	depends on SYSFS
@@ -1763,6 +1796,7 @@ choice
 
 config SLAB
 	bool "SLAB"
+	select HAVE_HARDENED_USERCOPY_ALLOCATOR
 	help
 	  The regular slab allocator that is established and known to work
 	  well in all environments. It organizes cache hot objects in
@@ -1770,6 +1804,7 @@ config SLAB
 
 config SLUB
 	bool "SLUB (Unqueued Allocator)"
+	select HAVE_HARDENED_USERCOPY_ALLOCATOR
 	help
 	   SLUB is a slab allocator that minimizes cache line usage
 	   instead of managing queues of cached objects (SLAB approach).

@@ -648,28 +648,22 @@ static struct ion_handle* ion_handle_get_check_overflow(struct ion_handle *handl
 
 static int ion_handle_put_nolock(struct ion_handle *handle)
 {
-	int ret;
-
-	ret = kref_put(&handle->ref, ion_handle_destroy);
-
-	return ret;
+	return kref_put(&handle->ref, ion_handle_destroy);
 }
 
-int ion_handle_put(struct ion_client *client, struct ion_handle *handle)
+int ion_handle_put(struct ion_handle *handle)
 {
-	bool valid_handle;
 	int ret;
 
-	mutex_lock(&client->lock);
-	valid_handle = ion_handle_validate(client, handle);
-
-	if (!valid_handle) {
+	mutex_lock(&handle->client->lock);
+	if (!ion_handle_validate(handle->client, handle)) {
 		WARN(1, "%s: invalid handle passed to free.\n", __func__);
-		mutex_unlock(&client->lock);
+		mutex_unlock(&handle->client->lock);
 		return -EINVAL;
 	}
+
 	ret = ion_handle_put_nolock(handle);
-	mutex_unlock(&client->lock);
+	mutex_unlock(&handle->client->lock);
 
 	return ret;
 }
@@ -901,7 +895,7 @@ static struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
 	ret = ion_handle_add(client, handle);
 	mutex_unlock(&client->lock);
 	if (ret) {
-		ion_handle_put(client, handle);
+		ion_handle_put(handle);
 		handle = ERR_PTR(ret);
 		trace_ion_alloc_fail(client->name, (unsigned long ) buffer,
 					len, align, heap_id_mask, flags);
@@ -1733,7 +1727,7 @@ struct ion_handle *ion_import_dma_buf(struct ion_client *client, int fd)
 	ret = ion_handle_add(client, handle);
 	mutex_unlock(&client->lock);
 	if (ret) {
-		ion_handle_put(client, handle);
+		ion_handle_put(handle);
 		handle = ERR_PTR(ret);
 	}
 
@@ -1989,7 +1983,7 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (IS_ERR(handle))
 			return PTR_ERR(handle);
 		data.fd.fd = ion_share_dma_buf_fd(client, handle);
-		ion_handle_put(client, handle);
+		ion_handle_put(handle);
 		if (data.fd.fd < 0)
 			ret = data.fd.fd;
 		break;
@@ -2045,7 +2039,7 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 	}
 	if (cleanup_handle)
-		ion_handle_put(client,cleanup_handle);
+		ion_handle_put(cleanup_handle);
 	return ret;
 }
 

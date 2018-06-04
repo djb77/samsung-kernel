@@ -865,6 +865,119 @@ TRACE_EVENT(sched_task_usage_ratio,
 			__entry->ratio)
 );
 
+TRACE_EVENT(sched_rt_load_avg_task,
+
+	TP_PROTO(struct task_struct *tsk, struct sched_avg *avg),
+
+	TP_ARGS(tsk, avg),
+
+	TP_STRUCT__entry(
+		__array( char,	comm,	TASK_COMM_LEN	)
+		__field( pid_t,	pid			)
+		__field( int,	cpu			)
+		__field( unsigned long,	util_avg	)
+		__field( u32,		util_sum	)
+		__field( u32,		period_contrib	)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
+		__entry->pid		= tsk->pid;
+		__entry->cpu		= task_cpu(tsk);
+		__entry->util_avg	= avg->util_avg;
+		__entry->util_sum	= avg->util_sum;
+		__entry->period_contrib = avg->period_contrib;
+	),
+	TP_printk("comm=%s pid=%d cpu=%d util_avg=%lu util_sum=%u period_contrib=%u",
+		__entry->comm,
+		__entry->pid,
+		__entry->cpu,
+		__entry->util_avg,
+		(u32)__entry->util_sum,
+		(u32)__entry->period_contrib)
+);
+
+TRACE_EVENT(sched_rt_load_avg_cpu,
+
+	TP_PROTO(int cpu, struct rt_rq *rt_rq),
+
+	TP_ARGS(cpu, rt_rq),
+
+	TP_STRUCT__entry(
+		__field( int,		cpu	)
+		__field( unsigned long,	util_avg)
+	),
+
+	TP_fast_assign(
+		__entry->cpu = cpu;
+		__entry->util_avg = rt_rq->avg.util_avg;
+	),
+
+	TP_printk("cpu=%d util_avg=%lu ", __entry->cpu, __entry->util_avg)
+);
+
+#ifdef CONFIG_SCHED_USE_FLUID_RT
+TRACE_EVENT(sched_fluid_victim_rt_cpu,
+
+	TP_PROTO(struct task_struct *p, struct task_struct *vp, int best_cpu, char *label),
+
+	TP_ARGS(p, vp, best_cpu, label),
+
+	TP_STRUCT__entry(
+		__array(char,	comm,		TASK_COMM_LEN	)
+		__array(char,	victim_comm,	TASK_COMM_LEN	)
+		__field(pid_t,	pid				)
+		__field(pid_t,	vpid				)
+		__field(int,	vic_prio			)
+		__field(int,	task_prio			)
+		__field(int,	best_cpu			)
+		__array(char,	label,	64			)
+	),
+
+	TP_fast_assign(
+		strncpy(__entry->label, label, 64);
+		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
+		__entry->pid = p->pid;
+		memcpy(__entry->victim_comm, vp->comm, TASK_COMM_LEN);
+		__entry->vpid = vp->pid;
+		__entry->vic_prio = vp->prio;
+		__entry->task_prio = p->prio;
+		__entry->best_cpu = best_cpu;
+	),
+
+	TP_printk("comm=%s pid=%d[%d] vcomm=%s vpid=%d[%d] best_cpu=%d Reason=%s",
+			__entry->comm, __entry->pid, __entry->task_prio,
+			__entry->victim_comm, __entry->vpid, __entry->vic_prio,
+			__entry->best_cpu, __entry->label)
+);
+
+TRACE_EVENT(sched_fluid_select_norm_cpu,
+
+	TP_PROTO(struct task_struct *p, int cpu, unsigned long cpu_load, unsigned long min_load, int best_cpu),
+
+	TP_ARGS(p, cpu, cpu_load, min_load, best_cpu),
+
+	TP_STRUCT__entry(
+		__array(char,	comm,	TASK_COMM_LEN	)
+		__field(int,	cpu			)
+		__field(unsigned long,	cpu_load	)
+		__field(unsigned long,	min_load	)
+		__field(int,	best_cpu		)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
+		__entry->cpu = cpu;
+		__entry->cpu_load = cpu_load;
+		__entry->min_load = min_load;
+		__entry->best_cpu = best_cpu;
+	),
+
+	TP_printk("comm=%s target_cpu=%d cpu_load=%lu min_load=%lu best_cpu=%d",
+			__entry->comm, __entry->cpu, __entry->cpu_load, __entry->min_load, __entry->best_cpu)
+);
+#endif
+
 /*
  * Tracepoint for HMP (CONFIG_SCHED_HMP) task migrations.
  */

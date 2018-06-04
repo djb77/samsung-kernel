@@ -904,6 +904,7 @@ static int exynos_speedy_xfer(struct i2c_adapter *adap,
 	int retry, i = 0;
 	int ret = 0;
 
+	return 0;
 	for (retry = 0; retry < adap->retries; retry++) {
 		for (i = 0; i < num; i++) {
 			ret = exynos_speedy_xfer_batcher(speedy, msgs_ptr);

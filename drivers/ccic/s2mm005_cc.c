@@ -928,9 +928,10 @@ void process_cc_get_int_status(void *data, uint32_t *pPRT_MSG, MSG_IRQ_STATUS_Ty
 	}
 
 #if defined(CONFIG_CCIC_ALTERNATE_MODE)
-	if(VDM_MSG_IRQ_State.DATA)
+	if(VDM_MSG_IRQ_State.DATA && usbpd_data->is_host == HOST_ON_BY_RD)
 		receive_alternate_message(usbpd_data, &VDM_MSG_IRQ_State);
-	if(SSM_MSG_IRQ_State.BITS.Ssm_Flag_Unstructured_Data)
+	if(SSM_MSG_IRQ_State.BITS.Ssm_Flag_Unstructured_Data
+			&& usbpd_data->is_host == HOST_ON_BY_RD)
 		receive_unstructured_vdm_message(usbpd_data, &SSM_MSG_IRQ_State);
 	if(!AP_REQ_GET_State.BITS.Alt_Mode_By_I2C)
 		set_enable_alternate_mode(ALTERNATE_MODE_RESET);

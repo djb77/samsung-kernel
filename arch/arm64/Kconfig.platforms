@@ -169,6 +169,11 @@ config SOC_EXYNOS8895
 config SOC_EMULATOR8895
 	bool "Samsung EMULATOR8895"
 
+config SOC_EXYNOS8895_ANDROID_VERSION_O
+	bool "Samsung EXYNOS8895 Android version O"
+	help
+	 This enables support for Android version O of EXYNOS8895
+
 config ARCH_EXYNOS8
 	bool "ARMv8 based Samsung Exynos8"
 	select HAVE_ARM_SCU if SMP

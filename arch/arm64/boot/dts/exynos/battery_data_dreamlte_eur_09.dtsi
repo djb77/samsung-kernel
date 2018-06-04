@@ -1,0 +1,32 @@
+/*
+ * SAMSUNG UNIVERSAL5433 board device tree source
+ *
+ * Copyright (c) 2013 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+#include "battery_data_dreamlte_common.dtsi"
+
+/ {
+	battery {
+		io-channels = <&exynos_adc 4>, <&exynos_adc 3>, <&exynos_adc 11>, <&exynos_adc 4>, <&exynos_adc 1>;
+		io-channel-names = "adc-temp", "adc-chg-temp", "adc-in-bat", "adc-wpc-temp", "adc-usb-temp";
+		#io-channel-cells = <5>;
+		io-channel-ranges;
+	};
+	max77865-fuelgauge {
+		fuelgauge,capacity = <0x172F>;
+		fuelgauge,qrtable20 = <0x0900>;
+		fuelgauge,qrtable30 = <0x0880>;
+		fuelgauge,fg_resistor = <1>;
+		fuelgauge,v_empty = <0xAA5F>; /* Empty: 3260mV, Recover: 3480mV */
+		fuelgauge,jig_low_active;
+	};
+};
+
+
+

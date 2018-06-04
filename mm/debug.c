@@ -106,6 +106,35 @@ void dump_page(struct page *page, const char *reason)
 }
 EXPORT_SYMBOL(dump_page);
 
+void show_page_inode(struct page *page)
+{
+	struct address_space *mapping = page_mapping(page);
+	struct dentry *alias;
+	struct inode *inode;
+
+	if (!mapping)
+		return;
+
+	if (unlikely(PageSwapCache(page))) {
+		pr_info("page is swapcache\n");
+		return;
+	}
+
+	inode = mapping->host;
+
+	spin_lock(&inode->i_lock);
+
+	pr_info("mode: %#x, opflags: %#x, flags: %#x\n",
+		inode->i_mode, inode->i_opflags, inode->i_flags);
+	pr_info("inode_operations: %pS, file_operations: %pS\n",
+		inode->i_op, inode->i_fop);
+	pr_info("inode aliases:\n");
+	hlist_for_each_entry(alias, &inode->i_dentry, d_u.d_alias)
+		pr_info("    %s\n", alias->d_iname);
+
+	spin_unlock(&inode->i_lock);
+}
+
 #ifdef CONFIG_DEBUG_VM
 
 static const struct trace_print_flags vmaflags_names[] = {

@@ -52,8 +52,6 @@
 #include "fimc-is-interface-library.h"
 #include "hardware/fimc-is-hw-control.h"
 #endif
-#include <linux/memblock.h>
-#include <asm/map.h>
 
 #define CLUSTER_MIN_MASK			0x0000FFFF
 #define CLUSTER_MIN_SHIFT			0
@@ -412,36 +410,6 @@ static int fimc_is_resourcemgr_initmem(struct fimc_is_resourcemgr *resourcemgr)
 p_err:
 	return ret;
 }
-
-static int __init fimc_is_init_static_mem(char *str)
-{
-	ulong addr = 0;
-	struct fimc_is_static_mem static_mem[] = {{0, LIB_START, LIB_SIZE}};
-	struct map_desc fimc_iodesc[ARRAY_SIZE(static_mem)];
-	size_t i;
-
-	if (kstrtoul(str, 0, (ulong *)&addr) || !addr) {
-		probe_warn("[RSC] fimc_is_init_static_mem input address(0x%lx) invalid\n", addr);
-		addr = LIB_START;
-	}
-
-	if (addr != LIB_START)
-		probe_warn("[RSC] reserve-fimc=0x%lx is not equal to LIB_START:0x%lx", addr, LIB_START);
-
-	for (i = 0; i < ARRAY_SIZE(static_mem); i++) {
-		static_mem[i].paddr = memblock_alloc(static_mem[i].size, SZ_4K);
-
-		fimc_iodesc[i].virtual = addr;
-		fimc_iodesc[i].pfn = __phys_to_pfn(static_mem[i].paddr);
-		fimc_iodesc[i].length = static_mem[i].size;
-		fimc_iodesc[i].type = MT_MEMORY;
-	}
-	iotable_init_exec(fimc_iodesc, ARRAY_SIZE(static_mem));
-
-	probe_info("[RSC] fimc_is_init_static_mem done\n");
-	return 0;
-}
-__setup("reserve-fimc=", fimc_is_init_static_mem);
 
 #ifndef ENABLE_RESERVED_MEM
 static int fimc_is_resourcemgr_deinitmem(struct fimc_is_resourcemgr *resourcemgr)
