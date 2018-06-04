@@ -83,12 +83,6 @@ struct fimc_is_clk_gate_ctrl {
 	unsigned long chk_on_off_cnt[GROUP_ID_MAX];
 };
 
-struct fimc_is_static_mem {
-	ulong paddr;
-	ulong vaddr;
-	ulong size;
-};
-
 struct fimc_is_resource {
         struct platform_device                  *pdev;
         void __iomem                            *regs;

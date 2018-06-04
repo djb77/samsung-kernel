@@ -33,6 +33,7 @@
 #include <linux/mmu_context.h>
 #include <linux/poll.h>
 #include <linux/eventfd.h>
+#include <linux/delay.h>
 
 #include "u_fs.h"
 #include "u_f.h"
@@ -1855,12 +1856,12 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 		ep->ep->driver_data = ep;
 		ep->ep->desc = ds;
 
-		comp_desc = (struct usb_ss_ep_comp_descriptor *)(ds +
-				USB_DT_ENDPOINT_SIZE);
-		ep->ep->maxburst = comp_desc->bMaxBurst + 1;
-
-		if (needs_comp_desc)
+		if (needs_comp_desc) {
+			comp_desc = (struct usb_ss_ep_comp_descriptor *)(ds +
+					USB_DT_ENDPOINT_SIZE);
+			ep->ep->maxburst = comp_desc->bMaxBurst + 1;
 			ep->ep->comp_desc = comp_desc;
+		}
 
 		ret = usb_ep_enable(ep->ep);
 		if (likely(!ret)) {
@@ -2897,6 +2898,7 @@ static inline struct f_fs_opts *ffs_do_functionfs_bind(struct usb_function *f,
 	struct f_fs_opts *ffs_opts =
 		container_of(f->fi, struct f_fs_opts, func_inst);
 	int ret;
+	int retries = 200;
 
 	ENTER();
 
@@ -2907,12 +2909,21 @@ static inline struct f_fs_opts *ffs_do_functionfs_bind(struct usb_function *f,
 	 *
 	 * Configfs-enabled gadgets however do need ffs_dev_lock.
 	 */
-	if (!ffs_opts->no_configfs)
-		ffs_dev_lock();
-	ret = ffs_opts->dev->desc_ready ? 0 : -ENODEV;
-	func->ffs = ffs_opts->dev->ffs_data;
-	if (!ffs_opts->no_configfs)
-		ffs_dev_unlock();
+	do {
+		if (!ffs_opts->no_configfs)
+			ffs_dev_lock();
+		ret = ffs_opts->dev->desc_ready ? 0 : -ENODEV;
+		func->ffs = ffs_opts->dev->ffs_data;
+		if (!ffs_opts->no_configfs)
+			ffs_dev_unlock();
+		if (ret)
+			msleep(10);
+		else
+			break;
+	} while (--retries);
+
+	pr_info("ffs_do_functionfs_bind %d %d\n", ret, retries);
+
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -3684,6 +3695,7 @@ static void ffs_closed(struct ffs_data *ffs)
 {
 	struct ffs_dev *ffs_obj;
 	struct f_fs_opts *opts;
+	struct config_item *ci;
 
 	ENTER();
 	ffs_dev_lock();
@@ -3707,8 +3719,12 @@ static void ffs_closed(struct ffs_data *ffs)
 	    || !atomic_read(&opts->func_inst.group.cg_item.ci_kref.refcount))
 		goto done;
 
-	unregister_gadget_item(ffs_obj->opts->
-			       func_inst.group.cg_item.ci_parent->ci_parent);
+	ci = opts->func_inst.group.cg_item.ci_parent->ci_parent;
+	ffs_dev_unlock();
+
+	if (test_bit(FFS_FL_BOUND, &ffs->flags))
+		unregister_gadget_item(ci);
+	return;
 done:
 	ffs_dev_unlock();
 }

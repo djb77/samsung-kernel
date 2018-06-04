@@ -69,6 +69,7 @@ struct fpsimd_partial_state {
 	__uint128_t	vregs[32];
 };
 
+
 #if defined(__KERNEL__) && defined(CONFIG_COMPAT)
 /* Masks for extracting the FPSR and FPCR from the FPSCR */
 #define VFP_FPSCR_STAT_MASK	0xf800009f

@@ -76,7 +76,6 @@ void get_derived_permission_new(struct dentry *parent, struct dentry *dentry,
 	struct qstr q_knox = QSTR_LITERAL("knox");
 	struct qstr q_shared = QSTR_LITERAL("shared");
 
-
 	/* By default, each inode inherits from its parent.
 	 * the properties are maintained on its private fields
 	 * because the inode attributes will be modified with that of
@@ -158,7 +157,7 @@ void get_derived_permission_new(struct dentry *parent, struct dentry *dentry,
 		info->data->perm = PERM_KNOX_ROOT;
 		err = kstrtoul(name->name, 10, &user_num);
 		if (err)
-			info->data->userid = 100; /* default container no. */
+			info->data->userid = 10; /* default container no. */
 		else
 			info->data->userid = user_num;
 		set_top(info, info->data);

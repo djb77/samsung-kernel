@@ -804,7 +804,7 @@ static int gntdev_mmap(struct file *flip, struct vm_area_struct *vma)
 
 	vma->vm_ops = &gntdev_vmops;
 
-	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP | VM_IO;
+	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP | VM_MIXEDMAP;
 
 	if (use_ptemod)
 		vma->vm_flags |= VM_DONTCOPY;
@@ -827,6 +827,7 @@ static int gntdev_mmap(struct file *flip, struct vm_area_struct *vma)
 	mutex_unlock(&priv->lock);
 
 	if (use_ptemod) {
+		map->pages_vm_start = vma->vm_start;
 		err = apply_to_page_range(vma->vm_mm, vma->vm_start,
 					  vma->vm_end - vma->vm_start,
 					  find_grant_ptes, map);
@@ -864,7 +865,6 @@ static int gntdev_mmap(struct file *flip, struct vm_area_struct *vma)
 					    set_grant_ptes_as_special, NULL);
 		}
 #endif
-		map->pages_vm_start = vma->vm_start;
 	}
 
 	return 0;

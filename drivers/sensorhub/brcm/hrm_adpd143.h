@@ -28,5 +28,6 @@ int adpd_debug_set(u8 mode);
 int adpd_get_fac_cmd(char *cmd_result);
 int adpd_get_version(char *version);
 int adpd_get_sensor_info(char *sensor_info_data);
+int adpd_set_osc_trim(u16 trim_val);
 
 #endif /* _HRM_ADPD143_H_ */

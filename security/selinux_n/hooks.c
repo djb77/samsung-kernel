@@ -106,8 +106,9 @@ unsigned int cmp_ns_integrity(void)
 	return 0;
 }
 #endif
+
 #ifdef CONFIG_RKP_KDP
-#include<linux/rkp_entry.h>
+#include <linux/rkp.h>
 
 RKP_RO_AREA struct task_security_struct init_sec;
 extern struct kmem_cache *tsec_jar;
@@ -178,6 +179,10 @@ unsigned int rkp_get_offset_bp_cred(void)
 
 /* SECMARK reference count */
 static atomic_t selinux_secmark_refcount = ATOMIC_INIT(0);
+
+// [ SEC_SELINUX_PORTING_COMMON
+static DEFINE_MUTEX(selinux_sdcardfs_lock);
+// ] SEC_SELINUX_PORTING_COMMON
 
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
 // [ SEC_SELINUX_PORTING_COMMON
@@ -2935,21 +2940,32 @@ static int selinux_sb_kern_mount(struct super_block *sb, int flags, void *data)
 	struct common_audit_data ad;
 	int rc;
 
+	// [ SEC_SELINUX_PORTING_COMMON
+	if((strcmp(sb->s_type->name,"sdcardfs")) == 0)
+		mutex_lock(&selinux_sdcardfs_lock);
+
 #ifdef CONFIG_RKP_KDP	
 	if ((rc = security_integrity_current()))
-		return rc;
+		goto out;
 #endif  /* CONFIG_RKP_KDP */
 	rc = superblock_doinit(sb, data);
 	if (rc)
-		return rc;
+		goto out;
 
 	/* Allow all mounts performed by the kernel */
 	if (flags & MS_KERNMOUNT)
-		return 0;
+		goto out;
 
 	ad.type = LSM_AUDIT_DATA_DENTRY;
 	ad.u.dentry = sb->s_root;
-	return superblock_has_perm(cred, sb, FILESYSTEM__MOUNT, &ad);
+	rc = superblock_has_perm(cred, sb, FILESYSTEM__MOUNT, &ad);
+
+out:
+	if((strcmp(sb->s_type->name,"sdcardfs")) == 0)
+		mutex_unlock(&selinux_sdcardfs_lock);
+	// ] SEC_SELINUX_PORTING_COMMON
+
+	return rc;
 }
 
 static int selinux_sb_statfs(struct dentry *dentry)

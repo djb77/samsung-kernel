@@ -92,6 +92,7 @@ struct hrm_output_data {
 	s32 data_sub[8];
 	s32 fifo_main[4][32];
 	s32 fifo_num;
+	u8 trim_set_flag;
 };
 
 struct hrm_func {
@@ -125,6 +126,7 @@ struct hrm_func {
 	int (*get_fac_cmd)(char *cmd_result);
 	int (*get_version)(char *version);
 	int (*get_sensor_info)(char *sensor_info_data);
+	int (*set_osc_trim)(u16 trim_val);
 };
 
 struct hrm_device_data {

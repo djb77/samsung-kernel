@@ -66,8 +66,10 @@ struct ext4_encryption_context {
 #define EXT4_XTS_TWEAK_SIZE 16
 #define EXT4_AES_128_ECB_KEY_SIZE 16
 #define EXT4_AES_256_GCM_KEY_SIZE 32
+#define EXT4_AES_256_ECB_KEY_SIZE 32
 #define EXT4_AES_256_CBC_KEY_SIZE 32
 #define EXT4_AES_256_CTS_KEY_SIZE 32
+#define EXT4_AES_256_HEH_KEY_SIZE 32
 #define EXT4_AES_256_XTS_KEY_SIZE 64
 #define EXT4_MAX_KEY_SIZE 64
 #define FMP_AES_256_XTS_KEY_SIZE 64
@@ -88,7 +90,6 @@ struct ext4_crypt_info {
 	char		ci_filename_mode;
 	char		ci_flags;
 	struct crypto_ablkcipher *ci_ctfm;
-	struct key	*ci_keyring_key;
 	char		ci_master_key[EXT4_KEY_DESCRIPTOR_SIZE];
 	char 		raw_key[EXT4_MAX_KEY_SIZE];
 	int		private_enc_mode;
@@ -137,6 +138,8 @@ static inline int ext4_encryption_key_size(int mode)
 		return FMP_AES_256_XTS_KEY_SIZE;
 	case FMP_ENCRYPTION_MODE_AES_256_CBC:
 		return FMP_AES_256_CBC_KEY_SIZE;
+	case EXT4_ENCRYPTION_MODE_AES_256_HEH:
+		return EXT4_AES_256_HEH_KEY_SIZE;
 	default:
 		BUG();
 	}

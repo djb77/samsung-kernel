@@ -28,6 +28,11 @@ static inline struct mount *first_slave(struct mount *p)
 	return list_entry(p->mnt_slave_list.next, struct mount, mnt_slave);
 }
 
+static inline struct mount *last_slave(struct mount *p)
+{
+	return list_entry(p->mnt_slave_list.prev, struct mount, mnt_slave);
+}
+
 static inline struct mount *next_slave(struct mount *p)
 {
 	return list_entry(p->mnt_slave.next, struct mount, mnt_slave);
@@ -186,6 +191,19 @@ static struct mount *propagation_next(struct mount *m,
 	}
 }
 
+static struct mount *skip_propagation_subtree(struct mount *m,
+						struct mount *origin)
+{
+	/*
+	 * Advance m such that propagation_next will not return
+	 * the slaves of m.
+	 */
+	if (!IS_MNT_NEW(m) && !list_empty(&m->mnt_slave_list))
+		m = last_slave(m);
+
+	return m;
+}
+
 static struct mount *next_group(struct mount *m, struct mount *origin)
 {
 	while (1) {
@@ -293,7 +311,7 @@ static int propagate_one(struct mount *m)
 		read_sequnlock_excl(&mount_lock);
 	}
 	hlist_add_head(&child->mnt_hash, list);
-	return 0;
+	return count_mounts(m->mnt_ns, child);
 }
 
 /*
@@ -358,6 +376,25 @@ out:
 	return ret;
 }
 
+static struct mount *find_topper(struct mount *mnt)
+{
+	/* If there is exactly one mount covering mnt completely return it. */
+	struct mount *child;
+
+	if (!list_is_singular(&mnt->mnt_mounts))
+		return NULL;
+
+	child = list_first_entry(&mnt->mnt_mounts, struct mount, mnt_child);
+#ifdef CONFIG_RKP_NS_PROT
+	if (child->mnt_mountpoint != mnt->mnt->mnt_root)
+#else
+	if (child->mnt_mountpoint != mnt->mnt.mnt_root)
+#endif
+		return NULL;
+
+	return child;
+}
+
 /*
  * return true if the refcount is greater than count
  */
@@ -378,9 +415,8 @@ static inline int do_refcount_check(struct mount *mnt, int count)
  */
 int propagate_mount_busy(struct mount *mnt, int refcnt)
 {
-	struct mount *m, *child;
+	struct mount *m, *child, *topper;
 	struct mount *parent = mnt->mnt_parent;
-	int ret = 0;
 
 	if (mnt == parent)
 		return do_refcount_check(mnt, refcnt);
@@ -395,16 +431,28 @@ int propagate_mount_busy(struct mount *mnt, int refcnt)
 
 	for (m = propagation_next(parent, parent); m;
 	     		m = propagation_next(m, parent)) {
+		int count = 1;
 #ifdef CONFIG_RKP_NS_PROT
-		child = __lookup_mnt_last(m->mnt, mnt->mnt_mountpoint);
+		child = __lookup_mnt(m->mnt, mnt->mnt_mountpoint);
 #else
-		child = __lookup_mnt_last(&m->mnt, mnt->mnt_mountpoint);
+		child = __lookup_mnt(&m->mnt, mnt->mnt_mountpoint);
 #endif
-		if (child && list_empty(&child->mnt_mounts) &&
-		    (ret = do_refcount_check(child, 1)))
-			break;
+		if (!child)
+			continue;
+
+		/* Is there exactly one mount on the child that covers
+		 * it completely whose reference should be ignored?
+		 */
+		topper = find_topper(child);
+		if (topper)
+			count += 1;
+		else if (!list_empty(&child->mnt_mounts))
+			continue;
+
+		if (do_refcount_check(child, count))
+			return 1;
 	}
-	return ret;
+	return 0;
 }
 
 /*
@@ -422,78 +470,135 @@ void propagate_mount_unlock(struct mount *mnt)
 	for (m = propagation_next(parent, parent); m;
 			m = propagation_next(m, parent)) {
 #ifdef CONFIG_RKP_NS_PROT
-		child = __lookup_mnt_last(m->mnt, mnt->mnt_mountpoint);
+		child = __lookup_mnt(m->mnt, mnt->mnt_mountpoint);
 		if (child)
-			rkp_reset_mnt_flags(child->mnt,MNT_LOCKED);
+			rkp_reset_mnt_flags(child->mnt, MNT_LOCKED);
 #else
-		child = __lookup_mnt_last(&m->mnt, mnt->mnt_mountpoint);
+		child = __lookup_mnt(&m->mnt, mnt->mnt_mountpoint);
 		if (child)
 			child->mnt.mnt_flags &= ~MNT_LOCKED;
-
 #endif
 	}
 }
 
-/*
- * Mark all mounts that the MNT_LOCKED logic will allow to be unmounted.
- */
-static void mark_umount_candidates(struct mount *mnt)
+static void umount_one(struct mount *mnt, struct list_head *to_umount)
 {
-	struct mount *parent = mnt->mnt_parent;
-	struct mount *m;
-
-	BUG_ON(parent == mnt);
-
-	for (m = propagation_next(parent, parent); m;
-			m = propagation_next(m, parent)) {
+	CLEAR_MNT_MARK(mnt);
 #ifdef CONFIG_RKP_NS_PROT
-		struct mount *child = __lookup_mnt_last(m->mnt,
+	rkp_set_mnt_flags(mnt->mnt, MNT_UMOUNT);
 #else
-		struct mount *child = __lookup_mnt_last(&m->mnt,
+	mnt->mnt.mnt_flags |= MNT_UMOUNT;
 #endif
-						mnt->mnt_mountpoint);
-		if (child && (!IS_MNT_LOCKED(child) || IS_MNT_MARKED(m))) {
-			SET_MNT_MARK(child);
-		}
-	}
+	list_del_init(&mnt->mnt_child);
+	list_del_init(&mnt->mnt_umounting);
+	list_move_tail(&mnt->mnt_list, to_umount);
 }
 
 /*
  * NOTE: unmounting 'mnt' naturally propagates to all other mounts its
  * parent propagates to.
  */
-static void __propagate_umount(struct mount *mnt)
+static bool __propagate_umount(struct mount *mnt,
+			       struct list_head *to_umount,
+			       struct list_head *to_restore)
 {
-	struct mount *parent = mnt->mnt_parent;
-	struct mount *m;
+	bool progress = false;
+	struct mount *child;
 
-	BUG_ON(parent == mnt);
-
-	for (m = propagation_next(parent, parent); m;
-			m = propagation_next(m, parent)) {
-
+	/*
+	 * The state of the parent won't change if this mount is
+	 * already unmounted or marked as without children.
+	 */
 #ifdef CONFIG_RKP_NS_PROT
-		struct mount *child = __lookup_mnt_last(m->mnt,
+	if (mnt->mnt->mnt_flags & (MNT_UMOUNT | MNT_MARKED))
 #else
-		struct mount *child = __lookup_mnt_last(&m->mnt,
+	if (mnt->mnt.mnt_flags & (MNT_UMOUNT | MNT_MARKED))
 #endif
-						mnt->mnt_mountpoint);
-		/*
-		 * umount the child only if the child has no children
-		 * and the child is marked safe to unmount.
-		 */
-		if (!child || !IS_MNT_MARKED(child))
+		goto out;
+
+	/* Verify topper is the only grandchild that has not been
+	 * speculatively unmounted.
+	 */
+	list_for_each_entry(child, &mnt->mnt_mounts, mnt_child) {
+#ifdef CONFIG_RKP_NS_PROT
+		if (child->mnt_mountpoint == mnt->mnt->mnt_root)
+#else
+		if (child->mnt_mountpoint == mnt->mnt.mnt_root)
+#endif
 			continue;
-		CLEAR_MNT_MARK(child);
-		if (list_empty(&child->mnt_mounts)) {
-			list_del_init(&child->mnt_child);
+		if (!list_empty(&child->mnt_umounting) && IS_MNT_MARKED(child))
+			continue;
+		/* Found a mounted child */
+		goto children;
+	}
+
+	/* Mark mounts that can be unmounted if not locked */
+	SET_MNT_MARK(mnt);
+	progress = true;
+
+	/* If a mount is without children and not locked umount it. */
+	if (!IS_MNT_LOCKED(mnt)) {
+		umount_one(mnt, to_umount);
+	} else {
+children:
+		list_move_tail(&mnt->mnt_umounting, to_restore);
+	}
+out:
+	return progress;
+}
+
+static void umount_list(struct list_head *to_umount,
+			struct list_head *to_restore)
+{
+	struct mount *mnt, *child, *tmp;
+	list_for_each_entry(mnt, to_umount, mnt_list) {
+		list_for_each_entry_safe(child, tmp, &mnt->mnt_mounts, mnt_child) {
+			/* topper? */
 #ifdef CONFIG_RKP_NS_PROT
-			rkp_set_mnt_flags(child->mnt,MNT_UMOUNT);
+			if (child->mnt_mountpoint == mnt->mnt->mnt_root)
 #else
-			child->mnt.mnt_flags |= MNT_UMOUNT;
+			if (child->mnt_mountpoint == mnt->mnt.mnt_root)
 #endif
-			list_move_tail(&child->mnt_list, &mnt->mnt_list);
+				list_move_tail(&child->mnt_umounting, to_restore);
+			else
+				umount_one(child, to_umount);
 		}
+	}
+}
+
+static void restore_mounts(struct list_head *to_restore)
+{
+	/* Restore mounts to a clean working state */
+	while (!list_empty(to_restore)) {
+		struct mount *mnt, *parent;
+		struct mountpoint *mp;
+
+		mnt = list_first_entry(to_restore, struct mount, mnt_umounting);
+		CLEAR_MNT_MARK(mnt);
+		list_del_init(&mnt->mnt_umounting);
+
+		/* Should this mount be reparented? */
+		mp = mnt->mnt_mp;
+		parent = mnt->mnt_parent;
+#ifdef CONFIG_RKP_NS_PROT
+		while (parent->mnt->mnt_flags & MNT_UMOUNT) {
+#else
+		while (parent->mnt.mnt_flags & MNT_UMOUNT) {
+#endif
+			mp = parent->mnt_mp;
+			parent = parent->mnt_parent;
+		}
+		if (parent != mnt->mnt_parent)
+			mnt_change_mountpoint(parent, mp, mnt);
+	}
+}
+
+static void cleanup_umount_visitations(struct list_head *visited)
+{
+	while (!list_empty(visited)) {
+		struct mount *mnt =
+			list_first_entry(visited, struct mount, mnt_umounting);
+		list_del_init(&mnt->mnt_umounting);
 	}
 }
 
@@ -507,12 +612,78 @@ static void __propagate_umount(struct mount *mnt)
 int propagate_umount(struct list_head *list)
 {
 	struct mount *mnt;
+	LIST_HEAD(to_restore);
+	LIST_HEAD(to_umount);
+	LIST_HEAD(visited);
 
-	list_for_each_entry_reverse(mnt, list, mnt_list)
-		mark_umount_candidates(mnt);
+	/* Find candidates for unmounting */
+	list_for_each_entry_reverse(mnt, list, mnt_list) {
+		struct mount *parent = mnt->mnt_parent;
+		struct mount *m;
 
-	list_for_each_entry(mnt, list, mnt_list)
-		__propagate_umount(mnt);
+		/*
+		 * If this mount has already been visited it is known that it's
+		 * entire peer group and all of their slaves in the propagation
+		 * tree for the mountpoint has already been visited and there is
+		 * no need to visit them again.
+		 */
+		if (!list_empty(&mnt->mnt_umounting))
+			continue;
+
+		list_add_tail(&mnt->mnt_umounting, &visited);
+		for (m = propagation_next(parent, parent); m;
+		     m = propagation_next(m, parent)) {
+#ifdef CONFIG_RKP_NS_PROT
+			struct mount *child = __lookup_mnt(m->mnt,
+							   mnt->mnt_mountpoint);
+#else
+			struct mount *child = __lookup_mnt(&m->mnt,
+							   mnt->mnt_mountpoint);
+#endif
+			if (!child)
+				continue;
+
+			if (!list_empty(&child->mnt_umounting)) {
+				/*
+				 * If the child has already been visited it is
+				 * know that it's entire peer group and all of
+				 * their slaves in the propgation tree for the
+				 * mountpoint has already been visited and there
+				 * is no need to visit this subtree again.
+				 */
+				m = skip_propagation_subtree(m, parent);
+				continue;
+#ifdef CONFIG_RKP_NS_PROT
+			} else if (child->mnt->mnt_flags & MNT_UMOUNT) {
+#else
+			} else if (child->mnt.mnt_flags & MNT_UMOUNT) {
+#endif
+				/*
+				 * We have come accross an partially unmounted
+				 * mount in list that has not been visited yet.
+				 * Remember it has been visited and continue
+				 * about our merry way.
+				 */
+				list_add_tail(&child->mnt_umounting, &visited);
+				continue;
+			}
+
+			/* Check the child and parents while progress is made */
+			while (__propagate_umount(child,
+						  &to_umount, &to_restore)) {
+				/* Is the parent a umount candidate? */
+				child = child->mnt_parent;
+				if (list_empty(&child->mnt_umounting))
+					break;
+			}
+		}
+	}
+
+	umount_list(&to_umount, &to_restore);
+	restore_mounts(&to_restore);
+	cleanup_umount_visitations(&visited);
+	list_splice_tail(&to_umount, list);
+
 	return 0;
 }
 

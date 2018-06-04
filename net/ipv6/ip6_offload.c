@@ -199,6 +199,7 @@ static struct sk_buff **ipv6_gro_receive(struct sk_buff **head,
 	ops = rcu_dereference(inet6_offloads[proto]);
 	if (!ops || !ops->callbacks.gro_receive) {
 		__pskb_pull(skb, skb_gro_offset(skb));
+		skb_gro_frag0_invalidate(skb);
 		proto = ipv6_gso_pull_exthdrs(skb, proto);
 		skb_gro_pull(skb, -skb_transport_offset(skb));
 		skb_reset_transport_header(skb);
@@ -250,7 +251,7 @@ static struct sk_buff **ipv6_gro_receive(struct sk_buff **head,
 
 	skb_gro_postpull_rcsum(skb, iph, nlen);
 
-	pp = ops->callbacks.gro_receive(head, skb);
+	pp = call_gro_receive(ops->callbacks.gro_receive, head, skb);
 
 out_unlock:
 	rcu_read_unlock();

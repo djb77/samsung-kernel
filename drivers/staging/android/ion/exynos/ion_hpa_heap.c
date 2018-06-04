@@ -102,10 +102,18 @@ static int ion_hpa_heap_allocate(struct ion_heap *heap,
 		info->prot_desc.chunk_size = ION_HPA_DEFAULT_SIZE;
 		info->prot_desc.bus_address = (count == 1) ?  phys[0] :
 						info->handle;
-		ion_secure_protect(buffer);
+		ret = ion_secure_protect(buffer);
+		if (ret) {
+			pr_err("%s: Failed to protect buffer with %u chunks\n",
+			       __func__, count);
+			goto err_protect;
+		}
 	}
 
 	return 0;
+err_protect:
+	for_each_sg(info->table.sgl, sg, info->table.orig_nents, i)
+		__free_pages(sg_page(sg), ION_HPA_DEFAULT_ORDER);
 err_hpa:
 	sg_free_table(&info->table);
 err_sg:
@@ -120,13 +128,14 @@ static void ion_hpa_heap_free(struct ion_buffer *buffer)
 {
 	struct ion_buffer_info *info = buffer->priv_virt;
 	unsigned long *phys = phys_to_virt(info->handle);
+	struct scatterlist *sg;
 	unsigned int i;
 
 	if (buffer->flags & ION_FLAG_PROTECTED)
 		ion_secure_unprotect(buffer);
 
-	for (i = 0; i < info->prot_desc.chunk_count; i++)
-		__free_pages(phys_to_page(phys[i]), ION_HPA_DEFAULT_ORDER);
+	for_each_sg(info->table.sgl, sg, info->table.orig_nents, i)
+		__free_pages(sg_page(sg), ION_HPA_DEFAULT_ORDER);
 
 	sg_free_table(&info->table);
 	kfree(phys);

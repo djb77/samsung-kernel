@@ -22,10 +22,6 @@
 #endif
 #include <linux/sec_debug.h>
 
-#ifdef CONFIG_KNOX_KAP
-extern int boot_mode_security;
-#endif
-
 /*
  * Example usage: sec_log=256K@0x45000000
  * In above case, log_buf size is 256KB and its base address is

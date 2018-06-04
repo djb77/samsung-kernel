@@ -233,6 +233,29 @@ void schedtune_dequeue_task(struct task_struct *p, int cpu)
 	schedtune_tasks_update(p, cpu, idx, -1);
 }
 
+void schedtune_exit_task(struct task_struct *tsk)
+{
+	struct schedtune *st;
+	unsigned long irq_flags;
+	unsigned int cpu;
+	struct rq *rq;
+	int idx;
+
+	if (!unlikely(schedtune_initialized))
+		return;
+
+	rq = lock_rq_of(tsk, &irq_flags);
+	rcu_read_lock();
+
+	cpu = cpu_of(rq);
+	st = task_schedtune(tsk);
+	idx = st->idx;
+	schedtune_tasks_update(tsk, cpu, idx, DEQUEUE_TASK);
+
+	rcu_read_unlock();
+	unlock_rq_of(rq, tsk, &irq_flags);
+}
+
 int schedtune_cpu_boost(int cpu)
 {
 	struct boost_groups *bg;
@@ -662,4 +685,3 @@ sysctl_sched_cfs_boost_handler(struct ctl_table *table, int write,
 
 	return 0;
 }
-

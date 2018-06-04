@@ -45,6 +45,7 @@ static struct hrm_func max869_func = {
 	.get_fac_cmd = max869_get_fac_cmd,
 	.get_version = max869_get_version,
 	.get_sensor_info = NULL,
+	.set_osc_trim = NULL,
 };
 #endif
 #ifdef CONFIG_SENSORS_HRM_ADPD143
@@ -76,6 +77,7 @@ static struct hrm_func adpd_func = {
 	.get_fac_cmd = adpd_get_fac_cmd,
 	.get_version = adpd_get_version,
 	.get_sensor_info = adpd_get_sensor_info,
+	.set_osc_trim = adpd_set_osc_trim,
 };
 #endif
 
@@ -85,7 +87,7 @@ static struct hrm_func adpd_func = {
 #define SLAVE_ADDR_MAX 0x57
 #define SLAVE_ADDR_ADPD 0x64
 
-#define VERSION				"20"
+#define VERSION				"21"
 
 int hrm_debug = 1;
 int hrm_info;
@@ -502,7 +504,6 @@ void hrm_mode_enable(struct hrm_device_data *data,
 		err = hrm_enable(data, mode);
 		if (err != 0)
 			HRM_dbg("enable err : %d\n", err);
-
 		if (err < 0 && mode == MODE_AMBIENT) {
 			input_report_rel(data->hrm_input_dev,
 				REL_Y, -5 + 1); /* F_ERR_I2C -5 detected i2c error */
@@ -1223,6 +1224,38 @@ struct device_attribute *attr, char *buf)
 	}
 }
 
+static ssize_t osc_trim_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct hrm_device_data *data = dev_get_drvdata(dev);
+	int trim_val = 0;
+	int err = 0;
+	
+	mutex_lock(&data->activelock);
+	err = sscanf(buf, "%d", &trim_val);
+	HRM_dbg("%s - trim value = %d\n", __func__, trim_val);
+	if (err < 0) {
+		HRM_dbg("%s - failed, err = %x\n", __func__, err);
+		mutex_unlock(&data->activelock);
+		return err;
+	}
+
+	if (data->h_func == NULL) {
+		HRM_dbg("%s - not mapped function\n", __func__);
+		mutex_unlock(&data->activelock);
+		return -ENODEV;
+	}
+	err = data->h_func->set_osc_trim((u16)trim_val);
+	if (err < 0) {
+		HRM_dbg("%s - failed, err = %x\n", __func__, err);
+		mutex_unlock(&data->activelock);
+		return err;
+	}
+	mutex_unlock(&data->activelock);
+
+	return size;
+}
+
 static DEVICE_ATTR(name, S_IRUGO, hrm_name_show, NULL);
 static DEVICE_ATTR(vendor, S_IRUGO, hrm_vendor_show, NULL);
 static DEVICE_ATTR(led_current, S_IRUGO | S_IWUSR | S_IWGRP,
@@ -1250,6 +1283,7 @@ static DEVICE_ATTR(mode_cnt, S_IRUGO | S_IWUSR | S_IWGRP, mode_cnt_show, mode_cn
 static DEVICE_ATTR(hrm_factory_cmd, S_IRUGO, hrm_factory_cmd_show, NULL);
 static DEVICE_ATTR(hrm_version, S_IRUGO, hrm_version_show, NULL);
 static DEVICE_ATTR(sensor_info, S_IRUGO, hrm_sensor_info_show, NULL);
+static DEVICE_ATTR(osc_trim, S_IWUSR | S_IWGRP, NULL, osc_trim_store);
 
 static struct device_attribute *hrm_sensor_attrs[] = {
 	&dev_attr_name,
@@ -1273,6 +1307,7 @@ static struct device_attribute *hrm_sensor_attrs[] = {
 	&dev_attr_hrm_factory_cmd,
 	&dev_attr_hrm_version,
 	&dev_attr_sensor_info,
+	&dev_attr_osc_trim,
 	NULL,
 };
 
@@ -1359,6 +1394,11 @@ irqreturn_t hrm_irq_handler(int hrm_irq, void *device)
 
 					if (read_data.main_num || read_data.sub_num)
 						input_sync(data->hrm_input_dev);
+			}
+			if (read_data.trim_set_flag) {
+				input_report_rel(data->hrm_input_dev,
+					REL_Z, read_data.data_main[0]);
+				input_sync(data->hrm_input_dev);
 			}
 		}
 	}

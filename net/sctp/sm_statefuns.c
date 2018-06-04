@@ -3426,6 +3426,7 @@ sctp_disposition_t sctp_sf_ootb(struct net *net,
 			return sctp_sf_violation_chunklen(net, ep, asoc, type, arg,
 						  commands);
 						  
+
 		/* Report violation if chunk len overflows */
 		ch_end = ((__u8 *)ch) + WORD_ROUND(ntohs(ch->length));
 		if (ch_end > skb_tail_pointer(skb))

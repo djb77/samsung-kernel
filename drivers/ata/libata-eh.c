@@ -606,7 +606,7 @@ void ata_scsi_error(struct Scsi_Host *host)
 	ata_scsi_port_error_handler(host, ap);
 
 	/* finish or retry handled scmd's and clean up */
-	WARN_ON(host->host_failed || !list_empty(&eh_work_q));
+	WARN_ON(!list_empty(&eh_work_q));
 
 	DPRINTK("EXIT\n");
 }
@@ -2245,8 +2245,8 @@ static void ata_eh_link_autopsy(struct ata_link *link)
 		if (dev->flags & ATA_DFLAG_DUBIOUS_XFER)
 			eflags |= ATA_EFLAG_DUBIOUS_XFER;
 		ehc->i.action |= ata_eh_speed_down(dev, eflags, all_err_mask);
+		trace_ata_eh_link_autopsy(dev, ehc->i.action, all_err_mask);
 	}
-	trace_ata_eh_link_autopsy(dev, ehc->i.action, all_err_mask);
 	DPRINTK("EXIT\n");
 }
 

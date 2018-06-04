@@ -464,8 +464,11 @@ static struct sk_buff *br_ip6_multicast_alloc_query(struct net_bridge *br,
 	if (ipv6_dev_get_saddr(dev_net(br->dev), br->dev, &ip6h->daddr, 0,
 			       &ip6h->saddr)) {
 		kfree_skb(skb);
+		br->has_ipv6_addr = 0;
 		return NULL;
 	}
+
+	br->has_ipv6_addr = 1;
 	ipv6_eth_mc_map(&ip6h->daddr, eth->h_dest);
 
 	hopopt = (u8 *)(ip6h + 1);
@@ -948,13 +951,12 @@ static void br_multicast_enable(struct bridge_mcast_own_query *query)
 		mod_timer(&query->timer, jiffies);
 }
 
-void br_multicast_enable_port(struct net_bridge_port *port)
+static void __br_multicast_enable_port(struct net_bridge_port *port)
 {
 	struct net_bridge *br = port->br;
 
-	spin_lock(&br->multicast_lock);
 	if (br->multicast_disabled || !netif_running(br->dev))
-		goto out;
+		return;
 
 	br_multicast_enable(&port->ip4_own_query);
 #if IS_ENABLED(CONFIG_IPV6)
@@ -962,8 +964,14 @@ void br_multicast_enable_port(struct net_bridge_port *port)
 #endif
 	if (port->multicast_router == 2 && hlist_unhashed(&port->rlist))
 		br_multicast_add_router(br, port);
+}
 
-out:
+void br_multicast_enable_port(struct net_bridge_port *port)
+{
+	struct net_bridge *br = port->br;
+
+	spin_lock(&br->multicast_lock);
+	__br_multicast_enable_port(port);
 	spin_unlock(&br->multicast_lock);
 }
 
@@ -1110,7 +1118,7 @@ static int br_ip6_multicast_mld2_report(struct net_bridge *br,
 		} else {
 			err = br_ip6_multicast_add_group(br, port,
 							 &grec->grec_mca, vid);
-			if (!err)
+			if (err)
 				break;
 		}
 	}
@@ -1736,6 +1744,7 @@ void br_multicast_init(struct net_bridge *br)
 	br->ip6_other_query.delay_time = 0;
 	br->ip6_querier.port = NULL;
 #endif
+	br->has_ipv6_addr = 1;
 
 	spin_lock_init(&br->multicast_lock);
 	setup_timer(&br->multicast_router_timer,
@@ -1901,8 +1910,9 @@ static void br_multicast_start_querier(struct net_bridge *br,
 
 int br_multicast_toggle(struct net_bridge *br, unsigned long val)
 {
-	int err = 0;
 	struct net_bridge_mdb_htable *mdb;
+	struct net_bridge_port *port;
+	int err = 0;
 
 	spin_lock_bh(&br->multicast_lock);
 	if (br->multicast_disabled == !val)
@@ -1930,10 +1940,9 @@ rollback:
 			goto rollback;
 	}
 
-	br_multicast_start_querier(br, &br->ip4_own_query);
-#if IS_ENABLED(CONFIG_IPV6)
-	br_multicast_start_querier(br, &br->ip6_own_query);
-#endif
+	br_multicast_open(br);
+	list_for_each_entry(port, &br->port_list, list)
+		__br_multicast_enable_port(port);
 
 unlock:
 	spin_unlock_bh(&br->multicast_lock);
