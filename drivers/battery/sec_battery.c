@@ -3942,8 +3942,7 @@ static void sec_bat_cable_work(struct work_struct *work)
 	if (battery->charging_block &&
 		battery->cable_type != POWER_SUPPLY_TYPE_BATTERY &&
 		battery->cable_type != POWER_SUPPLY_TYPE_OTG &&
-		battery->cable_type != POWER_SUPPLY_TYPE_POWER_SHARING &&
-		battery->cable_type != POWER_SUPPLY_TYPE_HMT_CONNECTED) {
+		battery->cable_type != POWER_SUPPLY_TYPE_POWER_SHARING) {
 		keep_charging_state = true;
 		pr_info("%s: keep charging state (prev cable type:%d, now cable type:%d)\n",
 			__func__, battery->cable_type, current_cable_type);
