@@ -36,6 +36,7 @@ obj-$(CONFIG_USI) += usi.o
 obj-$(CONFIG_EXYNOS_ACPM)       += acpm/
 
 # CP
+obj-$(CONFIG_SEC_SIPC_HIGGS_MODEM_IF) += pmu-cp.o
 obj-$(CONFIG_SEC_SIPC_MODEM_IF) += pmu-cp.o
 obj-$(CONFIG_SEC_MODEM_IF)  += pmu-cp.o
 

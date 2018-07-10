@@ -1722,4 +1722,11 @@ static inline int blkdev_issue_flush(struct block_device *bdev, gfp_t gfp_mask,
 
 #endif /* CONFIG_BLOCK */
 
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+#define SIO_PATCH_VERSION(name, major, minor, description)	\
+	static const char *sio_##name##_##major##_##minor __attribute__ ((used, section("sio_patches"))) = (#name " " #major "." #minor " " description)
+#else
+#define SIO_PATCH_VERSION(name, major, minor, description)
+#endif
+
 #endif

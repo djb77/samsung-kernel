@@ -330,11 +330,19 @@ static int s2mpb02_pmic_dt_parse_pdata(struct s2mpb02_dev *iodev,
 	struct device_node *pmic_np, *regulators_np, *reg_np;
 	struct s2mpb02_regulator_data *rdata;
 	unsigned int i;
+	int ret;
 
 	pmic_np = iodev->dev->of_node;
 	if (!pmic_np) {
 		dev_err(iodev->dev, "could not find pmic sub-node\n");
 		return -ENODEV;
+	}
+
+	ret = of_property_read_u32(pmic_np, "b1_remote_sense_en",
+		&pdata->b1_rms_en);
+	if (ret) {
+		dev_info(iodev->dev, "no node for b1_remote_sense_en\n");
+		pdata->b1_rms_en = 0;
 	}
 
 	regulators_np = of_find_node_by_name(pmic_np, "regulators");
@@ -441,6 +449,9 @@ static int s2mpb02_pmic_probe(struct platform_device *pdev)
 		}
 	}
 
+	/* BUCK1 remote sense enable */
+	s2mpb02_update_reg(i2c, 0x0B, pdata->b1_rms_en << 5, 0x20);
+
 	return 0;
  err:
 	pr_info("[%s:%d] err:\n", __FILE__, __LINE__);
@@ -467,6 +478,7 @@ static int s2mpb02_pmic_remove(struct platform_device *pdev)
 
 static const struct platform_device_id s2mpb02_pmic_id[] = {
 	{"s2mpb02-regulator", 0},
+	{"s2mpb02-5g-pmic", 0},
 	{},
 };
 MODULE_DEVICE_TABLE(platform, s2mpb02_pmic_id);

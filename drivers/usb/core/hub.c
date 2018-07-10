@@ -32,6 +32,9 @@
 
 #include "hub.h"
 #include "otg_whitelist.h"
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+#include "otg_whitelist_for_mdm.h"
+#endif
 
 #define USB_VENDOR_GENESYS_LOGIC		0x05e3
 #define HUB_QUIRK_CHECK_PORT_AUTOSUSPEND	0x01
@@ -2365,7 +2368,19 @@ static int usb_enumerate_device(struct usb_device *udev)
 		}
 		return -ENOTSUPP;
 	}
-
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+	if (IS_ENABLED(CONFIG_USB_OTG_WHITELIST_FOR_MDM) &&
+		/*hcd->tpl_support &&*/
+		!is_targeted_for_samsung_mdm(udev)) {
+		if (IS_ENABLED(CONFIG_USB_OTG) && (udev->bus->b_hnp_enable
+			|| udev->bus->is_b_host)) {
+			err = usb_port_suspend(udev, PMSG_AUTO_SUSPEND);
+			if (err < 0)
+				dev_dbg(&udev->dev, "HNP fail, %d\n", err);
+		}
+		return -ENOTSUPP;
+	}
+#endif
 	usb_detect_interface_quirks(udev);
 
 	return 0;

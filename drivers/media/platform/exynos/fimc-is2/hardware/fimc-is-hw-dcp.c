@@ -517,7 +517,7 @@ int fimc_is_hw_dcp_frame_ndone(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame
 	output_id = FIMC_IS_HW_CORE_END;
 	if (test_bit(hw_ip->id, &frame->core_flag))
 		ret = fimc_is_hardware_frame_done(hw_ip, frame, wq_id,
-				output_id, done_type);
+				output_id, done_type, true);
 
 	return ret;
 }

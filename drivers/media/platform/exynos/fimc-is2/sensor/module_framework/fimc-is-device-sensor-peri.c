@@ -1032,6 +1032,11 @@ int fimc_is_sensor_peri_notify_vsync(struct v4l2_subdev *subdev, void *arg)
 	struct fimc_is_module_enum *module;
 	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
 
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION_RUNTIME
+	struct fimc_is_flash *flash = NULL;
+	bool do_mipi_clock_change_work = true;
+#endif
+
 	BUG_ON(!subdev);
 	BUG_ON(!arg);
 
@@ -1083,6 +1088,25 @@ int fimc_is_sensor_peri_notify_vsync(struct v4l2_subdev *subdev, void *arg)
 		if (cis->long_term_mode.frame_interval > 0)
 			cis->long_term_mode.frame_interval--;
 	}
+
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION_RUNTIME
+	if (cis->long_term_mode.sen_strm_off_on_enable)
+		do_mipi_clock_change_work = false;
+
+	flash = sensor_peri->flash;
+
+	if (sensor_peri->subdev_flash && flash) {
+		if (flash->flash_ae.frm_num_pre_fls != 0)
+			do_mipi_clock_change_work = false;
+
+		if (flash->flash_ae.frm_num_main_fls[flash->flash_ae.main_fls_strm_on_off_step] != 0)
+			do_mipi_clock_change_work = false;
+	}
+
+	if (cis->mipi_clock_index_new != cis->mipi_clock_index_cur && do_mipi_clock_change_work) {
+		schedule_work(&sensor_peri->cis.mipi_clock_change_work);
+	}
+#endif
 
 p_err:
 	return ret;
@@ -1462,6 +1486,48 @@ void fimc_is_sensor_long_term_mode_set_work(struct work_struct *data)
 	info("[%s] end\n", __func__);
 }
 
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION_RUNTIME
+void fimc_is_sensor_mipi_clock_change_work(struct work_struct *data)
+{
+	int ret = 0;
+	struct fimc_is_cis *cis = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri;
+	struct v4l2_subdev *subdev_cis;
+
+	BUG_ON(!data);
+
+	cis = container_of(data, struct fimc_is_cis, mipi_clock_change_work);
+
+	BUG_ON(!cis);
+
+	sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
+	BUG_ON(!sensor_peri);
+
+	subdev_cis = sensor_peri->subdev_cis;
+	if (!subdev_cis) {
+		err("[%s]: no subdev_cis", __func__);
+		return;
+	}
+
+	info("[%s] start\n", __func__);
+	/* Sensor stream off */
+	ret = CALL_CISOPS(cis, cis_stream_off, subdev_cis);
+	if (ret < 0) {
+		err("[%s] stream off fail\n", __func__);
+		return;
+	}
+
+	/* Sensor stream on */
+	ret = CALL_CISOPS(cis, cis_stream_on, subdev_cis);
+	if (ret < 0) {
+		err("[%s] stream off fail\n", __func__);
+		return;
+	}
+	dbg_sensor("[%s] stream on done\n", __func__);
+	info("[%s] end\n", __func__);
+}
+#endif
+
 void fimc_is_sensor_peri_init_work(struct fimc_is_device_sensor_peri *sensor_peri)
 {
 	BUG_ON(!sensor_peri);
@@ -1481,6 +1547,9 @@ void fimc_is_sensor_peri_init_work(struct fimc_is_device_sensor_peri *sensor_per
 
 	/* Init to LTE mode work */
 	INIT_WORK(&sensor_peri->cis.long_term_mode_work, fimc_is_sensor_long_term_mode_set_work);
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION_RUNTIME
+	INIT_WORK(&sensor_peri->cis.mipi_clock_change_work, fimc_is_sensor_mipi_clock_change_work);
+#endif
 }
 
 void fimc_is_sensor_peri_probe(struct fimc_is_device_sensor_peri *sensor_peri)
@@ -1552,13 +1621,34 @@ int fimc_is_sensor_peri_s_stream(struct fimc_is_device_sensor *device,
 		   wait for it to finish execution when working s_format */
 		flush_kthread_work(&sensor_peri->mode_change_work);
 
+		/* just for auto dual camera mode to reduce power consumption */
+#ifdef USE_OIS_SLEEP_MODE
+		if (sensor_peri->ois)
+			fimc_is_sensor_ois_start((struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(subdev_module));
+#endif
+#ifdef USE_AF_SLEEP_MODE
+		if (sensor_peri->actuator && sensor_peri->actuator->actuator_ops) {
+			ret = CALL_ACTUATOROPS(sensor_peri->actuator, set_active, sensor_peri->subdev_actuator, 1);
+			if (ret) {
+				err("[SEN:%d] actuator set active fail\n", module->sensor_id);
+				goto p_err;
+			}
+		}
+#endif
 		/* stream on sequence */
 		if (cis->need_mode_change == false) {
 			/* only first time after camera on */
+#ifdef CAMERA_REAR2
+			fimc_is_sensor_setting_mode_change(sensor_peri);
+#else
 			fimc_is_sensor_initial_setting_low_exposure(sensor_peri);
+#endif
 			cis->need_mode_change = true;
 			if (sensor_peri->actuator)
 				sensor_peri->actuator->actuator_data.timer_check = HRTIMER_POSSIBLE;
+
+			if (sensor_peri->ois)
+				fimc_is_sensor_ois_update((struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(subdev_module));
 		} else {
 			fimc_is_sensor_setting_mode_change(sensor_peri);
 		}
@@ -1606,6 +1696,22 @@ int fimc_is_sensor_peri_s_stream(struct fimc_is_device_sensor *device,
 		mutex_lock(&cis->control_lock);
 		ret = CALL_CISOPS(cis, cis_stream_off, subdev_cis);
 		mutex_unlock(&cis->control_lock);
+
+		/* just for auto dual camera mode to reduce power consumption */
+#ifdef USE_OIS_SLEEP_MODE
+		if (sensor_peri->ois)
+			fimc_is_sensor_ois_stop((struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(subdev_module));
+#endif
+
+#ifdef USE_AF_SLEEP_MODE
+		if (sensor_peri->actuator && sensor_peri->actuator->actuator_ops) {
+			ret = CALL_ACTUATOROPS(sensor_peri->actuator, set_active, sensor_peri->subdev_actuator, 0);
+			if (ret) {
+				err("[SEN:%d] actuator set sleep fail\n", module->sensor_id);
+				goto p_err;
+			}
+		}
+#endif
 
 		if (subdev_preprocessor){
 			ret = CALL_PREPROPOPS(preprocessor, preprocessor_stream_off, subdev_preprocessor);
@@ -2149,6 +2255,7 @@ int fimc_is_sensor_peri_call_m2m_actuator(struct fimc_is_device_sensor *device)
 int fimc_is_sensor_initial_preprocessor_setting(struct fimc_is_device_sensor_peri *sensor_peri)
 {
 	int ret = 0;
+#ifdef CONFIG_COMPANION_USE
 	cis_shared_data *cis_data = NULL;
 	SENCMD_CompanionSetWdrAeInfoStr wdrParam;
 
@@ -2157,7 +2264,6 @@ int fimc_is_sensor_initial_preprocessor_setting(struct fimc_is_device_sensor_per
 	cis_data = sensor_peri->cis.cis_data;
 	BUG_ON(!cis_data);
 
-#ifdef CONFIG_COMPANION_USE
 	/* update cis_data about preproc */
 	wdrParam.uiShortExposureCoarse = cis_data->preproc_auto_exposure[CURRENT_FRAME].short_exposure_coarse;
 	wdrParam.uiShortExposureFine = 0x100;

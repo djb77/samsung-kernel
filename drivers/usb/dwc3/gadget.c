@@ -94,6 +94,8 @@ cpumask_var_t affinity_cpu_mask;
 cpumask_var_t default_cpu_mask;
 #endif
 
+extern bool lockup_noti;
+
 /**
  * dwc3_gadget_set_test_mode - Enables USB2 Test Modes
  * @dwc: pointer to our context structure
@@ -1752,9 +1754,6 @@ static void dwc3_gadget_enable_irq(struct dwc3 *dwc)
 
 	/* Enable all but Start and End of Frame IRQs */
 	reg = (DWC3_DEVTEN_VNDRDEVTSTRCVEDEN |
-			DWC3_DEVTEN_EVNTOVERFLOWEN |
-			DWC3_DEVTEN_CMDCMPLTEN |
-			DWC3_DEVTEN_ERRTICERREN |
 			DWC3_DEVTEN_WKUPEVTEN |
 			DWC3_DEVTEN_ULSTCNGEN |
 			DWC3_DEVTEN_CONNECTDONEEN |
@@ -1897,7 +1896,6 @@ static int dwc3_gadget_vbus_session(struct usb_gadget *g, int is_active)
 		} else {
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 			dwc3_gadget_cable_connect(dwc,false);
-			dwc3_disconnect_gadget(dwc);
 			dwc->start_config_issued = false;
 			dwc->gadget.speed = USB_SPEED_UNKNOWN;
 			dwc->setup_packet_pending = false;
@@ -1911,6 +1909,9 @@ static int dwc3_gadget_vbus_session(struct usb_gadget *g, int is_active)
 			else
 				store_usblog_notify(NOTIFY_USBSTATE,
 							(void *)"USB_STATE=VBUS:DIS:FAIL", NULL);
+#endif
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+			dwc3_disconnect_gadget(dwc);
 #endif
 		}
 	}
@@ -2381,6 +2382,14 @@ static int dwc3_cleanup_done_reqs(struct dwc3 *dwc, struct dwc3_ep *dep,
 		if (ret)
 			break;
 	} while (1);
+
+	/*  
+	* Our endpoint might get disabled by another thread during  
+	* dwc3_gadget_giveback(). If that happens, we're just gonna return 1  
+	* early on so DWC3_EP_BUSY flag gets cleared  
+	*/  
+	if (!dep->endpoint.desc)  
+		return 1;
 
 	if (usb_endpoint_xfer_isoc(dep->endpoint.desc) &&
 			list_empty(&dep->req_queued)) {
@@ -3165,6 +3174,10 @@ static void dwc3_process_event_entry(struct dwc3 *dwc,
 		/* depevt */
 		return dwc3_endpoint_interrupt(dwc, &event->depevt);
 	}
+
+	if (lockup_noti)
+		pr_err("%s: event->type.type: 0x%08X devt->type: 0x%08X\n",
+					__func__, (int)event->type.type, (int)event->devt.type);
 
 	switch (event->type.type) {
 	case DWC3_EVENT_TYPE_DEV:

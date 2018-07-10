@@ -1045,10 +1045,8 @@ static int vidioc_s_ctrl(struct file *file, void *priv,
 		mfc_err_dev("not supported CID: 0x%x\n",ctrl->id);
 		break;
 	case V4L2_CID_MPEG_VIDEO_QOS_RATIO:
-		if (ctrl->value > 150)
-			ctrl->value = 1000;
-		mfc_info_ctx("set %d qos_ratio.\n", ctrl->value);
 		ctx->qos_ratio = ctrl->value;
+		mfc_info_ctx("set %d qos_ratio.\n", ctrl->value);
 		break;
 	case V4L2_CID_MPEG_MFC_SET_DYNAMIC_DPB_MODE:
 		dec->is_dynamic_dpb = ctrl->value;

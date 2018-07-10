@@ -206,12 +206,9 @@ struct mode_mapping {
 	int *mode_code;
 	unsigned int size;
 };
-int __arr_mode_IDLE[MAX_IDLE_MODE] =
-				{ IDLE_OFF };
-int __arr_mode_SAMPLE[MAX_SAMPLE_MODE] =
-				{ SAMPLE_XY_A, SAMPLE_XY_AB, SAMPLE_XY_B };
-int __arr_mode_TIA_ADC_SAMPLE[MAX_SAMPLE_MODE] =
-				{ SAMPLE_XY_A, SAMPLE_XY_AB, SAMPLE_XY_B };
+int __arr_mode_IDLE[MAX_IDLE_MODE] = { IDLE_OFF };
+int __arr_mode_SAMPLE[MAX_SAMPLE_MODE] = { SAMPLE_XY_A, SAMPLE_XY_AB, SAMPLE_XY_B };
+int __arr_mode_TIA_ADC_SAMPLE[MAX_SAMPLE_MODE] = { SAMPLE_XY_A, SAMPLE_XY_AB, SAMPLE_XY_B };
 
 struct mode_mapping __mode_recv_frm_usr[MAX_MODE] = {
 	{
@@ -443,8 +440,8 @@ static int adpd143_configuration(struct adpd143_data *pst_adpd, unsigned char co
 static int adpd143_TIA_ADC_configuration(struct adpd143_data *pst_adpd, unsigned char config);
 
 /* for TIA_ADC runtime Dark Calibration */
-static unsigned short is_TIA_Dark_Cal = 0;
-static unsigned short is_Float_Dark_Cal = 0;
+static unsigned short is_TIA_Dark_Cal;
+static unsigned short is_Float_Dark_Cal;
 static unsigned rawDarkCh[8];
 static unsigned rawDataCh[8];
 
@@ -946,7 +943,8 @@ adpd143_mode_switching(struct adpd143_data *pst_adpd, u32 usr_mode)
 		pst_adpd->ch3_f_str = CH3_FLOAT_STR;
 		pst_adpd->ch4_f_str = CH4_FLOAT_STR;
 		is_TIA_Dark_Cal = is_Float_Dark_Cal = 0;
-		for(i = 0; i < 8; i++) rawDarkCh[i] = rawDataCh[i] = 0;
+		for (i = 0; i < 8; i++)
+			rawDarkCh[i] = rawDataCh[i] = 0;
 
 		/*enable interrupt only when data written to FIFO */
 		switch (sub_mode) {
@@ -1034,7 +1032,7 @@ adpd143_sample_event(struct adpd143_data *pst_adpd)
 	pst_adpd->sample_cnt++;
 	if ((pst_adpd->sample_cnt % 200) == 1) {
 		printk("%s: user mode : %d, sub mode : %d\n",
-			__func__, GET_USR_MODE(usr_mode),GET_USR_SUB_MODE(usr_mode));
+			__func__, GET_USR_MODE(usr_mode), GET_USR_SUB_MODE(usr_mode));
 		if (pst_adpd->sample_cnt == SAMPLE_MAX_COUNT)
 			pst_adpd->sample_cnt = 0;
 	}
@@ -1047,7 +1045,7 @@ adpd143_sample_event(struct adpd143_data *pst_adpd)
 			break;
 		}
 
-		if(GET_USR_MODE(usr_mode) != TIA_ADC_USR) {
+		if (GET_USR_MODE(usr_mode) != TIA_ADC_USR) {
 			for (cnt = 0; cnt < pst_adpd->fifo_size; cnt += 4) {
 				if (atomic_read(&pst_adpd->hrmled_enabled)) {
 					input_event(pst_adpd->hrmled_input_dev,
@@ -1080,7 +1078,7 @@ adpd143_sample_event(struct adpd143_data *pst_adpd)
 				/* for TIA_ADC runtime Dark Calibration */
 				if (is_TIA_Dark_Cal < TIA_DARK_CAL_CNT
 					&& is_TIA_Dark_Cal > 1) {
-					for(k = 0; k < 4; k++) {
+					for (k = 0; k < 4; k++) {
 						if (rawDarkCh[k] < pst_adpd->ptr_data[cnt+k]
 							|| !rawDarkCh[k])
 							rawDarkCh[k] = pst_adpd->ptr_data[cnt+k];
@@ -1099,18 +1097,18 @@ adpd143_sample_event(struct adpd143_data *pst_adpd)
 					is_TIA_Dark_Cal++;
 					continue;
 				} else if (is_TIA_Dark_Cal == 100) {
-					reg_write(pst_adpd, 0x10,0x0001);
-					reg_write(pst_adpd, 0x14,0x0441);
-					reg_write(pst_adpd, 0x10,0x0002);
+					reg_write(pst_adpd, 0x10, 0x0001);
+					reg_write(pst_adpd, 0x14, 0x0441);
+					reg_write(pst_adpd, 0x10, 0x0002);
 					is_TIA_Dark_Cal++;
 					continue;
 				}
 				/* for making float mode saturated at the point */
-				for(ch = 0; ch < 4; ++ch) {
+				for (ch = 0; ch < 4; ++ch) {
 					rawDataCh[ch] =
 						rawDarkCh[ch] - pst_adpd->ptr_data[cnt+ch];
 					rawDataCh[ch] =
-						((int)rawDataCh[ch] < 0)? 0 : rawDataCh[ch];
+						((int)rawDataCh[ch] < 0) ? 0 : rawDataCh[ch];
 				}
 				input_event(pst_adpd->hrm_input_dev,
 					EV_REL, REL_Z, sub_mode + 1);
@@ -1200,7 +1198,7 @@ adpd143_sample_event(struct adpd143_data *pst_adpd)
 				/* for TIA_ADC runtime Dark Calibration */
 				if (is_TIA_Dark_Cal < TIA_DARK_CAL_CNT
 					&& is_TIA_Dark_Cal > 1) {
-					for(k = 0; k < 4; k++) {
+					for (k = 0; k < 4; k++) {
 						if (rawDarkCh[k] < pst_adpd->ptr_data[cnt+k]
 							|| !rawDarkCh[k])
 							rawDarkCh[k] = pst_adpd->ptr_data[cnt+k];
@@ -1219,7 +1217,7 @@ adpd143_sample_event(struct adpd143_data *pst_adpd)
 				/* for TIA_ADC runtime Dark Calibration */
 				if (is_Float_Dark_Cal < TIA_DARK_CAL_CNT &&
 					is_Float_Dark_Cal > 1) {
-					for(k = 4; k < 8; k++) {
+					for (k = 4; k < 8; k++) {
 						if (rawDarkCh[k] < pst_adpd->ptr_data[cnt+k]
 							|| !rawDarkCh[k])
 							rawDarkCh[k] = pst_adpd->ptr_data[cnt+k];
@@ -1234,27 +1232,28 @@ adpd143_sample_event(struct adpd143_data *pst_adpd)
 					is_Float_Dark_Cal++;
 					continue;
 				} else if (is_Float_Dark_Cal == 100) {
-					reg_write(pst_adpd, 0x10,0x0001);
-					reg_write(pst_adpd, 0x14,0x0441);
-					reg_write(pst_adpd, 0x10,0x0002);
+					reg_write(pst_adpd, 0x10, 0x0001);
+					reg_write(pst_adpd, 0x14, 0x0441);
+					reg_write(pst_adpd, 0x10, 0x0002);
 					is_Float_Dark_Cal++;
 					continue;
 				}
 				/* for making float mode saturated at the point */
-				for(ch = 0; ch < 4; ++ch) {
+				for (ch = 0; ch < 4; ++ch) {
 					rawDataCh[ch]
 						= rawDarkCh[ch] - pst_adpd->ptr_data[cnt+ch];
 					rawDataCh[ch]
-						= ((int)rawDataCh[ch] < 0)? 0 : rawDataCh[ch];
+						= ((int)rawDataCh[ch] < 0) ? 0 : rawDataCh[ch];
 				}
 
 				for (ch = 0; ch < 4; ++ch) {
-						if (ch == 2) uncoated_ch3 = rawDataCh[2];
+						if (ch == 2)
+							uncoated_ch3 = rawDataCh[2];
 						if (ch == 3) {
 							coated_ch4 = rawDataCh[3];
 							/* for approximating the code continuity between float and TIA_ADC */
 							input_event(pst_adpd->hrm_input_dev,
-							EV_MSC, MSC_RAW, rawDataCh[ch]*2 );
+								EV_MSC, MSC_RAW, rawDataCh[ch]*2);
 						} else {
 							input_event(pst_adpd->hrm_input_dev,
 							EV_MSC, MSC_RAW, rawDataCh[ch]);
@@ -1276,7 +1275,7 @@ adpd143_sample_event(struct adpd143_data *pst_adpd)
 					rawDataCh[ch] =
 						pst_adpd->ptr_data[cnt+ch] - rawDarkCh[ch];
 					rawDataCh[ch] =
-						((int)rawDataCh[ch] < 0)? 0 : rawDataCh[ch];
+						((int)rawDataCh[ch] < 0) ? 0 : rawDataCh[ch];
 
 					if ((int)rawDataCh[ch] >=
 						(FLOAT_STR_CONTROL - rawDarkCh[ch])) {
@@ -1350,7 +1349,7 @@ adpd143_sample_event(struct adpd143_data *pst_adpd)
 			break;
 		}
 
-		if( GET_USR_MODE(usr_mode) != TIA_ADC_USR ) {
+		if (GET_USR_MODE(usr_mode) != TIA_ADC_USR) {
 			for (cnt = 0; cnt < pst_adpd->fifo_size; cnt += 4) {
 				if (atomic_read(&pst_adpd->hrmled_enabled)) {
 					input_event(pst_adpd->hrmled_input_dev, EV_REL,
@@ -1383,7 +1382,7 @@ adpd143_sample_event(struct adpd143_data *pst_adpd)
 				/* for TIA_ADC runtime Dark Calibration */
 				if (is_Float_Dark_Cal < FLOAT_DARK_CAL_CNT &&
 					is_Float_Dark_Cal > 1) {
-					for(k = 4; k < 8; k++) {
+					for (k = 4; k < 8; k++) {
 						if (rawDarkCh[k] < pst_adpd->ptr_data[cnt+k-4]
 							|| !rawDarkCh[k])
 							rawDarkCh[k] = pst_adpd->ptr_data[cnt+k-4];
@@ -1398,14 +1397,14 @@ adpd143_sample_event(struct adpd143_data *pst_adpd)
 					is_Float_Dark_Cal++;
 					continue;
 				} else if (is_Float_Dark_Cal == 100) {
-					reg_write(pst_adpd, 0x10,0x0001);
-					reg_write(pst_adpd, 0x14,0x0441);
-					reg_write(pst_adpd, 0x10,0x0002);
+					reg_write(pst_adpd, 0x10, 0x0001);
+					reg_write(pst_adpd, 0x14, 0x0441);
+					reg_write(pst_adpd, 0x10, 0x0002);
 					is_Float_Dark_Cal++;
 				}
 
 				/* for making float mode saturated at the point */
-				for(ch = 4; ch < 8; ++ch) {
+				for (ch = 4; ch < 8; ++ch) {
 					rawDataCh[ch] =
 						pst_adpd->ptr_data[cnt+ch] - rawDarkCh[ch];
 					rawDataCh[ch] =
@@ -1813,7 +1812,7 @@ hrm_attr_set_enable(struct device *dev, struct device_attribute *attr,
 	struct adpd143_data *pst_adpd = dev_get_drvdata(dev);
 	unsigned short parse_data[2];
 	unsigned short mode = 0;
-        unsigned short osc_trim_32k, osc_trim_32m;
+    unsigned short osc_trim_32k, osc_trim_32m;
 	unsigned short osc_trim_addr26 = 0, osc_trim_addr28 = 0, osc_trim_addr29 = 0;
 	int err;
 
@@ -2085,14 +2084,14 @@ static int adpd_power_enable(struct adpd143_data *data, int en)
 
 static int adpd_parse_dt(struct adpd143_data *data, struct device *dev)
 {
-	struct device_node *this_node= dev->of_node;
+	struct device_node *this_node = dev->of_node;
 	enum of_gpio_flags flags;
 	int rc;
 
 	if (this_node == NULL)
 		return -ENODEV;
 
-	data->hrm_int = of_get_named_gpio_flags(this_node,"adpd143,irq_gpio", 0, &flags);
+	data->hrm_int = of_get_named_gpio_flags(this_node, "adpd143,irq_gpio", 0, &flags);
 	pr_err("%s: get hrm_int(data->hrm_int)(%d) \n", __func__, data->hrm_int);
 	if (data->hrm_int < 0) {
 		pr_err("%s: get hrm_int(%d) error\n", __func__, data->hrm_int);
@@ -2123,18 +2122,18 @@ static int adpd_parse_dt(struct adpd143_data *data, struct device *dev)
 		&data->led_3p3) < 0)
 		pr_err("%s: get led_3p3 error\n", __func__);
 
-	data->led_en =of_get_named_gpio_flags(this_node,"adpd143,led_en", 0, &flags);
+	data->led_en = of_get_named_gpio_flags(this_node, "adpd143,led_en", 0, &flags);
 	pr_err("%s: get led_en(data->led_en)(%d) \n", __func__, data->led_en);
 	if (data->led_en < 0) {
 		pr_err("%s: get led_en(%d) error\n", __func__, data->led_en);
 		data->led_en = -1;
 		data->leda = devm_regulator_get(dev, "reg_vled");
 		if (IS_ERR(data->leda)) {
-			pr_err("%s: regulator HRM_VLED fail \n",__func__);
+			pr_err("%s: regulator HRM_VLED fail \n", __func__);
 		}
 	} else {
 
-		rc = gpio_request(data->led_en,"led_en");
+		rc = gpio_request(data->led_en, "led_en");
 		if (unlikely(rc < 0)) {
 			pr_err("%s: gpio %d request failed (%d)\n",
 				__func__, data->led_en, rc);
@@ -2156,7 +2155,7 @@ static int adpd_parse_dt(struct adpd143_data *data, struct device *dev)
 	}
 
 	data->pins_sleep = pinctrl_lookup_state(data->p, PINCTRL_STATE_SLEEP);
-	if(IS_ERR(data->pins_sleep)) {
+	if (IS_ERR(data->pins_sleep)) {
 		pr_err("%s : could not get pins sleep_state (%li)\n",
 			__func__, PTR_ERR(data->pins_sleep));
 		pinctrl_put(data->p);
@@ -2164,7 +2163,7 @@ static int adpd_parse_dt(struct adpd143_data *data, struct device *dev)
 	}
 
 	data->pins_idle = pinctrl_lookup_state(data->p, PINCTRL_STATE_IDLE);
-	if(IS_ERR(data->pins_idle)) {
+	if (IS_ERR(data->pins_idle)) {
 		pr_err("%s : could not get pins idle_state (%li)\n",
 			__func__, PTR_ERR(data->pins_idle));
 		pinctrl_put(data->p);
@@ -2417,30 +2416,30 @@ hrmled_attr_set_enable(struct device *dev, struct device_attribute *attr,
 	pr_err("%s: pst_adpd->pre_hrmled_enable:%d, val:%d\n",
 		__func__, pst_adpd->pre_hrmled_enable, val);
 	if (pst_adpd->pre_hrmled_enable != val) {
-		switch(val) {
-			case IRRED_OFF:
-				pr_info("%s: IRRED_OFF.\n", __func__);
-				cmd_parsing("0x0", 1, parse_data);
-				atomic_set(&pst_adpd->hrmled_enabled, IRRED_OFF);
-				break;
-			case IR_MODE:
-				pr_info("%s: IR_MODE.\n", __func__);
-				cmd_parsing("0x32", 1, parse_data);
-				atomic_set(&pst_adpd->hrmled_enabled, IR_MODE);
-				break;
-			case RED_MODE:
-				pr_info("%s: RED_MODE.\n", __func__);
-				cmd_parsing("0x30", 1, parse_data);
-				atomic_set(&pst_adpd->hrmled_enabled, RED_MODE);
-				break;
-			case IRRED_MODE:
-				pr_info("%s: IRRED_MODE.\n", __func__);
-				cmd_parsing("0x31", 1, parse_data);
-				atomic_set(&pst_adpd->hrmled_enabled, IRRED_MODE);
-				break;
-			default:
-				pr_err("%s: invalid value\n", __func__);
-				return -EINVAL;
+		switch (val) {
+		case IRRED_OFF:
+			pr_info("%s: IRRED_OFF.\n", __func__);
+			cmd_parsing("0x0", 1, parse_data);
+			atomic_set(&pst_adpd->hrmled_enabled, IRRED_OFF);
+			break;
+		case IR_MODE:
+			pr_info("%s: IR_MODE.\n", __func__);
+			cmd_parsing("0x32", 1, parse_data);
+			atomic_set(&pst_adpd->hrmled_enabled, IR_MODE);
+			break;
+		case RED_MODE:
+			pr_info("%s: RED_MODE.\n", __func__);
+			cmd_parsing("0x30", 1, parse_data);
+			atomic_set(&pst_adpd->hrmled_enabled, RED_MODE);
+			break;
+		case IRRED_MODE:
+			pr_info("%s: IRRED_MODE.\n", __func__);
+			cmd_parsing("0x31", 1, parse_data);
+			atomic_set(&pst_adpd->hrmled_enabled, IRRED_MODE);
+			break;
+		default:
+			pr_err("%s: invalid value\n", __func__);
+			return -EINVAL;
 		}
 	}
 	mode = GET_USR_MODE(parse_data[0]);
@@ -2783,8 +2782,10 @@ adpd143_initialization(struct adpd143_data *pst_adpd,
 	pst_adpd->sample_cnt = 0;
 
 	return 0;
-//err_gpio_direction_input:
-	//gpio_free(pst_adpd->hrm_int);
+/*
+err_gpio_direction_input:
+	gpio_free(pst_adpd->hrm_int);
+*/
 err_work_queue_init:
 	destroy_workqueue(pst_adpd->ptr_adpd143_wq_st);
 err_wq_creation_init:
@@ -3254,7 +3255,7 @@ static ssize_t adpd143_alc_enable_store(struct device *dev,
 				pr_info(KERN_ERR "%s: enable ALC fail(%d)\n",
 					__func__, rc);
 			}
-		switch(val) {
+		switch (val) {
 		case ALC_TIA_MODE:
 			pr_info("%s: mode:%d\n", __func__, ALC_TIA_MODE);
 			cmd_parsing("0x50", 1, parse_data);
@@ -3452,7 +3453,7 @@ adpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	int err = 0, i = 0;
 	unsigned short u16_regval = 0;
 	struct regulator *regulator_i2c_1p8;
-	
+
 	pr_err("%s: is called Success\n", __func__);
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		dev_err(&client->dev, "client not i2c capable\n");
@@ -3469,7 +3470,7 @@ adpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 
 	if (client->dev.of_node) {
-		pdata = devm_kzalloc (&client->dev ,
+		pdata = devm_kzalloc (&client->dev,
 			sizeof(struct adpd_platform_data), GFP_KERNEL);
 		if (!pdata) {
 		dev_err(&client->dev, "Failed to allocate memory\n");
@@ -3530,7 +3531,8 @@ adpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	switch (u16_regval) {
 	case ADPD_CHIPID(3):
 	case ADPD_CHIPID(4):
-		for(i=0; i<8; i++) rawDarkCh[i] = rawDataCh[i] = 0;
+		for (i = 0; i < 8; i++)
+			rawDarkCh[i] = rawDataCh[i] = 0;
 		err = 0;
 		ADPD143_dbg("chipID value = 0x%x\n", u16_regval);
 	break;
@@ -3545,7 +3547,7 @@ adpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 	ADPD143_info("chipID value = 0x%x\n", u16_regval);
 
-	//pst_adpd->dev = &client->dev;
+	/* pst_adpd->dev = &client->dev; */
 	pr_info("%s: start \n", __func__);
 
 	if (adpd143_initialization(pst_adpd, id)) {
@@ -3695,7 +3697,7 @@ i2c_check_dev_attach(char *slave_name, unsigned short *slave_addrs,
 		i2c_adapter = i2c_get_adapter(count);
 		if (i2c_adapter != NULL) {
 			memset(&info, 0, sizeof(struct i2c_board_info));
-			strlcpy(info.type, slave_name /*"adpd143" */ ,
+			strlcpy(info.type, slave_name /*"adpd143" */,
 				I2C_NAME_SIZE);
 			/*need to check i2c_new_device instead of
 			i2c_new_probed_device*/

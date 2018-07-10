@@ -47,7 +47,8 @@ static void fimc_is_lib_vra_callback_output_ready(u32 instance,
 	info_lib("------ num_all_faces(%d) -------\n", num_all_faces);
 #endif
 
-	lib_vra->out_list_info[instance] = out_list_info_ptr;
+	memcpy(&lib_vra->out_list_info[instance], (void *)out_list_info_ptr,
+		sizeof(lib_vra->out_list_info[instance]));
 	lib_vra->all_face_num[instance] = (num_all_faces > lib_vra->max_face_num) ?
 				0 : num_all_faces;
 
@@ -136,10 +137,10 @@ void fimc_is_lib_vra_task_trigger(struct fimc_is_lib_vra *lib_vra,
 
 	spin_lock(&task_vra->work_lock);
 
-	task_vra->work[task_vra->work_index % FIMC_IS_MAX_TASK].func = func;
-	task_vra->work[task_vra->work_index % FIMC_IS_MAX_TASK].params = lib_vra;
+	task_vra->work[task_vra->work_index % LIB_MAX_TASK].func = func;
+	task_vra->work[task_vra->work_index % LIB_MAX_TASK].params = lib_vra;
 	task_vra->work_index++;
-	work_index = (task_vra->work_index - 1) % FIMC_IS_MAX_TASK;
+	work_index = (task_vra->work_index - 1) % LIB_MAX_TASK;
 
 	spin_unlock(&task_vra->work_lock);
 
@@ -265,7 +266,7 @@ int fimc_is_lib_vra_init_task(struct fimc_is_lib_vra *lib_vra)
 	}
 
 	lib_vra->task_vra.work_index = 0;
-	for (j = 0; j < FIMC_IS_MAX_TASK; j++) {
+	for (j = 0; j < LIB_MAX_TASK; j++) {
 		lib_vra->task_vra.work[j].func = NULL;
 		lib_vra->task_vra.work[j].params = NULL;
 		init_kthread_work(&lib_vra->task_vra.work[j].work,
@@ -622,6 +623,7 @@ int fimc_is_lib_vra_set_orientation(struct fimc_is_lib_vra *lib_vra,
 	enum api_vra_type status = VRA_NO_ERROR;
 	enum api_vra_orientation vra_orientation;
 	enum fimc_is_lib_vra_dir dir;
+	unsigned long flag;
 
 	if (unlikely(!lib_vra)) {
 		err_lib("lib_vra is NULL");
@@ -673,13 +675,17 @@ int fimc_is_lib_vra_set_orientation(struct fimc_is_lib_vra *lib_vra,
 	dbg_lib("[%d]scaler_orientation(%d), vra_orientation(%d)\n", instance,
 		scaler_orientation, vra_orientation);
 
+	spin_lock_irqsave(&lib_vra->slock, flag);
 	status = CALL_VRAOP(lib_vra, set_orientation,
 				lib_vra->frame_desc_heap[instance],
 				vra_orientation);
 	if (status) {
 		err_lib("[%d]set_orientation fail (%#x)", instance, status);
+		spin_unlock_irqrestore(&lib_vra->slock, flag);
+
 		return -EINVAL;
 	}
+	spin_unlock_irqrestore(&lib_vra->slock, flag);
 
 	return 0;
 }
@@ -873,6 +879,9 @@ int fimc_is_lib_vra_update_dm(struct fimc_is_lib_vra *lib_vra, u32 instance,
 		memset(&dm->faceLandmarks, 0, sizeof(dm->faceIds));
 	}
 
+	dm->faceSrcImageSize[0] = lib_vra->out_list_info[instance].in_sizes.width;
+	dm->faceSrcImageSize[1] = lib_vra->out_list_info[instance].in_sizes.height;
+
 	for (face_num = 0; face_num < lib_vra->all_face_num[instance]; face_num++) {
 		base = &lib_vra->out_faces[instance][face_num].base;
 		/* X min */
@@ -1022,8 +1031,8 @@ void fimc_is_lib_vra_os_funcs(void)
 	funcs.log_write_console              = fimc_is_log_write_console;
 	funcs.log_write                      = fimc_is_log_write;
 
-	funcs.spin_lock_init 	     = fimc_is_spin_lock_init;
-	funcs.spin_lock_finish 	     = fimc_is_spin_lock_finish;
+	funcs.spin_lock_init	     = fimc_is_spin_lock_init;
+	funcs.spin_lock_finish	     = fimc_is_spin_lock_finish;
 	funcs.spin_lock              = fimc_is_spin_lock;
 	funcs.spin_unlock            = fimc_is_spin_unlock;
 	funcs.spin_lock_irq          = fimc_is_spin_lock_irq;
@@ -1229,13 +1238,14 @@ int fimc_is_lib_vra_apply_tune(struct fimc_is_lib_vra *lib_vra,
 	struct fimc_is_lib_vra_tune_data *vra_tune, u32 instance)
 {
 	struct fimc_is_lib_vra_tune_data tune;
-	struct api_vra_tune_data *info_tune, dbg_tune;
+	struct api_vra_tune_data *info_tune, dbg_tune = {};
 	struct fimc_is_lib_vra_frame_lock *info_frame;
 	enum api_vra_orientation dbg_orientation;
 	bool dma_test = false;
 	int cnt;
 	int ret;
 	bool has_vra_ch1_only = false;
+	unsigned long flag;
 
 	if (unlikely(!lib_vra)) {
 		err_lib("lib_vra is NULL");
@@ -1280,6 +1290,7 @@ int fimc_is_lib_vra_apply_tune(struct fimc_is_lib_vra *lib_vra,
 		set_bit(VRA_INST_APPLY_TUNE_SET, &lib_vra->inst_state[instance]);
 	}
 
+	spin_lock_irqsave(&lib_vra->slock, flag);
 	lib_vra->max_face_num = tune.api_tune.max_face_count;
 	lib_vra->orientation[instance] = tune.dir;
 	info_tune  = &tune.api_tune;
@@ -1290,8 +1301,9 @@ int fimc_is_lib_vra_apply_tune(struct fimc_is_lib_vra *lib_vra,
 				&tune.api_tune);
 	if (cnt) {
 		err_lib("[%d]set_parameter is fail, cnt(%d)", instance, cnt);
-		ret = -EINVAL;
-		goto debug_info;
+		spin_unlock_irqrestore(&lib_vra->slock, flag);
+
+		goto err_s_param;
 	}
 
 	cnt = CALL_VRAOP(lib_vra, get_parameter, lib_vra->fr_work_heap,
@@ -1299,14 +1311,29 @@ int fimc_is_lib_vra_apply_tune(struct fimc_is_lib_vra *lib_vra,
 				&dbg_tune, &dbg_orientation);
 	if (cnt) {
 		err_lib("[%d]get_parameter is fail, cnt(%d)", instance, cnt);
-		info_tune = &dbg_tune;
-		ret = -EINVAL;
-		goto debug_info;
+		spin_unlock_irqrestore(&lib_vra->slock, flag);
+
+		goto err_g_param;
 	}
+
+	spin_unlock_irqrestore(&lib_vra->slock, flag);
 
 	return 0;
 
-debug_info:
+err_g_param:
+	info_lib("===== VRA get parameter =====\n"
+		"\t tracking_mode(%#x), enable_features(%#x)\n"
+		"\t min_face_size(%#x), max_face_count(%#x)\n"
+		"\t full_frame_detection_freq(%#x), face_priority(%#x)\n"
+		"\t disable_frontal_rot_mask(%#x), disable_profile_rot_mask(%#x)\n"
+		"\t working_point(%#x), tracking_smoothness(%#x)\n",
+		dbg_tune.tracking_mode, dbg_tune.enable_features,
+		dbg_tune.min_face_size, dbg_tune.max_face_count,
+		dbg_tune.full_frame_detection_freq, dbg_tune.face_priority,
+		dbg_tune.disable_frontal_rot_mask, dbg_tune.disable_profile_rot_mask,
+		dbg_tune.working_point, dbg_tune.tracking_smoothness);
+
+err_s_param:
 	info_lib("===== VRA set parameter =====\n"
 		"\t tracking_mode(%#x), enable_features(%#x)\n"
 		"\t min_face_size(%#x), max_face_count(%#x)\n"
@@ -1323,5 +1350,5 @@ debug_info:
 		info_frame->lock_frame_num, info_frame->init_frames_per_lock,
 		info_frame->normal_frames_per_lock);
 
-	return ret;
+	return 0;
 }

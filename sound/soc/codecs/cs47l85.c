@@ -691,6 +691,14 @@ MADERA_RATE_ENUM("ASRC1 Rate 2", madera_asrc1_rate[1]),
 MADERA_RATE_ENUM("ASRC2 Rate 1", madera_asrc2_rate[0]),
 MADERA_RATE_ENUM("ASRC2 Rate 2", madera_asrc2_rate[1]),
 
+WM_ADSP2_PRELOAD_SWITCH("DSP1", 1),
+WM_ADSP2_PRELOAD_SWITCH("DSP2", 2),
+WM_ADSP2_PRELOAD_SWITCH("DSP3", 3),
+WM_ADSP2_PRELOAD_SWITCH("DSP4", 4),
+WM_ADSP2_PRELOAD_SWITCH("DSP5", 5),
+WM_ADSP2_PRELOAD_SWITCH("DSP6", 6),
+WM_ADSP2_PRELOAD_SWITCH("DSP7", 7),
+
 MADERA_MIXER_CONTROLS("DSP1L", MADERA_DSP1LMIX_INPUT_1_SOURCE),
 MADERA_MIXER_CONTROLS("DSP1R", MADERA_DSP1RMIX_INPUT_1_SOURCE),
 MADERA_MIXER_CONTROLS("DSP2L", MADERA_DSP2LMIX_INPUT_1_SOURCE),
@@ -1906,13 +1914,23 @@ static const struct snd_soc_dapm_route cs47l85_dapm_routes[] = {
 	{ "IN6L", NULL, "DBVDD4" },
 	{ "IN6R", NULL, "DBVDD4" },
 
-	{ "DSP1", NULL, "DSPCLK"},
-	{ "DSP2", NULL, "DSPCLK"},
-	{ "DSP3", NULL, "DSPCLK"},
-	{ "DSP4", NULL, "DSPCLK"},
-	{ "DSP5", NULL, "DSPCLK"},
-	{ "DSP6", NULL, "DSPCLK"},
-	{ "DSP7", NULL, "DSPCLK"},
+	{ "ASRC1IN1L", NULL, "SYSCLK" },
+	{ "ASRC1IN1R", NULL, "SYSCLK" },
+	{ "ASRC1IN2L", NULL, "SYSCLK" },
+	{ "ASRC1IN2R", NULL, "SYSCLK" },
+	{ "ASRC2IN1L", NULL, "SYSCLK" },
+	{ "ASRC2IN1R", NULL, "SYSCLK" },
+	{ "ASRC2IN2L", NULL, "SYSCLK" },
+	{ "ASRC2IN2R", NULL, "SYSCLK" },
+
+	{ "ASRC1IN1L", NULL, "ASYNCCLK" },
+	{ "ASRC1IN1R", NULL, "ASYNCCLK" },
+	{ "ASRC1IN2L", NULL, "ASYNCCLK" },
+	{ "ASRC1IN2R", NULL, "ASYNCCLK" },
+	{ "ASRC2IN1L", NULL, "ASYNCCLK" },
+	{ "ASRC2IN1R", NULL, "ASYNCCLK" },
+	{ "ASRC2IN2L", NULL, "ASYNCCLK" },
+	{ "ASRC2IN2R", NULL, "ASYNCCLK" },
 
 	{ "MICBIAS1", NULL, "MICVDD" },
 	{ "MICBIAS2", NULL, "MICVDD" },
@@ -2014,10 +2032,8 @@ static const struct snd_soc_dapm_route cs47l85_dapm_routes[] = {
 	{ "Slim3 Capture", NULL, "SYSCLK" },
 
 	{ "Voice Control DSP", NULL, "DSP6" },
-	{ "Voice Control DSP", NULL, "SYSCLK" },
 
 	{ "Audio Trace DSP", NULL, "DSP1" },
-	{ "Audio Trace DSP", NULL, "SYSCLK" },
 
 	{ "IN1L Mux", "A", "IN1AL" },
 	{ "IN1L Mux", "B", "IN1B" },
@@ -2130,12 +2146,11 @@ static const struct snd_soc_dapm_route cs47l85_dapm_routes[] = {
 	MADERA_DSP_ROUTES("DSP6"),
 	MADERA_DSP_ROUTES("DSP7"),
 
-	{ "DSP2 Preloader",  NULL, "DSP2 Virtual Input" },
+	{ "DSP2",  NULL, "DSP2 Virtual Input" },
 	{ "DSP2 Virtual Input", "Shared Memory", "DSP3" },
-	{ "DSP3 Preloader", NULL, "DSP3 Virtual Input" },
+	{ "DSP3", NULL, "DSP3 Virtual Input" },
 	{ "DSP3 Virtual Input", "Shared Memory", "DSP2" },
 
-	{ "DSP Trigger Out", NULL, "SYSCLK" },
 	{ "DSP Trigger Out", NULL, "DSP1 Trigger Output" },
 	{ "DSP Trigger Out", NULL, "DSP2 Trigger Output" },
 	{ "DSP Trigger Out", NULL, "DSP3 Trigger Output" },
@@ -2706,7 +2721,7 @@ static int cs47l85_probe(struct platform_device *pdev)
 	pdev->dev.of_node = madera->dev->of_node;
 
 	cs47l85->core.madera = madera;
-	cs47l85->core.num_inputs = 8;
+	cs47l85->core.num_inputs = 12;
 	cs47l85->core.get_sources = cs47l85_get_sources;
 
 	ret = madera_core_init(&cs47l85->core);

@@ -14,6 +14,14 @@
 #include "fimc-is-hw-control.h"
 #include "fimc-is-param.h"
 
+#define WDMA0_SRAM_BASE_VALUE	(0)
+#define WDMA1_SRAM_BASE_VALUE	(164)
+#define WDMA2_SRAM_BASE_VALUE	(348) /* max 512 */
+
+#define WDMA3_SRAM_BASE_VALUE	(0)
+#define WDMA4_SRAM_BASE_VALUE	(128)
+#define WDMA5_SRAM_BASE_VALUE	(256)
+
 const struct mcsc_v_coef v_coef_4tap[7] = {
 	/* x8/8 */
 	{
@@ -145,6 +153,11 @@ const struct mcsc_h_coef h_coef_8tap[7] = {
 		{  0,   0,   0,   0,   0,   0,   0,   1,   1},
 	}
 };
+
+void fimc_is_scaler_set_shadow_reg_ctrl(void __iomem *base_addr, u32 val)
+{
+	fimc_is_hw_set_reg(base_addr, &mcsc_regs[MCSC_R_READ_SHADOW_REG_CTRL], val);
+}
 
 void fimc_is_scaler_start(void __iomem *base_addr, u32 hw_id)
 {
@@ -1901,22 +1914,28 @@ void fimc_is_scaler_set_wdma_sram_base(void __iomem *base_addr, u32 output_id)
 {
 	switch (output_id) {
 	case MCSC_OUTPUT0:
-		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_0], &mcsc_fields[MCSC_F_WDMA0_SRAM_BASE], 0);
+		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_0],
+			&mcsc_fields[MCSC_F_WDMA0_SRAM_BASE], WDMA0_SRAM_BASE_VALUE);
 		break;
 	case MCSC_OUTPUT1:
-		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_0], &mcsc_fields[MCSC_F_WDMA1_SRAM_BASE], 128);
+		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_0],
+			&mcsc_fields[MCSC_F_WDMA1_SRAM_BASE], WDMA1_SRAM_BASE_VALUE);
 		break;
 	case MCSC_OUTPUT2:
-		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_0], &mcsc_fields[MCSC_F_WDMA2_SRAM_BASE], 256);
+		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_0],
+			&mcsc_fields[MCSC_F_WDMA2_SRAM_BASE], WDMA2_SRAM_BASE_VALUE);
 		break;
 	case MCSC_OUTPUT3:
-		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_1], &mcsc_fields[MCSC_F_WDMA3_SRAM_BASE], 0);
+		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_1],
+			&mcsc_fields[MCSC_F_WDMA3_SRAM_BASE], WDMA3_SRAM_BASE_VALUE);
 		break;
 	case MCSC_OUTPUT4:
-		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_1], &mcsc_fields[MCSC_F_WDMA4_SRAM_BASE], 128);
+		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_1],
+			&mcsc_fields[MCSC_F_WDMA4_SRAM_BASE], WDMA4_SRAM_BASE_VALUE);
 		break;
 	case MCSC_OUTPUT_SSB:
-		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_1], &mcsc_fields[MCSC_F_WDMA5_SRAM_BASE], 256);
+		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_WDMA_SRAM_BASE_1],
+			&mcsc_fields[MCSC_F_WDMA5_SRAM_BASE], WDMA5_SRAM_BASE_VALUE);
 		break;
 	default:
 	break;
@@ -2830,8 +2849,6 @@ void fimc_is_scaler_set_hwfc_config(void __iomem *base_addr,
 	u32 total_width_byte2 = 0;
 	enum fimc_is_mcsc_hwfc_format hwfc_format = 0;
 
-	val = fimc_is_hw_get_reg(base_addr, &mcsc_regs[MCSC_R_HWFC_CONFIG_IMAGE_A]);
-
 	switch (format) {
 	case DMA_OUTPUT_FORMAT_YUV422:
 		switch (plane) {
@@ -2899,6 +2916,7 @@ void fimc_is_scaler_set_hwfc_config(void __iomem *base_addr,
 	case MCSC_OUTPUT2:
 		break;
 	case MCSC_OUTPUT3:
+		val = fimc_is_hw_get_reg(base_addr, &mcsc_regs[MCSC_R_HWFC_CONFIG_IMAGE_A]);
 		/* format */
 		val = fimc_is_hw_set_field_value(val, &mcsc_fields[MCSC_F_FORMAT_A], hwfc_format);
 
@@ -2921,6 +2939,7 @@ void fimc_is_scaler_set_hwfc_config(void __iomem *base_addr,
 		fimc_is_hw_set_reg(base_addr, &mcsc_regs[MCSC_R_HWFC_TOTAL_WIDTH_BYTE2_A], total_width_byte2);
 		break;
 	case MCSC_OUTPUT4:
+		val = fimc_is_hw_get_reg(base_addr, &mcsc_regs[MCSC_R_HWFC_CONFIG_IMAGE_B]);
 		/* format */
 		val = fimc_is_hw_set_field_value(val, &mcsc_fields[MCSC_F_FORMAT_B], hwfc_format);
 

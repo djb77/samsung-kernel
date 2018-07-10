@@ -661,6 +661,96 @@ p_err:
 	return;
 }
 
+void fimc_is_sensor_ois_update(struct fimc_is_device_sensor *device)
+{
+	int ret = 0;
+	struct fimc_is_module_enum *module = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+
+	BUG_ON(!device);
+
+	module = (struct fimc_is_module_enum *)v4l2_get_subdevdata(device->subdev_module);
+	if (unlikely(!module)) {
+		err("%s, module in is NULL", __func__);
+		return;
+	}
+	sensor_peri = (struct fimc_is_device_sensor_peri *)module->private_data;
+
+	if (sensor_peri->subdev_ois) {
+		ret = CALL_OISOPS(sensor_peri->ois, ois_set_mode, sensor_peri->subdev_ois, sensor_peri->ois->ois_mode);
+		if (ret < 0) {
+			err("[SEN:%d] v4l2_subdev_call(ois_mode_change, mode:%d) is fail(%d)",
+						module->sensor_id, sensor_peri->ois->ois_mode, ret);
+			goto p_err;
+		}
+
+		ret = CALL_OISOPS(sensor_peri->ois, ois_set_coef, sensor_peri->subdev_ois, sensor_peri->ois->coef);
+		if (ret < 0) {
+			err("[SEN:%d] v4l2_subdev_call(ois_set_coef, coef:%d) is fail(%d)",
+						module->sensor_id, sensor_peri->ois->coef, ret);
+			goto p_err;
+		}
+	}
+
+p_err:
+	return;
+}
+#ifdef USE_OIS_SLEEP_MODE
+void fimc_is_sensor_ois_start(struct fimc_is_device_sensor *device)
+{
+	int ret = 0;
+	struct fimc_is_module_enum *module = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+
+	BUG_ON(!device);
+
+	module = (struct fimc_is_module_enum *)v4l2_get_subdevdata(device->subdev_module);
+	if (unlikely(!module)) {
+		err("%s, module in is NULL", __func__);
+		return;
+	}
+	sensor_peri = (struct fimc_is_device_sensor_peri *)module->private_data;
+
+	if (sensor_peri->subdev_ois) {
+		ret = CALL_OISOPS(sensor_peri->ois, ois_start, sensor_peri->subdev_ois);
+		if (ret < 0) {
+			err("[SEN:%d] v4l2_subdev_call(ois_mode_change, mode:%d) is fail(%d)",
+						module->sensor_id, sensor_peri->ois->ois_mode, ret);
+			goto p_err;
+		}
+	}
+p_err:
+	return;
+}
+
+void fimc_is_sensor_ois_stop(struct fimc_is_device_sensor *device)
+{
+	int ret = 0;
+	struct fimc_is_module_enum *module = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+
+	BUG_ON(!device);
+
+	module = (struct fimc_is_module_enum *)v4l2_get_subdevdata(device->subdev_module);
+	if (unlikely(!module)) {
+		err("%s, module in is NULL", __func__);
+		return;
+	}
+	sensor_peri = (struct fimc_is_device_sensor_peri *)module->private_data;
+
+	if (sensor_peri->subdev_ois) {
+		ret = CALL_OISOPS(sensor_peri->ois, ois_stop, sensor_peri->subdev_ois);
+		if (ret < 0) {
+			err("[SEN:%d] v4l2_subdev_call(ois_mode_change, mode:%d) is fail(%d)",
+						module->sensor_id, sensor_peri->ois->ois_mode, ret);
+			goto p_err;
+		}
+	}
+p_err:
+	return;
+}
+#endif
+
 int fimc_is_sensor_ctl_adjust_sync(struct fimc_is_device_sensor *device, u32 sync)
 {
 	int ret = 0;
@@ -669,7 +759,7 @@ int fimc_is_sensor_ctl_adjust_sync(struct fimc_is_device_sensor *device, u32 syn
 	cis_shared_data *cis_data = NULL;
 
 	BUG_ON(!device);
-	
+
 	module = (struct fimc_is_module_enum *)v4l2_get_subdevdata(device->subdev_module);
 	if (unlikely(!module)) {
 		err("%s, module in is NULL", __func__);

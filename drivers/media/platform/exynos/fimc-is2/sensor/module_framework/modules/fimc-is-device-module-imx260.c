@@ -430,8 +430,10 @@ int sensor_module_imx260_probe(struct platform_device *pdev)
 	module->cfg = config_imx260;
 	module->ops = NULL;
 
-    for (ch = 1; ch < CSI_VIRTUAL_CH_MAX; ch++)
-        module->internal_vc[ch] = pdata->internal_vc[ch];
+	for (ch = 1; ch < CSI_VIRTUAL_CH_MAX; ch++) {
+		module->internal_vc[ch] = pdata->internal_vc[ch];
+		module->vc_buffer_offset[ch] = pdata->vc_buffer_offset[ch];
+	}
 
 	/* Sensor peri */
 	module->private_data = kzalloc(sizeof(struct fimc_is_device_sensor_peri), GFP_KERNEL);

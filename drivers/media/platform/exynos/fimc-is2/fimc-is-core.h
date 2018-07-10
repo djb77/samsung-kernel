@@ -50,6 +50,7 @@
 #include "fimc-is-video.h"
 #include "fimc-is-mem.h"
 #include "fimc-is-vender.h"
+#include "exynos-fimc-is-module.h"
 
 #define FIMC_IS_DRV_NAME			"exynos-fimc-is"
 #define FIMC_IS_COMMAND_TIMEOUT			(30*HZ)
@@ -202,10 +203,24 @@ enum fimc_is_secure_state {
 };
 #endif
 
+enum fimc_is_dual_mode {
+	FIMC_IS_DUAL_MODE_NOTHING,
+	FIMC_IS_DUAL_MODE_BYPASS,
+	FIMC_IS_DUAL_MODE_SYNC,
+	FIMC_IS_DUAL_MODE_SWITCH,
+};
+
+enum fimc_is_hal_debug_mode {
+	FIMC_IS_HAL_DEBUG_SUDDEN_DEAD_DETECT,
+	FIMC_IS_HAL_DEBUG_PILE_REQ_BUF,
+};
+
 struct fimc_is_sysfs_debug {
 	unsigned int en_dvfs;
 	unsigned int en_clk_gate;
 	unsigned int clk_gate_mode;
+	unsigned long hal_debug_mode;
+	unsigned int hal_debug_delay;
 };
 
 #ifndef ENABLE_IS_CORE
@@ -215,6 +230,14 @@ struct fimc_is_sysfs_actuator {
 	int init_delays[INIT_MAX_SETTING];
 };
 #endif
+
+struct fimc_is_dual_info {
+	int pre_mode;
+	int mode;
+	int max_fps_master;
+	int max_fps_slave;
+	int tick_count;
+};
 
 #ifdef FIXED_SENSOR_DEBUG
 struct fimc_is_sysfs_sensor {
@@ -239,6 +262,7 @@ struct fimc_is_core {
 	unsigned long				state;
 	bool					shutdown;
 	bool					reboot;
+	struct fimc_is_sysfs_debug sysfs_debug;
 
 	/* depended on isp */
 	struct exynos_platform_fimc_is		*pdata;
@@ -253,6 +277,7 @@ struct fimc_is_core {
 #if defined(CONFIG_EXYNOS_DEVICE_MIPI_CSIS_VER3)
 	struct fimc_is_device_csi_dma		csi_dma;
 #endif
+	u32					chain_config;
 	struct fimc_is_device_ischain		ischain[FIMC_IS_STREAM_COUNT];
 #ifndef ENABLE_IS_CORE
 	struct fimc_is_hardware			hardware;
@@ -299,11 +324,17 @@ struct fimc_is_core {
 
 	struct mutex				i2c_lock[SENSOR_CONTROL_I2C_MAX];
 
+	spinlock_t				shared_rsc_slock[MAX_SENSOR_SHARED_RSC];
+	atomic_t				shared_rsc_count[MAX_SENSOR_SHARED_RSC];
+
 	struct fimc_is_vender			vender;
 #if defined(CONFIG_SECURE_CAMERA_USE)
 	struct mutex				secure_state_lock;
 	unsigned long				secure_state;
 #endif
+
+	unsigned long				sensor_map;
+	struct fimc_is_dual_info        	dual_info;
 };
 
 #if defined(CONFIG_VIDEOBUF2_CMA_PHYS)

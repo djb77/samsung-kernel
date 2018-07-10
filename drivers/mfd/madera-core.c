@@ -23,13 +23,13 @@
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/machine.h>
 #include <linux/slab.h>
-#include <sound/soc.h>
 
 #include <linux/mfd/madera/core.h>
 #include <linux/mfd/madera/registers.h>
 
 #include "madera.h"
 
+#define CS47L15_SILICON_ID	0x6370
 #define CS47L35_SILICON_ID	0x6360
 #define CS47L85_SILICON_ID	0x6338
 #define CS47L90_SILICON_ID	0x6364
@@ -47,6 +47,25 @@ static const char * const madera_core_supplies[] = {
 
 static const struct mfd_cell madera_ldo1_devs[] = {
 	{ .name = "madera-ldo1" },
+};
+
+static const char * const cs47l15_supplies[] = {
+	"MICVDD",
+	"CPVDD1",
+	"SPKVDD",
+};
+
+static const struct mfd_cell cs47l15_devs[] = {
+	{ .name = "madera-irq" },
+	{ .name = "madera-extcon" },
+	{ .name = "madera-gpio" },
+	{ .name = "madera-haptics" },
+	{ .name = "madera-pwm" },
+	{
+		.name = "cs47l15-codec",
+		.parent_supplies = cs47l15_supplies,
+		.num_parent_supplies = ARRAY_SIZE(cs47l15_supplies),
+	},
 };
 
 static const char * const cs47l35_supplies[] = {
@@ -142,6 +161,8 @@ static const struct mfd_cell cs47l92_devs[] = {
 const char *madera_name_from_type(enum madera_type type)
 {
 	switch (type) {
+	case CS47L15:
+		return "CS47L15";
 	case CS47L35:
 		return "CS47L35";
 	case CS47L85:
@@ -164,6 +185,7 @@ EXPORT_SYMBOL_GPL(madera_name_from_type);
 
 #ifdef CONFIG_OF
 const struct of_device_id madera_of_match[] = {
+	{ .compatible = "cirrus,cs47l15", .data = (void *)CS47L15 },
 	{ .compatible = "cirrus,cs47l35", .data = (void *)CS47L35 },
 	{ .compatible = "cirrus,cs47l85", .data = (void *)CS47L85 },
 	{ .compatible = "cirrus,cs47l90", .data = (void *)CS47L90 },
@@ -203,8 +225,7 @@ static int madera_poll_reg(struct madera *madera,
 
 static int madera_wait_for_boot(struct madera *madera)
 {
-	int ret, i;
-	unsigned int val;
+	int ret;
 
 	/*
 	 * We can't use an interrupt as we need to runtime resume to do so,
@@ -214,19 +235,9 @@ static int madera_wait_for_boot(struct madera *madera)
 	ret = madera_poll_reg(madera, 5, MADERA_IRQ1_RAW_STATUS_1,
 			      MADERA_BOOT_DONE_STS1, MADERA_BOOT_DONE_STS1);
 
-	if (!ret) {
+	if (!ret)
 		regmap_write(madera->regmap, MADERA_IRQ1_STATUS_1,
 			     MADERA_BOOT_DONE_EINT1);
-		for (i = 0; i < 10; i++) {
-			regmap_read(madera->regmap, MADERA_IRQ1_STATUS_1, &val);
-			if ((val & MADERA_BOOT_DONE_EINT1_MASK) == 0)
-				break;
-			dev_dbg(madera->dev, "Boot done failed to clear: %x\n",
-				val);
-			ret = regmap_write(madera->regmap, MADERA_IRQ1_STATUS_1,
-					   MADERA_BOOT_DONE_EINT1_MASK);
-		}
-	}
 
 	pm_runtime_mark_last_busy(madera->dev);
 
@@ -283,7 +294,7 @@ static int madera_runtime_resume(struct device *dev)
 	bool force_reset = false;
 	int ret;
 
-	dev_dbg(madera->dev, "Leaving sleep mode\n");
+	dev_info(madera->dev, "Leaving sleep mode\n");
 
 	switch (madera->type) {
 	case CS47L93:
@@ -368,7 +379,7 @@ static int madera_runtime_suspend(struct device *dev)
 {
 	struct madera *madera = dev_get_drvdata(dev);
 
-	dev_dbg(madera->dev, "Entering sleep mode\n");
+	dev_info(madera->dev, "Entering sleep mode\n");
 
 	regcache_cache_only(madera->regmap, true);
 	regcache_mark_dirty(madera->regmap);
@@ -394,6 +405,9 @@ unsigned int madera_get_num_micbias(struct madera *madera)
 	unsigned int biases;
 
 	switch (madera->type) {
+	case CS47L15:
+		biases = 1;
+		break;
 	case CS47L35:
 		biases = 2;
 		break;
@@ -420,6 +434,9 @@ unsigned int madera_get_num_childbias(struct madera *madera, int micbias)
 	unsigned int children = 0;
 
 	switch (madera->type) {
+	case CS47L15:
+		children = 3;
+		break;
 	case CS47L35:
 		children = 2;
 		break;
@@ -750,6 +767,7 @@ int madera_dev_init(struct madera *madera)
 
 	dev_set_drvdata(madera->dev, madera);
 	mutex_init(&madera->reg_setting_lock);
+	mutex_init(&madera->micsupp_lock);
 	BLOCKING_INIT_NOTIFIER_HEAD(&madera->notifier);
 
 	/* default headphone impedance in case the extcon driver is not used */
@@ -777,6 +795,7 @@ int madera_dev_init(struct madera *madera)
 	madera->num_core_supplies = ARRAY_SIZE(madera_core_supplies);
 
 	switch (madera->type) {
+	case CS47L15:
 	case CS47L35:
 	case CS47L90:
 	case CS47L91:
@@ -867,6 +886,7 @@ int madera_dev_init(struct madera *madera)
 	}
 
 	switch (reg) {
+	case CS47L15_SILICON_ID:
 	case CS47L35_SILICON_ID:
 	case CS47L85_SILICON_ID:
 	case CS47L90_SILICON_ID:
@@ -909,6 +929,22 @@ int madera_dev_init(struct madera *madera)
 	name = madera_name_from_type(madera->type);
 
 	switch (hwid) {
+	case CS47L15_SILICON_ID:
+		if (IS_ENABLED(CONFIG_MFD_CS47L15)) {
+			switch (madera->type) {
+			case CS47L15:
+				patch_fn = cs47l15_patch;
+				mfd_devs = cs47l15_devs;
+				n_devs = ARRAY_SIZE(cs47l15_devs);
+				break;
+			default:
+				ret = -EINVAL;
+				break;
+			}
+		} else {
+			ret = -EINVAL;
+		}
+		break;
 	case CS47L35_SILICON_ID:
 		if (IS_ENABLED(CONFIG_MFD_CS47L35)) {
 			switch (madera->type) {
@@ -1037,6 +1073,7 @@ EXPORT_SYMBOL_GPL(madera_dev_init);
 
 int madera_dev_exit(struct madera *madera)
 {
+	disable_irq(madera->irq);
 	pm_runtime_disable(madera->dev);
 
 	regulator_disable(madera->dcvdd);
@@ -1051,55 +1088,3 @@ int madera_dev_exit(struct madera *madera)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(madera_dev_exit);
-
-void madera_reboot_codec(struct madera *madera)
-{
-	struct snd_soc_card *card = madera->dapm->card;
-	int ret;
-
-	dev_err(madera->dev, "Fatal error, rebuilding CODEC...\n");
-	regcache_cache_only(madera->regmap, true);
-	regcache_cache_only(madera->regmap_32bit, true);
-	regcache_mark_dirty(madera->regmap);
-	regcache_mark_dirty(madera->regmap_32bit);
-
-	snd_soc_dapm_shutdown(card);
-
-	snd_soc_dapm_mutex_lock(madera->dapm);
-
-	regulator_disable(madera->dcvdd);
-	msleep(1000);
-
-	gpio_set_value_cansleep(madera->pdata.reset, 0);
-	usleep_range(1000, 2000);
-	ret = regulator_enable(madera->dcvdd);
-	if (ret)
-		dev_err(madera->dev, "Failed to re-enable DCVDD: %d\n", ret);
-	usleep_range(1000, 2000);
-	gpio_set_value_cansleep(madera->pdata.reset, 1);
-	msleep(20);
-
-	regcache_cache_only(madera->regmap, false);
-	regcache_cache_only(madera->regmap_32bit, false);
-
-	madera_wait_for_boot(madera);
-
-	mutex_lock(&madera->reg_setting_lock);
-	regmap_write(madera->regmap, 0x80, 0x3);
-	regcache_sync_region(madera->regmap, MADERA_HP_CHARGE_PUMP_8,
-			     MADERA_HP_CHARGE_PUMP_8);
-	regmap_write(madera->regmap, 0x80, 0x0);
-	mutex_unlock(&madera->reg_setting_lock);
-
-	regcache_sync(madera->regmap);
-	regcache_sync(madera->regmap_32bit);
-	snd_soc_dapm_mutex_unlock(madera->dapm);
-
-	snd_soc_dapm_reboot(card);
-
-	regmap_write(madera->regmap, MADERA_IRQ1_STATUS_1,
-			MADERA_BOOT_DONE_EINT1);
-
-	dev_err(madera->dev, "Done rebuild\n");
-}
-EXPORT_SYMBOL_GPL(madera_reboot_codec);

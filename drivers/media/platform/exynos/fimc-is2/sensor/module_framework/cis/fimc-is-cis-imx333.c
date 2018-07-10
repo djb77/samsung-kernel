@@ -174,10 +174,12 @@ static void sensor_imx333_cis_data_calculation(const struct sensor_pll_info_comp
         vt_pix_clk_hz = pll_info->pclk;
 
 	/* 2. the time of processing one frame calculation (us) */
-        cis_data->min_frame_us_time = (pll_info->frame_length_lines * pll_info->line_length_pck
-                        / (vt_pix_clk_hz / (1000 * 1000)));
+        cis_data->min_frame_us_time = (u32)((u64)(pll_info->frame_length_lines) * pll_info->line_length_pck * 1000
+					/ (vt_pix_clk_hz / 1000));
         cis_data->cur_frame_us_time = cis_data->min_frame_us_time;
-
+#ifdef CAMERA_REAR2
+        cis_data->min_sync_frame_us_time = cis_data->min_frame_us_time;
+#endif
         /* 3. FPS calculation */
         frame_rate = vt_pix_clk_hz / (pll_info->frame_length_lines * pll_info->line_length_pck);
         dbg_sensor("frame_rate (%d) = vt_pix_clk_hz(%d) / (pll_info->frame_length_lines(%d) * pll_info->line_length_pck(%d))\n",
@@ -346,10 +348,8 @@ int sensor_imx333_cis_init(struct v4l2_subdev *subdev)
 	if (ret < 0) {
 #ifdef USE_CAMERA_HW_BIG_DATA
 		sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
-		if (sensor_peri && sensor_peri->module->position == SENSOR_POSITION_REAR)
-			fimc_is_sec_get_rear_hw_param(&hw_param);
-		else if (sensor_peri && sensor_peri->module->position == SENSOR_POSITION_FRONT)
-			fimc_is_sec_get_front_hw_param(&hw_param);
+		if (sensor_peri)
+			fimc_is_sec_get_hw_param(&hw_param, sensor_peri->module->position);
 		if (hw_param)
 			hw_param->i2c_sensor_err_cnt++;
 #endif
@@ -547,12 +547,10 @@ int sensor_imx333_cis_set_global_setting(struct v4l2_subdev *subdev)
 
 	I2C_MUTEX_LOCK(cis->i2c_lock);
 	/* setfile global setting is at camera entrance */
-	if (ext_info->use_retention_mode == SENSOR_RETENTION_DISABLE) {
-		ret = sensor_cis_set_registers(subdev, sensor_imx333_global, sensor_imx333_global_size);
-		if (ret < 0) {
-			err("sensor_imx333_set_registers fail!!");
-			goto p_err;
-		}
+	ret = sensor_cis_set_registers(subdev, sensor_imx333_global, sensor_imx333_global_size);
+	if (ret < 0) {
+		err("sensor_imx333_set_registers fail!!");
+		goto p_err;
 	}
 
 	dbg_sensor("[%s] global setting done\n", __func__);
@@ -566,7 +564,6 @@ int sensor_imx333_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 {
 	int ret = 0;
 	struct fimc_is_cis *cis = NULL;
-	int index = 0;
 	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
 	struct fimc_is_module_enum *module;
 	struct sensor_open_extended *ext_info;
@@ -603,102 +600,11 @@ int sensor_imx333_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 	ext_info = &module->ext;
 
 	I2C_MUTEX_LOCK(cis->i2c_lock);
-	if (ext_info->use_retention_mode != SENSOR_RETENTION_DISABLE) {
-		switch (mode) {
-		case SENSOR_IMX333_8064X3024_30FPS:
-			index = 0;
-			break;
-		case SENSOR_IMX333_8064X2268_30FPS:
-			index = 1;
-			break;
-		case SENSOR_IMX333_1008X756_120FPS:
-			index = 2;
-			break;
-		case SENSOR_IMX333_4032X2268_60FPS:
-			index = 3;
-			break;
-		default:
-			index = 4;
-			break;
-		}
 
-	        if (sensor_peri->mode_change_first == true) {
-			switch (index) {
-			case 0:
-				fimc_is_sensor_write8(cis->client, 0x9007, 0x20);
-				break;
-			case 1:
-				fimc_is_sensor_write8(cis->client, 0x9007, 0x21);
-				break;
-			case 2:
-				fimc_is_sensor_write8(cis->client, 0x9007, 0x22);
-				break;
-			case 3:
-				fimc_is_sensor_write8(cis->client, 0x9007, 0x23);
-				break;
-			default:
-				break;
-			}
-
-			/* IMX333 rev 0.6 do not needs D0D2 swap */
-			fimc_is_sensor_write8(cis->client, 0x40AD, 0x00); // DP/DN SWAP disabled
-			fimc_is_sensor_write8(cis->client, 0x40B8, 0x02); // D0/D2 SWAP disabled
-			fimc_is_sensor_write8(cis->client, 0x40B9, 0x01);
-			fimc_is_sensor_write8(cis->client, 0x40BA, 0x03);
-			fimc_is_sensor_write8(cis->client, 0x40BB, 0x00);
-	        } else {
-			/* Retention mode sensor mode select */
-			switch (index) {
-			case 0:
-				fimc_is_sensor_write8(cis->client, 0x9007, 0x00);
-				break;
-			case 1:
-				fimc_is_sensor_write8(cis->client, 0x9007, 0x01);
-				break;
-			case 2:
-				fimc_is_sensor_write8(cis->client, 0x9007, 0x02);
-				break;
-			case 3:
-				fimc_is_sensor_write8(cis->client, 0x9007, 0x03);
-				break;
-			default: /* Not Retention Mode */
-				fimc_is_sensor_write8(cis->client, 0x9007, 0x00);
-				break;
-			}
-#if 0
-			/* Retention mode setting */
-			switch (index) {
-			case 0:
-				sensor_cis_set_registers(subdev, sensor_imx333_retention[index], sensor_imx333_retention_size[index]);
-				break;
-			case 1:
-				sensor_cis_set_registers(subdev, sensor_imx333_retention[index], sensor_imx333_retention_size[index]);
-				break;
-			case 2:
-				sensor_cis_set_registers(subdev, sensor_imx333_retention[index], sensor_imx333_retention_size[index]);
-				break;
-			case 3:
-				sensor_cis_set_registers(subdev, sensor_imx333_retention[index], sensor_imx333_retention_size[index]);
-				break;
-			default: /* Not Retention Mode */
-				sensor_cis_set_registers(subdev, sensor_imx333_setfiles[mode], sensor_imx333_setfile_sizes[mode]);
-				break;
-			}
-#endif
-		}
-	} else {
-		ret = sensor_cis_set_registers(subdev, sensor_imx333_setfiles[mode], sensor_imx333_setfile_sizes[mode]);
-		if (ret < 0) {
-			err("sensor_imx333_set_registers fail!!");
-			goto p_err;
-		}
-
-		/* IMX333 rev 0.6 do not needs D0D2 swap */
-		fimc_is_sensor_write8(cis->client, 0x40AD, 0x00); // DP/DN SWAP disabled
-		fimc_is_sensor_write8(cis->client, 0x40B8, 0x02); // D0/D2 SWAP disabled
-		fimc_is_sensor_write8(cis->client, 0x40B9, 0x01);
-		fimc_is_sensor_write8(cis->client, 0x40BA, 0x03);
-		fimc_is_sensor_write8(cis->client, 0x40BB, 0x00);
+	ret = sensor_cis_set_registers(subdev, sensor_imx333_setfiles[mode], sensor_imx333_setfile_sizes[mode]);
+	if (ret < 0) {
+		err("sensor_imx333_set_registers fail!!");
+		goto p_err;
 	}
 
 	dbg_sensor("[%s] mode changed(%d)\n", __func__, mode);
@@ -875,6 +781,14 @@ int sensor_imx333_cis_stream_on(struct v4l2_subdev *subdev)
 	cis_shared_data *cis_data;
 	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
 
+#ifdef CAMERA_REAR2
+	struct fimc_is_device_sensor *device = NULL;
+	u32 setfile;
+	u32 scene;
+	bool dual_flag = false;
+	u32 mode;
+#endif
+
 #ifdef DEBUG_SENSOR_TIME
 	struct timeval st, end;
 	do_gettimeofday(&st);
@@ -946,6 +860,42 @@ int sensor_imx333_cis_stream_on(struct v4l2_subdev *subdev)
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
 
 	cis_data->stream_on = true;
+
+#ifdef CAMERA_REAR2
+	device = (struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(subdev);
+	if (unlikely(!device)) {
+		err("device sensor is null");
+		goto p_err;
+	}
+
+	if (device->ischain) {
+		setfile = device->ischain->setfile;
+	} else {
+		err("device->ischain is null");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	scene = (setfile & FIMC_IS_SCENARIO_MASK) >> FIMC_IS_SCENARIO_SHIFT;
+	dual_flag = (scene == FIMC_IS_SCENARIO_AUTO_DUAL);
+	mode = cis_data->sens_config_index_cur;
+	dbg_sensor("[%s] scene=%d, scenario_flag=%d, sens_config_index_cur=%d\n", __func__, scene, dual_flag, mode);
+
+	switch (mode) {
+		case SENSOR_IMX333_8064X3024_30FPS:
+		case SENSOR_IMX333_8064X2268_30FPS:
+		case SENSOR_IMX333_6048X3024_30FPS:
+		case SENSOR_IMX333_8064X1960_30FPS:
+			if(dual_flag == true) {
+				cis->cis_data->min_frame_us_time = (u32)((u64)(sensor_imx333_pllinfos[mode]->frame_length_lines + 0xD) 
+					* sensor_imx333_pllinfos[mode]->line_length_pck * 1000 / (sensor_imx333_pllinfos[mode]->pclk / 1000));
+				cis->cis_data->min_sync_frame_us_time = cis->cis_data->min_frame_us_time;
+			}
+			break;
+		default:
+			break;
+		}
+#endif
 
 #ifdef DEBUG_SENSOR_TIME
 	do_gettimeofday(&end);
@@ -1434,7 +1384,8 @@ int sensor_imx333_cis_adjust_frame_duration(struct v4l2_subdev *subdev,
 
 	vt_pic_clk_freq_mhz = cis_data->pclk / (1000 * 1000);
 	line_length_pck = cis_data->line_length_pck;
-	frame_length_lines = ((vt_pic_clk_freq_mhz * input_exposure_time) / line_length_pck);
+	frame_length_lines = (u32)((((u64)(vt_pic_clk_freq_mhz) * input_exposure_time)
+					- cis_data->min_fine_integration_time) / line_length_pck);	
 	frame_length_lines += cis_data->max_margin_coarse_integration_time;
 
 	frame_duration = (frame_length_lines * line_length_pck) / vt_pic_clk_freq_mhz;
@@ -1579,7 +1530,11 @@ int sensor_imx333_cis_set_frame_rate(struct v4l2_subdev *subdev, u32 min_fps)
 		goto p_err;
 	}
 
+#ifdef CAMERA_REAR2
+	cis_data->min_frame_us_time = MAX(frame_duration, cis_data->min_sync_frame_us_time);
+#else
 	cis_data->min_frame_us_time = frame_duration;
+#endif
 
 #ifdef DEBUG_SENSOR_TIME
 	do_gettimeofday(&end);

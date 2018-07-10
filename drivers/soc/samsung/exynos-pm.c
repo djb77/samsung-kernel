@@ -484,11 +484,13 @@ static void __init exynos_pm_debugfs_init(void)
 
 #if defined(CONFIG_SEC_FACTORY)
 enum ids_info {
-	tg,
-	bg,
-	g3dg,
-	bids,
-	gids,
+        tg,
+        lg,
+        bg,
+        g3dg,
+        mifg,
+        bids,
+        gids,
 };
 
 extern int asv_ids_information(enum ids_info id);

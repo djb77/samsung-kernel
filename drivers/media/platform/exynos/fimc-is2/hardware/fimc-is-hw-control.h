@@ -207,7 +207,6 @@ struct setfile_table_entry {
 
 struct fimc_is_hw_ip_setfile {
 	int				version;
-	u32				applied_scenario;
 	/* the number of setfile each sub ip has */
 	u32				using_count;
 	/* which subindex is used at this scenario */
@@ -269,9 +268,14 @@ struct fimc_is_hw_ip {
 	/* control interface */
 	struct fimc_is_interface_ischain	*itfc;
 	struct fimc_is_hw_ip_setfile		setfile[SENSOR_POSITION_END];
+	u32					applied_scenario;
 	/* for dump sfr */
 	u8					*sfr_dump;
 	u8					*sfr_b_dump;
+#if defined(DEBUG_REPROCESSING_NDONE)
+	u8					*sfr_dump_debug[DEBUG_POINT_MAX];
+	u8					*sfr_b_dump_debug[DEBUG_POINT_MAX];
+#endif
 	atomic_t				rsccount;
 
 	struct fimc_is_clk_gate			*clk_gate;
@@ -348,8 +352,13 @@ struct fimc_is_hardware {
 	atomic_t			streaming[FIMC_IS_STREAM_COUNT];
 	atomic_t			bug_count;
 	atomic_t			log_count;
+#if defined(DEBUG_REPROCESSING_NDONE)
+	atomic_t			sfr_dump_debug_count;
+#endif
 };
 
+void framemgr_e_barrier_common(struct fimc_is_framemgr *this, u32 index, ulong flag);
+void framemgr_x_barrier_common(struct fimc_is_framemgr *this, u32 index, ulong flag);
 u32 get_hw_id_from_group(u32 group_id);
 void fimc_is_hardware_flush_frame(struct fimc_is_hw_ip *hw_ip,
 	enum fimc_is_hw_frame_state state,
@@ -378,9 +387,7 @@ int fimc_is_hardware_open(struct fimc_is_hardware *hardware, u32 hw_id,
 int fimc_is_hardware_close(struct fimc_is_hardware *hardware, u32 hw_id, u32 instance);
 void fimc_is_hardware_clear(struct fimc_is_hardware *hardware);
 int fimc_is_hardware_frame_done(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame *frame,
-	int wq_id, u32 output_id, enum ShotErrorType done_type);
-int fimc_is_hardware_shot_done(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame *frame,
-	struct fimc_is_framemgr *framemgr, enum ShotErrorType done_type);
+	int wq_id, u32 output_id, enum ShotErrorType done_type, bool get_meta);
 int fimc_is_hardware_frame_ndone(struct fimc_is_hw_ip *ldr_hw_ip,
 	struct fimc_is_frame *frame, u32 instance, enum ShotErrorType done_type);
 int fimc_is_hardware_load_setfile(struct fimc_is_hardware *hardware, ulong addr,
@@ -394,6 +401,9 @@ void fimc_is_hardware_clk_gate_dump(struct fimc_is_hardware *hardware);
 int fimc_is_hardware_runtime_resume(struct fimc_is_hardware *hardware);
 int fimc_is_hardware_runtime_suspend(struct fimc_is_hardware *hardware);
 void fimc_is_hardware_sfr_dump(struct fimc_is_hardware *hardware);
+#if defined(DEBUG_REPROCESSING_NDONE)
+void fimc_is_hardware_sfr_dump_debug(struct fimc_is_hardware *hardware, u32 shadow_ctrl);
+#endif
 void print_all_hw_frame_count(struct fimc_is_hardware *hardware);
 void fimc_is_hardware_clk_gate(struct fimc_is_hw_ip *hw_ip, u32 instance,
 	bool on, bool close);

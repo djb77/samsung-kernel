@@ -214,6 +214,9 @@ int sensor_module_init(struct v4l2_subdev *subdev, u32 val)
 		subdev_actuator = sensor_peri->subdev_actuator;
 		BUG_ON(!subdev_actuator);
 
+		if (!sensor_peri->reuse_3a_value)
+			sensor_peri->actuator->position = 0;
+
 		ret = v4l2_subdev_call(subdev_actuator, core, init, 0);
 		if (ret) {
 			err("v4l2_actuator_call(init) is fail(%d)", ret);
@@ -267,6 +270,15 @@ int sensor_module_deinit(struct v4l2_subdev *subdev)
 
 	/* kthread stop to sensor setting when s_format */
 	fimc_is_sensor_deinit_mode_change_thread(sensor_peri);
+
+#ifdef CONFIG_OIS_USE_RUMBA_S6
+	if (sensor_peri->subdev_ois != NULL) {
+		ret = CALL_OISOPS(sensor_peri->ois, ois_deinit, sensor_peri->subdev_ois);
+		if (ret < 0) {
+			err("v4l2_subdev_call(ois_deinit) is fail(%d)", ret);
+		}
+	}
+#endif
 
 	if (sensor_peri->flash != NULL) {
 		sensor_peri->flash->flash_data.mode = CAM2_FLASH_MODE_OFF;

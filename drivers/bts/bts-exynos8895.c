@@ -319,6 +319,12 @@ static struct bts_info exynos_bts[] = {
 		.table[BS_MFC_UHD].stat.wmo = 0x14,
 		.table[BS_MFC_UHD].stat.max_rmo = 0x1,
 		.table[BS_MFC_UHD].stat.max_wmo = 0x1,
+		.table[BS_MFC_UHD_10BIT].stat.scen_en = true,
+		.table[BS_MFC_UHD_10BIT].stat.priority = 0x0,
+		.table[BS_MFC_UHD_10BIT].stat.rmo = 0x20,
+		.table[BS_MFC_UHD_10BIT].stat.wmo = 0x20,
+		.table[BS_MFC_UHD_10BIT].stat.max_rmo = 0x1,
+		.table[BS_MFC_UHD_10BIT].stat.max_wmo = 0x1,
 	},
 	[BTS_IDX_MFC1] = {
 		.name ="mfc1",
@@ -337,6 +343,12 @@ static struct bts_info exynos_bts[] = {
 		.table[BS_MFC_UHD].stat.wmo = 0x14,
 		.table[BS_MFC_UHD].stat.max_rmo = 0x1,
 		.table[BS_MFC_UHD].stat.max_wmo = 0x1,
+		.table[BS_MFC_UHD_10BIT].stat.scen_en = true,
+		.table[BS_MFC_UHD_10BIT].stat.priority = 0x0,
+		.table[BS_MFC_UHD_10BIT].stat.rmo = 0x20,
+		.table[BS_MFC_UHD_10BIT].stat.wmo = 0x20,
+		.table[BS_MFC_UHD_10BIT].stat.max_rmo = 0x1,
+		.table[BS_MFC_UHD_10BIT].stat.max_wmo = 0x1,
 	},
 	[BTS_IDX_G2D0] = {
 		.name ="g2d0",
@@ -580,6 +592,9 @@ static struct bts_scenario bts_scen[BS_MAX] = {
 	},
 	[BS_MFC_UHD] = {
 		.name = "mfc uhd",
+	},
+	[BS_MFC_UHD_10BIT] = {
+		.name = "mfc uhd 10bit",
 	},
 	[BS_G3D_PEFORMANCE] = {
 		.name = "g3d per",

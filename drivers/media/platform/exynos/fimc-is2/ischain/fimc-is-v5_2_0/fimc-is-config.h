@@ -80,12 +80,16 @@
 #undef OVERFLOW_PANIC_ENABLE_CSIS
 /* #define ENABLE_DIRECT_CLOCK_GATE */
 #define ENABLE_HMP_BOOST
+#define DEBUG_REPROCESSING_NDONE
 
 /*
  * =================================================================================================
  * CONFIG - FEATURE ENABLE
  * =================================================================================================
  */
+
+#define FIMC_IS_MAX_TASK		(40)
+#define MAX_FPS_DUAL_SYNC		(24)
 
 #if defined(CONFIG_ARM_EXYNOS8895_BUS_DEVFREQ)
 #define CONFIG_FIMC_IS_BUS_DEVFREQ

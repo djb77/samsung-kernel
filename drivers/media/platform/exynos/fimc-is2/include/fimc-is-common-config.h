@@ -121,6 +121,7 @@
 /* #define DBG_DRAW_DIGIT */
 /* #define DBG_IMAGE_DUMP */
 /* #define DBG_META_DUMP */
+#define DBG_HAL_DEAD_PANIC_DELAY (500) /* ms */
 #define DBG_DMA_DUMP_PATH	"/data"
 #define DBG_DMA_DUMP_INTEVAL	33	/* unit : frame */
 #define DBG_DMA_DUMP_VID_COND(vid)	((vid == FIMC_IS_VIDEO_SS0_NUM) || \

@@ -37,12 +37,6 @@ config USE_HW_API_COMMON
 	help
 	  Enalbe HW API Common library.
 
-config USE_HOST_FD_LIBRARY
-	bool "Use FD library in host"
-	default n
-	help
-	  Enalbe SW FD library in host.
-
 config USE_SENSOR_GROUP
 	bool "Use sensor group feature"
 	default n

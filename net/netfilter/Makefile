@@ -157,6 +157,7 @@ obj-$(CONFIG_NETFILTER_XT_MATCH_PHYSDEV) += xt_physdev.o
 obj-$(CONFIG_NETFILTER_XT_MATCH_PKTTYPE) += xt_pkttype.o
 obj-$(CONFIG_NETFILTER_XT_MATCH_POLICY) += xt_policy.o
 obj-$(CONFIG_NETFILTER_XT_MATCH_QTAGUID) += xt_qtaguid_print.o xt_qtaguid.o
+obj-$(CONFIG_NETFILTER_XT_MATCH_ONESHOT) += xt_oneshot.o
 obj-$(CONFIG_NETFILTER_XT_MATCH_QUOTA) += xt_quota.o
 obj-$(CONFIG_NETFILTER_XT_MATCH_QUOTA2) += xt_quota2.o
 obj-$(CONFIG_NETFILTER_XT_MATCH_RATEEST) += xt_rateest.o
@@ -180,4 +181,4 @@ obj-$(CONFIG_IP_VS) += ipvs/
 # netfilter prio
 obj-y += xt_PRIO.o
 
-obj-$(CONFIG_ONESHOT_UID) += oneshot_uid.o
+obj-$(CONFIG_NF_HISTORY) += nf_history.o

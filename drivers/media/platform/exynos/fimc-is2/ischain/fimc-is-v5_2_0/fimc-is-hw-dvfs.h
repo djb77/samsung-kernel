@@ -13,10 +13,14 @@
 #ifndef FIMC_IS_HW_DVFS_H
 #define FIMC_IS_HW_DVFS_H
 
+#include "fimc-is-framemgr.h"
+#include "fimc-is-groupmgr.h"
+
 /* dvfs table idx ex.different dvfa table  pure bayer or dynamic bayer */
 #define FIMC_IS_DVFS_TABLE_IDX_MAX 3
 #define FIMC_IS_DVFS_CAPTURE_TICK (KEEP_FRAME_TICK_DEFAULT + 3)
 #define FIMC_IS_DVFS_DUAL_CAPTURE_TICK (2 * FIMC_IS_DVFS_CAPTURE_TICK)
+#define FIMC_IS_DVFS_DUAL_TICK 4
 
 /* FIMC-IS DVFS SCENARIO enum */
 enum FIMC_IS_SCENARIO_ID {
@@ -48,10 +52,22 @@ enum FIMC_IS_SCENARIO_ID {
 	FIMC_IS_SN_REAR_CAMCORDING_WHD_CAPTURE,
 	FIMC_IS_SN_REAR_CAMCORDING_UHD_CAPTURE,
 	FIMC_IS_SN_SECURE_FRONT,
+	FIMC_IS_SN_DUAL_SYNC_PREVIEW,
+	FIMC_IS_SN_DUAL_SYNC_CAPTURE,
+	FIMC_IS_SN_DUAL_SYNC_FHD_CAMCORDING,
+	FIMC_IS_SN_DUAL_SYNC_FHD_CAMCORDING_CAPTURE,
+	FIMC_IS_SN_DUAL_SYNC_UHD_CAMCORDING,
+	FIMC_IS_SN_DUAL_SYNC_UHD_CAMCORDING_CAPTURE,
+	FIMC_IS_SN_DUAL_SYNC_UHD_CAMCORDING_SWVDIS,
+	FIMC_IS_SN_DUAL_SYNC_UHD_CAMCORDING_CAPTURE_SWVDIS,
 	FIMC_IS_SN_DUAL_PREVIEW,
 	FIMC_IS_SN_DUAL_CAPTURE,
-	FIMC_IS_SN_DUAL_CAMCORDING,
-	FIMC_IS_SN_DUAL_CAMCORDING_CAPTURE,
+	FIMC_IS_SN_DUAL_FHD_CAMCORDING,
+	FIMC_IS_SN_DUAL_FHD_CAMCORDING_CAPTURE,
+	FIMC_IS_SN_DUAL_UHD_CAMCORDING,
+	FIMC_IS_SN_DUAL_UHD_CAMCORDING_CAPTURE,
+	FIMC_IS_SN_DUAL_UHD_CAMCORDING_SWVDIS,
+	FIMC_IS_SN_DUAL_UHD_CAMCORDING_CAPTURE_SWVDIS,
 	FIMC_IS_SN_PIP_PREVIEW,
 	FIMC_IS_SN_PIP_CAPTURE,
 	FIMC_IS_SN_PIP_CAMCORDING,
@@ -69,4 +85,11 @@ enum FIMC_IS_SCENARIO_ID {
 
 /* for assign staic / dynamic scenario check logic data */
 int fimc_is_hw_dvfs_init(void *dvfs_data);
+
+void fimc_is_dual_mode_update(struct fimc_is_device_ischain *device,
+	struct fimc_is_group *group,
+	struct fimc_is_frame *frame);
+void fimc_is_dual_dvfs_update(struct fimc_is_device_ischain *device,
+	struct fimc_is_group *group,
+	struct fimc_is_frame *frame);
 #endif /* FIMC_IS_HW_DVFS_H */

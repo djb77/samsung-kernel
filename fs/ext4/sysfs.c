@@ -17,6 +17,8 @@
 
 typedef enum {
 	attr_noop,
+	attr_sec_fs_stat,
+	attr_sec_fs_freefrag,
 	attr_delayed_allocation_blocks,
 	attr_session_write_kbytes,
 	attr_lifetime_write_kbytes,
@@ -46,6 +48,29 @@ struct ext4_attr {
 		void *explicit_ptr;
 	} u;
 };
+
+static ssize_t sec_fs_stat_show(struct ext4_attr *a,
+				struct ext4_sb_info *sbi, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s:%llu,%s:%llu,%s:%u,%s:%llu,%s:%u\n",
+		"F_BLOCKS",
+		(unsigned long long)ext4_blocks_count(sbi->s_es),
+		"F_BFREE",
+		(unsigned long long)percpu_counter_sum_positive(&sbi->s_freeclusters_counter) -
+		(unsigned long long)percpu_counter_sum_positive(&sbi->s_dirtyclusters_counter),
+		"F_FILES",
+		(unsigned int)le32_to_cpu(sbi->s_es->s_inodes_count),
+		"F_FFREE",
+		(unsigned long long)percpu_counter_sum_positive(&sbi->s_freeinodes_counter),
+		"FS_ERROR",
+		(unsigned int)le32_to_cpu(sbi->s_es->s_error_count));
+}
+
+static ssize_t sec_fs_freefrag_show(struct ext4_attr *a,
+				struct ext4_sb_info *sbi, char *buf)
+{
+	return ext4_mb_freefrag_show(sbi, buf);
+}
 
 static ssize_t session_write_kbytes_show(struct ext4_attr *a,
 					 struct ext4_sb_info *sbi, char *buf)
@@ -162,6 +187,9 @@ static struct ext4_attr ext4_attr_##_name = {			\
 
 #define ATTR_LIST(name) &ext4_attr_##name.attr
 
+EXT4_ATTR_FUNC(sec_fs_stat, 0444);
+EXT4_ATTR_FUNC(sec_fs_freefrag, 0444);
+
 EXT4_ATTR_FUNC(delayed_allocation_blocks, 0444);
 EXT4_ATTR_FUNC(session_write_kbytes, 0444);
 EXT4_ATTR_FUNC(lifetime_write_kbytes, 0444);
@@ -192,6 +220,8 @@ static unsigned int old_bump_val = 128;
 EXT4_ATTR_PTR(max_writeback_mb_bump, 0444, pointer_ui, &old_bump_val);
 
 static struct attribute *ext4_attrs[] = {
+	ATTR_LIST(sec_fs_stat),
+	ATTR_LIST(sec_fs_freefrag),
 	ATTR_LIST(delayed_allocation_blocks),
 	ATTR_LIST(session_write_kbytes),
 	ATTR_LIST(lifetime_write_kbytes),
@@ -257,6 +287,10 @@ static ssize_t ext4_attr_show(struct kobject *kobj,
 	void *ptr = calc_ptr(a, sbi);
 
 	switch (a->attr_id) {
+	case attr_sec_fs_stat:
+		return sec_fs_stat_show(a, sbi, buf);
+	case attr_sec_fs_freefrag:
+		return sec_fs_freefrag_show(a, sbi, buf);
 	case attr_delayed_allocation_blocks:
 		return snprintf(buf, PAGE_SIZE, "%llu\n",
 				(s64) EXT4_C2B(sbi,
@@ -395,6 +429,14 @@ int ext4_register_sysfs(struct super_block *sb)
 	if (err)
 		return err;
 
+	if (le32_to_cpu(sbi->s_es->s_sec_magic) == EXT4_SEC_DATA_MAGIC) {
+		err = sysfs_create_link(&ext4_kset.kobj, &sbi->s_kobj,
+			      "userdata");
+		if (err)
+			printk(KERN_ERR "Can not create sysfs link"
+					"for userdata(%d)", err);
+	}
+	
 	if (ext4_proc_root)
 		sbi->s_proc = proc_mkdir(sb->s_id, ext4_proc_root);
 
@@ -416,6 +458,10 @@ void ext4_unregister_sysfs(struct super_block *sb)
 			remove_proc_entry(p->name, sbi->s_proc);
 		remove_proc_entry(sb->s_id, ext4_proc_root);
 	}
+
+	if (le32_to_cpu(sbi->s_es->s_sec_magic) == EXT4_SEC_DATA_MAGIC)
+		sysfs_delete_link(&ext4_kset.kobj, &sbi->s_kobj, "userdata");
+
 	kobject_del(&sbi->s_kobj);
 }
 

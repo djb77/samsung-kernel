@@ -96,7 +96,7 @@
 #endif
 
 /* reserved memory for FIMC-IS */
-#define SETFILE_SIZE		(0x00200000)
+#define SETFILE_SIZE		(0x002AF000)
 #define REAR_CALDATA_SIZE	(0x00010000)
 #define FRONT_CALDATA_SIZE	(0x00010000)
 #define DEBUG_REGION_SIZE	(0x0007D000)

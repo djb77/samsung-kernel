@@ -26,19 +26,26 @@ static irqreturn_t decon_wb_irq_handler(int irq, void *dev_data)
 
 	irq_sts_reg = decon_reg_get_interrupt_and_clear(decon->id, &ext_irq);
 
-	if (irq_sts_reg & DPU_UNDER_FLOW_INT_EN) {
+	if (irq_sts_reg & DPU_UNDER_FLOW_INT_PEND) {
 		DPU_EVENT_LOG(DPU_EVT_UNDERRUN, &decon->sd, ktime_set(0, 0));
 		decon_err("DECON%d FIFO underrun\n", decon->id);
 	}
-	if (irq_sts_reg & DPU_FRAME_DONE_INT_EN) {
+	if (irq_sts_reg & DPU_FRAME_DONE_INT_PEND) {
+		decon->d.conti_recovery_cnt = 0;
 		DPU_EVENT_LOG(DPU_EVT_DECON_FRAMEDONE, &decon->sd, ktime_set(0, 0));
 		decon_dbg("%s Frame Done is occured. timeline:%d, %d\n",
 				__func__, decon->timeline->value, decon->timeline_max);
 	}
-	if (ext_irq & DPU_RESOURCE_CONFLICT_INT_EN) {
+	if (ext_irq & DPU_RESOURCE_CONFLICT_INT_PEND) {
 		DPU_EVENT_LOG(DPU_EVT_RSC_CONFLICT, &decon->sd, ktime_set(0, 0));
 		decon_err("DECON%d Resource Conflict(ext_irq=0x%x, irq_sts=0x%x)\n",
 				decon->id, ext_irq, irq_sts_reg);
+	}
+	if (ext_irq & DPU_TIME_OUT_INT_PEND) {
+		decon->frm_status |= DPU_FRM_DECON_TIMEOUT;
+		decon->timeout_irq = true;
+		decon->frame_cnt++;
+		decon_err("%s: DECON%d timeout irq occurs\n", __func__, decon->id);
 	}
 irq_end:
 	spin_unlock(&decon->slock);
@@ -224,9 +231,9 @@ static int decon_wb_set_lcd_info(struct decon_device *decon)
 	}
 
 	decon->lcd_info->width = 1440;
-	decon->lcd_info->height = 2560;
+	decon->lcd_info->height = 2960;
 	decon->lcd_info->xres = 1440;
-	decon->lcd_info->yres = 2560;
+	decon->lcd_info->yres = 2960;
 	decon->lcd_info->vfp = 2;
 	decon->lcd_info->vbp = 20;
 	decon->lcd_info->hfp = 20;

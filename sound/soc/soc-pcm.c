@@ -31,6 +31,9 @@
 #include <sound/soc.h>
 #include <sound/soc-dpcm.h>
 #include <sound/initval.h>
+#if defined(CONFIG_SEC_ABC)
+#include <linux/sti/abc_common.h>
+#endif
 
 #define DPCM_MAX_BE_USERS	8
 
@@ -594,6 +597,10 @@ codec_dai_err:
 		platform->driver->ops->close(substream);
 
 platform_err:
+#if defined(CONFIG_SEC_ABC)
+	dev_err(platform->dev, "ASoC:Notify sec abc driver of soc_pcm_open_fail\n");
+	sec_abc_send_event("MODULE=sound@ERROR=soc_pcm_open_fail");
+#endif
 	if (cpu_dai->driver->ops->shutdown)
 		cpu_dai->driver->ops->shutdown(substream, cpu_dai);
 out:
@@ -1840,6 +1847,10 @@ int dpcm_be_dai_hw_params(struct snd_soc_pcm_runtime *fe, int stream)
 	return 0;
 
 unwind:
+#if defined(CONFIG_SEC_ABC)
+	dev_err(dpcm->be->dev, "ASoC:Notify sec abc driver of dpcm_be_dai_hw_params_fail\n");
+	sec_abc_send_event("MODULE=sound@ERROR=dpcm_be_dai_hw_params_fail");
+#endif
 	/* disable any enabled and non active backends */
 	list_for_each_entry_continue_reverse(dpcm, &fe->dpcm[stream].be_clients, list_be) {
 		struct snd_soc_pcm_runtime *be = dpcm->be;

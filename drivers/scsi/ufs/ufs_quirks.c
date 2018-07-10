@@ -14,7 +14,7 @@
 #include "ufshcd.h"
 #include "ufs_quirks.h"
 
-#define SERIAL_NUM_SIZE 6
+#define SERIAL_NUM_SIZE 7
 #define TOSHIBA_SERIAL_NUM_SIZE 10
 static struct ufs_card_fix ufs_fixups[] = {
 	/* UFS cards deviations table */
@@ -36,8 +36,18 @@ void ufs_set_sec_unique_number(struct ufs_hba *hba, u8 *str_desc_buf, u8 *desc_b
 	memset(hba->unique_number, 0, sizeof(hba->unique_number));
 	memset(snum_buf, 0, sizeof(snum_buf));
 
-#if defined(CONFIG_UFS_UN_18DIGITS)
+#if defined(CONFIG_UFS_UN_20DIGITS)
+	memcpy(snum_buf, str_desc_buf + QUERY_DESC_HDR_SIZE, SERIAL_NUM_SIZE);
 
+	sprintf(hba->unique_number, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+		manid,
+		desc_buf[DEVICE_DESC_PARAM_MANF_DATE], desc_buf[DEVICE_DESC_PARAM_MANF_DATE+1],
+		snum_buf[0], snum_buf[1], snum_buf[2], snum_buf[3], snum_buf[4], snum_buf[5], snum_buf[6]);
+
+	/* Null terminate the unique number string */
+	hba->unique_number[UFS_UN_20_DIGITS] = '\0';
+
+#elif defined(CONFIG_UFS_UN_18DIGITS)
 	memcpy(snum_buf, str_desc_buf + QUERY_DESC_HDR_SIZE, SERIAL_NUM_SIZE);
 
 	sprintf(hba->unique_number, "%02x%02x%02x%02x%02x%02x%02x%02x%02x",
@@ -149,9 +159,6 @@ int ufs_get_device_info(struct ufs_hba *hba, struct ufs_card_info *card_data)
 	str_desc_buf[QUERY_DESC_STRING_MAX_SIZE] = '\0';
 
 	ufs_set_sec_unique_number(hba, str_desc_buf, desc_buf);
-
-	printk("%s: UNIQUE NUMBER = %s , LT: 0x%02x \n",
-		__FUNCTION__, hba->unique_number, health_buf[3]<<4|health_buf[4]);
 
 out:
 	return err;

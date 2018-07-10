@@ -251,6 +251,9 @@ int fimc_is_parse_dt(struct platform_device *pdev)
 	if (parse_gate_info(pdata, np) < 0)
 		probe_err("can't parse clock gate info node");
 
+	of_property_read_u32(np, "chain_config", &core->chain_config);
+	probe_info("FIMC-IS chain configuration: %d", core->chain_config);
+
 	vender_np = of_find_node_by_name(np, "vender");
 	if (vender_np) {
 		ret = fimc_is_vender_dt(vender_np);
@@ -519,7 +522,7 @@ static int parse_internal_vc_data(struct exynos_platform_fimc_is_module *pdata, 
 	int i;
 	u32 ch = 0;
 
-	vc_count = of_property_count_elems_of_size(dnode, "vc_list", sizeof(u32)) / 2;
+	vc_count = of_property_count_elems_of_size(dnode, "vc_list", sizeof(u32)) / 3;
 	if (vc_count >= CSI_VIRTUAL_CH_MAX) {
 		probe_err("vc_list exceed to csi ch max(%d)", vc_count);
 		return -EINVAL;
@@ -527,20 +530,28 @@ static int parse_internal_vc_data(struct exynos_platform_fimc_is_module *pdata, 
 
 	for (i = 0; i < vc_count; i++) {
 		/* parse channel info */
-		ret = of_property_read_u32_index(dnode, "vc_list", i * 2, &ch);
+		ret = of_property_read_u32_index(dnode, "vc_list", i * 3, &ch);
 		if (ret) {
 			probe_err("internal vc read fail(%d)", ret);
 			return ret;
 		}
 
 		/* parse internal vc type info */
-		ret = of_property_read_u32_index(dnode, "vc_list", i * 2 + 1, &pdata->internal_vc[ch]);
+		ret = of_property_read_u32_index(dnode, "vc_list", i * 3 + 1, &pdata->internal_vc[ch]);
 		if (ret) {
 			probe_err("internal vc_type read fail(%d)", ret);
 			return ret;
 		}
 
-		probe_info("internal vc(%d), type(%d)", ch, pdata->internal_vc[ch]);
+		/* parse internal vc return buffer offset info */
+		ret = of_property_read_u32_index(dnode, "vc_list", i * 3 + 2, &pdata->vc_buffer_offset[ch]);
+		if (ret) {
+			probe_err("internal buffer_offset read fail(%d)", ret);
+			return ret;
+		}
+
+		probe_info("internal vc(%d), type(%d), offset(%d)\n", ch, pdata->internal_vc[ch],
+			pdata->vc_buffer_offset[ch]);
 	}
 
 	return ret;

@@ -336,6 +336,7 @@
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
 
+#define KEY_WAKEUP_UNLOCK	253	/* Wake-up to recent view, ex: AOP */
 #define KEY_RECENT   254
 #define KEY_WINK            0x2bf    /* Intelligence Key */
 
@@ -601,6 +602,7 @@
 #define BTN_DPAD_RIGHT		0x223
 
 #define KEY_ALS_TOGGLE		0x230	/* Ambient light sensor */
+#define BTN_TOOL_SPEN_SCAN	0x230	/* Wacom full scan mode */
 
 #define KEY_BUTTONCONFIG		0x240	/* AL Button Configuration */
 #define KEY_TASKMANAGER		0x241	/* AL Task/Project Manager */
@@ -761,6 +763,7 @@
 #define SW_LINEIN_INSERT	0x0d  /* set = inserted */
 #define SW_MUTE_DEVICE		0x0e  /* set = device disabled */
 #define SW_GLOVE		0x0f	/* set = glove mode */
+#define SW_PEN_INSERT		0x13  /* set = pen insert, remove */
 #define SW_FLIP                 0x15    /* set = flip cover */
 #define SW_CERTIFYHALL          0x1b    /* set = certify_hall... */
 #define SW_MAX			0x20

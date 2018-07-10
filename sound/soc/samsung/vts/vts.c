@@ -3,7 +3,7 @@
  * ALSA SoC - Samsung VTS driver
  *
  * Copyright (c) 2016 Samsung Electronics Co. Ltd.
-  *
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -33,6 +33,9 @@
 #include <sound/samsung/mailbox.h>
 #include <sound/samsung/vts.h>
 #include <soc/samsung/exynos-pmu.h>
+#if defined(CONFIG_SEC_ABC)
+#include <linux/sti/abc_common.h>
+#endif
 
 #include "vts.h"
 
@@ -66,15 +69,132 @@ static void update_mask_value(volatile void __iomem *sfr,
 /* For only external static functions */
 static struct vts_data *p_vts_data;
 
+/* vts mailbox interface functions */
+int vts_mailbox_generate_interrupt(
+	const struct platform_device *pdev,
+	int hw_irq)
+{
+	struct vts_data *data = p_vts_data;
+	struct device *dev = data ? (data->pdev ?
+				&data->pdev->dev : NULL) : NULL;
+	unsigned long flag;
+	int result = 0;
+
+	if (!data || !dev) {
+		dev_warn(dev, "%s: VTS not Initialized\n", __func__);
+		return -EINVAL;
+	}
+
+	spin_lock_irqsave(&data->state_spinlock, flag);
+	/* Check VTS state before accessing mailbox */
+	if (data->vts_state == VTS_STATE_RUNTIME_SUSPENDED ||
+		data->vts_state == VTS_STATE_VOICECALL ||
+		data->vts_state == VTS_STATE_NONE) {
+		dev_warn(dev, "%s: VTS wrong state [%d]\n", __func__,
+			data->vts_state);
+		result = -EINVAL;
+		goto out;
+	}
+
+	result = mailbox_generate_interrupt(pdev, hw_irq);
+
+out:
+	spin_unlock_irqrestore(&data->state_spinlock, flag);
+	return result;
+}
+
+void vts_mailbox_write_shared_register(
+	const struct platform_device *pdev,
+	const u32 *values,
+	int start,
+	int count)
+{
+	struct vts_data *data = p_vts_data;
+	struct device *dev = data ? (data->pdev ?
+				&data->pdev->dev : NULL) : NULL;
+	unsigned long flag;
+
+	if (!data || !dev) {
+		dev_warn(dev, "%s: VTS not Initialized\n", __func__);
+		return;
+	}
+
+	spin_lock_irqsave(&data->state_spinlock, flag);
+	/* Check VTS state before accessing mailbox */
+	if (data->vts_state == VTS_STATE_RUNTIME_SUSPENDED ||
+		data->vts_state == VTS_STATE_VOICECALL ||
+		data->vts_state == VTS_STATE_NONE) {
+		dev_warn(dev, "%s: VTS wrong state [%d]\n", __func__,
+			data->vts_state);
+		goto out;
+	}
+
+	mailbox_write_shared_register(pdev, values, start, count);
+
+out:
+	spin_unlock_irqrestore(&data->state_spinlock, flag);
+}
+
+void vts_mailbox_read_shared_register(
+	const struct platform_device *pdev,
+	u32 *values,
+	int start,
+	int count)
+{
+	struct vts_data *data = p_vts_data;
+	struct device *dev = data ? (data->pdev ?
+				&data->pdev->dev : NULL) : NULL;
+	unsigned long flag;
+
+	if (!data || !dev) {
+		dev_warn(dev, "%s: VTS not Initialized\n", __func__);
+		return;
+	}
+
+	spin_lock_irqsave(&data->state_spinlock, flag);
+	/* Check VTS state before accessing mailbox */
+	if (data && (data->vts_state == VTS_STATE_RUNTIME_SUSPENDED ||
+		data->vts_state == VTS_STATE_VOICECALL ||
+		data->vts_state == VTS_STATE_NONE)) {
+		dev_warn(dev, "%s: VTS wrong state [%d]\n", __func__,
+			data->vts_state);
+		goto out;
+	}
+
+	mailbox_read_shared_register(pdev, values, start, count);
+
+out:
+	spin_unlock_irqrestore(&data->state_spinlock, flag);
+}
+
 static int vts_start_ipc_transaction_atomic(struct device *dev, struct vts_data *data, int msg, u32 (*values)[3], int sync)
 {
 	long result = 0;
 	u32 ack_value = 0;
 	volatile enum ipc_state *state = &data->ipc_state_ap;
+	unsigned long flag;
 
 	dev_info(dev, "%s:++ msg:%d, values: 0x%08x, 0x%08x, 0x%08x\n",
 					__func__, msg, (*values)[0],
 					(*values)[1], (*values)[2]);
+
+	/* Check VTS state before processing IPC,
+	 * in VTS_STATE_RUNTIME_SUSPENDING state only Power Down IPC
+	 * can be processed
+	 */
+	spin_lock_irqsave(&data->state_spinlock, flag);
+	if ((data->vts_state == VTS_STATE_RUNTIME_SUSPENDING &&
+		msg != VTS_IRQ_AP_POWER_DOWN) ||
+		data->vts_state == VTS_STATE_RUNTIME_SUSPENDED ||
+		data->vts_state == VTS_STATE_VOICECALL ||
+		data->vts_state == VTS_STATE_NONE) {
+		dev_warn(dev, "%s: VTS IP %s state\n", __func__,
+			(data->vts_state == VTS_STATE_VOICECALL ?
+			"VoiceCall" : "Suspended"));
+		spin_unlock_irqrestore(&data->state_spinlock, flag);
+		return -EINVAL;
+	}
+	spin_unlock_irqrestore(&data->state_spinlock, flag);
 
 	if (pm_runtime_suspended(dev)) {
 		dev_warn(dev, "%s: VTS IP is in suspended state, IPC cann't be processed \n", __func__);
@@ -89,8 +209,8 @@ static int vts_start_ipc_transaction_atomic(struct device *dev, struct vts_data 
 	spin_lock(&data->ipc_spinlock);
 
 	*state = SEND_MSG;
-	mailbox_write_shared_register(data->pdev_mailbox, *values, 0, 3);
-	mailbox_generate_interrupt(data->pdev_mailbox, msg);
+	vts_mailbox_write_shared_register(data->pdev_mailbox, *values, 0, 3);
+	vts_mailbox_generate_interrupt(data->pdev_mailbox, msg);
 	data->running_ipc = msg;
 
 	if (sync) {
@@ -98,7 +218,8 @@ static int vts_start_ipc_transaction_atomic(struct device *dev, struct vts_data 
 		for (i = 1000; i && (*state != SEND_MSG_OK) &&
 				(*state != SEND_MSG_FAIL) &&
 				(ack_value != (0x1 << msg)); i--) {
-			mailbox_read_shared_register(data->pdev_mailbox, &ack_value, 3, 1);
+			vts_mailbox_read_shared_register(data->pdev_mailbox,
+							&ack_value, 3, 1);
 			dev_dbg(dev, "%s ACK-value: 0x%08x\n", __func__, ack_value);
 			udelay(50);
 		}
@@ -117,7 +238,8 @@ static int vts_start_ipc_transaction_atomic(struct device *dev, struct vts_data 
 
 	/* Clear running IPC & ACK value */
 	ack_value = 0x0;
-	mailbox_write_shared_register(data->pdev_mailbox, &ack_value, 3, 1);
+	vts_mailbox_write_shared_register(data->pdev_mailbox,
+						&ack_value, 3, 1);
 	data->running_ipc = 0;
 	*state = IDLE;
 
@@ -136,8 +258,10 @@ int vts_start_ipc_transaction(struct device *dev, struct vts_data *data,
 static int vts_ipc_ack(struct vts_data *data, u32 result)
 {
 	pr_debug("%s(%p, %u)\n", __func__, data, result);
-	mailbox_write_shared_register(data->pdev_mailbox, &result, 0, 1);
-	mailbox_generate_interrupt(data->pdev_mailbox, VTS_IRQ_AP_IPC_RECEIVED);
+	vts_mailbox_write_shared_register(data->pdev_mailbox,
+						&result, 0, 1);
+	vts_mailbox_generate_interrupt(data->pdev_mailbox,
+					VTS_IRQ_AP_IPC_RECEIVED);
 	return 0;
 }
 
@@ -349,6 +473,7 @@ int vts_acquire_sram(struct platform_device *pdev, int vts)
 {
 	struct vts_data *data = platform_get_drvdata(pdev);
 	int previous;
+	unsigned long flag;
 
 	dev_info(&pdev->dev, "%s(%d)\n", __func__, vts);
 
@@ -367,7 +492,9 @@ int vts_acquire_sram(struct platform_device *pdev, int vts)
 	if (!vts) {
 		pm_runtime_get_sync(&pdev->dev);
 		data->voicecall_enabled = true;
+		spin_lock_irqsave(&data->state_spinlock, flag);
 		data->vts_state = VTS_STATE_VOICECALL;
+		spin_unlock_irqrestore(&data->state_spinlock, flag);
 	}
 
 	writel((vts ? 0 : 1) << VTS_MEM_SEL_OFFSET, data->sfr_base + VTS_SHARED_MEM_CTRL);
@@ -419,6 +546,12 @@ volatile bool vts_is_on(void)
 	return p_vts_data && p_vts_data->enabled;
 }
 EXPORT_SYMBOL(vts_is_on);
+
+volatile bool vts_is_recognitionrunning(void)
+{
+	return p_vts_data && p_vts_data->running;
+}
+EXPORT_SYMBOL(vts_is_recognitionrunning);
 
 static struct snd_soc_dai_driver vts_dai[] = {
 	{
@@ -485,22 +618,152 @@ static SOC_ENUM_SINGLE_DECL(vts_ovfw_ctrl, VTS_DMIC_CONTROL_DMIC_IF, VTS_DMIC_OV
 static const char *vts_cic_sel_texts[] = {"Off", "On"};
 static SOC_ENUM_SINGLE_DECL(vts_cic_sel, VTS_DMIC_CONTROL_DMIC_IF, VTS_DMIC_CIC_SEL_OFFSET, vts_cic_sel_texts);
 
-static const char * const vtsexec_mode_text[] = {
-	"OFF", "VOICE_TRIGGER_MODE", "SOUND_DETECT_MODE", "VT_ALWAYS_ON_MODE"
+static const char * const vtsvcrecog_mode_text[] = {
+	"OFF", "VOICE_TRIGGER_MODE_ON", "SOUND_DETECT_MODE_ON",
+	 "VT_ALWAYS_ON_MODE_ON", "GOOGLE_TRIGGER_MODE_ON",
+	 "SENSORY_TRIGGER_MODE_ON", "VOICE_TRIGGER_MODE_OFF",
+	 "SOUND_DETECT_MODE_OFF", "VT_ALWAYS_ON_MODE_OFF",
+	 "GOOGLE_TRIGGER_MODE_OFF", "SENSORY_TRIGGER_MODE_OFF"
 };
-/* Keyphrases svoice: "Hi Galaxy", Sensory: "Hi Blue Genie" Google:"Okay Google" */
+/* Keyphrases svoice: "Hi Galaxy", Google:"Okay Google" Sensory: "Hi Blue Genie" */
 static const char * const vtsactive_phrase_text[] = {
-	"SVOICE", "SENSORY", "GOOGLE"
+	"SVOICE", "GOOGLE", "SENSORY"
 };
-static const char * const voicerecog_start_text[] = {
-	"Off", "On"
+static const char * const vtsforce_reset_text[] = {
+	"NONE", "RESET"
 };
-
-static SOC_ENUM_SINGLE_EXT_DECL(vtsexec_mode_enum, vtsexec_mode_text);
+static SOC_ENUM_SINGLE_EXT_DECL(vtsvcrecog_mode_enum, vtsvcrecog_mode_text);
 static SOC_ENUM_SINGLE_EXT_DECL(vtsactive_phrase_enum, vtsactive_phrase_text);
-static SOC_ENUM_SINGLE_EXT_DECL(voicerecog_start_enum, voicerecog_start_text);
+static SOC_ENUM_SINGLE_EXT_DECL(vtsforce_reset_enum, vtsforce_reset_text);
 
-static int get_vtsexec_mode(struct snd_kcontrol *kcontrol,
+static int vts_start_recognization(struct device *dev, int start)
+{
+	struct vts_data *data = dev_get_drvdata(dev);
+	int active_trigger = data->active_trigger;
+	int result;
+	u32 values[3];
+
+	dev_info(dev, "%s for %s\n", __func__, vtsactive_phrase_text[active_trigger]);
+
+	start = !!start;
+	if (start) {
+		dev_info(dev, "%s for %s G-loaded:%d s-loaded: %d\n", __func__,
+				 vtsactive_phrase_text[active_trigger],
+				 data->google_info.loaded,
+				 data->svoice_info.loaded);
+		dev_info(dev, "%s exec_mode %d active_trig :%d\n", __func__,
+				 data->exec_mode, active_trigger);
+		if (!(data->exec_mode & (0x1 << VTS_SOUND_DETECT_MODE))) {
+			if (active_trigger == TRIGGER_SVOICE &&
+				 data->svoice_info.loaded) {
+				/*
+				 * load svoice model.bin @ offset 0x2A800
+				 * file before starting recognition
+				 */
+				if (data->svoice_info.actual_sz > SOUND_MODEL_SVOICE_SIZE_MAX) {
+					dev_err(dev, "Failed %s Requested size[0x%zx] > supported[0x%x]\n",
+					"svoice.bin", data->svoice_info.actual_sz,
+					SOUND_MODEL_SVOICE_SIZE_MAX);
+					return -EINVAL;
+				}
+				memcpy(data->sram_base + 0x2A800, data->svoice_info.data,
+					data->svoice_info.actual_sz);
+				dev_info(dev, "svoice.bin Binary uploaded size=%zu\n",
+						data->svoice_info.actual_sz);
+
+			} else if (active_trigger == TRIGGER_GOOGLE &&
+				data->google_info.loaded) {
+				/*
+				 * load google model.bin @ offset 0x32B00
+				 * file before starting recognition
+				 */
+				if (data->google_info.actual_sz > SOUND_MODEL_GOOGLE_SIZE_MAX) {
+					dev_err(dev, "Failed %s Requested size[0x%zx] > supported[0x%x]\n",
+					"google.bin", data->google_info.actual_sz,
+					SOUND_MODEL_GOOGLE_SIZE_MAX);
+					return -EINVAL;
+				}
+				memcpy(data->sram_base + 0x32B00, data->google_info.data,
+					data->google_info.actual_sz);
+				dev_info(dev, "google.bin Binary uploaded size=%zu\n",
+						data->google_info.actual_sz);
+			} else {
+				dev_err(dev, "%s Model Binary File not Loaded\n", __func__);
+#if defined(CONFIG_SEC_ABC)
+				dev_err(dev, "Notify sec abc driver of vts_request_firmware_fail\n");
+				sec_abc_send_event("MODULE=sound@ERROR=vts_request_firmware_fail");
+#endif
+				return -EINVAL;
+			}
+		}
+
+		result = vts_set_dmicctrl(data->pdev,
+				((active_trigger == TRIGGER_SVOICE) ?
+				VTS_MICCONF_FOR_TRIGGER
+				: VTS_MICCONF_FOR_GOOGLE), true);
+		if (IS_ERR_VALUE(result)) {
+			dev_err(dev, "%s: MIC control failed\n",
+						 __func__);
+			return result;
+		}
+
+		if (data->exec_mode & (0x1 << VTS_SOUND_DETECT_MODE)) {
+			int ctrl_dmicif;
+			/* set VTS Gain for LPSD mode */
+			ctrl_dmicif = readl(data->dmic_base +
+					 VTS_DMIC_CONTROL_DMIC_IF);
+			ctrl_dmicif &= ~(0x7 << VTS_DMIC_GAIN_OFFSET);
+			writel((ctrl_dmicif |
+				 (data->lpsdgain << VTS_DMIC_GAIN_OFFSET)),
+				data->dmic_base + VTS_DMIC_CONTROL_DMIC_IF);
+		}
+
+		/* Send Start recognition IPC command to VTS */
+		values[0] = 1 << active_trigger;
+		values[1] = 0;
+		values[2] = 0;
+		result = vts_start_ipc_transaction(dev, data,
+				VTS_IRQ_AP_START_RECOGNITION,
+				&values, 0, 1);
+		if (IS_ERR_VALUE(result)) {
+			dev_err(dev, "vts ipc VTS_IRQ_AP_START_RECOGNITION failed: %d\n", result);
+			return result;
+		}
+
+		data->vts_state = VTS_STATE_RECOG_STARTED;
+		dev_info(dev, "%s start=%d, active_trigger=%d\n", __func__, start, active_trigger);
+
+	} else if (!start) {
+		values[0] = 1 << active_trigger;
+		values[1] = 0;
+		values[2] = 0;
+		result = vts_start_ipc_transaction(dev, data,
+				VTS_IRQ_AP_STOP_RECOGNITION,
+				&values, 0, 1);
+		if (IS_ERR_VALUE(result)) {
+			dev_err(dev, "vts ipc VTS_IRQ_AP_STOP_RECOGNITION failed: %d\n", result);
+			return result;
+		}
+
+		data->vts_state = VTS_STATE_RECOG_STOPPED;
+		dev_info(dev, "%s start=%d, active_trigger=%d\n", __func__, start, active_trigger);
+
+		result = vts_set_dmicctrl(data->pdev,
+				((active_trigger == TRIGGER_SVOICE) ?
+				VTS_MICCONF_FOR_TRIGGER
+				: VTS_MICCONF_FOR_GOOGLE), false);
+		if (IS_ERR_VALUE(result)) {
+			dev_err(dev, "%s: MIC control failed\n",
+						 __func__);
+			return result;
+		}
+	}
+
+
+	return 0;
+}
+
+static int get_vtsvoicerecognize_mode(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
@@ -508,34 +771,35 @@ static int get_vtsexec_mode(struct snd_kcontrol *kcontrol,
 
 	ucontrol->value.integer.value[0] = data->exec_mode;
 
-	dev_dbg(codec->dev, "GET VTS Execution mode: %s \n",
-			vtsexec_mode_text[data->exec_mode]);
+	dev_dbg(codec->dev, "GET VTS Execution mode: %d\n",
+			 data->exec_mode);
 
 	return 0;
 }
 
-static int set_vtsexec_mode(struct snd_kcontrol *kcontrol,
+static int set_vtsvoicerecognize_mode(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct vts_data *data = p_vts_data;
+	struct device *dev = codec->dev;
 	u32 values[3];
 	int result = 0;
-	int vtsexecution_mode;
+	int vcrecognize_mode = 0;
+	int vcrecognize_start = 0;
 
 	u32 keyword_type = 1;
 	char env[100] = {0,};
 	char *envp[2] = {env, NULL};
-	struct device *dev = &data->pdev->dev;
 	int loopcnt = 10;
 
 	pm_runtime_barrier(codec->dev);
 
 	while (data->voicecall_enabled) {
-		dev_warn(codec->dev, "%s voicecall (%d)\n", __func__, data->voicecall_enabled);
+		dev_warn(dev, "%s voicecall (%d)\n", __func__, data->voicecall_enabled);
 
 		if (loopcnt <= 0) {
-			dev_warn(codec->dev, "%s VTS SRAM is Used for CP call\n", __func__);
+			dev_warn(dev, "%s VTS SRAM is Used for CP call\n", __func__);
 
 			keyword_type = -EBUSY;
 			snprintf(env, sizeof(env),
@@ -550,46 +814,102 @@ static int set_vtsexec_mode(struct snd_kcontrol *kcontrol,
 		usleep_range(10000, 10000);
 	}
 
-	dev_warn(codec->dev, "%s voicecall (%d) (End)\n", __func__, data->voicecall_enabled);
+	dev_warn(dev, "%s voicecall (%d) (End)\n", __func__, data->voicecall_enabled);
 
-	vtsexecution_mode = ucontrol->value.integer.value[0];
+	vcrecognize_mode = ucontrol->value.integer.value[0];
 
-	if (vtsexecution_mode > 3) {
-		dev_err(codec->dev,
-		"Invalid voice control mode =%d", vtsexecution_mode);
+	if (vcrecognize_mode < VTS_VOICE_TRIGGER_MODE ||
+		vcrecognize_mode >= VTS_MODE_COUNT) {
+		dev_err(dev,
+		"Invalid voice control mode =%d", vcrecognize_mode);
 		return 0;
 	} else {
-		dev_info(codec->dev, "%s VTS Execution mode: %d %s \n", __func__,
-			data->exec_mode, vtsexec_mode_text[vtsexecution_mode]);
-		if (data->exec_mode == VTS_OFF_MODE && vtsexecution_mode != VTS_OFF_MODE) {
-			pm_runtime_get_sync(codec->dev);
-			vts_clk_set_rate(codec->dev, data->syssel_rate);
+		dev_info(dev, "%s Current: %d requested %s\n",
+				 __func__, data->exec_mode,
+				 vtsvcrecog_mode_text[vcrecognize_mode]);
+		if ((vcrecognize_mode < VTS_VOICE_TRIGGER_MODE_OFF &&
+			data->exec_mode & (0x1 << vcrecognize_mode)) ||
+			(vcrecognize_mode >= VTS_VOICE_TRIGGER_MODE_OFF &&
+			!(data->exec_mode & (0x1 << (vcrecognize_mode -
+				VTS_SENSORY_TRIGGER_MODE))))) {
+			dev_err(dev,
+			"Requested Recognition mode=%d already completed",
+			 vcrecognize_mode);
+			return 0;
 		}
 
-		if (pm_runtime_active(codec->dev)) {
-			values[0] = vtsexecution_mode;
-			values[1] = 0;
-			values[2] = 0;
-			result = vts_start_ipc_transaction(codec->dev, data, VTS_IRQ_AP_SET_MODE, &values, 0, 1);
-			if (IS_ERR_VALUE(result)) {
-				dev_err(codec->dev, "%s SET_MODE IPC transaction Failed\n",
-						vtsexec_mode_text[vtsexecution_mode]);
-				if (data->exec_mode == VTS_OFF_MODE &&
-					 vtsexecution_mode != VTS_OFF_MODE)
-					pm_runtime_put_sync(codec->dev);
-				return result;
-			}
-		}
-		data->exec_mode = vtsexecution_mode;
-		dev_info(codec->dev, "%s VTS Execution mode: %s \n", __func__,
-			vtsexec_mode_text[vtsexecution_mode]);
+		if (vcrecognize_mode <= VTS_SENSORY_TRIGGER_MODE) {
+			pm_runtime_get_sync(dev);
+			vts_clk_set_rate(dev, data->syssel_rate);
+			vcrecognize_start = true;
+		} else
+			vcrecognize_start = false;
 
-		if (vtsexecution_mode == VTS_OFF_MODE && pm_runtime_active(codec->dev)) {
-			pm_runtime_put_sync(codec->dev);
+		if (!pm_runtime_active(dev)) {
+			dev_warn(dev, "%s wrong state %d req: %d\n",
+					__func__, data->exec_mode,
+					vcrecognize_mode);
+			return 0;
+		}
+
+		values[0] = vcrecognize_mode;
+		values[1] = 0;
+		values[2] = 0;
+		result = vts_start_ipc_transaction(dev,
+				 data, VTS_IRQ_AP_SET_MODE,
+				 &values, 0, 1);
+		if (IS_ERR_VALUE(result)) {
+			dev_err(dev, "%s IPC transaction Failed\n",
+				vtsvcrecog_mode_text[vcrecognize_mode]);
+			goto err_ipcmode;
+		}
+
+		if (vcrecognize_start)
+			data->exec_mode |= (0x1 << vcrecognize_mode);
+		else
+			data->exec_mode &= ~(0x1 << (vcrecognize_mode -
+						VTS_SENSORY_TRIGGER_MODE));
+
+		/* Start/stop the request Voice recognization mode */
+		result = vts_start_recognization(dev,
+						vcrecognize_start);
+		if (IS_ERR_VALUE(result)) {
+			dev_err(dev, "Start Recognization Failed: %d\n",
+				 result);
+			goto err_ipcmode;
+		}
+
+		if (vcrecognize_start)
+			data->voicerecog_start |= (0x1 << data->active_trigger);
+		else
+			data->voicerecog_start &= ~(0x1 << data->active_trigger);
+
+		dev_info(dev, "%s Configured: [%d] %s started\n",
+			 __func__, data->exec_mode,
+			 vtsvcrecog_mode_text[vcrecognize_mode]);
+
+		if (!vcrecognize_start &&
+				pm_runtime_active(dev)) {
+			pm_runtime_put_sync(dev);
 		}
 	}
 
 	return  0;
+
+err_ipcmode:
+	if (pm_runtime_active(dev) && (vcrecognize_start ||
+		data->exec_mode & (0x1 << vcrecognize_mode) ||
+		data->voicerecog_start & (0x1 << data->active_trigger))) {
+		pm_runtime_put_sync(dev);
+	}
+
+	if (!vcrecognize_start) {
+		data->exec_mode &= ~(0x1 << (vcrecognize_mode -
+					VTS_SENSORY_TRIGGER_MODE));
+		data->voicerecog_start &= ~(0x1 << data->active_trigger);
+	}
+
+	return result;
 }
 
 static int get_vtsactive_phrase(struct snd_kcontrol *kcontrol,
@@ -647,6 +967,7 @@ static int set_voicetrigger_value(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct vts_data *data = p_vts_data;
+	int active_trigger = data->active_trigger;
 	u32 values[3];
 	int result = 0;
 	int trig_ms;
@@ -678,7 +999,7 @@ static int set_voicetrigger_value(struct snd_kcontrol *kcontrol,
 	} else {
 		/* Configure VTS target size */
 		values[0] = trig_ms * 32; /* 1ms requires (16KHz,16bit,Mono) = 16samples * 2 bytes = 32 bytes*/
-		values[1] = 0;
+		values[1] = 1 << active_trigger;
 		values[2] = 0;
 		result = vts_start_ipc_transaction(codec->dev, data, VTS_IRQ_AP_TARGET_SIZE, &values, 0, 1);
 		if (IS_ERR_VALUE(result)) {
@@ -694,211 +1015,33 @@ static int set_voicetrigger_value(struct snd_kcontrol *kcontrol,
 	return  0;
 }
 
-static int get_voicerecognize_start(struct snd_kcontrol *kcontrol,
+static int get_vtsforce_reset(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct vts_data *data = p_vts_data;
 
-	ucontrol->value.integer.value[0] = data->voicerecog_start;
+	ucontrol->value.integer.value[0] = data->running;
 
-	dev_dbg(codec->dev, "GET Voice Recognization start : %s \n",
-			voicerecog_start_text[data->voicerecog_start]);
-
-	return 0;
-}
-
-static int vts_start_recognization(struct device *dev, int start)
-{
-	struct vts_data *data = dev_get_drvdata(dev);
-	int active_trigger = data->active_trigger;
-	int result;
-	u32 values[3];
-	const struct firmware *firmware1;
-	const struct firmware *firmware2;
-
-	dev_info(dev, "%s\n", __func__);
-
-	if ((data->exec_mode == VTS_VOICE_TRIGGER_MODE ||
-		data->exec_mode == VTS_SOUND_DETECT_MODE ||
-		data->exec_mode == VTS_VT_ALWAYS_ON_MODE ||
-		(data->exec_mode == VTS_OFF_MODE && !start)) &&
-		(TRIGGER_NONE < active_trigger && active_trigger < TRIGGER_COUNT)) {
-		start = !!start;
-		if (start) {
-			if (data->exec_mode != VTS_SOUND_DETECT_MODE) {
-				/* load voice_net.bin @ offset 0x2A800 &
-				voice_grammar.bin @offset 0x32800
-				file before starting recognition */
-				result = request_firmware(&firmware1, "voice_net.bin", dev);
-				if (result != 0) {
-					dev_warn(dev, "Failed to request '%s'\n", "voice_net.bin");
-					return result;
-				}
-
-				if (firmware1->size > SOUND_MODEL_NET_SIZE_MAX) {
-					dev_err(dev, "Failed %s Requested size[0x%zx] > supported[0x%x]\n",
-						"voice_net.bin", firmware1->size,
-						SOUND_MODEL_NET_SIZE_MAX);
-					release_firmware(firmware1);
-					return -EINVAL;
-				}
-
-				memcpy(data->sram_base + 0x2A800, firmware1->data, firmware1->size);
-				dev_info(dev, "voice_net.bin Ref Binary uploaded to Firmware size=%zu\n",
-						firmware1->size);
-
-				result = request_firmware(&firmware2, "voice_grammar.bin", dev);
-				if (result != 0) {
-					dev_warn(dev, "Failed to request '%s'\n", "voice_grammar.bin");
-					release_firmware(firmware1);
-					return result;
-				}
-
-				if (firmware2->size > SOUND_MODEL_GRAMMAR_SIZE_MAX) {
-					dev_err(dev, "Failed %s Requested size[0x%zx] > supported[0x%x]\n",
-						"voice_grammar.bin", firmware2->size,
-						SOUND_MODEL_GRAMMAR_SIZE_MAX);
-					release_firmware(firmware1);
-					release_firmware(firmware2);
-					return -EINVAL;
-				}
-
-				memcpy(data->sram_base + 0x32800, firmware2->data, firmware2->size);
-				dev_info(dev, "voice_grammar.bin RefBinary uploaded to Firmware size=%zu\n",
-					firmware2->size);
-
-				/* release loaded fimrware binaries */
-				release_firmware(firmware1);
-				release_firmware(firmware2);
-			}
-
-			result = vts_set_dmicctrl(data->pdev,
-					VTS_MICCONF_FOR_TRIGGER, true);
-			if (IS_ERR_VALUE(result)) {
-				dev_err(dev, "%s: MIC control failed\n",
-							 __func__);
-				return result;
-			}
-
-			if (data->exec_mode  == VTS_SOUND_DETECT_MODE) {
-				int ctrl_dmicif;
-				/* set VTS Gain for LPSD mode */
-				ctrl_dmicif = readl(data->dmic_base + VTS_DMIC_CONTROL_DMIC_IF);
-				ctrl_dmicif &= ~(0x7 << VTS_DMIC_GAIN_OFFSET);
-				writel((ctrl_dmicif |
-					(data->lpsdgain << VTS_DMIC_GAIN_OFFSET)),
-					data->dmic_base + VTS_DMIC_CONTROL_DMIC_IF);
-			}
-
-			/* Send Start recognition IPC command to VTS */
-			values[0] = 1 << active_trigger;
-			values[1] = 0;
-			values[2] = 0;
-			result = vts_start_ipc_transaction(dev, data,
-					VTS_IRQ_AP_START_RECOGNITION,
-					&values, 0, 1);
-			if (IS_ERR_VALUE(result)) {
-				dev_err(dev, "vts ipc VTS_IRQ_AP_START_RECOGNITION failed: %d\n", result);
-				return result;
-			}
-
-			data->vts_state = VTS_STATE_RECOG_STARTED;
-			dev_info(dev, "%s start=%d, active_trigger=%d\n", __func__, start, active_trigger);
-
-		}else if (!start){
-			values[0] = 1 << active_trigger;
-			values[1] = 0;
-			values[2] = 0;
-			result = vts_start_ipc_transaction(dev, data,
-					VTS_IRQ_AP_STOP_RECOGNITION,
-					&values, 0, 1);
-			if (IS_ERR_VALUE(result)) {
-				dev_err(dev, "vts ipc VTS_IRQ_AP_STOP_RECOGNITION failed: %d\n", result);
-				return result;
-			}
-			dev_info(dev, "%s start=%d, active_trigger=%d\n", __func__, start, active_trigger);
-
-			result = vts_set_dmicctrl(data->pdev,
-					VTS_MICCONF_FOR_TRIGGER, false);
-			if (IS_ERR_VALUE(result)) {
-				dev_err(dev, "%s: MIC control failed\n",
-							 __func__);
-				return result;
-			}
-			data->vts_state = VTS_STATE_RECOG_STOPPED;
-		}
-
-	} else {
-		if (data->exec_mode == VTS_VOICE_TRIGGER_MODE ||
-			 data->exec_mode == VTS_SOUND_DETECT_MODE ||
-			 data->exec_mode == VTS_VT_ALWAYS_ON_MODE)
-			dev_warn(dev, "active_trigger is not valid: %d\n", active_trigger);
-		else
-			dev_warn(dev, "VTS Mode Should be Configured TRIGGER Mode\n");
-		return -EINVAL;
-	}
+	dev_dbg(codec->dev, "GET VTS Force Reset: %s\n",
+			(data->running ? "VTS Running" :
+			"VTS Not Running"));
 
 	return 0;
 }
 
-static int set_voicerecognize_start(struct snd_kcontrol *kcontrol,
+static int set_vtsforce_reset(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct device *dev = codec->dev;
 	struct vts_data *data = p_vts_data;
-	int result = 0;
-	int recognize_start;
 
-	pm_runtime_barrier(codec->dev);
+	dev_dbg(dev, "VTS RESET: %s\n", __func__);
 
-	if (data->voicecall_enabled) {
-		u32 keyword_type = 1;
-		char env[100] = {0,};
-		char *envp[2] = {env, NULL};
-		struct device *dev = &data->pdev->dev;
-
-		dev_warn(codec->dev, "%s VTS SRAM is Used for CP call\n", __func__);
-		keyword_type = -EBUSY;
-		snprintf(env, sizeof(env),
-			 "VOICE_WAKEUP_WORD_ID=%x",
-			 keyword_type);
-
-		kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, envp);
-		return -EBUSY;
-	}
-
-	recognize_start = ucontrol->value.integer.value[0];
-
-	if (recognize_start > 1) {
-		dev_err(codec->dev,
-		"Invalid Voice Recognize input =%d", recognize_start);
-		return 0;
-	} else {
-		if ((!data->voicerecog_start && recognize_start) ||
-			(data->voicerecog_start && !recognize_start)) {
-
-			if (recognize_start) {
-				pm_runtime_get_sync(codec->dev);
-			}
-
-			result = vts_start_recognization(codec->dev, recognize_start);
-			if (IS_ERR_VALUE(result)) {
-				dev_err(codec->dev, "Voice Start Recognization Failed: %d\n", result);
-				if (recognize_start)
-					pm_runtime_put_sync(codec->dev);
-				return result;
-			}
-
-			data->voicerecog_start = recognize_start;
-
-			dev_info(codec->dev, "SET Voice Recognization start : %s \n",
-				voicerecog_start_text[data->voicerecog_start]);
-
-			if (!recognize_start) {
-				pm_runtime_put_sync(codec->dev);
-			}
-		}
+	while (data->running && pm_runtime_active(dev)) {
+		dev_warn(dev, "%s Clear active models\n", __func__);
+		pm_runtime_put_sync(dev);
 	}
 
 	return  0;
@@ -916,16 +1059,16 @@ static const struct snd_kcontrol_new vts_controls[] = {
 	SOC_ENUM("POLARITY INPUT", vts_polarity_input),
 	SOC_ENUM("OVFW CTRL", vts_ovfw_ctrl),
 	SOC_ENUM("CIC SEL", vts_cic_sel),
-	SOC_ENUM_EXT("Execution Mode", vtsexec_mode_enum,
-		get_vtsexec_mode, set_vtsexec_mode),
+	SOC_ENUM_EXT("VoiceRecognization Mode", vtsvcrecog_mode_enum,
+		get_vtsvoicerecognize_mode, set_vtsvoicerecognize_mode),
 	SOC_ENUM_EXT("Active Keyphrase", vtsactive_phrase_enum,
 		get_vtsactive_phrase, set_vtsactive_phrase),
 	SOC_SINGLE_EXT("VoiceTrigger Value",
 		SND_SOC_NOPM,
 		0, 2000, 0,
 		get_voicetrigger_value, set_voicetrigger_value),
-	SOC_ENUM_EXT("VoiceRecognize Start", voicerecog_start_enum,
-		get_voicerecognize_start, set_voicerecognize_start),
+	SOC_ENUM_EXT("Force Reset", vtsforce_reset_enum,
+		get_vtsforce_reset, set_vtsforce_reset),
 };
 
 static const char *dmic_sel_texts[] = {"DPDM", "APDM"};
@@ -1033,8 +1176,10 @@ int vts_set_dmicctrl(struct platform_device *pdev, int micconf_type, bool enable
 
 		/* check whether Mic is already configure or not based on VTS
 		   option type for MIC configuration book keeping */
-		if (!(data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER)) &&
-			micconf_type == VTS_MICCONF_FOR_TRIGGER) {
+		if ((!(data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER)) ||
+			!(data->mic_ready & (0x1 << VTS_MICCONF_FOR_GOOGLE))) &&
+			(micconf_type == VTS_MICCONF_FOR_TRIGGER ||
+			micconf_type == VTS_MICCONF_FOR_GOOGLE)) {
 			data->micclk_init_cnt++;
 			data->mic_ready |= (0x1 << micconf_type);
 			dev_info(dev, "%s Micclk ENABLED for TRIGGER ++ %d\n",
@@ -1063,8 +1208,10 @@ int vts_set_dmicctrl(struct platform_device *pdev, int micconf_type, bool enable
 		}
 
 		/* MIC configuration book keeping */
-		if ((data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER)) &&
-			micconf_type == VTS_MICCONF_FOR_TRIGGER) {
+		if (((data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER)) ||
+			(data->mic_ready & (0x1 << VTS_MICCONF_FOR_GOOGLE))) &&
+			(micconf_type == VTS_MICCONF_FOR_TRIGGER ||
+			micconf_type == VTS_MICCONF_FOR_GOOGLE)) {
 			data->mic_ready &= ~(0x1 << micconf_type);
 			dev_info(dev, "%s Micclk DISABLED for TRIGGER -- %d\n",
 				 __func__, data->mic_ready);
@@ -1086,7 +1233,8 @@ static irqreturn_t vts_error_handler(int irq, void *dev_id)
 	struct vts_data *data = platform_get_drvdata(pdev);
 	u32 error_code;
 
-	mailbox_read_shared_register(data->pdev_mailbox, &error_code, 3, 1);
+	vts_mailbox_read_shared_register(data->pdev_mailbox,
+						&error_code, 3, 1);
 	vts_ipc_ack(data, 1);
 
 	dev_err(dev, "Error occurred on VTS: 0x%x\n", (int)error_code);
@@ -1118,7 +1266,8 @@ static irqreturn_t vts_ipc_received_handler(int irq, void *dev_id)
 	struct vts_data *data = platform_get_drvdata(pdev);
 	u32 result;
 
-	mailbox_read_shared_register(data->pdev_mailbox, &result, 3, 1);
+	vts_mailbox_read_shared_register(data->pdev_mailbox,
+						&result, 3, 1);
 	dev_dbg(dev, "VTS received IPC: 0x%x\n", result);
 
 	switch (data->ipc_state_ap) {
@@ -1150,9 +1299,10 @@ static irqreturn_t vts_voice_triggered_handler(int irq, void *dev_id)
 	char env[100] = {0,};
 	char *envp[2] = {env, NULL};
 
-	if (data->mic_ready & (0x1 << PLATFORM_VTS_TRIGGER_RECORD)) {
-		mailbox_read_shared_register(data->pdev_mailbox, &id,
-						 3, 1);
+	if (data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER) ||
+		data->mic_ready & (0x1 << VTS_MICCONF_FOR_GOOGLE)) {
+		vts_mailbox_read_shared_register(data->pdev_mailbox,
+						&id, 3, 1);
 		vts_ipc_ack(data, 1);
 
 		frame_count = (u32)(id & GENMASK(15, 0));
@@ -1164,13 +1314,12 @@ static irqreturn_t vts_voice_triggered_handler(int irq, void *dev_id)
 		dev_info(dev, "VTS triggered: frame_count = %u\n",
 				 frame_count);
 
-		if (data->exec_mode == VTS_VOICE_TRIGGER_MODE ||
-			 data->exec_mode == VTS_VT_ALWAYS_ON_MODE) {
-			keyword_type = 1;
+		if (!(data->exec_mode & (0x1 << VTS_SOUND_DETECT_MODE))) {
+			keyword_type = id;
 			snprintf(env, sizeof(env),
 					 "VOICE_WAKEUP_WORD_ID=%x",
 					 keyword_type);
-		} else if (data->exec_mode == VTS_SOUND_DETECT_MODE) {
+		} else if (data->exec_mode & (0x1 << VTS_SOUND_DETECT_MODE)) {
 			snprintf(env, sizeof(env),
 				 "VOICE_WAKEUP_WORD_ID=LPSD");
 		} else {
@@ -1194,8 +1343,9 @@ static irqreturn_t vts_trigger_period_elapsed_handler(int irq, void *dev_id)
 	struct vts_platform_data *platform_data = platform_get_drvdata(data->pdev_vtsdma[0]);
 	u32 pointer;
 
-	if (data->mic_ready & (0x1 << PLATFORM_VTS_TRIGGER_RECORD)) {
-		mailbox_read_shared_register(data->pdev_mailbox,
+	if (data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER) ||
+		data->mic_ready & (0x1 << VTS_MICCONF_FOR_GOOGLE)) {
+		vts_mailbox_read_shared_register(data->pdev_mailbox,
 					 &pointer, 2, 1);
 		dev_dbg(dev, "%s:[%s] Base: %08x pointer:%08x\n",
 			 __func__, (platform_data->id ? "VTS-RECORD" :
@@ -1221,8 +1371,8 @@ static irqreturn_t vts_record_period_elapsed_handler(int irq, void *dev_id)
 	struct vts_platform_data *platform_data = platform_get_drvdata(data->pdev_vtsdma[1]);
 	u32 pointer;
 
-	if (data->mic_ready & (0x1 << PLATFORM_VTS_NORMAL_RECORD)) {
-		mailbox_read_shared_register(data->pdev_mailbox,
+	if (data->mic_ready & (0x1 << VTS_MICCONF_FOR_RECORD)) {
+		vts_mailbox_read_shared_register(data->pdev_mailbox,
 						 &pointer, 1, 1);
 		dev_dbg(dev, "%s:[%s] Base: %08x pointer:%08x\n",
 			 __func__,
@@ -1338,8 +1488,10 @@ void vts_dbg_print_gpr(struct device *dev, struct vts_data *data)
 	buf[1] = '.';
 	buf[2] = (((version >> 16) & 0xFF) + '0');
 	buf[3] = '.';
-	buf[4] = ((version & 0xFF) + '0');
-	buf[5] = '\0';
+	buf[4] = (((version >> 8) & 0xFF) + '0');
+	buf[5] = '.';
+	buf[6] = ((version & 0xFF) + '0');
+	buf[7] = '\0';
 
 	dev_info(dev, "========================================\n");
 	dev_info(dev, "VTS CM4 register dump (%s)\n", buf);
@@ -1430,8 +1582,13 @@ static int vts_runtime_suspend(struct device *dev)
 	unsigned int status = 0;
 	u32 values[3] = {0,0,0};
 	int result = 0;
+	unsigned long flag;
 
 	dev_info(dev, "%s \n", __func__);
+
+	spin_lock_irqsave(&data->state_spinlock, flag);
+	data->vts_state = VTS_STATE_RUNTIME_SUSPENDING;
+	spin_unlock_irqrestore(&data->state_spinlock, flag);
 
 	vts_save_register(data);
 
@@ -1462,20 +1619,29 @@ static int vts_runtime_suspend(struct device *dev)
 		}
 		vts_release_sram(pdev, 1);
 		clk_disable(data->clk_dmic);
+
+		spin_lock_irqsave(&data->state_spinlock, flag);
+		data->vts_state = VTS_STATE_RUNTIME_SUSPENDED;
+		spin_unlock_irqrestore(&data->state_spinlock, flag);
+
 		vts_cpu_enable(false);
 		vts_cpu_power(false);
 		data->running = false;
+	} else {
+		spin_lock_irqsave(&data->state_spinlock, flag);
+		data->vts_state = VTS_STATE_RUNTIME_SUSPENDED;
+		spin_unlock_irqrestore(&data->state_spinlock, flag);
 	}
 
 	data->enabled = false;
 	data->exec_mode = VTS_OFF_MODE;
+	data->active_trigger = TRIGGER_SVOICE;
 	data->voicerecog_start = 0;
 	data->target_size = 0;
 	/* reset micbias setting count */
 	data->micclk_init_cnt = 0;
 	data->mic_ready = 0;
 	data->vts_ready = 0;
-	data->vts_state = VTS_STATE_NONE;
 	dev_info(dev, "%s Exit \n", __func__);
 	return 0;
 }
@@ -1489,6 +1655,7 @@ static int vts_runtime_resume(struct device *dev)
 
 	dev_info(dev, "%s \n", __func__);
 
+	data->vts_state = VTS_STATE_RUNTIME_RESUMING;
 	data->enabled = true;
 
 	vts_restore_register(data);
@@ -1550,7 +1717,6 @@ static int vts_runtime_resume(struct device *dev)
 		goto error_firmware;
 	}
 	data->exec_mode = VTS_OFF_MODE;
-	data->active_trigger = 0;
 
 	values[0] = VTS_ENABLE_SRAM_LOG;
 	values[1] = 0;
@@ -1568,7 +1734,7 @@ static int vts_runtime_resume(struct device *dev)
 	dev_info(dev, "%s Exit \n", __func__);
 
 	data->running = true;
-	data->vts_state = VTS_STATE_IDLE;
+	data->vts_state = VTS_STATE_RUNTIME_RESUMED;
 	return 0;
 
 error_firmware:
@@ -1598,6 +1764,113 @@ static const struct of_device_id exynos_vts_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, exynos_vts_of_match);
 
+static ssize_t vts_google_model_read(struct file *file, struct kobject *kobj,
+		struct bin_attribute *bin_attr, char *buffer,
+		loff_t ppos, size_t count)
+{
+	dev_info(kobj_to_dev(kobj), "%s\n", __func__);
+
+	return 0;
+}
+
+static ssize_t vts_google_model_write(struct file *file, struct kobject *kobj,
+		struct bin_attribute *bin_attr, char *buffer, loff_t ppos, size_t count)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct vts_data *data = dev_get_drvdata(dev);
+	char *to;
+	ssize_t available;
+
+	dev_info(dev, "%s\n", __func__);
+
+	if (!data->google_info.data) {
+		dev_info(dev, "%s Google binary Buffer not allocated\n", __func__);
+		return -EINVAL;
+	}
+
+	to = data->google_info.data;
+	available = data->google_info.max_sz;
+
+	dev_dbg(dev, "%s available %zu Cur-pos %lld size-to-copy %zu\n", __func__,
+		 available, ppos, count);
+	if (ppos < 0) {
+		dev_info(dev, "%s Error wrong current position\n", __func__);
+		return -EINVAL;
+	}
+	if (ppos >= available || !count) {
+		dev_info(dev, "%s Error copysize[%lld] greater than available buffer\n",
+			__func__, ppos);
+		return 0;
+	}
+	if (count > available - ppos)
+		count = available - ppos;
+
+	memcpy(to + ppos, buffer, count);
+
+	to = (to + ppos);
+	data->google_info.actual_sz = ppos + count;
+	dev_info(dev, "%s updated Size %zu\n", __func__,
+		 data->google_info.actual_sz);
+	data->google_info.loaded = true;
+
+	return count;
+}
+
+static ssize_t vts_svoice_model_read(struct file *file, struct kobject *kobj,
+		struct bin_attribute *bin_attr, char *buffer,
+		loff_t ppos, size_t count)
+{
+	dev_info(kobj_to_dev(kobj), "%s\n", __func__);
+
+	return 0;
+}
+
+static ssize_t vts_svoice_model_write(struct file *file, struct kobject *kobj,
+		struct bin_attribute *bin_attr, char *buffer, loff_t ppos, size_t count)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct vts_data *data = dev_get_drvdata(dev);
+	char *to;
+	ssize_t available;
+
+	dev_info(dev, "%s\n", __func__);
+
+	if (!data->svoice_info.data) {
+		dev_info(dev, "%s Grammar binary Buffer not allocated\n", __func__);
+		return -EINVAL;
+	}
+
+	to = data->svoice_info.data;
+	available = data->svoice_info.max_sz;
+
+	dev_dbg(dev, "%s available %zu Cur-pos %lld size-to-copy %zu\n", __func__,
+		 available, ppos, count);
+	if (ppos < 0) {
+		dev_info(dev, "%s Error wrong current position\n", __func__);
+		return -EINVAL;
+	}
+	if (ppos >= available || !count) {
+		dev_info(dev, "%s Error copysize[%lld] greater than available buffer\n",
+			__func__, ppos);
+		return 0;
+	}
+	if (count > available - ppos)
+		count = available - ppos;
+
+	memcpy(to + ppos, buffer, count);
+
+	to = (to + ppos);
+	data->svoice_info.actual_sz = ppos + count;
+	dev_info(dev, "%s updated Size %zu\n", __func__,
+		 data->svoice_info.actual_sz);
+	data->svoice_info.loaded = true;
+
+	return count;
+}
+
+static const BIN_ATTR_RW(vts_google_model, VTS_MODEL_GOOGLE_BIN_MAXSZ);
+static const BIN_ATTR_RW(vts_svoice_model, VTS_MODEL_SVOICE_BIN_MAXSZ);
+
 static ssize_t vtsfw_version_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -1608,11 +1881,13 @@ static ssize_t vtsfw_version_show(struct device *dev,
 	buf[1] = '.';
 	buf[2] = (((version >> 16) & 0xFF) + '0');
 	buf[3] = '.';
-	buf[4] = ((version & 0xFF) + '0');
-	buf[5] = '\n';
-	buf[6] = '\0';
+	buf[4] = (((version >> 8) & 0xFF) + '0');
+	buf[5] = '.';
+	buf[6] = ((version & 0xFF) + '0');
+	buf[7] = '\n';
+	buf[8] = '\0';
 
-	return 7;
+	return 9;
 }
 
 static ssize_t vtsdetectlib_version_show(struct device *dev,
@@ -1768,8 +2043,29 @@ static int samsung_vts_probe(struct platform_device *pdev)
 		goto error;
 	}
 
+	/* Model binary memory allocation */
+	data->google_info.max_sz = VTS_MODEL_GOOGLE_BIN_MAXSZ;
+	data->google_info.actual_sz = 0;
+	data->google_info.loaded = false;
+	data->google_info.data = vmalloc(VTS_MODEL_GOOGLE_BIN_MAXSZ);
+	if (!data->google_info.data) {
+		dev_err(dev, "%s Failed to allocate Grammar Bin memory\n", __func__);
+		result = -ENOMEM;
+		goto error;
+	}
+
+	data->svoice_info.max_sz = VTS_MODEL_SVOICE_BIN_MAXSZ;
+	data->svoice_info.actual_sz = 0;
+	data->svoice_info.loaded = false;
+	data->svoice_info.data = vmalloc(VTS_MODEL_SVOICE_BIN_MAXSZ);
+	if (!data->svoice_info.data) {
+		dev_err(dev, "%s Failed to allocate Net Bin memory\n", __func__);
+		result = -ENOMEM;
+		goto error;
+	}
+
 	/* initialize device structure members */
-	data->active_trigger = TRIGGER_MCD;
+	data->active_trigger = TRIGGER_SVOICE;
 
 	/* initialize micbias setting count */
 	data->micclk_init_cnt = 0;
@@ -1782,6 +2078,7 @@ static int samsung_vts_probe(struct platform_device *pdev)
 
 	init_waitqueue_head(&data->ipc_wait_queue);
 	spin_lock_init(&data->ipc_spinlock);
+	spin_lock_init(&data->state_spinlock);
 	mutex_init(&data->ipc_mutex);
 	wake_lock_init(&data->wake_lock, WAKE_LOCK_SUSPEND, "vts");
 
@@ -1940,6 +2237,18 @@ static int samsung_vts_probe(struct platform_device *pdev)
 		goto error;
 	}
 
+	result = device_create_bin_file(dev, &bin_attr_vts_google_model);
+	if (IS_ERR_VALUE(result)) {
+		dev_err(dev, "Failed to create attribute %s\n", "vts_google_model");
+		goto error;
+	}
+
+	result = device_create_bin_file(dev, &bin_attr_vts_svoice_model);
+	if (IS_ERR_VALUE(result)) {
+		dev_err(dev, "Failed to create attribute %s\n", "vts_svoice_model");
+		goto error;
+	}
+
 	data->regmap_dmic = devm_regmap_init_mmio_clk(dev,
 			NULL,
 			data->dmic_base,
@@ -1984,6 +2293,9 @@ static int samsung_vts_probe(struct platform_device *pdev)
 	atomic_notifier_chain_register(&panic_notifier_list, &vts_panic_notifier);
 
 	device_init_wakeup(dev, true);
+
+	of_platform_populate(np, NULL, NULL, dev);
+
 	dev_info(dev, "Probed successfully\n");
 
 error:
@@ -2001,6 +2313,10 @@ static int samsung_vts_remove(struct platform_device *pdev)
 	vts_runtime_suspend(dev);
 #endif
 	release_firmware(data->firmware);
+	if (data->google_info.data)
+		vfree(data->google_info.data);
+	if (data->svoice_info.data)
+		vfree(data->svoice_info.data);
 	snd_soc_unregister_codec(dev);
 #ifdef EMULATOR
 	iounmap(pmu_alive);

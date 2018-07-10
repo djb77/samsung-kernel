@@ -74,6 +74,7 @@ struct mcsc_h_coef {
 	int h_coef_h[9];
 };
 
+void fimc_is_scaler_set_shadow_reg_ctrl(void __iomem *base_addr, u32 val);
 void fimc_is_scaler_start(void __iomem *base_addr, u32 hw_id);
 void fimc_is_scaler_stop(void __iomem *base_addr, u32 hw_id);
 

@@ -18,6 +18,13 @@
 
 #include "fimc-is-device-sensor.h"
 
+#define MAX_SENSOR_SHARED_RSC	10
+
+enum shared_rsc_type_t {
+	SRT_ACQUIRE = 1,
+	SRT_RELEASE,
+};
+
 struct exynos_sensor_pin {
 	ulong pin;
 	u32 delay;
@@ -25,27 +32,52 @@ struct exynos_sensor_pin {
 	char *name;
 	u32 act;
 	u32 voltage;
+
+	enum shared_rsc_type_t shared_rsc_type;
+	spinlock_t *shared_rsc_slock;
+	atomic_t *shared_rsc_count;
+	int shared_rsc_active;
 };
 
 #define SET_PIN_INIT(d, s, c) d->pinctrl_index[s][c] = 0;
 
-#define SET_PIN(d, s, c, p, n, a, v, t) \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].pin	= p; \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].name	= n; \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].act	= a; \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].value	= v; \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].delay	= t; \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].voltage = 0; \
-		(d)->pinctrl_index[s][c]++;
+#define SET_PIN(d, s, c, p, n, a, v, t)							\
+	do {										\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].pin	= p;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].name	= n;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].act	= a;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].value	= v;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].delay	= t;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].voltage	= 0;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].shared_rsc_type  = 0;	\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].shared_rsc_slock = NULL;	\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].shared_rsc_count = NULL;	\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].shared_rsc_active = 0;	\
+		(d)->pinctrl_index[s][c]++;						\
+	} while (0)
 
-#define SET_PIN_VOLTAGE(d, s, c, p, n, a, v, t, e) \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].pin	= p; \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].name	= n; \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].act	= a; \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].value	= v; \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].delay	= t; \
-		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].voltage	= e; \
-		(d)->pinctrl_index[s][c]++;
+#define SET_PIN_VOLTAGE(d, s, c, p, n, a, v, t, e)					\
+	do {										\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].pin	= p;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].name	= n;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].act	= a;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].value	= v;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].delay	= t;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].voltage	= e;		\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].shared_rsc_type  = 0;	\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].shared_rsc_slock = NULL;	\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].shared_rsc_count = NULL;	\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c]].shared_rsc_active = 0;	\
+		(d)->pinctrl_index[s][c]++;						\
+	} while (0)
+
+#define SET_PIN_SHARED(d, s, c, type, slock, count, active)					\
+	do {											\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c] - 1].shared_rsc_type  = type;	\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c] - 1].shared_rsc_slock = slock;	\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c] - 1].shared_rsc_count = count;	\
+		(d)->pin_ctrls[s][c][d->pinctrl_index[s][c] - 1].shared_rsc_active = active;	\
+	} while (0)
 
 struct exynos_platform_fimc_is_module {
 	int (*gpio_cfg)(struct fimc_is_module_enum *module, u32 scenario, u32 gpio_scenario);
@@ -75,6 +107,7 @@ struct exynos_platform_fimc_is_module {
 	u32 preprocessor_dma_channel;
 	bool power_seq_dt;
 	u32 internal_vc[CSI_VIRTUAL_CH_MAX];
+	u32 vc_buffer_offset[CSI_VIRTUAL_CH_MAX];
 };
 
 extern int exynos_fimc_is_module_pins_cfg(struct fimc_is_module_enum *module,

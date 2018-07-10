@@ -546,9 +546,10 @@ static int fimc_is_ssx_video_s_ctrl(struct file *file, void *priv,
 	switch (ctrl->id) {
 	case V4L2_CID_IS_S_STREAM:
 		{
-			u32 sstream, instant, noblock;
+			u32 sstream, instant, noblock, standby;
 
 			sstream = (ctrl->value & SENSOR_SSTREAM_MASK) >> SENSOR_SSTREAM_SHIFT;
+			standby = (ctrl->value & SENSOR_USE_STANDBY_MASK) >> SENSOR_USE_STANDBY_SHIFT;
 			instant = (ctrl->value & SENSOR_INSTANT_MASK) >> SENSOR_INSTANT_SHIFT;
 			noblock = (ctrl->value & SENSOR_NOBLOCK_MASK) >> SENSOR_NOBLOCK_SHIFT;
 			/*
@@ -556,7 +557,11 @@ static int fimc_is_ssx_video_s_ctrl(struct file *file, void *priv,
 			 * nonblock(1) : non-blocking command
 			 */
 
-			minfo(" Sensor Stream %s : (cnt:%d, noblk:%d)\n", device, sstream ? "On" : "Off", instant, noblock);
+			minfo(" Sensor Stream %s : (cnt:%d, noblk:%d, standby:%d)\n", device,
+				sstream ? "On" : "Off", instant, noblock, standby);
+
+			device->use_standby = standby;
+			device->sstream = sstream;
 
 			if (sstream == IS_ENABLE_STREAM) {
 				ret = fimc_is_sensor_front_start(device, instant, noblock);
@@ -595,22 +600,14 @@ static int fimc_is_ssx_video_s_ctrl(struct file *file, void *priv,
 	 * gain boost: min_target_fps,  max_target_fps, scene_mode
 	 */
 	case V4L2_CID_IS_MIN_TARGET_FPS:
-		if (test_bit(FIMC_IS_SENSOR_FRONT_START, &device->state)) {
-			err("failed to set min_target_fps: %d - sensor stream on already\n",
-					ctrl->value);
-			ret = -EINVAL;
-		} else {
-			device->min_target_fps = ctrl->value;
-		}
+		minfo("%s: set min_target_fps(%d), state(0x%lx)\n", device, __func__, ctrl->value, device->state);
+
+		device->min_target_fps = ctrl->value;
 		break;
 	case V4L2_CID_IS_MAX_TARGET_FPS:
-		if (test_bit(FIMC_IS_SENSOR_FRONT_START, &device->state)) {
-			err("failed to set max_target_fps: %d - sensor stream on already\n",
-					ctrl->value);
-			ret = -EINVAL;
-		} else {
-			device->max_target_fps = ctrl->value;
-		}
+		minfo("%s: set max_target_fps(%d), state(0x%lx)\n", device, __func__, ctrl->value, device->state);
+
+		device->max_target_fps = ctrl->value;
 		break;
 	case V4L2_CID_SCENEMODE:
 		if (test_bit(FIMC_IS_SENSOR_FRONT_START, &device->state)) {
@@ -791,6 +788,63 @@ p_err:
 	return ret;
 }
 
+static int fimc_is_ssx_video_s_ext_ctrl(struct file *file, void *priv,
+	struct v4l2_ext_controls *ctrls)
+{
+	int ret = 0;
+	int i;
+	struct fimc_is_video_ctx *vctx = file->private_data;
+	struct fimc_is_device_sensor *device;
+	struct v4l2_ext_control *ext_ctrl;
+	struct v4l2_control ctrl;
+
+	BUG_ON(!ctrls);
+	BUG_ON(!vctx);
+
+	device = vctx->device;
+	if (!device) {
+		err("device is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	ret = fimc_is_vender_ssx_video_s_ext_ctrl(ctrls, device);
+	if (ret) {
+		merr("fimc_is_vender_ssx_video_s_ctrl is fail(%d)", device, ret);
+		goto p_err;
+	}
+
+	for (i = 0; i < ctrls->count; i++) {
+		ext_ctrl = (ctrls->controls + i);
+		switch (ext_ctrl->id) {
+			case VENDER_S_CTRL:
+				/* This s_ctrl is needed to skip, when the s_ctrl id was found. */
+				break;
+			default:
+				ctrl.id = ext_ctrl->id;
+				ctrl.value = ext_ctrl->value;
+
+				ret = fimc_is_ssx_video_s_ctrl(file, vctx, &ctrl);
+				if (ret) {
+					merr("fimc_is_video_s_ctrl is fail(%d)", device, ret);
+					goto p_err;
+				}
+				break;
+		}
+	}
+
+p_err:
+	return ret;
+
+}
+
+static int fimc_is_ssx_video_g_ext_ctrl(struct file *file, void *priv,
+	struct v4l2_ext_controls *ctrls)
+{
+	/* Todo: add to get extra control code */
+	return 0;
+}
+
 static int fimc_is_ssx_video_g_parm(struct file *file, void *priv,
 	struct v4l2_streamparm *parm)
 {
@@ -861,6 +915,8 @@ const struct v4l2_ioctl_ops fimc_is_ssx_video_ioctl_ops = {
 	.vidioc_s_input			= fimc_is_ssx_video_s_input,
 	.vidioc_s_ctrl			= fimc_is_ssx_video_s_ctrl,
 	.vidioc_g_ctrl			= fimc_is_ssx_video_g_ctrl,
+	.vidioc_s_ext_ctrls		= fimc_is_ssx_video_s_ext_ctrl,
+	.vidioc_g_ext_ctrls		= fimc_is_ssx_video_g_ext_ctrl,
 	.vidioc_g_parm			= fimc_is_ssx_video_g_parm,
 	.vidioc_s_parm			= fimc_is_ssx_video_s_parm,
 };

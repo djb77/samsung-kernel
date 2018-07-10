@@ -148,19 +148,16 @@ int flash_s2mpb02_probe(struct device *dev, struct i2c_client *client)
 	struct v4l2_subdev *subdev_flash;
 	struct fimc_is_device_sensor *device;
 	struct fimc_is_flash *flash;
-	u32 sensor_id = 0;
 	struct device_node *dnode;
+	const u32 *sensor_id_spec;
+	u32 sensor_id_len;
+	u32 sensor_id[FIMC_IS_SENSOR_COUNT];
+	int i;
 
 	BUG_ON(!fimc_is_dev);
 	BUG_ON(!dev);
 
 	dnode = dev->of_node;
-
-	ret = of_property_read_u32(dnode, "id", &sensor_id);
-	if (ret) {
-		err("id read is fail(%d)", ret);
-		goto p_err;
-	}
 
 	core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
 	if (!core) {
@@ -169,21 +166,37 @@ int flash_s2mpb02_probe(struct device *dev, struct i2c_client *client)
 		goto p_err;
 	}
 
-	device = &core->sensor[sensor_id];
-	if (!device) {
-		err("sensor device is NULL");
-		ret = -EPROBE_DEFER;
+	sensor_id_spec = of_get_property(dnode, "id", &sensor_id_len);
+	if (!sensor_id_spec) {
+		err("sensor_id num read is fail(%d)", ret);
 		goto p_err;
 	}
 
-	flash = kzalloc(sizeof(struct fimc_is_flash), GFP_KERNEL);
+	sensor_id_len /= sizeof(*sensor_id_spec);
+
+	ret = of_property_read_u32_array(dnode, "id", sensor_id, sensor_id_len);
+	if (ret) {
+		err("sensor_id read is fail(%d)", ret);
+		goto p_err;
+	}
+
+	for (i = 0; i < sensor_id_len; i++) {
+		device = &core->sensor[sensor_id[i]];
+		if (!device) {
+			err("sensor device is NULL");
+			ret = -EPROBE_DEFER;
+			goto p_err;
+		}
+	}
+
+	flash = kzalloc(sizeof(struct fimc_is_flash) * sensor_id_len, GFP_KERNEL);
 	if (!flash) {
 		err("flash is NULL");
 		ret = -ENOMEM;
 		goto p_err;
 	}
 
-	subdev_flash = kzalloc(sizeof(struct v4l2_subdev), GFP_KERNEL);
+	subdev_flash = kzalloc(sizeof(struct v4l2_subdev)* sensor_id_len, GFP_KERNEL);
 	if (!subdev_flash) {
 		err("subdev_flash is NULL");
 		ret = -ENOMEM;
@@ -191,47 +204,55 @@ int flash_s2mpb02_probe(struct device *dev, struct i2c_client *client)
 		goto p_err;
 	}
 
-	flash->id = FLADRV_NAME_MAX77693;
-	flash->subdev = subdev_flash;
-	flash->client = client;
+	for (i = 0; i < sensor_id_len; i++) {
+		probe_info("%s sensor_id %d\n", __func__, sensor_id[i]);
 
-	flash->flash_gpio = of_get_named_gpio(dnode, "flash-gpio", 0);
-	if (!gpio_is_valid(flash->flash_gpio)) {
-		dev_err(dev, "failed to get PIN_RESET\n");
-		kfree(flash);
-		kfree(subdev_flash);
-		return -EINVAL;
-	} else {
-		gpio_request_one(flash->flash_gpio, GPIOF_IN, "CAM_FLASH_INPUT");
-		gpio_free(flash->flash_gpio);
+		flash[i].id = FLADRV_NAME_MAX77693;
+		flash[i].subdev = &subdev_flash[i];
+		flash[i].client = client;
+
+		flash[i].flash_gpio = of_get_named_gpio(dnode, "flash-gpio", 0);
+		if (!gpio_is_valid(flash[i].flash_gpio)) {
+			dev_err(dev, "failed to get PIN_RESET\n");
+			kfree(flash);
+			kfree(subdev_flash);
+			return -EINVAL;
+		} else {
+			gpio_request_one(flash[i].flash_gpio, GPIOF_IN, "CAM_FLASH_INPUT");
+			gpio_free(flash[i].flash_gpio);
+		}
+
+		flash[i].torch_gpio = of_get_named_gpio(dnode, "torch-gpio", 0);
+		if (!gpio_is_valid(flash[i].torch_gpio)) {
+			dev_err(dev, "failed to get PIN_RESET\n");
+			kfree(flash);
+			kfree(subdev_flash);
+			return -EINVAL;
+		} else {
+			gpio_request_one(flash[i].torch_gpio, GPIOF_IN, "CAM_TORCH_INPUT");
+			gpio_free(flash[i].torch_gpio);
+		}
+
+		flash[i].flash_data.mode = CAM2_FLASH_MODE_OFF;
+		flash[i].flash_data.intensity = 255; /* TODO: Need to figure out min/max range */
+		flash[i].flash_data.firing_time_us = 1 * 1000 * 1000; /* Max firing time is 1sec */
+
+		device = &core->sensor[sensor_id[i]];
+		device->subdev_flash = &subdev_flash[i];
+		device->flash = &flash[i];
+
+		if (client)
+			v4l2_i2c_subdev_init(&subdev_flash[i], client, &subdev_ops);
+		else
+			v4l2_subdev_init(&subdev_flash[i], &subdev_ops);
+
+		v4l2_set_subdevdata(&subdev_flash[i], &flash[i]);
+		v4l2_set_subdev_hostdata(&subdev_flash[i], device);
+		snprintf(subdev_flash[i].name, V4L2_SUBDEV_NAME_SIZE,
+					"flash-subdev.%d", flash[i].id);
+
+		probe_info("%s done\n", __func__);
 	}
-
-	flash->torch_gpio = of_get_named_gpio(dnode, "torch-gpio", 0);
-	if (!gpio_is_valid(flash->torch_gpio)) {
-		dev_err(dev, "failed to get PIN_RESET\n");
-		kfree(flash);
-		kfree(subdev_flash);
-		return -EINVAL;
-	} else {
-		gpio_request_one(flash->torch_gpio, GPIOF_IN, "CAM_TORCH_INPUT");
-		gpio_free(flash->torch_gpio);
-	}
-
-	flash->flash_data.mode = CAM2_FLASH_MODE_OFF;
-	flash->flash_data.intensity = 255; /* TODO: Need to figure out min/max range */
-	flash->flash_data.firing_time_us = 1 * 1000 * 1000; /* Max firing time is 1sec */
-
-	device->subdev_flash = subdev_flash;
-	device->flash = flash;
-
-	if (client)
-		v4l2_i2c_subdev_init(subdev_flash, client, &subdev_ops);
-	else
-		v4l2_subdev_init(subdev_flash, &subdev_ops);
-
-	v4l2_set_subdevdata(subdev_flash, flash);
-	v4l2_set_subdev_hostdata(subdev_flash, device);
-	snprintf(subdev_flash->name, V4L2_SUBDEV_NAME_SIZE, "flash-subdev.%d", flash->id);
 
 p_err:
 	return ret;

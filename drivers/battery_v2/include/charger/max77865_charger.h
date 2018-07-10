@@ -286,6 +286,8 @@ struct max77865_charger_data {
 	int irq_sysovlo;
 	struct wake_lock sysovlo_wake_lock;
 
+	u8 vsys_ocp;
+
 	bool is_mdock;
 	bool otg_on;
 

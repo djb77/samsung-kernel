@@ -287,6 +287,7 @@ static void shmem_forced_cp_crash(struct mem_link_device *mld,
 {
 	struct link_device *ld = &mld->link_dev;
 	struct modem_ctl *mc = ld->mc;
+	unsigned int ap_status = mc->mbx_ap_status;
 
 	/* Disable normal IPC */
 	set_magic(mld, MEM_CRASH_MAGIC);
@@ -309,31 +310,33 @@ static void shmem_forced_cp_crash(struct mem_link_device *mld,
 
 	mld->crash_reason.owner = crash_reason_owner;
 	strlcpy(mld->crash_reason.string, crash_reason_string,
-		MEM_CRASH_REASON_SIZE);
+		CRASH_REASON_SIZE);
 
-	if (mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP)) {
-		stop_net_ifaces(ld);
+	stop_net_ifaces(ld);
 
-		if (mld->debug_info)
-			mld->debug_info();
+	if (mld->debug_info)
+		mld->debug_info();
 
-		/**
-		 * If there is no CRASH_ACK from CP in a timeout,
-		 * handle_no_cp_crash_ack() will be executed.
-		 */
-		mif_add_timer(&mld->crash_ack_timer, FORCE_CRASH_ACK_TIMEOUT,
-			      handle_no_cp_crash_ack, (unsigned long)mld);
+	/**
+	 * If there is no CRASH_ACK from CP in a timeout,
+	 * handle_no_cp_crash_ack() will be executed.
+	 */
+	mif_add_timer(&mld->crash_ack_timer, FORCE_CRASH_ACK_TIMEOUT,
+		      handle_no_cp_crash_ack, (unsigned long)mld);
 
-		/* Send CRASH_EXIT command to a CP */
-		send_ipc_irq(mld, cmd2int(CMD_CRASH_EXIT));
-	} else {
-		shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
-			"Crash by shmem_forced_cp_crash()");
-	}
+	/* Update crash type to msg box */
+	mbox_update_value(MCU_CP, ap_status, mld->crash_reason.owner, 
+			mc->sbi_crash_type_mask, mc->sbi_crash_type_pos);
+
+	/* Send CRASH_EXIT command to a CP */
+	send_ipc_irq(mld, cmd2int(CMD_CRASH_EXIT));
 
 	clean_vss_magic_code();
 
-	mif_err("%s->%s: CP_CRASH_REQ <%pf>\n", ld->name, mc->name, CALLER);
+	mif_err("%s->%s: CP_CRASH_REQ by %d, %s <%pf>\n",
+				ld->name, mc->name,
+				crash_reason_owner, crash_reason_string,
+				CALLER);
 }
 
 #endif
@@ -724,7 +727,7 @@ static enum hrtimer_restart tx_timer_func(struct hrtimer *timer)
 					need_schedule = true;
 					continue;
 				} else {
-					shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+					shmem_forced_cp_crash(mld, CRASH_REASON_MIF_TX_ERR,
 						"check_tx_flow_ctrl error");
 					need_schedule = false;
 					goto exit;
@@ -743,7 +746,7 @@ static enum hrtimer_restart tx_timer_func(struct hrtimer *timer)
 				mask |= msg_mask(dev);
 				continue;
 			} else {
-				shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+				shmem_forced_cp_crash(mld, CRASH_REASON_MIF_TX_ERR,
 					"tx_frames_to_dev error");
 				need_schedule = false;
 				goto exit;
@@ -930,15 +933,31 @@ static enum hrtimer_restart sbd_tx_timer_func(struct hrtimer *timer)
 		struct sbd_ring_buffer *rb = sbd_id2rb(sl, i, TX);
 		int ret;
 
-		ret = tx_frames_to_rb(rb);
+		if (unlikely(sbd_under_tx_flow_ctrl(rb))) {
+			ret = sbd_check_tx_flow_ctrl(rb);
+			if (ret < 0) {
+				if (ret == -EBUSY || ret == -ETIME) {
+					need_schedule = true;
+					continue;
+				} else {
+					shmem_forced_cp_crash(mld,
+						CRASH_REASON_MIF_TX_ERR,
+						"check_sbd_tx_flow_ctrl error");
+					need_schedule = false;
+					goto exit;
+				}
+			}
+		}
 
+		ret = tx_frames_to_rb(rb);
 		if (unlikely(ret < 0)) {
 			if (ret == -EBUSY || ret == -ENOSPC) {
 				need_schedule = true;
+				sbd_txq_stop(rb);
 				mask = MASK_SEND_DATA;
 				continue;
 			} else {
-				shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+				shmem_forced_cp_crash(mld, CRASH_REASON_MIF_TX_ERR,
 					"tx_frames_to_rb error");
 				need_schedule = false;
 				goto exit;
@@ -1228,7 +1247,7 @@ static void pass_skb_to_demux(struct mem_link_device *mld, struct sk_buff *skb)
 	if (unlikely(!iod)) {
 		mif_err("%s: ERR! No IOD for CH.%d\n", ld->name, ch);
 		dev_kfree_skb_any(skb);
-		shmem_forced_cp_crash(mld, MEM_CRASH_REASON_RIL,
+		shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RIL_BAD_CH,
 			"ERR! No IOD for CH.XX in pass_skb_to_demux()");
 		return;
 	}
@@ -1347,7 +1366,7 @@ bad_msg:
 		ld->name, arrow(RX), ld->mc->name,
 		hdr[0], hdr[1], hdr[2], hdr[3]);
 	set_rxq_tail(dev, in);	/* Reset tail (out) pointer */
-	shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+	shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 		"ERR! BAD MSG from CP in rxq_read()");
 
 no_mem:
@@ -1385,7 +1404,7 @@ static int rx_frames_from_dev(struct mem_link_device *mld,
 				ld->name, dev->name, ch, get_rxq_tail(dev));
 			pr_skb("CRASH", skb);
 			dev_kfree_skb_any(skb);
-			shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+			shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 				"ERR! No IOD from CP in rx_frames_from_dev()");
 			break;
 		}
@@ -1459,7 +1478,7 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 	if (unlikely(!priv)) {
 		mif_err("%s: ERR! No PRIV in skb@%p\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
-		shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+		shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 			"ERR! No PRIV in pass_skb_to_net()");
 		return;
 	}
@@ -1468,7 +1487,7 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 	if (unlikely(!iod)) {
 		mif_err("%s: ERR! No IOD in skb@%p\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
-		shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+		shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 			"ERR! No IOD in pass_skb_to_net()");
 		return;
 	}
@@ -1603,7 +1622,8 @@ static int rx_ipc_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb)
 #ifdef DEBUG_MODEM_IF
 			panic("skb alloc failed.");
 #else
-			shmem_forced_cp_crash(mld);
+			shmem_forced_cp_crash(mld, CRASH_REASON_MIF_ZMC,
+				"ERR! ZMC alloc failed");
 #endif
 			break;
 		}
@@ -1619,7 +1639,7 @@ static int rx_ipc_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb)
 				mif_err("frm.ch:%d != rb.ch:%d\n", fch, ch);
 				pr_skb("CRASH", skb);
 				dev_kfree_skb_any(skb);
-				shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
+				shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 					"frm.ch is not same with rb.ch");
 				continue;
 			}
@@ -1668,8 +1688,8 @@ static int rx_ipc_frames_from_rb(struct sbd_ring_buffer *rb)
 				mif_err("frm.ch:%d != rb.ch:%d\n", fch, ch);
 				pr_skb("CRASH", skb);
 				dev_kfree_skb_any(skb);
-				shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
-					"frm.ch != rb.ch in rx_ipc_frames_from_rb()");
+				shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
+					"frm.ch is not same with rb.ch");
 				continue;
 			}
 		}
@@ -1948,20 +1968,23 @@ static int shmem_send(struct link_device *ld, struct io_device *iod,
 
 	switch (id) {
 	case IPC_RAW:
-		if (unlikely(atomic_read(&ld->netif_stopped) > 0)) {
-			if (skb->queue_mapping != 1) {
-				if (in_interrupt()) {
-					mif_err("raw tx is suspended, drop size=%d\n",
-							skb->len);
-					return -EBUSY;
-				}
+		if (sipc_ps_ch(iod->id)) {
+			if (unlikely(atomic_read(&ld->netif_stopped) > 0)) {
+				if (skb->queue_mapping != 1) {
+					if (in_interrupt()) {
+						mif_err("raw tx is suspended, drop size=%d\n",
+								skb->len);
+						return -EBUSY;
+					}
 
-				mif_err("wait TX RESUME CMD...\n");
-				reinit_completion(&ld->raw_tx_resumed);
-				wait_for_completion(&ld->raw_tx_resumed);
-				mif_err("TX resumed done.\n");
-			} else {
-				mif_err_limited("Tx_flowctrl, but received ack from ch %d\n", ch);
+					mif_err("wait TX RESUME CMD...\n");
+					reinit_completion(&ld->raw_tx_resumed);
+					wait_for_completion_timeout(&ld->raw_tx_resumed,
+							msecs_to_jiffies(3000));
+					mif_err("TX resumed done.\n");
+				} else {
+					mif_err_limited("Tx_flowctrl, but received ack from ch %d\n", ch);
+				}
 			}
 		}
 
@@ -2291,9 +2314,11 @@ static int shmem_update_firm_info(struct link_device *ld, struct io_device *iod,
 static int shmem_force_dump(struct link_device *ld, struct io_device *iod)
 {
 	struct mem_link_device *mld = to_mem_link_device(ld);
+	u32 crash_type = ld->crash_type;
+
 	mif_err("+++\n");
-	shmem_forced_cp_crash(mld, MEM_CRASH_REASON_AP,
-		"shmem_force_dump() is called");
+	shmem_forced_cp_crash(mld, crash_type,
+		"forced crash is called by ioctl command");
 	mif_err("---\n");
 	return 0;
 }
@@ -2529,7 +2554,10 @@ static void shmem_tx_state_handler(void *data)
 
 	int2ap_status = mld->recv_cp2ap_status(mld);
 
-	switch (int2ap_status & 0x0010) {
+	/* Change SHM_FLOWCTL to MASK_TX_FLOWCTRL */
+	int2ap_status = (int2ap_status & SHM_FLOWCTL_BIT) << 2;
+
+	switch (int2ap_status & (SHM_FLOWCTL_BIT << 2)) {
 	case MASK_TX_FLOWCTL_SUSPEND:
 		if (!chk_same_cmd(mld, int2ap_status))
 			tx_flowctrl_suspend(mld);

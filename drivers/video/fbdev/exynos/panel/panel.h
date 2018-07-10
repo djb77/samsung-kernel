@@ -27,8 +27,12 @@
 #ifdef CONFIG_SEC_FACTORY
 #define CONFIG_SUPPORT_PANEL_SWAP
 #define CONFIG_SUPPORT_XTALK_MODE
+#define CONFIG_DSC_DECODE_CRC
 #endif
+#define CONFIG_SUPPORT_MST
 #define CONFIG_SUPPORT_GRAYSPOT_TEST
+
+
 
 #define to_panel_device(_m_)	container_of(_m_, struct panel_device, _m_)
 
@@ -137,6 +141,7 @@ enum {
 /*Command to write ddi side ram */
 	DSI_PKT_TYPE_WR_SR,
 #endif
+	DSI_PKT_TYPE_WR_MEM,
 	DSI_PKT_TYPE_PPS,
 	CMD_TYPE_TX_PKT_END = DSI_PKT_TYPE_PPS,
 	CMD_TYPE_RD_PKT_START,
@@ -527,9 +532,22 @@ enum PANEL_SEQ {
 	PANEL_ACTIVE_CLK_CTRL_SEQ,
 	PANEL_ACTIVE_CLK_UPDATE_SEQ,
 #endif
+#ifdef CONFIG_SUPPORT_MST
+	PANEL_MST_ON_SEQ,
+	PANEL_MST_OFF_SEQ,
+#endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+	PANEL_GCT_ENTER_SEQ,
+	PANEL_GCT_VDDM_SEQ,
+	PANEL_GCT_IMG_UPDATE_SEQ,
+	PANEL_GCT_EXIT_SEQ,
+#endif
 #ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
 	PANEL_GRAYSPOT_ON_SEQ,
 	PANEL_GRAYSPOT_OFF_SEQ,
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+	PANEL_DSC_DECODE_CRC,
 #endif
 	PANEL_DUMP_SEQ,
 	PANEL_DUMMY_SEQ,
@@ -593,6 +611,18 @@ enum {
 };
 
 enum {
+	POC_ONOFF_OFF,
+	POC_ONOFF_ON,
+	POC_ONOFF_MAX
+};
+
+enum {
+	IRC_ONOFF_OFF,
+	IRC_ONOFF_ON,
+	IRC_ONOFF_MAX
+};
+
+enum {
 	ACL_PWRSAVE_OFF,
 	ACL_PWRSAVE_ON,
 	MAX_ACL_PWRSAVE,
@@ -620,6 +650,36 @@ enum {
 enum {
 	XTALK_OFF,
 	XTALK_ON,
+};
+#endif
+
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+enum {
+	GRAM_CHKSUM_OFF,
+	GRAM_CHKSUM_LV_TEST_1,
+	GRAM_CHKSUM_LV_TEST_2,
+	GRAM_CHKSUM_HV_TEST_1,
+	GRAM_CHKSUM_HV_TEST_2,
+	MAX_GRAM_CHKSUM,
+};
+
+enum {
+	GCT_PATTERN_NONE,
+	GCT_PATTERN_1,
+	GCT_PATTERN_2,
+	MAX_GCT_PATTERN,
+};
+
+enum {
+	VDDM_ORIG,
+	VDDM_LV,
+	VDDM_HV,
+	MAX_VDDM,
+};
+
+enum {
+	GRAM_TEST_OFF,
+	GRAM_TEST_ON
 };
 #endif
 
@@ -652,6 +712,9 @@ struct panel_properties {
 	u32 alpm_mode;
 	u32 cur_alpm_mode;
 	u32 mcd_on;
+#ifdef CONFIG_SUPPORT_MST
+	u32 mst_on;
+#endif
 	u32 hmd_on;
 	u32 hmd_brightness;
 	u32 lux;
@@ -661,9 +724,17 @@ struct panel_properties {
 #ifdef CONFIG_SUPPORT_POC_FLASH
 	u32 poc_op;
 #endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+	u32 gct_on;
+	u32 gct_vddm;
+	u32 gct_pattern;
+	u8 gct_valid_chksum;
+#endif
 #ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
 	u32 grayspot;
 #endif
+	u32 poc_onoff;
+	u32 irc_onoff;
 	u32 key[MAX_CMD_LEVEL];
 };
 

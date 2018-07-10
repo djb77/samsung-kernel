@@ -312,6 +312,12 @@ config SENSORS_HRM_MAX869_ENHANCED_EOL
 	help
 	  If you want to apply enhanced eol process, it should be set.
 
+config SENSORS_HRM_MAX869_NEW_EOL
+	bool "MAX869 HRM sensor new eol"
+	default n
+	help
+	  If you want to apply new eol process, it should be set.
+
 config MAX86902_THRESHOLD
 	int "MAX86902 HRM sensor finger detection threshold"
 	default 70000
@@ -383,6 +389,13 @@ config SENSORS_SSP_TMG399x
 	  To compile this driver as a module, choose M here: the
 	  module will be called ssp.
 
+config SENSORS_SSP_CM3323
+	tristate "Sensors ssp cm3323"
+	default n
+	depends on SPI
+	help
+	  This option enables cm3323 proxitmity sensor.
+      
 config SENSORS_SSP_PROX_SETTING
 	tristate "Sensors ssp prox setting"
 	default n
@@ -522,6 +535,16 @@ config SENSORS_CAN
 	  Say Y here if you accept HERO CAN Grip sensor
 	  Say N here if you do not access HERO CAN Grip Sensor
 
+config SENSORS_SX9320_MULTI
+	depends on I2C
+	tristate "SX9320 driver"
+	default n
+	help
+	  Say Y here if you use four sx9320 multi.
+	  This option enables additional grip sensors using
+	  SemTech sx9320 device driver especially in multi grip.
+	  Say N here if you do not use four sx9320.
+
 config SENSORS_SX9320
 	depends on I2C
 	tristate "SX9320 driver"
@@ -619,6 +642,28 @@ config SENSORS_SSP_DREAM
        	  factory test.
  	  To compile this driver as a module, choose M here: the
  	  module will be called ssp.
+      
+config SENSORS_SSP_GREAT
+	tristate "DREAM Project"
+	default n
+	depends on SPI
+	help
+	  Binary file for ssp driver.
+          If you say yes here you get GRACE project support for
+       	  factory test.
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called ssp.
+      
+config SENSORS_SSP_LUGE
+	tristate "DREAM Project"
+	default n
+	depends on SPI
+	help
+	  Binary file for ssp driver.
+          If you say yes here you get GRACE project support for
+       	  factory test.
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called ssp.
 
 config SSP_MOTOR_CALLBACK
 	tristate "Sensors support motor"
@@ -628,6 +673,12 @@ config SSP_MOTOR_CALLBACK
 	  If you want to use royce project, it should be set.
       
 config SSP_REGISTER_RW
+	tristate "SensorHub support Register RW"
+	default n
+	help
+	  If you want to use Register RW sysfs, it should be set.
+      
+config SSP_SUPPORT_MAGNETIC_OVERFLOW
 	tristate "SensorHub support Register RW"
 	default n
 	help

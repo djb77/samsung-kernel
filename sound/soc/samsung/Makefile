@@ -46,6 +46,10 @@ obj-$(CONFIG_SND_SOC_SAMSUNG) += snd-soc-eax-dai.o snd-soc-eax-dma.o
 obj-$(CONFIG_SND_ESA_SA_EFFECT) += snd-soc-esa-sa-effect.o
 obj-$(CONFIG_SND_SOC_EAX_SLOWPATH) += snd-soc-eax-slowpath.o
 
+obj-$(CONFIG_SND_SAMSUNG_SEIREN) += seiren/
+obj-$(CONFIG_SND_SOC_SAMSUNG_VTS) += vts/
+obj-$(CONFIG_SND_SOC_SAMSUNG_ABOX) += abox/
+
 # S3C24XX Machine Support
 snd-soc-jive-wm8750-objs := jive_wm8750.o
 snd-soc-neo1973-wm8753-objs := neo1973_wm8753.o
@@ -109,10 +113,6 @@ obj-$(CONFIG_SND_SOC_SAMSUNG_ZERO_CLEARWATER) += snd-soc-pacific-arizona.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_LUCKY_MOON) += snd-soc-lucky-arizona.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_ESPRESSO8890_CLEARWATER) += snd-soc-espresso8890-clearwater.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_EXYNOS8895_MOON) += exynos8895_madera.o
-obj-$(CONFIG_SND_SOC_SAMSUNG_EXYNOS8895_ASHETON) += exynos8895_madera.o
+obj-$(CONFIG_SND_SOC_SAMSUNG_EXYNOS8895_ASHETON) += dream_madera.o jack_madera_sysfs_cb.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_EXYNOS8895_COD3033) += exynos8895_sound.o
-
-obj-$(CONFIG_SND_SAMSUNG_SEIREN) += seiren/
-obj-$(CONFIG_SND_SOC_SAMSUNG_VTS) += vts/
-obj-$(CONFIG_SND_SOC_SAMSUNG_ABOX) += abox/
-obj-$(CONFIG_EXYNOS_MIPI_DISPLAYPORT) += dp_dma.o
+obj-$(CONFIG_SND_SOC_SAMSUNG_AUDIO) += sec_audio_debug.o sec_audio_sysfs.o

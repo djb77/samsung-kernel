@@ -636,6 +636,18 @@ static struct s5p_mfc_ctrl_cfg mfc_ctrl_list[] = {
 		.flag_addr = 0,
 		.flag_shft = 0,
 	},
+	{	/* set base layer priority */
+		.type = MFC_CTRL_TYPE_SET,
+		.id = V4L2_CID_MPEG_VIDEO_RATIO_OF_INTRA,
+		.is_volatile = 1,
+		.mode = MFC_CTRL_MODE_SFR,
+		.addr = S5P_FIMV_E_RC_MODE,
+		.mask = 0x000000FF,
+		.shft = 8,
+		.flag_mode = MFC_CTRL_MODE_SFR,
+		.flag_addr = S5P_FIMV_E_PARAM_CHANGE,
+		.flag_shft = 13,
+	},
 };
 
 #define NUM_CTRL_CFGS ARRAY_SIZE(mfc_ctrl_list)
@@ -1412,6 +1424,12 @@ static int s5p_mfc_enc_set_buf_ctrls_val_nal_q_enc(struct s5p_mfc_ctx *ctx,
 					buf_ctrl->old_val2,
 					enc->roi_buf[buf_ctrl->old_val2].daddr,
 					buf_ctrl->val);
+			break;
+		case V4L2_CID_MPEG_VIDEO_RATIO_OF_INTRA:
+			pInStr->RcMode &= ~(buf_ctrl->mask << buf_ctrl->shft);
+			pInStr->RcMode |=
+				(buf_ctrl->val & buf_ctrl->mask) << buf_ctrl->shft;
+			param_change = 1;
 			break;
 		/* If new dynamic controls are added, insert here */
 		default:

@@ -27,6 +27,8 @@
 #define SEC_NFC_WAKEUP			_IOW(SEC_NFC_MAGIC, 3, unsigned int)
 #define SEC_NFC_SET_NPT_MODE		_IOW(SEC_NFC_MAGIC, 4, unsigned int)
 
+#define SEC_NFC_DEBUG			_IO(SEC_NFC_MAGIC, 99)
+
 /* size */
 #define SEC_NFC_MSG_MAX_SIZE	(256 + 4)
 

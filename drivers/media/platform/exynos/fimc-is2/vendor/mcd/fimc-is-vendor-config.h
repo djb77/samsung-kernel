@@ -23,8 +23,10 @@
 #include "fimc-is-vendor-config_dream2.h"
 #elif defined(CONFIG_CAMERA_DREAM)
 #include "fimc-is-vendor-config_dream.h"
-#elif defined(CONFIG_CAMERA_BAIKAL)
-#include "fimc-is-vendor-config_baikal.h"
+#elif defined(CONFIG_CAMERA_GREAT)
+#include "fimc-is-vendor-config_great.h"
+#elif defined(CONFIG_CAMERA_VALLEY)
+#include "fimc-is-vendor-config_valley.h"
 #else
 #include "fimc-is-vendor-config_dream.h" /* Default */
 #endif

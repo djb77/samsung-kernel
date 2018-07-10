@@ -38,20 +38,6 @@
 
 #include "fimc-is-device-sensor.h"
 
-static const char * const hw_frame_state_name[NR_FRAME_STATE] = {
-	"Free",
-	"Request",
-	"Configure",
-	"Wait_done"
-};
-
-static const char * const frame_state_name[NR_FRAME_STATE] = {
-	"Free",
-	"Request",
-	"Process",
-	"Complete"
-};
-
 int frame_fcount(struct fimc_is_frame *frame, void *data)
 {
 	return frame->fcount - (u32)(ulong)data;

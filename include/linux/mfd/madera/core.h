@@ -8,8 +8,8 @@
  * published by the Free Software Foundation.
  */
 
-#ifndef _MADERA_CORE_H
-#define _MADERA_CORE_H
+#ifndef MADERA_CORE_H
+#define MADERA_CORE_H
 
 #include <linux/interrupt.h>
 #include <linux/regmap.h>
@@ -26,6 +26,7 @@ enum madera_type {
 	CS47L92 = 5,
 	CS47L93 = 6,
 	WM1840 = 7,
+	CS47L15 = 8,
 };
 
 #define MADERA_MAX_CORE_SUPPLIES 2
@@ -53,6 +54,9 @@ struct madera {
 	struct notifier_block dcvdd_notifier;
 	bool internal_dcvdd;
 	bool micvdd_regulated;
+	bool micvdd_enabled;
+	bool micvdd_forced;
+	struct mutex micsupp_lock;
 	bool bypass_cache;
 	bool dcvdd_powered_off;
 
@@ -64,8 +68,10 @@ struct madera {
 	bool hpdet_clamp[MADERA_MAX_ACCESSORY];
 	unsigned int hp_ena;
 	unsigned int hp_impedance_x100[MADERA_MAX_ACCESSORY];
+	unsigned int hp_short[MADERA_MAX_ACCESSORY];
 
 	struct madera_extcon_info *extcon_info;
+	bool hs_mic_muted;
 
 	struct snd_soc_dapm_context *dapm;
 
@@ -102,7 +108,4 @@ static inline int madera_call_notifiers(struct madera *madera,
 {
 	return blocking_notifier_call_chain(&madera->notifier, event, data);
 }
-
-void madera_reboot_codec(struct madera *madera);
-
 #endif

@@ -115,3 +115,10 @@ config MALI_ASV_CALIBRATION_SUPPORT
 	default y
 	help
 	  Choose this option to enable AUTO_CALIBRATION_SUPPORT in the Mali tMIX DDK.
+
+config MALI_SEC_JOB_STATUS_CHECK
+	bool "Enable GPU JOB & FENCE STATUS DUMP "
+	depends on MALI_TMIX && MALI_RT_PM && MALI_DVFS
+	default y
+	help
+	  Choose this option to enable job & fence status dump feature in the Mali tMIX DDK.

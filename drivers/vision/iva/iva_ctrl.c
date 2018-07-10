@@ -241,7 +241,7 @@ static int32_t iva_ctrl_mcu_boot_file(struct iva_dev_data *iva,
 	name_len = strncpy_from_user(mcu_file, mcu_file_u,
 			sizeof(mcu_file) - 1);
 	mcu_file[sizeof(mcu_file) - 1] = 0x0;
-	if (name_len < 0) {
+	if (name_len <= 0) {
 		dev_err(dev, "%s() unexpected name_len(%d)\n",
 				__func__, name_len);
 		return name_len;
@@ -521,6 +521,7 @@ static int iva_ctrl_open(struct inode *inode, struct file *filp)
 	proc->iva_data	= iva;
 	proc->state	= 0;
 
+	mutex_init(&proc->proc_mem_lock);
 	hash_init(proc->h_mem_map);
 
 	mutex_lock(&iva->proc_mutex);
@@ -566,6 +567,7 @@ static int iva_ctrl_release(struct inode *inode, struct file *filp)
 		iva_deinit(iva);
 
 	iva_mem_force_to_free_proc_mapped_list(proc);
+	mutex_destroy(&proc->proc_mem_lock);
 
 	put_task_struct(proc->tsk);
 

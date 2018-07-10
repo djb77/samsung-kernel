@@ -57,7 +57,8 @@ struct score_system {
 	resource_size_t				regs_size;
 	int					irq0;
 
-	u32					cam_qos;
+	u32					cam_qos_current;
+	u32					cam_qos_request;
 	u32					mif_qos;
 	unsigned long				iommu_act;
 
@@ -103,6 +104,7 @@ int score_system_resume(struct score_system *system);
 int score_system_suspend(struct score_system *system);
 int score_system_runtime_resume(struct score_system *system);
 int score_system_runtime_suspend(struct score_system *system);
+int score_system_runtime_update(struct score_system *system);
 int score_system_fw_start(struct score_system *system);
 
 int score_system_check_resettable(struct score_system *system);

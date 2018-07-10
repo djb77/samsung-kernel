@@ -30,6 +30,7 @@ static struct crypto_blkcipher *dek_aes_key_setup(kek_t *kek)
 		crypto_blkcipher_setkey(tfm, kek->buf, kek->len);
 	} else {
 		printk("dek: failed to alloc blkcipher\n");
+		tfm = NULL;
 	}
 	return tfm;
 }

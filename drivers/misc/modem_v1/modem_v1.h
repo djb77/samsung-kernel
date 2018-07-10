@@ -414,6 +414,9 @@ struct modem_mbox {
 	unsigned int sbi_uart_noti_mask;
 	unsigned int sbi_uart_noti_pos;
 
+	unsigned int sbi_crash_type_mask;
+	unsigned int sbi_crash_type_pos;
+
 	/* Clk table Info */
 	unsigned int *ap_clk_table;
 	unsigned int ap_clk_cnt;

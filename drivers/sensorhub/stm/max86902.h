@@ -35,7 +35,7 @@
 
 #define MAX86902_SLAVE_ADDR			0x57
 
-//MAX86900 Registers
+/* MAX86900 Registers */
 #define MAX86900_INTERRUPT_STATUS	0x00
 #define MAX86900_INTERRUPT_ENABLE	0x01
 
@@ -55,7 +55,7 @@
 
 #define MAX86900_FIFO_SIZE				16
 
-//MAX86902 Registers
+/* MAX86902 Registers */
 
 #define MAX_UV_DATA			2
 
@@ -141,7 +141,7 @@
 #define MAX86902_LED4_PA					0x0F
 #define MAX86902_PILOT_PA					0x10
 
-/*THIS IS A BS ENTRY. KEPT HERE TO KEEP LEGACY CODE COMPUILING*/
+/* THIS IS A BS ENTRY. KEPT HERE TO KEEP LEGACY CODE COMPUILING */
 #define MAX86902_LED_CONFIGURATION			0x10
 
 #define MAX86902_LED_FLEX_CONTROL_1			0x11
@@ -183,7 +183,7 @@
 
 #define MAX86902_FIFO_SIZE				64
 
-//Self Test
+/* Self Test */
 #define MAX86900_TEST_MODE					0xFF
 #define MAX86900_TEST_GTST					0x80
 #define MAX86900_TEST_ENABLE_IDAC			0x81
@@ -194,8 +194,7 @@
 #define MAX86900_TEST_LOOK_MODE_IR			0x99
 #define MAX86900_TEST_IDAC_GAIN				0x9C
 
-typedef enum _PART_TYPE
-{
+typedef enum _PART_TYPE {
 	PART_TYPE_MAX86900 = 0,
 	PART_TYPE_MAX86900A,
 	PART_TYPE_MAX86900B,
@@ -206,15 +205,13 @@ typedef enum _PART_TYPE
 	PART_TYPE_MAX86907,
 } PART_TYPE;
 
-struct max86900_platform_data
-{
+struct max86900_platform_data {
 	int (*init)(void);
 	int (*deinit)(void);
 };
 
-struct max86900_device_data
-{
-	struct i2c_client *client;          // represents the slave device
+struct max86900_device_data {
+	struct i2c_client *client;          /* represents the slave device */
 	struct device *dev;
 	struct input_dev *hrm_input_dev;
 	struct input_dev *hrmled_input_dev;
@@ -297,7 +294,7 @@ struct max86900_device_data
 
 extern int sensors_create_symlink(struct input_dev *inputdev);
 extern void sensors_remove_symlink(struct input_dev *inputdev);
-extern int sensors_register(struct device *dev, void * drvdata,
+extern int sensors_register(struct device *dev, void *drvdata,
 	struct device_attribute *attributes[], char *name);
 extern void sensors_unregister(struct device *dev,
 	struct device_attribute *attributes[]);

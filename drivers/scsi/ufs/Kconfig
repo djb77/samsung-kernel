@@ -50,6 +50,10 @@ config SCSI_UFSHCD
 config UFS_UN_18DIGITS
 	bool "The digits of SEC unique number"
 	depends on SCSI_UFSHCD
+	
+config UFS_UN_20DIGITS
+	bool "The digits of SEC unique number"
+	depends on SCSI_UFSHCD
 
 config SCSI_UFSHCD_PCI
 	tristate "PCI bus based UFS Controller support"
@@ -80,6 +84,25 @@ config SCSI_UFS_ASYNC_RELINK
 	  This feature is to support concurrency of UFS resume and the others.
 	  In UFS re-link, system wake-up may task a long time when UFS resume
 	  time is increased for device latency or etc.
+
+	  If you want to enable this feature, say Y or M here.
+
+	  If unsure, say N.
+	  
+config SCSI_UFS_TEST_MODE
+	bool "Samsung UFS TEST feature"
+	depends on SCSI_UFSHCD && SCSI_UFSHCD_PLATFORM
+	---help---
+	  This selects support for test mode for debugging.
+	  Select this option if this feature is needed on working.
+
+config SCSI_UFS_CMD_LOGGING
+	tristate "UFS cmd loggging support"
+	depends on SCSI_UFSHCD && SCSI_UFSHCD_PLATFORM
+	---help---
+	  This feature is to support UFS cmd logging.
+	  When UFS cmd transferred to UFS HCI
+	  various data logs for debugging purpose.
 
 	  If you want to enable this feature, say Y or M here.
 

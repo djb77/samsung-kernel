@@ -91,10 +91,10 @@
 #ifdef CONFIG_SEC_EXT
 #include <linux/sec_ext.h>
 #endif
-#ifdef CONFIG_TIMA_RKP
+#ifdef CONFIG_RKP
 #include <linux/vmm.h>
 #include <linux/rkp_entry.h> 
-#endif //CONFIG_TIMA_RKP
+#endif //CONFIG_RKP
 #ifdef CONFIG_RELOCATABLE_KERNEL
 #include <linux/memblock.h>
 #endif
@@ -112,10 +112,6 @@ int boot_mode_security;
 EXPORT_SYMBOL(boot_mode_security);
 #endif
 
-#ifdef CONFIG_TIMA_RKP
-int rkp_support_large_memory;
-EXPORT_SYMBOL(rkp_support_large_memory);
-#endif
 /*
  * Debug helper: via this flag we know that we are in 'early bootup code'
  * where only the boot processor is running with IRQ disabled.  This means
@@ -168,6 +164,8 @@ EXPORT_SYMBOL_GPL(static_key_initialized);
  */
 unsigned int reset_devices;
 EXPORT_SYMBOL(reset_devices);
+
+int ddr_start_type = 0;
 
 static int __init set_reset_devices(char *str)
 {
@@ -554,7 +552,7 @@ static void __init mm_init(void)
 	vmalloc_init();
 	ioremap_huge_init();
 }
-#ifdef	CONFIG_TIMA_RKP
+#ifdef	CONFIG_RKP
 
 #ifdef CONFIG_RKP_6G
 __attribute__((section(".rkp.bitmap"))) u8 rkp_pgt_bitmap_arr[0x30000] = {0};
@@ -564,9 +562,9 @@ __attribute__((section(".rkp.bitmap"))) u8 rkp_pgt_bitmap_arr[0x20000] = {0};
 __attribute__((section(".rkp.dblmap"))) u8 rkp_map_bitmap_arr[0x20000] = {0};
 #endif
 
-u8 rkp_started = 0;
+RKP_RO_AREA u8 rkp_started = 0;
 extern void* vmm_extra_mem ;
-static void rkp_init(void)
+static void __init rkp_init(void)
 {
 	rkp_init_t init;
 	init.magic = RKP_INIT_MAGIC;
@@ -589,7 +587,9 @@ static void rkp_init(void)
 	init.extra_memory_size = 0x600000;
 	init._srodata = (u64) __start_rodata;
 	init._erodata =(u64) __end_rodata;
-	init.large_memory = rkp_support_large_memory;
+	init.large_memory = 0;
+	init.fimc_phys_addr = (u64)page_to_phys(vmalloc_to_page((void *)FIMC_LIB_START_VA));
+	init.fimc_size = FIMC_LIB_SIZE;
 
 	rkp_call(RKP_INIT, (u64)&init, 0, 0, 0, 0);
 	rkp_started = 1;
@@ -598,7 +598,7 @@ static void rkp_init(void)
 #endif
 #ifdef CONFIG_RKP_KDP
 
-void kdp_init(void)
+static void __init kdp_init(void)
 {
 	kdp_init_t cred;
 
@@ -692,11 +692,17 @@ asmlinkage __visible void __init start_kernel(void)
 	vfs_caches_init_early();
 	sort_main_extable();
 	trap_init();
+#ifdef CONFIG_RKP
+	rkp_reserve_mem();
+#endif
 	mm_init();
-#ifdef CONFIG_TIMA_RKP
+#ifdef CONFIG_RKP
 	vmm_init();
 	rkp_init();
-#ifdef CONFIG_TIMA_RKP_DEBUG
+#if !defined(CONFIG_USE_SIGNED_BINARY) && !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+	rkp_call(RKP_NOSHIP_BIN, 0, 0, 0, 0, 0);
+#endif
+#ifdef CONFIG_RKP_DEBUG
 	rkp_call(RKP_DEBUG, 0, 0, 0, 0, 0);
 #endif
 #ifdef CONFIG_RELOCATABLE_KERNEL 
@@ -705,7 +711,7 @@ asmlinkage __visible void __init start_kernel(void)
 #ifdef CONFIG_RKP_KDP
 	rkp_cred_enable = 1;
 #endif /*CONFIG_RKP_KDP*/
-#endif //CONFIG_TIMA_RKP
+#endif //CONFIG_RKP
 
 	/*
 	 * Set up the scheduler prior starting any interrupts (such as the
@@ -808,10 +814,6 @@ asmlinkage __visible void __init start_kernel(void)
 	buffer_init();
 	key_init();
 	security_init();
-#ifdef CONFIG_RKP_KDP
-	if (rkp_cred_enable) 
-		rkp_call(RKP_CMDID(0x51),(u64)__rkp_ro_start,0,0,0,0);
-#endif /*CONFIG_RKP_KDP*/
 	dbg_late_init();
 	vfs_caches_init();
 	signals_init();

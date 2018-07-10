@@ -217,6 +217,8 @@ static int verity_handle_err(struct dm_verity *v, enum verity_block_type type,
 	u8 *data;
 	u8 *page;
 
+	int i;
+	char hex_str[65] = {0, };
 	/* Corruption should be visible in device status in all modes */
 	v->hash_failed = 1;
 	
@@ -242,8 +244,12 @@ static int verity_handle_err(struct dm_verity *v, enum verity_block_type type,
 		BUG();
 	}
 
-	DMERR("%s: %s block %llu is corrupted", v->data_dev->name, type_str,
-		block);
+	DMERR("%s: %s block %llu is corrupted", v->data_dev->name, type_str, block);
+	
+	for(i=0 ; i < v->salt_size; i++){
+		sprintf(hex_str + (i * 2), "%02x", *(v->salt + i)); 	
+	}
+	DMERR("dm-verity salt: %s", hex_str);
 
 	if(!(strcmp(type_str, "metadata"))){
 		data = dm_bufio_read(v->bufio, block, &buf);
@@ -390,6 +396,7 @@ static int verity_verify_level(struct dm_verity *v, struct dm_verity_io *io,
 				   hash_block)) {
 #endif
 			r = -EIO;
+			panic("dmv metadata corrupt %llu" , (unsigned long long)hash_block);
 			goto release_ret_r;
 		}
 	}
@@ -413,7 +420,7 @@ static void print_block_data(unsigned long long blocknr, unsigned char *data_to_
 	char row_hex[50] = { 0, };
 	char ch;
 	if (blocknr == 0) {
-		printk(KERN_ERR "printing Hash dump %dbyte\n", len);
+	printk(KERN_ERR "printing Hash dump %dbyte, hash_to_dump 0x%p\n", len , (void*)data_to_dump);
 	} else {
 		printk(KERN_ERR "dm-verity corrupted, printing data in hex\n");
 		printk(KERN_ERR " dump block# : %llu, start offset(byte) : %d\n"
@@ -546,6 +553,9 @@ static int verity_verify_io(struct dm_verity_io *io)
 	struct bvec_iter start;
 	unsigned b;
 
+	struct bio *bio;
+	struct bio_vec bv;
+	u8 *page;
 	for (b = 0; b < io->n_blocks; b++) {
 		int r;
 		struct shash_desc *desc = verity_io_hash_desc(v, io);
@@ -598,6 +608,10 @@ static int verity_verify_io(struct dm_verity_io *io)
 #if defined(CONFIG_TZ_ICCC)
 			printk(KERN_ERR "ICCC smc ret = %llu \n",(unsigned long long)exynos_smc(SMC_CMD_DMV_WRITE_STATUS, 1, 0, 0));
 #endif
+			bio = dm_bio_from_per_bio_data(io, v->ti->per_bio_data_size);
+			bv = bio_iter_iovec(bio, start);
+			page = kmap_atomic(bv.bv_page);
+			panic("dmv corrupt %llu 0x%p" , (unsigned long long)(io->block+b) , page);
 			return -EIO;
 		}
 	}

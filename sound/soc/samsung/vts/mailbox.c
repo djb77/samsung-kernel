@@ -84,7 +84,7 @@ static void mailbox_handle_irq(struct irq_desc *desc)
 	chained_irq_enter(chip, desc);
 
 	while (stat) {
-		u32 hwirq = __fls(stat);
+		unsigned long hwirq = __fls(stat);
 		generic_handle_irq(irq_find_mapping(irq_domain, gc->irq_base + hwirq));
 		stat &= ~(1 << hwirq);
 	}

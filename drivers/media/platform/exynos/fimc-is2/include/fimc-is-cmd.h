@@ -141,6 +141,8 @@ enum is_subscenario_id {
 enum is_scenario_is {
 	FIMC_IS_SCENARIO_SWVDIS = 1,
 	FIMC_IS_SCENARIO_COLOR_IRIS = 2,
+	FIMC_IS_SCENARIO_AUTO_DUAL = 3,
+	FIMC_IS_SCENARIO_FHD_60FPS = 4,
 };
 
 enum is_system_control_id {

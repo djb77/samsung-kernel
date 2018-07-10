@@ -8,8 +8,8 @@
  * published by the Free Software Foundation.
  */
 
-#ifndef _MADERA_PDATA_H
-#define _MADERA_PDATA_H
+#ifndef MADERA_PDATA_H
+#define MADERA_PDATA_H
 
 #include <linux/kernel.h>
 
@@ -22,6 +22,7 @@
 
 #define MADERA_MAX_GPIO_REGS		80
 
+#define CS47L15_NUM_GPIOS	15
 #define CS47L35_NUM_GPIOS	16
 #define CS47L85_NUM_GPIOS	40
 #define CS47L90_NUM_GPIOS	38

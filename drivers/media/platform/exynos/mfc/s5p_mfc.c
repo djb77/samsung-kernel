@@ -70,6 +70,7 @@ module_param(nal_q_parallel_enable, int, S_IRUGO | S_IWUSR);
 
 struct _mfc_trace g_mfc_trace[MFC_TRACE_COUNT_MAX];
 struct _mfc_trace g_mfc_trace_hwlock[MFC_TRACE_COUNT_MAX];
+struct _mfc_trace_logging g_mfc_trace_logging[MFC_TRACE_LOG_COUNT_MAX];
 struct s5p_mfc_dev *g_mfc_dev;
 
 #ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
@@ -488,10 +489,20 @@ static int s5p_mfc_open(struct file *file)
 
 		ret = s5p_mfc_alloc_common_context(dev);
 		if (ret)
-			goto err_fw_load;
+			goto err_context_alloc;
 
 		if (dbg_enable)
 			s5p_mfc_alloc_dbg_info_buffer(dev);
+
+		MFC_TRACE_DEV_HWLOCK("**open\n");
+		ret = s5p_mfc_get_hwlock_dev(dev);
+		if (ret < 0) {
+			mfc_err_dev("Failed to get hwlock.\n");
+			mfc_err_dev("dev.hwlock.dev = 0x%lx, bits = 0x%lx, owned_by_irq = %d, wl_count = %d, transfer_owner = %d\n",
+			dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
+			dev->hwlock.wl_count, dev->hwlock.transfer_owner);
+			goto err_hw_lock;
+		}
 
 		mfc_debug(2, "power on\n");
 		ret = s5p_mfc_pm_power_on(dev);
@@ -504,25 +515,13 @@ static int s5p_mfc_open(struct file *file)
 		dev->preempt_ctx = MFC_NO_INSTANCE_SET;
 		dev->curr_ctx_is_drm = ctx->is_drm;
 
-		MFC_TRACE_DEV_HWLOCK("**open\n");
-		/* Init the FW */
-		ret = s5p_mfc_get_hwlock_dev(dev);
-		if (ret < 0) {
-			mfc_err_dev("Failed to get hwlock.\n");
-			mfc_err_dev("dev.hwlock.dev = 0x%lx, bits = 0x%lx, owned_by_irq = %d, wl_count = %d, transfer_owner = %d\n",
-					dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
-					dev->hwlock.wl_count, dev->hwlock.transfer_owner);
-			goto err_hw_init;
-		}
-
 		ret = s5p_mfc_init_hw(dev);
-
-		s5p_mfc_release_hwlock_dev(dev);
-
 		if (ret) {
 			mfc_err_ctx("Failed to init mfc h/w\n");
 			goto err_hw_init;
 		}
+
+		s5p_mfc_release_hwlock_dev(dev);
 
 #ifdef NAL_Q_ENABLE
 		dev->nal_q_handle = s5p_mfc_nal_q_create(dev);
@@ -542,9 +541,12 @@ err_hw_init:
 	s5p_mfc_pm_power_off(dev);
 
 err_pwr_enable:
+	s5p_mfc_release_hwlock_dev(dev);
+
+err_hw_lock:
 	s5p_mfc_release_common_context(dev);
 
-err_fw_load:
+err_context_alloc:
 #ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
 	if (dev->fw.drm_status) {
 		int smc_ret = 0;
@@ -556,9 +558,8 @@ err_fw_load:
 			mfc_err_ctx("failed MFC DRM F/W unprot(%#x)\n", smc_ret);
 	}
 #endif
-	s5p_mfc_release_firmware(dev);
-	dev->fw.status = 0;
 
+err_fw_load:
 err_fw_alloc:
 	del_timer_sync(&dev->watchdog_timer);
 #ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
@@ -905,6 +906,7 @@ static int mfc_parse_mfc_qos_platdata(struct device_node *np, char *node_name,
 	of_property_read_u32(np_qos, "freq_cpu", &qosdata->freq_cpu);
 	of_property_read_u32(np_qos, "freq_kfc", &qosdata->freq_kfc);
 	of_property_read_u32(np_qos, "mo_value", &qosdata->mo_value);
+	of_property_read_u32(np_qos, "mo_10bit_value", &qosdata->mo_10bit_value);
 	of_property_read_u32(np_qos, "time_fw", &qosdata->time_fw);
 
 	return ret;
@@ -915,9 +917,15 @@ int s5p_mfc_sysmmu_fault_handler(struct iommu_domain *iodmn, struct device *devi
 		unsigned long addr, int id, void *param)
 {
 	struct s5p_mfc_dev *dev;
+	bool mapping;
 
-	dev = (struct s5p_mfc_dev *)param;
-	s5p_mfc_dump_buffer_info(dev, addr);
+	dev = platform_get_drvdata(to_platform_device(device));
+	dev->logging_data->mmu_fi = (struct _sysmmu_fi *)param;
+
+	mapping = iovmm_address_verifier(device, addr, dev->logging_data->mmu_fi);
+	if (!mapping)
+		dev->logging_data->cause |= (1 << MFC_CAUSE_NO_MAPPING_AREA);
+	mfc_info_dev("There %s mapping\n", mapping ? "is" : "isn't");
 
 	if (MFC_MMU0_READL(MFC_MMU_INTERRUPT_STATUS)) {
 		if (MFC_MMU0_READL(MFC_MMU_FAULT_TRANS_INFO) & MFC_MMU_FAULT_TRANS_INFO_RW_MASK)
@@ -938,6 +946,7 @@ int s5p_mfc_sysmmu_fault_handler(struct iommu_domain *iodmn, struct device *devi
 	}
 	dev->logging_data->fault_addr = addr;
 
+	s5p_mfc_dump_buffer_info(dev, addr);
 	s5p_mfc_dump_info_and_stop_hw(dev);
 
 	return 0;
@@ -1019,8 +1028,10 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 
 	atomic_set(&dev->trace_ref, 0);
 	atomic_set(&dev->trace_ref_hwlock, 0);
+	atomic_set(&dev->trace_ref_log, 0);
 	dev->mfc_trace = g_mfc_trace;
 	dev->mfc_trace_hwlock = g_mfc_trace_hwlock;
+	dev->mfc_trace_logging = g_mfc_trace_logging;
 
 	s5p_mfc_pm_init(dev);
 
@@ -1286,8 +1297,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	}
 #endif
 
-	iovmm_set_fault_handler(dev->device,
-		s5p_mfc_sysmmu_fault_handler, dev);
+	iovmm_set_fault_handler(dev->device, s5p_mfc_sysmmu_fault_handler, NULL);
 
 	g_mfc_dev = dev;
 

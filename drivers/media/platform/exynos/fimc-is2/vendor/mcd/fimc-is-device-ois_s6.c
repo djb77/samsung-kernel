@@ -53,8 +53,21 @@
 
 static int ois_shift_x[POSITION_NUM];
 static int ois_shift_y[POSITION_NUM];
+static int ois_centering_shift_x;
+static int ois_centering_shift_y;
 static int ois_shift_x_rear2[POSITION_NUM];
 static int ois_shift_y_rear2[POSITION_NUM];
+static int ois_centering_shift_x_rear2;
+static int ois_centering_shift_y_rear2;
+static bool ois_centering_shift_enable = false;
+#ifdef USE_OIS_SLEEP_MODE
+static bool ois_wide_start = false;
+static bool ois_tele_start = false;
+#else
+static bool ois_wide_init;
+static bool ois_tele_init;
+#endif
+static bool ois_fadeupdown;
 static const struct v4l2_subdev_ops subdev_ops;
 static u8 progCode[OIS_BOOT_FW_SIZE + OIS_PROG_FW_SIZE] = {0,};
 static bool fw_sdcard = false;
@@ -62,6 +75,7 @@ extern struct fimc_is_ois_info ois_minfo;
 extern struct fimc_is_ois_info ois_pinfo;
 extern struct fimc_is_ois_info ois_uinfo;
 extern struct fimc_is_ois_exif ois_exif_data;
+#define OIS_SHIFT_ENABLE
 
 void fimc_is_ois_enable_s6(struct fimc_is_core *core)
 {
@@ -545,7 +559,7 @@ bool fimc_is_ois_sine_wavecheck_s6(struct fimc_is_core *core,
 	ret |= fimc_is_ois_i2c_write(core->client1, 0x0053, 0x0); /* count value for error judgement level. */
 	ret |= fimc_is_ois_i2c_write(core->client1, 0x0054, 0x05); /* frequency level for measurement. */
 	ret |= fimc_is_ois_i2c_write(core->client1, 0x0055, 0x3A); /* amplitude level for measurement. */
-	ret |= fimc_is_ois_i2c_write(core->client1, 0x0056, 0x01); /* dummy pulse setting. */	
+	ret |= fimc_is_ois_i2c_write(core->client1, 0x0056, 0x01); /* dummy pulse setting. */
 	ret |= fimc_is_ois_i2c_write(core->client1, 0x0057, 0x02); /* vyvle level for measurement. */
 	ret |= fimc_is_ois_i2c_write(core->client1, 0x0050, 0x01); /* start sine wave check operation */
 	if (ret) {
@@ -672,11 +686,13 @@ bool fimc_is_ois_auto_test_s6(struct fimc_is_core *core,
 
 #ifdef CAMERA_REAR2_OIS
 bool fimc_is_ois_sine_wavecheck_rear2_s6(struct fimc_is_core *core,
-		              int threshold, int *sinx, int *siny, int *result)
+		              int threshold, int *sinx, int *siny, int *result,
+		              int *sinx_2nd, int *siny_2nd)
 {
 	u8 buf = 0, val = 0;
 	int ret = 0, retries = 10;
 	int sinx_count = 0, siny_count = 0;
+	int sinx_count_2nd = 0, siny_count_2nd = 0;
 	u8 u8_sinx_count[2] = {0, }, u8_siny_count[2] = {0, };
 	u8 u8_sinx[2] = {0, }, u8_siny[2] = {0, };
 	struct fimc_is_vender_specific *specific = core->vender.private_data;
@@ -685,12 +701,13 @@ bool fimc_is_ois_sine_wavecheck_rear2_s6(struct fimc_is_core *core,
 	    fimc_is_ois_i2c_config(core->client1, true);
 	}
 
-	ret = fimc_is_ois_i2c_write(core->client1, 0x005B, (u8)threshold); /* error threshold level. */
-	ret |= fimc_is_ois_i2c_write(core->client1, 0x00BE, 0x02); /* OIS SEL (wide : 1 , tele : 2, both : 3 ). */
+	ret = fimc_is_ois_i2c_write(core->client1, 0x0052, (u8)threshold); /* error threshold level. */
+	ret |= fimc_is_ois_i2c_write(core->client1, 0x005B, (u8)threshold); /* error threshold level. */
+	ret |= fimc_is_ois_i2c_write(core->client1, 0x00BE, 0x03); /* OIS SEL (wide : 1 , tele : 2, both : 3 ). */
 	ret |= fimc_is_ois_i2c_write(core->client1, 0x0053, 0x0); /* count value for error judgement level. */
 	ret |= fimc_is_ois_i2c_write(core->client1, 0x0054, 0x05); /* frequency level for measurement. */
 	ret |= fimc_is_ois_i2c_write(core->client1, 0x0055, 0x3A); /* amplitude level for measurement. */
-	ret |= fimc_is_ois_i2c_write(core->client1, 0x0056, 0x01); /* dummy pulse setting. */	
+	ret |= fimc_is_ois_i2c_write(core->client1, 0x0056, 0x01); /* dummy pulse setting. */
 	ret |= fimc_is_ois_i2c_write(core->client1, 0x0057, 0x02); /* vyvle level for measurement. */
 	ret |= fimc_is_ois_i2c_write(core->client1, 0x0050, 0x01); /* start sine wave check operation */
 	if (ret) {
@@ -722,26 +739,48 @@ bool fimc_is_ois_sine_wavecheck_rear2_s6(struct fimc_is_core *core,
 
 	*result = (int)buf;
 
-	ret = fimc_is_ois_i2c_read_multi(core->client1, 0x00E4, u8_sinx_count, 2);
+	ret = fimc_is_ois_i2c_read_multi(core->client1, 0x00C0, u8_sinx_count, 2);
 	sinx_count = (u8_sinx_count[1] << 8) | u8_sinx_count[0];
 	if (sinx_count > 0x7FFF) {
 		sinx_count = -((sinx_count ^ 0xFFFF) + 1);
 	}
-	ret |= fimc_is_ois_i2c_read_multi(core->client1, 0x00E6, u8_siny_count, 2);
+	ret |= fimc_is_ois_i2c_read_multi(core->client1, 0x00C2, u8_siny_count, 2);
 	siny_count = (u8_siny_count[1] << 8) | u8_siny_count[0];
 	if (siny_count > 0x7FFF) {
 		siny_count = -((siny_count ^ 0xFFFF) + 1);
 	}
-	ret |= fimc_is_ois_i2c_read_multi(core->client1, 0x00E8, u8_sinx, 2);
+	ret |= fimc_is_ois_i2c_read_multi(core->client1, 0x00C4, u8_sinx, 2);
 	*sinx = (u8_sinx[1] << 8) | u8_sinx[0];
 	if (*sinx > 0x7FFF) {
 		*sinx = -((*sinx ^ 0xFFFF) + 1);
 	}
-	ret |= fimc_is_ois_i2c_read_multi(core->client1, 0x00EA, u8_siny, 2);
+	ret |= fimc_is_ois_i2c_read_multi(core->client1, 0x00C6, u8_siny, 2);
 	*siny = (u8_siny[1] << 8) | u8_siny[0];
 	if (*siny > 0x7FFF) {
 		*siny = -((*siny ^ 0xFFFF) + 1);
 	}
+
+	ret |= fimc_is_ois_i2c_read_multi(core->client1, 0x00E4, u8_sinx_count, 2);
+	sinx_count_2nd = (u8_sinx_count[1] << 8) | u8_sinx_count[0];
+	if (sinx_count_2nd > 0x7FFF) {
+		sinx_count_2nd = -((sinx_count_2nd ^ 0xFFFF) + 1);
+	}
+	ret |= fimc_is_ois_i2c_read_multi(core->client1, 0x00E6, u8_siny_count, 2);
+	siny_count_2nd = (u8_siny_count[1] << 8) | u8_siny_count[0];
+	if (siny_count_2nd > 0x7FFF) {
+		siny_count_2nd = -((siny_count_2nd ^ 0xFFFF) + 1);
+	}
+	ret |= fimc_is_ois_i2c_read_multi(core->client1, 0x00E8, u8_sinx, 2);
+	*sinx_2nd = (u8_sinx[1] << 8) | u8_sinx[0];
+	if (*sinx_2nd > 0x7FFF) {
+		*sinx_2nd = -((*sinx_2nd ^ 0xFFFF) + 1);
+	}
+	ret |= fimc_is_ois_i2c_read_multi(core->client1, 0x00EA, u8_siny, 2);
+	*siny_2nd = (u8_siny[1] << 8) | u8_siny[0];
+	if (*siny_2nd > 0x7FFF) {
+		*siny_2nd = -((*siny_2nd ^ 0xFFFF) + 1);
+	}
+
 	if (ret) {
 		err("i2c read fail\n");
 		goto exit;
@@ -753,6 +792,9 @@ bool fimc_is_ois_sine_wavecheck_rear2_s6(struct fimc_is_core *core,
 
 	info("threshold = %d, sinx = %d, siny = %d, sinx_count = %d, syny_count = %d\n",
 		threshold, *sinx, *siny, sinx_count, siny_count);
+
+	info("threshold = %d, sinx_2nd = %d, siny_2nd = %d, sinx_count_2nd = %d, syny_count_2nd = %d\n",
+		threshold, *sinx_2nd, *siny_2nd, sinx_count_2nd, siny_count_2nd);
 
 	if (buf == 0x0) {
 		return true;
@@ -767,12 +809,14 @@ exit:
 
 	*sinx = -1;
 	*siny = -1;
-
+	*sinx_2nd = -1;
+	*siny_2nd = -1;
 	return false;
 }
 
 bool fimc_is_ois_auto_test_rear2_s6(struct fimc_is_core *core,
-		            int threshold, bool *x_result, bool *y_result, int *sin_x, int *sin_y)
+		            int threshold, bool *x_result, bool *y_result, int *sin_x, int *sin_y,
+		            bool *x_result_2nd, bool *y_result_2nd, int *sin_x_2nd, int *sin_y_2nd)
 {
 	int result = 0;
 	bool value = false;
@@ -780,11 +824,15 @@ bool fimc_is_ois_auto_test_rear2_s6(struct fimc_is_core *core,
 #ifdef CONFIG_AF_HOST_CONTROL
 #ifdef CAMERA_REAR2_AF
 	fimc_is_af_move_lens_rear2(core);
+	msleep(100);
 #endif
+	fimc_is_af_move_lens(core);
 	msleep(100);
 #endif
 
-	value = fimc_is_ois_sine_wavecheck_rear2_s6(core, threshold, sin_x, sin_y, &result);
+	value = fimc_is_ois_sine_wavecheck_rear2_s6(core, threshold, sin_x, sin_y, &result,
+				sin_x_2nd, sin_y_2nd);
+
 	if (*sin_x == -1 && *sin_y == -1) {
 		err("OIS device is not prepared.");
 		*x_result = false;
@@ -795,14 +843,28 @@ bool fimc_is_ois_auto_test_rear2_s6(struct fimc_is_core *core,
 		return false;
 	}
 
+	if (*sin_x_2nd == -1 && *sin_y_2nd == -1) {
+		err("OIS 2 device is not prepared.");
+		*x_result_2nd = false;
+		*y_result_2nd = false;
+		*sin_x_2nd = 0;
+		*sin_y_2nd = 0;
+		return false;
+	}
+
 	if (value == true) {
 		*x_result = true;
 		*y_result = true;
+		*x_result_2nd = true;
+		*y_result_2nd = true;
 
 		return true;
 	} else {
-		info("OIS autotest_2nd is failed value = 0x%x\n", result);
-		if ((result & 0x03) == 0x01) {
+		err("OIS autotest_2nd is failed result (0x0051) = 0x%x\n", result);
+		if ((result & 0x03) == 0x00) {
+			*x_result = true;
+			*y_result = true;
+		} else if ((result & 0x03) == 0x01) {
 			*x_result = false;
 			*y_result = true;
 		} else if ((result & 0x03) == 0x02) {
@@ -811,6 +873,20 @@ bool fimc_is_ois_auto_test_rear2_s6(struct fimc_is_core *core,
 		} else {
 			*x_result = false;
 			*y_result = false;
+		}
+
+		if ((result & 0x30) == 0x00) {
+			*x_result_2nd = true;
+			*y_result_2nd = true;
+		} else if ((result & 0x30) == 0x10) {
+			*x_result_2nd = false;
+			*y_result_2nd = true;
+		} else if ((result & 0x30) == 0x20) {
+			*x_result_2nd = true;
+			*y_result_2nd = false;
+		} else {
+			*x_result_2nd = false;
+			*y_result_2nd = false;
 		}
 
 		return false;
@@ -823,7 +899,7 @@ void fimc_is_ois_gyro_sleep_s6(struct fimc_is_core *core)
 	int ret = 0;
 	u8 val = 0;
 	int retries = 20;
-	
+
 	struct fimc_is_vender_specific *specific = core->vender.private_data;
 
 	if (specific->use_ois_hsi2c) {
@@ -872,7 +948,10 @@ void fimc_is_ois_exif_data_s6(struct fimc_is_core *core)
 	struct fimc_is_vender_specific *specific = core->vender.private_data;
 
 	if (specific->use_ois_hsi2c) {
-	    fimc_is_ois_i2c_config(core->client1, true);
+		mutex_lock(&core->i2c_lock[1]);
+		fimc_is_ois_i2c_config(core->client1, true);
+		specific->use_ois_online_cnt++;
+		mutex_unlock(&core->i2c_lock[1]);
 	}
 
 	ret = fimc_is_ois_i2c_read(core->client1, 0x0004, &error_reg[0]);
@@ -893,7 +972,13 @@ void fimc_is_ois_exif_data_s6(struct fimc_is_core *core)
 	}
 
 	if (specific->use_ois_hsi2c) {
-	    fimc_is_ois_i2c_config(core->client1, false);
+		mutex_lock(&core->i2c_lock[1]);
+		if (specific->use_ois_online_cnt > 0) {
+			specific->use_ois_online_cnt--;
+			if (specific->use_ois_online_cnt == 0)
+				fimc_is_ois_i2c_config(core->client1, false);
+		}
+		mutex_unlock(&core->i2c_lock[1]);
 	}
 
 	ois_exif_data.error_data = error_sum;
@@ -1222,7 +1307,7 @@ bool fimc_is_ois_read_userdata_s6(struct fimc_is_core *core)
 	ois_shift_info = 0;
 	fimc_is_ois_i2c_read(client, 0x0101, &ois_shift_info);
 	info("OIS Shift Info : 0x%x\n", ois_shift_info);
-	
+
 	if (ois_shift_info == 0x11) {
 		u16 ois_shift_checksum = 0;
 		u16 ois_shift_x_diff = 0;
@@ -1266,7 +1351,7 @@ bool fimc_is_ois_read_userdata_s6(struct fimc_is_core *core)
 			info("REAR2 OIS CAL[%d]:X[%d], Y[%d]\n", i, ois_shift_x_cal, ois_shift_y_cal);
 		}
 	}
-	
+
 	if (specific->use_ois_hsi2c) {
 		fimc_is_ois_i2c_config(core->client1, false);
 	}
@@ -1420,7 +1505,7 @@ bool fimc_is_ois_check_fw_s6(struct fimc_is_core *core)
 	case 'B':
 	case 'D':
 	case 'F':
- 	case 'H':
+	case 'H':
 	case 'J':
 	case 'L':
 	case 'N':
@@ -1441,6 +1526,46 @@ bool fimc_is_ois_check_fw_s6(struct fimc_is_core *core)
 	}
 
 	return true;
+}
+
+int fimc_is_ois_read_fw_ver_s6(char *name, char *ver)
+{
+	int ret = 0;
+	ulong size = 0;
+	char buf[100] = {0, };
+	struct file *fp = NULL;
+	mm_segment_t old_fs;
+	long nread;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	fp = filp_open(name, O_RDONLY, 0);
+	if (IS_ERR_OR_NULL(fp)) {
+		info("failed to open fw!!!\n");
+		ret = -EIO;
+		goto exit;
+	}
+
+	size = 7;
+	fp->f_pos = (OIS_BIN_HEADER - 4);
+
+	nread = vfs_read(fp, (char __user *)(buf), size, &fp->f_pos);
+	if (nread != size) {
+		err("failed to read firmware file, %ld Bytes\n", nread);
+		ret = -EIO;
+		goto exit;
+	}
+
+exit:
+	if (!IS_ERR_OR_NULL(fp))
+		filp_close(fp, current->files);
+	set_fs(old_fs);
+
+	memcpy(ver, &buf[4], 3);
+	memcpy(&ver[3], buf, 4);
+
+	return ret;
 }
 
 #ifdef CAMERA_USE_OIS_EXT_CLK
@@ -1618,10 +1743,10 @@ void fimc_is_ois_fw_update_s6(struct fimc_is_core *core)
 		if (!ret) {
 			err("Failed to read ois fw version.");
 			return;
-		}		
+		}
 		fimc_is_ois_read_userdata_s6(core);
 	}
-	
+
 	switch (ois_minfo.header_ver[FW_CORE_VERSION]) {
 	case 'A':
 	case 'C':
@@ -1636,7 +1761,7 @@ void fimc_is_ois_fw_update_s6(struct fimc_is_core *core)
 	case 'B':
 	case 'D':
 	case 'F':
- 	case 'H':
+	case 'H':
 	case 'J':
 	case 'L':
 	case 'N':
@@ -1813,10 +1938,13 @@ int fimc_is_ois_shift_compensation_s6(struct v4l2_subdev *subdev, int position, 
 	int ret = 0;
 	struct fimc_is_ois *ois;
 	u32 af_value;
-    int af_boundary = 0;
+	int af_boundary = 0;
 	u8 write_data[4] = {0,};
 	short shift_x = 0;
 	short shift_y = 0;
+	struct fimc_is_device_sensor *device = NULL;
+	u32 setfile;
+	u32 scene;
 
 	BUG_ON(!subdev);
 
@@ -1830,26 +1958,65 @@ int fimc_is_ois_shift_compensation_s6(struct v4l2_subdev *subdev, int position, 
 	if (ois->ois_shift_available == false)
 		goto p_err;
 
-	/* Usage 
+	device = (struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(ois->sensor_peri->subdev_cis);
+	if (unlikely(!device)) {
+		printk("device sensor is null");
+		goto p_err;
+	}
+
+	if (device->ischain) {
+		setfile = device->ischain->setfile;
+	} else {
+		printk("device->ischain is null");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	scene = (setfile & FIMC_IS_SCENARIO_MASK) >> FIMC_IS_SCENARIO_SHIFT;
+#ifdef OIS_SHIFT_ENABLE
+	if ((scene == FIMC_IS_SCENARIO_FHD_60FPS) || (scene == FIMC_IS_SCENARIO_SWVDIS)
+		|| (scene == FIMC_IS_SCENARIO_AUTO_DUAL)) /* scene == FIMC_IS_SCENARIO_SWVDIS : UHD */
+		ois_centering_shift_enable = true;
+	else
+		ois_centering_shift_enable = false;
+#endif
+	/* Usage
 	   1) AF position size bit : 10bit => AF Boundary : (1 << 7)
 	   2) AF position size bit :  9bit => AF Boundary : (1 << 6)
 	*/
 	if (resolution >= ACTUATOR_POS_SIZE_8BIT && resolution <= ACTUATOR_POS_SIZE_10BIT) {
-		af_boundary = (1 << (resolution - 3)); 
+		af_boundary = (1 << (resolution - 3));
 	} else { /* Default value */
 		af_boundary = AF_BOUNDARY;
 	}
 
 	af_value = position / af_boundary;
 
-	shift_x = (short)ois_shift_x[af_value];
-	shift_y = (short)ois_shift_y[af_value];
+	if (ois->device == SENSOR_POSITION_REAR) {
+		shift_x = (short)ois_shift_x[af_value];
+		shift_y = (short)ois_shift_y[af_value];
 
-	shift_x = (2 * (((short)ois_shift_x[af_value + 1] - shift_x) *
-				(short)((position - AF_BOUNDARY * af_value) / 2)) / (short)AF_BOUNDARY + shift_x);
-	shift_y = (2 * (((short)ois_shift_y[af_value + 1] - shift_y) *
-				(short)((position - AF_BOUNDARY * af_value) / 2)) / (short)AF_BOUNDARY + shift_y);
+		shift_x = (2 * (((short)ois_shift_x[af_value + 1] - shift_x) *
+					(short)((position - AF_BOUNDARY * af_value) / 2)) / (short)AF_BOUNDARY + shift_x);
+		shift_y = (2 * (((short)ois_shift_y[af_value + 1] - shift_y) *
+					(short)((position - AF_BOUNDARY * af_value) / 2)) / (short)AF_BOUNDARY + shift_y);
+		if (ois_centering_shift_enable == true) {
+			shift_x += (short)ois_centering_shift_x;
+			shift_y += (short)ois_centering_shift_y;
+		}
+	} else if (ois->device == SENSOR_POSITION_REAR2) {
+		shift_x = (short)ois_shift_x_rear2[af_value];
+		shift_y = (short)ois_shift_y_rear2[af_value];
 
+		shift_x = (2 * (((short)ois_shift_x_rear2[af_value + 1] - shift_x) *
+					(short)((position - AF_BOUNDARY * af_value) / 2)) / (short)AF_BOUNDARY + shift_x);
+		shift_y = (2 * (((short)ois_shift_y_rear2[af_value + 1] - shift_y) *
+					(short)((position - AF_BOUNDARY * af_value) / 2)) / (short)AF_BOUNDARY + shift_y);
+		if (ois_centering_shift_enable == true) {
+			shift_x += (short)ois_centering_shift_x_rear2;
+			shift_y += (short)ois_centering_shift_y_rear2;
+		}
+	}
 	write_data[0] = (shift_x & 0xFF);
 	write_data[1] = (shift_x & 0xFF00) >> 8;
 	write_data[2] = (shift_y & 0xFF);
@@ -1861,7 +2028,11 @@ int fimc_is_ois_shift_compensation_s6(struct v4l2_subdev *subdev, int position, 
 			write_data[0], write_data[1], write_data[2], write_data[3]);
 
 	I2C_MUTEX_LOCK(ois->i2c_lock);
-	ret = fimc_is_ois_i2c_write_multi(ois->client, 0x004C, write_data, 6);
+	if (ois->device == SENSOR_POSITION_REAR)
+		ret = fimc_is_ois_i2c_write_multi(ois->client, 0x004C, write_data, 6);
+	else if (ois->device == SENSOR_POSITION_REAR2)
+		ret = fimc_is_ois_i2c_write_multi(ois->client, 0x0098, write_data, 6);
+
 	if (ret < 0)
 		err("i2c write multi is fail\n");
 	I2C_MUTEX_UNLOCK(ois->i2c_lock);
@@ -1886,7 +2057,10 @@ int fimc_is_set_ois_mode_s6(struct v4l2_subdev *subdev, int mode)
 	}
 
 	if (ois->fadeupdown == false) {
-		fimc_is_ois_set_ggfadeupdown_s6(subdev, 1000, 1000);
+		if (ois_fadeupdown == false) {
+			ois_fadeupdown = true;
+			fimc_is_ois_set_ggfadeupdown_s6(subdev, 1000, 1000);
+		}
 		ois->fadeupdown = true;
 	}
 
@@ -1924,7 +2098,8 @@ int fimc_is_set_ois_mode_s6(struct v4l2_subdev *subdev, int mode)
 		case OPTICAL_STABILIZATION_MODE_VDIS:
 			fimc_is_ois_i2c_write(client, 0x0002, 0x14);
 			fimc_is_ois_i2c_write(client, 0x0000, 0x01);
-			ois->pre_coef = 0;
+			if (ois->pre_coef == 255)
+				ois->pre_coef = 100;
 			break;
 		case OPTICAL_STABILIZATION_MODE_SINE_X:
 			fimc_is_ois_i2c_write(client, 0x0018, 0x01);
@@ -1955,7 +2130,7 @@ void fimc_is_status_check_s6(struct i2c_client *client)
 {
 	u8 ois_status_check = 0;
 	int retry_count = 0;
-	
+
 	do {
 		fimc_is_ois_i2c_read(client, 0x000E, &ois_status_check);
 		if (ois_status_check == 0x14)
@@ -1971,7 +2146,22 @@ void fimc_is_status_check_s6(struct i2c_client *client)
 		err("%s, ois Memory access fail\n", __func__);
 }
 
-int fimc_is_ois_init_s6(struct v4l2_subdev *subdev)
+signed long long hex2float_kernel(unsigned int hex_data, int endian)
+{
+	const signed long long scale = SCALE;
+	unsigned int s,e,m;
+	signed long long res;
+
+	if(endian == eBIG_ENDIAN) hex_data = SWAP32(hex_data);
+
+	s = hex_data>>31, e = (hex_data>>23)&0xff, m = hex_data&0x7fffff;
+	res = (e >= 150) ? ((scale*(8388608 + m))<<(e-150)) : ((scale*(8388608 + m))>>(150-e));
+	if(s == 1) res *= -1;
+
+	return res;
+}
+
+int fimc_calculate_shift_value(struct v4l2_subdev *subdev)
 {
 	int ret = 0;
 	int i = 0;
@@ -1980,12 +2170,185 @@ int fimc_is_ois_init_s6(struct v4l2_subdev *subdev)
 	u8 cal_data[2];
 	u8 shift_available = 0;
 	struct fimc_is_ois *ois = NULL;
+	char *cal_buf;
+	u32 Wide_XGG_Hex, Wide_YGG_Hex, Tele_XGG_Hex, Tele_YGG_Hex;
+	signed long long Wide_XGG, Wide_YGG, Tele_XGG, Tele_YGG;
+	u32 Image_Shift_x_Hex, Image_Shift_y_Hex;
+	signed long long Image_Shift_x, Image_Shift_y;
+	u8 read_multi[4] = {0, };
+	signed long long Coef_angle_X , Coef_angle_Y;
+	signed long long Wide_Xshift, Tele_Xshift, Wide_Yshift, Tele_Yshift;
+	const signed long long scale = SCALE*SCALE;
+#ifdef USE_CAMERA_HW_BIG_DATA
+	struct cam_hw_param *hw_param = NULL;
+	struct fimc_is_device_sensor *device = NULL;
+#endif
+
+	BUG_ON(!subdev);
+
+	ois = (struct fimc_is_ois *)v4l2_get_subdevdata(subdev);
+	if(!ois) {
+		err("%s, ois subdev is NULL", __func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	I2C_MUTEX_LOCK(ois->i2c_lock);
+
+	/* use user data */
+	ret |= fimc_is_ois_i2c_write(ois->client, 0x000F, 0x40);
+	cal_data[0] = 0x00;
+	cal_data[1] = 0x02;
+	ret |= fimc_is_ois_i2c_write_multi(ois->client, 0x0010, cal_data, 4);
+	ret |= fimc_is_ois_i2c_write(ois->client, 0x000E, 0x04);
+	if (ret < 0) {
+#ifdef USE_CAMERA_HW_BIG_DATA
+		device = v4l2_get_subdev_hostdata(subdev);
+		if (device) {
+			fimc_is_sec_get_hw_param(&hw_param, device->position);
+		}
+		if (hw_param)
+			hw_param->i2c_ois_err_cnt++;
+#endif
+		err("ois user data write is fail");
+		I2C_MUTEX_UNLOCK(ois->i2c_lock);
+		return ret;
+	}
+
+	fimc_is_status_check_s6(ois->client);
+
+	fimc_is_ois_i2c_read_multi(ois->client, 0x0254, read_multi, 4);
+	Wide_XGG_Hex = (read_multi[3] << 24) | (read_multi[2] << 16) | (read_multi[1] << 8) | (read_multi[0]);
+
+	fimc_is_ois_i2c_read_multi(ois->client, 0x0554, read_multi, 4);
+	Tele_XGG_Hex = (read_multi[3] << 24) | (read_multi[2] << 16) | (read_multi[1] << 8) | (read_multi[0]);
+
+	fimc_is_ois_i2c_read_multi(ois->client, 0x0258, read_multi, 4);
+	Wide_YGG_Hex = (read_multi[3] << 24) | (read_multi[2] << 16) | (read_multi[1] << 8) | (read_multi[0]);
+
+	fimc_is_ois_i2c_read_multi(ois->client, 0x0558, read_multi, 4);
+	Tele_YGG_Hex = (read_multi[3] << 24) | (read_multi[2] << 16) | (read_multi[1] << 8) | (read_multi[0]);
+
+	Wide_XGG = hex2float_kernel(Wide_XGG_Hex,eLIT_ENDIAN); // unit : 1/SCALE
+	Wide_YGG = hex2float_kernel(Wide_YGG_Hex,eLIT_ENDIAN); // unit : 1/SCALE
+	Tele_XGG = hex2float_kernel(Tele_XGG_Hex,eLIT_ENDIAN); // unit : 1/SCALE
+	Tele_YGG = hex2float_kernel(Tele_YGG_Hex,eLIT_ENDIAN); // unit : 1/SCALE
+
+	fimc_is_sec_get_cal_buf(&cal_buf);
+
+	Image_Shift_x_Hex = (cal_buf[0x6C7C+3] << 24) | (cal_buf[0x6C7C+2] << 16) | (cal_buf[0x6C7C+1] << 8) | (cal_buf[0x6C7C]);
+	Image_Shift_y_Hex = (cal_buf[0x6C80+3] << 24) | (cal_buf[0x6C80+2] << 16) | (cal_buf[0x6C80+1] << 8) | (cal_buf[0x6C80]);
+
+	Image_Shift_x = hex2float_kernel(Image_Shift_x_Hex,eLIT_ENDIAN); // unit : 1/SCALE
+	Image_Shift_y = hex2float_kernel(Image_Shift_y_Hex,eLIT_ENDIAN); // unit : 1/SCALE
+
+	Image_Shift_y += 90 * SCALE;
+
+	#define ABS(a)				((a) > 0 ? (a) : -(a))
+
+	// Calc w/t x shift
+	//=======================================================
+	Coef_angle_X = (ABS(Image_Shift_x) > SH_THRES) ? Coef_angle_max : RND_DIV(ABS(Image_Shift_x), 228);
+
+	Wide_Xshift = Gyrocode * Coef_angle_X * Wide_XGG;
+	Tele_Xshift = Gyrocode * Coef_angle_X * Tele_XGG;
+
+	Wide_Xshift = (Image_Shift_x > 0) ? Wide_Xshift	: Wide_Xshift*-1;
+	Tele_Xshift = (Image_Shift_x > 0) ? Tele_Xshift*-1 : Tele_Xshift;
+
+	// Calc w/t y shift
+	//=======================================================
+	Coef_angle_Y = (ABS(Image_Shift_y) > SH_THRES) ? Coef_angle_max : RND_DIV(ABS(Image_Shift_y), 228);
+
+	Wide_Yshift = Gyrocode * Coef_angle_Y * Wide_YGG;
+	Tele_Yshift = Gyrocode * Coef_angle_Y * Tele_YGG;
+
+	Wide_Yshift = (Image_Shift_y > 0) ? Wide_Yshift*-1 : Wide_Yshift;
+	Tele_Yshift = (Image_Shift_y > 0) ? Tele_Yshift*-1 : Tele_Yshift;
+
+	// Calc output variable
+	//=======================================================
+	ois_centering_shift_x = (int)RND_DIV(Wide_Xshift, scale);
+	ois_centering_shift_y = (int)RND_DIV(Wide_Yshift, scale);
+	ois_centering_shift_x_rear2 = (int)RND_DIV(Tele_Xshift, scale);
+	ois_centering_shift_y_rear2 = (int)RND_DIV(Tele_Yshift, scale);
+
+	fimc_is_ois_i2c_read(ois->client, 0x0100, &shift_available);
+	if (shift_available != 0x11) {
+		ois->ois_shift_available = false;
+		info("%s, OIS AF CAL(0x%x) does not installed.\n", __func__, shift_available);
+	} else {
+		ois->ois_shift_available = true;
+
+		/* OIS Shift CAL DATA */
+		for (i = 0; i < 9; i++) {
+			cal_data[0] = 0;
+			cal_data[1] = 0;
+			fimc_is_ois_i2c_read_multi(ois->client, 0x0110 + (i * 2), cal_data, 2);
+			ois_shift_x_cal = (cal_data[1] << 8) | (cal_data[0]);
+
+			cal_data[0] = 0;
+			cal_data[1] = 0;
+			fimc_is_ois_i2c_read_multi(ois->client, 0x0122 + (i * 2), cal_data, 2);
+			ois_shift_y_cal = (cal_data[1] << 8) | (cal_data[0]);
+
+			if (ois_shift_x_cal > (short)32767)
+				ois_shift_x[i] = ois_shift_x_cal - 65536;
+			else
+				ois_shift_x[i] = ois_shift_x_cal;
+
+			if (ois_shift_y_cal > (short)32767)
+				ois_shift_y[i] = ois_shift_y_cal - 65536;
+			else
+				ois_shift_y[i] = ois_shift_y_cal;
+		}
+	}
+
+	shift_available = 0;
+	fimc_is_ois_i2c_read(ois->client, 0x0101, &shift_available);
+	if (shift_available != 0x11) {
+		info("%s, REAR2 OIS AF CAL(0x%x) does not installed.\n", __func__, shift_available);
+	} else {
+		/* OIS Shift CAL DATA REAR2 */
+		for (i = 0; i < 9; i++) {
+			cal_data[0] = 0;
+			cal_data[1] = 0;
+			fimc_is_ois_i2c_read_multi(ois->client, 0x0140 + (i * 2), cal_data, 2);
+			ois_shift_x_cal = (cal_data[1] << 8) | (cal_data[0]);
+
+			cal_data[0] = 0;
+			cal_data[1] = 0;
+			fimc_is_ois_i2c_read_multi(ois->client, 0x0152 + (i * 2), cal_data, 2);
+			ois_shift_y_cal = (cal_data[1] << 8) | (cal_data[0]);
+
+			if (ois_shift_x_cal > (short)32767)
+				ois_shift_x_rear2[i] = ois_shift_x_cal - 65536;
+			else
+				ois_shift_x_rear2[i] = ois_shift_x_cal;
+
+			if (ois_shift_y_cal > (short)32767)
+				ois_shift_y_rear2[i] = ois_shift_y_cal - 65536;
+			else
+				ois_shift_y_rear2[i] = ois_shift_y_cal;
+
+		}
+	}
+
+	I2C_MUTEX_UNLOCK(ois->i2c_lock);
+
+	return ret;
+}
+
+int fimc_is_ois_init_s6(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+#ifdef USE_OIS_SLEEP_MODE
+	u8 read_gyrocalcen = 0;
+#endif
+	struct fimc_is_ois *ois = NULL;
 	struct i2c_client *client = NULL;
 	struct fimc_is_module_enum *module = NULL;
 	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
-#ifdef USE_CAMERA_HW_BIG_DATA
-	struct cam_hw_param *hw_param;
-#endif
 
 	BUG_ON(!subdev);
 
@@ -2023,121 +2386,232 @@ int fimc_is_ois_init_s6(struct v4l2_subdev *subdev)
 	ois->pre_coef = 255;
 	ois->fadeupdown = false;
 
+#ifdef USE_OIS_SLEEP_MODE
 	I2C_MUTEX_LOCK(ois->i2c_lock);
-	/* use user data */
-	ret |= fimc_is_ois_i2c_write(ois->client, 0x000F, 0x40);
-	cal_data[0] = 0x00;
-	cal_data[1] = 0x02;
-	ret |= fimc_is_ois_i2c_write_multi(ois->client, 0x0010, cal_data, 4);
-	ret |= fimc_is_ois_i2c_write(ois->client, 0x000E, 0x04);
-	if (ret < 0) {
-#ifdef USE_CAMERA_HW_BIG_DATA
-		fimc_is_sec_get_rear_hw_param(&hw_param);
-		if (hw_param)
-			hw_param->i2c_ois_err_cnt++;
-#endif	
-		err("ois user data write is fail");
+	fimc_is_ois_i2c_read(ois->client, 0x00BF, &read_gyrocalcen);
+	if ((read_gyrocalcen == 0x01 && module->position == SENSOR_POSITION_REAR2) || //tele already enabled
+		(read_gyrocalcen == 0x02 && module->position == SENSOR_POSITION_REAR)) { //wide already enabled
+		ois->ois_shift_available = true;
+		pr_info("%s %d sensor(%d) is already initialized.\n", __func__, __LINE__, ois->device);
+		ret = fimc_is_ois_i2c_write(ois->client, 0x00BF, 0x03);
+		if (ret < 0)
+			err("ois 0x00BF write is fail");
 		I2C_MUTEX_UNLOCK(ois->i2c_lock);
 		return ret;
 	}
-
-	fimc_is_status_check_s6(ois->client);
-
-	fimc_is_ois_i2c_read(ois->client, 0x0100, &shift_available);
-	if (shift_available != 0x11) {
-		ois->ois_shift_available = false;
-		info("%s, OIS AF CAL(0x%x) does not installed.\n", __func__, shift_available);
-	} else {
+	I2C_MUTEX_UNLOCK(ois->i2c_lock);
+#else
+	if ((ois_wide_init == true && module->position == SENSOR_POSITION_REAR2) ||
+		(ois_tele_init == true && module->position == SENSOR_POSITION_REAR)) {
+		pr_info("%s %d sensor(%d) is already initialized.\n", __func__, __LINE__, ois->device);
+		ois_wide_init = ois_tele_init = true;
 		ois->ois_shift_available = true;
 
-		/* OIS Shift CAL DATA */
-		for (i = 0; i < 9; i++) {
-			cal_data[0] = 0;
-			cal_data[1] = 0;
-				fimc_is_ois_i2c_read_multi(ois->client, 0x0110 + (i * 2), cal_data, 2);
-			ois_shift_x_cal = (cal_data[1] << 8) | (cal_data[0]);
-
-			cal_data[0] = 0;
-			cal_data[1] = 0;
-				fimc_is_ois_i2c_read_multi(ois->client, 0x0122 + (i * 2), cal_data, 2);
-			ois_shift_y_cal = (cal_data[1] << 8) | (cal_data[0]);
-
-			if (ois_shift_x_cal > (short)32767)
-				ois_shift_x[i] = ois_shift_x_cal - 65536;
-			else
-				ois_shift_x[i] = ois_shift_x_cal;
-
-			if (ois_shift_y_cal > (short)32767)
-				ois_shift_y[i] = ois_shift_y_cal - 65536;
-			else
-				ois_shift_y[i] = ois_shift_y_cal;
-
-		}
-		ret = fimc_is_ois_i2c_write(ois->client, 0x0039, 0x01);
-		if (ret < 0) {
-			err("ois cactrl write is fail");
-			I2C_MUTEX_UNLOCK(ois->i2c_lock);
-			return ret;
-		}
+		return ret;
 	}
-	
-	shift_available = 0;
-	fimc_is_ois_i2c_read(ois->client, 0x0101, &shift_available);
-	if (shift_available != 0x11) {
-		ois->ois_shift_available_rear2 = false;
-		info("%s, REAR2 OIS AF CAL(0x%x) does not installed.\n", __func__, shift_available);
-	} else {
-		ois->ois_shift_available_rear2 = true;
+#endif
 
-		/* OIS Shift CAL DATA REAR2 */
-		for (i = 0; i < 9; i++) {
-			cal_data[0] = 0;
-			cal_data[1] = 0;
-			fimc_is_ois_i2c_read_multi(ois->client, 0x0140 + (i * 2), cal_data, 2);
-			ois_shift_x_cal = (cal_data[1] << 8) | (cal_data[0]);
+	fimc_calculate_shift_value(subdev);
 
-			cal_data[0] = 0;
-			cal_data[1] = 0;
-			fimc_is_ois_i2c_read_multi(ois->client, 0x0152 + (i * 2), cal_data, 2);
-			ois_shift_y_cal = (cal_data[1] << 8) | (cal_data[0]);
+	I2C_MUTEX_LOCK(ois->i2c_lock);
 
-			if (ois_shift_x_cal > (short)32767)
-				ois_shift_x_rear2[i] = ois_shift_x_cal - 65536;
-			else
-				ois_shift_x_rear2[i] = ois_shift_x_cal;
-
-			if (ois_shift_y_cal > (short)32767)
-				ois_shift_y_rear2[i] = ois_shift_y_cal - 65536;
-			else
-				ois_shift_y_rear2[i] = ois_shift_y_cal;
-
-		}
-		ret = fimc_is_ois_i2c_write(ois->client, 0x0039, 0x01);
-		if (ret < 0) {
-			err("ois cactrl write is fail");
-	                I2C_MUTEX_UNLOCK(ois->i2c_lock);
-			return ret;
-		}
-	
-	}
-
+#ifdef USE_OIS_SLEEP_MODE
 	if (module->position == SENSOR_POSITION_REAR2) {
+		ret = fimc_is_ois_i2c_write(ois->client, 0x00BF, 0x02);
+		if (ret < 0)
+			err("ois 0x00BF write is fail");
 		ret = fimc_is_ois_i2c_write(ois->client, 0x00BE, 0x02);
 		if (ret < 0)
-			err("ois sel write is fail");
+			err("ois 0x00BE write is fail");
+		else
+			fimc_is_ois_set_oissel_info(0x02);
+
 	} else if (module->position == SENSOR_POSITION_REAR) {
+		ret = fimc_is_ois_i2c_write(ois->client, 0x00BF, 0x01);
+		if (ret < 0)
+			err("ois 0x00BF write is fail");
 		ret = fimc_is_ois_i2c_write(ois->client, 0x00BE, 0x01);
 		if (ret < 0)
-			err("ois sel write is fail");
+			err("ois 0x00BE write is fail");
+		else
+			fimc_is_ois_set_oissel_info(0x01);
+
 	} else {
 		info("%s : module->position = %d is invalid\n", __func__, module->position);
 	}
+#else
+	if (module->position == SENSOR_POSITION_REAR2) {
+		ois_tele_init = true;
+	} else if (module->position == SENSOR_POSITION_REAR) {
+		ois_wide_init = true;
+	}
+#endif
 
 	I2C_MUTEX_UNLOCK(ois->i2c_lock);
 
 	info("%s\n", __func__);
 	return ret;
 }
+
+int fimc_is_ois_deinit_s6(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+
+	BUG_ON(!subdev);
+
+	ois_fadeupdown = false;
+
+	info("%s\n", __func__);
+
+	return ret;
+}
+
+#ifdef USE_OIS_SLEEP_MODE
+int fimc_is_ois_start_s6(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	struct fimc_is_ois *ois = NULL;
+	struct i2c_client *client = NULL;
+	struct fimc_is_module_enum *module = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+
+	BUG_ON(!subdev);
+
+	ois = (struct fimc_is_ois *)v4l2_get_subdevdata(subdev);
+	if(!ois) {
+		err("%s, ois subdev is NULL", __func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	sensor_peri = ois->sensor_peri;
+	if (!sensor_peri) {
+		err("%s, sensor_peri is NULL", __func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	module = sensor_peri->module;
+	if (!module) {
+		err("%s, module is NULL", __func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	client = ois->client;
+	if (!client) {
+		err("%s, client is NULL", __func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	I2C_MUTEX_LOCK(ois->i2c_lock);
+
+
+	if ((ois_wide_start == true && module->position == SENSOR_POSITION_REAR2) || //tele already enabled
+		(ois_tele_start == true && module->position == SENSOR_POSITION_REAR)) {
+		ret = fimc_is_ois_i2c_write(ois->client, 0x00BE, 0x03);
+		if (ret < 0)
+			err("ois 0x00BE write is fail");
+		else
+			fimc_is_ois_set_oissel_info(0x03);
+	} else if (ois_tele_start == false && module->position == SENSOR_POSITION_REAR) {
+		ret = fimc_is_ois_i2c_write(ois->client, 0x00BE, 0x01);
+		if (ret < 0)
+			err("ois 0x00BE write is fail");
+		else
+			fimc_is_ois_set_oissel_info(0x01);
+	} else if (ois_wide_start == false && module->position == SENSOR_POSITION_REAR2) {
+		ret = fimc_is_ois_i2c_write(ois->client, 0x00BE, 0x02);
+		if (ret < 0)
+			err("ois 0x00BE write is fail");
+		else
+			fimc_is_ois_set_oissel_info(0x02);
+	}else {
+	}
+
+	I2C_MUTEX_UNLOCK(ois->i2c_lock);
+
+	if (module->position == SENSOR_POSITION_REAR) {
+		ois_wide_start = true;
+	} else if(module->position == SENSOR_POSITION_REAR2) {
+		ois_tele_start = true;
+	}
+
+	info("%s Camera[%d]\n", __func__, module->position);
+	return ret;
+}
+
+int fimc_is_ois_stop_s6(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	struct fimc_is_ois *ois = NULL;
+	struct i2c_client *client = NULL;
+	struct fimc_is_module_enum *module = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+	u8 read_oissel = 0;
+
+	BUG_ON(!subdev);
+
+	ois = (struct fimc_is_ois *)v4l2_get_subdevdata(subdev);
+	if(!ois) {
+		err("%s, ois subdev is NULL", __func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	sensor_peri = ois->sensor_peri;
+	if (!sensor_peri) {
+		err("%s, sensor_peri is NULL", __func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	module = sensor_peri->module;
+	if (!module) {
+		err("%s, module is NULL", __func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	client = ois->client;
+	if (!client) {
+		err("%s, client is NULL", __func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	I2C_MUTEX_LOCK(ois->i2c_lock);
+
+	read_oissel = fimc_is_ois_get_oissel_info();
+
+	if (read_oissel == 0x03) {
+		if (module->position == SENSOR_POSITION_REAR2) {
+			ret = fimc_is_ois_i2c_write(ois->client, 0x00BE, 0x01);
+			if (ret < 0)
+				err("ois 0x00BE write is fail");
+			else
+				fimc_is_ois_set_oissel_info(0x01);
+		}else if (module->position == SENSOR_POSITION_REAR) {
+			ret = fimc_is_ois_i2c_write(ois->client, 0x00BE, 0x02);
+			if (ret < 0)
+				err("ois 0x00BE write is fail");
+			else
+				fimc_is_ois_set_oissel_info(0x02);
+		}
+	}
+	I2C_MUTEX_UNLOCK(ois->i2c_lock);
+
+	if (module->position == SENSOR_POSITION_REAR) {
+		ois_wide_start = false;
+	} else if(module->position == SENSOR_POSITION_REAR2) {
+		ois_tele_start = false;
+	}
+
+	info("%s Camera[%d]\n", __func__, module->position);
+	return ret;
+}
+#endif
 
 int fimc_is_ois_set_coef_s6(struct v4l2_subdev *subdev, u8 coef)
 {
@@ -2161,7 +2635,7 @@ int fimc_is_ois_set_coef_s6(struct v4l2_subdev *subdev, u8 coef)
 		err("client is NULL");
 		return -EINVAL;
 	}
-	
+
 	info("%s %d\n", __func__, coef);
 
 	I2C_MUTEX_LOCK(ois->i2c_lock);
@@ -2174,7 +2648,7 @@ int fimc_is_ois_set_coef_s6(struct v4l2_subdev *subdev, u8 coef)
 	I2C_MUTEX_UNLOCK(ois->i2c_lock);
 
 	ois->pre_coef = coef;
-	
+
 	return ret;
 }
 
@@ -2184,8 +2658,14 @@ int fimc_is_ois_set_ggfadeupdown_s6(struct v4l2_subdev *subdev, int up, int down
 	struct fimc_is_ois *ois = NULL;
 	struct i2c_client *client = NULL;
 	u8 status = 0;
-	int retries = 20;
+	int retries = 100;
 	u8 data[2];
+#ifdef OIS_SHIFT_ENABLE
+	u8 write_data[4] = {0,};
+#endif
+#ifdef USE_OIS_SLEEP_MODE
+	u8 read_sensorStart = 0;
+#endif
 
 	BUG_ON(!subdev);
 
@@ -2203,7 +2683,67 @@ int fimc_is_ois_set_ggfadeupdown_s6(struct v4l2_subdev *subdev, int up, int down
 
 	info("%s up:%d down:%d\n", __func__, up, down);
 
-	/* wait idle status */
+	I2C_MUTEX_LOCK(ois->i2c_lock);
+
+	ret = fimc_is_ois_i2c_write(ois->client, 0x00BE, 0x03);
+	if (ret < 0) {
+		err("ois Actuator output write is fail");
+		I2C_MUTEX_UNLOCK(ois->i2c_lock);
+		return ret;
+	}
+
+	ret = fimc_is_ois_i2c_write(ois->client, 0x0039, 0x01);
+	if (ret < 0) {
+		err("ois cactrl write is fail");
+		I2C_MUTEX_UNLOCK(ois->i2c_lock);
+		return ret;
+	}
+
+#ifdef OIS_SHIFT_ENABLE
+	/* angle compensation 1.5->1.25
+	   before addr:0x0000, data:0x01
+	   write 0x3F558106
+	   write 0x3F558106
+	*/
+	write_data[0] = 0x06;
+	write_data[1] = 0x81;
+	write_data[2] = 0x55;
+	write_data[3] = 0x3F;
+	fimc_is_ois_i2c_write_multi(ois->client, 0x0348, write_data, 6);
+
+	write_data[0] = 0x06;
+	write_data[1] = 0x81;
+	write_data[2] = 0x55;
+	write_data[3] = 0x3F;
+	fimc_is_ois_i2c_write_multi(ois->client, 0x03D8, write_data, 6);
+#endif
+
+#ifdef USE_OIS_SLEEP_MODE
+	/* if camera is already started, skip VDIS setting */
+	fimc_is_ois_i2c_read(ois->client, 0x00BF, &read_sensorStart);
+	if (read_sensorStart == 0x03) {
+		I2C_MUTEX_UNLOCK(ois->i2c_lock);
+		return ret;
+	}
+#endif
+	/* set fadeup */
+	data[0] = up & 0xFF;
+	data[1] = (up >> 8) & 0xFF;
+	ret = fimc_is_ois_i2c_write_multi(client, 0x0238, data, 4);
+	if (ret < 0)
+		err("%s i2c write fail\n", __func__);
+
+	/* set fadedown */
+	data[0] = down & 0xFF;
+	data[1] = (down >> 8) & 0xFF;
+	ret = fimc_is_ois_i2c_write_multi(client, 0x023a, data, 4);
+	if (ret < 0)
+		err("%s i2c write fail\n", __func__);
+
+	/* wait idle status
+	   100msec delay is needed between "ois_power_on" and "ois_mode_s6".
+	*/
+
 	do {
 		fimc_is_ois_i2c_read(client, 0x0001, &status);
 		if (status == 0x01)
@@ -2213,31 +2753,23 @@ int fimc_is_ois_set_ggfadeupdown_s6(struct v4l2_subdev *subdev, int up, int down
 			ret = -1;
 			break;
 		}
-		info("%s status=%d\n", __func__, status);
 		usleep_range(1000, 1100);
 	} while (status != 0x01);
-			
-	I2C_MUTEX_LOCK(ois->i2c_lock);
-	/* set fadeup */
-	data[0] = up & 0xFF;
-	data[1] = (up >> 8) & 0xFF;
-	ret = fimc_is_ois_i2c_write_multi(client, 0x0238, data, 4);
-	if (ret < 0)
-		err("%s i2c write fail\n", __func__);
-	
-	/* set fadedown */
-	data[0] = down & 0xFF;
-	data[1] = (down >> 8) & 0xFF;
-	ret = fimc_is_ois_i2c_write_multi(client, 0x023a, data, 4);
-	if (ret < 0)
-		err("%s i2c write fail\n", __func__);
+
 	I2C_MUTEX_UNLOCK(ois->i2c_lock);
-	
+
+	info("%s retryCount = %d , status = 0x%x\n", __func__, 100 - retries, status);
+
 	return ret;
 }
 
 static struct fimc_is_ois_ops ois_ops_s6 = {
 	.ois_init = fimc_is_ois_init_s6,
+	.ois_deinit = fimc_is_ois_deinit_s6,
+#ifdef USE_OIS_SLEEP_MODE
+	.ois_start = fimc_is_ois_start_s6,
+	.ois_stop = fimc_is_ois_stop_s6,
+#endif
 	.ois_set_mode = fimc_is_set_ois_mode_s6,
 	.ois_shift_compensation = fimc_is_ois_shift_compensation_s6,
 	.ois_fw_update = fimc_is_ois_fw_update_s6,
@@ -2246,7 +2778,7 @@ static struct fimc_is_ois_ops ois_ops_s6 = {
 	.ois_auto_test = fimc_is_ois_auto_test_s6,
 #ifdef CAMERA_REAR2_OIS
 	.ois_auto_test_rear2 = fimc_is_ois_auto_test_rear2_s6,
-#endif			
+#endif
 	.ois_check_fw = fimc_is_ois_check_fw_s6,
 	.ois_enable = fimc_is_ois_enable_s6,
 	.ois_offset_test = fimc_is_ois_offset_test_s6,
@@ -2256,24 +2788,28 @@ static struct fimc_is_ois_ops ois_ops_s6 = {
 	.ois_read_status = fimc_is_ois_read_status_s6,
 	.ois_read_cal_checksum = fimc_is_ois_read_cal_checksum_s6,
 	.ois_set_coef = fimc_is_ois_set_coef_s6,
+	.ois_read_fw_ver = fimc_is_ois_read_fw_ver_s6,
 };
 
 int ois_rumbaS6_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
 	int ret = 0;
-	struct fimc_is_core *core= NULL;
-	struct v4l2_subdev *subdev_ois = NULL;
-	struct fimc_is_device_sensor *device = NULL;
+	struct fimc_is_core *core;
+	struct fimc_is_device_sensor *device;
+	struct v4l2_subdev *subdev_ois;
 	struct fimc_is_ois *ois;
 	struct device *dev;
 	struct device_node *dnode;
-	u32 sensor_id[FIMC_IS_SENSOR_COUNT] = {0, };	
+	u32 sensor_id[FIMC_IS_SENSOR_COUNT] = {0, };
 	struct fimc_is_device_ois *ois_device;
 	struct fimc_is_vender_specific *specific;
 	const u32 *sensor_id_spec;
 	u32 sensor_id_len;
 	int i = 0;
+	ois_wide_init = false;
+	ois_tele_init = false;
+	ois_fadeupdown = false;
 
 	BUG_ON(!fimc_is_dev);
 	BUG_ON(!client);
@@ -2303,63 +2839,70 @@ int ois_rumbaS6_probe(struct i2c_client *client,
 	}
 
 	for (i = 0; i < sensor_id_len; i++) {
-		probe_info("%s sensor_id %d\n", __func__, sensor_id[i]);
-
 		device = &core->sensor[sensor_id[i]];
 		if (!device) {
 			err("sensor device is NULL");
 			ret = -EPROBE_DEFER;
 			goto p_err;
 		}
+	}
 
-		ois = kzalloc(sizeof(struct fimc_is_ois), GFP_KERNEL);
-		if (!ois) {
-			err("fimc_is_ois is NULL");
-			return -ENOMEM;
-		}
-		ois->ois_ops = &ois_ops_s6;
+	ois = kzalloc(sizeof(struct fimc_is_ois) * sensor_id_len, GFP_KERNEL);
+	if (!ois) {
+		err("fimc_is_ois is NULL");
+		return -ENOMEM;
+	}
 
-		subdev_ois = kzalloc(sizeof(struct v4l2_subdev), GFP_KERNEL);
-		if (!subdev_ois) {
-			err("subdev_ois is NULL");
-			ret = -ENOMEM;
-			kfree(ois);
-			goto p_err;
-		}
+	subdev_ois = kzalloc(sizeof(struct v4l2_subdev) * sensor_id_len, GFP_KERNEL);
+	if (!subdev_ois) {
+		err("subdev_ois is NULL");
+		ret = -ENOMEM;
+		kfree(ois);
+		goto p_err;
+	}
 
-		ois_device = kzalloc(sizeof(struct fimc_is_device_ois), GFP_KERNEL);
-		if (!ois_device) {
-			err("fimc_is_device_ois is NULL");
-			kfree(ois);
-			kfree(subdev_ois);
-			return -ENOMEM;
-		}
-		ois_device->ois_hsi2c_status = false;
-		ois_device->ois_ops = &ois_ops_s6;
-		specific = core->vender.private_data;
-		specific->ois_ver_read = false;
+	ois_device = kzalloc(sizeof(struct fimc_is_device_ois), GFP_KERNEL);
+	if (!ois_device) {
+		err("fimc_is_device_ois is NULL");
+		kfree(ois);
+		kfree(subdev_ois);
+		return -ENOMEM;
+	}
+	ois_device->ois_ops = &ois_ops_s6;
+	ois_device->ois_hsi2c_status = false;
 
-		ois->id = OIS_NAME_RUMBA_S6;
-		ois->subdev = subdev_ois;
-		ois->device = sensor_id[i];
-		ois->client = client;
-		core->client1 = client;
-		ois->ois_mode = OPTICAL_STABILIZATION_MODE_OFF;
-		ois->pre_ois_mode = OPTICAL_STABILIZATION_MODE_OFF;
-		ois->ois_shift_available = false;
-		ois->ois_shift_available_rear2 = false;
-		device->subdev_ois = subdev_ois;
-		device->ois = ois;
-		ois->i2c_lock = NULL;
+	for (i = 0; i < sensor_id_len; i++) {
+		probe_info("%s sensor_id %d\n", __func__, sensor_id[i]);
 
-		v4l2_i2c_subdev_init(subdev_ois, client, &subdev_ops);
-		v4l2_set_subdevdata(subdev_ois, ois);
-		v4l2_set_subdev_hostdata(subdev_ois, ois_device);
-		i2c_set_clientdata(client, ois_device);
-		snprintf(subdev_ois->name, V4L2_SUBDEV_NAME_SIZE, "ois->subdev.%d", ois->id);
+		ois[i].ois_ops = &ois_ops_s6;
+		ois[i].id = OIS_NAME_RUMBA_S6;
+		ois[i].subdev = &subdev_ois[i];
+		ois[i].device = sensor_id[i];
+		ois[i].client = client;
+		ois[i].ois_mode = OPTICAL_STABILIZATION_MODE_OFF;
+		ois[i].pre_ois_mode = OPTICAL_STABILIZATION_MODE_OFF;
+		ois[i].ois_shift_available = false;
+		ois[i].i2c_lock = NULL;
+
+		device = &core->sensor[sensor_id[i]];
+		device->subdev_ois = &subdev_ois[i];
+		device->ois = &ois[i];
+
+		v4l2_i2c_subdev_init(&subdev_ois[i], client, &subdev_ops);
+		v4l2_set_subdevdata(&subdev_ois[i], &ois[i]);
+		v4l2_set_subdev_hostdata(&subdev_ois[i], ois_device);
+		snprintf(subdev_ois[i].name, V4L2_SUBDEV_NAME_SIZE, "ois->subdev.%d", ois[i].id);
 
 		probe_info("%s done\n", __func__);
 	}
+
+	/* reset i2c client's data to ois_device */
+	i2c_set_clientdata(client, ois_device);
+	core->client1 = client;
+
+	specific = core->vender.private_data;
+	specific->ois_ver_read = false;
+
 p_err:
 	return ret;
 }

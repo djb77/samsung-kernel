@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 722015 2017-09-18 12:34:51Z $
+ * $Id: dhd_linux.c 736671 2017-12-18 05:40:38Z $
  */
 
 #include <typedefs.h>
@@ -191,10 +191,6 @@ typedef struct dhd_tx_lb_pkttag_fr {
 #define DHD_LB_TX_PKTTAG_SET_IFIDX(tag, ifidx)	((tag)->ifidx = ifidx)
 #define DHD_LB_TX_PKTTAG_IFIDX(tag)		((tag)->ifidx)
 #endif /* DHD_LB_TXP */
-
-#ifdef DHD_LB_IRQSET
-#define RX_CPU_BIG_CORE 4
-#endif /* DHD_LB_IRQSET */
 #endif /* DHD_LB */
 
 #ifdef HOFFLOAD_MODULES
@@ -622,6 +618,7 @@ typedef struct dhd_info {
 	wait_queue_head_t ioctl_resp_wait;
 	wait_queue_head_t d3ack_wait;
 	wait_queue_head_t dhd_bus_busy_state_wait;
+	wait_queue_head_t dmaxfer_wait;
 	uint32	default_wd_interval;
 
 	struct timer_list timer;
@@ -2812,6 +2809,7 @@ dhd_napi_poll(struct napi_struct *napi, int budget)
 	struct dhd_info *dhd;
 	int processed = 0;
 	struct sk_buff_head rx_process_queue;
+	int cnt = 0;
 
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic push
@@ -2831,6 +2829,7 @@ dhd_napi_poll(struct napi_struct *napi, int budget)
 	skb_queue_splice_tail_init(&dhd->rx_napi_queue, &rx_process_queue);
 	spin_unlock_irqrestore(&dhd->rx_napi_queue.lock, flags);
 
+	cnt = (int)skb_queue_len(&rx_process_queue);
 	while ((skb = __skb_dequeue(&rx_process_queue)) != NULL) {
 		OSL_PREFETCH(skb->data);
 
@@ -2841,6 +2840,18 @@ dhd_napi_poll(struct napi_struct *napi, int budget)
 
 		dhd_rx_frame(&dhd->pub, ifid, skb, pkt_count, chan);
 		processed++;
+
+		if (cnt-- < 0) {
+			DHD_ERROR(("%s list:%p, list->prev:%p, list->next=%p\n",
+				__FUNCTION__,
+				&rx_process_queue,
+				rx_process_queue.prev,
+				rx_process_queue.next));
+			DHD_ERROR(("%s skb:%p, skb->prev:%p, skb->next=%p\n",
+				__FUNCTION__, skb, skb->prev, skb->next));
+
+			DHD_ERROR(("%s processed %d\n", __FUNCTION__, processed));
+		}
 	}
 
 	DHD_LB_STATS_UPDATE_NAPI_HISTO(&dhd->pub, processed);
@@ -2971,6 +2982,9 @@ dhd_lb_rx_napi_dispatch(dhd_pub_t *dhdp)
 	dhd_info_t *dhd = dhdp->info;
 	int curr_cpu;
 	int on_cpu;
+#ifdef DHD_LB_IRQSET
+	cpumask_t cpus;
+#endif /* DHD_LB_IRQSET */
 
 	if (dhd->rx_napi_netdev == NULL) {
 		DHD_ERROR(("%s: dhd->rx_napi_netdev is NULL\n", __FUNCTION__));
@@ -2993,8 +3007,23 @@ dhd_lb_rx_napi_dispatch(dhd_pub_t *dhdp)
 	put_cpu();
 
 	on_cpu = atomic_read(&dhd->rx_napi_cpu);
+	DHD_INFO(("%s : curr_cpu : %d, cpumask : 0x%lx\n", __FUNCTION__,
+		    curr_cpu, *cpumask_bits(dhd->cpumask_primary)));
 
-	if ((on_cpu == curr_cpu) || (!cpu_online(on_cpu))) {
+	if (0 ||
+#ifdef DHD_LB_IRQSET
+	/* XXX :  SWWLAN-163963
+	 * Migration CPU from little to big has Tput degradation in NAS download
+	 * scenario, and changing IRQ affinity from little to big shows
+	 * the best performance without migration,
+	 * so, if curr_cpu (from IRQ) is set from big core,
+	 * it won't schedule to dedicated cpu.
+	 */
+	cpumask_and(&cpus, cpumask_of(curr_cpu), dhd->cpumask_primary) ||
+#else
+	(on_cpu == curr_cpu) ||
+#endif /* DHD_LB_IRQSET */
+	(!cpu_online(on_cpu))) {
 		dhd_napi_schedule(dhd);
 	} else {
 		schedule_work(&dhd->rx_napi_dispatcher_work);
@@ -3016,6 +3045,31 @@ dhd_lb_rx_pkt_enqueue(dhd_pub_t *dhdp, void *pkt, int ifidx)
 }
 #endif /* DHD_LB_RXP */
 
+#ifdef DHD_LB_IRQSET
+void
+dhd_irq_set_affinity(dhd_pub_t *dhdp)
+{
+    unsigned int irq = (unsigned int)-1;
+    int err = BCME_OK;
+
+    if (!dhdp) {
+	DHD_ERROR(("%s : dhdp is NULL\n", __FUNCTION__));
+	return;
+    }
+
+    if (!dhdp->bus) {
+	DHD_ERROR(("%s : bus is NULL\n", __FUNCTION__));
+	return;
+    }
+
+    dhdpcie_get_pcieirq(dhdp->bus, &irq);
+    err = irq_set_affinity(irq, dhdp->info->cpumask_primary);
+    if (err) {
+	DHD_ERROR(("%s : irq set affinity is failed cpu:0x%lx\n",
+		    __FUNCTION__, *cpumask_bits(dhdp->info->cpumask_primary)));
+    }
+}
+#endif /* DHD_LB_IRQSET */
 #endif /* DHD_LB */
 
 
@@ -3620,20 +3674,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 #endif /* ENABLE_IPMCAST_FILTER */
 #endif /* DHD_USE_EARLYSUSPEND */
 #ifdef DHD_LB_IRQSET
-				if (cpu_online(RX_CPU_BIG_CORE)) {
-					unsigned int irq = (unsigned int)-1;
-					int err = 0;
-					dhdpcie_get_pcieirq(dhd->bus, &irq);
-					err = irq_set_affinity(irq,
-							cpumask_of(RX_CPU_BIG_CORE));
-					if (err)
-						DHD_ERROR(("%s: irq set afiinity is"
-								"failed cpu:%d\n",
-								__FUNCTION__, RX_CPU_BIG_CORE));
-				} else {
-					DHD_ERROR(("%s: RX_CPU_BIG_CORE(%d) is offline.\n",
-							__FUNCTION__, RX_CPU_BIG_CORE));
-				}
+				dhd_irq_set_affinity(dhd);
 #endif /* DHD_LB_IRQSET */
 			}
 	}
@@ -8108,18 +8149,7 @@ dhd_open(struct net_device *net)
 		} /* rx_napi_netdev == NULL */
 #endif /* DHD_LB_RXP */
 #ifdef DHD_LB_IRQSET
-		if (cpu_online(RX_CPU_BIG_CORE)) {
-			unsigned int irq = (unsigned int) -1;
-			int err = 0;
-			dhdpcie_get_pcieirq(dhd->pub.bus, &irq);
-			err = irq_set_affinity(irq, cpumask_of(RX_CPU_BIG_CORE));
-			if (err)
-				DHD_ERROR(("%s: IRQ affinity set is failed, cpu : %d\n",
-						__FUNCTION__, RX_CPU_BIG_CORE));
-		} else {
-			DHD_ERROR(("%s: RX_CPU_BIG_CORE(%d) is offline.\n",
-					__FUNCTION__, RX_CPU_BIG_CORE));
-		}
+		dhd_irq_set_affinity(&dhd->pub);
 #endif /* DHD_LB_IRQSET */
 
 #if defined(DHD_LB_TXP)
@@ -8572,12 +8602,12 @@ dhd_init_logstrs_array(osl_t *osh, dhd_event_log_t *temp)
 	filep = filp_open(logstrs_path, O_RDONLY, 0);
 
 	if (IS_ERR(filep)) {
-		DHD_ERROR(("%s: Failed to open the file %s \n", __FUNCTION__, logstrs_path));
+		DHD_INFO(("%s: Failed to open the file %s \n", __FUNCTION__, logstrs_path));
 		goto fail;
 	}
 	error = vfs_stat(logstrs_path, &stat);
 	if (error) {
-		DHD_ERROR(("%s: Failed to stat file %s \n", __FUNCTION__, logstrs_path));
+		DHD_INFO(("%s: Failed to stat file %s \n", __FUNCTION__, logstrs_path));
 		goto fail;
 	}
 	logstrs_size = (int) stat.size;
@@ -8593,7 +8623,7 @@ dhd_init_logstrs_array(osl_t *osh, dhd_event_log_t *temp)
 		goto fail;
 	}
 	if (vfs_read(filep, raw_fmts, logstrs_size, &filep->f_pos) !=	logstrs_size) {
-		DHD_ERROR(("%s: Failed to read file %s", __FUNCTION__, logstrs_path));
+		DHD_INFO(("%s: Failed to read file %s", __FUNCTION__, logstrs_path));
 		goto fail;
 	}
 
@@ -8637,7 +8667,7 @@ dhd_read_map(osl_t *osh, char *fname, uint32 *ramstart, uint32 *rodata_start,
 
 	filep = filp_open(fname, O_RDONLY, 0);
 	if (IS_ERR(filep)) {
-		DHD_ERROR(("%s: Failed to open %s \n",  __FUNCTION__, fname));
+		DHD_INFO(("%s: Failed to open %s \n",  __FUNCTION__, fname));
 		goto fail;
 	}
 
@@ -8922,6 +8952,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 #endif /* PCIE_INB_DW */
 	init_waitqueue_head(&dhd->ctrl_wait);
 	init_waitqueue_head(&dhd->dhd_bus_busy_state_wait);
+	init_waitqueue_head(&dhd->dmaxfer_wait);
 	dhd->pub.dhd_bus_busy_state = 0;
 
 	/* Initialize the spinlocks */
@@ -9114,7 +9145,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 				dhd->pub.affinity_isdpc = TRUE;
 			}
 		}
-#endif /* ARGOS_CPU_SCHEDULER && ARGOS_DPC_TASKLET_CTL && CONFIG_SCHED_HMP */
+#endif /* ARGOS_CPU_SCHEDULER && ARGOS_DPC_TASKLET_CTL && CONFIG_SCHED_HMP && !DHD_LB_IRQSET */
 		/*  use tasklet for dpc */
 		tasklet_init(&dhd->tasklet, dhd_dpc, (ulong)dhd);
 		dhd->thr_dpc_ctl.thr_pid = -1;
@@ -9545,7 +9576,7 @@ bool dhd_validate_chipid(dhd_pub_t *dhdp)
 	config_chipid = BCM43430_CHIP_ID;
 #elif defined(BCM43018_CHIP)
 	config_chipid = BCM43018_CHIP_ID;
-#elif defined(BCM43455_CHIP)
+#elif defined(BCM43455_CHIP) || defined(BCM43456_CHIP)
 	config_chipid = BCM4345_CHIP_ID;
 #elif defined(BCM4334W_CHIP)
 	config_chipid = BCM43342_CHIP_ID;
@@ -10223,6 +10254,11 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #ifdef SUPPORT_SET_CAC
 	uint32 cac = 1;
 #endif /* SUPPORT_SET_CAC */
+
+#if defined(DHD_NON_DMA_M2M_CORRUPTION)
+	dhd_pcie_dmaxfer_lpbk_t pcie_dmaxfer_lpbk;
+#endif /* DHD_NON_DMA_M2M_CORRUPTION */
+
 #ifdef DHD_ENABLE_LPC
 	uint32 lpc = 1;
 #endif /* DHD_ENABLE_LPC */
@@ -10337,6 +10373,9 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #ifdef DISABLE_PRUNED_SCAN
 	uint32 scan_features = 0;
 #endif /* DISABLE_PRUNED_SCAN */
+#ifdef DHD_2G_ONLY_SUPPORT
+	uint band = WLC_BAND_2G;
+#endif /* DHD_2G_ONLY_SUPPORT */
 #ifdef PKT_FILTER_SUPPORT
 	dhd_pkt_filter_enable = TRUE;
 #ifdef APF
@@ -10590,6 +10629,14 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 			DHD_ERROR(("%s: country code setting failed\n", __FUNCTION__));
 	}
 
+
+#ifdef DHD_2G_ONLY_SUPPORT
+	DHD_ERROR(("Enabled DHD 2G only support!!\n"));
+	ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_BAND, (char *)&band, sizeof(band), TRUE, 0);
+	if (ret < 0) {
+		DHD_ERROR(("%s Set Band B failed %d\n", __FUNCTION__, ret));
+	}
+#endif /* DHD_2G_ONLY_SUPPORT */
 
 	/* Set Listen Interval */
 	ret = dhd_iovar(dhd, 0, "assoc_listen", (char *)&listen_interval, sizeof(listen_interval),
@@ -10947,6 +10994,9 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 		DHD_ERROR(("%s ht_features set failed %d\n", __FUNCTION__, ret));
 	}
 #endif /* DISABLE_11N_PROPRIETARY_RATES */
+#ifdef DHD_DISABLE_VHTMODE
+	dhd_disable_vhtmode(dhd);
+#endif /* DHD_DISABLE_VHTMODE */
 #ifdef CUSTOM_PSPRETEND_THR
 	/* Turn off MPC in AP mode */
 	ret = dhd_iovar(dhd, 0, "pspretend_threshold", (char *)&pspretend_thr,
@@ -11217,9 +11267,15 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	dhd->pktfilter[DHD_BROADCAST_ARP_FILTER_NUM] = NULL;
 	if (FW_SUPPORTED(dhd, pf6)) {
 		/* Immediately pkt filter TYPE 6 Dicard Broadcast IP packet */
-		dhd->pktfilter[DHD_IP4BCAST_DROP_FILTER_NUM] =
-			"107 1 6 IP4_H:16 0xf0 !0xe0 IP4_H:19 0xff 0xff";
-		dhd->pktfilter_count = 8;
+		dhd->pktfilter[DHD_IP4BCAST_DROP_FILTER_NUM] = DISCARD_IPV4_BCAST;
+		/* Immediately pkt filter TYPE 6 Dicard Cisco STP packet */
+		dhd->pktfilter[DHD_CISCO_STP_DROP_FILTER_NUM] =
+			"108 1 6 ETH_H:14 0xFFFFFFFFFFFF 0xAAAA0300000C";
+		/* Immediately pkt filter TYPE 6 Dicard Cisco XID protocol */
+		dhd->pktfilter[DHD_CISCO_XID_DROP_FILTER_NUM] =
+			"109 1 6 ETH_H:14 0xFFFFFF 0x0001AF";
+
+		dhd->pktfilter_count = 10;
 	}
 
 #ifdef GAN_LITE_NAT_KEEPALIVE_FILTER
@@ -11461,6 +11517,35 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	}
 #endif /* !WBTEXT */
 
+#if defined(DHD_NON_DMA_M2M_CORRUPTION)
+	/* check pcie non dma loopback */
+	if (dhd->op_mode == DHD_FLAG_MFG_MODE) {
+		memset(&pcie_dmaxfer_lpbk, 0, sizeof(dhd_pcie_dmaxfer_lpbk_t));
+		pcie_dmaxfer_lpbk.u.length = PCIE_DMAXFER_LPBK_LENGTH;
+		pcie_dmaxfer_lpbk.lpbkmode = M2M_NON_DMA_LPBK;
+		pcie_dmaxfer_lpbk.wait = TRUE;
+
+		if ((ret = dhd_bus_iovar_op(dhd, "pcie_dmaxfer", NULL, 0,
+			(char *)&pcie_dmaxfer_lpbk, sizeof(dhd_pcie_dmaxfer_lpbk_t),
+			IOV_SET)) < 0) {
+			DHD_ERROR(("failed to check PCIe Non DMA Loopback Test!!! Reason : %d\n",
+				ret));
+			goto done;
+		}
+
+		if (pcie_dmaxfer_lpbk.u.status != BCME_OK) {
+			DHD_ERROR(("failed to check PCIe Non DMA Loopback Test!!! Reason : %d"
+				" Status : %d\n", ret, pcie_dmaxfer_lpbk.u.status));
+			ret = BCME_ERROR;
+			goto done;
+		} else {
+
+			DHD_ERROR(("successful to check PCIe Non DMA Loopback Test\n"));
+		}
+	}
+#endif /* DHD_NON_DMA_M2M_CORRUPTION */
+
+
 	/* WNM capabilities */
 	wnm_cap = 0
 #ifdef WL11U
@@ -11473,6 +11558,18 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	if (dhd_iovar(dhd, 0, "wnm", (char *)&wnm_cap, sizeof(wnm_cap), NULL, 0, TRUE) < 0) {
 		DHD_ERROR(("failed to set WNM capabilities\n"));
 	}
+
+#ifdef CUSTOM_ASSOC_TIMEOUT
+	/* set recreate_bi_timeout to increase assoc timeout :
+	* 20 * 100TU * 1024 / 1000 = 2 secs
+	* (beacon wait time = recreate_bi_timeout * beacon_period * 1024 / 1000)
+	*/
+	if (dhd_wl_ioctl_set_intiovar(dhd, "recreate_bi_timeout",
+			CUSTOM_ASSOC_TIMEOUT,
+			WLC_SET_VAR, TRUE, 0) != BCME_OK) {
+		DHD_ERROR(("failed to set assoc timeout\n"));
+	}
+#endif /* CUSTOM_ASSOC_TIMEOUT */
 
 done:
 
@@ -12939,6 +13036,27 @@ dhd_os_busbusy_wait_condition(dhd_pub_t *pub, uint *var, uint condition)
 	return timeout;
 }
 
+int
+dhd_os_dmaxfer_wait(dhd_pub_t *pub, uint *condition)
+{
+	int ret = 0;
+	dhd_info_t * dhd = (dhd_info_t *)(pub->info);
+
+	DHD_PERIM_UNLOCK(pub);
+	ret = wait_event_interruptible(dhd->dmaxfer_wait, (*condition));
+	DHD_PERIM_LOCK(pub);
+
+	return ret;
+}
+
+int
+dhd_os_dmaxfer_wake(dhd_pub_t *pub)
+{
+	dhd_info_t *dhd = (dhd_info_t *)(pub->info);
+
+	wake_up(&dhd->dmaxfer_wait);
+	return 0;
+}
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36))
 /* Fix compilation error for FC11 */
@@ -13525,9 +13643,18 @@ dhd_net_bus_devreset(struct net_device *dev, uint8 flag)
 #endif /* BCMSDIO */
 
 	ret = dhd_bus_devreset(&dhd->pub, flag);
+
+	if (flag) {
+		/* Clear some flags for recovery logic */
+		dhd->pub.dongle_trap_occured = 0;
+		dhd->pub.iovar_timeout_occured = 0;
+#ifdef PCIE_FULL_DONGLE
+		dhd->pub.d3ack_timeout_occured = 0;
+#endif /* PCIE_FULL_DONGLE */
+	}
+
 	if (ret) {
 		DHD_ERROR(("%s: dhd_bus_devreset: %d\n", __FUNCTION__, ret));
-		return ret;
 	}
 
 	return ret;
@@ -14447,8 +14574,8 @@ dhd_dev_cfg_rand_mac_oui(struct net_device *dev, uint8 *oui)
 	} else {
 		uint8 *rand_mac_oui = dhdp->rand_mac_oui;
 		memcpy(rand_mac_oui, oui, DOT11_OUI_LEN);
-		DHD_ERROR(("Random MAC OUI to be used - %02x:%02x:%x\n", rand_mac_oui[0],
-		    rand_mac_oui[1], (rand_mac_oui[2] & 0x0f)));
+		DHD_ERROR(("Random MAC OUI to be used - "MACOUIDBG"\n",
+			MACOUI2STRDBG(rand_mac_oui)));
 	}
 	return BCME_OK;
 }
@@ -14469,8 +14596,8 @@ dhd_set_rand_mac_oui(dhd_pub_t *dhd)
 		wl_cfg.flags = (WL_PFN_MAC_OUI_ONLY_MASK | WL_PFN_SET_MAC_UNASSOC_MASK);
 	}
 
-	DHD_ERROR(("Setting rand mac oui to FW - %02x:%02x:%02x\n", rand_mac_oui[0],
-		rand_mac_oui[1], rand_mac_oui[2]));
+	DHD_ERROR(("Setting rand mac oui to FW - "MACOUIDBG"\n",
+		MACOUI2STRDBG(rand_mac_oui)));
 
 	err = dhd_iovar(dhd, 0, "pfn_macaddr", (char *)&wl_cfg, sizeof(wl_cfg), NULL, 0, TRUE);
 	if (err < 0) {
@@ -15293,11 +15420,49 @@ void dhd_bus_country_set(struct net_device *dev, wl_country_t *cspec, bool notif
 
 	if (dhd && dhd->pub.up) {
 		memcpy(&dhd->pub.dhd_cspec, cspec, sizeof(wl_country_t));
+#ifdef DHD_DISABLE_VHTMODE
+		dhd_disable_vhtmode(&dhd->pub);
+#endif /* DHD_DISABLE_VHTMODE */
+
 #ifdef WL_CFG80211
 		wl_update_wiphybands(cfg, notify);
 #endif
 	}
 }
+
+#ifdef DHD_DISABLE_VHTMODE
+void
+dhd_disable_vhtmode(dhd_pub_t *dhd)
+{
+	int ret = 0;
+	uint32 vhtmode = FALSE;
+	ret = dhd_iovar(dhd, 0, "vhtmode", (char *)&vhtmode, sizeof(vhtmode), NULL, 0, TRUE);
+	if (ret < 0) {
+		DHD_ERROR(("%s Set vhtmode 0 failed  %d\n", __FUNCTION__, ret));
+
+		if (ret == BCME_NOTDOWN) {
+			uint wl_down = 1;
+			ret = dhd_wl_ioctl_cmd(dhd, WLC_DOWN,
+				(char *)&wl_down, sizeof(wl_down), TRUE, 0);
+			if (ret) {
+				DHD_ERROR(("%s WL_DOWN Fail ret %d\n", __FUNCTION__, ret));
+				return;
+			}
+
+			ret = dhd_iovar(dhd, 0, "vhtmode", (char *)&vhtmode,
+				sizeof(vhtmode), NULL, 0, TRUE);
+			DHD_ERROR(("%s Set vhtmode %d, ret %d\n", __FUNCTION__, vhtmode, ret));
+
+			ret = dhd_wl_ioctl_cmd(dhd, WLC_UP,
+				(char *)&wl_down, sizeof(wl_down), TRUE, 0);
+			if (ret) {
+				DHD_ERROR(("%s WL_UP Fail ret %d\n", __FUNCTION__, ret));
+			}
+		}
+	}
+}
+#endif /* DHD_DISABLE_VHTMODE */
+
 
 void dhd_bus_band_set(struct net_device *dev, uint band)
 {
@@ -15582,6 +15747,11 @@ dhd_convert_memdump_type_to_str(uint32 type, char *buf)
 		case DUMP_TYPE_HANG_ON_IFACE_OP_FAIL:
 			type_str = "HANG_IFACE_OP_FAIL";
 			break;
+#ifdef DEBUG_DNGL_INIT_FAIL
+		case DUMP_TYPE_DONGLE_INIT_FAILURE;
+			type_str = "DONGLE_INIT_FAIL";
+			break;
+#endif /* DEBUG_DNGL_INIT_FAIL */
 #ifdef SUPPORT_LINKDOWN_RECOVERY
 		case DUMP_TYPE_READ_SHM_FAIL:
 			type_str = "READ_SHM_FAIL";
@@ -16937,6 +17107,12 @@ void dhd_schedule_memdump(dhd_pub_t *dhdp, uint8 *buf, uint32 size)
 		dhd_schedule_log_dump(dhdp);
 	}
 #endif /* DHD_LOG_DUMP */
+#ifdef DEBUG_DNGL_INIT_FAIL
+	if (dhdp->memdump_type == DUMP_TYPE_DONGLE_INIT_FAILURE) {
+		dhd_mem_dump((void *)dhdp->info, (void *)dump, 0);
+		return;
+	}
+#endif /* DEBUG_DNGL_INIT_FAIL */
 	dhd_deferred_schedule_work(dhdp->info->dhd_deferred_wq, (void *)dump,
 		DHD_WQ_WORK_SOC_RAM_DUMP, dhd_mem_dump, DHD_WQ_WORK_PRIORITY_HIGH);
 }
@@ -17945,13 +18121,13 @@ dhd_icmp_dump(char *ifname, uint8 *pktdata, bool tx)
 
 	icmph = (struct icmphdr *)((uint8 *)pkt + sizeof(struct iphdr));
 	if (icmph->type == ICMP_ECHO) {
-		DHD_ERROR(("PING REQUEST[%s] [%s] : SEQNUM=%d\n",
+		DHD_ERROR_MEM(("PING REQUEST[%s] [%s] : SEQNUM=%d\n",
 			ifname, tx ? "TX" : "RX", ntoh16(icmph->un.echo.sequence)));
 	} else if (icmph->type == ICMP_ECHOREPLY) {
-		DHD_ERROR(("PING REPLY[%s] [%s] : SEQNUM=%d\n",
+		DHD_ERROR_MEM(("PING REPLY[%s] [%s] : SEQNUM=%d\n",
 			ifname, tx ? "TX" : "RX", ntoh16(icmph->un.echo.sequence)));
 	} else {
-		DHD_ERROR(("ICMP [%s] [%s] : TYPE=%d, CODE=%d\n",
+		DHD_ERROR_MEM(("ICMP [%s] [%s] : TYPE=%d, CODE=%d\n",
 			ifname, tx ? "TX" : "RX", icmph->type, icmph->code));
 	}
 }

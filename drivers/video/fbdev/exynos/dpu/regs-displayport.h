@@ -762,6 +762,9 @@
 #define HOST_BIST_DATA_B_ADD			(0x1140)
 #define HOST_BIST_DATA_B                        (0xFF << 0)
 
+#define SPD_infoFrame_Packet_Type_Register	(0x1244)
+#define SPD_infoFrame_Packet_Data_Register	(0x1254)
+
 #define AVI_infoFrame_Packet_Register_AVI_Data_Byte_1   (0x11D0)
 #define AVI_DB1                                 (0xFF << 0)
 

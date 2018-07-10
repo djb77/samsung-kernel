@@ -146,17 +146,20 @@ int fimc_is_vender_fw_sel(struct fimc_is_vender *vender)
 	return ret;
 }
 
-int fimc_is_vender_setfile_sel(struct fimc_is_vender *vender, char *setfile_name)
+int fimc_is_vender_setfile_sel(struct fimc_is_vender *vender,
+	char *setfile_name,
+	int position)
 {
 	int ret = 0;
 
 	BUG_ON(!vender);
 	BUG_ON(!setfile_name);
 
-	snprintf(vender->setfile_path, sizeof(vender->setfile_path), "%s%s",
-		FIMC_IS_SETFILE_SDCARD_PATH, setfile_name);
-	snprintf(vender->request_setfile_path, sizeof(vender->request_setfile_path), "%s",
-		setfile_name);
+	snprintf(vender->setfile_path[position], sizeof(vender->setfile_path[position]),
+		"%s%s", FIMC_IS_SETFILE_SDCARD_PATH, setfile_name);
+	snprintf(vender->request_setfile_path[position],
+		sizeof(vender->request_setfile_path[position]),
+		"%s", setfile_name);
 
 	return ret;
 }

@@ -91,11 +91,9 @@ EXPORT_SYMBOL_GPL(madera_set_irq_wake);
 
 static irqreturn_t madera_irq_thread(int irq, void *data)
 {
-	static int bad_irq_count;
 	struct madera_irq_priv *priv = data;
 	bool poll;
 	int ret;
-	unsigned int val, val2;
 
 	dev_dbg(priv->dev, "irq_thread handler\n");
 
@@ -110,104 +108,6 @@ static irqreturn_t madera_irq_thread(int irq, void *data)
 
 	do {
 		poll = false;
-
-		if (bad_irq_count >= 10) {
-			regmap_read(priv->madera->regmap,
-				    MADERA_INTERRUPT_RAW_STATUS_1,
-				    &val);
-			if (!(val & 0x1)) {
-				regmap_read(priv->madera->regmap,
-					    MADERA_SOFTWARE_RESET,
-					    &val2);
-				dev_info(priv->madera->dev,
-					 "IRQ status: 0x%x (san: 0x%x)\n",
-					 val, val2);
-			}
-		}
-		{
-			unsigned int irqreg = MADERA_IRQ1_STATUS_1;
-			unsigned int mskreg = MADERA_IRQ1_MASK_1;
-			unsigned int irqval, mskval;
-			bool irq_req = false;
-
-			regmap_read(priv->madera->regmap, MADERA_IRQ1_STATUS_6,
-				    &irqval);
-			if (!(irqval & (MADERA_MICDET1_EINT1 |
-					MADERA_HPDET_EINT1))) {
-				regmap_read(priv->madera->regmap,
-					    MADERA_IRQ1_STATUS_7,
-					    &irqval);
-				if (!(irqval & (MADERA_MICD_CLAMP_FALL_EINT1 |
-						MADERA_MICD_CLAMP_RISE_EINT1))) {
-					irq_req = true;
-				}
-			}
-
-			while (irq_req && irqreg <= MADERA_IRQ1_STATUS_40) {
-				regmap_read(priv->madera->regmap, irqreg++,
-					    &irqval);
-				regmap_read(priv->madera->regmap, mskreg++,
-					    &mskval);
-
-				if (irqval)
-					dev_info(priv->madera->dev, "IRQ reg: 0x%x: 0x%x\n",
-						 (irqreg - 1), irqval);
-
-				irqval &= ~mskval;
-				if (irqval)
-					break;
-			}
-
-			if (irqreg > MADERA_IRQ1_STATUS_40) {
-				if (bad_irq_count >= 10)
-					dev_info(priv->madera->dev,
-						 "nIRQ: %d\n",
-						 bad_irq_count);
-				if (++bad_irq_count >= 100) {
-					regmap_read(priv->madera->regmap,
-						    MADERA_SOFTWARE_RESET,
-						    &val);
-					dev_err(priv->madera->dev,
-						"0x%x: 0x%x\n",
-						MADERA_SOFTWARE_RESET,
-						val);
-					regmap_read(priv->madera->regmap,
-						    MADERA_HARDWARE_REVISION,
-						    &val);
-					dev_err(priv->madera->dev,
-						"0x%x: 0x%x\n",
-						MADERA_HARDWARE_REVISION, val);
-					regmap_read(priv->madera->regmap,
-						    0x158, &val);
-					dev_err(priv->madera->dev,
-						"0x158: 0x%x\n", val);
-					regmap_read(priv->madera->regmap,
-						    0x159, &val);
-					dev_err(priv->madera->dev,
-						"0x159: 0x%x\n", val);
-					regmap_read(priv->madera->regmap,
-						    0x15D, &val);
-					dev_err(priv->madera->dev,
-						"0x15D: 0x%x\n", val);
-					regmap_read(priv->madera->regmap,
-						    0x15E, &val);
-					dev_err(priv->madera->dev,
-						"0x15E: 0x%x\n", val);
-					regmap_read(priv->madera->regmap,
-						    0x15F, &val);
-					dev_err(priv->madera->dev,
-						"0x15F: 0x%x\n", val);
-					regmap_read(priv->madera->regmap,
-						    0x160, &val);
-					dev_err(priv->madera->dev,
-						"0x160: 0x%x\n", val);
-					madera_reboot_codec(priv->madera);
-					bad_irq_count = 0;
-				}
-			} else {
-				bad_irq_count = 0;
-			}
-		}
 
 		handle_nested_irq(irq_find_mapping(priv->domain, 0));
 
@@ -280,7 +180,7 @@ static int madera_suspend_noirq(struct device *dev)
 {
 	struct madera_irq_priv *priv = dev_get_drvdata(dev);
 
-	dev_dbg(priv->dev, "No IRQ suspend, reenabling IRQ\n");
+	dev_info(priv->dev, "No IRQ suspend, reenabling IRQ\n");
 
 	enable_irq(priv->irq);
 
@@ -291,7 +191,7 @@ static int madera_suspend(struct device *dev)
 {
 	struct madera_irq_priv *priv = dev_get_drvdata(dev);
 
-	dev_dbg(priv->dev, "Suspend, disabling IRQ\n");
+	dev_info(priv->dev, "Suspend, disabling IRQ\n");
 
 	disable_irq(priv->irq);
 
@@ -302,7 +202,7 @@ static int madera_resume_noirq(struct device *dev)
 {
 	struct madera_irq_priv *priv = dev_get_drvdata(dev);
 
-	dev_dbg(priv->dev, "No IRQ resume, disabling IRQ\n");
+	dev_info(priv->dev, "No IRQ resume, disabling IRQ\n");
 
 	disable_irq(priv->irq);
 
@@ -313,7 +213,7 @@ static int madera_resume(struct device *dev)
 {
 	struct madera_irq_priv *priv = dev_get_drvdata(dev);
 
-	dev_dbg(priv->dev, "Resume, reenabling IRQ\n");
+	dev_info(priv->dev, "Resume, reenabling IRQ\n");
 
 	enable_irq(priv->irq);
 
@@ -334,11 +234,7 @@ static int madera_irq_of_get(struct madera_irq_priv *priv)
 	u32 value;
 	int ret;
 
-	priv->irq = irq_of_parse_and_map(np, 0);
-	if (priv->irq < 0)
-		return priv->irq;
-
-	ret = of_property_read_u32(np, "cirrus,irq_flags", &value);
+	ret = of_property_read_u32(np, "cirrus,irq-flags", &value);
 	if (ret == 0)
 		madera->pdata.irqchip.irq_flags = value;
 
@@ -349,12 +245,13 @@ static int madera_irq_of_get(struct madera_irq_priv *priv)
 	return 0;
 }
 
-int madera_irq_probe(struct platform_device *pdev)
+static int madera_irq_probe(struct platform_device *pdev)
 {
 	struct madera *madera = dev_get_drvdata(pdev->dev.parent);
 	struct madera_irq_priv *priv;
 	const struct regmap_irq_chip *irq = NULL;
 	struct irq_data *irq_data;
+	unsigned int virq;
 	int flags = IRQF_ONESHOT;
 	int ret;
 
@@ -368,6 +265,10 @@ int madera_irq_probe(struct platform_device *pdev)
 	priv->madera = madera;
 
 	switch (madera->type) {
+	case CS47L15:
+		if (IS_ENABLED(CONFIG_MADERA_IRQ_CS47L15))
+			irq = &cs47l15_irq;
+		break;
 	case CS47L35:
 		if (IS_ENABLED(CONFIG_MADERA_IRQ_CS47L35))
 			irq = &cs47l35_irq;
@@ -403,7 +304,7 @@ int madera_irq_probe(struct platform_device *pdev)
 	if (madera->pdata.irqchip.irq_gpio == 0)
 		madera->pdata.irqchip.irq_gpio = -EINVAL;
 
-	priv->irq = madera->irq; /* default, may be replaced by DT entry */
+	priv->irq = madera->irq;
 
 	if (IS_ENABLED(CONFIG_OF)) {
 		if (!dev_get_platdata(priv->dev)) {
@@ -483,13 +384,18 @@ int madera_irq_probe(struct platform_device *pdev)
 
 	priv->domain = irq_domain_add_linear(NULL, 1, &madera_domain_ops, priv);
 
-	ret = regmap_add_irq_chip(madera->regmap,
-				  irq_create_mapping(priv->domain, 0),
-				  IRQF_ONESHOT, 0, irq,
+	virq = irq_create_mapping(priv->domain, 0);
+	if (!virq) {
+		dev_err(priv->dev, "Failed to map IRQs\n");
+		ret = -EINVAL;
+		goto err_domain;
+	}
+
+	ret = regmap_add_irq_chip(madera->regmap, virq, IRQF_ONESHOT, 0, irq,
 				  &priv->irq_data);
 	if (ret) {
 		dev_err(priv->dev, "add_irq_chip failed: %d\n", ret);
-		return ret;
+		goto err_mapping;
 	}
 
 	ret = request_threaded_irq(priv->irq, NULL, madera_irq_thread,
@@ -498,23 +404,37 @@ int madera_irq_probe(struct platform_device *pdev)
 		dev_err(priv->dev,
 			"Failed to request threaded irq %d: %d\n",
 			priv->irq, ret);
-		regmap_del_irq_chip(priv->irq, priv->irq_data);
-		return ret;
+		goto err_chip;
 	}
 
 	platform_set_drvdata(pdev, priv);
 	madera->irq_dev = priv->dev;
 
 	return 0;
+
+err_chip:
+	regmap_del_irq_chip(virq, priv->irq_data);
+err_mapping:
+	irq_dispose_mapping(virq);
+err_domain:
+	irq_domain_remove(priv->domain);
+
+	return ret;
 }
 
-int madera_irq_remove(struct platform_device *pdev)
+static int madera_irq_remove(struct platform_device *pdev)
 {
 	struct madera_irq_priv *priv = platform_get_drvdata(pdev);
+	unsigned int virq;
 
 	priv->madera->irq_dev = NULL;
 
-	regmap_del_irq_chip(priv->irq, priv->irq_data);
+	virq = irq_find_mapping(priv->domain, 0);
+	regmap_del_irq_chip(virq, priv->irq_data);
+	irq_dispose_mapping(virq);
+
+	irq_domain_remove(priv->domain);
+
 	free_irq(priv->irq, priv);
 
 	return 0;

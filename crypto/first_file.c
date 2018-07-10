@@ -27,12 +27,14 @@ void first_crypto_text (void)
 #ifdef CONFIG_RELOCATABLE_KERNEL
 
 #define KERNEL_KASLR_16K_ALGIN
+#define DDR_START_FIRST		(0x80000000)
+#define DDR_START_SECOND	(0x40000000) // Used only for MSM8998 6GB RAM
 
 #ifdef  KERNEL_KASLR_16K_ALGIN
-#define KASLR_FIRST_SLOT	(0x80080000)
+#define KASLR_FIRST_SLOT	(0x80000)
 #define KASLR_ALIGN			(0x4000)
 #else
-#define KASLR_FIRST_SLOT	(0x85000000)
+#define KASLR_FIRST_SLOT	(0x5000000)
 #define KASLR_ALIGN			(0x200000)
 #endif
 
@@ -41,8 +43,21 @@ get_builtime_crypto_hmac (void)
 {
 	extern u64 *__boot_kernel_offset;
 	u64 *kernel_addr = (u64 *) &__boot_kernel_offset;
-	u64 offset = (u64)((u64)kernel_addr[1] + (u64)kernel_addr[0] - (u64)KASLR_FIRST_SLOT);
-	u64 idx = (offset / KASLR_ALIGN);
+	u64 offset = 0;
+	u64 idx = 0;
+	if (ddr_start_type) { // This value is set only for MSM8998
+		if (ddr_start_type == 1)
+			offset = (u64)((u64)kernel_addr[1] + (u64)kernel_addr[0] - (u64)KASLR_FIRST_SLOT - (u64)DDR_START_FIRST);
+		else
+			offset = (u64)((u64)kernel_addr[1] + (u64)kernel_addr[0] - (u64)KASLR_FIRST_SLOT - (u64)DDR_START_SECOND);
+	} else {
+		offset = (u64)((u64)kernel_addr[1] + (u64)kernel_addr[0] - (u64)KASLR_FIRST_SLOT - (u64)DDR_START_FIRST);
+	}
+
+	idx = (offset / KASLR_ALIGN);
+	/* zero out the KASLR information for security */
+	kernel_addr[1] = 0;
+	kernel_addr[0] = 0;
 	return builtime_crypto_hmac[idx];
 }
 #else

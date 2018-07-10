@@ -15,6 +15,8 @@
 #define MAX_MULTI_TOUCH_EVENTS		3
 #define MAX_EVENTS			MAX_MULTI_TOUCH_EVENTS * 10
 
+#define INPUT_BOOSTER_NULL	0
+
 #define HEADGAGE "******"
 #define TAILGAGE "****  "
 
@@ -54,14 +56,26 @@
 
 #if defined(CONFIG_ARCH_EXYNOS) //______________________________________________________________________________
 #define SET_BOOSTER  { \
-	set_hmp(_this->param[_this->index].hmp_boost); \
+	int value = INPUT_BOOSTER_NULL; \
+	_this->level++; \
+	MAX_T_INPUT_BOOSTER(value, hmp_boost); \
+	if (value == INPUT_BOOSTER_NULL) { \
+		value = 0; \
+	} \
+	set_hmp(value); \
 	set_qos(&_this->cpu_qos, PM_QOS_CLUSTER1_FREQ_MIN/*PM_QOS_CPU_FREQ_MIN*/, _this->param[_this->index].cpu_freq);  \
 	set_qos(&_this->kfc_qos, PM_QOS_CLUSTER0_FREQ_MIN/*PM_QOS_KFC_FREQ_MIN*/, _this->param[_this->index].kfc_freq);  \
 	set_qos(&_this->mif_qos, PM_QOS_BUS_THROUGHPUT, _this->param[_this->index].mif_freq);  \
 	set_qos(&_this->int_qos, PM_QOS_DEVICE_THROUGHPUT, _this->param[_this->index].int_freq);  \
 }
 #define REMOVE_BOOSTER  { \
-	set_hmp(0);  \
+	int value = INPUT_BOOSTER_NULL; \
+	_this->level = -1; \
+	MAX_T_INPUT_BOOSTER(value, hmp_boost); \
+	if (value == INPUT_BOOSTER_NULL) { \
+		value = 0; \
+	} \
+	set_hmp(value); \
 	remove_qos(&_this->cpu_qos);  \
 	remove_qos(&_this->kfc_qos);  \
 	remove_qos(&_this->mif_qos);  \
@@ -128,6 +142,9 @@
 	_DEVICE_##_booster.multi_events = 0; \
 	{ \
 		int i; \
+		for (i = 0; i < sizeof(_DEVICE_##_booster.param)/sizeof(struct t_input_booster_param); i++) { \
+			_DEVICE_##_booster.level = -1; \
+		} \
 		for(i=0;i<ndevice_in_dt;i++) { \
 			if(device_tree_infor[i].type == _DEVICE_##_booster_dt.type) { \
 				struct t_input_booster_device_tree_gender *dt_gender = &_DEVICE_##_booster_dt; \
@@ -442,6 +459,7 @@ struct t_input_booster {
 	int multi_events;
 	int event_type;
 	int change_on_release;
+	int level;
 
 	void (*input_booster_state)(void *__this, int input_booster_event);
 };
@@ -480,16 +498,15 @@ struct t_input_booster_device_tree_gender {
 //______________________________________________________________________________	<<< in DTSI file >>>
 //______________________________________________________________________________	input_booster,type = <4>;	/* BOOSTER_DEVICE_KEYBOARD */
 //______________________________________________________________________________
-struct t_input_booster_device_tree_gender	touch_booster_dt = {2,2,};		// type : 2,  level : 2
-struct t_input_booster_device_tree_gender	multitouch_booster_dt = {3,1,};		// type : 3,  level : 1
-struct t_input_booster_device_tree_gender	key_booster_dt = {0,1,};		// type : 0,  level : 1
+struct t_input_booster_device_tree_gender	key_booster_dt = {0,1,};			// type : 0,  level : 1
 struct t_input_booster_device_tree_gender	touchkey_booster_dt = {1,1,};		// type : 1,  level : 1
+struct t_input_booster_device_tree_gender	touch_booster_dt = {2,2,};			// type : 2,  level : 2
+struct t_input_booster_device_tree_gender	multitouch_booster_dt = {3,1,};		// type : 3,  level : 1
 struct t_input_booster_device_tree_gender	keyboard_booster_dt = {4,1,};		// type : 4,  level : 1
-struct t_input_booster_device_tree_gender	mouse_booster_dt = {5,1,};		// type : 5,  level : 1
+struct t_input_booster_device_tree_gender	mouse_booster_dt = {5,1,};			// type : 5,  level : 1
 struct t_input_booster_device_tree_gender	mouse_wheel_booster_dt = {6,1,};	// type : 6,  level : 1
-struct t_input_booster_device_tree_gender	pen_booster_dt = {7,1,};		// type : 7,  level : 1
-struct t_input_booster_device_tree_gender	hover_booster_dt = {7,1,};		// type : 7,  level : 1
-struct t_input_booster_device_tree_gender	gamepad_booster_dt = {8,1,};		// type : 8,  level : 1
+struct t_input_booster_device_tree_gender	hover_booster_dt = {7,1,};			// type : 7,  level : 1
+struct t_input_booster_device_tree_gender	pen_booster_dt = {8,1,};			// type : 8,  level : 1
 struct t_input_booster_device_tree_gender	key_two_booster_dt = {9,1,};			// type : 9,  level : 1
 struct t_input_booster_device_tree_infor	*device_tree_infor = NULL;
 
@@ -553,8 +570,39 @@ struct t_input_booster	mouse_booster;
 struct t_input_booster	mouse_wheel_booster;
 struct t_input_booster	pen_booster;
 struct t_input_booster	hover_booster;
-struct t_input_booster	gamepad_booster;
 struct t_input_booster	key_two_booster;
+
+struct t_input_booster *t_input_boosters[] = {
+	&touch_booster,
+	&multitouch_booster,
+	&key_booster,
+	&touchkey_booster,
+	&keyboard_booster,
+	&mouse_booster,
+	&mouse_wheel_booster,
+	&pen_booster,
+	&hover_booster,
+	&key_two_booster
+};
+
+#define MAX_T_INPUT_BOOSTER(ref, _PARAM_) { \
+		int i = 0; \
+		int max = INPUT_BOOSTER_NULL; \
+		for (i = 0; i < sizeof(t_input_boosters)/sizeof(struct t_input_booster *); i++) { \
+			if (t_input_boosters[i]->level >= 0 && t_input_boosters[i]->level < (int)(sizeof(t_input_boosters[i]->param)/sizeof(struct t_input_booster_param))) { \
+				pr_debug("[Input Booster3] %s booster type : %d    level : %d    value : %d\n", #_PARAM_, i, t_input_boosters[i]->level, t_input_boosters[i]->param[t_input_boosters[i]->level]._PARAM_); \
+				if (max < (int)(t_input_boosters[i]->param[t_input_boosters[i]->level]._PARAM_)) { \
+					max = (int)(t_input_boosters[i]->param[t_input_boosters[i]->level]._PARAM_); \
+				} \
+			} \
+		} \
+		if (max == INPUT_BOOSTER_NULL) { \
+			ref = INPUT_BOOSTER_NULL; \
+		} else { \
+			ref = max; \
+		} \
+		pr_debug("[Input Booster3] %s max value : %d\n", #_PARAM_, max); \
+	} \
 
 int input_count = 0, key_back = 0, key_home = 0, key_recent = 0;
 

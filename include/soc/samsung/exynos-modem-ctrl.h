@@ -32,7 +32,10 @@ static inline bool skb_free_head_cp_zerocopy(struct sk_buff *skb)
 	return __skb_free_head_cp_zerocopy(skb);
 }
 #else
-static inline bool skb_free_head_cp_zerocopy(struct sk_buff *skb) { return; }
+static inline bool skb_free_head_cp_zerocopy(struct sk_buff *skb)
+{
+	return false;
+}
 #endif
 
 #endif

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_wlfc.c 679733 2017-01-17 06:40:39Z $
+ * $Id: dhd_wlfc.c 735359 2017-12-08 10:56:04Z $
  *
  */
 
@@ -2627,8 +2627,8 @@ _dhd_wlfc_mac_table_update(dhd_pub_t *dhd, uint8* value, uint8 type)
 	uint8 ifid;
 	uint8* ea;
 
-	WLFC_DBGMESG(("%s(), mac [%02x:%02x:%02x:%02x:%02x:%02x],%s,idx:%d,id:0x%02x\n",
-		__FUNCTION__, value[2], value[3], value[4], value[5], value[6], value[7],
+	WLFC_DBGMESG(("%s(), mac ["MACDBG"],%s,idx:%d,id:0x%02x\n",
+		__FUNCTION__, MAC2STRDBG(&value[2]),
 		((type == WLFC_CTL_TYPE_MACDESC_ADD) ? "ADD":"DEL"),
 		WLFC_MAC_DESC_GET_LOOKUP_INDEX(value[0]), value[0]));
 
@@ -3958,10 +3958,9 @@ dhd_wlfc_dump(dhd_pub_t *dhdp, struct bcmstrbuf *strbuf)
 
 			ea = interfaces[i].ea;
 			bcm_bprintf(strbuf, "INTERFACE[%d].ea = "
-				"[%02x:%02x:%02x:%02x:%02x:%02x], if:%d, type: %s "
+				"["MACDBG"], if:%d, type: %s "
 				"netif_flow_control:%s\n", i,
-				ea[0], ea[1], ea[2], ea[3], ea[4], ea[5],
-				interfaces[i].interface_id,
+				MAC2STRDBG(ea), interfaces[i].interface_id,
 				iftype_desc, ((wlfc->hostif_flow_state[i] == OFF)
 				? " OFF":" ON"));
 
@@ -4005,9 +4004,8 @@ dhd_wlfc_dump(dhd_pub_t *dhdp, struct bcmstrbuf *strbuf)
 		if (mac_table[i].occupied) {
 			ea = mac_table[i].ea;
 			bcm_bprintf(strbuf, "MAC_table[%d].ea = "
-				"[%02x:%02x:%02x:%02x:%02x:%02x], if:%d \n", i,
-				ea[0], ea[1], ea[2], ea[3], ea[4], ea[5],
-				mac_table[i].interface_id);
+				"["MACDBG"], if:%d \n", i,
+				MAC2STRDBG(ea), mac_table[i].interface_id);
 
 			bcm_bprintf(strbuf, "MAC_table[%d].PSQ(len,state,credit),"
 				"(trans,supp_trans,onbus)"

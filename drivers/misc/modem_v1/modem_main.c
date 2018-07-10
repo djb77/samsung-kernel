@@ -520,6 +520,9 @@ static int parse_dt_mbox_pdata(struct device *dev, struct device_node *np,
 	mif_dt_read_u32 (np, "sbi_pda_active_pos", mbox->sbi_pda_active_pos);
 	mif_dt_read_u32 (np, "sbi_ap_status_mask", mbox->sbi_ap_status_mask);
 	mif_dt_read_u32 (np, "sbi_ap_status_pos", mbox->sbi_ap_status_pos);
+	mif_dt_read_u32 (np, "sbi_crash_type_mask", mbox->sbi_crash_type_mask);
+	mif_dt_read_u32 (np, "sbi_crash_type_pos", mbox->sbi_crash_type_pos);
+	
 	mif_dt_read_u32 (np, "sbi_ap2cp_kerneltime_sec_mask",
 			mbox->sbi_ap2cp_kerneltime_sec_mask);
 	mif_dt_read_u32 (np, "sbi_ap2cp_kerneltime_sec_pos",

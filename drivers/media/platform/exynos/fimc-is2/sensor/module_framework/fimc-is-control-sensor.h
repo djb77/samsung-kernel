@@ -35,6 +35,11 @@ u32 fimc_is_sensor_convert_ns_to_us(u64 nsec);
 
 struct fimc_is_device_sensor;
 void fimc_is_sensor_ctl_frame_evt(struct fimc_is_device_sensor *device);
+void fimc_is_sensor_ois_update(struct fimc_is_device_sensor *device);
+#ifdef USE_OIS_SLEEP_MODE
+void fimc_is_sensor_ois_start(struct fimc_is_device_sensor *device);
+void fimc_is_sensor_ois_stop(struct fimc_is_device_sensor *device);
+#endif
 int fimc_is_sensor_ctl_adjust_sync(struct fimc_is_device_sensor *device, u32 adjust_sync);
 
 /* Actuator funtion */

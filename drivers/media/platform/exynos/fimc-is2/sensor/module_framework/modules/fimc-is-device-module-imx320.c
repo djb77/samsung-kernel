@@ -59,6 +59,8 @@ static struct fimc_is_sensor_cfg config_module_imx320[] = {
 	FIMC_IS_SENSOR_CFG(752, 1328, 15, 14, 8, CSI_DATA_LANES_2),
 	/* 376X664@110fps */
 	FIMC_IS_SENSOR_CFG(376, 664, 110, 14, 9, CSI_DATA_LANES_2),
+	/* 3264X1592@30fps */
+	FIMC_IS_SENSOR_CFG(3264, 1592, 30, 14, 10, CSI_DATA_LANES_2),
 };
 
 static struct fimc_is_vci vci_module_imx320[] = {

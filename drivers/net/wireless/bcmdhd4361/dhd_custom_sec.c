@@ -41,12 +41,12 @@
 
 #include <linux/fcntl.h>
 #include <linux/fs.h>
-#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET)
 
+#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET)
 extern int argos_irq_affinity_setup_label(unsigned int irq, const char *label,
 	struct cpumask *affinity_cpu_mask,
 	struct cpumask *default_cpu_mask);
-#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET */
+#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET */
 
 const struct cntry_locales_custom translate_custom_table[] = {
 #if defined(BCM4330_CHIP) || defined(BCM4334_CHIP) || defined(BCM43241_CHIP)
@@ -97,7 +97,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"",   "XZ", 1},	/* Universal if Country code is unknown or empty */
 	{"IR", "XZ", 1},	/* Universal if Country code is IRAN, (ISLAMIC REPUBLIC OF) */
 	{"SD", "XZ", 1},	/* Universal if Country code is SUDAN */
-	{"SY", "XZ", 1},	/* Universal if Country code is SYRIAN ARAB REPUBLIC */
 	{"GL", "XZ", 1},	/* Universal if Country code is GREENLAND */
 	{"PS", "XZ", 1},	/* Universal if Country code is PALESTINIAN TERRITORY, OCCUPIED */
 	{"TL", "XZ", 1},	/* Universal if Country code is TIMOR-LESTE (EAST TIMOR) */
@@ -142,7 +141,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"",   "XZ", 11},	/* Universal if Country code is unknown or empty */
 	{"IR", "XZ", 11},	/* Universal if Country code is IRAN, (ISLAMIC REPUBLIC OF) */
 	{"SD", "XZ", 11},	/* Universal if Country code is SUDAN */
-	{"SY", "XZ", 11},	/* Universal if Country code is SYRIAN ARAB REPUBLIC */
 	{"GL", "XZ", 11},	/* Universal if Country code is GREENLAND */
 	{"PS", "XZ", 11},	/* Universal if Country code is PALESTINIAN TERRITORY, OCCUPIED */
 	{"TL", "XZ", 11},	/* Universal if Country code is TIMOR-LESTE (EAST TIMOR) */
@@ -172,7 +170,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"",   "XZ", 11},	/* Universal if Country code is unknown or empty */
 	{"IR", "XZ", 11},	/* Universal if Country code is IRAN, (ISLAMIC REPUBLIC OF) */
 	{"SD", "XZ", 11},	/* Universal if Country code is SUDAN */
-	{"SY", "XZ", 11},	/* Universal if Country code is SYRIAN ARAB REPUBLIC */
 	{"PS", "XZ", 11},	/* Universal if Country code is PALESTINIAN TERRITORY, OCCUPIED */
 	{"TL", "XZ", 11},	/* Universal if Country code is TIMOR-LESTE (EAST TIMOR) */
 	{"MH", "XZ", 11},	/* Universal if Country code is MARSHALL ISLANDS */
@@ -950,6 +947,7 @@ dhd_force_disable_singlcore_scan(dhd_pub_t *dhd)
 	}
 }
 #endif /* FORCE_DISABLE_SINGLECORE_SCAN */
+
 #if defined(ARGOS_CPU_SCHEDULER) && defined(CONFIG_SCHED_HMP) && \
 	!defined(DHD_LB_IRQSET)
 void
@@ -1078,7 +1076,7 @@ const char *softap_info_items[] = {
 const char *softap_info_values[] = {
 	"yes", "yes", "10", "yes", "yes", "yes", NULL
 };
-#elif defined(BCM43455_CHIP)
+#elif defined(BCM43455_CHIP) || defined(BCM43456_CHIP)
 const char *softap_info_values[] = {
 	"no", "yes", "10", "no", "yes", "yes", NULL
 };

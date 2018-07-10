@@ -34,6 +34,8 @@
 
 extern int panel_log_level;
 
+void clear_disp_det_pend(struct panel_device *panel);
+
 #define panel_err(fmt, ...)							\
 	do {									\
 		if (panel_log_level >= 3) {					\
@@ -201,7 +203,7 @@ struct copr_spi_gpios {
 	int gpio_cs;
 };
 struct host_cb {
-	int (*cb)(void *data);
+	int (*cb)(void *data, int (*check_cond)(void));
 	void *data;
 };
 struct panel_device {
@@ -289,4 +291,7 @@ struct panel_device {
 #define PANEL_IOC_SET_DSU				_IOW(PANEL_IOC_BASE, 14, struct dsu_info *)
 #endif
 #define PANEL_IOC_REG_RESET_CB			_IOR(PANEL_IOC_BASE, 15, struct host_cb *)
+#ifdef CONFIG_SUPPORT_INDISPLAY
+#define PANEL_IOC_SET_FINGER_SET		_IO(PANEL_IOC_BASE, 16)
+#endif
 #endif //__PANEL_DRV_H__

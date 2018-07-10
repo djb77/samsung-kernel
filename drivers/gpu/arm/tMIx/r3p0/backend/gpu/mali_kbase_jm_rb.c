@@ -438,6 +438,9 @@ static bool kbasep_js_job_check_ref_cores(struct kbase_device *kbdev,
 						recently_chosen_affinity);
 				kbasep_js_job_check_deref_cores(kbdev, katom);
 
+				dev_err(kbdev->dev, "%s: affinity [0x%llx -> 0x%llx]\n", __func__,
+					recently_chosen_affinity, katom->affinity);
+
 				/* Fixup the state that was reduced by
 				 * deref_cores: */
 				katom->coreref_state =

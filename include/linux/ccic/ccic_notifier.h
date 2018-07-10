@@ -56,6 +56,7 @@ typedef enum {
 	CCIC_NOTIFY_ID_DP_LINK_CONF,
 	CCIC_NOTIFY_ID_USB_DP,
 	CCIC_NOTIFY_ID_ROLE_SWAP,
+	CCIC_NOTIFY_ID_FAC,
 } ccic_notifier_id_t;
 
 typedef struct
@@ -191,7 +192,7 @@ extern int ccic_notifier_register(struct notifier_block *nb,
 extern int ccic_notifier_unregister(struct notifier_block *nb);
 
 #define CCIC_NOTI_DEST_NUM	(10)
-#define CCIC_NOTI_ID_NUM	(12)
+#define CCIC_NOTI_ID_NUM	(13)
 #define CCIC_NOTI_RID_NUM	(8)
 #define CCIC_NOTI_USB_STATUS_NUM (5)
 

@@ -228,6 +228,7 @@ static void mdev_handle_ccic_detach(muic_data_t *pmuic)
 #endif
 	pmuic->is_ccic_attach = false;
 	pmuic->is_ccic_afc_enable = 0;
+	pmuic->is_ccic_rp56_enable = false;
 
 	if (pdesc->ccic_evt_rprd) {
 		if (pvendor && pvendor->enable_chgdet)
@@ -485,14 +486,17 @@ static int muic_handle_ccic_ATTACH(muic_data_t *pmuic, CC_NOTI_ATTACH_TYPEDEF *p
 #if !defined(CONFIG_SEC_FACTORY)
 		switch (pnoti->cable_type) {
 		case Rp_56K:
-			switch (pmuic->attached_dev) {
-			case ATTACHED_DEV_AFC_CHARGER_5V_MUIC:
-				pr_info("%s: 9V HV Charging Start!\n", __func__);
-				pmuic->phv->tx_data = MUIC_HV_9V;
-				max77865_hv_muic_connect_start(pmuic->phv);
-				break;
-			default:
-				break;
+			if (!pmuic->is_ccic_rp56_enable) {
+				switch (pmuic->attached_dev) {
+				case ATTACHED_DEV_AFC_CHARGER_5V_MUIC:
+					pr_info("%s: 9V HV Charging Start!\n", __func__);
+					pmuic->phv->tx_data = MUIC_HV_9V;
+					max77865_hv_muic_connect_start(pmuic->phv);
+					break;
+				default:
+					break;
+				}
+				pmuic->is_ccic_rp56_enable = true;
 			}
 			break;
 		case Rp_Abnormal:

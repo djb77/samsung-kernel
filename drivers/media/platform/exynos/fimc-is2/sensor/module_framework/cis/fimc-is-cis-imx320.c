@@ -289,10 +289,8 @@ int sensor_imx320_cis_init(struct v4l2_subdev *subdev)
 	if (ret < 0) {
 #ifdef USE_CAMERA_HW_BIG_DATA
 		sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
-		if (sensor_peri && sensor_peri->module->position == SENSOR_POSITION_REAR)
-			fimc_is_sec_get_rear_hw_param(&hw_param);
-		else if (sensor_peri && sensor_peri->module->position == SENSOR_POSITION_FRONT)
-			fimc_is_sec_get_front_hw_param(&hw_param);
+		if (sensor_peri)
+			fimc_is_sec_get_hw_param(&hw_param, sensor_peri->module->position);
 		if (hw_param)
 			hw_param->i2c_sensor_err_cnt++;
 #endif

@@ -3,7 +3,7 @@
  * ALSA SoC - Samsung Abox Log driver
  *
  * Copyright (c) 2016 Samsung Electronics Co. Ltd.
-  *
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -41,6 +41,7 @@ extern void abox_log_flush_by_id(struct device *dev, int id);
  * @param[in]	buffer		pointer to shared buffer
  * @return	error code if any
  */
-extern int abox_log_register_buffer(struct device *dev, int id, struct ABOX_LOG_BUFFER *buffer);
+extern int abox_log_register_buffer(struct device *dev, int id,
+		struct ABOX_LOG_BUFFER *buffer);
 
 #endif /* __SND_SOC_ABOX_LOG_H */

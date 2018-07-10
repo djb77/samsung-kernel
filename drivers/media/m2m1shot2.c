@@ -1583,6 +1583,7 @@ static long m2m1shot2_ioctl(struct file *filp,
 	case M2M1SHOT2_IOC_REQUEST_PERF:
 	{
 		struct m2m1shot2_performance_data data;
+		int i;
 
 		if (!ctx->m21dev->ops->prepare_perf) {
 			dev_err(ctx->m21dev->dev,
@@ -1598,7 +1599,19 @@ static long m2m1shot2_ioctl(struct file *filp,
 			break;
 		}
 
-		ret = ctx->m21dev->ops->prepare_perf(ctx, &data);
+		if (data.num_frames >= M2M1SHOT2_PERF_MAX_FRAMES) {
+			ret = -EINVAL;
+			break;
+		}
+
+		for (i = 0; i < data.num_frames; i++) {
+			if (data.frame[i].num_layers >= M2M1SHOT2_MAX_IMAGES) {
+				ret = -EINVAL;
+				break;
+			}
+		}
+		if (!ret)
+			ret = ctx->m21dev->ops->prepare_perf(ctx, &data);
 
 		break;
 	}

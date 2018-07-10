@@ -261,6 +261,9 @@ struct dw_mci {
 
 	struct timer_list       cmd11_timer;
 	struct timer_list       dto_timer;
+	
+	/* Card Clock In */
+	u32			cclk_in;
 };
 
 /* DMA ops for Internal/External DMAC interface */

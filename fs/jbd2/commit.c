@@ -363,6 +363,7 @@ static void jbd2_block_tag_csum_set(journal_t *j, journal_block_tag_t *tag,
 	else
 		tag->t_checksum = cpu_to_be16(csum32);
 }
+
 /*
  * jbd2_journal_commit_transaction
  *

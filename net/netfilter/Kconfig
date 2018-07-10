@@ -1329,6 +1329,10 @@ config NETFILTER_XT_MATCH_QTAGUID
 
 	  If unsure, say `N'.
 
+config NETFILTER_XT_MATCH_ONESHOT
+	bool "Support NETFILTER_XT_MATCH_ONESHOT"
+	default n
+
 config NETFILTER_XT_MATCH_QUOTA
 	tristate '"quota" match support'
 	depends on NETFILTER_ADVANCED
@@ -1497,8 +1501,8 @@ config NETFILTER_XT_MATCH_U32
 
 endif # NETFILTER_XTABLES
 
-config ONESHOT_UID
-	bool "Support ONESHOT UID"
+config NF_HISTORY
+	bool "Support NF HISTORY"
 	default n
 
 endmenu

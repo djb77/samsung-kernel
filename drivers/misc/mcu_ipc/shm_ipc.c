@@ -90,6 +90,11 @@ static ssize_t memshare_read(struct file *filep, char __user *buf,
 	if ((filep->f_flags & O_NONBLOCK) && !rd_dev->data_ready)
 		return -EAGAIN;
 
+	if (*pos < 0 || *pos >= rd_dev->cplog_size) {
+		pr_err("%s: tried to read over limit (%lld)\n", __func__, *pos);
+		return 0;
+	}
+
 	data_left = rd_dev->cplog_size - *pos;
 	addr = rd_dev->p_cplog_addr + *pos;
 

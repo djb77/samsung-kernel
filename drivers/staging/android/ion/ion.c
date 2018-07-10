@@ -795,6 +795,27 @@ static int ion_handle_add(struct ion_client *client, struct ion_handle *handle)
 
 unsigned int ion_parse_heap_id(unsigned int heap_id_mask, unsigned int flags);
 
+static size_t ion_buffer_get_total_size_by_pid(struct ion_client *client)
+{
+	struct ion_device *dev = client->dev;
+	pid_t pid = client->pid;
+	size_t pid_total_size = 0;
+	struct rb_node *n;
+
+	mutex_lock(&dev->buffer_lock);
+	for (n = rb_first(&dev->buffers); n; n = rb_next(n)) {
+		struct ion_buffer *buffer = rb_entry(n, struct ion_buffer,
+						     node);
+		mutex_lock(&buffer->lock);
+		if (pid == buffer->pid)
+			pid_total_size += buffer->size;
+		mutex_unlock(&buffer->lock);
+	}
+	mutex_unlock(&dev->buffer_lock);
+
+	return pid_total_size;
+}
+
 static struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
 			     size_t align, unsigned int heap_id_mask,
 			     unsigned int flags, bool grab_handle)
@@ -821,6 +842,16 @@ static struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
 		trace_ion_alloc_fail(client->name, EINVAL, len,
 				align, heap_id_mask, flags);
 		return ERR_PTR(-EINVAL);
+	}
+
+	if (len / PAGE_SIZE > totalram_pages / 4) {
+		size_t pid_total_size = ion_buffer_get_total_size_by_pid(client);
+
+		if ((len + pid_total_size) / PAGE_SIZE > totalram_pages / 2) {
+			pr_err("%s: len %zu total %zu heap_id_mask %u flags %x\n",
+			       __func__, len, pid_total_size, heap_id_mask, flags);
+			return ERR_PTR(-EINVAL);
+		}
 	}
 
 	down_read(&dev->lock);
@@ -1085,9 +1116,8 @@ static int ion_debug_client_show(struct seq_file *s, void *unused)
 		return -EINVAL;
 	}
 
-	seq_printf(s, "%16.s %16.s %4.s %16.s %4.s %10.s %8.s %9.s\n",
-			"buffer", "task", "pid", "thread", "tid", "size",
-			"# procs", "flag");
+	seq_printf(s, "%16.s %4.s %16.s %4.s %10.s %8.s %9.s\n",
+		   "task", "pid", "thread", "tid", "size", "# procs", "flag");
 	seq_printf(s, "----------------------------------------------"
 			"--------------------------------------------\n");
 
@@ -1102,8 +1132,8 @@ static int ion_debug_client_show(struct seq_file *s, void *unused)
 			names[id] = buffer->heap->name;
 		sizes[id] += buffer->size;
 		sizes_pss[id] += (buffer->size / buffer->handle_count);
-		seq_printf(s, "%16p %16.s %4u %16.s %4u %10zu %8d %9lx\n",
-				buffer, buffer->task_comm, buffer->pid,
+		seq_printf(s, "%16.s %4u %16.s %4u %10zu %8d %9lx\n",
+			   buffer->task_comm, buffer->pid,
 				buffer->thread_comm, buffer->tid, buffer->size,
 				buffer->handle_count, buffer->flags);
 	}

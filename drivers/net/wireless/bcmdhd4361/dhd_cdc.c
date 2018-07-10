@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_cdc.c 671577 2016-11-22 10:31:40Z $
+ * $Id: dhd_cdc.c 699163 2017-05-12 05:18:23Z $
  *
  * BDC is like CDC, except it includes a header for data packets to convey
  * packet priority over the bus, and flags (e.g. to indicate checksum status

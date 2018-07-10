@@ -64,7 +64,7 @@ struct sec_debug_auto_comm_freq_info {
 };
 
 struct sec_debug_auto_summary {
-	int haeder_magic;
+	int header_magic;
 	int fault_flag;
 	int lv5_log_cnt;
 	u64 lv5_log_order;
@@ -159,9 +159,6 @@ static void sec_auto_summary_init_print_buf(unsigned long base)
 
 	memset(auto_summary_info, 0, sizeof(struct sec_debug_auto_summary));
 
-	auto_summary_info->haeder_magic = AUTO_SUMMARY_MAGIC;
-	auto_summary_info->tail_magic = AUTO_SUMMARY_TAIL_MAGIC;
-
 	auto_summary_info->pa_text = virt_to_phys(_text);
 	auto_summary_info->pa_start_rodata = virt_to_phys(__start_rodata);
 
@@ -200,6 +197,19 @@ out:
 	return 0;
 }
 __setup("auto_summary_log=", sec_auto_summary_log_setup);
+
+static int __init sec_auto_summary_log_init(void)
+{
+	if (auto_summary_info) {
+		auto_summary_info->header_magic = AUTO_SUMMARY_MAGIC;
+		auto_summary_info->tail_magic = AUTO_SUMMARY_TAIL_MAGIC;
+	}
+
+	pr_debug("%s, done.\n", __func__);
+
+	return 0;
+}
+subsys_initcall(sec_auto_summary_log_init);
 
 static ssize_t sec_reset_auto_summary_proc_read(struct file *file, char __user *buf, size_t len, loff_t *offset)
 {

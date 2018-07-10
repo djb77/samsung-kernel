@@ -1175,7 +1175,7 @@ static int kcryptd_io_rw(struct dm_crypt_io *io, gfp_t gfp)
 
 	clone_init(io, clone);
 	clone->private_enc_mode = FMP_DISK_ENC_MODE;
-	clone->private_enc_algo = FMP_XTS_ALGO_MODE;
+	clone->private_algo_mode = FMP_XTS_ALGO_MODE;
 	clone->key = cc->key;
 	clone->key_length = cc->key_size;
 	clone->bi_iter.bi_sector = cc->start + io->sector;
@@ -2076,7 +2076,9 @@ static int crypt_map(struct dm_target *ti, struct bio *bio)
 	 * - for REQ_FLUSH device-mapper core ensures that no IO is in-flight
 	 * - for REQ_DISCARD caller must use flush if IO ordering matters
 	 */
-	if (unlikely(bio->bi_rw & (REQ_FLUSH | REQ_DISCARD))) {
+
+	if (unlikely(bio->bi_rw & (REQ_FLUSH | REQ_DISCARD) ||
+		bio_flagged(bio, BIO_BYPASS))) {
 		bio->bi_bdev = cc->dev->bdev;
 		if (bio_sectors(bio))
 			bio->bi_iter.bi_sector = cc->start +

@@ -45,7 +45,7 @@ bool ssp_debug_time_flag;
 static int __init bootmode_setup(char *str)
 {
 	get_option(&str, &bootmode);
-	pr_info("[SSP] bootmode_setup = %d\n", bootmode);
+	pr_info("[SSP] %s  = %d\n", __func__,  bootmode);
 	return 1;
 }
 __setup("bootmode=", bootmode_setup);
@@ -60,12 +60,16 @@ void ssp_enable(struct ssp_data *data, bool enable)
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
 	if (enable) {
 		enable_irq(data->mcu_host_wake_irq);
-		/* pr_info("[SSP_IRQ] enable irq (%d)",
-				data->mcu_host_wake_irq);*/
+		 /*
+		  *pr_info("[SSP_IRQ] enable irq (%d)",
+		  *               data->mcu_host_wake_irq);
+		  */
 	} else {
 		disable_irq(data->mcu_host_wake_irq);
-		/* pr_info("[SSP_IRQ] disable irq (%d)",
-				data->mcu_host_wake_irq);*/
+		 /*
+		  *pr_info("[SSP_IRQ] disable irq (%d)",
+		  *               data->mcu_host_wake_irq);
+		  */
 	}
 #endif
 
@@ -95,16 +99,6 @@ static void initialize_variable(struct ssp_data *data)
 	int iSensorIndex;
 
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
-	int sensor_data_size[SENSOR_MAX] = SENSOR_DATA_SIZE;
-	int sensor_report_mode[SENSOR_MAX] = SENSOR_REPORT_MODE;
-
-	memcpy(&data->sensor_data_size,
-		sensor_data_size,
-		sizeof(data->sensor_data_size));
-	memcpy(&data->sensor_report_mode,
-		sensor_report_mode,
-		sizeof(data->sensor_report_mode));
-
 	data->cameraGyroSyncMode = false;
 	data->ts_stacked_cnt = 0;
 	data->ts_stacked_offset = 0;
@@ -116,7 +110,7 @@ static void initialize_variable(struct ssp_data *data)
 		data->batchOptBuf[iSensorIndex] = 0;
 		data->aiCheckStatus[iSensorIndex] = INITIALIZATION_STATE;
 		data->lastTimestamp[iSensorIndex] = 0;
-        data->LastSensorTimeforReset[iSensorIndex] = 0;
+		data->LastSensorTimeforReset[iSensorIndex] = 0;
 		data->IsBypassMode[iSensorIndex] = 0;
 		data->reportedData[iSensorIndex] = false;
 		/* variables for conditional timestamp */
@@ -142,7 +136,7 @@ static void initialize_variable(struct ssp_data *data)
 	data->bAccelAlert = false;
 	data->bTimeSyncing = true;
 	data->bHandlingIrq = false;
-    data->resetting = false;
+	data->resetting = false;
 
 	data->accelcal.x = 0;
 	data->accelcal.y = 0;
@@ -210,14 +204,15 @@ static void initialize_variable(struct ssp_data *data)
 	data->uNoRespSensorCnt = 0;
 	data->errorCount = 0;
 	data->mcuCrashedCnt = 0;
-    data->pktErrCnt = 0;
+	data->pktErrCnt = 0;
 	data->mcuAbnormal = false;
-    data->IsMcuCrashed = false;
+	data->IsMcuCrashed = false;
 	data->intendedMcuReset = false;
 
 	data->timestamp_factor = 10; // initialize for 0.1%
 	ssp_debug_time_flag = false;
-    data->dhrAccelScaleRange = 0;
+	data->dhrAccelScaleRange = 0;
+	data->skipSensorData = 0;
 }
 
 int initialize_mcu(struct ssp_data *data)
@@ -282,7 +277,7 @@ int initialize_mcu(struct ssp_data *data)
 
 
 
-    data->dhrAccelScaleRange = get_accel_range(data);
+	data->dhrAccelScaleRange = get_accel_range(data);
 
 /* hoi: il dan mak a */
 #ifndef CONFIG_SENSORS_SSP_BBD
@@ -293,11 +288,11 @@ out:
 }
 
 static bbd_callbacks ssp_bbd_callbacks = {
-	.on_packet       = callback_bbd_on_packet,
+	.on_packet	   = callback_bbd_on_packet,
 	.on_packet_alarm = callback_bbd_on_packet_alarm,
-	.on_control      = callback_bbd_on_control,
-	.on_mcu_ready    = callback_bbd_on_mcu_ready,
-	.on_mcu_reset    = callback_bbd_on_mcu_reset
+	.on_control	  = callback_bbd_on_control,
+	.on_mcu_ready	= callback_bbd_on_mcu_ready,
+	.on_mcu_reset	= callback_bbd_on_mcu_reset
 };
 
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
@@ -305,7 +300,8 @@ static bbd_callbacks ssp_bbd_callbacks = {
 void ssp_reset_batching_resources(struct ssp_data *data)
 {
 	u64 ts = get_current_timestamp();
-	pr_err("[SSP_RST] reset triggered %lld\n",ts);
+
+	pr_err("[SSP_RST] reset triggered %lld\n", ts);
 	data->ts_stacked_cnt = 0;
 	data->ts_stacked_offset = 0;
 	data->ts_irq_last = 0ULL;
@@ -322,7 +318,7 @@ void ssp_reset_batching_resources(struct ssp_data *data)
 	data->bIsReset = true;
 
 	ts = get_current_timestamp();
-	pr_err("[SSP_RST] reset finished %lld\n",ts);
+	pr_err("[SSP_RST] reset finished %lld\n", ts);
 }
 
 irqreturn_t ssp_mcu_host_wake_irq_handler(int irq, void *device)
@@ -337,13 +333,15 @@ irqreturn_t ssp_mcu_host_wake_irq_handler(int irq, void *device)
 	tmp = data->ts_stacked_cnt % SIZE_TIMESTAMP_BUFFER;
 	data->ts_index_buffer[tmp] = timestamp;
 
-	ssp_debug_time("[SSP_DEBUG_TIME_IRQ] ts_stacked_cnt - %d, timestamp - %lld diff - %lld\n", data->ts_stacked_cnt % SIZE_TIMESTAMP_BUFFER, timestamp, timestamp - data->ts_irq_last);
+	ssp_debug_time("[SSP_DEBUG_TIME_IRQ] ts_stacked_cnt - %d, timestamp - %lld diff - %lld\n",
+			data->ts_stacked_cnt % SIZE_TIMESTAMP_BUFFER, timestamp, timestamp - data->ts_irq_last);
 	/*
-	ssp_dbg("[SSP_IRQ] %15s       [%3d] TS  %lld   [           AP  %5u] DT %lld  DE %lld\n",
-		__func__, irq, timestamp, data->ts_stacked_cnt,
-		(timestamp - data->ts_irq_last),
-		(timestamp - data->ts_last_enable_cmd_time));
-	*/
+	 *ssp_dbg("[SSP_IRQ] %15s	   [%3d] TS  %lld   [		   AP  %5u] DT %lld  DE %lld\n",
+	 *        __func__, irq, timestamp, data->ts_stacked_cnt,
+	 *        (timestamp - data->ts_irq_last),
+	 *        (timestamp - data->ts_last_enable_cmd_time));
+	 */
+
 	data->ts_irq_last = timestamp;
 	return IRQ_HANDLED;
 }
@@ -364,8 +362,9 @@ static int ssp_parse_dt(struct device *dev, struct ssp_data *data)
 		data->regulator_vdd_mcu_1p8 = NULL;
 	} else {
 		data->regulator_vdd_mcu_1p8 = regulator_get(NULL, data->vdd_mcu_1p8_name);
-		if(IS_ERR(data->regulator_vdd_mcu_1p8)){
-			pr_err("[SSP]: failed to get reulator %s ret: %ld\n", data->vdd_mcu_1p8_name, PTR_ERR(data->regulator_vdd_mcu_1p8));
+		if (IS_ERR(data->regulator_vdd_mcu_1p8)) {
+			pr_err("[SSP]: failed to get reulator %s ret: %ld\n",
+					data->vdd_mcu_1p8_name, PTR_ERR(data->regulator_vdd_mcu_1p8));
 		}
 	}
 
@@ -376,13 +375,12 @@ static int ssp_parse_dt(struct device *dev, struct ssp_data *data)
 	} else {
 		/* Config GPIO */
 		errorno = gpio_request(data->shub_en, "SHUB EN");
-		if (errorno){
+		if (errorno)
 			pr_err("[SSPBBD]: failed to request SHUB EN, ret:%d", errorno);
-		}
-		errorno= gpio_direction_output(data->shub_en, 0);
-		if (errorno) {
+
+		errorno = gpio_direction_output(data->shub_en, 0);
+		if (errorno)
 			pr_err("[SSPBBD]: failed set SHUB EN as output mode, ret:%d", errorno);
-		}
 	}
 
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING
@@ -481,14 +479,11 @@ static int ssp_parse_dt(struct device *dev, struct ssp_data *data)
 #endif
 
 	/* magnetic matrix */
-	if(data->mag_type == 1)
-	{
+	if (data->mag_type == 1) {
 		if (of_property_read_u8_array(np, "ssp-mag-array",
 		data->pdc_matrix, sizeof(data->pdc_matrix)))
-		pr_err("no mag-array, set as 0");
-	}
-	else
-	{
+			pr_err("no mag-array, set as 0");
+	} else {
 		if (!of_get_property(np, "ssp-mag-array", &len)) {
 			pr_info("[SSP] No static matrix at DT for YAS532!(%p)\n",
 					data->static_matrix);
@@ -563,18 +558,20 @@ static int exynos_cpuidle_muic_notifier(struct notifier_block *nb,
 }
 #endif
 
-#if defined (CONFIG_SENSORS_SSP_VLTE)
-static int ssp_hall_ic_notify(struct notifier_block *nb,
-				unsigned long action, void *v)
-{
-	pr_info("[SSP] %s is called : fold state %lu\n", __func__, action);
-	ssp_ckeck_lcd((int) action);
-	return 0;
-}
-#endif
+/*
+ *#if defined (CONFIG_SENSORS_SSP_VLTE)
+ *static int ssp_hall_ic_notify(struct notifier_block *nb,
+ *                                unsigned long action, void *v)
+ *{
+ *        pr_info("[SSP] %s is called : fold state %lu\n", __func__, action);
+ *        ssp_ckeck_lcd((int) action);
+ *        return 0;
+ *}
+ *#endif
+ */
 
 #if defined(CONFIG_SSP_MOTOR_CALLBACK)
-static struct ssp_data *ssp_data_info = NULL;
+static struct ssp_data *ssp_data_info;
 void set_ssp_data_info(struct ssp_data *data)
 {
 	if (data != NULL)
@@ -592,17 +589,17 @@ int ssp_motor_callback(int state)
 	queue_work(ssp_data_info->ssp_motor_wq,
 			&ssp_data_info->work_ssp_motor);
 
-	pr_info("[SSP] %s : Motor state %d\n",__func__, state);
+	pr_info("[SSP] %s : Motor state %d\n", __func__, state);
 
 	return iRet;
 }
 int get_current_motor_state(void)
 {
-    return ssp_data_info->motor_state;
+	return ssp_data_info->motor_state;
 }
 int (*getMotorCallback(void))(int)
 {
-	pr_info("[SSP] %s : called \n",__func__);
+	pr_info("[SSP] %s : called\n", __func__);
 	return ssp_motor_callback;
 }
 
@@ -613,7 +610,7 @@ void ssp_motor_work_func(struct work_struct *work)
 					struct ssp_data, work_ssp_motor);
 
 	iRet = send_motor_state(data);
-	pr_info("[SSP] %s : Motor state %d, iRet %d\n",__func__, data->motor_state, iRet);
+	pr_info("[SSP] %s : Motor state %d, iRet %d\n", __func__, data->motor_state, iRet);
 }
 #endif
 
@@ -622,18 +619,33 @@ void ssp_timestamp_sync_work_func(struct work_struct *work)
 {
 	struct ssp_data *data = container_of((struct delayed_work *)work,
 					struct ssp_data, work_ssp_tiemstamp_sync);
-    struct ssp_msg *msg = kzalloc(sizeof(*msg), GFP_KERNEL);
+	struct ssp_msg *msg = kzalloc(sizeof(*msg), GFP_KERNEL);
 
-    msg->cmd = MSG2AP_INST_TIMESTAMP_OFFSET;
-    msg->length = sizeof(data->timestamp_offset);
-    msg->options = AP2HUB_WRITE;
-    msg->buffer = (char *) kzalloc(sizeof(data->timestamp_offset), GFP_KERNEL);
+	msg->cmd = MSG2AP_INST_TIMESTAMP_OFFSET;
+	msg->length = sizeof(data->timestamp_offset);
+	msg->options = AP2HUB_WRITE;
+	msg->buffer = (char *) kzalloc(sizeof(data->timestamp_offset), GFP_KERNEL);
 
-    pr_info("handle_timestamp_sync: %lld\n", data->timestamp_offset);
-    memcpy(msg->buffer, &(data->timestamp_offset), sizeof(data->timestamp_offset));
+	pr_info("handle_timestamp_sync: %lld\n", data->timestamp_offset);
+	memcpy(msg->buffer, &(data->timestamp_offset), sizeof(data->timestamp_offset));
 
-    ssp_spi_sync(data, msg, 1000);
+	ssp_spi_sync(data, msg, 1000);
 	//pr_info("[SSP] %s : Motor state %d, iRet %d\n",__func__, data->motor_state, iRet);
+}
+
+void ssp_reset_work_func(struct work_struct *work)
+{
+	struct ssp_data *data = container_of((struct delayed_work *)work,
+					struct ssp_data, work_ssp_reset);
+	u64 current_timestamp = get_current_timestamp();
+
+	pr_err("[SSP]: resumetimestamp %lld, current_timestamp %lld\n", data->resumeTimestamp, current_timestamp);
+	if (data->resetting == false && current_timestamp - data->resumeTimestamp < 3000000000ULL) {
+		mutex_lock(&data->ssp_enable_mutex);
+		pr_err("[SSP]: reset scenario, flip cover issue.\n");
+		reset_mcu(data);
+		mutex_unlock(&data->ssp_enable_mutex);
+	}
 }
 
 static int ssp_probe(struct spi_device *spi)
@@ -776,10 +788,12 @@ static int ssp_probe(struct spi_device *spi)
 			ssp_mcu_host_wake_irq_handler,
 			IRQF_TRIGGER_FALLING, "ssp-batch-wake-irq", data);
 
-	/* pr_info("[SSP_IRQ]: request_irq(%d) for gpio %d (%d)\n",
-		data->mcu_host_wake_int,
-		data->mcu_host_wake_irq,
-		iRet); */
+	/*
+	 *pr_info("[SSP_IRQ]: request_irq(%d) for gpio %d (%d)\n",
+	 *        data->mcu_host_wake_int,
+	 *        data->mcu_host_wake_irq,
+	 *        iRet)
+	 */
 
 	if (iRet < 0) {
 		pr_info("[SSP_IRQ]: request_irq(%d) failed for gpio %d (%d)\n",
@@ -805,10 +819,12 @@ static int ssp_probe(struct spi_device *spi)
 		exynos_cpuidle_muic_notifier, MUIC_NOTIFY_DEV_CPUIDLE);
 #endif
 
-#if defined (CONFIG_SENSORS_SSP_VLTE)
-	data->hall_ic_nb.notifier_call = ssp_hall_ic_notify;
-	hall_ic_register_notify(&data->hall_ic_nb);
-#endif
+/*
+ *#if defined (CONFIG_SENSORS_SSP_VLTE)
+ *        data->hall_ic_nb.notifier_call = ssp_hall_ic_notify;
+ *        hall_ic_register_notify(&data->hall_ic_nb);
+ *#endif
+ */
 
 
 	pr_info("[SSP]: %s - probe success!\n", __func__);
@@ -836,7 +852,9 @@ static int ssp_probe(struct spi_device *spi)
 	INIT_WORK(&data->work_ssp_motor, ssp_motor_work_func);
 #endif
 
-    INIT_DELAYED_WORK(&data->work_ssp_tiemstamp_sync, ssp_timestamp_sync_work_func);
+	INIT_DELAYED_WORK(&data->work_ssp_tiemstamp_sync, ssp_timestamp_sync_work_func);
+	INIT_DELAYED_WORK(&data->work_ssp_reset, ssp_reset_work_func);
+
 	goto exit;
 
 #ifdef CONFIG_SSP_MOTOR_CALLBACK
@@ -889,15 +907,18 @@ static void ssp_shutdown(struct spi_device *spi)
 
 	disable_debug_timer(data);
 
-	/* hoi
-	if (SUCCESS != ssp_send_cmd(data, MSG2SSP_AP_STATUS_SHUTDOWN, 0))
-		pr_err("[SSP]: %s MSG2SSP_AP_STATUS_SHUTDOWN failed\n",
-			__func__);
-	*/
-#if defined (CONFIG_SENSORS_SSP_VLTE)
-	// hall_ic unregister
-	hall_ic_unregister_notify(&data->hall_ic_nb);
-#endif
+	/*
+	 *hoi
+	 *if (SUCCESS != ssp_send_cmd(data, MSG2SSP_AP_STATUS_SHUTDOWN, 0))
+	 *        pr_err("[SSP]: %s MSG2SSP_AP_STATUS_SHUTDOWN failed\n",
+	 *                __func__);
+	 */
+/*
+ *#if defined (CONFIG_SENSORS_SSP_VLTE)
+ *        // hall_ic unregister
+ *        hall_ic_unregister_notify(&data->hall_ic_nb);
+ *#endif
+ */
 	mutex_lock(&data->ssp_enable_mutex);
 	ssp_enable(data, false);
 	clean_pending_list(data);
@@ -1008,7 +1029,7 @@ static int ssp_suspend(struct device *dev)
 
 	func_dbg();
 
-	if (SUCCESS != ssp_send_cmd(data, MSG2SSP_AP_STATUS_SUSPEND, 0))
+	if (ssp_send_cmd(data, MSG2SSP_AP_STATUS_SUSPEND, 0) != SUCCESS)
 		pr_err("[SSP]: %s MSG2SSP_AP_STATUS_SUSPEND failed\n",
 			__func__);
 
@@ -1032,7 +1053,7 @@ static int ssp_resume(struct device *dev)
 	data->resumeTimestamp = get_current_timestamp();
 	data->bIsResumed = true;
 #endif
-	if (SUCCESS != ssp_send_cmd(data, MSG2SSP_AP_STATUS_RESUME, 0))
+	if (ssp_send_cmd(data, MSG2SSP_AP_STATUS_RESUME, 0) != SUCCESS)
 		pr_err("[SSP]: %s MSG2SSP_AP_STATUS_RESUME failed\n",
 			__func__);
 	data->uLastResumeState = MSG2SSP_AP_STATUS_RESUME;

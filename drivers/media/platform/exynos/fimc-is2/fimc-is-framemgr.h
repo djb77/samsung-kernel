@@ -233,6 +233,20 @@ struct fimc_is_framemgr {
 	struct list_head	queued_list[NR_FRAME_STATE];
 };
 
+static const char * const hw_frame_state_name[NR_FRAME_STATE] = {
+	"Free",
+	"Request",
+	"Configure",
+	"Wait_Done"
+};
+
+static const char * const frame_state_name[NR_FRAME_STATE] = {
+	"Free",
+	"Request",
+	"Process",
+	"Complete"
+};
+
 int frame_fcount(struct fimc_is_frame *frame, void *data);
 int put_frame(struct fimc_is_framemgr *this, struct fimc_is_frame *frame,
 			enum fimc_is_frame_state state);

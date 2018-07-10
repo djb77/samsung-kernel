@@ -63,11 +63,18 @@ static irqreturn_t decon_displayport_irq_handler(int irq, void *dev_data)
 			decon->id, decon->timeline->obj.name, decon->timeline->value, decon->timeline_max);
 	}
 
-	if (irq_sts_reg & DPU_FRAME_DONE_INT_PEND)
+	if (irq_sts_reg & DPU_FRAME_DONE_INT_PEND) {
+		decon->d.conti_recovery_cnt = 0;
 		DPU_EVENT_LOG(DPU_EVT_DECON_FRAMEDONE, &decon->sd, ktime_set(0, 0));
+	}
 
-	if (ext_irq & DPU_TIME_OUT_INT_PEND)
+	if (ext_irq & DPU_TIME_OUT_INT_PEND) {
+		decon->frm_status |= DPU_FRM_DECON_TIMEOUT;
+		SAVE_DISP_ERR(decon, DISP_ERR_DECON_TIMEOUT);
+		decon->timeout_irq = true;
+		decon->frame_cnt++;
 		decon_err("%s: DECON%d timeout irq occurs\n", __func__, decon->id);
+	}
 
 	if (ext_irq & DPU_ERROR_INT_PEND)
 		decon_err("%s: DECON%d error irq occurs\n", __func__, decon->id);

@@ -161,6 +161,7 @@ int fimc_is_hw_mcsc_adjust_output_img_fmt(u32 format, u32 plane, u32 order, u32 
 	bool *conv420_flag);
 int fimc_is_hw_mcsc_check_format(enum mcsc_io_type type, u32 format, u32 bit_width,
 	u32 width, u32 height);
+void fimc_is_hw_mcsc_set_shadow_ctrl(struct fimc_is_hw_ip *hw_ip, u32 val);
 void fimc_is_hw_mcsc_size_dump(struct fimc_is_hw_ip *hw_ip);
 
 #ifdef DEBUG_HW_SIZE

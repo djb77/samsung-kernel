@@ -31,7 +31,7 @@
 
 #if CONFIG_PGTABLE_LEVELS > 2
 
-#ifndef CONFIG_TIMA_RKP
+#ifndef CONFIG_RKP
 static inline pmd_t *pmd_alloc_one(struct mm_struct *mm, unsigned long addr)
 {
 	return (pmd_t *)__get_free_page(PGALLOC_GFP);
@@ -49,7 +49,7 @@ static inline pmd_t *pmd_alloc_one(struct mm_struct *mm, unsigned long addr)
 		return (pmd_t *)__get_free_page(PGALLOC_GFP);
 }
 #endif
-#ifndef CONFIG_TIMA_RKP
+#ifndef CONFIG_RKP
 static inline void pmd_free(struct mm_struct *mm, pmd_t *pmd)
 {
 	BUG_ON((unsigned long)pmd & (PAGE_SIZE-1));
@@ -60,7 +60,8 @@ static inline void pmd_free(struct mm_struct *mm, pmd_t *pmd)
 {
 	BUG_ON((unsigned long)pmd & (PAGE_SIZE-1));
 
-	if((unsigned long)pmd >= (unsigned long)RKP_RBUF_VA && (unsigned long)pmd < ((unsigned long)RKP_RBUF_VA + TIMA_ROBUF_SIZE))
+	if ((unsigned long)pmd >= (unsigned long)RKP_RBUF_VA &&
+		(unsigned long)pmd < ((unsigned long)RKP_RBUF_VA + RKP_ROBUF_SIZE))
 		rkp_ro_free((void*)pmd);
 	else
 		free_page((unsigned long)pmd);
@@ -75,7 +76,7 @@ static inline void pud_populate(struct mm_struct *mm, pud_t *pud, pmd_t *pmd)
 
 #if CONFIG_PGTABLE_LEVELS > 3
 
-#ifndef CONFIG_TIMA_RKP
+#ifndef CONFIG_RKP
 static inline pud_t *pud_alloc_one(struct mm_struct *mm, unsigned long addr)
 {
 	return (pud_t *)__get_free_page(PGALLOC_GFP);
@@ -92,7 +93,7 @@ static inline pud_t *pud_alloc_one(struct mm_struct *mm, unsigned long addr)
 		return (pud_t *)__get_free_page(PGALLOC_GFP);
 }
 #endif
-#ifndef CONFIG_TIMA_RKP
+#ifndef CONFIG_RKP
 static inline void pud_free(struct mm_struct *mm, pud_t *pud)
 {
 	BUG_ON((unsigned long)pud & (PAGE_SIZE-1));
@@ -103,7 +104,8 @@ static inline void pud_free(struct mm_struct *mm, pud_t *pud)
 {
 	BUG_ON((unsigned long)pud & (PAGE_SIZE-1));
 
-	if((unsigned long)pud >= (unsigned long)RKP_RBUF_VA && (unsigned long)pud < ((unsigned long)RKP_RBUF_VA + TIMA_ROBUF_SIZE))
+	if ((unsigned long)pud >= (unsigned long)RKP_RBUF_VA &&
+			(unsigned long)pud < ((unsigned long)RKP_RBUF_VA + RKP_ROBUF_SIZE))
 		rkp_ro_free((void*)pud);
 	else
 		free_page((unsigned long)pud);

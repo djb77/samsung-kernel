@@ -109,7 +109,7 @@ static int fimc_is_hw_vra_ch0_handle_interrupt(u32 id, void *context)
 			fimc_is_hw_vra_save_debug_info(hw_ip, lib_vra, DEBUG_POINT_FRAME_END);
 #if !defined(VRA_DMA_TEST_BY_IMAGE)
 			fimc_is_hardware_frame_done(hw_ip, NULL, -1,
-				FIMC_IS_HW_CORE_END, IS_SHOT_SUCCESS);
+				FIMC_IS_HW_CORE_END, IS_SHOT_SUCCESS, true);
 #endif
 			wake_up(&hw_ip->status.wait_queue);
 		}
@@ -238,7 +238,7 @@ static int fimc_is_hw_vra_ch1_handle_interrupt(u32 id, void *context)
 				atomic_set(&hw_ip->status.Vvalid, V_BLANK);
 				fimc_is_hw_vra_save_debug_info(hw_ip, lib_vra, DEBUG_POINT_FRAME_END);
 				fimc_is_hardware_frame_done(hw_ip, NULL, -1,
-					FIMC_IS_HW_CORE_END, IS_SHOT_SUCCESS);
+					FIMC_IS_HW_CORE_END, IS_SHOT_SUCCESS, true);
 				wake_up(&hw_ip->status.wait_queue);
 
 				hw_ip->mframe = NULL;
@@ -404,6 +404,7 @@ int fimc_is_hw_vra_init(struct fimc_is_hw_ip *hw_ip,
 #endif
 
 		atomic_set(&hw_vra->ch1_count, 0);
+		spin_lock_init(&lib_vra->slock);
 	} else {
 		if (input_type != lib_vra->fr_work_init.dram_input) {
 			err_hw("[%d] input type is not matched - instance: %s, framework: %s",
@@ -496,6 +497,9 @@ int fimc_is_hw_vra_disable(struct fimc_is_hw_ip *hw_ip, u32 instance,
 	BUG_ON(!hw_ip);
 
 	if (!test_bit_variables(hw_ip->id, &hw_map))
+		return 0;
+
+	if (atomic_read(&hw_ip->rsccount) > 1)
 		return 0;
 
 	info_hw("[%d][ID:%d]vra_disable: Vvalid(%d)\n", instance, hw_ip->id,
@@ -766,7 +770,7 @@ int fimc_is_hw_vra_frame_ndone(struct fimc_is_hw_ip *hw_ip,
 	output_id = FIMC_IS_HW_CORE_END;
 	if (test_bit_variables(hw_ip->id, &frame->core_flag))
 		ret = fimc_is_hardware_frame_done(hw_ip, frame, wq_id, output_id,
-				done_type);
+				done_type, true);
 
 	return ret;
 }

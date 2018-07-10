@@ -58,19 +58,27 @@ static irqreturn_t decon_irq_handler(int irq, void *dev_data)
 	}
 
 	if (irq_sts_reg & DPU_FRAME_DONE_INT_PEND) {
+		decon->d.conti_recovery_cnt = 0;
 		DPU_EVENT_LOG(DPU_EVT_DECON_FRAMEDONE, &decon->sd, ktime_set(0, 0));
 		decon_hiber_trig_reset(decon);
 		if (decon->state == DECON_STATE_TUI)
 			decon_info("%s:%d TUI Frame Done\n", __func__, __LINE__);
 		decon->fsync.timestamp = timestamp;
+		SAVE_DISP_ERR(decon, DISP_ERR_FRAME_DONE);
 		wake_up_interruptible_all(&decon->fsync.wait);
 	}
 
 	if (ext_irq & DPU_RESOURCE_CONFLICT_INT_PEND)
 		DPU_EVENT_LOG(DPU_EVT_RSC_CONFLICT, &decon->sd, ktime_set(0, 0));
 
-	if (ext_irq & DPU_TIME_OUT_INT_PEND)
+	if (ext_irq & DPU_TIME_OUT_INT_PEND) {
+		decon->frm_status |= DPU_FRM_DECON_TIMEOUT;
+		decon->timeout_irq = true;
+		decon->frame_cnt++;
+		SAVE_DISP_ERR(decon, DISP_ERR_DECON_TIMEOUT);
+		wake_up_interruptible_all(&decon->wait_vstatus);
 		decon_err("%s: DECON%d timeout irq occurs\n", __func__, decon->id);
+	}
 
 	if (ext_irq & DPU_ERROR_INT_PEND)
 		decon_err("%s: DECON%d error irq occurs\n", __func__, decon->id);
@@ -289,7 +297,7 @@ void decon_set_clocks(struct decon_device *decon)
 }
 
 
-static int decon_reset_panel(void *data)
+static int decon_reset_panel(void *data, int (*check_condition)(void))
 {
 	int ret = 0, retry = 5;
 	enum decon_state cur_state;
@@ -321,11 +329,31 @@ wait_list_empty:
 	}
 
 	decon->force_fullupdate = 1;
+
+	if (decon->state != DECON_STATE_ON) {
+		ret = v4l2_subdev_call(decon->out_sd[0], video, s_stream, 1);
+		if (ret) {
+			decon_err("stopping stream failed for %s\n",
+					decon->out_sd[0]->name);
+			goto exit_reset;
+		}
+	}
 reset_panel:
 	ret = v4l2_subdev_call(decon->out_sd[0], video, s_stream, 0);
 	if (ret) {
 		decon_err("stopping stream failed for %s\n",
 				decon->out_sd[0]->name);
+		goto exit_reset;
+	}
+
+
+
+	if (check_condition != NULL)
+		check_condition();
+
+	if (decon->state != DECON_STATE_ON) {
+		decon_info("DECON:INFO:%s:decon state:%d, skip last frame update\n",
+			__func__, decon->state);
 		goto exit_reset;
 	}
 
@@ -347,14 +375,13 @@ reset_panel:
 			decon_err("DECON:ERR:%s:failed to reset panel\n", __func__);
 			goto reset_panel;
 		}
-		decon_dump(decon);
+		decon_dump(decon, DPU_DUMP_LV0);
 		BUG();
 	}
-
 	mutex_unlock(&decon->lock);
 	decon_hiber_unblock(decon);
 
-	decon_info("--%s : Done\n", __func__);	
+	decon_info("-- %s : Done\n", __func__);
 
 	return ret;
 
@@ -1120,7 +1147,7 @@ int decon_enter_hiber(struct decon_device *decon)
 	ret = decon_reg_stop(decon->id, decon->dt.out_idx[0], &psr);
 	if (ret < 0) {
 		decon_err("%s, failed to decon_reg_stop\n", __func__);
-		//decon_dump(decon);
+		//decon_dump(decon, DPU_DUMP_LV0);
 		/* call decon instant off */
 		decon_reg_direct_on_off(decon->id, 0);
 	}

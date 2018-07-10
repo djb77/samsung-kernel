@@ -2418,6 +2418,7 @@ static void interface_timer(unsigned long data)
 			atomic_inc(&itf->sensor_timeout[i]);
 			pr_err ("sensor timer[%d] is increased to %d(fcount : %d)\n", i,
 				atomic_read(&itf->sensor_timeout[i]), fcount);
+			fimc_is_sensor_dump(sensor);
 		} else {
 			atomic_set(&itf->sensor_timeout[i], 0);
 			atomic_set(&itf->sensor_check[i], fcount);

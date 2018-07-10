@@ -129,14 +129,10 @@ enum {
 	UPIU_TASK_ATTR_ORDERED	= 0x01,
 	UPIU_TASK_ATTR_HEADQ	= 0x02,
 	UPIU_TASK_ATTR_ACA	= 0x03,
-};
-
-#ifdef COMMAND_PRIORITY
-/* UPIU Task Attributes */
-enum {
-	UPIU_COMMAND_PRIORITY_HIGH	= 0x4,
-};
+#ifdef CUSTOMIZE_UPIU_FLAGS
+	UPIU_COMMAND_PRIORITY_HIGH      = 0x4,
 #endif
+};
 
 /* UPIU Query request function */
 enum {
@@ -320,6 +316,7 @@ enum query_opcode {
 	UPIU_QUERY_OPCODE_SET_FLAG	= 0x6,
 	UPIU_QUERY_OPCODE_CLEAR_FLAG	= 0x7,
 	UPIU_QUERY_OPCODE_TOGGLE_FLAG	= 0x8,
+	UPIU_QUERY_OPCODE_MAX,
 };
 
 /* Query response result code */

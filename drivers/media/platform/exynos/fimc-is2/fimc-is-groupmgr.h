@@ -236,7 +236,6 @@ int fimc_is_groupmgr_start(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_device_ischain *device);
 int fimc_is_groupmgr_stop(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_device_ischain *device);
-
 int fimc_is_group_probe(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_group *group,
 	struct fimc_is_device_sensor *sensor,

@@ -1774,7 +1774,8 @@ int fimc_is_ois_init_s4(struct v4l2_subdev *subdev)
 	u8 cal_data[2];
 	u8 shift_available = 0;
 #ifdef USE_CAMERA_HW_BIG_DATA
-	struct cam_hw_param *hw_param;
+	struct cam_hw_param *hw_param = NULL;
+	struct fimc_is_device_sensor *device = NULL;
 #endif
 
 	BUG_ON(!subdev);
@@ -1801,7 +1802,10 @@ int fimc_is_ois_init_s4(struct v4l2_subdev *subdev)
 	ret |= fimc_is_ois_i2c_write(ois->client, 0x000E, 0x04);
 	if (ret < 0) {
 #ifdef USE_CAMERA_HW_BIG_DATA
-		fimc_is_sec_get_rear_hw_param(&hw_param);
+		device = v4l2_get_subdev_hostdata(subdev);
+		if (device) {
+			fimc_is_sec_get_hw_param(&hw_param, device->position);
+		}
 		if (hw_param)
 			hw_param->i2c_ois_err_cnt++;
 #endif

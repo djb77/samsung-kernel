@@ -81,6 +81,16 @@ struct fimc_is_cis {
 	/* Long Term Exposure Mode(LTE mode) structure */
 	struct fimc_is_long_term_expo_mode		long_term_mode;
 	struct work_struct				long_term_mode_work;
+
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION_RUNTIME
+	struct work_struct				mipi_clock_change_work;
+#endif
+	u32				mipi_clock_index_new;
+	u32				mipi_clock_index_cur;
+#endif
+	u32				ae_exposure;
+	u32				ae_deltaev;
 };
 
 struct fimc_is_actuator_data {
@@ -129,6 +139,7 @@ struct fimc_is_actuator {
 
 	struct fimc_is_actuator_data		actuator_data;
 	struct fimc_is_device_sensor_peri	*sensor_peri;
+	struct fimc_is_actuator_ops			*actuator_ops;
 	struct mutex				*i2c_lock;
 };
 
@@ -168,7 +179,6 @@ struct fimc_is_ois {
 	u32				ois_mode; /* need to mode when ois mode change */
 	u32                         pre_ois_mode; /* need to mode when ois mode change */
 	bool                        ois_shift_available;
-	bool                        ois_shift_available_rear2; /* need to mode when ois mode change */
 	struct v4l2_subdev		*subdev; /* connected module subdevice */
 	struct i2c_client		*client;
 
@@ -237,6 +247,7 @@ struct fimc_is_device_sensor_peri {
 #ifdef CONFIG_COMPANION_DIRECT_USE
 	struct fimc_is_preprocessor_interface		preprocessor_inferface;
 #endif
+	int						reuse_3a_value;
 };
 
 void fimc_is_sensor_work_fn(struct kthread_work *work);
@@ -317,5 +328,5 @@ void fimc_is_sensor_peri_init_work(struct fimc_is_device_sensor_peri *sensor_per
 #define CALL_CISOPS(s, op, args...) (((s)->cis_ops->op) ? ((s)->cis_ops->op(args)) : 0)
 #define CALL_PREPROPOPS(s, op, args...) (((s)->preprocessor_ops->op) ? ((s)->preprocessor_ops->op(args)) : 0)
 #define CALL_OISOPS(s, op, args...) (((s)->ois_ops->op) ? ((s)->ois_ops->op(args)) : 0)
-
+#define CALL_ACTUATOROPS(s, op, args...) (((s)->actuator_ops->op) ? ((s)->actuator_ops->op(args)) : 0)
 #endif

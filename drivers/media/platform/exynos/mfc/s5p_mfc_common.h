@@ -145,6 +145,7 @@
 #define	ENC_SET_QP_BOUND_PB		(1 << 5)
 #define	ENC_SET_FIXED_SLICE		(1 << 6)
 #define	ENC_SET_PVC_MODE		(1 << 7)
+#define	ENC_SET_RATIO_OF_INTRA		(1 << 8)
 
 #define MFC_VER_MAJOR(dev)	((s5p_mfc_version(dev) >> 8) & 0xFF)
 #define MFC_VER_MINOR(dev)	(s5p_mfc_version(dev) & 0xFF)
@@ -170,6 +171,8 @@
 					(dev->fw.date >= 0x160415))
 #define FW_HAS_BLACK_BAR_DETECT(dev)	(IS_MFCV11X(dev) &&		\
 					(dev->fw.date >= 0x161017))
+#define FW_HAS_RATIO_INTRA_CTRL(dev)	(IS_MFCV11X(dev) &&		\
+					(dev->fw.date >= 0x171113))
 
 static inline unsigned int s5p_mfc_version(struct s5p_mfc_dev *dev)
 {

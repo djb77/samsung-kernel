@@ -74,6 +74,7 @@
 #define SEC_BAT_CURRENT_EVENT_WPC_VOUT_LOCK		0x4000
 #define SEC_BAT_CURRENT_EVENT_AICL			0x8000
 #define SEC_BAT_CURRENT_EVENT_HV_DISABLE		0x10000
+#define SEC_BAT_CURRENT_EVENT_SELECT_PDO		0x20000
 
 #define SIOP_EVENT_NONE 	0x0000
 #define SIOP_EVENT_WPC_CALL 	0x0001
@@ -187,6 +188,7 @@ struct sec_battery_info {
 
 	bool is_sysovlo;
 	bool is_vbatovlo;
+	bool is_abnormal_temp;
 
 	bool safety_timer_set;
 	bool lcd_status;
@@ -203,6 +205,7 @@ struct sec_battery_info {
 	int inbat_adc;                  /* inbat adc */
 	int current_avg;		/* average current (mA) */
 	int current_max;		/* input current limit (mA) */
+	int charge_counter;		/* remaining capacity (uAh) */
 	int current_adc;
 
 	unsigned int capacity;			/* SOC (%) */
@@ -235,6 +238,11 @@ struct sec_battery_info {
 	struct cisd cisd;
 	bool skip_cisd;
 	bool usb_overheat_check;
+	int prev_volt;
+	int prev_temp;
+	int prev_jig_on;
+	int enable_update_data;
+	int prev_chg_on;
 #endif
 
 	/* battery check */
@@ -393,6 +401,7 @@ struct sec_battery_info {
 #endif
 #if defined(CONFIG_CALC_TIME_TO_FULL)
 	int timetofull;
+	struct delayed_work timetofull_work;
 #endif
 	struct delayed_work slowcharging_work;
 #if defined(CONFIG_BATTERY_AGE_FORECAST)
@@ -604,6 +613,8 @@ enum {
 	CISD_WIRE_COUNT,
 	CISD_WC_DATA,
 	CISD_WC_DATA_JSON,
+	PREV_BATTERY_DATA,
+	PREV_BATTERY_INFO,
 #endif
 #if defined(CONFIG_BATTERY_SBM_DATA)
 	SBM_DATA,

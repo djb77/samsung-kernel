@@ -114,17 +114,6 @@ RKP_RO_AREA struct cred init_cred = {
 #endif /*CONFIG_RKP_KDP*/
 };
 
-#ifdef CONFIG_RKP_KDP
-void rkp_get_init_cred(void)
-{
-        if (rkp_ro_page((unsigned long)&init_cred))
-				rocred_uc_inc((&init_cred));
-		else 
-                atomic_inc(&init_cred.usage);
-}
-EXPORT_SYMBOL(rkp_get_init_cred);
-#endif /*CONFIG_RKP_KDP*/
-
 static inline void set_cred_subscribers(struct cred *cred, int n)
 {
 #ifdef CONFIG_DEBUG_CREDENTIALS
@@ -553,7 +542,11 @@ int copy_creds(struct task_struct *p, unsigned long clone_flags)
 		
 		rkp_cred_fill_params(new,new_ro,use_cnt_ptr,tsec,RKP_CMD_COPY_CREDS,p);
 		rkp_call(RKP_CMDID(0x46),(unsigned long long)&cred_param,0,0,0,0);
-		
+		if((new_ro->bp_task != p) 
+			|| new_ro->security != tsec 
+			|| new_ro->use_cnt != use_cnt_ptr) {
+			panic("Copy Creds: RKP Call failed task=#%p:%p#, sec=#%p:%p#, usecnt=#%p:%p#",new_ro->bp_task,p,new_ro->security,tsec,new_ro->use_cnt,use_cnt_ptr);
+		}
 		rkp_use_cnt = atomic_read(&new->usage);
 		rkp_use_cnt = rkp_use_cnt + 1;
 
@@ -630,6 +623,7 @@ int commit_creds(struct cred *new)
 	void *use_cnt_ptr = NULL;
 	unsigned int rkp_use_cnt = 0;
 	void *tsec = NULL;
+	u64 pgd =(u64)(current->mm?current->mm->pgd:swapper_pg_dir);
 #endif
 
 	kdebug("commit_creds(%p{%d,%d})", new,
@@ -700,6 +694,14 @@ int commit_creds(struct cred *new)
 
 		rkp_cred_fill_params(new,new_ro,use_cnt_ptr,tsec,RKP_CMD_CMMIT_CREDS,0);	
 		rkp_call(RKP_CMDID(0x46),(unsigned long long)&cred_param,0,0,0,0);
+		if((new_ro->bp_task != current)||
+			(current->mm 
+			&& (!( in_interrupt() || in_softirq())) 
+			&& new_ro->bp_pgd != (void *)pgd) ||
+			(new_ro->security != tsec) ||
+			(new_ro->use_cnt != use_cnt_ptr)) {
+			panic("Commit Creds: RKP Call failed task=#%p:%p#, sec=#%p:%p#, usecnt=#%p:%p#, pgd=#%p:%p#",new_ro->bp_task,current,new_ro->security,tsec,new_ro->use_cnt,use_cnt_ptr,new_ro->bp_pgd,(void *)pgd);
+		}
 		rcu_assign_pointer(task->real_cred, new_ro);
 		rcu_assign_pointer(task->cred, new_ro);
 
@@ -793,6 +795,7 @@ const struct cred *override_creds(const struct cred *new)
 	volatile unsigned int rkp_use_count = rkp_get_usecount(new);
 	void *use_cnt_ptr = NULL;
 	void *tsec = NULL;
+	u64 pgd =(u64)(current->mm?current->mm->pgd:swapper_pg_dir);
 #endif  /* CONFIG_RKP_KDP */
 
 	kdebug("override_creds(%p{%d,%d})", new,
@@ -818,7 +821,14 @@ const struct cred *override_creds(const struct cred *new)
 
 		rkp_cred_fill_params(new,new_ro,use_cnt_ptr,tsec,RKP_CMD_OVRD_CREDS,rkp_use_count);	
 		rkp_call(RKP_CMDID(0x46),(unsigned long long)&cred_param,0,0,0,0);
-
+		if((new_ro->bp_task != current)||
+			(current->mm 
+			&& (!( in_interrupt() || in_softirq())) 
+			&& new_ro->bp_pgd != (void *)pgd) ||
+			(new_ro->security != tsec) ||
+			(new_ro->use_cnt != use_cnt_ptr)) {
+			panic("Commit Creds: RKP Call failed task=#%p:%p#, sec=#%p:%p#, usecnt=#%p:%p#, pgd=#%p:%p#",new_ro->bp_task,current,new_ro->security,tsec,new_ro->use_cnt,use_cnt_ptr,new_ro->bp_pgd,(void *)pgd);
+		}
 		rocred_uc_set(new_ro,2);
 		rcu_assign_pointer(current->cred, new_ro);
 

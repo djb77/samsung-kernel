@@ -132,6 +132,7 @@ config SEC_FACTORY
 	bool "SAMSUNG Factory build option"
 	depends on SEC_EXT
 	default n
+	select SEC_PANIC_PCIE_ERR
 	select SLUB_DEBUG
 	help
 	  Include some codes for Factory binary.
@@ -184,3 +185,32 @@ config SEC_NAD_MANUAL_PARAM_READTIME
 	help
 	  Samsung TN NAD Feature, set param reading time manually.
 
+config SEC_SUPPORT_SECOND_NAD
+	bool "Samsung TN 2nd NAD Feature"
+	depends on SEC_NAD
+	default n
+	help
+	  Samsung TN NAD Feature, support 2nd NAD feature.
+	  
+config SEC_NAD_HPM
+	bool "Samsung TN NAD HPM Feature"
+	depends on SEC_NAD
+	default n
+	help
+	  Samsung TN NAD Feature, Enable NAD HPM
+
+config SEC_NAD_API
+	bool "Samsung TN NAD API Feature"
+	depends on SEC_NAD
+	default n
+	help
+	  Samsung TN NAD Feature, Support NAD API to check gpio pull-up registance
+
+config SEC_NAD_BALANCER
+	bool "Samsung TN NAD Balancer Feature"
+	depends on SEC_NAD
+	default n
+	help
+	  This option enables Samsung TN NAD Balancer Feature.
+	  This option also can generate thread to change dvfs frequency. It helps keep balancing
+	  between user and factory binary.

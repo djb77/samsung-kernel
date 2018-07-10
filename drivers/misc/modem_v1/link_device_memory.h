@@ -185,6 +185,7 @@ struct mem_ipc_device {
 
 #define TXQ_STOP_MASK			(0x1<<0)
 #define TX_SUSPEND_MASK			(0x1<<1)
+#define SHM_FLOWCTL_BIT			BIT(2)
 #endif
 
 #ifdef GROUP_MEM_CP_CRASH
@@ -239,14 +240,29 @@ enum mem_ipc_mode {
 	MEM_SBD_IPC,
 };
 
-#define MEM_CRASH_REASON_CP		0
-#define MEM_CRASH_REASON_AP		1
-#define MEM_CRASH_REASON_RIL	2
-#define MEM_CRASH_REASON_SIZE	512
+#define CRASH_REASON_SIZE	512
+enum crash_type {
+	CRASH_REASON_CP_ACT_CRASH = 0,
+	CRASH_REASON_RIL_MNR,
+	CRASH_REASON_RIL_REQ_FULL,
+	CRASH_REASON_RIL_PHONE_DIE,
+	CRASH_REASON_RIL_RSV_MAX,
+	CRASH_REASON_USER = 5,
+	CRASH_REASON_MIF_TX_ERR = 6,
+	CRASH_REASON_MIF_RIL_BAD_CH,
+	CRASH_REASON_MIF_RX_BAD_DATA,
+	CRASH_REASON_MIF_ZMC,
+	CRASH_REASON_MIF_RSV_0,
+	CRASH_REASON_MIF_RSV_1,
+	CRASH_REASON_MIF_RSV_MAX = 12,
+	CRASH_REASON_CP_SRST,
+	CRASH_REASON_CP_RSV_0,
+	CRASH_REASON_CP_RSV_MAX = 15,
+};
 
 struct crash_reason {
 	u32 owner;
-	char string[MEM_CRASH_REASON_SIZE];
+	char string[CRASH_REASON_SIZE];
 };
 
 #define FREQ_MAX_LV (40)
@@ -821,6 +837,12 @@ void mem_cmd_handler(struct mem_link_device *mld, u16 cmd);
 #endif
 
 #ifdef GROUP_MEM_FLOW_CONTROL
+
+void sbd_txq_stop(struct sbd_ring_buffer *rb);
+void sbd_txq_start(struct sbd_ring_buffer *rb);
+
+int sbd_under_tx_flow_ctrl(struct sbd_ring_buffer *rb);
+int sbd_check_tx_flow_ctrl(struct sbd_ring_buffer *rb);
 
 void tx_flowctrl_suspend(struct mem_link_device *mld);
 void tx_flowctrl_resume(struct mem_link_device *mld);

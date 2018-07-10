@@ -20,7 +20,6 @@
 
 #include <linux/linkage.h>
 #include <asm/assembler.h>
-#include <linux/rkp_cfp.h>
 
 .section .hyperdrive, "ax"
 .global _start_hyperdrive
@@ -29,7 +28,11 @@ _start_hyperdrive:
 # jopp_springboard_bl label.
 nop
 
+#define RRX x16
+#define RRX_32 w16
 
+#define RRS x18
+#define RRS_32 w18
 
 #ifdef CONFIG_RKP_CFP_JOPP
 
@@ -80,15 +83,8 @@ nop
 	springboard_blr	x13
 	springboard_blr	x14
 	springboard_blr	x15
-	/* 
-	 * x16, x17 are reserved.
-	 * Undefine ROPP will free x16 and x17
-	 * JOPP only needs no registers
-	 */
-#ifndef CONFIG_RKP_CFP_ROPP
 	springboard_blr	x16
 	springboard_blr	x17
-#endif
 	springboard_blr	x18
 	springboard_blr	x19
 	springboard_blr	x20

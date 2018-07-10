@@ -32,7 +32,6 @@
 #include <linux/firmware.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
-#include <linux/usb_notify.h>
 #include <linux/wakelock.h>
 
 #if defined(CONFIG_CCIC_NOTIFIER)
@@ -197,7 +196,7 @@ typedef union
                     IS_DFP:1,
                     RP_CurrentLvl:2,
                     VBUS_CC_Short:1,
-                    VBUS_SBU_Short:1,
+			VBUS_SBU_Short:1,
                     RESET:1;
 	}BITS;
 } FUNC_STATE_Type;
@@ -215,15 +214,16 @@ typedef union
                     RUN_DRY:1,
                     removing_charge_by_sbu_low:1,
                     BOOTING_RUN_DRY:1,
-                    Sleep_Cable_Detect:1, /* b8 */
-                    PDSTATE29_SBU_DONE:1, /* b9 */
-                    RSP_BYTE:22;
+			Sleep_Cable_Detect:1, //b8
+			PDSTATE29_SBU_DONE:1, //b9
+			RSP_BYTE:22;		//b10 ~ b31
 	} BITS;
 } LP_STATE_Type;
 
 typedef union
 {
 	uint32_t        DATA;
+	uint8_t	BYTE[4];
     struct {
         uint32_t    Flash_State:8,
                     Reserved:24;
@@ -384,7 +384,9 @@ typedef union
                     UPSM_By_I2C:1,                  // b2
                     Reserved:1,                     // b3
                     Is_HardReset:1,                 // b4
-                    AP_Req_Reserved_L:3,            // b5 - b7
+                    FAC_Abnormal_Repeat_State:1,    // b5
+                    FAC_Abnormal_Repeat_RID:1,      // b6
+                    FAC_Abnormal_RID0:1,            // b7
                     SBU1_CNT:8,                     // b8 - b15
                     SBU2_CNT:8,                     // b16 - b23
                     SBU_LOW_CNT:4,                  // b24 - b27
@@ -464,7 +466,7 @@ typedef struct
     MSG_IRQ_STATUS_Type		MSG_IRQ_STATUS;		// 0x0040h
     VDM_MSG_IRQ_STATUS_Type	VDM_MSG_IRQ_STATUS;	// 0x0044h
     SSM_MSG_IRQ_STATUS_Type	SSM_MSG_IRQ_STATUS;	// 0x0048h
-    VDM_MSG_IRQ_STATUS_Type	DBG_VDM_MSG_IRQ_STATUS;	// 0x004Ch
+    AP_REQ_GET_STATUS_Type      AP_REQ_GET_STATUS;      // 0x004Ch
     SSM_HW_ID_VALUE_Type	SSM_HW_ID_VALUE;	// 0x0050h
     SSM_HW_PID_VALUE_Type	SSM_HW_PID_VALUE;	// 0x0054h
     SSM_HW_USE_MSG_Type		SSM_HW_USE_MSG;		// 0x0058h
@@ -839,9 +841,13 @@ struct s2mm005_data {
 	int p_prev_rid;
 	int prev_rid;
 	int cur_rid;
+	int water_detect_support;
 	int water_det;
 	int run_dry;
 	int booting_run_dry;
+#if defined(CONFIG_SEC_FACTORY)
+	int fac_booting_dry_check;
+#endif
 
 	u8 firm_ver[4];
 
@@ -873,6 +879,10 @@ struct s2mm005_data {
 	int host_turn_on_event;
 	int host_turn_on_wait_time;
 	int is_samsung_accessory_enter_mode;
+	int is_in_first_sec_uvdm_req;
+	int is_in_sec_uvdm_out;
+	struct completion uvdm_out_wait;
+	struct completion uvdm_longpacket_in_wait;
 #endif
 	int manual_lpm_mode;
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
@@ -884,13 +894,16 @@ struct s2mm005_data {
 	struct delayed_work role_swap_work;
 #endif
 
-	u8 fw_product_num;
+	int s2mm005_fw_product_id;
+	u8 fw_product_id;
 
 #if defined(CONFIG_SEC_FACTORY)
 	int fac_water_enable;
 #endif
 	struct delayed_work ccic_init_work;
 	int ccic_check_at_booting;
+	struct delayed_work usb_external_notifier_register_work;
+	struct notifier_block usb_external_notifier_nb;
 
 };
 #endif /* __S2MM005_H */

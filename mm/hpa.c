@@ -151,7 +151,7 @@ static bool is_movable_chunk(unsigned long start_pfn, unsigned int order)
 			return false;
 		if (PageReserved(page))
 			return false;
-		if (!PageLRU(page))
+		if (!PageLRU(page) && !__PageMovable(page))
 			return false;
 	}
 	return true;

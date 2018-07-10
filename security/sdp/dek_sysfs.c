@@ -100,7 +100,7 @@ static ssize_t dek_set_key_dump(struct device *dev,
     return strlen(buf);
 }
 
-static DEVICE_ATTR(key_dump, S_IRUGO | S_IWUGO, dek_show_key_dump, dek_set_key_dump);
+static DEVICE_ATTR(key_dump, 0664, dek_show_key_dump, dek_set_key_dump);
 
 int dek_create_sysfs_key_dump(struct device *d) {
     int error;

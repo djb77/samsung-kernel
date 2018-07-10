@@ -4520,9 +4520,17 @@ static void net_rps_action_and_irq_enable(struct softnet_data *sd)
 		while (remsd) {
 			struct softnet_data *next = remsd->rps_ipi_next;
 
-			if (cpu_online(remsd->cpu))
+			if (cpu_online(remsd->cpu)) {
 				smp_call_function_single_async(remsd->cpu,
 							   &remsd->csd);
+			} else {
+				pr_err("%s(), cpu was offline and IPI was not "
+				"delivered so clean up NAPI", __func__);
+				rps_lock(remsd);
+				remsd->backlog.state = 0;
+				rps_unlock(remsd);
+
+			}
 			remsd = next;
 		}
 	} else

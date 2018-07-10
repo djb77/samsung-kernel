@@ -436,6 +436,7 @@ int exynos_get_cp_power_status(void)
 	u32 cp_state;
 	u32 seq_status;
 	u32 cp_ctrl;
+	int ret = 0;
 
 	exynos_pmu_read(EXYNOS_PMU_RESET_SEQUENCER_STATUS, &seq_status);
 	seq_status &= 0x7;
@@ -455,10 +456,19 @@ int exynos_get_cp_power_status(void)
 			return 0;
 	} else {
 		/* Clear CP_PWRON bit */
+#if defined(CONFIG_CP_SECURE_BOOT)
 		cp_ctrl = exynos_smc_read(CP_CTRL_NS);
 		cp_ctrl &= ~CP_PWRON;
-		exynos_smc_write(CP_CTRL_NS, cp_ctrl);
-
+		ret = exynos_smc_write(CP_CTRL_NS, cp_ctrl);
+		if (ret < 0)
+			pr_err("%s: ERR! write Fail: %d\n", __func__, ret);
+#else
+		exynos_pmu_read(EXYNOS_PMU_CP_CTRL_NS, &cp_ctrl);
+		cp_ctrl &= ~CP_PWRON;
+		ret = exynos_pmu_write(EXYNOS_PMU_CP_CTRL_NS, cp_ctrl);
+		if (ret < 0)
+			pr_err("%s: ERR! write Fail: %d\n", __func__, ret);
+#endif
 		return 0;
 	}
 }

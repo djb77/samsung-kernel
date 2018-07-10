@@ -120,6 +120,14 @@
 #define S6E3HA6_POC_CTRL_LEN		(PANEL_POC_CTRL_LEN)
 #endif
 
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+#define S6E3HA6_GRAM_IMG_SIZE	(1440 * 2960 * 3 / 3)	/* W * H * BPP / COMP_RATIO */
+#define S6E3HA6_GRAM_CHECKSUM_REG	0xAF
+#define S6E3HA6_GRAM_CHECKSUM_OFS	0
+#define S6E3HA6_GRAM_CHECKSUM_LEN	1
+#define S6E3HA6_GRAM_CHECKSUM_VALID	0x8B
+#endif
+
 #ifdef CONFIG_EXYNOS_DECON_MDNIE_LITE
 #define NR_S6E3HA6_MDNIE_REG	(3)
 
@@ -142,6 +150,9 @@
 #define S6E3HA6_SCR_WB_OFS	(53)
 #define S6E3HA6_NIGHT_MODE_OFS	(S6E3HA6_SCR_CR_OFS)
 #define S6E3HA6_NIGHT_MODE_LEN	(24)
+
+#define S6E3HA6_COLOR_LENS_OFS	(S6E3HA6_SCR_CR_OFS)
+#define S6E3HA6_COLOR_LENS_LEN	(24)
 
 #define S6E3HA6_TRANS_MODE_OFS	(16)
 #define S6E3HA6_TRANS_MODE_LEN	(1)
@@ -185,6 +196,13 @@ enum {
 #ifdef CONFIG_SUPPORT_POC_FLASH
 	POC_ON_MAPTBL,
 #endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+	VDDM_MAPTBL,
+	GRAM_IMG_0_MAPTBL,
+	GRAM_IMG_1_MAPTBL,
+#endif
+	POC_ONOFF_MAPTBL,
+	IRC_ONOFF_MAPTBL,
 	MAX_MAPTBL,
 };
 
@@ -213,6 +231,12 @@ enum {
 	READ_POC_CHKSUM,
 	READ_POC_CTRL,
 #endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+	READ_GRAM_CHECKSUM,
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+	READ_DSC_CRC,
+#endif
 };
 
 enum {
@@ -240,6 +264,13 @@ enum {
 	RES_POC_CHKSUM,
 	RES_POC_CTRL,
 #endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+	RES_GRAM_CHECKSUM,
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+	RES_DSC_DECODE_CRC,
+#endif
+
 };
 
 static u8 S6E3HA6_ID[S6E3HA6_ID_LEN];
@@ -267,7 +298,16 @@ static u8 S6E3HA6_SELF_DIAG[S6E3HA6_SELF_DIAG_LEN];
 static u8 S6E3HA6_POC_CHKSUM[S6E3HA6_POC_CHKSUM_LEN];
 static u8 S6E3HA6_POC_CTRL[S6E3HA6_POC_CTRL_LEN];
 #endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+static u8 S6E3HA6_GRAM_CHECKSUM[S6E3HA6_GRAM_CHECKSUM_LEN];
+#endif
 
+#ifdef CONFIG_DSC_DECODE_CRC
+#define S6E3HA6_DSC_CRC_REG 0x14
+#define S6E3HA6_DSC_CRC_OFS 0
+#define S6E3HA6_DSC_CRC_LEN 2
+static u8 S6E3HA6_DSC_CRC[S6E3HA6_DSC_CRC_LEN];
+#endif
 static struct rdinfo s6e3ha6_rditbl[] = {
 	[READ_ID] = RDINFO_INIT(id, DSI_PKT_TYPE_RD, S6E3HA6_ID_REG, S6E3HA6_ID_OFS, S6E3HA6_ID_LEN),
 	[READ_COORDINATE] = RDINFO_INIT(coordinate, DSI_PKT_TYPE_RD, S6E3HA6_COORDINATE_REG, S6E3HA6_COORDINATE_OFS, S6E3HA6_COORDINATE_LEN),
@@ -292,6 +332,13 @@ static struct rdinfo s6e3ha6_rditbl[] = {
 #ifdef CONFIG_SUPPORT_POC_FLASH
 	[READ_POC_CHKSUM] = RDINFO_INIT(poc_chksum, DSI_PKT_TYPE_RD, S6E3HA6_POC_CHKSUM_REG, S6E3HA6_POC_CHKSUM_OFS, S6E3HA6_POC_CHKSUM_LEN),
 	[READ_POC_CTRL] = RDINFO_INIT(poc_ctrl, DSI_PKT_TYPE_RD, S6E3HA6_POC_CTRL_REG, S6E3HA6_POC_CTRL_OFS, S6E3HA6_POC_CTRL_LEN),
+#endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+	[READ_GRAM_CHECKSUM] = RDINFO_INIT(gram_checksum, DSI_PKT_TYPE_RD, S6E3HA6_GRAM_CHECKSUM_REG, S6E3HA6_GRAM_CHECKSUM_OFS, S6E3HA6_GRAM_CHECKSUM_LEN),
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+	[READ_DSC_CRC] = RDINFO_INIT(dsc_crc, DSI_PKT_TYPE_RD,
+		S6E3HA6_DSC_CRC_REG, S6E3HA6_DSC_CRC_OFS, S6E3HA6_DSC_CRC_LEN),
 #endif
 };
 
@@ -319,6 +366,12 @@ static DEFINE_RESUI(self_diag, &s6e3ha6_rditbl[READ_SELF_DIAG], 0);
 static DEFINE_RESUI(poc_chksum, &s6e3ha6_rditbl[READ_POC_CHKSUM], 0);
 static DEFINE_RESUI(poc_ctrl, &s6e3ha6_rditbl[READ_POC_CTRL], 0);
 #endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+static DEFINE_RESUI(gram_checksum, &s6e3ha6_rditbl[READ_GRAM_CHECKSUM], 0);
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+static DEFINE_RESUI(dsc_crc, &s6e3ha6_rditbl[READ_DSC_CRC], 0);
+#endif
 
 static struct resinfo s6e3ha6_restbl[] = {
 	[RES_ID] = RESINFO_INIT(id, S6E3HA6_ID, RESUI(id)),
@@ -345,6 +398,12 @@ static struct resinfo s6e3ha6_restbl[] = {
 	[RES_POC_CHKSUM] = RESINFO_INIT(poc_chksum, S6E3HA6_POC_CHKSUM, RESUI(poc_chksum)),
 	[RES_POC_CTRL] = RESINFO_INIT(poc_ctrl, S6E3HA6_POC_CTRL, RESUI(poc_ctrl)),
 #endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+	[RES_GRAM_CHECKSUM] = RESINFO_INIT(gram_checksum, S6E3HA6_GRAM_CHECKSUM, RESUI(gram_checksum)),
+#endif
+#ifdef CONFIG_DSC_DECODE_CRC
+	[RES_DSC_DECODE_CRC] = RESINFO_INIT(dsc_crc, S6E3HA6_DSC_CRC, RESUI(dsc_crc)),
+#endif
 };
 
 enum {
@@ -356,12 +415,12 @@ enum {
 	DUMP_SELF_DIAG,
 };
 
-void show_rddpm(struct dumpinfo *info);
-void show_rddsm(struct dumpinfo *info);
-void show_err(struct dumpinfo *info);
-void show_err_fg(struct dumpinfo *info);
-void show_dsi_err(struct dumpinfo *info);
-void show_self_diag(struct dumpinfo *info);
+static void show_rddpm(struct dumpinfo *info);
+static void show_rddsm(struct dumpinfo *info);
+static void show_err(struct dumpinfo *info);
+static void show_err_fg(struct dumpinfo *info);
+static void show_dsi_err(struct dumpinfo *info);
+static void show_self_diag(struct dumpinfo *info);
 
 static struct dumpinfo s6e3ha6_dmptbl[] = {
 	[DUMP_RDDPM] = DUMPINFO_INIT(rddpm, &s6e3ha6_restbl[RES_RDDPM], show_rddpm),
@@ -379,6 +438,9 @@ int getidx_dimming_maptbl(struct maptbl *);
 int getidx_brt_tbl(struct maptbl *tbl);
 int getidx_aor_table(struct maptbl *tbl);
 int getidx_irc_table(struct maptbl *tbl);
+int getidx_poc_onoff_table(struct maptbl *tbl);
+int getidx_irc_onoff_table(struct maptbl *tbl);
+
 int getidx_mps_table(struct maptbl *);
 int init_elvss_temp_table(struct maptbl *);
 int getidx_elvss_temp_table(struct maptbl *);
@@ -403,6 +465,11 @@ void copy_self_clk_update_maptbl(struct maptbl *tbl, u8 *dst);
 void copy_self_clk_maptbl(struct maptbl *, u8 *);
 void copy_self_drawer(struct maptbl *tbl, u8 *dst);
 #endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+int s6e3ha6_getidx_vddm_table(struct maptbl *);
+void copy_gram_img_pattern_0(struct maptbl *, u8 *);
+void copy_gram_img_pattern_1(struct maptbl *, u8 *);
+#endif
 #ifdef CONFIG_SUPPORT_HMD
 int init_hmd_gamma_table(struct maptbl *);
 int getidx_hmd_dimming_mtptbl(struct maptbl *);
@@ -415,6 +482,8 @@ int getidx_mdnie_hdr_maptbl(struct maptbl *tbl);
 int getidx_mdnie_trans_mode_maptbl(struct maptbl *tbl);
 int init_mdnie_night_mode_table(struct maptbl *tbl);
 int getidx_mdnie_night_mode_maptbl(struct maptbl *tbl);
+int init_mdnie_color_lens_table(struct maptbl *tbl);
+int getidx_color_lens_maptbl(struct maptbl *tbl);
 int init_color_coordinate_table(struct maptbl *);
 int init_sensor_rgb_table(struct maptbl *tbl);
 int getidx_adjust_ldu_maptbl(struct maptbl *tbl);

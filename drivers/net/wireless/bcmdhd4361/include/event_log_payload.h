@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: event_log_payload.h 676796 2016-12-24 18:16:02Z $
+ * $Id: event_log_payload.h 700076 2017-05-17 14:42:22Z $
  */
 
 #ifndef _EVENT_LOG_PAYLOAD_H_

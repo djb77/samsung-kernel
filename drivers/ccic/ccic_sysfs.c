@@ -28,7 +28,9 @@
 #include <linux/ccic/s2mm005_ext.h>
 #include <linux/ccic/s2mm005_fw.h>
 #include <linux/regulator/consumer.h>
+#if defined(CONFIG_CCIC_ALTERNATE_MODE)
 #include <linux/ccic/ccic_alternate.h>
+#endif
 static ssize_t s2mm005_cur_ver_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -57,7 +59,8 @@ static ssize_t s2mm005_src_ver_show(struct device *dev,
 	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
 	struct s2mm005_version fw_swver;
 
-	s2mm005_get_fw_version(&fw_swver, usbpd_data->firm_ver[3], usbpd_data->hw_rev);
+	s2mm005_get_fw_version(usbpd_data->s2mm005_fw_product_id,
+		&fw_swver, usbpd_data->firm_ver[3], usbpd_data->hw_rev);
 	return sprintf(buf, "%02X %02X %02X %02X\n",
 		fw_swver.main[2], fw_swver.main[1], fw_swver.main[0], fw_swver.boot);
 }
@@ -167,6 +170,22 @@ static ssize_t s2mm005_store_control_option_command(struct device *dev,
 	return size;
 }
 static DEVICE_ATTR(ccic_control_option, 0220, NULL, s2mm005_store_control_option_command);
+
+static ssize_t ccic_booting_dry_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+
+	if(!usbpd_data) {
+		pr_err("%s usbpd_data is null!!\n", __func__);
+		return -ENODEV;
+	}
+	pr_info("%s booting_run_dry=%d\n", __func__,
+		usbpd_data->fac_booting_dry_check);
+
+	return sprintf(buf, "%d\n", (usbpd_data->fac_booting_dry_check));
+}
+static DEVICE_ATTR(booting_dry, 0444, ccic_booting_dry_show, NULL);
 #endif
 static int ccic_firmware_update_built_in(struct device *dev)
 {
@@ -176,7 +195,8 @@ static int ccic_firmware_update_built_in(struct device *dev)
 	s2mm005_get_chip_swversion(usbpd_data, &chip_swver);
 	pr_err("%s CHIP SWversion %2x %2x %2x %2x - before\n", __func__,
 	       chip_swver.main[2] , chip_swver.main[1], chip_swver.main[0], chip_swver.boot);
-	s2mm005_get_fw_version(&fw_swver, chip_swver.boot, usbpd_data->hw_rev);
+	s2mm005_get_fw_version(usbpd_data->s2mm005_fw_product_id,
+		&fw_swver, chip_swver.boot, usbpd_data->hw_rev);
 	pr_err("%s SRC SWversion:%2x,%2x,%2x,%2x\n",__func__,
 		fw_swver.main[2], fw_swver.main[1], fw_swver.main[0], fw_swver.boot);
 
@@ -323,6 +343,67 @@ static ssize_t ccic_store_firmware_update(struct device *dev,
 }
 static DEVICE_ATTR(fw_update, 0220, NULL, ccic_store_firmware_update);
 
+static ssize_t ccic_store_sink_pdo_update(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+	uint32_t data = 0;
+	uint16_t REG_ADD;
+	uint8_t MSG_BUF[32] = {0,};
+	SINK_VAR_SUPPLY_Typedef *pSINK_MSG;
+	MSG_HEADER_Typedef *pMSG_HEADER;
+	uint32_t * MSG_DATA;
+	uint8_t cnt;
+
+	if (!usbpd_data) {
+		pr_err("usbpd_data is NULL\n");
+		return -ENODEV;
+	}
+
+	sscanf(buf, "%x\n", &data);
+	if (data == 0)
+		data = 0x8F019032; // 5V~12V, 500mA
+	pr_info("%s data=0x%x\n", __func__, data);
+
+	/* update Sink PDO */
+	REG_ADD = REG_TX_SINK_CAPA_MSG;
+	s2mm005_read_byte(usbpd_data->i2c, REG_ADD, MSG_BUF, 32);
+
+	MSG_DATA = (uint32_t *)&MSG_BUF[0];
+	pr_err("--- Read Data on TX_SNK_CAPA_MSG(0x220)\n");
+	for(cnt = 0; cnt < 8; cnt++) {
+		pr_err("   0x%08X\n", MSG_DATA[cnt]);
+	}
+
+	pMSG_HEADER = (MSG_HEADER_Typedef *)&MSG_BUF[0];
+	pMSG_HEADER->BITS.Number_of_obj += 1;
+	pSINK_MSG = (SINK_VAR_SUPPLY_Typedef *)&MSG_BUF[8];
+	pSINK_MSG->DATA = data;
+	pr_err("--- Write DATA\n");
+	for (cnt = 0; cnt < 8; cnt++) {
+		pr_err("   0x%08X\n", MSG_DATA[cnt]);
+	}
+
+	s2mm005_write_byte(usbpd_data->i2c, REG_ADD, &MSG_BUF[0], 32);
+
+	for (cnt = 0; cnt < 32; cnt++) {
+		MSG_BUF[cnt] = 0;
+	}
+
+	for (cnt = 0; cnt < 8; cnt++) {
+		pr_err("   0x%08X\n", MSG_DATA[cnt]);
+	}
+	s2mm005_read_byte(usbpd_data->i2c, REG_ADD, MSG_BUF, 32);
+
+	pr_err("--- Read 2 new Data on TX_SNK_CAPA_MSG(0x220)\n");
+	for(cnt = 0; cnt < 8; cnt++) {
+		pr_err("   0x%08X\n", MSG_DATA[cnt]);
+	}
+	
+	return size;
+}
+static DEVICE_ATTR(sink_pdo_update, 0220, NULL, ccic_store_sink_pdo_update);
+
 #if defined(CONFIG_CCIC_ALTERNATE_MODE)
 static ssize_t ccic_send_samsung_uVDM_message(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
@@ -408,10 +489,10 @@ static ssize_t ccic_send_attention_message(struct device *dev,
 	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
 	int cmd = 0;
 
-    if (!usbpd_data) {
-        pr_err("usbpd_data is NULL\n");
-        return -ENODEV;
-    }
+	if (!usbpd_data) {
+		pr_err("usbpd_data is NULL\n");
+		return -ENODEV;
+	}
 
 	sscanf(buf, "%d", &cmd);
 	pr_info("%s cmd=%d\n", __func__, cmd);
@@ -607,6 +688,45 @@ static ssize_t ccic_water_show(struct device *dev,
 }
 static DEVICE_ATTR(water, 0444, ccic_water_show, NULL);
 
+static ssize_t ccic_usbpd_ids_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+	int retval = 0;
+
+	if (!usbpd_data) {
+		pr_err("%s usbpd_data is null!!\n", __func__);
+		return -ENODEV;
+	}
+	retval = sprintf(buf, "%04x:%04x\n",
+		le16_to_cpu(usbpd_data->Vendor_ID),
+		le16_to_cpu(usbpd_data->Product_ID));
+	pr_info("usb: %s : %s",
+		__func__, buf);
+
+	return retval;
+}
+static DEVICE_ATTR(usbpd_ids, 0444, ccic_usbpd_ids_show, NULL);
+
+static ssize_t ccic_usbpd_type_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+	int retval = 0;
+
+	if (!usbpd_data) {
+		pr_err("%s usbpd_data is null!!\n", __func__);
+		return -ENODEV;
+	}
+	retval = sprintf(buf, "%d\n", usbpd_data->acc_type);
+	pr_info("usb: %s : %d",
+		__func__, usbpd_data->acc_type);
+
+	return retval;
+}
+
+static DEVICE_ATTR(usbpd_type, 0444, ccic_usbpd_type_show, NULL);
+
 static struct attribute *ccic_attributes[] = {
 	&dev_attr_cur_version.attr,
 	&dev_attr_src_version.attr,
@@ -615,9 +735,11 @@ static struct attribute *ccic_attributes[] = {
 #if defined(CONFIG_SEC_FACTORY)
 	&dev_attr_rid.attr,
 	&dev_attr_ccic_control_option.attr,
+	&dev_attr_booting_dry.attr,
 #endif
 	&dev_attr_fw_update.attr,
 	&dev_attr_fw_update_status.attr,
+	&dev_attr_sink_pdo_update.attr,
 #if defined(CONFIG_CCIC_ALTERNATE_MODE)
 	&dev_attr_uvdm.attr,
 	&dev_attr_attention.attr,
@@ -626,6 +748,8 @@ static struct attribute *ccic_attributes[] = {
 	&dev_attr_dna_audio_uvdm.attr,
 	&dev_attr_dex_fan_uvdm.attr,
 	&dev_attr_acc_device_version.attr,
+	&dev_attr_usbpd_ids.attr,
+	&dev_attr_usbpd_type.attr,
 #endif
 	&dev_attr_control_gpio.attr,
 	&dev_attr_water.attr,

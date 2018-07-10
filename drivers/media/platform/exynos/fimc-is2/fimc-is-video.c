@@ -524,7 +524,7 @@ int open_vctx(struct file *file,
 		goto p_err;
 	}
 
-	*vctx = kzalloc(sizeof(struct fimc_is_video_ctx), GFP_KERNEL);
+	*vctx = vzalloc(sizeof(struct fimc_is_video_ctx));
 	if (*vctx == NULL) {
 		err("kzalloc is fail");
 		ret = -ENOMEM;
@@ -548,7 +548,7 @@ int close_vctx(struct file *file,
 {
 	int ret = 0;
 
-	kfree(vctx);
+	vfree(vctx);
 	file->private_data = NULL;
 	ret = vref_put(video, NULL);
 
@@ -1381,6 +1381,11 @@ int fimc_is_video_dqbuf(struct fimc_is_video_ctx *vctx,
 	ret = vb2_dqbuf(queue->vbq, buf, blocking);
 	if (ret) {
 		mverr("vb2_dqbuf is fail(%d)", vctx,  video, ret);
+		if (test_bit(FIMC_IS_HAL_DEBUG_SUDDEN_DEAD_DETECT, &sysfs_debug.hal_debug_mode) &&
+				ret == -ERESTARTSYS) {
+			msleep(sysfs_debug.hal_debug_delay);
+			panic("HAL dead");
+		}
 		goto p_err;
 	}
 

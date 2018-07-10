@@ -110,10 +110,10 @@ static int fimc_is_hw_mcsc_handle_interrupt(u32 id, void *context)
 
 			atomic_inc(&hw_ip->count.dma);
 			fimc_is_hardware_frame_done(hw_ip, NULL, WORK_SCP_FDONE, ENTRY_SCP,
-				FRAME_DONE_NORMAL);
+				FRAME_DONE_NORMAL, false);
 		} else {
 			fimc_is_hardware_frame_done(hw_ip, NULL, -1, FIMC_IS_HW_CORE_END,
-				FRAME_DONE_NORMAL);
+				FRAME_DONE_NORMAL, false);
 		}
 		hw_ip->debug_info[index].cpuid[DEBUG_POINT_FRAME_END] = raw_smp_processor_id();
 		hw_ip->debug_info[index].time[DEBUG_POINT_FRAME_END] = local_clock();
@@ -668,13 +668,13 @@ int fimc_is_hw_mcsc_frame_ndone(struct fimc_is_hw_ip *hw_ip, struct fimc_is_fram
 	output_id = ENTRY_SCP;
 	if (test_bit(output_id, &frame->out_flag))
 		ret = fimc_is_hardware_frame_done(hw_ip, frame, wq_id, output_id,
-				done_type);
+				done_type, false);
 
 	wq_id     = -1;
 	output_id = FIMC_IS_HW_CORE_END;
 	if (test_bit(hw_ip->id, &frame->core_flag))
 		ret = fimc_is_hardware_frame_done(hw_ip, frame, wq_id, output_id,
-				done_type);
+				done_type, false);
 
 	return ret;
 }

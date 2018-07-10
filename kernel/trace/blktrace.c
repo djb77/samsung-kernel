@@ -1773,6 +1773,8 @@ void blk_dump_cmd(char *buf, struct request *rq)
 	}
 }
 
+SIO_PATCH_VERSION(ftrace_discard_bugfix, 1, 0, "");
+
 void blk_fill_rwbs(char *rwbs, u32 rw, int bytes)
 {
 	int i = 0;

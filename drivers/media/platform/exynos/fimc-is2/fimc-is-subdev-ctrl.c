@@ -15,7 +15,6 @@
 #include "fimc-is-core.h"
 #include "fimc-is-param.h"
 #include "fimc-is-device-ischain.h"
-#include "fimc-is-interface-fd.h"
 #include "fimc-is-debug.h"
 
 struct fimc_is_subdev * video2subdev(enum fimc_is_subdev_device_type device_type,
@@ -1371,9 +1370,7 @@ static int fimc_is_sensor_subdev_internal_start(struct fimc_is_device_sensor *de
 			/* 2. update frame manager */
 			framemgr_e_barrier_irqs(framemgr, FMGR_IDX_17, flags);
 
-			if (frame->state == FS_FREE) {
-				trans_frame(framemgr, frame, FS_REQUEST);
-			} else {
+			if (frame->state != FS_FREE) {
 				mserr("frame %d is invalid state(%d)\n",
 					dma_subdev, dma_subdev, j, frame->state);
 				frame_manager_print_queues(framemgr);
@@ -1543,10 +1540,17 @@ static int fimc_is_sensor_subdev_internal_s_format(struct fimc_is_device_sensor 
 	int ret = 0;
 	int ch;
 	struct fimc_is_device_csi *csi;
+	struct fimc_is_module_enum *module = NULL;
 	struct fimc_is_subdev *subdev = NULL;
 	u32 vc_cfg = 0;
 
 	BUG_ON(!sensor);
+
+	module = (struct fimc_is_module_enum *)v4l2_get_subdevdata(sensor->subdev_module);
+	if (!module) {
+		err("module is NULL");
+		return -EINVAL;
+	}
 
 	csi = (struct fimc_is_device_csi *)v4l2_get_subdevdata(sensor->subdev_csi);
 	if (!csi) {
@@ -1597,11 +1601,13 @@ static int fimc_is_sensor_subdev_internal_s_format(struct fimc_is_device_sensor 
 		case VC_TAIL_MODE_PDAF:
 			subdev->pixelformat = V4L2_PIX_FMT_SBGGR16;
 			subdev->buffer_num = 8;
+			subdev->vc_buffer_offset = module->vc_buffer_offset[ch];
 			snprintf(subdev->data_type, sizeof(subdev->data_type), "TAIL_MODE_PDAF");
 			break;
 		case VC_MIPI_STAT:
 			subdev->pixelformat = V4L2_PIX_FMT_SBGGR16;
 			subdev->buffer_num = 8;
+			subdev->vc_buffer_offset = module->vc_buffer_offset[ch];
 			snprintf(subdev->data_type, sizeof(subdev->data_type), "VC_MIPI_STAT");
 			break;
 		default:

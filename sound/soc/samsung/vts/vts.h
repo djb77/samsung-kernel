@@ -147,10 +147,6 @@
 #define SOUND_MODEL_SIZE_MAX (SZ_32K)
 #define SOUND_MODEL_COUNT (3)
 
-/* net & grammar binary sizes defined in firmware */
-#define SOUND_MODEL_NET_SIZE_MAX (0x8000)
-#define SOUND_MODEL_GRAMMAR_SIZE_MAX (0x300)
-
 /* DRAM for copying VTS firmware logs */
 #define LOG_BUFFER_BYTES_MAX	(0x2000)
 #define VTS_SRAMLOG_MSGS_OFFSET (0x59000)
@@ -158,6 +154,17 @@
 /* VTS firmware version information offset */
 #define VTSFW_VERSION_OFFSET	(0x7c)
 #define DETLIB_VERSION_OFFSET	(0x78)
+
+/* svoice net(0x8000) & grammar(0x300) binary sizes defined in firmware */
+#define SOUND_MODEL_SVOICE_SIZE_MAX (0x8000 + 0x300)
+
+/* google binary size defined in firmware */
+#define SOUND_MODEL_GOOGLE_SIZE_MAX (0xB500)
+
+/* VTS Model Binary Max buffer sizes */
+#define VTS_MODEL_SVOICE_BIN_MAXSZ     (SOUND_MODEL_SVOICE_SIZE_MAX)
+#define VTS_MODEL_GOOGLE_BIN_MAXSZ     (SOUND_MODEL_GOOGLE_SIZE_MAX)
+
 enum ipc_state {
 	IDLE,
 	SEND_MSG,
@@ -167,9 +174,9 @@ enum ipc_state {
 
 enum trigger {
 	TRIGGER_NONE	= -1,
-	TRIGGER_MCD	= 0,
-	TRIGGER_SENSORY	= 1,
-	TRIGGER_GOOGLE	= 2,
+	TRIGGER_SVOICE	= 0,
+	TRIGGER_GOOGLE	= 1,
+	TRIGGER_SENSORY	= 2,
 	TRIGGER_COUNT,
 };
 
@@ -179,10 +186,28 @@ enum vts_platform_type {
 };
 
 enum executionmode {
-	VTS_OFF_MODE		= 0,	//default is off
-	VTS_VOICE_TRIGGER_MODE	= 1,	//voice-trig-mode:Both LPSD & Trigger are enabled
-	VTS_SOUND_DETECT_MODE	= 2,	//sound-detect-mode: Low Power sound Detect
-	VTS_VT_ALWAYS_ON_MODE	= 3,	//vt-always-mode: key phrase Detection only(Trigger)
+	//default is off
+	VTS_OFF_MODE			= 0,
+	//voice-trig-mode:Both LPSD & Trigger are enabled
+	VTS_VOICE_TRIGGER_MODE		= 1,
+	//sound-detect-mode: Low Power sound Detect
+	VTS_SOUND_DETECT_MODE		= 2,
+	//vt-always-mode: key phrase Detection only(Trigger)
+	VTS_VT_ALWAYS_ON_MODE		= 3,
+	//google-trigger: key phrase Detection only(Trigger)
+	VTS_GOOGLE_TRIGGER_MODE		= 4,
+	//sensory-trigger: key phrase Detection only(Trigger)
+	VTS_SENSORY_TRIGGER_MODE	= 5,
+	//off:voice-trig-mode:Both LPSD & Trigger are enabled
+	VTS_VOICE_TRIGGER_MODE_OFF	= 6,
+	//off:sound-detect-mode: Low Power sound Detect
+	VTS_SOUND_DETECT_MODE_OFF	= 7,
+	//off:vt-always-mode: key phrase Detection only(Trigger)
+	VTS_VT_ALWAYS_ON_MODE_OFF	= 8,
+	//off:google-trigger: key phrase Detection only(Trigger)
+	VTS_GOOGLE_TRIGGER_MODE_OFF	= 9,
+	//off:sensory-trigger: key phrase Detection only(Trigger)
+	VTS_SENSORY_TRIGGER_MODE_OFF	= 10,
 	VTS_MODE_COUNT,
 };
 
@@ -205,17 +230,28 @@ struct vts_ipc_msg {
 enum vts_micconf_type {
 	VTS_MICCONF_FOR_RECORD	= 0,
 	VTS_MICCONF_FOR_TRIGGER	= 1,
+	VTS_MICCONF_FOR_GOOGLE	= 2,
 };
 
 enum vts_state_machine {
-	VTS_STATE_NONE			= 0,	//runtime_suspended state
-	VTS_STATE_VOICECALL		= 1,	//sram L2Cache voicecall state
-	VTS_STATE_IDLE			= 2,	//runtime_resume state
-	VTS_STATE_RECOG_STARTED		= 3,	//Voice Recognization started
-	VTS_STATE_RECOG_TRIGGERED	= 4,	//Voice Recognize triggered
-	VTS_STATE_SEAMLESS_REC_STARTED	= 5,	//seamless record started
-	VTS_STATE_SEAMLESS_REC_STOPPED	= 6,	//seamless record started
-	VTS_STATE_RECOG_STOPPED		= 7,	//Voice Recognization stopped
+	VTS_STATE_NONE			= 0,	/* runtime_suspended state */
+	VTS_STATE_VOICECALL		= 1,	/* sram L2Cache call state */
+	VTS_STATE_RUNTIME_RESUMING	= 2,	/* runtime_resume started */
+	VTS_STATE_RUNTIME_RESUMED	= 3,	/* runtime_resume done */
+	VTS_STATE_RECOG_STARTED		= 4,	/* Recognization started */
+	VTS_STATE_RECOG_TRIGGERED	= 5,	/* Recognize triggered */
+	VTS_STATE_SEAMLESS_REC_STARTED	= 6,	/* seamless record started */
+	VTS_STATE_SEAMLESS_REC_STOPPED	= 7,	/* seamless record stopped */
+	VTS_STATE_RECOG_STOPPED		= 8,	/* Recognization stopped */
+	VTS_STATE_RUNTIME_SUSPENDING	= 9,	/* runtime_suspend started */
+	VTS_STATE_RUNTIME_SUSPENDED	= 10,	/* runtime_suspend done */
+};
+
+struct vts_model_bin_info {
+	unsigned char *data;
+	size_t	actual_sz;
+	size_t	max_sz;
+	bool loaded;
 };
 
 struct vts_data {
@@ -268,6 +304,9 @@ struct vts_data {
 	u32 running_ipc;
 	struct wake_lock wake_lock;
 	unsigned int vts_state;
+	struct vts_model_bin_info svoice_info;
+	struct vts_model_bin_info google_info;
+	spinlock_t state_spinlock;
 };
 
 struct vts_platform_data {

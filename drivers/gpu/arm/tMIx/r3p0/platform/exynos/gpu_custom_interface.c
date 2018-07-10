@@ -1386,6 +1386,7 @@ static int gpu_get_status(struct exynos_context *platform, char *buf, size_t buf
 {
 	int cnt = 0;
 	int i;
+	int mmu_fault_cnt = 0;
 
 	if(!platform)
 		return -ENODEV;
@@ -1393,9 +1394,12 @@ static int gpu_get_status(struct exynos_context *platform, char *buf, size_t buf
 	if(buf == NULL)
 		return 0;
 
-	cnt += snprintf(buf+cnt, buf_size-cnt, "reset count : %d\n", platform->reset_count);
-	cnt += snprintf(buf+cnt, buf_size-cnt, "data invalid count : %d\n", platform->data_invalid_fault_count);
-	cnt += snprintf(buf+cnt, buf_size-cnt, "mmu fault count : %d\n", platform->mmu_fault_count);
+	for (i = GPU_MMU_TRANSLATION_FAULT; i <= GPU_MMU_MEMORY_ATTRIBUTES_FAULT; i++)
+		mmu_fault_cnt += platform->gpu_exception_count[i];
+
+	cnt += snprintf(buf+cnt, buf_size-cnt, "reset count : %d\n", platform->gpu_exception_count[GPU_RESET]);
+	cnt += snprintf(buf+cnt, buf_size-cnt, "data invalid count : %d\n", platform->gpu_exception_count[GPU_DATA_INVALIDATE_FAULT]);
+	cnt += snprintf(buf+cnt, buf_size-cnt, "mmu fault count : %d\n", mmu_fault_cnt);
 
 	for (i = 0; i < BMAX_RETRY_CNT; i++)
 		cnt += snprintf(buf+cnt, buf_size-cnt, "warmup retry count %d : %d\n", i+1, platform->balance_retry_count[i]);
@@ -1473,6 +1477,41 @@ DEVICE_ATTR(hwcnt_tripipe, S_IRUGO, show_hwcnt_tripipe, NULL);
 DEVICE_ATTR(gpu_status, S_IRUGO, show_gpu_status, NULL);
 
 #ifdef CONFIG_MALI_DEBUG_KERNEL_SYSFS
+#define BUF_SIZE 1000
+static ssize_t show_kernel_sysfs_gpu_info(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	struct exynos_context *platform = (struct exynos_context *)pkbdev->platform_context;
+	ssize_t ret = 0;
+
+	if (!platform)
+		return -ENODEV;
+
+	if(buf == NULL)
+		return 0;
+
+	ret += snprintf(buf+ret, BUF_SIZE-ret, "\"SSTOP\":\"%d\",", platform->gpu_exception_count[GPU_SOFT_STOP]);
+	ret += snprintf(buf+ret, BUF_SIZE-ret, "\"HSTOP\":\"%d\",", platform->gpu_exception_count[GPU_HARD_STOP]);
+	ret += snprintf(buf+ret, BUF_SIZE-ret, "\"RESET\":\"%d\",", platform->gpu_exception_count[GPU_RESET]);
+	ret += snprintf(buf+ret, BUF_SIZE-ret, "\"DIFLT\":\"%d\",", platform->gpu_exception_count[GPU_DATA_INVALIDATE_FAULT]);
+	ret += snprintf(buf+ret, BUF_SIZE-ret, "\"TRFLT\":\"%d\",", platform->gpu_exception_count[GPU_MMU_TRANSLATION_FAULT]);
+	ret += snprintf(buf+ret, BUF_SIZE-ret, "\"PMFLT\":\"%d\",", platform->gpu_exception_count[GPU_MMU_PERMISSION_FAULT]);
+	ret += snprintf(buf+ret, BUF_SIZE-ret, "\"BFLT\":\"%d\",", platform->gpu_exception_count[GPU_MMU_TRANSTAB_BUS_FAULT]);
+	ret += snprintf(buf+ret, BUF_SIZE-ret, "\"ACCFG\":\"%d\",", platform->gpu_exception_count[GPU_MMU_ACCESS_FLAG_FAULT]);
+	ret += snprintf(buf+ret, BUF_SIZE-ret, "\"ASFLT\":\"%d\",", platform->gpu_exception_count[GPU_MMU_ADDRESS_SIZE_FAULT]);
+	ret += snprintf(buf+ret, BUF_SIZE-ret, "\"ATFLT\":\"%d\",", platform->gpu_exception_count[GPU_MMU_MEMORY_ATTRIBUTES_FAULT]);
+	ret += snprintf(buf+ret, BUF_SIZE-ret, "\"UNKN\":\"%d\"", platform->gpu_exception_count[GPU_UNKNOWN]);
+
+	if (ret < PAGE_SIZE - 1) {
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "\n");
+	} else {
+		buf[PAGE_SIZE-2] = '\n';
+		buf[PAGE_SIZE-1] = '\0';
+		ret = PAGE_SIZE-1;
+	}
+
+	return ret;
+}
+
 static ssize_t show_kernel_sysfs_max_lock_dvfs(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
@@ -1869,6 +1908,9 @@ static struct kobj_attribute gpu_temp_attribute =
 	__ATTR(gpu_tmu, S_IRUGO, show_kernel_sysfs_gpu_temp, NULL);
 #endif
 
+static struct kobj_attribute gpu_info_attribute =
+	__ATTR(gpu_info, S_IRUGO, show_kernel_sysfs_gpu_info, NULL);
+
 static struct kobj_attribute gpu_max_lock_attribute =
 	__ATTR(gpu_max_clock, S_IRUGO|S_IWUSR, show_kernel_sysfs_max_lock_dvfs, set_kernel_sysfs_max_lock_dvfs);
 
@@ -1899,6 +1941,7 @@ static struct attribute * attrs [] =
 #if defined(CONFIG_EXYNOS_THERMAL) && defined(CONFIG_GPU_THERMAL)
 	&gpu_temp_attribute.attr,
 #endif
+	&gpu_info_attribute.attr,
 	&gpu_max_lock_attribute.attr,
 	&gpu_min_lock_attribute.attr,
 	&gpu_busy_attribute.attr,

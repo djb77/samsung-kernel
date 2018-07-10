@@ -151,6 +151,11 @@ static void sync_print_fence(struct seq_file *s, struct sync_fence *fence)
 
 	seq_printf(s, "[%p] %s: %s\n", fence, fence->name,
 		   sync_status_str(atomic_read(&fence->status)));
+	if ((fence->name[HWC_FENCE_NAME_START] == '_') &&
+	    (fence->name[sizeof(fence->name) - 2] == 'h') &&
+	    (fence->name[sizeof(fence->name) - 1] == '\0')) {
+		seq_printf(s, "hwc fence type: %s\n", fence->name + HWC_FENCE_NAME_START + 1);
+	}
 
 	for (i = 0; i < fence->num_fences; ++i) {
 		struct sync_pt *pt =

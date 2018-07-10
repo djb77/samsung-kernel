@@ -121,23 +121,24 @@ p_err:
 	return ret;
 }
 
+#define MXP_RATIO_UP	(10)
 static int fimc_is_ischain_mxp_adjust_crop(struct fimc_is_device_ischain *device,
 	u32 input_crop_w, u32 input_crop_h,
 	u32 *output_crop_w, u32 *output_crop_h)
 {
 	int changed = 0;
 
-	if (*output_crop_w > input_crop_w * 8) {
-		mwarn("Cannot be scaled up beyond 8 times(%d -> %d)",
-			device, input_crop_w, *output_crop_w);
-		*output_crop_w = input_crop_w * 8;
+	if (*output_crop_w > input_crop_w * MXP_RATIO_UP) {
+		mwarn("Cannot be scaled up beyond %d times(%d -> %d)",
+			device, MXP_RATIO_UP, input_crop_w, *output_crop_w);
+		*output_crop_w = input_crop_w * MXP_RATIO_UP;
 		changed |= 0x01;
 	}
 
-	if (*output_crop_h > input_crop_h * 8) {
-		mwarn("Cannot be scaled up beyond 8 times(%d -> %d)",
-			device, input_crop_h, *output_crop_h);
-		*output_crop_h = input_crop_h * 8;
+	if (*output_crop_h > input_crop_h * MXP_RATIO_UP) {
+		mwarn("Cannot be scaled up beyond %d times(%d -> %d)",
+			device, MXP_RATIO_UP, input_crop_h, *output_crop_h);
+		*output_crop_h = input_crop_h * MXP_RATIO_UP;
 		changed |= 0x02;
 	}
 

@@ -420,7 +420,7 @@ int fimc_is_comp_get_crc(struct fimc_is_core *core, u32 addr, int size, char* cr
 			fail_count++;
 			err("CRC_START_ADDR write fail");
 		}
-		ret = fimc_is_comp_single_write(core, FIMC_IS_COMPANION_CRC_START_ADDR + 2, 
+		ret = fimc_is_comp_single_write(core, FIMC_IS_COMPANION_CRC_START_ADDR + 2,
 										(u16) (((addr - 0x80000) & 0xFFFF0000) >> 16));
 		if (ret) {
 			fail_count++;
@@ -438,7 +438,7 @@ int fimc_is_comp_get_crc(struct fimc_is_core *core, u32 addr, int size, char* cr
 	if (ret) {
 		fail_count++;
 		err("CRC_SIZE_ADDR + 2 write fail");
-	}    
+	}
 
 	/* start CRC calculation */
 	ret = fimc_is_comp_single_write(core, FIMC_IS_COMPANION_CRC_ENABLE_ADDR, 0x0001);
@@ -1161,7 +1161,7 @@ static int fimc_is_comp_load_i2c_cal(struct fimc_is_core *core, u32 addr, int po
 	ret = fimc_is_comp_i2c_write(core->client0, 0x6028, data1);
 	if (ret) {
 #ifdef USE_CAMERA_HW_BIG_DATA
-		fimc_is_sec_get_rear_hw_param(&hw_param);
+		fimc_is_sec_get_hw_param(&hw_param, position);
 		if (hw_param)
 			hw_param->i2c_comp_err_cnt++;
 #endif
@@ -1319,7 +1319,7 @@ int fimc_is_comp_is_valid(void *core_data)
 	u16 companion_id = 0;
 #ifdef USE_CAMERA_HW_BIG_DATA
 	struct cam_hw_param *hw_param;
-#endif	
+#endif
 
 	if (!core->spi1.device) {
 		info("spi1 device is not available\n");
@@ -1330,7 +1330,7 @@ int fimc_is_comp_is_valid(void *core_data)
 	fimc_is_comp_single_read(core, 0x0, &companion_id);
 #ifdef USE_CAMERA_HW_BIG_DATA
 	if (companion_id != 0x73C3) {
-		fimc_is_sec_get_rear_hw_param(&hw_param);
+		fimc_is_sec_get_hw_param(&hw_param, SENSOR_POSITION_REAR);
 #ifndef USE_SPI
 		if (hw_param)
 			hw_param->i2c_comp_err_cnt++;
@@ -1578,6 +1578,7 @@ int fimc_is_comp_loadcal(void *core_data, int position)
 		info("Did not load LSC cal data\n");
 	}
 
+#ifndef USE_DEFAULT_PAF_DATA_IN_C3
 	if(position == SENSOR_POSITION_REAR) {
 		if (fimc_is_sec_check_from_ver(core, position)) {
 			ret = fimc_is_comp_load_cal(core, COMP_PDAF_SHAD, position);
@@ -1592,7 +1593,7 @@ int fimc_is_comp_loadcal(void *core_data, int position)
 			info("Did not load PDAF cal data\n");
 		}
 	}
-
+#endif
 	usleep_range(5000, 5000);
 
 p_err:
@@ -1746,7 +1747,7 @@ int fimc_is_comp_retention(void *core_data)
 
 	if ((companion_ver != FIMC_IS_COMPANION_SIGNATURE_2ND_VALUE_EVT0) &&
 	    (companion_ver != FIMC_IS_COMPANION_SIGNATURE_2ND_VALUE_EVT1)) {
-	    	err("check 2nd signature fail");
+		err("check 2nd signature fail");
 		ret = -EINVAL;
 		goto p_err;
 	}

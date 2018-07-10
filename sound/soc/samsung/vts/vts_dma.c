@@ -199,6 +199,7 @@ static int vts_platform_close(struct snd_pcm_substream *substream)
 	if (data->vts_data->voicecall_enabled) {
 		dev_warn(dev, "%s VTS SRAM is Used for CP call\n",
 					__func__);
+		pm_runtime_get_sync(dev);
 		return -EBUSY;
 	}
 

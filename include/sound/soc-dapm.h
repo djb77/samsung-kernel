@@ -410,7 +410,6 @@ void snd_soc_dapm_reset_cache(struct snd_soc_dapm_context *dapm);
 void snd_soc_dapm_stream_event(struct snd_soc_pcm_runtime *rtd, int stream,
 	int event);
 void snd_soc_dapm_shutdown(struct snd_soc_card *card);
-void snd_soc_dapm_reboot(struct snd_soc_card *card);
 
 /* external DAPM widget events */
 int snd_soc_dapm_mixer_update_power(struct snd_soc_dapm_context *dapm,
@@ -465,9 +464,11 @@ struct snd_soc_dapm_widget *snd_soc_dapm_kcontrol_widget(
 int snd_soc_dapm_force_bias_level(struct snd_soc_dapm_context *dapm,
 	enum snd_soc_bias_level level);
 
-int snd_soc_dapm_connected_output_ep(struct snd_soc_dapm_widget *widget);
+int snd_soc_dapm_connected_output_ep(struct snd_soc_dapm_widget *widget,
+	struct list_head *list);
 
-int snd_soc_dapm_connected_input_ep(struct snd_soc_dapm_widget *widget);
+int snd_soc_dapm_connected_input_ep(struct snd_soc_dapm_widget *widget,
+	struct list_head *list);
 
 /* dapm widget types */
 enum snd_soc_dapm_type {

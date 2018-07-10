@@ -691,6 +691,51 @@ static ssize_t store_en_dvfs(struct device *dev,
 	return count;
 }
 
+static ssize_t show_hal_debug_mode(struct device *dev, struct device_attribute *attr,
+				  char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "0x%lx\n", sysfs_debug.hal_debug_mode);
+}
+
+static ssize_t store_hal_debug_mode(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	int ret;
+	unsigned long long debug_mode = 0;
+
+	ret = kstrtoull(buf, 16 /* hexa */, &debug_mode);
+	if (ret < 0) {
+		pr_err("%s, %s, failed for debug_mode:%llu, ret:%d", __func__, buf, debug_mode, ret);
+		return 0;
+	}
+
+	sysfs_debug.hal_debug_mode = (unsigned long)debug_mode;
+
+	return count;
+}
+
+static ssize_t show_hal_debug_delay(struct device *dev, struct device_attribute *attr,
+				  char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%u ms\n", sysfs_debug.hal_debug_delay);
+}
+
+static ssize_t store_hal_debug_delay(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	int ret;
+
+	ret = kstrtouint(buf, 10, &sysfs_debug.hal_debug_delay);
+	if (ret < 0) {
+		pr_err("%s, %s, failed for debug_delay:%u, ret:%d", __func__, buf, sysfs_debug.hal_debug_delay, ret);
+		return 0;
+	}
+
+	return count;
+}
+
 #ifdef ENABLE_DBG_STATE
 static ssize_t show_debug_state(struct device *dev, struct device_attribute *attr,
 				  char *buf)
@@ -900,6 +945,8 @@ static ssize_t store_en_fixed_sensor(struct device *dev,
 static DEVICE_ATTR(en_clk_gate, 0644, show_en_clk_gate, store_en_clk_gate);
 static DEVICE_ATTR(clk_gate_mode, 0644, show_clk_gate_mode, store_clk_gate_mode);
 static DEVICE_ATTR(en_dvfs, 0644, show_en_dvfs, store_en_dvfs);
+static DEVICE_ATTR(hal_debug_mode, 0644, show_hal_debug_mode, store_hal_debug_mode);
+static DEVICE_ATTR(hal_debug_delay, 0644, show_hal_debug_delay, store_hal_debug_delay);
 
 #ifdef ENABLE_DBG_STATE
 static DEVICE_ATTR(en_debug_state, 0644, show_debug_state, store_debug_state);
@@ -920,6 +967,8 @@ static struct attribute *fimc_is_debug_entries[] = {
 	&dev_attr_en_clk_gate.attr,
 	&dev_attr_clk_gate_mode.attr,
 	&dev_attr_en_dvfs.attr,
+	&dev_attr_hal_debug_mode.attr,
+	&dev_attr_hal_debug_delay.attr,
 #ifdef ENABLE_DBG_STATE
 	&dev_attr_en_debug_state.attr,
 #endif
@@ -1291,6 +1340,8 @@ static int fimc_is_probe(struct platform_device *pdev)
 	/* set sysfs for debuging */
 	sysfs_debug.en_clk_gate = 0;
 	sysfs_debug.en_dvfs = 1;
+	sysfs_debug.hal_debug_mode = 0;
+	sysfs_debug.hal_debug_delay = DBG_HAL_DEAD_PANIC_DELAY;
 #ifdef ENABLE_CLOCK_GATE
 	sysfs_debug.en_clk_gate = 1;
 #ifdef HAS_FW_CLOCK_GATE

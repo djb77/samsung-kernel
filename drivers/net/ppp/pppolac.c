@@ -206,9 +206,7 @@ static void pppolac_xmit_core(struct work_struct *delivery_work)
 	while ((skb = skb_dequeue(&delivery_queue))) {
 		struct sock *sk_udp = skb->sk;
 		struct kvec iov = {.iov_base = skb->data, .iov_len = skb->len};
-		struct msghdr msg = {
-			.msg_flags = MSG_NOSIGNAL | MSG_DONTWAIT,
-		};
+		struct msghdr msg = { 0 };
 
 		iov_iter_kvec(&msg.msg_iter, WRITE | ITER_KVEC, &iov, 1,
 			      skb->len);

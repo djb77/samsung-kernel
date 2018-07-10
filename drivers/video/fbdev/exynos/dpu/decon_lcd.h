@@ -60,6 +60,19 @@ struct dsu_info_dt {
 	struct dsu_res_info res_info[MAX_DSU_RES_NUMBER];
 };
 #endif
+
+#ifdef CONFIG_SUPPORT_HDR
+#define HDR_CAPA_NUM		4
+
+struct lcd_hdr_info {
+	unsigned int hdr_num;
+	unsigned int hdr_type[HDR_CAPA_NUM];
+	unsigned int hdr_max_luma;
+	unsigned int hdr_max_avg_luma;
+	unsigned int hdr_min_luma;
+};
+#endif /* CONFIG_SUPPORT_HDR */
+
 struct decon_lcd {
 	enum decon_psr_mode mode;
 	unsigned int vfp;
@@ -97,6 +110,9 @@ struct decon_lcd {
 #ifdef CONFIG_SUPPORT_DSU
 	unsigned int dsu_mode;
 	struct dsu_info_dt dt_dsu_info;
+#endif
+#ifdef CONFIG_SUPPORT_HDR
+	struct lcd_hdr_info hdr_info;
 #endif
 };
 

@@ -94,4 +94,10 @@ struct sync_fence_info_data {
 #define SYNC_IOC_FENCE_INFO	_IOWR(SYNC_IOC_MAGIC, 2,\
 	struct sync_fence_info_data)
 
+#define HWC_FENCE_NAME_LEN  (5)
+
+#define HWC_FENCE_NAME_START    (32 - HWC_FENCE_NAME_LEN)
+
+#define SYNC_IOC_FENCE_NAME	_IOWR(SYNC_IOC_MAGIC, 10, char[32])
+
 #endif /* _UAPI_LINUX_SYNC_H */

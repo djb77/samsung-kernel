@@ -236,9 +236,15 @@ struct muic_platform_data {
 	/* muic path switch function for rustproof */
 	void (*set_path_switch_suspend)(struct device *dev);
 	void (*set_path_switch_resume)(struct device *dev);
+
+	/* muic cable data collecting function */
+	void (*init_cable_data_collect_cb)(void);
 };
 
 int get_switch_sel(void);
 int get_afc_mode(void);
 void muic_set_hmt_status(int status);
+#ifdef CONFIG_SEC_FACTORY
+extern void muic_send_attached_muic_cable_intent(int type);
+#endif
 #endif /* __MUIC_H__ */

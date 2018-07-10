@@ -764,11 +764,13 @@ static void exynos_usbdrd_pipe3_init(struct exynos_usbdrd_phy *phy_drd)
 	u8 i;
 #endif
 
-	if (gpio_is_valid(phy_drd->phy_port)) {
+	if (gpio_is_valid(phy_drd->phy_port))
 		phy_drd->usbphy_info.used_phy_port = !gpio_get_value(phy_drd->phy_port);
-		dev_info(phy_drd->dev, "%s: phy port[%d]\n", __func__,
+	else
+		phy_drd->usbphy_info.used_phy_port = 0;
+
+	dev_info(phy_drd->dev, "%s: phy port[%d]\n", __func__,
 						phy_drd->usbphy_info.used_phy_port);
-	}
 
 	exynos_usbdrd_change_refclk(phy_drd);
 

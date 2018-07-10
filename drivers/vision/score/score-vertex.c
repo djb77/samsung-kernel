@@ -647,46 +647,22 @@ static int score_vertex_s_param(struct file *file, struct vs4l_param_list *plist
 static int score_vertex_s_ctrl(struct file *file, struct vs4l_ctrl *ctrl)
 {
 	int ret = 0;
-	/*
-	unsigned long flags;
 
 	struct score_vertex_ctx *vctx = file->private_data;
-	struct score_vertex *vertex = vctx->vertex;
-	struct score_device *device = container_of(vertex, struct score_device, vertex);
 	struct mutex *lock = &vctx->lock;
 
+	struct score_vertex *vertex = vctx->vertex;
+	struct score_device *device = container_of(vertex, struct score_device, vertex);
 	struct score_system *system = &device->system;
-	struct score_framemgr *iframemgr = vctx->iframemgr;
 
 	if (mutex_lock_interruptible(lock)) {
 		score_verr("mutex_lock_interruptible is fail \n", vctx);
 		return -ERESTARTSYS;
 	}
 
-	switch (ctrl->ctrl) {
-	case SCORE_CTRL_FWCHECK:
-		if (system->fw_index != ctrl->value) {
-			ret = -ENODEV;
-		}
-		break;
-	case SCORE_CTRL_FWCHANGE:
-		if (system->fw_index != ctrl->value) {
-			system->fw_index = ctrl->value;
-
-			spin_lock_irqsave(&iframemgr->slock, flags);
-			ret = score_system_reset(system, RESET_OPT_FORCE |
-					RESET_SFR_CLEAN | RESET_OPT_RESTART);
-			spin_unlock_irqrestore(&iframemgr->slock, flags);
-		}
-		break;
-	default:
-		score_verr("request control is invalid(%d)\n", vctx, ctrl->ctrl);
-		ret = -EINVAL;
-		break;
-	}
+	ret = score_system_runtime_update(system);
 
 	mutex_unlock(lock);
-	*/
 	return ret;
 }
 

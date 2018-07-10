@@ -43,3 +43,11 @@ config CAMERA_FLASH_I2C_OBJ
         default n
         help
           Use to build I2C driver.
+
+config CAMERA_FLASH_KTD2692_OBJ
+        bool "Use KTD2692"
+	depends on USE_DIRECT_IS_CONTROL
+	depends on CAMERA_FLASH_SELECT
+        default n
+        help
+          Use to build I2C driver.

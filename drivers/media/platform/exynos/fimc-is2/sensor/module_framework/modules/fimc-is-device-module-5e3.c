@@ -40,11 +40,11 @@
 
 static struct fimc_is_sensor_cfg config_module_5e3[] = {
 	/* 2560x1920@30fps */
-	FIMC_IS_SENSOR_CFG(2576, 1932, 30, 19, 0, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(2576, 1932, 30, 9, 0, CSI_DATA_LANES_2),
 	/* 1280x960@30fps */
-	FIMC_IS_SENSOR_CFG(1280, 960, 30, 19, 1, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(1280, 960, 30, 9, 1, CSI_DATA_LANES_2),
 	/* 1280x960@15fps */
-	FIMC_IS_SENSOR_CFG(1280, 960, 15, 19, 2, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(1280, 960, 15, 9, 2, CSI_DATA_LANES_2),
 };
 
 static struct fimc_is_vci vci_module_5e3[] = {
@@ -127,6 +127,60 @@ static int sensor_module_5e3_power_setpin(struct platform_device *pdev,
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "AVDD24_CAM_2P8", PIN_REGULATOR, 1, 0);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "VDD18_CAM_SENSOR_IO", PIN_REGULATOR, 1, 0);
 
+
+	dev_info(dev, "%s X v4\n", __func__);
+
+	return 0;
+}
+#elif defined(CONFIG_SOC_EXYNOS8895)
+static int sensor_module_5e3_power_setpin(struct platform_device *pdev,
+		struct exynos_platform_fimc_is_module *pdata)
+{
+	struct device *dev;
+	struct device_node *dnode;
+	int gpio_reset = 0;
+	int gpio_none = 0;
+
+	BUG_ON(!pdev);
+
+	dev = &pdev->dev;
+	dnode = dev->of_node;
+
+	dev_info(dev, "%s E v4\n", __func__);
+
+	gpio_reset = of_get_named_gpio(dnode, "gpio_reset", 0);
+	if (!gpio_is_valid(gpio_reset)) {
+		dev_err(dev, "failed to get PIN_RESET\n");
+		return -EINVAL;
+	} else {
+		gpio_request_one(gpio_reset, GPIOF_OUT_INIT_LOW, "CAM_GPIO_OUTPUT_LOW");
+		gpio_free(gpio_reset);
+	}
+
+	SET_PIN_INIT(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON);
+	SET_PIN_INIT(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF);
+    SET_PIN_INIT(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON);
+	SET_PIN_INIT(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF);
+
+	/* Normal On */
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_reset, "sen_rst low", PIN_OUTPUT, 0, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_none, "VDDD_1.2V_VT", PIN_REGULATOR, 1, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_none, "VDDA_2.9V_VT", PIN_REGULATOR, 1, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_none, "VDDIO_1.8V_VT", PIN_REGULATOR, 1, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_none, "pin", PIN_FUNCTION, 2, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_reset, "sen_rst high", PIN_OUTPUT, 1, 0);
+
+	/* Normal Off */
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 0, 10);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_reset, "sen_rst low", PIN_OUTPUT, 0, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "VDDD_1.2V_VT", PIN_REGULATOR, 0, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "VDDA_2.9V_VT", PIN_REGULATOR, 0, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "VDDIO_1.8V_VT", PIN_REGULATOR, 0, 0);
+
+	/* READ_ROM - POWER ON */
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_none, "VDDIO_1.8V_VT", PIN_REGULATOR, 1, 0);	
+	/* READ_ROM - POWER OFF */
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_none, "VDDIO_1.8V_VT", PIN_REGULATOR, 0, 0);
 	dev_info(dev, "%s X v4\n", __func__);
 
 	return 0;

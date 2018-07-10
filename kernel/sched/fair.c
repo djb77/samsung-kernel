@@ -31,6 +31,7 @@
 #include <linux/migrate.h>
 #include <linux/task_work.h>
 #include <linux/of.h>
+#include <linux/cpuset.h>
 
 #include <trace/events/sched.h>
 #ifdef CONFIG_HMP_VARIABLE_SCALE
@@ -112,7 +113,6 @@ const_debug unsigned int sysctl_sched_migration_cost = 500000UL;
  * (default: 10msec)
  */
 unsigned int __read_mostly sysctl_sched_shares_window = 10000000UL;
-unsigned int sysctl_sched_wakeup_to_idle_cpu = 0;
 
 #ifdef CONFIG_CFS_BANDWIDTH
 /*
@@ -5591,10 +5591,12 @@ static int hmp_boostpulse;
 static int hmp_active_down_migration;
 static int hmp_aggressive_up_migration;
 static int hmp_aggressive_yield;
+static int hmp_wakeup_to_idle_cpu;
 static DEFINE_RAW_SPINLOCK(hmp_boost_lock);
 static DEFINE_RAW_SPINLOCK(hmp_family_boost_lock);
 static DEFINE_RAW_SPINLOCK(hmp_semiboost_lock);
 static DEFINE_RAW_SPINLOCK(hmp_sysfs_lock);
+static DEFINE_RAW_SPINLOCK(hmp_wakeup_to_idle_cpu_lock);
 
 #define BOOT_BOOST_DURATION 40000000 /* microseconds */
 #define YIELD_CORRECTION_TIME 10000000 /* nanoseconds */
@@ -5615,11 +5617,9 @@ static inline int hmp_boost(void)
 	return ret;
 }
 
-static inline int hmp_family_boost(void)
+static inline int hmp_family_boost(struct task_struct *p)
 {
-	if (hmp_family_boost_val)
-		return 1;
-	return 0;
+	return is_top_task(p);
 }
 
 static inline int hmp_semiboost(void)
@@ -6064,6 +6064,21 @@ static int hmp_aggressive_yield_from_sysfs(int value)
 	return ret;
 }
 
+static int hmp_wakeup_to_idle_cpu_from_sysfs(int value)
+{
+	unsigned long flags;
+	int ret = 0;
+
+	raw_spin_lock_irqsave(&hmp_wakeup_to_idle_cpu_lock, flags);
+	if (value == 1 || value == 0)
+		hmp_wakeup_to_idle_cpu = value;
+	else
+		ret = -EINVAL;
+	raw_spin_unlock_irqrestore(&hmp_wakeup_to_idle_cpu_lock, flags);
+
+	return ret;
+}
+
 #ifdef CONFIG_SCHED_HMP_TASK_BASED_SOFTLANDING
 static int hmp_tbsoftlanding_enabled_sysfs(int value)
 {
@@ -6213,6 +6228,11 @@ int set_hmp_aggressive_yield(int enable)
 	return hmp_aggressive_yield_from_sysfs(enable);
 }
 
+int set_hmp_wakeup_to_idle_cpu(int enable)
+{
+	return hmp_wakeup_to_idle_cpu_from_sysfs(enable);
+}
+
 int get_hmp_boost(void)
 {
 	return hmp_boost();
@@ -6331,6 +6351,11 @@ static int hmp_attr_init(void)
 		&hmp_aggressive_yield,
 		NULL,
 		hmp_aggressive_yield_from_sysfs);
+
+	hmp_attr_add("wakeup_to_idle_cpu",
+		&hmp_wakeup_to_idle_cpu,
+		NULL,
+		hmp_wakeup_to_idle_cpu_from_sysfs);
 
 #ifdef CONFIG_SCHED_HMP_TASK_BASED_SOFTLANDING
 	hmp_attr_add("down_compensation_enabled",
@@ -6574,6 +6599,19 @@ static int hmp_is_family_in_fastest_domain(struct task_struct *p)
 		struct sched_entity *thread_se = &thread_p->se;
 		if (thread_se->avg.hmp_load_avg >= hmp_down_threshold &&
 				hmp_cpu_is_fastest(task_cpu(thread_p))) {
+			if (!task_running(cpu_rq(task_cpu(thread_p)), thread_p)) {
+				u64 delta;
+				u64 now = cpu_rq(task_cpu(p))->clock_task;
+
+				delta = now - thread_se->avg.last_update_time;
+
+				if ((s64)delta > 0) {
+					delta >>= 10;
+
+					if (delta > (1024 << 8))
+						continue;
+				}
+			}
 			return thread_p->pid;
 		}
 	}
@@ -6639,7 +6677,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 	int sync = wake_flags & WF_SYNC;
 	int thread_pid;
 
-	if(sysctl_sched_wakeup_to_idle_cpu)
+	if (hmp_wakeup_to_idle_cpu)
 		sd_flag |= SD_BALANCE_WAKE;
 
 	if (sd_flag & SD_BALANCE_WAKE)
@@ -6718,7 +6756,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 	rcu_read_unlock();
 
 #ifdef CONFIG_SCHED_HMP
-	if (hmp_family_boost() && p->parent && p->parent->pid > 2) {
+	if (hmp_family_boost(p) && p->parent && p->parent->pid > 2) {
 		int lowest_ratio = 0;
 		thread_pid = hmp_is_family_in_fastest_domain(p->group_leader);
 		if (thread_pid) {

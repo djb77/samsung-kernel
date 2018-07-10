@@ -53,6 +53,7 @@
 #include "muic_apis.h"
 #include "muic_i2c.h"
 #include "muic_vps.h"
+#include "muic_regmap.h"
 
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
 #include "muic_ccic.h"
@@ -530,6 +531,7 @@ void muic_detect_dev(muic_data_t *pmuic, int irq)
 	muic_attached_dev_t new_dev = ATTACHED_DEV_UNKNOWN_MUIC;
 	int intr = MUIC_INTR_DETACH;
 	u8 adc = 0, vbvolt = 0;
+	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
 #if defined(CONFIG_SEC_FACTORY) && defined(CONFIG_MUIC_UNIVERSAL_MAX77865)
 	struct i2c_client *i2c = pmuic->i2c;
 	u8 val = 0;
@@ -589,6 +591,16 @@ void muic_detect_dev(muic_data_t *pmuic, int irq)
 	}
 
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
+	/* W/A of incomplete insertion case */
+	if (new_dev == ATTACHED_DEV_USB_MUIC) {
+		if (irq == (-1)) {
+			if (pvendor && pvendor->run_chgdet) {
+				pvendor->run_chgdet(pmuic->regmapdesc, 1);
+				intr = MUIC_INTR_DETACH;
+			}
+		} else if (pmuic->is_dcdtmr_intr)
+			new_dev = ATTACHED_DEV_TIMEOUT_OPEN_MUIC;
+	}
 	if (new_dev == ATTACHED_DEV_USB_MUIC && pmuic->is_dcdtmr_intr) {
 		new_dev = ATTACHED_DEV_TIMEOUT_OPEN_MUIC;
 	}

@@ -37,7 +37,9 @@
 #include "fimc-is-resourcemgr.h"
 #include "fimc-is-dt.h"
 #include "fimc-is-cis-3m3.h"
+#ifdef SUPPORT_3M3_EVT0P0
 #include "fimc-is-cis-3m3-setA.h"
+#endif
 #include "fimc-is-cis-3m3-setB.h"
 
 #include "fimc-is-helper-i2c.h"
@@ -61,11 +63,12 @@ static void sensor_3m3_set_integration_max_margin(u32 mode, cis_shared_data *cis
 	switch (mode) {
 		case SENSOR_3M3_4032X3024_30FPS:
 		case SENSOR_3M3_4032X2268_30FPS:
+		case SENSOR_3M3_4032X1960_30FPS:
 		case SENSOR_3M3_3024X3024_30FPS:
 		case SENSOR_3M3_2016X1512_30FPS:
 		case SENSOR_3M3_1504X1504_30FPS:
 		case SENSOR_3M3_1920X1080_60FPS:
-		case SENSOR_3M3_1376X774_120FPS:
+		case SENSOR_3M3_1344X756_120FPS:
 		case SENSOR_3M3_2016X1134_30FPS:
 			cis_data->max_margin_coarse_integration_time = SENSOR_3M3_COARSE_INTEGRATION_TIME_MAX_MARGIN;
 			dbg_sensor("max_margin_coarse_integration_time(%d)\n",
@@ -94,7 +97,9 @@ static void sensor_3m3_cis_data_calculation(const struct sensor_pll_info_compact
 	cis_data->min_frame_us_time = (pll_info->frame_length_lines * pll_info->line_length_pck
 	                / (vt_pix_clk_hz / (1000 * 1000)));
 	cis_data->cur_frame_us_time = cis_data->min_frame_us_time;
-
+#ifdef CAMERA_REAR2	
+	cis_data->min_sync_frame_us_time = cis_data->min_frame_us_time;
+#endif
 	/* 3. FPS calculation */
 	frame_rate = vt_pix_clk_hz / (pll_info->frame_length_lines * pll_info->line_length_pck);
 	dbg_sensor("frame_rate (%d) = vt_pix_clk_hz(%d) / (pll_info->frame_length_lines(%d) * pll_info->line_length_pck(%d))\n",
@@ -190,6 +195,10 @@ int sensor_3m3_cis_init(struct v4l2_subdev *subdev)
 	struct fimc_is_cis *cis;
 	u32 setfile_index = 0;
 	cis_setting_info setinfo;
+#ifdef USE_CAMERA_HW_BIG_DATA
+	struct cam_hw_param *hw_param = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+#endif
 	setinfo.param = NULL;
 	setinfo.return_value = 0;
 
@@ -207,11 +216,18 @@ int sensor_3m3_cis_init(struct v4l2_subdev *subdev)
 
 	ret = sensor_cis_check_rev(cis);
 	if (ret < 0) {
+#ifdef USE_CAMERA_HW_BIG_DATA
+		sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
+		if (sensor_peri)
+			fimc_is_sec_get_hw_param(&hw_param, sensor_peri->module->position);
+		if (hw_param)
+			hw_param->i2c_sensor_err_cnt++;
+#endif
 		err("sensor_3m3_check_rev is fail");
 		goto p_err;
 	}
-
-	if (cis->cis_data->cis_rev == 0xA1) { // EVT 0.0
+#ifdef SUPPORT_3M3_EVT0P0
+	if (cis->cis_data->cis_rev == 0xA1) { /* EVT 0.0 */
 		probe_info("%s setfile_A\n", __func__);
 		sensor_3m3_global = sensor_3m3_setfile_A_Global;
 		sensor_3m3_global_size = sizeof(sensor_3m3_setfile_A_Global) / sizeof(sensor_3m3_setfile_A_Global[0]);
@@ -219,7 +235,9 @@ int sensor_3m3_cis_init(struct v4l2_subdev *subdev)
 		sensor_3m3_setfile_sizes = sensor_3m3_setfile_A_sizes;
 		sensor_3m3_pllinfos = sensor_3m3_pllinfos_A;
 		sensor_3m3_max_setfile_num = sizeof(sensor_3m3_setfiles_A) / sizeof(sensor_3m3_setfiles_A[0]);
-	} else {    // 0xA2: EVT 0.1 and default
+	} else
+#endif
+	{	/* 0xA2: EVT 0.1 and default */
 		probe_info("%s setfile_B\n", __func__);
 		sensor_3m3_global = sensor_3m3_setfile_B_Global;
 		sensor_3m3_global_size = sizeof(sensor_3m3_setfile_B_Global) / sizeof(sensor_3m3_setfile_B_Global[0]);
@@ -434,7 +452,15 @@ int sensor_3m3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 	}
 
 	client = cis->client;
-	setfile = device->ischain->setfile;
+
+	if (device->ischain) {
+		setfile = device->ischain->setfile;
+	} else {
+		err("device->ischain is null");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
 	info("[3M3] current scenario: 0x%x (rev:0x%x)", setfile, cis->cis_data->cis_rev);
 	if (((setfile & FIMC_IS_SETFILE_MASK) != ISS_SUB_SCENARIO_DUAL_STILL) &&
 		((setfile & FIMC_IS_SETFILE_MASK) != ISS_SUB_SCENARIO_DUAL_VIDEO)) {
@@ -445,7 +471,7 @@ int sensor_3m3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 			ret = fimc_is_sensor_write16(client, 0x6028, 0x2000);
 			ret = fimc_is_sensor_write16(client, 0x602A, 0x4B00);
 			ret = fimc_is_sensor_write16(client, 0x6F12, 0x00A0);
-		} else { // EVT 0.1
+		} /* else { // EVT 0.1
 			ret = fimc_is_sensor_write16(client, 0x30D6, 0x0000);
 			ret = fimc_is_sensor_write16(client, 0x30D8, 0x0000);
 			ret = fimc_is_sensor_write16(client, 0x30D2, 0x0000);
@@ -453,7 +479,7 @@ int sensor_3m3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 			ret = fimc_is_sensor_write16(client, 0x6028, 0x2000);
 			ret = fimc_is_sensor_write16(client, 0x602A, 0x2F34);
 			ret = fimc_is_sensor_write16(client, 0x6F12, 0x00A0);
-		}
+		} */
 		if (ret < 0) {
 			err("sensor_3m3 setting slave mode off failed!!");
 			goto p_err;
@@ -466,16 +492,16 @@ int sensor_3m3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 			ret = fimc_is_sensor_write16(client, 0x6028, 0x2000);						
 			ret = fimc_is_sensor_write16(client, 0x602A, 0x4B00);
 			ret = fimc_is_sensor_write16(client, 0x6F12, 0x0100);
-		}
+		} /*
 		else { // EVT 0.1
 			ret = fimc_is_sensor_write16(client, 0x30D6, 0x0100);
 			ret = fimc_is_sensor_write16(client, 0x30D8, 0x0100);
 			ret = fimc_is_sensor_write16(client, 0x30D2, 0x0004);
 			// 161101 Page setting (add by schwartz.lee)
-			ret = fimc_is_sensor_write16(client, 0x6028, 0x2000);			
+			ret = fimc_is_sensor_write16(client, 0x6028, 0x2000);
 			ret = fimc_is_sensor_write16(client, 0x602A, 0x2F34);
 			ret = fimc_is_sensor_write16(client, 0x6F12, 0x0100);
-		}
+		} */
 		if (ret < 0) {
 			err("sensor_3m3 setting slave mode on failed!!");
 			goto p_err;
@@ -651,6 +677,14 @@ int sensor_3m3_cis_stream_on(struct v4l2_subdev *subdev)
 	struct i2c_client *client;
 	cis_shared_data *cis_data;
 
+#ifdef CAMERA_REAR2
+	struct fimc_is_device_sensor *device = NULL;
+	u32 setfile;
+	u32 scene;
+	bool dual_flag = false;
+	u32 mode;
+#endif
+
 #ifdef DEBUG_SENSOR_TIME
 	struct timeval st, end;
 	do_gettimeofday(&st);
@@ -733,6 +767,42 @@ int sensor_3m3_cis_stream_on(struct v4l2_subdev *subdev)
 #ifdef DEBUG_SENSOR_TIME
 	do_gettimeofday(&end);
 	dbg_sensor("[%s] time %lu us\n", __func__, (end.tv_sec - st.tv_sec)*1000000 + (end.tv_usec - st.tv_usec));
+#endif
+
+#ifdef CAMERA_REAR2
+	device = (struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(subdev);
+	if (unlikely(!device)) {
+		err("device sensor is null");
+		goto p_err;
+	}
+
+	if (device->ischain) {
+		setfile = device->ischain->setfile;
+	} else {
+		err("device->ischain is null");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	scene = (setfile & FIMC_IS_SCENARIO_MASK) >> FIMC_IS_SCENARIO_SHIFT;
+	dual_flag = (scene == FIMC_IS_SCENARIO_AUTO_DUAL);
+	mode = cis_data->sens_config_index_cur;
+	dbg_sensor("[%s] scene=%d, scenario_flag=%d, sens_config_index_cur=%d\n", __func__, scene, dual_flag, mode);
+
+	switch (mode) {
+		case SENSOR_3M3_4032X3024_30FPS:
+		case SENSOR_3M3_4032X2268_30FPS:
+		case SENSOR_3M3_4032X1960_30FPS:
+		case SENSOR_3M3_3024X3024_30FPS:
+			if(dual_flag == true) {
+				cis->cis_data->min_frame_us_time = (u32)((u64)(sensor_3m3_pllinfos[mode]->frame_length_lines + 0xD)
+					* sensor_3m3_pllinfos[mode]->line_length_pck * 1000 / (sensor_3m3_pllinfos[mode]->pclk / 1000));
+				cis->cis_data->min_sync_frame_us_time = cis->cis_data->min_frame_us_time;
+			}
+			break;
+		default:
+			break;
+	}
 #endif
 
 p_err:
@@ -1055,7 +1125,8 @@ int sensor_3m3_cis_adjust_frame_duration(struct v4l2_subdev *subdev,
 
 	vt_pic_clk_freq_mhz = cis_data->pclk / (1000 * 1000);
 	line_length_pck = cis_data->line_length_pck;
-	frame_length_lines = ((vt_pic_clk_freq_mhz * input_exposure_time) / line_length_pck);
+	frame_length_lines = (u32)((((u64)(vt_pic_clk_freq_mhz) * input_exposure_time)
+						- cis_data->min_fine_integration_time) / line_length_pck);	
 	frame_length_lines += cis_data->max_margin_coarse_integration_time;
 
 	frame_duration = (frame_length_lines * line_length_pck) / vt_pic_clk_freq_mhz;
@@ -1196,7 +1267,11 @@ int sensor_3m3_cis_set_frame_rate(struct v4l2_subdev *subdev, u32 min_fps)
 		goto p_err;
 	}
 
+#ifdef CAMERA_REAR2
+	cis_data->min_frame_us_time = MAX(frame_duration, cis_data->min_sync_frame_us_time);
+#else
 	cis_data->min_frame_us_time = frame_duration;
+#endif
 
 #ifdef DEBUG_SENSOR_TIME
 	do_gettimeofday(&end);
@@ -1685,7 +1760,7 @@ int sensor_3m3_cis_set_adjust_sync(struct v4l2_subdev *subdev, u32 sync)
 	}
 
 	/* Adjust Sync */
-	ret = fimc_is_sensor_write16(client, 0x30D7, 0x01);
+	ret = fimc_is_sensor_write8(client, 0x30D7, 0x01);
 p_err:
 	return ret;
 }

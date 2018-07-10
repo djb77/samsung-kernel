@@ -319,6 +319,18 @@ int gpu_control_enable_customization(struct kbase_device *kbdev)
 		return -ENODEV;
 
 #ifdef CONFIG_REGULATOR
+#ifdef CONFIG_SCHED_HMP
+	mutex_lock(&platform->gpu_sched_hmp_lock);
+
+	if (platform->inter_frame_pm_feature == false)
+		platform->inter_frame_pm_status = false;
+	else if (platform->ctx_need_qos == true)
+		platform->inter_frame_pm_status = false;
+	else
+		platform->inter_frame_pm_status = true;
+
+	mutex_unlock(&platform->gpu_sched_hmp_lock);
+#endif
 	if (!platform->dvs_status && !platform->inter_frame_pm_status)
 		return 0;
 

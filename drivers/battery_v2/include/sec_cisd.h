@@ -201,25 +201,6 @@ enum {
 	WC_DATA_MAX,
 };
 
-enum {
-	/* 0x01~1F : Single Port */
-	SNGL_NOBLE = 0x10,
-	SNGL_VEHICLE,
-	SNGL_MINI,
-	SNGL_ZERO,
-	SNGL_DREAM,
-	/* 0x20~2F : Multi Port */
-	/* 0x30~3F : Stand Type */
-	STAND_HERO = 0x30,
-	STAND_DREAM,
-	/* 0x40~4F : External Battery Pack */
-	EXT_PACK = 0x40,
-	EXT_PACK_TA,
-
-	/* 0x50~6F : Reserved */
-	TX_TYPE_MAX = 0x6F,
-};
-
 extern const char *cisd_data_str[];
 extern const char *cisd_wc_data_str[];
 extern const char *cisd_data_str_d[];

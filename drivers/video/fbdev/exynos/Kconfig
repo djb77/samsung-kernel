@@ -29,8 +29,24 @@ config EXYNOS_LCD_S6E8AX0
 	  If you have an S6E8AX0 MIPI AMOLED LCD Panel, say Y to enable its
 	  LCD control driver.
 
+config EXYNOS_DUAL_DISPLAY
+	bool "EXYNOS Dual Display Driver Support."
+	depends on SOC_EXYNOS8895
+	default n
+
+config EXYNOS_SINGLE_DISPLAY
+	bool "EXYNOS Single Display Driver Support."
+	depends on SOC_EXYNOS8895
+	default y
+
 if SOC_EXYNOS8895
+if EXYNOS_SINGLE_DISPLAY
 source "drivers/video/fbdev/exynos/dpu/Kconfig"
 source "drivers/video/fbdev/exynos/panel/Kconfig"
+endif # EXYNOS_SINGLE_DISPLAY
+if EXYNOS_DUAL_DISPLAY
+source "drivers/video/fbdev/exynos/dual_dpu/Kconfig"
+source "drivers/video/fbdev/exynos/dual_panel/Kconfig"
+endif #EXYNOS_DUAL_DISPLAY
 endif # SOC_EXYNOS8895
 endif # EXYNOS_VIDEO

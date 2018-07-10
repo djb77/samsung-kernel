@@ -165,7 +165,7 @@ static int setup_sbd_rb(struct sbd_link_device *sl, struct sbd_ring_buffer *rb,
 	(1) Allocate an array of data buffers in SHMEM.
 	(2) Register the address of each data buffer.
 	*/
-	alloc_size = (rb->len * rb->buff_size);
+	alloc_size = ((u32)rb->len * (u32)rb->buff_size);
 	rb->buff_rgn = (u8 *)buff_alloc(sl, alloc_size);
 	if (!rb->buff_rgn)
 		return -ENOMEM;
@@ -320,7 +320,7 @@ static u8* data_offset_to_buffer(u64 offset, struct sbd_ring_buffer *rb)
 	int buf_offset;
 	u8* buf = NULL;
 
-	if (offset >= 0 && offset < (sl->shmem_size + zmb_size)) {
+	if (offset < (sl->shmem_size + zmb_size)) {
 		buf_offset = offset - NET_HEADROOM;
 		buf = v_zmb + (buf_offset - sl->shmem_size);
 		if (!(buf >= v_zmb && buf < (v_zmb + zmb_size))) {
@@ -365,7 +365,7 @@ static u8* unused_data_offset_to_buffer(u64 offset, struct sbd_ring_buffer *rb)
 	int buf_offset;
 	u8* buf = NULL;
 
-	if (offset >= 0 && offset < (sl->shmem_size + zmb_size)) {
+	if (offset < (sl->shmem_size + zmb_size)) {
 		buf_offset = offset - NET_HEADROOM;
 		buf = v_zmb + (buf_offset - sl->shmem_size);
 		if (!(buf >= v_zmb && buf < (v_zmb + zmb_size))) {
@@ -610,10 +610,12 @@ static void init_ipc_device(struct sbd_link_device *sl, u16 id,
 	rb = &ipc_dev->rb[UL];
 	spin_lock_init(&rb->lock);
 	skb_queue_head_init(&rb->skb_q);
+	atomic_set(&rb->busy, 0);
 
 	rb = &ipc_dev->rb[DL];
 	spin_lock_init(&rb->lock);
 	skb_queue_head_init(&rb->skb_q);
+	atomic_set(&rb->busy, 0);
 }
 
 /**

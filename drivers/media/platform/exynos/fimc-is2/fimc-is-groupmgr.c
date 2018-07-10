@@ -42,6 +42,9 @@
 #include "fimc-is-debug.h"
 #include "fimc-is-hw.h"
 #include "fimc-is-vender.h"
+#ifdef CONFIG_USE_DIRECT_IS_CONTROL
+#include "fimc-is-interface-wrap.h"
+#endif
 #ifdef CONFIG_COMPANION_DIRECT_USE
 #include "fimc-is-interface-sensor.h"
 #include "fimc-is-device-sensor-peri.h"
@@ -215,6 +218,11 @@ static int fimc_is_gframe_check(struct fimc_is_group *gprev,
 			node->vid = 0;
 			goto p_err;
 		}
+/*
+		mrwarn("[V%d][req:%d] the output size is invalid(perframe:%dx%d > subdev:%dx%d)", group, gframe,
+			node->vid, node->request,
+			otcrop->w, otcrop->h, subdev->output.width, subdev->output.height);
+*/
 
 		if ((otcrop->w * otcrop->h) > (subdev->output.width * subdev->output.height)) {
 			mrwarn("[V%d][req:%d] the output size is invalid(perframe:%dx%d > subdev:%dx%d)", group, gframe,
@@ -309,6 +317,65 @@ check_gnext:
 
 	/* set canvas size of next group as output size of currnet group */
 	gframe->canv = *otcrop;
+
+p_err:
+	return ret;
+}
+
+static int fimc_is_frame_check_without_gframe(struct fimc_is_group *group,
+	struct fimc_is_frame *frame)
+{
+	int ret = 0;
+	u32 capture_id;
+	struct fimc_is_device_ischain *device;
+	struct fimc_is_crop *incrop, *otcrop;
+	struct fimc_is_subdev *subdev;
+	struct camera2_node *node;
+
+	BUG_ON(!group);
+	BUG_ON(!group->device);
+	BUG_ON(group->slot >= GROUP_SLOT_MAX);
+
+	device = group->device;
+
+	/*
+	 * perframe check
+	 * 1. perframe size can't exceed s_format size
+	 */
+	incrop = (struct fimc_is_crop *)frame->shot_ext->node_group.leader.input.cropRegion;
+	subdev = &group->leader;
+	if ((incrop->w * incrop->h) > (subdev->input.width * subdev->input.height)) {
+		mrwarn("the input size is invalid(%dx%d > %dx%d)", group, frame,
+			incrop->w, incrop->h, subdev->input.width, subdev->input.height);
+		incrop->w = subdev->input.width;
+		incrop->h = subdev->input.height;
+	}
+
+	for (capture_id = 0; capture_id < CAPTURE_NODE_MAX; ++capture_id) {
+		node = &frame->shot_ext->node_group.capture[capture_id];
+		if (node->vid == 0) /* no effect */
+			continue;
+
+		otcrop = (struct fimc_is_crop *)node->output.cropRegion;
+		subdev = video2subdev(FIMC_IS_ISCHAIN_SUBDEV, (void *)device, node->vid);
+		if (!subdev) {
+			mgerr("subdev is NULL", group, group);
+			ret = -EINVAL;
+			node->request = 0;
+			node->vid = 0;
+			goto p_err;
+		}
+
+		if ((otcrop->w * otcrop->h) > (subdev->output.width * subdev->output.height)) {
+			mrwarn("[V%d][req:%d] the output size is invalid(perframe:%dx%d > subdev:%dx%d)", group, frame,
+				node->vid, node->request,
+				otcrop->w, otcrop->h, subdev->output.width, subdev->output.height);
+			otcrop->w = subdev->output.width;
+			otcrop->h = subdev->output.height;
+		}
+
+		subdev->cid = capture_id;
+	}
 
 p_err:
 	return ret;
@@ -470,7 +537,7 @@ void * fimc_is_gframe_rewind(struct fimc_is_groupmgr *groupmgr,
 	return gframe;
 }
 
-int fimc_is_gframe_flush(struct fimc_is_groupmgr *groupmgr,
+int fimc_is_gframe_flush_all(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_group *group)
 {
 	int ret = 0;
@@ -497,6 +564,39 @@ int fimc_is_gframe_flush(struct fimc_is_groupmgr *groupmgr,
 	return ret;
 }
 
+int fimc_is_gframe_flush(struct fimc_is_groupmgr *groupmgr,
+	struct fimc_is_group *group, int remain)
+{
+	int ret = 0;
+	unsigned long flag;
+	struct fimc_is_group_framemgr *gframemgr;
+	struct fimc_is_group_frame *gframe, *temp;
+
+	BUG_ON(!groupmgr);
+	BUG_ON(!group);
+	BUG_ON(group->instance >= FIMC_IS_STREAM_COUNT);
+
+	gframemgr = &groupmgr->gframemgr[group->instance];
+
+	spin_lock_irqsave(&gframemgr->gframe_slock, flag);
+	if (group->gframe_cnt <= remain) {
+		spin_unlock_irqrestore(&gframemgr->gframe_slock, flag);
+		return 0;
+	}
+
+	list_for_each_entry_safe(gframe, temp, &group->gframe_head, list) {
+		list_del(&gframe->list);
+		group->gframe_cnt--;
+		fimc_is_gframe_s_free(gframemgr, gframe);
+
+		if (group->gframe_cnt == remain)
+			break;
+
+	}
+	spin_unlock_irqrestore(&gframemgr->gframe_slock, flag);
+
+	return ret;
+}
 unsigned long fimc_is_group_lock(struct fimc_is_group *group,
 		enum fimc_is_device_type device_type,
 		bool leader_lock)
@@ -1119,6 +1219,9 @@ int fimc_is_groupmgr_init(struct fimc_is_groupmgr *groupmgr,
 			BUG_ON(group->slot >= GROUP_SLOT_MAX);
 			BUG_ON(next->slot >= GROUP_SLOT_MAX);
 		} else {
+			if (group->id == GROUP_ID_MCS0 || group->id == GROUP_ID_MCS1)
+				source_vid = device->vid_to_vra;
+			else
 			source_vid = 0;
 			path->group[group->slot] = group->id;
 		}
@@ -2206,7 +2309,9 @@ int fimc_is_group_stop(struct fimc_is_groupmgr *groupmgr,
 					mgerr(" waiting(subdev stop) is fail", device, group);
 					errcnt++;
 				}
-			} else if (subdev) {
+
+				clear_bit(FIMC_IS_SUBDEV_RUN, &subdev->state);
+			}
 				/*
 				 *
 				 * For subdev only to be control by driver (no video node)
@@ -2219,13 +2324,13 @@ int fimc_is_group_stop(struct fimc_is_groupmgr *groupmgr,
 				 * In this case, the subdev's function can't be worked.
 				 * Because driver skips the function if it's state is FIMC_IS_SUBDEV_RUN.
 				 */
+			if (subdev)
 				clear_bit(FIMC_IS_SUBDEV_RUN, &subdev->state);
 			}
-		}
 		child = child->child;
 	}
 
-	fimc_is_gframe_flush(groupmgr, group);
+	fimc_is_gframe_flush_all(groupmgr, group);
 
 	if (test_bit(FIMC_IS_GROUP_OTF_INPUT, &group->state))
 		mginfo(" sensor fcount: %d, fcount: %d\n", device, group,
@@ -2306,8 +2411,14 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 		}
 
 		if (!test_bit(FIMC_IS_GROUP_OTF_INPUT, &group->state) &&
-			(framemgr->queued_count[FS_REQUEST] >= DIV_ROUND_UP(framemgr->num_frames, 2)))
+			(framemgr->queued_count[FS_REQUEST] >= DIV_ROUND_UP(framemgr->num_frames, 2))) {
 				mgwarn(" request bufs : %d", device, group, framemgr->queued_count[FS_REQUEST]);
+				frame_manager_print_queues(framemgr);
+				if (test_bit(FIMC_IS_HAL_DEBUG_PILE_REQ_BUF, &sysfs_debug.hal_debug_mode)) {
+					mdelay(sysfs_debug.hal_debug_delay);
+					panic("HAL panic for request bufs");
+				}
+		}
 
 		/* orientation is set by user */
 		orientation = frame->shot->uctl.scalerUd.orientation;
@@ -2446,7 +2557,8 @@ static int fimc_is_group_check_pre(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_group *group,
 	struct fimc_is_group *gnext,
 	struct fimc_is_frame *frame,
-	struct fimc_is_group_frame **result)
+	struct fimc_is_group_frame **result,
+	bool skip_chk_gframe)
 {
 	int ret = 0;
 	struct fimc_is_group *group_leader;
@@ -2470,6 +2582,10 @@ static int fimc_is_group_check_pre(struct fimc_is_groupmgr *groupmgr,
 		ret = -EINVAL;
 		goto p_err;
 	}
+
+	/* skip the gframe check */
+	if (skip_chk_gframe)
+		return fimc_is_frame_check_without_gframe(group, frame);
 
 	spin_lock_irqsave(&gframemgr->gframe_slock, flags);
 
@@ -2698,6 +2814,9 @@ int fimc_is_group_shot(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_group_task *gtask;
 	bool try_sdown = false;
 	bool try_rdown = false;
+	struct fimc_is_core *core;
+	int resol, stream_cnt;
+	bool skip_chk_gframe = false;
 
 	BUG_ON(!groupmgr);
 	BUG_ON(!group);
@@ -2827,6 +2946,14 @@ p_skip_sync:
 		goto p_err_ignore;
 	}
 
+	core = (struct fimc_is_core *)device->interface->core;
+	resol = fimc_is_get_target_resol(device);
+	stream_cnt = fimc_is_get_start_sensor_cnt(core);
+
+	/* HACK: try to flush all remained gframes in Dual UHD */
+	if ((stream_cnt > 1) && (resol >= SIZE_UHD))
+		skip_chk_gframe = true;
+
 	PROGRAM_COUNT(6);
 	gnext = group->gnext;
 	gprev = group->gprev;
@@ -2840,13 +2967,13 @@ p_skip_sync:
 	if (group->pipe_shot_callback)
 		group->pipe_shot_callback(device, group, frame);
 
-	ret = fimc_is_group_check_pre(groupmgr, device, gprev, group, gnext, frame, &gframe);
+	ret = fimc_is_group_check_pre(groupmgr, device, gprev, group, gnext, frame, &gframe, skip_chk_gframe);
 	if (unlikely(ret)) {
 		merr(" fimc_is_group_check_pre is fail(%d)", device, ret);
 		goto p_err_cancel;
 	}
 
-	if (unlikely(!gframe)) {
+	if (!skip_chk_gframe && unlikely(!gframe)) {
 		merr(" gframe is NULL", device);
 		goto p_err_cancel;
 	}
@@ -2867,6 +2994,8 @@ p_skip_sync:
 		goto p_err_cancel;
 	}
 
+	fimc_is_dual_mode_update(device, group, frame);
+
 #ifdef ENABLE_DVFS
 	if ((!pm_qos_request_active(&device->user_qos)) && (sysfs_debug.en_dvfs)) {
 		int scenario_id;
@@ -2874,6 +3003,8 @@ p_skip_sync:
 		mutex_lock(&resourcemgr->dvfs_ctrl.lock);
 
 		/* try to find dynamic scenario to apply */
+		fimc_is_dual_dvfs_update(device, group, frame);
+
 		scenario_id = fimc_is_dvfs_sel_dynamic(device, group);
 		if (scenario_id > 0) {
 			struct fimc_is_dvfs_scenario_ctrl *dynamic_ctrl = resourcemgr->dvfs_ctrl.dynamic_ctrl;
@@ -2899,10 +3030,12 @@ p_skip_sync:
 
 	PROGRAM_COUNT(7);
 
-	ret = fimc_is_group_check_post(groupmgr, device, gprev, group, gnext, frame, gframe);
-	if (unlikely(ret)) {
-		merr(" fimc_is_group_check_post is fail(%d)", device, ret);
-		goto p_err_cancel;
+	if (!skip_chk_gframe) {
+		ret = fimc_is_group_check_post(groupmgr, device, gprev, group, gnext, frame, gframe);
+		if (unlikely(ret)) {
+			merr(" fimc_is_group_check_post is fail(%d)", device, ret);
+			goto p_err_cancel;
+		}
 	}
 
 	fimc_is_itf_grp_shot(device, group, frame);

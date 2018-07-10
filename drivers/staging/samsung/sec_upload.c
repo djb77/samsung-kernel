@@ -11,6 +11,7 @@
 
 #include <linux/kernel.h>
 #include <linux/input.h>
+#include <linux/gpio_keys.h>
 
 #ifndef ARRAYSIZE
 #define ARRAYSIZE(a)		(sizeof(a) / sizeof(a[0]))
@@ -192,20 +193,24 @@ static void reset_count(void)
 	SEC_LOG("");
 }
 
-void check_crash_keys_in_user(unsigned int code, int state)
+static int check_crash_keys_in_user(struct notifier_block *nb,
+				   unsigned long c, void *v)
 {
+	unsigned int code = c;
+	int state = *(int *)v;
+
 	if (!is_crash_keys(code))
-		return;
+		return NOTIFY_DONE;
 
 	if (state == KEY_STATE_DOWN) {
 		/* Duplicated input */
 		if (is_key_state_down(code))
-			return;
+			return NOTIFY_DONE;
 		set_key_state_down(code);
 
 		if (is_hold_key(code)) {
 			set_hold_key_hold(KEY_STATE_DOWN);
-			return;
+			return NOTIFY_DONE;
 		}
 		if (is_hold_key_hold()) {
 			if (is_key_matched_for_current_step(code)) {
@@ -228,5 +233,18 @@ void check_crash_keys_in_user(unsigned int code, int state)
 			reset_count();
 		}
 	}
+	return NOTIFY_OK;
 }
-EXPORT_SYMBOL(check_crash_keys_in_user)
+static struct notifier_block nb_gpio_keys = {
+	.notifier_call = check_crash_keys_in_user
+};
+
+int __init sec_upload_init(void)
+{
+	/* only work for debug level is low */
+	if ((sec_debug_get_debug_level() & 0x1) != 0x1)
+		register_gpio_keys_notifier(&nb_gpio_keys);
+	return 0;
+}
+
+early_initcall(sec_upload_init);

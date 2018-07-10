@@ -447,6 +447,9 @@ static int muic_probe(struct platform_device *pdev)
 	if (pmuic->pdata->init_switch_dev_cb)
 		pmuic->pdata->init_switch_dev_cb();
 
+	if (pmuic->pdata->init_cable_data_collect_cb)
+		pmuic->pdata->init_cable_data_collect_cb();
+
 	pr_info("  switch_sel : 0x%04x\n", get_switch_sel());
 
 	if (!(get_switch_sel() & SWITCH_SEL_RUSTPROOF_MASK)) {
@@ -477,6 +480,7 @@ static int muic_probe(struct platform_device *pdev)
 	pmuic->afc_tsub_disable = false;
 	pmuic->is_ccic_attach = false;
 	pmuic->is_ccic_afc_enable = 0;
+	pmuic->is_ccic_rp56_enable = false;
 #if defined(CONFIG_SEC_FACTORY)
 	f_opmode = pmuic->opmode;
 #endif

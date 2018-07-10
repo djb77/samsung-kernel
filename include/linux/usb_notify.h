@@ -1,12 +1,12 @@
 /*
  *  usb notify header
  *
- * Copyright (C) 2011-2013 Samsung, Inc.
+ * Copyright (C) 2011-2017 Samsung, Inc.
  * Author: Dongrak Shin <dongrak.shin@samsung.com>
  *
 */
 
- /* usb notify layer v2.0 */
+ /* usb notify layer v3.0 */
 
 #ifndef __LINUX_USB_NOTIFY_H__
 #define __LINUX_USB_NOTIFY_H__
@@ -15,6 +15,12 @@
 #include <linux/host_notify.h>
 #include <linux/external_notify.h>
 #include <linux/usblog_proc_notify.h>
+#if defined(CONFIG_USB_HW_PARAM)
+#include <linux/usb_hw_param.h>
+#endif
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+#include <linux/usb.h>
+#endif
 
 enum otg_notify_events {
 	NOTIFY_EVENT_NONE,
@@ -33,6 +39,9 @@ enum otg_notify_events {
 	NOTIFY_EVENT_ALL_DISABLE,
 	NOTIFY_EVENT_HOST_DISABLE,
 	NOTIFY_EVENT_CLIENT_DISABLE,
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+	NOTIFY_EVENT_MDM_ON_OFF,
+#endif
 	NOTIFY_EVENT_OVERCURRENT,
 	NOTIFY_EVENT_SMSC_OVC,
 	NOTIFY_EVENT_SMTD_EXT_CURRENT,
@@ -40,6 +49,7 @@ enum otg_notify_events {
 	NOTIFY_EVENT_DEVICE_CONNECT,
 	NOTIFY_EVENT_GAMEPAD_CONNECT,
 	NOTIFY_EVENT_LANHUB_CONNECT,
+	NOTIFY_EVENT_POWER_SOURCE,
 	NOTIFY_EVENT_VBUSPOWER,
 	NOTIFY_EVENT_VIRTUAL,
 };
@@ -75,6 +85,13 @@ enum otg_notify_block_type {
 	NOTIFY_BLOCK_TYPE_ALL = (1 << 0 | 1 << 1),
 };
 
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+enum otg_notify_mdm_type {
+	NOTIFY_MDM_TYPE_OFF,
+	NOTIFY_MDM_TYPE_ON,
+};
+#endif
+
 enum otg_notify_gpio {
 	NOTIFY_VBUS,
 	NOTIFY_REDRIVER,
@@ -92,42 +109,14 @@ enum ovc_check_value {
 	HNOTIFY_INITIAL,
 };
 
-enum usb_hw_param {
-	USB_CCIC_WATER_INT_COUNT,
-	USB_CCIC_DRY_INT_COUNT,
-	USB_CCIC_I2C_ERROR_COUNT,
-	USB_CCIC_OVC_COUNT,
-	USB_CCIC_OTG_USE_COUNT,
-	USB_CCIC_DP_USE_COUNT,
-	USB_CCIC_VR_USE_COUNT,
-	USB_HOST_SUPER_SPEED_COUNT,
-	USB_HOST_HIGH_SPEED_COUNT,
-	USB_HOST_FULL_SPEED_COUNT,
-	USB_HOST_LOW_SPEED_COUNT,
-	USB_CLIENT_SUPER_SPEED_COUNT,
-	USB_CLIENT_HIGH_SPEED_COUNT,
-	USB_HOST_CLASS_AUDIO_COUNT,
-	USB_HOST_CLASS_COMM_COUNT,
-	USB_HOST_CLASS_HID_COUNT,
-	USB_HOST_CLASS_PHYSICAL_COUNT,
-	USB_HOST_CLASS_IMAGE_COUNT,
-	USB_HOST_CLASS_PRINTER_COUNT,
-	USB_HOST_CLASS_STORAGE_COUNT,
-	USB_HOST_CLASS_HUB_COUNT,
-	USB_HOST_CLASS_CDC_COUNT,
-	USB_HOST_CLASS_CSCID_COUNT,
-	USB_HOST_CLASS_CONTENT_COUNT,
-	USB_HOST_CLASS_VIDEO_COUNT,
-	USB_HOST_CLASS_WIRELESS_COUNT,
-	USB_HOST_CLASS_MISC_COUNT,
-	USB_HOST_CLASS_APP_COUNT,
-	USB_HOST_CLASS_VENDOR_COUNT,
-	USB_CCIC_DEX_USE_COUNT,
-	USB_CCIC_WATER_TIME_DURATION,
-	USB_CCIC_WATER_VBUS_COUNT,
-	USB_CCIC_VBUS_CC_SHORT_COUNT,
-	USB_CCIC_VERSION,
-	USB_CCIC_HW_PARAM_MAX,
+enum otg_notify_power_role {
+	HNOTIFY_SINK,
+	HNOTIFY_SOURCE,
+};
+
+enum otg_notify_data_role {
+	HNOTIFY_UFP,
+	HNOTIFY_DFP,
 };
 
 struct otg_notify {
@@ -140,8 +129,8 @@ struct otg_notify {
 	int booting_delay_sec;
 	int disable_control;
 	int device_check_sec;
+	int pre_peri_delay_us;
 	int speed;
-	unsigned long long hw_param[USB_CCIC_HW_PARAM_MAX];
 	const char *muic_name;
 	int (*pre_gpio)(int gpio, int use);
 	int (*post_gpio)(int gpio, int use);
@@ -156,6 +145,9 @@ struct otg_notify {
 	void (*set_ldo_onoff)(void *,unsigned int);
 	void *o_data;
 	void *u_notify;
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+	int sec_whitelist_enable;
+#endif
 };
 
 struct otg_booster {
@@ -181,6 +173,17 @@ extern struct otg_notify *get_otg_notify(void);
 extern int set_otg_notify(struct otg_notify *n);
 extern void put_otg_notify(struct otg_notify *n);
 extern bool is_blocked(struct otg_notify *n, int type);
+#if defined(CONFIG_USB_HW_PARAM)
+extern unsigned long long *get_hw_param(struct otg_notify *n,
+					enum usb_hw_param index);
+extern int inc_hw_param(struct otg_notify *n,
+					enum usb_hw_param index);
+extern int inc_hw_param_host(struct host_notify_dev *dev,
+					enum usb_hw_param index);
+#endif
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+extern int usb_check_whitelist_for_mdm(struct usb_device *dev);
+#endif
 #else
 static inline const char *event_string(enum otg_notify_events event)
 			{return NULL; }
@@ -203,5 +206,17 @@ static inline struct otg_notify *get_otg_notify(void) {return NULL; }
 static inline int set_otg_notify(struct otg_notify *n) {return 0; }
 static inline void put_otg_notify(struct otg_notify *n) {}
 static inline bool is_blocked(struct otg_notify *n, int type) {return false; }
+#if defined(CONFIG_USB_HW_PARAM)
+static unsigned long long *get_hw_param(struct otg_notify *n,
+			enum usb_hw_param index) {return NULL; }
+static int inc_hw_param(struct otg_notify *n,
+			enum usb_hw_param index) {return 0; }
+static int inc_hw_param_host(struct host_notify_dev *dev,
+			enum usb_hw_param index) {return 0; }
+#endif
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+static inline int usb_check_whitelist_for_mdm(struct usb_device *dev)
+			{return 0; }
+#endif
 #endif
 #endif /* __LINUX_USB_NOTIFY_H__ */

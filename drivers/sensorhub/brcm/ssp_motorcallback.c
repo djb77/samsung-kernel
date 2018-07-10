@@ -15,20 +15,15 @@ int setMotorCallback(int (*callback)(int state))
 void setSensorCallback(bool flag, int duration)
 
 {
-    int current_state = get_current_motor_state();
-    
-    if((flag ==  true && duration >= 20) || (flag == false && current_state))
-    {
-        if (sensorCallback != NULL)
-        {
-            sensorCallback(flag);
-        }
-        else 
-        {
-            pr_debug("%s sensorCallback is null.start\n", __func__);
-            sensorCallback = getMotorCallback();
-            sensorCallback(flag);
-        }
-    }
+	int current_state = get_current_motor_state();
+
+	if ((flag ==  true && duration >= 20) || (flag == false && current_state)) {
+		if (sensorCallback != NULL) {
+			sensorCallback(flag);
+		} else {
+			pr_debug("%s sensorCallback is null.start\n", __func__);
+			sensorCallback = getMotorCallback();
+			sensorCallback(flag);
+		}
+	}
 }
-	

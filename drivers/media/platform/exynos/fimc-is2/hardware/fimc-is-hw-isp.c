@@ -558,6 +558,7 @@ int fimc_is_hw_isp_frame_ndone(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame
 {
 	int ret = 0;
 	int wq_id_ixc, wq_id_ixp, output_id;
+	bool flag_get_meta = true;
 
 	BUG_ON(!hw_ip);
 	BUG_ON(!frame);
@@ -578,20 +579,26 @@ int fimc_is_hw_isp_frame_ndone(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame
 	}
 
 	output_id = ENTRY_IXC;
-	if (test_bit(output_id, &frame->out_flag))
+	if (test_bit(output_id, &frame->out_flag)) {
 		ret = fimc_is_hardware_frame_done(hw_ip, frame, wq_id_ixc,
-				output_id, done_type);
+				output_id, done_type, flag_get_meta);
+		flag_get_meta = false;
+	}
 
 	output_id = ENTRY_IXP;
-	if (test_bit(output_id, &frame->out_flag))
+	if (test_bit(output_id, &frame->out_flag)) {
 		ret = fimc_is_hardware_frame_done(hw_ip, frame, wq_id_ixp,
-				output_id, done_type);
+				output_id, done_type, flag_get_meta);
+		flag_get_meta = false;
+	}
 
 	output_id = FIMC_IS_HW_CORE_END;
-	if (test_bit(hw_ip->id, &frame->core_flag))
+	if (test_bit(hw_ip->id, &frame->core_flag)) {
 		ret = fimc_is_hardware_frame_done(hw_ip, frame, -1,
-				output_id, done_type);
+				output_id, done_type, flag_get_meta);
 
+		flag_get_meta = false;
+	}
 	return ret;
 }
 

@@ -19,6 +19,10 @@
 #include <linux/soc/samsung/exynos-soc.h>
 #include <soc/samsung/acpm_ipc_ctrl.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
+
 extern void (*arm_pm_restart)(enum reboot_mode reboot_mode, const char *cmd);
 static void __iomem *exynos_pmu_base = NULL;
 
@@ -97,6 +101,12 @@ static void dfd_set_dump_gpr(int en)
 			reg_val =
 				DFD_CLEAR_L2RSTDISABLE_MNGS | DFD_CLEAR_DBGL1RSTDISABLE_MNGS |
 				DFD_CLEAR_L2RSTDISABLE_APOLLO | DFD_CLEAR_DBGL1RSTDISABLE_APOLLO;
+#ifdef CONFIG_SEC_DEBUG
+			if ((sec_debug_get_debug_level() & 0x1) == 0x1) {
+				pr_info("Enable DumpGPR for reboot lockup\n");
+				reg_val |= DFD_EDPCSR_DUMP_EN;
+			}
+#endif
 		}
 		writel(reg_val, exynos_pmu_base + EXYNOS_PMU_RESET_SEQUENCER_CONFIGURATION);
 	}

@@ -8,8 +8,8 @@
  * published by the Free Software Foundation.
  */
 
-#ifndef _MADERA_MFD_H
-#define _MADERA_MFD_H
+#ifndef MADERA_MFD_H
+#define MADERA_MFD_H
 
 #include <linux/pm.h>
 #include <linux/of.h>
@@ -32,6 +32,12 @@ static inline unsigned long madera_of_get_type(struct device *dev)
 	return 0;
 }
 #endif
+
+extern const struct regmap_config cs47l15_16bit_spi_regmap;
+extern const struct regmap_config cs47l15_32bit_spi_regmap;
+extern const struct regmap_config cs47l15_16bit_i2c_regmap;
+extern const struct regmap_config cs47l15_32bit_i2c_regmap;
+extern int cs47l15_patch(struct madera *madera);
 
 extern const struct regmap_config cs47l35_16bit_spi_regmap;
 extern const struct regmap_config cs47l35_32bit_spi_regmap;

@@ -4,8 +4,9 @@
 
 #include "abox_util.h"
 
-void __iomem *devm_not_request_and_map(struct platform_device *pdev, const char *name,
-		unsigned int num, phys_addr_t *phys_addr, size_t *size)
+void __iomem *devm_not_request_and_map(struct platform_device *pdev,
+		const char *name, unsigned int num,
+		phys_addr_t *phys_addr, size_t *size)
 {
 	struct resource *res;
 	void __iomem *result;
@@ -15,12 +16,10 @@ void __iomem *devm_not_request_and_map(struct platform_device *pdev, const char 
 		dev_err(&pdev->dev, "Failed to get %s\n", name);
 		return ERR_PTR(-EINVAL);
 	}
-	if (phys_addr) {
+	if (phys_addr)
 		*phys_addr = res->start;
-	}
-	if (size) {
+	if (size)
 		*size = resource_size(res);
-	}
 
 	result = devm_ioremap(&pdev->dev, res->start, resource_size(res));
 	if (IS_ERR_OR_NULL(result)) {
@@ -29,13 +28,15 @@ void __iomem *devm_not_request_and_map(struct platform_device *pdev, const char 
 	}
 
 	dev_dbg(&pdev->dev, "%s: %s(%p) is mapped on %p with size of %zu",
-			__func__, name, (void *)res->start, result, (size_t)resource_size(res));
+			__func__, name, (void *)res->start, result,
+			(size_t)resource_size(res));
 
 	return result;
 }
 
-void __iomem *devm_request_and_map(struct platform_device *pdev, const char *name,
-		unsigned int num, phys_addr_t *phys_addr, size_t *size)
+void __iomem *devm_request_and_map(struct platform_device *pdev,
+		const char *name, unsigned int num,
+		phys_addr_t *phys_addr, size_t *size)
 {
 	struct resource *res;
 	void __iomem *result;
@@ -45,14 +46,13 @@ void __iomem *devm_request_and_map(struct platform_device *pdev, const char *nam
 		dev_err(&pdev->dev, "Failed to get %s\n", name);
 		return ERR_PTR(-EINVAL);
 	}
-	if (phys_addr) {
+	if (phys_addr)
 		*phys_addr = res->start;
-	}
-	if (size) {
+	if (size)
 		*size = resource_size(res);
-	}
 
-	res = devm_request_mem_region(&pdev->dev, res->start, resource_size(res), name);
+	res = devm_request_mem_region(&pdev->dev, res->start,
+			resource_size(res), name);
 	if (IS_ERR_OR_NULL(res)) {
 		dev_err(&pdev->dev, "Failed to request %s\n", name);
 		return ERR_PTR(-EFAULT);
@@ -65,13 +65,14 @@ void __iomem *devm_request_and_map(struct platform_device *pdev, const char *nam
 	}
 
 	dev_dbg(&pdev->dev, "%s: %s(%p) is mapped on %p with size of %zu",
-			__func__, name, (void *)res->start, result, (size_t)resource_size(res));
+			__func__, name, (void *)res->start, result,
+			(size_t)resource_size(res));
 
 	return result;
 }
 
-void __iomem *devm_request_and_map_byname(struct platform_device *pdev, const char *name,
-		phys_addr_t *phys_addr, size_t *size)
+void __iomem *devm_request_and_map_byname(struct platform_device *pdev,
+		const char *name, phys_addr_t *phys_addr, size_t *size)
 {
 	struct resource *res;
 	void __iomem *result;
@@ -81,14 +82,13 @@ void __iomem *devm_request_and_map_byname(struct platform_device *pdev, const ch
 		dev_err(&pdev->dev, "Failed to get %s\n", name);
 		return ERR_PTR(-EINVAL);
 	}
-	if (phys_addr) {
+	if (phys_addr)
 		*phys_addr = res->start;
-	}
-	if (size) {
+	if (size)
 		*size = resource_size(res);
-	}
 
-	res = devm_request_mem_region(&pdev->dev, res->start, resource_size(res), name);
+	res = devm_request_mem_region(&pdev->dev, res->start,
+			resource_size(res), name);
 	if (IS_ERR_OR_NULL(res)) {
 		dev_err(&pdev->dev, "Failed to request %s\n", name);
 		return ERR_PTR(-EFAULT);
@@ -101,12 +101,14 @@ void __iomem *devm_request_and_map_byname(struct platform_device *pdev, const ch
 	}
 
 	dev_dbg(&pdev->dev, "%s: %s(%p) is mapped on %p with size of %zu",
-			__func__, name, (void *)res->start, result, (size_t)resource_size(res));
+			__func__, name, (void *)res->start, result,
+			(size_t)resource_size(res));
 
 	return result;
 }
 
-struct clk *devm_clk_get_and_prepare(struct platform_device *pdev, const char *name)
+struct clk *devm_clk_get_and_prepare(struct platform_device *pdev,
+		const char *name)
 {
 	struct device *dev = &pdev->dev;
 	struct clk *clk;
@@ -131,8 +133,8 @@ error:
 u32 readl_phys(phys_addr_t addr)
 {
 	u32 result;
-
 	void __iomem *virt = ioremap(addr, 0x4);
+
 	result = readl(virt);
 	pr_debug("%pa = %08x\n", &addr, result);
 	iounmap(virt);
@@ -143,6 +145,7 @@ u32 readl_phys(phys_addr_t addr)
 void writel_phys(unsigned int val, phys_addr_t addr)
 {
 	void __iomem *virt = ioremap(addr, 0x4);
+
 	writel(val, virt);
 	pr_debug("%pa <= %08x\n", &addr, val);
 	iounmap(virt);
@@ -150,6 +153,8 @@ void writel_phys(unsigned int val, phys_addr_t addr)
 
 bool is_secure_gic(void)
 {
-	pr_debug("%s: %08x, %08x\n", __func__, readl_phys(0x10000000), readl_phys(0x10000010));
-	return (readl_phys(0x10000000) == 0xE8895000) && (readl_phys(0x10000010) == 0x0);
+	pr_debug("%s: %08x, %08x\n", __func__,
+			readl_phys(0x10000000), readl_phys(0x10000010));
+	return (readl_phys(0x10000000) == 0xE8895000) &&
+			(readl_phys(0x10000010) == 0x0);
 }

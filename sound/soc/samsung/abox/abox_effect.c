@@ -3,7 +3,7 @@
  * ALSA SoC Audio Layer - Samsung Abox Effect driver
  *
  * Copyright (c) 2016 Samsung Electronics Co. Ltd.
-  *
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -32,7 +32,8 @@ struct abox_ctl_eq_switch {
 	unsigned int max;
 };
 
-static int abox_ctl_info(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_info *uinfo)
+static int abox_ctl_info(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_info *uinfo)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct device *dev = codec->dev;
@@ -47,7 +48,8 @@ static int abox_ctl_info(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_info
 	return 0;
 }
 
-static int abox_ctl_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+static int abox_ctl_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct device *dev = codec->dev;
@@ -62,7 +64,8 @@ static int abox_ctl_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value
 	for (i = 0; i < params->count; i++) {
 		unsigned int reg, val;
 
-		reg = params->base + PARAM_OFFSET + (i * sizeof(u32));
+		reg = (unsigned int)(params->base + PARAM_OFFSET +
+				(i * sizeof(u32)));
 		ret = snd_soc_component_read(component,	reg, &val);
 		if (IS_ERR_VALUE(ret)) {
 			dev_err(dev, "reading fail at 0x%08X\n", reg);
@@ -76,7 +79,8 @@ static int abox_ctl_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value
 	return ret;
 }
 
-static int abox_ctl_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+static int abox_ctl_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct device *dev = codec->dev;
@@ -84,16 +88,17 @@ static int abox_ctl_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value
 	struct abox_ctl_eq_switch *params = (void *)kcontrol->private_value;
 	int i;
 
-	dev_dbg(dev, "%s: %s\n", __func__, kcontrol->id.name);
+	dev_info(dev, "%s: %s\n", __func__, kcontrol->id.name);
 
 	pm_runtime_get_sync(dev);
 	for (i = 0; i < params->count; i++) {
 		unsigned int reg, val;
 
-		reg = params->base + PARAM_OFFSET + (i * sizeof(u32));
+		reg = (unsigned int)(params->base + PARAM_OFFSET +
+				(i * sizeof(u32)));
 		val = (unsigned int)ucontrol->value.integer.value[i];
 		snd_soc_component_write(component, reg, val);
-		dev_dbg(dev, "%s[%d] <= %u\n", kcontrol->id.name, i, val);
+		dev_info(dev, "%s[%d] <= %u\n", kcontrol->id.name, i, val);
 	}
 	snd_soc_component_write(component, params->base, CHANGE_BIT);
 	pm_runtime_put_autosuspend(dev);
@@ -128,39 +133,40 @@ static const struct snd_kcontrol_new abox_effect_controls[] = {
 	DECLARE_ABOX_CTL_EQ_SWITCH("NXP RVB param data", NXPRVB_PARAM),
 };
 
-#define ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(name, reg) \
-		(name##_BASE <= reg && reg <= name##_BASE + PARAM_OFFSET + (name##_MAX_COUNT * sizeof(u32)))
+#define ABOX_EFFECT_ACCESSIABLE_REG(name, reg) \
+		(reg >= name##_BASE && reg <= name##_BASE + PARAM_OFFSET + \
+		(name##_MAX_COUNT * sizeof(u32)))
 
 static bool abox_effect_accessible_reg(struct device *dev, unsigned int reg)
 {
-	return ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(SA, reg)			||
-			ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(MYSOUND, reg)	||
-			ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(VSP, reg)		||
-			ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(LRSM, reg)	||
-			ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(MYSPACE, reg)	||
-			ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(BB, reg)		||
-			ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(EQ, reg)		||
-			ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(ELPE, reg)	||
-			ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(NXPBDL, reg)	||
-			ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(NXPRVB_CTX, reg)	||
-			ABOX_EFFECT_ACCESSIABLE_REG_CONDITION(NXPRVB_PARAM, reg);
+	return ABOX_EFFECT_ACCESSIABLE_REG(SA, reg)			||
+			ABOX_EFFECT_ACCESSIABLE_REG(MYSOUND, reg)	||
+			ABOX_EFFECT_ACCESSIABLE_REG(VSP, reg)		||
+			ABOX_EFFECT_ACCESSIABLE_REG(LRSM, reg)		||
+			ABOX_EFFECT_ACCESSIABLE_REG(MYSPACE, reg)	||
+			ABOX_EFFECT_ACCESSIABLE_REG(BB, reg)		||
+			ABOX_EFFECT_ACCESSIABLE_REG(EQ, reg)		||
+			ABOX_EFFECT_ACCESSIABLE_REG(ELPE, reg)		||
+			ABOX_EFFECT_ACCESSIABLE_REG(NXPBDL, reg)	||
+			ABOX_EFFECT_ACCESSIABLE_REG(NXPRVB_CTX, reg)	||
+			ABOX_EFFECT_ACCESSIABLE_REG(NXPRVB_PARAM, reg);
 }
 
-#define ABOX_EFFECT_VOLATILE_REG_CONDITION(name, reg) (name##_BASE == reg)
+#define ABOX_EFFECT_VOLATILE_REG(name, reg) (reg == name##_BASE)
 
 static bool abox_effect_volatile_reg(struct device *dev, unsigned int reg)
 {
-	return ABOX_EFFECT_VOLATILE_REG_CONDITION(SA, reg)			||
-			ABOX_EFFECT_VOLATILE_REG_CONDITION(MYSOUND, reg)	||
-			ABOX_EFFECT_VOLATILE_REG_CONDITION(VSP, reg)		||
-			ABOX_EFFECT_VOLATILE_REG_CONDITION(LRSM, reg)		||
-			ABOX_EFFECT_VOLATILE_REG_CONDITION(MYSPACE, reg)	||
-			ABOX_EFFECT_VOLATILE_REG_CONDITION(BB, reg)		||
-			ABOX_EFFECT_VOLATILE_REG_CONDITION(EQ, reg)		||
-			ABOX_EFFECT_VOLATILE_REG_CONDITION(ELPE, reg)		||
-			ABOX_EFFECT_VOLATILE_REG_CONDITION(NXPBDL, reg)		||
-			ABOX_EFFECT_VOLATILE_REG_CONDITION(NXPRVB_CTX, reg)	||
-			ABOX_EFFECT_VOLATILE_REG_CONDITION(NXPRVB_PARAM, reg);
+	return ABOX_EFFECT_VOLATILE_REG(SA, reg)			||
+			ABOX_EFFECT_VOLATILE_REG(MYSOUND, reg)		||
+			ABOX_EFFECT_VOLATILE_REG(VSP, reg)		||
+			ABOX_EFFECT_VOLATILE_REG(LRSM, reg)		||
+			ABOX_EFFECT_VOLATILE_REG(MYSPACE, reg)		||
+			ABOX_EFFECT_VOLATILE_REG(BB, reg)		||
+			ABOX_EFFECT_VOLATILE_REG(EQ, reg)		||
+			ABOX_EFFECT_VOLATILE_REG(ELPE, reg)		||
+			ABOX_EFFECT_VOLATILE_REG(NXPBDL, reg)		||
+			ABOX_EFFECT_VOLATILE_REG(NXPRVB_CTX, reg)	||
+			ABOX_EFFECT_VOLATILE_REG(NXPRVB_PARAM, reg);
 }
 
 static const struct regmap_config abox_effect_regmap_config = {
@@ -215,7 +221,8 @@ static int abox_effect_runtime_resume(struct device *dev)
 }
 
 const struct dev_pm_ops samsung_abox_effect_pm = {
-	SET_RUNTIME_PM_OPS(abox_effect_runtime_suspend, abox_effect_runtime_resume, NULL)
+	SET_RUNTIME_PM_OPS(abox_effect_runtime_suspend,
+			abox_effect_runtime_resume, NULL)
 };
 
 static int samsung_abox_effect_probe(struct platform_device *pdev)
@@ -228,9 +235,8 @@ static int samsung_abox_effect_probe(struct platform_device *pdev)
 	dev_dbg(dev, "%s\n", __func__);
 
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
-	if (data == NULL) {
+	if (data == NULL)
 		return -ENOMEM;
-	}
 	platform_set_drvdata(pdev, data);
 
 	np_tmp = of_parse_phandle(np, "abox", 0);
@@ -248,13 +254,16 @@ static int samsung_abox_effect_probe(struct platform_device *pdev)
 
 	data->base = devm_not_request_and_map(pdev, "reg", 0, NULL, NULL);
 	if (IS_ERR(data->base)) {
-		dev_err(dev, "base address request failed: %ld\n", PTR_ERR(data->base));
+		dev_err(dev, "base address request failed: %ld\n",
+				PTR_ERR(data->base));
 		return PTR_ERR(data->base);
 	}
 
-	data->regmap = devm_regmap_init_mmio(dev, data->base, &abox_effect_regmap_config);
+	data->regmap = devm_regmap_init_mmio(dev, data->base,
+			&abox_effect_regmap_config);
 	if (IS_ERR(data->regmap)) {
-		dev_err(dev, "regmap init failed: %ld\n", PTR_ERR(data->regmap));
+		dev_err(dev, "regmap init failed: %ld\n",
+				PTR_ERR(data->regmap));
 		return PTR_ERR(data->regmap);
 	}
 

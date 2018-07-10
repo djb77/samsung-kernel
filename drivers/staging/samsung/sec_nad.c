@@ -186,10 +186,591 @@ static ssize_t show_nad_stat(struct device *dev,
 {
     NAD_PRINT("%s\n", __func__);
 
+#if defined(CONFIG_SEC_SUPPORT_SECOND_NAD)
+#if defined(CONFIG_SEC_NAD_HPM)
+    if (!strncasecmp(sec_nad_env.nad_result, "FAIL", 4) && !strncasecmp(sec_nad_env.nad_second_result, "FAIL", 4)) {
+        /* Both of NAD were failed. */
+        return sprintf(buf, "NG_3.1_L_0x%x_0x%x_0x%x_0x%x,IT(%d),MT(%d),"
+                "HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),"
+                "HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),"
+                "HPM_LIT_L%d(%d),HPM_LIT_L%d(%d),HPM_LIT_L%d(%d),HPM_LIT_L%d(%d),HPM_LIT_L%d(%d),HPM_LIT_L%d(%d),"
+                "HPM_G3D_L%d(%d),HPM_G3D_L%d(%d),HPM_G3D_L%d(%d),HPM_G3D_L%d(%d),"
+                "HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),"
+                "HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),"
+                "HPM_INVALID(%d),HPM_PASS_FAIL(%d),"
+                "LOTID(%s),TBL_VER(%d),BIG_G(%d),LIT_G(%d),G3D_G(%d),MIF_G(%d),"
+                "HPM_BIG_DATA(%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;"
+                "%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d),"
+                "HPM_LIT_DATA(%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;"
+                "%d_%d_%d_%d_%d;%d_%d_%d_%d_%d),"
+                "HPM_G3D_DATA(%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d),"
+                "HPM_MIF_DATA(%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;"
+                "%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d),"
+                "DAS(%s),BLOCK(%s),"
+                "FN(%s_%s_%d_%s),FD(0x%08llx_0x%08llx_0x%08llx),"
+                "FNS(%s_%s_%d_%s),FDS(0x%08llx_0x%08llx_0x%08llx)\n",
+                sec_nad_env.nad_data,
+                sec_nad_env.nad_inform2_data,
+                sec_nad_env.nad_second_data,
+                sec_nad_env.nad_second_inform2_data,
+                sec_nad_env.nad_init_temperature,
+                sec_nad_env.max_temperature,
+                /* Start HPM */
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].level,
+                sec_nad_env.hpm_min_diff_level_big[0],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].level,
+                sec_nad_env.hpm_min_diff_level_big[1],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].level,
+                sec_nad_env.hpm_min_diff_level_big[2],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].level,
+                sec_nad_env.hpm_min_diff_level_big[3],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].level,
+                sec_nad_env.hpm_min_diff_level_big[4],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].level,
+                sec_nad_env.hpm_min_diff_level_big[5],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].level,
+                sec_nad_env.hpm_min_diff_level_big[6],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].level,
+                sec_nad_env.hpm_min_diff_level_big[7],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].level,
+                sec_nad_env.hpm_min_diff_level_big[8],
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].level,
+                sec_nad_env.hpm_min_diff_level_lit[0],
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].level,
+                sec_nad_env.hpm_min_diff_level_lit[1],
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].level,
+                sec_nad_env.hpm_min_diff_level_lit[2],
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].level,
+                sec_nad_env.hpm_min_diff_level_lit[3],
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].level,
+                sec_nad_env.hpm_min_diff_level_lit[4],
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].level,
+                sec_nad_env.hpm_min_diff_level_lit[5],
+
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].level,
+                sec_nad_env.hpm_min_diff_level_g3d[0],
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].level,
+                sec_nad_env.hpm_min_diff_level_g3d[1],
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].level,
+                sec_nad_env.hpm_min_diff_level_g3d[2],
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].level,
+                sec_nad_env.hpm_min_diff_level_g3d[3],
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].level,
+                sec_nad_env.hpm_min_diff_level_mif[0],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].level,
+                sec_nad_env.hpm_min_diff_level_mif[1],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].level,
+                sec_nad_env.hpm_min_diff_level_mif[2],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].level,
+                sec_nad_env.hpm_min_diff_level_mif[3],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].level,
+                sec_nad_env.hpm_min_diff_level_mif[4],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].level,
+                sec_nad_env.hpm_min_diff_level_mif[5],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].level,
+                sec_nad_env.hpm_min_diff_level_mif[6],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].level,
+                sec_nad_env.hpm_min_diff_level_mif[7],
+
+                sec_nad_env.nad_hpm_info.hpm_invalid,
+                sec_nad_env.nad_hpm_info.device_pass_fail,
+                sec_nad_env.nad_hpm_info.LotID,
+                sec_nad_env.nad_hpm_info.asv_table_ver,
+                sec_nad_env.nad_hpm_info.big_grp,
+                sec_nad_env.nad_hpm_info.lit_grp,
+                sec_nad_env.nad_hpm_info.g3d_grp,
+                sec_nad_env.nad_hpm_info.mif_grp,
+                // BIG
+                sec_nad_env.nad_hpm_info.hpm_info[0].block_pass_fail,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].pba_hpm_min,
+                // Little
+                sec_nad_env.nad_hpm_info.hpm_info[1].block_pass_fail,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].pba_hpm_min,
+                //G3D
+                sec_nad_env.nad_hpm_info.hpm_info[2].block_pass_fail,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].level,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].level,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].level,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].level,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].pba_hpm_min,
+                //MIF
+                sec_nad_env.nad_hpm_info.hpm_info[3].block_pass_fail,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].pba_hpm_min,
+                /* End of HPM */
+                sec_nad_env.nad_second_fail_info.das_string,
+                sec_nad_env.nad_second_fail_info.block_string,
+                sec_nad_env.nad_fail_info.das_string,
+                sec_nad_env.nad_fail_info.block_string,
+                sec_nad_env.nad_fail_info.level,
+                sec_nad_env.nad_fail_info.vector_string,
+                sec_nad_env.nad_dram_fail_information.nad_dram_fail_info[0].target_addr,
+                sec_nad_env.nad_dram_fail_information.nad_dram_fail_info[0].read_val,
+                sec_nad_env.nad_dram_fail_information.nad_dram_fail_info[0].expected_val,
+                sec_nad_env.nad_second_fail_info.das_string,
+                sec_nad_env.nad_second_fail_info.block_string,
+                sec_nad_env.nad_second_fail_info.level,
+                sec_nad_env.nad_second_fail_info.vector_string,
+                sec_nad_env.nad_second_dram_fail_information.nad_dram_fail_info[0].target_addr,
+                sec_nad_env.nad_second_dram_fail_information.nad_dram_fail_info[0].read_val,
+                sec_nad_env.nad_second_dram_fail_information.nad_dram_fail_info[0].expected_val);
+    } else {
+        return sprintf(buf, "OK_3.1_L_0x%x_0x%x_0x%x_0x%x,IT(%d),MT(%d),"
+                "HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),"
+                "HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),HPM_BIG_L%d(%d),"
+                "HPM_LIT_L%d(%d),HPM_LIT_L%d(%d),HPM_LIT_L%d(%d),HPM_LIT_L%d(%d),HPM_LIT_L%d(%d),HPM_LIT_L%d(%d),"
+                "HPM_G3D_L%d(%d),HPM_G3D_L%d(%d),HPM_G3D_L%d(%d),HPM_G3D_L%d(%d),"
+                "HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),"
+                "HPM_MIF_L%d(%d),HPM_MIF_L%d(%d),"                
+                "HPM_INVALID(%d),HPM_PASS_FAIL(%d),"
+                "LOTID(%s),TBL_VER(%d),BIG_G(%d),LIT_G(%d),G3D_G(%d),MIF_G(%d),"
+                "HPM_BIG_DATA(%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;"
+                "%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d),"
+                "HPM_LIT_DATA(%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;"
+                "%d_%d_%d_%d_%d;%d_%d_%d_%d_%d),"
+                "HPM_G3D_DATA(%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d),"
+                "HPM_MIF_DATA(%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;"
+                "%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d;%d_%d_%d_%d_%d),"
+                "OT(0x%x),TN(%d)\n",
+                sec_nad_env.nad_data,
+                sec_nad_env.nad_inform2_data,
+                sec_nad_env.nad_second_data,
+                sec_nad_env.nad_second_inform2_data,
+                sec_nad_env.nad_init_temperature,
+                sec_nad_env.max_temperature,
+                /* Start HPM */
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].level,
+                sec_nad_env.hpm_min_diff_level_big[0],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].level,
+                sec_nad_env.hpm_min_diff_level_big[1],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].level,
+                sec_nad_env.hpm_min_diff_level_big[2],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].level,
+                sec_nad_env.hpm_min_diff_level_big[3],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].level,
+                sec_nad_env.hpm_min_diff_level_big[4],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].level,
+                sec_nad_env.hpm_min_diff_level_big[5],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].level,
+                sec_nad_env.hpm_min_diff_level_big[6],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].level,
+                sec_nad_env.hpm_min_diff_level_big[7],
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].level,
+                sec_nad_env.hpm_min_diff_level_big[8],
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].level,
+                sec_nad_env.hpm_min_diff_level_lit[0],
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].level,
+                sec_nad_env.hpm_min_diff_level_lit[1],
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].level,
+                sec_nad_env.hpm_min_diff_level_lit[2],
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].level,
+                sec_nad_env.hpm_min_diff_level_lit[3],
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].level,
+                sec_nad_env.hpm_min_diff_level_lit[4],
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].level,
+                sec_nad_env.hpm_min_diff_level_lit[5],
+
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].level,
+                sec_nad_env.hpm_min_diff_level_g3d[0],
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].level,
+                sec_nad_env.hpm_min_diff_level_g3d[1],
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].level,
+                sec_nad_env.hpm_min_diff_level_g3d[2],
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].level,
+                sec_nad_env.hpm_min_diff_level_g3d[3],
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].level,
+                sec_nad_env.hpm_min_diff_level_mif[0],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].level,
+                sec_nad_env.hpm_min_diff_level_mif[1],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].level,
+                sec_nad_env.hpm_min_diff_level_mif[2],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].level,
+                sec_nad_env.hpm_min_diff_level_mif[3],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].level,
+                sec_nad_env.hpm_min_diff_level_mif[4],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].level,
+                sec_nad_env.hpm_min_diff_level_mif[5],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].level,
+                sec_nad_env.hpm_min_diff_level_mif[6],
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].level,
+                sec_nad_env.hpm_min_diff_level_mif[7],
+
+                sec_nad_env.nad_hpm_info.hpm_invalid,
+                sec_nad_env.nad_hpm_info.device_pass_fail,
+                sec_nad_env.nad_hpm_info.LotID,
+                sec_nad_env.nad_hpm_info.asv_table_ver,
+                sec_nad_env.nad_hpm_info.big_grp,
+                sec_nad_env.nad_hpm_info.lit_grp,
+                sec_nad_env.nad_hpm_info.g3d_grp,
+                sec_nad_env.nad_hpm_info.mif_grp,
+                // BIG
+                sec_nad_env.nad_hpm_info.hpm_info[0].block_pass_fail,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[0].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[1].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[2].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[3].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[4].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[5].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[6].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[7].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].level,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[0].hpm_level_info[8].pba_hpm_min,
+                // Little
+                sec_nad_env.nad_hpm_info.hpm_info[1].block_pass_fail,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[0].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[1].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[2].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[3].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[4].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].level,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[1].hpm_level_info[5].pba_hpm_min,
+                //G3D
+                sec_nad_env.nad_hpm_info.hpm_info[2].block_pass_fail,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].level,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[0].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].level,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[1].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].level,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[2].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].level,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[2].hpm_level_info[3].pba_hpm_min,
+                //MIF
+                sec_nad_env.nad_hpm_info.hpm_info[3].block_pass_fail,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[0].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[1].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[2].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[3].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[4].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[5].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[6].pba_hpm_min,
+
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].level,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].fused_hpm,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].pba_hpm_ave,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].pba_hpm_var,
+                sec_nad_env.nad_hpm_info.hpm_info[3].hpm_level_info[7].pba_hpm_min,
+                /* End of HPM */
+                sec_nad_env.nad_inform3_data,
+                sec_nad_env.nad_inform3_data & 0xFF);
+    }
+#else
+    if (!strncasecmp(sec_nad_env.nad_result, "FAIL", 4) && !strncasecmp(sec_nad_env.nad_second_result, "FAIL", 4)) {
+        /* Both of NAD were failed. */
+        return sprintf(buf, "NG_3.0_L_0x%x_0x%x_0x%x_0x%x,%d,%d,HPM(NULL),%s,%s,"
+                "FN(%s_%s_%d_%s),FD(0x%08llx_0x%08llx_0x%08llx),"
+                "FNS(%s_%s_%d_%s),FDS(0x%08llx_0x%08llx_0x%08llx)\n",
+                sec_nad_env.nad_data,
+                sec_nad_env.nad_inform2_data,
+                sec_nad_env.nad_second_data,
+                sec_nad_env.nad_second_inform2_data,
+                sec_nad_env.nad_init_temperature,
+                sec_nad_env.max_temperature,
+                sec_nad_env.nad_second_fail_info.das_string,
+                sec_nad_env.nad_second_fail_info.block_string,
+                sec_nad_env.nad_fail_info.das_string,
+                sec_nad_env.nad_fail_info.block_string,
+                sec_nad_env.nad_fail_info.level,
+                sec_nad_env.nad_fail_info.vector_string,
+                sec_nad_env.nad_dram_fail_information.nad_dram_fail_info[0].target_addr,
+                sec_nad_env.nad_dram_fail_information.nad_dram_fail_info[0].read_val,
+                sec_nad_env.nad_dram_fail_information.nad_dram_fail_info[0].expected_val,
+                sec_nad_env.nad_second_fail_info.das_string,
+                sec_nad_env.nad_second_fail_info.block_string,
+                sec_nad_env.nad_second_fail_info.level,
+                sec_nad_env.nad_second_fail_info.vector_string,
+                sec_nad_env.nad_second_dram_fail_information.nad_dram_fail_info[0].target_addr,
+                sec_nad_env.nad_second_dram_fail_information.nad_dram_fail_info[0].read_val,
+                sec_nad_env.nad_second_dram_fail_information.nad_dram_fail_info[0].expected_val);
+    } else {
+        return sprintf(buf, "OK_3.0_L_0x%x_0x%x_0x%x_0x%x,%d,%d,HPM(NULL),OT(0x%x)\n",
+                sec_nad_env.nad_data,
+                sec_nad_env.nad_inform2_data,
+                sec_nad_env.nad_second_data,
+                sec_nad_env.nad_second_inform2_data,
+                sec_nad_env.nad_init_temperature,
+                sec_nad_env.max_temperature,
+                sec_nad_env.nad_inform3_data);
+    }
+#endif
+#else
     if (!strncasecmp(sec_nad_env.nad_result, "FAIL", 4))
         return sprintf(buf, "NG_2.0_0x%x,T(%d)\n", sec_nad_env.nad_data, sec_nad_env.max_temperature);
     else
         return sprintf(buf, "OK_2.0_0x%x,T(%d)\n", sec_nad_env.nad_data, sec_nad_env.max_temperature);
+#endif
 }
 static DEVICE_ATTR(nad_stat, S_IRUGO, show_nad_stat, NULL);
 
@@ -201,6 +782,20 @@ static ssize_t store_nad_erase(struct device *dev,
 
     if (!strncmp(buf, "erase", 5)) {
         strncpy(sec_nad_env.nad_factory, "GAP",3);
+#if defined(CONFIG_SEC_SUPPORT_SECOND_NAD)
+        strncpy(sec_nad_env.nad_second, "DUMM",4);
+#endif
+#if defined(CONFIG_SEC_NAD_HPM)
+        /* Initialize NAD HPM data */
+        memset(&sec_nad_env.nad_hpm_info, 0, sizeof(nad_hpm));
+        memset(&sec_nad_env.hpm_min_diff_level_big, 0, sizeof(sec_nad_env.hpm_min_diff_level_big));
+        memset(&sec_nad_env.hpm_min_diff_level_lit, 0, sizeof(sec_nad_env.hpm_min_diff_level_lit));
+        memset(&sec_nad_env.hpm_min_diff_level_g3d, 0, sizeof(sec_nad_env.hpm_min_diff_level_g3d));
+        memset(&sec_nad_env.hpm_min_diff_level_mif, 0, sizeof(sec_nad_env.hpm_min_diff_level_mif));
+#endif
+#if defined(CONFIG_SEC_NAD_API)
+        sec_nad_env.nad_api_status = 0;
+#endif
         ret = sec_set_nad_param(NAD_PARAM_WRITE);
         if (ret < 0)
             pr_err("%s: write error! %d\n", __func__, ret);
@@ -230,6 +825,91 @@ static ssize_t show_nad_acat(struct device *dev,
 {
     NAD_PRINT("%s\n", __func__);
 
+#if defined(CONFIG_SEC_SUPPORT_SECOND_NAD)
+#if defined(CONFIG_SEC_NAD_HPM)
+    /* Check status if ACAT NAD was excuted */
+    if(sec_nad_env.current_nad_status >= NAD_ACAT_FLAG) {
+        if (!strncasecmp(sec_nad_env.nad_acat_result, "FAIL", 4) && !strncasecmp(sec_nad_env.nad_acat_second_result, "FAIL", 4)) {
+            return sprintf(buf, "NG_3.0_L_0x%x_0x%x_0x%x_0x%x,%d,%d,HPM(NULL),%s,%s,"
+                    "FN(%s_%s_%d_%s),FD(0x%08llx_0x%08llx_0x%08llx),"
+                    "FNS(%s_%s_%d_%s),FDS(0x%08llx_0x%08llx_0x%08llx)\n",
+                    sec_nad_env.nad_acat_data,
+                    sec_nad_env.nad_acat_inform2_data,
+                    sec_nad_env.nad_acat_second_data,
+                    sec_nad_env.nad_acat_second_inform2_data,
+                    sec_nad_env.nad_acat_init_temperature,
+                    sec_nad_env.nad_acat_max_temperature,
+                    sec_nad_env.nad_acat_second_fail_info.das_string,
+                    sec_nad_env.nad_acat_second_fail_info.block_string,
+                    sec_nad_env.nad_acat_fail_info.das_string,
+                    sec_nad_env.nad_acat_fail_info.block_string,
+                    sec_nad_env.nad_acat_fail_info.level,
+                    sec_nad_env.nad_acat_fail_info.vector_string,
+                    sec_nad_env.nad_acat_dram_fail_information.nad_dram_fail_info[0].target_addr,
+                    sec_nad_env.nad_acat_dram_fail_information.nad_dram_fail_info[0].read_val,
+                    sec_nad_env.nad_acat_dram_fail_information.nad_dram_fail_info[0].expected_val,
+                    sec_nad_env.nad_acat_second_fail_info.das_string,
+                    sec_nad_env.nad_acat_second_fail_info.block_string,
+                    sec_nad_env.nad_acat_second_fail_info.level,
+                    sec_nad_env.nad_acat_second_fail_info.vector_string,
+                    sec_nad_env.nad_acat_second_dram_fail_information.nad_dram_fail_info[0].target_addr,
+                    sec_nad_env.nad_acat_second_dram_fail_information.nad_dram_fail_info[0].read_val,
+                    sec_nad_env.nad_acat_second_dram_fail_information.nad_dram_fail_info[0].expected_val);
+        } else {
+            return sprintf(buf, "OK_3.0_L_0x%x_0x%x_0x%x_0x%x,%d,%d,HPM(NULL),OT(0x%x)\n",
+                    sec_nad_env.nad_acat_data,
+                    sec_nad_env.nad_acat_inform2_data,
+                    sec_nad_env.nad_acat_second_data,
+                    sec_nad_env.nad_acat_second_inform2_data,
+                    sec_nad_env.nad_acat_init_temperature,
+                    sec_nad_env.nad_acat_max_temperature,
+                    sec_nad_env.nad_acat_inform3_data);
+        }
+    } else
+        return sprintf(buf, "NO_3.0_L_NADTEST\n");
+#else
+    /* Check status if ACAT NAD was excuted */
+    if(sec_nad_env.current_nad_status >= NAD_ACAT_FLAG) {
+        if (!strncasecmp(sec_nad_env.nad_acat_result, "FAIL", 4) && !strncasecmp(sec_nad_env.nad_acat_second_result, "FAIL", 4)) {
+            return sprintf(buf, "NG_3.0_L_0x%x_0x%x_0x%x_0x%x,%d,%d,HPM(NULL),%s,%s,"
+                    "FN(%s_%s_%d_%s),FD(0x%08llx_0x%08llx_0x%08llx),"
+                    "FNS(%s_%s_%d_%s),FDS(0x%08llx_0x%08llx_0x%08llx)\n",
+                    sec_nad_env.nad_acat_data,
+                    sec_nad_env.nad_acat_inform2_data,
+                    sec_nad_env.nad_acat_second_data,
+                    sec_nad_env.nad_acat_second_inform2_data,
+                    sec_nad_env.nad_acat_init_temperature,
+                    sec_nad_env.nad_acat_max_temperature,
+                    sec_nad_env.nad_acat_second_fail_info.das_string,
+                    sec_nad_env.nad_acat_second_fail_info.block_string,
+                    sec_nad_env.nad_acat_fail_info.das_string,
+                    sec_nad_env.nad_acat_fail_info.block_string,
+                    sec_nad_env.nad_acat_fail_info.level,
+                    sec_nad_env.nad_acat_fail_info.vector_string,
+                    sec_nad_env.nad_acat_dram_fail_information.nad_dram_fail_info[0].target_addr,
+                    sec_nad_env.nad_acat_dram_fail_information.nad_dram_fail_info[0].read_val,
+                    sec_nad_env.nad_acat_dram_fail_information.nad_dram_fail_info[0].expected_val,
+                    sec_nad_env.nad_acat_second_fail_info.das_string,
+                    sec_nad_env.nad_acat_second_fail_info.block_string,
+                    sec_nad_env.nad_acat_second_fail_info.level,
+                    sec_nad_env.nad_acat_second_fail_info.vector_string,
+                    sec_nad_env.nad_acat_second_dram_fail_information.nad_dram_fail_info[0].target_addr,
+                    sec_nad_env.nad_acat_second_dram_fail_information.nad_dram_fail_info[0].read_val,
+                    sec_nad_env.nad_acat_second_dram_fail_information.nad_dram_fail_info[0].expected_val);
+        } else {
+            return sprintf(buf, "OK_3.0_L_0x%x_0x%x_0x%x_0x%x,%d,%d,HPM(NULL),OT(0x%x)\n",
+                    sec_nad_env.nad_acat_data,
+                    sec_nad_env.nad_acat_inform2_data,
+                    sec_nad_env.nad_acat_second_data,
+                    sec_nad_env.nad_acat_second_inform2_data,
+                    sec_nad_env.nad_acat_init_temperature,
+                    sec_nad_env.nad_acat_max_temperature,
+                    sec_nad_env.nad_acat_inform3_data);
+        }
+    } else
+        return sprintf(buf, "NO_3.0_L_NADTEST\n");
+#endif
+#else
     /* Check status if ACAT NAD was excuted */
     if(sec_nad_env.current_nad_status == NAD_ACAT_FLAG) {
         if (!strncasecmp(sec_nad_env.nad_acat_result, "FAIL", 4))
@@ -238,6 +918,7 @@ static ssize_t show_nad_acat(struct device *dev,
             return sprintf(buf, "OK_ACAT_0x%x,T(%d)\n", sec_nad_env.nad_acat_data, sec_nad_env.nad_acat_max_temperature);
     } else
         return sprintf(buf, "NO_ACAT_NADTEST\n");
+#endif
 }
 
 static ssize_t store_nad_acat(struct device *dev,
@@ -283,6 +964,12 @@ static ssize_t store_nad_acat(struct device *dev,
             NAD_PRINT("ACAT NAD test command.\n");
 
             strncpy(sec_nad_env.nad_acat, "ACAT",4);
+#if defined(CONFIG_SEC_SUPPORT_SECOND_NAD)
+            strncpy(sec_nad_env.nad_acat_second, "DUMM",4);
+            sec_nad_env.nad_acat_second_running_count = 0;
+            sec_nad_env.acat_fail_retry_count = 0;
+            sec_nad_env.nad_acat_real_count = 0;
+#endif
             sec_nad_env.nad_acat_data = 0;
             sec_nad_env.nad_acat_real_count = 0;
             sec_nad_env.current_nad_status = 0;
@@ -384,6 +1071,49 @@ static ssize_t show_nad_support(struct device *dev,
         return sprintf(buf, "NOT_SUPPORT\n");
 }
 static DEVICE_ATTR(nad_support, S_IRUGO, show_nad_support, NULL);
+
+
+#if defined(CONFIG_SEC_NAD_API)
+static void make_result_data_to_string(void)
+{
+    int i = 0;
+
+    NAD_PRINT("%s : api total count(%d)\n", __func__, sec_nad_env.nad_api_total_count);
+
+    /* Make result string if array is empty */
+    if(!strlen(nad_api_result_string)) {
+        for(i = 0; i < sec_nad_env.nad_api_total_count; i++) {
+            NAD_PRINT("%s : name(%s) result(%d)\n", __func__, 
+                    sec_nad_env.nad_api_info[i].name, sec_nad_env.nad_api_info[i].result);
+            /* Failed gpio test */
+            if(sec_nad_env.nad_api_info[i].result) {
+                strcat(nad_api_result_string, sec_nad_env.nad_api_info[i].name);
+                strcat(nad_api_result_string, ",");
+            }
+        }
+        nad_api_result_string[strlen(nad_api_result_string)-1] = '\0';
+    }
+}
+
+static ssize_t show_nad_api(struct device *dev,
+        struct device_attribute *attr,
+        char *buf)
+{
+    NAD_PRINT("%s\n", __func__);
+
+    /* Check nad api running status */
+    if(sec_nad_env.nad_api_status == MAGIC_NAD_API_SUCCESS) {
+        if(sec_nad_env.nad_api_magic == MAGIC_NAD_API_SUCCESS)
+            return sprintf(buf, "OK_%d\n", sec_nad_env.nad_api_total_count);
+        else {
+            make_result_data_to_string();
+            return sprintf(buf, "NG_%d,%s\n", sec_nad_env.nad_api_total_count, nad_api_result_string);
+        }
+    } else
+        return sprintf(buf, "NONE\n");
+}
+static DEVICE_ATTR(nad_api, S_IRUGO, show_nad_api, NULL);
+#endif
 #endif
 
 static int __init sec_nad_init(void)
@@ -440,6 +1170,14 @@ static int __init sec_nad_init(void)
         pr_err("%s: Failed to create device file\n", __func__);
         goto err_create_nad_sysfs;
     }
+
+#if defined(CONFIG_SEC_NAD_API)
+    ret = device_create_file(sec_nad, &dev_attr_nad_api); 
+    if(ret) {
+        pr_err("%s: Failed to create device file\n", __func__);
+        goto err_create_nad_sysfs;
+    }
+#endif
 
     /* Initialize nad param struct */
     sec_nad_param_data.offset = NAD_ENV_OFFSET;

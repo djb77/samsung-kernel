@@ -176,11 +176,7 @@ int sensor_ak7372_actuator_init(struct v4l2_subdev *subdev, u32 val)
 #ifdef USE_CAMERA_HW_BIG_DATA
 		device = v4l2_get_subdev_hostdata(subdev);
 		if (device) {
-			if (device->position == SENSOR_POSITION_REAR) {
-				fimc_is_sec_get_rear_hw_param(&hw_param);
-			} else if (device->position == SENSOR_POSITION_FRONT) {
-				fimc_is_sec_get_front_hw_param(&hw_param);
-			}
+			fimc_is_sec_get_hw_param(&hw_param, device->position);
 		}
 		if (hw_param)
 			hw_param->i2c_af_err_cnt++;

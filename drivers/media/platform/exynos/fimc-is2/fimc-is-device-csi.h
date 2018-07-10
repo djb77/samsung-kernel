@@ -22,8 +22,8 @@
 #define CSI_CH_TO_ENTRY(id) (id + ENTRY_SSVC0) /* range : ENTRY_SSVC0 ~ ENTRY_SSVC3 */
 
 /* for use multi buffering */
-#define CSI_GET_PREV_FRAMEPTR(frameptr, num_frames) \
-	((frameptr) == 0 ? (num_frames) - 1: (cur_frameptr) - 1)
+#define CSI_GET_PREV_FRAMEPTR(frameptr, num_frames, offset) \
+	((frameptr) == 0 ? (num_frames) - offset : (frameptr) - offset)
 #define CSI_GET_NEXT_FRAMEPTR(frameptr, num_frames) \
 	(((frameptr) + 1) % num_frames)
 

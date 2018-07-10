@@ -977,6 +977,7 @@ struct fimc_is_preproc_cfg config_preproc_sensor_imx320[] = {
 	FIMC_IS_PREPROC_CFG(1632, 1224, 30, 16), 	/* 2x2 binning mode 4:3 */
 	FIMC_IS_PREPROC_CFG(1224, 1224, 30, 17), 	/* 2x2 binning mode 1:1 */
 	FIMC_IS_PREPROC_CFG(800, 600, 120, 18), 	/* 4x4 binning mode 4:3 */
+	FIMC_IS_PREPROC_CFG(3264, 1592, 30, 19), 	/* 18.5:9 */
 };
 
 struct fimc_is_preproc_cfg config_preproc_sensor_3H1[] = {
@@ -988,6 +989,7 @@ struct fimc_is_preproc_cfg config_preproc_sensor_3H1[] = {
 	FIMC_IS_PREPROC_CFG(1632, 1224, 30, 16), 	/* 2x2 binning mode 4:3 */
 	FIMC_IS_PREPROC_CFG(1224, 1224, 30, 17), 	/* 2x2 binning mode 1:1 */
 	FIMC_IS_PREPROC_CFG(800, 600, 120, 18), 	/* 4x4 binning mode 4:3 */
+	FIMC_IS_PREPROC_CFG(3264, 1592, 30, 19), 	/* 18.5:9 */
 };
 
 struct fimc_is_preproc_cfg *config_preproc_sensor[] = {
@@ -1381,12 +1383,23 @@ static bool C73C3_IsPafStatEnableMode(cis_shared_data *cis_data)
 		}
 		break;
 	case SENSOR_NAME_S5K2L2:
-		if (mode <= C73C3_S5K2L2_CONFIG_6048X3024_30 || mode > C73C3_S5K2L2_CONFIG_1008X756_120) {
+		if (mode <= C73C3_S5K2L2_CONFIG_6048X3024_30 || mode > C73C3_S5K2L2_CONFIG_1008X756_120  
+#ifdef USE_BINNING_PAF			
+		    || mode == C73C3_S5K2L2_CONFIG_2016X1134_30 || mode == C73C3_S5K2L2_CONFIG_2016X1512_30 
+		    || mode == C73C3_S5K2L2_CONFIG_1504X1504_30
+#endif
+			){
 			bRes = true;
 		}
 		break;
 	case SENSOR_NAME_IMX333:
-		if (mode <= C73C3_IMX333_CONFIG_6048X3024_30 || mode > C73C3_IMX333_CONFIG_1008X756_120) {
+
+		if (mode <= C73C3_IMX333_CONFIG_6048X3024_30 || mode > C73C3_IMX333_CONFIG_1008X756_120 
+#ifdef USE_BINNING_PAF
+		    || mode == C73C3_IMX333_CONFIG_2016X1134_30 || mode == C73C3_IMX333_CONFIG_2016X1512_30
+		    || mode == C73C3_IMX333_CONFIG_1504X1504_30
+#endif
+			){
 			bRes = true;
 		}
 		break;
@@ -1470,6 +1483,7 @@ static bool C73C3_IsWdrEnableMode(cis_shared_data *cis_data)
 		case C73C3_S5K3H1_CONFIG_3264X2448_30:
 		case C73C3_S5K3H1_CONFIG_3264X1836_30:
 		case C73C3_S5K3H1_CONFIG_2448X2448_30:
+		case C73C3_S5K3H1_CONFIG_3264X1592_30:
 			bRes = true;
 			break;
 		default:
@@ -1483,6 +1497,7 @@ static bool C73C3_IsWdrEnableMode(cis_shared_data *cis_data)
 		case C73C3_IMX320_CONFIG_3264X2448_30:
 		case C73C3_IMX320_CONFIG_3264X1836_30:
 		case C73C3_IMX320_CONFIG_2448X2448_30:
+		case C73C3_IMX320_CONFIG_3264X1592_30:
 			bRes = true;
 			break;
 		default:
@@ -1671,7 +1686,7 @@ static int C73C3_StreamOn(struct v4l2_subdev *subdev, preproc_setting_info *seti
 	ret = C73C3SendByte_Reg2Data2(client, HOST_INTRP_StreamEnable, 0x0001);
 #ifdef USE_CAMERA_HW_BIG_DATA
 	if (!ret) {
-		fimc_is_sec_get_rear_hw_param(&hw_param);
+		fimc_is_sec_get_hw_param(&hw_param, SENSOR_POSITION_REAR);
 		if (hw_param)
 			hw_param->i2c_comp_err_cnt++;
 	}

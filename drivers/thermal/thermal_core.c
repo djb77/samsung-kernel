@@ -35,6 +35,7 @@
 #include <linux/reboot.h>
 #include <linux/string.h>
 #include <linux/of.h>
+#include <linux/cpu.h>
 #include <net/netlink.h>
 #include <net/genetlink.h>
 #include <linux/suspend.h>

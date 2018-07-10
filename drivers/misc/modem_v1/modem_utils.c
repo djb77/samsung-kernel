@@ -97,7 +97,7 @@ static inline void ts2utc(struct timespec *ts, struct utc_time *utc)
 	utc->hour = tm.tm_hour;
 	utc->min = tm.tm_min;
 	utc->sec = tm.tm_sec;
-	utc->us = ns2us(ts->tv_nsec);
+	utc->us = (u32)ns2us(ts->tv_nsec);
 }
 
 void get_utc_time(struct utc_time *utc)
@@ -580,7 +580,7 @@ __be32 ipv4str_to_be32(const char *ipv4str, size_t count)
 	char *next = ipstr;
 	int i;
 
-	strncpy(ipstr, ipv4str, ARRAY_SIZE(ipstr));
+	strlcpy(ipstr, ipv4str, ARRAY_SIZE(ipstr));
 
 	for (i = 0; i < 4; i++) {
 		char *p;
@@ -1227,7 +1227,8 @@ struct mif_buff_mng *init_mif_buff_mng(unsigned char *buffer_start,
 	bm->used_cell_count = 0;
 
 	bm->current_map_index = 0;
-	bm->buffer_map_size = (bm->cell_count / MIF_BITS_FOR_MAP_CELL) + 1;
+	bm->buffer_map_size = (unsigned int)(bm->cell_count /
+			MIF_BITS_FOR_MAP_CELL) + 1;
 	bm->buffer_map = kzalloc((MIF_BUFF_MAP_CELL_SIZE * bm->buffer_map_size),
 		GFP_KERNEL);
 	if (bm->buffer_map == NULL) {

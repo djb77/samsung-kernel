@@ -118,6 +118,7 @@ struct fimc_is_subdev {
 	u32					pixelformat;
 	struct fimc_is_framemgr			internal_framemgr;
 	u32					buffer_num;
+	u32					vc_buffer_offset;
 	struct fimc_is_priv_buf			*pb_subdev[SUBDEV_INTERNAL_BUF_MAX];
 	dma_addr_t				dvaddr_subdev[SUBDEV_INTERNAL_BUF_MAX];
 	ulong					kvaddr_subdev[SUBDEV_INTERNAL_BUF_MAX];

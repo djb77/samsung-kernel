@@ -55,31 +55,31 @@
 
 #ifdef CONFIG_CRYPTO_FIPS
 
-/**
- * crypto_cc_rng_get_bytes
- * @data: Buffer to get random bytes
- * @len: the lengh of random bytes
- */
-static void crypto_cc_rng_get_bytes(u8 *data, unsigned int len)
+static struct crypto_rng *ecryptfs_crypto_rng;
+
+static int crypto_rng_init(void)
 {
-	struct crypto_rng *rng = NULL;
 	char *seed = NULL;
 	int read_bytes = 0;
 	int get_bytes = 0;
 	int trialcount = 10;
 	int ret = 0;
+
 	struct file *filp = NULL;
 	mm_segment_t oldfs;
 
+	ecryptfs_crypto_rng = NULL;
 	seed = kmalloc(SEED_LEN, GFP_KERNEL);
 	if (!seed) {
 		ecryptfs_printk(KERN_ERR, "Failed to get memory space for seed\n");
+		ret = -1;
 		goto err_out;
 	}
 
 	filp = filp_open("/dev/random", O_RDONLY, 0);
 	if (IS_ERR(filp)) {
 		ecryptfs_printk(KERN_ERR, "Failed to open /dev/random\n");
+		ret = -1;
 		goto err_out;
 	}
 
@@ -88,7 +88,9 @@ static void crypto_cc_rng_get_bytes(u8 *data, unsigned int len)
 	memset((void *)seed, 0, SEED_LEN);
 
 	while (trialcount > 0) {
-                if ((get_bytes = (int)filp->f_op->read(filp, &(seed[read_bytes]), SEED_LEN-read_bytes, &filp->f_pos)) > 0)
+		get_bytes = (int)filp->f_op->read(filp, &(seed[read_bytes]), SEED_LEN-read_bytes, &filp->f_pos);
+
+		if (get_bytes > 0)
 			read_bytes += get_bytes;
 		if (read_bytes != SEED_LEN)
 			trialcount--;
@@ -99,31 +101,72 @@ static void crypto_cc_rng_get_bytes(u8 *data, unsigned int len)
 
 	if (read_bytes != SEED_LEN) {
 		ecryptfs_printk(KERN_ERR, "Failed to get enough random bytes (read=%d/request=%d)\n", read_bytes, SEED_LEN);
+		ret = -1;
 		goto err_out;
 	}
 
-	rng = crypto_alloc_rng("stdrng", 0, 0);
-	if (IS_ERR(rng)) {
-		ecryptfs_printk(KERN_ERR, "RNG allocateion fail \t Not Available: %ld\n", PTR_ERR(rng));
+	ecryptfs_crypto_rng = crypto_alloc_rng("stdrng", 0, 0);
+	if (IS_ERR(ecryptfs_crypto_rng)) {
+		ecryptfs_printk(KERN_ERR, "RNG allocateion fail \t Not Available: %ld\n", PTR_ERR(ecryptfs_crypto_rng));
+		ret = -1;
 		goto err_out;
 	}
 
-	ret = crypto_rng_reset(rng, seed, SEED_LEN);
+	ret = crypto_rng_reset(ecryptfs_crypto_rng, seed, SEED_LEN);
+
 	if (ret < 0) {
- 		ecryptfs_printk(KERN_ERR, "rng reset fail (%d)\n", ret);
+		ecryptfs_printk(KERN_ERR, "rng reset fail (%d)\n", ret);
 	}
 
-	ret = crypto_rng_get_bytes(rng, data, len);
-	if (ret < 0) {
-		ecryptfs_printk(KERN_ERR, "generate_random failed to generate random number (%d)\n", ret);
-	}
-	crypto_free_rng(rng);
+err_out:
+	if (seed)
+		kfree(seed);
+	if (filp)
+		filp_close(filp, NULL);
 
-err_out :
-	if (seed) kfree(seed);
-	if (filp) filp_close(filp, NULL);
-        return;
+	return ret;
 }
+
+static void crypto_rng_destroy(void)
+{
+	crypto_free_rng(ecryptfs_crypto_rng);
+	ecryptfs_crypto_rng = NULL;
+}
+
+/**
+ * crypto_cc_rng_get_bytes
+ * @data: Buffer to get random bytes
+ * @len: the lengh of random bytes
+ */
+static void crypto_cc_rng_get_bytes(u8 *data, unsigned int len)
+{
+	int ret = 0;
+
+	if (NULL == ecryptfs_crypto_rng || IS_ERR(ecryptfs_crypto_rng)) {
+		if (crypto_rng_init() < 0) {
+			ecryptfs_printk(KERN_ERR, "crypto_rng_init fail\n");
+			crypto_rng_destroy();
+			return;
+		}
+	}
+
+	if (NULL == ecryptfs_crypto_rng || IS_ERR(ecryptfs_crypto_rng)) {
+		ecryptfs_printk(KERN_ERR, "rng generation is failed\n");
+	} else {
+		if (NULL == data || IS_ERR(data)) {
+			ecryptfs_printk(KERN_ERR, "key buffer is wrong\n");
+			crypto_rng_destroy();
+			return;
+		}
+
+		ret = crypto_rng_get_bytes(ecryptfs_crypto_rng, data, len);
+		if (ret < 0) {
+			ecryptfs_printk(KERN_ERR, "generate_random failed to generate random number (%d)\n", ret);
+			crypto_rng_destroy();
+		}
+	}
+}
+
 #endif
 
 /**
@@ -2141,6 +2184,11 @@ int ecryptfs_destroy_crypto(void)
 			crypto_free_blkcipher(key_tfm->key_tfm);
 		kmem_cache_free(ecryptfs_key_tfm_cache, key_tfm);
 	}
+
+#ifdef CONFIG_CRYPTO_FIPS
+	crypto_rng_destroy();
+#endif
+
 	mutex_unlock(&key_tfm_list_mutex);
 	return 0;
 }
@@ -2703,3 +2751,4 @@ int ecryptfs_set_f_namelen(long *namelen, long lower_namelen,
 
 	return 0;
 }
+

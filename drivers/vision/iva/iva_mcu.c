@@ -376,7 +376,7 @@ int32_t iva_mcu_boot_file(struct iva_dev_data *iva,
 	}
 
 	mcu_size = iva_mcu_file_size(mcu_fp);
-	if (mcu_size > VMCU_MEM_SIZE) {
+	if (mcu_size <= 0 || mcu_size > VMCU_MEM_SIZE) {
 		dev_err(dev, "%s() file size(0x%x) is larger that expected %d\n",
 			__func__, mcu_size, VMCU_MEM_SIZE);
 		goto err_mcu_file;
@@ -410,7 +410,7 @@ int32_t iva_mcu_boot_file(struct iva_dev_data *iva,
 
 	read_bytes = kernel_read(mcu_fp, 0, mcu_bin->bin,
 			(unsigned long) mcu_size);
-	if ((read_bytes < 0) || ((uint32_t) read_bytes != mcu_size)) {
+	if ((read_bytes <= 0) || ((uint32_t) read_bytes != mcu_size)) {
 		dev_err(dev, "%s() unable to read %s sucessfully. "
 				"read(%d) file size(%d)\n",
 				__func__, mcu_file, read_bytes, mcu_size);

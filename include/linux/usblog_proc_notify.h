@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Samsung Electronics Co. Ltd.
+ * Copyright (C) 2016-2017 Samsung Electronics Co. Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-  /* usb notify layer v2.0 */
+  /* usb notify layer v3.0 */
 
 #ifndef __LINUX_USBLOG_PROC_NOTIFY_H__
 #define __LINUX_USBLOG_PROC_NOTIFY_H__

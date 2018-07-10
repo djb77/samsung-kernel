@@ -42,13 +42,15 @@ const u32 sensor_3m3_setfile_B_Global[] = {
 	0x3EFA,	0x0000,	0x02,
 	0x1118,	0x43C8,	0x02,
 	0x1124,	0x43C8,	0x02,
+	0x30AC,	0x0064,	0x02,
+	0x708A,	0x1FFF,	0x02,
 	0x6028,	0x2000,	0x02,
 	0x602A,	0x2F40,	0x02,
 	0x6F12,	0x0000,	0x02,
 	0x602A,	0x2F42,	0x02,
 	0x6F12,	0x0044,	0x02,
 	0x602A,	0x2F34,	0x02,
-	0x6F12,	0x0100,	0x02,
+	0x6F12,	0x00A0,	0x02,
 	0x602A,	0x2F48,	0x02,
 	0x6F12,	0xFFF8,	0x02,
 	0x602A,	0x2F54,	0x02,
@@ -168,6 +170,63 @@ const u32 sensor_3m3_setfile_B_4032x2268_30fps[] = {
 	0x602A,	0x2F6E,	0x02,
 	0x6F12,	0x0001,	0x02,
 	//0x0100,	0x0100,	0x02,
+};
+
+const u32 sensor_3m3_setfile_B_4032x1960_30fps[] = {
+	0xFCFC, 0x4000, 0x02,
+	0x6214, 0x7971, 0x02,
+	0x6218, 0x7150, 0x02,
+	0x0136, 0x1A00, 0x02,
+	0x1130, 0x43F1, 0x02,
+	0x0306, 0x006F, 0x02,
+	0x030E, 0x005C, 0x02,
+	0x0344, 0x0060, 0x02,
+	0x0346, 0x0250, 0x02,
+	0x0348, 0x101F, 0x02,
+	0x034A, 0x09F8, 0x02,
+	0x034C, 0x0FC0, 0x02,
+	0x034E, 0x07A8, 0x02,
+	0x0340, 0x0D48, 0x02,
+	0x0342, 0x1268, 0x02,
+	0x3000, 0x0001, 0x02,
+	0xF440, 0x002F, 0x02,
+	0xF494, 0x0030, 0x02,
+	0x3604, 0x0000, 0x02,
+	0xF4CC, 0x0029, 0x02,
+	0xF4CE, 0x002C, 0x02,
+	0xF4D0, 0x0034, 0x02,
+	0xF4D2, 0x0035, 0x02,
+	0xF4D4, 0x0038, 0x02,
+	0xF4D6, 0x0039, 0x02,
+	0xF4D8, 0x0034, 0x02,
+	0xF4DA, 0x0035, 0x02,
+	0xF4DC, 0x0038, 0x02,
+	0xF4DE, 0x0039, 0x02,
+	0x0200, 0x0618, 0x02,
+	0x0202, 0x0D27, 0x02,
+	0x021E, 0x0400, 0x02,
+	0x021C, 0x0000, 0x02,
+	0x0900, 0x0011, 0x02,
+	0x0380, 0x0001, 0x02,
+	0x0382, 0x0001, 0x02,
+	0x0384, 0x0001, 0x02,
+	0x0386, 0x0001, 0x02,
+	0x0400, 0x0000, 0x02,
+	0x0404, 0x0010, 0x02,
+	0x0B0E, 0x0100, 0x02,
+	0x3058, 0x0001, 0x02,
+	0x6028, 0x2000, 0x02,
+	0x602A, 0x19E0, 0x02,
+	0x6F12, 0x0000, 0x02,
+	0x317A, 0x0115, 0x02,
+	0x30E2, 0x0001, 0x02,
+	0x30E4, 0x002B, 0x02,
+	0x6028, 0x2000, 0x02,
+	0x602A, 0x2F6C, 0x02,
+	0x6F12, 0x0001, 0x02,
+	0x602A, 0x2F6E, 0x02,
+	0x6F12, 0x0001, 0x02,
+	//0x0100, 0x0100, 0x02,
 };
 
 const u32 sensor_3m3_setfile_B_3024x3024_30fps[] = {
@@ -398,7 +457,7 @@ const u32 sensor_3m3_setfile_B_1920x1080_60fps[] = {
 	//0x0100,	0x0100,	0x02,
 };
 
-const u32 sensor_3m3_setfile_B_1376x774_120fps[] = {
+const u32 sensor_3m3_setfile_B_1344x756_120fps[] = {
 	0xFCFC,	0x4000,	0x02,
 	0x6214,	0x7971,	0x02,
 	0x6218,	0x7150,	0x02,
@@ -406,12 +465,12 @@ const u32 sensor_3m3_setfile_B_1376x774_120fps[] = {
 	0x1130,	0x43F1,	0x02,
 	0x0306,	0x006F,	0x02,
 	0x030E,	0x005C,	0x02,
-	0x0344,	0x0030,	0x02,
-	0x0346,	0x0198,	0x02,
-	0x0348,	0x1051,	0x02,
-	0x034A,	0x0AA9,	0x02,
-	0x034C,	0x0560,	0x02,
-	0x034E,	0x0306,	0x02,
+	0x0344,	0x0060,	0x02,
+	0x0346,	0x01B0,	0x02,
+	0x0348,	0x101F,	0x02,
+	0x034A,	0x0A97,	0x02,
+	0x034C,	0x0540,	0x02,
+	0x034E,	0x02F4,	0x02,
 	0x0340,	0x0382,	0x02,
 	0x0342,	0x1168,	0x02,
 	0x3000,	0x0000,	0x02,
@@ -528,6 +587,14 @@ const struct sensor_pll_info_compact sensor_3m3_pllinfo_B_4032x2268_30fps = {
 	0x1268, /* line_length_pck */
 };
 
+const struct sensor_pll_info_compact sensor_3m3_pllinfo_B_4032x1960_30fps = {
+	EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
+	1196000000, /* mipi_datarate */
+	481000000,  /* pclk  = VT pix CLK * 4(this value is different by cis) */
+	0x0D48, /* frame_length_lines */
+	0x1268, /* line_length_pck */
+};
+
 const struct sensor_pll_info_compact sensor_3m3_pllinfo_B_3024x3024_30fps = {
 	EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
 	1196000000, /* mipi_datarate */
@@ -560,7 +627,7 @@ const struct sensor_pll_info_compact sensor_3m3_pllinfo_B_1920x1080_60fps = {
 	0x1268, /* line_length_pck */
 };
 
-const struct sensor_pll_info_compact sensor_3m3_pllinfo_B_1376x774_120fps = {
+const struct sensor_pll_info_compact sensor_3m3_pllinfo_B_1344x756_120fps = {
 	EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
 	1196000000, /* mipi_datarate */
 	481000000,  /* pclk  = VT pix CLK * 4(this value is different by cis) */
@@ -579,33 +646,36 @@ const struct sensor_pll_info_compact sensor_3m3_pllinfo_B_2016x1134_30fps = {
 static const u32 *sensor_3m3_setfiles_B[] = {
 	sensor_3m3_setfile_B_4032x3024_30fps,
 	sensor_3m3_setfile_B_4032x2268_30fps,
+	sensor_3m3_setfile_B_4032x1960_30fps,
 	sensor_3m3_setfile_B_3024x3024_30fps,
 	sensor_3m3_setfile_B_2016x1512_30fps,
 	sensor_3m3_setfile_B_1504x1504_30fps,
 	sensor_3m3_setfile_B_1920x1080_60fps,
-	sensor_3m3_setfile_B_1376x774_120fps,
+	sensor_3m3_setfile_B_1344x756_120fps,
 	sensor_3m3_setfile_B_2016x1134_30fps,
 };
 
 static const u32 sensor_3m3_setfile_B_sizes[] = {
 	sizeof(sensor_3m3_setfile_B_4032x3024_30fps) / sizeof(sensor_3m3_setfile_B_4032x3024_30fps[0]),
 	sizeof(sensor_3m3_setfile_B_4032x2268_30fps) / sizeof(sensor_3m3_setfile_B_4032x2268_30fps[0]),
+	sizeof(sensor_3m3_setfile_B_4032x1960_30fps) / sizeof(sensor_3m3_setfile_B_4032x1960_30fps[0]),
 	sizeof(sensor_3m3_setfile_B_3024x3024_30fps) / sizeof(sensor_3m3_setfile_B_3024x3024_30fps[0]),
 	sizeof(sensor_3m3_setfile_B_2016x1512_30fps) / sizeof(sensor_3m3_setfile_B_2016x1512_30fps[0]),
 	sizeof(sensor_3m3_setfile_B_1504x1504_30fps) / sizeof(sensor_3m3_setfile_B_1504x1504_30fps[0]),
 	sizeof(sensor_3m3_setfile_B_1920x1080_60fps) / sizeof(sensor_3m3_setfile_B_1920x1080_60fps[0]),
-	sizeof(sensor_3m3_setfile_B_1376x774_120fps) / sizeof(sensor_3m3_setfile_B_1376x774_120fps[0]),
+	sizeof(sensor_3m3_setfile_B_1344x756_120fps) / sizeof(sensor_3m3_setfile_B_1344x756_120fps[0]),
 	sizeof(sensor_3m3_setfile_B_2016x1134_30fps) / sizeof(sensor_3m3_setfile_B_2016x1134_30fps[0]),
 };
 
 static const struct sensor_pll_info_compact *sensor_3m3_pllinfos_B[] = {
 	&sensor_3m3_pllinfo_B_4032x3024_30fps,
 	&sensor_3m3_pllinfo_B_4032x2268_30fps,
+	&sensor_3m3_pllinfo_B_4032x1960_30fps,
 	&sensor_3m3_pllinfo_B_3024x3024_30fps,
 	&sensor_3m3_pllinfo_B_2016x1512_30fps,
 	&sensor_3m3_pllinfo_B_1504x1504_30fps,
 	&sensor_3m3_pllinfo_B_1920x1080_60fps,
-	&sensor_3m3_pllinfo_B_1376x774_120fps,
+	&sensor_3m3_pllinfo_B_1344x756_120fps,
 	&sensor_3m3_pllinfo_B_2016x1134_30fps,
 };
 

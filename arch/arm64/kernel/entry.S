@@ -85,6 +85,20 @@
 #endif
 
 	stp	x0, x1, [sp, #16 * 0]
+#if 1
+	/*
+	 * This is workaround code to stop infinite exception problem:
+	 * Check low bits of sp if sp is too low enough to reach the bottom of stack area
+	 * If it is under stack bottom + 0x200, loop forever and wait for watchdog reset
+	 */
+	mov	x0, sp
+	and	x0, x0, #(THREAD_SIZE - 1)
+	cmp	x0, #0x200 // 0x200 - 0x120 is rough estimation of stack safety area (including thread_info)
+	b.ge	1f
+	b	.
+1:
+	ldr	x0, [sp]
+#endif
 	stp	x2, x3, [sp, #16 * 1]
 	stp	x4, x5, [sp, #16 * 2]
 	stp	x6, x7, [sp, #16 * 3]
@@ -331,6 +345,7 @@ el1_sync:
 	cmp	x24, #ESR_ELx_EC_BREAKPT_CUR	// debug exception in EL1
 	b.ge	el1_dbg
 	b	el1_inv
+
 el1_da:
 	/*
 	 * Data abort handling
@@ -449,7 +464,7 @@ el0_sync:
 	cmp	x24, #ESR_ELx_EC_FP_EXC64	// FP/ASIMD exception
 	b.eq	el0_fpsimd_exc
 	cmp	x24, #ESR_ELx_EC_SYS64		// configurable trap
-	b.eq	el0_undef
+	b.eq	el0_sys
 	cmp	x24, #ESR_ELx_EC_SP_ALIGN	// stack alignment exception
 	b.eq	el0_sp_pc
 	cmp	x24, #ESR_ELx_EC_PC_ALIGN	// pc alignment exception
@@ -577,6 +592,16 @@ el0_undef:
 	mov	x0, sp
 	mrs	x1, esr_el1			// read the syndrome register
 	bl	do_undefinstr
+	b	ret_to_user
+el0_sys:
+	/*
+	 * System instructions, for trapped cache maintenance instructions
+	 */
+	enable_dbg_and_irq
+	ct_user_exit
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_sysinstr
 	b	ret_to_user
 el0_dbg:
 	/*

@@ -8,9 +8,6 @@
 #include <linux/types.h>
 #include <linux/highmem.h>
 
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-#include <linux/rkp_cfp.h>
-#endif
 #define	CMD_READ_SYSTEM_IMAGE_CHECK_STATUS 3
 
 static inline u64 exynos_smc_verity(u64 cmd, u64 arg1, u64 arg2, u64 arg3)
@@ -21,14 +18,8 @@ static inline u64 exynos_smc_verity(u64 cmd, u64 arg1, u64 arg2, u64 arg3)
     register u64 reg3 __asm__("x3") = arg3;
 
     __asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-	PRE_SMC_INLINE
-#endif
         "dsb    sy\n"
         "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-	POST_SMC_INLINE
-#endif
         : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 
     );
@@ -44,6 +35,7 @@ static int verity_scm_call(void)
 
 #define DRIVER_DESC   "Read whether odin flash succeeded"
 
+#if 0
 ssize_t	dmverity_read(struct file *filep, char __user *buf, size_t size, loff_t *offset)
 {
 	uint32_t	odin_flag;
@@ -64,9 +56,26 @@ ssize_t	dmverity_read(struct file *filep, char __user *buf, size_t size, loff_t 
 	} else
 		return sizeof(uint32_t);
 }
+#endif
+
+static int dmverity_read(struct seq_file *m, void *v){
+	int odin_flag = 0;
+	unsigned char ret_buffer[10];
+	odin_flag = verity_scm_call();
+
+	memset(ret_buffer, 0, sizeof(ret_buffer));
+	snprintf(ret_buffer, sizeof(ret_buffer), "%08x\n", odin_flag);
+	seq_write(m, ret_buffer, sizeof(ret_buffer));
+	printk(KERN_INFO"dmverity: odin_flag: %x\n", odin_flag);
+	return 0;
+}
+static int dmverity_open(struct inode *inode, struct file *filep){
+	return single_open(filep, dmverity_read, NULL);
+}
 
 static const struct file_operations dmverity_proc_fops = {
-	.read		= dmverity_read,
+	.open       = dmverity_open,
+	.read	    = seq_read,
 };
 
 /**

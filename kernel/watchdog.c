@@ -576,7 +576,7 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 		if (softlockup_panic) {
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
 			if (regs) {
-				sec_debug_set_extra_info_fault(-1, regs);
+				sec_debug_set_extra_info_fault(WATCHDOG_FAULT, (unsigned long)regs->pc, regs);
 				sec_debug_set_extra_info_backtrace(regs);
 			}
 #endif

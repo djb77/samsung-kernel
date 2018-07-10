@@ -693,7 +693,7 @@ static void max98506_spk_enable(struct max98506_priv *max98506,
 				MAX98506_R038_GLOBAL_ENABLE,
 				MAX98506_EN_MASK,
 				0x00);
-		usleep_range(10000, 11000);
+		usleep_range(15000, 16000);
 	}
 
 #ifdef CONFIG_SND_SOC_MAXIM_DSM
@@ -834,7 +834,7 @@ static int max98506_volume_step_put(struct snd_kcontrol *kcontrol,
 	 * Under step 7 : Disable
 	 * Over step 7  : Enable
 	 */
-	if (sel >= MAX98506_VSTEP_MAX) {
+	if (sel >= MAX98506_VSTEP_MAX || sel < 0) {
 		msg_maxim("Unknown value %d", sel);
 		return -EINVAL;
 	}
@@ -1098,7 +1098,7 @@ static inline int max98506_rate_value(int rate, int clock, u8 *value)
 	}
 
 	msg_maxim("sample rate is %d, returning %d",
-		rate_table[i < ARRAY_SIZE(rate_table) ? i : ARRAY_SIZE(rate_table)].rate, *value);
+		rate_table[i < ARRAY_SIZE(rate_table) ? i : ARRAY_SIZE(rate_table) - 1].rate, *value);
 
 	return ret;
 }
@@ -1671,7 +1671,6 @@ static int max98506_probe(struct snd_soc_codec *codec)
 	dev_info(codec->dev, "build number %s\n", MAX98506_REVISION);
 
 	max98506->codec = codec;
-	codec->control_data = max98506->regmap;
 
 	rev_id = max98506_check_version(max98506);
 	if (!rev_id) {
@@ -2020,14 +2019,7 @@ go_ahead_next_step:
 	maxdsm_update_sub_reg(pdata->sub_reg);
 #endif /* CONFIG_SND_SOC_MAXIM_DSM */
 
-	ret = snd_soc_register_codec(&i2c->dev, &soc_codec_dev_max98506,
-			max98506_dai, ARRAY_SIZE(max98506_dai));
-	if (ret) {
-		dev_err(&i2c->dev, "Failed to register codec");
-		goto err_register_codec;
-	}
-
-	max98506->regmap = regmap_init_i2c(i2c, &max98506_regmap);
+	max98506->regmap = devm_regmap_init_i2c(i2c, &max98506_regmap);
 	if (IS_ERR(max98506->regmap)) {
 		ret = PTR_ERR(max98506->regmap);
 		dev_err(&i2c->dev, "Failed to initialize regmap: %d", ret);
@@ -2044,7 +2036,7 @@ go_ahead_next_step:
 			ret = -ENODEV;
 			goto err_regmap;
 		} else {
-			max98506->sub_regmap = regmap_init_i2c(
+			max98506->sub_regmap = devm_regmap_init_i2c(
 					max98506->sub_i2c, &max98506_regmap);
 			if (IS_ERR(max98506->sub_regmap)) {
 				ret = PTR_ERR(max98506->sub_regmap);
@@ -2056,16 +2048,20 @@ go_ahead_next_step:
 		}
 	}
 
+	ret = snd_soc_register_codec(&i2c->dev, &soc_codec_dev_max98506,
+			max98506_dai, ARRAY_SIZE(max98506_dai));
+	if (ret) {
+		dev_err(&i2c->dev, "Failed to register codec");
+		goto err_register_codec;
+	}
+
 	msg_maxim("exit, device '%s'", id->name);
 
 	return 0;
 
 err_regmap:
 	snd_soc_unregister_codec(&i2c->dev);
-	if (max98506->regmap)
-		regmap_exit(max98506->regmap);
-	if (max98506->sub_regmap)
-		regmap_exit(max98506->sub_regmap);
+
 err_register_codec:
 #ifdef CONFIG_SND_SOC_MAXIM_DSM
 	maxdsm_deinit();
@@ -2087,12 +2083,7 @@ static int max98506_i2c_remove(struct i2c_client *client)
 	struct max98506_pdata *pdata = max98506->pdata;
 
 	snd_soc_unregister_codec(&client->dev);
-	if (max98506->regmap)
-		regmap_exit(max98506->regmap);
-	if (max98506->sub_regmap)
-		regmap_exit(max98506->sub_regmap);
-	if (pdata->sub_reg != 0)
-		i2c_unregister_device(max98506->sub_i2c);
+
 	devm_kfree(&client->dev, pdata);
 	devm_kfree(&client->dev, max98506);
 
@@ -2125,6 +2116,7 @@ static struct i2c_driver max98506_i2c_driver = {
 		.name = "max98506",
 		.owner = THIS_MODULE,
 		.of_match_table = max98506_dt_ids,
+		.suppress_bind_attrs = true,
 	},
 	.probe  = max98506_i2c_probe,
 	.remove = max98506_i2c_remove,

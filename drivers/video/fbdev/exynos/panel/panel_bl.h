@@ -73,6 +73,11 @@ struct brightness_table {
 	/* actual brightness table */
 	u32 *lum;
 	u32 sz_lum;
+	u32 sz_ui_lum;
+	u32 sz_hbm_lum;
+	u32 sz_ext_hbm_lum;
+	u32 max_ui_lum;
+	u32 max_hbm_lum;
 };
 
 struct panel_bl_ops {
@@ -119,6 +124,10 @@ struct panel_bl_device {
 	struct mutex lock;
 	struct panel_bl_properties props;
 	struct panel_bl_sub_dev subdev[MAX_PANEL_BL_SUBDEV];
+#ifdef CONFIG_SUPPORT_INDISPLAY
+	int saved_br;
+	bool finger_layer;
+#endif
 };
 
 int panel_bl_probe(struct panel_device *panel);
@@ -132,4 +141,5 @@ int get_actual_brightness_interpolation(struct panel_bl_device *, int);
 int get_subdev_actual_brightness_interpolation(struct panel_bl_device *, int, int);
 int panel_bl_get_acl_pwrsave(struct panel_bl_device *);
 int panel_bl_get_acl_opr(struct panel_bl_device *);
+bool is_hbm_brightness(struct panel_bl_device *panel_bl, int brightness);
 #endif /* __PANEL_BL_H__ */

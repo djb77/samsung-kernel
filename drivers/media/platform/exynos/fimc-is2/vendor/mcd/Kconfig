@@ -136,6 +136,18 @@ config CAMERA_BAIKAL
         default n
         help
           This camera is baikal project.
+config CAMERA_GREAT
+        bool "This camera is great project"
+        depends on VENDER_MCD
+        default n
+        help
+          This camera is great project.
+config CAMERA_VALLEY
+        bool "This camera is valley project"
+        depends on VENDER_MCD
+        default n
+        help
+          This camera is great project.
 config OIS_USE_RUMBA_S4
         bool "Use RUMBA S4 ois driver IC"
         depends on OIS_USE

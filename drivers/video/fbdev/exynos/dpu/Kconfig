@@ -85,4 +85,15 @@ config LOGGING_BIGDATA_BUG
 	bool "Logging extra information when decon bug"
 	depends on EXYNOS_DECON_8895
 	default y
+
+config SUPPORT_INDISPLAY
+	bool "Support HBM for indisplay"
+	depends on EXYNOS_DECON_8895
+	default n
+
+config DUMPSTATE_LOGGING
+	bool "Support DumpState Logging"
+	depends on EXYNOS_DECON_8895
+	default y
+source "drivers/video/fbdev/exynos/dpu/dp_logger/Kconfig"
 endif

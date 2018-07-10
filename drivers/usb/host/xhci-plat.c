@@ -293,6 +293,7 @@ static int xhci_plat_remove(struct platform_device *dev)
 
 	manager_notifier_unregister(&xhci->ccic_xhci_nb);
 #endif
+	xhci->xhc_state |= XHCI_STATE_REMOVING;
 	usb_remove_hcd(xhci->shared_hcd);
 	usb_phy_shutdown(hcd->usb_phy);
 

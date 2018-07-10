@@ -27,6 +27,22 @@
 
 #include <exynos-fimc-is-module.h>
 
+static int acquire_shared_rsc(struct exynos_sensor_pin *pin_ctrls)
+{
+	if (pin_ctrls->shared_rsc_count)
+		return atomic_inc_return(pin_ctrls->shared_rsc_count);
+
+	return 1;
+}
+
+static int release_shared_rsc(struct exynos_sensor_pin *pin_ctrls)
+{
+	if (pin_ctrls->shared_rsc_count)
+		return atomic_dec_return(pin_ctrls->shared_rsc_count);
+
+	return 0;
+}
+
 static int exynos_fimc_is_module_pin_control(struct device *dev,
 	struct pinctrl *pinctrl, struct exynos_sensor_pin *pin_ctrls)
 {
@@ -37,6 +53,30 @@ static int exynos_fimc_is_module_pin_control(struct device *dev,
 	u32 voltage = pin_ctrls->voltage;
 	u32 act = pin_ctrls->act;
 	int ret = 0;
+	int active_count;
+	unsigned long flags;
+
+	if (pin_ctrls->shared_rsc_type) {
+		spin_lock_irqsave(pin_ctrls->shared_rsc_slock, flags);
+
+		if (pin_ctrls->shared_rsc_type == SRT_ACQUIRE)
+			active_count = acquire_shared_rsc(pin_ctrls);
+		else if (pin_ctrls->shared_rsc_type == SRT_RELEASE)
+			active_count = release_shared_rsc(pin_ctrls);
+
+		pr_info("[@] shared rsc (act(%d), pin(%ld), val(%d), nm(%s), active(cur: %d, target: %d))\n",
+			pin_ctrls->act,
+			(pin_ctrls->act == PIN_FUNCTION) ? 0 : pin_ctrls->pin,
+			pin_ctrls->value,
+			pin_ctrls->name,
+			active_count,
+			pin_ctrls->shared_rsc_active);
+
+		spin_unlock_irqrestore(pin_ctrls->shared_rsc_slock, flags);
+
+		if (active_count != pin_ctrls->shared_rsc_active)
+			return 0;
+	}
 
 	switch (act) {
 	case PIN_NONE:
@@ -100,11 +140,8 @@ static int exynos_fimc_is_module_pin_control(struct device *dev,
 					}
 				}
 
-				if (regulator_is_enabled(regulator)) {
+				if (regulator_is_enabled(regulator))
 					pr_warning("%s regulator is already enabled\n", name);
-					regulator_put(regulator);
-					return 0;
-				}
 
 				ret = regulator_enable(regulator);
 				if (ret) {

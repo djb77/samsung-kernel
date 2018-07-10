@@ -56,6 +56,9 @@ struct fimc_is_ois_info ois_minfo;
 struct fimc_is_ois_info ois_pinfo;
 struct fimc_is_ois_info ois_uinfo;
 struct fimc_is_ois_exif ois_exif_data;
+#ifdef USE_OIS_SLEEP_MODE
+struct fimc_is_ois_shared_info ois_shared_info;
+#endif
 
 void fimc_is_ois_i2c_config(struct i2c_client *client, bool onoff)
 {
@@ -407,14 +410,16 @@ bool fimc_is_ois_auto_test(struct fimc_is_core *core,
 
 #ifdef CAMERA_REAR2_OIS
 bool fimc_is_ois_auto_test_rear2(struct fimc_is_core *core,
-		            int threshold, bool *x_result, bool *y_result, int *sin_x, int *sin_y)
+		            int threshold, bool *x_result, bool *y_result, int *sin_x, int *sin_y,
+		            bool *x_result_2nd, bool *y_result_2nd, int *sin_x_2nd, int *sin_y_2nd)
 {
 	bool result = false;
 	struct fimc_is_device_ois *ois_device = NULL;
 
 	ois_device = i2c_get_clientdata(core->client1);
 	result = CALL_OISOPS(ois_device, ois_auto_test_rear2, core,
-			threshold, x_result, y_result, sin_x, sin_y);
+			threshold, x_result, y_result, sin_x, sin_y,
+			x_result_2nd, y_result_2nd, sin_x_2nd, sin_y_2nd);
 
 	return result;
 }
@@ -574,12 +579,23 @@ bool fimc_is_ois_check_fw(struct fimc_is_core *core)
 	return ret;
 }
 
+bool fimc_is_ois_read_fw_ver(struct fimc_is_core *core, char *name, char *ver)
+{
+	bool ret = false;
+	struct fimc_is_device_ois *ois_device = NULL;
+
+	ois_device = i2c_get_clientdata(core->client1);
+	ret = CALL_OISOPS(ois_device, ois_read_fw_ver, name, ver);
+
+	return ret;
+}
+
 void fimc_is_ois_fw_update(struct fimc_is_core *core)
 {
 	struct fimc_is_device_ois *ois_device = NULL;
 
 	ois_device = i2c_get_clientdata(core->client1);
-	
+
 	fimc_is_ois_gpio_on(core);
 	msleep(150);
 	CALL_OISOPS(ois_device, ois_fw_update, core);
@@ -588,6 +604,16 @@ void fimc_is_ois_fw_update(struct fimc_is_core *core)
 	return;
 }
 
+#ifdef USE_OIS_SLEEP_MODE
+void fimc_is_ois_set_oissel_info(int oissel)
+{
+	ois_shared_info.oissel = oissel;
+}
+int fimc_is_ois_get_oissel_info(void)
+{
+	return ois_shared_info.oissel;
+}
+#endif
 MODULE_DESCRIPTION("OIS driver for Rumba");
 MODULE_AUTHOR("kyoungho yun <kyoungho.yun@samsung.com>");
 MODULE_LICENSE("GPL v2");

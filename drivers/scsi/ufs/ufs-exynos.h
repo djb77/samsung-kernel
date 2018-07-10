@@ -762,10 +762,34 @@ static inline u32 phy_pma_readl(struct exynos_ufs *ufs, u32 reg)
 #endif
 #endif
 
+/* Structure for ufs cmd logging */
+#define MAX_CMD_LOGS    128
+
+struct ufs_cmd_logging_category {
+	unsigned char cmd_opcode;
+	unsigned int tag;
+	unsigned long lba;
+	unsigned int sct;
+	int retries;
+	u64 	start_time;
+	u64 	end_time;
+	unsigned long outstanding_reqs;
+
+};
+
+struct ufs_cmd_info {
+	int 	first;
+	int 	last;
+	struct ufs_cmd_logging_category	*addr_per_tag[16];
+	struct ufs_cmd_logging_category	 data[MAX_CMD_LOGS];
+};
+
 extern void exynos_ufs_get_uic_info(struct ufs_hba *hba);
 extern void exynos_ufs_dump_uic_info(struct ufs_hba *hba);
 extern int exynos_ufs_init_dbg(struct ufs_hba *hba);
 extern void exynos_ufs_show_uic_info(struct ufs_hba *hba);
+extern void exynos_ufs_cmd_log_start(struct ufs_hba *hba, struct scsi_cmnd *cmd);
+extern void exynos_ufs_cmd_log_end(struct ufs_hba *hba, int tag);
 #ifndef __EXYNOS_UFS_VS_DEBUG__
 #define __EXYNOS_UFS_VS_DEBUG__
 #endif

@@ -3085,7 +3085,8 @@ void __init xfrm_init(void)
 	xfrm_input_init();
 }
 
-#ifdef CONFIG_AUDITSYSCALL
+// [ SEC_SELINUX_PORTING_COMMON - remove AUDIT_MAC_IPSEC_EVENT audit log, it conflict with security notification
+#if 0 // #ifdef CONFIG_AUDITSYSCALL
 static void xfrm_audit_common_policyinfo(struct xfrm_policy *xp,
 					 struct audit_buffer *audit_buf)
 {
@@ -3149,6 +3150,7 @@ void xfrm_audit_policy_delete(struct xfrm_policy *xp, int result,
 }
 EXPORT_SYMBOL_GPL(xfrm_audit_policy_delete);
 #endif
+// ] SEC_SELINUX_PORTING_COMMON - remove AUDIT_MAC_IPSEC_EVENT audit log, it conflict with security notification
 
 #ifdef CONFIG_XFRM_MIGRATE
 static bool xfrm_migrate_selector_match(const struct xfrm_selector *sel_cmp,

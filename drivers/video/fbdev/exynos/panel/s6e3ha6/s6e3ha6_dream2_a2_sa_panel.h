@@ -124,7 +124,7 @@ static u8 dream2_a2_sa_aor_table[S6E3HA6_TOTAL_PAC_STEPS][2] = {
 	{ 0x00, 0x29 }, { 0x00, 0x1B }, { 0x00, 0x0C }, { 0x00, 0x3D }, { 0x00, 0x2C }, { 0x00, 0x1C }, { 0x00, 0x0C }, { 0x00, 0x36 }, { 0x00, 0x28 }, { 0x00, 0x1A },
 	{ 0x00, 0x0C }, { 0x00, 0x0C },
 	/* HBM */
-	{ 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C },
+	{ 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C },
 #ifdef CONFIG_LCD_EXTEND_HBM
 	/* EXTEND_HBM */
 	{ 0x00, 0x0C },
@@ -159,7 +159,7 @@ static u8 dream2_a2_sa_aor_table[S6E3HA6_TOTAL_PAC_STEPS][2] = {
 	{ 0x00, 0x70 }, { 0x00, 0x59 }, { 0x00, 0x41 }, { 0x00, 0x38 }, { 0x00, 0x29 }, { 0x00, 0x1B }, { 0x00, 0x0C }, { 0x00, 0x3D }, { 0x00, 0x2C }, { 0x00, 0x1C },
 	{ 0x00, 0x0C }, { 0x00, 0x36 }, { 0x00, 0x28 }, { 0x00, 0x1A }, { 0x00, 0x0C }, { 0x00, 0x0C },
 	/* HBM */
-	{ 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C },
+	{ 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C },
 #ifdef CONFIG_LCD_EXTEND_HBM
 	/* EXTEND_HBM */
 	{ 0x00, 0x0C },
@@ -176,7 +176,7 @@ static u8 dream2_a2_sa_aor_table[S6E3HA6_TOTAL_NR_LUMINANCE][2] = {
 	{ 0x01, 0x55 }, { 0x01, 0x55 }, { 0x01, 0x55 }, { 0x01, 0x55 }, { 0x01, 0x55 }, { 0x01, 0x55 }, { 0x01, 0x4F }, { 0x01, 0x01 }, { 0x00, 0xC0 }, { 0x00, 0x78 },
 	{ 0x00, 0x26 }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C },
 	/* HBM */
-	{ 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C },
+	{ 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C }, { 0x00, 0x0C },
 #ifdef CONFIG_LCD_EXTEND_HBM
 	/* EXTEND_HBM */
 	{ 0x00, 0x0C },
@@ -197,7 +197,7 @@ static u8 dream2_a2_sa_elvss_table[][S6E3HA6_TOTAL_NR_LUMINANCE][1] = {
 		{ 0x11 }, { 0x10 }, { 0x0F }, { 0x0E }, { 0x0D }, { 0x0D }, { 0x0C }, { 0x0C }, { 0x0C }, { 0x0B },
 		{ 0x0B }, { 0x0B }, { 0x0A }, { 0x0A },
 		/* HBM */
-		{ 0x13 }, { 0x12 }, { 0x11 }, { 0x10 }, { 0x0E }, { 0x0D }, { 0x0B }, { 0x0A },
+		{ 0x12 }, { 0x11 }, { 0x10 }, { 0x0E }, { 0x0D }, { 0x0B }, { 0x0A },
 #ifdef CONFIG_LCD_EXTEND_HBM
 		/* EXTEND_HBM */
 		{ 0x00 },
@@ -214,7 +214,7 @@ static u8 dream2_a2_sa_elvss_table[][S6E3HA6_TOTAL_NR_LUMINANCE][1] = {
 		{ 0x11 }, { 0x10 }, { 0x0F }, { 0x0E }, { 0x0D }, { 0x0D }, { 0x0C }, { 0x0C }, { 0x0C }, { 0x0B },
 		{ 0x0B }, { 0x0B }, { 0x0A }, { 0x0A },
 		/* HBM */
-		{ 0x13 }, { 0x12 }, { 0x11 }, { 0x10 }, { 0x0E }, { 0x0D }, { 0x0B }, { 0x0A },
+		{ 0x12 }, { 0x11 }, { 0x10 }, { 0x0E }, { 0x0D }, { 0x0B }, { 0x0A },
 #ifdef CONFIG_LCD_EXTEND_HBM
 		/* EXTEND_HBM */
 		{ 0x00 },
@@ -231,7 +231,7 @@ static u8 dream2_a2_sa_elvss_table[][S6E3HA6_TOTAL_NR_LUMINANCE][1] = {
 		{ 0x11 }, { 0x10 }, { 0x0F }, { 0x0E }, { 0x0D }, { 0x0D }, { 0x0C }, { 0x0C }, { 0x0C }, { 0x0B },
 		{ 0x0B }, { 0x0B }, { 0x0A }, { 0x0A },
 		/* HBM */
-		{ 0x13 }, { 0x12 }, { 0x11 }, { 0x10 }, { 0x0E }, { 0x0D }, { 0x0B }, { 0x0A },
+		{ 0x12 }, { 0x11 }, { 0x10 }, { 0x0E }, { 0x0D }, { 0x0B }, { 0x0A },
 #ifdef CONFIG_LCD_EXTEND_HBM
 		/* EXTEND_HBM */
 		{ 0x00 },
@@ -251,7 +251,7 @@ static u8 dream2_a2_sa_elvss_temp_table[][S6E3HA6_TOTAL_NR_LUMINANCE][1] = {
 		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
 		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
 		/* HBM */
-		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
+		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
 #ifdef CONFIG_LCD_EXTEND_HBM
 		/* EXTEND_HBM */
 		{ 0x0 },
@@ -268,7 +268,7 @@ static u8 dream2_a2_sa_elvss_temp_table[][S6E3HA6_TOTAL_NR_LUMINANCE][1] = {
 		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
 		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
 		/* HBM */
-		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
+		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
 #ifdef CONFIG_LCD_EXTEND_HBM
 		/* EXTEND_HBM */
 		{ 0x0 },
@@ -285,7 +285,7 @@ static u8 dream2_a2_sa_elvss_temp_table[][S6E3HA6_TOTAL_NR_LUMINANCE][1] = {
 		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
 		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
 		/* HBM */
-		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
+		{ 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 }, { 0x0 },
 #ifdef CONFIG_LCD_EXTEND_HBM
 		/* EXTEND_HBM */
 		{ 0x0 },
@@ -844,7 +844,6 @@ static u8 dream2_a2_sa_irc_table[S6E3HA6_TOTAL_PAC_STEPS][20] = {
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x59, 0x56, 0x59, 0x1E, 0x1D, 0x1E, 0x1E, 0x1C, 0x1E},
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x59, 0x56, 0x59, 0x1E, 0x1D, 0x1E, 0x1E, 0x1C, 0x1E},
 	/* HBM */
-	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x5E, 0x5B, 0x5E, 0x20, 0x1E, 0x20, 0x1F, 0x1E, 0x1F},
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x63, 0x5F, 0x63, 0x21, 0x20, 0x21, 0x21, 0x1F, 0x21},
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x67, 0x64, 0x67, 0x23, 0x22, 0x23, 0x23, 0x20, 0x23},
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x6C, 0x68, 0x6C, 0x25, 0x24, 0x25, 0x24, 0x22, 0x24},
@@ -1116,7 +1115,6 @@ static u8 dream2_a2_sa_irc_table[S6E3HA6_TOTAL_PAC_STEPS][20] = {
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x59, 0x56, 0x59, 0x1E, 0x1D, 0x1E, 0x1E, 0x1C, 0x1E },
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x59, 0x56, 0x59, 0x1E, 0x1D, 0x1E, 0x1E, 0x1C, 0x1E },
 	/* HBM */
-	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x5E, 0x5B, 0x5E, 0x20, 0x1E, 0x20, 0x1F, 0x1E, 0x1F },
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x63, 0x5F, 0x63, 0x21, 0x20, 0x21, 0x21, 0x1F, 0x21 },
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x67, 0x64, 0x67, 0x23, 0x22, 0x23, 0x23, 0x20, 0x23 },
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x6C, 0x68, 0x6C, 0x25, 0x24, 0x25, 0x24, 0x22, 0x24 },
@@ -1206,7 +1204,6 @@ static u8 dream2_a2_sa_irc_table[S6E3HA6_TOTAL_NR_LUMINANCE][20] = {
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x57, 0x54, 0x57, 0x1E, 0x1D, 0x1E, 0x1D, 0x1B, 0x1D },
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x59, 0x56, 0x59, 0x1E, 0x1D, 0x1E, 0x1E, 0x1C, 0x1E },
 	/* HBM */
-	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x5E, 0x5B, 0x5E, 0x20, 0x1E, 0x20, 0x1F, 0x1E, 0x1F },
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x63, 0x5F, 0x63, 0x21, 0x20, 0x21, 0x21, 0x1F, 0x21 },
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x67, 0x64, 0x67, 0x23, 0x22, 0x23, 0x23, 0x20, 0x23 },
 	{ 0x0D, 0xF0, 0x2E, 0x24, 0x46, 0xBD, 0x33, 0x69, 0x12, 0x7A, 0xE0, 0x6C, 0x68, 0x6C, 0x25, 0x24, 0x25, 0x24, 0x22, 0x24 },
@@ -1327,6 +1324,14 @@ static u8 dream2_a2_sa_lpm_mode_table[][1] = {
 	{0x02}, // HLPM_60NIT
 };
 
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+static u8 dream2_a2_sa_vddm_table[][1] = {
+	{0x00}, // VDDM ORIGINAL
+	{0x10}, // VDDM LOW VOLTAGE : 0.9V
+	{0x30}, // VDDM HIGH VOLTAGE : 1.1V
+};
+#endif
+
 #ifdef CONFIG_SUPPORT_DSU
 static u8 DREAM2_A2_SA_OMOK_2CH_LATCH1[] = {
 	0xB0, 0x05
@@ -1394,6 +1399,11 @@ struct maptbl dream2_a2_sa_maptbl[MAX_MAPTBL] = {
 #ifdef CONFIG_SUPPORT_POC_FLASH
 	[POC_ON_MAPTBL] = DEFINE_0D_MAPTBL(dream2_a2_sa_poc_on_table, init_common_table, NULL, copy_poc_maptbl),
 #endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+	[VDDM_MAPTBL] = DEFINE_2D_MAPTBL(dream2_a2_sa_vddm_table, init_common_table, s6e3ha6_getidx_vddm_table, copy_common_maptbl),
+	[GRAM_IMG_0_MAPTBL] = DEFINE_0D_MAPTBL(dream2_a2_sa_gram_img_0_table, init_common_table, NULL, copy_gram_img_pattern_0),
+	[GRAM_IMG_1_MAPTBL] = DEFINE_0D_MAPTBL(dream2_a2_sa_gram_img_1_table, init_common_table, NULL, copy_gram_img_pattern_1),
+#endif
 };
 
 /* ===================================================================================== */
@@ -1410,6 +1420,28 @@ u8 DREAM2_A2_SA_SLEEP_IN[] = { 0x10 };
 u8 DREAM2_A2_SA_DISPLAY_OFF[] = { 0x28 };
 u8 DREAM2_A2_SA_DISPLAY_ON[] = { 0x29 };
 
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+u8 DREAM2_A2_SA_SW_RESET[] = { 0x01 };
+u8 DREAM2_A2_SA_GCT_DSC[] = { 0x9D, 0x01 };
+u8 DREAM2_A2_SA_GCT_PPS[] = { 0x9E,
+	0x11, 0x00, 0x00, 0x89, 0x30, 0x80, 0x0B, 0x90,
+	0x05, 0xA0, 0x00, 0x28, 0x02, 0xD0, 0x02, 0xD0,
+	0x02, 0x00, 0x02, 0x68, 0x00, 0x20, 0x04, 0x6C,
+	0x00, 0x0A, 0x00, 0x0C, 0x02, 0x77, 0x01, 0xE9,
+	0x18, 0x00, 0x10, 0xF0, 0x03, 0x0C, 0x20, 0x00,
+	0x06, 0x0B, 0x0B, 0x33, 0x0E, 0x1C, 0x2A, 0x38,
+	0x46, 0x54, 0x62, 0x69, 0x70, 0x77, 0x79, 0x7B,
+	0x7D, 0x7E, 0x01, 0x02, 0x01, 0x00, 0x09, 0x40,
+	0x09, 0xBE, 0x19, 0xFC, 0x19, 0xFA, 0x19, 0xF8,
+	0x1A, 0x38, 0x1A, 0x78, 0x1A, 0xB6, 0x2A, 0xF6,
+	0x2B, 0x34, 0x2B, 0x74, 0x3B, 0x74, 0x6B, 0xF4,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+#endif
 u8 DREAM2_A2_SA_DSC[] = { 0x00 };
 u8 DREAM2_A2_SA_PPS[] = {
 	// QHD :2960x1440
@@ -1455,6 +1487,7 @@ u8 DREAM2_A2_SA_DISABLE_ACTIVE_CLK[] = {
 	0xE3,
 	0x00, 0x00
 };
+#if 0
 u8 DREAM2_A2_SA_SET_SELF_DRAWER[] = {
 	0xE2,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -1467,7 +1500,7 @@ u8 DREAM2_A2_SA_SET_SELF_DRAWER[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
 };
-
+#endif
 u8 DREAM2_A2_SA_DISABLE_SELF_DRAWER[] = {
 	0xE2,
 	0x00, 0x00
@@ -1608,8 +1641,24 @@ u8 DREAM2_A2_SA_ISC_02[] = { 0xF6, 0x53 };
 u8 DREAM2_A2_SA_ISC_03[] = { 0xB0, 0x08 };
 u8 DREAM2_A2_SA_ISC_04[] = { 0xF6, 0x80 };
 
+#ifdef CONFIG_SUPPORT_MST
+u8 DREAM2_A2_SA_MST_ON_01[] = { 0xF6, 0x43, 0x04, 0x57, 0x53, 0xA2, 0x50, 0xCC, 0xE1, 0x80, 0x00 };
+u8 DREAM2_A2_SA_MST_ON_02[] = { 0xBF, 0x33, 0x25, 0xFF, 0x00, 0x00, 0x10 };
+u8 DREAM2_A2_SA_MST_OFF_01[] = { 0xF6, 0x43, 0x04, 0x57, 0x53, 0xAA, 0xBF, 0xCC, 0xE1, 0x80, 0x00 };
+u8 DREAM2_A2_SA_MST_OFF_02[] = { 0xBF, 0x00, 0x07, 0xFF, 0x00, 0x00, 0x10 };
+#endif
+
 #ifdef CONFIG_SUPPORT_POC_FLASH
 u8 DREAM2_A2_SA_POC_ON[] = { 0xEB, 0xFF, 0x52, 0x00, 0xFF };
+#endif
+
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+static u8 DREAM2_A2_SA_GRAM_IMG_PATTERN[S6E3HA6_GRAM_IMG_SIZE] = { 0, };
+static u8 DREAM2_A2_SA_VDDM_PARA[] = { 0xB0, 0x09 };
+static u8 DREAM2_A2_SA_VDDM_ORIG[] = { 0xF4, 0x00 };
+static u8 DREAM2_A2_SA_VDDM_VOLT[] = { 0xF4, 0x00 };
+static u8 DREAM2_A2_SA_VDDM_UPDATE_ENABLE[] = { 0xFE, 0xB0 };
+static u8 DREAM2_A2_SA_VDDM_UPDATE_DISABLE[] = { 0xFE, 0x30 };
 #endif
 
 #ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
@@ -1684,11 +1733,26 @@ DEFINE_VARIABLE_PACKET(dream2_a2_sa_lpm_mode, DSI_PKT_TYPE_WR, DREAM2_A2_SA_LPM_
 
 #ifdef CONFIG_ACTIVE_CLOCK
 DEFINE_VARIABLE_PACKET(dream2_a2_sa_enable_active_clk, DSI_PKT_TYPE_WR, DREAM2_A2_SA_ENABLE_ACTIVE_CLK, &dream2_a2_sa_maptbl[ACTIVE_CLK_CTRL_MAPTBL], 1);
+#if 0
 DEFINE_VARIABLE_PACKET(dream2_a2_sa_set_self_drawer, DSI_PKT_TYPE_WR, DREAM2_A2_SA_SET_SELF_DRAWER, &dream2_a2_sa_maptbl[ACTIVE_CLK_SELF_DRAWER], 1);
+#endif
 DEFINE_VARIABLE_PACKET(dream2_a2_sa_update_active_clk, DSI_PKT_TYPE_WR, DREAM2_A2_SA_UPDATE_ACTIVE_CLK, &dream2_a2_sa_maptbl[ACTIVE_CLK_CTRL_UPDATE_MAPTBL], 1);
 DEFINE_STATIC_PACKET(dream2_a2_sa_disable_self_drawer, DSI_PKT_TYPE_WR, DREAM2_A2_SA_DISABLE_SELF_DRAWER);
 DEFINE_STATIC_PACKET(dream2_a2_sa_disable_active_clk, DSI_PKT_TYPE_WR, DREAM2_A2_SA_DISABLE_ACTIVE_CLK);
 DEFINE_STATIC_PACKET(dream2_a2_sa_active_clk_img_pkt, DSI_PKT_TYPE_WR_SR, live_clock_image);
+#endif
+
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+DEFINE_STATIC_PACKET(dream2_a2_sa_sw_reset, DSI_PKT_TYPE_WR, DREAM2_A2_SA_SW_RESET);
+DEFINE_STATIC_PACKET(dream2_a2_sa_gct_dsc, DSI_PKT_TYPE_WR, DREAM2_A2_SA_GCT_DSC);
+DEFINE_STATIC_PACKET(dream2_a2_sa_gct_pps, DSI_PKT_TYPE_WR, DREAM2_A2_SA_GCT_PPS);
+DEFINE_STATIC_PACKET(dream2_a2_sa_vddm_para, DSI_PKT_TYPE_WR, DREAM2_A2_SA_VDDM_PARA);
+DEFINE_STATIC_PACKET(dream2_a2_sa_vddm_orig, DSI_PKT_TYPE_WR, DREAM2_A2_SA_VDDM_ORIG);
+DEFINE_VARIABLE_PACKET(dream2_a2_sa_vddm_volt, DSI_PKT_TYPE_WR, DREAM2_A2_SA_VDDM_VOLT, &dream2_a2_sa_maptbl[VDDM_MAPTBL], 1);
+DEFINE_STATIC_PACKET(dream2_a2_sa_vddm_update_enable, DSI_PKT_TYPE_WR, DREAM2_A2_SA_VDDM_UPDATE_ENABLE);
+DEFINE_STATIC_PACKET(dream2_a2_sa_vddm_update_disable, DSI_PKT_TYPE_WR, DREAM2_A2_SA_VDDM_UPDATE_DISABLE);
+DEFINE_VARIABLE_PACKET(dream2_a2_sa_gram_img_pattern_0, DSI_PKT_TYPE_WR_MEM, DREAM2_A2_SA_GRAM_IMG_PATTERN, &dream2_a2_sa_maptbl[GRAM_IMG_0_MAPTBL], 0);
+DEFINE_VARIABLE_PACKET(dream2_a2_sa_gram_img_pattern_1, DSI_PKT_TYPE_WR_MEM, DREAM2_A2_SA_GRAM_IMG_PATTERN, &dream2_a2_sa_maptbl[GRAM_IMG_1_MAPTBL], 0);
 #endif
 
 DEFINE_VARIABLE_PACKET(dream2_a2_sa_gamma, DSI_PKT_TYPE_WR, DREAM2_A2_SA_GAMMA, &dream2_a2_sa_maptbl[GAMMA_MAPTBL], 1);
@@ -1793,6 +1857,13 @@ DEFINE_STATIC_PACKET(dream2_a2_sa_isc_02, DSI_PKT_TYPE_WR, DREAM2_A2_SA_ISC_02);
 DEFINE_STATIC_PACKET(dream2_a2_sa_isc_03, DSI_PKT_TYPE_WR, DREAM2_A2_SA_ISC_03);
 DEFINE_STATIC_PACKET(dream2_a2_sa_isc_04, DSI_PKT_TYPE_WR, DREAM2_A2_SA_ISC_04);
 
+#ifdef CONFIG_SUPPORT_MST
+DEFINE_STATIC_PACKET(dream2_a2_sa_mst_on_01, DSI_PKT_TYPE_WR, DREAM2_A2_SA_MST_ON_01);
+DEFINE_STATIC_PACKET(dream2_a2_sa_mst_on_02, DSI_PKT_TYPE_WR, DREAM2_A2_SA_MST_ON_02);
+DEFINE_STATIC_PACKET(dream2_a2_sa_mst_off_01, DSI_PKT_TYPE_WR, DREAM2_A2_SA_MST_OFF_01);
+DEFINE_STATIC_PACKET(dream2_a2_sa_mst_off_02, DSI_PKT_TYPE_WR, DREAM2_A2_SA_MST_OFF_02);
+#endif
+
 #ifdef CONFIG_SUPPORT_POC_FLASH
 DEFINE_VARIABLE_PACKET(dream2_a2_sa_poc_on, DSI_PKT_TYPE_WR, DREAM2_A2_SA_POC_ON, &dream2_a2_sa_maptbl[POC_ON_MAPTBL], 4);
 #endif
@@ -1820,6 +1891,12 @@ static DEFINE_PANEL_UDELAY(dream2_a2_sa_wait_1_frame_in_60hz, 16700);
 static DEFINE_PANEL_UDELAY(dream2_a2_sa_wait_1_frame_in_30hz, 33400);
 static DEFINE_PANEL_MDELAY(dream2_a2_sa_wait_100msec, 100);
 static DEFINE_PANEL_MDELAY(dream2_a2_sa_wait_124msec, 124);
+
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+static DEFINE_PANEL_MDELAY(dream2_a2_sa_wait_120msec, 120);
+static DEFINE_PANEL_MDELAY(dream2_a2_sa_wait_vddm_update, 100);
+static DEFINE_PANEL_MDELAY(dream2_a2_sa_wait_gram_checksum, 300);
+#endif
 
 static DEFINE_PANEL_KEY(dream2_a2_sa_level1_key_enable, CMD_LEVEL_1, KEY_ENABLE, &PKTINFO(dream2_a2_sa_level1_key_enable));
 static DEFINE_PANEL_KEY(dream2_a2_sa_level2_key_enable, CMD_LEVEL_2, KEY_ENABLE, &PKTINFO(dream2_a2_sa_level2_key_enable));
@@ -2055,6 +2132,72 @@ static void *dream2_a2_sa_mcd_off_cmdtbl[] = {
 	&KEYINFO(dream2_a2_sa_level2_key_disable),
 };
 
+#ifdef CONFIG_SUPPORT_MST
+static void *dream2_a2_sa_mst_on_cmdtbl[] = {
+	&KEYINFO(dream2_a2_sa_level2_key_enable),
+	&PKTINFO(dream2_a2_sa_mst_on_01),
+	&PKTINFO(dream2_a2_sa_mst_on_02),
+	&KEYINFO(dream2_a2_sa_level2_key_disable),
+};
+
+static void *dream2_a2_sa_mst_off_cmdtbl[] = {
+	&KEYINFO(dream2_a2_sa_level2_key_enable),
+	&PKTINFO(dream2_a2_sa_mst_off_01),
+	&PKTINFO(dream2_a2_sa_mst_off_02),
+	&KEYINFO(dream2_a2_sa_level2_key_disable),
+};
+#endif
+
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+static void *dream2_a2_sa_gct_enter_cmdtbl[] = {
+	&KEYINFO(dream2_a2_sa_level1_key_enable),
+	&PKTINFO(dream2_a2_sa_sw_reset),
+	&DLYINFO(dream2_a2_sa_wait_120msec),
+	&PKTINFO(dream2_a2_sa_sleep_out),
+	&DLYINFO(dream2_a2_sa_wait_sleep_out),
+	&PKTINFO(dream2_a2_sa_gct_dsc),
+	&PKTINFO(dream2_a2_sa_gct_pps),
+	&KEYINFO(dream2_a2_sa_level1_key_disable),
+};
+
+static void *dream2_a2_sa_gct_vddm_cmdtbl[] = {
+	&KEYINFO(dream2_a2_sa_level2_key_enable),
+	&KEYINFO(dream2_a2_sa_level3_key_enable),
+	&PKTINFO(dream2_a2_sa_vddm_para),
+	&PKTINFO(dream2_a2_sa_vddm_volt),
+	&PKTINFO(dream2_a2_sa_vddm_update_enable),
+	&PKTINFO(dream2_a2_sa_vddm_update_disable),
+	&DLYINFO(dream2_a2_sa_wait_vddm_update),
+	&KEYINFO(dream2_a2_sa_level3_key_disable),
+	&KEYINFO(dream2_a2_sa_level2_key_disable),
+};
+
+static void *dream2_a2_sa_gct_img_update_cmdtbl[] = {
+	&PKTINFO(dream2_a2_sa_gram_img_pattern_0),
+	&PKTINFO(dream2_a2_sa_gram_img_pattern_1),
+	&DLYINFO(dream2_a2_sa_wait_gram_checksum),
+	&s6e3ha6_restbl[RES_GRAM_CHECKSUM],
+};
+
+static void *dream2_a2_sa_gct_exit_cmdtbl[] = {
+	&KEYINFO(dream2_a2_sa_level2_key_enable),
+	&KEYINFO(dream2_a2_sa_level3_key_enable),
+	&PKTINFO(dream2_a2_sa_vddm_para),
+	&PKTINFO(dream2_a2_sa_vddm_orig),
+	&PKTINFO(dream2_a2_sa_vddm_update_enable),
+	&PKTINFO(dream2_a2_sa_vddm_update_disable),
+	&DLYINFO(dream2_a2_sa_wait_vddm_update),
+	&KEYINFO(dream2_a2_sa_level3_key_disable),
+	&KEYINFO(dream2_a2_sa_level2_key_disable),
+
+	&KEYINFO(dream2_a2_sa_level1_key_enable),
+	&PKTINFO(dream2_a2_sa_sw_reset),
+	&DLYINFO(dream2_a2_sa_wait_120msec),
+	&KEYINFO(dream2_a2_sa_level1_key_disable),
+	&SEQINFO(dream2_a2_sa_seqtbl[PANEL_INIT_SEQ]),
+};
+#endif
+
 #ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
 static void *dream2_a2_sa_grayspot_on_cmdtbl[] = {
 	&KEYINFO(dream2_a2_sa_level2_key_enable),
@@ -2082,14 +2225,18 @@ static void *dream2_a2_sa_active_clk_img_cmdtbl[] = {
 static void *dream2_a2_sa_active_clk_ctrl_cmdtbl[] = {
 	&KEYINFO(dream2_a2_sa_level2_key_enable),
 	&PKTINFO(dream2_a2_sa_enable_active_clk),
+#if 0
 	&PKTINFO(dream2_a2_sa_set_self_drawer),
+#endif
 	&KEYINFO(dream2_a2_sa_level2_key_disable),
 };
 
 static void *dream2_a2_sa_active_clk_update_cmdtbl[] = {
 	&KEYINFO(dream2_a2_sa_level2_key_enable),
 	&PKTINFO(dream2_a2_sa_enable_active_clk),
+#if 0
 	&PKTINFO(dream2_a2_sa_set_self_drawer),
+#endif
 	&DLYINFO(dream2_a2_sa_wait_1_frame_in_30hz),
 	&PKTINFO(dream2_a2_sa_update_active_clk),
 	&KEYINFO(dream2_a2_sa_level2_key_disable),
@@ -2134,10 +2281,20 @@ static struct seqinfo dream2_a2_sa_seqtbl[MAX_PANEL_SEQ] = {
 #endif
 	[PANEL_MCD_ON_SEQ] = SEQINFO_INIT("mcd-on-seq", dream2_a2_sa_mcd_on_cmdtbl),
 	[PANEL_MCD_OFF_SEQ] = SEQINFO_INIT("mcd-off-seq", dream2_a2_sa_mcd_off_cmdtbl),
+#ifdef CONFIG_SUPPORT_MST
+	[PANEL_MST_ON_SEQ] = SEQINFO_INIT("mst-on-seq", dream2_a2_sa_mst_on_cmdtbl),
+	[PANEL_MST_OFF_SEQ] = SEQINFO_INIT("mst-off-seq", dream2_a2_sa_mst_off_cmdtbl),
+#endif
 #ifdef CONFIG_ACTIVE_CLOCK
 	[PANEL_ACTIVE_CLK_IMG_SEQ] = SEQINFO_INIT("active-clk-img-seq", dream2_a2_sa_active_clk_img_cmdtbl),
 	[PANEL_ACTIVE_CLK_CTRL_SEQ] = SEQINFO_INIT("active-clk-ctrl-seq", dream2_a2_sa_active_clk_ctrl_cmdtbl),
 	[PANEL_ACTIVE_CLK_UPDATE_SEQ] = SEQINFO_INIT("active-clk-update-seq", dream2_a2_sa_active_clk_update_cmdtbl),
+#endif
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+	[PANEL_GCT_ENTER_SEQ] = SEQINFO_INIT("gct-enter-seq", dream2_a2_sa_gct_enter_cmdtbl),
+	[PANEL_GCT_VDDM_SEQ] = SEQINFO_INIT("gct-vddm-seq", dream2_a2_sa_gct_vddm_cmdtbl),
+	[PANEL_GCT_IMG_UPDATE_SEQ] = SEQINFO_INIT("gct-img-update-seq", dream2_a2_sa_gct_img_update_cmdtbl),
+	[PANEL_GCT_EXIT_SEQ] = SEQINFO_INIT("gct-exit-seq", dream2_a2_sa_gct_exit_cmdtbl),
 #endif
 #ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
 	[PANEL_GRAYSPOT_ON_SEQ] = SEQINFO_INIT("grayspot-on-seq", dream2_a2_sa_grayspot_on_cmdtbl),

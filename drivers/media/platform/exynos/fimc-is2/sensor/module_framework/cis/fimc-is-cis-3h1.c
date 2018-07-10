@@ -37,9 +37,9 @@
 #include "fimc-is-resourcemgr.h"
 #include "fimc-is-dt.h"
 #include "fimc-is-cis-3h1.h"
+#include "fimc-is-vender.h"
 #include "fimc-is-cis-3h1-setA.h"
 #include "fimc-is-cis-3h1-setB.h"
-
 #include "fimc-is-helper-i2c.h"
 
 #define SENSOR_NAME "S5K3H1"
@@ -50,6 +50,33 @@ static const u32 **sensor_3h1_setfiles;
 static const u32 *sensor_3h1_setfile_sizes;
 static const struct sensor_pll_info_compact **sensor_3h1_pllinfos;
 static u32 sensor_3h1_max_setfile_num;
+
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
+int sensor_3h1_cis_set_mipi_clock(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	struct fimc_is_cis *cis = NULL;
+	int mode = 0;
+	BUG_ON(!subdev);
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+
+	BUG_ON(!cis);
+	BUG_ON(!cis->cis_data);
+
+	mode = cis->cis_data->sens_config_index_cur;
+
+	if (cis->mipi_clock_index_cur != cis->mipi_clock_index_new) {
+		if (sensor_3h1_setfiles_A_mipi_clock_list[mode] != NULL) {
+			sensor_cis_set_registers(subdev, sensor_3h1_setfiles_A_mipi_clock_list[mode][cis->mipi_clock_index_new],
+				sensor_3h1_setfile_A_sizes_mipi_clock_list[mode]);
+		}
+		cis->mipi_clock_index_cur = cis->mipi_clock_index_new;
+	}
+
+	return ret;
+}
+#endif
 
 static void sensor_3h1_cis_data_calculation(const struct sensor_pll_info_compact *pll_info_compact, cis_shared_data *cis_data)
 {
@@ -167,10 +194,8 @@ int sensor_3h1_cis_init(struct v4l2_subdev *subdev)
 	if (ret < 0) {
 #ifdef USE_CAMERA_HW_BIG_DATA
 		sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
-		if (sensor_peri && sensor_peri->module->position == SENSOR_POSITION_REAR)
-			fimc_is_sec_get_rear_hw_param(&hw_param);
-		else if (sensor_peri && sensor_peri->module->position == SENSOR_POSITION_FRONT)
-			fimc_is_sec_get_front_hw_param(&hw_param);
+		if (sensor_peri)
+			fimc_is_sec_get_hw_param(&hw_param, sensor_peri->module->position);
 		if (hw_param)
 			hw_param->i2c_sensor_err_cnt++;
 #endif
@@ -184,6 +209,10 @@ int sensor_3h1_cis_init(struct v4l2_subdev *subdev)
 	cis->cis_data->cur_height = SENSOR_3H1_MAX_HEIGHT;
 	cis->cis_data->low_expo_start = 33000;
 	cis->need_mode_change = false;
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
+	cis->mipi_clock_index_cur = CAMERA_MIPI_CLOCK_DEFAULT;
+	cis->mipi_clock_index_new = CAMERA_MIPI_CLOCK_DEFAULT;
+#endif
 
 	sensor_3h1_cis_data_calculation(sensor_3h1_pllinfos[setfile_index], cis->cis_data);
 
@@ -370,6 +399,10 @@ int sensor_3h1_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 	}
 
 	sensor_3h1_cis_data_calculation(sensor_3h1_pllinfos[mode], cis->cis_data);
+
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
+	cis->mipi_clock_index_cur = CAMERA_MIPI_CLOCK_DEFAULT;
+#endif
 
 	I2C_MUTEX_LOCK(cis->i2c_lock);
 	ret = sensor_cis_set_registers(subdev, sensor_3h1_setfiles[mode], sensor_3h1_setfile_sizes[mode]);
@@ -581,6 +614,9 @@ int sensor_3h1_cis_stream_on(struct v4l2_subdev *subdev)
 	dbg_sensor("[MOD:D:%d] %s\n", cis->id, __func__);
 
 	I2C_MUTEX_LOCK(cis->i2c_lock);
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
+	sensor_3h1_cis_set_mipi_clock(subdev);
+#endif
 	sensor_3h1_cis_group_param_hold_func(subdev, 0x00);
 	msleep(8);
 	/* Sensor stream on */
@@ -1644,6 +1680,108 @@ p_err:
 	return ret;
 }
 
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
+int sensor_3h1_cis_update_settle_info(struct v4l2_subdev *subdev)
+{
+	int i = 0, mipi_index = 0;
+	struct fimc_is_cis *cis = NULL;
+	struct fimc_is_device_sensor *device;
+	struct fimc_is_module_enum *module;
+
+	device = (struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(subdev);
+	if (device == NULL) {
+		err("device is NULL");
+		return -1;
+	}
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+	if (cis == NULL) {
+		err("cis is NULL");
+		return -1;
+	}
+
+	mipi_index = cis->mipi_clock_index_new;
+	module = (struct fimc_is_module_enum *)v4l2_get_subdevdata(device->subdev_module);
+	if (module == NULL) {
+		err("module is NULL");
+		return -1;
+	}
+
+	for (i = 0; i < module->cfgs; i++) {
+		if (sensor_3h1_settle_mipi_clock_list[i] != NULL) {
+			module->cfg[i].settle = sensor_3h1_settle_mipi_clock_list[i][mipi_index];
+		}
+	}
+
+	return 0;
+}
+
+int sensor_3h1_cis_update_mipi_index_info(struct v4l2_subdev *subdev, u32 rat, u32 channel)
+{
+	struct fimc_is_cis *cis = NULL;
+	struct fimc_is_device_sensor *device;
+	int j = 0, i = 0;
+	int index = (channel % 10000) / 1000;
+	const struct earfcn_mipi_info *info;
+	const struct earfcn_mipi_info **rat_array;
+	const struct earfcn_mipi_info_sub *sub_info;
+	bool find = false;
+
+	device = (struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(subdev);
+	if (device == NULL) {
+		err("device is NULL");
+		return -1;
+	}
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+	if (cis == NULL) {
+		err("cis is NULL");
+		return -1;
+	}
+
+	if (rat < CAMERA_RAT_BASE || rat >= CAMERA_RAT_MAX) {
+		err("RAT is out of range [%d]", rat);
+		return -1;
+	}
+
+	rat -= CAMERA_RAT_BASE;
+	rat_array = sensor_3h1_RAT[rat];
+	if (rat_array == NULL) {
+		err("mipi variation not support [%d] NULL", rat);
+		return -1;
+	}
+
+	for (j = 0; j < sensor_3h1_RAT_sizes[rat]; j++) {
+		info = rat_array[j];
+		if (info->min <= channel && channel < info->max) {
+			sub_info = info->info_sub[index];
+			for (i = 0; i < MAX_SUB_NUM_COL; i++) {
+				if (sub_info[i].sub_max == -1)
+					break;
+
+				if (sub_info[i].sub_max < channel)
+					continue;
+
+				if (sub_info[i].sub_min <= channel) {
+					cis->mipi_clock_index_new = sub_info[i].idx;
+					find = true;
+					info("find mipi index %d %d %d \n", sub_info[i].sub_min, sub_info[i].sub_max,
+								cis->mipi_clock_index_new);
+				}
+				break;
+			}
+			break;
+		}
+	}
+
+	if (find == false) {
+		err("find mipi index faild %d", channel);
+		cis->mipi_clock_index_new = CAMERA_MIPI_CLOCK_DEFAULT;
+	}
+	return 0;
+}
+#endif
+
 static struct fimc_is_cis_ops cis_ops = {
 	.cis_init = sensor_3h1_cis_init,
 	.cis_log_status = sensor_3h1_cis_log_status,
@@ -1669,6 +1807,10 @@ static struct fimc_is_cis_ops cis_ops = {
 	.cis_get_max_digital_gain = sensor_3h1_cis_get_max_digital_gain,
 	.cis_compensate_gain_for_extremely_br = sensor_cis_compensate_gain_for_extremely_br,
 	.cis_wait_streamoff = sensor_cis_wait_streamoff,
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
+	.cis_update_settle_info = sensor_3h1_cis_update_settle_info,
+	.cis_update_mipi_index_info = sensor_3h1_cis_update_mipi_index_info,
+#endif
 };
 
 int cis_3h1_probe(struct i2c_client *client,
@@ -1748,7 +1890,10 @@ int cis_3h1_probe(struct i2c_client *client,
 		cis->client = client;
 		sensor_peri->module->client = cis->client;
 		cis->i2c_lock = NULL;
-
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
+		cis->mipi_clock_index_cur = CAMERA_MIPI_CLOCK_DEFAULT;
+		cis->mipi_clock_index_new = CAMERA_MIPI_CLOCK_DEFAULT;
+#endif
 		cis->cis_data = kzalloc(sizeof(cis_shared_data), GFP_KERNEL);
 		if (!cis->cis_data) {
 			err("cis_data is NULL");

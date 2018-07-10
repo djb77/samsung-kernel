@@ -396,6 +396,10 @@ static ssize_t muic_show_attached_dev(struct device *dev,
 		return sprintf(buf, "AUDIODOCK\n");
 	case ATTACHED_DEV_CHARGING_CABLE_MUIC:
 		return sprintf(buf, "PS CABLE\n");
+	case ATTACHED_DEV_AFC_CHARGER_PREPARE_MUIC:
+	case ATTACHED_DEV_AFC_CHARGER_PREPARE_DUPLI_MUIC:
+	case ATTACHED_DEV_AFC_CHARGER_5V_DUPLI_MUIC:
+		return sprintf(buf, "AFC Communication\n");
 	case ATTACHED_DEV_AFC_CHARGER_5V_MUIC:
 	case ATTACHED_DEV_AFC_CHARGER_9V_MUIC:
 	case ATTACHED_DEV_AFC_CHARGER_12V_MUIC:

@@ -25,9 +25,12 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/module.h>
 
 #define UID_HASH_BITS	10
 DECLARE_HASHTABLE(hash_table, UID_HASH_BITS);
+static int uid_count;
+module_param(uid_count, int, 0444);
 
 static DEFINE_MUTEX(uid_lock);
 static struct proc_dir_entry *parent;
@@ -41,6 +44,8 @@ struct uid_entry {
 	unsigned long long active_power;
 	unsigned long long power;
 	struct hlist_node hash;
+	pid_t pid;
+	char comm[TASK_COMM_LEN];
 };
 
 static struct uid_entry *find_uid_entry(uid_t uid)
@@ -53,8 +58,9 @@ static struct uid_entry *find_uid_entry(uid_t uid)
 	return NULL;
 }
 
-static struct uid_entry *find_or_register_uid(uid_t uid)
+static struct uid_entry *find_or_register_uid_of_task(struct task_struct *task)
 {
+	uid_t uid = from_kuid_munged(current_user_ns(), task_uid(task));
 	struct uid_entry *uid_entry;
 
 	uid_entry = find_uid_entry(uid);
@@ -66,6 +72,11 @@ static struct uid_entry *find_or_register_uid(uid_t uid)
 		return NULL;
 
 	uid_entry->uid = uid;
+	uid_entry->pid = task->group_leader->pid;
+	get_task_comm(uid_entry->comm, task->group_leader);
+	pr_info("add uid %llu: pid %d %s (uid_count: %d)\n",
+		(unsigned long long)uid, uid_entry->pid, uid_entry->comm,
+		++uid_count);
 
 	hash_add(hash_table, &uid_entry->hash, uid);
 
@@ -90,14 +101,13 @@ static int uid_stat_show(struct seq_file *m, void *v)
 
 	read_lock(&tasklist_lock);
 	do_each_thread(temp, task) {
-		uid_entry = find_or_register_uid(from_kuid_munged(
-			current_user_ns(), task_uid(task)));
+		uid_entry = find_or_register_uid_of_task(task);
 		if (!uid_entry) {
 			read_unlock(&tasklist_lock);
 			mutex_unlock(&uid_lock);
-			pr_err("%s: failed to find the uid_entry for uid %d\n",
+			pr_err("%s: failed to find the uid_entry for uid %d, task %s\n",
 				__func__, from_kuid_munged(current_user_ns(),
-				task_uid(task)));
+				task_uid(task)), task->comm);
 			return -ENOMEM;
 		}
 		/* if this task is exiting, we have already accounted for the
@@ -180,6 +190,10 @@ static ssize_t uid_remove_write(struct file *file,
 		hash_for_each_possible_safe(hash_table, uid_entry, tmp,
 							hash, (uid_t)uid_start) {
 			if (uid_start == uid_entry->uid) {
+			        pr_info("remove uid %llu: pid %d %s (uid_count: %d)\n",
+				        (unsigned long long)uid_entry->uid,
+				        uid_entry->pid, uid_entry->comm,
+				        --uid_count);
 				hash_del(&uid_entry->hash);
 				kfree(uid_entry);
 			}
@@ -202,16 +216,15 @@ static int process_notifier(struct notifier_block *self,
 	struct task_struct *task = v;
 	struct uid_entry *uid_entry;
 	cputime_t utime, stime;
-	uid_t uid;
 
 	if (!task)
 		return NOTIFY_OK;
 
 	mutex_lock(&uid_lock);
-	uid = from_kuid_munged(current_user_ns(), task_uid(task));
-	uid_entry = find_or_register_uid(uid);
+	uid_entry = find_or_register_uid_of_task(task);
 	if (!uid_entry) {
-		pr_err("%s: failed to find uid %d\n", __func__, uid);
+		pr_err("%s: failed to find uid of task %s\n", __func__,
+		       task->comm);
 		goto exit;
 	}
 

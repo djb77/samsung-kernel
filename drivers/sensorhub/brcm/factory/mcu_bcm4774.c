@@ -143,13 +143,13 @@ ssize_t mcu_sleep_factorytest_store(struct device *dev,
 
 	return size;
 }
+struct sensor_value fsb[SENSOR_MAX];
 
 ssize_t mcu_sleep_factorytest_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	int iDataIdx, iSensorData = 0;
 	struct ssp_data *data = dev_get_drvdata(dev);
-	struct sensor_value fsb[SENSOR_MAX];
 	u16 chLength = 0;
 
 	memcpy(&chLength, buffer, 2);
@@ -169,7 +169,7 @@ ssize_t mcu_sleep_factorytest_show(struct device *dev,
 			&iDataIdx, &(fsb[iSensorData]));
 	}
 
-	fsb[PRESSURE_SENSOR].pressure[0] -= data->iPressureCal;
+	fsb[PRESSURE_SENSOR].pressure -= data->iPressureCal;
 
 exit:
 	ssp_dbg("[SSP]: %s Result\n"
@@ -186,11 +186,11 @@ exit:
 		fsb[ACCELEROMETER_SENSOR].z, fsb[GYROSCOPE_SENSOR].x,
 		fsb[GYROSCOPE_SENSOR].y, fsb[GYROSCOPE_SENSOR].z,
 		fsb[GEOMAGNETIC_SENSOR].cal_x, fsb[GEOMAGNETIC_SENSOR].cal_y,
-		fsb[GEOMAGNETIC_SENSOR].cal_z, fsb[PRESSURE_SENSOR].pressure[0],
-		fsb[PRESSURE_SENSOR].pressure[1],
+		fsb[GEOMAGNETIC_SENSOR].cal_z, fsb[PRESSURE_SENSOR].pressure,
+		fsb[PRESSURE_SENSOR].temperature,
 		fsb[GESTURE_SENSOR].data[0], fsb[GESTURE_SENSOR].data[1],
 		fsb[GESTURE_SENSOR].data[2], fsb[GESTURE_SENSOR].data[3],
-		fsb[PROXIMITY_SENSOR].prox[0], fsb[PROXIMITY_SENSOR].prox[1],
+		fsb[PROXIMITY_SENSOR].prox_detect, fsb[PROXIMITY_SENSOR].prox_adc,
 		fsb[TEMPERATURE_HUMIDITY_SENSOR].x,
 		fsb[TEMPERATURE_HUMIDITY_SENSOR].y,
 		fsb[TEMPERATURE_HUMIDITY_SENSOR].z,
@@ -198,15 +198,14 @@ exit:
 		fsb[LIGHT_SENSOR].w, fsb[LIGHT_SENSOR].a_time, fsb[LIGHT_SENSOR].a_gain
 		);
 
-	return sprintf(buf, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%u,"
-		"%u,%u,%u,%u,%u,%u,%d,%d,%d,%d,%d,%d\n",
+	return sprintf(buf, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%u,%u,%u,%u,%u,%u,%u,%d,%d,%d,%d,%d,%d\n",
 
 		fsb[ACCELEROMETER_SENSOR].x, fsb[ACCELEROMETER_SENSOR].y,
 		fsb[ACCELEROMETER_SENSOR].z, fsb[GYROSCOPE_SENSOR].x,
 		fsb[GYROSCOPE_SENSOR].y, fsb[GYROSCOPE_SENSOR].z,
 		fsb[GEOMAGNETIC_SENSOR].cal_x, fsb[GEOMAGNETIC_SENSOR].cal_y,
-		fsb[GEOMAGNETIC_SENSOR].cal_z, fsb[PRESSURE_SENSOR].pressure[0],
-		fsb[PRESSURE_SENSOR].pressure[1], fsb[PROXIMITY_SENSOR].prox[1],
+		fsb[GEOMAGNETIC_SENSOR].cal_z, fsb[PRESSURE_SENSOR].pressure,
+		fsb[PRESSURE_SENSOR].temperature, fsb[PROXIMITY_SENSOR].prox_adc,
 		fsb[LIGHT_SENSOR].r, fsb[LIGHT_SENSOR].g, fsb[LIGHT_SENSOR].b,
 		fsb[LIGHT_SENSOR].w, fsb[LIGHT_SENSOR].a_time, fsb[LIGHT_SENSOR].a_gain,
 

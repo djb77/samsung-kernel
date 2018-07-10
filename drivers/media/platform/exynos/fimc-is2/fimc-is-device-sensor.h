@@ -56,6 +56,8 @@ struct fimc_is_device_ischain;
 
 #define SENSOR_SSTREAM_MASK		0x0000000F
 #define SENSOR_SSTREAM_SHIFT		0
+#define SENSOR_USE_STANDBY_MASK		0x000000F0
+#define SENSOR_USE_STANDBY_SHIFT	4
 #define SENSOR_INSTANT_MASK		0x0FFF0000
 #define SENSOR_INSTANT_SHIFT		16
 #define SENSOR_NOBLOCK_MASK		0xF0000000
@@ -233,6 +235,7 @@ struct fimc_is_module_enum {
 	struct fimc_is_sensor_vc_max_size               vc_max_size[2];
 	u32						vc_max_buf;
 	u32						internal_vc[CSI_VIRTUAL_CH_MAX];
+	u32						vc_buffer_offset[CSI_VIRTUAL_CH_MAX];
 	struct i2c_client				*client;
 	struct sensor_open_extended			ext;
 	struct fimc_is_sensor_ops			*ops;
@@ -261,6 +264,7 @@ enum fimc_is_sensor_state {
 	FIMC_IS_SENSOR_BACK_NOWAIT_STOP,
 	FIMC_IS_SENSOR_SUBDEV_MODULE_INIT,
 	FIMC_IS_SENSOR_OTF_OUTPUT,
+	FIMC_IS_SENSOR_WAIT_STREAMING
 };
 
 enum sensor_subdev_internel_use {
@@ -365,6 +369,9 @@ struct fimc_is_device_sensor {
 
 	u32						sensor_width;
 	u32						sensor_height;
+
+	u32						use_standby;
+	u32						sstream;
 };
 
 int fimc_is_sensor_open(struct fimc_is_device_sensor *device,
@@ -416,6 +423,7 @@ int fimc_is_sensor_mclk_off(struct fimc_is_device_sensor *device, u32 scenario, 
 int fimc_is_sensor_gpio_on(struct fimc_is_device_sensor *device);
 int fimc_is_sensor_gpio_off(struct fimc_is_device_sensor *device);
 int fimc_is_sensor_gpio_dbg(struct fimc_is_device_sensor *device);
+void fimc_is_sensor_dump(struct fimc_is_device_sensor *device);
 
 int fimc_is_sensor_g_ctrl(struct fimc_is_device_sensor *device,
 	struct v4l2_control *ctrl);

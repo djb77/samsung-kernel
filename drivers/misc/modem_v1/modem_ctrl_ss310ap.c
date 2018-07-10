@@ -597,6 +597,9 @@ static void ss310ap_get_pdata(struct modem_ctl *mc, struct modem_data *modem)
 
 	mc->sbi_uart_noti_mask = mbx->sbi_uart_noti_mask;
 	mc->sbi_uart_noti_pos = mbx->sbi_uart_noti_pos;
+
+	mc->sbi_crash_type_mask = mbx->sbi_crash_type_mask;
+	mc->sbi_crash_type_pos = mbx->sbi_crash_type_pos;
 }
 
 #ifdef CONFIG_EXYNOS_BUSMONITOR

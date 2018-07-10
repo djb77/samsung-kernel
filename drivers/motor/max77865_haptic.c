@@ -47,9 +47,9 @@
 #define BOOST_ON                        1
 #define BOOST_OFF                       0
 
-#define HOMEKEY_PRESS_FREQ              2000
-#define HOMEKEY_RELEASE_FREQ            2000
-#define HOMEKEY_DURATION				7
+#define HOMEKEY_PRESS_FREQ              5
+#define HOMEKEY_RELEASE_FREQ            6
+#define HOMEKEY_DURATION                7
 
 static struct max77865_haptic_drvdata *g_drvdata;
 
@@ -80,6 +80,7 @@ struct max77865_haptic_drvdata {
 	bool f_packet_en;
 	int packet_size;
 	int packet_cnt;
+	bool packet_running;
 	struct vib_packet test_pac[PACKET_MAX_SIZE];
 };
 
@@ -223,6 +224,39 @@ static void max77865_haptic_i2c(struct max77865_haptic_drvdata *drvdata,
 	else
 		max77865_update_reg(drvdata->i2c,
 			MAX77865_PMIC_REG_MCONFIG, 0x0, MOTOR_EN);
+}
+
+static void max77865_haptic_engine_set_packet(struct max77865_haptic_drvdata *drvdata,
+		struct vib_packet haptic_packet)
+{
+	int frequency = haptic_packet.freq;
+	int intensity = haptic_packet.intensity;
+	int overdrive = haptic_packet.overdrive;
+
+	if (!drvdata->f_packet_en) {
+		pr_err("haptic packet is empty\n");
+		return;
+	}
+
+	max77865_haptic_set_overdrive_state(drvdata, overdrive);
+	max77865_haptic_set_frequency(drvdata, frequency);
+	max77865_haptic_set_intensity(drvdata, intensity);
+
+	if (intensity == 0) {
+		if (drvdata->packet_running) {
+			pr_info("[haptic engine] motor stop\n");
+			max77865_haptic_i2c(drvdata, false);
+		}
+		drvdata->packet_running = false;
+	} else {
+		if (!drvdata->packet_running) {
+			pr_info("[haptic engine] motor run\n");
+			max77865_haptic_i2c(drvdata, true);
+		}
+		drvdata->packet_running = true;
+	}
+
+	pr_info("%s [haptic_engine] freq:%d, intensity:%d, time:%d overdrive: %d\n", __func__, frequency, intensity, drvdata->timeout, drvdata->pdata->overdrive_state);
 }
 
 static ssize_t store_duty(struct device *dev,
@@ -403,7 +437,7 @@ static ssize_t haptic_engine_store(struct device *dev,
 		= container_of(tdev, struct max77865_haptic_drvdata, tout_dev);
 	int i = 0, _data = 0, tmp = 0;
 
-	if (sscanf(buf, "%d", &_data) == 1) {
+	if (sscanf(buf, "%6d", &_data) == 1) {
 		if (_data > PACKET_MAX_SIZE * 4)
 			pr_info("%s, [%d] packet size over\n", __func__, _data);
 		else {
@@ -415,7 +449,14 @@ static ssize_t haptic_engine_store(struct device *dev,
 
 			for (i = 0; i < drvdata->packet_size; i++) {
 				for (tmp = 0; tmp < 4; tmp++) {
-					if (sscanf(buf++, "%d", &_data) == 1) {
+					if (buf == NULL) {
+						pr_err("%s, buf is NULL, Please check packet data again\n",
+							__func__);
+						drvdata->f_packet_en = false;
+						return count;
+					}
+
+					if (sscanf(buf++, "%6d", &_data) == 1) {
 						switch (tmp){
 							case 0:
 								drvdata->test_pac[i].time = _data;
@@ -432,7 +473,8 @@ static ssize_t haptic_engine_store(struct device *dev,
 						}
 						buf = strstr(buf, " ");
 					} else {
-						pr_info("%s packet data error\n", __func__);
+						pr_err("%s, packet data error, Please check packet data again\n",
+							__func__);
 						drvdata->f_packet_en = false;
 						return count;
 					}
@@ -451,18 +493,17 @@ static ssize_t haptic_engine_show(struct device *dev,
 	struct max77865_haptic_drvdata *drvdata
 		= container_of(tdev, struct max77865_haptic_drvdata, tout_dev);
 	int i = 0;
-	char *bufp = buf;
+	size_t size = 0;
 
-	bufp += snprintf(bufp, VIB_BUFSIZE, "\n");
-	for (i = 0; i < drvdata->packet_size && drvdata->f_packet_en; i++) {
-		bufp+= snprintf(bufp, VIB_BUFSIZE, "%u,", drvdata->test_pac[i].time);
-		bufp+= snprintf(bufp, VIB_BUFSIZE, "%u,", drvdata->test_pac[i].intensity);
-		bufp+= snprintf(bufp, VIB_BUFSIZE, "%u,", drvdata->test_pac[i].freq);
-		bufp+= snprintf(bufp, VIB_BUFSIZE, "%u,", drvdata->test_pac[i].overdrive);
+	for (i = 0; i < drvdata->packet_size && drvdata->f_packet_en &&
+			((4 * VIB_BUFSIZE + size) < PAGE_SIZE); i++) {
+		size += snprintf(&buf[size], VIB_BUFSIZE, "%u,", drvdata->test_pac[i].time);
+		size += snprintf(&buf[size], VIB_BUFSIZE, "%u,", drvdata->test_pac[i].intensity);
+		size += snprintf(&buf[size], VIB_BUFSIZE, "%u,", drvdata->test_pac[i].freq);
+		size += snprintf(&buf[size], VIB_BUFSIZE, "%u,", drvdata->test_pac[i].overdrive);
 	}
-	bufp += snprintf(bufp, VIB_BUFSIZE, "\n");
 
-	return strlen(buf);
+	return size;
 }
 
 static DEVICE_ATTR(haptic_engine, 0660, haptic_engine_show, haptic_engine_store);
@@ -497,17 +538,15 @@ static void haptic_enable(struct timed_output_dev *tout_dev, int value)
 
 	value = min_t(int, value, (int)pdata->max_timeout);
 	drvdata->timeout = value;
+	drvdata->packet_running = false;
 
 	if (value > 0) {
 		mutex_lock(&drvdata->mutex);
 
 		if (drvdata->f_packet_en) {
 			drvdata->timeout = drvdata->test_pac[0].time;
-			max77865_haptic_set_overdrive_state(drvdata, drvdata->test_pac[0].overdrive);
-			max77865_haptic_set_frequency(drvdata, drvdata->test_pac[0].freq);
-			max77865_haptic_set_intensity(drvdata, drvdata->test_pac[0].intensity);
+			max77865_haptic_engine_set_packet(drvdata, drvdata->test_pac[0]);
 
-			pr_info("%s [haptic_engine] freq:%d, intensity:%d, time:%d overdrive: %d\n", __func__, drvdata->pdata->freq_num, drvdata->intensity, drvdata->timeout, drvdata->pdata->overdrive_state);
 #if defined(CONFIG_SSP_MOTOR_CALLBACK)
 			if(drvdata->intensity == 0)
 				setSensorCallback(false, 0);
@@ -525,12 +564,12 @@ static void haptic_enable(struct timed_output_dev *tout_dev, int value)
 				pr_debug("%d %u %ums\n", pdata->freq_num, drvdata->duty, value);
 			else
 				pr_debug("%u %ums\n", drvdata->duty, value);
+
+			max77865_haptic_i2c(drvdata, true);
 #if defined(CONFIG_SSP_MOTOR_CALLBACK)
 			setSensorCallback(true, value);
 #endif
 		}
-
-		max77865_haptic_i2c(drvdata, true);
 
 		mutex_unlock(&drvdata->mutex);
 		hrtimer_start(timer, ns_to_ktime((u64)drvdata->timeout * NSEC_PER_MSEC),
@@ -583,10 +622,7 @@ static void haptic_work(struct kthread_work *work)
 			drvdata->packet_cnt = 0;
 			drvdata->packet_size = 0;
 		} else {
-			max77865_haptic_set_overdrive_state(drvdata, drvdata->test_pac[drvdata->packet_cnt].overdrive);
-			max77865_haptic_set_frequency(drvdata, drvdata->test_pac[drvdata->packet_cnt].freq);
-			max77865_haptic_set_intensity(drvdata, drvdata->test_pac[drvdata->packet_cnt].intensity);
-			pr_info("%s [haptic_engine] freq:%d, intensity:%d, time:%d overdrive: %d\n", __func__, drvdata->pdata->freq_num, drvdata->intensity, drvdata->test_pac[drvdata->packet_cnt].time, drvdata->pdata->overdrive_state);
+			max77865_haptic_engine_set_packet(drvdata, drvdata->test_pac[drvdata->packet_cnt]);
 			hrtimer_start(timer, ns_to_ktime((u64)drvdata->test_pac[drvdata->packet_cnt].time * NSEC_PER_MSEC), HRTIMER_MODE_REL);
 #if defined(CONFIG_SSP_MOTOR_CALLBACK)
 			if(drvdata->intensity == 0)

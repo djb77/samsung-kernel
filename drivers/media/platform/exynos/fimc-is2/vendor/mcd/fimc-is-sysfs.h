@@ -69,6 +69,11 @@ enum fimc_is_cam_info_valid {
 	CAM_INFO_VALID,
 };
 
+enum fimc_is_cam_info_dual_open {
+	CAM_INFO_SINGLE_OPEN = 0,
+	CAM_INFO_DUAL_OPEN,
+};
+
 enum fimc_is_cam_info_index {
 	CAM_INFO_REAR = 0,
 	CAM_INFO_FRONT,
@@ -88,6 +93,7 @@ struct fimc_is_cam_info {
 	unsigned int companion;
 	unsigned int ois;
 	unsigned int valid;
+	unsigned int dual_open;
 };
 
 int fimc_is_get_cam_info(struct fimc_is_cam_info **caminfo);

@@ -3,7 +3,7 @@
  * ALSA SoC - Samsung Abox driver
  *
  * Copyright (c) 2016 Samsung Electronics Co. Ltd.
-  *
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -28,7 +28,7 @@ enum {
 #define SA_BASE			(0x000)
 #define SA_CHANGE_BIT		(0x000)
 #define SA_OUT_DEVICE		(0x010)
-#define	SA_PRESET 		(0x014)
+#define	SA_PRESET		(0x014)
 #define SA_EQ_BEGIN		(0x018)
 #define SA_EQ_END		(0x038)
 #define SA_3D_LEVEL		(0x03C)

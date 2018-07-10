@@ -41,7 +41,7 @@ extern int hrm_info;
 #define VENDOR					"ADI"
 
 #define VENDOR_VERISON			"2"
-#define VERSION					"29"
+#define VERSION					"32"
 
 #define ADPD143_SLAVE_ADDR		0x64
 
@@ -217,10 +217,10 @@ enum {
 
 /* AGC mode */
 enum {
-	M_HRM, // finger detection, IR&Red No Saturation
-	M_HRMLED_IR, //IR Only No Saturation
-	M_HRMLED_RED, //RED Only No Saturation
-	M_HRMLED_BOTH, //IR&Red No Saturation
+	M_HRM, /* finger detection, IR&Red No Saturation */
+	M_HRMLED_IR, /* IR Only No Saturation */
+	M_HRMLED_RED, /* RED Only No Saturation */
+	M_HRMLED_BOTH, /* IR&Red No Saturation */
 	M_NONE
 };
 
@@ -519,6 +519,7 @@ struct adpd_device_data {
 #define ADPD143_IOCTL_READ_FLICKER	_IOR(ADPD143_IOCTL_MAGIC, 0x01, int *)
 
 static struct adpd_device_data *adpd_data;
+static struct hrm_device_data *hrm_data;
 
 typedef struct _adpd_eol_result_ {
 	unsigned char eol_res_odr;
@@ -713,6 +714,21 @@ static int __adpd_i2c_reg_read(struct adpd_device_data *adpd_data, u8 reg_addr, 
 			.buf = (s8 *)buf,
 		},
 	};
+
+	if (hrm_data == NULL) {
+		HRM_dbg("%s - read error, hrm_data is null\n", __func__);
+		err = -EFAULT;
+		return err;
+	}
+
+	mutex_lock(&hrm_data->suspendlock);
+
+	if (!hrm_data->pm_state) {
+		HRM_dbg("%s - read error, pm suspend\n", __func__);
+		err = -EFAULT;
+		mutex_unlock(&hrm_data->suspendlock);
+		return err;
+	}
 	do_gettimeofday(&prev_tv);
 
 	do {
@@ -728,6 +744,8 @@ static int __adpd_i2c_reg_read(struct adpd_device_data *adpd_data, u8 reg_addr, 
 			}
 		}
 	} while ((err != 2) && (++tries < I2C_RETRIES));
+
+	mutex_unlock(&hrm_data->suspendlock);
 
 	if (err != 2) {
 		HRM_dbg("%s - read transfer error\n", __func__);
@@ -761,6 +779,21 @@ static int __adpd_i2c_reg_write(struct adpd_device_data *adpd_data, u8 reg_addr,
 	msgs[0].flags = adpd_data->client->flags & I2C_M_TEN;
 	msgs[0].len = 1 + (1 * sizeof(unsigned short));
 	msgs[0].buf = buf;
+
+	if (hrm_data == NULL) {
+		HRM_dbg("%s - write error, hrm_data is null\n", __func__);
+		err = -EFAULT;
+		return err;
+	}
+	mutex_lock(&hrm_data->suspendlock);
+
+	if (!hrm_data->pm_state) {
+		HRM_dbg("%s - write error, pm suspend\n", __func__);
+		err = -EFAULT;
+		mutex_unlock(&hrm_data->suspendlock);
+		return err;
+	}
+
 	do_gettimeofday(&prev_tv);
 
 	do {
@@ -776,6 +809,8 @@ static int __adpd_i2c_reg_write(struct adpd_device_data *adpd_data, u8 reg_addr,
 			}
 		}
 	} while ((err != 1) && (++tries < I2C_RETRIES));
+
+	mutex_unlock(&hrm_data->suspendlock);
 
 	if (err != 1) {
 		dev_err(&adpd_data->client->dev, "write transfer error\n");
@@ -1321,7 +1356,7 @@ static AGC_ErrCode_t __adpd_stepAgcLedA(unsigned *rawData)
 
 					return MwErrProcessing;
 				} else {
-					NoSkipSamples = 0;//<--here
+					NoSkipSamples = 0;
 					HRM_dbg("%s - MwErrLedAOutofRange4[End]\n", __func__);
 					return MwErrLedAOutofRange;
 				}
@@ -1434,7 +1469,7 @@ static AGC_ErrCode_t __adpd_stepAgcLedA(unsigned *rawData)
 
 					return MwErrProcessing;
 				} else {
-					NoSkipSamples = 0;//<--here
+					NoSkipSamples = 0;
 					HRM_dbg("%s - MwErrLedAOutofRange9[End]\n", __func__);
 					return MwErrLedAOutofRange;
 				}
@@ -1543,7 +1578,7 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 
 					return MwErrProcessing;
 				} else {
-					NoSkipSamples = 0;//<--here
+					NoSkipSamples = 0;
 					HRM_dbg("%s - MwErrLedAOutofRange1[End]\n", __func__);
 					return MwErrLedAOutofRange;
 				}
@@ -1575,7 +1610,7 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 
 						return MwErrProcessing;
 					} else {
-						NoSkipSamples = 0;//<--here
+						NoSkipSamples = 0;
 						HRM_dbg("%s - MwErrLedAOutofRange2[End]\n", __func__);
 						return MwErrLedAOutofRange;
 					}
@@ -1594,7 +1629,7 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 
 					return MwErrProcessing;
 				} else {
-					NoSkipSamples = 0;//<--here
+					NoSkipSamples = 0;
 					HRM_dbg("%s - MwErrLedAOutofRange4[End]\n", __func__);
 					return MwErrLedAOutofRange;
 				}
@@ -1621,7 +1656,7 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 				}
 			}
 		} else {
-			NoSkipSamples = 0;//<<--here
+			NoSkipSamples = 0;
 			HRM_info("%s - MwErrPass[End]\n", __func__);
 			return MwErrPass;
 		}
@@ -1645,7 +1680,7 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 
 					return MwErrProcessing;
 				} else {
-					NoSkipSamples = 0;//<--here
+					NoSkipSamples = 0;
 					HRM_dbg("%s - MwErrLedAOutofRange6[End]\n", __func__);
 
 					return MwErrLedAOutofRange;
@@ -1672,7 +1707,7 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 
 						return MwErrProcessing;
 					} else {
-						NoSkipSamples = 0;//<--here
+						NoSkipSamples = 0;
 						HRM_dbg("%s - MwErrLedAOutofRange7[End]\n", __func__);
 						return MwErrLedAOutofRange;
 					}
@@ -1706,13 +1741,13 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 
 					return MwErrProcessing;
 				} else {
-					NoSkipSamples = 0;//<--here
+					NoSkipSamples = 0;
 					HRM_dbg("%s - MwErrLedAOutofRange9[End]\n", __func__);
 					return MwErrLedAOutofRange;
 				}
 			}
 		} else {
-			NoSkipSamples = 0;//<-here
+			NoSkipSamples = 0;
 			HRM_info("%s - MwErrPass[End]\n", __func__);
 			return MwErrPass;
 		}
@@ -1914,7 +1949,7 @@ OBJ_PROXIMITY_STATUS __adpd_checkObjProximity(unsigned *dataInA, unsigned *dataI
 
 			__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
 
-			//More safety offet to guarantee any remaning DC noise after dark calibration
+			/* More safety offset to guarantee any remaning DC noise after dark calibration */
 			if (!adpd_data->Is_Hrm_Dark_Calibrated) {
 				g_eol_ADCOffset[0] += CH1_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
 				g_eol_ADCOffset[1] += CH2_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
@@ -4201,6 +4236,14 @@ int adpd_init_device(struct i2c_client *client)
 	adpd_data->ir_adc = 0;
 	adpd_data->red_adc = 0;
 
+	hrm_data = i2c_get_clientdata(adpd_data->client);
+
+	if (hrm_data == NULL) {
+		err = -EIO;
+		HRM_dbg("%s couldn't get hrm_data\n", __func__);
+		goto err_get_hrm_data;
+	}
+
 	/*chip ID verification */
 	u16_regval = __adpd_reg_read(adpd_data, ADPD_CHIPID_ADDR);
 
@@ -4287,6 +4330,7 @@ int adpd_init_device(struct i2c_client *client)
 
 err_p2p_reg_read:
 exit_chipid_verification:
+err_get_hrm_data:
 	mutex_unlock(&adpd_data->mutex);
 	mutex_destroy(&adpd_data->mutex);
 	mutex_destroy(&adpd_data->flickerdatalock);
@@ -4320,7 +4364,7 @@ int adpd_deinit_device(void)
 
 	mutex_unlock(&adpd_data->mutex);
 	mutex_destroy(&adpd_data->mutex);
-	
+
 	kfree(adpd_data);
 	adpd_data = NULL;
 
@@ -4722,6 +4766,12 @@ int adpd_set_eol_enable(u8 enable)
 		adpd_data->eol_test_is_enable = enable;
 
 		if (enable) {
+			if (adpd_data->hrm_mode == 0) {
+				HRM_dbg("%s - eol enable set fail. hrm mode is IDLE \n", __func__);
+				adpd_data->eol_test_is_enable = 0;
+				mutex_unlock(&adpd_data->mutex);
+				return -EPERM;
+			}
 			__adpd_mode_switching(adpd_data, SAMPLE_EOL_MODE);
 			adpd_data->eol_test_status = 0;
 		} else
@@ -4856,3 +4906,4 @@ int adpd_get_sensor_info(char *sensor_info_data)
 										adpd_data->slot_data[6], adpd_data->slot_data[7], adpd_data->slot_data[0],
 										adpd_data->slot_data[1], adpd_data->slot_data[2], adpd_data->slot_data[3]);
 }
+

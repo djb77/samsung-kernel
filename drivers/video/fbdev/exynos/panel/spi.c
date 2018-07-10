@@ -24,15 +24,22 @@
 #endif /* CONFIG_OF */
 
 #define DRIVER_NAME "panel_spi"
+#define MAX_PANEL_SPI_RX_BUF	(256)
+enum {
+	PANEL_SPI_CTRL_DATA_RX = 0,
+	PANEL_SPI_CTRL_DATA_TX = 1,
+};
 static struct spi_device *panel_spi;
 static DEFINE_MUTEX(panel_spi_lock);
 int panel_spi_write_data(struct spi_device *spi, const u8 *cmd, int size)
 {
 	int i, status;
-	u16 tx_buf[256];
+	u8 ctrl_data = PANEL_SPI_CTRL_DATA_TX;
 	struct spi_message msg;
-	struct spi_transfer tx = { .len = 0, .tx_buf = tx_buf, };
-	bool dc;
+	struct spi_transfer xfer[] = {
+		{ .bits_per_word = 1, .len = 1, .tx_buf = &ctrl_data, },
+		{ .bits_per_word = 8, .len = size, .tx_buf = cmd, },
+	};
 
 	if (unlikely(!spi || !cmd)) {
 		pr_err("%s, invalid parameter\n", __func__);
@@ -41,20 +48,10 @@ int panel_spi_write_data(struct spi_device *spi, const u8 *cmd, int size)
 
 	pr_debug("%s, addr 0x%02X len %d\n", __func__, cmd[0], size);
 
-	if (size > ARRAY_SIZE(tx_buf)) {
-		pr_err("%s, write length(%d) should be less than %ld\n",
-				__func__, size, ARRAY_SIZE(tx_buf));
-		return -EINVAL;
-	}
-
-	for (i = 0; i < size; i++) {
-		dc = (i == 0) ? 0 : 1;
-		tx_buf[i] = (dc << 8) | cmd[i];
-	}
-	tx.len = size * 2;
-
 	spi_message_init(&msg);
-	spi_message_add_tail(&tx, &msg);
+	for (i = 0; i < ARRAY_SIZE(xfer); i++)
+		if (xfer[i].len > 0)
+			spi_message_add_tail(&xfer[i], &msg);
 	status = spi_sync(spi, &msg);
 	if (status < 0) {
 		pr_err("%s, failed to spi_sync %d\n", __func__, status);
@@ -67,11 +64,20 @@ int panel_spi_write_data(struct spi_device *spi, const u8 *cmd, int size)
 int panel_spi_read_data(struct spi_device *spi, u8 addr, u8 *buf, int size)
 {
 	int i, status;
-	u16 cmd_addr;
-	u16 rx_buf[256];
+	u8 ctrl_data = PANEL_SPI_CTRL_DATA_RX;
+#ifdef CONFIG_SUPPORT_PANEL_SPI_SHORT_TEST
+	u8 dummy_rx_buf[1];
+#endif
+	u8 rx_buf[MAX_PANEL_SPI_RX_BUF];
 	struct spi_message msg;
-	struct spi_transfer tx = { .len = 2, .tx_buf = (u8 *)&cmd_addr, };
-	struct spi_transfer rx = { .len = 0, .rx_buf = rx_buf, };
+	struct spi_transfer xfer[] = {
+		{ .bits_per_word = 1, .len = 1, .tx_buf = &ctrl_data, },
+		{ .bits_per_word = 8, .len = 1, .tx_buf = &addr, },
+		{ .bits_per_word = 8, .len = size, .rx_buf = rx_buf, },
+#ifdef CONFIG_SUPPORT_PANEL_SPI_SHORT_TEST
+		{ .bits_per_word = 1, .len = 1, .rx_buf = dummy_rx_buf, },
+#endif
+	};
 
 	if (unlikely(!spi || !buf)) {
 		pr_err("%s, invalid parameter\n", __func__);
@@ -86,12 +92,12 @@ int panel_spi_read_data(struct spi_device *spi, u8 addr, u8 *buf, int size)
 		return -EINVAL;
 	}
 
-	cmd_addr = (0x0 << 8) | addr;
-	rx.len = size * 2;
+	memset(rx_buf, 0, sizeof(rx_buf));
 
 	spi_message_init(&msg);
-	spi_message_add_tail(&tx, &msg);
-	spi_message_add_tail(&rx, &msg);
+	for (i = 0; i < ARRAY_SIZE(xfer); i++)
+		if (xfer[i].len > 0)
+			spi_message_add_tail(&xfer[i], &msg);
 
 	status = spi_sync(spi, &msg);
 	if (status < 0) {
@@ -100,7 +106,7 @@ int panel_spi_read_data(struct spi_device *spi, u8 addr, u8 *buf, int size)
 	}
 
 	for (i = 0; i < size; i++) {
-		buf[i] = rx_buf[i] & 0xFF;
+		buf[i] = rx_buf[i];
 		pr_debug("%s, rx_buf[%d] 0x%02X\n", __func__, i, buf[i]);
 	}
 

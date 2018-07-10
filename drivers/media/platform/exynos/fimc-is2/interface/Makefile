@@ -3,8 +3,6 @@ obj-$(CONFIG_USE_DIRECT_IS_CONTROL) += fimc-is-interface-ischain.o \
 		fimc-is-interface-vra.o \
 		fimc-is-interface-ddk.o
 
-obj-$(CONFIG_USE_HOST_FD_LIBRARY) += fimc-is-interface-fd.o
-
 EXTRA_CFLAGS += -Idrivers/media/platform/exynos/fimc-is2/
 EXTRA_CFLAGS += -Idrivers/media/platform/exynos/fimc-is2/include
 EXTRA_CFLAGS += -Idrivers/media/platform/exynos/fimc-is2/hardware

@@ -3,7 +3,7 @@
  * ALSA SoC Audio Layer - Samsung Abox Debug driver
  *
  * Copyright (c) 2016 Samsung Electronics Co. Ltd.
-  *
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -24,14 +24,14 @@ struct dentry *abox_dbg_get_root_dir(void)
 {
 	pr_debug("%s\n", __func__);
 
-	if (abox_dbg_root_dir == NULL) {
+	if (abox_dbg_root_dir == NULL)
 		abox_dbg_root_dir = debugfs_create_dir("abox", NULL);
-	}
 
 	return abox_dbg_root_dir;
 }
 
-void abox_dbg_print_gpr_from_addr(struct device *dev, struct abox_data *data, unsigned int *addr)
+void abox_dbg_print_gpr_from_addr(struct device *dev,
+		struct abox_data *data, unsigned int *addr)
 {
 	int i;
 	char version[4];
@@ -42,9 +42,8 @@ void abox_dbg_print_gpr_from_addr(struct device *dev, struct abox_data *data, un
 	dev_info(dev, "A-Box CPU register dump (%c%c%c%c)\n",
 			version[3], version[2], version[1], version[0]);
 	dev_info(dev, "----------------------------------------\n");
-	for (i = 0; i <= 14; i++) {
+	for (i = 0; i <= 14; i++)
 		dev_info(dev, "CA7_R%02d        : %08x\n", i, *addr++);
-	}
 	dev_info(dev, "CA7_PC         : %08x\n", *addr++);
 	dev_info(dev, "========================================\n");
 }
@@ -60,11 +59,13 @@ void abox_dbg_print_gpr(struct device *dev, struct abox_data *data)
 	dev_info(dev, "A-Box CPU register dump (%c%c%c%c)\n",
 			version[3], version[2], version[1], version[0]);
 	dev_info(dev, "----------------------------------------\n");
-	for (i = 0; i <= 14; i++) {
-		dev_info(dev, "CA7_R%02d        : %08x\n", i, readl(data->sfr_base + ABOX_CA7_R(i)));
-	}
-	dev_info(dev, "CA7_PC         : %08x\n", readl(data->sfr_base + ABOX_CA7_PC));
-	dev_info(dev, "CA7_L2C_STATUS : %08x\n", readl(data->sfr_base + ABOX_CA7_L2C_STATUS));
+	for (i = 0; i <= 14; i++)
+		dev_info(dev, "CA7_R%02d        : %08x\n", i,
+				readl(data->sfr_base + ABOX_CA7_R(i)));
+	dev_info(dev, "CA7_PC         : %08x\n",
+			readl(data->sfr_base + ABOX_CA7_PC));
+	dev_info(dev, "CA7_L2C_STATUS : %08x\n",
+			readl(data->sfr_base + ABOX_CA7_L2C_STATUS));
 	dev_info(dev, "========================================\n");
 }
 
@@ -108,7 +109,8 @@ static int __init abox_rmem_setup(struct reserved_mem *rmem)
 
 RESERVEDMEM_OF_DECLARE(abox_rmem, "exynos,abox_rmem", abox_rmem_setup);
 
-void abox_dbg_dump_gpr_from_addr(struct device *dev, unsigned int *addr, enum abox_dbg_dump_src src, const char *reason)
+void abox_dbg_dump_gpr_from_addr(struct device *dev, unsigned int *addr,
+		enum abox_dbg_dump_src src, const char *reason)
 {
 	int i;
 
@@ -138,7 +140,8 @@ void abox_dbg_dump_gpr_from_addr(struct device *dev, unsigned int *addr, enum ab
 	}
 }
 
-void abox_dbg_dump_gpr(struct device *dev, struct abox_data *data, enum abox_dbg_dump_src src, const char *reason)
+void abox_dbg_dump_gpr(struct device *dev, struct abox_data *data,
+		enum abox_dbg_dump_src src, const char *reason)
 {
 	int i;
 
@@ -170,7 +173,8 @@ void abox_dbg_dump_gpr(struct device *dev, struct abox_data *data, enum abox_dbg
 	}
 }
 
-void abox_dbg_dump_mem(struct device *dev, struct abox_data *data, enum abox_dbg_dump_src src, const char *reason)
+void abox_dbg_dump_mem(struct device *dev, struct abox_data *data,
+		enum abox_dbg_dump_src src, const char *reason)
 {
 	struct abox_gic_data *gic_data = platform_get_drvdata(data->pdev_gic);
 
@@ -188,12 +192,15 @@ void abox_dbg_dump_mem(struct device *dev, struct abox_data *data, enum abox_dbg
 		strncpy(p_dump->reason, reason, sizeof(p_dump->reason) - 1);
 		memcpy_fromio(p_dump->sram, data->sram_base, data->sram_size);
 		if (data->ima_claimed)
-			memcpy_fromio(p_dump->iva, data->ima_vaddr, sizeof(p_dump->iva));
+			memcpy_fromio(p_dump->iva, data->ima_vaddr,
+					sizeof(p_dump->iva));
 		else
-			memcpy(p_dump->iva, data->iva_base, sizeof(p_dump->iva));
+			memcpy(p_dump->iva, data->iva_base,
+					sizeof(p_dump->iva));
 		memcpy(p_dump->dram, data->dram_base, sizeof(p_dump->dram));
 		memcpy_fromio(p_dump->sfr, data->sfr_base, sizeof(p_dump->sfr));
-		memcpy_fromio(p_dump->sfr_gic_gicd, gic_data->gicd_base, sizeof(p_dump->sfr_gic_gicd));
+		memcpy_fromio(p_dump->sfr_gic_gicd, gic_data->gicd_base,
+				sizeof(p_dump->sfr_gic_gicd));
 	} else if (p_abox_dbg_dump_min) {
 		struct abox_dbg_dump_min *p_dump = &(*p_abox_dbg_dump_min)[src];
 
@@ -201,15 +208,19 @@ void abox_dbg_dump_mem(struct device *dev, struct abox_data *data, enum abox_dbg
 		strncpy(p_dump->reason, reason, sizeof(p_dump->reason) - 1);
 		memcpy_fromio(p_dump->sram, data->sram_base, data->sram_size);
 		if (data->ima_claimed)
-			memcpy_fromio(p_dump->iva, data->ima_vaddr, sizeof(p_dump->iva));
+			memcpy_fromio(p_dump->iva, data->ima_vaddr,
+					sizeof(p_dump->iva));
 		else
-			memcpy(p_dump->iva, data->iva_base, sizeof(p_dump->iva));
+			memcpy(p_dump->iva, data->iva_base,
+					sizeof(p_dump->iva));
 		memcpy_fromio(p_dump->sfr, data->sfr_base, sizeof(p_dump->sfr));
-		memcpy_fromio(p_dump->sfr_gic_gicd, gic_data->gicd_base, sizeof(p_dump->sfr_gic_gicd));
+		memcpy_fromio(p_dump->sfr_gic_gicd, gic_data->gicd_base,
+				sizeof(p_dump->sfr_gic_gicd));
 	}
 }
 
-void abox_dbg_dump_gpr_mem(struct device *dev, struct abox_data *data, enum abox_dbg_dump_src src, const char *reason)
+void abox_dbg_dump_gpr_mem(struct device *dev, struct abox_data *data,
+		enum abox_dbg_dump_src src, const char *reason)
 {
 	abox_dbg_dump_gpr(dev, data, src, reason);
 	abox_dbg_dump_mem(dev, data, src, reason);
@@ -224,13 +235,13 @@ void abox_dbg_report_status(struct device *dev, bool ok)
 
 	dev_info(dev, "%s\n", __func__);
 
-	if (ok) {
+	if (ok)
 		atomic_inc(&abox_error_count);
-	} else {
+	else
 		atomic_set(&abox_error_count, 0);
-	}
 
-	snprintf(env, sizeof(env), "ERR_CNT=%d", atomic_read(&abox_error_count));
+	snprintf(env, sizeof(env), "ERR_CNT=%d",
+			atomic_read(&abox_error_count));
 	kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, envp);
 }
 
@@ -332,13 +343,14 @@ static int samsung_abox_debug_probe(struct platform_device *pdev)
 
 	dev_dbg(dev, "%s\n", __func__);
 
-	if (abox_rmem == NULL) {
+	if (abox_rmem == NULL)
 		return -ENOMEM;
-	}
 
-	dev_info(dev, "%s(%pa) is mapped on %p with size of %pa\n", "dump buffer",
-			&abox_rmem->base, phys_to_virt(abox_rmem->base), &abox_rmem->size);
-	iommu_map(data->iommu_domain, IOVA_DUMP_BUFFER, abox_rmem->base, abox_rmem->size, 0);
+	dev_info(dev, "%s(%pa) is mapped on %p with size of %pa\n",
+			"dump buffer", &abox_rmem->base,
+			phys_to_virt(abox_rmem->base), &abox_rmem->size);
+	iommu_map(data->iommu_domain, IOVA_DUMP_BUFFER,
+			abox_rmem->base, abox_rmem->size, 0);
 	data->dump_base = phys_to_virt(abox_rmem->base);
 	data->dump_base_phys = abox_rmem->base;
 	ret = device_create_file(dev, &dev_attr_gpr);

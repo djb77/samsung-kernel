@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_common.c 719896 2017-09-07 04:13:03Z $
+ * $Id: dhd_common.c 736294 2017-12-14 10:37:03Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -637,8 +637,8 @@ dhd_dump(dhd_pub_t *dhdp, char *buf, int buflen)
 	            dhdp->up, dhdp->txoff, dhdp->busstate);
 	bcm_bprintf(strbuf, "pub.hdrlen %u pub.maxctl %u pub.rxsz %u\n",
 	            dhdp->hdrlen, dhdp->maxctl, dhdp->rxsz);
-	bcm_bprintf(strbuf, "pub.iswl %d pub.drv_version %ld pub.mac %s\n",
-	            dhdp->iswl, dhdp->drv_version, bcm_ether_ntoa(&dhdp->mac, eabuf));
+	bcm_bprintf(strbuf, "pub.iswl %d pub.drv_version %ld pub.mac "MACDBG"\n",
+	            dhdp->iswl, dhdp->drv_version, MAC2STRDBG(bcm_ether_ntoa(&dhdp->mac, eabuf)));
 	bcm_bprintf(strbuf, "pub.bcmerror %d tickcnt %u\n", dhdp->bcmerror, dhdp->tickcnt);
 
 	bcm_bprintf(strbuf, "dongle stats:\n");
@@ -2772,12 +2772,11 @@ wl_process_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata, uint pktlen
 #ifdef PROP_TXSTATUS
 		{
 			uint8* ea = pvt_data->eth.ether_dhost;
-			WLFC_DBGMESG(("WLC_E_IF: idx:%d, action:%s, iftype:%s, "
-						  "[%02x:%02x:%02x:%02x:%02x:%02x]\n",
-						  ifevent->ifidx,
-						  ((ifevent->opcode == WLC_E_IF_ADD) ? "ADD":"DEL"),
-						  ((ifevent->role == 0) ? "STA":"AP "),
-						  ea[0], ea[1], ea[2], ea[3], ea[4], ea[5]));
+			WLFC_DBGMESG(("WLC_E_IF: idx:%d, action:%s, iftype:%s, ["MACDBG"]\n",
+				ifevent->ifidx,
+				((ifevent->opcode == WLC_E_IF_ADD) ? "ADD":"DEL"),
+				((ifevent->role == 0) ? "STA":"AP "),
+				MAC2STRDBG(ea)));
 			(void)ea;
 
 			if (ifevent->opcode == WLC_E_IF_CHANGE)
@@ -3221,20 +3220,28 @@ dhd_pktfilter_offload_set(dhd_pub_t * dhd, char *arg)
 		}
 
 		/* Parse pattern filter mask. */
-		mask_size =
-			htod32(wl_pattern_atoh(argv[i],
-			(char *) pkt_filterp->u.pattern.mask_and_pattern));
+		rc  = wl_pattern_atoh(argv[i],
+			(char *) pkt_filterp->u.pattern.mask_and_pattern);
 
+		if (rc == -1) {
+			DHD_ERROR(("Rejecting: %s\n", argv[i]));
+			goto fail;
+		}
+		mask_size = htod32(rc);
 		if (argv[++i] == NULL) {
 			DHD_ERROR(("Pattern not provided\n"));
 			goto fail;
 		}
 
 		/* Parse pattern filter pattern. */
-		pattern_size =
-			htod32(wl_pattern_atoh(argv[i],
-			(char *) &pkt_filterp->u.pattern.mask_and_pattern[mask_size]));
+		rc = wl_pattern_atoh(argv[i],
+			(char *) &pkt_filterp->u.pattern.mask_and_pattern[mask_size]);
 
+		if (rc == -1) {
+			DHD_ERROR(("Rejecting: %s\n", argv[i]));
+			goto fail;
+		}
+		pattern_size = htod32(rc);
 		if (mask_size != pattern_size) {
 			DHD_ERROR(("Mask and pattern not the same size\n"));
 			goto fail;
@@ -3550,6 +3557,12 @@ dhd_ndo_enable(dhd_pub_t * dhd, int ndo_enable)
 	if (dhd == NULL)
 		return -1;
 
+#ifdef WL_CFG80211
+	if (dhd->op_mode & DHD_FLAG_HOSTAP_MODE) {
+		/* NDO disable on STA+SOFTAP mode */
+		ndo_enable = FALSE;
+	}
+#endif /* WL_CFG80211 */
 	retcode = dhd_wl_ioctl_set_intiovar(dhd, "ndoe",
 		ndo_enable, WLC_SET_VAR, TRUE, 0);
 	if (retcode)
@@ -4262,26 +4275,36 @@ wl_parse_ssid_list_tlv(char** list_str, wlc_ssid_ext_t* ssid, int max, int *byte
 {
 	char* str;
 	int idx = 0;
+	uint8 len;
 
 	if ((list_str == NULL) || (*list_str == NULL) || (*bytes_left < 0)) {
 		DHD_ERROR(("%s error paramters\n", __FUNCTION__));
-		return -1;
+		return BCME_BADARG;
 	}
 	str = *list_str;
 	while (*bytes_left > 0) {
-
 		if (str[0] != CSCAN_TLV_TYPE_SSID_IE) {
 			*list_str = str;
 			DHD_TRACE(("nssid=%d left_parse=%d %d\n", idx, *bytes_left, str[0]));
 			return idx;
 		}
 
+		if (idx >= max) {
+			DHD_ERROR(("%s number of SSIDs more than %d\n", __FUNCTION__, idx));
+			return BCME_BADARG;
+		}
+
 		/* Get proper CSCAN_TLV_TYPE_SSID_IE */
 		*bytes_left -= 1;
+		if (*bytes_left == 0) {
+			DHD_ERROR(("%s no length field.\n", __FUNCTION__));
+			return BCME_BADARG;
+		}
 		str += 1;
 		ssid[idx].rssi_thresh = 0;
 		ssid[idx].flags = 0;
-		if (str[0] == 0) {
+		len = str[0];
+		if (len == 0) {
 			/* Broadcast SSID */
 			ssid[idx].SSID_len = 0;
 			memset((char*)ssid[idx].SSID, 0x0, DOT11_MAX_SSID_LEN);
@@ -4289,20 +4312,17 @@ wl_parse_ssid_list_tlv(char** list_str, wlc_ssid_ext_t* ssid, int max, int *byte
 			str += 1;
 
 			DHD_TRACE(("BROADCAST SCAN  left=%d\n", *bytes_left));
-		}
-		else if (str[0] <= DOT11_MAX_SSID_LEN) {
+		} else if (len <= DOT11_MAX_SSID_LEN) {
 			/* Get proper SSID size */
-			ssid[idx].SSID_len = str[0];
+			ssid[idx].SSID_len = len;
 			*bytes_left -= 1;
-			str += 1;
-
 			/* Get SSID */
 			if (ssid[idx].SSID_len > *bytes_left) {
 				DHD_ERROR(("%s out of memory range len=%d but left=%d\n",
 				__FUNCTION__, ssid[idx].SSID_len, *bytes_left));
-				return -1;
+				return BCME_BADARG;
 			}
-
+			str += 1;
 			memcpy((char*)ssid[idx].SSID, str, ssid[idx].SSID_len);
 
 			*bytes_left -= ssid[idx].SSID_len;
@@ -4311,16 +4331,11 @@ wl_parse_ssid_list_tlv(char** list_str, wlc_ssid_ext_t* ssid, int max, int *byte
 
 			DHD_TRACE(("%s :size=%d left=%d\n",
 				(char*)ssid[idx].SSID, ssid[idx].SSID_len, *bytes_left));
+		} else {
+			DHD_ERROR(("### SSID size more than %d\n", str[0]));
+			return BCME_BADARG;
 		}
-		else {
-			DHD_ERROR(("### SSID size more that %d\n", str[0]));
-			return -1;
-		}
-
-		if (idx++ >  max) {
-			DHD_ERROR(("%s number of SSIDs more that %d\n", __FUNCTION__, idx));
-			return -1;
-		}
+		idx++;
 	}
 
 	*list_str = str;
@@ -5587,6 +5602,11 @@ dhd_parse_logstrs_file(osl_t *osh, char *raw_fmts, int logstrs_size,
 			hdr->rom_lognums_offset) / sizeof(uint32);
 		lognums = (uint32 *) &raw_fmts[hdr->rom_lognums_offset];
 		logstrs = (char *)	 &raw_fmts[hdr->rom_logstrs_offset];
+
+		if (logstrs_size != hdr->logstrs_size) {
+			DHD_ERROR(("%s: bad logstrs_size %d\n", __FUNCTION__, hdr->logstrs_size));
+			return BCME_ERROR;
+		}
 	} else {
 		/*
 		 * Legacy logstrs.bin format without header.
@@ -5848,6 +5868,63 @@ int dhd_free_tdls_peer_list(dhd_pub_t *dhd_pub)
 	return BCME_OK;
 }
 #endif	/* #if defined(WLTDLS) && defined(PCIE_FULL_DONGLE) */
+
+/* pretty hex print a contiguous buffer
+ * based on the debug level specified
+ */
+void
+dhd_prhex(const char *msg, volatile uchar *buf, uint nbytes, uint8 dbg_level)
+{
+	char line[128], *p;
+	int len = sizeof(line);
+	int nchar;
+	uint i;
+
+	if (msg && (msg[0] != '\0')) {
+		if (dbg_level == DHD_ERROR_VAL)
+			DHD_ERROR(("%s:\n", msg));
+		else if (dbg_level == DHD_INFO_VAL)
+			DHD_INFO(("%s:\n", msg));
+		else if (dbg_level == DHD_TRACE_VAL)
+			DHD_TRACE(("%s:\n", msg));
+	}
+
+	p = line;
+	for (i = 0; i < nbytes; i++) {
+		if (i % 16 == 0) {
+			nchar = snprintf(p, len, "  %04x: ", i);	/* line prefix */
+			p += nchar;
+			len -= nchar;
+		}
+		if (len > 0) {
+			nchar = snprintf(p, len, "%02x ", buf[i]);
+			p += nchar;
+			len -= nchar;
+		}
+
+		if (i % 16 == 15) {
+			/* flush line */
+			if (dbg_level == DHD_ERROR_VAL)
+				DHD_ERROR(("%s:\n", line));
+			else if (dbg_level == DHD_INFO_VAL)
+				DHD_INFO(("%s:\n", line));
+			else if (dbg_level == DHD_TRACE_VAL)
+				DHD_TRACE(("%s:\n", line));
+			p = line;
+			len = sizeof(line);
+		}
+	}
+
+	/* flush last partial line */
+	if (p != line) {
+		if (dbg_level == DHD_ERROR_VAL)
+			DHD_ERROR(("%s:\n", line));
+		else if (dbg_level == DHD_INFO_VAL)
+			DHD_INFO(("%s:\n", line));
+		else if (dbg_level == DHD_TRACE_VAL)
+			DHD_TRACE(("%s:\n", line));
+	}
+}
 
 #ifdef DUMP_IOCTL_IOV_LIST
 void

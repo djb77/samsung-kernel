@@ -53,6 +53,7 @@ char CCIC_NOTI_ID_Print[CCIC_NOTI_ID_NUM][20] =
     {"ID_DP_LINK_CONF"},
     {"ID_DP_USB"},
     {"ID_ROLE_SWAP"},
+    {"ID_FAC"},
 };
 
 char CCIC_NOTI_RID_Print[CCIC_NOTI_RID_NUM][15] =
@@ -125,15 +126,39 @@ static void ccic_uevent_work(int id, int state)
 	char *water[2] = { "CCIC=WATER", NULL };
 	char *dry[2] = { "CCIC=DRY", NULL };
 	char *vconn[2] = { "CCIC=VCONN", NULL };
+#if defined(CONFIG_SEC_FACTORY)
+	char ccicrid[15] = {0,};
+	char *rid[2] = {ccicrid, NULL};
+	char ccicFacErr[20] = {0,};
+	char *facErr[2] = {ccicFacErr, NULL};
+#endif
 
 	pr_info("usb: %s: id=%s state=%d\n", __func__, CCIC_NOTI_ID_Print[id], state);
-	if (id == CCIC_NOTIFY_ID_WATER) {
-		if (state)
-			kobject_uevent_env(&ccic_device->kobj, KOBJ_CHANGE, water);
-		else
-			kobject_uevent_env(&ccic_device->kobj, KOBJ_CHANGE, dry);
-	} else if (id == CCIC_NOTIFY_ID_VCONN) {
-		kobject_uevent_env(&ccic_device->kobj, KOBJ_CHANGE, vconn);
+
+	switch (id) {
+		case CCIC_NOTIFY_ID_WATER:
+			if (state)
+				kobject_uevent_env(&ccic_device->kobj, KOBJ_CHANGE, water);
+			else
+				kobject_uevent_env(&ccic_device->kobj, KOBJ_CHANGE, dry);
+			break;
+		case CCIC_NOTIFY_ID_VCONN:
+			kobject_uevent_env(&ccic_device->kobj, KOBJ_CHANGE, vconn);
+			break;
+#if defined(CONFIG_SEC_FACTORY)
+		case CCIC_NOTIFY_ID_RID:
+			snprintf(ccicrid, sizeof(ccicrid), "%s",
+				(state<CCIC_NOTI_RID_NUM)? CCIC_NOTI_RID_Print[state] : CCIC_NOTI_RID_Print[0]);
+			kobject_uevent_env(&ccic_device->kobj, KOBJ_CHANGE, rid);			
+			break;
+		case CCIC_NOTIFY_ID_FAC:
+			snprintf(ccicFacErr, sizeof(ccicFacErr), "%s:%d",
+				"ERR_STATE", state);
+			kobject_uevent_env(&ccic_device->kobj, KOBJ_CHANGE, facErr);			
+			break;
+#endif
+		default:
+			break;
 	}
 }
 
@@ -185,7 +210,17 @@ int ccic_notifier_notify(CC_NOTI_TYPEDEF *p_noti, void *pd, int pdic_attach)
 			((CC_NOTI_RID_TYPEDEF *)p_noti)->dest,
 			((CC_NOTI_RID_TYPEDEF *)p_noti)->id,
 			((CC_NOTI_RID_TYPEDEF *)p_noti)->rid);
+#if defined(CONFIG_SEC_FACTORY)
+			ccic_uevent_work(CCIC_NOTIFY_ID_RID,((CC_NOTI_RID_TYPEDEF *)p_noti)->rid);
+#endif
 		break;
+#ifdef CONFIG_SEC_FACTORY
+	case CCIC_NOTIFY_ID_FAC:
+		pr_info("%s: src:%01x dest:%01x id:%02x ErrState:%02x\n", __func__,
+			p_noti->src, p_noti->dest, p_noti->id, p_noti->sub1);
+			ccic_uevent_work(CCIC_NOTIFY_ID_FAC, p_noti->sub1);
+			return 0;
+#endif
 	case CCIC_NOTIFY_ID_WATER:
 		pr_info("%s: src:%01x dest:%01x id:%02x attach:%02x\n", __func__,
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->src,
@@ -193,6 +228,9 @@ int ccic_notifier_notify(CC_NOTI_TYPEDEF *p_noti, void *pd, int pdic_attach)
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->id,
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->attach);
 			ccic_uevent_work(CCIC_NOTIFY_ID_WATER, ((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->attach);
+#ifdef CONFIG_SEC_FACTORY
+			return 0;
+#endif
 		break;
 	case CCIC_NOTIFY_ID_VCONN:
 		ccic_uevent_work(CCIC_NOTIFY_ID_VCONN, 0);

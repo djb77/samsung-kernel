@@ -179,7 +179,7 @@ static void __do_kernel_fault(struct mm_struct *mm, unsigned long addr,
 		 "paging request", addr);
 
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
-	sec_debug_set_extra_info_fault(addr, regs);
+	sec_debug_set_extra_info_fault(KERNEL_FAULT, addr, regs);
 #endif
 	show_pte(mm, addr);
 	die("Oops", regs, esr);
@@ -565,7 +565,7 @@ asmlinkage void __exception do_mem_abort(unsigned long addr, unsigned int esr,
 	}
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
 	if (!user_mode(regs)) {
-		sec_debug_set_extra_info_fault(addr, regs);
+		sec_debug_set_extra_info_fault(MEM_ABORT_FAULT, addr, regs);
 		sec_debug_set_extra_info_esr(esr);
 	}
 #endif
@@ -595,7 +595,7 @@ asmlinkage void __exception do_sp_pc_abort(unsigned long addr,
 
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
 	if (!user_mode(regs)) {
-		sec_debug_set_extra_info_fault(addr, regs);
+		sec_debug_set_extra_info_fault(SP_PC_ABORT_FAULT, addr, regs);
 		sec_debug_set_extra_info_esr(esr);
 	}
 #endif

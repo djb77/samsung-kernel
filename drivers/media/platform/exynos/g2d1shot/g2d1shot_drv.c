@@ -656,7 +656,9 @@ static int m2m1shot2_g2d_prepare_target(struct m2m1shot2_context *ctx,
 	/* invalid crop range */
 	if (fmt->crop.left < 0 || fmt->crop.top < 0 ||
 			(fmt->crop.left + fmt->crop.width > fmt->width) ||
-			(fmt->crop.top + fmt->crop.height > fmt->height)) {
+			(fmt->crop.top + fmt->crop.height > fmt->height) ||
+			(fmt->crop.width == 0) ||
+			(fmt->crop.height == 0)) {
 		pr_err("Invalid range of crop ltwh(%d, %d, %d, %d)\n",
 				fmt->crop.left, fmt->crop.top,
 				fmt->crop.width, fmt->crop.height);
@@ -759,7 +761,9 @@ static int m2m1shot2_g2d_prepare_source(struct m2m1shot2_context *ctx,
 	/* invalid crop range */
 	if (fmt->crop.left < 0 || fmt->crop.top < 0 ||
 			(fmt->crop.left + fmt->crop.width > fmt->width) ||
-			(fmt->crop.top + fmt->crop.height > fmt->height)) {
+			(fmt->crop.top + fmt->crop.height > fmt->height) ||
+			(fmt->crop.width == 0) || (fmt->window.width == 0) ||
+			(fmt->crop.height == 0) || (fmt->window.height == 0)) {
 		pr_err("Invalid range of crop ltwh(%d, %d, %d, %d)\n",
 				fmt->crop.left, fmt->crop.top,
 				fmt->crop.width, fmt->crop.height);

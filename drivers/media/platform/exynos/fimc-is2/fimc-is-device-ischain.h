@@ -141,6 +141,7 @@ struct fimc_is_device_ischain {
 
 	struct fimc_is_group			group_vra;
 
+	u32					vid_to_vra;
 #ifdef ENABLE_FD_SW
 	struct fimc_is_lib			*fd_lib;
 #endif

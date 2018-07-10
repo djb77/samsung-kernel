@@ -133,15 +133,11 @@ int set_gyro_cal(struct ssp_data *data)
 	gyro_cal[2] = data->gyrocal.z;
 
 	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-	if (msg == NULL) {
-		pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-		return -ENOMEM;
-	}
 	msg->cmd = MSG2SSP_AP_MCU_SET_GYRO_CAL;
 	msg->length = 6;
 	msg->options = AP2HUB_WRITE;
-	msg->buffer = (char*) kzalloc(6, GFP_KERNEL);
-	if (!(msg->buffer)){
+	msg->buffer = (char *) kzalloc(6, GFP_KERNEL);
+	if (!(msg->buffer)) {
 		kfree(msg);
 		return -ENOMEM;
 	}
@@ -180,12 +176,8 @@ short bmi058_gyro_get_temp(struct ssp_data *data)
 	char chTempBuf = 0;
 	short temperature = 0;
 	int iRet = 0;
-
 	struct ssp_msg *msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-	if (msg == NULL) {
-		pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-		return -ENOMEM;
-	}
+
 	msg->cmd = GYROSCOPE_TEMP_FACTORY;
 	msg->length = 1;
 	msg->options = AP2HUB_READ;
@@ -201,7 +193,7 @@ short bmi058_gyro_get_temp(struct ssp_data *data)
 	temperature = (short)chTempBuf;
 	ssp_dbg("[SSP]: %s - %d\n", __func__, temperature);
 
-	exit:
+exit:
 	return temperature;
 }
 
@@ -219,20 +211,15 @@ static ssize_t bmi058_gyro_selftest_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	char chTempBuf[19] = { 0,};
-	u8 bist=0, selftest = 0;
+	u8 bist = 0, selftest = 0;
 	int datax_check = 0;
 	int datay_check = 0;
 	int dataz_check = 0;
 	s16 iCalData[3] = {0,};
 	int iRet = 0;
-
 	struct ssp_data *data = dev_get_drvdata(dev);
-
 	struct ssp_msg *msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-	if (msg == NULL) {
-		pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-		goto exit;
-	}
+
 	msg->cmd = GYROSCOPE_FACTORY;
 	msg->length = 19;
 	msg->options = AP2HUB_READ;
@@ -257,12 +244,12 @@ static ssize_t bmi058_gyro_selftest_show(struct device *dev,
 	if (selftest == 0)
 		bist = 1;
 	else
-		bist =0;
-	datax_check = (int)((chTempBuf[4] << 24) + (chTempBuf[3] <<16)
+		bist = 0;
+	datax_check = (int)((chTempBuf[4] << 24) + (chTempBuf[3] << 16)
 						  +(chTempBuf[2] << 8) + chTempBuf[1]);
-	datay_check = (int)((chTempBuf[8] << 24) + (chTempBuf[7] <<16)
+	datay_check = (int)((chTempBuf[8] << 24) + (chTempBuf[7] << 16)
 						  +(chTempBuf[6] << 8) + chTempBuf[5]);
-	dataz_check = (int)((chTempBuf[12] << 24) + (chTempBuf[11] <<16)
+	dataz_check = (int)((chTempBuf[12] << 24) + (chTempBuf[11] << 16)
 						  +(chTempBuf[10] << 8) + chTempBuf[9]);
 	iCalData[0] = (s16)((chTempBuf[14] << 8) +
 				chTempBuf[13]);
@@ -306,12 +293,12 @@ exit:
 			(datay_check / 1000), (datay_check % 1000),
 			(dataz_check / 1000), (dataz_check % 1000));
 
-	return sprintf(buf, "%d,%d,%d.%03d,%d.%03d,%d.%03d," "%d,%d,%d,%d,%d,%d,%d,%d" "\n",
+	return sprintf(buf, "%d,%d,%d.%03d,%d.%03d,%d.%03d, %d,%d,%d,%d,%d,%d,%d,%d\n",
 			selftest ? 0 : 1, bist,
 			(datax_check / 1000), (datax_check % 1000),
 			(datay_check / 1000), (datay_check % 1000),
 			(dataz_check / 1000), (dataz_check % 1000),
-			iRet ,iRet ,iRet ,iRet ,iRet ,iRet ,iRet ,iRet);
+			iRet, iRet, iRet, iRet, iRet, iRet, iRet, iRet);
 }
 
 static ssize_t gyro_selftest_dps_store(struct device *dev,
@@ -329,10 +316,6 @@ static ssize_t gyro_selftest_dps_store(struct device *dev,
 		goto exit;
 
 	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-	if (msg == NULL) {
-		pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-		goto exit;
-	}
 	msg->cmd = GYROSCOPE_DPS_FACTORY;
 	msg->length = 1;
 	msg->options = AP2HUB_READ;
@@ -378,13 +361,13 @@ static ssize_t gyro_selftest_dps_show(struct device *dev,
 	return sprintf(buf, "%u\n", data->uGyroDps);
 }
 
-static DEVICE_ATTR(name, S_IRUGO, gyro_name_show, NULL);
-static DEVICE_ATTR(vendor, S_IRUGO, gyro_vendor_show, NULL);
-static DEVICE_ATTR(power_off, S_IRUGO, gyro_power_off, NULL);
-static DEVICE_ATTR(power_on, S_IRUGO, gyro_power_on, NULL);
-static DEVICE_ATTR(temperature, S_IRUGO, gyro_get_temp, NULL);
-static DEVICE_ATTR(selftest, S_IRUGO, bmi058_gyro_selftest_show, NULL);
-static DEVICE_ATTR(selftest_dps, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(name, 0444, gyro_name_show, NULL);
+static DEVICE_ATTR(vendor, 0444, gyro_vendor_show, NULL);
+static DEVICE_ATTR(power_off, 0444, gyro_power_off, NULL);
+static DEVICE_ATTR(power_on, 0444, gyro_power_on, NULL);
+static DEVICE_ATTR(temperature, 0444, gyro_get_temp, NULL);
+static DEVICE_ATTR(selftest, 0444, bmi058_gyro_selftest_show, NULL);
+static DEVICE_ATTR(selftest_dps, 0664,
 	gyro_selftest_dps_show, gyro_selftest_dps_store);
 
 static struct device_attribute *gyro_attrs[] = {

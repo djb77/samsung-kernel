@@ -20,8 +20,11 @@
 #include "panel.h"
 #include "panel_drv.h"
 #include "panel_poc.h"
-
+#ifdef CONFIG_PANEL_POC_2_0
+#define POC_IMG_SIZE	(546008)
+#else
 #define POC_IMG_SIZE	(532816)
+#endif
 #define POC_IMG_ADDR	(0x000000)
 #define POC_PAGE		(4096)
 #define POC_TEST_PATTERN_SIZE	(4096)
@@ -42,15 +45,20 @@
 #define POC_USER_FILE_PATH	("/efs/FactoryApp/poc_user")
 #endif
 
-#ifdef CONFIG_POC_DREAM
+#if defined(CONFIG_POC_DREAM)
 #define ERASE_WAIT_COUNT	(180)
 #define WR_DONE_UDELAY		(4000)
 #define QD_DONE_MDELAY		(30)
 #define RD_DONE_UDELAY		(200)
-#else
+#elif defined(CONFIG_POC_DREAM2)
 #define ERASE_WAIT_COUNT	(41)
 #define WR_DONE_UDELAY		(800)
 #define QD_DONE_MDELAY		(10)
+#define RD_DONE_UDELAY		(200)
+#else
+#define ERASE_WAIT_COUNT	(180)
+#define WR_DONE_UDELAY		(4000)
+#define QD_DONE_MDELAY		(30)
 #define RD_DONE_UDELAY		(200)
 #endif
 

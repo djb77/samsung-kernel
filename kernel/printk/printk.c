@@ -284,7 +284,8 @@ static enum log_flags console_prev;
 static u64 clear_seq;
 static u32 clear_idx;
 
-/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM - the next printk record to read after the last 'clear_knox' command */
+/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
+/* The next printk record to read after the last 'clear_knox' command */
 static u64 clear_seq_knox;
 static u32 clear_idx_knox;
 
@@ -580,7 +581,8 @@ static int log_store(int facility, int level,
 
 #ifdef CONFIG_PRINTK_PROCESS
 	if (printk_process) {
-		strncpy(msg->process, current->comm, sizeof(msg->process));
+		strncpy(msg->process, current->comm, sizeof(msg->process)-1);
+		msg->process[sizeof(msg->process)-1]='\0';
 		msg->pid = task_pid_nr(current);
 		msg->cpu = smp_processor_id();
 		msg->in_interrupt = in_interrupt() ? 1 : 0;
@@ -1343,15 +1345,15 @@ static int syslog_print_all(char __user *buf, int size, bool clear, bool knox)
 		u64 seq;
 		u32 idx;
 		enum log_flags prev;
-		
+
 		/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
 		/* messages are gone, move to first available one */
 		if (!knox && clear_seq < log_first_seq) {
-				clear_seq = log_first_seq;
-				clear_idx = log_first_idx;
+			clear_seq = log_first_seq;
+			clear_idx = log_first_idx;
 		} else if (knox && clear_seq_knox < log_first_seq) {
-				clear_seq_knox = log_first_seq;
-				clear_idx_knox = log_first_idx;
+			clear_seq_knox = log_first_seq;
+			clear_idx_knox = log_first_idx;
 		}
 		/* } SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
 
@@ -1359,17 +1361,17 @@ static int syslog_print_all(char __user *buf, int size, bool clear, bool knox)
 		 * Find first record that fits, including all following records,
 		 * into the user-provided buffer for this dump.
 		 */
-		 
-		/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */ 
-		if(!knox) {
+
+		/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
+		if (!knox) {
 			seq = clear_seq;
 			idx = clear_idx;
-		}else { //MDM edmaudit
+		} else { //MDM edmaudit
 			seq = clear_seq_knox;
 			idx = clear_idx_knox;
 		}
 		/* } SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
-		
+
 		prev = 0;
 		while (seq < log_next_seq) {
 			struct printk_log *msg = log_from_idx(idx);
@@ -1379,10 +1381,10 @@ static int syslog_print_all(char __user *buf, int size, bool clear, bool knox)
 			idx = log_next(idx);
 			seq++;
 		}
-		
+
 		/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
 		/* move first record forward until length fits into the buffer */
-		if(!knox) {
+		if (!knox) {
 			seq = clear_seq;
 			idx = clear_idx;
 		} else { // MDM edmaudit

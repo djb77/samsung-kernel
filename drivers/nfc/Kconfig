@@ -128,4 +128,5 @@ config NFC_PN547_LDO_CONTROL
 	  Say Y here to compile support for NXP PN547 LDO CONTROL feature into the
 	  kernel.
 
+source "drivers/nfc/nfc_logger/Kconfig"
 endmenu

@@ -250,9 +250,4 @@ int etspi_io_vdm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc);
 int etspi_io_vdm_write(struct etspi_data *etspi, struct egis_ioc_transfer *ioc);
 int etspi_io_get_frame(struct etspi_data *etspi, u8 *frame, u32 size);
 
-extern int fingerprint_register(struct device *dev, void *drvdata,
-	struct device_attribute *attributes[], char *name);
-extern void fingerprint_unregister(struct device *dev,
-	struct device_attribute *attributes[]);
-
 #endif

@@ -94,6 +94,7 @@ struct fimc_is_vender_specific {
 	bool			skip_cal_loading;
 	bool			use_ois_hsi2c;
 	bool			use_ois;
+	u8			use_ois_online_cnt;
 	bool			use_module_check;
 
 	bool			suspend_resume_disable;

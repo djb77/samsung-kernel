@@ -440,6 +440,7 @@ static int spip3_release(struct inode *inode, struct file *filp)
 #ifdef CONFIG_ESE_SECURE
 	p3_clk_control(p3_dev, false);
 	p3_suspend();
+	usleep_range(1000, 1000);
 #else
 	p3_pinctrl_config(p3_dev->p3_device.parent, false);
 #endif

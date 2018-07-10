@@ -15,7 +15,7 @@
 
 #include "ssp_sensorhub.h"
 
-static void ssp_sensorhub_log(const char *func_name,
+void ssp_sensorhub_log(const char *func_name,
 				const char *data, int length)
 {
 	char buf[6];
@@ -261,7 +261,7 @@ static long ssp_sensorhub_ioctl(struct file *file, unsigned int cmd,
 	return length;
 }
 
-static struct file_operations ssp_sensorhub_fops = {
+static struct file_operations const ssp_sensorhub_fops = {
 	.owner = THIS_MODULE,
 	.open = nonseekable_open,
 	.write = ssp_sensorhub_write,
@@ -271,28 +271,54 @@ static struct file_operations ssp_sensorhub_fops = {
 
 void ssp_sensorhub_report_notice(struct ssp_data *ssp_data, char notice)
 {
+#if ANDROID_VERSION >= 80000
+	struct sensor_value sensorsdata;
+	int size = 0, index = 0;
+	char reportData[4] = {0x02, 0x01, 0x00, 0x00};
+
+	memset(&sensorsdata, 0, sizeof(struct sensor_value));
+
+	if (notice == MSG2SSP_AP_STATUS_RESET) {
+		reportData[2] = MSG2SSP_AP_STATUS_RESET;
+		if (ssp_data->IsMcuCrashed == true) {
+			reportData[3] = MCU_CRASHED;
+			ssp_data->IsMcuCrashed = false;
+		} else if (ssp_data->intendedMcuReset == true) {
+			reportData[3] = MCU_INTENDED_RESET;
+			ssp_data->intendedMcuReset = false;
+		} else
+			reportData[3] = KERNEL_RESET;
+		size = 4;
+	} else {
+		reportData[2] = notice;
+		size = 3;
+	}
+	memcpy(&sensorsdata.scontext_buf[index], &size, sizeof(int));
+	index += sizeof(int);
+	index += sizeof(short);//always start index is 0
+	size--;
+	memcpy(&sensorsdata.scontext_buf[index], &size, sizeof(short));
+	index += sizeof(short);
+	memcpy(&sensorsdata.scontext_buf[index], reportData, size + 1);
+
+	report_scontext_data(ssp_data, &sensorsdata);
+#else
 	struct ssp_sensorhub_data *hub_data = ssp_data->hub_data;
 
-    if(notice == MSG2SSP_AP_STATUS_RESET)
-    {
-        if(ssp_data->IsMcuCrashed == true)
-		{
+	if (notice == MSG2SSP_AP_STATUS_RESET) {
+		if (ssp_data->IsMcuCrashed == true) {
 			input_report_rel(hub_data->sensorhub_input_dev, NOTICE, MCU_CRASHED);
 			ssp_data->IsMcuCrashed = false;
-		}
-		else if(ssp_data->intendedMcuReset == true)
-		{
+		} else if (ssp_data->intendedMcuReset == true) {
 			input_report_rel(hub_data->sensorhub_input_dev, NOTICE, MCU_INTENDED_RESET);
 			ssp_data->intendedMcuReset = false;
-		}
-        else
-            input_report_rel(hub_data->sensorhub_input_dev, NOTICE, KERNEL_RESET);
-    }
-    else
-	    input_report_rel(hub_data->sensorhub_input_dev, NOTICE, notice);
-    
-	input_sync(hub_data->sensorhub_input_dev);
+		} else
+			input_report_rel(hub_data->sensorhub_input_dev, NOTICE, KERNEL_RESET);
+	} else
+		input_report_rel(hub_data->sensorhub_input_dev, NOTICE, notice);
 
+	input_sync(hub_data->sensorhub_input_dev);
+#endif
 	if (notice == MSG2SSP_AP_STATUS_WAKEUP)
 		sensorhub_info("wake up");
 	else if (notice == MSG2SSP_AP_STATUS_SLEEP)
@@ -330,7 +356,7 @@ static int ssp_sensorhub_list(struct ssp_sensorhub_data *hub_data,
 	}
 
 	ssp_sensorhub_log(__func__, dataframe, length);
-    pr_info("[SSP]: %s len: %d ev: %d\n", __func__, length, hub_data->event_number);
+	pr_info("[SSP]: %s len: %d ev: %d\n", __func__, length, hub_data->event_number);
 	/* overwrite new event if list is full */
 	if (unlikely(kfifo_is_full(&hub_data->fifo))) {
 		ret = kfifo_out(&hub_data->fifo, &event, sizeof(void *));
@@ -354,7 +380,7 @@ static int ssp_sensorhub_list(struct ssp_sensorhub_data *hub_data,
 	memcpy(hub_data->events[hub_data->event_number].library_data,
 		dataframe, length);
 	hub_data->events[hub_data->event_number].library_length = length;
-    hub_data->events[hub_data->event_number].library_event_number = hub_data->event_number;
+	hub_data->events[hub_data->event_number].library_event_number = hub_data->event_number;
 	/* add new event into the end of list */
 	event = &hub_data->events[hub_data->event_number];
 	ret = kfifo_in(&hub_data->fifo, &event, sizeof(void *));
@@ -444,8 +470,8 @@ void ssp_read_big_library_task(struct work_struct *work)
 	int buf_len, residue, ret = 0, index = 0, pos = 0;
 
 	mutex_lock(&hub_data->big_events_lock);
-	if (hub_data->big_events.library_data)
-		kfree(hub_data->big_events.library_data);
+
+	kfree(hub_data->big_events.library_data);
 
 	residue = big->length;
 	hub_data->big_events.library_length = big->length;
@@ -593,11 +619,6 @@ int ssp_sensorhub_initialize(struct ssp_data *ssp_data)
 
 	/* allocate memory for sensorhub data */
 	hub_data = kzalloc(sizeof(*hub_data), GFP_KERNEL);
-	if (!hub_data) {
-		sensorhub_err("allocate memory for sensorhub data err");
-		ret = -ENOMEM;
-		goto exit;
-	}
 	hub_data->ssp_data = ssp_data;
 	ssp_data->hub_data = hub_data;
 
@@ -677,17 +698,13 @@ err_input_allocate_device_sensorhub:
 	complete_all(&hub_data->read_done);
 	wake_lock_destroy(&hub_data->sensorhub_wake_lock);
 	kfree(hub_data);
-exit:
+
 	return ret;
 }
 
 void ssp_sensorhub_remove(struct ssp_data *ssp_data)
 {
 	struct ssp_sensorhub_data *hub_data = ssp_data->hub_data;
-
-	ssp_sensorhub_fops.write = NULL;
-	ssp_sensorhub_fops.read = NULL;
-	ssp_sensorhub_fops.unlocked_ioctl = NULL;
 
 	kthread_stop(hub_data->sensorhub_task);
 	kfifo_free(&hub_data->fifo);

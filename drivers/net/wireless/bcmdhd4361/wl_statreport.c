@@ -23,7 +23,7 @@
 *
 * <<Broadcom-WL-IPTag/Open:>>
 *
-* $Id: wl_statreport.c 715256 2017-08-10 06:34:17Z $
+* $Id: wl_statreport.c 735359 2017-12-08 10:56:04Z $
 */
 #include <wlc_types.h>
 #include <bcmutils.h>
@@ -819,16 +819,12 @@ wsr_dbg_print_elem(wsr_dbg_elem_t *elem)
 		clock->time/WSR_REPORT_HOUR_MUL,
 		(clock->time%WSR_REPORT_HOUR_MUL)/WSR_REPORT_MIN_MUL,
 		(clock->time%WSR_REPORT_HOUR_MUL)%WSR_REPORT_MIN_MUL));
-	WL_ERR(("WSR_DBG: CONN bssid: %02x:%02x:%02x:%02x:%02x:%02x\n",
-		conn->bssid[0], conn->bssid[1],
-		conn->bssid[2], conn->bssid[3],
-		conn->bssid[4], conn->bssid[5]));
+	WL_ERR(("WSR_DBG: CONN bssid: "MACDBG"\n",
+		MAC2STRDBG(conn->bssid)));
 	WL_ERR(("WSR_DBG: CONN  op_mode:%x vndr oui: %d", conn->dhd_opmode, conn->oui_cnt));
 	for (idx = 0; idx < conn->oui_cnt; idx++) {
-		WL_ERR((" %02x-%02x-%02x",
-			conn->oui_list[idx][0],
-			conn->oui_list[idx][1],
-			conn->oui_list[idx][2]));
+		WL_ERR((" "MACOUIDBG,
+			MACOUI2STRDBG(conn->oui_list[idx])));
 	}
 	WL_ERR(("WSR_DBG\n"));
 	WL_ERR(("WSR_DBG: CNT txframe:%d rxmgocast:%d\n", elem->txframe, elem->rxmgocast));

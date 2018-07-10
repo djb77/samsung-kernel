@@ -243,7 +243,7 @@ static void csis_s_vc_dma_multibuf(struct fimc_is_device_csi *csi)
 
 			csi_s_multibuf_addr(csi, frame, i, vc);
 			csi_s_output_dma(csi, vc, true);
-			trans_frame(framemgr, frame, FS_PROCESS);
+			trans_frame(framemgr, frame, FS_FREE);
 		}
 
 		framemgr_x_barrier(framemgr, 0);
@@ -533,6 +533,7 @@ trigger_skip:
 	csis_early_buf_done_start(subdev);
 #endif
 	v4l2_subdev_notify(subdev, CSIS_NOTIFY_FSTART, &fcount);
+	clear_bit(FIMC_IS_SENSOR_WAIT_STREAMING, &device->state);
 }
 
 void tasklet_csis_str_m2m(unsigned long data)
@@ -622,50 +623,6 @@ static void csi_dma_tag(struct v4l2_subdev *subdev,
 
 	if (csi->vci[csi->active_vci].config[vc].dma_mode == VCI_DMA_NORMAL)
 		v4l2_subdev_notify(subdev, CSIS_NOTIFY_DMA_END, frame_done);
-}
-
-static void csi_multibuf_dma_tag(struct v4l2_subdev *subdev,
-	struct fimc_is_device_csi *csi,
-	struct fimc_is_framemgr *framemgr, u32 vc)
-{
-	struct fimc_is_frame *frame = NULL;
-	struct fimc_is_frame *next_frame = NULL;
-	u32 frameptr = 0;
-
-	framemgr_e_barrier(framemgr, 0);
-
-	frameptr = csi_hw_g_frameptr(csi->base_reg, vc);
-
-	/* update processed frame state */
-	frame = &framemgr->frames[frameptr];
-	if (frame) {
-		if (frame->state == FS_PROCESS) {
-			trans_frame(framemgr, frame, FS_COMPLETE);
-		} else {
-			warn("[VC%d][F%d] invalid frame state(%d) fcount(%d) %s [%d/%d/%d]",
-					vc, atomic_read(&csi->fcount),
-					frame->state, frame->fcount,
-					csi_hw_g_output_cur_dma_enable(csi->base_reg, vc) ? "on" : "off",
-					framemgr->queued_count[FS_REQUEST],
-					framemgr->queued_count[FS_PROCESS],
-					framemgr->queued_count[FS_COMPLETE]);
-		}
-	}
-
-	/* check next frame state */
-	next_frame = &framemgr->frames[CSI_GET_NEXT_FRAMEPTR(frameptr, framemgr->num_frames)];
-	if (next_frame) {
-		if (next_frame->state == FS_COMPLETE) {
-			mdbgd_front("next frame is not used, overwrite\n", csi);
-			trans_frame(framemgr, next_frame, FS_PROCESS);
-		} else if (next_frame->state == FS_FREE) {
-			warn("[CSI] next frame can't use, skip this frame");
-			csi_s_frameptr(csi, vc,
-				(frameptr + 2) % framemgr->num_frames, true);
-		}
-	}
-
-	framemgr_x_barrier(framemgr, 0);
 }
 
 static void csi_err_check(struct fimc_is_device_csi *csi, u32 *err_id)
@@ -760,8 +717,10 @@ static void csi_err_print(struct fimc_is_device_csi *csi)
 #ifdef OVERFLOW_PANIC_ENABLE_CSIS
 #ifdef USE_CAMERA_HW_BIG_DATA
 				fimc_is_vender_csi_err_handler(csi);
+#ifdef CAMERA_HW_BIG_DATA_FILE_IO
 				fimc_is_sec_copy_err_cnt_to_file();
-#endif				
+#endif
+#endif /* USE_CAMERA_HW_BIG_DATA */
 				panic("CSIS error!! %s", err_str);
 #endif
 				break;
@@ -770,8 +729,10 @@ static void csi_err_print(struct fimc_is_device_csi *csi)
 #ifdef OVERFLOW_PANIC_ENABLE_CSIS
 #ifdef USE_CAMERA_HW_BIG_DATA
 				fimc_is_vender_csi_err_handler(csi);
+#ifdef CAMERA_HW_BIG_DATA_FILE_IO
 				fimc_is_sec_copy_err_cnt_to_file();
-#endif				
+#endif
+#endif /* USE_CAMERA_HW_BIG_DATA */
 				panic("CSIS error!! %s", err_str);
 #endif
 				break;
@@ -780,8 +741,10 @@ static void csi_err_print(struct fimc_is_device_csi *csi)
 #ifdef OVERFLOW_PANIC_ENABLE_CSIS
 #ifdef USE_CAMERA_HW_BIG_DATA
 				fimc_is_vender_csi_err_handler(csi);
+#ifdef CAMERA_HW_BIG_DATA_FILE_IO
 				fimc_is_sec_copy_err_cnt_to_file();
-#endif				
+#endif
+#endif /* USE_CAMERA_HW_BIG_DATA */
 				panic("CSIS error!! %s", err_str);
 #endif
 				break;
@@ -881,10 +844,8 @@ static void tasklet_csis_dma_vc1(unsigned long data)
 
 	framemgr = csis_get_vc_framemgr(csi, CSI_VIRTUAL_CH_1);
 	if (framemgr) {
-		if (test_bit(FIMC_IS_SUBDEV_INTERNAL_USE,
+		if (!test_bit(FIMC_IS_SUBDEV_INTERNAL_USE,
 			&csi->dma_subdev[CSI_VIRTUAL_CH_1]->state))
-			csi_multibuf_dma_tag(subdev, csi, framemgr, CSI_VIRTUAL_CH_1);
-		else
 			csi_dma_tag(subdev, csi, framemgr, CSI_VIRTUAL_CH_1);
 	}
 }
@@ -904,10 +865,8 @@ static void tasklet_csis_dma_vc2(unsigned long data)
 
 	framemgr = csis_get_vc_framemgr(csi, CSI_VIRTUAL_CH_2);
 	if (framemgr) {
-		if (test_bit(FIMC_IS_SUBDEV_INTERNAL_USE,
+		if (!test_bit(FIMC_IS_SUBDEV_INTERNAL_USE,
 			&csi->dma_subdev[CSI_VIRTUAL_CH_2]->state))
-			csi_multibuf_dma_tag(subdev, csi, framemgr, CSI_VIRTUAL_CH_2);
-		else
 			csi_dma_tag(subdev, csi, framemgr, CSI_VIRTUAL_CH_2);
 	}
 }
@@ -927,10 +886,8 @@ static void tasklet_csis_dma_vc3(unsigned long data)
 
 	framemgr = csis_get_vc_framemgr(csi, CSI_VIRTUAL_CH_3);
 	if (framemgr) {
-		if (test_bit(FIMC_IS_SUBDEV_INTERNAL_USE,
+		if (!test_bit(FIMC_IS_SUBDEV_INTERNAL_USE,
 			&csi->dma_subdev[CSI_VIRTUAL_CH_3]->state))
-			csi_multibuf_dma_tag(subdev, csi, framemgr, CSI_VIRTUAL_CH_3);
-		else
 			csi_dma_tag(subdev, csi, framemgr, CSI_VIRTUAL_CH_3);
 	}
 }
@@ -1484,13 +1441,17 @@ static int csi_stream_on(struct v4l2_subdev *subdev,
 
 		/* DMA Tasklet Setting */
 		if (csi->dma_subdev[CSI_VIRTUAL_CH_0])
-			tasklet_init(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_0], tasklet_csis_dma_vc0, (unsigned long)subdev);
+			tasklet_init(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_0],
+				tasklet_csis_dma_vc0, (unsigned long)subdev);
 		if (csi->dma_subdev[CSI_VIRTUAL_CH_1])
-			tasklet_init(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_1], tasklet_csis_dma_vc1, (unsigned long)subdev);
+			tasklet_init(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_1],
+				tasklet_csis_dma_vc1, (unsigned long)subdev);
 		if (csi->dma_subdev[CSI_VIRTUAL_CH_2])
-			tasklet_init(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_2], tasklet_csis_dma_vc2, (unsigned long)subdev);
+			tasklet_init(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_2],
+				tasklet_csis_dma_vc2, (unsigned long)subdev);
 		if (csi->dma_subdev[CSI_VIRTUAL_CH_3])
-			tasklet_init(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_3], tasklet_csis_dma_vc3, (unsigned long)subdev);
+			tasklet_init(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_3],
+				tasklet_csis_dma_vc3, (unsigned long)subdev);
 	}
 
 	/* if sensor's output otf was enabled, enable line irq */

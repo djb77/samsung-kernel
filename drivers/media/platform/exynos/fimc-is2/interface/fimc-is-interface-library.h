@@ -32,9 +32,10 @@
 #define LIB_VRA_CODE_SIZE	(0x00040000)
 
 #define LIB_RTA_OFFSET		(0x00000000)
-#define LIB_RTA_CODE_SIZE	(0x00100000)
 
-#define FIMC_IS_MAX_TASK	(20)
+#define LIB_RTA_CODE_SIZE	RTA_CODE_AREA_SIZE
+
+#define LIB_MAX_TASK		(FIMC_IS_MAX_TASK)
 
 #define TASK_TYPE_DDK	(1)
 #define TASK_TYPE_RTA	(2)
@@ -80,7 +81,7 @@ enum task_index {
 /* #define TASK_RTA_AFFINITY		(1) */ /* There is no need to set of cpu affinity for RTA task */
 #define TASK_VRA_AFFINITY		(2)
 
-#define CAMERA_BINARY_RTA_DATA_OFFSET   0x100000
+#define CAMERA_BINARY_RTA_DATA_OFFSET   RTA_CODE_AREA_SIZE
 #define CAMERA_BINARY_DDK_DATA_OFFSET   0x380000
 #define CAMERA_BINARY_DDK_CODE_OFFSET   0x080000
 #define CAMERA_BINARY_VRA_DATA_OFFSET   0x040000
@@ -115,7 +116,7 @@ struct fimc_is_lib_task {
 	struct task_struct		*task;
 	spinlock_t			work_lock;
 	u32				work_index;
-	struct fimc_is_task_work	work[FIMC_IS_MAX_TASK];
+	struct fimc_is_task_work	work[LIB_MAX_TASK];
 };
 
 #ifdef LIB_MEM_TRACK
@@ -130,7 +131,7 @@ struct fimc_is_lib_task {
 
 
 #define MT_STATUS_ALLOC	0x1
-#define MT_STATUS_FREE 	0x2
+#define MT_STATUS_FREE	0x2
 
 #define MEM_TRACK_COUNT	64
 #define MEM_TRACK_ADDRS_COUNT 16
@@ -191,12 +192,15 @@ struct fimc_is_lib_support {
 	struct fimc_is_lib_task			task_taaisp[TASK_INDEX_MAX];
 
 	/* memory management */
-	spinlock_t				slock_mem;
+	spinlock_t				slock_lib_mem;
 	struct list_head			lib_mem_list;
+	spinlock_t				slock_taaisp_mem;
 	struct list_head			taaisp_mem_list;
+	spinlock_t				slock_vra_mem;
 	struct list_head			vra_mem_list;
 	bool					binary_load_flg;
-	int 					binary_code_load_flg;
+	int					binary_load_fatal;
+	int					binary_code_load_flg;
 
 	u32					reserved_lib_size;
 	u32					reserved_taaisp_size;
@@ -218,8 +222,8 @@ struct fimc_is_lib_support {
 #endif
 	struct general_intr_handler	intr_handler_preproc;
 	struct work_struct			work_stop;
-	char		fw_name[50]; 		/* DDK */
-	char		rta_fw_name[50]; 	/* RTA */
+	char		fw_name[50];		/* DDK */
+	char		rta_fw_name[50];	/* RTA */
 };
 
 struct fimc_is_memory_attribute {

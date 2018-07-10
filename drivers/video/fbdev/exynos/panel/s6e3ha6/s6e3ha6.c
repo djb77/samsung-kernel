@@ -122,14 +122,7 @@ static int init_dimming(struct panel_info *panel_data, int id,
 		return ret;
 	}
 
-	brt_tbl->brt = panel_dim_info->brt_tbl->brt;
-	brt_tbl->sz_brt = panel_dim_info->brt_tbl->sz_brt;
-	brt_tbl->lum = panel_dim_info->brt_tbl->lum;
-	brt_tbl->sz_lum = panel_dim_info->brt_tbl->sz_lum;
-	brt_tbl->brt_to_brt= panel_dim_info->brt_tbl->brt_to_brt;
-	brt_tbl->sz_brt_to_brt = panel_dim_info->brt_tbl->sz_brt_to_brt;
-	brt_tbl->brt_to_step = panel_dim_info->brt_tbl->brt_to_step;
-	brt_tbl->sz_brt_to_step = panel_dim_info->brt_tbl->sz_brt_to_step;
+	memcpy(brt_tbl, panel_dim_info->brt_tbl, sizeof(struct brightness_table));
 	nr_luminance = panel_dim_info->nr_luminance;
 	nr_hbm_luminance = panel_dim_info->nr_hbm_luminance;
 	nr_extend_hbm_luminance = panel_dim_info->nr_extend_hbm_luminance;
@@ -355,6 +348,42 @@ int getidx_irc_table(struct maptbl *tbl)
 	return getidx_brt_tbl(tbl);
 }
 
+int getidx_poc_onoff_table(struct maptbl *tbl)
+{
+	struct panel_info *panel_data;
+	struct panel_device *panel = (struct panel_device *)tbl->pdata;
+	int idx;
+
+	if (panel == NULL) {
+		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+
+	panel_data = &panel->panel_data;
+
+	idx = sizeof_row(tbl) * (panel_data->props.poc_onoff ? POC_ONOFF_ON : POC_ONOFF_OFF);
+
+	return idx;
+}
+
+int getidx_irc_onoff_table(struct maptbl *tbl)
+{
+	struct panel_info *panel_data;
+	struct panel_device *panel = (struct panel_device *)tbl->pdata;
+	int idx;
+
+	if (panel == NULL) {
+		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+
+	panel_data = &panel->panel_data;
+
+	idx = sizeof_row(tbl) * (panel_data->props.irc_onoff ? IRC_ONOFF_ON : IRC_ONOFF_OFF);
+
+	return idx;
+}
+
 int getidx_mps_table(struct maptbl *tbl)
 {
 	struct panel_device *panel = (struct panel_device *)tbl->pdata;
@@ -510,8 +539,7 @@ int getidx_hbm_onoff_table(struct maptbl *tbl)
 
 	panel_bl = &panel->panel_bl;
 
-	return IS_HBM_BRIGHTNESS(panel_bl->props.brightness) ||
-		IS_EXT_HBM_BRIGHTNESS(panel_bl->props.brightness);
+	return is_hbm_brightness(panel_bl, panel_bl->props.brightness);
 }
 
 int getidx_acl_opr_table(struct maptbl *tbl)
@@ -634,6 +662,108 @@ void copy_poc_maptbl(struct maptbl *tbl, u8 *dst)
 		*dst = (gray == 0x33) ? 0x64 : gray;
 
 	pr_info("%s poc %d, gray %02x->%02x\n", __func__, poc, gray, *dst);
+}
+#endif
+
+#ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
+static u8 s6e3ha6_gct_pattern[2][192 * 3];
+static u8 s6e3ha6_gct_pattern_line[2][192 * 3 * 5];
+int s6e3ha6_getidx_vddm_table(struct maptbl *tbl)
+{
+	struct panel_device *panel = (struct panel_device *)tbl->pdata;
+	struct panel_properties *props = &panel->panel_data.props;
+
+	pr_info("%s vddm %d\n", __func__, props->gct_vddm);
+
+	return tbl->ncol * props->gct_vddm;
+}
+
+static void generate_gct_pattern(u8 *dst, int pattern, int size)
+{
+	static u8 s6e3ha6_gct_value[2] = { 0x5A, 0xA5 };
+	static bool initialized = false;
+	int i;
+
+	if (size != 192 * 3 * 5 * 1480) {
+		pr_err("%s, invalid size %d\n", __func__, size);
+		return;
+	}
+
+	if (!initialized) {
+		/* generate gct pattern */
+		for (i = 0; i < 2; i++) {
+			memset(s6e3ha6_gct_pattern[i % 2], s6e3ha6_gct_value[i % 2], sizeof(u8) * 192 * 3);
+			pr_info("%s %02X pattern\n", __func__, s6e3ha6_gct_value[i % 2]);
+			print_data(s6e3ha6_gct_pattern[i % 2], 128);
+		}
+
+		/* generate gct pattern line */
+		for (i = 0; i < 960 / 192; i++) {
+			memcpy(&s6e3ha6_gct_pattern_line[i % 2][i * sizeof(s6e3ha6_gct_pattern[0])],
+					s6e3ha6_gct_pattern[i % 2], sizeof(s6e3ha6_gct_pattern[0]));
+			memcpy(&s6e3ha6_gct_pattern_line[(i + 1) % 2][i * sizeof(s6e3ha6_gct_pattern[0])],
+					s6e3ha6_gct_pattern[(i + 1) % 2], sizeof(s6e3ha6_gct_pattern[0]));
+		}
+		print_data(s6e3ha6_gct_pattern_line[i % 2], 128);
+		initialized = true;
+	}
+
+	/* generate gct pattern img */
+	for (i = 0; i < 1480; i++) {
+		if (pattern == GCT_PATTERN_1)
+			memcpy(&dst[i * sizeof(s6e3ha6_gct_pattern_line[i % 2])], 
+					s6e3ha6_gct_pattern_line[i % 2],
+					sizeof(s6e3ha6_gct_pattern_line[i % 2]));
+		else if (pattern == GCT_PATTERN_2)
+			memcpy(&dst[i * sizeof(s6e3ha6_gct_pattern_line[(i + 1) % 2])], 
+					s6e3ha6_gct_pattern_line[(i + 1) % 2],
+					sizeof(s6e3ha6_gct_pattern_line[(i + 1) % 2]));
+	}
+
+	pr_info("%s generate gct pattern(%d) %d done!!\n",
+			__func__, pattern, size);
+}
+
+void copy_gram_img_pattern_0(struct maptbl *tbl, u8 *dst)
+{
+	struct panel_device *panel;
+	struct panel_info *panel_data;
+	struct panel_properties *props;
+
+	if (!tbl || !dst)
+		return;
+
+	panel = (struct panel_device *)tbl->pdata;
+	if (unlikely(!panel))
+		return;
+
+	panel_data = &panel->panel_data;
+	props = &panel_data->props;
+
+	props->gct_valid_chksum = S6E3HA6_GRAM_CHECKSUM_VALID;
+
+	generate_gct_pattern(dst, props->gct_pattern == GCT_PATTERN_1 ?
+			GCT_PATTERN_1 : GCT_PATTERN_2, S6E3HA6_GRAM_IMG_SIZE);
+}
+
+void copy_gram_img_pattern_1(struct maptbl *tbl, u8 *dst)
+{
+	struct panel_device *panel;
+	struct panel_info *panel_data;
+	struct panel_properties *props;
+
+	if (!tbl || !dst)
+		return;
+
+	panel = (struct panel_device *)tbl->pdata;
+	if (unlikely(!panel))
+		return;
+
+	panel_data = &panel->panel_data;
+	props = &panel_data->props;
+
+	generate_gct_pattern(dst, props->gct_pattern == GCT_PATTERN_1 ?
+			GCT_PATTERN_2 : GCT_PATTERN_1, S6E3HA6_GRAM_IMG_SIZE);
 }
 #endif
 
@@ -973,6 +1103,41 @@ int init_mdnie_night_mode_table(struct maptbl *tbl)
 	return 0;
 }
 
+int init_mdnie_color_lens_table(struct maptbl *tbl)
+{
+	struct mdnie_info *mdnie;
+	struct maptbl *color_lens_maptbl;
+
+	if (tbl == NULL) {
+		panel_err("PANEL:ERR:%s:maptbl is null\n", __func__);
+		return -EINVAL;
+	}
+
+	if (tbl->pdata == NULL) {
+		panel_err("PANEL:ERR:%s:pdata is null\n", __func__);
+		return -EINVAL;
+	}
+
+	mdnie = tbl->pdata;
+
+	color_lens_maptbl = mdnie_find_etc_maptbl(mdnie, MDNIE_ETC_COLOR_LENS_MAPTBL);
+	if (!color_lens_maptbl) {
+		panel_err("%s, COLOR_LENS_MAPTBL not found\n", __func__);
+		return -EINVAL;
+	}
+
+	if (sizeof_maptbl(tbl) < (S6E3HA6_COLOR_LENS_OFS +
+			sizeof_row(color_lens_maptbl))) {
+		panel_err("%s invalid size (maptbl_size %d, color_lens_maptbl_size %d)\n",
+			__func__, sizeof_maptbl(tbl), sizeof_row(color_lens_maptbl));
+		return -EINVAL;
+	}
+
+	maptbl_copy(color_lens_maptbl, &tbl->arr[S6E3HA6_COLOR_LENS_OFS]);
+
+	return 0;
+}
+
 void update_current_scr_white(struct maptbl *tbl, u8 *dst)
 {
 	struct mdnie_info *mdnie;
@@ -1082,6 +1247,24 @@ int getidx_adjust_ldu_maptbl(struct maptbl *tbl)
 		return -EINVAL;
 	}
 	return maptbl_index(tbl, wcrd_type[mdnie->props.mode], mdnie->props.ldu, 0);
+}
+
+int getidx_color_lens_maptbl(struct maptbl *tbl)
+{
+	struct mdnie_info *mdnie = (struct mdnie_info *)tbl->pdata;
+
+	if (!IS_COLOR_LENS_MODE(mdnie))
+		return -EINVAL;
+
+	if ((mdnie->props.color_lens_color < 0) || (mdnie->props.color_lens_color >= COLOR_LENS_COLOR_MAX)) {
+		pr_err("%s, out of color lens color range %d\n", __func__, mdnie->props.color_lens_color);
+		return -EINVAL;
+	}
+	if ((mdnie->props.color_lens_level < 0) || (mdnie->props.color_lens_level >= COLOR_LENS_LEVEL_MAX)) {
+		pr_err("%s, out of color lens level range %d\n", __func__, mdnie->props.color_lens_level);
+		return -EINVAL;
+	}
+	return maptbl_index(tbl, mdnie->props.color_lens_color, mdnie->props.color_lens_level, 0);
 }
 
 void copy_color_coordinate_maptbl(struct maptbl *tbl, u8 *dst)
@@ -1269,13 +1452,13 @@ int getidx_mdnie_scr_white_maptbl(struct pkt_update_info *pktui)
 
 
 #ifdef CONFIG_LOGGING_BIGDATA_BUG
-unsigned int g_rddpm = 0xff;
-unsigned int g_rddsm = 0xff;
+static unsigned int g_rddpm = 0xff;
+static unsigned int g_rddsm = 0xff;
 
 unsigned int get_panel_bigdata(void)
 {
 	unsigned int val = 0;
-	
+
 	val = (g_rddsm << 8) | g_rddpm;
 
 	return val;
@@ -1283,12 +1466,18 @@ unsigned int get_panel_bigdata(void)
 #endif
 
 
-void show_rddpm(struct dumpinfo *info)
+static void show_rddpm(struct dumpinfo *info)
 {
 	int ret;
-	u8 rddpm = 0;
+	struct resinfo *res = info->res;
+	u8 rddpm[S6E3HA6_RDDPM_LEN] = { 0, };
 
-	ret = resource_copy(&rddpm, info->res);
+	if (!res || ARRAY_SIZE(rddpm) != res->dlen) {
+		pr_err("%s invalid resource\n", __func__);
+		return;
+	}
+
+	ret = resource_copy(rddpm, info->res);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to copy rddpm resource\n", __func__);
 		return;
@@ -1296,25 +1485,31 @@ void show_rddpm(struct dumpinfo *info)
 
 	panel_info("========== SHOW PANEL [0Ah:RDDPM] INFO ==========\n");
 	panel_info("* Reg Value : 0x%02x, Result : %s\n",
-			rddpm, (rddpm == 0x9C) ? "GOOD" : "NG");
-	panel_info("* Bootster Mode : %s\n", rddpm & 0x80 ? "ON (GD)" : "OFF (NG)");
-	panel_info("* Idle Mode     : %s\n", rddpm & 0x40 ? "ON (NG)" : "OFF (GD)");
-	panel_info("* Partial Mode  : %s\n", rddpm & 0x20 ? "ON" : "OFF");
-	panel_info("* Sleep Mode    : %s\n", rddpm & 0x10 ? "OUT (GD)" : "IN (NG)");
-	panel_info("* Normal Mode   : %s\n", rddpm & 0x08 ? "OK (GD)" : "SLEEP (NG)");
-	panel_info("* Display ON    : %s\n", rddpm & 0x04 ? "ON (GD)" : "OFF (NG)");
+			rddpm[0], (rddpm[0] == 0x9C) ? "GOOD" : "NG");
+	panel_info("* Bootster Mode : %s\n", rddpm[0] & 0x80 ? "ON (GD)" : "OFF (NG)");
+	panel_info("* Idle Mode     : %s\n", rddpm[0] & 0x40 ? "ON (NG)" : "OFF (GD)");
+	panel_info("* Partial Mode  : %s\n", rddpm[0] & 0x20 ? "ON" : "OFF");
+	panel_info("* Sleep Mode    : %s\n", rddpm[0] & 0x10 ? "OUT (GD)" : "IN (NG)");
+	panel_info("* Normal Mode   : %s\n", rddpm[0] & 0x08 ? "OK (GD)" : "SLEEP (NG)");
+	panel_info("* Display ON    : %s\n", rddpm[0] & 0x04 ? "ON (GD)" : "OFF (NG)");
 	panel_info("=================================================\n");
 #ifdef CONFIG_LOGGING_BIGDATA_BUG
-	g_rddpm = (unsigned int)rddpm;
+	g_rddpm = (unsigned int)rddpm[0];
 #endif
 }
 
-void show_rddsm(struct dumpinfo *info)
+static void show_rddsm(struct dumpinfo *info)
 {
 	int ret;
-	u8 rddsm = 0;
+	struct resinfo *res = info->res;
+	u8 rddsm[S6E3HA6_RDDSM_LEN] = { 0, };
 
-	ret = resource_copy(&rddsm, info->res);
+	if (!res || ARRAY_SIZE(rddsm) != res->dlen) {
+		pr_err("%s invalid resource\n", __func__);
+		return;
+	}
+
+	ret = resource_copy(rddsm, info->res);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to copy rddsm resource\n", __func__);
 		return;
@@ -1322,18 +1517,24 @@ void show_rddsm(struct dumpinfo *info)
 
 	panel_info("========== SHOW PANEL [0Eh:RDDSM] INFO ==========\n");
 	panel_info("* Reg Value : 0x%02x, Result : %s\n",
-			rddsm, (rddsm == 0x80) ? "GOOD" : "NG");
-	panel_info("* TE Mode : %s\n", rddsm & 0x80 ? "ON(GD)" : "OFF(NG)");
+			rddsm[0], (rddsm[0] == 0x80) ? "GOOD" : "NG");
+	panel_info("* TE Mode : %s\n", rddsm[0] & 0x80 ? "ON(GD)" : "OFF(NG)");
 	panel_info("=================================================\n");
 #ifdef CONFIG_LOGGING_BIGDATA_BUG
-	g_rddsm = (unsigned int)rddsm;
+	g_rddsm = (unsigned int)rddsm[0];
 #endif
 }
 
-void show_err(struct dumpinfo *info)
+static void show_err(struct dumpinfo *info)
 {
 	int ret;
+	struct resinfo *res = info->res;
 	u8 err[S6E3HA6_ERR_LEN] = { 0, }, err_15_8, err_7_0;
+
+	if (!res || ARRAY_SIZE(err) != res->dlen) {
+		pr_err("%s invalid resource\n", __func__);
+		return;
+	}
 
 	ret = resource_copy(err, info->res);
 	if (unlikely(ret < 0)) {
@@ -1403,13 +1604,18 @@ void show_err(struct dumpinfo *info)
 	panel_info("==================================================\n");
 }
 
-void show_err_fg(struct dumpinfo *info)
+static void show_err_fg(struct dumpinfo *info)
 {
 	int ret;
+	u8 err_fg[S6E3HA6_ERR_FG_LEN] = { 0, };
 	struct resinfo *res = info->res;
-	u8 err_fg = 0;
 
-	ret = resource_copy(&err_fg, res);
+	if (!res || ARRAY_SIZE(err_fg) != res->dlen) {
+		pr_err("%s invalid resource\n", __func__);
+		return;
+	}
+
+	ret = resource_copy(err_fg, res);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to copy err_fg resource\n", __func__);
 		return;
@@ -1417,35 +1623,40 @@ void show_err_fg(struct dumpinfo *info)
 
 	panel_info("========== SHOW PANEL [EEh:ERR_FG] INFO ==========\n");
 	panel_info("* Reg Value : 0x%02x, Result : %s\n",
-			err_fg, (err_fg & 0x4C) ? "NG" : "GOOD");
+			err_fg[0], (err_fg[0] & 0x4C) ? "NG" : "GOOD");
 
-	if (err_fg & 0x04) {
+	if (err_fg[0] & 0x04) {
 		panel_info("* VLOUT3 Error\n");
 		inc_dpui_u32_field(DPUI_KEY_PNVLO3E, 1);
 	}
 
-	if (err_fg & 0x08) {
+	if (err_fg[0] & 0x08) {
 		panel_info("* ELVDD Error\n");
 		inc_dpui_u32_field(DPUI_KEY_PNELVDE, 1);
 	}
 
-	if (err_fg & 0x40) {
+	if (err_fg[0] & 0x40) {
 		panel_info("* VLIN1 Error\n");
 		inc_dpui_u32_field(DPUI_KEY_PNVLI1E, 1);
 	}
 
 	panel_info("==================================================\n");
 
-	inc_dpui_u32_field(DPUI_KEY_PNESDE, (err_fg & 0x4D) ? 1 : 0);
+	inc_dpui_u32_field(DPUI_KEY_PNESDE, (err_fg[0] & 0x4D) ? 1 : 0);
 }
 
-void show_dsi_err(struct dumpinfo *info)
+static void show_dsi_err(struct dumpinfo *info)
 {
 	int ret;
 	struct resinfo *res = info->res;
-	u8 dsi_err = 0;
+	u8 dsi_err[S6E3HA6_DSI_ERR_LEN] = { 0, };
 
-	ret = resource_copy(&dsi_err, res);
+	if (!res || ARRAY_SIZE(dsi_err) != res->dlen) {
+		pr_err("%s invalid resource\n", __func__);
+		return;
+	}
+
+	ret = resource_copy(dsi_err, res);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to copy dsi_err resource\n", __func__);
 		return;
@@ -1453,21 +1664,21 @@ void show_dsi_err(struct dumpinfo *info)
 
 	panel_info("========== SHOW PANEL [05h:DSIE_CNT] INFO ==========\n");
 	panel_info("* Reg Value : 0x%02x, Result : %s\n",
-			dsi_err, (dsi_err) ? "NG" : "GOOD");
-	if (dsi_err)
-		panel_info("* DSI Error Count : %d\n", dsi_err);
+			dsi_err[0], (dsi_err[0]) ? "NG" : "GOOD");
+	if (dsi_err[0])
+		panel_info("* DSI Error Count : %d\n", dsi_err[0]);
 	panel_info("====================================================\n");
-	
-	inc_dpui_u32_field(DPUI_KEY_PNDSIE, dsi_err);
+
+	inc_dpui_u32_field(DPUI_KEY_PNDSIE, dsi_err[0]);
 }
 
-void show_self_diag(struct dumpinfo *info)
+static void show_self_diag(struct dumpinfo *info)
 {
 	int ret;
 	struct resinfo *res = info->res;
-	u8 self_diag = 0;
+	u8 self_diag[S6E3HA6_SELF_DIAG_LEN] = { 0, };
 
-	ret = resource_copy(&self_diag, res);
+	ret = resource_copy(self_diag, res);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to copy self_diag resource\n", __func__);
 		return;
@@ -1475,10 +1686,10 @@ void show_self_diag(struct dumpinfo *info)
 
 	panel_info("========== SHOW PANEL [0Fh:SELF_DIAG] INFO ==========\n");
 	panel_info("* Reg Value : 0x%02x, Result : %s\n",
-			self_diag, (self_diag & 0x80) ? "GOOD" : "NG");
-	if ((self_diag & 0x80) == 0)
+			self_diag[0], (self_diag[0] & 0x80) ? "GOOD" : "NG");
+	if ((self_diag[0] & 0x80) == 0)
 		panel_info("* OTP Reg Loading Error\n");
 	panel_info("=====================================================\n");
 
-	inc_dpui_u32_field(DPUI_KEY_PNSDRE, (self_diag & 0x80) ? 0 : 1);
+	inc_dpui_u32_field(DPUI_KEY_PNSDRE, (self_diag[0] & 0x80) ? 0 : 1);
 }

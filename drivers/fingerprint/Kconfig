@@ -22,6 +22,12 @@ config SENSORS_VFS8XXX
 	help
 	  If you say yes here you get support for Synaptics's
 	  fingerprint sensor NAMSAN.
+config SENSORS_VFS9XXX
+	tristate "VFS9XXX fingerprint sensor support"
+	default n
+	help
+	  If you say yes here you get support for Synaptics's
+	  fingerprint sensor CPID.
 config SENSORS_FPRINT_SECURE
 	tristate "VFS61XX fingerprint sensor support"
 	default n

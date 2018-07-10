@@ -452,6 +452,9 @@ struct link_device {
 	/* MIF buffer management */
 	struct mif_buff_mng *mif_buff_mng;
 
+	/* Save reason of forced crash */
+	unsigned int crash_type;
+
 	int (*init_comm)(struct link_device *ld, struct io_device *iod);
 	void (*terminate_comm)(struct link_device *ld, struct io_device *iod);
 
@@ -696,6 +699,9 @@ struct modem_ctl {
 	unsigned int sbi_uart_noti_mask;
 	unsigned int sbi_uart_noti_pos;
 
+	unsigned int sbi_crash_type_mask;
+	unsigned int sbi_crash_type_pos;
+
 	unsigned int airplane_mode;
 #endif
 
@@ -778,6 +784,6 @@ extern int sec_argos_unregister_notifier(struct notifier_block *n, char *label);
 
 int mif_init_argos_notifier(void);
 #else
-int mif_init_argos_notifier(void) { return 0; }
+static inline int mif_init_argos_notifier(void) { return 0; }
 #endif
 #endif

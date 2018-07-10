@@ -91,6 +91,10 @@ struct s2mpb02_platform_data {
 	/* led (flash/torch) data */
 	struct s2mpb02_led_platform_data *led_data;
 #endif
+	u32 b1_rms_en;
+
+	int devs_num;
+	struct mfd_cell *devs;
 };
 
 extern int s2mpb02_irq_init(struct s2mpb02_dev *s2mpb02);

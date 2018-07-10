@@ -81,7 +81,7 @@ struct timezone;
 #define rocred_uc_inc_not_zero(x) atomic_inc_not_zero(x->use_cnt)
 #define rocred_uc_set(x,v) atomic_set(x->use_cnt,v)
 
-#define RKP_RO_AREA __attribute__((section (".rkp.prot.page")))
+#define RKP_RO_AREA __attribute__((section(".rkp.ro.area")))
 extern int rkp_cred_enable;
 extern char __rkp_ro_start[], __rkp_ro_end[];
 extern struct cred init_cred;

@@ -165,6 +165,41 @@ void decon_reg_set_clkgate_mode(u32 id, u32 en)
 }
 
 /*
+* Check the connection of DECON & DMA(DPP)
+*
+* CH0[5:4](vg0=2) - CH1[9:8](vgf0=4) - CH2[13:12](vgf1=5)
+* - CH3[17:16](g1=1) - CH4[21:20](vg1=3)
+*
+* return : 0=decon0, 1=decon1, 2=decon2, 3=idle
+*/
+u32 decon_reg_get_rsc_dma_info(u32 id, u32 dpp_id)
+{
+	u32 val = 0;
+	/* NA, G1-VG0-VG1-VGF0-VGF1 */
+	u32 bit_pos[6] = {0, 16, 4, 20, 8, 12};
+	u32 decon_id = 0;
+
+	if (dpp_id == 0)
+		val = 0;
+	else
+		val = decon_read(id, RESOURCE_OCCUPANCY_INFO_1);
+
+	decon_id = (val >> bit_pos[dpp_id]) & 0x3;
+	return decon_id;
+}
+
+int decon_reg_instant_stop(u32 id, unsigned long timeout)
+{
+	int ret = 0;
+
+	decon_reg_direct_on_off(id, 0);
+	decon_reg_update_req_global(id);
+	ret = decon_reg_wait_idle_status_timeout(id, timeout);
+
+	return ret;
+}
+
+/*
  * API is considering real possible Display Scenario
  * such as following examples
  *  < Single display >          D0=16K, D1=0K, D2=0K
@@ -766,6 +801,11 @@ void decon_reg_get_crc_data(u32 id, u32 *w0_data, u32 *w1_data)
 	*w1_data = CRC_DATA_WCLK1_GET(val);
 }
 
+void decon_reg_clear_all_update_req(u32 id)
+{
+	decon_write(id, SHADOW_REG_UPDATE_REQ, 0);
+}
+
 void decon_reg_update_req_global(u32 id)
 {
 	u32 mask;
@@ -981,6 +1021,11 @@ void decon_reg_set_trigger(u32 id, struct decon_mode_info *psr,
 	}
 
 	decon_write_mask(id, HW_SW_TRIG_CONTROL, val, mask);
+}
+
+void decon_reg_set_timeout_value(u32 id, u32 to_val)
+{
+	decon_write(id, TIME_OUT_VALUE, to_val);
 }
 
 /****************** DSC related functions ********************/
@@ -1978,12 +2023,6 @@ static void decon_reg_init_probe(u32 id, u32 dsi_idx, struct decon_param *p)
 		decon_reg_set_dispif_size(id, lcd_info->xres, lcd_info->yres);
 	}
 
-	decon_reg_update_req_global(id);
-
-	if (psr->psr_mode == DECON_MIPI_COMMAND_MODE) {
-		decon_reg_set_trigger(id, psr, DECON_TRIG_DISABLE);
-	}
-
 	decon_reg_get_data_path(id, &d_path, &e_path);
 	decon_dbg("%s: decon%d, enhance path(0x%x), data path(0x%x)\n",
 			__func__, id, e_path, d_path);
@@ -2201,6 +2240,7 @@ void decon_reg_clear_int_all(u32 id)
 			| DPU_FIFO_SEL_MASK
 			| DPU_UNDER_FLOW_INT_EN);
 	}
+	mask |= DPU_EXTRA_INT_EN;
 	decon_write_mask(id, INTERRUPT_PENDING, ~0, mask);
 
 	mask = (DPU_RESOURCE_CONFLICT_INT_EN
@@ -2229,8 +2269,10 @@ void decon_reg_set_int(u32 id, struct decon_mode_info *psr, u32 en)
 		if (psr->psr_mode == DECON_VIDEO_MODE && psr->out_type == DECON_OUT_DP) {
 			val = (DPU_FIFO_SEL_DISPIF
 				| DPU_UNDER_FLOW_INT_EN
+				| DPU_FRAME_DONE_INT_EN
 				| DPU_DISPIF_VSTATUS_INT_EN
 				| DPU_DISPIF_VSTATUS_INT_SEL(DPU_VERTICAL_VSYNC_START)
+				| DPU_EXTRA_INT_EN
 				| DPU_INT_EN);
 		}
 

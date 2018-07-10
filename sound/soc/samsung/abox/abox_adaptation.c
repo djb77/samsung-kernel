@@ -38,6 +38,7 @@ struct maxim_dsm *read_maxdsm;
 bool abox_ipc_irq_read_avail;
 bool abox_ipc_irq_write_avail;
 int dsm_offset;
+int dsm_size;
 
 int maxim_dsm_read(int offset, int size, void *dsm_data)
 {
@@ -56,6 +57,7 @@ int maxim_dsm_read(int offset, int size, void *dsm_data)
 	dbg_abox_adaptation("");
 	abox_ipc_irq_read_avail = false;
 	dsm_offset = offset;
+	dsm_size = size;
 
 	ret = abox_start_ipc_transaction(&data->pdev_abox->dev, IPC_ERAP, &msg, sizeof(msg), 1, 1);
 	if (IS_ERR_VALUE(ret)) {
@@ -123,10 +125,12 @@ static irqreturn_t abox_adaptation_irq_handler(int irq,
 			if ((dsm_offset != READ_WRITE_ALL_PARAM) &&
 				(dsm_offset != PARAM_DSM_5_0_ABOX_GET_LOGGING)) {
 
+				if((dsm_offset + dsm_size) > read_maxdsm->param_size)
+					dsm_size = read_maxdsm->param_size - dsm_offset;
+
 				memcpy(&read_maxdsm->param[dsm_offset],
 					&erap_msg->param.raw.params[0],
-					min((sizeof(uint32_t) * read_maxdsm->param_size),
-						(sizeof(erap_msg->param.raw))));
+					sizeof(uint32_t) * dsm_size);
 
 				abox_ipc_irq_read_avail = true;
 
@@ -139,10 +143,12 @@ static irqreturn_t abox_adaptation_irq_handler(int irq,
 			} else if ((erap_msg->param.raw.params[0] > 0)
 				&& (erap_msg->param.raw.params[0] <= sizeof(erap_msg->param.raw.params))) {
 
+				if(erap_msg->param.raw.params[0] > read_maxdsm->param_size)
+					erap_msg->param.raw.params[0] = read_maxdsm->param_size;
+
 				memcpy(&read_maxdsm->param[0],
 					&erap_msg->param.raw.params[0],
-					min((sizeof(uint32_t) * read_maxdsm->param_size),
-						(sizeof(erap_msg->param.raw))));
+					sizeof(uint32_t) * erap_msg->param.raw.params[0]);
 
 				abox_ipc_irq_read_avail = true;
 

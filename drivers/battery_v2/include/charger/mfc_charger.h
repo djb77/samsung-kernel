@@ -630,6 +630,7 @@ struct mfc_charger_platform_data {
 	u32 *fod_a4wp_data;
 	u32 *fod_wpc_data;
 	u32 *fod_pma_data;
+	u32 *fod_hero_5v_data;
 	int fod_data_check;
 	bool ic_on_mode;
 	int hw_rev_changed; /* this is only for noble/zero2 */
@@ -652,6 +653,7 @@ struct mfc_charger_platform_data {
 	int wpc_cc_call_vout;
 	int opfq_cnt;
 	int hv_vout_wa;
+	int mst_switch_delay;
 	int wc_cover_rpp;
 	int wc_hv_rpp;
 };
@@ -706,6 +708,7 @@ struct mfc_charger_data {
 	int led_cover;
 	bool is_probed;
 	bool is_afc_tx;
+	int tx_id;
 };
 
 #endif /* __MFC_CHARGER_H */

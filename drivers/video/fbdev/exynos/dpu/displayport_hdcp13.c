@@ -634,6 +634,9 @@ HDCP13_END:
 		displayport_reg_video_mute(1);
 		HDCP13_Encryption_con(0);
 		displayport_dbg("[HDCP 1.3] HDCP Authentication fail!!!\n");
+#ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
+		secdp_bigdata_inc_error_cnt(ERR_HDCP_AUTH);
+#endif
 	}
 
 	/*HDCP3_IRQ_Mask();*/

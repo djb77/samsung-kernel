@@ -44,7 +44,7 @@
 void ssp_iio_unconfigure_ring(struct iio_dev *indio_dev)
 {
 	iio_kfifo_free(indio_dev->buffer);
-};
+}
 
 static int ssp_predisable(struct iio_dev *indio_dev)
 {
@@ -70,14 +70,16 @@ int ssp_iio_configure_ring(struct iio_dev *indio_dev)
 	if (!ring)
 		return -ENOMEM;
 
-	/* setup ring buffer */	
+	/* setup ring buffer */
 	ring->bytes_per_datum = 8;
 	ring->scan_timestamp = true;
 	iio_device_attach_buffer(indio_dev, ring);
 
 	indio_dev->setup_ops = &ssp_iio_ring_setup_ops;
-	/*scan count double count timestamp. should subtract 1. but
-	number of channels still includes timestamp*/
+	/*
+	 *scan count double count timestamp. should subtract 1. but
+	 *number of channels still includes timestamp
+	 */
 
 	indio_dev->modes |= INDIO_BUFFER_SOFTWARE;
 

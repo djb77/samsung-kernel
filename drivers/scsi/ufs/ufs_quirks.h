@@ -31,7 +31,8 @@
 /*unique number*/
 #define	UFS_UN_16_DIGITS 16
 #define UFS_UN_18_DIGITS 18
-#define UFS_UN_MAX_DIGITS 19 //current max digit + 1
+#define UFS_UN_20_DIGITS 20
+#define UFS_UN_MAX_DIGITS 21 //current max digit + 1
 
 /**
  * ufs_card_info - ufs device details

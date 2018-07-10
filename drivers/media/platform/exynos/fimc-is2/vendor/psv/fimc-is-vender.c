@@ -243,21 +243,10 @@ int fimc_is_vender_fw_sel(struct fimc_is_vender *vender)
 }
 
 int fimc_is_vender_setfile_sel(struct fimc_is_vender *vender,
-		char *setfile_name)
+	char *setfile_name,
+	int position)
 {
-	int ret = 0;
-
-	if (setfile_name) {
-		snprintf(vender->setfile_path, sizeof(vender->setfile_path), "%s%s",
-				FIMC_IS_SETFILE_SDCARD_PATH, setfile_name);
-		snprintf(vender->request_setfile_path,
-				sizeof(vender->request_setfile_path), "%s",
-				setfile_name);
-	} else {
-		ret = -EINVAL;
-	}
-
-	return ret;
+	return 0;
 }
 
 int fimc_is_vender_preprocessor_gpio_on_sel(struct fimc_is_vender *vender, u32 scenario, u32 *gpio_scneario)

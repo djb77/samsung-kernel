@@ -49,6 +49,7 @@ enum power_supply_ext_property {
 	POWER_SUPPLY_EXT_PROP_WIRELESS_OP_FREQ,
 	POWER_SUPPLY_EXT_PROP_WIRELESS_TX_CMD,
 	POWER_SUPPLY_EXT_PROP_WIRELESS_TX_VAL,
+	POWER_SUPPLY_EXT_PROP_WIRELESS_TX_ID,
 	POWER_SUPPLY_EXT_PROP_AICL_CURRENT,
 	POWER_SUPPLY_EXT_PROP_CHECK_MULTI_CHARGE,
 	POWER_SUPPLY_EXT_PROP_CHIP_ID,
@@ -113,7 +114,9 @@ enum sec_battery_cable {
 	SEC_BATTERY_CABLE_WIRELESS_HV_VEHICLE,	/* 28 */
 	SEC_BATTERY_CABLE_PREPARE_WIRELESS_HV,	/* 29 */
 	SEC_BATTERY_CABLE_TIMEOUT,	        /* 30 */
-	SEC_BATTERY_CABLE_MAX,                	/* 31 */
+	SEC_BATTERY_CABLE_SMART_OTG,            /* 31 */
+	SEC_BATTERY_CABLE_SMART_NOTG,           /* 32 */
+	SEC_BATTERY_CABLE_MAX,                	/* 33 */
 };
 
 enum sec_battery_voltage_mode {
@@ -228,6 +231,25 @@ enum sec_wireless_pad_mode {
 	SEC_WIRELESS_PAD_VEHICLE_HV,
 	SEC_WIRELESS_PAD_PREPARE_HV,
 	SEC_WIRELESS_PAD_A4WP,
+};
+
+enum sec_wireless_pad_id {
+	WC_PAD_ID_UNKNOWN	= 0x00,
+	/* 0x01~1F : Single Port */
+	WC_PAD_ID_SNGL_NOBLE = 0x10,
+	WC_PAD_ID_SNGL_VEHICLE,
+	WC_PAD_ID_SNGL_MINI,
+	WC_PAD_ID_SNGL_ZERO,
+	WC_PAD_ID_SNGL_DREAM,
+	/* 0x20~2F : Multi Port */
+	/* 0x30~3F : Stand Type */
+	WC_PAD_ID_STAND_HERO = 0x30,
+	WC_PAD_ID_STAND_DREAM,
+	/* 0x40~4F : External Battery Pack */
+	WC_PAD_ID_EXT_BATT_PACK = 0x40,
+	WC_PAD_ID_EXT_BATT_PACK_TA,
+	/* 0x50~6F : Reserved */
+	WC_PAD_ID_MAX = 0x6F,
 };
 
 enum sec_battery_temp_control_source {

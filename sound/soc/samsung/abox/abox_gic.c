@@ -3,7 +3,7 @@
  * ALSA SoC - Samsung ABOX driver
  *
  * Copyright (c) 2016 Samsung Electronics Co. Ltd.
-  *
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -32,7 +32,8 @@ void abox_gic_generate_interrupt(struct platform_device *pdev, int hw_irq)
 #endif
 	dev_dbg(&pdev->dev, "%s(%d)\n", __func__, hw_irq);
 #ifdef GIC_IS_SECURE_FREE
-	writel((0x1 << 16) | (hw_irq & 0xF), data->gicd_base + GIC_DIST_SOFTINT);
+	writel((0x1 << 16) | (hw_irq & 0xF),
+			data->gicd_base + GIC_DIST_SOFTINT);
 #else
 	dev_dbg(&pdev->dev, "exynos_smc() is called\n");
 	exynos_smc(SMC_CMD_REG,
@@ -42,7 +43,8 @@ void abox_gic_generate_interrupt(struct platform_device *pdev, int hw_irq)
 }
 EXPORT_SYMBOL(abox_gic_generate_interrupt);
 
-void abox_gic_register_irq_handler(struct platform_device *pdev, irq_handler_t irq_handler, void *dev_id)
+void abox_gic_register_irq_handler(struct platform_device *pdev,
+		irq_handler_t irq_handler, void *dev_id)
 {
 	struct abox_gic_data *data = platform_get_drvdata(pdev);
 
@@ -68,7 +70,8 @@ static irqreturn_t abox_gic_irq_handler(int irq, void *dev_id)
 {
 	struct platform_device *pdev = dev_id;
 	struct abox_gic_data *data = platform_get_drvdata(pdev);
-	struct abox_gic_irq_handler_t *irq_handler = &data->abox_gic_irq_handler;
+	struct abox_gic_irq_handler_t *irq_handler =
+			&data->abox_gic_irq_handler;
 	irqreturn_t result = IRQ_HANDLED;
 	u32 irqstat, irqnr;
 
@@ -83,7 +86,8 @@ static irqreturn_t abox_gic_irq_handler(int irq, void *dev_id)
 			writel(irqstat, data->gicc_base + GIC_CPU_EOI);
 			writel(irqstat, data->gicc_base + GIC_CPU_DEACTIVATE);
 			if (irq_handler->irq_handler) {
-				result = irq_handler->irq_handler(irqnr, irq_handler->dev_id);
+				result = irq_handler->irq_handler(irqnr,
+						irq_handler->dev_id);
 			}
 			continue;
 		} else if (unlikely(irqnr > 15 && irqnr < 1021)) {
@@ -99,28 +103,27 @@ static irqreturn_t abox_gic_irq_handler(int irq, void *dev_id)
 void abox_gic_init_gic(struct platform_device *pdev)
 {
 	struct abox_gic_data *data = platform_get_drvdata(pdev);
+	unsigned long arg;
 	int i, result;
 
 	dev_info(&pdev->dev, "%s\n", __func__);
 
-	result = exynos_smc(SMC_CMD_REG,
-			SMC_REG_ID_SFR_W(data->gicc_base_phys + GIC_CPU_PRIMASK),
-			0x000000FF, 0);
+	arg = SMC_REG_ID_SFR_W(data->gicc_base_phys + GIC_CPU_PRIMASK);
+	result = exynos_smc(SMC_CMD_REG, arg, 0x000000FF, 0);
 
-	result = exynos_smc(SMC_CMD_REG,
-			SMC_REG_ID_SFR_W(data->gicd_base_phys + GIC_DIST_CTRL),
-			0x3, 0);
+	arg = SMC_REG_ID_SFR_W(data->gicd_base_phys + GIC_DIST_CTRL);
+	result = exynos_smc(SMC_CMD_REG, arg, 0x3, 0);
 	if (is_secure_gic()) {
 		for (i = 0; i < 1; i++) {
-			result = exynos_smc(SMC_CMD_REG,
-					SMC_REG_ID_SFR_W(data->gicd_base_phys + GIC_DIST_IGROUP + (i * 4)),
-					0xFFFFFFFF, 0);
+			arg = SMC_REG_ID_SFR_W(data->gicd_base_phys +
+					GIC_DIST_IGROUP + (i * 4));
+			result = exynos_smc(SMC_CMD_REG, arg, 0xFFFFFFFF, 0);
 		}
 	}
 	for (i = 0; i < 40; i++) {
-		result = exynos_smc(SMC_CMD_REG,
-				SMC_REG_ID_SFR_W(data->gicd_base_phys + GIC_DIST_PRI + (i * 4)),
-				0x10101010, 0);
+		arg = SMC_REG_ID_SFR_W(data->gicd_base_phys +
+				GIC_DIST_PRI + (i * 4));
+		result = exynos_smc(SMC_CMD_REG, arg, 0x10101010, 0);
 	}
 
 	writel(0x3, data->gicc_base + GIC_CPU_CTRL);
@@ -163,21 +166,19 @@ static int samsung_abox_gic_probe(struct platform_device *pdev)
 	dev_info(dev, "%s\n", __func__);
 
 	data = devm_kzalloc(dev, sizeof(struct abox_gic_data), GFP_KERNEL);
-	if (!data) {
-		dev_err(dev, "Failed to allocate memory\n");
+	if (!data)
 		return -ENOMEM;
-	}
 	platform_set_drvdata(pdev, data);
 
-	data->gicd_base = devm_request_and_map_byname(pdev, "gicd", &data->gicd_base_phys, NULL);
-	if (IS_ERR(data->gicd_base)) {
+	data->gicd_base = devm_request_and_map_byname(pdev, "gicd",
+			&data->gicd_base_phys, NULL);
+	if (IS_ERR(data->gicd_base))
 		return PTR_ERR(data->gicd_base);
-	}
 
-	data->gicc_base = devm_request_and_map_byname(pdev, "gicc", &data->gicc_base_phys, NULL);
-	if (IS_ERR(data->gicc_base)) {
+	data->gicc_base = devm_request_and_map_byname(pdev, "gicc",
+			&data->gicc_base_phys, NULL);
+	if (IS_ERR(data->gicc_base))
 		return PTR_ERR(data->gicc_base);
-	}
 
 	data->irq = platform_get_irq(pdev, 0);
 	if (IS_ERR_VALUE(data->irq)) {

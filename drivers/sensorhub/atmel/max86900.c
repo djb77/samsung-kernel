@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright (c)2013 Maxim Integrated Products, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
@@ -182,7 +182,8 @@ static int max86900_init_device(struct max86900_device_data *data)
 
 	/* Interrupt Clear */
 	recvData = MAX86900_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -202,7 +203,7 @@ static int max86900_init_device(struct max86900_device_data *data)
 		return -EIO;
 	}
 
-	err = max86900_write_reg(data, MAX86900_SPO2_CONFIGURATION, 0x51); //400hz 400us
+	err = max86900_write_reg(data, MAX86900_SPO2_CONFIGURATION, 0x51); /* 400hz 400us */
 	if (err != 0) {
 		pr_err("%s - error initializing MAX86900_SPO2_CONFIGURATION!\n",
 			__func__);
@@ -434,14 +435,15 @@ static int max86900_read_data(struct max86900_device_data *device, u16 *data)
 		device->sample_cnt = 0;
 
 	recvData[0] = MAX86900_FIFO_DATA;
-	if ((err = max86900_read_reg(device, recvData, 4)) != 0) {
+	err = max86900_read_reg(device, recvData, 4);
+	if (err != 0) {
 		pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData[0]);
 		return -EIO;
 	}
 
 	for (i = 0; i < 2; i++)	{
-		data[i] = ((((u16)recvData[i * 2]) << 8 ) & 0xff00)
+		data[i] = ((((u16)recvData[i * 2]) << 8) & 0xff00)
 			| ((((u16)recvData[i * 2 + 1])) & 0x00ff);
 	}
 
@@ -562,9 +564,9 @@ static ssize_t max86900_poll_delay_store(struct device *dev,
 }
 
 static DEVICE_ATTR(enable, S_IRUGO|S_IWUSR|S_IWGRP,
-        max86900_enable_show, max86900_enable_store);
+	max86900_enable_show, max86900_enable_store);
 static DEVICE_ATTR(poll_delay, S_IRUGO|S_IWUSR|S_IWGRP,
-        max86900_poll_delay_show, max86900_poll_delay_store);
+	max86900_poll_delay_show, max86900_poll_delay_store);
 
 static struct attribute *hrm_sysfs_attrs[] = {
 	&dev_attr_enable.attr,
@@ -640,7 +642,7 @@ static int max86900_eol_test_enable(struct max86900_device_data *data)
 		return -EIO;
 	}
 
-	err = max86900_write_reg(data, MAX86900_SPO2_CONFIGURATION, 0x47); //100Hz 1600us
+	err = max86900_write_reg(data, MAX86900_SPO2_CONFIGURATION, 0x47); /* 100Hz 1600us */
 	if (err != 0) {
 		pr_err("%s - error initializing MAX86900_SPO2_CONFIGURATION!\n",
 			__func__);
@@ -916,7 +918,7 @@ static ssize_t eol_test_result_store(struct device *dev,
 	strncpy(data->eol_test_result, buf, buf_len);
 
 	mutex_unlock(&data->storelock);
-	
+
 	pr_info("max86900_%s - result = %s, buf_len(%u)\n", __func__, data->eol_test_result, buf_len);
 	data->eol_test_status = 1;
 	return size;
@@ -974,7 +976,8 @@ static ssize_t int_pin_check(struct device *dev,
 	pr_info("max86900_%s - Before INT clear %d\n", __func__, pin_state);
 	/* Interrupt Clear */
 	recvData = MAX86900_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("max86900_%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		max86900_regulator_onoff(data, HRM_LDO_OFF);
@@ -1163,7 +1166,7 @@ done:
 	return errorno;
 }
 
-int max86900_probe(struct i2c_client *client, const struct i2c_device_id *id )
+int max86900_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int err = -ENODEV;
 	u8 buffer[2] = {0, };
@@ -1171,7 +1174,7 @@ int max86900_probe(struct i2c_client *client, const struct i2c_device_id *id )
 	struct max86900_device_data *data;
 
 	/* check to make sure that the adapter supports I2C */
-	if (!i2c_check_functionality(client->adapter,I2C_FUNC_I2C)) {
+	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		pr_err("%s - I2C_FUNC_I2C not supported\n", __func__);
 		return -ENODEV;
 	}
@@ -1218,24 +1221,24 @@ int max86900_probe(struct i2c_client *client, const struct i2c_device_id *id )
 
 	if (buffer[1] == MAX86900A_WHOAMI) {
 		/* MAX86900A & MAX86900B */
-		switch(buffer[0]) {
-			case MAX86900A_REV_ID:
-				data->part_type = PART_TYPE_MAX86900A;
-				data->default_current = MAX86900A_DEFAULT_CURRENT;
-				break;
-			case MAX86900B_REV_ID:
-				data->part_type = PART_TYPE_MAX86900B;
-				data->default_current = MAX86900A_DEFAULT_CURRENT;
-				break;
-			case MAX86900C_REV_ID:
-				data->part_type = PART_TYPE_MAX86900C;
-				data->default_current = MAX86900C_DEFAULT_CURRENT;
-				break;
-			default:
-				pr_err("%s WHOAMI read error : REV ID : 0x%02x\n",
-				__func__, buffer[0]);
-				err = -ENODEV;
-				goto err_of_read_chipid;
+		switch (buffer[0]) {
+		case MAX86900A_REV_ID:
+			data->part_type = PART_TYPE_MAX86900A;
+			data->default_current = MAX86900A_DEFAULT_CURRENT;
+			break;
+		case MAX86900B_REV_ID:
+			data->part_type = PART_TYPE_MAX86900B;
+			data->default_current = MAX86900A_DEFAULT_CURRENT;
+			break;
+		case MAX86900C_REV_ID:
+			data->part_type = PART_TYPE_MAX86900C;
+			data->default_current = MAX86900C_DEFAULT_CURRENT;
+			break;
+		default:
+			pr_err("%s WHOAMI read error : REV ID : 0x%02x\n",
+			__func__, buffer[0]);
+			err = -ENODEV;
+			goto err_of_read_chipid;
 		}
 		pr_info("%s - MAX86900 OS21(0x%X), REV ID : 0x%02x\n",
 				__func__, MAX86900A_SLAVE_ADDR, buffer[0]);
@@ -1405,8 +1408,7 @@ static const struct i2c_device_id max86900_device_id[] = {
 	{ }
 };
 /* descriptor of the max86900 I2C driver */
-static struct i2c_driver max86900_i2c_driver =
-{
+static struct i2c_driver max86900_i2c_driver = {
 	.driver = {
 	    .name = CHIP_NAME,
 	    .owner = THIS_MODULE,

@@ -9,11 +9,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *  
- * A copy of the GPL is available at 
- * http://www.broadcom.com/licenses/GPLv2.php, or by writing to the Free
- * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
- * 02111-1307, USA.
  *
  * The BBD (Broadcom Bridge Driver)
  *
@@ -52,6 +47,9 @@ enum {
 #define BBD_CTRL_SSI_PATCH_END		"SSI:PassThru=0"
 #define GPSD_SENSOR_ON		"GPSD:SENSOR_ON"
 #define GPSD_SENSOR_OFF		"GPSD:SENSOR_OFF"
+#define BBD_CTRL_GPS_ON		"GPSD:CORE_ON"
+#define BBD_CTRL_GPS_OFF		"GPSD:CORE_OFF"
+#define BBD_CTRL_LHD_STOP		"LHD:STOP"
 //#define DEBUG_1HZ_STAT
 
 #ifdef DEBUG_1HZ_STAT
@@ -85,7 +83,7 @@ struct bbd_stat {
 	u64 max_rx_dur; // = 0
 
 	volatile u64 stat[STAT_MAX];
-	
+
 	struct timer_list timer;
 	struct work_struct work;
 	struct workqueue_struct *workq;
@@ -108,9 +106,9 @@ typedef struct {
 	int (*on_mcu_reset)(void *ssh_data);
 } bbd_callbacks;
 
-extern void	bbd_register(void* ext_data, bbd_callbacks *pcallbacks);
+extern void	bbd_register(void *ext_data, bbd_callbacks *pcallbacks);
 extern ssize_t	bbd_send_packet(unsigned char *buf, size_t size);
 extern ssize_t	bbd_pull_packet(unsigned char *buf, size_t size, unsigned int timeout_ms);
 extern int	bbd_mcu_reset(void);
-extern int	bbd_init(struct device* dev);
+extern int	bbd_init(struct device *dev);
 #endif /* __BBD_H__ */

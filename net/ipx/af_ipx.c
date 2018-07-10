@@ -1170,7 +1170,7 @@ static int ipxitf_ioctl(unsigned int cmd, void __user *arg)
 			sizeof(sipx->sipx_node));
 		rc = 0;
 		if (copy_to_user(arg, &ifr, sizeof(ifr)))
-		rc = -EFAULT;
+			rc = -EFAULT;
 		ipxitf_put(ipxif);
 		break;
 	}

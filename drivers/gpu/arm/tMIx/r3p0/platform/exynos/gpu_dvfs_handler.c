@@ -30,6 +30,7 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation)
 	struct exynos_context *platform;
 
 	int mif , i;
+	char *env[2] = {"FEATURE=GPUI", NULL};
 	int *mif_min_table;
 	int table_size;
 
@@ -37,6 +38,10 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation)
 	mif_min_table = get_mif_table(&table_size);
 
 	DVFS_ASSERT(platform);
+
+	if (platform->fault_count == 5) {
+		kobject_uevent_env(&kbdev->dev->kobj, KOBJ_CHANGE, env);
+	}
 
 	if (!platform->perf_gathering_status) {
 		mutex_lock(&platform->gpu_dvfs_handler_lock);

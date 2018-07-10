@@ -47,13 +47,13 @@
 #define MAX86900C_DEFAULT_CURRENT	0x0F
 #define MAX86906_DEFAULT_CURRENT	0x0F
 
-#define MAX86902_DEFAULT_CURRENT1	0x00 //RED
-#define MAX86902_DEFAULT_CURRENT2	0xFF //IR
-#define MAX86902_DEFAULT_CURRENT3	0x60 //NONE
-#define MAX86902_DEFAULT_CURRENT4	0x60 //Violet
+#define MAX86902_DEFAULT_CURRENT1	0x00 /* RED */
+#define MAX86902_DEFAULT_CURRENT2	0xFF /* IR */
+#define MAX86902_DEFAULT_CURRENT3	0x60 /* NONE */
+#define MAX86902_DEFAULT_CURRENT4	0x60 /* Violet */
 
 #define MAX86902_DEFAULT_UV_SR_INTERVAL	100 /*ms*/
-#define MAX86902_RE_ENABLE		200/*ms*/
+#define MAX86902_RE_ENABLE		200 /* ms */
 
 #define MODULE_NAME_HRM			"hrm_sensor"
 #define MODULE_NAME_HRM_LED		"hrmled_sensor"
@@ -270,7 +270,8 @@ static int max86900_init_device(struct max86900_device_data *data)
 
 	/* Interrupt Clear */
 	recvData = MAX86900_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		mutex_unlock(&data->activelock);
@@ -322,7 +323,8 @@ static int max86902_init_device(struct max86900_device_data *data)
 
 	/* Interrupt Clear */
 	recvData = MAX86902_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		mutex_unlock(&data->activelock);
@@ -331,7 +333,8 @@ static int max86902_init_device(struct max86900_device_data *data)
 
 	/* Interrupt2 Clear */
 	recvData = MAX86902_INTERRUPT_STATUS_2;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		mutex_unlock(&data->activelock);
@@ -374,12 +377,12 @@ static void irq_set_state(struct max86900_device_data *data, int irq_enable)
 		__func__, irq_enable, data->irq_state);
 
 	if (irq_enable) {
-		if(!data->irq_state) {
+		if (!data->irq_state) {
 			enable_irq(data->irq);
 			data->irq_state++;
 		}
 	} else {
-		if(data->irq_state) {
+		if (data->irq_state) {
 			disable_irq(data->irq);
 			data->irq_state--;
 		}
@@ -508,7 +511,7 @@ static int max86902_hrm_enable(struct max86900_device_data *data)
 	data->num_samples = 0;
 	data->flex_mode = 0;
 
-	flex_config[0] = ( IR_LED_CH << MAX86902_S2_OFFSET) | RED_LED_CH;
+	flex_config[0] = (IR_LED_CH << MAX86902_S2_OFFSET) | RED_LED_CH;
 	flex_config[1] = 0x00;
 	if (flex_config[0] & MAX86902_S1_MASK) {
 		data->num_samples++;
@@ -853,7 +856,8 @@ static int max86902_uv_enable_gesture(struct max86900_device_data *data)
 
 		/* Interrupt Clear */
 		recvData = MAX86902_INTERRUPT_STATUS;
-		if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+		err = max86900_read_reg(data, &recvData, 1);
+		if (err != 0) {
 			pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 				__func__, err, recvData);
 			return -EIO;
@@ -861,12 +865,13 @@ static int max86902_uv_enable_gesture(struct max86900_device_data *data)
 
 		/* Interrupt2 Clear */
 		recvData = MAX86902_INTERRUPT_STATUS_2;
-		if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+		err = max86900_read_reg(data, &recvData, 1);
+		if (err != 0) {
 			pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 				__func__, err, recvData);
 			return -EIO;
 		}
-	} while(retry_cnt > 0 && !gpio_get_value_cansleep(data->hrm_int));
+	} while (retry_cnt > 0 && !gpio_get_value_cansleep(data->hrm_int));
 
 	atomic_set(&data->enhanced_uv_mode, MAX86902_ENHANCED_UV_GESTURE_MODE);
 
@@ -921,7 +926,8 @@ static int max86902_uv_enable_hr(struct max86900_device_data *data)
 
 	/* Interrupt Clear */
 	recvData = MAX86902_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -929,7 +935,8 @@ static int max86902_uv_enable_hr(struct max86900_device_data *data)
 
 	/* Interrupt2 Clear */
 	recvData = MAX86902_INTERRUPT_STATUS_2;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -967,7 +974,7 @@ static int max86902_uv_enable_uv(struct max86900_device_data *data)
 		return -EIO;
 	}
 
-	err = max86900_write_reg(data,MAX86902_MODE_CONFIGURATION, 0x01);
+	err = max86900_write_reg(data, MAX86902_MODE_CONFIGURATION, 0x01);
 	if (err != 0) {
 		pr_err("%s - error init MAX86902_MODE_CONFIGURATION!\n",
 			__func__);
@@ -976,7 +983,8 @@ static int max86902_uv_enable_uv(struct max86900_device_data *data)
 
 	/* Interrupt Clear */
 	recvData = MAX86902_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -984,7 +992,8 @@ static int max86902_uv_enable_uv(struct max86900_device_data *data)
 
 	/* Interrupt2 Clear */
 	recvData = MAX86902_INTERRUPT_STATUS_2;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -1160,7 +1169,8 @@ static int max86902_uv_eol_enable_vb(struct max86900_device_data *data)
 
 	/* Interrupt Clear */
 	recvData = MAX86902_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -1168,7 +1178,8 @@ static int max86902_uv_eol_enable_vb(struct max86900_device_data *data)
 
 	/* Interrupt2 Clear */
 	recvData = MAX86902_INTERRUPT_STATUS_2;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -1222,7 +1233,8 @@ static int max86902_uv_eol_enable_sum(struct max86900_device_data *data)
 
 	/* Interrupt Clear */
 	recvData = MAX86902_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -1230,7 +1242,8 @@ static int max86902_uv_eol_enable_sum(struct max86900_device_data *data)
 
 	/* Interrupt2 Clear */
 	recvData = MAX86902_INTERRUPT_STATUS_2;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -1283,7 +1296,8 @@ static int max86902_uv_eol_enable_hr(struct max86900_device_data *data)
 
 	/* Interrupt Clear */
 	recvData = MAX86902_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -1291,7 +1305,8 @@ static int max86902_uv_eol_enable_hr(struct max86900_device_data *data)
 
 	/* Interrupt2 Clear */
 	recvData = MAX86902_INTERRUPT_STATUS_2;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -1435,7 +1450,7 @@ static int max86902_read_temperature(struct max86900_device_data *data)
 		return -EIO;
 	}
 
-	if (atomic_read(&data->uv_is_enable)){
+	if (atomic_read(&data->uv_is_enable)) {
 		max86902_uv_log("%s - %d(%x, %x)\n", __func__,
 			data->hrm_temp, recvData[0], recvData[1]);
 	} else
@@ -1453,7 +1468,7 @@ static int max86900_eol_test_control(struct max86900_device_data *data)
 	if (data->sample_cnt < data->hr_range2)	{
 		data->hr_range = 1;
 	} else if (data->sample_cnt < (data->hr_range2 + 297)) {
-		if ( data->eol_test_is_enable == 1 ) {
+		if (data->eol_test_is_enable == 1) {
 			/* Fake pulse */
 			if (data->sample_cnt % 8 < 4) {
 				data->test_current_ir++;
@@ -1473,7 +1488,7 @@ static int max86900_eol_test_control(struct max86900_device_data *data)
 				return -EIO;
 			}
 			data->hr_range = 2;
-		} else if (data->eol_test_is_enable == 2 ) {
+		} else if (data->eol_test_is_enable == 2) {
 			data->sample_cnt = data->hr_range2 + 297 - 1;
 		}
 	} else if (data->sample_cnt == (data->hr_range2 + 297)) {
@@ -1696,7 +1711,8 @@ static int max86900_hrm_read_data(struct max86900_device_data *device, u16 *data
 		device->sample_cnt = 0;
 
 	recvData[0] = MAX86900_FIFO_DATA;
-	if ((err = max86900_read_reg(device, recvData, 4)) != 0) {
+	err = max86900_read_reg(device, recvData, 4);
+	if (err != 0) {
 		pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData[0]);
 		return -EIO;
@@ -1759,8 +1775,9 @@ static int max86902_hrm_read_data(struct max86900_device_data *device, int *data
 		device->sample_cnt = 0;
 
 	recvData[0] = MAX86902_FIFO_DATA;
-	if ((err = max86900_read_reg(device, recvData,
-			device->num_samples * NUM_BYTES_PER_SAMPLE)) != 0) {
+	err = max86900_read_reg(device, recvData,
+			device->num_samples * NUM_BYTES_PER_SAMPLE);
+	if (err != 0) {
 		pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData[0]);
 		return -EIO;
@@ -1798,7 +1815,7 @@ static int max86902_hrm_read_data(struct max86900_device_data *device, int *data
 			return -EIO;
 		}
 	} else {
-		for (i = 0; i < MAX_LED_NUM; i++ )
+		for (i = 0; i < MAX_LED_NUM; i++)
 #ifdef CONFIG_SENSORS_MAX_NOTCHFILTER
 			data[i] = downsample(data[i] >> 2, i) << 2;
 #else
@@ -1832,22 +1849,23 @@ static int max86902_awb_flicker_read_data(struct max86900_device_data *device, i
 	int ret = 0;
 
 	recvData[0] = MAX86902_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(device, recvData, 1)) != 0) {
+	err = max86900_read_reg(device, recvData, 1);
+	if (err != 0) {
 		pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData[0]);
 		return -EIO;
 	}
 
 	irq_status = recvData[0];
-	if ( device->flicker_sample_cnt % FLICKER_INTERVAL == 0 && irq_status != 0x40 )
+	if (device->flicker_sample_cnt % FLICKER_INTERVAL == 0 && irq_status != 0x40)
 		return 1;
-	else if ( device->flicker_sample_cnt % FLICKER_INTERVAL != 0 && irq_status != 0x80 )
+	else if (device->flicker_sample_cnt % FLICKER_INTERVAL != 0 && irq_status != 0x80)
 		return 1;
 
 	recvData[0] = MAX86902_FIFO_DATA;
 	if (device->flicker_sample_cnt % FLICKER_INTERVAL == 0) {/* AWB data read, only read IR data */
-		if ((err = max86900_read_reg(device, recvData,
-				NUM_BYTES_PER_SAMPLE)) != 0) {
+		err = max86900_read_reg(device, recvData, NUM_BYTES_PER_SAMPLE));
+		if (err != 0) {
 			pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 				__func__, err, recvData[0]);
 			return -EIO;
@@ -1923,8 +1941,8 @@ static int max86902_awb_flicker_read_data(struct max86900_device_data *device, i
 		} else
 			ret = 1;
 	} else {
-		if ((err = max86900_read_reg(device, recvData,
-				20 * NUM_BYTES_PER_SAMPLE)) != 0) {
+		err = max86900_read_reg(device, recvData, 20 * NUM_BYTES_PER_SAMPLE);
+		if (err != 0) {
 			pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 				__func__, err, recvData[0]);
 			return -EIO;
@@ -1937,7 +1955,7 @@ static int max86902_awb_flicker_read_data(struct max86900_device_data *device, i
 				+ (recvData[i*NUM_BYTES_PER_SAMPLE + 2] << 0);
 		}
 		mutex_unlock(&device->flickerdatalock);
-		if ( device->flicker_data_cnt == FLICKER_DATA_CNT ) {
+		if (device->flicker_data_cnt == FLICKER_DATA_CNT) {
 			ret = 0;
 			device->flicker_data_cnt = 0;
 		} else
@@ -2026,7 +2044,8 @@ static int max86900_uv_read_data(struct max86900_device_data *device, u16 *data)
 		device->sample_cnt = 0;
 
 	recvData[0] = MAX86900_UV_DATA;
-	if ((err = max86900_read_reg(device, recvData, 2)) != 0) {
+	err = max86900_read_reg(device, recvData, 2);
+	if (err != 0) {
 		pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData[0]);
 		return -EIO;
@@ -2069,8 +2088,8 @@ static int max86902_uv_read_data_gesture(struct max86900_device_data *device, in
 
 	if (status & PPG_RDY_MASK) {
 		recvData[0] = MAX86902_FIFO_DATA;
-		if ((err = max86900_read_reg(device, recvData,
-				NUM_BYTES_PER_SAMPLE)) != 0) {
+		err = max86900_read_reg(device, recvData, NUM_BYTES_PER_SAMPLE);
+		if (err != 0) {
 			pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 				__func__, err, recvData[0]);
 			return -EIO;
@@ -2087,9 +2106,9 @@ static int max86902_uv_read_data_gesture(struct max86900_device_data *device, in
 			}
 		}
 
-		if ( device->sample_cnt >= 4 ) {
+		if (device->sample_cnt >= 4) {
 			/* Mode change */
-			if ( device->uv_eol_test_is_enable )
+			if (device->uv_eol_test_is_enable)
 				err = max86902_uv_eol_enable_vb(device);
 			else
 				err = max86902_uv_enable_hr(device);
@@ -2125,16 +2144,17 @@ static int max86902_uv_read_data_hr(struct max86900_device_data *device, int *da
 		return -EIO;
 	}
 
-	if (status & A_FULL_MASK){
+	if (status & A_FULL_MASK) {
 		recvData[0] = MAX86902_FIFO_DATA;
-		if ((err = max86900_read_reg(device, recvData,
-				device->num_samples * NUM_BYTES_PER_SAMPLE)) != 0) {
+		err = max86900_read_reg(device, recvData,
+				device->num_samples * NUM_BYTES_PER_SAMPLE);
+		if (err != 0) {
 			pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 				__func__, err, recvData[0]);
 			return -EIO;
 		}
 
-		for ( i = 16; i < 20; i++ ) {
+		for (i = 16; i < 20; i++) {
 			reg_data =  recvData[i*NUM_BYTES_PER_SAMPLE+0] << 16 & 0x30000;
 			reg_data += recvData[i*NUM_BYTES_PER_SAMPLE+1] << 8;
 			reg_data += recvData[i*NUM_BYTES_PER_SAMPLE+2] << 0;
@@ -2149,7 +2169,7 @@ static int max86902_uv_read_data_hr(struct max86900_device_data *device, int *da
 			return -EIO;
 		}
 		/* Mode change */
-		if ( device->uv_eol_test_is_enable )
+		if (device->uv_eol_test_is_enable)
 			err = max86902_uv_eol_enable_vb(device);
 		else
 			err = max86902_uv_enable_uv(device);
@@ -2184,7 +2204,8 @@ static int max86902_uv_read_data_uv(struct max86900_device_data *device, int *da
 
 	if (status & UV_RDY_MASK) {
 		recvData[0] = MAX86902_UV_DATA_HI;
-		if ((err = max86900_read_reg(device, recvData, MAX_UV_DATA)) != 0) {
+		err = max86900_read_reg(device, recvData, MAX_UV_DATA);
+		if (err != 0) {
 			pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 				__func__, err, recvData[0]);
 			return -EIO;
@@ -2194,7 +2215,7 @@ static int max86902_uv_read_data_uv(struct max86900_device_data *device, int *da
 			| ((((int)recvData[1])) & 0x00ff);
 
 		/* Mode change */
-		if ( device->uv_eol_test_is_enable )
+		if (device->uv_eol_test_is_enable)
 			err = max86902_uv_eol_enable_vb(device);
 		else
 			err = max86902_uv_enable_gesture(device);
@@ -2228,8 +2249,9 @@ static int max86902_uv_eol_read_data_vb(struct max86900_device_data *device, int
 
 	if (status & PPG_RDY_MASK) {
 		recvData[0] = MAX86902_FIFO_DATA;
-		if ((err = max86900_read_reg(device, recvData,
-				device->num_samples * NUM_BYTES_PER_SAMPLE)) != 0) {
+		err = max86900_read_reg(device, recvData,
+				device->num_samples * NUM_BYTES_PER_SAMPLE);
+		if (err != 0) {
 			pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 				__func__, err, recvData[0]);
 			return -EIO;
@@ -2249,7 +2271,7 @@ static int max86902_uv_eol_read_data_vb(struct max86900_device_data *device, int
 
 		if (device->sample_cnt >= 20) {
 			/* Mode change */
-			if ( device->uv_eol_test_is_enable )
+			if (device->uv_eol_test_is_enable)
 				err = max86902_uv_eol_enable_sum(device);
 			else
 				err = max86902_uv_enable_gesture(device);
@@ -2282,8 +2304,8 @@ static int max86902_uv_eol_read_data_sum(struct max86900_device_data *device, in
 
 	if (status & PPG_RDY_MASK) {
 		recvData[0] = MAX86902_FIFO_DATA;
-		if ((err = max86900_read_reg(device, recvData,
-				NUM_BYTES_PER_SAMPLE)) != 0) {
+		err = max86900_read_reg(device, recvData, NUM_BYTES_PER_SAMPLE);
+		if (err != 0) {
 			pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 				__func__, err, recvData[0]);
 			return -EIO;
@@ -2298,7 +2320,7 @@ static int max86902_uv_eol_read_data_sum(struct max86900_device_data *device, in
 
 		if (device->sample_cnt >= 4) { /* ODO */
 			/* Mode change */
-			if ( device->uv_eol_test_is_enable )
+			if (device->uv_eol_test_is_enable)
 				err = max86902_uv_eol_enable_hr(device);
 			else
 				err = max86902_uv_enable_gesture(device);
@@ -2337,8 +2359,9 @@ static int max86902_uv_eol_read_data_hr(struct max86900_device_data *device, int
 
 	if (status & A_FULL_MASK) {
 		recvData[0] = MAX86902_FIFO_DATA;
-		if ((err = max86900_read_reg(device, recvData,
-				device->num_samples * NUM_BYTES_PER_SAMPLE)) != 0) {
+		err = max86900_read_reg(device, recvData,
+				device->num_samples * NUM_BYTES_PER_SAMPLE);
+		if (err != 0) {
 			pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 				__func__, err, recvData[0]);
 			return -EIO;
@@ -2353,7 +2376,7 @@ static int max86902_uv_eol_read_data_hr(struct max86900_device_data *device, int
 		}
 
 		/* Mode change */
-		if ( device->uv_eol_test_is_enable )
+		if (device->uv_eol_test_is_enable)
 			err = max86902_uv_eol_enable_vb(device);
 		else
 			err = max86902_uv_enable_gesture(device);
@@ -2559,7 +2582,7 @@ static ssize_t max86900_hrm_enable_store(struct device *dev,
 		return -EINVAL;
 	}
 	if (data->part_type < PART_TYPE_MAX86902A) {
-		if (atomic_read(&data->uv_is_enable)){
+		if (atomic_read(&data->uv_is_enable)) {
 			if (new_value)
 				atomic_set(&data->hrm_need_reenable, 1);
 			else
@@ -2569,7 +2592,7 @@ static ssize_t max86900_hrm_enable_store(struct device *dev,
 			max86900_hrm_mode_enable(data, new_value);
 		}
 	} else {
-		if (atomic_read(&data->uv_is_enable)){
+		if (atomic_read(&data->uv_is_enable)) {
 			if (new_value)
 				atomic_set(&data->hrm_need_reenable, 1);
 			else
@@ -2647,7 +2670,7 @@ static ssize_t max86900_hrmled_enable_store(struct device *dev,
 	pr_info("%s - start en : %d\n", __func__, new_value);
 
 	if (data->part_type < PART_TYPE_MAX86902A) {
-		if (atomic_read(&data->uv_is_enable)){
+		if (atomic_read(&data->uv_is_enable)) {
 			if (new_value)
 				atomic_set(&data->hrm_need_reenable, 1);
 			else
@@ -2657,7 +2680,7 @@ static ssize_t max86900_hrmled_enable_store(struct device *dev,
 			max86900_hrm_mode_enable(data, new_value);
 		}
 	} else {
-		if (atomic_read(&data->uv_is_enable)){
+		if (atomic_read(&data->uv_is_enable)) {
 			if (new_value)
 				atomic_set(&data->hrm_need_reenable, 1);
 			else
@@ -3234,7 +3257,8 @@ static int max86900_get_device_id(struct max86900_device_data *data, unsigned lo
 	}
 
 	recvData = 0x88;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3242,7 +3266,8 @@ static int max86900_get_device_id(struct max86900_device_data *data, unsigned lo
 	reg_0x88 = recvData;
 
 	recvData = 0x89;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3250,7 +3275,8 @@ static int max86900_get_device_id(struct max86900_device_data *data, unsigned lo
 	reg_0x89 = recvData;
 
 	recvData = 0x8A;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3258,7 +3284,8 @@ static int max86900_get_device_id(struct max86900_device_data *data, unsigned lo
 	reg_0x8A = recvData;
 
 	recvData = 0x90;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3266,7 +3293,8 @@ static int max86900_get_device_id(struct max86900_device_data *data, unsigned lo
 	reg_0x90 = recvData;
 
 	recvData = 0x98;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3274,7 +3302,8 @@ static int max86900_get_device_id(struct max86900_device_data *data, unsigned lo
 	reg_0x98 = recvData;
 
 	recvData = 0x99;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3282,7 +3311,8 @@ static int max86900_get_device_id(struct max86900_device_data *data, unsigned lo
 	reg_0x99 = recvData;
 
 	recvData = 0x9D;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3364,7 +3394,8 @@ static int max86902_get_device_id(struct max86900_device_data *data, unsigned lo
 	}
 
 	recvData = 0x8B;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3372,7 +3403,8 @@ static int max86902_get_device_id(struct max86900_device_data *data, unsigned lo
 	high = recvData;
 
 	recvData = 0x8C;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3380,7 +3412,8 @@ static int max86902_get_device_id(struct max86900_device_data *data, unsigned lo
 	low = recvData;
 
 	recvData = 0x88;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3388,7 +3421,8 @@ static int max86902_get_device_id(struct max86900_device_data *data, unsigned lo
 	clock_code = recvData;
 
 	recvData = 0x89;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3396,7 +3430,8 @@ static int max86902_get_device_id(struct max86900_device_data *data, unsigned lo
 	VREF_trim_code = recvData & 0x0F;
 
 	recvData = 0x8A;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3405,7 +3440,8 @@ static int max86902_get_device_id(struct max86900_device_data *data, unsigned lo
 	UVL_trim_code = recvData & 0x0F;
 
 	recvData = 0x90;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3413,7 +3449,8 @@ static int max86902_get_device_id(struct max86900_device_data *data, unsigned lo
 	SPO2_trim_code = recvData & 0x7F;
 
 	recvData = 0x98;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3422,7 +3459,8 @@ static int max86902_get_device_id(struct max86900_device_data *data, unsigned lo
 	red_led_code = recvData & 0x0F;
 
 	recvData = 0x9D;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3480,7 +3518,8 @@ static int max86900_otp_id(struct max86900_device_data *data)
 	}
 
 	recvData = 0x8B;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -3503,7 +3542,7 @@ static ssize_t max86900_hrm_name_show(struct device *dev,
 
 	if (data->part_type < PART_TYPE_MAX86902A)
 		return snprintf(buf, PAGE_SIZE, "%s\n", MAX86900_CHIP_NAME);
-	else if(data->part_type < PART_TYPE_MAX86907)
+	else if (data->part_type < PART_TYPE_MAX86907)
 		return snprintf(buf, PAGE_SIZE, "%s\n", MAX86902_CHIP_NAME);
 	else
 		return snprintf(buf, PAGE_SIZE, "%s\n", MAX86907_CHIP_NAME);
@@ -3825,7 +3864,7 @@ static ssize_t eol_test_result_store(struct device *dev,
 	if (buf_len > MAX_EOL_RESULT)
 		buf_len = MAX_EOL_RESULT;
 
-	mutex_lock(&data->storelock);	
+	mutex_lock(&data->storelock);
 
 	if (data->eol_test_result != NULL)
 		kfree(data->eol_test_result);
@@ -3901,7 +3940,8 @@ static ssize_t int_pin_check(struct device *dev,
 	pr_info("max86900_%s - Before INT clear %d\n", __func__, pin_state);
 	/* Interrupt Clear */
 	recvData = MAX86900_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("max86900_%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		max86900_regulator_onoff(data, HRM_LDO_OFF);
@@ -3938,7 +3978,7 @@ static ssize_t max86900_lib_ver_store(struct device *dev,
 	if (buf_len > MAX_LIB_VER)
 		buf_len = MAX_LIB_VER;
 
-	mutex_lock(&data->storelock);	
+	mutex_lock(&data->storelock);
 
 	if (data->lib_ver != NULL)
 		kfree(data->lib_ver);
@@ -4183,7 +4223,8 @@ static ssize_t max86900_hrm_alc_enable_store(struct device *dev,
 
 			/* Interrupt Clear */
 			recvData = MAX86902_INTERRUPT_STATUS;
-			if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+			err = max86900_read_reg(data, &recvData, 1);
+			if (err != 0) {
 				pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 					__func__, err, recvData);
 				return -EIO;
@@ -4191,7 +4232,8 @@ static ssize_t max86900_hrm_alc_enable_store(struct device *dev,
 
 			/* Interrupt2 Clear */
 			recvData = MAX86902_INTERRUPT_STATUS_2;
-			if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+			err = max86900_read_reg(data, &recvData, 1);
+			if (err != 0) {
 				pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 					__func__, err, recvData);
 				return -EIO;
@@ -4253,7 +4295,8 @@ static ssize_t max86900_hrm_alc_enable_store(struct device *dev,
 
 			/* Interrupt Clear */
 			recvData = MAX86902_INTERRUPT_STATUS;
-			if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+			err = max86900_read_reg(data, &recvData, 1);
+			if (err != 0) {
 				pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 					__func__, err, recvData);
 				return -EIO;
@@ -4261,7 +4304,8 @@ static ssize_t max86900_hrm_alc_enable_store(struct device *dev,
 
 			/* Interrupt2 Clear */
 			recvData = MAX86902_INTERRUPT_STATUS_2;
-			if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+			err = max86900_read_reg(data, &recvData, 1);
+			if (err != 0) {
 				pr_err("%s max86900_read_reg err:%d, address:0x%02x\n",
 					__func__, err, recvData);
 				return -EIO;
@@ -4284,7 +4328,7 @@ static ssize_t max86900_hrm_alc_enable_store(struct device *dev,
 					__func__);
 				return -EIO;
 			}
-			err = max86900_write_reg(data, 0x8f, 0x01); //PW_EN = 0
+			err = max86900_write_reg(data, 0x8f, 0x01); /* PW_EN = 0 */
 			if (err != 0) {
 				pr_err("%s - error initializing 0x8f!\n",
 					__func__);
@@ -4412,7 +4456,7 @@ static ssize_t max86900_hrmled_name_show(struct device *dev,
 
 	if (data->part_type < PART_TYPE_MAX86902A)
 		return snprintf(buf, PAGE_SIZE, "%s\n", MAX86900_CHIP_NAME);
-	else if(data->part_type < PART_TYPE_MAX86907)
+	else if (data->part_type < PART_TYPE_MAX86907)
 		return snprintf(buf, PAGE_SIZE, "%s\n", MAX86902_CHIP_NAME);
 	else
 		return snprintf(buf, PAGE_SIZE, "%s\n", MAX86907_CHIP_NAME);
@@ -4710,7 +4754,7 @@ static void max86902_awb_flicker_handler(struct max86900_device_data *data)
 		pr_err("max86902_awb_flicker_read_data err : %d\n", err);
 
 	if (err == 0) {
-		if ( data->flicker_sample_cnt % FLICKER_INTERVAL == 1 ) {
+		if (data->flicker_sample_cnt % FLICKER_INTERVAL == 1) {
 			input_report_rel(data->hrm_input_dev, REL_X,  raw_data + 1); /* IR */
 			input_sync(data->hrm_input_dev);
 		} else {
@@ -4759,7 +4803,7 @@ static void max86902_uv_irq_handler(struct max86900_device_data *data)
 	else
 		dbg_enable = 0;
 
-	switch(err) {
+	switch (err) {
 	case MAX86902_ENHANCED_UV_MODE:
 		input_report_rel(data->uv_input_dev, REL_X, raw_data + 1); /* UV Data */
 		input_report_rel(data->uv_input_dev, REL_Y, data->hrm_temp + 1);
@@ -4807,15 +4851,15 @@ irqreturn_t max86900_irq_handler(int irq, void *device)
 				max86902_hrm_irq_handler(data);
 			else
 				max86902_awb_flicker_handler(data);
-		}
-		else if (atomic_read(&data->uv_is_enable))
+		} else if (atomic_read(&data->uv_is_enable))
 			max86902_uv_irq_handler(data);
 	}
 
 #if !defined(CONFIG_SWI2C_MAX86902)
 	/* Interrupt Clear */
 	recvData = MAX86902_INTERRUPT_STATUS;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -4823,7 +4867,8 @@ irqreturn_t max86900_irq_handler(int irq, void *device)
 
 	/* Interrupt2 Clear */
 	recvData = MAX86902_INTERRUPT_STATUS_2;
-	if ((err = max86900_read_reg(data, &recvData, 1)) != 0) {
+	err = max86900_read_reg(data, &recvData, 1);
+	if (err != 0) {
 		pr_err("%s - max86900_read_reg err:%d, address:0x%02x\n",
 			__func__, err, recvData);
 		return -EIO;
@@ -4942,7 +4987,7 @@ static int max86900_parse_dt(struct max86900_device_data *data,
 	}
 
 	data->pins_sleep = pinctrl_lookup_state(data->p, PINCTRL_STATE_SLEEP);
-	if(IS_ERR(data->pins_sleep)) {
+	if (IS_ERR(data->pins_sleep)) {
 		pr_err("%s : could not get pins sleep_state (%li)\n",
 			__func__, PTR_ERR(data->pins_sleep));
 		pinctrl_put(data->p);
@@ -4950,7 +4995,7 @@ static int max86900_parse_dt(struct max86900_device_data *data,
 	}
 
 	data->pins_idle = pinctrl_lookup_state(data->p, PINCTRL_STATE_IDLE);
-	if(IS_ERR(data->pins_idle)) {
+	if (IS_ERR(data->pins_idle)) {
 		pr_err("%s : could not get pins idle_state (%li)\n",
 			__func__, PTR_ERR(data->pins_idle));
 		pinctrl_put(data->p);
@@ -5015,18 +5060,18 @@ static long max86900_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 	pr_err("%s - ioctl start\n", __func__);
 	mutex_lock(&data->flickerdatalock);
 	switch (cmd) {
-		case MAX86900_IOCTL_READ_FLICKER:
-			ret = copy_to_user(argp,
-					data->flicker_data,
-					sizeof(int)*FLICKER_DATA_CNT);
-			if (unlikely(ret)) {
-				pr_err("%s - read flicker data err(%d)\n", __func__, ret);
-				goto ioctl_error;
-			}
-			break;
-		default:
-			pr_err("%s - invalid cmd\n", __func__);
-			break;
+	case MAX86900_IOCTL_READ_FLICKER:
+		ret = copy_to_user(argp,
+				data->flicker_data,
+				sizeof(int)*FLICKER_DATA_CNT);
+		if (unlikely(ret)) {
+			pr_err("%s - read flicker data err(%d)\n", __func__, ret);
+			goto ioctl_error;
+		}
+		break;
+	default:
+		pr_err("%s - invalid cmd\n", __func__);
+		break;
 	}
 	mutex_unlock(&data->flickerdatalock);
 	return ret;
@@ -5145,7 +5190,7 @@ int max86900_probe(struct i2c_client *client, const struct i2c_device_id *id)
 				data->default_current = MAX86900A_DEFAULT_CURRENT;
 				break;
 			case MAX86900C_REV_ID:
-				if ( max86900_otp_id(data) == MAX86906_OTP_ID ) {
+				if (max86900_otp_id(data) == MAX86906_OTP_ID) {
 					data->part_type = PART_TYPE_MAX86906;
 					data->default_current = MAX86906_DEFAULT_CURRENT;
 				} else {

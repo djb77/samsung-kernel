@@ -9,11 +9,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *  
- * A copy of the GPL is available at 
- * http://www.broadcom.com/licenses/GPLv2.php, or by writing to the Free
- * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
- * 02111-1307, USA.
  *
  * The BBD (Broadcom Bridge Driver)
  *
@@ -60,15 +55,15 @@ void bbd_log_hex(const char*, const unsigned char*, unsigned long);
 
 //--------------------------------------------------------------
 //
-//               BBD device struct
+//			   BBD device struct
 //
 //--------------------------------------------------------------
 #define BBD_BUFF_SIZE (PAGE_SIZE*2)
 struct bbd_cdev_priv {
-	const char* name;
+	const char *name;
 	struct cdev dev;			/* char device */
 	bool busy;
-	struct circ_buf read_buf;	    	/* LHD reads from BBD */
+	struct circ_buf read_buf;		/* LHD reads from BBD */
 	struct mutex lock;			/* Lock for read_buf */
 	char _read_buf[BBD_BUFF_SIZE];		/* LHD reads from BBD */
 	char write_buf[BBD_BUFF_SIZE];		/* LHD writes into BBD */
@@ -88,7 +83,7 @@ struct lhd_killer {
 	struct timer_list timer;
 	struct work_struct work;
 	struct workqueue_struct *workq;
-    spinlock_t lock;
+	spinlock_t lock;
 
 };
 
@@ -108,7 +103,7 @@ struct bbd_device {
 };
 
 /*
- * Character device names of BBD 
+ * Character device names of BBD
  */
 static const char *bbd_dev_name[BBD_DEVICE_INDEX] = {
 	"bbd_shmd",
@@ -120,7 +115,7 @@ static const char *bbd_dev_name[BBD_DEVICE_INDEX] = {
 
 //--------------------------------------------------------------
 //
-//               Globals
+//			   Globals
 //
 //--------------------------------------------------------------
 /*
@@ -131,16 +126,27 @@ static struct bbd_device bbd;
 /*
  * Embedded patch file provided as /dev/bbd_patch
  */
-static unsigned char bbd_patch[] =
-{
-#if defined (CONFIG_SENSORS_SSP_DREAM)
+static unsigned char bbd_patch[] = {
+#if defined(CONFIG_SENSORS_SSP_GREAT)
+#if ANDROID_VERSION < 80000
+#include "bbd_patch_file_great.h"
+#else
+#include "bbd_patch_file_great_o.h"
+#endif
+#elif defined(CONFIG_SENSORS_SSP_DREAM)
+#if ANDROID_VERSION < 80000
 #include "bbd_patch_file_dream.h"
-#elif defined (CONFIG_SENSORS_SSP_GRACE)
-#include "bbd_patch_file_grace.h"	
-#elif defined (CONFIG_SENSORS_SSP_LUCKY)
+#else
+#include "bbd_patch_file_dream_o.h"
+#endif
+#elif defined(CONFIG_SENSORS_SSP_GRACE)
+#include "bbd_patch_file_grace.h"
+#elif defined(CONFIG_SENSORS_SSP_LUCKY)
 #include "bbd_patch_file_lucky.h"
-#elif defined (CONFIG_SENSORS_SSP_VLTE)
+#elif defined(CONFIG_SENSORS_SSP_VLTE)
 #include "bbd_patch_file_valley.h"
+#elif defined(CONFIG_SENSORS_SSP_LUGE)
+#include "bbd_patch_file_luge.h"
 #endif
 };
 
@@ -150,23 +156,23 @@ ssize_t bbd_on_read(unsigned int minor, const unsigned char *buf, size_t size);
 #ifdef DEBUG_1HZ_STAT
 
 static const char *bbd_stat_name[STAT_MAX] = {
-       	"tx@lhd",
-       	"tx@ssp",
-       	"tx@rpc",
-       	"tx@tl",
-       	"tx@ssi",
-       	"rx@ssi",
-       	"rx@tl",
-       	"rx@rpc",
-       	"rx@ssp",
-       	"rx@lhd"
+	"tx@lhd",
+	"tx@ssp",
+	"tx@rpc",
+	"tx@tl",
+	"tx@ssi",
+	"rx@ssi",
+	"rx@tl",
+	"rx@rpc",
+	"rx@ssp",
+	"rx@lhd"
 };
 
 struct bbd_stat stat1hz;
 
 //--------------------------------------------------------------
 //
-//               bbd 1hz statistics Functions
+//			   bbd 1hz statistics Functions
 //
 //--------------------------------------------------------------
 static void bbd_init_stat(void)
@@ -197,7 +203,7 @@ static void bbd_report_stat(struct work_struct *work)
 	p += sprintf(p, "BBD:");
 	for (i = 0; i < STAT_MAX; i++)
 		p += sprintf(p, " %s=%llu", bbd_stat_name[i],
-			       		stat1hz.stat[i]);
+					stat1hz.stat[i]);
 	p += sprintf(p, " rxlat_min=%llu rxlat_max=%llu",
 		stat1hz.min_rx_lat, stat1hz.max_rx_lat);
 	p += sprintf(p, " rxdur_min=%llu rxdur_max=%llu",
@@ -231,7 +237,7 @@ void bbd_update_stat(int idx, unsigned int count)
 void bbd_enable_stat(void)
 {
 	if (stat1hz.enabled) {
-		printk("%s() 1HZ stat already enable. skipping.\n", __func__);
+		pr_info("%s() 1HZ stat already enable. skipping.\n", __func__);
 		return;
 	}
 
@@ -244,7 +250,7 @@ void bbd_enable_stat(void)
 void bbd_disable_stat(void)
 {
 	if (!stat1hz.enabled) {
-		printk("%s() 1HZ stat already disabled. skipping.\n", __func__);
+		pr_info("%s() 1HZ stat already disabled. skipping.\n", __func__);
 		return;
 	}
 	del_timer_sync(&stat1hz.timer);
@@ -269,9 +275,9 @@ static void bbd_lk_timer_func(unsigned long p)
 
 static void bbd_enable_lk(void)
 {
-	printk("%s timeout:%ld sec\n", __func__, bbd.lk.timeout_sec);
+	pr_info("%s timeout:%ld sec\n", __func__, bbd.lk.timeout_sec);
 	if (bbd.lk.timer_enabled) {
-		printk("%s() lhd kill timer aready enabled. reset timer\n", __func__);
+		pr_info("%s() lhd kill timer aready enabled. reset timer\n", __func__);
 		del_timer_sync(&bbd.lk.timer);
 	}
 
@@ -283,9 +289,9 @@ static void bbd_enable_lk(void)
 
 static void bbd_disable_lk(void)
 {
-	printk("%s \n", __func__);
+	pr_info("%s\n", __func__);
 	if (!bbd.lk.timer_enabled) {
-		printk("%s() lhd killer already disabled. skipping.\n", __func__);
+		pr_info("%s() lhd killer already disabled. skipping.\n", __func__);
 		return;
 	}
 	del_timer_sync(&bbd.lk.timer);
@@ -298,7 +304,7 @@ static void bbd_init_lk(void)
 	bbd.lk.enabled = true;
 	bbd.lk.timeout_sec = 10;
 	bbd.lk.workq = create_singlethread_workqueue("BBD_LHD_KILLER");
-    spin_lock_init(&bbd.lk.lock);
+	spin_lock_init(&bbd.lk.lock);
 }
 
 static void bbd_exit_lk(void)
@@ -313,7 +319,7 @@ static void bbd_exit_lk(void)
 #endif
 //--------------------------------------------------------------
 //
-//               SHMD Interface Functions
+//			   SHMD Interface Functions
 //
 //--------------------------------------------------------------
 
@@ -333,8 +339,8 @@ EXPORT_SYMBOL(bbd_register);
 /**
  * bbd_send_packet - Interface function called from SHMD to send sensor packet.
  *
- *     The sensor packet is pushed into /dev/bbd_sensor to be read by gpsd/lhd.
- *     gpsd/lhd wrap the packet into RPC and sends to chip directly.
+ *	 The sensor packet is pushed into /dev/bbd_sensor to be read by gpsd/lhd.
+ *	 gpsd/lhd wrap the packet into RPC and sends to chip directly.
  *
  * @buf: buffer containing sensor packet
  * @size: size of sensor packet
@@ -353,18 +359,18 @@ ssize_t bbd_send_packet(unsigned char *buf, size_t size)
 #ifdef DEBUG_1HZ_STAT
 	bbd_update_stat(STAT_TX_SSP, size);
 #endif
-	return bbd_on_read(BBD_MINOR_SENSOR, (unsigned char*)&pkt, size+2); /* +2 for pkt.size */
+	return bbd_on_read(BBD_MINOR_SENSOR, (unsigned char *)&pkt, size + 2); /* +2 for pkt.size */
 }
 EXPORT_SYMBOL(bbd_send_packet);
 
 
 /**
  * bbd_pull_packet - Interface function called from SHMD to read sensor packet.
- * 
- *     Read packet consists of sensor packet from gpsd/lhd and from BBD.
- *   
+ *
+ *	 Read packet consists of sensor packet from gpsd/lhd and from BBD.
+ *
  * @buf: buffer to receive packet
- * @size: 
+ * @size:
  * @timeout_ms: if specified, this function waits for sensor packet during given time
  *
  * @return: popped data length = success
@@ -373,7 +379,7 @@ ssize_t bbd_pull_packet(unsigned char *buf, size_t size, unsigned int timeout_ms
 {
 	struct circ_buf *circ = &bbd.priv[BBD_MINOR_SHMD].read_buf;
 	size_t rd_size = 0;
-	
+
 	WARN_ON(!buf);
 	WARN_ON(!size);
 
@@ -395,12 +401,12 @@ ssize_t bbd_pull_packet(unsigned char *buf, size_t size, unsigned int timeout_ms
 		size_t cnt_to_end = CIRC_CNT_TO_END(circ->head, circ->tail, BBD_BUFF_SIZE);
 		size_t copied = min(cnt_to_end, size);
 
-		memcpy(buf + rd_size, (void*) circ->buf + circ->tail, copied);
+		memcpy(buf + rd_size, (void *) circ->buf + circ->tail, copied);
 		size -= copied;
 		rd_size += copied;
-		circ->tail = (circ->tail + copied) & (BBD_BUFF_SIZE -1);
+		circ->tail = (circ->tail + copied) & (BBD_BUFF_SIZE - 1);
 
-	} while (size>0 && CIRC_CNT(circ->head, circ->tail, BBD_BUFF_SIZE));
+	} while (size > 0 && CIRC_CNT(circ->head, circ->tail, BBD_BUFF_SIZE));
 
 	mutex_unlock(&bbd.priv[BBD_MINOR_SHMD].lock);
 
@@ -411,7 +417,7 @@ EXPORT_SYMBOL(bbd_pull_packet);
 /**
  * bbd_mcu_reset - Interface function called from SHMD to reset chip
  *
- *      BBD pushes reset request into /dev/bbd_control and actual reset is done by gpsd/lhd when it reads the request
+ *	  BBD pushes reset request into /dev/bbd_control and actual reset is done by gpsd/lhd when it reads the request
  *
  * @return: 0 = success, -1 = failure
  */
@@ -422,20 +428,18 @@ int bbd_mcu_reset(void)
 		bbd.ssp_cb->on_mcu_reset(bbd.ssp_priv);
 
 	if (bbd.lk.enabled) {
-        int ret;
+		int ret;
 		/* to fix lhd hang issue, we don't use lhd's control interface to reset mcu.  */
-        spin_lock(&bbd.lk.lock);
-		if (bbd.lk.lhd == NULL || bbd.lk.resetting)
-		{
+		spin_lock(&bbd.lk.lock);
+		if (bbd.lk.lhd == NULL || bbd.lk.resetting) {
 			pr_err("[SSP] lhd is NULL or resetting");
 			ret = -1;
-		}   
-        else {
-            bbd.lk.resetting = true;
-            ret = send_sig(SIGKILL, bbd.lk.lhd, 0);
-        }
-        spin_unlock(&bbd.lk.lock);
-        return ret;
+		} else {
+			bbd.lk.resetting = true;
+			ret = send_sig(SIGKILL, bbd.lk.lhd, 0);
+		}
+		spin_unlock(&bbd.lk.lock);
+		return ret;
 	} else
 		return bbd_on_read(BBD_MINOR_CONTROL, BBD_CTRL_RESET_REQ, strlen(BBD_CTRL_RESET_REQ)+1);
 }
@@ -445,7 +449,7 @@ EXPORT_SYMBOL(bbd_mcu_reset);
 
 //--------------------------------------------------------------
 //
-//               BBD device struct
+//			   BBD device struct
 //
 //--------------------------------------------------------------
 
@@ -456,7 +460,7 @@ EXPORT_SYMBOL(bbd_mcu_reset);
  */
 ssize_t bbd_control(const char *buf, ssize_t len)
 {
-	printk("%s : %s \n", __func__, buf);
+	pr_info("%s : %s\n", __func__, buf);
 
 	if (strstr(buf, ESW_CTRL_READY)) {
 
@@ -467,6 +471,7 @@ ssize_t bbd_control(const char *buf, ssize_t len)
 			wake_unlock(&bbd.patch_wake_lock);
 	} else if (strstr(buf, ESW_CTRL_NOTREADY)) {
 		struct circ_buf *circ = &bbd.priv[BBD_MINOR_SENSOR].read_buf;
+
 		circ->head = circ->tail = 0;
 		if (bbd.ssp_cb && bbd.ssp_cb->on_mcu_ready)
 			bbd.ssp_cb->on_mcu_ready(bbd.ssp_priv, false);
@@ -475,13 +480,14 @@ ssize_t bbd_control(const char *buf, ssize_t len)
 			wake_unlock(&bbd.patch_wake_lock);
 	} else if (strstr(buf, ESW_CTRL_CRASHED)) {
 		struct circ_buf *circ = &bbd.priv[BBD_MINOR_SENSOR].read_buf;
+
 		circ->head = circ->tail = 0;
 
 		if (bbd.ssp_cb && bbd.ssp_cb->on_mcu_ready)
 			bbd.ssp_cb->on_mcu_ready(bbd.ssp_priv, false);
-		
+
 		if (bbd.ssp_cb && bbd.ssp_cb->on_control)
-		       	bbd.ssp_cb->on_control(bbd.ssp_priv, buf);
+			bbd.ssp_cb->on_control(bbd.ssp_priv, buf);
 	} else if (strstr(buf, BBD_CTRL_SSI_PATCH_BEGIN)) {
 		wake_lock(&bbd.patch_wake_lock);
 #if 0
@@ -506,16 +512,16 @@ ssize_t bbd_control(const char *buf, ssize_t len)
 #endif
 #ifdef CONFIG_LHD_KILLER
 	} else if (strstr(buf, BBD_CTRL_PASSTHRU_ON)) {
-		printk("[SSPBBD] PatchTimer Start\n");
+		pr_info("[SSPBBD] PatchTimer Start\n");
 		bbd_enable_lk();
 	} else if (strstr(buf, BBD_CTRL_PASSTHRU_OFF)) {
-		printk("[SSPBBD] Patch Done Timer Off\n");
+		pr_info("[SSPBBD] Patch Done Timer Off\n");
 		bbd_disable_lk();
 #endif /* CONFIG_LHD_KILLER */
 	} else if (bbd.ssp_cb && bbd.ssp_cb->on_control) {
 		/* Tell SHMD about the unknown control string */
 		bbd.ssp_cb->on_control(bbd.ssp_priv, buf);
-	} 
+	}
 
 	return len;
 }
@@ -524,12 +530,12 @@ ssize_t bbd_control(const char *buf, ssize_t len)
 
 //--------------------------------------------------------------
 //
-//               BBD Common File Functions
+//			   BBD Common File Functions
 //
 //--------------------------------------------------------------
 
 /**
- * bbd_common_open - Common open function for BBD devices 
+ * bbd_common_open - Common open function for BBD devices
  *
  */
 int bbd_common_open(struct inode *inode, struct file *filp)
@@ -544,7 +550,7 @@ int bbd_common_open(struct inode *inode, struct file *filp)
 
 	pr_info("%s", bbd.priv[minor].name);
 
-	if (bbd.priv[minor].busy && minor!=BBD_MINOR_CONTROL)
+	if (bbd.priv[minor].busy && minor != BBD_MINOR_CONTROL)
 		return -EBUSY;
 
 	bbd.priv[minor].busy = true;
@@ -555,12 +561,12 @@ int bbd_common_open(struct inode *inode, struct file *filp)
 	filp->private_data = &bbd;
 
 	pr_info("%s--\n", __func__);
-    if (minor == BBD_MINOR_SENSOR) {
-        spin_lock(&bbd.lk.lock);
-        bbd.lk.lhd = current;
-        bbd.lk.resetting = false;
-        spin_unlock(&bbd.lk.lock);
-    }
+	if (minor == BBD_MINOR_SENSOR) {
+		spin_lock(&bbd.lk.lock);
+		bbd.lk.lhd = current;
+		bbd.lk.resetting = false;
+		spin_unlock(&bbd.lk.lock);
+	}
 	return 0;
 }
 
@@ -575,18 +581,18 @@ static int bbd_common_release(struct inode *inode, struct file *filp)
 
 	pr_info("%s[%s]++\n", __func__, bbd.priv[minor].name);
 	bbd.priv[minor].busy = false;
-    if (minor == BBD_MINOR_SENSOR) {
-        spin_lock(&bbd.lk.lock);
-        bbd.lk.lhd = NULL;
-        spin_unlock(&bbd.lk.lock);
-    }
+	if (minor == BBD_MINOR_SENSOR) {
+		spin_lock(&bbd.lk.lock);
+		bbd.lk.lhd = NULL;
+		spin_unlock(&bbd.lk.lock);
+	}
 	pr_info("%s[%s]--\n", __func__, bbd.priv[minor].name);
 	return 0;
 }
 
 /**
  * bbd_common_read - Common read function for BBD devices
- * 
+ *
  * lhd reads from BBD devices via this function
  *
  */
@@ -595,26 +601,26 @@ static ssize_t bbd_common_read(struct file *filp, char __user *buf, size_t size,
 	unsigned int minor = iminor(filp->f_path.dentry->d_inode);
 	//struct bbd_device *bbd = filp->private_data;
 	struct circ_buf *circ = &bbd.priv[minor].read_buf;
-	size_t rd_size=0;
+	size_t rd_size = 0;
 
 	BUG_ON(minor >= BBD_DEVICE_INDEX);
 	//pr_info("%s[%s]++\n", __func__, bbd.priv[minor].name);
 
 	mutex_lock(&bbd.priv[minor].lock);
 
-	/* Copy from circ buffer to lhd 
+	/* Copy from circ buffer to lhd
 	 * Because lhd's buffer is linear, we may require 2 copies from [tail..end] and [end..head]
 	 */
 	do {
 		size_t cnt_to_end = CIRC_CNT_TO_END(circ->head, circ->tail, BBD_BUFF_SIZE);
 		size_t copied = min(cnt_to_end, size);
 
-		WARN_ON(copy_to_user(buf + rd_size, (void*) circ->buf + circ->tail, copied));
+		WARN_ON(copy_to_user(buf + rd_size, (void *) circ->buf + circ->tail, copied));
 		size -= copied;
 		rd_size += copied;
-		circ->tail = (circ->tail + copied) & (BBD_BUFF_SIZE -1);
+		circ->tail = (circ->tail + copied) & (BBD_BUFF_SIZE - 1);
 
-	} while (size>0 && CIRC_CNT(circ->head, circ->tail, BBD_BUFF_SIZE));
+	} while (size > 0 && CIRC_CNT(circ->head, circ->tail, BBD_BUFF_SIZE));
 
 	mutex_unlock(&bbd.priv[minor].lock);
 
@@ -629,7 +635,7 @@ static ssize_t bbd_common_read(struct file *filp, char __user *buf, size_t size,
 
 /**
  * bbd_common_write - Common write function for BBD devices *
- * lhd writes to BBD devices via this function 
+ * lhd writes to BBD devices via this function
  *
  */
 static ssize_t bbd_common_write(struct file *filp, const char __user *buf, size_t size, loff_t *ppos)
@@ -638,9 +644,9 @@ static ssize_t bbd_common_write(struct file *filp, const char __user *buf, size_
 	//struct bbd_device *bbd = filp->private_data;
 
 	//BUG_ON(size >= BBD_BUFF_SIZE);
-	 if (size >= BBD_BUFF_SIZE)
-	 	return -EINVAL;
-		
+	if (size >= BBD_BUFF_SIZE)
+		return -EINVAL;
+
 	WARN_ON(copy_from_user(bbd.priv[minor].write_buf, buf, size));
 
 #ifdef DEBUG_1HZ_STAT
@@ -675,13 +681,13 @@ static unsigned int bbd_common_poll(struct file *filp, poll_table *wait)
 
 //--------------------------------------------------------------
 //
-//               BBD Device Specific File Functions
+//			   BBD Device Specific File Functions
 //
 //--------------------------------------------------------------
 
 /**
  * bbd_sensor_write - BBD's RPC calls this function to send sensor packet
- * 
+ *
  * @buf: contains sensor packet coming from gpsd/lhd
  *
  */
@@ -694,16 +700,15 @@ ssize_t bbd_sensor_write(const char *buf, size_t size)
 
 #ifdef DEBUG_1HZ_STAT
 	bbd_update_stat(STAT_RX_SSP, size);
-#endif	
+#endif
 	/* OK. Now call pre-registered SHMD callbacks */
-	if (bbd.ssp_cb->on_packet) 
+	if (bbd.ssp_cb->on_packet)
 		bbd.ssp_cb->on_packet(bbd.ssp_priv, buf, size);
 	else if (bbd.ssp_cb->on_packet_alarm) {
 		bbd_on_read(BBD_MINOR_SHMD, buf, size);
 		bbd.ssp_cb->on_packet_alarm(bbd.ssp_priv);
 	} else
-		pr_err("%s no SSP on_packet callback registered. "
-				"Dropped %u bytes\n", __func__, (unsigned int)size);
+		pr_err("%s no SSP on_packet callback registered. Dropped %u bytes\n", __func__, (unsigned int)size);
 
 	return size;
 }
@@ -712,6 +717,7 @@ s64 get_sensor_time_delta_us(void)
 {
 	struct timespec curr_ts = ktime_to_timespec(ktime_get_boottime());
 	struct timespec delta = timespec_sub(curr_ts, bbd_sensor_time);
+
 	return timespec_to_ns(&delta)/NSEC_PER_USEC;
 }
 
@@ -729,6 +735,7 @@ ssize_t bbd_control_write(struct file *filp, const char __user *buf, size_t size
 
 	/* get command string first */
 	ssize_t len = bbd_common_write(filp, buf, size, ppos);
+
 	if (len <= 0)
 		return len;
 
@@ -736,12 +743,12 @@ ssize_t bbd_control_write(struct file *filp, const char __user *buf, size_t size
 	return bbd_control(bbd.priv[minor].write_buf, len);
 }
 
-ssize_t bbd_patch_read( struct file *filp, char __user *buf, size_t size, loff_t *ppos)
+ssize_t bbd_patch_read(struct file *filp, char __user *buf, size_t size, loff_t *ppos)
 {
-        ssize_t rd_size = size;
-        size_t  offset = filp->f_pos;
+	ssize_t rd_size = size;
+	size_t  offset = filp->f_pos;
 
-	if (offset >= sizeof(bbd_patch)) {       /* signal EOF */
+	if (offset >= sizeof(bbd_patch)) {	   /* signal EOF */
 		*ppos = 0;
 		return 0;
 	}
@@ -751,14 +758,14 @@ ssize_t bbd_patch_read( struct file *filp, char __user *buf, size_t size, loff_t
 		rd_size = -EFAULT;
 	else
 		*ppos = filp->f_pos + rd_size;
-		
-        return rd_size;
+
+	return rd_size;
 }
 
 
 //--------------------------------------------------------------
 //
-//               Sysfs
+//			   Sysfs
 //
 //--------------------------------------------------------------
 static ssize_t store_sysfs_bbd_control(struct device *dev, struct device_attribute *attr, const char *buf, size_t len)
@@ -770,34 +777,35 @@ static ssize_t store_sysfs_bbd_control(struct device *dev, struct device_attribu
 static ssize_t show_sysfs_bbd_pl(struct device *dev, struct device_attribute *attr, char *buf)
 {
 #if 0
-        const struct stTransportLayerStats *p = 0;
-        p = TransportLayer_GetStats(&bbd.engine.bridge.m_otTL);
-        if (!p)
-		return 0;
+		const struct stTransportLayerStats *p = 0;
+
+		p = TransportLayer_GetStats(&bbd.engine.bridge.m_otTL);
+		if (!p)
+			return 0;
 
 	return sprintf(buf,
-                    "RxGarbageBytes=%lu\n"
-                    "RxPacketLost=%lu\n"
-                    "RemotePacketLost=%lu\n"
-                    "RemoteGarbage=%lu\n"
-                    "PacketSent=%lu\n"
-                    "PacketReceived=%lu\n"
-                    "AckReceived=%lu\n"
-                    "ReliablePacketSent=%lu\n"
-                    "ReliableRetransmit=%lu\n"
-                    "ReliablePacketReceived=%lu\n"
-                    "MaxRetransmitCount=%lu\n",
-            p->ulRxGarbageBytes,
-            p->ulRxPacketLost,
-            p->ulRemotePacketLost, /* approximate */
-            p->ulRemoteGarbage, /* approximate */
-            p->ulPacketSent,         /* number of normal packets sent */
-            p->ulPacketReceived,
-            p->ulAckReceived,
-            p->ulReliablePacketSent,
-            p->ulReliableRetransmit,
-            p->ulReliablePacketReceived,
-            p->ulMaxRetransmitCount);
+					"RxGarbageBytes=%lu\n"
+					"RxPacketLost=%lu\n"
+					"RemotePacketLost=%lu\n"
+					"RemoteGarbage=%lu\n"
+					"PacketSent=%lu\n"
+					"PacketReceived=%lu\n"
+					"AckReceived=%lu\n"
+					"ReliablePacketSent=%lu\n"
+					"ReliableRetransmit=%lu\n"
+					"ReliablePacketReceived=%lu\n"
+					"MaxRetransmitCount=%lu\n",
+			p->ulRxGarbageBytes,
+			p->ulRxPacketLost,
+			p->ulRemotePacketLost, /* approximate */
+			p->ulRemoteGarbage, /* approximate */
+			p->ulPacketSent,		 /* number of normal packets sent */
+			p->ulPacketReceived,
+			p->ulAckReceived,
+			p->ulReliablePacketSent,
+			p->ulReliableRetransmit,
+			p->ulReliablePacketReceived,
+			p->ulMaxRetransmitCount);
 #endif
 	return 0;
 }
@@ -805,8 +813,9 @@ static ssize_t show_sysfs_bbd_pl(struct device *dev, struct device_attribute *at
 static ssize_t store_sysfs_lk_timeout(struct device *dev, struct device_attribute *attr, const char *buf, size_t len)
 {
 	int status = kstrtol(buf, 0, &bbd.lk.timeout_sec);
-    if(bbd.lk.timeout_sec < 10)
-        bbd.lk.timeout_sec = 10; //base timeout 10sec
+
+	if (bbd.lk.timeout_sec < 10)
+		bbd.lk.timeout_sec = 10; //base timeout 10sec
 	return status ? : len;
 }
 static ssize_t show_sysfs_lk_timeout(struct device *dev, struct device_attribute *attr, char *buf)
@@ -825,8 +834,8 @@ static ssize_t show_sysfs_lk_enable(struct device *dev, struct device_attribute 
 	return sprintf(buf, "lhd killer %s\n", bbd.lk.enabled ? "enabled" : "disabled");
 }
 
-static DEVICE_ATTR(bbd, 0220, NULL,                store_sysfs_bbd_control);
-static DEVICE_ATTR(pl, 0440, show_sysfs_bbd_pl,       NULL);
+static DEVICE_ATTR(bbd, 0220, NULL,				store_sysfs_bbd_control);
+static DEVICE_ATTR(pl, 0440, show_sysfs_bbd_pl,	   NULL);
 static DEVICE_ATTR(lk_timeout, 0660, show_sysfs_lk_timeout, store_sysfs_lk_timeout);
 static DEVICE_ATTR(lk_enable, 0660, show_sysfs_lk_enable, store_sysfs_lk_enable);
 
@@ -845,36 +854,37 @@ static const struct attribute_group bbd_group = {
 
 //--------------------------------------------------------------
 //
-//               Misc Functions
+//			   Misc Functions
 //
 //--------------------------------------------------------------
-void bbd_log_hex(const char*          pIntroduction,
-		const unsigned char* pData,
-		unsigned long        ulDataLen)
+void bbd_log_hex(const char *pIntroduction,
+		const unsigned char *pData,
+		unsigned long ulDataLen)
 {
-	const unsigned char* pDataEnd = pData + ulDataLen;
+	const unsigned char *pDataEnd = pData + ulDataLen;
 
 	if (likely(!bbd.db))
 		return;
-	if (!pIntroduction) pIntroduction = "...unknown...";
+	if (!pIntroduction)
+		pIntroduction = "...unknown...";
 
-	while (pData < pDataEnd)
-	{
+	while (pData < pDataEnd) {
 		char buf[128];
 		size_t bufsize = sizeof(buf) - 3;
 		size_t lineLen = pDataEnd - pData;
 		size_t perLineCount = lineLen;
+
 		if (lineLen > 32) {
 			lineLen = 32;
 			perLineCount = lineLen;
 		}
 
 		snprintf(buf, bufsize, "%s [%u] { ", pIntroduction,
-			       	(unsigned int)lineLen);
+				(unsigned int)lineLen);
 
-		for (; perLineCount > 0; ++pData, --perLineCount)
-		{
+		for (; perLineCount > 0; ++pData, --perLineCount) {
 			size_t len = strlen(buf);
+
 			snprintf(buf+len, bufsize - len, "%02X ", *pData);
 		}
 		printk(KERN_INFO"%s}\n", buf);
@@ -898,9 +908,9 @@ ssize_t bbd_on_read(unsigned int minor, const unsigned char *buf, size_t size)
 	mutex_lock(&bbd.priv[minor].lock);
 
 	/* If there's not enough speace, drop it but try waking up reader */
-	if (CIRC_SPACE(circ->head, circ->tail, BBD_BUFF_SIZE)<size) {
+	if (CIRC_SPACE(circ->head, circ->tail, BBD_BUFF_SIZE) < size) {
 		pr_err("%s read buffer full. Dropping %u bytes\n",
-			       	bbd_dev_name[minor], (unsigned int)size);
+				bbd_dev_name[minor], (unsigned int)size);
 		goto skip;
 	}
 
@@ -911,12 +921,12 @@ ssize_t bbd_on_read(unsigned int minor, const unsigned char *buf, size_t size)
 		size_t space_to_end = CIRC_SPACE_TO_END(circ->head, circ->tail, BBD_BUFF_SIZE);
 		size_t copied = min(space_to_end, size);
 
-		memcpy((void*) circ->buf + circ->head, buf + wr_size, copied);
+		memcpy((void *) circ->buf + circ->head, buf + wr_size, copied);
 		size -= copied;
 		wr_size += copied;
-		circ->head = (circ->head + copied) & (BBD_BUFF_SIZE -1);
+		circ->head = (circ->head + copied) & (BBD_BUFF_SIZE - 1);
 
-	} while (size>0 && CIRC_SPACE(circ->head, circ->tail, BBD_BUFF_SIZE));
+	} while (size > 0 && CIRC_SPACE(circ->head, circ->tail, BBD_BUFF_SIZE));
 skip:
 	mutex_unlock(&bbd.priv[minor].lock);
 
@@ -929,43 +939,42 @@ skip:
 
 ssize_t bbd_request_mcu(bool on)
 {
-	printk("%s(%s) called", __func__, (on)?"On":"Off");
+	pr_info("%s(%s) called", __func__, (on) ? "On" : "Off");
 	if (on)
-		return bbd_on_read(BBD_MINOR_CONTROL, GPSD_SENSOR_ON, strlen(GPSD_SENSOR_ON)+1);
-	else {
-		bbd.ssp_cb->on_mcu_ready(bbd.ssp_priv, false);
-		return bbd_on_read(BBD_MINOR_CONTROL, GPSD_SENSOR_OFF, strlen(GPSD_SENSOR_OFF)+1);
-	}
+		return bbd_on_read(BBD_MINOR_CONTROL, GPSD_SENSOR_ON, strlen(GPSD_SENSOR_ON) + 1);
+
+	bbd.ssp_cb->on_mcu_ready(bbd.ssp_priv, false);
+	return bbd_on_read(BBD_MINOR_CONTROL, GPSD_SENSOR_OFF, strlen(GPSD_SENSOR_OFF) + 1);
 }
 EXPORT_SYMBOL(bbd_request_mcu);
 
 //--------------------------------------------------------------
 //
-//               PM operation
+//			   PM operation
 //
 //--------------------------------------------------------------
 static int bbd_suspend(pm_message_t state)
 {
-	pr_info("[SSPBBD]: %s ++ \n", __func__);
+	pr_info("[SSPBBD]: %s ++\n", __func__);
 
 #ifdef DEBUG_1HZ_STAT
 	bbd_disable_stat();
 #endif
 #ifdef CONFIG_SENSORS_SSP
-	/* Call SSP suspend */	
+	/* Call SSP suspend */
 	if (pssp_driver->driver.pm && pssp_driver->driver.pm->suspend)
 		pssp_driver->driver.pm->suspend(&dummy_spi.dev);
 #endif
 	mdelay(20);
-	
-	pr_info("[SSPBBD]: %s -- \n", __func__);
-     return 0;
+
+	pr_info("[SSPBBD]: %s --\n", __func__);
+	return 0;
 }
 
 static int bbd_resume(void)
 {
 #ifdef CONFIG_SENSORS_SSP
-	/* Call SSP resume */	
+	/* Call SSP resume */
 	if (pssp_driver->driver.pm && pssp_driver->driver.pm->suspend)
 		pssp_driver->driver.pm->resume(&dummy_spi.dev);
 #endif
@@ -977,48 +986,49 @@ static int bbd_resume(void)
 	return 0;
 }
 
-static int bbd_notifier(struct notifier_block *nb, unsigned long event, void * data)
+static int bbd_notifier(struct notifier_block *nb, unsigned long event, void *data)
 {
 	pm_message_t state = {0};
-        switch (event) {
-		case PM_SUSPEND_PREPARE:
-			printk("%s going to sleep", __func__);
-			state.event = event;
-			bbd_suspend(state);
-			break;
-		case PM_POST_SUSPEND:
-			printk("%s waking up", __func__);
-			bbd_resume();
-			break;
+
+	switch (event) {
+	case PM_SUSPEND_PREPARE:
+		pr_info("%s going to sleep", __func__);
+		state.event = event;
+		bbd_suspend(state);
+		break;
+	case PM_POST_SUSPEND:
+		pr_info("%s waking up", __func__);
+		bbd_resume();
+		break;
 	}
 	return NOTIFY_OK;
 }
 
 static struct notifier_block bbd_notifier_block = {
-        .notifier_call = bbd_notifier,
+	.notifier_call = bbd_notifier,
 };
 
 //--------------------------------------------------------------
 //
-//               BBD Device Init and Exit
+//			   BBD Device Init and Exit
 //
 //--------------------------------------------------------------
 
 
 static const struct file_operations bbd_fops[BBD_DEVICE_INDEX] = {
-        /* bbd shmd file operations */
+	/* bbd shmd file operations */
 	{
-                .owner          =  THIS_MODULE,
+		.owner		  =  THIS_MODULE,
 	},
-        /* bbd sensor file operations */
-        {
-                .owner          =  THIS_MODULE,
-                .open           =  bbd_common_open,
-                .release        =  bbd_common_release,
-                .read           =  bbd_common_read,
-                .write          =  NULL,
-                .poll           =  bbd_common_poll,
-        },
+	/* bbd sensor file operations */
+	{
+		.owner		=  THIS_MODULE,
+		.open		=  bbd_common_open,
+		.release	=  bbd_common_release,
+		.read		=  bbd_common_read,
+		.write		=  NULL,
+		.poll		=  bbd_common_poll,
+	},
 	/* bbd control file operations */
 	{
 		.owner		=  THIS_MODULE,
@@ -1037,25 +1047,26 @@ static const struct file_operations bbd_fops[BBD_DEVICE_INDEX] = {
 		.write		=  NULL, /* /dev/bbd_patch is read-only */
 		.poll		=  NULL,
 	},
-	/* bbd ssi spi debug operations 
-	{
-		.owner          =  THIS_MODULE,
-		.open		=  bbd_common_open,
-		.release	=  bbd_common_release, 
-		.read           =  NULL,
-		.write          =  bbd_ssi_spi_debug_write,
-		.poll           =  NULL,
-	}
-	*/
+	/*
+	 *bbd ssi spi debug operations
+	 *{
+	 *        .owner		  =  THIS_MODULE,
+	 *        .open		=  bbd_common_open,
+	 *        .release	=  bbd_common_release,
+	 *        .read		   =  NULL,
+	 *        .write		  =  bbd_ssi_spi_debug_write,
+	 *        .poll		   =  NULL,
+	 *}
+	 */
 };
 
 
-int bbd_init(struct device* dev)
+int bbd_init(struct device *dev)
 {
 	int minor, ret = -ENOMEM;
 	struct timespec ts1;
 	unsigned long start, elapsed;
-	
+
 	ts1 = ktime_to_timespec(ktime_get_boottime());
 	start = ts1.tv_sec * 1000000000ULL + ts1.tv_nsec;
 
@@ -1072,7 +1083,7 @@ int bbd_init(struct device* dev)
 	}
 
 	/* Create BBD char devices */
-	for (minor=0; minor<BBD_DEVICE_INDEX; minor++) {
+	for (minor = 0; minor < BBD_DEVICE_INDEX; minor++) {
 		dev_t devno = MKDEV(BBD_DEVICE_MAJOR, minor);
 		struct cdev *cdev = &bbd.priv[minor].dev;
 		const char *name = bbd_dev_name[minor];
@@ -1086,13 +1097,12 @@ int bbd_init(struct device* dev)
 		mutex_init(&bbd.priv[minor].lock);
 
 		/* Don't register /dev/bbd_shmd */
-		if (minor==BBD_MINOR_SHMD)
+		if (minor == BBD_MINOR_SHMD)
 			continue;
 		/* Reserve char device number (a.k.a, major, minor) for this BBD device */
 		ret = register_chrdev_region(devno, 1, name);
 		if (ret) {
-			pr_err("BBD:%s() failed to register_chrdev_region() "
-					"\"%s\", ret=%d", __func__, name, ret);
+			pr_err("BBD:%s() failed to register_chrdev_region() \"%s\", ret=%d", __func__, name, ret);
 			goto free_class;
 		}
 
@@ -1103,16 +1113,15 @@ int bbd_init(struct device* dev)
 		ret = cdev_add(cdev, devno, 1);
 		if (ret) {
 			pr_err("BBD:%s()) failed to cdev_add() \"%s\", ret=%d",
-						       	__func__, name, ret);
+							__func__, name, ret);
 			unregister_chrdev_region(devno, 1);
-			goto free_class;	
+			goto free_class;
 		}
-		
+
 		/* Let it show in FS */
 		dev = device_create(bbd.class, NULL, devno, NULL, "%s", name);
 		if (IS_ERR_OR_NULL(dev)) {
-			pr_err("BBD:%s() failed to device_create() "
-				"\"%s\", ret=%d", __func__, name, ret);
+			pr_err("BBD:%s() failed to device_create() \"%s\", ret=%d", __func__, name, ret);
 			unregister_chrdev_region(devno, 1);
 			cdev_del(&bbd.priv[minor].dev);
 			goto free_class;
@@ -1120,7 +1129,7 @@ int bbd_init(struct device* dev)
 
 		/* Done. Put success log and init BBD specific fields */
 		pr_info("BBD:%s(%d,%d) registered /dev/%s\n",
-			      __func__, BBD_DEVICE_MAJOR,minor,name);
+				  __func__, BBD_DEVICE_MAJOR, minor, name);
 
 	}
 
@@ -1170,7 +1179,7 @@ int bbd_init(struct device* dev)
 free_kobj:
 	kobject_put(bbd.kobj);
 free_class:
-	while (--minor>BBD_MINOR_SHMD) {
+	while (--minor > BBD_MINOR_SHMD) {
 		dev_t devno = MKDEV(BBD_DEVICE_MAJOR, minor);
 		struct cdev *cdev = &bbd.priv[minor].dev;
 
@@ -1178,7 +1187,7 @@ free_class:
 		cdev_del(cdev);
 		unregister_chrdev_region(devno, 1);
 	}
-	class_destroy(bbd.class);	
+	class_destroy(bbd.class);
 exit:
 	return ret;
 }
@@ -1198,7 +1207,7 @@ static void __exit bbd_exit(void)
 	sysfs_remove_group(bbd.kobj, &bbd_group);
 
 	/* Remove BBD char devices */
-	for (minor=BBD_MINOR_SENSOR; minor<BBD_DEVICE_INDEX; minor++) {
+	for (minor = BBD_MINOR_SENSOR; minor < BBD_DEVICE_INDEX; minor++) {
 		dev_t devno = MKDEV(BBD_DEVICE_MAJOR, minor);
 		struct cdev *cdev = &bbd.priv[minor].dev;
 		const char *name = bbd_dev_name[minor];
@@ -1208,7 +1217,7 @@ static void __exit bbd_exit(void)
 		unregister_chrdev_region(devno, 1);
 
 		pr_info("%s(%d,%d) unregistered /dev/%s\n",
-			       	__func__, BBD_DEVICE_MAJOR, minor, name);
+				__func__, BBD_DEVICE_MAJOR, minor, name);
 	}
 
 #ifdef DEBUG_1HZ_STAT
@@ -1219,9 +1228,9 @@ static void __exit bbd_exit(void)
 	bbd_exit_lk();
 #endif
 	/* Remove class */
-	class_destroy(bbd.class);	
+	class_destroy(bbd.class);
 	/* Done. Put success log */
-	pr_info("%s --\n",__func__);
+	pr_info("%s --\n", __func__);
 }
 
 MODULE_AUTHOR("Broadcom");

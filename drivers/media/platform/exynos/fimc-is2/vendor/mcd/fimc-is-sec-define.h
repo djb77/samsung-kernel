@@ -75,7 +75,7 @@
 #define FW_SENSOR_MAKER_SF		'F'
 #define FW_SENSOR_MAKER_SLSI		'L'			/* rear_front*/
 #define FW_SENSOR_MAKER_SONY		'S'			/* rear_front*/
-#define FW_SENSOR_MAKER_SLSI_SONY		'X'  	/* rear_front*/
+#define FW_SENSOR_MAKER_SLSI_SONY		'X'	/* rear_front*/
 #define FW_SENSOR_MAKER_SONY_LSI		'Y'		/* rear_front*/
 
 #define FW_SENSOR_MAKER_SLSI		'L'
@@ -122,6 +122,11 @@
 #define FW_2L2_L		"F12LL"		/* rear -lsi, front-lsi */
 #define FW_2L2_X		"F12LX"		/* rear -lsi, front-sony */
 
+#define FW_IMX333_GS		"G12LS"		/* great rear -sony, front-sony */
+#define FW_IMX333_GY		"G12LY"		/* great rear -sony, front-lsi */
+#define FW_2L2_GL		"G12LL"		/* great rear -lsi, front-lsi */
+#define FW_2L2_GX		"G12LX"		/* great rear -lsi, front-sony */
+
 #define FW_3M3_D		"D13LL"
 #define FW_3M3			"E13LL"
 
@@ -134,6 +139,9 @@
 #define FW_COMP_IMX333_IMX320	"E12LS"
 #define FW_COMP_IMX333_3H1	"E12LY"
 #define FW_COMP_2L2_IMX320	"E12LX"
+
+#define FW_4H5YC_P		"P08LL"
+#define FW_5E3			"D05LL"
 
 #define SDCARD_FW
 
@@ -180,6 +188,7 @@
 #define FIMC_IS_IMX135_SETF			"setfile_imx135.bin"
 #define FIMC_IS_IMX134_SETF			"setfile_imx134.bin"
 #define FIMC_IS_4H5_SETF			"setfile_4h5.bin"
+#define FIMC_IS_4H5YC_SETF			"setfile_4h5yc.bin"
 #define FIMC_IS_3L2_SETF			"setfile_3l2.bin"
 #define FIMC_IS_6B2_SETF			"setfile_6b2.bin"
 #define FIMC_IS_8B1_SETF			"setfile_8b1.bin"
@@ -193,10 +202,12 @@
 
 #define FIMC_IS_IMX333_SETF			"setfile_imx333.bin"
 #define FIMC_IS_2L2_SETF			"setfile_2l2.bin"
+#define FIMC_IS_3M3_SETF			"setfile_3m3.bin"
 
 #define FIMC_IS_IMX320_SETF			"setfile_imx320.bin"
 #define FIMC_IS_3H1_SETF			"setfile_3h1.bin"
 #define FIMC_IS_4E6_SETF			"setfile_4e6.bin"
+#define FIMC_IS_5E3_SETF			"setfile_5e3.bin"
 #define FIMC_IS_COMPANION_MASTER_SETF			"companion_master_setfile.bin"
 #define FIMC_IS_COMPANION_MODE_SETF			"companion_mode_setfile.bin"
 #define FIMC_IS_COMPANION_2P2_MASTER_SETF			"companion_2p2_master_setfile.bin"
@@ -294,6 +305,10 @@ struct fimc_is_from_info {
 	u32		shading_end_addr;
 	u32		setfile_start_addr;
 	u32		setfile_end_addr;
+#ifdef CAMERA_MODULE_REAR2_SETF_DUMP
+	u32		setfile2_start_addr;
+	u32		setfile2_end_addr;
+#endif
 	u32		front_setfile_start_addr;
 	u32		front_setfile_end_addr;
 	u32		header_section_crc_addr;
@@ -316,7 +331,7 @@ struct fimc_is_from_info {
 	u32		af_cal2_macro;		/* Rear Second Sensor (TELE) */
 	u32		af_cal2_d1;		/* Rear Second Sensor (TELE) */
 	u32		mtf_data_addr;
-	u32		mtf_data2_addr; 	/*TELE*/
+	u32		mtf_data2_addr;		/*TELE*/
 	char		header_ver[FIMC_IS_HEADER_VER_SIZE + 1];
 	char		header2_ver[FIMC_IS_HEADER_VER_SIZE + 1]; /* Rear Second Sensor (TELE) */
 	char		cal_map_ver[FIMC_IS_CAL_MAP_VER_SIZE + 1];
@@ -325,10 +340,13 @@ struct fimc_is_from_info {
 	char		awb_ver[FIMC_IS_AWB_VER_SIZE + 1];
 	char		shading_ver[FIMC_IS_SHADING_VER_SIZE + 1];
 
-	char		load_fw_name[50]; 		/* DDK */
-	char		load_rta_fw_name[50]; 	/* RTA */
+	char		load_fw_name[50];		/* DDK */
+	char		load_rta_fw_name[50];	/* RTA */
 
 	char		load_setfile_name[50];
+#ifdef CAMERA_MODULE_REAR2_SETF_DUMP
+	char		load_setfile2_name[50];  /*rear 2*/
+#endif
 	char		load_front_setfile_name[50];
 	char		load_tunning_hifills_name[50];
 	char		project_name[FIMC_IS_PROJECT_NAME_SIZE + 1];
@@ -420,6 +438,9 @@ struct fimc_is_from_info {
 	unsigned long		rta_fw_size;
 #endif
 	unsigned long		setfile_size;
+#ifdef CAMERA_MODULE_REAR2_SETF_DUMP
+	unsigned long		setfile2_size;
+#endif
 	unsigned long		front_setfile_size;
 	unsigned long		comp_fw_size;
 	unsigned long		hifi_tunning_size;
@@ -485,4 +506,5 @@ int fimc_is_sec_ldo_enable(struct device *dev, char *name, bool on);
 int fimc_is_sec_rom_power_on(struct fimc_is_core *core, int position);
 int fimc_is_sec_rom_power_off(struct fimc_is_core *core, int position);
 int fimc_is_sec_check_bin_files(struct fimc_is_core * core);
+void remove_dump_fw_file(void);
 #endif /* FIMC_IS_SEC_DEFINE_H */

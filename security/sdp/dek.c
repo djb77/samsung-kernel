@@ -546,9 +546,9 @@ static int dek_on_user_added(dek_arg_on_user_added *evt) {
 	int engine_id = evt->engine_id;
 	int user_id = evt->user_id;
 
-	if((evt->SDPK_Rpub.len > KEK_MAXLEN) ||
-	        (evt->SDPK_Dpub.len > KEK_MAXLEN) ||
-	        (evt->SDPK_EDpub.len > KEK_MAXLEN)) {
+	if ((evt->SDPK_Rpub.len > KEK_MAXLEN) ||
+			(evt->SDPK_Dpub.len > KEK_MAXLEN) ||
+			(evt->SDPK_EDpub.len > KEK_MAXLEN)) {
 		DEK_LOGE("Invalid args\n");
 		DEK_LOGE("SDPK_Rpub.len : %d\n", evt->SDPK_Rpub.len);
         DEK_LOGE("SDPK_Dpub.len : %d\n", evt->SDPK_Dpub.len);

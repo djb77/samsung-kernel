@@ -144,7 +144,7 @@ def skip_func(func, skip, skip_asm):
 def parse_last_insn(objdump, i, n):
     return [objdump.parse_insn(j) if objdump.is_insn(j) else None for j in xrange(i-n, i)]
 
-def instrument(objdump, func=None, skip=set([]), skip_stp=set([]), skip_asm=set([]), skip_blr=set([]), threads=1):
+def instrument(objdump, func=None, skip=set([]), skip_stp=set([]), skip_asm=set([]), skip_blr=set([]), skip_magic=set([]), threads=1):
     """
     Replace:
         BLR rX
@@ -205,13 +205,13 @@ def instrument(objdump, func=None, skip=set([]), skip_stp=set([]), skip_asm=set(
         def each_insn():
             # Keep track of the last 2 instructions
             # (needed it for CONFIG_RKP_CFP_JOPP)
-            for curfunc, func_i, i, insn, last_insns in objdump.each_insn(start_func=start_func, end_func=end_func, 
+            for curfunc, func_i, i, insn, last_insns in objdump.each_insn(start_func=start_func, end_func=end_func,
                     start_i=start_i, end_i=end_i, skip_func=_skip_func, num_last_insns=1):
                 yield curfunc, func_i, i, insn, last_insns
                 last_func_i[0] = func_i
 
         for curfunc, func_i, i, insn, last_insns in each_insn():
-            if objdump.JOPP and func_i != last_func_i[0] and are_nop_insns(ins[1] for ins in last_insns):
+            if objdump.JOPP and func_i != last_func_i[0] and are_nop_insns(ins[1] for ins in last_insns) and curfunc not in skip_magic:
                 # Instrument the nop just before the function.
                 magic_i, magic_insn = last_insns[0]
                 objdump.write(magic_i, objdump.JOPP_MAGIC)
@@ -1141,8 +1141,8 @@ def main():
 
     # instrument and validate
     with _load_objdump() as objdump:
-        instrument(objdump, func=None, skip=common.skip, skip_stp=common.skip_stp, 
-                skip_asm=common.skip_asm, skip_blr=common.skip_blr, threads=args.threads)
+        instrument(objdump, func=None, skip=common.skip, skip_stp=common.skip_stp,
+                skip_asm=common.skip_asm, skip_blr=common.skip_blr, skip_magic=common.skip_magic, threads=args.threads)
         #objdump.save_instr_copy()
         return
 

@@ -600,13 +600,27 @@ static int fimc_is_mxp_video_s_ctrl(struct file *file, void *priv,
 {
 	int ret = 0;
 	struct fimc_is_video_ctx *vctx = file->private_data;
+	struct fimc_is_device_ischain *device;
+	struct fimc_is_video *video;
 
 	BUG_ON(!vctx);
 	BUG_ON(!ctrl);
+	BUG_ON(!GET_DEVICE(vctx));
 
 	mdbgv_mxp("%s\n", vctx, __func__);
 
+	device = GET_DEVICE(vctx);
+	video = GET_VIDEO(vctx);
+
 	switch (ctrl->id) {
+	case V4L2_CID_IS_S_VRA_CONNECTION:
+		minfo("[M%dP:V] %s(%d->vra): %d\n", device, GET_MXP_ID(video), __func__,
+			GET_MXP_ID(video), ctrl->value);
+
+		if (ctrl->value == 1)
+			device->vid_to_vra = video->id;
+
+		break;
 	default:
 		ret = fimc_is_video_s_ctrl(file, vctx, ctrl);
 		if (ret) {

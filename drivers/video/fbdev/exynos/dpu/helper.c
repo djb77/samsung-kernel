@@ -26,6 +26,8 @@
 #include "../panel/panel_drv.h"
 #include <video/mipi_display.h>
 
+char acquire_fence_log[ACQUIRE_FENCE_LEN];
+
 static int __dpu_match_dev(struct device *dev, void *data)
 {
 	struct dpp_device *dpp;
@@ -336,9 +338,9 @@ void decon_create_timeline(struct decon_device *decon, char *name)
 		decon->timeline_max = 1;
 }
 
-int decon_create_fence(struct decon_device *decon)
+int decon_create_fence(struct decon_device *decon,
+		struct sync_fence **fence, struct decon_reg_data *regs)
 {
-	struct sync_fence *fence;
 	struct sync_pt *pt;
 	int fd = -EMFILE;
 
@@ -349,20 +351,23 @@ int decon_create_fence(struct decon_device *decon)
 		goto err;
 	}
 
-	fence = sync_fence_create("display", pt);
-	if (!fence) {
+	*fence = sync_fence_create("display", pt);
+	if (!(*fence)) {
 		decon_err("%s: failed to create fence\n", __func__);
 		sync_pt_free(pt);
 		goto err;
 	}
 
+	if (regs)
+		regs->pt = pt;
+
 	fd = get_unused_fd_flags(0);
 	if (fd < 0) {
 		decon_err("%s: failed to get unused fd\n", __func__);
+		sync_fence_put(*fence);
 		goto err;
 	}
 
-	sync_fence_install(fence, fd);
 	return fd;
 
 err:
@@ -370,14 +375,139 @@ err:
 	return fd;
 }
 
-void decon_wait_fence(struct sync_fence *fence)
+void decon_install_fence(struct sync_fence *fence, int fd)
 {
-	int err = sync_fence_wait(fence, 900);
-	if (err >= 0)
-		return;
+	sync_fence_install(fence, fd);
+}
 
+int decon_print_fence_err(struct decon_device *decon, struct seq_file *s)
+{
+	int i, idx;
+	u64 time, before_time;
+	ktime_t cur_time = ktime_get();
+	struct disp_fence_err *fence_err;
+
+	idx = (decon->fence_err_cnt - 1) % FENCE_ERR_LIST_CNT;
+
+	if (s != NULL)
+		seq_printf(s, "- Fence Error History (Total Cnt: %d) -\n",
+			decon->fence_err_cnt);
+	else
+		decon_info("- Fence Error History (Total Cnt: %d) -\n",
+			decon->fence_err_cnt);
+
+	if (decon->fence_err_cnt <= 0)
+		return 0;
+
+	fence_err = &decon->first_fence_err;
+	time = ktime_to_ms(fence_err->time);
+	before_time = ktime_to_ms(ktime_sub(cur_time, fence_err->time));
+	if (s != NULL)
+		seq_printf(s, "1st : %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+			fence_err->name, fence_err->win_id, fence_err->status,
+			time / 1000, time % 1000,
+			before_time / 1000, before_time % 1000);
+	else
+		decon_info("1st: %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+			fence_err->name, fence_err->win_id, fence_err->status,
+			time / 1000, time % 1000,
+			before_time / 1000, before_time % 1000);
+
+
+	for (i = idx ; i >= 0; i--) {
+		fence_err = &decon->fence_err_list[i];
+		if (fence_err == NULL) {
+			decon_err("DECON:ERR:%s:fence_err_list is null\n", __func__);
+			goto exit_dump;
+		}
+
+		time = ktime_to_ms(fence_err->time);
+		before_time = ktime_to_ms(ktime_sub(cur_time, fence_err->time));
+		if (s != NULL)
+			seq_printf(s, "F: %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+
+		else
+			decon_info("F: %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+
+	}
+
+	for (i = FENCE_ERR_LIST_CNT - 1; i >= idx + 1; i--) {
+		fence_err = &decon->fence_err_list[i];
+		if (fence_err == NULL) {
+			decon_err("DECON:ERR:%s:fence_err_list is null\n", __func__);
+			goto exit_dump;
+		}
+
+		time = ktime_to_ms(fence_err->time);
+		before_time = ktime_to_ms(ktime_sub(cur_time, fence_err->time));
+		if (s != NULL)
+			seq_printf(s, "F: %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+
+		else
+			decon_info("F: %s, W: %d, S: %d: %lld.%lld, Be: %lld.%lld\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+	}
+exit_dump:
+	return 0;
+}
+
+
+#define FENCE_NAME_MAX	32
+#define FENCE_NAME_STR_MAX (FENCE_NAME_MAX - 1)
+
+void decon_fence_err_log(struct decon_device *decon, int idx, struct sync_fence *fence)
+
+{
+	int err_idx;
+	int namelen;
+
+	namelen = strlen(fence->name);
+	if (namelen > FENCE_NAME_STR_MAX)
+		namelen = FENCE_NAME_STR_MAX;
+
+	if (decon->fence_err_cnt == 0) {
+		decon->first_fence_err.win_id = idx;
+		decon->first_fence_err.time = ktime_get();
+		decon->first_fence_err.status = atomic_read(&fence->status);
+		memset(decon->first_fence_err.name, 0, FENCE_NAME_MAX);
+		strncpy(decon->first_fence_err.name, fence->name, namelen);
+	}
+
+	err_idx = decon->fence_err_cnt % FENCE_ERR_LIST_CNT;
+	decon->fence_err_list[err_idx].win_id = idx;
+	decon->fence_err_list[err_idx].time = ktime_get();
+	decon->fence_err_list[err_idx].status = atomic_read(&fence->status);
+	memset(decon->fence_err_list[err_idx].name, 0, FENCE_NAME_MAX);
+	strncpy(decon->fence_err_list[err_idx].name, fence->name, namelen);
+
+	decon->fence_err_cnt += 1;
+
+	decon_print_fence_err(decon, NULL);
+}
+
+
+int decon_wait_fence(struct sync_fence *fence)
+{
+	int err = 0;
+
+	snprintf(acquire_fence_log, ACQUIRE_FENCE_LEN, "%p:%s:%d",
+			fence, fence->name, atomic_read(&fence->status));
+	err = sync_fence_wait(fence, 900);
 	if (err < 0)
-		decon_warn("error waiting on acquire fence: %d\n", err);
+		decon_warn("%s: error waiting on acquire fence: %d\n", acquire_fence_log, err);
+
+	return err;
 }
 
 void decon_signal_fence(struct decon_device *decon)
@@ -607,9 +737,40 @@ void decon_set_protected_content(struct decon_device *decon,
 /* id : VGF0=0, VGF1=1 */
 void dpu_dump_data_to_console(void *v_addr, int buf_size, int id)
 {
-	dpp_info("=== (IDMA_VGF%d) Frame Buffer Data(128 Bytes) ===\n",
-		id == IDMA_VGF0 ? 0 : 1);
+	dpp_info("=== (IDMA_VGF%d) Frame Buffer Data(%d Bytes) ===\n",
+		id == IDMA_VGF0 ? 0 : 1, BUF_DUMP_SIZE);
 
 	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_ADDRESS, 32, 4,
 			v_addr, buf_size, false);
+}
+
+void dpu_clear_all_irq(struct decon_device *decon)
+{
+	int i;
+	u32 mgr_id = 0;
+	struct v4l2_subdev *sd;
+
+	/* dsim */
+	if (decon->dt.out_type == DECON_OUT_DSI) {
+		sd = decon->out_sd[0];
+		v4l2_subdev_call(sd, core, ioctl, DSIM_IOC_CLEAR_IRQ, NULL);
+	}
+
+	/* displayport : add code if necessary */
+
+	/* decon */
+	decon_reg_clear_int_all(decon->id);
+
+	/* dma & dpp */
+	if (decon->id == 0) {
+		sd = decon->dpp_sd[IDMA_G0];
+		v4l2_subdev_call(sd, core, ioctl, DPP_CLEAR_IRQ, NULL);
+	}
+	for (i = IDMA_G1; i < MAX_DPP_SUBDEV; i++) {
+		mgr_id = decon_reg_get_rsc_dma_info(decon->id, i);
+		if (mgr_id == decon->id) {
+			sd = decon->dpp_sd[i];
+			v4l2_subdev_call(sd, core, ioctl, DPP_CLEAR_IRQ, NULL);
+		}
+	}
 }

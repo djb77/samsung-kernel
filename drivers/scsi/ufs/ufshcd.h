@@ -65,8 +65,7 @@
 #include <scsi/scsi_eh.h>
 #include <scsi/scsi_ioctl.h>
 
-#define COMMAND_PRIORITY
-#define HEAD_OF_Q_FEATURE
+#define CUSTOMIZE_UPIU_FLAGS
 
 #include "ufs.h"
 #include "ufshci.h"
@@ -985,6 +984,10 @@ static inline void ufshcd_vops_dbg_register_dump(struct ufs_hba *hba)
 {
 	if (hba->vops && hba->vops->dbg_register_dump)
 		hba->vops->dbg_register_dump(hba);
+#if defined(CONFIG_SCSI_UFS_TEST_MODE)
+	/* do not recover system if test mode is enabled */
+	BUG();
+#endif
 }
 
 static inline u8 ufshcd_vops_get_unipro(struct ufs_hba *hba, int num)

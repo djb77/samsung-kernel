@@ -64,7 +64,7 @@ static int fimc_is_hw_srdz_handle_interrupt(u32 id, void *context)
 				info_hw("[ID:%d][F:%d]F.E\n", hw_ip->id, hw_fcount);
 
 			fimc_is_hardware_frame_done(hw_ip, NULL, -1, FIMC_IS_HW_CORE_END,
-				IS_SHOT_SUCCESS);
+				IS_SHOT_SUCCESS, true);
 		}
 
 		atomic_set(&hw_ip->status.Vvalid, V_BLANK);
@@ -619,7 +619,7 @@ bool fimc_is_hw_srdz_frame_done(struct fimc_is_hw_ip *hw_ip, struct fimc_is_fram
 
 	if (test_bit(ENTRY_SRDZ, &done_frame->out_flag)) {
 		ret = fimc_is_hardware_frame_done(hw_ip, frame,
-			WORK_SRDZ_FDONE, ENTRY_SRDZ, done_type);
+			WORK_SRDZ_FDONE, ENTRY_SRDZ, done_type, true);
 		fdone_flag = true;
 		dbg_hw("[OUT:0] cleared[F:%d]\n", done_frame->fcount);
 	}
@@ -637,7 +637,7 @@ int fimc_is_hw_srdz_frame_ndone(struct fimc_is_hw_ip *hw_ip, struct fimc_is_fram
 
 	if (test_bit_variables(hw_ip->id, &frame->core_flag))
 		ret = fimc_is_hardware_frame_done(hw_ip, frame, -1, FIMC_IS_HW_CORE_END,
-				done_type);
+				done_type, true);
 
 	return ret;
 }

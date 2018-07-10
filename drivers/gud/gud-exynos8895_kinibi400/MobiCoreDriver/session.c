@@ -599,7 +599,9 @@ int session_notify_swd(struct tee_session *session)
 		return -EINVAL;
 	}
 
-	return mcp_notify(&session->mcp_session);
+	session->nq_session.notif_count++;
+	return mcp_notify(&session->mcp_session,
+			  session->nq_session.notif_count);
 }
 
 /*
@@ -620,12 +622,13 @@ static int wsm_debug_structs(struct kasnprintf_buf *buf, struct tee_wsm *wsm,
 
 	ret = kasnprintf(buf, "\t\t");
 	if (no < 0)
-		ret = kasnprintf(buf, "tci %p: cbuf %p va %lx len %u\n",
-				 wsm, wsm->cbuf, wsm->va, wsm->len);
+		ret = kasnprintf(buf, "tci %pK: cbuf %pK va %pK len %u\n",
+				 wsm, wsm->cbuf, (void *)wsm->va, wsm->len);
 	else if (wsm->in_use)
 		ret = kasnprintf(buf,
-				 "wsm #%d: cbuf %p va %lx len %u sva %x\n",
-				 no, wsm->cbuf, wsm->va, wsm->len, wsm->sva);
+				 "wsm #%d: cbuf %pK va %pK len %u sva %x\n",
+				 no, wsm->cbuf, (void *)wsm->va, wsm->len,
+				 wsm->sva);
 
 	if (ret < 0)
 		return ret;
@@ -910,7 +913,7 @@ int session_debug_structs(struct kasnprintf_buf *buf,
 		type = "MC";
 	}
 
-	ret = kasnprintf(buf, "\tsession %p [%d]: %4x %s ec %d%s\n",
+	ret = kasnprintf(buf, "\tsession %pK [%d]: %4x %s ec %d%s\n",
 			 session, kref_read(&session->kref), session_id, type,
 			 exit_code, is_closing ? " <closing>" : "");
 	if (ret < 0)

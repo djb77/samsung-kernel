@@ -12,6 +12,10 @@
 #include "include/sec_battery.h"
 #include "include/sec_cisd.h"
 
+#if defined(CONFIG_SEC_ABC)
+#include <linux/sti/abc_common.h>
+#endif
+
 const char *cisd_data_str[] = {
 	"RESET_ALG", "ALG_INDEX", "FULL_CNT", "CAP_MAX", "CAP_MIN", "RECHARGING_CNT", "VALERT_CNT",
 	"BATT_CYCLE", "WIRE_CNT", "WIRELESS_CNT", "HIGH_SWELLING_CNT", "LOW_SWELLING_CNT",
@@ -67,6 +71,9 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 			pcisd->data[CISD_DATA_VBAT_OVP]++;
 			pcisd->data[CISD_DATA_VBAT_OVP_PER_DAY]++;
 			pcisd->state |= CISD_STATE_OVER_VOLTAGE;
+#if defined(CONFIG_SEC_ABC)
+			sec_abc_send_event("MODULE=battery@ERROR=over_voltage");
+#endif
 		}
 
 		/* get actual input current */
@@ -140,6 +147,9 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 				pcisd->data[CISD_DATA_VBAT_OVP]++;
 				pcisd->data[CISD_DATA_VBAT_OVP_PER_DAY]++;
 				pcisd->state |= CISD_STATE_OVER_VOLTAGE;
+#if defined(CONFIG_SEC_ABC)
+				sec_abc_send_event("MODULE=battery@ERROR=over_voltage");
+#endif
 			}
 		}
 

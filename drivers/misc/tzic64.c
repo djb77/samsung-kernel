@@ -28,9 +28,6 @@
 #include <linux/types.h>
 //#include <asm/smc.h>
 
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-#include <linux/rkp_cfp.h>
-#endif
 #define TZIC_DEV "tzic"
 #define SMC_CMD_STORE_BINFO	 (-201)
 
@@ -55,14 +52,8 @@ uint32_t exynos_smc1(uint32_t cmd, uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	register uint32_t reg3 __asm__("x3") = arg3;
 
 	__asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		PRE_SMC_INLINE
-#endif
 	        "dsb    sy\n"
 	        "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		POST_SMC_INLINE
-#endif
 	        : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 	
 	);
@@ -79,14 +70,8 @@ uint32_t exynos_smc_new(uint32_t cmd, uint32_t arg1, uint32_t arg2, uint32_t arg
 	register uint32_t reg3 __asm__("x3") = arg3;
 
 	__asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		PRE_SMC_INLINE
-#endif
 	        "dsb    sy\n"
 	        "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		POST_SMC_INLINE
-#endif
 	        : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 	
 	);
@@ -111,14 +96,8 @@ int exynos_smc_read_oemflag(uint32_t ctrl_word, uint32_t *val)
 		reg1 = 1;
 		reg2 = idx;
 		__asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-			PRE_SMC_INLINE
-#endif
 		        "dsb    sy\n"
 		        "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-			POST_SMC_INLINE
-#endif
 		        : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 		
 		);
@@ -131,14 +110,8 @@ int exynos_smc_read_oemflag(uint32_t ctrl_word, uint32_t *val)
 	reg2 = idx;
 
 	__asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		PRE_SMC_INLINE
-#endif
 	        "dsb    sy\n"
 	        "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		POST_SMC_INLINE
-#endif
 	        : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 	
 	);
@@ -168,14 +141,8 @@ int exynos_smc_read_oemflag_new(uint32_t getflag, uint32_t *val)
    reg3 = idx;
 
 	__asm__ volatile (
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		PRE_SMC_INLINE
-#endif
 	        "dsb    sy\n"
 	        "smc    0\n"
-#ifdef CONFIG_RKP_CFP_FIX_SMC_BUG
-		POST_SMC_INLINE
-#endif
 	        : "+r"(reg0), "+r"(reg1), "+r"(reg2), "+r"(reg3)
 	
 	);

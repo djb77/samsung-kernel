@@ -103,7 +103,7 @@ static struct tee_object *tee_object_alloc(bool is_sp_trustlet, size_t length)
 
 	/* Check size for overflow */
 	if (size < length) {
-	    mc_dev_err("cannot allocate object of size %zu", length);
+		mc_dev_err("cannot allocate object of size %zu", length);
 		return NULL;
 	}
 

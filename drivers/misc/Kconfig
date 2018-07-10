@@ -546,10 +546,17 @@ config EXYNOS_IMA
 
 config TIMA_LOG
 	tristate "Support for dumping TIMA log"
-	depends on TIMA
+	depends on RKP
 	default y
 	help
 	  This option enables support for dumping TIMA log.
+
+config FAN_G761
+	bool "GMT Fan Driver"
+	depends on I2C
+	default n
+	help
+	  This driver is for Fan
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
@@ -566,4 +573,16 @@ source "drivers/misc/cxl/Kconfig"
 source "drivers/misc/mcu_ipc/Kconfig"
 source "drivers/misc/modem_if/Kconfig"
 source "drivers/misc/modem_v1/Kconfig"
+
+menuconfig SEC_SIPC_HIGGS_MODEM_IF
+
+	bool "Samsung Mobile SIPC 5G HIGGS Modem Interface"
+	default n
+	---help---
+	  Samsung 5G Modem Interface Driver
+
+if SEC_SIPC_HIGGS_MODEM_IF
+source "drivers/misc/modem_5g/Kconfig"
+endif
+
 endmenu

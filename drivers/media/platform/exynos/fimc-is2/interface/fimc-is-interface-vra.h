@@ -174,7 +174,7 @@ struct fimc_is_lib_vra {
 	/* VRA output data */
 	u32					max_face_num;	/* defined in setfile */
 	u32					all_face_num[VRA_TOTAL_SENSORS];
-	const struct api_vra_out_list_info	*out_list_info[VRA_TOTAL_SENSORS];
+	struct api_vra_out_list_info		out_list_info[VRA_TOTAL_SENSORS];
 	struct api_vra_out_face			out_faces[VRA_TOTAL_SENSORS][MAX_FACE_COUNT];
 
 	/* VRA debug data */
@@ -182,6 +182,7 @@ struct fimc_is_lib_vra {
 
 	/* VRA orientation data */
 	enum fimc_is_lib_vra_dir		orientation[VRA_TOTAL_SENSORS];
+	spinlock_t				slock;
 
 #ifdef VRA_DMA_TEST_BY_IMAGE
 	void					*test_input_buffer;

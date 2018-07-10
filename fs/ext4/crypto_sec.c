@@ -144,7 +144,7 @@ int ext4_sec_get_key_aes(const char *source_data, const char *source_key, char *
 
 	// Make HMAC for FEK with master key
 	res = __hmac_sha256(cbc_key, EXT4_AES_256_CBC_KEY_SIZE,
-				raw_key, EXT4_AES_256_XTS_KEY_SIZE, digest);
+				encrypted_key, EXT4_AES_256_XTS_KEY_SIZE, digest);
 	if (res)
 		goto out;
 
@@ -298,7 +298,7 @@ int ext4_sec_set_key_aes(char* save_key_data, const char *master_key_desc)
 
 	// Make HMAC for FEK with master key
 	res = __hmac_sha256(cbc_key, EXT4_AES_256_CBC_KEY_SIZE,
-				raw_key, EXT4_AES_256_XTS_KEY_SIZE, digest);
+				encrypted_key, EXT4_AES_256_XTS_KEY_SIZE, digest);
 	if (res) {
 		printk(KERN_DEBUG
 				"ext4: can't calculation hmac\n");

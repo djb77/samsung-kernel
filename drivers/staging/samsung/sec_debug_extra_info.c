@@ -21,10 +21,25 @@
 #include <asm/esr.h>
 
 #define SZ_96	0x00000060
+#define SZ_960	0x000003c0
+
+#define EXTRA_VERSION	"QC14"
+/******************************************************************************
+ * sec_debug_extra_info details
+ *
+ *	etr_a : basic reset information
+ *	etr_c : hard-lockup information (callstack)
+ *	etr_m : mfc error information
+ *
+ ******************************************************************************/
+
 struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 	.item = {
+		/* basic reset information */
+		{"AID",		"", SZ_32},
 		{"KTIME",	"", SZ_8},
 		{"BIN",		"", SZ_16},
+		{"FTYPE",	"", SZ_16},
 		{"FAULT",	"", SZ_32},
 		{"BUG",		"", SZ_64},
 		{"PANIC",	"", SZ_96},
@@ -32,7 +47,7 @@ struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 		{"LR",		"", SZ_64},
 		{"STACK",	"", SZ_256},
 		{"RR",		"", SZ_8},
-		{"EVT",		"", SZ_8},
+		{"PINFO",	"", SZ_256},
 		{"SMU",		"", SZ_64},
 		{"BUS",		"", SZ_128},
 		{"DPM",		"", SZ_32},
@@ -46,39 +61,107 @@ struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 		{"LPI",		"", SZ_4},
 		{"CDI",		"", SZ_4},
 		{"KLG",		"", SZ_128},
-		{"LR0",		"", SZ_128},
+		{"HINT",	"", SZ_16},
 		{"LEV",		"", SZ_4},
 		{"DCN",		"", SZ_32},
 		{"WAK",		"", SZ_16},
 		{"BAT",		"", SZ_32},
+
+		/* extrb reset information */
+		{"BID",		"", SZ_32},
+		{"BRR",		"", SZ_8},
+		{"ASB",		"", SZ_32},
+		{"PSITE",	"", SZ_32},
+		{"DDRID",	"", SZ_32},
+		{"RST",		"", SZ_32},
+		{"INFO2",	"", SZ_32},
+		{"INFO3",	"", SZ_32},
+		{"RBASE",	"", SZ_32},
+		{"MAGIC",	"", SZ_32},
+		{"PWR",		"", SZ_8},
+		{"PWROFF",	"", SZ_8},
+		{"PINT1",	"", SZ_8},
+		{"PINT2",	"", SZ_8},
+		{"RVD1",	"", SZ_256},
+		{"RVD2",	"", SZ_256},
+		{"RVD3",	"", SZ_256},
+
+		/* core lockup information */
+		{"CID",		"", SZ_32},
+		{"CRR",		"", SZ_8},
+		{"CPU0",	"", SZ_256},
+		{"CPU1",	"", SZ_256},
+		{"CPU2",	"", SZ_256},
+		{"CPU3",	"", SZ_256},
+		{"CPU4",	"", SZ_256},
+		{"CPU5",	"", SZ_256},
+		{"CPU6",	"", SZ_256},
+		{"CPU7",	"", SZ_256},
+
+		/* core lockup information */
+		{"MID",		"", SZ_32},
+		{"MRR",		"", SZ_8},
+		{"MFC",		"", SZ_960},
 	}
 };
 
-struct sec_debug_panic_extra_info *sec_debug_extra_info;
+const char *ftype_items[MAX_EXTRA_INFO_KEY_LEN] = {
+	"UNDF",
+	"BAD",
+	"WATCH",
+	"KERN",
+	"MEM",
+	"SPPC",
+	"PAGE",
+	"AUF",
+	"EUF",
+	"AUOF"
+};
 
+struct sec_debug_panic_extra_info *sec_debug_extra_info;
+struct sec_debug_panic_extra_info *sec_debug_extra_info_backup;
+
+#define MAX_DRAMINFO	15
+static char dram_info[MAX_DRAMINFO + 1];
+
+static int __init sec_hw_param_get_dram_info(char *arg)
+{
+	if (strlen(arg) > MAX_DRAMINFO)
+		return 0;
+
+	memcpy(dram_info, arg, (int)strlen(arg));
+
+	return 0;
+}
+
+early_param("androidboot.dram_info", sec_hw_param_get_dram_info);
 /******************************************************************************
  * sec_debug_init_extra_info() - function to init extra info
  *
  * This function simply initialize each filed of sec_debug_panic_extra_info.
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_init_extra_info(struct sec_debug_shared_info *sec_debug_info)
 {
-	if (sec_debug_info)
+	if (sec_debug_info) {
 		sec_debug_extra_info = &sec_debug_info->sec_debug_extra_info;
+		sec_debug_extra_info_backup = &sec_debug_info->sec_debug_extra_info_backup;
 
-	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P)
-		sec_debug_store_extra_info();
+		if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+			memcpy(sec_debug_extra_info_backup, sec_debug_extra_info,
+				sizeof(struct sec_debug_panic_extra_info));
+		}
 
-	if (sec_debug_extra_info)
-		memcpy(sec_debug_extra_info, &sec_debug_extra_info_init, sizeof(sec_debug_extra_info_init));
+		memcpy(sec_debug_extra_info, &sec_debug_extra_info_init,
+			sizeof(struct sec_debug_panic_extra_info));
+	}
 }
 
 /******************************************************************************
  * sec_debug_clear_extra_info() - function to clear each extra info field
  *
  * This function simply clear the specified field of sec_debug_panic_extra_info.
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_clear_extra_info(enum sec_debug_extra_buf_type type)
 {
@@ -90,7 +173,7 @@ void sec_debug_clear_extra_info(enum sec_debug_extra_buf_type type)
  * sec_debug_set_extra_info() - function to set each extra info field
  *
  * This function simply set each filed of sec_debug_panic_extra_info.
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info(enum sec_debug_extra_buf_type type,
 				const char *fmt, ...)
@@ -112,9 +195,9 @@ void sec_debug_set_extra_info(enum sec_debug_extra_buf_type type,
  *
  * This function finally export the extra info to destination buffer.
  * The contents of buffer will be deliverd to framework at the next booting.
-*****************************************************************************/
+ *****************************************************************************/
 
-void sec_debug_store_extra_info(void)
+void sec_debug_store_extra_info(int start, int end)
 {
 	int i;
 	char *ptr = (char *)SEC_DEBUG_EXTRA_INFO_VA;
@@ -122,25 +205,81 @@ void sec_debug_store_extra_info(void)
 	/* initialize extra info output buffer */
 	memset((void *)SEC_DEBUG_EXTRA_INFO_VA, 0, SZ_1K);
 
-	if (!sec_debug_extra_info)
+	if (!sec_debug_extra_info_backup)
 		return;
 
-	ptr += sprintf(ptr, "\"%s\":\"%s\"", sec_debug_extra_info->item[0].key,
-		sec_debug_extra_info->item[0].val);
+	ptr += sprintf(ptr, "\"%s\":\"%s\"", sec_debug_extra_info_backup->item[start].key,
+		sec_debug_extra_info_backup->item[start].val);
 
-	for (i = 1; i < INFO_MAX; i++) {
-		if (ptr + strlen(sec_debug_extra_info->item[i].key) + strlen(sec_debug_extra_info->item[i].val) + MAX_EXTRA_INFO_HDR_LEN > (char *)SEC_DEBUG_EXTRA_INFO_VA + SZ_1K)
+	for (i = start + 1; i < end; i++) {
+		if (ptr + strlen(sec_debug_extra_info_backup->item[i].key) +
+				strlen(sec_debug_extra_info_backup->item[i].val) +
+				MAX_EXTRA_INFO_HDR_LEN > (char *)SEC_DEBUG_EXTRA_INFO_VA + SZ_1K)
 			break;
 
 		ptr += sprintf(ptr, ",\"%s\":\"%s\"",
-			sec_debug_extra_info->item[i].key,
-			sec_debug_extra_info->item[i].val);
+			sec_debug_extra_info_backup->item[i].key,
+			sec_debug_extra_info_backup->item[i].val);
 	}
 }
 
 /******************************************************************************
+ * sec_debug_store_extra_info_A
+ ******************************************************************************/
+
+void sec_debug_store_extra_info_A(void)
+{
+	sec_debug_store_extra_info(INFO_AID, INFO_MAX_A);
+}
+
+/******************************************************************************
+ * sec_debug_store_extra_info_B
+ ******************************************************************************/
+
+void sec_debug_store_extra_info_B(void)
+{
+	sec_debug_store_extra_info(INFO_BID, INFO_MAX_B);
+}
+
+/******************************************************************************
+ * sec_debug_store_extra_info_C
+ ******************************************************************************/
+
+void sec_debug_store_extra_info_C(void)
+{
+	sec_debug_store_extra_info(INFO_CID, INFO_MAX_C);
+}
+
+/******************************************************************************
+ * sec_debug_store_extra_info_M
+ ******************************************************************************/
+
+void sec_debug_store_extra_info_M(void)
+{
+	sec_debug_store_extra_info(INFO_MID, INFO_MAX_M);
+}
+
+/******************************************************************************
+ * sec_debug_set_extra_info_id
+ ******************************************************************************/
+
+void sec_debug_set_extra_info_id(void)
+{
+	struct timespec ts;
+
+	getnstimeofday(&ts);
+
+	sec_debug_set_extra_info(INFO_AID, "%09lu%s", ts.tv_nsec, EXTRA_VERSION);
+	sec_debug_set_extra_info(INFO_BID, "%09lu%s", ts.tv_nsec, EXTRA_VERSION);
+	sec_debug_set_extra_info(INFO_CID, "%09lu%s", ts.tv_nsec, EXTRA_VERSION);
+	sec_debug_set_extra_info(INFO_MID, "%09lu%s", ts.tv_nsec, EXTRA_VERSION);
+
+	sec_debug_set_extra_info(INFO_DDRID, "%s", dram_info);
+}
+
+/******************************************************************************
  * sec_debug_set_extra_info_ktime
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_ktime(void)
 {
@@ -153,23 +292,26 @@ void sec_debug_set_extra_info_ktime(void)
 
 /******************************************************************************
  * sec_debug_set_extra_info_fault
-******************************************************************************/
+ ******************************************************************************/
 
-void sec_debug_set_extra_info_fault(unsigned long addr, struct pt_regs *regs)
+void sec_debug_set_extra_info_fault(enum sec_debug_extra_fault_type type,
+				    unsigned long addr, struct pt_regs *regs)
 {
 	if (regs) {
-		pr_crit("sec_debug_set_extra_info_fault = 0x%lx\n", addr);
+		pr_crit("%s = %s / 0x%lx\n", __func__, ftype_items[type], addr);
+		sec_debug_set_extra_info(INFO_FTYPE, "%s", ftype_items[type]);
 		sec_debug_set_extra_info(INFO_FAULT, "0x%lx", addr);
 		sec_debug_set_extra_info(INFO_PC, "%pS", regs->pc);
 		sec_debug_set_extra_info(INFO_LR, "%pS",
 					 compat_user_mode(regs) ?
-					  regs->compat_lr : regs->regs[30]);
+					 regs->compat_lr : regs->regs[30]);
+
 	}
 }
 
 /******************************************************************************
  * sec_debug_set_extra_info_bug
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_bug(const char *file, unsigned int line)
 {
@@ -178,7 +320,7 @@ void sec_debug_set_extra_info_bug(const char *file, unsigned int line)
 
 /******************************************************************************
  * sec_debug_set_extra_info_panic
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_panic(char *str)
 {
@@ -190,7 +332,7 @@ void sec_debug_set_extra_info_panic(char *str)
 
 /******************************************************************************
  * sec_debug_set_extra_info_backtrace
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_backtrace(struct pt_regs *regs)
 {
@@ -239,19 +381,59 @@ void sec_debug_set_extra_info_backtrace(struct pt_regs *regs)
 }
 
 /******************************************************************************
- * sec_debug_set_extra_info_evt_version
-******************************************************************************/
+ * sec_debug_set_extra_info_backtrace_cpu
+ ******************************************************************************/
 
-void sec_debug_set_extra_info_evt_version(void)
+void sec_debug_set_extra_info_backtrace_cpu(struct pt_regs *regs, int cpu)
 {
-	sec_debug_set_extra_info(INFO_EVT, "%d.%d",
-		(exynos_soc_info.product_id >> 4) & 0xf,
-		(exynos_soc_info.product_id & 0xf));
+	char buf[64];
+	struct stackframe frame;
+	int offset = 0;
+	int sym_name_len;
+
+	if (!sec_debug_extra_info)
+		return;
+
+	if (strlen(sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val))
+		return;
+
+	pr_crit("sec_debug_store_backtrace_cpu(%d)\n", cpu);
+
+	if (regs) {
+		frame.fp = regs->regs[29];
+		frame.sp = regs->sp;
+		frame.pc = regs->pc;
+	} else {
+		frame.fp = (unsigned long)__builtin_frame_address(0);
+		frame.sp = current_stack_pointer;
+		frame.pc = (unsigned long)sec_debug_set_extra_info_backtrace_cpu;
+	}
+
+	while (1) {
+		unsigned long where = frame.pc;
+		int ret;
+
+		ret = unwind_frame(&frame);
+		if (ret < 0)
+			break;
+
+		snprintf(buf, sizeof(buf), "%pf", (void *)where);
+		sym_name_len = strlen(buf);
+		if (offset + sym_name_len > MAX_EXTRA_INFO_VAL_LEN)
+			break;
+
+		if (offset)
+			offset += sprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset, ":");
+
+		sprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset, "%s", buf);
+		offset += sym_name_len;
+	}
 }
+
 
 /******************************************************************************
  * sec_debug_set_extra_info_sysmmu
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_sysmmu(char *str)
 {
@@ -260,7 +442,7 @@ void sec_debug_set_extra_info_sysmmu(char *str)
 
 /******************************************************************************
  * sec_debug_set_extra_info_sysmmu
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_busmon(char *str)
 {
@@ -269,7 +451,7 @@ void sec_debug_set_extra_info_busmon(char *str)
 
 /******************************************************************************
  * sec_debug_set_extra_info_dpm_timeout
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_dpm_timeout(char *devname)
 {
@@ -278,7 +460,7 @@ void sec_debug_set_extra_info_dpm_timeout(char *devname)
 
 /******************************************************************************
  * sec_debug_set_extra_info_smpl
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_smpl(unsigned int count)
 {
@@ -287,7 +469,7 @@ void sec_debug_set_extra_info_smpl(unsigned int count)
 
 /******************************************************************************
  * sec_debug_set_extra_info_ufs_error
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_ufs_error(char *str)
 {
@@ -296,7 +478,7 @@ void sec_debug_set_extra_info_ufs_error(char *str)
 
 /******************************************************************************
  * sec_debug_set_extra_info_zswap
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_zswap(char *str)
 {
@@ -305,18 +487,18 @@ void sec_debug_set_extra_info_zswap(char *str)
 
 /******************************************************************************
  * sec_debug_set_extra_info_mfc_error
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_mfc_error(char *str)
 {
 	sec_debug_clear_extra_info(INFO_STACK); /* erase STACK */
 	sec_debug_set_extra_info(INFO_STACK, "MFC ERROR");
-	sec_debug_set_extra_info(INFO_ETC, "%s", str);
+	sec_debug_set_extra_info(INFO_MFC, "%s", str);
 }
 
 /******************************************************************************
  * sec_debug_set_extra_info_esr
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_esr(unsigned int esr)
 {
@@ -325,8 +507,18 @@ void sec_debug_set_extra_info_esr(unsigned int esr)
 }
 
 /******************************************************************************
+ * sec_debug_set_extra_info_hint
+ ******************************************************************************/
+
+void sec_debug_set_extra_info_hint(u64 hint)
+{
+	if (hint)
+		sec_debug_set_extra_info(INFO_HINT, "%llx", hint);
+}
+
+/******************************************************************************
  * sec_debug_set_extra_info_merr
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_merr(void)
 {
@@ -335,7 +527,7 @@ void sec_debug_set_extra_info_merr(void)
 
 /******************************************************************************
  * sec_debug_set_extra_info_decon
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_decon(unsigned int err)
 {
@@ -344,7 +536,7 @@ void sec_debug_set_extra_info_decon(unsigned int err)
 
 /******************************************************************************
  * sec_debug_set_extra_info_batt
-******************************************************************************/
+ ******************************************************************************/
 
 void sec_debug_set_extra_info_batt(int cap, int volt, int temp, int curr)
 {
@@ -355,7 +547,6 @@ void sec_debug_set_extra_info_batt(int cap, int volt, int temp, int curr)
 void sec_debug_finish_extra_info(void)
 {
 	sec_debug_set_extra_info_ktime();
-	sec_debug_set_extra_info_evt_version();
 	sec_debug_set_extra_info_merr();
 }
 
@@ -363,12 +554,14 @@ static int set_debug_reset_extra_info_proc_show(struct seq_file *m, void *v)
 {
 	char buf[SZ_1K];
 
-	memcpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
+	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+		sec_debug_store_extra_info_A();
+		memcpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 
-	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P)
 		seq_printf(m, buf);
-	else
+	} else {
 		return -ENOENT;
+	}
 
 	return 0;
 }
@@ -394,6 +587,8 @@ static int __init sec_debug_reset_extra_info_init(void)
 	if (!entry)
 		return -ENOMEM;
 	proc_set_size(entry, SZ_1K);
+
+	sec_debug_set_extra_info_id();
 	return 0;
 }
 device_initcall(sec_debug_reset_extra_info_init);

@@ -1330,8 +1330,8 @@ sample_attr_set_enable(struct device *dev, struct device_attribute *attr,
 			gpio_set_value(pst_adpd->led_en, 1);
 		else if (!IS_ERR(pst_adpd->leda))
 			rc = regulator_enable(pst_adpd->leda);
-			if (rc){
-				pr_info(KERN_ERR "%s: adpd enable failed (%d)\n",__func__, rc);
+			if (rc) {
+				pr_info(KERN_ERR "%s: adpd enable failed (%d)\n", __func__, rc);
 			}
 			cmd_parsing("0x31", 1, parse_data);
 			atomic_set(&pst_adpd->sample_enabled, 1);
@@ -1341,8 +1341,8 @@ sample_attr_set_enable(struct device *dev, struct device_attribute *attr,
 			gpio_set_value(pst_adpd->led_en, 0);
 		else if (!IS_ERR(pst_adpd->leda))
 			rc = regulator_disable(pst_adpd->leda);
-			if (rc){
-				pr_info(KERN_ERR "%s: adpd disable failed (%d)\n",__func__, rc);
+			if (rc) {
+				pr_info(KERN_ERR "%s: adpd disable failed (%d)\n", __func__, rc);
 			}
 			cmd_parsing("0x0", 1, parse_data);
 			atomic_set(&pst_adpd->sample_enabled, 0);
@@ -1475,7 +1475,7 @@ attr_reg_read_set(struct device *dev, struct device_attribute *attr,
 
 static int adpd_power_enable(struct adpd142_data *data, int en)
 {
-	int rc=0;
+	int rc = 0;
 	struct regulator *regulator_led_3p3;
 	struct regulator *regulator_vdd_1p8;
 
@@ -1544,14 +1544,14 @@ static int adpd_power_enable(struct adpd142_data *data, int en)
 
 static int adpd_parse_dt(struct adpd142_data *data, struct device *dev)
 {
-	struct device_node *this_node= dev->of_node;
+	struct device_node *this_node = dev->of_node;
 	enum of_gpio_flags flags;
 	int rc;
 
 	if (this_node == NULL)
 		return -ENODEV;
 
-	data->hrm_int = of_get_named_gpio_flags(this_node,"adpd142,irq_gpio", 0, &flags);
+	data->hrm_int = of_get_named_gpio_flags(this_node, "adpd142,irq_gpio", 0, &flags);
 	pr_err("%s : get hrm_int(data->hrm_int)(%d) \n", __func__, data->hrm_int);
 	if (data->hrm_int < 0) {
 		pr_err("%s : get hrm_int(%d) error\n", __func__, data->hrm_int);
@@ -1986,7 +1986,7 @@ adpd142_initialization(struct adpd142_data *pst_adpd,
 		goto err_wq_creation_init;
 	}
 
-	if (!pst_adpd->client->irq){
+	if (!pst_adpd->client->irq) {
 		pr_err("%s %d\n", __func__, __LINE__);
 		goto err_work_queue_init;
 	}
@@ -2017,8 +2017,10 @@ adpd142_initialization(struct adpd142_data *pst_adpd,
 	pst_adpd->osc_trim_open_enable = 1;
 
 	return 0;
-//err_gpio_direction_input:
-	//gpio_free(pst_adpd->hrm_int);
+/*
+err_gpio_direction_input:
+	gpio_free(pst_adpd->hrm_int);
+*/
 err_work_queue_init:
 	destroy_workqueue(pst_adpd->ptr_adpd142_wq_st);
 err_wq_creation_init:
@@ -2233,7 +2235,7 @@ static ssize_t eol_test_result_store(struct device *dev,
 	strncpy(pst_adpd->eol_test_result, buf, buf_len);
 
 	mutex_unlock(&pst_adpd->storelock);
-	
+
 	pr_info("adpd142_%s - result = %s, buf_len(%u)\n", __func__, pst_adpd->eol_test_result, buf_len);
 	pst_adpd->eol_test_status = 1;
 
@@ -2450,12 +2452,12 @@ adpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto exit_mem_allocate_failed;
 	}
 
-	if(client->dev.of_node) {
-		pdata = devm_kzalloc (&client->dev ,
+	if (client->dev.of_node) {
+		pdata = devm_kzalloc (&client->dev,
 			sizeof(struct adpd_platform_data), GFP_KERNEL);
-		if(!pdata) {
+		if (!pdata) {
 		dev_err(&client->dev, "Failed to allocate memory\n");
-			if(pst_adpd)
+			if (pst_adpd)
 				kfree(pst_adpd);
 		return -ENOMEM;
 		}
@@ -2463,7 +2465,7 @@ adpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		pdata = client->dev.platform_data;
 	if (!pdata) {
 		pr_err("%s: missing pdata!\n", __func__);
-		if(pst_adpd)
+		if (pst_adpd)
 			kfree(pst_adpd);
 		return err;
 	}
@@ -2513,10 +2515,10 @@ adpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 	ADPD142_info("chipID value = 0x%x\n", u16_regval);
 
-	//pst_adpd->dev = &client->dev;
+	/* pst_adpd->dev = &client->dev; */
 	pr_info("%s - start \n", __func__);
 
-	if (adpd142_initialization(pst_adpd, id)){
+	if (adpd142_initialization(pst_adpd, id)) {
 		pr_err("[SENSOR] %s - exit_adpd142_init_exit.\n", __func__);
 		goto exit_adpd142_init;
 	}
@@ -2653,7 +2655,7 @@ i2c_check_dev_attach(char *slave_name, unsigned short *slave_addrs,
 		i2c_adapter = i2c_get_adapter(count);
 		if (i2c_adapter != NULL) {
 			memset(&info, 0, sizeof(struct i2c_board_info));
-			strlcpy(info.type, slave_name /*"adpd142" */ ,
+			strlcpy(info.type, slave_name /*"adpd142" */,
 				I2C_NAME_SIZE);
 			/*need to check i2c_new_device instead of
 			i2c_new_probed_device*/

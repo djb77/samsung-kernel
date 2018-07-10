@@ -548,12 +548,8 @@ config LEDS_MENF21BMC
 
 config LEDS_KTD2692
 	tristate "LED support for KTD2692 flash LED controller"
-	depends on LEDS_CLASS_FLASH && OF
-	depends on GPIOLIB || COMPILE_TEST
+	depends on LEDS_CLASS
 	help
-	  This option enables support for KTD2692 LED flash connected
-	  through ExpressWire interface.
-
 	  Say Y to enable this driver.
 
 config LEDS_SEAD3

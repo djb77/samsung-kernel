@@ -579,6 +579,10 @@ void kbasep_job_slot_soft_or_hard_stop_do_action(struct kbase_device *kbdev,
 		 * been soft stopped */
 		target_katom->atom_flags |= KBASE_KATOM_FLAG_BEEN_SOFT_STOPPPED;
 
+		/* MALI_SEC_INTEGRATION */
+		if(kbdev->vendor_callbacks->update_status)
+			kbdev->vendor_callbacks->update_status(kbdev, "soft_stop", 0);
+
 		/* Mark the point where we issue the soft-stop command */
 		KBASE_TLSTREAM_TL_EVENT_ATOM_SOFTSTOP_ISSUE(target_katom);
 
@@ -652,6 +656,10 @@ void kbasep_job_slot_soft_or_hard_stop_do_action(struct kbase_device *kbdev,
 			return;
 		}
 		target_katom->atom_flags |= KBASE_KATOM_FLAG_BEEN_HARD_STOPPED;
+
+		/* MALI_SEC_INTEGRATION */
+		if(kbdev->vendor_callbacks->update_status)
+			kbdev->vendor_callbacks->update_status(kbdev, "hard_stop", 0);
 
 		if (kbase_hw_has_feature(
 				kbdev,
@@ -1368,6 +1376,10 @@ static void kbasep_reset_timeout_worker(struct work_struct *data)
 		try_schedule = true;
 
 	mutex_unlock(&js_devdata->runpool_mutex);
+
+	/* MALI_SEC_INTEGRATION */
+	if(kbdev->vendor_callbacks->update_status)
+		kbdev->vendor_callbacks->update_status(kbdev, "reset_count", 0);
 
 	mutex_lock(&kbdev->pm.lock);
 

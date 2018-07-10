@@ -3379,6 +3379,9 @@ static inline bool cfq_slice_used_soon(struct cfq_data *cfqd,
 	return false;
 }
 
+#define CFQ_MAY_DISPATCH_ASYNC(cfqd) \
+	((cfqd)->rq_in_flight[BLK_RW_ASYNC] < (cfqd)->cfq_max_async_dispatch)
+
 static bool cfq_may_dispatch(struct cfq_data *cfqd, struct cfq_queue *cfqq)
 {
 	unsigned int max_dispatch;
@@ -3394,15 +3397,16 @@ static bool cfq_may_dispatch(struct cfq_data *cfqd, struct cfq_queue *cfqq)
 
 	/*
 	 * If this is an async queue and we have sync IO in flight, let it wait
+	 * but only if device does not support hw_tag.
 	 */
-	if (cfqd->rq_in_flight[BLK_RW_SYNC] && !cfq_cfqq_sync(cfqq))
+	if (cfqd->rq_in_flight[BLK_RW_SYNC] && !cfq_cfqq_sync(cfqq)
+			&& !cfqd->hw_tag)
 		return false;
 
 	/*
 	 * Let it wait if too many async requests are dispatched.
 	 */
-	if (cfqd->rq_in_flight[BLK_RW_ASYNC] >= cfqd->cfq_max_async_dispatch
-			&& !cfq_cfqq_sync(cfqq))
+	if (!cfq_cfqq_sync(cfqq) && !CFQ_MAY_DISPATCH_ASYNC(cfqd))
 		return false;
 
 	max_dispatch = max_t(unsigned int, cfqd->cfq_quantum / 2, 1);
@@ -3485,7 +3489,7 @@ static bool cfq_dispatch_request(struct cfq_data *cfqd, struct cfq_queue *cfqq)
 	BUG_ON(RB_EMPTY_ROOT(&cfqq->sort_list));
 
 	rq = cfq_check_fifo(cfqq);
-	if (rq)
+	if (rq && (cfq_cfqq_sync(cfqq) || CFQ_MAY_DISPATCH_ASYNC(cfqd)))
 		cfq_mark_cfqq_must_dispatch(cfqq);
 
 	if (!cfq_may_dispatch(cfqd, cfqq))

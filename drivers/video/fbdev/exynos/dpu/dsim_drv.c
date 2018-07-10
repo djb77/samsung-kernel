@@ -658,6 +658,58 @@ err_write_side_ram:
 
 }
 
+int mipi_write_gram(struct dsim_device *dsim, const u8 *cmd, int size)
+{
+	int ret;
+	u8 buf[DSIM_FIFO_SIZE];
+	u32 t_tx_size, tx_size, remind_size;
+	u32 fifo_size, tmp;	
+
+	dsim_info("%s : was called : %d\n", __func__, size);
+
+	fifo_size = DSIM_FIFO_SIZE;
+
+	/* for only exynos8895 evt0 */
+	if (dsim->version == 0)
+		fifo_size = 40;
+
+	/* for 12byte align */
+	tmp = (fifo_size - 1) / SIDE_RAM_ALIGN_CNT;
+	fifo_size = (tmp * SIDE_RAM_ALIGN_CNT) + 1;
+
+	t_tx_size = 0;
+	remind_size = size;
+
+	while (remind_size > 0) {
+		buf[0] = (remind_size == size) ?
+			MIPI_DCS_WRITE_MEMORY_START : MIPI_DCS_WRITE_MEMORY_CONTINUE;
+
+		tx_size = min(remind_size, fifo_size - 1);
+		if (tx_size < 12) {
+			pr_info("%s tx_size %d align 12bytes\n", __func__, tx_size);
+			tx_size = 12;
+		}
+
+		memcpy(buf + 1, (u8 *)cmd + t_tx_size, tx_size);
+
+		ret = __mipi_write_data(dsim, MIPI_DSI_WRITE, buf, tx_size + 1);
+		if (ret != tx_size + 1) {
+			dsim_err("DISP:ERR(2):%s:failed to write command : %d\n", __func__, ret);
+			goto err_write_side_ram;
+		}
+
+		t_tx_size += tx_size;
+		remind_size -= tx_size;
+	}
+	pr_info("%s fifo %d write %d bytes\n", __func__, fifo_size, t_tx_size);
+
+	return size;
+
+err_write_side_ram:
+	return ret;
+
+}
+
 int mipi_write_cmd(u32 id, u8 cmd_id, const u8 *cmd, int size)
 {
 	int ret = 0;
@@ -697,6 +749,13 @@ int mipi_write_cmd(u32 id, u8 cmd_id, const u8 *cmd, int size)
 			ret = mipi_write_gen_cmd(dsim, cmd_id, cmd, size);
 			if (ret != size) {
 				dsim_err("DSIM:ERR:%s:failed to write gen cmd\n", __func__);
+				goto err_write_cmd;
+			}
+			break;
+		case MIPI_DSI_WR_MEM:
+			ret = mipi_write_gram(dsim, cmd, size);
+			if (ret != size) {
+				dsim_err("DSIM:ERR:%s:failed to write gram\n", __func__);
 				goto err_write_cmd;
 			}
 			break;
@@ -791,9 +850,84 @@ exit:
 	return;
 }
 
+
+void dsim_print_underrung_info(struct dsim_device *dsim, struct seq_file *s)
+{
+	int i, idx;
+	u64 time;
+	struct dsim_underrun_info *underrun;
+
+	idx = dsim->under_list_idx - 1;
+	idx = idx < 0 ? MAX_UNDERRUN_LIST - 1 : idx;
+
+	if (s != NULL)
+		seq_printf(s, "---------- DSIM Underrun History (Total Cnt: %d) ----------\n",
+			dsim->total_underrun_cnt);
+	else
+		dsim_info("---------- DSIM Underrun History (Total Cnt: %d) ----------\n",
+			dsim->total_underrun_cnt);
+
+	for (i = idx; i >= 0; i--) {
+		underrun = &dsim->under_list[i];
+		if (!underrun) {
+			dsim_info("DSIM:ERR:%s:underlist is null\n", __func__);
+			goto exit_print;
+		}
+		time = ktime_to_ms(underrun->time);
+		if (time == 0)
+			goto exit_print;
+
+		if (s != NULL) {
+			seq_printf(s, "Time:%lld.%lldm, ",
+				time / 1000, time % 1000);
+			seq_printf(s, "MIF:%lu, INT:%lu, DISP:%lu, Total BW:%u->%u\n",
+				underrun->mif_freq,
+				underrun->int_freq,
+				underrun->disp_freq,
+				underrun->prev_bw,
+				underrun->cur_bw);
+		}
+	}
+	for (i = MAX_UNDERRUN_LIST - 1; i >= idx + 1; i--) {
+		underrun = &dsim->under_list[i];
+		if (!underrun) {
+			dsim_info("DSIM:ERR:%s:underlist is null\n", __func__);
+			goto exit_print;
+		}
+		time = ktime_to_ms(underrun->time);
+		if (time == 0)
+			goto exit_print;
+
+		if (s != NULL) {
+			seq_printf(s, "Time:%lld.%lldm, ",
+				time / 1000, time % 1000);
+			seq_printf(s, "MIF:%lu, INT:%lu, DISP:%lu, Total BW:%u->%u\n",
+				underrun->mif_freq,
+				underrun->int_freq,
+				underrun->disp_freq,
+				underrun->prev_bw,
+				underrun->cur_bw);
+		}
+	}
+exit_print:
+	return;
+}
+
 static void dsim_underrun_info(struct dsim_device *dsim)
 {
+	int idx;
 	struct decon_device *decon = get_decon_drvdata(0);
+
+	idx = dsim->under_list_idx;
+
+	dsim->under_list[idx].time = ktime_get();
+	dsim->under_list[idx].mif_freq = cal_dfs_get_rate(ACPM_DVFS_MIF);
+	dsim->under_list[idx].int_freq = cal_dfs_get_rate(ACPM_DVFS_INT);
+	dsim->under_list[idx].disp_freq = cal_dfs_get_rate(ACPM_DVFS_DISP);
+	dsim->under_list[idx].prev_bw = decon->bts.prev_total_bw;
+	dsim->under_list[idx].cur_bw = decon->bts.total_bw;
+
+	dsim->under_list_idx = (idx + 1) % MAX_UNDERRUN_LIST;
 
 	dsim_info("dsim%d: MIF(%lu), INT(%lu), DISP(%lu), total bw(%u, %u)\n",
 			dsim->id,
@@ -831,10 +965,13 @@ static irqreturn_t dsim_irq_handler(int irq, void *dev_id)
 		complete(&dsim->rd_comp);
 	if (int_src & DSIM_INTSRC_FRAME_DONE)
 		dsim_dbg("dsim%d framedone irq occurs\n", dsim->id);
-	if (int_src & DSIM_INTSRC_ERR_RX_ECC)
+	if (int_src & DSIM_INTSRC_ERR_RX_ECC) {
+		decon->frm_status |= DPU_FRM_RX_ECC;
 		dsim_err("RX ECC Multibit error was detected!\n");
+	}
 #if defined(CONFIG_SOC_EXYNOS8895)
 	if (int_src & DSIM_INTSRC_UNDER_RUN) {
+		decon->frm_status |= DPU_FRM_UNDERRUN;
 		dsim->total_underrun_cnt++;
 		dsim_info("dsim%d underrun irq occurs(%d)\n", dsim->id,
 				dsim->total_underrun_cnt);
@@ -1318,6 +1455,17 @@ static long dsim_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 	case DSIM_IOC_GET_WCLK:
 		v4l2_set_subdev_hostdata(sd, &dsim->clks.word_clk);
 		break;
+
+	case DSIM_IOC_FUNC_RST:
+		dsim_reg_function_reset(dsim->id);
+		dsim_dbg("dsim reg function reset\n");
+		break;
+
+	case DSIM_IOC_CLEAR_IRQ:
+		dsim_reg_clear_int_all(dsim->id);
+		dsim_dbg("dsim%d clear all interrupts\n", dsim->id);
+		break;
+
 #ifdef CONFIG_SUPPORT_DOZE
 	case DSIM_IOC_DOZE:
 		ret = dsim_doze(dsim);
@@ -1692,6 +1840,53 @@ static int dsim_init_resources(struct dsim_device *dsim, struct platform_device 
 	return 0;
 }
 
+#ifdef CONFIG_DUMPSTATE_LOGGING
+static int dsim_debug_info_show(struct seq_file *s, void *unused)
+{
+	struct dsim_device *dsim = s->private;
+
+	dsim_print_underrung_info(dsim, s);
+
+	return 0;
+}
+
+static int dsim_debug_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, dsim_debug_info_show, inode->i_private);
+}
+
+static const struct file_operations dsim_debug_fops = {
+	.open = dsim_debug_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
+int dsim_create_debugfs(struct dsim_device *dsim)
+{
+	int ret = 0;
+
+	if (dsim->id == 0) {
+		dsim->debug_root = debugfs_create_dir("dsim", NULL);
+		if (!dsim->debug_root) {
+			dsim_err("DSIM:ERR:%s:failed to create debugfs dir\n", __func__);
+			ret = -ENOENT;
+			goto create_err;
+		}
+		dsim->debug_info = debugfs_create_file("debug", 0444,
+			dsim->debug_root, dsim, &dsim_debug_fops);
+		if (!dsim->debug_info) {
+			dsim_err("DSIM:ERR:%s:failed to create debug info\n", __func__);
+			ret = -ENOENT;
+			goto create_err;
+		}
+	}
+create_err:
+	return ret;
+}
+
+#endif
+
 static int dsim_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -1758,9 +1953,18 @@ static int dsim_probe(struct platform_device *pdev)
 	ret = v4l2_subdev_call(dsim->panel_sd, core, ioctl, PANEL_IOC_PANEL_PROBE, &dsim->id);
 	if (ret) {
 		dsim_err("DSIM:ERR:%s:failed to get panel info from panel's v4l2 subdev\n", __func__);
-		return ret;
+		goto err_dt;
 	}
 #endif
+#ifdef CONFIG_DUMPSTATE_LOGGING
+	ret = dsim_create_debugfs(dsim);
+	if (ret) {
+		dsim_err("DSIM:ERR:%s:failed to create debugfs\n", __func__);
+		goto err_dt;
+	}
+#endif
+
+
 	/* TODO: This is for dsim BIST mode in zebu emulator. only for test*/
 	dsim_set_bist(dsim->id, false);
 

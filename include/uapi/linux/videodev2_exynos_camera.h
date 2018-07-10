@@ -186,11 +186,13 @@ enum is_set_stream {
 #define V4L2_CID_IS_G_VC1_FRAMEPTR		(V4L2_CID_FIMC_IS_BASE + 70)
 #define V4L2_CID_IS_G_VC2_FRAMEPTR		(V4L2_CID_FIMC_IS_BASE + 71)
 #define V4L2_CID_IS_G_VC3_FRAMEPTR		(V4L2_CID_FIMC_IS_BASE + 72)
+#define V4L2_CID_IS_S_VRA_CONNECTION		(V4L2_CID_FIMC_IS_BASE + 73)
 
 enum is_fw_boot_mode {
 	IS_COLD_BOOT = 0,  /* FrontCamera, 3rd-Party Camera */
 	IS_WARM_BOOT,      /* SamsungCamera & RearCamera */
-	IS_COLD_RESET,      /* Reset for camera using warm boot mode */
+	IS_COLD_RESET,     /* Reset for camera using warm boot mode */
+	IS_REUSE_3A,      /* Reuse 3A value for next camera operation */
 };
 
 #define V4L2_CID_IS_SCENE_MODE			(V4L2_CID_FIMC_IS_BASE + 667)
@@ -248,6 +250,7 @@ enum v4l2_is_hal_version {
 #define V4L2_CID_SENSOR_ADJUST_ANALOG_GAIN              (V4L2_CID_SENSOR_BASE + 107)
 #define V4L2_CID_SENSOR_GET_ANALOG_GAIN                 (V4L2_CID_SENSOR_BASE + 108)
 #define V4L2_CID_SENSOR_GET_DIGITAL_GAIN                (V4L2_CID_SENSOR_BASE + 109)
+#define V4L2_CID_SENSOR_SET_RAT_FREQ                    (V4L2_CID_SENSOR_BASE + 110)
 
 #define V4L2_CID_ACTUATOR_GET_STATUS                    (V4L2_CID_SENSOR_BASE + 200)
 #define V4L2_CID_ACTUATOR_SET_POSITION                  (V4L2_CID_SENSOR_BASE + 201)

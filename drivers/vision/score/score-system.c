@@ -456,9 +456,9 @@ int score_system_suspend(struct score_system *system)
 	spin_unlock_irqrestore(&iframemgr->slock, flags);
 
 #if defined(CONFIG_PM_DEVFREQ)
-	if (system->cam_qos && pm_qos_request_active(&exynos_score_qos_cam)) {
+	if (system->cam_qos_current && pm_qos_request_active(&exynos_score_qos_cam)) {
 		pm_qos_update_request(&exynos_score_qos_cam, 0);
-		system->cam_qos = 0;
+		system->cam_qos_current = 0;
 	}
 #endif
 
@@ -474,10 +474,11 @@ int score_system_runtime_resume(struct score_system *system)
 #endif
 
 #if defined(CONFIG_PM_DEVFREQ)
-	if (!system->cam_qos && !pm_qos_request_active(&exynos_score_qos_cam)) {
+	if (!system->cam_qos_current && !pm_qos_request_active(&exynos_score_qos_cam)) {
 		pm_qos_add_request(&exynos_score_qos_cam,
 				PM_QOS_CAM_THROUGHPUT, SCORE_CAM_L0); /* L0, 533MHz */
-		system->cam_qos = SCORE_CAM_L0;
+		system->cam_qos_request = SCORE_CAM_L0;
+		system->cam_qos_current = SCORE_CAM_L0;
 	}
 	/* pm_qos_add_request(&exynos_score_qos_cam,
 			PM_QOS_CAM_THROUGHPUT, SCORE_CAM_L5); *//* L5, 466MHz */
@@ -525,12 +526,26 @@ int score_system_runtime_suspend(struct score_system *system)
 #if defined(CONFIG_PM_DEVFREQ)
 	if (pm_qos_request_active(&exynos_score_qos_cam)) {
 		pm_qos_remove_request(&exynos_score_qos_cam);
-		system->cam_qos = 0;
+		system->cam_qos_current = 0;
 	}
 	/* pm_qos_remove_request(&exynos_score_qos_mem); */
 #endif
 #endif
 
+	return ret;
+}
+
+int score_system_runtime_update(struct score_system *system)
+{
+	int ret = 0;
+#if defined(CONFIG_PM_DEVFREQ)
+	if (system->cam_qos_current == SCORE_CAM_L0 &&
+			pm_qos_request_active(&exynos_score_qos_cam)) {
+		pm_qos_update_request(&exynos_score_qos_cam, SCORE_CAM_L2);
+		system->cam_qos_request = SCORE_CAM_L2;
+		system->cam_qos_current = SCORE_CAM_L2;
+	}
+#endif
 	return ret;
 }
 
@@ -638,9 +653,9 @@ int score_system_start(struct score_system *system)
 	int ret = 0;
 
 #if defined(CONFIG_PM_DEVFREQ)
-	if (!system->cam_qos && pm_qos_request_active(&exynos_score_qos_cam)) {
-		pm_qos_update_request(&exynos_score_qos_cam, SCORE_CAM_L0);
-		system->cam_qos = SCORE_CAM_L0;
+	if (!system->cam_qos_current && pm_qos_request_active(&exynos_score_qos_cam)) {
+		pm_qos_update_request(&exynos_score_qos_cam, system->cam_qos_request);
+		system->cam_qos_current = system->cam_qos_request;
 	}
 #endif
 	return ret;
@@ -861,7 +876,8 @@ int score_system_probe(struct score_system *system, struct platform_device *pdev
 
 	system->pdev = pdev;
 	dev = &pdev->dev;
-	system->cam_qos = 0;
+	system->cam_qos_request = SCORE_CAM_L0;
+	system->cam_qos_current = 0;
 	system->mif_qos = 0;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);

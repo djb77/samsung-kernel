@@ -217,6 +217,10 @@ static unsigned *sec_tsp_log_ptr;
 static char *sec_tsp_log_buf;
 static unsigned sec_tsp_log_size;
 
+static int sec_tsp_raw_data_index;
+static char *sec_tsp_raw_data_buf;
+static unsigned int sec_tsp_raw_data_size;
+
 static int __init sec_tsp_log_setup(char *str)
 {
 	unsigned size = memparse(str, &str);
@@ -286,6 +290,32 @@ static int sec_tsp_log_timestamp(unsigned long idx)
 	return *sec_tsp_log_ptr;
 }
 
+static int sec_tsp_raw_data_timestamp(unsigned long idx)
+{
+	/* Add the current time stamp */
+	char tbuf[50];
+	unsigned int tlen;
+	unsigned long long t;
+	unsigned long nanosec_rem;
+
+	t = local_clock();
+	nanosec_rem = do_div(t, 1000000000);
+	tlen = snprintf(tbuf, sizeof(tbuf), "[%5lu.%06lu] ",
+			(unsigned long)t,
+			nanosec_rem / 1000);
+
+	/* Overflow buffer size */
+	if (idx + tlen > sec_tsp_raw_data_size - 1) {
+		tlen = scnprintf(&sec_tsp_raw_data_buf[0], tlen + 1, "%s", tbuf);
+		sec_tsp_raw_data_index = tlen;
+	} else {
+		tlen = scnprintf(&sec_tsp_raw_data_buf[idx], tlen + 1, "%s", tbuf);
+		sec_tsp_raw_data_index += tlen;
+	}
+
+	return sec_tsp_raw_data_index;
+}
+
 #define TSP_BUF_SIZE 512
 void sec_debug_tsp_log(char *fmt, ...)
 {
@@ -318,6 +348,38 @@ void sec_debug_tsp_log(char *fmt, ...)
 	}
 }
 EXPORT_SYMBOL(sec_debug_tsp_log);
+
+void sec_debug_tsp_raw_data(char *fmt, ...)
+{
+	va_list args;
+	char buf[TSP_BUF_SIZE];
+	int len = 0;
+	unsigned int idx;
+	unsigned long size;
+
+	/* In case of sec_tsp_log_setup is failed */
+	if (!sec_tsp_raw_data_size || !sec_tsp_raw_data_buf)
+		return;
+	va_start(args, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, args);
+	va_end(args);
+
+	idx = sec_tsp_raw_data_index;
+	size = strlen(buf);
+
+	idx = sec_tsp_raw_data_timestamp(idx);
+
+	/* Overflow buffer size */
+	if (idx + size > sec_tsp_raw_data_size - 1) {
+		len = scnprintf(&sec_tsp_raw_data_buf[0],
+				size + 1, "%s\n", buf);
+		sec_tsp_raw_data_index = len;
+	} else {
+		len = scnprintf(&sec_tsp_raw_data_buf[idx], size + 1, "%s\n", buf);
+		sec_tsp_raw_data_index += len;
+	}
+}
+EXPORT_SYMBOL(sec_debug_tsp_raw_data);
 
 void sec_debug_tsp_log_msg(char *msg, char *fmt, ...)
 {
@@ -353,9 +415,54 @@ void sec_debug_tsp_log_msg(char *msg, char *fmt, ...)
 }
 EXPORT_SYMBOL(sec_debug_tsp_log_msg);
 
+void sec_debug_tsp_raw_data_msg(char *msg, char *fmt, ...)
+{
+	va_list args;
+	char buf[TSP_BUF_SIZE];
+	int len = 0;
+	unsigned int idx;
+	unsigned int size;
+	unsigned int size_dev_name;
+
+	/* In case of sec_tsp_log_setup is failed */
+	if (!sec_tsp_raw_data_size || !sec_tsp_raw_data_buf)
+		return;
+	va_start(args, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, args);
+	va_end(args);
+
+	idx = sec_tsp_raw_data_index;
+	size = strlen(buf);
+	size_dev_name = strlen(msg);
+
+	idx = sec_tsp_raw_data_timestamp(idx);
+
+	/* Overflow buffer size */
+	if (idx + size + size_dev_name + 3 + 1 > sec_tsp_raw_data_size) {
+		len = scnprintf(&sec_tsp_raw_data_buf[0],
+				size + size_dev_name + 3 + 1, "%s : %s", msg, buf);
+		sec_tsp_raw_data_index = len;
+	} else {
+		len = scnprintf(&sec_tsp_raw_data_buf[idx],
+				size + size_dev_name + 3 + 1, "%s : %s", msg, buf);
+		sec_tsp_raw_data_index += len;
+	}
+}
+EXPORT_SYMBOL(sec_debug_tsp_raw_data_msg);
+
+void sec_tsp_raw_data_clear(void)
+{
+	if (!sec_tsp_raw_data_size || !sec_tsp_raw_data_buf)
+		return;
+
+	sec_tsp_raw_data_index = 0;
+	memset(sec_tsp_raw_data_buf, 0x00, sec_tsp_raw_data_size);
+}
+EXPORT_SYMBOL(sec_tsp_raw_data_clear);
+
 static ssize_t sec_tsp_log_write(struct file *file,
-					     const char __user *buf,
-					     size_t count, loff_t *ppos)
+				 const char __user *buf,
+				 size_t count, loff_t *ppos)
 {
 	char *page = NULL;
 	ssize_t ret;
@@ -381,7 +488,7 @@ static ssize_t sec_tsp_log_write(struct file *file,
 	if (sscanf(page, "%u", &new_value) != 1) {
 		pr_info("%s\n", page);
 		/* print tsp_log to sec_tsp_log_buf */
-		sec_debug_tsp_log(page);
+		sec_debug_tsp_log("%s", page);
 	}
 	ret = count;
 out:
@@ -389,6 +496,40 @@ out:
 	return ret;
 }
 
+static ssize_t sec_tsp_raw_data_write(struct file *file,
+				      const char __user *buf,
+				      size_t count, loff_t *ppos)
+{
+	char *page = NULL;
+	ssize_t ret;
+	int new_value;
+
+	if (!sec_tsp_raw_data_buf)
+		return 0;
+
+	ret = -EINVAL;
+	if (count >= PAGE_SIZE)
+		return ret;
+
+	ret = -ENOMEM;
+	page = (char *)get_zeroed_page(GFP_KERNEL);
+	if (!page)
+		return ret;
+
+	ret = -EFAULT;
+	if (copy_from_user(page, buf, count))
+		goto out;
+
+	ret = -EINVAL;
+	if (sscanf(page, "%u", &new_value) != 1) {
+		pr_info("%s\n", page);
+		sec_debug_tsp_raw_data("%s", page);
+	}
+	ret = count;
+out:
+	free_page((unsigned long)page);
+	return ret;
+}
 
 static ssize_t sec_tsp_log_read(struct file *file, char __user *buf,
 								size_t len, loff_t *offset)
@@ -396,7 +537,7 @@ static ssize_t sec_tsp_log_read(struct file *file, char __user *buf,
 	loff_t pos = *offset;
 	ssize_t count;
 
-	if (sec_tsp_log_buf == NULL)
+	if (!sec_tsp_log_buf)
 		return 0;
 
 	if (pos >= *sec_tsp_log_ptr)
@@ -409,6 +550,25 @@ static ssize_t sec_tsp_log_read(struct file *file, char __user *buf,
 	return count;
 }
 
+static ssize_t sec_tsp_raw_data_read(struct file *file, char __user *buf,
+				     size_t len, loff_t *offset)
+{
+	loff_t pos = *offset;
+	ssize_t count;
+
+	if (!sec_tsp_raw_data_buf)
+		return 0;
+
+	if (pos >= sec_tsp_raw_data_index)
+		return 0;
+
+	count = min(len, (size_t)(sec_tsp_raw_data_index - pos));
+	if (copy_to_user(buf, sec_tsp_raw_data_buf + pos, count))
+		return -EFAULT;
+	*offset += count;
+	return count;
+}
+
 static const struct file_operations tsp_msg_file_ops = {
 	.owner = THIS_MODULE,
 	.read = sec_tsp_log_read,
@@ -416,10 +576,18 @@ static const struct file_operations tsp_msg_file_ops = {
 	.llseek = generic_file_llseek,
 };
 
+static const struct file_operations tsp_raw_data_file_ops = {
+	.owner = THIS_MODULE,
+	.read = sec_tsp_raw_data_read,
+	.write = sec_tsp_raw_data_write,
+	.llseek = generic_file_llseek,
+};
+
 static int __init sec_tsp_log_late_init(void)
 {
 	struct proc_dir_entry *entry;
-	if (sec_tsp_log_buf == NULL)
+
+	if (!sec_tsp_log_buf)
 		return 0;
 
 	entry = proc_create("tsp_msg", S_IFREG | S_IRUGO,
@@ -433,6 +601,50 @@ static int __init sec_tsp_log_late_init(void)
 
 	return 0;
 }
-
 late_initcall(sec_tsp_log_late_init);
+
+static int __init sec_tsp_raw_data_late_init(void)
+{
+	struct proc_dir_entry *entry2;
+
+	if (!sec_tsp_raw_data_buf)
+		return 0;
+
+	entry2 = proc_create("tsp_raw_data", S_IFREG | S_IRUGO,
+			     NULL, &tsp_raw_data_file_ops);
+	if (!entry2) {
+		pr_err("%s: failed to create proc entry of tsp_raw_data\n", __func__);
+		return 0;
+	}
+
+	proc_set_size(entry2, sec_tsp_raw_data_size);
+
+	return 0;
+}
+late_initcall(sec_tsp_raw_data_late_init);
+
+#define SEC_TSP_RAW_DATA_BUF_SIZE	(50 * 1024)	/* 50 KB */
+static int __init __init_sec_tsp_raw_data(void)
+{
+	char *vaddr;
+
+	sec_tsp_raw_data_size = SEC_TSP_RAW_DATA_BUF_SIZE;
+	vaddr = kmalloc(sec_tsp_raw_data_size, GFP_KERNEL);
+
+	pr_info("%s: vaddr=0x%lx size=0x%x\n", __func__,
+		(unsigned long)vaddr, sec_tsp_raw_data_size);
+
+	if (!vaddr) {
+		pr_info("%s: ERROR! init failed!\n", __func__);
+		return -ENOMEM;
+	}
+
+	sec_tsp_raw_data_buf = vaddr;
+
+	pr_info("%s: init done\n", __func__);
+
+	return 0;
+}
+fs_initcall(__init_sec_tsp_raw_data);	/* earlier than device_initcall */
+
 #endif /* CONFIG_SEC_DEBUG_TSP_LOG */

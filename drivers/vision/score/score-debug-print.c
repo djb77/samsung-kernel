@@ -36,7 +36,7 @@
 #endif
 #include "score-cache-ctrl.h"
 
-//#define ENABLE_DEBUG_TIMER
+#define ENABLE_DEBUG_TIMER
 
 static inline int score_print_buf_full(struct score_print_buf *buf)
 {

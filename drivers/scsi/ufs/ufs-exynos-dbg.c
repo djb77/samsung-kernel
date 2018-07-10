@@ -1144,3 +1144,51 @@ int exynos_ufs_init_dbg(struct ufs_hba *hba)
 
 	return 0;
 }
+
+static	struct ufs_cmd_info   ufs_cmd_queue;
+static	struct ufs_cmd_logging_category ufs_cmd_log;
+
+static void exynos_ufs_putItem_start(struct ufs_cmd_info *cmdQueue, struct ufs_cmd_logging_category *cmdData)
+{
+	cmdQueue->addr_per_tag[cmdData->tag] = &cmdQueue->data[cmdQueue->last];
+	cmdQueue->data[cmdQueue->last].cmd_opcode = cmdData->cmd_opcode;
+	cmdQueue->data[cmdQueue->last].tag = cmdData->tag;
+	cmdQueue->data[cmdQueue->last].lba = cmdData->lba;
+	cmdQueue->data[cmdQueue->last].sct = cmdData->sct;
+	cmdQueue->data[cmdQueue->last].retries = cmdData->retries;
+	cmdQueue->data[cmdQueue->last].start_time = cmdData->start_time;
+	cmdQueue->data[cmdQueue->last].outstanding_reqs = cmdData->outstanding_reqs;
+	cmdQueue->last = (cmdQueue->last + 1) % MAX_CMD_LOGS;
+}
+
+void exynos_ufs_cmd_log_start(struct ufs_hba *hba, struct scsi_cmnd *cmd)
+{
+	int cpu = raw_smp_processor_id();
+
+	unsigned long lba = (cmd->cmnd[2] << 24) |
+					(cmd->cmnd[3] << 16) |
+					(cmd->cmnd[4] << 8) |
+					(cmd->cmnd[5] << 0);
+	unsigned int sct = (cmd->cmnd[7] << 8) |
+					(cmd->cmnd[8] << 0);
+
+	ufs_cmd_log.start_time = cpu_clock(cpu);
+	ufs_cmd_log.cmd_opcode = cmd->cmnd[0];
+	ufs_cmd_log.tag = cmd->request->tag;
+	ufs_cmd_log.outstanding_reqs = hba->outstanding_reqs;
+
+	if(cmd->cmnd[0] != UNMAP)
+		ufs_cmd_log.lba = lba;
+
+	ufs_cmd_log.sct = sct;
+	ufs_cmd_log.retries = cmd->allowed;
+
+	exynos_ufs_putItem_start(&ufs_cmd_queue, &ufs_cmd_log);
+}
+
+void exynos_ufs_cmd_log_end(struct ufs_hba *hba, int tag)
+{
+	int cpu = raw_smp_processor_id();
+
+	ufs_cmd_queue.addr_per_tag[tag]->end_time = cpu_clock(cpu);
+}

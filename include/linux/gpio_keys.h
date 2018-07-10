@@ -1,6 +1,8 @@
 #ifndef _GPIO_KEYS_H
 #define _GPIO_KEYS_H
 
+#include <linux/notifier.h>
+
 struct device;
 struct gpio_desc;
 
@@ -56,4 +58,6 @@ struct gpio_keys_platform_data {
 	const char *name;
 };
 
+int register_gpio_keys_notifier(struct notifier_block *nb);
+int unregister_gpio_keys_notifier(struct notifier_block *nb);
 #endif

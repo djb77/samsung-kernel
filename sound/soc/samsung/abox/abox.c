@@ -3,7 +3,7 @@
  * ALSA SoC Audio Layer - Samsung Abox driver
  *
  * Copyright (c) 2016 Samsung Electronics Co. Ltd.
-  *
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -28,6 +28,7 @@
 #include <linux/modem_notifier.h>
 
 #include <sound/soc.h>
+#include <sound/soc-dapm.h>
 #include <sound/pcm_params.h>
 #include <sound/samsung/abox.h>
 #include <sound/samsung/vts.h>
@@ -47,10 +48,11 @@
 #undef EMULATOR
 #ifdef EMULATOR
 static void __iomem *pmu_alive;
-static void update_mask_value(volatile void __iomem *sfr,
+static void update_mask_value(void __iomem *sfr,
 		unsigned int mask, unsigned int value)
 {
 	unsigned int sfr_value = readl(sfr);
+
 	set_mask_value(sfr_value, mask, value);
 	writel(sfr_value, sfr);
 }
@@ -97,6 +99,7 @@ static int abox_iommu_fault_handler(
 		unsigned long fault_addr, int fault_flags, void *token)
 {
 	struct abox_data *data = token;
+
 	abox_dbg_print_gpr(&data->pdev->dev, data);
 	return 0;
 }
@@ -110,7 +113,8 @@ static void exynos_abox_panic_handler(void)
 {
 	static bool has_run;
 	struct abox_data *data = p_abox_data;
-	struct device *dev = data ? (data->pdev ? &data->pdev->dev : NULL) : NULL;
+	struct device *dev = data ? (data->pdev ?
+			&data->pdev->dev : NULL) : NULL;
 
 	dev_dbg(dev, "%s\n", __func__);
 
@@ -131,7 +135,8 @@ static void exynos_abox_panic_handler(void)
 		mdelay(100);
 		abox_dbg_dump_mem(dev, data, ABOX_DBG_DUMP_KERNEL, "panic");
 	} else {
-		dev_info(dev, "%s: dump is skipped due to no power\n", __func__);
+		dev_info(dev, "%s: dump is skipped due to no power\n",
+				__func__);
 	}
 }
 
@@ -152,46 +157,44 @@ static void *abox_addr_to_kernel_addr(struct abox_data *data, unsigned int addr)
 {
 	void *result;
 
-	if (addr < IOVA_DRAM_FIRMWARE) {
+	if (addr < IOVA_DRAM_FIRMWARE)
 		result = data->sram_base + addr;
-	} else if (IOVA_DRAM_FIRMWARE <= addr && addr < IOVA_IVA_FIRMWARE) {
+	else if (addr >= IOVA_DRAM_FIRMWARE && addr < IOVA_IVA_FIRMWARE)
 		result = data->dram_base + (addr - IOVA_DRAM_FIRMWARE);
-	} else if (IOVA_IVA_FIRMWARE <= addr && addr < IOVA_VSS_FIRMWARE) {
+	else if (addr >= IOVA_IVA_FIRMWARE && addr < IOVA_VSS_FIRMWARE)
 		result = data->iva_base + (addr - IOVA_IVA_FIRMWARE);
-	} else if (IOVA_VSS_FIRMWARE <= addr && addr <  IOVA_DUMP_BUFFER) {
+	else if (addr >= IOVA_VSS_FIRMWARE && addr <  IOVA_DUMP_BUFFER)
 		result = phys_to_virt(shm_get_phys_base() + shm_get_cp_size()) +
 				(addr - IOVA_VSS_FIRMWARE);
-	} else {
+	else
 		result = data->dump_base + (addr - IOVA_DUMP_BUFFER);
-	}
 
 	return result;
 }
 
-static phys_addr_t abox_addr_to_phys_addr(struct abox_data *data, unsigned int addr)
+static phys_addr_t abox_addr_to_phys_addr(struct abox_data *data,
+		unsigned int addr)
 {
 	phys_addr_t result;
 
-	if (addr < IOVA_DRAM_FIRMWARE) {
+	if (addr < IOVA_DRAM_FIRMWARE)
 		result = data->sram_base_phys + addr;
-	} else if (IOVA_DRAM_FIRMWARE <= addr && addr < IOVA_IVA_FIRMWARE) {
+	else if (addr >= IOVA_DRAM_FIRMWARE && addr < IOVA_IVA_FIRMWARE)
 		result = data->dram_base_phys + (addr - IOVA_DRAM_FIRMWARE);
-	} else if (IOVA_IVA_FIRMWARE <= addr && addr < IOVA_VSS_FIRMWARE) {
+	else if (addr >= IOVA_IVA_FIRMWARE && addr < IOVA_VSS_FIRMWARE)
 		result = data->iva_base_phys + (addr - IOVA_IVA_FIRMWARE);
-	} else if (IOVA_VSS_FIRMWARE <= addr && addr <  IOVA_DUMP_BUFFER) {
+	else if (addr >= IOVA_VSS_FIRMWARE && addr <  IOVA_DUMP_BUFFER)
 		result = shm_get_phys_base() + shm_get_cp_size() +
 				(addr - IOVA_VSS_FIRMWARE);
-	} else {
+	else
 		result = data->dump_base_phys + (addr - IOVA_DUMP_BUFFER);
-	}
 
 	return result;
 }
 
-unsigned int abox_get_out_rate(struct platform_device *pdev, enum ABOX_CONFIGMSG configmsg)
+static unsigned int abox_get_out_rate(struct abox_data *data,
+		enum ABOX_CONFIGMSG configmsg)
 {
-	struct abox_data *data = platform_get_drvdata(pdev);
-
 	return data->out_rate[configmsg];
 }
 
@@ -252,12 +255,14 @@ static int abox_start_ipc_transaction_atomic(struct device *dev,
 {
 	struct abox_data *data = dev_get_drvdata(dev);
 	void __iomem *tx_sram_base = data->sram_base + data->ipc_tx_offset;
-	void __iomem *tx_ack_sram_base = data->sram_base + data->ipc_tx_ack_offset;
+	void __iomem *tx_ack_sram_base = data->sram_base +
+			data->ipc_tx_ack_offset;
 	int i;
 	long result = 0;
 	unsigned long flag;
 
-	dev_dbg(dev, "%s(%d, %p, %zu, %d)\n", __func__, hw_irq, supplement, size, sync);
+	dev_dbg(dev, "%s(%d, %p, %zu, %d)\n", __func__, hw_irq,
+			supplement, size, sync);
 
 	if (pm_runtime_suspended(dev)) {
 		dev_info(dev, "%s: abox has been suspended\n", __func__);
@@ -269,13 +274,14 @@ static int abox_start_ipc_transaction_atomic(struct device *dev,
 	switch (data->calliope_state) {
 	case CALLIOPE_ENABLING:
 		spin_unlock_irqrestore(&data->ipc_spinlock, flag);
-		for (i = CALLIOPE_ENABLE_TIMEOUT_MS; i && (data->calliope_state != CALLIOPE_ENABLED); i--) {
+		for (i = CALLIOPE_ENABLE_TIMEOUT_MS; i &&
+				(data->calliope_state != CALLIOPE_ENABLED);
+				i--) {
 			mdelay(1);
 		}
 		spin_lock_irqsave(&data->ipc_spinlock, flag);
-		if (data->calliope_state == CALLIOPE_ENABLED) {
+		if (data->calliope_state == CALLIOPE_ENABLED)
 			break;
-		}
 		/* Fallthrough */
 	case CALLIOPE_DISABLED:
 		dev_warn(dev, "IPC request when calliope is not ready: %d\n",
@@ -295,18 +301,19 @@ static int abox_start_ipc_transaction_atomic(struct device *dev,
 	writel(1, tx_ack_sram_base);
 	abox_gic_generate_interrupt(data->pdev_gic, hw_irq);
 
-	if (sync) {
-		if (likely(data->calliope_version > CALLIOPE_VERSION('A', 1, 1, 0))) {
-			for (i = 1000; i && readl(tx_ack_sram_base); i--) {
-				udelay(1);
-			}
-			if (!i) {
-				dev_warn_ratelimited(dev, "Transaction timeout\n");
-			}
-			result = readl(tx_ack_sram_base) ? -EIO : 0;
-		} else {
-			mdelay(1);
+	if (!sync)
+		goto unlock;
+
+	if (likely(data->calliope_version > CALLIOPE_VERSION('A', 1, 1, 0))) {
+
+		for (i = 1000; i && readl(tx_ack_sram_base); i--)
+			udelay(1);
+		if (!i) {
+			dev_warn_ratelimited(dev, "Transaction timeout\n");
 		}
+		result = readl(tx_ack_sram_base) ? -EIO : 0;
+	} else {
+		mdelay(1);
 	}
 unlock:
 	spin_unlock_irqrestore(&data->ipc_spinlock, flag);
@@ -314,7 +321,7 @@ out:
 	return (int)result;
 }
 
-int abox_start_ipc_transaction(struct device *dev,
+int abox_request_ipc(struct device *dev,
 		int hw_irq, const void *supplement,
 		size_t size, int atomic, int sync)
 {
@@ -322,45 +329,49 @@ int abox_start_ipc_transaction(struct device *dev,
 	return abox_start_ipc_transaction_atomic(
 			dev, hw_irq, supplement, size, 1);
 }
-EXPORT_SYMBOL(abox_start_ipc_transaction);
+EXPORT_SYMBOL(abox_request_ipc);
 
 static void abox_process_ipc(struct work_struct *work)
 {
 	struct abox_data *data = container_of(work, struct abox_data, ipc_work);
 	void __iomem *tx_sram_base = data->sram_base + data->ipc_tx_offset;
 	long result = 0;
-	volatile enum ipc_state *state = &data->ipc_state;
+
+	enum ipc_state *state = &data->ipc_state;
 
 	while (data->ipc_queue_start != data->ipc_queue_end) {
 		struct abox_ipc *ipc = &data->ipc_queue[data->ipc_queue_start];
 		struct device *dev = ipc->dev;
 		int hw_irq = ipc->hw_irq;
 		const unsigned char *supplement = ipc->supplement;
-		size_t size = ipc->size;;
+		size_t size = ipc->size;
 
-		dev_dbg(dev, "%s(%d, %p, %zu)\n", __func__, hw_irq, supplement, size);
+		dev_dbg(dev, "%s(%d, %p, %zu)\n", __func__, hw_irq,
+				supplement, size);
 
 		*state = SEND_MSG;
 		memcpy(tx_sram_base, supplement, size);
 		abox_gic_generate_interrupt(data->pdev_gic, hw_irq);
 		result = wait_event_timeout(data->ipc_wait_queue,
-				(*state == SEND_MSG_OK || *state == SEND_MSG_FAIL),
+				(*state == SEND_MSG_OK ||
+				*state == SEND_MSG_FAIL),
 				LIMIT_IN_JIFFIES);
-		if (0 < result) {
-			if (*state == SEND_MSG_OK) {
+		if (result > 0) {
+			if (*state == SEND_MSG_OK)
 				dev_dbg(dev, "Transaction success\n");
-			} else {
+			else
 				dev_err(dev, "Transaction failed\n");
-			}
 		} else {
-			dev_err(dev, "Transaction timeout or interrupted: %ld\n", result);
+			dev_err(dev, "Transaction timeout or interrupted: %ld\n",
+					result);
 		}
 		result = (*state == SEND_MSG_OK) ? 0 : -EIO;
 
 		*state = IDLE;
 
-		data->ipc_queue_start = (data->ipc_queue_start + 1 < ARRAY_SIZE(data->ipc_queue)) ?
-			(data->ipc_queue_start + 1) : (0);
+		data->ipc_queue_start = (data->ipc_queue_start + 1 <
+				ARRAY_SIZE(data->ipc_queue)) ?
+				(data->ipc_queue_start + 1) : (0);
 	}
 
 
@@ -374,7 +385,8 @@ int abox_schedule_ipc(struct device *dev, struct abox_data *data,
 	dev_dbg(dev, "%s\n", __func__);
 
 	if (size > sizeof(ipc->supplement)) {
-		dev_err(dev, "supplement is too large (%zu > %zu)\n", size, sizeof(ipc->supplement));
+		dev_err(dev, "supplement is too large (%zu > %zu)\n",
+				size, sizeof(ipc->supplement));
 		return -EOVERFLOW;
 	}
 
@@ -388,7 +400,8 @@ int abox_schedule_ipc(struct device *dev, struct abox_data *data,
 	memcpy(ipc->supplement, supplement, size);
 	ipc->size = size;
 
-	data->ipc_queue_end = (data->ipc_queue_end + 1 < ARRAY_SIZE(data->ipc_queue)) ?
+	data->ipc_queue_end = (data->ipc_queue_end + 1 <
+			ARRAY_SIZE(data->ipc_queue)) ?
 			(data->ipc_queue_end + 1) : (0);
 
 	schedule_work(&data->ipc_work);
@@ -396,7 +409,7 @@ int abox_schedule_ipc(struct device *dev, struct abox_data *data,
 	return 0;
 }
 
-volatile bool abox_is_on(void)
+bool abox_is_on(void)
 {
 	return p_abox_data && p_abox_data->enabled;
 }
@@ -425,7 +438,8 @@ static u32 get_sample_format(int bit_depth, int channels)
 	return result;
 }
 
-static unsigned long abox_register_audif_rate(struct abox_data *data, enum abox_dai id, unsigned long rate)
+static unsigned long abox_register_audif_rate(struct abox_data *data,
+		enum abox_dai id, unsigned long rate)
 {
 	unsigned long ret = 0;
 	unsigned int i;
@@ -435,9 +449,8 @@ static unsigned long abox_register_audif_rate(struct abox_data *data, enum abox_
 	data->audif_rates[id] = rate;
 
 	for (i = 0; i < ARRAY_SIZE(data->audif_rates); i++) {
-		if (data->audif_rates[i] > 0 && data->audif_rates[i] > ret) {
+		if (data->audif_rates[i] > 0 && data->audif_rates[i] > ret)
 			ret = data->audif_rates[i];
-		}
 	}
 
 	return ret;
@@ -519,19 +532,24 @@ static int abox_uaif_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 
 	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
 	case SND_SOC_DAIFMT_NB_NF:
-		set_mask_value(ctrl1, ABOX_BCLK_POLARITY_MASK, 1 << ABOX_BCLK_POLARITY_L);
+		set_mask_value(ctrl1, ABOX_BCLK_POLARITY_MASK,
+				1 << ABOX_BCLK_POLARITY_L);
 		set_mask_value(ctrl1, ABOX_WS_POLAR_MASK, 0 << ABOX_WS_POLAR_L);
 		break;
 	case SND_SOC_DAIFMT_NB_IF:
-		set_mask_value(ctrl1, ABOX_BCLK_POLARITY_MASK, 1 << ABOX_BCLK_POLARITY_L);
+		set_mask_value(ctrl1, ABOX_BCLK_POLARITY_MASK,
+				1 << ABOX_BCLK_POLARITY_L);
 		set_mask_value(ctrl1, ABOX_WS_POLAR_MASK, 1 << ABOX_WS_POLAR_L);
 		break;
 	case SND_SOC_DAIFMT_IB_NF:
-		set_mask_value(ctrl1, ABOX_BCLK_POLARITY_MASK, 0 << ABOX_BCLK_POLARITY_L);
-		set_mask_value(ctrl1, ABOX_WS_POLAR_MASK, 0 << ABOX_WS_POLAR_L);
+		set_mask_value(ctrl1, ABOX_BCLK_POLARITY_MASK,
+				0 << ABOX_BCLK_POLARITY_L);
+		set_mask_value(ctrl1, ABOX_WS_POLAR_MASK,
+				0 << ABOX_WS_POLAR_L);
 		break;
 	case SND_SOC_DAIFMT_IB_IF:
-		set_mask_value(ctrl1, ABOX_BCLK_POLARITY_MASK, 0 << ABOX_BCLK_POLARITY_L);
+		set_mask_value(ctrl1, ABOX_BCLK_POLARITY_MASK,
+				0 << ABOX_BCLK_POLARITY_L);
 		set_mask_value(ctrl1, ABOX_WS_POLAR_MASK, 1 << ABOX_WS_POLAR_L);
 		break;
 	default:
@@ -550,7 +568,8 @@ static int abox_uaif_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	}
 
 	/* set ctrl1 BCLK_POLARITY 0 for idle power consumption */
-	set_mask_value(ctrl1, ABOX_BCLK_POLARITY_MASK, 0 << ABOX_BCLK_POLARITY_L);
+	set_mask_value(ctrl1, ABOX_BCLK_POLARITY_MASK,
+			0 << ABOX_BCLK_POLARITY_L);
 
 	snd_soc_write(codec, ABOX_UAIF_CTRL0(id), ctrl0);
 	snd_soc_write(codec, ABOX_UAIF_CTRL1(id), ctrl1);
@@ -569,7 +588,8 @@ static int abox_uaif_startup(struct snd_pcm_substream *substream,
 	int result;
 
 	dev_info(dev, "%s[%d:%c]\n", __func__, id,
-			(substream->stream == SNDRV_PCM_STREAM_CAPTURE) ? 'C' : 'P');
+			(substream->stream == SNDRV_PCM_STREAM_CAPTURE) ?
+			'C' : 'P');
 
 	pm_runtime_get_sync(dev);
 	abox_uaif_control_bclk_polarity(dai, true);
@@ -597,7 +617,8 @@ static void abox_uaif_shutdown(struct snd_pcm_substream *substream,
 	struct snd_soc_codec *codec = dai->codec;
 
 	dev_info(dev, "%s[%d:%c]\n", __func__, id,
-			(substream->stream == SNDRV_PCM_STREAM_CAPTURE) ? 'C' : 'P');
+			(substream->stream == SNDRV_PCM_STREAM_CAPTURE) ?
+			'C' : 'P');
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		snd_soc_update_bits(codec, ABOX_UAIF_CTRL0(id),
@@ -610,8 +631,6 @@ static void abox_uaif_shutdown(struct snd_pcm_substream *substream,
 	abox_request_cpu_gear(dev, data, dai, 12);
 	abox_uaif_control_bclk_polarity(dai, false);
 	pm_runtime_put(dev);
-
-	return;
 }
 
 static int abox_uaif_hw_params(struct snd_pcm_substream *substream,
@@ -628,7 +647,8 @@ static int abox_uaif_hw_params(struct snd_pcm_substream *substream,
 	int result;
 
 	dev_info(dev, "%s[%d:%c]\n", __func__, dai->id,
-			(substream->stream == SNDRV_PCM_STREAM_CAPTURE) ? 'C' : 'P');
+			(substream->stream == SNDRV_PCM_STREAM_CAPTURE) ?
+			'C' : 'P');
 
 	ctrl1 = snd_soc_read(codec, ABOX_UAIF_CTRL1(id));
 
@@ -636,7 +656,8 @@ static int abox_uaif_hw_params(struct snd_pcm_substream *substream,
 	rate = params_rate(hw_params);
 	width = params_width(hw_params);
 
-	target_pll = ((rate % 44100) == 0) ? AUD_PLL_RATE_HZ_FOR_44100 : AUD_PLL_RATE_HZ_FOR_48000;
+	target_pll = ((rate % 44100) == 0) ? AUD_PLL_RATE_HZ_FOR_44100 :
+			AUD_PLL_RATE_HZ_FOR_48000;
 	if (target_pll != clk_get_rate(data->clk_pll)) {
 		dev_info(dev, "Set AUD_PLL rate: %lu -> %lu\n",
 			clk_get_rate(data->clk_pll), target_pll);
@@ -647,14 +668,13 @@ static int abox_uaif_hw_params(struct snd_pcm_substream *substream,
 		}
 	}
 
-	if ((rate % 44100) == 0) {
+	if ((rate % 44100) == 0)
 		audif_rate = ((rate > 176400) ? 352800 : 176400) * width * 2;
-	} else {
+	else
 		audif_rate = ((rate > 192000) ? 384000 : 192000) * width * 2;
-	}
-	while (audif_rate / rate / channels / width > 32) {
+
+	while (audif_rate / rate / channels / width > 32)
 		audif_rate /= 2;
-	}
 
 	audif_rate = abox_register_audif_rate(data, id, audif_rate);
 	result = clk_set_rate(data->clk_audif, audif_rate);
@@ -680,7 +700,8 @@ static int abox_uaif_hw_params(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_FORMAT_S16:
 	case SNDRV_PCM_FORMAT_S24:
 	case SNDRV_PCM_FORMAT_S32:
-		set_mask_value(ctrl1, ABOX_SBIT_MAX_MASK, (width - 1) << ABOX_SBIT_MAX_L);
+		set_mask_value(ctrl1, ABOX_SBIT_MAX_MASK,
+				(width - 1) << ABOX_SBIT_MAX_L);
 		break;
 	default:
 		return -EINVAL;
@@ -695,15 +716,18 @@ static int abox_uaif_hw_params(struct snd_pcm_substream *substream,
 	case 4:
 	case 6:
 	case 8:
-		set_mask_value(ctrl1, ABOX_VALID_STR_MASK, (width - 1) << ABOX_VALID_STR_L);
-		set_mask_value(ctrl1, ABOX_VALID_END_MASK, (width - 1) << ABOX_VALID_END_L);
+		set_mask_value(ctrl1, ABOX_VALID_STR_MASK,
+				(width - 1) << ABOX_VALID_STR_L);
+		set_mask_value(ctrl1, ABOX_VALID_END_MASK,
+				(width - 1) << ABOX_VALID_END_L);
 		break;
 	default:
 		return -EINVAL;
 	}
-	set_mask_value(ctrl1, ABOX_SLOT_MAX_MASK, (channels - 1) << ABOX_SLOT_MAX_L);
-
-	set_mask_value(ctrl1, ABOX_FORMAT_MASK, get_sample_format(width, channels) << ABOX_FORMAT_L);
+	set_mask_value(ctrl1, ABOX_SLOT_MAX_MASK,
+			(channels - 1) << ABOX_SLOT_MAX_L);
+	set_mask_value(ctrl1, ABOX_FORMAT_MASK,
+			get_sample_format(width, channels) << ABOX_FORMAT_L);
 
 	snd_soc_write(codec, ABOX_UAIF_CTRL1(id), ctrl1);
 
@@ -718,7 +742,8 @@ static int abox_uaif_trigger(struct snd_pcm_substream *substream,
 	enum abox_dai id = dai->id;
 
 	dev_info(dev, "%s[%d:%c] trigger=%d\n", __func__, dai->id,
-			(substream->stream == SNDRV_PCM_STREAM_CAPTURE) ? 'C' : 'P', trigger);
+			(substream->stream == SNDRV_PCM_STREAM_CAPTURE) ?
+			'C' : 'P', trigger);
 
 	switch (trigger) {
 	case SNDRV_PCM_TRIGGER_START:
@@ -726,10 +751,12 @@ static int abox_uaif_trigger(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 			snd_soc_update_bits(codec, ABOX_UAIF_CTRL0(id),
-					ABOX_MIC_ENABLE_MASK, 1 << ABOX_MIC_ENABLE_L);
+					ABOX_MIC_ENABLE_MASK,
+					1 << ABOX_MIC_ENABLE_L);
 		} else {
 			snd_soc_update_bits(codec, ABOX_UAIF_CTRL0(id),
-					ABOX_SPK_ENABLE_MASK, 1 << ABOX_SPK_ENABLE_L);
+					ABOX_SPK_ENABLE_MASK,
+					1 << ABOX_SPK_ENABLE_L);
 		}
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
@@ -737,7 +764,8 @@ static int abox_uaif_trigger(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 			snd_soc_update_bits(codec, ABOX_UAIF_CTRL0(id),
-					ABOX_MIC_ENABLE_MASK, 0 << ABOX_MIC_ENABLE_L);
+					ABOX_MIC_ENABLE_MASK,
+					0 << ABOX_MIC_ENABLE_L);
 		}
 		/* disable DAI on shutdown to suppress pop noise */
 		break;
@@ -748,157 +776,28 @@ static int abox_uaif_trigger(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int abox_output_format_put_ipc(struct device *dev, enum ABOX_CONFIGMSG configmsg, int bit_depth, int channels)
+static int abox_output_format_put_ipc(struct device *dev,
+		enum ABOX_CONFIGMSG configmsg, int bit_depth, int channels)
 {
 	ABOX_IPC_MSG msg;
 	struct IPC_ABOX_CONFIG_MSG *abox_config_msg = &msg.msg.config;
 	int result;
 
-	dev_dbg(dev, "%s(%d, %d, %d)\n", __func__, configmsg, bit_depth, channels);
+	dev_dbg(dev, "%s(%d, %d, %d)\n", __func__, configmsg, bit_depth,
+			channels);
 
 	msg.ipcid = IPC_ABOX_CONFIG;
 	abox_config_msg->param1 = bit_depth;
 	abox_config_msg->param2 = channels;
 	abox_config_msg->msgtype = configmsg;
-	result = abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
+	result = abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
 	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "%d: setting format(%d bit, %d channels) is failed\n", configmsg, bit_depth, channels);
+		dev_err(dev, "%d: setting format(%d bit, %d channels) is failed\n",
+				configmsg, bit_depth, channels);
 	}
 
 	return result;
 }
-
-int abox_hw_params_fixup_helper(struct snd_soc_pcm_runtime *rtd,
-		struct snd_pcm_hw_params *params)
-{
-	struct device *dev = rtd->cpu_dai->dev;
-	enum abox_dai abox_dai = rtd->cpu_dai->id;
-	unsigned int shift;
-	unsigned int val;
-	bool playback;
-
-	switch (rtd->dpcm[SNDRV_PCM_STREAM_PLAYBACK].state) {
-	case SND_SOC_DPCM_STATE_OPEN:
-	case SND_SOC_DPCM_STATE_HW_PARAMS:
-	case SND_SOC_DPCM_STATE_HW_FREE:
-		playback = true;
-		break;
-	default:
-		playback = false;
-		break;
-	}
-
-	dev_dbg(dev, "%s: id=%d\n", __func__, abox_dai);
-
-	if (params_channels(params) < 1) {
-		dev_info(dev, "channel count is fixed from %d to 2\n", params_channels(params));
-		hw_param_interval(params, SNDRV_PCM_HW_PARAM_CHANNELS)->min = 2;
-	}
-
-	if (params_width(params) < 16) {
-		dev_info(dev, "bit depth is fixed from %d to 16\n", params_width(params));
-		snd_mask_set(&params->masks[SNDRV_PCM_HW_PARAM_FORMAT - SNDRV_PCM_HW_PARAM_FIRST_MASK],
-				SNDRV_PCM_FORMAT_S16_LE);
-	}
-
-	if (playback) {
-		dev_dbg(dev, "playback\n");
-
-		switch (abox_dai) {
-		case ABOX_UAIF0:
-			shift = ABOX_ROUTE_UAIF_SPK_L(0);
-			break;
-		case ABOX_UAIF1:
-			shift = ABOX_ROUTE_UAIF_SPK_L(1);
-			break;
-		case ABOX_UAIF2:
-			shift = ABOX_ROUTE_UAIF_SPK_L(2);
-			break;
-		case ABOX_UAIF3:
-			shift = ABOX_ROUTE_UAIF_SPK_L(3);
-			break;
-		case ABOX_UAIF4:
-			shift = ABOX_ROUTE_UAIF_SPK_L(4);
-			break;
-		case ABOX_DSIF:
-			shift = ABOX_ROUTE_DSIF_L;
-			break;
-		default:
-			dev_err(dev, "%s:invalid dai id %d\n", __func__, abox_dai);
-			return -EINVAL;
-		}
-
-		val = (snd_soc_read(rtd->cpu_dai->codec, ABOX_ROUTE_CTRL0) >> shift) & ABOX_ROUTE_UAIF_SPK_MASK(0);
-
-		switch (val) {
-		default:
-			dev_dbg(dev, "%s:invalid routing value %d on dai id %d\n", __func__, val, abox_dai);
-		case 0x1:
-			hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min =
-					abox_get_out_rate(to_platform_device(dev), SET_MIXER_SAMPLE_RATE);
-			dev_info(dev, "sampling rate is fixed to %u\n", hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min);
-			abox_output_format_put_ipc(dev, SET_MIXER_FORMAT, params_width(params), params_channels(params));
-			break;
-		case 0x2:
-			hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min =
-					abox_get_out_rate(to_platform_device(dev), SET_OUT1_SAMPLE_RATE);
-			dev_info(dev, "sampling rate is fixed to %u\n", hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min);
-			abox_output_format_put_ipc(dev, SET_OUT1_FORMAT, params_width(params), params_channels(params));
-			break;
-		case 0x3:
-			hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min =
-					abox_get_out_rate(to_platform_device(dev), SET_OUT2_SAMPLE_RATE);
-			dev_info(dev, "sampling rate is fixed to %u\n", hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min);
-			abox_output_format_put_ipc(dev, SET_OUT2_FORMAT, params_width(params), params_channels(params));
-			break;
-		}
-	} else {
-		struct snd_soc_dpcm *dpcm;
-
-		dev_dbg(dev, "capture\n");
-
-		if (!list_empty(&rtd->dpcm[SNDRV_PCM_STREAM_CAPTURE].fe_clients)) {
-			int rate_src, format_src;
-
-			dpcm = list_first_entry(&rtd->dpcm[SNDRV_PCM_STREAM_CAPTURE].fe_clients,
-					struct snd_soc_dpcm, list_fe);
-			switch (dpcm->fe->cpu_dai->id) {
-			case ABOX_WDMA0:
-				rate_src = SET_RECP_SAMPLE_RATE;
-				format_src = SET_RECP_FORMAT;
-				break;
-			default:
-				dev_warn(dev, "fallback to WDMA1 (%d)\n", dpcm->fe->cpu_dai->id);
-			case ABOX_WDMA1:
-				rate_src = SET_INMUX0_SAMPLE_RATE;
-				format_src = SET_INMUX0_FORMAT;
-				break;
-			case ABOX_WDMA2:
-				rate_src = SET_INMUX1_SAMPLE_RATE;
-				format_src = SET_INMUX1_FORMAT;
-				break;
-			case ABOX_WDMA3:
-				rate_src = SET_INMUX2_SAMPLE_RATE;
-				format_src = SET_INMUX2_FORMAT;
-				break;
-			case ABOX_WDMA4:
-				rate_src = SET_INMUX3_SAMPLE_RATE;
-				format_src = SET_INMUX3_FORMAT;
-				break;
-			}
-			hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min =
-				abox_get_out_rate(to_platform_device(dev), rate_src);
-			dev_info(dev, "sampling rate is fixed to %u\n",
-					hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min);
-			abox_output_format_put_ipc(dev, format_src, params_width(params), params_channels(params));
-		} else {
-			dev_warn(dev, "fe is empty\n");
-		}
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL(abox_hw_params_fixup_helper);
 
 static const struct snd_soc_dai_ops abox_uaif_dai_ops = {
 	.set_fmt	= abox_uaif_set_fmt,
@@ -921,7 +820,8 @@ static int abox_dsif_set_bclk_ratio(struct snd_soc_dai *dai, unsigned int ratio)
 
 	rate = dai->rate;
 
-	target_pll = ((rate % 44100) == 0) ? AUD_PLL_RATE_HZ_FOR_44100 : AUD_PLL_RATE_HZ_FOR_48000;
+	target_pll = ((rate % 44100) == 0) ? AUD_PLL_RATE_HZ_FOR_44100 :
+			AUD_PLL_RATE_HZ_FOR_48000;
 	if (target_pll != clk_get_rate(data->clk_pll)) {
 		dev_info(dev, "Set AUD_PLL rate: %lu -> %lu\n",
 			clk_get_rate(data->clk_pll), target_pll);
@@ -966,11 +866,13 @@ static int abox_dsif_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
 	case SND_SOC_DAIFMT_NB_NF:
 	case SND_SOC_DAIFMT_NB_IF:
-		set_mask_value(ctrl, ABOX_DSIF_BCLK_POLARITY_MASK, 1 << ABOX_DSIF_BCLK_POLARITY_L);
+		set_mask_value(ctrl, ABOX_DSIF_BCLK_POLARITY_MASK,
+				1 << ABOX_DSIF_BCLK_POLARITY_L);
 		break;
 	case SND_SOC_DAIFMT_IB_NF:
 	case SND_SOC_DAIFMT_IB_IF:
-		set_mask_value(ctrl, ABOX_DSIF_BCLK_POLARITY_MASK, 0 << ABOX_DSIF_BCLK_POLARITY_L);
+		set_mask_value(ctrl, ABOX_DSIF_BCLK_POLARITY_MASK,
+				0 << ABOX_DSIF_BCLK_POLARITY_L);
 		break;
 	default:
 		result = -EINVAL;
@@ -1002,11 +904,10 @@ static int abox_dsif_set_channel_map(struct snd_soc_dai *dai,
 
 	ctrl = snd_soc_read(codec, ABOX_DSIF_CTRL);
 
-	if (tx_slot[0]) {
+	if (tx_slot[0])
 		set_mask_value(ctrl, ABOX_ORDER_MASK, 1 << ABOX_ORDER_L);
-	} else {
+	else
 		set_mask_value(ctrl, ABOX_ORDER_MASK, 0 << ABOX_ORDER_L);
-	}
 
 	snd_soc_write(codec, ABOX_DSIF_CTRL, ctrl);
 
@@ -1049,14 +950,13 @@ static void abox_dsif_shutdown(struct snd_pcm_substream *substream,
 
 	dev_info(dev, "%s[%d]\n", __func__, id);
 
-	snd_soc_update_bits(codec, ABOX_DSIF_CTRL, ABOX_ENABLE_MASK, 0 << ABOX_ENABLE_L);
+	snd_soc_update_bits(codec, ABOX_DSIF_CTRL, ABOX_ENABLE_MASK,
+			0 << ABOX_ENABLE_L);
 
 	clk_disable(data->clk_bclk_gate[id]);
 	clk_disable(data->clk_bclk[id]);
 	abox_request_cpu_gear(dev, data, dai, 12);
 	pm_runtime_put(dev);
-
-	return;
 }
 
 static int abox_dsif_hw_params(struct snd_pcm_substream *substream,
@@ -1109,7 +1009,8 @@ static int abox_dsif_trigger(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		snd_soc_update_bits(codec, ABOX_DSIF_CTRL, ABOX_ENABLE_MASK, 1 << ABOX_ENABLE_L);
+		snd_soc_update_bits(codec, ABOX_DSIF_CTRL, ABOX_ENABLE_MASK,
+				1 << ABOX_ENABLE_L);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
@@ -1493,7 +1394,8 @@ static int abox_codec_probe(struct snd_soc_codec *codec)
 
 	data->codec = codec;
 
-	snd_soc_update_bits(codec, ABOX_SPUM_CTRL0, ABOX_FUNC_CHAIN_RSRC_RECP_MASK,
+	snd_soc_update_bits(codec, ABOX_SPUM_CTRL0,
+			ABOX_FUNC_CHAIN_RSRC_RECP_MASK,
 			ABOX_FUNC_CHAIN_RSRC_RECP_MASK);
 
 	return 0;
@@ -1507,7 +1409,8 @@ static int abox_codec_remove(struct snd_soc_codec *codec)
 }
 
 static int abox_output_rate_get(struct snd_kcontrol *kcontrol,
-		struct snd_ctl_elem_value *ucontrol, enum ABOX_CONFIGMSG configmsg)
+		struct snd_ctl_elem_value *ucontrol,
+		enum ABOX_CONFIGMSG configmsg)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct device *dev = codec->dev;
@@ -1520,7 +1423,8 @@ static int abox_output_rate_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int abox_output_rate_put_ipc(struct device *dev, unsigned int val, enum ABOX_CONFIGMSG configmsg)
+static int abox_output_rate_put_ipc(struct device *dev, unsigned int val,
+		enum ABOX_CONFIGMSG configmsg)
 {
 	struct abox_data *data = dev_get_drvdata(dev);
 	ABOX_IPC_MSG msg;
@@ -1532,9 +1436,10 @@ static int abox_output_rate_put_ipc(struct device *dev, unsigned int val, enum A
 	msg.ipcid = IPC_ABOX_CONFIG;
 	abox_config_msg->param1 = val;
 	abox_config_msg->msgtype = configmsg;
-	result = abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
+	result = abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
 	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "setting %u to sample rate %d is failed\n", val, configmsg);
+		dev_err(dev, "setting %u to sample rate %d is failed\n",
+				val, configmsg);
 	}
 
 	data->out_rate[abox_config_msg->msgtype] = abox_config_msg->param1;
@@ -1543,7 +1448,8 @@ static int abox_output_rate_put_ipc(struct device *dev, unsigned int val, enum A
 }
 
 static int abox_output_rate_put(struct snd_kcontrol *kcontrol,
-		struct snd_ctl_elem_value *ucontrol, enum ABOX_CONFIGMSG configmsg)
+		struct snd_ctl_elem_value *ucontrol,
+		enum ABOX_CONFIGMSG configmsg)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct device *dev = codec->dev;
@@ -1552,7 +1458,7 @@ static int abox_output_rate_put(struct snd_kcontrol *kcontrol,
 	dev_info(dev, "%s(%u, %d)\n", __func__, val, configmsg);
 
 	pm_runtime_barrier(dev);
-	return abox_output_rate_put_ipc(dev, val, configmsg);;
+	return abox_output_rate_put_ipc(dev, val, configmsg);
 }
 
 static int abox_output_rate_get_mixer(struct snd_kcontrol *kcontrol,
@@ -1663,6 +1569,43 @@ static int abox_output_rate_put_inmux4(struct snd_kcontrol *kcontrol,
 	return abox_output_rate_put(kcontrol, ucontrol, SET_INMUX4_SAMPLE_RATE);
 }
 
+
+static int abox_auto_output_rate_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct device *dev = codec->dev;
+	struct abox_data *data = dev_get_drvdata(dev);
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+	unsigned int reg = mc->reg;
+	long value = data->out_rate_auto[reg];
+
+	dev_dbg(dev, "%s(0x%08x): %ld\n", __func__, reg, value);
+
+	ucontrol->value.integer.value[0] = value;
+
+	return 0;
+}
+
+static int abox_auto_output_rate_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct device *dev = codec->dev;
+	struct abox_data *data = dev_get_drvdata(dev);
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+	unsigned int reg = mc->reg;
+	long value = ucontrol->value.integer.value[0];
+
+	dev_info(dev, "%s(0x%08x, %ld)\n", __func__, reg, value);
+
+	data->out_rate_auto[reg] = value ? true : false;
+
+	return 0;
+}
+
 static int abox_synchronize_get(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol, int id)
 {
@@ -1677,7 +1620,8 @@ static int abox_synchronize_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int abox_synchronize_put_ipc(struct device *dev, unsigned int val, int id)
+static int abox_synchronize_put_ipc(struct device *dev,
+		unsigned int val, int id)
 {
 	struct abox_data *data = dev_get_drvdata(dev);
 	ABOX_IPC_MSG msg;
@@ -1690,9 +1634,10 @@ static int abox_synchronize_put_ipc(struct device *dev, unsigned int val, int id
 	pcmtask_msg->msgtype = PCM_SYNCHRONIZE;
 	pcmtask_msg->param.synchronize = val;
 	pcmtask_msg->channel_id = id;
-	result = abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
+	result = abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
 	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "synchronize rdma %u to rdma %d is failed\n", id, val);
+		dev_err(dev, "synchronize rdma %u to rdma %d is failed\n",
+				id, val);
 	}
 
 	data->rdma_synchronizer[id] = val;
@@ -1710,7 +1655,7 @@ static int abox_synchronize_put(struct snd_kcontrol *kcontrol,
 	dev_info(dev, "%s(%u, %d)\n", __func__, val, id);
 
 	pm_runtime_barrier(dev);
-	return abox_synchronize_put_ipc(dev, val, id);;
+	return abox_synchronize_put_ipc(dev, val, id);
 }
 
 static int abox_synchronize_get_rdma0(struct snd_kcontrol *kcontrol,
@@ -1815,7 +1760,8 @@ static int abox_erap_handler_get(struct snd_kcontrol *kcontrol,
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct device *dev = codec->dev;
 	struct abox_data *data = dev_get_drvdata(dev);
-	struct soc_mixer_control *mc = (struct soc_mixer_control *)kcontrol->private_value;
+	struct soc_mixer_control *mc =
+			(struct soc_mixer_control *)kcontrol->private_value;
 	enum ABOX_ERAP_TYPE type = (enum ABOX_ERAP_TYPE)mc->reg;
 
 	dev_dbg(dev, "%s(%d)\n", __func__, type);
@@ -1825,7 +1771,8 @@ static int abox_erap_handler_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int abox_erap_handler_put_ipc(struct device *dev, enum ABOX_ERAP_TYPE type, unsigned int val)
+static int abox_erap_handler_put_ipc(struct device *dev,
+		enum ABOX_ERAP_TYPE type, unsigned int val)
 {
 	struct abox_data *data = dev_get_drvdata(dev);
 	ABOX_IPC_MSG msg;
@@ -1840,9 +1787,10 @@ static int abox_erap_handler_put_ipc(struct device *dev, enum ABOX_ERAP_TYPE typ
 	erap_param->type = type;
 	erap_param->channel_no = 0;
 	erap_param->version = val;
-	result = abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
+	result = abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
 	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "erap control failed(type:%d, status:%d)\n", type, val);
+		dev_err(dev, "erap control failed(type:%d, status:%d)\n",
+				type, val);
 	}
 
 	data->erap_status[type] = val;
@@ -1855,7 +1803,8 @@ static int abox_erap_handler_put(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct device *dev = codec->dev;
-	struct soc_mixer_control *mc = (struct soc_mixer_control *)kcontrol->private_value;
+	struct soc_mixer_control *mc =
+			(struct soc_mixer_control *)kcontrol->private_value;
 	enum ABOX_ERAP_TYPE type = (enum ABOX_ERAP_TYPE)mc->reg;
 	unsigned int val = (unsigned int)ucontrol->value.integer.value[0];
 
@@ -1901,7 +1850,7 @@ static int abox_audio_mode_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static const char *abox_audio_mode_enum_texts[] = {
+static const char * const abox_audio_mode_enum_texts[] = {
 	"NORMAL",
 	"RINGTONE",
 	"IN_CALL",
@@ -1915,139 +1864,203 @@ static const unsigned int abox_audio_mode_enum_values[] = {
 	MODE_IN_COMMUNICATION,
 	MODE_IN_VIDEOCALL,
 };
-SOC_VALUE_ENUM_SINGLE_DECL(abox_audio_mode_enum, SND_SOC_NOPM, 0, 0, abox_audio_mode_enum_texts, abox_audio_mode_enum_values);
+SOC_VALUE_ENUM_SINGLE_DECL(abox_audio_mode_enum, SND_SOC_NOPM, 0, 0,
+	abox_audio_mode_enum_texts, abox_audio_mode_enum_values);
 
 static const struct snd_kcontrol_new abox_codec_controls[] = {
-	SOC_SINGLE_EXT("Sampling Rate Mixer", SND_SOC_NOPM, 8000, 192000, 0, abox_output_rate_get_mixer, abox_output_rate_put_mixer),
-	SOC_SINGLE_EXT("Sampling Rate Out1", SND_SOC_NOPM, 8000, 384000, 0, abox_output_rate_get_out1, abox_output_rate_put_out1),
-	SOC_SINGLE_EXT("Sampling Rate Out2", SND_SOC_NOPM, 8000, 384000, 0, abox_output_rate_get_out2, abox_output_rate_put_out2),
-	SOC_SINGLE_EXT("Sampling Rate Recp", SND_SOC_NOPM, 8000, 192000, 0, abox_output_rate_get_recp, abox_output_rate_put_recp),
-	SOC_SINGLE_EXT("Sampling Rate Inmux0", SND_SOC_NOPM, 8000, 192000, 0, abox_output_rate_get_inmux0, abox_output_rate_put_inmux0),
-	SOC_SINGLE_EXT("Sampling Rate Inmux1", SND_SOC_NOPM, 8000, 192000, 0, abox_output_rate_get_inmux1, abox_output_rate_put_inmux1),
-	SOC_SINGLE_EXT("Sampling Rate Inmux2", SND_SOC_NOPM, 8000, 192000, 0, abox_output_rate_get_inmux2, abox_output_rate_put_inmux2),
-	SOC_SINGLE_EXT("Sampling Rate Inmux3", SND_SOC_NOPM, 8000, 192000, 0, abox_output_rate_get_inmux3, abox_output_rate_put_inmux3),
-	SOC_SINGLE_EXT("Sampling Rate Inmux4", SND_SOC_NOPM, 8000, 192000, 0, abox_output_rate_get_inmux4, abox_output_rate_put_inmux4),
-	SOC_SINGLE_EXT("Synchronize RDMA0", SND_SOC_NOPM, 0, 7, 0, abox_synchronize_get_rdma0, abox_synchronize_put_rdma0),
-	SOC_SINGLE_EXT("Synchronize RDMA1", SND_SOC_NOPM, 0, 7, 0, abox_synchronize_get_rdma1, abox_synchronize_put_rdma1),
-	SOC_SINGLE_EXT("Synchronize RDMA2", SND_SOC_NOPM, 0, 7, 0, abox_synchronize_get_rdma2, abox_synchronize_put_rdma2),
-	SOC_SINGLE_EXT("Synchronize RDMA3", SND_SOC_NOPM, 0, 7, 0, abox_synchronize_get_rdma3, abox_synchronize_put_rdma3),
-	SOC_SINGLE_EXT("Synchronize RDMA4", SND_SOC_NOPM, 0, 7, 0, abox_synchronize_get_rdma4, abox_synchronize_put_rdma4),
-	SOC_SINGLE_EXT("Synchronize RDMA5", SND_SOC_NOPM, 0, 7, 0, abox_synchronize_get_rdma5, abox_synchronize_put_rdma5),
-	SOC_SINGLE_EXT("Synchronize RDMA6", SND_SOC_NOPM, 0, 7, 0, abox_synchronize_get_rdma6, abox_synchronize_put_rdma6),
-	SOC_SINGLE_EXT("Synchronize RDMA7", SND_SOC_NOPM, 0, 7, 0, abox_synchronize_get_rdma7, abox_synchronize_put_rdma7),
-	SOC_SINGLE_EXT("Echo Cancellation", ERAP_ECHO_CANCEL, 0, 2, 0, abox_erap_handler_get, abox_erap_handler_put),
-	SOC_SINGLE_EXT("VI Sensing", ERAP_VI_SENSE, 0, 2, 0, abox_erap_handler_get, abox_erap_handler_put),
-	SOC_VALUE_ENUM_EXT("Audio Mode", abox_audio_mode_enum, abox_audio_mode_get, abox_audio_mode_put),
+	SOC_SINGLE_EXT("Sampling Rate Mixer", SND_SOC_NOPM, 8000, 192000, 0,
+		abox_output_rate_get_mixer, abox_output_rate_put_mixer),
+	SOC_SINGLE_EXT("Sampling Rate Out1", SND_SOC_NOPM, 8000, 384000, 0,
+		abox_output_rate_get_out1, abox_output_rate_put_out1),
+	SOC_SINGLE_EXT("Sampling Rate Out2", SND_SOC_NOPM, 8000, 384000, 0,
+		abox_output_rate_get_out2, abox_output_rate_put_out2),
+	SOC_SINGLE_EXT("Sampling Rate Recp", SND_SOC_NOPM, 8000, 192000, 0,
+		abox_output_rate_get_recp, abox_output_rate_put_recp),
+	SOC_SINGLE_EXT("Sampling Rate Inmux0", SND_SOC_NOPM, 8000, 192000, 0,
+		abox_output_rate_get_inmux0, abox_output_rate_put_inmux0),
+	SOC_SINGLE_EXT("Sampling Rate Inmux1", SND_SOC_NOPM, 8000, 192000, 0,
+		abox_output_rate_get_inmux1, abox_output_rate_put_inmux1),
+	SOC_SINGLE_EXT("Sampling Rate Inmux2", SND_SOC_NOPM, 8000, 192000, 0,
+		abox_output_rate_get_inmux2, abox_output_rate_put_inmux2),
+	SOC_SINGLE_EXT("Sampling Rate Inmux3", SND_SOC_NOPM, 8000, 192000, 0,
+		abox_output_rate_get_inmux3, abox_output_rate_put_inmux3),
+	SOC_SINGLE_EXT("Sampling Rate Inmux4", SND_SOC_NOPM, 8000, 192000, 0,
+		abox_output_rate_get_inmux4, abox_output_rate_put_inmux4),
+	SOC_SINGLE_EXT("Sampling Rate Mixer Auto", SET_MIXER_SAMPLE_RATE,
+		0, 1, 0, abox_auto_output_rate_get, abox_auto_output_rate_put),
+	SOC_SINGLE_EXT("Sampling Rate Out1 Auto", SET_OUT1_SAMPLE_RATE,
+		0, 1, 0, abox_auto_output_rate_get, abox_auto_output_rate_put),
+	SOC_SINGLE_EXT("Sampling Rate Out2 Auto", SET_OUT2_SAMPLE_RATE,
+		0, 1, 0, abox_auto_output_rate_get, abox_auto_output_rate_put),
+	SOC_SINGLE_EXT("Sampling Rate Recp Auto", SET_RECP_SAMPLE_RATE,
+		0, 1, 0, abox_auto_output_rate_get, abox_auto_output_rate_put),
+	SOC_SINGLE_EXT("Sampling Rate Inmux0 Auto", SET_INMUX0_SAMPLE_RATE,
+		0, 1, 0, abox_auto_output_rate_get, abox_auto_output_rate_put),
+	SOC_SINGLE_EXT("Sampling Rate Inmux1 Auto", SET_INMUX1_SAMPLE_RATE,
+		0, 1, 0, abox_auto_output_rate_get, abox_auto_output_rate_put),
+	SOC_SINGLE_EXT("Sampling Rate Inmux2 Auto", SET_INMUX2_SAMPLE_RATE,
+		0, 1, 0, abox_auto_output_rate_get, abox_auto_output_rate_put),
+	SOC_SINGLE_EXT("Sampling Rate Inmux3 Auto", SET_INMUX3_SAMPLE_RATE,
+		0, 1, 0, abox_auto_output_rate_get, abox_auto_output_rate_put),
+	SOC_SINGLE_EXT("Sampling Rate Inmux4 Auto", SET_INMUX4_SAMPLE_RATE,
+		0, 1, 0, abox_auto_output_rate_get, abox_auto_output_rate_put),
+	SOC_SINGLE_EXT("Synchronize RDMA0", SND_SOC_NOPM, 0, 7, 0,
+		abox_synchronize_get_rdma0, abox_synchronize_put_rdma0),
+	SOC_SINGLE_EXT("Synchronize RDMA1", SND_SOC_NOPM, 0, 7, 0,
+		abox_synchronize_get_rdma1, abox_synchronize_put_rdma1),
+	SOC_SINGLE_EXT("Synchronize RDMA2", SND_SOC_NOPM, 0, 7, 0,
+		abox_synchronize_get_rdma2, abox_synchronize_put_rdma2),
+	SOC_SINGLE_EXT("Synchronize RDMA3", SND_SOC_NOPM, 0, 7, 0,
+		abox_synchronize_get_rdma3, abox_synchronize_put_rdma3),
+	SOC_SINGLE_EXT("Synchronize RDMA4", SND_SOC_NOPM, 0, 7, 0,
+		abox_synchronize_get_rdma4, abox_synchronize_put_rdma4),
+	SOC_SINGLE_EXT("Synchronize RDMA5", SND_SOC_NOPM, 0, 7, 0,
+		abox_synchronize_get_rdma5, abox_synchronize_put_rdma5),
+	SOC_SINGLE_EXT("Synchronize RDMA6", SND_SOC_NOPM, 0, 7, 0,
+		abox_synchronize_get_rdma6, abox_synchronize_put_rdma6),
+	SOC_SINGLE_EXT("Synchronize RDMA7", SND_SOC_NOPM, 0, 7, 0,
+		abox_synchronize_get_rdma7, abox_synchronize_put_rdma7),
+	SOC_SINGLE_EXT("Echo Cancellation", ERAP_ECHO_CANCEL, 0, 2, 0,
+		abox_erap_handler_get, abox_erap_handler_put),
+	SOC_SINGLE_EXT("VI Sensing", ERAP_VI_SENSE, 0, 2, 0,
+		abox_erap_handler_get, abox_erap_handler_put),
+	SOC_VALUE_ENUM_EXT("Audio Mode", abox_audio_mode_enum,
+		abox_audio_mode_get, abox_audio_mode_put),
 };
 
-static const char *spus_inx_texts[] = {"RDMA", "SIFSM"};
-static SOC_ENUM_SINGLE_DECL(spus_in0_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_IN_L(0), spus_inx_texts);
+static const char * const spus_inx_texts[] = {"RDMA", "SIFSM"};
+static SOC_ENUM_SINGLE_DECL(spus_in0_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_IN_L(0), spus_inx_texts);
 static const struct snd_kcontrol_new spus_in0_controls[] = {
 	SOC_DAPM_ENUM("MUX", spus_in0_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_in1_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_IN_L(1), spus_inx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_in1_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_IN_L(1), spus_inx_texts);
 static const struct snd_kcontrol_new spus_in1_controls[] = {
 	SOC_DAPM_ENUM("MUX", spus_in1_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_in2_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_IN_L(2), spus_inx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_in2_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_IN_L(2), spus_inx_texts);
 static const struct snd_kcontrol_new spus_in2_controls[] = {
 	SOC_DAPM_ENUM("MUX", spus_in2_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_in3_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_IN_L(3), spus_inx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_in3_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_IN_L(3), spus_inx_texts);
 static const struct snd_kcontrol_new spus_in3_controls[] = {
 	SOC_DAPM_ENUM("MUX", spus_in3_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_in4_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_IN_L(4), spus_inx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_in4_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_IN_L(4), spus_inx_texts);
 static const struct snd_kcontrol_new spus_in4_controls[] = {
 	SOC_DAPM_ENUM("MUX", spus_in4_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_in5_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_IN_L(5), spus_inx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_in5_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_IN_L(5), spus_inx_texts);
 static const struct snd_kcontrol_new spus_in5_controls[] = {
 	SOC_DAPM_ENUM("MUX", spus_in5_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_in6_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_IN_L(6), spus_inx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_in6_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_IN_L(6), spus_inx_texts);
 static const struct snd_kcontrol_new spus_in6_controls[] = {
 	SOC_DAPM_ENUM("MUX", spus_in6_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_in7_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_IN_L(7), spus_inx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_in7_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_IN_L(7), spus_inx_texts);
 static const struct snd_kcontrol_new spus_in7_controls[] = {
 	SOC_DAPM_ENUM("MUX", spus_in7_enum),
 };
 
-static const char *spus_asrcx_texts[] = {"Off", "On"};
-static SOC_ENUM_SINGLE_DECL(spus_asrc0_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_ASRC_L(0), spus_asrcx_texts);
+static const char * const spus_asrcx_texts[] = {"Off", "On"};
+static SOC_ENUM_SINGLE_DECL(spus_asrc0_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_ASRC_L(0), spus_asrcx_texts);
 static const struct snd_kcontrol_new spus_asrc0_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spus_asrc0_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_asrc1_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_ASRC_L(1), spus_asrcx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_asrc1_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_ASRC_L(1), spus_asrcx_texts);
 static const struct snd_kcontrol_new spus_asrc1_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spus_asrc1_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_asrc2_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_ASRC_L(2), spus_asrcx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_asrc2_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_ASRC_L(2), spus_asrcx_texts);
 static const struct snd_kcontrol_new spus_asrc2_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spus_asrc2_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_asrc3_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_ASRC_L(3), spus_asrcx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_asrc3_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_ASRC_L(3), spus_asrcx_texts);
 static const struct snd_kcontrol_new spus_asrc3_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spus_asrc3_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_asrc4_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_ASRC_L(4), spus_asrcx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_asrc4_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_ASRC_L(4), spus_asrcx_texts);
 static const struct snd_kcontrol_new spus_asrc4_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spus_asrc4_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_asrc5_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_ASRC_L(5), spus_asrcx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_asrc5_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_ASRC_L(5), spus_asrcx_texts);
 static const struct snd_kcontrol_new spus_asrc5_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spus_asrc5_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_asrc6_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_ASRC_L(6), spus_asrcx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_asrc6_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_ASRC_L(6), spus_asrcx_texts);
 static const struct snd_kcontrol_new spus_asrc6_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spus_asrc6_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_asrc7_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_ASRC_L(7), spus_asrcx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_asrc7_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_ASRC_L(7), spus_asrcx_texts);
 static const struct snd_kcontrol_new spus_asrc7_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spus_asrc7_enum),
 };
 
-static const char *spus_outx_texts[] = {"SIFS1", "SIFS0", "SIFS2"};
-static SOC_ENUM_SINGLE_DECL(spus_out0_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_OUT_L(0), spus_outx_texts);
+static const char * const spus_outx_texts[] = {"SIFS1", "SIFS0", "SIFS2"};
+static SOC_ENUM_SINGLE_DECL(spus_out0_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_OUT_L(0), spus_outx_texts);
 static const struct snd_kcontrol_new spus_out0_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", spus_out0_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_out1_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_OUT_L(1), spus_outx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_out1_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_OUT_L(1), spus_outx_texts);
 static const struct snd_kcontrol_new spus_out1_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", spus_out1_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_out2_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_OUT_L(2), spus_outx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_out2_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_OUT_L(2), spus_outx_texts);
 static const struct snd_kcontrol_new spus_out2_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", spus_out2_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_out3_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_OUT_L(3), spus_outx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_out3_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_OUT_L(3), spus_outx_texts);
 static const struct snd_kcontrol_new spus_out3_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", spus_out3_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_out4_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_OUT_L(4), spus_outx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_out4_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_OUT_L(4), spus_outx_texts);
 static const struct snd_kcontrol_new spus_out4_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", spus_out4_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_out5_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_OUT_L(5), spus_outx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_out5_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_OUT_L(5), spus_outx_texts);
 static const struct snd_kcontrol_new spus_out5_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", spus_out5_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_out6_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_OUT_L(6), spus_outx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_out6_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_OUT_L(6), spus_outx_texts);
 static const struct snd_kcontrol_new spus_out6_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", spus_out6_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spus_out7_enum, ABOX_SPUS_CTRL0, ABOX_FUNC_CHAIN_SRC_OUT_L(7), spus_outx_texts);
+static SOC_ENUM_SINGLE_DECL(spus_out7_enum, ABOX_SPUS_CTRL0,
+	ABOX_FUNC_CHAIN_SRC_OUT_L(7), spus_outx_texts);
 static const struct snd_kcontrol_new spus_out7_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", spus_out7_enum),
 };
 
-static const char *spusm_texts[] = {
+static const char * const spusm_texts[] = {
 	"RESERVED", "RESERVED", "RESERVED", "RESERVED",
 	"RESERVED", "RESERVED", "RESERVED", "RESERVED",
 	"UAIF0", "UAIF1", "UAIF2", "UAIF3", "UAIF4",
 };
-static SOC_ENUM_SINGLE_DECL(spusm_enum, ABOX_ROUTE_CTRL1, ABOX_ROUTE_SPUSM_L, spusm_texts);
+static SOC_ENUM_SINGLE_DECL(spusm_enum, ABOX_ROUTE_CTRL1,
+	ABOX_ROUTE_SPUSM_L, spusm_texts);
 static const struct snd_kcontrol_new spusm_controls[] = {
 	SOC_DAPM_ENUM("MUX", spusm_enum),
 };
@@ -2060,7 +2073,8 @@ static int abox_flush_mixp(struct snd_soc_dapm_widget *w,
 	dev_dbg(codec->dev, "%s\n", __func__);
 
 	dev_info(codec->dev, "%s: flush\n", __func__);
-	snd_soc_update_bits(codec, ABOX_SPUS_CTRL2, ABOX_SPUS_MIXP_FLUSH_MASK,
+	snd_soc_update_bits(codec, ABOX_SPUS_CTRL2,
+			ABOX_SPUS_MIXP_FLUSH_MASK,
 			1 << ABOX_SPUS_MIXP_FLUSH_L);
 
 	return 0;
@@ -2073,9 +2087,10 @@ static int abox_flush_sifm(struct snd_soc_dapm_widget *w,
 
 	dev_dbg(codec->dev, "%s\n", __func__);
 
-	if (!snd_soc_dapm_connected_input_ep(w)) {
+	if (!snd_soc_dapm_connected_input_ep(w, NULL)) {
 		dev_info(codec->dev, "%s: flush\n", __func__);
-		snd_soc_update_bits(codec, ABOX_SPUS_CTRL3, ABOX_SPUS_SIFM_FLUSH_MASK,
+		snd_soc_update_bits(codec, ABOX_SPUS_CTRL3,
+				ABOX_SPUS_SIFM_FLUSH_MASK,
 				1 << ABOX_SPUS_SIFM_FLUSH_L);
 	}
 
@@ -2089,9 +2104,10 @@ static int abox_flush_sifs1(struct snd_soc_dapm_widget *w,
 
 	dev_dbg(codec->dev, "%s\n", __func__);
 
-	if (!snd_soc_dapm_connected_input_ep(w)) {
+	if (!snd_soc_dapm_connected_input_ep(w, NULL)) {
 		dev_info(codec->dev, "%s: flush\n", __func__);
-		snd_soc_update_bits(codec, ABOX_SPUS_CTRL3, ABOX_SPUS_SIFS1_FLUSH_MASK,
+		snd_soc_update_bits(codec, ABOX_SPUS_CTRL3,
+				ABOX_SPUS_SIFS1_FLUSH_MASK,
 				1 << ABOX_SPUS_SIFS1_FLUSH_L);
 	}
 
@@ -2105,9 +2121,10 @@ static int abox_flush_sifs2(struct snd_soc_dapm_widget *w,
 
 	dev_dbg(codec->dev, "%s\n", __func__);
 
-	if (!snd_soc_dapm_connected_input_ep(w)) {
+	if (!snd_soc_dapm_connected_input_ep(w, NULL)) {
 		dev_info(codec->dev, "%s: flush\n", __func__);
-		snd_soc_update_bits(codec, ABOX_SPUS_CTRL3, ABOX_SPUS_SIFS2_FLUSH_MASK,
+		snd_soc_update_bits(codec, ABOX_SPUS_CTRL3,
+				ABOX_SPUS_SIFS2_FLUSH_MASK,
 				1 << ABOX_SPUS_SIFS2_FLUSH_L);
 	}
 
@@ -2121,9 +2138,10 @@ static int abox_flush_recp(struct snd_soc_dapm_widget *w,
 
 	dev_dbg(codec->dev, "%s\n", __func__);
 
-	if (!snd_soc_dapm_connected_output_ep(w)) {
+	if (!snd_soc_dapm_connected_output_ep(w, NULL)) {
 		dev_info(codec->dev, "%s: flush\n", __func__);
-		snd_soc_update_bits(codec, ABOX_SPUM_CTRL2, ABOX_SPUM_RECP_FLUSH_MASK,
+		snd_soc_update_bits(codec, ABOX_SPUM_CTRL2,
+				ABOX_SPUM_RECP_FLUSH_MASK,
 				1 << ABOX_SPUM_RECP_FLUSH_L);
 	}
 
@@ -2137,9 +2155,10 @@ static int abox_flush_sifm0(struct snd_soc_dapm_widget *w,
 
 	dev_dbg(codec->dev, "%s\n", __func__);
 
-	if (!snd_soc_dapm_connected_output_ep(w)) {
+	if (!snd_soc_dapm_connected_output_ep(w, NULL)) {
 		dev_info(codec->dev, "%s: flush\n", __func__);
-		snd_soc_update_bits(codec, ABOX_SPUM_CTRL3, ABOX_SPUM_SIFM0_FLUSH_MASK,
+		snd_soc_update_bits(codec, ABOX_SPUM_CTRL3,
+				ABOX_SPUM_SIFM0_FLUSH_MASK,
 				1 << ABOX_SPUM_SIFM0_FLUSH_L);
 	}
 
@@ -2153,9 +2172,10 @@ static int abox_flush_sifm1(struct snd_soc_dapm_widget *w,
 
 	dev_dbg(codec->dev, "%s\n", __func__);
 
-	if (!snd_soc_dapm_connected_output_ep(w)) {
+	if (!snd_soc_dapm_connected_output_ep(w, NULL)) {
 		dev_info(codec->dev, "%s: flush\n", __func__);
-		snd_soc_update_bits(codec, ABOX_SPUM_CTRL3, ABOX_SPUM_SIFM1_FLUSH_MASK,
+		snd_soc_update_bits(codec, ABOX_SPUM_CTRL3,
+				ABOX_SPUM_SIFM1_FLUSH_MASK,
 				1 << ABOX_SPUM_SIFM1_FLUSH_L);
 	}
 
@@ -2169,9 +2189,10 @@ static int abox_flush_sifm2(struct snd_soc_dapm_widget *w,
 
 	dev_dbg(codec->dev, "%s\n", __func__);
 
-	if (!snd_soc_dapm_connected_output_ep(w)) {
+	if (!snd_soc_dapm_connected_output_ep(w, NULL)) {
 		dev_info(codec->dev, "%s: flush\n", __func__);
-		snd_soc_update_bits(codec, ABOX_SPUM_CTRL3, ABOX_SPUM_SIFM2_FLUSH_MASK,
+		snd_soc_update_bits(codec, ABOX_SPUM_CTRL3,
+				ABOX_SPUM_SIFM2_FLUSH_MASK,
 				1 << ABOX_SPUM_SIFM2_FLUSH_L);
 	}
 
@@ -2185,104 +2206,120 @@ static int abox_flush_sifm3(struct snd_soc_dapm_widget *w,
 
 	dev_dbg(codec->dev, "%s\n", __func__);
 
-	if (!snd_soc_dapm_connected_output_ep(w)) {
+	if (!snd_soc_dapm_connected_output_ep(w, NULL)) {
 		dev_info(codec->dev, "%s: flush\n", __func__);
-		snd_soc_update_bits(codec, ABOX_SPUM_CTRL3, ABOX_SPUM_SIFM3_FLUSH_MASK,
+		snd_soc_update_bits(codec, ABOX_SPUM_CTRL3,
+				ABOX_SPUM_SIFM3_FLUSH_MASK,
 				1 << ABOX_SPUM_SIFM3_FLUSH_L);
 	}
 
 	return 0;
 }
 
-static const char *sifsx_texts[] = {
+static const char * const sifsx_texts[] = {
 	"SPUS OUT0", "SPUS OUT1", "SPUS OUT2", "SPUS OUT3",
 	"SPUS OUT4", "SPUS OUT5", "SPUS OUT6", "SPUS OUT7",
 };
-static SOC_ENUM_SINGLE_DECL(sifs1_enum, ABOX_SPUS_CTRL1, ABOX_SIFS_OUT1_SEL_L, sifsx_texts);
+static SOC_ENUM_SINGLE_DECL(sifs1_enum, ABOX_SPUS_CTRL1,
+	ABOX_SIFS_OUT1_SEL_L, sifsx_texts);
 static const struct snd_kcontrol_new sifs1_controls[] = {
 	SOC_DAPM_ENUM("MUX", sifs1_enum),
 };
-static SOC_ENUM_SINGLE_DECL(sifs2_enum, ABOX_SPUS_CTRL1, ABOX_SIFS_OUT2_SEL_L, sifsx_texts);
+static SOC_ENUM_SINGLE_DECL(sifs2_enum, ABOX_SPUS_CTRL1,
+	ABOX_SIFS_OUT2_SEL_L, sifsx_texts);
 static const struct snd_kcontrol_new sifs2_controls[] = {
 	SOC_DAPM_ENUM("MUX", sifs2_enum),
 };
 
-static const char *sifsm_texts[] = {
+static const char * const sifsm_texts[] = {
 	"SPUS IN0", "SPUS IN1", "SPUS IN2", "SPUS IN3",
 	"SPUS IN4", "SPUS IN5", "SPUS IN6", "SPUS IN7",
 };
-static SOC_ENUM_SINGLE_DECL(sifsm_enum, ABOX_SPUS_CTRL1, ABOX_SIFM_IN_SEL_L, sifsm_texts);
+static SOC_ENUM_SINGLE_DECL(sifsm_enum, ABOX_SPUS_CTRL1,
+	ABOX_SIFM_IN_SEL_L, sifsm_texts);
 static const struct snd_kcontrol_new sifsm_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", sifsm_enum),
 };
 
-static const char *uaif_spkx_texts[] = {
+static const char * const uaif_spkx_texts[] = {
 	"RESERVED", "SIFS0", "SIFS1", "SIFS2",
 	"RESERVED", "RESERVED", "RESERVED", "RESERVED",
 	"RESERVED", "RESERVED", "RESERVED", "RESERVED",
 	"SIFMS",
 };
-static SOC_ENUM_SINGLE_DECL(uaif_spk0_enum, ABOX_ROUTE_CTRL0, ABOX_ROUTE_UAIF_SPK_L(0), uaif_spkx_texts);
+static SOC_ENUM_SINGLE_DECL(uaif_spk0_enum, ABOX_ROUTE_CTRL0,
+	ABOX_ROUTE_UAIF_SPK_L(0), uaif_spkx_texts);
 static const struct snd_kcontrol_new uaif_spk0_controls[] = {
 	SOC_DAPM_ENUM("MUX", uaif_spk0_enum),
 };
-static SOC_ENUM_SINGLE_DECL(uaif_spk1_enum, ABOX_ROUTE_CTRL0, ABOX_ROUTE_UAIF_SPK_L(1), uaif_spkx_texts);
+static SOC_ENUM_SINGLE_DECL(uaif_spk1_enum, ABOX_ROUTE_CTRL0,
+	ABOX_ROUTE_UAIF_SPK_L(1), uaif_spkx_texts);
 static const struct snd_kcontrol_new uaif_spk1_controls[] = {
 	SOC_DAPM_ENUM("MUX", uaif_spk1_enum),
 };
-static SOC_ENUM_SINGLE_DECL(uaif_spk2_enum, ABOX_ROUTE_CTRL0, ABOX_ROUTE_UAIF_SPK_L(2), uaif_spkx_texts);
+static SOC_ENUM_SINGLE_DECL(uaif_spk2_enum, ABOX_ROUTE_CTRL0,
+	ABOX_ROUTE_UAIF_SPK_L(2), uaif_spkx_texts);
 static const struct snd_kcontrol_new uaif_spk2_controls[] = {
 	SOC_DAPM_ENUM("MUX", uaif_spk2_enum),
 };
-static SOC_ENUM_SINGLE_DECL(uaif_spk3_enum, ABOX_ROUTE_CTRL0, ABOX_ROUTE_UAIF_SPK_L(3), uaif_spkx_texts);
+static SOC_ENUM_SINGLE_DECL(uaif_spk3_enum, ABOX_ROUTE_CTRL0,
+	ABOX_ROUTE_UAIF_SPK_L(3), uaif_spkx_texts);
 static const struct snd_kcontrol_new uaif_spk3_controls[] = {
 	SOC_DAPM_ENUM("MUX", uaif_spk3_enum),
 };
-static SOC_ENUM_SINGLE_DECL(uaif_spk4_enum, ABOX_ROUTE_CTRL0, ABOX_ROUTE_UAIF_SPK_L(4), uaif_spkx_texts);
+static SOC_ENUM_SINGLE_DECL(uaif_spk4_enum, ABOX_ROUTE_CTRL0,
+	ABOX_ROUTE_UAIF_SPK_L(4), uaif_spkx_texts);
 static const struct snd_kcontrol_new uaif_spk4_controls[] = {
 	SOC_DAPM_ENUM("MUX", uaif_spk4_enum),
 };
 
-static const char *dsif_spk_texts[] = {
+static const char * const dsif_spk_texts[] = {
 	"RESERVED", "RESERVED", "SIFS1", "SIFS2",
 };
-static SOC_ENUM_SINGLE_DECL(dsif_spk_enum, ABOX_ROUTE_CTRL0, 20, dsif_spk_texts);
+static SOC_ENUM_SINGLE_DECL(dsif_spk_enum, ABOX_ROUTE_CTRL0, 20,
+	dsif_spk_texts);
 static const struct snd_kcontrol_new dsif_spk_controls[] = {
 	SOC_DAPM_ENUM("MUX", dsif_spk_enum),
 };
 
-static const char *rsrcx_texts[] = {
+static const char * const rsrcx_texts[] = {
 	"RESERVED", "SIFS0", "SIFS1", "SIFS2",
 	"RESERVED", "RESERVED", "RESERVED", "RESERVED",
 	"NSRC0", "NSRC1", "NSRC2", "NSRC3",
 };
-static SOC_ENUM_SINGLE_DECL(rsrc0_enum, ABOX_ROUTE_CTRL2, ABOX_ROUTE_RSRC_L(0), rsrcx_texts);
+static SOC_ENUM_SINGLE_DECL(rsrc0_enum, ABOX_ROUTE_CTRL2, ABOX_ROUTE_RSRC_L(0),
+	rsrcx_texts);
 static const struct snd_kcontrol_new rsrc0_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", rsrc0_enum),
 };
-static SOC_ENUM_SINGLE_DECL(rsrc1_enum, ABOX_ROUTE_CTRL2, ABOX_ROUTE_RSRC_L(1), rsrcx_texts);
+static SOC_ENUM_SINGLE_DECL(rsrc1_enum, ABOX_ROUTE_CTRL2, ABOX_ROUTE_RSRC_L(1),
+	rsrcx_texts);
 static const struct snd_kcontrol_new rsrc1_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", rsrc1_enum),
 };
 
-static const char *nsrcx_texts[] = {
+static const char * const nsrcx_texts[] = {
 	"RESERVED", "SIFS0", "SIFS1", "SIFS2",
 	"RESERVED", "RESERVED", "RESERVED", "RESERVED",
 	"UAIF0", "UAIF1", "UAIF2", "UAIF3", "UAIF4",
 };
-static SOC_ENUM_SINGLE_DECL(nsrc0_enum, ABOX_ROUTE_CTRL1, ABOX_ROUTE_NSRC_L(0), nsrcx_texts);
+static SOC_ENUM_SINGLE_DECL(nsrc0_enum, ABOX_ROUTE_CTRL1, ABOX_ROUTE_NSRC_L(0),
+	nsrcx_texts);
 static const struct snd_kcontrol_new nsrc0_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", nsrc0_enum),
 };
-static SOC_ENUM_SINGLE_DECL(nsrc1_enum, ABOX_ROUTE_CTRL1, ABOX_ROUTE_NSRC_L(1), nsrcx_texts);
+static SOC_ENUM_SINGLE_DECL(nsrc1_enum, ABOX_ROUTE_CTRL1, ABOX_ROUTE_NSRC_L(1),
+	nsrcx_texts);
 static const struct snd_kcontrol_new nsrc1_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", nsrc1_enum),
 };
-static SOC_ENUM_SINGLE_DECL(nsrc2_enum, ABOX_ROUTE_CTRL1, ABOX_ROUTE_NSRC_L(2), nsrcx_texts);
+static SOC_ENUM_SINGLE_DECL(nsrc2_enum, ABOX_ROUTE_CTRL1, ABOX_ROUTE_NSRC_L(2),
+	nsrcx_texts);
 static const struct snd_kcontrol_new nsrc2_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", nsrc2_enum),
 };
-static SOC_ENUM_SINGLE_DECL(nsrc3_enum, ABOX_ROUTE_CTRL1, ABOX_ROUTE_NSRC_L(3), nsrcx_texts);
+static SOC_ENUM_SINGLE_DECL(nsrc3_enum, ABOX_ROUTE_CTRL1, ABOX_ROUTE_NSRC_L(3),
+	nsrcx_texts);
 static const struct snd_kcontrol_new nsrc3_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", nsrc3_enum),
 };
@@ -2292,48 +2329,57 @@ static const struct snd_kcontrol_new recp_controls[] = {
 	SOC_DAPM_SINGLE("PIFS1", ABOX_SPUM_CTRL1, ABOX_RECP_SRC_VALID_H, 1, 0),
 };
 
-static const char *spum_asrcx_texts[] = {"Off", "On"};
-static SOC_ENUM_SINGLE_DECL(spum_asrc0_enum, ABOX_SPUM_CTRL0, ABOX_FUNC_CHAIN_RSRC_ASRC_L, spum_asrcx_texts);
+static const char * const spum_asrcx_texts[] = {"Off", "On"};
+static SOC_ENUM_SINGLE_DECL(spum_asrc0_enum, ABOX_SPUM_CTRL0,
+	ABOX_FUNC_CHAIN_RSRC_ASRC_L, spum_asrcx_texts);
 static const struct snd_kcontrol_new spum_asrc0_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spum_asrc0_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spum_asrc1_enum, ABOX_SPUM_CTRL0, ABOX_FUNC_CHAIN_NSRC_ASRC_L(0), spum_asrcx_texts);
+static SOC_ENUM_SINGLE_DECL(spum_asrc1_enum, ABOX_SPUM_CTRL0,
+	ABOX_FUNC_CHAIN_NSRC_ASRC_L(0), spum_asrcx_texts);
 static const struct snd_kcontrol_new spum_asrc1_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spum_asrc1_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spum_asrc2_enum, ABOX_SPUM_CTRL0, ABOX_FUNC_CHAIN_NSRC_ASRC_L(1), spum_asrcx_texts);
+static SOC_ENUM_SINGLE_DECL(spum_asrc2_enum, ABOX_SPUM_CTRL0,
+	ABOX_FUNC_CHAIN_NSRC_ASRC_L(1), spum_asrcx_texts);
 static const struct snd_kcontrol_new spum_asrc2_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spum_asrc2_enum),
 };
-static SOC_ENUM_SINGLE_DECL(spum_asrc3_enum, ABOX_SPUM_CTRL0, ABOX_FUNC_CHAIN_NSRC_ASRC_L(2), spum_asrcx_texts);
+static SOC_ENUM_SINGLE_DECL(spum_asrc3_enum, ABOX_SPUM_CTRL0,
+	ABOX_FUNC_CHAIN_NSRC_ASRC_L(2), spum_asrcx_texts);
 static const struct snd_kcontrol_new spum_asrc3_controls[] = {
 	SOC_DAPM_ENUM("ASRC", spum_asrc3_enum),
 };
 
-static const char *sifmx_texts[] = {
+static const char * const sifmx_texts[] = {
 	"WDMA", "SIFMS",
 };
-static SOC_ENUM_SINGLE_DECL(sifm0_enum, ABOX_SPUM_CTRL0, ABOX_FUNC_CHAIN_NSRC_OUT_L(0), sifmx_texts);
+static SOC_ENUM_SINGLE_DECL(sifm0_enum, ABOX_SPUM_CTRL0,
+	ABOX_FUNC_CHAIN_NSRC_OUT_L(0), sifmx_texts);
 static const struct snd_kcontrol_new sifm0_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", sifm0_enum),
 };
-static SOC_ENUM_SINGLE_DECL(sifm1_enum, ABOX_SPUM_CTRL0, ABOX_FUNC_CHAIN_NSRC_OUT_L(1), sifmx_texts);
+static SOC_ENUM_SINGLE_DECL(sifm1_enum, ABOX_SPUM_CTRL0,
+	ABOX_FUNC_CHAIN_NSRC_OUT_L(1), sifmx_texts);
 static const struct snd_kcontrol_new sifm1_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", sifm1_enum),
 };
-static SOC_ENUM_SINGLE_DECL(sifm2_enum, ABOX_SPUM_CTRL0, ABOX_FUNC_CHAIN_NSRC_OUT_L(2), sifmx_texts);
+static SOC_ENUM_SINGLE_DECL(sifm2_enum, ABOX_SPUM_CTRL0,
+	ABOX_FUNC_CHAIN_NSRC_OUT_L(2), sifmx_texts);
 static const struct snd_kcontrol_new sifm2_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", sifm2_enum),
 };
-static SOC_ENUM_SINGLE_DECL(sifm3_enum, ABOX_SPUM_CTRL0, ABOX_FUNC_CHAIN_NSRC_OUT_L(3), sifmx_texts);
+static SOC_ENUM_SINGLE_DECL(sifm3_enum, ABOX_SPUM_CTRL0,
+	ABOX_FUNC_CHAIN_NSRC_OUT_L(3), sifmx_texts);
 static const struct snd_kcontrol_new sifm3_controls[] = {
 	SOC_DAPM_ENUM("DEMUX", sifm3_enum),
 };
 
-static const char *sifms_texts[] = {
+static const char * const sifms_texts[] = {
 	"RESERVED", "SIFM0", "SIFM1", "SIFM2", "SIFM3",
 };
-static SOC_ENUM_SINGLE_DECL(sifms_enum, ABOX_SPUM_CTRL1, ABOX_SIFS_OUT_SEL_L, sifms_texts);
+static SOC_ENUM_SINGLE_DECL(sifms_enum, ABOX_SPUM_CTRL1, ABOX_SIFS_OUT_SEL_L,
+	sifms_texts);
 static const struct snd_kcontrol_new sifms_controls[] = {
 	SOC_DAPM_ENUM("MUX", sifms_enum),
 };
@@ -2348,7 +2394,8 @@ static const struct snd_soc_dapm_widget abox_codec_dapm_widgets[] = {
 	SND_SOC_DAPM_PGA("SIFSM-SPUS IN5", SND_SOC_NOPM, 0, 0, NULL, 0),
 	SND_SOC_DAPM_PGA("SIFSM-SPUS IN6", SND_SOC_NOPM, 0, 0, NULL, 0),
 	SND_SOC_DAPM_PGA("SIFSM-SPUS IN7", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_DEMUX_E("SIFSM", SND_SOC_NOPM, 0, 0, sifsm_controls, abox_flush_sifm, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_DEMUX_E("SIFSM", SND_SOC_NOPM, 0, 0, sifsm_controls,
+		abox_flush_sifm, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_MUX("SPUS IN0", SND_SOC_NOPM, 0, 0, spus_in0_controls),
 	SND_SOC_DAPM_MUX("SPUS IN1", SND_SOC_NOPM, 0, 0, spus_in1_controls),
@@ -2399,9 +2446,12 @@ static const struct snd_soc_dapm_widget abox_codec_dapm_widgets[] = {
 	SND_SOC_DAPM_PGA("SPUS OUT5-SIFS2", SND_SOC_NOPM, 0, 0, NULL, 0),
 	SND_SOC_DAPM_PGA("SPUS OUT6-SIFS2", SND_SOC_NOPM, 0, 0, NULL, 0),
 	SND_SOC_DAPM_PGA("SPUS OUT7-SIFS2", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER_E("SIFS0", SND_SOC_NOPM, 0, 0, NULL, 0, abox_flush_mixp, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MUX_E("SIFS1", SND_SOC_NOPM, 0, 0, sifs1_controls, abox_flush_sifs1, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MUX_E("SIFS2", SND_SOC_NOPM, 0, 0, sifs2_controls, abox_flush_sifs2, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_MIXER_E("SIFS0", SND_SOC_NOPM, 0, 0, NULL, 0,
+		abox_flush_mixp, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_MUX_E("SIFS1", SND_SOC_NOPM, 0, 0, sifs1_controls,
+		abox_flush_sifs1, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_MUX_E("SIFS2", SND_SOC_NOPM, 0, 0, sifs2_controls,
+		abox_flush_sifs2, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_MUX("UAIF SPK0", SND_SOC_NOPM, 0, 0, uaif_spk0_controls),
 	SND_SOC_DAPM_MUX("UAIF SPK1", SND_SOC_NOPM, 0, 0, uaif_spk1_controls),
@@ -2419,16 +2469,21 @@ static const struct snd_soc_dapm_widget abox_codec_dapm_widgets[] = {
 
 	SND_SOC_DAPM_PGA("PIFS0", SND_SOC_NOPM, 0, 0, NULL, 0),
 	SND_SOC_DAPM_PGA("PIFS1", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SOC_MIXER_E_ARRAY("RECP", SND_SOC_NOPM, 0, 0, recp_controls, abox_flush_recp, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+	SOC_MIXER_E_ARRAY("RECP", SND_SOC_NOPM, 0, 0, recp_controls,
+		abox_flush_recp, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_MUX("SPUM ASRC0", SND_SOC_NOPM, 0, 0, spum_asrc0_controls),
 	SND_SOC_DAPM_MUX("SPUM ASRC1", SND_SOC_NOPM, 0, 0, spum_asrc1_controls),
 	SND_SOC_DAPM_MUX("SPUM ASRC2", SND_SOC_NOPM, 0, 0, spum_asrc2_controls),
 	SND_SOC_DAPM_MUX("SPUM ASRC3", SND_SOC_NOPM, 0, 0, spum_asrc3_controls),
-	SND_SOC_DAPM_DEMUX_E("SIFM0", SND_SOC_NOPM, 0, 0, sifm0_controls, abox_flush_sifm0, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_DEMUX_E("SIFM1", SND_SOC_NOPM, 0, 0, sifm1_controls, abox_flush_sifm1, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_DEMUX_E("SIFM2", SND_SOC_NOPM, 0, 0, sifm2_controls, abox_flush_sifm2, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_DEMUX_E("SIFM3", SND_SOC_NOPM, 0, 0, sifm3_controls, abox_flush_sifm3, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_DEMUX_E("SIFM0", SND_SOC_NOPM, 0, 0, sifm0_controls,
+		abox_flush_sifm0, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_DEMUX_E("SIFM1", SND_SOC_NOPM, 0, 0, sifm1_controls,
+		abox_flush_sifm1, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_DEMUX_E("SIFM2", SND_SOC_NOPM, 0, 0, sifm2_controls,
+		abox_flush_sifm2, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_DEMUX_E("SIFM3", SND_SOC_NOPM, 0, 0, sifm3_controls,
+		abox_flush_sifm3, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_PGA("SIFM0-SIFMS", SND_SOC_NOPM, 0, 0, NULL, 0),
 	SND_SOC_DAPM_PGA("SIFM1-SIFMS", SND_SOC_NOPM, 0, 0, NULL, 0),
@@ -2445,11 +2500,16 @@ static const struct snd_soc_dapm_widget abox_codec_dapm_widgets[] = {
 	SND_SOC_DAPM_AIF_IN("UAIF3IN", "UAIF3 Capture", 0, SND_SOC_NOPM, 0, 0),
 	SND_SOC_DAPM_AIF_IN("UAIF4IN", "UAIF4 Capture", 0, SND_SOC_NOPM, 0, 0),
 
-	SND_SOC_DAPM_AIF_OUT("UAIF0OUT", "UAIF0 Playback", 0, SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_AIF_OUT("UAIF1OUT", "UAIF1 Playback", 0, SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_AIF_OUT("UAIF2OUT", "UAIF2 Playback", 0, SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_AIF_OUT("UAIF3OUT", "UAIF3 Playback", 0, SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_AIF_OUT("UAIF4OUT", "UAIF4 Playback", 0, SND_SOC_NOPM, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("UAIF0OUT", "UAIF0 Playback", 0, SND_SOC_NOPM,
+		0, 0),
+	SND_SOC_DAPM_AIF_OUT("UAIF1OUT", "UAIF1 Playback", 0, SND_SOC_NOPM,
+		0, 0),
+	SND_SOC_DAPM_AIF_OUT("UAIF2OUT", "UAIF2 Playback", 0, SND_SOC_NOPM,
+		0, 0),
+	SND_SOC_DAPM_AIF_OUT("UAIF3OUT", "UAIF3 Playback", 0, SND_SOC_NOPM,
+		0, 0),
+	SND_SOC_DAPM_AIF_OUT("UAIF4OUT", "UAIF4 Playback", 0, SND_SOC_NOPM,
+		0, 0),
 	SND_SOC_DAPM_AIF_OUT("DSIFOUT", "DSIF Playback", 0, SND_SOC_NOPM, 0, 0),
 };
 
@@ -2862,6 +2922,7 @@ static const struct regmap_config abox_codec_regmap_config = {
 static struct regmap *abox_codec_get_regmap(struct device *dev)
 {
 	struct abox_data *data = dev_get_drvdata(dev);
+
 	return data->regmap;
 }
 
@@ -2879,6 +2940,156 @@ static const struct snd_soc_codec_driver abox_codec = {
 	.get_regmap		= abox_codec_get_regmap,
 };
 
+static bool abox_find_nrf(const char *name,
+		int stream,
+		enum ABOX_CONFIGMSG *rate,
+		enum ABOX_CONFIGMSG *format)
+{
+	struct abox_name_rate_format {
+		const char *name;
+		int stream;
+		const enum ABOX_CONFIGMSG rate;
+		const enum ABOX_CONFIGMSG format;
+	};
+
+	static const struct abox_name_rate_format abox_nrf[] = {
+		{ "ABOX SIFS0",	SNDRV_PCM_STREAM_PLAYBACK,
+			SET_MIXER_SAMPLE_RATE,	SET_MIXER_FORMAT },
+		{ "ABOX SIFS1",	SNDRV_PCM_STREAM_PLAYBACK,
+			SET_OUT1_SAMPLE_RATE,	SET_OUT1_FORMAT },
+		{ "ABOX SIFS2",	SNDRV_PCM_STREAM_PLAYBACK,
+			SET_OUT2_SAMPLE_RATE,	SET_OUT2_FORMAT },
+		{ "ABOX RECP",	SNDRV_PCM_STREAM_CAPTURE,
+			SET_RECP_SAMPLE_RATE,	SET_RECP_FORMAT },
+		{ "ABOX SIFM0",	SNDRV_PCM_STREAM_CAPTURE,
+			SET_INMUX0_SAMPLE_RATE,	SET_INMUX0_FORMAT },
+		{ "ABOX SIFM1",	SNDRV_PCM_STREAM_CAPTURE,
+			SET_INMUX1_SAMPLE_RATE,	SET_INMUX1_FORMAT },
+		{ "ABOX SIFM2",	SNDRV_PCM_STREAM_CAPTURE,
+			SET_INMUX2_SAMPLE_RATE,	SET_INMUX2_FORMAT },
+		{ "ABOX SIFM3",	SNDRV_PCM_STREAM_CAPTURE,
+			SET_INMUX3_SAMPLE_RATE,	SET_INMUX3_FORMAT },
+		{ "SIFS0",	SNDRV_PCM_STREAM_PLAYBACK,
+			SET_MIXER_SAMPLE_RATE,	SET_MIXER_FORMAT },
+		{ "SIFS1",	SNDRV_PCM_STREAM_PLAYBACK,
+			SET_OUT1_SAMPLE_RATE,	SET_OUT1_FORMAT },
+		{ "SIFS2",	SNDRV_PCM_STREAM_PLAYBACK,
+			SET_OUT2_SAMPLE_RATE,	SET_OUT2_FORMAT },
+		{ "RECP",	SNDRV_PCM_STREAM_CAPTURE,
+			SET_RECP_SAMPLE_RATE,	SET_RECP_FORMAT },
+		{ "SIFM0",	SNDRV_PCM_STREAM_CAPTURE,
+			SET_INMUX0_SAMPLE_RATE,	SET_INMUX0_FORMAT },
+		{ "SIFM1",	SNDRV_PCM_STREAM_CAPTURE,
+			SET_INMUX1_SAMPLE_RATE,	SET_INMUX1_FORMAT },
+		{ "SIFM2",	SNDRV_PCM_STREAM_CAPTURE,
+			SET_INMUX2_SAMPLE_RATE,	SET_INMUX2_FORMAT },
+		{ "SIFM3",	SNDRV_PCM_STREAM_CAPTURE,
+			SET_INMUX3_SAMPLE_RATE,	SET_INMUX3_FORMAT },
+	};
+
+	const struct abox_name_rate_format *nrf;
+
+	for (nrf = abox_nrf; nrf - abox_nrf < ARRAY_SIZE(abox_nrf); nrf++) {
+		if ((nrf->stream == stream) && (strcmp(nrf->name, name) == 0)) {
+			*rate = nrf->rate;
+			*format = nrf->format;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+int abox_hw_params_fixup_helper(struct snd_soc_pcm_runtime *rtd,
+		struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_dai *dai = rtd->cpu_dai;
+	struct snd_soc_component *cmpnt = dai->component;
+	struct device *dev = dai->dev;
+	struct abox_data *data = dev_get_drvdata(dev);
+	struct snd_soc_dpcm *dpcm;
+	struct snd_pcm_hw_params *fastest_hw_params = NULL;
+	struct snd_soc_dapm_widget *w;
+	LIST_HEAD(widget_list);
+	int stream;
+	enum ABOX_CONFIGMSG rate, format;
+
+	dev_dbg(dev, "%s[%s]\n", __func__, dai->name);
+
+	switch (rtd->dpcm[SNDRV_PCM_STREAM_PLAYBACK].state) {
+	case SND_SOC_DPCM_STATE_OPEN:
+	case SND_SOC_DPCM_STATE_HW_PARAMS:
+	case SND_SOC_DPCM_STATE_HW_FREE:
+		stream = SNDRV_PCM_STREAM_PLAYBACK;
+		break;
+	default:
+		stream = SNDRV_PCM_STREAM_CAPTURE;
+		break;
+	}
+
+	list_for_each_entry(dpcm, &rtd->dpcm[stream].fe_clients, list_fe) {
+		if (!fastest_hw_params || (params_rate(fastest_hw_params) <
+				params_rate(&dpcm->hw_params))) {
+			fastest_hw_params = &dpcm->hw_params;
+		}
+	}
+
+	if (params_channels(params) < 1) {
+		dev_info(dev, "channel is fixed from %d to 2\n",
+				params_channels(params));
+		hw_param_interval(params, SNDRV_PCM_HW_PARAM_CHANNELS)->min = 2;
+	}
+
+	if (params_width(params) < 16) {
+		dev_info(dev, "width is fixed from %d to 16\n",
+				params_width(params));
+		params_set_format(params, SNDRV_PCM_FORMAT_S16_LE);
+	}
+
+	snd_soc_dapm_mutex_lock(snd_soc_component_get_dapm(cmpnt));
+	/*
+	 * For snd_soc_dapm_connected_{output,input}_ep fully discover the graph
+	 * we need to reset the cached number of inputs and outputs.
+	 */
+	list_for_each_entry(w, &cmpnt->card->widgets, list) {
+		w->endpoints[SND_SOC_DAPM_DIR_IN] = -1;
+		w->endpoints[SND_SOC_DAPM_DIR_OUT] = -1;
+	}
+	snd_soc_dapm_connected_input_ep(dai->playback_widget, &widget_list);
+	snd_soc_dapm_connected_output_ep(dai->capture_widget, &widget_list);
+
+	rate = (stream == SNDRV_PCM_STREAM_PLAYBACK) ?
+			SET_MIXER_SAMPLE_RATE : SET_INMUX0_SAMPLE_RATE;
+	format = (stream == SNDRV_PCM_STREAM_PLAYBACK) ?
+			SET_MIXER_FORMAT : SET_INMUX0_FORMAT;
+
+	list_for_each_entry(w, &widget_list, work_list) {
+		dev_dbg(dev, "%s", w->name);
+
+		if (!abox_find_nrf(w->name, stream, &rate, &format))
+			continue;
+
+		if (data->out_rate_auto[rate]) {
+			dev_dbg(dev, "%s: automatic\n", __func__);
+			abox_output_rate_put_ipc(dev,
+					params_rate(fastest_hw_params),
+					rate);
+		}
+
+		abox_output_format_put_ipc(dev, format, params_width(params),
+				params_channels(params));
+		hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min =
+				abox_get_out_rate(data, rate);
+		dev_info(dev, "%s: %d bit, %u channel, %uHz\n", __func__,
+				params_width(params), params_channels(params),
+				abox_get_out_rate(data, rate));
+	}
+	snd_soc_dapm_mutex_unlock(snd_soc_component_get_dapm(cmpnt));
+
+	return 0;
+}
+EXPORT_SYMBOL(abox_hw_params_fixup_helper);
+
 static struct pm_qos_request abox_pm_qos_int;
 static struct pm_qos_request abox_pm_qos_mif;
 static struct pm_qos_request abox_pm_qos_lit;
@@ -2890,17 +3101,15 @@ unsigned int abox_get_requiring_int_freq_in_khz(void)
 	unsigned int gear;
 	unsigned int int_freq;
 
-	if (data == NULL) {
+	if (data == NULL)
 		return 0;
-	}
 
 	gear = data->clk_ca7_gear;
 
-	if (gear <= ARRAY_SIZE(data->pm_qos_int)) {
+	if (gear <= ARRAY_SIZE(data->pm_qos_int))
 		int_freq = data->pm_qos_int[gear - 1];
-	} else {
+	else
 		int_freq = 0;
-	}
 
 	return int_freq;
 }
@@ -2909,20 +3118,15 @@ EXPORT_SYMBOL(abox_get_requiring_int_freq_in_khz);
 bool abox_cpu_gear_idle(struct device *dev, struct abox_data *data, void *id)
 {
 	struct abox_qos_request *request;
+	size_t len = ARRAY_SIZE(data->ca7_gear_requests);
 
 	dev_dbg(dev, "%s(%p)\n", __func__, id);
 
 	for (request = data->ca7_gear_requests;
-			request - data->ca7_gear_requests < ARRAY_SIZE(data->ca7_gear_requests)
-			&& request->id;
+			request - data->ca7_gear_requests < len && request->id;
 			request++) {
-		if (id == request->id) {
-			if (request->value >= CPU_GEAR_LOWER_LIMIT) {
-				return true;
-			} else {
-				return false;
-			}
-		}
+		if (id == request->id)
+			return (request->value >= CPU_GEAR_LOWER_LIMIT);
 	}
 
 	return true;
@@ -2939,9 +3143,8 @@ static void abox_check_call_cpu_gear(struct device *dev,
 		return;
 	}
 
-	if (id != (void *)ABOX_CPU_GEAR_CALL) {
+	if (id != (void *)ABOX_CPU_GEAR_CALL)
 		return;
-	}
 
 	if (old_id != id) {
 		if (gear < CPU_GEAR_LOWER_LIMIT) {
@@ -2982,7 +3185,7 @@ static void abox_notify_cpu_gear(struct abox_data *data, unsigned int freq)
 		system_msg->param1 = (int)freq;
 		system_msg->param2 = (int)time; /* SEC */
 		system_msg->param3 = (int)rem; /* NSEC */
-		abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 0, 0);
+		abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 0);
 		break;
 	case CALLIOPE_DISABLING:
 	case CALLIOPE_DISABLED:
@@ -2995,6 +3198,7 @@ static void abox_notify_cpu_gear(struct abox_data *data, unsigned int freq)
 static void abox_change_cpu_gear(struct device *dev, struct abox_data *data)
 {
 	struct abox_qos_request *request;
+	size_t len = ARRAY_SIZE(data->ca7_gear_requests);
 	unsigned int gear = UINT_MAX;
 	int result;
 	bool increasing;
@@ -3002,13 +3206,12 @@ static void abox_change_cpu_gear(struct device *dev, struct abox_data *data)
 	dev_dbg(dev, "%s\n", __func__);
 
 	for (request = data->ca7_gear_requests;
-			request - data->ca7_gear_requests < ARRAY_SIZE(data->ca7_gear_requests)
-			&& request->id;
+			request - data->ca7_gear_requests < len && request->id;
 			request++) {
-		if (gear > request->value) {
+		if (gear > request->value)
 			gear = request->value;
-		}
-		dev_dbg(dev, "id=%p, value=%u, gear=%u\n", request->id, request->value, gear);
+		dev_dbg(dev, "id=%p, value=%u, gear=%u\n",
+				request->id, request->value, gear);
 	}
 
 	increasing = (gear < data->clk_ca7_gear);
@@ -3016,7 +3219,8 @@ static void abox_change_cpu_gear(struct device *dev, struct abox_data *data)
 
 	if (increasing) {
 		if (gear <= ARRAY_SIZE(data->pm_qos_int)) {
-			pm_qos_update_request(&abox_pm_qos_int, data->pm_qos_int[gear - 1]);
+			pm_qos_update_request(&abox_pm_qos_int,
+					data->pm_qos_int[gear - 1]);
 		} else {
 			pm_qos_update_request(&abox_pm_qos_int, 0);
 		}
@@ -3025,32 +3229,40 @@ static void abox_change_cpu_gear(struct device *dev, struct abox_data *data)
 	if (gear >= CPU_GEAR_LOWER_LIMIT) {
 		result = clk_set_rate(data->clk_pll, 0);
 		if (IS_ERR_VALUE(result)) {
-			dev_warn(dev, "setting pll clock to 0 is failed: %d\n", result);
+			dev_warn(dev, "setting pll clock to %d is failed: %d\n",
+					0, result);
 		}
 		dev_info(dev, "pll clock: %lu\n", clk_get_rate(data->clk_pll));
 		result = clk_set_rate(data->clk_ca7, AUD_PLL_RATE_KHZ);
 		if (IS_ERR_VALUE(result)) {
-			dev_warn(dev, "setting cpu clock gear to %d is failed: %d\n", gear, result);
+			dev_warn(dev, "setting cpu clock gear to %d is failed: %d\n",
+					gear, result);
 		}
 	} else {
 		result = clk_set_rate(data->clk_ca7, AUD_PLL_RATE_KHZ / gear);
 		if (IS_ERR_VALUE(result)) {
-			dev_warn(dev, "setting cpu clock gear to %d is failed: %d\n", gear, result);
+			dev_warn(dev, "setting cpu clock gear to %d is failed: %d\n",
+					gear, result);
 		}
 
 		if (clk_get_rate(data->clk_pll) <= AUD_PLL_RATE_HZ_BYPASS) {
-			result = clk_set_rate(data->clk_pll, AUD_PLL_RATE_HZ_FOR_48000);
+			result = clk_set_rate(data->clk_pll,
+				AUD_PLL_RATE_HZ_FOR_48000);
 			if (IS_ERR_VALUE(result)) {
-				dev_warn(dev, "setting pll clock to 0 is failed: %d\n", result);
+				dev_warn(dev, "setting pll clock to %d is failed: %d\n",
+						AUD_PLL_RATE_HZ_FOR_48000,
+						result);
 			}
-			dev_info(dev, "pll clock: %lu\n", clk_get_rate(data->clk_pll));
+			dev_info(dev, "pll clock: %lu\n",
+					clk_get_rate(data->clk_pll));
 		}
 	}
 	dev_info(dev, "cpu clock: %lukHz\n", clk_get_rate(data->clk_ca7));
 
 	if (!increasing) {
 		if (gear <= ARRAY_SIZE(data->pm_qos_int)) {
-			pm_qos_update_request(&abox_pm_qos_int, data->pm_qos_int[gear - 1]);
+			pm_qos_update_request(&abox_pm_qos_int,
+					data->pm_qos_int[gear - 1]);
 		} else {
 			pm_qos_update_request(&abox_pm_qos_int, 0);
 		}
@@ -3061,31 +3273,36 @@ static void abox_change_cpu_gear(struct device *dev, struct abox_data *data)
 
 static void abox_change_cpu_gear_work_func(struct work_struct *work)
 {
-	struct abox_data *data = container_of(work, struct abox_data, change_cpu_gear_work);
+	struct abox_data *data = container_of(work, struct abox_data,
+			change_cpu_gear_work);
 
 	abox_change_cpu_gear(&data->pdev->dev, data);
 }
 
-int abox_request_cpu_gear(struct device *dev, struct abox_data *data, void *id, unsigned int gear)
+int abox_request_cpu_gear(struct device *dev, struct abox_data *data, void *id,
+		unsigned int gear)
 {
 	struct abox_qos_request *request;
+	size_t len = ARRAY_SIZE(data->ca7_gear_requests);
 
 	dev_info(dev, "%s(%p, %u)\n", __func__, id, gear);
 
 	for (request = data->ca7_gear_requests;
-			request - data->ca7_gear_requests < ARRAY_SIZE(data->ca7_gear_requests)
+			request - data->ca7_gear_requests < len
 			&& request->id && request->id != id;
 			request++) {
 	}
 
-	abox_check_call_cpu_gear(dev, data, request->id, request->value, id, gear);
+	abox_check_call_cpu_gear(dev, data, request->id, request->value,
+			id, gear);
 
 	request->value = gear;
-	wmb();
+	wmb(); /* value is read only when id is valid */
 	request->id = id;
 
-	if (request - data->ca7_gear_requests >= ARRAY_SIZE(data->ca7_gear_requests)) {
-		dev_err(dev, "%s: out of index. id=%p, gear=%u \n", __func__, id, gear);
+	if (request - data->ca7_gear_requests >= len) {
+		dev_err(dev, "%s: out of index. id=%p, gear=%u\n", __func__,
+				id, gear);
 		return -ENOMEM;
 	}
 
@@ -3094,14 +3311,17 @@ int abox_request_cpu_gear(struct device *dev, struct abox_data *data, void *id, 
 	return 0;
 }
 
-int abox_request_cpu_gear_sync(struct device *dev, struct abox_data *data, void *id, unsigned int gear)
+int abox_request_cpu_gear_sync(struct device *dev, struct abox_data *data,
+		void *id, unsigned int gear)
 {
 	int result = abox_request_cpu_gear(dev, data, id, gear);
+
 	flush_work(&data->change_cpu_gear_work);
 	return result;
 }
 
-static void abox_clear_cpu_gear_requests(struct device *dev, struct abox_data *data)
+static void abox_clear_cpu_gear_requests(struct device *dev,
+		struct abox_data *data)
 {
 	struct abox_qos_request *req;
 	size_t len = ARRAY_SIZE(data->ca7_gear_requests);
@@ -3119,7 +3339,8 @@ static void abox_clear_cpu_gear_requests(struct device *dev, struct abox_data *d
 
 static void abox_change_mif_freq_work_func(struct work_struct *work)
 {
-	struct abox_data *data = container_of(work, struct abox_data, change_mif_freq_work);
+	struct abox_data *data = container_of(work, struct abox_data,
+			change_mif_freq_work);
 
 	dev_info(&data->pdev->dev, "%s(%u)\n", __func__, data->mif_freq);
 
@@ -3182,7 +3403,7 @@ int abox_request_lit_freq(struct device *dev, struct abox_data *data,
 		return 0;
 
 	request->value = freq;
-	wmb();
+	wmb(); /* value is read only when id is valid */
 	request->id = id;
 
 	dev_info(dev, "%s(%p, %u)\n", __func__, id, freq);
@@ -3246,7 +3467,7 @@ int abox_request_big_freq(struct device *dev, struct abox_data *data,
 	dev_info(dev, "%s(%p, %u)\n", __func__, id, freq);
 
 	request->value = freq;
-	wmb();
+	wmb(); /* value is read only when id is valid */
 	request->id = id;
 
 	if (request - data->big_requests >= ARRAY_SIZE(data->big_requests)) {
@@ -3309,7 +3530,7 @@ int abox_request_hmp_boost(struct device *dev, struct abox_data *data,
 	dev_info(dev, "%s(%p, %u)\n", __func__, id, on);
 
 	request->value = on;
-	wmb();
+	wmb(); /* value is read only when id is valid */
 	request->id = id;
 
 	if (request - data->hmp_requests >= ARRAY_SIZE(data->hmp_requests)) {
@@ -3333,17 +3554,19 @@ void abox_request_dram_on(struct platform_device *pdev_abox, void *id, bool on)
 	dev_dbg(dev, "%s(%d)\n", __func__, on);
 
 	for (request = data->dram_requests;
-			request - data->dram_requests < ARRAY_SIZE(data->dram_requests)
+			request - data->dram_requests <
+			ARRAY_SIZE(data->dram_requests)
 			&& request->id && request->id != id;
 			request++) {
 	}
 
 	request->on = on;
-	wmb();
+	wmb(); /* value is read only when id is valid */
 	request->id = id;
 
 	for (request = data->dram_requests;
-			request - data->dram_requests < ARRAY_SIZE(data->dram_requests)
+			request - data->dram_requests <
+			ARRAY_SIZE(data->dram_requests)
 			&& request->id;
 			request++) {
 		if (request->on) {
@@ -3354,18 +3577,19 @@ void abox_request_dram_on(struct platform_device *pdev_abox, void *id, bool on)
 
 	regmap_write(data->regmap, ABOX_SYSPOWER_CTRL, val);
 	dev_dbg(dev, "%s: SYSPOWER_CTRL=%08x\n", __func__,
-			({regmap_read(data->regmap, ABOX_SYSPOWER_CTRL, &val); val; }));
+			({regmap_read(data->regmap, ABOX_SYSPOWER_CTRL, &val);
+			val; }));
 }
 
-int abox_register_irq_handler(struct device *dev, int ipc_id, abox_irq_handler_t irq_handler, void *dev_id)
+int abox_register_irq_handler(struct device *dev, int ipc_id,
+		abox_irq_handler_t irq_handler, void *dev_id)
 {
 	struct abox_data *data = dev_get_drvdata(dev);
 	struct abox_irq_action *irq_action = NULL;
 	bool new_handler = true;
 
-	if (ipc_id >= IPC_ID_COUNT) {
+	if (ipc_id >= IPC_ID_COUNT)
 		return -EINVAL;
-	}
 
 	list_for_each_entry(irq_action, &data->irq_actions, list) {
 		if (irq_action->irq == ipc_id && irq_action->dev_id == dev_id) {
@@ -3375,7 +3599,8 @@ int abox_register_irq_handler(struct device *dev, int ipc_id, abox_irq_handler_t
 	}
 
 	if (new_handler) {
-		irq_action = devm_kzalloc(dev, sizeof(struct abox_irq_action), GFP_KERNEL);
+		irq_action = devm_kzalloc(dev, sizeof(struct abox_irq_action),
+				GFP_KERNEL);
 		if (IS_ERR_OR_NULL(irq_action)) {
 			dev_err(dev, "%s: kmalloc fail\n", __func__);
 			return -ENOMEM;
@@ -3391,6 +3616,92 @@ int abox_register_irq_handler(struct device *dev, int ipc_id, abox_irq_handler_t
 }
 EXPORT_SYMBOL(abox_register_irq_handler);
 
+static int abox_control_asrc(struct snd_soc_dapm_widget *w, bool on)
+{
+	struct snd_kcontrol *kcontrol;
+	struct snd_soc_component *cmpnt;
+	struct soc_enum *e;
+	unsigned int reg, mask, val;
+
+	if (!w || !w->name || !w->num_kcontrols)
+		return -EINVAL;
+
+	kcontrol = w->kcontrols[0];
+	cmpnt = w->dapm->component;
+	e = (struct soc_enum *)kcontrol->private_value;
+	reg = e->reg;
+	mask = e->mask << e->shift_l;
+	val = (on ? 1 : 0) << e->shift_l;
+
+	return snd_soc_component_update_bits(cmpnt, reg, mask, val);
+}
+
+static bool abox_is_asrc_widget(struct snd_soc_dapm_widget *w)
+{
+	return w->name && !!strstr(w->name, "ASRC");
+}
+
+int abox_try_to_asrc_off(struct device *dev, struct abox_data *data,
+		struct snd_soc_dai *dai)
+{
+	struct snd_soc_component *cmpnt = dai->component;
+	struct snd_soc_dapm_widget *w, *w_asrc = NULL;
+	LIST_HEAD(widget_list);
+	enum ABOX_CONFIGMSG rate, format;
+	int stream, srate = 0;
+
+	dev_info(dev, "%s(%s)\n", __func__, dai->name);
+
+	if (dai->playback_widget == dai->capture_widget) {
+		dev_warn(dev, "%s: %s has playback, capture both\n",
+				__func__, dai->name);
+		return -EINVAL;
+	}
+
+	snd_soc_dapm_mutex_lock(snd_soc_component_get_dapm(cmpnt));
+	/*
+	 * For snd_soc_dapm_connected_{output,input}_ep fully discover the graph
+	 * we need to reset the cached number of inputs and outputs.
+	 */
+	list_for_each_entry(w, &cmpnt->card->widgets, list) {
+		w->endpoints[SND_SOC_DAPM_DIR_IN] = -1;
+		w->endpoints[SND_SOC_DAPM_DIR_OUT] = -1;
+	}
+	if (dai->playback_widget) {
+		stream = SNDRV_PCM_STREAM_PLAYBACK;
+		snd_soc_dapm_connected_output_ep(dai->playback_widget,
+				&widget_list);
+	}
+	if (dai->capture_widget) {
+		stream = SNDRV_PCM_STREAM_CAPTURE;
+		snd_soc_dapm_connected_input_ep(dai->capture_widget,
+				&widget_list);
+	}
+
+	list_for_each_entry(w, &widget_list, work_list) {
+		dev_dbg(dev, "%s", w->name);
+
+		if (abox_find_nrf(w->name, stream, &rate, &format)) {
+			srate = abox_get_out_rate(data, rate);
+			dev_dbg(dev, "%s: rate=%d\n", w->name, srate);
+		}
+
+		if (abox_is_asrc_widget(w)) {
+			w_asrc = w;
+			dev_dbg(dev, "%s is asrc\n", w->name);
+		}
+	}
+	snd_soc_dapm_mutex_unlock(snd_soc_component_get_dapm(cmpnt));
+
+	if (!w_asrc || !srate) {
+		dev_warn(dev, "%s: incomplete path: w_asrc=%p, srate=%d",
+				__func__, w_asrc, srate);
+		return -EINVAL;
+	}
+
+	return abox_control_asrc(w_asrc, (dai->rate != srate));
+}
+
 void abox_register_rdma(struct platform_device *pdev_abox,
 		struct platform_device *pdev_rdma, unsigned int id)
 {
@@ -3398,9 +3709,8 @@ void abox_register_rdma(struct platform_device *pdev_abox,
 
 	if (id < ARRAY_SIZE(data->pdev_rdma)) {
 		data->pdev_rdma[id] = pdev_rdma;
-		if (id > data->rdma_count) {
+		if (id > data->rdma_count)
 			data->rdma_count = id + 1;
-		}
 	} else {
 		dev_err(&data->pdev->dev, "%s: invalid id(%u)\n", __func__, id);
 	}
@@ -3413,9 +3723,8 @@ void abox_register_wdma(struct platform_device *pdev_abox,
 
 	if (id < ARRAY_SIZE(data->pdev_wdma)) {
 		data->pdev_wdma[id] = pdev_wdma;
-		if (id > data->wdma_count) {
+		if (id > data->wdma_count)
 			data->wdma_count = id + 1;
-		}
 	} else {
 		dev_err(&data->pdev->dev, "%s: invalid id(%u)\n", __func__, id);
 	}
@@ -3426,7 +3735,8 @@ static int abox_component_control_info(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct device *dev = codec->dev;
-	struct abox_component_kcontrol_value *value = (void *)kcontrol->private_value;
+	struct abox_component_kcontrol_value *value =
+			(void *)kcontrol->private_value;
 
 	dev_dbg(dev, "%s(%s)\n", __func__, kcontrol->id.name);
 
@@ -3445,7 +3755,8 @@ static int abox_component_control_get(struct snd_kcontrol *kcontrol,
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct device *dev = codec->dev;
 	struct abox_data *data = dev_get_drvdata(dev);
-	struct abox_component_kcontrol_value *value = (void *)kcontrol->private_value;
+	struct abox_component_kcontrol_value *value =
+			(void *)kcontrol->private_value;
 	ABOX_IPC_MSG *msg = &abox_component_control_get_msg;
 	struct IPC_SYSTEM_MSG *system_msg = &msg->msg.system;
 	int i, result;
@@ -3458,16 +3769,15 @@ static int abox_component_control_get(struct snd_kcontrol *kcontrol,
 	system_msg->msgtype = ABOX_REQUEST_COMPONENT_CONTROL;
 	system_msg->param1 = value->desc->id;
 	system_msg->param2 = value->control->id;
-	result = abox_start_ipc_transaction(dev, msg->ipcid, msg, sizeof(*msg), 0, 1);
-	if (IS_ERR_VALUE(result)) {
+	result = abox_request_ipc(dev, msg->ipcid, msg, sizeof(*msg), 0, 1);
+	if (IS_ERR_VALUE(result))
 		return result;
-	}
+
 	result = wait_event_timeout(data->ipc_wait_queue,
 			system_msg->msgtype == ABOX_REPORT_COMPONENT_CONTROL,
 			msecs_to_jiffies(1000));
-	if (system_msg->msgtype != ABOX_REPORT_COMPONENT_CONTROL) {
+	if (system_msg->msgtype != ABOX_REPORT_COMPONENT_CONTROL)
 		return -ETIME;
-	}
 
 	for (i = 0; i < value->control->count; i++) {
 		long val = (long)system_msg->bundle.param_s32[i];
@@ -3483,7 +3793,8 @@ static int abox_component_control_put(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct device *dev = codec->dev;
-	struct abox_component_kcontrol_value *value = (void *)kcontrol->private_value;
+	struct abox_component_kcontrol_value *value =
+			(void *)kcontrol->private_value;
 	ABOX_IPC_MSG msg;
 	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
 	int i;
@@ -3504,7 +3815,7 @@ static int abox_component_control_put(struct snd_kcontrol *kcontrol,
 	system_msg->param1 = value->desc->id;
 	system_msg->param2 = value->control->id;
 
-	return abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
+	return abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
 }
 
 #define ABOX_COMPONENT_KCONTROL(xname, xdesc, xcontrol)	\
@@ -3521,53 +3832,67 @@ struct snd_kcontrol_new abox_component_kcontrols[] = {
 	ABOX_COMPONENT_KCONTROL(NULL, NULL, NULL),
 };
 
+static int __abox_register_component_work_func(struct device *dev,
+		struct abox_data *data, struct abox_component *component)
+{
+	int i;
+	struct ABOX_COMPONENT_DESCRIPTIOR *desc = component->desc;
+
+	if (!component->desc || component->registered)
+		return -EEXIST;
+
+	component->registered = true;
+	for (i = 0; i < desc->control_count; i++) {
+		struct ABOX_COMPONENT_CONTROL *control = &desc->controls[i];
+		struct abox_component_kcontrol_value *value;
+		char kcontrol_name[64];
+
+		value = devm_kmalloc(dev, sizeof(*value), GFP_KERNEL);
+		if (IS_ERR_OR_NULL(value)) {
+			dev_err(dev, "%s: kmalloc fail\n", __func__);
+			continue;
+		}
+		value->desc = desc;
+		value->control = control;
+
+		snprintf(kcontrol_name, sizeof(kcontrol_name), "%s %s",
+				desc->name, control->name);
+
+		abox_component_kcontrols[0].name =
+				devm_kstrdup(dev, kcontrol_name, GFP_KERNEL);
+		abox_component_kcontrols[0].private_value =
+				(unsigned long)value;
+		if (data->codec) {
+			snd_soc_add_codec_controls(data->codec,
+					abox_component_kcontrols, 1);
+		}
+	}
+	return 0;
+}
+
 static void abox_register_component_work_func(struct work_struct *work)
 {
-	struct abox_data *data = container_of(work, struct abox_data, register_component_work);
+	struct abox_data *data = container_of(work, struct abox_data,
+			register_component_work);
 	struct device *dev = &data->pdev->dev;
 	struct abox_component *component;
-	int i;
+	int ret;
 
 	dev_dbg(dev, "%s\n", __func__);
 
 	for (component = data->components;
-			((component - data->components) < ARRAY_SIZE(data->components));
+			((component - data->components) <
+			ARRAY_SIZE(data->components));
 			component++) {
-		struct ABOX_COMPONENT_DESCRIPTIOR *desc = component->desc;
-
-		if (!component->desc || component->registered) {
+		ret = __abox_register_component_work_func(dev, data, component);
+		if (ret == -EEXIST)
 			continue;
-		}
-
-		component->registered = true;
-		for (i = 0; i < desc->control_count; i++) {
-			struct ABOX_COMPONENT_CONTROL *control = &desc->controls[i];
-			struct abox_component_kcontrol_value *value =
-					(struct abox_component_kcontrol_value *)
-					abox_component_kcontrols[0].private_value;
-			char kcontrol_name[64];
-
-			value = devm_kmalloc(dev, sizeof(*value), GFP_KERNEL);
-			if (IS_ERR_OR_NULL(value)) {
-				dev_err(dev, "%s: kmalloc fail\n", __func__);
-				continue;
-			}
-			value->desc = desc;
-			value->control = control;
-
-			snprintf(kcontrol_name, sizeof(kcontrol_name), "%s %s", desc->name, control->name);
-
-			abox_component_kcontrols[0].name = devm_kstrdup(dev, kcontrol_name, GFP_KERNEL);
-			abox_component_kcontrols[0].private_value = (unsigned long)value;
-			if (data->codec) {
-				snd_soc_add_codec_controls(data->codec, abox_component_kcontrols, 1);
-			}
-		}
 	}
 }
 
 
-static int abox_register_component(struct device *dev, struct ABOX_COMPONENT_DESCRIPTIOR *desc)
+static int abox_register_component(struct device *dev,
+		struct ABOX_COMPONENT_DESCRIPTIOR *desc)
 {
 	struct abox_data *data = dev_get_drvdata(dev);
 	struct abox_component *component;
@@ -3575,7 +3900,8 @@ static int abox_register_component(struct device *dev, struct ABOX_COMPONENT_DES
 	dev_dbg(dev, "%s(%d, %s)\n", __func__, desc->id, desc->name);
 
 	for (component = data->components;
-			((component - data->components) < ARRAY_SIZE(data->components)) &&
+			((component - data->components) <
+			ARRAY_SIZE(data->components)) &&
 			component->desc && component->desc != desc;
 			component++) {
 	}
@@ -3599,21 +3925,33 @@ static bool abox_is_calliope_incompatible(struct platform_device *pdev)
 	return ((system_msg->param3 >> 24) == 'A');
 }
 
+static void abox_restore_output_rate(struct device *dev,
+		struct abox_data *data, enum ABOX_CONFIGMSG msg)
+{
+	abox_output_rate_put_ipc(dev, data->out_rate[msg], msg);
+}
+
+static void abox_restore_erap_status(struct device *dev,
+		struct abox_data *data, enum ABOX_ERAP_TYPE type)
+{
+	abox_erap_handler_put_ipc(dev, type, data->erap_status[type]);
+}
+
 static void abox_restore_data(struct device *dev)
 {
 	struct abox_data *data = dev_get_drvdata(dev);
 
 	dev_info(dev, "%s\n", __func__);
 
-	abox_output_rate_put_ipc(dev, data->out_rate[SET_MIXER_SAMPLE_RATE], SET_MIXER_SAMPLE_RATE);
-	abox_output_rate_put_ipc(dev, data->out_rate[SET_OUT1_SAMPLE_RATE], SET_OUT1_SAMPLE_RATE);
-	abox_output_rate_put_ipc(dev, data->out_rate[SET_OUT2_SAMPLE_RATE], SET_OUT2_SAMPLE_RATE);
-	abox_output_rate_put_ipc(dev, data->out_rate[SET_RECP_SAMPLE_RATE], SET_RECP_SAMPLE_RATE);
-	abox_output_rate_put_ipc(dev, data->out_rate[SET_INMUX0_SAMPLE_RATE], SET_INMUX0_SAMPLE_RATE);
-	abox_output_rate_put_ipc(dev, data->out_rate[SET_INMUX1_SAMPLE_RATE], SET_INMUX1_SAMPLE_RATE);
-	abox_output_rate_put_ipc(dev, data->out_rate[SET_INMUX2_SAMPLE_RATE], SET_INMUX2_SAMPLE_RATE);
-	abox_output_rate_put_ipc(dev, data->out_rate[SET_INMUX3_SAMPLE_RATE], SET_INMUX3_SAMPLE_RATE);
-	abox_output_rate_put_ipc(dev, data->out_rate[SET_INMUX4_SAMPLE_RATE], SET_INMUX4_SAMPLE_RATE);
+	abox_restore_output_rate(dev, data, SET_MIXER_SAMPLE_RATE);
+	abox_restore_output_rate(dev, data, SET_OUT1_SAMPLE_RATE);
+	abox_restore_output_rate(dev, data, SET_OUT2_SAMPLE_RATE);
+	abox_restore_output_rate(dev, data, SET_RECP_SAMPLE_RATE);
+	abox_restore_output_rate(dev, data, SET_INMUX0_SAMPLE_RATE);
+	abox_restore_output_rate(dev, data, SET_INMUX1_SAMPLE_RATE);
+	abox_restore_output_rate(dev, data, SET_INMUX2_SAMPLE_RATE);
+	abox_restore_output_rate(dev, data, SET_INMUX3_SAMPLE_RATE);
+	abox_restore_output_rate(dev, data, SET_INMUX4_SAMPLE_RATE);
 
 	abox_synchronize_put_ipc(dev, data->rdma_synchronizer[0], 0);
 	abox_synchronize_put_ipc(dev, data->rdma_synchronizer[1], 1);
@@ -3624,13 +3962,14 @@ static void abox_restore_data(struct device *dev)
 	abox_synchronize_put_ipc(dev, data->rdma_synchronizer[6], 6);
 	abox_synchronize_put_ipc(dev, data->rdma_synchronizer[7], 7);
 
-	abox_erap_handler_put_ipc(dev, ERAP_ECHO_CANCEL, data->erap_status[ERAP_ECHO_CANCEL]);
-	abox_erap_handler_put_ipc(dev, ERAP_VI_SENSE, data->erap_status[ERAP_VI_SENSE]);
+	abox_restore_erap_status(dev, data, ERAP_ECHO_CANCEL);
+	abox_restore_erap_status(dev, data, ERAP_VI_SENSE);
 }
 
 static void abox_boot_done_work_func(struct work_struct *work)
 {
-	struct abox_data *data = container_of(work, struct abox_data, boot_done_work);
+	struct abox_data *data = container_of(work, struct abox_data,
+			boot_done_work);
 	struct platform_device *pdev = data->pdev;
 	struct device *dev = &pdev->dev;
 
@@ -3714,19 +4053,242 @@ static irqreturn_t abox_dma_irq_handler(int irq, struct abox_data *data)
 	return IRQ_HANDLED;
 }
 
+static void abox_system_ipc_handler(struct device *dev,
+		struct abox_data *data, ABOX_IPC_MSG *msg)
+{
+	struct IPC_SYSTEM_MSG *system_msg = &msg->msg.system;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct abox_irq_action *irq_action;
+	int result;
+
+	dev_dbg(dev, "msgtype=%d\n", system_msg->msgtype);
+
+	switch (system_msg->msgtype) {
+	case ABOX_BOOT_DONE:
+		if (abox_is_calliope_incompatible(pdev))
+			dev_err(dev, "Calliope is not compatible with the driver\n");
+
+		abox_boot_done(dev, system_msg->param3);
+
+		list_for_each_entry(irq_action, &data->irq_actions, list) {
+			if (irq_action->irq == IPC_SYSTEM) {
+				irq_action->irq_handler(IPC_SYSTEM,
+						irq_action->dev_id, msg);
+			}
+		}
+		break;
+	case ABOX_CHANGE_GEAR:
+		abox_request_cpu_gear(dev, data,
+				(void *)(long)system_msg->param2,
+				system_msg->param1);
+		break;
+	case ABOX_END_L2C_CONTROL:
+		data->l2c_controlled = true;
+		wake_up(&data->ipc_wait_queue);
+		break;
+	case ABOX_REQUEST_L2C:
+	{
+		void *id = (void *)(long)system_msg->param2;
+		bool on = !!system_msg->param1;
+
+		abox_request_l2c(dev, data, id, on);
+		break;
+	}
+	case ABOX_REQUEST_SYSCLK:
+		abox_request_mif_freq(dev, system_msg->param1);
+		break;
+	case ABOX_REPORT_LOG:
+		result = abox_log_register_buffer(dev, system_msg->param1,
+				abox_addr_to_kernel_addr(data,
+				system_msg->param2));
+		if (IS_ERR_VALUE(result)) {
+			dev_err(dev, "log buffer registration failed: %u, %u\n",
+					system_msg->param1, system_msg->param2);
+		}
+		break;
+	case ABOX_FLUSH_LOG:
+		break;
+	case ABOX_REPORT_DUMP:
+		result = abox_dump_register_buffer(dev, system_msg->param1,
+				system_msg->bundle.param_bundle,
+				abox_addr_to_kernel_addr(data,
+				system_msg->param2),
+				abox_addr_to_phys_addr(data,
+				system_msg->param2),
+				system_msg->param3);
+		if (IS_ERR_VALUE(result)) {
+			dev_err(dev, "dump buffer registration failed: %u, %u\n",
+					system_msg->param1, system_msg->param2);
+		}
+		break;
+	case ABOX_FLUSH_DUMP:
+		abox_dump_period_elapsed(system_msg->param1,
+				system_msg->param2);
+		break;
+	case ABOX_END_CLAIM_SRAM:
+		data->ima_claimed = true;
+		wake_up(&data->ipc_wait_queue);
+		break;
+	case ABOX_END_RECLAIM_SRAM:
+		data->ima_claimed = false;
+		wake_up(&data->ipc_wait_queue);
+		break;
+	case ABOX_REPORT_COMPONENT:
+		abox_register_component(dev, abox_addr_to_kernel_addr(data,
+				system_msg->param1));
+		break;
+	case ABOX_REPORT_COMPONENT_CONTROL:
+		abox_component_control_get_msg = *msg;
+		wake_up(&data->ipc_wait_queue);
+		break;
+	case ABOX_REPORT_FAULT:
+	{
+		const char *type;
+		unsigned int *addr;
+
+		switch (system_msg->param1) {
+		case 1:
+			type = "data abort";
+			break;
+		case 2:
+			type = "prefetch abort";
+			break;
+		case 3:
+			type = "os error";
+			break;
+		case 4:
+			type = "vss error";
+			break;
+		default:
+			type = "unknown error";
+			break;
+		}
+		dev_err(dev, "%s(%08X, %08X, %08X) is reported from calliope\n",
+				type, system_msg->param1, system_msg->param2,
+				system_msg->param3);
+
+		switch (system_msg->param1) {
+		case 1:
+		case 2:
+			addr = abox_addr_to_kernel_addr(data,
+					system_msg->bundle.param_s32[0]);
+			abox_dbg_print_gpr_from_addr(dev, data, addr);
+			abox_dbg_dump_gpr_from_addr(dev, addr,
+					ABOX_DBG_DUMP_FIRMWARE, type);
+			abox_dbg_dump_mem(dev, data,
+					ABOX_DBG_DUMP_FIRMWARE, type);
+			break;
+		case 4:
+			abox_dbg_print_gpr(dev, data);
+			abox_dbg_dump_gpr(dev, data, ABOX_DBG_DUMP_VSS, type);
+			abox_dbg_dump_mem(dev, data, ABOX_DBG_DUMP_VSS, type);
+			break;
+		default:
+			abox_dbg_print_gpr(dev, data);
+			abox_dbg_dump_gpr(dev, data,
+					ABOX_DBG_DUMP_FIRMWARE, type);
+			abox_dbg_dump_mem(dev, data,
+					ABOX_DBG_DUMP_FIRMWARE, type);
+			break;
+		}
+		break;
+	}
+	default:
+		dev_warn(dev, "Redundant system message: %d(%d, %d, %d)\n",
+				system_msg->msgtype, system_msg->param1,
+				system_msg->param2, system_msg->param3);
+		break;
+	}
+}
+
+static void abox_playback_ipc_handler(struct device *dev,
+		struct abox_data *data, ABOX_IPC_MSG *msg)
+{
+	struct IPC_PCMTASK_MSG *pcmtask_msg = &msg->msg.pcmtask;
+	struct abox_platform_data *platform_data;
+	struct platform_device *pdev;
+	int id;
+
+	dev_dbg(dev, "msgtype=%d\n", pcmtask_msg->msgtype);
+
+	switch (pcmtask_msg->msgtype) {
+	case PCM_PLTDAI_POINTER:
+		id = pcmtask_msg->channel_id;
+		pdev = data->pdev_rdma[id];
+		if (likely(id < ARRAY_SIZE(data->pdev_rdma)) && pdev) {
+			platform_data = platform_get_drvdata(pdev);
+			platform_data->pointer = pcmtask_msg->param.pointer;
+			snd_pcm_period_elapsed(platform_data->substream);
+		} else {
+			dev_err(dev, "pcm playback irq: id=%d\n", id);
+		}
+		break;
+	default:
+		dev_warn(dev, "Redundant pcmtask message: %d\n",
+				pcmtask_msg->msgtype);
+		break;
+	}
+}
+
+static void abox_capture_ipc_handler(struct device *dev,
+		struct abox_data *data, ABOX_IPC_MSG *msg)
+{
+	struct IPC_PCMTASK_MSG *pcmtask_msg = &msg->msg.pcmtask;
+	struct abox_platform_data *platform_data;
+	struct platform_device *pdev;
+	int id;
+
+	dev_dbg(dev, "msgtype=%d\n", pcmtask_msg->msgtype);
+
+	switch (pcmtask_msg->msgtype) {
+	case PCM_PLTDAI_POINTER:
+		id = pcmtask_msg->channel_id;
+		pdev = data->pdev_wdma[id];
+		if (likely(id < ARRAY_SIZE(data->pdev_wdma)) && pdev) {
+			platform_data = platform_get_drvdata(pdev);
+			platform_data->pointer = pcmtask_msg->param.pointer;
+			snd_pcm_period_elapsed(platform_data->substream);
+		} else {
+			dev_err(dev, "pcm capture irq: id=%d\n", id);
+		}
+		break;
+	default:
+		dev_warn(dev, "Redundant pcmtask message: %d\n",
+				pcmtask_msg->msgtype);
+		break;
+	}
+}
+
+static void abox_offload_ipc_handler(struct device *dev,
+		struct abox_data *data, ABOX_IPC_MSG *msg)
+{
+	struct IPC_OFFLOADTASK_MSG *offloadtask_msg = &msg->msg.offload;
+	int id = offloadtask_msg->channel_id;
+	struct abox_platform_data *platform_data;
+
+	if (id != 5) {
+		dev_warn(dev, "%s: unknown channel id(%d)\n", __func__, id);
+		id = 5;
+	}
+
+	platform_data = platform_get_drvdata(data->pdev_rdma[id]);
+	if (platform_data->compr_data.isr_handler)
+		platform_data->compr_data.isr_handler(data->pdev_rdma[id]);
+	else
+		dev_warn(dev, "Redundant offload message on rdma[%d]", id);
+}
+
 static irqreturn_t abox_irq_handler(int irq, void *dev_id)
 {
 	struct platform_device *pdev = dev_id;
 	struct device *dev = &pdev->dev;
 	struct abox_data *data = platform_get_drvdata(pdev);
 	struct abox_irq_action *irq_action;
-	int result;
 	ABOX_IPC_MSG msg;
 	irqreturn_t ret = IRQ_HANDLED;
 
-	if (abox_dma_irq_handler(irq, data) == IRQ_HANDLED) {
+	if (abox_dma_irq_handler(irq, data) == IRQ_HANDLED)
 		return IRQ_HANDLED;
-	}
 
 	memcpy(&msg, data->sram_base + data->ipc_rx_offset, sizeof(msg));
 	writel(0, data->sram_base + data->ipc_rx_ack_offset);
@@ -3737,211 +4299,24 @@ static irqreturn_t abox_irq_handler(int irq, void *dev_id)
 	case IPC_RECEIVED:
 		break;
 	case IPC_SYSTEM:
-	{
-		struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
-
-		dev_dbg(dev, "msgtype=%d\n", system_msg->msgtype);
-
-		switch (system_msg->msgtype) {
-		case ABOX_BOOT_DONE:
-			if (abox_is_calliope_incompatible(pdev)) {
-				dev_err(dev, "Calliope is not compatible with the driver\n");
-			}
-
-			abox_boot_done(dev, system_msg->param3);
-
-			list_for_each_entry(irq_action, &data->irq_actions, list) {
-				if (irq_action->irq == irq) {
-					irq_action->irq_handler(irq, irq_action->dev_id, &msg);
-				}
-			}
-			break;
-		case ABOX_CHANGE_GEAR:
-			abox_request_cpu_gear(dev, data, (void *)(long)system_msg->param2, system_msg->param1);
-			break;
-		case ABOX_END_L2C_CONTROL:
-			data->l2c_controlled = true;
-			wake_up(&data->ipc_wait_queue);
-			break;
-		case ABOX_REQUEST_L2C:
-		{
-			void *id = (void *)(long)system_msg->param2;
-			bool on = !!system_msg->param1;
-
-			abox_request_l2c(dev, data, id, on);
-			break;
-		}
-		case ABOX_REQUEST_SYSCLK:
-			abox_request_mif_freq(dev, system_msg->param1);
-			break;
-		case ABOX_REPORT_LOG:
-			result = abox_log_register_buffer(dev, system_msg->param1,
-					abox_addr_to_kernel_addr(data, system_msg->param2));
-			if (IS_ERR_VALUE(result)) {
-				dev_err(dev, "log buffer registration failed: %u, %u\n",
-						system_msg->param1, system_msg->param2);
-			}
-			break;
-		case ABOX_FLUSH_LOG:
-			break;
-		case ABOX_REPORT_DUMP:
-			result = abox_dump_register_buffer(dev, system_msg->param1,
-					system_msg->bundle.param_bundle,
-					abox_addr_to_kernel_addr(data, system_msg->param2),
-					abox_addr_to_phys_addr(data, system_msg->param2),
-					system_msg->param3);
-			if (IS_ERR_VALUE(result)) {
-				dev_err(dev, "dump buffer registration failed: %u, %u\n",
-						system_msg->param1, system_msg->param2);
-			}
-			break;
-		case ABOX_FLUSH_DUMP:
-			abox_dump_period_elapsed(system_msg->param1, system_msg->param2);
-			break;
-		case ABOX_END_CLAIM_SRAM:
-			data->ima_claimed = true;
-			wake_up(&data->ipc_wait_queue);
-			break;
-		case ABOX_END_RECLAIM_SRAM:
-			data->ima_claimed = false;
-			wake_up(&data->ipc_wait_queue);
-			break;
-		case ABOX_REPORT_COMPONENT:
-			abox_register_component(dev, abox_addr_to_kernel_addr(data, system_msg->param1));
-			break;
-		case ABOX_REPORT_COMPONENT_CONTROL:
-			memcpy(&abox_component_control_get_msg, &msg, sizeof(msg));
-			wake_up(&data->ipc_wait_queue);
-			break;
-		case ABOX_REPORT_FAULT:
-		{
-			const char *type;
-
-			switch (system_msg->param1) {
-			case 1:
-				type = "data abort";
-				break;
-			case 2:
-				type = "prefetch abort";
-				break;
-			case 3:
-				type = "os error";
-				break;
-			case 4:
-				type = "vss error";
-				break;
-			default:
-				type = "unknown error";
-				break;
-			}
-			dev_err(dev, "%s(%08X, %08X, %08X) is reported from calliope\n", type,
-					system_msg->param1, system_msg->param2, system_msg->param3);
-
-			switch (system_msg->param1) {
-			case 1:
-			case 2:
-				abox_dbg_print_gpr_from_addr(dev, data,
-						abox_addr_to_kernel_addr(data, system_msg->bundle.param_s32[0]));
-				abox_dbg_dump_gpr_from_addr(dev,
-						abox_addr_to_kernel_addr(data, system_msg->bundle.param_s32[0]),
-						ABOX_DBG_DUMP_FIRMWARE, type);
-				abox_dbg_dump_mem(dev, data, ABOX_DBG_DUMP_FIRMWARE, type);
-				break;
-			case 4:
-				abox_dbg_print_gpr(dev, data);
-				abox_dbg_dump_gpr(dev, data, ABOX_DBG_DUMP_VSS, type);
-				abox_dbg_dump_mem(dev, data, ABOX_DBG_DUMP_VSS, type);
-				break;
-			default:
-				abox_dbg_print_gpr(dev, data);
-				abox_dbg_dump_gpr(dev, data, ABOX_DBG_DUMP_FIRMWARE, type);
-				abox_dbg_dump_mem(dev, data, ABOX_DBG_DUMP_FIRMWARE, type);
-				break;
-			}
-			break;
-		}
-		default:
-			dev_warn(dev, "Redundant system message: %d(%d, %d, %d)\n",
-					system_msg->msgtype, system_msg->param1,
-					system_msg->param2, system_msg->param3);
-			break;
-		}
+		abox_system_ipc_handler(dev, data, &msg);
 		break;
-	}
 	case IPC_PCMPLAYBACK:
-	{
-		struct IPC_PCMTASK_MSG *pcmtask_msg = &msg.msg.pcmtask;
-		struct abox_platform_data *platform_data;
-		int id;
-
-		dev_dbg(dev, "msgtype=%d\n", pcmtask_msg->msgtype);
-
-		switch (pcmtask_msg->msgtype) {
-		case PCM_PLTDAI_POINTER:
-			id = pcmtask_msg->channel_id;
-			if (likely(id < ARRAY_SIZE(data->pdev_rdma) && data->pdev_rdma[id])) {
-				platform_data = platform_get_drvdata(data->pdev_rdma[id]);
-				platform_data->pointer = pcmtask_msg->param.pointer;
-				snd_pcm_period_elapsed(platform_data->substream);
-			} else {
-				dev_err(dev, "pcm playback irq: id=%d\n", id);
-			}
-			break;
-		default:
-			dev_warn(dev, "Redundant pcmtask message: %d\n", pcmtask_msg->msgtype);
-			break;
-		}
+		abox_playback_ipc_handler(dev, data, &msg);
 		break;
-	}
 	case IPC_PCMCAPTURE:
-	{
-		struct IPC_PCMTASK_MSG *pcmtask_msg = &msg.msg.pcmtask;
-		struct abox_platform_data *platform_data;
-		int id;
-
-		dev_dbg(dev, "msgtype=%d\n", pcmtask_msg->msgtype);
-
-		switch (pcmtask_msg->msgtype) {
-		case PCM_PLTDAI_POINTER:
-			id = pcmtask_msg->channel_id;
-			if (likely(id < ARRAY_SIZE(data->pdev_wdma) && data->pdev_wdma[id])) {
-				platform_data = platform_get_drvdata(data->pdev_wdma[id]);
-				platform_data->pointer = pcmtask_msg->param.pointer;
-				snd_pcm_period_elapsed(platform_data->substream);
-			} else {
-				dev_err(dev, "pcm capture irq: id=%d\n", id);
-			}
-			break;
-		default:
-			dev_warn(dev, "Redundant pcmtask message: %d\n", pcmtask_msg->msgtype);
-			break;
-		}
+		abox_capture_ipc_handler(dev, data, &msg);
 		break;
-	}
 	case IPC_OFFLOAD:
-	{
-		struct IPC_OFFLOADTASK_MSG *offloadtask_msg = &msg.msg.offload;
-		int id = offloadtask_msg->channel_id;
-		struct abox_platform_data *platform_data;
-
-		if (id != 5) {
-			dev_warn(dev, "%s: unknown channel id(%d)\n", __func__, id);
-			id = 5;
-		}
-		platform_data = platform_get_drvdata(data->pdev_rdma[id]);
-
-		if (platform_data->compr_data.isr_handler) {
-			platform_data->compr_data.isr_handler(data->pdev_rdma[id]);
-		} else {
-			dev_warn(dev, "Redundant offload message on rdma[%d]", id);
-		}
-
+		abox_offload_ipc_handler(dev, data, &msg);
 		break;
-	}
 	default:
 		list_for_each_entry(irq_action, &data->irq_actions, list) {
-			if ((irq_action->irq == irq) && (irq_action->irq_handler(irq, irq_action->dev_id, &msg) == IRQ_HANDLED)) {
-				break;
+			if (irq_action->irq == irq) {
+				if (irq_action->irq_handler(irq,
+						irq_action->dev_id, &msg) ==
+						IRQ_HANDLED)
+					break;
 			}
 		}
 		break;
@@ -3963,7 +4338,7 @@ static int abox_cpu_pm_ipc(struct device *dev, bool resume)
 
 	msg.ipcid = IPC_SYSTEM;
 	system->msgtype = resume ? ABOX_RESUME : ABOX_SUSPEND;
-	result = abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), true, true);
+	result = abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 1, 1);
 	if (!IS_ERR_VALUE(result) && !resume) {
 		int i = 1000;
 		unsigned val;
@@ -3972,9 +4347,8 @@ static int abox_cpu_pm_ipc(struct device *dev, bool resume)
 			exynos_pmu_read(ABOX_CA7_STATUS, &val);
 		} while (i-- && !(val & ABOX_CA7_STATUS_STANDBYWFI_MASK));
 
-		if (!i) {
+		if (!i)
 			dev_warn(dev, "calliope suspend time out\n");
-		}
 	}
 
 	return result;
@@ -3986,15 +4360,19 @@ static void abox_pad_retention(bool retention)
 #ifndef EMULATOR
 		exynos_pmu_update(GPIO_MODE_ABOX_SYS_PWR_REG, 0x1, 0x1);
 #else
-		update_mask_value(pmu_alive + GPIO_MODE_ABOX_SYS_PWR_REG, 0x1, 0x1);
+		update_mask_value(pmu_alive + GPIO_MODE_ABOX_SYS_PWR_REG,
+				0x1, 0x1);
 #endif
 	} else {
 #ifndef EMULATOR
-		exynos_pmu_update(PAD_RETENTION_ABOX_OPTION, 0x10000000, 0x10000000);
+		exynos_pmu_update(PAD_RETENTION_ABOX_OPTION,
+				0x10000000, 0x10000000);
 		exynos_pmu_update(GPIO_MODE_ABOX_SYS_PWR_REG, 0x1, 0x1);
 #else
-		update_mask_value(pmu_alive + PAD_RETENTION_ABOX_OPTION, 0x10000000, 0x10000000);
-		update_mask_value(pmu_alive + GPIO_MODE_ABOX_SYS_PWR_REG, 0x1, 0x1);
+		update_mask_value(pmu_alive + PAD_RETENTION_ABOX_OPTION,
+				0x10000000, 0x10000000);
+		update_mask_value(pmu_alive + GPIO_MODE_ABOX_SYS_PWR_REG,
+				0x1, 0x1);
 #endif
 	}
 }
@@ -4007,7 +4385,8 @@ static void abox_cpu_power(bool on)
 	exynos_pmu_update(ABOX_CA7_CONFIGURATION, ABOX_CA7_LOCAL_PWR_CFG,
 			on ? ABOX_CA7_LOCAL_PWR_CFG : 0);
 #else
-	update_mask_value(pmu_alive + ABOX_CA7_CONFIGURATION, ABOX_CA7_LOCAL_PWR_CFG,
+	update_mask_value(pmu_alive + ABOX_CA7_CONFIGURATION,
+			ABOX_CA7_LOCAL_PWR_CFG,
 			on ? ABOX_CA7_LOCAL_PWR_CFG : 0);
 #endif
 }
@@ -4071,20 +4450,21 @@ static void abox_reload_extra_firmware(struct abox_data *data, const char *name)
 
 	for (ext_fw = data->firmware_extra;
 			ext_fw->name && ext_fw->firmware &&
-			ext_fw - data->firmware_extra < ARRAY_SIZE(data->firmware_extra);
+			ext_fw - data->firmware_extra <
+			ARRAY_SIZE(data->firmware_extra);
 			ext_fw++) {
 		void __iomem *base;
 		size_t size;
 
-		if (strcmp(ext_fw->name, name) != 0) {
+		if (strcmp(ext_fw->name, name) != 0)
 			continue;
-		}
 
 		/* request */
 		release_firmware(ext_fw->firmware);
 		result = request_firmware(&ext_fw->firmware, ext_fw->name, dev);
 		if (IS_ERR_VALUE(result)) {
-			dev_err(dev, "%s: %s request failed\n", __func__, ext_fw->name);
+			dev_err(dev, "%s: %s request failed\n", __func__,
+					ext_fw->name);
 			break;
 		}
 
@@ -4099,24 +4479,29 @@ static void abox_reload_extra_firmware(struct abox_data *data, const char *name)
 			size = DRAM_FIRMWARE_SIZE;
 			break;
 		case 2:
-			base = phys_to_virt(shm_get_phys_base() + shm_get_cp_size());
+			base = phys_to_virt(shm_get_phys_base() +
+					shm_get_cp_size());
 			size = shm_get_vss_size();
 			break;
 		default:
-			dev_err(dev, "%s: area is invalid name=%s, area=%u, offset=%u\n", __func__,
-				ext_fw->name, ext_fw->area, ext_fw->offset);
+			dev_err(dev, "%s: area is invalid name=%s, area=%u, offset=%u\n",
+					__func__, ext_fw->name, ext_fw->area,
+					ext_fw->offset);
 			continue;
 		}
 
 		if (ext_fw->offset + ext_fw->firmware->size > size) {
-			dev_err(dev, "%s: firmware is too large name=%s, area=%u, offset=%u\n", __func__,
-				ext_fw->name, ext_fw->area, ext_fw->offset);
+			dev_err(dev, "%s: firmware is too large name=%s, area=%u, offset=%u\n",
+					__func__, ext_fw->name, ext_fw->area,
+					ext_fw->offset);
 			break;
 		}
 
-		memcpy(base + ext_fw->offset, ext_fw->firmware->data, ext_fw->firmware->size);
-		dev_info(dev, "%s: %s is downloaded at area %u offset %u\n", __func__,
-				ext_fw->name, ext_fw->area, ext_fw->offset);
+		memcpy(base + ext_fw->offset, ext_fw->firmware->data,
+				ext_fw->firmware->size);
+		dev_info(dev, "%s: %s is downloaded at area %u offset %u\n",
+				__func__, ext_fw->name, ext_fw->area,
+				ext_fw->offset);
 		break;
 	}
 }
@@ -4136,24 +4521,23 @@ static void abox_request_extra_firmware(struct abox_data *data)
 		const char *status;
 
 		status = of_get_property(child_np, "status", NULL);
-		if (status && strcmp("okay", status) && strcmp("ok", status)) {
+		if (status && strcmp("okay", status) && strcmp("ok", status))
 			continue;
-		}
 
-		result = of_property_read_string(child_np, "samsung,name", &ext_fw->name);
-		if (IS_ERR_VALUE(result)) {
+		result = of_property_read_string(child_np, "samsung,name",
+				&ext_fw->name);
+		if (IS_ERR_VALUE(result))
 			continue;
-		}
 
-		result = of_property_read_u32(child_np, "samsung,area", &ext_fw->area);
-		if (IS_ERR_VALUE(result)) {
+		result = of_property_read_u32(child_np, "samsung,area",
+				&ext_fw->area);
+		if (IS_ERR_VALUE(result))
 			continue;
-		}
 
-		result = of_property_read_u32(child_np, "samsung,offset", &ext_fw->offset);
-		if (IS_ERR_VALUE(result)) {
+		result = of_property_read_u32(child_np, "samsung,offset",
+				&ext_fw->offset);
+		if (IS_ERR_VALUE(result))
 			continue;
-		}
 
 		dev_dbg(dev, "%s: name=%s, area=%u, offset=%u\n", __func__,
 				ext_fw->name, ext_fw->area, ext_fw->offset);
@@ -4161,7 +4545,8 @@ static void abox_request_extra_firmware(struct abox_data *data)
 		release_firmware(ext_fw->firmware);
 		result = request_firmware(&ext_fw->firmware, ext_fw->name, dev);
 		if (IS_ERR_VALUE(result)) {
-			dev_err(dev, "%s: %s request failed\n", __func__, ext_fw->name);
+			dev_err(dev, "%s: %s request failed\n", __func__,
+					ext_fw->name);
 			continue;
 		}
 
@@ -4181,7 +4566,8 @@ static void abox_download_extra_firmware(struct abox_data *data)
 
 	for (ext_fw = data->firmware_extra;
 			ext_fw->name && ext_fw->firmware &&
-			ext_fw - data->firmware_extra < ARRAY_SIZE(data->firmware_extra);
+			ext_fw - data->firmware_extra <
+			ARRAY_SIZE(data->firmware_extra);
 			ext_fw++) {
 		switch (ext_fw->area) {
 		case 0:
@@ -4193,24 +4579,29 @@ static void abox_download_extra_firmware(struct abox_data *data)
 			size = DRAM_FIRMWARE_SIZE;
 			break;
 		case 2:
-			base = phys_to_virt(shm_get_phys_base() + shm_get_cp_size());
+			base = phys_to_virt(shm_get_phys_base() +
+					shm_get_cp_size());
 			size = shm_get_vss_size();
 			break;
 		default:
-			dev_err(dev, "%s: area is invalid name=%s, area=%u, offset=%u\n", __func__,
-				ext_fw->name, ext_fw->area, ext_fw->offset);
+			dev_err(dev, "%s: area is invalid name=%s, area=%u, offset=%u\n",
+					__func__, ext_fw->name, ext_fw->area,
+					ext_fw->offset);
 			continue;
 		}
 
 		if (ext_fw->offset + ext_fw->firmware->size > size) {
-			dev_err(dev, "%s: firmware is too large name=%s, area=%u, offset=%u\n", __func__,
-				ext_fw->name, ext_fw->area, ext_fw->offset);
+			dev_err(dev, "%s: firmware is too large name=%s, area=%u, offset=%u\n",
+					__func__, ext_fw->name, ext_fw->area,
+					ext_fw->offset);
 			continue;
 		}
 
-		memcpy(base + ext_fw->offset, ext_fw->firmware->data, ext_fw->firmware->size);
-		dev_info(dev, "%s: %s is downloaded at area %u offset %u\n", __func__,
-				ext_fw->name, ext_fw->area, ext_fw->offset);
+		memcpy(base + ext_fw->offset, ext_fw->firmware->data,
+				ext_fw->firmware->size);
+		dev_info(dev, "%s: %s is downloaded at area %u offset %u\n",
+				__func__, ext_fw->name, ext_fw->area,
+				ext_fw->offset);
 	}
 }
 
@@ -4222,22 +4613,25 @@ static int abox_download_firmware(struct platform_device *pdev)
 	dev_info(dev, "%s\n", __func__);
 
 	if (!data->firmware_sram) {
-		dev_err(dev, "SRAM firmware is not loaded\n");
+		dev_warn(dev, "SRAM firmware downloading is deferred\n");
 		return -EAGAIN;
 	}
 	memset_io(data->sram_base, 0, data->sram_size);
-	memcpy(data->sram_base, data->firmware_sram->data, data->firmware_sram->size);
+	memcpy(data->sram_base, data->firmware_sram->data,
+			data->firmware_sram->size);
 
 	if (!data->firmware_dram) {
-		dev_err(dev, "DRAM firmware is not loaded\n");
+		dev_warn(dev, "DRAM firmware downloading is defferred\n");
 		return -EAGAIN;
 	}
-	memcpy(data->dram_base, data->firmware_dram->data, data->firmware_dram->size);
+	memcpy(data->dram_base, data->firmware_dram->data,
+			data->firmware_dram->size);
 
 	if (!data->firmware_iva) {
-		dev_err(dev, "IVA firmware is not loaded\n");
+		dev_warn(dev, "IVA firmware is not loaded\n");
 	} else {
-		memcpy(data->iva_base, data->firmware_iva->data, data->firmware_iva->size);
+		memcpy(data->iva_base, data->firmware_iva->data,
+				data->firmware_iva->size);
 	}
 
 	abox_request_extra_firmware(data);
@@ -4274,7 +4668,8 @@ static void work_temp_function(struct work_struct *work)
 static DECLARE_DELAYED_WORK(work_temp, work_temp_function);
 #endif
 
-int abox_ima_claim(struct device *dev, struct abox_data *data, phys_addr_t *addr)
+int abox_ima_claim(struct device *dev, struct abox_data *data,
+		phys_addr_t *addr)
 {
 	ABOX_IPC_MSG msg;
 	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
@@ -4292,19 +4687,21 @@ int abox_ima_claim(struct device *dev, struct abox_data *data, phys_addr_t *addr
 
 	data->ima_vaddr = ima_alloc(data->ima_client, IVA_FIRMWARE_SIZE, 0);
 	if (IS_ERR_OR_NULL(data->ima_vaddr)) {
-		dev_err(dev, "%s: ima_alloc failed: %ld\n", __func__, PTR_ERR(data->ima_vaddr));
+		dev_err(dev, "%s: ima_alloc failed: %ld\n", __func__,
+				PTR_ERR(data->ima_vaddr));
 		result = data->ima_vaddr ? PTR_ERR(data->ima_vaddr) : -ENOMEM;
 		goto error;
 	}
 	paddr = ima_get_dma_addr(data->ima_client, data->ima_vaddr);
-	if (addr) {
+	if (addr)
 		*addr = paddr;
-	}
 
-	result = iommu_map(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY_PREPARE), paddr,
+	result = iommu_map(data->iommu_domain,
+			IOVA_IVA(ABOX_IVA_MEMORY_PREPARE), paddr,
 			IVA_FIRMWARE_SIZE, 0);
 	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "%s: iommu mapping failed(%d)\n", __func__, result);
+		dev_err(dev, "%s: iommu mapping failed(%d)\n", __func__,
+				result);
 		goto error;
 	}
 
@@ -4313,10 +4710,10 @@ int abox_ima_claim(struct device *dev, struct abox_data *data, phys_addr_t *addr
 	system_msg->param1 = ABOX_IVA_MEMORY_PREPARE;
 	system_msg->param2 = IOVA_IVA(ABOX_IVA_MEMORY_PREPARE);
 	system_msg->param3 = IVA_FIRMWARE_SIZE;
-	result = abox_start_ipc_transaction(&data->pdev->dev, msg.ipcid, &msg, sizeof(msg), 0, 0);
-	if (IS_ERR_VALUE(result)) {
+	result = abox_request_ipc(&data->pdev->dev, msg.ipcid, &msg,
+			sizeof(msg), 0, 0);
+	if (IS_ERR_VALUE(result))
 		goto error;
-	}
 
 	result = wait_event_timeout(data->ipc_wait_queue,
 			data->ima_claimed, msecs_to_jiffies(1000));
@@ -4328,8 +4725,10 @@ int abox_ima_claim(struct device *dev, struct abox_data *data, phys_addr_t *addr
 		goto error;
 	}
 
-	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY), IVA_FIRMWARE_SIZE);
-	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY_PREPARE), IVA_FIRMWARE_SIZE);
+	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY),
+			IVA_FIRMWARE_SIZE);
+	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY_PREPARE),
+			IVA_FIRMWARE_SIZE);
 	exynos_sysmmu_tlb_invalidate(data->iommu_domain,
 			IOVA_IVA(ABOX_IVA_MEMORY), IVA_FIRMWARE_SIZE);
 	exynos_sysmmu_tlb_invalidate(data->iommu_domain,
@@ -4338,13 +4737,14 @@ int abox_ima_claim(struct device *dev, struct abox_data *data, phys_addr_t *addr
 	result = iommu_map(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY),
 			paddr, IVA_FIRMWARE_SIZE, 0);
 	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "%s: iommu mapping failed(%d)\n", __func__, result);
+		dev_err(dev, "%s: iommu map failed(%d)\n", __func__, result);
 		goto error;
 	}
-	result = iommu_map(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY_PREPARE),
+	result = iommu_map(data->iommu_domain,
+			IOVA_IVA(ABOX_IVA_MEMORY_PREPARE),
 			data->iva_base_phys, IVA_FIRMWARE_SIZE, 0);
 	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "%s: iommu mapping failed(%d)\n", __func__, result);
+		dev_err(dev, "%s: iommu map failed(%d)\n", __func__, result);
 		goto error;
 	}
 
@@ -4352,17 +4752,19 @@ int abox_ima_claim(struct device *dev, struct abox_data *data, phys_addr_t *addr
 	system_msg->param1 = ABOX_IVA_MEMORY;
 	system_msg->param2 = IOVA_IVA(ABOX_IVA_MEMORY);
 	system_msg->param3 = IVA_FIRMWARE_SIZE;
-	result = abox_start_ipc_transaction(&data->pdev->dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
-	if (IS_ERR_VALUE(result)) {
+	result = abox_request_ipc(&data->pdev->dev, msg.ipcid, &msg,
+			sizeof(msg), 0, 1);
+	if (IS_ERR_VALUE(result))
 		goto error;
-	}
 
 	mutex_unlock(&data->ima_lock);
 	return result;
 
 error:
-	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY), IVA_FIRMWARE_SIZE);
-	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY_PREPARE), IVA_FIRMWARE_SIZE);
+	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY),
+			IVA_FIRMWARE_SIZE);
+	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY_PREPARE),
+			IVA_FIRMWARE_SIZE);
 	exynos_sysmmu_tlb_invalidate(data->iommu_domain,
 			IOVA_IVA(ABOX_IVA_MEMORY), IVA_FIRMWARE_SIZE);
 	exynos_sysmmu_tlb_invalidate(data->iommu_domain,
@@ -4374,7 +4776,8 @@ error:
 	return result;
 }
 
-static int abox_ima_reclaim(struct ima_client *client, struct device *dev, void *priv)
+static int abox_ima_reclaim(struct ima_client *client, struct device *dev,
+		void *priv)
 {
 	ABOX_IPC_MSG msg;
 	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
@@ -4396,7 +4799,7 @@ static int abox_ima_reclaim(struct ima_client *client, struct device *dev, void 
 	system_msg->param2 = IOVA_IVA(ABOX_IVA_MEMORY_PREPARE);
 	system_msg->param3 = IVA_FIRMWARE_SIZE;
 
-	abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 0, 0);
+	abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 0);
 
 	result = wait_event_timeout(data->ipc_wait_queue,
 			!data->ima_claimed, msecs_to_jiffies(1000));
@@ -4407,8 +4810,10 @@ static int abox_ima_reclaim(struct ima_client *client, struct device *dev, void 
 		result = -ETIME;
 	}
 
-	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY), IVA_FIRMWARE_SIZE);
-	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY_PREPARE), IVA_FIRMWARE_SIZE);
+	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY),
+			IVA_FIRMWARE_SIZE);
+	iommu_unmap(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY_PREPARE),
+			IVA_FIRMWARE_SIZE);
 	exynos_sysmmu_tlb_invalidate(data->iommu_domain,
 			IOVA_IVA(ABOX_IVA_MEMORY), IVA_FIRMWARE_SIZE);
 	exynos_sysmmu_tlb_invalidate(data->iommu_domain,
@@ -4417,7 +4822,8 @@ static int abox_ima_reclaim(struct ima_client *client, struct device *dev, void 
 	result = iommu_map(data->iommu_domain, IOVA_IVA(ABOX_IVA_MEMORY),
 			data->iva_base_phys, IVA_FIRMWARE_SIZE, 0);
 	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "%s: iommu mapping failed(%ld)\n", __func__, result);
+		dev_err(dev, "%s: iommu mapping failed(%ld)\n", __func__,
+				result);
 		goto error;
 	}
 
@@ -4427,10 +4833,9 @@ static int abox_ima_reclaim(struct ima_client *client, struct device *dev, void 
 	system_msg->param1 = ABOX_IVA_MEMORY;
 	system_msg->param2 = IOVA_IVA(ABOX_IVA_MEMORY);
 	system_msg->param3 = IVA_FIRMWARE_SIZE;
-	result = abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
-	if (IS_ERR_VALUE(result)) {
+	result = abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
+	if (IS_ERR_VALUE(result))
 		goto error;
-	}
 
 error:
 	mutex_unlock(&data->ima_lock);
@@ -4444,7 +4849,8 @@ static int abox_ima_init(struct device *dev, struct abox_data *data)
 	mutex_init(&data->ima_lock);
 	data->ima_client = ima_create_client(dev, abox_ima_reclaim, data);
 	if (IS_ERR(data->ima_client)) {
-		dev_err(dev, "ima_create_client failed: %ld\n", PTR_ERR(data->ima_client));
+		dev_err(dev, "ima_create_client failed: %ld\n",
+				PTR_ERR(data->ima_client));
 		return PTR_ERR(data->ima_client);
 	}
 
@@ -4471,13 +4877,13 @@ static void __abox_control_l2c(struct abox_data *data, bool enable)
 	if (enable) {
 		vts_acquire_sram(data->pdev_vts, 0);
 
-		abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 1, 0);
+		abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 1, 0);
 		wait_event_timeout(data->ipc_wait_queue,
 				data->l2c_controlled, LIMIT_IN_JIFFIES);
 		if (!data->l2c_controlled)
 			dev_err(dev, "l2c enable failed\n");
 	} else {
-		abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 1, 0);
+		abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 1, 0);
 		wait_event_timeout(data->ipc_wait_queue,
 				data->l2c_controlled, LIMIT_IN_JIFFIES);
 		if (!data->l2c_controlled)
@@ -4528,7 +4934,7 @@ int abox_request_l2c(struct device *dev, struct abox_data *data,
 	}
 
 	request->on = on;
-	wmb();
+	wmb(); /* value is read only when id is valid */
 	request->id = id;
 
 	if (request - data->l2c_requests >= ARRAY_SIZE(data->l2c_requests)) {
@@ -4588,13 +4994,12 @@ static int abox_enable(struct device *dev)
 
 		for (i = 1000; i; i--) {
 			exynos_pmu_read(ABOX_MAGIC, &value);
-			if (value == ABOX_MAGIC_VALUE) {
+			if (value == ABOX_MAGIC_VALUE)
 				break;
-			}
 		}
-		if (value != ABOX_MAGIC_VALUE) {
+		if (value != ABOX_MAGIC_VALUE)
 			dev_warn(dev, "%s: abox magic timeout\n", __func__);
-		}
+
 		abox_cpu_enable(false);
 		abox_cpu_power(false);
 	}
@@ -4629,7 +5034,8 @@ static int abox_enable(struct device *dev)
 
 	result = abox_download_firmware(pdev);
 	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "Failed to download firmware\n");
+		if (result != -EAGAIN)
+			dev_err(dev, "Failed to download firmware\n");
 		goto error;
 	}
 
@@ -4661,12 +5067,13 @@ static int abox_disable(struct device *dev)
 	case CALLIOPE_ENABLED:
 		break;
 	case CALLIOPE_ENABLING:
-		for (i = CALLIOPE_ENABLE_TIMEOUT_MS; i && (data->calliope_state != CALLIOPE_ENABLED); i--) {
+		for (i = CALLIOPE_ENABLE_TIMEOUT_MS;
+				i && (data->calliope_state != CALLIOPE_ENABLED);
+				i--)
 			mdelay(1);
-		}
-		if (data->calliope_state == CALLIOPE_ENABLED) {
+
+		if (data->calliope_state == CALLIOPE_ENABLED)
 			break;
-		}
 		/* Fallthrough */
 	default:
 		dev_warn(dev, "Invalid calliope state: %d\n",
@@ -4681,9 +5088,8 @@ static int abox_disable(struct device *dev)
 
 	abox_ima_reclaim(data->ima_client, dev, data);
 
-	abox_cpu_pm_ipc(dev, false);
-
 	flush_work(&data->change_cpu_gear_work);
+	abox_cpu_pm_ipc(dev, false);
 
 	spin_lock_irqsave(&data->ipc_spinlock, flag);
 	data->calliope_state = CALLIOPE_DISABLED;
@@ -4703,6 +5109,8 @@ static int abox_disable(struct device *dev)
 	clk_disable(data->clk_ca7);
 
 	abox_gic_disable_irq(&data->pdev_gic->dev);
+
+	cancel_work_sync(&data->change_cpu_gear_work);
 
 	return 0;
 }
@@ -4755,7 +5163,8 @@ static void abox_request_iva_firmware(struct abox_data *data)
 
 	result = request_firmware(&data->firmware_iva, firmware_name, dev);
 	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "%s: %s request failed\n", __func__, firmware_name);
+		dev_err(dev, "%s: %s request failed\n", __func__,
+				firmware_name);
 		return;
 	}
 
@@ -4763,7 +5172,8 @@ static void abox_request_iva_firmware(struct abox_data *data)
 			data->firmware_iva->data, data->firmware_iva->size);
 }
 
-static void abox_complete_dram_firmware_request(const struct firmware *fw, void *context)
+static void abox_complete_dram_firmware_request(const struct firmware *fw,
+		void *context)
 {
 	struct platform_device *pdev = context;
 	struct device *dev = &pdev->dev;
@@ -4781,12 +5191,12 @@ static void abox_complete_dram_firmware_request(const struct firmware *fw, void 
 	abox_request_extra_firmware(data);
 	abox_request_iva_firmware(data);
 
-	if (pm_runtime_active(dev)) {
+	if (pm_runtime_active(dev))
 		abox_enable(dev);
-	}
 }
 
-static void abox_complete_sram_firmware_request(const struct firmware *fw, void *context)
+static void abox_complete_sram_firmware_request(const struct firmware *fw,
+		void *context)
 {
 	struct platform_device *pdev = context;
 	struct device *dev = &pdev->dev;
@@ -4842,7 +5252,7 @@ static int abox_modem_notifier(struct notifier_block *nb,
 	case MODEM_EVENT_ONLINE:
 		msg.ipcid = IPC_SYSTEM;
 		system_msg->msgtype = ABOX_START_VSS;
-		abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 1, 1);
+		abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 1, 1);
 		break;
 	}
 
@@ -4890,12 +5300,12 @@ static ssize_t calliope_debug_store(struct device *dev,
 
 	msg.ipcid = IPC_SYSTEM;
 	system_msg->msgtype = ABOX_REQUEST_DEBUG;
-	sscanf(buf, "%10d,%10d,%10d,%739s", &system_msg->param1, &system_msg->param2, &system_msg->param3,
+	result = sscanf(buf, "%10d,%10d,%10d,%739s", &system_msg->param1,
+			&system_msg->param2, &system_msg->param3,
 			system_msg->bundle.param_bundle);
-	result = abox_start_ipc_transaction(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
-	if (IS_ERR_VALUE(result)) {
+	result = abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
+	if (IS_ERR_VALUE(result))
 		count = result;
-	}
 
 	return count;
 }
@@ -4909,13 +5319,11 @@ static ssize_t calliope_cmd_store(struct device *dev,
 
 	dev_dbg(dev, "%s(%s)\n", __func__, buf);
 
-	if (strncmp(cmd_reload_ext_bin, buf, sizeof(cmd_reload_ext_bin) - 1) == 0) {
+	if (!strncmp(cmd_reload_ext_bin, buf, sizeof(cmd_reload_ext_bin) - 1)) {
 		dev_dbg(dev, "reload ext bin\n");
 
-		if (sscanf(buf, "RELOAD EXT BIN:%63s", name) == 1) {
+		if (sscanf(buf, "RELOAD EXT BIN:%63s", name) == 1)
 			abox_reload_extra_firmware(data, name);
-		}
-
 	}
 
 	return count;
@@ -4931,15 +5339,13 @@ static int samsung_abox_probe(struct platform_device *pdev)
 	struct device_node *np = dev->of_node;
 	struct device_node *np_tmp;
 	struct abox_data *data;
-	int result, i;
+	int ret, i;
 
 	dev_info(dev, "%s\n", __func__);
 
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
-	if (!data) {
-		dev_err(dev, "Failed to allocate memory\n");
+	if (!data)
 		return -ENOMEM;
-	}
 	platform_set_drvdata(pdev, data);
 	data->pdev = pdev;
 	p_abox_data = data;
@@ -4948,19 +5354,19 @@ static int samsung_abox_probe(struct platform_device *pdev)
 	spin_lock_init(&data->ipc_spinlock);
 	mutex_init(&data->ipc_mutex);
 	wake_lock_init(&data->wake_lock, WAKE_LOCK_SUSPEND, "abox");
-	for (i = SET_MIXER_SAMPLE_RATE; i <= SET_INMUX4_SAMPLE_RATE; i++) {
+	for (i = SET_MIXER_SAMPLE_RATE; i <= SET_INMUX4_SAMPLE_RATE; i++)
 		data->out_rate[i] = 48000;
-	}
-	for (i = 0; i < 8; i++) {
+	for (i = 0; i < 8; i++)
 		data->rdma_synchronizer[i] = i;
-	}
 	INIT_WORK(&data->ipc_work, abox_process_ipc);
 	INIT_WORK(&data->change_cpu_gear_work, abox_change_cpu_gear_work_func);
 	INIT_WORK(&data->change_mif_freq_work, abox_change_mif_freq_work_func);
 	INIT_WORK(&data->change_lit_freq_work, abox_change_lit_freq_work_func);
 	INIT_WORK(&data->change_big_freq_work, abox_change_big_freq_work_func);
-	INIT_WORK(&data->change_hmp_boost_work, abox_change_hmp_boost_work_func);
-	INIT_WORK(&data->register_component_work, abox_register_component_work_func);
+	INIT_WORK(&data->change_hmp_boost_work,
+			abox_change_hmp_boost_work_func);
+	INIT_WORK(&data->register_component_work,
+			abox_register_component_work_func);
 	INIT_WORK(&data->boot_done_work, abox_boot_done_work_func);
 	INIT_WORK(&data->l2c_work, abox_l2c_work_func);
 	INIT_LIST_HEAD(&data->irq_actions);
@@ -4973,19 +5379,18 @@ static int samsung_abox_probe(struct platform_device *pdev)
 	}
 
 	data->sfr_base = devm_request_and_map_byname(pdev, "sfr", NULL, NULL);
-	if (IS_ERR(data->sfr_base)) {
+	if (IS_ERR(data->sfr_base))
 		return PTR_ERR(data->sfr_base);
-	}
 
-	data->sysreg_base = devm_request_and_map_byname(pdev, "sysreg", NULL, NULL);
-	if (IS_ERR(data->sysreg_base)) {
+	data->sysreg_base = devm_request_and_map_byname(pdev, "sysreg",
+			NULL, NULL);
+	if (IS_ERR(data->sysreg_base))
 		return PTR_ERR(data->sysreg_base);
-	}
 
-	data->sram_base = devm_request_and_map_byname(pdev, "sram", &data->sram_base_phys, &data->sram_size);
-	if (IS_ERR(data->sram_base)) {
+	data->sram_base = devm_request_and_map_byname(pdev, "sram",
+			&data->sram_base_phys, &data->sram_size);
+	if (IS_ERR(data->sram_base))
 		return PTR_ERR(data->sram_base);
-	}
 
 	data->iommu_domain = get_domain_from_dev(dev);
 	if (IS_ERR(data->iommu_domain)) {
@@ -4993,66 +5398,72 @@ static int samsung_abox_probe(struct platform_device *pdev)
 		return PTR_ERR(data->iommu_domain);
 	}
 
-	result = iommu_attach_device(data->iommu_domain, dev);
-	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "Unable to attach device to iommu domain (%d)\n", result);
-		return result;
+	ret = iommu_attach_device(data->iommu_domain, dev);
+	if (IS_ERR_VALUE(ret)) {
+		dev_err(dev, "Unable to attach iommu domain (%d)\n", ret);
+		return ret;
 	}
 
-	data->dram_base = dmam_alloc_coherent(dev, DRAM_FIRMWARE_SIZE, &data->dram_base_phys, GFP_KERNEL);
+	data->dram_base = dmam_alloc_coherent(dev, DRAM_FIRMWARE_SIZE,
+			&data->dram_base_phys, GFP_KERNEL);
 	if (IS_ERR_OR_NULL(data->dram_base)) {
-		dev_err(dev, "Failed to allocate coherent memory: %ld\n", PTR_ERR(data->dram_base));
+		dev_err(dev, "Failed to allocate coherent memory: %ld\n",
+				PTR_ERR(data->dram_base));
 		return PTR_ERR(data->dram_base);
 	}
 	dev_info(&pdev->dev, "%s(%pa) is mapped on %p with size of %d\n",
-			"dram firmware", &data->dram_base_phys, data->dram_base, DRAM_FIRMWARE_SIZE);
-	iommu_map(data->iommu_domain, IOVA_DRAM_FIRMWARE, data->dram_base_phys, DRAM_FIRMWARE_SIZE, 0);
+			"dram firmware", &data->dram_base_phys, data->dram_base,
+			DRAM_FIRMWARE_SIZE);
+	iommu_map(data->iommu_domain, IOVA_DRAM_FIRMWARE, data->dram_base_phys,
+			DRAM_FIRMWARE_SIZE, 0);
 
-	data->iva_base = dmam_alloc_coherent(dev, IVA_FIRMWARE_SIZE, &data->iva_base_phys, GFP_KERNEL);
+	data->iva_base = dmam_alloc_coherent(dev, IVA_FIRMWARE_SIZE,
+			&data->iva_base_phys, GFP_KERNEL);
 	if (IS_ERR_OR_NULL(data->iva_base)) {
-		dev_err(dev, "Failed to allocate coherent memory: %ld\n", PTR_ERR(data->iva_base));
+		dev_err(dev, "Failed to allocate coherent memory: %ld\n",
+				PTR_ERR(data->iva_base));
 		return PTR_ERR(data->iva_base);
 	}
 	dev_info(&pdev->dev, "%s(%pa) is mapped on %p with size of %d\n",
-			"iva firmware", &data->iva_base_phys, data->iva_base, IVA_FIRMWARE_SIZE);
-	iommu_map(data->iommu_domain, IOVA_IVA_FIRMWARE, data->iva_base_phys, IVA_FIRMWARE_SIZE, 0);
+			"iva firmware", &data->iva_base_phys, data->iva_base,
+			IVA_FIRMWARE_SIZE);
+	iommu_map(data->iommu_domain, IOVA_IVA_FIRMWARE, data->iva_base_phys,
+			IVA_FIRMWARE_SIZE, 0);
 
 	dev_dbg(&pdev->dev, "vss firmware is on 0x%08lx with size of %d\n",
-			shm_get_phys_base() + shm_get_cp_size(), shm_get_vss_size());
-	iommu_map(data->iommu_domain, IOVA_VSS_FIRMWARE, shm_get_phys_base() + shm_get_cp_size(), shm_get_vss_size(), 0);
+			shm_get_phys_base() + shm_get_cp_size(),
+			shm_get_vss_size());
+	iommu_map(data->iommu_domain, IOVA_VSS_FIRMWARE,
+			shm_get_phys_base() + shm_get_cp_size(),
+			shm_get_vss_size(), 0);
 
 	iommu_map(data->iommu_domain, 0x16480000, 0x16480000, 0x10000, 0);
 	iommu_map(data->iommu_domain, 0x10000000, 0x10000000, PAGE_SIZE, 0);
 	iovmm_set_fault_handler(&pdev->dev, abox_iommu_fault_handler, data);
 
 	data->clk_pll = devm_clk_get_and_prepare(pdev, "pll");
-	if (IS_ERR(data->clk_pll)) {
+	if (IS_ERR(data->clk_pll))
 		return PTR_ERR(data->clk_pll);
-	}
 
 	data->clk_audif = devm_clk_get_and_prepare(pdev, "audif");
-	if (IS_ERR(data->clk_audif)) {
+	if (IS_ERR(data->clk_audif))
 		return PTR_ERR(data->clk_audif);
-	}
 
 	data->clk_ca7 = devm_clk_get_and_prepare(pdev, "ca7");
-	if (IS_ERR(data->clk_ca7)) {
+	if (IS_ERR(data->clk_ca7))
 		return PTR_ERR(data->clk_ca7);
-	}
 
 	data->clk_dmic = devm_clk_get_and_prepare(pdev, "dmic");
-	if (IS_ERR(data->clk_dmic)) {
+	if (IS_ERR(data->clk_dmic))
 		return PTR_ERR(data->clk_dmic);
-	}
 
 	for (i = 0; i < ARRAY_SIZE(data->clk_bclk); i++) {
 		char name[16];
 
 		sprintf(name, "bclk%d", i);
 		data->clk_bclk[i] = devm_clk_get_and_prepare(pdev, name);
-		if (IS_ERR(data->clk_bclk[i])) {
+		if (IS_ERR(data->clk_bclk[i]))
 			return PTR_ERR(data->clk_bclk[i]);
-		}
 
 		sprintf(name, "bclk%d_gate", i);
 		data->clk_bclk_gate[i] = devm_clk_get_and_prepare(pdev, name);
@@ -5062,40 +5473,48 @@ static int samsung_abox_probe(struct platform_device *pdev)
 		}
 	}
 
-	result = of_property_read_u32(np, "ipc_tx_offset", &data->ipc_tx_offset);
-	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "Failed to read %s: %d\n", "ipc_tx_offset", result);
-		return result;
+	ret = of_property_read_u32(np, "ipc_tx_offset",
+			&data->ipc_tx_offset);
+	if (IS_ERR_VALUE(ret)) {
+		dev_err(dev, "Failed to read %s: %d\n", "ipc_tx_offset", ret);
+		return ret;
 	}
 
-	result = of_property_read_u32(np, "ipc_rx_offset", &data->ipc_rx_offset);
-	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "Failed to read %s: %d\n", "ipc_rx_offset", result);
-		return result;
+	ret = of_property_read_u32(np, "ipc_rx_offset",
+			&data->ipc_rx_offset);
+	if (IS_ERR_VALUE(ret)) {
+		dev_err(dev, "Failed to read %s: %d\n", "ipc_rx_offset", ret);
+		return ret;
 	}
 
-	result = of_property_read_u32(np, "ipc_tx_ack_offset", &data->ipc_tx_ack_offset);
-	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "Failed to read %s: %d\n", "ipc_tx_ack_offset", result);
-		return result;
+	ret = of_property_read_u32(np, "ipc_tx_ack_offset",
+			&data->ipc_tx_ack_offset);
+	if (IS_ERR_VALUE(ret)) {
+		dev_err(dev, "Failed to read %s: %d\n",
+				"ipc_tx_ack_offset", ret);
+		return ret;
 	}
 
-	result = of_property_read_u32(np, "ipc_rx_ack_offset", &data->ipc_rx_ack_offset);
-	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "Failed to read %s: %d\n", "ipc_rx_ack_offset", result);
-		return result;
+	ret = of_property_read_u32(np, "ipc_rx_ack_offset",
+			&data->ipc_rx_ack_offset);
+	if (IS_ERR_VALUE(ret)) {
+		dev_err(dev, "Failed to read %s: %d\n",
+				"ipc_rx_ack_offset", ret);
+		return ret;
 	}
 
-	result = of_property_read_u32(np, "mailbox_offset", &data->mailbox_offset);
-	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "Failed to read %s: %d\n", "mailbox_offset", result);
-		return result;
+	ret = of_property_read_u32(np, "mailbox_offset",
+			&data->mailbox_offset);
+	if (IS_ERR_VALUE(ret)) {
+		dev_err(dev, "Failed to read %s: %d\n", "mailbox_offset", ret);
+		return ret;
 	}
 
-	result = of_property_read_u32_array(np, "pm_qos_int", data->pm_qos_int, ARRAY_SIZE(data->pm_qos_int));
-	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "Failed to read %s: %d\n", "pm_qos_int", result);
-		return result;
+	ret = of_property_read_u32_array(np, "pm_qos_int",
+			data->pm_qos_int, ARRAY_SIZE(data->pm_qos_int));
+	if (IS_ERR_VALUE(ret)) {
+		dev_err(dev, "Failed to read %s: %d\n", "pm_qos_int", ret);
+		return ret;
 	}
 
 	np_tmp = of_parse_phandle(np, "abox_gic", 0);
@@ -5147,7 +5566,7 @@ static int samsung_abox_probe(struct platform_device *pdev)
 			&abox_codec_regmap_config);
 
 	pm_runtime_enable(dev);
-	pm_runtime_get_sync(dev);
+	pm_runtime_get(dev);
 
 	data->pm_nb.notifier_call = abox_pm_notifier;
 	register_pm_notifier(&data->pm_nb);
@@ -5164,21 +5583,23 @@ static int samsung_abox_probe(struct platform_device *pdev)
 
 	of_platform_populate(np, NULL, NULL, dev);
 
-	result = device_create_file(dev, &dev_attr_calliope_version);
-	if (IS_ERR_VALUE(result))
+	ret = device_create_file(dev, &dev_attr_calliope_version);
+	if (IS_ERR_VALUE(ret))
 		dev_warn(dev, "Failed to create file: %s\n", "version");
 
-	result = device_create_file(dev, &dev_attr_calliope_debug);
-	if (IS_ERR_VALUE(result))
+	ret = device_create_file(dev, &dev_attr_calliope_debug);
+	if (IS_ERR_VALUE(ret))
 		dev_warn(dev, "Failed to create file: %s\n", "debug");
 
-	result = device_create_file(dev, &dev_attr_calliope_cmd);
-	if (IS_ERR_VALUE(result))
+	ret = device_create_file(dev, &dev_attr_calliope_cmd);
+	if (IS_ERR_VALUE(ret))
 		dev_warn(dev, "Failed to create file: %s\n", "cmd");
 
-	atomic_notifier_chain_register(&panic_notifier_list, &abox_panic_notifier);
+	atomic_notifier_chain_register(&panic_notifier_list,
+			&abox_panic_notifier);
 
-	return snd_soc_register_codec(dev, &abox_codec, abox_dais, ARRAY_SIZE(abox_dais));
+	return snd_soc_register_codec(dev, &abox_codec, abox_dais,
+			ARRAY_SIZE(abox_dais));
 }
 
 static int samsung_abox_remove(struct platform_device *pdev)
@@ -5246,7 +5667,8 @@ static int __init samsung_abox_late_initcall(void)
 	if (p_abox_data && p_abox_data->pdev) {
 		pm_runtime_put_sync(&p_abox_data->pdev->dev);
 	} else {
-		pr_err("%s: p_abox_data or p_abox_data->pdev is null", __func__);
+		pr_err("%s: p_abox_data or p_abox_data->pdev is null",
+				__func__);
 	}
 	return 0;
 }

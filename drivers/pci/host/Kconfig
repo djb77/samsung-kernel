@@ -91,6 +91,10 @@ config PCIE_XILINX
 	  Say 'Y' here if you want kernel to support the Xilinx AXI PCIe
 	  Host Bridge driver.
 
+config SEC_PANIC_PCIE_ERR
+	depends on PCI_EXYNOS
+	bool "PANIC on PCIe Error"
+
 config PCI_XGENE
 	bool "X-Gene PCIe controller"
 	depends on ARCH_XGENE

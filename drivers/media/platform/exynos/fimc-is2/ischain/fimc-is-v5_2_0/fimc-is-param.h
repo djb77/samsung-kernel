@@ -1330,6 +1330,13 @@ struct fast_ctl_capture {
 	u32 capture_exposureTime;
 };
 
+#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
+struct rat_freq_info {
+	u32 rat;
+	u32 freq;
+};
+#endif
+
 struct is_fast_control {
 	struct fast_ctl_capture		fast_capture;
 };

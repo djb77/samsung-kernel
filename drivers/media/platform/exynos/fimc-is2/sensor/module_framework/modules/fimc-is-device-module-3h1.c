@@ -59,6 +59,8 @@ static struct fimc_is_sensor_cfg config_module_3h1[] = {
 	FIMC_IS_SENSOR_CFG(752, 1328, 15, 15, 8, CSI_DATA_LANES_2),
 	/* 376X664@110fps */
 	FIMC_IS_SENSOR_CFG(376, 664, 110, 15, 9, CSI_DATA_LANES_2),
+	/* 3264X1592@30fps */
+	FIMC_IS_SENSOR_CFG(3264, 1592, 30, 15, 10, CSI_DATA_LANES_2),
 };
 
 static struct fimc_is_vci vci_module_3h1[] = {

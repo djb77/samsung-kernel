@@ -3,7 +3,11 @@
 
 int max869_i2c_read(u32 reg, u32 *value, u32 *size);
 int max869_i2c_write(u32 reg, u32 value);
+#ifdef CONFIG_SPI_TO_I2C_FPGA
+int max869_init_device(struct i2c_client *client, struct platform_device *pdev);
+#else
 int max869_init_device(struct i2c_client *client);
+#endif
 int max869_deinit_device(void);
 int max869_enable(enum hrm_mode mode);
 int max869_disable(enum hrm_mode mode);

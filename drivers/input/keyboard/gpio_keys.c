@@ -39,6 +39,8 @@
 struct device *sec_key;
 EXPORT_SYMBOL(sec_key);
 
+static int call_gpio_keys_notifier(unsigned int code, int state);
+
 struct gpio_button_data {
 	struct gpio_keys_button *button;
 	struct input_dev *input;
@@ -511,19 +513,16 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	}
 
 	state = (state ? 1 : 0) ^ button->active_low;
-#ifndef CONFIG_SEC_DEBUG
-	exynos_ss_check_crash_key(button->code, state);
-#endif
 
-	pr_info("%s %s: %d (%d)\n", SECLOG, __func__, button->code, state);
+	pr_info("%s %s: %d (%d/%d)\n", SECLOG, __func__, button->code, state,
+									irqd_is_wakeup_set(&desc->irq_data));
 
 	if (type == EV_ABS) {
 		if (state)
 			input_event(input, type, button->code, button->value);
 	} else {
 		bdata->key_state = !!state;
-		input_event(input, type, button->code,
-				irqd_is_wakeup_set(&desc->irq_data) ? 1 : !!state);
+		input_event(input, type, button->code, !!state);
 	}
 	input_sync(input);
 }
@@ -561,10 +560,8 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 {
 	struct gpio_button_data *bdata = dev_id;
 
-#ifdef CONFIG_SEC_DEBUG
 	int state = (gpio_get_value(bdata->button->gpio) ? 1 : 0) ^ bdata->button->active_low;
-	exynos_ss_check_crash_key(bdata->button->code, state);
-#endif
+	call_gpio_keys_notifier(bdata->button->code, state);
 
 	BUG_ON(irq != bdata->irq);
 
@@ -1075,6 +1072,25 @@ static int gpio_keys_resume(struct device *dev)
 	return 0;
 }
 #endif
+
+static ATOMIC_NOTIFIER_HEAD(gpio_keys_notifiers);
+
+int register_gpio_keys_notifier(struct  notifier_block *nb)
+{
+	return atomic_notifier_chain_register(&gpio_keys_notifiers, nb);
+}
+EXPORT_SYMBOL_GPL(register_gpio_keys_notifier);
+
+int unregister_gpio_keys_notifier(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_unregister(&gpio_keys_notifiers, nb);
+}
+EXPORT_SYMBOL_GPL(unregister_gpio_keys_notifier);
+
+static int call_gpio_keys_notifier(unsigned int code, int state)
+{
+	return atomic_notifier_call_chain(&gpio_keys_notifiers, code, &state);
+}
 
 static SIMPLE_DEV_PM_OPS(gpio_keys_pm_ops, gpio_keys_suspend, gpio_keys_resume);
 

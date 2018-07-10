@@ -28,6 +28,8 @@
 int vmm_init(void);
 int vmm_disable(void);
 
+int _vmm_goto_EL2(int magic, void *label, int offset, int mode, void *base, int size);
+
 #endif //__ASSEMBLY__
 
 #endif //__VMM_H__

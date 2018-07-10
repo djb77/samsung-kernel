@@ -16,7 +16,7 @@
 #include "../ssp.h"
 
 /*************************************************************************/
-/* factory Sysfs                                                         */
+/* factory Sysfs							 */
 /*************************************************************************/
 
 #define VENDOR		"STM"
@@ -42,6 +42,12 @@
 #ifndef ABS
 #define ABS(a) ((a) > 0 ? (a) : -(a))
 #endif
+
+#define CALDATATOTALMAX		15
+#define CALDATAFIELDLENGTH  17
+static u8 gyroCalDataInfo[CALDATATOTALMAX][CALDATAFIELDLENGTH];
+static int gyroCalDataIndx = -1;
+
 
 static ssize_t gyro_vendor_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -73,13 +79,12 @@ int gyro_open_calibration(struct ssp_data *data)
 		data->gyrocal.y = 0;
 		data->gyrocal.z = 0;
 
-		pr_err("[SSP]: %s - Can't open calibration file(%d)\n",__func__, -iRet);
+		pr_err("[SSP]: %s - Can't open calibration file(%d)\n", __func__, -iRet);
 		return iRet;
 	}
 
 	iRet = vfs_read(cal_filp, (char *)&data->gyrocal, 3 * sizeof(int), &cal_filp->f_pos);
-	if (iRet < 0)
-	{
+	if (iRet < 0) {
 		pr_err("[SSP]: %s - Can't read gyro cal to file\n", __func__);
 		iRet = -EIO;
 	}
@@ -133,9 +138,9 @@ int set_gyro_cal(struct ssp_data *data)
 	int iRet = 0;
 	struct ssp_msg *msg;
 	s32 gyro_cal[3];
+
 	if (!(data->uSensorState & (1 << GYROSCOPE_SENSOR))) {
-		pr_info("[SSP]: %s - Skip this function!!!"\
-			", gyro sensor is not connected(0x%llx)\n",
+		pr_info("[SSP]: %s - Skip this function!!!, gyro sensor is not connected(0x%llx)\n",
 			__func__, data->uSensorState);
 		return iRet;
 	}
@@ -145,10 +150,6 @@ int set_gyro_cal(struct ssp_data *data)
 	gyro_cal[2] = data->gyrocal.z;
 
 	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-	if (msg == NULL) {
-		pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-		return -ENOMEM;
-	}
 	msg->cmd = MSG2SSP_AP_MCU_SET_GYRO_CAL;
 	msg->length = sizeof(gyro_cal);
 	msg->options = AP2HUB_WRITE;
@@ -190,12 +191,8 @@ short lsm6dsl_gyro_get_temp(struct ssp_data *data)
 	unsigned char reg[2];
 	short temperature = 0;
 	int iRet = 0;
-
 	struct ssp_msg *msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-	if (msg == NULL) {
-		pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-		goto exit;
-	}
+
 	msg->cmd = GYROSCOPE_TEMP_FACTORY;
 	msg->length = 2;
 	msg->options = AP2HUB_READ;
@@ -214,7 +211,7 @@ short lsm6dsl_gyro_get_temp(struct ssp_data *data)
 	temperature = (short) (((reg[0]) << 8) | reg[1]);
 	ssp_dbg("[SSP]: %s - %d\n", __func__, temperature);
 
-	exit:
+exit:
 	return temperature;
 }
 
@@ -249,12 +246,8 @@ static ssize_t lsm6dsl_gyro_selftest(struct device *dev,
 	s16 st_bias[3] = {0, };
 	int gyro_fifo_avg[3] = {0,}, gyro_self_zro[3] = {0,};
 	int gyro_self_bias[3] = {0,}, gyro_self_diff[3] = {0,};
-	
 	struct ssp_msg *msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-	if (msg == NULL) {
-		pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-		goto exit;
-	}
+
 	msg->cmd = GYROSCOPE_FACTORY;
 	msg->length = 36;
 	msg->options = AP2HUB_READ;
@@ -326,7 +319,7 @@ static ssize_t lsm6dsl_gyro_selftest(struct device *dev,
 				chTempBuf[32]);
 	st_bias[2] = (s16)((chTempBuf[35] << 8) +
 				chTempBuf[34]);
-	
+
 	pr_info("[SSP] init: %d, total cnt: %d\n", initialized, total_count);
 	pr_info("[SSP] hw_result: %d, %d, %d, %d\n", hw_result,
 		shift_ratio[0], shift_ratio[1],	shift_ratio[2]);
@@ -354,9 +347,8 @@ static ssize_t lsm6dsl_gyro_selftest(struct device *dev,
 		pr_err("[SSP] %s, total_count is not 128. goto exit\n", __func__);
 		ret_val = 2;
 		goto exit;
-	}
-	else
-		cal_ret = fifo_ret = 1;	
+	} else
+		cal_ret = fifo_ret = 1;
 
 	if (hw_result < 0) {
 		pr_err("[SSP] %s - hw selftest fail(%d), sw selftest skip\n",
@@ -367,25 +359,25 @@ static ssize_t lsm6dsl_gyro_selftest(struct device *dev,
 			pr_err("[SSP] %s - gyro lib download fail\n", __func__);
 			gyro_lib_dl_fail = 1;
 		} else {
-/*
-			ssp_dbg("[SSP]: %s - %d,%d,%d fail.\n",
-				__func__,
-				shift_ratio[0] / 10, 
-				shift_ratio[1] / 10, 
-				shift_ratio[2] / 10);
-			return sprintf(buf, "%d,%d,%d\n",
-				shift_ratio[0] / 10, 
-				shift_ratio[1] / 10, 
-				shift_ratio[2] / 10);
-*/
-			ssp_dbg("[SSP]: %s - %d,%d,%d fail.\n",	__func__, gyro_self_diff[0], gyro_self_diff[1], gyro_self_diff[2]);
+			/*
+			 *ssp_dbg("[SSP]: %s - %d,%d,%d fail.\n",
+			 *        __func__,
+			 *        shift_ratio[0] / 10,
+			 *        shift_ratio[1] / 10,
+			 *        shift_ratio[2] / 10);
+			 *return sprintf(buf, "%d,%d,%d\n",
+			 *        shift_ratio[0] / 10,
+			 *        shift_ratio[1] / 10,
+			 *        shift_ratio[2] / 10);
+			 */
+			ssp_dbg("[SSP]: %s - %d,%d,%d fail.\n",	__func__, gyro_self_diff[0],
+					gyro_self_diff[1], gyro_self_diff[2]);
 			return sprintf(buf, "%d,%d,%d\n", gyro_self_diff[0], gyro_self_diff[1], gyro_self_diff[2]);
 		}
 	}
 
 	// AVG value range test +/- 40
-	if( (ABS(gyro_fifo_avg[0]) > 40) || (ABS(gyro_fifo_avg[1]) > 40) || (ABS(gyro_fifo_avg[2]) > 40) )
-	{
+	if ((ABS(gyro_fifo_avg[0]) > 40) || (ABS(gyro_fifo_avg[1]) > 40) || (ABS(gyro_fifo_avg[2]) > 40)) {
 		ssp_dbg("[SSP]: %s - %d,%d,%d fail.\n",	__func__, gyro_fifo_avg[0], gyro_fifo_avg[1], gyro_fifo_avg[2]);
 		return sprintf(buf, "%d,%d,%d\n", gyro_fifo_avg[0], gyro_fifo_avg[1], gyro_fifo_avg[2]);
 	}
@@ -410,17 +402,19 @@ static ssize_t lsm6dsl_gyro_selftest(struct device *dev,
 
 	for (j = 0; j < 3; j++) {
 		if (unlikely(abs(avg[j]) > bias_thresh)) {
-			pr_err("[SSP] %s-Gyro bias (%ld) exceeded threshold "
-				"(threshold = %d LSB)\n", a_name[j],
+			pr_err("[SSP] %s-Gyro bias (%ld) exceeded threshold (threshold = %d LSB)\n",
+				a_name[j],
 				avg[j], bias_thresh);
 			ret_val |= 1 << (3 + j);
 		}
 	}
 // STMICRO
-	/* 3rd, check RMS for dead gyros
-	   If any of the RMS noise value returns zero,
-	   then we might have dead gyro or FIFO/register failure,
-	   the part is sleeping, or the part is not responsive */
+/*
+ *3rd, check RMS for dead gyros
+ *If any of the RMS noise value returns zero,
+ *then we might have dead gyro or FIFO/register failure,
+ *the part is sleeping, or the part is not responsive
+ */
 	//if (rms[0] == 0 || rms[1] == 0 || rms[2] == 0)
 	//ret_val |= 1 << 6;
 
@@ -439,12 +433,8 @@ static ssize_t lsm6dsl_gyro_selftest(struct device *dev,
 		data->gyrocal.z = 0;
 	}
 exit:
-	ssp_dbg("[SSP]: %s - "
-		"%d,%d,%d,"
-		"%d,%d,%d,"
-		"%d,%d,%d,"
-		"%d,%d,%d,%d,%d\n",
-		__func__, 
+	ssp_dbg("[SSP]: %s - %d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+		__func__,
 		gyro_fifo_avg[0], gyro_fifo_avg[1], gyro_fifo_avg[2],
 		gyro_self_zro[0], gyro_self_zro[1], gyro_self_zro[2],
 		gyro_self_bias[0], gyro_self_bias[1], gyro_self_bias[2],
@@ -453,14 +443,11 @@ exit:
 		cal_ret);
 
 	// Gyro Calibration pass / fail, buffer 1~6 values.
-	if( (fifo_ret == 0) || (cal_ret == 0) )
-		return sprintf(buf, "%d,%d,%d\n", gyro_self_diff[0], gyro_self_diff[1], gyro_self_diff[2]);	
+	if ((fifo_ret == 0) || (cal_ret == 0))
+		return sprintf(buf, "%d,%d,%d\n", gyro_self_diff[0], gyro_self_diff[1], gyro_self_diff[2]);
 
 	return sprintf(buf,
-		"%d,%d,%d,"
-		"%d,%d,%d,"
-		"%d,%d,%d,"
-		"%d,%d,%d,%d,%d\n",
+		"%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
 		gyro_fifo_avg[0], gyro_fifo_avg[1], gyro_fifo_avg[2],
 		gyro_self_zro[0], gyro_self_zro[1], gyro_self_zro[2],
 		gyro_self_bias[0], gyro_self_bias[1], gyro_self_bias[2],
@@ -475,19 +462,13 @@ static ssize_t gyro_selftest_dps_store(struct device *dev,
 	int iNewDps = 0;
 	int iRet = 0;
 	char chTempBuf = 0;
-
 	struct ssp_data *data = dev_get_drvdata(dev);
-
 	struct ssp_msg *msg;
 
 	if (!(data->uSensorState & (1 << GYROSCOPE_SENSOR)))
 		goto exit;
 
 	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-	if (msg == NULL) {
-		pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-		goto exit;
-	}
 	msg->cmd = GYROSCOPE_DPS_FACTORY;
 	msg->length = 1;
 	msg->options = AP2HUB_READ;
@@ -533,14 +514,68 @@ static ssize_t gyro_selftest_dps_show(struct device *dev,
 	return sprintf(buf, "%u\n", data->uGyroDps);
 }
 
-static DEVICE_ATTR(name, S_IRUSR | S_IRGRP, gyro_name_show, NULL);
-static DEVICE_ATTR(vendor, S_IRUSR | S_IRGRP, gyro_vendor_show, NULL);
-static DEVICE_ATTR(power_off, S_IRUSR | S_IRGRP, gyro_power_off, NULL);
-static DEVICE_ATTR(power_on, S_IRUSR | S_IRGRP, gyro_power_on, NULL);
-static DEVICE_ATTR(temperature, S_IRUSR | S_IRGRP, gyro_get_temp, NULL);
-static DEVICE_ATTR(selftest, S_IRUSR | S_IRGRP, lsm6dsl_gyro_selftest, NULL);
-static DEVICE_ATTR(selftest_dps, S_IRUSR | S_IRGRP | S_IWUSR | S_IWGRP,
+struct gyro_cal_info {
+	u16 version;
+	u16 updated_index;
+	s32 bias[3];	//x, y, z
+	s8 temperature;
+} __attribute__((__packed__));
+static char printCalData[1024*3] = {0, };
+
+static ssize_t gyro_calibration_info_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+   // struct ssp_data *data = dev_get_drvdata(dev);
+	s32 i, j, float_bias;
+
+	memset(printCalData, 0, sizeof(printCalData));
+
+	if (gyroCalDataIndx == -1)
+		return 0;
+	for (i = 0; i <= gyroCalDataIndx; i++) {
+		char temp[300] = {0, };
+		struct gyro_cal_info infoFrame = {0, };
+
+		memcpy(&infoFrame, gyroCalDataInfo[i], sizeof(struct gyro_cal_info));
+
+		sprintf(temp, "VERSION:%hd,UPDATE_INDEX:%d,",
+		infoFrame.version, infoFrame.updated_index);
+		strcat(printCalData, temp);
+
+		for (j = 0; j < 3; j++) {
+			float_bias = ((infoFrame.bias[j] % 1000) >  0 ? (infoFrame.bias[j] % 1000) : -(infoFrame.bias[j] % 1000));
+			if (infoFrame.bias[j] / 1000 == 0)
+				infoFrame.bias[j] > 0 ? (sprintf(temp, "BIAS_%c:0.%03d,", 'X'+j, float_bias)) : (sprintf(temp, "BIAS_%c:-0.%03d,", 'X'+j, float_bias));
+			else
+				sprintf(temp, "BIAS_%c:%d.%03d,", 'X'+j,  infoFrame.bias[j] / 1000, float_bias);
+
+			strcat(printCalData, temp);
+		}
+		sprintf(temp, "TEMPERATURE:%d;", infoFrame.temperature);
+		strcat(printCalData, temp);
+	}
+
+	gyroCalDataIndx = -1;
+	return sprintf(buf, "%s", printCalData);
+}
+
+void set_GyroCalibrationInfoData(char *pchRcvDataFrame, int *iDataIdx)
+{
+	if (gyroCalDataIndx < (CALDATATOTALMAX - 1))
+		memcpy(gyroCalDataInfo[++gyroCalDataIndx],  pchRcvDataFrame + *iDataIdx, CALDATAFIELDLENGTH);
+
+	*iDataIdx += CALDATAFIELDLENGTH;
+}
+
+static DEVICE_ATTR(name, 0440, gyro_name_show, NULL);
+static DEVICE_ATTR(vendor, 0440, gyro_vendor_show, NULL);
+static DEVICE_ATTR(power_off, 0440, gyro_power_off, NULL);
+static DEVICE_ATTR(power_on, 0440, gyro_power_on, NULL);
+static DEVICE_ATTR(temperature, 0440, gyro_get_temp, NULL);
+static DEVICE_ATTR(selftest, 0440, lsm6dsl_gyro_selftest, NULL);
+static DEVICE_ATTR(selftest_dps, 0660,
 	gyro_selftest_dps_show, gyro_selftest_dps_store);
+static DEVICE_ATTR(calibration_info, 0440, gyro_calibration_info_show, NULL);
 
 static struct device_attribute *gyro_attrs[] = {
 	&dev_attr_name,
@@ -550,6 +585,7 @@ static struct device_attribute *gyro_attrs[] = {
 	&dev_attr_power_off,
 	&dev_attr_temperature,
 	&dev_attr_selftest_dps,
+	&dev_attr_calibration_info,
 	NULL,
 };
 

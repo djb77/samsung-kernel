@@ -1192,7 +1192,6 @@ static bool cs47l92_16bit_readable_register(struct device *dev,
 	case MADERA_RATE_ESTIMATOR_3:
 	case MADERA_RATE_ESTIMATOR_4:
 	case MADERA_RATE_ESTIMATOR_5:
-	case 0x158 ... 0x160:
 	case MADERA_FLL1_CONTROL_1:
 	case MADERA_FLL1_CONTROL_2:
 	case MADERA_FLL1_CONTROL_3:
@@ -2174,14 +2173,6 @@ static bool cs47l92_16bit_readable_register(struct device *dev,
 	case MADERA_IRQ1_STATUS_30:
 	case MADERA_IRQ1_STATUS_31:
 	case MADERA_IRQ1_STATUS_32:
-	case MADERA_IRQ1_STATUS_33:
-	case MADERA_IRQ1_STATUS_34:
-	case MADERA_IRQ1_STATUS_35:
-	case MADERA_IRQ1_STATUS_36:
-	case MADERA_IRQ1_STATUS_37:
-	case MADERA_IRQ1_STATUS_38:
-	case MADERA_IRQ1_STATUS_39:
-	case MADERA_IRQ1_STATUS_40:
 	case MADERA_IRQ1_MASK_1:
 	case MADERA_IRQ1_MASK_2:
 	case MADERA_IRQ1_MASK_3:
@@ -2215,13 +2206,6 @@ static bool cs47l92_16bit_readable_register(struct device *dev,
 	case MADERA_IRQ1_MASK_31:
 	case MADERA_IRQ1_MASK_32:
 	case MADERA_IRQ1_MASK_33:
-	case MADERA_IRQ1_MASK_34:
-	case MADERA_IRQ1_MASK_35:
-	case MADERA_IRQ1_MASK_36:
-	case MADERA_IRQ1_MASK_37:
-	case MADERA_IRQ1_MASK_38:
-	case MADERA_IRQ1_MASK_39:
-	case MADERA_IRQ1_MASK_40:
 	case MADERA_IRQ1_RAW_STATUS_1:
 	case MADERA_IRQ1_RAW_STATUS_2:
 	case MADERA_IRQ1_RAW_STATUS_7:
@@ -2247,7 +2231,7 @@ static bool cs47l92_16bit_readable_register(struct device *dev,
 	case MADERA_IRQ2_RAW_STATUS_9:
 	case MADERA_INTERRUPT_DEBOUNCE_7:
 	case MADERA_IRQ1_CTRL:
-	case MADERA_INTERRUPT_RAW_STATUS_1:
+	case MADERA_IRQ1_STATUS_33:
 		return true;
 	default:
 		return false;
@@ -2269,7 +2253,6 @@ static bool cs47l92_16bit_volatile_register(struct device *dev,
 	case MADERA_SAMPLE_RATE_3_STATUS:
 	case MADERA_ASYNC_SAMPLE_RATE_1_STATUS:
 	case MADERA_ASYNC_SAMPLE_RATE_2_STATUS:
-	case 0x158 ... 0x160:
 	case MADERA_HP_CTRL_1L:
 	case MADERA_HP_CTRL_1R:
 	case MADERA_HP_CTRL_2L:
@@ -2327,13 +2310,6 @@ static bool cs47l92_16bit_volatile_register(struct device *dev,
 	case MADERA_IRQ1_STATUS_31:
 	case MADERA_IRQ1_STATUS_32:
 	case MADERA_IRQ1_STATUS_33:
-	case MADERA_IRQ1_STATUS_34:
-	case MADERA_IRQ1_STATUS_35:
-	case MADERA_IRQ1_STATUS_36:
-	case MADERA_IRQ1_STATUS_37:
-	case MADERA_IRQ1_STATUS_38:
-	case MADERA_IRQ1_STATUS_39:
-	case MADERA_IRQ1_STATUS_40:
 	case MADERA_IRQ1_RAW_STATUS_1:
 	case MADERA_IRQ1_RAW_STATUS_2:
 	case MADERA_IRQ1_RAW_STATUS_7:
@@ -2356,7 +2332,6 @@ static bool cs47l92_16bit_volatile_register(struct device *dev,
 	case MADERA_IRQ1_RAW_STATUS_32:
 	case MADERA_IRQ2_STATUS_9:
 	case MADERA_IRQ2_RAW_STATUS_9:
-	case MADERA_INTERRUPT_RAW_STATUS_1:
 		return true;
 	default:
 		return false;

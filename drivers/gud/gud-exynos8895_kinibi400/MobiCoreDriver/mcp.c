@@ -50,7 +50,7 @@
 /* respond timeout for MCP notification, in secs */
 #define MCP_TIMEOUT		10
 /* ExySp */
-#define MCP_RETRIES		5
+#define MCP_RETRIES		2
 #define MCP_NF_QUEUE_SZ		8
 
 static struct {
@@ -258,8 +258,8 @@ static inline int wait_mcp_notification(void)
 		int ret;
 
 		/*
-		 * Wait non-interruptible to keep MCP synchronised even if
-		 * caller is interrupted by signal.
+		 * Wait non-interruptible to keep MCP synchronised even if caller
+		 * is interrupted by signal.
 		*/
 		ret = wait_for_completion_timeout(&l_ctx.complete, timeout);
 		if (ret > 0)
@@ -329,7 +329,7 @@ static int mcp_cmd(union mcp_message *cmd,
 	memcpy(msg, cmd, sizeof(*msg));
 
 	/* Poke TEE */
-	ret = mcp_notify(&l_ctx.mcp_session);
+	ret = mcp_notify(&l_ctx.mcp_session, cmd_id);
 	if (ret)
 		goto out;
 
@@ -654,14 +654,14 @@ static int mcp_close(void)
 	return mcp_cmd(&cmd, 0, NULL, NULL);
 }
 
-int mcp_notify(struct mcp_session *session)
+int mcp_notify(struct mcp_session *session, u32 payload)
 {
 	if (session->sid == SID_MCP)
 		mc_dev_devel("notify MCP");
 	else
 		mc_dev_devel("notify session %x", session->sid);
 
-	return nq_session_notify(&session->nq_session, session->sid, 0);
+	return nq_session_notify(&session->nq_session, session->sid, payload);
 }
 
 static inline void session_notif_handler(struct mcp_session *session, u32 id,

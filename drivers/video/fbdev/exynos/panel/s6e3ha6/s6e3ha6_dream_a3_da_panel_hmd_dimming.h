@@ -156,6 +156,9 @@ struct brightness_table s6e3ha6_dream_a3_da_panel_hmd_brightness_table = {
 	.sz_brt = ARRAY_SIZE(dream_a3_da_hmd_brt_tbl),
 	.lum = dream_a3_da_hmd_lum_tbl,
 	.sz_lum = ARRAY_SIZE(dream_a3_da_hmd_lum_tbl),
+	.sz_ui_lum = S6E3HA6_HMD_NR_LUMINANCE,
+	.sz_hbm_lum = 0,
+	.sz_ext_hbm_lum = 0,
 	.brt_to_step = dream_a3_da_hmd_brt_tbl,
 	.sz_brt_to_step = ARRAY_SIZE(dream_a3_da_hmd_brt_tbl),
 };

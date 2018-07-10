@@ -16,6 +16,7 @@ struct adc_list {
 	const char*	name;
 	struct iio_channel *channel;
 	bool is_used;
+	int prev_value;
 };
 
 static struct adc_list batt_adc_list[] = {
@@ -50,9 +51,22 @@ static int sec_bat_adc_ap_read(int channel)
 {
 	int data = -1;
 	int ret = 0;
+	int retry_cnt = RETRY_CNT;
 
-	ret = (batt_adc_list[channel].is_used) ?
-		iio_read_channel_raw(batt_adc_list[channel].channel, &data) : 0;
+	if (batt_adc_list[channel].is_used) {
+		do {
+			ret = (batt_adc_list[channel].is_used) ?
+			iio_read_channel_raw(batt_adc_list[channel].channel, &data) : 0;
+			retry_cnt--;
+		} while ((retry_cnt > 0) && (data < 0));
+	}
+
+	if (retry_cnt <= 0) {
+		pr_err("%s: Error in ADC\n", __func__);
+		data = batt_adc_list[channel].prev_value;
+	} else
+		batt_adc_list[channel].prev_value = data;
+
 	return data;
 }
 
@@ -176,11 +190,6 @@ int sec_bat_get_adc_data(struct sec_battery_info *battery,
 		adc_data = adc_read_type(battery->pdata, adc_ch);
 #endif
 		mutex_unlock(&battery->adclock);
-
-		if (adc_data < 0) {
-			dev_err(battery->dev, "%s: Error in ADC\n", __func__);
-			return adc_data;
-		}
 
 		if (i != 0) {
 			if (adc_data > adc_max)

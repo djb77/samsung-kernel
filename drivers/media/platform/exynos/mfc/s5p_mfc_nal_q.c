@@ -35,6 +35,7 @@ int s5p_mfc_nal_q_check_enable(struct s5p_mfc_dev *dev)
 {
 	struct s5p_mfc_ctx *temp_ctx;
 	struct s5p_mfc_dec *dec = NULL;
+	struct s5p_mfc_enc *enc = NULL;
 	int i;
 
 	mfc_debug_enter();
@@ -67,7 +68,7 @@ int s5p_mfc_nal_q_check_enable(struct s5p_mfc_dev *dev)
 				mfc_debug(2, "There is a last frame. index: %d\n", i);
 				return 0;
 			}
-			/* NAL-Q doesn't support multi-frame */
+			/* NAL-Q doesn't support multi-frame, interlaced, black bar */
 			if (temp_ctx->type == MFCINST_DECODER) {
 				dec = temp_ctx->dec_priv;
 				if (!dec) {
@@ -88,6 +89,17 @@ int s5p_mfc_nal_q_check_enable(struct s5p_mfc_dev *dev)
 				}
 				if (dec->detect_black_bar) {
 					mfc_debug(2, "black bar detection is enabled\n");
+					return 0;
+				}
+			/* NAL-Q doesn't support fixed byte(slice mode) */
+			} else if (temp_ctx->type == MFCINST_ENCODER) {
+				enc = temp_ctx->enc_priv;
+				if (!enc) {
+					mfc_debug (2, "There is no enc\n");
+					return 0;
+				}
+				if (enc->slice_mode == V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_FIXED_BYTES) {
+					mfc_debug(2, "There is fixed bytes option(slice mode)\n");
 					return 0;
 				}
 			}
@@ -690,6 +702,7 @@ static int mfc_nal_q_run_in_buf_dec(struct s5p_mfc_ctx *ctx, DecoderInputStr *pI
 	pInStr->CpbBufferAddr = buf_addr;
 	pInStr->CpbBufferSize = cpb_buf_size;
 	pInStr->CpbBufferOffset = 0;
+	ctx->last_src_addr = buf_addr;
 
 	MFC_TRACE_CTX("Set src[%d] fd: %d, %#llx\n",
 			src_mb->vb.vb2_buf.index,
@@ -704,6 +717,7 @@ static int mfc_nal_q_run_in_buf_dec(struct s5p_mfc_ctx *ctx, DecoderInputStr *pI
 	for (i = 0; i < raw->num_planes; i++) {
 		pInStr->FrameSize[i] = raw->plane_size[i];
 		pInStr->FrameAddr[i] = dst_mb->planes.raw[i];
+		ctx->last_dst_addr[i] = dst_mb->planes.raw[i];
 	}
 	mfc_debug(2, "NAL Q: dst addr[0]: 0x%08llx\n",
 			dst_mb->planes.raw[0]);
@@ -892,42 +906,41 @@ static void mfc_nal_q_handle_stream(struct s5p_mfc_ctx *ctx, EncoderOutputStr *p
 	return;
 }
 
-static int mfc_nal_q_handle_reuse_buffer(struct s5p_mfc_ctx *ctx, DecoderOutputStr *pOutStr)
+static void mfc_nal_q_handle_reuse_buffer(struct s5p_mfc_ctx *ctx, DecoderOutputStr *pOutStr)
 {
 	struct s5p_mfc_dec *dec = ctx->dec_priv;
+	unsigned int prev_flag, released_flag = 0;
 	struct s5p_mfc_buf *dst_mb;
 	dma_addr_t disp_addr;
-	int ret = 0;
+	int i;
 
-	mfc_debug_enter();
-
+	/* reuse not used buf: dst_buf_nal_queue -> dst_queue */
 	disp_addr = pOutStr->DisplayAddr[0];
-
-	dst_mb = s5p_mfc_get_move_buf_addr(&ctx->buf_queue_lock,
-			&ctx->dst_buf_queue, &ctx->dst_buf_nal_queue,
-			disp_addr);
-	if (dst_mb) {
-		mfc_debug(2, "NAL Q: reuse buffer. disp addr: 0x%08llx\n", disp_addr);
-		mfc_debug(2, "NAL Q: Found disp addr in first buffer, "
-				"display addr: 0x%08llx\n", disp_addr);
-		dst_mb->used = 0;
-		clear_bit(dst_mb->vb.vb2_buf.index, &dec->available_dpb);
-	} else {
-		dst_mb = s5p_mfc_find_move_buf_vb_used(&ctx->buf_queue_lock,
-				&ctx->dst_buf_queue, &ctx->dst_buf_nal_queue, disp_addr);
+	if (disp_addr) {
+		mfc_debug(2, "NAL Q: decoding only but there is disp addr: 0x%llx\n", disp_addr);
+		dst_mb = s5p_mfc_get_move_buf_addr(&ctx->buf_queue_lock,
+				&ctx->dst_buf_queue, &ctx->dst_buf_nal_queue,
+				disp_addr);
 		if (dst_mb) {
-			mfc_debug(2, "NAL Q: Found disp addr in dst nal queue, "
-					"display addr: 0x%08llx\n", disp_addr);
+			mfc_debug(2, "NAL Q: buf[%d] will reused. addr: 0x%08llx\n",
+					dst_mb->vb.vb2_buf.index, disp_addr);
 			dst_mb->used = 0;
 			clear_bit(dst_mb->vb.vb2_buf.index, &dec->available_dpb);
-		} else {
-			mfc_debug(2, "NAL Q: Can't find disp addr in dst nal queue\n");
-			ret = -1;
 		}
 	}
 
-	mfc_debug_leave();
-	return ret;
+	/* reuse not referenced buf anymore: ref_queue -> dst_queue */
+	prev_flag = dec->dynamic_used;
+	dec->dynamic_used = pOutStr->UsedDpbFlagLower;
+	released_flag = prev_flag & (~dec->dynamic_used);
+
+	if (!released_flag)
+		return;
+
+	for (i = 0; i < MFC_MAX_DPBS; i++)
+		if (released_flag & (1 << i))
+			s5p_mfc_move_reuse_buffer(ctx, i);
+
 }
 
 static void mfc_nal_q_handle_ref_frame(struct s5p_mfc_ctx *ctx, DecoderOutputStr *pOutStr)
@@ -1294,18 +1307,13 @@ void mfc_nal_q_handle_frame(struct s5p_mfc_ctx *ctx, DecoderOutputStr *pOutStr)
 	}
 
 	switch (dst_frame_status) {
-	case S5P_FIMV_DEC_STATUS_DECODING_ONLY:
-		if (pOutStr->DisplayAddr[0]) {
-			/* reuse dst buffer if there is display addr */
-			if (!mfc_nal_q_handle_reuse_buffer(ctx, pOutStr))
-				break;
-		} else {
-			dec->dynamic_used |= pOutStr->UsedDpbFlagLower;
-		}
-		/* Fall through */
 	case S5P_FIMV_DEC_STATUS_DECODING_DISPLAY:
 		mfc_nal_q_handle_ref_frame(ctx, pOutStr);
 		mfc_nal_q_handle_frame_copy_timestamp(ctx, pOutStr);
+		break;
+	case S5P_FIMV_DEC_STATUS_DECODING_ONLY:
+		mfc_nal_q_handle_ref_frame(ctx, pOutStr);
+		mfc_nal_q_handle_reuse_buffer(ctx, pOutStr);
 		break;
 	default:
 		break;
@@ -1559,6 +1567,7 @@ int s5p_mfc_nal_q_enqueue_in_buf(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ct
 
 	if (input_diff == 0)
 		s5p_mfc_watchdog_start_tick(dev);
+	MFC_TRACE_LOG_DEV("N%d", input_diff);
 
 	spin_unlock_irqrestore(&nal_q_in_handle->lock, flags);
 

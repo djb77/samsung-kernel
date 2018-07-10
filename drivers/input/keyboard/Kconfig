@@ -708,6 +708,12 @@ config KEYBOARD_CAP11XX
 	  To compile this driver as a module, choose M here: the
 	  module will be called cap11xx.
 
+config KEYBOARD_TC300K
+	tristate "Coreriver TC300K touchkey"
+	depends on I2C
+	help
+	 Say Y if you want use Coreriver TC300K chip as touchkey.
+
 config KEYBOARD_BCM
 	tristate "Broadcom keypad driver"
 	depends on OF && HAVE_CLK
@@ -718,5 +724,11 @@ config KEYBOARD_BCM
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called bcm-keypad.
+
+config KEYBOARD_ABOV_TOUCH_A96TA316
+	tristate "Abov T316 touchkey"
+	depends on I2C
+	help
+	  Say Y here if you want to use ABOV A96TA316AUN chip as touchkey.
 
 endif

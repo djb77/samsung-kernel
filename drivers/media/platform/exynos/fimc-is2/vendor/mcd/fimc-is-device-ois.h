@@ -40,6 +40,11 @@ struct fimc_is_ois_info {
 	u8 caldata;
 };
 
+#ifdef USE_OIS_SLEEP_MODE
+struct fimc_is_ois_shared_info {
+	u8 oissel;
+};
+#endif
 #define FIMC_OIS_FW_NAME_SEC		"ois_fw_sec.bin"
 #define FIMC_OIS_FW_NAME_SEC_2		"ois_fw_sec_2.bin"
 #define FIMC_OIS_FW_NAME_DOM		"ois_fw_dom.bin"
@@ -73,8 +78,14 @@ void fimc_is_ois_fw_update(struct fimc_is_core *core);
 bool fimc_is_ois_check_fw(struct fimc_is_core *core);
 bool fimc_is_ois_auto_test(struct fimc_is_core *core,
 	                int threshold, bool *x_result, bool *y_result, int *sin_x, int *sin_y);
+bool fimc_is_ois_read_fw_ver(struct fimc_is_core *core, char *name, char *ver);
 #ifdef CAMERA_REAR2_OIS
 bool fimc_is_ois_auto_test_rear2(struct fimc_is_core *core,
-	                int threshold, bool *x_result, bool *y_result, int *sin_x, int *sin_y);
+	                int threshold, bool *x_result, bool *y_result, int *sin_x, int *sin_y,
+	                bool *x_result_2nd, bool *y_result_2nd, int *sin_x_2nd, int *sin_y_2nd);
 #endif
 void fimc_is_ois_gyro_sleep(struct fimc_is_core *core);
+#ifdef USE_OIS_SLEEP_MODE
+void fimc_is_ois_set_oissel_info(int oissel);
+int fimc_is_ois_get_oissel_info(void);
+#endif

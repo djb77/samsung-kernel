@@ -673,6 +673,14 @@ static int panel_do_tx_packet(struct panel_device *panel, struct pktinfo *info)
 				return -EINVAL;
 			}
 			break;
+		case DSI_PKT_TYPE_WR_MEM:
+			ret = mipi_ops->write(id, MIPI_DSI_WR_MEM, info->data, info->dlen);
+			if (ret != info->dlen) {
+				panel_err("%s, failed to send packet %s (ret %d)\n",
+						__func__, info->name, ret);
+				return -EINVAL;
+			}
+			break;
 		case DSI_PKT_TYPE_WR:
 #ifdef DEBUG_PANEL
 			panel_dbg("%s, send packet %s - start\n", __func__, info->name);
@@ -1183,7 +1191,7 @@ int panel_rx_nbytes(struct panel_device *panel,
 
 int read_panel_id(struct panel_device *panel, u8 *buf)
 {
-	int ret;
+	int len, ret = 0;
 
 	if (panel == NULL) {
 		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
@@ -1191,13 +1199,13 @@ int read_panel_id(struct panel_device *panel, u8 *buf)
 	}
 
 	if (!IS_PANEL_ACTIVE(panel)) {
-		return 0;
+		return -ENODEV;
 	}
 
 	mutex_lock(&panel->op_lock);
 	panel_set_key(panel, 3, true);
-	ret = panel_rx_nbytes(panel, DSI_PKT_TYPE_RD, buf, PANEL_ID_REG, 0, 3);
-	if (ret != 3) {
+	len = panel_rx_nbytes(panel, DSI_PKT_TYPE_RD, buf, PANEL_ID_REG, 0, 3);
+	if (len != 3) {
 		pr_err("%s, failed to read id\n", __func__);
 		ret = -EINVAL;
 		goto read_err;
@@ -1206,7 +1214,7 @@ int read_panel_id(struct panel_device *panel, u8 *buf)
 read_err:
 	panel_set_key(panel, 3, false);
 	mutex_unlock(&panel->op_lock);
-	return 0;
+	return ret;
 }
 
 static struct rdinfo *find_panel_rdinfo(struct panel_info *panel_data, char *name)

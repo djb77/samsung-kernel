@@ -48,7 +48,6 @@
 #include "io.h"
 
 #include "debug.h"
-
 /* for BC1.2 spec */
 int dwc3_set_vbus_current(int state)
 {
@@ -270,7 +269,7 @@ reset_check:
 	} else {
 		dev_err(dwc->dev, "DCTL Reset again !!\n");
 		goto reset_dctl;
-	}
+	}	
 
 err_usb3phy_init:
 	phy_exit(dwc->usb3_generic_phy);
@@ -1562,4 +1561,3 @@ MODULE_ALIAS("platform:dwc3");
 MODULE_AUTHOR("Felipe Balbi <balbi@ti.com>");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DesignWare USB3 DRD Controller Driver");
-

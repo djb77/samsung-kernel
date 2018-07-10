@@ -3,7 +3,7 @@
  * ALSA SoC - Samsung Abox Internal Buffer Dumping driver
  *
  * Copyright (c) 2016 Samsung Electronics Co. Ltd.
-  *
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -32,6 +32,7 @@ extern void abox_dump_period_elapsed(int id, size_t pointer);
  * @param[in]	bytes		buffer size in bytes
  * @return	error code if any
  */
-extern int abox_dump_register_buffer(struct device *dev, int id, const char *name, void *area, phys_addr_t addr, size_t bytes);
+extern int abox_dump_register_buffer(struct device *dev, int id,
+		const char *name, void *area, phys_addr_t addr, size_t bytes);
 
 #endif /* __SND_SOC_ABOX_DUMP_H */

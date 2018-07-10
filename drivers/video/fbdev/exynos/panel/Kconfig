@@ -50,9 +50,29 @@ config SUPPORT_POC_FLASH
 	tristate "Support display poc flash"
 	default n
 
+config PANEL_POC_2_0
+	depends on EXYNOS_DECON_LCD && SUPPORT_POC_FLASH
+	tristate "Support display poc 2.0"
+	default n
+
 config POC_DREAM
 	depends on EXYNOS_DECON_LCD && EXYNOS_DECON_LCD_S6E3HA6 && SUPPORT_POC_FLASH
 	tristate "Support display poc dream"
+	default n
+
+config POC_DREAM2
+	depends on EXYNOS_DECON_LCD && EXYNOS_DECON_LCD_S6E3HA6 && SUPPORT_POC_FLASH
+	tristate "Support display poc dream2"
+	default n
+
+config SUPPORT_GRAM_CHECKSUM
+	depends on EXYNOS_DECON_LCD && SEC_FACTORY
+	tristate "Support GRAM Checksum"
+	default n
+
+config SUPPORT_PANEL_SPI_SHORT_TEST
+	depends on EXYNOS_DECON_LCD && EXYNOS_DECON_LCD_SPI && SEC_FACTORY
+	tristate "Support panel spi short test"
 	default n
 
 config PANEL_BACKLIGHT_PAC_3_0
@@ -65,3 +85,7 @@ config DISPLAY_USE_INFO
 	tristate "Support display use info logging"
 	default n
 
+config SUPPORT_HDR
+	depends on EXYNOS_DECON_LCD
+	tristate "Support HDR Param"
+	default y

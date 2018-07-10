@@ -65,9 +65,11 @@ struct exynos5_i2c {
 	unsigned int		cmd_pointer;
 	unsigned int		desc_pointer;
 	unsigned int		batcher_read_addr;
+	unsigned int		t_data_su_timing;
 	int			need_cs_enb;
 	int			idle_ip_index;
 	int			reset_before_trans;
 	unsigned int		runtime_resumed;
+	unsigned int		control_sda;
 };
 #endif /*__I2C_EXYNOS5_H */

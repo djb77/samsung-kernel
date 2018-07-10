@@ -146,6 +146,8 @@ extern void (*late_time_init)(void);
 
 extern bool initcall_debug;
 
+extern int ddr_start_type;
+
 #endif
   
 #ifndef MODULE

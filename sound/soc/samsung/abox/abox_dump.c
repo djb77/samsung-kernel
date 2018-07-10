@@ -3,7 +3,7 @@
  * ALSA SoC Audio Layer - Samsung Abox Internal Buffer Dumping driver
  *
  * Copyright (c) 2016 Samsung Electronics Co. Ltd.
-  *
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -49,22 +49,21 @@ static struct abox_dump_buffer_info *abox_dump_get_buffer_info(int id)
 	struct abox_dump_buffer_info *info;
 
 	list_for_each_entry(info, &abox_dump_list_head, list) {
-		if (info->id == id) {
+		if (info->id == id)
 			return info;
-		}
 	}
 
 	return NULL;
 }
 
-static struct abox_dump_buffer_info *abox_dump_get_buffer_info_by_name(const char *name)
+static struct abox_dump_buffer_info *abox_dump_get_buffer_info_by_name(
+		const char *name)
 {
 	struct abox_dump_buffer_info *info;
 
 	list_for_each_entry(info, &abox_dump_list_head, list) {
-		if (strncmp(info->name, name, sizeof(info->name)) == 0) {
+		if (strncmp(info->name, name, sizeof(info->name)) == 0)
 			return info;
-		}
 	}
 
 	return NULL;
@@ -83,46 +82,52 @@ static void abox_dump_request_dump(int id)
 	system->msgtype = ABOX_REQUEST_DUMP;
 	system->param1 = id;
 	system->param2 = start ? 1 : 0;
-	abox_start_ipc_transaction(abox_dump_dev_abox, msg.ipcid, &msg, sizeof(msg), 0, 0);
+	abox_request_ipc(abox_dump_dev_abox, msg.ipcid,
+			&msg, sizeof(msg), 0, 0);
 }
 
-static ssize_t abox_dump_auto_read(struct file *file, char __user *data, size_t count, loff_t *ppos, bool enable)
+static ssize_t abox_dump_auto_read(struct file *file, char __user *data,
+		size_t count, loff_t *ppos, bool enable)
 {
 	struct abox_dump_buffer_info *info;
 	char buffer[SZ_256] = {0,}, *buffer_p = buffer;
 
-	dev_dbg(abox_dump_dev_abox, "%s(%zu, %lld, %d)\n", __func__, count, *ppos, enable);
+	dev_dbg(abox_dump_dev_abox, "%s(%zu, %lld, %d)\n", __func__,
+			count, *ppos, enable);
 
 	list_for_each_entry(info, &abox_dump_list_head, list) {
 		if (info->auto_started == enable) {
-			buffer_p += snprintf(buffer_p, sizeof(buffer) - (buffer_p - buffer),
+			buffer_p += snprintf(buffer_p, sizeof(buffer) -
+					(buffer_p - buffer),
 					"%d(%s) ", info->id, info->name);
 		}
 	}
 	snprintf(buffer_p, 2, "\n");
 
-	return simple_read_from_buffer(data, count, ppos, buffer, buffer_p - buffer);
+	return simple_read_from_buffer(data, count, ppos,
+			buffer, buffer_p - buffer);
 }
 
-static ssize_t abox_dump_auto_write(struct file *file, const char __user *data, size_t count, loff_t *ppos, bool enable)
+static ssize_t abox_dump_auto_write(struct file *file, const char __user *data,
+		size_t count, loff_t *ppos, bool enable)
 {
 	char buffer[SZ_256] = {0,}, name[NAME_LENGTH];
 	char *p_buffer = buffer, *token = NULL;
 	unsigned int id;
 	struct abox_dump_buffer_info *info;
 
-	dev_dbg(abox_dump_dev_abox, "%s(%zu, %lld, %d)\n", __func__, count, *ppos, enable);
+	dev_dbg(abox_dump_dev_abox, "%s(%zu, %lld, %d)\n", __func__,
+			count, *ppos, enable);
 
 	simple_write_to_buffer(buffer, sizeof(buffer), ppos, data, count);
 
 	while ((token = strsep(&p_buffer, " ")) != NULL) {
-		if (sscanf(token, "%11u", &id) == 1) {
+		if (sscanf(token, "%11u", &id) == 1)
 			info = abox_dump_get_buffer_info(id);
-		} else if (sscanf(token, "%31s", name) == 1) {
+		else if (sscanf(token, "%31s", name) == 1)
 			info = abox_dump_get_buffer_info_by_name(name);
-		} else {
+		else
 			info = NULL;
-		}
 
 		if (IS_ERR_OR_NULL(info)) {
 			dev_err(abox_dump_dev_abox, "invalid argument\n");
@@ -141,32 +146,36 @@ static ssize_t abox_dump_auto_write(struct file *file, const char __user *data, 
 	return count;
 }
 
-static ssize_t abox_dump_auto_start_read(struct file *file, char __user *data, size_t count, loff_t *ppos)
+static ssize_t abox_dump_auto_start_read(struct file *file,
+		char __user *data, size_t count, loff_t *ppos)
 {
 	return abox_dump_auto_read(file, data, count, ppos, true);
 }
 
-static ssize_t abox_dump_auto_start_write(struct file *file, const char __user *data, size_t count, loff_t *ppos)
+static ssize_t abox_dump_auto_start_write(struct file *file,
+		const char __user *data, size_t count, loff_t *ppos)
 {
 	return abox_dump_auto_write(file, data, count, ppos, true);
 }
 
-static ssize_t abox_dump_auto_stop_read(struct file *file, char __user *data, size_t count, loff_t *ppos)
+static ssize_t abox_dump_auto_stop_read(struct file *file,
+		char __user *data, size_t count, loff_t *ppos)
 {
 	return abox_dump_auto_read(file, data, count, ppos, false);
 }
 
-static ssize_t abox_dump_auto_stop_write(struct file *file, const char __user *data, size_t count, loff_t *ppos)
+static ssize_t abox_dump_auto_stop_write(struct file *file,
+		const char __user *data, size_t count, loff_t *ppos)
 {
 	return abox_dump_auto_write(file, data, count, ppos, false);
 }
 
-static struct file_operations abox_dump_auto_start_fops = {
+static const struct file_operations abox_dump_auto_start_fops = {
 	.read = abox_dump_auto_start_read,
 	.write = abox_dump_auto_start_write,
 };
 
-static struct file_operations abox_dump_auto_stop_fops = {
+static const struct file_operations abox_dump_auto_stop_fops = {
 	.read = abox_dump_auto_stop_read,
 	.write = abox_dump_auto_stop_write,
 };
@@ -175,8 +184,12 @@ static int __init samsung_abox_dump_late_initcall(void)
 {
 	pr_info("%s\n", __func__);
 
-	debugfs_create_file("dump_auto_start", S_IRUGO | S_IWUGO, abox_dbg_get_root_dir(), NULL, &abox_dump_auto_start_fops);
-	debugfs_create_file("dump_auto_stop", S_IRUGO | S_IWUGO, abox_dbg_get_root_dir(), NULL, &abox_dump_auto_stop_fops);
+	debugfs_create_file("dump_auto_start", 0666,
+			abox_dbg_get_root_dir(), NULL,
+			&abox_dump_auto_start_fops);
+	debugfs_create_file("dump_auto_stop", 0666,
+			abox_dbg_get_root_dir(), NULL,
+			&abox_dump_auto_stop_fops);
 
 	return 0;
 }
@@ -193,7 +206,8 @@ static struct snd_soc_card abox_dump_card = {
 
 static void abox_dump_auto_dump_work_func(struct work_struct *work)
 {
-	struct abox_dump_buffer_info *info = container_of(work, struct abox_dump_buffer_info, auto_work);
+	struct abox_dump_buffer_info *info = container_of(work,
+			struct abox_dump_buffer_info, auto_work);
 	struct device *dev = info->dev;
 	int id = info->id;
 
@@ -207,10 +221,12 @@ static void abox_dump_auto_dump_work_func(struct work_struct *work)
 		old_fs = get_fs();
 		set_fs(KERNEL_DS);
 		if (likely(info->file_created)) {
-			filp = filp_open(filename, O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+			filp = filp_open(filename, O_RDWR | O_APPEND | O_CREAT,
+					0600);
 			dev_dbg(dev, "appended\n");
 		} else {
-			filp = filp_open(filename, O_RDWR | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
+			filp = filp_open(filename, O_RDWR | O_TRUNC | O_CREAT,
+					0600);
 			info->file_created = true;
 			dev_dbg(dev, "created\n");
 		}
@@ -224,20 +240,31 @@ static void abox_dump_auto_dump_work_func(struct work_struct *work)
 				info->auto_pointer = pointer;
 				first = true;
 			}
-			/* dev_dbg(dev, "%pad, %p, %zx, %zx)\n", &info->buffer.addr, area, bytes, info->auto_pointer); */
+			dev_dbg(dev, "%pad, %p, %zx, %zx)\n",
+					&info->buffer.addr, area, bytes,
+					info->auto_pointer);
 			if (pointer < info->auto_pointer || first) {
-				vfs_write(filp, area + info->auto_pointer, bytes - info->auto_pointer, &filp->f_pos);
-				/* dev_dbg(dev, "vfs_write(%p, %zx)\n", area + info->auto_pointer, bytes - info->auto_pointer); */
+				vfs_write(filp, area + info->auto_pointer,
+						bytes - info->auto_pointer,
+						&filp->f_pos);
+				dev_dbg(dev, "vfs_write(%p, %zx)\n",
+						area + info->auto_pointer,
+						bytes - info->auto_pointer);
 				info->auto_pointer = 0;
 			}
-			vfs_write(filp, area + info->auto_pointer, pointer - info->auto_pointer, &filp->f_pos);
-			/* dev_dbg(dev, "vfs_write(%p, %zx)\n", area + info->auto_pointer, pointer - info->auto_pointer); */
+			vfs_write(filp, area + info->auto_pointer,
+					pointer - info->auto_pointer,
+					&filp->f_pos);
+			dev_dbg(dev, "vfs_write(%p, %zx)\n",
+					area + info->auto_pointer,
+					pointer - info->auto_pointer);
 			info->auto_pointer = pointer;
 
 			vfs_fsync(filp, 1);
 			filp_close(filp, NULL);
 		} else {
-			dev_err(dev, "dump file %d open error: %ld\n", id, PTR_ERR(filp));
+			dev_err(dev, "dump file %d open error: %ld\n",
+					id, PTR_ERR(filp));
 		}
 
 		set_fs(old_fs);
@@ -246,17 +273,14 @@ static void abox_dump_auto_dump_work_func(struct work_struct *work)
 
 void abox_dump_register_buffer_work_func(struct work_struct *work)
 {
-	struct device *dev;
 	int id;
 	struct abox_dump_buffer_info *info;
-
-	dev_dbg(dev, "%s\n", __func__);
 
 	for (info = &abox_dump_list[0]; (info - &abox_dump_list[0]) <
 			ARRAY_SIZE(abox_dump_list); info++) {
 		id = info->id;
 		if (info->dev && !abox_dump_get_buffer_info(id)) {
-			dev_info(dev, "%s[%d]\n", __func__, id);
+			dev_info(info->dev, "%s[%d]\n", __func__, id);
 
 			list_add_tail(&info->list, &abox_dump_list_head);
 			platform_device_register_simple("samsung-abox-dump",
@@ -265,9 +289,11 @@ void abox_dump_register_buffer_work_func(struct work_struct *work)
 	}
 }
 
-static DECLARE_WORK(abox_dump_register_buffer_work, abox_dump_register_buffer_work_func);
+static DECLARE_WORK(abox_dump_register_buffer_work,
+		abox_dump_register_buffer_work_func);
 
-int abox_dump_register_buffer(struct device *dev, int id, const char *name, void *area, phys_addr_t addr, size_t bytes)
+int abox_dump_register_buffer(struct device *dev, int id, const char *name,
+		void *area, phys_addr_t addr, size_t bytes)
 {
 	struct abox_dump_buffer_info *info;
 
@@ -299,18 +325,18 @@ int abox_dump_register_buffer(struct device *dev, int id, const char *name, void
 EXPORT_SYMBOL(abox_dump_register_buffer);
 
 static struct snd_pcm_hardware abox_dump_hardware = {
-	.info			= SNDRV_PCM_INFO_INTERLEAVED
-				| SNDRV_PCM_INFO_BLOCK_TRANSFER
-				| SNDRV_PCM_INFO_MMAP
-				| SNDRV_PCM_INFO_MMAP_VALID,
-	.formats		= ABOX_SAMPLE_FORMATS,
-	.rates			= SNDRV_PCM_RATE_8000_192000 | SNDRV_PCM_RATE_KNOT,
-	.rate_min		= 8000,
-	.rate_max		= 384000,
-	.channels_min		= 1,
-	.channels_max		= 8,
-	.periods_min		= 2,
-	.periods_max		= 2,
+	.info		= SNDRV_PCM_INFO_INTERLEAVED
+			| SNDRV_PCM_INFO_BLOCK_TRANSFER
+			| SNDRV_PCM_INFO_MMAP
+			| SNDRV_PCM_INFO_MMAP_VALID,
+	.formats	= ABOX_SAMPLE_FORMATS,
+	.rates		= SNDRV_PCM_RATE_8000_192000 | SNDRV_PCM_RATE_KNOT,
+	.rate_min	= 8000,
+	.rate_max	= 384000,
+	.channels_min	= 1,
+	.channels_max	= 8,
+	.periods_min	= 2,
+	.periods_max	= 2,
 };
 
 static int abox_dump_platform_open(struct snd_pcm_substream *substream)
@@ -325,8 +351,10 @@ static int abox_dump_platform_open(struct snd_pcm_substream *substream)
 	dev_dbg(dev, "%s[%d]\n", __func__, id);
 
 	abox_dump_hardware.buffer_bytes_max = dmab->bytes;
-	abox_dump_hardware.period_bytes_min = dmab->bytes / abox_dump_hardware.periods_max;
-	abox_dump_hardware.period_bytes_max = dmab->bytes / abox_dump_hardware.periods_min;
+	abox_dump_hardware.period_bytes_min = dmab->bytes /
+			abox_dump_hardware.periods_max;
+	abox_dump_hardware.period_bytes_max = dmab->bytes /
+			abox_dump_hardware.periods_min;
 
 	snd_soc_set_runtime_hwparams(substream, &abox_dump_hardware);
 
@@ -350,7 +378,8 @@ static int abox_dump_platform_close(struct snd_pcm_substream *substream)
 	return 0;
 }
 
-static int abox_dump_platform_hw_params(struct snd_pcm_substream *substream, struct snd_pcm_hw_params *params)
+static int abox_dump_platform_hw_params(struct snd_pcm_substream *substream,
+		struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_platform *platform = rtd->platform;
@@ -371,7 +400,7 @@ static int abox_dump_platform_hw_free(struct snd_pcm_substream *substream)
 
 	dev_dbg(dev, "%s[%d]\n", __func__, id);
 
-	return snd_pcm_lib_free_pages(substream);;
+	return snd_pcm_lib_free_pages(substream);
 }
 
 static int abox_dump_platform_prepare(struct snd_pcm_substream *substream)
@@ -389,7 +418,8 @@ static int abox_dump_platform_prepare(struct snd_pcm_substream *substream)
 	return 0;
 }
 
-static int abox_dump_platform_trigger(struct snd_pcm_substream *substream, int cmd)
+static int abox_dump_platform_trigger(struct snd_pcm_substream *substream,
+		int cmd)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_platform *platform = rtd->platform;
@@ -433,7 +463,8 @@ void abox_dump_period_elapsed(int id, size_t pointer)
 }
 EXPORT_SYMBOL(abox_dump_period_elapsed);
 
-static snd_pcm_uframes_t abox_dump_platform_pointer(struct snd_pcm_substream *substream)
+static snd_pcm_uframes_t abox_dump_platform_pointer(
+		struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_platform *platform = rtd->platform;
@@ -481,7 +512,8 @@ static void abox_dump_register_card_work_func(struct work_struct *work)
 	snd_soc_register_card(&abox_dump_card);
 }
 
-DECLARE_DELAYED_WORK(abox_dump_register_card_work, abox_dump_register_card_work_func);
+DECLARE_DELAYED_WORK(abox_dump_register_card_work,
+		abox_dump_register_card_work_func);
 
 static void abox_dump_add_dai_link(struct device *dev)
 {
@@ -530,7 +562,9 @@ static int abox_dump_platform_probe(struct snd_soc_platform *platform)
 static int abox_dump_platform_new(struct snd_soc_pcm_runtime *runtime)
 {
 	struct device *dev = runtime->platform->dev;
-	struct snd_pcm_substream *substream = runtime->pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream;
+	struct snd_pcm *pcm = runtime->pcm;
+	struct snd_pcm_str *stream = &pcm->streams[SNDRV_PCM_STREAM_CAPTURE];
+	struct snd_pcm_substream *substream = stream->substream;
 	struct snd_dma_buffer *dmab = &substream->dma_buffer;
 	int id = to_platform_device(dev)->id;
 	struct abox_dump_buffer_info *info = abox_dump_get_buffer_info(id);

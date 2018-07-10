@@ -689,7 +689,7 @@ p_err:
 }
 
 #ifndef ENABLE_IS_CORE
-static void fimc_is_sensor_dump(struct fimc_is_device_sensor *device)
+void fimc_is_sensor_dump(struct fimc_is_device_sensor *device)
 {
 	int ret = 0;
 	struct v4l2_subdev *subdev_module;

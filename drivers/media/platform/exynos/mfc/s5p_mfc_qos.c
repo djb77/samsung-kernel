@@ -50,15 +50,17 @@ static void mfc_qos_operate(struct s5p_mfc_ctx *ctx, int opr_type, int idx)
 				qos_table[idx].freq_kfc);
 #endif
 
+		if (ctx->type == MFCINST_DECODER)
+			bts_update_scen(BS_MFC_UHD_10BIT, qos_table[idx].mo_10bit_value);
 		bts_update_scen(BS_MFC_UHD, qos_table[idx].mo_value);
 
 		atomic_set(&dev->qos_req_cur, idx + 1);
-		MFC_TRACE_CTX("-- QOS add[%d] (int:%d, mif:%d, mo:%d)\n",
+		MFC_TRACE_CTX("-- QOS add[%d] (int:%d, mif:%d, mo:%d, mo_10bit:%d)\n",
 				idx, qos_table[idx].freq_int, qos_table[idx].freq_mif,
-				qos_table[idx].mo_value);
-		mfc_debug(2, "QOS add[%d] (int:%d, mif:%d, mo:%d)\n",
+				qos_table[idx].mo_value, qos_table[idx].mo_10bit_value);
+		mfc_debug(2, "QOS add[%d] (int:%d, mif:%d, mo:%d, mo_10bit:%d)\n",
 				idx, qos_table[idx].freq_int, qos_table[idx].freq_mif,
-				qos_table[idx].mo_value);
+				qos_table[idx].mo_value, qos_table[idx].mo_10bit_value);
 		break;
 	case MFC_QOS_UPDATE:
 		MFC_TRACE_CTX("++ QOS update[%d] (int:%d, mif:%d)\n",
@@ -75,16 +77,17 @@ static void mfc_qos_operate(struct s5p_mfc_ctx *ctx, int opr_type, int idx)
 		pm_qos_update_request(&dev->qos_req_cluster0,
 				qos_table[idx].freq_kfc);
 #endif
-
+		if (ctx->type == MFCINST_DECODER)
+			bts_update_scen(BS_MFC_UHD_10BIT, qos_table[idx].mo_10bit_value);
 		bts_update_scen(BS_MFC_UHD, qos_table[idx].mo_value);
 
 		atomic_set(&dev->qos_req_cur, idx + 1);
-		MFC_TRACE_CTX("-- QOS update[%d] (int:%d, mif:%d, mo: %d)\n",
+		MFC_TRACE_CTX("-- QOS update[%d] (int:%d, mif:%d, mo:%d, mo_10bit:%d)\n",
 				idx, qos_table[idx].freq_int, qos_table[idx].freq_mif,
-				qos_table[idx].mo_value);
-		mfc_debug(2, "QOS update[%d] (int:%d, mif:%d, mo: %d)\n",
+				qos_table[idx].mo_value, qos_table[idx].mo_10bit_value);
+		mfc_debug(2, "QOS update[%d] (int:%d, mif:%d, mo:%d, mo_10bit:%d)\n",
 				idx, qos_table[idx].freq_int, qos_table[idx].freq_mif,
-				qos_table[idx].mo_value);
+				qos_table[idx].mo_value, qos_table[idx].mo_10bit_value);
 		break;
 	case MFC_QOS_REMOVE:
 		MFC_TRACE_CTX("++ QOS remove\n");
@@ -97,6 +100,8 @@ static void mfc_qos_operate(struct s5p_mfc_ctx *ctx, int opr_type, int idx)
 		pm_qos_remove_request(&dev->qos_req_cluster0);
 #endif
 
+		if (ctx->type == MFCINST_DECODER)
+			bts_update_scen(BS_MFC_UHD_10BIT, 0);
 		bts_update_scen(BS_MFC_UHD, 0);
 
 		dev->mfc_bw.peak = 0;
