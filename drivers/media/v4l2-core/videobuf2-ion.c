@@ -633,6 +633,8 @@ static struct vm_area_struct *vb2_ion_get_vma(struct device *dev,
 		return NULL;
 	}
 
+	down_read(&current->mm->mmap_sem);
+
 	for (vma = find_vma(current->mm, addr);
 		vma && len && (addr >= vma->vm_start); vma = vma->vm_next) {
 		struct vm_area_struct *cur_vma;
@@ -661,6 +663,8 @@ static struct vm_area_struct *vb2_ion_get_vma(struct device *dev,
 			addr = vma->vm_end;
 		}
 	}
+
+	up_read(&current->mm->mmap_sem);
 
 	if (len) { /* error detected */
 		vb2ion_err(dev, "Invalid user area [%#lx, %#lx)\n",

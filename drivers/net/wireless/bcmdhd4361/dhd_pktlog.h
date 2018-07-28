@@ -1,7 +1,7 @@
 /*
  * DHD debugability packet logging header file
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pktlog.h 717188 2017-08-23 11:47:08Z $
+ * $Id: dhd_pktlog.h 742382 2018-01-22 01:56:53Z $
  */
 
 #ifndef __DHD_PKTLOG_H_
@@ -35,7 +35,8 @@
 
 #ifdef DHD_PKT_LOGGING
 #define DHD_PKT_LOG(args)	DHD_INFO(args)
-#define MAX_PKT_LOG_LEN			(32 * 10)
+#define MIN_PKTLOG_LEN			(32 * 10)
+#define MAX_PKTLOG_LEN			(32 * 100)
 #define MAX_DHD_PKTLOG_FILTER_LEN	10
 #define MAX_MASK_PATTERN_FILTER_LEN	64
 #define PKTLOG_TXPKT_CASE			0x0001
@@ -65,14 +66,15 @@ typedef struct dhd_pktlog_ring_info
 
 typedef struct dhd_pktlog_ring
 {
-	dhd_pktlog_ring_info_t *pktlog_ring_info;
-	dhd_pub_t *dhdp;
 	uint16 front;
 	uint16 rear;
 	uint16 prev_pos;
 	uint16 next_pos;
 	uint32 start;
 	uint32 pktlog_minmize;
+	uint32 pktlog_len;
+	dhd_pktlog_ring_info_t *pktlog_ring_info;
+	dhd_pub_t *dhdp;
 } dhd_pktlog_ring_t;
 
 typedef struct dhd_pktlog_filter_info
@@ -118,7 +120,7 @@ typedef struct dhd_pktlog_pcap_hdr
 
 extern int dhd_os_attach_pktlog(dhd_pub_t *dhdp);
 extern int dhd_os_detach_pktlog(dhd_pub_t *dhdp);
-extern dhd_pktlog_ring_t* dhd_pktlog_ring_init(int size);
+extern dhd_pktlog_ring_t* dhd_pktlog_ring_init(dhd_pub_t *dhdp, int size);
 extern int dhd_pktlog_ring_deinit(dhd_pktlog_ring_t *ring);
 extern int dhd_pktlog_ring_set_nextpos(dhd_pktlog_ring_t *ringbuf);
 extern int dhd_pktlog_ring_get_nextbuf(dhd_pktlog_ring_t *ringbuf, void **data);
@@ -129,6 +131,7 @@ extern int dhd_pktlog_ring_tx_pkts(dhd_pub_t *dhdp, void *pkt, uint32 pktid);
 extern int dhd_pktlog_ring_tx_status(dhd_pub_t *dhdp, void *pkt, uint32 pktid,
 		uint16 status);
 extern int dhd_pktlog_ring_rx_pkts(dhd_pub_t *dhdp, void *pkt);
+extern dhd_pktlog_ring_t* dhd_pktlog_ring_change_size(dhd_pktlog_ring_t *ringbuf, int size);
 
 #define DHD_PKTLOG_TX(dhdp, pkt, pktid) \
 { \
@@ -191,6 +194,7 @@ extern int dhd_pktlog_write_file(dhd_pub_t *dhdp);
 
 #define DHD_PKTLOG_FATE_INFO_STR_LEN 256
 #define DHD_PKTLOG_FATE_INFO_FORMAT	"BRCM_Packet_Fate"
+#define DHD_PKTLOG_DUMP_TYPE "pktlog_dump"
 
 #endif /* DHD_PKT_LOGGING */
 #endif /* __DHD_PKTLOG_H_ */

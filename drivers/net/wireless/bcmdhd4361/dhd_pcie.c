@@ -1,7 +1,7 @@
 /*
  * DHD Bus Module for PCIE
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.c 736723 2017-12-18 08:37:35Z $
+ * $Id: dhd_pcie.c 762598 2018-05-15 08:00:06Z $
  */
 
 
@@ -574,17 +574,17 @@ dhdpcie_bus_isr(dhd_bus_t *bus)
 		DHD_TRACE(("%s: Enter\n", __FUNCTION__));
 		/* verify argument */
 		if (!bus) {
-			DHD_ERROR(("%s : bus is null pointer, exit \n", __FUNCTION__));
+			DHD_ERROR_MEM(("%s : bus is null pointer, exit \n", __FUNCTION__));
 			break;
 		}
 
 		if (bus->dhd->dongle_reset) {
-			DHD_ERROR(("%s : dongle is reset\n", __FUNCTION__));
+			DHD_ERROR_MEM(("%s : dongle is reset\n", __FUNCTION__));
 			break;
 		}
 
 		if (bus->dhd->busstate == DHD_BUS_DOWN) {
-			DHD_ERROR(("%s : bus is down \n", __FUNCTION__));
+			DHD_ERROR_MEM(("%s : bus is down \n", __FUNCTION__));
 			break;
 		}
 
@@ -606,7 +606,7 @@ dhdpcie_bus_isr(dhd_bus_t *bus)
 
 		/* Check if the interrupt is ours or not */
 		if (intstatus == 0) {
-			DHD_ERROR(("%s : this interrupt is not ours\n", __FUNCTION__));
+			DHD_ERROR_MEM(("%s : this interrupt is not ours\n", __FUNCTION__));
 			break;
 		}
 
@@ -636,7 +636,13 @@ dhdpcie_bus_isr(dhd_bus_t *bus)
 		bus->ipend = TRUE;
 
 		bus->isr_intr_disable_count++;
-		dhdpcie_bus_intr_disable(bus); /* Disable interrupt using IntMask!! */
+
+		/* For Linux, Macos etc (otherthan NDIS) instead of disabling
+		 * dongle interrupt by clearing the IntMask, disable directly
+		 * interrupt from the host side, so that host will not recieve
+		 * any interrupts at all, even though dongle raises interrupts
+		 */
+		dhdpcie_disable_irq_nosync(bus); /* Disable interrupt!! */
 
 		bus->intdis = TRUE;
 
@@ -1564,111 +1570,13 @@ bool dhd_bus_watchdog(dhd_pub_t *dhd)
 } /* dhd_bus_watchdog */
 
 #if defined(SUPPORT_MULTIPLE_REVISION)
-static int concate_revision_bcm4358(dhd_bus_t *bus, char *fw_path, char *nv_path)
-{
-	uint32 chiprev;
-#if defined(SUPPORT_MULTIPLE_CHIPS)
-	char chipver_tag[20] = "_4358";
-#else
-	char chipver_tag[10] = {0, };
-#endif /* SUPPORT_MULTIPLE_CHIPS */
-
-	chiprev = dhd_bus_chiprev(bus);
-	if (chiprev == 0) {
-		DHD_ERROR(("----- CHIP 4358 A0 -----\n"));
-		strcat(chipver_tag, "_a0");
-	} else if (chiprev == 1) {
-		DHD_ERROR(("----- CHIP 4358 A1 -----\n"));
-#if defined(SUPPORT_MULTIPLE_CHIPS) || defined(SUPPORT_MULTIPLE_MODULE_CIS)
-		strcat(chipver_tag, "_a1");
-#endif /* defined(SUPPORT_MULTIPLE_CHIPS) || defined(SUPPORT_MULTIPLE_MODULE_CIS) */
-	} else if (chiprev == 3) {
-		DHD_ERROR(("----- CHIP 4358 A3 -----\n"));
-#if defined(SUPPORT_MULTIPLE_CHIPS)
-		strcat(chipver_tag, "_a3");
-#endif /* SUPPORT_MULTIPLE_CHIPS */
-	} else {
-		DHD_ERROR(("----- Unknown chip version, ver=%x -----\n", chiprev));
-	}
-
-	strcat(fw_path, chipver_tag);
-
-#if defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK)
-	if (chiprev == 1 || chiprev == 3) {
-		int ret = dhd_check_module_b85a();
-		if ((chiprev == 1) && (ret < 0)) {
-			memset(chipver_tag, 0x00, sizeof(chipver_tag));
-			strcat(chipver_tag, "_b85");
-			strcat(chipver_tag, "_a1");
-		}
-	}
-
-	DHD_ERROR(("%s: chipver_tag %s \n", __FUNCTION__, chipver_tag));
-#endif /* defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK) */
-
-#if defined(SUPPORT_MULTIPLE_BOARD_REV)
-	if (system_rev >= 10) {
-		DHD_ERROR(("----- Board Rev  [%d]-----\n", system_rev));
-		strcat(chipver_tag, "_r10");
-	}
-#endif /* SUPPORT_MULTIPLE_BOARD_REV */
-	strcat(nv_path, chipver_tag);
-
-	return 0;
-}
-
-static int concate_revision_bcm4359(dhd_bus_t *bus, char *fw_path, char *nv_path)
-{
-	uint32 chip_ver;
-	char chipver_tag[10] = {0, };
-#if defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK) && \
-	defined(SUPPORT_BCM4359_MIXED_MODULES)
-	int module_type = -1;
-#endif /* SUPPORT_MULTIPLE_MODULE_CIS && USE_CID_CHECK && SUPPORT_BCM4359_MIXED_MODULES */
-
-	chip_ver = bus->sih->chiprev;
-	if (chip_ver == 4) {
-		DHD_ERROR(("----- CHIP 4359 B0 -----\n"));
-		strncat(chipver_tag, "_b0", strlen("_b0"));
-	} else if (chip_ver == 5) {
-		DHD_ERROR(("----- CHIP 4359 B1 -----\n"));
-		strncat(chipver_tag, "_b1", strlen("_b1"));
-	} else if (chip_ver == 9) {
-		DHD_ERROR(("----- CHIP 4359 C0 -----\n"));
-		strncat(chipver_tag, "_c0", strlen("_c0"));
-	} else {
-		DHD_ERROR(("----- Unknown chip version, ver=%x -----\n", chip_ver));
-		return -1;
-	}
 
 #if defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK) && \
 	defined(SUPPORT_BCM4359_MIXED_MODULES)
-	module_type =  dhd_check_module_b90();
-
-	switch (module_type) {
-		case BCM4359_MODULE_TYPE_B90B:
-			strcat(fw_path, chipver_tag);
-			break;
-		case BCM4359_MODULE_TYPE_B90S:
-		default:
-			/*
-			 * .cid.info file not exist case,
-			 * loading B90S FW force for initial MFG boot up.
-			*/
-			if (chip_ver == 5) {
-				strncat(fw_path, "_b90s", strlen("_b90s"));
-			}
-			strcat(fw_path, chipver_tag);
-			strcat(nv_path, chipver_tag);
-			break;
-	}
-#else /* SUPPORT_MULTIPLE_MODULE_CIS && USE_CID_CHECK && SUPPORT_BCM4359_MIXED_MODULES */
-	strcat(fw_path, chipver_tag);
-	strcat(nv_path, chipver_tag);
+#define VENDOR_MURATA "murata"
+#define VENDOR_WISOL "wisol"
+#define VNAME_DELIM "_"
 #endif /* SUPPORT_MULTIPLE_MODULE_CIS && USE_CID_CHECK && SUPPORT_BCM4359_MIXED_MODULES */
-
-	return 0;
-}
 
 #if defined(SUPPORT_BCM4361_MIXED_MODULES) && defined(USE_CID_CHECK)
 
@@ -1921,6 +1829,139 @@ dhd_find_naming_info_by_chip_rev(naming_info_t table[], int table_size,
 }
 #endif /* SUPPORT_BCM4361_MIXED_MODULES && USE_CID_CHECK */
 
+static int concate_revision_bcm4358(dhd_bus_t *bus, char *fw_path, char *nv_path)
+{
+	uint32 chiprev;
+#if defined(SUPPORT_MULTIPLE_CHIPS)
+	char chipver_tag[20] = "_4358";
+#else
+	char chipver_tag[10] = {0, };
+#endif /* SUPPORT_MULTIPLE_CHIPS */
+
+	chiprev = dhd_bus_chiprev(bus);
+	if (chiprev == 0) {
+		DHD_ERROR(("----- CHIP 4358 A0 -----\n"));
+		strcat(chipver_tag, "_a0");
+	} else if (chiprev == 1) {
+		DHD_ERROR(("----- CHIP 4358 A1 -----\n"));
+#if defined(SUPPORT_MULTIPLE_CHIPS) || defined(SUPPORT_MULTIPLE_MODULE_CIS)
+		strcat(chipver_tag, "_a1");
+#endif /* defined(SUPPORT_MULTIPLE_CHIPS) || defined(SUPPORT_MULTIPLE_MODULE_CIS) */
+	} else if (chiprev == 3) {
+		DHD_ERROR(("----- CHIP 4358 A3 -----\n"));
+#if defined(SUPPORT_MULTIPLE_CHIPS)
+		strcat(chipver_tag, "_a3");
+#endif /* SUPPORT_MULTIPLE_CHIPS */
+	} else {
+		DHD_ERROR(("----- Unknown chip version, ver=%x -----\n", chiprev));
+	}
+
+	strcat(fw_path, chipver_tag);
+
+#if defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK)
+	if (chiprev == 1 || chiprev == 3) {
+		int ret = dhd_check_module_b85a();
+		if ((chiprev == 1) && (ret < 0)) {
+			memset(chipver_tag, 0x00, sizeof(chipver_tag));
+			strcat(chipver_tag, "_b85");
+			strcat(chipver_tag, "_a1");
+		}
+	}
+
+	DHD_ERROR(("%s: chipver_tag %s \n", __FUNCTION__, chipver_tag));
+#endif /* defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK) */
+
+#if defined(SUPPORT_MULTIPLE_BOARD_REV)
+	if (system_rev >= 10) {
+		DHD_ERROR(("----- Board Rev  [%d]-----\n", system_rev));
+		strcat(chipver_tag, "_r10");
+	}
+#endif /* SUPPORT_MULTIPLE_BOARD_REV */
+	strcat(nv_path, chipver_tag);
+
+	return BCME_OK;
+}
+
+static int concate_revision_bcm4359(dhd_bus_t *bus, char *fw_path, char *nv_path)
+{
+	uint32 chip_ver;
+	char chipver_tag[10] = {0, };
+#if defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK) && \
+	defined(SUPPORT_BCM4359_MIXED_MODULES)
+	char chipver_tag_nv[10] = {0, };
+	int module_type = -1;
+#endif /* SUPPORT_MULTIPLE_MODULE_CIS && USE_CID_CHECK && SUPPORT_BCM4359_MIXED_MODULES */
+
+	chip_ver = bus->sih->chiprev;
+	if (chip_ver == 4) {
+		DHD_ERROR(("----- CHIP 4359 B0 -----\n"));
+		strncat(chipver_tag, "_b0", strlen("_b0"));
+	} else if (chip_ver == 5) {
+		DHD_ERROR(("----- CHIP 4359 B1 -----\n"));
+		strncat(chipver_tag, "_b1", strlen("_b1"));
+	} else if (chip_ver == 9) {
+		DHD_ERROR(("----- CHIP 4359 C0 -----\n"));
+#if defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK) && \
+	defined(SUPPORT_BCM4359_MIXED_MODULES)
+		if (dhd_check_module(VENDOR_MURATA)) {
+			strncat(chipver_tag_nv, VNAME_DELIM, strlen(VNAME_DELIM));
+			strncat(chipver_tag_nv, VENDOR_MURATA, strlen(VENDOR_MURATA));
+		} else if (dhd_check_module(VENDOR_WISOL)) {
+			strncat(chipver_tag_nv, VNAME_DELIM, strlen(VNAME_DELIM));
+			strncat(chipver_tag_nv, VENDOR_WISOL, strlen(VENDOR_WISOL));
+		}
+		/* In case of SEMCO module, extra vendor string doen not need to add */
+		strncat(chipver_tag_nv, "_c0", strlen("_c0"));
+#endif /* SUPPORT_MULTIPLE_MODULE_CIS && USE_CID_CHECK && SUPPORT_BCM4359_MIXED_MODULES */
+		strncat(chipver_tag, "_c0", strlen("_c0"));
+#if defined(CONFIG_WLAN_GRACE) || defined(CONFIG_SEC_GRACEQLTE_PROJECT)
+		DHD_ERROR(("----- Adding _plus string -----\n"));
+		strncat(chipver_tag, "_plus", strlen("_plus"));
+#if defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK) && \
+	defined(SUPPORT_BCM4359_MIXED_MODULES)
+		strncat(chipver_tag_nv, "_plus", strlen("_plus"));
+#endif /* SUPPORT_MULTIPLE_MODULE_CIS && USE_CID_CHECK && SUPPORT_BCM4359_MIXED_MODULES */
+#endif /* CONFIG_WLAN_GRACE || CONFIG_SEC_GRACEQLTE_PROJECT */
+	} else {
+		DHD_ERROR(("----- Unknown chip version, ver=%x -----\n", chip_ver));
+		return BCME_ERROR;
+	}
+
+#if defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK) && \
+	defined(SUPPORT_BCM4359_MIXED_MODULES)
+	module_type = dhd_check_module_b90();
+
+	switch (module_type) {
+		case BCM4359_MODULE_TYPE_B90B:
+			strcat(fw_path, chipver_tag);
+			break;
+		case BCM4359_MODULE_TYPE_B90S:
+			strcat(fw_path, chipver_tag);
+			if (!(strstr(nv_path, VENDOR_MURATA) || strstr(nv_path, VENDOR_WISOL))) {
+				strcat(nv_path, chipver_tag_nv);
+			} else {
+				strcat(nv_path, chipver_tag);
+			}
+			break;
+		default:
+			/*
+			 * .cid.info file not exist case,
+			 * loading B90S FW force for initial MFG boot up.
+			*/
+			if (chip_ver == 5) {
+				strncat(fw_path, "_b90s", strlen("_b90s"));
+			}
+			strcat(fw_path, chipver_tag);
+			strcat(nv_path, chipver_tag);
+			break;
+	}
+#else /* SUPPORT_MULTIPLE_MODULE_CIS && USE_CID_CHECK && SUPPORT_BCM4359_MIXED_MODULES */
+	strcat(fw_path, chipver_tag);
+	strcat(nv_path, chipver_tag);
+#endif /* SUPPORT_MULTIPLE_MODULE_CIS && USE_CID_CHECK && SUPPORT_BCM4359_MIXED_MODULES */
+
+	return BCME_OK;
+}
 static int
 concate_revision_bcm4361(dhd_bus_t *bus, char *fw_path, char *nv_path)
 {
@@ -5839,10 +5880,10 @@ int
 dhdpcie_downloadvars(dhd_bus_t *bus, void *arg, int len)
 {
 	int bcmerror = BCME_OK;
-#ifdef KEEP_JP_REGREV
+#if defined(KEEP_KR_REGREV) || defined(KEEP_JP_REGREV)
 	char *tmpbuf;
 	uint tmpidx;
-#endif /* KEEP_JP_REGREV */
+#endif /* KEEP_KR_REGREV || KEEP_JP_REGREV */
 
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
 
@@ -5908,7 +5949,7 @@ dhdpcie_downloadvars(dhd_bus_t *bus, void *arg, int len)
 	}
 #endif /* DHD_USE_SINGLE_NVRAM_FILE */
 
-#ifdef KEEP_JP_REGREV
+#if defined(KEEP_KR_REGREV) || defined(KEEP_JP_REGREV)
 #ifdef DHD_USE_SINGLE_NVRAM_FILE
 	if (dhd_bus_get_fw_mode(bus->dhd) != DHD_FLAG_MFG_MODE)
 #endif /* DHD_USE_SINGLE_NVRAM_FILE */
@@ -5934,7 +5975,7 @@ dhdpcie_downloadvars(dhd_bus_t *bus, void *arg, int len)
 		}
 		MFREE(bus->dhd->osh, tmpbuf, bus->varsz + 1);
 	}
-#endif /* KEEP_JP_REGREV */
+#endif /* KEEP_KR_REGREV || KEEP_JP_REGREV */
 
 err:
 	return bcmerror;
@@ -6609,7 +6650,10 @@ dhd_bus_dpc(struct dhd_bus *bus)
 	if (!resched) {
 		bus->intstatus = 0;
 		bus->dpc_intr_enable_count++;
-		dhdpcie_bus_intr_enable(bus); /* Enable back interrupt using Intmask!! */
+		/* For Linux, Macos etc (otherthan NDIS) enable back the host interrupts
+		 * which has been disabled in the dhdpcie_bus_isr()
+		 */
+		dhdpcie_enable_irq(bus); /* Enable back interrupt!! */
 	}
 
 	DHD_GENERAL_LOCK(bus->dhd, flags);
@@ -6990,17 +7034,18 @@ dhdpci_bus_read_frames(dhd_bus_t *bus)
 				DHD_OS_WAKE_UNLOCK(bus->dhd);
 			}
 #endif /* DHD_FW_COREDUMP */
-			bus->dhd->hang_reason = HANG_REASON_PCIE_LINK_DOWN;
-			dhd_os_send_hang_message(bus->dhd);
 		} else {
 			DHD_ERROR(("%s: Link is Down.\n", __FUNCTION__));
 #ifdef CONFIG_ARCH_MSM
 			bus->no_cfg_restore = 1;
 #endif /* CONFIG_ARCH_MSM */
 			bus->is_linkdown = 1;
+		}
+
+		dhd_prot_debug_info_print(bus->dhd);
 			bus->dhd->hang_reason = HANG_REASON_PCIE_LINK_DOWN;
 			dhd_os_send_hang_message(bus->dhd);
-		}
+		more = FALSE;
 	}
 #endif /* SUPPORT_LINKDOWN_RECOVERY */
 	return more;
@@ -8727,6 +8772,11 @@ dhdpcie_d11_check_outofreset(dhd_pub_t *dhd)
 	for (i = 0; i < MAX_NUM_D11CORES; i++) {
 		/* Check if bit 0 of resetctrl is cleared */
 		addr = dhd->sssr_reg_info.mac_regs[i].wrapper_regs.resetctrl;
+		if (!addr) {
+			/* ignore invalid address */
+			dhd->sssr_d11_outofreset[i] = FALSE;
+			continue;
+		}
 		dhd_sbreg_op(dhd, addr, &val, TRUE);
 		if (!(val & 1)) {
 			dhd->sssr_d11_outofreset[i] = TRUE;
