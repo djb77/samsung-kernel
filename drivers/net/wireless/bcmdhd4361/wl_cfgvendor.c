@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 Vendor Extension Code
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.c 730790 2017-11-08 11:44:12Z $
+ * $Id: wl_cfgvendor.c 763050 2018-05-17 04:42:47Z $
  */
 
 /*
@@ -2316,6 +2316,32 @@ exit:
 #define NUM_PEER 1
 #define NUM_CHAN 11
 #define HEADER_SIZE sizeof(ver_len)
+
+static int wl_cfgvendor_lstats_get_bcn_mbss(char *buf, uint32 *rxbeaconmbss)
+{
+	wl_cnt_info_t *cbuf = (wl_cnt_info_t *)buf;
+	const void *cnt;
+
+	if ((cnt = (const void *)bcm_get_data_from_xtlv_buf(cbuf->data, cbuf->datalen,
+		WL_CNT_XTLV_CNTV_LE10_UCODE, NULL, BCM_XTLV_OPTION_ALIGN32)) != NULL) {
+		*rxbeaconmbss = ((const wl_cnt_v_le10_mcst_t *)cnt)->rxbeaconmbss;
+	} else if ((cnt = (const void *)bcm_get_data_from_xtlv_buf(cbuf->data, cbuf->datalen,
+		WL_CNT_XTLV_LT40_UCODE_V1, NULL, BCM_XTLV_OPTION_ALIGN32)) != NULL) {
+		*rxbeaconmbss = ((const wl_cnt_lt40mcst_v1_t *)cnt)->rxbeaconmbss;
+	} else if ((cnt = (const void *)bcm_get_data_from_xtlv_buf(cbuf->data, cbuf->datalen,
+		WL_CNT_XTLV_GE40_UCODE_V1, NULL, BCM_XTLV_OPTION_ALIGN32)) != NULL) {
+		*rxbeaconmbss = ((const wl_cnt_ge40mcst_v1_t *)cnt)->rxbeaconmbss;
+	} else if ((cnt = (const void *)bcm_get_data_from_xtlv_buf(cbuf->data, cbuf->datalen,
+		WL_CNT_XTLV_GE80_UCODE_V1, NULL, BCM_XTLV_OPTION_ALIGN32)) != NULL) {
+		*rxbeaconmbss = ((const wl_cnt_ge80mcst_v1_t *)cnt)->rxbeaconmbss;
+	} else {
+		*rxbeaconmbss = 0;
+		return BCME_NOTFOUND;
+	}
+
+	return BCME_OK;
+}
+
 static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 	struct wireless_dev *wdev, const void  *data, int len)
 {
@@ -2325,7 +2351,6 @@ static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 	wifi_radio_stat *radio;
 	wifi_radio_stat_h radio_h;
 	wl_wme_cnt_t *wl_wme_cnt;
-	wl_cnt_ge40mcst_v1_t *macstat_cnt;
 	wl_cnt_wlc_t *wlc_cnt;
 	scb_val_t scbval;
 	char *output = NULL;
@@ -2333,6 +2358,7 @@ static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 	wifi_rate_stat_v1 *p_wifi_rate_stat_v1 = NULL;
 	wifi_rate_stat *p_wifi_rate_stat = NULL;
 	uint total_len = 0;
+	uint32 rxbeaconmbss;
 	wifi_iface_stat iface;
 	wlc_rev_info_t revinfo;
 #ifdef CONFIG_COMPAT
@@ -2448,19 +2474,9 @@ static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 
 	COMPAT_ASSIGN_VALUE(iface, ac[WIFI_AC_BE].retries, wlc_cnt->txretry);
 
-	if ((macstat_cnt = bcm_get_data_from_xtlv_buf(((wl_cnt_info_t *)iovar_buf)->data,
-			((wl_cnt_info_t *)iovar_buf)->datalen,
-			WL_CNT_XTLV_CNTV_LE10_UCODE, NULL,
-			BCM_XTLV_OPTION_ALIGN32)) == NULL) {
-		macstat_cnt = bcm_get_data_from_xtlv_buf(((wl_cnt_info_t *)iovar_buf)->data,
-				((wl_cnt_info_t *)iovar_buf)->datalen,
-				WL_CNT_XTLV_GE40_UCODE_V1, NULL,
-				BCM_XTLV_OPTION_ALIGN32);
-	}
-
-	if (macstat_cnt == NULL) {
-		printf("wlmTxGetAckedPackets: macstat_cnt NULL!\n");
-		err = BCME_ERROR;
+	err = wl_cfgvendor_lstats_get_bcn_mbss(iovar_buf, &rxbeaconmbss);
+	if (unlikely(err)) {
+		WL_ERR(("get_bcn_mbss error (%d)\n", err));
 		goto exit;
 	}
 
@@ -2470,7 +2486,7 @@ static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 		goto exit;
 	}
 
-	COMPAT_ASSIGN_VALUE(iface, beacon_rx, macstat_cnt->rxbeaconmbss);
+	COMPAT_ASSIGN_VALUE(iface, beacon_rx, rxbeaconmbss);
 	COMPAT_ASSIGN_VALUE(iface, rssi_mgmt, scbval.val);
 	COMPAT_ASSIGN_VALUE(iface, num_peers, NUM_PEER);
 	COMPAT_ASSIGN_VALUE(iface, peer_info->num_rate, NUM_RATE);
@@ -2737,50 +2753,6 @@ exit:
 	return ret;
 }
 
-static int wl_cfgvendor_dbg_get_version(struct wiphy *wiphy,
-	struct wireless_dev *wdev, const void *data, int len)
-{
-	int ret = BCME_OK, rem, type;
-	int buf_len = 1024;
-	bool dhd_ver = FALSE;
-	char *buf_ptr;
-	const struct nlattr *iter;
-	gfp_t kflags;
-	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
-	kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
-	buf_ptr = kzalloc(buf_len, kflags);
-	if (!buf_ptr) {
-		WL_ERR(("failed to allocate the buffer for version n"));
-		ret = BCME_NOMEM;
-		goto exit;
-	}
-	nla_for_each_attr(iter, data, len, rem) {
-		type = nla_type(iter);
-		switch (type) {
-			case DEBUG_ATTRIBUTE_GET_DRIVER:
-				dhd_ver = TRUE;
-				break;
-			case DEBUG_ATTRIBUTE_GET_FW:
-				dhd_ver = FALSE;
-				break;
-			default:
-				WL_ERR(("Unknown type: %d\n", type));
-				ret = BCME_ERROR;
-				goto exit;
-		}
-	}
-	ret = dhd_os_get_version(bcmcfg_to_prmry_ndev(cfg), dhd_ver, &buf_ptr, buf_len);
-	if (ret < 0) {
-		WL_ERR(("failed to get the version %d\n", ret));
-		goto exit;
-	}
-	ret = wl_cfgvendor_send_cmd_reply(wiphy, bcmcfg_to_prmry_ndev(cfg),
-	        buf_ptr, strlen(buf_ptr));
-exit:
-	kfree(buf_ptr);
-	return ret;
-}
-
 static int wl_cfgvendor_dbg_get_ring_status(struct wiphy *wiphy,
 	struct wireless_dev *wdev, const void  *data, int len)
 {
@@ -2855,25 +2827,6 @@ static int wl_cfgvendor_dbg_get_ring_data(struct wiphy *wiphy,
 	return ret;
 }
 
-static int wl_cfgvendor_dbg_get_feature(struct wiphy *wiphy,
-	struct wireless_dev *wdev, const void  *data, int len)
-{
-	int ret = BCME_OK;
-	u32 supported_features = 0;
-	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
-	dhd_pub_t *dhd_pub = cfg->pub;
-
-	ret = dhd_os_dbg_get_feature(dhd_pub, &supported_features);
-	if (ret < 0) {
-		WL_ERR(("dbg_get_feature failed ret:%d\n", ret));
-		goto exit;
-	}
-	ret = wl_cfgvendor_send_cmd_reply(wiphy, bcmcfg_to_prmry_ndev(cfg),
-	        &supported_features, sizeof(supported_features));
-exit:
-	return ret;
-}
-
 static void wl_cfgvendor_dbg_ring_send_evt(void *ctx,
 	const int ring_id, const void *data, const uint32 len,
 	const dhd_dbg_ring_status_t ring_status)
@@ -2939,6 +2892,69 @@ static void wl_cfgvendor_dbg_send_urgent_evt(void *ctx, const void *data,
 	cfg80211_vendor_event(skb, kflags);
 }
 #endif /* DEBUGABILITY */
+
+static int wl_cfgvendor_dbg_get_version(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void *data, int len)
+{
+	int ret = BCME_OK, rem, type;
+	int buf_len = 1024;
+	bool dhd_ver = FALSE;
+	char *buf_ptr;
+	const struct nlattr *iter;
+	gfp_t kflags;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
+	buf_ptr = kzalloc(buf_len, kflags);
+	if (!buf_ptr) {
+		WL_ERR(("failed to allocate the buffer for version n"));
+		ret = BCME_NOMEM;
+		goto exit;
+	}
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case DEBUG_ATTRIBUTE_GET_DRIVER:
+				dhd_ver = TRUE;
+				break;
+			case DEBUG_ATTRIBUTE_GET_FW:
+				dhd_ver = FALSE;
+				break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				ret = BCME_ERROR;
+				goto exit;
+		}
+	}
+	ret = dhd_os_get_version(bcmcfg_to_prmry_ndev(cfg), dhd_ver, &buf_ptr, buf_len);
+	if (ret < 0) {
+		WL_ERR(("failed to get the version %d\n", ret));
+		goto exit;
+	}
+	ret = wl_cfgvendor_send_cmd_reply(wiphy, bcmcfg_to_prmry_ndev(cfg),
+	        buf_ptr, strlen(buf_ptr));
+exit:
+	kfree(buf_ptr);
+	return ret;
+}
+
+static int wl_cfgvendor_dbg_get_feature(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = BCME_OK;
+	u32 supported_features = 0;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+
+	ret = dhd_os_dbg_get_feature(dhd_pub, &supported_features);
+	if (ret < 0) {
+		WL_ERR(("dbg_get_feature failed ret:%d\n", ret));
+		goto exit;
+	}
+	ret = wl_cfgvendor_send_cmd_reply(wiphy, bcmcfg_to_prmry_ndev(cfg),
+	        &supported_features, sizeof(supported_features));
+exit:
+	return ret;
+}
 
 #ifdef DBG_PKT_MON
 static int wl_cfgvendor_dbg_start_pkt_fate_monitoring(struct wiphy *wiphy,
@@ -3554,6 +3570,22 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 		.doit = wl_cfgvendor_set_bssid_blacklist
 	},
 #endif /* GSCAN_SUPPORT */
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_VER
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_dbg_get_version
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_FEATURE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_dbg_get_feature
+	},
 #ifdef DEBUGABILITY
 	{
 		{
@@ -3590,14 +3622,6 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 	{
 		{
 			.vendor_id = OUI_GOOGLE,
-			.subcmd = DEBUG_GET_VER
-		},
-		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_dbg_get_version
-	},
-	{
-		{
-			.vendor_id = OUI_GOOGLE,
 			.subcmd = DEBUG_GET_RING_STATUS
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
@@ -3610,14 +3634,6 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wl_cfgvendor_dbg_get_ring_data
-	},
-	{
-		{
-			.vendor_id = OUI_GOOGLE,
-			.subcmd = DEBUG_GET_FEATURE
-		},
-		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_dbg_get_feature
 	},
 #endif /* DEBUGABILITY */
 #ifdef DBG_PKT_MON
@@ -3728,40 +3744,38 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 static const struct  nl80211_vendor_cmd_info wl_vendor_events [] = {
 		{ OUI_BRCM, BRCM_VENDOR_EVENT_UNSPEC },
 		{ OUI_BRCM, BRCM_VENDOR_EVENT_PRIV_STR },
-#ifdef GSCAN_SUPPORT
 		{ OUI_GOOGLE, GOOGLE_GSCAN_SIGNIFICANT_EVENT },
 		{ OUI_GOOGLE, GOOGLE_GSCAN_GEOFENCE_FOUND_EVENT },
 		{ OUI_GOOGLE, GOOGLE_GSCAN_BATCH_SCAN_EVENT },
 		{ OUI_GOOGLE, GOOGLE_SCAN_FULL_RESULTS_EVENT },
-#endif /* GSCAN_SUPPORT */
-#ifdef RTT_SUPPORT
 		{ OUI_GOOGLE, GOOGLE_RTT_COMPLETE_EVENT },
-#endif /* RTT_SUPPORT */
-#ifdef GSCAN_SUPPORT
 		{ OUI_GOOGLE, GOOGLE_SCAN_COMPLETE_EVENT },
 		{ OUI_GOOGLE, GOOGLE_GSCAN_GEOFENCE_LOST_EVENT },
 		{ OUI_GOOGLE, GOOGLE_SCAN_EPNO_EVENT },
-#endif /* GSCAN_SUPPORT */
 		{ OUI_GOOGLE, GOOGLE_DEBUG_RING_EVENT },
 		{ OUI_GOOGLE, GOOGLE_FW_DUMP_EVENT },
-#ifdef GSCAN_SUPPORT
 		{ OUI_GOOGLE, GOOGLE_PNO_HOTSPOT_FOUND_EVENT },
-#endif /* GSCAN_SUPPORT */
 		{ OUI_GOOGLE, GOOGLE_RSSI_MONITOR_EVENT },
 		{ OUI_GOOGLE, GOOGLE_MKEEP_ALIVE_EVENT },
 		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_ENABLED},
 		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_DISABLED},
+	{ OUI_GOOGLE, GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH},
+	{ OUI_GOOGLE, GOOGLE_NAN_EVENT_REPLIED},
 		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_PUBLISH_TERMINATED},
-		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH},
-		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_SUBSCRIBE_UNMATCH},
 		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED},
 		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_DE_EVENT},
 		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_FOLLOWUP},
+	{ OUI_GOOGLE, GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND},
+	{ OUI_GOOGLE, GOOGLE_NAN_EVENT_DATA_REQUEST},
+	{ OUI_GOOGLE, GOOGLE_NAN_EVENT_DATA_CONFIRMATION},
+	{ OUI_GOOGLE, GOOGLE_NAN_EVENT_DATA_END},
+	{ OUI_GOOGLE, GOOGLE_NAN_EVENT_BEACON},
+	{ OUI_GOOGLE, GOOGLE_NAN_EVENT_SDF},
 		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_TCA},
-#ifdef NAN_DP
-		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_DATA_PATH_OPEN},
-#endif /* NAN_DP */
-		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_UNKNOWN}
+	{ OUI_GOOGLE, GOOGLE_NAN_EVENT_SUBSCRIBE_UNMATCH},
+	{ OUI_GOOGLE, GOOGLE_NAN_EVENT_UNKNOWN},
+	{ OUI_GOOGLE, GOOGLE_ROAM_EVENT_START},
+	{ OUI_BRCM, BRCM_VENDOR_EVENT_HANGED}
 };
 
 int wl_cfgvendor_attach(struct wiphy *wiphy, dhd_pub_t *dhd)

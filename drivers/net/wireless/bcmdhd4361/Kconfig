@@ -19,6 +19,13 @@ config BCM4343
 	  This module adds support for wireless adapters based on
 	  Broadcom 4343 chipset.
 
+config BCM43436
+        tristate "Broadcom 43436 wireless cards support"
+        depends on BROADCOM_WIFI
+        ---help---
+          This module adds support for wireless adapters based on
+          Broadcom 43436 chipset.
+
 config BCM4334
 	tristate "Broadcom 4334 wireless cards support"
 	depends on BROADCOM_WIFI
@@ -197,9 +204,22 @@ config BCMDHD_PREALLOC_MEMDUMP
 	---help---
 	  Preallocated memory support for dongle memory dump
 
+config WLAN_HERO
+	bool "model code for hero"
+	depends on BROADCOM_WIFI
+	---help---
+	  This is configuration for USA regrev
+
+config WLAN_HERO2
+	bool "model code for hero2"
+	depends on BROADCOM_WIFI
+	---help---
+	  This is configuration for USA regrev
+
 config BCMDHD_OOB_HOST_WAKE
 	bool "Use the external WLAN_HOST_WAKE pin"
 	depends on BROADCOM_WIFI
+	default y
 	---help---
 	  Use the external GPIO pin to wake up host
 
@@ -208,6 +228,12 @@ config SPLIT_ARGOS_SET
 	depends on BROADCOM_WIFI
 	---help---
 	To support SPLIT_ARGOS_SET
+
+config WLAN_GRACE
+       bool "Model code for GRACE"
+       depends on BROADCOM_WIFI
+       ---help---
+       This is configuration for Grace feature
 
 config WLAN_GREAT
 	bool "model code for GREAT"
@@ -221,3 +247,17 @@ config BCM_DETECT_CONSECUTIVE_HANG
 	default n
 	---help---
 	Detecting defect module from consecutive hang event
+
+config WLAN_VHTDISABLE
+	bool "WLAN Disable 11ac"
+	depends on BCM43456
+	default n
+	---help---
+	This is a configuration to disable 11ac.
+
+config WLAN_5GDISABLE
+	bool "Enable to block Band A(5G)"
+	depends on BROADCOM_WIFI
+	default n
+	---help---
+	This is configuration for block band A

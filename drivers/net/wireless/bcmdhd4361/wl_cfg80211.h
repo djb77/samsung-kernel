@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 736724 2017-12-18 08:39:54Z $
+ * $Id: wl_cfg80211.h 763128 2018-05-17 08:38:35Z $
  */
 
 /**
@@ -43,6 +43,9 @@
 #include <linux/rfkill.h>
 
 #include <wl_cfgp2p.h>
+#ifdef WL_BAM
+#include <wl_bam.h>
+#endif  /* WL_BAM */
 struct wl_conf;
 struct wl_iface;
 struct bcm_cfg80211;
@@ -65,6 +68,13 @@ struct wl_ibss;
 #define WL_DBG_DBG	(1 << 2)
 #define WL_DBG_INFO	(1 << 1)
 #define WL_DBG_ERR	(1 << 0)
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0))
+/* Newer kernels use defines from nl80211.h */
+#define IEEE80211_BAND_2GHZ	NL80211_BAND_2GHZ
+#define IEEE80211_BAND_5GHZ	NL80211_BAND_5GHZ
+#define IEEE80211_NUM_BANDS	NUM_NL80211_BANDS
+#endif /* LINUX_VER >= 4.7 */
 
 #ifdef DHD_LOG_DUMP
 extern void dhd_log_dump_write(int type, const char *fmt, ...);
@@ -703,13 +713,6 @@ typedef struct wl_rssi_ant_mimo {
 
 #ifdef DHD_LB_IRQSET
 #if defined(CONFIG_ARCH_MSM8998) || defined(CONFIG_ARCH_SDM845)
-/*
- * XXX : This duration is for specific platform Hotplug operation
- * This platform has all big cores hot-plugging operation
- * after 22 secs. from system boot time by force
- * For this platform, we set IRQ affinity again.
- * and set IRQ once again after connection is done.
- */
 #define WL_IRQSET
 #endif /* CONFIG_ARCH_MSM8998 | CONFIG_ARCH_SDM845) */
 #endif /* DHD_LB_IRQSET */
@@ -930,6 +933,12 @@ struct bcm_cfg80211 {
 #ifdef STAT_REPORT
 	void *stat_report_info;
 #endif
+#ifdef SUPPORT_CUSTOM_SET_CAC
+	int enable_cac;
+#endif	/* SUPPORT_CUSTOM_SET_CAC */
+#ifdef WL_BAM
+	wl_bad_ap_mngr_t bad_ap_mngr;
+#endif  /* WL_BAM */
 };
 
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == \
@@ -1756,7 +1765,7 @@ extern void wl_cfg80211_del_p2p_wdev(struct net_device *dev);
 #endif /* WL_CFG80211_P2P_DEV_IF */
 #if defined(WL_SUPPORT_AUTO_CHANNEL)
 extern int wl_cfg80211_set_spect(struct net_device *dev, int spect);
-extern int wl_cfg80211_get_sta_channel(struct net_device *dev);
+extern int wl_cfg80211_get_sta_channel(struct bcm_cfg80211 *cfg);
 #endif /* WL_SUPPORT_AUTO_CHANNEL */
 
 #ifdef P2P_LISTEN_OFFLOADING
@@ -1800,8 +1809,42 @@ int wl_get_rssi_logging(struct net_device *dev, void *param);
 int wl_set_rssi_logging(struct net_device *dev, void *param);
 int wl_get_rssi_per_ant(struct net_device *dev, char *ifname, char *peer_mac, void *param);
 #endif /* SUPPORT_RSSI_SUM_REPORT */
+#ifdef DYNAMIC_MUMIMO_CONTROL
+void wl_set_murx_block_eapol_status(struct bcm_cfg80211 *cfg, int enable);
+bool wl_get_murx_reassoc_status(struct bcm_cfg80211 *cfg);
+void wl_set_murx_reassoc_status(struct bcm_cfg80211 *cfg, int enable);
+int wl_check_bss_support_mumimo(struct net_device *dev);
+int wl_get_murx_bfe_cap(struct net_device *dev, int *cap);
+int wl_set_murx_bfe_cap(struct net_device *dev, int val, bool reassoc_req);
+#endif /* DYNAMIC_MUMIMO_CONTROL */
 int wl_cfg80211_iface_count(struct net_device *dev);
 struct net_device* wl_get_ap_netdev(struct bcm_cfg80211 *cfg, char *ifname);
 struct net_device* wl_get_netdev_by_name(struct bcm_cfg80211 *cfg, char *ifname);
 int wl_cfg80211_get_vndr_ouilist(struct bcm_cfg80211 *cfg, uint8 *buf, int max_cnt);
+void wl_cfg80211_disassoc(struct net_device *ndev);
+#ifdef SUPPORT_SET_CAC
+extern int wl_cfg80211_enable_cac(struct net_device *dev, int enable);
+#endif /* SUPPORT_SET_CAC */
+#ifdef DHD_USE_CHECK_DONGLE_IDLE
+int wl_check_dongle_idle(struct wiphy *wiphy);
+#else
+static inline int wl_check_dongle_idle(struct wiphy *wiphy)
+{
+	return TRUE;
+}
+#endif /* DHD_USE_CHECK_DONGLE_IDLE */
+#ifdef DHD_ABORT_SCAN_CREATE_INTERFACE
+extern int wl_abort_scan_and_check(struct bcm_cfg80211 *cfg);
+#else
+static inline int wl_abort_scan_and_check(struct bcm_cfg80211 *cfg)
+{
+	return TRUE;
+}
+#endif /* DHD_ABORT_SCAN_CREATE_INTERFACE */
+#ifdef APSTA_RESTRICTED_CHANNEL
+extern s32 wl_cfg80211_set_indoor_channels(struct net_device *ndev, char *command, int total_len);
+extern s32 wl_cfg80211_get_indoor_channels(struct net_device *ndev, char *command, int total_len);
+extern s32 wl_cfg80211_read_indoor_channels(struct net_device *ndev, void *buf, int buflen);
+extern bool wl_cfg80211_check_indoor_channels(struct net_device *ndev, int channel);
+#endif /* APSTA_RESTRICTED_CHANNEL */
 #endif /* _wl_cfg80211_h_ */

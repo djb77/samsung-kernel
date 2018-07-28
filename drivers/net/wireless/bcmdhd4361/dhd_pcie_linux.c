@@ -1,7 +1,7 @@
 /*
  * Linux DHD Bus Module for PCIE
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie_linux.c 732289 2017-11-16 14:22:26Z $
+ * $Id: dhd_pcie_linux.c 737516 2017-12-21 08:20:40Z $
  */
 
 
@@ -1466,7 +1466,7 @@ dhdpcie_isr(int irq, void *arg)
 	dhd_bus_t *bus = (dhd_bus_t*)arg;
 
 	if (!dhdpcie_bus_isr(bus)) {
-		DHD_ERROR(("%s: dhdpcie_bus_isr returns with FALSE\n", __FUNCTION__));
+		DHD_TRACE(("%s: dhdpcie_bus_isr returns with FALSE\n", __FUNCTION__));
 	}
 	return IRQ_HANDLED;
 }

@@ -688,6 +688,15 @@ static int set_config(struct usb_composite_dev *cdev,
 	unsigned		power = gadget_is_otg(gadget) ? 8 : 100;
 	int			tmp;
 
+	/*
+	 * ignore if SET_CONFIGURATION
+	 * is sent again for same config value.
+	 */
+	if (cdev->config && (cdev->config->bConfigurationValue == number)) {
+		DBG(cdev, "already in the same config with value %d\n",
+				number);
+		return 0;
+	}
 	if (number) {
 		list_for_each_entry(c, &cdev->configs, list) {
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE

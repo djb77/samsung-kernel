@@ -1,7 +1,7 @@
 /*
  * DHD Bus Module for SDIO
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_sdio.c 733461 2017-11-28 12:05:07Z $
+ * $Id: dhd_sdio.c 763050 2018-05-17 04:42:47Z $
  */
 
 #include <typedefs.h>
@@ -910,6 +910,7 @@ dhdsdio_sr_cap(dhd_bus_t *bus)
 		(bus->sih->chip == BCM43349_CHIP_ID) ||
 		BCM4345_CHIP(bus->sih->chip) ||
 		(bus->sih->chip == BCM4354_CHIP_ID) ||
+		(bus->sih->chip == BCM43569_CHIP_ID) ||
 		(bus->sih->chip == BCM4358_CHIP_ID) ||
 		(BCM4349_CHIP(bus->sih->chip))		||
 		(bus->sih->chip == BCM4350_CHIP_ID) ||
@@ -933,6 +934,7 @@ dhdsdio_sr_cap(dhd_bus_t *bus)
 		(bus->sih->chip == BCM43349_CHIP_ID) ||
 		BCM4345_CHIP(bus->sih->chip) ||
 		(bus->sih->chip == BCM4354_CHIP_ID) ||
+		(bus->sih->chip == BCM43569_CHIP_ID) ||
 		(bus->sih->chip == BCM4358_CHIP_ID) ||
 		(bus->sih->chip == BCM4350_CHIP_ID)) {
 		uint32 enabval = 0;
@@ -944,6 +946,7 @@ dhdsdio_sr_cap(dhd_bus_t *bus)
 		if ((bus->sih->chip == BCM4350_CHIP_ID) ||
 			BCM4345_CHIP(bus->sih->chip) ||
 			(bus->sih->chip == BCM4354_CHIP_ID) ||
+			(bus->sih->chip == BCM43569_CHIP_ID) ||
 			(bus->sih->chip == BCM4358_CHIP_ID))
 			enabval &= CC_CHIPCTRL3_SR_ENG_ENABLE;
 
@@ -2802,7 +2805,8 @@ dhd_bus_txctl(struct dhd_bus *bus, uchar *msg, uint msglen)
 			}
 #ifdef DHD_FW_COREDUMP
 			/* Collect socram dump */
-			if (bus->dhd->memdump_enabled) {
+			if ((bus->dhd->memdump_enabled) &&
+				(bus->dhd->txcnt_timeout >= MAX_CNTL_TX_TIMEOUT)) {
 				/* collect core dump */
 				bus->dhd->memdump_type = DUMP_TYPE_RESUMED_ON_TIMEOUT_TX;
 				dhd_os_sdunlock(bus->dhd);
@@ -3667,6 +3671,9 @@ dhdsdio_checkdied(dhd_bus_t *bus, char *data, uint size)
 
 printbuf:
 	if (l_sdpcm_shared.flags & (SDPCM_SHARED_ASSERT | SDPCM_SHARED_TRAP)) {
+#ifdef WL_CFGVENDOR_SEND_HANG_EVENT
+		copy_hang_info_trap(bus->dhd);
+#endif /* WL_CFGVENDOR_SEND_HANG_EVENT */
 		DHD_ERROR(("%s: %s\n", __FUNCTION__, strbuf.origbuf));
 	}
 
