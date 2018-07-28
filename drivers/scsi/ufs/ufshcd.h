@@ -647,6 +647,8 @@ struct ufs_hba {
 	u8 lifetime;
 	struct ufs_reset_info rst_info;
 	struct ufs_debug debug;
+	int			latency_hist_enabled;
+	struct io_latency_state io_lat_s;
 #if defined(SEC_UFS_ERROR_COUNT)
 	struct SEC_UFS_counting SEC_err_info;
 #endif

@@ -490,7 +490,7 @@ static void exynos4_local_timer_stop(struct clock_event_device *evt)
 		disable_irq(evt->irq);
 	else
 		disable_percpu_irq(mct_irqs[MCT_L0_IRQ]);
-}
+	}
 
 static int exynos4_mct_cpu_notify(struct notifier_block *self,
 					   unsigned long action, void *hcpu)

@@ -352,6 +352,10 @@ static int f_midi_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	unsigned i;
 	int err;
 
+	/* For Control Device interface we do nothing */
+	if (intf == 0)
+		return 0;
+
 	err = f_midi_start_ep(midi, f, midi->in_ep);
 	if (err)
 		return err;
@@ -564,7 +568,7 @@ static void f_midi_transmit(struct f_midi *midi, struct usb_request *req)
 		req = midi_alloc_ep_req(ep, midi->buflen);
 
 	if (!req) {
-		ERROR(midi, "gmidi_transmit: alloc_ep_request failed\n");
+		ERROR(midi, "%s: alloc_ep_request failed\n", __func__);
 		return;
 	}
 	req->length = 0;
@@ -677,6 +681,14 @@ static struct snd_rawmidi_ops gmidi_out_ops = {
 	.trigger = f_midi_out_trigger
 };
 
+static inline void f_midi_unregister_card(struct f_midi *midi)
+{
+	if (midi->card) {
+		snd_card_free(midi->card);
+		midi->card = NULL;
+	}
+}
+
 /* register as a sound "card" */
 static int f_midi_register_card(struct f_midi *midi)
 {
@@ -738,10 +750,7 @@ static int f_midi_register_card(struct f_midi *midi)
 	return 0;
 
 fail:
-	if (midi->card) {
-		snd_card_free(midi->card);
-		midi->card = NULL;
-	}
+	f_midi_unregister_card(midi);
 	return err;
 }
 
@@ -941,6 +950,8 @@ fail_f_midi:
 	kfree(midi_function);
 	usb_free_descriptors(f->hs_descriptors);
 fail:
+	f_midi_unregister_card(midi);
+
 	/* we might as well release our claims on endpoints */
 	if (midi->out_ep)
 		midi->out_ep->driver_data = NULL;

@@ -596,7 +596,9 @@ const struct snd_soc_dapm_route lucky_cs47l91_dapm_routes[] = {
 	{ "HP", NULL, "HPOUT1L" },
 	{ "HP", NULL, "HPOUT1R" },
 
+#if 0
 	{ "SPK", NULL, "HiFi Playback" },
+#endif
 
 	{ "RCV", NULL, "HPOUT3L" },
 	{ "RCV", NULL, "HPOUT3R" },
@@ -610,8 +612,10 @@ const struct snd_soc_dapm_route lucky_cs47l91_dapm_routes[] = {
 	{ "Sub Mic", NULL, "MICBIAS2B" },
 	{ "IN3L", NULL, "Sub Mic" },
 
+#if 0
 	/* "HiFi Capture" is capture stream of maxim_amp dai */
 	{ "HiFi Capture", NULL, "VI SENSING" },
+#endif
 
 	{ "IN3L", NULL, "FM In" },
 	{ "IN3R", NULL, "FM In" },

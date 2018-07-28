@@ -47,4 +47,3 @@ static int __init ctr_el0_instr_emulator_init(void)
 }
 
 late_initcall(ctr_el0_instr_emulator_init);
-

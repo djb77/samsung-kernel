@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/spinlock.h>
+#include <asm/io.h>
 
 #define EXYNOS_MIPI_PHY_ISO_BYPASS  BIT(0)
 #define EXYNOS_MIPI_PHYS_NUM 4

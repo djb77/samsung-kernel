@@ -307,6 +307,9 @@ static int dw_msi_setup_irq(struct msi_chip *chip, struct pci_dev *pdev,
 	if (desc->msi_attrib.is_msix)
 		return -EINVAL;
 
+	if (desc->msi_attrib.is_msix)
+		return -EINVAL;
+
 	irq = assign_irq(1, desc, &pos);
 	if (irq < 0)
 		return irq;

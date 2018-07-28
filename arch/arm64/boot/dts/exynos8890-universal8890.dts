@@ -300,7 +300,7 @@
 	};
 
 	chosen {
-		bootargs = "console=ram clk_ignore_unused androidboot.hardware=samsungexynos8890 ess_setup=0x86000000 pmic_info=3 androidboot.debug_level=0x4948 firmware_class.path=/vendor/firmware";
+		bootargs = "console=ram clk_ignore_unused androidboot.hardware=samsungexynos8890 ess_setup=0x86000000 pmic_info=3 androidboot.debug_level=0x4948 androidboot.selinux=permissive firmware_class.path=/vendor/firmware kpti=yes";
 		linux,initrd-start = <0x82000000>;
 		linux,initrd-end = <0x820FFFFF>;
 	};

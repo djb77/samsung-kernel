@@ -172,10 +172,10 @@ offsets_sizes_gen(){
 		last_addr=`cat $system_map_var|grep -w $var3|awk '{print $1}'`
 		if  [[ ! $last_addr =~ $reg ]]; then echo "$0 : last_addr invalid"; exit 1; fi
 	
-		start_addr=`cat vmlinux.elf |grep -w "$var1 "|grep PROGBITS|awk '{print '$var4'}'`
+		start_addr=`cat vmlinux.elf |grep -w "$var1 "|grep PROGBITS| awk -F "]" '{print $2}' |awk '{print $3}'`
 		if  [[ ! $start_addr =~ $reg ]]; then echo "$0 : start_addr invalid"; exit 1; fi
 	
-		offset=`cat vmlinux.elf |grep -w "$var1 "|grep PROGBITS|awk '{print '$var5'}'`
+		offset=`cat vmlinux.elf |grep -w "$var1 "|grep PROGBITS| awk -F "]" '{print $2}' |awk '{print $4}'`
 		if  [[ ! $offset =~ $reg ]]; then echo "$0 : offset invalid"; exit 1; fi
 	
 		if [[ $((16#$first_addr)) -lt $((16#$start_addr)) ]]; then echo "$0 : first_addr < start_addr"; exit 1; fi
@@ -205,10 +205,10 @@ cal_hmac_offset(){
 	first_addr=`cat $system_map_var|grep -w $1|awk '{print $1}' `
 	if  [[ ! $first_addr =~ $reg ]]; then echo "$0 : first_addr of hmac variable invalid"; exit 1; fi
 	
-	start_addr=`cat vmlinux.elf |grep -w $2|grep PROGBITS|awk '{print $5}' `
+	start_addr=`cat vmlinux.elf |grep -w $2|grep PROGBITS| awk -F "]" '{print $2}' |awk '{print $3}' `
 	if  [[ ! $start_addr =~ $reg ]]; then echo "$0 : start_addr of .rodata invalid"; exit 1; fi
 	
-	offset=`cat vmlinux.elf |grep -w $2|grep PROGBITS| awk '{print $6}' `
+	offset=`cat vmlinux.elf |grep -w $2|grep PROGBITS| awk -F "]" '{print $2}' | awk '{print $4}' `
 	if  [[ ! $offset =~ $reg ]]; then echo "$0 : offset of .rodata invalid"; exit 1; fi
 	
 	if [[ $((16#$first_addr)) -le $((16#$start_addr)) ]]; then echo "$0 : hmac var first_addr <= start_addr"; exit 1; fi
@@ -330,8 +330,8 @@ offsets_sizes_gen fips_fmp $offsets_sizes_fmp
 #find hmac_offset in vmlinux for updating
 cal_hmac_offset builtime_fmp_hmac .rodata
 
-rodata_va_addr=`cat vmlinux.elf|grep -w '.rodata'|awk '{print $5}'`
-rodata_file_addr=`cat vmlinux.elf|grep -w '.rodata'|awk '{print $6}'`
+rodata_va_addr=`cat vmlinux.elf|grep -w '.rodata'| awk -F "]" '{print $2}' | awk '{print $3}'`
+rodata_file_addr=`cat vmlinux.elf|grep -w '.rodata'| awk -F "]" '{print $2}' |awk '{print $4}'`
 va_to_file=`expr $((16#$rodata_va_addr)) - $((16#$rodata_file_addr))`
 
 # the loop

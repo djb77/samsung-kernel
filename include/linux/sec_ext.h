@@ -69,7 +69,14 @@ enum
 	PARAM_OFF = '0',
 	PARAM_ON = '1',
 };
-
+enum
+{
+	PARAM_TEST0 = 0,
+	PARAM_TEST1,
+	PARAM_TEST2,
+	PARAM_TEST3,
+	PARAM_MAX,
+};
 extern int sec_set_param(unsigned long offset, char val);
 extern int sec_set_param_str(unsigned long offset, const char *val, int size);
 #else

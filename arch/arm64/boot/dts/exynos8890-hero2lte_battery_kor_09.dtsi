@@ -26,7 +26,7 @@
 	};
 
 	max77854-fuelgauge {
-		fuelgauge,capacity = <0x0DAF>;
+		fuelgauge,capacity = <0x0DAE>;
 		fuelgauge,fg_resistor = <2>;
 		fuelgauge,fg_sensing_wa;
 	};

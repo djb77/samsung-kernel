@@ -962,7 +962,7 @@ static void bq24190_charger_init(struct power_supply *charger)
 	charger->properties = bq24190_charger_properties;
 	charger->num_properties = ARRAY_SIZE(bq24190_charger_properties);
 	charger->supplied_to = bq24190_charger_supplied_to;
-	charger->num_supplies = ARRAY_SIZE(bq24190_charger_supplied_to);
+	charger->num_supplicants = ARRAY_SIZE(bq24190_charger_supplied_to);
 	charger->get_property = bq24190_charger_get_property;
 	charger->set_property = bq24190_charger_set_property;
 	charger->property_is_writeable = bq24190_charger_property_is_writeable;
@@ -1332,7 +1332,7 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
 {
 	struct bq24190_dev_info *bdi = data;
 	bool alert_userspace = false;
-	u8 ss_reg, f_reg;
+	u8 ss_reg = 0, f_reg = 0;
 	int ret;
 
 	pm_runtime_get_sync(bdi->dev);
@@ -1605,7 +1605,7 @@ static int bq24190_probe(struct i2c_client *client,
 
 	ret = devm_request_threaded_irq(dev, bdi->irq, NULL,
 			bq24190_irq_handler_thread,
-			IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 			"bq24190-charger", bdi);
 	if (ret < 0) {
 		dev_err(dev, "Can't set up irq handler\n");
@@ -1695,6 +1695,7 @@ static int bq24190_pm_resume(struct device *dev)
 
 	pm_runtime_get_sync(bdi->dev);
 	bq24190_register_reset(bdi);
+	bq24190_set_mode_host(bdi);
 	pm_runtime_put_sync(bdi->dev);
 
 	/* Things may have changed while suspended so alert upper layer */

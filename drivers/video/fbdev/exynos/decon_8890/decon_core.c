@@ -1234,7 +1234,8 @@ int decon_enable(struct decon_device *decon)
 		decon->state = DECON_STATE_ON;
 		goto err;
 	}
-
+	if (!decon->id && (decon->state != DECON_STATE_LPD_EXIT_REQ))
+		flush_kthread_worker(&decon->update_regs_worker);
 	if (decon->state == DECON_STATE_ON) {
 		decon_warn("decon%d already enabled\n", decon->id);
 

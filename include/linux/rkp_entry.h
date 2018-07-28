@@ -106,6 +106,9 @@ struct rkp_init {
 	u64 _srodata;
 	u64 _erodata;
 	u32 large_memory;
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+	u64 tramp_pgd;
+#endif
 } __attribute__((packed));
 
 #ifdef CONFIG_RKP_KDP
