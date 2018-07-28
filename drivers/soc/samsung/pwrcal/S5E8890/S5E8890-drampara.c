@@ -1,3 +1,4 @@
+#include <asm/io.h>
 #include "../pwrcal-env.h"
 #include "../pwrcal-rae.h"
 #include "../pwrcal-dram.h"

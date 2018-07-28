@@ -32,3 +32,5 @@ struct static_vm {
 	struct list_head list;
 };
 extern struct list_head static_vmlist;
+
+void fixup_init(void);

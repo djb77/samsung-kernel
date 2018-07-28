@@ -794,6 +794,7 @@ struct device {
 	struct iommu_group	*iommu_group;
 
 	bool			offline_disabled:1;
+	bool			offline:1;
 };
 
 static inline struct device *kobj_to_dev(struct kobject *kobj)

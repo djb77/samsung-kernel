@@ -18,10 +18,10 @@
  */
 
 #include <linux/crypto.h>
-#include <linux/kallsyms.h>
 #include <linux/err.h>
 #include <linux/scatterlist.h>
 #include "internal.h" /* For Functional test macros */
+#include "fips_helper.h"
 
 static const char *
 symtab[][3] = {{".text",      "first_crypto_text",   "last_crypto_text"  },
@@ -37,8 +37,8 @@ extern const char * get_builtime_crypto_hmac(void);
 static int
 dump_bytes(const char * section_name, const char * first_symbol, const char * last_symbol)
 {
-	u8 * start_addr = (u8 *) kallsyms_lookup_name (first_symbol);
-	u8 * end_addr   = (u8 *) kallsyms_lookup_name (last_symbol);
+	u8 * start_addr = (u8 *) get_fips_symbol_address (first_symbol);
+	u8 * end_addr   = (u8 *) get_fips_symbol_address (last_symbol);
 
 	if (!start_addr || !end_addr || start_addr >= end_addr)
 	{
@@ -60,8 +60,8 @@ static int
 query_symbol_addresses (const char * first_symbol, const char * last_symbol, 
                         unsigned long * start_addr,unsigned long * end_addr)
 {
-	unsigned long start = kallsyms_lookup_name (first_symbol);
-	unsigned long end   = kallsyms_lookup_name (last_symbol);
+	unsigned long start = get_fips_symbol_address (first_symbol);
+	unsigned long end   = get_fips_symbol_address (last_symbol);
 
 #ifdef FIPS_DEBUG
 	printk(KERN_INFO "FIPS CRYPTO RUNTIME :  %s : %p, %s : %p\n", first_symbol, (u8*)start, last_symbol, (u8*)end);

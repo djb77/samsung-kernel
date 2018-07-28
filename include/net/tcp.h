@@ -398,7 +398,7 @@ bool tcp_snd_wnd_test(const struct tcp_sock *tp, const struct sk_buff *skb,
 unsigned int tcp_cwnd_test(const struct tcp_sock *tp, const struct sk_buff *skb);
 int tcp_init_tso_segs(const struct sock *sk, struct sk_buff *skb,
 		      unsigned int mss_now);
-void __pskb_trim_head(struct sk_buff *skb, int len);
+int __pskb_trim_head(struct sk_buff *skb, int len);
 void tcp_queue_skb(struct sock *sk, struct sk_buff *skb);
 void tcp_init_nondata_skb(struct sk_buff *skb, u32 seq, u8 flags);
 void tcp_reset(struct sock *sk);
@@ -1714,12 +1714,12 @@ static inline void tcp_highest_sack_reset(struct sock *sk)
 	tcp_sk(sk)->highest_sack = tcp_write_queue_head(sk);
 }
 
-/* Called when old skb is about to be deleted (to be combined with new skb) */
-static inline void tcp_highest_sack_combine(struct sock *sk,
+/* Called when old skb is about to be deleted and replaced by new skb */
+static inline void tcp_highest_sack_replace(struct sock *sk,
 					    struct sk_buff *old,
 					    struct sk_buff *new)
 {
-	if (tcp_sk(sk)->sacked_out && (old == tcp_sk(sk)->highest_sack))
+	if (old == tcp_highest_sack(sk))
 		tcp_sk(sk)->highest_sack = new;
 }
 
@@ -1784,8 +1784,6 @@ static inline bool tcp_stream_memory_free(const struct sock *sk)
 
 	return notsent_bytes < tcp_notsent_lowat(tp);
 }
-
-extern int tcp_nuke_addr(struct net *net, struct sockaddr *addr);
 
 #ifdef CONFIG_PROC_FS
 int tcp4_proc_init(void);

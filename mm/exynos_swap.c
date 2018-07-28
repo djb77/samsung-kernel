@@ -698,7 +698,7 @@ static int __init exynos_swap_init(void)
 {
 	pr_info("initialize exynos swap\n");
 
-	eswap.pool = zpool_create_pool(eswap_zpool_type, GFP_KERNEL, NULL);
+	eswap.pool = zpool_create_pool(eswap_zpool_type, NULL, GFP_KERNEL, NULL);
 	if (!eswap.pool) {
 		pr_info("fail to create %s\n", eswap_zpool_type);
 		goto err_pool;

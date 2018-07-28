@@ -113,6 +113,8 @@ int sec_set_param(unsigned long offset, char val)
 	case PARAM_ON:
 		goto set_param;
 	default:
+		if (val >= PARAM_TEST0 && val < PARAM_MAX)
+			goto set_param;
 		goto unlock_out;
 	}
 

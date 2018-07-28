@@ -9,8 +9,8 @@ static int uas_is_interface(struct usb_host_interface *intf)
 		intf->desc.bInterfaceProtocol == USB_PR_UAS);
 }
 
-static struct usb_host_interface *uas_find_uas_alt_setting(  
-		struct usb_interface *intf)  
+static struct usb_host_interface *uas_find_uas_alt_setting(
+		struct usb_interface *intf)
 {
 	int i;
 
@@ -59,8 +59,8 @@ static int uas_use_uas_driver(struct usb_interface *intf,
 	struct usb_device *udev = interface_to_usbdev(intf);
 	struct usb_hcd *hcd = bus_to_hcd(udev->bus);
 	unsigned long flags = id->driver_info;
-	struct usb_host_interface *alt; 
-	int r; 
+	struct usb_host_interface *alt;
+	int r;
 
 	alt = uas_find_uas_alt_setting(intf);
 	if (!alt)
@@ -87,6 +87,10 @@ static int uas_use_uas_driver(struct usb_interface *intf,
 			flags |= US_FL_MAX_SECTORS_240;
 		}
 	}
+
+	/* All Seagate disk enclosures have broken ATA pass-through support */
+	if (le16_to_cpu(udev->descriptor.idVendor) == 0x0bc2)
+		flags |= US_FL_NO_ATA_1X;
 
 	usb_stor_adjust_quirks(udev, &flags);
 

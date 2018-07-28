@@ -19,11 +19,11 @@
  */
 
 #include <linux/crypto.h>
-#include <linux/kallsyms.h>
 #include <linux/err.h>
 #include <linux/scatterlist.h>
 #include <linux/smc.h>
 #include "fmpdev_int.h" //for FIPS_FMP_FUNC_TEST macro
+#include "fmp_helper.h"
 
 //#define FIPS_DEBUG
 
@@ -38,8 +38,8 @@ extern const char *get_builtime_fmp_hmac(void);
 static int
 dump_bytes(const char *section_name, const char *first_symbol, const char *last_symbol)
 {
-	u8 *start_addr = (u8 *)kallsyms_lookup_name(first_symbol);
-	u8 *end_addr   = (u8 *)kallsyms_lookup_name(last_symbol);
+	u8 *start_addr = (u8 *)get_fmp_symbol_address(first_symbol);
+	u8 *end_addr   = (u8 *)get_fmp_symbol_address(last_symbol);
 
 	if (!start_addr || !end_addr || start_addr >= end_addr) {
 		printk(KERN_ERR "FIPS(%s): Error Invalid Addresses in Section : %s, Start_Addr : %p , End_Addr : %p",
@@ -57,8 +57,8 @@ dump_bytes(const char *section_name, const char *first_symbol, const char *last_
 static int query_symbol_addresses(const char *first_symbol, const char *last_symbol,
 				unsigned long *start_addr,unsigned long *end_addr)
 {
-	unsigned long start = kallsyms_lookup_name(first_symbol);
-	unsigned long end = kallsyms_lookup_name(last_symbol);
+	unsigned long start = get_fmp_symbol_address(first_symbol);
+	unsigned long end = get_fmp_symbol_address(last_symbol);
 
 #ifdef FIPS_DEBUG
 	printk(KERN_INFO "FIPS CRYPTO RUNTIME : %s : %p, %s : %p\n", first_symbol, (u8*)start, last_symbol, (u8*)end);

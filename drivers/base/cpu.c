@@ -287,7 +287,6 @@ static void cpu_device_release(struct device *dev)
 	 */
 }
 
-#ifdef CONFIG_HAVE_CPU_AUTOPROBE
 #ifdef CONFIG_GENERIC_CPU_AUTOPROBE
 static ssize_t print_cpu_modalias(struct device *dev,
 				  struct device_attribute *attr,
@@ -310,11 +309,7 @@ static ssize_t print_cpu_modalias(struct device *dev,
 	buf[n++] = '\n';
 	return n;
 }
-#else
-#define print_cpu_modalias	arch_print_cpu_modalias
-#endif
 
-#ifdef CONFIG_ARCH_HAS_CPU_AUTOPROBE
 static int cpu_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
 	char *buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
@@ -325,7 +320,6 @@ static int cpu_uevent(struct device *dev, struct kobj_uevent_env *env)
 	}
 	return 0;
 }
-#endif
 #endif
 
 /*
@@ -346,8 +340,9 @@ int register_cpu(struct cpu *cpu, int num)
 	cpu->dev.bus = &cpu_subsys;
 	cpu->dev.release = cpu_device_release;
 	cpu->dev.offline_disabled = !cpu->hotpluggable;
+	cpu->dev.offline = !cpu_online(num);
 	cpu->dev.of_node = of_get_cpu_node(num, NULL);
-#ifdef CONFIG_ARCH_HAS_CPU_AUTOPROBE
+#ifdef CONFIG_GENERIC_CPU_AUTOPROBE
 	cpu->dev.bus->uevent = cpu_uevent;
 #endif
 	cpu->dev.groups = common_cpu_attr_groups;
@@ -371,7 +366,7 @@ struct device *get_cpu_device(unsigned cpu)
 }
 EXPORT_SYMBOL_GPL(get_cpu_device);
 
-#ifdef CONFIG_HAVE_CPU_AUTOPROBE
+#ifdef CONFIG_GENERIC_CPU_AUTOPROBE
 static DEVICE_ATTR(modalias, 0444, print_cpu_modalias, NULL);
 #endif
 
@@ -385,7 +380,7 @@ static struct attribute *cpu_root_attrs[] = {
 	&cpu_attrs[2].attr.attr,
 	&dev_attr_kernel_max.attr,
 	&dev_attr_offline.attr,
-#ifdef CONFIG_HAVE_CPU_AUTOPROBE
+#ifdef CONFIG_GENERIC_CPU_AUTOPROBE
 	&dev_attr_modalias.attr,
 #endif
 	NULL

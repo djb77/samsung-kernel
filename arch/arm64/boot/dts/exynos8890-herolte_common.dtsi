@@ -298,7 +298,7 @@
 	};
 
 	chosen {
-		bootargs = "console=ttySAC4,115200 clk_ignore_unused ess_setup=0x86000000 androidboot.hardware=samsungexynos8890 ess_setup=0x86000000 pmic_info=3 androidboot.debug_level=0x4948";
+		bootargs = "console=ttySAC4,115200 clk_ignore_unused ess_setup=0x86000000 androidboot.hardware=samsungexynos8890 ess_setup=0x86000000 pmic_info=3 androidboot.debug_level=0x4948 kpti=yes";
 		linux,initrd-start = <0x82000000>;
 		linux,initrd-end = <0x820FFFFF>;
 	};

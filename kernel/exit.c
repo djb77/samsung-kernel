@@ -53,6 +53,9 @@
 #include <linux/oom.h>
 #include <linux/writeback.h>
 #include <linux/shm.h>
+#include <linux/kcov.h>
+
+#include "sched/tune.h"
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
@@ -672,6 +675,7 @@ void do_exit(long code)
 	TASKS_RCU(int tasks_rcu_i);
 
 	profile_task_exit(tsk);
+	kcov_task_exit(tsk);
 
 	WARN_ON(blk_needs_flush_plug(tsk));
 
@@ -714,6 +718,9 @@ void do_exit(long code)
 	}
 
 	exit_signals(tsk);  /* sets PF_EXITING */
+
+	schedtune_exit_task(tsk);
+
 	/*
 	 * tsk->flags are checked in the futex code to protect against
 	 * an exiting task cleaning up the robust pi futexes.
@@ -931,17 +938,28 @@ static int eligible_pid(struct wait_opts *wo, struct task_struct *p)
 		task_pid_type(p, wo->wo_type) == wo->wo_pid;
 }
 
-static int eligible_child(struct wait_opts *wo, struct task_struct *p)
+static int
+eligible_child(struct wait_opts *wo, bool ptrace, struct task_struct *p)
 {
 	if (!eligible_pid(wo, p))
 		return 0;
-	/* Wait for all children (clone and not) if __WALL is set;
-	 * otherwise, wait for clone children *only* if __WCLONE is
-	 * set; otherwise, wait for non-clone children *only*.  (Note:
-	 * A "clone" child here is one that reports to its parent
-	 * using a signal other than SIGCHLD.) */
-	if (((p->exit_signal != SIGCHLD) ^ !!(wo->wo_flags & __WCLONE))
-	    && !(wo->wo_flags & __WALL))
+
+	/*
+	 * Wait for all children (clone and not) if __WALL is set or
+	 * if it is traced by us.
+	 */
+	if (ptrace || (wo->wo_flags & __WALL))
+		return 1;
+
+	/*
+	 * Otherwise, wait for clone children *only* if __WCLONE is set;
+	 * otherwise, wait for non-clone children *only*.
+	 *
+	 * Note: a "clone" child here is one that reports to its parent
+	 * using a signal other than SIGCHLD, or a non-leader thread which
+	 * we can only see if it is traced by us.
+	 */
+	if ((p->exit_signal != SIGCHLD) ^ !!(wo->wo_flags & __WCLONE))
 		return 0;
 
 	return 1;
@@ -1314,7 +1332,7 @@ static int wait_consider_task(struct wait_opts *wo, int ptrace,
 	if (unlikely(exit_state == EXIT_DEAD))
 		return 0;
 
-	ret = eligible_child(wo, p);
+	ret = eligible_child(wo, ptrace, p);
 	if (!ret)
 		return ret;
 

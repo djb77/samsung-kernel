@@ -64,7 +64,7 @@ $(warning ANDROID_MAJOR_VERSION : $(CURRENT_ANDROID_MAJOR_VERSION))
 $(warning ANDROID_PLATFORM_VERSION : $(CURRENT_ANDROID_VERSION))
 
 
-ifeq ($(shell echo o),o)
+ifeq ($(shell echo $(ANDROID_MAJOR_VERSION)),o)
 	obj-$(CONFIG_SENSORS_SSP) += ssp_iio.o ssp_dump.o
 else
 	obj-$(CONFIG_SENSORS_SSP) += ssp_input.o ssp_dump_old.o

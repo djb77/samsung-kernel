@@ -29,6 +29,7 @@
 #include <linux/sec_sysfs.h>
 #include <linux/sec_bsp.h>
 #include <linux/slab.h>
+#include <asm/io.h>
 
 struct boot_event {
 	const char *string;
