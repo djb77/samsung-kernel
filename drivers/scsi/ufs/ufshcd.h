@@ -719,6 +719,8 @@ struct ufs_hba {
 #if defined(SEC_UFS_ERROR_COUNT)
 	struct SEC_UFS_counting SEC_err_info;
 #endif
+	bool UFS_fatal_mode_done;
+	struct work_struct fatal_mode_work;
 #if defined(CONFIG_UFS_DATA_LOG)
 	atomic_t	log_count;
 #endif

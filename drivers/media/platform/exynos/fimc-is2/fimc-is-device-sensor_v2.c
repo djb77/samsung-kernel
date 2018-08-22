@@ -2767,6 +2767,13 @@ int fimc_is_sensor_g_fcount(struct fimc_is_device_sensor *device)
 	return device->fcount;
 }
 
+int fimc_is_sensor_g_ex_mode(struct fimc_is_device_sensor *device)
+{
+	FIMC_BUG(!device);
+	FIMC_BUG(!device->cfg);
+	return device->cfg->ex_mode;
+}
+
 int fimc_is_sensor_g_framerate(struct fimc_is_device_sensor *device)
 {
 	FIMC_BUG(!device);

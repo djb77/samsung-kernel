@@ -278,10 +278,9 @@ void copy_analog_pos_ctrl(struct maptbl *tbl, u8 *dst)
 	panel_info("AOD:INFO:%s: %x\n", __func__, dst[ANALOG_POS_X1_REG]);
 }
 
-void copy_clock_ctrl(struct maptbl *tbl, u8 *dst)
+void copy_analog_clock_ctrl(struct maptbl *tbl, u8 *dst)
 {
 	char en_reg = 0;
-	char dig_en = 0;
 	struct aod_dev_info *aod = tbl->pdata;
 	struct aod_ioctl_props *props = &aod->props;
 
@@ -295,8 +294,29 @@ void copy_clock_ctrl(struct maptbl *tbl, u8 *dst)
 	if (props->analog.en)
 		en_reg |= SC_DISP_ON;
 
+	if (props->cur_time.disp_24h)
+		en_reg |= SC_24H_EN;
+
+	dst[TIMER_EN_REG] = en_reg;
+
+	panel_info("AOD:INFO:%s: %x %x %x\n", __func__, dst[0], dst[1], dst[2]);
+}
+
+void copy_digital_clock_ctrl(struct maptbl *tbl, u8 *dst)
+{
+	char en_reg = 0;
+	char dig_en = 0;
+	struct aod_dev_info *aod = tbl->pdata;
+	struct aod_ioctl_props *props = &aod->props;
+
+	if (aod == NULL) {
+		panel_err("AOD:ERR:%s:aod is null\n", __func__);
+		return;
+	}
+
+	en_reg |= SC_TIME_EN;
+
 	if (props->digital.en) {
-		en_reg &= ~(SC_A_CLK_EN);
 		en_reg |= (SC_D_CLK_EN | SC_DISP_ON);
 
 		if (props->digital.en_hh)

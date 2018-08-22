@@ -210,6 +210,7 @@ enum fimc_is_ex_mode {
 	EX_NONE = 0,
 	EX_DRAMTEST = 1,
 	EX_LIVEFOCUS = 2,
+	EX_DUALFPS = 3,
 };
 
 struct fimc_is_sensor_cfg {
@@ -481,6 +482,7 @@ void fimc_is_sensor_dump(struct fimc_is_device_sensor *device);
 int fimc_is_sensor_g_ctrl(struct fimc_is_device_sensor *device,
 	struct v4l2_control *ctrl);
 int fimc_is_sensor_g_instance(struct fimc_is_device_sensor *device);
+int fimc_is_sensor_g_ex_mode(struct fimc_is_device_sensor *device);
 int fimc_is_sensor_g_framerate(struct fimc_is_device_sensor *device);
 int fimc_is_sensor_g_fcount(struct fimc_is_device_sensor *device);
 int fimc_is_sensor_g_width(struct fimc_is_device_sensor *device);

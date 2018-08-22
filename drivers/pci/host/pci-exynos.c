@@ -1284,34 +1284,59 @@ static void exynos_pcie_assert_phy_reset(struct pcie_port *pp)
 		writel(0x116c0000, ia_base + 0x38); /* Base addr2 : PCS */
 		writel(0x11680000, ia_base + 0x3C); /* Base addr3 : PCIE_IA */
 
+
+		/* IA_CNT_TRG 10 : Repeat 10 */
+		writel(0xb, ia_base + 0x10);
+		writel(0x2ffff, ia_base + 0x40);
+
 		/* L1.2 EXIT Interrupt Happens */
 		/* SQ0) UIR_1 : DATA MASK */
 		writel(0x50000004, ia_base + 0x100); /* DATA MASK_REG */
-		writel(0x20, ia_base + 0x104); /* Enable bit 5 */
+		writel(0xffff, ia_base + 0x104); /* Enable bit 5 */
 
-		/* SQ1) BRT */
-		writel(0x205101ec, ia_base + 0x108); /* READ AFC_DONE */
-		writel(0x20, ia_base + 0x10C);
+		/* SQ1) BRT : Count check and exit*/
+		writel(0x20930014, ia_base + 0x108); /* READ AFC_DONE */
+		writel(0xa, ia_base + 0x10C);
 
-		/* SQ2) Write CDR_EN 0xC0 */
-		writel(0x400200d0, ia_base + 0x110);
-		writel(0xc0, ia_base + 0x114);
+		/* SQ2) Write : Count increment */
+		writel(0x40030044, ia_base + 0x110);
+		writel(0x1, ia_base + 0x114);
 
-		/* SQ3) Write CDR_EN 0x80 */
-		writel(0x400200d0, ia_base + 0x118);
-		writel(0x80, ia_base + 0x11C);
+		/* SQ3) DATA MASK : Mask AFC_DONE bit*/
+		writel(0x50000004, ia_base + 0x118);
+		writel(0x20, ia_base + 0x11C);
 
-		/* SQ4) Write CDR_EN 0x0 */
-		writel(0x400200d0, ia_base + 0x120);
-		writel(0x0, ia_base + 0x124);
+		/* SQ4) BRT : Read and check AFC_DONE */
+		writel(0x209101ec, ia_base + 0x120);
+		writel(0x20, ia_base + 0x124);
 
-		/* SQ5) Clear L1.2 Exit Interrupt */
-		writel(0x70000004, ia_base + 0x128);
-		writel(0x10, ia_base + 0x12C);
+		/* SQ5) WRITE : CDR_EN 0xC0 */
+		writel(0x400200d0, ia_base + 0x128);
+		writel(0xc0, ia_base + 0x12C);
 
-		/* SQ6) Return to IDLE */
-		writel(0x80000000, ia_base + 0x130);
-		writel(0x0, ia_base + 0x134);
+		/* SQ6) WRITE : CDR_EN 0x80*/
+		writel(0x400200d0, ia_base + 0x130);
+		writel(0x80, ia_base + 0x134);
+
+		/* SQ7) WRITE : CDR_EN 0x0*/
+		writel(0x400200d0, ia_base + 0x138);
+		writel(0x0, ia_base + 0x13C);
+
+		/* SQ8) LOOP */
+		writel(0x100101ec, ia_base + 0x140);
+		writel(0x20, ia_base + 0x144);
+
+		/* SQ9) Clear L1.2 EXIT Interrupt */
+		writel(0x70000004, ia_base + 0x148);
+		writel(0x10, ia_base + 0x14C);
+
+		/* SQ10) WRITE : IA_CNT Clear*/
+		writel(0x40030010, ia_base + 0x150);
+		writel(0x1000b, ia_base + 0x154);
+
+		/* SQ11) EOP : Return to idle */
+		writel(0x80000000, ia_base + 0x158);
+		writel(0x0, ia_base + 0x15C);
 
 		/* PCIE_IA Enable */
 		writel(0x1, ia_base + 0x0);

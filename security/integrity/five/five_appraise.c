@@ -159,17 +159,22 @@ static int five_fix_xattr(struct task_struct *task,
 		rc = five_cert_append_signature(raw_cert, &raw_cert_len,
 						sig, sig_len);
 		if (!rc) {
-			iint->version = file_inode(file)->i_version;
+			int count = 1;
 
-			rc = __vfs_setxattr_noperm(dentry,
-						XATTR_NAME_FIVE,
-						*raw_cert,
-						raw_cert_len,
-						0);
+			do {
+				rc = __vfs_setxattr_noperm(dentry,
+							XATTR_NAME_FIVE,
+							*raw_cert,
+							raw_cert_len,
+							0);
+				count--;
+			} while (count >= 0 && rc != 0);
 
-			if (!rc)
+			if (!rc) {
 				rc = update_label(iint,
 						file_label, file_label_len);
+				iint->version = file_inode(file)->i_version;
+			}
 		}
 	}
 

@@ -183,8 +183,10 @@ static struct maptbl s6e3ha8_aod_maptbl[] = {
 		init_common_table, NULL, copy_self_move_on_ctrl),
 	[ANALOG_POS_MAPTBL] = DEFINE_0D_MAPTBL(s6e3ha8_aod_analog_pos,
 		init_common_table, NULL, copy_analog_pos_ctrl),
-	[CLOCK_CTRL_MAPTBL] = DEFINE_0D_MAPTBL(s6e3ha8_aod_clock_ctrl,
-		init_common_table, NULL, copy_clock_ctrl),
+	[ANALOG_CLK_CTRL_MAPTBL] = DEFINE_0D_MAPTBL(s6e3ha8_aod_analog_clock,
+		init_common_table, NULL, copy_analog_clock_ctrl),
+	[DIGITAL_CLK_CTRL_MAPTBL] = DEFINE_0D_MAPTBL(s6e3ha8_aod_digital_clock,
+		init_common_table, NULL, copy_digital_clock_ctrl),
 	[SELF_MOVE_POS_MAPTBL] = DEFINE_2D_MAPTBL(s6e3ha8_aod_self_move_pos_tbl,
 		init_common_table, getidx_self_mode_pos, copy_common_maptbl),
 	[SEFL_MOVE_RESET_MAPTBL] = DEFINE_0D_MAPTBL(s6e3ha8_aod_self_move_reset,
@@ -329,13 +331,13 @@ static char S6E3HA8_AOD_CLOCK_CTRL[] = {
 	0x00, 0x00, 0x00
 };
 
-static DEFINE_PKTUI(s6e3ha8_aod_clock_ctrl, &s6e3ha8_aod_maptbl[CLOCK_CTRL_MAPTBL], 0);
-static DEFINE_VARIABLE_PACKET(s6e3ha8_aod_clock_ctrl, DSI_PKT_TYPE_WR, S6E3HA8_AOD_CLOCK_CTRL, 0);
+static DEFINE_PKTUI(s6e3ha8_aod_analog_clock, &s6e3ha8_aod_maptbl[ANALOG_CLK_CTRL_MAPTBL], 0);
+static DEFINE_VARIABLE_PACKET(s6e3ha8_aod_analog_clock, DSI_PKT_TYPE_WR, S6E3HA8_AOD_CLOCK_CTRL, 0);
 
 static void *s6e3ha8_aod_analog_ctrl_cmdtbl[] = {
 	&KEYINFO(s6e3ha8_aod_level2_key_enable),
 	&PKTINFO(s6e3ha8_aod_analog_pos),
-	&PKTINFO(s6e3ha8_aod_clock_ctrl),
+	&PKTINFO(s6e3ha8_aod_analog_clock),
 	&KEYINFO(s6e3ha8_aod_level2_key_disable),
 };
 
@@ -385,11 +387,15 @@ static char S6E3HA8_AOD_DIG_INTERVAL[] = {
 static DEFINE_STATIC_PACKET(s6e3ha8_aod_dig_interval, DSI_PKT_TYPE_WR, S6E3HA8_AOD_DIG_INTERVAL, 7);
 #endif
 
+
+static DEFINE_PKTUI(s6e3ha8_aod_digital_clock, &s6e3ha8_aod_maptbl[DIGITAL_CLK_CTRL_MAPTBL], 0);
+static DEFINE_VARIABLE_PACKET(s6e3ha8_aod_digital_clock, DSI_PKT_TYPE_WR, S6E3HA8_AOD_CLOCK_CTRL, 0);
+
 static void *s6e3ha8_aod_digital_ctrl_cmdtbl[] = {
 	&KEYINFO(s6e3ha8_aod_level2_key_enable),
 	&PKTINFO(s6e3ha8_aod_digital_pos),
 	&PKTINFO(s6e3ha8_aod_digital_blink),
-	&PKTINFO(s6e3ha8_aod_clock_ctrl),
+	&PKTINFO(s6e3ha8_aod_digital_clock),
 	//&PKTINFO(s6e3ha8_aod_dig_interval),
 	&KEYINFO(s6e3ha8_aod_level2_key_disable),
 };

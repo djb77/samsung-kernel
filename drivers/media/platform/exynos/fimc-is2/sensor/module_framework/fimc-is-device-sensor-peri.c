@@ -1809,7 +1809,8 @@ int fimc_is_sensor_peri_s_stream(struct fimc_is_device_sensor *device,
 #endif
 
 #ifdef USE_AF_SLEEP_MODE
-		if (sensor_peri->actuator && sensor_peri->actuator->actuator_ops) {
+		if (sensor_peri->actuator && sensor_peri->actuator->actuator_ops
+			&& (dual_info->mode != FIMC_IS_DUAL_MODE_NOTHING)) {
 			ret = CALL_ACTUATOROPS(sensor_peri->actuator, set_active, sensor_peri->subdev_actuator, 0);
 			if (ret) {
 				err("[SEN:%d] actuator set sleep fail\n", module->sensor_id);

@@ -146,7 +146,8 @@ void copy_set_time_ctrl(struct maptbl *tbl, u8 *dst);
 void copy_icon_grid_on_ctrl(struct maptbl *tbl, u8 *dst);
 void copy_self_move_on_ctrl(struct maptbl *tbl, u8 *dst);
 void copy_analog_pos_ctrl(struct maptbl *tbl, u8 *dst);
-void copy_clock_ctrl(struct maptbl *tbl, u8 *dst);
+void copy_analog_clock_ctrl(struct maptbl *tbl, u8 *dst);
+void copy_digital_clock_ctrl(struct maptbl *tbl, u8 *dst);
 int getidx_self_mode_pos(struct maptbl *tbl);
 void copy_self_move_reset(struct maptbl *tbl, u8 *dst);
 

@@ -45,6 +45,7 @@ struct tci_msg {
 #define CMD_VERIFY 2
 
 static int load_trusted_app(void);
+static void unload_trusted_app(void);
 
 static int thread_handler(void *arg)
 {
@@ -190,22 +191,57 @@ out:
 	return rc;
 }
 
+static int send_cmd_with_retry(unsigned int cmd,
+				enum hash_algo algo,
+				const void *hash,
+				size_t hash_len,
+				const void *label,
+				size_t label_len,
+				void *signature,
+				size_t *signature_len,
+				unsigned int retry_num)
+{
+	int rc;
+
+	do {
+		bool need_retry = false;
+
+		rc = send_cmd(cmd, algo,
+				hash, hash_len, label, label_len,
+						signature, signature_len);
+
+		need_retry = (rc == TEEC_ERROR_COMMUNICATION ||
+						rc == TEEC_ERROR_TARGET_DEAD);
+		if (need_retry && retry_num) {
+			pr_err("FIVE: TA got the fatal error rc=%d. Try again\n",
+									rc);
+			mutex_lock(&itee_driver_lock);
+			unload_trusted_app();
+			mutex_unlock(&itee_driver_lock);
+		} else {
+			break;
+		}
+	} while (retry_num--);
+
+	return rc;
+}
+
 static int verify_hmac(enum hash_algo algo, const void *hash, size_t hash_len,
 			const void *label, size_t label_len,
 			const void *signature, size_t signature_len)
 {
-	return send_cmd(CMD_VERIFY, algo,
-			hash, hash_len, label, label_len,
-					(void *)signature, &signature_len);
+	return send_cmd_with_retry(CMD_VERIFY, algo,
+					hash, hash_len, label, label_len,
+					(void *)signature, &signature_len, 1);
 }
 
 static int sign_hmac(enum hash_algo algo, const void *hash, size_t hash_len,
 			const void *label, size_t label_len,
 			void *signature, size_t *signature_len)
 {
-	return send_cmd(CMD_SIGN, algo,
-			hash, hash_len, label, label_len,
-						signature, signature_len);
+	return send_cmd_with_retry(CMD_SIGN, algo,
+					hash, hash_len, label, label_len,
+					signature, signature_len, 1);
 }
 
 static int load_trusted_app(void)
@@ -269,7 +305,6 @@ static void unregister_tee_driver(void)
 	/* tee_integrity_driver has been unloaded */
 }
 
-#ifdef CONFIG_TEE_DRIVER_DEBUG
 static void unload_trusted_app(void)
 {
 	is_initialized = 0;
@@ -281,6 +316,7 @@ static void unload_trusted_app(void)
 	context = NULL;
 }
 
+#ifdef CONFIG_TEE_DRIVER_DEBUG
 static ssize_t tee_driver_write(
 		struct file *file, const char __user *buf,
 		size_t count, loff_t *pos)

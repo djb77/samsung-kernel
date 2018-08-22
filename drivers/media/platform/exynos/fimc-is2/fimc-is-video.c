@@ -1730,12 +1730,26 @@ int fimc_is_video_prepare(struct file *file,
 	pipe = &device->pipe;
 
 	if ((pipe->dst) && (pipe->dst->leader.vid == video->id)) {
+		if (index >=  FIMC_IS_MAX_PIPE_BUFS) {
+			mverr("The leader index(%d) is bigger than array size(%d)",
+				vctx, video, index, FIMC_IS_MAX_PIPE_BUFS);
+			ret = -EINVAL;
+			goto p_err;
+		}
+
 		/* Destination */
 		memcpy(&pipe->buf[PIPE_SLOT_DST][index], buf, sizeof(struct v4l2_buffer));
 		memcpy(pipe->planes[PIPE_SLOT_DST][index], buf->m.planes, sizeof(struct v4l2_plane) * buf->length);
 		pipe->buf[PIPE_SLOT_DST][index].m.planes = (struct v4l2_plane *)pipe->planes[PIPE_SLOT_DST][index];
 	} else if ((pipe->dst) && (pipe->vctx[PIPE_SLOT_JUNCTION]) &&
 			(pipe->vctx[PIPE_SLOT_JUNCTION]->video->id == video->id)) {
+		if (index >=  FIMC_IS_MAX_PIPE_BUFS) {
+			mverr("The junction index(%d) is bigger than array size(%d)",
+				vctx, video, index, FIMC_IS_MAX_PIPE_BUFS);
+			ret = -EINVAL;
+			goto p_err;
+		}
+
 		/* Junction */
 		if ((pipe->dst) && test_bit(FIMC_IS_GROUP_PIPE_INPUT, &pipe->dst->state)) {
 			memcpy(&pipe->buf[PIPE_SLOT_JUNCTION][index], buf, sizeof(struct v4l2_buffer));

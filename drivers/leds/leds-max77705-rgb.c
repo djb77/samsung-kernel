@@ -623,6 +623,8 @@ static ssize_t store_max77705_rgb_blink(struct device *dev,
 	u8 led_b_brightness = 0;
 	unsigned int led_total_br = 0;
 	unsigned int led_max_br = 0;
+	u8 led_en = 0;
+	int led_num = 0;
 	int ret;
 
 	ret = sscanf(buf, "0x%8x %5d %5d", &led_brightness,
@@ -695,17 +697,30 @@ static ssize_t store_max77705_rgb_blink(struct device *dev,
 		}
 	}
 
-	if (led_r_brightness)
-		max77705_rgb_set_state(&max77705_rgb->led[RED], led_r_brightness, LED_BLINK);
+	if (led_r_brightness) {
+		max77705_rgb_set_state(&max77705_rgb->led[RED], led_r_brightness, LED_DISABLE);
+		led_num = max77705_rgb_number(&max77705_rgb->led[RED], &max77705_rgb);
+		led_en |= LED_BLINK << 2*led_num;
+	}
 
-	if (led_g_brightness)
-		max77705_rgb_set_state(&max77705_rgb->led[GREEN], led_g_brightness, LED_BLINK);
+	if (led_g_brightness) {
+		max77705_rgb_set_state(&max77705_rgb->led[GREEN], led_g_brightness, LED_DISABLE);
+		led_num = max77705_rgb_number(&max77705_rgb->led[GREEN], &max77705_rgb);
+		led_en |= LED_BLINK << 2*led_num;
+	}
 
-	if (led_b_brightness)
-		max77705_rgb_set_state(&max77705_rgb->led[BLUE], led_b_brightness, LED_BLINK);
+	if (led_b_brightness) {
+		max77705_rgb_set_state(&max77705_rgb->led[BLUE], led_b_brightness, LED_DISABLE);
+		led_num = max77705_rgb_number(&max77705_rgb->led[BLUE], &max77705_rgb);
+		led_en |= LED_BLINK << 2*led_num;
+	}
 
 	/*Set LED blink mode*/
 	max77705_rgb_blink(dev, delay_on_time, delay_off_time);
+
+	ret = max77705_update_reg(max77705_rgb->i2c, MAX77705_RGBLED_REG_LEDEN, led_en, 0xff);
+	if (ret < 0)
+		dev_err(dev, "can't write FLASH_EN : %d\n", ret);
 
 	pr_info("leds-max77705-rgb: %s, delay_on_time: %d, delay_off_time: %d, color: 0x%x, lowpower: %i\n",
 			__func__, delay_on_time, delay_off_time, led_brightness, led_lowpower_mode);

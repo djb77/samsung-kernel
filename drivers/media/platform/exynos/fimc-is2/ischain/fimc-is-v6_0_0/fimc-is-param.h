@@ -835,7 +835,8 @@ struct param_sensor_config {
 	u32	bns_output_height; /* Active scaled image height */
 	u32	calibrated_width; /* sensor cal size */
 	u32	calibrated_height;
-	u32	reserved[PARAMETER_MAX_MEMBER-16];
+	u32	early_config_lock;
+	u32	reserved[PARAMETER_MAX_MEMBER-17];
 	u32	err;
 };
 

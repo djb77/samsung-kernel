@@ -3330,13 +3330,20 @@ static void abox_change_cpu_gear(struct device *dev, struct abox_data *data)
 	for (request = data->cpu_gear_requests;
 			request - data->cpu_gear_requests <
 			ARRAY_SIZE(data->cpu_gear_requests)
-			&& request->id;
+			&& READ_ONCE(request->id);
 			request++) {
-		if (gear > request->value)
-			gear = request->value;
+		unsigned int value = READ_ONCE(request->value);
+
+		if (gear > value)
+			gear = value;
 
 		dev_dbg(dev, "id=%p, value=%u, gear=%u\n", request->id,
 				request->value, gear);
+	}
+
+	if (gear < 1) {
+		dev_warn(dev, "%s: gear=%d\n", __func__, gear);
+		gear = 1;
 	}
 
 	if ((data->cpu_gear >= ABOX_CPU_GEAR_MIN) &&
@@ -3394,9 +3401,8 @@ int abox_request_cpu_gear(struct device *dev, struct abox_data *data,
 
 	old_id = request->id;
 	old_gear = request->value;
-	request->value = gear;
-	wmb(); /* value is read after id in reading function */
-	request->id = id;
+	WRITE_ONCE(request->value, gear);
+	WRITE_ONCE(request->id, id);
 
 	if (request - data->cpu_gear_requests >=
 			ARRAY_SIZE(data->cpu_gear_requests)) {

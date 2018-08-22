@@ -1471,6 +1471,8 @@ struct camera2_ipc_udm {
 struct camera2_rta_udm {
 	uint32_t vsLength;
 	uint32_t vendorSpecific[90];
+	uint32_t vs2Length;
+	uint32_t vendorSpecific2[48];
 };
 
 struct camera2_drc_udm {
@@ -1763,7 +1765,12 @@ enum camera2_scene_index {
 	SCENE_INDEX_BIRD		= 16,
 	SCENE_INDEX_CITYSTREET		= 17,
 	SCENE_INDEX_HOMEINDOOR		= 18,
-	SCENE_INDEX_WATERSIDE		= 19
+	SCENE_INDEX_WATERSIDE		= 19,
+	SCENE_INDEX_SCENERY		= 20,
+	SCENE_INDEX_GREENERY	= 21,
+	SCENE_INDEX_DAY_HDR		= 10000, // The enums which are same as or more than 1000 are set by AE result    
+	SCENE_INDEX_NIGHT_HDR	= 10001,
+	SCENE_INDEX_MOTION_BLUR_REMOVAL	= 10002
 };
 
 struct camera2_scene_detect_uctl
@@ -1852,7 +1859,8 @@ struct camera2_uctl {
 	struct camera2_is_hw_lls_uctl	hwlls_mode;
 	uint32_t			statsRoi[4];
 	enum aa_cameratype		masterCam;
-	uint32_t			reserved[10];
+	int32_t                         productColorInfo;    
+	uint32_t			reserved[9];
 };
 
 struct camera2_udm {
@@ -1880,7 +1888,8 @@ struct camera2_udm {
 	struct camera2_rgbGamma_udm rgbGamma;
 	struct camera2_ccm_udm      ccm;
 	uint32_t			frame_id;
-	uint32_t			reserved[9];
+	enum camera2_scene_index	scene_index;
+	uint32_t			reserved[8];
 };
 
 struct camera2_shot {

@@ -172,7 +172,7 @@
 
 					cirrus,moisture-pin = <7>;
 					cirrus,moisture-imp = <2000>;
-					cirrus,moisture-debounce = <4>;
+					cirrus,moisture-debounce = <100>;
 
 					cirrus,micd-configs = <0 1 4 0 1>;
 					cirrus,hpd-pins = <2 5 0 0>;

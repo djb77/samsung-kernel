@@ -931,7 +931,13 @@ int panel_do_seqtbl(struct panel_device *panel, struct seqinfo *seqtbl)
 					seqtbl->name, cmd_type_name[type],
 					(((struct cmdinfo *)cmdtbl[i])->name ?
 					 ((struct cmdinfo *)cmdtbl[i])->name : "none"));
-			return ret;
+
+			/*
+			 * CMD_TYP_DMP seq is intended for debugging only.
+			 * So if it's failed, go through the dump seq.
+			 */
+			if (type != CMD_TYPE_DMP)
+				return ret;
 		}
 
 #ifdef DEBUG_PANEL
@@ -1412,8 +1418,9 @@ int panel_dumpinfo_update(struct panel_device *panel, struct dumpinfo *info)
 	}
 
 	ret = panel_resource_update(panel, info->res);
-	if (unlikely(ret)) {
-		pr_err("%s, failed to update resource\n", __func__);
+	if (unlikely(ret < 0)) {
+		pr_err("%s, dump:%s failed to update resource\n",
+				__func__, info->name);
 		return ret;
 	}
 	info->callback(info);

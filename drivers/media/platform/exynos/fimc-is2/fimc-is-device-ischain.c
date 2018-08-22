@@ -2608,6 +2608,7 @@ static int fimc_is_ischain_s_sensor_size(struct fimc_is_device_ischain *device,
 	u32 sensor_width, sensor_height;
 	u32 bns_width, bns_height;
 	u32 framerate;
+	enum fimc_is_ex_mode ex_mode;
 
 	FIMC_BUG(!device->sensor);
 
@@ -2617,6 +2618,7 @@ static int fimc_is_ischain_s_sensor_size(struct fimc_is_device_ischain *device,
 	bns_width = fimc_is_sensor_g_bns_width(device->sensor);
 	bns_height = fimc_is_sensor_g_bns_height(device->sensor);
 	framerate = fimc_is_sensor_g_framerate(device->sensor);
+	ex_mode = fimc_is_sensor_g_ex_mode(device->sensor);
 
 	if (test_bit(FIMC_IS_ISCHAIN_REPROCESSING, &device->state))
 		bns_binning = 1000;
@@ -2646,6 +2648,12 @@ static int fimc_is_ischain_s_sensor_size(struct fimc_is_device_ischain *device,
 	if (device->sensor->max_target_fps > 0)
 		sensor_config->max_target_fps = device->sensor->max_target_fps;
 #endif
+
+	if (ex_mode == EX_DUALFPS)
+		sensor_config->early_config_lock = 1;
+	else
+		sensor_config->early_config_lock = 0;
+
 	*lindex |= LOWBIT_OF(PARAM_SENSOR_CONFIG);
 	*hindex |= HIGHBIT_OF(PARAM_SENSOR_CONFIG);
 	(*indexes)++;
