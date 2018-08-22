@@ -1,0 +1,341 @@
+BCM4361 DHD 100.10.163 for Android STAR Project
+
+DHD 100.10.163 - 2017.12.29
+Major Issue
+ - CS4079439(By Cho Seong Ji) Added the additional spin lock and debugging implementation to protect DMA map/unmap synchronization and logging the history for Exynos9810 platform
+     * Issue summary
+       Kernel Panic was happened during VoIP test
+     * Analysis / Root cause
+       1. Kernel panic was occurred due to SMMU fault from the IOMMU driver
+       2. From the initial analysis of Samsung S.LSI, unsynchronization between DMA map and unmap could lead the SMMU fault issue
+     * Solution
+       1. Added new spinlock to sync up for DMA map/unmap implementation in the OS dependent layer of DHD to avoid the issue
+       2. Provided the debug codes to narrow down the issue once it is reproduced
+
+ - CS4139777(By Kwak Hogil) Removed PKT filter ID 107: IPv4 Broadcast filter
+     * Issue summary
+       VOWIFI mute issue happened after LCD off
+     * Analysis / Root cause
+       In this network, netmask is 255.255.253.0 so DUT IP address xxx.xxx.xxx.255 is not Broadcast.
+       But it was filtered by IPv4 Broadcast filter (ID 107)       
+     * Solution
+       First, removed packet filter ID 107 not to block this unicast packet in this kind of network
+
+ - CS4228470(By Kwak Hogil) Fixed ARP offload flag not to clean up Host IP address/ARP table after roaming done
+     * Issue summary
+       AP failed to do ARP resolution after roaming completed
+     * Analysis / Root cause
+       There was roaming patch code which clean up Host IP address/ARP table in DHD
+       From Android O, DHCP is not run after roaming if some requirements meet on framework side
+       So Host IP address was not set again in this case and it caused the problem ARP request was dropped after roaming
+     * Solution
+       It was caused by ARP_OL_HOST_AUTO_REPLY option that has not been used and not needed for Samsung model
+       Fixed to not use it, not to clean up Host IP address/ARP table after roaming done
+
+Kernel Panic
+ - CS4164502(By Jeong Min Cheol) Fixed potential kernel panic during deleting flowring with invalid flowid
+ - CS4198456(By Kim Gwang Min) Fixed kernel panic while collecting data for Mobile HotSpot BigData
+ - Added Null check routine in wl_cfg80211_deinit_p2p_discovery() / Kernel panic occurred while disable P2P discovery Interface
+
+Others
+ - CS4190889(By Kwak Hogil) Added DEBUG_DUMP private command option for unwanted/disconnected
+ - CS4233933(By Kwak Hogil) Print mask and pattern values for pktlog filter separately
+ - CS4261039(By Min SungBin) Fixed to use proper locally_generated value on cfg80211_disconnect() when upper layer request disconnection
+ - CS4272339 Fixed potential user space overflow issue in dhd_trace_read_proc()
+ - Added clearing timestamp for debug dump file after collecting memdump
+ - Added length check for handling logtrace events
+ - Changed 'escan is not ready' log as rate limit log style for avoid repeatedly printing log message
+ - Changed MAC OUI format for Bigdata
+ - Enhanced logtrace and version changed as V02
+ - Enhanced SoftAP/P2PGO keep alive to avoid unexpected keep alive disconnection
+ - Fixed debug_dump not generated intermittently for scan busy case
+ - Fixed wrong length for memory free function in wl_event_q()
+ - Update correct STA channel for the Auto channel selection in case of STA/SoftAP concurrent mode
+
+
+DHD 100.10.142 - 2017.12.15
+Major Issue
+ - CS4086723(By Jeong Min Cheol) Fixed WPS connection failure issue with Random MAC Scan feature
+     * Issue summary
+       WPS PBC connection failed with specific AP
+     * Analysis / Root cause
+       If Random MAC Scan feature enabled for WPS PBC, connection was failed due to PBC overlap
+     * Solution
+       Disabled conditionally Random MAC Scan feature for WPS PBC connection
+
+New Feature
+ - EWP : Added txbcmfrm in ecounters to get info on the behavior of softap beaconing history
+ - EWP : Implemented saving cookie to debug dump file
+
+Others
+ - CS3839380(By Nam Counjong) Changed default BTM delta
+ - CS3846389(By Kwak Hogil) Limit the number of dump files that DHD can store to local file system
+ - CS4034777(By Kim MinSoo) Enabled ARGOS notification callback, DHD TCP ACK suppress is disabled
+ - CS4058797(By Jeong Min Cheol) Added more debug logs to debug PKTID AUDIT failure issue
+ - CS4115086(By Kwak Hogil) Added android private command to change pkt logging size
+ - CS4138402(By Lee SoonHo) Added PCIe interrupt affinity configuration for P2P GO & SoftAP
+ - CS4154668(By Cho Seong Ji) Added interrupt status and time stamp information for debugging SCAN timeout issue
+ - CS4163743(By Kwak Hogil) Fixed code defect for wl_pattern_atoh() with invalid return value
+ - Added debug prints in log_dump/mem_dump/sssr_dump scheduling to debug in any scheduling issues
+ - Added new msglevel for IOVAR info dumping(DHD_IOVAR_MEM)
+ - Deferred code for free of log dump related buffer until workqueue is purged in dhd_detach()
+ - Fixed a possible memory leak in dhdpcie_bus_write_vars
+ - Fixed memory leak during android GETSTAINFO command processing for bigdata softap
+ - Fixed missed SSID/MAC filtering in log for security reason
+ - Fixed parsing issue on wl_parse_ssid_list_tlv() for PNO setup
+ - Fixed SSSR and debug dump were not getting collected during memory dump
+ - Fixed unsynchronized active_tx_count which gives incorrect information
+ - Optimized the livelock check loop to handle corner case of partial DMA
+
+
+DHD 100.10.136 - 2017.12.01
+Major Issue
+ - CS3846890(By Kim MinSoo) Disabled DHD TCP ACK SUPPRESS for GS9 (Exynos 9810 platform)
+     * Issue summary
+       N-DRIVE download TPUT was lower than the GN8 (Great) device
+     * Analysis / Root cause
+       DHD TCP ACK suppress enable/disable controlled by ARGOS notification callback by current TPUT
+       Problem is DHD TCP ACK suppress is enabled by default for GS9 because GS9 does not use ARGOS feature in DHD
+     * Solution
+       Disabled DHD TCP ACK suppress in DHD Makefile for GS9
+       DHD TCP ACK suppress is replaced by TCP delayed ACK
+
+ - CS4048984(By Min SungBin) Skip dumping PCIe registers if PCIe link down has occurred
+     * Issue summary
+       The Kernel panic was triggered due to System MMU fault
+     * Analysis / Root cause
+       1. The PCIe link down has occurred before the Kernel panic
+       2. The System MMU fault was triggered when host tried to access the configuration registers in EP
+       3. It seemed that RC doesn?™t allow host to access any EP registers after the PCIe link down has occurred
+     * Solution
+       To avoid the Kernel panic, skip dumping any PCIe registers in EP if PCIe link down has occurred
+
+ - CS4050389(By Jeong Min Cheol) Fixed kernel panic due to unexpected suspend during DHD_LOG_DUMP
+     * Issue summary
+       Kernel Panic is happened during DHD_LOG_DUMP
+     * Analysis / Root cause
+       Wpa_supplicant triggered DEBUG_DUMP and then runtime suspend was entered
+       ITMON detected that dhd_log_dump tried to access pci bus after runtime suspend at this time 
+     * Solution
+       Adding wakelock for avoiding unexpected runtime suspend during DHD_LOG_DUMP
+
+ - CS4050409(By ahn joongmin) CS4078469(By Seo Jung Kuk) CS4078386(By Cho Seong Ji) CS4075752(By Cho Seong Ji) Fixed kernel panic due to duplicate free in pktlogging feature
+     * Issue summary
+       Kernel Panic has happened due to duplicate skb free in pktlogging feature
+     * Analysis / Root cause
+       Two different DHD threads indicated same function (dhd_pktlog_ring_get_writebuf) in the log
+       The reason is that it's a critical section but there was no synchronization object in the pktlog function
+     * Solution
+       Added spin lock to protect critical section
+
+New Feature
+ - EWP : Changed MAC masking pattern and masking position to sync up with Firmware masking pattern
+ - EWP : Set proper values for rxbeaconmbss and noise_level while Bigdata Report
+
+Kernel Panic
+ - CS4050389(By Jeong Min Cheol) Fixed kernel panic due to unexpected suspend during DHD_LOG_DUMP
+ - Fixed Kernel panic by watchdong context - Disable watchdog before devreset off / Enable again after devreset on
+ - Fixed Kernel panic while collecting log dump after hang event occurred
+
+Others
+ - CS2810592(By ahn joongmin) Added antenna mode information for HotSpot BigData Logging
+ - CS3898979(By Yoon Jae Ho) Fixed unintended hang issue by invalid deauth reason code from specific AP
+ - CS4043579(By Jeong Min Cheol) CS4050681(By Cho Seong Ji) Fixed coverity issues
+ - CS4043949(By Nam Counjong) Fixed dropping BTM request after roaming
+ - CS4045271(By Hogil Kwak) Added SET_ADPS log message
+ - CS4072384(By Jeong Min Cheol) Added more time stamps for debugging Resumed on timeout and D3_ACK timeout issue due to DPC scheduling problem
+ - CS4097050(By Min SungBin) Fixed cfg80211 layer warning for wl_bss_connect_done indication path
+ - Added wakeup RunTimePM code during wifi reloading
+ - Changed event_handler workqueue parameter for debugging scan timeout issue
+ - Cleaned up code for send up packets routine
+ - Disabled DHD RA (Router Advertisement) filter if APF is supported because APF can filter out RA frame
+ - Disabled handling of EVENT_LOG_TAG_TS - MAC address masked on firmware
+ - Disabled MAC address masking on firmware temporally
+ - Enabled WL_SCHED_SCAN for PNO
+ - Fixed buffer overrun issue on NAN code
+ - Fixed to clean up dongle arp table when roaming done
+ - Reduced scan event workqueue max count for avoid workqueue not scheduled issue
+ - Supported SDM845 cfg80211_connect_bss API changes
+ - Take SSSR dump only if memdump mode is enabled
+
+
+DHD 100.10.126 - 2017.11.17
+New Feature
+ - EWP: Added collecting preserve log for TRAP
+ - EWP: Print preserve log when logstrs.bin is present
+
+Kernel Panic
+ - CS3863852 Changed the log level to DHD_ERROR_MEM for ICMP dump to avoid Kernel panic
+ - CS3987886 Fixed kernel panic by stack overflow during copy extended trap data
+ - Fixed Kernel Panic during static control buffer depletion
+
+Others
+ - CS3831435 Changed SoftAP power save status format in private command (ms -> min)
+ - CS3863518 Removed a carriage return character in SUPP_LOG() of wl_cfg80211_connect()
+ - CS3935040 IRQ Affinity set to Big core and blocking CPU migration to Big Core
+ - CS3976846 Clear the bus state related flags for recovery during turning on Wi-Fi
+ - CS3995917 Fixed to use P2P interface MAC address scheme as before
+ - CS4005452 Disabled ARP host auto reply option
+ - CS4011220 Block ADPS enable private command at RF test mode
+ - Block processing the rest of ring buffers once PCIe bus enters low power state
+ - Enabled feature for the Dongle memory loopback test and the PCIE Non DMA M2M loopback test when CONFIG_SEC_FACTORY enabled case
+ - Fixed Coverity defects - Buffer Overrun issue
+ - Fixed Coverity defects - Dereferencing NULL Pointer
+ - Fixed Coverity defects - Integer Overflow / Constant expression results
+
+
+DHD 100.10.117.4 - 2017.11.08
+Kernel Panic
+ - Block to send HANG event information to BIGDATA module to avoid Kernel Panic
+
+Others
+ - CS3955693 Disabled DHD_RECOVER_TIMEOUT feature for debugging SCAN timeout issue
+ - CS3959762 Print BAR0 and BAR1 information to debug D3_ACK timeout
+ - Fixed dongle trap issue during connect/disconnect stress test
+ - Print tasklet status for SCAN timeout debugging
+
+
+DHD 100.10.117.3 - 2017.11.07
+Others
+ - Disabled FW corruption test and PCIE Non DMA M2M loopback test in Makefile
+   (For enabling it, please modify Makefile and sync up FW version with IGUANA08T_REL_13_35_189 or higher version)
+
+
+DHD 100.10.117.2 - 2017.11.06
+Others
+ - CS3944770 Fixed to set roam_prof failure issue
+ - CS3962099 Fixed lockup corner case of Non-DMA M2M loopback test
+ - Added registration of PCIe link down handler for Exynos9810
+
+
+DHD 100.10.117 - 2017.11.03
+New Feature
+ - EWP : CS3846389 Changed Samsung Bigdata format for hang reason
+ - EWP : CS3846389 Removed OK string for android ewp filter command
+ - EWP : Enhanced debug log for SCAN timeout
+ - EWP : Reduced Firmaware log message
+ - EWP : Triggered mem_dump on interface delete failure
+ - EWP : Updated Bigdata report format of counters
+
+Kernel Panic
+ - CS3920857 Block to access dongle PCIe register if host fails to bring the PCIe link up
+ - CS3938108 Fixed the Kernel Panic issue when PCIe link down is occurred
+
+Security Patch
+ - CS3621122 Fixed vulnerability issue by dhd_parse_logstrs_file() which contains problematic code
+
+Others
+ - CS2554190 Removed dead code in Samsung packet logging feature
+ - CS3516646 Added the log to print invalid txdeauth count
+ - CS3768340 Changed EVENT_LOG printing style to reduce lines and print dongle time
+ - CS3831021 Fixed coverity tool reported issues
+ - CS3831435 Added Private command for SoftAP radio power save statistics
+ - CS3831435 Modified return string of softAP power save private command
+ - CS3914585 Fixed RCC channel missing issue when scan result is more than 100
+ - Added a new VID information for SEMCO SWB-E32A module
+ - Added bounding logic to logtrace process events to relinquish CPU to others
+ - Added Kernel IRQ counts for debug purpose
+ - Changed for enabling wl events dynamically
+ - Changed the log format of PCIe ring buffer information
+ - Fixed link down by invalid RSSI
+ - Fixed memory leak in PNO stop command
+ - Fixed missing BTM query after join
+ - Hold wakelock during OOB IRQ to not allow to go to suspend
+
+
+DHD 100.10.100.6 - 2017.11.30
+Kernel Panic
+ - Enabled l1ss after turning on WiFi on Exynos9810 Platform
+
+Others
+ - Cleaned up the memory allocation logic of DHD_FW_MEM_CORRUPTION feature
+
+
+DHD 100.10.100.5 - 2017.10.26
+New Feature
+ - CS3688359 Added PCIe M2M non DMA loopback test in MFG mode
+
+Others
+ - CS3831435 Added Private command for SoftAP radio power save statistics
+ - CS3847313 Fixed PCIe IRQ missing issue after PCIe bus resume
+ - Fixed Kernel IRQ warning during Wi-Fi on/off automation test
+ - Fixed scan timeout issue
+
+
+DHD 100.10.100 - 2017.10.20
+New Feature
+ - Added trap specific data to send hang reason code
+ - Enabled using a vendor command to send hang reason code with more parameters
+ - EWP : Added interface based counters
+ - EWP : Added more print for TRAP case
+ - EWP : Fixed current regression (40uA) due to ECounters timer
+ - EWP : Flushed all preserve log while collecting debug_dump
+ - EWP : Implemented Bigdata Serialization
+ - EWP : Reduced burst error printing for specific case
+
+Kernel Panic
+ - CS3759879 Cleaned up wl_cfgnan_init to fix the Kernel panic
+ - CS3766435 Fixed the Kernel Panic due to SMMU fault
+ - CS3830411 Fixed cpu lock up during de-init tcpack suppress module
+
+Security Patch
+ - CVE-2017-13161 V2017092501 Fixed buffer overrun issue in wl_parse_ssid_list_tlv()
+
+Others
+ - CS2455903 Fixed invalid RSSI during roaming
+ - CS2810592 Added lock to protect event and stainfo data used HotSpot BigData Logging
+ - CS3724694 Cancel roaming process when BSS was not matched
+ - CS3744556 Fixed to use SoftAP MAC address scheme as before
+ - CS3757724 Supported SDM845 cfg80211_roamed API changes
+ - CS3768340 Changed EVENT_LOG style because too many logs are being printed
+ - CS3796854 Added the logs to track the PCIE host wake IRQ, suspend and resume timestamps in order to help debugging
+ - CS3799104 Added lock to protect vndr_oui_list
+ - Added error handling for role mismatch case during interface remove
+ - Added more debug information for buffer address used debug dump
+ - Added more debug information for scan timeout issue
+ - Added more debug information when PCIe link down is occurred
+ - Changed scan timeout timer trigger point to scan iovar returned successfully case
+ - Enabled CONFIG_BCMDHD_PREALLOC_MEMDUMP and CONFIG_BCMDHD_OOB_HOST_WAKE by default for all PCIe projects
+ - Enabled PCIe Runtime PM
+ - Enhanced scan mac  feature for unsupported platform
+ - Fixed P2P group formation failure issue
+ - Logging PCIE ISR and DPC timestamps to help debugging for Resumed on Timeout and D3_ACK timeout issue
+ - Skip sending HANG event when driver status is not READY
+
+
+DHD 100.10.86 - 2017.09.29
+New Feature
+ - Enabled Samsung Mobile HotSpot BigData Logging
+ - Enabled using a vendor command to send hang reason code with more parameters
+ - Enhanced Debugability - Added android private commands for verbose log level
+ - Enhanced Debugability - Added Extended TRAP
+ - Enhanced Debugability - Added interface based ecounters to save for Bigdata reporting
+ - Enhanced Debugability - Changed mutex instead of spinlock for debug ring access
+ - Enhanced Debugability - Updated Buffer management
+
+Kernel Panic
+ - CS3726729 Fixed Kernel panic while charging test
+
+Others
+ - CS3509434 Added WLC_E_SET_SSID fail custom reason code
+ - CS3558828 Added NDO_CONFIG_SUPPORT
+ - CS3591398 Enabled TCP ACK suppress enable/disable log message
+ - CS3661384 Disabled WLAN_REASON_UNSPECIFIED reason code used as hang event code
+ - CS3697438 Added deferred_module_init call for SDM845 platform
+ - CS3734421 Fixed redefine issue for WAPI related define
+ - Added 4361B2 MURATA module information
+ - Added missing clear vendor OUI list for fix memory leak
+ - Added pspretend_retry_limit iovar for fix P2P interface delete issue during bidirection tput test
+ - Changed dump filename timestamp format - YYMMDDhhmmss
+ - Changed malloc/free function as wrapper function of MALLOC/MFREE for further debugging purpose
+ - Enhanced loopback test for MFG build firmware
+ - Fixed P2P discovery failure issue after SoftAP tear down case
+ - Fixed RX load balancing - Potential CPU stall issue can be happen
+ - Increased LOG_DUMP memory size to 4MB
+ - Removed interrupt mask check on IOVAR/D3_ACK recover logic
+
+
+DHD 100.10.72 - 2017.09.15
+ - Initial release for BCM4361B2
+
+

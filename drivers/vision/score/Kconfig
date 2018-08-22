@@ -1,0 +1,4 @@
+config EXYNOS_SCORE
+       bool "SCORE driver"
+       help
+         This is a SCORE Driver
