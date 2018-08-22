@@ -147,7 +147,7 @@ err:
 	return ret;
 }
 
-int do_fmp_fips_init(struct exynos_fmp *fmp)
+struct fmp_fips_data *do_fmp_fips_init(struct exynos_fmp *fmp)
 {
 	int ret = 0;
 	struct fmp_fips_data *data;
@@ -162,10 +162,11 @@ int do_fmp_fips_init(struct exynos_fmp *fmp)
 
 	if (!fmp) {
 		pr_err("%s: Invalid exynos fmp struct\n", __func__);
-		return -ENODEV;
+		return NULL;
 	}
 
 	dev = fmp->dev;
+
 	data = kmalloc(sizeof(struct fmp_fips_data), GFP_KERNEL);
 	if (!data) {
 		ret = -ENOMEM;
@@ -206,17 +207,15 @@ int do_fmp_fips_init(struct exynos_fmp *fmp)
 			  >> blocksize_bits;
 	data->sector = self_test_block;
 
-	fmp->fips_data = data;
-	return ret;
+	return data;
 
 err:
-	kfree(data);
-	return ret;
+	kzfree(data);
+	return NULL;
 }
 
-void do_fmp_fips_exit(struct exynos_fmp *fmp)
+void do_fmp_fips_exit(struct fmp_fips_data *data)
 {
-	struct fmp_fips_data *data = fmp->fips_data;
 	fmode_t fmode = FMODE_WRITE | FMODE_READ;
 
 	if (!data)
@@ -224,7 +223,7 @@ void do_fmp_fips_exit(struct exynos_fmp *fmp)
 
 	if (data->bdev)
 		blkdev_put(data->bdev, fmode);
-	kfree(data);
+	kzfree(data);
 }
 
 static ssize_t fmp_fips_result_show(struct device *dev,
@@ -337,10 +336,10 @@ int exynos_fmp_fips_init(struct exynos_fmp *fmp)
 
 	set_fmp_fips_state(FMP_FIPS_PROGRESS_STATE);
 
-	ret = do_fmp_fips_init(fmp);
-	if (ret) {
-		dev_err(fmp->dev, "%s: Fail to initialize fips test. ret(%d)\n",
-				__func__, ret);
+	fmp->fips_data = do_fmp_fips_init(fmp);
+	if (!fmp->fips_data) {
+		dev_err(fmp->dev, "%s: Fail to initialize fips test.\n",
+				__func__);
 		goto err;
 	}
 
@@ -365,7 +364,7 @@ int exynos_fmp_fips_init(struct exynos_fmp *fmp)
 	set_fmp_fips_state(FMP_FIPS_SUCCESS_STATE);
 	fmp->result.overall = 1;
 
-	do_fmp_fips_exit(fmp);
+	do_fmp_fips_exit(fmp->fips_data);
 
 	return 0;
 
@@ -373,7 +372,7 @@ err:
 #if defined(CONFIG_NODE_FOR_SELFTEST_FAIL)
 	set_fmp_fips_state(FMP_FIPS_ERR_STATE);
 	fmp->result.overall = 0;
-	do_fmp_fips_exit(fmp);
+	do_fmp_fips_exit(fmp->fips_data);
 
 	return 0;
 #else

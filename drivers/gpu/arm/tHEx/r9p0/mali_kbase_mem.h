@@ -972,6 +972,9 @@ static inline void kbase_set_dma_addr(struct page *p, dma_addr_t dma_addr)
 
 static inline dma_addr_t kbase_dma_addr(struct page *p)
 {
+	/* MALI_SEC_INTEGRATION */
+	if (p == NULL)
+		return (dma_addr_t)NULL;
 	if (sizeof(dma_addr_t) > sizeof(p->private))
 		return ((dma_addr_t)page_private(p)) << PAGE_SHIFT;
 

@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 739343 2018-01-08 06:31:00Z $
+ * $Id: dhd_linux.c 758476 2018-04-19 02:09:42Z $
  */
 
 #include <typedefs.h>
@@ -423,7 +423,8 @@ extern void set_irq_cpucore(unsigned int irq, cpumask_var_t default_cpu_mask,
 	cpumask_var_t affinity_cpu_mask);
 #endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET */
 
-#if defined(ARGOS_CPU_SCHEDULER) && defined(ARGOS_RPS_CPU_CTL)
+#if (defined(ARGOS_CPU_SCHEDULER) && defined(ARGOS_RPS_CPU_CTL)) || \
+	defined(ARGOS_NOTIFY_CB)
 int argos_register_notifier_init(struct net_device *net);
 int argos_register_notifier_deinit(void);
 
@@ -434,6 +435,9 @@ static int argos_status_notifier_wifi_cb(struct notifier_block *notifier,
 	unsigned long speed, void *v);
 static int argos_status_notifier_p2p_cb(struct notifier_block *notifier,
 	unsigned long speed, void *v);
+
+/* PCIe interrupt affinity threshold (Mbps) */
+#define PCIE_IRQ_AFFINITY_THRESHOLD 300
 
 /* ARGOS notifer data */
 static struct notifier_block argos_wifi; /* STA */
@@ -447,7 +451,7 @@ typedef struct {
 argos_rps_ctrl argos_rps_ctrl_data;
 #define RPS_TPUT_THRESHOLD		300
 #define DELAY_TO_CLEAR_RPS_CPUS		300
-#endif /* ARGOS_RPS_CPU_CTL && ARGOS_CPU_SCHEDULER */
+#endif /* (ARGOS_RPS_CPU_CTL && ARGOS_CPU_SCHEDULER) || ARGOS_NOTIFY_CB */
 
 #if defined(BT_OVER_SDIO)
 extern void wl_android_set_wifi_on_flag(bool enable);
@@ -3413,6 +3417,9 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 #ifdef ENABLE_IPMCAST_FILTER
 	int ipmcast_l2filter;
 #endif /* ENABLE_IPMCAST_FILTER */
+#ifdef CUSTOM_EVENT_PM_WAKE
+	uint32 pm_awake_thresh = CUSTOM_EVENT_PM_WAKE;
+#endif /* CUSTOM_EVENT_PM_WAKE */
 #endif /* DHD_USE_EARLYSUSPEND */
 #ifdef PASS_ALL_MCAST_PKTS
 	struct dhd_info *dhdinfo;
@@ -3639,6 +3646,16 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 					DHD_ERROR(("failed to set intr_width (%d)\n", ret));
 				}
 #endif /* DYNAMIC_SWOOB_DURATION */
+#ifdef CUSTOM_EVENT_PM_WAKE
+				pm_awake_thresh = CUSTOM_EVENT_PM_WAKE * 4;
+				ret = dhd_iovar(dhd, 0, "const_awake_thresh",
+					(char *)&pm_awake_thresh,
+					sizeof(pm_awake_thresh), NULL, 0, TRUE);
+				if (ret < 0) {
+					DHD_ERROR(("%s set const_awake_thresh failed %d\n",
+						__FUNCTION__, ret));
+				}
+#endif /* CUSTOM_EVENT_PM_WAKE */
 #endif /* DHD_USE_EARLYSUSPEND */
 			} else {
 #ifdef PKT_FILTER_SUPPORT
@@ -3785,6 +3802,15 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 					DHD_ERROR(("failed to clear ipmcast_l2filter ret:%d", ret));
 				}
 #endif /* ENABLE_IPMCAST_FILTER */
+#ifdef CUSTOM_EVENT_PM_WAKE
+				ret = dhd_iovar(dhd, 0, "const_awake_thresh",
+					(char *)&pm_awake_thresh,
+					sizeof(pm_awake_thresh), NULL, 0, TRUE);
+				if (ret < 0) {
+					DHD_ERROR(("%s set const_awake_thresh failed %d\n",
+						__FUNCTION__, ret));
+				}
+#endif /* CUSTOM_EVENT_PM_WAKE */
 #endif /* DHD_USE_EARLYSUSPEND */
 #ifdef DHD_LB_IRQSET
 				dhd_irq_set_affinity(dhd);
@@ -4732,6 +4758,14 @@ __dhd_sendpkt(dhd_pub_t *dhdp, int ifidx, void *pktbuf)
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 20) */
 	}
 #endif /* PCIE_FULL_DONGLE */
+
+	/* Reject if pktlen > MAX_MTU_SZ */
+	if (PKTLEN(dhdp->osh, pktbuf) > MAX_MTU_SZ) {
+		/* free the packet here since the caller won't */
+		dhdp->tx_big_packets++;
+		PKTCFREE(dhdp->osh, pktbuf, TRUE);
+		return BCME_ERROR;
+	}
 
 #ifdef DHD_L2_FILTER
 	/* if dhcp_unicast is enabled, we need to convert the */
@@ -6181,9 +6215,10 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 				bcm_object_trace_opr(skb, BCM_OBJDBG_REMOVE,
 					__FUNCTION__, __LINE__);
 
-#if defined(ARGOS_RPS_CPU_CTL) && defined(ARGOS_CPU_SCHEDULER)
+#if (defined(ARGOS_RPS_CPU_CTL) && defined(ARGOS_CPU_SCHEDULER)) || \
+	defined(ARGOS_NOTIFY_CB)
 		argos_register_notifier_deinit();
-#endif /* ARGOS_RPS_CPU_CTL && ARGOS_CPU_SCHEDULER */
+#endif /* (ARGOS_RPS_CPU_CTL && ARGOS_CPU_SCHEDULER) || ARGOS_NOTIFY_CB */
 #if defined(BCMPCIE) && defined(DHDTCPACK_SUPPRESS)
 		dhd_tcpack_suppress_set(&dhd->pub, TCPACK_SUP_OFF);
 #endif /* BCMPCIE && DHDTCPACK_SUPPRESS */
@@ -8083,9 +8118,10 @@ dhd_stop(struct net_device *net)
 #endif /* DHD_LB_TXP */
 		}
 
-#if defined(ARGOS_RPS_CPU_CTL) && defined(ARGOS_CPU_SCHEDULER)
+#if (defined(ARGOS_RPS_CPU_CTL) && defined(ARGOS_CPU_SCHEDULER)) || \
+	defined(ARGOS_NOTIFY_CB)
 		argos_register_notifier_deinit();
-#endif /* ARGOS_RPS_CPU_CTL && ARGOS_CPU_SCHEDULER */
+#endif /* (ARGOS_RPS_CPU_CTL && ARGOS_CPU_SCHEDULER) || ARGOS_NOTIFY_CB */
 #ifdef DHDTCPACK_SUPPRESS
 		dhd_tcpack_suppress_set(&dhd->pub, TCPACK_SUP_OFF);
 #endif /* DHDTCPACK_SUPPRESS */
@@ -8451,9 +8487,10 @@ dhd_open(struct net_device *net)
 #endif /* CONFIG_IPV6 && IPV6_NDO_SUPPORT */
 		}
 
-#if defined(ARGOS_CPU_SCHEDULER) && defined(ARGOS_RPS_CPU_CTL)
+#if (defined(ARGOS_CPU_SCHEDULER) && defined(ARGOS_RPS_CPU_CTL)) || \
+	defined(ARGOS_NOTIFY_CB)
 		argos_register_notifier_init(net);
-#endif /* ARGOS_CPU_SCHEDULER && ARGOS_RPS_CPU_CTL */
+#endif /* (ARGOS_CPU_SCHEDULER && ARGOS_RPS_CPU_CTL) || ARGOS_NOTIFY_CB  */
 #if defined(BCMPCIE) && defined(DHDTCPACK_SUPPRESS)
 #if defined(SET_RPS_CPUS) || defined(ARGOS_RPS_CPU_CTL)
 		dhd_tcpack_suppress_set(&dhd->pub, TCPACK_SUP_OFF);
@@ -12811,9 +12848,10 @@ void dhd_detach(dhd_pub_t *dhdp)
 			if (ifp->net->reg_state == NETREG_UNINITIALIZED) {
 				free_netdev(ifp->net);
 			} else {
-#if defined(ARGOS_CPU_SCHEDULER) && defined(ARGOS_RPS_CPU_CTL)
+#if (defined(ARGOS_CPU_SCHEDULER) && defined(ARGOS_RPS_CPU_CTL)) || \
+	defined(ARGOS_NOTIFY_CB)
 				argos_register_notifier_deinit();
-#endif /*  ARGOS_CPU_SCHEDULER && ARGOS_RPS_CPU_CTL */
+#endif /*  (ARGOS_CPU_SCHEDULER && ARGOS_RPS_CPU_CTL) || ARGOS_NOTIFY_CB */
 #ifdef SET_RPS_CPUS
 				custom_rps_map_clear(ifp->net->_rx);
 #endif /* SET_RPS_CPUS */
@@ -14347,7 +14385,7 @@ dhd_dev_get_feature_set(struct net_device *dev)
 	feature_set |= WIFI_FEATURE_LINKSTAT;
 #endif /* LINKSTAT_SUPPORT */
 
-#ifdef PNO_SUPPORT
+#if defined(PNO_SUPPORT) && !defined(DISABLE_ANDROID_PNO)
 	if (dhd_is_pno_supported(dhd)) {
 		feature_set |= WIFI_FEATURE_PNO;
 #ifdef GSCAN_SUPPORT
@@ -14355,7 +14393,7 @@ dhd_dev_get_feature_set(struct net_device *dev)
 		feature_set |= WIFI_FEATURE_HAL_EPNO;
 #endif /* GSCAN_SUPPORT */
 	}
-#endif /* PNO_SUPPORT */
+#endif /* PNO_SUPPORT && !DISABLE_ANDROID_PNO */
 #ifdef RSSI_MONITOR_SUPPORT
 	if (FW_SUPPORTED(dhd, rssi_mon)) {
 		feature_set |= WIFI_FEATURE_RSSI_MONITOR;
@@ -15937,6 +15975,17 @@ void dhd_get_customized_country_code(struct net_device *dev, char *country_iso_c
 		get_customized_country_code(dhd->adapter, country_iso_code, cspec);
 #endif /* CUSTOM_COUNTRY_CODE */
 	}
+#if defined(DHD_BLOB_EXISTENCE_CHECK) && !defined(CUSTOM_COUNTRY_CODE)
+	else {
+		/* Replace the ccode to XZ if ccode is undefined country */
+		if (strncmp(country_iso_code, "", WLC_CNTRY_BUF_SZ) == 0) {
+			strlcpy(country_iso_code, "XZ", WLC_CNTRY_BUF_SZ);
+			strlcpy(cspec->country_abbrev, country_iso_code, WLC_CNTRY_BUF_SZ);
+			strlcpy(cspec->ccode, country_iso_code, WLC_CNTRY_BUF_SZ);
+			DHD_ERROR(("%s: ccode change to %s\n", __FUNCTION__, country_iso_code));
+		}
+	}
+#endif /* DHD_BLOB_EXISTENCE_CHECK && !CUSTOM_COUNTRY_CODE */
 
 #ifdef KEEP_JP_REGREV
 	if (strncmp(country_iso_code, "JP", 3) == 0) {
@@ -18469,7 +18518,9 @@ dhd_os_socram_dump(struct net_device *dev, uint32 *dump_size)
 			__FUNCTION__, dhdp->busstate, dhdp->dhd_bus_busy_state));
 		return BCME_ERROR;
 	}
-
+#ifdef DHD_PCIE_RUNTIMEPM
+	dhdpcie_runtime_bus_wake(dhdp, TRUE, __builtin_return_address(0));
+#endif /* DHD_PCIE_RUNTIMEPM */
 	ret = dhd_common_socram_dump(dhdp);
 	if (ret == BCME_OK) {
 		*dump_size = dhdp->soc_ram_length;
@@ -18856,7 +18907,8 @@ void custom_rps_map_clear(struct netdev_rx_queue *queue)
 }
 #endif /* SET_RPS_CPUS || ARGOS_RPS_CPU_CTL */
 
-#if defined(ARGOS_CPU_SCHEDULER) && defined(ARGOS_RPS_CPU_CTL)
+#if (defined(ARGOS_CPU_SCHEDULER) && defined(ARGOS_RPS_CPU_CTL)) || \
+	defined(ARGOS_NOTIFY_CB)
 int
 argos_register_notifier_init(struct net_device *net)
 {
@@ -18934,7 +18986,9 @@ argos_status_notifier_wifi_cb(struct notifier_block *notifier,
 {
 	dhd_info_t *dhd;
 	dhd_pub_t *dhdp;
-
+#if defined(ARGOS_NOTIFY_CB)
+	unsigned int  pcie_irq = 0;
+#endif /* ARGOS_NOTIFY_CB */
 	DHD_INFO(("DHD: %s: speed=%ld\n", __FUNCTION__, speed));
 
 	if (argos_rps_ctrl_data.wlan_primary_netdev == NULL) {
@@ -18950,7 +19004,19 @@ argos_status_notifier_wifi_cb(struct notifier_block *notifier,
 	if (dhdp == NULL || !dhdp->up) {
 		goto exit;
 	}
-
+#if defined(ARGOS_NOTIFY_CB)
+	if (speed > PCIE_IRQ_AFFINITY_THRESHOLD) {
+		if (dhdpcie_get_pcieirq(dhd->pub.bus, &pcie_irq)) {
+			DHD_ERROR(("%s, Failed to get PCIe IRQ\n", __FUNCTION__));
+		} else {
+			DHD_ERROR(("%s, PCIe IRQ:%u set Core %d\n",
+				__FUNCTION__, pcie_irq, PCIE_IRQ_CPU_CORE));
+			irq_set_affinity(pcie_irq, cpumask_of(PCIE_IRQ_CPU_CORE));
+		}
+	} else {
+		dhd_irq_set_affinity(dhdp);
+	}
+#endif /* ARGOS_NOTIFY_CB */
 	/* Check if reported TPut value is more than threshold value */
 	if (speed > RPS_TPUT_THRESHOLD) {
 		if (argos_rps_ctrl_data.argos_rps_cpus_enabled == 0) {
@@ -19023,7 +19089,7 @@ argos_status_notifier_p2p_cb(struct notifier_block *notifier,
 	DHD_INFO(("DHD: %s: speed=%ld\n", __FUNCTION__, speed));
 	return argos_status_notifier_wifi_cb(notifier, speed, v);
 }
-#endif /* ARGOS_CPU_SCHEDULER && ARGOS_RPS_CPU_CTL */
+#endif /* (ARGOS_CPU_SCHEDULER && ARGOS_RPS_CPU_CTL) || ARGOS_NOTIFY_CB */
 
 #ifdef DHD_DEBUG_PAGEALLOC
 

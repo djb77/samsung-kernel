@@ -139,7 +139,11 @@ static void kbase_mem_pool_sync_page(struct kbase_mem_pool *pool,
 		struct page *p)
 {
 	struct device *dev = pool->kbdev->dev;
-	dma_sync_single_for_device(dev, kbase_dma_addr(p),
+	/* MALI_SEC_INTEGRATION */
+	dma_addr_t dma_addr = kbase_dma_addr(p);
+	if (WARN(!dma_addr, "Page structure is NULL pointer on %s", __func__))
+		return;
+	dma_sync_single_for_device(dev, dma_addr,
 			(PAGE_SIZE << pool->order), DMA_BIDIRECTIONAL);
 }
 

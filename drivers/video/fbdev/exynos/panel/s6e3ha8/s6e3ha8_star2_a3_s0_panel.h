@@ -1934,7 +1934,8 @@ static DEFINE_STATIC_PACKET(star2_a3_s0_grayspot_off_03, DSI_PKT_TYPE_WR, STAR2_
 
 static DEFINE_PANEL_MDELAY(star2_a3_s0_wait_5msec, 5);
 static DEFINE_PANEL_MDELAY(star2_a3_s0_wait_sleep_out, 10);
-static DEFINE_PANEL_MDELAY(star2_a3_s0_wait_sleep_in, 120);
+static DEFINE_PANEL_MDELAY(star2_a3_s0_wait_afc_off, 20);
+static DEFINE_PANEL_MDELAY(star2_a3_s0_wait_sleep_in, 100);
 static DEFINE_PANEL_UDELAY(star2_a3_s0_wait_1_frame_in_60hz, 16700);
 static DEFINE_PANEL_UDELAY(star2_a3_s0_wait_1_frame_in_30hz, 33400);
 static DEFINE_PANEL_MDELAY(star2_a3_s0_wait_100msec, 100);
@@ -2115,6 +2116,10 @@ static void *star2_a3_s0_display_off_cmdtbl[] = {
 };
 
 static void *star2_a3_s0_exit_cmdtbl[] = {
+#ifdef CONFIG_SUPPORT_AFC
+	&SEQINFO(star2_a3_s0_mdnie_seqtbl[MDNIE_AFC_OFF_SEQ]),
+	&DLYINFO(star2_a3_s0_wait_afc_off),
+#endif
 	&KEYINFO(star2_a3_s0_level1_key_enable),
 #ifdef CONFIG_DISPLAY_USE_INFO
 	&KEYINFO(star2_a3_s0_level2_key_enable),

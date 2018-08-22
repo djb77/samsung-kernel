@@ -66,6 +66,8 @@ enum dpui_key {
 	DPUI_KEY_MAID_DATE,	/* panel manufacture date */
 	DPUI_KEY_DISP_MODEL,	/* panel model name */
 	DPUI_KEY_CHIPID,	/* display driver-ic chip id */
+	DPUI_KEY_CELLID,	/* panel cell id */
+	DPUI_KEY_OCTAID,	/* panel octa id */
 	DPUI_KEY_PNDSIE,	/* panel dsi error count */
 	DPUI_KEY_PNELVDE,	/* panel ELVDD error count */
 	DPUI_KEY_PNVLI1E,	/* panel VLIN1 error count */

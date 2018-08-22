@@ -44,7 +44,7 @@ struct rational {
 #define CAMERA2_MAX_AVAILABLE_MODE		21
 #define CAMERA2_MAX_FACES			16
 #define CAMERA2_MAX_VENDER_LENGTH		400
-#define CAMERA2_MAX_IPC_VENDER_LENGTH		928
+#define CAMERA2_MAX_IPC_VENDER_LENGTH		1056
 #define CAMERA2_MAX_PDAF_MULTIROI_COLUMN	13
 #define CAMERA2_MAX_PDAF_MULTIROI_ROW		9
 #define CAMERA2_MAX_UCTL_VENDER_LENGTH		32
@@ -790,6 +790,8 @@ enum aa_scene_mode {
 	AA_SCENE_MODE_REMOSAIC,
 	AA_SCENE_MODE_SUPER_SLOWMOTION,
 	AA_SCENE_MODE_HYPERLAPSE,
+	AA_SCENE_MODE_FACTORY_LN2,
+	AA_SCENE_MODE_FACTORY_LN4,
 };
 
 enum aa_effect_mode {
@@ -1741,6 +1743,37 @@ struct camera2_dcp_uctl {
 	struct camera2_dcp_rgb_gamma_lut tele_gamma_LUT;
 };
 
+enum camera2_scene_index {
+	SCENE_INDEX_INVALID		= 0,
+	SCENE_INDEX_FOOD		= 1,
+	SCENE_INDEX_TEXT		= 2,
+	SCENE_INDEX_PERSON		= 3,
+	SCENE_INDEX_FLOWER		= 4,
+	SCENE_INDEX_TREE		= 5,
+	SCENE_INDEX_MOUNTAIN		= 6,
+	SCENE_INDEX_MOUNTAIN_GREEN	= 7,
+	SCENE_INDEX_MOUNTAIN_FALL	= 8,
+	SCENE_INDEX_ANIMAL		= 9,
+	SCENE_INDEX_SUNSET_SUNRISE	= 10,
+	SCENE_INDEX_BEACH		= 11,
+	SCENE_INDEX_SKY			= 12,
+	SCENE_INDEX_SNOW		= 13,
+	SCENE_INDEX_NIGHTVIEW		= 14,
+	SCENE_INDEX_WATERFALL		= 15,
+	SCENE_INDEX_BIRD		= 16,
+	SCENE_INDEX_CITYSTREET		= 17,
+	SCENE_INDEX_HOMEINDOOR		= 18,
+	SCENE_INDEX_WATERSIDE		= 19
+};
+
+struct camera2_scene_detect_uctl
+{
+	uint64_t			timeStamp;
+	enum camera2_scene_index	scene_index;
+	uint32_t			confidence_score;
+	uint32_t			object_roi[4];  /* left, top, right, bottom */
+};
+
 enum camera_vt_mode {
 	VT_MODE_OFF = 0,
 	VT_MODE_1,   /* qcif ~ qvga */
@@ -1810,6 +1843,7 @@ struct camera2_uctl {
 
 	/** ispfw specific control(user-defined) of dcp. */
 	struct camera2_dcp_uctl         dcpUd;
+	struct camera2_scene_detect_uctl	  sceneDetectInfoUd;
 
 	enum camera_vt_mode		vtMode;
 	float				zoomRatio;

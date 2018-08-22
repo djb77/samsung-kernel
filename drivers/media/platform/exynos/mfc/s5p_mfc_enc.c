@@ -761,6 +761,9 @@ static int mfc_enc_ext_info(struct s5p_mfc_ctx *ctx)
 	if (FW_HAS_RATIO_INTRA_CTRL(dev))
 		val |= ENC_SET_RATIO_OF_INTRA;
 
+	if (FW_HAS_ENC_COLOR_ASPECT(dev))
+		val |= ENC_SET_COLOR_ASPECT;
+
 	return val;
 }
 
@@ -1577,6 +1580,18 @@ static int mfc_enc_set_param(struct s5p_mfc_ctx *ctx, struct v4l2_control *ctrl)
 		break;
 	case V4L2_CID_MPEG_VIDEO_RATIO_OF_INTRA:
 		p->ratio_intra = ctrl->value;
+		break;
+	case V4L2_CID_MPEG_VIDEO_FULL_RANGE_FLAG:
+		p->color_range = ctrl->value;
+		break;
+	case V4L2_CID_MPEG_VIDEO_COLOUR_PRIMARIES:
+		p->colour_primaries = ctrl->value;
+		break;
+	case V4L2_CID_MPEG_VIDEO_TRANSFER_CHARACTERISTICS:
+		p->transfer_characteristics = ctrl->value;
+		break;
+	case V4L2_CID_MPEG_VIDEO_MATRIX_COEFFICIENTS:
+		p->matrix_coefficients = ctrl->value;
 		break;
 	default:
 		mfc_err_ctx("Invalid control: 0x%08x\n", ctrl->id);

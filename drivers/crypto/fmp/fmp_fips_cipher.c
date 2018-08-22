@@ -16,40 +16,22 @@
 
 #include "fmp_fips_info.h"
 
-int fmp_cipher_init(struct exynos_fmp *fmp)
-{
-	struct device *dev;
-	struct fmp_crypto_setting *crypto;
-
-	if (!fmp || !fmp->fips_data)
-		return -EINVAL;
-
-	dev = fmp->dev;
-	crypto = kzalloc(sizeof(struct fmp_crypto_setting), GFP_KERNEL);
-	if (!crypto) {
-		dev_err(dev, "%s: Fail to alloc for fmp crypto.\n", __func__);
-		return -ENOMEM;
-	}
-
-	fmp->fips_data->crypto = crypto;
-	return 0;
-}
-
-int fmp_cipher_set_key(struct exynos_fmp *fmp, uint32_t mode,
-					uint8_t *key, uint32_t key_len)
+int fmp_cipher_set_key(struct exynos_fmp *fmp,
+			struct fmp_fips_data *fdata,
+			uint32_t mode, uint8_t *key, uint32_t key_len)
 {
 	int ret = 0;
 	struct fmp_crypto_setting *crypto;
 	struct device *dev = fmp->dev;
 
-	if (!fmp->fips_data) {
+	if (!fdata) {
 		dev_err(dev, "%s: fmp test data context is not allocated\n",
 				__func__);
 		ret = -ENOMEM;
 		goto err;
 	}
 
-	crypto = fmp->fips_data->crypto;
+	crypto = &fdata->crypto;
 	memset(crypto->key, 0, FMP_MAX_KEY_SIZE);
 	if (mode == CBC_MODE) {
 		crypto->algo_mode = EXYNOS_FMP_ALGO_MODE_AES_CBC;
@@ -96,21 +78,22 @@ err:
 	return ret;
 }
 
-int fmp_cipher_set_iv(struct exynos_fmp *fmp, uint32_t mode,
-					uint8_t *iv, uint32_t iv_len)
+int fmp_cipher_set_iv(struct exynos_fmp *fmp,
+			struct fmp_fips_data *fdata,
+			uint32_t mode, uint8_t *iv, uint32_t iv_len)
 {
 	int ret = 0;
 	struct fmp_crypto_setting *crypto;
 	struct device *dev = fmp->dev;
 
-	if (!fmp->fips_data) {
+	if (!fdata) {
 		dev_err(dev, "%s: fmp test data context is not allocated\n",
 				__func__);
 		ret = -ENOMEM;
 		goto err;
 	}
 
-	crypto = fmp->fips_data->crypto;
+	crypto = &fdata->crypto;
 	if (iv_len != FMP_IV_SIZE_16) {
 		dev_err(dev, "%s: Invalid FMP iv size(%d)\n", __func__, iv_len);
 		ret = -EINVAL;
@@ -131,31 +114,41 @@ err:
 	return ret;
 }
 
-int fmp_cipher_run(struct exynos_fmp *fmp, uint32_t mode, uint8_t *data,
-			uint32_t len, uint32_t write)
+int fmp_cipher_run(struct exynos_fmp *fmp,
+			struct fmp_fips_data *fdata, uint32_t mode,
+			uint8_t *data, uint32_t len, uint32_t write)
 {
 	int ret = 0;
 	struct device *dev = fmp->dev;
 	static struct buffer_head *bh;
-	struct fmp_fips_data *fips_data = fmp->fips_data;
+	struct fmp_crypto_setting *crypto;
 
-	bh = __getblk(fips_data->bdev, fips_data->sector, FMP_BLK_SIZE);
+	if (!fdata) {
+		dev_err(dev, "%s: fmp test data context is not allocated\n",
+				__func__);
+		return -ENOMEM;
+	}
+
+	crypto = &fdata->crypto;
+	bh = __getblk(fdata->bdev, fdata->sector, FMP_BLK_SIZE);
 	if (!bh) {
-		dev_err(dev, "%s: Fail to get block from bdev\n", __func__);
+		dev_err(dev, "%s: Fail to get block from bdev:%p sector:%d devt:%d\n",
+			__func__, fdata->bdev, (int)fdata->sector, fdata->devt);
 		return -ENODEV;
 	}
 
 	if (mode == CBC_MODE)
-		fips_data->crypto->algo_mode = EXYNOS_FMP_ALGO_MODE_AES_CBC;
+		crypto->algo_mode = EXYNOS_FMP_ALGO_MODE_AES_CBC;
 	else if (mode == XTS_MODE)
-		fips_data->crypto->algo_mode = EXYNOS_FMP_ALGO_MODE_AES_XTS;
+		crypto->algo_mode = EXYNOS_FMP_ALGO_MODE_AES_XTS;
 	else if (mode == BYPASS_MODE)
-		fips_data->crypto->algo_mode = EXYNOS_FMP_BYPASS_MODE;
+		crypto->algo_mode = EXYNOS_FMP_BYPASS_MODE;
 	else {
 		dev_err(dev, "%s: Invalid algo mode(%d)\n", __func__, mode);
 		return -EINVAL;
 	}
 
+	fmp->fips_data = fdata;
 	fmp->test_bh = bh;
 	get_bh(bh);
 	if (write == WRITE_MODE) {
@@ -185,9 +178,4 @@ out:
 	put_bh(bh);
 
 	return ret;
-}
-
-void fmp_cipher_exit(struct exynos_fmp *fmp)
-{
-	kfree(fmp->fips_data->crypto);
 }

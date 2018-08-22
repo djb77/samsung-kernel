@@ -52,7 +52,7 @@ struct ext4_attr {
 static ssize_t sec_fs_stat_show(struct ext4_attr *a,
 				struct ext4_sb_info *sbi, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%s:%llu,%s:%llu,%s:%u,%s:%llu,%s:%u\n",
+	return snprintf(buf, PAGE_SIZE, "\"%s\":\"%llu\",\"%s\":\"%llu\",\"%s\":\"%u\",\"%s\":\"%llu\",\"%s\":\"%u\"\n",
 		"F_BLOCKS",
 		(unsigned long long)ext4_blocks_count(sbi->s_es),
 		"F_BFREE",

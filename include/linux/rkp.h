@@ -98,11 +98,10 @@ struct rkp_init { //copy from uh (app/rkp/rkp.h)
 };
 
 #ifdef CONFIG_RKP_KDP
-typedef struct kdp_init
-{
+typedef struct kdp_init_struct {
 	u32 credSize;
-	u32 cred_task;
-	u32 mm_task;
+	u32 sp_size;
+	u32 pgd_mm;
 	u32 uid_cred;
 	u32 euid_cred;
 	u32 gid_cred;
@@ -111,19 +110,40 @@ typedef struct kdp_init
 	u32 bp_task_cred;
 	u32 type_cred;
 	u32 security_cred;
+	u32 usage_cred;
+	u32 cred_task;
+	u32 mm_task;
 	u32 pid_task;
 	u32 rp_task;
 	u32 comm_task;
-	u32 pgd_mm;
-	u32 usage_cred;
-	u32 task_threadinfo;
-	u32 sp_size;
 	u32 bp_cred_secptr;
+	u32 task_threadinfo;
 } kdp_init_t;
 #endif  /* CONFIG_RKP_KDP */
 
 
 
+
+#ifdef CONFIG_RKP_NS_PROT
+typedef struct ns_param {
+	u32 ns_buff_size;
+	u32 ns_size;
+	u32 bp_offset;
+	u32 sb_offset;
+	u32 flag_offset;
+	u32 data_offset;
+}ns_param_t;
+
+#define rkp_ns_fill_params(nsparam,buff_size,size,bp,sb,flag,data)	\
+do {						\
+	nsparam.ns_buff_size = (u64)buff_size;		\
+	nsparam.ns_size  = (u64)size;		\
+	nsparam.bp_offset = (u64)bp;		\
+	nsparam.sb_offset = (u64)sb;		\
+	nsparam.flag_offset = (u64)flag;		\
+	nsparam.data_offset = (u64)data;		\
+} while(0)
+#endif
 
 #define rkp_is_pg_protected(va)	rkp_is_protected(va, __pa(va), (u64 *)rkp_pgt_bitmap, 1)
 #define rkp_is_pg_dbl_mapped(pa) rkp_is_protected((u64)__va(pa), pa, (u64 *)rkp_map_bitmap, 0)

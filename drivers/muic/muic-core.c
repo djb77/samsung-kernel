@@ -221,7 +221,7 @@ static int muic_handle_cable_data_notification(struct notifier_block *nb,
 		break;
 #if defined(CONFIG_USB_HW_PARAM)
 	case ATTACHED_DEV_TIMEOUT_OPEN_MUIC:
-		if (action == MUIC_NOTIFY_CMD_ATTACH && o_notify)
+		if (action == MUIC_NOTIFY_CMD_DETACH && o_notify)
 			inc_hw_param(o_notify, USB_MUIC_DCD_TIMEOUT_COUNT);
 		break;
 #endif
@@ -341,6 +341,16 @@ static void muic_init_switch_dev_cb(void)
 
 static void muic_cleanup_switch_dev_cb(void)
 {
+#ifdef CONFIG_ANDROID_SWITCH
+#ifdef CONFIG_SEC_FACTORY
+	/* for cable type event */
+	switch_dev_unregister(&switch_attached_muic_cable);
+#endif
+	/* for UART event */
+	switch_dev_unregister(&switch_uart3);
+	/* for DockObserver */
+	switch_dev_unregister(&switch_dock);
+#endif /* CONFIG_ANDROID_SWITCH */
 #if defined(CONFIG_MUIC_NOTIFIER)
 	muic_notifier_unregister(&dock_notifier_block);
 	muic_notifier_unregister(&cable_data_notifier_block);

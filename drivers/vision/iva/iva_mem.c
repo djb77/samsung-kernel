@@ -29,7 +29,12 @@
 #define CALL_SHOW_PROC_MAP_LIST
 
 //#define ENABLE_MAP_ATTACHMENT
-#undef ENABLE_CACHE_FLUSH_ALL
+#define ENABLE_CACHE_FLUSH_ALL
+
+/* should be same as iva_ext_ram.h in user space */
+#define IVA_MEM_ALLOC_TYPE_FD_SHIFT	(24)
+#define IVA_MEM_GET_SHARED_FD(fd) \
+	(fd & ~(1 << IVA_MEM_ALLOC_TYPE_FD_SHIFT))
 
 static void __iva_mem_map_destroy(struct kref *kref)
 {
@@ -176,7 +181,7 @@ struct iva_mem_map *iva_mem_find_proc_map_with_fd(struct iva_proc *proc,
 	return iva_map_node;
 }
 
-struct iva_mem_map *iva_mem_ion_alloc(struct iva_proc *proc,
+static struct iva_mem_map *iva_mem_ion_alloc(struct iva_proc *proc,
 			uint32_t size, uint32_t align, uint32_t cacheflag)
 {
 #define ZONE_BIT(zone)		(1 << zone)
@@ -187,7 +192,6 @@ struct iva_mem_map *iva_mem_ion_alloc(struct iva_proc *proc,
 	struct ion_handle	*handle;
 	struct iva_mem_map	*iva_map_node;
 	struct dma_buf		*dmabuf;
-	int			lock_acquired;
 
 	iva_map_node = iva_mem_alloc_map_node(iva);
 	if (!iva_map_node) {
@@ -243,11 +247,8 @@ struct iva_mem_map *iva_mem_ion_alloc(struct iva_proc *proc,
 	dev_dbg(dev, "dma_buf(%p) with buf fd(%d, %ld)\n",
 		dmabuf,	ion_shared_fd, file_count(dmabuf->file));
 
-	lock_acquired = mutex_trylock(&proc->mem_map_lock);
 	hash_add(proc->h_mem_map, &iva_map_node->h_node, ion_shared_fd);
 	proc->mem_map_nr++;
-	if (lock_acquired)
-		mutex_unlock(&proc->mem_map_lock);
 
 	return iva_map_node;
 
@@ -267,14 +268,13 @@ err_alloc_ion:
 }
 
 
-int iva_mem_ion_free(struct iva_proc *proc, struct iva_mem_map *iva_map_node)
+static int iva_mem_ion_free(struct iva_proc *proc, struct iva_mem_map *iva_map_node)
 {
 	int			buf_fd = iva_map_node->shared_fd;
 	struct iva_dev_data	*iva = proc->iva_data;
 	struct ion_client	*client = iva->ion_client;
 	struct device		*dev = iva->dev;
 	int			ref_cnt;
-	int			lock_acquired;
 
 	/* in case that ion mem was allocated outside */
 	if (!ALLOC_INSIDE(iva_map_node->flags)) {
@@ -298,11 +298,8 @@ int iva_mem_ion_free(struct iva_proc *proc, struct iva_mem_map *iva_map_node)
 	/* close() should be done in user space */
 	ion_free(client, iva_map_node->handle); /* handle-1, ion_buffer-1 */
 
-	lock_acquired = mutex_trylock(&proc->mem_map_lock);
 	hash_del(&iva_map_node->h_node);
 	proc->mem_map_nr--;
-	if (lock_acquired)
-		mutex_unlock(&proc->mem_map_lock);
 
 	iva_mem_free_map_node(iva, iva_map_node);
 
@@ -524,7 +521,6 @@ static struct iva_mem_map *iva_mem_import_ion_buf(struct iva_proc *proc,
 	struct iva_mem_map	*iva_map_node;
 	struct dma_buf		*dmabuf;
 	struct ion_handle	*handle;
-	int			lock_acquired;
 
 	iva_map_node = iva_mem_alloc_map_node(iva);
 	if (!iva_map_node) {
@@ -533,7 +529,7 @@ static struct iva_mem_map *iva_mem_import_ion_buf(struct iva_proc *proc,
 		return NULL;
 	}
 
-	dmabuf = dma_buf_get(import_fd);
+	dmabuf = dma_buf_get(IVA_MEM_GET_SHARED_FD(import_fd));
 	if (IS_ERR_OR_NULL(dmabuf)) {
 		dev_err(dev, "%s() fail to get dmabuf from fd(%d)\n",
 			__func__, import_fd);
@@ -542,7 +538,7 @@ static struct iva_mem_map *iva_mem_import_ion_buf(struct iva_proc *proc,
 
 	/* create handle in space of our client */
 #if defined(CONFIG_SOC_EXYNOS8895)
-	handle = ion_import_dma_buf(iva->ion_client, import_fd);
+	handle = ion_import_dma_buf(iva->ion_client, IVA_MEM_GET_SHARED_FD(import_fd));
 #elif defined(CONFIG_SOC_EXYNOS9810)
 	handle = ion_import_dma_buf(iva->ion_client, dmabuf);
 #endif
@@ -567,11 +563,9 @@ static struct iva_mem_map *iva_mem_import_ion_buf(struct iva_proc *proc,
 	atomic_set(&iva_map_node->map_ref.refcount, 0);
 	iva_map_node->dev	= dev;
 
-	lock_acquired = mutex_trylock(&proc->mem_map_lock);
+	/* lock is held */
 	hash_add(proc->h_mem_map, &iva_map_node->h_node, import_fd);
 	proc->mem_map_nr++;
-	if (lock_acquired)
-		mutex_unlock(&proc->mem_map_lock);
 
 	return iva_map_node;
 
@@ -588,7 +582,6 @@ static void iva_mem_cancel_imported_ion_buf(struct iva_proc *proc,
 	struct iva_dev_data	*iva = proc->iva_data;
 	struct device		*dev = iva->dev;
 	int			ref_cnt;
-	int			lock_acquired;
 
 	ref_cnt = iva_mem_map_read_refcnt(iva_map_node);
 	if (ref_cnt) {
@@ -606,11 +599,8 @@ static void iva_mem_cancel_imported_ion_buf(struct iva_proc *proc,
 
 	ion_free(iva->ion_client, iva_map_node->handle);/* destroy handle */
 
-	lock_acquired = mutex_trylock(&proc->mem_map_lock);
 	hash_del(&iva_map_node->h_node);
 	proc->mem_map_nr--;
-	if (lock_acquired)
-		mutex_unlock(&proc->mem_map_lock);
 
 	iva_mem_free_map_node(iva, iva_map_node);
 }
@@ -623,16 +613,18 @@ static int iva_mem_ion_alloc_param(struct iva_proc *proc,
 	struct device		*dev = iva->dev;
 	struct iva_mem_map	*iva_map_node;
 
+	mutex_lock(&proc->mem_map_lock);
 	iva_map_node = iva_mem_ion_alloc(proc,
 			ion_param->size, ion_param->align, ion_param->cacheflag);
 	if (!iva_map_node) {
 		dev_err(dev, "%s() fail to alloc ion/ion fd\n", __func__);
+		mutex_unlock(&proc->mem_map_lock);
 		return -ENOMEM;
 	}
 
 	ion_param->shared_fd	= iva_map_node->shared_fd;
 	ion_param->iova		= (unsigned int) iva_map_node->io_va;
-
+	mutex_unlock(&proc->mem_map_lock);
 	return 0;
 
 }
@@ -674,12 +666,17 @@ static void iva_mem_force_to_free_proc_mapped_list(struct iva_proc *proc)
 #ifdef CALL_SHOW_PROC_MAP_LIST
 	struct device		*dev = iva->dev;
 	int			j = 0;
+
+	mutex_lock(&proc->mem_map_lock);
 #else
 	int			ret;
 
+	mutex_lock(&proc->mem_map_lock);
 	ret = iva_mem_show_proc_mapped_list_nolock(proc);
-	if (ret == 0)	/* nothing to do */
+	if (ret == 0) {	/* nothing to do */
+		mutex_unlock(&proc->mem_map_lock);
 		return;
+	}
 #endif
 
 	hash_for_each_safe(proc->h_mem_map, i, tmp, iva_map_node, h_node) {
@@ -710,6 +707,8 @@ static void iva_mem_force_to_free_proc_mapped_list(struct iva_proc *proc)
 		j++;
 	#endif
 	}
+
+	mutex_unlock(&proc->mem_map_lock);
 }
 
 static int iva_mem_get_ion_iova_param(struct iva_proc *proc,

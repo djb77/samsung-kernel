@@ -235,6 +235,7 @@ struct etspi_data {
 	struct wake_lock fp_spi_lock;
 #endif
 #endif
+	struct wake_lock fp_signal_lock;
 	bool tz_mode;
 	int detect_period;
 	int detect_threshold;

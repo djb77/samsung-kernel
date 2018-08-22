@@ -325,6 +325,7 @@ struct exynos_context {
 	int trace_level;
 
 	int fault_count;
+	bool bigdata_uevent_is_sent;
 	int gpu_exception_count[GPU_EXCEPTION_LIST_END];
 	int balance_retry_count[BMAX_RETRY_CNT];
 	gpu_attribute *attrib;

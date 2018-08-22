@@ -1263,11 +1263,10 @@ vra_pass:
 #endif
 
 static int fimc_is_subdev_internal_alloc_buffer(struct fimc_is_subdev *subdev,
-	struct fimc_is_mem *mem)
+	struct fimc_is_mem *mem, int buffer_size)
 {
 	int ret = 0;
 	int i;
-	int buffer_size = 0;
 	struct fimc_is_frame *frame;
 
 	FIMC_BUG(!subdev);
@@ -1277,15 +1276,18 @@ static int fimc_is_subdev_internal_alloc_buffer(struct fimc_is_subdev *subdev,
 		return -EINVAL;
 	}
 
+	/* W/A: This is for one time alloc as max size. */
+	if (subdev->internal_framemgr.num_frames > 0) {
+		info("%s: already internal buffer alloced", __func__);
+		goto p_err;
+	}
+
+	if (buffer_size <= 0) {
+		err("wrong internal subdev buffer size(%d)", buffer_size);
+		return -EINVAL;
+	}
+
 	for (i = 0; i < subdev->buffer_num; i++) {
-		/* TODO : buffer alloc format change */
-		buffer_size = ALIGN(subdev->output.width * 2, 16) * subdev->output.height;
-
-		if (buffer_size <= 0) {
-			err("wrong internal subdev buffer size(%d)", buffer_size);
-			return -EINVAL;
-		}
-
 		subdev->pb_subdev[i] = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, buffer_size, 16);
 		if (IS_ERR_OR_NULL(subdev->pb_subdev[i])) {
 			err("failed to allocate buffer for internal subdev");
@@ -1342,14 +1344,28 @@ static int fimc_is_sensor_subdev_internal_alloc_buffer(struct fimc_is_device_sen
 {
 	int ret = 0;
 	int i;
+	int buffer_size = 0;
+	int max_width = 0;
+	int max_height = 0;
 	struct fimc_is_device_csi *csi;
 	struct fimc_is_subdev *dma_subdev;
 	struct fimc_is_mem *mem = &device->resourcemgr->mem;
+	struct fimc_is_module_enum *module = NULL;
 
 	csi = (struct fimc_is_device_csi *)v4l2_get_subdevdata(device->subdev_csi);
 	if (!csi) {
 		err("csi is NULL");
 		return -EINVAL;
+	}
+
+	module = (struct fimc_is_module_enum *)v4l2_get_subdevdata(device->subdev_module);
+
+	/* This is to calculate max buffer size */
+	for (i = 0; i < VC_BUF_DATA_TYPE_MAX; i++) {
+		max_width = (module->vc_max_size[i]).width;
+		max_height = (module->vc_max_size[i]).height;
+		if (buffer_size < (ALIGN(max_width * 2, 16) * max_height))
+			buffer_size = (ALIGN(max_width * 2, 16) * max_height);
 	}
 
 	for (i = CSI_VIRTUAL_CH_1; i < CSI_VIRTUAL_CH_MAX; i++) {
@@ -1367,19 +1383,7 @@ static int fimc_is_sensor_subdev_internal_alloc_buffer(struct fimc_is_device_sen
 		if (!test_bit(FIMC_IS_SUBDEV_INTERNAL_S_FMT, &dma_subdev->state))
 			continue;
 
-		if (dma_subdev->internal_framemgr.num_frames > 0) {
-			mwarn("%s: [VC%d] already internal buffer alloced, re-alloc after free",
-				device, __func__, i);
-
-			ret = fimc_is_subdev_internal_free_buffer(dma_subdev);
-			if (ret) {
-				merr("subdev internal free buffer is fail", device);
-				ret = -EINVAL;
-				goto p_err;
-			}
-		}
-
-		ret = fimc_is_subdev_internal_alloc_buffer(dma_subdev, mem);
+		ret = fimc_is_subdev_internal_alloc_buffer(dma_subdev, mem, buffer_size);
 		if (ret) {
 			merr("subdev internal alloc buffer is fail", device);
 			ret = -EINVAL;
@@ -1408,7 +1412,6 @@ static int fimc_is_sensor_subdev_internal_free_buffer(struct fimc_is_device_sens
 		mwarn("sensor is not stopped, skip internal buffer free", device);
 		goto p_err;
 	}
-
 	for (i = CSI_VIRTUAL_CH_1; i < CSI_VIRTUAL_CH_MAX; i++) {
 		dma_subdev = csi->dma_subdev[i];
 
@@ -1421,19 +1424,13 @@ static int fimc_is_sensor_subdev_internal_free_buffer(struct fimc_is_device_sens
 		if (!test_bit(FIMC_IS_SUBDEV_OPEN, &dma_subdev->state))
 			continue;
 
-		if (!test_bit(FIMC_IS_SUBDEV_INTERNAL_S_FMT, &dma_subdev->state))
-			continue;
-
-		if (dma_subdev->internal_framemgr.num_frames == 0) {
-			mwarn("[VC%d] already free internal buffer", device, i);
-			continue;
-		}
-
-		ret = fimc_is_subdev_internal_free_buffer(dma_subdev);
-		if (ret) {
-			merr("subdev internal free buffer is fail", device);
-			ret = -EINVAL;
-			goto p_err;
+		if (dma_subdev->internal_framemgr.num_frames > 0) {
+			ret = fimc_is_subdev_internal_free_buffer(dma_subdev);
+			if (ret) {
+				merr("subdev internal free buffer is fail", device);
+				ret = -EINVAL;
+				goto p_err;
+			}
 		}
 
 		//csi->dma_subdev[i] = NULL;
@@ -1650,11 +1647,6 @@ int fimc_is_subdev_internal_stop(void *device, enum fimc_is_device_type type)
 			err("sensor internal stop fail(%d)", ret);
 			break;
 		}
-
-		ret = fimc_is_sensor_subdev_internal_free_buffer(sensor);
-		if (ret)
-			err("sensor internal buffer free fail(%d)", ret);
-
 		break;
 	case FIMC_IS_DEVICE_ISCHAIN:
 		ischain = (struct fimc_is_device_ischain *)device;

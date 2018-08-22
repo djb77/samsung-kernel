@@ -846,7 +846,9 @@ static void csi_err_handle(struct fimc_is_device_csi *csi)
 #endif
 
 		/* CLK dump */
-		schedule_work(&core->wq_data_print_clk);
+		if (device->position != SENSOR_POSITION_SECURE) {
+			schedule_work(&core->wq_data_print_clk);
+		}
 	}
 }
 
@@ -955,7 +957,6 @@ static void tasklet_csis_line(unsigned long data)
 {
 	struct fimc_is_device_csi *csi;
 	struct v4l2_subdev *subdev;
-	u32 line_fcount;
 
 	subdev = (struct v4l2_subdev *)data;
 	csi = v4l2_get_subdevdata(subdev);
@@ -964,12 +965,10 @@ static void tasklet_csis_line(unsigned long data)
 		BUG();
 	}
 
-	line_fcount = atomic_read(&csi->fcount) + 1;
-
 #ifdef TASKLET_MSG
-	pr_info("L%d(%d)\n", atomic_read(&csi->fcount), line_fcount);
+	pr_info("L%d\n", atomic_read(&csi->fcount));
 #endif
-	v4l2_subdev_notify(subdev, CSIS_NOTIFY_LINE, &line_fcount);
+	v4l2_subdev_notify(subdev, CSIS_NOTIFY_LINE, NULL);
 }
 
 static irqreturn_t fimc_is_isr_csi(int irq, void *data)

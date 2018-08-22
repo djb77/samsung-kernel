@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_common.c 740023 2018-01-10 12:15:20Z $
+ * $Id: dhd_common.c 757032 2018-04-11 08:37:47Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -636,6 +636,8 @@ dhd_dump(dhd_pub_t *dhdp, char *buf, int buflen)
 	            dhdp->rx_readahead_cnt, dhdp->tx_realloc);
 	bcm_bprintf(strbuf, "tx_pktgetfail %lu rx_pktgetfail %lu\n",
 	            dhdp->tx_pktgetfail, dhdp->rx_pktgetfail);
+	bcm_bprintf(strbuf, "tx_big_packets %lu\n",
+	            dhdp->tx_big_packets);
 	bcm_bprintf(strbuf, "\n");
 #ifdef DMAMAP_STATS
 	/* Add DMA MAP info */
@@ -959,8 +961,14 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifidx, wl_ioctl_t *ioc, void *buf, int len)
 			}
 		} else {
 			slen = ioc->len;
-			if (buf != NULL) {
-				val = *(int*)buf;
+			if (buf != NULL && slen != 0) {
+				if (slen >= 4) {
+					val = *(int*)buf;
+				} else if (slen >= 2) {
+					val = *(short*)buf;
+				} else {
+					val = *(char*)buf;
+				}
 				/* Do not dump for WLC_GET_MAGIC and WLC_GET_VERSION */
 				if (ioc->cmd != WLC_GET_MAGIC && ioc->cmd != WLC_GET_VERSION)
 					DHD_IOVAR_MEM(("WLC_IOCTL: cmd: %d, val: %d, len: %d, "
@@ -1418,6 +1426,7 @@ dhd_doiovar(dhd_pub_t *dhd_pub, const bcm_iovar_t *vi, uint32 actionid, const ch
 		dhd_pub->rx_readahead_cnt = 0;
 		dhd_pub->tx_realloc = 0;
 		dhd_pub->wd_dpc_sched = 0;
+		dhd_pub->tx_big_packets = 0;
 		memset(&dhd_pub->dstats, 0, sizeof(dhd_pub->dstats));
 		dhd_bus_clearcounts(dhd_pub);
 #ifdef PROP_TXSTATUS

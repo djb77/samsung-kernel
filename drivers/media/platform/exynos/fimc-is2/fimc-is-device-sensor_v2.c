@@ -136,7 +136,7 @@ int fimc_is_search_sensor_module_with_position(struct fimc_is_device_sensor *dev
 
 	if (mindex >= mmax) {
 		*module = NULL;
-		merr("module(%d) is not found", device, sensor_id);
+		merr("module(%d) is not found, position(%d)", device, sensor_id, position);
 		ret = -EINVAL;
 	}
 
@@ -1252,7 +1252,7 @@ static int fimc_is_sensor_notify_by_dma_end(struct fimc_is_device_sensor *device
 	return ret;
 }
 
-static int fimc_is_sensor_notify_by_line(struct fimc_is_device_sensor *device, void *arg,
+static int fimc_is_sensor_notify_by_line(struct fimc_is_device_sensor *device,
 	unsigned int notification)
 {
 	int ret = 0;
@@ -1261,9 +1261,11 @@ static int fimc_is_sensor_notify_by_line(struct fimc_is_device_sensor *device, v
 	struct fimc_is_frame *frame;
 
 	FIMC_BUG(!device);
-	FIMC_BUG(!arg);
 
-	device->line_fcount = *(u32 *)arg;
+	if (device->line_fcount == 0)
+		device->line_fcount = 1;
+
+	device->line_fcount++;
 
 	group = &device->group_sensor;
 	framemgr = GET_SUBDEV_FRAMEMGR(&group->head->leader);
@@ -1335,7 +1337,7 @@ static void fimc_is_sensor_notify(struct v4l2_subdev *subdev,
 			merr("fimc_is_sensor_notify_by_dma_end is fail(%d)", device, ret);
 		break;
 	case CSIS_NOTIFY_LINE:
-		ret = fimc_is_sensor_notify_by_line(device, arg, notification);
+		ret = fimc_is_sensor_notify_by_line(device, notification);
 		if (ret)
 			merr("fimc_is_sensor_notify_by_line is fail(%d)", device, ret);
 		break;

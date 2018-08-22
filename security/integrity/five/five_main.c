@@ -696,8 +696,10 @@ int five_fork(struct task_struct *task, struct task_struct *child_task)
 
 int five_ptrace(long request, struct task_struct *task)
 {
+#ifdef CONFIG_FIVE_DEBUG
 	pr_info("FIVE: task gpid=%d pid=%d is traced, request=%ld\n",
 		task_pid_nr(task->group_leader), task_pid_nr(task), request);
+#endif
 	return 0;
 }
 

@@ -948,7 +948,7 @@ static void itmon_report_timeout(struct itmon_dev *itmon,
 		/* PAYLOAD[15:8] : USER */
 		user = (payload & GENMASK(15, 8)) >> 8;
 		/* PAYLOAD[0] : Valid or Not valid */
-		valid = payload & BIT(0);
+		valid = payload & (unsigned int)BIT(0);
 		/* PAYLOAD[19:16] : Timeout */
 		timeout = (payload & (unsigned int)(GENMASK(19, 16))) >> 16;
 
@@ -1441,7 +1441,7 @@ static int itmon_search_node(struct itmon_dev *itmon, struct itmon_nodegroup *gr
 			if (node[bit].type == S_NODE && node[bit].tmout_frz_enabled) {
 				val = __raw_readl(node[bit].regs + OFFSET_TMOUT_REG  +
 							REG_TMOUT_BUF_STATUS);
-				freeze = val & GENMASK(1, 0);
+				freeze = val & (unsigned int)GENMASK(1, 0);
 				if (freeze) {
 					if (freeze & BIT(0))
 						itmon_report_timeout(itmon, &node[bit], TRANS_TYPE_WRITE);

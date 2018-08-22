@@ -1330,7 +1330,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	if(rkp_cred_enable &&
 		is_rkp_priv_task() && 
 		invalid_drive(bprm)) {
-		panic("\n Illegal Execution file_name #%s#\n",bprm->filename);
+		//panic("\n Illegal Execution file_name #%s#\n",bprm->filename);
 	}
 #endif /*CONFIG_RKP_NS_PROT*/
 	retval = exec_mmap(bprm->mm);

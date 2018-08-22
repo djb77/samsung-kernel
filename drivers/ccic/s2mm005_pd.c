@@ -296,8 +296,7 @@ void process_pd(void *data, u8 plug_attach_done, u8 *pdic_attach, MSG_IRQ_STATUS
 				/* 5V/0.5A RP charger is detected by CCIC */
 				pd_noti.sink_status.rp_currentlvl = RP_CURRENT_LEVEL_DEFAULT;
 				pd_noti.event = PDIC_NOTIFY_EVENT_CCIC_ATTACH;
-			} else
-				return;
+			}
 		} else
 			return;
 #ifdef CONFIG_SEC_FACTORY

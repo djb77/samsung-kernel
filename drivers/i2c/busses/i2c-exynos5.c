@@ -590,8 +590,11 @@ static irqreturn_t exynos5_i2c_irq(int irqno, void *dev_id)
 
 		if (reg_val & HSI2C_INT_NODEV) {
 			dev_err(i2c->dev, "HSI2C NO ACK occured\n");
-			if (i2c->nack_restart)
+			if (i2c->nack_restart) {
+				if (reg_val & HSI2C_INT_TRANSFER_DONE)
+					exynos5_i2c_stop(i2c);
 				goto out;
+			}
 		}
 
 		i2c->trans_done = -ENXIO;

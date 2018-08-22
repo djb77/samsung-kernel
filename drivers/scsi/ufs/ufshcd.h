@@ -706,6 +706,7 @@ struct ufs_hba {
 	char unique_number[UFS_UN_MAX_DIGITS];
 	u16 manufacturer_id;
 	u8 lifetime;
+	unsigned int lc_info;
 
 	struct ufs_monitor monitor;
 
@@ -1015,12 +1016,6 @@ static inline void ufshcd_vops_dbg_register_dump(struct ufs_hba *hba)
 {
 	if (hba->vops && hba->vops->dbg_register_dump)
 		hba->vops->dbg_register_dump(hba);
-
-#if defined(CONFIG_SCSI_UFS_TEST_MODE)
-	exynos_ufs_show_uic_info(hba);
-	/* do not recover system if test mode is enabled */
-	BUG();
-#endif
 }
 
 static inline u8 ufshcd_vops_get_unipro(struct ufs_hba *hba, int num)

@@ -2025,7 +2025,7 @@ ecryptfs_add_new_key_tfm(struct ecryptfs_key_tfm **key_tfm, char *cipher_name,
 
 	strncpy(tmp_tfm->cipher_mode,
 			(mount_flags & ECRYPTFS_ENABLE_CC)?ECRYPTFS_AES_CBC_MODE:ECRYPTFS_AES_ECB_MODE,
-			ECRYPTFS_MAX_CIPHER_MODE_SIZE);
+			ECRYPTFS_MAX_CIPHER_MODE_SIZE + 1);
 
 	rc = ecryptfs_process_key_cipher(&tmp_tfm->key_tfm,
 					 tmp_tfm->cipher_name,
@@ -2100,7 +2100,7 @@ int ecryptfs_get_tfm_and_mutex_for_cipher_name(struct crypto_skcipher **tfm,
 	mutex_lock(&key_tfm_list_mutex);
 	strncpy(cipher_mode,
 			(mount_flags & ECRYPTFS_ENABLE_CC)?ECRYPTFS_AES_CBC_MODE:ECRYPTFS_AES_ECB_MODE,
-			ECRYPTFS_MAX_CIPHER_MODE_SIZE);
+			ECRYPTFS_MAX_CIPHER_MODE_SIZE + 1);
 
 	if (!ecryptfs_tfm_exists(cipher_name, cipher_mode, &key_tfm)) {
 		rc = ecryptfs_add_new_key_tfm(&key_tfm, cipher_name, 0, mount_flags);

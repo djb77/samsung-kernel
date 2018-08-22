@@ -84,11 +84,7 @@ void put_cred(const struct cred *_cred)
 /*
  * The initial credentials for the initial task
  */
-#ifdef CONFIG_RKP_KDP
 RKP_RO_AREA struct cred init_cred = {
-#else
-struct cred init_cred = {
-#endif
 	.usage			= ATOMIC_INIT(4),
 #ifdef CONFIG_DEBUG_CREDENTIALS
 	.subscribers		= ATOMIC_INIT(2),
@@ -556,8 +552,6 @@ int copy_creds(struct task_struct *p, unsigned long clone_flags)
 			panic("copy_creds() : Unable to allocate security pointer\n");
 		
 		rkp_cred_fill_params(new,new_ro,use_cnt_ptr,tsec,RKP_CMD_COPY_CREDS,p);
-		printk(KERN_ERR"KDP: @%d new cred %p\n", __LINE__, new);
-//#error
 		uh_call(UH_APP_RKP,0x46,(u64)&cred_param,0,0,0);
 		if((new_ro->bp_task != p) 
 			|| new_ro->security != tsec 
@@ -710,7 +704,6 @@ int commit_creds(struct cred *new)
 			panic("commit_creds() : Unable to allocate security pointer\n");
 
 		rkp_cred_fill_params(new,new_ro,use_cnt_ptr,tsec,RKP_CMD_CMMIT_CREDS,0);
-		printk(KERN_ERR"KDP: @%d new cred %p\n", __LINE__, new);
 		uh_call(UH_APP_RKP, 0x46,(u64)&cred_param,0,0,0);
 		if((new_ro->bp_task != current)||
 			(current->mm 
@@ -838,7 +831,6 @@ const struct cred *override_creds(const struct cred *new)
 			panic("override_creds() : Unable to allocate security pointer\n");
 
 		rkp_cred_fill_params(new,new_ro,use_cnt_ptr,tsec,RKP_CMD_OVRD_CREDS,rkp_use_count);	
-		printk(KERN_ERR"KDP: @%d new cred %p\n", __LINE__, new);
 		uh_call(UH_APP_RKP, 0x46,(u64)&cred_param,0,0,0);
 		if((new_ro->bp_task != current)||
 			(current->mm 

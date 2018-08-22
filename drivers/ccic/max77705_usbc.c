@@ -2732,12 +2732,23 @@ static int max77705_usbc_remove(struct platform_device *pdev)
 {
 	struct max77705_usbc_platform_data *usbc_data =
 		platform_get_drvdata(pdev);
+	struct max77705_dev *max77705 = usbc_data->max77705;
 
+#if defined(CONFIG_CCIC_MAX77705_DEBUG)
+	mxim_debug_exit();
+#endif
+	sysfs_remove_group(&max77705->dev->kobj, &max77705_attr_grp);
 	mutex_destroy(&usbc_data->op_lock);
+	ccic_core_unregister_chip();
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 	devm_dual_role_instance_unregister(usbc_data->dev, usbc_data->dual_role);
 	devm_kfree(usbc_data->dev, usbc_data->desc);
 #endif
+	ccic_register_switch_device(0);
+#if defined(CONFIG_CCIC_NOTIFIER)
+	ccic_misc_exit();
+#endif
+	usb_external_notify_unregister(&usbc_data->usb_external_notifier_nb);
 	max77705_muic_remove(usbc_data);
 
 	wake_lock_destroy(&usbc_data->apcmd_wake_lock);

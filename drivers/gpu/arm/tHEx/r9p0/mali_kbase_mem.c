@@ -1172,10 +1172,12 @@ void kbase_sync_single(struct kbase_context *kctx,
 	if (likely(cpu_pa == gpu_pa)) {
 		dma_addr_t dma_addr;
 
-		BUG_ON(!cpu_page);
+		/* MALI_SEC_INTEGRATION */
 		BUG_ON(offset + size > PAGE_SIZE);
 
 		dma_addr = kbase_dma_addr(cpu_page) + offset;
+		if (WARN(!dma_addr, "cpu_page structure is NULL on %s", __func__))
+			return;
 		if (sync_fn == KBASE_SYNC_TO_CPU)
 			dma_sync_single_for_cpu(kctx->kbdev->dev, dma_addr,
 					size, DMA_BIDIRECTIONAL);
@@ -1343,7 +1345,10 @@ int kbase_mem_free_region(struct kbase_context *kctx, struct kbase_va_region *re
 	lockdep_assert_held(&kctx->reg_lock);
 
 	if (reg->flags & KBASE_REG_JIT) {
-		dev_warn(reg->kctx->kbdev->dev, "Attempt to free JIT memory!\n");
+		/* MALI_SEC_INTEGRATION */
+		dev_warn(kctx->kbdev->dev,
+			"Attempt to free JIT memory! At this time, reg->kctx is 0x%p and kctx is 0x%p\n",
+			reg->kctx, kctx);
 		return -EINVAL;
 	}
 
@@ -1370,7 +1375,10 @@ int kbase_mem_free_region(struct kbase_context *kctx, struct kbase_va_region *re
 
 	err = kbase_gpu_munmap(kctx, reg);
 	if (err) {
-		dev_warn(reg->kctx->kbdev->dev, "Could not unmap from the GPU...\n");
+		/* MALI_SEC_INTEGRATION */
+		dev_warn(kctx->kbdev->dev,
+			"Could not unmap from the GPU. At this time, reg->kctx is 0x%p and kctx is 0x%p\n",
+			reg->kctx, kctx);
 		goto out;
 	}
 

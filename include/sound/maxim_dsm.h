@@ -39,6 +39,7 @@
 #define PARAM_WRITE_OSM					0xCBA0CBA0
 #define PARAM_WRITE_SET_THERM_MIN_GAIN			0xCACACACA
 #define PARAM_WRITE_SET_PPR				0xCDCDCDCD
+#define PARAM_WRITE_AMP_SCREEN				0xFEBCFEBC
 
 #define RESERVED_ADDR_COUNT		0xFF
 #define START_ADDR_FOR_LSI		0x2A004C
@@ -75,6 +76,7 @@
 #define DSM_API_SETGET_ENABLE_SMART_PT			104
 #define DSM_API_SETGET_POWER_MEASUREMENT		136
 #define DSM_API_GET_V_VALIDATION			145
+#define DSM_API_SETGET_AMP_SCREEN_VALIDATION		64
 
 enum maxdsm_version {
 	VERSION_3_0 = 30,
@@ -266,6 +268,8 @@ enum maxdsm_4_0_params {
 	PARAM_POWER_MEASUREMENT_SZ,
 	PARAM_V_VALIDATION,
 	PARAM_V_VALIDATION_SZ,
+	PARAM_AMP_SCREEN_VALIDATION,
+	PARAM_AMP_SCREEN_VALIDATION_SZ,
 	PARAM_DSM_4_0_MAX,
 };
 
@@ -553,7 +557,10 @@ void maxdsm_set_stereo_mode_configuration(unsigned int mode);
 int maxdsm_set_v_validation_mode(int on);
 uint32_t maxdsm_get_v_validation(void);
 uint32_t maxdsm_get_v_validation_r(void);
-
+uint32_t maxdsm_get_amp_screen_validation(void);
+uint32_t maxdsm_get_amp_screen_validation_r(void);
+int maxdsm_set_amp_screen_mode(unsigned int mode);
+int maxdsm_set_amp_screen_validation_mode(int on);
 
 #ifdef USE_DSM_LOG
 struct maxim_dsm_log_max_values {
@@ -569,12 +576,13 @@ struct maxim_dsm_log_max_values {
 #define LOG_LEFT 0
 #define LOG_RIGHT 1
 
-
-
 /* BUFSIZE must be 4 bytes allignment*/
 #define BEFORE_BUFSIZE (4+(LOG_BUFFER_ARRAY_SIZE*2))
 #define AFTER_BUFSIZE (LOG_BUFFER_ARRAY_SIZE*4)
 #define LOGMAX_BUFSIZE 4
+
+extern int coil_temp_max_keep;
+extern int coil_temp_max_keep_r;
 
 int maxdsm_get_dump_status(void);
 void maxdsm_update_param(void);

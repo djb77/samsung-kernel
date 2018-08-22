@@ -39,10 +39,9 @@
 #define DEF_COP_RINGSIZE 16
 #define MAX_COP_RINGSIZE 64
 
-static int fmp_fips_set_key(struct exynos_fmp *fmp, uint32_t mode,
-				uint8_t *enckey,
-				uint8_t *twkey,
-				uint32_t key_len)
+static int fmp_fips_set_key(struct exynos_fmp *fmp, struct fmp_fips_info *info,
+				uint32_t mode, uint8_t *enckey,
+				uint8_t *twkey, uint32_t key_len)
 {
 	int ret = 0;
 	uint8_t *key;
@@ -69,11 +68,11 @@ static int fmp_fips_set_key(struct exynos_fmp *fmp, uint32_t mode,
 		memcpy(key, enckey, key_len);
 	}
 
-	ret = fmp_cipher_set_key(fmp, mode, key, key_len);
+	ret = fmp_cipher_set_key(fmp, info->data, mode, key, key_len);
 	if (ret)
 		dev_err(fmp->dev, "%s: Fail to set key. ret(%d)\n",
 				__func__, ret);
-	kfree(key);
+	kzfree(key);
 err:
 	return ret;
 }
@@ -103,15 +102,9 @@ static int fmp_fips_cipher_init(struct fmp_fips_info *info, struct cipher_data *
 		goto err;
 	}
 
-	ret = fmp_cipher_init(fmp);
-	if (ret) {
-		dev_err(fmp->dev, "%s: Fail to initialize fmp cipher\n", __func__);
-		goto err;
-	}
-
 	out->blocksize = 16;
 	out->ivsize = 16;
-	ret = fmp_fips_set_key(fmp, out->mode, enckey, twkey, key_len);
+	ret = fmp_fips_set_key(fmp, info, out->mode, enckey, twkey, key_len);
 	if (ret) {
 		dev_err(fmp->dev, "%s: Fail to set fmp key\n", __func__);
 		goto err;
@@ -129,45 +122,51 @@ static void fmp_fips_cipher_deinit(struct cipher_data *cdata)
 }
 
 static int fmp_fips_cipher_set_iv(struct exynos_fmp *fmp,
+				struct fmp_fips_info *info,
 				struct cipher_data *cdata,
 				uint8_t *iv, size_t iv_size)
 {
 	int ret = 0;
 	struct device *dev = fmp->dev;
 
-	ret = fmp_cipher_set_iv(fmp, cdata->mode, iv, iv_size);
+	ret = fmp_cipher_set_iv(fmp, info->data, cdata->mode, iv, iv_size);
 	if (ret)
 		dev_err(dev, "%s: Fail to set iv. ret(%d)\n", __func__, ret);
 
 	return ret;
 }
 
-static int fmp_fips_cipher_run(struct exynos_fmp *fmp, uint8_t *src,
-				uint8_t *dst, uint32_t len,
+static int fmp_fips_cipher_run(struct exynos_fmp *fmp,
+				struct fmp_fips_info *info,
+				uint8_t *src, uint8_t *dst, uint32_t len,
 				uint32_t mode, uint32_t enc)
 {
 	int ret;
 
 	if (enc == ENCRYPT) {
-		ret = fmp_cipher_run(fmp, mode, src, len, WRITE_MODE);
+		ret = fmp_cipher_run(fmp, info->data,
+				mode, src, len, WRITE_MODE);
 		if (ret) {
 			dev_err(fmp->dev, "Fail to run fmp cipher ret(%d)\n", ret);
 			goto err;
 		}
 
-		ret = fmp_cipher_run(fmp, BYPASS_MODE, dst, len, READ_MODE);
+		ret = fmp_cipher_run(fmp, info->data,
+				BYPASS_MODE, dst, len, READ_MODE);
 		if (ret) {
 			dev_err(fmp->dev, "Fail to run fmp cipher ret(%d)\n", ret);
 			goto err;
 		}
 	} else {
-		ret = fmp_cipher_run(fmp, BYPASS_MODE, src, len, WRITE_MODE);
+		ret = fmp_cipher_run(fmp, info->data,
+				BYPASS_MODE, src, len, WRITE_MODE);
 		if (ret) {
 			dev_err(fmp->dev, "Fail to run fmp cipher ret(%d)\n", ret);
 			goto err;
 		}
 
-		ret = fmp_cipher_run(fmp, mode, dst, len, READ_MODE);
+		ret = fmp_cipher_run(fmp, info->data,
+				mode, dst, len, READ_MODE);
 		if (ret) {
 			dev_err(fmp->dev, "Fail to run fmp cipher ret(%d)\n", ret);
 			goto err;
@@ -180,13 +179,14 @@ err:
 }
 
 static int fmp_fips_cipher_encrypt(struct exynos_fmp *fmp,
+		struct fmp_fips_info *info,
 		struct cipher_data *cdata,
 		struct scatterlist *src,
 		struct scatterlist *dst, size_t len)
 {
 	int ret;
 
-	ret = fmp_fips_cipher_run(fmp, sg_virt(src), sg_virt(dst),
+	ret = fmp_fips_cipher_run(fmp, info, sg_virt(src), sg_virt(dst),
 				len, cdata->mode, ENCRYPT);
 	if (ret) {
 		dev_err(fmp->dev, "Fail to encrypt using fmp\n");
@@ -197,13 +197,14 @@ static int fmp_fips_cipher_encrypt(struct exynos_fmp *fmp,
 }
 
 static int fmp_fips_cipher_decrypt(struct exynos_fmp *fmp,
+		struct fmp_fips_info *info,
 		struct cipher_data *cdata,
 		struct scatterlist *src,
 		struct scatterlist *dst, size_t len)
 {
 	int ret;
 
-	ret = fmp_fips_cipher_run(fmp, sg_virt(src), sg_virt(dst),
+	ret = fmp_fips_cipher_run(fmp, info, sg_virt(src), sg_virt(dst),
 				len, cdata->mode, DECRYPT);
 	if (ret) {
 		dev_err(fmp->dev, "Fail to encrypt using fmp\n");
@@ -211,11 +212,6 @@ static int fmp_fips_cipher_decrypt(struct exynos_fmp *fmp,
 	}
 
 	return 0;
-}
-
-static void fmp_fips_cipher_exit(struct exynos_fmp *fmp)
-{
-	return fmp_cipher_exit(fmp);
 }
 
 static int fmp_fips_hash_init(struct fmp_fips_info *info, struct hash_data *hdata,
@@ -266,13 +262,13 @@ static void fmp_fips_hash_deinit(struct hash_data *hdata)
 {
 	if (hdata->hmac != NULL) {
 		hmac_sha256_ctx_cleanup(hdata->hmac);
-		kfree(hdata->hmac);
+		kzfree(hdata->hmac);
 		return;
 	}
 
 	if (hdata->sha != NULL) {
 		memset(hdata->sha, 0x00, sizeof(*hdata->sha));
-		kfree(hdata->sha);
+		kzfree(hdata->sha);
 		return;
 	}
 }
@@ -301,7 +297,7 @@ static ssize_t fmp_fips_hash_update(struct exynos_fmp *fmp,
 		ret = hmac_sha256_update(hdata->hmac, buf, len);
 
 exit:
-	kfree(buf);
+	kzfree(buf);
 	return ret;
 }
 
@@ -345,15 +341,15 @@ static int fmp_n_crypt(struct fmp_fips_info *info, struct csession *ses_ptr,
 		}
 
 		if (ses_ptr->cdata.init != 0) {
-			ret = fmp_fips_cipher_encrypt(fmp, &ses_ptr->cdata,
-						src_sg, dst_sg, len);
+			ret = fmp_fips_cipher_encrypt(fmp, info,
+					&ses_ptr->cdata, src_sg, dst_sg, len);
 			if (unlikely(ret))
 				goto out_err;
 		}
 	} else {
 		if (ses_ptr->cdata.init != 0) {
-			ret = fmp_fips_cipher_decrypt(fmp, &ses_ptr->cdata,
-						src_sg, dst_sg, len);
+			ret = fmp_fips_cipher_decrypt(fmp, info,
+					&ses_ptr->cdata, src_sg, dst_sg, len);
 			if (unlikely(ret))
 				goto out_err;
 		}
@@ -477,10 +473,11 @@ static int fmp_run(struct fmp_fips_info *info, struct fcrypt *fcr,
 		}
 
 		if (cop->flags == COP_FLAG_AES_CBC)
-			fmp_fips_cipher_set_iv(fmp, &ses_ptr->cdata, kcop->iv, 16);
+			fmp_fips_cipher_set_iv(fmp, info, &ses_ptr->cdata,
+				kcop->iv, 16);
 		else if (cop->flags == COP_FLAG_AES_XTS)
-			fmp_fips_cipher_set_iv(fmp, &ses_ptr->cdata,
-					(uint8_t *)&cop->data_unit_seqnumber, 16);
+			fmp_fips_cipher_set_iv(fmp, info, &ses_ptr->cdata,
+				(uint8_t *)&cop->data_unit_seqnumber, 16);
 		else {
 			ret = -EINVAL;
 			goto out_unlock;
@@ -558,7 +555,8 @@ static int fmp_run_AES_CBC_MCT(struct fmp_fips_info *info, struct fcrypt *fcr,
 			goto out_unlock;
 		}
 
-		fmp_fips_cipher_set_iv(fmp, &ses_ptr->cdata, kcop->iv, 16);
+		fmp_fips_cipher_set_iv(fmp, info,
+			&ses_ptr->cdata, kcop->iv, 16);
 	}
 
 	if (!cop->len || !(cop->flags & COP_FLAG_AES_CBC_MCT)) {
@@ -645,9 +643,11 @@ static int fmp_run_AES_CBC_MCT(struct fmp_fips_info *info, struct fcrypt *fcr,
 		}
 
 		if (cop->op == COP_ENCRYPT)
-			fmp_fips_cipher_set_iv(fmp, &ses_ptr->cdata, Ct[y], 16);
+			fmp_fips_cipher_set_iv(fmp, info,
+					&ses_ptr->cdata, Ct[y], 16);
 		else if (cop->op == COP_DECRYPT)
-			fmp_fips_cipher_set_iv(fmp, &ses_ptr->cdata, Pt[y], 16);
+			fmp_fips_cipher_set_iv(fmp, info,
+					&ses_ptr->cdata, Pt[y], 16);
 	}
 
 	if (ses_ptr->cdata.init != 0) {
@@ -660,15 +660,15 @@ static int fmp_run_AES_CBC_MCT(struct fmp_fips_info *info, struct fcrypt *fcr,
 
 out_err_fail:
 	for (k = 0; k < 1000; k++)
-		kfree(Ct[k]);
+		kzfree(Ct[k]);
 out_err_mem_ct_k:
-	kfree(Ct);
+	kzfree(Ct);
 
 out_err_mem_ct:
 	for (k = 0; k < 1000; k++)
-		kfree(Pt[k]);
+		kzfree(Pt[k]);
 out_err_mem_pt_k:
-	kfree(Pt);
+	kzfree(Pt);
 out_err_mem_pt:
 	free_page((unsigned long)data);
 out_unlock:
@@ -775,7 +775,6 @@ static int fmp_create_session(struct fmp_fips_info *info,
 			ret = -EINVAL;
 			goto error_cipher;
 		}
-		info->init_status = 1;
 	}
 
 	if (hash_name) {
@@ -843,10 +842,10 @@ restart:
 
 error_hash:
 	fmp_fips_cipher_deinit(&ses_new->cdata);
-	kfree(ses_new->sg);
-	kfree(ses_new->pages);
+	kzfree(ses_new->sg);
+	kzfree(ses_new->pages);
 error_cipher:
-	kfree(ses_new);
+	kzfree(ses_new);
 	return ret;
 }
 
@@ -866,11 +865,11 @@ static inline void fmp_destroy_session(struct fmp_fips_info *info, struct csessi
 	}
 	fmp_fips_cipher_deinit(&ses_ptr->cdata);
 	fmp_fips_hash_deinit(&ses_ptr->hdata);
-	kfree(ses_ptr->pages);
-	kfree(ses_ptr->sg);
+	kzfree(ses_ptr->pages);
+	kzfree(ses_ptr->sg);
 	mutex_unlock(&ses_ptr->sem);
 	mutex_destroy(&ses_ptr->sem);
-	kfree(ses_ptr);
+	kzfree(ses_ptr);
 }
 
 /* Look up a session by ID and remove. */
@@ -881,20 +880,14 @@ static int fmp_finish_session(struct fmp_fips_info *info, struct fcrypt *fcr, ui
 	struct list_head *head;
 	int ret = 0;
 
-	mutex_lock(&fcr->sem);
-	head = &fcr->list;
-
 	if (!info || !info->fmp) {
 		pr_err("%s: Invalid fmp info\n", __func__);
-		mutex_unlock(&fcr->sem);
 		return -ENODEV;
 	}
-	fmp = info->fmp;
 
-	if (info->init_status) {
-		fmp_fips_cipher_exit(fmp);
-		info->init_status = 0;
-	}
+	mutex_lock(&fcr->sem);
+	head = &fcr->list;
+	fmp = info->fmp;
 
 	list_for_each_entry_safe(ses_ptr, tmp, head, entry) {
 		if (ses_ptr->sid == sid) {
@@ -991,7 +984,7 @@ static void fmptask_routine(struct work_struct *work)
 int fmp_fips_open(struct inode *inode, struct file *file)
 {
 	int i, ret = 0;
-	struct fmp_fips_info *info;
+	struct fmp_fips_info *info = NULL;
 	struct todo_list_item *tmp;
 	struct exynos_fmp *fmp = container_of(file->private_data,
 			struct exynos_fmp, miscdev);
@@ -1003,14 +996,6 @@ int fmp_fips_open(struct inode *inode, struct file *file)
 	}
 
 	dev_info(fmp->dev, "fmp fips driver name : %s\n", dev_name(fmp->dev));
-
-	ret = do_fmp_fips_init(fmp);
-	if (ret) {
-		dev_err(fmp->dev, "%s: Fail to initialize fips test. ret(%d)\n",
-				__func__, ret);
-		goto err;
-	}
-
 	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info) {
 		ret = -ENOMEM;
@@ -1018,9 +1003,15 @@ int fmp_fips_open(struct inode *inode, struct file *file)
 	}
 	memset(info, 0, sizeof(*info));
 
+	info->data = do_fmp_fips_init(fmp);
+	if (ret) {
+		dev_err(fmp->dev, "%s: Fail to initialize fips test. ret(%d)\n",
+				__func__, ret);
+		goto err;
+	}
+
 	mutex_init(&info->fcrypt.sem);
 	INIT_LIST_HEAD(&info->fcrypt.list);
-
 	INIT_LIST_HEAD(&info->free.list);
 	INIT_LIST_HEAD(&info->todo.list);
 	INIT_LIST_HEAD(&info->done.list);
@@ -1042,10 +1033,10 @@ int fmp_fips_open(struct inode *inode, struct file *file)
 	file->private_data = info;
 
 	dev_info(fmp->dev, "%s opened.\n", dev_name(fmp->dev));
-
 	return ret;
 err:
-	do_fmp_fips_exit(fmp);
+	if (info)
+		do_fmp_fips_exit(info->data);
 	return ret;
 }
 
@@ -1191,7 +1182,6 @@ long fmp_fips_ioctl(struct file *file, unsigned int cmd, unsigned long arg_)
 		return -ENODEV;
 	}
 	fmp = info->fmp;
-
 	fcr = &info->fcrypt;
 
 	switch (cmd) {
@@ -1223,7 +1213,6 @@ long fmp_fips_ioctl(struct file *file, unsigned int cmd, unsigned long arg_)
 	case FMPGSESSIONINFO:
 		if (unlikely(copy_from_user(&siop, arg, sizeof(siop))))
 			return -EFAULT;
-
 		ret = get_session_info(info, fcr, &siop);
 		if (unlikely(ret)) {
 			dev_err(fmp->dev, "%s: Fail to get fmp session. ret = %d\n",
@@ -1497,7 +1486,7 @@ int fmp_fips_release(struct inode *inode, struct file *file)
 		dev_err(fmp->dev, "%s: freeing item at %lx\n",
 				__func__, (unsigned long)item);
 		list_del(&item->__hook);
-		kfree(item);
+		kzfree(item);
 		items_freed++;
 	}
 	if (items_freed != info->itemcount)
@@ -1505,11 +1494,10 @@ int fmp_fips_release(struct inode *inode, struct file *file)
 				__func__, items_freed, info->itemcount);
 
 	fmp_finish_all_sessions(info, &info->fcrypt);
-	kfree(info);
+	do_fmp_fips_exit(info->data);
+	kzfree(info);
 	file->private_data = NULL;
-
 	dev_info(fmp->dev, "%s released.\n", dev_name(fmp->dev));
 
-	do_fmp_fips_exit(fmp);
 	return 0;
 }

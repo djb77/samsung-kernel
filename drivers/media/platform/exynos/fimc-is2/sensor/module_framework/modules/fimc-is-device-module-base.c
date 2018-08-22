@@ -805,20 +805,23 @@ int sensor_module_s_stream(struct v4l2_subdev *subdev, int enable)
 				}
 			}
 		}
+
+		/*
+		 * Camera first mode set high speed recording and maintain 120fps
+		 * not setting exposure so need to this check
+		 */
+		if (sensor_peri->cis.cis_data->video_mode == true && device->cfg->framerate >= 60) {
+			sensor_peri->sensor_interface.diff_bet_sen_isp
+				= sensor_peri->sensor_interface.otf_flag_3aa ? DIFF_OTF_DELAY + 1 : DIFF_M2M_DELAY;
+			if (fimc_is_sensor_init_sensor_thread(sensor_peri))
+				err("fimc_is_sensor_init_sensor_thread is fail");
+		} else {
+			sensor_peri->sensor_interface.diff_bet_sen_isp
+				= sensor_peri->sensor_interface.otf_flag_3aa ? DIFF_OTF_DELAY : DIFF_M2M_DELAY;
+		}
 	} else {
 		pdp_unregister(module);
-	}
-
-	/*
-	 * Camera first mode set high speed recording and maintain 120fps
-	 * not setting exposure so need to this check
-	 */
-	if (sensor_peri->cis.cis_data->video_mode == true && device->cfg->framerate >= 60) {
-		sensor_peri->sensor_interface.diff_bet_sen_isp = sensor_peri->sensor_interface.otf_flag_3aa? DIFF_OTF_DELAY + 1 : DIFF_M2M_DELAY;
-		if (fimc_is_sensor_init_sensor_thread(sensor_peri))
-			err("fimc_is_sensor_init_sensor_thread is fail");
-	} else {
-		sensor_peri->sensor_interface.diff_bet_sen_isp = sensor_peri->sensor_interface.otf_flag_3aa? DIFF_OTF_DELAY : DIFF_M2M_DELAY;
+		fimc_is_sensor_deinit_sensor_thread(sensor_peri);
 	}
 
 	ret = fimc_is_sensor_peri_s_stream(device, enable);

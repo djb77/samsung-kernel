@@ -25,7 +25,7 @@
 #include "s5p_mfc_queue.h"
 #include "s5p_mfc_utils.h"
 
-#define MFC_SFR_AREA_COUNT	22
+#define MFC_SFR_AREA_COUNT	21
 static void mfc_dump_regs(struct s5p_mfc_dev *dev)
 {
 	int i;
@@ -52,7 +52,6 @@ static void mfc_dump_regs(struct s5p_mfc_dev *dev)
 		{ 0xA000, 0x20C },
 		{ 0xB000, 0x444 },
 		{ 0xC000, 0x84 },
-		{ 0xD000, 0x74 },
 	};
 
 	pr_err("-----------dumping MFC registers (SFR base = %p, dev = %p)\n",
@@ -145,6 +144,7 @@ static void mfc_save_logging_sfr(struct s5p_mfc_dev *dev)
 
 static void mfc_display_state(struct s5p_mfc_dev *dev)
 {
+	nal_queue_handle *nal_q_handle = dev->nal_q_handle;
 	int i;
 
 	pr_err("-----------dumping MFC device info-----------\n");
@@ -156,16 +156,23 @@ static void mfc_display_state(struct s5p_mfc_dev *dev)
 			dev->hwlock.bits, dev->hwlock.dev,
 			dev->curr_ctx, dev->curr_ctx_is_drm,
 			dev->preempt_ctx, s5p_mfc_get_bits(&dev->work_bits));
+	pr_err("NAL-Q state:%d, exception:%d, in_exe_cnt: %d, out_exe_cnt: %d\n",
+			nal_q_handle->nal_q_state, nal_q_handle->nal_q_exception,
+			nal_q_handle->nal_q_in_handle->in_exe_count,
+			nal_q_handle->nal_q_out_handle->out_exe_count);
 
 	for (i = 0; i < MFC_NUM_CONTEXTS; i++)
 		if (dev->ctx[i])
-			pr_err("MFC ctx[%d] %s(%d) state:%d, queue_cnt(src:%d, dst:%d),"
-				" interrupt(cond:%d, type:%d, err:%d)\n",
+			pr_err("MFC ctx[%d] %s(%d) state:%d, queue_cnt(src:%d, dst:%d, ref:%d, qsrc:%d, qdst:%d)\n"
+				"     interrupt(cond:%d, type:%d, err:%d)\n",
 				dev->ctx[i]->num,
 				dev->ctx[i]->type == MFCINST_DECODER ? "DEC" : "ENC",
 				dev->ctx[i]->codec_mode, dev->ctx[i]->state,
 				s5p_mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->src_buf_queue),
 				s5p_mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->dst_buf_queue),
+				s5p_mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->ref_buf_queue),
+				s5p_mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->src_buf_nal_queue),
+				s5p_mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->dst_buf_nal_queue),
 				dev->ctx[i]->int_condition, dev->ctx[i]->int_reason,
 				dev->ctx[i]->int_err);
 }

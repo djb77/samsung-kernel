@@ -322,7 +322,7 @@ static int __exynos_cpufreq_target(struct cpufreq_policy *policy,
 				  unsigned int relation)
 {
 	struct exynos_cpufreq_domain *domain = find_domain(policy->cpu);
-	unsigned int index;
+	int index;
 	int ret = 0;
 
 	if (!domain)
@@ -345,7 +345,7 @@ static int __exynos_cpufreq_target(struct cpufreq_policy *policy,
 	 * priority of policy is higher.
 	 */
 	index = cpufreq_frequency_table_target(policy, target_freq, relation);
-	if (ret) {
+	if (index < 0) {
 		pr_err("target frequency(%d) out of range\n", target_freq);
 		goto out;
 	}

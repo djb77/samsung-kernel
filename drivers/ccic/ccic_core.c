@@ -109,6 +109,17 @@ out:
 	return ret;
 }
 
+void ccic_core_unregister_chip(void)
+{
+	pr_info("%s\n", __func__);
+	if (IS_ERR(ccic_device)) {
+		pr_err("%s ccic_device is not present try again\n", __func__);
+		return;
+	}
+	sysfs_remove_group(&ccic_device->kobj, &ccic_sysfs_group);
+	dev_set_drvdata(ccic_device, NULL);
+}
+
 int ccic_core_init(void)
 {
 	int ret = 0;

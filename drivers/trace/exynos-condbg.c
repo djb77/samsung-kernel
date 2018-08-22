@@ -210,6 +210,9 @@ int ecd_hook_ioremap(unsigned long paddr, unsigned long vaddr, unsigned int size
 	if (interface) {
 		spin_lock(&interface->iomap_lock);
 		item = kmalloc(sizeof(struct ecd_ioremap_item), GFP_ATOMIC);
+		if (!item)
+			return -ENOMEM;
+
 		item->paddr = paddr;
 		item->vaddr = vaddr;
 		item->size = size;

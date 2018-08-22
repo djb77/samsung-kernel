@@ -478,7 +478,7 @@ static void exynos_adc_v2_start_conv(struct exynos_adc *info,
 
 	con2 = readl(ADC_V2_CON2(info->regs));
 	con2 &= ~ADC_V2_CON2_ACH_MASK;
-	con2 |= ADC_V2_CON2_ACH_SEL(addr);
+	con2 |= (u32)ADC_V2_CON2_ACH_SEL(addr);
 	writel(con2, ADC_V2_CON2(info->regs));
 
 	con1 = readl(ADC_V2_CON1(info->regs));

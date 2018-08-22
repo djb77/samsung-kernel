@@ -34,6 +34,7 @@ struct abox_vdma_rtd {
 	unsigned long iova;
 	size_t pointer;
 	bool ack_enabled;
+	bool iommu_mapped;
 };
 
 struct abox_vdma_info {
@@ -378,6 +379,8 @@ static int abox_vdma_platform_new(struct snd_soc_pcm_runtime *soc_rtd)
 					substream->dma_buffer.bytes);
 			if (ret < 0)
 				return ret;
+
+			info->rtd[i].iommu_mapped = true;
 		}
 
 		info->rtd[i].substream = substream;
@@ -405,10 +408,16 @@ static void abox_vdma_platform_free(struct snd_pcm *pcm)
 
 		info->rtd[i].substream = NULL;
 
-		if (!info->rtd[i].buffer.addr) {
+		if (info->rtd[i].iommu_mapped) {
 			abox_iommu_unmap(dev_abox, info->rtd[i].iova,
 					substream->dma_buffer.addr,
 					substream->dma_buffer.bytes);
+			info->rtd[i].iommu_mapped = false;
+		}
+
+		if (info->rtd[i].buffer.addr) {
+			substream->dma_buffer.area = NULL;
+		} else {
 			snd_pcm_lib_preallocate_free(substream);
 		}
 	}

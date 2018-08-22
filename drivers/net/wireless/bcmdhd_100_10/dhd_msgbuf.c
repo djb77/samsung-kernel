@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_msgbuf.c 739566 2018-01-09 01:24:24Z $
+ * $Id: dhd_msgbuf.c 756631 2018-04-10 05:26:11Z $
  */
 
 #include <typedefs.h>
@@ -6357,7 +6357,6 @@ dhd_prot_alloc_ring_space(dhd_pub_t *dhd, msgbuf_ring_t *ring,
 			/* Check if ring->rd is valid */
 			if (ring->rd >= ring->max_items) {
 				DHD_ERROR(("%s: Invalid rd idx=%d\n", ring->name, ring->rd));
-				dhd_prot_debug_info_print(dhd);
 				dhd->bus->read_shm_fail = TRUE;
 				return NULL;
 			}
@@ -7495,7 +7494,6 @@ dhd_prot_get_read_addr(dhd_pub_t *dhd, msgbuf_ring_t *ring, uint32 *available_le
 		DHD_ERROR(("\r\n======================= \r\n"));
 #ifdef SUPPORT_LINKDOWN_RECOVERY
 		if (wr >= ring->max_items) {
-			dhd_prot_debug_info_print(dhd);
 			dhd->bus->read_shm_fail = TRUE;
 		}
 #else
@@ -8546,9 +8544,14 @@ dhd_prot_debug_info_print(dhd_pub_t *dhd)
 		ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
 		ltoh32(ring->base_addr.low_addr), dma_buf_len));
 	DHD_ERROR(("CtrlPost: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
-	dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
-	dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
-	DHD_ERROR(("CtrlPost: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+	if (dhd->bus->is_linkdown) {
+		DHD_ERROR(("CtrlPost: From Shared Mem: RD and WR are invalid"
+			" due to PCIe link down\r\n"));
+	} else {
+		dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+		dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+		DHD_ERROR(("CtrlPost: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+	}
 	DHD_ERROR(("CtrlPost: seq num: %d \r\n", ring->seqnum % H2D_EPOCH_MODULO));
 
 	ring = &prot->d2hring_ctrl_cpln;
@@ -8557,9 +8560,14 @@ dhd_prot_debug_info_print(dhd_pub_t *dhd)
 		ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
 		ltoh32(ring->base_addr.low_addr), dma_buf_len));
 	DHD_ERROR(("CtrlCpl: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
-	dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
-	dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
-	DHD_ERROR(("CtrlCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+	if (dhd->bus->is_linkdown) {
+		DHD_ERROR(("CtrlCpl: From Shared Mem: RD and WR are invalid"
+			" due to PCIe link down\r\n"));
+	} else {
+		dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+		dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+		DHD_ERROR(("CtrlCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+	}
 	DHD_ERROR(("CtrlCpl: Expected seq num: %d \r\n", ring->seqnum % H2D_EPOCH_MODULO));
 
 	ring = prot->h2dring_info_subn;
@@ -8569,9 +8577,14 @@ dhd_prot_debug_info_print(dhd_pub_t *dhd)
 			ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
 			ltoh32(ring->base_addr.low_addr), dma_buf_len));
 		DHD_ERROR(("InfoSub: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
-		dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
-		dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
-		DHD_ERROR(("InfoSub: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		if (dhd->bus->is_linkdown) {
+			DHD_ERROR(("InfoSub: From Shared Mem: RD and WR are invalid"
+				" due to PCIe link down\r\n"));
+		} else {
+			dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+			dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+			DHD_ERROR(("InfoSub: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		}
 		DHD_ERROR(("InfoSub: seq num: %d \r\n", ring->seqnum % H2D_EPOCH_MODULO));
 	}
 	ring = prot->d2hring_info_cpln;
@@ -8581,9 +8594,14 @@ dhd_prot_debug_info_print(dhd_pub_t *dhd)
 			ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
 			ltoh32(ring->base_addr.low_addr), dma_buf_len));
 		DHD_ERROR(("InfoCpl: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
-		dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
-		dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
-		DHD_ERROR(("InfoCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		if (dhd->bus->is_linkdown) {
+			DHD_ERROR(("InfoCpl: From Shared Mem: RD and WR are invalid"
+				" due to PCIe link down\r\n"));
+		} else {
+			dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+			dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+			DHD_ERROR(("InfoCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		}
 		DHD_ERROR(("InfoCpl: Expected seq num: %d \r\n", ring->seqnum % D2H_EPOCH_MODULO));
 	}
 
@@ -8594,9 +8612,14 @@ dhd_prot_debug_info_print(dhd_pub_t *dhd)
 			ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
 			ltoh32(ring->base_addr.low_addr), dma_buf_len));
 		DHD_ERROR(("TxCpl: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
-		dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
-		dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
-		DHD_ERROR(("TxCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		if (dhd->bus->is_linkdown) {
+			DHD_ERROR(("TxCpl: From Shared Mem: RD and WR are invalid"
+				" due to PCIe link down\r\n"));
+		} else {
+			dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+			dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+			DHD_ERROR(("TxCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		}
 		DHD_ERROR(("TxCpl: Expected seq num: %d \r\n", ring->seqnum % D2H_EPOCH_MODULO));
 	}
 
@@ -8607,9 +8630,14 @@ dhd_prot_debug_info_print(dhd_pub_t *dhd)
 			ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
 			ltoh32(ring->base_addr.low_addr), dma_buf_len));
 		DHD_ERROR(("RxCpl: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
-		dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
-		dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
-		DHD_ERROR(("RxCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		if (dhd->bus->is_linkdown) {
+			DHD_ERROR(("RxCpl: From Shared Mem: RD and WR are invalid"
+				" due to PCIe link down\r\n"));
+		} else {
+			dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+			dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+			DHD_ERROR(("RxCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		}
 		DHD_ERROR(("RxCpl: Expected seq num: %d \r\n", ring->seqnum % D2H_EPOCH_MODULO));
 	}
 

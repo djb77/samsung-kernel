@@ -1289,6 +1289,12 @@ config DEBUG_NOTIFIERS
 	  This is a relatively cheap check but if you care about maximum
 	  performance, say N.
 
+config DEBUG_NOTIFIERS_PRINT_ELAPSED_TIME
+	bool "Print elapsed time of specific notifier call chains"
+	depends on DEBUG_KERNEL
+	help
+	  Enable this to turn on printing elapsed time of notifier call chains.
+
 config DEBUG_CREDENTIALS
 	bool "Debug credential management"
 	depends on DEBUG_KERNEL

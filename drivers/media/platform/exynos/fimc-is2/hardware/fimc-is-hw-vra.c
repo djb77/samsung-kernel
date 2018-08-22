@@ -477,6 +477,7 @@ static int fimc_is_hw_vra_enable(struct fimc_is_hw_ip *hw_ip, u32 instance,
 
 	set_bit(HW_RUN, &hw_ip->state);
 	set_bit(HW_VRA_CH1_START, &hw_ip->state);
+	atomic_inc(&hw_ip->run_rsccount);
 
 	return ret;
 }
@@ -493,7 +494,19 @@ static int fimc_is_hw_vra_disable(struct fimc_is_hw_ip *hw_ip, u32 instance,
 	if (!test_bit_variables(hw_ip->id, &hw_map))
 		return 0;
 
-	if (atomic_read(&hw_ip->rsccount) > 1)
+	hw_vra = (struct fimc_is_hw_vra *)hw_ip->priv_info;
+	if (unlikely(!hw_vra)) {
+		mserr_hw("priv_info is NULL", instance, hw_ip);
+		return -EINVAL;
+	}
+
+	ret = fimc_is_lib_vra_stop_instance(&hw_vra->lib_vra, instance);
+	if (ret) {
+		mserr_hw("lib_vra_stop_instance is fail (%d)", instance, hw_ip, ret);
+		return ret;
+	}
+
+	if (atomic_dec_return(&hw_ip->run_rsccount) > 0)
 		return 0;
 
 	msinfo_hw("vra_disable: Vvalid(%d)\n", instance, hw_ip,
@@ -506,12 +519,6 @@ static int fimc_is_hw_vra_disable(struct fimc_is_hw_ip *hw_ip, u32 instance,
 
 		if (!timetowait)
 			mserr_hw("wait FRAME_END timeout (%ld)", instance, hw_ip, timetowait);
-
-		hw_vra = (struct fimc_is_hw_vra *)hw_ip->priv_info;
-		if (unlikely(!hw_vra)) {
-			mserr_hw("priv_info is NULL", instance, hw_ip);
-			return -EINVAL;
-		}
 
 		ret = fimc_is_lib_vra_stop(&hw_vra->lib_vra);
 		if (ret) {
@@ -1127,6 +1134,7 @@ int fimc_is_hw_vra_probe(struct fimc_is_hw_ip *hw_ip, struct fimc_is_interface *
 	hw_ip->is_leader = true;
 	atomic_set(&hw_ip->status.Vvalid, V_BLANK);
 	atomic_set(&hw_ip->rsccount, 0);
+	atomic_set(&hw_ip->run_rsccount, 0);
 	init_waitqueue_head(&hw_ip->status.wait_queue);
 
 	/* set fd sfr base address */

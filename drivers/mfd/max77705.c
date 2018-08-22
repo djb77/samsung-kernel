@@ -829,6 +829,9 @@ err_mfd:
 	mfd_remove_devices(max77705->dev);
 err_irq_init:
 	i2c_unregister_device(max77705->muic);
+	i2c_unregister_device(max77705->charger);
+	i2c_unregister_device(max77705->fuelgauge);
+	i2c_unregister_device(max77705->debug);
 err_w_lock:
 	mutex_destroy(&max77705->i2c_lock);
 err:
@@ -841,8 +844,12 @@ static int max77705_i2c_remove(struct i2c_client *i2c)
 	struct max77705_dev *max77705 = i2c_get_clientdata(i2c);
 
 	device_init_wakeup(max77705->dev, 0);
+	max77705_irq_exit(max77705);
 	mfd_remove_devices(max77705->dev);
 	i2c_unregister_device(max77705->muic);
+	i2c_unregister_device(max77705->charger);
+	i2c_unregister_device(max77705->fuelgauge);
+	i2c_unregister_device(max77705->debug);
 	kfree(max77705);
 
 	return 0;

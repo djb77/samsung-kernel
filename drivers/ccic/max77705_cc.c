@@ -479,6 +479,7 @@ static void max77705_ccstat_irq_handler(void *data, int irq)
 			usbc_data->cc_data->current_pr = 0xFF;
 			usbc_data->pd_data->current_dr = 0xFF;
 			usbc_data->cc_data->current_vcon = 0xFF;
+			usbc_data->detach_done_wait = 1;
 		}
 	} else {
 		if (!usbc_data->plug_attach_done) {
@@ -513,6 +514,9 @@ static void max77705_ccstat_irq_handler(void *data, int irq)
 			usbc_data->pd_data->cc_status = CC_SNK;
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 			usbc_data->power_role = DUAL_ROLE_PROP_PR_SNK;
+			if (usbc_data->dual_role != NULL &&
+				usbc_data->data_role != USB_STATUS_NOTIFY_DETACH)
+				dual_role_instance_changed(usbc_data->dual_role);
 #endif
 #if defined(CONFIG_USB_HOST_NOTIFY)
 			send_otg_notify(o_notify, NOTIFY_EVENT_POWER_SOURCE, 0);
@@ -541,6 +545,9 @@ static void max77705_ccstat_irq_handler(void *data, int irq)
 			usbc_data->pd_data->cc_status = CC_SRC;
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 			usbc_data->power_role = DUAL_ROLE_PROP_PR_SRC;
+			if (usbc_data->dual_role != NULL &&
+				usbc_data->data_role != USB_STATUS_NOTIFY_DETACH)
+				dual_role_instance_changed(usbc_data->dual_role);
 #endif
 #if defined(CONFIG_USB_HOST_NOTIFY)
 			send_otg_notify(o_notify, NOTIFY_EVENT_POWER_SOURCE, 1);

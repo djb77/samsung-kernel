@@ -39,8 +39,9 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation)
 
 	DVFS_ASSERT(platform);
 
-	if(platform->fault_count == 5)
+	if(platform->fault_count >= 5 && platform->bigdata_uevent_is_sent == false)
 	{
+		platform->bigdata_uevent_is_sent = true;
 		kobject_uevent_env(&kbdev->dev->kobj, KOBJ_CHANGE, env);
 	}
 

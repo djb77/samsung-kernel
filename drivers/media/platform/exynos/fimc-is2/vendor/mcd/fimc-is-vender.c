@@ -832,26 +832,34 @@ void fimc_is_vendor_prepare_retention(struct fimc_is_core *core, int sensor_id, 
 		}
 
 		cis = (struct fimc_is_cis *)v4l2_get_subdevdata(sensor_peri->subdev_cis);
+		ret = CALL_CISOPS(cis, cis_check_rev, sensor_peri->subdev_cis);
+		if (ret) {
+			warn("v4l2_subdev_call(cis_check_rev) is fail(%d)", ret);
+			goto p_power_off;
+		}
+
 		ret = CALL_CISOPS(cis, cis_init, sensor_peri->subdev_cis);
 		if (ret) {
 			warn("v4l2_subdev_call(init) is fail(%d)", ret);
 			goto p_power_off;
 		}
+
 		ret = CALL_CISOPS(cis, cis_set_global_setting, sensor_peri->subdev_cis);
 		if (ret) {
-			warn("v4l2_subdev_call(init) is fail(%d)", ret);
+			warn("v4l2_subdev_call(cis_set_global_setting) is fail(%d)", ret);
 			goto p_power_off;
 		}
+
 		ret = CALL_CISOPS(cis, cis_stream_on, sensor_peri->subdev_cis);
 		if (ret) {
-			warn("v4l2_subdev_call(init) is fail(%d)", ret);
+			warn("v4l2_subdev_call(cis_stream_on) is fail(%d)", ret);
 			goto p_power_off;
 		}
 		CALL_CISOPS(cis, cis_wait_streamon, sensor_peri->subdev_cis);
 
 		ret = CALL_CISOPS(cis, cis_stream_off, sensor_peri->subdev_cis);
 		if (ret) {
-			warn("v4l2_subdev_call(init) is fail(%d)", ret);
+			warn("v4l2_subdev_call(cis_stream_off) is fail(%d)", ret);
 			goto p_power_off;
 		}
 		CALL_CISOPS(cis, cis_wait_streamoff, sensor_peri->subdev_cis);

@@ -46,6 +46,7 @@ void five_audit_info(struct task_struct *task, struct file *file,
 {
 	five_audit_msg(task, file, op, prev, tint, cause, result);
 }
+
 void five_audit_err(struct task_struct *task, struct file *file,
 		const char *op, enum task_integrity_value prev,
 		enum task_integrity_value tint, const char *cause, int result)
@@ -59,9 +60,12 @@ static void five_audit_msg(struct task_struct *task, struct file *file,
 {
 	struct audit_buffer *ab;
 	struct inode *inode = NULL;
-	const unsigned char *fname = NULL;
+	const char *fname = NULL;
 	char *pathbuf = NULL;
-	char name[TASK_COMM_LEN];
+	char comm[TASK_COMM_LEN];
+	const char *name = "";
+	unsigned long ino = 0;
+	char *dev = "";
 	struct task_struct *tsk = task ? task : current;
 
 	if (file) {
@@ -78,7 +82,7 @@ static void five_audit_msg(struct task_struct *task, struct file *file,
 
 	audit_log_format(ab, " pid=%d", task_pid_nr(tsk));
 	audit_log_format(ab, " gpid=%d",
-			task_pid_nr((tsk)->group_leader));
+			task_pid_nr(tsk->group_leader));
 	audit_log_task_context(ab);
 	audit_log_format(ab, " op=");
 	audit_log_string(ab, op);
@@ -87,18 +91,22 @@ static void five_audit_msg(struct task_struct *task, struct file *file,
 	audit_log_format(ab, " cause=");
 	audit_log_string(ab, cause);
 	audit_log_format(ab, " comm=");
-	audit_log_untrustedstring(ab, get_task_comm(name, tsk));
+	audit_log_untrustedstring(ab, get_task_comm(comm, tsk));
 	if (fname) {
 		audit_log_format(ab, " name=");
 		audit_log_untrustedstring(ab, fname);
+		name = fname;
 	}
 	if (inode) {
 		audit_log_format(ab, " dev=");
 		audit_log_untrustedstring(ab, inode->i_sb->s_id);
 		audit_log_format(ab, " ino=%lu", inode->i_ino);
+		ino = inode->i_ino;
+		dev = inode->i_sb->s_id;
 	}
 	audit_log_format(ab, " res=%d", result);
 	audit_log_end(ab);
+
 exit:
 	if (pathbuf)
 		__putname(pathbuf);
@@ -134,7 +142,8 @@ void five_audit_hexinfo(struct file *file, const char *msg, char *data,
 				(unsigned long)inode->i_version);
 		iint = integrity_inode_get(inode);
 		if (iint)
-			audit_log_format(ab, " cache_value=%lu ", iint->five_flags);
+			audit_log_format(ab, " cache_value=%lu ",
+							iint->five_flags);
 	}
 
 	audit_log_string(ab, msg);

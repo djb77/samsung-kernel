@@ -63,13 +63,13 @@ struct locked_list {
 };
 
 struct fmp_fips_info {
-	int init_status;
 	struct fcrypt fcrypt;
 	struct locked_list free, todo, done;
 	int itemcount;
 	struct work_struct fmptask;
 	wait_queue_head_t user_waiter;
 	struct exynos_fmp *fmp;
+	struct fmp_fips_data *data;
 };
 
 /* compatibility stuff */

@@ -2544,6 +2544,14 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 				prev->shot->ctl.aa.aeExpCompensation		= frame->shot->ctl.aa.aeExpCompensation;
 				prev->shot->ctl.aa.aeLock			= frame->shot->ctl.aa.aeLock;
 				prev->shot->ctl.lens.opticalStabilizationMode	= frame->shot->ctl.lens.opticalStabilizationMode;
+				/*
+				* Flash capture has 2 Frame delays due to DDK constraints.
+				* N + 1: The DDK uploads the best shot and streams off.
+				* N + 2: HAL used the buffer of the next of best shot as a flash image.
+				*/
+				if (frame->shot->ctl.aa.vendor_aeflashMode == AA_FLASHMODE_CAPTURE) {
+					prev->shot->ctl.aa.vendor_aeflashMode = frame->shot->ctl.aa.vendor_aeflashMode;
+				}
 			}
 		}
 #endif

@@ -1789,6 +1789,15 @@ static void fimc_is_get_fd_data(u32 instance,
 		face_data->face[i].faceId = lib_vra->out_faces[instance][i].base.unique_id;
 		face_data->face[i].score = lib_vra->out_faces[instance][i].base.score;
 		face_data->face[i].rotation = lib_vra->out_faces[instance][i].base.rotation;
+
+		dbg_lib(3, "fimc_is_get_fd_data: [%d](%d,%d,%d,%d,%d,%d,%d)\n", i,
+			face_data->face[i].face_area.top_left.x,
+			face_data->face[i].face_area.top_left.y,
+			face_data->face[i].face_area.span.width,
+			face_data->face[i].face_area.span.height,
+			face_data->face[i].faceId,
+			face_data->face[i].score,
+			face_data->face[i].rotation);
 	}
 
 	face_data->face_num = lib_vra->all_face_num[instance];
@@ -1796,6 +1805,13 @@ static void fimc_is_get_fd_data(u32 instance,
 
 	fd_in_size->width = lib_vra->out_list_info[instance].in_sizes.width;
 	fd_in_size->height = lib_vra->out_list_info[instance].in_sizes.height;
+
+	dbg_lib(3, "fimc_is_get_fd_data: (%d,%d,%d,%d)\n",
+		face_data->face_num,
+		face_data->frame_count,
+		fd_in_size->width,
+		fd_in_size->height);
+
 	spin_unlock_irqrestore(&lib_vra->ae_fd_slock[instance], flags);
 
 }
@@ -1848,6 +1864,15 @@ static void fimc_is_get_hybrid_fd_data(u32 instance,
 			face_data->face[i].score = fdae_info->score[i];
 			face_data->face[i].rotation =
 				(fdae_info->rot[i] * 2 + fdae_info->is_rot[i]) * 45;
+
+			dbg_lib(3, "fimc_is_get_fd_data: [%d](%d,%d,%d,%d,%d,%d,%d)\n", i,
+				face_data->face[i].face_area.top_left.x,
+				face_data->face[i].face_area.top_left.y,
+				face_data->face[i].face_area.span.width,
+				face_data->face[i].face_area.span.height,
+				face_data->face[i].faceId,
+				face_data->face[i].score,
+				face_data->face[i].rotation);
 		}
 
 		face_data->face_num = (0x1 << 16) | (fdae_info->face_num & 0xFFFF);
@@ -1855,6 +1880,13 @@ static void fimc_is_get_hybrid_fd_data(u32 instance,
 
 		fd_in_size->width = lib_vra->pdt_out_list_info[instance].in_sizes.width;
 		fd_in_size->height = lib_vra->pdt_out_list_info[instance].in_sizes.height;
+
+		dbg_lib(3, "fimc_is_get_fd_data: (%d,%d,%d,%d)\n",
+			face_data->face_num,
+			face_data->frame_count,
+			fd_in_size->width,
+			fd_in_size->height);
+
 		spin_unlock_irqrestore(&fdae_info->slock, flags);
 #endif
 	} else {
@@ -1925,8 +1957,8 @@ void set_os_system_funcs(os_system_func_t *funcs)
 	funcs[47] = (os_system_func_t)fimc_is_lib_in_interrupt;
 	funcs[48] = (os_system_func_t)fimc_is_lib_flush_task_handler;
 
-	funcs[49] = (os_system_func_t)fimc_is_get_fd_data; /* FDAE */
-	funcs[50] = (os_system_func_t)fimc_is_get_hybrid_fd_data; /* FDAF */
+	funcs[49] = (os_system_func_t)fimc_is_get_fd_data; /* for FDAE/FDAF */
+	funcs[50] = (os_system_func_t)fimc_is_get_hybrid_fd_data; /* for FDAE/FDAF */
 
 	/* TODO: re-odering function table */
 	funcs[99] = (os_system_func_t)fimc_is_event_write;

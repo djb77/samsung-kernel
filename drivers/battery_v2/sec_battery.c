@@ -9333,7 +9333,8 @@ static void sec_bat_init_chg_work(struct work_struct *work)
 				struct sec_battery_info, init_chg_work.work);
 
 	if (battery->cable_type == SEC_BATTERY_CABLE_NONE &&
-		!(battery->misc_event & BATT_MISC_EVENT_UNDEFINED_RANGE_TYPE)) {
+		!(battery->misc_event & (BATT_MISC_EVENT_UNDEFINED_RANGE_TYPE |
+			BATT_MISC_EVENT_HICCUP_TYPE))) {
 		pr_info("%s: disable charging\n", __func__);
 		sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING_OFF);
 	}

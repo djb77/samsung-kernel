@@ -96,10 +96,6 @@ static inline struct dma_buf *iva_mem_get_dmabuf_with_fd(struct iva_proc *proc,
 
 	return iva_map_node->dmabuf;
 }
-extern struct iva_mem_map *iva_mem_ion_alloc(struct iva_proc *proc,
-			uint32_t size, uint32_t align, uint32_t cacheflag);
-extern int	iva_mem_ion_free(struct iva_proc *proc,
-			struct iva_mem_map *iva_map_node);
 
 extern long	iva_mem_ioctl(struct iva_proc *proc,
 			unsigned int cmd, void __user *p);

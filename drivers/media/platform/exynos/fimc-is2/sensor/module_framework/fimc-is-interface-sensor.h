@@ -413,6 +413,8 @@ enum fimc_is_cis_lownoise_mode {
 	FIMC_IS_CIS_LNOFF = 0, /* Low Noise Off */
 	FIMC_IS_CIS_LN2, /* Low Noise 2 */
 	FIMC_IS_CIS_LN4, /* Low Noise 4 */
+	FIMC_IS_CIS_LN2_PEDESTAL128, /* Low Noise 2 + pedestal 128 */
+	FIMC_IS_CIS_LN4_PEDESTAL128, /* Low Noise 4 + pedestal 128 */
 	FIMC_IS_CIS_LOWNOISE_MODE_MAX,
 };
 

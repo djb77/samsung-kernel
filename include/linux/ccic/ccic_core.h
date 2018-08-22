@@ -105,11 +105,13 @@ typedef struct _ccic_data_t {
 
 int ccic_core_init(void);
 int ccic_core_register_chip(pccic_data_t pccic_data);
+void ccic_core_unregister_chip(void);
 int ccic_register_switch_device(int mode);
 void ccic_send_dock_intent(int type);
 void ccic_send_dock_uevent(u32 vid, u32 pid, int state);
 void *ccic_core_get_drvdata(void);
 int ccic_misc_init(pccic_data_t pccic_data);
+void ccic_misc_exit(void);
 extern unsigned int pn_flag;
 #endif
 

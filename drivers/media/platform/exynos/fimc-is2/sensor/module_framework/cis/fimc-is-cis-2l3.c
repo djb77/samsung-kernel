@@ -1081,12 +1081,20 @@ int sensor_2l3_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 	int ret = 0;
 	struct fimc_is_cis *cis = NULL;
 	unsigned int mode = 0;
+	struct fimc_is_module_enum *module;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+	struct sensor_open_extended *ext_info = NULL;
 
 	WARN_ON(!subdev);
 
 	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
 	WARN_ON(!cis);
 	WARN_ON(!cis->cis_data);
+
+	sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
+	module = sensor_peri->module;
+	ext_info = &module->ext;
+	WARN_ON(!ext_info);
 
 	mode = cis->cis_data->sens_config_index_cur;
 
@@ -1109,6 +1117,12 @@ int sensor_2l3_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 	switch (cis->cis_data->cur_lownoise_mode) {
 	case FIMC_IS_CIS_LNOFF:
 		dbg_sensor(1, "[%s] FIMC_IS_CIS_LNOFF\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x6028, 0x2000);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x6028, 0x0200)\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x602A, 0xB65B);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x602A, 0xB65B)\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x6F12, 0x0100);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x6F12, 0x0100)\n", __func__);
 		ret |= fimc_is_sensor_write16(cis->client, 0x0B30, 0x0100);
 		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x0B30, 0x0100)\n", __func__);
 
@@ -1137,6 +1151,12 @@ int sensor_2l3_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 		break;
 	case FIMC_IS_CIS_LN2:
 		dbg_sensor(1, "[%s] FIMC_IS_CIS_LN2\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x6028, 0x2000);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x6028, 0x0200)\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x602A, 0xB65B);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x602A, 0xB65B)\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x6F12, 0x0100);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x6F12, 0x0100)\n", __func__);
 		ret |= fimc_is_sensor_write16(cis->client, 0x0B30, 0x0200);
 		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x0B30, 0x0200)\n", __func__);
 
@@ -1149,6 +1169,12 @@ int sensor_2l3_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 		break;
 	case FIMC_IS_CIS_LN4:
 		dbg_sensor(1, "[%s] FIMC_IS_CIS_LN4\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x6028, 0x2000);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x6028, 0x0200)\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x602A, 0xB65B);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x602A, 0xB65B)\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x6F12, 0x0100);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x6F12, 0x0100)\n", __func__);
 		ret |= fimc_is_sensor_write16(cis->client, 0x0B30, 0x0300);
 		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x0B30, 0x0300)\n", __func__);
 
@@ -1158,6 +1184,36 @@ int sensor_2l3_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 		ret |= fimc_is_sensor_write16(cis->client, 0x30E6, 0x0500);
 		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x30E6, 0x0500)\n", __func__);
 #endif
+		break;
+	case FIMC_IS_CIS_LN2_PEDESTAL128:
+		dbg_sensor(1, "[%s] FIMC_IS_CIS_LN2\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x0B30, 0x0200);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x0B30, 0x0200)\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x0BC0, 0x0080); /* pedestal 128 */
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x0BC0, 0x0080)\n", __func__);
+
+#ifdef CAMERA_REAR2
+		ret |= fimc_is_sensor_write16(cis->client, 0x30E4, 0x0000);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x30E4, 0x0000)\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x30E6, 0x0500);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x30E6, 0x0500)\n", __func__);
+#endif
+		ext_info->use_retention_mode = SENSOR_RETENTION_INACTIVE;
+		break;
+	case FIMC_IS_CIS_LN4_PEDESTAL128:
+		dbg_sensor(1, "[%s] FIMC_IS_CIS_LN4\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x0B30, 0x0300);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x0B30, 0x0300)\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x0BC0, 0x0080); /* pedestal 128 */
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x0BC0, 0x0080)\n", __func__);
+
+#ifdef CAMERA_REAR2
+		ret |= fimc_is_sensor_write16(cis->client, 0x30E4, 0x0000);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x30E4, 0x0000)\n", __func__);
+		ret |= fimc_is_sensor_write16(cis->client, 0x30E6, 0x0500);
+		dbg_common(i2c_log_enable, "%s : i2c_write", " (0x30E6, 0x0500)\n", __func__);
+#endif
+		ext_info->use_retention_mode = SENSOR_RETENTION_INACTIVE;
 		break;
 	default:
 		dbg_sensor(1, "[%s] not support lownoise mode(%d)\n",
@@ -1547,7 +1603,7 @@ int sensor_2l3_cis_stream_on(struct v4l2_subdev *subdev)
 
 	/*
 	 * If a companion is used,
-	 * then 8 ms waiting is needed before the StreamOn of a sensor (S5K2L3).
+	 * then 8 ms waiting is needed before the StreamOn of a sensor (SAK2L3).
 	 */
 	if (test_bit(FIMC_IS_SENSOR_PREPROCESSOR_AVAILABLE, &sensor_peri->peri_state))
 		mdelay(8);

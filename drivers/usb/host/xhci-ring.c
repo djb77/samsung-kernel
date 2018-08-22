@@ -282,6 +282,7 @@ static void xhci_handle_stopped_cmd_ring(struct xhci_hcd *xhci,
 	struct xhci_command *i_cmd;
 	u32 cycle_state;
 
+	xhci_info(xhci, "%s \n", __func__);
 	/* Turn all aborted commands in list to no-ops, then restart */
 	list_for_each_entry(i_cmd, &xhci->cmd_list, cmd_list) {
 
@@ -290,7 +291,7 @@ static void xhci_handle_stopped_cmd_ring(struct xhci_hcd *xhci,
 
 		i_cmd->status = COMP_CMD_STOP;
 
-		xhci_dbg(xhci, "Turn aborted command %p to no-op\n",
+		xhci_info(xhci, "Turn aborted command %p to no-op\n",
 			 i_cmd->command_trb);
 		/* get cycle state from the original cmd trb */
 		cycle_state = le32_to_cpu(
@@ -313,6 +314,7 @@ static void xhci_handle_stopped_cmd_ring(struct xhci_hcd *xhci,
 	/* ring command ring doorbell to restart the command ring */
 	if ((xhci->cmd_ring->dequeue != xhci->cmd_ring->enqueue) &&
 	    !(xhci->xhc_state & XHCI_STATE_DYING)) {
+	    xhci_info(xhci, "xhci->xhc_state 0x%x\n", xhci->xhc_state);
 		xhci->current_cmd = cur_cmd;
 		xhci_mod_cmd_timer(xhci, XHCI_CMD_DEFAULT_TIMEOUT);
 		xhci_ring_cmd_db(xhci);
@@ -325,7 +327,7 @@ static int xhci_abort_cmd_ring(struct xhci_hcd *xhci, unsigned long flags)
 	u64 temp_64;
 	int ret;
 
-	xhci_dbg(xhci, "Abort command ring\n");
+	xhci_info(xhci, "Abort command ring\n");
 
 	reinit_completion(&xhci->cmd_ring_stop_completion);
 
@@ -364,13 +366,12 @@ static int xhci_abort_cmd_ring(struct xhci_hcd *xhci, unsigned long flags)
 	 * but the completion event in never sent. Wait 2 secs (arbitrary
 	 * number) to handle those cases after negation of CMD_RING_RUNNING.
 	 */
-	spin_unlock_irqrestore(&xhci->lock, flags);
 	ret = wait_for_completion_timeout(&xhci->cmd_ring_stop_completion,
 					  msecs_to_jiffies(2000));
-	spin_lock_irqsave(&xhci->lock, flags);
 	if (!ret) {
-		xhci_dbg(xhci, "No stop event for abort, ring start fail?\n");
+		xhci_info(xhci, "No stop event for abort, ring start fail?\n");
 		xhci_cleanup_command_queue(xhci);
+		xhci->current_cmd = NULL;
 	} else {
 		xhci_handle_stopped_cmd_ring(xhci, xhci_next_queued_cmd(xhci));
 	}
@@ -1296,26 +1297,25 @@ void xhci_handle_command_timeout(struct work_struct *work)
 	hw_ring_state = xhci_read_64(xhci, &xhci->op_regs->cmd_ring);
 	if ((xhci->cmd_ring_state & CMD_RING_STATE_RUNNING) &&
 	    (hw_ring_state & CMD_RING_RUNNING))  {
+	    spin_unlock_irqrestore(&xhci->lock, flags);
 		/* Prevent new doorbell, and start command abort */
 		xhci->cmd_ring_state = CMD_RING_STATE_ABORTED;
-		xhci_dbg(xhci, "Command timeout\n");
+		xhci_info(xhci, "Command timeout\n");
 		ret = xhci_abort_cmd_ring(xhci, flags);
 		if (unlikely(ret == -ESHUTDOWN)) {
 			xhci_err(xhci, "Abort command ring failed\n");
 			xhci_cleanup_command_queue(xhci);
-			spin_unlock_irqrestore(&xhci->lock, flags);
-			usb_hc_died(xhci_to_hcd(xhci)->primary_hcd);
-			xhci_dbg(xhci, "xHCI host controller is dead.\n");
-
+			if (!(xhci->xhc_state & XHCI_STATE_REMOVING))
+				usb_hc_died(xhci_to_hcd(xhci)->primary_hcd);
+			xhci_err(xhci, "xHCI host controller is dead.\n");
 			return;
 		}
-
-		goto time_out_completed;
+		return;
 	}
 
 	/* host removed. Bail out */
 	if (xhci->xhc_state & XHCI_STATE_REMOVING) {
-		xhci_dbg(xhci, "host removed, ring start fail?\n");
+		xhci_info(xhci, "host removed, ring start fail?\n");
 		xhci_cleanup_command_queue(xhci);
 
 		goto time_out_completed;
@@ -3925,7 +3925,7 @@ static int queue_command(struct xhci_hcd *xhci, struct xhci_command *cmd,
 
 	if ((xhci->xhc_state & XHCI_STATE_DYING) ||
 		(xhci->xhc_state & XHCI_STATE_HALTED)) {
-		xhci_dbg(xhci, "xHCI dying or halted, can't queue_command\n");
+		xhci_err(xhci, "xHCI dying or halted, can't queue_command\n");
 		return -ESHUTDOWN;
 	}
 

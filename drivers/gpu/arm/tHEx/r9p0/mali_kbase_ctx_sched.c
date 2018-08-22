@@ -193,9 +193,13 @@ void kbase_ctx_sched_restore_all_as(struct kbase_device *kbdev)
 		kctx = kbdev->as_to_kctx[i];
 		if (kctx) {
 			if (atomic_read(&kctx->refcount)) {
+				unsigned long flags;
 				WARN_ON(kctx->as_nr != i);
 
+				/* MALI_SEC_INTEGRATION */
+				spin_lock_irqsave(&kbdev->pm.backend.gpu_powered_lock, flags);
 				kbase_mmu_update(kctx);
+				spin_unlock_irqrestore(&kbdev->pm.backend.gpu_powered_lock, flags);
 			} else {
 				/* This context might have been assigned an
 				 * AS before, clear it.

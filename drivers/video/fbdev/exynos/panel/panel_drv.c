@@ -27,6 +27,7 @@
 #include <linux/debugfs.h>
 #include <linux/of_gpio.h>
 #include <linux/of_address.h>
+#include <linux/ctype.h>
 #include <video/mipi_display.h>
 #ifdef CONFIG_DISP_PMIC_SSD
 #include <linux/regulator/consumer.h>
@@ -2143,7 +2144,11 @@ static int panel_dpui_notifier_callback(struct notifier_block *self,
 	struct dpui_info *dpui = data;
 	char tbuf[MAX_DPUI_VAL_LEN];
 	u8 panel_datetime[7] = { 0, };
+	u8 panel_coord[4] = { 0, };
 	u8 panel_chip_id[5] = { 0, };
+	int i, site, rework, poc;
+	u8 cell_id[16], octa_id[PANEL_OCTA_ID_LEN] = { 0, };
+	bool cell_id_exist = true;
 	int size;
 
 	if (dpui == NULL) {
@@ -2181,6 +2186,34 @@ static int panel_dpui_notifier_callback(struct notifier_block *self,
 			panel_chip_id[0], panel_chip_id[1], panel_chip_id[2],
 			panel_chip_id[3], panel_chip_id[4]);
 	set_dpui_field(DPUI_KEY_CHIPID, tbuf, size);
+
+	resource_copy_by_name(panel_data, panel_coord, "coordinate");
+	size = snprintf(tbuf, MAX_DPUI_VAL_LEN, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+		panel_datetime[0], panel_datetime[1], panel_datetime[2], panel_datetime[3],
+		panel_datetime[4], panel_datetime[5], panel_datetime[6],
+		panel_coord[0], panel_coord[1], panel_coord[2], panel_coord[3]);
+	set_dpui_field(DPUI_KEY_CELLID, tbuf, size);
+
+	/* OCTAID */
+	resource_copy_by_name(panel_data, octa_id, "octa_id");
+	site = (octa_id[0] >> 4) & 0x0F;
+	rework = octa_id[0] & 0x0F;
+	poc = octa_id[1] & 0x0F;
+
+	for (i = 0; i < 16; i++) {
+		cell_id[i] = isalnum(octa_id[i + 4]) ? octa_id[i + 4] : '\0';
+		if (cell_id[i] == '\0') {
+			cell_id_exist = false;
+			break;
+		}
+	}
+	size = snprintf(tbuf, MAX_DPUI_VAL_LEN, "%d%d%d%02x%02x",
+			site, rework, poc, octa_id[2], octa_id[3]);
+	if (cell_id_exist) {
+		for (i = 0; i < 16; i++)
+			size += snprintf(tbuf + size, MAX_DPUI_VAL_LEN - size, "%c", cell_id[i]);
+	}
+	set_dpui_field(DPUI_KEY_OCTAID, tbuf, size);
 
 	return 0;
 }

@@ -210,6 +210,7 @@ struct max77705_usbc_platform_data {
 	struct delayed_work factory_state_work;
 	struct delayed_work factory_rid_work;
 #endif
+	int detach_done_wait;
 };
 
 /* Function Status from s2mm005 definition */

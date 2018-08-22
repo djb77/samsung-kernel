@@ -533,6 +533,7 @@ void fimc_is_sensor_setting_mode_change(struct fimc_is_device_sensor_peri *senso
 void fimc_is_sensor_flash_fire_work(struct work_struct *data)
 {
 	int ret = 0;
+	u32 frame_duration = 0;
 	struct fimc_is_flash *flash;
 	struct fimc_is_flash_data *flash_data;
 	struct fimc_is_device_sensor *device;
@@ -593,6 +594,10 @@ void fimc_is_sensor_flash_fire_work(struct work_struct *data)
 	step = flash->flash_ae.main_fls_strm_on_off_step;
 
 	if (sensor_peri->sensor_interface.cis_mode == ITF_CIS_SMIA) {
+		CALL_CISOPS(&sensor_peri->cis, cis_adjust_frame_duration, sensor_peri->subdev_cis,
+		    flash->flash_ae.expo[step], &frame_duration);
+		fimc_is_sensor_peri_s_frame_duration(device, frame_duration);
+		
 		fimc_is_sensor_peri_s_analog_gain(device, flash->flash_ae.again[step], flash->flash_ae.again[step]);
 		fimc_is_sensor_peri_s_digital_gain(device, flash->flash_ae.dgain[step], flash->flash_ae.dgain[step]);
 		fimc_is_sensor_peri_s_exposure_time(device, flash->flash_ae.expo[step], flash->flash_ae.expo[step]);
@@ -613,6 +618,10 @@ void fimc_is_sensor_flash_fire_work(struct work_struct *data)
 			flash->flash_ae.again[step], flash->flash_ae.again[step],
 			flash->flash_ae.dgain[step], flash->flash_ae.dgain[step]);
 	} else {
+		CALL_CISOPS(&sensor_peri->cis, cis_adjust_frame_duration, sensor_peri->subdev_cis,
+			MAX(flash->flash_ae.long_expo[step], flash->flash_ae.short_expo[step]), &frame_duration);
+		fimc_is_sensor_peri_s_frame_duration(device, frame_duration);
+
 		fimc_is_sensor_peri_s_analog_gain(device, flash->flash_ae.long_again[step], flash->flash_ae.short_again[step]);
 		fimc_is_sensor_peri_s_digital_gain(device, flash->flash_ae.long_dgain[step], flash->flash_ae.short_dgain[step]);
 		fimc_is_sensor_peri_s_exposure_time(device, flash->flash_ae.long_expo[step], flash->flash_ae.short_expo[step]);
@@ -916,11 +925,11 @@ void fimc_is_sensor_aperture_set_work(struct work_struct *data)
 	}
 
 	/* Sensor stream on */
-	if (need_stream_off) {
+	if (need_stream_off && device->sstream) {
 		mutex_lock(&sensor_peri->cis.control_lock);
 		ret = CALL_CISOPS(&sensor_peri->cis, cis_stream_on, sensor_peri->subdev_cis);
 		if (ret < 0)
-			err("[%s] stream off fail\n", __func__);
+			err("[%s] stream on fail\n", __func__);
 		mutex_unlock(&sensor_peri->cis.control_lock);
 	}
 
@@ -1832,6 +1841,8 @@ int fimc_is_sensor_peri_s_stream(struct fimc_is_device_sensor *device,
 		for (i = 0; i < CAM2P0_UCTL_LIST_SIZE; i++) {
 			memset(&sensor_peri->cis.sensor_ctls[i].cur_cam20_sensor_udctrl, 0, sizeof(camera2_sensor_uctl_t));
 			sensor_peri->cis.sensor_ctls[i].valid_sensor_ctrl = 0;
+			memset(&sensor_peri->cis.sensor_ctls[i].cur_cam20_flash_udctrl, 0, sizeof(camera2_flash_uctl_t));
+			sensor_peri->cis.sensor_ctls[i].valid_flash_udctrl = false;
 		}
 	}
 	if (ret < 0) {

@@ -458,7 +458,7 @@ static noinline void __ref rest_init(void)
 }
 
 #ifdef CONFIG_RKP_KDP
-RKP_RO_AREA int is_boot_recovery = 0;
+RKP_RO_AREA int is_recovery = 0;
 #endif
 /* Check for early params. */
 static int __init do_early_param(char *param, char *val,
@@ -480,7 +480,7 @@ static int __init do_early_param(char *param, char *val,
 	if ((strncmp(param, "bootmode", 9) == 0)) {
 			//printk("\n RKP22 In Recovery Mode= %d\n",*val);
 			if ((strncmp(val, "2", 2) == 0)) {
-				is_boot_recovery = 1;
+				is_recovery = 1;
 			}
 	}
 #endif

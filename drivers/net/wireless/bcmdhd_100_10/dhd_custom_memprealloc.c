@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_memprealloc.c 734328 2017-12-04 06:33:47Z $
+ * $Id: dhd_custom_memprealloc.c 742964 2018-01-24 08:51:35Z $
  */
 
 #include <linux/device.h>
@@ -290,21 +290,21 @@ dhd_init_wlan_mem(void)
 	int j;
 
 	for (i = 0; i < DHD_SKB_1PAGE_BUF_NUM; i++) {
-		wlan_static_skb[i] = dev_alloc_skb(DHD_SKB_1PAGE_BUFSIZE);
+		wlan_static_skb[i] = __dev_alloc_skb(DHD_SKB_1PAGE_BUFSIZE, GFP_KERNEL);
 		if (!wlan_static_skb[i]) {
 			goto err_skb_alloc;
 		}
 	}
 
 	for (i = DHD_SKB_1PAGE_BUF_NUM; i < WLAN_SKB_1_2PAGE_BUF_NUM; i++) {
-		wlan_static_skb[i] = dev_alloc_skb(DHD_SKB_2PAGE_BUFSIZE);
+		wlan_static_skb[i] = __dev_alloc_skb(DHD_SKB_2PAGE_BUFSIZE, GFP_KERNEL);
 		if (!wlan_static_skb[i]) {
 			goto err_skb_alloc;
 		}
 	}
 
 #if !defined(CONFIG_BCMDHD_PCIE)
-	wlan_static_skb[i] = dev_alloc_skb(DHD_SKB_4PAGE_BUFSIZE);
+	wlan_static_skb[i] = __dev_alloc_skb(DHD_SKB_4PAGE_BUFSIZE, GFP_KERNEL);
 	if (!wlan_static_skb[i]) {
 		goto err_skb_alloc;
 	}

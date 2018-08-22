@@ -194,7 +194,7 @@ static void fimc_is_lib_vra_callback_post_detect_ready(u32 instance,
 				i, faces_ptr[i].rect.left,
 				faces_ptr[i].rect.top, faces_ptr[i].rect.size,
 				faces_ptr[i].score,
-				faces_ptr[i].extra.is_rot, faces_ptr[i].extra.is_yaw,
+				faces_ptr[i].extra.is_rot, faces_ptr[i].extra.yaw_type,
 				faces_ptr[i].extra.rot, faces_ptr[i].extra.mirror_x,
 				faces_ptr[i].extra.hw_rot_and_mirror);
 	}
@@ -927,6 +927,26 @@ static int fimc_is_lib_vra_fwalgs_stop(struct fimc_is_lib_vra *lib_vra)
 	return 0;
 }
 
+int fimc_is_lib_vra_stop_instance(struct fimc_is_lib_vra *lib_vra, u32 instance)
+{
+	if (unlikely(!lib_vra)) {
+		err_lib("lib_vra is NULL");
+		return -EINVAL;
+	}
+
+	if (instance >= VRA_TOTAL_SENSORS) {
+		err_lib("invalid instance");
+		return -EINVAL;
+	}
+
+	lib_vra->all_face_num[instance] = 0;
+	lib_vra->pdt_all_face_num[instance] = 0;
+	lib_vra->af_all_face_num[instance] = 0;
+	clear_bit(VRA_INST_APPLY_TUNE_SET, &lib_vra->inst_state[instance]);
+
+	return 0;
+}
+
 int fimc_is_lib_vra_stop(struct fimc_is_lib_vra *lib_vra)
 {
 	int ret;
@@ -1124,7 +1144,7 @@ static int fimc_is_lib_vra_update_hfd_dm(struct fimc_is_lib_vra *lib_vra, u32 in
 			hfd->faceIds[face_num]);
 
 		hfd->is_rot[face_num] = face->extra.is_rot;
-		hfd->is_yaw[face_num] = face->extra.is_yaw;
+		hfd->is_yaw[face_num] = face->extra.yaw_type;
 		hfd->rot[face_num] = face->extra.rot;
 		hfd->mirror_x[face_num] = face->extra.mirror_x;
 		hfd->hw_rot_mirror[face_num] = face->extra.hw_rot_and_mirror;

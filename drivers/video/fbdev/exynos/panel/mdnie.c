@@ -1169,7 +1169,7 @@ static ssize_t afc_store(struct device *dev,
 	if ((ret != 1 && ret != ARRAY_SIZE(s) + 1) ||
 			ARRAY_SIZE(s) != MAX_AFC_ROI_LEN) {
 		pr_warn("%s, invalid size %d\n", __func__, ret);
-		return ret;
+		return -EINVAL;
 	}
 
 	mutex_lock(&mdnie->lock);

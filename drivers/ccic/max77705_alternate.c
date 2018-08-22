@@ -398,7 +398,7 @@ static int max77705_vdm_process_discover_svids(void *data, char *vdm_data, int l
 		if (o_notify) {
 			inc_hw_param(o_notify, USB_CCIC_DP_USE_COUNT);
 			timeleft = wait_event_interruptible_timeout(usbpd_data->host_turn_on_wait_q,
-					usbpd_data->host_turn_on_event, (usbpd_data->host_turn_on_wait_time)*HZ);
+					usbpd_data->host_turn_on_event && !usbpd_data->detach_done_wait, (usbpd_data->host_turn_on_wait_time)*HZ);
 			msg_maxim("%s host turn on wait = %d\n", __func__, timeleft);
 		}
 #endif
@@ -1166,9 +1166,11 @@ void max77705_set_host_turn_on_event(int mode)
 
 	pr_info("%s : current_set is %d!\n", __func__, mode);
 	if (mode) {
+		usbpd_data->detach_done_wait = 0;
 		usbpd_data->host_turn_on_event = 1;
 		wake_up_interruptible(&usbpd_data->host_turn_on_wait_q);
 	} else {
+		usbpd_data->detach_done_wait = 0;
 		usbpd_data->host_turn_on_event = 0;
 	}
 }

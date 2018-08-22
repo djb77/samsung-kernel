@@ -13,8 +13,8 @@
 #if defined(CONFIG_EXYNOS_FMP_FIPS)
 int exynos_fmp_fips_init(struct exynos_fmp *fmp);
 void exynos_fmp_fips_exit(struct exynos_fmp *fmp);
-int do_fmp_fips_init(struct exynos_fmp *fmp);
-void do_fmp_fips_exit(struct exynos_fmp *fmp);
+struct fmp_fips_data *do_fmp_fips_init(struct exynos_fmp *fmp);
+void do_fmp_fips_exit(struct fmp_fips_data *data);
 bool in_fmp_fips_err(void);
 #else
 inline int exynos_fmp_fips_init(struct exynos_fmp *fmp)

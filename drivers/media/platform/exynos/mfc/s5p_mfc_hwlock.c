@@ -669,24 +669,17 @@ static int mfc_nal_q_just_run(struct s5p_mfc_ctx *ctx, int need_cache_flush)
 			mfc_info_ctx("NAL Q: start NAL QUEUE\n");
 			s5p_mfc_nal_q_start(dev, nal_q_handle);
 
-			if (s5p_mfc_nal_q_enqueue_in_buf(dev, ctx, nal_q_handle->nal_q_in_handle)) {
+			if (s5p_mfc_nal_q_enqueue_in_buf(dev, ctx, nal_q_handle->nal_q_in_handle))
 				mfc_debug(2, "NAL Q: Failed to enqueue input data\n");
-				if (ctx->clear_work_bit) {
-					s5p_mfc_clear_bit(ctx->num, &dev->work_bits);
-					ctx->clear_work_bit = 0;
-				}
-				s5p_mfc_release_hwlock_ctx(ctx);
-				ret = 0;
-				break;
-			}
 
-			if (!nal_q_handle->nal_q_exception)
-				s5p_mfc_clear_bit(ctx->num, &dev->work_bits);
+			s5p_mfc_clear_bit(ctx->num, &dev->work_bits);
+			if ((s5p_mfc_ctx_ready(ctx) && !ctx->clear_work_bit) ||
+					nal_q_handle->nal_q_exception)
+				s5p_mfc_set_bit(ctx->num, &dev->work_bits);
+			ctx->clear_work_bit = 0;
 
 			s5p_mfc_release_hwlock_ctx(ctx);
 
-			if (s5p_mfc_ctx_ready(ctx))
-				s5p_mfc_set_bit(ctx->num, &dev->work_bits);
 			if (s5p_mfc_is_work_to_do(dev))
 				queue_work(dev->butler_wq, &dev->butler_work);
 
@@ -711,24 +704,18 @@ static int mfc_nal_q_just_run(struct s5p_mfc_ctx *ctx, int need_cache_flush)
 			break;
 		} else {
 			/* NAL QUEUE */
-			if (s5p_mfc_nal_q_enqueue_in_buf(dev, ctx, nal_q_handle->nal_q_in_handle)) {
+			if (s5p_mfc_nal_q_enqueue_in_buf(dev, ctx, nal_q_handle->nal_q_in_handle))
 				mfc_debug(2, "NAL Q: Failed to enqueue input data\n");
-				if (ctx->clear_work_bit) {
-					s5p_mfc_clear_bit(ctx->num, &dev->work_bits);
-					ctx->clear_work_bit = 0;
-				}
-				s5p_mfc_release_hwlock_ctx(ctx);
-				ret = 0;
-				break;
-			}
 
-			if (!nal_q_handle->nal_q_exception)
-				s5p_mfc_clear_bit(ctx->num, &dev->work_bits);
+			s5p_mfc_clear_bit(ctx->num, &dev->work_bits);
+
+			if ((s5p_mfc_ctx_ready(ctx) && !ctx->clear_work_bit) ||
+					nal_q_handle->nal_q_exception)
+				s5p_mfc_set_bit(ctx->num, &dev->work_bits);
+			ctx->clear_work_bit = 0;
 
 			s5p_mfc_release_hwlock_ctx(ctx);
 
-			if (s5p_mfc_ctx_ready(ctx))
-				s5p_mfc_set_bit(ctx->num, &dev->work_bits);
 			if (s5p_mfc_is_work_to_do(dev))
 				queue_work(dev->butler_wq, &dev->butler_work);
 			ret = 0;

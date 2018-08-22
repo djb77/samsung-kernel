@@ -586,8 +586,12 @@ int sec_haptic_unregister(struct sec_haptic_drvdata *ddata)
 {
 	sec_haptic_boost(ddata, BOOST_OFF);
 	sysfs_remove_group(&ddata->dev->kobj, &sec_haptic_attr_group);
+	sysfs_remove_group(&ddata->to_dev->kobj, &multi_freq_attr_group);
+	sysfs_remove_group(&ddata->to_dev->kobj, &timed_output_attr_group);
 	sec_device_destroy(ddata->dev->devt);
 	sec_haptic_enable(ddata, false);
+	device_destroy(ddata->to_class, MKDEV(0, 0));
+	class_destroy(ddata->to_class);
 	pddata = NULL;
 	kfree(ddata);
 	return 0;

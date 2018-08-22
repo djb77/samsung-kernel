@@ -255,6 +255,7 @@ int ccic_notifier_notify(CC_NOTI_TYPEDEF *p_noti, void *pd, int pdic_attach)
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->dest,
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->id,
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->attach);
+		break;
 #ifdef CONFIG_SEC_FACTORY
 	case CCIC_NOTIFY_ID_CC_PIN_STATUS:
 		pr_info("%s: src:%01x dest:%01x id:%02x pinStatus:%02x\n", __func__,

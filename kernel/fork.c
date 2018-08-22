@@ -1473,17 +1473,25 @@ static int dup_task_integrity(unsigned long clone_flags,
 	} else {
 		tsk->integrity = task_integrity_alloc();
 
-		if (tsk->integrity) {
-			ret = five_fork(current, tsk);
-
-			if (ret)
-				task_integrity_put(tsk->integrity);
-
-		}
-		else
+		if (!tsk->integrity) 
 			ret = -ENOMEM;
-
 	}
+
+	return ret;
+}
+
+static inline void task_integrity_cleanup(struct task_struct *tsk)
+{
+	task_integrity_put(tsk->integrity);
+}
+
+static inline int task_integrity_apply(unsigned long clone_flags,
+						struct task_struct *tsk)
+{
+	int ret = 0;
+
+	if (!(clone_flags & CLONE_VM))
+		ret = five_fork(current, tsk);
 
 	return ret;
 }
@@ -1493,6 +1501,17 @@ static inline int dup_task_integrity(unsigned long clone_flags,
 {
 	return 0;
 }
+
+static inline void task_integrity_cleanup(struct task_struct *tsk)
+{
+}
+
+static inline int task_integrity_apply(unsigned long clone_flags,
+						struct task_struct *tsk)
+{
+	return 0;
+}
+
 #endif
 
 /*
@@ -1840,6 +1859,10 @@ static __latent_entropy struct task_struct *copy_process(
 		goto bad_fork_cancel_cgroup;
 	}
 
+	retval = task_integrity_apply(clone_flags, p);
+	if (retval)
+		goto bad_fork_cancel_cgroup;
+
 	if (likely(p->pid)) {
 		ptrace_init_task(p, (clone_flags & CLONE_PTRACE) || trace);
 
@@ -1895,6 +1918,7 @@ bad_fork_cancel_cgroup:
 	spin_unlock(&current->sighand->siglock);
 	write_unlock_irq(&tasklist_lock);
 	cgroup_cancel_fork(p);
+	task_integrity_cleanup(p);
 bad_fork_free_pid:
 	threadgroup_change_end(current);
 	if (pid != &init_struct_pid)

@@ -1009,8 +1009,13 @@ static int max77705_rgb_remove(struct platform_device *pdev)
 	struct max77705_rgb *max77705_rgb = platform_get_drvdata(pdev);
 	int i;
 
-	for (i = 0; i < 4; i++)
+	sysfs_remove_group(&led_dev->kobj, &sec_led_attr_group);
+	sec_device_destroy(led_dev->devt);
+	for (i = 0; i < 4; i++) {
+		sysfs_remove_group(&max77705_rgb->led[i].dev->kobj,
+						&common_led_attr_group);
 		led_classdev_unregister(&max77705_rgb->led[i]);
+	}
 
 	return 0;
 }

@@ -99,6 +99,7 @@ void device_pm_sleep_init(struct device *dev)
 	dev->power.is_suspended = false;
 	dev->power.is_noirq_suspended = false;
 	dev->power.is_late_suspended = false;
+	dev->power.is_rpm_disabled = false;
 	init_completion(&dev->power.completion);
 	complete_all(&dev->power.completion);
 	dev->power.wakeup = NULL;
@@ -781,10 +782,10 @@ static int device_resume(struct device *dev, pm_message_t state, bool async)
 
 	if (dev->power.direct_complete) {
 		/* Match the pm_runtime_disable() in __device_suspend(). */
-		if (!dev->power.is_suspend_aborted)
+		if (dev->power.is_rpm_disabled) {
 			pm_runtime_enable(dev);
-		else
-			dev->power.is_suspend_aborted = false;
+			dev->power.is_rpm_disabled = false;
+		}
 		goto Complete;
 	}
 
@@ -1416,8 +1417,6 @@ static int __device_suspend(struct device *dev, pm_message_t state, bool async)
 			MAX_SUSPEND_ABORT_LEN);
 		log_suspend_abort_reason(suspend_abort);
 		async_error = -EBUSY;
-		if (dev->power.direct_complete)
-			dev->power.is_suspend_aborted = true;
 		goto Complete;
 	}
 
@@ -1427,10 +1426,12 @@ static int __device_suspend(struct device *dev, pm_message_t state, bool async)
 	if (dev->power.direct_complete) {
 		if (pm_runtime_status_suspended(dev)) {
 			pm_runtime_disable(dev);
+			dev->power.is_rpm_disabled = true;
 			if (pm_runtime_status_suspended(dev))
 				goto Complete;
 
 			pm_runtime_enable(dev);
+			dev->power.is_rpm_disabled = false;
 		}
 		dev->power.direct_complete = false;
 	}

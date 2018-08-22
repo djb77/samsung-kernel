@@ -163,7 +163,7 @@ struct fmp_fips_data {
 	struct block_device *bdev;
 	sector_t sector;
 	dev_t devt;
-	struct fmp_crypto_setting *crypto;
+	struct fmp_crypto_setting crypto;
 	uint32_t test_block_offset;
 };
 

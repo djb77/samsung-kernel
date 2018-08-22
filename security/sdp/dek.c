@@ -216,6 +216,7 @@ static void kek_dump(int engine_id, int kek_type, const char *kek_name)
 
 static void dump_all_keys(int engine_id)
 {
+	printk("engine id : %d\n", engine_id);
 	kek_dump(engine_id, KEK_TYPE_SYM, "KEK_TYPE_SYM");
 	kek_dump(engine_id, KEK_TYPE_RSA_PUB, "KEK_TYPE_RSA_PUB");
 	kek_dump(engine_id, KEK_TYPE_RSA_PRIV, "KEK_TYPE_RSA_PRIV");

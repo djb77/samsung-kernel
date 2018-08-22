@@ -773,6 +773,9 @@ struct sec_ts_data {
 	int min_ambient;
 	int min_ambient_channel_tx;
 	int min_ambient_channel_rx;
+	int mode_change_failed_count;
+	int irq_recovery_count;
+	int ic_reset_count;
 
 	/* average value for each channel */
 	short ambient_tx[TOUCH_TX_CHANNEL_NUM];

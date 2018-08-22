@@ -141,6 +141,8 @@ struct max77705_muic_data {
 	bool				is_factory_start;
 	bool				is_check_hv;
 	bool				is_charger_ready;
+	bool				is_afc_reset;
+	bool				is_skip_bigdata;
 
 	u8				is_boot_dpdnvden;
 

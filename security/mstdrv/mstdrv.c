@@ -30,6 +30,7 @@ struct device *mst_drv_dev;
 static int escape_loop = 1;
 //static int rt;
 static struct wake_lock mst_wakelock;
+static int wpc_det;
 
 EXPORT_SYMBOL_GPL(mst_drv_dev);
 
@@ -98,14 +99,6 @@ static void of_mst_hw_onoff(bool on)
 		}
 		printk("%s : regulator 3.0 is enabled\n", __func__);
 
-		gpio_set_value(mst_pwr_en, 1);
-		usleep_range(3600, 4000);
-		gpio_set_value(mst_pwr_en, 0);
-		mdelay(50);
-
-		gpio_set_value(mst_pwr_en, 1);
-		printk("%s : mst_pwr_en gets the HIGH\n", __func__);
-
 		printk("%s : MST_MODE_ON notify start\n", __func__);
 		value.intval = MST_MODE_ON;
 
@@ -113,6 +106,14 @@ static void of_mst_hw_onoff(bool on)
 				POWER_SUPPLY_PROP_TECHNOLOGY, value);
 		printk("%s : MST_MODE_ON notified : %d\n", __func__,
 		       value.intval);
+
+		gpio_set_value(mst_pwr_en, 1);
+		usleep_range(3600, 4000);
+		gpio_set_value(mst_pwr_en, 0);
+		mdelay(50);
+
+		gpio_set_value(mst_pwr_en, 1);
+		printk("%s : mst_pwr_en gets the HIGH\n", __func__);
 
 		mdelay(40);
 
@@ -135,17 +136,17 @@ static void of_mst_hw_onoff(bool on)
 		}
 
 	} else {
+		gpio_set_value(mst_pwr_en, 0);
+		printk("%s : mst_pwr_en gets the LOW\n", __func__);
+
+		usleep_range(800, 1000);
+		printk("%s : msleep(1)\n", __func__);
+
 		value.intval = MST_MODE_OFF;
 		psy_do_property("mfc-charger", set,
 				POWER_SUPPLY_PROP_TECHNOLOGY, value);
 		printk("%s : MST_MODE_OFF notify : %d\n", __func__,
 		       value.intval);
-
-		usleep_range(800, 1000);
-		printk("%s : msleep(1)\n", __func__);
-
-		gpio_set_value(mst_pwr_en, 0);
-		printk("%s : mst_pwr_en gets the LOW\n", __func__);
 
 		ret = regulator_disable(regulator3_0);
 		if (ret < 0) {
@@ -181,6 +182,12 @@ static ssize_t store_mst_drv(struct device *dev,
 
 	sscanf(buf, "%20s\n", test_result);
 	printk(KERN_ERR "MST Store test result : %s\n", test_result);
+
+	if (wpc_det && (gpio_get_value(wpc_det) == 1)) {
+		printk("[MST] Wireless charging is ongoing, do not proceed MST work\n");
+		return count;
+	}
+
 	switch (test_result[0]) {
 	case '1':
 		of_mst_hw_onoff(1);
@@ -280,6 +287,22 @@ static DEVICE_ATTR(mfc, 0770, show_mfc, store_mfc);
 static int sec_mst_gpio_init(struct device *dev)
 {
 	int ret = 0;
+	struct device_node *np;
+	enum of_gpio_flags irq_gpio_flags;
+
+	/* get wireless chraging check gpio */
+	np = of_find_node_by_name(NULL, "battery");
+	if (!np) {
+		pr_err("%s np NULL\n", __func__);
+	} else {
+		/* wpc_det */
+		wpc_det = of_get_named_gpio_flags(np, "battery,wpc_det",
+			0, &irq_gpio_flags);
+		if (ret < 0) {
+			dev_err(dev, "%s : can't get wpc_det\r\n", __FUNCTION__);
+		}
+	}
+
 	mst_pwr_en = of_get_named_gpio(dev->of_node, "sec-mst,mst-pwr-gpio", 0);
 
 	printk("[MST] Data Value : %d\n", mst_pwr_en);

@@ -1187,10 +1187,7 @@ static long  mtpg_ioctl(struct file *fd, unsigned int code, unsigned long arg)
 		max_pkt = dev->bulk_in->maxpacket;
 		printk(KERN_DEBUG "[%s] line = %d max_pkt = [%d]\n",
 						 __func__, __LINE__, max_pkt);
-		if (max_pkt == 64)
-			status = 64;
-		else
-			status = 512;
+		status = max_pkt;
 		break;
 	case SEND_FILE_WITH_HEADER:
 	{

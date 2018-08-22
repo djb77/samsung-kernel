@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.c 739652 2018-01-09 07:19:48Z $
+ * $Id: wl_cfg80211.c 757023 2018-04-11 08:24:18Z $
  */
 /* */
 #include <typedefs.h>
@@ -3895,6 +3895,14 @@ static s32 wl_set_retry(struct net_device *dev, u32 retry, bool l)
 {
 	s32 err = 0;
 	u32 cmd = (l ? WLC_SET_LRL : WLC_SET_SRL);
+
+#ifdef CUSTOM_LONG_RETRY_LIMIT
+	if ((cmd == WLC_SET_LRL) &&
+		(retry != CUSTOM_LONG_RETRY_LIMIT)) {
+		WL_DBG(("CUSTOM_LONG_RETRY_LIMIT is used.Ignore configuration"));
+		return err;
+	}
+#endif /* CUSTOM_LONG_RETRY_LIMIT */
 
 	retry = htod32(retry);
 	err = wldev_ioctl_set(dev, cmd, &retry, sizeof(retry));
@@ -12201,8 +12209,9 @@ static s32 wl_inform_bss(struct bcm_cfg80211 *cfg)
 		add_roam_cache(cfg, bi);
 #endif /* ESCAN_CHANNEL_CACHE */
 		err = wl_inform_single_bss(cfg, bi, false);
-		if (unlikely(err))
-			break;
+		if (unlikely(err)) {
+			WL_ERR(("bss inform failed\n"));
+		}
 	}
 	preempt_enable();
 #ifdef ROAM_CHANNEL_CACHE
@@ -12321,7 +12330,8 @@ static s32 wl_inform_single_bss(struct bcm_cfg80211 *cfg, wl_bss_info_t *bi, boo
 	cbss = cfg80211_inform_bss_frame(wiphy, channel, mgmt,
 		le16_to_cpu(notif_bss_info->frame_len), signal, aflags);
 	if (unlikely(!cbss)) {
-		WL_ERR(("cfg80211_inform_bss_frame error\n"));
+		WL_ERR(("cfg80211_inform_bss_frame error bssid " MACDBG " channel %d \n",
+			MAC2STRDBG((u8*)(&bi->BSSID)), notif_bss_info->channel));
 		err = -EINVAL;
 		goto out_err;
 	}
@@ -13882,7 +13892,7 @@ wl_notify_roaming_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 
 #ifdef CUSTOM_EVENT_PM_WAKE
 uint32 last_dpm_upd_time = 0;	/* ms */
-#define DPM_UPD_LMT_TIME	25000	/* ms */
+#define DPM_UPD_LMT_TIME	(CUSTOM_EVENT_PM_WAKE + 5) * 1000 * 4	/* ms */
 #define DPM_UPD_LMT_RSSI	-85	/* dbm */
 
 static s32
@@ -14078,6 +14088,27 @@ static s32 wl_get_assoc_ies(struct bcm_cfg80211 *cfg, struct net_device *ndev)
 	assoc_info.req_len = htod32(assoc_info.req_len);
 	assoc_info.resp_len = htod32(assoc_info.resp_len);
 	assoc_info.flags = htod32(assoc_info.flags);
+
+	if (assoc_info.req_len > (MAX_REQ_LINE + sizeof(struct dot11_assoc_req) +
+		((assoc_info.flags & WLC_ASSOC_REQ_IS_REASSOC) ? ETHER_ADDR_LEN : 0))) {
+		err = BCME_BADLEN;
+		goto exit;
+	}
+	if ((assoc_info.req_len > 0) &&
+		(assoc_info.req_len < (sizeof(struct dot11_assoc_req) +
+			((assoc_info.flags & WLC_ASSOC_REQ_IS_REASSOC) ? ETHER_ADDR_LEN : 0)))) {
+		err = BCME_BADLEN;
+		goto exit;
+	}
+	if (assoc_info.resp_len > (MAX_REQ_LINE + sizeof(struct dot11_assoc_resp))) {
+		err = BCME_BADLEN;
+		goto exit;
+	}
+	if ((assoc_info.resp_len > 0) && (assoc_info.resp_len < sizeof(struct dot11_assoc_resp))) {
+		err = BCME_BADLEN;
+		goto exit;
+	}
+
 	if (conn_info->req_ie_len) {
 		conn_info->req_ie_len = 0;
 		bzero(conn_info->req_ie, sizeof(conn_info->req_ie));
@@ -14092,21 +14123,13 @@ static s32 wl_get_assoc_ies(struct bcm_cfg80211 *cfg, struct net_device *ndev)
 			assoc_info.req_len, NULL);
 		if (unlikely(err)) {
 			WL_ERR(("could not get assoc req (%d)\n", err));
-			return err;
+			goto exit;
 		}
 		conn_info->req_ie_len = assoc_info.req_len - sizeof(struct dot11_assoc_req);
 		if (assoc_info.flags & WLC_ASSOC_REQ_IS_REASSOC) {
 			conn_info->req_ie_len -= ETHER_ADDR_LEN;
 		}
-		if (conn_info->req_ie_len <= MAX_REQ_LINE)
-			memcpy(conn_info->req_ie, cfg->extra_buf, conn_info->req_ie_len);
-		else {
-			WL_ERR(("IE size %d above max %d size \n",
-				conn_info->req_ie_len, MAX_REQ_LINE));
-			return err;
-		}
-	} else {
-		conn_info->req_ie_len = 0;
+		memcpy(conn_info->req_ie, cfg->extra_buf, conn_info->req_ie_len);
 	}
 
 	if (assoc_info.resp_len) {
@@ -14114,17 +14137,10 @@ static s32 wl_get_assoc_ies(struct bcm_cfg80211 *cfg, struct net_device *ndev)
 			assoc_info.resp_len, NULL);
 		if (unlikely(err)) {
 			WL_ERR(("could not get assoc resp (%d)\n", err));
-			return err;
+			goto exit;
 		}
-		conn_info->resp_ie_len = assoc_info.resp_len -sizeof(struct dot11_assoc_resp);
-		if (conn_info->resp_ie_len <= MAX_REQ_LINE) {
-			memcpy(conn_info->resp_ie, cfg->extra_buf, conn_info->resp_ie_len);
-		} else {
-			WL_ERR(("IE size %d above max %d size \n",
-				conn_info->resp_ie_len, MAX_REQ_LINE));
-			return err;
-		}
-
+		conn_info->resp_ie_len = assoc_info.resp_len - sizeof(struct dot11_assoc_resp);
+		memcpy(conn_info->resp_ie, cfg->extra_buf, conn_info->resp_ie_len);
 #ifdef QOS_MAP_SET
 		/* find qos map set ie */
 		if ((qos_map_ie = bcm_parse_tlvs(conn_info->resp_ie, conn_info->resp_ie_len,
@@ -14139,12 +14155,14 @@ static s32 wl_get_assoc_ies(struct bcm_cfg80211 *cfg, struct net_device *ndev)
 			cfg->up_table = NULL;
 		}
 #endif /* QOS_MAP_SET */
-	} else {
-		conn_info->resp_ie_len = 0;
 	}
-	WL_DBG(("req len (%d) resp len (%d)\n", conn_info->req_ie_len,
-		conn_info->resp_ie_len));
 
+exit:
+	if (err) {
+		WL_ERR(("err:%d, assoc_info-req:%u,resp:%u conn_info-req:%u,resp:%u\n",
+			err, assoc_info.req_len, assoc_info.resp_len,
+			conn_info->req_ie_len, conn_info->resp_ie_len));
+	}
 	return err;
 }
 
@@ -14409,6 +14427,11 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		memcpy(cfg->fbt_key, data, FBT_KEYLEN);
 	}
 #endif /* WLFBT */
+#ifdef CUSTOM_LONG_RETRY_LIMIT
+	if (wl_set_retry(ndev, CUSTOM_LONG_RETRY_LIMIT, 1) < 0) {
+		WL_ERR(("CUSTOM_LONG_RETRY_LIMIT set fail!\n"));
+	}
+#endif /* CUSTOM_LONG_RETRY_LIMIT */
 	WL_ERR(("Report roam event to upper layer. " MACDBG " (ch:%d)\n",
 		MAC2STRDBG((const u8*)(&e->addr)), *channel));
 
@@ -14585,6 +14608,11 @@ wl_bss_connect_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 				dhd_set_cpucore(dhdp, TRUE);
 			}
 #endif /* CUSTOM_SET_CPUCORE */
+#ifdef CUSTOM_LONG_RETRY_LIMIT
+			if (wl_set_retry(ndev, CUSTOM_LONG_RETRY_LIMIT, 1) < 0) {
+				WL_ERR(("CUSTOM_LONG_RETRY_LIMIT set fail!\n"));
+			}
+#endif /* CUSTOM_LONG_RETRY_LIMIT */
 #ifdef WL_IRQSET
 			dhd_irq_set_affinity(dhdp);
 			delta_time = IRQ_SET_DURATION - local_clock() / USEC_PER_SEC;
@@ -18970,12 +18998,15 @@ int wl_cfg80211_hang(struct net_device *dev, u16 reason)
 s32 wl_cfg80211_down(struct net_device *dev)
 {
 	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
-	s32 err;
+	s32 err = BCME_ERROR;
 
 	WL_DBG(("In\n"));
-	mutex_lock(&cfg->usr_sync);
-	err = __wl_cfg80211_down(cfg);
-	mutex_unlock(&cfg->usr_sync);
+
+	if (cfg) {
+		mutex_lock(&cfg->usr_sync);
+		err = __wl_cfg80211_down(cfg);
+		mutex_unlock(&cfg->usr_sync);
+	}
 
 	return err;
 }
@@ -20703,6 +20734,7 @@ exit:
 }
 
 #define BUFSZ 5
+#define BUFSZN	BUFSZ + 1
 
 #define _S(x) #x
 #define S(x) _S(x)
@@ -20711,7 +20743,7 @@ int wl_cfg80211_wbtext_weight_config(struct net_device *ndev, char *data,
 		char *command, int total_len)
 {
 	int bytes_written = 0, err = -EINVAL, argc = 0;
-	char rssi[BUFSZ], band[BUFSZ], weight[BUFSZ];
+	char rssi[BUFSZN], band[BUFSZN], weight[BUFSZN];
 	char *endptr = NULL;
 	wnm_bss_select_weight_cfg_t *bwcfg;
 	u8 ioctl_buf[WLC_IOCTL_SMLEN];
@@ -20797,7 +20829,7 @@ int wl_cfg80211_wbtext_table_config(struct net_device *ndev, char *data,
 {
 	struct bcm_cfg80211 *cfg = wl_get_cfg(ndev);
 	int bytes_written = 0, err = -EINVAL;
-	char rssi[BUFSZ], band[BUFSZ];
+	char rssi[BUFSZN], band[BUFSZN];
 	int btcfg_len = 0, i = 0, parsed_len = 0;
 	wnm_bss_select_factor_cfg_t *btcfg;
 	size_t slen = strlen(data);
@@ -20915,7 +20947,7 @@ wl_cfg80211_wbtext_delta_config(struct net_device *ndev, char *data, char *comma
 	uint i = 0;
 	struct bcm_cfg80211 *cfg = wl_get_cfg(ndev);
 	int err = -EINVAL, bytes_written = 0, argc = 0, val, len = 0;
-	char delta[BUFSZ], band[BUFSZ], *endptr = NULL;
+	char delta[BUFSZN], band[BUFSZN], *endptr = NULL;
 	wl_roam_prof_band_v2_t *rp;
 	u8 ioctl_buf[WLC_IOCTL_MEDLEN];
 

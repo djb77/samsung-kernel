@@ -168,8 +168,16 @@
 #define RXF_CPUCORE 5
 #endif /* CONFIG_MACH_UNIVERSAL5433 || CONFIG_MACH_UNIVERSAL7420  || CONFIG_SOC_EXYNOS8890 */
 
+#if defined(CONFIG_SOC_EXYNOS9810)
+#define ARGOS_NOTIFY_CB
+#define PCIE_IRQ_CPU_CORE 5
+#endif /* CONFIG_SOC_EXYNOS9810 */
+
 #if defined(DHD_LB)
-#if defined(CONFIG_SOC_EXYNOS8890)
+#if defined(CONFIG_SOC_EXYNOS9810)
+#define DHD_LB_PRIMARY_CPUS     (0x10)
+#define DHD_LB_SECONDARY_CPUS   (0x0E)
+#elif defined(CONFIG_SOC_EXYNOS8890)
 /*
  * Removed core 6~7 from NAPI CPU mask.
  * Exynos 8890 disabled core 6~7 by default.

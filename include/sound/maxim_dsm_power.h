@@ -79,5 +79,6 @@ struct maxim_dsm_power {
 };
 
 void maxdsm_power_ppr_control(int state);
+void maxdsm_power_control(int state);
 
 #endif /* __SOUND_MAXIM_DSM_POWER_H__ */

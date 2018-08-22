@@ -69,7 +69,6 @@ static void srpmb_worker(struct work_struct *data)
 	struct rpmb_packet packet;
 	struct rpmb_irq_ctx *rpmb_ctx;
 	struct scsi_device *sdp;
-	struct device *dev;
 	Rpmb_Req *req;
 
 	if (!data) {
@@ -224,7 +223,7 @@ static void srpmb_worker(struct work_struct *data)
 	}
 
 	__pm_relax(&rpmb_ctx->wakesrc);
-	dev_info(dev, "finish rpmb workqueue with command(%d)\n", req->type);
+	dev_info(&sr_pdev->dev, "finish rpmb workqueue with command(%d)\n", req->type);
 }
 
 static int srpmb_suspend_notifier(struct notifier_block *nb, unsigned long event,

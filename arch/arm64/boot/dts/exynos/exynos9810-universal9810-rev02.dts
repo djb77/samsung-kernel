@@ -1,0 +1,21 @@
+/*
+ * SAMSUNG EXYNOS9810 board device tree source
+ *
+ * Copyright (c) 2017 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+/dts-v1/;
+#include "exynos9810-universal9810_common.dtsi"
+#include "exynos9810-rmem_star1.dtsi"
+
+/ {
+	model = "Samsung UNIVERSAL9810-rev02 board based on EXYNOS9810";
+	compatible = "samsung,exynos9810", "samsung,UNIVERSAL9810-rev02";
+};
+
+//#include "exynos9810-ecd.dtsi"

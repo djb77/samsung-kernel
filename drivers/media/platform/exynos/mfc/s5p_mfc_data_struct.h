@@ -579,7 +579,6 @@ typedef struct _nal_queue_in_handle {
 	struct s5p_mfc_special_buf in_buf;
 	unsigned int in_exe_count;
 	nal_in_queue *nal_q_in_addr;
-	spinlock_t lock;
 } nal_queue_in_handle;
 
 typedef struct _nal_queue_out_handle {
@@ -594,6 +593,7 @@ typedef struct _nal_queue_handle {
 	nal_queue_in_handle *nal_q_in_handle;
 	nal_queue_out_handle *nal_q_out_handle;
 	nal_queue_state nal_q_state;
+	spinlock_t lock;
 	int nal_q_exception;
 } nal_queue_handle;
 
@@ -972,6 +972,11 @@ struct s5p_mfc_enc_params {
 	u32 i_frm_ctrl_mode;
 	u32 i_frm_ctrl;
 
+	u32 color_range;
+	u32 colour_primaries;
+	u32 transfer_characteristics;
+	u32 matrix_coefficients;
+
 	union {
 		struct s5p_mfc_h264_enc_params h264;
 		struct s5p_mfc_mpeg4_enc_params mpeg4;
@@ -1166,6 +1171,9 @@ struct s5p_mfc_dec {
 	unsigned char frame_cnt;
 
 	unsigned int num_of_tile_over_4;
+
+	unsigned int color_range;
+	unsigned int color_space;
 };
 
 struct s5p_mfc_enc {
@@ -1312,9 +1320,6 @@ struct s5p_mfc_ctx {
 	struct list_head ts_list;
 	int ts_count;
 	int ts_is_full;
-
-	unsigned int color_range;
-	unsigned int color_space;
 
 	int buf_process_type;
 

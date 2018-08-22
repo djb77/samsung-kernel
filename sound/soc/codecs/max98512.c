@@ -10,6 +10,7 @@
  * option) any later version.
  */
 
+#include <linux/delay.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
@@ -24,6 +25,7 @@
 #include "max98512.h"
 #ifdef CONFIG_SND_SOC_MAXIM_DSM
 #include <sound/maxim_dsm_cal.h>
+#include <sound/maxim_dsm.h>
 #endif /* CONFIG_SND_SOC_MAXIM_DSM_CAL */
 
 #define DEBUG_MAX98512
@@ -33,6 +35,8 @@
 #else
 #define msg_maxim(format, args...)
 #endif /* DEBUG_MAX98512 */
+
+struct max98512_priv *g_max98512;
 
 static struct reg_default max98512_reg[] = {
 	{MAX98512_R0001_INT_RAW1, 0x00},
@@ -384,7 +388,6 @@ static ssize_t max98512_log_spk_excu_maxtime_r_show(struct device *dev,
 static DEVICE_ATTR(spk_excu_maxtime_r, 0444,
 		   max98512_log_spk_excu_maxtime_r_show, NULL);
 
-
 static ssize_t max98512_log_spk_excu_overcnt_show(struct device *dev,
 						  struct device_attribute *attr,
 						  char *buf)
@@ -441,6 +444,28 @@ static ssize_t max98512_log_spk_temp_max_r_show(struct device *dev,
 static DEVICE_ATTR(spk_temp_max_r, 0444,
 		   max98512_log_spk_temp_max_r_show, NULL);
 
+static ssize_t max98512_log_spk_temp_max_keep_show(struct device *dev,
+						   struct device_attribute *attr,
+						   char *buf)
+{
+	msg_maxim("val: %d", coil_temp_max_keep);
+
+	return snprintf(buf, PAGE_SIZE, "%d", coil_temp_max_keep);
+}
+static DEVICE_ATTR(spk_temp_max_keep, 0444,
+		   max98512_log_spk_temp_max_keep_show, NULL);
+
+static ssize_t max98512_log_spk_temp_max_keep_r_show(struct device *dev,
+						     struct device_attribute *attr,
+						     char *buf)
+{
+
+	msg_maxim("val: %d", coil_temp_max_keep_r);
+
+	return snprintf(buf, PAGE_SIZE, "%d", coil_temp_max_keep_r);
+}
+static DEVICE_ATTR(spk_temp_max_keep_r, 0444,
+		   max98512_log_spk_temp_max_keep_r_show, NULL);
 
 static ssize_t max98512_log_spk_temp_maxtime_show(struct device *dev,
 						  struct device_attribute *attr,
@@ -481,8 +506,6 @@ static ssize_t max98512_log_spk_temp_overcnt_show(struct device *dev,
 }
 static DEVICE_ATTR(spk_temp_overcnt, 0444,
 		   max98512_log_spk_temp_overcnt_show, NULL);
-
-
 
 static ssize_t max98512_log_spk_temp_overcnt_r_show(struct device *dev,
 						  struct device_attribute *attr,
@@ -539,6 +562,8 @@ static struct attribute *max98512_attributes[] = {
 	&dev_attr_spk_excu_overcnt_r.attr,
 	&dev_attr_spk_temp_max.attr,
 	&dev_attr_spk_temp_max_r.attr,
+	&dev_attr_spk_temp_max_keep.attr,
+	&dev_attr_spk_temp_max_keep_r.attr,
 	&dev_attr_spk_temp_maxtime.attr,
 	&dev_attr_spk_temp_maxtime_r.attr,
 	&dev_attr_spk_temp_overcnt.attr,
@@ -843,6 +868,46 @@ err:
 
 #define MAX98512_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | \
 	SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
+
+void max98512_dc_blocker_enable(int enable)
+{
+	msg_maxim("dc blocker enable %d", enable);
+	if (enable) {
+		max98512_wrapper_write(g_max98512, MAX98512B,
+				       MAX98512_R0036_AMP_DSP_CFG,
+				       0x01);
+		max98512_wrapper_write(g_max98512, MAX98512B,
+				       MAX98512_R003D_MEAS_DSP_CFG,
+				       0xF7);
+	} else {
+		max98512_wrapper_write(g_max98512, MAX98512B,
+				       MAX98512_R0036_AMP_DSP_CFG,
+				       0x00);
+		max98512_wrapper_write(g_max98512, MAX98512B,
+				       MAX98512_R003D_MEAS_DSP_CFG,
+				       0xF4);
+	}
+}
+EXPORT_SYMBOL_GPL(max98512_dc_blocker_enable);
+
+void max98512_boost_bypass(int mode)
+{
+	msg_maxim("boost bypass mode %d", mode);
+
+	if (mode == 0x1)
+		max98512_wrapper_write(g_max98512, MAX98512B,
+				       MAX98512_R0087_BOOST_BYPASS_2,
+				       0x1);
+	else if (mode == 0x0 || mode == 0x2)
+		max98512_wrapper_write(g_max98512, MAX98512B,
+				MAX98512_R0087_BOOST_BYPASS_2,
+				0x2);
+	else
+		max98512_wrapper_write(g_max98512, MAX98512B,
+				       MAX98512_R0087_BOOST_BYPASS_2,
+				       0x3);
+}
+EXPORT_SYMBOL_GPL(max98512_boost_bypass);
 
 static int max98512_dai_set_sysclk(struct snd_soc_dai *dai, int clk_id,
 				   unsigned int freq, int dir)
@@ -1236,9 +1301,9 @@ static int max98512_dai_mute_stream(struct snd_soc_dai *dai,
 
 		if (max98512->mono_stereo) {
 			ret = maxdsm_cal_get_rdc_r(&rdc_r);
-			if (ret < 0) {
-				pr_err("%s: Failed to set calibration ret = (%d)\n",
-				       __func__, ret);
+			if (ret < 0 || rdc_r <= 0) {
+				pr_err("%s: Failed to set calibration ret = (%d) rdc_r(0x%08x)\n",
+					__func__, ret, rdc_r);
 				goto exit;
 			}
 			maxdsm_set_rdc_temp_ch(rdc_r, (int)(temp / 10), 1);
@@ -1555,6 +1620,7 @@ static int max98512_rcv_digital_gain_put(struct snd_kcontrol *kcontrol,
 					MAX98512_R0035_AMP_VOL_CTRL,
 					MAX98512_AMP_VOL_MASK,
 					sel);
+
 		max98512->digital_gain_rcv = sel;
 	}
 
@@ -1588,6 +1654,7 @@ static int max98512_analog_gain_l_put(struct snd_kcontrol *kcontrol,
 					MAX98512_R003A_SPK_GAIN,
 					MAX98512_SPK_PCM_GAIN_MASK,
 					sel);
+
 		max98512->spk_gain_left = sel;
 	}
 
@@ -1621,6 +1688,7 @@ static int max98512_analog_gain_r_put(struct snd_kcontrol *kcontrol,
 					MAX98512_R003A_SPK_GAIN,
 					MAX98512_SPK_PCM_GAIN_MASK,
 					sel);
+
 		max98512->spk_gain_right = sel;
 	}
 
@@ -1683,12 +1751,15 @@ static int max98512_boost_mode_put(struct snd_kcontrol *kcontrol,
 
 	boost_mode = boost_mode < 0 ? 0 : boost_mode;
 
-	max98512_wrapper_write(max98512, MAX98512L,
+	if (boost_mode != pdata->boost_mode) {
+		max98512_wrapper_write(max98512, MAX98512B,
 				MAX98512_R0087_BOOST_BYPASS_2,
 				boost_mode);
 
 	msg_maxim("mixer set boost[%d]", boost_mode);
 	pdata->boost_mode = boost_mode;
+	}
+
 	return 0;
 }
 
@@ -2324,6 +2395,8 @@ static int max98512_i2c_probe(struct i2c_client *i2c,
 		dev_err(&i2c->dev, "Failed to register codec: %d\n", ret);
 		goto err_register_codec;
 	}
+
+	g_max98512 = max98512;
 
 	msg_maxim("End. driver_data %ld", id->driver_data);
 

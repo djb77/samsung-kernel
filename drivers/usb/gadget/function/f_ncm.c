@@ -1365,13 +1365,15 @@ ncm_bind(struct usb_configuration *c, struct usb_function *f)
 		}
 		ncm_opts->bound = true;
 	}
+	/* need to clear local value */
+	ncm_reset_values(ncm);
 
 	/* export host's Ethernet address in CDC format */
 	status = gether_get_host_addr_cdc(ncm_opts->net, ncm->ethaddr,
 				      sizeof(ncm->ethaddr));
 
 	if (status < 12) { /* strlen("01234567890a") */
-		status = PTR_ERR(us);
+		status = -EINVAL;
 		goto netdev_cleanup;
 	}
 
@@ -1725,7 +1727,10 @@ static void ncm_unbind(struct usb_configuration *c, struct usb_function *f)
 #ifdef CONFIG_USB_CONFIGFS_UEVENT
 	struct f_ncm_opts	*opts;
 #endif
-
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+	opts = container_of(f->fi, struct f_ncm_opts, func_inst);
+	opts->bound = false;
+#endif
 	DBG(c->cdev, "ncm unbind\n");
 
 	ncm_string_defs[0].id = 0;
@@ -1737,9 +1742,7 @@ static void ncm_unbind(struct usb_configuration *c, struct usb_function *f)
 	gether_free_request(&ncm->port);
 
 #ifdef CONFIG_USB_CONFIGFS_UEVENT
-	opts = container_of(f->fi, struct f_ncm_opts, func_inst);
 	gether_cleanup(netdev_priv(opts->net));
-	opts->bound = false;
 #endif
 }
 

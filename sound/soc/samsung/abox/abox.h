@@ -374,6 +374,7 @@
 #define ABOX_CPU_GEAR_CALL_VSS		(0xCA11)
 #define ABOX_CPU_GEAR_CALL_KERNEL	(0xCA12)
 #define ABOX_CPU_GEAR_CALL		ABOX_CPU_GEAR_CALL_VSS
+#define ABOX_CPU_GEAR_ABSOLUTE		(0xABC0ABC0)
 #define ABOX_CPU_GEAR_BOOT		(0xB00D)
 #define ABOX_CPU_GEAR_MAX		(1)
 #define ABOX_CPU_GEAR_MIN		(12)
@@ -457,6 +458,7 @@ enum sound_type {
 	SOUND_TYPE_HEADSET,
 	SOUND_TYPE_BTVOICE,
 	SOUND_TYPE_USB,
+	SOUND_TYPE_CALLFWD,
 };
 
 enum qchannel {
@@ -618,6 +620,7 @@ struct abox_data {
 	struct list_head irq_actions;
 	bool enabled;
 	enum calliope_state calliope_state;
+	bool failsafe;
 	bool l2c_controlled;
 	bool l2c_enabled;
 	struct abox_l2c_request l2c_requests[8];

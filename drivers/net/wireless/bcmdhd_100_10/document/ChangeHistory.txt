@@ -1,4 +1,63 @@
-BCM4361 DHD 100.10.163 for Android STAR Project
+BCM4361 DHD 100.11.5 for Android STAR Project
+(Notes: 100.11.x is twigged off from 100.10.163)
+
+DHD 100.11.5 - 2018.04.30
+Major Issue
+ - CS4449537(By Huang Junming) Fixed the packet delay with TPLINK AP on Tencent site
+     * Issue summary
+       While running the Game application using TPLINK AP,  packet delay is detected at the Game server side
+     * Analysis / Root cause
+       According to Air sniffer log, AP couldn't receive 802.11 Ack or Block Ack frame which DUT sent on the noisy environment
+       If TPLINK lost AMPDU these frames, AP holds frames which already received during 1 second
+     * Solution
+       Increase LRL(Long Retry Limit) from 6 to 12 to increase the opportunity to receive frame on AP side
+
+Kernel Panic
+ - CS4492776(By Jeong Min Cheol) Fixed watchdog due to deadlock from RPM & dhd_socram_dump
+ - CS4854788(By Jeong Min Cheol) Moved the debug info prints to avoid the Kernel panic due to watchdog bark
+
+Security Patch
+ - CS4417295(By Jeong Min Cheol) Fixed for wl/cfg driver vulnerability by buffer overflow
+ - CS4511968(by Hogil Kwak) Fixed GET_ADPS private command security problem reporting by KASAN
+ - CS4789072(By Kim Gwang Min) Fixed out of bounds read access issues
+ - CVE-2017-13292 V2018010201 Fixed buffer overflow in wl_get_assoc_ies() during assoc_info iovar results handling
+
+Others
+ - CS4324680(By Cho Seong Ji) Changed API from dev_alloc_skb(GFP_ATOMIC) to __dev_alloc_skb(GFP_KERNEL) in dhd_init_wlan_mem()
+ - CS4384009(By bang haejung) Fixed wrong configurations at MIRACAST
+ - CS4447594(By Min SungBin) Fixed can't be reading RD/WR indices of common ring issue when PCIe link down is occurred
+ - CS4474435(By Cho Seong Ji) Fixed AP scan results corrupted issue by wrong IE channel information in beacon
+ - CS4596042(By Kwak Hogil) Changed EXCESS_PM_WAKE_EVENT interval time on suspend mode
+ - CS4725359(By Junsu Choi) Disabled android PNO feature
+ - CS4795437(By Gu Ja Heon) Changed threshold for Exynos 9810 PCIe interrupt affinity
+ - CS4795437(By Gu Ja Heon) TPUT enhancement for Exynos 9810 Big Turbo feature
+ - CS4807325(By Min SungBin) Replaced country code to XZ ccode if ccode is an undefined country
+ - CS4865776(By Kim Tae-Yong) Decided FW/NVRAM/BLOB base location by referring PLATFORM_VERSION and ANDROID_VERSION together
+ - Dropped tx packet if it is larger than MAX_MTU_SZ(1600 bytes)
+
+
+DHD 100.11.4 - 2018.01.19
+Others
+ - CS3846389(By Kwak Hogil) Enabled DHD_DUMP_MNGR feature for EXYNOS9810 platform and GREAT project
+
+
+DHD 100.11.3 - 2018.01.12
+Kernel Panic
+ - CS3959621(By Kim Gwang Min) Fixed watchdog reset due to deadlock path from PM handler
+ - CS4307683(By Cho Seong Ji) Changed to retry PCIe bus initialization if Device vendor ID information is different from the saved value
+
+Others
+ - CS3846389(By Kwak Hogil) Changed the location of copy_hang_info_trap() to collect the data for hang_info correctly
+ - CS4315656(By Kwak Hogil) Changed the file name string for EWP log from USER to FORUSER
+ - Collect SOCRAM dump for Health Check event only if memdump mode is enabled
+
+
+DHD 100.11.1 - 2018.01.09
+Others
+ - CS4139777(By Kwak Hogil) Fixed call mute issue during LCD Off(Changed Packet filter ID 107)
+ - CS4172138(By Kim MinSoo) Disabled frameburst feature for stand-alone 2GHz SoftAP to enhance Mobile HotSpot end-to-end performance
+ - CS4286706(By Kwak Hogil) Added STP / XID packet filter (ID 108, 109)
+
 
 DHD 100.10.163 - 2017.12.29
 Major Issue
@@ -106,7 +165,7 @@ Major Issue
      * Analysis / Root cause
        1. The PCIe link down has occurred before the Kernel panic
        2. The System MMU fault was triggered when host tried to access the configuration registers in EP
-       3. It seemed that RC doesn?™t allow host to access any EP registers after the PCIe link down has occurred
+       3. It seemed that RC doesnâ€™t allow host to access any EP registers after the PCIe link down has occurred
      * Solution
        To avoid the Kernel panic, skip dumping any PCIe registers in EP if PCIe link down has occurred
 

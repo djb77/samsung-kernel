@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_android.c 738149 2017-12-27 07:54:37Z $
+ * $Id: wl_android.c 757949 2018-04-17 05:07:38Z $
  */
 
 #include <linux/module.h>
@@ -354,18 +354,6 @@ typedef struct android_wifi_af_params {
 #define MIRACAST_MODE_OFF	0
 #define MIRACAST_MODE_SOURCE	1
 #define MIRACAST_MODE_SINK	2
-
-#ifndef MIRACAST_AMPDU_SIZE
-#define MIRACAST_AMPDU_SIZE	8
-#endif // endif
-
-#ifndef MIRACAST_MCHAN_ALGO
-#define MIRACAST_MCHAN_ALGO     1
-#endif // endif
-
-#ifndef MIRACAST_MCHAN_BW
-#define MIRACAST_MCHAN_BW       25
-#endif // endif
 
 #ifdef CONNECTION_STATISTICS
 #define CMD_GET_CONNECTION_STATS	"GET_CONNECTION_STATS"
@@ -4123,14 +4111,19 @@ wl_android_ch_res_rl(struct net_device *dev, bool change)
 		srl = 4;
 		lrl = 2;
 	}
+
+	BCM_REFERENCE(lrl);
+
 	error = wldev_ioctl_set(dev, WLC_SET_SRL, &srl, sizeof(s32));
 	if (error) {
 		DHD_ERROR(("Failed to set SRL, error = %d\n", error));
 	}
+#ifndef CUSTOM_LONG_RETRY_LIMIT
 	error = wldev_ioctl_set(dev, WLC_SET_LRL, &lrl, sizeof(s32));
 	if (error) {
 		DHD_ERROR(("Failed to set LRL, error = %d\n", error));
 	}
+#endif /* CUSTOM_LONG_RETRY_LIMIT */
 	return error;
 }
 
@@ -4747,6 +4740,7 @@ wl_android_set_miracast(struct net_device *dev, char *command)
 	memset((void *)&config, 0, sizeof(config));
 	switch (mode) {
 	case MIRACAST_MODE_SOURCE:
+#ifdef MIRACAST_MCHAN_ALGO
 		/* setting mchan_algo to platform specific value */
 		config.iovar = "mchan_algo";
 
@@ -4763,7 +4757,9 @@ wl_android_set_miracast(struct net_device *dev, char *command)
 		if (ret) {
 			goto resume;
 		}
+#endif /* MIRACAST_MCHAN_ALGO */
 
+#ifdef MIRACAST_MCHAN_BW
 		/* setting mchan_bw to platform specific value */
 		config.iovar = "mchan_bw";
 		config.param = MIRACAST_MCHAN_BW;
@@ -4771,7 +4767,9 @@ wl_android_set_miracast(struct net_device *dev, char *command)
 		if (ret) {
 			goto resume;
 		}
+#endif /* MIRACAST_MCHAN_BW */
 
+#ifdef MIRACAST_AMPDU_SIZE
 		/* setting apmdu to platform specific value */
 		config.iovar = "ampdu_mpdu";
 		config.param = MIRACAST_AMPDU_SIZE;
@@ -4779,6 +4777,7 @@ wl_android_set_miracast(struct net_device *dev, char *command)
 		if (ret) {
 			goto resume;
 		}
+#endif /* MIRACAST_AMPDU_SIZE */
 		/* FALLTROUGH */
 		/* Source mode shares most configurations with sink mode.
 		 * Fall through here to avoid code duplication
@@ -6553,7 +6552,7 @@ wl_android_get_adps_mode(
 
 	memset(&iov_buf, 0, sizeof(iov_buf));
 
-	len = OFFSETOF(bcm_iov_buf_t, data) + sizeof(*data);
+	len = OFFSETOF(bcm_iov_buf_t, data) + sizeof(band);
 
 	iov_buf.version = WL_ADPS_IOV_VER;
 	iov_buf.len = sizeof(band);

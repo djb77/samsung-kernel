@@ -121,6 +121,7 @@ static void mfc_handle_frame_all_extracted(struct s5p_mfc_ctx *ctx)
 
 		dst_mb->vb.sequence = (ctx->sequence++);
 		dst_mb->vb.field = mfc_handle_frame_field(ctx);
+		dst_mb->vb.reserved2 = 0;
 
 		clear_bit(dst_mb->vb.vb2_buf.index, &dec->available_dpb);
 
@@ -285,7 +286,7 @@ static void mfc_handle_frame_output_del(struct s5p_mfc_ctx *ctx,
 		}
 
 		if (IS_VP9_DEC(ctx) && FW_HAS_VP9_HDR(dev)) {
-			if (ctx->color_space != S5P_FIMV_D_COLOR_UNKNOWN) {
+			if (dec->color_space != S5P_FIMV_D_COLOR_UNKNOWN) {
 				ref_mb->vb.reserved2 |= (1 << 3);
 				mfc_debug(2, "color space parsed\n");
 			}
@@ -552,6 +553,9 @@ static void mfc_handle_frame_input(struct s5p_mfc_ctx *ctx, unsigned int err)
 		dec->remained_size = src_mb->vb.vb2_buf.planes[0].bytesused
 					- dec->consumed;
 		dec->has_multiframe = 1;
+
+		MFC_TRACE_CTX("** consumed:%ld, remained:%ld, addr:0x%08llx\n",
+			dec->consumed, dec->remained_size, dec->y_addr_for_pb);
 		/* Do not move src buffer to done_list */
 		return;
 	}
@@ -1109,10 +1113,10 @@ static int mfc_handle_seq_dec(struct s5p_mfc_ctx *ctx)
 	}
 
 	if (IS_VP9_DEC(ctx)) {
-		ctx->color_range = s5p_mfc_get_color_range();
-		ctx->color_space = s5p_mfc_get_color_space();
+		dec->color_range = s5p_mfc_get_color_range();
+		dec->color_space = s5p_mfc_get_color_space();
 		mfc_debug(2, "color range: %d, color space: %d, It's valid for VP9\n",
-				ctx->color_range, ctx->color_space);
+				dec->color_range, dec->color_space);
 	}
 
 	return 0;

@@ -506,9 +506,12 @@ static int set_auxpdm_hiz_mode(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct snd_soc_card *card = codec->component.card;
 	struct madera_drvdata *drvdata = codec->component.card->drvdata;
 
 	drvdata->hiz_val = ucontrol->value.integer.value[0];
+
+	dev_info(card->dev, "%s ev: %d\n", __func__, drvdata->hiz_val);
 
 	if (drvdata->hiz_val) {
 		snd_soc_update_bits(codec, MADERA_GPIO10_CTRL_1,
@@ -672,8 +675,6 @@ static int set_fm_mute_switch(struct snd_kcontrol *kcontrol,
 
 		if (ret < 0) {
 			dev_err(card->dev, "Failed to update registers 0x%x\n", fm_in_reg + (i * 4));
-		} else {
-			dev_info(card->dev, "update 0x%x : 0x%x\n", fm_in_reg + (i * 4), snd_soc_read(codec, fm_in_reg + (i * 4)));
 		}
 	}
 
@@ -1232,7 +1233,7 @@ static int star_headsetmic(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_card *card = w->dapm->card;
 
-	dev_info(card->dev, "%s ev: %d\n", __func__, event);
+	dev_info(card->dev, "%s ev: %d ear_mic %d\n", __func__, event, madera_ear_mic);
 
 	return 0;
 }
@@ -1262,7 +1263,7 @@ static int star_headphone(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_card *card = w->dapm->card;
 
-	dev_info(card->dev, "%s ev: %d\n", __func__, event);
+	dev_info(card->dev, "%s ev: %d jack_det %d\n", __func__, event, madera_jack_det);
 
 	return 0;
 }

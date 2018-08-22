@@ -126,8 +126,8 @@ static phys_addr_t __init rkp_ro_alloc_phys(void)
 
 	spin_lock_irqsave(&ro_rkp_pages_lock, flags);
 
-	for (i = 0, j = ro_alloc_last; i < (RO_PAGES) ; i++) {
-		j =  (j+i) % (RO_PAGES);
+	for (i = 0, j = ro_alloc_last; i < (unsigned int)(RO_PAGES); i++) {
+		j =  (j+1) % (RO_PAGES);
 		if (!ro_pages_stat[j]) {
 			ro_pages_stat[j] = 1;
 			ro_alloc_last = j+1;
@@ -148,8 +148,8 @@ void *rkp_ro_alloc(void)
 
 	spin_lock_irqsave(&ro_rkp_pages_lock, flags);
 
-	for (i = 0, j = ro_alloc_last; i < (RO_PAGES) ; i++) {
-		j =  (j+i) % (RO_PAGES);
+	for (i = 0, j = ro_alloc_last; i < (unsigned int)(RO_PAGES); i++) {
+		j =  (j+1) % (RO_PAGES);
 		if (!ro_pages_stat[j]) {
 			ro_pages_stat[j] = 1;
 			ro_alloc_last = j+1;
@@ -195,17 +195,7 @@ static void alloc_init_pte(pmd_t *pmd, unsigned long addr,
 	if (pmd_none(*pmd)) {
 		phys_addr_t pte_phys;
 		BUG_ON(!pgtable_alloc);
-		/*
-#ifndef CONFIG_UH_RKP
-		pte_phys = rkp_ro_alloc_phys();
-		if (!pte_phys)
-			pte_phys = pgtable_alloc();
-#else
-			*/
 		pte_phys = pgtable_alloc();
-		/*
-#endif
-		*/
 		pte = pte_set_fixmap(pte_phys);
 		__pmd_populate(pmd, pte_phys, PMD_TYPE_TABLE);
 		pte_clear_fixmap();
@@ -254,6 +244,9 @@ static void alloc_init_pmd(pud_t *pud, unsigned long addr, unsigned long end,
 		next = pmd_addr_end(addr, end);
 		/* try section mapping first */
 		if (((addr | next | phys) & ~SECTION_MASK) == 0 &&
+#ifdef CONFIG_UH_RKP
+			phys != (__pa(swapper_pg_dir) & SECTION_MASK) &&
+#endif
 		      allow_block_mappings) {
 			pmd_t old_pmd =*pmd;
 			pmd_set_huge(pmd, phys, prot);
@@ -543,6 +536,37 @@ static void __init map_kernel_segment(pgd_t *pgd, void *va_start, void *va_end,
 
 	vm_area_add_early(vma);
 }
+
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+static int __init map_entry_trampoline(void)
+{
+	extern char __entry_tramp_text_start[];
+
+	pgprot_t prot = PAGE_KERNEL_EXEC;
+	phys_addr_t pa_start = __pa_symbol(__entry_tramp_text_start);
+
+	/* The trampoline is always mapped and can therefore be global */
+	pgprot_val(prot) &= ~PTE_NG;
+
+	/* Map only the text into the trampoline page table */
+	memset(tramp_pg_dir, 0, PGD_SIZE);
+	__create_pgd_mapping(tramp_pg_dir, pa_start, TRAMP_VALIAS, PAGE_SIZE,
+			     prot, pgd_pgtable_alloc, 0);
+
+	/* Map both the text and data into the kernel page table */
+	__set_fixmap(FIX_ENTRY_TRAMP_TEXT, pa_start, prot);
+	if (IS_ENABLED(CONFIG_RANDOMIZE_BASE)) {
+		extern char __entry_tramp_data_start[];
+
+		__set_fixmap(FIX_ENTRY_TRAMP_DATA,
+			     __pa_symbol(__entry_tramp_data_start),
+			     PAGE_KERNEL_RO);
+	}
+
+	return 0;
+}
+core_initcall(map_entry_trampoline);
+#endif
 
 /*
  * Create fine-grained mappings for the kernel.

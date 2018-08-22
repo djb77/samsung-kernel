@@ -113,6 +113,7 @@ int xhci_halt(struct xhci_hcd *xhci)
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "// Halt the HC");
 	xhci_quiesce(xhci);
 
+	pr_info("%s ++ \n", __func__);
 	ret = xhci_handshake(&xhci->op_regs->status,
 			STS_HALT, STS_HALT, XHCI_MAX_HALT_USEC);
 	if (!ret) {
@@ -709,6 +710,9 @@ void xhci_stop(struct usb_hcd *hcd)
 	u32 temp;
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 
+	if (!usb_hcd_is_primary_hcd(hcd))
+		return;
+
 	mutex_lock(&xhci->mutex);
 
 	if (!(xhci->xhc_state & XHCI_STATE_HALTED)) {
@@ -720,11 +724,6 @@ void xhci_stop(struct usb_hcd *hcd)
 		xhci_reset(xhci);
 
 		spin_unlock_irq(&xhci->lock);
-	}
-
-	if (!usb_hcd_is_primary_hcd(hcd)) {
-		mutex_unlock(&xhci->mutex);
-		return;
 	}
 
 	xhci_cleanup_msix(xhci);

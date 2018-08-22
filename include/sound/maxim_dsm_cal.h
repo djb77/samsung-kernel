@@ -50,12 +50,20 @@ struct maxim_dsm_cal_values {
 
 struct maxim_dsm_info_v_validation {
 	int duration;
+	int screen_duration;
+	int screen_remaining;
+	int screen_interval;
+	unsigned long screen_previous_jiffies;
 };
 
 struct maxim_dsm_values_v_validation {
 	uint32_t status;
+	uint32_t amp_screen_status;
+	int boost_bypass;
 	int v_validation;
 	int v_validation_r;
+	int amp_screen_validation;
+	int amp_screen_validation_r;
 };
 
 struct maxim_dsm_values_thermal_safe {
@@ -71,6 +79,7 @@ struct maxim_dsm_cal {
 	struct workqueue_struct *wq;
 	struct delayed_work work;
 	struct delayed_work work_v_validation;
+	struct delayed_work work_amp_screen_validation;
 	struct maxim_dsm_cal_values values;
 	struct maxim_dsm_cal_info info;
 	struct maxim_dsm_info_v_validation info_v_validation;
@@ -93,5 +102,7 @@ extern int maxdsm_cal_get_safe_mode(void);
 extern uint32_t maxdsm_cal_get_thermal_min_gain(void);
 extern void maxdsm_cal_set_thermal_min_gain(uint32_t thermal_min_gain);
 extern int maxdsm_cal_get_temp_from_power_supply(void);
+extern void max98512_dc_blocker_enable(int enable);
+extern void max98512_boost_bypass(int mode);
 
 #endif /* __SOUND_MAXIM_DSM_CAL_H__ */

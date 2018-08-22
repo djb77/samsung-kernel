@@ -15,6 +15,7 @@
 #include "fimc-is-err.h"
 #include <linux/videodev2_exynos_media.h>
 
+struct semaphore	smp_mcsc_g_enable;
 spinlock_t	shared_output_slock;
 static ulong hw_mcsc_out_configured = 0xFFFF;
 #define HW_MCSC_OUT_CLEARED_ALL (MCSC_OUTPUT_MAX)
@@ -231,6 +232,7 @@ static int fimc_is_hw_mcsc_handle_interrupt(u32 id, void *context)
 
 	if (status & (1 << INTR_MC_SCALER_FRAME_START)) {
 		atomic_inc(&hw_ip->count.fs);
+		up(&smp_mcsc_g_enable);
 		hw_ip->cur_s_int++;
 
 		if (hw_ip->cur_s_int == 1) {
@@ -814,7 +816,7 @@ skip_addr:
 static int fimc_is_hw_mcsc_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame *frame,
 	ulong hw_map)
 {
-	int ret = 0;
+	int ret = 0, ret_smp;
 	int ret_internal = 0;
 	struct fimc_is_group *head;
 	struct fimc_is_hardware *hardware;
@@ -824,7 +826,6 @@ static int fimc_is_hw_mcsc_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_fram
 	bool start_flag = true;
 	u32 lindex, hindex, instance;
 	struct fimc_is_hw_mcsc_cap *cap = GET_MCSC_HW_CAP(hw_ip);
-	ulong flag;
 
 	FIMC_BUG(!hw_ip);
 	FIMC_BUG(!frame);
@@ -867,6 +868,8 @@ static int fimc_is_hw_mcsc_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_fram
 		start_flag = true;
 	}
 
+	ret_smp = down_interruptible(&smp_mcsc_g_enable);
+
 	if (frame->type == SHOT_TYPE_INTERNAL) {
 		msdbg_hw(2, "request not exist\n", instance, hw_ip);
 		goto config;
@@ -889,12 +892,8 @@ static int fimc_is_hw_mcsc_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_fram
 	else
 		hw_mcsc->djag_input_source = DEV_HW_MCSC1;
 
-	spin_lock_irqsave(&shared_output_slock, flag);
-
 	fimc_is_hw_mcsc_update_param(hw_ip, mcs_param,
 		lindex, hindex, instance);
-
-	spin_unlock_irqrestore(&shared_output_slock, flag);
 
 	msdbg_hw(2, "[F:%d]shot [T:%d]\n", instance, hw_ip, frame->fcount, frame->type);
 
@@ -1122,6 +1121,9 @@ int fimc_is_hw_mcsc_reset(struct fimc_is_hw_ip *hw_ip)
 
 		if (hw_ip1 && test_bit(HW_RUN, &hw_ip1->state))
 			return 0;
+
+		sinfo_hw("%s: sema_init (g_enable, 1)\n", hw_ip, __func__);
+		sema_init(&smp_mcsc_g_enable, 1);
 	}
 
 	hw_mcsc = (struct fimc_is_hw_mcsc *)hw_ip->priv_info;
@@ -1484,6 +1486,9 @@ static int fimc_is_hw_mcsc_frame_ndone(struct fimc_is_hw_ip *hw_ip, struct fimc_
 	if (test_bit_variables(hw_ip->id, &frame->core_flag))
 		ret = fimc_is_hardware_frame_done(hw_ip, frame, -1, FIMC_IS_HW_CORE_END,
 				done_type, true);
+
+	if (test_bit(HW_CONFIG, &hw_ip->state))
+		up(&smp_mcsc_g_enable);
 
 	return ret;
 }
@@ -3860,6 +3865,7 @@ int fimc_is_hw_mcsc_probe(struct fimc_is_hw_ip *hw_ip, struct fimc_is_interface 
 	clear_bit(HW_RUN, &hw_ip->state);
 	clear_bit(HW_TUNESET, &hw_ip->state);
 	spin_lock_init(&shared_output_slock);
+	sema_init(&smp_mcsc_g_enable, 1);
 
 	sinfo_hw("probe done\n", hw_ip);
 

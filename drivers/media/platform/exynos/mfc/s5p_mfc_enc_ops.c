@@ -1124,9 +1124,9 @@ static void mfc_enc_set_buf_ctrls_exception(struct s5p_mfc_ctx *ctx,
 	}
 	if (buf_ctrl->id == V4L2_CID_MPEG_MFC_H264_USE_LTR) {
 		value = MFC_READL(S5P_FIMV_E_H264_NAL_CONTROL);
-		buf_ctrl->old_val2 = (value >> 11) & 0x7;
-		value &= ~(0x7 << 11);
-		value |= (buf_ctrl->val & 0x7) << 11;
+		buf_ctrl->old_val2 = (value >> 11) & 0xF;
+		value &= ~(0xF << 11);
+		value |= (buf_ctrl->val & 0xF) << 11;
 		MFC_WRITEL(value, S5P_FIMV_E_H264_NAL_CONTROL);
 	}
 
@@ -1430,8 +1430,8 @@ static int s5p_mfc_enc_set_buf_ctrls_val_nal_q_enc(struct s5p_mfc_ctx *ctx,
 			pInStr->H264NalControl &= ~(buf_ctrl->mask << buf_ctrl->shft);
 			pInStr->H264NalControl |=
 				(buf_ctrl->val & buf_ctrl->mask) << buf_ctrl->shft;
-			pInStr->H264NalControl &= ~(0x7 << 11);
-			pInStr->H264NalControl |= (buf_ctrl->val & 0x7) << 11;
+			pInStr->H264NalControl &= ~(0xF << 11);
+			pInStr->H264NalControl |= (buf_ctrl->val & 0xF) << 11;
 			break;
 		case V4L2_CID_MPEG_MFC_H264_BASE_PRIORITY:
 			for (i = 0; i < (p->codec.h264.num_hier_layer & 0x7); i++)
@@ -1617,8 +1617,8 @@ static int s5p_mfc_enc_recover_buf_ctrls_val(struct s5p_mfc_ctx *ctx,
 		}
 		if (buf_ctrl->id == V4L2_CID_MPEG_MFC_H264_USE_LTR) {
 			value = MFC_READL(S5P_FIMV_E_H264_NAL_CONTROL);
-			value &= ~(0x7 << 11);
-			value |= (buf_ctrl->old_val2 & 0x7) << 11;
+			value &= ~(0xF << 11);
+			value |= (buf_ctrl->old_val2 & 0xF) << 11;
 			MFC_WRITEL(value, S5P_FIMV_E_H264_NAL_CONTROL);
 		}
 		buf_ctrl->updated = 0;

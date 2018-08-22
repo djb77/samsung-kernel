@@ -371,18 +371,8 @@ int phy_power_on(struct phy *phy)
 		 * so when phy_power_on is called, -ENOSYS error is returned.
 		 * this code will be removed after finding root cause.
 		 */
-		if (ret == -ENOSYS && dev_name(&phy->dev) &&
-			(!strncmp(dev_name(&phy->dev), "phy-phy_m4s4top_dsi0@0x16160000.0", 33) ||
-			!strncmp(dev_name(&phy->dev), "phy-16210500.dphy_m4s4_csis0.1", 30) ||
-			!strncmp(dev_name(&phy->dev), "phy-dphy_m0s4s2_csis1@0x16210500.3", 34) ||
-			!strncmp(dev_name(&phy->dev), "phy-dphy_m4s4_csis2@0x16210500.2", 32) ||
-			!strncmp(dev_name(&phy->dev), "phy-dphy_m0s4s2_csis3@0x16210500.4", 34))) {
-			dev_warn(&phy->dev, "%s: %d(%d) skip -ENOSYS (disable_depth:%d, direct_complete:%d)\n",
-					__func__, __LINE__, ret, phy->dev.power.disable_depth, phy->dev.power.direct_complete);
-		} else {
-			dev_info(&phy->dev, "%s: %d(%d)\n", __func__, __LINE__, ret);
-			goto err_pm_sync;
-		}
+		dev_info(&phy->dev, "%s: %d(%d)\n", __func__, __LINE__, ret);
+		goto err_pm_sync;
 	}
 
 	ret = 0; /* Override possible ret == -ENOTSUPP */

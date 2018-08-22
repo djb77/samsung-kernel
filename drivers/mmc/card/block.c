@@ -1210,36 +1210,45 @@ static void mmc_card_error_logging(struct mmc_card *card, struct mmc_blk_request
 	int index = 0;
 	int error = 0;
 	int ret = 0;
+	bool noti = false;
 
 	err_log = card->err_log;
 
 	if (status & STATUS_MASK || brq->stop.resp[0] & STATUS_MASK) {
-		if (status & R1_ERROR || brq->stop.resp[0] & R1_ERROR)
+		if (status & R1_ERROR || brq->stop.resp[0] & R1_ERROR) {
 			err_log[index].ge_cnt++;
+			if (!(err_log[index].ge_cnt % 1000))
+				 noti = true;
+		 }
 		if (status & R1_CC_ERROR || brq->stop.resp[0] & R1_CC_ERROR)
 			err_log[index].cc_cnt++;
-		if (status & R1_CARD_ECC_FAILED || brq->stop.resp[0] & R1_CARD_ECC_FAILED)
+		if (status & R1_CARD_ECC_FAILED || brq->stop.resp[0] & R1_CARD_ECC_FAILED) {
 			err_log[index].ecc_cnt++;
-		if (status & R1_WP_VIOLATION || brq->stop.resp[0] & R1_WP_VIOLATION)
+			if (!(err_log[index].ecc_cnt % 1000))
+				noti = true;
+		}
+		if (status & R1_WP_VIOLATION || brq->stop.resp[0] & R1_WP_VIOLATION) {
 			err_log[index].wp_cnt++;
-		if (status & R1_OUT_OF_RANGE || brq->stop.resp[0] & R1_OUT_OF_RANGE)
+			 if (!(err_log[index].wp_cnt % 100))
+				noti = true; 
+		}
+		if (status & R1_OUT_OF_RANGE || brq->stop.resp[0] & R1_OUT_OF_RANGE) {
 			err_log[index].oor_cnt++;
+			if (!(err_log[index].oor_cnt % 100))
+				noti = true;
+		}
 	}
 
 	if (!brq)
 		return;
 	/*
-	 * Make Notification about Errors
+	 * Make Notification about SD card Errors
 	 *
 	 * Condition :
 	 *   GE, ECC : Every 1000 errors
 	 *   WP, OOR : Every  100 errors
 	 */
-	if (card->type == MMC_TYPE_SD && card->host->sdcard_uevent &&
-			((err_log[index].ge_cnt && !(err_log[index].ge_cnt % 1000)) ||
-			 (err_log[index].ecc_cnt && !(err_log[index].ecc_cnt % 1000)) ||
-			 (err_log[index].wp_cnt && !(err_log[index].wp_cnt % 100)) ||
-			 (err_log[index].oor_cnt && !(err_log[index].oor_cnt % 100)))) {
+	if (noti && card->type == MMC_TYPE_SD && card->host->sdcard_uevent) {
 		ret = card->host->sdcard_uevent(card);
 		if (ret)
 			pr_err("%s: Failed to Send Uevent with err %d\n",

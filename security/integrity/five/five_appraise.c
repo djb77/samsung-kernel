@@ -112,7 +112,7 @@ static int update_label(struct integrity_iint_cache *iint,
 static int five_fix_xattr(struct task_struct *task,
 			  struct dentry *dentry,
 			  struct file *file,
-			  void *raw_cert,
+			  void **raw_cert,
 			  size_t raw_cert_len,
 			  struct integrity_iint_cache *iint,
 			  struct integrity_label *label)
@@ -125,9 +125,9 @@ static int five_fix_xattr(struct task_struct *task,
 	struct five_cert_body body_cert = {0};
 	struct five_cert_header *header;
 
-	BUG_ON(!task || !dentry || !file || !raw_cert || !iint);
+	BUG_ON(!task || !dentry || !file || !raw_cert || !(*raw_cert) || !iint);
 
-	rc = five_cert_body_fillout(&body_cert, raw_cert, raw_cert_len);
+	rc = five_cert_body_fillout(&body_cert, *raw_cert, raw_cert_len);
 	if (unlikely(rc))
 		return -EINVAL;
 
@@ -156,14 +156,14 @@ static int five_fix_xattr(struct task_struct *task,
 		       file_label, file_label_len, sig, &sig_len);
 
 	if (!rc) {
-		rc = five_cert_append_signature(&raw_cert, &raw_cert_len,
+		rc = five_cert_append_signature(raw_cert, &raw_cert_len,
 						sig, sig_len);
 		if (!rc) {
 			iint->version = file_inode(file)->i_version;
 
 			rc = __vfs_setxattr_noperm(dentry,
 						XATTR_NAME_FIVE,
-						raw_cert,
+						*raw_cert,
 						raw_cert_len,
 						0);
 
@@ -441,7 +441,7 @@ void five_update_xattr(struct task_struct *task,
 	if (tint == INTEGRITY_PRELOAD_ALLOW_SIGN
 				|| tint == INTEGRITY_MIXED_ALLOW_SIGN
 				|| tint == INTEGRITY_DMVERITY_ALLOW_SIGN)
-		five_fix_xattr(task, dentry, file, raw_cert, raw_cert_len,
+		five_fix_xattr(task, dentry, file, (void **)&raw_cert, raw_cert_len,
 			       iint, label);
 
 	five_cert_free(raw_cert);

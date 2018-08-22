@@ -519,9 +519,6 @@ void __init exynos9810_clk_init(struct device_node *np)
 	samsung_register_vclk(exynos9810_clk_provider, exynos9810_cmgp_hwacg_vclks, ARRAY_SIZE(exynos9810_cmgp_hwacg_vclks));
 	samsung_register_vclk(exynos9810_clk_provider, exynos9810_cmu_hwacg_vclks, ARRAY_SIZE(exynos9810_cmu_hwacg_vclks));
 	samsung_register_vclk(exynos9810_clk_provider, exynos9810_core_hwacg_vclks, ARRAY_SIZE(exynos9810_core_hwacg_vclks));
-	samsung_register_vclk(exynos9810_clk_provider, exynos9810_dcf_hwacg_vclks, ARRAY_SIZE(exynos9810_dcf_hwacg_vclks));
-	samsung_register_vclk(exynos9810_clk_provider, exynos9810_dcpost_hwacg_vclks, ARRAY_SIZE(exynos9810_dcpost_hwacg_vclks));
-	samsung_register_vclk(exynos9810_clk_provider, exynos9810_dcrd_hwacg_vclks, ARRAY_SIZE(exynos9810_dcrd_hwacg_vclks));
 	samsung_register_vclk(exynos9810_clk_provider, exynos9810_dpu_hwacg_vclks, ARRAY_SIZE(exynos9810_dpu_hwacg_vclks));
 	samsung_register_vclk(exynos9810_clk_provider, exynos9810_dspm_hwacg_vclks, ARRAY_SIZE(exynos9810_dspm_hwacg_vclks));
 	samsung_register_vclk(exynos9810_clk_provider, exynos9810_dsps_hwacg_vclks, ARRAY_SIZE(exynos9810_dsps_hwacg_vclks));

@@ -278,6 +278,7 @@ struct fimc_is_hw_ip {
 	u8					*sfr_b_dump;
 	bool					sfr_dump_flag;
 	atomic_t				rsccount;
+	atomic_t				run_rsccount;
 
 	struct fimc_is_clk_gate			*clk_gate;
 	u32					clk_gate_idx;

@@ -876,26 +876,27 @@ static int fmp_test_run(struct exynos_fmp *fmp, struct cipher_testvec *template,
 		}
 	}
 
-	ret = fmp_cipher_set_key(fmp, mode, temp_key, template->klen);
+	ret = fmp_cipher_set_key(fmp, fmp->fips_data,
+				mode, temp_key, template->klen);
 	if (ret) {
 		dev_err(fmp->dev, "%s: Fail to set key. ret(%d)\n",
 				__func__, ret);
 		goto err;
 	}
 
-	ret = fmp_cipher_set_iv(fmp, mode, template->iv, 16);
+	ret = fmp_cipher_set_iv(fmp, fmp->fips_data, mode, template->iv, 16);
 	if (ret) {
 		dev_err(fmp->dev, "%s: Fail to set iv. ret(%d)\n", __func__, ret);
 		goto err;
 	}
 
-	ret = fmp_cipher_run(fmp, mode, data, len, write);
+	ret = fmp_cipher_run(fmp, fmp->fips_data, mode, data, len, write);
 	if (ret) {
 		dev_err(fmp->dev, "%s: Fail to run. ret(%d)\n", __func__, ret);
 		goto err;
 	}
 err:
-	kfree(temp_key);
+	kzfree(temp_key);
 	return ret;
 }
 
@@ -1010,12 +1011,6 @@ int do_fmp_selftest(struct exynos_fmp *fmp)
 		return -EINVAL;
 	}
 
-	ret = fmp_cipher_init(fmp);
-	if (ret) {
-		dev_err(fmp->dev, "FIPS: Fail to allocate fmp crypto\n");
-		return ret;
-	}
-
 	/* Self test for AES XTS mode */
 	xts_cipher.enc.vecs = aes_xts_enc_tv_template;
 	xts_cipher.enc.count = AES_XTS_ENC_TEST_VECTORS;
@@ -1058,11 +1053,9 @@ int do_fmp_selftest(struct exynos_fmp *fmp)
 	dev_info(fmp->dev, "FIPS: self-tests for UFSFMP %s passed\n", ALG_HMAC_SHA256_FMP);
 	fmp->result.hmac = 1;
 
-	fmp_cipher_exit(fmp);
 	return 0;
 
 err_cbc_cipher:
 err_xts_cipher:
-	fmp_cipher_exit(fmp);
 	return -1;
 }

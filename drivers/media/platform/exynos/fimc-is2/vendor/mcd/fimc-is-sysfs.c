@@ -2391,7 +2391,7 @@ static ssize_t camera_rear_moduleid_show(struct device *dev,
 			finfo->from_module_id[6], finfo->from_module_id[7], finfo->from_module_id[8],
 			finfo->from_module_id[9]);
 	} else {
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "%s\n", "0000000000");
 	}
 }
 
@@ -2416,7 +2416,7 @@ static ssize_t camera_front_moduleid_show(struct device *dev,
 			front_finfo->eeprom_front_module_id[6], front_finfo->eeprom_front_module_id[7], front_finfo->eeprom_front_module_id[8],
 			front_finfo->eeprom_front_module_id[9]);
 	} else {
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "%s\n", "0000000000");
 	}
 }
 

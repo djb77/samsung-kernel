@@ -814,10 +814,7 @@ gb_threshold_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	struct schedtune *st = css_st(css);
 	struct group_balancer *gb = &st->gb;
 
-	raw_spin_lock(&gb->lock);
 	gb->threshold = threshold;
-	check_need_group_balance(st->idx, gb);
-	raw_spin_unlock(&gb->lock);
 
 	return 0;
 }
@@ -839,10 +836,7 @@ gb_imbalance_ratio_write(struct cgroup_subsys_state *css, struct cftype *cft,
 
 	ratio = min_t(u64, ratio, 100);
 
-	raw_spin_lock(&gb->lock);
 	gb->imbalance_ratio = ratio;
-	check_need_group_balance(st->idx, gb);
-	raw_spin_unlock(&gb->lock);
 
 	return 0;
 }
@@ -864,10 +858,7 @@ gb_balance_ratio_write(struct cgroup_subsys_state *css, struct cftype *cft,
 
 	ratio = min_t(u64, ratio, 100);
 
-	raw_spin_lock(&gb->lock);
 	gb->balance_ratio = ratio;
-	check_need_group_balance(st->idx, gb);
-	raw_spin_unlock(&gb->lock);
 
 	return 0;
 }
@@ -887,13 +878,11 @@ gb_interval_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	struct schedtune *st = css_st(css);
 	struct group_balancer *gb = &st->gb;
 
-	raw_spin_lock(&gb->lock);
 	gb->update_interval = interval_us * NSEC_PER_USEC;
 	if (!interval_us) {
 		gb->util = 0;
 		gb->need_balance = false;
 	}
-	raw_spin_unlock(&gb->lock);
 
 	return 0;
 }
@@ -913,10 +902,7 @@ gb_duration_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	struct schedtune *st = css_st(css);
 	struct group_balancer *gb = &st->gb;
 
-	raw_spin_lock(&gb->lock);
 	gb->imbalance_duration = duration;
-	check_need_group_balance(st->idx, gb);
-	raw_spin_unlock(&gb->lock);
 
 	return 0;
 }
@@ -936,9 +922,7 @@ gb_window_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	struct schedtune *st = css_st(css);
 	struct group_balancer *gb = &st->gb;
 
-	raw_spin_lock(&gb->lock);
 	gb->window = window * NSEC_PER_MSEC;
-	raw_spin_unlock(&gb->lock);
 
 	return 0;
 }

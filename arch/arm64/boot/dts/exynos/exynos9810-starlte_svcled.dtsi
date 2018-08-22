@@ -1,0 +1,89 @@
+/*
+ * SAMSUNG UNIVERSAL9810 board device tree source
+ *
+ * Copyright (c) 2017 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/ {
+	rgb {
+		led_device_type = <0>;
+		rgb-name = "led_w", "led_r", "led_g", "led_b";
+
+		normal_powermode_current_uu = <10>;
+		low_powermode_current_uu = <10>;
+		br_ratio_r_uu = <700>;
+		br_ratio_g_uu = <60>;
+		br_ratio_b_uu = <120>;
+		br_ratio_r_low_uu = <100>;
+		br_ratio_g_low_uu = <10>;
+		br_ratio_b_low_uu = <10>;
+
+		normal_powermode_current_bk = <10>;
+		low_powermode_current_bk = <10>;
+		br_ratio_r_bk = <700>;
+		br_ratio_g_bk = <60>;
+		br_ratio_b_bk = <120>;
+		br_ratio_r_low_bk = <100>;
+		br_ratio_g_low_bk = <10>;
+		br_ratio_b_low_bk = <10>;
+
+		normal_powermode_current_wh = <10>;
+		low_powermode_current_wh = <10>;
+		br_ratio_r_wh = <750>;
+		br_ratio_g_wh = <70>;
+		br_ratio_b_wh = <150>;
+		br_ratio_r_low_wh = <70>;
+		br_ratio_g_low_wh = <1>;
+		br_ratio_b_low_wh = <19>;
+
+		normal_powermode_current_gd = <10>;
+		low_powermode_current_gd = <10>;
+		br_ratio_r_gd = <750>;
+		br_ratio_g_gd = <70>;
+		br_ratio_b_gd = <150>;
+		br_ratio_r_low_gd = <70>;
+		br_ratio_g_low_gd = <1>;
+		br_ratio_b_low_gd = <19>;
+
+		normal_powermode_current_sv = <10>;
+		low_powermode_current_sv = <10>;
+		br_ratio_r_sv = <750>;
+		br_ratio_g_sv = <70>;
+		br_ratio_b_sv = <150>;
+		br_ratio_r_low_sv = <70>;
+		br_ratio_g_low_sv = <1>;
+		br_ratio_b_low_sv = <19>;
+
+		normal_powermode_current_gr = <10>;
+		low_powermode_current_gr = <10>;
+		br_ratio_r_gr = <750>;
+		br_ratio_g_gr = <70>;
+		br_ratio_b_gr = <150>;
+		br_ratio_r_low_gr = <70>;
+		br_ratio_g_low_gr = <1>;
+		br_ratio_b_low_gr = <19>;
+
+		normal_powermode_current_bl = <10>;
+		low_powermode_current_bl = <10>;
+		br_ratio_r_bl = <750>;
+		br_ratio_g_bl = <70>;
+		br_ratio_b_bl = <150>;
+		br_ratio_r_low_bl = <70>;
+		br_ratio_g_low_bl = <1>;
+		br_ratio_b_low_bl = <19>;
+
+		normal_powermode_current_pg = <10>;
+		low_powermode_current_pg = <10>;
+		br_ratio_r_pg = <750>;
+		br_ratio_g_pg = <70>;
+		br_ratio_b_pg = <150>;
+		br_ratio_r_low_pg = <70>;
+		br_ratio_g_low_pg = <1>;
+		br_ratio_b_low_pg = <19>;
+	};
+};

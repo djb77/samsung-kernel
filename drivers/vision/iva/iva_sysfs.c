@@ -91,8 +91,11 @@ static ssize_t iva_mem_proc_show(struct device *dev,
 
 		hash_for_each(iva_proc_node->h_mem_map, i, iva_map_node, h_node) {
 			IVA_SYSFS_PRINT0(buf, buf_size, tmp_buf, tmp_size,
-				"[%d] buf_fd:%04d,\tflags:0x%x,\tio_va:0x%08lx,\tsize:0x%08x, 0x%08x\tref_cnt:%d\n", i,
-				iva_map_node->shared_fd, iva_map_node->flags,
+				"[%d] buf_fd:0x%08x,\tflags:0x%x,\t""io_va:"
+				"0x%08lx,\tsize:0x%08x, 0x%08x\tref_cnt:%d\n",
+				i,
+				iva_map_node->shared_fd,
+			       	iva_map_node->flags,
 				iva_map_node->io_va,
 				iva_map_node->req_size, iva_map_node->act_size,
 				iva_mem_map_read_refcnt(iva_map_node));

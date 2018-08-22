@@ -2361,8 +2361,13 @@ static void mfc_wpc_det_work(struct work_struct *work)
 	}
 
 	if (charger->is_mst_on == MST_MODE_2) {
-		pr_info("%s: skip wpc_det_work for MST operation\n", __func__);
-		return;
+		pr_info("%s: check wpc-state(%d - %d)\n", __func__,
+			charger->wc_w_state, gpio_get_value(charger->pdata->wpc_det));
+
+		if (charger->wc_w_state == 0) {
+			pr_info("%s: skip wpc_det_work for MST operation\n", __func__);
+			return;
+		}
 	}
 
 	wake_lock(&charger->wpc_wake_lock);

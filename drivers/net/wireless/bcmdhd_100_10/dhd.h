@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd.h 739343 2018-01-08 06:31:00Z $
+ * $Id: dhd.h 757032 2018-04-11 08:37:47Z $
  */
 
 /****************
@@ -696,6 +696,8 @@ struct cntry_locales_custom {
 
 int dhd_send_msg_to_daemon(struct sk_buff *skb, void *data, int size);
 
+#define MAX_MTU_SZ (1600u)
+
 #ifdef DMAMAP_STATS
 typedef struct dmamap_stats {
 	uint64 txdata;
@@ -769,7 +771,7 @@ typedef struct dhd_pub {
 	ulong rx_readahead_cnt;	/* Number of packets where header read-ahead was used. */
 	ulong tx_realloc;	/* Number of tx packets we had to realloc for headroom */
 	ulong fc_packets;       /* Number of flow control pkts recvd */
-
+	ulong tx_big_packets;	/* Dropped data packets that are larger than MAX_MTU_SZ */
 #ifdef DMAMAP_STATS
 	/* DMA Mapping statistics */
 	dma_stats_t dma_stats;

@@ -279,6 +279,12 @@ static void exynos_ufs_dump_debug_info(struct ufs_hba *hba)
 #else
 	exynos_ufs_dump_std_sfr(hba);
 #endif
+
+#if defined(CONFIG_SCSI_UFS_TEST_MODE)
+	exynos_ufs_show_uic_info(hba);
+	/* do not recover system if test mode is enabled */
+	BUG();
+#endif
 }
 
 static void exynos_ufs_select_refclk(struct exynos_ufs *ufs, bool en)

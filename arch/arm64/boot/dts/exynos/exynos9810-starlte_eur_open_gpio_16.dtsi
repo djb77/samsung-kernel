@@ -1,0 +1,157 @@
+/*
+ * Copyright (c) 2016 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+// Support STAR2 LTE HW REV0.0 (10000)
+
+#include "exynos_gpio_config_macros.dtsi"
+
+// GPM0 GPM1 GPM2 GPM3 GPM4 GPM5 GPM6 GPM7
+// GPM10 GPM11 GPM12 GPM13 GPM14 GPM15 GPM16 GPM17
+// GPM40 GPM41 GPM42 GPM43
+&pinctrl_3 {
+	pinctrl-names = "default","sleep";
+	pinctrl-0 = <&initial3>;
+	initial3: initial-state {
+		PIN_IN(gpm7-0, DOWN);	/* NC */
+	};
+};
+
+// GPF0
+&pinctrl_4 {
+	pinctrl-names = "sleep";
+	pinctrl-0 = <&sleep4>;
+	sleep4: sleep-state {
+		PIN_SLP(gpf0-0, PREV, NONE);	/* UFS_REFCLK */
+		PIN_SLP(gpf0-1, PREV, NONE);	/* UFS_RST_N */
+	};
+};
+
+// GPF1 GPF2
+&pinctrl_5 {
+	pinctrl-names = "default","sleep";
+	pinctrl-0 = <&initial5>;
+	pinctrl-1 = <&sleep5>;
+	initial5: initial-state {
+		PIN_IN(gpf1-6, DOWN);	/* NC */
+		PIN_IN(gpf2-1, DOWN);	/* NC */
+		PIN_IN(gpf2-3, DOWN);	/* NC */
+		PIN_IN(gpf2-4, DOWN);	/* NC */
+		PIN_IN(gpf2-5, DOWN);	/* NC */
+	};
+	sleep5: sleep-state {
+		PIN_SLP(gpf1-0, OUT0, NONE);		/* SD2_CLK */
+		PIN_SLP(gpf1-1, OUT0, NONE);		/* SD2_CMD */
+		PIN_SLP(gpf1-2, OUT0, NONE);		/* SD2_DAT0 */
+		PIN_SLP(gpf1-3, OUT0, NONE);		/* SD2_DAT1 */
+		PIN_SLP(gpf1-4, OUT0, NONE);		/* SD2_DAT2 */
+		PIN_SLP(gpf1-5, OUT0, NONE);		/* SD2_DAT3 */
+		PIN_SLP(gpf1-6, INPUT, DOWN);	/* NC */
+		PIN_SLP(gpf2-0, INPUT, NONE);	/* PCIE_CLK_REQ_L */
+		PIN_SLP(gpf2-1, INPUT, DOWN);	/* NC */
+		PIN_SLP(gpf2-3, INPUT, DOWN);	/* NC */
+		PIN_SLP(gpf2-4, INPUT, DOWN);	/* NC */
+		PIN_SLP(gpf2-5, INPUT, DOWN);	/* NC */
+	};
+};
+
+// GPP0 GPP1 GPP2 GPP3
+// GPG0 GPG1 GPG2
+&pinctrl_6 {
+	pinctrl-names = "default","sleep";
+	pinctrl-0 = <&initial6>;
+	pinctrl-1 = <&sleep6>;
+	initial6: initial-state {
+		PIN_IN(gpg0-6, DOWN);	/* NC */
+
+		PIN_IN(gpg2-7, DOWN);	/* NC */
+
+		PIN_IN(gpg1-2, NONE);	/* HW_REV3 */
+		PIN_IN(gpg1-3, NONE);	/* HW_REV2 */
+		PIN_IN(gpg1-4, NONE);	/* HW_REV1 */
+		PIN_IN(gpg1-5, NONE);	/* HW_REV0 */
+
+		PIN_IN(gpg2-3, DOWN);	/* IRIS_RST_N */
+	};
+	sleep6:sleep-state {
+		PIN_SLP(gpp1-4, PREV, NONE);	/* TSP_SCL_1P8 */
+		PIN_SLP(gpp1-5, PREV, NONE);	/* TSP_SDA_1P8 */
+		PIN_SLP(gpp1-6, INPUT, NONE);	/* GRIP_SCL_1P8 */
+		PIN_SLP(gpp1-7, INPUT, NONE);	/* GRIP_SDA_1P8 */
+
+		PIN_SLP(gpg0-0, INPUT, NONE);	/* IFC_SENSE_INT_AP */
+		PIN_SLP(gpg0-5, PREV, NONE);	/* WLAN_EN */
+		PIN_SLP(gpg0-6, INPUT, DOWN);	/* NC */
+
+		PIN_SLP(gpg1-2, INPUT, NONE);	/* HW_REV3 */
+		PIN_SLP(gpg1-3, INPUT, NONE);	/* HW_REV2 */
+		PIN_SLP(gpg1-4, INPUT, NONE);	/* HW_REV1 */
+		PIN_SLP(gpg1-5, INPUT, NONE);	/* HW_REV0 */
+
+		PIN_SLP(gpg2-2, PREV, NONE);	/* DISP_DET */
+		PIN_SLP(gpg2-4, PREV, DOWN);	/* CAM_TORCH_EN */
+		PIN_SLP(gpg2-6, OUT0, DOWN);	/* CAM_RST_N */
+		PIN_SLP(gpg2-7, INPUT, DOWN);	/* NC */
+
+		PIN_SLP(gpp0-0, OUT0, NONE);		/* BTP_SPI_CLK */
+		PIN_SLP(gpp0-1, OUT0, NONE);		/* BTP_SPI_MOSI */
+		PIN_SLP(gpp0-2, INPUT, DOWN);	/* BTP_SPI_MISO */
+		PIN_SLP(gpp0-3, OUT0, NONE);		/* BTP_SPI_CS_N */
+	};
+};
+
+// GPP4 GPP5 GPP6
+// GPC0 GPC1
+// GPD0
+// GPG3
+&pinctrl_7 {
+	pinctrl-names = "default","sleep";
+	pinctrl-0 = <&initial7>;
+	pinctrl-1 = <&sleep7>;
+	initial7: initial-state {
+		PIN_IN(gpc0-4, DOWN);	/* NC */
+		PIN_IN(gpc0-5, DOWN);	/* NC */
+		PIN_IN(gpc0-6, DOWN);	/* NC */
+		PIN_IN(gpc0-7, DOWN);	/* NC */
+
+		PIN_IN(gpc1-7, DOWN);	/* NC */
+
+		PIN_IN(gpd0-3, DOWN);	/* NC */
+
+		PIN_IN(gpg3-0, NONE);	/* CP_REV3 */
+		PIN_IN(gpg3-1, NONE);	/* CP_REV2 */
+		PIN_IN(gpg3-2, NONE);	/* CP_REV1 */
+		PIN_IN(gpg3-3, NONE);	/* CP_REV0 */
+	};
+	sleep7:sleep-state {
+		PIN_SLP(gpp5-0, INPUT, NONE);	/* NFC_HRM_SCL_1P8 */
+		PIN_SLP(gpp5-1, INPUT, NONE);	/* NFC_HRM_SDA_1P8 */
+
+		PIN_SLP(gpp6-2, INPUT, NONE);	/* EXPANDER_SCL_1P8 */
+		PIN_SLP(gpp6-3, INPUT, NONE);	/* EXPANDER_SDA_1P8 */
+
+		PIN_SLP(gpc0-0, INPUT, NONE);	/* CAM_SCL_1P8 */
+		PIN_SLP(gpc0-1, INPUT, NONE);	/* CAM_SDA_1P8 */
+		PIN_SLP(gpc0-4, INPUT, DOWN);	/* NC */
+		PIN_SLP(gpc0-5, INPUT, DOWN);	/* NC */
+		PIN_SLP(gpc0-6, INPUT, DOWN);	/* NC */
+		PIN_SLP(gpc0-7, INPUT, DOWN);	/* NC */
+
+		PIN_SLP(gpc1-7, INPUT, DOWN);	/* NC */
+
+		PIN_SLP(gpd0-0, PREV, NONE);	/* DISP_TE */
+		PIN_SLP(gpd0-2, OUT0, NONE);		/* XBOOTLDO0 */
+		PIN_SLP(gpd0-3, INPUT, DOWN);	/* NC */
+
+		PIN_SLP(gpg3-0, INPUT, NONE);	/* CP_REV3 */
+		PIN_SLP(gpg3-1, INPUT, NONE);	/* CP_REV2 */
+		PIN_SLP(gpg3-2, INPUT, NONE);	/* CP_REV1 */
+		PIN_SLP(gpg3-3, INPUT, NONE);	/* CP_REV0 */
+		PIN_SLP(gpg3-5, OUT0, DOWN);	/* CAM_FLASH_EN */
+	};
+};

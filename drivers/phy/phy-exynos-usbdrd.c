@@ -39,9 +39,10 @@
 #include "phy-exynos-debug.h"
 
 static void __iomem *usbdp_combo_phy_reg;
-static int phy_isol_delayed, dp_use_informed;
+static int phy_isol_delayed;
 static struct regmap *reg_pmu_delayed;
 static u32 pmu_offset_delayed, pmu_offset_dp_delayed;
+int dp_use_informed;
 
 static int exynos_usbdrd_clk_prepare(struct exynos_usbdrd_phy *phy_drd)
 {
@@ -1212,6 +1213,7 @@ static int exynos_usbdrd_phy_init(struct phy *phy)
 
 	/* UTMI or PIPE3 specific init */
 	inst->phy_cfg->phy_init(phy_drd);
+	dp_use_informed = 0;
 
 	return 0;
 }
@@ -1480,7 +1482,6 @@ static int exynos_usbdrd_phy_power_on(struct phy *phy)
 	inst->phy_cfg->phy_isol(inst, 0, inst->pmu_mask);
 
 	phy_isol_delayed = 0;
-	dp_use_informed = 0;
 
 	return 0;
 }

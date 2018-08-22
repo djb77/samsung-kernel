@@ -458,7 +458,11 @@ void mxim_debug_exit(void)
 {
 	if (mxim_pdev) {
 		mutex_destroy(&mxim_pdev->lock);
+		sysfs_remove_group(&mxim_pdev->dev->kobj, &mxim_debug_attr_grp);
+		device_destroy(mxim_pdev->class, 1);
+		class_destroy(mxim_pdev->class);
 		kfree(mxim_pdev);
+		mxim_pdev = NULL;
 	}
 
 	misc_deregister(&mxim_debug_miscdev);

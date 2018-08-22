@@ -858,6 +858,8 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 	u8 force_strength = 1;
 
 	if (ts->power_status == SEC_TS_STATE_LPM) {
+		wake_lock_timeout(&ts->wakelock, msecs_to_jiffies(500));
+
 		/* waiting for blsp block resuming, if not occurs i2c error */
 		ret = wait_for_completion_interruptible_timeout(&ts->resume_done, msecs_to_jiffies(500));
 		if (ret == 0) {
@@ -944,6 +946,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 					(p_event_status->status_id == SEC_TS_ACK_BOOT_COMPLETE) &&
 					(p_event_status->status_data_1 == 0x20)) {
 
+				ts->ic_reset_count++;
 				sec_ts_unlocked_release_all_finger(ts);
 
 				ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SENSE_ON, NULL, 0);
@@ -1235,9 +1238,6 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 		case SEC_TS_GESTURE_EVENT:
 			p_gesture_status = (struct sec_ts_gesture_status *)event_buff;
-
-			if (ts->power_status == SEC_TS_STATE_LPM)
-				wake_lock_timeout(&ts->wakelock, msecs_to_jiffies(500));
 
 			switch (p_gesture_status->stype) {
 			case SEC_TS_GESTURE_CODE_SPAY:
@@ -2476,6 +2476,7 @@ static void sec_ts_reset_work(struct work_struct *work)
 	}
 
 	mutex_lock(&ts->modechange);
+	wake_lock(&ts->wakelock);
 
 	ts->reset_is_on_going = true;
 	input_info(true, &ts->client->dev, "%s\n", __func__);
@@ -2495,6 +2496,8 @@ static void sec_ts_reset_work(struct work_struct *work)
 		if (ts->debug_flag & SEC_TS_DEBUG_SEND_UEVENT)
 			send_event_to_user(ts, 0, UEVENT_TSP_I2C_RESET);
 
+		wake_unlock(&ts->wakelock);
+
 		return;
 	}
 
@@ -2509,6 +2512,7 @@ static void sec_ts_reset_work(struct work_struct *work)
 				cancel_delayed_work(&ts->reset_work);
 				schedule_delayed_work(&ts->reset_work, msecs_to_jiffies(TOUCH_RESET_DWORK_TIME));
 				mutex_unlock(&ts->modechange);
+				wake_unlock(&ts->wakelock);
 				return;
 			}
 		} else {
@@ -2546,6 +2550,8 @@ static void sec_ts_reset_work(struct work_struct *work)
 
 	if (ts->debug_flag & SEC_TS_DEBUG_SEND_UEVENT)
 		send_event_to_user(ts, 0, UEVENT_TSP_I2C_RESET);
+
+	wake_unlock(&ts->wakelock);
 }
 #endif
 
@@ -2623,6 +2629,7 @@ retry_pmode:
 
 	if (mode != para) {
 		retrycnt++;
+		ts->mode_change_failed_count++;
 		if (retrycnt < 5)
 			goto retry_pmode;
 	}

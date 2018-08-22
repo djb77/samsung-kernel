@@ -168,13 +168,13 @@ static ssize_t octa_id_show(struct device *dev,
 	rework = octa_id[0] & 0x0F;
 	poc = octa_id[1] & 0x0F;
 
-	panel_dbg("site (%d), rework (%d), poc (%d)\n",
+	pr_debug("site (%d), rework (%d), poc (%d)\n",
 			site, rework, poc);
 
-	panel_dbg("<CELL ID>\n");
+	pr_debug("<CELL ID>\n");
 	for (i = 0; i < 16; i++) {
 		cell_id[i] = isalnum(octa_id[i + 4]) ? octa_id[i + 4] : '\0';
-		panel_dbg("%x -> %c\n", octa_id[i + 4], cell_id[i]);
+		pr_debug("%x -> %c\n", octa_id[i + 4], cell_id[i]);
 		if (cell_id[i] == '\0') {
 			cell_id_exist = false;
 			break;

@@ -642,6 +642,30 @@ void s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 		MFC_WRITEL(reg, S5P_FIMV_E_H264_FRAME_PACKING_SEI_INFO);
 	}
 
+	if (FW_HAS_ENC_COLOR_ASPECT(dev)) {
+		reg = MFC_READL(S5P_FIMV_E_VIDEO_SIGNAL_TYPE);
+		/* VIDEO_SIGNAL_TYPE_FLAG */
+		reg |= 0x1 << 31;
+		/* COLOR_RANGE */
+		reg &= ~(0x1 << 25);
+		reg |= p->color_range << 25;
+		/* COLOUR_DESCRIPTION_PRESENT_FLAG */
+		reg |= 0x1 << 24;
+		/* COLOUR_PRIMARIES */
+		reg &= ~(0xFF << 16);
+		reg |= p->colour_primaries << 16;
+		/* TRANSFER_CHARACTERISTICS */
+		reg &= ~(0xFF << 8);
+		reg |= p->transfer_characteristics << 8;
+		/* MATRIX_COEFFICIENTS */
+		reg &= ~(0xFF);
+		reg |= p->matrix_coefficients;
+		MFC_WRITEL(reg, S5P_FIMV_E_VIDEO_SIGNAL_TYPE);
+		mfc_debug(2, "H264 ENC Color aspect: range:%s, pri:%d, trans:%d, mat:%d\n",
+				p->color_range ? "Full" : "Limited", p->colour_primaries,
+				p->transfer_characteristics, p->matrix_coefficients);
+	}
+
 	mfc_set_fmo_slice_map_h264(ctx, p_264);
 
 	mfc_debug_leave();
@@ -1068,6 +1092,21 @@ void s5p_mfc_set_enc_params_vp9(struct s5p_mfc_ctx *ctx)
 	reg |= p_vp9->rc_min_qp_p & 0xFF;
 	MFC_WRITEL(reg, S5P_FIMV_E_RC_QP_BOUND_PB);
 
+	if (FW_HAS_ENC_COLOR_ASPECT(dev)) {
+		reg = MFC_READL(S5P_FIMV_E_VIDEO_SIGNAL_TYPE);
+		/* VIDEO_SIGNAL_TYPE_FLAG */
+		reg |= 0x1 << 31;
+		/* COLOR_SPACE: VP9 uses colour_primaries interface for color space */
+		reg &= ~(0x1F << 26);
+		reg |= p->colour_primaries << 26;
+		/* COLOR_RANGE */
+		reg &= ~(0x1 << 25);
+		reg |= p->color_range << 25;
+		MFC_WRITEL(reg, S5P_FIMV_E_VIDEO_SIGNAL_TYPE);
+		mfc_debug(2, "VP9 ENC Color aspect: range:%s, space: %d\n",
+				p->color_range ? "Full" : "Limited", p->colour_primaries);
+	}
+
 	mfc_debug_leave();
 }
 
@@ -1282,6 +1321,30 @@ void s5p_mfc_set_enc_params_hevc(struct s5p_mfc_ctx *ctx)
 	reg |= (p->roi_enable);
 	MFC_WRITEL(reg, S5P_FIMV_E_RC_ROI_CTRL);
 	mfc_debug(3, "ROI: HEVC ROI enable\n");
+
+	if (FW_HAS_ENC_COLOR_ASPECT(dev)) {
+		reg = MFC_READL(S5P_FIMV_E_VIDEO_SIGNAL_TYPE);
+		/* VIDEO_SIGNAL_TYPE_FLAG */
+		reg |= 0x1 << 31;
+		/* COLOR_RANGE */
+		reg &= ~(0x1 << 25);
+		reg |= p->color_range << 25;
+		/* COLOUR_DESCRIPTION_PRESENT_FLAG */
+		reg |= 0x1 << 24;
+		/* COLOUR_PRIMARIES */
+		reg &= ~(0xFF << 16);
+		reg |= p->colour_primaries << 16;
+		/* TRANSFER_CHARACTERISTICS */
+		reg &= ~(0xFF << 8);
+		reg |= p->transfer_characteristics << 8;
+		/* MATRIX_COEFFICIENTS */
+		reg &= ~(0xFF);
+		reg |= p->matrix_coefficients;
+		MFC_WRITEL(reg, S5P_FIMV_E_VIDEO_SIGNAL_TYPE);
+		mfc_debug(2, "HEVC ENC Color aspect: range:%s, pri:%d, trans:%d, mat:%d\n",
+				p->color_range ? "Full" : "Limited", p->colour_primaries,
+				p->transfer_characteristics, p->matrix_coefficients);
+	}
 
 	mfc_debug_leave();
 }

@@ -558,6 +558,11 @@ static int __abox_process_ipc(struct device *dev, struct abox_data *data,
 			dev_warn_ratelimited(dev, "Transaction timeout(%d)\n",
 					tout_cnt);
 
+			if (data->failsafe) {
+				writel(0, tx_ack);
+				goto unlock;
+			}
+
 			if (tout_cnt == 1)
 				abox_dbg_dump_simple(dev, data,
 						"Transaction timeout");
@@ -572,6 +577,7 @@ static int __abox_process_ipc(struct device *dev, struct abox_data *data,
 			tout_cnt = 0;
 			ret = 0;
 		}
+unlock:
 		spin_unlock(&lock);
 	} while (readl(tx_ack));
 
@@ -1605,6 +1611,7 @@ static const char * const abox_sound_type_enum_texts[] = {
 	"HEADSET",
 	"BTVOICE",
 	"USB",
+	"CALLFWD",
 };
 static const unsigned int abox_sound_type_enum_values[] = {
 	SOUND_TYPE_VOICE,
@@ -1612,6 +1619,7 @@ static const unsigned int abox_sound_type_enum_values[] = {
 	SOUND_TYPE_HEADSET,
 	SOUND_TYPE_BTVOICE,
 	SOUND_TYPE_USB,
+	SOUND_TYPE_CALLFWD,
 };
 SOC_VALUE_ENUM_SINGLE_DECL(abox_sound_type_enum, SND_SOC_NOPM, 0, 0,
 		abox_sound_type_enum_texts, abox_sound_type_enum_values);
@@ -3167,6 +3175,12 @@ bool abox_cpu_gear_idle(struct device *dev, struct abox_data *data, void *id)
 	return true;
 }
 
+static bool abox_is_clearable(struct device *dev, struct abox_data *data)
+{
+	return abox_cpu_gear_idle(dev, data, (void *)ABOX_CPU_GEAR_ABSOLUTE) &&
+			data->audio_mode != MODE_IN_CALL;
+}
+
 static void abox_check_cpu_gear(struct device *dev,
 		struct abox_data *data,
 		const void *old_id, unsigned int old_gear,
@@ -3196,7 +3210,7 @@ static void abox_check_cpu_gear(struct device *dev,
 				(gear >= ABOX_CPU_GEAR_MIN)) {
 			/* off */
 			dev_dbg(dev, "%s(%p): off\n", __func__, id);
-			pm_relax(dev);
+			pm_relax(dev_abox);
 		}
 	}
 }
@@ -3331,11 +3345,10 @@ static void abox_change_cpu_gear(struct device *dev, struct abox_data *data)
 		pm_runtime_get(dev);
 	}
 
-	if (data->cpu_gear != gear) {
-		freq = (gear <= ARRAY_SIZE(data->pm_qos_aud)) ?
+	freq = (gear <= ARRAY_SIZE(data->pm_qos_aud)) ?
 				data->pm_qos_aud[gear - 1] : 0;
+	if (data->cpu_gear != gear)
 		pm_qos_update_request(&abox_pm_qos_aud, freq);
-	}
 
 	dev_info(dev, "pm qos request aud: req=%dkHz ret=%dkHz\n", freq,
 			pm_qos_request(abox_pm_qos_aud.pm_qos_class));
@@ -3447,11 +3460,13 @@ static void abox_change_int_freq_work_func(struct work_struct *work)
 				request->value, freq);
 	}
 
-	data->int_freq = freq;
-	pm_qos_update_request(&abox_pm_qos_int, data->int_freq);
+	if (data->int_freq != freq) {
+		data->int_freq = freq;
+		pm_qos_update_request(&abox_pm_qos_int, data->int_freq);
 
-	dev_info(dev, "pm qos request int: %dHz\n", pm_qos_request(
-			abox_pm_qos_int.pm_qos_class));
+		dev_info(dev, "pm qos request int: req=%dkHz ret=%dkHz\n", freq,
+				pm_qos_request(abox_pm_qos_int.pm_qos_class));
+	}
 }
 
 int abox_request_int_freq(struct device *dev, struct abox_data *data,
@@ -3504,11 +3519,13 @@ static void abox_change_mif_freq_work_func(struct work_struct *work)
 				request->value, freq);
 	}
 
-	data->mif_freq = freq;
-	pm_qos_update_request(&abox_pm_qos_mif, data->mif_freq);
+	if (data->mif_freq != freq) {
+		data->mif_freq = freq;
+		pm_qos_update_request(&abox_pm_qos_mif, data->mif_freq);
 
-	dev_info(dev, "pm qos request mif: %dHz\n", pm_qos_request(
-			abox_pm_qos_mif.pm_qos_class));
+		dev_info(dev, "pm qos request mif: req=%dkHz ret=%dkHz\n", freq,
+				pm_qos_request(abox_pm_qos_mif.pm_qos_class));
+	}
 }
 
 static int abox_request_mif_freq(struct device *dev, struct abox_data *data,
@@ -3562,11 +3579,13 @@ static void abox_change_lit_freq_work_func(struct work_struct *work)
 				request->value, freq);
 	}
 
-	data->lit_freq = freq;
-	pm_qos_update_request(&abox_pm_qos_lit, data->lit_freq);
+	if (data->lit_freq != freq) {
+		data->lit_freq = freq;
+		pm_qos_update_request(&abox_pm_qos_lit, data->lit_freq);
 
-	dev_info(dev, "pm qos request little: %dkHz\n",
-			pm_qos_request(abox_pm_qos_lit.pm_qos_class));
+		dev_info(dev, "pm qos request lit: req=%dkHz ret=%dkHz\n", freq,
+				pm_qos_request(abox_pm_qos_lit.pm_qos_class));
+	}
 }
 
 int abox_request_lit_freq(struct device *dev, struct abox_data *data,
@@ -3624,11 +3643,13 @@ static void abox_change_big_freq_work_func(struct work_struct *work)
 				request->value, freq);
 	}
 
-	data->big_freq = freq;
-	pm_qos_update_request(&abox_pm_qos_big, data->big_freq);
+	if (data->big_freq != freq) {
+		data->big_freq = freq;
+		pm_qos_update_request(&abox_pm_qos_big, data->big_freq);
 
-	dev_info(dev, "pm qos request big: %dkHz\n",
-			pm_qos_request(abox_pm_qos_big.pm_qos_class));
+		dev_info(dev, "pm qos request big: req=%dkHz ret=%dkHz\n", freq,
+				pm_qos_request(abox_pm_qos_big.pm_qos_class));
+	}
 }
 
 int abox_request_big_freq(struct device *dev, struct abox_data *data,
@@ -4407,10 +4428,11 @@ static irqreturn_t abox_dma_irq_handler(int irq, struct abox_data *data)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t abox_registered_ipc_handler(struct device *dev, int irq,
+static irqreturn_t abox_registered_ipc_handler(struct device *dev,
 		struct abox_data *data, ABOX_IPC_MSG *msg, bool broadcast)
 {
 	struct abox_irq_action *action;
+	int irq = msg->ipcid;
 	irqreturn_t ret = IRQ_NONE;
 
 	dev_dbg(dev, "%s: irq=%d\n", __func__, irq);
@@ -4441,7 +4463,7 @@ static void abox_system_ipc_handler(struct device *dev,
 			dev_err(dev, "Calliope is not compatible with the driver\n");
 
 		abox_boot_done(dev, system_msg->param3);
-		abox_registered_ipc_handler(dev, IPC_SYSTEM, data, msg, true);
+		abox_registered_ipc_handler(dev, data, msg, true);
 		break;
 	case ABOX_CHANGE_GEAR:
 		abox_request_cpu_gear(dev, data,
@@ -4593,8 +4615,7 @@ static void abox_playback_ipc_handler(struct device *dev,
 	if ((id >= ARRAY_SIZE(data->pdev_rdma)) || !data->pdev_rdma[id]) {
 		irqreturn_t ret;
 
-		ret = abox_registered_ipc_handler(dev, IPC_PCMPLAYBACK, data,
-				msg, false);
+		ret = abox_registered_ipc_handler(dev, data, msg, false);
 		if (ret != IRQ_HANDLED)
 			dev_err(dev, "pcm playback irq: id=%d\n", id);
 		return;
@@ -4629,8 +4650,7 @@ static void abox_capture_ipc_handler(struct device *dev,
 	if ((id >= ARRAY_SIZE(data->pdev_wdma)) || (!data->pdev_wdma[id])) {
 		irqreturn_t ret;
 
-		ret = abox_registered_ipc_handler(dev, IPC_PCMCAPTURE, data,
-				msg, false);
+		ret = abox_registered_ipc_handler(dev, data, msg, false);
 		if (ret != IRQ_HANDLED)
 			dev_err(dev, "pcm capture irq: id=%d\n", id);
 		return;
@@ -4687,7 +4707,7 @@ static irqreturn_t abox_irq_handler(int irq, void *dev_id)
 
 	dev_dbg(dev, "%s: irq=%d, ipcid=%d\n", __func__, irq, msg.ipcid);
 
-	switch (irq) {
+	switch (msg.ipcid) {
 	case IPC_SYSTEM:
 		abox_system_ipc_handler(dev, data, &msg);
 		break;
@@ -4701,7 +4721,7 @@ static irqreturn_t abox_irq_handler(int irq, void *dev_id)
 		abox_offload_ipc_handler(dev, data, &msg);
 		break;
 	default:
-		abox_registered_ipc_handler(dev, irq, data, &msg, false);
+		abox_registered_ipc_handler(dev, data, &msg, false);
 		break;
 	}
 out:
@@ -5519,7 +5539,6 @@ static int abox_disable(struct device *dev)
 	clk_disable(data->clk_cpu);
 	abox_gic_disable_irq(data->dev_gic);
 	abox_failsafe_report_reset(dev);
-
 	return 0;
 }
 
@@ -5628,6 +5647,19 @@ out:
 	return NOTIFY_DONE;
 }
 
+static int abox_print_power_usage(struct device *dev, void *data)
+{
+	dev_dbg(dev, "%s\n", __func__);
+
+	if (pm_runtime_enabled(dev) && pm_runtime_active(dev)) {
+		dev_info(dev, "usage_count:%d\n",
+				atomic_read(&dev->power.usage_count));
+		device_for_each_child(dev, data, abox_print_power_usage);
+	}
+
+	return 0;
+}
+
 static int abox_pm_notifier(struct notifier_block *nb,
 		unsigned long action, void *nb_data)
 {
@@ -5639,7 +5671,7 @@ static int abox_pm_notifier(struct notifier_block *nb,
 
 	switch (action) {
 	case PM_SUSPEND_PREPARE:
-		if (data->audio_mode != MODE_IN_CALL) {
+		if (abox_is_clearable(dev, data)) {
 			enum calliope_state state;
 
 			pm_runtime_barrier(dev);
@@ -5655,6 +5687,7 @@ static int abox_pm_notifier(struct notifier_block *nb,
 			ret = pm_runtime_suspend(dev);
 			if (ret < 0) {
 				dev_info(dev, "runtime suspend: %d\n", ret);
+				abox_print_power_usage(dev, NULL);
 				return NOTIFY_BAD;
 			}
 		}

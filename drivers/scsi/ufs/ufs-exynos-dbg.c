@@ -1179,7 +1179,7 @@ void exynos_ufs_cmd_log_start(struct ufs_hba *hba, struct scsi_cmnd *cmd)
 		ufs_cmd_log.lba = lba;
 
 	ufs_cmd_log.sct = sct;
-	ufs_cmd_log.retries = cmd->allowed;
+	ufs_cmd_log.retries = cmd->retries;
 
 	exynos_ufs_putItem_start(&ufs_cmd_queue, &ufs_cmd_log);
 }

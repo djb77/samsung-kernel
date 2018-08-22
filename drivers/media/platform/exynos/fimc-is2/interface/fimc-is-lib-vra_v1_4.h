@@ -390,7 +390,12 @@ enum api_vra_yaw_type {
 	VRA_YAW_FRONT = 0,
 	/* for right profile => Yaw Angle = 90. 270 stands for left profile */
 	VRA_YAW_RIGHT_PROFILE = 1,
+#ifdef VRA_OLD_POSES
 	VRA_YAW_ALL = 2
+#else
+	VRA_YAW_RIGHT_SEMI_PROFILE = 2, /*!< for right semi profile => Yaw Angle = 45. 315 stands for left semi profile */
+	VRA_YAW_All = 3
+#endif
 };
 
 /* brief The Image orientation */
@@ -499,8 +504,8 @@ enum api_vra_hw_err_bit_type {
 #define VRA_MASK_ERR_RESULTS_LOST	\
 	(VRA_HW_ERR_RES_VDMA_OVERFLOW_BIT | VRA_HW_ERR_RES_VDMA_MAX_RES_BIT)
 
-/* Each bit in mask stands for 45 degrees */
-#define VRA_DIS_ROT_UNIT	45
+#ifdef VRA_OLD_POSES
+#define VRA_DIS_ROT_UNIT	45  /* Each bit in mask stands for 45 degrees */
 #define VRA_DIS_ROT_0_BIT	(1 << 0)
 #define VRA_DIS_ROT_45_BIT	(1 << 1)
 #define VRA_DIS_ROT_90_BIT	(1 << 2)
@@ -509,6 +514,21 @@ enum api_vra_hw_err_bit_type {
 #define VRA_DIS_ROT_225_BIT	(1 << 5)
 #define VRA_DIS_ROT_270_BIT	(1 << 6)
 #define VRA_DIS_ROT_315_BIT	(1 << 7)
+#else
+#define VRA_DIS_ROT_UNIT	30  /* Each bit in mask stands for 30 degrees */
+#define VRA_DIS_ROT_0_BIT	(1 << 0)
+#define VRA_DIS_ROT_30_BIT	(1 << 1)
+#define VRA_DIS_ROT_60_BIT	(1 << 2)
+#define VRA_DIS_ROT_90_BIT	(1 << 3)
+#define VRA_DIS_ROT_120_BIT	(1 << 4)
+#define VRA_DIS_ROT_150_BIT	(1 << 5)
+#define VRA_DIS_ROT_180_BIT	(1 << 6)
+#define VRA_DIS_ROT_210_BIT	(1 << 7)
+#define VRA_DIS_ROT_240_BIT	(1 << 8)
+#define VRA_DIS_ROT_270_BIT	(1 << 9)
+#define VRA_DIS_ROT_300_BIT	(1 << 10)
+#define VRA_DIS_ROT_330_BIT	(1 << 11)
+#endif
 
 struct api_vra_sizes {
 	unsigned short width;
@@ -646,10 +666,15 @@ struct api_vra_pdt_rect {
 
 struct api_vra_pdt_face_extra {
 	unsigned char	is_rot: 1;	/* assuming VRA_ROT_ALL == 2 */
+#ifdef VRA_OLD_POSES
 	unsigned char	is_yaw: 1;	/* assuming VRA_YAW_ALL == 2 */
+#endif
 	unsigned char	rot: 2;
 	unsigned char	mirror_x: 1;	/* Required for facial features + set ROI commands */
 	unsigned char	hw_rot_and_mirror: 3;	/* Required for facial features + set ROI commands */
+#ifndef VRA_OLD_POSES
+	enum api_vra_yaw_type     yaw_type;
+#endif
 };
 
 struct api_vra_pdt_out_face {

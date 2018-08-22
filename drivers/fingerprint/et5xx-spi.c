@@ -63,6 +63,7 @@ static irqreturn_t etspi_fingerprint_interrupt(int irq, void *dev_id)
 	etspi->finger_on = 1;
 	disable_irq_nosync(gpio_irq);
 	wake_up_interruptible(&interrupt_waitq);
+	wake_lock_timeout(&etspi->fp_signal_lock, 1 * HZ);
 	pr_info("%s FPS triggered.int_count(%d) On(%d)\n", __func__,
 		etspi->int_count, etspi->finger_on);
 	return IRQ_HANDLED;
@@ -994,6 +995,8 @@ int etspi_platformInit(struct etspi_data *etspi)
 		WAKE_LOCK_SUSPEND, "etspi_wake_lock");
 #endif
 #endif
+	wake_lock_init(&etspi->fp_signal_lock,
+				WAKE_LOCK_SUSPEND, "etspi_sigwake_lock");
 
 	pr_info("%s successful status=%d\n", __func__, status);
 	return status;
@@ -1032,6 +1035,7 @@ void etspi_platformUninit(struct etspi_data *etspi)
 		wake_lock_destroy(&etspi->fp_spi_lock);
 #endif
 #endif
+		wake_lock_destroy(&etspi->fp_signal_lock);
 	}
 }
 

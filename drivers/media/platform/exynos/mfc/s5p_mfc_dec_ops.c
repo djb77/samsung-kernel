@@ -691,6 +691,7 @@ static int s5p_mfc_dec_get_buf_ctrls_val(struct s5p_mfc_ctx *ctx, struct list_he
 {
 	struct s5p_mfc_buf_ctrl *buf_ctrl;
 	struct s5p_mfc_dev *dev = ctx->dev;
+	struct s5p_mfc_dec *dec = ctx->dec_priv;
 	unsigned int value = 0;
 
 	list_for_each_entry(buf_ctrl, head, list) {
@@ -705,9 +706,9 @@ static int s5p_mfc_dec_get_buf_ctrls_val(struct s5p_mfc_ctx *ctx, struct list_he
 
 		if (IS_VP9_DEC(ctx)) {
 			if (buf_ctrl->id == V4L2_CID_MPEG_VIDEO_FULL_RANGE_FLAG)
-				buf_ctrl->val = ctx->color_range;
+				buf_ctrl->val = dec->color_range;
 			else if (buf_ctrl->id == V4L2_CID_MPEG_VIDEO_COLOUR_PRIMARIES)
-				buf_ctrl->val = ctx->color_space;
+				buf_ctrl->val = dec->color_space;
 		}
 		mfc_debug(8, "Get buffer control "\
 				"id: 0x%08x val: %d\n",
@@ -755,6 +756,7 @@ static int s5p_mfc_dec_set_buf_ctrls_val_nal_q_dec(struct s5p_mfc_ctx *ctx,
 static int s5p_mfc_dec_get_buf_ctrls_val_nal_q_dec(struct s5p_mfc_ctx *ctx,
 			struct list_head *head, DecoderOutputStr *pOutStr)
 {
+	struct s5p_mfc_dec *dec = ctx->dec_priv;
 	struct s5p_mfc_buf_ctrl *buf_ctrl;
 	unsigned int value = 0;
 
@@ -816,13 +818,13 @@ static int s5p_mfc_dec_get_buf_ctrls_val_nal_q_dec(struct s5p_mfc_ctx *ctx,
 			break;
 		case V4L2_CID_MPEG_VIDEO_FULL_RANGE_FLAG:
 			if (IS_VP9_DEC(ctx)) {
-				buf_ctrl->val = ctx->color_range;
+				buf_ctrl->val = dec->color_range;
 				buf_ctrl->has_new = 1;
 				continue;
 			}
 		case V4L2_CID_MPEG_VIDEO_COLOUR_PRIMARIES:
 			if (IS_VP9_DEC(ctx)) {
-				buf_ctrl->val = ctx->color_space;
+				buf_ctrl->val = dec->color_space;
 				buf_ctrl->has_new = 1;
 				continue;
 			}

@@ -1,0 +1,159 @@
+/*
+ * SAMSUNG UNIVERSAL5433 board device tree source
+ *
+ * Copyright (c) 2013 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+#include "battery_data_starlte_common.dtsi"
+/ {
+	hsi2c@14370000 {  /* hsi2c_41 */
+		mfc-charger@3b {
+			battery,charger_name = "max77865-charger";
+			battery,fuelgauge_name = "max77865-fuelgauge";
+		};
+	};
+
+	battery {
+		battery,charger_name = "max77865-charger";
+		battery,fuelgauge_name = "max77865-fuelgauge";
+		battery,fgsrc_switch_name = "max77865-charger"; /* Fuelgauge voltage source */
+
+		battery,chg_float_voltage = <43500>;
+		battery,chg_float_voltage_conv = <10>;
+		battery,swelling_drop_float_voltage = <41500>;
+		battery,wa_float_voltage = <40500>;
+
+		/* cycle, chg_float_voltage, recharge_condition_vcell, full_condition_vcell, full_condition_soc */
+		battery,age_data = <0 43500 4280 4250 93
+				200 43250 4255 4225 92
+				250 43125 4242 4212 91
+				300 42875 4217 4187 90
+				1000 42375 4167 4137 89>;
+	};
+	max77865-fuelgauge {
+		status = "okay";
+		fuelgauge,fuel_alert_soc = <1>;
+		fuelgauge,jig_gpio = <&gpg0 0 0>;
+		fuelgauge,jig_low_active;
+		fuelgauge,capacity_max = <1000>;
+		fuelgauge,capacity_max_margin = <300>;
+		fuelgauge,capacity_min = <0>;
+		fuelgauge,capacity_calculation_type = <28>;
+		fuelgauge,repeated_fuelalert;
+		fuelgauge,using_temp_compensation;
+		fuelgauge,low_temp_limit = <100>;
+		fuelgauge,using_hw_vempty;
+		fuelgauge,v_empty = <0xAA64>; /* Empty: 3260mV, Recover: 3480mV */
+		fuelgauge,v_empty_origin = <0x7D54>; /* Empty: 2500mV, Recover: 3360mV */
+		fuelgauge,sw_v_empty_voltage = <3200>;
+		fuelgauge,sw_v_empty_voltage_cisd = <3100>;
+		fuelgauge,sw_v_empty_recover_voltage = <3480>;
+		fuelgauge,qrtable20 = <0x1680>;
+		fuelgauge,qrtable30 = <0x1180>;
+		fuelgauge,fg_resistor = <1>;
+		fuelgauge,capacity = <0x172D>;
+		/*fuelgauge,auto_discharge_en;*/
+		fuelgauge,discharge_temp_threshold = <600>;
+		fuelgauge,discharge_volt_threshold = <4200>;
+		fuelgauge,ttf_capacity = <3000>;
+		fuelgauge,cv_data = <
+			2488	829	1809
+			2409	832	1796
+			2327	837	1769
+			2272	840	1743
+			2182	846	1721
+			2104	850	1690
+			2038	854	1670
+			1950	859	1640
+			1904	861	1622
+			1838	865	1594
+			1797	867	1576
+			1749	870	1560
+			1703	873	1531
+			1683	873	1525
+			1667	875	1515
+			1660	875	1512
+			1653	876	1509
+			1615	878	1502
+			1580	880	1483
+			1553	881	1463
+			1544	882	1458
+			1520	883	1451
+			1477	886	1424
+			1431	888	1409
+			1396	891	1383
+			1347	894	1361
+			1299	896	1332
+			1267	898	1315
+			1231	902	1288
+			1202	904	1263
+			1148	906	1243
+			1109	909	1213
+			1067	911	1185
+			1031	914	1156
+			1013	915	1140
+			975	917	1111
+			961	919	1084
+			921	921	1064
+			892	923	1038
+			887	923	1019
+			863	925	1004
+			833	927	976
+			808	929	946
+			787	930	918
+			780	931	904
+			764	932	895
+			744	934	864
+			730	935	846
+			715	936	828
+			693	937	800
+			681	938	783
+			666	940	752
+			651	941	735
+			640	942	712
+			628	945	697
+			622	946	679
+			618	947	664
+			600	950	646
+			596	951	627
+			589	953	614
+			584	953	601
+			576	956	572
+			577	957	553
+			562	958	535
+			511	968	506
+			505	969	487
+			493	971	464
+			492	972	435
+			484	973	417
+			480	975	398
+			474	976	380
+			470	977	364
+			462	977	355
+			456	978	336
+			452	979	329
+			446	981	303
+			437	982	282
+			429	984	255
+			423	985	242
+			422	986	229
+			414	987	211
+			411	988	199
+			405	989	191
+			397	990	171
+			391	991	140
+			387	992	126
+			384	993	107
+			372	995	84
+			364	997	54
+			356	998	26
+			356	998	13
+			0	1000	0
+			>;
+	};
+};

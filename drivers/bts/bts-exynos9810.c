@@ -833,7 +833,7 @@ static void find_qmax(unsigned int freq, unsigned int *read_mo,
 
 static void exynos_bts_mif_update(unsigned int freq)
 {
-	unsigned int i;
+	unsigned long i;
 	unsigned int read_mo;
 	unsigned int write_mo;
 
@@ -977,7 +977,7 @@ static int exynos_qos_status_open_show(struct seq_file *buf, void *d)
 static int exynos_mo_status_open_show(struct seq_file *buf, void *d)
 {
 	struct bts_info *bts;
-	unsigned int i;
+	unsigned long i;
 	int nr_ip = 0;
 
 	seq_puts(buf, "\tIP/Scen/RW/MO\nex)echo 0 0 0 16 > mo\n");
@@ -1055,7 +1055,7 @@ static ssize_t exynos_mo_write(struct file *file, const char __user *user_buf,
 static int exynos_prio_status_open_show(struct seq_file *buf, void *d)
 {
 	struct bts_info *bts;
-	unsigned int i;
+	unsigned long i;
 	int nr_ip = 0;
 
 	seq_puts(buf, "\tqos IP/Scen/Prio\nex)echo 0 0 8 > priority\n");
@@ -1128,12 +1128,12 @@ static ssize_t exynos_prio_write(struct file *file, const char __user *user_buf,
 
 static int exynos_scen_status_open_show(struct seq_file *buf, void *d)
 {
-	unsigned int i;
+	unsigned long i;
 
 	for (i = 0; i < ARRAY_SIZE(bts_scen) - 1; i++) {
 		if (!bts_scen[i].name)
 			continue;
-		seq_printf(buf, "[%2d]%9s\n", i, bts_scen[i].name);
+		seq_printf(buf, "[%2lu]%9s\n", i, bts_scen[i].name);
 	}
 	return 0;
 }
@@ -1401,7 +1401,7 @@ static ssize_t exynos_qbusy_write(struct file *file, const char __user *buf, siz
 				  loff_t *f_pos)
 {
 	char *buf_data;
-	unsigned int i;
+	unsigned long i;
 	int ret;
 
 	buf_data = kmalloc(count, GFP_KERNEL);
@@ -1698,7 +1698,7 @@ void bts_update_bw(enum bts_bw_type type, struct bts_bw bw)
 static int __init exynos_bts_init(void)
 {
 	int ret;
-	unsigned int i;
+	unsigned long i;
 	struct bts_info *bts;
 
 	ret = bts_debugfs();

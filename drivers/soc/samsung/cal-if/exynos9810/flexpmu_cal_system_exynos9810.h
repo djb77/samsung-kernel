@@ -100,6 +100,12 @@ struct pmucal_seq pmucal_lpm_init[] = {
 	PMUCAL_SEQ_DESC(PMUCAL_WRITE, "SCI_CRPPORTPWRDN_EMBEDDED_G3D_SYS_PWR_REG", 0x14060000, 0x15A8, (0x1 << 0), (0x1 << 0), 0, 0, 0xffffffff, 0),
 	PMUCAL_SEQ_DESC(PMUCAL_WRITE, "AUD_CPU_OPTION", 0x14060000, 0x3808, (0x1 << 16), (0x1 << 16), 0, 0, 0xffffffff, 0),
 	PMUCAL_SEQ_DESC(PMUCAL_WRITE, "PWR_EMBEDDED_G3D_SYS_PWR_REG", 0x14060000, 0x15ac, (0x1 << 0), (0x1 << 0), 0, 0, 0xffffffff, 0),
+	PMUCAL_SEQ_DESC(PMUCAL_WRITE, "DCRD_CONFIGURATION", 0x14060000, 0x4018, (0xf << 0), (0x0 << 0), 0, 0, 0xffffffff, 0),
+	PMUCAL_SEQ_DESC(PMUCAL_WAIT, "DCRD_STATUS", 0x14060000, 0x401c, (0xf << 0), (0x0 << 0), 0x14060000, 0x401c, (0xf << 0), (0x0 << 0)),
+	PMUCAL_SEQ_DESC(PMUCAL_WRITE, "DCPOST_CONFIGURATION", 0x14060000, 0x4010, (0xf << 0), (0x0 << 0), 0, 0, 0xffffffff, 0),
+	PMUCAL_SEQ_DESC(PMUCAL_WAIT, "DCPOST_STATUS", 0x14060000, 0x4014, (0xf << 0), (0x0 << 0), 0x14060000, 0x4014, (0xf << 0), (0x0 << 0)),
+	PMUCAL_SEQ_DESC(PMUCAL_WRITE, "DCF_CONFIGURATION", 0x14060000, 0x4008, (0xf << 0), (0x0 << 0), 0, 0, 0xffffffff, 0),
+	PMUCAL_SEQ_DESC(PMUCAL_WAIT, "DCF_STATUS", 0x14060000, 0x400c, (0xf << 0), (0x0 << 0), 0x14060000, 0x400c, (0xf << 0), (0x0 << 0)),
 };
 unsigned int pmucal_lpm_init_size = ARRAY_SIZE(pmucal_lpm_init);
 /* individual sequence descriptor for each power mode - enter, exit, early_wakeup */

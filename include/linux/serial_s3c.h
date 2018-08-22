@@ -40,6 +40,7 @@
 #define S3C2410_UERSTAT	  (0x14)
 #define S3C2410_UFSTAT	  (0x18)
 #define S3C2410_UMSTAT	  (0x1C)
+#define S3C2410_UFLT	  (0x40)
 
 #define USI_CON	  		(0xC4)
 #define USI_OPTION		(0xC8)
@@ -155,6 +156,8 @@
 #define S3C2410_UFCON_RESETBOTH	  (3<<1)
 #define S3C2410_UFCON_RESETTX	  (1<<2)
 #define S3C2410_UFCON_RESETRX	  (1<<1)
+
+#define S3C2410_UFLT_MAX		  (7<<13)
 
 #define S3C2410_UFCON_DEFAULT	  (S3C2410_UFCON_FIFOMODE | \
 				   S3C2410_UFCON_TXTRIG0  | \

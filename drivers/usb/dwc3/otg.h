@@ -23,6 +23,8 @@
 #include <linux/wakelock.h>
 #include <linux/usb/otg-fsm.h>
 
+extern int dp_use_informed;
+
 struct dwc3_ext_otg_ops {
 	int	(*setup)(struct device *dev, struct otg_fsm *fsm);
 	void	(*exit)(struct device *dev);

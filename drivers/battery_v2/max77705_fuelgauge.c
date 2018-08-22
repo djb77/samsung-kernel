@@ -2572,7 +2572,14 @@ static int max77705_fuelgauge_remove(struct platform_device *pdev)
 	if (fuelgauge->psy_fg)
 		power_supply_unregister(fuelgauge->psy_fg);
 
+	free_irq(fuelgauge->fg_irq, fuelgauge);
 	wake_lock_destroy(&fuelgauge->fuel_alert_wake_lock);
+#if defined(CONFIG_OF)
+	kfree(fuelgauge->battery_data);
+#endif
+	kfree(fuelgauge->pdata);
+	mutex_destroy(&fuelgauge->fg_lock);
+	kfree(fuelgauge);
 
 	pr_info("%s: --\n", __func__);
 

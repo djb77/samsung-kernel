@@ -29,6 +29,7 @@
 #include "fimc-is-hw-dcp.h"
 #include "fimc-is-hw-srdz.h"
 #include "fimc-is-hw-dm.h"
+#include "fimc-is-interface-library.h"
 
 #define INTERNAL_SHOT_EXIST	(1)
 
@@ -395,6 +396,8 @@ void fimc_is_hardware_flush_frame(struct fimc_is_hw_ip *hw_ip,
 		if (done_type == IS_SHOT_TIMEOUT) {
 			mserr_hw("[F:%d]hardware is timeout", frame->instance, hw_ip, frame->fcount);
 			fimc_is_hardware_size_dump(hw_ip);
+			if (hw_ip->id == DEV_HW_3AA0 || hw_ip->id == DEV_HW_3AA1)
+				fimc_is_lib_logdump();
 		}
 
 		ret = fimc_is_hardware_frame_ndone(hw_ip, frame, atomic_read(&hw_ip->instance), done_type);
@@ -2029,6 +2032,7 @@ int fimc_is_hardware_open(struct fimc_is_hardware *hardware, u32 hw_id,
 		atomic_set(&hw_ip->count.fe, 0);
 		atomic_set(&hw_ip->count.dma, 0);
 		atomic_set(&hw_ip->status.Vvalid, V_BLANK);
+		atomic_set(&hw_ip->run_rsccount, 0);
 		setup_timer(&hw_ip->shot_timer, fimc_is_hardware_shot_timer, (unsigned long)hw_ip);
 
 		if (!test_bit(FIMC_IS_GROUP_OTF_INPUT, &group->state)) {
@@ -2140,6 +2144,7 @@ int fimc_is_hardware_close(struct fimc_is_hardware *hardware,u32 hw_id, u32 inst
 		atomic_set(&hw_ip->fcount, 0);
 		atomic_set(&hw_ip->instance, 0);
 		hw_ip->internal_fcount = 0;
+		atomic_set(&hw_ip->run_rsccount, 0);
 
 #if defined(MULTI_SHOT_KTHREAD)
 		fimc_is_hardware_deinit_mshot_thread(hw_ip);

@@ -21,7 +21,7 @@
 #include "exynos_mfc_media.h"
 #include "s5p_mfc_data_struct.h"
 
-#define MFC_DRIVER_INFO		170522
+#define MFC_DRIVER_INFO		180315
 
 #define MFC_MAX_REF_BUFS	2
 #define MFC_FRAME_PLANES	2
@@ -153,6 +153,7 @@
 #define	ENC_SET_FIXED_SLICE		(1 << 6)
 #define	ENC_SET_PVC_MODE		(1 << 7)
 #define	ENC_SET_RATIO_OF_INTRA		(1 << 8)
+#define	ENC_SET_COLOR_ASPECT		(1 << 9)
 
 #define MFC_VER_MAJOR(dev)	((s5p_mfc_version(dev) >> 8) & 0xFF)
 #define MFC_VER_MINOR(dev)	(s5p_mfc_version(dev) & 0xFF)
@@ -185,6 +186,8 @@
 					(dev->fw.date >= 0x171023))
 #define FW_HAS_RATIO_INTRA_CTRL(dev)	(FROM_MFCV11X(dev) &&		\
 					(dev->fw.date >= 0x171113))
+#define FW_HAS_ENC_COLOR_ASPECT(dev)	(FROM_MFCV11X(dev) &&		\
+					(dev->fw.date >= 0x171023))
 
 static inline unsigned int s5p_mfc_version(struct s5p_mfc_dev *dev)
 {

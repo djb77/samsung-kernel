@@ -336,8 +336,6 @@ int exynos_ufs_fmp_cfg(struct ufs_hba *hba,
 		return 0;
 	}
 
-	
-
 	ret = is_ufs_fmp_test_enabled(cmd, ufs->fmp.pdev);
 	if (ret == TRUE)
 		goto out_test;

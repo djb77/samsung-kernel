@@ -152,7 +152,7 @@ static int fmpdev_set_test_cfg(struct exynos_fmp *fmp,
 		dev_err(fmp->dev, "%s: Invalid test data\n", __func__);
 		goto err;
 	}
-	crypto = fmp->fips_data->crypto;
+	crypto = &fmp->fips_data->crypto;
 
 	if (!data || !data->table) {
 		dev_err(fmp->dev, "%s: Invalid data or table data\n", __func__);
@@ -560,7 +560,7 @@ static int exynos_fmp_probe(struct platform_device *pdev)
 	return ret;
 
 err_dev:
-	kfree(fmp);
+	kzfree(fmp);
 err_mem:
 err_pdev:
 	return ret;
@@ -577,7 +577,7 @@ static int exynos_fmp_remove(struct platform_device *pdev)
 
 	exynos_fmp_fips_exit(fmp);
 
-	kfree(fmp);
+	kzfree(fmp);
 	return 0;
 }
 

@@ -354,7 +354,7 @@ static ssize_t usb_hw_param_store(
 		dev_get_drvdata(dev);
 	struct otg_notify *n = udev->o_notify;
 	unsigned long long prev_hw_param[USB_CCIC_HW_PARAM_MAX] = {0, };
-
+	unsigned long long *p_param = NULL;
 	int index = 0;
 	size_t ret = -ENOMEM;
 	char *token, *str = (char *)buf;
@@ -378,8 +378,11 @@ static ssize_t usb_hw_param_store(
 			goto error;
 	}
 
-	for (index = 0; index < (USB_CCIC_HW_PARAM_MAX - 1); index++)
-		*(get_hw_param(n, index)) += prev_hw_param[index];
+	for (index = 0; index < (USB_CCIC_HW_PARAM_MAX - 1); index++) {
+		p_param = get_hw_param(n, index);
+		if (p_param)
+			*p_param += prev_hw_param[index];
+	}
 	pr_info("%s - ret : %zu\n", __func__, ret);
 error:
 	return ret;
@@ -467,6 +470,7 @@ static ssize_t hw_param_store(
 	int index = 0;
 	size_t ret = -ENOMEM;
 	char *str = (char *)buf;
+	unsigned long long *p_param = NULL;
 
 	if (size > 2) {
 		pr_err("%s size(%zu) is too long.\n", __func__, size);
@@ -475,8 +479,11 @@ static ssize_t hw_param_store(
 	ret = size;
 	pr_info("%s : %s\n", __func__, str);
 	if (!strncmp(str, "c", 1))
-		for (index = 0; index < USB_CCIC_HW_PARAM_MAX; index++)
-			*(get_hw_param(n, index)) = 0;
+		for (index = 0; index < USB_CCIC_HW_PARAM_MAX; index++) {
+			p_param = get_hw_param(n, index);
+			if (p_param)
+				*p_param = 0;
+		}
 error:
 	return ret;
 }

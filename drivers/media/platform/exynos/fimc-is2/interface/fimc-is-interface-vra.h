@@ -239,6 +239,7 @@ int fimc_is_lib_vra_frame_work_init(struct fimc_is_lib_vra *lib_vra,
 	void __iomem *base_addr, enum fimc_is_lib_vra_input_type input_type);
 int fimc_is_lib_vra_frame_desc_init(struct fimc_is_lib_vra *lib_vra,
 	u32 instance);
+int fimc_is_lib_vra_stop_instance(struct fimc_is_lib_vra *lib_vra, u32 instance);
 int fimc_is_lib_vra_stop(struct fimc_is_lib_vra *lib_vra);
 int fimc_is_lib_vra_frame_work_final(struct fimc_is_lib_vra *lib_vra);
 int fimc_is_lib_vra_otf_input(struct fimc_is_lib_vra *lib_vra,

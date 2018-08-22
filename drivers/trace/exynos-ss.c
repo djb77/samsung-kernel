@@ -443,7 +443,8 @@ static size_t __init exynos_ss_remap(void)
 
 static int __init exynos_ss_init_desc(void)
 {
-	unsigned int i, len;
+	unsigned int i;
+	size_t len;
 
 	/* initialize ess_desc */
 	memset((struct exynos_ss_desc *)&ess_desc, 0, sizeof(struct exynos_ss_desc));
