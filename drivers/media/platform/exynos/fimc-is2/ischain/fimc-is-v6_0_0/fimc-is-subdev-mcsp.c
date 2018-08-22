@@ -45,6 +45,7 @@ static int fimc_is_ischain_mxp_cfg(struct fimc_is_subdev *subdev,
 	struct fimc_is_device_ischain *device;
 	u32 width, height;
 	u32 crange;
+	int scenario_id;
 
 	device = (struct fimc_is_device_ischain *)device_data;
 
@@ -68,13 +69,16 @@ static int fimc_is_ischain_mxp_cfg(struct fimc_is_subdev *subdev,
 	width = queue->framecfg.width;
 	height = queue->framecfg.height;
 	fimc_is_ischain_mxp_adjust_crop(device, incrop->w, incrop->h, &width, &height);
+	scenario_id = fimc_is_dvfs_sel_static(device);
 
 	if (queue->framecfg.quantization == V4L2_QUANTIZATION_FULL_RANGE) {
 		crange = SCALER_OUTPUT_YUV_RANGE_FULL;
 		msinfo("CRange:W\n", device, subdev);
 	} else {
 		crange = SCALER_OUTPUT_YUV_RANGE_NARROW;
-		msinfo("CRange:N\n", device, subdev);
+		if (scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_120FPS && scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_240FPS) {
+			msinfo("CRange:N\n", device, subdev);
+		}
 	}
 
 	mcs_output = fimc_is_itf_g_param(device, frame, subdev->param_dma_ot);
@@ -232,6 +236,7 @@ static int fimc_is_ischain_mxp_start(struct fimc_is_device_ischain *device,
 	struct fimc_is_fmt *format;
 	struct param_otf_input *otf_input;
 	u32 crange;
+	int scenario_id;
 
 	FIMC_BUG(!queue);
 	FIMC_BUG(!queue->framecfg.format);
@@ -239,6 +244,8 @@ static int fimc_is_ischain_mxp_start(struct fimc_is_device_ischain *device,
 	format = queue->framecfg.format;
 
 	otf_input = NULL;
+
+	scenario_id = fimc_is_dvfs_sel_static(device);
 
 	/* if output DS, skip check a incrop & input mcs param
 	 * because, DS input size set to preview port output size
@@ -253,7 +260,9 @@ static int fimc_is_ischain_mxp_start(struct fimc_is_device_ischain *device,
 		mdbg_pframe("CRange:W\n", device, subdev, frame);
 	} else {
 		crange = SCALER_OUTPUT_YUV_RANGE_NARROW;
-		mdbg_pframe("CRange:N\n", device, subdev, frame);
+		if (scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_120FPS && scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_240FPS) {
+			mdbg_pframe("CRange:N\n", device, subdev, frame);
+		}
 	}
 
 	if (node->pixelformat) { /* per-frame control for RGB */
@@ -406,6 +415,7 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 	u32 pixelformat = 0;
 	u32 *target_addr;
 	bool change_pixelformat = false;
+	int scenario_id;
 
 	device = (struct fimc_is_device_ischain *)device_data;
 
@@ -470,6 +480,8 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 
 	mcs_output = fimc_is_itf_g_param(device, ldr_frame, index);
 
+	scenario_id = fimc_is_dvfs_sel_static(device);
+
 	if (node->request) {
 		incrop = (struct fimc_is_crop *)node->input.cropRegion;
 		otcrop = (struct fimc_is_crop *)node->output.cropRegion;
@@ -517,10 +529,12 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 				goto p_err;
 			}
 
-			mdbg_pframe("in_crop[%d, %d, %d, %d]\n", device, subdev, ldr_frame,
-				incrop->x, incrop->y, incrop->w, incrop->h);
-			mdbg_pframe("ot_crop[%d, %d, %d, %d]\n", device, subdev, ldr_frame,
-				otcrop->x, otcrop->y, otcrop->w, otcrop->h);
+			if (scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_120FPS && scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_240FPS) {
+				mdbg_pframe("in_crop[%d, %d, %d, %d]\n", device, subdev, ldr_frame,
+					incrop->x, incrop->y, incrop->w, incrop->h);
+				mdbg_pframe("ot_crop[%d, %d, %d, %d]\n", device, subdev, ldr_frame,
+					otcrop->x, otcrop->y, otcrop->w, otcrop->h);
+			}
 		}
 
 		ret = fimc_is_ischain_buf_tag(device,
@@ -566,8 +580,9 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 				merr("fimc_is_ischain_mxp_stop is fail(%d)", device, ret);
 				goto p_err;
 			}
-
-			mdbg_pframe(" off\n", device, subdev, ldr_frame);
+			if (scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_120FPS && scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_240FPS) {
+				mdbg_pframe(" off\n", device, subdev, ldr_frame);
+			}
 		}
 
 		if ((node->vid - FIMC_IS_VIDEO_M0P_NUM)

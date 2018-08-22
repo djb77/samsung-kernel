@@ -182,7 +182,7 @@ static int __do_kernel_fault_safe(struct mm_struct *mm, unsigned long addr,
 {
 	safe_fault_in_progress = 0xFAFADEAD;
 
-	exynos_ss_panic_handler_safe();
+	exynos_ss_panic_handler_safe(regs);
 	exynos_ss_printkl(safe_fault_in_progress,safe_fault_in_progress);
 	while(1)
 		wfi();

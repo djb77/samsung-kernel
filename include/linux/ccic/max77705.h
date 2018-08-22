@@ -406,6 +406,7 @@ enum max77705_pdmsg {
 
 	Sink_PD_Disabled = 0x20,
 	Source_PD_Disabled = 0x21,
+	Current_Cable_Connected = 0x22,
 
 	Get_Source_Capabilities_Extended_Received = 0x30,
 	Get_Status_Received = 0x31,
@@ -518,6 +519,7 @@ typedef enum {
 	OPCODE_SAMSUNG_FW_AUTOIBUS = 0x57,
 	OPCODE_READ_SELFTEST = 0x59,
 	OPCODE_GRL_COMMAND = 0x70,
+	OPCODE_RAM_TEST_COMMAND = 0xD1,
 	OPCODE_NONE = 0xff,
 } max77705_opcode_list;
 

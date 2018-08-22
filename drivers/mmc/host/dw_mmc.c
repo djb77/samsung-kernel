@@ -694,6 +694,7 @@ static void dw_mci_dma_cleanup(struct dw_mci *host)
 				     data->sg,
 				     data->sg_len,
 				     dw_mci_get_dma_dir(data));
+	memset(host->sg_cpu, 0, DESC_RING_BUF_SZ);
 }
 
 static void dw_mci_idmac_reset(struct dw_mci *host)

@@ -50,6 +50,7 @@ enum {
 	PHY_PMA_TRSV,
 	PHY_PLL_WAIT,
 	PHY_CDR_WAIT,
+	PHY_CDR_AFC_WAIT,
 	UNIPRO_STD_MIB,
 	UNIPRO_DBG_MIB,
 	UNIPRO_DBG_APB,
@@ -293,16 +294,43 @@ static struct ufs_cal_phy_cfg lane1_sq_off[] = {
 static struct ufs_cal_phy_cfg post_h8_enter[] = {
 	{0x0C4, 0x99, PMD_ALL, PHY_PMA_TRSV, 0},
 	{0x0E8, 0x7F, PMD_ALL, PHY_PMA_TRSV, 0},
+	{0x0F0, 0x7F, PMD_ALL, PHY_PMA_TRSV, 0},
 	{0x004, 0x02, PMD_ALL, PHY_PMA_COMN, 0},
 	{},
 };
 
 static struct ufs_cal_phy_cfg pre_h8_exit[] = {
-	{0x004, 0x00, PMD_ALL, PHY_PMA_COMN, 0},
-	{0x0C4, 0xD9, PMD_ALL, PHY_PMA_TRSV, 0},
-	{0x0E8, 0x77, PMD_ALL, PHY_PMA_TRSV, 0},
+	{0x004, 0x3F, PMD_HS, PHY_PMA_COMN,      0},
+	{0x0C4, 0xD9, PMD_ALL, PHY_PMA_TRSV,     0},
+	{0x0E8, 0x77, PMD_ALL, PHY_PMA_TRSV,     0},
+	{0x00,  0x0A, PMD_HS,  COMMON_WAIT,      0},
+	{0x0F0, 0xFF, PMD_HS,  PHY_PMA_TRSV,     0},
+	{0x1fc, 0x01, PMD_HS,  PHY_CDR_AFC_WAIT, 0},
 	{},
 };
+
+static inline ufs_cal_errno ufs_cal_wait_cdr_afc_check(void *hba,
+			u32 addr, u32 mask, int lane)
+{
+	u32 delay_us = 1;
+	u32 delay2_us = 40;
+	u32 reg = 0;
+	u32 i;
+
+	for (i = 0; i < 100; i++) {
+		ufs_lld_usleep_delay(delay2_us, delay2_us);
+
+		reg = ufs_lld_pma_read(hba, PHY_PMA_TRSV_ADDR(addr, lane));
+		if (mask == (reg & mask))
+			return UFS_CAL_NO_ERROR;
+
+		ufs_lld_usleep_delay(delay_us, delay_us);
+		ufs_lld_pma_write(hba, 0x7F, PHY_PMA_TRSV_ADDR(0xF0, lane));
+		ufs_lld_pma_write(hba, 0xFF, PHY_PMA_TRSV_ADDR(0xF0, lane));
+	}
+
+	return UFS_CAL_ERROR;
+}
 
 static inline ufs_cal_errno __match_board_by_cfg(u8 board, u8 cfg_board)
 {
@@ -503,6 +531,12 @@ static ufs_cal_errno ufs_cal_config_uic(struct ufs_cal_param *p,
 				if (ufs_cal_wait_cdr_lock(hba,
 						cfg->addr, cfg->val, i) ==
 								UFS_CAL_ERROR)
+					return UFS_CAL_TIMEOUT;
+				break;
+			case PHY_CDR_AFC_WAIT:
+				if (ufs_cal_wait_cdr_afc_check(hba,
+						cfg->addr, cfg->val, i) ==
+						UFS_CAL_ERROR)
 					return UFS_CAL_TIMEOUT;
 				break;
 			case COMMON_WAIT:

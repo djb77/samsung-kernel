@@ -583,13 +583,13 @@ void __init smp_init(void)
 			break;
 
 		if (test_bit(cpu, &sec_cpumask)) {
-			pr_err("%s: CPU%d OFF byg sec coremask\n", __func__, cpu);
-			break;
+			pr_err("%s: CPU%d OFF by sec coremask\n", __func__, cpu);
+			continue;
 		}
 
 		if (!cpu_online(cpu)) {
-			cpu_up(cpu);
 			cpumask_set_cpu(cpu, &early_cpu_mask);
+			cpu_up(cpu);
 		}
 	}
 

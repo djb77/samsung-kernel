@@ -531,8 +531,19 @@ static char S6E3HA8_AOD_SELF_MOVE_SYNC_OFF[] = {
 };
 DEFINE_STATIC_PACKET(s6e3ha8_aod_self_move_sync_off, DSI_PKT_TYPE_WR, S6E3HA8_AOD_SELF_MOVE_SYNC_OFF, 0);
 
+
+static char S6E3HA8_AOD_SELF_MOVE_FORCE_RESET[] = {
+	0x7D,
+	0x00, 0x00, 0x00, 0x04
+};
+DEFINE_STATIC_PACKET(s6e3ha8_aod_self_move_force_reset, DSI_PKT_TYPE_WR, S6E3HA8_AOD_SELF_MOVE_FORCE_RESET, 0);
+
+static DEFINE_PANEL_MDELAY(s6e3ha8_aod_move_off_delay, 34);
+
 static void *s6e3ha8_aod_self_move_off_cmdtbl[] = {
 	&KEYINFO(s6e3ha8_aod_level2_key_enable),
+	&PKTINFO(s6e3ha8_aod_self_move_force_reset),
+	&DLYINFO(s6e3ha8_aod_move_off_delay),
 	&PKTINFO(s6e3ha8_aod_self_move_sync_off),
 	&KEYINFO(s6e3ha8_aod_level2_key_disable),
 };

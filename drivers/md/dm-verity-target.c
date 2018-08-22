@@ -279,6 +279,9 @@ static int verity_handle_err(struct dm_verity *v, enum verity_block_type type,
 	} else {
 		DMERR("%s: %s block : Unknown block type", v->data_dev->name, type_str);
 	}
+	
+	if (io->io_retry == IO_RETRY_MAX) panic("dmv corrupt");
+
 	if (v->corrupted_errs == DM_VERITY_MAX_CORRUPTED_ERRS)
 		DMERR("%s: reached maximum errors", v->data_dev->name);
 
@@ -410,7 +413,6 @@ static int verity_verify_level(struct dm_verity *v, struct dm_verity_io *io,
 					   hash_block)) {
 #endif
 			r = -EIO;
-			panic("dmv metadata corrupt %llu", (unsigned long long)hash_block);
 			goto release_ret_r;
 		}
 	}
@@ -569,10 +571,6 @@ static int verity_verify_io(struct dm_verity_io *io)
 	struct bvec_iter start;
 	unsigned b;
 
-	struct bio *bio;
-	struct bio_vec bv;
-	u8 *page;
-
 	for (b = 0; b < io->n_blocks; b++) {
 		int r;
 		struct shash_desc *desc = verity_io_hash_desc(v, io);
@@ -631,10 +629,6 @@ static int verity_verify_io(struct dm_verity_io *io)
 			pr_err("ICCC smc ret = %llu\n",
 				(unsigned long long)exynos_smc(SMC_CMD_DMV_WRITE_STATUS, 1, 0, 0));
 #endif
-			bio = dm_bio_from_per_bio_data(io, v->ti->per_io_data_size);
-			bv = bio_iter_iovec(bio, start);
-			page = kmap_atomic(bv.bv_page);
-			panic("dmv corrupt %llu 0x%p", (unsigned long long)(io->block+b), page);
 			return -EIO;
 		}
 	}
@@ -661,8 +655,28 @@ static void verity_finish_io(struct dm_verity_io *io, int error)
 static void verity_work(struct work_struct *w)
 {
 	struct dm_verity_io *io = container_of(w, struct dm_verity_io, work);
+	struct bvec_iter iter = io->iter;
+	int ret = verity_verify_io(io);
+	struct bio *bio = dm_bio_from_per_bio_data(io, io->v->ti->per_io_data_size);
 
-	verity_finish_io(io, verity_verify_io(io));
+	if (ret == -EIO && io->io_retry < IO_RETRY_MAX){
+		bio->bi_next = NULL;
+		bio_clear_flag(bio, BIO_SEG_VALID);
+		bio->bi_iter = iter;
+		bio->bi_phys_segments = 0;
+		bio->bi_seg_front_size = 0;
+		bio->bi_seg_back_size = 0;
+
+		io->iter = iter;
+
+		DMERR_LIMIT("%s: submitting io-request. io_retry cnt: %d", __func__, io->io_retry);
+		io->io_retry++;
+		generic_make_request(bio);
+
+	}
+	else {
+		verity_finish_io(io, ret);
+	}
 }
 
 static void verity_end_io(struct bio *bio)
@@ -811,6 +825,8 @@ int verity_map(struct dm_target *ti, struct bio *bio)
 	bio->bi_private = io;
 	io->iter = bio->bi_iter;
 
+	io->io_retry = 0;
+	
 	verity_fec_init_io(io);
 
 	verity_submit_prefetch(v, io);

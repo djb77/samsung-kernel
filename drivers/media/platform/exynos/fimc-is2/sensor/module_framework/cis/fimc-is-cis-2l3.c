@@ -300,7 +300,6 @@ static void sensor_2l3_cis_data_calculation(const struct sensor_pll_info_compact
 
 void sensor_2l3_cis_data_calc(struct v4l2_subdev *subdev, u32 mode)
 {
-	int ret = 0;
 	struct fimc_is_cis *cis = NULL;
 
 	WARN_ON(!subdev);
@@ -314,6 +313,7 @@ void sensor_2l3_cis_data_calc(struct v4l2_subdev *subdev, u32 mode)
 		return;
 	}
 
+#if 0
 	/* If check_rev fail when cis_init, one more check_rev in mode_change */
 	if (cis->rev_flag == true) {
 		cis->rev_flag = false;
@@ -323,6 +323,7 @@ void sensor_2l3_cis_data_calc(struct v4l2_subdev *subdev, u32 mode)
 			return;
 		}
 	}
+#endif
 
 	if (cis->cis_data->stream_on) {
 		info("[%s] call mode change in stream on state\n", __func__);
@@ -376,9 +377,6 @@ int sensor_2l3_cis_check_rev(struct v4l2_subdev *subdev)
 	u8 rev = 0;
 	struct i2c_client *client;
 	struct fimc_is_cis *cis = NULL;
-	struct fimc_is_module_enum *module;
-	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
-	struct sensor_open_extended *ext_info;
 
 	WARN_ON(!subdev);
 
@@ -393,20 +391,38 @@ int sensor_2l3_cis_check_rev(struct v4l2_subdev *subdev)
 		return ret;
 	}
 
-	sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
-	module = sensor_peri->module;
-	ext_info = &module->ext;
-	WARN_ON(!ext_info);
+	memset(cis->cis_data, 0, sizeof(cis_shared_data));
+	cis->rev_flag = false;
 
 	I2C_MUTEX_LOCK(cis->i2c_lock);
+
 	ret = fimc_is_sensor_read8(client, 0x0002, &rev);
 	if (ret < 0) {
-		err("fimc_is_sensor_read8 fail, (ret %d)", ret);
-		goto p_err;
+		cis->rev_flag = true;
+		ret = -EAGAIN;
+	} else {
+		cis->cis_data->cis_rev = rev;
+		pr_info("%s : Default version 2l3 sensor. Rev. 0x%X\n", __func__, rev);
 	}
 
-	cis->cis_data->cis_rev = rev;
-	pr_info("%s : Default version 2l3 sensor. Rev. 0x%X\n", __func__, rev);
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+
+	return ret;
+}
+
+int sensor_2l3_cis_select_setfile(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	u8 rev = 0;
+	struct fimc_is_cis *cis = NULL;
+
+	WARN_ON(!subdev);
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+	WARN_ON(!cis);
+	WARN_ON(!cis->cis_data);
+
+	rev = cis->cis_data->cis_rev;
 
 	switch (rev) {
 	case 0xA0:
@@ -465,8 +481,6 @@ int sensor_2l3_cis_check_rev(struct v4l2_subdev *subdev)
 		break;
 	}
 
-p_err:
-	I2C_MUTEX_UNLOCK(cis->i2c_lock);
 	return ret;
 }
 
@@ -479,11 +493,6 @@ int sensor_2l3_cis_init(struct v4l2_subdev *subdev)
 	struct fimc_is_cis *cis;
 	u32 setfile_index = 0;
 	cis_setting_info setinfo;
-#ifdef USE_CAMERA_HW_BIG_DATA
-	struct cam_hw_param *hw_param = NULL;
-	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
-#endif
-	int retry_cnt = 3;
 	setinfo.param = NULL;
 	setinfo.return_value = 0;
 
@@ -497,29 +506,8 @@ int sensor_2l3_cis_init(struct v4l2_subdev *subdev)
 	}
 
 	WARN_ON(!cis->cis_data);
-	memset(cis->cis_data, 0, sizeof(cis_shared_data));
-	cis->rev_flag = false;
 
-retry:
-	ret = sensor_2l3_cis_check_rev(subdev);
-	if (ret < 0) {
-		if (retry_cnt-- > 0) {
-			err("sensor_2l3_check_rev is fail. retry %d", retry_cnt);
-			usleep_range(10000, 10000);
-			goto retry;
-		} else {
-#ifdef USE_CAMERA_HW_BIG_DATA
-			sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
-			if (sensor_peri)
-				fimc_is_sec_get_hw_param(&hw_param, sensor_peri->module->position);
-			if (hw_param)
-				hw_param->i2c_sensor_err_cnt++;
-#endif
-			warn("sensor_2l3_check_rev is fail when cis init, ret(%d)", ret);
-			cis->rev_flag = true;
-			goto p_err;
-		}
-	}
+	sensor_2l3_cis_select_setfile(subdev);
 
 	need_cancel_retention_mode = false;
 
@@ -945,6 +933,7 @@ int sensor_2l3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 	ext_info = &module->ext;
 	WARN_ON(!ext_info);
 
+#if 0
 	/* If check_rev fail when cis_init, one more check_rev in mode_change */
 	if (cis->rev_flag == true) {
 		cis->rev_flag = false;
@@ -954,6 +943,7 @@ int sensor_2l3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 			goto p_err;
 		}
 	}
+#endif
 
 #if 0 /* cis_data_calculation is called in module_s_format */
 	sensor_2l3_cis_data_calculation(sensor_2l3_pllinfos[mode], cis->cis_data);
@@ -2973,6 +2963,7 @@ static struct fimc_is_cis_ops cis_ops_2l3 = {
 #endif
 	.cis_set_frs_control = sensor_2l3_cis_set_frs_control,
 	.cis_set_super_slow_motion_roi = sensor_2l3_cis_set_super_slow_motion_roi,
+	.cis_check_rev = sensor_2l3_cis_check_rev,
 };
 
 static int cis_2l3_probe(struct i2c_client *client,

@@ -82,6 +82,7 @@ static enum ccic_sysfs_property max77705_sysfs_properties[] = {
 	CCIC_SYSFS_PROP_USBPD_IDS,
 	CCIC_SYSFS_PROP_USBPD_TYPE,
 	CCIC_SYSFS_PROP_CC_PIN_STATUS,
+	CCIC_SYSFS_PROP_RAM_TEST,
 };
 #endif /* CONFIG_CCIC_NOTIFIER */
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
@@ -104,6 +105,29 @@ static enum dual_role_property fusb_drp_properties[] = {
 
 #define MAX77705_SYS_FW_UPDATE
 #define MAX77705_GRL_ENABLE
+
+#define MAX77705_RAM_TEST
+
+
+#ifdef MAX77705_RAM_TEST
+#define MAX77705_RAM_TEST_RETRY_COUNT 1
+#define MAX77705_RAM_TEST_SUCCESS 0xA1
+#define MAX77705_RAM_TEST_FAIL 0x51
+
+enum MAX77705_RAM_TEST_MODE {
+	MAX77705_RAM_TEST_STOP_MODE,
+	MAX77705_RAM_TEST_START_MODE,
+	MAX77705_RAM_TEST_RETRY_MODE,
+};
+
+enum MAX77705_RAM_TEST_RESULT {
+	MAX77705_RAM_TEST_RESULT_SUCCESS,
+	MAX77705_RAM_TEST_RESULT_FAIL_USBC_FUELGAUAGE,
+	MAX77705_RAM_TEST_RESULT_FAIL_USBC,
+	MAX77705_RAM_TEST_RESULT_FAIL_FUELGAUAGE,
+};
+#endif
+
 struct max77705_usbc_platform_data *g_usbc_data;
 
 #ifdef MAX77705_SYS_FW_UPDATE
@@ -141,6 +165,32 @@ static int max77705_i2c_master_write(struct max77705_usbc_platform_data *usbpd_d
 	}
 
 	return 1;
+}
+#endif
+
+#ifdef MAX77705_RAM_TEST
+static void max77705_verify_ram_bist_write(struct max77705_usbc_platform_data *usbc_data)
+{
+	usbc_cmd_data write_data;
+	u8 irq_reg[MAX77705_IRQ_GROUP_NR] = {0};
+	write_data.opcode = OPCODE_RAM_TEST_COMMAND;
+	write_data.write_data[0] = 0x0;
+	write_data.write_length = 0x1;
+	write_data.read_length = 0x6;
+	/* clear all interrpts */
+	max77705_bulk_read(usbc_data->muic, MAX77705_USBC_REG_UIC_INT,
+			4, &irq_reg[USBC_INT]);
+	msg_maxim("[MAX77705] irq_reg, %x, %x, %x, %x", irq_reg[USBC_INT], irq_reg[CC_INT], irq_reg[PD_INT], irq_reg[VDM_INT]);
+	max77705_write_reg(usbc_data->muic, REG_UIC_INT_M, 0x3F);
+	max77705_write_reg(usbc_data->muic, REG_CC_INT_M, 0xFF);
+	max77705_write_reg(usbc_data->muic, REG_PD_INT_M, 0xFF);
+	max77705_write_reg(usbc_data->muic, REG_VDM_INT_M, 0xFF);
+
+	max77705_usbc_opcode_write(usbc_data, &write_data);
+	if(usbc_data->ram_test_enable == MAX77705_RAM_TEST_STOP_MODE) {
+		usbc_data->ram_test_enable = MAX77705_RAM_TEST_START_MODE;
+		usbc_data->ram_test_retry = 0x0;
+	}
 }
 #endif
 
@@ -358,6 +408,8 @@ static int max77705_ccic_set_dual_role(struct dual_role_phy_instance *dual_role,
 		return 0;
 	}
 
+	reinit_completion(&usbpd_data->reverse_completion);
+
 	if (attached_state == USB_STATUS_NOTIFY_ATTACH_DFP) {
 		/* Current mode DFP and Source  */
 		msg_maxim("try reversing, from Source to Sink");
@@ -382,7 +434,6 @@ static int max77705_ccic_set_dual_role(struct dual_role_phy_instance *dual_role,
 		max77705_rprd_mode_change(usbpd_data, mode);
 	}
 
-	reinit_completion(&usbpd_data->reverse_completion);
 	timeout =
 	    wait_for_completion_timeout(&usbpd_data->reverse_completion,
 					msecs_to_jiffies
@@ -857,6 +908,20 @@ static int max77705_sysfs_get_local_prop(struct _ccic_data_t *pccic_data,
 		msg_maxim("usb: CCIC_SYSFS_PROP_PIN_STATUS : %d",
 				usbpd_data->cc_pin_status);
 		break;
+#ifdef MAX77705_RAM_TEST
+	case CCIC_SYSFS_PROP_RAM_TEST:
+		max77705_verify_ram_bist_write(usbpd_data);
+		for (i = 0; i < 300; i++) {
+			msleep(10);
+			if (usbpd_data->ram_test_enable == MAX77705_RAM_TEST_STOP_MODE) {
+				msleep(3000);
+				break;
+			}
+		}
+		msg_maxim("usb: CCIC_SYSFS_PROP_RAM_TEST : %d", usbpd_data->ram_test_result);
+		retval = sprintf(buf, "%d\n", usbpd_data->ram_test_result);
+		break;
+#endif
 	default:
 		msg_maxim("prop read not supported prop (%d)", prop);
 		retval = -ENODATA;
@@ -1045,7 +1110,10 @@ static ssize_t max77705_fw_update(struct device *dev,
 		write_data.write_length = 0x1;
 		write_data.read_length = 0x2;
 		max77705_usbc_opcode_write(g_usbc_data, &write_data);
-
+#ifdef MAX77705_RAM_TEST
+	case 15:
+		max77705_verify_ram_bist_write(g_usbc_data);
+#endif
 		break;
 	default:
 		break;
@@ -1438,9 +1506,49 @@ static void max77705_irq_execute(struct max77705_usbc_platform_data *usbc_data,
 	case OPCODE_READ_SELFTEST:
 		max77705_response_selftest_read(usbc_data, data);
 		break;
-#if 1
+#ifdef MAX77705_GRL_ENABLE
 	case OPCODE_GRL_COMMAND:
 		max77705_set_forcetrimi(usbc_data);
+		break;
+#endif
+#ifdef MAX77705_RAM_TEST
+	case OPCODE_RAM_TEST_COMMAND:
+		msg_maxim("MXIM DEBUG : [%x], [%x], [%x]", data[0], data[1], data[2]);
+		if (data[1] == MAX77705_RAM_TEST_SUCCESS && data[2] == MAX77705_RAM_TEST_SUCCESS) {
+			msg_maxim("MXIM DEBUG : the RAM Testing is OK");
+			usbc_data->ram_test_result = MAX77705_RAM_TEST_RESULT_SUCCESS;
+			usbc_data->ram_test_retry = 0;
+		} else {
+			if (data[1] == MAX77705_RAM_TEST_FAIL && data[2] == MAX77705_RAM_TEST_FAIL) {
+				msg_maxim("MXIM DEBUG : the RAM Testing is FAIL : [%x], [%x], [%x]",data[0], data[1],data[2]);
+				usbc_data->ram_test_result = MAX77705_RAM_TEST_RESULT_FAIL_USBC_FUELGAUAGE;
+				usbc_data->ram_test_retry = 0;
+			} else if (data[1] == MAX77705_RAM_TEST_SUCCESS && data[2] == MAX77705_RAM_TEST_FAIL) {
+				msg_maxim("MXIM DEBUG : the USBC RAM Testing  is FAIL : [%x], [%x], [%x]",data[0], data[1],data[2]);
+				usbc_data->ram_test_result = MAX77705_RAM_TEST_RESULT_FAIL_USBC;
+				usbc_data->ram_test_retry = 0;
+			} else if (data[1] == MAX77705_RAM_TEST_FAIL && data[2] == MAX77705_RAM_TEST_SUCCESS) {
+				msg_maxim("MXIM DEBUG : the FG RAM Testing is FAIL : [%x], [%x], [%x]",data[0], data[1],data[2]);
+				usbc_data->ram_test_result = MAX77705_RAM_TEST_RESULT_FAIL_FUELGAUAGE;
+				usbc_data->ram_test_retry = 0;
+			} else {
+				msg_maxim("MXIM DEBUG : the RAM Testing is WRONG : [%x], [%x], [%x], [%x], [%x],mode: [%x], cnt : [%x]",
+						data[0], data[1],data[2], data[3], data[4],
+						usbc_data->ram_test_enable,usbc_data->ram_test_retry);
+				if (usbc_data->ram_test_enable == MAX77705_RAM_TEST_START_MODE) {
+					usbc_data->ram_test_retry = MAX77705_RAM_TEST_RETRY_COUNT;
+					usbc_data->ram_test_enable = MAX77705_RAM_TEST_RETRY_MODE;
+				}
+				if (!usbc_data->ram_test_retry) {
+					usbc_data->ram_test_enable = MAX77705_RAM_TEST_STOP_MODE;
+					usbc_data->ram_test_retry = 0;
+					msg_maxim("MXIM DEBUG : the RAM Testing is FAIL : [%x], [%x], [%x], [%x], [%x], cnt : [%x]",
+						data[0], data[1],data[2],data[3], data[4],usbc_data->ram_test_retry);
+				}
+				usbc_data->ram_test_retry--;
+			}
+
+		}
 		break;
 #endif
 	default:
@@ -1866,6 +1974,14 @@ void max77705_usbc_check_sysmsg(struct max77705_usbc_platform_data *usbc_data, u
 		usbc_data->is_first_booting = 1;
 		max77705_set_enable_alternate_mode(ALTERNATE_MODE_START);
 		max77705_usbc_umask_irq(usbc_data);
+#ifdef MAX77705_RAM_TEST		
+		if(usbc_data->ram_test_enable == MAX77705_RAM_TEST_RETRY_MODE) {
+			mdelay(100);
+			max77705_verify_ram_bist_write(usbc_data);
+		} else {
+			usbc_data->ram_test_enable = MAX77705_RAM_TEST_STOP_MODE;
+		}
+#endif
 		break;
 	case SYSERROR_BOOT_SWRSTREQ:
 		break;
@@ -2029,10 +2145,27 @@ static irqreturn_t max77705_sysmsg_irq(int irq, void *data)
 {
 	struct max77705_usbc_platform_data *usbc_data = data;
 	u8 sysmsg = 0;
+	u8 i = 0;
+	u8 raw_data[3] = {0, };
+	u8 usbc_status2 = 0;
+	u8 dump_reg[10] = {0, };
 
-	max77705_read_reg(usbc_data->muic, REG_USBC_STATUS2, &usbc_data->usbc_status2);
-	sysmsg = usbc_data->usbc_status2;
-	msg_maxim("IRQ(%d)_IN", irq);
+	for (i = 0; i < 3; i++) {
+		usbc_status2 = 0;
+		max77705_read_reg(usbc_data->muic, REG_USBC_STATUS2, &usbc_status2);
+		raw_data[i] = usbc_status2;
+	}
+	if((raw_data[0] == raw_data[1]) && (raw_data[0] == raw_data[2])){
+		sysmsg = raw_data[0];
+	} else {
+		max77705_bulk_read(usbc_data->muic, REG_USBC_STATUS1,
+				8, dump_reg);
+		msg_maxim("[ERROR ]sys_reg, %x, %x, %x", raw_data[0], raw_data[1],raw_data[2]);	
+		msg_maxim("[ERROR ]dump_reg, %x, %x, %x, %x, %x, %x, %x, %x\n", dump_reg[0], dump_reg[1],
+			dump_reg[2], dump_reg[3], dump_reg[4], dump_reg[5], dump_reg[6], dump_reg[7]);
+		sysmsg = 0x6D;
+	}
+	msg_maxim("%s: IRQ(%d)_IN\n", __func__, irq);
 	max77705_usbc_check_sysmsg(usbc_data, sysmsg);
 	usbc_data->sysmsg = sysmsg;
 	msg_maxim("IRQ(%d)_OUT sysmsg: %x", irq, sysmsg);

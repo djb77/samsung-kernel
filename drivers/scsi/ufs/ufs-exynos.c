@@ -681,11 +681,6 @@ static int exynos_ufs_pre_setup_clocks(struct ufs_hba *hba, bool on)
 		exynos_ufs_set_hwacg_control(ufs, false);
 	} else {
 		pm_qos_update_request(&ufs->pm_qos_fsys0, 0);
-
-		/*
-		 * BG/SQ off
-		 */
-		ret = ufs_post_h8_enter(ufs);
 	}
 
 	return ret;
@@ -697,13 +692,7 @@ static int exynos_ufs_setup_clocks(struct ufs_hba *hba, bool on)
 	int ret = 0;
 
 	if (on) {
-		/*
-		 * BG/SQ on
-		 */
-		ret = ufs_pre_h8_exit(ufs);
-
 		pm_qos_update_request(&ufs->pm_qos_fsys0, ufs->pm_qos_fsys0_value);
-
 	} else {
 		/*
 		 * Now all used blocks would be turned off in a host.
@@ -857,6 +846,28 @@ static void exynos_ufs_hibern8_notify(struct ufs_hba *hba,
 	}
 }
 
+static int exynos_ufs_hibern8_prepare(struct ufs_hba *hba,
+				u8 enter, bool notify)
+{
+	struct exynos_ufs *ufs = to_exynos_ufs(hba);
+	int ret = 0;
+
+	switch (notify) {
+	case PRE_CHANGE:
+		if(!enter)
+			ret = ufs_pre_h8_exit(ufs);
+		break;
+	case POST_CHANGE:
+		if (enter)
+			ret = ufs_post_h8_enter(ufs);
+		break;
+	default:
+		break;
+	}
+
+	return ret;
+}
+
 static int __exynos_ufs_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	struct exynos_ufs *ufs = to_exynos_ufs(hba);
@@ -945,6 +956,7 @@ static struct ufs_hba_variant_ops exynos_ufs_ops = {
 	.set_nexus_t_xfer_req = exynos_ufs_set_nexus_t_xfer_req,
 	.set_nexus_t_task_mgmt = exynos_ufs_set_nexus_t_task_mgmt,
 	.hibern8_notify = exynos_ufs_hibern8_notify,
+	.hibern8_prepare = exynos_ufs_hibern8_prepare,
 	.dbg_register_dump = exynos_ufs_dump_debug_info,
 	.suspend = __exynos_ufs_suspend,
 	.resume = __exynos_ufs_resume,

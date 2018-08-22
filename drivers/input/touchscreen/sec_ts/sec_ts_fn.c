@@ -106,6 +106,7 @@ static void factory_cmd_result_all(void *device_data);
 static void set_factory_level(void *device_data);
 static void check_connection(void *device_data);
 static void fix_active_mode(void *device_data);
+static void touch_aging_mode(void *device_data);
 static void not_support_cmd(void *device_data);
 
 static int execute_selftest(struct sec_ts_data *ts, bool save_result);
@@ -211,6 +212,7 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("set_factory_level", set_factory_level),},
 	{SEC_CMD("check_connection", check_connection),},
 	{SEC_CMD("fix_active_mode", fix_active_mode),},
+	{SEC_CMD("touch_aging_mode", touch_aging_mode),},
 	{SEC_CMD("not_support_cmd", not_support_cmd),},
 };
 
@@ -7315,6 +7317,42 @@ static void fix_active_mode(void *device_data)
 
 	snprintf(buff, sizeof(buff), "%s", "OK");
 	sec->cmd_state = SEC_CMD_STATUS_OK;
+out:
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec_cmd_set_cmd_exit(sec);
+
+	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
+}
+
+static void touch_aging_mode(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	char buff[SEC_CMD_STR_LEN] = { 0 };
+	int ret;
+	u8 data;
+
+	sec_cmd_set_default_result(sec);
+
+	if (sec->cmd_param[0] < 0 || sec->cmd_param[0] > 1) {
+		snprintf(buff, sizeof(buff), "%s", "NG");
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		goto out;
+	}
+
+	if (sec->cmd_param[0] == 1)
+		data = 5;
+	else
+		data = 0;
+
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_POWER_MODE, &data, 1);
+	if (ret < 0) {
+		snprintf(buff, sizeof(buff), "%s", "NG");
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+	} else {
+		snprintf(buff, sizeof(buff), "%s", "OK");
+		sec->cmd_state = SEC_CMD_STATUS_OK;
+	}
 out:
 	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
 	sec_cmd_set_cmd_exit(sec);

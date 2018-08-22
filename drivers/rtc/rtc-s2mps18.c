@@ -31,6 +31,9 @@
 #include <linux/reboot.h>
 #include <linux/wakelock.h>
 #endif
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+#include <linux/sec_debug.h>
+#endif
 
 struct s2m_rtc_info {
 	struct device		*dev;
@@ -748,6 +751,10 @@ static irqreturn_t s2m_smpl_warn_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+static unsigned long smpl_warn_number = 0;
+#endif
+
 static void exynos_smpl_warn_work(struct work_struct *work)
 {
 	struct s2m_rtc_info *info = container_of(work,
@@ -759,6 +766,10 @@ static void exynos_smpl_warn_work(struct work_struct *work)
 		msleep(100);
 	} while (!state);
 
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	smpl_warn_number++;
+	sec_debug_set_extra_info_smpl(smpl_warn_number);
+#endif
 	dev_info(info->dev, "%s: SMPL_WARN HAPPENED!\n", __func__);
 }
 

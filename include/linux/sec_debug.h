@@ -223,6 +223,8 @@ enum sec_debug_extra_buf_type {
 	INFO_PWROFF,
 	INFO_PINT1,
 	INFO_PINT2,
+	INFO_PINT5,
+	INFO_PINT6,
 	INFO_RVD1,
 	INFO_RVD2,
 	INFO_RVD3,
@@ -355,7 +357,7 @@ extern void sec_debug_set_extra_info_evt_version(void);
 extern void sec_debug_set_extra_info_sysmmu(char *str);
 extern void sec_debug_set_extra_info_busmon(char *str);
 extern void sec_debug_set_extra_info_dpm_timeout(char *devname);
-extern void sec_debug_set_extra_info_smpl(unsigned int count);
+extern void sec_debug_set_extra_info_smpl(unsigned long count);
 extern void sec_debug_set_extra_info_esr(unsigned int esr);
 extern void sec_debug_set_extra_info_merr(char *merr);
 extern void sec_debug_set_extra_info_hint(u64 hint);

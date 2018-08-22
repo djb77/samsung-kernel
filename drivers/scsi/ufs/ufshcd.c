@@ -3451,17 +3451,27 @@ static void ufshcd_init_pwr_info(struct ufs_hba *hba)
 
 static int ufshcd_link_hibern8_ctrl(struct ufs_hba *hba, bool en)
 {
-	int ret;
+	int ret = 0;
 
 	if (hba->vops && hba->vops->hibern8_notify)
 		hba->vops->hibern8_notify(hba, en, PRE_CHANGE);
 
-	if (en)
+	if (en){
 		ret = ufshcd_uic_hibern8_enter(hba);
-	else
-		ret = ufshcd_uic_hibern8_exit(hba);
+		if (ret)
+			goto err_chk;
 
+		if (hba->vops && hba->vops->hibern8_prepare)
+			ret = hba->vops->hibern8_prepare(hba, en, POST_CHANGE);
+	} else {
+		if (hba->vops && hba->vops->hibern8_prepare)
+			ret = hba->vops->hibern8_prepare(hba, en, PRE_CHANGE);
 
+		if(!ret)
+			ret = ufshcd_uic_hibern8_exit(hba);
+	}
+
+err_chk:
 	if (ret || (hba->saved_err & INT_FATAL_ERRORS) ||
 		((hba->saved_err & UIC_ERROR) &&
 		((hba->saved_uic_err & UFSHCD_UIC_DL_PA_INIT_ERROR) ||

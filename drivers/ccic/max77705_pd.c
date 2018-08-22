@@ -516,6 +516,11 @@ static void max77705_pd_check_pdmsg(struct max77705_usbc_platform_data *usbc_dat
 		max77705_vbus_turn_on_ctrl(usbc_data, ON, false);
 		msg_maxim("PRSWAP_SNKTOSRC : [%x]", pd_msg);
 		break;
+	case Current_Cable_Connected:
+		max77705_manual_jig_on(usbc_data, 1);
+		usbc_data->manual_lpm_mode = 1;
+		msg_maxim("Current_Cable_Connected : [%x]", pd_msg);
+		break;
 	default:
 		break;
 	}

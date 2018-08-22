@@ -3230,18 +3230,20 @@ int fimc_is_group_done(struct fimc_is_groupmgr *groupmgr,
 	gframemgr = &groupmgr->gframemgr[group->instance];
 	gtask = &groupmgr->gtask[group->id];
 
-	if (unlikely(test_bit(FIMC_IS_ISCHAIN_REPROCESSING, &device->state) &&
-		(done_state != VB2_BUF_STATE_DONE))) {
-		merr("G%d NOT DONE(reprocessing)\n", group, group->id);
-		fimc_is_hw_logdump(device->interface);
-		if (test_bit(FIMC_IS_HAL_DEBUG_NDONE_REPROCESSING, &sysfs_debug.hal_debug_mode)) {
-			mdelay(sysfs_debug.hal_debug_delay);
-			panic("HAL panic for NDONE reprocessing");
+	if (unlikely(test_bit(FIMC_IS_ISCHAIN_REPROCESSING, &device->state))) {
+		if (done_state != VB2_BUF_STATE_DONE) {
+			merr("G%d NOT DONE(reprocessing)\n", group, group->id);
+			fimc_is_hw_logdump(device->interface);
+			if (test_bit(FIMC_IS_HAL_DEBUG_NDONE_REPROCESSING, &sysfs_debug.hal_debug_mode)) {
+				mdelay(sysfs_debug.hal_debug_delay);
+				panic("HAL panic for NDONE reprocessing");
+			}
+			/* HACK: MCSC group sfr dump */
+			fimc_is_itf_sfr_dump_wrap(device, GROUP_ID_MCS1, true);
+		} else {
+			mgrinfo("DONE(reprocessing)\n", group, group, frame);
 		}
-
-		/* HACK: MCSC group sfr dump */
-		fimc_is_itf_sfr_dump_wrap(device, GROUP_ID_MCS1, true);
-	}
+        }
 
 #ifdef DEBUG_AA
 	fimc_is_group_debug_aa_done(group, frame);

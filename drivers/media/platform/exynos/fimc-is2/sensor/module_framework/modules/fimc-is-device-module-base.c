@@ -40,6 +40,37 @@
 #include "pdp/fimc-is-pdp.h"
 #include "fimc-is-sec-define.h"
 
+int sensor_module_power_reset(struct v4l2_subdev *subdev, struct fimc_is_device_sensor *device)
+{
+	int ret = 0;
+	struct fimc_is_module_enum *module;
+
+	module = (struct fimc_is_module_enum *)v4l2_get_subdevdata(subdev);
+	FIMC_BUG(!module);
+
+	ret = fimc_is_sensor_gpio_off(device);
+	if (ret)
+		err("gpio off is fail(%d)", ret);
+
+	ret = fimc_is_sensor_mclk_off(device, device->pdata->scenario, module->pdata->mclk_ch);
+	if (ret)
+		err("fimc_is_sensor_mclk_off is fail(%d)", ret);
+
+	usleep_range(10000, 10000);
+
+	ret = fimc_is_sensor_mclk_on(device, device->pdata->scenario, module->pdata->mclk_ch);
+	if (ret)
+		err("fimc_is_sensor_mclk_on is fail(%d)", ret);
+
+	ret = fimc_is_sensor_gpio_on(device);
+	if (ret)
+		err("gpio on is fail(%d)", ret);
+
+	usleep_range(10000, 10000);
+
+	return ret;
+}
+
 int sensor_module_init(struct v4l2_subdev *subdev, u32 val)
 {
 	int ret = 0;
@@ -53,6 +84,10 @@ int sensor_module_init(struct v4l2_subdev *subdev, u32 val)
 	struct v4l2_subdev *subdev_ois = NULL;
 	struct fimc_is_preprocessor *preprocessor = NULL;
 	struct v4l2_subdev *subdev_preprocessor = NULL;
+	struct fimc_is_device_sensor *device = NULL;
+#ifdef USE_CAMERA_HW_BIG_DATA
+	struct cam_hw_param *hw_param = NULL;
+#endif
 
 	FIMC_BUG(!subdev);
 
@@ -102,6 +137,23 @@ int sensor_module_init(struct v4l2_subdev *subdev, u32 val)
 		if (ret) {
 			err("[MOD:%s] preprocessor wait s_input timeout\n", module->sensor_name);
 			goto p_err;
+		}
+	}
+
+	ret = CALL_CISOPS(&sensor_peri->cis, cis_check_rev, subdev_cis);
+	if (ret < 0) {
+		device = (struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(subdev_cis);
+		if (device != NULL && ret == -EAGAIN) {
+			err("Checking sensor revision is fail. So retry camera power sequence.");
+			sensor_module_power_reset(subdev, device);
+			ret = CALL_CISOPS(&sensor_peri->cis, cis_check_rev, subdev_cis);
+			if (ret < 0) {
+#ifdef USE_CAMERA_HW_BIG_DATA
+				fimc_is_sec_get_hw_param(&hw_param, sensor_peri->module->position);
+				if (hw_param)
+					hw_param->i2c_sensor_err_cnt++;
+#endif
+			}
 		}
 	}
 
@@ -227,8 +279,12 @@ int sensor_module_deinit(struct v4l2_subdev *subdev)
 	/* kthread stop to sensor setting when s_format */
 	fimc_is_sensor_deinit_mode_change_thread(sensor_peri);
 
-#ifdef APERTURE_CLOSE_VALUE
 	if (sensor_peri->aperture) {
+		/* wait until aperture operation end */
+		flush_work(&sensor_peri->aperture->aperture_set_start_work);
+		flush_work(&sensor_peri->aperture->aperture_set_work);
+
+#ifdef APERTURE_CLOSE_VALUE
 		if (sensor_peri->aperture->cur_value != APERTURE_CLOSE_VALUE
 			&& sensor_peri->aperture->step == APERTURE_STEP_STATIONARY) {
 			ret = CALL_APERTUREOPS(sensor_peri->aperture, aperture_deinit,
@@ -236,8 +292,8 @@ int sensor_module_deinit(struct v4l2_subdev *subdev)
 			if (ret < 0)
 				err("[%s] aperture_deinit failed\n", __func__);
 		}
-	}
 #endif
+	}
 
 #ifdef CONFIG_OIS_USE_RUMBA_S6
 	if (sensor_peri->subdev_ois != NULL) {

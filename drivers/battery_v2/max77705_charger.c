@@ -906,9 +906,12 @@ static void max77705_charger_initialize(struct max77705_charger_data *charger)
 
 	/*
 	 * cv voltage 4.2V or 4.35V
-	 * MINVSYS 3.6V(default)
 	 */
 	max77705_set_float_voltage(charger, charger->pdata->chg_float_voltage);
+
+	/* MINVSYS 3.4V */
+	max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_04,
+				0x0 << MAX77705_CHG_MINVSYS_SHIFT,  MAX77705_CHG_MINVSYS_MASK);
 
 	/* VCHGIN : REG=4.5V, UVLO=4.7V, WCHGIN : REG=4.5V, UVLO=4.7V */
 	max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_12,

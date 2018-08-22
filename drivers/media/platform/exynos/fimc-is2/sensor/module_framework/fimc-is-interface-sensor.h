@@ -307,6 +307,7 @@ struct fimc_is_cis_ops {
 #ifdef CAMERA_REAR2_SENSOR_SHIFT_CROP
 	int (*cis_update_pdaf_tail_size)(struct v4l2_subdev *subdev, struct fimc_is_sensor_cfg *select);
 #endif
+	int (*cis_check_rev)(struct v4l2_subdev *subdev);
 };
 
 struct fimc_is_sensor_ctl

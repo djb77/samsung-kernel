@@ -483,6 +483,7 @@ int max77705_usbc_fw_update(struct max77705_dev *max77705,
 		const u8 *fw_bin, int fw_bin_len, int enforce_do)
 {
 	struct max77705_fw_header fw_header;
+	struct otg_notify *o_notify = get_otg_notify();
 	int offset = 0;
 	unsigned long duration = 0;
 	int size = 0;
@@ -492,10 +493,11 @@ int max77705_usbc_fw_update(struct max77705_dev *max77705,
 	static u8 fct_id; /* FCT cable */
 	u8 try_command = 0;
 	u8 sw_boot = 0;
-
 	u8 chg_cnfg_00 = 0;
 	bool chg_mode_changed = 0;
+	bool wpc_en_changed = 0;
 	int vcell = 0;
+	u8 vbvolt = 0;
 
 	disable_irq(max77705->irq);
 	max77705_write_reg(max77705->muic, REG_PD_INT_M, 0xFF);
@@ -512,7 +514,7 @@ retry:
 	/* to do (unmask interrupt) */
 	ret = max77705_read_reg(max77705->muic, REG_UIC_FW_REV, &max77705->FW_Revision);
 	ret = max77705_read_reg(max77705->muic, REG_UIC_FW_MINOR, &max77705->FW_Minor_Revision);
-	if (ret < 0) {
+	if (ret < 0 && (try_count == 0 && try_command == 0)) {
 		msg_maxim("Failed to read FW_REV");
 		goto out;
 	}
@@ -535,26 +537,49 @@ retry:
 			msg_maxim("FCT_ID : 0x%x", fct_id);
 		}
 
-		/* change chg_mode during FW update */
-		vcell = max77705_fuelgauge_read_vcell(max77705);
+		if (try_count == 0 && try_command == 0) {
+			/* change chg_mode during FW update */
+			vcell = max77705_fuelgauge_read_vcell(max77705);
 
-		if (vcell >= 3300) {
-			pr_info("%s: change chg_mode(0x9), vcell(%dmv)\n",
-				__func__, vcell);
-			chg_mode_changed = true;
-			max77705_wc_control(max77705, false);
-			max77705_update_reg(max77705->charger,
-				MAX77705_CHG_REG_CNFG_00, 0x09, 0x0F);		
-			msleep(500);
-		} else {
-			pr_info("%s: keep chg_mode(0x%x), vcell(%dmv)\n",
-				__func__, chg_cnfg_00 & 0x0F, vcell);
-			goto out;
+			if (vcell >= 3300) {
+				wpc_en_changed = true;
+				max77705_wc_control(max77705, false);
+
+				max77705_read_reg(max77705->muic, MAX77705_USBC_REG_BC_STATUS, &vbvolt);
+				pr_info("%s: BC:0x%02x, vbvolt:0x%x\n",
+					__func__, vbvolt, (vbvolt & 0x80) >> 7);
+
+				if (!(vbvolt & 0x80)) {
+					chg_mode_changed = true;
+					/* Switching Frequency : 3MHz */
+					max77705_update_reg(max77705->charger,
+						MAX77705_CHG_REG_CNFG_08, 0x00,	0x3);
+					pr_info("%s: +set Switching Frequency 3Mhz\n", __func__);
+
+					/* Disable skip mode */
+					max77705_update_reg(max77705->charger,
+						MAX77705_CHG_REG_CNFG_12, 0x1, 0x1);
+					pr_info("%s: +set Disable skip mode\n", __func__);
+
+					max77705_update_reg(max77705->charger,
+						MAX77705_CHG_REG_CNFG_00, 0x09, 0x0F);
+					pr_info("%s: +change chg_mode(0x9), vcell(%dmv)\n",
+						__func__, vcell);
+				} else {
+					pr_info("%s: +keep chg_mode(0x%x), vcell(%dmv)\n",
+						__func__, chg_cnfg_00 & 0x0F, vcell);
+				}
+				msleep(500);
+			} else {
+				pr_info("%s: keep chg_mode(0x%x), vcell(%dmv)\n",
+					__func__, chg_cnfg_00 & 0x0F, vcell);
+				goto out;
+			}
 		}
 
 		max77705_write_reg(max77705->muic, 0x21, 0xD0);
 		max77705_write_reg(max77705->muic, 0x41, 0x00);
-		msleep(100);
+		msleep(500);
 
 		max77705_read_reg(max77705->muic, REG_UIC_FW_REV, &max77705->FW_Revision);
 		max77705_read_reg(max77705->muic, REG_UIC_FW_MINOR, &max77705->FW_Minor_Revision);
@@ -574,6 +599,8 @@ retry:
 				goto retry;
 			} else {
 				msg_maxim("the Secure Update Fail!!");
+				if (o_notify)
+					inc_hw_param(o_notify, USB_CCIC_FWUP_ERROR_COUNT);
 				goto out;
 			}
 		}
@@ -598,6 +625,8 @@ retry:
 				} else {
 					msg_maxim("Failed to update FW. ret %d, offset %d",
 							size, (offset + size));
+					if (o_notify)
+						inc_hw_param(o_notify, USB_CCIC_FWUP_ERROR_COUNT);
 					goto out;
 				}
 				break;
@@ -605,6 +634,8 @@ retry:
 			case FW_UPDATE_MAX_LENGTH_FAIL:
 				msg_maxim("Failed to update FW. ret %d, offset %d",
 						size, (offset + size));
+				if (o_notify)
+					inc_hw_param(o_notify, USB_CCIC_FWUP_ERROR_COUNT);
 				goto out;
 			case FW_UPDATE_END: /* 0x00 */
 				/* JIG PIN for setting HIGH. */
@@ -645,11 +676,24 @@ retry:
 out:
 	if (chg_mode_changed) {
 		vcell = max77705_fuelgauge_read_vcell(max77705);
-		max77705_wc_control(max77705, true);
 		max77705_update_reg(max77705->charger,
 			MAX77705_CHG_REG_CNFG_00, chg_cnfg_00, 0x0F);
 		pr_info("%s: -recover chg_mode(0x%x), vcell(%dmv)\n",
 			__func__, chg_cnfg_00 & 0x0F, vcell);
+
+		/* Switching Frequency : 1.5MHz */
+		max77705_update_reg(max77705->charger,
+			MAX77705_CHG_REG_CNFG_08, 0x02, 0x3);
+		pr_info("%s: -set Switching Frequency 1.5MHz\n", __func__);
+
+		/* Auto skip mode */
+		max77705_update_reg(max77705->charger,
+			MAX77705_CHG_REG_CNFG_12, 0x0, 0x1);
+		pr_info("%s: -set Auto skip mode\n", __func__);
+	}
+
+	if (wpc_en_changed) {
+		max77705_wc_control(max77705, true);
 	}
 	enable_irq(max77705->irq);
 	return 0;

@@ -653,6 +653,10 @@ int ion_handle_put(struct ion_client *client, struct ion_handle *handle);
 
 int ion_query_heaps(struct ion_client *client, struct ion_heap_query *query);
 
+struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
+			     size_t align, unsigned int heap_id_mask,
+			     unsigned int flags, bool grab_handle);
+
 void show_ion_system_heap_size(struct seq_file *s);
 void show_ion_system_heap_pool_size(struct seq_file *s);
 #endif /* _ION_PRIV_H */

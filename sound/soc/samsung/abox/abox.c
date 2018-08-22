@@ -1106,9 +1106,6 @@ static struct snd_soc_dai_driver abox_dais[] = {
 			.formats = ABOX_SAMPLE_FORMATS,
 		},
 		.ops = &abox_sifs_dai_ops,
-		.symmetric_rates = 1,
-		.symmetric_channels = 1,
-		.symmetric_samplebits = 1,
 	},
 	{
 		.name = "SIFS1",
@@ -1132,9 +1129,6 @@ static struct snd_soc_dai_driver abox_dais[] = {
 			.formats = ABOX_SAMPLE_FORMATS,
 		},
 		.ops = &abox_sifs_dai_ops,
-		.symmetric_rates = 1,
-		.symmetric_channels = 1,
-		.symmetric_samplebits = 1,
 	},
 	{
 		.name = "SIFS2",
@@ -1158,9 +1152,6 @@ static struct snd_soc_dai_driver abox_dais[] = {
 			.formats = ABOX_SAMPLE_FORMATS,
 		},
 		.ops = &abox_sifs_dai_ops,
-		.symmetric_rates = 1,
-		.symmetric_channels = 1,
-		.symmetric_samplebits = 1,
 	},
 };
 
@@ -2845,31 +2836,31 @@ struct abox_name_rate_format {
 	int stream;
 	const enum ABOX_CONFIGMSG rate;
 	const enum ABOX_CONFIGMSG format;
-
+	bool slave;
 };
 
 static const struct abox_name_rate_format abox_nrf[] = {
 	{"SIFS0", SNDRV_PCM_STREAM_PLAYBACK, SET_MIXER_SAMPLE_RATE,
-			SET_MIXER_FORMAT},
+			SET_MIXER_FORMAT, false},
 	{"SIFS1", SNDRV_PCM_STREAM_PLAYBACK, SET_OUT1_SAMPLE_RATE,
-			SET_OUT1_FORMAT},
+			SET_OUT1_FORMAT, false},
 	{"SIFS2", SNDRV_PCM_STREAM_PLAYBACK, SET_OUT2_SAMPLE_RATE,
-			SET_OUT2_FORMAT},
+			SET_OUT2_FORMAT, false},
 	{"RECP", SNDRV_PCM_STREAM_CAPTURE, SET_RECP_SAMPLE_RATE,
-			SET_RECP_FORMAT},
+			SET_RECP_FORMAT, true},
 	{"SIFM0", SNDRV_PCM_STREAM_CAPTURE, SET_INMUX0_SAMPLE_RATE,
-			SET_INMUX0_FORMAT},
+			SET_INMUX0_FORMAT, false},
 	{"SIFM1", SNDRV_PCM_STREAM_CAPTURE, SET_INMUX1_SAMPLE_RATE,
-			SET_INMUX1_FORMAT},
+			SET_INMUX1_FORMAT, false},
 	{"SIFM2", SNDRV_PCM_STREAM_CAPTURE, SET_INMUX2_SAMPLE_RATE,
-			SET_INMUX2_FORMAT},
+			SET_INMUX2_FORMAT, false},
 	{"SIFM3", SNDRV_PCM_STREAM_CAPTURE, SET_INMUX3_SAMPLE_RATE,
-			SET_INMUX3_FORMAT},
+			SET_INMUX3_FORMAT, false},
 };
 
 static bool abox_find_nrf_stream(const struct snd_soc_dapm_widget *w,
 		int stream, enum ABOX_CONFIGMSG *rate,
-		enum ABOX_CONFIGMSG *format)
+		enum ABOX_CONFIGMSG *format, bool *slave)
 {
 	struct snd_soc_component *cmpnt = w->dapm->component;
 	const char *name_prefix = cmpnt ? cmpnt->name_prefix : NULL;
@@ -2881,6 +2872,7 @@ static bool abox_find_nrf_stream(const struct snd_soc_dapm_widget *w,
 		if ((nrf->stream == stream) && (strcmp(nrf->name, name) == 0)) {
 			*rate = nrf->rate;
 			*format = nrf->format;
+			*slave = nrf->slave;
 			return true;
 		}
 	}
@@ -2888,8 +2880,9 @@ static bool abox_find_nrf_stream(const struct snd_soc_dapm_widget *w,
 	return false;
 }
 
-static bool __maybe_unused abox_find_nrf(const struct snd_soc_dapm_widget *w,
-		enum ABOX_CONFIGMSG *rate, enum ABOX_CONFIGMSG *format)
+static bool abox_find_nrf(const struct snd_soc_dapm_widget *w,
+		enum ABOX_CONFIGMSG *rate, enum ABOX_CONFIGMSG *format,
+		int *stream, bool *slave)
 {
 	struct snd_soc_component *cmpnt = w->dapm->component;
 	const char *name_prefix = cmpnt ? cmpnt->name_prefix : NULL;
@@ -2901,11 +2894,43 @@ static bool __maybe_unused abox_find_nrf(const struct snd_soc_dapm_widget *w,
 		if (strcmp(nrf->name, name) == 0) {
 			*rate = nrf->rate;
 			*format = nrf->format;
+			*stream = nrf->stream;
+			*slave = nrf->slave;
 			return true;
 		}
 	}
 
 	return false;
+}
+
+static struct snd_soc_dapm_widget *abox_sync_params(struct abox_data *data,
+		struct list_head *widget_list, int *stream,
+		const struct snd_soc_dapm_widget *w_src,
+		enum ABOX_CONFIGMSG rate, enum ABOX_CONFIGMSG format)
+{
+	struct device *dev = &data->pdev->dev;
+	enum ABOX_CONFIGMSG msg_rate, msg_format;
+	struct snd_soc_dapm_widget *w = NULL;
+	bool slave;
+
+
+	list_for_each_entry(w, widget_list, work_list) {
+		if (!abox_find_nrf(w, &msg_rate, &msg_format, stream, &slave))
+			continue;
+		if (slave)
+			continue;
+
+		dev_dbg(dev, "%s: %s => %s\n", __func__, w->name, w_src->name);
+		abox_set_sif_format(data, format,
+				abox_get_sif_format(data, msg_format));
+		abox_set_sif_rate(data, rate,
+				abox_get_sif_rate(data, msg_rate));
+		abox_set_sif_channels(data, format,
+				abox_get_sif_channels(data, msg_format));
+		break;
+	}
+
+	return w;
 }
 
 int abox_hw_params_fixup_helper(struct snd_soc_pcm_runtime *rtd,
@@ -2921,7 +2946,8 @@ int abox_hw_params_fixup_helper(struct snd_soc_pcm_runtime *rtd,
 	enum ABOX_CONFIGMSG msg_rate, msg_format;
 	unsigned int rate, channels, width;
 	snd_pcm_format_t format;
-	bool skip_ipc = false;
+	struct snd_soc_dapm_widget *w_mst = NULL;
+	int stream_mst;
 
 	dev_info(dev, "%s[%s](%d)\n", __func__, dai->name, stream);
 
@@ -2962,9 +2988,16 @@ int abox_hw_params_fixup_helper(struct snd_soc_pcm_runtime *rtd,
 
 	/* find current params */
 	list_for_each_entry(w, &widget_list, work_list) {
+		bool slave;
+
 		dev_dbg(dev, "%s\n", w->name);
-		if (!abox_find_nrf_stream(w, stream, &msg_rate, &msg_format))
+		if (!abox_find_nrf_stream(w, stream, &msg_rate, &msg_format,
+				&slave))
 			continue;
+
+		if (slave)
+			w_mst = abox_sync_params(data, &widget_list, &stream_mst,
+					w, msg_rate, msg_format);
 
 		format = abox_get_sif_format(data, msg_format);
 		width = snd_pcm_format_width(format);
@@ -2979,19 +3012,42 @@ int abox_hw_params_fixup_helper(struct snd_soc_pcm_runtime *rtd,
 	if (!w_tgt)
 		goto unlock;
 
-	if (w_tgt->power) {
-		dev_info(dev, "%s: %s: skip ipc due to active already\n",
-				__func__, w_tgt->name);
-		skip_ipc = true;
-		goto unlock;
+	if (!w_mst) {
+		w_mst = w_tgt;
+		stream_mst = stream;
 	}
 
 	/* channel mixing isn't supported */
 	abox_set_sif_channels(data, msg_format, params_channels(params));
 
 	/* override formats to UAIF format, if it is connected */
-	if (abox_if_hw_params_fixup(rtd, params, stream) >= 0)
+	if (abox_if_hw_params_fixup(rtd, params, stream) >= 0) {
 		abox_set_sif_auto_config(data, msg_rate, true);
+	} else if (w_mst) {
+		list_for_each_entry(w, &cmpnt->card->widgets, list) {
+			w->endpoints[SND_SOC_DAPM_DIR_IN] = -1;
+			w->endpoints[SND_SOC_DAPM_DIR_OUT] = -1;
+		}
+		list_del_init(&widget_list);
+		if (stream_mst == SNDRV_PCM_STREAM_PLAYBACK)
+			snd_soc_dapm_connected_output_ep(w_mst, &widget_list);
+		else
+			snd_soc_dapm_connected_input_ep(w_mst, &widget_list);
+
+		list_for_each_entry(w, &widget_list, work_list) {
+			struct snd_soc_dai *dai;
+
+			if (!w->sname)
+				continue;
+
+			dai = w->priv;
+			if (abox_if_hw_params_fixup_by_dai(dai, params, stream)
+					>= 0) {
+				abox_set_sif_auto_config(data, msg_rate, true);
+				break;
+			}
+		}
+	}
 
 	if (!abox_get_sif_auto_config(data, msg_rate))
 		goto unlock;
@@ -3001,16 +3057,18 @@ int abox_hw_params_fixup_helper(struct snd_soc_pcm_runtime *rtd,
 	rate = params_rate(params);
 	channels = params_channels(params);
 
-	if (dai->sample_width && dai->sample_width != width) {
+	if (dai->driver->symmetric_samplebits && dai->sample_width &&
+			dai->sample_width != width) {
 		width = dai->sample_width;
 		abox_set_sif_width(data, msg_format, dai->sample_width);
 		format = abox_get_sif_format(data, msg_format);
 	}
 
-	if (dai->channels && dai->channels != channels)
+	if (dai->driver->symmetric_channels && dai->channels &&
+			dai->channels != channels)
 		channels = dai->channels;
 
-	if (dai->rate && dai->rate != rate)
+	if (dai->driver->symmetric_rates && dai->rate && dai->rate != rate)
 		rate = dai->rate;
 
 	dev_dbg(dev, "%s: set to %u bit, %u channel, %uHz\n", __func__,
@@ -3020,12 +3078,10 @@ unlock:
 
 	if (!w_tgt)
 		goto out;
-	if (skip_ipc)
-		goto fixup;
 
 	abox_sample_rate_put_ipc(dev, rate, msg_rate);
 	abox_sif_format_put_ipc(dev, format, channels, msg_format);
-fixup:
+
 	hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min =
 			abox_get_sif_rate(data, msg_rate);
 	hw_param_interval(params, SNDRV_PCM_HW_PARAM_CHANNELS)->min =
@@ -3815,6 +3871,7 @@ int abox_try_to_asrc_off(struct device *dev, struct abox_data *data,
 	enum ABOX_CONFIGMSG rate, format;
 	unsigned int out_rate = 0, out_width = 0;
 	unsigned int pcm_rate, pcm_width;
+	bool slave;
 
 	if (!abox_test_quirk(data, ABOX_QUIRK_BIT_TRY_TO_ASRC_OFF))
 		return 0;
@@ -3843,7 +3900,7 @@ int abox_try_to_asrc_off(struct device *dev, struct abox_data *data,
 	list_for_each_entry(w, &widget_list, work_list) {
 		dev_dbg(dev, "%s", w->name);
 
-		if (abox_find_nrf_stream(w, stream, &rate, &format)) {
+		if (abox_find_nrf_stream(w, stream, &rate, &format, &slave)) {
 			out_rate = abox_get_sif_rate(data, rate);
 			out_width = abox_get_sif_width(data, format);
 			dev_dbg(dev, "%s: rate=%u, width=%u\n",
@@ -4989,7 +5046,10 @@ static void abox_cfg_gpio(struct device *dev, const char *name)
 	struct pinctrl_state *pin_state;
 	int ret;
 
-	dev_info(dev, "%s(%s)\n", __func__, name);
+	dev_dbg(dev, "%s(%s)\n", __func__, name);
+
+	if (!data->pinctrl)
+		return;
 
 	pin_state = pinctrl_lookup_state(data->pinctrl, name);
 	if (IS_ERR(pin_state)) {
@@ -5787,9 +5847,9 @@ static int samsung_abox_probe(struct platform_device *pdev)
 
 	data->pinctrl = devm_pinctrl_get(dev);
 	if (IS_ERR(data->pinctrl)) {
-		dev_err(dev, "Couldn't get pins (%li)\n",
+		dev_dbg(dev, "Couldn't get pins (%li)\n",
 				PTR_ERR(data->pinctrl));
-		return PTR_ERR(data->pinctrl);
+		data->pinctrl = NULL;
 	}
 
 	data->sfr_base = devm_request_and_map_byname(pdev, "sfr",

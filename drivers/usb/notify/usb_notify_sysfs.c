@@ -68,6 +68,7 @@ usb_hw_param_print[USB_CCIC_HW_PARAM_MAX][MAX_HWPARAM_STRING] = {
 	{"M_AFCERR"},
 	{"M_DCDTMO"},
 	{"CC_KILLER"},
+	{"CC_FWERR"},
 	{"CC_VER"},
 };
 #endif

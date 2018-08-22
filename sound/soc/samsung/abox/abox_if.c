@@ -797,10 +797,9 @@ static struct platform_driver samsung_abox_if_driver = {
 
 module_platform_driver(samsung_abox_if_driver);
 
-int abox_if_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+int abox_if_hw_params_fixup_by_dai(struct snd_soc_dai *dai,
 		struct snd_pcm_hw_params *params, int stream)
 {
-	struct snd_soc_dai *dai = rtd->cpu_dai;
 	struct device *dev = dai->dev;
 	struct abox_if_data *data = dev_get_drvdata(dev);
 	unsigned int rate, channels, width;
@@ -859,6 +858,14 @@ int abox_if_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 		ret = -EINVAL;
 
 	return ret;
+}
+
+int abox_if_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+		struct snd_pcm_hw_params *params, int stream)
+{
+	struct snd_soc_dai *dai = rtd->cpu_dai;
+
+	return abox_if_hw_params_fixup_by_dai(dai, params, stream);
 }
 
 /* Module information */

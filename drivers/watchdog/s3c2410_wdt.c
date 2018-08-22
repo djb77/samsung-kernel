@@ -147,6 +147,8 @@ struct s3c2410_wdt {
 	struct regmap *pmureg;
 	unsigned int cluster;
 	int use_multistage_wdt;
+	unsigned int disable_reg_val;
+	unsigned int mask_reset_reg_val;
 };
 
 struct s3c2410_wdt *s3c_wdt[MAX_WATCHDOG_CLUSTER_CNT];
@@ -260,7 +262,7 @@ static int s3c2410wdt_mask_wdt_reset(struct s3c2410_wdt *wdt, bool mask)
 {
 	int ret;
 	u32 mask_val = 1 << wdt->drv_data->mask_bit;
-	u32 val = 0;
+	u32 val = 0, mask_reset_reg_val = 0, disable_reg_val = 0;
 
 	/* No need to do anything if no PMU CONFIG needed */
 	if (!(wdt->drv_data->quirks & QUIRK_HAS_PMU_CONFIG))
@@ -273,8 +275,30 @@ static int s3c2410wdt_mask_wdt_reset(struct s3c2410_wdt *wdt, bool mask)
 			wdt->drv_data->mask_reset_reg,
 			mask_val, val);
 
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(wdt->dev, "failed to update reg(%d)\n", ret);
+		return ret;
+	}
+
+	ret = regmap_read(wdt->pmureg, wdt->drv_data->mask_reset_reg, &mask_reset_reg_val);
+	if (ret < 0) {
+		dev_err(wdt->dev, "Couldn't get MASK_WDT_RESET register, ret = (%d)\n", ret);
+		return ret;
+	}
+
+	ret = regmap_read(wdt->pmureg, wdt->drv_data->disable_reg, &disable_reg_val);
+	if (ret < 0) {
+		dev_err(wdt->dev, "Couldn't get DISABLE_WDT register, ret = (%d)\n", ret);
+		return ret;
+	}
+
+	dev_info(wdt->dev, "DISABLE_WDT reg val:  %x, MASK_WDT_RESET reg val: %x\n",
+			disable_reg_val, mask_reset_reg_val);
+
+	wdt->disable_reg_val = disable_reg_val;
+	wdt->mask_reset_reg_val = mask_reset_reg_val;
+
+	dev_info(wdt->dev, "Mask_wdt_reset set %s done, mask = %d\n", mask ? "true" : "false", mask);
 
 	return ret;
 }
@@ -283,7 +307,7 @@ static int s3c2410wdt_automatic_disable_wdt(struct s3c2410_wdt *wdt, bool mask)
 {
 	int ret;
 	u32 mask_val = 1 << wdt->drv_data->mask_bit;
-	u32 val = 0;
+	u32 val = 0, mask_reset_reg_val = 0, disable_reg_val = 0;
 
 	/* No need to do anything if no PMU CONFIG needed */
 	if (!(wdt->drv_data->quirks & QUIRK_HAS_PMU_CONFIG))
@@ -296,8 +320,30 @@ static int s3c2410wdt_automatic_disable_wdt(struct s3c2410_wdt *wdt, bool mask)
 			wdt->drv_data->disable_reg,
 			mask_val, val);
 
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(wdt->dev, "failed to update reg(%d)\n", ret);
+		return ret;
+	}
+
+	ret = regmap_read(wdt->pmureg, wdt->drv_data->mask_reset_reg, &mask_reset_reg_val);
+	if (ret < 0) {
+		dev_err(wdt->dev, "Couldn't get MASK_WDT_RESET register, ret = (%d)\n", ret);
+		return ret;
+	}
+
+	ret = regmap_read(wdt->pmureg, wdt->drv_data->disable_reg, &disable_reg_val);
+	if (ret < 0) {
+		dev_err(wdt->dev, "Couldn't get DISABLE_WDT register, ret = (%d)\n", ret);
+		return ret;
+	}
+
+	dev_info(wdt->dev, "DISABLE_WDT reg val:  %x, MASK_WDT_RESET reg val: %x\n",
+			disable_reg_val, mask_reset_reg_val);
+
+	wdt->disable_reg_val = disable_reg_val;
+	wdt->mask_reset_reg_val = mask_reset_reg_val;
+
+	dev_info(wdt->dev, "Automatic_wdt set %s done, mask = %d\n", mask ? "true" : "false", mask);
 
 	return ret;
 }
@@ -305,13 +351,16 @@ static int s3c2410wdt_automatic_disable_wdt(struct s3c2410_wdt *wdt, bool mask)
 static int s3c2410wdt_keepalive(struct watchdog_device *wdd)
 {
 	struct s3c2410_wdt *wdt = watchdog_get_drvdata(wdd);
-	unsigned long flags;
+	unsigned long flags, wtcnt = 0;
 
 	s3c2410wdt_multistage_wdt_keepalive();
 
 	spin_lock_irqsave(&wdt->lock, flags);
 	writel(wdt->count, wdt->reg_base + S3C2410_WTCNT);
 	spin_unlock_irqrestore(&wdt->lock, flags);
+
+	wtcnt = readl(wdt->reg_base + S3C2410_WTCNT);
+	dev_info(wdt->dev, "Watchdog cluster %u keepalive!, wtcnt = %lx\n", wdt->cluster, wtcnt);
 
 	return 0;
 }
@@ -320,11 +369,15 @@ static void __s3c2410wdt_stop(struct s3c2410_wdt *wdt)
 {
 	unsigned long wtcon;
 
+	/* If Cluster 0 Watchdog is disabled, Multistage watchdog is also disabled */
 	s3c2410wdt_multistage_wdt_stop();
 
 	wtcon = readl(wdt->reg_base + S3C2410_WTCON);
 	wtcon &= ~(S3C2410_WTCON_ENABLE | S3C2410_WTCON_RSTEN);
 	writel(wtcon, wdt->reg_base + S3C2410_WTCON);
+
+	wtcon = readl(wdt->reg_base + S3C2410_WTCON);
+	dev_info(wdt->dev, "Watchdog cluster %u stop done, WTCON = %lx\n", wdt->cluster, wtcon);
 }
 
 static int s3c2410wdt_stop(struct watchdog_device *wdd)
@@ -381,6 +434,8 @@ static int s3c2410wdt_start(struct watchdog_device *wdd)
 
 	spin_unlock_irqrestore(&wdt->lock, flags);
 
+	wtcon = readl(wdt->reg_base + S3C2410_WTCON);
+	dev_info(wdt->dev, "Watchdog cluster %u start, WTCON = %lx\n", wdt->cluster, wtcon);
 	return 0;
 }
 
@@ -420,7 +475,7 @@ static int s3c2410wdt_set_heartbeat(struct watchdog_device *wdd, unsigned int ti
 		}
 	}
 
-	DBG("%s: timeout=%d, divisor=%d, count=%d (%08x)\n",
+	dev_info(wdt->dev, "%s: timeout=%d, divisor=%d, count=%d (%08x)\n",
 	    __func__, timeout, divisor, count, DIV_ROUND_UP(count, divisor));
 
 	count = DIV_ROUND_UP(count, divisor);
@@ -1006,7 +1061,7 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 	struct s3c2410_wdt *wdt;
 	struct resource *wdt_mem;
 	struct resource *wdt_irq;
-	unsigned int wtcon;
+	unsigned int wtcon, disable_reg_val, mask_reset_reg_val;
 	int started = 0;
 	int ret, cluster_index;
 
@@ -1055,6 +1110,25 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 		}
 	}
 
+	ret = regmap_read(wdt->pmureg, wdt->drv_data->mask_reset_reg, &mask_reset_reg_val);
+	if (ret) {
+		dev_err(wdt->dev, "Couldn't get MASK_WDT_RESET register\n");
+		return PTR_ERR(wdt->pmureg);
+	}
+
+	ret = regmap_read(wdt->pmureg, wdt->drv_data->disable_reg, &disable_reg_val);
+	if (ret) {
+		dev_err(wdt->dev, "Couldn't get DISABLE_WDT register\n");
+		return PTR_ERR(wdt->pmureg);
+	}
+
+	/*  Watchdog bits in both registers must be masked */
+	dev_info(wdt->dev, "DISABLE_WDT reg val:  %x, MASK_WDT_RESET reg val: %x\n",
+			disable_reg_val, mask_reset_reg_val);
+
+	wdt->disable_reg_val = disable_reg_val;
+	wdt->mask_reset_reg_val = mask_reset_reg_val;
+
 	wdt_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (wdt_irq == NULL) {
 		dev_err(dev, "no irq resource specified\n");
@@ -1070,7 +1144,7 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	DBG("probe: mapped reg_base=%p\n", wdt->reg_base);
+	dev_info(dev, "probe: mapped reg_base=%p\n", wdt->reg_base);
 
 	wdt->rate_clock = devm_clk_get(dev, "rate_watchdog");
 	if (IS_ERR(wdt->rate_clock)) {

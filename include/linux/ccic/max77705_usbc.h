@@ -196,6 +196,9 @@ struct max77705_usbc_platform_data {
 	int shut_down;
 	struct delayed_work vbus_hard_reset_work;
 	uint8_t ReadMSG[32];
+	int ram_test_enable;
+	int ram_test_retry;
+	int ram_test_result;
 	struct completion uvdm_longpacket_out_wait;
 	struct completion uvdm_longpacket_in_wait;
 	int is_in_first_sec_uvdm_req;
@@ -250,6 +253,7 @@ void max77705_current_pdo(struct max77705_usbc_platform_data *usbc_data,
 		unsigned char *data);
 void max77705_detach_pd(struct max77705_usbc_platform_data *usbc_data);
 void max77705_notify_rp_current_level(struct max77705_usbc_platform_data *usbc_data);
+extern void max77705_manual_jig_on(struct max77705_usbc_platform_data *usbpd_data, int mode);
 extern void max77705_vbus_turn_on_ctrl(struct max77705_usbc_platform_data *usbc_data, bool enable, bool swaped);
 extern void max77705_dp_detach(void *data);
 void max77705_usbc_disable_auto_vbus(struct max77705_usbc_platform_data *usbc_data);

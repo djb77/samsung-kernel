@@ -1369,8 +1369,8 @@ static u8 star_a3_s0_lpm_dyn_vlin_table[][1] = {
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
 static u8 star_a3_s0_vddm_table[][1] = {
 	{0x00}, // VDDM ORIGINAL
-	{0x10}, // VDDM LOW VOLTAGE : 0.9V
-	{0x30}, // VDDM HIGH VOLTAGE : 1.1V
+	{0x0D}, // VDDM LOW VOLTAGE : 0.92V
+	{0x2B}, // VDDM HIGH VOLTAGE : 1.08V
 };
 static u8 star_a3_s0_gram_img_pattern_table[][1] = {
 	{0x00}, // GCT_PATTERN_NONE

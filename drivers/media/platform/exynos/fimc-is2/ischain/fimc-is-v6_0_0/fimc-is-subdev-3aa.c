@@ -18,6 +18,10 @@
 #include "fimc-is-video.h"
 #include "fimc-is-type.h"
 
+#include "fimc-is-core.h"
+#include "fimc-is-dvfs.h"
+#include "fimc-is-hw-dvfs.h"
+
 static int fimc_is_ischain_3aa_cfg(struct fimc_is_subdev *leader,
 	void *device_data,
 	struct fimc_is_frame *frame,
@@ -200,6 +204,7 @@ static int fimc_is_ischain_3aa_tag(struct fimc_is_subdev *subdev,
 	struct fimc_is_subdev *leader;
 	struct fimc_is_device_ischain *device;
 	u32 lindex, hindex, indexes;
+	int scenario_id;
 
 	device = (struct fimc_is_device_ischain *)device_data;
 
@@ -275,10 +280,14 @@ static int fimc_is_ischain_3aa_tag(struct fimc_is_subdev *subdev,
 			goto p_err;
 		}
 
-		msrinfo("in_crop[%d, %d, %d, %d]\n", device, subdev, frame,
-			incrop->x, incrop->y, incrop->w, incrop->h);
-		msrinfo("ot_crop[%d, %d, %d, %d]\n", device, subdev, frame,
-			otcrop->x, otcrop->y, otcrop->w, otcrop->h);
+		scenario_id = fimc_is_dvfs_sel_static(device);
+
+		if (scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_120FPS && scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_240FPS) {
+			msrinfo("in_crop[%d, %d, %d, %d]\n", device, subdev, frame,
+				incrop->x, incrop->y, incrop->w, incrop->h);
+			msrinfo("ot_crop[%d, %d, %d, %d]\n", device, subdev, frame,
+				otcrop->x, otcrop->y, otcrop->w, otcrop->h);
+		}
 	}
 
 	ret = fimc_is_itf_s_param(device, frame, lindex, hindex, indexes);

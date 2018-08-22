@@ -568,7 +568,7 @@ void ssp_batch_data_read_task(struct work_struct *work)
 	if (data->batch_event.batch_data == NULL) {
 		ssp_dbg("[SSP_BAT] batch data alloc fail\n");
 		kfree(big);
-		wake_unlock(&data->ssp_wake_lock);
+		wake_unlock(&data->ssp_batch_wake_lock);
 		mutex_unlock(&data->batch_events_lock);
 		return;
 	}
@@ -594,7 +594,7 @@ void ssp_batch_data_read_task(struct work_struct *work)
 			data->batch_event.batch_data = NULL;
 			data->batch_event.batch_length = 0;
 			kfree(big);
-			wake_unlock(&data->ssp_wake_lock);
+			wake_unlock(&data->ssp_batch_wake_lock);
 			mutex_unlock(&data->batch_events_lock);
 			return;
 		}

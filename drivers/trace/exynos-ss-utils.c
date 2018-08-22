@@ -444,7 +444,7 @@ void exynos_ss_save_system(void *unused)
 	if (!exynos_ss_get_enable("header"))
 		return;
 
-	mmu_reg = per_cpu(ess_mmu_reg, raw_smp_processor_id());
+	mmu_reg = raw_cpu_read(ess_mmu_reg);
 #ifdef CONFIG_ARM64
 	asm("mrs x1, SCTLR_EL1\n\t"		/* SCTLR_EL1 */
 		"str x1, [%0]\n\t"
@@ -680,6 +680,18 @@ int exynos_ss_dump(void)
 	return 0;
 }
 EXPORT_SYMBOL(exynos_ss_dump);
+
+static int exynos_ss_save_core_safe(struct pt_regs *regs, int cpu)
+{
+	struct pt_regs *core_reg = per_cpu(ess_core_reg, cpu);
+
+	if (!exynos_ss_get_enable("header"))
+		return 0;
+
+	memcpy(core_reg, regs, sizeof(struct pt_regs));
+
+	return 0;
+}
 
 int exynos_ss_save_core(void *v_regs)
 {
@@ -974,7 +986,7 @@ static struct notifier_block nb_panic_block = {
 	.notifier_call = exynos_ss_panic_handler,
 };
 
-void exynos_ss_panic_handler_safe(void)
+void exynos_ss_panic_handler_safe(struct pt_regs *regs)
 {
 	char *cpu_num[SZ_16] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"};
 	char text[SZ_32] = "safe panic handler at cpu ";
@@ -988,6 +1000,10 @@ void exynos_ss_panic_handler_safe(void)
 	len = strnlen(text, SZ_32);
 
 	exynos_ss_report_reason(ESS_SIGN_SAFE_FAULT);
+	exynos_ss_save_system(NULL);
+	exynos_ss_save_core_safe(regs, cpu);
+	exynos_ss_set_core_panic_stat(ESS_SIGN_PANIC, cpu);
+	flush_cache_all();
 	exynos_ss_dump_panic(text, len);
 	s3c2410wdt_set_emergency_reset(100, 0);
 }

@@ -602,6 +602,9 @@ int sensor_5f1_stream_off(struct v4l2_subdev *subdev)
 		goto p_err;
 	}
 
+	/* add 1 frame delay for stream off */
+	usleep_range(40000, 40000);
+
 p_err:
 	return ret;
 }

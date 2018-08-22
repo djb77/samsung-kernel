@@ -40,7 +40,7 @@ extern unsigned int exynos_ss_get_item_size(char *);
 extern unsigned long exynos_ss_get_item_vaddr(char *name);
 extern unsigned int exynos_ss_get_item_paddr(char *);
 extern bool exynos_ss_dumper_one(void *, char *, size_t, size_t *);
-extern void exynos_ss_panic_handler_safe(void);
+extern void exynos_ss_panic_handler_safe(struct pt_regs *regs);
 extern unsigned long exynos_ss_get_spare_vaddr(unsigned int offset);
 extern unsigned long exynos_ss_get_spare_paddr(unsigned int offset);
 extern unsigned long exynos_ss_get_last_pc(unsigned int cpu);
@@ -208,7 +208,7 @@ extern void s3c2410wdt_reset_confirm(unsigned long mtime, int index);
 #define exynos_ss_get_item_paddr(a)	do { } while (0)
 #define exynos_ss_check_crash_key(a, b)	do { } while (0)
 #define exynos_ss_dm(a, b, c, d, e)	do { } while (0)
-#define exynos_ss_panic_handler_safe()	do { } while (0)
+#define exynos_ss_panic_handler_safe(a)	do { } while (0)
 #define exynos_ss_get_last_pc(a)	do { } while (0)
 #define exynos_ss_get_last_pc_paddr()	do { } while (0)
 #define exynos_ss_hook_hardlockup_entry(a) do { } while (0)

@@ -1490,9 +1490,13 @@ out:
 	return err;
 }
 
-
+extern struct cpumask early_cpu_mask;
 int cpu_up(unsigned int cpu)
 {
+	if (!cpumask_test_cpu(cpu, &early_cpu_mask)) {
+		dump_stack();
+		return -EINVAL;
+	}
 	return do_cpu_up(cpu, CPUHP_ONLINE);
 }
 EXPORT_SYMBOL_GPL(cpu_up);

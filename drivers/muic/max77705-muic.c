@@ -916,7 +916,10 @@ static ssize_t max77705_muic_set_afc_disable(struct device *dev,
 {
 	struct max77705_muic_data *muic_data = dev_get_drvdata(dev);
 	struct muic_platform_data *pdata = muic_data->pdata;
-	int ret;
+	int param_val, ret = 0;
+#if defined(CONFIG_MUIC_HV) || defined(CONFIG_SUPPORT_QC30)
+	union power_supply_propval psy_val;
+#endif
 
 	if (!strncasecmp(buf, "1", 1)) {
 		ret = sec_set_param(CM_OFFSET + 1, '1');
@@ -933,12 +936,21 @@ static ssize_t max77705_muic_set_afc_disable(struct device *dev,
 	} else {
 		pr_warn("%s invalid value\n", __func__);
 	}
+
+	param_val = pdata->afc_disable ? '1' : '0';
+
 #if defined(CONFIG_SEC_FACTORY)
 	/* for factory self charging test (AFC-> NORMAL TA) */
 	if (muic_data->attached_dev == ATTACHED_DEV_AFC_CHARGER_9V_MUIC)
 		max77705_muic_afc_hv_set(muic_data, 5);
 #endif
 	pr_info("%s afc_disable(%d)\n", __func__, pdata->afc_disable);
+
+#if defined(CONFIG_MUIC_HV) || defined(CONFIG_SUPPORT_QC30)
+		psy_val.intval = param_val;
+		psy_do_property("battery", set,
+			POWER_SUPPLY_EXT_PROP_HV_DISABLE, psy_val);
+#endif
 
 	return count;
 }
@@ -1388,10 +1400,10 @@ handle_attach:
 
 #if defined(CONFIG_HV_MUIC_MAX77705_AFC)
 	if (max77705_muic_check_is_enable_afc(muic_data, new_dev)) {
-		/* Maxim's request, wait 30ms for checking HVDCP */
-		pr_info("%s afc work after 30ms\n", __func__);
+		/* Maxim's request, wait 500ms for checking HVDCP */
+		pr_info("%s afc work after 500ms\n", __func__);
 		cancel_delayed_work_sync(&(muic_data->afc_work));
-		schedule_delayed_work(&(muic_data->afc_work), msecs_to_jiffies(30));
+		schedule_delayed_work(&(muic_data->afc_work), msecs_to_jiffies(500));
 	}
 #endif /* CONFIG_HV_MUIC_MAX77705_AFC */
 
@@ -1683,14 +1695,14 @@ static void max77705_muic_detect_dev(struct max77705_muic_data *muic_data,
 	/* W/A of defect cable(Vbus is valid and CC is invalid), set or cancel vbus_wa_work */
 	if (irq == muic_data->irq_vbusdet) {
 		wake_unlock(&muic_data->muic_wake_lock);
-		cancel_delayed_work_sync(&(muic_data->vbus_wa_work));
+		cancel_delayed_work(&(muic_data->vbus_wa_work));
 		if (vbvolt > 0) {
 			wake_lock_timeout(&muic_data->muic_wake_lock, 2100);
 			schedule_delayed_work(&(muic_data->vbus_wa_work), msecs_to_jiffies(2000));
 		}
 	} else if (irq == muic_data->irq_chgtyp && chgtyp > 0) {
 		wake_unlock(&muic_data->muic_wake_lock);
-		cancel_delayed_work_sync(&(muic_data->vbus_wa_work));
+		cancel_delayed_work(&(muic_data->vbus_wa_work));
 	}
 #endif
 
@@ -2370,7 +2382,7 @@ int max77705_muic_remove(struct max77705_usbc_platform_data *usbc_data)
 		if (muic_data->pdata->cleanup_switch_dev_cb)
 			muic_data->pdata->cleanup_switch_dev_cb();
 
-		cancel_delayed_work_sync(&(muic_data->vbus_wa_work));
+		cancel_delayed_work(&(muic_data->vbus_wa_work));
 
 #if defined(CONFIG_MUIC_MAX77705_CCIC)
 		if (muic_data->pdata->opmode & OPMODE_CCIC) {
@@ -2420,7 +2432,7 @@ out_cleanup:
 	if (muic_data->pdata && muic_data->pdata->cleanup_switch_dev_cb)
 		muic_data->pdata->cleanup_switch_dev_cb();
 
-	cancel_delayed_work_sync(&(muic_data->vbus_wa_work));
+	cancel_delayed_work(&(muic_data->vbus_wa_work));
 
 #if defined(CONFIG_MUIC_MAX77705_CCIC)
 	if ((muic_data->pdata) && (muic_data->pdata->opmode & OPMODE_CCIC)) {

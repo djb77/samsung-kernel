@@ -60,6 +60,7 @@ static struct device_attribute ccic_attributes[] = {
 	CCIC_SYSFS_ATTR(usbpd_ids),
 	CCIC_SYSFS_ATTR(usbpd_type),
 	CCIC_SYSFS_ATTR(cc_pin_status),
+	CCIC_SYSFS_ATTR(ram_test),
 };
 
 static ssize_t ccic_sysfs_show_property(struct device *dev,

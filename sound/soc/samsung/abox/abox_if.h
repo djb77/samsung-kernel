@@ -41,6 +41,16 @@ struct abox_if_data {
 };
 
 /**
+ * UAIF/DSIF hw params fixup helper by dai
+ * @param[in]	dai	snd_soc_dai
+ * @param[out]	params	snd_pcm_hw_params
+ * @param[in]	stream	SNDRV_PCM_STREAM_PLAYBACK or SNDRV_PCM_STREAM_CAPTURE
+ * @return		error code if any
+ */
+extern int abox_if_hw_params_fixup_by_dai(struct snd_soc_dai *dai,
+		struct snd_pcm_hw_params *params, int stream);
+
+/**
  * UAIF/DSIF hw params fixup helper
  * @param[in]	rtd	snd_soc_pcm_runtime
  * @param[out]	params	snd_pcm_hw_params

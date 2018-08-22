@@ -243,9 +243,11 @@ void set_usb_enable_state(void)
 {
 	if (!typec_manager.usb_enable_state) {
 		typec_manager.usb_enable_state = true;
-		if (typec_manager.pd_con_state) {
+		if (typec_manager.pd_con_state)
 			cable_type_check_work(true, 120);
-		}
+		else if (typec_manager.ccic_drp_state == USB_STATUS_NOTIFY_ATTACH_UFP && 
+			typec_manager.cable_type == MANAGER_NOTIFY_MUIC_TIMEOUT_OPEN_DEVICE)
+			cable_type_check_work(true, 10);
 	}
 }
 EXPORT_SYMBOL(set_usb_enable_state);
@@ -292,7 +294,7 @@ static void cable_type_check(struct work_struct *work)
 		return;
 	}
 
-	pr_info("usb: [M] %s: usb=%d, pd=%d\n", __func__, typec_manager.usb_enum_state, typec_manager.pd_con_state);
+	pr_info("usb: [M] %s: usb=%d, pd=%d cable_type=%d\n", __func__, typec_manager.usb_enum_state, typec_manager.pd_con_state, typec_manager.cable_type);
 	if(!typec_manager.usb_enum_state ||
 		(typec_manager.muic_data_refresh
 		&& typec_manager.cable_type==MANAGER_NOTIFY_MUIC_CHARGER)) {
@@ -575,6 +577,14 @@ static int manager_handle_ccic_notification(struct notifier_block *nb,
 			(typec_manager.ccic_rid_state == RID_523K || typec_manager.ccic_rid_state == RID_619K))) {
 			return 0;
 		}
+		if ((typec_manager.cable_type == MANAGER_NOTIFY_MUIC_TIMEOUT_OPEN_DEVICE) 
+			&&  (p_noti.sub2 == USB_STATUS_NOTIFY_ATTACH_UFP) ) {
+				pr_info("usb: [M] %s: DCD Timeout case.\n", __func__);
+				cable_type_check_work(false, 0);
+		} else if (p_noti.sub2 == USB_STATUS_NOTIFY_DETACH)
+			cable_type_check_work(false, 0);
+		else
+			;
 		break;
 	case CCIC_NOTIFY_ID_WATER:
 		if (p_noti.sub1) {	/* attach */
@@ -712,6 +722,11 @@ static int manager_handle_muic_notification(struct notifier_block *nb,
 
 		if(typec_manager.muic_action) {
 			typec_manager.cable_type = MANAGER_NOTIFY_MUIC_TIMEOUT_OPEN_DEVICE;
+			if(typec_manager.ccic_drp_state == USB_STATUS_NOTIFY_ATTACH_UFP) {
+				pr_info("usb: [M] %s: DCD Timeout case schedule work enable_state[%d]\n", 
+					__func__, typec_manager.usb_enable_state);
+				cable_type_check_work(true, 10);
+			}
 		}
 		break;
 

@@ -199,6 +199,45 @@ static int sensor_3m3_wait_stream_off_status(cis_shared_data *cis_data)
 	return ret;
 }
 
+int sensor_3m3_cis_check_rev(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	u8 rev = 0;
+	struct i2c_client *client;
+	struct fimc_is_cis *cis = NULL;
+
+	WARN_ON(!subdev);
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+	WARN_ON(!cis);
+	WARN_ON(!cis->cis_data);
+
+	client = cis->client;
+	if (unlikely(!client)) {
+		err("client is NULL");
+		ret = -EINVAL;
+		return ret;
+	}
+	
+	memset(cis->cis_data, 0, sizeof(cis_shared_data));
+	cis->rev_flag = false;
+
+	I2C_MUTEX_LOCK(cis->i2c_lock);
+
+	ret = fimc_is_sensor_read8(client, 0x0002, &rev);
+	if (ret < 0) {
+		cis->rev_flag = true;
+		ret = -EAGAIN;
+	} else {
+		cis->cis_data->cis_rev = rev;
+		pr_info("%s : Default version 3m3 sensor. Rev. 0x%X\n", __func__, rev);
+	}
+
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+
+	return ret;
+}
+
 /* CIS OPS */
 int sensor_3m3_cis_init(struct v4l2_subdev *subdev)
 {
@@ -206,11 +245,6 @@ int sensor_3m3_cis_init(struct v4l2_subdev *subdev)
 	struct fimc_is_cis *cis;
 	u32 setfile_index = 0;
 	cis_setting_info setinfo;
-#ifdef USE_CAMERA_HW_BIG_DATA
-	struct cam_hw_param *hw_param = NULL;
-	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
-#endif
-	int retry_cnt = 3;
 	setinfo.param = NULL;
 	setinfo.return_value = 0;
 
@@ -224,27 +258,6 @@ int sensor_3m3_cis_init(struct v4l2_subdev *subdev)
 	}
 
 	FIMC_BUG(!cis->cis_data);
-	memset(cis->cis_data, 0, sizeof(cis_shared_data));
-
-retry:
-	ret = sensor_cis_check_rev(cis);
-	if (ret < 0) {
-		if (retry_cnt-- > 0) {
-			err("sensor_3m3_check_rev is fail. retry %d", retry_cnt);
-			usleep_range(10000, 10000);
-			goto retry;
-		} else {
-#ifdef USE_CAMERA_HW_BIG_DATA
-			sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
-			if (sensor_peri)
-				fimc_is_sec_get_hw_param(&hw_param, sensor_peri->module->position);
-			if (hw_param)
-				hw_param->i2c_sensor_err_cnt++;
-#endif
-			err("sensor_3m3_check_rev is fail");
-			goto p_err;
-		}
-	}
 
 	cis->cis_data->cur_width = SENSOR_3M3_MAX_WIDTH;
 	cis->cis_data->cur_height = SENSOR_3M3_MAX_HEIGHT;
@@ -2075,6 +2088,7 @@ static struct fimc_is_cis_ops cis_ops = {
 #ifdef CAMERA_REAR2_SENSOR_SHIFT_CROP
 	.cis_update_pdaf_tail_size = sensor_3m3_cis_update_pdaf_tail_size,
 #endif
+	.cis_check_rev = sensor_3m3_cis_check_rev,
 };
 
 static int cis_3m3_probe(struct i2c_client *client,

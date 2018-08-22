@@ -296,19 +296,29 @@ static int rx_raw_misc(struct sk_buff *skb)
 	return queue_skb_to_iod(skb, iod);
 }
 
+#ifdef CONFIG_MODEM_IF_NET_GRO
+static int region = 0;
+module_param(region, int, S_IRUGO | S_IWUSR | S_IWGRP);
+
 static int check_gro_support(struct sk_buff *skb)
 {
-#ifdef CONFIG_MODEM_IF_NET_GRO
-	switch (skb->data[0] & 0xF0) {
-	case 0x40:
-		return (ip_hdr(skb)->protocol == IPPROTO_TCP);
+	if (region) {
+		switch (skb->data[0] & 0xF0) {
+		case 0x40:
+			return (ip_hdr(skb)->protocol == IPPROTO_TCP);
 
-	case 0x60:
-		return (ipv6_hdr(skb)->nexthdr == IPPROTO_TCP);
+		case 0x60:
+			return (ipv6_hdr(skb)->nexthdr == IPPROTO_TCP);
+		}
 	}
-#endif
 	return 0;
 }
+#else
+static int check_gro_support(struct sk_buff *skb)
+{
+	return 0;
+}
+#endif
 
 static int rx_multi_pdp(struct sk_buff *skb)
 {
@@ -360,6 +370,9 @@ static int rx_multi_pdp(struct sk_buff *skb)
 #if defined(DEBUG_MODEM_IF_IODEV_RX) && defined(DEBUG_MODEM_IF_PS_DATA)
 	mif_pkt(iod->id, "IOD-RX", skb);
 #endif
+
+	skb_reset_transport_header(skb);
+	skb_reset_network_header(skb);
 
 	if (check_gro_support(skb)) {
 		ret = napi_gro_receive(napi_get_current(), skb);

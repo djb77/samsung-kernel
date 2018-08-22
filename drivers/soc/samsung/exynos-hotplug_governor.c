@@ -1001,16 +1001,32 @@ exit:
 extern unsigned long sec_cpumask;
 static int __init exynos_hpgov_boostable(void)
 {
-	return ((!sec_cpumask) &&
-		(exynos_hpgov.maxfreq_table[SINGLE]
-			!= exynos_hpgov.maxfreq_table[QUAD]));
+	return (exynos_hpgov.maxfreq_table[SINGLE]
+			> exynos_hpgov.maxfreq_table[QUAD]);
 }
 
+extern struct cpumask early_cpu_mask;
 static int __init exynos_hpgov_init(void)
 {
 	int ret = 0;
 	int attr_count = ATTR_COUNT;
 	int i_attr = attr_count;
+
+	/* if user controls core number by boot arg, disable hpgov */
+	if (cpumask_weight(&early_cpu_mask) != NR_CPUS) {
+		pr_info("HP_GOV initialization is canceled by core ccontrol\n");
+		goto failed;
+	}
+
+	/* parse DT */
+	if (exynos_hpgov_parse_dt())
+		goto failed;
+
+	/* start hp_governor after BOOT_ENAMBE_MS */
+	if (!exynos_hpgov_boostable()) {
+		pr_info("HP_GOV initialization is canceled by boost frequency\n");
+		goto failed;
+	}
 
 	/* init timer */
 	hrtimer_init(&exynos_hpgov.slack_timer, CLOCK_MONOTONIC,
@@ -1029,7 +1045,7 @@ static int __init exynos_hpgov_init(void)
 		kzalloc(attr_count * sizeof(struct attribute *), GFP_KERNEL);
 	if (!exynos_hpgov.attrib.attrib_group.attrs) {
 		ret = -ENOMEM;
-		goto done;
+		goto failed;
 	}
 
 	HPGOV_RW_ATTRIB(attr_count - (i_attr--), enabled);
@@ -1044,12 +1060,10 @@ static int __init exynos_hpgov_init(void)
 	exynos_hpgov.attrib.attrib_group.name = "governor";
 	ret = sysfs_create_group(exynos_cpu_hotplug_kobj(),
 				&exynos_hpgov.attrib.attrib_group);
-	if (ret)
+	if (ret) {
 		pr_err("Unable to create sysfs objects :%d\n", ret);
-
-	/* parse DT */
-	if (exynos_hpgov_parse_dt())
-		goto done;
+		goto failed;
+	}
 
 	/* set default valuse */
 	exynos_hpgov.enabled = 0;
@@ -1086,17 +1100,17 @@ static int __init exynos_hpgov_init(void)
 	register_pm_notifier(&exynos_hp_gov_suspend_nb);
 	register_pm_notifier(&exynos_hp_gov_resume_nb);
 
-	/* start hp_governor after BOOT_ENAMBE_MS */
-	if (exynos_hpgov_boostable())
-		schedule_delayed_work_on(0, &hpgov_boot_work,
-				msecs_to_jiffies(DEFAULT_BOOT_ENABLE_MS));
-	else
-		pr_info("HP_GOV: Diable HOTPLUG_GOVERNOR!\n");
+	schedule_delayed_work_on(0, &hpgov_boot_work,
+			msecs_to_jiffies(DEFAULT_BOOT_ENABLE_MS));
 
 	exynos_cpu_hotplug_gov_activated();
-done:
-	if (ret)
-		pr_info("HP_GOV: failed to initialized HOTPLUG_GOVERNOR!\n");
+
+	return ret;
+
+failed:
+	exynos_hpgov.enabled = 0;
+	exynos_hpgov.user_mode = DISABLE;
+	pr_info("HP_GOV: failed to initialized HOTPLUG_GOVERNOR (ret: %d)!\n", ret);
 
 	return ret;
 }
