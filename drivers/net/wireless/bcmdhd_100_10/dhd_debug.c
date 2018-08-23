@@ -23,7 +23,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_debug.c 737983 2017-12-26 07:10:52Z $
+ * $Id: dhd_debug.c 760444 2018-05-02 05:18:22Z $
  */
 
 #include <typedefs.h>
@@ -813,7 +813,7 @@ dhd_dbg_verboselog_printf(dhd_pub_t *dhdp, event_log_hdr_t *hdr,
 			/* ensure preserve fw logs go to debug_dump only in case of customer4 */
 			if (logset < WL_MAX_PRESERVE_BUFFER &&
 				((0x01u << logset) & dhdp->logset_prsrv_mask)) {
-				DHD_EVENT_MEM(("%s\n", b.origbuf));
+				DHD_PRSRV_MEM(("%s\n", b.origbuf));
 			} else {
 				DHD_EVENT(("%s\n", b.origbuf));
 			}
@@ -905,7 +905,7 @@ dhd_dbg_verboselog_printf(dhd_pub_t *dhdp, event_log_hdr_t *hdr,
 	/* ensure preserve fw logs go to debug_dump only in case of customer4 */
 	if (logset < WL_MAX_PRESERVE_BUFFER &&
 			((0x01u << logset) & dhdp->logset_prsrv_mask)) {
-		DHD_EVENT_MEM((fmtstr_loc_buf, arg[0], arg[1], arg[2], arg[3],
+		DHD_PRSRV_MEM((fmtstr_loc_buf, arg[0], arg[1], arg[2], arg[3],
 			arg[4], arg[5], arg[6], arg[7], arg[8], arg[9], arg[10],
 			arg[11], arg[12], arg[13], arg[14], arg[15]));
 	} else {

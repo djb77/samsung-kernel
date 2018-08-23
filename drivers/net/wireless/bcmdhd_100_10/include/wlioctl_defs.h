@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wlioctl_defs.h 738254 2017-12-27 22:33:17Z $
+ * $Id: wlioctl_defs.h 746651 2018-02-13 23:06:06Z $
  */
 
 #ifndef wlioctl_defs_h
@@ -539,7 +539,9 @@
 #define WPA2_AUTH_FILS_SHA256	0x10000 /* FILS with SHA256 key derivation */
 #define WPA2_AUTH_FILS_SHA384	0x20000 /* FILS with SHA384 key derivation */
 #define WPA2_AUTH_IS_FILS(auth) ((auth) & (WPA2_AUTH_FILS_SHA256 | WPA2_AUTH_FILS_SHA384))
-
+#define WPA3_AUTH_SAE_PSK 0x40000 /* SAE with 4-way handshake */
+#define WPA3_AUTH_SAE_FBT 0x80000 /* SAE with FT */
+#define WPA3_AUTH_OWE 0x100000	/* OWE */
 /* WPA2_AUTH_SHA256 not used anymore. Just kept here to avoid build issue in DINGO */
 #define WPA2_AUTH_SHA256	0x8000
 #define WPA_AUTH_PFN_ANY	0xffffffff	/* for PFN, match only ssid */
@@ -954,9 +956,9 @@
 #define WL_AUTH_OPEN_SYSTEM		0	/* d11 open authentication */
 #define WL_AUTH_SHARED_KEY		1	/* d11 shared authentication */
 #define WL_AUTH_OPEN_SHARED		2	/* try open, then shared if open failed w/rc 13 */
-#define WL_AUTH_FILS_SHARED		5	/* d11 fils shared key authentication */
-#define WL_AUTH_FILS_SHARED_PFS		6	/* d11 fils shared key w/ pfs authentication */
-#define WL_AUTH_FILS_PUBLIC		7	/* d11 fils public key authentication */
+#define WL_AUTH_FILS_SHARED		4	/* d11 fils shared key authentication */
+#define WL_AUTH_FILS_SHARED_PFS		5	/* d11 fils shared key w/ pfs authentication */
+#define WL_AUTH_FILS_PUBLIC		6	/* d11 fils public key authentication */
 
 /* a large TX Power as an init value to factor out of MIN() calculations,
  * keep low enough to fit in an int8, units are .25 dBm
@@ -1329,7 +1331,7 @@
 #define WL_MBO_VAL		0x04000000
 /* re-using WL_SRSCAN_VAL */
 #define WL_RANDMAC_VAL		0x02000000
-#define WL_PWRSEL_VAL		0x10000000
+#define WL_UNUSED_VAL		0x10000000	/* Was a duplicate for WL_LPC_VAL. Removed */
 #define WL_NET_DETECT_VAL	0x20000000
 #define WL_OCE_VAL  0x20000000 /* reuse */
 #define WL_PCIE_VAL		0x40000000
@@ -1343,6 +1345,7 @@
  * wl_msg_level3 in wl_dbg.h
  */
 #define WL_ASSOC_AP_VAL		0x00000001
+#define WL_FILS_VAL		0x00000002
 
 /* max # of leds supported by GPIO (gpio pin# == led index#) */
 #define	WL_LED_NUMGPIO		32	/* gpio 0-31 */
@@ -2294,6 +2297,8 @@
 #define WL_PWRSTATS_TYPE_TSYNC		11 /**< struct wl_pwr_tsync_stats */
 #define	WL_PWRSTATS_TYPE_OPS_STATS	12 /* struct wl_pwr_ops_stats_t */
 #define WL_PWRSTATS_TYPE_BCNTRIM_STATS	13 /* struct wl_pwr_bcntrim_stats_t */
+#define WL_PWRSTATS_TYPE_SLICE_INDEX_BAND_INFO	14 /* wl_pwr_slice_index_band_t */
+#define WL_PWRSTATS_TYPE_PSBW_STATS	15 /* struct wl_pwr_psbw_stats_t */
 
 /* IOV AWD DATA */
 #define AWD_DATA_JOIN_INFO	0

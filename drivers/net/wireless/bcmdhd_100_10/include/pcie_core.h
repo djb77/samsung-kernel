@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: pcie_core.h 732527 2017-11-17 19:09:04Z $
+ * $Id: pcie_core.h 769920 2018-06-28 15:44:12Z $
  */
 #ifndef	_PCIE_CORE_H
 #define	_PCIE_CORE_H
@@ -974,6 +974,12 @@ typedef volatile struct sbpcieregs {
 #define DAR_PCIE_PWR_CTRL(rev)	(REV_GE_64(rev) ? \
 						OFFSETOF(sbpcieregs_t, u1.dar_64.powerctl) : \
 						OFFSETOF(sbpcieregs_t, u1.dar.powerctl))
+#define DAR_CLK_CTRL(rev)	(REV_GE_64(rev) ? \
+						OFFSETOF(sbpcieregs_t, u1.dar_64.clk_ctl_st) : \
+						OFFSETOF(sbpcieregs_t, u1.dar.clk_ctl_st))
+#define DAR_INTSTAT(rev)	(REV_GE_64(rev) ? \
+						OFFSETOF(sbpcieregs_t, u1.dar_64.intstatus) : \
+						OFFSETOF(sbpcieregs_t, u1.dar.intstatus))
 
 #define PCIE_PWR_REQ_PCIE		(0x1 << 8)
 

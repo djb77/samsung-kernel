@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linux_pkt.c 729708 2017-11-02 05:10:59Z $
+ * $Id: linux_pkt.c 769684 2018-06-27 07:36:50Z $
  */
 
 #include <typedefs.h>
@@ -83,7 +83,7 @@ int osl_static_mem_init(osl_t *osh, void *adapter)
 				ASSERT(osh->magic == OS_HANDLE_MAGIC);
 				return -ENOMEM;
 			} else {
-				printk("alloc static buf at %p!\n", bcm_static_buf);
+				printk("succeed to alloc static buf\n");
 			}
 
 			spin_lock_init(&bcm_static_buf->static_lock);

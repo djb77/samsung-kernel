@@ -42,7 +42,6 @@ struct repeater_device {
 	struct device *dev;
 	int ctx_num;
 	struct repeater_context *ctx[REPEATER_MAX_CONTEXTS_NUM];
-	spinlock_t device_spinlock;
 };
 
 struct repeater_context {
@@ -57,9 +56,8 @@ struct repeater_context {
 	uint64_t last_encoding_time_us;
 	uint64_t time_stamp_us;
 	enum repeater_context_status ctx_status;
-	spinlock_t ctx_spinlock;
 
-	struct work_struct encoding_work;
+	struct delayed_work encoding_work;
 	uint64_t encoding_start_timestamp;
 	uint64_t video_frame_count;
 	uint64_t paused_time;

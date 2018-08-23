@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_dbg.h 737458 2017-12-21 05:17:03Z $
+ * $Id: dhd_dbg.h 761450 2018-05-08 07:09:38Z $
  */
 
 #ifndef _dhd_dbg_
@@ -52,6 +52,9 @@ typedef enum {
 #define DHD_DUMP_LOG_HDR "\n-------------------- 'dhd dump' log -----------------------\n"
 #define EXT_TRAP_LOG_HDR "\n-------------------- Extended trap data -------------------\n"
 #define HEALTH_CHK_LOG_HDR "\n-------------------- Health check data --------------------\n"
+#ifdef DHD_DUMP_PCIE_RINGS
+#define FLOWRING_DUMP_HDR "\n-------------------- Flowring dump --------------------\n"
+#endif /* DHD_DUMP_PCIE_RINGS */
 #define DHD_LOG_DUMP_WRITE(fmt, ...) \
 	dhd_log_dump_write(DLD_BUF_TYPE_GENERAL, NULL, 0, fmt, ##__VA_ARGS__)
 #define DHD_LOG_DUMP_WRITE_EX(fmt, ...) \
@@ -110,6 +113,13 @@ do {	\
 		DHD_LOG_DUMP_WRITE args;	\
 	}	\
 } while (0)
+#define DHD_LOG_MEM(args) \
+do {	\
+	if (dhd_msg_level & DHD_ERROR_VAL) {	\
+		DHD_LOG_DUMP_WRITE("[%s]: ", dhd_log_dump_get_timestamp());	\
+		DHD_LOG_DUMP_WRITE args;	\
+	}	\
+} while (0)
 /* NON-EFI builds with LOG DUMP enabled */
 #define DHD_EVENT(args) \
 do {	\
@@ -119,10 +129,10 @@ do {	\
 		DHD_LOG_DUMP_WRITE args;	\
 	}	\
 } while (0)
-#define DHD_EVENT_MEM(args) \
+#define DHD_PRSRV_MEM(args) \
 do {	\
 	if (dhd_msg_level & DHD_EVENT_VAL) {	\
-		if (dhd_msg_level & DHD_EVENT_MEM_VAL) \
+		if (dhd_msg_level & DHD_PRSRV_MEM_VAL) \
 			printf args; \
 		DHD_LOG_DUMP_WRITE_PRSRV("[%s]: ", dhd_log_dump_get_timestamp()); \
 		DHD_LOG_DUMP_WRITE_PRSRV args;	\
@@ -167,9 +177,10 @@ do {	\
 #define DHD_MSGTRACE_LOG(args)  do {if (dhd_msg_level & DHD_MSGTRACE_VAL) printf args;} while (0)
 #define DHD_ERROR_MEM(args)	DHD_ERROR(args)
 #define DHD_IOVAR_MEM(args)	DHD_ERROR(args)
+#define DHD_LOG_MEM(args)	DHD_ERROR(args)
 #define DHD_EVENT(args)		do {if (dhd_msg_level & DHD_EVENT_VAL) printf args;} while (0)
 #define DHD_ECNTR_LOG(args)	DHD_EVENT(args)
-#define DHD_EVENT_MEM(args)	DHD_EVENT(args)
+#define DHD_PRSRV_MEM(args)	DHD_EVENT(args)
 #define DHD_ERROR_EX(args)	DHD_ERROR(args)
 #endif /* DHD_LOG_DUMP */
 
@@ -261,7 +272,7 @@ do {	\
 #define DHD_EVENT(args)
 #define DHD_ECNTR_LOG(args)	DHD_EVENT(args)
 
-#define DHD_EVENT_MEM(args)	DHD_EVENT(args)
+#define DHD_PRSRV_MEM(args)	DHD_EVENT(args)
 
 #define DHD_BTA(args)
 #define DHD_ISCAN(args)
@@ -278,6 +289,7 @@ do {	\
 
 #define DHD_ERROR_MEM(args)	DHD_ERROR(args)
 #define DHD_IOVAR_MEM(args)	DHD_ERROR(args)
+#define DHD_LOG_MEM(args)	DHD_ERROR(args)
 #define DHD_ERROR_EX(args)	DHD_ERROR(args)
 
 #ifdef CUSTOMER_HW4_DEBUG

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.h 740024 2018-01-10 12:20:47Z $
+ * $Id: dhd_pcie.h 765804 2018-06-05 13:54:14Z $
  */
 
 #ifndef dhd_pcie_h
@@ -450,6 +450,7 @@ extern int dhdpcie_stop_host_pcieclock(dhd_bus_t *bus);
 extern int dhdpcie_disable_device(dhd_bus_t *bus);
 extern int dhdpcie_alloc_resource(dhd_bus_t *bus);
 extern void dhdpcie_free_resource(dhd_bus_t *bus);
+extern void dhdpcie_dump_resource(dhd_bus_t *bus);
 extern int dhdpcie_bus_request_irq(struct dhd_bus *bus);
 
 extern int dhdpcie_enable_device(dhd_bus_t *bus);

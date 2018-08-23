@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: event_log_tag.h 736348 2017-12-14 20:10:24Z $
+ * $Id: event_log_tag.h 745704 2018-02-09 03:31:32Z $
  */
 
 #ifndef _EVENT_LOG_TAG_H_
@@ -227,15 +227,16 @@
 #define EVENT_LOG_TAG_PHY_TXPWR_WARN		206
 #define EVENT_LOG_TAG_PHY_TXPWR_INFO		207
 #define EVENT_LOG_TAG_PHY_ACI_INFO		208
-
 #define EVENT_LOG_TAG_WL_COUNTERS_AUX		209
 #define EVENT_LOG_TAG_AMPDU_DUMP_AUX		210
 #define EVENT_LOG_TAG_PWRSTATS_AWDL_AUX		211
 #define EVENT_LOG_TAG_PWRSTATS_PHY_AUX		212
 #define EVENT_LOG_TAG_PWRSTATS_SCAN_AUX		213
 #define EVENT_LOG_TAG_PWRSTATS_WAKE_V2_AUX	214
-
 #define EVENT_LOG_TAG_SVT_TESTING		215	/* SVT testing/verification */
+#define EVENT_LOG_TAG_HND_SMD_ERROR		216
+#define EVENT_LOG_TAG_PSBW_INFO			217
+#define EVENT_LOG_TAG_PHY_CAL_DBG		218
 
 /* Debug tags for making debug builds */
 #define EVENT_LOG_TAG_DBG1			251
@@ -252,8 +253,9 @@
 /* Note: New event should be added/reserved in trunk before adding it to branches */
 
 typedef enum wl_el_set_type_def {
-	EVENT_LOG_SET_TYPE_DEFAULT = 0,
-	EVENT_LOG_SET_TYPE_PRSRV = 1
+	EVENT_LOG_SET_TYPE_DEFAULT = 0, /* flush the log buffer when it is full - Default option */
+	EVENT_LOG_SET_TYPE_PRSRV = 1, /* flush the log buffer based on fw or host trigger */
+	EVENT_LOG_SET_TYPE_DFLUSH = 2 /* flush the log buffer once the watermark is reached */
 } wl_el_set_type_def_t;
 
 #define EVENT_LOG_TAG_FLUSH_NONE		0x00	/* No flush */

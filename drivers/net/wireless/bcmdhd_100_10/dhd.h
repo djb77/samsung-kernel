@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd.h 757032 2018-04-11 08:37:47Z $
+ * $Id: dhd.h 768017 2018-06-18 03:09:47Z $
  */
 
 /****************
@@ -622,7 +622,8 @@ typedef enum {
 	LOG_DUMP_SECTION_EXT_TRAP,
 	LOG_DUMP_SECTION_HEALTH_CHK,
 	LOG_DUMP_SECTION_PRESERVE,
-	LOG_DUMP_SECTION_COOKIE
+	LOG_DUMP_SECTION_COOKIE,
+	LOG_DUMP_SECTION_FLOWRING
 } log_dump_section_type_t;
 
 /* Each section in the debug_dump log file shall begin with a header */
@@ -883,6 +884,9 @@ typedef struct dhd_pub {
 #ifdef BT_OVER_SDIO
 	bool	is_bt_recovery_required;
 #endif // endif
+#ifdef DHD_MAP_LOGGING
+	bool	smmu_fault_occurred;	/* flag to indicate SMMU Fault */
+#endif /* DHD_MAP_LOGGING */
 	int   hang_was_sent;
 	int   rxcnt_timeout;		/* counter rxcnt timeout to send HANG */
 	int   txcnt_timeout;		/* counter txcnt timeout to send HANG */
@@ -2845,4 +2849,10 @@ typedef struct _dhd_dump_file_manage {
 
 extern void dhd_dump_file_manage_enqueue(dhd_pub_t *dhd, char *dump_path, char *fname);
 #endif /* DHD_DUMP_MNGR */
+#ifdef DHD_DUMP_PCIE_RINGS
+extern int dhd_d2h_h2d_ring_dump(dhd_pub_t *dhd, void *file, unsigned long *file_posn);
+#endif /* DHD_DUMP_PCIE_RINGS */
+#define HD_PREFIX_SIZE  2   /* hexadecimal prefix size */
+#define HD_BYTE_SIZE    2   /* hexadecimal byte size */
+
 #endif /* _dhd_h_ */

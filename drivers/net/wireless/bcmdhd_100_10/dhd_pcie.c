@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.c 756631 2018-04-10 05:26:11Z $
+ * $Id: dhd_pcie.c 769683 2018-06-27 07:36:05Z $
  */
 
 /* include files */
@@ -927,6 +927,17 @@ dhd_bus_aspm_enable(dhd_bus_t *bus, bool enable)
 }
 #endif /* DHD_DISABLE_ASPM */
 
+void
+dhdpcie_dongle_reset(dhd_bus_t *bus)
+{
+#ifdef DHD_USE_BP_RESET
+	dhd_bus_perform_bp_reset(bus);
+#else
+	pcie_watchdog_reset(bus->osh, bus->sih,
+		WD_ENABLE_MASK, WD_SSRESET_PCIE_F0_EN);
+#endif /* DHD_USE_BP_RESET */
+}
+
 static bool
 dhdpcie_dongle_attach(dhd_bus_t *bus)
 {
@@ -986,31 +997,33 @@ dhdpcie_dongle_attach(dhd_bus_t *bus)
 	}
 
 	BCM_REFERENCE(dongle_isolation);
-#ifndef DONGLE_ENABLE_ISOLATION
-	/* Enable CLKREQ# */
-	dhdpcie_clkreq(bus->osh, 1, 1);
 
-	/*
-	 * bus->dhd will be NULL if it is called from dhd_bus_attach, so need to reset
-	 * without checking dongle_isolation flag, but if it is called via some other path
-	 * like quiesce FLR, then based on dongle_isolation flag, watchdog_reset should
-	 * be called.
-	 */
-	if (bus->dhd == NULL) {
-		dongle_isolation = FALSE; /* dhd_attach not yet happened, do watchdog reset */
-	} else {
-		dongle_isolation = bus->dhd->dongle_isolation;
+	/* Dongle reset during power on can be invoked in case of module type driver */
+	if (dhd_download_fw_on_driverload) {
+		/* Enable CLKREQ# */
+		dhdpcie_clkreq(bus->osh, 1, 1);
+
+		/*
+		 * bus->dhd will be NULL if it is called from dhd_bus_attach, so need to reset
+		 * without checking dongle_isolation flag, but if it is called via some other path
+		 * like quiesce FLR, then based on dongle_isolation flag, watchdog_reset should
+		 * be called.
+		 */
+		if (bus->dhd == NULL) {
+			/* dhd_attach not yet happened, do watchdog reset */
+			dongle_isolation = FALSE;
+		} else {
+			dongle_isolation = bus->dhd->dongle_isolation;
+		}
+		/*
+		 * Issue CC watchdog to reset all the cores on the chip - similar to rmmod dhd
+		 * This is required to avoid spurious interrupts to the Host and bring back
+		 * dongle to a sane state (on host soft-reboot / watchdog-reboot).
+		 */
+		if (dongle_isolation == FALSE) {
+			dhdpcie_dongle_reset(bus);
+		}
 	}
-	/*
-	 * Issue CC watchdog to reset all the cores on the chip - similar to rmmod dhd
-	 * This is required to avoid spurious interrupts to the Host and bring back
-	 * dongle to a sane state (on host soft-reboot / watchdog-reboot).
-	 */
-	if (dongle_isolation == FALSE) {
-		pcie_watchdog_reset(bus->osh, bus->sih,
-			WD_ENABLE_MASK, WD_SSRESET_PCIE_F0_EN);
-	}
-#endif /* !DONGLE_ENABLE_ISOLATION */
 
 	si_setcore(bus->sih, PCIE2_CORE_ID, 0);
 	sbpcieregs = (sbpcieregs_t*)(bus->regs);
@@ -1256,9 +1269,7 @@ dhdpcie_bus_remove_prep(dhd_bus_t *bus)
 		*/
 
 		if (!bus->is_linkdown) {
-
-			pcie_watchdog_reset(bus->osh, bus->sih,
-				WD_ENABLE_MASK, WD_SSRESET_PCIE_F0_EN);
+			dhdpcie_dongle_reset(bus);
 		}
 
 		bus->dhd->is_pcie_watchdog_reset = TRUE;
@@ -1372,9 +1383,8 @@ dhdpcie_bus_release_dongle(dhd_bus_t *bus, osl_t *osh, bool dongle_isolation, bo
 	if (bus->sih) {
 
 		if (!dongle_isolation &&
-		(bus->dhd && !bus->dhd->is_pcie_watchdog_reset)) {
-			pcie_watchdog_reset(bus->osh, bus->sih,
-				WD_ENABLE_MASK, WD_SSRESET_PCIE_F0_EN);
+			(bus->dhd && !bus->dhd->is_pcie_watchdog_reset)) {
+			dhdpcie_dongle_reset(bus);
 		}
 
 		if (bus->ltrsleep_on_unload) {
@@ -1386,10 +1396,10 @@ dhdpcie_bus_release_dongle(dhd_bus_t *bus, osl_t *osh, bool dongle_isolation, bo
 			 pcie_serdes_iddqdisable(bus->osh, bus->sih,
 			                         (sbpcieregs_t *) bus->regs);
 
-#ifndef DONGLE_ENABLE_ISOLATION
-		/* Disable CLKREQ# */
-		dhdpcie_clkreq(bus->osh, 1, 0);
-#endif /* !DONGLE_ENABLE_ISOLATION */
+		if (dhd_download_fw_on_driverload) {
+			/* Disable CLKREQ# */
+			dhdpcie_clkreq(bus->osh, 1, 0);
+		}
 
 		if (bus->sih != NULL) {
 			si_detach(bus->sih);
@@ -2044,6 +2054,7 @@ dhd_bus_download_firmware(struct dhd_bus *bus, osl_t *osh,
 
 	DHD_ERROR(("%s: firmware path=%s, nvram path=%s\n",
 		__FUNCTION__, bus->fw_path, bus->nv_path));
+	dhdpcie_dump_resource(bus);
 
 	ret = dhdpcie_download_firmware(bus, osh);
 
@@ -3168,6 +3179,11 @@ dhd_bus_schedule_queue(struct dhd_bus  *bus, uint16 flow_id, bool txs)
 
 	flow_ring_node = DHD_FLOW_RING(bus->dhd, flow_id);
 
+	if (flow_ring_node->prot_info == NULL) {
+	    DHD_ERROR((" %s : invalid flow_ring_node \n", __FUNCTION__));
+	    return BCME_NOTREADY;
+	}
+
 #ifdef DHD_LOSSLESS_ROAMING
 	if ((dhdp->dequeue_prec_map & (1 << flow_ring_node->flow_info.tid)) == 0) {
 		DHD_INFO(("%s: tid %d is not in precedence map. block scheduling\n",
@@ -4137,6 +4153,104 @@ dhd_bus_perform_flr(dhd_bus_t *bus, bool force_fail)
 
 	return BCME_OK;
 }
+
+#ifdef DHD_USE_BP_RESET
+#define DHD_BP_RESET_ASPM_DISABLE_DELAY	500u	/* usec */
+
+#define DHD_BP_RESET_STATUS_RETRY_DELAY	40u	/* usec */
+#define DHD_BP_RESET_STATUS_RETRIES	50u
+
+#define PCIE_CFG_SPROM_CTRL_SB_RESET_BIT	10
+#define PCIE_CFG_CLOCK_CTRL_STATUS_BP_RESET_BIT	21
+int
+dhd_bus_perform_bp_reset(struct dhd_bus *bus)
+{
+	uint val;
+	int retry = 0;
+	uint dar_clk_ctrl_status_reg = DAR_CLK_CTRL(bus->sih->buscorerev);
+	int ret = BCME_OK;
+	bool cond;
+
+	DHD_ERROR(("******** Perform BP reset ********\n"));
+
+	/* Disable ASPM */
+	DHD_INFO(("Disable ASPM: Clear bits(1-0) of PCIECFGREG_LINK_STATUS_CTRL(0x%x)\n",
+		PCIECFGREG_LINK_STATUS_CTRL));
+	val = OSL_PCI_READ_CONFIG(bus->osh, PCIECFGREG_LINK_STATUS_CTRL, sizeof(val));
+	DHD_INFO(("read_config: reg=0x%x read val=0x%x\n", PCIECFGREG_LINK_STATUS_CTRL, val));
+	val = val & (~PCIE_ASPM_ENAB);
+	DHD_INFO(("write_config: reg=0x%x write val=0x%x\n", PCIECFGREG_LINK_STATUS_CTRL, val));
+	OSL_PCI_WRITE_CONFIG(bus->osh, PCIECFGREG_LINK_STATUS_CTRL, sizeof(val), val);
+
+	/* wait for delay usec */
+	DHD_INFO(("Delay of %d usec\n", DHD_BP_RESET_ASPM_DISABLE_DELAY));
+	OSL_DELAY(DHD_BP_RESET_ASPM_DISABLE_DELAY);
+
+	/* Set bit 10 of PCIECFGREG_SPROM_CTRL */
+	DHD_INFO(("Set PCIE_CFG_SPROM_CTRL_SB_RESET_BIT(%d) of PCIECFGREG_SPROM_CTRL(0x%x)\n",
+		PCIE_CFG_SPROM_CTRL_SB_RESET_BIT, PCIECFGREG_SPROM_CTRL));
+	val = OSL_PCI_READ_CONFIG(bus->osh, PCIECFGREG_SPROM_CTRL, sizeof(val));
+	DHD_INFO(("read_config: reg=0x%x read val=0x%x\n", PCIECFGREG_SPROM_CTRL, val));
+	val = val | (1 << PCIE_CFG_SPROM_CTRL_SB_RESET_BIT);
+	DHD_INFO(("write_config: reg=0x%x write val=0x%x\n", PCIECFGREG_SPROM_CTRL, val));
+	OSL_PCI_WRITE_CONFIG(bus->osh, PCIECFGREG_SPROM_CTRL, sizeof(val), val);
+
+	/* Wait till bit backplane reset is ASSERTED i,e
+	 * bit 10 of PCIECFGREG_SPROM_CTRL is cleared.
+	 * Only after this, poll for 21st bit of DAR reg 0xAE0 is valid
+	 * else DAR register will read previous old value
+	 */
+	DHD_INFO(("Wait till PCIE_CFG_SPROM_CTRL_SB_RESET_BIT(%d) of "
+		"PCIECFGREG_SPROM_CTRL(0x%x) is cleared\n",
+		PCIE_CFG_SPROM_CTRL_SB_RESET_BIT, PCIECFGREG_SPROM_CTRL));
+	do {
+		val = OSL_PCI_READ_CONFIG(bus->osh, PCIECFGREG_SPROM_CTRL, sizeof(val));
+		DHD_INFO(("read_config: reg=0x%x read val=0x%x\n", PCIECFGREG_SPROM_CTRL, val));
+		cond = val & (1 << PCIE_CFG_SPROM_CTRL_SB_RESET_BIT);
+		OSL_DELAY(DHD_BP_RESET_STATUS_RETRY_DELAY);
+	} while (cond && (retry++ < DHD_BP_RESET_STATUS_RETRIES));
+
+	if (cond) {
+		DHD_ERROR(("ERROR: reg=0x%x bit %d is not cleared\n",
+			PCIECFGREG_SPROM_CTRL, PCIE_CFG_SPROM_CTRL_SB_RESET_BIT));
+		ret = BCME_ERROR;
+		goto aspm_enab;
+	}
+
+	/* Wait till bit 21 of dar_clk_ctrl_status_reg is cleared */
+	DHD_INFO(("Wait till PCIE_CFG_CLOCK_CTRL_STATUS_BP_RESET_BIT(%d) of "
+		"dar_clk_ctrl_status_reg(0x%x) is cleared\n",
+		PCIE_CFG_CLOCK_CTRL_STATUS_BP_RESET_BIT, dar_clk_ctrl_status_reg));
+	do {
+		val = si_corereg(bus->sih, bus->sih->buscoreidx,
+			dar_clk_ctrl_status_reg, 0, 0);
+		DHD_INFO(("read_dar si_corereg: reg=0x%x read val=0x%x\n",
+			dar_clk_ctrl_status_reg, val));
+		cond = val & (1 << PCIE_CFG_CLOCK_CTRL_STATUS_BP_RESET_BIT);
+		OSL_DELAY(DHD_BP_RESET_STATUS_RETRY_DELAY);
+	} while (cond && (retry++ < DHD_BP_RESET_STATUS_RETRIES));
+
+	if (cond) {
+		DHD_ERROR(("ERROR: reg=0x%x bit %d is not cleared\n",
+			dar_clk_ctrl_status_reg, PCIE_CFG_CLOCK_CTRL_STATUS_BP_RESET_BIT));
+		ret = BCME_ERROR;
+	}
+
+aspm_enab:
+	/* Enable ASPM */
+	DHD_INFO(("Enable ASPM: set bit 1 of PCIECFGREG_LINK_STATUS_CTRL(0x%x)\n",
+		PCIECFGREG_LINK_STATUS_CTRL));
+	val = OSL_PCI_READ_CONFIG(bus->osh, PCIECFGREG_LINK_STATUS_CTRL, sizeof(val));
+	DHD_INFO(("read_config: reg=0x%x read val=0x%x\n", PCIECFGREG_LINK_STATUS_CTRL, val));
+	val = val | (PCIE_ASPM_L1_ENAB);
+	DHD_INFO(("write_config: reg=0x%x write val=0x%x\n", PCIECFGREG_LINK_STATUS_CTRL, val));
+	OSL_PCI_WRITE_CONFIG(bus->osh, PCIECFGREG_LINK_STATUS_CTRL, sizeof(val), val);
+
+	DHD_ERROR(("******** BP reset Succedeed ********\n"));
+
+	return ret;
+}
+#endif /* DHD_USE_BP_RESET */
 
 int
 dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)
@@ -5289,6 +5403,7 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 					PCIECFGREG_BASEADDR1,
 					dhd_pcie_config_read(bus->osh,
 						PCIECFGREG_BASEADDR1, sizeof(uint32))));
+				dhdpcie_dump_resource(bus);
 				/* Handle Host Suspend */
 				rc = dhdpcie_pci_suspend_resume(bus, state);
 				if (!rc) {
@@ -5366,6 +5481,7 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 			dhd_pcie_config_read(bus->osh, PCIECFGREG_BASEADDR0, sizeof(uint32)),
 			PCIECFGREG_BASEADDR1,
 			dhd_pcie_config_read(bus->osh, PCIECFGREG_BASEADDR1, sizeof(uint32))));
+		dhdpcie_dump_resource(bus);
 
 		DHD_BUS_LOCK(bus->bus_lock, flags_bus);
 		/* set bus_low_power_state to DHD_BUS_NO_LOW_POWER_STATE */
@@ -9205,6 +9321,9 @@ dhd_pcie_debug_info_dump(dhd_pub_t *dhd)
 	DHD_ERROR(("host pcie_irq disabled = %d\n", host_irq_disabled));
 	dhd_print_tasklet_status(dhd);
 	dhd_pcie_intr_count_dump(dhd);
+
+	DHD_ERROR(("\n ------- DUMPING PCIE EP Resouce Info ------- \r\n"));
+	dhdpcie_dump_resource(dhd->bus);
 
 	DHD_ERROR(("\n ------- DUMPING PCIE RC config space Registers ------- \r\n"));
 	DHD_ERROR(("Pcie RC Error Status Val=0x%x\n",

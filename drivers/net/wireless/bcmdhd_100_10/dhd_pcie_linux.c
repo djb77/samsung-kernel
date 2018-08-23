@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie_linux.c 740051 2018-01-10 13:56:33Z $
+ * $Id: dhd_pcie_linux.c 768097 2018-06-18 12:45:00Z $
  */
 
 /* include files */
@@ -1348,6 +1348,37 @@ int dhdpcie_scan_resource(dhdpcie_info_t *dhdpcie_info)
 
 }
 
+void dhdpcie_dump_resource(dhd_bus_t *bus)
+{
+	dhdpcie_info_t *pch;
+
+	if (bus == NULL) {
+		DHD_ERROR(("%s: bus is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	if (bus->dev == NULL) {
+		DHD_ERROR(("%s: bus->dev is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	pch = pci_get_drvdata(bus->dev);
+	if (pch == NULL) {
+		DHD_ERROR(("%s: pch is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	/* BAR0 */
+	DHD_ERROR(("%s: BAR0(VA): 0x%p, BAR0(PA): "PRINTF_RESOURCE", SIZE: %d\n",
+		__FUNCTION__, pch->regs, pci_resource_start(bus->dev, 0),
+		DONGLE_REG_MAP_SIZE));
+
+	/* BAR1 */
+	DHD_ERROR(("%s: BAR1(VA): 0x%p, BAR1(PA): "PRINTF_RESOURCE", SIZE: %d\n",
+		__FUNCTION__, pch->tcm, pci_resource_start(bus->dev, 2),
+		pch->tcm_size));
+}
+
 #ifdef SUPPORT_LINKDOWN_RECOVERY
 #if defined(CONFIG_ARCH_MSM) || (defined(EXYNOS_PCIE_LINKDOWN_RECOVERY) && \
 	(defined(CONFIG_SOC_EXYNOS8890) || defined(CONFIG_SOC_EXYNOS8895) || \
@@ -1490,6 +1521,7 @@ int dhdpcie_init(struct pci_dev *pdev)
 
 		dhdpcie_info->bus = bus;
 		bus->is_linkdown = 0;
+		bus->no_bus_init = FALSE;
 
 		/* Get RC Device Handle */
 		bus->rc_dev = pci_get_device(PCIE_RC_VENDOR_ID, PCIE_RC_DEVICE_ID, NULL);
@@ -1506,7 +1538,6 @@ int dhdpcie_init(struct pci_dev *pdev)
 		bus->pcie_event.options = MSM_PCIE_CONFIG_NO_RECOVERY;
 		msm_pcie_register_event(&bus->pcie_event);
 		bus->no_cfg_restore = FALSE;
-		bus->no_bus_init = FALSE;
 #endif /* CONFIG_ARCH_MSM */
 #ifdef EXYNOS_PCIE_LINKDOWN_RECOVERY
 #if defined(CONFIG_SOC_EXYNOS8890) || defined(CONFIG_SOC_EXYNOS8895) || \
@@ -1873,6 +1904,15 @@ dhdpcie_enable_device(dhd_bus_t *bus)
 			DHD_ERROR(("%s: VID(0x%x) is different from saved VID(0x%x) "
 				"Skip the bus init\n", __FUNCTION__, vid, saved_vid));
 			bus->no_bus_init = TRUE;
+			/* Check if the PCIe link is down */
+			if (vid == (uint32)-1) {
+				bus->is_linkdown = 1;
+#ifdef SUPPORT_LINKDOWN_RECOVERY
+#ifdef CONFIG_ARCH_MSM
+				bus->no_cfg_restore = TRUE;
+#endif /* CONFIG_ARCH_MSM */
+#endif /* SUPPORT_LINKDOWN_RECOVERY */
+			}
 			return BCME_ERROR;
 		}
 	}

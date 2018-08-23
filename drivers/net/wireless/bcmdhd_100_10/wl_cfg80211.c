@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.c 757023 2018-04-11 08:24:18Z $
+ * $Id: wl_cfg80211.c 769678 2018-06-27 07:11:29Z $
  */
 /* */
 #include <typedefs.h>
@@ -1159,7 +1159,8 @@ static int maxrxpktglom = 0;
 /* IOCtl version read from targeted driver */
 int ioctl_version;
 #ifdef DEBUGFS_CFG80211
-#define S_SUBLOGLEVEL 20
+#define SUBLOGLEVEL 20
+#define SUBLOGLEVELZ SUBLOGLEVEL + 1
 static const struct {
 	u32 log_level;
 	char *sublogname;
@@ -1172,6 +1173,12 @@ static const struct {
 	{WL_DBG_P2P_ACTION, "P2PACTION"}
 };
 #endif // endif
+
+#define BUFSZ 5
+#define BUFSZN	BUFSZ + 1
+
+#define _S(x) #x
+#define S(x) _S(x)
 
 #define SOFT_AP_IF_NAME         "swlan0"
 
@@ -2285,13 +2292,13 @@ wl_cfg80211_add_if(struct bcm_cfg80211 *cfg,
 	if ((wl_mode = wl_iftype_to_mode(wl_iftype)) < 0) {
 		return NULL;
 	}
-	/* Protect the interace op context */
-	mutex_lock(&cfg->if_sync);
 
 	if ((err = wl_check_vif_support(cfg, wl_iftype)) < 0) {
-		goto fail;
+		return NULL;
 	}
 
+	/* Protect the interace op context */
+	mutex_lock(&cfg->if_sync);
 	/* Do pre-create ops */
 	wl_cfg80211_iface_state_ops(primary_ndev->ieee80211_ptr, WL_IF_CREATE_REQ,
 		wl_iftype, wl_mode);
@@ -2319,6 +2326,12 @@ wl_cfg80211_add_if(struct bcm_cfg80211 *cfg,
 		case WL_IF_TYPE_STA:
 		case WL_IF_TYPE_AP:
 		case WL_IF_TYPE_NAN:
+			if (cfg->iface_cnt >= (IFACE_MAX_CNT - 1)) {
+				WL_ERR(("iface_cnt exceeds max cnt. created iface_cnt: %d\n",
+					cfg->iface_cnt));
+				err = -ENOTSUPP;
+				goto fail;
+			}
 			wdev = wl_cfg80211_create_iface(cfg->wdev->wiphy,
 				wl_iftype, mac_addr, name);
 			break;
@@ -2354,9 +2367,9 @@ wl_cfg80211_add_if(struct bcm_cfg80211 *cfg,
 	wl_cfg80211_iface_state_ops(wdev,
 		WL_IF_CREATE_DONE, wl_iftype, wl_mode);
 
-	WL_INFORM_MEM(("Vif created. wdev:%p netdev:%p"
+	WL_INFORM_MEM(("Vif created."
 		" dev->ifindex:%d cfg_iftype:%d, vif_count:%d\n",
-		wdev, wdev->netdev, (wdev->netdev ? wdev->netdev->ifindex : 0xff),
+		(wdev->netdev ? wdev->netdev->ifindex : 0xff),
 		wdev->iftype, cfg->vif_count));
 	mutex_unlock(&cfg->if_sync);
 	return wdev;
@@ -5536,10 +5549,12 @@ wl_cfg80211_set_mfp(struct bcm_cfg80211 *cfg,
 			(wl_cfg80211_get_rsn_capa(wpa2_ie, &rsn_cap) == 0) && rsn_cap) {
 		WL_DBG(("rsn_cap 0x%x%x\n", rsn_cap[0], rsn_cap[1]));
 		/* Check for MFP cap in the RSN capability field */
-		if (rsn_cap[0] & RSN_CAP_MFPR) {
-			mfp = WL_MFP_REQUIRED;
-		} else if (rsn_cap[0] & RSN_CAP_MFPC) {
-			mfp = WL_MFP_CAPABLE;
+		if (sme->mfp) {
+			if (rsn_cap[0] & RSN_CAP_MFPR) {
+				mfp = WL_MFP_REQUIRED;
+			} else if (rsn_cap[0] & RSN_CAP_MFPC) {
+				mfp = WL_MFP_CAPABLE;
+			}
 		}
 		/*
 		 * eptr --> end/last byte addr of wpa2_ie
@@ -13332,9 +13347,9 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 	} else if (mode == WL_MODE_IBSS) {
 		err = wl_notify_connect_status_ibss(cfg, ndev, e, data);
 	} else if (mode == WL_MODE_BSS) {
-		WL_INFORM_MEM(("[%s] Mode BSS. event:%d status:%d reason:%d wdev:%p\n",
+		WL_INFORM_MEM(("[%s] Mode BSS. event:%d status:%d reason:%d\n",
 			ndev->name, ntoh32(e->event_type),
-			ntoh32(e->status),  ntoh32(e->reason), ndev->ieee80211_ptr));
+			ntoh32(e->status),  ntoh32(e->reason)));
 
 		if (!wl_get_drv_status(cfg, CFG80211_CONNECT, ndev)) {
 			/* Join attempt via non-cfg80211 interface.
@@ -14462,6 +14477,13 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 #if defined(DHD_ENABLE_BIGDATA_LOGGING)
 	cfg->roam_count++;
 #endif /* DHD_ENABLE_BIGDATA_LOGGING */
+#ifdef WL_BAM
+	if (wl_adps_bad_ap_check(cfg, &e->addr)) {
+		if (wl_adps_enabled(cfg, ndev)) {
+			wl_adps_set_suspend(cfg, ndev, ADPS_SUSPEND);
+		}
+	}
+#endif	/* WL_BAM */
 
 	return err;
 
@@ -14659,10 +14681,17 @@ wl_bss_connect_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 			WLAN_STATUS_UNSPECIFIED_FAILURE,
 			GFP_KERNEL);
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0) */
-		if (completed)
+		if (completed) {
 			WL_INFORM_MEM(("[%s] Report connect result - "
 				"connection succeeded\n", ndev->name));
-		else
+#ifdef WL_BAM
+			if (wl_adps_bad_ap_check(cfg, &e->addr)) {
+				if (wl_adps_enabled(cfg, ndev)) {
+					wl_adps_set_suspend(cfg, ndev, ADPS_SUSPEND);
+				}
+			}
+#endif	/* WL_BAM */
+		} else
 			WL_ERR(("[%s] Report connect result - connection failed\n", ndev->name));
 	} else {
 			WL_INFORM_MEM(("[%s] Ignore event:%d. drv status"
@@ -15936,7 +15965,9 @@ static void wl_init_event_handler(struct bcm_cfg80211 *cfg)
 	cfg->evt_handler[WLC_E_ROAM_PREP] = wl_notify_roam_prep_status;
 #endif /* DHD_LOSSLESS_ROAMING || DBG_PKT_MON  */
 	cfg->evt_handler[WLC_E_ROAM_START] = wl_notify_roam_start_status;
-
+#ifdef WL_BAM
+	cfg->evt_handler[WLC_E_ADPS] = wl_adps_event_handler;
+#endif	/* WL_BAM */
 }
 
 #if defined(STATIC_WL_PRIV_STRUCT)
@@ -17728,7 +17759,9 @@ s32 wl_cfg80211_attach(struct net_device *ndev, void *context)
 	wl_attach_ap_stainfo(cfg);
 #endif /* BIGDATA_SOFTAP */
 	cfg->rssi_sum_report = FALSE;
-
+#ifdef WL_BAM
+	wl_bad_ap_mngr_init(cfg);
+#endif	/* WL_BAM */
 	return err;
 
 cfg80211_attach_out:
@@ -17781,6 +17814,9 @@ void wl_cfg80211_detach(struct bcm_cfg80211 *cfg)
 #ifdef BIGDATA_SOFTAP
 	wl_detach_ap_stainfo(cfg);
 #endif /* BIGDATA_SOFTAP */
+#ifdef WL_BAM
+	wl_bad_ap_mngr_deinit(cfg);
+#endif	/* WL_BAM */
 	wl_cfg80211_ibss_vsie_free(cfg);
 	wl_dealloc_netinfo_by_wdev(cfg, cfg->wdev);
 	wl_cfg80211_set_bcmcfg(NULL);
@@ -20006,7 +20042,7 @@ static ssize_t
 wl_debuglevel_write(struct file *file, const char __user *userbuf,
 	size_t count, loff_t *ppos)
 {
-	char tbuf[S_SUBLOGLEVEL * ARRAYSIZE(sublogname_map)], sublog[S_SUBLOGLEVEL];
+	char tbuf[SUBLOGLEVELZ * ARRAYSIZE(sublogname_map)], sublog[SUBLOGLEVELZ];
 	char *params, *token, *colon;
 	uint i, tokens, log_on = 0;
 	size_t minsize = min_t(size_t, (sizeof(tbuf) - 1), count);
@@ -20017,7 +20053,7 @@ wl_debuglevel_write(struct file *file, const char __user *userbuf,
 		return -EFAULT;
 	}
 
-	tbuf[minsize + 1] = '\0';
+	tbuf[minsize] = '\0';
 	params = &tbuf[0];
 	colon = strchr(params, '\n');
 	if (colon != NULL)
@@ -20032,7 +20068,7 @@ wl_debuglevel_write(struct file *file, const char __user *userbuf,
 		if (colon != NULL) {
 			*colon = ' ';
 		}
-		tokens = sscanf(token, "%s %u", sublog, &log_on);
+		tokens = sscanf(token, "%"S(SUBLOGLEVEL)"s %u", sublog, &log_on);
 		if (colon != NULL)
 			*colon = ':';
 
@@ -20062,7 +20098,7 @@ wl_debuglevel_read(struct file *file, char __user *user_buf,
 	size_t count, loff_t *ppos)
 {
 	char *param;
-	char tbuf[S_SUBLOGLEVEL * ARRAYSIZE(sublogname_map)];
+	char tbuf[SUBLOGLEVELZ * ARRAYSIZE(sublogname_map)];
 	uint i;
 	memset(tbuf, 0, sizeof(tbuf));
 	param = &tbuf[0];
@@ -20732,12 +20768,6 @@ exit:
 	}
 	return err;
 }
-
-#define BUFSZ 5
-#define BUFSZN	BUFSZ + 1
-
-#define _S(x) #x
-#define S(x) _S(x)
 
 int wl_cfg80211_wbtext_weight_config(struct net_device *ndev, char *data,
 		char *command, int total_len)

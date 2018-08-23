@@ -126,13 +126,36 @@ typedef BWL_PRE_PACKED_STRUCT struct fils_rnr_element {
 #define TBTT_INFO_HDR_LENGTH(hdr)\
 	(((hdr) & TBTT_INFO_HDR_LENGTH_MASK) >> 8)
 
+/* FILS Nonce element */
+#define FILS_NONCE_LENGTH 16u
+
+typedef BWL_PRE_PACKED_STRUCT struct fils_nonce_element {
+	uint8		elementid;
+	uint8		length;
+	uint8		element_id_ext;
+	uint8		fils_nonce[FILS_NONCE_LENGTH];
+} BWL_POST_PACKED_STRUCT fils_nonce_element_t;
+
 /* 8.4.2.175 FILS Session element */
+#define FILS_SESSION_LENGTH 8u
+
 typedef BWL_PRE_PACKED_STRUCT struct fils_session_element {
 	uint8		elementid;
 	uint8		length;
 	uint8		element_id_ext;
-	uint32		fils_session[2];
+	uint8		fils_session[FILS_SESSION_LENGTH];
 } BWL_POST_PACKED_STRUCT fils_session_element_t;
+
+/* 9.4.2.179 FILS key confirmation element */
+#define FILS_KEY_CONFIRMATION_HEADER_LEN 3u
+
+typedef BWL_PRE_PACKED_STRUCT struct fils_key_conf_element {
+	uint8		elementid;
+	uint8		length;
+	uint8		element_id_ext;
+	/* variable len info */
+	uint8		key_auth[];
+} BWL_POST_PACKED_STRUCT fils_key_conf_element_t;
 
 #define FILS_SESSION_ELEM_LEN	(sizeof(fils_session_element_t))
 
@@ -242,6 +265,15 @@ typedef BWL_PRE_PACKED_STRUCT struct fils_hlp_container_element {
 	/* variable len hlp packet */
 	uint8		hlp[];
 } BWL_POST_PACKED_STRUCT fils_hlp_container_element_t;
+
+/* 11ai 9.4.2.184 FILS Wrapped Data element */
+typedef BWL_PRE_PACKED_STRUCT struct fils_wrapped_data_element {
+	uint8		elementid;
+	uint8		length;
+	uint8		element_id_ext;
+	/* variable len wrapped data packet */
+	uint8		wrapped_data[];
+} BWL_POST_PACKED_STRUCT fils_wrapped_data_element_t;
 
 #define FILS_HLP_CONTAINER_ELEM_LEN	(sizeof(fils_hlp_container_element_t))
 

@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_bus.h 739566 2018-01-09 01:24:24Z $
+ * $Id: dhd_bus.h 767115 2018-06-12 14:12:28Z $
  */
 
 #ifndef _dhd_bus_h_
@@ -294,5 +294,9 @@ int dhd_bus_perform_flr(struct dhd_bus *bus, bool force_fail);
 extern void dhdpcie_advertise_bus_cleanup(dhd_pub_t  *dhdp);
 extern void dhd_msgbuf_iovar_timeout_dump(dhd_pub_t *dhd);
 #endif /* BCMPCIE */
+
+#ifdef DHD_USE_BP_RESET
+extern int dhd_bus_perform_bp_reset(struct dhd_bus *bus);
+#endif /* DHD_USE_BP_RESET */
 
 #endif /* _dhd_bus_h_ */

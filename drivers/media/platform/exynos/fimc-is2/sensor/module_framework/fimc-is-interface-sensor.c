@@ -2885,6 +2885,33 @@ int set_low_noise_mode(struct fimc_is_sensor_interface *itf, u32 mode)
 	return 0;
 }
 
+int get_sensor_max_dynamic_fps(struct fimc_is_sensor_interface *itf,
+			u32 *max_dynamic_fps)
+{
+	int ret = 0;
+	struct fimc_is_device_sensor *sensor = NULL;
+	enum fimc_is_ex_mode ex_mode;
+
+	FIMC_BUG(!itf);
+	FIMC_BUG(!max_dynamic_fps);
+
+	sensor = get_device_sensor(itf);
+	if (!sensor) {
+		err("%s, failed to get sensor device", __func__);
+		return -ENODEV;
+	}
+
+	ex_mode = fimc_is_sensor_g_ex_mode(sensor);
+	if (ex_mode == EX_DUALFPS_960)
+		*max_dynamic_fps = 960;
+	else if (ex_mode == EX_DUALFPS_480)
+		*max_dynamic_fps = 480;
+	else
+		*max_dynamic_fps = 0;
+
+	return ret;
+}
+
 int get_sensor_state(struct fimc_is_sensor_interface *itf)
 {
 	struct fimc_is_device_sensor *sensor;
@@ -3217,6 +3244,7 @@ int init_sensor_interface(struct fimc_is_sensor_interface *itf)
 	/* Long Term Exposure mode(LTE mode) interface */
 	itf->cis_ext2_itf_ops.set_long_term_expo_mode = set_long_term_expo_mode;
 	itf->cis_ext2_itf_ops.set_low_noise_mode = set_low_noise_mode;
+	itf->cis_ext2_itf_ops.get_sensor_max_dynamic_fps = get_sensor_max_dynamic_fps;
 	itf->cis_ext_itf_ops.set_adjust_sync = set_adjust_sync;
 	itf->cis_ext_itf_ops.request_frame_length_line = request_frame_length_line;
 	itf->cis_ext_itf_ops.request_sensitivity = request_sensitivity;

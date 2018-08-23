@@ -1353,10 +1353,16 @@ struct camera2_illuminaion_sensor_info {
 	uint16_t	ir_exptime;
 };
 
+enum sensor_state {
+	SENSOR_STATE_STATIONARY = 0,
+	SENSOR_STATE_MOVING,
+};
+
 struct camera2_gyro_sensor_info {
 	float x;
 	float y;
 	float z;
+	enum sensor_state state;
 };
 
 struct camera2_accelerometer_sensor_info {

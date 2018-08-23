@@ -21,9 +21,9 @@
 #include "repeater_dbg.h"
 
 #define REPEATER_CUR_CONTEXTS_NUM		0
-#define USES_WORKQUEUE
 
 static struct repeater_device *g_repeater_device;
+static spinlock_t repeater_spinlock;
 
 #define ENCODING_PERIOD_TIME_US			1000000
 #define MAX_WAIT_TIME_DUMP				10000000
@@ -42,18 +42,32 @@ int hwfc_request_buffer(struct shared_buffer_info *info, int owner)
 	int i = 0;
 	int *buf_fd;
 	int idx = REPEATER_CUR_CONTEXTS_NUM;
+	unsigned long flags;
 
 	print_repeater_debug(RPT_EXT_INFO, "%s++\n", __func__);
 
-	if (!g_repeater_device || !info)
+	spin_lock_irqsave(&repeater_spinlock, flags);
+
+	if (!g_repeater_device || !info) {
+		print_repeater_debug(RPT_ERROR, "%s, g_repeater %p, info %p\n",
+			__func__, g_repeater_device, info);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
 		return -EFAULT;
+	}
 
 	ctx = g_repeater_device->ctx[idx];
-	if (!ctx)
+	if (!ctx) {
+		print_repeater_debug(RPT_ERROR, "%s, ctx %p\n", __func__, ctx);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
 		return -EFAULT;
+	}
 
-	if (ctx->ctx_status == REPEATER_CTX_INIT)
+	if (ctx->ctx_status == REPEATER_CTX_INIT) {
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status %d\n",
+			__func__, ctx->ctx_status);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
 		return -EFAULT;
+	}
 
 	info->pixel_format = ctx->info.pixel_format;
 	info->width = ctx->info.width;
@@ -73,6 +87,8 @@ int hwfc_request_buffer(struct shared_buffer_info *info, int owner)
 		print_repeater_debug(RPT_EXT_INFO,
 			"owner %d, dma_buf[%d] %p\n", owner, i, info->bufs[i]);
 
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
+
 	print_repeater_debug(RPT_EXT_INFO, "%s--\n", __func__);
 
 	return ret;
@@ -88,24 +104,35 @@ int hwfc_get_valid_buffer(int *buf_idx)
 
 	print_repeater_debug(RPT_EXT_INFO, "%s++\n", __func__);
 
-	if (!g_repeater_device || !buf_idx)
+	spin_lock_irqsave(&repeater_spinlock, flags);
+
+	if (!g_repeater_device || !buf_idx) {
+		print_repeater_debug(RPT_ERROR, "%s, g_repeater %p, buf_idx %p\n",
+			__func__, g_repeater_device, buf_idx);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
 		return -EFAULT;
+	}
 
 	ctx = g_repeater_device->ctx[idx];
-	if (!ctx)
+	if (!ctx) {
+		print_repeater_debug(RPT_ERROR, "%s, ctx %p\n", __func__, ctx);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
 		return -EFAULT;
+	}
 
-	if (ctx->ctx_status == REPEATER_CTX_INIT)
+	if (ctx->ctx_status == REPEATER_CTX_INIT) {
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status %d\n",
+			__func__, ctx->ctx_status);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
 		return -EFAULT;
-
-	spin_lock_irqsave(&ctx->ctx_spinlock, flags);
+	}
 
 	shr_bufs = &ctx->shared_bufs;
 	ret = get_capturing_buf_idx(shr_bufs, buf_idx);
 
 	print_repeater_debug(RPT_EXT_INFO, "ret %d, buf_idx %d\n", ret, *buf_idx);
 
-	spin_unlock_irqrestore(&ctx->ctx_spinlock, flags);
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
 
 	print_repeater_debug(RPT_EXT_INFO, "%s--\n", __func__);
 
@@ -127,24 +154,32 @@ int hwfc_set_valid_buffer(int buf_idx, int capture_idx)
 	print_repeater_debug(RPT_EXT_INFO, "buf_idx %d, capture_idx %d\n",
 		buf_idx, capture_idx);
 
-	if (!g_repeater_device)
+	spin_lock_irqsave(&repeater_spinlock, flags);
+
+	if (!g_repeater_device) {
+		print_repeater_debug(RPT_ERROR, "%s, g_repeater %p\n",
+			__func__, g_repeater_device);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
 		return -EFAULT;
+	}
 
 	ctx = g_repeater_device->ctx[idx];
-	if (!ctx)
+	if (!ctx) {
+		print_repeater_debug(RPT_ERROR, "%s, ctx %p\n", __func__, ctx);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
 		return -EFAULT;
+	}
 
-	if (ctx->ctx_status == REPEATER_CTX_INIT)
+	if (ctx->ctx_status == REPEATER_CTX_INIT) {
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status %d\n",
+			__func__, ctx->ctx_status);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
 		return -EFAULT;
-
-	if (capture_idx == -1)
-		return -EFAULT;
-
-	spin_lock_irqsave(&ctx->ctx_spinlock, flags);
+	}
 
 	shr_bufs = &ctx->shared_bufs;
 
-	ret = set_captured_buf_idx(shr_bufs, buf_idx);
+	ret = set_captured_buf_idx(shr_bufs, buf_idx, capture_idx);
 
 	if (ctx->info.fps == 60) {
 		cur_ktime = ktime_get();
@@ -154,13 +189,14 @@ int hwfc_set_valid_buffer(int buf_idx, int capture_idx)
 			set_encoding_start(shr_bufs, buf_idx);
 			ret = s5p_mfc_hwfc_encode(buf_idx, capture_idx, &ctx->enc_param);
 			if (ret != HWFC_ERR_NONE) {
-				print_repeater_debug(RPT_ERROR, "s5p_mfc_hwfc_encode failed %d\n", ret);
+				print_repeater_debug(RPT_ERROR,
+					"s5p_mfc_hwfc_encode failed %d\n", ret);
 				ret = set_encoding_done(shr_bufs);
 			}
 		}
 	}
 
-	spin_unlock_irqrestore(&ctx->ctx_spinlock, flags);
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
 
 	print_repeater_debug(RPT_EXT_INFO, "%s--\n", __func__);
 
@@ -177,19 +213,27 @@ int hwfc_encoding_done(int encoding_ret)
 
 	print_repeater_debug(RPT_EXT_INFO, "%s++\n", __func__);
 
-	if (!g_repeater_device)
-		return -ENODEV;
+	spin_lock_irqsave(&repeater_spinlock, flags);
+
+	if (!g_repeater_device) {
+		print_repeater_debug(RPT_ERROR, "%s, g_repeater_device %p\n",
+			__func__, g_repeater_device);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
+		return -EFAULT;
+	}
 
 	ctx = g_repeater_device->ctx[idx];
-	if (!ctx)
-		return -ENODEV;
-
-	spin_lock_irqsave(&ctx->ctx_spinlock, flags);
+	if (!ctx) {
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status %d\n",
+			__func__, ctx->ctx_status);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
+		return -EFAULT;
+	}
 
 	shr_bufs = &ctx->shared_bufs;
 	ret = set_encoding_done(shr_bufs);
 
-	spin_unlock_irqrestore(&ctx->ctx_spinlock, flags);
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
 
 	print_repeater_debug(RPT_EXT_INFO, "%s--\n", __func__);
 
@@ -207,21 +251,63 @@ void encoding_work_handler(struct work_struct *work)
 	uint64_t cur_timestamp;
 	int32_t required_delay;
 	unsigned long flags;
+	struct delayed_work *enc_work;
 
 	print_repeater_debug(RPT_INT_INFO, "%s++\n", __func__);
 
-	ctx = container_of(work, struct repeater_context, encoding_work);
-	if (!ctx || (ctx->ctx_status != REPEATER_CTX_START)) {
-		print_repeater_debug(RPT_ERROR, "no repeater ctx\n");
+	enc_work = container_of(work, struct delayed_work, work);
+	if (!enc_work) {
+		print_repeater_debug(RPT_ERROR, "no enc_work\n");
 		return;
 	}
 
-	spin_lock_irqsave(&ctx->ctx_spinlock, flags);
+	spin_lock_irqsave(&repeater_spinlock, flags);
+
+	ctx = container_of(enc_work, struct repeater_context, encoding_work);
+
+	if (!ctx) {
+		print_repeater_debug(RPT_ERROR, "%s, ctx %p\n", __func__, ctx);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
+		return;
+	}
+
+	if (ctx->ctx_status != REPEATER_CTX_START) {
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status %d\n",
+			__func__, ctx->ctx_status);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
+		return;
+	}
+
+	cur_ktime = ktime_get();
+	cur_timestamp = ktime_to_us(cur_ktime);
+
+	target_timestamp = ctx->encoding_start_timestamp +
+		ctx->video_frame_count * ctx->encoding_period_us + ctx->paused_time;
+	required_delay = target_timestamp - cur_timestamp;
+
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
+
+	print_repeater_debug(RPT_EXT_INFO, "usleep_range %d\n", required_delay);
+	if (required_delay > 1000 && required_delay < (1000000 / ctx->info.fps))
+		usleep_range(required_delay, required_delay + 1);
+
+	spin_lock_irqsave(&repeater_spinlock, flags);
+
+	if (!ctx) {
+		print_repeater_debug(RPT_ERROR, "%s, ctx %p\n", __func__, ctx);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
+		return;
+	}
+
+	if (ctx->ctx_status != REPEATER_CTX_START) {
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status %d\n",
+			__func__, ctx->ctx_status);
+		spin_unlock_irqrestore(&repeater_spinlock, flags);
+		return;
+	}
 
 	shr_bufs = &ctx->shared_bufs;
 	ret = get_latest_captured_buf_idx(shr_bufs, &buf_idx);
-
-	spin_unlock_irqrestore(&ctx->ctx_spinlock, flags);
 
 	cur_ktime = ktime_get();
 	cur_timestamp = ktime_to_us(cur_ktime);
@@ -236,11 +322,13 @@ void encoding_work_handler(struct work_struct *work)
 		print_repeater_debug(RPT_EXT_INFO, "buf_idx %d\n", buf_idx);
 		ctx->buf_idx_dump = buf_idx;
 		wake_up_interruptible(&ctx->wait_queue_dump);
-		spin_lock_irqsave(&ctx->ctx_spinlock, flags);
+		set_encoding_start(shr_bufs, buf_idx);
 		ret = s5p_mfc_hwfc_encode(buf_idx, buf_idx, &ctx->enc_param);
-		if (ret == 0)
-			set_encoding_start(shr_bufs, buf_idx);
-		spin_unlock_irqrestore(&ctx->ctx_spinlock, flags);
+		if (ret != HWFC_ERR_NONE) {
+			print_repeater_debug(RPT_ERROR,
+				"s5p_mfc_hwfc_encode failed %d\n", ret);
+			ret = set_encoding_done(shr_bufs);
+		}
 	}
 
 	do {
@@ -253,112 +341,58 @@ void encoding_work_handler(struct work_struct *work)
 	print_repeater_debug(RPT_EXT_INFO, "timestamp cur %lld, target %lld\n",
 		cur_timestamp, target_timestamp);
 
-	usleep_range(required_delay, required_delay + 1);
+	if (ctx->ctx_status == REPEATER_CTX_START) {
+		required_delay = required_delay / 2;
+		print_repeater_debug(RPT_EXT_INFO, "schedule_delayed_work() %d\n",
+			required_delay);
+		schedule_delayed_work(&ctx->encoding_work,
+			usecs_to_jiffies(required_delay));
+	} else {
+		print_repeater_debug(RPT_ERROR, "ctx_status is invalid %d",
+			ctx->ctx_status);
+	}
 
-	if (ctx->ctx_status == REPEATER_CTX_START)
-		schedule_work(&ctx->encoding_work);
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
 
 	print_repeater_debug(RPT_INT_INFO, "%s--\n", __func__);
-}
-
-void encoding_timer_callback(unsigned long arg)
-{
-	struct repeater_context *ctx = (struct repeater_context *)arg;
-	struct shared_buffer *shr_bufs;
-	int buf_idx = -1;
-	int ret;
-	int jiffies_delay;
-	uint64_t my_jiffies;
-	uint64_t cur_time_us;
-	uint64_t elapsed_time_us;
-
-	/* Fix Me: it is for 30 fps */
-	jiffies_delay = 8;
-
-	print_repeater_debug(RPT_EXT_INFO, "%s++\n", __func__);
-
-	if (!ctx) {
-		print_repeater_debug(RPT_ERROR, "no repeater device\n");
-		return;
-	}
-
-	print_repeater_debug(RPT_EXT_INFO, "spin_trylock()\n");
-	if (spin_trylock(&ctx->ctx_spinlock) == 0) {
-		print_repeater_debug(RPT_EXT_INFO, "spin_trylock(), failed");
-		ctx->encoding_timer.expires += jiffies_delay;
-		add_timer(&ctx->encoding_timer);
-
-		print_repeater_debug(RPT_EXT_INFO, "%s--\n", __func__);
-		return;
-	}
-
-	shr_bufs = &ctx->shared_bufs;
-
-	ret = get_latest_captured_buf_idx(shr_bufs, &buf_idx);
-
-	my_jiffies = jiffies;
-	cur_time_us = jiffies_to_usecs(my_jiffies);
-	if (ctx->last_encoding_time_us == 0)
-		ctx->last_encoding_time_us = cur_time_us;
-
-	if (ctx->last_encoding_time_us <= cur_time_us) {
-		elapsed_time_us = cur_time_us - ctx->last_encoding_time_us;
-	} else {
-		/* time was toggled*/
-		elapsed_time_us = cur_time_us;
-	}
-	ctx->time_stamp_us += elapsed_time_us;
-	ctx->last_encoding_time_us = cur_time_us;
-
-	ctx->enc_param.time_stamp = ctx->time_stamp_us;
-
-	if (ret == 0 && buf_idx >= 0) {
-		print_repeater_debug(RPT_EXT_INFO, "buf_idx %d\n", buf_idx);
-		ctx->buf_idx_dump = buf_idx;
-		wake_up_interruptible(&ctx->wait_queue_dump);
-		if (s5p_mfc_hwfc_encode(buf_idx, buf_idx, &ctx->enc_param) == 0) {
-			set_encoding_start(shr_bufs, buf_idx);
-		}
-	}
-
-	spin_unlock(&ctx->ctx_spinlock);
-	print_repeater_debug(RPT_EXT_INFO, "spin_unlock()\n");
-
-	ctx->encoding_timer.expires += jiffies_delay;
-	add_timer(&ctx->encoding_timer);
-
-	print_repeater_debug(RPT_EXT_INFO, "%s--\n", __func__);
 }
 
 int repeater_ioctl_map_buf(struct repeater_context *ctx)
 {
 	int ret = 0;
+	unsigned long flags;
 	int i = 0;
 
 	print_repeater_debug(RPT_INT_INFO, "%s++\n", __func__);
 
-	if (ctx == NULL || ctx->repeater_dev == NULL)
-		return -ENOMEM;
-
-	if (ctx->ctx_status != REPEATER_CTX_INIT)
-		return -ENOMEM;
+	spin_lock_irqsave(&repeater_spinlock, flags);
 
 	if (ctx->info.buffer_count > MAX_SHARED_BUF_NUM) {
-		ctx->info.buffer_count = 0;
-		return -ENOMEM;
+		print_repeater_debug(RPT_ERROR, "%s, buffer_count is invalid %d",
+			__func__, ctx->info.buffer_count);
+		ctx->info.buffer_count = MAX_SHARED_BUF_NUM;
 	}
 
-	if (ctx->info.fps != 30 && ctx->info.fps != 60)
-		return -ENOMEM;
-
-	for (i = 0; i < ctx->info.buffer_count; i++) {
-		ctx->dmabufs[i] = dma_buf_get(ctx->info.buf_fd[i]);
-		print_repeater_debug(RPT_INT_INFO,
-			"dmabufs[%i] %p\n", i, ctx->dmabufs[i]);
+	if (ctx->info.fps != 30 && ctx->info.fps != 60) {
+		print_repeater_debug(RPT_ERROR, "%s, fps is invalid %d",
+			__func__, ctx->info.fps);
+		ctx->info.fps = 30;
 	}
 
-	ctx->ctx_status = REPEATER_CTX_MAP;
-	ctx->encoding_period_us = ENCODING_PERIOD_TIME_US / ctx->info.fps;
+	if (ctx->ctx_status == REPEATER_CTX_INIT) {
+		for (i = 0; i < ctx->info.buffer_count; i++) {
+			ctx->dmabufs[i] = dma_buf_get(ctx->info.buf_fd[i]);
+			print_repeater_debug(RPT_INT_INFO,
+				"dmabufs[%i] %p\n", i, ctx->dmabufs[i]);
+		}
+		ctx->ctx_status = REPEATER_CTX_MAP;
+		ctx->encoding_period_us = ENCODING_PERIOD_TIME_US / ctx->info.fps;
+	} else {
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status is invalid %d",
+			__func__, ctx->ctx_status);
+	}
+
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
 
 	print_repeater_debug(RPT_INT_INFO, "%s--\n", __func__);
 
@@ -368,23 +402,33 @@ int repeater_ioctl_map_buf(struct repeater_context *ctx)
 int repeater_ioctl_unmap_buf(struct repeater_context *ctx)
 {
 	int ret = 0;
+	unsigned long flags;
 	int i;
 
 	print_repeater_debug(RPT_INT_INFO, "%s++\n", __func__);
 
-	if (ctx == NULL || ctx->repeater_dev == NULL)
-		return -ENOMEM;
+	spin_lock_irqsave(&repeater_spinlock, flags);
 
-	if (ctx->ctx_status != REPEATER_CTX_MAP)
-		return -ENOMEM;
-
-	ctx->ctx_status = REPEATER_CTX_INIT;
-	for (i = 0; i < ctx->info.buffer_count; i++) {
-		if (!IS_ERR_OR_NULL(ctx->dmabufs[i])) {
-			dma_buf_put(ctx->dmabufs[i]);
-			ctx->dmabufs[i] = 0;
-		}
+	if (ctx->info.buffer_count > MAX_SHARED_BUF_NUM) {
+		print_repeater_debug(RPT_ERROR, "%s, buffer_count is invalid %d",
+			__func__, ctx->info.buffer_count);
+		ctx->info.buffer_count = MAX_SHARED_BUF_NUM;
 	}
+
+	if (ctx->ctx_status == REPEATER_CTX_MAP) {
+		for (i = 0; i < ctx->info.buffer_count; i++) {
+			if (!IS_ERR_OR_NULL(ctx->dmabufs[i])) {
+				dma_buf_put(ctx->dmabufs[i]);
+				ctx->dmabufs[i] = 0;
+			}
+		}
+		ctx->ctx_status = REPEATER_CTX_INIT;
+	} else {
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status is invalid %d",
+			__func__, ctx->ctx_status);
+	}
+
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
 
 	print_repeater_debug(RPT_INT_INFO, "%s--\n", __func__);
 
@@ -394,25 +438,25 @@ int repeater_ioctl_unmap_buf(struct repeater_context *ctx)
 int repeater_ioctl_start(struct repeater_context *ctx)
 {
 	int ret = 0;
+	unsigned long flags;
 
 	print_repeater_debug(RPT_INT_INFO, "%s++\n", __func__);
 
-	if (ctx == NULL || ctx->repeater_dev == NULL)
-		return -ENOMEM;
+	spin_lock_irqsave(&repeater_spinlock, flags);
 
-	if (ctx->ctx_status != REPEATER_CTX_MAP)
-		return -ENOMEM;
-
-	ctx->ctx_status = REPEATER_CTX_START;
-
-	if (ctx->info.fps != 60) {
-#ifdef USES_WORKQUEUE
-		schedule_work(&ctx->encoding_work);
-#else
-		ctx->encoding_timer.expires = jiffies +
-			usecs_to_jiffies(ctx->encoding_period_us);
-#endif
+	if (ctx->ctx_status == REPEATER_CTX_MAP) {
+		ctx->ctx_status = REPEATER_CTX_START;
+		if (ctx->info.fps == 30) {
+			schedule_delayed_work(&ctx->encoding_work,
+				usecs_to_jiffies(1));
+		}
+	} else {
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status is invalid %d\n",
+			__func__, ctx->ctx_status);
 	}
+
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
+
 	print_repeater_debug(RPT_INT_INFO, "%s--\n", __func__);
 
 	return ret;
@@ -421,20 +465,21 @@ int repeater_ioctl_start(struct repeater_context *ctx)
 int repeater_ioctl_stop(struct repeater_context *ctx)
 {
 	int ret = 0;
+	unsigned long flags;
 
 	print_repeater_debug(RPT_INT_INFO, "%s++\n", __func__);
 
-	if (ctx == NULL || ctx->repeater_dev == NULL)
-		return -ENOMEM;
+	spin_lock_irqsave(&repeater_spinlock, flags);
 
-	if (ctx->ctx_status != REPEATER_CTX_START &&
-			ctx->ctx_status != REPEATER_CTX_PAUSE)
-		return -ENOMEM;
+	if (ctx->ctx_status == REPEATER_CTX_START ||
+			ctx->ctx_status == REPEATER_CTX_PAUSE)
+		ctx->ctx_status = REPEATER_CTX_MAP;
+	else
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status is invalid %d\n",
+			__func__, ctx->ctx_status);
 
-	ctx->ctx_status = REPEATER_CTX_MAP;
-#ifndef USES_WORKQUEUE
-	del_timer_sync(&ctx->encoding_timer);
-#endif
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
+
 	print_repeater_debug(RPT_INT_INFO, "%s--\n", __func__);
 
 	return ret;
@@ -444,15 +489,24 @@ int repeater_ioctl_pause(struct repeater_context *ctx)
 {
 	int ret = 0;
 	ktime_t cur_ktime;
+	unsigned long flags;
 
 	print_repeater_debug(RPT_INT_INFO, "%s++\n", __func__);
 
-	if (ctx == NULL || ctx->repeater_dev == NULL)
-		return -ENOMEM;
+	cancel_delayed_work_sync(&ctx->encoding_work);
 
-	cur_ktime = ktime_get();
-	ctx->pause_time = ktime_to_us(cur_ktime);
-	ctx->ctx_status = REPEATER_CTX_PAUSE;
+	spin_lock_irqsave(&repeater_spinlock, flags);
+
+	if (ctx->ctx_status == REPEATER_CTX_START) {
+		cur_ktime = ktime_get();
+		ctx->pause_time = ktime_to_us(cur_ktime);
+		ctx->ctx_status = REPEATER_CTX_PAUSE;
+	} else {
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status is invalid %d\n",
+			__func__, ctx->ctx_status);
+	}
+
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
 
 	print_repeater_debug(RPT_INT_INFO, "%s--\n", __func__);
 
@@ -463,21 +517,25 @@ int repeater_ioctl_resume(struct repeater_context *ctx)
 {
 	int ret = 0;
 	ktime_t cur_ktime;
+	unsigned long flags;
 
 	print_repeater_debug(RPT_INT_INFO, "%s++\n", __func__);
 
-	if (ctx == NULL || ctx->repeater_dev == NULL)
-		return -ENOMEM;
+	spin_lock_irqsave(&repeater_spinlock, flags);
 
-	if (ctx->ctx_status != REPEATER_CTX_PAUSE)
-		print_repeater_debug(RPT_ERROR, "repeater is not pause status\n");
+	if (ctx->ctx_status == REPEATER_CTX_PAUSE) {
+		cur_ktime = ktime_get();
+		ctx->resume_time = ktime_to_us(cur_ktime);
+		ctx->paused_time += ctx->resume_time - ctx->pause_time;
+		ctx->ctx_status = REPEATER_CTX_START;
+		schedule_delayed_work(&ctx->encoding_work,
+			usecs_to_jiffies(1));
+	} else {
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status is invalid %d\n",
+			__func__, ctx->ctx_status);
+	}
 
-	cur_ktime = ktime_get();
-	ctx->resume_time = ktime_to_us(cur_ktime);
-	ctx->paused_time += ctx->resume_time - ctx->pause_time;
-
-	ctx->ctx_status = REPEATER_CTX_START;
-	schedule_work(&ctx->encoding_work);
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
 
 	print_repeater_debug(RPT_INT_INFO, "%s--\n", __func__);
 
@@ -488,21 +546,24 @@ int repeater_ioctl_dump(struct repeater_context *ctx)
 {
 	int ret = 0;
 	unsigned long jiffies_from_usec = usecs_to_jiffies(MAX_WAIT_TIME_DUMP);
+	unsigned long flags;
 
 	print_repeater_debug(RPT_INT_INFO, "%s++\n", __func__);
 
-	if (ctx == NULL || ctx->repeater_dev == NULL)
-		return -ENOMEM;
+	spin_lock_irqsave(&repeater_spinlock, flags);
 
-	if (ctx->ctx_status != REPEATER_CTX_START)
-		return -ENOMEM;
-
-	ret = wait_event_interruptible_timeout(ctx->wait_queue_dump,
-		ctx->buf_idx_dump >= 0, jiffies_from_usec);
+	if (ctx->ctx_status == REPEATER_CTX_START)
+		ret = wait_event_interruptible_timeout(ctx->wait_queue_dump,
+			ctx->buf_idx_dump >= 0, jiffies_from_usec);
+	else
+		print_repeater_debug(RPT_ERROR, "%s, ctx_status is invalid %d\n",
+			__func__, ctx->ctx_status);
 
 	print_repeater_debug(RPT_INT_INFO,
 		"wait_event_interruptible_timeout(%lu) ret %d, ctx->buf_idx_dump %d\n",
 		jiffies_from_usec, ret, ctx->buf_idx_dump);
+
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
 
 	print_repeater_debug(RPT_INT_INFO, "%s--\n", __func__);
 
@@ -516,26 +577,25 @@ static int repeater_open(struct inode *inode, struct file *filp)
 		struct repeater_device, misc_dev);
 	struct repeater_context *ctx;
 	struct shared_buffer *shr_bufs;
+	unsigned long flags;
 
 	print_repeater_debug(RPT_INT_INFO, "%s++\n", __func__);
 
 	if (repeater_dev->ctx_num >= REPEATER_MAX_CONTEXTS_NUM) {
-		print_repeater_debug(RPT_ERROR, "too many context\n");
-		ret = -ENOMEM;
-		goto err_init;
+		print_repeater_debug(RPT_ERROR, "%s, too many context\n", __func__);
+		ret = -EBUSY;
+		return ret;
 	}
 
 	ctx = kzalloc(sizeof(struct repeater_context), GFP_KERNEL);
 	if (!ctx) {
 		ret = -ENOMEM;
-		goto err_init;
+		return ret;
 	}
 
 	ctx->repeater_dev = repeater_dev;
 	repeater_dev->ctx[repeater_dev->ctx_num] = ctx;
 	repeater_dev->ctx_num++;
-
-	spin_lock_init(&ctx->ctx_spinlock);
 
 	filp->private_data = ctx;
 
@@ -544,22 +604,18 @@ static int repeater_open(struct inode *inode, struct file *filp)
 	shr_bufs = &ctx->shared_bufs;
 	init_shared_buffer(shr_bufs, MAX_SHARED_BUF_NUM);
 	ctx->enc_param.time_stamp = 0;
-#ifdef USES_WORKQUEUE
 	ctx->encoding_start_timestamp = 0;
 	ctx->video_frame_count = 0;
 	ctx->paused_time = 0;
 	ctx->pause_time = 0;
 	ctx->resume_time = 0;
-	INIT_WORK(&ctx->encoding_work, encoding_work_handler);
-#else
-	init_timer(&ctx->encoding_timer);
-	ctx->encoding_timer.data = (unsigned long)ctx;
-	ctx->encoding_timer.function = encoding_timer_callback;
-#endif
+	INIT_DELAYED_WORK(&ctx->encoding_work, encoding_work_handler);
 	ctx->time_stamp_us = 33333;
 	ctx->last_encoding_time_us = 0;
 
+	spin_lock_irqsave(&repeater_spinlock, flags);
 	g_repeater_device = repeater_dev;
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
 
 	init_waitqueue_head(&ctx->wait_queue_dump);
 	ctx->buf_idx_dump = -1;
@@ -569,11 +625,6 @@ static int repeater_open(struct inode *inode, struct file *filp)
 	print_repeater_debug(RPT_INT_INFO, "%s--\n", __func__);
 
 	return ret;
-
-err_init:
-	print_repeater_debug(RPT_ERROR, "%s--, err_init\n", __func__);
-
-	return ret;
 }
 
 static int repeater_release(struct inode *inode, struct file *filp)
@@ -581,8 +632,11 @@ static int repeater_release(struct inode *inode, struct file *filp)
 	int ret = 0;
 	struct repeater_context *ctx = filp->private_data;
 	struct repeater_device *repeater_dev = ctx->repeater_dev;
+	unsigned long flags;
 
 	print_repeater_debug(RPT_INT_INFO, "%s++\n", __func__);
+
+	cancel_delayed_work_sync(&ctx->encoding_work);
 
 	if (ctx->ctx_status == REPEATER_CTX_START ||
 			ctx->ctx_status == REPEATER_CTX_PAUSE)
@@ -593,11 +647,14 @@ static int repeater_release(struct inode *inode, struct file *filp)
 
 	pm_runtime_put_sync(repeater_dev->dev);
 
+	spin_lock_irqsave(&repeater_spinlock, flags);
+
 	ctx->repeater_dev->ctx_num--;
 	kfree(ctx);
 	filp->private_data = NULL;
 
 	g_repeater_device = NULL;
+	spin_unlock_irqrestore(&repeater_spinlock, flags);
 
 	print_repeater_debug(RPT_INT_INFO, "%s--\n", __func__);
 	return ret;
@@ -710,6 +767,7 @@ static int repeater_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(&pdev->dev);
 
+	spin_lock_init(&repeater_spinlock);
 	g_repeater_debug_level = RPT_ERROR;
 
 	print_repeater_debug(RPT_INT_INFO, "%s--\n", __func__);

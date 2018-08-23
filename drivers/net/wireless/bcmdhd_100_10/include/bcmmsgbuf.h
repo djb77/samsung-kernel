@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmmsgbuf.h 726968 2017-10-17 10:34:46Z $
+ * $Id: bcmmsgbuf.h 739442 2018-01-08 17:45:01Z $
  */
 #ifndef _bcmmsgbuf_h_
 #define	_bcmmsgbuf_h_
@@ -589,11 +589,21 @@ typedef struct compl_msg_hdr {
 typedef uint32 dma_done_t;
 
 #define MAX_CLKSRC_ID	0xF
+#define TX_PKT_RETRY_CNT_0_MASK		0x000000FF
+#define TX_PKT_RETRY_CNT_0_SHIFT	0
+#define TX_PKT_RETRY_CNT_1_MASK		0x0000FF00
+#define TX_PKT_RETRY_CNT_1_SHIFT	8
+#define TX_PKT_RETRY_CNT_2_MASK		0x00FF0000
+#define TX_PKT_RETRY_CNT_2_SHIFT	16
+#define TX_PKT_BAND_INFO		0x0F000000
+#define TX_PKT_BAND_INFO_SHIFT		24
+#define TX_PKT_VALID_INFO		0xF0000000
+#define TX_PKT_VALID_INFO_SHIFT		28
 
 typedef struct ts_timestamp_srcid {
 	union {
 		uint32	ts_low; /* time stamp low 32 bits */
-		uint32	reserved; /* If timestamp not used */
+		uint32  rate_spec; /* use ratespec */
 	};
 	union {
 		uint32  ts_high; /* time stamp high 28 bits */
@@ -603,6 +613,7 @@ typedef struct ts_timestamp_srcid {
 			uint32  phase :1; /* Phase bit */
 			dma_done_t	marker_ext;
 		};
+		uint32 tx_pkt_band_retry_info;
 	};
 } ts_timestamp_srcid_t;
 

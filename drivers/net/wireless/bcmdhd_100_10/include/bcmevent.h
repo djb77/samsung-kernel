@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmevent.h 738226 2017-12-27 18:10:00Z $
+ * $Id: bcmevent.h 749068 2018-02-27 13:33:30Z $
  *
  */
 
@@ -288,9 +288,11 @@ typedef union bcm_event_msg_u {
 #define WLC_E_SCAN                172 /* Scan event */
 #define WLC_E_MBO                173	/* MBO event */
 #define WLC_E_PHY_CAL		174	/* Phy calibration start indication to host */
-#define WLC_E_LAST			175	/* highest val + 1 for range checking */
-#if (WLC_E_LAST > 175)
-#error "WLC_E_LAST: Invalid value for last event; must be <= 175."
+#define WLC_E_RPSNOA		175	/* Radio power save start/end indication to host */
+#define WLC_E_ADPS		176	/* ADPS event */
+#define WLC_E_LAST			177	/* highest val + 1 for range checking */
+#if (WLC_E_LAST > 177)
+#error "WLC_E_LAST: Invalid value for last event; must be <= 177."
 #endif /* WLC_E_LAST */
 
 /* define an API for getting the string name of an event */
@@ -392,8 +394,9 @@ typedef struct wl_event_sdb_trans {
 /* retained for precommit auto-merging errors; remove once all branches are synced */
 #define WLC_E_REASON_REQUESTED_ROAM	11
 #define WLC_E_REASON_BSSTRANS_REQ	11	/* roamed due to BSS Transition request by AP */
-#define WLC_E_REASON_LOW_RSSI_CU		12 /* roamed due to low RSSI and Channel Usage */
+#define WLC_E_REASON_LOW_RSSI_CU	12	/* roamed due to low RSSI and Channel Usage */
 #define WLC_E_REASON_RADAR_DETECTED	13	/* roamed due to radar detection by STA */
+#define WLC_E_REASON_CSA	        14	/* roamed due to CSA from AP */
 
 /* prune reason codes */
 #define WLC_E_PRUNE_ENCR_MISMATCH	1	/* encryption mismatch */
@@ -1100,4 +1103,31 @@ struct wl_event_mbo_cell_nw_switch {
 	*/
 	uint32 assoc_time_remain;
 };
+
+/* WLC_E_ADPS event data */
+#define WL_EVENT_ADPS_VER_1		1
+
+/* WLC_E_ADPS event type */
+#define WL_E_TYPE_ADPS_BAD_AP		1
+
+/* WLC_E_ADPS status */
+enum {
+	WL_E_STATUS_ADPS_DEAUTH = 0,
+	WL_E_STATUS_ADPS_MAX
+};
+
+typedef struct wl_event_adps_bad_ap {
+	uint32 status;
+	uint32 reason;
+	struct ether_addr ea;	/* bssid */
+} wl_event_adps_bad_ap_t;
+
+typedef struct wl_event_adps {
+	uint16	version;	/* structure version */
+	uint16	length;		/* length of structure */
+	uint32	type;		/* event type */
+	uint8	data[];		/* variable length data */
+} wl_event_adps_v1_t;
+
+typedef wl_event_adps_v1_t wl_event_adps_t;
 #endif /* _BCMEVENT_H_ */

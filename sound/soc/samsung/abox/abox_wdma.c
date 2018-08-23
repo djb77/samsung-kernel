@@ -164,7 +164,7 @@ static int abox_wdma_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 
 	if (params_rate(params) > 48000)
-		abox_request_cpu_gear(dev, abox_data, dev,
+		abox_request_cpu_gear_dai(dev, abox_data, rtd->cpu_dai,
 				abox_data->cpu_gear_min - 1);
 
 	dev_info(dev, "%s:DmaAddr=%pad Total=%zu PrdSz=%u(%u) #Prds=%u dma_area=%p rate=%u, width=%d, channels=%u\n",
@@ -365,10 +365,9 @@ static int abox_wdma_open(struct snd_pcm_substream *substream)
 	dev_dbg(dev, "%s[%d]\n", __func__, id);
 
 	if (data->type == PLATFORM_CALL) {
-		if (abox_cpu_gear_idle(dev, abox_data,
-				(void *)ABOX_CPU_GEAR_CALL_VSS))
+		if (abox_cpu_gear_idle(dev, abox_data, ABOX_CPU_GEAR_CALL_VSS))
 			abox_request_cpu_gear_sync(dev, abox_data,
-					(void *)ABOX_CPU_GEAR_CALL_KERNEL,
+					ABOX_CPU_GEAR_CALL_KERNEL,
 					ABOX_CPU_GEAR_MAX);
 		ret = abox_request_l2c_sync(dev, abox_data, dev, true);
 		if (ret < 0)
@@ -377,7 +376,8 @@ static int abox_wdma_open(struct snd_pcm_substream *substream)
 		if (ret < 0)
 			dev_warn(dev, "call notify failed: %d\n", ret);
 	}
-	abox_request_cpu_gear(dev, abox_data, dev, abox_data->cpu_gear_min);
+	abox_request_cpu_gear_dai(dev, abox_data, rtd->cpu_dai,
+			abox_data->cpu_gear_min);
 
 	snd_soc_set_runtime_hwparams(substream, &abox_wdma_hardware);
 
@@ -412,10 +412,10 @@ static int abox_wdma_close(struct snd_pcm_substream *substream)
 	msg.task_id = pcmtask_msg->channel_id = id;
 	ret = abox_wdma_request_ipc(data, &msg, 0, 1);
 
-	abox_request_cpu_gear(dev, abox_data, dev, ABOX_CPU_GEAR_MIN);
+	abox_request_cpu_gear_dai(dev, abox_data, rtd->cpu_dai,
+			ABOX_CPU_GEAR_MIN);
 	if (data->type == PLATFORM_CALL) {
-		abox_request_cpu_gear(dev, abox_data,
-				(void *)ABOX_CPU_GEAR_CALL_KERNEL,
+		abox_request_cpu_gear(dev, abox_data, ABOX_CPU_GEAR_CALL_KERNEL,
 				ABOX_CPU_GEAR_MIN);
 		ret = abox_request_l2c(dev, abox_data, dev, false);
 		if (ret < 0)
@@ -443,7 +443,7 @@ static int abox_wdma_mmap(struct snd_pcm_substream *substream,
 	/* Increased cpu gear for sound camp.
 	 * Only sound camp uses mmap now.
 	 */
-	abox_request_cpu_gear(dev, data->abox_data, dev,
+	abox_request_cpu_gear_dai(dev, data->abox_data, rtd->cpu_dai,
 			data->abox_data->cpu_gear_min - 1);
 
 	return dma_mmap_writecombine(dev, vma,

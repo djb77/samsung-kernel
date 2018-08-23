@@ -539,7 +539,7 @@ static int __abox_process_ipc(struct device *dev, struct abox_data *data,
 
 	void __iomem *tx_base = data->sram_base + data->ipc_tx_offset;
 	void __iomem *tx_ack = data->sram_base + data->ipc_tx_ack_offset;
-	int ret, i;
+	int ret = 0, i;
 
 	dev_dbg(dev, "%s(%d, %d, %d)\n", __func__, hw_irq,
 			msg->ipcid, msg->msg.system.msgtype);
@@ -844,7 +844,9 @@ static int abox_sifs_hw_params(struct snd_pcm_substream *substream,
 	if (skip)
 		goto out;
 
-	abox_request_cpu_gear_sync(dev, data, substream, ABOX_CPU_GEAR_MAX);
+	abox_request_cpu_gear_dai(dev, data, dai, ABOX_CPU_GEAR_MAX);
+	abox_cpu_gear_barrier(data);
+
 	aclk = clk_get_rate(data->clk_bus);
 	cnt_val = abox_sifsx_cnt_val(aclk, rate, pwidth, channels);
 
@@ -909,7 +911,7 @@ static int abox_sifs_hw_free(struct snd_pcm_substream *substream,
 		break;
 	}
 
-	abox_request_cpu_gear(dev, data, substream, ABOX_CPU_GEAR_MIN);
+	abox_request_cpu_gear_dai(dev, data, dai, ABOX_CPU_GEAR_MIN);
 out:
 	return ret;
 }
@@ -1493,26 +1495,6 @@ static int abox_audio_mode_put_ipc(struct device *dev, enum audio_mode mode)
 	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
 
 	dev_dbg(dev, "%s(%d)\n", __func__, mode);
-
-	if (IS_ENABLED(CONFIG_SOC_EXYNOS9810)) {
-		static const unsigned int BIG_FREQ = 1248000;
-		static const unsigned int LIT_FREQ = 1274000;
-
-		switch (mode) {
-		case MODE_IN_COMMUNICATION:
-			abox_request_big_freq(dev, data,
-					(void *)DEFAULT_BIG_FREQ_ID, BIG_FREQ);
-			abox_request_lit_freq(dev, data,
-					(void *)DEFAULT_LIT_FREQ_ID, LIT_FREQ);
-			break;
-		default:
-			abox_request_big_freq(dev, data,
-					(void *)DEFAULT_BIG_FREQ_ID, 0);
-			abox_request_lit_freq(dev, data,
-					(void *)DEFAULT_LIT_FREQ_ID, 0);
-			break;
-		}
-	}
 
 	msg.ipcid = IPC_SYSTEM;
 	system_msg->msgtype = ABOX_SET_MODE;
@@ -3153,11 +3135,12 @@ unsigned int abox_get_requiring_aud_freq_in_khz(void)
 }
 EXPORT_SYMBOL(abox_get_requiring_aud_freq_in_khz);
 
-bool abox_cpu_gear_idle(struct device *dev, struct abox_data *data, void *id)
+bool abox_cpu_gear_idle(struct device *dev, struct abox_data *data,
+		unsigned int id)
 {
 	struct abox_qos_request *request;
 
-	dev_dbg(dev, "%s(%p)\n", __func__, id);
+	dev_dbg(dev, "%s(%x)\n", __func__, id);
 
 	for (request = data->cpu_gear_requests;
 			request - data->cpu_gear_requests <
@@ -3177,18 +3160,18 @@ bool abox_cpu_gear_idle(struct device *dev, struct abox_data *data, void *id)
 
 static bool abox_is_clearable(struct device *dev, struct abox_data *data)
 {
-	return abox_cpu_gear_idle(dev, data, (void *)ABOX_CPU_GEAR_ABSOLUTE) &&
+	return abox_cpu_gear_idle(dev, data, ABOX_CPU_GEAR_ABSOLUTE) &&
 			data->audio_mode != MODE_IN_CALL;
 }
 
 static void abox_check_cpu_gear(struct device *dev,
 		struct abox_data *data,
-		const void *old_id, unsigned int old_gear,
-		const void *id, unsigned int gear)
+		unsigned int old_id, unsigned int old_gear,
+		unsigned int id, unsigned int gear)
 {
 	struct device *dev_abox = &data->pdev->dev;
 
-	if (id != (void *)ABOX_CPU_GEAR_BOOT)
+	if (id != ABOX_CPU_GEAR_BOOT)
 		return;
 
 	if (data->calliope_state == CALLIOPE_ENABLING)
@@ -3197,19 +3180,19 @@ static void abox_check_cpu_gear(struct device *dev,
 	if (old_id != id) {
 		if (gear < ABOX_CPU_GEAR_MIN) {
 			/* new */
-			dev_dbg(dev, "%s(%p): new\n", __func__, id);
+			dev_dbg(dev, "%s(%x): new\n", __func__, id);
 			pm_wakeup_event(dev_abox, BOOT_DONE_TIMEOUT_MS);
 		}
 	} else {
 		if ((old_gear >= ABOX_CPU_GEAR_MIN) &&
 				(gear < ABOX_CPU_GEAR_MIN)) {
 			/* on */
-			dev_dbg(dev, "%s(%p): on\n", __func__, id);
+			dev_dbg(dev, "%s(%x): on\n", __func__, id);
 			pm_wakeup_event(dev_abox, BOOT_DONE_TIMEOUT_MS);
 		} else if ((old_gear < ABOX_CPU_GEAR_MIN) &&
 				(gear >= ABOX_CPU_GEAR_MIN)) {
 			/* off */
-			dev_dbg(dev, "%s(%p): off\n", __func__, id);
+			dev_dbg(dev, "%s(%x): off\n", __func__, id);
 			pm_relax(dev_abox);
 		}
 	}
@@ -3261,7 +3244,7 @@ static void abox_change_cpu_gear_legacy(struct device *dev,
 		if (gear > request->value)
 			gear = request->value;
 
-		dev_dbg(dev, "id=%p, value=%u, gear=%u\n", request->id,
+		dev_dbg(dev, "id=%x, value=%u, gear=%u\n", request->id,
 				request->value, gear);
 	}
 
@@ -3337,7 +3320,7 @@ static void abox_change_cpu_gear(struct device *dev, struct abox_data *data)
 		if (gear > value)
 			gear = value;
 
-		dev_dbg(dev, "id=%p, value=%u, gear=%u\n", request->id,
+		dev_dbg(dev, "id=%x, value=%u, gear=%u\n", request->id,
 				request->value, gear);
 	}
 
@@ -3384,17 +3367,16 @@ static void abox_change_cpu_gear_work_func(struct work_struct *work)
 }
 
 int abox_request_cpu_gear(struct device *dev, struct abox_data *data,
-		const void *id, unsigned int gear)
+		unsigned int id, unsigned int gear)
 {
 	struct abox_qos_request *request;
-	const void *old_id;
-	unsigned int old_gear;
+	unsigned int old_id, old_gear;
+	size_t len = ARRAY_SIZE(data->cpu_gear_requests);
 
-	dev_info(dev, "%s(%p, %u)\n", __func__, id, gear);
+	dev_info(dev, "%s(%x, %u)\n", __func__, id, gear);
 
 	for (request = data->cpu_gear_requests;
-			request - data->cpu_gear_requests <
-			ARRAY_SIZE(data->cpu_gear_requests)
+			request - data->cpu_gear_requests < len
 			&& request->id && request->id != id;
 			request++) {
 	}
@@ -3406,7 +3388,7 @@ int abox_request_cpu_gear(struct device *dev, struct abox_data *data,
 
 	if (request - data->cpu_gear_requests >=
 			ARRAY_SIZE(data->cpu_gear_requests)) {
-		dev_err(dev, "%s: out of index. id=%p, gear=%u\n", __func__,
+		dev_err(dev, "%s: out of index. id=%x, gear=%u\n", __func__,
 				id, gear);
 		return -ENOMEM;
 	}
@@ -3423,7 +3405,7 @@ void abox_cpu_gear_barrier(struct abox_data *data)
 }
 
 int abox_request_cpu_gear_sync(struct device *dev, struct abox_data *data,
-		const void *id, unsigned int gear)
+		unsigned int id, unsigned int gear)
 {
 	int ret = abox_request_cpu_gear(dev, data, id, gear);
 
@@ -3462,7 +3444,7 @@ static void abox_change_int_freq_work_func(struct work_struct *work)
 		if (freq < request->value)
 			freq = request->value;
 
-		dev_dbg(dev, "id=%p, value=%u, freq=%u\n", request->id,
+		dev_dbg(dev, "id=%x, value=%u, freq=%u\n", request->id,
 				request->value, freq);
 	}
 
@@ -3476,14 +3458,14 @@ static void abox_change_int_freq_work_func(struct work_struct *work)
 }
 
 int abox_request_int_freq(struct device *dev, struct abox_data *data,
-		void *id, unsigned int int_freq)
+		unsigned int id, unsigned int int_freq)
 {
 	struct abox_qos_request *request;
 
-	dev_info(dev, "%s(%p, %u)\n", __func__, id, int_freq);
+	dev_info(dev, "%s(%x, %u)\n", __func__, id, int_freq);
 
 	if (!id)
-		id = (void *)DEFAULT_INT_FREQ_ID;
+		id = DEFAULT_INT_FREQ_ID;
 
 	for (request = data->int_requests; request - data->int_requests <
 			ARRAY_SIZE(data->int_requests) && request->id &&
@@ -3495,7 +3477,7 @@ int abox_request_int_freq(struct device *dev, struct abox_data *data,
 	request->id = id;
 
 	if (request - data->int_requests >= ARRAY_SIZE(data->int_requests)) {
-		dev_err(dev, "%s: out of index. id=%p, int_freq=%u\n", __func__,
+		dev_err(dev, "%s: out of index. id=%x, int_freq=%u\n", __func__,
 				id, int_freq);
 		return -ENOMEM;
 	}
@@ -3521,7 +3503,7 @@ static void abox_change_mif_freq_work_func(struct work_struct *work)
 		if (freq < request->value)
 			freq = request->value;
 
-		dev_dbg(dev, "id=%p, value=%u, freq=%u\n", request->id,
+		dev_dbg(dev, "id=%x, value=%u, freq=%u\n", request->id,
 				request->value, freq);
 	}
 
@@ -3535,14 +3517,14 @@ static void abox_change_mif_freq_work_func(struct work_struct *work)
 }
 
 static int abox_request_mif_freq(struct device *dev, struct abox_data *data,
-		void *id, unsigned int mif_freq)
+		unsigned int id, unsigned int mif_freq)
 {
 	struct abox_qos_request *request;
 
-	dev_info(dev, "%s(%p, %u)\n", __func__, id, mif_freq);
+	dev_info(dev, "%s(%x, %u)\n", __func__, id, mif_freq);
 
 	if (!id)
-		id = (void *)DEFAULT_MIF_FREQ_ID;
+		id = DEFAULT_MIF_FREQ_ID;
 
 	for (request = data->mif_requests; request - data->mif_requests <
 			ARRAY_SIZE(data->mif_requests) && request->id &&
@@ -3554,7 +3536,7 @@ static int abox_request_mif_freq(struct device *dev, struct abox_data *data,
 	request->id = id;
 
 	if (request - data->mif_requests >= ARRAY_SIZE(data->mif_requests)) {
-		dev_err(dev, "%s: out of index. id=%p, mif_freq=%u\n", __func__,
+		dev_err(dev, "%s: out of index. id=%x, mif_freq=%u\n", __func__,
 				id, mif_freq);
 		return -ENOMEM;
 	}
@@ -3581,7 +3563,7 @@ static void abox_change_lit_freq_work_func(struct work_struct *work)
 		if (freq < request->value)
 			freq = request->value;
 
-		dev_dbg(dev, "id=%p, value=%u, freq=%u\n", request->id,
+		dev_dbg(dev, "id=%x, value=%u, freq=%u\n", request->id,
 				request->value, freq);
 	}
 
@@ -3595,13 +3577,13 @@ static void abox_change_lit_freq_work_func(struct work_struct *work)
 }
 
 int abox_request_lit_freq(struct device *dev, struct abox_data *data,
-		void *id, unsigned int freq)
+		unsigned int id, unsigned int freq)
 {
 	size_t array_size = ARRAY_SIZE(data->lit_requests);
 	struct abox_qos_request *request;
 
 	if (!id)
-		id = (void *)DEFAULT_LIT_FREQ_ID;
+		id = DEFAULT_LIT_FREQ_ID;
 
 	for (request = data->lit_requests;
 			request - data->lit_requests < array_size &&
@@ -3615,10 +3597,10 @@ int abox_request_lit_freq(struct device *dev, struct abox_data *data,
 	wmb(); /* value is read after id in reading function */
 	request->id = id;
 
-	dev_info(dev, "%s(%p, %u)\n", __func__, id, freq);
+	dev_info(dev, "%s(%x, %u)\n", __func__, id, freq);
 
 	if (request - data->lit_requests >= ARRAY_SIZE(data->lit_requests)) {
-		dev_err(dev, "%s: out of index. id=%p, freq=%u\n",
+		dev_err(dev, "%s: out of index. id=%x, freq=%u\n",
 				__func__, id, freq);
 		return -ENOMEM;
 	}
@@ -3645,7 +3627,7 @@ static void abox_change_big_freq_work_func(struct work_struct *work)
 		if (freq < request->value)
 			freq = request->value;
 
-		dev_dbg(dev, "id=%p, value=%u, freq=%u\n", request->id,
+		dev_dbg(dev, "id=%x, value=%u, freq=%u\n", request->id,
 				request->value, freq);
 	}
 
@@ -3659,13 +3641,13 @@ static void abox_change_big_freq_work_func(struct work_struct *work)
 }
 
 int abox_request_big_freq(struct device *dev, struct abox_data *data,
-		void *id, unsigned int freq)
+		unsigned int id, unsigned int freq)
 {
 	size_t array_size = ARRAY_SIZE(data->big_requests);
 	struct abox_qos_request *request;
 
 	if (!id)
-		id = (void *)DEFAULT_BIG_FREQ_ID;
+		id = DEFAULT_BIG_FREQ_ID;
 
 	for (request = data->big_requests;
 			request - data->big_requests < array_size &&
@@ -3675,14 +3657,14 @@ int abox_request_big_freq(struct device *dev, struct abox_data *data,
 	if ((request->id == id) && (request->value == freq))
 		return 0;
 
-	dev_info(dev, "%s(%p, %u)\n", __func__, id, freq);
+	dev_info(dev, "%s(%x, %u)\n", __func__, id, freq);
 
 	request->value = freq;
 	wmb(); /* value is read after id in reading function */
 	request->id = id;
 
 	if (request - data->big_requests >= ARRAY_SIZE(data->big_requests)) {
-		dev_err(dev, "%s: out of index. id=%p, freq=%u\n",
+		dev_err(dev, "%s: out of index. id=%x, freq=%u\n",
 				__func__, id, freq);
 		return -ENOMEM;
 	}
@@ -3709,7 +3691,7 @@ static void abox_change_hmp_boost_work_func(struct work_struct *work)
 		if (request->value)
 			on = request->value;
 
-		dev_dbg(dev, "id=%p, value=%u, on=%u\n", request->id,
+		dev_dbg(dev, "id=%x, value=%u, on=%u\n", request->id,
 				request->value, on);
 	}
 
@@ -3724,13 +3706,13 @@ static void abox_change_hmp_boost_work_func(struct work_struct *work)
 }
 
 int abox_request_hmp_boost(struct device *dev, struct abox_data *data,
-		void *id, unsigned int on)
+		unsigned int id, unsigned int on)
 {
 	size_t array_size = ARRAY_SIZE(data->hmp_requests);
 	struct abox_qos_request *request;
 
 	if (!id)
-		id = (void *)DEFAULT_HMP_BOOST_ID;
+		id = DEFAULT_HMP_BOOST_ID;
 
 	for (request = data->hmp_requests;
 			request - data->hmp_requests < array_size &&
@@ -3740,14 +3722,14 @@ int abox_request_hmp_boost(struct device *dev, struct abox_data *data,
 	if ((request->id == id) && (request->value == on))
 		return 0;
 
-	dev_info(dev, "%s(%p, %u)\n", __func__, id, on);
+	dev_info(dev, "%s(%x, %u)\n", __func__, id, on);
 
 	request->value = on;
 	wmb(); /* value is read after id in reading function */
 	request->id = id;
 
 	if (request - data->hmp_requests >= ARRAY_SIZE(data->hmp_requests)) {
-		dev_err(dev, "%s: out of index. id=%p, on=%u\n",
+		dev_err(dev, "%s: out of index. id=%x, on=%u\n",
 				__func__, id, on);
 		return -ENOMEM;
 	}
@@ -4357,7 +4339,7 @@ static void abox_boot_done_work_func(struct work_struct *work)
 
 	abox_cpu_pm_ipc(dev, true);
 	abox_restore_data(dev);
-	abox_request_cpu_gear(dev, data, (void *)DEFAULT_CPU_GEAR_ID,
+	abox_request_cpu_gear(dev, data, DEFAULT_CPU_GEAR_ID,
 			ABOX_CPU_GEAR_MIN);
 	abox_request_dram_on(pdev, dev, false);
 }
@@ -4472,8 +4454,7 @@ static void abox_system_ipc_handler(struct device *dev,
 		abox_registered_ipc_handler(dev, data, msg, true);
 		break;
 	case ABOX_CHANGE_GEAR:
-		abox_request_cpu_gear(dev, data,
-				(void *)(long)system_msg->param2,
+		abox_request_cpu_gear(dev, data, system_msg->param2,
 				system_msg->param1);
 		break;
 	case ABOX_END_L2C_CONTROL:
@@ -4482,7 +4463,7 @@ static void abox_system_ipc_handler(struct device *dev,
 		break;
 	case ABOX_REQUEST_L2C:
 	{
-		void *id = (void *)(long)system_msg->param2;
+		void *id = (void *)(unsigned long)system_msg->param2;
 		bool on = !!system_msg->param1;
 
 		abox_request_l2c(dev, data, id, on);
@@ -4493,13 +4474,11 @@ static void abox_system_ipc_handler(struct device *dev,
 		default:
 			/* fall through */
 		case 0:
-			abox_request_mif_freq(dev, data,
-					(void *)(long)system_msg->param3,
+			abox_request_mif_freq(dev, data, system_msg->param3,
 					system_msg->param1);
 			break;
 		case 1:
-			abox_request_int_freq(dev, data,
-					(void *)(long)system_msg->param3,
+			abox_request_int_freq(dev, data, system_msg->param3,
 					system_msg->param1);
 			break;
 		}
@@ -5443,7 +5422,7 @@ static int abox_enable(struct device *dev)
 
 	abox_gic_enable_irq(data->dev_gic);
 
-	abox_request_cpu_gear_sync(dev, data, (void *)DEFAULT_CPU_GEAR_ID,
+	abox_request_cpu_gear_sync(dev, data, DEFAULT_CPU_GEAR_ID,
 			ABOX_CPU_GEAR_MAX);
 
 	if (is_secure_gic()) {
@@ -5498,7 +5477,7 @@ static int abox_enable(struct device *dev)
 			dev_err(dev, "Failed to download firmware\n");
 		else
 			ret = 0;
-		abox_request_cpu_gear(dev, data, (void *)DEFAULT_CPU_GEAR_ID,
+		abox_request_cpu_gear(dev, data, DEFAULT_CPU_GEAR_ID,
 				ABOX_CPU_GEAR_MIN);
 		goto error;
 	}
@@ -5682,12 +5661,17 @@ static int abox_pm_notifier(struct notifier_block *nb,
 
 			pm_runtime_barrier(dev);
 			state = data->calliope_state;
-			if (state == CALLIOPE_ENABLING) {
+			switch (state) {
+			case CALLIOPE_ENABLING:
 				dev_info(dev, "calliope state: %d\n", state);
 				return NOTIFY_BAD;
+			case CALLIOPE_ENABLED:
+				/* clear cpu gears to abox power off */
+				abox_clear_cpu_gear_requests(dev, data);
+				break;
+			default:
+				break;
 			}
-			/* clear cpu gears to abox power off */
-			abox_clear_cpu_gear_requests(dev, data);
 			abox_cpu_gear_barrier(data);
 			flush_workqueue(data->ipc_workqueue);
 			ret = pm_runtime_suspend(dev);
@@ -5808,9 +5792,10 @@ static ssize_t calliope_cmd_store(struct device *dev,
 		if (!ret) {
 			dev_info(dev, "gear = %u\n", gear);
 			pm_runtime_get_sync(dev);
-			abox_request_cpu_gear(dev, data,
-					(void *)TEST_CPU_GEAR_ID, gear);
-			dev_info(dev, "bus clk = %lu\n", clk_get_rate(data->clk_bus));
+			abox_request_cpu_gear(dev, data, TEST_CPU_GEAR_ID,
+					gear);
+			dev_info(dev, "bus clk = %lu\n",
+					clk_get_rate(data->clk_bus));
 			pm_runtime_mark_last_busy(dev);
 			pm_runtime_put_autosuspend(dev);
 		}

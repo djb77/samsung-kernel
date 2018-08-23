@@ -28,7 +28,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhdioctl.h 735118 2017-12-07 10:59:35Z $
+ * $Id: dhdioctl.h 760444 2018-05-02 05:18:22Z $
  */
 
 #ifndef _dhdioctl_h_
@@ -148,7 +148,7 @@ typedef enum {
 #define DHD_ERROR_MEM_VAL	0x8000000
 #define DHD_DNGL_IOVAR_SET_VAL	0x10000000 /**< logs the setting of dongle iovars */
 #define DHD_LPBKDTDUMP_VAL	0x20000000
-#define DHD_EVENT_MEM_VAL	0x40000000
+#define DHD_PRSRV_MEM_VAL	0x40000000
 #define DHD_IOVAR_MEM_VAL	0x80000000
 
 #ifdef SDTEST

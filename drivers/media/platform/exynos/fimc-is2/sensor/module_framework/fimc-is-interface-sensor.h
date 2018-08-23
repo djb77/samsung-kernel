@@ -729,7 +729,9 @@ struct fimc_is_cis_ext2_interface_ops {
 	int (*set_long_term_expo_mode)(struct fimc_is_sensor_interface *itf,
 				struct fimc_is_long_term_expo_mode *long_term_expo_mode);
 	int (*set_low_noise_mode)(struct fimc_is_sensor_interface *itf, u32 mode);
-	void *reserved[19];
+	int (*get_sensor_max_dynamic_fps)(struct fimc_is_sensor_interface *itf,
+				u32 *max_dynamic_fps);
+	void *reserved[18];
 };
 
 struct fimc_is_cis_event_ops {

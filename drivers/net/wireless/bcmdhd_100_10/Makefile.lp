@@ -104,7 +104,7 @@ endif
 	# DHDCFLAGS += -DDHD_RECOVER_TIMEOUT
 	# HEAP ASLR
 	DHDCFLAGS += -DBCM_ASLR_HEAP
-ifneq ($(CONFIG_SOC_EXYNOS8895),)
+ifeq ($(filter y,$(CONFIG_SOC_EXYNOS8895) $(CONFIG_SOC_EXYNOS9810)),y)
 	# Default Tx LB Enable
 	DHDCFLAGS += -DDHD_LB_TXP_DEFAULT_ENAB
 endif
@@ -410,6 +410,8 @@ endif
 #  DHDCFLAGS += -DADPS_MODE_FROM_FILE
 #  DHDCFLAGS += -DWLADPS_SEAK_AP_WAR
   DHDCFLAGS += -DWLADPS_PRIVATE_CMD
+  DHDCFLAGS += -DWL_BAM
+  DHDCFLAGS += -DWL_BAM_FILE_PATH="\"/data/misc/conn/\""
   DHDCFLAGS += -DWL_RELMCAST
   DHDCFLAGS += -DSUPPORT_LTECX
   DHDCFLAGS += -DSUPPORT_2G_VHT -DSUPPORT_5G_1024QAM_VHT
@@ -421,6 +423,10 @@ endif
   DHDCFLAGS += -DDISABLE_PRUNED_SCAN
 # Remove common feature for BCM4361
   DHDCFLAGS :=$(filter-out -DDISABLE_11H_SOFTAP,$(DHDCFLAGS))
+# Block ARP during DHCP on STA/SoftAP concurrent mode
+  DHDCFLAGS += -DAPSTA_BLOCK_ARP_DURING_DHCP
+# Use restricted channels on STA/SoftAP concurrent mode
+  DHDCFLAGS += -DAPSTA_RESTRICTED_CHANNEL
   DHDCFLAGS += -DDHD_LOG_DUMP
 ifneq ($(CUSTOM_LOG_DUMP_BUFSIZE_MB),)
   DHDCFLAGS += -DCUSTOM_LOG_DUMP_BUFSIZE_MB=$(CUSTOM_LOG_DUMP_BUFSIZE_MB)
@@ -494,6 +500,13 @@ ifneq ($(USE_LEGACY_DUMP_PATH),)
   DHDCFLAGS += -DDHD_COMMON_DUMP_PATH="\"/data/media/wifi/log/\""
 else
   DHDCFLAGS += -DDHD_COMMON_DUMP_PATH="\"/data/log/wifi/\""
+endif
+
+ifeq ($(CONFIG_ARCH_SDM845),y)
+# Disable Dongle Isolation
+  DHDCFLAGS := $(filter-out -DDONGLE_ENABLE_ISOLATION,$(DHDCFLAGS))
+# Enable BP Reset while Wi-Fi power off
+  DHDCFLAGS += -DDHD_USE_BP_RESET
 endif
 
 # For Samsung factory mode only
@@ -1179,6 +1192,10 @@ endif
 
 ifneq ($(filter -DBIGDATA_SOFTAP,$(DHDCFLAGS)),)
 DHDOFILES += wl_bigdata.o
+endif
+
+ifneq ($(filter -DWL_BAM,$(DHDCFLAGS)),)
+DHDOFILES += wl_bam.o
 endif
 
 dhd-y := $(DHDOFILES)

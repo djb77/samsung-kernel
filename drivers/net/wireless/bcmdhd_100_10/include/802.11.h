@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: 802.11.h 737757 2017-12-22 07:38:13Z $
+ * $Id: 802.11.h 748934 2018-02-27 02:44:11Z $
  */
 
 #ifndef _802_11_H_
@@ -1032,8 +1032,8 @@ typedef struct ccx_qfl_ie ccx_qfl_ie_t;
 #define DOT11_SHARED_KEY	1	/* d11 shared authentication */
 #define DOT11_FAST_BSS		2	/* d11 fast bss authentication */
 #define DOT11_SAE		3	/* d11 simultaneous authentication of equals */
-#define DOT11_FILS_SKEY_PFS	4	/* d11 fils shared key authentication w/o pfs */
-#define DOT11_FILS_SKEY		5	/* d11 fils shared key authentication w/ pfs */
+#define DOT11_FILS_SKEY		4	/* d11 fils shared key authentication w/o pfs */
+#define DOT11_FILS_SKEY_PFS	5	/* d11 fils shared key authentication w/ pfs */
 #define DOT11_FILS_PKEY		6	/* d11 fils public key authentication */
 #define DOT11_CHALLENGE_LEN	128	/* d11 challenge text length */
 
@@ -1533,20 +1533,33 @@ typedef struct ccx_qfl_ie ccx_qfl_ie_t;
 #define DOT11_MNG_MU_EDCA_ID			(DOT11_MNG_ID_EXT_ID + EXT_MNG_MU_EDCA_ID)
 #define EXT_MNG_SRPS_ID				39	/* Spatial Reuse Parameter Set */
 #define DOT11_MNG_SRPS_ID			(DOT11_MNG_ID_EXT_ID + EXT_MNG_SRPS_ID)
+#define EXT_MNG_BSSCOLOR_CHANGE_ID		42	/* BSS Color Change Announcement */
+#define DOT11_MNG_BSSCOLOR_CHANGE_ID		(DOT11_MNG_ID_EXT_ID + EXT_MNG_BSSCOLOR_CHANGE_ID)
 
-/* FILS ext ids */
-#define FILS_REQ_PARAMS_EXT_ID		2
-#define DOT11_MNG_FILS_REQ_PARAMS	(DOT11_MNG_ID_EXT_ID + FILS_REQ_PARAMS_EXT_ID)
-#define FILS_SESSION_EXT_ID		4
-#define DOT11_MNG_FILS_SESSION		(DOT11_MNG_ID_EXT_ID + FILS_SESSION_EXT_ID)
-#define FILS_HLP_CONTAINER_EXT_ID		5
-#define DOT11_MNG_FILS_HLP_CONTAINER		(DOT11_MNG_ID_EXT_ID + FILS_HLP_CONTAINER_EXT_ID)
-#define FILS_WRAPPED_DATA_EXT_ID	8
-#define DOT11_MNG_FILS_WRAPPED_DATA	(DOT11_MNG_ID_EXT_ID + FILS_WRAPPED_DATA_EXT_ID)
-#define DOT11_ESP_EXT_ID		11u
-#define DOT11_MNG_ESP			(DOT11_MNG_ID_EXT_ID + DOT11_ESP_EXT_ID)
-#define FILS_NONCE_EXT_ID		13
-#define DOT11_MNG_FILS_NONCE		(DOT11_MNG_ID_EXT_ID + FILS_NONCE_EXT_ID)
+/* FILS and OCE ext ids */
+#define FILS_EXTID_MNG_REQ_PARAMS		2u	/* FILS Request Parameters element */
+#define DOT11_MNG_FILS_REQ_PARAMS		(DOT11_MNG_ID_EXT_ID + FILS_EXTID_MNG_REQ_PARAMS)
+#define FILS_EXTID_MNG_KEY_CONFIRMATION_ID	3u	/* FILS Key Confirmation element */
+#define DOT11_MNG_FILS_KEY_CONFIRMATION		(DOT11_MNG_ID_EXT_ID +\
+							FILS_EXTID_MNG_KEY_CONFIRMATION_ID)
+#define FILS_EXTID_MNG_SESSION_ID		4u	/* FILS Session element */
+#define DOT11_MNG_FILS_SESSION			(DOT11_MNG_ID_EXT_ID + FILS_EXTID_MNG_SESSION_ID)
+#define FILS_EXTID_MNG_HLP_CONTAINER_ID		5u	/* FILS HLP Container element */
+#define DOT11_MNG_FILS_HLP_CONTAINER		(DOT11_MNG_ID_EXT_ID +\
+							FILS_EXTID_MNG_HLP_CONTAINER_ID)
+#define FILS_EXTID_MNG_WRAPPED_DATA_ID		8u	/* FILS Wrapped Data element */
+#define DOT11_MNG_FILS_WRAPPED_DATA		(DOT11_MNG_ID_EXT_ID +\
+							FILS_EXTID_MNG_WRAPPED_DATA_ID)
+#define OCE_EXTID_MNG_ESP_ID			11u	/* Estimated Service Parameters element */
+#define DOT11_MNG_ESP				(DOT11_MNG_ID_EXT_ID + OCE_EXTID_MNG_ESP_ID)
+#define FILS_EXTID_MNG_NONCE_ID			13u	/* FILS Nonce element */
+#define DOT11_MNG_FILS_NONCE			(DOT11_MNG_ID_EXT_ID + FILS_EXTID_MNG_NONCE_ID)
+
+/* deprecated definitions, do not use, to be deleted later */
+#define FILS_HLP_CONTAINER_EXT_ID	FILS_EXTID_MNG_HLP_CONTAINER_ID
+#define DOT11_ESP_EXT_ID		OCE_EXTID_MNG_ESP_ID
+#define FILS_REQ_PARAMS_EXT_ID		FILS_EXTID_MNG_REQ_PARAMS
+/* End of deprecated definitions */
 
 #define DOT11_MNG_IE_ID_EXT_MATCH(_ie, _id) (\
 	((_ie)->id == DOT11_MNG_ID_EXT_ID) && \
@@ -1674,6 +1687,7 @@ typedef struct ccx_qfl_ie ccx_qfl_ie_t;
 /* Fine timing measurement - D3.0 */
 #define DOT11_EXT_CAP_FTM_RESPONDER		70
 #define DOT11_EXT_CAP_FTM_INITIATOR		71 /* tentative 11mcd3.0 */
+#define DOT11_EXT_CAP_FILS			72 /* FILS Capability */
 /* TWT support */
 #define DOT11_EXT_CAP_TWT_REQUESTER		75
 #define DOT11_EXT_CAP_TWT_RESPONDER		76
@@ -4375,7 +4389,7 @@ typedef struct vht_features_ie_hdr vht_features_ie_hdr_t;
 #if defined(WL_LEGACY_P2P)
 #define MAC_OUI			"\x00\x17\xF2"	/* MACOSX OUI */
 #define MAC_OUI_TYPE_P2P	5
-#endif // endif
+#endif /* WL_LEGACY_P2P */
 
 #ifdef P2P_IE_OVRD
 #define WFA_OUI			MAC_OUI
@@ -4416,6 +4430,8 @@ typedef struct vht_features_ie_hdr vht_features_ie_hdr_t;
 #define RSN_AKM_SHA256_1X	5	/* SHA256 key derivation, using 802.1X */
 #define RSN_AKM_SHA256_PSK	6	/* SHA256 key derivation, using Pre-shared Key */
 #define RSN_AKM_TPK		7	/* TPK(TDLS Peer Key) handshake */
+#define RSN_AKM_SAE_PSK         8       /* AKM for SAE with 4-way handshake */
+#define RSN_AKM_SAE_FBT         9       /* AKM for SAE with FBT */
 #define RSN_AKM_FILS_SHA256	14	/* SHA256 key derivation, using FILS */
 #define RSN_AKM_FILS_SHA384	15	/* SHA384 key derivation, using FILS */
 
@@ -4953,7 +4969,8 @@ enum {
 	FTM_VS_TLV_SEC_PARAMS = 3,		/* security parameters (in either) */
 	FTM_VS_TLV_SEQ_PARAMS = 4,		/* toast parameters (FTM_REQ, BRCM proprietary) */
 	FTM_VS_TLV_MF_BUF = 5,			/* multi frame buffer - may span ftm vs ie's */
-	FTM_VS_TLV_TIMING_PARAMS = 6            /* timing adjustments */
+	FTM_VS_TLV_TIMING_PARAMS = 6,            /* timing adjustments */
+	FTM_VS_TLV_MF_STATS_BUF = 7		/* multi frame statistics buffer */
 	/* add additional types above */
 };
 

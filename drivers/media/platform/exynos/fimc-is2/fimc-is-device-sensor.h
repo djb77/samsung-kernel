@@ -210,7 +210,8 @@ enum fimc_is_ex_mode {
 	EX_NONE = 0,
 	EX_DRAMTEST = 1,
 	EX_LIVEFOCUS = 2,
-	EX_DUALFPS = 3,
+	EX_DUALFPS_960 = 3,
+	EX_DUALFPS_480 = 4,
 };
 
 struct fimc_is_sensor_cfg {

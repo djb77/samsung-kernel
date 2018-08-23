@@ -2090,7 +2090,6 @@ static int max98512_probe(struct snd_soc_codec *codec)
 					  ret);
 		}
 	}
-	msg_maxim("g_class = %p %p", g_class, max98512->class);
 #endif /* USE_DSM_LOG */
 
 	msg_maxim("End");
@@ -2343,7 +2342,6 @@ static int max98512_i2c_probe(struct i2c_client *i2c,
 		goto err_regmap;
 	} else {
 		regcache_cache_bypass(max98512->regmap_l, true);
-		msg_maxim("regmap_L %p", max98512->regmap_l);
 	}
 
 	/* regmap init for sub-device */
@@ -2366,7 +2364,6 @@ static int max98512_i2c_probe(struct i2c_client *i2c,
 				goto err_regmap;
 			} else {
 				regcache_cache_bypass(max98512->regmap_r, true);
-				msg_maxim("regmap_R %p", max98512->regmap_r);
 			}
 		}
 	}

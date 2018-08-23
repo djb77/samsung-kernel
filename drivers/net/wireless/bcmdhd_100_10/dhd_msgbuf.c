@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_msgbuf.c 756631 2018-04-10 05:26:11Z $
+ * $Id: dhd_msgbuf.c 768017 2018-06-18 03:09:47Z $
  */
 
 #include <typedefs.h>
@@ -461,6 +461,11 @@ typedef struct dhd_prot {
 	bool no_aggr;
 	bool fixed_rate;
 } dhd_prot_t;
+
+#ifdef DHD_DUMP_PCIE_RINGS
+static
+int dhd_ring_write(dhd_pub_t *dhd, msgbuf_ring_t *ring, void *file, unsigned long *file_posn);
+#endif /* DHD_DUMP_PCIE_RINGS */
 
 extern bool dhd_timesync_delay_post_bufs(dhd_pub_t *dhdp);
 extern void dhd_schedule_dmaxfer_free(dhd_pub_t* dhdp, dmaxref_mem_map_t *dmmap);
@@ -4247,6 +4252,13 @@ dhd_prot_process_msgbuf_infocpl(dhd_pub_t *dhd, uint bound)
 			break;
 		}
 
+#ifdef DHD_MAP_LOGGING
+		if (dhd->smmu_fault_occurred) {
+			more = FALSE;
+			break;
+		}
+#endif /* DHD_MAP_LOGGING */
+
 		DHD_RING_LOCK(ring->ring_lock, flags);
 		/* Get the message from ring */
 		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len);
@@ -4307,6 +4319,12 @@ dhd_prot_process_msgbuf_rxcpl(dhd_pub_t *dhd, uint bound)
 
 		if (dhd->hang_was_sent)
 			break;
+
+#ifdef DHD_MAP_LOGGING
+		if (dhd->smmu_fault_occurred) {
+			break;
+		}
+#endif /* DHD_MAP_LOGGING */
 
 		pkt_cnt = 0;
 		pktqhead = pkt_newidx = NULL;
@@ -4534,6 +4552,13 @@ dhd_prot_process_msgbuf_txcpl(dhd_pub_t *dhd, uint bound)
 			break;
 		}
 
+#ifdef DHD_MAP_LOGGING
+		if (dhd->smmu_fault_occurred) {
+			more = FALSE;
+			break;
+		}
+#endif /* DHD_MAP_LOGGING */
+
 		DHD_RING_LOCK(ring->ring_lock, flags);
 		/* Get the address of the next message to be read from ring */
 		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len);
@@ -4619,6 +4644,12 @@ dhd_prot_process_ctrlbuf(dhd_pub_t *dhd)
 			break;
 		}
 
+#ifdef DHD_MAP_LOGGING
+		if (dhd->smmu_fault_occurred) {
+			break;
+		}
+#endif /* DHD_MAP_LOGGING */
+
 		DHD_RING_LOCK(ring->ring_lock, flags);
 		/* Get the address of the next message to be read from ring */
 		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len);
@@ -4669,6 +4700,13 @@ dhd_prot_process_msgtype(dhd_pub_t *dhd, msgbuf_ring_t *ring, uint8 *buf, uint32
 			ret = BCME_ERROR;
 			goto done;
 		}
+
+#ifdef DHD_MAP_LOGGING
+		if (dhd->smmu_fault_occurred) {
+			ret = BCME_ERROR;
+			goto done;
+		}
+#endif /* DHD_MAP_LOGGING */
 
 		msg = (cmn_msg_hdr_t *)buf;
 
@@ -6258,6 +6296,93 @@ int dhd_prot_iovar_op(dhd_pub_t *dhd, const char *name,
 {
 	return BCME_UNSUPPORTED;
 }
+
+#ifdef DHD_DUMP_PCIE_RINGS
+int dhd_d2h_h2d_ring_dump(dhd_pub_t *dhd, void *file, unsigned long *file_posn)
+{
+	dhd_prot_t *prot = dhd->prot;
+	msgbuf_ring_t *ring;
+	int ret = 0;
+
+	ring = &prot->h2dring_ctrl_subn;
+	if ((ret = dhd_ring_write(dhd, ring, file, file_posn)) < 0)
+		goto exit;
+
+	ring = &prot->d2hring_ctrl_cpln;
+	if ((ret = dhd_ring_write(dhd, ring, file, file_posn)) < 0)
+		goto exit;
+
+	ring = prot->h2dring_info_subn;
+	if ((ret = dhd_ring_write(dhd, ring, file, file_posn)) < 0)
+		goto exit;
+
+	ring = prot->d2hring_info_cpln;
+	if ((ret = dhd_ring_write(dhd, ring, file, file_posn)) < 0)
+		goto exit;
+
+	ring = &prot->d2hring_tx_cpln;
+	if ((ret = dhd_ring_write(dhd, ring, file, file_posn)) < 0)
+		goto exit;
+
+	ring = &prot->d2hring_rx_cpln;
+	if ((ret = dhd_ring_write(dhd, ring, file, file_posn)) < 0)
+		goto exit;
+
+	ring = prot->h2d_flowrings_pool;
+	if ((ret = dhd_ring_write(dhd, ring, file, file_posn)) < 0)
+		goto exit;
+
+exit :
+	return ret;
+}
+
+/* Writes to file in TLV format */
+static
+int dhd_ring_write(dhd_pub_t *dhd, msgbuf_ring_t *ring, void *file, unsigned long *file_posn)
+{
+	unsigned long flags;
+	int len = 0;
+	int ret = 0;
+	uint16	loc_rd = 0;
+
+	while (len < ((ring->max_items) * (ring->item_len))) {
+		uint8 *msg_addr;
+		cmn_msg_hdr_t *msg;
+
+		DHD_RING_LOCK(ring->ring_lock, flags);
+		msg_addr = (uint8*)ring->dma_buf.va + (loc_rd * ring->item_len);
+		ASSERT(loc_rd < ring->max_items);
+		DHD_RING_UNLOCK(ring->ring_lock, flags);
+
+		if (msg_addr == NULL) {
+			return BCME_ERROR;
+		}
+		msg = (cmn_msg_hdr_t *)msg_addr;
+
+		ret = dhd_os_write_file_posn(file, file_posn, (char *)(&(msg->msg_type)),
+			sizeof(msg->msg_type));
+		if (ret < 0) {
+			DHD_ERROR(("%s: write file error !\n", __FUNCTION__));
+			return BCME_ERROR;
+		}
+		ret = dhd_os_write_file_posn(file, file_posn, (char *)(&(ring->item_len)),
+			sizeof(ring->item_len));
+		if (ret < 0) {
+			DHD_ERROR(("%s: write file error !\n", __FUNCTION__));
+			return BCME_ERROR;
+		}
+		ret = dhd_os_write_file_posn(file, file_posn, (char *)msg_addr, ring->item_len);
+		if (ret < 0) {
+			DHD_ERROR(("%s: write file error !\n", __FUNCTION__));
+			return BCME_ERROR;
+		}
+
+		len += ring->item_len;
+		loc_rd += 1;
+	}
+	return BCME_OK;
+}
+#endif /* DHD_DUMP_PCIE_RINGS */
 
 /** Add prot dump output to a buffer */
 void dhd_prot_dump(dhd_pub_t *dhd, struct bcmstrbuf *b)
@@ -8654,45 +8779,50 @@ dhd_prot_ringupd_dump(dhd_pub_t *dhd, struct bcmstrbuf *b)
 {
 	uint32 *ptr;
 	uint32 value;
-	uint32 i;
-	uint32 max_h2d_queues = dhd_bus_max_h2d_queues(dhd->bus);
 
-	OSL_CACHE_INV((void *)dhd->prot->d2h_dma_indx_wr_buf.va,
-		dhd->prot->d2h_dma_indx_wr_buf.len);
+	if (dhd->prot->d2h_dma_indx_wr_buf.va) {
+		uint32 i;
+		uint32 max_h2d_queues = dhd_bus_max_h2d_queues(dhd->bus);
 
-	ptr = (uint32 *)(dhd->prot->d2h_dma_indx_wr_buf.va);
+		OSL_CACHE_INV((void *)dhd->prot->d2h_dma_indx_wr_buf.va,
+			dhd->prot->d2h_dma_indx_wr_buf.len);
 
-	bcm_bprintf(b, "\n max_tx_queues %d\n", max_h2d_queues);
+		ptr = (uint32 *)(dhd->prot->d2h_dma_indx_wr_buf.va);
 
-	bcm_bprintf(b, "\nRPTR block H2D common rings, 0x%04x\n", ptr);
-	value = ltoh32(*ptr);
-	bcm_bprintf(b, "\tH2D CTRL: value 0x%04x\n", value);
-	ptr++;
-	value = ltoh32(*ptr);
-	bcm_bprintf(b, "\tH2D RXPOST: value 0x%04x\n", value);
+		bcm_bprintf(b, "\n max_tx_queues %d\n", max_h2d_queues);
 
-	ptr++;
-	bcm_bprintf(b, "RPTR block Flow rings , 0x%04x\n", ptr);
-	for (i = BCMPCIE_H2D_COMMON_MSGRINGS; i < max_h2d_queues; i++) {
+		bcm_bprintf(b, "\nRPTR block H2D common rings, 0x%04x\n", ptr);
 		value = ltoh32(*ptr);
-		bcm_bprintf(b, "\tflowring ID %d: value 0x%04x\n", i, value);
+		bcm_bprintf(b, "\tH2D CTRL: value 0x%04x\n", value);
 		ptr++;
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tH2D RXPOST: value 0x%04x\n", value);
+
+		ptr++;
+		bcm_bprintf(b, "RPTR block Flow rings , 0x%04x\n", ptr);
+		for (i = BCMPCIE_H2D_COMMON_MSGRINGS; i < max_h2d_queues; i++) {
+			value = ltoh32(*ptr);
+			bcm_bprintf(b, "\tflowring ID %d: value 0x%04x\n", i, value);
+			ptr++;
+		}
 	}
 
-	OSL_CACHE_INV((void *)dhd->prot->h2d_dma_indx_rd_buf.va,
-		dhd->prot->h2d_dma_indx_rd_buf.len);
+	if (dhd->prot->h2d_dma_indx_rd_buf.va) {
+		OSL_CACHE_INV((void *)dhd->prot->h2d_dma_indx_rd_buf.va,
+			dhd->prot->h2d_dma_indx_rd_buf.len);
 
-	ptr = (uint32 *)(dhd->prot->h2d_dma_indx_rd_buf.va);
+		ptr = (uint32 *)(dhd->prot->h2d_dma_indx_rd_buf.va);
 
-	bcm_bprintf(b, "\nWPTR block D2H common rings, 0x%04x\n", ptr);
-	value = ltoh32(*ptr);
-	bcm_bprintf(b, "\tD2H CTRLCPLT: value 0x%04x\n", value);
-	ptr++;
-	value = ltoh32(*ptr);
-	bcm_bprintf(b, "\tD2H TXCPLT: value 0x%04x\n", value);
-	ptr++;
-	value = ltoh32(*ptr);
-	bcm_bprintf(b, "\tD2H RXCPLT: value 0x%04x\n", value);
+		bcm_bprintf(b, "\nWPTR block D2H common rings, 0x%04x\n", ptr);
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tD2H CTRLCPLT: value 0x%04x\n", value);
+		ptr++;
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tD2H TXCPLT: value 0x%04x\n", value);
+		ptr++;
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tD2H RXCPLT: value 0x%04x\n", value);
+	}
 
 	return 0;
 }

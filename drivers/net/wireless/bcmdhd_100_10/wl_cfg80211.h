@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 747652 2018-02-19 07:57:02Z $
+ * $Id: wl_cfg80211.h 765757 2018-06-05 07:48:03Z $
  */
 
 /**
@@ -50,6 +50,9 @@
 #ifdef BIGDATA_SOFTAP
 #include <wl_bigdata.h>
 #endif // endif
+#ifdef WL_BAM
+#include <wl_bam.h>
+#endif  /* WL_BAM */
 struct wl_conf;
 struct wl_iface;
 struct bcm_cfg80211;
@@ -1076,6 +1079,9 @@ struct bcm_cfg80211 {
 	bool rssi_sum_report;
 	int rssi;	/* previous RSSI (backup) of get_station */
 	uint64 scan_enq_time;
+#ifdef WL_BAM
+	wl_bad_ap_mngr_t bad_ap_mngr;
+#endif  /* WL_BAM */
 };
 
 s32 wl_iftype_to_mode(wl_iftype_t iftype);

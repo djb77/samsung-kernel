@@ -662,7 +662,7 @@ int five_fork(struct task_struct *task, struct task_struct *child_task)
 					struct processing_event_list, list);
 
 			five_file = five_event_create(
-					FIVE_VERIFY_BUNCH_FILES,
+					from_entry->event,
 					child_task,
 					from_entry->file,
 					from_entry->function,
@@ -709,7 +709,7 @@ static inline struct processing_event_list *five_event_create(
 {
 	struct processing_event_list *five_file;
 
-	five_file = kmalloc(sizeof(struct processing_event_list), flags);
+	five_file = kzalloc(sizeof(struct processing_event_list), flags);
 	if (unlikely(!five_file))
 		return NULL;
 

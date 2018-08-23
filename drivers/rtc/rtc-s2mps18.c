@@ -42,7 +42,7 @@ struct s2m_rtc_info {
 	struct s2mps18_dev	*iodev;
 	struct rtc_device	*rtc_dev;
 	struct mutex		lock;
-	struct work_struct	irq_work;
+	struct delayed_work	irq_work;
 	int			irq;
 #if defined(CONFIG_RTC_ALARM_BOOT)
 	int			alarm_boot_irq;
@@ -727,26 +727,11 @@ static irqreturn_t s2m_smpl_warn_irq_handler(int irq, void *data)
 	if (gpio_get_value(info->smpl_warn_info) & 0x1)
 		return IRQ_HANDLED;
 
-	disable_irq_nosync(smpl_irq);
-
-	return IRQ_WAKE_THREAD;
-}
-
-static irqreturn_t s2m_smpl_warn_irq(int irq, void *data)
-{
-	struct s2m_rtc_info *info = data;
-	int state = 0;
-
-	if (!info->rtc_dev)
-		return IRQ_HANDLED;
-
-	do {
-		state = (gpio_get_value(info->smpl_warn_info) & 0x1);
-		msleep(100);
-	} while (!state);
-
 	dev_info(info->dev, "%s: SMPL_WARN HAPPENED!\n", __func__);
-	enable_irq(smpl_irq);
+
+	disable_irq_nosync(smpl_irq);
+	queue_delayed_work(system_freezable_wq, &info->irq_work,
+			msecs_to_jiffies(100));
 
 	return IRQ_HANDLED;
 }
@@ -758,19 +743,23 @@ static unsigned long smpl_warn_number = 0;
 static void exynos_smpl_warn_work(struct work_struct *work)
 {
 	struct s2m_rtc_info *info = container_of(work,
-			struct s2m_rtc_info, irq_work);
+			struct s2m_rtc_info, irq_work.work);
 	int state = 0;
 
-	do {
-		state = (gpio_get_value(info->smpl_warn_info) & 0x1);
-		msleep(100);
-	} while (!state);
+	state = (gpio_get_value(info->smpl_warn_info) & 0x1);
+
+	if (!state) {
+		queue_delayed_work(system_freezable_wq, &info->irq_work,
+				msecs_to_jiffies(100));
+	} else {
+		dev_info(info->dev, "%s: SMPL_WARN polling End!\n", __func__);
+		enable_irq(smpl_irq);
 
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
-	smpl_warn_number++;
-	sec_debug_set_extra_info_smpl(smpl_warn_number);
+		smpl_warn_number++;
+		sec_debug_set_extra_info_smpl(smpl_warn_number);
 #endif
-	dev_info(info->dev, "%s: SMPL_WARN HAPPENED!\n", __func__);
+	}
 }
 
 static void s2m_rtc_enable_wtsr_smpl(struct s2m_rtc_info *info,
@@ -984,7 +973,7 @@ static int s2m_rtc_probe(struct platform_device *pdev)
 
 		ret = devm_request_threaded_irq(&pdev->dev, info->smpl_irq,
 			s2m_smpl_warn_irq_handler,
-			s2m_smpl_warn_irq,
+			NULL,
 			IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 			"SMPL WARN", info);
 		if (ret < 0) {
@@ -993,7 +982,7 @@ static int s2m_rtc_probe(struct platform_device *pdev)
 			goto err_smpl_warn;
 		}
 		info->smpl_warn_info = pdata->smpl_warn;
-		INIT_WORK(&info->irq_work, exynos_smpl_warn_work);
+		INIT_DELAYED_WORK(&info->irq_work, exynos_smpl_warn_work);
 	}
 
 	device_init_wakeup(&pdev->dev, true);

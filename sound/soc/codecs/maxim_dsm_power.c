@@ -685,7 +685,6 @@ static int __init maxdsm_power_init(void)
 						ret);
 		}
 	}
-	dbg_maxdsm("class=%p %p", class, mdp->class);
 
 	dbg_maxdsm("Completed initialization");
 

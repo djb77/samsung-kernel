@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: nan.h 736626 2017-12-17 10:08:43Z $
+ * $Id: nan.h 744033 2018-01-31 07:33:59Z $
  */
 #ifndef _NAN_H_
 #define _NAN_H_
@@ -178,10 +178,11 @@ enum {
 	NAN_ATTR_MCAST_SCHED_OWNER_CHANGE = 38,
 	NAN_ATTR_PUBLIC_AVAILABILITY = 39,
 	NAN_ATTR_SUB_SVC_ID_LIST = 40,
+	NAN_ATTR_NDPE = 41,
 	/* change NAN_ATTR_MAX_ID to max ids + 1, excluding NAN_ATTR_VENDOR_SPECIFIC.
 	 * This is used in nan_parse.c
 	 */
-	NAN_ATTR_MAX_ID		= NAN_ATTR_SUB_SVC_ID_LIST + 1,
+	NAN_ATTR_MAX_ID		= NAN_ATTR_NDPE + 1,
 
 	NAN_ATTR_VENDOR_SPECIFIC = 221
 };
@@ -610,7 +611,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_channel_entry_s {
 #define NAN_AVAIL_ENTRY_CTRL_USAGE_SHIFT 3
 #define NAN_AVAIL_ENTRY_CTRL_USAGE(_flags) (((_flags) & NAN_AVAIL_ENTRY_CTRL_USAGE_MASK) \
 	>> NAN_AVAIL_ENTRY_CTRL_USAGE_SHIFT)
-#define NAN_AVAIL_ENTRY_CTRL_UTIL_MASK 0x1E0
+#define NAN_AVAIL_ENTRY_CTRL_UTIL_MASK 0xE0
 #define NAN_AVAIL_ENTRY_CTRL_UTIL_SHIFT 5
 #define NAN_AVAIL_ENTRY_CTRL_UTIL(_flags) (((_flags) & NAN_AVAIL_ENTRY_CTRL_UTIL_MASK) \
 	>> NAN_AVAIL_ENTRY_CTRL_UTIL_SHIFT)
@@ -941,6 +942,9 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_dev_cap_s {
 /* extended iv cap */
 #define NAN_DEV_CAP_EXT_KEYID_MASK		0x02
 #define NAN_DEV_CAP_EXT_KEYID_SHIFT		1
+/* NDPE attribute support */
+#define	NAN_DEV_CAP_NDPE_ATTR_SUPPORT_MASK	0x08
+#define NAN_DEV_CAP_NDPE_ATTR_SUPPORT(_cap)	((_cap) & NAN_DEV_CAP_NDPE_ATTR_SUPPORT_MASK)
 
 /* Band IDs */
 enum {
@@ -1022,6 +1026,7 @@ typedef BWL_PRE_PACKED_STRUCT struct nan2_pub_act_frame_s {
 /* NAN Action Frame Subtypes */
 /* Subtype-0 is Reserved */
 #define NAN_MGMT_FRM_SUBTYPE_RESERVED		0
+#define NAN_MGMT_FRM_SUBTYPE_INVALID		0
 /* NAN Ranging Request */
 #define NAN_MGMT_FRM_SUBTYPE_RANGING_REQ	1
 /* NAN Ranging Response */
@@ -1079,9 +1084,9 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndp_qos_s {
 #define NAN_NDP_CTRL_SPEC_INFO_PRESENT		0x20
 #define NAN_NDP_CTRL_RESERVED			0xA0
 
-/* NDP Attribute */
+/* Used for both NDP Attribute and NDPE Attribute, since the structures are identical */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndp_attr_s {
-	uint8 id;		/* 0x10 */
+	uint8 id;		/* NDP: 0x10, NDPE: 0x29 */
 	uint16 len;		/* length */
 	uint8 dialog_token;	/* dialog token */
 	uint8 type_status;	/* bits 0-3 type, 4-7 status */

@@ -211,7 +211,11 @@ static int samsung_mailbox_probe(struct platform_device *pdev)
 	gc->chip_types[0].chip.irq_unmask	= irq_gc_mask_clr_bit;
 	gc->chip_types[0].regs.mask		= MAILBOX_INTMR1;
 	gc->chip_types[0].regs.ack		= MAILBOX_INTCR1;
+#ifdef CONFIG_SOC_EXYNOS8895
 	gc->wake_enabled			= 0x0000FFFF;
+#else
+	gc->wake_enabled			= 0xFFFF0000;
+#endif
 	gc->chip_types[0].chip.irq_set_wake	= irq_gc_set_wake;
 
 	irq_set_handler_data(data->irq, pdev);

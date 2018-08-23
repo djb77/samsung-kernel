@@ -1358,7 +1358,6 @@ static int __init maxdsm_cal_init(void)
 						ret);
 		}
 	}
-	dbg_maxdsm("g_class=%p %p", g_class, mdc->class);
 
 	dbg_maxdsm("Completed initialization");
 

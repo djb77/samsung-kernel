@@ -2649,7 +2649,7 @@ static int fimc_is_ischain_s_sensor_size(struct fimc_is_device_ischain *device,
 		sensor_config->max_target_fps = device->sensor->max_target_fps;
 #endif
 
-	if (ex_mode == EX_DUALFPS)
+	if (ex_mode == EX_DUALFPS_960 || ex_mode == EX_DUALFPS_480)
 		sensor_config->early_config_lock = 1;
 	else
 		sensor_config->early_config_lock = 0;

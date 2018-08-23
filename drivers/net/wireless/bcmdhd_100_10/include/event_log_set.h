@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: event_log_set.h 711987 2017-07-20 22:04:29Z $
+ * $Id: event_log_set.h 744920 2018-02-06 06:25:40Z $
  */
 
 #ifndef _EVENT_LOG_SET_H_
@@ -36,7 +36,7 @@
  * this to an appropriat enumber in their makefiles to reduce
  * ROM invalidation
  */
-#define NUM_EVENT_LOG_SETS 10
+#define NUM_EVENT_LOG_SETS 11
 #endif // endif
 
 /* Legacy implementation does not have these sets. So make them 0. */
@@ -78,5 +78,12 @@
 #define EVENT_LOG_SET_PRSRV    7 /* The logtag set flushed only on error. Share with 7 to avoid
 				    * abandons.
 				    */
+
+#define EVENT_LOG_SET_PRSRV_BUS	10
+
+/* send delayed logs when >= 50% of buffer is full */
+#ifndef ECOUNTERS_DELAYED_FLUSH_PERCENTAGE
+#define ECOUNTERS_DELAYED_FLUSH_PERCENTAGE	(50)
+#endif // endif
 
 #endif /* _EVENT_LOG_SET_H_ */

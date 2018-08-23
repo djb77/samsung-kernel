@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: siutils.c 729061 2017-10-30 08:41:27Z $
+ * $Id: siutils.c 769688 2018-06-27 08:15:37Z $
  */
 
 #include <bcm_cfg.h>
@@ -3502,7 +3502,7 @@ bool _bcmsrpwr = FALSE;
 uint32
 si_srpwr_request(si_t *sih, uint32 mask, uint32 val)
 {
-	uint32 r, offset = OFFSETOF(chipcregs_t, powerctl); /* Same 0x1e8 per core */
+	uint32 r, offset = (uint32)OFFSETOF(chipcregs_t, powerctl); /* Same 0x1e8 per core */
 	uint cidx = (BUSTYPE(sih->bustype) == SI_BUS) ? SI_CC_IDX : sih->buscoreidx;
 	uint32 mask2 = mask;
 	uint32 val2 = val;
@@ -3553,7 +3553,7 @@ si_srpwr_request(si_t *sih, uint32 mask, uint32 val)
 uint32
 si_srpwr_stat_spinwait(si_t *sih, uint32 mask, uint32 val)
 {
-	uint32 r, offset = OFFSETOF(chipcregs_t, powerctl); /* Same 0x1e8 per core */
+	uint32 r, offset = (uint32)OFFSETOF(chipcregs_t, powerctl); /* Same 0x1e8 per core */
 	uint cidx = (BUSTYPE(sih->bustype) == SI_BUS) ? SI_CC_IDX : sih->buscoreidx;
 	volatile uint32 *fast_srpwr_addr = (volatile uint32 *)((uintptr)SI_ENUM_BASE(sih)
 					 + (uintptr)offset);
@@ -3585,8 +3585,8 @@ si_srpwr_stat_spinwait(si_t *sih, uint32 mask, uint32 val)
 uint32
 si_srpwr_stat(si_t *sih)
 {
-	uint32 r, offset = OFFSETOF(chipcregs_t, powerctl); /* Same 0x1e8 per core */
-	uint cidx = (BUSTYPE(sih->bustype) == SI_BUS) ? SI_CC_IDX : sih->buscoreidx;
+	uint32 r, offset = (uint32)OFFSETOF(chipcregs_t, powerctl); /* Same 0x1e8 per core */
+	uint cidx = (uint32)(BUSTYPE(sih->bustype) == SI_BUS) ? SI_CC_IDX : sih->buscoreidx;
 
 	r = si_corereg(sih, cidx, offset, 0, 0);
 	r = (r >> SRPWR_STATUS_SHIFT) & SRPWR_DMN_ALL_MASK;
@@ -3597,8 +3597,8 @@ si_srpwr_stat(si_t *sih)
 uint32
 si_srpwr_domain(si_t *sih)
 {
-	uint32 r, offset = OFFSETOF(chipcregs_t, powerctl); /* Same 0x1e8 per core */
-	uint cidx = (BUSTYPE(sih->bustype) == SI_BUS) ? SI_CC_IDX : sih->buscoreidx;
+	uint32 r, offset = (uint32)OFFSETOF(chipcregs_t, powerctl); /* Same 0x1e8 per core */
+	uint cidx = ((uint32)BUSTYPE(sih->bustype) == SI_BUS) ? SI_CC_IDX : sih->buscoreidx;
 
 	r = si_corereg(sih, cidx, offset, 0, 0);
 	r = (r >> SRPWR_DMN_SHIFT) & SRPWR_DMN_ALL_MASK;

@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 758476 2018-04-19 02:09:42Z $
+ * $Id: dhd_linux.c 769691 2018-06-27 08:23:25Z $
  */
 
 #include <typedefs.h>
@@ -98,9 +98,12 @@
 #ifdef CONFIG_HAS_WAKELOCK
 #include <linux/wakelock.h>
 #endif // endif
-#ifdef WL_CFG80211
+#if defined(WL_CFG80211)
 #include <wl_cfg80211.h>
-#endif // endif
+#ifdef WL_BAM
+#include <wl_bam.h>
+#endif	/* WL_BAM */
+#endif	/* WL_CFG80211 */
 #ifdef PNO_SUPPORT
 #include <dhd_pno.h>
 #endif // endif
@@ -517,7 +520,7 @@ void dhd_schedule_log_dump(dhd_pub_t *dhdp, log_dump_type_t *type);
 static int do_dhd_log_dump(dhd_pub_t *dhdp, log_dump_type_t *type);
 
 #define DHD_PRINT_BUF_NAME_LEN 30
-static void dhd_print_buf_addr(char *name, void *buf, unsigned int size);
+static void dhd_print_buf_addr(dhd_pub_t *dhdp, char *name, void *buf, unsigned int size);
 #endif /* DHD_LOG_DUMP */
 
 #ifdef DHD_PCIE_NATIVE_RUNTIMEPM
@@ -2226,7 +2229,6 @@ dhd_sta_free(dhd_pub_t * dhdp, dhd_sta_t * sta)
 
 		if (flowid != FLOWID_INVALID) {
 			unsigned long flags;
-			flow_queue_t * queue = dhd_flow_queue(dhdp, flowid);
 			flow_ring_node_t * flow_ring_node;
 
 #ifdef DHDTCPACK_SUPPRESS
@@ -2237,18 +2239,23 @@ dhd_sta_free(dhd_pub_t * dhdp, dhd_sta_t * sta)
 #endif /* DHDTCPACK_SUPPRESS */
 
 			flow_ring_node = dhd_flow_ring_node(dhdp, flowid);
-			DHD_FLOWRING_LOCK(flow_ring_node->lock, flags);
-			flow_ring_node->status = FLOW_RING_STATUS_STA_FREEING;
+			if (flow_ring_node) {
+				flow_queue_t *queue = &flow_ring_node->queue;
 
-			if (!DHD_FLOW_QUEUE_EMPTY(queue)) {
-				void * pkt;
-				while ((pkt = dhd_flow_queue_dequeue(dhdp, queue)) != NULL) {
-					PKTFREE(dhdp->osh, pkt, TRUE);
+				DHD_FLOWRING_LOCK(flow_ring_node->lock, flags);
+				flow_ring_node->status = FLOW_RING_STATUS_STA_FREEING;
+
+				if (!DHD_FLOW_QUEUE_EMPTY(queue)) {
+					void * pkt;
+					while ((pkt = dhd_flow_queue_dequeue(dhdp, queue)) !=
+						NULL) {
+						PKTFREE(dhdp->osh, pkt, TRUE);
+					}
 				}
-			}
 
-			DHD_FLOWRING_UNLOCK(flow_ring_node->lock, flags);
-			ASSERT(DHD_FLOW_QUEUE_EMPTY(queue));
+				DHD_FLOWRING_UNLOCK(flow_ring_node->lock, flags);
+				ASSERT(DHD_FLOW_QUEUE_EMPTY(queue));
+			}
 		}
 
 		sta->flowid[prio] = FLOWID_INVALID;
@@ -7733,7 +7740,17 @@ int dhd_ioctl_process(dhd_pub_t *pub, int ifidx, dhd_ioctl_t *ioc, void *data_bu
 #ifdef WL_MONITOR
 	/* Intercept monitor ioctl here, add/del monitor if */
 	if (bcmerror == BCME_OK && ioc->cmd == WLC_SET_MONITOR) {
-		dhd_set_monitor(pub, ifidx, *(int32*)data_buf);
+		int val = 0;
+		if (data_buf != NULL && buflen != 0) {
+			if (buflen >= 4) {
+				val = *(int*)data_buf;
+			} else if (buflen >= 2) {
+				val = *(short*)data_buf;
+			} else {
+				val = *(char*)data_buf;
+			}
+		}
+		dhd_set_monitor(pub, ifidx, val);
 	}
 #endif /* WL_MONITOR */
 
@@ -8320,6 +8337,9 @@ dhd_open(struct net_device *net)
 #ifdef PCIE_FULL_DONGLE
 	dhd->pub.d3ack_timeout_occured = 0;
 #endif /* PCIE_FULL_DONGLE */
+#ifdef DHD_MAP_LOGGING
+	dhd->pub.smmu_fault_occurred = 0;
+#endif /* DHD_MAP_LOGGING */
 
 #ifdef DHD_LOSSLESS_ROAMING
 	dhd->pub.dequeue_prec_map = ALLPRIO;
@@ -9805,7 +9825,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	dhd_found++;
 
 	g_dhd_pub = &dhd->pub;
-	DHD_ERROR(("%s: g_dhd_pub %p\n", __FUNCTION__, g_dhd_pub));
+	DHD_INFO(("%s: g_dhd_pub %p\n", __FUNCTION__, g_dhd_pub));
 
 #ifdef DHD_DUMP_MNGR
 	dhd->pub.dump_file_manage =
@@ -10163,6 +10183,9 @@ dhd_bus_start(dhd_pub_t *dhdp)
 #ifdef PCIE_FULL_DONGLE
 	dhdp->d3ack_timeout_occured = 0;
 #endif /* PCIE_FULL_DONGLE */
+#ifdef DHD_MAP_LOGGING
+	dhdp->smmu_fault_occurred = 0;
+#endif /* DHD_MAP_LOGGING */
 
 	DHD_PERIM_LOCK(dhdp);
 	/* try to download image and nvram to the dongle */
@@ -10658,6 +10681,44 @@ dhd_preinit_aibss_ioctls(dhd_pub_t *dhd, char *iov_buf_smlen)
 #endif /* WLAIBSS */
 
 #if defined(WLADPS) || defined(WLADPS_PRIVATE_CMD)
+#ifdef WL_BAM
+static int
+dhd_check_adps_bad_ap(dhd_pub_t *dhd)
+{
+	struct net_device *ndev;
+	struct bcm_cfg80211 *cfg;
+	struct wl_profile *profile;
+	struct ether_addr bssid;
+
+	if (!dhd_is_associated(dhd, 0, NULL)) {
+		DHD_ERROR(("%s - not associated\n", __FUNCTION__));
+		return BCME_OK;
+	}
+
+	ndev = dhd_linux_get_primary_netdev(dhd);
+	if (!ndev) {
+		DHD_ERROR(("%s: Cannot find primary netdev\n", __FUNCTION__));
+		return -ENODEV;
+	}
+
+	cfg = wl_get_cfg(ndev);
+	if (!cfg) {
+		DHD_ERROR(("%s: Cannot find cfg\n", __FUNCTION__));
+		return -EINVAL;
+	}
+
+	profile = wl_get_profile_by_netdev(cfg, ndev);
+	memcpy(bssid.octet, profile->bssid, ETHER_ADDR_LEN);
+	if (wl_adps_bad_ap_check(cfg, &bssid)) {
+		if (wl_adps_enabled(cfg, ndev)) {
+			wl_adps_set_suspend(cfg, ndev, ADPS_SUSPEND);
+		}
+	}
+
+	return BCME_OK;
+}
+#endif	/* WL_BAM */
+
 int
 dhd_enable_adps(dhd_pub_t *dhd, uint8 on)
 {
@@ -10701,6 +10762,12 @@ dhd_enable_adps(dhd_pub_t *dhd, uint8 on)
 			}
 		}
 	}
+
+#ifdef WL_BAM
+	if (on) {
+		dhd_check_adps_bad_ap(dhd);
+	}
+#endif	/* WL_BAM */
 
 exit:
 	if (iov_buf) {
@@ -14186,6 +14253,9 @@ dhd_net_bus_devreset(struct net_device *dev, uint8 flag)
 #ifdef PCIE_FULL_DONGLE
 		dhd->pub.d3ack_timeout_occured = 0;
 #endif /* PCIE_FULL_DONGLE */
+#ifdef DHD_MAP_LOGGING
+		dhd->pub.smmu_fault_occurred = 0;
+#endif /* DHD_MAP_LOGGING */
 	}
 
 	if (ret) {
@@ -16402,7 +16472,7 @@ write_dump_to_file(dhd_pub_t *dhd, uint8 *buf, int size, char *fname)
 	DHD_ERROR(("%s: file_path = %s\n", __FUNCTION__, memdump_path));
 
 #ifdef DHD_LOG_DUMP
-	dhd_print_buf_addr("write_dump_to_file", buf, size);
+	dhd_print_buf_addr(dhd, "write_dump_to_file", buf, size);
 #endif /* DHD_LOG_DUMP */
 
 	/* Write file */
@@ -17682,14 +17752,10 @@ void dhd_schedule_memdump(dhd_pub_t *dhdp, uint8 *buf, uint32 size)
 	}
 	dump->buf = buf;
 	dump->bufsize = size;
+#ifdef DHD_LOG_DUMP
+	dhd_print_buf_addr(dhdp, "memdump", buf, size);
+#endif /* DHD_LOG_DUMP */
 
-#if defined(CONFIG_ARM64)
-	DHD_ERROR(("%s: buf(va)=%llx, buf(pa)=%llx, bufsize=%d\n", __FUNCTION__,
-		(uint64)buf, (uint64)__virt_to_phys((ulong)buf), size));
-#elif defined(__ARM_ARCH_7A__)
-	DHD_ERROR(("%s: buf(va)=%x, buf(pa)=%x, bufsize=%d\n", __FUNCTION__,
-		(uint32)buf, (uint32)__virt_to_phys((ulong)buf), size));
-#endif /* __ARM_ARCH_7A__ */
 	if (dhdp->memdump_enabled == DUMP_MEMONLY) {
 		BUG_ON(1);
 	}
@@ -17966,15 +18032,18 @@ void dhd_schedule_log_dump(dhd_pub_t *dhdp, log_dump_type_t *type)
 }
 
 static void
-dhd_print_buf_addr(char *name, void *buf, unsigned int size)
+dhd_print_buf_addr(dhd_pub_t *dhdp, char *name, void *buf, unsigned int size)
 {
+	if ((dhdp->memdump_enabled == DUMP_MEMONLY) ||
+		(dhdp->memdump_enabled == DUMP_MEMFILE_BUGON)) {
 #if defined(CONFIG_ARM64)
-	DHD_ERROR(("-------- %s: buf(va)=%llx, buf(pa)=%llx, bufsize=%d\n",
-		name, (uint64)buf, (uint64)__virt_to_phys((ulong)buf), size));
+		DHD_ERROR(("-------- %s: buf(va)=%llx, buf(pa)=%llx, bufsize=%d\n",
+			name, (uint64)buf, (uint64)__virt_to_phys((ulong)buf), size));
 #elif defined(__ARM_ARCH_7A__)
-	DHD_ERROR(("-------- %s: buf(va)=%x, buf(pa)=%x, bufsize=%d\n",
-		name, (uint32)buf, (uint32)__virt_to_phys((ulong)buf), size));
+		DHD_ERROR(("-------- %s: buf(va)=%x, buf(pa)=%x, bufsize=%d\n",
+			name, (uint32)buf, (uint32)__virt_to_phys((ulong)buf), size));
 #endif /* __ARM_ARCH_7A__ */
+	}
 }
 
 static void
@@ -18000,13 +18069,13 @@ dhd_log_dump_buf_addr(dhd_pub_t *dhdp, log_dump_type_t *type)
 				(unsigned long)dld_buf->front;
 		}
 		scnprintf(buf_name, sizeof(buf_name), "dlb_buf[%d]", i);
-		dhd_print_buf_addr(buf_name, dld_buf, dld_buf_size[i]);
+		dhd_print_buf_addr(dhdp, buf_name, dld_buf, dld_buf_size[i]);
 		scnprintf(buf_name, sizeof(buf_name), "dlb_buf[%d] buffer", i);
-		dhd_print_buf_addr(buf_name, dld_buf->buffer, wr_size);
+		dhd_print_buf_addr(dhdp, buf_name, dld_buf->buffer, wr_size);
 		scnprintf(buf_name, sizeof(buf_name), "dlb_buf[%d] present", i);
-		dhd_print_buf_addr(buf_name, dld_buf->present, wr_size);
+		dhd_print_buf_addr(dhdp, buf_name, dld_buf->present, wr_size);
 		scnprintf(buf_name, sizeof(buf_name), "dlb_buf[%d] front", i);
-		dhd_print_buf_addr(buf_name, dld_buf->front, wr_size);
+		dhd_print_buf_addr(dhdp, buf_name, dld_buf->front, wr_size);
 	}
 
 #ifdef DEBUGABILITY_ECNTRS_LOGGING
@@ -18016,28 +18085,29 @@ dhd_log_dump_buf_addr(dhd_pub_t *dhdp, log_dump_type_t *type)
 			dhdp->ecntr_dbg_ring) {
 
 		ring = (dhd_dbg_ring_t *)dhdp->ecntr_dbg_ring;
-		dhd_print_buf_addr("ecntr_dbg_ring", ring, LOG_DUMP_ECNTRS_MAX_BUFSIZE);
-		dhd_print_buf_addr("ecntr_dbg_ring ring_buf", ring->ring_buf,
+		dhd_print_buf_addr(dhdp, "ecntr_dbg_ring", ring, LOG_DUMP_ECNTRS_MAX_BUFSIZE);
+		dhd_print_buf_addr(dhdp, "ecntr_dbg_ring ring_buf", ring->ring_buf,
 				LOG_DUMP_ECNTRS_MAX_BUFSIZE);
 	}
 #endif /* DEBUGABILITY_ECNTRS_LOGGING */
 
 	if (dhdp->dongle_trap_occured && dhdp->extended_trap_data) {
-		dhd_print_buf_addr("extended_trap_data", dhdp->extended_trap_data,
+		dhd_print_buf_addr(dhdp, "extended_trap_data", dhdp->extended_trap_data,
 				BCMPCIE_EXT_TRAP_DATA_MAXLEN);
 	}
 
 #if defined(DHD_FW_COREDUMP) && defined(DNGL_EVENT_SUPPORT)
 	/* if health check event was received */
 	if (dhdp->memdump_type == DUMP_TYPE_DONGLE_HOST_EVENT) {
-		dhd_print_buf_addr("health_chk_event_data", dhdp->health_chk_event_data,
+		dhd_print_buf_addr(dhdp, "health_chk_event_data", dhdp->health_chk_event_data,
 				HEALTH_CHK_BUF_SIZE);
 	}
 #endif /* DHD_FW_COREDUMP && DNGL_EVENT_SUPPORT */
 
 	/* append the concise debug information */
 	if (dhdp->concise_dbg_buf) {
-		dhd_print_buf_addr("concise_dbg_buf", dhdp->concise_dbg_buf, CONCISE_DUMP_BUFLEN);
+		dhd_print_buf_addr(dhdp, "concise_dbg_buf", dhdp->concise_dbg_buf,
+				CONCISE_DUMP_BUFLEN);
 	}
 }
 
@@ -18393,6 +18463,43 @@ do_dhd_log_dump(dhd_pub_t *dhdp, log_dump_type_t *type)
 		}
 	}
 #endif /* DHD_FW_COREDUMP && DNGL_EVENT_SUPPORT */
+
+#ifdef DHD_DUMP_PCIE_RINGS
+		/* write the section header first */
+		vfs_write(fp, FLOWRING_DUMP_HDR, strlen(FLOWRING_DUMP_HDR), &pos);
+		/* Write the ring summary */
+		ret = vfs_write(fp, dhdp->concise_dbg_buf, CONCISE_DUMP_BUFLEN - remain_len, &pos);
+		if (ret < 0) {
+			DHD_ERROR(("write file error of concise debug info,"
+									" err = %d\n", ret));
+			goto exit;
+		}
+		sec_hdr.type = LOG_DUMP_SECTION_FLOWRING;
+		sec_hdr.length = ((H2DRING_TXPOST_ITEMSIZE
+					* H2DRING_TXPOST_MAX_ITEM)
+					+ (D2HRING_TXCMPLT_ITEMSIZE
+					* D2HRING_TXCMPLT_MAX_ITEM)
+					+ (H2DRING_RXPOST_ITEMSIZE
+					* H2DRING_RXPOST_MAX_ITEM)
+					+ (D2HRING_RXCMPLT_ITEMSIZE
+					* D2HRING_RXCMPLT_MAX_ITEM)
+					+ (H2DRING_CTRL_SUB_ITEMSIZE
+					* H2DRING_CTRL_SUB_MAX_ITEM)
+					+ (D2HRING_CTRL_CMPLT_ITEMSIZE
+					* D2HRING_CTRL_CMPLT_MAX_ITEM)
+					+ (H2DRING_INFO_BUFPOST_ITEMSIZE
+					* H2DRING_DYNAMIC_INFO_MAX_ITEM)
+					+ (D2HRING_INFO_BUFCMPLT_ITEMSIZE
+					* D2HRING_DYNAMIC_INFO_MAX_ITEM));
+		vfs_write(fp, (char *)&sec_hdr, sizeof(sec_hdr), &pos);
+		/* write the log */
+		ret = dhd_d2h_h2d_ring_dump(dhdp, fp, (unsigned long *)&pos);
+		if (ret < 0) {
+			DHD_ERROR(("%s: error dumping ring data!\n",
+				__FUNCTION__));
+			goto exit;
+		}
+#endif /* DHD_DUMP_PCIE_RINGS */
 
 	/* append the concise debug information to the file.
 	 * This is the information which is seen
@@ -21705,7 +21812,16 @@ void
 dhd_debug_info_dump(void)
 {
 	dhd_pub_t *dhdp = (dhd_pub_t *)g_dhd_pub;
+	uint32 irq = (uint32)-1;
+
 	DHD_ERROR(("%s: Trigger SMMU Fault\n", __FUNCTION__));
+	dhdp->smmu_fault_occurred = TRUE;
+
+	/* Disable PCIe IRQ */
+	dhdpcie_get_pcieirq(dhdp->bus, &irq);
+	if (irq != (uint32)-1) {
+		disable_irq_nosync(irq);
+	}
 
 	DHD_OS_WAKE_LOCK(dhdp);
 	dhd_prot_debug_info_print(dhdp);

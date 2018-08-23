@@ -506,8 +506,7 @@ void kbase_pm_do_poweron(struct kbase_device *kbdev, bool is_resume);
  * @is_suspend: true if power off due to suspend,
  *              false otherwise
  */
-/* MALI_SEC_INTEGRATION */
-int kbase_pm_do_poweroff(struct kbase_device *kbdev, bool is_suspend);
+void kbase_pm_do_poweroff(struct kbase_device *kbdev, bool is_suspend);
 
 #if defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS)
 void kbase_pm_get_dvfs_utilisation(struct kbase_device *kbdev,

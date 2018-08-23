@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmpcie.h 737203 2017-12-20 05:55:03Z $
+ * $Id: bcmpcie.h 739442 2018-01-08 17:45:01Z $
  */
 
 #ifndef	_bcmpcie_h_
@@ -279,8 +279,6 @@ typedef struct ring_mem {
 	sh_addr_t	base_addr; /* 64 bits address, either in host or device memory */
 } ring_mem_t;
 
-#define HOSTCAP_PKT_TXSTATUS		    0x00400000
-
 /**
  * Per flow ring, information is maintained in device memory, eg at what address the ringmem and
  * ringstate are located. The flow ring itself can be instantiated in either host or device memory.
@@ -406,6 +404,7 @@ typedef struct {
 #define HOSTCAP_BT_LOGGING			0x00080000
 #define HOSTCAP_SNAPSHOT_UPLOAD			0x00100000
 #define HOSTCAP_FAST_DELETE_RING		0x00200000
+#define HOSTCAP_PKT_TXSTATUS			0x00400000
 #define HOSTCAP_UR_FW_NO_TRAP			0x00800000 /* Don't trap on UR */
 #define HOSTCAP_HSCB				0x02000000
 /* Host support for extended device trap debug buffer */

@@ -20,6 +20,7 @@
 static unsigned int VSS_MAGIC_OFFSET = 0x500000;
 static const int E9810_INT_FREQ = 178000;
 static const int E9810_INT_FREQ_SPK = 400000;
+static const unsigned int E9810_INT_ID = ABOX_CPU_GEAR_CALL_KERNEL;
 
 int abox_vss_notify_call(struct device *dev, struct abox_data *data, int en)
 {
@@ -30,15 +31,17 @@ int abox_vss_notify_call(struct device *dev, struct abox_data *data, int en)
 	if (en) {
 		if (IS_ENABLED(CONFIG_SOC_EXYNOS9810)) {
 			if (data->sound_type == SOUND_TYPE_SPEAKER)
-				ret = abox_request_int_freq(dev, data, dev,
+				ret = abox_request_int_freq(dev, data,
+						E9810_INT_ID,
 						E9810_INT_FREQ_SPK);
 			else
-				ret = abox_request_int_freq(dev, data, dev,
+				ret = abox_request_int_freq(dev, data,
+						E9810_INT_ID,
 						E9810_INT_FREQ);
 		}
 	} else {
 		if (IS_ENABLED(CONFIG_SOC_EXYNOS9810))
-			ret = abox_request_int_freq(dev, data, dev, 0);
+			ret = abox_request_int_freq(dev, data, E9810_INT_ID, 0);
 	}
 
 	return ret;

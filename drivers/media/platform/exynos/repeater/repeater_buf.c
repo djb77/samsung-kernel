@@ -88,7 +88,7 @@ int get_capturing_buf_idx(struct shared_buffer *bufs, int *buf_idx)
 	return ret;
 }
 
-int set_captured_buf_idx(struct shared_buffer *bufs, int buf_idx)
+int set_captured_buf_idx(struct shared_buffer *bufs, int buf_idx, int cap_idx)
 {
 	int i = 0;
 	int ret = -ENOBUFS;
@@ -99,21 +99,27 @@ int set_captured_buf_idx(struct shared_buffer *bufs, int buf_idx)
 
 	if ((buf_idx >= 0 && buf_idx < MAX_SHARED_BUF_NUM) &&
 			bufs->buf_status[buf_idx] == SHARED_BUF_CAPTURING) {
-		bufs->buf_status[buf_idx] = SHARED_BUF_CAPTURED;
+		if (buf_idx == cap_idx) {
+			bufs->buf_status[buf_idx] = SHARED_BUF_CAPTURED;
+		} else {
+			bufs->buf_status[buf_idx] = SHARED_BUF_INIT;
+			print_repeater_debug(RPT_ERROR, "blending error, buf_idx %d, cap_idx %d\n",
+				buf_idx, cap_idx);
+		}
 		cur_ktime = ktime_get();
 		cur_timestamp = ktime_to_us(cur_ktime);
 		bufs->captured_timestamp_us[buf_idx] = cur_timestamp;
 		ret = 0;
 
 		print_repeater_debug(RPT_SHR_BUF_INFO,
-				"buf_idx %d, captured_timestamp_us %lld, cur_timestamp %lld\n",
-				buf_idx, bufs->captured_timestamp_us[buf_idx], cur_timestamp);
+			"buf_idx %d, captured_timestamp_us %lld, cur_timestamp %lld\n",
+			buf_idx, bufs->captured_timestamp_us[buf_idx], cur_timestamp);
 	}
 
 	for (i = 0; i < bufs->buffer_count; i++) {
 		print_repeater_debug(RPT_SHR_BUF_INFO,
-				"bufs->buf_status[%d] %d, captured_timestamp_us %lld\n",
-				i, bufs->buf_status[i], bufs->captured_timestamp_us[i]);
+			"bufs->buf_status[%d] %d, captured_timestamp_us %lld\n",
+			i, bufs->buf_status[i], bufs->captured_timestamp_us[i]);
 	}
 
 	print_repeater_debug(RPT_SHR_BUF_INFO, "%s--\n", __func__);

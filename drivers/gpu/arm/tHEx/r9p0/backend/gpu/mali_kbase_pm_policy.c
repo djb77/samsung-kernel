@@ -293,10 +293,8 @@ int kbase_pm_policy_init(struct kbase_device *kbdev)
 {
 	struct workqueue_struct *wq;
 
-	/* MALI_SEC_INTEGRATION */
-	/* alloc_workqueue option is changed to ordered */
 	wq = alloc_workqueue("kbase_pm_do_poweroff",
-			WQ_HIGHPRI | WQ_UNBOUND | __WQ_ORDERED, 1);
+			WQ_HIGHPRI | WQ_UNBOUND, 1);
 	if (!wq)
 		return -ENOMEM;
 
@@ -427,10 +425,6 @@ void kbase_pm_update_active(struct kbase_device *kbdev)
 				spin_unlock_irqrestore(&kbdev->hwaccess_lock,
 						flags);
 			} else {
-				/* MALI_SEC_INTEGRATION */
-				if (pm->backend.poweroff_wait_in_progress && pm->backend.poweron_required) {
-					pm->backend.poweron_required = false;
-				}
 				spin_unlock_irqrestore(&kbdev->hwaccess_lock,
 						flags);
 

@@ -40,7 +40,7 @@ void init_shared_buffer(struct shared_buffer *bufs, int buffer_count);
 
 int get_capturing_buf_idx(struct shared_buffer *bufs, int *buf_idx);
 
-int set_captured_buf_idx(struct shared_buffer *bufs, int buf_idx);
+int set_captured_buf_idx(struct shared_buffer *bufs, int buf_idx, int cap_idx);
 
 int get_latest_captured_buf_idx(struct shared_buffer *bufs, int *buf_idx);
 
