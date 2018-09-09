@@ -1,0 +1,90 @@
+comment "Samsung Modem Interface Driver for Memory-type Interface"
+menuconfig SEC_MODEM_IF
+	bool "Samsung Mobile Modem Interface"
+	default n
+	---help---
+	  Samsung Modem Interface Driver.
+
+config LTE_MODEM_CMC221
+	bool "modem chip : SEC CMC221"
+	depends on SEC_MODEM_IF
+	default n
+
+config UMTS_MODEM_SS222
+	bool "modem chip : SEC SS222"
+	depends on SEC_MODEM_IF
+	default n
+
+config LTE_MODEM_S5E4270
+	bool "modem chip : LSI S5E4270(onechip)"
+	depends on SEC_MODEM_IF
+	default n
+
+config LTE_MODEM_S5E7580
+	bool "modem chip : LSI S5E7580(onechip)"
+	depends on SEC_MODEM_IF
+	default n
+
+config LTE_MODEM_S5E7890
+	bool "modem chip : LSI S5E7890(onechip)"
+	depends on SEC_MODEM_IF
+	default n
+
+config LTE_MODEM_S5E8890
+	bool "modem chip : LSI S5E8890(onechip)"
+	depends on SEC_MODEM_IF
+	default n
+
+config LTE_MODEM_S5E7880
+	bool "modem chip : LSI S5E7880(onechip)"
+	depends on SEC_MODEM_IF
+	default n
+
+config LTE_MODEM_S5E7570
+	bool "modem chip : LSI S5E7570(onechip)"
+	depends on SEC_MODEM_IF
+	default n
+
+config LTE_MODEM_S5E8895
+	bool "modem chip : LSI S5E8895(onechip)"
+	depends on SEC_MODEM_IF
+	default n
+
+config LTE_MODEM_S5E9810
+	bool "modem chip : LSI S5E9810(onechip)"
+	depends on SEC_MODEM_IF
+	default n
+
+config LTE_MODEM_S5E7872
+	bool "modem chip : LSI S5E7872(onechip)"
+	depends on SEC_MODEM_IF
+	default n
+
+config LINK_DEVICE_SHMEM
+	bool "modem driver link device shared memory"
+	depends on SEC_MODEM_IF
+	default y
+
+config CP_SECURE_BOOT
+	bool "Support CP Secure Boot"
+	default n
+
+config DEBUG_MODEM_IF
+	bool "enable modem if debug option"
+	depends on SEC_MODEM_IF
+	default n
+
+config WORKQUEUE_FRONT
+	bool "IPC: SPI workqueue front"
+	depends on SEC_MODEM_IF
+	default n
+
+config SIM_DETECT
+	bool "SIM_DETECT pin"
+	depends on SEC_MODEM_IF
+	default n
+
+config SIM_SLOT_SWITCH
+	bool "SIM_SLOT_SWITCH"
+	depends on SEC_MODEM_IF
+	default n

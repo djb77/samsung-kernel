@@ -1,0 +1,80 @@
+BCM4361 DHD 100.13.11 for Android Crown Project
+(Notes: 100.13.x is twigged off from 100.10.246)
+
+DHD 100.13.11 - 2018.06.20
+
+1. CS5301150 Tx packet drop due to dongle encryption key setting clear issue correction
+2. CS5289774 Fix RSSI 0 Issues in the BT Coex situation
+
+DHD 100.13.6 - 2018.06.05
+Kernel Panic
+ - CS5120366(By Jeong Min Cheol) Fixed potential buffer overflow due to sscanf
+
+Others
+ - CS4417297(By Jeong Min Cheol) Fixed vulnerability issue by repeated INTERFACE_CREATE command
+ - CS4996816(By Kim TaeYoung) Fixed prevent issue - INVALID_ASSIGNMENT warning
+ - Added virtual and physical address information log of BAR0/BAR1 to support PCIe related issue
+ - Changed EWP counters version to version #2 for 4361B2
+ - Disabled WPS state sync code until stabilized
+
+
+DHD 100.13.3 - 2018.05.18
+Others
+ - CS4227562(By SungBin Min) Supported a list of bad APs handling PS mode improperly
+ - CS4679906(By Yoon Jae Ho) Added to check MFP condition when enabling MFP
+ - CS4985606(By Kim MinSoo) Throughput enhancement in upload mode with HFS tool on Exynos 9810 platform
+ - CS4996816(By Kim Gwang Min) Fixed prevent issue(Possibility of memory leakage)
+ - Enhanced interface type setting even initial value was not set properly
+ - Fixed Certification issue for 5.2.16 PMK Caching Test
+
+
+DHD 100.10.246 - 2018.05.04
+Security Patch
+ - Changed length field to unsigned variable for TLV parsing code
+
+Others
+ - CS4795437(By Gu Ja Heon) Changed threshold for Exynos 9810 PCIe interrupt affinity
+ - Added error logs and changed the return value in ISR
+ - Fixed "Failed to cache disc result" failures in NAN COMMS test
+ - Fixed ARP iovar was blocked due to improper bus status check during RPM suspend
+ - Fixed devreset iovar error issue
+ - Fixed PCIe ring dump delay issue
+
+
+DHD 100.10.235 - 2018.04.20
+Major Issue
+ - CS4384271(By MinSoo Kim) Modified to select TSQ MULTIPLIER by kernel config
+   (CONFIG_WLAN_TSQ_MULTIPLIER should be defined on kernel defconfig to use TSQ MULTIPLIER feature)
+
+New Feature
+ - CS4628274(By Choi Junsu) Monitor mode support (Disabled RunTime PM and Enabled Scansuppress)
+ - First official NAN feature release
+
+Kernel Panic
+ - CS4854788(By Jeong Min Cheol) Moved the debug info prints to avoid the Kernel panic due to watchdog bark
+
+Others
+ - CS4555626(By Min SungBin) Added to check roaming condition on wl_cfg80211_get_station() function
+ - CS4596042(By Kwak Hogil) Changed EXCESS_PM_WAKE_EVENT interval time on suspend mode
+ - CS4725359(By Junsu Choi) Disabled android PNO feature
+ - CS4795437(By Gu Ja Heon) TPUT enhancement for Exynos 9810 Big Turbo feature
+ - CS4807325(By Min SungBin) Replaced country code to XZ ccode if ccode is an undefined country
+ - CS4865776(By Kim Tae-Yong) Decide FW/NVRAM/BLOB base location by referring PLATFORM_VERSION and ANDROID_VERSION together
+ - Added DHD_LOG_MEM macro for saving log to memory only (not print out to kernel message)
+ - Added dump code for all PCIe rings in debug_dump
+ - Added invalid flowid check routine
+ - Added PKT TAG size check in run time
+ - Dropped tx packet if it is larger than MAX_MTU_SZ(1600 bytes)
+ - Fixed Race condition between wl_cfg80211_add_if() and event_handler context
+ - Fixed wrong size buffer posting error after MFG FW loading (cleared monitor_enable flag in dhd_prot_init() )
+
+
+DHD 100.10.222 - 2018.03.30
+Security Patch
+ - CVE-2017-13292 V2018010201 Fixed buffer overflow in wl_get_assoc_ies() during assoc_info iovar results handling
+
+Note
+  - This is the initial version for Crown Project
+  - All code fixes till 100.11.4 in Star project are included in this version
+
+

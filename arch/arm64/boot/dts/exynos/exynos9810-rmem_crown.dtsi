@@ -1,0 +1,25 @@
+/*
+ * SAMSUNG EXYNOS device tree source for reserved-memory
+ *
+ * Copyright (c) 2017 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+&reserved_memory {
+	camera {
+		compatible = "exynos8890-ion,camera";
+		ion,recyclable;
+		size = <0x1B800000>;
+		alloc-ranges = <0x0 0x40000000 0xC0000000>;
+		alignment = <0x0 0x00400000>;
+		id = <10>;
+	};
+	rkp_region: rkp_region@0xAF600000 {
+		compatible = "removed-dma-pool";
+		reg = <0x0 0xAF600000 0x2000000>;
+	};
+};

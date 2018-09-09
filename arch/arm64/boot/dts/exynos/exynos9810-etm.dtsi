@@ -1,0 +1,349 @@
+/*
+ * SAMSUNG EXYNOS8895 SoC TRACE device tree source
+ *
+ * Copyright (c) 2016 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * SAMSUNG EXYNOS8895 SoC device nodes are listed in this file.
+ * EXYNOS8895 based board files can include this file and provide
+ * values for board specfic bindings.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+#include <dt-bindings/clock/exynos9810.h>
+
+/ {
+	/* CL0 ETMs */
+	etm@1e840000 {
+		compatible = "arm,coresight-etm4x", "arm,primecell";
+		arm,primecell-periphid = <0x0bbd05>;
+		reg = <0 0x1e840000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		cpu = <&cpu0>;
+		port {
+			etm0_out_port: endpoint {
+				remote-endpoint = <&funnel1_in_port0>;
+			};
+		};
+	};
+
+	etm@1e940000 {
+		compatible = "arm,coresight-etm4x", "arm,primecell";
+		arm,primecell-periphid = <0x0bbd05>;
+		reg = <0 0x1e940000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		cpu = <&cpu1>;
+		port {
+			etm1_out_port: endpoint {
+				remote-endpoint = <&funnel1_in_port1>;
+			};
+		};
+	};
+
+	etm@1ea40000 {
+		compatible = "arm,coresight-etm4x", "arm,primecell";
+		arm,primecell-periphid = <0x0bbd05>;
+		reg = <0 0x1ea40000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		cpu = <&cpu2>;
+		port {
+			etm2_out_port: endpoint {
+				remote-endpoint = <&funnel1_in_port2>;
+			};
+		};
+	};
+
+	etm@1eb40000 {
+		compatible = "arm,coresight-etm4x", "arm,primecell";
+		arm,primecell-periphid = <0x0bbd05>;
+		reg = <0 0x1eb40000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		cpu = <&cpu3>;
+		port {
+			etm3_out_port: endpoint {
+				remote-endpoint = <&funnel1_in_port3>;
+			};
+		};
+	};
+
+	/* CL1 */
+	etm@1e440000 {
+		compatible = "arm,coresight-etm4x", "arm,primecell";
+		arm,primecell-periphid = <0x000ce002>;
+		reg = <0 0x1e440000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		cpu = <&cpu4>;
+		port {
+			etm4_out_port: endpoint {
+				remote-endpoint = <&funnel0_in_port0>;
+			};
+		};
+	};
+
+	etm@1e540000 {
+		compatible = "arm,coresight-etm4x", "arm,primecell";
+		arm,primecell-periphid = <0x000ce002>;
+		reg = <0 0x1e540000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		cpu = <&cpu5>;
+		port {
+			etm5_out_port: endpoint {
+				remote-endpoint = <&funnel0_in_port1>;
+			};
+		};
+	};
+
+	etm@1e640000 {
+		compatible = "arm,coresight-etm4x", "arm,primecell";
+		arm,primecell-periphid = <0x000ce002>;
+		reg = <0 0x1e640000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		cpu = <&cpu6>;
+		port {
+			etm6_out_port: endpoint {
+				remote-endpoint = <&funnel0_in_port2>;
+			};
+		};
+	};
+
+	etm@1e740000 {
+		compatible = "arm,coresight-etm4x", "arm,primecell";
+		arm,primecell-periphid = <0x000ce002>;
+		reg = <0 0x1e740000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		cpu = <&cpu7>;
+		port {
+			etm7_out_port: endpoint {
+				remote-endpoint = <&funnel0_in_port3>;
+			};
+		};
+	};
+
+	/* ETF0 link (from CL1 sources) */
+	etf0@1e004000 {
+		compatible = "arm,coresight-tmc", "arm,primecell";
+		arm,primecell-periphid = <0x001bb961>;
+		reg = <0 0x1e004000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			/* funnel0 input port */
+			port@0 {
+				reg = <0>;
+				etf0_in_port: endpoint@0 {
+					slave-mode;
+					remote-endpoint = <&funnel0_out_port0>;
+				};
+			};
+			/* funnelm output port */
+			port@1 {
+				reg = <0>;
+				etf0_out_port: endpoint@0 {
+					remote-endpoint = <&funnelm_in_port0>;
+				};
+			};
+		};
+	};
+
+	/* ETF1 link (from CL0 sources) */
+	etf1@1e005000 {
+		compatible = "arm,coresight-tmc", "arm,primecell";
+		arm,primecell-periphid = <0x001bb961>;
+		reg = <0 0x1e005000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			/* funnel1 input port */
+			port@0 {
+				reg = <0>;
+				etf1_in_port: endpoint@0 {
+					slave-mode;
+					remote-endpoint = <&funnel1_out_port0>;
+				};
+			};
+			/* funnelm output port */
+			port@1 {
+				reg = <0>;
+				etf1_out_port: endpoint@0 {
+					remote-endpoint = <&funnelm_in_port1>;
+				};
+			};
+		};
+	};
+
+	/* ETR sink */
+	etr@1e00a000 {
+		compatible = "arm,coresight-tmc", "arm,primecell";
+		arm,primecell-periphid = <0x001bb962>;
+		reg = <0 0x1e00a000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		samsung,cs-sfr = <0x1E00c000 0x100>;
+		samsung,q-offset = <0x2c>;
+		port {
+			etr_in_port: endpoint {
+				slave-mode;
+				remote-endpoint = <&funnelm_out_port0>;
+			};
+		};
+	};
+
+
+	/* FUNNEL0 link (to FUNNELm from ETF0) */
+	funnel0@1e007000 {
+		compatible = "arm,coresight-funnel", "arm,primecell";
+		arm,primecell-periphid = <0x001bb908>;
+		reg = <0 0x1e007000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			/* funnel output port */
+			port@0 {
+				reg = <0>;
+				funnel0_out_port0: endpoint {
+					remote-endpoint = <&etf0_in_port>;
+				};
+			};
+
+			/* funnel input ports */
+			port@1 {
+				reg = <0>;
+				funnel0_in_port0: endpoint {
+					slave-mode;
+					remote-endpoint = <&etm4_out_port>;
+				};
+			};
+
+			port@2 {
+				reg = <1>;
+				funnel0_in_port1: endpoint {
+					slave-mode;
+					remote-endpoint = <&etm5_out_port>;
+				};
+			};
+
+			port@3 {
+				reg = <2>;
+				funnel0_in_port2: endpoint {
+					slave-mode;
+					remote-endpoint = <&etm6_out_port>;
+				};
+			};
+
+			port@4 {
+				reg = <3>;
+				funnel0_in_port3: endpoint {
+					slave-mode;
+					remote-endpoint = <&etm7_out_port>;
+				};
+			};
+		};
+	};
+
+	/* FUNNEL1 link (to FUNNELm from ETF1) */
+	funnel1@1e008000 {
+		compatible = "arm,coresight-funnel", "arm,primecell";
+		arm,primecell-periphid = <0x001bb908>;
+		reg = <0 0x1e008000 0x1000>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			/* funnel output port */
+			port@0 {
+				reg = <0>;
+				funnel1_out_port0: endpoint {
+					remote-endpoint = <&etf1_in_port>;
+				};
+			};
+
+			/* funnel input ports */
+			port@1 {
+				reg = <0>;
+				funnel1_in_port0: endpoint {
+					slave-mode;
+					remote-endpoint = <&etm0_out_port>;
+				};
+			};
+
+			port@2 {
+				reg = <1>;
+				funnel1_in_port1: endpoint {
+					slave-mode;
+					remote-endpoint = <&etm1_out_port>;
+				};
+			};
+
+			port@3 {
+				reg = <2>;
+				funnel1_in_port2: endpoint {
+					slave-mode;
+					remote-endpoint = <&etm2_out_port>;
+				};
+			};
+
+			port@4 {
+				reg = <3>;
+				funnel1_in_port3: endpoint {
+					slave-mode;
+					remote-endpoint = <&etm3_out_port>;
+				};
+			};
+		};
+	};
+
+	/* FUNNEL1 link (to ETR from FUNNEL0 & FUNNEL1) */
+	funnelm@1e009000 {
+		compatible = "arm,coresight-funnel", "arm,primecell";
+		reg = <0 0x1e009000 0x1000>;
+		arm,primecell-periphid = <0x001bb908>;
+		clocks = <&clock OSCCLK>;
+		clock-names = "apb_pclk";
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			/* funnel output port */
+			port@0 {
+				reg = <0>;
+				funnelm_out_port0: endpoint {
+					remote-endpoint = <&etr_in_port>;
+				};
+			};
+
+			/* funnel input ports */
+			port@1 {
+				reg = <0>;
+				funnelm_in_port0: endpoint {
+					slave-mode;
+					remote-endpoint = <&etf0_out_port>;
+				};
+			};
+
+			port@2 {
+				reg = <1>;
+				funnelm_in_port1: endpoint {
+					slave-mode;
+					remote-endpoint = <&etf1_out_port>;
+				};
+			};
+		};
+	};
+};

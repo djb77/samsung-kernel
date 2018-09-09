@@ -1,0 +1,10 @@
+#
+# Exynos multimedia device drivers
+#
+config VIDEO_EXYNOS_ASTC
+        bool "Exynos ASTC encoder driver"
+        depends on ARCH_EXYNOS
+        select CONFIG_VIDEO_EXYNOS_ASTC
+        default n
+        help
+          This is a representative exynos astc device.
