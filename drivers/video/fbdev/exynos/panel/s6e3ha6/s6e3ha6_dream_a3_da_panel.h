@@ -305,6 +305,13 @@ static u8 dream_a3_da_vint_table[][1] = {
 	{ 0x17 }, { 0x17 }, { 0x17 }, { 0x17 }, { 0x17 },
 };
 
+#ifdef CONFIG_SUPPORT_POC_FLASH
+static u8 dream_a3_da_poc_onoff_table[][1] = {
+	{ 0x53 }, /* OFF */
+	{ 0x52 }, /* ON */
+};
+#endif
+
 static u8 dream_a3_da_acl_onoff_table[][1] = {
 	{ 0x00 }, /* acl off */
 	{ 0x02 }, /* acl on */
@@ -1399,6 +1406,8 @@ struct maptbl dream_a3_da_maptbl[MAX_MAPTBL] = {
 #endif
 #ifdef CONFIG_SUPPORT_POC_FLASH
 	[POC_ON_MAPTBL] = DEFINE_0D_MAPTBL(dream_a3_da_poc_on_table, init_common_table, NULL, copy_poc_maptbl),
+	[POC_ONOFF_MAPTBL] = DEFINE_2D_MAPTBL(dream_a3_da_poc_onoff_table, init_common_table,
+		getidx_poc_onoff_table, copy_common_maptbl),
 #endif
 
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
@@ -1644,6 +1653,7 @@ u8 DREAM_A3_DA_MST_OFF_02[] = { 0xBF, 0x00, 0x07, 0xFF, 0x00, 0x00, 0x10 };
 
 #ifdef CONFIG_SUPPORT_POC_FLASH
 u8 DREAM_A3_DA_POC_ON[] = { 0xEB, 0xFF, 0x52, 0x00, 0xFF };
+u8 DREAM_A3_DA_POC_ONOFF[] = { 0xEB, 0xFF, 0x52 };
 #endif
 
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
@@ -1858,7 +1868,14 @@ DEFINE_STATIC_PACKET(dream_a3_da_mst_off_02, DSI_PKT_TYPE_WR, DREAM_A3_DA_MST_OF
 #endif
 
 #ifdef CONFIG_SUPPORT_POC_FLASH
-DEFINE_VARIABLE_PACKET(dream_a3_da_poc_on, DSI_PKT_TYPE_WR, DREAM_A3_DA_POC_ON, &dream_a3_da_maptbl[POC_ON_MAPTBL], 4);
+static struct pkt_update_info PKTUI(dream_a3_da_poc_on)[] = {
+	{ .offset = 2, .maptbl = &dream_a3_da_maptbl[POC_ONOFF_MAPTBL] },
+	{ .offset = 4, .maptbl = &dream_a3_da_maptbl[POC_ON_MAPTBL] },
+};
+static DEFINE_PACKET(dream_a3_da_poc_on, DSI_PKT_TYPE_WR, DREAM_A3_DA_POC_ON,
+		PKTUI(dream_a3_da_poc_on), ARRAY_SIZE(PKTUI(dream_a3_da_poc_on)));
+DEFINE_VARIABLE_PACKET(dream_a3_da_poc_onoff, DSI_PKT_TYPE_WR, DREAM_A3_DA_POC_ONOFF,
+		&dream_a3_da_maptbl[POC_ONOFF_MAPTBL], 2);
 #endif
 
 #ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
@@ -1985,6 +2002,9 @@ static void *dream_a3_da_set_bl_cmdtbl[] = {
 	&PKTINFO(dream_a3_da_vgh_vint),
 	&PKTINFO(dream_a3_da_acl_control),
 	&PKTINFO(dream_a3_da_acl_onoff),
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	&PKTINFO(dream_a3_da_poc_onoff),
+#endif
 	&PKTINFO(dream_a3_da_irc_on),
 	&PKTINFO(dream_a3_da_gamma_update_enable),
 	&KEYINFO(dream_a3_da_level2_key_disable),
