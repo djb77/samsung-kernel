@@ -2345,7 +2345,7 @@
 				video_high_speed_240fps_mif = <DVFS_MIF_L2>;
 				video_high_speed_240fps_int = <DVFS_INT_L1>;
 				video_high_speed_240fps_i2c = <0>;
-				video_high_speed_240fps_hpg = <1>;
+				video_high_speed_240fps_hpg = <6>;
 
 				ext_front_int_cam = <DVFS_INT_CAM_L3>;
 				ext_front_cam = <DVFS_CAM_L2>;

@@ -305,6 +305,13 @@ static u8 dream2_a3_sa_vint_table[][1] = {
 	{ 0x17 }, { 0x17 }, { 0x17 }, { 0x17 }, { 0x17 },
 };
 
+#ifdef CONFIG_SUPPORT_POC_FLASH
+static u8 dream2_a3_sa_poc_onoff_table[][1] = {
+	{ 0x53 }, /* OFF */
+	{ 0x52 }, /* ON */
+};
+#endif
+
 static u8 dream2_a3_sa_acl_onoff_table[][1] = {
 	{ 0x00 }, /* acl off */
 	{ 0x02 }, /* acl on */
@@ -1398,6 +1405,8 @@ struct maptbl dream2_a3_sa_maptbl[MAX_MAPTBL] = {
 #endif
 #ifdef CONFIG_SUPPORT_POC_FLASH
 	[POC_ON_MAPTBL] = DEFINE_0D_MAPTBL(dream2_a3_sa_poc_on_table, init_common_table, NULL, copy_poc_maptbl),
+	[POC_ONOFF_MAPTBL] = DEFINE_2D_MAPTBL(dream2_a3_sa_poc_onoff_table, init_common_table,
+		getidx_poc_onoff_table, copy_common_maptbl),
 #endif
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
 	[VDDM_MAPTBL] = DEFINE_2D_MAPTBL(dream2_a3_sa_vddm_table, init_common_table, s6e3ha6_getidx_vddm_table, copy_common_maptbl),
@@ -1650,6 +1659,7 @@ u8 DREAM2_A3_SA_MST_OFF_02[] = { 0xBF, 0x00, 0x07, 0xFF, 0x00, 0x00, 0x10 };
 
 #ifdef CONFIG_SUPPORT_POC_FLASH
 u8 DREAM2_A3_SA_POC_ON[] = { 0xEB, 0xFF, 0x52, 0x00, 0xFF };
+u8 DREAM2_A3_SA_POC_ONOFF[] = { 0xEB, 0xFF, 0x52 };
 #endif
 
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
@@ -1865,7 +1875,14 @@ DEFINE_STATIC_PACKET(dream2_a3_sa_mst_off_02, DSI_PKT_TYPE_WR, DREAM2_A3_SA_MST_
 #endif
 
 #ifdef CONFIG_SUPPORT_POC_FLASH
-DEFINE_VARIABLE_PACKET(dream2_a3_sa_poc_on, DSI_PKT_TYPE_WR, DREAM2_A3_SA_POC_ON, &dream2_a3_sa_maptbl[POC_ON_MAPTBL], 4);
+static struct pkt_update_info PKTUI(dream2_a3_sa_poc_on)[] = {
+	{ .offset = 2, .maptbl = &dream2_a3_sa_maptbl[POC_ONOFF_MAPTBL] },
+	{ .offset = 4, .maptbl = &dream2_a3_sa_maptbl[POC_ON_MAPTBL] },
+};
+static DEFINE_PACKET(dream2_a3_sa_poc_on, DSI_PKT_TYPE_WR, DREAM2_A3_SA_POC_ON,
+		PKTUI(dream2_a3_sa_poc_on), ARRAY_SIZE(PKTUI(dream2_a3_sa_poc_on)));
+DEFINE_VARIABLE_PACKET(dream2_a3_sa_poc_onoff, DSI_PKT_TYPE_WR, DREAM2_A3_SA_POC_ONOFF,
+		&dream2_a3_sa_maptbl[POC_ONOFF_MAPTBL], 2);
 #endif
 
 #ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
@@ -1992,6 +2009,9 @@ static void *dream2_a3_sa_set_bl_cmdtbl[] = {
 	&PKTINFO(dream2_a3_sa_vgh_vint),
 	&PKTINFO(dream2_a3_sa_acl_control),
 	&PKTINFO(dream2_a3_sa_acl_onoff),
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	&PKTINFO(dream2_a3_sa_poc_onoff),
+#endif
 	&PKTINFO(dream2_a3_sa_irc_on),
 	&PKTINFO(dream2_a3_sa_gamma_update_enable),
 	&KEYINFO(dream2_a3_sa_level2_key_disable),
