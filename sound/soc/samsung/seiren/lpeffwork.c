@@ -42,6 +42,7 @@
 #define lpeff_prerr(s, ...)	pr_err( LPEFF_DEBUG_HEADER s, ##__VA_ARGS__ )
 
 extern struct mutex esa_mutex;
+extern int check_esa_compr_state(void);
 
 struct lpeff_workstruct {
 	struct task_struct *g_th_id;
@@ -89,10 +90,13 @@ static ssize_t lpeff_show(struct device *dev,
 	u32 arg0, arg1, arg2, arg3, arg4, arg5, arg6;
 	u32 arg7, arg8, arg9, arg10, arg11, arg12;
 
+	if (!check_esa_compr_state())
+		return 1;
+
 	mutex_lock(&esa_mutex);
 	if (pm_runtime_get_sync(&g_si.pdev->dev) < 0) {
 		mutex_unlock(&esa_mutex);
-		return 0;
+		return 1;
 	}
 
 	if (g_effect_addr) {
@@ -131,13 +135,13 @@ static ssize_t lpeff_show(struct device *dev,
 
 static DEVICE_ATTR(lpeff, S_IRUGO, lpeff_show, NULL);
 
-int lpeff_init(struct seiren_info si)
+int lpeff_init(struct seiren_info *si)
 {
 	int ret = 0;
 
-	memcpy(&g_si, &si, sizeof(struct seiren_info));
+	memcpy(&g_si, si, sizeof(struct seiren_info));
 #ifndef CONFIG_SOC_EXYNOS8890
-	g_effect_addr = si.effect_ram;
+	g_effect_addr = si->effect_ram;
 	printk("g_effect_addr = 0x%p \n", g_effect_addr);
 #endif
 

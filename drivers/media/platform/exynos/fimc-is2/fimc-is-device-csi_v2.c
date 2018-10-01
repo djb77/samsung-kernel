@@ -1108,8 +1108,19 @@ static int csi_stream_off(struct v4l2_subdev *subdev,
 
 	csi_hw_disable(base_reg);
 
+	tasklet_kill(&csi->tasklet_csis_str);
+	tasklet_kill(&csi->tasklet_csis_end);
+
 	if (!test_bit(CSIS_DMA_ENABLE, &csi->state))
 		goto p_dma_skip;
+
+	tasklet_kill(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_0]);
+	if (csi->dma_subdev[ENTRY_SSVC1])
+		tasklet_kill(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_1]);
+	if (csi->dma_subdev[ENTRY_SSVC2])
+		tasklet_kill(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_2]);
+	if (csi->dma_subdev[ENTRY_SSVC3])
+		tasklet_kill(&csi->tasklet_csis_dma[CSI_VIRTUAL_CH_3]);
 
 	csis_flush_all_vc_buf_done(csi, VB2_BUF_STATE_ERROR);
 

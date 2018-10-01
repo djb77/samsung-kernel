@@ -30,21 +30,9 @@
  * issues can usefully be addressed by this framework.
  */
 
-// #define	DEBUG			// error path messages, extra info
-// #define	VERBOSE			// more; success messages
-
 #include <linux/version.h>
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13))
-#include <linux/config.h>
-#endif
-
 #include <linux/module.h>
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,0))
 #include <linux/moduleparam.h>
-#endif
-
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/init.h>
@@ -57,7 +45,6 @@
 #include <linux/if_vlan.h>
 #include "smscusbnet.h"
 #include "version.h"
-/*-------------------------------------------------------------------------*/
 
 /*
  * Nineteen USB 1.1 max size bulk transactions per frame (ms), max.
@@ -70,8 +57,8 @@
  * let the USB host controller be busy for 5msec or more before an irq
  * is required, under load.  Jumbograms change the equation.
  */
-#define	RX_QLEN(dev) (((dev)->udev->speed == USB_SPEED_HIGH) ? rx_queue_size : 4)
-#define	TX_QLEN(dev) (((dev)->udev->speed == USB_SPEED_HIGH) ? tx_queue_size : 4)
+#define	RX_QLEN(dev) ((dev)->rx_qlen)
+#define	TX_QLEN(dev) ((dev)->tx_qlen)
 
 // reawaken network queue this soon after stopping; else watchdog barks
 #define TX_TIMEOUT_JIFFIES	(5*HZ)
@@ -86,7 +73,6 @@
 #define UNLINK_TIMEOUT_MS	3
 
 #define TX_PENDING_LEN    30
-/*-------------------------------------------------------------------------*/
 
 // randomly generated ethernet address
 static u8	node_id [ETH_ALEN];
@@ -98,17 +84,21 @@ static int msg_level = -1;
 module_param (msg_level, int, 0);
 MODULE_PARM_DESC (msg_level, "Override default message level");
 
-//operational_mode = 0----> low latency
-//operational_mode = 1----> low power
+//operational_mode = 0 (low latency)
+//operational_mode = 1 (low power)
 static int operational_mode = 0;
 module_param(operational_mode,int, 0);
 MODULE_PARM_DESC(operational_mode,"Enable operational mode");
 
-static unsigned long rx_queue_size = 60UL;
+bool TurboMode = TRUE;
+module_param(TurboMode,bool, 0);
+MODULE_PARM_DESC(TurboMode,"Enable Turbo Mode");
+
+static unsigned long rx_queue_size = 5UL;
 module_param(rx_queue_size, ulong, 0);
 MODULE_PARM_DESC(rx_queue_size,"Specifies the size of the rx queue lenght");
 
-static unsigned long tx_queue_size = 60UL;
+static unsigned long tx_queue_size = 5UL;
 module_param(tx_queue_size, ulong, 0);
 MODULE_PARM_DESC(tx_queue_size,"Specifies the size of the tx queue lenght");
 
@@ -116,6 +106,13 @@ int tx_hold_on_completion = TRUE;
 module_param(tx_hold_on_completion, int, 0);
 MODULE_PARM_DESC(tx_hold_on_completion,"Hold tx until USB completion if Enable");
 
+int tx_use_prealloc_buffers = TRUE;
+module_param(tx_use_prealloc_buffers, int, 0);
+MODULE_PARM_DESC(tx_use_prealloc_buffers,"Uses pre allocated buffers for usb tx");
+
+int rx_use_prealloc_buffers = TRUE;
+module_param(rx_use_prealloc_buffers, int, 0);
+MODULE_PARM_DESC(rx_use_prealloc_buffers,"Uses pre allocated buffers for usb rx");
 
 static int smscusbnet_xmit (struct sk_buff *skb, struct net_device *net);
 static int smscusbnet_bundle_skb_ximt(struct usbnet *dev, struct sk_buff_head *q);
@@ -127,41 +124,90 @@ static int smscusbnet_start_xmit (struct sk_buff *skb, struct net_device *net);
 static void smscusbnet_tx_timeout (struct net_device *net);
 static int smscusbnet_change_mtu (struct net_device *net, int new_mtu);
 #endif
+static void intr_complete (struct urb *urb);
+static void rx_complete (struct urb *urb);
 
-static inline struct urb *smscusbnet_get_rx_urb(struct usbnet *dev)
+static int smscusbnet_alloc_rx_pool(struct usbnet *dev, int size)
 {
-	unsigned long lockflags;
-	struct urb * urb = NULL;
+	struct sk_buff *skb;	
+	int i;
 
-	spin_lock_irqsave (&dev->rx_urblist_lock, lockflags);
-	if(dev->rx_urb_pool_head != dev->rx_urb_pool_tail){
-		urb = dev->rx_urb_pool[dev->rx_urb_pool_head];
-		dev->rx_urb_pool[dev->rx_urb_pool_head] = NULL;
-		dev->rx_urb_pool_head = (dev->rx_urb_pool_head + 1) % dev->rx_urb_pool_size;
+	for (i = 0; i < dev->rx_qlen; i++) {
+		skb = alloc_skb(size, GFP_ATOMIC);
+		if (!skb)
+			return 1;		
+		__skb_queue_tail(&dev->rx_pool_queue, skb);
 	}
-	spin_unlock_irqrestore (&dev->rx_urblist_lock, lockflags);
-
-	return urb;
-}
-
-static inline int smscusbnet_return_rx_urb(struct usbnet *dev, struct urb *urb)
-{
-	unsigned long lockflags;
-
-	//return this urb to rx urb pool
-	if(urb == NULL){
-		return 0;
-	}
-
-	spin_lock_irqsave(&dev->rx_urblist_lock, lockflags);
-	dev->rx_urb_pool[dev->rx_urb_pool_tail] = urb;
-	dev->rx_urb_pool_tail = (dev->rx_urb_pool_tail + 1) % dev->rx_urb_pool_size;
-
-	spin_unlock_irqrestore (&dev->rx_urblist_lock, lockflags);
-
 	return 0;
 }
 
+static inline void smscusbnet_free_rx_pool(struct usbnet *dev)
+{
+	if (!skb_queue_empty(&dev->rx_pool_queue))
+		skb_queue_purge(&dev->rx_pool_queue);
+}
+
+static inline struct sk_buff *smscusbnet_get_rx_buffer(struct usbnet *dev)
+{
+	if (!skb_queue_empty(&dev->rx_pool_queue))
+		return(skb_dequeue(&dev->rx_pool_queue));
+	else
+		return NULL;
+}
+
+static inline void smscusbnet_return_rx_buffer(struct usbnet *dev, struct sk_buff *skb)
+{
+	unsigned long lockflags;	
+
+	skb->data = skb->head;
+	skb_reset_tail_pointer(skb);
+	skb->len = 0;
+	skb->data_len = 0;
+	spin_lock_irqsave(&dev->rx_pool_queue.lock, lockflags);
+	__skb_queue_tail(&dev->rx_pool_queue, skb);
+	spin_unlock_irqrestore(&dev->rx_pool_queue.lock, lockflags);
+}
+
+static int smscusbnet_alloc_tx_pool(struct usbnet *dev, int size)
+{
+	struct sk_buff *skb;	
+	int i;
+
+	for (i = 0; i < dev->tx_qlen; i++) {
+		skb = alloc_skb(size, GFP_ATOMIC);
+		if (!skb)
+			return 1;		
+		__skb_queue_tail(&dev->tx_pool_queue, skb);
+	}
+	return 0;
+}
+
+static inline void smscusbnet_free_tx_pool(struct usbnet *dev)
+{
+	if (!skb_queue_empty(&dev->tx_pool_queue))
+		skb_queue_purge(&dev->tx_pool_queue);
+}
+
+static inline struct sk_buff *smscusbnet_get_tx_buffer(struct usbnet *dev)
+{
+	if (!skb_queue_empty(&dev->tx_pool_queue))
+		return(skb_dequeue(&dev->tx_pool_queue));
+	else
+		return NULL;
+}
+
+static inline void smscusbnet_return_tx_buffer(struct usbnet *dev, struct sk_buff *skb)
+{
+	unsigned long lockflags;	
+
+	skb->data = skb->head;
+	skb_reset_tail_pointer(skb);
+	skb->len = 0;
+	skb->data_len = 0;
+	spin_lock_irqsave(&dev->tx_pool_queue.lock, lockflags);
+	__skb_queue_tail(&dev->tx_pool_queue, skb);
+	spin_unlock_irqrestore(&dev->tx_pool_queue.lock, lockflags);
+}
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 static const struct net_device_ops smscusbnet_netdev_ops =
@@ -174,19 +220,13 @@ static const struct net_device_ops smscusbnet_netdev_ops =
         .ndo_get_stats          = smscusbnet_get_stats,
         .ndo_validate_addr      = eth_validate_addr,
 };
-#endif  //linux 2.6.29
-
-/*-------------------------------------------------------------------------*/
+#endif 
 
 int smscusbnet_IsOperationalMode(struct usbnet *dev)
 {
 
 	return operational_mode;
 }
-/*-------------------------------------------------------------------------*/
-
-
-/*-------------------------------------------------------------------------*/
 
 /* handles CDC Ethernet and many other network "bulk data" interfaces */
 int smscusbnet_get_endpoints(struct usbnet *dev, struct usb_interface *intf)
@@ -262,35 +302,26 @@ int smscusbnet_get_endpoints(struct usbnet *dev, struct usb_interface *intf)
 	return 0;
 }
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19))
-static void intr_complete (struct urb *urb, struct pt_regs *regs);
-#else
-static void intr_complete (struct urb *urb);
-#endif
-
 static int init_status (struct usbnet *dev, struct usb_interface *intf)
 {
 	unsigned	pipe = 0;
 	unsigned	maxp;
 	unsigned	period;
-	int	 i;
 
 	if (!dev->driver_info->status)
 		return 0;
-
-    dev->device_id = DEV_SMSC9500;
-    dev->tx_hold_on_completion = tx_hold_on_completion;
+	
+	dev->tx_hold_on_completion = tx_hold_on_completion;
 
 	pipe = usb_rcvintpipe (dev->udev,
 			dev->status->desc.bEndpointAddress
 				& USB_ENDPOINT_NUMBER_MASK);
 	maxp = usb_maxpacket (dev->udev, pipe, 0);
 
-
 	period = dev->status->desc.bInterval;
 	dev->interrupt_urb_buffer = NULL;
-	if(operational_mode){
 
+	if(operational_mode){
 		dev->interrupt_urb_buffer = kmalloc (maxp, GFP_KERNEL);
 		if (dev->interrupt_urb_buffer) {
 			dev->interrupt = usb_alloc_urb (0, GFP_KERNEL);
@@ -308,36 +339,6 @@ static int init_status (struct usbnet *dev, struct usb_interface *intf)
 		}
 	}
 
-	dev->rx_urb_pool_head = 0;
-	dev->rx_urb_pool_tail = 0;
-	dev->rx_urb_pool_size = RX_QLEN (dev);
-	//Allocate extra one to distinguish between empty and full list
-	dev->rx_urb_pool_size += 1;
-	dev->rx_urb_pool = kmalloc(sizeof(struct urb*) * dev->rx_urb_pool_size, GFP_KERNEL);
-	memset(dev->rx_urb_pool, 0, sizeof(struct urb*) * dev->rx_urb_pool_size);
-
-	if(!dev->rx_urb_pool){
-		devwarn(dev, "unable to allocate memory for rx_urb_pool");
-		return -ENOMEM;
-	}
-
-	for(i=0; i<(dev->rx_urb_pool_size-1); i++){
-		dev->rx_urb_pool[i] = usb_alloc_urb (0, GFP_KERNEL);
-		if(!dev->rx_urb_pool[i]){
-			devwarn(dev, "failed to alloc rx urb");
-			return -ENOMEM;
-		}
-		 //URB_ASYNC_UNLINK: usb_unlink_urb will return immediately without waiting for complete handler
-		 //	which might result in deadlock problem on muitl-core cpu
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14))
-		dev->rx_urb_pool[i]->transfer_flags |= URB_ASYNC_UNLINK;
-#endif
-
-	}
-	dev->rx_urb_pool_tail = dev->rx_urb_pool_size - 1;
-	spin_lock_init(&(dev->rx_urblist_lock));
-	devdbg (dev, "init_status, rx_urb_pool_head = %d, rx_urb_pool_tail = %d", dev->rx_urb_pool_head, dev->rx_urb_pool_tail);
-
 	return  0;
 }
 
@@ -345,7 +346,7 @@ static int init_status (struct usbnet *dev, struct usb_interface *intf)
  * Some link protocols batch packets, so their rx_fixup paths
  * can return clones as well as just modify the original skb.
  */
-void smscusbnet_skb_return (struct usbnet *dev, struct sk_buff *skb)
+void smscusbnet_skb_return(struct usbnet *dev, struct sk_buff *skb)
 {
 	int	status;
 	u16 vlan_tag = *((u16 *)&skb->cb[0]);
@@ -354,28 +355,27 @@ void smscusbnet_skb_return (struct usbnet *dev, struct sk_buff *skb)
 	skb->protocol = eth_type_trans (skb, dev->net);
 
 	if (netif_msg_rx_status (dev))
-		devdbg (dev, "< rx, len %zu, type 0x%x",
-			skb->len + sizeof (struct ethhdr), skb->protocol);
+		devdbg (dev, "< rx, len %zu, type 0x%x", skb->len + sizeof (struct ethhdr), skb->protocol);
 	memset (skb->cb, 0, sizeof (struct skb_data));
 
-	if(vlan_tag == VLAN_DUMMY){//No vlan tag acceleration
+	if (vlan_tag == VLAN_DUMMY) {//No vlan tag acceleration
 		status = netif_rx (skb);
-	}else{//Vlan tag acceleration
+	} else {//Vlan tag acceleration
 #if (LINUX_VERSION_CODE <= KERNEL_VERSION(3,0,31))
-		status = vlan_hwaccel_rx(skb, dev->vlgrp, vlan_tag);
+		status = vlan_hwaccel_rx(skb, dev->vlgrp, vlan_tag);   
 #else
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0))
-			__vlan_hwaccel_put_tag(skb, vlan_tag);
+		__vlan_hwaccel_put_tag(skb, vlan_tag);
 #else
-			__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q), vlan_tag);
+		__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q), vlan_tag);
 #endif
-			status = netif_rx(skb);
+		status = netif_rx(skb);
 #endif
 	}
 
-	if(status == NET_RX_DROP){
+	if (status == NET_RX_DROP) {
 		dev->stats.rx_dropped++;
-	}else{
+	} else {
 		dev->stats.rx_packets++;
 		dev->stats.rx_bytes += skb->len;
 	}
@@ -384,14 +384,8 @@ void smscusbnet_skb_return (struct usbnet *dev, struct sk_buff *skb)
 		devdbg (dev, "netif_rx status %d", status);
 }
 
-/*-------------------------------------------------------------------------
- *
- * Network Device Driver (peer link to "Host Device", from USB host)
- *
- *-------------------------------------------------------------------------*/
-
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29))
-static
+static 
 #endif
 int smscusbnet_change_mtu (struct net_device *net, int new_mtu)
 {
@@ -420,9 +414,8 @@ int smscusbnet_change_mtu (struct net_device *net, int new_mtu)
 	return 0;
 }
 
-/*-------------------------------------------------------------------------*/
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29))
-static
+static 
 #endif
 struct net_device_stats *smscusbnet_get_stats (struct net_device *net)
 {
@@ -430,12 +423,10 @@ struct net_device_stats *smscusbnet_get_stats (struct net_device *net)
 	return &dev->stats;
 }
 
-/*-------------------------------------------------------------------------*/
 
 /* some LK 2.4 HCDs oopsed if we freed or resubmitted urbs from
  * completion callbacks.  2.5 should have fixed those bugs...
  */
-
 static void defer_bh(struct usbnet *dev, struct sk_buff *skb, struct sk_buff_head *list)
 {
 	unsigned long		flags;
@@ -461,8 +452,8 @@ void smscusbnet_defer_kevent (struct usbnet *dev, int work)
 	if (!schedule_work (&dev->kevent)){
 		devdbg (dev, "kevent %d may have been dropped", work);
 	}
-//	else
-//		devdbg (dev, "kevent %d scheduled", work);
+	//else
+		//devdbg (dev, "kevent %d scheduled", work);
 }
 
 /* some work can't be done in tasklets, so we use keventd
@@ -470,7 +461,6 @@ void smscusbnet_defer_kevent (struct usbnet *dev, int work)
  * We use myevent to schedule Rx Bulk in
  *
  */
-
 void smscusbnet_defer_myevent (struct usbnet *dev, int work)
 {
 	set_bit (work, &dev->flags);
@@ -478,7 +468,7 @@ void smscusbnet_defer_myevent (struct usbnet *dev, int work)
 		//deverr (dev, "myevent %d may have been dropped", work);
 	}
 	//else
-	//	devdbg (dev,"myevent %d scheduled", work);
+		//devdbg (dev,"myevent %d scheduled", work);
 }
 
 void smscusbnet_linkpolling(unsigned long ptr)
@@ -486,7 +476,7 @@ void smscusbnet_linkpolling(unsigned long ptr)
 
 	struct usbnet * dev= (struct usbnet *) ptr;
 
-	if (dev==NULL) return;
+	if (dev==NULL) return;	
 	smscusbnet_defer_myevent(dev, EVENT_LINK_RESET);
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,18)) && defined(CONFIG_PM)
@@ -506,17 +496,27 @@ void smscusbnet_linkpolling(unsigned long ptr)
 		}
 }
 
-
-
-/*-------------------------------------------------------------------------*/
-
-//static void rx_complete (struct urb *urb, struct pt_regs *regs);
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19))
-static void rx_complete (struct urb *urb, struct pt_regs *regs );
+static inline struct sk_buff *smscusbnet_allocate_rx_skb_buffer(struct usbnet *dev, int flags)
+{
+	struct sk_buff *skb = NULL;
+	size_t size = dev->rx_urb_size;
+	
+	if (dev->rx_use_prealloc_buffs) {
+		skb = smscusbnet_get_rx_buffer(dev);
+	} else {
+#ifdef RX_OFFSET
+		skb = alloc_skb (size, flags);
 #else
-static void rx_complete (struct urb *urb);
-#endif
-static void rx_submit (struct usbnet *dev, struct urb *urb, int flags)
+		skb = alloc_skb (size + NET_IP_ALIGN , flags);
+		if (skb)
+			skb_reserve (skb, NET_IP_ALIGN);
+#endif 
+	}
+
+	return skb;
+}
+
+static int rx_submit (struct usbnet *dev, struct urb *urb, int flags)
 {
 	struct sk_buff		*skb;
 	struct skb_data		*entry;
@@ -524,22 +524,17 @@ static void rx_submit (struct usbnet *dev, struct urb *urb, int flags)
 	unsigned long		lockflags;
 	size_t			size = dev->rx_urb_size;
 
-#ifndef RX_OFFSET
-	if ((skb = alloc_skb (size + NET_IP_ALIGN , flags)) == NULL) {
-#else
-	if ((skb = alloc_skb (size, flags)) == NULL) {
-#endif //RX_OFFSET
+	skb = smscusbnet_allocate_rx_skb_buffer(dev, flags);
+	if (!skb) {
 		if (netif_msg_rx_err (dev))
 			devdbg (dev,"no rx skb\n");
-		smscusbnet_defer_kevent (dev, EVENT_RX_MEMORY);
+		/* When using pre allocated memory, no rx skb means all
+		are submitted. rx_complete should resubmit */
+		if (!dev->rx_use_prealloc_buffs) 
+			smscusbnet_defer_kevent(dev, EVENT_RX_MEMORY);
 		usb_free_urb(urb);
-
-		return;
+		return -ENOMEM;
 	}
-
-#ifndef RX_OFFSET
-	skb_reserve (skb, NET_IP_ALIGN);
-#endif
 
 	entry = (struct skb_data *) skb->cb;
 	entry->urb = urb;
@@ -556,7 +551,7 @@ static void rx_submit (struct usbnet *dev, struct urb *urb, int flags)
 			&& netif_device_present (dev->net)
 			&& !test_bit (EVENT_RX_HALT, &dev->flags)
 			&& netif_carrier_ok(dev->net)) {
-		switch (retval = usb_submit_urb (urb, GFP_ATOMIC)){
+		switch (retval = usb_submit_urb (urb, GFP_ATOMIC)) {
 		case -EPIPE:
 			smscusbnet_defer_kevent (dev, EVENT_RX_HALT);
 			break;
@@ -586,58 +581,49 @@ static void rx_submit (struct usbnet *dev, struct urb *urb, int flags)
 		dev_kfree_skb_any (skb);
 		usb_free_urb(urb);
 	}
+	return retval;
 }
-
-//-------------------------------------------------------------------------
 
 static inline void rx_process (struct usbnet *dev, struct sk_buff *skb)
 {
 	int ret;
 
-	if (!dev->driver_info->rx_fixup)return;
+	if (!dev->driver_info->rx_fixup)
+		return;
 
-	ret = dev->driver_info->rx_fixup (dev, skb);
-
-	if(ret == RX_FIXUP_INVALID_SKB)skb_queue_tail(&dev->done, skb);
-	else if(ret == RX_FIXUP_ERROR){
+	ret = dev->driver_info->rx_fixup(dev, skb);
+	if (ret == RX_FIXUP_INVALID_SKB) {
+		skb_queue_tail(&dev->done, skb);
+	} else if(ret == RX_FIXUP_ERROR){
 		dev->stats.rx_errors++;
-		skb_queue_tail (&dev->done, skb);
-	}
-	else{
+		skb_queue_tail(&dev->done, skb);
+	} else {
 		if (skb->len) {
-			smscusbnet_skb_return (dev, skb);
-
-	    } else {
-			if (netif_msg_rx_err (dev))
-				devdbg (dev, "drop");
+			smscusbnet_skb_return(dev, skb);
+		} else {
+			if (netif_msg_rx_err(dev))
+				devdbg(dev, "drop");
 			dev->stats.rx_errors++;
-			skb_queue_tail (&dev->done, skb);
+			skb_queue_tail(&dev->done, skb);
 		}
 	}
-
 }
 
-/*-------------------------------------------------------------------------*/
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19))
-static void rx_complete (struct urb *urb, struct pt_regs *regs)
-#else
 static void rx_complete (struct urb *urb)
-#endif
-
 {
 	struct sk_buff		*skb = (struct sk_buff *) urb->context;
 	struct skb_data		*entry = (struct skb_data *) skb->cb;
 	struct usbnet		*dev = entry->dev;
-	int			urb_status = urb->status;
+	int 			urb_status = urb->status;
 
-    dev->idleCount = 0;
+	dev->idleCount = 0;
 
-	skb_put (skb, urb->actual_length);
+	skb_put(skb, urb->actual_length);
 	entry->state = rx_done;
 	entry->urb = NULL;
 
 	switch (urb_status) {
-	    // success
+	    /* success */
 	    case 0:
 		if (operational_mode) {
 			if ((skb->len < dev->net->hard_header_len) && (skb->len != 0)) {
@@ -650,10 +636,10 @@ static void rx_complete (struct urb *urb)
 
 			if (skb->len == 0) {
 				entry->state = rx_cleanup;
-				dev->StopSummitUrb=1;
+				dev->StopSummitUrb = 1;
 			}
 			else {
-				dev->StopSummitUrb=0;
+				dev->StopSummitUrb = 0;
 			}
 
 		} else {
@@ -750,22 +736,17 @@ block:
 
 			if (netif_running (dev->net)
 				&& !test_bit (EVENT_RX_HALT, &dev->flags)) {
-				rx_submit (dev, urb, GFP_ATOMIC);
+				rx_submit(dev, urb, GFP_ATOMIC);
 				return;
 			}
 		}
-		//return this urb to rx urb pool
 		usb_free_urb(urb);
 	}
 	if (netif_msg_rx_err (dev))
 		devdbg (dev, "no read resubmitted");
 }
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19))
-static void intr_complete (struct urb *urb, struct pt_regs *regs)
-#else
-static void intr_complete (struct urb *urb)
-#endif
 
+static void intr_complete (struct urb *urb)
 {
 	struct usbnet	*dev = urb->context;
 	int		status = urb->status;
@@ -850,18 +831,34 @@ static int unlink_urbs (struct usbnet *dev, struct sk_buff_head *q)
 	return count;
 }
 
-/*-------------------------------------------------------------------------*/
+static void smscusbnet_free_rx_buffer(struct usbnet *dev, struct sk_buff *skb)
+{
+	if (dev->rx_use_prealloc_buffs) {
+		smscusbnet_return_rx_buffer(dev, skb);
+	} else {
+		dev_kfree_skb(skb);
+	}
+}
+static void smscusbnet_free_tx_buffer(struct usbnet *dev, struct sk_buff *skb)
+{
+	if (dev->tx_use_prealloc_buffs) {
+		smscusbnet_return_tx_buffer(dev, skb);
+	} else {
+		dev_kfree_skb(skb);
+	}
+}
 
-// tasklet (work deferred from completions, in_irq) or timer
-
-static void  smscusbnet_bh (unsigned long param)
+/* tasklet (work deferred from completions, in_irq) or timer */
+static void  smscusbnet_bh(unsigned long param)
 {
 	struct usbnet		*dev = (struct usbnet *) param;
 	struct sk_buff		*skb = NULL;
 	struct skb_data		*entry = NULL;
 	unsigned long		flags;
+	int 			ret = 0;
 
-	if (dev==NULL) return;
+	if (dev == NULL) 
+		return;
 	while ((skb = skb_dequeue (&dev->done))) {
 		entry = (struct skb_data *) skb->cb;
 		switch (entry->state) {
@@ -871,33 +868,31 @@ static void  smscusbnet_bh (unsigned long param)
 			continue;
 		    case tx_done:
 			usb_free_urb (entry->urb);
-			dev_kfree_skb (skb);
-
+			smscusbnet_free_tx_buffer(dev, skb);
 			spin_lock_irqsave (&dev->txq.lock, flags);
 			if(!dev->txq.qlen)
 				smscusbnet_bundle_skb_ximt(dev, &dev->tx_pending_q);
 			spin_unlock_irqrestore (&dev->txq.lock, flags);
-
 			continue;
 		    case rx_cleanup:
-			if(entry->urb) usb_free_urb(entry->urb);
-			dev_kfree_skb (skb);
+			if (entry->urb) 
+				usb_free_urb(entry->urb);
+			smscusbnet_free_rx_buffer(dev, skb);
 			continue;
 		    default:
 			devdbg (dev, "bogus skb state %d", entry->state);
 		}
 	}
 
-    if (netif_running (dev->net) && netif_device_present (dev->net) && !timer_pending (&dev->delay)) {
-        //submit delayed interrupt urb
-        if(operational_mode && dev->interrupt && dev->intr_urb_delay_submit){
-            int status = usb_submit_urb (dev->interrupt, GFP_ATOMIC);
-            dev->intr_urb_delay_submit = FALSE;
-            if (status != 0 && netif_msg_timer (dev))
-                deverr(dev, "intr resubmit --> %d", status);
-
-        }
-    }
+	if (netif_running (dev->net) && netif_device_present (dev->net) && !timer_pending (&dev->delay)) {
+		//submit delayed interrupt urb
+		if(operational_mode && dev->interrupt && dev->intr_urb_delay_submit){
+			int status = usb_submit_urb (dev->interrupt, GFP_ATOMIC);
+			dev->intr_urb_delay_submit = FALSE;
+			if (status != 0 && netif_msg_timer (dev))
+			deverr(dev, "intr resubmit --> %d", status);
+		}
+	}
 
 	// waiting for all pending urbs to complete?
 	if (dev->wait) {
@@ -913,24 +908,22 @@ static void  smscusbnet_bh (unsigned long param)
 			&& netif_carrier_ok(dev->net)) {
 
 		if (((operational_mode)&&(!dev->StopSummitUrb)) ||(!(operational_mode) ))  {
-			int	temp = dev->rxq.qlen;
-			int	qlen = RX_QLEN (dev);
+			int temp = dev->rxq.qlen;
+			int qlen = RX_QLEN(dev);
 
 			if (temp < qlen) {
-				struct urb	*urb;
-				int		i;
+				struct urb *urb;
+				int i;
 
 				// don't refill the queue all at once
-				for (i = 0; i < 10 && dev->rxq.qlen < qlen; i++) {
+				for (i = 0; i < 5 && dev->rxq.qlen < qlen; i++) {
 					urb = usb_alloc_urb(0,GFP_ATOMIC);
 					if (urb != NULL) {
-						rx_submit (dev, urb, GFP_ATOMIC);
+						ret = rx_submit (dev, urb, GFP_ATOMIC);
+						if (ret)
+							break;
 					}
 				}
-
-				//if (temp != dev->rxq.qlen && netif_msg_link (dev))
-					//devdbg (dev, "in dev->bh, rxqlen %d --> %d",
-					//		temp, dev->rxq.qlen);
 				if (dev->rxq.qlen < qlen)
 					tasklet_schedule (&dev->bh);
 			}
@@ -943,8 +936,6 @@ static void  smscusbnet_bh (unsigned long param)
 	}
 }
 
-/*-------------------------------------------------------------------------*/
-
 // precondition: never called in_interrupt
 
 int smscusbnet_stop (struct net_device *net)
@@ -952,12 +943,14 @@ int smscusbnet_stop (struct net_device *net)
 	struct usbnet		*dev = netdev_priv(net);
 	int			temp;
 
+	
 	DECLARE_WAIT_QUEUE_HEAD (unlink_wakeup);
 	DECLARE_WAITQUEUE (wait, current);
 
 	netif_stop_queue (net);
 	if (netif_msg_ifdown (dev))
 		devinfo (dev, "stop stats: rx/tx %ld/%ld, errs %ld/%ld",
+		
 		dev->stats.rx_packets, dev->stats.tx_packets,
 		dev->stats.rx_errors, dev->stats.tx_errors
 		);
@@ -981,7 +974,6 @@ int smscusbnet_stop (struct net_device *net)
 	if(operational_mode){
 		usb_kill_urb(dev->interrupt);
 	}
-	devdbg (dev, "smscusbnet_stop, rx_urb_pool_head = %d, rx_urb_pool_tail = %d", dev->rx_urb_pool_head, dev->rx_urb_pool_tail);
 
 	/* deferred work (task, timer, softirq) must also stop.
 	 * can't flush_scheduled_work() until we drop rtnl (later),
@@ -995,7 +987,7 @@ int smscusbnet_stop (struct net_device *net)
 	dev->StopLinkPolling=TRUE;
 	tasklet_kill (&dev->bh);
     netif_carrier_off(dev->net);
-
+	
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,18))
     //if thera is in suspend0 status already, resume it first. So we can set suspend2 in Smsc9500_suspend();
     down(&dev->pm_mutex);
@@ -1025,7 +1017,7 @@ int smscusbnet_stop (struct net_device *net)
 // precondition: never called in_interrupt
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29))
-static
+static 
 #endif
 int smscusbnet_open (struct net_device *net)
 {
@@ -1033,6 +1025,7 @@ int smscusbnet_open (struct net_device *net)
 	int			retval = 0;
 	struct driver_info	*info = dev->driver_info;
 
+	
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,18))
     down(&dev->pm_mutex);
     dev->pmLock = TRUE;
@@ -1056,6 +1049,7 @@ int smscusbnet_open (struct net_device *net)
 	}
 
     dev->intr_urb_delay_submit = FALSE;
+	
 
 	// insist peer be connected
 	if (info->check_connect && (retval = info->check_connect (dev)) < 0) {
@@ -1187,9 +1181,8 @@ static void kevent(struct work_struct *work)
 		}
 	}
 
-	if (dev->flags)
-		devdbg (dev, "kevent done, flags = 0x%lx \n",
-			dev->flags);
+	//if (dev->flags)
+		//devdbg (dev, "kevent done, flags = 0x%lx \n", dev->flags);
 }
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,18))
@@ -1260,22 +1253,24 @@ static void myevent(struct work_struct *work)
     if (test_bit (EVENT_IDLE_CHECK, &dev->flags)) {
         clear_bit (EVENT_IDLE_CHECK, &dev->flags);
         //autosuspend_disabled should be enabled by shell cmd "echo auto > /sys/bus/usb/devices/X-XX/power/level"
-        if(dev->dynamicSuspend
+        if(dev->dynamicSuspend 
 #if ((LINUX_VERSION_CODE > KERNEL_VERSION(2,6,21)) && (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)))
 		&& !dev->udev->autosuspend_disabled
 #endif
 			){
-			if((dev->idleCount >= PM_IDLE_DELAY) &&
+			if((dev->idleCount >= PM_IDLE_DELAY) && 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,31))
 				(atomic_read(&dev->uintf->pm_usage_cnt) > 0)){
 #else
 				(dev->uintf->pm_usage_cnt > 0)){
 #endif
+				
 				if(dev->chipDependFeatures[FEATURE_SUSPEND3]){
 					dev->suspendFlag |= AUTOSUSPEND_DYNAMIC_S3;
 				}else{
 					dev->suspendFlag |= AUTOSUSPEND_DYNAMIC;
 				}
+				
 				suspendDevice(dev);
 			}
 			if(dev->idleCount < PM_IDLE_DELAY)dev->idleCount++;
@@ -1283,18 +1278,18 @@ static void myevent(struct work_struct *work)
     }
 #endif //(LINUX_VERSION_CODE > KERNEL_VERSION(2,6,18)) && defined(CONFIG_PM)
     if (test_bit (EVENT_LINK_DOWN_DETACH, &dev->flags)) {
-		clear_bit (EVENT_LINK_DOWN_DETACH, &dev->flags);
+    	clear_bit (EVENT_LINK_DOWN_DETACH, &dev->flags);
 		if(dev->netDetach){
-			dev->suspendFlag |= AUTOSUSPEND_DETACH;
+        	dev->suspendFlag |= AUTOSUSPEND_DETACH;
 		}
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,18)) && defined(CONFIG_PM)
-		else if(dev->linkDownSuspend
+		else if(dev->linkDownSuspend 
 #if ((LINUX_VERSION_CODE > KERNEL_VERSION(2,6,21)) && (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)))
 		&& !dev->udev->autosuspend_disabled
-#endif
+#endif		
 		){
-			dev->suspendFlag |= AUTOSUSPEND_LINKDOWN;
-			suspendDevice(dev);
+        	dev->suspendFlag |= AUTOSUSPEND_LINKDOWN;
+        	suspendDevice(dev);
         }
 #endif //(LINUX_VERSION_CODE > KERNEL_VERSION(2,6,18)) && defined(CONFIG_PM)
     }
@@ -1328,7 +1323,7 @@ static void myevent(struct work_struct *work)
 
 #endif //(LINUX_VERSION_CODE > KERNEL_VERSION(2,6,18)) && defined(CONFIG_PM)
 	if (test_bit (EVENT_LINK_RESET, &dev->flags)) {
-		struct driver_info	*info = dev->driver_info;
+		struct driver_info 	*info = dev->driver_info;
 		int			retval = 0;
 
 		clear_bit (EVENT_LINK_RESET, &dev->flags);
@@ -1343,15 +1338,20 @@ static void myevent(struct work_struct *work)
 		if (test_bit (EVENT_LINK_UP, &dev->flags)) {
 		     clear_bit (EVENT_LINK_UP, &dev->flags);
 		     tasklet_schedule (&dev->bh);
+        
 	    }
         if (test_bit (EVENT_LINK_DOWN, &dev->flags)) {
 		     clear_bit (EVENT_LINK_DOWN, &dev->flags);
 		     unlink_urbs (dev, &dev->rxq);
+        
 	    }
+	       
 	}
 
+	
+
 	if (test_bit (EVENT_SET_MULTICAST, &dev->flags)) {
-		struct driver_info	*info = dev->driver_info;
+		struct driver_info 	*info = dev->driver_info;
 		int			retval = 0;
 
 		clear_bit (EVENT_SET_MULTICAST, &dev->flags);
@@ -1363,23 +1363,17 @@ static void myevent(struct work_struct *work)
 		}
 	}
 
-	if (dev->flags)
-		devdbg (dev, "myevent done, flags = 0x%lx", dev->flags);
+	//if (dev->flags)
+		//devdbg (dev, "myevent done, flags = 0x%lx", dev->flags);
 }
 
-/*-------------------------------------------------------------------------*/
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19))
-static void tx_complete (struct urb *urb, struct pt_regs *regs)
-#else
 static void tx_complete (struct urb *urb)
-#endif
-
 {
 	struct sk_buff		*skb = (struct sk_buff *) urb->context;
 	struct skb_data		*entry = (struct skb_data *) skb->cb;
 	struct usbnet		*dev = entry->dev;
 
-    dev->idleCount = 0;
+	dev->idleCount = 0;
 
 	if (urb->status == 0) {
 		if(dev->tx_hold_on_completion){
@@ -1398,7 +1392,7 @@ static void tx_complete (struct urb *urb)
 		switch (urb->status) {
 		case -EPIPE:
 			smscusbnet_defer_kevent (dev, EVENT_TX_HALT);
-            dev->extra_error_cnts.tx_epipe++;
+			dev->extra_error_cnts.tx_epipe++;
 			break;
 
 		/* software-driven interface shutdown */
@@ -1442,8 +1436,6 @@ _HANDLE:
 	defer_bh(dev, skb, &dev->txq);
 }
 
-/*-------------------------------------------------------------------------*/
-
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29))
 static
 #endif
@@ -1457,7 +1449,6 @@ void smscusbnet_tx_timeout (struct net_device *net)
 	// FIXME: device recovery -- reset?
 }
 
-/*-------------------------------------------------------------------------*/
 /*txq.lock will be acquired by caller*/
 static int smscusbnet_bundle_skb_ximt(struct usbnet *dev, struct sk_buff_head *q)
 {
@@ -1469,42 +1460,73 @@ static int smscusbnet_bundle_skb_ximt(struct usbnet *dev, struct sk_buff_head *q
 	int			retval = NET_XMIT_SUCCESS;
 	struct urb		*urb = NULL;
 
-	if((struct sk_buff *)q == q->next)return retval;
-
-	spin_lock_irqsave(&q->lock, flags);
-
-	for(skbnext = q->next; skbnext != (struct sk_buff *) q; skbnext = skbnext->next){
-		SkbSize += skbnext->len;
-		pkt_cnt++;
-	}
-	if(SkbSize == 0){
-		spin_unlock_irqrestore(&q->lock, flags);
+	if ((struct sk_buff *)q == q->next)
 		return retval;
-	}
 
-	if(pkt_cnt > 1){
-		skb = dev_alloc_skb(SkbSize);
+	if (dev->tx_use_prealloc_buffs) {
+		spin_lock_irqsave(&q->lock, flags);
 
-		if (!skb){
-			devdbg (dev, "smscusbnet_merge_skb, skb is NULL, CX_SkbSize = %d", SkbSize);
+		if (!q->qlen) {
 			spin_unlock_irqrestore(&q->lock, flags);
 			return retval;
 		}
-		skb_put(skb, SkbSize);
+		
+		skb = smscusbnet_get_tx_buffer(dev);
+		if (!skb) {
+			devdbg (dev, "smscusbnet_bundle_skb_ximt(): no tx buffer available\n");
+			spin_unlock_irqrestore(&q->lock, flags);
+			return retval;
+		}
 		count = 0;
+		while((skbnext = __skb_dequeue(q)) != NULL) {
+			if ((count + skbnext->len) < dev->tx_urb_size) {
+				memcpy(skb->data + count, skbnext->data, skbnext->len);
+				count += skbnext->len;
+				skb_put(skb, skbnext->len);
+				kfree_skb(skbnext);
+			} else {
+				__skb_queue_head(q, skbnext);	
+				break;
+			}
+		}
+
+		spin_unlock_irqrestore(&q->lock, flags);
+
+	} else {
+		spin_lock_irqsave(&q->lock, flags);
 
 		for(skbnext = q->next; skbnext != (struct sk_buff *) q; skbnext = skbnext->next){
-			memcpy(skb->data + count, skbnext->data, skbnext->len);
-			count += skbnext->len;
+			SkbSize += skbnext->len;
+			pkt_cnt++;
 		}
-		while((skbnext = __skb_dequeue(q)) != NULL){
-			kfree_skb(skbnext);
+		if(SkbSize == 0){
+			spin_unlock_irqrestore(&q->lock, flags);
+			return retval;
 		}
 
-	}else{ //one packet
-		skb = __skb_dequeue(q);
+		if(pkt_cnt > 1){
+			skb = dev_alloc_skb(SkbSize);
+			if (!skb){
+				devdbg (dev, "smscusbnet_merge_skb, skb is NULL, CX_SkbSize = %d", SkbSize);
+				spin_unlock_irqrestore(&q->lock, flags);
+				return retval;
+			}
+			skb_put(skb, SkbSize);
+			count = 0;
+
+			for(skbnext = q->next; skbnext != (struct sk_buff *) q; skbnext = skbnext->next){
+				memcpy(skb->data + count, skbnext->data, skbnext->len);
+				count += skbnext->len;
+			}
+			while((skbnext = __skb_dequeue(q)) != NULL){
+				kfree_skb(skbnext);
+			}
+
+		} else { //one packet
+			skb = __skb_dequeue(q);
+		}
+		spin_unlock_irqrestore(&q->lock, flags);
 	}
-	spin_unlock_irqrestore(&q->lock, flags);
 
 	netif_wake_queue (dev->net);
 
@@ -1520,11 +1542,6 @@ static int smscusbnet_bundle_skb_ximt(struct usbnet *dev, struct sk_buff_head *q
 
 		goto drop;
 	}else{
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14))
-		urb->transfer_flags |= URB_ASYNC_UNLINK;
-#endif
-
 		entry = (struct skb_data *) skb->cb;
 		entry->urb = urb;
 		entry->dev = dev;
@@ -1581,19 +1598,20 @@ int smscusbnet_start_xmit (struct sk_buff *skb, struct net_device *net)
 	int			retval = NET_XMIT_SUCCESS;
 	struct driver_info	*info = dev->driver_info;
 
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,18))
-#if defined(CONFIG_PM) && defined(CONFIG_USB_SUSPEND)
+#if defined(CONFIG_PM)
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,31))
     if(atomic_read(&dev->uintf->pm_usage_cnt) <= 0){
 #else
     if(dev->uintf->pm_usage_cnt <= 0){
 #endif
-		netif_stop_queue (net);
+    	netif_stop_queue (net);
         smscusbnet_defer_myevent(dev, EVENT_IDLE_RESUME);
         return NET_XMIT_DROP;
     }
-#endif //CONFIG_PM && CONFIG_USB_SUSPEND
-#endif
+#endif //CONFIG_PM 
+
+        /* We do not advertise SG, so skbs should be already linearized */
+        BUG_ON(skb_shinfo(skb)->nr_frags);
 
 	// some devices want funky USB-level framing, for
 	// win32 driver (usually) and/or hardware quirks
@@ -1609,9 +1627,9 @@ int smscusbnet_start_xmit (struct sk_buff *skb, struct net_device *net)
 	}
 
 	if(dev->tx_hold_on_completion){
-			unsigned long		flags;
-			skb_queue_tail (&dev->tx_pending_q, skb);
+			unsigned long flags;
 
+			skb_queue_tail (&dev->tx_pending_q, skb);
 			spin_lock_irqsave (&dev->txq.lock, flags);
 			if(dev->txq.qlen != 0){
 				if (dev->tx_pending_q.qlen >= TX_PENDING_LEN){
@@ -1625,7 +1643,6 @@ int smscusbnet_start_xmit (struct sk_buff *skb, struct net_device *net)
 
 		retval = smscusbnet_xmit(skb, net);
 	}
-
 	return retval;
 }
 
@@ -1642,10 +1659,6 @@ static int smscusbnet_xmit (struct sk_buff *skb, struct net_device *net)
 				devdbg (dev, "no urb");
 			goto drop;
 		}
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14))
-		urb->transfer_flags |= URB_ASYNC_UNLINK;
-#endif
 
 		entry = (struct skb_data *) skb->cb;
 		entry->urb = urb;
@@ -1718,9 +1731,9 @@ drop:
 
 void smscusbnet_disconnect (struct usb_interface *intf)
 {
-	struct usbnet		*dev = NULL;
-	struct usb_device	*xdev = NULL;
-	struct net_device	*net = NULL;
+	struct usbnet *dev = NULL;
+	struct usb_device *xdev = NULL;
+	struct net_device *net = NULL;
 
 	dev = usb_get_intfdata(intf);
 	usb_set_intfdata(intf, NULL);
@@ -1738,21 +1751,6 @@ void smscusbnet_disconnect (struct usb_interface *intf)
 	net = dev->net;
 	unregister_netdev (net);
 
-	devdbg (dev, "smscusbnet_disconnect, rx_urb_pool_head = %d, rx_urb_pool_tail = %d", dev->rx_urb_pool_head, dev->rx_urb_pool_tail);
-
-	if(dev->rx_urb_pool){
-		while(dev->rx_urb_pool_head != dev->rx_urb_pool_tail){
-			if(dev->rx_urb_pool[dev->rx_urb_pool_head])usb_free_urb(dev->rx_urb_pool[dev->rx_urb_pool_head]);
-			dev->rx_urb_pool[dev->rx_urb_pool_head] = NULL;
-			dev->rx_urb_pool_head = (dev->rx_urb_pool_head + 1) % dev->rx_urb_pool_size;
-		}
-		if(dev->rx_urb_pool[dev->rx_urb_pool_head]){
-			usb_free_urb(dev->rx_urb_pool[dev->rx_urb_pool_head]);
-			dev->rx_urb_pool[dev->rx_urb_pool_head] = NULL;
-		}
-		kfree(dev->rx_urb_pool);
-	}
-
 	if(operational_mode && dev->interrupt){
 		usb_free_urb(dev->interrupt);
 	}
@@ -1762,7 +1760,6 @@ void smscusbnet_disconnect (struct usb_interface *intf)
 	}
 
 	if (dev->driver_info->unbind) {
-		devinfo (dev,"unbind usb\n");
 		dev->driver_info->unbind (dev, intf);
 	}
 
@@ -1774,25 +1771,28 @@ void smscusbnet_disconnect (struct usb_interface *intf)
 	del_timer_sync (&dev->LinkPollingTimer);
 	del_timer_sync (&dev->delay);
 
+	if (dev->rx_use_prealloc_buffs)
+		smscusbnet_free_rx_pool(dev);
+	if (dev->tx_use_prealloc_buffs)
+		smscusbnet_free_tx_pool(dev);
+
 	free_netdev(net);
 	usb_put_dev (xdev);
+
 }
 
-/*-------------------------------------------------------------------------*/
-
 // precondition: never called in_interrupt
-
 int
 smscusbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 {
 	struct usbnet			*dev = NULL;
-	struct net_device		*net = NULL;
+	struct net_device 		*net = NULL;
 	struct usb_host_interface	*interface = NULL;
 	struct driver_info		*info = NULL;
 	struct usb_device		*xdev = NULL;
 	int				status = 0;
 	char version[15];
-
+	
 	info = (struct driver_info *) prod->driver_info;
 	if (!info) {
 		return -ENODEV;
@@ -1801,8 +1801,6 @@ smscusbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	interface = udev->cur_altsetting;
 
 	usb_get_dev (xdev);
-
-	status = -ENOMEM;
 
 	sprintf(version,"%lX.%02lX.%02lX", (DRIVER_VERSION>>16),(DRIVER_VERSION>>8)&0xFF,(DRIVER_VERSION&0xFFUL));
 	printk("Driver smscusbnet.ko verison %s\n",version);
@@ -1831,39 +1829,72 @@ smscusbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	dev->idVendor = prod->idVendor;
 	dev->idProduct = prod->idProduct;
 
-	#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20))
 		INIT_WORK (&dev->kevent, kevent,dev);
-	#else
+#else
 		INIT_WORK (&dev->kevent, kevent);
-	#endif
+#endif
 
-    if(operational_mode)devdbg (dev,"Operational mode enabled\n");
+	if (operational_mode)
+		devdbg (dev,"Operational mode enabled\n");
 
 	dev->MyWorkQueue=create_singlethread_workqueue("intr_work");
 	if (!dev->MyWorkQueue) {
 		devdbg (dev,"can't create MyWorkQueue!\n");
 		goto out1;
 	}
-	#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20))
 	INIT_WORK (&dev->myevent, myevent,dev);
-	#else
+#else
 	INIT_WORK (&dev->myevent, myevent);
-	#endif
-
+#endif
 	dev->delay.function = smscusbnet_bh;
 	dev->delay.data = (unsigned long) dev;
 	init_timer (&dev->delay);
 
+	dev->tx_qlen = tx_queue_size;
+	dev->rx_qlen = rx_queue_size;
+	dev->turbo_mode = TurboMode;
+
+        if (TurboMode) {
+                if(dev->udev->speed == USB_SPEED_HIGH)
+			dev->rx_urb_size = DEFAULT_HS_BURST_CAP_SIZE;
+                else
+			dev->rx_urb_size = DEFAULT_FS_BURST_CAP_SIZE;
+        }else{
+                dev->rx_urb_size = MAX_SINGLE_PACKET_SIZE;
+        }
+
+	dev->rx_use_prealloc_buffs = rx_use_prealloc_buffers;
+	skb_queue_head_init(&dev->rx_pool_queue);
+	/* allocate rx usb buffers if enabled */
+	if (dev->rx_use_prealloc_buffs) {
+		status = smscusbnet_alloc_rx_pool(dev, dev->rx_urb_size + NET_IP_ALIGN);
+		if (status) {
+			smscusbnet_free_rx_pool(dev);
+			status = ENOMEM;
+			goto out1;
+		}
+	}
+
+	dev->tx_use_prealloc_buffs = tx_use_prealloc_buffers;
+	dev->tx_urb_size = DEFAULT_TX_BUFFER_SIZE;
+	skb_queue_head_init(&dev->tx_pool_queue);
+	/* allocate tx usb buffers if enabled */
+	if (dev->tx_use_prealloc_buffs) {
+		status = smscusbnet_alloc_tx_pool(dev, dev->tx_urb_size);
+		if (status) {
+			smscusbnet_free_tx_pool(dev);
+			status = ENOMEM;
+			goto out1;
+		}
+	}
+
 	dev->StopLinkPolling=FALSE;
 	dev->LinkPollingTimer.function=smscusbnet_linkpolling;
 	dev->LinkPollingTimer.data=(unsigned long) dev;
-//      dev->LinkPollingTimer.expires=jiffies+HZ;
 	init_timer(&(dev->LinkPollingTimer));
-//	add_timer(&(dev->LinkPollingTimer));
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24))
-	SET_MODULE_OWNER (net);
-#endif
 	dev->net = net;
 	strcpy (net->name, "usb%d");
 	memcpy (net->dev_addr, node_id, sizeof node_id);
@@ -1872,7 +1903,6 @@ smscusbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	 * bind() should set rx_urb_size in that case.
 	 */
 	net->hard_header_len += EXTRA_HEADER_LEN; //Reserve extra 8 bytes for control word to eliminate memcpy in tx_fixup()
-	devdbg (dev, "hard_header_len = %d\n", (int)net->hard_header_len);
 	dev->hard_mtu = net->mtu + net->hard_header_len;
 #if 0
 // dma_supported() is deeply broken on almost all architectures
@@ -1932,7 +1962,6 @@ smscusbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	}
 	if (status >= 0 && dev->status)
 	{
-		devdbg (dev,"status==0 \n");
 		status = init_status (dev, udev);
 	}
 	if (status < 0)
@@ -1944,7 +1973,6 @@ smscusbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	if (!dev->rx_urb_size)
 		dev->rx_urb_size = dev->hard_mtu;
 
-	devdbg (dev, "rx_urb_size = %d\n", (int)dev->rx_urb_size);
 	dev->StopSummitUrb=1;
 
 	dev->maxpacket = usb_maxpacket (dev->udev, dev->out, 1);
@@ -1970,7 +1998,7 @@ smscusbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 
 	// start as if the link is up
 	netif_device_attach (net);
-
+	
 	return 0;
 
 out3:
@@ -2076,7 +2104,7 @@ static int __init smscusbnet_init(void)
 			< sizeof (struct skb_data));
 
 	random_ether_addr(node_id);
-	return 0;
+ 	return 0;
 }
 module_init(smscusbnet_init);
 

@@ -25,6 +25,8 @@
 #ifndef __MUIC_NOTIFIER_H__
 #define __MUIC_NOTIFIER_H__
 
+#include <linux/ccic/ccic_notifier.h>
+
 /* MUIC notifier call chain command */
 typedef enum {
 	MUIC_NOTIFY_CMD_DETACH	= 0,
@@ -42,25 +44,16 @@ typedef enum {
 	MUIC_NOTIFY_DEV_TSP,
 	MUIC_NOTIFY_DEV_CHARGER,
 	MUIC_NOTIFY_DEV_CPUIDLE,
-	MUIC_NOTIFY_DEV_CPUFREQ
+	MUIC_NOTIFY_DEV_CPUFREQ,
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+	MUIC_NOTIFY_DEV_MANAGER,
+#endif
 } muic_notifier_device_t;
-
-
-/* Follows the same structure defined in ccic_notifier.h */
-typedef struct muic_noti_cxt_
-{
-	uint64_t src:4;
-	uint64_t dest:4;
-	uint64_t id:8;
-	uint64_t attach:16;
-	uint64_t cable_type:16;
-	uint64_t reserved:16;
-} muic_noti_cxt_t;
 
 struct muic_notifier_struct {
 	muic_attached_dev_t attached_dev;
 	muic_notifier_cmd_t cmd;
-	muic_noti_cxt_t cxt;
+	CC_NOTI_ATTACH_TYPEDEF cxt;
 	struct blocking_notifier_head notifier_call_chain;
 };
 

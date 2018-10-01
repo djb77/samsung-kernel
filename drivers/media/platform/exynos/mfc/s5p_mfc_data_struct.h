@@ -39,7 +39,7 @@
 #define MFC_MAX_DPBS		32
 #define MFC_MAX_BUFFERS		32
 #define MFC_MAX_EXTRA_BUF	10
-#define MFC_TIME_INDEX		8
+#define MFC_TIME_INDEX		15
 
 /* Maximum number of temporal layers */
 #define VIDEO_MAX_TEMPORAL_LAYERS 7
@@ -402,7 +402,8 @@ struct s5p_mfc_h264_enc_params {
 	u32 aso_slice_order[8];
 
 	u32 prepend_sps_pps_to_idr;
-	u32 enable_ltr;
+	u8 enable_ltr;
+	u8 num_of_ltr;
 	u32 set_priority;
 	u32 base_priority;
 	u32 vui_enable;
@@ -570,6 +571,7 @@ struct s5p_mfc_enc_params {
 	enum v4l2_mpeg_video_header_mode seq_hdr_mode;
 	enum v4l2_mpeg_mfc51_video_frame_skip_mode frame_skip_mode;
 	u8 fixed_target_bit;
+	u8 num_hier_max_layer;
 
 	u16 rc_frame_delta;	/* MFC6.1 Only */
 
@@ -794,7 +796,7 @@ struct s5p_mfc_dec {
 	int profile;
 	int is_10bit;
 
-	unsigned int err_sync_flag;
+	unsigned int err_reuse_flag;
 };
 
 struct s5p_mfc_enc {

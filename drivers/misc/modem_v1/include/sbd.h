@@ -71,6 +71,15 @@ desc		descriptor
 #define BUFF_RGN_OFFSET	(CMD_DESC_RGN_SIZE)
 
 /**
+@brief		Priority for QoS(Quality of Service)
+*/
+enum qos_prio {
+	QOS_HIPRIO = 10,
+	QOS_NORMAL,
+	QOS_MAX_PRIO,
+};
+
+/**
 @brief		SBD Ring Buffer Descriptor
 		(i.e. IPC Channel Descriptor Structure in MIPI LLI_IPC_AN)
 */
@@ -401,6 +410,20 @@ static inline struct sbd_ring_buffer *sbd_ch2rb(struct sbd_link_device *sl,
 						enum direction dir)
 {
 	u16 id = sbd_ch2id(sl, ch);
+	return (id < MAX_LINK_CHANNELS) ? &sl->ipc_dev[id].rb[dir] : NULL;
+}
+
+static inline struct sbd_ring_buffer *sbd_ch2rb_with_skb(struct sbd_link_device *sl,
+						unsigned int ch,
+						enum direction dir,
+						struct sk_buff *skb)
+{
+	u16 id;
+
+	if (sipc_ps_ch(ch))
+		ch = (skb && skb->queue_mapping == 1) ? QOS_HIPRIO : QOS_NORMAL;
+
+	id = sbd_ch2id(sl, ch);
 	return (id < MAX_LINK_CHANNELS) ? &sl->ipc_dev[id].rb[dir] : NULL;
 }
 

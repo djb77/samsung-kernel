@@ -38,6 +38,10 @@
 #include "ecryptfs_dek.h"
 #endif
 
+#if defined(CONFIG_MMC_DW_FMP_ECRYPT_FS) || defined(CONFIG_UFS_FMP_ECRYPT_FS)
+#include "sdcardfs.h"
+#endif
+
 struct kmem_cache *ecryptfs_inode_info_cache;
 
 /**
@@ -140,38 +144,7 @@ static int ecryptfs_statfs(struct dentry *dentry, struct kstatfs *buf)
  */
 static void ecryptfs_evict_inode(struct inode *inode)
 {
-#if defined(CONFIG_MMC_DW_FMP_ECRYPT_FS) || defined(CONFIG_UFS_FMP_ECRYPT_FS)
-	struct inode *lower_inode;
-	struct ecryptfs_mount_crypt_stat *mount_crypt_stat =
-		&ecryptfs_superblock_to_private(inode->i_sb)->mount_crypt_stat;
-#endif
 	truncate_inode_pages_final(&inode->i_data);
-#if defined(CONFIG_MMC_DW_FMP_ECRYPT_FS) || defined(CONFIG_UFS_FMP_ECRYPT_FS)
-	if (mount_crypt_stat->flags & ECRYPTFS_USE_FMP) {
-		lower_inode = ecryptfs_inode_to_lower(inode);
-		for(;;) {
-			if (!lower_inode)
-				break;
-
-			if (!strcmp("ext4", lower_inode->i_sb->s_type->name)) {
-				truncate_inode_pages(&lower_inode->i_data, 0);
-				lower_inode->i_mapping->iv = NULL;
-				lower_inode->i_mapping->key = NULL;
-				lower_inode->i_mapping->key_length = 0;
-				lower_inode->i_mapping->sensitive_data_index = 0;
-				lower_inode->i_mapping->alg = NULL;
-				lower_inode->i_mapping-> hash_tfm = NULL;
-#ifdef CONFIG_CRYPTO_FIPS
-				lower_inode->i_mapping->cc_enable = 0;
-#endif
-				break;
-			} else {
-				printk("%s: lower inode err: %s\n", __func__, lower_inode->i_sb->s_type->name);
-				break;
-			}
-		}
-	}
-#endif
 	clear_inode(inode);
 	iput(ecryptfs_inode_to_lower(inode));
 }
@@ -277,9 +250,12 @@ static long ecryptfs_propagate_lookup(struct super_block *sb, char *pathname){
 
 	sbi = ecryptfs_superblock_to_private(sb);
 	stat = &sbi->propagate_stat;
-	propagate_path = kmalloc(PATH_MAX, GFP_KERNEL);
-
 	ECRYPTFS_OVERRIDE_ROOT_CRED(saved_cred);
+	propagate_path = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!propagate_path) {
+		ECRYPTFS_REVERT_CRED(saved_cred);
+		return -ENOMEM;
+	}
 	if (stat->propagate_type != TYPE_E_NONE && stat->propagate_type != TYPE_E_DEFAULT) {
 		snprintf(propagate_path, PATH_MAX, "%s/%s/%s/%s",
 				stat->base_path, "default", stat->label, pathname);

@@ -97,6 +97,8 @@ struct sub_ch_info_type {
 	unsigned char svc_label[SVC_LABEL_MAX+1]; /* 16*8 bits */
 	unsigned char ecc;	/* 8 bits */
 	unsigned char scids;	/* 4 bits */
+
+	unsigned char ca_flags;
 } ;
 
 struct ensemble_info_type {

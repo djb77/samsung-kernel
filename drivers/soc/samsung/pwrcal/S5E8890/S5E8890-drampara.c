@@ -1,5 +1,6 @@
 #include "../pwrcal-env.h"
 #include "../pwrcal-rae.h"
+#include "../pwrcal-dram.h"
 #include "S5E8890-sfrbase.h"
 #include "S5E8890-vclk-internal.h"
 
@@ -787,6 +788,7 @@ struct drampara_config_t {
 	struct phy_offset_config_t phy_offset;
 	struct vref_config_t vref;
 };
+
 /******************************************************************************
  *
  *
@@ -903,9 +905,58 @@ void *get_dram_dfs_table(void)
  * @return
  *
  *****************************************************************************/
-unsigned int pwrcal_get_dram_manufacturer(void)
+unsigned long long pwrcal_get_dram_manufacturer(void)
 {
 	return (query_key);
+}
+
+/******************************************************************************
+ *
+ * @fn      pwrcal_get_dram_tdqs2dq
+ *
+ * @brief
+ *
+ * @param
+ *
+ * @return
+ *
+ *****************************************************************************/
+int pwrcal_get_dram_tdqs2dq(int ch, int rank, int idx, unsigned int *tdqs2dq)
+{
+	int dq;
+	int byte;
+
+	if (drampara_config == NULL)
+		return 0;
+
+	dq = idx % 9;
+	byte = idx / 9;
+
+	*tdqs2dq = drampara_config->phy.trn_data[ch].write[rank].deskewl[dq][byte];
+
+	return 1;
+}
+
+/******************************************************************************
+ *
+ * @fn      pwrcal_get_dram_tdqsck
+ *
+ * @brief
+ *
+ * @param
+ *
+ * @return
+ *
+ *****************************************************************************/
+int pwrcal_get_dram_tdqsck(int ch, int rank, int byte, unsigned int *tdqsck)
+{
+	if (drampara_config == NULL)
+		return 0;
+
+	*tdqsck = drampara_config->phy.trn_data[ch].gate[rank].cycle[byte] * drampara_config->phy.trn_data[ch].dll
+			+ drampara_config->phy.trn_data[ch].gate[rank].center[byte];
+
+	return 1;
 }
 
 /******************************************************************************
@@ -1555,6 +1606,50 @@ void dfs_mif_level_init(void)
 
 /******************************************************************************
  *
+ * @fn      pwrcal_dram_print_info
+ *
+ * @brief
+ *
+ * @param
+ *
+ * @return
+ *
+ *****************************************************************************/
+static void pwrcal_dram_print_info(void)
+{
+	int ch;
+	int rank;
+	int byte;
+	int idx;
+
+	unsigned int tdqs2dq;
+	unsigned int tdqsck[2];
+
+	for (ch = 0; ch < 4; ch++) {
+		for (rank = 0; rank < 2; rank++) {
+
+			for (byte = 0; byte < 2; byte++)
+				pwrcal_get_dram_tdqsck(ch, rank, byte, &tdqsck[byte]);
+
+			pr_info("tdqsck for ch%d, rank%d : %d, %d \n", ch, rank, tdqsck[0], tdqsck[1]);
+		}
+	}
+
+	for (rank = 0; rank < 2; rank++) {
+		for (ch = 0; ch < 4; ch++) {
+
+			pr_info("tdqs2dq for ch%d, rank%d \n", ch, rank);
+
+			for (idx = 0; idx < 18; idx++) {
+				pwrcal_get_dram_tdqs2dq(ch, rank, idx, &tdqs2dq);
+				pr_info("tdqs2dq[%d] : %d \n", idx, tdqs2dq);
+			}
+		}
+	}
+}
+
+/******************************************************************************
+ *
  * @fn      dfs_dram_init
  *
  * @brief
@@ -1580,3 +1675,9 @@ void dfs_dram_init(void)
 	dfs_dram_param_init();
 	dfs_mif_level_init();
 }
+
+struct cal_dram_ops cal_dram_ops = {
+	.print_dram_info = pwrcal_dram_print_info,
+	.get_dram_tdqsck = pwrcal_get_dram_tdqsck,
+	.get_dram_tdqs2dq = pwrcal_get_dram_tdqs2dq,
+};

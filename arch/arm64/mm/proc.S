@@ -190,6 +190,8 @@ ENTRY(cpu_do_switch_mm)
 	isb
 	tlbi	vaae1, xzr
 	dsb	nsh
+	mrs	x1, ttbr0_el1
+	sub	x0, x0, x1
 	ret
 ENDPROC(cpu_do_switch_mm)
 

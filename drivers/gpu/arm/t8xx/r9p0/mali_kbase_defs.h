@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -1331,7 +1331,11 @@ struct kbase_context {
 
 	/* Waiting soft-jobs will fail when this timer expires */
 	struct hrtimer soft_event_timeout;
-	/* MALI_SEC_INTEGRATION */
+
+        /* External sticky resource management */
+        struct list_head ext_res_meta_head;
+
+        /* MALI_SEC_INTEGRATION */
 	int ctx_status;
 	bool ctx_need_qos;
 	char name[CTX_NAME_SIZE];
@@ -1343,6 +1347,35 @@ struct kbase_context {
 	bool destroying_context;
 	atomic_t mem_profile_showing_state;
 	wait_queue_head_t mem_profile_wait;
+};
+
+/**
+ * struct kbase_ctx_ext_res_meta - Structure which binds an external resource
+ *                                 to a @kbase_context.
+ * @ext_res_node:                  List head for adding the metadata to a
+ *                                 @kbase_context.
+ * @alloc:                         The physical memory allocation structure
+ *                                 which is mapped.
+ * @gpu_addr:                      The GPU virtual address the resource is
+ *                                 mapped to.
+ * @refcount:                      Refcount to keep track of the number of
+ *                                 active mappings.
+ *
+ * External resources can be mapped into multiple contexts as well as the same
+ * context multiple times.
+ * As kbase_va_region itself isn't refcounted we can't attach our extra
+ * information to it as it could be removed under our feet leaving external
+ * resources pinned.
+ * This metadata structure binds a single external resource to a single
+ * context, ensuring that per context refcount is tracked separately so it can
+ * be overridden when needed and abuses by the application (freeing the resource
+ * multiple times) don't effect the refcount of the physical allocation.
+ */
+struct kbase_ctx_ext_res_meta {
+        struct list_head ext_res_node;
+        struct kbase_mem_phy_alloc *alloc;
+        u64 gpu_addr;
+        u64 refcount;
 };
 
 enum kbase_reg_access_type {

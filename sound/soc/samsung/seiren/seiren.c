@@ -58,7 +58,9 @@
 #endif
 
 #include "../lpass.h"
+#include "../eax.h"
 #include "seiren.h"
+#include "seiren-dma.h"
 #include "seiren_ioctl.h"
 #include "seiren_error.h"
 #ifdef CONFIG_SND_SAMSUNG_ELPE
@@ -86,6 +88,8 @@
 #endif
 
 #define msecs_to_loops(t) (loops_per_jiffy / 1000 * HZ * t)
+
+void __iomem *dma_reg = NULL;
 
 DEFINE_MUTEX(esa_mutex);
 static DECLARE_WAIT_QUEUE_HEAD(esa_wq);
@@ -162,6 +166,47 @@ static int esa_set_cpu_lock_kthread(void *arg)
 
 static struct audio_processor *ptr_ap;
 static void esa_dump_fw_log(void);
+
+int esa_compr_send_direct_cmd(int32_t cmd)
+{
+	int n, ack;
+
+	switch (cmd) {
+	case CMD_DMA_START:
+		esa_info("%s: CMD_COMPR_DMA_START %d\n", __func__, cmd);
+		break;
+	case CMD_DMA_STOP:
+		esa_info("%s: CMD_COMPR_DMA_STOP %d\n", __func__, cmd);
+		break;
+	default:
+		esa_err("%s: unknown cmd %d\n", __func__, cmd);
+		return -EIO;
+	}
+
+	spin_lock(&si.cmd_lock);
+	writel(2, si.mailbox + COMPR_HANDLE_ID);
+	writel(cmd, si.mailbox + COMPR_CMD_CODE);		/* command */
+	writel(1, si.regs + SW_INTR_CA5);		/* trigger ca5 */
+
+	for (n = 0, ack = 0; n < 2000; n++) {
+		if (readl(si.mailbox + COMPR_ACK)) {	/* Wait for ACK */
+			ack = 1;
+			break;
+		}
+		udelay(100);
+	}
+	writel(0, si.mailbox + COMPR_ACK);		/* clear ACK */
+
+	spin_unlock(&si.cmd_lock);
+
+	if (!ack) {
+		esa_err("%s: No ack error!(%x)", __func__, cmd);
+		esa_dump_fw_log();
+		return -EFAULT;
+	}
+
+	return 0;
+}
 
 int esa_compr_send_cmd(int32_t cmd, struct audio_processor* ap)
 {
@@ -430,6 +475,22 @@ u32 esa_compr_get_sample_rate(void)
 }
 #endif
 
+void esa_fw_start(void)
+{
+	pm_runtime_get_sync(&si.pdev->dev);
+#ifdef ESA_DATA_DUMP
+	if (!sram_filp)
+		sram_filp =
+		filp_open("/data/sram.bin", O_RDWR|O_TRUNC|O_CREAT, S_IRUSR|S_IWUSR);
+#endif
+}
+
+void esa_fw_stop(void)
+{
+	pm_runtime_mark_last_busy(&si.pdev->dev);
+	pm_runtime_put_sync_autosuspend(&si.pdev->dev);
+}
+
 int esa_compr_open(void)
 {
 	int ret;
@@ -486,6 +547,7 @@ void esa_compr_close(void)
 #ifdef CONFIG_SND_SAMSUNG_SEIREN_OFFLOAD
 static void esa_fw_snapshot(void)
 {
+#if 0
         struct file *sram_filp;
         struct file *dram_filp;
         mm_segment_t old_fs;
@@ -513,6 +575,7 @@ static void esa_fw_snapshot(void)
 	filp_close(dram_filp, NULL);
 
 	set_fs(old_fs);
+#endif
 }
 
 struct kobject *seiren_fw_snapshot_kobj = NULL;
@@ -727,39 +790,33 @@ static int esa_fw_startup(void)
 
 	/* Not to enter SICD_AUD */
 	lpass_update_lpclock(LPCLK_CTRLID_LEGACY, true);
+	lpass_mif_power_on();
 	/* power on */
 	si.fw_use_dram = true;
 	esa_debug("Turn on CA5...\n");
 	esa_fw_download();
 
 	/* wait for fw ready */
-	ret = wait_event_interruptible_timeout(esa_wq, si.fw_ready, HZ / 2);
+	ret = wait_event_interruptible_timeout(esa_wq, si.fw_ready, HZ * 3);
 	if (!ret) {
-		pr_info("%s: Retry CA5 Initialization\n", __func__);
-		lpass_reset(LPASS_IP_CA5, LPASS_OP_RESET);
-		udelay(20);
-		lpass_reset(LPASS_IP_CA5, LPASS_OP_NORMAL);
-		ret = wait_event_interruptible_timeout(esa_wq, si.fw_ready, HZ / 2);
-		if (!ret) {
 #ifdef CONFIG_SOC_EXYNOS8890
-			u32 cfg;
-			void __iomem	*cmu_reg;
-			cmu_reg = ioremap(0x114C0000, SZ_4K);
-			cfg = readl(cmu_reg + 0x800); /* Check CA5 clock */
-			iounmap(cmu_reg);
-			esa_err("%s: fw not ready!!! (%d), clk = %x\n", __func__,
-				readl(si.mailbox + LAST_CHECKPT), cfg);
+		u32 cfg;
+		void __iomem	*cmu_reg;
+		cmu_reg = ioremap(0x114C0000, SZ_4K);
+		cfg = readl(cmu_reg + 0x800); /* Check CA5 clock */
+		iounmap(cmu_reg);
+		esa_err("%s: fw not ready!!! (%d), clk = %x\n", __func__,
+			readl(si.mailbox + LAST_CHECKPT), cfg);
 #else
-			esa_err("%s: fw not ready!!! (%d)\n", __func__,
-				readl(si.mailbox + LAST_CHECKPT));
+		esa_err("%s: fw not ready!!! (%d)\n", __func__,
+			readl(si.mailbox + LAST_CHECKPT));
 #endif
-			lpass_reset(LPASS_IP_CA5, LPASS_OP_RESET);
-			if (!check_esa_compr_state())
-				lpass_update_lpclock(LPCLK_CTRLID_OFFLOAD, false);
-			lpass_update_lpclock(LPCLK_CTRLID_LEGACY, false);
-			si.fw_use_dram = false;
-			return -EBUSY;
-		}
+		lpass_reset(LPASS_IP_CA5, LPASS_OP_RESET);
+		if (!check_esa_compr_state())
+			lpass_update_lpclock(LPCLK_CTRLID_OFFLOAD, false);
+		lpass_update_lpclock(LPCLK_CTRLID_LEGACY, false);
+		si.fw_use_dram = false;
+		return -EBUSY;
 	}
 
 #ifndef CONFIG_SND_SAMSUNG_SEIREN_OFFLOAD
@@ -875,8 +932,10 @@ int esa_effect_write(int type, int *value, int count)
 	int i, *effect_value;
 	int ret = 0;
 
-	if (!check_esa_compr_state() ||
-	   (pm_runtime_get_sync(&si.pdev->dev) < 0))
+	if (!check_esa_compr_state())
+		return 0;
+
+	if (pm_runtime_get_sync(&si.pdev->dev) < 0)
 		return 0;
 
 	effect_value = value;
@@ -1473,6 +1532,7 @@ static int esa_get_params(struct file *file, unsigned int param,
 static irqreturn_t esa_isr(int irqno, void *id)
 {
 	unsigned int fw_stat, log_size, val;
+	int index;
 	bool wakeup = false;
 
 #ifdef CONFIG_SND_SAMSUNG_SEIREN_OFFLOAD
@@ -1496,6 +1556,23 @@ static irqreturn_t esa_isr(int irqno, void *id)
 		pr_debug("FW is ready!\n");
 		si.fw_ready = true;
 		wakeup = true;
+		break;
+	case INTR_DMA:
+		index = readl(si.mailbox + COMPR_DMA_IDX);
+#ifdef CONFIG_SND_SOC_EAX_SLOWPATH
+		pr_debug("ADMA INTR index = %d !!!!\n", index);
+		eax_slowpath_wakeup_buf_wq(index);
+#endif
+		writel(0, si.mailbox + COMPR_INTR_ACK);
+		break;
+	case INTR_DMA_INDEX:
+		index = readl(si.mailbox + RETURN_CMD) & 0xF;
+#ifdef CONFIG_SND_SOC_EAX_SLOWPATH
+		pr_debug("ADMA INTR index = %d , dma_ptr = %x!!!!\n",
+			index, readl(dma_reg + 0x440));
+		eax_slowpath_wakeup_buf_wq(index);
+#endif
+		writel(0, si.mailbox + COMPR_INTR_ACK);
 		break;
 #ifdef CONFIG_SND_SAMSUNG_SEIREN_OFFLOAD
 	case INTR_CREATED:
@@ -2376,6 +2453,8 @@ static void esa_fw_request_complete(const struct firmware *fw_sram, void *ctx)
 	memcpy(si.fwmem, fw_sram->data, si.fw_sbin_size);
 	memcpy(si.fwmem + si.fw_sbin_size, fw_dram->data, si.fw_dbin_size);
 
+	release_firmware(fw_dram);
+
 	esa_info("FW Loaded (SRAM = %d, DRAM = %d)\n",
 			si.fw_sbin_size, si.fw_dbin_size);
 
@@ -2504,13 +2583,11 @@ static int esa_probe(struct platform_device *pdev)
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_set_autosuspend_delay(dev, 300);
 	pm_runtime_enable(dev);
-	pm_runtime_get_sync(dev);
-	pm_runtime_put_sync(dev);
 #else
 	esa_do_resume(dev);
 #endif
 #ifdef CONFIG_SND_SAMSUNG_ELPE
-	lpeff_init(si);
+	lpeff_init(&si);
 	exynos_init_lpeffworker();
 #endif
 #ifdef CONFIG_SND_SAMSUNG_SEIREN_OFFLOAD
@@ -2533,6 +2610,8 @@ static int esa_probe(struct platform_device *pdev)
 	pm_qos_add_request(&si.ca5_mif_qos, PM_QOS_BUS_THROUGHPUT, 0);
 	pm_qos_add_request(&si.ca5_int_qos, PM_QOS_DEVICE_THROUGHPUT, 0);
 #endif
+	if (!dma_reg)
+		dma_reg = ioremap(0x11420000, SZ_4K);
 	return 0;
 
 err:

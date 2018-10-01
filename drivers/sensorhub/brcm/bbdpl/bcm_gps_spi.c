@@ -987,6 +987,7 @@ static struct spi_driver bcm_spi_driver =
 	.driver = {
 		.name = "brcm gps spi",
 		.owner = THIS_MODULE,
+		.suppress_bind_attrs = true,
 #ifdef CONFIG_OF
 		.of_match_table = match_table
 #endif

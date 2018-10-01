@@ -133,6 +133,9 @@ int exynos8890_fimc_is_sensor_iclk_cfg(struct device *dev,
 	fimc_is_enable(dev, "cam1_phy3_csis2");
 	fimc_is_enable(dev, "cam1_phy0_csis3");
 
+	/* 3aa clock on for secure camera */
+	fimc_is_enable(dev, "gate_fimc_3aa0");
+	fimc_is_enable(dev, "gate_fimc_3aa1");
 	return  0;
 }
 
@@ -196,46 +199,21 @@ int exynos8890_fimc_is_sensor_iclk_off(struct device *dev,
 	fimc_is_disable(dev, "cam1_trex");
 	fimc_is_disable(dev, "cam1_bus");
 
+	/* 3aa clock off for secure camera */
+	fimc_is_disable(dev, "gate_fimc_3aa0");
+	fimc_is_disable(dev, "gate_fimc_3aa1");
+
 	if (scenario == SENSOR_SCENARIO_NORMAL)
 		goto p_err;
 
 	switch (channel) {
 	case 0:
-		/* BUS0 */
-		fimc_is_disable(dev, "gate_aclk_lh_cam0");
-
-		/* CAM0 */
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam0_csis0_690");
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam0_bnsa_690");
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam0_bnsd_690");
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam0_trex_532");
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam0_nocp_133");
-		fimc_is_disable(dev, "mout_user_mux_phyclk_rxbyteclkhs0_s4");
-		fimc_is_disable(dev, "mout_user_mux_phyclk_rxbyteclkhs1_s4");
-		fimc_is_disable(dev, "mout_user_mux_phyclk_rxbyteclkhs2_s4");
-		fimc_is_disable(dev, "mout_user_mux_phyclk_rxbyteclkhs3_s4");
 		break;
 	case 1:
-		/* BUS0 */
-		fimc_is_disable(dev, "gate_aclk_lh_cam0");
-
-		/* CAM0 */
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam0_csis1_174");
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam0_bnsb_690");
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam0_trex_532");
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam0_nocp_133");
-		fimc_is_disable(dev, "mout_user_mux_phyclk_rxbyteclkhs0_s2a");
 		break;
 	case 2:
-		/* BUS0 */
-		fimc_is_enable(dev, "gate_aclk_lh_cam1");
-
-		/* CAM1 */
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam1_bnscsis_133");
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam1_trex_532");
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam1_nocp_133");
-		fimc_is_disable(dev, "mout_user_mux_phyclk_hs0_csis2_rx_byte");
-		fimc_is_disable(dev, "mout_user_mux_aclk_cam1_busperi_334");
+		break;
+	case 3:
 		break;
 	default:
 		pr_err("channel is invalid(%d)\n", channel);

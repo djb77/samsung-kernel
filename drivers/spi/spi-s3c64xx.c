@@ -434,7 +434,7 @@ static int acquire_dma(struct s3c64xx_spi_driver_data *sdd)
 	req.cap = DMA_SLAVE;
 	req.client = &s3c64xx_spi_dma_client;
 
-	if ((sci->check_fusing_bit) && (fusing_bit == 0x40000000)) {
+	if ((sci->check_fusing_bit) && (fusing_bit & 0xC0000000)) {
 		if (sdd->rx_dma.ch == NULL)
 			sdd->rx_dma.ch = (void *)sdd->ops->request(sdd->rx_dma.dmach,
 							&req, dev, "rx-s");

@@ -354,6 +354,7 @@ static int fimc_is_mcs_video_qbuf(struct file *file, void *priv,
 {
 	int ret = 0;
 	struct fimc_is_video_ctx *vctx = file->private_data;
+	struct fimc_is_queue *queue;
 
 	BUG_ON(!vctx);
 
@@ -361,10 +362,19 @@ static int fimc_is_mcs_video_qbuf(struct file *file, void *priv,
 	mdbgv_mcs("%s(%02d:%d)\n", vctx, __func__, buf->type, buf->index);
 #endif
 
+	queue = GET_QUEUE(vctx);
+
+	if (!test_bit(FIMC_IS_QUEUE_STREAM_ON, &queue->state)) {
+		merr("stream off state, can NOT qbuf", vctx);
+		ret = -EINVAL;
+		goto p_err;
+	}
+
 	ret = CALL_VOPS(vctx, qbuf, buf);
 	if (ret)
 		merr("qbuf is fail(%d)", vctx, ret);
 
+p_err:
 	return ret;
 }
 

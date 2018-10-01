@@ -121,7 +121,15 @@
  * Big Cores are 7-4 and Little Cores are 3-1.
  */
 #if defined(DHD_LB)
-#define DHD_LB_PRIMARY_CPUS	(0xF0)
+#if defined(CONFIG_SOC_EXYNOS8890)
+/*
+ * Removed core 6~7 from NAPI CPU mask.
+ * Exynos 8890 disabled core 6~7 by default.
+ */
+#define DHD_LB_PRIMARY_CPUS	(0x30)
+#else
+#define DHD_LB_PRIMARY_CPUS     (0xF0)
+#endif
 #define DHD_LB_SECONDARY_CPUS	(0x0E)
 #else
 #define ARGOS_DPC_TASKLET_CTL

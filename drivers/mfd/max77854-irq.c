@@ -199,12 +199,18 @@ static void max77854_irq_unmask(struct irq_data *data)
 		max77854->irq_masks_cur[irq_data->group] &= ~irq_data->mask;
 }
 
+static void max77854_irq_disable(struct irq_data *data)
+{
+	max77854_irq_mask(data);
+}
+
 static struct irq_chip max77854_irq_chip = {
 	.name			= MFD_DEV_NAME,
 	.irq_bus_lock		= max77854_irq_lock,
 	.irq_bus_sync_unlock	= max77854_irq_sync_unlock,
 	.irq_mask		= max77854_irq_mask,
 	.irq_unmask		= max77854_irq_unmask,
+	.irq_disable	= max77854_irq_disable,
 };
 
 static irqreturn_t max77854_irq_thread(int irq, void *data)

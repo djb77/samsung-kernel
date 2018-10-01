@@ -4,10 +4,6 @@
 #include <asm/assembler.h>
 
 #ifdef CONFIG_RKP_CFP
-/* TODO:
- * Persist RRK when we call up to the hypervisor from __invoke_psci_fn_hvc.
- * (it's not secure to save RRK in memory).
- */
 #include <asm/rkp_cfp.h>
 #endif
 
@@ -72,6 +68,7 @@
 ENTRY(__cpu_suspend_enter)
 #ifdef CONFIG_RKP_CFP_ROPP
 	stp	x29, lr, [sp, #-112]!
+	stp	RRK, RRS, [sp,#96]
 #else
 	stp	x29, lr, [sp, #-96]!
 #endif
@@ -80,9 +77,6 @@ ENTRY(__cpu_suspend_enter)
 	stp	x23, x24, [sp,#48]
 	stp	x25, x26, [sp,#64]
 	stp	x27, x28, [sp,#80]
-#ifdef CONFIG_RKP_CFP_ROPP
-	stp	RRK, RRS, [sp,#96]
-#endif
 	/*
 	 * Stash suspend finisher and its argument in x20 and x19
 	 */
@@ -138,7 +132,7 @@ ENTRY(__cpu_suspend_enter)
 	ldp	x25, x26, [sp, #64]
 	ldp	x27, x28, [sp, #80]
 #ifdef CONFIG_RKP_CFP_ROPP
-    ldp	RRK, RRS, [sp, #96]
+	ldp	RRK, RRS, [sp, #96]
 	ldp	x29, lr, [sp], #112
 #else
 	ldp	x29, lr, [sp], #96
@@ -164,7 +158,7 @@ cpu_resume_after_mmu:
 	ldp	x25, x26, [sp, #64]
 	ldp	x27, x28, [sp, #80]
 #ifdef CONFIG_RKP_CFP_ROPP
-    ldp	RRK, RRS, [sp, #96]
+	ldp	RRK, RRS, [sp, #96]
 	ldp	x29, lr, [sp], #112
 #else
 	ldp	x29, lr, [sp], #96
@@ -173,9 +167,6 @@ cpu_resume_after_mmu:
 ENDPROC(cpu_resume_after_mmu)
 
 ENTRY(cpu_resume)
-#ifdef CONFIG_RKP_CFP_JOPP
-    load_function_entry_magic_number_no_mmu sleep_magic
-#endif
 	bl	el2_setup		// if in EL2 drop to EL1 cleanly
 #ifdef CONFIG_SMP
 	mrs	x1, mpidr_el1
@@ -207,7 +198,3 @@ ENTRY(cpu_resume)
 	bl	cpu_do_resume		// PC relative jump, MMU off
 	b	cpu_resume_mmu		// Resume MMU, never returns
 ENDPROC(cpu_resume)
-
-#ifdef CONFIG_RKP_CFP_JOPP
-alloc_function_entry_magic_number sleep_magic
-#endif

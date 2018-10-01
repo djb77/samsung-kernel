@@ -68,8 +68,7 @@ static void sec_power_off(void)
 
 	while (1) {
 		/* Check reboot charging */
-		if ((ac_val.intval || usb_val.intval || wpc_val.intval || (poweroff_try >= 5)) &&
-		     !lpcharge) {
+		if (ac_val.intval || usb_val.intval || wpc_val.intval || (poweroff_try >= 5)) {
 
 			pr_emerg("%s: charger connected() or power"
 			     "off failed(%d), reboot!\n",
@@ -109,6 +108,15 @@ static void sec_power_off(void)
 	}
 }
 
+#ifdef CONFIG_LCD_RES
+enum lcd_res_type {
+	LCD_RES_DEFAULT = 0,
+	LCD_RES_FHD = 1920,
+	LCD_RES_HD = 1280,
+	LCD_RES_MAX
+};
+#endif
+
 #define REBOOT_MODE_PREFIX	0x12345670
 #define REBOOT_MODE_NONE	0
 #define REBOOT_MODE_DOWNLOAD	1
@@ -119,8 +127,10 @@ static void sec_power_off(void)
 #define REBOOT_MODE_FOTA_BL	6	/* update bootloader */
 #define REBOOT_MODE_SECURE	7	/* image secure check fail */
 #define REBOOT_MODE_FWUP	9	/* emergency firmware update */
+#define REBOOT_MODE_EM_FUSE	10	/* EMC market fuse */
 
 #define REBOOT_SET_PREFIX	0xabc00000
+#define REBOOT_SET_LCD_RES	0x000b0000
 #define REBOOT_SET_DEBUG	0x000d0000
 #define REBOOT_SET_SWSEL	0x000e0000
 #define REBOOT_SET_SUD		0x000f0000
@@ -151,6 +161,17 @@ static void sec_reboot(char str, const char *cmd)
 			exynos_pmu_write(EXYNOS_INFORM3,REBOOT_MODE_PREFIX | REBOOT_MODE_SECURE);
 		else if (!strcmp(cmd, "fwup"))
 			exynos_pmu_write(EXYNOS_INFORM3,REBOOT_MODE_PREFIX | REBOOT_MODE_FWUP);
+		else if (!strcmp(cmd, "em_mode_force_user"))
+			exynos_pmu_write(EXYNOS_INFORM3,REBOOT_MODE_PREFIX | REBOOT_MODE_EM_FUSE);
+#ifdef CONFIG_LCD_RES
+		else if (!strncmp(cmd, "lcdres_", 7)) {
+			if( !strcmp(cmd, "lcdres_fhd") ) value = LCD_RES_FHD;
+			else if( !strcmp(cmd, "lcdres_hd") ) value = LCD_RES_HD;
+			else value = LCD_RES_DEFAULT;
+			pr_info( "%s : lcd_res, %d\n", __func__, (int)value );
+			exynos_pmu_write(EXYNOS_INFORM3, REBOOT_SET_PREFIX | REBOOT_SET_LCD_RES | value);
+		}
+#endif
 		else if (!strncmp(cmd, "debug", 5)
 			 && !kstrtoul(cmd + 5, 0, &value))
 			exynos_pmu_write(EXYNOS_INFORM3,REBOOT_SET_PREFIX | REBOOT_SET_DEBUG | value);
@@ -164,10 +185,10 @@ static void sec_reboot(char str, const char *cmd)
 			exynos_pmu_write(EXYNOS_INFORM3, 0x0);
 		else if (!strncmp(cmd, "panic", 5)){
 			/*
-			 * This line is intentionally blanked because the INFORM3 is used for upload cause 
+			 * This line is intentionally blanked because the INFORM3 is used for upload cause
 			 * in sec_debug_set_upload_cause() only in case of  panic() .
 			 */
-		}	
+		}
 		else
 			exynos_pmu_write(EXYNOS_INFORM3,REBOOT_MODE_PREFIX | REBOOT_MODE_NONE);
 	}

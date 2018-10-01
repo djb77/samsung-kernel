@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmdevs.h 582052 2015-08-26 09:30:53Z $
+ * $Id: bcmdevs.h 627766 2016-03-28 11:12:28Z $
  */
 
 #ifndef	_BCMDEVS_H
@@ -205,6 +205,9 @@
 #define BCM43596_D11AC_ID	0x4415		/* 43596 802.11ac dualband device */
 #define BCM43596_D11AC2G_ID	0x4416		/* 43596 802.11ac 2.4G device */
 #define BCM43596_D11AC5G_ID	0x4417		/* 43596 802.11ac 5G device */
+#define BCM43597_D11AC_ID	0x441c		/* 43597 802.11ac dualband device */
+#define BCM43597_D11AC2G_ID	0x441d		/* 43597 802.11ac 2.4G device */
+#define BCM43597_D11AC5G_ID	0x441e		/* 43597 802.11ac 5G device */
 #define BCM43909_D11AC_ID	0x43d0		/* 43909 802.11ac dualband device */
 #define BCM43909_D11AC2G_ID	0x43d1		/* 43909 802.11ac 2.4G device */
 #define BCM43909_D11AC5G_ID	0x43d2		/* 43909 802.11ac 5G device */

@@ -16,6 +16,7 @@
 #include <linux/pwm.h>
 #include <linux/platform_device.h>
 #include <linux/err.h>
+#include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/clk.h>
 #include <linux/i2c.h>
@@ -40,6 +41,8 @@
 #define MRDBTMER_MASK		(0x7)
 #define MREN					(1 << 3)
 #define BIASEN				(1 << 7)
+
+#define VIB_BUFSIZE		30
 
 #if defined(CONFIG_MOTOR_DRV_SENSOR)
 int (*sensorCallback)(int);
@@ -115,6 +118,11 @@ static void max77854_haptic_init_reg(struct max77854_haptic_drvdata *drvdata)
 		MAX77854_PMIC_REG_MCONFIG, 0xff, MOTOR_LRA);
 	if (ret)
 		pr_err("i2c MOTOR_LPA update error %d\n", ret);
+
+	ret = max77854_update_reg(drvdata->i2c,
+		MAX77854_PMIC_REG_MCONFIG, 0xff, DIVIDER_128);
+	if (ret)
+		pr_err("i2c DIVIDER_128 update error %d\n", ret);
 }
 
 static void max77854_haptic_i2c(struct max77854_haptic_drvdata *drvdata,
@@ -172,7 +180,7 @@ static ssize_t show_duty_period(struct device *dev,
 {
 	struct max77854_haptic_drvdata *drvdata = dev_get_drvdata(dev);
 
-	return sprintf(buf, "duty: %u, period%u\n",
+	return snprintf(buf, VIB_BUFSIZE, "duty: %u, period: %u\n",
 			drvdata->pdata->duty,
 			drvdata->pdata->period);
 }
@@ -203,6 +211,10 @@ static ssize_t intensity_store(struct device *dev,
 	int intensity = 0, ret = 0;
 
 	ret = kstrtoint(buf, 0, &intensity);
+	if (ret) {
+		pr_err("fail to get intensity\n");
+		return -EINVAL;
+	}
 
 	if (intensity < 0 || MAX_INTENSITY < intensity) {
 		pr_err("out of rage\n");
@@ -233,10 +245,49 @@ static ssize_t intensity_show(struct device *dev,
 	struct max77854_haptic_drvdata *drvdata
 		= container_of(tdev, struct max77854_haptic_drvdata, tout_dev);
 
-	return sprintf(buf, "intensity: %u\n", drvdata->intensity);
+	return snprintf(buf, VIB_BUFSIZE, "intensity: %u\n", drvdata->intensity);
 }
 
 static DEVICE_ATTR(intensity, 0660, intensity_show, intensity_store);
+
+static ssize_t frequency_store(struct device *dev,
+	struct device_attribute *devattr, const char *buf, size_t count)
+{
+	struct timed_output_dev *tdev = dev_get_drvdata(dev);
+	struct max77854_haptic_drvdata *drvdata
+		= container_of(tdev, struct max77854_haptic_drvdata, tout_dev);
+	struct max77854_haptic_pdata *pdata = drvdata->pdata;
+	int num, ret;
+
+	ret = kstrtoint(buf, 0, &num);
+	if (ret) {
+		pr_err("fail to get frequency\n");
+		return -EINVAL;
+	}
+	if (num < 0 || num >= pdata->multi_frequency) {
+		pr_err("out of rage\n");
+		return -EINVAL;
+	}
+
+	pdata->period = pdata->multi_freq_period[num];
+	pdata->duty = pdata->multi_freq_duty[num];
+	pdata->freq_num = num;
+
+	return count;
+}
+
+static ssize_t frequency_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct timed_output_dev *tdev = dev_get_drvdata(dev);
+	struct max77854_haptic_drvdata *drvdata
+		= container_of(tdev, struct max77854_haptic_drvdata, tout_dev);
+	struct max77854_haptic_pdata *pdata = drvdata->pdata;
+
+	return snprintf(buf, VIB_BUFSIZE, "frequency: %d\n", pdata->freq_num);
+}
+
+static DEVICE_ATTR(multi_freq, 0660, frequency_show, frequency_store);
 
 static int haptic_get_time(struct timed_output_dev *tout_dev)
 {
@@ -258,16 +309,20 @@ static void haptic_enable(struct timed_output_dev *tout_dev, int value)
 	struct max77854_haptic_drvdata *drvdata
 		= container_of(tout_dev, struct max77854_haptic_drvdata, tout_dev);
 	struct hrtimer *timer = &drvdata->timer;
-	int period = drvdata->pdata->period;
+	struct max77854_haptic_pdata *pdata = drvdata->pdata;
+	int period = pdata->period;
 	int duty = drvdata->duty;
 	int ret = 0;
 
 	flush_kthread_worker(&drvdata->kworker);
 	ret = hrtimer_cancel(timer);
 
-	value = min_t(int, value, (int)drvdata->pdata->max_timeout);
+	value = min_t(int, value, (int)pdata->max_timeout);
 	drvdata->timeout = value;
-	pr_debug("%u %ums\n", drvdata->duty, value);
+	if (pdata->multi_frequency)
+		pr_debug("%d %u %ums\n", pdata->freq_num, drvdata->duty, value);
+	else
+		pr_debug("%u %ums\n", drvdata->duty, value);
 	if (value > 0) {
 		mutex_lock(&drvdata->mutex);
 
@@ -355,7 +410,7 @@ static struct max77854_haptic_pdata *of_max77854_haptic_dt(struct device *dev)
 	struct max77854_haptic_pdata *pdata;
 	u32 temp;
 	const char *temp_str;
-	int ret;
+	int ret, i;
 
 	pdata = kzalloc(sizeof(struct max77854_haptic_pdata),
 		GFP_KERNEL);
@@ -387,21 +442,62 @@ static struct max77854_haptic_pdata *of_max77854_haptic_dt(struct device *dev)
 	} else
 		pdata->max_timeout = (u16)temp;
 
-	ret = of_property_read_u32(np,
-			"haptic,duty", &temp);
+	ret = of_property_read_u32(np, "haptic,multi_frequency", &temp);
 	if (IS_ERR_VALUE(ret)) {
-		pr_err("%s : error to get dt node duty\n", __func__);
-		goto err_parsing_dt;
+		pr_err("%s : error to get dt node multi_frequency\n", __func__);
+		pdata->multi_frequency = 0;
 	} else
-		pdata->duty = (u16)temp;
+		pdata->multi_frequency = (int)temp;
 
-	ret = of_property_read_u32(np,
-			"haptic,period", &temp);
-	if (IS_ERR_VALUE(ret)) {
-		pr_err("%s : error to get dt node period\n", __func__);
-		goto err_parsing_dt;
-	} else
-		pdata->period = (u16)temp;
+	if (pdata->multi_frequency) {
+		pdata->multi_freq_duty
+			= devm_kzalloc(dev, sizeof(u32)*pdata->multi_frequency, GFP_KERNEL);
+		if (!pdata->multi_freq_duty) {
+			pr_err("%s: failed to allocate duty data\n", __func__);
+			goto err_parsing_dt;
+		}
+		pdata->multi_freq_period 
+			= devm_kzalloc(dev, sizeof(u32)*pdata->multi_frequency, GFP_KERNEL);
+		if (!pdata->multi_freq_period) {
+			pr_err("%s: failed to allocate period data\n", __func__);
+			goto err_parsing_dt;
+		}
+
+		ret = of_property_read_u32_array(np, "haptic,duty", pdata->multi_freq_duty,
+				pdata->multi_frequency);
+		if (IS_ERR_VALUE(ret)) {
+			pr_err("%s : error to get dt node duty\n", __func__);
+			goto err_parsing_dt;
+		}
+
+		ret = of_property_read_u32_array(np, "haptic,period", pdata->multi_freq_period,
+				pdata->multi_frequency);
+		if (IS_ERR_VALUE(ret)) {
+			pr_err("%s : error to get dt node period\n", __func__);
+			goto err_parsing_dt;
+		}
+
+		pdata->duty = pdata->multi_freq_duty[0];
+		pdata->period = pdata->multi_freq_period[0];
+		pdata->freq_num = 0;
+	}
+	else {
+		ret = of_property_read_u32(np,
+				"haptic,duty", &temp);
+		if (IS_ERR_VALUE(ret)) {
+			pr_err("%s : error to get dt node duty\n", __func__);
+			goto err_parsing_dt;
+		} else
+			pdata->duty = (u16)temp;
+
+		ret = of_property_read_u32(np,
+				"haptic,period", &temp);
+		if (IS_ERR_VALUE(ret)) {
+			pr_err("%s : error to get dt node period\n", __func__);
+			goto err_parsing_dt;
+		} else
+			pdata->period = (u16)temp;
+	}
 
 	ret = of_property_read_u32(np,
 			"haptic,pwm_id", &temp);
@@ -436,8 +532,17 @@ static struct max77854_haptic_pdata *of_max77854_haptic_dt(struct device *dev)
 	/* debugging */
 	pr_debug("model = %d\n", pdata->model);
 	pr_debug("max_timeout = %d\n", pdata->max_timeout);
-	pr_debug("duty = %d\n", pdata->duty);
-	pr_debug("period = %d\n", pdata->period);
+	if (pdata->multi_frequency) {
+		pr_debug("multi frequency = %d\n", pdata->multi_frequency);
+		for (i=0; i<pdata->multi_frequency; i++) {
+			pr_debug("duty[%d] = %d\n", i, pdata->multi_freq_duty[i]);
+			pr_debug("period[%d] = %d\n", i, pdata->multi_freq_period[i]);
+		}
+	}
+	else {
+		pr_debug("duty = %d\n", pdata->duty);
+		pr_debug("period = %d\n", pdata->period);
+	}
 	pr_debug("pwm_id = %d\n", pdata->pwm_id);
 
 	return pdata;
@@ -551,8 +656,17 @@ static int max77854_haptic_probe(struct platform_device *pdev)
 	error = sysfs_create_file(&drvdata->tout_dev.dev->kobj,
 				&dev_attr_intensity.attr);
 	if (error < 0) {
-		pr_err("Failed to register sysfs : %d\n", error);
+		pr_err("Failed to register intensity sysfs : %d\n", error);
 		goto err_timed_output_register;
+	}
+
+	if (pdata->multi_frequency) {
+		error = sysfs_create_file(&drvdata->tout_dev.dev->kobj,
+					&dev_attr_multi_freq.attr);
+		if (error < 0) {
+			pr_err("Failed to register multi_freq sysfs : %d\n", error);
+			goto err_timed_output_register;
+		}
 	}
 
 	return error;

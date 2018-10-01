@@ -51,7 +51,6 @@ enum {
 
 #define REFERENCE_GAMMA			2.2
 #define MAX_GRAYSCALE			255
-#define UI_MAX_BRIGHTNESS			255
 
 #define TBL_INDEX_V0			0
 #define TBL_INDEX_V3			3

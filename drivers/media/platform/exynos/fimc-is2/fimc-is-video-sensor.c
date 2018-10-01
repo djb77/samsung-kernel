@@ -36,6 +36,13 @@
 #include "fimc-is-video.h"
 #include "fimc-is-resourcemgr.h"
 
+#ifdef CONFIG_LEDS_IRIS_IRLED_SUPPORT
+extern int s2mpb02_ir_led_current(uint32_t current_value);
+extern int s2mpb02_ir_led_pulse_width(uint32_t width);
+extern int s2mpb02_ir_led_pulse_delay(uint32_t delay);
+extern int s2mpb02_ir_led_max_time(uint32_t max_time);
+#endif
+
 const struct v4l2_file_operations fimc_is_ssx_video_fops;
 const struct v4l2_ioctl_ops fimc_is_ssx_video_ioctl_ops;
 const struct vb2_ops fimc_is_ssx_qops;
@@ -535,6 +542,50 @@ static int fimc_is_ssx_video_s_ctrl(struct file *file, void *priv,
 			ret = -EINVAL;
 		}
 		break;
+	case V4L2_CID_SENSOR_SET_GAIN:
+		if (fimc_is_sensor_s_again(device, ctrl->value)) {
+			err("failed to set gain : %d\n - %d",
+				ctrl->value, ret);
+			ret = -EINVAL;
+		}
+		break;
+	case V4L2_CID_SENSOR_SET_SHUTTER:
+		if (fimc_is_sensor_s_shutterspeed(device, ctrl->value)) {
+			err("failed to set shutter speed : %d\n - %d",
+				ctrl->value, ret);
+			ret = -EINVAL;
+		}
+		break;
+#ifdef CONFIG_LEDS_IRIS_IRLED_SUPPORT
+	case V4L2_CID_IRLED_SET_WIDTH:
+		ret = s2mpb02_ir_led_pulse_width(ctrl->value);
+		if (ret < 0) {
+			err("failed to set irled pulse width : %d\n - %d",ctrl->value, ret);
+			ret = -EINVAL;
+		}
+		break;
+	case V4L2_CID_IRLED_SET_DELAY:
+		ret = s2mpb02_ir_led_pulse_delay(ctrl->value);
+		if (ret < 0) {
+			err("failed to set irled pulse delay : %d\n - %d",ctrl->value, ret);
+			ret = -EINVAL;
+		}
+		break;
+	case V4L2_CID_IRLED_SET_CURRENT:
+		ret = s2mpb02_ir_led_current(ctrl->value);
+		if (ret < 0) {
+			err("failed to set irled current : %d\n - %d",ctrl->value, ret);
+			ret = -EINVAL;
+		}
+		break;
+	case V4L2_CID_IRLED_SET_ONTIME:
+		ret = s2mpb02_ir_led_max_time(ctrl->value);
+		if (ret < 0) {
+			err("failed to set irled max time : %d\n - %d",ctrl->value, ret);
+			ret = -EINVAL;
+		}
+		break;
+#endif
 	default:
 		ret = fimc_is_sensor_s_ctrl(device, ctrl);
 		if (ret) {

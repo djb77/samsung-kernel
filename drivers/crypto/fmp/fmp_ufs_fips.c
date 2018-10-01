@@ -255,7 +255,7 @@ static int ufs_fmp_set_iv(struct device *dev, uint32_t mode, uint8_t *iv, uint32
 	return 0;
 }
 
-static dev_t find_devt_for_selftest(struct device *dev)
+static dev_t find_devt_for_selftest(struct device *dev, struct Scsi_Host *host)
 {
 	int i, idx = 0;
 	uint32_t count = 0;
@@ -268,6 +268,22 @@ static dev_t find_devt_for_selftest(struct device *dev)
 
 	memset(size_list, 0, sizeof(size_list));
 	memset(devt_list, 0, sizeof(devt_list));
+
+	do {
+		if (!host->async_scan) {
+			dev_info(dev, "scsi scan is already done for FMP self-test\n");
+			break;
+		} else {
+			mdelay(100);
+			count++;
+		}
+	} while (count < 1000);
+
+	if (count == 1000) {
+		dev_err(dev, "scsi scan is not done yet. FMP goes to error state\n");
+		return 0;
+	}
+	count = 0;
 
 	do {
 		for (i = 1; i < MAX_SCAN_PART; i++) {
@@ -425,7 +441,7 @@ int fips_fmp_init(struct device *dev)
 	work->host = host;
 	work->sdev = sdev;
 
-	work->devt = find_devt_for_selftest(dev);
+	work->devt = find_devt_for_selftest(dev, host);
 	if (!work->devt) {
 		dev_err(dev, "Fail to find devt for self test\n");
 		return -ENODEV;

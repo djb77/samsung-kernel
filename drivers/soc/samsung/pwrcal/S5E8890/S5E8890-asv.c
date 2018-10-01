@@ -15,6 +15,8 @@
 #include <mach/ect_parser.h>
 #endif
 
+#define MIN(x, y)   ((x) < (y) ? (x) : (y))
+
 enum dvfs_id {
 	cal_asv_dvfs_big,
 	cal_asv_dvfs_little,
@@ -30,6 +32,8 @@ enum dvfs_id {
 #define MAX_ASV_GROUP	16
 #define NUM_OF_ASVTABLE	1
 #define PWRCAL_ASV_LIST(table)	{table, sizeof(table) / sizeof(table[0])}
+
+#define MAX_VOLT_OF_MIF	1000000
 
 struct asv_table_entry {
 	unsigned int index;
@@ -657,11 +661,11 @@ static int dfsg3d_set_ema(unsigned int volt)
 	return 0;
 }
 
-unsigned int pwrcal_get_dram_manufacturer(void);
+unsigned long long pwrcal_get_dram_manufacturer(void);
 static void asv_voltage_init_table(struct asv_table_list **asv_table, struct pwrcal_vclk_dfs *dfs)
 {
 	int i, j, k;
-	unsigned int ect_query_key;
+	unsigned long long ect_query_key;
 	void *asv_block, *margin_block, *tim_block;
 	struct ect_timing_param_size *ect_mif;
 	struct ect_voltage_domain *domain;
@@ -694,7 +698,7 @@ static void asv_voltage_init_table(struct asv_table_list **asv_table, struct pwr
 
 	tim_block = ect_get_block(BLOCK_TIMING_PARAM);
 	if ((strcmp("dvfs_mif", dfs->vclk.name) == 0) && (tim_block != 0)) {
-		ect_query_key = (pwrcal_get_dram_manufacturer() & 0xffffff00) | 0x3;
+		ect_query_key = (pwrcal_get_dram_manufacturer() & 0xffffffffffffff00) | 0x3;
 		ect_mif = ect_timing_param_get_key(tim_block, ect_query_key);
 		if (ect_mif)
 			mif_volt_margin = ect_mif->timing_parameter;
@@ -738,8 +742,18 @@ static void asv_voltage_init_table(struct asv_table_list **asv_table, struct pwr
 						asv_entry->voltage[k] += margin_domain->offset_compact[j * margin_domain->num_of_group + k] * margin_domain->volt_step;
 				}
 
-				if (mif_volt_margin != NULL)
-					asv_entry->voltage[k] += mif_volt_margin[j];
+				if (mif_volt_margin != NULL) {
+					asv_entry->voltage[k] = MIN((asv_entry->voltage[k] + mif_volt_margin[j]), MAX_VOLT_OF_MIF);
+				}
+			}
+		}
+
+		/* voltage clipping : VDD_MIF@L(i+1) = min(VDD_MIF@L(i), VDD_MIF@L(i+1)) */
+		if (mif_volt_margin != NULL) {
+			for (j = 1; j < domain->num_of_level; ++j) {
+				for (k = 0; k < domain->num_of_group; ++k) {
+					(*asv_table)[i].table[j].voltage[k] = MIN(((*asv_table)[i].table[j-1].voltage[k]), ((*asv_table)[i].table[j].voltage[k]));
+				}
 			}
 		}
 	}
@@ -980,11 +994,13 @@ static int asv_get_ids_info(unsigned int domain)
 #endif
 }
 
-#if defined(CONFIG_SEC_FACTORY)
+#if defined(CONFIG_SEC_FACTORY) || defined(CONFIG_SEC_DEBUG)
 enum ids_info {
 	tg,
+	lg,
 	bg,
 	g3dg,
+	mifg,
 	bids,
 	gids,
 };
@@ -992,16 +1008,22 @@ enum ids_info {
 int asv_ids_information(enum ids_info id) {
 
 	int res;
-	
+
 	switch (id) {
 		case tg:
 			res = asv_tbl_info.asv_table_ver;
+			break;
+		case lg:
+			res = asv_tbl_info.apollo_asv_group;
 			break;
 		case bg:
 			res = asv_tbl_info.mngs_asv_group;
 			break;
 		case g3dg:
 			res = asv_tbl_info.g3d_asv_group;
+			break;
+		case mifg:
+			res = asv_tbl_info.mif_asv_group;
 			break;
 		case bids:
 			res = asv_get_ids_info(0);
@@ -1014,7 +1036,7 @@ int asv_ids_information(enum ids_info id) {
 			break;
 		};
 	return res;
-		
+
 }
 
 #endif
@@ -1026,7 +1048,7 @@ enum asv_group {
 	dvfs_freq,
 	dvfs_voltage,
 	dvfs_group,
-	table_group,	
+	table_group,
 	num_of_asc,
 };
 

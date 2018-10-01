@@ -88,6 +88,20 @@ struct fimc_is_device_ischain;
 	.mipi_speed	= 0,			\
 }
 
+#if defined(CONFIG_SECURE_CAMERA_USE)
+#define MC_SECURE_CAMERA_INIT           ((uint32_t)(0x83000041))
+#define MC_SECURE_CAMERA_CFW_ENABLE     ((uint32_t)(0x83000042))
+#define MC_SECURE_CAMERA_PREPARE        ((uint32_t)(0x83000043))
+#define MC_SECURE_CAMERA_UNPREPARE      ((uint32_t)(0x83000044))
+
+enum fimc_is_sensor_smc_state {
+        FIMC_IS_SENSOR_SMC_INIT = 0,
+        FIMC_IS_SENSOR_SMC_CFW_ENABLE,
+        FIMC_IS_SENSOR_SMC_PREPARE,
+        FIMC_IS_SENSOR_SMC_UNPREPARE,
+};
+#endif
+
 enum fimc_is_sensor_output_entity {
 	FIMC_IS_SENSOR_OUTPUT_NONE = 0,
 	FIMC_IS_SENSOR_OUTPUT_FRONT,
@@ -132,6 +146,10 @@ struct fimc_is_sensor_ops {
 	int (*s_dgain)(struct v4l2_subdev *subdev);
 	int (*g_min_dgain)(struct v4l2_subdev *subdev);
 	int (*g_max_dgain)(struct v4l2_subdev *subdev);
+
+	int (*s_shutterspeed)(struct v4l2_subdev *subdev, u64 shutterspeed);
+	int (*g_min_shutterspeed)(struct v4l2_subdev *subdev);
+	int (*g_max_shutterspeed)(struct v4l2_subdev *subdev);
 };
 
 struct fimc_is_module_enum {
@@ -211,6 +229,9 @@ struct fimc_is_device_sensor {
 	struct work_struct				instant_work;
 	unsigned long					state;
 	spinlock_t					slock_state;
+#if defined(CONFIG_SECURE_CAMERA_USE)
+        enum fimc_is_sensor_smc_state                smc_state;
+#endif
 
 	/* hardware configuration */
 	struct v4l2_subdev				*subdev_module;
@@ -282,6 +303,8 @@ int fimc_is_sensor_s_frame_duration(struct fimc_is_device_sensor *device,
 int fimc_is_sensor_s_exposure_time(struct fimc_is_device_sensor *device,
 	u32 exposure_time);
 int fimc_is_sensor_s_fcount(struct fimc_is_device_sensor *device);
+int fimc_is_sensor_s_again(struct fimc_is_device_sensor *device, u32 gain);
+int fimc_is_sensor_s_shutterspeed(struct fimc_is_device_sensor *device, u32 shutterspeed);
 
 struct fimc_is_sensor_cfg * fimc_is_sensor_g_mode(struct fimc_is_device_sensor *device);
 int fimc_is_sensor_mclk_on(struct fimc_is_device_sensor *device, u32 scenario, u32 channel);
@@ -304,7 +327,7 @@ int fimc_is_sensor_g_bratio(struct fimc_is_device_sensor *device);
 int fimc_is_sensor_g_module(struct fimc_is_device_sensor *device,
 	struct fimc_is_module_enum **module);
 int fimc_is_sensor_deinit_module(struct fimc_is_module_enum *module);
-int fimc_is_sensor_g_postion(struct fimc_is_device_sensor *device);
+int fimc_is_sensor_g_position(struct fimc_is_device_sensor *device);
 int fimc_is_search_sensor_module(struct fimc_is_device_sensor *device,
 	u32 sensor_id, struct fimc_is_module_enum **module);
 int fimc_is_sensor_tag(struct fimc_is_device_sensor *device,

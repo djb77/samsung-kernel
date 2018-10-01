@@ -24,13 +24,17 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: siutils_priv.h 520760 2014-12-15 00:54:16Z $
+ * $Id: siutils_priv.h 625731 2016-03-17 11:53:31Z $
  */
 
 #ifndef	_siutils_priv_h_
 #define	_siutils_priv_h_
 
+#if defined(SI_ERROR_ENFORCE)
+#define	SI_ERROR(args)	printf args
+#else
 #define	SI_ERROR(args)
+#endif	
 
 #define	SI_MSG(args)
 

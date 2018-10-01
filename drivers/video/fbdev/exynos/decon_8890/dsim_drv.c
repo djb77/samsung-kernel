@@ -69,6 +69,10 @@ EXPORT_SYMBOL(dsim0_for_decon);
 struct dsim_device *dsim1_for_decon;
 EXPORT_SYMBOL(dsim1_for_decon);
 
+#ifdef CONFIG_LCD_RES
+static int g_lcd_res = 0;
+#endif
+
 static void __dsim_dump(struct dsim_device *dsim)
 {
 	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 32, 4,
@@ -212,6 +216,49 @@ int dsim_write_data(struct dsim_device *dsim, unsigned int data_id,
 	int ret = 0;
 	struct decon_device *decon = (struct decon_device *)dsim->decon;
 	bool must_wait = true;
+
+#ifdef CONFIG_FB_DSU
+	if( decon!=NULL && decon->need_DSU_update ) {
+	        char pBuffer[1024];
+	        u8* pData;
+	        int i;
+
+	        sprintf( pBuffer, "%s(dsu): ", __func__ );
+	        switch (data_id) {
+	        /* short packet types of packet types for command. */
+	        case MIPI_DSI_GENERIC_SHORT_WRITE_0_PARAM:
+	        case MIPI_DSI_GENERIC_SHORT_WRITE_1_PARAM:
+	        case MIPI_DSI_GENERIC_SHORT_WRITE_2_PARAM:
+	        case MIPI_DSI_DCS_SHORT_WRITE:
+	        case MIPI_DSI_DCS_SHORT_WRITE_PARAM:
+	        case MIPI_DSI_SET_MAXIMUM_RETURN_PACKET_SIZE:
+	        case MIPI_DSI_DSC_PRA:
+	        case MIPI_DSI_GENERIC_READ_REQUEST_0_PARAM:
+	        case MIPI_DSI_GENERIC_READ_REQUEST_1_PARAM:
+	        case MIPI_DSI_GENERIC_READ_REQUEST_2_PARAM:
+	        case MIPI_DSI_DCS_READ:
+	        case MIPI_DSI_COLOR_MODE_OFF:
+	        case MIPI_DSI_COLOR_MODE_ON:
+	        case MIPI_DSI_SHUTDOWN_PERIPHERAL:
+	        case MIPI_DSI_TURN_ON_PERIPHERAL:
+		        sprintf( pBuffer +strlen(pBuffer), "cmd:%02x, data=%02x %02x ", data_id, (unsigned int) data0, data1 );
+		        break;
+
+	        /* long packet types of packet types for command. */
+	        case MIPI_DSI_GENERIC_LONG_WRITE:
+	        case MIPI_DSI_DCS_LONG_WRITE:
+	        case MIPI_DSI_DSC_PPS:
+		        pData = (u8 *)(data0);
+		        sprintf( pBuffer +strlen(pBuffer), "cmd:%02x, (%d)data=", data_id, decon->need_DSU_update );
+		        for( i = 0; i < data1; i++ )
+			        sprintf( pBuffer +strlen(pBuffer), "%02x ", pData[i] );
+		        break;
+	        default:
+		        break;
+	        }
+	        pr_info( "%s\n", pBuffer );
+	}
+#endif
 
 	/* LPD related: Decon must be enabled for PACKET_GO mode */
 	decon_lpd_block_exit(decon);
@@ -424,6 +471,17 @@ static void dsim_set_lcd_full_screen(struct dsim_device *dsim)
 }
 #endif
 
+#ifdef CONFIG_FB_DSU
+static int dsim_dsu_command(struct dsim_device *dsim, struct decon_device *decon)
+{
+	pr_info( "%s : DSU_mode=%d, (%d,%d)\n", __func__, decon->DSU_mode, dsim->dsu_xres, dsim->dsu_yres );
+
+	call_panel_ops(dsim, dsu_cmd, dsim);
+
+	return 0;
+}
+#endif
+
 int dsim_read_data(struct dsim_device *dsim, u32 data_id,
 	 u32 addr, u32 count, u8 *buf)
 {
@@ -487,8 +545,9 @@ int dsim_read_data(struct dsim_device *dsim, u32 data_id,
 		case MIPI_DSI_RX_GENERIC_SHORT_READ_RESPONSE_1BYTE:
 		case MIPI_DSI_RX_GENERIC_SHORT_READ_RESPONSE_2BYTE:
 			dev_dbg(dsim->dev, "Short Packet was received from LCD module.\n");
-			for (i = 0; i <= count; i++)
+			for (i = 0; i < count; i++)
 				buf[i] = (rx_fifo >> (8 + i * 8)) & 0xff;
+			rx_size = count;
 			break;
 		case MIPI_DSI_RX_DCS_LONG_READ_RESPONSE:
 		case MIPI_DSI_RX_GENERIC_LONG_READ_RESPONSE:
@@ -963,11 +1022,18 @@ int dsim_set_panel_power(struct dsim_device *dsim, bool on)
 
 static int dsim_enable(struct dsim_device *dsim)
 {
+	struct decon_device *decon = (struct decon_device *)dsim->decon;
+
 	pr_info("%s ++\n", __func__);
 	if (dsim->state == DSIM_STATE_HSCLKEN) {
-#ifdef CONFIG_LCD_DOZE_MODE		
-		if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) || 
+#ifdef CONFIG_LCD_DOZE_MODE
+		if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) ||
 			(dsim->dsim_doze == DSIM_DOZE_STATE_DOZE_SUSPEND)) {
+#ifdef CONFIG_VDDR_1p5V_ALPM
+			if( regulator_set_voltage(dsim->res.regulator_16V, 1600000, 1600000) == 0 )
+				dsim_info( "%s : vddr to 1.6v successed\n", __func__ );
+			else dsim_err( "%s : vddr to 1.6v failed\n", __func__ );
+#endif
 			call_panel_ops(dsim, exitalpm, dsim);
 		}
 #endif
@@ -982,7 +1048,7 @@ static int dsim_enable(struct dsim_device *dsim)
 	enable_irq(dsim->irq);
 
 #ifdef CONFIG_LCD_DOZE_MODE
-	if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) || 
+	if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) ||
 		(dsim->dsim_doze == DSIM_DOZE_STATE_DOZE_SUSPEND)) {
 		dsim_info("%s : exit doze\n", __func__);
 	} else {
@@ -998,9 +1064,9 @@ static int dsim_enable(struct dsim_device *dsim)
 	dsim_reg_set_lanes(dsim->id, DSIM_LANE_CLOCK | dsim->data_lane, 1);
 	dsim_reg_init(dsim->id, &dsim->lcd_info, dsim->data_lane_cnt,
 			&dsim->clks_param.clks);
-	
+
 #ifdef CONFIG_LCD_DOZE_MODE
-	if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) || 
+	if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) ||
 		(dsim->dsim_doze == DSIM_DOZE_STATE_DOZE_SUSPEND)) {
 		dsim_info("%s : exit doze\n", __func__);
 	} else {
@@ -1014,19 +1080,27 @@ static int dsim_enable(struct dsim_device *dsim)
 	dsim->state = DSIM_STATE_HSCLKEN;
 
 #ifdef CONFIG_LCD_DOZE_MODE
-	if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) || 
+	if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) ||
 		(dsim->dsim_doze == DSIM_DOZE_STATE_DOZE_SUSPEND)) {
+#ifdef CONFIG_VDDR_1p5V_ALPM
+		if( regulator_set_voltage(dsim->res.regulator_16V, 1600000, 1600000) == 0 )
+			dsim_info( "%s : vddr to 1.6v successed\n", __func__ );
+		else dsim_err( "%s : vddr to 1.6v failed\n", __func__ );
+#endif
 		call_panel_ops(dsim, exitalpm, dsim);
 	} else {
 		call_panel_ops(dsim, displayon, dsim);
+		decon->req_display_on = 1;
 	}
 #else
 	call_panel_ops(dsim, displayon, dsim);
+	decon->req_display_on = 1;
 #endif
 
-exit_dsim_enable:	
+exit_dsim_enable:
 #ifdef CONFIG_LCD_DOZE_MODE
 	dsim->dsim_doze = DSIM_DOZE_STATE_NORMAL;
+	dsim->priv.curr_alpm_mode = 0;
 #endif
 	pr_info("%s --\n", __func__);
 
@@ -1045,6 +1119,9 @@ static int dsim_disable(struct dsim_device *dsim)
 	dsim_set_lcd_full_screen(dsim);
 	call_panel_ops(dsim, suspend, dsim);
 
+#ifdef CONFIG_LCD_DOZE_MODE
+	dsim->dsim_doze = DSIM_DOZE_STATE_SUSPEND;
+#endif
 	/* Wait for current read & write CMDs. */
 	mutex_lock(&dsim_rd_wr_mutex);
 	del_timer(&dsim->cmd_timer);
@@ -1064,9 +1141,7 @@ static int dsim_disable(struct dsim_device *dsim)
 #endif
 
 exit_dsim_disable:
-#ifdef CONFIG_LCD_DOZE_MODE
-	dsim->dsim_doze = DSIM_DOZE_STATE_SUSPEND;
-#endif
+
 	dsim_info("-- %s\n", __func__);
 	return 0;
 }
@@ -1082,7 +1157,7 @@ static int dsim_doze_enable(struct dsim_device *dsim)
 		dsim_info("%s:this panel does not support alpm mode\n", __func__);
 		return -ENODEV;
 	}
-	
+
 	if (dsim->state == DSIM_STATE_HSCLKEN) {
 		if (dsim->dsim_doze != DSIM_DOZE_STATE_DOZE) {
 			call_panel_ops(dsim, enteralpm, dsim);
@@ -1098,6 +1173,11 @@ static int dsim_doze_enable(struct dsim_device *dsim)
 	enable_irq(dsim->irq);
 
 	if (dsim->dsim_doze == DSIM_DOZE_STATE_SUSPEND) {
+#ifdef CONFIG_VDDR_1p5V_ALPM
+		if( regulator_set_voltage(dsim->res.regulator_16V, 1500000, 1500000) == 0 )
+			dsim_info( "%s : vddr to 1.5v successed\n", __func__ );
+		else dsim_err( "%s : vddr to 1.5v failed\n", __func__ );
+#endif
 		dsim_set_panel_power(dsim, 1);
 	}
 	/* DPHY power on */
@@ -1159,6 +1239,8 @@ static int dsim_doze_suspend(struct dsim_device *dsim)
 	if (dsim->dsim_doze == DSIM_DOZE_STATE_NORMAL)
 		call_panel_ops(dsim, enteralpm, dsim);
 
+	dsim->dsim_doze = DSIM_DOZE_STATE_DOZE_SUSPEND;
+
 	/* Wait for current read & write CMDs. */
 	mutex_lock(&dsim_rd_wr_mutex);
 	del_timer(&dsim->cmd_timer);
@@ -1168,7 +1250,7 @@ static int dsim_doze_suspend(struct dsim_device *dsim)
 	dsim_reg_stop(dsim->id, DSIM_LANE_CLOCK | dsim->data_lane);
 	disable_irq(dsim->irq);
 	phy_power_off(dsim->phy);
-#if 0 
+#if 0
 	if (dsim->dsim_doze != DSIM_DOZE_STATE_DOZE)
 		dsim_set_panel_power(dsim, 0);
 #endif
@@ -1178,7 +1260,7 @@ static int dsim_doze_suspend(struct dsim_device *dsim)
 #else
 	dsim_runtime_suspend(dsim->dev);
 #endif
-	dsim->dsim_doze = DSIM_DOZE_STATE_DOZE_SUSPEND;
+	
 exit_doze_disable:
 	dsim_info("-- %s\n", __func__);
 	return 0;
@@ -1291,9 +1373,9 @@ static struct dsim_device *sd_to_dsim(struct v4l2_subdev *sd)
 
 static int dsim_s_stream(struct v4l2_subdev *sd, int enable)
 {
-	int ret = 0; 
+	int ret = 0;
 	struct dsim_device *dsim = sd_to_dsim(sd);
-	
+
 	switch (enable) {
 		case DSIM_REQ_POWER_OFF:
 			ret = dsim_disable(dsim);
@@ -1316,10 +1398,25 @@ static int dsim_s_stream(struct v4l2_subdev *sd, int enable)
 	return ret;
 }
 
+#ifdef CONFIG_FB_DSU
+void dsim_reg_set_num_of_slice(u32 id, u32 num_of_slice);
+void dsim_reg_set_multi_slice(u32 id, struct decon_lcd *lcd_info);
+void dsim_reg_set_size_of_slice(u32 id, struct decon_lcd *lcd_info);
+#endif
+
 static long dsim_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 {
 	struct dsim_device *dsim = sd_to_dsim(sd);
 	int ret = 0;
+
+#ifdef CONFIG_FB_DSU
+	static const unsigned char LCD_SEQ_TE_ON[] = {0x35,};
+	static const unsigned char LCD_SEQ_TE_OFF[] = {	0x34,};
+	static const unsigned char LCD_SEQ_DISPLAY_ON[] = { 0x29, };
+	static const unsigned char LCD_SEQ_DISPLAY_OFF[] = { 0x28 };
+	static const unsigned char LCD_SEQ_DDI_LOCK[] = {0x9F, 0x5A, 0x5A};
+	static const unsigned char LCD_SEQ_DDI_UNLOCK[] = {0x9F, 0xA5, 0xA5};
+#endif
 
 	switch (cmd) {
 	case DSIM_IOC_GET_LCD_INFO:
@@ -1372,6 +1469,58 @@ static long dsim_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 			dsim_err("[REM_DISP_DET] %s() 0x0A=[%d]\n", __func__, ret);
 		}
 		break;
+#endif
+#ifdef CONFIG_FB_DSU
+	case DSIM_IOC_DSU_CMD:
+		ret = dsim_dsu_command(dsim, (struct decon_device *) arg );
+		break;
+	case DSIM_IOC_DSU_DSC:
+	pr_info( "%s:DSIM_IOC_DSU_DSC - cancel, xres=%d\n", __func__, ((struct decon_device *)arg)->lcd_info->xres );
+	break;
+	case DSIM_IOC_TE_ONOFF:
+		if( (bool) arg ) { // TE_ON
+			pr_info( "%s (DSU) send LCD_SEQ_TE_ON(%d)\n", __func__,  (int)((unsigned long)arg) );
+			dsim_write_hl_data(dsim, LCD_SEQ_TE_ON, ARRAY_SIZE(LCD_SEQ_TE_ON));
+		} else {	// TE_OFF
+			msleep(1);	// this delay is requared by noise in LCD-bottom (HD->FHD)
+			pr_info( "%s (DSU) LCD_SEQ_TE_OFF(%d)\n", __func__, (int)((unsigned long)arg) );
+			dsim_write_hl_data(dsim, LCD_SEQ_TE_OFF, ARRAY_SIZE(LCD_SEQ_TE_OFF));
+		}
+	break;
+	case DSIM_IOC_DISPLAY_ONOFF:
+		if( (bool) arg ) { // TE_ON
+			pr_info( "%s (DSU) send LCD_SEQ_DISPLAY_ON(%d)\n", __func__, (int)((unsigned long)arg) );
+			dsim_write_hl_data(dsim, LCD_SEQ_DISPLAY_ON, ARRAY_SIZE(LCD_SEQ_DISPLAY_ON));
+		} else {	// TE_OFF
+			pr_info( "%s (DSU) LCD_SEQ_DISPLAY_OFF(%d)\n", __func__, (int)((unsigned long)arg) );
+			dsim_write_hl_data(dsim, LCD_SEQ_DISPLAY_OFF, ARRAY_SIZE(LCD_SEQ_DISPLAY_OFF));
+		}
+	break;
+
+	case DSIM_IOC_DSU_RECONFIG:
+		pr_info("%s: DSIM_IOC_DSU_RECONFIG ++\n", __func__ );
+		// src code from : dsim_reg_init()
+		if (dsim->lcd_info.dsc_enabled) {
+			dsim_dbg("%s: dsc configuration is set\n", __func__);
+			dsim_reg_set_num_of_slice(dsim->id, dsim->lcd_info.dsc_slice_num);
+			dsim_reg_set_multi_slice(dsim->id, &dsim->lcd_info); /* multi slice */
+			dsim_reg_set_size_of_slice(dsim->id, &dsim->lcd_info);
+		}
+		ret = 0;
+	break;
+
+	case DSIM_IOC_REG_LOCK:
+	{
+		/* In case of HF4 DDI, changing resolution command need to lock DDI register. */
+		if( (bool) arg ) { // LOCK
+			pr_info( "%s (DSU) send LCD_SEQ_DDI_LOCK(%d)\n", __func__, (int)((unsigned long)arg) );
+			dsim_write_hl_data(dsim, LCD_SEQ_DDI_LOCK, ARRAY_SIZE(LCD_SEQ_DDI_LOCK));
+		} else {	// UNLOCK
+			pr_info( "%s (DSU) LCD_SEQ_DDI_UNLOCK(%d)\n", __func__, (int)((unsigned long)arg) );
+			dsim_write_hl_data(dsim, LCD_SEQ_DDI_UNLOCK, ARRAY_SIZE(LCD_SEQ_DDI_UNLOCK));
+		}
+	}
+	break;
 #endif
 	case DSIM_IOC_DUMP:
 		dsim_dump(dsim);
@@ -1566,7 +1715,23 @@ static int dsim_parse_lcd_info(struct dsim_device *dsim)
 	of_property_read_u32(node, "mode", &dsim->lcd_info.mode);
 	dsim_dbg("%s mode\n", dsim->lcd_info.mode ? "command" : "video");
 
+#ifdef CONFIG_LCD_RES
+	dsim_info( "%s : LCD_RES %d", __func__, g_lcd_res );
+	dsim->priv.lcd_res = g_lcd_res;
+	switch( dsim->priv.lcd_res ) {
+	case LCD_RES_FHD:
+		of_property_read_u32_array(node, "resolution_fhd", res, 2);
+		break;
+	case LCD_RES_HD:
+		of_property_read_u32_array(node, "resolution_hd", res, 2);
+		break;
+	default:
+		of_property_read_u32_array(node, "resolution", res, 2);
+		break;
+	}
+#else
 	of_property_read_u32_array(node, "resolution", res, 2);
+#endif
 	dsim->lcd_info.xres = res[0];
 	dsim->lcd_info.yres = res[1];
 	dsim_info("LCD(%s) resolution: xres(%d), yres(%d)\n",
@@ -1922,5 +2087,18 @@ static void __exit dsim_exit(void)
 }
 
 module_exit(dsim_exit);
+
+#ifdef CONFIG_LCD_RES
+static int __init get_lcdres(char *arg)
+{
+	get_option(&arg, (unsigned int*) &g_lcd_res);
+
+	dsim_info("%s : %d\n", __func__, g_lcd_res);
+
+	return 0;
+}
+early_param("lcdres", get_lcdres);
+#endif
+
 MODULE_AUTHOR("Jiun Yu <jiun.yu@samsung.com>");
 MODULE_DESCRIPTION("Samusung MIPI-DSI driver");

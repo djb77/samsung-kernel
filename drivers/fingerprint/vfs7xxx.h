@@ -24,11 +24,14 @@
 #ifndef VFS7XXX_H_
 #define VFS7XXX_H_
 
+#if defined(CONFIG_SOC_EXYNOS8890)
 /* exynos8890 evt0 board don't support to SPI clock rate 13MHz under */
-/* #define SLOW_BAUD_RATE      4800000 */
-/* #define MAX_BAUD_RATE       9600000 */
 #define SLOW_BAUD_RATE      13000000
 #define MAX_BAUD_RATE       13000000
+#else
+#define SLOW_BAUD_RATE      4800000
+#define MAX_BAUD_RATE       9600000
+#endif
 #define BAUD_RATE_COEF      1000
 #define DRDY_TIMEOUT_MS     40
 #define DRDY_ACTIVE_STATUS  1
@@ -148,11 +151,29 @@
  * @tx_buffer:pointer to transmitted data
  * @len:transmitted/retrieved data size
  */
+#ifdef CONFIG_SENSORS_FINGERPRINT_32BITS_PLATFORM_ONLY
+/*
+* Platform supports only 32 bits.
+*/
 struct vfsspi_ioctl_transfer {
+	u32 rx_buffer;
+	u32 tx_buffer;
+	u32 len;
+};
+#else
+ struct vfsspi_ioctl_transfer {
 	unsigned char *rx_buffer;
 	unsigned char *tx_buffer;
 	unsigned int len;
 };
+#endif
+
+/* used for WoG mode */
+extern void vfsspi_fp_homekey_ev(void);
+/* export variable for signaling */
+EXPORT_SYMBOL(vfsspi_fp_homekey_ev);
+extern int vfsspi_goto_suspend;
+EXPORT_SYMBOL(vfsspi_goto_suspend);
 #endif
 
 /*

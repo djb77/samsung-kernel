@@ -42,6 +42,13 @@
 #include "secgpio_dvs.h"
 #endif
 
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+#ifdef CONFIG_FB
+#include <linux/smc.h>
+extern int vfsspi_goto_suspend;
+#endif
+#endif
+
 #define GROUP_SUFFIX		"-grp"
 #define GSUFFIX_LEN		sizeof(GROUP_SUFFIX)
 #define FUNCTION_SUFFIX		"-mux"
@@ -460,6 +467,7 @@ static void samsung_pinmux_setup(struct pinctrl_dev *pctldev, unsigned selector,
 	if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
 		return;
 #endif
+
 #ifdef CONFIG_ESE_SECURE
 	if (!strncmp(bank->name, CONFIG_ESE_SECURE_GPIO, 4))
 		return;
@@ -523,10 +531,12 @@ static int samsung_pinconf_rw(struct pinctrl_dev *pctldev, unsigned int pin,
 	drvdata = pinctrl_dev_get_drvdata(pctldev);
 	pin_to_reg_bank(drvdata, pin - drvdata->ctrl->base, &reg_base,
 					&pin_offset, &bank);
+
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
 	if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
 		return 0;
 #endif
+
 #ifdef CONFIG_ESE_SECURE
 	if (!strncmp(bank->name, CONFIG_ESE_SECURE_GPIO, 4))
 		return 0;
@@ -691,6 +701,7 @@ static void samsung_gpio_set(struct gpio_chip *gc, unsigned offset, int value)
 	if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
 		return;
 #endif
+
 #ifdef CONFIG_ESE_SECURE
 	if (!strncmp(bank->name, CONFIG_ESE_SECURE_GPIO, 4))
 		return;
@@ -752,6 +763,11 @@ static int samsung_gpio_set_direction(struct gpio_chip *gc,
 	bank = gc_to_pin_bank(gc);
 	type = bank->type;
 	drvdata = bank->drvdata;
+
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
+		return 0;
+#endif
 
 	reg = drvdata->virt_base + bank->pctl_offset +
 					type->reg_offset[PINCFG_TYPE_FUNC];
@@ -1298,6 +1314,7 @@ static void samsung_pinctrl_save_regs(
 		if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
 			continue;
 #endif
+
 #ifdef CONFIG_ESE_SECURE
 		if (!strncmp(bank->name, CONFIG_ESE_SECURE_GPIO, 4))
 			continue;
@@ -1348,9 +1365,17 @@ static void samsung_pinctrl_restore_regs(
 			continue;
 
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
+#ifdef CONFIG_FB
+		if (vfsspi_goto_suspend) {
+			vfsspi_goto_suspend = 0;
+			pr_info("%s: vfsspi_resume smc ret=%d, en:%d\n", __func__,
+					exynos_smc(0x83000022, 0, 0, 0), vfsspi_goto_suspend);
+		}
+#endif
 		if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
 			continue;
 #endif
+
 #ifdef CONFIG_ESE_SECURE
 		if (!strncmp(bank->name, CONFIG_ESE_SECURE_GPIO, 4))
 			continue;
@@ -1408,6 +1433,7 @@ static void samsung_pinctrl_set_pdn_previos_state(
 		if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
 			continue;
 #endif
+
 #ifdef CONFIG_ESE_SECURE
 		if (!strncmp(bank->name, CONFIG_ESE_SECURE_GPIO, 4))
 			continue;

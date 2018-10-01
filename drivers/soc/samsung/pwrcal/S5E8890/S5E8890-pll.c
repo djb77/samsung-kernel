@@ -71,9 +71,9 @@ static int _clk_pll141xx_find_pms(struct pll_spec *pll_spec,
 
 		for (s = pll_spec->sdiv_min; s <= pll_spec->sdiv_max; s++) {
 			tmprate = rate;
-			do_div(tmprate, MHZ);
+			do_div(tmprate, KHZ);
 			tmprate = tmprate * p * (1 << s);
-			do_div(tmprate, (FIN_HZ_26M / MHZ));
+			do_div(tmprate, (FIN_HZ_26M / KHZ));
 			m = (unsigned int)tmprate;
 
 			if ((m < pll_spec->mdiv_min)
@@ -142,9 +142,9 @@ static int _clk_pll1419x_find_pms(struct pll_spec *pll_spec,
 		for (s = pll_spec->sdiv_min; s <= pll_spec->sdiv_max; s++) {
 			/*tmprate = rate;*/
 			tmprate = rate/2; /*for PLL1419*/
-			do_div(tmprate, MHZ);
+			do_div(tmprate, KHZ);
 			tmprate = tmprate * p * (1 << s);
-			do_div(tmprate, (FIN_HZ_26M / MHZ));
+			do_div(tmprate, (FIN_HZ_26M / KHZ));
 			m = (unsigned int)tmprate;
 
 			if ((m < pll_spec->mdiv_min)
@@ -682,9 +682,9 @@ static int _clk_pll1431x_find_pms(struct pll_spec *pll_spec,
 
 		for (s = pll_spec->sdiv_min; s <= pll_spec->sdiv_max; s++) {
 			tmprate = rate;
-			do_div(tmprate, MHZ);
+			do_div(tmprate, KHZ);
 			tmprate = tmprate * p * (1 << s);
-			do_div(tmprate, (FIN_HZ_26M / MHZ));
+			do_div(tmprate, (FIN_HZ_26M / KHZ));
 			m = (unsigned int)tmprate;
 
 			if ((m < pll_spec->mdiv_min)
@@ -692,9 +692,9 @@ static int _clk_pll1431x_find_pms(struct pll_spec *pll_spec,
 				continue;
 
 			tmprate = rate;
-			do_div(tmprate, MHZ);
+			do_div(tmprate, KHZ);
 			tmprate = tmprate * p * (1 << s);
-			do_div(tmprate, (FIN_HZ_26M / MHZ));
+			do_div(tmprate, (FIN_HZ_26M / KHZ));
 			tmprate = (tmprate - m) * 65536;
 			k = (unsigned int)tmprate;
 			if ((k < pll_spec->kdiv_min)

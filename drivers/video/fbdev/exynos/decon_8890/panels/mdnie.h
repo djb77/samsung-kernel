@@ -1,14 +1,7 @@
 #ifndef __MDNIE_H__
 #define __MDNIE_H__
 
-#define END_SEQ	0xffff
-
-
-#if defined(CONFIG_EXYNOS_DECON_MDNIE_LITE)
 typedef u8 mdnie_t;
-#else
-typedef u16 mdnie_t;
-#endif
 
 enum MODE {
 	DYNAMIC,
@@ -29,16 +22,18 @@ enum SCENARIO {
 	BROWSER_MODE,
 	EBOOK_MODE,
 	EMAIL_MODE,
-#if defined(CONFIG_PANEL_S6E3HA3_DYNAMIC) || defined(CONFIG_PANEL_S6E3HF4_WQHD)
+#if defined(CONFIG_PANEL_S6E3HA3_DYNAMIC) || defined(CONFIG_PANEL_S6E3HF4_WQHD) || defined(CONFIG_PANEL_S6E3HA5_WQHD)
 	GAME_LOW_MODE,
 	GAME_MID_MODE,
 	GAME_HIGH_MODE,
 #endif
+	VIDEO_ENHANCER,
+	VIDEO_ENHANCER_THIRD,
 	HMT_8_MODE,
 	HMT_16_MODE,
 	SCENARIO_MAX,
 	DMB_NORMAL_MODE = 20,
-	DMB_MODE_MAX,
+	DMB_MODE_MAX
 };
 
 enum BYPASS {
@@ -60,16 +55,8 @@ enum ACCESSIBILITY {
 
 enum HBM {
 	HBM_OFF,
-#if defined(CONFIG_PANEL_S6E3HA3_DYNAMIC) || defined(CONFIG_PANEL_S6E3HF3_DYNAMIC) || defined(CONFIG_PANEL_S6E3HF4_WQHD)
 	HBM_ON,
-	HBM_AOLCE_1 = HBM_ON,
-	HBM_AOLCE_2,
-	HBM_AOLCE_3,
-#else
-	HBM_ON,
-	HBM_ON_TEXT,
-#endif
-	HBM_MAX,
+	HBM_MAX
 };
 
 enum hmt_mode {
@@ -79,7 +66,22 @@ enum hmt_mode {
 	HMT_4000K,
 	HMT_6400K,
 	HMT_7500K,
-	HMT_MDNIE_MAX,
+	HMT_MDNIE_MAX
+};
+
+enum NIGHT_MODE {
+	NIGHT_MODE_OFF,
+	NIGHT_MODE_ON,
+	NIGHT_MODE_MAX
+};
+
+enum HDR {
+	HDR_OFF,
+	HDR_ON,
+	HDR_1 = HDR_ON,
+	HDR_2,
+	HDR_3,
+	HDR_MAX
 };
 
 struct mdnie_seq_info {
@@ -108,6 +110,11 @@ struct mdnie_trans_info {
 	u32 enable;
 };
 
+struct mdnie_night_info {
+	u32 index_max_num;
+	u32 index_size;
+};
+
 struct mdnie_tune {
 	struct mdnie_table	*bypass_table;
 	struct mdnie_table	*accessibility_table;
@@ -115,12 +122,17 @@ struct mdnie_tune {
 	struct mdnie_table	*hmt_table;
 	struct mdnie_table	(*main_table)[MODE_MAX];
 	struct mdnie_table	*dmb_table;
+	struct mdnie_table	*night_table;
+	struct mdnie_table	*hdr_table;
 
 	struct mdnie_scr_info	*scr_info;
 	struct mdnie_trans_info	*trans_info;
+	struct mdnie_night_info	*night_info;
 	unsigned char **coordinate_table;
 	unsigned char **adjust_ldu_table;
+	unsigned char *night_mode_table;
 	unsigned int max_adjust_ldu;
+	int (*get_hbm_index)(int);
 	int (*color_offset[])(int, int);
 };
 
@@ -134,27 +146,25 @@ typedef int (*mdnie_r)(void *devdata, u8 addr, u8 *buf, u32 len);
 
 
 struct mdnie_info {
-	struct clk		*bus_clk;
-	struct clk		*clk;
-
 	struct device		*dev;
 	struct mutex		dev_lock;
 	struct mutex		lock;
 
 	unsigned int		enable;
 
-	struct mdnie_tune 	*tune;
+	struct mdnie_tune	*tune;
 
 	enum SCENARIO		scenario;
 	enum MODE		mode;
 	enum BYPASS		bypass;
 	enum HBM		hbm;
-	enum hmt_mode	hmt_mode;
+	enum hmt_mode		hmt_mode;
+	enum NIGHT_MODE		night_mode;
+	enum HDR		hdr;
 
 	unsigned int		tuning;
 	unsigned int		accessibility;
 	unsigned int		color_correction;
-	unsigned int		auto_brightness;
 
 	char			path[50];
 
@@ -167,34 +177,26 @@ struct mdnie_info {
 	unsigned int white_r;
 	unsigned int white_g;
 	unsigned int white_b;
+	int white_default_r;
+	int white_default_g;
+	int white_default_b;
+	int white_balance_r;
+	int white_balance_g;
+	int white_balance_b;
+	unsigned int white_rgb_enabled;
 	unsigned int disable_trans_dimming;
+	unsigned int night_mode_level;
 
 	struct mdnie_table table_buffer;
 	mdnie_t sequence_buffer[256];
-	u16 coordinate[2];
-#if defined(CONFIG_EXYNOS_DECON_MDNIE)
-	mdnie_t *lpd_store_data;
-	unsigned int need_update;
-#endif
-
+	unsigned int coordinate[2];
 };
 
 extern int mdnie_calibration(int *r);
 extern int mdnie_open_file(const char *path, char **fp);
-
-#if defined(CONFIG_EXYNOS_DECON_MDNIE)
-extern struct mdnie_info* decon_mdnie_register(void);
-extern void decon_mdnie_start(struct mdnie_info *mdnie, u32 w, u32 h);
-extern void decon_mdnie_stop(struct mdnie_info *mdnie);
-extern void decon_mdnie_frame_update(struct mdnie_info *mdnie, u32 xres, u32 yres);
-extern u32 decon_mdnie_input_read(void);
-#elif defined(CONFIG_EXYNOS_DECON_MDNIE_LITE)
-extern int mdnie_register(struct device *p, void *data, mdnie_w w, mdnie_r r, u16 *coordinate, struct mdnie_tune *tune);
-#endif
-
-#if defined(CONFIG_EXYNOS_DECON_DUAL_DISPLAY) && defined(CONFIG_EXYNOS_DECON_MDNIE_LITE)
-extern int mdnie2_register(struct device *p, void *data, mdnie_w w, mdnie_r r);
-#endif
+extern int mdnie_register(struct device *p, void *data, mdnie_w w, mdnie_r r, unsigned int *coordinate, struct mdnie_tune *tune);
 extern uintptr_t mdnie_request_table(char *path, struct mdnie_table *s);
+extern ssize_t attr_store_for_each(struct class *cls, const char *name, const char *buf, size_t size);
+extern struct class *get_mdnie_class(void);
 
 #endif /* __MDNIE_H__ */

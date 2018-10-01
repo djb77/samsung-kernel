@@ -141,12 +141,17 @@ fw-shipped-$(CONFIG_VIDEO_CPIA2) += cpia2/stv0672_vp4.bin
 fw-shipped-$(CONFIG_YAM) += yam/1200.bin yam/9600.bin
 
 fw-shipped-$(CONFIG_CCIC_S2MM003) += usbpd/USB_PD_FULL_DRIVER.bin
+fw-shipped-$(CONFIG_CCIC_S2MM005) += usbpd/s2mm005.bin
+
+fw-shipped-$(CONFIG_EPEN_WACOM_W9018) += epen/W9018_GRACE.bin
 
 TSPFIRMWARE_DIRECTORY = firmware/tsp_stm
 ifeq ($(shell test -d $(TSPFIRMWARE_DIRECTORY) && echo yes),yes)
 fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += tsp_stm/stm_z1.fw tsp_stm/stm_z2a.fw
-fw-shipped-$(CONFIG_TOUCHSCREEN_FTS7) += tsp_stm/stm_z1.fw tsp_stm/stm_z2a.fw tsp_stm/hero2i.fw \
-						tsp_stm/hero2a.fw tsp_stm/stm_vjfa.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS7) += tsp_stm/hero2i.fw tsp_stm/hero2a.fw tsp_stm/hero_e.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS7_VALLEY) += tsp_stm/stm_vjfa.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS7_HAECHI) += tsp_stm/fts7bd50_haechi.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS8) += tsp_stm/fts9cd56_of.fw
 else
 $(warning '$(TSPFIRMWARE_DIRECTORY)' directory dose not exist)
 endif
@@ -155,6 +160,7 @@ TSPFIRMWARE_DIRECTORY = firmware/tsp_sec
 ifeq ($(shell test -d $(TSPFIRMWARE_DIRECTORY) && echo yes),yes)
 fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS) += tsp_sec/hero.bin
 fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS) += tsp_sec/hero_ub.bin tsp_sec/hero2la.bin
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS) += tsp_sec/y661_grace.fw
 else
 $(warning '$(TSPFIRMWARE_DIRECTORY)' directory dose not exist)
 endif
@@ -168,9 +174,24 @@ else
 $(warning '$(TSPFIRMWARE_DIRECTORY)' directory dose not exist)
 endif
 
-fw-shipped-$(CONFIG_KEYBOARD_CYPRESS_TOUCH_MBR31X5) += cypress/cypress_zerof.fw
+TSPFIRMWARE_DIRECTORY = firmware/tsp_atmel
+ifeq ($(shell test -d $(TSPFIRMWARE_DIRECTORY) && echo yes),yes)
+fw-shipped-$(CONFIG_TOUCHSCREEN_ATMEL_MXT874U) += tsp_atmel/mxt874u_ufo.fw tsp_atmel/mxt874u_grace.fw
+else
+$(warning '$(TSPFIRMWARE_DIRECTORY)' directory dose not exist)
+endif
+
+TSPFIRMWARE_DIRECTORY = firmware/tsp_melfas
+ifeq ($(shell test -d $(TSPFIRMWARE_DIRECTORY) && echo yes),yes)
+fw-shipped-$(CONFIG_TOUCHSCREEN_MMS100S) += tsp_melfas/mms128s_ufo.fw tsp_melfas/mms128s_config_ufo.fw
+else
+$(warning '$(TSPFIRMWARE_DIRECTORY)' directory dose not exist)
+endif
+
+fw-shipped-$(CONFIG_KEYBOARD_CYPRESS_TOUCH_MBR31X5) += cypress/cy8cmbr3145_grace.fw cypress/cy8cmbr3145_hero.fw
 fw-shipped-$(CONFIG_KEYBOARD_ABOV_FT16XX_TOUCH) += abov/abov_hero.fw abov/abov_hero2.fw abov/abov_valley.fw
-fw-shipped-$(CONFIG_KEYBOARD_ABOV_FT16XX_TOUCH_VALLEY) += abov/abov_valley.fw abov/abov_valley_sub.fw
+fw-shipped-$(CONFIG_KEYBOARD_ABOV_FT16XX_TOUCH_VALLEY) += abov/abov_valley.fw abov/abov_valley_sub.fw \
+								abov/abov_vjf.fw abov/abov_vjf_sub.fw
 fw-shipped-all := $(fw-shipped-y) $(fw-shipped-m) $(fw-shipped-)
 
 quiet_cmd_ihex  = IHEX    $@

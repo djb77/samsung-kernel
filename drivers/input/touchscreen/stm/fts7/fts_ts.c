@@ -1108,7 +1108,7 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 		case EVENTID_GESTURE_WAKEUP:
 			tsp_debug_info(true, &info->client->dev, "EVENTID_GESTURE_WAKEUP detected![EventID=%x]\n", EventID);
 			
-			info->scrub_id = 0x07;	// defined in VLTE-Istor & JF-synaptics
+			info->scrub_id = 0x07;	// defined in JF-synaptics
 		
 			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
 			input_sync(info->input_dev);
@@ -2027,11 +2027,9 @@ static int fts_parse_dt(struct i2c_client *client)
 	}
 #endif
 
-	if((strncmp(pdata->project_name, "valley", 6) == 0)){
-		pdata->stm_ver = STM_VER7;
-		tsp_debug_err(true, dev,"%s:FTS7AD56 - VALLEY STM_VER(0x%2X)\n", __func__, pdata->stm_ver);
-		tsp_debug_err(true, dev, "max_coords[%d,%d]\n", pdata->max_x, pdata->max_y);
-	}else if((lcdtype & LCD_ID2_MODEL_MASK) == MODEL_HEROPLUS){
+	if(((lcdtype & LCD_ID2_MODEL_MASK) == MODEL_HEROPLUS) ||
+		(((lcdtype & LCD_ID2_MODEL_MASK) == MODEL_HEROEDGE)) ||
+		(strncmp(pdata->project_name, "PS-LTE", 6) == 0)) {
 		pdata->stm_ver = STM_VER7;
 		tsp_debug_err(true, dev,"%s:FTS7AD56 - STM_VER(0x%2X)\n", __func__, pdata->stm_ver);
 		pdata->max_x = 1439;
@@ -2046,14 +2044,6 @@ static int fts_parse_dt(struct i2c_client *client)
 
 	if (of_property_read_u32(np, "stm,device_num", &pdata->device_num))
 		tsp_debug_err(true, dev, "Failed to get device_num property\n");
-
-	/* only for multi tsp models. */
-	if ((strncmp(pdata->project_name, "valley", 6) == 0)){
-		if(pdata->device_num == 0)
-			dev->init_name = "main tsp";
-		else
-			dev->init_name = "sub  tsp";
-	}
 
 	pdata->panel_revision = (lcdtype & 0xF000) >> 12;
 	tsp_debug_info(true, dev,

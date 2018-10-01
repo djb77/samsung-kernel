@@ -30,7 +30,9 @@ static const int cfq_back_penalty = 2;
 static const int cfq_slice_sync = HZ / 10;
 static int cfq_slice_async = HZ / 25;
 static const int cfq_slice_async_rq = 2;
-static int cfq_slice_idle = HZ / 125;
+/* Explicitly set cfq_slice_idle to 0 */
+static int cfq_slice_idle = 0;
+/* static int cfq_slice_idle = HZ / 125; */
 static int cfq_group_idle = HZ / 125;
 static const int cfq_target_latency = HZ * 3/10; /* 300 ms */
 static const int cfq_hist_divisor = 4;
@@ -48,7 +50,7 @@ static int cfq_throttle_async = 1;
 #define CFQ_MIN_TT		(2)
 
 #define CFQ_SLICE_SCALE		(5)
-#define CFQ_HW_QUEUE_MIN	(4)
+#define CFQ_HW_QUEUE_MIN	(5)
 #define CFQ_SERVICE_SHIFT       12
 
 #define CFQQ_SEEK_THR		(sector_t)(8 * 100)
@@ -3999,14 +4001,8 @@ static void cfq_update_hw_tag(struct cfq_data *cfqd)
 	if (cfqd->hw_tag_samples++ < 50)
 		return;
 
-	if (cfqd->hw_tag_est_depth >= CFQ_HW_QUEUE_MIN) {
+	if (cfqd->hw_tag_est_depth >= CFQ_HW_QUEUE_MIN)
 		cfqd->hw_tag = 1;
-		/*
-		 * for queueing devices, such as UFS and eMMC CQ,
-		 * set slice_idle to 0 if no one touched it yet.
-		 */
-		cfqd->cfq_slice_idle = 0;
-	}
 	else
 		cfqd->hw_tag = 0;
 }
@@ -4647,8 +4643,12 @@ static int __init cfq_init(void)
 	 */
 	if (!cfq_slice_async)
 		cfq_slice_async = 1;
+	
+	/* Do not touch cfq_slice_idle if it is zero */
+	/*
 	if (!cfq_slice_idle)
 		cfq_slice_idle = 1;
+	 */
 
 #ifdef CONFIG_CFQ_GROUP_IOSCHED
 	if (!cfq_group_idle)

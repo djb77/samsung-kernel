@@ -91,6 +91,8 @@ struct arizona_jd_state;
 
 struct arizona_dai_priv {
 	int clk;
+
+	struct snd_pcm_hw_constraint_list constraint;
 };
 
 struct arizona_priv {
@@ -357,6 +359,9 @@ extern int moon_osr_put(struct snd_kcontrol *kcontrol,
 extern int moon_lp_mode_put(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol);
 
+extern const struct snd_kcontrol_new arizona_adsp2_rate_controls[];
+extern const struct snd_kcontrol_new arizona_adsp2v2_rate_controls[];
+
 extern int arizona_in_ev(struct snd_soc_dapm_widget *w,
 			 struct snd_kcontrol *kcontrol,
 			 int event);
@@ -369,15 +374,11 @@ extern int arizona_hp_ev(struct snd_soc_dapm_widget *w,
 extern int clearwater_hp_ev(struct snd_soc_dapm_widget *w,
 			    struct snd_kcontrol *kcontrol,
 			    int event);
-extern int moon_hp_ev(struct snd_soc_dapm_widget *w,
-			    struct snd_kcontrol *kcontrol,
-			    int event);
-extern int moon_analog_ev(struct snd_soc_dapm_widget *w,
-			    struct snd_kcontrol *kcontrol,
-			    int event);
 extern int arizona_anc_ev(struct snd_soc_dapm_widget *w,
 			  struct snd_kcontrol *kcontrol,
 			  int event);
+
+extern unsigned int arizona_hpimp_cb(struct device *dev);
 
 extern int arizona_mux_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol);
@@ -443,8 +444,8 @@ struct arizona_fll {
 	unsigned int sync_freq;
 	int ref_src;
 	unsigned int ref_freq;
+
 	struct arizona_fll_cfg ref_cfg;
-	struct arizona_fll_cfg sync_cfg;
 };
 
 extern int arizona_dvfs_up(struct snd_soc_codec *codec, unsigned int flags);
@@ -467,10 +468,6 @@ extern int arizona_init_gpio(struct snd_soc_codec *codec);
 extern int arizona_init_mono(struct snd_soc_codec *codec);
 extern int arizona_init_input(struct snd_soc_codec *codec);
 
-extern int arizona_adsp_power_ev(struct snd_soc_dapm_widget *w,
-				 struct snd_kcontrol *kcontrol,
-				 int event);
-
 extern int arizona_init_dai(struct arizona_priv *priv, int dai);
 
 int arizona_set_output_mode(struct snd_soc_codec *codec, int output,
@@ -492,6 +489,8 @@ extern struct regmap *arizona_get_regmap_dsp(struct snd_soc_codec *codec);
 
 extern struct arizona_extcon_info *
 arizona_get_extcon_info(struct snd_soc_codec *codec);
+
+extern bool arizona_get_moisture_state(struct snd_soc_codec *codec);
 
 extern int arizona_enable_force_bypass(struct snd_soc_codec *codec);
 extern int arizona_disable_force_bypass(struct snd_soc_codec *codec);

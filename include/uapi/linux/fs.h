@@ -58,6 +58,9 @@ struct inodes_stat_t {
 	long dummy[5];		/* padding for sysctl ABI compatibility */
 };
 
+struct ci_lookup_data {
+	char d[PATH_MAX];
+};
 
 #define NR_FILE  8192	/* this can well be larger on a larger system */
 
@@ -171,6 +174,7 @@ struct inodes_stat_t {
 #define FS_IOC32_SETVERSION		_IOW('v', 2, int)
 
 #define FS_IOC_INVAL_MAPPING		_IO('f', 13)
+#define FS_IOC_CI_LOOKUP		_IOWR('f', 15, struct ci_lookup_data)
 
 /*
  * Inode flags (FS_IOC_GETFLAGS / FS_IOC_SETFLAGS)

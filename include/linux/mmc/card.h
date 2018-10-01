@@ -240,6 +240,15 @@ struct mmc_part {
 #define MMC_BLK_DATA_AREA_RPMB	(1<<3)
 };
 
+struct mmc_card_error_log {
+	char	type[4];	// sbc, cmd, data, stop, busy
+	int	err_type;
+	u32	status;
+	u64	first_issue_time;
+	u64	last_issue_time;
+	u32	count;
+};
+
 /*
  * MMC device
  */
@@ -309,6 +318,9 @@ struct mmc_card {
 	struct mmc_part	part[MMC_NUM_PHY_PARTITION]; /* physical partitions */
 	unsigned int    nr_parts;
 	u8 en_strobe_enhanced;	/*enhanced strobe ctrl */
+
+	struct device_attribute error_count;
+	struct mmc_card_error_log err_log[10];
 };
 
 /*

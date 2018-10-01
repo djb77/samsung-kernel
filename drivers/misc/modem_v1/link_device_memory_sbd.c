@@ -359,7 +359,7 @@ static unsigned int init_ctrl_tables(struct sbd_link_device *sl, int num_iodevs,
 {
 	int i;
 	unsigned int id;
-	unsigned int dummy_idx = -1;
+	unsigned int qos_prio = QOS_HIPRIO;
 
 	/*
 	Fill ch2id array with MAX_LINK_CHANNELS value to prevent sbd_ch2id()
@@ -371,7 +371,17 @@ static unsigned int init_ctrl_tables(struct sbd_link_device *sl, int num_iodevs,
 	for (id = 0, i = 0; i < num_iodevs; i++) {
 		int ch = iodevs[i].id;
 
-		if (sipc5_ipc_ch(ch) && !sipc_ps_ch(ch)) {
+		if ((sipc5_ipc_ch(ch) && !sipc_ps_ch(ch)) ||
+			iodevs[i].format == IPC_MULTI_RAW) {
+			/* Skip making rb if mismatch region info */
+			if (iodevs[i].attrs & IODEV_ATTR(ATTR_OPTION_REGION) &&
+				strcmp(iodevs[i].option_region, CONFIG_OPTION_REGION))
+				continue;
+
+			/* Change channel to Qos priority */
+			if (iodevs[i].format == IPC_MULTI_RAW)
+				ch = qos_prio++;
+
 			/* Save CH# to LinkID-to-CH conversion table. */
 			sl->id2ch[id] = ch;
 
@@ -382,25 +392,8 @@ static unsigned int init_ctrl_tables(struct sbd_link_device *sl, int num_iodevs,
 			setup_link_attr(&sl->link_attr[id], id, ch, &iodevs[i]);
 
 			++id;
-		} else if (iodevs[i].format == IPC_MULTI_RAW) {
-			dummy_idx = i;
 		}
 	}
-
-	for (i = 0; i < num_iodevs; i++) {
-		int ch = iodevs[i].id;
-
-		if (sipc_ps_ch(ch)) {
-			sl->id2ch[id] = 0;
-			sl->ch2id[ch] = id;
-		}
-	}
-
-	/* Set up the attribute table entry of a LinkID. */
-	setup_link_attr(&sl->link_attr[id],
-			id, iodevs[dummy_idx].id, &iodevs[dummy_idx]);
-
-	id++;
 
 	/* Finally, id has the number of actual link channels. */
 	return id;

@@ -20,4 +20,9 @@ config SWITCH_ARIZONA
 	  with Wolfson Arizona devices. These are audio CODECs with
 	  advanced audio accessory detection support.
 
+config SWITCH_PTT
+	tristate "PTT Headset support"
+	help
+	  Say Y here to enable support for PTT headset accessory detection.
+
 endif # SWITCH

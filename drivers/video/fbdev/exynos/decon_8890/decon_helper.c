@@ -15,11 +15,14 @@
 #include <asm/cacheflush.h>
 #include <asm/page.h>
 
+#ifdef CONFIG_FB_DSU
+#include <linux/ion.h>
+#endif
+
 #include "decon.h"
 #include "dsim.h"
 #include "./vpp/vpp.h"
 #include "decon_helper.h"
-#include "./panels/lcd_ctrl.h"
 #include <video/mipi_display.h>
 
 extern void *return_address(int);
@@ -692,13 +695,67 @@ void DISP_SS_EVENT_SHOW(struct seq_file *s, struct decon_device *decon)
 void DISP_SS_EVENT_SIZE_ERR_LOG(struct v4l2_subdev *sd, struct disp_ss_size_info *info)
 {
 	struct decon_device *decon = container_of(sd, struct decon_device, sd);
-	int idx = (decon->disp_ss_size_log_idx++) % DISP_EVENT_SIZE_ERR_MAX;
-	struct disp_ss_size_err_info *log = &decon->disp_ss_size_log[idx];
+	int idx = 0;
+	struct disp_ss_size_err_info *log = NULL;
 
 	if (!decon)
 		return;
-
+	idx = (decon->disp_ss_size_log_idx++) % DISP_EVENT_SIZE_ERR_MAX;
+	log = &decon->disp_ss_size_log[idx];
 	log->time = ktime_get();
 	memcpy(&log->info, info, sizeof(struct disp_ss_size_info));
 }
 #endif
+
+#ifdef CONFIG_FB_DSU
+static char logBuffer[10][1024];
+static char* logLast;
+static int logCnt = 0;
+
+void decon_get_window_rect_log( char* buffer, struct decon_device *decon, struct decon_win_config_data *win_data )
+{
+	struct decon_win_config *win_config = win_data->config;
+	char* cPos = buffer;
+	int i;
+
+	cPos += sprintf( cPos, "DSU window.%llu:", ktime_to_ms(ktime_get()) );
+
+	cPos += sprintf( cPos, "[%d-%d,dst[%4d,%4d,%4d,%4d],rect[%4d,%4d,%4d,%4d]] ",
+		DECON_WIN_UPDATE_IDX, win_config[DECON_WIN_UPDATE_IDX].enableDSU,
+		win_config[DECON_WIN_UPDATE_IDX].dst.x, win_config[DECON_WIN_UPDATE_IDX].dst.y, win_config[DECON_WIN_UPDATE_IDX].dst.w, win_config[DECON_WIN_UPDATE_IDX].dst.h,
+		win_config[DECON_WIN_UPDATE_IDX].left, win_config[DECON_WIN_UPDATE_IDX].top, win_config[DECON_WIN_UPDATE_IDX].right, win_config[DECON_WIN_UPDATE_IDX].bottom );
+
+	for (i = 0; i < decon->pdata->max_win; i++) {
+		if( win_config[i].dst.x || win_config[i].dst.y || win_config[i].dst.w || win_config[i].dst.h||
+			win_config[i].src.x || win_config[i].src.y || win_config[i].src.w || win_config[i].src.h ) {
+			cPos += sprintf( cPos, "(%d.%d-src(%4d,%4d,%4d,%4d),dst(%4d,%4d,%4d,%4d)) ", i, win_config[i].state,
+				win_config[i].src.x, win_config[i].src.y, win_config[i].src.w, win_config[i].src.h,
+				win_config[i].dst.x, win_config[i].dst.y, win_config[i].dst.w, win_config[i].dst.h );
+		}
+	}
+}
+
+
+void decon_store_window_rect_log( struct decon_device *decon, struct decon_win_config_data *win_data )
+{
+	decon_get_window_rect_log( &(logBuffer[logCnt][0]), decon, win_data);
+	logLast = &(logBuffer[logCnt][0]);
+
+	logCnt++;
+	if( logCnt >= 10 ) logCnt = 0;
+}
+
+char* decon_last_window_rect_log( void )
+{
+	return logLast;
+}
+
+void decon_print_bufered_window_rect_log( void )
+{
+	int i;
+
+	for( i = logCnt; i < 10; i++ ) pr_info( "(history) %s\n", logBuffer[i] );
+	for( i = 0; i < logCnt; i++ ) pr_info( "(history) %s\n", logBuffer[i] );
+}
+#endif
+

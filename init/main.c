@@ -708,6 +708,12 @@ asmlinkage __visible void __init start_kernel(void)
 #ifdef CONFIG_TIMA_RKP_DEBUG
 	rkp_call(RKP_DEBUG, 0, 0, 0, 0, 0);
 #endif
+#ifdef CONFIG_RKP_CFP_ROPP
+	rkp_call(CFP_ROPP_INIT, 0, 0, 0, 0, 0);
+#endif
+#ifdef CONFIG_RKP_CFP_JOPP
+	rkp_call(CFP_JOPP_INIT, 0, 0, 0, 0, 0);
+#endif
 #ifdef CONFIG_RELOCATABLE_KERNEL
 	rkp_call(KASLR_MEM_RESERVE, kaslr_mem, kaslr_size, 0, 0, 0); 
 #endif 

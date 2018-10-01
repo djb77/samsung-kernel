@@ -31,7 +31,6 @@ struct dw_mci_exynos_priv_data {
 	u32                     hs400_timing;
 	u32                     tuned_sample;
 	u32			cur_speed;
-	u32			dqs_delay;
 	u32			saved_dqs_en;
 	u32			saved_strobe_ctrl;
 	u32			hs200_timing;
@@ -39,6 +38,8 @@ struct dw_mci_exynos_priv_data {
 	u32			ddr200_ulp_timing;
 	u32			ddr200_tx_t_fastlimit;
 	u32			ddr200_tx_t_initval;
+	u32			sdr104_timing;
+	u32			sdr50_timing;
 	u32			*ref_clk;
 	u32			delay_line;
 	u32			tx_delay_line;
@@ -96,6 +97,8 @@ extern void dw_mci_reg_dump(struct dw_mci *host);
 #define SDMMC_SECTOR_NUM_INC	0xffff	/*not used*/
 #endif
 
+#define FORCE_SWRESET		BIT(15)
+
 #define SDMMC_CDTHRCTL		0x100
 #define SDMMC_DATA(x)		(x)
 
@@ -108,6 +111,11 @@ extern void dw_mci_reg_dump(struct dw_mci *host);
 #define SDMMC_HS400_DQS_EN		0x180
 #define SDMMC_HS400_ASYNC_FIFO_CTRL	0x184
 #define SDMMC_HS400_DLINE_CTRL		0x188
+
+#define SDMMC_SHA_CMD_IE		0x190
+#define SDMMC_SHA_CMD_IS		0x194
+#define SDMMC_DEBUG_INFO1		0x1A0
+#define SDMMC_DEBUG_INFO2		0x1A4
 
 #define SDMMC_EMMCP_BASE		0x1000
 #define SDMMC_MPSTAT			(SDMMC_EMMCP_BASE + 0x0008)
@@ -149,10 +157,6 @@ extern void dw_mci_reg_dump(struct dw_mci *host);
 /* RCLK_EN register defines */
 #define DATA_STROBE_EN			BIT(0)
 #define AXI_NON_BLOCKING_WR	BIT(7)
-
-/* DLINE_CTRL register defines */
-#define DQS_CTRL_RD_DELAY(x, y)		(((x) & ~0x3FF) | ((y) & 0x3FF))
-#define DQS_CTRL_GET_RD_DELAY(x)	((x) & 0x3FF)
 
 /* SDMMC_DDR200_RDDQS_EN */
 #define DWMCI_TXDT_CRC_TIMER_FASTLIMIT(x)	(((x) & 0xFF) << 16)

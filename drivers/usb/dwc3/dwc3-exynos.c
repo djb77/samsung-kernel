@@ -256,7 +256,7 @@ int dwc3_exynos_vbus_event(struct device *dev, bool vbus_active)
 	struct dwc3_exynos_rsw	*rsw;
 	struct otg_fsm		*fsm;
 
-	dev_dbg(dev, "EVENT: VBUS: %sactive\n", vbus_active ? "" : "in");
+	dev_info(dev, "EVENT: VBUS: %sactive\n", vbus_active ? "" : "in");
 
 	exynos = dev_get_drvdata(dev);
 	if (!exynos)

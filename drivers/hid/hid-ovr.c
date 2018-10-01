@@ -1,7 +1,5 @@
 /*
- * Oculus VR driver for Linux
- *
- * Copyright (c) 2013 Lee Cooper <lee.cooper@oculusvr.com>
+ * OVR driver for Linux. Based on hidraw
  */
 
 /*
@@ -9,10 +7,6 @@
  * under the terms of the GNU General Public License as published by the Free
  * Software Foundation; either version 2 of the License, or (at your option)
  * any later version.
- */
-
-/*
- * Driver for Oculus VR devices. Based on hidraw driver.
  */
 
 #include <linux/cdev.h>
@@ -42,13 +36,13 @@ struct irq_affinity_data {
 	unsigned long default_irq_affinity_len;
 };
 
-#define OVRIOCGSERIALSIZE	_IOR('H', 0x01, int)
+#define OVRIOCGSERIALSIZE	_IOR('S', 0x01, int)
 #define OVRIOCGSERIAL(len)	_IOC(_IOC_READ, 			'S', 0x02, len)
 #define OVRIOCSRPSCPUS		_IOC(_IOC_WRITE|_IOC_READ,	'S', 0x03, sizeof(struct rpscpus_data))
 #define OVRIOCSIRQAFFINITY	_IOC(_IOC_WRITE|_IOC_READ,	'S', 0x04, sizeof(struct irq_affinity_data))
 
-struct rpscpus_data ovr_rpscpu_data;
-struct irq_affinity_data ovr_irq_affinity_data;
+static struct rpscpus_data ovr_rpscpu_data;
+static struct irq_affinity_data ovr_irq_affinity_data;
 
 #define USB_TRACKER_INTERFACE_PROTOCOL	0
 
@@ -58,8 +52,43 @@ struct irq_affinity_data ovr_irq_affinity_data;
 #define OVR_FIRST_MINOR 0
 #define OVR_HIDRAW_MAX_SERIAL 256
 
+#define OVR_MODE_NODEVICE		(0)
+#define OVR_MODE_USB			(1)
+#define OVR_MODE_RELAY			(2)
+#define OVR_MODE_RELAY_FORCELY	(3)
+
+#define OVR_VERSION 		"0000"
+#define OVR_MANUFACTURER 	"sec_hmt"
+#define OVR_PRODUCT 		"Gear VR"
+#define OVR_SERIAL 			"R323XXU0API1"
+
 static char ovr_serial[OVR_HIDRAW_MAX_SERIAL] = {0,};
 static char ovr_serial_len = 0;
+static int ovr_mode = OVR_MODE_NODEVICE;
+
+static u8 wbuf[OVR_HIDRAW_BUFFER_SIZE] = { 0,};
+
+static u8 feature_report_69[69] = { 0x0, };
+static u8 feature_report_64[64] = {						\
+	0x0A, 0x00, 0xEA, 0x33, 0x32, 0x30, 0x57, 0x35, \
+	0x30, 0x34, 0x30, 0x48, 0x41, 0x44, 0x36, 0x0 , \
+	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , \
+	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , \
+	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , \
+	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , \
+	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , \
+	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0};
+static u8 feature_report_56[56] = { 0x0, };
+static u8 feature_report_18[18] = { 0x0, };
+static u8 feature_report_15[15] = {						\
+	0xA , 0x0 , 0x0 , 0x33, 0x32, 0x30, 0x57, 0x35, \
+	0x30, 0x34, 0x30, 0x48, 0x41, 0x44, 0x36};
+static u8 feature_report_8[8] = { 0x0, };
+static u8 feature_report_7[7] = {							\
+	0x2, 0x0, 0x0, 0x2C, 0x1, 0xE8, 0x3};
+
+static struct kobject *virtual_dir = NULL;
+extern struct kobject *virtual_device_parent(struct device *dev);
 
 static struct class *ovr_class;
 static struct hidraw *ovr_hidraw_table[OVR_HIDRAW_MAX_DEVICES];
@@ -83,6 +112,9 @@ static DECLARE_DELAYED_WORK(ovr_rpscpus_work, ovr_rpscpus_work_func);
 static void ovr_irq_affinity_work_func(struct work_struct *work);
 static DECLARE_DELAYED_WORK(ovr_irq_affinity_work, ovr_irq_affinity_work_func);
 extern int irq_select_affinity_usr(unsigned int irq, struct cpumask *mask);
+static int ovr_report_event(struct hid_device *hid, u8 *data, int len);
+static int ovr_connect(struct hid_device *hid, int mode);
+static void ovr_disconnect(struct hid_device *hid);
 
 static ssize_t ovr_hidraw_read(struct file *file, char __user *buffer, size_t count, loff_t *ppos)
 {
@@ -173,7 +205,10 @@ static ssize_t ovr_hidraw_send_report(struct file *file, const char __user *buff
 	}
 
 	dev = ovr_hidraw_table[minor]->hid;
-
+	if (!dev) {
+		ret = -ENODEV;
+		goto out;
+	}
 
 	if (count > HID_MAX_BUFFER_SIZE) {
 		hid_warn(dev, "ovr - pid %d passed too large report\n",
@@ -224,9 +259,19 @@ out:
 /* the first byte is expected to be a report number */
 static ssize_t ovr_hidraw_write(struct file *file, const char __user *buffer, size_t count, loff_t *ppos)
 {
-	ssize_t ret;
+	ssize_t ret = -EFAULT;
 	mutex_lock(&minors_lock);
-	ret = ovr_hidraw_send_report(file, buffer, count, HID_OUTPUT_REPORT);
+
+	if ((ovr_mode == OVR_MODE_RELAY || ovr_mode == OVR_MODE_RELAY_FORCELY) \
+		&& count >= 24 && !copy_from_user(wbuf, buffer, count)) {
+
+		isr_count++;
+		last_isr = jiffies;
+
+		ovr_report_event(NULL, wbuf, OVR_HIDRAW_BUFFER_SIZE-2);
+		ret = count;
+	}
+
 	mutex_unlock(&minors_lock);
 	return ret;
 }
@@ -291,6 +336,10 @@ static ssize_t ovr_hidraw_get_report(struct file *file, char __user *buffer, siz
 	unsigned char report_number;
 
 	dev = ovr_hidraw_table[minor]->hid;
+	if (!dev) {
+		ret = -ENODEV;
+		goto out;		
+	}
 
 	if (!dev->ll_driver->raw_request) {
 		ret = -ENODEV;
@@ -485,10 +534,16 @@ unlock:
 
 static int ovr_report_event(struct hid_device *hid, u8 *data, int len)
 {
-	struct hidraw *dev = hid->hidovr;
+	struct hidraw *dev;
 	struct hidraw_list *list;
 	int ret = 0;
 	unsigned long flags;
+
+	if (hid) {
+		dev = hid->hidovr;
+	} else {
+		dev = ovr_hidraw_table[ovr_minor];
+	}
 
 	spin_lock_irqsave(&list_lock, flags);
 	list_for_each_entry(list, &dev->list, node) {
@@ -718,6 +773,9 @@ void init_ovr_data(void) {
 	ovr_irq_affinity_data.irq_affinity_len = 1;
 	ovr_irq_affinity_data.default_irq_affinity[0] = 'f';
 	ovr_irq_affinity_data.default_irq_affinity_len = 1;
+#elif defined(CONFIG_ARCH_MSM8996)
+	ovr_rpscpu_data.rpscpus[0] = 'e';
+	ovr_rpscpu_data.rpscpus_len = 1;
 #endif
 }
 
@@ -780,12 +838,109 @@ static void ovr_irq_affinity_work_func(struct work_struct *work)
 	set_irq_affinity(1);
 }
 
-static int ovr_connect(struct hid_device *hid)
+static ssize_t bcdDevice_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%s\n", OVR_VERSION);
+}
+static ssize_t serial_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%s\n", OVR_SERIAL);
+}
+static ssize_t product_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%s\n", OVR_PRODUCT);
+}
+static ssize_t manufacturer_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%s\n", OVR_MANUFACTURER);
+}
+
+static DEVICE_ATTR(bcdDevice, S_IRUGO, bcdDevice_show, NULL);
+static DEVICE_ATTR(serial, S_IRUGO, serial_show, NULL);
+static DEVICE_ATTR(product, S_IRUGO, product_show, NULL);
+static DEVICE_ATTR(manufacturer, S_IRUGO, manufacturer_show, NULL);
+
+static struct device_attribute *ovr_dev_attrs[] = {
+	&dev_attr_bcdDevice,
+	&dev_attr_serial,
+	&dev_attr_manufacturer,
+	&dev_attr_product,
+	NULL,
+};
+
+static ssize_t relay_on_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", ovr_mode);
+}
+static ssize_t relay_on_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	switch(val) {
+		case OVR_MODE_RELAY:
+			ovr_connect(NULL, OVR_MODE_RELAY);
+			break;
+		case OVR_MODE_RELAY_FORCELY:
+			ovr_connect(NULL, OVR_MODE_RELAY_FORCELY);
+			break;
+		case OVR_MODE_NODEVICE:
+			ovr_disconnect(NULL);
+			break;
+		default:
+			return -EINVAL;
+			break;
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(relay_on, 0664, relay_on_show, relay_on_store);
+static struct device_attribute *ovr_relay_attrs[] = {
+	&dev_attr_relay_on,
+	NULL,
+};
+
+static void make_ovr_node(void)
+{
+	int ret, i;
+
+	if (virtual_dir) {
+		for (i=0; ovr_dev_attrs[i]!= NULL; i++) {
+			ret = sysfs_create_file(virtual_dir, &ovr_dev_attrs[i]->attr);
+			if (ret) {
+				printk("OVR: sysfs_create_file error %d(%d) \n", ret, i);
+			}
+		}
+	}
+}
+
+static void remove_ovr_node(void)
+{
+	int i;
+
+	if (virtual_dir) {
+		for (i=0; ovr_dev_attrs[i]!= NULL; i++) {			
+			sysfs_remove_file(virtual_dir, &ovr_dev_attrs[i]->attr);
+		}
+	}
+}
+
+static int ovr_connect(struct hid_device *hid, int mode)
 {
 	int minor, result, i;
 	struct hidraw *dev;
 
 	/* we accept any HID device, no matter the applications */
+
+	if (ovr_mode == OVR_MODE_RELAY && hid) {
+		ovr_disconnect(NULL);
+	}
+	else if (ovr_mode) {
+		return -EINVAL;
+	}
 
 	dev = kzalloc(sizeof(struct hidraw), GFP_KERNEL);
 	if (!dev)
@@ -815,8 +970,13 @@ static int ovr_connect(struct hid_device *hid)
 		goto out;
 	}
 
-	dev->dev = device_create(ovr_class, &hid->dev, MKDEV(ovr_major, minor),
-				 NULL, "%s%d", "ovr", minor);
+	if (hid) {
+		dev->dev = device_create(ovr_class, &hid->dev, MKDEV(ovr_major, minor),
+					 NULL, "%s%d", "ovr", minor);
+	} else {
+		dev->dev = device_create(ovr_class, NULL, MKDEV(ovr_major, minor),
+					 NULL, "%s%d", "ovr", minor);
+	}
 
 	if (IS_ERR(dev->dev)) {
 		ovr_hidraw_table[minor] = NULL;
@@ -824,6 +984,18 @@ static int ovr_connect(struct hid_device *hid)
 		result = PTR_ERR(dev->dev);
 		kfree(dev);
 		goto out;
+	}
+
+	if (!hid) {
+		make_ovr_node();
+
+		if (mode == OVR_MODE_RELAY_FORCELY) {
+			ovr_mode = OVR_MODE_RELAY_FORCELY;
+		} else {
+			ovr_mode = OVR_MODE_RELAY;
+		}
+	} else {
+		ovr_mode = OVR_MODE_USB;
 	}
 
 	for (i=0; i<MONITOR_MAX; i++)
@@ -838,11 +1010,15 @@ static int ovr_connect(struct hid_device *hid)
 	init_waitqueue_head(&dev->wait);
 	INIT_LIST_HEAD(&dev->list);
 
-	dev->hid = hid;
+	if (hid) {
+		dev->hid = hid;
+	}
 	dev->minor = minor;
 
 	dev->exist = 1;
-	hid->hidovr = dev;
+	if (hid) {
+		hid->hidovr = dev;
+	}
 
 	init_ovr_data();
 	set_rpscpus(1);
@@ -854,11 +1030,25 @@ out:
 
 static void ovr_disconnect(struct hid_device *hid)
 {
-	struct hidraw *hidraw = hid->hidovr;
+	struct hidraw *hidraw;
+
+	if (ovr_mode == OVR_MODE_NODEVICE || (ovr_mode == OVR_MODE_USB && !hid)) {
+		return;
+	}
+
+	if (hid) {
+		hidraw = hid->hidovr;
+	} else {
+		hidraw = ovr_hidraw_table[ovr_minor];
+	}
 
 	mutex_lock(&minors_lock);
 
 	printk("OVR: disconnect %d %d (%d:%s) >>>\n", hidraw->minor, hidraw->open, current->pid, current->comm);
+
+	if (!hid) {
+		remove_ovr_node();
+	}
 
 	if (hidraw->minor == ovr_minor) {
 		opens = 0;
@@ -878,6 +1068,7 @@ static void ovr_disconnect(struct hid_device *hid)
 	}
 
 	printk("OVR: disconnect <<<\n");
+	ovr_mode = OVR_MODE_NODEVICE;
 
 	mutex_unlock(&minors_lock);
 
@@ -902,33 +1093,47 @@ static long ovr_hidraw_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
 	switch (cmd) {
 		case HIDIOCGRDESCSIZE:
-			if (put_user(dev->hid->rsize, (int __user *)arg))
+			if (dev->hid) {
+				if (put_user(dev->hid->rsize, (int __user *)arg))
+					ret = -EFAULT;
+			} else {
 				ret = -EFAULT;
+			}
 			break;
 
 		case HIDIOCGRDESC:
 			{
-				__u32 len;
+				if (dev->hid) {
+					__u32 len;
 
-				if (get_user(len, (int __user *)arg))
+					if (get_user(len, (int __user *)arg))
+						ret = -EFAULT;
+					else if (len > HID_MAX_DESCRIPTOR_SIZE - 1)
+						ret = -EINVAL;
+					else if (copy_to_user(user_arg + offsetof(
+						struct hidraw_report_descriptor,
+						value[0]),
+						dev->hid->rdesc,
+						min(dev->hid->rsize, len)))
+						ret = -EFAULT;
+				} else {
 					ret = -EFAULT;
-				else if (len > HID_MAX_DESCRIPTOR_SIZE - 1)
-					ret = -EINVAL;
-				else if (copy_to_user(user_arg + offsetof(
-					struct hidraw_report_descriptor,
-					value[0]),
-					dev->hid->rdesc,
-					min(dev->hid->rsize, len)))
-					ret = -EFAULT;
+				}
 				break;
 			}
 		case HIDIOCGRAWINFO:
 			{
 				struct hidraw_devinfo dinfo;
 
-				dinfo.bustype = dev->hid->bus;
-				dinfo.vendor = dev->hid->vendor;
-				dinfo.product = dev->hid->product;
+				if (dev->hid) {
+					dinfo.bustype = dev->hid->bus;
+					dinfo.vendor = dev->hid->vendor;
+					dinfo.product = dev->hid->product;
+				} else {
+					dinfo.bustype = 0;
+					dinfo.vendor = USB_VENDOR_ID_SAMSUNG_ELECTRONICS;
+					dinfo.product = USB_DEVICE_ID_SAMSUNG_GEARVR_1;
+				}
 				if (copy_to_user(user_arg, &dinfo, sizeof(dinfo)))
 					ret = -EFAULT;
 				break;
@@ -984,12 +1189,64 @@ static long ovr_hidraw_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
 				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCSFEATURE(0))) {
 					int len = _IOC_SIZE(cmd);
-					ret = ovr_hidraw_send_report(file, user_arg, len, HID_FEATURE_REPORT);
+					if (hid) {
+						ret = ovr_hidraw_send_report(file, user_arg, len, HID_FEATURE_REPORT);
+					} else {
+						switch (len) {
+							case 2:
+								ret = len;
+								feature_report_7[3] = 0x2C;
+								break;
+							case 7:
+								ret = copy_from_user((void *)feature_report_7, user_arg, len) ? -EFAULT : len;
+								break;
+							default:
+								ret = len;
+								break;
+						}
+					}
 					break;
 				}
 				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGFEATURE(0))) {
 					int len = _IOC_SIZE(cmd);
-					ret = ovr_hidraw_get_report(file, user_arg, len, HID_FEATURE_REPORT);
+					if (hid) {
+						ret = ovr_hidraw_get_report(file, user_arg, len, HID_FEATURE_REPORT);
+					} else {
+						__u8 *buf;
+						switch (len) {
+							case 7:
+								buf = feature_report_7;
+								break;
+							case 8:
+								buf = feature_report_8;
+								break;
+							case 15:
+								buf = feature_report_15;							
+								break;
+							case 18:
+								buf = feature_report_18;
+								break;
+							case 56:
+								buf = feature_report_56;
+								break;
+							case 64:
+								buf = feature_report_64;
+								break;
+							case 69:
+								buf = feature_report_69;
+								break;
+							default:
+								if (len <= 69) {
+									buf = feature_report_69;
+								} else {
+									ret = -EINVAL;
+									goto out;
+								}
+								break;
+						}
+
+						ret = copy_to_user(user_arg, (void *)buf, len) ? -EFAULT : len;						
+					}
 					break;
 				}
 
@@ -1000,20 +1257,28 @@ static long ovr_hidraw_ioctl(struct file *file, unsigned int cmd, unsigned long 
 				}
 
 				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGRAWNAME(0))) {
-					int len = strlen(hid->name) + 1;
-					if (len > _IOC_SIZE(cmd))
-						len = _IOC_SIZE(cmd);
-					ret = copy_to_user(user_arg, hid->name, len) ?
-						-EFAULT : len;
+					if (hid) {
+						int len = strlen(hid->name) + 1;
+						if (len > _IOC_SIZE(cmd))
+							len = _IOC_SIZE(cmd);
+						ret = copy_to_user(user_arg, hid->name, len) ?
+							-EFAULT : len;
+					} else {
+						ret = -EFAULT;
+					}
 					break;
 				}
 
 				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGRAWPHYS(0))) {
-					int len = strlen(hid->phys) + 1;
-					if (len > _IOC_SIZE(cmd))
-						len = _IOC_SIZE(cmd);
-					ret = copy_to_user(user_arg, hid->phys, len) ?
-						-EFAULT : len;
+					if (hid) {
+						int len = strlen(hid->phys) + 1;
+						if (len > _IOC_SIZE(cmd))
+							len = _IOC_SIZE(cmd);
+						ret = copy_to_user(user_arg, hid->phys, len) ?
+							-EFAULT : len;
+					} else {
+						ret = -EFAULT;
+					}
 					break;
 				}
 			}
@@ -1074,7 +1339,7 @@ static int ovr_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		}
 	}
 
-	retval = ovr_connect(hdev);
+	retval = ovr_connect(hdev, OVR_MODE_USB);
 
 	if (retval) {
 		hid_err(hdev, "ovr - Couldn't connect\n");
@@ -1169,12 +1434,26 @@ static struct hid_driver ovr_driver = {
 
 static int __init ovr_init(void)
 {
-	int retval;
+	int retval = 0;
 	dev_t dev_id;
 
 	ovr_class = class_create(THIS_MODULE, "ovr");
 	if (IS_ERR(ovr_class)) {
 		return PTR_ERR(ovr_class);
+	}
+
+	virtual_dir = virtual_device_parent(NULL);
+	if (!virtual_dir) {
+		pr_warn("ovr_init - failed virtual_device_parent\n");
+		goto out_class;
+	}
+
+	retval = sysfs_create_file(virtual_dir, &ovr_relay_attrs[0]->attr);
+	if (retval) {
+		pr_warn("ovr_init - failed sysfs_create_file\n");
+		kobject_put(virtual_dir);
+		virtual_dir = NULL;
+		goto out_class;
 	}
 
 	retval = hid_register_driver(&ovr_driver);
@@ -1217,12 +1496,14 @@ static void __exit ovr_exit(void)
 
 	hid_unregister_driver(&ovr_driver);
 
+	kobject_put(virtual_dir);
+	virtual_dir = NULL;
+
 	class_destroy(ovr_class);
 }
 
 module_init(ovr_init);
 module_exit(ovr_exit);
 
-MODULE_AUTHOR("Lee Cooper");
-MODULE_DESCRIPTION("USB Oculus VR char device driver.");
+MODULE_DESCRIPTION("USB OVR device driver.");
 MODULE_LICENSE("GPL v2");

@@ -339,6 +339,12 @@ int amap_create(struct super_block *sb, u32 pack_ratio, u32 sect_per_au, u32 hid
 		return -ENOTSUPP;
 	}
 
+	if (fsi->num_sectors < AMAP_MIN_SUPPORT_SECTORS) {
+		sdfat_msg(sb, KERN_ERR, "smart allocation is only available "
+			"with sectors above %d", AMAP_MIN_SUPPORT_SECTORS);
+		return -ENOTSUPP;
+	}
+
 	/* AU size must be a multiple of clu_size */
 	if ((sect_per_au <= 0) || (sect_per_au & (fsi->sect_per_clus - 1))) {
 		sdfat_msg(sb, KERN_ERR,
@@ -416,17 +422,13 @@ int amap_create(struct super_block *sb, u32 pack_ratio, u32 sect_per_au, u32 hid
 
 	/* Allocate buckets indexed by # of free clusters */
 	amap->fclu_order = get_order(sizeof(FCLU_NODE_T) * amap->clusters_per_au);
-	if (amap->fclu_order > 0) {
-		// XXX: amap->clusters_per_au limitation is 512 (w/ 8 byte list_head)
-		sdfat_log_msg(sb, KERN_INFO, "multiple pages are required for AU nodes "
-				"(sect_per_clus:%d, sect_per_au:%d, "
-				"clus_per_au:%d, node_size:%lu, order:%d).",
-				fsi->sect_per_clus,
-				sect_per_au,
-				amap->clusters_per_au,
-				(unsigned long)sizeof(FCLU_NODE_T),
-				amap->fclu_order);
-	}
+
+	// XXX: amap->clusters_per_au limitation is 512 (w/ 8 byte list_head)
+	sdfat_log_msg(sb, KERN_INFO, "page orders for AU nodes : %d "
+			"(clus_per_au : %d, node_size : %lu)",
+			amap->fclu_order,
+			amap->clusters_per_au,
+			(unsigned long)sizeof(FCLU_NODE_T));
 
 	if (!amap->fclu_order)
 		amap->fclu_nodes = (FCLU_NODE_T*)get_zeroed_page(GFP_NOIO);
@@ -467,14 +469,13 @@ int amap_create(struct super_block *sb, u32 pack_ratio, u32 sect_per_au, u32 hid
 	*/
 	
 	/* Parse FAT table */
-	for (i_clu = 2; i_clu < fsi->num_clusters; i_clu++){
+	for (i_clu = CLUS_BASE; i_clu < fsi->num_clusters; i_clu++){
 		u32 clu_data;
 		AU_INFO_T *au;
 
 		if (fat_ent_get(sb, i_clu, &clu_data)) {
-			sdfat_msg(sb, KERN_ERR, "Failed to read fat entry(%u)\n"
-									,i_clu); 
-
+			sdfat_msg(sb, KERN_ERR,
+				"failed to read fat entry(%u)\n", i_clu);
 			goto free_and_eio;
 		}
 		
@@ -552,29 +553,33 @@ free_and_eio:
 
 
 /* Free AMAP related structure */
-int amap_destroy(struct super_block *sb)
+void amap_destroy(struct super_block *sb)
 {
 	AMAP_T *amap = SDFAT_SB(sb)->fsi.amap;
-	const int n_au_table = (amap->n_au + N_AU_PER_TABLE - 1) / N_AU_PER_TABLE;
+	int n_au_table;
+
+	if (!amap)
+		return;
+
 	DMSG("%s\n", __func__);
-	BUG_ON(!amap);
-	if (amap) {
-		if (amap->au_table) {
-			int i;
-			for (i = 0; i < n_au_table; i++)
-				free_page((unsigned long)amap->au_table[i]);
 
-			kfree(amap->au_table);
-		}
-		if (!amap->fclu_order)
-			free_page((unsigned long)amap->fclu_nodes);
-		else
-			vfree(amap->fclu_nodes);
-		kfree(amap);
-		SDFAT_SB(sb)->fsi.amap = NULL;
+	n_au_table = (amap->n_au + N_AU_PER_TABLE - 1) / N_AU_PER_TABLE;
+
+	if (amap->au_table) {
+		int i;
+		for (i = 0; i < n_au_table; i++)
+			free_page((unsigned long)amap->au_table[i]);
+
+		kfree(amap->au_table);
 	}
+	if (!amap->fclu_order)
+		free_page((unsigned long)amap->fclu_nodes);
+	else
+		vfree(amap->fclu_nodes);
+	kfree(amap);
+	SDFAT_SB(sb)->fsi.amap = NULL;
 
-	return 0;
+	return;
 }
 
 
@@ -942,7 +947,7 @@ static inline int amap_skip_cluster(struct super_block *sb, TARGET_AU_T *cur, in
 	clu = CLU_of_i_AU(amap, cur->au->idx, cur->idx);
 
 	while (num_to_skip > 0) {
-		if (clu >= 2) {
+		if (clu >= CLUS_BASE) {
 			/* Cf.
 			 * If AMAP's integrity is okay,
 			 * we don't need to check if (clu < fsi->num_clusters) 
@@ -953,7 +958,6 @@ static inline int amap_skip_cluster(struct super_block *sb, TARGET_AU_T *cur, in
 
 			if (IS_CLUS_FREE(read_clu))
 				num_to_skip--;
-
 		}
 
 		// Move clu->idx

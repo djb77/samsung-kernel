@@ -868,10 +868,14 @@ bool fimc_is_ois_check_fw_impl(struct fimc_is_core *core)
 	fimc_is_ois_read_userdata(core);
 
 	if (ois_minfo.header_ver[FW_CORE_VERSION] == 'A' ||
-		ois_minfo.header_ver[FW_CORE_VERSION] == 'C') {
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'C' ||
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'M' ||
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'O') {
 		ret = fimc_is_ois_open_fw(core, FIMC_OIS_FW_NAME_DOM, &buf);
 	} else if (ois_minfo.header_ver[FW_CORE_VERSION] == 'B' ||
-		ois_minfo.header_ver[FW_CORE_VERSION] == 'D') {
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'D' ||
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'N' ||
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'P') {
 		ret |= fimc_is_ois_open_fw(core, FIMC_OIS_FW_NAME_SEC, &buf);
 	}
 
@@ -921,6 +925,7 @@ void fimc_is_ois_check_extclk(struct fimc_is_core *core)
 	ret = fimc_is_ois_i2c_read_multi(core->client1, 0x03F0, cur_clk, 4);
 	if (ret) {
 		err("i2c read fail\n");
+		goto exit;
 	}
 
 	cur_clk_32 = (cur_clk[3] << 24)  | (cur_clk[2]  << 16) |
@@ -963,24 +968,29 @@ void fimc_is_ois_check_extclk(struct fimc_is_core *core)
 		ret = fimc_is_ois_i2c_write_multi(core->client1, 0x03F0, new_clk, 6);
 		if (ret) {
 			err("i2c write fail\n");
+			goto exit;
 		}
 
 		/* write PLLMULTIPLE */
 		ret = fimc_is_ois_i2c_write(core->client1, 0x03F4, pll_multi);
 		if (ret) {
 			err("i2c write fail\n");
+			goto exit;
 		}
 
 		/* write PLLDIVIDE */
 		ret = fimc_is_ois_i2c_write(core->client1, 0x03F5, pll_divide);
 		if (ret) {
 			err("i2c write fail\n");
+			goto exit;
 		}
 
 		/* FLASH TO OIS MODULE */
 		ret = fimc_is_ois_i2c_write(core->client1, 0x0003, 0x01);
 		if (ret) {
 			err("i2c write fail\n");
+			msleep(200);
+			goto exit;
 		}
 		msleep(200);
 
@@ -989,6 +999,8 @@ void fimc_is_ois_check_extclk(struct fimc_is_core *core)
 		ret |= fimc_is_ois_i2c_write(core->client1 ,0x000E, 0x06);
 		if (ret) {
 			err("i2c write fail\n");
+			msleep(50);
+			goto exit;
 		}
 		msleep(50);
 
@@ -1030,6 +1042,7 @@ void fimc_is_ois_fw_update_impl(struct fimc_is_core *core)
 	ret = fimc_is_ois_i2c_read_multi(core->client1, 0x00FC, ois_status, 4);
 	if (ret) {
 		err("i2c read fail\n");
+		goto p_err;
 	}
 
 	if (specific->use_ois_hsi2c) {
@@ -1059,10 +1072,14 @@ void fimc_is_ois_fw_update_impl(struct fimc_is_core *core)
 	}
 	
 	if (ois_minfo.header_ver[FW_CORE_VERSION] == 'A' ||
-		ois_minfo.header_ver[FW_CORE_VERSION] == 'C') {
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'C' ||
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'M' ||
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'O') {
 		ret = fimc_is_ois_open_fw(core, FIMC_OIS_FW_NAME_DOM, &buf);
 	} else if (ois_minfo.header_ver[FW_CORE_VERSION] == 'B' ||
-		ois_minfo.header_ver[FW_CORE_VERSION] == 'D') {
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'D' ||
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'N' ||
+		ois_minfo.header_ver[FW_CORE_VERSION] == 'P') {
 		ret |= fimc_is_ois_open_fw(core, FIMC_OIS_FW_NAME_SEC, &buf);
 	}
 

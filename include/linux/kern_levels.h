@@ -15,6 +15,21 @@
 
 #define KERN_DEFAULT	KERN_SOH "d"	/* the default kernel loglevel */
 
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+
+#define KERN_AUTO	KERN_SOH		/* auto-summary messages */
+#define KERN_AUTO1	"B"
+#define KERN_AUTO2	"C"
+#define KERN_AUTO3	"D"
+#define KERN_AUTO4	"E"
+#define KERN_AUTO5	"F"
+#define KERN_AUTO6	"G"
+#define KERN_AUTO7	"H"
+#define KERN_AUTO8	"I"
+#define KERN_AUTO9	"J"
+
+#endif
+
 /*
  * Annotation for a "continued" line of log printout (only done after a
  * line that had no enclosing \n). Only to be used by core/arch code

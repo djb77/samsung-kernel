@@ -6,10 +6,16 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  */
+
+  /* usb notify layer v2.0 */
+
 #ifndef __LINUX_USB_NOTIFY_SYSFS_H__
 #define __LINUX_USB_NOTIFY_SYSFS_H__
 
 #define MAX_DISABLE_STR_LEN 32
+#define MAX_HWPARAM_STR_LEN 1024
+#define MAX_HWPARAM_STRING 10
+
 
 struct usb_notify_dev {
 	const char *name;

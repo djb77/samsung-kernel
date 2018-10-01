@@ -2,20 +2,7 @@
  *
  *
  */
-//#include <linux/export.h>
-
-#include <asm/unaligned.h>
-#include <linux/device.h>
-#include <linux/slab.h>
-#include <linux/delay.h>
-#include <linux/err.h>
-#include <linux/gpio.h>
-#include <linux/kernel.h>
-
-//#include <linux/firmware.h>
 #include "cy8cmbr_swd.h"
-
-//#define dev_info dev_info
 
 /*****************************************************************************
  *
@@ -44,7 +31,7 @@ static struct swd_data *g_sd = NULL;
 #define swd_set_swdio_in(sd)	gpio_direction_input(sd->swdio_gpio)
 #define swd_set_swdio_hi(sd)	gpio_set_value(sd->swdio_gpio, 1)
 #define swd_set_swdio_lo(sd)	gpio_set_value(sd->swdio_gpio, 0)
-#define swd_get_swdio(sd)		gpio_get_value(sd->swdio_gpio)
+#define swd_get_swdio(sd)	gpio_get_value(sd->swdio_gpio)
 
 /*****************************************************************************
  * AN84858
@@ -59,30 +46,30 @@ static struct swd_data *g_sd = NULL;
 //#define HEX_FIRMWARE
 #define FORCE_PROTECT
 
-#define CY8C40xx_FAMILY						1
+#define CY8C40xx_FAMILY				1
 
 /******************************************************************************
-*   Timeout
-******************************************************************************/
-#define DEVICE_ACQUIRE_TIMEOUT_US	50000
-#define SROM_POLLING_TIMEOUT_MS		1000
+ *   Timeout
+ ******************************************************************************/
+#define DEVICE_ACQUIRE_TIMEOUT_US		50000
+#define SROM_POLLING_TIMEOUT_MS			1000
 
 /******************************************************************************
-*   Hex
-******************************************************************************/
+ *   Hex
+ ******************************************************************************/
 /* The below definitions are not dependent on hex file and are always
    constant */
 
-#if(CY8C40xx_FAMILY)
-#define BYTES_PER_FLASH_ROW             64
+#if (CY8C40xx_FAMILY)
+#define BYTES_PER_FLASH_ROW			64
 #else
-#define BYTES_PER_FLASH_ROW				128
+#define BYTES_PER_FLASH_ROW			128
 #endif
-#define SILICON_ID_BYTE_LENGTH          	4
-#define CHECKSUM_BYTE_LENGTH            	2
+#define SILICON_ID_BYTE_LENGTH			4
+#define CHECKSUM_BYTE_LENGTH			2
 #define MAXIMUM_ROW_PROTECTION_BYTE_LENGTH	32
 #ifndef HEX_FIRMWARE
-#define NUMBER_OF_FLASH_ROWS_HEX_FILE 		128
+#define NUMBER_OF_FLASH_ROWS_HEX_FILE		128
 #endif
 #ifdef HEX_FIRMWARE
 #include "HexImage.h"
@@ -92,8 +79,8 @@ static void HEX_ReadSiliconId(u32 * hexSiliconId)
 
 	for (i = 0; i < SILICON_ID_BYTE_LENGTH; i++) {
 		*hexSiliconId =
-		    *hexSiliconId | ((u32) (deviceSiliconId_HexFile[i]) <<
-				     (8 * i));
+			*hexSiliconId | ((u32) (deviceSiliconId_HexFile[i]) <<
+					(8 * i));
 	}
 }
 
@@ -112,7 +99,7 @@ static void HEX_ReadChipProtectionData(u8 * chipProtectionData)
 }
 
 static void HEX_ReadRowProtectionData(u8 rowProtectionByteSize,
-				      u8 * rowProtectionData)
+		u8 * rowProtectionData)
 {
 	u16 i;
 
@@ -129,15 +116,15 @@ static void HEX_ReadChecksumData(u16 * checksumData)
 		*checksumData |= (checksumData_HexFile[i] << (8 * i));
 	}
 }
-#endif				//HEX_FIRMWARE
+#endif //HEX_FIRMWARE
 static u16 GetFlashRowCount(void)
 {
 	return (NUMBER_OF_FLASH_ROWS_HEX_FILE);
 }
 
 /******************************************************************************
-*   Programming Steps
-******************************************************************************/
+ *   Programming Steps
+ ******************************************************************************/
 /* Return value definitions for high level Programming functions */
 #define FAILURE 0
 #define SUCCESS (!FAILURE)
@@ -149,22 +136,22 @@ static u16 GetFlashRowCount(void)
    failure status */
 
 /* This bit field is set if programmer fails to acquire the device in 1.5 ms */
-#define PORT_ACQUIRE_TIMEOUT_ERROR 	0x10
+#define PORT_ACQUIRE_TIMEOUT_ERROR	0x10
 
 /* This bit field is set if the SROM does not return the success status code
    within the SROM Polling timeout duration*/
-#define SROM_TIMEOUT_ERROR  		0x20
+#define SROM_TIMEOUT_ERROR		0x20
 
 /* This bit field is set in case of JTAG ID mismatch or Flash data verification
    mismatch or Checksum data mismatch */
-#define VERIFICATION_ERROR 			0x40
+#define VERIFICATION_ERROR			0x40
 
 /* This bit field is set if wrong transition of chip protection settings is
    detected */
 #define TRANSITION_ERROR			0x80
 
 /* Constants for Address Space of CPU */
-#if(CY8C40xx_FAMILY)
+#if (CY8C40xx_FAMILY)
 #define CPUSS_SYSREQ	            0x40100004
 #define CPUSS_SYSARG	            0x40100008
 #else
@@ -191,7 +178,7 @@ static u16 GetFlashRowCount(void)
 #define SROM_CMD_ERASE_ALL	        0x0A
 #define SROM_CMD_CHECKSUM	        0x0B
 #define SROM_CMD_WRITE_PROTECTION	0x0D
-#if(CY8C40xx_FAMILY)
+#if (CY8C40xx_FAMILY)
 #define SROM_CMD_SET_IMO_48MHZ		0x15
 #endif
 
@@ -211,38 +198,37 @@ static u16 GetFlashRowCount(void)
 #define CM0_DAP_ID					0x0BB11477
 
 /* Constant maximum number of rows in PSoC 4 */
-#define ROWS_PER_ARRAY 				256
+#define ROWS_PER_ARRAY				256
 
 static u32 checksum_Privileged = 0;
 static u32 statusCode = 0;
 
 static u8 result = 0;
-#if defined(HEX_FIRMWARE) || defined (FORCE_PROTECT)
+#if defined(HEX_FIRMWARE) || defined(FORCE_PROTECT)
 static u8 chipProtectionData_Chip = 0;
 #endif
 static u8 randompara = 0;
 
 static enum Transition_mode { OPEN_XXX, VIRGIN_OPEN, PROT_XXX,
-	    WRONG_TRANSITION } flow;
+	WRONG_TRANSITION } flow;
 
 #if defined(FORCE_PROTECT)
 static void HEX_ReadChipProtectionData(u8 * chipProtectionData)
 {
-    *chipProtectionData = CHIP_PROT_OPEN;
+	*chipProtectionData = CHIP_PROT_OPEN;
 }
 
 static void HEX_ReadRowProtectionData(u8 rowProtectionByteSize, u8 * rowProtectionData)
 {
-    u16 i;
+	u16 i;
 
-    for(i = 0; i < rowProtectionByteSize; i++)
-        rowProtectionData[i] = 0xFF;
+	for(i = 0; i < rowProtectionByteSize; i++)
+		rowProtectionData[i] = 0xFF;
 }
 #endif
 
 static u8 PollSromStatus(void)
 {
-	//u32 time_elapsed = 0;
 	unsigned long end_time;
 
 	end_time = jiffies + msecs_to_jiffies(SROM_POLLING_TIMEOUT_MS);
@@ -252,15 +238,11 @@ static u8 PollSromStatus(void)
 		Read_IO(CPUSS_SYSREQ, &statusCode);
 
 		statusCode &= (SROM_SYSREQ_BIT | SROM_PRIVILEGED_BIT);
-
-		//time_elapsed++;
-
-		//}while ((statusCode != 0) && (time_elapsed <= SROM_POLLING_TIMEOUT));
 	} while ((statusCode != 0) && time_before_eq(jiffies, end_time));
+
 	randompara = 10;
 	/* If time exceeds the timeout value, set the SROM_TIMEOUT_ERROR bit in
 	   swd_PacketAck */
-	//if (time_elapsed > SROM_POLLING_TIMEOUT )
 	if (!time_before_eq(jiffies, end_time)) {
 		swd_PacketAck = swd_PacketAck | SROM_TIMEOUT_ERROR;
 
@@ -277,33 +259,26 @@ static u8 PollSromStatus(void)
 		swd_PacketAck = swd_PacketAck | SROM_TIMEOUT_ERROR;
 		randompara = 14;
 		return (FAILURE);
-	} else
+	} else {
 		return (SUCCESS);
-
+	}
 }
 
-#if(CY8C40xx_FAMILY)
+#if (CY8C40xx_FAMILY)
 static void SetIMO48MHz(void)
 {
 	u32 parameter1 = 0;
 
 	/* Load the Parameter1 with the SROM command to read silicon ID */
 	parameter1 = (u32) (((u32) SROM_KEY1 << 0) +	//
-			    (((u32) SROM_KEY2 +
-			      (u32) SROM_CMD_SET_IMO_48MHZ) << 8));
+			(((u32) SROM_KEY2 +
+			  (u32) SROM_CMD_SET_IMO_48MHZ) << 8));
 
 	/* Write the command to CPUSS_SYSARG register */
 	Write_IO(CPUSS_SYSARG, parameter1);
 	Write_IO(CPUSS_SYSREQ, SROM_SYSREQ_BIT | SROM_CMD_SET_IMO_48MHZ);
 }
 
-#endif
-
-#if 0
-static u8 ReadSromStatus(void)
-{
-	return ((u8) statusCode);
-}
 #endif
 
 #ifdef HEX_FIRMWARE
@@ -314,8 +289,8 @@ static u8 GetChipProtectionVal(void)
 
 	/* Load the Parameter1 with the SROM command to read silicon ID */
 	parameter1 = (u32) (((u32) SROM_KEY1 << 0) +	//
-			    (((u32) SROM_KEY2 +
-			      (u32) SROM_CMD_GET_SILICON_ID) << 8));
+			(((u32) SROM_KEY2 +
+			  (u32) SROM_CMD_GET_SILICON_ID) << 8));
 
 	/* Write the command to CPUSS_SYSARG register */
 	Write_IO(CPUSS_SYSARG, parameter1);
@@ -347,8 +322,8 @@ static u8 GetChipProtectionVal(void)
 	}
 
 	chipProtectionData_Chip = (u8) (chipProtData >> 12);
-	dev_info(g_sd->dev, "%s: chipProtectionData_Chip=%d\n", __func__,
-		 chipProtectionData_Chip);
+	input_info(true, g_sd->dev, "%s: chipProtectionData_Chip=%d\n", __func__,
+			chipProtectionData_Chip);
 	return (SUCCESS);
 }
 
@@ -363,12 +338,12 @@ static u8 GetTransitionMode(void)
 	   setting in hex file) of the chip */
 	flow = WRONG_TRANSITION;
 
-	dev_info(g_sd->dev, "%s: chipProtectionData_Chip=%s\n", __func__,
-		 chipProtectionData_Chip ==
-		 CHIP_PROT_VIRGIN ? "CHIP_PROT_VIRGIN" : chipProtectionData_Chip
-		 ==
-		 CHIP_PROT_OPEN ? "CHIP_PROT_OPEN" : chipProtectionData_Chip ==
-		 CHIP_PROT_PROTECTED ? "CHIP_PROT_PROTECTED" : "ELSE");
+	input_info(true, g_sd->dev, "%s: chipProtectionData_Chip=%s\n", __func__,
+			chipProtectionData_Chip ==
+			CHIP_PROT_VIRGIN ? "CHIP_PROT_VIRGIN" : chipProtectionData_Chip
+			==
+			CHIP_PROT_OPEN ? "CHIP_PROT_OPEN" : chipProtectionData_Chip ==
+			CHIP_PROT_PROTECTED ? "CHIP_PROT_PROTECTED" : "ELSE");
 	switch (chipProtectionData_Chip) {
 		/* virgin to open protection setting is the only allowed transition */
 	case CHIP_PROT_VIRGIN:
@@ -391,7 +366,7 @@ static u8 GetTransitionMode(void)
 		   transitions */
 	case CHIP_PROT_PROTECTED:
 		if ((chipProtectionData_Hex == CHIP_PROT_OPEN)
-		    || (chipProtectionData_Hex == CHIP_PROT_PROTECTED))
+				|| (chipProtectionData_Hex == CHIP_PROT_PROTECTED))
 			flow = PROT_XXX;
 		else
 			flow = WRONG_TRANSITION;
@@ -408,14 +383,14 @@ static u8 GetTransitionMode(void)
 		swd_PacketAck = swd_PacketAck | TRANSITION_ERROR;
 		return (FAILURE);
 	}
-	dev_info(g_sd->dev, "%s: flow=%s\n", __func__,
-		 flow == OPEN_XXX ? "OPEN_XXX" :
-		 flow == VIRGIN_OPEN ? "VIRGIN_OPEN" :
-		 flow == PROT_XXX ? "PROT_XXX" :
-		 flow == WRONG_TRANSITION ? "WRONG_TRANSITION" : "");
+	input_info(true, g_sd->dev, "%s: flow=%s\n", __func__,
+			flow == OPEN_XXX ? "OPEN_XXX" :
+			flow == VIRGIN_OPEN ? "VIRGIN_OPEN" :
+			flow == PROT_XXX ? "PROT_XXX" :
+			flow == WRONG_TRANSITION ? "WRONG_TRANSITION" : "");
 	return (SUCCESS);
 }
-#endif				//HEX_FIRMWARE
+#endif //HEX_FIRMWARE
 
 static u8 LoadLatch(u8 arrayID, u8 * rowData)
 {
@@ -426,8 +401,8 @@ static u8 LoadLatch(u8 arrayID, u8 * rowData)
 	/* Load parameter1 with the SROM command to load the page latch buffer
 	   with programming data */
 	parameter1 = ((u32) SROM_KEY1 << 0) +	//
-	    (((u32) SROM_KEY2 + (u32) SROM_CMD_LOAD_LATCH) << 8) +	//
-	    (0x00 << 16) + ((u32) arrayID << 24);
+		(((u32) SROM_KEY2 + (u32) SROM_CMD_LOAD_LATCH) << 8) +	//
+		(0x00 << 16) + ((u32) arrayID << 24);
 
 	/* Number of Bytes to load minus 1 */
 	parameter2 = (BYTES_PER_FLASH_ROW - 1);
@@ -449,8 +424,8 @@ static u8 LoadLatch(u8 arrayID, u8 * rowData)
 	/* Put row data into SRAM buffer */
 	for (i = 0; i < BYTES_PER_FLASH_ROW; i += 4) {
 		parameter1 =
-		    (rowData[i] << 0) + (rowData[i + 1] << 8) +
-		    (rowData[i + 2] << 16) + (rowData[i + 3] << 24);
+			(rowData[i] << 0) + (rowData[i + 1] << 8) +
+			(rowData[i + 2] << 16) + (rowData[i + 3] << 24);
 
 		/* Write parameter1 in SRAM */
 		Write_IO(SRAM_PARAMS_BASE + 0x08 + i, parameter1);
@@ -486,7 +461,7 @@ static u8 LoadLatch(u8 arrayID, u8 * rowData)
 	return (SUCCESS);
 }
 
-#if defined(HEX_FIRMWARE) || defined (FORCE_PROTECT)
+#if defined(HEX_FIRMWARE) || defined(FORCE_PROTECT)
 static u8 LoadLatch_protect(u8 arrayID, u8 * rowData, u8 rowProtectionByteSize)
 {
 	u32 parameter1 = 0;
@@ -496,8 +471,8 @@ static u8 LoadLatch_protect(u8 arrayID, u8 * rowData, u8 rowProtectionByteSize)
 	/* Load parameter1 with the SROM command to load the page latch buffer
 	   with programming data */
 	parameter1 = ((u32) SROM_KEY1 << 0) +	//
-	    (((u32) SROM_KEY2 + (u32) SROM_CMD_LOAD_LATCH) << 8) +	//
-	    (0x00 << 16) + ((u32) arrayID << 24);
+		(((u32) SROM_KEY2 + (u32) SROM_CMD_LOAD_LATCH) << 8) +	//
+		(0x00 << 16) + ((u32) arrayID << 24);
 
 	/* Number of Bytes to load minus 1 */
 	parameter2 = (rowProtectionByteSize - 1);
@@ -519,8 +494,8 @@ static u8 LoadLatch_protect(u8 arrayID, u8 * rowData, u8 rowProtectionByteSize)
 	/* Put row data into SRAM buffer */
 	for (i = 0; i < rowProtectionByteSize; i += 4) {
 		parameter1 =
-		    (rowData[i] << 0) + (rowData[i + 1] << 8) +
-		    (rowData[i + 2] << 16) + (rowData[i + 3] << 24);
+			(rowData[i] << 0) + (rowData[i + 1] << 8) +
+			(rowData[i + 2] << 16) + (rowData[i + 3] << 24);
 
 		/* Write parameter1 in SRAM */
 		Write_IO(SRAM_PARAMS_BASE + 0x08 + i, parameter1);
@@ -555,7 +530,7 @@ static u8 LoadLatch_protect(u8 arrayID, u8 * rowData, u8 rowProtectionByteSize)
 	}
 	return (SUCCESS);
 }
-#endif				//HEX_FIRMWARE
+#endif //HEX_FIRMWARE
 
 static u8 ChecksumAPI(u16 checksumRow, u32 * checksum)
 {
@@ -564,8 +539,10 @@ static u8 ChecksumAPI(u16 checksumRow, u32 * checksum)
 
 	/* Load parameter1 with the SROM command to compute checksum of whole
 	   flash */
-	parameter1 = ((u32) SROM_KEY1 << 00) + (((u32) SROM_KEY2 + (u32) SROM_CMD_CHECKSUM) << 8) + (((u32) checksumRow & 0x000000FF) << 16) +	//
-	    (((u32) checksumRow & 0x0000FF00) << 16);
+	parameter1 = ((u32) SROM_KEY1 << 00) +
+			(((u32) SROM_KEY2 + (u32) SROM_CMD_CHECKSUM) << 8) +
+			(((u32) checksumRow & 0x000000FF) << 16) +
+			(((u32) checksumRow & 0x0000FF00) << 16);
 
 	/* Load CPUSS_SYSARG register with parameter1 command */
 	Write_IO(CPUSS_SYSARG, parameter1);
@@ -611,17 +588,10 @@ static u8 DeviceAcquire(void)
 	unsigned long end_time;
 	struct swd_data *sd = g_sd;
 
-	dev_info(g_sd->dev, "%s: \n", __func__);
+	input_dbg(true, g_sd->dev, "%s: \n", __func__);
 	/* Aquiring Sequence */
 
 	/* Set SWDIO and SWDCK initial pin directions and out values */
-	/*rc = gpio_direction_output(sd->swdck_gpio, 0);
-	   if (rc)
-	   dev_err(g_sd->dev, "%s: swdck out fail, rc=%d\n", __func__, rc);
-	   rc = gpio_direction_output(sd->swdio_gpio, 0);
-	   if (rc)
-	   dev_err(g_sd->dev, "%s: swdck out fail, rc=%d\n", __func__, rc); */
-
 	swd_set_swdio_out(sd);
 	swd_set_swdio_lo(sd);
 	swd_set_swdck_out(sd);
@@ -630,10 +600,9 @@ static u8 DeviceAcquire(void)
 	/* Set XRES of PSoC 4 low for 100us with SWDCK and SWDIO low (min delay
 	   required is 5us) */
 	SetXresLow();
-	msleep(100);		//DelayHundredUs();
+	msleep(100);	//DelayHundredUs();
 	SetXresHigh();
 
-/*	preempt_disable();*/
 	end_time = jiffies + usecs_to_jiffies(DEVICE_ACQUIRE_TIMEOUT_US);
 	do {
 		/* Call Swd_LineReset (Standard ARM command to reset DAP) and read
@@ -644,26 +613,25 @@ static u8 DeviceAcquire(void)
 
 		total_packet_count++;
 
-		//}while((swd_PacketAck != SWD_OK_ACK)&& (total_packet_count < DEVICE_ACQUIRE_TIMEOUT));
 	} while ((swd_PacketAck != SWD_OK_ACK)
-		 && time_before_eq(jiffies, end_time));
+			&& time_before_eq(jiffies, end_time));
 
 	/* Set PORT_ACQUIRE_TIMEOUT_ERROR bit in swd_PacketAck if time
 	   exceeds 1.5 ms */
-	//if (total_packet_count == DEVICE_ACQUIRE_TIMEOUT)
 	if (!time_before_eq(jiffies, end_time)) {
 		swd_PacketAck = swd_PacketAck | PORT_ACQUIRE_TIMEOUT_ERROR;
-		dev_err(g_sd->dev, "%s: fail, swd_PacketAck=0x%02x \n",
-			__func__, swd_PacketAck);
+		input_err(true, g_sd->dev, "%s: fail, swd_PacketAck=0x%02x \n",
+				__func__, swd_PacketAck);
 		goto testmode_fail;	//return(FAILURE);
 	}
-	dev_dbg(g_sd->dev, "%s: chip_DAP_Id=0x%08x \n", __func__, chip_DAP_Id);
+	input_info(true, g_sd->dev, "%s: chip_DAP_Id=0x%08x \n", __func__, chip_DAP_Id);
 
 	/* Set VERIFICATION_ERROR bit in swd_PacketAck if the DAP_ID read
 	   from chip does not match with the ARM CM0_DAP_ID (MACRO defined in
 	   ProgrammingSteps.h file - 0x0BB11477) */
 	if (chip_DAP_Id != CM0_DAP_ID) {
 		swd_PacketAck = swd_PacketAck | VERIFICATION_ERROR;
+		input_dbg(true, g_sd->dev, "%s:%d: chip_DAP_Id:%x\n", __func__, __LINE__, chip_DAP_Id);
 		goto testmode_fail;	//return(FAILURE);
 	}
 
@@ -671,18 +639,21 @@ static u8 DeviceAcquire(void)
 	Write_DAP(DPACC_DP_CTRLSTAT_WRITE, 0x54000000);
 
 	if (swd_PacketAck != SWD_OK_ACK) {
+		input_dbg(true, g_sd->dev, "%s:%d: swd_PacketAck:%x\n", __func__, __LINE__, swd_PacketAck);
 		goto testmode_fail;	//return(FAILURE);
 	}
 
 	Write_DAP(DPACC_DP_SELECT_WRITE, 0x00000000);
 
 	if (swd_PacketAck != SWD_OK_ACK) {
+		input_dbg(true, g_sd->dev, "%s:%d: swd_PacketAck:%x\n", __func__, __LINE__, swd_PacketAck);
 		goto testmode_fail;	//return(FAILURE);
 	}
 
 	Write_DAP(DPACC_AP_CSW_WRITE, 0x00000002);
 
 	if (swd_PacketAck != SWD_OK_ACK) {
+		input_dbg(true, g_sd->dev, "%s:%d: swd_PacketAck:%x\n", __func__, __LINE__, swd_PacketAck);
 		goto testmode_fail;	//return(FAILURE);
 	}
 
@@ -690,16 +661,19 @@ static u8 DeviceAcquire(void)
 	Write_IO(TEST_MODE, 0x80000000);
 
 	if (swd_PacketAck != SWD_OK_ACK) {
+		input_dbg(true, g_sd->dev, "%s:%d: swd_PacketAck:%x\n", __func__, __LINE__, swd_PacketAck);
 		goto testmode_fail;	//return(FAILURE);
 	}
 
 	Read_IO(TEST_MODE, &status);
 
 	if (swd_PacketAck != SWD_OK_ACK) {
+		input_dbg(true, g_sd->dev, "%s:%d: swd_PacketAck:%x\n", __func__, __LINE__, swd_PacketAck);
 		goto testmode_fail;	//return(FAILURE);
 	}
 
 	if ((status & 0x80000000) != 0x80000000) {
+		input_dbg(true, g_sd->dev, "%s:%d: status:%x\n", __func__, __LINE__, status);
 		goto testmode_fail;	//return (FAILURE);
 	}
 
@@ -707,12 +681,11 @@ static u8 DeviceAcquire(void)
 	result = PollSromStatus();
 
 	if (result != SROM_SUCCESS) {
+		input_dbg(true, g_sd->dev, "%s:%d: result:%x\n", __func__, __LINE__, result);
 		goto testmode_fail;	//return(FAILURE);
 	}
 
-/*	preempt_enable();*/
-
-#if(CY8C40xx_FAMILY)
+#if (CY8C40xx_FAMILY)
 	/* Set IMO to 48 MHz */
 	SetIMO48MHz();
 
@@ -720,21 +693,20 @@ static u8 DeviceAcquire(void)
 	result = PollSromStatus();
 
 	if (result != SROM_SUCCESS) {
-		dev_err(g_sd->dev, "%s: fail\n", __func__);
+		input_err(true, g_sd->dev, "%s:%d: fail result:%x\n", __func__, __LINE__, result);
 		return (FAILURE);
 	}
 #endif
-	dev_info(g_sd->dev, "%s: success\n", __func__);
+	input_info(true, g_sd->dev, "%s: success\n", __func__);
 	return (SUCCESS);
- testmode_fail:
-/*	preempt_enable();*/
+
+testmode_fail:
 	return (FAILURE);
 }
 
 #ifdef HEX_FIRMWARE
 static u8 VerifySiliconId(void)
 {
-	//u8 i;
 	u32 deviceSiliconID;
 	u32 hexSiliconId = 0;
 
@@ -742,7 +714,7 @@ static u8 VerifySiliconId(void)
 	u32 siliconIdData1 = 0;
 	u32 siliconIdData2 = 0;
 
-	dev_info(g_sd->dev, "%s: \n", __func__);
+	input_info(true, g_sd->dev, "%s: \n", __func__);
 
 	/* Read and store Silicon ID from HEX file to hexSiliconId array */
 	HEX_ReadSiliconId(&hexSiliconId);
@@ -750,8 +722,8 @@ static u8 VerifySiliconId(void)
 	/* Load Parameter1 with the SROM command to read silicon ID from PSoC 4
 	   chip */
 	parameter1 = (u32) (((u32) SROM_KEY1 << 0) +	//
-			    (((u32) SROM_KEY2 +
-			      (u32) SROM_CMD_GET_SILICON_ID) << 8));
+			(((u32) SROM_KEY2 +
+			  (u32) SROM_CMD_GET_SILICON_ID) << 8));
 
 	/* Load CPUSS_SYSARG register with parameter1 */
 	Write_IO(CPUSS_SYSARG, parameter1);
@@ -789,34 +761,22 @@ static u8 VerifySiliconId(void)
 	   SiliconIdData1 (2nd byte) = 1st byte of Device Silicon ID (LSB)
 	 */
 	deviceSiliconID = (((siliconIdData2 << 24) & 0xFF000000) + (siliconIdData1 & 0x00FF0000) +	//
-			   ((siliconIdData1 << 8) & 0x0000FF00) +
-			   ((siliconIdData1 >> 8) & 0x000000FF));
-	dev_dbg(g_sd->dev, "%s: deviceSiliconID=0x%08x\n", __func__,
-		 deviceSiliconID);
-	dev_dbg(g_sd->dev, "%s: hexSiliconId=0x%08x\n", __func__,
-		 hexSiliconId);
-
-	/* Match the Silicon ID read from HEX file and PSoC 4 chip */
-	//for (i=0; i<SILICON_ID_BYTE_LENGTH; i++)
-	{
-#if 0
-		if (deviceSiliconID != hexSiliconId) {
-			/* Set the VERIFICATION_ERROR bit in swd_PacketAck */
-			swd_PacketAck = swd_PacketAck | VERIFICATION_ERROR;
-			return (FAILURE);
-		}
-#endif
-	}
-	dev_info(g_sd->dev, "%s: success\n", __func__);
+			((siliconIdData1 << 8) & 0x0000FF00) +
+			((siliconIdData1 >> 8) & 0x000000FF));
+	input_dbg(true, g_sd->dev, "%s: deviceSiliconID=0x%08x\n", __func__,
+			deviceSiliconID);
+	input_dbg(true, g_sd->dev, "%s: hexSiliconId=0x%08x\n", __func__,
+			hexSiliconId);
+	input_info(true, g_sd->dev, "%s: success\n", __func__);
 	return (SUCCESS);
 }
-#endif				//HEX_FIRMWARE
+#endif //HEX_FIRMWARE
 
 static u8 EraseAllFlash(void)
 {
 	u32 parameter1 = 0;
 
-	dev_info(g_sd->dev, "%s: \n", __func__);
+	input_dbg(true, g_sd->dev, "%s: \n", __func__);
 
 #ifdef HEX_FIRMWARE
 	/* Get current chip protection setting */
@@ -834,8 +794,8 @@ static u8 EraseAllFlash(void)
 	   open, call ERASE_ALL SROM command */
 	if ((flow == OPEN_XXX) || (flow == VIRGIN_OPEN)) {
 		parameter1 = (u32) (((u32) SROM_KEY1 << 0) +	//
-				    (((u32) SROM_KEY2 +
-				      (u32) SROM_CMD_ERASE_ALL) << 8));
+				(((u32) SROM_KEY2 +
+				  (u32) SROM_CMD_ERASE_ALL) << 8));
 
 		/* Load ERASE_ALL SROM command in parameter1 to SRAM */
 		Write_IO(SRAM_PARAMS_BASE + 0x00, parameter1);
@@ -860,7 +820,7 @@ static u8 EraseAllFlash(void)
 		if (result != SUCCESS) {
 			return (FAILURE);
 		}
-		dev_info(g_sd->dev, "%s: erase all succeeded\n", __func__);
+		input_info(true, g_sd->dev, "%s: erase all succeeded\n", __func__);
 	}
 
 	/* If the transition is from protected mode to open mode or protected mode to
@@ -869,8 +829,8 @@ static u8 EraseAllFlash(void)
 		/* Move chip to open state: 0x01 corresponds to open state, 0x00 to
 		   macro 1 */
 		parameter1 = ((u32) SROM_KEY1 << 0) +	//
-		    (((u32) SROM_KEY2 + (u32) SROM_CMD_WRITE_PROTECTION) << 8) +	//
-		    (0x01 << 16) + (0x00 << 24);
+			(((u32) SROM_KEY2 + (u32) SROM_CMD_WRITE_PROTECTION) << 8) +	//
+			(0x01 << 16) + (0x00 << 24);
 
 		/* Load the write protection command to SRAM */
 		Write_IO(CPUSS_SYSARG, parameter1);
@@ -880,7 +840,7 @@ static u8 EraseAllFlash(void)
 
 		/* Request SROM call */
 		Write_IO(CPUSS_SYSREQ,
-			 SROM_SYSREQ_BIT | SROM_CMD_WRITE_PROTECTION);
+				SROM_SYSREQ_BIT | SROM_CMD_WRITE_PROTECTION);
 		if (swd_PacketAck != SWD_OK_ACK) {
 			return (FAILURE);
 		}
@@ -896,24 +856,24 @@ static u8 EraseAllFlash(void)
 		if (result != SUCCESS) {
 			return (FAILURE);
 		}
-		dev_info(g_sd->dev, "%s: move to open state succeeded\n",
-			 __func__);
+		input_info(true, g_sd->dev, "%s: move to open state succeeded\n",
+				__func__);
 	}
 
-	dev_info(g_sd->dev, "%s: success\n", __func__);
+	input_dbg(true, g_sd->dev, "%s: success\n", __func__);
 	return (SUCCESS);
 }
 
 static u8 ChecksumPrivileged(void)
 {
-	dev_info(g_sd->dev, "%s: \n", __func__);
+	input_dbg(true, g_sd->dev, "%s: \n", __func__);
 	result = ChecksumAPI(CHECKSUM_ENTIRE_FLASH, &checksum_Privileged);
 	if (result != SUCCESS) {
 		return (FAILURE);
 	}
-	dev_dbg(g_sd->dev, "%s: checksum_Privileged=0x%08x\n", __func__,
-		 checksum_Privileged);
-	dev_info(g_sd->dev, "%s: success\n", __func__);
+	input_info(true, g_sd->dev, "%s: checksum_Privileged=0x%08x\n", __func__,
+			checksum_Privileged);
+	input_dbg(true, g_sd->dev, "%s: success\n", __func__);
 	return (SUCCESS);
 }
 
@@ -927,12 +887,12 @@ static u8 ProgramFlash(void)
 
 	u32 parameter1 = 0;
 
-	dev_info(g_sd->dev, "%s: \n", __func__);
+	input_info(true, g_sd->dev, "%s: \n", __func__);
 
 	/* Get the total number of flash rows in the Target PSoC 4 device */
 	numOfFlashRows = GetFlashRowCount();
-	dev_dbg(g_sd->dev, "%s: numOfFlashRows=%d\n", __func__,
-		 numOfFlashRows);
+	input_dbg(true, g_sd->dev, "%s: numOfFlashRows=%d\n", __func__,
+			numOfFlashRows);
 
 	/* Program all flash rows */
 	for (rowCount = 0; rowCount < numOfFlashRows; rowCount++) {
@@ -940,41 +900,41 @@ static u8 ProgramFlash(void)
 		HEX_ReadRowData(rowCount, &rowData[0]);
 #else
 		memcpy(&rowData[0],
-	       g_sd->fw_img + (rowCount * BYTES_PER_FLASH_ROW),
-	       BYTES_PER_FLASH_ROW);
+				g_sd->fw_img + (rowCount * BYTES_PER_FLASH_ROW),
+				BYTES_PER_FLASH_ROW);
 #endif
 		if (rowCount == 0)
-			dev_dbg(g_sd->dev,
-				 "%s: row%d file=0x%02x 0x%02x 0x%02x 0x%02x\n",
-				 __func__, rowCount, rowData[0], rowData[1],
-				 rowData[2], rowData[3]);
+			input_dbg(true, g_sd->dev,
+					"%s: row%d file=0x%02x 0x%02x 0x%02x 0x%02x\n",
+					__func__, rowCount, rowData[0], rowData[1],
+					rowData[2], rowData[3]);
 		else if (rowCount == (numOfFlashRows - 1))
-			dev_dbg(g_sd->dev,
-				 "%s: row%d file=0x%02x 0x%02x 0x%02x 0x%02x\n",
-				 __func__, rowCount, rowData[0], rowData[1],
-				 rowData[2], rowData[3]);
+			input_dbg(true, g_sd->dev,
+					"%s: row%d file=0x%02x 0x%02x 0x%02x 0x%02x\n",
+					__func__, rowCount, rowData[0], rowData[1],
+					rowData[2], rowData[3]);
 
 		arrayID = rowCount / ROWS_PER_ARRAY;
 
 		result = LoadLatch(arrayID, &rowData[0]);
 
 		if (result != SUCCESS) {
-			dev_err(g_sd->dev, "%s: fail load latch\n", __func__);
+			input_err(true, g_sd->dev, "%s: fail load latch\n", __func__);
 			return (FAILURE);
 		}
 
 		/* Load parameter1 with Program Row - SROM command */
 		parameter1 = (u32) (((u32) SROM_KEY1 << 0) +
-				    (((u32) SROM_KEY2 +
-				      (u32) SROM_CMD_PROGRAM_ROW) << 8) +
-				    (((u32) rowCount & 0x000000FF) << 16) +
-				    (((u32) rowCount & 0x0000FF00) << 16));
+				(((u32) SROM_KEY2 +
+				  (u32) SROM_CMD_PROGRAM_ROW) << 8) +
+				(((u32) rowCount & 0x000000FF) << 16) +
+				(((u32) rowCount & 0x0000FF00) << 16));
 
 		/* Write parameters in SRAM */
 		Write_IO(SRAM_PARAMS_BASE + 0x00, parameter1);
 
 		if (swd_PacketAck != SWD_OK_ACK) {
-			dev_err(g_sd->dev, "%s: fail prog row\n", __func__);
+			input_err(true, g_sd->dev, "%s: fail prog row\n", __func__);
 			return (FAILURE);
 		}
 
@@ -982,7 +942,7 @@ static u8 ProgramFlash(void)
 		Write_IO(CPUSS_SYSARG, SRAM_PARAMS_BASE);
 
 		if (swd_PacketAck != SWD_OK_ACK) {
-			dev_err(g_sd->dev, "%s: fail set location\n", __func__);
+			input_err(true, g_sd->dev, "%s: fail set location\n", __func__);
 			return (FAILURE);
 		}
 
@@ -990,8 +950,8 @@ static u8 ProgramFlash(void)
 		Write_IO(CPUSS_SYSREQ, SROM_SYSREQ_BIT | SROM_CMD_PROGRAM_ROW);
 
 		if (swd_PacketAck != SWD_OK_ACK) {
-			dev_err(g_sd->dev, "%s: fail request SROM operation\n",
-				__func__);
+			input_err(true, g_sd->dev, "%s: fail request SROM operation\n",
+					__func__);
 			return (FAILURE);
 		}
 
@@ -999,13 +959,13 @@ static u8 ProgramFlash(void)
 		result = PollSromStatus();
 
 		if (result != SROM_SUCCESS) {
-			dev_err(g_sd->dev, "%s: fail read status\n", __func__);
+			input_err(true, g_sd->dev, "%s: fail read status\n", __func__);
 			return (FAILURE);
 		}
 
 	}
 
-	dev_info(g_sd->dev, "%s: success\n", __func__);
+	input_info(true, g_sd->dev, "%s: success\n", __func__);
 	return (SUCCESS);
 }
 
@@ -1017,14 +977,14 @@ static u8 VerifyFlash(void)
 	u16 rowCount;
 	u8 i;
 	u8 rowData[BYTES_PER_FLASH_ROW];
-	u8 chipData[BYTES_PER_FLASH_ROW];
+	u8 chipdata[BYTES_PER_FLASH_ROW];
 
-	dev_info(g_sd->dev, "%s: \n", __func__);
+	input_dbg(true, g_sd->dev, "%s: \n", __func__);
 
 	/* Get the total number of flash rows in the Target PSoC 4 device */
 	numOfFlashRows = GetFlashRowCount();
-	dev_dbg(g_sd->dev, "%s: numOfFlashRows=%d\n", __func__,
-		 numOfFlashRows);
+	input_info(true, g_sd->dev, "%s: numOfFlashRows=%d\n", __func__,
+			numOfFlashRows);
 
 	/* Read and Verify Flash rows */
 	for (rowCount = 0; rowCount < numOfFlashRows; rowCount++) {
@@ -1033,26 +993,26 @@ static u8 VerifyFlash(void)
 		/* linear address of row in flash */
 		rowAddress = BYTES_PER_FLASH_ROW * rowCount;
 
-		/* Extract 128-byte row from the hex-file from address: ?œrowCount??into
-		   buffer - ?œrowData?? */
+		/* Extract 128-byte row from the hex-file from address: ?ï¿½rowCount??into
+		   buffer - ?ï¿½rowData?? */
 #ifdef HEX_FIRMWARE
 		HEX_ReadRowData(rowCount, &rowData[0]);
 #else
 		memcpy(&rowData[0],
-		       g_sd->fw_img + (rowCount * BYTES_PER_FLASH_ROW),
-		       BYTES_PER_FLASH_ROW);
+				g_sd->fw_img + (rowCount * BYTES_PER_FLASH_ROW),
+				BYTES_PER_FLASH_ROW);
 #endif
 
 		if (rowCount == 0)
-			dev_dbg(g_sd->dev,
-				 "%s: row%d file=0x%02x 0x%02x 0x%02x 0x%02x\n",
-				 __func__, rowCount, rowData[0], rowData[1],
-				 rowData[2], rowData[3]);
+			input_dbg(true, g_sd->dev,
+					"%s: row%d file=0x%02x 0x%02x 0x%02x 0x%02x\n",
+					__func__, rowCount, rowData[0], rowData[1],
+					rowData[2], rowData[3]);
 		else if (rowCount == (numOfFlashRows - 1))
-			dev_dbg(g_sd->dev,
-				 "%s: row%d file=0x%02x 0x%02x 0x%02x 0x%02x\n",
-				 __func__, rowCount, rowData[0], rowData[1],
-				 rowData[2], rowData[3]);
+			input_dbg(true, g_sd->dev,
+					"%s: row%d file=0x%02x 0x%02x 0x%02x 0x%02x\n",
+					__func__, rowCount, rowData[0], rowData[1],
+					rowData[2], rowData[3]);
 
 		/* Read row from chip */
 		for (i = 0; i < BYTES_PER_FLASH_ROW; i += 4) {
@@ -1062,33 +1022,33 @@ static u8 VerifyFlash(void)
 				return (FAILURE);
 			}
 
-			chipData[i + 0] = (flashData >> 0) & 0xFF;
-			chipData[i + 1] = (flashData >> 8) & 0xFF;
-			chipData[i + 2] = (flashData >> 16) & 0xFF;
-			chipData[i + 3] = (flashData >> 24) & 0xFF;
+			chipdata[i + 0] = (flashData >> 0) & 0xFF;
+			chipdata[i + 1] = (flashData >> 8) & 0xFF;
+			chipdata[i + 2] = (flashData >> 16) & 0xFF;
+			chipdata[i + 3] = (flashData >> 24) & 0xFF;
 		}
 		if (rowCount == 0)
-			dev_dbg(g_sd->dev,
-				 "%s: row%d chip=0x%02x 0x%02x 0x%02x 0x%02x\n",
-				 __func__, rowCount, chipData[0], chipData[1],
-				 chipData[2], chipData[3]);
+			input_dbg(true, g_sd->dev,
+					"%s: row%d chip=0x%02x 0x%02x 0x%02x 0x%02x\n",
+					__func__, rowCount, chipdata[0], chipdata[1],
+					chipdata[2], chipdata[3]);
 
 		else if (rowCount == (numOfFlashRows - 1))
-			dev_dbg(g_sd->dev,
-				 "%s: row%d chip=0x%02x 0x%02x 0x%02x 0x%02x\n",
-				 __func__, rowCount, chipData[0], chipData[1],
-				 chipData[2], chipData[3]);
+			input_dbg(true, g_sd->dev,
+					"%s: row%d chip=0x%02x 0x%02x 0x%02x 0x%02x\n",
+					__func__, rowCount, chipdata[0], chipdata[1],
+					chipdata[2], chipdata[3]);
 
 		/* Compare the row data of HEX file with chip data */
 		for (i = 0; i < BYTES_PER_FLASH_ROW; i++) {
-			if (chipData[i] != rowData[i]) {
+			if (chipdata[i] != rowData[i]) {
 				swd_PacketAck =
-				    swd_PacketAck | VERIFICATION_ERROR;
+					swd_PacketAck | VERIFICATION_ERROR;
 				return (FAILURE);
 			}
 		}
 	}
-	dev_info(g_sd->dev, "%s: success\n", __func__);
+	input_info(true, g_sd->dev, "%s: success\n", __func__);
 	return (SUCCESS);
 }
 
@@ -1104,35 +1064,35 @@ static u8 ProgramProtectionSettings(void)
 
 	u32 parameter1 = 0;
 
-	dev_info(g_sd->dev, "%s: \n", __func__);
+	input_info(true, g_sd->dev, "%s: \n", __func__);
 
 	/* Get total number of flash rows to determine the size of row protection data
 	   and arrayID */
 	numOfFlashRows = GetFlashRowCount();
-	dev_dbg(g_sd->dev, "%s: numOfFlashRows=%d\n", __func__,
-		 numOfFlashRows);
+	input_dbg(true, g_sd->dev, "%s: numOfFlashRows=%d\n", __func__,
+			numOfFlashRows);
 
 	rowProtectionByteSize = numOfFlashRows / 8;
-	dev_dbg(g_sd->dev, "%s: rowProtectionByteSize=%d\n", __func__,
-		 rowProtectionByteSize);
+	input_dbg(true, g_sd->dev, "%s: rowProtectionByteSize=%d\n", __func__,
+			rowProtectionByteSize);
 
 	arrayID = numOfFlashRows / ROWS_PER_ARRAY;
-	dev_dbg(g_sd->dev, "%s: arrayID=%d\n", __func__, arrayID);
+	input_dbg(true, g_sd->dev, "%s: arrayID=%d\n", __func__, arrayID);
 
 	HEX_ReadChipProtectionData(&chipProtectionData_Hex);
-	dev_dbg(g_sd->dev, "%s: chipProtectionData=%d\n", __func__,
-		 chipProtectionData_Hex);
+	input_dbg(true, g_sd->dev, "%s: chipProtectionData=%d\n", __func__,
+			chipProtectionData_Hex);
 
 	HEX_ReadRowProtectionData(rowProtectionByteSize, &rowProtectionData[0]);
-	dev_dbg(g_sd->dev, "%s: rowProtectionData0~2:0x%02x 0x%02x 0x%02x \n",
-		 __func__, rowProtectionData[0], rowProtectionData[1],
-		 rowProtectionData[2]);
+	input_dbg(true, g_sd->dev, "%s: rowProtectionData0~2:0x%02x 0x%02x 0x%02x \n",
+			__func__, rowProtectionData[0], rowProtectionData[1],
+			rowProtectionData[2]);
 
 	/* Load protection setting of current macro into volatile latch using
 	   LoadLatch API */
 	result =
-	    LoadLatch_protect(arrayID, &rowProtectionData[0],
-			      rowProtectionByteSize);
+		LoadLatch_protect(arrayID, &rowProtectionData[0],
+				rowProtectionByteSize);
 
 	if (result != SUCCESS) {
 		return (FAILURE);
@@ -1140,8 +1100,8 @@ static u8 ProgramProtectionSettings(void)
 
 	/* Program protection setting into supervisory row */
 	parameter1 = (u32) (((u32) SROM_KEY1 << 0) +	//
-			    (((u32) SROM_KEY2 + (u32) SROM_CMD_WRITE_PROTECTION) << 8) +	//
-			    ((u32) chipProtectionData_Hex << 16));
+			(((u32) SROM_KEY2 + (u32) SROM_CMD_WRITE_PROTECTION) << 8) +	//
+			((u32) chipProtectionData_Hex << 16));
 
 	/* Load parameter1 in CPUSS_SYSARG register */
 	Write_IO(CPUSS_SYSARG, parameter1);
@@ -1164,7 +1124,7 @@ static u8 ProgramProtectionSettings(void)
 		return (FAILURE);
 	}
 
-	dev_info(g_sd->dev, "%s: success\n", __func__);
+	input_info(true, g_sd->dev, "%s: success\n", __func__);
 	return (SUCCESS);
 }
 
@@ -1179,13 +1139,13 @@ static u8 VerifyProtectionSettings(void)
 	u8 rowProtectionData[MAXIMUM_ROW_PROTECTION_BYTE_LENGTH];
 	u8 rowProtectionFlashData[MAXIMUM_ROW_PROTECTION_BYTE_LENGTH];
 
-	dev_info(g_sd->dev, "%s: \n", __func__);
+	input_info(true, g_sd->dev, "%s: \n", __func__);
 
 	numOfFlashRows = GetFlashRowCount();
 
 	rowProtectionByteSize = numOfFlashRows / 8;
-	dev_dbg(g_sd->dev, "%s: rowProtectionByteSize=%d\n", __func__,
-		 rowProtectionByteSize);
+	input_dbg(true, g_sd->dev, "%s: rowProtectionByteSize=%d\n", __func__,
+			rowProtectionByteSize);
 
 	flashProtectionAddress = SFLASH_MACRO;
 
@@ -1206,13 +1166,13 @@ static u8 VerifyProtectionSettings(void)
 		rowProtectionFlashData[i + 3] = (protectionData >> 24) & 0xFF;
 
 		if (i == 0)
-			dev_dbg(g_sd->dev,
-				 "%s: rowProtectionFlashData0~2:0x%02x 0x%02x 0x%02x \n",
-				 __func__, rowProtectionData[0],
-				 rowProtectionData[1], rowProtectionData[2]);
+			input_dbg(true, g_sd->dev,
+					"%s: rowProtectionFlashData0~2:0x%02x 0x%02x 0x%02x \n",
+					__func__, rowProtectionData[0],
+					rowProtectionData[1], rowProtectionData[2]);
 	}
 
-	/* Compare hex and silicon?™s data */
+	/* Compare hex and silicon?ï¿½s data */
 	for (i = 0; i < rowProtectionByteSize; i++) {
 		if (rowProtectionData[i] != rowProtectionFlashData[i]) {
 			/* Set the verification error bit for Flash protection data
@@ -1224,8 +1184,8 @@ static u8 VerifyProtectionSettings(void)
 
 	/* Read Chip Level Protection from hex-file */
 	HEX_ReadChipProtectionData(&chipProtectionData_Hex);
-	dev_dbg(g_sd->dev, "%s: chipProtectionData=%d\n", __func__,
-		 chipProtectionData_Hex);
+	input_dbg(true, g_sd->dev, "%s: chipProtectionData=%d\n", __func__,
+			chipProtectionData_Hex);
 
 	/* Read Chip Level Protection from the silicon */
 	Read_IO(SFLASH_CPUSS_PROTECTION, &protectionData);
@@ -1234,18 +1194,18 @@ static u8 VerifyProtectionSettings(void)
 	}
 
 	chipProtectionData_Chip = (protectionData >> 24) & 0x0F;
-	dev_dbg(g_sd->dev, "%s: chipProtectionData_Chip=0x%02x\n", __func__,
-		 chipProtectionData_Chip);
+	input_dbg(true, g_sd->dev, "%s: chipProtectionData_Chip=0x%02x\n", __func__,
+			chipProtectionData_Chip);
 
 	if (chipProtectionData_Chip == CHIP_PROT_VIRGIN) {
 		chipProtectionData_Chip = CHIP_PROT_OPEN;
-		//dev_dbg(g_sd->dev, "%s: chip protection open\n", __func__);
+		//input_dbg(true, g_sd->dev, "%s: chip protection open\n", __func__);
 	} else if (chipProtectionData_Chip == CHIP_PROT_OPEN) {
 		chipProtectionData_Chip = CHIP_PROT_VIRGIN;
-		//dev_dbg(g_sd->dev, "%s: chip protection virgin\n", __func__);
+		//input_dbg(true, g_sd->dev, "%s: chip protection virgin\n", __func__);
 	}
 
-	/* Compare hex?™s and silicon?™s chip protection data */
+	/* Compare hex?ï¿½s and silicon?ï¿½s chip protection data */
 	if (chipProtectionData_Chip != chipProtectionData_Hex) {
 		/* Set the verification error bit for Flash protection data
 		   mismatch and return failure */
@@ -1253,7 +1213,7 @@ static u8 VerifyProtectionSettings(void)
 		return (FAILURE);
 	}
 
-	dev_info(g_sd->dev, "%s: success\n", __func__);
+	input_info(true, g_sd->dev, "%s: success\n", __func__);
 	return (SUCCESS);
 }
 #endif
@@ -1263,67 +1223,44 @@ static u8 VerifyChecksum(void)
 	u32 checksum_All = 0;
 	u16 chip_Checksum = 0;
 
-/*	u16 checksumData  = 0; */
-
-	dev_info(g_sd->dev, "%s: \n", __func__);
+	input_info(true, g_sd->dev, "%s: \n", __func__);
 
 	/* Read the checksum of entire flash */
 	result = ChecksumAPI(CHECKSUM_ENTIRE_FLASH, &checksum_All);
 
 	if (result != SUCCESS) {
-		dev_err(g_sd->dev, "%s: fail ChecksumAPI\n", __func__);
+		input_err(true, g_sd->dev, "%s: fail ChecksumAPI\n", __func__);
 		return (FAILURE);
 	}
-	dev_dbg(g_sd->dev, "%s: checksum of entire flash=0x%08x\n", __func__,
-		 checksum_All);
+	input_dbg(true, g_sd->dev, "%s: checksum of entire flash=0x%08x\n", __func__,
+			checksum_All);
 
 	/* Calculate checksum of user flash */
 	chip_Checksum = (u16) checksum_All - (u16) checksum_Privileged;
-	dev_info(g_sd->dev, "%s: chip_Checksum=0x%08x\n", __func__,
-		 chip_Checksum);
-	dev_info(g_sd->dev, "%s: checksum from fw file=0x%08x\n", __func__,
-		 g_sd->swd_tkey_i2c->fw_img->checksum);
-	/* Read checksum from hex file */
-/*	HEX_ReadChecksumData(&checksumData);
-	dev_info(g_sd->dev, "%s: checksum from hex file=0x%08x\n", __func__, checksumData);*/
+	input_info(true, g_sd->dev, "%s: chip_Checksum=0x%08x\n", __func__,
+			chip_Checksum);
+	input_info(true, g_sd->dev, "%s: checksum from fw file=0x%08x\n", __func__,
+			g_sd->swd_tkey_i2c->fw_img->checksum);
 
 	/* Compare the checksum data of silicon and hex file */
 	if (chip_Checksum != g_sd->swd_tkey_i2c->fw_img->checksum) {
 		swd_PacketAck = swd_PacketAck | VERIFICATION_ERROR;
-		dev_err(g_sd->dev, "%s: fail compare checksum\n", __func__);
+		input_err(true, g_sd->dev, "%s: fail compare checksum\n", __func__);
 		return (FAILURE);
 	}
 
-	dev_info(g_sd->dev, "%s: success\n", __func__);
+	input_info(true, g_sd->dev, "%s: success\n", __func__);
 	return (SUCCESS);
 }
 
-#if 0
-static u8 ReadHsspErrorStatus(void)
-{
-	return (swd_PacketAck);
-}
-#endif
-
 static void ExitProgrammingMode(void)
 {
-	dev_info(g_sd->dev, "%s: \n", __func__);
-
-	/* Drive the SWDIO, SWDCK outputs low */
-	//SetSwdckLow();
-	//SetSwdioLow();
-
-	/* Make SWDIO, SWDCK High-Z after completing Programming */
-	//SetSwdioHizInput();
-	//SetSwdckHizInput();
+	input_info(true, g_sd->dev, "%s: \n", __func__);
 
 	/* Generate active low rest pulse for 100 uS */
 	SetXresLow();
-	msleep(20);		//DelayHundredUs();
+	msleep(20);
 	SetXresHigh();
-
-	/* Make XRES High-Z after generating the reset pulse */
-	//SetXresHizInput();
 }
 
 static u8 ProgramDevice(struct swd_data *sd)
@@ -1333,7 +1270,7 @@ static u8 ProgramDevice(struct swd_data *sd)
 #if !defined(CRC_CHECK_INTERNAL)
 	if (sd->swd_tkey_i2c->do_checksum == true) {
 		if (VerifyChecksum() == SUCCESS) {
-			dev_info(sd->dev, "%s: fw update pass\n", __func__);
+			input_info(true, sd->dev, "%s: fw update pass\n", __func__);
 			goto out;
 		}
 	}
@@ -1364,12 +1301,12 @@ static u8 ProgramDevice(struct swd_data *sd)
 		goto fail;
 
 #if !defined(CRC_CHECK_INTERNAL)
- out:
+out:
 #endif
 	ExitProgrammingMode();
 	/* All the steps were completed successfully */
 	return (SUCCESS);
- fail:
+fail:
 	ExitProgrammingMode();
 	return (FAILURE);
 }
@@ -1382,41 +1319,25 @@ int cy8cmbr_swd_program(struct touchkey_i2c *tkey_i2c)
 	struct swd_data *sd;
 	int rc;
 
-	dev_info(&tkey_i2c->client->dev, "%s: \n", __func__);
+	input_info(true, &tkey_i2c->client->dev, "%s: \n", __func__);
 
-/*	dev_info(dev, "%s: swdio_gpio=%d\n", __func__, swdio_gpio);
-	dev_info(dev, "%s: swdck_gpio=%d\n", __func__, swdck_gpio);
-	dev_info(dev, "%s: fw_img_size=0x%04x\n", __func__, fw_img_size);
-	dev_info(dev, "%s: fw_img=%p\n", __func__, fw_img);
-	dev_info(dev, "%s: fw_img[0x00, 0x01, 0x%04x, 0x%04x]=0x%02x 0x%02x 0x%02x 0x%02x\n",
-		__func__,
-		fw_img_size-2, fw_img_size-1,
-		fw_img[0x00], fw_img[0x01],
-		fw_img[fw_img_size-2], fw_img[fw_img_size-1]);
-	*/
 	memset(&_swd_data, 0, sizeof(_swd_data));
 	sd = &_swd_data;
 	sd->swd_tkey_i2c = tkey_i2c;
-	sd->power = tkey_i2c->pdata->power_on;
-	sd->swdio_gpio = tkey_i2c->pdata->gpio_sda;
-	sd->swdck_gpio = tkey_i2c->pdata->gpio_scl;
+	sd->power = tkey_i2c->power;
+	sd->swdio_gpio = tkey_i2c->dtdata->gpio_sda;
+	sd->swdck_gpio = tkey_i2c->dtdata->gpio_scl;
 	sd->fw_img = tkey_i2c->fw_img->data;
 	sd->fw_img_size = tkey_i2c->fw_img->fw_len;
 	sd->dev = &tkey_i2c->client->dev;
 	g_sd = sd;
 
-	//cyttsp5_load_app_(dev, cyttsp4_img, ARRAY_SIZE(cyttsp4_img));
-	//cyttsp5_load_app_(dev, 0, 0);
 	Swd_configPhysical(sd->swdio_gpio, sd->swdck_gpio);
 	if (ProgramDevice(sd) == SUCCESS)
 		rc = 0;
 	else
 		rc = -1;
 
-	dev_info(&tkey_i2c->client->dev, "%s: end, rc=%d\n", __func__, rc);
+	input_info(true, &tkey_i2c->client->dev, "%s: end, rc=%d\n", __func__, rc);
 	return rc;
-
-/*error_no_pdata:
-	dev_err(&tkey_i2c->client->dev, "%s failed.\n", __func__);
-	return rc;*/
 }

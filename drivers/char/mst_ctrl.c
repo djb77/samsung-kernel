@@ -40,6 +40,9 @@
 
 #include <linux/delay.h>
 
+/* Mar 9, 2016, limit the length of string to 1 byte: "0" or "1"*/
+#define MST_CTRL_CMD_LEN ((size_t)1)
+
 #define SMC_CMD_FC_NFC_ACTION ((uint32_t)(0x83000030))
 
 ssize_t mst_ctrl_write(struct file *file, const char __user *buffer, size_t size, loff_t *offset) {
@@ -54,20 +57,26 @@ ssize_t mst_ctrl_write(struct file *file, const char __user *buffer, size_t size
 	printk(KERN_ERR " %s\n", __FUNCTION__);
 
 	/* size includes space for NULL, so size will be "number of buffer char. + 1" */
-	string = kmalloc(size * sizeof(char), GFP_KERNEL);
+	string = kmalloc(MST_CTRL_CMD_LEN + 1, GFP_KERNEL);
 	if (string == NULL) {
 		printk(KERN_ERR "%s failed kmalloc\n", __func__);
-		return size;
+		return 0;
 	}
 
-	memcpy(string, buffer, size-1);
-	string[size-1] = '\0';
+	if (copy_from_user(string, buffer, MST_CTRL_CMD_LEN) != 0) {
+		printk(KERN_ERR "%s failed copy_from_user\n", __func__);
+		return 0;
+	}
+
+	string[MST_CTRL_CMD_LEN] = '\0';
 
 	if(kstrtoul(string, 0, &mode)) {
+		memset(string, 0, MST_CTRL_CMD_LEN);
 		kfree(string);
-		return size;
+		return 0;
 	};
 
+	memset(string, 0, MST_CTRL_CMD_LEN);
 	kfree(string);
 
 	printk(KERN_ERR "id: %d\n", (int)mode);
@@ -87,8 +96,6 @@ ssize_t mst_ctrl_write(struct file *file, const char __user *buffer, size_t size
 			printk(KERN_ERR " %s -> Invalid mst operations\n", __FUNCTION__);
 			break;
 	}
-
-	*offset += size;
 
 	return size;
 }

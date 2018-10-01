@@ -1067,6 +1067,21 @@ static int acm_write_buffers_alloc(struct acm *acm)
 	return 0;
 }
 
+static int check_samsung_feature_ums_acm_device(struct usb_device *dev)
+{
+	int ret = 0;
+
+ 	pr_info("%s : product=%s\n", __func__, dev->product);
+
+	if (!dev->product)
+		return ret;
+
+	if (!strnicmp(dev->product , "SM-B360E", 8))
+		ret = 1;
+
+	return ret;
+}
+
 static int acm_probe(struct usb_interface *intf,
 		     const struct usb_device_id *id)
 {
@@ -1108,6 +1123,9 @@ static int acm_probe(struct usb_interface *intf,
 	if (quirks == NO_UNION_NORMAL) {
 		data_interface = usb_ifnum_to_if(usb_dev, 1);
 		control_interface = usb_ifnum_to_if(usb_dev, 0);
+		/* we would crash */
+		if (!data_interface || !control_interface)
+			return -ENODEV;
 		goto skip_normal_probe;
 	}
 
@@ -1211,6 +1229,11 @@ next_desc:
 				goto look_for_collapsed_interface;
 			}
 		}
+	} else if (check_samsung_feature_ums_acm_device(usb_dev)) {
+		data_interface = usb_ifnum_to_if(usb_dev, 2);
+		control_interface = usb_ifnum_to_if(usb_dev, 1);
+		pr_info("%s : manual set data_interface = 2, control_interface = 1\n", __func__);
+		goto skip_normal_probe;
 	} else {
 		control_interface = usb_ifnum_to_if(usb_dev, union_header->bMasterInterface0);
 		data_interface = usb_ifnum_to_if(usb_dev, (data_interface_num = union_header->bSlaveInterface0));

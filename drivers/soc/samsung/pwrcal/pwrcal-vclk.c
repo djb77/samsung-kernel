@@ -579,7 +579,10 @@ static int m1d1g1_set(struct vclk *vclk, unsigned long freq_to)
 
 	for (pidx = 0; pidx < num_of_parents && min_diff != 0; pidx++) {
 		for (didx = 1; didx < max_ratio + 1 && min_diff != 0; didx++) {
-			cur_freq = parent_freq[pidx] / didx;
+			if (parent_freq[pidx])
+				cur_freq = parent_freq[pidx] / didx;
+			else
+				cur_freq = 0;
 			if (freq_to >= cur_freq) {
 				if (min_diff > freq_to - cur_freq) {
 					min_diff = freq_to - cur_freq;

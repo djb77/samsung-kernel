@@ -867,6 +867,12 @@ static long dek_do_ioctl_req(unsigned int minor, unsigned int cmd,
 			ret = -EFAULT;
 			goto err;
 		}
+		if(req.plain_dek.len <= 0 || req.plain_dek.len > DEK_MAXLEN) {
+			DEK_LOGE("Incorrect dek len\n");
+			zero_out((char *)&req, sizeof(dek_arg_encrypt_dek));
+			ret = -EFAULT;
+			goto err;
+		}
 		ret = dek_encrypt_dek(req.engine_id,
 				&req.plain_dek, &req.enc_dek);
 		if (ret < 0) {
@@ -897,6 +903,12 @@ static long dek_do_ioctl_req(unsigned int minor, unsigned int cmd,
 		memset(&req, 0, sizeof(dek_arg_decrypt_dek));
 		if(copy_from_user(&req, ubuf, sizeof(req))) {
 			DEK_LOGE("can't copy from user req\n");
+			zero_out((char *)&req, sizeof(dek_arg_decrypt_dek));
+			ret = -EFAULT;
+			goto err;
+		}
+		if(req.enc_dek.len <= 0 || req.enc_dek.len > DEK_MAXLEN) {
+			DEK_LOGE("Incorrect dek len\n");
 			zero_out((char *)&req, sizeof(dek_arg_decrypt_dek));
 			ret = -EFAULT;
 			goto err;

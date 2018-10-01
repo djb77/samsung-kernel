@@ -35,8 +35,10 @@
 
 #define CLEARWATER_NUM_ADSP 7
 
-#define CLEARWATER_DEFAULT_FRAGMENTS       1
-#define CLEARWATER_DEFAULT_FRAGMENT_SIZE   4096
+/* Number of compressed DAI hookups, each pair of DSP and dummy CPU
+ * are counted as one DAI
+ */
+#define CLEARWATER_NUM_COMPR_DAI 2
 
 #define CLEARWATER_FRF_COEFFICIENT_LEN 4
 
@@ -185,23 +187,36 @@ static int clearwater_rate_put(struct snd_kcontrol *kcontrol,
 	.get = snd_soc_get_enum_double, .put = clearwater_rate_put, \
 	.private_value = (unsigned long)&xenum }
 
+struct clearwater_priv;
+
 struct clearwater_compr {
-	struct mutex lock;
-
-	struct snd_compr_stream *stream;
-	struct wm_adsp *adsp;
-
-	size_t total_copied;
-	bool allocated;
+	struct wm_adsp_compr adsp_compr;
+	const char *dai_name;
 	bool trig;
+	struct mutex trig_lock;
+	struct clearwater_priv *priv;
 };
 
 struct clearwater_priv {
 	struct arizona_priv core;
 	struct arizona_fll fll[3];
-	struct clearwater_compr compr_info;
+	struct clearwater_compr compr_info[CLEARWATER_NUM_COMPR_DAI];
 
 	struct mutex fw_lock;
+};
+
+static const struct {
+	const char *dai_name;
+	int adsp_num;
+} compr_dai_mapping[CLEARWATER_NUM_COMPR_DAI] = {
+	{
+		.dai_name = "clearwater-dsp-voicectrl",
+		.adsp_num = 5,
+	},
+	{
+		.dai_name = "clearwater-dsp-trace",
+		.adsp_num = 0,
+	},
 };
 
 static const struct wm_adsp_region clearwater_dsp1_regions[] = {
@@ -278,19 +293,19 @@ static const char * const clearwater_inmux_texts[] = {
 	"B",
 };
 
-static const SOC_ENUM_SINGLE_DECL(clearwater_in1mux_enum,
-				  ARIZONA_ADC_DIGITAL_VOLUME_1L,
-				  ARIZONA_IN1L_SRC_SHIFT,
-				  clearwater_inmux_texts);
+static SOC_ENUM_SINGLE_DECL(clearwater_in1mux_enum,
+			    ARIZONA_ADC_DIGITAL_VOLUME_1L,
+			    ARIZONA_IN1L_SRC_SHIFT,
+			    clearwater_inmux_texts);
 
-static const SOC_ENUM_SINGLE_DECL(clearwater_in2muxl_enum,
-				  ARIZONA_ADC_DIGITAL_VOLUME_2L,
-				  ARIZONA_IN2L_SRC_SHIFT,
-				  clearwater_inmux_texts);
-static const SOC_ENUM_SINGLE_DECL(clearwater_in2muxr_enum,
-				  ARIZONA_ADC_DIGITAL_VOLUME_2R,
-				  ARIZONA_IN2R_SRC_SHIFT,
-				  clearwater_inmux_texts);
+static SOC_ENUM_SINGLE_DECL(clearwater_in2muxl_enum,
+			    ARIZONA_ADC_DIGITAL_VOLUME_2L,
+			    ARIZONA_IN2L_SRC_SHIFT,
+			    clearwater_inmux_texts);
+static SOC_ENUM_SINGLE_DECL(clearwater_in2muxr_enum,
+			    ARIZONA_ADC_DIGITAL_VOLUME_2R,
+			    ARIZONA_IN2R_SRC_SHIFT,
+			    clearwater_inmux_texts);
 
 static const struct snd_kcontrol_new clearwater_in1mux =
 	SOC_DAPM_ENUM("IN1L Mux", clearwater_in1mux_enum);
@@ -491,12 +506,10 @@ static int clearwater_rate_put(struct snd_kcontrol *kcontrol,
 
 	/* Apply the rate through the original callback */
 	clearwater_spin_sysclk(arizona);
-	udelay(300);
 	mutex_lock(&codec->mutex);
 	ret = snd_soc_update_bits(codec, e->reg, mask, val);
 	mutex_unlock(&codec->mutex);
 	clearwater_spin_sysclk(arizona);
-	udelay(300);
 
 out:
 	err = arizona_restore_sources(arizona, cur_sources,
@@ -555,11 +568,9 @@ static int clearwater_adsp_rate_put_cb(struct wm_adsp *adsp,
 	}
 
 	clearwater_spin_sysclk(arizona);
-	udelay(300);
 	/* Apply the rate */
 	ret = regmap_update_bits(adsp->regmap, adsp->base, mask, val);
 	clearwater_spin_sysclk(arizona);
-	udelay(300);
 
 out:
 	err = arizona_restore_sources(arizona, cur_sources,
@@ -585,7 +596,6 @@ static int clearwater_sysclk_ev(struct snd_soc_dapm_widget *w,
 	struct arizona *arizona = priv->arizona;
 
 	clearwater_spin_sysclk(arizona);
-	udelay(300);
 
 	return 0;
 }
@@ -620,7 +630,7 @@ static int clearwater_adsp_power_ev(struct snd_soc_dapm_widget *w,
 	struct arizona_priv *priv = &clearwater->core;
 	struct arizona *arizona = priv->arizona;
 	unsigned int freq;
-	int ret;
+	int i, ret;
 
 	ret = regmap_read(arizona->regmap, CLEARWATER_DSP_CLOCK_1, &freq);
 	if (ret != 0) {
@@ -633,10 +643,14 @@ static int clearwater_adsp_power_ev(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		if (w->shift == 5) {
-			mutex_lock(&clearwater->compr_info.lock);
-			clearwater->compr_info.trig = false;
-			mutex_unlock(&clearwater->compr_info.lock);
+		for (i = 0; i < ARRAY_SIZE(clearwater->compr_info); ++i) {
+			if (clearwater->compr_info[i].adsp_compr.dsp->num !=
+			    w->shift + 1)
+				continue;
+
+			mutex_lock(&clearwater->compr_info[i].trig_lock);
+			clearwater->compr_info[i].trig = false;
+			mutex_unlock(&clearwater->compr_info[i].trig_lock);
 		}
 		break;
 	default:
@@ -2133,6 +2147,7 @@ static const struct snd_soc_dapm_route clearwater_dapm_routes[] = {
 	{ "OUT2L", NULL, "SYSCLK" },
 	{ "OUT2R", NULL, "SYSCLK" },
 	{ "OUT3L", NULL, "SYSCLK" },
+	{ "OUT3R", NULL, "SYSCLK" },
 	{ "OUT4L", NULL, "SYSCLK" },
 	{ "OUT4R", NULL, "SYSCLK" },
 	{ "OUT5L", NULL, "SYSCLK" },
@@ -2533,7 +2548,7 @@ static int clearwater_set_fll(struct snd_soc_codec *codec, int fll_id, int sourc
 	}
 }
 
-#define CLEARWATER_RATES SNDRV_PCM_RATE_8000_192000
+#define CLEARWATER_RATES SNDRV_PCM_RATE_KNOT
 
 #define CLEARWATER_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
@@ -2724,240 +2739,103 @@ static struct snd_soc_dai_driver clearwater_dai[] = {
 	},
 };
 
-static irqreturn_t adsp2_irq(int irq, void *data)
+static void clearwater_compr_irq(struct clearwater_priv *clearwater,
+				 struct clearwater_compr *compr)
+{
+	struct arizona *arizona = clearwater->core.arizona;
+	bool trigger = false;
+	int ret;
+
+	ret = wm_adsp_compr_irq(&compr->adsp_compr, &trigger);
+	if (ret < 0)
+		return;
+
+	if (trigger && arizona->pdata.ez2ctrl_trigger) {
+		mutex_lock(&compr->trig_lock);
+		if (!compr->trig) {
+			compr->trig = true;
+
+			if (wm_adsp_fw_has_voice_trig(compr->adsp_compr.dsp))
+				arizona->pdata.ez2ctrl_trigger();
+		}
+		mutex_unlock(&compr->trig_lock);
+	}
+}
+
+static irqreturn_t clearwater_adsp2_irq(int irq, void *data)
 {
 	struct clearwater_priv *clearwater = data;
-	int ret, avail;
+	int i;
 
-	mutex_lock(&clearwater->compr_info.lock);
+	for (i = 0; i < ARRAY_SIZE(clearwater->compr_info); ++i) {
+		if (!clearwater->compr_info[i].adsp_compr.dsp->running)
+			continue;
 
-	if (!clearwater->compr_info.trig &&
-	    clearwater->core.adsp[5].fw_features.ez2control_trigger &&
-	    clearwater->core.adsp[5].running) {
-		if (clearwater->core.arizona->pdata.ez2ctrl_trigger)
-			clearwater->core.arizona->pdata.ez2ctrl_trigger();
-		clearwater->compr_info.trig = true;
+		clearwater_compr_irq(clearwater, &clearwater->compr_info[i]);
 	}
-
-	if (!clearwater->compr_info.allocated)
-		goto out;
-
-	ret = wm_adsp_stream_handle_irq(clearwater->compr_info.adsp);
-	if (ret < 0) {
-		dev_err(clearwater->core.arizona->dev,
-			"Failed to capture DSP data: %d\n",
-			ret);
-		goto out;
-	}
-
-	clearwater->compr_info.total_copied += ret;
-
-	avail = wm_adsp_stream_avail(clearwater->compr_info.adsp);
-	if (avail > CLEARWATER_DEFAULT_FRAGMENT_SIZE)
-		snd_compr_fragment_elapsed(clearwater->compr_info.stream);
-
-out:
-	mutex_unlock(&clearwater->compr_info.lock);
-
 	return IRQ_HANDLED;
 }
 
-static int clearwater_open(struct snd_compr_stream *stream)
+static struct clearwater_compr *clearwater_get_compr(
+					struct snd_soc_pcm_runtime *rtd,
+					struct clearwater_priv *clearwater)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(clearwater->compr_info); ++i) {
+		if (strcmp(rtd->codec_dai->name,
+			   clearwater->compr_info[i].dai_name) == 0)
+			return &clearwater->compr_info[i];
+	}
+
+	return NULL;
+}
+
+static int clearwater_compr_open(struct snd_compr_stream *stream)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
 	struct clearwater_priv *clearwater = snd_soc_codec_get_drvdata(rtd->codec);
-	struct arizona *arizona = clearwater->core.arizona;
-	int n_adsp, ret = 0;
+	struct clearwater_compr *compr;
 
-	mutex_lock(&clearwater->compr_info.lock);
-
-	if (clearwater->compr_info.stream) {
-		ret = -EBUSY;
-		goto out;
-	}
-
-	if (strcmp(rtd->codec_dai->name, "clearwater-dsp-voicectrl") == 0) {
-		n_adsp = 5;
-	} else if (strcmp(rtd->codec_dai->name, "clearwater-dsp-trace") == 0) {
-		n_adsp = 0;
-	} else {
-		dev_err(arizona->dev,
-			"No suitable compressed stream for dai '%s'\n",
+	compr = clearwater_get_compr(rtd, clearwater);
+	if (!compr) {
+		dev_err(clearwater->core.arizona->dev,
+			"No compressed stream for dai '%s'\n",
 			rtd->codec_dai->name);
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 
-	if (!wm_adsp_compress_supported(&clearwater->core.adsp[n_adsp], stream)) {
-		dev_err(arizona->dev,
-			"No suitable firmware for compressed stream\n");
-		ret = -EINVAL;
-		goto out;
-	}
-
-	clearwater->compr_info.adsp = &clearwater->core.adsp[n_adsp];
-	clearwater->compr_info.stream = stream;
-out:
-	mutex_unlock(&clearwater->compr_info.lock);
-
-	return ret;
+	return wm_adsp_compr_open(&compr->adsp_compr, stream);
 }
 
-static int clearwater_free(struct snd_compr_stream *stream)
+static int clearwater_compr_trigger(struct snd_compr_stream *stream, int cmd)
 {
-	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clearwater_priv *clearwater = snd_soc_codec_get_drvdata(rtd->codec);
+	struct wm_adsp_compr *adsp_compr =
+			(struct wm_adsp_compr *)stream->runtime->private_data;
+	struct clearwater_compr *compr = container_of(adsp_compr,
+						      struct clearwater_compr,
+						      adsp_compr);
+	struct arizona *arizona = compr->priv->core.arizona;
+	int ret;
 
-	mutex_lock(&clearwater->compr_info.lock);
-
-	clearwater->compr_info.allocated = false;
-	clearwater->compr_info.stream = NULL;
-	clearwater->compr_info.total_copied = 0;
-
-	wm_adsp_stream_free(clearwater->compr_info.adsp);
-
-	mutex_unlock(&clearwater->compr_info.lock);
-
-	return 0;
-}
-
-static int clearwater_set_params(struct snd_compr_stream *stream,
-			     struct snd_compr_params *params)
-{
-	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clearwater_priv *clearwater = snd_soc_codec_get_drvdata(rtd->codec);
-	struct arizona *arizona = clearwater->core.arizona;
-	struct clearwater_compr *compr = &clearwater->compr_info;
-	int ret = 0;
-
-	mutex_lock(&compr->lock);
-
-	if (!wm_adsp_format_supported(compr->adsp, stream, params)) {
-		dev_err(arizona->dev,
-			"Invalid params: id:%u, chan:%u,%u, rate:%u format:%u\n",
-			params->codec.id, params->codec.ch_in,
-			params->codec.ch_out, params->codec.sample_rate,
-			params->codec.format);
-		ret = -EINVAL;
-		goto out;
-	}
-
-	ret = wm_adsp_stream_alloc(compr->adsp, params);
-	if (ret == 0)
-		compr->allocated = true;
-
-out:
-	mutex_unlock(&compr->lock);
-
-	return ret;
-}
-
-static int clearwater_get_params(struct snd_compr_stream *stream,
-			     struct snd_codec *params)
-{
-	return 0;
-}
-
-static int clearwater_trigger(struct snd_compr_stream *stream, int cmd)
-{
-	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clearwater_priv *clearwater = snd_soc_codec_get_drvdata(rtd->codec);
-	struct arizona *arizona = clearwater->core.arizona;
-	int ret = 0;
-	bool pending = false;
-
-	mutex_lock(&clearwater->compr_info.lock);
+	ret = wm_adsp_compr_trigger(stream, cmd);
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
-		ret = wm_adsp_stream_start(clearwater->compr_info.adsp);
-
-		/**
-		 * If the stream has already triggered before the stream
-		 * opened better process any outstanding data
-		 */
-		if (clearwater->compr_info.trig)
-			pending = true;
-		break;
-	case SNDRV_PCM_TRIGGER_STOP:
+		if (compr->trig)
+			/*
+			 * If the firmware already triggered before the stream
+			 * was opened trigger another interrupt so irq handler
+			 * will run and process any outstanding data
+			 */
+			regmap_write(arizona->regmap,
+				     CLEARWATER_ADSP2_IRQ0, 0x01);
 		break;
 	default:
-		ret = -EINVAL;
 		break;
 	}
 
-	mutex_unlock(&clearwater->compr_info.lock);
-
-	/*
-	* Stream has already trigerred, force irq handler to run
-	* by generating interrupt.
-	*/
-	if (pending)
-		regmap_write(arizona->regmap, CLEARWATER_ADSP2_IRQ0, 0x01);
-
 	return ret;
-}
-
-static int clearwater_pointer(struct snd_compr_stream *stream,
-			  struct snd_compr_tstamp *tstamp)
-{
-	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clearwater_priv *clearwater = snd_soc_codec_get_drvdata(rtd->codec);
-
-	mutex_lock(&clearwater->compr_info.lock);
-	tstamp->byte_offset = 0;
-	tstamp->copied_total = clearwater->compr_info.total_copied;
-	mutex_unlock(&clearwater->compr_info.lock);
-
-	return 0;
-}
-
-static int clearwater_copy(struct snd_compr_stream *stream, char __user *buf,
-		       size_t count)
-{
-	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clearwater_priv *clearwater = snd_soc_codec_get_drvdata(rtd->codec);
-	int ret;
-
-	mutex_lock(&clearwater->compr_info.lock);
-
-	if (stream->direction == SND_COMPRESS_PLAYBACK)
-		ret = -EINVAL;
-	else
-		ret = wm_adsp_stream_read(clearwater->compr_info.adsp, buf, count);
-
-	mutex_unlock(&clearwater->compr_info.lock);
-
-	return ret;
-}
-
-static int clearwater_get_caps(struct snd_compr_stream *stream,
-			   struct snd_compr_caps *caps)
-{
-	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clearwater_priv *clearwater = snd_soc_codec_get_drvdata(rtd->codec);
-
-	mutex_lock(&clearwater->compr_info.lock);
-
-	memset(caps, 0, sizeof(*caps));
-
-	caps->direction = stream->direction;
-	caps->min_fragment_size = CLEARWATER_DEFAULT_FRAGMENT_SIZE;
-	caps->max_fragment_size = CLEARWATER_DEFAULT_FRAGMENT_SIZE;
-	caps->min_fragments = CLEARWATER_DEFAULT_FRAGMENTS;
-	caps->max_fragments = CLEARWATER_DEFAULT_FRAGMENTS;
-
-	wm_adsp_get_caps(clearwater->compr_info.adsp, stream, caps);
-
-	mutex_unlock(&clearwater->compr_info.lock);
-
-	return 0;
-}
-
-static int clearwater_get_codec_caps(struct snd_compr_stream *stream,
-				 struct snd_compr_codec_caps *codec)
-{
-	return 0;
 }
 
 static int clearwater_codec_probe(struct snd_soc_codec *codec)
@@ -2979,20 +2857,23 @@ static int clearwater_codec_probe(struct snd_soc_codec *codec)
 			return ret;
 	}
 
+	ret = snd_soc_add_codec_controls(codec,
+					 arizona_adsp2v2_rate_controls,
+					 CLEARWATER_NUM_ADSP);
+	if (ret)
+		return ret;
+
 	/* Update Sample Rate 1 to 48kHz for cases when no AIF1 hw_params */
 	regmap_update_bits(arizona->regmap, ARIZONA_SAMPLE_RATE_1,
 			   ARIZONA_SAMPLE_RATE_1_MASK, 0x03);
-
-	ret = snd_soc_add_codec_controls(codec, wm_adsp2v2_fw_controls, 14);
-	if (ret != 0)
-		return ret;
 
 	snd_soc_dapm_disable_pin(&codec->dapm, "HAPTICS");
 
 	priv->core.arizona->dapm = &codec->dapm;
 
 	ret = arizona_request_irq(arizona, ARIZONA_IRQ_DSP_IRQ1,
-				  "ADSP2 interrupt 1", adsp2_irq, priv);
+				  "ADSP2 interrupt 1",
+				  clearwater_adsp2_irq, priv);
 	if (ret != 0) {
 		dev_err(arizona->dev, "Failed to request DSP IRQ: %d\n", ret);
 		return ret;
@@ -3082,20 +2963,47 @@ static struct snd_soc_codec_driver soc_codec_dev_clearwater = {
 };
 
 static struct snd_compr_ops clearwater_compr_ops = {
-	.open = clearwater_open,
-	.free = clearwater_free,
-	.set_params = clearwater_set_params,
-	.get_params = clearwater_get_params,
-	.trigger = clearwater_trigger,
-	.pointer = clearwater_pointer,
-	.copy = clearwater_copy,
-	.get_caps = clearwater_get_caps,
-	.get_codec_caps = clearwater_get_codec_caps,
+	.open = clearwater_compr_open,
+	.free = wm_adsp_compr_free,
+	.set_params = wm_adsp_compr_set_params,
+	.trigger = clearwater_compr_trigger,
+	.pointer = wm_adsp_compr_pointer,
+	.copy = wm_adsp_compr_copy,
+	.get_caps = wm_adsp_compr_get_caps,
 };
 
 static struct snd_soc_platform_driver clearwater_compr_platform = {
 	.compr_ops = &clearwater_compr_ops,
 };
+
+static void clearwater_init_compr_info(struct clearwater_priv *clearwater)
+{
+	struct wm_adsp *dsp;
+	int i;
+
+	BUILD_BUG_ON(ARRAY_SIZE(clearwater->compr_info) !=
+		     ARRAY_SIZE(compr_dai_mapping));
+
+	for (i = 0; i < ARRAY_SIZE(clearwater->compr_info); ++i) {
+		clearwater->compr_info[i].priv = clearwater;
+
+		clearwater->compr_info[i].dai_name =
+			compr_dai_mapping[i].dai_name;
+
+		dsp = &clearwater->core.adsp[compr_dai_mapping[i].adsp_num],
+		wm_adsp_compr_init(dsp, &clearwater->compr_info[i].adsp_compr);
+
+		mutex_init(&clearwater->compr_info[i].trig_lock);
+	}
+}
+
+static void clearwater_destroy_compr_info(struct clearwater_priv *clearwater)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(clearwater->compr_info); ++i)
+		wm_adsp_compr_destroy(&clearwater->compr_info[i].adsp_compr);
+}
 
 static int clearwater_probe(struct platform_device *pdev)
 {
@@ -3115,7 +3023,6 @@ static int clearwater_probe(struct platform_device *pdev)
 	 * locate regulator supplies */
 	pdev->dev.of_node = arizona->dev->of_node;
 
-	mutex_init(&clearwater->compr_info.lock);
 	mutex_init(&clearwater->fw_lock);
 
 	clearwater->core.arizona = arizona;
@@ -3147,10 +3054,14 @@ static int clearwater_probe(struct platform_device *pdev)
 		clearwater->core.adsp[i].rate_put_cb =
 					clearwater_adsp_rate_put_cb;
 
+		clearwater->core.adsp[i].hpimp_cb = arizona_hpimp_cb;
+
 		ret = wm_adsp2_init(&clearwater->core.adsp[i], &clearwater->fw_lock);
 		if (ret != 0)
 			return ret;
 	}
+
+	clearwater_init_compr_info(clearwater);
 
 	for (i = 0; i < ARRAY_SIZE(clearwater->fll); i++) {
 		clearwater->fll[i].vco_mult = 3;
@@ -3200,7 +3111,7 @@ static int clearwater_probe(struct platform_device *pdev)
 	return ret;
 
 error:
-	mutex_destroy(&clearwater->compr_info.lock);
+	clearwater_destroy_compr_info(clearwater);
 	mutex_destroy(&clearwater->fw_lock);
 
 	return ret;
@@ -3209,11 +3120,17 @@ error:
 static int clearwater_remove(struct platform_device *pdev)
 {
 	struct clearwater_priv *clearwater = platform_get_drvdata(pdev);
+	int i;
 
+	snd_soc_unregister_platform(&pdev->dev);
 	snd_soc_unregister_codec(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
-	mutex_destroy(&clearwater->compr_info.lock);
+	clearwater_destroy_compr_info(clearwater);
+
+	for (i = 0; i < CLEARWATER_NUM_ADSP; i++)
+		wm_adsp2_remove(&clearwater->core.adsp[i]);
+
 	mutex_destroy(&clearwater->fw_lock);
 
 	return 0;

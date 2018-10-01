@@ -194,7 +194,7 @@ static struct of_device_id mst_match_ldo_table[] = {
 	{},
 };
 
-/*
+
 static int mst_ldo_device_suspend(struct platform_device *dev, pm_message_t state)
 {
 	u64 r0 = 0, r1 = 0, r2 = 0, r3 = 0;
@@ -230,10 +230,10 @@ static int mst_ldo_device_resume(struct platform_device *dev)
 		printk(KERN_INFO "MST_LDO_DRV]]] resume success after smc : %x\n", result);
 	}
 	
-	rt = result;
+//	rt = result;
 	return 0;
 }
-*/
+
 
 static struct platform_driver sec_mst_ldo_driver = {
 	.driver = {
@@ -242,8 +242,8 @@ static struct platform_driver sec_mst_ldo_driver = {
 		.of_match_table = mst_match_ldo_table,
 	},
 	.probe = mst_ldo_device_probe,
-	//.suspend = mst_ldo_device_suspend,
-	//.resume = mst_ldo_device_resume,
+	.suspend = mst_ldo_device_suspend,
+	.resume = mst_ldo_device_resume,
 };
 
 static int __init mst_drv_init(void)

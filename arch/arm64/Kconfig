@@ -37,6 +37,8 @@ config ARM64
 	select HAVE_ARCH_AUDITSYSCALL
 	select HAVE_ARCH_JUMP_LABEL
 	select HAVE_ARCH_KGDB
+	select HAVE_ARCH_MMAP_RND_BITS
+	select HAVE_ARCH_MMAP_RND_COMPAT_BITS if COMPAT
 	select HAVE_ARCH_SECCOMP_FILTER
 	select HAVE_ARCH_TRACEHOOK
 	select HAVE_BPF_JIT
@@ -86,8 +88,39 @@ config ARCH_PHYS_ADDR_T_64BIT
 config MMU
 	def_bool y
 
+config ARCH_MMAP_RND_BITS_MIN
+       default 14 if ARM64_64K_PAGES
+       default 16 if ARM64_16K_PAGES
+       default 18
+
+# max bits determined by the following formula:
+#  VA_BITS - PAGE_SHIFT - 3
+config ARCH_MMAP_RND_BITS_MAX
+       default 19 if ARM64_VA_BITS=36
+       default 24 if ARM64_VA_BITS=39
+       default 27 if ARM64_VA_BITS=42
+       default 30 if ARM64_VA_BITS=47
+       default 29 if ARM64_VA_BITS=48 && ARM64_64K_PAGES
+       default 31 if ARM64_VA_BITS=48 && ARM64_16K_PAGES
+       default 33 if ARM64_VA_BITS=48
+       default 14 if ARM64_64K_PAGES
+       default 16 if ARM64_16K_PAGES
+       default 18
+
+config ARCH_MMAP_RND_COMPAT_BITS_MIN
+       default 7 if ARM64_64K_PAGES
+       default 9 if ARM64_16K_PAGES
+       default 11
+
+config ARCH_MMAP_RND_COMPAT_BITS_MAX
+       default 16
+
 config NO_IOPORT_MAP
 	def_bool y if !PCI
+
+config ILLEGAL_POINTER_VALUE
+	hex
+	default 0xdead000000000000
 
 config STACKTRACE_SUPPORT
 	def_bool y
@@ -623,6 +656,14 @@ config SCHED_HMP_LITTLE_PACKING
 	  packing_limit: runqueue load ratio where a RQ is considered
 	    to be full. Default is NICE_0_LOAD * 9/8.
 
+config SCHED_HMP_DOWN_MIGRATION_COMPENSATION
+	bool "(EXPERIMENTAL) HMP down migration compensation"
+	depends on SCHED_HMP
+	help
+	  Enables down migration compensation. The down-migration compensation
+	  guarantees proper performance to the down-migrated task by frequency
+	  qos lock.
+
 config NR_CPUS
 	int "Maximum number of CPUs (2-64)"
 	range 2 64
@@ -924,7 +965,7 @@ menu "Control Flow Protection"
 
 config RKP_CFP
 	bool "Hyperdrive ROP protection"
-	# depends on TIMA_RKP
+	depends on TIMA_RKP
 	# Disable RKP for now, keep getting TIMA_RKP_VMM_PANIC when doing sleep.S code for saving/restoring x17.
 	default n
 	help
@@ -933,12 +974,10 @@ config RKP_CFP
 
 config RKP_CFP_ROPP
 	bool "Hyperdrive: encrypt return-addresses"
+	depends on TIMA_RKP
 	select RKP_CFP
+	select RKP_CFP_FIX_SMC_BUG
 	default n
-	help
-        XOR return-addresses with the reserved key register on call/return from functions 
-        to encrypt/decrypt return-addresses before they are pushed onto the stack.
-        Also, save the key during context-switches and suspend/resume cycles.
 
 choice
 	prompt "ROPP key"
@@ -965,18 +1004,9 @@ endchoice
 
 config RKP_CFP_JOPP
 	bool "Just to function entry only, Restrict BLR jump target to a valid function entry point and no br in C code"
+	depends on TIMA_RKP
 	select RKP_CFP
 	default n
-	help
-        We need nop spacers above ever potential target of a blr jump instruction.
-        The compiler already adds spacers for C functions.
-        We need to define a VECTOR_ENTRY macro for exception vector definitions.  We don't 
-        want to add nops to exception vectors, since they need PRECISE alignment. Need to
-        put FALLTHROUGH for ASM fall through
-        
-        No BR in C code requires to disable BPF, as it has a lot of jump, which can be used 
-        as dispatch gadget for JOPP
-
 
 config RKP_CFP_JOPP_MAGIC
 	hex "Magic number put just above function labels to restrict BLR to function entry points"
@@ -988,19 +1018,6 @@ config RKP_CFP_FIX_SMC_BUG
 	bool "Hyperdrive: [INSECURE] hack broken smc calls to save/restore RRK after it clobbers it"
 	depends on RKP_CFP_ROPP
 	default n
-	help
-        As of bootloader version "G920VVRE1BOE4" of the TrustZone for exynos7420, the smc 
-        instruction sets register x17 to zero.  Too bad for us, we store our key there!  In 
-        the meantime, save x17 (and other reserved registers) before making the call.
-
-        To reproduce this bug, disable this option and set a JTAG breakpoint at 
-        exynos_smc_readsfr which gets called during early boot (start_kernel).  Watch x17 
-        get zeroed after the smc call returns.
-
-        ADDITIONAL BUG BECAUSE OF THIS:
-        If we take an interrupt at the instruction IMMEDIATELY after "smc #0", we won't be 
-        able to restore x17 to the key before entering el1_irq. To work around this, we 
-        reload the key in kernel_entry.
 endmenu
 
 #

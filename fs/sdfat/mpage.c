@@ -72,6 +72,37 @@
 
 #ifdef CONFIG_SDFAT_ALIGNED_MPAGE_WRITE
 
+/*************************************************************************
+ * INNER FUNCTIONS FOR FUNCTIONS WHICH HAS KERNEL VERSION DEPENDENCY
+ *************************************************************************/
+static void __mpage_write_end_io(struct bio *bio, int err);
+
+/*************************************************************************
+ * FUNCTIONS WHICH HAS KERNEL VERSION DEPENDENCY
+ *************************************************************************/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
+static void  mpage_write_end_io(struct bio *bio)
+{
+	__mpage_write_end_io(bio, bio->bi_error);
+}
+#else /* LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0) */
+static void mpage_write_end_io(struct bio *bio, int err)
+{
+	if (test_bit(BIO_UPTODATE, &bio->bi_flags))
+		err = 0;
+	__mpage_write_end_io(bio, err);
+}
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0) */
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+static inline int bio_get_nr_vecs(struct block_device *bdev)
+{
+	return BIO_MAX_PAGES;
+}
+#else /* LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0) */
+	/* EMPTY */
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0)
 static inline sector_t __sdfat_bio_sector(struct bio *bio)
 {
@@ -188,9 +219,8 @@ struct mpage_data {
  * status of that page is hard.  See end_buffer_async_read() for the details.
  * There is no point in duplicating all that complexity.
  */
-static void mpage_write_end_io(struct bio *bio, int err)
+static void __mpage_write_end_io(struct bio *bio, int err)
 {
-	const int uptodate = test_bit(BIO_UPTODATE, &bio->bi_flags);
 	struct bio_vec *bvec = bio->bi_io_vec + bio->bi_vcnt - 1;
 
 	ASSERT(bio_data_dir(bio) == WRITE); /* only write */
@@ -200,10 +230,10 @@ static void mpage_write_end_io(struct bio *bio, int err)
 
 		if (--bvec >= bio->bi_io_vec)
 			prefetchw(&bvec->bv_page->flags);
-		if (!uptodate) {
+		if (err) {
 			SetPageError(page);
 			if (page->mapping)
-				set_bit(AS_EIO, &page->mapping->flags);
+				mapping_set_error(page->mapping, err);
 		}
 		
 		__dfr_writepage_end_io(page);

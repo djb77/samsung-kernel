@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgp2p.c 604795 2015-12-08 13:45:42Z $
+ * $Id: wl_cfgp2p.c 635563 2016-05-04 09:26:53Z $
  *
  */
 #include <typedefs.h>
@@ -2082,6 +2082,41 @@ wl_cfgp2p_set_p2p_ecsa(struct bcm_cfg80211 *cfg, struct net_device *ndev, char* 
 	} else {
 		CFGP2P_ERR(("ERROR: set_p2p_ecsa in non-p2p mode\n"));
 		return BCME_ERROR;
+	}
+	return BCME_OK;
+}
+
+s32
+wl_cfgp2p_increase_p2p_bw(struct bcm_cfg80211 *cfg, struct net_device *ndev, char* buf, int len)
+{
+	int algo;
+	int bw;
+	int ret = BCME_OK;
+
+
+	sscanf(buf, "%3d", &bw);
+	if (bw == 0) {
+		algo = 0;
+		ret = wldev_iovar_setbuf(ndev, "mchan_algo", &algo, sizeof(algo), cfg->ioctl_buf,
+				WLC_IOCTL_MAXLEN, &cfg->ioctl_buf_sync);
+		if (ret < 0) {
+			CFGP2P_ERR(("fw set mchan_algo failed %d\n", ret));
+			return BCME_ERROR;
+		}
+	} else {
+		algo = 1;
+		ret = wldev_iovar_setbuf(ndev, "mchan_algo", &algo, sizeof(algo), cfg->ioctl_buf,
+				WLC_IOCTL_MAXLEN, &cfg->ioctl_buf_sync);
+		if (ret < 0) {
+			CFGP2P_ERR(("fw set mchan_algo failed %d\n", ret));
+			return BCME_ERROR;
+		}
+		ret = wldev_iovar_setbuf(ndev, "mchan_bw", &bw, sizeof(algo), cfg->ioctl_buf,
+				WLC_IOCTL_MAXLEN, &cfg->ioctl_buf_sync);
+		if (ret < 0) {
+			CFGP2P_ERR(("fw set mchan_bw failed %d\n", ret));
+			return BCME_ERROR;
+		}
 	}
 	return BCME_OK;
 }

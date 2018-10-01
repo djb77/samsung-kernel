@@ -10,3 +10,22 @@ config TOUCHSCREEN_FTS7
 		If unsure, say N.
 		To compile this driver as a module, choose M here: the
 		module will be called STM_ts.
+
+config TOUCHSCREEN_FTS7_VALLEY
+	tristate "STMicroelectronics i2c multitouch touchscreen with FingerTipS"
+	depends on I2C
+	help
+		Say Y here to enable STMicroelectronics touchscreen for valley model support.
+		If unsure, say N.
+		To compile this driver as a module, choose M here: the
+		module will be called STM_ts.
+
+config TOUCHSCREEN_FTS7_HAECHI
+	tristate "STMicroelectronics i2c multitouch touchscreen with FingerTipS"
+	depends on I2C
+	help
+		Say Y here to enable STMicroelectronics touchscreen for haechi model support.
+		If unsure, say N.
+		To compile this driver as a module, choose M here: the
+		module will be called STM_ts.
+

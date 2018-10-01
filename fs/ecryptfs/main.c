@@ -48,6 +48,10 @@
 #include <linux/ctype.h>
 #endif
 
+#if defined(CONFIG_MMC_DW_FMP_ECRYPT_FS) || defined(CONFIG_UFS_FMP_ECRYPT_FS)
+#include "../sdcardfs/sdcardfs.h"
+#endif
+
 /**
  * Module parameter that defines the ecryptfs_verbosity level.
  */
@@ -930,6 +934,25 @@ out:
 	return ERR_PTR(rc);
 }
 
+#if defined(CONFIG_MMC_DW_FMP_ECRYPT_FS) || defined(CONFIG_UFS_FMP_ECRYPT_FS)
+static int ecryptfs_shrink_parent(struct ecryptfs_sb_info *sb_info)
+{
+        struct super_block *lower_sb = sb_info->wsi_sb;
+
+        while (lower_sb) {
+		if (!strncmp("sdcardfs", lower_sb->s_type->name, sizeof("sdcardfs"))) {
+			shrink_dcache_parent(lower_sb->s_root);
+			lower_sb = sdcardfs_lower_super(lower_sb);
+		} else if (!strncmp("ext4", lower_sb->s_type->name, sizeof("ext4"))) {
+                        shrink_dcache_parent(lower_sb->s_root);
+                        break;
+                }
+        }
+
+        return 0;
+}
+#endif
+
 /**
  * ecryptfs_kill_block_super
  * @sb: The ecryptfs super block
@@ -942,9 +965,13 @@ static void ecryptfs_kill_block_super(struct super_block *sb)
 	kill_anon_super(sb);
 	if (!sb_info)
 		return;
-	if (sb_info->wsi_sb)
+	if (sb_info->wsi_sb) {
+#if defined(CONFIG_MMC_DW_FMP_ECRYPT_FS) || defined(CONFIG_UFS_FMP_ECRYPT_FS)
+		if (sb_info->mount_crypt_stat.flags & ECRYPTFS_USE_FMP)
+			ecryptfs_shrink_parent(sb_info);
+#endif
 		atomic_dec(&sb_info->wsi_sb->s_active);
-
+}
 	ecryptfs_destroy_mount_crypt_stat(&sb_info->mount_crypt_stat);
 	bdi_destroy(&sb_info->bdi);
 	kmem_cache_free(ecryptfs_sb_info_cache, sb_info);

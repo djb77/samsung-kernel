@@ -192,6 +192,7 @@ u8 *fcache_getblk(struct super_block *sb, u32 sec)
 {
 	cache_ent_t *bp;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
+	u32 page_ra_count = FCACHE_MAX_RA_SIZE >> sb->s_blocksize_bits;
 
 	bp = __fcache_find(sb, sec);
 	if (bp) {
@@ -213,11 +214,9 @@ u8 *fcache_getblk(struct super_block *sb, u32 sec)
 	bp->flag = 0;
 	__fcache_insert_hash(sb, bp);
 
-#if (FAT_RA_SECTORS > 0)
-	/* Naive FAT read-ahead (increase I/O unit to FAT_RA_SECTORS) */
-	if ((sec & (FAT_RA_SECTORS - 1)) == 0)
-		bdev_readahead(sb, sec, FAT_RA_SECTORS);
-#endif
+	/* Naive FAT read-ahead (increase I/O unit to page_ra_count) */
+	if ((sec & (page_ra_count - 1)) == 0)
+		bdev_readahead(sb, sec, page_ra_count);
 
 	/* 
 	 * patch 1.2.4 : buffer_head null pointer exception problem.
@@ -235,8 +234,8 @@ u8 *fcache_getblk(struct super_block *sb, u32 sec)
 
 static inline int __mark_delayed_dirty(struct super_block *sb, cache_ent_t *bp)
 {
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 #ifdef CONFIG_SDFAT_DELAYED_META_DIRTY
+	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 	if (fsi->vol_type == EXFAT)
 		return -ENOTSUPP;
 	
@@ -342,7 +341,7 @@ s32 fcache_release_all(struct super_block *sb)
 	s32 ret = 0;
 	cache_ent_t *bp;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-	int dirtycnt = 0;
+	s32 dirtycnt = 0;
 
 	bp = fsi->fcache.lru_list.next;
 	while (bp != &fsi->fcache.lru_list) {
@@ -373,7 +372,7 @@ s32 fcache_flush(struct super_block *sb, u32 sync)
 	s32 ret = 0;
 	cache_ent_t *bp;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-	int dirtycnt = 0;
+	s32 dirtycnt = 0;
 
 	bp = fsi->fcache.lru_list.next;
 	while (bp != &fsi->fcache.lru_list) {
@@ -474,34 +473,33 @@ static void __fcache_remove_hash(cache_ent_t *bp)
 /*======================================================================*/
 /*  Buffer Read/Write Functions                                         */
 /*======================================================================*/
-
 /* Read-ahead a cluster */
 s32 dcache_readahead(struct super_block *sb, u32 sec)
 {
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 	struct buffer_head *bh;
+	u32 max_ra_count = DCACHE_MAX_RA_SIZE >> sb->s_blocksize_bits;
+	u32 page_ra_count = PAGE_SIZE >> sb->s_blocksize_bits;
+	u32 adj_ra_count = max(fsi->sect_per_clus, page_ra_count);
+	u32 ra_count = min(adj_ra_count, max_ra_count);
 
 	/* Read-ahead is not required */ 
 	if (fsi->sect_per_clus == 1)
 		return 0;
 
-	if (sec < fsi->root_start_sector) {
+	if (sec < fsi->data_start_sector) {
 		EMSG("BD: %s: requested sector is invalid(sect:%u, root:%u)\n", 
-				__func__, sec, fsi->root_start_sector);
+				__func__, sec, fsi->data_start_sector);
 		return -EIO;
 	}
 
-	/* Not a first sector of cluster */
-	if ((sec - fsi->root_start_sector) & (fsi->sect_per_clus - 1)) {
-		EMSG("BD: %s: no sector aligned with cluster size"
-				"(sect:%u, sect/clus:%u)\n", 
-				__func__, sec, fsi->sect_per_clus);
-		return -EIO;
-	}
+	/* Not sector aligned with ra_count, resize ra_count to page size */
+	if ((sec - fsi->data_start_sector) & (ra_count - 1))
+		ra_count = page_ra_count;
 
-	bh = __find_get_block(sb->s_bdev, sec, sb->s_blocksize);
+	bh = sb_find_get_block(sb, sec);
 	if (!bh || !buffer_uptodate(bh))
-		bdev_readahead(sb, sec, fsi->sect_per_clus);
+		bdev_readahead(sb, sec, ra_count);
 
 	brelse(bh);
 
@@ -595,13 +593,13 @@ s32 dcache_modify(struct super_block *sb, u32 sec)
 {
 	s32 ret = -EIO;
 	cache_ent_t *bp;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
 	set_sb_dirty(sb);
 
 	bp = __dcache_find(sb, sec);
 	if (likely(bp)) {
 #ifdef CONFIG_SDFAT_DELAYED_META_DIRTY
+		FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 		if (fsi->vol_type != EXFAT) {
 			bp->flag |= DIRTYBIT;
 			return 0;
@@ -678,7 +676,7 @@ s32 dcache_release_all(struct super_block *sb)
 	s32 ret = 0;
 	cache_ent_t *bp;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-	int dirtycnt = 0;
+	s32 dirtycnt = 0;
 
 	/* Connect list elements */
 	/* LRU list : (A - B - ... - bp_front) + (bp_first + ... + bp_last) */
@@ -718,8 +716,8 @@ s32 dcache_flush(struct super_block *sb, u32 sync)
 	s32 ret = 0;
 	cache_ent_t *bp;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-	int dirtycnt = 0;
-	int keepcnt = 0;
+	s32 dirtycnt = 0;
+	s32 keepcnt = 0;
 
 	/* Connect list elements */
 	/* LRU list : (A - B - ... - bp_front) + (bp_first + ... + bp_last) */

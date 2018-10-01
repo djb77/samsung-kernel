@@ -96,7 +96,8 @@ struct battery_data_t {
 	u32 V_empty;
 	u32 V_empty_origin;
 	u32 sw_v_empty_vol;
-	u32 sw_v_empty_recover_vol;	
+	u32 sw_v_empty_vol_cisd;
+	u32 sw_v_empty_recover_vol;
 	u32 QResidual20;
 	u32 QResidual30;
 	u32 TempCo;

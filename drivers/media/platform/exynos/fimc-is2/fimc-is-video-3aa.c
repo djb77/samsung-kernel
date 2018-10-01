@@ -579,25 +579,28 @@ static int fimc_is_3aa_video_s_ext_ctrl(struct file *file, void *priv,
 
 		switch (ext_ctrl->id) {
 #ifdef ENABLE_ULTRA_FAST_SHOT
-		case V4L2_CID_IS_CANCEL_CAPTURE:
+		case V4L2_CID_IS_FAST_CAPTURE_CONTROL:
 			{
-				IS_FastAeControlStr *fastCancel = (IS_FastAeControlStr *)&device->is_region->FastControl.fastAeControl;
-				ret = copy_from_user(fastCancel, ext_ctrl->ptr, sizeof(IS_FastAeControlStr));
+				struct fast_ctl_capture *fast_capture =
+					(struct fast_ctl_capture *)&device->is_region->fast_ctl.fast_capture;
+				ret = copy_from_user(fast_capture, ext_ctrl->ptr, sizeof(struct fast_ctl_capture));
 				if (ret) {
 					merr("copy_from_user is fail(%d)", vctx, ret);
 					goto p_err;
 				}
 
-				fastCancel->readyForNewCmd = 1;
-				device->fastctlmgr.fast_ae_count = 2;
+				fast_capture->ready = 1;
+				device->fastctlmgr.fast_capture_count = 2;
 
 				vb2_ion_sync_for_device(
 					device->imemory.fw_cookie,
-					(ulong)fastCancel - device->imemory.kvaddr,
-					sizeof(IS_FastAeControlStr),
+					(ulong)fast_capture - device->imemory.kvaddr,
+					sizeof(struct fast_ctl_capture),
 					DMA_TO_DEVICE);
 
-				mvinfo("Fast cancel control(flag %d)\n", vctx, vctx->video, fastCancel->cancelPicture);
+				mvinfo("Fast capture control(Intent:%d, count:%d, exposureTime:%d)\n",
+					vctx, vctx->video, fast_capture->capture_intent, fast_capture->capture_count,
+					fast_capture->capture_exposureTime);
 			}
 			break;
 #endif

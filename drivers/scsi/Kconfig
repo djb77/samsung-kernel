@@ -50,6 +50,12 @@ config UFS_FMP_ECRYPT_FS
 	  This option activates flash memory protector of the UFS controller to
 	  accelerate eCryptfs.
 
+config SRPMB
+	bool "Secure RPMB support"
+	depends on SCSI
+	help
+	  This option activates secure rpmb.
+
 config SCSI_DMA
 	bool
 	default n

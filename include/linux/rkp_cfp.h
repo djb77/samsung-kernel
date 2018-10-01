@@ -56,8 +56,6 @@ struct task_struct;
 
 #ifdef CONFIG_RKP_CFP_ROPP
 void rkp_cfp_ropp_change_keys(struct task_struct *p);
-void reencrypt_task_return_addresses(struct task_struct * tsk, unsigned long);
-void reencrypt_return_addresses(unsigned long);
 #endif // CONFIG_RKP_CFP_ROPP
 
 #ifdef CONFIG_RKP_CFP_FIX_SMC_BUG

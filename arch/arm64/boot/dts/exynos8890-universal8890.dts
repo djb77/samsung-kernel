@@ -2228,6 +2228,18 @@
 				video_high_speed_240fps_mif = <DVFS_MIF_L4>;
 				video_high_speed_240fps_i2c = <0>;
 
+				ext_rear_int = <DVFS_INT_L4>;
+				ext_rear_cam = <DVFS_CAM_L0>;
+				ext_rear_mif = <DVFS_MIF_L6>;
+				ext_rear_i2c = <0>;
+				ext_rear_hpg = <1>;
+
+				ext_front_int = <DVFS_INT_L5>;
+				ext_front_cam = <DVFS_CAM_L0>;
+				ext_front_mif = <DVFS_MIF_L6>;
+				ext_front_i2c = <0>;
+				ext_front_hpg = <1>;
+
 				max_int = <DVFS_INT_L0>;
 				max_cam = <DVFS_CAM_L0>;
 				max_mif = <DVFS_MIF_L0>;
@@ -2391,6 +2403,18 @@
 				video_high_speed_240fps_cam = <DVFS_CAM_L1>;
 				video_high_speed_240fps_mif = <DVFS_MIF_L4>;
 				video_high_speed_240fps_i2c = <0>;
+
+				ext_rear_int = <DVFS_INT_L4>;
+				ext_rear_cam = <DVFS_CAM_L0>;
+				ext_rear_mif = <DVFS_MIF_L6>;
+				ext_rear_i2c = <0>;
+				ext_rear_hpg = <1>;
+
+				ext_front_int = <DVFS_INT_L5>;
+				ext_front_cam = <DVFS_CAM_L0>;
+				ext_front_mif = <DVFS_MIF_L6>;
+				ext_front_i2c = <0>;
+				ext_front_hpg = <1>;
 
 				max_int = <DVFS_INT_L0>;
 				max_cam = <DVFS_CAM_L0>;

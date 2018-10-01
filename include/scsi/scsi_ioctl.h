@@ -44,6 +44,20 @@ typedef struct scsi_fctargaddress {
 	unsigned char host_wwn[8]; // include NULL term.
 } Scsi_FCTargAddress;
 
+#if defined(CONFIG_SRPMB)
+typedef struct rpmb_req {
+	u32 cmd;
+	volatile u32 status_flag;
+	u32 type;
+	u32 data_len;
+	u32 inlen;
+	u32 outlen;
+	u8 rpmb_data[0];
+} Rpmb_Req;
+
+extern int srpmb_scsi_ioctl(struct scsi_device *, Rpmb_Req *req);
+#endif
+
 extern int scsi_ioctl(struct scsi_device *, int, void __user *);
 extern int scsi_nonblockable_ioctl(struct scsi_device *sdev, int cmd,
 				   void __user *arg, int ndelay);

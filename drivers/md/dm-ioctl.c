@@ -57,6 +57,8 @@ struct vers_iter {
 static struct list_head _name_buckets[NUM_BUCKETS];
 static struct list_head _uuid_buckets[NUM_BUCKETS];
 
+int fmp_encrypted;
+
 static void dm_hash_remove_all(bool keep_open_devices, bool mark_deferred, bool only_deferred);
 
 /*
@@ -962,6 +964,16 @@ out:
 	return r;
 }
 
+static int dev_update_status(struct dm_ioctl *param, size_t param_size)
+{
+	if (!(strncmp(param->crypto_type_name, "aes-xts-fmp", sizeof("aes-xts-fmp"))) &&
+			!(strncmp(param->encrypted_state, "encrypted", sizeof("encrypted"))))
+		fmp_encrypted = 1;
+	else
+		fmp_encrypted = 0;
+	return 0;
+}
+
 static int do_suspend(struct dm_ioctl *param)
 {
 	int r = 0;
@@ -1621,7 +1633,8 @@ static ioctl_fn lookup_ioctl(unsigned int cmd, int *ioctl_flags)
 		{DM_LIST_VERSIONS_CMD, 0, list_versions},
 
 		{DM_TARGET_MSG_CMD, 0, target_message},
-		{DM_DEV_SET_GEOMETRY_CMD, 0, dev_set_geometry}
+		{DM_DEV_SET_GEOMETRY_CMD, 0, dev_set_geometry},
+		{DM_DEV_UPDATE_STATUS_CMD, 0, dev_update_status}
 	};
 
 	if (unlikely(cmd >= ARRAY_SIZE(_ioctls)))

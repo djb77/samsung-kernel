@@ -186,13 +186,6 @@ config CPU_FREQ_GOV_INTERACTIVE
 
 	  If in doubt, say N.
 
-config MODE_AUTO_CHANGE
-	bool "automatic governor parameter change"
-	depends on CPU_FREQ_GOV_INTERACTIVE
-	default n
-	help
-	  automatic governor parameter change by MODE
-
 config CPU_FREQ_GOV_CONSERVATIVE
 	tristate "'conservative' cpufreq governor"
 	depends on CPU_FREQ

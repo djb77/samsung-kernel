@@ -51,7 +51,23 @@ static ssize_t prox_vendor_show(struct device *dev,
 static ssize_t prox_name_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%s\n", CHIP_ID);
+	struct ssp_data *data = dev_get_drvdata(dev);
+	int device_id = 0;
+	device_id = get_proximity_device_id(data);
+
+	if(device_id == TMD4903)
+	{
+		return sprintf(buf, "%s\n", "TMD4903");
+	}
+	else if(device_id ==  TMD4904)
+	{
+		return sprintf(buf, "%s\n", "TMD4904");
+	}
+	else
+	{
+		pr_err("[SSP]: %s - Unkown proximity device \n", __func__);
+		return sprintf(buf, "%s\n", "UNKNOWN");
+	}
 }
 
 static ssize_t proximity_avg_show(struct device *dev,
@@ -197,6 +213,10 @@ void get_proximity_threshold(struct ssp_data *data)
 #endif
 	data->uProxHiThresh = data->uProxHiThresh_default;
 	data->uProxLoThresh = data->uProxLoThresh_default;
+
+	//for tmd4904
+	data->uProxHiThresh_tmd4904 = data->uProxHiThresh_default_tmd4904;
+	data->uProxLoThresh_tmd4904 = data->uProxLoThresh_default_tmd4904;
 }
 
 int proximity_open_calibration(struct ssp_data *data)
@@ -204,6 +224,10 @@ int proximity_open_calibration(struct ssp_data *data)
 	int iRet = 0;
 	mm_segment_t old_fs;
 	struct file *cancel_filp = NULL;
+
+	//for tmd4904
+	int device_id = 0;
+	device_id = get_proximity_device_id(data);
 
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
@@ -226,16 +250,31 @@ int proximity_open_calibration(struct ssp_data *data)
 	}
 
 	if (data->uProxCanc != 0) {
-		/*If there is an offset cal data. */
-		data->uProxHiThresh =
-			data->uProxHiThresh_default + data->uProxCanc;
-		data->uProxLoThresh =
-			data->uProxLoThresh_default + data->uProxCanc;
+		if(device_id == TMD4903)
+		{
+			/*If there is an offset cal data. */
+			data->uProxHiThresh =
+				data->uProxHiThresh_default + data->uProxCanc;
+			data->uProxLoThresh =
+				data->uProxLoThresh_default + data->uProxCanc;
+			
+			pr_info("[SSP] %s: proximity ps_canc = %d, ps_thresh hi - %d lo - %d\n",
+				__func__, data->uProxCanc, data->uProxHiThresh, data->uProxLoThresh);
+		}
+		else if(device_id == TMD4904)
+		{
+			//for tmd4904
+			data->uProxHiThresh_tmd4904 = data->uProxHiThresh_default_tmd4904 + data->uProxCanc;
+			data->uProxLoThresh_tmd4904 = data->uProxLoThresh_default_tmd4904 + data->uProxCanc;
+			
+			pr_info("[SSP] %s: proximity TMD4904 ps_canc = %d, ps_thresh hi - %d lo - %d\n",
+				__func__, data->uProxCanc, data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904);
+		}
+		else
+		{
+			pr_info("[SSP] %s: unkonwn proximity \n", __func__);
+		}
 	}
-
-	pr_info("[SSP] %s: proximity ps_canc = %d, ps_thresh hi - %d lo - %d\n",
-		__func__, data->uProxCanc, data->uProxHiThresh,
-		data->uProxLoThresh);
 
 	filp_close(cancel_filp, current->files);
 	set_fs(old_fs);
@@ -246,25 +285,75 @@ exit:
 
 static int calculate_proximity_threshold(struct ssp_data *data)
 {
-	if (data->uCrosstalk < data->uProxLoThresh_cal) {
-		data->uProxCanc = 0;
-		data->uProxCalResult = 2;
-	} else if (data->uCrosstalk <= data->uProxHiThresh_cal) {
-		data->uProxCanc = data->uCrosstalk * 5 / 10;
-		data->uProxCalResult = 1;
-	} else {
-		data->uProxCanc = 0;
-		data->uProxCalResult = 0;
-		pr_info("[SSP] crosstalk > %d, calibration failed\n",
-			data->uProxHiThresh_cal);
-		return ERROR;
-	}
-	data->uProxHiThresh = data->uProxHiThresh_default + data->uProxCanc;
-	data->uProxLoThresh = data->uProxLoThresh_default + data->uProxCanc;
+	//for tmd4904
+	int device_id = 0;
+	device_id = get_proximity_device_id(data);
 
-	pr_info("[SSP] %s - crosstalk_offset = %u(%u), HI_THD = %u, LOW_THD = %u\n",
-		__func__, data->uProxCanc, data->uCrosstalk,
-		data->uProxHiThresh, data->uProxLoThresh);
+	if(device_id == TMD4903)
+	{
+		if (data->uCrosstalk < data->uProxLoThresh_cal) {
+			data->uProxCanc = 0;
+			data->uProxCalResult = 2;
+		} else if (data->uCrosstalk <= data->uProxHiThresh_cal) {
+			data->uProxCanc = data->uCrosstalk * 5 / 10;
+			data->uProxCalResult = 1;
+		} else {
+			data->uProxCanc = 0;
+			data->uProxCalResult = 0;
+			pr_info("[SSP] crosstalk > %d, calibration failed\n",
+				data->uProxHiThresh_cal);
+			return ERROR;
+		}
+		data->uProxHiThresh = data->uProxHiThresh_default + data->uProxCanc;
+		data->uProxLoThresh = data->uProxLoThresh_default + data->uProxCanc;
+
+		pr_info("[SSP] %s - TMD4903 crosstalk_offset = %u(%u), HI_THD = %u, LOW_THD = %u\n",
+			__func__, data->uProxCanc, data->uCrosstalk, data->uProxHiThresh, data->uProxLoThresh);
+
+	}
+	else if(device_id == TMD4904)
+	{
+		// for tmd4904
+		if (data->uCrosstalk < data->uProxLoThresh_cal_tmd4904) {
+			data->uProxCanc = 0;
+			data->uProxCalResult = 2;
+		} else if (data->uCrosstalk <= data->uProxHiThresh_cal_tmd4904) {
+			data->uProxCanc = data->uCrosstalk * 5 / 10;
+			data->uProxCalResult = 1;
+		} else {
+			data->uProxCanc = 0;
+			data->uProxCalResult = 0;
+			pr_info("[SSP] TMD4904 crosstalk > %d, calibration failed\n",
+				data->uProxHiThresh_cal);
+			return ERROR;
+		}
+		data->uProxHiThresh_tmd4904 = data->uProxHiThresh_default_tmd4904 + data->uProxCanc;
+		data->uProxLoThresh_tmd4904 = data->uProxLoThresh_default_tmd4904 + data->uProxCanc;
+
+		pr_info("[SSP] %s - crosstalk_offset = %u(%u), HI_THD = %u, LOW_THD = %u\n",
+		__func__, data->uProxCanc, data->uCrosstalk, data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904);
+	}
+	else
+	{
+		if (data->uCrosstalk < data->uProxLoThresh_cal) {
+			data->uProxCanc = 0;
+			data->uProxCalResult = 2;
+		} else if (data->uCrosstalk <= data->uProxHiThresh_cal) {
+			data->uProxCanc = data->uCrosstalk * 5 / 10;
+			data->uProxCalResult = 1;
+		} else {
+			data->uProxCanc = 0;
+			data->uProxCalResult = 0;
+			pr_info("[SSP] crosstalk > %d, calibration failed\n",
+				data->uProxHiThresh_cal);
+			return ERROR;
+		}
+		data->uProxHiThresh = data->uProxHiThresh_default + data->uProxCanc;
+		data->uProxLoThresh = data->uProxLoThresh_default + data->uProxCanc;
+
+		pr_info("[SSP] %s - UNKNOWN crosstalk_offset = %u(%u), HI_THD = %u, LOW_THD = %u\n",
+			__func__, data->uProxCanc, data->uCrosstalk, data->uProxHiThresh, data->uProxLoThresh);
+	}
 
 	return SUCCESS;
 }
@@ -281,6 +370,10 @@ static int proximity_store_cancelation(struct ssp_data *data, int iCalCMD)
 	} else {
 		data->uProxHiThresh = data->uProxHiThresh_default;
 		data->uProxLoThresh = data->uProxLoThresh_default;
+		
+		//for tmd 4904
+		data->uProxHiThresh_tmd4904 = data->uProxHiThresh_default_tmd4904;
+		data->uProxLoThresh_tmd4904 = data->uProxLoThresh_default_tmd4904;
 		data->uProxCanc = 0;
 	}
 
@@ -317,8 +410,30 @@ static ssize_t proximity_cancel_show(struct device *dev,
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
-	ssp_dbg("[SSP]: uProxThresh : hi : %u lo : %u, uProxCanc = %u\n",
-		data->uProxHiThresh, data->uProxLoThresh, data->uProxCanc);
+	//for tmd4904
+	int device_id = 0;
+	device_id = get_proximity_device_id(data);
+
+	if(device_id == TMD4903)
+	{
+		ssp_dbg("[SSP]: TMD4903 uProxThresh : hi : %u lo : %u, uProxCanc = %u\n",
+			data->uProxHiThresh, data->uProxLoThresh, data->uProxCanc);
+
+		return sprintf(buf, "%u,%u,%u\n", data->uProxCanc,
+			data->uProxHiThresh, data->uProxLoThresh);
+	}
+	else if(device_id == TMD4904)
+	{
+		ssp_dbg("[SSP]: TMD4904 uProxThresh : hi : %u lo : %u, uProxCanc = %u\n",
+			data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904, data->uProxCanc);
+
+		return sprintf(buf, "%u,%u,%u\n", data->uProxCanc,
+			data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904);
+	}
+	else
+	{
+		ssp_dbg("[SSP] %s: UNKNOWN Proximity device \n", __func__);
+	}
 
 	return sprintf(buf, "%u,%u,%u\n", data->uProxCanc,
 		data->uProxHiThresh, data->uProxLoThresh);
@@ -355,11 +470,30 @@ static ssize_t proximity_thresh_high_show(struct device *dev,
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
-	ssp_dbg("[SSP]: uProxThresh = hi - %u, lo - %u\n",
-		data->uProxHiThresh, data->uProxLoThresh);
+	//for tmd4904
+	int device_id = 0;
+	device_id = get_proximity_device_id(data);
+	
+	if(device_id == TMD4903)
+	{
+		ssp_dbg("[SSP]: TMD4903 uProxThresh = hi - %u, lo - %u\n",
+			data->uProxHiThresh, data->uProxLoThresh);
 
-	return sprintf(buf, "%u,%u\n", data->uProxHiThresh,
-		data->uProxLoThresh);
+		return sprintf(buf, "%u,%u\n", data->uProxHiThresh, data->uProxLoThresh);
+	}
+	else if(device_id == TMD4904)
+	{
+		ssp_dbg("[SSP]: TMD4904 uProxThresh = hi - %u, lo - %u\n",
+			data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904);
+
+		return sprintf(buf, "%u,%u\n", data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904);
+	}
+	else
+	{
+		ssp_dbg("[SSP]: %s - UNKNOWN Proximity Device \n", __func__);
+	}
+
+	return sprintf(buf, "%u,%u\n", data->uProxHiThresh, data->uProxLoThresh);
 }
 
 static ssize_t proximity_thresh_high_store(struct device *dev,
@@ -369,6 +503,11 @@ static ssize_t proximity_thresh_high_store(struct device *dev,
 	int iRet = 0;
 	struct ssp_data *data = dev_get_drvdata(dev);
 
+
+	//for tmd4904
+	int device_id = 0;
+	device_id = get_proximity_device_id(data);
+
 	iRet = kstrtou16(buf, 10, &uNewThresh);
 	if (iRet < 0)
 		pr_err("[SSP]: %s - kstrtoint failed.(%d)\n", __func__, iRet);
@@ -377,13 +516,22 @@ static ssize_t proximity_thresh_high_store(struct device *dev,
 			pr_err("[SSP]: %s - allow 14bits.(%d)\n", __func__, uNewThresh);
 		else {
 			uNewThresh &= 0x3fff;
-			data->uProxHiThresh = data->uProxHiThresh_default = uNewThresh;
+
+			if(device_id == TMD4903)
+			{
+				data->uProxHiThresh = data->uProxHiThresh_default = uNewThresh;
+			}
+			else if(device_id == TMD4904)
+			{
+				//for tmd4904
+				data->uProxHiThresh_tmd4904 = data->uProxHiThresh_default_tmd4904 = uNewThresh;
+			}
 			set_proximity_threshold(data);
 		}
 	}
 
-	ssp_dbg("[SSP]: %s - new prox threshold : hi - %u, lo - %u\n",
-		__func__, data->uProxHiThresh, data->uProxLoThresh);
+	ssp_dbg("[SSP]: %s - new prox threshold : hi - %u, lo - %u, hi - %u, lo - %u \n",
+		__func__, data->uProxHiThresh, data->uProxLoThresh, data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904);
 
 	return size;
 }
@@ -393,8 +541,28 @@ static ssize_t proximity_thresh_low_show(struct device *dev,
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
-	ssp_dbg("[SSP]: uProxThresh = hi - %u, lo - %u\n",
-		data->uProxHiThresh, data->uProxLoThresh);
+	//for tmd4904
+	int device_id = 0;
+	device_id = get_proximity_device_id(data);
+	
+	if(device_id == TMD4903)
+	{
+		ssp_dbg("[SSP]: TMD4903 uProxThresh = hi - %u, lo - %u\n",
+			data->uProxHiThresh, data->uProxLoThresh);
+
+		return sprintf(buf, "%u,%u\n", data->uProxHiThresh, data->uProxLoThresh);
+	}
+	else if(device_id == TMD4904)
+	{
+		ssp_dbg("[SSP]: TMD4903 uProxThresh = hi - %u, lo - %u\n",
+			data->uProxHiThresh, data->uProxLoThresh);
+
+		return sprintf(buf, "%u,%u\n", data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904);
+	}
+	else
+	{
+		ssp_dbg("[SSP]: %s - UNKNOWN Proximity Device \n",__func__);
+	}
 
 	return sprintf(buf, "%u,%u\n", data->uProxHiThresh,
 		data->uProxLoThresh);
@@ -407,6 +575,11 @@ static ssize_t proximity_thresh_low_store(struct device *dev,
 	int iRet = 0;
 	struct ssp_data *data = dev_get_drvdata(dev);
 
+
+	//for tmd4904
+	int device_id = 0;
+	device_id = get_proximity_device_id(data);
+
 	iRet = kstrtou16(buf, 10, &uNewThresh);
 	if (iRet < 0)
 		pr_err("[SSP]: %s - kstrtoint failed.(%d)\n", __func__, iRet);
@@ -415,13 +588,21 @@ static ssize_t proximity_thresh_low_store(struct device *dev,
 			pr_err("[SSP]: %s - allow 14bits.(%d)\n", __func__, uNewThresh);
 		else {
 			uNewThresh &= 0x3fff;
-			data->uProxLoThresh = data->uProxLoThresh_default = uNewThresh;
+			if(device_id == TMD4903)
+			{
+				data->uProxLoThresh = data->uProxLoThresh_default = uNewThresh;
+			}
+			else if(device_id == TMD4904)
+			{
+				// for tmd4904
+				data->uProxLoThresh_tmd4904 = data->uProxLoThresh_default_tmd4904 = uNewThresh;
+			}
 			set_proximity_threshold(data);
 		}
 	}
 
-	ssp_dbg("[SSP]: %s - new prox threshold : hi - %u, lo - %u\n",
-		__func__, data->uProxHiThresh, data->uProxLoThresh);
+	ssp_dbg("[SSP]: %s - new prox threshold : hi - %u, lo - %u, hi - %u, lo - %u \n",
+		__func__, data->uProxHiThresh, data->uProxLoThresh, data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904);
 
 	return size;
 }

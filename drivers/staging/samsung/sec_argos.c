@@ -26,6 +26,7 @@
 #include <linux/cpumask.h>
 #include <linux/interrupt.h>
 #include <linux/sec_argos.h>
+#include <linux/proc_fs.h>
 
 #define ARGOS_NAME "argos"
 #define TYPE_SHIFT 4
@@ -92,6 +93,7 @@ struct argos {
 	struct blocking_notifier_head argos_notifier;
 	/* protect prev_level, qos, task/irq_hotplug_disable, hmpboost_enable */
 	struct mutex level_mutex;
+	unsigned long last_speed;
 };
 
 struct argos_platform_data {
@@ -491,6 +493,7 @@ void argos_block_enable(char *req_name, bool set)
 		argos_irq_affinity_apply(dev_num, 0);
 		argos_hmpboost_apply(dev_num, 0);
 		cnode->prev_level = -1;
+		cnode->last_speed = 0;
 		mutex_unlock(&cnode->level_mutex);
 	} else {
 		cnode->argos_block = false;
@@ -537,9 +540,9 @@ static int argos_pm_qos_notify(struct notifier_block *nfb,
 	cnode = &argos_pdata->devices[type];
 
 	prev_level = cnode->prev_level;
+	cnode->last_speed = speed;
 
 	pr_debug("%s name:%s, speed:%ldMbps\n", __func__, cnode->desc, speed);
-
 	argos_blocked = cnode->argos_block;
 
 	/* Find proper level */
@@ -675,6 +678,7 @@ static int argos_parse_dt(struct device *dev)
 		cnode->hmpboost_enable = false;
 		cnode->argos_block = false;
 		cnode->prev_level = -1;
+		cnode->last_speed = 0;
 		mutex_init(&cnode->level_mutex);
 		cnode->qos = devm_kzalloc(dev, sizeof(struct argos_pm_qos), GFP_KERNEL);
 		if (!cnode->qos) {
@@ -769,8 +773,34 @@ static struct platform_driver argos_driver = {
 	.remove = argos_remove
 };
 
+static int sec_argos_proc_show(struct seq_file *m, void *v)
+{
+	struct argos *cnode;
+	int i;
+
+	for (i = 0; i < argos_pdata->ndevice; i++) {
+		cnode = &argos_pdata->devices[i];
+		if (!strncmp("WIFI", cnode->desc, 5))
+			seq_printf(m, "%ld", cnode->last_speed);
+	}
+	return 0;
+}
+
+static int sec_argos_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, sec_argos_proc_show, NULL);
+}
+
+static const struct file_operations sec_argos_proc_fops = {
+	.open	= sec_argos_proc_open,
+	.read	= seq_read,
+	.llseek	= seq_lseek,
+	.release= single_release,
+};
+
 static int __init argos_init(void)
 {
+	proc_create("sec_argos", 0, NULL, &sec_argos_proc_fops);
 	return platform_driver_register(&argos_driver);
 }
 

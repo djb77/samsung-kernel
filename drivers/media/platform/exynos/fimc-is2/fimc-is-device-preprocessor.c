@@ -38,6 +38,9 @@
 #include "fimc-is-device-preprocessor.h"
 #include "fimc-is-core.h"
 #include "fimc-is-dvfs.h"
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+#include "fimc-is-companion.h"
+#endif
 
 extern struct pm_qos_request exynos_isp_qos_int;
 extern struct pm_qos_request exynos_isp_qos_mem;
@@ -800,6 +803,75 @@ p_err:
 	minfo("[PRE:D] %s(%d, %d):%d\n", device, __func__, scenario, input, ret);
 	return ret;
 }
+
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+int fimc_is_preproc_fac_valid_check(struct fimc_is_device_preproc *device,
+	u32 input,
+	u32 scenario)
+{
+	int ret = 0;
+	struct fimc_is_core *core;
+	struct fimc_is_vender *vender;
+	struct fimc_is_device_sensor *device_sensor;
+
+	BUG_ON(!device);
+	BUG_ON(!device->pdata);
+	BUG_ON(!device->private_data);
+	BUG_ON(input >= SENSOR_NAME_END);
+
+	core = device->private_data;
+	vender = &core->vender;
+	device_sensor = &core->sensor[device->pdata->id];
+
+	ret = fimc_is_search_sensor_module(device_sensor, input, &device->module);
+	if (ret) {
+		err("fimc_is_search_sensor_module is fail(%d)", ret);
+		goto p_err;
+	}
+
+	core->current_position = device->module->position;
+
+	ret = fimc_is_preproc_mclk_on(device);
+	if (ret) {
+		err("fimc_is_preproc_mclk_on is fail(%d)", ret);
+		goto p_err;
+	}
+
+	ret = fimc_is_preproc_gpio_on(device);
+	if (ret) {
+		err("fimc_is_preproc_gpio_on is fail(%d)", ret);
+		fimc_is_preproc_mclk_off(device);
+		goto p_err;
+	}
+
+	msleep(150);
+
+	ret = fimc_is_comp_is_valid_fac(core);
+	if (ret) {
+		err("fimc_is_comp_is_valid is fail(%d)", ret);
+		fimc_is_preproc_gpio_off(device);
+		fimc_is_preproc_mclk_off(device);
+		goto p_err;
+	}
+    
+	ret = fimc_is_preproc_gpio_off(device);
+	if (ret) {
+		err("fimc_is_preproc_gpio_off is fail(%d)", ret);
+		fimc_is_preproc_mclk_off(device);
+		goto p_err;
+	}
+    
+	ret = fimc_is_preproc_mclk_off(device);
+	if (ret) {
+		err("fimc_is_preproc_mclk_off is fail(%d)", ret);
+		goto p_err;
+	}
+
+p_err:
+	minfo("[PRE:D] %s(%d, %d):%d\n", device, __func__, scenario, input, ret);
+	return ret;
+}
+#endif
 
 static const struct dev_pm_ops fimc_is_preproc_pm_ops = {
 	.suspend		= fimc_is_preproc_suspend,

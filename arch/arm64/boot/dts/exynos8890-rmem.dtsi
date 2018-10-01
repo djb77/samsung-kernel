@@ -53,7 +53,7 @@
 			compatible = "exynos8890-ion,vframe";
 			secure;
 			reusable;
-			reg = <0x0 0xC2000000 0x5400000>;
+			reg = <0x0 0xC2000000 0x6400000>;
 			id = <5>;
 			compat-id = <26 29>;
 		};
@@ -62,7 +62,7 @@
 			compatible = "exynos8890-ion,vscaler";
 			secure;
 			reusable;
-			reg = <0x0 0xC7400000 0x3C00000>;
+			reg = <0x0 0xC8400000 0x4800000>;
 			id = <6>;
 			compat-id = <28>;
 		};
@@ -70,7 +70,7 @@
 		gpu_crc {
 			compatible = "exynos8890-ion,gpu_crc";
 			secure;
-			reg = <0x0 0xCB000000 0x800000>;
+			reg = <0x0 0xCCC00000 0x800000>;
 			id = <8>;
 		};
 
@@ -78,14 +78,21 @@
 			compatible = "exynos8890-ion,gpu_buffer";
 			secure;
 			reusable;
-			reg = <0x0 0xCB800000 0x2400000>;
+			reg = <0x0 0xCD400000 0x2400000>;
 			id = <9>;
 		};
 
 		camera {
 			compatible = "exynos8890-ion,camera";
-			reg = <0x0 0xCDC00000 0xE400000>;
+			reg = <0x0 0xCF800000 0xE400000>;
 			id = <10>;
+		};
+
+		secure_camera {
+			compatible = "exynos8890-ion,secure_camera";
+			secure;
+			reg = <0x0 0xFC000000 0x1C00000>;
+			id = <11>;
 		};
 	};
 };

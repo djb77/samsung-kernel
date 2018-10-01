@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmpcie.h 604490 2015-12-07 15:48:45Z $
+ * $Id: bcmpcie.h 645077 2016-06-22 12:55:51Z $
  */
 
 
@@ -284,9 +284,10 @@ extern pciedev_shared_t pciedev_shared;
 #define D2H_DEV_D3_ACK		0x00000001
 #define D2H_DEV_DS_ENTER_REQ	0x00000002
 #define D2H_DEV_DS_EXIT_NOTE	0x00000004
+#define D2H_FWTRAP_MASK		0x0000001F	/* Adding maskbits for TRAP information */
 #define D2H_DEV_FWHALT		0x10000000
 #define D2H_DEV_MB_MASK		(D2H_DEV_D3_ACK | D2H_DEV_DS_ENTER_REQ | \
-				D2H_DEV_DS_EXIT_NOTE | D2H_DEV_FWHALT)
+				D2H_DEV_DS_EXIT_NOTE | D2H_FWTRAP_MASK | D2H_DEV_FWHALT)
 #define D2H_DEV_MB_INVALIDATED(x)	((!x) || (x & ~D2H_DEV_MB_MASK))
 
 /** These macro's operate on type 'inuse_lclbuf_pool_t' and are used by firmware only */

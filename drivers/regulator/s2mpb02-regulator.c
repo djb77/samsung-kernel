@@ -412,7 +412,7 @@ static int s2mpb02_pmic_probe(struct platform_device *pdev)
 		if (s2mpb02->rdev[i])
 			regulator_unregister(s2mpb02->rdev[i]);
 
-	kfree(s2mpb02);
+	devm_kfree(&pdev->dev, (void*)s2mpb02);
 
 	return ret;
 }
@@ -439,6 +439,7 @@ static struct platform_driver s2mpb02_pmic_driver = {
 	.driver = {
 		   .name = "s2mpb02-regulator",
 		   .owner = THIS_MODULE,
+		   .suppress_bind_attrs = true,
 		   },
 	.probe = s2mpb02_pmic_probe,
 	.remove = s2mpb02_pmic_remove,

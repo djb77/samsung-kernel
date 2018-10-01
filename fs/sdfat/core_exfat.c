@@ -87,422 +87,6 @@ static u8 used_bit[] = {
 /*======================================================================*/
 /*  Local Function Definitions                                          */
 /*======================================================================*/
-
-/*
- *  Allocation Bitmap Management Functions
- */
-s32 load_alloc_bmp(struct super_block *sb)
-{
-	s32 i, j, ret;
-	u32 map_size;
-	u32 type, sector;
-	CHAIN_T clu;
-	BMAP_DENTRY_T *ep;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
-	clu.dir = fsi->root_dir;
-	clu.flags = 0x01;
-
-	while (!IS_CLUS_EOF(clu.dir)) {
-		for (i = 0; i < fsi->dentries_per_clu; i++) {
-			ep = (BMAP_DENTRY_T *) get_dentry_in_dir(sb, &clu, i, NULL);
-			if (!ep)
-				return -EIO;
-
-			type = fsi->fs_func->get_entry_type((DENTRY_T *) ep);
-
-			if (type == TYPE_UNUSED)
-				break;
-			if (type != TYPE_BITMAP)
-				continue;
-
-			if (ep->flags == 0x0) {
-				fsi->map_clu  = le32_to_cpu(ep->start_clu);
-				map_size = (u32) le64_to_cpu(ep->size);
-
-				fsi->map_sectors = ((map_size-1) >> (sb->s_blocksize_bits)) + 1;
-				fsi->vol_amap = (struct buffer_head **) kmalloc((sizeof(struct buffer_head *) * fsi->map_sectors), GFP_KERNEL);
-				if (!fsi->vol_amap)
-					return -ENOMEM;
-
-				sector = CLUS_TO_SECT(fsi, fsi->map_clu);
-
-				for (j = 0; j < fsi->map_sectors; j++) {
-					fsi->vol_amap[j] = NULL;
-					ret = read_sect(sb, sector+j, &(fsi->vol_amap[j]), 1);
-					if (ret) {
-						/*  release all buffers and free vol_amap */
-						i=0;
-						while (i < j)
-							brelse(fsi->vol_amap[i++]);
-
-						if (fsi->vol_amap) {
-							kfree(fsi->vol_amap);
-							fsi->vol_amap = NULL;
-						}
-						return ret;
-					}
-				}
-
-				fsi->pbr_bh = NULL;
-				return 0;
-			}
-		}
-
-		if (fat_ent_get(sb, clu.dir, &(clu.dir)))
-			return -EIO;
-	}
-
-	return -EINVAL;
-} /* end of load_alloc_bmp */
-
-void free_alloc_bmp(struct super_block *sb)
-{
-	s32 i;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
-	brelse(fsi->pbr_bh);
-
-	for (i = 0; i < fsi->map_sectors; i++) {
-		__brelse(fsi->vol_amap[i]);
-	}
-
-	if(fsi->vol_amap) {
-		kfree(fsi->vol_amap);
-		fsi->vol_amap = NULL;
-	}
-}
-
-/* WARN : 
- * If the value of "clu" is 0, it means cluster 2 which is 
- * the first cluster of cluster heap.
- */
-static s32 set_alloc_bitmap(struct super_block *sb, u32 clu)
-{
-	s32 i, b;
-	u32 sector;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
-	i = clu >> (sb->s_blocksize_bits + 3);
-	b = clu & (u32)((sb->s_blocksize << 3) - 1);
-
-	sector = CLUS_TO_SECT(fsi, fsi->map_clu) + i;
-
-	bitmap_set((unsigned long*)(fsi->vol_amap[i]->b_data), b, 1);
-
-	return write_sect(sb, sector, fsi->vol_amap[i], 0);
-} /* end of set_alloc_bitmap */
-
-/* WARN : 
- * If the value of "clu" is 0, it means cluster 2 which is 
- * the first cluster of cluster heap.
- */
-static s32 clr_alloc_bitmap(struct super_block *sb, u32 clu)
-{
-	s32 ret;
-	s32 i, b;
-	u32 sector;
-	struct sdfat_sb_info *sbi = SDFAT_SB(sb);
-	struct sdfat_mount_options *opts = &sbi->options;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
-	i = clu >> (sb->s_blocksize_bits + 3);
-	b = clu & (u32)((sb->s_blocksize << 3) - 1);
-
-	sector = CLUS_TO_SECT(fsi, fsi->map_clu) + i;
-
-	bitmap_clear((unsigned long*)(fsi->vol_amap[i]->b_data), b, 1);
-
-	ret = write_sect(sb, sector, fsi->vol_amap[i], 0);
-
-	if (opts->discard) {
-		s32 ret_discard;
-		TMSG("discard cluster(%08x)\n", clu+2);
-		ret_discard = sb_issue_discard(sb, CLUS_TO_SECT(fsi, clu+2), 
-				(1 << fsi->sect_per_clus_bits), GFP_NOFS, 0);
-		
-		if (ret_discard == -EOPNOTSUPP) {
-			sdfat_msg(sb, KERN_ERR, 
-				"discard not supported by device, disabling");
-			opts->discard = 0;
-		}
-	}
-
-	return ret;
-} /* end of clr_alloc_bitmap */
-
-/* WARN : 
- * If the value of "clu" is 0, it means cluster 2 which is 
- * the first cluster of cluster heap.
- */
-static u32 test_alloc_bitmap(struct super_block *sb, u32 clu)
-{
-	u32 i, map_i, map_b;
-	u32 clu_base, clu_free;
-	u8 k, clu_mask;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
-	clu_base = (clu & ~(0x7)) + 2;
-	clu_mask = (1 << (clu - clu_base + 2)) - 1;
-
-	map_i = clu >> (sb->s_blocksize_bits + 3);
-	map_b = (clu >> 3) & (u32)(sb->s_blocksize - 1);
-
-	for (i = 2; i < fsi->num_clusters; i += 8) {
-		k = *(((u8 *) fsi->vol_amap[map_i]->b_data) + map_b);
-		if (clu_mask > 0) {
-			k |= clu_mask;
-			clu_mask = 0;
-		}
-		if (k < 0xFF) {
-			clu_free = clu_base + free_bit[k];
-			if (clu_free < fsi->num_clusters)
-				return clu_free;
-		}
-		clu_base += 8;
-
-		if (((++map_b) >= (u32)sb->s_blocksize) || (clu_base >= fsi->num_clusters)) {
-			if ((++map_i) >= fsi->map_sectors) {
-				clu_base = 2;
-				map_i = 0;
-			}
-			map_b = 0;
-		}
-	}
-
-	return CLUS_EOF;
-} /* end of test_alloc_bitmap */
-
-void sync_alloc_bmp(struct super_block *sb)
-{
-	s32 i;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
-	if (fsi->vol_amap == NULL)
-		return;
-
-	for (i = 0; i < fsi->map_sectors; i++)
-		sync_dirty_buffer(fsi->vol_amap[i]);
-}
-
-static s32 exfat_chain_cont_cluster(struct super_block *sb, u32 chain, s32 len)
-{
-	if (!len)
-		return 0;
-
-	while (len > 1) {
-		if (fat_ent_set(sb, chain, chain+1))
-			return -EIO;
-		chain++;
-		len--;
-	}
-
-	if (fat_ent_set(sb, chain, CLUS_EOF))
-		return -EIO;
-	return 0;
-}
-
-s32 chain_cont_cluster(struct super_block *sb, u32 chain, s32 len)
-{
-	return exfat_chain_cont_cluster(sb, chain, len);
-}
-
-static s32 exfat_alloc_cluster(struct super_block *sb, s32 num_alloc, CHAIN_T *p_chain, int dest)
-{
-	s32 num_clusters = 0;
-	u32 hint_clu, new_clu, last_clu = CLUS_EOF;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
-	hint_clu = p_chain->dir;
-	/* find new cluster */
-	if (IS_CLUS_EOF(hint_clu)) {
-		if (fsi->clu_srch_ptr < 2) {
-			EMSG("%s: fsi->clu_srch_ptr is invalid (%u)\n",
-					__func__,
-					fsi->clu_srch_ptr);
-			sdfat_debug_bug_on(1);
-			fsi->clu_srch_ptr = 2;
-		}
-
-		hint_clu = test_alloc_bitmap(sb, fsi->clu_srch_ptr-2);
-		if (IS_CLUS_EOF(hint_clu))
-			return 0;
-	} 
-	
-	/* check cluster validation */
-	if ((hint_clu < 2) && (hint_clu >= fsi->num_clusters)) {
-		EMSG("%s: hint_cluster is invalid (%u)\n", __func__, hint_clu);
-		sdfat_debug_bug_on(1);
-		hint_clu = 2;
-		if (p_chain->flags == 0x03) {
-			if (exfat_chain_cont_cluster( sb, p_chain->dir, num_clusters))
-				return -EIO;
-			p_chain->flags = 0x01;
-		}
-	}
-
-	set_sb_dirty(sb);
-	
-	p_chain->dir = CLUS_EOF;
-
-	while ((new_clu = test_alloc_bitmap(sb, hint_clu-2)) != CLUS_EOF) {
-		if ( (new_clu != hint_clu) && (p_chain->flags == 0x03) ) {
-			if (exfat_chain_cont_cluster( sb, p_chain->dir, num_clusters))
-				return -EIO;
-			p_chain->flags = 0x01;
-		}
-
-		/* update allocation bitmap */
-		if (set_alloc_bitmap(sb, new_clu-2))
-			return -EIO;
-
-		num_clusters++;
-
-		/* update FAT table */
-		if (p_chain->flags == 0x01)
-			if (fat_ent_set(sb, new_clu, CLUS_EOF))
-				return -EIO;
-
-		if (IS_CLUS_EOF(p_chain->dir)) {
-			p_chain->dir = new_clu;
-		} else if (p_chain->flags == 0x01) {
-			if (fat_ent_set(sb, last_clu, new_clu))
-				return -EIO;
-		}
-		last_clu = new_clu;
-
-		if ((--num_alloc) == 0) {
-			fsi->clu_srch_ptr = hint_clu;
-			if (fsi->used_clusters != (u32) ~0)
-				fsi->used_clusters += num_clusters;
-
-			p_chain->size += num_clusters;
-			return num_clusters;
-		}
-
-		hint_clu = new_clu + 1;
-		if (hint_clu >= fsi->num_clusters) {
-			hint_clu = 2;
-
-			if (p_chain->flags == 0x03) {
-				if (exfat_chain_cont_cluster(sb, p_chain->dir, num_clusters))
-					return -EIO;
-				p_chain->flags = 0x01;
-			}
-		}
-	}
-
-	fsi->clu_srch_ptr = hint_clu;
-	if (fsi->used_clusters != (u32) ~0)
-		fsi->used_clusters += num_clusters;
-
-	p_chain->size += num_clusters;
-	return num_clusters;
-} /* end of exfat_alloc_cluster */
-
-
-static s32 exfat_free_cluster(struct super_block *sb, CHAIN_T *p_chain, s32 do_relse)
-{
-	s32 ret = -EIO;
-	s32 num_clusters = 0;
-	u32 clu;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-	s32 i;
-	u32 sector;
-
-	/* invalid cluster number */	
-	if (IS_CLUS_FREE(p_chain->dir) || IS_CLUS_EOF(p_chain->dir))
-		return 0;
-
-	/* no cluster to truncate */
-	if (p_chain->size <= 0) {
-		DMSG("%s: cluster(%u) truncation is not required.",
-			 __func__, p_chain->dir);
-		return 0;
-	}
-
-	/* check cluster validation */
-	if ((p_chain->dir < 2) && (p_chain->dir >= fsi->num_clusters)) {
-		EMSG("%s: invalid start cluster (%u)\n", __func__, p_chain->dir);
-		sdfat_debug_bug_on(1);
-		return -EIO;
-	}
-
-	set_sb_dirty(sb);
-	clu = p_chain->dir;
-
-	if (p_chain->flags == 0x03) {
-		do {
-			if (do_relse) {
-				sector = CLUS_TO_SECT(fsi, clu);
-				for (i = 0; i < fsi->sect_per_clus; i++) {
-					if (dcache_release(sb, sector+i) == -EIO)
-						goto out;
-				}
-			}
-			
-			if (clr_alloc_bitmap(sb, clu-2))
-				goto out;
-			clu++;
-
-			num_clusters++;
-		} while (num_clusters < p_chain->size);
-	} else {
-		do {
-			if (do_relse) {
-				sector = CLUS_TO_SECT(fsi, clu);
-				for (i = 0; i < fsi->sect_per_clus; i++) {
-					if (dcache_release(sb, sector+i) == -EIO)
-						goto out;
-				}
-			}
-			
-			if (clr_alloc_bitmap(sb, clu-2))
-				goto out;
-
-			if (fat_ent_get(sb, clu, &clu))
-				goto out;
-			num_clusters++;
-		} while ((!IS_CLUS_FREE(clu)) && (!IS_CLUS_EOF(clu)));
-		/* patch 1.1.1p0 : Added zero-cluster-checking */
-	}
-
-	/* success */
-	ret = 0;
-out:
-
-	if (fsi->used_clusters != (u32) ~0)
-		fsi->used_clusters -= num_clusters;
-	return ret;
-} /* end of exfat_free_cluster */
-
-static s32 exfat_count_used_clusters(struct super_block *sb, u32* ret_count)
-{
-	u32 count = 0;
-	u32 i, map_i, map_b;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-	u32 total_clus = fsi->num_clusters - 2;
-
-	map_i = map_b = 0;
-
-	for (i = 0; i < total_clus; i += 8) {
-		u8 k = *(((u8 *) fsi->vol_amap[map_i]->b_data) + map_b);
-		count += used_bit[k];
-
-		if ((++map_b) >= (u32)sb->s_blocksize) {
-			map_i++;
-			map_b = 0;
-		}
-	}
-
-	/* FIXME : abnormal bitmap count should be handled as more smart */
-	if (total_clus < count) 
-		count = total_clus; 
-
-	*ret_count = count;
-	return 0;
-} /* end of exfat_count_used_clusters */
-
 /*
  *  Directory Entry Management Functions
  */
@@ -834,14 +418,13 @@ static s32 exfat_delete_dir_entry(struct super_block *sb, CHAIN_T *p_dir, s32 en
 	s32 i;
 	u32 sector;
 	DENTRY_T *ep;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
 	for (i = order; i < num_entries; i++) {
 		ep = get_dentry_in_dir(sb, p_dir, entry+i, &sector);
 		if (!ep)
 			return -EIO;
 
-		fsi->fs_func->set_entry_type(ep, TYPE_DELETED);
+		exfat_set_entry_type(ep, TYPE_DELETED);
 		if (dcache_modify(sb, sector))
 			return -EIO;
 	}
@@ -878,12 +461,10 @@ static s32 __write_partial_entries_in_entry_set (struct super_block *sb, ENTRY_S
 			// get next sector
 			if (IS_LAST_SECT_IN_CLUS(fsi, sec)) {
 				clu = SECT_TO_CLUS(fsi, sec);
-				if (es->alloc_flag == 0x03) {
+				if (es->alloc_flag == 0x03)
 					clu++;
-				} else {
-					if (fat_ent_get(sb, clu, &clu))
-						goto err_out;
-				}
+				else if (get_next_clus_safe(sb, &clu))
+					goto err_out;
 				sec = CLUS_TO_SECT(fsi, clu);
 			} else {
 				sec++;
@@ -974,11 +555,11 @@ ENTRY_SET_CACHE_T *get_dentry_set_in_dir (struct super_block *sb, CHAIN_T *p_dir
 	/* byte offset in cluster */
 	byte_offset &= fsi->cluster_size - 1;
 
-	/* byte offset in sector    */
-	off = byte_offset & (u32)(sb->s_blocksize - 1);  
+	/* byte offset in sector */
+	off = byte_offset & (u32)(sb->s_blocksize - 1);
 
 	/* sector offset in cluster */
-	sec = byte_offset >> (sb->s_blocksize_bits); 
+	sec = byte_offset >> (sb->s_blocksize_bits);
 	sec += CLUS_TO_SECT(fsi, clu);
 
 	buf = dcache_getblk(sb, sec);
@@ -986,7 +567,7 @@ ENTRY_SET_CACHE_T *get_dentry_set_in_dir (struct super_block *sb, CHAIN_T *p_dir
 		goto err_out;
 
 	ep = (DENTRY_T *)(buf + off);
-	entry_type = fsi->fs_func->get_entry_type(ep);
+	entry_type = exfat_get_entry_type(ep);
 
 	if ((entry_type != TYPE_FILE)
 		&& (entry_type != TYPE_DIR))
@@ -997,7 +578,7 @@ ENTRY_SET_CACHE_T *get_dentry_set_in_dir (struct super_block *sb, CHAIN_T *p_dir
 	else
 		num_entries = type;
 
-	MMSG("trying to malloc %lx bytes for %d entries\n", 
+	MMSG("trying to malloc %lx bytes for %d entries\n",
 		(unsigned long)(offsetof(ENTRY_SET_CACHE_T, __buf) + (num_entries)  * sizeof(DENTRY_T)), num_entries);
 	es = kmalloc((offsetof(ENTRY_SET_CACHE_T, __buf) + (num_entries)  * sizeof(DENTRY_T)), GFP_KERNEL);
 	if (!es) {
@@ -1015,7 +596,7 @@ ENTRY_SET_CACHE_T *get_dentry_set_in_dir (struct super_block *sb, CHAIN_T *p_dir
 	while(num_entries) {
 		// instead of copying whole sector, we will check every entry.
 		// this will provide minimum stablity and consistancy.
-		entry_type = fsi->fs_func->get_entry_type(ep);
+		entry_type = exfat_get_entry_type(ep);
 
 		if ((entry_type == TYPE_UNUSED) || (entry_type == TYPE_DELETED))
 			goto err_out;
@@ -1063,16 +644,14 @@ ENTRY_SET_CACHE_T *get_dentry_set_in_dir (struct super_block *sb, CHAIN_T *p_dir
 		if (--num_entries == 0)
 			break;
 
-		if ( ((off + DENTRY_SIZE) & (u32)(sb->s_blocksize - 1)) < 
+		if ( ((off + DENTRY_SIZE) & (u32)(sb->s_blocksize - 1)) <
 					(off &  (u32)(sb->s_blocksize - 1)) ) {
 			// get the next sector
 			if (IS_LAST_SECT_IN_CLUS(fsi, sec)) {
-				if (es->alloc_flag == 0x03) {
+				if (es->alloc_flag == 0x03)
 					clu++;
-				} else {
-					if (fat_ent_get(sb, clu, &clu))
-						goto err_out;
-				}
+				else if (get_next_clus_safe(sb, &clu))
+					goto err_out;
 				sec = CLUS_TO_SECT(fsi, clu);
 			} else {
 				sec++;
@@ -1136,11 +715,11 @@ static s32 __extract_uni_name_from_name_entry(NAME_DENTRY_T *ep, u16 *uniname, s
  * >= 0 : return dir entiry position with the name in dir
  * -EEXIST : (root dir, ".") it is the root dir itself
  * -ENOENT : entry with the name does not exist
- * -EIO    : I/O error 
+ * -EIO    : I/O error
  */
-static s32 exfat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *unused, u32 type)
+static s32 exfat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, HINT_T *hint_stat, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *unused, u32 type)
 {
-	s32 i, dentry = 0, num_ext_entries = 0, len;
+	s32 i, rewind = 0, dentry = 0, end_eidx = 0, num_ext_entries = 0, len;
 	s32 order = 0, is_feasible_entry = false;
 	s32 dentries_per_clu, num_empty = 0;
 	u32 entry_type;
@@ -1152,35 +731,41 @@ static s32 exfat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, UNI_NAME
 	NAME_DENTRY_T *name_ep;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
-	/* DOT and DOTDOT are handled by VFS layer */
 	/*
-	if (p_dir->dir == fsi->root_dir) {
-		if ((!nls_cmp_uniname(sb, p_uniname->name, (u16 *) UNI_CUR_DIR_NAME)) ||
-			(!nls_cmp_uniname(sb, p_uniname->name, (u16 *) UNI_PAR_DIR_NAME)))
-			return -EEXIST; // special case, root directory itself
-	}
-	*/
+	 * REMARK:
+	 * DOT and DOTDOT are handled by VFS layer
+	 */
 
-	if (IS_CLUS_FREE(p_dir->dir)) /* FAT16 root_dir */
-		dentries_per_clu = fsi->dentries_in_root;
-	else
-		dentries_per_clu = fsi->dentries_per_clu;
+	if (IS_CLUS_FREE(p_dir->dir))
+		return -EIO;
+
+	dentries_per_clu = fsi->dentries_per_clu;
 
 	clu.dir = p_dir->dir;
 	clu.size = p_dir->size;
 	clu.flags = p_dir->flags;
 
+	if (hint_stat->eidx) {
+		clu.dir = hint_stat->clu;
+		dentry = hint_stat->eidx;
+		end_eidx = dentry;
+	}
+
 	fsi->hint_uentry.dir = p_dir->dir;
 	fsi->hint_uentry.entry = -1;
 
+rewind:
 	while (!IS_CLUS_EOF(clu.dir)) {
+		i = dentry & (dentries_per_clu - 1);
+		for (; i < dentries_per_clu; i++, dentry++) {
+			if (rewind && (dentry == end_eidx))
+				goto not_found;
 
-		for (i = 0; i < dentries_per_clu; i++, dentry++) {
 			ep = get_dentry_in_dir(sb, &clu, i, NULL);
 			if (!ep)
 				return -EIO;
 
-			entry_type = fsi->fs_func->get_entry_type(ep);
+			entry_type = exfat_get_entry_type(ep);
 
 			if ((entry_type == TYPE_UNUSED) || (entry_type == TYPE_DELETED)) {
 				is_feasible_entry = false;
@@ -1199,7 +784,7 @@ static s32 exfat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, UNI_NAME
 				}
 
 				if (entry_type == TYPE_UNUSED) {
-					return -ENOENT;
+					goto not_found;
 				}
 			} else {
 				num_empty = 0;
@@ -1241,7 +826,7 @@ static s32 exfat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, UNI_NAME
 						} else if (order == num_ext_entries) {
 							fsi->hint_uentry.dir = CLUS_EOF;
 							fsi->hint_uentry.entry = -1;
-							return(dentry - (num_ext_entries));
+							goto found;
 						}
 
 						*(uniname+len) = unichar;
@@ -1252,21 +837,57 @@ static s32 exfat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, UNI_NAME
 			}
 		}
 
-		if (IS_CLUS_FREE(p_dir->dir))
-			break; /* FAT16 root_dir */
-
 		if (clu.flags == 0x03) {
 			if ((--clu.size) > 0)
 				clu.dir++;
 			else
 				clu.dir = CLUS_EOF;
 		} else {
-			if (fat_ent_get(sb, clu.dir, &(clu.dir)))
+			if (get_next_clus_safe(sb, &clu.dir))
 				return -EIO;
 		}
 	}
 
+not_found:
+	/* we started at not 0 index,so we should try to find target
+	 * from 0 index to the index we started at.
+	 */
+	if (!rewind && end_eidx) {
+		rewind = 1;
+		dentry = 0;
+		clu.dir = p_dir->dir;
+		goto rewind;
+	}
+
+	/* initialized hint_stat */
+	hint_stat->clu = p_dir->dir;
+	hint_stat->eidx = 0;
 	return -ENOENT;
+
+found:
+	/* next dentry we'll find is out of this cluster */
+	if (!((dentry + 1) & (dentries_per_clu-1))) {
+		int ret = 0;
+		if (clu.flags == 0x03) {
+			if ((--clu.size) > 0)
+				clu.dir++;
+			else
+				clu.dir = CLUS_EOF;
+		} else {
+			ret = get_next_clus_safe(sb, &clu.dir);
+		}
+
+		if (ret || IS_CLUS_EOF(clu.dir)) {
+			/* just initialized hint_stat */
+			hint_stat->clu = p_dir->dir;
+			hint_stat->eidx = 0;
+			return (dentry - num_ext_entries);
+		}
+	}
+
+	hint_stat->clu = clu.dir;
+	hint_stat->eidx = dentry + 1;
+	return (dentry - num_ext_entries);
 } /* end of exfat_find_dir_entry */
 
 /* returns -EIO on error */
@@ -1276,14 +897,13 @@ static s32 exfat_count_ext_entries(struct super_block *sb, CHAIN_T *p_dir, s32 e
 	u32 type;
 	FILE_DENTRY_T *file_ep = (FILE_DENTRY_T *) p_entry;
 	DENTRY_T *ext_ep;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
 	for (i = 0, entry++; i < file_ep->num_ext; i++, entry++) {
 		ext_ep = get_dentry_in_dir(sb, p_dir, entry, NULL);
 		if (!ext_ep)
 			return -EIO;
 
-		type = fsi->fs_func->get_entry_type(ext_ep);
+		type = exfat_get_entry_type(ext_ep);
 		if ((type == TYPE_EXTEND) || (type == TYPE_STREAM)) {
 			count++;
 		} else {
@@ -1294,48 +914,37 @@ static s32 exfat_count_ext_entries(struct super_block *sb, CHAIN_T *p_dir, s32 e
 	return count;
 } /* end of exfat_count_ext_entries */
 
+
 /*
  *  Name Conversion Functions
  */
-
-
-
 static void exfat_get_uniname_from_ext_entry(struct super_block *sb, CHAIN_T *p_dir, s32 entry, u16 *uniname)
 {
 	s32 i;
 	DENTRY_T *ep;
 	ENTRY_SET_CACHE_T *es;
-	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
 	es = get_dentry_set_in_dir(sb, p_dir, entry, ES_ALL_ENTRIES, &ep);
-	if (es == NULL || es->num_entries < 3) {
-		if(es) {
-			/*
-			 * XXX : Check memory leak.
-			 * patch 1.2.1
-			 */
-			release_dentry_set(es);
-		}
+	if (!es)
 		return;
-	}
+
+	if (es->num_entries < 3)
+		goto out;
 
 	ep += 2;
 
 	/*
-	* First entry  : file entry
-	* Second entry : stream-extension entry
-	* Third entry  : first file-name entry
-	* So, the index of first file-name dentry should start from 2.
-	*
-	* patch 1.1.0p2
-	*/
+	 * First entry  : file entry
+	 * Second entry : stream-extension entry
+	 * Third entry  : first file-name entry
+	 * So, the index of first file-name dentry should start from 2.
+	 */
 	for (i = 2; i < es->num_entries; i++, ep++) {
-		if (fsi->fs_func->get_entry_type(ep) == TYPE_EXTEND) {
-			__extract_uni_name_from_name_entry((NAME_DENTRY_T *)ep, uniname, i);
-		} else {
-			// end of name entry
+		/* end of name entry */
+		if (exfat_get_entry_type(ep) != TYPE_EXTEND)
 			goto out;
-		}
+
+		__extract_uni_name_from_name_entry((NAME_DENTRY_T *)ep, uniname, i);
 		uniname += 15;
 	}
 
@@ -1356,6 +965,423 @@ static s32 exfat_calc_num_entries(UNI_NAME_T *p_uniname)
 
 } /* end of exfat_calc_num_entries */
 
+
+/*
+ *  Allocation Bitmap Management Functions
+ */
+s32 load_alloc_bmp(struct super_block *sb)
+{
+	s32 i, j, ret;
+	u32 map_size;
+	u32 type, sector;
+	CHAIN_T clu;
+	BMAP_DENTRY_T *ep;
+	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
+
+	clu.dir = fsi->root_dir;
+	clu.flags = 0x01;
+
+	while (!IS_CLUS_EOF(clu.dir)) {
+		for (i = 0; i < fsi->dentries_per_clu; i++) {
+			ep = (BMAP_DENTRY_T *) get_dentry_in_dir(sb, &clu, i, NULL);
+			if (!ep)
+				return -EIO;
+
+			type = exfat_get_entry_type((DENTRY_T *) ep);
+
+			if (type == TYPE_UNUSED)
+				break;
+			if (type != TYPE_BITMAP)
+				continue;
+
+			if (ep->flags == 0x0) {
+				fsi->map_clu  = le32_to_cpu(ep->start_clu);
+				map_size = (u32) le64_to_cpu(ep->size);
+
+				fsi->map_sectors = ((map_size-1) >> (sb->s_blocksize_bits)) + 1;
+				fsi->vol_amap = (struct buffer_head **) kmalloc((sizeof(struct buffer_head *) * fsi->map_sectors), GFP_KERNEL);
+				if (!fsi->vol_amap)
+					return -ENOMEM;
+
+				sector = CLUS_TO_SECT(fsi, fsi->map_clu);
+
+				for (j = 0; j < fsi->map_sectors; j++) {
+					fsi->vol_amap[j] = NULL;
+					ret = read_sect(sb, sector+j, &(fsi->vol_amap[j]), 1);
+					if (ret) {
+						/*  release all buffers and free vol_amap */
+						i=0;
+						while (i < j)
+							brelse(fsi->vol_amap[i++]);
+
+						if (fsi->vol_amap) {
+							kfree(fsi->vol_amap);
+							fsi->vol_amap = NULL;
+						}
+						return ret;
+					}
+				}
+
+				fsi->pbr_bh = NULL;
+				return 0;
+			}
+		}
+
+		if (get_next_clus_safe(sb, &clu.dir))
+			return -EIO;
+	}
+
+	return -EINVAL;
+} /* end of load_alloc_bmp */
+
+void free_alloc_bmp(struct super_block *sb)
+{
+	s32 i;
+	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
+
+	brelse(fsi->pbr_bh);
+
+	for (i = 0; i < fsi->map_sectors; i++) {
+		__brelse(fsi->vol_amap[i]);
+	}
+
+	if(fsi->vol_amap) {
+		kfree(fsi->vol_amap);
+		fsi->vol_amap = NULL;
+	}
+}
+
+/* WARN :
+ * If the value of "clu" is 0, it means cluster 2 which is
+ * the first cluster of cluster heap.
+ */
+static s32 set_alloc_bitmap(struct super_block *sb, u32 clu)
+{
+	s32 i, b;
+	u32 sector;
+	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
+
+	i = clu >> (sb->s_blocksize_bits + 3);
+	b = clu & (u32)((sb->s_blocksize << 3) - 1);
+
+	sector = CLUS_TO_SECT(fsi, fsi->map_clu) + i;
+
+	bitmap_set((unsigned long*)(fsi->vol_amap[i]->b_data), b, 1);
+
+	return write_sect(sb, sector, fsi->vol_amap[i], 0);
+} /* end of set_alloc_bitmap */
+
+/* WARN :
+ * If the value of "clu" is 0, it means cluster 2 which is
+ * the first cluster of cluster heap.
+ */
+static s32 clr_alloc_bitmap(struct super_block *sb, u32 clu)
+{
+	s32 ret;
+	s32 i, b;
+	u32 sector;
+	struct sdfat_sb_info *sbi = SDFAT_SB(sb);
+	struct sdfat_mount_options *opts = &sbi->options;
+	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
+
+	i = clu >> (sb->s_blocksize_bits + 3);
+	b = clu & (u32)((sb->s_blocksize << 3) - 1);
+
+	sector = CLUS_TO_SECT(fsi, fsi->map_clu) + i;
+
+	bitmap_clear((unsigned long*)(fsi->vol_amap[i]->b_data), b, 1);
+
+	ret = write_sect(sb, sector, fsi->vol_amap[i], 0);
+
+	if (opts->discard) {
+		s32 ret_discard;
+		TMSG("discard cluster(%08x)\n", clu+2);
+		ret_discard = sb_issue_discard(sb, CLUS_TO_SECT(fsi, clu+2),
+				(1 << fsi->sect_per_clus_bits), GFP_NOFS, 0);
+
+		if (ret_discard == -EOPNOTSUPP) {
+			sdfat_msg(sb, KERN_ERR,
+				"discard not supported by device, disabling");
+			opts->discard = 0;
+		}
+	}
+
+	return ret;
+} /* end of clr_alloc_bitmap */
+
+/* WARN :
+ * If the value of "clu" is 0, it means cluster 2 which is
+ * the first cluster of cluster heap.
+ */
+static u32 test_alloc_bitmap(struct super_block *sb, u32 clu)
+{
+	u32 i, map_i, map_b;
+	u32 clu_base, clu_free;
+	u8 k, clu_mask;
+	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
+
+	clu_base = (clu & ~(0x7)) + 2;
+	clu_mask = (1 << (clu - clu_base + 2)) - 1;
+
+	map_i = clu >> (sb->s_blocksize_bits + 3);
+	map_b = (clu >> 3) & (u32)(sb->s_blocksize - 1);
+
+	for (i = 2; i < fsi->num_clusters; i += 8) {
+		k = *(((u8 *) fsi->vol_amap[map_i]->b_data) + map_b);
+		if (clu_mask > 0) {
+			k |= clu_mask;
+			clu_mask = 0;
+		}
+		if (k < 0xFF) {
+			clu_free = clu_base + free_bit[k];
+			if (clu_free < fsi->num_clusters)
+				return clu_free;
+		}
+		clu_base += 8;
+
+		if (((++map_b) >= (u32)sb->s_blocksize) ||
+			(clu_base >= fsi->num_clusters)) {
+			if ((++map_i) >= fsi->map_sectors) {
+				clu_base = 2;
+				map_i = 0;
+			}
+			map_b = 0;
+		}
+	}
+
+	return CLUS_EOF;
+} /* end of test_alloc_bitmap */
+
+void sync_alloc_bmp(struct super_block *sb)
+{
+	s32 i;
+	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
+
+	if (fsi->vol_amap == NULL)
+		return;
+
+	for (i = 0; i < fsi->map_sectors; i++)
+		sync_dirty_buffer(fsi->vol_amap[i]);
+}
+
+static s32 exfat_chain_cont_cluster(struct super_block *sb, u32 chain, s32 len)
+{
+	if (!len)
+		return 0;
+
+	while (len > 1) {
+		if (fat_ent_set(sb, chain, chain+1))
+			return -EIO;
+		chain++;
+		len--;
+	}
+
+	if (fat_ent_set(sb, chain, CLUS_EOF))
+		return -EIO;
+	return 0;
+}
+
+s32 chain_cont_cluster(struct super_block *sb, u32 chain, s32 len)
+{
+	return exfat_chain_cont_cluster(sb, chain, len);
+}
+
+static s32 exfat_alloc_cluster(struct super_block *sb, s32 num_alloc, CHAIN_T *p_chain, int dest)
+{
+	s32 num_clusters = 0;
+	u32 hint_clu, new_clu, last_clu = CLUS_EOF;
+	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
+
+	hint_clu = p_chain->dir;
+	/* find new cluster */
+	if (IS_CLUS_EOF(hint_clu)) {
+		if (fsi->clu_srch_ptr < 2) {
+			EMSG("%s: fsi->clu_srch_ptr is invalid (%u)\n",
+				__func__, fsi->clu_srch_ptr);
+			ASSERT(0);
+			fsi->clu_srch_ptr = 2;
+		}
+
+		hint_clu = test_alloc_bitmap(sb, fsi->clu_srch_ptr-2);
+		if (IS_CLUS_EOF(hint_clu))
+			return 0;
+	}
+
+	/* check cluster validation */
+	if ((hint_clu < 2) && (hint_clu >= fsi->num_clusters)) {
+		EMSG("%s: hint_cluster is invalid (%u)\n", __func__, hint_clu);
+		ASSERT(0);
+		hint_clu = 2;
+		if (p_chain->flags == 0x03) {
+			if (exfat_chain_cont_cluster( sb, p_chain->dir, num_clusters))
+				return -EIO;
+			p_chain->flags = 0x01;
+		}
+	}
+
+	set_sb_dirty(sb);
+
+	p_chain->dir = CLUS_EOF;
+
+	while ((new_clu = test_alloc_bitmap(sb, hint_clu-2)) != CLUS_EOF) {
+		if ( (new_clu != hint_clu) && (p_chain->flags == 0x03) ) {
+			if (exfat_chain_cont_cluster( sb, p_chain->dir, num_clusters))
+				return -EIO;
+			p_chain->flags = 0x01;
+		}
+
+		/* update allocation bitmap */
+		if (set_alloc_bitmap(sb, new_clu-2))
+			return -EIO;
+
+		num_clusters++;
+
+		/* update FAT table */
+		if (p_chain->flags == 0x01)
+			if (fat_ent_set(sb, new_clu, CLUS_EOF))
+				return -EIO;
+
+		if (IS_CLUS_EOF(p_chain->dir)) {
+			p_chain->dir = new_clu;
+		} else if (p_chain->flags == 0x01) {
+			if (fat_ent_set(sb, last_clu, new_clu))
+				return -EIO;
+		}
+		last_clu = new_clu;
+
+		if ((--num_alloc) == 0) {
+			fsi->clu_srch_ptr = hint_clu;
+			if (fsi->used_clusters != (u32) ~0)
+				fsi->used_clusters += num_clusters;
+
+			p_chain->size += num_clusters;
+			return num_clusters;
+		}
+
+		hint_clu = new_clu + 1;
+		if (hint_clu >= fsi->num_clusters) {
+			hint_clu = 2;
+
+			if (p_chain->flags == 0x03) {
+				if (exfat_chain_cont_cluster(sb, p_chain->dir, num_clusters))
+					return -EIO;
+				p_chain->flags = 0x01;
+			}
+		}
+	}
+
+	fsi->clu_srch_ptr = hint_clu;
+	if (fsi->used_clusters != (u32) ~0)
+		fsi->used_clusters += num_clusters;
+
+	p_chain->size += num_clusters;
+	return num_clusters;
+} /* end of exfat_alloc_cluster */
+
+
+static s32 exfat_free_cluster(struct super_block *sb, CHAIN_T *p_chain, s32 do_relse)
+{
+	s32 ret = -EIO;
+	s32 num_clusters = 0;
+	u32 clu;
+	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
+	s32 i;
+	u32 sector;
+
+	/* invalid cluster number */
+	if (IS_CLUS_FREE(p_chain->dir) || IS_CLUS_EOF(p_chain->dir))
+		return 0;
+
+	/* no cluster to truncate */
+	if (p_chain->size <= 0) {
+		DMSG("%s: cluster(%u) truncation is not required.",
+			 __func__, p_chain->dir);
+		return 0;
+	}
+
+	/* check cluster validation */
+	if ((p_chain->dir < 2) && (p_chain->dir >= fsi->num_clusters)) {
+		EMSG("%s: invalid start cluster (%u)\n", __func__, p_chain->dir);
+		sdfat_debug_bug_on(1);
+		return -EIO;
+	}
+
+	set_sb_dirty(sb);
+	clu = p_chain->dir;
+
+	if (p_chain->flags == 0x03) {
+		do {
+			if (do_relse) {
+				sector = CLUS_TO_SECT(fsi, clu);
+				for (i = 0; i < fsi->sect_per_clus; i++) {
+					if (dcache_release(sb, sector+i) == -EIO)
+						goto out;
+				}
+			}
+
+			if (clr_alloc_bitmap(sb, clu-2))
+				goto out;
+			clu++;
+
+			num_clusters++;
+		} while (num_clusters < p_chain->size);
+	} else {
+		do {
+			if (do_relse) {
+				sector = CLUS_TO_SECT(fsi, clu);
+				for (i = 0; i < fsi->sect_per_clus; i++) {
+					if (dcache_release(sb, sector+i) == -EIO)
+						goto out;
+				}
+			}
+
+			if (clr_alloc_bitmap(sb, (clu - CLUS_BASE)))
+				goto out;
+
+			if (get_next_clus_safe(sb, &clu))
+				goto out;
+
+			num_clusters++;
+		} while (!IS_CLUS_EOF(clu));
+	}
+
+	/* success */
+	ret = 0;
+out:
+
+	if (fsi->used_clusters != (u32) ~0)
+		fsi->used_clusters -= num_clusters;
+	return ret;
+} /* end of exfat_free_cluster */
+
+static s32 exfat_count_used_clusters(struct super_block *sb, u32* ret_count)
+{
+	u32 count = 0;
+	u32 i, map_i, map_b;
+	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
+	u32 total_clus = fsi->num_clusters - 2;
+
+	map_i = map_b = 0;
+
+	for (i = 0; i < total_clus; i += 8) {
+		u8 k = *(((u8 *) fsi->vol_amap[map_i]->b_data) + map_b);
+		count += used_bit[k];
+
+		if ((++map_b) >= (u32)sb->s_blocksize) {
+			map_i++;
+			map_b = 0;
+		}
+	}
+
+	/* FIXME : abnormal bitmap count should be handled as more smart */
+	if (total_clus < count)
+		count = total_clus;
+
+	*ret_count = count;
+	return 0;
+} /* end of exfat_count_used_clusters */
+
+
 /*
  *  File Operation Functions
  */
@@ -1368,7 +1394,7 @@ static FS_FUNC_T exfat_fs_func = {
 	.init_ext_entry = exfat_init_ext_entry,
 	.find_dir_entry = exfat_find_dir_entry,
 	.delete_dir_entry = exfat_delete_dir_entry,
-	.get_uni_name_from_ext_entry = exfat_get_uniname_from_ext_entry,
+	.get_uniname_from_ext_entry = exfat_get_uniname_from_ext_entry,
 	.count_ext_entries = exfat_count_ext_entries,
 	.calc_num_entries = exfat_calc_num_entries,
 
@@ -1429,8 +1455,6 @@ s32 mount_exfat(struct super_block *sb, pbr_t *p_pbr)
 
 	fsi->fs_func = &exfat_fs_func;
 	fat_ent_ops_init(sb);
-	
-	sdfat_log_msg(sb, KERN_INFO, "detected fs-type : exFAT");
 	
 	if (p_bpb->bsx.vol_flags & VOL_DIRTY) {
 		fsi->vol_flag |= VOL_DIRTY;

@@ -429,7 +429,6 @@ void decon_reg_set_comp_size(u32 id, enum decon_mic_comp_ratio cr, enum decon_ds
 	u32 mic_width_in_bytes, mic_dummy_in_bytes;
 	u32 width;
 	u32 temp_size, odd_n = 0;
-	u32 cr_0_setting_guide = 0;	/* 0 : guide about 1/2 mic, 1 : UM's guide about 1/2 mic */
 
 	if (dsi_mode == DSI_MODE_DUAL_DSI)
 		width = lcd_info->xres * 2;
@@ -493,10 +492,11 @@ void decon_reg_set_comp_size(u32 id, enum decon_mic_comp_ratio cr, enum decon_ds
 
 		ratio_type = 3;
 
-		if (cr_0_setting_guide)
-			mic_width_in_bytes = (width / 2) * 3 / (1 + dsi_mode);
-		else
-			mic_width_in_bytes = (width / 2) * 3;
+#if DECON_CR0_SETTING
+		mic_width_in_bytes = (width / 2) * 3 / (1 + dsi_mode);
+#else
+		mic_width_in_bytes = (width / 2) * 3;
+#endif
 
 		mic_dummy_in_bytes = 0;
 	}
@@ -521,7 +521,30 @@ void decon_reg_set_comp_size(u32 id, enum decon_mic_comp_ratio cr, enum decon_ds
 		if (dsi_mode == DSI_MODE_DUAL_DSI)
 			decon_reg_set_dispif_size(id, 1, (mic_width_in_bytes / 3 / 2), (lcd_info->yres));
 	} else {
-		if (cr_0_setting_guide) {
+#if DECON_CR0_SETTING
+		/* set Splitter Size */
+		decon_reg_set_splitter(id, dsi_mode, (mic_width_in_bytes / 3), (lcd_info->yres));
+
+		/* set Frame FIFO Size */
+		decon_reg_set_frame_fifo_size(id, dsi_mode, (mic_width_in_bytes / 3), (lcd_info->yres));
+
+		/* set Display Size */
+		decon_reg_set_dispif_size(id, 0, (mic_width_in_bytes / 3), (lcd_info->yres));
+		if (dsi_mode == DSI_MODE_DUAL_DSI)
+			decon_reg_set_dispif_size(id, 1, (mic_width_in_bytes / 3), (lcd_info->yres));
+#else
+		if (dsi_mode == DSI_MODE_DUAL_DSI) {
+			/* set Splitter Size */
+			decon_reg_set_splitter(id, dsi_mode, (mic_width_in_bytes / 3), (lcd_info->yres));
+
+			/* set Frame FIFO Size */
+			decon_reg_set_frame_fifo_size(id, dsi_mode, (mic_width_in_bytes / 3 / 2), (lcd_info->yres));
+
+			/* set Display Size */
+			decon_reg_set_dispif_size(id, 0, (mic_width_in_bytes / 3 / 2), (lcd_info->yres));
+			decon_reg_set_dispif_size(id, 1, (mic_width_in_bytes / 3 / 2), (lcd_info->yres));
+
+		} else {
 			/* set Splitter Size */
 			decon_reg_set_splitter(id, dsi_mode, (mic_width_in_bytes / 3), (lcd_info->yres));
 
@@ -530,31 +553,8 @@ void decon_reg_set_comp_size(u32 id, enum decon_mic_comp_ratio cr, enum decon_ds
 
 			/* set Display Size */
 			decon_reg_set_dispif_size(id, 0, (mic_width_in_bytes / 3), (lcd_info->yres));
-			if (dsi_mode == DSI_MODE_DUAL_DSI)
-				decon_reg_set_dispif_size(id, 1, (mic_width_in_bytes / 3), (lcd_info->yres));
-		} else {
-			if (dsi_mode == DSI_MODE_DUAL_DSI) {
-				/* set Splitter Size */
-				decon_reg_set_splitter(id, dsi_mode, (mic_width_in_bytes / 3), (lcd_info->yres));
-
-				/* set Frame FIFO Size */
-				decon_reg_set_frame_fifo_size(id, dsi_mode, (mic_width_in_bytes / 3 / 2), (lcd_info->yres));
-
-				/* set Display Size */
-				decon_reg_set_dispif_size(id, 0, (mic_width_in_bytes / 3 / 2), (lcd_info->yres));
-				decon_reg_set_dispif_size(id, 1, (mic_width_in_bytes / 3 / 2), (lcd_info->yres));
-
-			} else {
-				/* set Splitter Size */
-				decon_reg_set_splitter(id, dsi_mode, (mic_width_in_bytes / 3), (lcd_info->yres));
-
-				/* set Frame FIFO Size */
-				decon_reg_set_frame_fifo_size(id, dsi_mode, (mic_width_in_bytes / 3), (lcd_info->yres));
-
-				/* set Display Size */
-				decon_reg_set_dispif_size(id, 0, (mic_width_in_bytes / 3), (lcd_info->yres));
-			}
 		}
+#endif
 	}
 }
 
@@ -669,6 +669,56 @@ void decon_reg_configure_lcd(u32 id, enum decon_dsi_mode dsi_mode, struct decon_
 			__func__, id, e_path, d_path);
 }
 
+#ifdef CONFIG_FB_DSU
+void decon_reg_configure_lcd_dsu(u32 id, enum decon_dsi_mode dsi_mode, struct decon_lcd *lcd_info)
+{
+	pr_info( "%s.\n", __func__ );
+
+	decon_reg_set_rgb_order(id, DECON_RGB);
+
+	decon_reg_set_dispif_porch(id, 0, lcd_info);
+
+	if (dsi_mode == DSI_MODE_DUAL_DSI)
+		decon_reg_set_dispif_porch(id, 1, lcd_info);
+
+	if (lcd_info->mic_enabled) {
+		if (id != 0)
+			decon_err("\n   [ERROR!!!] decon.%d doesn't support MIC\n", id);
+		decon_reg_config_mic(id, dsi_mode, lcd_info);
+
+		if (dsi_mode == DSI_MODE_DUAL_DSI)
+			decon_reg_set_data_path(id, DATAPATH_MIC_SPLITTER_U0FFU1FF_DISP0DISP1, ENHANCEPATH_ENHANCE_ALL_OFF);
+		else
+			decon_reg_set_data_path(id, DATAPATH_MIC_SPLITTERBYPASS_U0FF_DISP0, ENHANCEPATH_ENHANCE_ALL_OFF);
+	} else if (lcd_info->dsc_enabled) {
+		if (lcd_info->dsc_cnt == 1)
+			decon_reg_set_data_path(id,
+					DATAPATH_ENC0_SPLITTERBYPASS_U0FF_DISP0,
+					ENHANCEPATH_ENHANCE_ALL_OFF);
+		else if (lcd_info->dsc_cnt == 2)
+			decon_reg_set_data_path(id,
+					DATAPATH_DSCC_ENC0ENC1_U0FFU1FF_MERGER_DISP0,
+					ENHANCEPATH_ENHANCE_ALL_OFF);
+		else
+			decon_err("not supported data path for %d DSC of decon%d",
+					lcd_info->dsc_cnt, id);
+
+		dsc_reg_init(id, dsi_mode, lcd_info);
+	} else {
+		decon_reg_set_splitter(id, dsi_mode, lcd_info->xres, lcd_info->yres);
+		decon_reg_set_frame_fifo_size(id, dsi_mode, lcd_info->xres, lcd_info->yres);
+		decon_reg_set_dispif_size(id, 0, lcd_info->xres, lcd_info->yres);
+		if (dsi_mode == DSI_MODE_DUAL_DSI)
+			decon_reg_set_dispif_size(id, 1, lcd_info->xres, lcd_info->yres);
+
+		if (dsi_mode == DSI_MODE_DUAL_DSI)
+			decon_reg_set_data_path(id, DATAPATH_NOCOMP_SPLITTER_U0FFU1FF_DISP0DISP1, ENHANCEPATH_ENHANCE_ALL_OFF);
+		else
+			decon_reg_set_data_path(id, DATAPATH_NOCOMP_SPLITTERBYPASS_U0FF_DISP0, ENHANCEPATH_ENHANCE_ALL_OFF);
+	}
+}
+
+#endif
 
 void decon_reg_configure_trigger(u32 id, enum decon_trig_mode mode)
 {
@@ -1261,7 +1311,7 @@ void dsc_reg_set_pps_30_31_slice_bpg_offset(u32 encoder_id, u32 slice_width, u32
 
 	reg  =  dsc_read(encoder_id, (DSC_PPS28_31));
 	reg &= ~DSC_PPS30_31_SLICE_BPG_OFFSET_MASK;
-	reg |= DSC_PPS30_31_SLICE_BPG_OFFSET(0x0263);
+	reg |= DSC_PPS30_31_SLICE_BPG_OFFSET(uPPS30_SliceBpgOffset);
 	dsc_write(encoder_id, (DSC_PPS28_31), reg);
 }
 void dsc_reg_set_pps_32_33_initial_offset(u32 encoder_id)
@@ -1292,19 +1342,19 @@ void dsc_reg_set_pps_34_35_final_offset(u32 encoder_id, u32 chunk_size, u32 slic
 void dsc_reg_set_encoder(u32 encoder_id, struct decon_lcd *lcd_info)
 {
 	u32 dual_slice = 0;
+	u32 slice_mode_change = 0;
+	int dsi_cnt = 1;
 
-	if (lcd_info->dsc_slice_num == 4 ||
-			(lcd_info->dsc_cnt == 1 && lcd_info->dsc_slice_num == 2))
-		dual_slice = 1;
-
-	decon_dbg("dual slice(%d)\n", dual_slice);
+	if (lcd_info->dsc_slice_num == lcd_info->dsc_cnt *2) dual_slice = 1;
+	slice_mode_change = ((lcd_info->dsc_slice_num == lcd_info->dsc_cnt) != (lcd_info->dsc_slice_num == dsi_cnt));
+	decon_dbg("dual slice(%d), slice_mode_change(%d)\n", dual_slice, slice_mode_change);
 
 	dsc_reg_set_swap(encoder_id, 0x0, 0x0, 0x0);
 	dsc_reg_set_flatness_det_th(encoder_id, 0x2);
 	dsc_reg_set_auto_clock_gating(encoder_id, 1);
 	dsc_reg_set_dual_slice_mode(encoder_id, dual_slice);
 	dsc_reg_set_encoder_bypass(encoder_id, 0);
-	dsc_reg_set_slice_mode_change(encoder_id, 0);
+	dsc_reg_set_slice_mode_change(encoder_id, slice_mode_change);
 
 	dsc_reg_set_pps_0_3_dsc_version(encoder_id, 0x11);
 	dsc_reg_set_pps_16_17_init_xmit_delay(encoder_id);
@@ -1318,6 +1368,7 @@ void dsc_reg_set_pps_size(u32 encoder_id, struct decon_lcd *lcd_info)
 	u32 picture_w, picture_h;
 	u32 slice_w, slice_h;
 	u32 chunk_size;
+	int dsc_slice_pixels;
 
 	picture_h = lcd_info->yres;
 	slice_w = lcd_info->xres / lcd_info->dsc_slice_num;
@@ -1332,6 +1383,11 @@ void dsc_reg_set_pps_size(u32 encoder_id, struct decon_lcd *lcd_info)
 		picture_w = lcd_info->xres;
 		decon_err("DSC max count is %d\n", lcd_info->dsc_cnt);
 	}
+
+	dsc_slice_pixels = 15000 / (lcd_info->xres /lcd_info->dsc_slice_num);
+	if( dsc_slice_pixels > 64 ) slice_h = 128;
+	else if( dsc_slice_pixels > 32 ) slice_h = 64;
+	else slice_h = 32;
 
 	decon_dbg("DSC%d: picture w(%d) h(%d)\n", encoder_id, picture_w, picture_h);
 	decon_dbg("slice w(%d) h(%d), chunk(%d)\n",
@@ -1851,7 +1907,10 @@ const signed long decon_clocks_table[][CLK_ID_MAX] = {
 	{  41.7, 137.5,   400,    66,      62.5, 1440 * 2560,  MIC_COMP_RATIO_1_3,         0},
 	{   141, 137.5,   400,    66,       141, 1440 * 2560,     MIC_COMP_BYPASS,         0},
 	{    42,   337,   400,    66,        42, 1440 * 2560,     MIC_COMP_BYPASS,         1},
-	{    42,   168,   400,    66,        42, 1440 * 2560,     MIC_COMP_BYPASS,         2},
+    {    42,   168,   400,    66,        42, 1440 * 2560,     MIC_COMP_BYPASS,         2},
+    {   10.5,  168,   400,    66,      10.5,  720 * 1280,     MIC_COMP_BYPASS,         2},  /* HD */
+    {    24,   168,   400,    66,        24, 1080 * 1920,     MIC_COMP_BYPASS,         2},  /* FHD */
+    {    63,   168,   400,    66,        63, 1600 * 2560,  MIC_COMP_RATIO_1_2,         0},  /* wqxga */
 };
 
 void decon_reg_get_clock_ratio(struct decon_clocks *clks, struct decon_lcd *lcd_info)
@@ -1866,11 +1925,17 @@ void decon_reg_get_clock_ratio(struct decon_clocks *clks, struct decon_lcd *lcd_
 	clks->decon[CLK_ID_DPLL] = decon_clocks_table[0][CLK_ID_DPLL];
 
 	for (; i >= 0; i--) {
+#ifdef CONFIG_FB_DSU
+		// temporary, all clock become WQHD. code doesn't have FHD/HD clock
+		if (decon_clocks_table[i][CLK_ID_RESOLUTION] != 1440 * 2560) {
+			continue;
+		}
+#else
 		if (decon_clocks_table[i][CLK_ID_RESOLUTION]
 				!= lcd_info->xres * lcd_info->yres) {
 			continue;
 		}
-
+#endif
 		if (!lcd_info->mic_enabled && !lcd_info->dsc_enabled) {
 			if (decon_clocks_table[i][CLK_ID_MIC_RATIO]
 					!= MIC_COMP_BYPASS)

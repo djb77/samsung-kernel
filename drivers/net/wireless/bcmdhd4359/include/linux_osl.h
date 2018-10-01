@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linux_osl.h 601764 2015-11-24 03:47:41Z $
+ * $Id: linux_osl.h 672945 2016-11-30 08:58:34Z $
  */
 
 #ifndef _linux_osl_h_
@@ -261,12 +261,12 @@ extern int osl_error(int bcmerror);
 
 /* register access macros */
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 1)) && defined(CONFIG_64BIT) && \
-	defined(CONFIG_X86)
+#ifdef CONFIG_64BIT
+/* readq is defined only for 64 bit platform */
 #define R_REG(osh, r) (\
 	SELECT_BUS_READ(osh, \
 		({ \
-			__typeof(*(r)) __osl_v; \
+			__typeof(*(r)) __osl_v = 0; \
 			switch (sizeof(*(r))) { \
 				case sizeof(uint8):	__osl_v = \
 					readb((volatile uint8*)(r)); break; \
@@ -281,11 +281,11 @@ extern int osl_error(int bcmerror);
 		}), \
 		OSL_READ_REG(osh, r)) \
 )
-#else
+#else /* !CONFIG_64BIT */
 #define R_REG(osh, r) (\
 	SELECT_BUS_READ(osh, \
 		({ \
-			__typeof(*(r)) __osl_v; \
+			__typeof(*(r)) __osl_v = 0; \
 			switch (sizeof(*(r))) { \
 				case sizeof(uint8):	__osl_v = \
 					readb((volatile uint8*)(r)); break; \
@@ -298,9 +298,10 @@ extern int osl_error(int bcmerror);
 		}), \
 		OSL_READ_REG(osh, r)) \
 )
-#endif /* KERNEL_VERSION(3, 11, 1)) && defined(CONFIG_64BIT) && defined(CONFIG_X86) */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 1)) && defined(CONFIG_64BIT) && \
-	defined(CONFIG_X86)
+#endif /* CONFIG_64BIT */
+
+#ifdef CONFIG_64BIT
+/* writeq is defined only for 64 bit platform */
 #define W_REG(osh, r, v) do { \
 	SELECT_BUS_WRITE(osh, \
 		switch (sizeof(*(r))) { \
@@ -311,7 +312,8 @@ extern int osl_error(int bcmerror);
 		}, \
 		(OSL_WRITE_REG(osh, r, v))); \
 	} while (0)
-#else
+
+#else /* !CONFIG_64BIT */
 #define W_REG(osh, r, v) do { \
 	SELECT_BUS_WRITE(osh, \
 		switch (sizeof(*(r))) { \
@@ -321,7 +323,7 @@ extern int osl_error(int bcmerror);
 		}, \
 		(OSL_WRITE_REG(osh, r, v))); \
 	} while (0)
-#endif  /* KERNEL_VERSION(3, 11, 1)) && defined(CONFIG_64BIT) && defined(CONFIG_X86) */
+#endif /* CONFIG_64BIT */
 
 #define	AND_REG(osh, r, v)		W_REG(osh, (r), R_REG(osh, r) & (v))
 #define	OR_REG(osh, r, v)		W_REG(osh, (r), R_REG(osh, r) | (v))

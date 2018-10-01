@@ -292,6 +292,15 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 	mq->thread = kthread_run(mmc_queue_thread, mq, "mmcqd/%d%s",
 		host->index, subname ? subname : "");
 
+#ifdef CONFIG_LARGE_DIRTY_BUFFER
+	if (mmc_card_sd(card)) {
+		/* apply more throttle on external sdcard */
+		mq->queue->backing_dev_info.max_ratio = 10;
+		mq->queue->backing_dev_info.min_ratio = 10;
+		mq->queue->backing_dev_info.capabilities |= BDI_CAP_STRICTLIMIT;
+	}
+#endif
+
 	if (IS_ERR(mq->thread)) {
 		ret = PTR_ERR(mq->thread);
 		goto free_bounce_sg;

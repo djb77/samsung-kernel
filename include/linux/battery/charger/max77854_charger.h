@@ -223,7 +223,8 @@ struct max77854_charger_data {
 	unsigned int	input_current;
 	unsigned int	charging_current;
 	unsigned int	vbus_state;
-	int		aicl_on;
+	bool		aicl_on;
+	bool		is_aicl;
 	int		status;
 	int		charge_mode;
 	int uvlo_attach_flag;
@@ -237,6 +238,7 @@ struct max77854_charger_data {
 	int		irq_wcin;
 	int		irq_chgin;
 	int		irq_aicl;
+	int		irq_aicl_enabled;
 	/* software regulation */
 	bool		soft_reg_state;
 	int		soft_reg_current;

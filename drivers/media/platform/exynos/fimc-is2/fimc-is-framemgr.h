@@ -159,6 +159,8 @@ struct fimc_is_frame {
 	u32			fcount;
 	u32			rcount;
 	u32			index;
+	u32			lindex;
+	u32			hindex;
 	u32			result;
 	unsigned long		out_flag;
 	unsigned long		bak_flag;

@@ -74,6 +74,7 @@ struct service_info_t {
 	u8	addrType;		/* PD */
 	u8	tmid;
 	u8	sub_channel_id;
+	u8	ca_flag;
 	u8	nscps;
 	u8	label[32];
 

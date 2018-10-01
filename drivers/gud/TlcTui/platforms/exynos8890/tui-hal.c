@@ -311,6 +311,7 @@ void hal_tui_free(void)
 		if (!IS_ERR_OR_NULL(handle[i])){
 			pr_info("[%s:%d] TUI buffer free idx:%d\n", __func__, __LINE__, i);
 			ion_free(client, handle[i]);
+			handle[i] = NULL;
 		}
 	}
 
@@ -352,6 +353,10 @@ uint32_t hal_tui_activate(void)
 
 	fb_tui_unprotection();
 	disable_unprepare_i2c_clock();
+#endif
+
+#if defined(CONFIG_TOUCHSCREEN_SEC_TS)
+	trustedui_mode_off();
 #endif
 
 	/* Clear linux TUI flag */

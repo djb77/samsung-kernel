@@ -56,6 +56,10 @@ bool wakeup_by_key(void) {
 }
 EXPORT_SYMBOL(wakeup_by_key);
 
+#if defined(CONFIG_FB) && defined(CONFIG_SENSORS_VFS7XXX)
+extern void vfsspi_fp_homekey_ev(void);
+#endif
+
 struct gpio_button_data {
 	struct gpio_keys_button *button;
 	struct input_dev *input;
@@ -367,6 +371,8 @@ static ssize_t key_pressed_show(struct device *dev,
 	else
 		sprintf(buf, "RELEASE");
 
+	pr_info("%s key state:%d\n", SECLOG, keystate);
+
 	return strlen(buf);
 }
 
@@ -388,6 +394,8 @@ static ssize_t key_pressed_show_code(struct device *dev,
 	}
 
 	sprintf(buf, "%d %d %d", volume_up, volume_down, power);
+
+	pr_info("%s volup:%d, voldown:%d, power:%d\n", SECLOG, volume_up, volume_down, power);
 
 	return strlen(buf);
 }
@@ -426,14 +434,55 @@ out:
 	return count;
 }
 
+static ssize_t keycode_pressed_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
+	int index;
+	int state, keycode;
+	char *buff;
+	char tmp[7] = {0};
+	ssize_t count;
+	int len = (ddata->pdata->nbuttons) * 7 + 2;
+
+	buff = kmalloc(len, GFP_KERNEL);
+	if (!buff) {
+		pr_err("%s %s: failed to mem alloc\n", SECLOG, __func__);
+		return snprintf(buf, 5, "NG\n");
+	}
+
+	for (index = 0; index < ddata->pdata->nbuttons; index++) {
+		struct gpio_button_data *button;
+
+		button = &ddata->data[index];
+		state = button->key_state;
+		keycode = button->button->code;
+		if (index == 0) {
+			snprintf(buff, 7, "%d:%d", keycode, state);
+		} else {
+			snprintf(tmp, 7, ",%d:%d", keycode, state);
+			strncat(buff, tmp, 7);
+		}
+	}
+
+	pr_info("%s %s: %s\n", SECLOG, __func__, buff);
+	count = snprintf(buf, strnlen(buff, len - 2) + 2, "%s\n", buff);
+
+	kfree(buff);
+
+	return count;
+}
+
 static DEVICE_ATTR(sec_key_pressed, 0664, key_pressed_show, NULL);
 static DEVICE_ATTR(sec_key_pressed_code, 0664, key_pressed_show_code, NULL);
 static DEVICE_ATTR(wakeup_keys, 0664, NULL, wakeup_enable);
+static DEVICE_ATTR(keycode_pressed, 0444 , keycode_pressed_show, NULL);
 
 static struct attribute *sec_key_attrs[] = {
 	&dev_attr_sec_key_pressed.attr,
 	&dev_attr_sec_key_pressed_code.attr,
 	&dev_attr_wakeup_keys.attr,
+	&dev_attr_keycode_pressed.attr,
 	NULL,
 };
 
@@ -448,14 +497,6 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	unsigned int type = button->type ?: EV_KEY;
 	int state = (gpio_get_value_cansleep(button->gpio) ? 1 : 0) ^ button->active_low;
 
-	if ((button->code == KEY_POWER) && !!state) {
-		printk(KERN_INFO "PWR key is pressed\n");
-	}
-
-	if ((button->code == KEY_HOMEPAGE) && !!state) {
-		printk(KERN_INFO "HOME key is pressed\n");
-	}
-
 	exynos_ss_check_crash_key(button->code, state);
 
 	if (type == EV_ABS) {
@@ -464,9 +505,15 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	} else {
 		bdata->key_state = !!state;
 		input_event(input, type, button->code, !!state);
+#if defined(CONFIG_FB) && defined(CONFIG_SENSORS_VFS7XXX)
+		if(button->code == KEY_HOMEPAGE && !!state == 1)
+			vfsspi_fp_homekey_ev();
+#endif
 	}
 
 	input_sync(input);
+
+	pr_info("%s %s: %d, %d, %d\n", SECLOG, __func__, button->code, button->value, state);
 }
 
 static void gpio_keys_gpio_work_func(struct work_struct *work)
@@ -504,7 +551,7 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 	if (suspend_state) {
 		irq_in_suspend = true;
 		wakeup_reason = bdata->button->code;
-		pr_info("%s before resume by %d\n", __func__, wakeup_reason);
+		pr_info("%s %s: before resume by %d\n", SECLOG, __func__, wakeup_reason);
 	}
 
 	if (bdata->button->wakeup)

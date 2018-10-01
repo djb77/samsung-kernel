@@ -35,5 +35,6 @@
 #include "../sensor/module/fimc-is-module-4e6.h"
 #include "../sensor/module/fimc-is-module-2t2.h"
 #include "../sensor/module/fimc-is-module-2l1.h"
+#include "../sensor/module/fimc-is-module-5e6.h"
 
 #endif

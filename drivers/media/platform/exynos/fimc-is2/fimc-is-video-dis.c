@@ -289,14 +289,14 @@ static int fimc_is_dis_video_qbuf(struct file *file, void *priv,
 {
 	int ret = 0;
 	struct fimc_is_video_ctx *vctx = file->private_data;
-	struct fimc_is_device_ischain *device;
 	struct fimc_is_queue *queue;
+
+	BUG_ON(!vctx);
 
 #ifdef DBG_STREAMING
 	mdbgv_dis("%s\n", vctx, __func__);
 #endif
 
-	device = GET_DEVICE(vctx);
 	queue = GET_QUEUE(vctx);
 
 	if (!test_bit(FIMC_IS_QUEUE_STREAM_ON, &queue->state)) {

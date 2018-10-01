@@ -732,6 +732,42 @@ static int sec_resume(struct device *dev)
 #define sec_resume	NULL
 #endif /* CONFIG_PM */
 
+#ifdef CONFIG_SEC_PM
+extern unsigned int get_smpl_warn_number(void);
+extern void clear_smpl_warn_number(void);
+
+static unsigned int smpl_warn_counts = 0;
+static int get_smpl_warn_count(char *val, const struct kernel_param *kp)
+{
+	smpl_warn_counts = get_smpl_warn_number();
+
+	pr_info("%s: smpl_warn_counts=0x%x\n", __func__, smpl_warn_counts);
+
+	return param_get_uint(val, kp);
+}
+
+static int clear_smpl_warn_count(const char *val, const struct kernel_param *kp)
+{
+
+	int rv = param_set_uint(val, kp);
+
+	if(*val=='c') {
+		clear_smpl_warn_number();  /* clear after reading */
+		pr_info("%s: smpl_warn_counts clear\n", __func__);
+	}
+
+	return rv;
+}
+
+static struct kernel_param_ops smpl_warn_count_param_ops = {
+	.get = get_smpl_warn_count,
+	.set = clear_smpl_warn_count,
+};
+
+module_param_cb(smpl_warn_count, &smpl_warn_count_param_ops, &smpl_warn_counts, 0660);
+MODULE_PARM_DESC(smpl_warn_count, "check smpl warn count");
+#endif
+
 const struct dev_pm_ops sec_pmic_apm = {
 	.suspend = sec_suspend,
 	.resume = sec_resume,
@@ -743,6 +779,7 @@ static struct i2c_driver sec_pmic_driver = {
 		   .owner = THIS_MODULE,
 		   .of_match_table = of_match_ptr(sec_dt_match),
 		   .pm = &sec_pmic_apm,
+		   .suppress_bind_attrs = true,
 	},
 	.probe = sec_pmic_probe,
 	.remove = sec_pmic_remove,

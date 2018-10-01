@@ -175,9 +175,7 @@ static void show_power_domain(void)
 			pr_info("   %-9s - %-3s\n", pd->genpd.name,
 					cal_pd_status(pd->cal_pdid) ? "on" : "off");
 		} else
-			pr_info("   %-9s - %s\n",
-						kstrdup(np->name, GFP_KERNEL),
-						"on,  always");
+			pr_info("   %-9s - %s\n", np->name, "on,  always");
 	}
 
 	return;

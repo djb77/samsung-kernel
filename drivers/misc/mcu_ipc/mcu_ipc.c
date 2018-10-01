@@ -33,6 +33,8 @@ static irqreturn_t mcu_ipc_handler(int irq, void *data)
 	}
 
 	irq_stat = mcu_ipc_readl(EXYNOS_MCU_IPC_INTSR0) & 0xFFFF0000;
+	/* Interrupt Clear */
+	mcu_ipc_writel(irq_stat, EXYNOS_MCU_IPC_INTCR0);
 
 	for (i = 0; i < 16; i++) {
 		if (irq_stat & (1 << (i + 16))) {
@@ -42,8 +44,6 @@ static irqreturn_t mcu_ipc_handler(int irq, void *data)
 				dev_err_ratelimited(mcu_dat.mcu_ipc_dev,
 					"irq:0x%x, Unregistered INT received.\n", irq_stat);
 
-			/* Interrupt Clear */
-			mcu_ipc_writel(1 << (i + 16), EXYNOS_MCU_IPC_INTCR0);
 			irq_stat &= ~(1 << (i + 16));
 		}
 

@@ -4019,7 +4019,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 		NAPI_GRO_CB(skb)->same_flow = 0;
 		NAPI_GRO_CB(skb)->flush = 0;
 		NAPI_GRO_CB(skb)->free = 0;
-		NAPI_GRO_CB(skb)->encap_mark = 0;
+		NAPI_GRO_CB(skb)->udp_mark = 0;
 
 		/* Setup for GRO checksum validation */
 		switch (skb->ip_summed) {
@@ -4316,6 +4316,9 @@ static void net_rps_action_and_irq_enable(struct softnet_data *sd)
 			if (cpu_online(remsd->cpu))
 				smp_call_function_single_async(remsd->cpu,
 							   &remsd->csd);
+			else
+				clear_bit(NAPI_STATE_SCHED, &remsd->backlog.state);
+
 			remsd = next;
 		}
 	} else

@@ -1074,7 +1074,7 @@ static void mmc_sd_detect(struct mmc_host *host)
 		mmc_sd_remove(host);
 		mmc_detach_bus(host);
 		mmc_release_host(host);
-		pr_err("[TEST] %s: card(tray) removed...\n", __func__);
+		pr_err("%s: card(tray) removed...\n", __func__);
 		return;
 	}
 

@@ -1512,6 +1512,55 @@ static int dwc3_gadget_set_selfpowered(struct usb_gadget *g,
 	return 0;
 }
 
+static int dwc3_gadget_trb_buffer_check(struct dwc3 *dwc)
+{
+	if (!dwc->ctrl_req) {
+		dev_err(dwc->dev, "dwc->ctrl_req is NULL\n");
+		return -EINVAL;
+	} else {
+		dev_info(dwc->dev, "dwc->ctrl: %p\n", dwc->ctrl_req);
+	}
+
+	if (!dwc->ctrl_req_addr) {
+		dev_err(dwc->dev, "dwc->ctrl_req_addr is NULL\n");
+		return -EINVAL;
+	} else {
+		dev_info(dwc->dev, "dwc->ctrl_addr: %08llx\n",
+				(unsigned long long)dwc->ctrl_req_addr);
+	}
+
+	if (!dwc->ep0_trb) {
+		dev_err(dwc->dev, "dwc->ep0_trb is NULL\n");
+		return -EINVAL;
+	} else {
+		dev_info(dwc->dev, "dwc->ep0_trb: %p\n", dwc->ep0_trb);
+	}
+
+	if (!dwc->ep0_trb_addr) {
+		dev_err(dwc->dev, "dwc->ep0_trb_addr is NULL\n");
+		return -EINVAL;
+	} else {
+		dev_info(dwc->dev, "dwc->ep0_trb_addr: %08llx\n",
+				(unsigned long long)dwc->ep0_trb_addr);
+	}
+
+	if (!dwc->setup_buf) {
+		dev_err(dwc->dev, "dwc->setup_buf is NULL\n");
+		return -EINVAL;
+	} else {
+		dev_info(dwc->dev, "dwc->setup_buf: %p\n", dwc->setup_buf);
+	}
+
+	if (!dwc->ep0_bounce) {
+		dev_err(dwc->dev, "dwc->ep0_bounce is NULL\n");
+		return -EINVAL;
+	} else {
+		dev_info(dwc->dev, "dwc->ep0_bounce : %p\n", dwc->ep0_bounce);
+	}
+
+	return 0;
+}
+
 static int dwc3_udc_init(struct dwc3 *dwc)
 {
 	struct dwc3_ep          *dep;
@@ -1559,6 +1608,10 @@ static int dwc3_udc_init(struct dwc3 *dwc)
 
 	/* Start with SuperSpeed Default */
 	dwc3_gadget_ep0_desc.wMaxPacketSize = cpu_to_le16(512);
+
+	ret = dwc3_gadget_trb_buffer_check(dwc);
+	if (ret)
+		goto err0;
 
 	dep = dwc->eps[0];
 	ret = __dwc3_gadget_ep_enable(dep, &dwc3_gadget_ep0_desc, NULL, false,
@@ -1693,6 +1746,7 @@ static int dwc3_gadget_vbus_session(struct usb_gadget *g, int is_active)
 {
 	struct dwc3 *dwc = gadget_to_dwc(g);
 	unsigned long flags;
+	int ret;
 
 	if (!dwc->dotg)
 		return -EPERM;
@@ -1717,7 +1771,16 @@ static int dwc3_gadget_vbus_session(struct usb_gadget *g, int is_active)
 			 * Both vbus was activated by otg and pullup was
 			 * signaled by the gadget driver.
 			 */
-			dwc3_gadget_run_stop(dwc, 1, false);
+			ret = dwc3_gadget_run_stop(dwc, 1, false);
+
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+			if (ret == 0 )
+				store_usblog_notify(NOTIFY_USBSTATE,
+							(void *)"USB_STATE=VBUS:EN:SUCCESS", NULL);
+			else
+				store_usblog_notify(NOTIFY_USBSTATE,
+							(void *)"USB_STATE=VBUS:EN:FAIL", NULL);
+#endif
 		} else {
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 			dwc3_gadget_cable_connect(dwc,false);
@@ -1726,7 +1789,16 @@ static int dwc3_gadget_vbus_session(struct usb_gadget *g, int is_active)
 			dwc->gadget.speed = USB_SPEED_UNKNOWN;
 			dwc->setup_packet_pending = false;
 #endif
-			dwc3_gadget_run_stop(dwc, 0, false);
+			ret = dwc3_gadget_run_stop(dwc, 0, false);
+
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+			if (ret == 0 )
+				store_usblog_notify(NOTIFY_USBSTATE,
+							(void *)"USB_STATE=VBUS:DIS:SUCCESS", NULL);
+			else
+				store_usblog_notify(NOTIFY_USBSTATE,
+							(void *)"USB_STATE=VBUS:DIS:FAIL", NULL);
+#endif
 		}
 	}
 
@@ -1793,6 +1865,26 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	}
 
 	ret = dwc3_gadget_run_stop(dwc, is_on, false);
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+	if (ret == 0 )
+	{
+		if (is_on)
+			store_usblog_notify(NOTIFY_USBSTATE,
+						(void *)"USB_STATE=PULLUP:EN:SUCCESS", NULL);
+		else
+			store_usblog_notify(NOTIFY_USBSTATE,
+						(void *)"USB_STATE=PULLUP:DIS:SUCCESS", NULL);
+	}
+	else
+	{
+		if (is_on)
+			store_usblog_notify(NOTIFY_USBSTATE,
+						(void *)"USB_STATE=PULLUP:DIS:FAIL", NULL);
+		else
+			store_usblog_notify(NOTIFY_USBSTATE,
+						(void *)"USB_STATE=PULLUP:DIS:FAIL", NULL);
+	}
+#endif
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
 	return ret;
@@ -2836,6 +2928,17 @@ static void dwc3_gadget_interrupt(struct dwc3 *dwc,
 	case DWC3_DEVICE_EVENT_RESET:
 		printk(KERN_DEBUG"usb: %s RESET \n",__func__);
 		dwc3_gadget_reset_interrupt(dwc);
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+		if (dwc->gadget.speed == USB_SPEED_FULL)
+			store_usblog_notify(NOTIFY_USBSTATE,
+						(void *)"USB_STATE=RESET:FULL", NULL);
+		else if (dwc->gadget.speed == USB_SPEED_HIGH)
+			store_usblog_notify(NOTIFY_USBSTATE,
+						(void *)"USB_STATE=RESET:HIGH", NULL);
+		else if (dwc->gadget.speed == USB_SPEED_SUPER)
+			store_usblog_notify(NOTIFY_USBSTATE,
+						(void *)"USB_STATE=RESET:SUPER", NULL);
+#endif
 		break;
 	case DWC3_DEVICE_EVENT_CONNECT_DONE:
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE

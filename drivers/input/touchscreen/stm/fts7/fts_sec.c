@@ -737,7 +737,7 @@ static void procedure_cmd_event(struct fts_ts_info *info, unsigned char *data)
 {
 	char buff[16] = { 0 };
 
-	if ((data[1] == 0x01) && (data[2] == 0x62))
+	if ((data[1] == 0x01) && (data[2] == 0x8D))
 	{
 		snprintf(buff, sizeof(buff), "%d",
 					*(unsigned short *)&data[3]);
@@ -977,7 +977,11 @@ static int fts_panel_ito_test(struct fts_ts_info *info)
 
 	disable_irq(info->irq);
 	fts_interrupt_set(info, INT_DISABLE);
+
+	if (info->stm_ver != STM_VER7)
+	{
 	fts_write_reg(info, &regAdd[0], 4);
+	}
 
 	fts_command(info, FLUSHBUFFER);
 
@@ -1152,10 +1156,10 @@ static void get_threshold(void *device_data)
 		{ 0xB2, 0x00, 0x79, 0x02 }; // For Noble or Zero2
 	int timeout=0;
 
-	if (info->stm_ver == STM_VER7)
+	if (info->stm_ver == STM_VER7)  // For Hero2
 	{
 		cmd[1] = 0x01;
-		cmd[2] = 0x62;
+		cmd[2] = 0x8D;
 	}
 
 	set_default_result(info);
@@ -1434,7 +1438,7 @@ static void run_rawcap_read(void *device_data)
 #ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD
 	//unsigned char regAdd[4] = {0xB0, 0x04, 0x49, 0x00}; // it's for Zero Prj
 	//unsigned char regAdd[4] = {0xB0, 0x04, 0x48, 0x00}; // it's for Noble & Zero2 Prj
-	unsigned char regAdd[4] = {0xB0, 0x02, 0xE1, 0x00}; // it's for Hero2 Prj
+	unsigned char regAdd[4] = {0xB0, 0x03, 0x17, 0x00}; // it's for Hero2 Prj
 #endif
 	set_default_result(info);
 
@@ -1509,6 +1513,12 @@ static void run_rawcap_read(void *device_data)
 #endif
 
 		fts_execute_autotune(info);
+
+		// Added mutual auto tune
+		fts_command(info, CX_TUNNING);
+		fts_delay(300);
+		fts_fw_wait_for_event_D3(info, STATUS_EVENT_MUTUAL_AUTOTUNE_DONE, 0x00);
+
 #ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD
 		//STMicro Auto-tune protection disable
 		fts_write_reg(info, regAdd, 4);
@@ -2165,7 +2175,7 @@ static void run_ix_data_read_all(void *device_data)
 
 static void fts_read_self_raw_frame(struct fts_ts_info *info, unsigned short oAddr, bool allnode)
 {
-	char buff[CMD_STR_LEN] = { 0 };
+	char buff[CMD_STR_LEN*2] = { 0 };
 	unsigned char D0_offset = 1;
 	unsigned char regAdd[3] = {0xD0, 0x00, 0x00};
 	unsigned char ReadData[info->SenseChannelLength * 2 + 1];
@@ -2196,6 +2206,11 @@ static void fts_read_self_raw_frame(struct fts_ts_info *info, unsigned short oAd
 	fts_systemreset(info);
 	fts_delay(50);
 	fts_wait_for_ready(info);
+
+	// Added self auto tune
+	fts_command(info, SELF_AUTO_TUNE);
+	fts_delay(300);
+	fts_fw_wait_for_event_D3(info, STATUS_EVENT_SELF_AUTOTUNE_DONE_D3, 0x00);
 
 	if (info->stm_ver != STM_VER7)
 	{
@@ -2275,19 +2290,11 @@ static void fts_read_self_raw_frame(struct fts_ts_info *info, unsigned short oAd
 		fts_command(info, SLEEPOUT);
 		fts_delay(1);
 	}
-	fts_command(info, SENSEON);
+
 #ifdef FTS_SUPPORT_WATER_MODE
 	fts_fw_wait_for_event(info, STATUS_EVENT_WATER_SELF_DONE);
-#else
-	if( info->stm_ver == STM_VER7)
-	{
-		fts_fw_wait_for_event (info, STATUS_EVENT_FORCE_CAL_DONE_D3);
-	}
-	else
-	{
-		fts_fw_wait_for_event(info, STATUS_EVENT_FORCE_CAL_DONE);
-	}
 #endif
+
 #ifdef FTS_SUPPORT_TOUCH_KEY
 	if (info->board->support_mskey)
 		fts_command(info, FTS_CMD_KEY_SENSE_ON);
@@ -2296,8 +2303,13 @@ static void fts_read_self_raw_frame(struct fts_ts_info *info, unsigned short oAd
 	enable_irq(info->irq);
 	fts_interrupt_set(info, INT_ENABLE);
 
+
+	tsp_debug_info(true, &info->client->dev, "%s ForceChannelLength: %d    SenseChannelLength : %d\n",
+				__func__, info->ForceChannelLength, info->SenseChannelLength );
+
+
 	if(allnode == true){
-		buff_size = (info->ForceChannelLength + info->SenseChannelLength + 2)*5;
+		buff_size = (info->ForceChannelLength + info->SenseChannelLength + 2)*6;
 		mbuff = kzalloc(buff_size, GFP_KERNEL);
 	}
 	if (mbuff != NULL) {
@@ -2534,7 +2546,7 @@ static void get_status_afe(void *device_data)
 	regAdd[2] = 0x5A;
 	if (info->stm_ver == STM_VER7)
 	{
-		regAdd[2] = 0x53;
+		regAdd[2] = 0x52;
 	}
 
 	rc = info->fts_read_reg(info, regAdd, 3, buf, 3);
@@ -2894,11 +2906,10 @@ static void fts_read_wtr_cx_data(struct fts_ts_info *info, bool allnode)
 	unsigned char regAdd[8];
 	unsigned char *result_tx, *result_rx;
 	char buf[8];
-	char temp[8];
 	unsigned char r_addr = READ_ONE_EVENT;
 	unsigned int addr;
-	unsigned int ii, kk = 0, retry;
-	unsigned int tx_num, rx_num;
+	int ii, kk = 0, retry;
+	int tx_num, rx_num;
 
 	if (info->touch_stopped) {
 		tsp_debug_info(true, &info->client->dev, "%s: [ERROR] Touch is stopped\n",
@@ -3009,8 +3020,8 @@ static void fts_read_wtr_cx_data(struct fts_ts_info *info, bool allnode)
 
 		}
 	}	else 	{
-		unsigned int comp_header_addr,comp_start_tx_addr,comp_start_rx_addr;
-		int i;
+		int comp_header_addr, comp_start_tx_addr, comp_start_rx_addr;
+
 		/* Request compensation data */
 		regAdd[0] = 0xB8;
 		regAdd[1] = 0x20;		// SELF IX
@@ -3046,8 +3057,8 @@ static void fts_read_wtr_cx_data(struct fts_ts_info *info, bool allnode)
 		regAdd[2] = comp_start_tx_addr & 0xFF;
 		fts_read_reg(info, regAdd, 3, &buff[0], tx_num + 1);
 
-		for(i = 0; i < tx_num; i++) {
-			result_tx[i] = buff[i + 1];
+		for (ii = 0; ii < tx_num; ii++) {
+			result_tx[ii] = buff[ii + 1];
 		}
 
 		memset(buff, 0x0, 512);
@@ -3057,14 +3068,14 @@ static void fts_read_wtr_cx_data(struct fts_ts_info *info, bool allnode)
 		regAdd[2] = comp_start_rx_addr & 0xFF;
 		fts_read_reg(info, regAdd, 3, &buff[0], rx_num + 1);
 
-		for(i = 0; i < rx_num; i++) {
-			result_rx[i] = buff[i + 1];
+		for (ii = 0; ii < rx_num; ii++) {
+			result_rx[ii] = buff[ii + 1];
 		}
 	}
 
 	if (allnode) {
-		char *data = 0;
-
+		char *data = 0; char temp[9];
+		memset(buff, 0x0, 512);
 		data = result_tx;
 		for (ii = 0; ii < info->ForceChannelLength; ii++) {
 			tsp_debug_info(true, &info->client->dev,
@@ -4216,9 +4227,9 @@ static void dead_zone_enable(void *device_data)
 		info->cmd_state = CMD_STATUS_FAIL;
 	} else {
 		if (info->cmd_param[0]==0) {
-			regAdd[0] = 0xC1;	/* dead zone disable */
+			regAdd[0] = 0xC1;	/* dead zone enable */
 		} else {
-			regAdd[0] = 0xC2;	/* dead zone enable */
+			regAdd[0] = 0xC2;	/* dead zone disable */
 		}
 
 		ret = fts_write_reg(info, regAdd, 2);
@@ -5119,7 +5130,6 @@ static void run_force_calibration(void *device_data)
 	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
 	char buff[CMD_STR_LEN] = { 0 };
 	bool touch_on = false;
-
 	set_default_result(info);
 
 	if (info->touch_stopped) {
@@ -5141,6 +5151,12 @@ static void run_force_calibration(void *device_data)
 		touch_on = true;
 		tsp_debug_info(true, info->dev, "%s: finger on touch(%d)\n", __func__, info->touch_count);
 	}
+
+#ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD
+	info->cmd_param[0] = 0;
+	set_status_pureautotune(device_data);
+	set_default_result(info);
+#endif
 
 	disable_irq(info->irq);
 

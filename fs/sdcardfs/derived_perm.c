@@ -78,11 +78,6 @@ void get_derived_permission(struct dentry *parent, struct dentry *dentry)
 			/* Legacy internal layout places users at top level */
 			info->perm = PERM_ROOT;
 			info->userid = simple_strtoul(dentry->d_name.name, NULL, 10);
-#ifdef CONFIG_SDP
-			if(parent_dinfo->under_knox && (parent_dinfo->userid >= 0)) {
-				info->userid = parent_dinfo->userid;
-			}
-#endif
 			break;
 		case PERM_ROOT:
 			/* Assume masked off by default. */
@@ -162,6 +157,19 @@ void get_derived_permission(struct dentry *parent, struct dentry *dentry)
 		case PERM_ANDROID_KNOX_PACKAGE_DATA:
 		break;
 	}
+#ifdef CONFIG_SDP
+	if((parent_info->perm == PERM_PRE_ROOT) && (parent_dinfo->under_knox) && (parent_dinfo->userid >= 0)) {
+		info->userid = parent_dinfo->userid; 
+	}
+
+	if(parent_dinfo->under_knox) {
+		if(parent_dinfo->permission == PERMISSION_UNDER_ANDROID) {
+			if (parent_dinfo->appid != 0){				
+				info->d_uid = multiuser_get_uid(parent_info->userid, parent_dinfo->appid);
+				}
+		}
+	}
+#endif
 } 
 
 /* set vfs_inode from sdcardfs_inode */

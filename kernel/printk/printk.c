@@ -50,6 +50,10 @@
 #include <linux/sec_bsp.h>
 #endif
 
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+#include <linux/sec_debug.h>
+#endif
+
 #include <asm/uaccess.h>
 
 #define CREATE_TRACE_POINTS
@@ -235,6 +239,11 @@ struct printk_log {
 	pid_t pid;		/* process id */
 	u8 cpu;			/* cpu id */
 	u8 in_interrupt;	/* interrupt context */
+#endif
+
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+	u8 for_auto_summary;
+	u8 type_auto_summary;
 #endif
 };
 
@@ -424,6 +433,17 @@ static size_t print_process(const struct printk_log *msg, char *buf)
 #endif
 module_param_named(process, printk_process, bool, S_IRUGO | S_IWUSR);
 
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+static void (*func_hook_auto_comm)(int type, const char *buf, size_t size);
+
+struct sec_debug_auto_comm_buf* g_Auto_summary_buf_addr;
+
+void register_set_auto_comm_buf(void (*func)(int type, const char *buf, size_t size))
+{
+	func_hook_auto_comm = func;
+}
+#endif
+
 #ifdef CONFIG_EXYNOS_SNAPSHOT
 static size_t hook_size;
 static char hook_text[LOG_LINE_MAX + PREFIX_MAX];
@@ -530,6 +550,13 @@ static int log_store(int facility, int level,
 	memcpy(log_dict(msg), dict, dict_len);
 	msg->dict_len = dict_len;
 	msg->facility = facility;
+
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+	msg->for_auto_summary = (level / 10 == 9)? 1 : 0;
+	msg->type_auto_summary = (level / 10 == 9)? level - 90 : 0;
+	level = (msg->for_auto_summary)? 0 : level;
+#endif
+
 	msg->level = level & 7;
 	msg->flags = flags & 0x1f;
 	if (ts_nsec > 0)
@@ -547,13 +574,20 @@ static int log_store(int facility, int level,
 		msg->in_interrupt = in_interrupt() ? 1 : 0;
 	}
 #endif
+
 #ifdef CONFIG_EXYNOS_SNAPSHOT
 	if (func_hook_logbuf) {
 		hook_size = msg_print_text(msg, msg->flags,
 				true, hook_text, LOG_LINE_MAX + PREFIX_MAX);
 		func_hook_logbuf(hook_text, hook_size);
+
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+		if (msg->for_auto_summary && func_hook_auto_comm)
+			func_hook_auto_comm(msg->type_auto_summary, hook_text, hook_size);
+#endif
 	}
 #endif
+
 	/* insert message */
 	log_next_idx += msg->len;
 	log_next_seq++;
@@ -1864,9 +1898,17 @@ asmlinkage int vprintk_emit(int facility, int level,
 			case '0' ... '7':
 				if (level == -1)
 					level = kern_level - '0';
+
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+			case 'B' ... 'J':
+				if (level == -1)
+					level = 90 + (kern_level - 'A'); // 91 ~ 99
+#endif
+
 			case 'd':	/* KERN_DEFAULT */
 				lflags |= LOG_PREFIX;
 			}
+
 			/*
 			 * No need to check length here because vscnprintf
 			 * put '\0' at the end of the string. Only valid and

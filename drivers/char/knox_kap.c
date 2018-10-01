@@ -70,48 +70,6 @@ static void turn_on_kap(void) {
 	printk(KERN_ERR " %s -> Turn on kap mode\n", __FUNCTION__);
 }
 
-ssize_t knox_kap_write(struct file *file, const char __user *buffer, size_t size, loff_t *offset) {
-
-	unsigned long mode;
-	char *string;
-
-	printk(KERN_ERR " %s\n", __FUNCTION__);
-
-	string = kmalloc(size + sizeof(char), GFP_KERNEL);
-	if (string == NULL) {
-		printk(KERN_ERR "%s failed kmalloc\n", __func__);
-		return size;
-	}
-
-	memcpy(string, buffer, size);
-	string[size] = '\0';
-
-	if(kstrtoul(string, 0, &mode)) {
-		kfree(string);
-		return size;
-	};
-
-	kfree(string);
-
-	printk(KERN_ERR "id: %d\n", (int)mode);
-
-	switch(mode) {
-		case 0:
-			turn_off_kap();
-			break;
-		case 1:
-		  turn_on_kap();
-			break;
-		default:
-			printk(KERN_ERR " %s -> Invalid kap mode operations\n", __FUNCTION__);
-			break;
-	}
-
-	*offset += size;
-
-	return size;
-}
-
 #define KAP_RET_SIZE	5
 #define KAP_MAGIC	0x5afe0000
 #define KAP_MAGIC_MASK	0xffff0000
@@ -185,6 +143,5 @@ const struct file_operations knox_kap_fops = {
 	.open	= knox_kap_open,
 	.release	= single_release,
 	.read	= seq_read,
-	.write	= knox_kap_write,
 	.unlocked_ioctl  = knox_kap_ioctl,
 };

@@ -40,8 +40,8 @@ extern "C" {
 
 /* Read-ahead related                                */
 /* First config vars. should be pow of 2             */
-#define FAT_RA_SECTORS	8
-#define DIR_RA_CLUSTER	1
+#define FCACHE_MAX_RA_SIZE	(PAGE_SIZE)
+#define DCACHE_MAX_RA_SIZE	(128*1024)
 
 /*----------------------------------------------------------------------*/
 /*  Constant & Macro Definitions                                        */
@@ -141,9 +141,25 @@ typedef struct {
 /* directory structure */
 typedef struct {
 	u32      dir;
-	s32       size;
+	s32      size;
 	u8       flags;
 } CHAIN_T;
+
+/* hint structure */
+typedef struct {
+	u32      clu;
+	union {
+		s32 off;     // cluster offset
+		s32 eidx;    // entry index
+	};
+} HINT_T;
+
+typedef struct {
+	spinlock_t cache_lru_lock;
+	struct list_head cache_lru;
+	s32 nr_caches;
+	u32 cache_valid_id;	// for avoiding the race between alloc and free
+} EXTENT_T;
 
 /* file id structure */
 typedef struct {
@@ -154,15 +170,18 @@ typedef struct {
 	u32 start_clu;
 	u64 size;
 	u8  flags;
-	s64 rwoffset;
-	s32 hint_last_off;
-	u32 hint_last_clu;
+	u8  reserved[3];	// padding
+	u32 version;		// the copy of low 32bit of i_version to check the validation of hint_stat
+	s64 rwoffset;		// file offset or dentry index for readdir
+	EXTENT_T extent;	// extent cache for a file
+	HINT_T	hint_bmap;	// hint for cluster last accessed
+	HINT_T	hint_stat;	// hint for entry index we try to lookup next time
 } FILE_ID_T;
 
 typedef struct {
 	s8* lfn;
 	s8* sfn;
-	s32 lfnbuf_len; //usally MAX_UNINAME_BUF_SIZE
+	s32 lfnbuf_len;	//usally MAX_UNINAME_BUF_SIZE
 	s32 sfnbuf_len; //usally MAX_DOSNAME_BUF_SIZE, used only for vfat, not for exfat
 } DENTRY_NAMEBUF_T;
 
@@ -211,9 +230,9 @@ typedef struct {
 	s32      (*count_used_clusters)(struct super_block *sb, u32* ret_count);
 	s32      (*init_dir_entry)(struct super_block *sb, CHAIN_T *p_dir, s32 entry, u32 type,u32 start_clu, u64 size);
 	s32      (*init_ext_entry)(struct super_block *sb, CHAIN_T *p_dir, s32 entry, s32 num_entries, UNI_NAME_T *p_uniname, DOS_NAME_T *p_dosname);
-	s32      (*find_dir_entry)(struct super_block *sb, CHAIN_T *p_dir, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *p_dosname, u32 type);
+	s32      (*find_dir_entry)(struct super_block *sb, CHAIN_T *p_dir, HINT_T *hint_stat, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *p_dosname, u32 type);
 	s32      (*delete_dir_entry)(struct super_block *sb, CHAIN_T *p_dir, s32 entry, s32 offset, s32 num_entries);
-	void     (*get_uni_name_from_ext_entry)(struct super_block *sb, CHAIN_T *p_dir, s32 entry, u16 *uniname);
+	void     (*get_uniname_from_ext_entry)(struct super_block *sb, CHAIN_T *p_dir, s32 entry, u16 *uniname);
 	s32      (*count_ext_entries)(struct super_block *sb, CHAIN_T *p_dir, s32 entry, DENTRY_T *p_entry);
 	s32      (*calc_num_entries)(UNI_NAME_T *p_uniname);
 	u32      (*get_entry_type)(DENTRY_T *p_entry);
@@ -271,6 +290,9 @@ typedef struct __FS_INFO_T {
 	s32       reserved_clusters;  // # of reserved clusters (DA)
 	void        *amap;                  // AU Allocation Map
 
+	/* extent cache */
+	struct kmem_cache *extent_cache_cachep;
+
 	/* fat cache */
 	struct {
 		cache_ent_t pool[FAT_CACHE_SIZE];
@@ -307,6 +329,7 @@ s32 fsapi_mount(struct super_block *sb);
 s32 fsapi_umount(struct super_block *sb);
 s32 fsapi_statfs(struct super_block *sb, VOL_INFO_T *info);
 s32 fsapi_sync_fs(struct super_block *sb, s32 do_sync);
+s32 fsapi_set_vol_flags(struct super_block *sb, u16 new_flag, s32 always_sync);
 
 /* file management functions */
 s32 fsapi_lookup(struct inode *inode, u8 *path, FILE_ID_T *fid);
@@ -318,7 +341,7 @@ s32 fsapi_truncate(struct inode *inode, u64 old_size, u64 new_size);
 s32 fsapi_rename(struct inode *old_parent_inode, FILE_ID_T *fid, struct inode *new_parent_inode, struct dentry *new_dentry);
 s32 fsapi_unlink(struct inode *inode, FILE_ID_T *fid);
 s32 fsapi_read_inode(struct inode *inode, DIR_ENTRY_T *info);
-s32 fsapi_write_inode(struct inode *inode, DIR_ENTRY_T *info);
+s32 fsapi_write_inode(struct inode *inode, DIR_ENTRY_T *info, int sync);
 s32 fsapi_map_clus(struct inode *inode, s32 clu_offset, u32 *clu, int dest);
 s32 fsapi_reserve_clus(struct inode *inode);
 
@@ -333,6 +356,9 @@ s32 fsapi_cache_release(struct super_block *sb);
 
 /* extra info functions */
 u32 fsapi_get_au_stat(struct super_block *sb, s32 mode);
+
+/* extent cache functions */
+void fsapi_invalidate_extent(struct inode *inode);
 
 #ifdef CONFIG_SDFAT_DFR
 /*----------------------------------------------------------------------*/

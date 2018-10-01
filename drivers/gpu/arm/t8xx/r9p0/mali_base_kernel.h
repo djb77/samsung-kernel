@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -521,6 +521,25 @@ typedef u16 base_jd_core_req;
 //#endif
 
 /**
+ * SW only requirement: Map external resource
+ *
+ * This job requests external resource(s) are mapped once the dependencies
+ * of the job have been satisfied. The list of external resources are
+ * passed via the jc element of the atom which is a pointer to a
+ * @base_external_resource_list.
+ */
+#define BASE_JD_REQ_SOFT_EXT_RES_MAP            (BASE_JD_REQ_SOFT_JOB | 0xb)
+/**
+ * SW only requirement: Unmap external resource
+ *
+ * This job requests external resource(s) are unmapped once the dependencies
+ * of the job has been satisfied. The list of external resources are
+ * passed via the jc element of the atom which is a pointer to a
+ * @base_external_resource_list.
+ */
+#define BASE_JD_REQ_SOFT_EXT_RES_UNMAP          (BASE_JD_REQ_SOFT_JOB | 0xc)
+
+/**
  * HW Requirement: Requires Compute shaders (but not Vertex or Geometry Shaders)
  *
  * This indicates that the Job Chain contains Midgard Jobs of the 'Compute Shaders' type.
@@ -721,6 +740,30 @@ typedef enum base_external_resource_access {
 typedef struct base_external_resource {
 	u64 ext_resource;
 } base_external_resource;
+
+
+/**
+ * The maximum number of external resources which can be mapped/unmapped
+ * in a single request.
+ */
+#define BASE_EXT_RES_COUNT_MAX 10
+
+/**
+ * struct base_external_resource_list - Structure which describes a list of
+ *                                      external resources.
+ * @count:                              The number of resources.
+ * @ext_res:                            Array of external resources which is
+ *                                      sized at allocation time.
+ */
+struct base_external_resource_list {
+	u64 count;
+	struct base_external_resource ext_res[1];
+};
+
+struct base_jd_debug_copy_buffer {
+	u64 address;
+	u64 size;
+};
 
 /**
  * @brief Setter for a dependency structure

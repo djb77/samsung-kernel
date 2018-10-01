@@ -1338,7 +1338,7 @@ static struct notifier_block bts_lpa_nb = {
 
 static int __init exynos8_bts_init(void)
 {
-	unsigned long i;
+	signed long i;
 	int ret;
 	enum bts_index btstable_index = BTS_MAX - 1;
 

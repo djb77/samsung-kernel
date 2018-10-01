@@ -11,7 +11,7 @@
 
 / {
 	rgb {
-		device_type = <0>;
+		led_device_type = <0>;
 		rgb-name = "led_w", "led_r", "led_g", "led_b";
 
 		normal_powermode_current = <10>;

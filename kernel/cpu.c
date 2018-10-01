@@ -20,9 +20,11 @@
 #include <linux/gfp.h>
 #include <linux/suspend.h>
 #include <linux/lockdep.h>
+#include <linux/delay.h>
 #include <trace/events/power.h>
 
 #include "smpboot.h"
+#include "sched/sched.h"
 
 #ifdef CONFIG_SMP
 /* Serializes the updates to cpu_online_mask, cpu_present_mask */
@@ -377,6 +379,7 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen)
 		.mod = mod,
 		.hcpu = hcpu,
 	};
+	unsigned int timeout = 3000;
 
 	if (num_online_cpus() == 1)
 		return -EBUSY;
@@ -396,7 +399,7 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen)
 	}
 	smpboot_park_threads(cpu);
 
-	cpu_notify_nofail(CPU_DOWN_LATE_PREPARE | mod, 0);
+	cpu_notify_nofail(CPU_DOWN_LATE_PREPARE | mod, hcpu);
 
 	err = __stop_machine(take_cpu_down, &tcd_param, cpumask_of(cpu));
 	if (err) {
@@ -414,8 +417,16 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen)
 	 *
 	 * Wait for the stop thread to go away.
 	 */
-	while (!idle_cpu(cpu))
+	while (!idle_cpu(cpu)){
 		cpu_relax();
+
+		mdelay(1);
+		timeout--;
+
+		BUG_ON(cpu_rq(cpu)->nr_running || !timeout);
+	}
+
+	save_pcpu_tick(cpu);
 
 	/* This actually kills the CPU. */
 	__cpu_die(cpu);
@@ -478,7 +489,10 @@ int __ref cpus_down(struct cpumask *cpus)
 		}
 	}
 
-	cpu_notify_nofail(CPU_DOWN_LATE_PREPARE, 0);
+	for_each_cpu(cpu, &dest_cpus) {
+		void *hcpu = (void *)(long)cpu;
+		cpu_notify_nofail(CPU_DOWN_LATE_PREPARE, hcpu);
+	}
 
 	for_each_cpu(cpu, &dest_cpus) {
 		smpboot_park_threads(cpu);
@@ -489,6 +503,8 @@ int __ref cpus_down(struct cpumask *cpus)
 		goto err_stop_machine;
 
 	for_each_cpu(cpu, &dest_cpus) {
+		unsigned int timeout = 3000;
+
 		BUG_ON(cpu_online(cpu));
 		/*
 		 * The migration_call() CPU_DYING callback will have removed all
@@ -497,8 +513,14 @@ int __ref cpus_down(struct cpumask *cpus)
 		 *
 		 * Wait for the stop thread to go away.
 		 */
-		while (!idle_cpu(cpu))
+		while (!idle_cpu(cpu)) {
 			cpu_relax();
+
+			mdelay(1);
+			timeout--;
+
+			BUG_ON(cpu_rq(cpu)->nr_running || !timeout);
+		}
 
 		/* This actually kills the CPU. */
 		__cpu_die(cpu);
@@ -625,6 +647,8 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen)
 	if (ret != 0)
 		goto out_notify;
 	BUG_ON(!cpu_online(cpu));
+
+	restore_pcpu_tick(cpu);
 
 	/* Wake the per cpu threads */
 	smpboot_unpark_threads(cpu);

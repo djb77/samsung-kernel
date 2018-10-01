@@ -111,7 +111,7 @@ int ecryptfs_get_sdp_dek(struct ecryptfs_crypt_stat *crypt_stat)
 {
 	int rc = 0;
 
-	if(crypt_stat->flags & ECRYPTFS_KEY_SET) {
+	if((crypt_stat->flags & ECRYPTFS_KEY_SET) && (crypt_stat->flags & ECRYPTFS_POLICY_APPLIED)) {
 		DEK_LOGE("get_sdp_dek: key is already set (success)\n");
 		return 0;
 	}

@@ -770,8 +770,17 @@ static int dw_pcie_rd_conf(struct pci_bus *bus, u32 devfn, int where,
 			int size, u32 *val)
 {
 	struct pcie_port *pp = bus->sysdata;
+	struct exynos_pcie *exynos_pcie = to_exynos_pcie(pp);
 	unsigned long flags;
 	int ret;
+
+	if (exynos_pcie->state == STATE_LINK_DOWN){
+		if( (where > (long unsigned int)(pp->io_base - pp->cfg0_base)) && (where < pp->io_size)) {
+			dev_err(pp->dev, "%s: PCIe link state is %d\n", __func__, exynos_pcie->state);
+			dev_err(pp->dev, "%s: Can not access in this state\n", __func__);
+		}
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	}
 
 	if (where > pp->cfg0_size) {
 		dev_err(pp->dev, "%s: where 0x%x value exceeds!\n", __func__, where);
@@ -805,8 +814,17 @@ static int dw_pcie_wr_conf(struct pci_bus *bus, u32 devfn,
 			int where, int size, u32 val)
 {
 	struct pcie_port *pp = bus->sysdata;
+	struct exynos_pcie *exynos_pcie = to_exynos_pcie(pp);
 	unsigned long flags;
 	int ret;
+
+	if (exynos_pcie->state == STATE_LINK_DOWN) {
+		if( (where > (long unsigned int)(pp->io_base - pp->cfg0_base)) && (where < pp->io_size)) {
+			dev_err(pp->dev, "%s: PCIe link state is %d\n", __func__, exynos_pcie->state);
+			dev_err(pp->dev, "%s: Can not access in this state\n", __func__);
+		}
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	}
 
 	if (where > pp->cfg0_size) {
 		dev_err(pp->dev, "%s: where 0x%x value exceeds!\n", __func__, where);

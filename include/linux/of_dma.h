@@ -50,6 +50,7 @@ extern void __iomem *of_dma_get_awwrapper_address(struct device_node *np, unsign
 extern void __iomem *of_dma_get_instwrapper_address(struct device_node *np);
 extern bool of_dma_get_wrapper_available(struct device_node *np);
 extern u64 of_dma_get_mask(struct device_node *np, char *name);
+extern bool of_dma_multi_irq(struct device_node *np);
 #else
 static inline unsigned int of_dma_get_mcode_addr(struct device_node *np)
 {
@@ -109,6 +110,11 @@ static u64 of_dma_get_mask(struct device_node *np, char *name)
 	return NULL;
 }
 #define of_dma_xlate_by_chan_id NULL
+
+static inline bool of_dma_multi_irq(struct device_node *np)
+{
+	return NULL;
+}
 
 #endif
 

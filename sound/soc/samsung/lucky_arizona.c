@@ -636,8 +636,8 @@ static int set_voice_trigger_info(struct snd_kcontrol *kcontrol,
 static int lucky_dsm_cal_apply(struct snd_soc_card *card)
 {
 	struct arizona_machine_priv *priv = card->drvdata;
-	static bool is_get_temp = false;
-	static bool is_get_rdc = false;
+	static bool is_get_temp;
+	static bool is_get_rdc;
 	static int get_temp_try_cnt = 3;
 	static int get_rdc_try_cnt = 3;
 	int ret;
@@ -793,29 +793,32 @@ static int lucky_spk_set_asyncclk(struct snd_soc_dapm_widget *w,
 		dev_dbg(card->dev, "%s\n", __func__);
 
 		/* Set ASYNCCLK FLL  */
-		ret = snd_soc_codec_set_pll(priv->codec, priv->asyncclk.fll_ref_id,
-					    priv->asyncclk.fll_ref_src,
-					    priv->asyncclk.fll_ref_in,
-					    priv->asyncclk.fll_ref_out);
+		ret = snd_soc_codec_set_pll(priv->codec,
+						priv->asyncclk.fll_ref_id,
+						priv->asyncclk.fll_ref_src,
+						priv->asyncclk.fll_ref_in,
+						priv->asyncclk.fll_ref_out);
 		if (ret != 0)
 			dev_err(card->dev,
-				 "Failed to start ASYNCCLK FLL REF: %d\n", ret);
+				"Failed to start ASYNCCLK FLL REF: %d\n", ret);
 
 		ret = snd_soc_codec_set_pll(priv->codec, priv->asyncclk.fll_id,
-					    priv->asyncclk.mclk.id,
-					    priv->asyncclk.mclk.rate,
-					    priv->asyncclk.fll_out);
+						priv->asyncclk.mclk.id,
+						priv->asyncclk.mclk.rate,
+						priv->asyncclk.fll_out);
 		if (ret != 0)
-			dev_err(card->dev, "Failed to start ASYNCCLK FLL: %d\n", ret);
+			dev_err(card->dev,
+				"Failed to start ASYNCCLK FLL: %d\n", ret);
 
 		/* Set ASYNCCLK from FLL */
-		ret = snd_soc_codec_set_sysclk(priv->codec, priv->asyncclk.clk_id,
-					       priv->asyncclk.src_id,
-					       priv->asyncclk.rate,
-					       SND_SOC_CLOCK_IN);
+		ret = snd_soc_codec_set_sysclk(priv->codec,
+						priv->asyncclk.clk_id,
+						priv->asyncclk.src_id,
+						priv->asyncclk.rate,
+						SND_SOC_CLOCK_IN);
 		if (ret < 0)
 			dev_err(card->dev,
-					 "Unable to set ASYNCCLK to FLL: %d\n", ret);
+				"Unable to set ASYNCCLK to FLL: %d\n", ret);
 		break;
 	default:
 		break;
@@ -835,8 +838,8 @@ static struct snd_soc_dapm_widget *lucky_dapm_find_widget(
 		if (!strcmp(w->name, pin)) {
 			if (w->dapm == dapm)
 				return w;
-			else
-				fallback = w;
+
+			fallback = w;
 		}
 	}
 
@@ -1101,7 +1104,7 @@ static int lucky_aif1_hw_free(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_card *card = rtd->card;
 
-	dev_dbg(card->dev, "%s-%d\n hw_free",
+	dev_dbg(card->dev, "%s-%d hw_free",
 			rtd->dai_link->name, substream->stream);
 
 	return 0;
@@ -1288,7 +1291,7 @@ static int lucky_aif2_hw_free(struct snd_pcm_substream *substream)
 	struct snd_soc_card *card = rtd->card;
 	struct arizona_machine_priv *priv = rtd->card->drvdata;
 
-	dev_dbg(card->dev, "%s-%d\n hw_free",
+	dev_dbg(card->dev, "%s-%d hw_free",
 			rtd->dai_link->name, substream->stream);
 
 	priv->asyncclk.fll_ref_src = ARIZONA_FLL_SRC_NONE;

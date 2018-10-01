@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -30,7 +30,9 @@
 #endif
 
 #include <linux/kref.h>
-
+#ifdef CONFIG_KDS
+#include <linux/kds.h>
+#endif				/* CONFIG_KDS */
 #ifdef CONFIG_UMP
 #include <linux/ump.h>
 #endif				/* CONFIG_UMP */
@@ -859,4 +861,78 @@ void kbase_sync_single_for_device(struct kbase_device *kbdev, dma_addr_t handle,
 void kbase_sync_single_for_cpu(struct kbase_device *kbdev, dma_addr_t handle,
 		size_t size, enum dma_data_direction dir);
 
+/**
+ * kbase_map_external_resource - Map an external resource to the GPU.
+ * @kctx:              kbase context.
+ * @reg:               The region to map.
+ * @locked_mm:         The mm_struct which has been locked for this operation.
+ * @kds_res_count:     The number of KDS resources.
+ * @kds_resources:     Array of KDS resources.
+ * @kds_access_bitmap: Access bitmap for KDS.
+ * @exclusive:         If the KDS resource requires exclusive access.
+ *
+ * Return: The physical allocation which backs the region on success or NULL
+ * on failure.
+ */
+struct kbase_mem_phy_alloc *kbase_map_external_resource(
+		struct kbase_context *kctx, struct kbase_va_region *reg,
+		struct mm_struct *locked_mm
+#ifdef CONFIG_KDS
+		, u32 *kds_res_count, struct kds_resource **kds_resources,
+		unsigned long *kds_access_bitmap, bool exclusive
+#endif
+		);
+
+/**
+ * kbase_unmap_external_resource - Unmap an external resource from the GPU.
+ * @kctx:  kbase context.
+ * @reg:   The region to unmap or NULL if it has already been released.
+ * @alloc: The physical allocation being unmapped.
+ */
+void kbase_unmap_external_resource(struct kbase_context *kctx,
+		struct kbase_va_region *reg, struct kbase_mem_phy_alloc *alloc);
+
+/**
+ * kbase_sticky_resource_init - Initialize sticky resource management.
+ * @kctx: kbase context
+ *
+ * Returns zero on success or negative error number on failure.
+ */
+int kbase_sticky_resource_init(struct kbase_context *kctx);
+
+/**
+ * kbase_sticky_resource_acquire - Acquire a reference on a sticky resource.
+ * @kctx:     kbase context.
+ * @gpu_addr: The GPU address of the external resource.
+ *
+ * Return: The metadata object which represents the binding between the
+ * external resource and the kbase context on success or NULL on failure.
+ */
+struct kbase_ctx_ext_res_meta *kbase_sticky_resource_acquire(
+		struct kbase_context *kctx, u64 gpu_addr);
+
+/**
+ * kbase_sticky_resource_release - Release a reference on a sticky resource.
+ * @kctx:     kbase context.
+ * @meta:     Binding metadata.
+ * @gpu_addr: GPU address of the external resource.
+ * @force:    If the release is being forced.
+ *
+ * If meta is NULL then gpu_addr will be used to scan the metadata list and
+ * find the matching metadata (if any), otherwise the provided meta will be
+ * used and gpu_addr will be ignored.
+ *
+ * If force is true then the refcount in the metadata is ignored and the
+ * resource will be forced freed.
+ *
+ * Return: True if the release found the metadata and the reference was dropped.
+ */
+bool kbase_sticky_resource_release(struct kbase_context *kctx,
+		struct kbase_ctx_ext_res_meta *meta, u64 gpu_addr, bool force);
+
+/**
+ * kbase_sticky_resource_term - Terminate sticky resource management.
+ * @kctx: kbase context
+ */
+void kbase_sticky_resource_term(struct kbase_context *kctx);
 #endif				/* _KBASE_MEM_H_ */

@@ -64,7 +64,6 @@ static s32 exfat_ent_get(struct super_block *sb, u32 loc, u32 *content)
 	if (!fat_sector)
 		return -EIO;
 
-//	_content = get_unaligned_le32(&fat_sector[off]);
 	_content = le32_to_cpu(*(__le32*)(&fat_sector[off]));
 	if (_content >= CLUSTER_32(0xFFFFFFF8)) {
 		//return 0xFFFFFFFF to simplify code
@@ -80,7 +79,6 @@ static s32 exfat_ent_set(struct super_block *sb, u32 loc, u32 content)
 {
 	u32 sec, off;
 	u8 *fat_sector; 
-//	u8 *fat_entry;
 	__le32 *fat_entry;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
@@ -91,8 +89,6 @@ static s32 exfat_ent_set(struct super_block *sb, u32 loc, u32 content)
 	if (!fat_sector)
 		return -EIO;
 
-//	fat_entry = &(fat_sector[off]);
-//	put_unaligned_le32(content, fat_entry);
 	fat_entry = (__le32 *)&(fat_sector[off]);
 	*fat_entry = cpu_to_le32(content);
 
@@ -112,7 +108,6 @@ static s32 fat32_ent_get(struct super_block *sb, u32 loc, u32 *content)
 	if (!fat_sector)
 		return -EIO;
 
-//	_content = get_unaligned_le32(&fat_sector[off]);
 	_content = le32_to_cpu(*(__le32*)(&fat_sector[off]));
 	_content &= 0x0FFFFFFF;
 
@@ -130,7 +125,6 @@ static s32 fat32_ent_set(struct super_block *sb, u32 loc, u32 content)
 {
 	u32 sec, off;
 	u8 *fat_sector;
-//	u8 *fat_entry;
 	__le32 *fat_entry;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
@@ -143,9 +137,6 @@ static s32 fat32_ent_set(struct super_block *sb, u32 loc, u32 content)
 	if (!fat_sector)
 		return -EIO;
 
-//	fat_entry = &(fat_sector[off]);
-//	content |= get_unaligned_le32(fat_entry) & 0xF0000000;
-//	put_unaligned_le32(content, fat_entry);
 	fat_entry = (__le32 *)&(fat_sector[off]);
 	content |= (le32_to_cpu(*fat_entry) & 0xF0000000);
 	*fat_entry = cpu_to_le32(content);
@@ -166,7 +157,6 @@ static s32 fat16_ent_get(struct super_block *sb, u32 loc, u32 *content)
 	if(!fat_sector)
 		return -EIO;
 
-	//_content = get_unaligned_le16(&fat_sector[off]);
 	_content = (u32)le16_to_cpu(*(__le16*)(&fat_sector[off]));
 	_content &= 0x0000FFFF;
 
@@ -184,7 +174,6 @@ static s32 fat16_ent_set(struct super_block *sb, u32 loc, u32 content)
 {
 	u32 sec, off;
 	u8 *fat_sector;
-	//u8 *fat_entry;
 	__le16 *fat_entry;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
@@ -197,8 +186,6 @@ static s32 fat16_ent_set(struct super_block *sb, u32 loc, u32 content)
 	if (!fat_sector)
 		return -EIO;
 
-	//fat_entry = &(fat_sector[off]);
-	//put_unaligned_le16(content, fat_entry);
 	fat_entry = (__le16*)&(fat_sector[off]);
 	*fat_entry = cpu_to_le16(content);
 
@@ -351,13 +338,42 @@ s32 fat_ent_ops_init(struct super_block *sb)
 s32 fat_ent_get(struct super_block *sb, u32 loc, u32 *content)
 {
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-	return fsi->fatent_ops->ent_get(sb, loc, content);
+	s32 err;
+
+	if (loc < CLUS_BASE || fsi->num_clusters <= loc) {
+		sdfat_fs_error(sb, "invalid access to FAT (entry 0x%08x)", loc);
+		return -EIO;
+	}
+
+	err = fsi->fatent_ops->ent_get(sb, loc, content);
+	if (err) {
+		sdfat_fs_error(sb, "failed to access to FAT "
+				"(entry 0x%08x, err:%d)", loc, err);
+		return err;
+	}
+
+	return 0;
 }
 
 s32 fat_ent_set(struct super_block *sb, u32 loc, u32 content)
 {
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 	return fsi->fatent_ops->ent_set(sb, loc, content);
+}
+
+s32 fat_ent_get_safe(struct super_block *sb, u32 loc, u32 *content)
+{
+	s32 err = fat_ent_get(sb, loc, content);
+	if (err)
+		return err;
+
+	if (IS_CLUS_FREE(*content)) {
+		sdfat_fs_error(sb, "invalid access to free FAT "
+				"(entry 0x%08x)", loc);
+		return -EIO;
+	}
+
+	return 0;
 }
 
 /* end of fatent.c */

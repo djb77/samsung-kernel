@@ -1125,13 +1125,18 @@
 		supports-cmd23;
 		supports-erase;
 		supports-highspeed;
+		sd-uhs-sdr50;
 		sd-uhs-sdr104;
+		card-detect-gpio;
 		bypass-smu;
 		bypass-for-allpass;
 		clock-gate;
 		use-fine-tuning;
 		card-init-hwacg-ctrl;
+		switch_transfer;
+		ignore-phase = <(1 << 7)>;
 		samsung,voltage-int-extra = <0x7>;
+		skip-init-mmc-scan;
 		fifo-depth = <0x40>;
 		qos_int_level = <255000>;
 		samsung,dw-mshc-ciu-div = <3>;
@@ -1142,9 +1147,11 @@
 		clock-frequency = <800000000>;
 		samsung,dw-mshc-sdr-timing = <3 0 2 0>;
 		samsung,dw-mshc-ddr-timing = <3 0 2 1>;
+		samsung,dw-mshc-sdr50-timing = <3 0 4 2>;
+		samsung,dw-mshc-sdr104-timing = <3 0 3 0>;
 
-		num-ref-clks = <8>;
-		ciu_clkin = <25 50 50 100 200 100 200 200>;
+		num-ref-clks = <9>;
+		ciu_clkin = <25 50 50 25 50 100 200 50 50>;
 
 		/* Swapping clock drive strength */
 		clk-drive-number = <4>;

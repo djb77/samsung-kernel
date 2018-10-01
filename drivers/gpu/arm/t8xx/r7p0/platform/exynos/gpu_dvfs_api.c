@@ -879,11 +879,12 @@ bool gpu_dvfs_process_job(void *pkatom)
 
 	mutex_lock(&platform->gpu_process_job_lock);
 
+	job = &dvfs_job;
+
 	job_addr = get_compat_pointer(katom->kctx, (union kbase_pointer *)&katom->jc);
 	if (copy_from_user(&dvfs_job, job_addr, sizeof(gpu_dvfs_job)) != 0)
 		goto out;
 
-	job = &dvfs_job;
 	data = (gpu_dvfs_job __user *)get_compat_pointer(katom->kctx, (union kbase_pointer *)&job->data);
 
 	job->event = DVFS_JOB_EVENT_ERROR;

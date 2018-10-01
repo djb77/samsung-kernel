@@ -1693,13 +1693,14 @@ int ring_buffer_resize(struct ring_buffer *buffer, unsigned long size,
 	    !cpumask_test_cpu(cpu_id, buffer->cpumask))
 		return size;
 
-	nr_pages = DIV_ROUND_UP(size, BUF_PAGE_SIZE);
+	size = DIV_ROUND_UP(size, BUF_PAGE_SIZE);
+	size *= BUF_PAGE_SIZE;
 
 	/* we need a minimum of two pages */
-	if (nr_pages < 2)
-		nr_pages = 2;
+	if (size < BUF_PAGE_SIZE * 2)
+		size = BUF_PAGE_SIZE * 2;
 
-	size = nr_pages * BUF_PAGE_SIZE;
+	nr_pages = DIV_ROUND_UP(size, BUF_PAGE_SIZE);
 
 	/*
 	 * Don't succeed if resizing is disabled, as a reader might be

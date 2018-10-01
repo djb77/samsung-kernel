@@ -1211,10 +1211,11 @@ for (i = 0; i < ENS_DESC.svr_num; i++) {
 					= type0_ext13->User_APP_Type[k];
 				ENS_DESC.svr_comp[j].User_APP_data_length[k]
 					= type0_ext13->User_APP_data_length[k];
+
 				for (p = 0;
 				p < type0_ext13->User_APP_data_length[k]; p++)
-					ENS_DESC.svr_comp[j].User_APP_data[p]
-					= type0_ext13->User_APP_data[p];
+					ENS_DESC.svr_comp[j].User_APP_data[k][p]
+					= type0_ext13->User_APP_data[k][p] ;
 			}
 		}
 	}
@@ -1273,7 +1274,7 @@ S32 Get_FIG0_EXT13(U8 fic_cmd, U8 P_D, U8 C_N)
 */
 			for (p = 0; p < type0_ext13.User_APP_data_length[k]
 				; p++)
-				Get_Bytes(1, &type0_ext13.User_APP_data[p]);
+				Get_Bytes(1, &type0_ext13.User_APP_data[k][p]);
 
 		}
 
@@ -2618,6 +2619,9 @@ void rtvFICDEC_GetEnsembleInfo(struct ensemble_info_type *ensble,
 				ensble->sub_ch[subch_idx].scids
 					= desc->svr_comp[comp_idx].SCidS;
 				ensble->sub_ch[subch_idx].ecc = Ensemble_ECC;
+
+				ensble->sub_ch[subch_idx].ca_flags
+						= desc->svr_comp[comp_idx].CA_flag;
 				subch_idx++;
 				break;
 
@@ -2663,6 +2667,9 @@ void rtvFICDEC_GetEnsembleInfo(struct ensemble_info_type *ensble,
 				DPRINTK("NO TMID\n");
 				break;
 			}
+		if (desc->svr_comp[comp_idx].CA_flag)
+			DPRINTK("%s: sub_channel_id(%d), ca_flag detected\n", __func__,
+					(subch_idx - 1));
 
 /*
 		RTV_DBGMSG2("ensble->sub_ch[%d].sub_ch_id: %d\n",

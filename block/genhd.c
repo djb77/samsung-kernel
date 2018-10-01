@@ -1189,6 +1189,7 @@ static struct device_type disk_type = {
 };
 
 #ifdef CONFIG_PROC_FS
+#define PG2KB(x) ((unsigned long)((x) << (PAGE_SHIFT - 10)))
 /*
  * aggregate disk stat collector.  Uses the same stats that the sysfs
  * entries do, above, but makes them available through one seq_file.
@@ -1203,6 +1204,11 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 	struct hd_struct *hd;
 	char buf[BDEVNAME_SIZE];
 	int cpu;
+	u64 uptime;
+	unsigned long thresh = 0;
+	unsigned long bg_thresh = 0;
+	struct backing_dev_info *bdi;
+	unsigned int nread, nwrite;
 
 	/*
 	if (&disk_to_dev(gp)->kobj.entry == block_class.devices.next)
@@ -1212,26 +1218,55 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 				"\n\n");
 	*/
 
+	/* Enhanced diskstats for IOD V 2.1 */
+	global_dirty_limits(&bg_thresh, &thresh);
+
 	disk_part_iter_init(&piter, gp, DISK_PITER_INCL_EMPTY_PART0);
 	while ((hd = disk_part_iter_next(&piter))) {
 		cpu = part_stat_lock();
 		part_round_stats(cpu, hd);
 		part_stat_unlock();
-		seq_printf(seqf, "%4d %7d %s %lu %lu %lu "
-			   "%u %lu %lu %lu %u %u %u %u\n",
+		uptime = ktime_to_ns(ktime_get());
+		uptime /= 1000000; /* in ms */
+		bdi = &gp->queue->backing_dev_info;
+		nread = part_in_flight_read(hd);
+		nwrite = part_in_flight_write(hd);
+		seq_printf(seqf, "%4d %7d %s %lu %lu %lu %u "
+			   "%lu %lu %lu %u %u %u %u "
+			   /* added */
+			   "%lu %lu %lu %lu "
+			   "%u %llu %lu %lu %lu %u "
+			   "%lu.%03lu\n",
 			   MAJOR(part_devt(hd)), MINOR(part_devt(hd)),
 			   disk_name(gp, hd->partno, buf),
 			   part_stat_read(hd, ios[READ]),
 			   part_stat_read(hd, merges[READ]),
 			   part_stat_read(hd, sectors[READ]),
 			   jiffies_to_msecs(part_stat_read(hd, ticks[READ])),
+
 			   part_stat_read(hd, ios[WRITE]),
 			   part_stat_read(hd, merges[WRITE]),
 			   part_stat_read(hd, sectors[WRITE]),
 			   jiffies_to_msecs(part_stat_read(hd, ticks[WRITE])),
-			   part_in_flight(hd),
+			   /*part_in_flight(hd),*/
+			   nread + nwrite,
 			   jiffies_to_msecs(part_stat_read(hd, io_ticks)),
-			   jiffies_to_msecs(part_stat_read(hd, time_in_queue))
+			   jiffies_to_msecs(part_stat_read(hd, time_in_queue)),
+			   /* followings are added */
+			   part_stat_read(hd, discard_ios),
+			   part_stat_read(hd, discard_sectors),
+			   part_stat_read(hd, flush_ios),
+			   gp->queue->flush_ios,
+
+			   nread,
+			   gp->queue->in_flight_time / USEC_PER_MSEC,
+			   PG2KB(thresh),
+			   PG2KB(bdi->last_thresh),
+			   PG2KB(bdi->last_nr_dirty),
+			   jiffies_to_msecs(bdi->paused_total),
+
+			   (unsigned long)(uptime / 1000),
+			   (unsigned long)(uptime % 1000)
 			);
 	}
 	disk_part_iter_exit(&piter);

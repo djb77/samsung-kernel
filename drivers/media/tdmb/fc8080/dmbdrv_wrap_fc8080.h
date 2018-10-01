@@ -41,6 +41,7 @@ struct sub_channel_info_type {
 	unsigned char	ucSubchID;
 	unsigned short uiStartAddress;
 	unsigned char ucTMId;
+	unsigned char ucCAFlag;
 	unsigned char ucServiceType;
 	unsigned long ulServiceID;
 	unsigned char num_of_user_appl;

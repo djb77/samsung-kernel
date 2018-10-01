@@ -42,6 +42,7 @@
 #include <linux/buffer_head.h>
 #include <linux/time.h>
 #include "sdfat.h"
+#include "version.h"
 
 #ifdef CONFIG_SDFAT_SUPPORT_STLOG
 #include <linux/stlog.h>
@@ -70,20 +71,26 @@ void __sdfat_fs_error(struct super_block *sb, int report, const char *fmt, ...)
 		vaf.fmt = fmt;
 		vaf.va = &args;
 		printk(KERN_ERR "[SDFAT](%s[%d:%d]):ERR: %pV\n", 
+			sb->s_id, MAJOR(bd_dev), MINOR(bd_dev), &vaf);
+#ifdef CONFIG_SDFAT_SUPPORT_STLOG
+		if (opts->errors == SDFAT_ERRORS_RO && !(sb->s_flags & MS_RDONLY)) {
+			ST_LOG("[SDFAT](%s[%d:%d]):ERR: %pV\n",
 				sb->s_id, MAJOR(bd_dev), MINOR(bd_dev), &vaf);
+		}
+#endif
 		va_end(args);
 	}
 
-	if (opts->errors == SDFAT_ERRORS_PANIC)
+	if (opts->errors == SDFAT_ERRORS_PANIC) {
 		panic("[SDFAT](%s[%d:%d]): fs panic from previous error\n", 
-					sb->s_id, MAJOR(bd_dev), MINOR(bd_dev));
-	else if (opts->errors == SDFAT_ERRORS_RO && !(sb->s_flags & MS_RDONLY)) {
+			sb->s_id, MAJOR(bd_dev), MINOR(bd_dev));
+	} else if (opts->errors == SDFAT_ERRORS_RO && !(sb->s_flags & MS_RDONLY)) {
 		sb->s_flags |= MS_RDONLY;
 		printk(KERN_ERR "[SDFAT](%s[%d:%d]): Filesystem has been set "
 			"read-only\n", sb->s_id, MAJOR(bd_dev), MINOR(bd_dev));
 #ifdef CONFIG_SDFAT_SUPPORT_STLOG
 		ST_LOG("[SDFAT](%s[%d:%d]): Filesystem has been set read-only\n",
-				       	sb->s_id, MAJOR(bd_dev), MINOR(bd_dev));
+			sb->s_id, MAJOR(bd_dev), MINOR(bd_dev));
 #endif
 	}
 }
@@ -116,6 +123,14 @@ void __sdfat_msg(struct super_block *sb, const char *level, int st, const char *
 }
 EXPORT_SYMBOL(__sdfat_msg);
 
+void sdfat_log_version(void)
+{
+	printk(KERN_INFO "[SDFAT] Filesystem version %s\n", SDFAT_VERSION);
+#ifdef CONFIG_SDFAT_SUPPORT_STLOG
+	ST_LOG("[SDFAT] Filesystem version %s\n", SDFAT_VERSION);
+#endif
+}
+EXPORT_SYMBOL(sdfat_log_version);
 
 extern struct timezone sys_tz;
 
@@ -315,10 +330,10 @@ void sdfat_debug_check_clusters(struct inode *inode){
 		if (tmp_i >= 50)
 			tmp_i = 0;
 
-		BUG_ON(IS_CLUS_EOF(clu.dir));
+		BUG_ON(IS_CLUS_EOF(clu.dir) || IS_CLUS_FREE(clu.dir));
 
-		if (fat_ent_get(inode->i_sb, clu.dir, &(clu.dir)))
-			EMSG("%s: failed to get fat entry\n");
+		if (get_next_clus_safe(inode->i_sb, &(clu.dir)))
+			EMSG("%s: failed to access to FAT\n");
 
 		num_clusters--;
 	}

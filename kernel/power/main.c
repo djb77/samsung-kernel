@@ -587,9 +587,7 @@ power_attr(pm_freeze_timeout);
 static char selfdischg_usage_str[] =
 	"[START]\n"
 	"/sys/power/cpufreq_self_discharging 1\n"
-	"/sys/power/cpuhotplug/enabled 0\n"
 	"[STOP]\n"
-	"/sys/power/cpuhotplug/enabled 1\n"
 	"/sys/power/cpufreq_self_discharging 0\n"
 	"[END]\n";
 
@@ -609,6 +607,35 @@ static struct kobj_attribute selfdischg_usage_attr = {
 	.show	= selfdischg_usage_show,
 };
 #endif /* CONFIG_SW_SELF_DISCHARGING */
+
+#if defined(CONFIG_FOTA_LIMIT)
+static char fota_limit_str[] =
+#if defined(CONFIG_ARCH_EXYNOS8)
+	"[START]\n"
+	"/sys/power/cpufreq_max_limit 1144000\n"
+	"[STOP]\n"
+	"/sys/power/cpufreq_max_limit -1\n"
+	"[END]\n";
+#else
+	"[NOT_SUPPORT]\n";
+#endif
+
+static ssize_t fota_limit_show(struct kobject *kobj,
+					struct kobj_attribute *attr,
+					char *buf)
+{
+	pr_info("%s\n", __func__);
+	return sprintf(buf, "%s", fota_limit_str);
+}
+
+static struct kobj_attribute fota_limit_attr = {
+	.attr	= {
+		.name = __stringify(fota_limit),
+		.mode = 0440,
+	},
+	.show	= fota_limit_show,
+};
+#endif /* CONFIG_FOTA_LIMIT */
 
 extern void update_cp_available(bool open);
 int call_enable;
@@ -669,6 +696,9 @@ static struct attribute * g[] = {
 #ifdef CONFIG_SW_SELF_DISCHARGING
 	&selfdischg_usage_attr.attr,
 #endif
+#if defined(CONFIG_FOTA_LIMIT)
+	&fota_limit_attr.attr,
+#endif /* CONFIG_FOTA_LIMIT */
 	&call_state_attr.attr,
 	NULL,
 };

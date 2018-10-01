@@ -55,8 +55,7 @@ struct thread_info {
 	int			preempt_count;	/* 0 => preemptable, <0 => bug */
 	int			cpu;		/* cpu */
 #ifdef CONFIG_RKP_CFP_ROPP
-    //Todo: save key to hypervisor
-    unsigned long rrk;
+	unsigned long rrk;
 #endif
 };
 
@@ -77,7 +76,7 @@ struct thread_info {
 	.restart_block	= {						\
 		.fn	= do_no_restart_syscall,			\
 	},								\
-    INIT_THREAD_INFO_RKP_CFP(tsk) \
+	INIT_THREAD_INFO_RKP_CFP(tsk) \
 }
 
 #define init_thread_info	(init_thread_union.thread_info)

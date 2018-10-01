@@ -40,7 +40,6 @@ DEFINE_SPINLOCK(disk_key_lock);
 
 #if defined(CONFIG_FIPS_FMP)
 extern int fmp_clear_disk_key(void);
-extern int fmp_check_disk_key(uint8_t *);
 #endif
 
 /*
@@ -1152,6 +1151,7 @@ static int kcryptd_io_rw(struct dm_crypt_io *io, gfp_t gfp)
 	clone_init(io, clone);
 #if defined(CONFIG_MMC_DW_FMP_DM_CRYPT) || defined(CONFIG_UFS_FMP_DM_CRYPT)
 	clone->bi_sensitive_data = 1;
+	clone->disk_key = cc->key;
 #endif
 	clone->bi_iter.bi_sector = cc->start + io->sector;
 
@@ -1500,15 +1500,6 @@ static int crypt_setkey_allcpus(struct crypt_config *cc)
 		for (i = 0; i < cc->key_size; i++)
 			key_storage[i] = cc->key[i];
 
-#if defined(CONFIG_FIPS_FMP)
-		r = fmp_check_disk_key((uint8_t *)key_storage);
-		if (r) {
-			pr_err("dm-crypt: Fail to store FMP disk key \
-					due to enckey and twkey is the same.\n");
-			iounmap((void *)key_storage);
-			return -EINVAL;
-		}
-#endif
 		r = exynos_smc(SMC_CMD_FMP, FMP_KEY_STORE,
 				base + FMP_KEY_STORAGE_OFFSET,
 				cc->key_size);
@@ -2002,13 +1993,10 @@ static int crypt_map(struct dm_target *ti, struct bio *bio)
 	crypt_io_init(io, cc, bio, dm_target_offset(ti, bio->bi_iter.bi_sector));
 	io->ctx.req = (struct ablkcipher_request *)(io + 1);
 
-	if (cc->hw_fmp == 1)
-		if (bio_data_dir(io->base_bio) == READ) {
-			if (kcryptd_io_rw(io, GFP_NOWAIT))
-				kcryptd_queue_io(io);
-		} else
+	if (cc->hw_fmp == 1) {
+		if (kcryptd_io_rw(io, GFP_NOWAIT))
 			kcryptd_queue_io(io);
-	else {
+	} else {
 		if (bio_data_dir(io->base_bio) == READ) {
 			if (kcryptd_io_read(io, GFP_NOWAIT))
 				kcryptd_queue_io(io);

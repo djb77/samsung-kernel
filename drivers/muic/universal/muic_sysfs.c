@@ -30,6 +30,7 @@
 #include <linux/host_notify.h>
 #include <linux/string.h>
 #include <linux/sec_debug.h>
+#include <linux/power_supply.h>
 
 #include <linux/muic/muic.h>
 
@@ -54,6 +55,15 @@
 #include "muic_ccic.h"
 #endif
 
+static int muic_resolve_attached_dev(muic_data_t *pmuic)
+{
+#if defined(CONFIG_MUIC_SUPPORT_CCIC)
+	if (pmuic->opmode & OPMODE_CCIC)
+		return muic_get_current_legacy_dev(pmuic);
+#endif
+	return pmuic->attached_dev;
+}
+
 static ssize_t muic_show_uart_en(struct device *dev,
 						struct device_attribute *attr,
 						char *buf)
@@ -68,6 +78,25 @@ static ssize_t muic_show_uart_en(struct device *dev,
 	return sprintf(buf, "0\n");
 }
 
+static void sec_battery_set_uart_en(int enable)
+{
+	struct power_supply *psy;
+
+	psy = power_supply_get_by_name("battery");
+	if (!psy) {
+		pr_err("%s: Fail to get battery psy \n", __func__);
+	} else {
+		union power_supply_propval value;		
+		int ret;
+
+		value.intval = enable;
+		ret = psy->set_property(psy, POWER_SUPPLY_PROP_SCOPE, &value);
+		if (ret < 0) {
+			pr_err("%s: Fail to set property(%d)\n", __func__, ret);
+		}
+	}
+}
+
 static ssize_t muic_set_uart_en(struct device *dev,
 						struct device_attribute *attr,
 						const char *buf, size_t count)
@@ -76,8 +105,10 @@ static ssize_t muic_set_uart_en(struct device *dev,
 
 	if (!strncmp(buf, "1", 1)) {
 		pmuic->is_rustproof = false;
+		sec_battery_set_uart_en(1);
 	} else if (!strncmp(buf, "0", 1)) {
 		pmuic->is_rustproof = true;
+		sec_battery_set_uart_en(0);
 	} else {
 		pr_warn("%s:%s invalid value\n", MUIC_DEV_NAME, __func__);
 	}
@@ -197,8 +228,9 @@ static ssize_t muic_show_usb_state(struct device *dev,
 					    char *buf)
 {
 	muic_data_t *pmuic = dev_get_drvdata(dev);
+	int mdev = muic_resolve_attached_dev(pmuic);
 
-	switch (pmuic->attached_dev) {
+	switch (mdev) {
 	case ATTACHED_DEV_USB_MUIC:
 	case ATTACHED_DEV_CDP_MUIC:
 	case ATTACHED_DEV_JIG_USB_OFF_MUIC:
@@ -387,11 +419,12 @@ static ssize_t muic_show_attached_dev(struct device *dev,
 					 char *buf)
 {
 	muic_data_t *pmuic = dev_get_drvdata(dev);
+	int mdev = muic_resolve_attached_dev(pmuic);
 
 	pr_info("%s:%s attached_dev:%d\n", MUIC_DEV_NAME, __func__,
-			pmuic->attached_dev);
+			mdev);
 
-	switch(pmuic->attached_dev) {
+	switch(mdev) {
 	case ATTACHED_DEV_NONE_MUIC:
 		return sprintf(buf, "No VPS\n");
 	case ATTACHED_DEV_USB_MUIC:
@@ -408,6 +441,8 @@ static ssize_t muic_show_attached_dev(struct device *dev,
 		return sprintf(buf, "JIG UART OFF/VB\n");
 	case ATTACHED_DEV_JIG_UART_ON_MUIC:
 		return sprintf(buf, "JIG UART ON\n");
+	case ATTACHED_DEV_JIG_UART_ON_VB_MUIC:
+		return sprintf(buf, "JIG UART ON/VB\n");
 	case ATTACHED_DEV_JIG_USB_OFF_MUIC:
 		return sprintf(buf, "JIG USB OFF\n");
 	case ATTACHED_DEV_JIG_USB_ON_MUIC:
@@ -418,6 +453,12 @@ static ssize_t muic_show_attached_dev(struct device *dev,
 		return sprintf(buf, "AUDIODOCK\n");
 	case ATTACHED_DEV_CHARGING_CABLE_MUIC:
 		return sprintf(buf, "PS CABLE\n");
+	case ATTACHED_DEV_AFC_CHARGER_5V_MUIC:
+	case ATTACHED_DEV_AFC_CHARGER_9V_MUIC:
+	case ATTACHED_DEV_AFC_CHARGER_12V_MUIC:
+	case ATTACHED_DEV_QC_CHARGER_5V_MUIC:
+	case ATTACHED_DEV_QC_CHARGER_9V_MUIC:
+		return sprintf(buf, "AFC Charger\n");
 	default:
 		break;
 	}
@@ -481,6 +522,52 @@ static ssize_t muic_set_apo_factory(struct device *dev,
 }
 
 #if defined(CONFIG_MUIC_HV)
+static ssize_t muic_show_vbus_value(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	muic_data_t *pmuic = dev_get_drvdata(dev);
+	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
+	int val;
+
+	if (pvendor->get_vbus_value)
+		val = pvendor->get_vbus_value(pmuic->regmapdesc, 0);
+	else {
+		pr_err("%s: No Vendor API ready.\n", __func__);
+		val = -EINVAL;
+	}
+
+	pr_info("%s:%s VBUS:%d\n", MUIC_DEV_NAME, __func__, val);
+
+	if (val > 0)
+		return sprintf(buf, "%dV\n", val);
+
+	return sprintf(buf, "UNKNOWN\n");
+}
+
+static ssize_t muic_show_vbus_value_pd(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	muic_data_t *pmuic = dev_get_drvdata(dev);
+	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
+	int val;
+
+	if (pvendor->get_vbus_value)
+		val = pvendor->get_vbus_value(pmuic->regmapdesc, 1);
+	else {
+		pr_err("%s: No Vendor API ready.\n", __func__);
+		val = -EINVAL;
+	}
+
+	pr_info("%s:%s VBUS:%d\n", MUIC_DEV_NAME, __func__, val);
+
+	if (val > 0)
+		return sprintf(buf, "%dV\n", val);
+
+	return sprintf(buf, "UNKNOWN\n");
+}
+
 static ssize_t muic_show_afc_disable(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -542,6 +629,27 @@ static ssize_t muic_set_afc_disable(struct device *dev,
 
 	return count;
 }
+#if defined(CONFIG_MUIC_HV_12V) && defined(CONFIG_SEC_FACTORY)
+static ssize_t muic_store_afc_set_voltage(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	muic_data_t *pmuic = dev_get_drvdata(dev);
+
+	if (!strncasecmp(buf, "5V", 2)) {
+		hv_muic_change_afc_voltage(pmuic, MUIC_HV_5V);
+	} else if (!strncasecmp(buf, "9V", 2)) {
+		hv_muic_change_afc_voltage(pmuic, MUIC_HV_9V);
+	} else if (!strncasecmp(buf, "12V", 3)) {
+		hv_muic_change_afc_voltage(pmuic, MUIC_HV_12V);
+	} else {
+		pr_warn("%s:%s invalid value\n", MUIC_DEV_NAME, __func__);
+		return count;
+	}
+
+	return count;
+}
+#endif
 #endif /* CONFIG_MUIC_HV */
 
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
@@ -635,6 +743,12 @@ static DEVICE_ATTR(apo_factory, 0664,
 #if defined(CONFIG_MUIC_HV)
 static DEVICE_ATTR(afc_disable, 0664,
 		muic_show_afc_disable, muic_set_afc_disable);
+static DEVICE_ATTR(vbus_value, 0444, muic_show_vbus_value, NULL);
+static DEVICE_ATTR(vbus_value_pd, 0444, muic_show_vbus_value_pd, NULL);
+#if defined(CONFIG_MUIC_HV_12V) && defined(CONFIG_SEC_FACTORY)
+static DEVICE_ATTR(afc_set_voltage, 0220,
+		NULL, muic_store_afc_set_voltage);
+#endif
 #endif
 
 static struct attribute *muic_attributes[] = {
@@ -658,6 +772,11 @@ static struct attribute *muic_attributes[] = {
 	&dev_attr_apo_factory.attr,
 #if defined(CONFIG_MUIC_HV)
 	&dev_attr_afc_disable.attr,
+	&dev_attr_vbus_value.attr,
+	&dev_attr_vbus_value_pd.attr,
+#if defined(CONFIG_MUIC_HV_12V) && defined(CONFIG_SEC_FACTORY)
+	&dev_attr_afc_set_voltage.attr,
+#endif
 #endif
 	NULL
 };

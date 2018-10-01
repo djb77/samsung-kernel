@@ -300,6 +300,7 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 	struct s5p_mfc_ctx *ctx;
 	int ret;
 	int old_state, i;
+	int need_cache_flush = 0;
 
 	mfc_debug_enter();
 
@@ -320,8 +321,14 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 			mfc_err("no mfc context to run\n");
 			return -EINVAL;
 		} else {
+			mfc_info_dev("ctx is changed %d -> %d\n",
+					dev->curr_ctx, ctx->num);
 			dev->curr_ctx = ctx->num;
-			dev->curr_ctx_drm = ctx->is_drm;
+			if (dev->curr_ctx_drm != ctx->is_drm) {
+				need_cache_flush = 1;
+				mfc_info_dev("DRM attribute is changed %d->%d\n",
+						dev->curr_ctx_drm, ctx->is_drm);
+			}
 		}
 	}
 	old_state = ctx->state;
@@ -343,6 +350,22 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 	s5p_mfc_change_state(ctx, old_state);
 	s5p_mfc_clock_on(dev);
 	s5p_mfc_clean_dev_int_flags(dev);
+
+	if (need_cache_flush) {
+		s5p_mfc_cmd_host2risc(dev, S5P_FIMV_CH_CACHE_FLUSH, NULL);
+		if (s5p_mfc_wait_for_done_dev(dev, S5P_FIMV_R2H_CMD_CACHE_FLUSH_RET)) {
+			mfc_err_ctx("Failed to flush cache\n");
+			ret = -EINVAL;
+			goto err_mfc_sleep;
+		}
+
+		s5p_mfc_init_memctrl(dev, (ctx->is_drm ? MFCBUF_DRM : MFCBUF_NORMAL));
+		s5p_mfc_clock_off(dev);
+
+		dev->curr_ctx_drm = ctx->is_drm;
+		s5p_mfc_clock_on(dev);
+	}
+
 	ret = s5p_mfc_sleep_cmd(dev);
 	if (ret) {
 		mfc_err_dev("Failed to send command to MFC - timeout.\n");

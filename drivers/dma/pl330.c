@@ -28,6 +28,7 @@
 #include <linux/of.h>
 #include <linux/of_dma.h>
 #include <linux/err.h>
+#include <linux/cpumask.h>
 
 #include "dmaengine.h"
 #include <soc/samsung/exynos-pm.h>
@@ -506,6 +507,9 @@ struct pl330_dmac {
 	/* Peripheral channels connected to this DMAC */
 	unsigned int num_peripherals;
 	struct dma_pl330_chan *peripherals; /* keep at end */
+
+	bool multi_irq;
+	int irqnum_having_multi[AMBA_NR_IRQS];
 };
 
 struct dma_pl330_desc {
@@ -2831,11 +2835,26 @@ static int pl330_notifier(struct notifier_block *nb,
 static int pl330_resume(struct device *dev)
 {
 	struct pl330_dmac *pl330;
+	int i;
 
 	pl330 = (struct pl330_dmac *)dev_get_drvdata(dev);
 
 	if (pl330->inst_wrapper)
 		__raw_writel((pl330->mcode_bus >> 32) & 0xf, pl330->inst_wrapper);
+
+	if(pl330->multi_irq) {
+		for (i = 0; i < AMBA_NR_IRQS; i++) {
+			int irq = pl330->irqnum_having_multi[i];
+			if (irq)
+#if defined(CONFIG_SCHED_HMP)
+				irq_set_affinity(irq, &hmp_slow_cpu_mask);
+#else
+				irq_set_affinity(irq, cpu_all_mask);
+#endif
+			else
+				break;
+		}
+	}
 
 	return 0;
 }
@@ -2863,6 +2882,8 @@ pl330_probe(struct amba_device *adev, const struct amba_id *id)
 	struct resource *res;
 	int i, ret, irq;
 	int num_chan;
+	int irq_flags = 0;
+	int count_irq = 0;
 
 	pdat = dev_get_platdata(&adev->dev);
 
@@ -2887,14 +2908,29 @@ pl330_probe(struct amba_device *adev, const struct amba_id *id)
 
 	amba_set_drvdata(adev, pl330);
 
+	if (adev->dev.of_node){
+		pl330->multi_irq = of_dma_multi_irq(adev->dev.of_node);
+		if(pl330->multi_irq)
+			irq_flags = IRQF_GIC_MULTI_TARGET;
+	}
+
 	for (i = 0; i < AMBA_NR_IRQS; i++) {
 		irq = adev->irq[i];
 		if (irq) {
 			ret = devm_request_irq(&adev->dev, irq,
-					       pl330_irq_handler, 0,
+					       pl330_irq_handler, irq_flags,
 					       dev_name(&adev->dev), pl330);
 			if (ret)
 				return ret;
+
+			if(pl330->multi_irq) {
+#if defined(CONFIG_SCHED_HMP)
+				irq_set_affinity(irq, &hmp_slow_cpu_mask);
+#else
+				irq_set_affinity(irq, cpu_all_mask);
+#endif
+				pl330->irqnum_having_multi[count_irq++] = irq;
+			}
 		} else {
 			break;
 		}

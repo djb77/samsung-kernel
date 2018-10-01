@@ -108,9 +108,13 @@ static void dbg(const char *fmt, ...)
 #define BT_UART_TRACE 1
 
 #ifdef BT_UART_TRACE
-#define BT_LOG_BUFFER_SIZE (0x19000) /* Allocate 100KB of buffer */
+#define BT_LOG_BUFFER_SIZE (0xC8000) /* Allocate 800KB of buffer */
 #define PROC_DIR	"bluetooth/uart"
 #define BLUETOOTH_UART_PORT_LINE 1
+#endif
+
+#if defined(CONFIG_BCM4359)
+#define WIFI_UART_PORT_LINE 3
 #endif
 
 /* macros to change one thing to another */
@@ -538,7 +542,7 @@ s3c24xx_serial_rx_chars(int irq, void *dev_id)
  ignore_char:
 		continue;
 	}
-	
+
 #ifdef BT_UART_TRACE
 	if (ourport->port.line == BLUETOOTH_UART_PORT_LINE) {
 		uart_copy_local_buf(1, &ourport->local_buf, ch_str, ch_str_cnt);
@@ -1057,6 +1061,12 @@ static void s3c24xx_serial_set_termios(struct uart_port *port,
 	 */
 
 	baud = uart_get_baud_rate(port, termios, old, MIN_BAUD, MAX_BAUD);
+#if defined(CONFIG_BCM4359)
+	if (ourport->port.line == WIFI_UART_PORT_LINE){
+		baud = 460800;
+		printk("set baud as 460800!!\n");
+	}
+#endif
 	quot = s3c24xx_serial_getclk(ourport, baud, &clk, &clk_sel);
 	if (baud == 38400 && (port->flags & UPF_SPD_MASK) == UPF_SPD_CUST)
 		quot = port->custom_divisor;

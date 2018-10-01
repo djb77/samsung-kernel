@@ -121,11 +121,6 @@ static inline void ipa_set_clamp(int cpu, unsigned int clamp_freq, unsigned int 
 #endif
 
 
-#if defined(CONFIG_EXYNOS_BIG_FREQ_BOOST)
-int exynos_cpufreq_verify_possible_hotplug(unsigned int hcpu);
-#else
-static inline int exynos_cpufreq_verify_possible_hotplug(unsigned int hcpu) {return 0;}
-#endif
 /* interface for THERMAL */
 extern void exynos_thermal_throttle(void);
 extern void exynos_thermal_unthrottle(void);

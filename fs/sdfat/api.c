@@ -91,10 +91,19 @@ s32 fsapi_mount(struct super_block *sb)
 	mutex_lock(&_lock_core);
 
 	err = meta_cache_init(sb);
-	if (!err)
-		err = fscore_mount(sb);
-	else
+	if (err)
+		goto out;
+
+	err = extent_cache_init(sb);
+	if (err)
+		goto out;
+
+	err = fscore_mount(sb);
+out:
+	if (err) {
+		extent_cache_shutdown(sb);
 		meta_cache_shutdown(sb);
+	}
 
 	/* release the core lock for file system critical section */
 	mutex_unlock(&_lock_core);
@@ -113,6 +122,7 @@ s32 fsapi_umount(struct super_block *sb)
 
 	mutex_lock(&(SDFAT_SB(sb)->s_vlock));
 	err = fscore_umount(sb);
+	extent_cache_shutdown(sb);
 	meta_cache_shutdown(sb);
 	mutex_unlock(&(SDFAT_SB(sb)->s_vlock));
 
@@ -160,7 +170,15 @@ s32 fsapi_sync_fs(struct super_block *sb, s32 do_sync)
 }
 EXPORT_SYMBOL(fsapi_sync_fs);
 
-
+s32 fsapi_set_vol_flags(struct super_block *sb, u16 new_flag, s32 always_sync)
+{
+	s32 err;
+	mutex_lock(&(SDFAT_SB(sb)->s_vlock));
+	err = fscore_set_vol_flags(sb, new_flag, always_sync);
+	mutex_unlock(&(SDFAT_SB(sb)->s_vlock));
+	return err;
+}
+EXPORT_SYMBOL(fsapi_set_vol_flags);
 
 /*----------------------------------------------------------------------*/
 /*  File Operation Functions                                            */
@@ -299,14 +317,15 @@ s32 fsapi_read_inode(struct inode *inode, DIR_ENTRY_T *info)
 EXPORT_SYMBOL(fsapi_read_inode);
 
 /* set the information of a given file */
-s32 fsapi_write_inode(struct inode *inode, DIR_ENTRY_T *info)
+s32 fsapi_write_inode(struct inode *inode, DIR_ENTRY_T *info, int sync)
 {
 	s32 err;
 	struct super_block *sb = inode->i_sb;
 
 	mutex_lock(&(SDFAT_SB(sb)->s_vlock));
-	TMSG("%s entered (inode %p info %p\n", __func__, inode, info);
-	err = fscore_write_inode(inode, info);
+	TMSG("%s entered (inode %p info %p sync:%d\n",
+			__func__, inode, info, sync);
+	err = fscore_write_inode(inode, info, sync);
 	TMSG("%s exited (err:%d)\n", __func__, err);
 	mutex_unlock(&(SDFAT_SB(sb)->s_vlock));
 	return err;
@@ -452,6 +471,18 @@ u32 fsapi_get_au_stat(struct super_block *sb, s32 mode)
 	return fscore_get_au_stat(sb, mode);
 }
 EXPORT_SYMBOL(fsapi_get_au_stat);
+
+/* clear extent cache */
+void fsapi_invalidate_extent(struct inode *inode)
+{
+	/* Volume lock is not required,
+	 * because it is only called by evict_inode.
+	 * If any other function can call it,
+	 * you should check whether volume lock is needed or not.
+	 */
+	extent_cache_inval_inode(inode);
+}
+EXPORT_SYMBOL(fsapi_invalidate_extent);
 
 
 

@@ -102,6 +102,15 @@ struct dsim_resources {
 	struct regulator *regulator_16V;
 };
 
+#ifdef CONFIG_LCD_RES
+typedef enum lcd_res_type {
+	LCD_RES_DEFAULT = 0,
+	LCD_RES_FHD = 1920,
+	LCD_RES_HD = 1280,
+	LCD_RES_MAX
+} lcd_res_t;
+#endif
+
 struct panel_private {
 	struct backlight_device *bd;
 	unsigned char id[3];
@@ -129,19 +138,15 @@ struct panel_private {
 	unsigned int vint_dim_table[20];
 	unsigned char vint_table_len;
 
-	unsigned char **hbm_tbl;
 	unsigned char **acl_cutoff_tbl;
 	unsigned char **acl_opr_tbl;
-	unsigned char irc_table[256][21];
-	unsigned char irc_table_hbm[8][21];
+	unsigned char irc_table[366][21];
 
 	int	temperature;
 	unsigned int coordinate[2];
 	unsigned char date[7];
 	unsigned int lcdConnected;
 	unsigned int state;
-	unsigned int auto_brightness;
-	unsigned int auto_brightness_level;
 	unsigned int br_index;
 	unsigned int acl_enable;
 	unsigned int caps_enable;
@@ -150,12 +155,14 @@ struct panel_private {
 	unsigned int current_vint;
 	unsigned int siop_enable;
 
+#ifdef CONFIG_CHECK_OCTA_CHIP_ID
+	unsigned char octa_id[25];
+#endif
+
 	void *dim_data;
 	void *dim_info;
 	unsigned char *inter_aor_tbl;
 	unsigned int *br_tbl;
-	unsigned int *origin_br_tbl;
-	unsigned int *hbm_inter_br_tbl;
 	struct mutex lock;
 	struct dsim_panel_ops *ops;
 	unsigned int panel_type;
@@ -200,17 +207,15 @@ struct panel_private {
 	unsigned int curr_alpm_mode;
 #endif
 
-#ifdef CONFIG_LCD_BURNIN_CORRECTION
-	unsigned char ldu_correction_state;
-	unsigned int *ldu_tbl[8];			// 0 : default, 1 : ldu comp
+	int esd_disable;
+
+#ifdef	CONFIG_LCD_RES
+	lcd_res_t lcd_res;
 #endif
 
-	unsigned int hbm_index;
-/* hbm interpolation for color weakness */
-	unsigned int interpolation;
-	unsigned int weakness_hbm_comp;
-
-	int esd_disable;
+	unsigned int adaptive_control;
+	int lux;
+	struct class *mdnie_class;
 };
 
 struct dsim_panel_ops {
@@ -223,6 +228,9 @@ struct dsim_panel_ops {
 #ifdef CONFIG_LCD_DOZE_MODE
 	int (*enteralpm)(struct dsim_device *dsim);
 	int (*exitalpm)(struct dsim_device *dsim);
+#endif
+#ifdef CONFIG_FB_DSU
+	int (*dsu_cmd)(struct dsim_device *dsim);
 #endif
 };
 
@@ -268,6 +276,15 @@ struct dsim_device {
 #ifdef CONFIG_LCD_DOZE_MODE
 	unsigned int dsim_doze;
 #endif
+#ifdef CONFIG_FB_DSU
+	int dsu_xres;
+	int dsu_yres;
+	struct workqueue_struct *dsu_sysfs_wq;
+	struct delayed_work dsu_sysfs_work;
+	unsigned int	dsu_param_offset;
+	unsigned int	dsu_param_value;
+#endif
+	bool req_display_on;
 };
 
 /**
@@ -288,6 +305,11 @@ struct mipi_dsim_lcd_driver {
 #ifdef CONFIG_LCD_DOZE_MODE
 	int (*enteralpm)(struct dsim_device *dsim);
 	int (*exitalpm)(struct dsim_device *dsim);
+#endif
+#ifdef CONFIG_FB_DSU
+	int (*dsu_cmd)(struct dsim_device *dsim);
+	int (*init)(struct dsim_device *dsim);
+	int (*dsu_sysfs) (struct dsim_device *dsim);
 #endif
 };
 
@@ -393,6 +415,14 @@ u32 dsim_reg_get_xres(u32 id);
 #define DSIM_IOC_IDLE_MODE_CMD			_IOW('D', 11, u32)
 #endif
 
+#ifdef CONFIG_FB_DSU
+#define DSIM_IOC_DSU_CMD            _IOW('D', 12, u32)
+#define DSIM_IOC_DSU_DSC            _IOW('D', 13, u32)
+#define DSIM_IOC_TE_ONOFF           _IOW('D', 14, u32)
+#define DSIM_IOC_DSU_RECONFIG   _IOW('D', 15, u32)
+#define DSIM_IOC_DISPLAY_ONOFF	    _IOW('D', 16, u32)
+#define DSIM_IOC_REG_LOCK	_IOW('D', 17, u32)
+#endif
 
 #define DSIM_REQ_POWER_OFF		0
 #define DSIM_REQ_POWER_ON		1

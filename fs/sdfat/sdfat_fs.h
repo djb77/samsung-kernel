@@ -72,6 +72,8 @@
 #define DENTRY_SIZE		32	/* directory entry size */
 #define DENTRY_SIZE_BITS	5
 
+#define MAX_FAT_DENTRIES	65536   /* FAT allows 65536 directory entries */
+
 /* PBR entries */
 #define PBR_SIGNATURE	0xAA55
 #define EXT_SIGNATURE	0xAA550000
@@ -122,6 +124,8 @@
 #define ATTR_SYMLINK            0x0040
 #define ATTR_EXTEND             (ATTR_READONLY | ATTR_HIDDEN | ATTR_SYSTEM | \
 				 ATTR_VOLUME) /* 0x000F */
+
+#define ATTR_EXTEND_MASK        (ATTR_EXTEND | ATTR_SUBDIR | ATTR_ARCHIVE)
 #define ATTR_RWMASK             (ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME | \
 				 ATTR_SUBDIR | ATTR_ARCHIVE | ATTR_SYMLINK)/* 0x007E */
 

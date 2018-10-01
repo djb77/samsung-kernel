@@ -78,6 +78,10 @@ static struct boot_event boot_events[] = {
 	{"!@Boot_SVC : SIM onAllRecordsLoaded", },
 	{"!@Boot_SVC : RUIM onAllRecordsLoaded", },
 	{"!@Boot_SVC : setupDataCall", },
+    {"!@Boot_SVC : Response setupDataCall", },
+    {"!@Boot_SVC : onDataConnectionAttached", },
+    {"!@Boot_SVC : IMSI Ready", },
+    {"!@Boot_SVC : completeConnection", },
 };
 
 static LIST_HEAD(init_command_list);

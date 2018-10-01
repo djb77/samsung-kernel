@@ -59,6 +59,13 @@
 #define ALLOC_COLD_SEQ		4
 
 /*
+ * sdfat nls lossy flag
+ */
+#define NLS_NAME_NO_LOSSY	(0x00) /* no lossy */
+#define NLS_NAME_LOSSY		(0x01) /* just detected incorrect filename(s) */
+#define NLS_NAME_OVERLEN	(0x02) /* the length is over than its limit */
+
+/*
  * sdfat common MACRO
  */
 #define CLUSTER_16(x)	((u16)((x) & 0xFFFFU))
@@ -207,6 +214,20 @@ struct sdfat_inode_info {
  */
 
 /* static inline functons */
+static inline const char *sdfat_get_vol_type_str(unsigned int type)
+{
+	if (type == EXFAT)
+		return "exfat";
+        else if (type == FAT32)
+		return "vfat:32";
+	else if (type == FAT16)
+		return "vfat:16";
+	else if (type == FAT12)
+		return "vfat:12";
+
+	return "unknown";
+}
+
 static inline struct sdfat_sb_info *SDFAT_SB(struct super_block *sb)
 {
 	return (struct sdfat_sb_info*)sb->s_fs_info;
@@ -311,6 +332,7 @@ __sdfat_msg(struct super_block *sb, const char *lv, int st, const char *fmt, ...
 	__sdfat_msg(sb, lv, 0, fmt , ## args)
 #define sdfat_log_msg(sb, lv, fmt, args...)          \
 	__sdfat_msg(sb, lv, 1, fmt , ## args)
+extern void sdfat_log_version(void);
 extern void sdfat_time_fat2unix(struct sdfat_sb_info *sbi, struct timespec *ts,
 				DATE_TIME_T *tp);
 extern void sdfat_time_unix2fat(struct sdfat_sb_info *sbi, struct timespec *ts,

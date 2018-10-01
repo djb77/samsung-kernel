@@ -427,8 +427,8 @@ static void exynos_usbdrd_fill_sstune(struct exynos_usbdrd_phy *phy_drd,
 			ss_tune->ssc_range	= 0x0;
 			ss_tune->los_bias	= 0x5;
 			ss_tune->los_mask_val	= 0x104;
-			ss_tune->enable_fixed_rxeq_mode	= 0x0;
-			ss_tune->fix_rxeq_value	= 0x4;
+			ss_tune->enable_fixed_rxeq_mode	= 0x1;
+			ss_tune->fix_rxeq_value	= 0x0;
 		}
 		break;
 	default:
@@ -617,6 +617,8 @@ static void exynos_usbdrd_pipe3_tune(struct exynos_usbdrd_phy *phy_drd,
 			dev_info(phy_drd->dev, "%s param0=0x%x-\n",
 						__func__, param0_check);
 #endif
+
+	samsung_exynos_cal_usb3phy_late_enable(&phy_drd->usbphy_info);
 }
 
 static void exynos_usbdrd_utmi_tune(struct exynos_usbdrd_phy *phy_drd,

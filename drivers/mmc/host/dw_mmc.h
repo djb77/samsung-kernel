@@ -56,6 +56,7 @@
 #define SDMMC_BUFADDR		0x098
 #define SDMMC_RESP_TAT		0x0AC
 #define SDMMC_CDTHRCTL		0x100
+#define SDMMC_EMMC_DDR_REG	0x10C
 #define SDMMC_DATA(x)		(x)
 
 /*
@@ -354,7 +355,7 @@ struct dw_mci_debug_info {
 
 #define DWMCI_DBG_NUM_HOST	3
 
-#define DWMCI_DBG_NUM_INFO	2			/* configurable */
+#define DWMCI_DBG_NUM_INFO	3			/* configurable */
 #define DWMCI_DBG_MASK_INFO	(BIT(0) | BIT(1) | BIT(2))	/* configurable */
 #define DWMCI_DBG_BIT_HOST(x)	BIT(x)
 
@@ -398,5 +399,63 @@ struct dw_mci_drv_data {
 	void            (*cfg_smu)(struct dw_mci *host);
 	int             (*misc_control)(struct dw_mci *host,
 				enum dw_mci_misc_control control, void *priv);
+};
+
+struct dw_mci_sfe_ram_dump {
+	u32			contrl;
+	u32			pwren;
+	u32			clkdiv;
+	u32			clkena;
+	u32			clksrc;
+	u32			tmout;
+	u32			ctype;
+	u32			blksiz;
+	u32			bytcnt;
+	u32			intmask;
+	u32			cmdarg;
+	u32			cmd;
+	u32		       	mintsts;
+	u32			rintsts;
+	u32			status;
+	u32			fifoth;
+	u32			tcbcnt;
+	u32			tbbcnt;
+	u32			debnce;
+	u32			uhs_reg;
+	u32			bmod;
+	u32			pldmnd;
+	u32			dbaddrl;
+	u32			dbaddru;
+	u32			dscaddrl;
+	u32			dscaddru;
+	u32			bufaddru;
+	u32			dbaddr;
+	u32			dscaddr;
+	u32			bufaddr;
+	u32			clksel;
+	u32			idsts64;
+	u32			idinten64;
+	u32			force_clk_stop;
+	u32			cdthrctl;
+	u32			ddr200_rdqs_en;
+	u32			ddr200_acync_fifo_ctrl;
+	u32			ddr200_dline_ctrl;
+	u32			fmp_emmcp_base;
+	u32			mpsecurity;
+	u32			mpstat;
+	u32			mpsbegin;
+	u32			mpsend;
+	u32			mpsctrl;
+	u32			cmd_status;
+	u32			data_status;
+	u32			pending_events;
+	u32			completed_events;
+	u32			host_state;
+	u32			cmd_index;
+	u32			fifo_count;
+	u32			data_busy;
+	u32			data_3_state;
+	u32			fifo_tx_watermark;
+	u32			fifo_rx_watermark;
 };
 #endif /* _DW_MMC_H_ */

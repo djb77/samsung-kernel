@@ -1411,7 +1411,11 @@ static void iput_final(struct inode *inode)
 	else
 		drop = generic_drop_inode(inode);
 
+#if defined(CONFIG_MMC_DW_FMP_ECRYPT_FS) || defined(CONFIG_UFS_FMP_ECRYPT_FS)
+	if (!drop && (sb->s_flags & MS_ACTIVE) && !inode->i_mapping->key) {
+#else
 	if (!drop && (sb->s_flags & MS_ACTIVE)) {
+#endif
 		inode->i_state |= I_REFERENCED;
 		inode_add_lru(inode);
 		spin_unlock(&inode->i_lock);

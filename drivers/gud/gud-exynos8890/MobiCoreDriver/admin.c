@@ -169,7 +169,7 @@ static int request_send(u32 command, const struct mc_uuid_t *uuid, bool is_gp,
 
 	memset(&g_request.request, 0, sizeof(g_request.request));
 	memset(&g_request.response, 0, sizeof(g_request.response));
-	g_request.request.request_id = g_request.request_id++;
+	g_request.request.request_id = g_request.request_id;
 	g_request.request.command = command;
 	if (uuid)
 		memcpy(&g_request.request.uuid, uuid, sizeof(*uuid));
@@ -781,6 +781,9 @@ static long admin_ioctl(struct file *file, unsigned int cmd,
 			ret = -EPROTO;
 			break;
 		}
+
+		/* Now that the daemon got it, update the request ID */
+		g_request.request_id++;
 
 		server_state_change(REQUEST_RECEIVED);
 		break;

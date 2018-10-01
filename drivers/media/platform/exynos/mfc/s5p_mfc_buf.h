@@ -24,14 +24,14 @@
 void mfc_fill_dynamic_dpb(struct s5p_mfc_ctx *ctx, struct vb2_buffer *vb);
 int s5p_mfc_set_dec_frame_buffer(struct s5p_mfc_ctx *ctx);
 int s5p_mfc_set_dec_stream_buffer(struct s5p_mfc_ctx *ctx,
-		dma_addr_t buf_addr,
+		struct s5p_mfc_buf *mfc_buf,
 		unsigned int start_num_byte,
 		unsigned int buf_size);
 
 void s5p_mfc_set_enc_frame_buffer(struct s5p_mfc_ctx *ctx,
 		dma_addr_t addr[], int num_planes);
 int s5p_mfc_set_enc_stream_buffer(struct s5p_mfc_ctx *ctx,
-		dma_addr_t addr, unsigned int size);
+		struct s5p_mfc_buf *mfc_buf);
 void s5p_mfc_get_enc_frame_buffer(struct s5p_mfc_ctx *ctx,
 		dma_addr_t addr[], int num_planes);
 int s5p_mfc_set_enc_ref_buffer(struct s5p_mfc_ctx *mfc_ctx);

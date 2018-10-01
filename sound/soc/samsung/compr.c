@@ -742,10 +742,9 @@ static int compr_trigger(struct snd_compr_stream *cstream, int cmd)
 		pr_info("%s: SND_COMPR_TRIGGER_NEXT_TRACK\n", __func__);
 		break;
 	case SND_COMPR_TRIGGER_PARTIAL_DRAIN:
-		pr_info("%s: SND_COMPR_TRIGGER_PARTIAL_DRAIN\n", __func__);
 	case SND_COMPR_TRIGGER_DRAIN:
-		if (SND_COMPR_TRIGGER_DRAIN == cmd)
-			pr_info("%s: SND_COMPR_TRIGGER_DRAIN\n", __func__);
+		pr_info("%s: %s\n", __func__, (SND_COMPR_TRIGGER_PARTIAL_DRAIN == cmd) ? "SND_COMPR_TRIGGER_PARTIAL_DRAIN" : "SND_COMPR_TRIGGER_DRAIN");
+
 		/* Make sure all the data is sent to F/W before sending EOS */
 		spin_lock_irqsave(&prtd->lock, flags);
 #ifdef AUDIO_PERF

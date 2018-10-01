@@ -351,5 +351,19 @@ config SND_SOC_I2S_1840_TDM
 	help
 	  Say Y if you want to add support for I2S TDM on the Universal7890
 
+config SND_SOC_EAX_SLOWPATH
+	bool "Enable eax slowapth on Universal8890"
+	depends on SND_SAMSUNG_AUDSS
+	default n
+	help
+	  Say Y if you want to add support for EAX slowpath on the Universal8890
+
+config SND_SOC_EAX_NONE_KMIXING
+	bool "Enable eax none kthread mixing on Universal8890"
+	depends on SND_SAMSUNG_AUDSS
+	default n
+	help
+	  Say Y if you want to add support for EAX slowpath on the Universal8890
+
 # For support SEIREN audio
 source "sound/soc/samsung/seiren/Kconfig"

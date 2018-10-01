@@ -589,7 +589,7 @@ static ssize_t store_en_dvfs(struct device *dev,
 		mutex_lock(&resourcemgr->dvfs_ctrl.lock);
 		for (i = 0; i < FIMC_IS_STREAM_COUNT; i++) {
 			if (test_bit(FIMC_IS_ISCHAIN_OPEN, &((core->ischain[i]).state)))
-				fimc_is_set_dvfs(&(core->ischain[i]), FIMC_IS_SN_MAX);
+				fimc_is_set_dvfs(core, &(core->ischain[i]), FIMC_IS_SN_MAX);
 		}
 		fimc_is_dvfs_init(resourcemgr);
 		resourcemgr->dvfs_ctrl.static_ctrl->cur_scenario_id = FIMC_IS_SN_MAX;

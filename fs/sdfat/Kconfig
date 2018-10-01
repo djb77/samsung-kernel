@@ -23,6 +23,11 @@ config SDFAT_DELAYED_META_DIRTY
 	  If you enable this feature, metadata(FAT/Directory entry) is updated
 	  by flush thread. 
 
+config SDFAT_SUPPORT_DIR_SYNC
+	bool "Enable supporting dir sync"
+	default n
+	depends on SDFAT_FS
+
 config SDFAT_DEFAULT_CODEPAGE
 	int "Default codepage for sdFAT"
 	default 437
@@ -83,3 +88,8 @@ config SDFAT_DBG_MSG
 	bool "enable debug messages"
 	depends on SDFAT_FS && SDFAT_DEBUG
 	default y
+
+config SDFAT_DBG_BUGON
+	bool "enable strict BUG_ON() for debugging"
+	depends on SDFAT_FS && SDFAT_DEBUG
+	default n

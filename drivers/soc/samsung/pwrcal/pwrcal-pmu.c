@@ -35,12 +35,12 @@ static int blkpwr_enable(struct cal_pd *pd)
 		}
 	}
 
-	if (pd->post)
+	if (pd->post && !ret)
 		pd->post(1);
 
 out:
 	if (pd && ret)
-		pr_err("BLKPWR enable Fail (%s)\n", pd->name);
+		pr_err("BLKPWR enable Fail (%s) STATUS : 0x%08X\n", pd->name, pwrcal_readl(pd->status));
 
 	return 0;
 }
@@ -81,7 +81,7 @@ static int blkpwr_disable(struct cal_pd *pd)
 
 out:
 	if (pd && ret)
-		pr_err("BLKPWR disable Fail (%s)\n", pd->name);
+		pr_err("BLKPWR disable Fail (%s) STATUS : 0x%08X\n", pd->name, pwrcal_readl(pd->status));
 
 	return 0;
 }

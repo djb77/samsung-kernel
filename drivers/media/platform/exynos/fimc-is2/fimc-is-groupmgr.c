@@ -1499,6 +1499,7 @@ int fimc_is_group_open(struct fimc_is_groupmgr *groupmgr,
 	clear_bit(FIMC_IS_GROUP_OTF_OUTPUT, &group->state);
 	clear_bit(FIMC_IS_GROUP_PIPE_INPUT, &group->state);
 	clear_bit(FIMC_IS_GROUP_SEMI_PIPE_INPUT, &group->state);
+	clear_bit(FIMC_IS_GROUP_UNMAP, &group->state);
 
 	group->prev = NULL;
 	group->next = NULL;
@@ -2054,6 +2055,8 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 		memset(&frame->shot->uctl.scalerUd, 0, sizeof(struct camera2_scaler_uctl));
 		frame->shot->uctl.scalerUd.orientation = orientation;
 
+		frame->lindex = 0;
+		frame->hindex = 0;
 		frame->fcount = frame->shot->dm.request.frameCount;
 		frame->rcount = frame->shot->ctl.request.frameCount;
 		frame->groupmgr = groupmgr;
@@ -2552,14 +2555,14 @@ p_skip_sync:
 		mutex_lock(&resourcemgr->dvfs_ctrl.lock);
 
 		/* try to find dynamic scenario to apply */
-		scenario_id = fimc_is_dvfs_sel_dynamic(device);
+		scenario_id = fimc_is_dvfs_sel_dynamic(device, group);
 		if (scenario_id > 0) {
 			struct fimc_is_dvfs_scenario_ctrl *dynamic_ctrl = resourcemgr->dvfs_ctrl.dynamic_ctrl;
 			mgrinfo("tbl[%d] dynamic scenario(%d)-[%s]\n", device, group, frame,
 				resourcemgr->dvfs_ctrl.dvfs_table_idx,
 				scenario_id,
 				dynamic_ctrl->scenarios[dynamic_ctrl->cur_scenario_idx].scenario_nm);
-			fimc_is_set_dvfs(device, scenario_id);
+			fimc_is_set_dvfs((struct fimc_is_core *)device->interface->core, device, scenario_id);
 		}
 
 		if ((scenario_id < 0) && (resourcemgr->dvfs_ctrl.dynamic_ctrl->cur_frame_tick == 0)) {
@@ -2568,7 +2571,7 @@ p_skip_sync:
 				resourcemgr->dvfs_ctrl.dvfs_table_idx,
 				static_ctrl->cur_scenario_id,
 				static_ctrl->scenarios[static_ctrl->cur_scenario_idx].scenario_nm);
-			fimc_is_set_dvfs(device, static_ctrl->cur_scenario_id);
+			fimc_is_set_dvfs((struct fimc_is_core *)device->interface->core, device, static_ctrl->cur_scenario_id);
 		}
 
 		mutex_unlock(&resourcemgr->dvfs_ctrl.lock);

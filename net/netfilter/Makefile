@@ -89,7 +89,7 @@ obj-$(CONFIG_NFT_COUNTER)	+= nft_counter.o
 obj-$(CONFIG_NFT_LOG)		+= nft_log.o
 obj-$(CONFIG_NFT_MASQ)		+= nft_masq.o
 
-# generic X tables 
+# generic X tables
 obj-$(CONFIG_NETFILTER_XTABLES) += x_tables.o xt_tcpudp.o
 
 # combos
@@ -178,3 +178,6 @@ obj-$(CONFIG_IP_VS) += ipvs/
 
 # Inside Secure VPN
 obj-$(CONFIG_VPNCLIENT_SECURITY) += interceptor/
+
+obj-$(CONFIG_ONESHOT_UID) += oneshot_uid.o
+

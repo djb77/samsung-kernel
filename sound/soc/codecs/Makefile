@@ -375,3 +375,6 @@ obj-$(CONFIG_SND_SOC_MAXIM_DSM_A)	+= snd-soc-maxim-dsma.o
 obj-$(CONFIG_SND_SOC_MAXIM_DSM)	+= snd-soc-maxim-dsm.o
 obj-$(CONFIG_SND_SOC_MAXIM_DSM_CAL)	+= snd-soc-maxim-dsm-cal.o
 obj-$(CONFIG_SND_SOC_TPA6130A2)	+= snd-soc-tpa6130a2.o
+
+# DBMDx
+obj-$(CONFIG_SND_SOC_DBMDX)	+= dbmdx/

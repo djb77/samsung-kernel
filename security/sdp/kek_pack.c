@@ -45,7 +45,7 @@ typedef struct __kek_item {
 	kek_t kek;
 }kek_item_t;
 
-#define KEK_PACK_DEBUG		1
+#define KEK_PACK_DEBUG		0
 
 #if KEK_PACK_DEBUG
 #define KEK_PACK_LOGD(FMT, ...) printk("KEK_PACK[%d] %s :: " FMT , current->pid, __func__, ##__VA_ARGS__)
@@ -71,7 +71,7 @@ static kek_pack_t *find_kek_pack(int engine_id) {
 		kek_pack_t *pack = list_entry(entry, kek_pack_t, list);
 
 		if(pack->engine_id == engine_id) {
-			KEK_PACK_LOGE("Found kek-pack : %d\n", engine_id);
+			KEK_PACK_LOGD("Found kek-pack : %d\n", engine_id);
 			spin_unlock(&kek_pack_list_lock);
 			return pack;
 		}
@@ -115,7 +115,7 @@ static kek_item_t *find_kek_item(kek_pack_t *pack, int kek_type) {
 		kek_item_t *item = list_entry(entry, kek_item_t, list);
 
 		if(item->kek_type == kek_type) {
-			KEK_PACK_LOGE("Found kek-item : %d\n", kek_type);
+			KEK_PACK_LOGD("Found kek-item : %d\n", kek_type);
 			spin_unlock(&pack->kek_list_lock);
 
 			return item;
@@ -123,7 +123,7 @@ static kek_item_t *find_kek_item(kek_pack_t *pack, int kek_type) {
 	}
 	spin_unlock(&pack->kek_list_lock);
 
-	KEK_PACK_LOGE("Can't find kek %d : %d\n", kek_type, pack->engine_id);
+	KEK_PACK_LOGD("Can't find kek %d : %d\n", kek_type, pack->engine_id);
 
 	return NULL;
 }

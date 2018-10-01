@@ -65,8 +65,10 @@ static inline void __pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmdp,
 static inline void __pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmdp,
 				  unsigned long addr)
 {
-	if ((unsigned long)pmdp >= (unsigned long)RKP_RBUF_VA && (unsigned long)pmdp < ((unsigned long)RKP_RBUF_VA + TIMA_ROBUF_SIZE))
+	if (is_rkp_ro_page((unsigned long)pmdp)) {
+		__flush_tlb_pgtable(tlb->mm, addr);
 		rkp_ro_free((void*)pmdp);
+	}
 	else {
 		__flush_tlb_pgtable(tlb->mm, addr);
 		tlb_remove_entry(tlb, virt_to_page(pmdp));
@@ -87,8 +89,10 @@ static inline void __pud_free_tlb(struct mmu_gather *tlb, pud_t *pudp,
 static inline void __pud_free_tlb(struct mmu_gather *tlb, pud_t *pudp,
 				  unsigned long addr)
 {
-	if ((unsigned long)pudp >= (unsigned long)RKP_RBUF_VA && (unsigned long)pudp < ((unsigned long)RKP_RBUF_VA + TIMA_ROBUF_SIZE))
+	if (is_rkp_ro_page((unsigned long)pudp)) {
+		__flush_tlb_pgtable(tlb->mm, addr);
 		rkp_ro_free((void*)pudp);
+	}
 	else {
 		__flush_tlb_pgtable(tlb->mm, addr);
 		tlb_remove_entry(tlb, virt_to_page(pudp));

@@ -64,6 +64,13 @@ enum fimc_is_cam_info_ois {
 	CAM_INFO_OIS_USE,
 };
 
+enum fimc_is_cam_info_index {
+	CAM_INFO_REAR = 0,
+	CAM_INFO_FRONT,
+	CAM_INFO_IRIS,
+	CAM_INFO_MAX
+};
+
 struct fimc_is_cam_info {
 	unsigned int isp;
 	unsigned int cal_memory;

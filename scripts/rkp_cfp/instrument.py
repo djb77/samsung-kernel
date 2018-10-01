@@ -107,8 +107,8 @@ def _cross(execname):
 OBJDUMP = _cross("objdump")
 READELF = _cross("readelf")
 NM = _cross("nm")
-GDB = _cross("gdb")
-CROSS_COMPILE_GCC = _cross("gcc")
+#GDB = _cross("gdb")
+GDB = None
 
 hex_re = r'(?:[a-f0-9]+)'
 virt_addr_re = re.compile(r'^(?P<virt_addr>{hex_re}):\s+'.format(hex_re=hex_re))
@@ -247,7 +247,7 @@ def instrument(objdump, func=None, skip=set([]), skip_stp=set([]), skip_asm=set(
             new_stp_insn(stp_insn, replaced_insn) -> new stp instruction to encode.
             """
 
-            last_insn = parse_insn_range(i-2, i)
+            last_insn = parse_insn_range(i-1, i)
             if not are_nop_insns(last_insn):
                 return
 
@@ -256,25 +256,25 @@ def instrument(objdump, func=None, skip=set([]), skip_stp=set([]), skip_asm=set(
             # The last instruction was a nop spacer.
             # Move forward until we see "add x29, sp, #<...>".
             # (we expect ... = add_x29_imm)
-            mov_j, movx29_insn = find_add_x29_x30_imm(objdump, curfunc, func_i, i)
-            assert movx29_insn['args']['imm'] == add_x29_imm
+            #mov_j, movx29_insn = find_add_x29_x30_imm(objdump, curfunc, func_i, i)
+            #assert movx29_insn['args']['imm'] == add_x29_imm
 
             # Time to do prologue instrumentation.
 
             # eor RRX, x30, RRK
             eor = eor_insn(last_insn[0],
                     reg1=objdump.RRX, reg2=REG_LR, reg3=objdump.RRK)
-            objdump.write(i-2, objdump.encode_insn(eor))
+            objdump.write(i-1, objdump.encode_insn(eor))
             # stp x29, RRX, ...
             stp = new_stp_insn(insn, insn)
-            objdump.write(i-1, objdump.encode_insn(stp))
+            objdump.write(i, objdump.encode_insn(stp))
             # add x29, sp, #<add_x29_imm>
-            add = add_insn({},
-                    dst_reg=REG_FP, src_reg=REG_SP, imm12=add_x29_imm)
-            objdump.write(i, objdump.encode_insn(add))
+            #add = add_insn({},
+                    #dst_reg=REG_FP, src_reg=REG_SP, imm12=add_x29_imm)
+            #objdump.write(i, objdump.encode_insn(add))
             # nop
-            nop = nop_insn(movx29_insn)
-            objdump.write(mov_j, objdump.encode_insn(nop))
+            #nop = nop_insn(movx29_insn)
+            #objdump.write(mov_j, objdump.encode_insn(nop))
 
         def _skip_func(func):
             return skip_func(func, skip, skip_asm)
@@ -284,15 +284,15 @@ def instrument(objdump, func=None, skip=set([]), skip_stp=set([]), skip_asm=set(
             # Keep track of the last 2 instructions
             # (needed it for CONFIG_RKP_CFP_JOPP)
             for curfunc, func_i, i, insn, last_insns in objdump.each_insn(func=func, start_func=start_func, end_func=end_func, 
-                    start_i=start_i, end_i=end_i, skip_func=_skip_func, num_last_insns=2):
+                    start_i=start_i, end_i=end_i, skip_func=_skip_func, num_last_insns=1):
                 yield curfunc, func_i, i, insn, last_insns
                 last_func_i[0] = func_i
 
         for curfunc, func_i, i, insn, last_insns in each_insn():
             if objdump.JOPP and func_i != last_func_i[0] and are_nop_insns(ins[1] for ins in last_insns):
                 # Instrument the 2 noop spacers just before the function.
-                nargs_i, nargs_insn = last_insns[0]
-                magic_i, magic_insn = last_insns[1]
+                #nargs_i, nargs_insn = last_insns[0]
+                magic_i, magic_insn = last_insns[0]
                 #nargs = objdump.get_nargs(func_i)
                 #if nargs is None:
                     # nargs ought to be defined for everything eventually.  For symbol 

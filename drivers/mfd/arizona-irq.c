@@ -98,10 +98,29 @@ static irqreturn_t arizona_ctrlif_err(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+/*
+ * Examine the IRQ pin status to see if we're really done
+ * if the interrupt controller can't do it for us.
+ */
+static bool arizona_irq_still_pending(struct arizona *arizona)
+{
+	bool still_pending = false;
+
+	if (arizona->pdata.irq_gpio) {
+		if (arizona->pdata.irq_flags & IRQF_TRIGGER_RISING &&
+		    gpio_get_value_cansleep(arizona->pdata.irq_gpio)) {
+			still_pending = true;
+		} else if (arizona->pdata.irq_flags & IRQF_TRIGGER_FALLING &&
+			   !gpio_get_value_cansleep(arizona->pdata.irq_gpio)) {
+			still_pending = true;
+		}
+	}
+	return still_pending;
+}
+
 static irqreturn_t arizona_irq_thread(int irq, void *data)
 {
 	struct arizona *arizona = data;
-	bool poll;
 	unsigned int val, nest_irq;
 	int ret;
 
@@ -112,16 +131,19 @@ static irqreturn_t arizona_irq_thread(int irq, void *data)
 	}
 
 	do {
-		poll = false;
+		if (arizona->aod_irq_chip && arizona->irq_chip) {
+			/* Only handle each domain if it has triggered an IRQ */
+			ret = regmap_read(arizona->regmap, ARIZONA_AOD_IRQ1,
+					  &val);
+			if (ret == 0 && val != 0) {
+				nest_irq = irq_find_mapping(arizona->virq, 0);
+				handle_nested_irq(nest_irq);
+			} else if (ret != 0) {
+				dev_err(arizona->dev,
+					"Failed to read AOD IRQ1 %d\n",
+					ret);
+			}
 
-		if (arizona->aod_irq_chip)
-			handle_nested_irq(irq_find_mapping(arizona->virq, 0));
-
-		if (arizona->irq_chip) {
-			/*
-			 * Check if one of the main interrupts is asserted and
-			 * only check that domain if it is.
-			 */
 			ret = regmap_read(arizona->regmap,
 					  ARIZONA_IRQ_PIN_STATUS,
 					  &val);
@@ -133,22 +155,12 @@ static irqreturn_t arizona_irq_thread(int irq, void *data)
 					"Failed to read main IRQ status: %d\n",
 					ret);
 			}
+		} else if (arizona->aod_irq_chip) {
+			handle_nested_irq(irq_find_mapping(arizona->virq, 0));
+		} else if (arizona->irq_chip) {
+			handle_nested_irq(irq_find_mapping(arizona->virq, 1));
 		}
-
-		/*
-		 * Poll the IRQ pin status to see if we're really done
-		 * if the interrupt controller can't do it for us.
-		 */
-		if (!arizona->pdata.irq_gpio) {
-			break;
-		} else if (arizona->pdata.irq_flags & IRQF_TRIGGER_RISING &&
-			   gpio_get_value_cansleep(arizona->pdata.irq_gpio)) {
-			poll = true;
-		} else if (arizona->pdata.irq_flags & IRQF_TRIGGER_FALLING &&
-			   !gpio_get_value_cansleep(arizona->pdata.irq_gpio)) {
-			poll = true;
-		}
-	} while (poll);
+	} while (arizona_irq_still_pending(arizona));
 
 	pm_runtime_mark_last_busy(arizona->dev);
 	pm_runtime_put_autosuspend(arizona->dev);
@@ -162,7 +174,9 @@ static void arizona_irq_dummy(struct irq_data *data)
 
 static int arizona_irq_set_wake(struct irq_data *data, unsigned int on)
 {
-	return 0;
+	struct arizona *arizona = irq_data_get_irq_chip_data(data);
+
+	return irq_set_irq_wake(arizona->irq, on);
 }
 
 static struct irq_chip arizona_irq_chip = {
@@ -175,12 +189,15 @@ static struct irq_chip arizona_irq_chip = {
 	.irq_set_wake	= arizona_irq_set_wake,
 };
 
+static struct lock_class_key arizona_irq_lock_class;
+
 static int arizona_irq_map(struct irq_domain *h, unsigned int virq,
 			      irq_hw_number_t hw)
 {
-	struct regmap_irq_chip_data *data = h->host_data;
+	struct arizona *data = h->host_data;
 
 	irq_set_chip_data(virq, data);
+	irq_set_lockdep_class(virq, &arizona_irq_lock_class);
 	irq_set_chip_and_handler(virq, &arizona_irq_chip, handle_simple_irq);
 	irq_set_nested_thread(virq, 1);
 
@@ -364,7 +381,7 @@ int arizona_irq_init(struct arizona *arizona)
 					  &arizona->aod_irq_chip);
 		if (ret != 0) {
 			dev_err(arizona->dev, "Failed to add AOD IRQs: %d\n", ret);
-			goto err_domain;
+			goto err;
 		}
 	}
 
@@ -376,30 +393,6 @@ int arizona_irq_init(struct arizona *arizona)
 		if (ret != 0) {
 			dev_err(arizona->dev, "Failed to add main IRQs: %d\n", ret);
 			goto err_aod;
-		}
-	}
-
-	/* Make sure the boot done IRQ is unmasked for resumes */
-	i = arizona_map_irq(arizona, ARIZONA_IRQ_BOOT_DONE);
-	ret = request_threaded_irq(i, NULL, arizona_boot_done, IRQF_ONESHOT,
-				   "Boot done", arizona);
-	if (ret != 0) {
-		dev_err(arizona->dev, "Failed to request boot done %d: %d\n",
-			arizona->irq, ret);
-		goto err_boot_done;
-	}
-
-	/* Handle control interface errors in the core */
-	if (arizona->ctrlif_error) {
-		i = arizona_map_irq(arizona, ARIZONA_IRQ_CTRLIF_ERR);
-		ret = request_threaded_irq(i, NULL, arizona_ctrlif_err,
-					   IRQF_ONESHOT,
-					   "Control interface error", arizona);
-		if (ret != 0) {
-			dev_err(arizona->dev,
-				"Failed to request CTRLIF_ERR %d: %d\n",
-				arizona->irq, ret);
-			goto err_ctrlif;
 		}
 	}
 
@@ -432,28 +425,42 @@ int arizona_irq_init(struct arizona *arizona)
 		goto err_main_irq;
 	}
 
-	ret = irq_set_irq_wake(arizona->irq, 1);
-
+	/* Make sure the boot done IRQ is unmasked for resumes */
+	i = arizona_map_irq(arizona, ARIZONA_IRQ_BOOT_DONE);
+	ret = request_threaded_irq(i, NULL, arizona_boot_done, IRQF_ONESHOT,
+				   "Boot done", arizona);
 	if (ret != 0) {
-		dev_err(arizona->dev,
-			"Failed to set arizona->irq as a wake source\n");
+		dev_err(arizona->dev, "Failed to request boot done %d: %d\n",
+			arizona->irq, ret);
+		goto err_boot_done;
+	}
+
+	/* Handle control interface errors in the core */
+	if (arizona->ctrlif_error) {
+		i = arizona_map_irq(arizona, ARIZONA_IRQ_CTRLIF_ERR);
+		ret = request_threaded_irq(i, NULL, arizona_ctrlif_err,
+					   IRQF_ONESHOT,
+					   "Control interface error", arizona);
+		if (ret != 0) {
+			dev_err(arizona->dev,
+				"Failed to request CTRLIF_ERR %d: %d\n",
+				arizona->irq, ret);
+			goto err_ctrlif;
+		}
 	}
 
 	return 0;
 
-err_main_irq:
-	if (arizona->ctrlif_error)
-		free_irq(arizona_map_irq(arizona, ARIZONA_IRQ_CTRLIF_ERR),
-			 arizona);
 err_ctrlif:
 	free_irq(arizona_map_irq(arizona, ARIZONA_IRQ_BOOT_DONE), arizona);
 err_boot_done:
+	free_irq(arizona->irq, arizona);
+err_main_irq:
 	regmap_del_irq_chip(irq_create_mapping(arizona->virq, 1),
 			    arizona->irq_chip);
 err_aod:
 	regmap_del_irq_chip(irq_create_mapping(arizona->virq, 0),
 			    arizona->aod_irq_chip);
-err_domain:
 err:
 	return ret;
 }

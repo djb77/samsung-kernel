@@ -20,6 +20,8 @@
 #include <linux/export.h>
 #include <linux/videodev2_exynos_media.h>
 
+#include "../../../../../soc/samsung/pwrcal/pwrcal.h"
+#include "../../../../../soc/samsung/pwrcal/S5E8890/S5E8890-vclk.h"
 #include "vpp.h"
 #include "vpp_common.h"
 #include "../decon_helper.h"
@@ -458,6 +460,16 @@ void vpp_split_single_plane(struct decon_win_config *config, struct vpp_size_par
 	}
 }
 
+void vpp_set_deadlock_time(struct vpp_dev *vpp, int msec)
+{
+	int deadlock_num;
+	int disp;
+
+	disp = cal_dfs_get_rate(dvfs_disp);
+	deadlock_num = msec * disp;
+	vpp_reg_set_deadlock_num(vpp->id, deadlock_num);
+}
+
 static int vpp_set_config(struct vpp_dev *vpp)
 {
 	struct decon_win_config *config = vpp->config;
@@ -656,6 +668,10 @@ static long vpp_subdev_ioctl(struct v4l2_subdev *sd,
 		ret = vpp_wait_for_framedone(vpp);
 		break;
 
+	case VPP_SET_DEADLOCK_NUM:
+		vpp_set_deadlock_time(vpp, 20);
+		break;
+
 	default:
 		break;
 	}
@@ -789,10 +805,13 @@ static irqreturn_t vpp_irq_handler(int irq, void *priv)
 		vpp_reg_set_clear_irq(vpp->id, vpp_irq);
 
 		if (is_err_irq(vpp_irq)) {
-			dev_err(DEV, "Error interrupt (0x%x)\n", vpp_irq);
-			vpp_dump_registers(vpp);
-			exynos_sysmmu_show_status(&vpp->pdev->dev);
-			goto err;
+			dev_err(DEV, "vpp%d interrupt info(0x%x)\n",vpp->id, vpp_irq);
+			if ((vpp_irq == VG_IRQ_DEADLOCK_STATUS) && (vpp->id == 6 || vpp->id == 7))
+				vpp->afbc_re = vpp_reg_set_debug_sfr(vpp->id);
+			if (!(vpp_irq == VG_IRQ_DEADLOCK_STATUS)) {
+				exynos_sysmmu_show_status(&vpp->pdev->dev);
+				goto err;
+			}
 		}
 	}
 

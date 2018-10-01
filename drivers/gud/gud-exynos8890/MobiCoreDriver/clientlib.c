@@ -67,6 +67,8 @@ enum mc_result convert(int err)
 		return MC_DRV_INFO_NOTIFICATION;
 	case EUNATCH:
 		return MC_DRV_ERR_NQ_FAILED;
+	case ERESTARTSYS:
+		return MC_DRV_ERR_INTERRUPTED_BY_SIGNAL;
 	default:
 		mc_dev_devel("error is %d\n", err);
 		return MC_DRV_ERR_UNKNOWN;

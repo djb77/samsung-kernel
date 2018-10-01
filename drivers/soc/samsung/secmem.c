@@ -30,6 +30,17 @@
 
 #include <soc/samsung/secmem.h>
 
+#if defined(CONFIG_SECURE_OS_BOOSTER_API)
+#if defined(CONFIG_SOC_EXYNOS8890)
+#include <soc/samsung/secos_booster.h>
+#else
+#include <mach/secos_booster.h>
+#endif
+#endif
+#include <linux/delay.h>
+
+
+
 #define SECMEM_DEV_NAME	"s5p-smem"
 
 
@@ -212,6 +223,45 @@ static long secmem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (copy_to_user((void __user *)arg, &drm_onoff, sizeof(int)))
 			return -EFAULT;
 		break;
+
+	case (uint32_t)IRIS_IOCTL_CPU_SPEEDUP:
+	{
+		int onoff = 0;
+		int ret_val = 0;
+		if (copy_from_user(&onoff, (void *)arg,
+			sizeof(unsigned int)) != 0) {
+			pr_err("%s Failed copy from user.(CPU_SPEEDUP)\n", __func__);
+			//mutex_unlock(&vfsspi_device->buffer_mutex);
+			return -EFAULT;
+		}
+		if (onoff) {
+			u8 retry_cnt = 0;
+			pr_debug("%s IRIS_IOCTL_CPU_SPEEDUP ON:%d, retry: %d\n",
+				__func__, onoff, retry_cnt);
+#if defined(CONFIG_SECURE_OS_BOOSTER_API)
+			do {
+				ret_val = secos_booster_start(onoff - 1);
+				retry_cnt++;
+				if (ret_val) {
+					pr_err("%s: booster start failed. (%d) retry: %d\n"
+						, __func__, ret_val, retry_cnt);
+					if (retry_cnt < 7)
+							usleep_range(500, 510);
+					}
+				} while (ret_val && retry_cnt < 7);
+#endif
+			} else {
+				pr_debug("%s IRIS_IOCTL_CPU_SPEEDUP OFF\n", __func__);
+#if defined(CONFIG_SECURE_OS_BOOSTER_API)
+				ret_val = secos_booster_stop();
+				if (ret_val)
+					pr_err("%s: booster stop failed. (%d)\n"
+						, __func__, ret_val);
+#endif
+			}
+			break;
+	}
+		
 	case (uint32_t)SECMEM_IOC_SET_DRM_ONOFF:
 	{
 		int ret, val = 0;

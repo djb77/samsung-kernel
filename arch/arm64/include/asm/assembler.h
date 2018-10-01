@@ -33,91 +33,6 @@
 #include <asm/asm-offsets.h>
 #endif
 
-#ifdef CONFIG_RKP_CFP_JOPP
-/* Macros for:
- * - storing the magic function entry point number in memory
- * - loading the magic function entry point number from memory into RRS
- * Store the magic number in the text segment with this label.
- * Put a hlt instruction right after it so if an attacker tries to jump to it, they 
- * will crash the kernel.
- */
-	.macro alloc_function_entry_magic_number, label
-	\label:
-	.word CONFIG_RKP_CFP_JOPP_MAGIC
-	hlt #0
-	.endm
-	
-	//Load the magic number from memory into RRS.
-	.macro load_function_entry_magic_number, label
-	ldr RRS_32, =\label
-	.endm
-	
-	
-	/* The macros below are just variations on the above two basic macros.
-	 * Should work before relocation entries are adjusted.
-	 */
-	.macro load_function_entry_magic_number_before_reloc, label
-	adr RRS, \label
-	ldr RRS_32, [RRS]
-	.endm
-	
-	.macro load_function_entry_magic_number_no_mmu, label
-	load_function_entry_magic_number_before_reloc \label
-	.endm
-	
-	.macro load_function_entry_magic_number_far_away, label
-	adr_l RRS, \label
-	ldr RRS_32, [RRS]
-	.endm
-
-	/*
-	 * Pseudo-ops for PC-relative adr/ldr/str <reg>, <symbol> where
-	 * <symbol> is within the range +/- 4 GB of the PC.
-	 *
-	 * @dst: destination register (64 bit wide)
-	 * @sym: name of the symbol
-	 * @tmp: optional scratch register to be used if <dst> == sp, which
-	 *       is not allowed in an adrp instruction
-	 */
-	.macro	adr_l, dst, sym, tmp=
-	.ifb	\tmp
-	adrp	\dst, \sym
-	add	\dst, \dst, :lo12:\sym
-	.else
-	adrp	\tmp, \sym
-	add	\dst, \tmp, :lo12:\sym
-	.endif
-	.endm
-
-	/*
-	 * @dst: destination register (32 or 64 bit wide)
-	 * @sym: name of the symbol
-	 * @tmp: optional 64-bit scratch register to be used if <dst> is a
-	 *       32-bit wide register, in which case it cannot be used to hold
-	 *       the address
-	 */
-	.macro	ldr_l, dst, sym, tmp=
-	.ifb	\tmp
-	adrp	\dst, \sym
-	ldr	\dst, [\dst, :lo12:\sym]
-	.else
-	adrp	\tmp, \sym
-	ldr	\dst, [\tmp, :lo12:\sym]
-	.endif
-	.endm
-
-	/*
-	 * @src: source register (32 or 64 bit wide)
-	 * @sym: name of the symbol
-	 * @tmp: mandatory 64-bit scratch register to calculate the address
-	 *       while <src> needs to be preserved.
-	 */
-	.macro	str_l, src, sym, tmp
-	adrp	\tmp, \sym
-	str	\src, [\tmp, :lo12:\sym]
-	.endm
-#endif
-
 
 #ifdef CONFIG_RKP_CFP_ROPP
 	.macro	get_thread_info, rd
@@ -128,7 +43,7 @@
 	/* Load the key register (RRK) with this task's return-address encryption key.
 	 * For secure, store the encrypted per thread key in rrk
 	 */
-	.macro load_key, tsk
+	.macro	load_key, tsk
 #ifdef CONFIG_RKP_CFP_ROPP_HYPKEY
 	push	x29, x30
 	push	x0, x1
@@ -140,7 +55,7 @@
 	pop	x0, x1
 	pop	x29, x30
 #else
-	ldr RRK, [\tsk, #TI_RRK]
+	ldr	RRK, [\tsk, #TI_RRK]
 #endif
 	.endm
 #endif

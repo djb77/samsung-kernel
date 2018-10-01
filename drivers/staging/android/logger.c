@@ -1125,6 +1125,42 @@ out_free_buffer:
 #endif /* SUPPORT_GETLOG_TOOL */
 }
 
+#if defined(CONFIG_SEC_DUMP_SUMMARY)
+int sec_debug_summary_set_logger_info(
+	struct sec_debug_summary_logger_log_info *log_info)
+{
+	struct logger_log *log;
+
+	log_info->stinfo.buffer_offset = offsetof(struct logger_log, buffer);
+	log_info->stinfo.w_off_offset = offsetof(struct logger_log, w_off);
+	log_info->stinfo.head_offset = offsetof(struct logger_log, head);
+	log_info->stinfo.size_offset = offsetof(struct logger_log, size);
+	log_info->stinfo.size_t_typesize = sizeof(size_t);
+
+	list_for_each_entry(log, &log_list, logs)
+	{
+		if(!strcmp(log->misc.name,LOGGER_LOG_MAIN)) {
+			log_info->main.log_paddr = virt_to_phys(log);
+			log_info->main.buffer_paddr = virt_to_phys(log->buffer);
+		}
+		else if(!strcmp(log->misc.name,LOGGER_LOG_SYSTEM)) {
+			log_info->system.log_paddr = virt_to_phys(log);
+			log_info->system.buffer_paddr = virt_to_phys(log->buffer);
+		}
+		else if(!strcmp(log->misc.name,LOGGER_LOG_EVENTS)) {
+			log_info->events.log_paddr = virt_to_phys(log);
+			log_info->events.buffer_paddr = virt_to_phys(log->buffer);
+		}
+		else if(!strcmp(log->misc.name,LOGGER_LOG_RADIO)) {
+			log_info->radio.log_paddr = virt_to_phys(log);
+			log_info->radio.buffer_paddr = virt_to_phys(log->buffer);
+		}
+	}
+
+	return 0;
+}
+#endif
+
 static int __init logger_init(void)
 {
 	int ret;

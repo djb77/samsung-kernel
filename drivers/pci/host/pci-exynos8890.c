@@ -49,15 +49,19 @@ static int exynos_pcie_clock_enable(struct pcie_port *pp, int enable)
 	struct exynos_pcie *exynos_pcie = to_exynos_pcie(pp);
 	struct exynos_pcie_clks	*clks = &exynos_pcie->clks;
 	int i;
+	int ret = 0;
 
 	if (enable) {
-		for (i = 0; i < exynos_pcie->pcie_clk_num; i++)
-			clk_prepare_enable(clks->pcie_clks[i]);
+		for (i = 0; i < exynos_pcie->pcie_clk_num; i++) {
+			ret = clk_prepare_enable(clks->pcie_clks[i]);
+			if(ret)
+				dev_err(pp->dev, "pcie clock[%d] enable error!!! ret=%d\n", i, ret);
+		}
 	} else {
 		for (i = 0; i < exynos_pcie->pcie_clk_num; i++)
 			clk_disable_unprepare(clks->pcie_clks[i]);
 	}
-	return 0;
+	return ret;
 }
 
 static int exynos_pcie_phy_clock_enable(struct pcie_port *pp, int enable)
@@ -65,13 +69,24 @@ static int exynos_pcie_phy_clock_enable(struct pcie_port *pp, int enable)
 	struct exynos_pcie *exynos_pcie = to_exynos_pcie(pp);
 	struct exynos_pcie_clks	*clks = &exynos_pcie->clks;
 	int i;
+	int ret = 0;
+	unsigned int en_cnt;
 
 	if (enable) {
-		for (i = 0; i < exynos_pcie->phy_clk_num; i++)
-			clk_prepare_enable(clks->phy_clks[i]);
+		for (i = 0; i < exynos_pcie->phy_clk_num; i++) {
+			en_cnt = __clk_get_enable_count(clks->phy_clks[i]);
+			if(en_cnt > 0) {
+				dev_err(pp->dev, "pcie phy clk[%d] is already enabled[en_cnt=%d]\n", i, en_cnt);
+				exynos_ss_printk("pcie phy clk en_cnt=%d", en_cnt);
+				break;
+			}
+			ret = clk_prepare_enable(clks->phy_clks[i]);
+			if (ret)
+				dev_err(pp->dev, "pcie phy clock[%d] enable error!!! ret=%d\n", i, ret);
+		}
 	} else {
 		for (i = 0; i < exynos_pcie->phy_clk_num; i++)
 			clk_disable_unprepare(clks->phy_clks[i]);
 	}
-	return 0;
+	return ret;
 }

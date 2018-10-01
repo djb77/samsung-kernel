@@ -83,14 +83,14 @@ static inline void exynos_ss_mailbox(void *msg, int mode, char *f_name, void *vo
 #endif
 
 #ifndef CONFIG_EXYNOS_SNAPSHOT_MINIMIZED_MODE
-extern void __exynos_ss_clockevent(unsigned long long clc, int64_t delta, void *next_event);
+extern void __exynos_ss_clockevent(void* dev, unsigned long long clc, int64_t delta, void *next_event);
 extern void __exynos_ss_printk(const char *fmt, ...);
 extern void __exynos_ss_printkl(size_t msg, size_t val);
 
-static inline void exynos_ss_clockevent(unsigned long long clc, int64_t delta, void *next_event)
+static inline void exynos_ss_clockevent(void* dev, unsigned long long clc, int64_t delta, void *next_event)
 {
 	if (unlikely(*exynos_ss_base_enabled))
-		__exynos_ss_clockevent(clc, delta, next_event);
+		__exynos_ss_clockevent(dev, clc, delta, next_event);
 }
 
 #define exynos_ss_printk(fmt, ...)				\
@@ -105,7 +105,7 @@ static inline void exynos_ss_printkl(size_t msg, size_t val)
 		__exynos_ss_printkl(msg, val);
 }
 #else
-#define exynos_ss_clockevent(a,b,c)	do { } while(0)
+#define exynos_ss_clockevent(a,b,c,d)	do { } while(0)
 #define exynos_ss_printk(...)		do { } while(0)
 #define exynos_ss_printkl(a,b)		do { } while(0)
 #endif

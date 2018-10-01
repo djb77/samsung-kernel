@@ -442,6 +442,7 @@ static int parse_ois_data(struct exynos_platform_fimc_is_module *pdata, struct d
 	return 0;
 }
 
+/* Deprecated. Use  fimc_is_module_parse_dt */ 
 int fimc_is_sensor_module_parse_dt(struct platform_device *pdev,
 	fimc_is_moudle_dt_callback module_callback)
 {
@@ -555,6 +556,115 @@ p_err:
 	return ret;
 }
 
+/* New function for module parse dt. Use this instead of fimc_is_sensor_module_parse_dt */ 
+int fimc_is_module_parse_dt(struct device *dev,
+	fimc_is_moudle_callback module_callback)
+{
+	int ret = 0;
+	struct exynos_platform_fimc_is_module *pdata;
+	struct device_node *dnode;
+	struct device_node *af_np;
+	struct device_node *flash_np;
+	struct device_node *preprocessor_np;
+	struct device_node *ois_np;
+
+	BUG_ON(!dev);
+	BUG_ON(!dev->of_node);
+	BUG_ON(!module_callback);
+
+	dnode = dev->of_node;
+	pdata = kzalloc(sizeof(struct exynos_platform_fimc_is_module), GFP_KERNEL);
+	if (!pdata) {
+		probe_err("%s: no memory for platform data", __func__);
+		return -ENOMEM;
+	}
+
+	pdata->gpio_cfg = exynos_fimc_is_module_pins_cfg;
+	pdata->gpio_dbg = exynos_fimc_is_module_pins_dbg;
+
+	ret = of_property_read_u32(dnode, "id", &pdata->id);
+	if (ret) {
+		probe_err("id read is fail(%d)", ret);
+		goto p_err;
+	}
+
+	ret = of_property_read_u32(dnode, "mclk_ch", &pdata->mclk_ch);
+	if (ret) {
+		probe_err("mclk_ch read is fail(%d)", ret);
+		goto p_err;
+	}
+
+	ret = of_property_read_u32(dnode, "sensor_i2c_ch", &pdata->sensor_i2c_ch);
+	if (ret) {
+		probe_err("i2c_ch read is fail(%d)", ret);
+	}
+
+	ret = of_property_read_u32(dnode, "sensor_i2c_addr", &pdata->sensor_i2c_addr);
+	if (ret) {
+		probe_err("i2c_addr read is fail(%d)", ret);
+	}
+
+	ret = of_property_read_u32(dnode, "position", &pdata->position);
+	if (ret) {
+		probe_err("id read is fail(%d)", ret);
+		goto p_err;
+	}
+
+	af_np = of_find_node_by_name(dnode, "af");
+	if (!af_np) {
+		pdata->af_product_name = ACTUATOR_NAME_NOTHING;
+	} else {
+		parse_af_data(pdata, af_np);
+	}
+
+	flash_np = of_find_node_by_name(dnode, "flash");
+	if (!flash_np) {
+		pdata->flash_product_name = FLADRV_NAME_NOTHING;
+	} else {
+		parse_flash_data(pdata, flash_np);
+	}
+
+	preprocessor_np = of_find_node_by_name(dnode, "preprocessor");
+	if (!preprocessor_np) {
+		pdata->preprocessor_product_name = PREPROCESSOR_NAME_NOTHING;
+	} else {
+		parse_preprocessor_data(pdata, preprocessor_np);
+	}
+
+	ois_np = of_find_node_by_name(dnode, "ois");
+	if (!ois_np) {
+		pdata->ois_product_name = OIS_NAME_NOTHING;
+	} else {
+		parse_ois_data(pdata, ois_np);
+	}
+
+	ret = module_callback(dev, pdata);
+	if (ret) {
+		probe_err("sensor dt callback is fail(%d)", ret);
+		goto p_err;
+	}
+
+	pdata->pinctrl = devm_pinctrl_get(dev);
+	if (IS_ERR(pdata->pinctrl)) {
+		probe_err("devm_pinctrl_get is fail");
+		goto p_err;
+	}
+
+	ret = get_pin_lookup_state(pdata->pinctrl, pdata->pin_ctrls);
+	if (ret) {
+		probe_err("get_pin_lookup_state is fail(%d)", ret);
+		goto p_err;
+	}
+
+	dev->platform_data = pdata;
+
+	return ret;
+
+p_err:
+	kfree(pdata);
+	return ret;
+}
+
 int fimc_is_spi_parse_dt(struct fimc_is_spi *spi)
 {
 	int ret = 0;
@@ -587,21 +697,35 @@ int fimc_is_spi_parse_dt(struct fimc_is_spi *spi)
 
 	s = pinctrl_lookup_state(spi->pinctrl, "ssn_out");
 	if (IS_ERR_OR_NULL(s)) {
-		err("pinctrl_lookup_state(%s) is failed", "ssn_out");
-		ret = -EINVAL;
-		goto p_err;
+		probe_info("pinctrl_lookup_state(%s) is not found", "ssn_out");
+		spi->pin_ssn_out = NULL;
+	} else {
+		spi->pin_ssn_out = s;
 	}
-
-	spi->pin_ssn_out = s;
 
 	s = pinctrl_lookup_state(spi->pinctrl, "ssn_fn");
 	if (IS_ERR_OR_NULL(s)) {
-		err("pinctrl_lookup_state(%s) is failed", "ssn_fn");
-		ret = -EINVAL;
-		goto p_err;
+		probe_info("pinctrl_lookup_state(%s) is not found", "ssn_fn");
+		spi->pin_ssn_fn = NULL;
+	} else {
+		spi->pin_ssn_fn = s;
 	}
 
-	spi->pin_ssn_fn = s;
+	s = pinctrl_lookup_state(spi->pinctrl, "ssn_inpd");
+	if (IS_ERR_OR_NULL(s)) {
+		probe_info("pinctrl_lookup_state(%s) is not found", "ssn_inpd");
+		spi->pin_ssn_inpd = NULL;
+	} else {
+		spi->pin_ssn_inpd = s;
+	}
+
+	s = pinctrl_lookup_state(spi->pinctrl, "ssn_inpu");
+	if (IS_ERR_OR_NULL(s)) {
+		probe_info("pinctrl_lookup_state(%s) is not found", "ssn_inpu");
+		spi->pin_ssn_inpu = NULL;
+	} else {
+		spi->pin_ssn_inpu = s;
+	}
 
 	spi->parent_pinctrl = devm_pinctrl_get(spi->device->dev.parent->parent);
 

@@ -27,6 +27,10 @@
 
 #include <asm/sections.h>
 
+#ifdef CONFIG_SEC_DUMP_SUMMARY
+#include <linux/sec_debug.h>
+#endif
+
 #ifdef CONFIG_KALLSYMS_ALL
 #define all_var 1
 #else
@@ -51,6 +55,27 @@ extern const u8 kallsyms_token_table[] __weak;
 extern const u16 kallsyms_token_index[] __weak;
 
 extern const unsigned long kallsyms_markers[] __weak;
+
+#ifdef CONFIG_SEC_DUMP_SUMMARY
+void sec_debug_summary_set_kallsyms_info(struct sec_debug_summary *summary_info)
+{
+	summary_info->ksyms.addresses_pa = __pa(kallsyms_addresses);
+	summary_info->ksyms.names_pa = __pa(kallsyms_names);
+	summary_info->ksyms.num_syms = kallsyms_num_syms;
+	summary_info->ksyms.token_table_pa = __pa(kallsyms_token_table);
+	summary_info->ksyms.token_index_pa = __pa(kallsyms_token_index);
+	summary_info->ksyms.markers_pa = __pa(kallsyms_markers);
+
+	summary_info->ksyms.sect.sinittext = (uint64_t)_sinittext;
+	summary_info->ksyms.sect.einittext = (uint64_t)_einittext;
+	summary_info->ksyms.sect.stext = (uint64_t)_stext;
+	summary_info->ksyms.sect.etext = (uint64_t)_etext;
+	summary_info->ksyms.sect.end = (uint64_t)_end;
+
+	summary_info->ksyms.kallsyms_all = all_var;
+	summary_info->ksyms.magic = SEC_DEBUG_SUMMARY_MAGIC1;
+}
+#endif
 
 static inline int is_kernel_inittext(unsigned long addr)
 {

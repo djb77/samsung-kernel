@@ -5,6 +5,9 @@
  * Author: Dongrak Shin <dongrak.shin@samsung.com>
  *
 */
+
+ /* usb notify layer v2.0 */
+
 #define pr_fmt(fmt) "usb_notify: " fmt
 
 #include <linux/module.h>
@@ -14,8 +17,43 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/err.h>
+#include <linux/usb.h>
 #include <linux/usb_notify.h>
+#include <linux/string.h>
 #include "usb_notify_sysfs.h"
+
+const char USB_HW_Param_Print[USB_CCIC_HW_PARAM_MAX][MAX_HWPARAM_STRING] =
+{
+	{"CC_WATER"},
+	{"CC_DRY"},
+	{"CC_I2C"},
+	{"CC_OVC"},
+	{"CC_OTG"},
+	{"CC_DP"},
+	{"CC_VR"},
+	{"H_SUPER"},
+	{"H_HIGH"},
+	{"H_FULL"},
+	{"H_LOW"},
+	{"C_SUPER"},
+	{"C_HIGH"},
+	{"H_AUDIO"},
+	{"H_COMM"},
+	{"H_HID"},
+	{"H_PHYSIC"},
+	{"H_IMAGE"},
+	{"H_PRINTER"},
+	{"H_STORAGE"},
+	{"H_HUB"},
+	{"H_CDC"},
+	{"H_CSCID"},
+	{"H_CONTENT"},
+	{"H_VIDEO"},
+	{"H_WIRE"},
+	{"H_MISC"},
+	{"H_APP"},
+	{"H_VENDOR"},
+};
 
 struct notify_data {
 	struct class *usb_notify_class;
@@ -23,6 +61,13 @@ struct notify_data {
 };
 
 static struct notify_data usb_notify_data;
+
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+int get_ccic_water_count(void);
+int get_ccic_dry_count(void);
+int get_usb310_count(void);
+int get_usb210_count(void);
+#endif
 
 static int is_valid_cmd(char *cur_cmd, char *prev_cmd)
 {
@@ -86,16 +131,16 @@ static int is_valid_cmd(char *cur_cmd, char *prev_cmd)
 		goto invalid;
 	}
 host:
-	pr_err("%s cmd=%s is accepted.\n", __func__, cur_cmd);
+	pr_info("%s cmd=%s is accepted.\n", __func__, cur_cmd);
 	return NOTIFY_BLOCK_TYPE_HOST;
 client:
-	pr_err("%s cmd=%s is accepted.\n", __func__, cur_cmd);
+	pr_info("%s cmd=%s is accepted.\n", __func__, cur_cmd);
 	return NOTIFY_BLOCK_TYPE_CLIENT;
 all:
-	pr_err("%s cmd=%s is accepted.\n", __func__, cur_cmd);
+	pr_info("%s cmd=%s is accepted.\n", __func__, cur_cmd);
 	return NOTIFY_BLOCK_TYPE_ALL;
 off:
-	pr_err("%s cmd=%s is accepted.\n", __func__, cur_cmd);
+	pr_info("%s cmd=%s is accepted.\n", __func__, cur_cmd);
 	return NOTIFY_BLOCK_TYPE_NONE;
 ignore:
 	pr_err("%s cmd=%s is ignored but saved.\n", __func__, cur_cmd);
@@ -103,6 +148,37 @@ ignore:
 invalid:
 	pr_err("%s cmd=%s is invalid.\n", __func__, cur_cmd);
 	return -EINVAL;
+}
+
+static unsigned long long int strtoull(char *ptr, char **end, int base)
+{
+	unsigned long long ret = 0;
+
+	if (base > 36)
+		goto out;
+
+	while (*ptr) {
+		int digit;
+
+		if (*ptr >= '0' && *ptr <= '9' && *ptr < '0' + base)
+			digit = *ptr - '0';
+		else if (*ptr >= 'A' && *ptr < 'A' + base - 10)
+			digit = *ptr - 'A' + 10;
+		else if (*ptr >= 'a' && *ptr < 'a' + base - 10)
+			digit = *ptr - 'a' + 10;
+		else
+			break;
+
+		ret *= base;
+		ret += digit;
+		ptr++;
+	}
+
+out:
+	if (end)
+		*end = (char *)ptr;
+
+	return ret;
 }
 
 static ssize_t disable_show(struct device *dev, struct device_attribute *attr,
@@ -123,7 +199,7 @@ static ssize_t disable_store(
 		dev_get_drvdata(dev);
 
 	char *disable;
-	int size_ret, param = -EINVAL;
+	int sret, param = -EINVAL;
 	size_t ret = -ENOMEM;
 
 	if (size > MAX_DISABLE_STR_LEN) {
@@ -135,7 +211,9 @@ static ssize_t disable_store(
 	if (!disable)
 		goto error;
 
-	size_ret = sscanf(buf, "%s", disable);
+	sret = sscanf(buf, "%s", disable);
+	if (sret != 1)
+		goto error1;
 
 	if (udev->set_disable) {
 		param = is_valid_cmd(disable, udev->disable_state_cmd);
@@ -144,23 +222,152 @@ static ssize_t disable_store(
 		} else {
 			if (param != -EEXIST)
 				udev->set_disable(udev, param);
-			memset(udev->disable_state_cmd, 0,
-				sizeof(udev->disable_state_cmd));
 			strncpy(udev->disable_state_cmd,
-				disable, strlen(disable));
+				disable, sizeof(udev->disable_state_cmd)-1);
 			ret = size;
 		}
 	} else
 		pr_err("set_disable func is NULL\n");
+error1:
 	kfree(disable);
 error:
 	return ret;
 }
 
+static ssize_t support_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct usb_notify_dev *udev = (struct usb_notify_dev *)
+		dev_get_drvdata(dev);
+	struct otg_notify *n = udev->o_notify;
+	char *support;
+
+	if (n->unsupport_host || !IS_ENABLED(CONFIG_USB_HOST_NOTIFY))
+		support = "CLIENT";
+	else
+		support = "ALL";
+
+	pr_info("read support %s\n", support);
+	return snprintf(buf,  sizeof(support)+1, "%s\n", support);
+}
+
+static ssize_t otg_speed_show(struct device *dev, 
+	struct device_attribute *attr, char *buf)
+{
+	struct usb_notify_dev *udev = (struct usb_notify_dev *)
+		dev_get_drvdata(dev);
+	struct otg_notify *n = udev->o_notify;
+	char *speed;
+
+	switch(n->speed)
+	{
+		case USB_SPEED_SUPER:
+			speed = "SUPER";
+		break;
+		case USB_SPEED_HIGH:
+			speed = "HIGH";
+		break;
+		case USB_SPEED_FULL:
+			speed = "FULL";
+		break;
+		case USB_SPEED_LOW:
+			speed = "LOW";
+		break;
+		default:
+			speed = "UNKNOWN";
+		break;
+	}
+	pr_info("%s : read otg speed %s\n", __func__, speed);
+	return snprintf(buf,  sizeof(speed)+1, "%s\n", speed);
+}
+
+static ssize_t usb_hw_param_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct usb_notify_dev *udev = (struct usb_notify_dev *)
+		dev_get_drvdata(dev);
+	struct otg_notify *n = udev->o_notify;
+	int index, ret = 0;
+
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+	n->hw_param[USB_CCIC_WATER_INT_COUNT] += get_ccic_water_count();
+	n->hw_param[USB_CCIC_DRY_INT_COUNT] += get_ccic_dry_count();
+	n->hw_param[USB_CLIENT_SUPER_SPEED_COUNT] += get_usb310_count();
+	n->hw_param[USB_CLIENT_HIGH_SPEED_COUNT] += get_usb210_count();
+#endif
+	for (index = 0; index < USB_CCIC_HW_PARAM_MAX-1; index++) {
+		ret += sprintf(buf + ret, "%llu ", n->hw_param[index]);
+	}
+	ret += sprintf(buf + ret, "%llu\n", n->hw_param[index]);
+	pr_info("%s - ret : %d\n", __func__, ret);
+
+	return ret;
+}
+
+static ssize_t usb_hw_param_store(
+		struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct usb_notify_dev *udev = (struct usb_notify_dev *)
+		dev_get_drvdata(dev);
+	struct otg_notify *n = udev->o_notify;
+
+	int index = 0;
+	size_t ret = -ENOMEM;
+	char *token, *str = (char*)buf;
+
+	if (size > MAX_HWPARAM_STR_LEN) {
+		pr_err("%s size(%zu) is too long.\n", __func__, size);
+		goto error;
+	}
+
+	if (size < USB_CCIC_HW_PARAM_MAX) {
+		pr_err("%s efs file is not created correctly.\n", __func__);
+		goto error;
+	}
+
+	for (index = 0; index < USB_CCIC_HW_PARAM_MAX; index++) {
+		token = strsep(&str, " ");
+		n->hw_param[index] += strtoull(token, NULL, 10);
+		pr_info("%s - hw_param[%d] : %llu\n",
+			__func__, index, n->hw_param[index]);
+	}
+	ret = size;
+error:
+	return ret;
+}
+
+static ssize_t hw_param_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct usb_notify_dev *udev = (struct usb_notify_dev *)
+		dev_get_drvdata(dev);
+	struct otg_notify *n = udev->o_notify;
+	int index, ret = 0;
+
+	for (index = 0; index < USB_CCIC_HW_PARAM_MAX-1; index++) {
+		ret += sprintf(buf + ret, "\"%s\":\"%llu\",",
+			USB_HW_Param_Print[index], n->hw_param[index]);
+	}
+	ret += sprintf(buf + ret, "\"%s\":\"%llu\"\n",
+			USB_HW_Param_Print[index], n->hw_param[index]);
+	pr_info("%s - ret : %d\n", __func__, ret);
+
+	return ret;
+}
+
 static DEVICE_ATTR(disable, 0664, disable_show, disable_store);
+static DEVICE_ATTR(support, 0444, support_show, NULL);
+static DEVICE_ATTR(otg_speed, 0444, otg_speed_show, NULL);
+static DEVICE_ATTR(usb_hw_param, 0664, usb_hw_param_show, usb_hw_param_store);
+static DEVICE_ATTR(hw_param, 0444, hw_param_show, NULL);
 
 static struct attribute *usb_notify_attrs[] = {
 	&dev_attr_disable.attr,
+	&dev_attr_support.attr,
+	&dev_attr_otg_speed.attr,
+	&dev_attr_usb_hw_param.attr,
+	&dev_attr_hw_param.attr,
 	NULL,
 };
 
@@ -199,7 +406,7 @@ int usb_notify_dev_register(struct usb_notify_dev *udev)
 
 	udev->disable_state = 0;
 	strncpy(udev->disable_state_cmd, "OFF",
-		sizeof(udev->disable_state_cmd)-1);
+			sizeof(udev->disable_state_cmd)-1);
 	ret = sysfs_create_group(&udev->dev->kobj, &usb_notify_attr_grp);
 	if (ret < 0) {
 		device_destroy(usb_notify_data.usb_notify_class,

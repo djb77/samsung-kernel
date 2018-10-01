@@ -245,5 +245,7 @@ void samsung_exynos_cal_usb3phy_disable_dp_pullup(
 		struct exynos_usbphy_info *usbphy_info);
 void samsung_exynos_cal_usb3phy_write_register(
 		struct exynos_usbphy_info *usbphy_info, u32 offset, u32 value);
+void samsung_exynos_cal_usb3phy_late_enable(
+		struct exynos_usbphy_info *usbphy_info);
 
 #endif

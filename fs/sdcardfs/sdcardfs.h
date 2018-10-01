@@ -212,6 +212,12 @@ struct sdcardfs_dentry_info {
 #ifdef CONFIG_SDP
 	int under_knox;
 	int userid;
+#define PERMISSION_PRE_ROOT 		0
+#define PERMISSION_ROOT 		1
+#define PERMISSION_ANDROID 		2
+#define PERMISSION_UNDER_ANDROID 	3
+	int permission;
+	appid_t appid;	
 #endif	
 };
 

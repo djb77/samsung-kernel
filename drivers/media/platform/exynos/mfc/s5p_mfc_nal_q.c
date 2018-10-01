@@ -937,7 +937,7 @@ void s5p_mfc_nal_q_flush_DecoderOutputStr(struct s5p_mfc_dev *dev, DecoderOutput
 	MFC_WRITEL(pStr->DecodeNalSize, S5P_FIMV_D_DECODED_NAL_SIZE);			// 0xF664
 	MFC_WRITEL(pStr->UsedDpbFlagUpper, S5P_FIMV_D_USED_DPB_FLAG_UPPER);		// 0xF720
 	MFC_WRITEL(pStr->UsedDpbFlagLower, S5P_FIMV_D_USED_DPB_FLAG_LOWER);		// 0xF724
-	MFC_WRITEL(pStr->FramePackSeiAvail, S5P_FIMV_D_FRAME_PACK_SEI_AVAIL);		// 0xF6DC
+	MFC_WRITEL(pStr->FramePackSeiAvail, S5P_FIMV_D_SEI_AVAIL);			// 0xF6DC
 	MFC_WRITEL(pStr->FramePackArrgmentId, S5P_FIMV_D_FRAME_PACK_ARRGMENT_ID);	// 0xF6E0
 	MFC_WRITEL(pStr->FramePackSeiInfo, S5P_FIMV_D_FRAME_PACK_SEI_INFO);		// 0xF6E4
 	MFC_WRITEL(pStr->FramePackGridPos, S5P_FIMV_D_FRAME_PACK_GRID_POS);		// 0xF6E8

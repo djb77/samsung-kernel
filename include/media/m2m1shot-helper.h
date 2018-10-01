@@ -43,6 +43,14 @@ int m2m1shot_dma_addr_map(struct device *dev,
 void m2m1shot_dma_addr_unmap(struct device *dev,
 			struct m2m1shot_buffer_dma *buf, int plane_idx);
 
+void m2m1shot_sync_for_device(struct device *dev,
+			      struct m2m1shot_buffer_plane_dma *plane,
+			      enum dma_data_direction dir);
+
+void m2m1shot_sync_for_cpu(struct device *dev,
+			   struct m2m1shot_buffer_plane_dma *plane,
+			   enum dma_data_direction dir);
+
 static inline dma_addr_t m2m1shot_dma_address(
 			struct m2m1shot_buffer_plane_dma *plane)
 {

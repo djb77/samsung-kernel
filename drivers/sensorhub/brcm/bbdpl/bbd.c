@@ -133,10 +133,18 @@ static struct bbd_device bbd;
  */
 static unsigned char bbd_patch[] =
 {
-#if defined (CONFIG_SENSORS_SSP_LUCKY)
-#include "bbd_patch_file_lucky.h"
-#elif defined (CONFIG_SENSORS_SSP_VLTE)
-#include "bbd_patch_file_valley.h"
+#if defined (CONFIG_SENSORS_SSP_GRACE)
+	#if ANDROID_VERSION < 70000
+	#include "m_os/bbd_patch_file_grace.h"	
+	#else
+	#include "n_os/bbd_patch_file_grace.h"
+	#endif
+#elif defined (CONFIG_SENSORS_SSP_LUCKY)
+	#if ANDROID_VERSION < 70000
+	#include "m_os/bbd_patch_file_lucky.h"
+	#else
+	#include "n_os/bbd_patch_file_lucky.h"
+	#endif
 #endif
 };
 
@@ -633,7 +641,9 @@ static ssize_t bbd_common_write(struct file *filp, const char __user *buf, size_
 	unsigned int minor = iminor(filp->f_path.dentry->d_inode);
 	//struct bbd_device *bbd = filp->private_data;
 
-	BUG_ON(size >= BBD_BUFF_SIZE);
+	//BUG_ON(size >= BBD_BUFF_SIZE);
+	 if (size >= BBD_BUFF_SIZE)
+	 	return -EINVAL;
 		
 	WARN_ON(copy_from_user(bbd.priv[minor].write_buf, buf, size));
 
@@ -679,25 +689,36 @@ static unsigned int bbd_common_poll(struct file *filp, poll_table *wait)
  * @buf: contains sensor packet coming from gpsd/lhd
  *
  */
+
+static struct timespec bbd_sensor_time;
 ssize_t bbd_sensor_write(const char *buf, size_t size)
 {
-	/* Copies into /dev/bbd_shmd. If SHMD was sleeping in poll_wait, bbd_on_read() wakes it up also */
-	bbd_on_read(BBD_MINOR_SHMD, buf, size);
+	bbd_sensor_time = ktime_to_timespec(ktime_get_boottime());
 
 #ifdef DEBUG_1HZ_STAT
 	bbd_update_stat(STAT_RX_SSP, size);
 #endif	
 	/* OK. Now call pre-registered SHMD callbacks */
 	if (bbd.ssp_cb->on_packet) 
-		bbd.ssp_cb->on_packet(bbd.ssp_priv, bbd.priv[BBD_MINOR_SHMD].write_buf, size);
-	else if (bbd.ssp_cb->on_packet_alarm)
+		bbd.ssp_cb->on_packet(bbd.ssp_priv, buf, size);
+	else if (bbd.ssp_cb->on_packet_alarm) {
+/* Copies into /dev/bbd_shmd. If SHMD was sleeping in poll_wait, bbd_on_read() wakes it up also */
+		bbd_on_read(BBD_MINOR_SHMD, buf, size);
 		bbd.ssp_cb->on_packet_alarm(bbd.ssp_priv);
-	else
+	} else
 		pr_err("%s no SSP on_packet callback registered. "
 				"Dropped %u bytes\n", __func__, (unsigned int)size);
 
 	return size;
 }
+
+s64 get_sensor_time_delta_us(void)
+{
+	struct timespec curr_ts = ktime_to_timespec(ktime_get_boottime());
+	struct timespec delta = timespec_sub(curr_ts, bbd_sensor_time);
+	return timespec_to_ns(&delta)/NSEC_PER_USEC;
+}
+
 
 /**
  * bbd_control_write - Write function for BBD control (/dev/bbd_control)

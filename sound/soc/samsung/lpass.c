@@ -109,6 +109,19 @@
 #define AUD_KFC_FREQ_NORM	(0)
 #define AUD_MIF_FREQ_NORM	(0)
 #define AUD_INT_FREQ_NORM	(0)
+#elif defined(CONFIG_SOC_EXYNOS8890)
+#define AUD_CPU_FREQ_UHQA	(0)
+#define AUD_KFC_FREQ_UHQA	(1040000)
+#define AUD_MIF_FREQ_UHQA	(413000)
+#define AUD_INT_FREQ_UHQA	(0)
+#define AUD_CPU_FREQ_HIGH	(0)
+#define AUD_KFC_FREQ_HIGH	(0)
+#define AUD_MIF_FREQ_HIGH	(500000)
+#define AUD_INT_FREQ_HIGH	(0)
+#define AUD_CPU_FREQ_NORM	(0)
+#define AUD_KFC_FREQ_NORM	(0)
+#define AUD_MIF_FREQ_NORM	(0)
+#define AUD_INT_FREQ_NORM	(0)
 #else
 #define AUD_CPU_FREQ_UHQA	(1000000)
 #define AUD_KFC_FREQ_UHQA	(1300000)
@@ -127,7 +140,7 @@
 
 /* Default interrupt mask */
 #define INTR_CA5_MASK_VAL	(LPASS_INTR_SFR)
-#define INTR_CPU_MASK_VAL	(LPASS_INTR_DMA | LPASS_INTR_I2S | \
+#define INTR_CPU_MASK_VAL	(LPASS_INTR_I2S | \
 				 LPASS_INTR_PCM | LPASS_INTR_SB | \
 				 LPASS_INTR_UART | LPASS_INTR_SFR)
 #define INTR_CPU_DMA_VAL	(LPASS_INTR_DMA)
@@ -207,6 +220,26 @@ void lpass_disable_mif_status(bool on)
 {
 	u32 val = on ? 1 << 2 : 0x0;
 	writel(val, lpass.regs + LPASS_MIF_POWER);
+}
+
+void lpass_mif_power_on(void)
+{
+	unsigned int timeout = 3000;
+
+	writel(0x2, lpass.regs + LPASS_MIF_POWER);
+	do {
+		mdelay(1);
+		timeout--;
+
+		if (readl(lpass.regs + LPASS_MIF_POWER) & 0x1)
+			break;
+
+	} while (timeout);
+
+	if (!timeout) {
+		pr_err("%s : LPASS driver failed to enable MIF\n",
+			__func__);
+	}
 }
 
 void lpass_inc_dram_usage_count(void)
@@ -340,7 +373,9 @@ void lpass_set_dma_intr(bool on)
 
 void lpass_dma_enable(bool on)
 {
-	spin_lock(&lpass.lock);
+	unsigned long flags;
+
+	spin_lock_irqsave(&lpass.lock, flags);
 	if (on) {
 		atomic_inc(&lpass.dma_use_cnt);
 		if (atomic_read(&lpass.dma_use_cnt) == 1)
@@ -350,14 +385,16 @@ void lpass_dma_enable(bool on)
 		if (atomic_read(&lpass.dma_use_cnt) == 0)
 			lpass_set_dma_intr(false);
 	}
-	spin_unlock(&lpass.lock);
+	spin_unlock_irqrestore(&lpass.lock, flags);
 }
 
 void ass_reset(int ip, int op)
 {
-	spin_lock(&lpass.lock);
+	unsigned long flags;
 
-	spin_unlock(&lpass.lock);
+	spin_lock_irqsave(&lpass.lock, flags);
+
+	spin_unlock_irqrestore(&lpass.lock, flags);
 }
 
 void lpass_reset(int ip, int op)
@@ -365,13 +402,14 @@ void lpass_reset(int ip, int op)
 	u32 reg, val;
 	u32 bit = 0;
 	void __iomem *regs;
+	unsigned long flags;
 
 	if (is_old_ass()) {
 		ass_reset(ip, op);
 		return;
 	}
 
-	spin_lock(&lpass.lock);
+	spin_lock_irqsave(&lpass.lock, flags);
 	regs = lpass.regs;
 	reg = LPASS_CORE_SW_RESET;
 	switch (ip) {
@@ -407,7 +445,7 @@ void lpass_reset(int ip, int op)
 		}
 		break;
 	default:
-		spin_unlock(&lpass.lock);
+		spin_unlock_irqrestore(&lpass.lock, flags);
 		pr_err("%s: wrong ip type %d!\n", __func__, ip);
 		return;
 	}
@@ -421,13 +459,13 @@ void lpass_reset(int ip, int op)
 		val |= bit;
 		break;
 	default:
-		spin_unlock(&lpass.lock);
+		spin_unlock_irqrestore(&lpass.lock, flags);
 		pr_err("%s: wrong op type %d!\n", __func__, op);
 		return;
 	}
 
 	writel(val, regs + reg);
-	spin_unlock(&lpass.lock);
+	spin_unlock_irqrestore(&lpass.lock, flags);
 }
 
 void lpass_reset_toggle(int ip)

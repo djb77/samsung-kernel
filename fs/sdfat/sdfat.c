@@ -91,11 +91,12 @@ static int sdfat_get_block(struct inode *inode, sector_t iblock,
 				   struct buffer_head *bh_result, int create);
 
 static struct inode *sdfat_iget(struct super_block *sb, loff_t i_pos);
-static int sdfat_sync_inode(struct inode *inode);
-static struct inode *sdfat_build_inode(struct super_block *sb, FILE_ID_T *fid, loff_t i_pos);
+static struct inode *sdfat_build_inode(struct super_block *sb, const FILE_ID_T *fid, loff_t i_pos);
 static void sdfat_detach(struct inode *inode);
 static void sdfat_attach(struct inode *inode, loff_t i_pos);
 static inline unsigned long sdfat_hash(loff_t i_pos);
+static int __sdfat_write_inode(struct inode *inode, int sync);
+static int sdfat_sync_inode(struct inode *inode);
 static int sdfat_write_inode(struct inode *inode, struct writeback_control *wbc);
 static void sdfat_write_super(struct super_block *sb);
 static void sdfat_write_failed(struct address_space *mapping, loff_t to);
@@ -107,6 +108,7 @@ static void sdfat_free_namebuf(DENTRY_NAMEBUF_T* nb);
 /*************************************************************************
  * INNER FUNCTIONS FOR FUNCTIONS WHICH HAS KERNEL VERSION DEPENDENCY
  *************************************************************************/
+static void __sdfat_writepage_end_io(struct bio *bio, int err);
 static inline void __lock_super(struct super_block *sb);
 static inline void __unlock_super(struct super_block *sb);
 static int __sdfat_create(struct inode *dir, struct dentry *dentry);
@@ -132,31 +134,52 @@ static int __sdfat_cmpi(const struct dentry *parent, const struct dentry *dentry
 /*************************************************************************
  * FUNCTIONS WHICH HAS KERNEL VERSION DEPENDENCY
  *************************************************************************/
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0)
-static ssize_t sdfat_direct_IO(int rw, struct kiocb *iocb,
-		struct iov_iter *iter,
-		loff_t offset)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
+static void sdfat_writepage_end_io(struct bio *bio)
 {
-	struct file *file = iocb->ki_filp;
-	struct address_space *mapping = file->f_mapping;
-	struct inode *inode = mapping->host;
-	size_t count = iov_iter_count(iter);
+	__sdfat_writepage_end_io(bio, bio->bi_error);
+}
+#else /* LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0) */
+static void sdfat_writepage_end_io(struct bio *bio, int err)
+{
+	if (test_bit(BIO_UPTODATE, &bio->bi_flags))
+		err = 0;
+	__sdfat_writepage_end_io(bio, err);
+}
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0) */
 
-	return __sdfat_direct_IO(rw, iocb, inode, (void*)iter, offset, count);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,2,0)
+static const char *sdfat_follow_link(struct dentry *dentry, void **cookie)
+{
+	return simple_follow_link(dentry, cookie);
+}
+#else /* LINUX_VERSION_CODE >= KERNEL_VERSION(4,2,0) */
+static void *sdfat_follow_link(struct dentry *dentry, struct nameidata *nd)
+{
+	struct sdfat_inode_info *ei = SDFAT_I(dentry->d_inode);
+	nd_set_link(nd, (char *)(ei->target));
+	return NULL;
+}
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4,2,0) */
+
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0)
+static inline int sdfat_remount_syncfs(struct super_block *sb)
+{
+	sync_filesystem(sb);
+	return 0;
 }
 #else /* LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0) */
-static ssize_t sdfat_direct_IO(int rw, struct kiocb *iocb,
-	   const struct iovec *iov, loff_t offset, unsigned long nr_segs)
+static inline int sdfat_remount_syncfs(struct super_block *sb)
 {
-	struct file *file = iocb->ki_filp;
-	struct address_space *mapping = file->f_mapping;
-	struct inode *inode = mapping->host;
-	size_t count = iov_length(iov, nr_segs);
-	
-	return __sdfat_direct_IO(rw, iocb, inode, (void*)iov, offset, count);
+	/*
+	 * We don`t need to call sync_filesystem(sb),
+	 * Because VFS calls it.
+	 */
+	return 0;
 }
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0) */
-
 
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0)
@@ -415,7 +438,7 @@ get_new:
 		inum = parent_ino(filp->f_path.dentry);
 	} else {
 		loff_t i_pos = ((loff_t) SDFAT_I(inode)->fid.start_clu << 32) |
-					   ((SDFAT_I(inode)->fid.rwoffset-1) & 0xffffffff);
+			   ((SDFAT_I(inode)->fid.rwoffset-1) & 0xffffffff);
 
 		struct inode *tmp = sdfat_iget(sb, i_pos);
 		if (tmp) {
@@ -452,6 +475,16 @@ out_unlocked:
 	return err;
 }
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0) */
+
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0)
+	/* EMPTY */
+#else
+static inline struct inode *file_inode(const struct file *f)
+{
+	return f->f_dentry->d_inode;
+}
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0) */
 
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
@@ -618,9 +651,7 @@ static struct inode *sdfat_iget(struct super_block *sb, loff_t i_pos) {
 	spin_unlock(&sbi->inode_hash_lock);
 	return inode;
 }
-
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0) */
-
 
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)
@@ -674,7 +705,6 @@ static inline gid_t make_kgid(struct user_namespace *from, gid_t gid)
 	return gid;
 }
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3,5,0) */
-
 
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0)
@@ -751,7 +781,6 @@ static int sdfat_show_options(struct seq_file *m, struct vfsmount *mnt)
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0) */
 
 
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,1,0)
 #define __sdfat_generic_file_fsync(filp, start, end, datasync) \
 		generic_file_fsync(filp, start, end, datasync)
@@ -770,8 +799,55 @@ static int sdfat_file_fsync(struct file *filp, int datasync)
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3,1,0) */
 
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+static ssize_t sdfat_direct_IO(struct kiocb *iocb,
+		struct iov_iter *iter,
+		loff_t offset)
+{
+	struct file *file = iocb->ki_filp;
+	struct address_space *mapping = file->f_mapping;
+	struct inode *inode = mapping->host;
+	size_t count = iov_iter_count(iter);
+	int rw = iov_iter_rw(iter);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0)
+	return __sdfat_direct_IO(rw, iocb, inode, (void*)iter, offset, count);
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0)
+static ssize_t sdfat_direct_IO(int rw, struct kiocb *iocb,
+		struct iov_iter *iter,
+		loff_t offset)
+{
+	struct file *file = iocb->ki_filp;
+	struct address_space *mapping = file->f_mapping;
+	struct inode *inode = mapping->host;
+	size_t count = iov_iter_count(iter);
+
+	return __sdfat_direct_IO(rw, iocb, inode, (void*)iter, offset, count);
+}
+#else
+static ssize_t sdfat_direct_IO(int rw, struct kiocb *iocb,
+	   const struct iovec *iov, loff_t offset, unsigned long nr_segs)
+{
+	struct file *file = iocb->ki_filp;
+	struct address_space *mapping = file->f_mapping;
+	struct inode *inode = mapping->host;
+	size_t count = iov_length(iov, nr_segs);
+
+	return __sdfat_direct_IO(rw, iocb, inode, (void*)iov, offset, count);
+}
+#endif
+
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+static inline ssize_t __sdfat_blkdev_direct_IO(int unused, struct kiocb *iocb,
+		struct inode *inode, void *iov_u, loff_t offset,
+		unsigned long nr_segs)
+{
+	struct iov_iter *iter = (struct iov_iter *)iov_u;
+	return blockdev_direct_IO(iocb, inode, iter,
+					offset, sdfat_get_block);
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0)
 static inline ssize_t __sdfat_blkdev_direct_IO(int rw, struct kiocb *iocb,
 		struct inode *inode, void *iov_u, loff_t offset,
 		unsigned long nr_segs)
@@ -856,6 +932,10 @@ static inline void __unlock_super(struct super_block *sb)
 /*************************************************************************
  * NORMAL FUNCTIONS
  *************************************************************************/
+static inline loff_t sdfat_make_i_pos(FILE_ID_T *fid)
+{
+	return ((loff_t) fid->dir.dir << 32) | (fid->entry & 0xffffffff);
+}
 
 /*======================================================================*/
 /*  Directory Entry Name Buffer Operations                              */
@@ -891,6 +971,32 @@ static void sdfat_free_namebuf(DENTRY_NAMEBUF_T* nb)
 /*======================================================================*/
 /*  Directory Entry Operations                                          */
 /*======================================================================*/
+#define SDFAT_DSTATE_LOCKED	(void *)(0xCAFE2016)
+#define SDFAT_DSTATE_UNLOCKED	(void *)(0x00000000)
+
+static inline void __lock_d_revalidate(struct dentry *dentry)
+{
+	spin_lock(&dentry->d_lock);
+	dentry->d_fsdata = SDFAT_DSTATE_LOCKED;
+	spin_unlock(&dentry->d_lock);
+}
+
+static inline void __unlock_d_revalidate(struct dentry *dentry)
+{
+	spin_lock(&dentry->d_lock);
+	dentry->d_fsdata = SDFAT_DSTATE_UNLOCKED;
+	spin_unlock(&dentry->d_lock);
+}
+
+/* __check_dstate_locked requires dentry->d_lock */
+static inline int __check_dstate_locked(struct dentry *dentry)
+{
+	if (dentry->d_fsdata == SDFAT_DSTATE_LOCKED)
+		return 1;
+
+	return 0;
+}
+
 /*
  * If new entry was created in the parent, it could create the 8.3
  * alias (the shortname of logname).  So, the parent may have the
@@ -901,21 +1007,14 @@ static void sdfat_free_namebuf(DENTRY_NAMEBUF_T* nb)
  */
 static int __sdfat_revalidate_common(struct dentry *dentry)
 {
-	/* FIXME :
-	 * There was some problems related to dentry.
-	 * So, we need to review below codes.
-	 * Before that, we alway invalidate negative dentry.
-	 */
-
-	/*
-	   int ret = 1;
-	   spin_lock(&dentry->d_lock);
-	   if (dentry->d_time != dentry->d_parent->d_inode->i_version)
-	   ret = 0;
-	   spin_unlock(&dentry->d_lock);
-	   return ret;
-	 */
-	return 0;
+	int ret = 1;
+	spin_lock(&dentry->d_lock);
+	if (!__check_dstate_locked(dentry) &&
+		(dentry->d_time != dentry->d_parent->d_inode->i_version)) {
+		ret = 0;
+	}
+	spin_unlock(&dentry->d_lock);
+	return ret;
 }
 
 static int __sdfat_revalidate(struct dentry *dentry)
@@ -1765,7 +1864,6 @@ static void __free_dfr_mem_if_required(struct super_block *sb)
 }
 
 
-
 static int sdfat_file_mmap( struct file *file, struct vm_area_struct *vm_struct)
 {
 	__cancel_dfr_work(file->f_mapping->host,
@@ -1939,7 +2037,7 @@ static int sdfat_dbg_ioctl(struct inode *inode, struct file *filp,
 
 static long sdfat_generic_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = file_inode(filp);
 	int err;
 
 	if (cmd == SDFAT_IOCTL_GET_VOLUME_ID)
@@ -1954,14 +2052,73 @@ static long sdfat_generic_ioctl(struct file *filp, unsigned int cmd, unsigned lo
 }
 
 
+static void __sdfat_writepage_end_io(struct bio *bio, int err)
+{
+	struct page *page = bio->bi_io_vec->bv_page;
+	struct super_block *sb = page->mapping->host->i_sb;
+
+	ASSERT(bio->bi_vcnt == 1); /* Single page endio */
+	ASSERT(bio->bi_rw & 1); /* Write */
+
+	if (err){
+		SetPageError(page);
+		mapping_set_error(page->mapping, err);
+	}
+
+	__dfr_writepage_end_io(page);
+
+#ifdef CONFIG_SDFAT_TRACE_IO
+	{
+		//struct sdfat_sb_info *sbi = SDFAT_SB(bio->bi_bdev->bd_super);
+		struct sdfat_sb_info *sbi = SDFAT_SB(sb);
+
+		sbi->stat_n_pages_written++;
+		if (page->mapping->host == sb->s_bdev->bd_inode)
+			sbi->stat_n_bdev_pages_written++;
+
+		/* 4 MB = 1024 pages => 0.4 sec (approx.)
+		   32 KB =  64 pages => 0.025 sec
+		   Min. average latency b/w msgs. ~= 0.025 sec */
+		if ((sbi->stat_n_pages_written & 63) == 0) {
+			DMSG("STAT:%u, %u, %u, %u (Sector #: %u)\n",
+			sbi->stat_n_pages_added, sbi->stat_n_pages_written,
+			sbi->stat_n_bdev_pages_witten,
+			sbi->stat_n_pages_confused,
+			(unsigned int)__sdfat_bio_sector(bio));
+		}
+	}
+#endif
+	end_page_writeback(page);
+	bio_put(bio);
+
+	// Update trace info.
+	atomic_dec(&SDFAT_SB(sb)->stat_n_pages_queued);
+}
+
+static int __support_write_inode_sync(struct super_block *sb)
+{
+#ifdef CONFIG_SDFAT_SUPPORT_DIR_SYNC
+#ifdef CONFIG_SDFAT_DELAYED_META_DIRTY
+	struct sdfat_sb_info *sbi = SDFAT_SB(sb);
+	if (sbi->fsi.vol_type != EXFAT)
+		return 0;
+#endif
+	return 1;
+#endif
+	return 0;
+}
+
+
 static int __sdfat_file_fsync(struct file *filp, loff_t start, loff_t end, int datasync)
 {
 	struct inode *inode = filp->f_mapping->host;
 	struct super_block *sb = inode->i_sb;
-	int res, err;
+	int res, err = 0;
 
 	res = __sdfat_generic_file_fsync(filp, start, end, datasync);
-	err = fsapi_sync_fs(sb, 1);
+
+	if(!__support_write_inode_sync(sb))
+		err = fsapi_sync_fs(sb, 1);
 
 	return res ? res : err;
 }
@@ -1997,7 +2154,9 @@ static int __sdfat_create(struct inode *dir, struct dentry *dentry)
 	err = fsapi_create(dir, (u8 *) dentry->d_name.name, FM_REGULAR, &fid);
 	if (err)
 		goto out;
-	
+
+	__lock_d_revalidate(dentry);
+
 	dir->i_version++;
 	dir->i_ctime = dir->i_mtime = dir->i_atime = ts;
 	if (IS_DIRSYNC(dir))
@@ -2005,8 +2164,7 @@ static int __sdfat_create(struct inode *dir, struct dentry *dentry)
 	else
 		mark_inode_dirty(dir);
 
-	i_pos = ((loff_t) fid.dir.dir << 32) | (fid.entry & 0xffffffff);
-
+	i_pos = sdfat_make_i_pos(&fid);
 	inode = sdfat_build_inode(sb, &fid, i_pos);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
@@ -2016,10 +2174,9 @@ static int __sdfat_create(struct inode *dir, struct dentry *dentry)
 	inode->i_mtime = inode->i_atime = inode->i_ctime = ts;
 	/* timestamp is already written, so mark_inode_dirty() is unneeded. */
 
-	dentry->d_time = dentry->d_parent->d_inode->i_version;
 	d_instantiate(dentry, inode);
-
 out:
+	__unlock_d_revalidate(dentry);
 	__unlock_super(sb);
 	TMSG("%s exited with err(%d)\n", __func__, err);
 	return err;
@@ -2067,7 +2224,7 @@ static struct dentry* __sdfat_lookup(struct inode *dir, struct dentry *dentry)
 		goto error;
 	}
 
-	i_pos = ((loff_t) fid.dir.dir << 32) | (fid.entry & 0xffffffff);
+	i_pos = sdfat_make_i_pos(&fid);
 	inode = sdfat_build_inode(sb, &fid, i_pos);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
@@ -2086,7 +2243,20 @@ static struct dentry* __sdfat_lookup(struct inode *dir, struct dentry *dentry)
 	}
 
 	alias = d_find_alias(inode);
-	if (alias && !sdfat_d_anon_disconn(alias)) {
+
+	/*
+	 * Checking "alias->d_parent == dentry->d_parent" to make sure
+	 * FS is not corrupted (especially double linked dir).
+	 */
+	if (alias && alias->d_parent == dentry->d_parent &&
+	    !sdfat_d_anon_disconn(alias)) {
+		/*
+		 * This inode has non anonymous-DCACHE_DISCONNECTED
+		 * dentry. This means, the user did ->lookup() by an
+		 * another name (longname vs 8.3 alias of it) in past.
+		 *
+		 * Switch to new one for reason of locality if possible.
+		 */
 		BUG_ON(d_unhashed(alias));
 		if (!S_ISDIR(i_mode))
 			d_move(alias, dentry);
@@ -2098,16 +2268,14 @@ static struct dentry* __sdfat_lookup(struct inode *dir, struct dentry *dentry)
 		dput(alias);
 	}
 out:
+	/* initialize d_time even though it is positive dentry */
+	dentry->d_time = dir->i_version;
 	__unlock_super(sb);
 
-	dentry->d_time = dentry->d_parent->d_inode->i_version;
 	dentry = d_splice_alias(inode, dentry);
-	if (dentry)
-		dentry->d_time = dentry->d_parent->d_inode->i_version;
 
 	TMSG("%s exited\n", __func__);
 	return dentry;
-
 error:
 	__unlock_super(sb);
 	TMSG("%s exited with err(%d)\n", __func__, err);
@@ -2136,6 +2304,8 @@ static int sdfat_unlink(struct inode *dir, struct dentry *dentry)
 	if (err)
 		goto out;
 
+	__lock_d_revalidate(dentry);
+
 	dir->i_version++;
 	dir->i_mtime = dir->i_atime = ts;
 	if (IS_DIRSYNC(dir))
@@ -2146,8 +2316,9 @@ static int sdfat_unlink(struct inode *dir, struct dentry *dentry)
 	clear_nlink(inode);
 	inode->i_mtime = inode->i_atime = ts;
 	sdfat_detach(inode);
-
+	dentry->d_time = dir->i_version;
 out:
+	__unlock_d_revalidate(dentry);
 	__unlock_super(sb);
 	TMSG("%s exited with err(%d)\n", __func__, err);
 	return err;
@@ -2185,6 +2356,8 @@ static int sdfat_symlink(struct inode *dir, struct dentry *dentry, const char *t
 		goto out;
 	}
 
+	__lock_d_revalidate(dentry);
+
 	dir->i_version++;
 	dir->i_ctime = dir->i_mtime = dir->i_atime = ts;
 	if (IS_DIRSYNC(dir))
@@ -2192,8 +2365,7 @@ static int sdfat_symlink(struct inode *dir, struct dentry *dentry, const char *t
 	else
 		mark_inode_dirty(dir);
 
-	i_pos = ((loff_t) fid.dir.dir << 32) | (fid.entry & 0xffffffff);
-
+	i_pos = sdfat_make_i_pos(&fid);
 	inode = sdfat_build_inode(sb, &fid, i_pos);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
@@ -2210,10 +2382,9 @@ static int sdfat_symlink(struct inode *dir, struct dentry *dentry, const char *t
 	}
 	memcpy(SDFAT_I(inode)->target, target, len+1);
 
-	dentry->d_time = dentry->d_parent->d_inode->i_version;
 	d_instantiate(dentry, inode);
-
 out:
+	__unlock_d_revalidate(dentry);
 	__unlock_super(sb);
 	TMSG("%s exited with err(%d)\n", __func__, err);
 	return err;
@@ -2239,6 +2410,8 @@ static int __sdfat_mkdir(struct inode *dir, struct dentry *dentry)
 	if (err)
 		goto out;
 
+	__lock_d_revalidate(dentry);
+
 	dir->i_version++;
 	dir->i_ctime = dir->i_mtime = dir->i_atime = ts;
 	if (IS_DIRSYNC(dir))
@@ -2247,8 +2420,7 @@ static int __sdfat_mkdir(struct inode *dir, struct dentry *dentry)
 		mark_inode_dirty(dir);
 	inc_nlink(dir);
 
-	i_pos = ((loff_t) fid.dir.dir << 32) | (fid.entry & 0xffffffff);
-
+	i_pos = sdfat_make_i_pos(&fid);
 	inode = sdfat_build_inode(sb, &fid, i_pos);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
@@ -2258,10 +2430,10 @@ static int __sdfat_mkdir(struct inode *dir, struct dentry *dentry)
 	inode->i_mtime = inode->i_atime = inode->i_ctime = ts;
 	/* timestamp is already written, so mark_inode_dirty() is unneeded. */
 
-	dentry->d_time = dentry->d_parent->d_inode->i_version;
 	d_instantiate(dentry, inode);
 
 out:
+	__unlock_d_revalidate(dentry);
 	__unlock_super(sb);
 	TMSG("%s exited with err(%d)\n", __func__, err);
 	return err;
@@ -2286,7 +2458,9 @@ static int sdfat_rmdir(struct inode *dir, struct dentry *dentry)
 	err = fsapi_rmdir(dir, &(SDFAT_I(inode)->fid));
 	if (err)
 		goto out;
-	
+
+	__lock_d_revalidate(dentry);
+
 	dir->i_version++;
 	dir->i_mtime = dir->i_atime = ts;
 	if (IS_DIRSYNC(dir))
@@ -2298,7 +2472,9 @@ static int sdfat_rmdir(struct inode *dir, struct dentry *dentry)
 	clear_nlink(inode);
 	inode->i_mtime = inode->i_atime = ts;
 	sdfat_detach(inode);
+	dentry->d_time = dir->i_version;
 out:
+	__unlock_d_revalidate(dentry);
 	__unlock_super(sb);
 	TMSG("%s exited with err(%d)\n", __func__, err);
 	return err;
@@ -2329,7 +2505,10 @@ static int sdfat_rename(struct inode *old_dir, struct dentry *old_dentry,
 	err = fsapi_rename(old_dir, &(SDFAT_I(old_inode)->fid), new_dir, new_dentry);
 	if (err)
 		goto out;
-	
+
+	__lock_d_revalidate(old_dentry);
+	__lock_d_revalidate(new_dentry);
+
 	new_dir->i_version++;
 	new_dir->i_ctime = new_dir->i_mtime = new_dir->i_atime = ts;
 	if (IS_DIRSYNC(new_dir))
@@ -2337,9 +2516,7 @@ static int sdfat_rename(struct inode *old_dir, struct dentry *old_dentry,
 	else
 		mark_inode_dirty(new_dir);
 
-	i_pos = ((loff_t) SDFAT_I(old_inode)->fid.dir.dir << 32) |
-			(SDFAT_I(old_inode)->fid.entry & 0xffffffff);
-
+	i_pos = sdfat_make_i_pos(&(SDFAT_I(old_inode)->fid));
 	sdfat_detach(old_inode);
 	sdfat_attach(old_inode, i_pos);
 	if (IS_DIRSYNC(new_dir))
@@ -2361,9 +2538,17 @@ static int sdfat_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	if (new_inode) {
 		sdfat_detach(new_inode);
-		drop_nlink(new_inode);
-		if (S_ISDIR(new_inode->i_mode))
+
+		/* skip drop_nlink if new_inode already has been dropped */
+		if (new_inode->i_nlink) {
 			drop_nlink(new_inode);
+			if (S_ISDIR(new_inode->i_mode))
+				drop_nlink(new_inode);
+		} else {
+			EMSG("%s : abnormal access to an inode dropped\n",
+				__func__);
+			WARN_ON(new_inode->i_nlink == 0);
+		}
 		new_inode->i_ctime = ts;
 #if 0
 		(void) sdfat_sync_inode(new_inode);
@@ -2371,6 +2556,8 @@ static int sdfat_rename(struct inode *old_dir, struct dentry *old_dentry,
 	}
 
 out:
+	__unlock_d_revalidate(old_dentry);
+	__unlock_d_revalidate(new_dentry);
 	__unlock_super(sb);
 	TMSG("%s exited with err(%d)\n", __func__, err);
 	return err;
@@ -2554,14 +2741,6 @@ static const struct inode_operations sdfat_dir_inode_operations = {
 /*======================================================================*/
 /*  File Operations                                                     */
 /*======================================================================*/
-
-static void *sdfat_follow_link(struct dentry *dentry, struct nameidata *nd)
-{
-	struct sdfat_inode_info *ei = SDFAT_I(dentry->d_inode);
-	nd_set_link(nd, (char *)(ei->target));
-	return NULL;
-}
-
 static const struct inode_operations sdfat_symlink_inode_operations = {
 	.readlink    = generic_readlink,
 	.follow_link = sdfat_follow_link,
@@ -2577,8 +2756,8 @@ static int sdfat_file_release(struct inode *inode, struct file *filp)
 {
 	struct super_block *sb = inode->i_sb;
 
-	/* patch 1.2.3 :
-	 * Moved below code from sdfat_write_inode TO FIX size-mismatch problem.
+	/* Moved below code from sdfat_write_inode
+	 * TO FIX size-mismatch problem.
 	 */
 	/* FIXME : Added bug_on to confirm that there is no size mismatch */
 	sdfat_debug_bug_on(SDFAT_I(inode)->fid.size != i_size_read(inode));
@@ -2589,16 +2768,19 @@ static int sdfat_file_release(struct inode *inode, struct file *filp)
 
 static const struct file_operations sdfat_file_operations = {
 	.llseek      = generic_file_llseek,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,16,0)
-	.read        = do_sync_read,
-	.write       = do_sync_write,
-	.aio_read    = generic_file_aio_read,
-	.aio_write   = generic_file_aio_write,
-#else
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+	.read_iter   = generic_file_read_iter,
+	.write_iter  = generic_file_write_iter,
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0)
 	.read        = new_sync_read,
 	.write       = new_sync_write,
 	.read_iter   = generic_file_read_iter,
 	.write_iter  = generic_file_write_iter,
+#else
+	.read        = do_sync_read,
+	.write       = do_sync_write,
+	.aio_read    = generic_file_aio_read,
+	.aio_write   = generic_file_aio_write,
 #endif
 	.mmap        = sdfat_file_mmap,
 	.release     = sdfat_file_release,
@@ -2635,7 +2817,8 @@ static void sdfat_truncate(struct inode *inode, loff_t old_size)
 	__cancel_dfr_work(inode, (loff_t)i_size_read(inode), (loff_t)old_size, __func__);
 
 	err = fsapi_truncate(inode, old_size, i_size_read(inode));
-	if (err) goto out;
+	if (err)
+		goto out;
 
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME_SEC;
 	if (IS_DIRSYNC(inode))
@@ -2938,10 +3121,10 @@ static int sdfat_da_prep_block(struct inode *inode, sector_t iblock,
 
 	/* FOR GRACEFUL ERROR HANDLING */
 	if (i_size_read(inode) > SDFAT_I(inode)->i_size_aligned) {
-		sdfat_debug_bug_on(1);
 		sdfat_fs_error_ratelimit(sb, "%s: invalid size (inode(%p), "
 			"size(%llu) > aligned(%llu)\n", __func__, inode, 
 			i_size_read(inode), SDFAT_I(inode)->i_size_aligned);
+		sdfat_debug_bug_on(1);
 	}
 
 	bh_result->b_size = max_blocks << sb->s_blocksize_bits;
@@ -3013,8 +3196,8 @@ static int sdfat_get_block(struct inode *inode, sector_t iblock,
 				 */
 				if (buffer_delay(bh_result) && 
 					(pos > SDFAT_I(inode)->i_size_aligned)) {
-					sdfat_debug_bug_on(1);
 					sdfat_fs_error(sb, "requested for bmap out of range(pos:(%llu)>i_size_aligned(%llu)\n", pos, SDFAT_I(inode)->i_size_aligned);
+					sdfat_debug_bug_on(1);
 					err = -EIO;
 					goto unlock_ret;
 				}
@@ -3071,50 +3254,6 @@ static int sdfat_readpages(struct file *file, struct address_space *mapping,
 	int ret;
 	ret =  mpage_readpages(mapping, pages, nr_pages, sdfat_get_block);
 	return ret;
-}
-
-static void sdfat_writepage_end_io(struct bio *bio, int err)
-{
-	const int uptodate = test_bit(BIO_UPTODATE, &bio->bi_flags);
-	struct page *page = bio->bi_io_vec->bv_page;
-	struct super_block *sb = page->mapping->host->i_sb;
-	
-	ASSERT(bio->bi_vcnt == 1); /* Single page endio */
-	ASSERT(bio->bi_rw & 1); /* Write */
-
-	if (!uptodate){
-		SetPageError(page);
-		set_bit(AS_EIO, &page->mapping->flags);
-	}
-
-	__dfr_writepage_end_io(page);
-
-#ifdef CONFIG_SDFAT_TRACE_IO
-	{
-		//struct sdfat_sb_info *sbi = SDFAT_SB(bio->bi_bdev->bd_super);		
-		struct sdfat_sb_info *sbi = SDFAT_SB(sb);
-
-		sbi->stat_n_pages_written++;
-		if (page->mapping->host == sb->s_bdev->bd_inode)
-			sbi->stat_n_bdev_pages_written++;
-	
-		/* 4 MB = 1024 pages => 0.4 sec (approx.)
-		   32 KB =  64 pages => 0.025 sec 
-		   Min. average latency b/w msgs. ~= 0.025 sec */
-		if ((sbi->stat_n_pages_written & 63) == 0) {
-			DMSG("STAT:%u, %u, %u, %u (Sector #: %u)\n",
-			sbi->stat_n_pages_added, sbi->stat_n_pages_written,
-			sbi->stat_n_bdev_pages_written, 
-			sbi->stat_n_pages_confused,
-			(unsigned int)__sdfat_bio_sector(bio));
-		}
-	}
-#endif
-	end_page_writeback(page);
-	bio_put(bio);
-
-	// Update trace info.
-	atomic_dec(&SDFAT_SB(sb)->stat_n_pages_queued);
 }
 
 static inline void sdfat_submit_fullpage_bio(struct block_device *bdev, sector_t sector, unsigned int length, struct page *page)
@@ -3391,10 +3530,10 @@ static int sdfat_write_end(struct file *file, struct address_space *mapping,
 
 	/* FOR GRACEFUL ERROR HANDLING */
 	if (SDFAT_I(inode)->i_size_aligned < i_size_read(inode)) {
-		sdfat_debug_bug_on(1);
 		sdfat_fs_error(inode->i_sb, "invalid size(size(%llu) "
 			"> aligned(%llu)\n", SDFAT_I(inode)->i_size_aligned, 
 			i_size_read(inode));
+		sdfat_debug_bug_on(1);
 	}
 
 	if (err < len)
@@ -3496,7 +3635,7 @@ static void sdfat_detach(struct inode *inode)
 
 
 /* doesn't deal with root inode */
-static int sdfat_fill_inode(struct inode *inode, FILE_ID_T *fid)
+static int sdfat_fill_inode(struct inode *inode, const FILE_ID_T *fid)
 {
 	struct sdfat_sb_info *sbi = SDFAT_SB(inode->i_sb);
 	FS_INFO_T *fsi = &(sbi->fsi);
@@ -3569,7 +3708,7 @@ static int sdfat_fill_inode(struct inode *inode, FILE_ID_T *fid)
 }
 
 static struct inode *sdfat_build_inode(struct super_block *sb,
-					   FILE_ID_T *fid, loff_t i_pos) {
+				   const FILE_ID_T *fid, loff_t i_pos) {
 	struct inode *inode;
 	int err;
 
@@ -3593,11 +3732,6 @@ static struct inode *sdfat_build_inode(struct super_block *sb,
 	insert_inode_hash(inode);
 out:
 	return inode;
-}
-
-static int sdfat_sync_inode(struct inode *inode)
-{
-	return sdfat_write_inode(inode, NULL);
 }
 
 static struct inode *sdfat_alloc_inode(struct super_block *sb) {
@@ -3624,9 +3758,7 @@ static void sdfat_destroy_inode(struct inode *inode)
 	kmem_cache_free(sdfat_inode_cachep, SDFAT_I(inode));
 }
 
-
-
-static int sdfat_write_inode(struct inode *inode, struct writeback_control *wbc)
+static int __sdfat_write_inode(struct inode *inode, int sync)
 {
 	struct super_block *sb = inode->i_sb;
 	struct sdfat_sb_info *sbi = SDFAT_SB(sb);
@@ -3642,8 +3774,21 @@ static int sdfat_write_inode(struct inode *inode, struct writeback_control *wbc)
 	sdfat_time_unix2fat(sbi, &inode->i_ctime, &info.CreateTimestamp);
 	sdfat_time_unix2fat(sbi, &inode->i_atime, &info.AccessTimestamp);
 
+	if (!__support_write_inode_sync(sb))
+		sync = 0;
+
 	/* FIXME : Do we need handling error? */
-	return fsapi_write_inode(inode, &info);
+	return fsapi_write_inode(inode, &info, sync);
+}
+
+static int sdfat_sync_inode(struct inode *inode)
+{
+	return __sdfat_write_inode(inode, 1);
+}
+
+static int sdfat_write_inode(struct inode *inode, struct writeback_control *wbc)
+{
+	return __sdfat_write_inode(inode, wbc->sync_mode == WB_SYNC_ALL);
 }
 
 static void sdfat_evict_inode(struct inode *inode)
@@ -3669,6 +3814,7 @@ static void sdfat_evict_inode(struct inode *inode)
 
 	invalidate_inode_buffers(inode);
 	clear_inode(inode);
+	fsapi_invalidate_extent(inode);
 	sdfat_detach(inode);
 
 	/* after end of this function, caller will remove inode hash */
@@ -3884,23 +4030,13 @@ static int sdfat_remount(struct super_block *sb, int *flags, char *data)
 	char *orig_data = kstrdup(data, GFP_KERNEL);
 	*flags |= MS_NODIRATIME;
 
+	sdfat_remount_syncfs(sb);
+
+	fsapi_set_vol_flags(sb, VOL_CLEAN, 1);
+
 	sdfat_log_msg(sb, KERN_INFO, "re-mounted. Opts: %s", orig_data);
 	kfree(orig_data);	
 	return 0;
-}
-
-static const char *get_vol_type_str(u32 type)
-{
-	if (type == EXFAT)
-		return "exfat";
-        else if (type == FAT32)
-		return "vfat:32";
-	else if (type == FAT16)
-		return "vfat:16";
-	else if (type == FAT12)
-		return "vfat:12";
-
-	return "unknown";
 }
 
 static int __sdfat_show_options(struct seq_file *m, struct super_block *sb)
@@ -3910,7 +4046,7 @@ static int __sdfat_show_options(struct seq_file *m, struct super_block *sb)
 	FS_INFO_T *fsi = &(sbi->fsi);
 
 	/* Show partition info */
-	seq_printf(m, ",fs=%s", get_vol_type_str(fsi->vol_type));
+	seq_printf(m, ",fs=%s", sdfat_get_vol_type_str(fsi->vol_type));
 	if (fsi->prev_eio)
 		seq_printf(m, ",eio=0x%x", fsi->prev_eio);
 	if (!uid_eq(opts->fs_uid, GLOBAL_ROOT_UID))
@@ -4010,7 +4146,7 @@ static const struct sysfs_ops sdfat_attr_ops = {
 static ssize_t type_show(struct sdfat_sb_info *sbi, char *buf)
 {
         FS_INFO_T *fsi = &(sbi->fsi);
-	return snprintf(buf, PAGE_SIZE, "%s\n", get_vol_type_str(fsi->vol_type));
+	return snprintf(buf, PAGE_SIZE, "%s\n", sdfat_get_vol_type_str(fsi->vol_type));
 }
 SDFAT_ATTR(type, 0444, type_show, NULL);
 
@@ -4349,6 +4485,15 @@ out:
 			sdfat_iocharset_with_utf8);
 	}
 
+	if (opts->discard) {
+		struct request_queue *q = bdev_get_queue(sb->s_bdev);
+		if (!blk_queue_discard(q))
+			sdfat_msg(sb, KERN_WARNING,
+				"mounting with \"discard\" option, but "
+				"the device does not support discard");
+		opts->discard = 0;
+	}
+
 	return 0;
 }
 
@@ -4379,7 +4524,10 @@ static int sdfat_read_root(struct inode *inode)
 	SDFAT_I(inode)->fid.flags = 0x01;
 	SDFAT_I(inode)->fid.type = TYPE_DIR;
 	SDFAT_I(inode)->fid.rwoffset = 0;
-	SDFAT_I(inode)->fid.hint_last_off = -1;
+	SDFAT_I(inode)->fid.hint_bmap.off = -1;
+
+	SDFAT_I(inode)->fid.hint_stat.eidx = 0;
+	SDFAT_I(inode)->fid.hint_stat.clu = fsi->root_dir;
 
 	SDFAT_I(inode)->target = NULL;
 
@@ -4594,7 +4742,7 @@ static int __init sdfat_init_inodecache(void)
 	return 0;
 }
 
-static void __exit sdfat_destroy_inodecache(void)
+static void sdfat_destroy_inodecache(void)
 {
 	kmem_cache_destroy(sdfat_inode_cachep);
 }
@@ -4638,7 +4786,7 @@ static int __init init_sdfat_fs(void)
 {
 	int err;
 
-	printk(KERN_INFO "[SDFAT] Filesystem version %s\n", SDFAT_VERSION);
+	sdfat_log_version();
 	err = fsapi_init();
 	if (err)
 		goto error;
@@ -4676,6 +4824,8 @@ error:
 		kset_unregister(sdfat_kset);
 		sdfat_kset = NULL;
 	}
+
+	sdfat_destroy_inodecache();
 
 	printk(KERN_ERR "[SDFAT] failed to initialize FS driver "
 			"(err:%d)\n", err);

@@ -30,6 +30,9 @@
 #include <linux/v4l2-mediabus.h>
 #include <linux/bug.h>
 #include <linux/i2c.h>
+#if defined(CONFIG_SECURE_CAMERA_USE)
+#include <linux/smc.h>
+#endif
 
 #include "fimc-is-core.h"
 #include "fimc-is-cmd.h"
@@ -39,13 +42,15 @@
 #include "fimc-is-video.h"
 #include "fimc-is-dt.h"
 #include "fimc-is-debug.h"
+#include "fimc-is-dvfs.h"
 
 #include "fimc-is-device-sensor.h"
 #include "fimc-is-interface-wrap.h"
 
-struct pm_qos_request exynos_sensor_qos_int;
-struct pm_qos_request exynos_sensor_qos_cam;
-struct pm_qos_request exynos_sensor_qos_mem;
+extern struct pm_qos_request exynos_isp_qos_int;
+extern struct pm_qos_request exynos_isp_qos_cam;
+extern struct pm_qos_request exynos_isp_qos_mem;
+extern struct pm_qos_request exynos_isp_qos_hpg;
 
 int fimc_is_sensor_runtime_suspend(struct device *dev);
 int fimc_is_sensor_runtime_resume(struct device *dev);
@@ -730,6 +735,11 @@ static void fimc_is_sensor_dtp(unsigned long data)
 	}
 
 	framemgr = GET_FRAMEMGR(vctx);
+	if (unlikely(!framemgr)) {
+		merr("framemgr is null", device);
+		return;
+	}
+
 	framemgr_e_barrier_irqs(framemgr, FMGR_IDX_1, flags);
 
 	for (i = 0; i < framemgr->num_frames; i++) {
@@ -885,12 +895,14 @@ int fimc_is_sensor_tag(struct fimc_is_device_sensor *device,
 	BUG_ON(!frame);
 
 	hashkey = frame->fcount % FIMC_IS_TIMESTAMP_HASH_KEY;
-	frame->shot->dm.request.frameCount = frame->fcount;
-	frame->shot->dm.sensor.timeStamp = device->timestamp[hashkey];
-	frame->shot->udm.sensor.timeStampBoot = device->timestampboot[hashkey];
+	if (frame->shot) {
+		frame->shot->dm.request.frameCount = frame->fcount;
+		frame->shot->dm.sensor.timeStamp = device->timestamp[hashkey];
+		frame->shot->udm.sensor.timeStampBoot = device->timestampboot[hashkey];
 #ifdef DBG_JITTER
-	fimc_is_jitter(frame->shot->dm.sensor.timeStamp);
+		fimc_is_jitter(frame->shot->dm.sensor.timeStamp);
 #endif
+	}
 
 	return ret;
 }
@@ -952,6 +964,11 @@ static int fimc_is_sensor_notify_by_fstr(struct fimc_is_device_sensor *device, v
 
 	device->fcount = *(u32 *)arg;
 	framemgr = GET_FRAMEMGR(device->vctx);
+	if (unlikely(!framemgr)) {
+		merr("framemgr is null", device);
+		ret = -EINVAL;
+		goto p_err;
+	}
 
 	if (device->instant_cnt) {
 		device->instant_cnt--;
@@ -1014,6 +1031,7 @@ static int fimc_is_sensor_notify_by_fstr(struct fimc_is_device_sensor *device, v
 		break;
 	}
 
+p_err:
 	return ret;
 }
 
@@ -1382,6 +1400,9 @@ int fimc_is_sensor_open(struct fimc_is_device_sensor *device,
 	clear_bit(FIMC_IS_SENSOR_FRONT_DTP_STOP, &device->state);
 	clear_bit(FIMC_IS_SENSOR_BACK_START, &device->state);
 	set_bit(FIMC_IS_SENSOR_BACK_NOWAIT_STOP, &device->state);
+#ifdef CONFIG_SECURE_CAMERA_USE
+	device->smc_state = FIMC_IS_SENSOR_SMC_INIT;
+#endif
 
 	device->vctx = vctx;
 	device->fcount = 0;
@@ -1568,6 +1589,19 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 	else
 		set_bit(FIMC_IS_SENSOR_DRIVING, &device->state);
 
+#if defined(CONFIG_SECURE_CAMERA_USE)
+	if (device->pdata->scenario == SENSOR_SCENARIO_SECURE) {
+		ret = exynos_smc(MC_SECURE_CAMERA_PREPARE, 0, 0, 0);
+		if(ret != 0) {
+			merr("[SMC] MC_SECURE_CAMERA_PREPARE fail(%d)\n", device, ret);
+		} else {
+			minfo("[SMC] Call MC_SECURE_CAMERA_PREPARE ret(%d) / smc_state(%d->%d)\n",
+						device, ret, device->smc_state, FIMC_IS_SENSOR_SMC_PREPARE);
+			device->smc_state = FIMC_IS_SENSOR_SMC_PREPARE;
+		}
+	}
+#endif
+
 	if (device->subdev_module) {
 		mwarn("subdev_module is already registered", device);
 		v4l2_device_unregister_subdev(device->subdev_module);
@@ -1583,8 +1617,25 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 
 #if defined(CONFIG_PM_DEVFREQ)
 	if (test_bit(FIMC_IS_SENSOR_DRIVING, &device->state)) {
-		pm_qos_add_request(&exynos_sensor_qos_cam, PM_QOS_DEVICE_THROUGHPUT, 500000);
-		pm_qos_add_request(&exynos_sensor_qos_mem, PM_QOS_BUS_THROUGHPUT, 632000);
+		int int_qos, mif_qos, cam_qos, hpg_qos;
+
+		int_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_INT, START_DVFS_LEVEL);
+		mif_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_MIF, START_DVFS_LEVEL);
+		cam_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_CAM, START_DVFS_LEVEL);
+		hpg_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_HPG, START_DVFS_LEVEL);
+
+		/* DEVFREQ lock */
+		if (int_qos > 0)
+			pm_qos_add_request(&exynos_isp_qos_int, PM_QOS_DEVICE_THROUGHPUT, int_qos);
+		if (mif_qos > 0)
+			pm_qos_add_request(&exynos_isp_qos_mem, PM_QOS_BUS_THROUGHPUT, mif_qos);
+		if (cam_qos > 0)
+			pm_qos_add_request(&exynos_isp_qos_cam, PM_QOS_CAM_THROUGHPUT, cam_qos);
+		if (hpg_qos > 0)
+			pm_qos_add_request(&exynos_isp_qos_hpg, PM_QOS_CPU_ONLINE_MIN, hpg_qos);
+
+		info("[RSC] %s: QoS LOCK [INT(%d), MIF(%d), CAM(%d), HPG(%d)]\n",
+				__func__, int_qos, mif_qos, cam_qos, hpg_qos);
 	}
 #endif
 
@@ -1626,9 +1677,26 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 
 	set_bit(FIMC_IS_SENSOR_S_INPUT, &device->state);
 
-p_err:
 	minfo("[SEN:D] %s(%d, %d):%d\n", device, __func__, input, scenario, ret);
 	return ret;
+
+p_err:
+#if defined(CONFIG_SECURE_CAMERA_USE)
+	if (device->pdata->scenario == SENSOR_SCENARIO_SECURE &&
+		device->smc_state == FIMC_IS_SENSOR_SMC_PREPARE) {
+		ret = exynos_smc(MC_SECURE_CAMERA_UNPREPARE, 0, 0, 0);
+		if(ret != 0) {
+			merr("[SMC] MC_SECURE_CAMERA_UNPREPARE fail(%d)\n", device, ret);
+		} else {
+			minfo("[SMC] Call MC_SECURE_CAMERA_UNPREPARE ret(%d) / smc_state(%d->%d)\n",
+						device, ret, device->smc_state, FIMC_IS_SENSOR_SMC_UNPREPARE);
+			device->smc_state = FIMC_IS_SENSOR_SMC_UNPREPARE;
+		}
+	}
+#endif
+
+	minfo("[SEN:D] %s(%d, %d):%d\n", device, __func__, input, scenario, ret);
+	return -EINVAL;
 }
 
 static int fimc_is_sensor_reqbufs(void *qdevice,
@@ -1930,6 +1998,76 @@ p_err:
 	return ret;
 }
 
+int fimc_is_sensor_s_again(struct fimc_is_device_sensor *device,
+	u32 gain)
+{
+	int ret = 0;
+	struct v4l2_subdev *subdev_module;
+	struct fimc_is_module_enum *module;
+
+	BUG_ON(!device);
+
+	subdev_module = device->subdev_module;
+	if (!subdev_module) {
+		err("subdev_module is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	module = v4l2_get_subdevdata(subdev_module);
+	if (!module) {
+		err("module is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	if (gain <= 0) {
+		err("it is wrong gain (%d)", gain);
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	CALL_MOPS(module, s_again, subdev_module, gain);
+
+p_err:
+	return ret;
+}
+
+int fimc_is_sensor_s_shutterspeed(struct fimc_is_device_sensor *device,
+	u32 shutterspeed)
+{
+	int ret = 0;
+	struct v4l2_subdev *subdev_module;
+	struct fimc_is_module_enum *module;
+
+	BUG_ON(!device);
+
+	subdev_module = device->subdev_module;
+	if (!subdev_module) {
+		err("subdev_module is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	module = v4l2_get_subdevdata(subdev_module);
+	if (!module) {
+		err("module is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	if (shutterspeed <= 0) {
+		err("it is wrong gain (%d)", shutterspeed);
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	CALL_MOPS(module, s_shutterspeed, subdev_module, shutterspeed);
+
+p_err:
+	return ret;
+}
+
 int fimc_is_sensor_s_fcount(struct fimc_is_device_sensor *device)
 {
 	int ret = 0;
@@ -2078,7 +2216,7 @@ p_err:
 	return binning;
 }
 
-int fimc_is_sensor_g_postion(struct fimc_is_device_sensor *device)
+int fimc_is_sensor_g_position(struct fimc_is_device_sensor *device)
 {
 	return device->position;
 }
@@ -2230,6 +2368,11 @@ int fimc_is_sensor_buffer_finish(struct fimc_is_device_sensor *device,
 	}
 
 	framemgr = GET_FRAMEMGR(device->vctx);
+	if (unlikely(!framemgr)) {
+		merr("framemgr is null", device);
+		ret = -EINVAL;
+		goto exit;
+	}
 
 	if (index >= framemgr->num_frames) {
 		err("index(%d) is invalid", index);
@@ -2242,14 +2385,16 @@ int fimc_is_sensor_buffer_finish(struct fimc_is_device_sensor *device,
 	framemgr_e_barrier_irqs(framemgr, FMGR_IDX_3, flags);
 
 	if (frame->state == FS_COMPLETE) {
-		if (!frame->shot->dm.request.frameCount)
+		if (frame->shot && !frame->shot->dm.request.frameCount)
 			err("request.frameCount is 0\n");
 		trans_frame(framemgr, frame, FS_FREE);
 
-		frame->shot_ext->free_cnt = framemgr->queued_count[FS_FREE];
-		frame->shot_ext->request_cnt = framemgr->queued_count[FS_REQUEST];
-		frame->shot_ext->process_cnt = framemgr->queued_count[FS_PROCESS];
-		frame->shot_ext->complete_cnt = framemgr->queued_count[FS_COMPLETE];
+		if (frame->shot_ext) {
+			frame->shot_ext->free_cnt = framemgr->queued_count[FS_FREE];
+			frame->shot_ext->request_cnt = framemgr->queued_count[FS_REQUEST];
+			frame->shot_ext->process_cnt = framemgr->queued_count[FS_PROCESS];
+			frame->shot_ext->complete_cnt = framemgr->queued_count[FS_COMPLETE];
+		}
 	} else {
 		err("frame(%d) is not com state(%d)", index, frame->state);
 		frame_manager_print_queues(framemgr);
@@ -2298,17 +2443,13 @@ static int fimc_is_sensor_back_start(void *qdevice,
 	}
 
 	/* if sensor is driving mode, skip finding sensor mode */
-	if (test_bit(FIMC_IS_SENSOR_DRIVING, &device->state)) {
-		device->cfg = NULL;
-	} else {
-		device->cfg = fimc_is_sensor_g_mode(device);
-		if (!device->cfg) {
-			merr("sensor cfg is invalid", device);
-			ret = -EINVAL;
-			goto p_err;
-		}
-		set_bit(FIMC_IS_SENSOR_S_CONFIG, &device->state);
+	device->cfg = fimc_is_sensor_g_mode(device);
+	if (!device->cfg) {
+		merr("sensor cfg is invalid", device);
+		ret = -EINVAL;
+		goto p_err;
 	}
+	set_bit(FIMC_IS_SENSOR_S_CONFIG, &device->state);
 
 	ret = v4l2_subdev_call(subdev_flite, video, s_stream, enable);
 	if (ret) {
@@ -2412,6 +2553,35 @@ int fimc_is_sensor_front_start(struct fimc_is_device_sensor *device,
 		goto p_err;
 	}
 
+#if defined(CONFIG_PM_DEVFREQ) && defined(ENABLE_DVFS)
+	/* for external sensor's dvfs */
+	if (test_bit(FIMC_IS_SENSOR_DRIVING, &device->state)) {
+		struct fimc_is_dvfs_ctrl *dvfs_ctrl;
+		int scenario_id;
+
+		dvfs_ctrl = &device->resourcemgr->dvfs_ctrl;
+		mutex_lock(&dvfs_ctrl->lock);
+
+		ret = fimc_is_dvfs_sel_table(device->resourcemgr);
+		if (ret) {
+			merr("fimc_is_dvfs_sel_table is fail(%d)", device, ret);
+			mutex_unlock(&dvfs_ctrl->lock); 
+			goto p_err;
+		}
+
+		/* try to find external scenario to apply */
+		scenario_id = fimc_is_dvfs_sel_external(device);
+		if (scenario_id >= 0) {
+			struct fimc_is_dvfs_scenario_ctrl *external_ctrl = dvfs_ctrl->external_ctrl;
+			minfo("[ISC:D] tbl[%d] external scenario(%d)-[%s]\n", device,
+				dvfs_ctrl->dvfs_table_idx, scenario_id,
+				external_ctrl->scenarios[external_ctrl->cur_scenario_idx].scenario_nm);
+			fimc_is_set_dvfs((struct fimc_is_core *)device->private_data, NULL, scenario_id);
+		}
+
+		mutex_unlock(&dvfs_ctrl->lock);
+	}
+#endif
 	mdbgd_sensor("%s(snesor id : %d, csi ch : %d, size : %d x %d)\n", device,
 		__func__,
 		module->sensor_id,
@@ -2430,8 +2600,23 @@ int fimc_is_sensor_front_start(struct fimc_is_device_sensor *device,
 		}
 	}
 
-p_err:
 	return ret;
+
+p_err:
+#if defined(CONFIG_SECURE_CAMERA_USE)
+	if (device->pdata->scenario == SENSOR_SCENARIO_SECURE) {
+		ret = exynos_smc(MC_SECURE_CAMERA_UNPREPARE, 0, 0, 0);
+		if(ret != 0) {
+			merr("[SMC] MC_SECURE_CAMERA_UNPREPARE fail(%d)\n", device, ret);
+		} else {
+			minfo("[SMC] Call MC_SECURE_CAMERA_UNPREPARE ret(%d) / smc_state(%d->%d)\n",
+						device, ret, device->smc_state, FIMC_IS_SENSOR_SMC_UNPREPARE);
+			device->smc_state = FIMC_IS_SENSOR_SMC_UNPREPARE;
+		}
+	}
+#endif
+
+	return -EINVAL;
 }
 
 int fimc_is_sensor_front_stop(struct fimc_is_device_sensor *device)
@@ -2455,6 +2640,19 @@ int fimc_is_sensor_front_stop(struct fimc_is_device_sensor *device)
 	ret = v4l2_subdev_call(subdev_csi, video, s_stream, IS_DISABLE_STREAM);
 	if (ret)
 		merr("v4l2_csi_call(s_stream) is fail(%d)", device, ret);
+
+#if defined(CONFIG_SECURE_CAMERA_USE)
+	if (device->pdata->scenario == SENSOR_SCENARIO_SECURE) {
+		ret = exynos_smc(MC_SECURE_CAMERA_UNPREPARE, 0, 0, 0);
+		if(ret != 0) {
+			merr("[SMC] MC_SECURE_CAMERA_UNPREPARE fail(%d)\n", device, ret);
+		} else {
+			minfo("[SMC] Call MC_SECURE_CAMERA_UNPREPARE ret(%d) / smc_state(%d->%d)\n",
+						device, ret, device->smc_state, FIMC_IS_SENSOR_SMC_UNPREPARE);
+			device->smc_state = FIMC_IS_SENSOR_SMC_UNPREPARE;
+		}
+	}
+#endif
 
 	set_bit(FIMC_IS_SENSOR_BACK_NOWAIT_STOP, &device->state);
 	clear_bit(FIMC_IS_SENSOR_FRONT_START, &device->state);
@@ -2553,8 +2751,29 @@ int fimc_is_sensor_runtime_suspend(struct device *dev)
 
 #if defined(CONFIG_PM_DEVFREQ)
 	if (test_bit(FIMC_IS_SENSOR_DRIVING, &device->state)) {
-		pm_qos_remove_request(&exynos_sensor_qos_cam);
-		pm_qos_remove_request(&exynos_sensor_qos_mem);
+		struct fimc_is_core *core = NULL;
+		int int_qos, mif_qos, cam_qos, hpg_qos;
+
+		core = device->private_data;
+		dbg_resource("[RSC] %s: QoS UNLOCK\n", __func__);
+
+		int_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_INT, START_DVFS_LEVEL);
+		mif_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_MIF, START_DVFS_LEVEL);
+		cam_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_CAM, START_DVFS_LEVEL);
+		hpg_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_HPG, START_DVFS_LEVEL);
+
+		if (int_qos > 0)
+			pm_qos_remove_request(&exynos_isp_qos_int);
+		if (mif_qos > 0)
+			pm_qos_remove_request(&exynos_isp_qos_mem);
+		if (cam_qos > 0)
+			pm_qos_remove_request(&exynos_isp_qos_cam);
+		if (hpg_qos > 0)
+			pm_qos_remove_request(&exynos_isp_qos_hpg);
+#if defined(CONFIG_HMP_VARIABLE_SCALE)
+		if (core->resourcemgr.dvfs_ctrl.cur_hmp_bst)
+			set_hmp_boost(0);
+#endif
 	}
 #endif
 
@@ -2589,6 +2808,17 @@ int fimc_is_sensor_runtime_resume(struct device *dev)
 		merr("fimc_is_sensor_runtime_resume_pre is fail(%d)", device, ret);
 		goto p_err;
 	}
+
+#if defined(CONFIG_SECURE_CAMERA_USE)
+	ret = exynos_smc(MC_SECURE_CAMERA_CFW_ENABLE, 0, 0, 0);
+	if(ret != 0) {
+		merr("[SMC] MC_SECURE_CAMERA_CFW_ENABLE fail(%d)\n", device, ret);
+	} else {
+		minfo("[SMC] Call MC_SECURE_CAMERA_CFW_ENABLE ret(%d) / smc_state(%d->%d)\n",
+				device, ret, device->smc_state, FIMC_IS_SENSOR_SMC_CFW_ENABLE);
+		device->smc_state = FIMC_IS_SENSOR_SMC_CFW_ENABLE;
+	}
+#endif
 
 	ret = v4l2_subdev_call(subdev_csi, core, s_power, 1);
 	if (ret) {

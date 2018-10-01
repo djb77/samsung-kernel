@@ -95,6 +95,9 @@ config EXYNOS_SNAPSHOT_HOOK_LOGGER
 config EXYNOS_SNAPSHOT_PSTORE
 	bool "Enable supporting ramoops driver for pstore filesystem"
 	depends on EXYNOS_SNAPSHOT
+	depends on ANDROID_MAJOR_VERSION != "m"
+	depends on ANDROID_MAJOR_VERSION != "l"
+	depends on ANDROID_MAJOR_VERSION != "k"
 	select PSTORE
 	select PSTORE_RAM
 	select PSTORE_PMSG

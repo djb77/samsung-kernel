@@ -30,11 +30,6 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 
-#if defined(CONFIG_CHARGER_MAX77854) && defined(CONFIG_FUELGAUGE_MAX77854)
-#include <linux/battery/sec_charger.h>
-#include <linux/battery/sec_fuelgauge.h>
-#endif
-
 #define MFD_DEV_NAME "max77854"
 #define M2SH(m) ((m) & 0x0F ? ((m) & 0x03 ? ((m) & 0x01 ? 0 : 1) : ((m) & 0x04 ? 2 : 3)) : \
 		((m) & 0x30 ? ((m) & 0x10 ? 4 : 5) : ((m) & 0x40 ? 6 : 7)))
@@ -49,6 +44,12 @@ struct max77854_haptic_pdata {
 	char *regulator_name;
 	unsigned int pwm_id;
 	unsigned int model;
+
+	/* for multi-frequency */
+	int multi_frequency;
+	int freq_num;
+	u32 *multi_freq_duty;
+	u32 *multi_freq_period;
 };
 #endif
 
@@ -64,11 +65,6 @@ struct max77854_platform_data {
 	int irq_gpio;
 	bool wakeup;
 	struct muic_platform_data *muic_pdata;
-
-#if defined(CONFIG_CHARGER_MAX77854) && defined(CONFIG_FUELGAUGE_MAX77854)
-	sec_battery_platform_data_t *charger_data;
-	sec_fuelgauge_platform_data_t *fuelgauge_data;
-#endif
 
 	int num_regulators;
 	struct max77854_regulator_data *regulators;

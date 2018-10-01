@@ -18,8 +18,8 @@
 int dsim_backlight_probe(struct dsim_device *dsim);
 int dsim_panel_set_brightness(struct dsim_device *dsim, int force);
 int dsim_panel_set_brightness_for_hmt(struct dsim_device *dsim, int force);
-int get_panel_acl_on( int p_br, int weakness_hbm_comp );
-int dsim_panel_set_acl_step(struct dsim_device *dsim, int old_level, int new_level, int step, int pos );
+int get_acutal_br_index(struct dsim_device *dsim, int br);
+unsigned int get_actual_br_value(struct dsim_device *dsim, int index);
 
 #endif
 

@@ -109,6 +109,28 @@ config SENSORS_SSP_YAS537
 	  To compile this driver as a module, choose M here: the
 	  module will be called ssp.
 
+config SENSORS_SSP_YAS539
+	tristate "Sensors ssp yas539"
+	default n
+	depends on SPI
+	help
+	  yas539 file for factory test in ssp driver.
+          If you say yes here you get yas539 support for
+	  factory test.
+	  To compile this driver as a module, choose M here: the
+	  module will be called ssp.
+
+config SENSORS_SSP_MAGNETIC_COMMON
+	tristate "Sensors ssp magnetic common"
+	default n
+	depends on SPI
+	help
+	  magnetic file for factory test in ssp driver.
+          If you say yes here you get magnetic common support for
+	  factory test.
+	  To compile this driver as a module, choose M here: the
+	  module will be called ssp.
+
 config SENSORS_SSP_CM3320
 	tristate "Sensors ssp cm3320"
 	default n
@@ -205,6 +227,33 @@ config SENSORS_SSP_MOBEAM
 	  To compile this driver as a module, choose M here: the
 	  module will be called ssp.
 
+config SENSORS_SSP_IRLED
+	tristate "Sensors ssp irled"
+	default n
+	depends on I2C
+	help
+	  mobeam file for ssp driver.
+          If you say yes here you get irled support using TMD4903.
+	  To compile this driver as a module, choose M here: the
+	  module will be called ssp.
+
+config SENSORS_HRMSENSOR
+	tristate "HRM Sensor Driver Common"
+	default n
+	depends on I2C
+	help
+	  If you say yes here you get support for the HRM sensor.
+	  This driver can also be built as a module.  If so, the module
+	  will be called hrmsensor.
+
+config SENSORS_HRM_ADPD143
+	tristate "HRM Sensor Driver ADPD143"
+	default n
+	depends on SENSORS_HRMSENSOR
+	help
+	  If you say yes here you get support for the HRM sensor.
+	  This driver should be set with SENSORS_HRMSENSOR.
+
 config SENSORS_MAX86900
 	tristate "MAXIM MAX86900 HRM Sensor"
 	default n
@@ -264,6 +313,13 @@ config SENSORS_SSP_TMD4905
 	help
 	  This option enables tmd4905 proxitmity sensor.
 
+config SENSORS_SSP_TMD4904
+	tristate "Sensors ssp tmd4904"
+	default n
+	depends on SPI
+	help
+	  This option enables tmd4904 proxitmity sensor.
+
 config SENSORS_SSP_TMD4903
 	tristate "Sensors ssp tmd4903"
 	default n
@@ -286,6 +342,13 @@ config SENSORS_SSP_TMG399x
 	  To compile this driver as a module, choose M here: the
 	  module will be called ssp.
 
+config SENSORS_SSP_PROX_SETTING
+	tristate "Sensors ssp prox setting"
+	default n
+	depends on SPI
+	help
+	   If you say yes here you get support for the proximity setting.
+
 config SENSORS_SSP_PROX_AUTOCAL_AMS
 	tristate "Sensors ssp proxautocal ams"
 	default n
@@ -307,6 +370,20 @@ config SENSORS_SSP_PROX_FACTORYCAL
 	  factory test.
 	  To compile this driver as a module, choose M here: the
 	  module will be called ssp.
+
+config SENSORS_SSP_LIGHT_REPORT_LUX
+	tristate "Sensors ssp light sensor reporting lux"
+	default y if ANDROID_MAJOR_VERSION = "n"
+	depends on SPI
+	help
+	  If you want to report lux, it should be set.
+
+config SENSORS_SSP_LIGHT_COLORID
+	tristate "Sensors ssp light sensor change coef by color id"
+	default n
+	depends on SPI
+	help
+	  If you want to change coef by colorid, it should be set.
 
 config SENSORS_SSP_IRDATA_FOR_CAMERA
 	tristate "Sensors ssp irdata for camera"
@@ -404,6 +481,24 @@ config SENSORS_CAN
 	  Say Y here if you accept HERO CAN Grip sensor
 	  Say N here if you do not access HERO CAN Grip Sensor
 
+config SENSORS_SX9320
+	depends on I2C
+	tristate "SX9320 driver"
+	default n
+	help
+	  Say Y here if you use sx9320.
+	  This option enables grip sensors using
+	  SemTech sx9320 device driver.
+	  Say N here if you do not use sx9320.
+
+config SENSORS_SX9320_NORMAL_TOUCH_THRESHOLD
+	int "SX9320 Grip sensor threshold for normal touch"
+	depends on SENSORS_SX9320
+	default "221"
+	help
+	  This value is the standard of normal touch using
+	  SemTech sx9320 device driver.
+
 config SENSORS_SSP_INTERRUPT_GYRO_SENSOR
          tristate "Sensors ssp interrpt gyro"
          default n
@@ -418,17 +513,6 @@ config SENSORS_SSP_HIFI_BATCHING
          help
          	If you want to use hifi batching, it should be set.
          	
-config SENSORS_SSP_VLTE
-	tristate "V Proejct"
-	default n
-	depends on SPI
-	help
-	  Binary file for ssp driver.
-          If you say yes here you get V project support for
-       	  factory test.
- 	  To compile this driver as a module, choose M here: the
- 	  module will be called ssp.
-
 config SENSORS_SSP_NOBLELTE
 	tristate "NOBLE Proejct"
 	default n
@@ -458,6 +542,28 @@ config SENSORS_SSP_LUCKY
 	help
 	  Binary file for ssp driver.
           If you say yes here you get LUCKY project support for
+       	  factory test.
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called ssp.
+
+config SENSORS_SSP_GRACE
+	tristate "GRACE Proejct"
+	default n
+	depends on SPI
+	help
+	  Binary file for ssp driver.
+          If you say yes here you get GRACE project support for
+       	  factory test.
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called ssp.
+	  
+config SENSORS_SSP_HAECHI
+	tristate "HAECHI Proejct"
+	default n
+	depends on SPI
+	help
+	  Binary file for ssp driver.
+          If you say yes here you get GRACE project support for
        	  factory test.
  	  To compile this driver as a module, choose M here: the
  	  module will be called ssp.

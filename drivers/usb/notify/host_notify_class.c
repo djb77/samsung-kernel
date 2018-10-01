@@ -6,6 +6,8 @@
  *
 */
 
+ /* usb notify layer v2.0 */
+
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/init.h>
@@ -57,21 +59,25 @@ static ssize_t mode_store(
 
 	char *mode;
 	size_t ret = -ENOMEM;
+	int sret = 0;
 
 	mode = kzalloc(size+1, GFP_KERNEL);
 	if (!mode)
 		goto error;
 
-	sscanf(buf, "%s", mode);
+	sret = sscanf(buf, "%s", mode);
+	if (sret != 1)
+		goto error1;
 
 	if (ndev->set_mode) {
+		pr_info("host_notify: set mode %s\n", mode);
 		if (!strncmp(mode, "HOST", 4))
 			ndev->set_mode(NOTIFY_SET_ON);
 		else if (!strncmp(mode, "NONE", 4))
 			ndev->set_mode(NOTIFY_SET_OFF);
-		pr_info("host_notify: set mode %s\n", mode);
 	}
 	ret = size;
+error1:
 	kfree(mode);
 error:
 	return ret;
@@ -107,14 +113,18 @@ static ssize_t booster_store(
 
 	char *booster;
 	size_t ret = -ENOMEM;
+	int sret = 0;
 
 	booster = kzalloc(size+1, GFP_KERNEL);
 	if (!booster)
 		goto error;
 
-	sscanf(buf, "%s", booster);
+	sret = sscanf(buf, "%s", booster);
+	if (sret != 1)
+		goto error1;
 
 	if (ndev->set_booster) {
+		pr_info("host_notify: set booster %s\n", booster);
 		if (!strncmp(booster, "ON", 2)) {
 			ndev->set_booster(NOTIFY_SET_ON);
 			ndev->mode = NOTIFY_TEST_MODE;
@@ -122,9 +132,9 @@ static ssize_t booster_store(
 			ndev->set_booster(NOTIFY_SET_OFF);
 			ndev->mode = NOTIFY_NONE_MODE;
 		}
-		pr_info("host_notify: set booster %s\n", booster);
 	}
 	ret = size;
+error1:
 	kfree(booster);
 error:
 	return ret;

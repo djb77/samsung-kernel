@@ -190,6 +190,20 @@ static int s2mpb02_led_setup(struct s2mpb02_led_data *led_data)
 				S2MPB02_REG_FLED_CTRL2, 0x04, S2MPB02_TORCH_MASK);
 	}
 
+#ifdef CONFIG_LEDS_IRIS_IRLED_SUPPORT
+	/* Remote-mode off, Power-LED Mode on, GPIO Polarity */
+	ret |= s2mpb02_write_reg(led_data->i2c, S2MPB02_REG_FLED_CTRL2, 0x38);
+
+	/* set current - 1050mA */
+	ret |= s2mpb02_write_reg(led_data->i2c, S2MPB02_REG_FLED_CUR2, 0xAF);
+
+	/* set 0x18, 0x19, 0x1A, 0x1B */
+	ret |= s2mpb02_write_reg(led_data->i2c, S2MPB02_REG_FLED_IRON1, 0x19);
+	ret |= s2mpb02_write_reg(led_data->i2c, S2MPB02_REG_FLED_IRON2, 0x0B);
+	ret |= s2mpb02_write_reg(led_data->i2c, S2MPB02_REG_FLED_IRD1, 0x00);
+	ret |= s2mpb02_write_reg(led_data->i2c, S2MPB02_REG_FLED_IRD2, 0x2C);
+#endif
+
 	return ret;
 }
 
@@ -300,11 +314,196 @@ ssize_t s2mpb02_show(struct device *dev,
 	return sprintf(buf, "%d\n", S2MPB02_TORCH_OUT_I_MAX - 1);
 }
 
+#ifdef CONFIG_LEDS_IRIS_IRLED_CERTIFICATE_SUPPORT
+ssize_t s2mpb02_irled_torch_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	int value = 0;
+	u8 ledvalue = 0;
+	int ret = 0;
+
+	if ((buf == NULL) || kstrtouint(buf, 10, &value)) {
+		return -1;
+	}
+
+	if(global_led_datas[0] == NULL) {
+		pr_err("<%s> global_led_datas[S2MPB02_TORCH_LED_1] is NULL\n", __func__);
+		return -1;
+	}
+
+	pr_info("%s , value:%d\n", __func__, value);
+	if (value == 1) {
+		pr_info("%s IRLED TORCH ON\n", __func__);
+		/* FLED_TIME2.IR_MAX_TIMER_EN Disable */
+		ret |= s2mpb02_update_reg(global_led_datas[0]->i2c,
+				S2MPB02_REG_FLED_TIME2,
+				S2MPB02_FLED_TIME2_IRMAX_TIMER_DISABLE,
+				S2MPB02_FLED_TIME2_IRMAX_TIMER_EN_MASK);
+
+		/* Remote-mode off, TORCH MODE */
+		ret |= s2mpb02_update_reg(global_led_datas[0]->i2c,
+				S2MPB02_REG_FLED_CTRL2,
+				S2MPB02_FLED_CTRL2_TORCH_ON,
+				S2MPB02_FLED_CTRL2_TORCH_MASK);
+		ret |= s2mpb02_update_reg(global_led_datas[0]->i2c,
+				S2MPB02_REG_FLED_CUR2, 0x0E, S2MPB02_FLED_CUR2_TORCH_CUR2_MASK);
+	} else if (value == 0) {
+		pr_info("%s IRLED TORCH OFF\n", __func__);
+		/* Remote-mode off, Power-LED Mode on, GPIO Polarity */
+		ret |= s2mpb02_update_reg(global_led_datas[0]->i2c,
+				S2MPB02_REG_FLED_CTRL2,
+				S2MPB02_FLED_CTRL2_FLASH_ON,
+				S2MPB02_FLED_CTRL2_TORCH_MASK);
+	} else {
+		pr_err("%s value(%d) is invalid!!\n", __func__, value);
+		return -1;
+	}
+	ret |= s2mpb02_read_reg(global_led_datas[0]->i2c, S2MPB02_REG_FLED_CTRL2, &ledvalue);
+	pr_info("[LED]%s , ledvalue:%x\n", __func__, ledvalue);
+
+	return count;
+}
+
+ssize_t s2mpb02_irled_torch_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct s2mpb02_led_data *led_data;
+	int ret = 0;
+	u8 value[10] = {0, };
+
+	if(global_led_datas[0] == NULL) {
+		pr_err("<%s> global_led_datas[S2MPB02_TORCH_LED_1] is NULL\n", __func__);
+		return -1;
+	}
+        led_data = global_led_datas[0];
+
+	ret = s2mpb02_read_reg(led_data->i2c, S2MPB02_REG_FLED_CTRL1, &value[0]); //Fled_ctrl1
+	ret |= s2mpb02_read_reg(led_data->i2c, S2MPB02_REG_FLED_CTRL2, &value[1]); //Fled_ctrl2
+	ret |= s2mpb02_read_reg(led_data->i2c, S2MPB02_REG_FLED_CUR1, &value[2]); //Fled_cur1
+	ret |= s2mpb02_read_reg(led_data->i2c, S2MPB02_REG_FLED_TIME1, &value[3]); //Fled_time1
+	ret |= s2mpb02_read_reg(led_data->i2c, S2MPB02_REG_FLED_CUR2, &value[4]); //Fled_cur2
+	ret |= s2mpb02_read_reg(led_data->i2c, S2MPB02_REG_FLED_TIME2, &value[5]); //Fled_time2
+	ret |= s2mpb02_read_reg(led_data->i2c, S2MPB02_REG_FLED_IRON1, &value[6]); //Fled_iron1
+	ret |= s2mpb02_read_reg(led_data->i2c, S2MPB02_REG_FLED_IRON2, &value[7]); //Fled_iron2
+	ret |= s2mpb02_read_reg(led_data->i2c, S2MPB02_REG_FLED_IRD1, &value[8]); //Fled_ird1
+	ret |= s2mpb02_read_reg(led_data->i2c, S2MPB02_REG_FLED_IRD2, &value[9]); //Fled_ird2
+	if (unlikely(ret < 0)) {
+		printk("%s : error to get dt node\n", __func__);
+	}
+
+	pr_info("%s : Fled_ctrl1 = 0x%12x, Fled_ctrl2 = 0x%13x, Fled_cur1 = 0x%14x, "
+		"Fled_time1 = 0x%15x, Fled_cur2 = 0x%16x, Fled_time2 = 0x%17x, "
+		"Fled_iron1 = 0x%x, Fled_iron2 = 0x%x, Fled_ird1 = 0x%x, Fled_ird2 = 0x%x\n",
+		__func__, value[0], value[1], value[2], value[3], value[4], value[5],
+		value[6], value[7], value[8], value[9]);
+
+	return sprintf(buf, "0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x\n",
+			value[0], value[1], value[2], value[3], value[4], value[5],
+			value[6], value[7], value[8], value[9]);
+}
+
+static DEVICE_ATTR(irled_torch, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
+	s2mpb02_irled_torch_show, s2mpb02_irled_torch_store);
+#endif
+
 static DEVICE_ATTR(rear_flash, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
 	s2mpb02_show, s2mpb02_store);
 
-static DEVICE_ATTR(torch_flash, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
+static DEVICE_ATTR(rear_torch_flash, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
 	s2mpb02_show, s2mpb02_store);
+
+#ifdef CONFIG_LEDS_IRIS_IRLED_SUPPORT
+int s2mpb02_ir_led_current(uint32_t current_value)
+{
+	int ret = 0;
+	unsigned int value = current_value - 1;
+	unsigned char data = 0;
+
+	pr_info("[%s] led current value : %u \n", __func__, value);
+
+	data = ((value & 0x0F) << 4) | 0x0F;
+
+	ret = s2mpb02_write_reg(global_led_datas[0]->i2c, S2MPB02_REG_FLED_CUR2, data);
+	if (ret < 0)
+		pr_err("[%s] i2c write error", __func__);
+
+	return ret;
+}
+EXPORT_SYMBOL(s2mpb02_ir_led_current);
+
+int s2mpb02_ir_led_pulse_width(uint32_t width)
+{
+	unsigned int value = width;
+	unsigned char iron1 = 0;
+	unsigned char iron2 = 0;
+	int ret = 0;
+
+	pr_info("[%s] led pulse_width value : %u\n", __func__, value);
+
+	iron1 = (value >> 2) & 0xFF;
+	iron2 = (value & 0x03) << 6;
+    
+	pr_info("[%s] IRON1(0x%02x), IRON2(0x%02x)\n", __func__, iron1, iron2);
+    
+	/* set 0x18, 0x19 */
+	ret |= s2mpb02_write_reg(global_led_datas[0]->i2c, S2MPB02_REG_FLED_IRON1, iron1);
+	ret |= s2mpb02_set_bits(global_led_datas[0]->i2c, S2MPB02_REG_FLED_IRON2,
+		S2MPB02_FLED2_IRON2_MASK, iron2);
+	if (ret < 0)
+		pr_err("[%s] i2c write error", __func__);
+
+	return ret;
+}
+EXPORT_SYMBOL(s2mpb02_ir_led_pulse_width);
+
+int s2mpb02_ir_led_pulse_delay(uint32_t delay)
+{
+	unsigned int value = delay;
+	unsigned char ird1 = 0;
+	unsigned char ird2 = 0;
+	int ret = 0;
+
+	pr_info("[%s] led pulse_delay value : %u\n", __func__, value);
+
+	ird1 = (value >> 2) & 0xFF;
+	ird2 = ((value & 0x03) << 6) | 0x2C; /* value 0x2C means RSVD[5:0] Reserved */
+    
+	pr_info("[%s] IRD1(0x%02x), IRD2(0x%02x)\n", __func__, ird1, ird2);
+    
+	/* set 0x1A, 0x1B */
+	ret |= s2mpb02_write_reg(global_led_datas[0]->i2c, S2MPB02_REG_FLED_IRD1, ird1);
+	ret |= s2mpb02_write_reg(global_led_datas[0]->i2c, S2MPB02_REG_FLED_IRD2, ird2);
+	if (ret < 0)
+		pr_err("[%s] i2c write error", __func__);
+
+	return ret;
+}
+EXPORT_SYMBOL(s2mpb02_ir_led_pulse_delay);
+
+int s2mpb02_ir_led_max_time(uint32_t max_time)
+{
+	int ret = 0;
+
+	pr_info("[%s] led max_time value : %u\n", __func__, max_time);
+
+	/* set IRLED max timer interrupt clear and enabled */
+	ret |= s2mpb02_set_bits(global_led_datas[0]->i2c, S2MPB02_REG_FLED_CTRL2,
+		S2MPB02_FLED2_MAX_TIME_CLEAR_MASK, 0x00);
+	ret |= s2mpb02_set_bits(global_led_datas[0]->i2c, S2MPB02_REG_FLED_TIME2,
+		S2MPB02_FLED2_MAX_TIME_EN_MASK, 0x00);
+	if (max_time > 0) {
+		ret |= s2mpb02_set_bits(global_led_datas[0]->i2c, S2MPB02_REG_FLED_TIME2,
+			S2MPB02_FLED2_MAX_TIME_EN_MASK, 0x01);
+
+		ret |= s2mpb02_set_bits(global_led_datas[0]->i2c, S2MPB02_REG_FLED_IRON2, 
+			S2MPB02_FLED2_MAX_TIME_MASK, (u8) max_time - 1);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(s2mpb02_ir_led_max_time);
+#endif
 
 #if defined(CONFIG_OF)
 static int of_s2mpb02_torch_dt(struct s2mpb02_dev *iodev,
@@ -504,10 +703,18 @@ static int s2mpb02_led_probe(struct platform_device *pdev)
 		}
 
 		if (device_create_file(s2mpb02_led_dev,
-					 &dev_attr_torch_flash) < 0) {
+					 &dev_attr_rear_torch_flash) < 0) {
 			pr_err("<%s> failed to create device file, %s\n",
-				__func__ , dev_attr_torch_flash.attr.name);
+				__func__ , dev_attr_rear_torch_flash.attr.name);
 		}
+
+#ifdef CONFIG_LEDS_IRIS_IRLED_CERTIFICATE_SUPPORT
+		if (device_create_file(s2mpb02_led_dev,
+					 &dev_attr_irled_torch) < 0) {
+			pr_err("<%s> failed to create device file, %s\n",
+				__func__ , dev_attr_irled_torch.attr.name);
+		}
+#endif
 	}
 
 	pr_err("<%s> end\n", __func__);
@@ -536,7 +743,10 @@ static int s2mpb02_led_remove(struct platform_device *pdev)
 
 	if(s2mpb02_led_dev) {
 		device_remove_file(s2mpb02_led_dev, &dev_attr_rear_flash);
-		device_remove_file(s2mpb02_led_dev, &dev_attr_torch_flash);
+		device_remove_file(s2mpb02_led_dev, &dev_attr_rear_torch_flash);
+#ifdef CONFIG_LEDS_IRIS_IRLED_CERTIFICATE_SUPPORT
+		device_remove_file(s2mpb02_led_dev, &dev_attr_irled_torch);
+#endif
 	}
 
 	if (camera_class && s2mpb02_led_dev) {

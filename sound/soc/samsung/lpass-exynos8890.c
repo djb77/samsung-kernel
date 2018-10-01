@@ -228,9 +228,11 @@ void lpass_update_lpclock_impl(struct device *dev, u32 ctrlid, bool active)
 		exynos_update_ip_idle_status(g_sicd_aud_index, 0);
 		break;
 	case 0x04: /* Only SRAM record case */
-		lpass_disable_mif_status(true);
 	case 0x01: /* Only offload case */
 	case 0x05: /* SRAM record + offload case */
+		if (g_current_power_mode == 0x04)
+			lpass_disable_mif_status(true);
+
 		exynos_update_ip_idle_status(g_sicd_index, 0);
 		exynos_update_ip_idle_status(g_sicd_aud_index, 1);
 		break;

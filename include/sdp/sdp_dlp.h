@@ -21,6 +21,6 @@
 #define _SDP_DLP_H
 
 bool dlp_is_locked(int user_id);
-int dlp_isInterestedFile(const char *filename);
+int dlp_isInterestedFile(int user_id, const char *filename);
 
 #endif /* _SDP_DLP_H */

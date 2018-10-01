@@ -58,13 +58,14 @@ int fimc_is_ssxvc3_video_probe(void *data)
 		goto p_err;
 	}
 
+	instance = device->instance;
+
 	if (instance >= FIMC_IS_SENSOR_COUNT) {
 		err("instance %d was invalid", instance);
 		ret = -EINVAL;
 		goto p_err;
 	}
 
-	instance = device->instance;
 	video = &device->video_ssxvc3;
 	video->resourcemgr = device->resourcemgr;
 

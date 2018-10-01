@@ -1,5 +1,6 @@
 #include "../codecs/florida.h"
 #include "../codecs/clearwater.h"
+#include "../codecs/arizona.h"
 
 /* To support PBA function test */
 static struct class *jack_class;
@@ -166,6 +167,19 @@ static ssize_t check_codec_id_store(struct device *dev,
 	return size;
 }
 
+static ssize_t water_detected_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct arizona_extcon_info *info = dev_get_drvdata(dev);
+	struct arizona *arizona = info->arizona;
+	struct snd_soc_codec *codec = arizona->dapm->component->codec;
+	int retval;
+
+	retval = arizona_get_moisture_state(codec);
+
+	return sprintf(buf, "%d\n", retval);
+}
+
 static DEVICE_ATTR(select_jack, S_IRUGO | S_IWUSR | S_IWGRP,
 		   earjack_select_jack_show, earjack_select_jack_store);
 
@@ -177,6 +191,9 @@ static DEVICE_ATTR(state, S_IRUGO | S_IWUSR | S_IWGRP,
 
 static DEVICE_ATTR(mic_adc, S_IRUGO | S_IWUSR | S_IWGRP,
 		   earjack_mic_adc_show, earjack_mic_adc_store);
+
+static DEVICE_ATTR(water_detected, S_IRUSR | S_IRGRP,
+		   water_detected_show, NULL);
 
 static DEVICE_ATTR(check_codec_id, S_IRUGO | S_IWUSR | S_IWGRP,
 		   check_codec_id_show, check_codec_id_store);
@@ -214,6 +231,10 @@ static void create_jack_devices(struct arizona_extcon_info *info)
 	if (device_create_file(jack_dev, &dev_attr_mic_adc) < 0)
 		pr_err("Failed to create device file (%s)!\n",
 			dev_attr_mic_adc.attr.name);
+
+	if (device_create_file(jack_dev, &dev_attr_water_detected) < 0)
+		pr_err("Failed to create device file (%s)!\n",
+			dev_attr_water_detected.attr.name);
 
 	/* Create CODEC ID check sysfs node */
 	codec_dev = device_create(jack_class, NULL, 0, info, "codec");

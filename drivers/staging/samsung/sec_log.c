@@ -205,7 +205,8 @@ late_initcall(sec_avc_log_late_init);
 #ifdef CONFIG_SEC_DEBUG_LAST_KMSG
 static char *last_kmsg_buffer;
 static size_t last_kmsg_size;
-void sec_debug_save_last_kmsg(unsigned char* head_ptr, unsigned char* curr_ptr)
+void sec_debug_save_last_kmsg(unsigned char* head_ptr, unsigned char* curr_ptr,
+	size_t log_size)
 {
 	if (head_ptr == NULL || curr_ptr == NULL || head_ptr == curr_ptr) {
 		pr_err("%s: no data \n", __func__);
@@ -218,7 +219,10 @@ void sec_debug_save_last_kmsg(unsigned char* head_ptr, unsigned char* curr_ptr)
 	last_kmsg_buffer = (char *)kzalloc(last_kmsg_size, GFP_NOWAIT);
 
 	if (last_kmsg_size && last_kmsg_buffer) {
-		memcpy(last_kmsg_buffer, head_ptr, last_kmsg_size);
+		unsigned i;
+		// Relocate the last kmsg log buffer
+		for (i = 0; i < last_kmsg_size; i++)
+			last_kmsg_buffer[i] = head_ptr[((size_t)(curr_ptr - head_ptr) - last_kmsg_size + i) & (log_size -1)];
 		pr_info("%s: successed\n", __func__);
 	} else
 		pr_err("%s: failed\n", __func__);

@@ -133,6 +133,7 @@
 			sec,tspid_gpio = <&gpe7 1 0>;
 			sec,firmware_name = "tsp_sec/hero2la.bin";
 			sec,project_name = "HERO2", "G935";
+			sec,grip_concept = <4>;  	// 1: old, 2: grace, 4:dual mode for hero2
 		};
 
 		touchscreen@49{

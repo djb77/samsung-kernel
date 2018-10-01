@@ -1237,9 +1237,10 @@ static int m2m1shot2_create_release_fence(struct m2m1shot2_context *ctx,
 {
 	struct sync_fence *fence = NULL;
 	struct m2m1shot2_context_image *img;
-	unsigned int i, ret = 0, ifd = 0;
+	unsigned int i, ifd = 0;
 	int fds[M2M1SHOT2_MAX_IMAGES + 1];
 	unsigned int num_fences = 0;
+	int ret = 0;
 
 	if (!!(ctx->target.flags & M2M1SHOT2_IMGFLAG_RELEASE_FENCE))
 		num_fences++;

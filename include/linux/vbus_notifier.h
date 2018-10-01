@@ -36,6 +36,7 @@ typedef enum {
 typedef enum {
 	VBUS_NOTIFY_DEV_USB,
 	VBUS_NOTIFY_DEV_CHARGER,
+	VBUS_NOTIFY_DEV_MANAGER,	
 } vbus_notifier_device_t;
 
 typedef enum {

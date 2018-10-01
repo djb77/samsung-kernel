@@ -99,6 +99,7 @@ struct vendor_ops {
 	int (*start_otg_test)(struct regmap_desc *, int);	
 	int (*attach_mmdock)(struct regmap_desc  *, int);
 	int (*detach_mmdock)(struct regmap_desc  *);
+	int (*get_vbus_value)(struct regmap_desc *, int);
 };
 
 struct regmap_desc {

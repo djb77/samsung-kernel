@@ -24,12 +24,6 @@ config CALC_TIME_TO_FULL
 	help
 	  Say Y to use calc time to full function.
 
-config SW_SELF_DISCHARGING
-	bool "enable sw_self_discharging"
-	default n
-	help
-	  Say Y to enable CONFIG_SW_SELF_DISCHARGING
-
 config BATTERY_AGE_FORECAST
 	tristate "battery age forecast"
 	default n
@@ -46,6 +40,12 @@ config STEP_CHARGING
 	bool "support for step charging"
 	help
 	 Say Y to include support for step charging
+
+config BATTERY_CISD
+	bool "support for cisd"
+	help
+	 Say Y to include support for cisd
+	 cisd means cell internal short detection
 
 config UPDATE_BATTERY_DATA
 	bool "support for updating battery data"
@@ -411,3 +411,9 @@ config STORE_MODE
        default n
        help
 	 Say Y to enable CONFIG_STORE_MODE
+
+config BATTERY_NOTIFIER
+	bool "battery notifier"
+	default n
+	help
+	  Say Y to enable battery notifier

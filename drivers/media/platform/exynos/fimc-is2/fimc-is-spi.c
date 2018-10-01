@@ -44,6 +44,14 @@ int fimc_is_spi_s_pin(struct fimc_is_spi *spi, int state)
 		parent_pin = spi->parent_pin_fn;
 		ssn_pin = spi->pin_ssn_fn;
 		break;
+	case SPI_PIN_STATE_IDLE_INPD:
+		parent_pin = spi->parent_pin_out;
+		ssn_pin = spi->pin_ssn_inpd;
+		break;
+	case SPI_PIN_STATE_IDLE_INPU:
+		parent_pin = spi->parent_pin_out;
+		ssn_pin = spi->pin_ssn_inpu;
+		break;
 	case SPI_PIN_STATE_IDLE:
 	default:
 		parent_pin = spi->parent_pin_out;
@@ -56,10 +64,15 @@ int fimc_is_spi_s_pin(struct fimc_is_spi *spi, int state)
 		pr_err("pinctrl_select_state is fail(%d)\n", ret);
 	}
 
-	ret2 = pinctrl_select_state(spi->pinctrl, ssn_pin);
-	if (ret2 < 0) {
-		pr_err("pinctrl_select_state is fail(%d)\n", ret2);
-		ret |= ret2;
+	if (ssn_pin != NULL) {
+		ret2 = pinctrl_select_state(spi->pinctrl, ssn_pin);
+		if (ret2 < 0) {
+			pr_err("pinctrl_select_state is fail(%d)\n", ret2);
+			ret |= ret2;
+		}
+	} else {
+		info("pinctrl_select_state(%d) is not found", state);
+		ret = 0;
 	}
 
 	return ret;

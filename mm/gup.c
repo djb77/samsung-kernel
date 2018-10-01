@@ -55,25 +55,32 @@ static bool __need_migrate_cma_page(struct page *page,
 	return true;
 }
 
-static int __migrate_cma_pinpage(struct page *page, struct vm_area_struct *vma)
+static int __isolate_cma_pinpage(struct page *page)
 {
 	struct zone *zone = page_zone(page);
-	struct list_head migratepages;
 	struct lruvec *lruvec;
+
+	spin_lock_irq(&zone->lru_lock);
+	if (__isolate_lru_page(page, 0) != 0) {
+		spin_unlock_irq(&zone->lru_lock);
+		dump_page(page, "failed to isolate lru page");
+		return -EBUSY;
+	} else {
+		lruvec = mem_cgroup_page_lruvec(page, page_zone(page));
+		del_page_from_lru_list(page, lruvec, page_lru(page));
+	}
+	spin_unlock_irq(&zone->lru_lock);
+
+	return 0;
+}
+
+static int __migrate_cma_pinpage(struct page *page, struct vm_area_struct *vma)
+{
+	struct list_head migratepages;
 	int tries = 0;
 	int ret = 0;
 
 	INIT_LIST_HEAD(&migratepages);
-
-	if (__isolate_lru_page(page, 0) != 0) {
-		dump_page(page, "failed to isolate lru page");
-		return -EFAULT;
-	} else {
-		spin_lock_irq(&zone->lru_lock);
-		lruvec = mem_cgroup_page_lruvec(page, page_zone(page));
-		del_page_from_lru_list(page, lruvec, page_lru(page));
-		spin_unlock_irq(&zone->lru_lock);
-	}
 
 	list_add(&page->lru, &migratepages);
 	inc_zone_page_state(page, NR_ISOLATED_ANON + page_is_file_cache(page));
@@ -169,6 +176,13 @@ retry:
 
 #ifdef CONFIG_CMA_PINPAGE_MIGRATION
 	if (__need_migrate_cma_page(page, vma, address, flags)) {
+		if (__isolate_cma_pinpage(page)) {
+			pr_err("%s: Fail to migrate cma pinpage because it is"
+				"already migrated by compaction. This should"
+				"be migrated to nonmovable userpage\n",
+				__func__);
+			goto bad_page;
+		}
 		pte_unmap_unlock(ptep, ptl);
 		if (__migrate_cma_pinpage(page, vma)) {
 			ptep = pte_offset_map_lock(mm, pmd, address, &ptl);
@@ -426,7 +440,7 @@ static int faultin_page(struct task_struct *tsk, struct vm_area_struct *vma,
 	 * reCOWed by userspace write).
 	 */
 	if ((ret & VM_FAULT_WRITE) && !(vma->vm_flags & VM_WRITE))
-	        *flags |= FOLL_COW;
+		*flags |= FOLL_COW;
 	return 0;
 }
 

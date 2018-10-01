@@ -6,6 +6,9 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  */
+
+  /* usb notify layer v2.0 */
+
 #ifndef __LINUX_DOCK_NOTIFY_H__
 #define __LINUX_DOCK_NOTIFY_H__
 

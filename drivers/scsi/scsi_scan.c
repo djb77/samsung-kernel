@@ -289,7 +289,7 @@ static struct scsi_device *scsi_alloc_sdev(struct scsi_target *starget,
 	scsi_adjust_queue_depth(sdev, 0, sdev->host->cmd_per_lun);
 
 #ifdef CONFIG_JOURNAL_DATA_TAG
-	if (shost->journal_tag)
+	if (shost->journal_tag == JOURNAL_TAG_ON)
 		queue_flag_set(QUEUE_FLAG_JOURNAL_TAG, sdev->request_queue);
 	else
 		queue_flag_clear(QUEUE_FLAG_JOURNAL_TAG, sdev->request_queue);

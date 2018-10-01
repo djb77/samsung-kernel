@@ -79,6 +79,11 @@ extern struct decon_bts2 decon_bts2_control;
 #define DECON_UNDERRUN_THRESHOLD	0
 #ifdef CONFIG_FB_WINDOW_UPDATE
 #define DECON_WIN_UPDATE_IDX	(8)
+
+#define DECON_CR0_SETTING_BY_UM		1
+#define DECON_CR0_SETTING_BY_GUIDE	0
+#define DECON_CR0_SETTING		DECON_CR0_SETTING_BY_GUIDE
+
 #define decon_win_update_dbg(fmt, ...)					\
 	do {								\
 		if (decon_log_level >= 7)				\
@@ -400,6 +405,15 @@ struct decon_win_config {
 			/* source framebuffer coordinates */
 			struct decon_frame		src;
 		};
+#ifdef CONFIG_FB_DSU
+		struct {
+			int left;
+			int top;
+			int right;
+			int bottom;
+			int enableDSU;
+		};
+#endif
 	};
 
 	/* destination OSD coordinates */
@@ -685,6 +699,20 @@ enum decon_doze_mode {
 	DECON_DOZE_STATE_DOZE_SUSPEND
 };
 #endif
+
+#ifdef CONFIG_FB_DSU
+enum decon_dsu_state {
+	DECON_DSU_DONE = 0,
+	DECON_DSU_IGNORE_VSYNC,
+	DECON_DSU_DSC_CMD,
+	DECON_DSU_DSC_SET,
+	DECON_DSU_MIC_CMD,
+	DECON_DSU_TE_ON,
+	DECON_DSU_DISPLAY_ON,
+	DECON_DSU_UPDATE_RECT,
+};
+#endif
+
 typedef struct decon_device decon_dev;
 struct decon_device {
 	decon_dev			*decon[NUM_DECON_IPS];
@@ -809,6 +837,11 @@ struct decon_device {
 	struct work_struct		fifo_irq_work;
 	struct workqueue_struct		*fifo_irq_wq;
 	int				fifo_irq_status;
+	int				re_cnt;
+	int				win_id[2];
+	int				vpp_id[2];
+	bool				vpp_afbc_re;
+	
 	bool	ignore_vsync;
 	struct esd_protect esd;
 	unsigned int			force_fullupdate;
@@ -819,6 +852,18 @@ struct decon_device {
 	unsigned int decon_doze;
 	bool vsync_backup;
 	unsigned int req_display_on;
+#endif
+#ifdef CONFIG_FB_DSU
+	int	need_DSU_update;
+	bool	DSU_mode;
+	bool	is_DSU_mic;
+	bool	is_DSU_dsc;
+	int		DSU_x_delta;
+	int		DSU_y_delta;
+	struct decon_win_rect DSU_rect;
+	struct decon_lcd lcd_info_default;
+	s64	dsu_lock_cnt;	/* for HA5 DDI register-Locking */
+	struct mutex	dsu_lock;
 #endif
 };
 

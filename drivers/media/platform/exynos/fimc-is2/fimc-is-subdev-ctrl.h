@@ -29,7 +29,8 @@ enum fimc_is_subdev_state {
 	FIMC_IS_SUBDEV_OPEN,
 	FIMC_IS_SUBDEV_START,
 	FIMC_IS_SUBDEV_RUN,
-	FIMC_IS_SUBDEV_FORCE_SET
+	FIMC_IS_SUBDEV_FORCE_SET,
+	FIMC_IS_SUBDEV_PARAM_ERR
 };
 
 struct fimc_is_subdev_path {

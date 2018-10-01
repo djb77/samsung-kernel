@@ -11,6 +11,7 @@
  */
 
 #include <linux/pm_qos.h>
+#include <linux/device.h>
 
 #include "fimc-is-sysfs.h"
 #include "fimc-is-core.h"
@@ -26,9 +27,13 @@
 /* #define FORCE_CAL_LOAD */
 
 extern struct device *fimc_is_dev;
+extern struct kset *devices_kset;
 struct class *camera_class = NULL;
 struct device *camera_front_dev;
 struct device *camera_rear_dev;
+#ifdef CONFIG_SECURE_CAMERA_USE
+struct device *camera_secure_dev;
+#endif
 #ifdef CONFIG_OIS_USE
 struct device *camera_ois_dev;
 #endif
@@ -58,7 +63,7 @@ static struct fimc_is_from_info *front_finfo = NULL;
 #endif
 
 #ifdef CAMERA_SYSFS_V2
-static struct fimc_is_cam_info cam_infos[2];
+static struct fimc_is_cam_info cam_infos[CAM_INFO_MAX];
 #endif
 
 extern bool force_caldata_dump;
@@ -67,6 +72,16 @@ static bool check_ois_power = false;
 int ois_threshold;
 #endif
 static bool check_module_init = false;
+
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+extern int comp_fac_i2c_check;
+extern u16 comp_fac_valid_check;
+#endif
+
+#ifdef CONFIG_SECURE_CAMERA_USE
+extern bool is_final_cam_module_iris;
+extern bool is_iris_ver_read;
+#endif
 
 #ifdef CAMERA_SYSFS_V2
 int fimc_is_get_cam_info(struct fimc_is_cam_info **caminfo)
@@ -167,6 +182,23 @@ static ssize_t camera_rear_sensorid_show(struct device *dev,
 static DEVICE_ATTR(front_sensorid, S_IRUGO, camera_front_sensorid_show, NULL);
 static DEVICE_ATTR(rear_sensorid, S_IRUGO, camera_rear_sensorid_show, NULL);
 
+#ifdef CONFIG_SECURE_CAMERA_USE
+static ssize_t camera_secure_sensorid_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fimc_is_core *core = NULL;
+	struct fimc_is_vender_specific *specific;
+
+	core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
+	specific = core->vender.private_data;
+
+	dev_info(dev, "%s: E", __func__);
+
+	return sprintf(buf, "%d\n", specific->secure_sensor_id);
+}
+static DEVICE_ATTR(secure_sensorid, S_IRUGO, camera_secure_sensorid_show, NULL);
+#endif
+
 static int fimc_is_get_sensor_data(struct device *dev, char *maker, char *name, int position)
 {
 	struct fimc_is_core *core;
@@ -193,7 +225,13 @@ static int fimc_is_get_sensor_data(struct device *dev, char *maker, char *name, 
 		sensor_id = specific->rear_sensor_id;
 	} else if(position == SENSOR_POSITION_FRONT) {
 		sensor_id = specific->front_sensor_id;
-	} else {
+	}
+#ifdef CONFIG_SECURE_CAMERA_USE
+	else if(position == SENSOR_POSITION_SECURE) {
+		sensor_id = specific->secure_sensor_id;
+	}
+#endif
+	else {
 		dev_err(dev, "%s: position value is wrong", __func__);
 		return -EINVAL;
 	}
@@ -346,7 +384,7 @@ static ssize_t camera_front_info_show(struct device *dev,
 {
 	char camera_info[110] = {0, };
 #ifdef CONFIG_OF
-	struct fimc_is_cam_info *front_cam_info = &(cam_infos[1]);
+	struct fimc_is_cam_info *front_cam_info = &(cam_infos[CAM_INFO_FRONT]);
 	strcpy(camera_info, "ISP=");
 	switch(front_cam_info->isp) {
 		case CAM_INFO_ISP_TYPE_INTERNAL :
@@ -503,8 +541,6 @@ static DEVICE_ATTR(front_checkfw_factory, S_IRUGO, camera_front_checkfw_factory_
 static ssize_t camera_rear_writefw_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-/* Disabled for product. Security Hole */ 
-#if 0
 	struct device *is_dev = &sysfs_core->ischain[0].pdev->dev;
 	int ret = 0;
 
@@ -514,9 +550,6 @@ static ssize_t camera_rear_writefw_show(struct device *dev,
 		return sprintf(buf, "NG\n");
 	else
 		return sprintf(buf, "OK\n");
-#else
-	return sprintf(buf, "OK\n");
-#endif
 }
 #endif
 
@@ -745,7 +778,8 @@ static ssize_t camera_rear_checkfw_factory_show(struct device *dev,
 			} else {
 #ifdef CONFIG_OIS_USE
 				if (ois_minfo->checksum != 0x00 || ois_minfo->caldata != 0x00 || !ois_ret) {
-					err(" NG, OIS crc check fail");
+					err(" NG, OIS crc check fail, checksum = 0x%02x, caldata = 0x%02x, ois_ret = %d",
+						ois_minfo->checksum, ois_minfo->caldata, ois_ret);
 #ifdef CAMERA_SYSFS_V2
 					strcpy(command_ack, "NG_CRC\n");
 #else
@@ -783,7 +817,7 @@ static ssize_t camera_rear_info_show(struct device *dev,
 {
 	char camera_info[110] = {0, };
 #ifdef CONFIG_OF
-	struct fimc_is_cam_info *rear_cam_info = &(cam_infos[0]);
+	struct fimc_is_cam_info *rear_cam_info = &(cam_infos[CAM_INFO_REAR]);
 
 	strcpy(camera_info, "ISP=");
 	switch(rear_cam_info->isp) {
@@ -1220,6 +1254,59 @@ static ssize_t camera_ois_rawdata_show(struct device *dev,
 	}
 }
 
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+static ssize_t camera_comp_ic_check_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret = 0;
+	struct fimc_is_vender_specific *specific = sysfs_core->vender.private_data;
+
+	info("%s: buf[0]=%c running_rear_camera=%d running_front_camera=%d\n",
+		__func__,buf[0],
+		specific->running_rear_camera,specific->running_front_camera);
+
+	switch (buf[0]) {
+	case '0':
+		break;
+	case '1':
+		comp_fac_i2c_check = 0;
+		comp_fac_valid_check = 0;
+		if (!specific->running_rear_camera) {
+			if (!specific->running_front_camera) {
+    				ret = fimc_is_comp_fac_valid(sysfs_core);
+			}
+		}
+		break;
+	default:
+		pr_debug("%s: %c\n", __func__, buf[0]);
+		break;
+	} 
+
+	return count;
+}
+
+static ssize_t camera_comp_ic_check_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	ssize_t len = 0;
+    
+	info("%s: comp_fac_i2c_check[%d] comp_fac_valid_check[0x%04x]\n",
+		__func__, comp_fac_i2c_check, comp_fac_valid_check);
+
+	if (comp_fac_i2c_check) {
+		len = sprintf(buf, "%s\n", "NG_I2C");
+	} else if (comp_fac_valid_check) {
+		len = sprintf(buf, "%04X\n", comp_fac_valid_check);
+	} else {
+		len = sprintf(buf, "%s\n", "NG");
+	}
+
+	info("buf: %s\n",buf);
+
+	return len;
+}
+#endif
+
 static ssize_t camera_ois_version_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -1300,6 +1387,20 @@ static ssize_t camera_rear_sensorid_exif_show(struct device *dev,
 	return sprintf(buf, "%s", finfo->from_sensor_id);
 }
 
+#ifdef FROM_HEADER_MODULE_ID_ADDR
+static ssize_t camera_rear_moduleid_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	read_from_firmware_version(SENSOR_POSITION_REAR);
+
+	return sprintf(buf, "%c%c%c%c%c%02X%02X%02X%02X%02X\n",
+		finfo->from_module_id[0], finfo->from_module_id[1], finfo->from_module_id[2],
+		finfo->from_module_id[3], finfo->from_module_id[4], finfo->from_module_id[5],
+		finfo->from_module_id[6], finfo->from_module_id[7], finfo->from_module_id[8],
+		finfo->from_module_id[9]);
+}
+#endif
+
 #if defined(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT)
 static ssize_t camera_front_sensorid_exif_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -1308,6 +1409,226 @@ static ssize_t camera_front_sensorid_exif_show(struct device *dev,
 
 	return sprintf(buf, "%s", front_finfo->from_sensor_id);
 }
+#endif
+
+#ifdef CONFIG_SECURE_CAMERA_USE
+static ssize_t camera_iris_camfw_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	char sensor_name[50];
+	int ret;
+
+	if (is_iris_ver_read) {
+		ret = fimc_is_get_sensor_data(dev, NULL, sensor_name, SENSOR_POSITION_SECURE);
+
+		if (ret < 0) {
+			return sprintf(buf, "UNKNOWN N\n");
+		} else {
+			return sprintf(buf, "%s N\n", sensor_name);
+		}
+	} else {
+		return sprintf(buf, "UNKNOWN N\n");
+	}
+}
+
+static ssize_t camera_iris_camfw_full_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	char sensor_name[50];
+	int ret;
+
+	if (is_iris_ver_read) {
+		ret = fimc_is_get_sensor_data(dev, NULL, sensor_name, SENSOR_POSITION_SECURE);
+
+		if (ret < 0) {
+			return sprintf(buf, "UNKNOWN N N\n");
+		} else {
+			return sprintf(buf, "%s N N\n", sensor_name);
+		}
+	} else {
+		return sprintf(buf, "UNKNOWN N N\n");
+	}
+}
+
+static ssize_t camera_iris_checkfw_factory_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	if (is_iris_ver_read) {
+		if (is_final_cam_module_iris) {
+			return sprintf(buf, "%s\n", "OK");
+		} else {
+#ifdef CAMERA_SYSFS_V2
+			return sprintf(buf, "%s\n", "NG_VER");
+#else
+			return sprintf(buf, "%s\n", "NG");
+#endif
+		}
+	} else {
+		return sprintf(buf, "%s\n", "NG_VER");
+	}
+}
+
+static ssize_t camera_iris_checkfw_user_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	if (is_iris_ver_read) {
+		if (is_final_cam_module_iris)
+			return sprintf(buf, "%s\n", "OK");
+		else
+			return sprintf(buf, "%s\n", "NG");
+	} else {
+		return sprintf(buf, "%s\n", "NG");
+	}
+}
+
+
+#ifdef CAMERA_SYSFS_V2
+static ssize_t camera_iris_info_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	char camera_info[110] = {0, };
+#ifdef CONFIG_OF
+	struct fimc_is_cam_info *iris_cam_info = &(cam_infos[CAM_INFO_IRIS]);
+
+	strcpy(camera_info, "ISP=");
+	switch(iris_cam_info->isp) {
+		case CAM_INFO_ISP_TYPE_INTERNAL :
+			strcat(camera_info, "INT;");
+			break;
+		case CAM_INFO_ISP_TYPE_EXTERNAL :
+			strcat(camera_info, "EXT;");
+			break;
+		case CAM_INFO_ISP_TYPE_SOC :
+			strcat(camera_info, "SOC;");
+			break;
+		default :
+			strcat(camera_info, "NULL;");
+			break;
+	}
+
+	strcat(camera_info, "CALMEM=");
+	switch(iris_cam_info->cal_memory) {
+		case CAM_INFO_CAL_MEM_TYPE_NONE :
+			strcat(camera_info, "N;");
+			break;
+		case CAM_INFO_CAL_MEM_TYPE_FROM :
+		case CAM_INFO_CAL_MEM_TYPE_EEPROM :
+		case CAM_INFO_CAL_MEM_TYPE_OTP :
+			strcat(camera_info, "Y;");
+			break;
+		default :
+			strcat(camera_info, "NULL;");
+			break;
+	}
+
+	strcat(camera_info, "READVER=");
+	switch(iris_cam_info->read_version) {
+		case CAM_INFO_READ_VER_SYSFS :
+			strcat(camera_info, "SYSFS;");
+			break;
+		case CAM_INFO_READ_VER_CAMON :
+			strcat(camera_info, "CAMON;");
+			break;
+		default :
+			strcat(camera_info, "NULL;");
+			break;
+	}
+
+	strcat(camera_info, "COREVOLT=");
+	switch(iris_cam_info->core_voltage) {
+		case CAM_INFO_CORE_VOLT_NONE :
+			strcat(camera_info, "N;");
+			break;
+		case CAM_INFO_CORE_VOLT_USE :
+			strcat(camera_info, "Y;");
+			break;
+		default :
+			strcat(camera_info, "NULL;");
+			break;
+	}
+
+	strcat(camera_info, "UPGRADE=");
+	switch(iris_cam_info->upgrade) {
+		case CAM_INFO_FW_UPGRADE_NONE :
+			strcat(camera_info, "N;");
+			break;
+		case CAM_INFO_FW_UPGRADE_SYSFS :
+			strcat(camera_info, "SYSFS;");
+			break;
+		case CAM_INFO_FW_UPGRADE_CAMON :
+			strcat(camera_info, "CAMON;");
+			break;
+		default :
+			strcat(camera_info, "NULL;");
+			break;
+	}
+
+	strcat(camera_info, "FWWRITE=");
+	switch(iris_cam_info->fw_write) {
+		case CAM_INFO_FW_WRITE_NONE :
+			strcat(camera_info, "N;");
+			break;
+		case CAM_INFO_FW_WRITE_OS :
+			strcat(camera_info, "OS;");
+			break;
+		case CAM_INFO_FW_WRITE_SD :
+			strcat(camera_info, "SD;");
+			break;
+		case CAM_INFO_FW_WRITE_ALL :
+			strcat(camera_info, "ALL;");
+			break;
+		default :
+			strcat(camera_info, "NULL;");
+			break;
+	}
+
+	strcat(camera_info, "FWDUMP=");
+	switch(iris_cam_info->fw_dump) {
+		case CAM_INFO_FW_DUMP_NONE :
+			strcat(camera_info, "N;");
+			break;
+		case CAM_INFO_FW_DUMP_USE :
+			strcat(camera_info, "Y;");
+			break;
+		default :
+			strcat(camera_info, "NULL;");
+			break;
+	}
+
+	strcat(camera_info, "CC=");
+	switch(iris_cam_info->companion) {
+		case CAM_INFO_COMPANION_NONE :
+			strcat(camera_info, "N;");
+			break;
+		case CAM_INFO_COMPANION_USE :
+			strcat(camera_info, "Y;");
+			break;
+		default :
+			strcat(camera_info, "NULL;");
+			break;
+	}
+
+	strcat(camera_info, "OIS=");
+	switch(iris_cam_info->ois) {
+		case CAM_INFO_OIS_NONE :
+			strcat(camera_info, "N;");
+			break;
+		case CAM_INFO_OIS_USE :
+			strcat(camera_info, "Y;");
+			break;
+		default :
+			strcat(camera_info, "NULL;");
+			break;
+	}
+
+	return sprintf(buf, "%s\n", camera_info);
+#endif
+	strcpy(camera_info, "ISP=NULL;CALMEM=NULL;READVER=NULL;COREVOLT=NULL;UPGRADE=NULL;"
+		"FWWRITE=NULL;FWDUMP=NULL;CC=NULL;OIS=NULL");
+
+	return sprintf(buf, "%s\n", camera_info);
+}
+#endif
 #endif
 
 #ifdef CAMERA_MODULE_DUALIZE
@@ -1344,6 +1665,10 @@ static DEVICE_ATTR(isp_core, S_IRUGO,
 #endif
 static DEVICE_ATTR(fw_update, S_IRUGO,
 		camera_hw_init_show, NULL);
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+static DEVICE_ATTR(companion_ic_check, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH, 
+		camera_comp_ic_check_show, camera_comp_ic_check_store);
+#endif
 #ifdef CONFIG_OIS_USE
 static DEVICE_ATTR(selftest, S_IRUGO,
 		camera_ois_selftest_show, NULL);
@@ -1365,16 +1690,66 @@ static DEVICE_ATTR(rear_force_cal_load, S_IRUGO, camera_rear_force_cal_load_show
 #endif
 static DEVICE_ATTR(rear_afcal, S_IRUGO, camera_rear_afcal_show, NULL);
 static DEVICE_ATTR(rear_sensorid_exif, S_IRUGO, camera_rear_sensorid_exif_show, NULL);
+#ifdef FROM_HEADER_MODULE_ID_ADDR
+static DEVICE_ATTR(rear_moduleid, S_IRUGO, camera_rear_moduleid_show, NULL);
+static DEVICE_ATTR(SVC_rear_module, S_IRUGO, camera_rear_moduleid_show, NULL);
+#endif
 #if defined(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT)
 static DEVICE_ATTR(front_sensorid_exif, S_IRUGO, camera_front_sensorid_exif_show, NULL);
 #endif
 
+#ifdef CONFIG_SECURE_CAMERA_USE
+static DEVICE_ATTR(iris_camfw, S_IRUGO, camera_iris_camfw_show, NULL);
+static DEVICE_ATTR(iris_camfw_full, S_IRUGO, camera_iris_camfw_full_show, NULL);
+static DEVICE_ATTR(iris_checkfw_factory, S_IRUGO, camera_iris_checkfw_factory_show, NULL);
+static DEVICE_ATTR(iris_checkfw_user, S_IRUGO, camera_iris_checkfw_user_show, NULL);
+#ifdef CAMERA_SYSFS_V2
+static DEVICE_ATTR(iris_caminfo, S_IRUGO, camera_iris_info_show, NULL);
+#endif
+#endif
+
+int svc_cheating_prevent_device_file_create(struct kobject **obj)
+{
+	struct kernfs_node *svc_sd;
+	struct kobject *data;
+	struct kobject *Camera;
+
+	/* To find SVC kobject */
+	svc_sd = sysfs_get_dirent(devices_kset->kobj.sd, "svc");
+	if (IS_ERR_OR_NULL(svc_sd)) {
+		/* try to create svc kobject */
+		data = kobject_create_and_add("svc", &devices_kset->kobj);
+		if (IS_ERR_OR_NULL(data)) {
+			pr_info("Failed to create sys/devices/svc already exist svc : 0x%p\n", data);
+		} else {
+			pr_info("Success to create sys/devices/svc svc : 0x%p\n", data);
+		}
+	} else {
+		data = (struct kobject *)svc_sd->priv;
+		pr_info("Success to find svc_sd : 0x%p svc : 0x%p\n", svc_sd, data);
+	}
+
+	Camera = kobject_create_and_add("Camera", data);
+	if (IS_ERR_OR_NULL(Camera)) {
+		pr_info("Failed to create sys/devices/svc/Camera : 0x%p\n", Camera);
+	} else {
+		pr_info("Success to create sys/devices/svc/Camera : 0x%p\n", Camera);
+	}
+
+	*obj = Camera;
+	return 0;
+}
+
 int fimc_is_create_sysfs(struct fimc_is_core *core)
 {
+	struct kobject *svc = 0;
+
 	if (!core) {
 		err("fimc_is_core is null");
 		return -EINVAL;
 	}
+
+	svc_cheating_prevent_device_file_create(&svc);
 
 	if (camera_class == NULL) {
 		camera_class = class_create(THIS_MODULE, "camera");
@@ -1519,6 +1894,22 @@ int fimc_is_create_sysfs(struct fimc_is_core *core)
 			printk(KERN_ERR "failed to create rear device file, %s\n",
 					dev_attr_rear_sensorid_exif.attr.name);
 		}
+#ifdef FROM_HEADER_MODULE_ID_ADDR
+		if (device_create_file(camera_rear_dev, &dev_attr_rear_moduleid) < 0) {
+			printk(KERN_ERR "failed to create rear device file, %s\n",
+					dev_attr_rear_moduleid.attr.name);
+		}
+		if (sysfs_create_file(svc, &dev_attr_SVC_rear_module.attr) < 0) {
+			printk(KERN_ERR "failed to create rear device file, %s\n",
+				dev_attr_SVC_rear_module.attr.name);
+		}
+#endif
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+		if (device_create_file(camera_rear_dev, &dev_attr_companion_ic_check) < 0) {
+			printk(KERN_ERR "failed to create rear device file, %s\n",
+					dev_attr_companion_ic_check.attr.name);
+		}
+#endif
 	}
 
 #ifdef CONFIG_OIS_USE
@@ -1554,6 +1945,41 @@ int fimc_is_create_sysfs(struct fimc_is_core *core)
 			printk(KERN_ERR "failed to create ois device file, %s\n",
 				dev_attr_ois_exif.attr.name);
 		}
+	}
+#endif
+#ifdef CONFIG_SECURE_CAMERA_USE
+	camera_secure_dev = device_create(camera_class, NULL, 3, NULL, "secure");
+	if (IS_ERR(camera_secure_dev)) {
+		printk(KERN_ERR "failed to create secure device!\n");
+	} else {
+		if (device_create_file(camera_secure_dev, &dev_attr_secure_sensorid) < 0) {
+			printk(KERN_ERR "failed to create secure device file, %s\n",
+				dev_attr_secure_sensorid.attr.name);
+		}
+		if (device_create_file(camera_secure_dev, &dev_attr_iris_camfw) < 0) {
+			printk(KERN_ERR "failed to create iris device file, %s\n",
+				dev_attr_iris_camfw.attr.name);
+		}
+		if (device_create_file(camera_secure_dev, &dev_attr_iris_camfw_full) < 0) {
+			printk(KERN_ERR "failed to create iris device file, %s\n",
+				dev_attr_iris_camfw_full.attr.name);
+		}
+		if (device_create_file(camera_secure_dev, &dev_attr_iris_checkfw_user) < 0) {
+			printk(KERN_ERR "failed to create iris device file, %s\n",
+				dev_attr_iris_checkfw_user.attr.name);
+		}
+		if (device_create_file(camera_secure_dev, &dev_attr_iris_checkfw_factory) < 0) {
+			printk(KERN_ERR "failed to create iris device file, %s\n",
+				dev_attr_iris_checkfw_factory.attr.name);
+		}
+#ifdef CAMERA_SYSFS_V2
+		if (device_create_file(camera_secure_dev,
+					&dev_attr_iris_caminfo) < 0) {
+			printk(KERN_ERR
+				"failed to create iris device file, %s\n",
+				dev_attr_iris_caminfo.attr.name);
+		}
+#endif
 	}
 #endif
 
@@ -1605,7 +2031,13 @@ int fimc_is_destroy_sysfs(struct fimc_is_core *core)
 #endif
 		device_remove_file(camera_rear_dev, &dev_attr_rear_afcal);
 		device_remove_file(camera_rear_dev, &dev_attr_rear_sensorid_exif);
+#ifdef FROM_HEADER_MODULE_ID_ADDR
+		device_remove_file(camera_rear_dev, &dev_attr_rear_moduleid);
+#endif
 		device_remove_file(camera_rear_dev, &dev_attr_fw_update);
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+		device_remove_file(camera_rear_dev, &dev_attr_companion_ic_check);
+#endif
 	}
 
 #ifdef CONFIG_OIS_USE
@@ -1619,6 +2051,18 @@ int fimc_is_destroy_sysfs(struct fimc_is_core *core)
 		device_remove_file(camera_ois_dev, &dev_attr_ois_exif);
 	}
 #endif
+#ifdef CONFIG_SECURE_CAMERA_USE 
+	if (camera_secure_dev) {
+		device_remove_file(camera_secure_dev, &dev_attr_secure_sensorid);
+		device_remove_file(camera_secure_dev, &dev_attr_iris_camfw);
+		device_remove_file(camera_secure_dev, &dev_attr_iris_camfw_full);
+		device_remove_file(camera_secure_dev, &dev_attr_iris_checkfw_user);
+		device_remove_file(camera_secure_dev, &dev_attr_iris_checkfw_factory);
+#ifdef CAMERA_SYSFS_V2
+		device_remove_file(camera_secure_dev, &dev_attr_iris_caminfo);
+#endif
+	}
+#endif
 
 	if (camera_class) {
 		if (camera_front_dev)
@@ -1630,6 +2074,10 @@ int fimc_is_destroy_sysfs(struct fimc_is_core *core)
 #ifdef CONFIG_OIS_USE
 		if (camera_ois_dev)
 			device_destroy(camera_class, camera_ois_dev->devt);
+#endif
+#ifdef CONFIG_SECURE_CAMERA_USE
+		if (camera_secure_dev)
+			device_destroy(camera_class, camera_secure_dev->devt);
 #endif
 	}
 

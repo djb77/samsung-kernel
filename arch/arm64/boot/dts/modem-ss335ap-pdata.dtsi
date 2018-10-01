@@ -63,7 +63,7 @@
 		mif,link_types = <0x200>;	/* LINKDEV_SHMEM */
 		mif,link_name = "shmem";
 		mif,link_attrs = <0x7C9>;	/* XMIT_BTDLR(0x400) | DUMP_ALIGNED (0x200) | BOOT_ALIGNED (0x100) | MEM_DUMP (0x80) | MEM_BOOT (0x40) | DPRAM_MAGIC (0x08) | SBD_IPC (0x01) */
-		mif,num_iodevs = <20>;
+		mif,num_iodevs = <21>;
 		iodevs {
 			io_device_0 {
 				iod,name = "umts_ipc0";
@@ -257,6 +257,19 @@
 				iod,dl_buffer_size = <2048>;
 			};
 			io_device_15 {
+				iod,name = "multipdp_hiprio";
+				iod,id = <0>;
+				iod,format = <3>;		/* IPC_MULTI_RAW */
+				iod,io_type = <2>;		/* IODEV_DUMMY */
+				iod,links = <0x200>;
+				iod,attrs = <0x180>;
+				iod,app = "RIL";
+				iod,ul_num_buffers = <256>;
+				iod,ul_buffer_size = <2048>;
+				iod,dl_num_buffers = <256>;
+				iod,dl_buffer_size = <2048>;
+			};
+			io_device_16 {
 				iod,name = "multipdp";
 				iod,id = <0>;
 				iod,format = <3>;		/* IPC_MULTI_RAW */
@@ -269,7 +282,7 @@
 				iod,dl_num_buffers = <1024>;
 				iod,dl_buffer_size = <2048>;
 			};
-			io_device_16 {
+			io_device_17 {
 				iod,name = "umts_boot0";
 				iod,id = <215>;
 				iod,format = <4>;		/* IPC_BOOT */
@@ -278,7 +291,7 @@
 				iod,attrs = <0x02>;
 				iod,app = "CBD";
 			};
-			io_device_17 {
+			io_device_18 {
 				iod,name = "umts_ramdump0";
 				iod,id = <225>;
 				iod,format = <5>;		/* IPC_DUMP */
@@ -287,7 +300,7 @@
 				iod,attrs = <0x202>;		/* ATTR_NO_CHECK_MAXQ | ATTR_SIPC5 */
 				iod,app = "CBD";
 			};
-			io_device_18 {
+			io_device_19 {
 				iod,name = "smd4";
 				iod,id = <33>;
 				iod,format = <1>;
@@ -300,7 +313,7 @@
 				iod,dl_buffer_size = <2048>;
 				iod,option_region = "kor_skt";
 			};
-			io_device_19 {
+			io_device_20 {
 				iod,name = "umts_ciq0";
 				iod,id = <26>;
 				iod,format = <1>;

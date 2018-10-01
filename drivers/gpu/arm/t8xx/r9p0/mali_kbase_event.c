@@ -135,7 +135,11 @@ int kbase_event_dequeue(struct kbase_context *ctx, struct base_jd_event_v2 *ueve
 	/* normal event processing */
 	atomic_dec(&ctx->event_count);
 	atom = list_entry(ctx->event_list.next, struct kbase_jd_atom, dep_item[0]);
-	list_del(ctx->event_list.next);
+
+	/* MALI_SEC_INTEGRATION */
+	/* Do not delete from list if item was removed already */
+	if (!(ctx->event_list.next->prev == LIST_POISON2 || ctx->event_list.next->next == LIST_POISON1))
+		list_del(ctx->event_list.next);
 
 	mutex_unlock(&ctx->event_mutex);
 

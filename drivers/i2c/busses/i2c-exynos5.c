@@ -28,6 +28,7 @@
 #include <linux/of_gpio.h>
 #include "../../pinctrl/core.h"
 #include <soc/samsung/exynos-powermode.h>
+#include <linux/smc.h>
 
 #ifdef CONFIG_CPU_IDLE
 #include <soc/samsung/exynos-pm.h>
@@ -313,6 +314,16 @@ static void change_i2c_gpio(struct exynos5_i2c *i2c)
 	}
 }
 
+static void recover_gpio_pins_secure(struct exynos5_i2c *i2c)
+{
+	dev_err(i2c->dev, "Recover GPIO pins in secure\n");
+
+	if (i2c->bus_id == exynos_smc((0x83000045), i2c->bus_id, 0, 0))
+		dev_err(i2c->dev, "SDA line(%d) is recovered in secure!!!\n", i2c->bus_id);
+	else
+		dev_err(i2c->dev, "SDA line(%d) is not recovered in secure!!!\n", i2c->bus_id);
+}
+
 static void recover_gpio_pins(struct exynos5_i2c *i2c)
 {
 	int gpio_sda, gpio_scl;
@@ -432,7 +443,10 @@ static inline void dump_i2c_register(struct exynos5_i2c *i2c)
 #endif
 
 #ifdef CONFIG_GPIOLIB
-	recover_gpio_pins(i2c);
+	if (i2c->secure_mode) /* this is for secure gpio port recovery (Grace Secure Camera only) */
+		recover_gpio_pins_secure(i2c);
+	else
+		recover_gpio_pins(i2c);
 #endif
 }
 
@@ -714,7 +728,10 @@ static void reset_batcher(struct exynos5_i2c *i2c)
 	u32 i2c_batcher_con = 0x00;
 
 #ifdef CONFIG_GPIOLIB
-	recover_gpio_pins(i2c);
+	if (i2c->secure_mode) /* this is for secure gpio port recovery (Grace Secure Camera only) */
+		recover_gpio_pins_secure(i2c);
+	else
+		recover_gpio_pins(i2c);
 #endif
 
 	i2c_batcher_con |= HSI2C_BATCHER_RESET;
@@ -1590,6 +1607,11 @@ static int exynos5_i2c_probe(struct platform_device *pdev)
 	else
 		i2c->reset_before_trans = 0;
 
+	if (of_get_property(np, "secure-mode", NULL))
+		i2c->secure_mode = 1;
+	else
+		i2c->secure_mode = 0;
+
 	i2c->idle_ip_index = exynos_get_idle_ip_index(dev_name(&pdev->dev));
 
 	strlcpy(i2c->adap.name, "exynos5-i2c", sizeof(i2c->adap.name));
@@ -1859,6 +1881,7 @@ static struct platform_driver exynos5_i2c_driver = {
 		.name	= "exynos5-hsi2c",
 		.pm	= &exynos5_i2c_pm,
 		.of_match_table = exynos5_i2c_match,
+		.suppress_bind_attrs = true,
 	},
 };
 

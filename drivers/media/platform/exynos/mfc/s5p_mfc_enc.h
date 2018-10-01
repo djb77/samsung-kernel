@@ -15,6 +15,11 @@
 
 #include "s5p_mfc_common.h"
 
+#define ENC_HIGH_FPS	(70000)
+#define ENC_DEFAULT_FPS	(30000)
+#define ENC_MAX_FPS	(120000)
+#define ENC_AVG_FRAMES	(10)
+
 const struct v4l2_ioctl_ops *get_enc_v4l2_ioctl_ops(void);
 int s5p_mfc_init_enc_ctx(struct s5p_mfc_ctx *ctx);
 int enc_cleanup_user_shared_handle(struct s5p_mfc_ctx *ctx,

@@ -32,7 +32,7 @@
 #include "s5p_mfc_data_struct.h"
 #include "s5p_mfc_debug.h"
 
-#define MFC_DRIVER_INFO		160106
+#define MFC_DRIVER_INFO		161116
 
 #define MFC_MAX_REF_BUFS	2
 #define MFC_FRAME_PLANES	2
@@ -48,7 +48,7 @@
 /* Watchdog interval */
 #define MFC_WATCHDOG_INTERVAL   1000
 /* After how many executions watchdog should assume lock up */
-#define MFC_WATCHDOG_CNT        5
+#define MFC_WATCHDOG_CNT        15
 
 #define MFC_NO_INSTANCE_SET	-1
 
@@ -169,9 +169,15 @@
 #define FW_HAS_INT_TIMEOUT(dev)		(IS_MFCv9X(dev) || IS_MFCv10X(dev))
 #define FW_HAS_CONCEAL_CONTROL(dev)	IS_MFCv10X(dev)
 
-#define FW_SUPPORT_SKYPE(dev)		IS_MFCv10X(dev) &&		\
-					(dev->fw.date >= 0x150901)
+#define FW_SUPPORT_SKYPE(dev)		(IS_MFCv10X(dev) &&		\
+					(dev->fw.date >= 0x150901))
 #define FW_HAS_ROI_CONTROL(dev)		IS_MFCv10X(dev)
+#define FW_HAS_VIDEO_SIGNAL_TYPE(dev)	(IS_MFCv10X(dev) &&		\
+					(dev->fw.date >= 0x151223))
+#define FW_HAS_SEI_INFO_FOR_HDR(dev)	(IS_MFCv10X(dev) &&		\
+					(dev->fw.date >= 0x160415))
+#define FW_HAS_FIXED_SLICE(dev)		(IS_MFCv10X(dev) &&		\
+					(dev->fw.date >= 0x160202))
 
 #define HW_LOCK_CLEAR_MASK		(0xFFFFFFFF)
 
@@ -219,6 +225,7 @@
 #define	ENC_SET_SKYPE_FLAG		(1 << 3)
 #define	ENC_SET_ROI_CONTROL		(1 << 4)
 #define	ENC_SET_QP_BOUND_PB		(1 << 5)
+#define	ENC_SET_FIXED_SLICE		(1 << 6)
 
 #define MFC_QOS_FLAG_NODATA		0xFFFFFFFF
 

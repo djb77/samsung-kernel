@@ -20,6 +20,10 @@
 #include <linux/exynos-busmon.h>
 #include <linux/exynos-modem-ctrl.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
+
 /* S-NODE, M-NODE Common */
 #define OFFSET_TIMEOUT_REG		(0x2000)
 #define OFFSET_REQ_R			(0x0)
@@ -584,11 +588,16 @@ static void busmon_report_route(struct busmon_dev *busmon,
 				"port:%s, id:%x, user:%x\n",
 				rpath->port_name, id, user);
 		} else {
-			pr_info("\n--------------------------------------------------------------------------------\n"
+
+			pr_auto(ASL3, "\n--------------------------------------------------------------------------------\n"
 				"Route Information for DATA transaction\n\n"
 				"Master IP:%s's %s ---> Target:%s\n",
 				master->port_name, master->master_name, rpath->dest_name);
 
+#ifdef CONFIG_SEC_DEBUG
+			sec_debug_store_extra_buf(INFO_BUSMON, "Master IP:%s's %s ---> Target:%s\n",
+				master->port_name, master->master_name, rpath->dest_name);
+#endif
 			busmon_post_handler_by_master(busmon, group,
 							master->port_name,
 							master->master_name,
@@ -632,14 +641,16 @@ static void busmon_report_info(struct busmon_dev *busmon,
 				/* SFR Path */
 				unsigned int master;
 				master = BIT_ID_VAL(int_info) & 0x7;
-				pr_info("\n--------------------------------------------------------------------------------\n"
+
+				pr_auto(ASL3, "\n--------------------------------------------------------------------------------\n"
 					"Route Information for SFR transaction\n\n"
-					"Master IP       : %s - %s\n"
-					"AxID            : 0x%X\n"
+					"Master IP		 : %s - %s\n"
+					"AxID			 : 0x%X\n"
 					"--------------------------------------------------------------------------------\n",
 					masterinfo_sfr[master].port_name,
 					masterinfo_sfr[master].master_name,
 					BIT_ID_VAL(int_info));
+
 				busmon_post_handler_by_master(busmon, group,
 								masterinfo_sfr[master].port_name,
 								masterinfo_sfr[master].master_name, read);
@@ -685,7 +696,16 @@ static void busmon_report_info(struct busmon_dev *busmon,
 		break;
 	}
 
-	pr_info("\n--------------------------------------------------------------------------------\n"
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_store_extra_buf(INFO_BUSMON, "Detect reason   : %s\n"
+		"Target address  : 0x%llX\n"
+		"Error type      : %s",
+		node->comment,
+		(unsigned long long)((info1 & (GENMASK(3, 0)) << 32) | info0),
+		busmon_errcode[errcode]);
+#endif
+
+	pr_auto(ASL3, "\n--------------------------------------------------------------------------------\n"
 		"Transaction information => [%s, %s] Fail to access\n\n"
 		"Detect reason   : %s\n"
 		"Target address  : 0x%llX\n"
@@ -698,16 +718,17 @@ static void busmon_report_info(struct busmon_dev *busmon,
 		busmon_errcode[errcode],
 		group->name);
 
-	pr_info("\n--------------------------------------------------------------------------------\n"
+	pr_auto(ASL3, "\n--------------------------------------------------------------------------------\n"
 		"Detail NODE information for debuggging\n\n"
-		"Node Name       : %s(0x%08X)\n"
+		"Node Name		 : %s(0x%08X)\n"
 		"INTERRUPT_INFO  : 0x%08X\n"
-		"EXT_INFO_0      : 0x%08X\n"
-		"EXT_INFO_1      : 0x%08X\n"
-		"EXT_INFO_2      : 0x%08X\n"
+		"EXT_INFO_0 	 : 0x%08X\n"
+		"EXT_INFO_1 	 : 0x%08X\n"
+		"EXT_INFO_2 	 : 0x%08X\n"
 		"--------------------------------------------------------------------------------\n",
 		node->name, node->phy_regs + offset,
 		int_info, info0, info1, info2);
+
 }
 
 static int busmon_parse_info(struct busmon_dev *busmon,

@@ -15,6 +15,7 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/proc_fs.h>
+#include <linux/delay.h>
 #include "tz_iccc.h"
 
 /* ICCC implementation for kernel */
@@ -90,7 +91,13 @@ uint32_t Iccc_SaveData_Kernel(uint32_t type, uint32_t value)
 		goto iccc_close_session;
 	}
 
+retry1:
 	mc_ret = mc_wait_notification(&iccc_mchandle, -1);
+	if (MC_DRV_ERR_INTERRUPTED_BY_SIGNAL == mc_ret) {
+		usleep_range(1000, 5000);
+		goto retry1;
+	}
+
 	if (mc_ret != MC_DRV_OK) {
 		pr_err("ICCC--wait_notify failed.\n");
 		ret = RET_ICCC_FAIL;
@@ -182,7 +189,12 @@ uint32_t Iccc_ReadData_Kernel(uint32_t type, uint32_t *value)
 		goto iccc_close_session;
 	}
 
+retry2:
 	mc_ret = mc_wait_notification(&iccc_mchandle, -1);
+	if (MC_DRV_ERR_INTERRUPTED_BY_SIGNAL == mc_ret) {
+		usleep_range(1000, 5000);
+		goto retry2;
+	}
 	if (mc_ret != MC_DRV_OK) {
 		pr_err("ICCC--wait_notify failed.\n");
 		ret = RET_ICCC_FAIL;

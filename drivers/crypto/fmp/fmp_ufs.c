@@ -38,9 +38,24 @@ extern void exynos_ufs_ctrl_hci_core_clk(struct exynos_ufs *ufs, bool en);
 #define word_in(x, c)           byte2word(((unsigned char *)(x) + 4 * (c))[0], ((unsigned char *)(x) + 4 * (c))[1], \
 					((unsigned char *)(x) + 4 * (c))[2], ((unsigned char *)(x) + 4 * (c))[3])
 
+#define FMP_KEY_SIZE	32
+
+static int fmp_xts_check_key(uint8_t *enckey, uint8_t *twkey, uint32_t len)
+{
+	if (!enckey | !twkey | !len) {
+		printk(KERN_ERR "FMP key buffer is NULL or length is 0.\n");
+		return -1;
+	}
+
+	if (!memcmp(enckey, twkey, len))
+		return -1;      /* enckey and twkey are same */
+	else
+		return 0;       /* enckey and twkey are different */
+}
+
 int fmp_map_sg(struct ufshcd_sg_entry *prd_table, struct scatterlist *sg,
 					uint32_t sector_key, uint32_t idx,
-					uint32_t sector)
+					uint32_t sector, struct bio *bio)
 {
 #if defined(CONFIG_FIPS_FMP)
 	if (unlikely(in_fmp_fips_err())) {
@@ -71,6 +86,11 @@ int fmp_map_sg(struct ufshcd_sg_entry *prd_table, struct scatterlist *sg,
 
 		if (disk_key_flag) {
 			int ret;
+
+			if (fmp_xts_check_key(bio->disk_key, (uint8_t *)((uint64_t)bio->disk_key + FMP_KEY_SIZE), FMP_KEY_SIZE)) {
+				printk(KERN_ERR "Fail to FMP XTS because enckey and twkey is the same\n");
+				return -EINVAL;
+			}
 
 			if (disk_key_flag == 1)
 				printk(KERN_INFO "FMP disk encryption key is set\n");
@@ -150,10 +170,19 @@ int fmp_map_sg(struct ufshcd_sg_entry *prd_table, struct scatterlist *sg,
 		prd_table[idx].file_iv2 = word_in(extent_iv, 1);
 		prd_table[idx].file_iv3 = word_in(extent_iv, 0);
 
-		/* File Enc key*/
+		/* File Enc key */
 		for (j = 0; j < sg_page(sg)->mapping->key_length >> 2; j++)
 			*(&prd_table[idx].file_enckey0 + j) =
 				word_in(sg_page(sg)->mapping->key, (sg_page(sg)->mapping->key_length >> 2) - (j + 1));
+#if defined(CONFIG_FIPS_FMP)
+		if (!strncmp(sg_page(sg)->mapping->alg, "aesxts", sizeof("aesxts"))) {
+			if (fmp_xts_check_key((uint8_t *)&prd_table[idx].file_enckey0, (uint8_t *)&prd_table[idx].file_twkey0,
+											sg_page(sg)->mapping->key_length)) {
+				printk(KERN_ERR "Fail to FMP XTS because enckey and twkey is the same\n");
+				return -EINVAL;
+			}
+		}
+#endif
 	}
 #endif
 	return 0;
@@ -180,6 +209,13 @@ int fmp_map_sg_st(struct ufs_hba *hba, struct ufshcd_sg_entry *prd_table,
 					for File Encrytion. size = 0x%x\n", prd_table[idx].size);
 			return -EINVAL;
 		}
+
+		if (fmp_xts_check_key((uint8_t *)&prd_table_st->file_enckey0,
+							(uint8_t *)&prd_table_st->file_twkey0, prd_table_st->size)) {
+			printk(KERN_ERR "Fail to FMP XTS because enckey and twkey is the same\n");
+			return -EINVAL;
+		}
+
 		SET_FAS(&prd_table[idx], AES_XTS);
 	} else if (hba->self_test_mode == CBC_MODE)
 		SET_FAS(&prd_table[idx], AES_CBC);
@@ -292,16 +328,5 @@ int fmp_clear_disk_key(void)
 	return exynos_smc(SMC_CMD_FMP, FMP_KEY_CLEAR, 0, 0);
 }
 
-int fmp_check_disk_key(uint8_t *key)
-{
-	if (!key) {
-		printk(KERN_ERR "FMP key buffer is NULL.\n");
-		return -1;
-	}
 
-	if (!memcmp(key, (uint8_t *)((uint64_t)key + 32), 32))
-		return -1;      /* enckey and twkey are same */
-	else
-		return 0;       /* enckey and twkey are different */
-}
 #endif

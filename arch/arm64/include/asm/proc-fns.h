@@ -30,7 +30,7 @@ struct cpu_suspend_ctx;
 
 extern void cpu_cache_off(void);
 extern void cpu_do_idle(void);
-extern void cpu_do_switch_mm(unsigned long pgd_phys, struct mm_struct *mm);
+extern unsigned long cpu_do_switch_mm(unsigned long pgd_phys, struct mm_struct *mm);
 extern void cpu_reset(unsigned long addr) __attribute__((noreturn));
 void cpu_soft_restart(phys_addr_t cpu_reset,
 		unsigned long addr) __attribute__((noreturn));
@@ -39,7 +39,12 @@ extern u64 cpu_do_resume(phys_addr_t ptr, u64 idmap_ttbr);
 
 #include <asm/memory.h>
 
-#define cpu_switch_mm(pgd,mm) cpu_do_switch_mm(virt_to_phys(pgd),mm)
+#define cpu_switch_mm(pgd,mm) 					\
+({								\
+	if (cpu_do_switch_mm(virt_to_phys(pgd),mm) != 0)	\
+		if (cpu_do_switch_mm(virt_to_phys(pgd),mm) != 0)\
+			panic ("TTBR update fail!");		\
+})
 
 #define cpu_get_pgd()					\
 ({							\

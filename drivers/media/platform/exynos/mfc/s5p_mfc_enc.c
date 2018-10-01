@@ -40,11 +40,6 @@
 
 #define MFC_ENC_AVG_FPS_MODE
 
-#define ENC_HIGH_FPS	(70000)
-#define ENC_DEFAULT_FPS	(30000)
-#define ENC_MAX_FPS	(120000)
-#define ENC_AVG_FRAMES	(10)
-
 static struct s5p_mfc_fmt *find_format(struct v4l2_format *f, unsigned int t)
 {
 	unsigned long i;
@@ -597,7 +592,7 @@ static int enc_set_buf_ctrls_val(struct s5p_mfc_ctx *ctx, struct list_head *head
 				value = MFC_READL(buf_ctrl->flag_addr);
 				value &= ~(1 << 10);
 				MFC_WRITEL(value, buf_ctrl->flag_addr);
-				mfc_err_ctx("temporal layer count is invalid : %d\n",
+				mfc_err_ctx("Temporal SVC: layer count is invalid : %d\n",
 						temporal_LC.temporal_layer_count);
 				goto invalid_layer_count;
 			}
@@ -615,21 +610,59 @@ static int enc_set_buf_ctrls_val(struct s5p_mfc_ctx *ctx, struct list_head *head
 				value &= ~(1 << 2);
 			MFC_WRITEL(value, buf_ctrl->flag_addr);
 
-			mfc_debug(2, "temporal layer count : %d\n",
-					temporal_LC.temporal_layer_count & 0x7);
+			mfc_debug(3, "Temporal SVC: layer count %d, E_PARAM_CHANGE %#x\n",
+					temporal_LC.temporal_layer_count & 0x7, value);
 
 			value = MFC_READL(S5P_FIMV_E_NUM_T_LAYER);
 			buf_ctrl->old_val2 = value;
 			value &= ~(0x7);
 			value |= (temporal_LC.temporal_layer_count & 0x7);
 			MFC_WRITEL(value, S5P_FIMV_E_NUM_T_LAYER);
+			mfc_debug(3, "Temporal SVC: E_NUM_T_LAYER %#x\n", value);
 			for (i = 0; i < (temporal_LC.temporal_layer_count & 0x7); i++) {
-				mfc_debug(2, "temporal layer bitrate[%d] : %d\n",
+				mfc_debug(3, "Temporal SVC: layer bitrate[%d] %d\n",
 					i, temporal_LC.temporal_layer_bitrate[i]);
 				MFC_WRITEL(temporal_LC.temporal_layer_bitrate[i],
 						buf_ctrl->addr + i * 4);
 			}
+
+			/* priority change */
+			if (ctx->codec_mode == S5P_FIMV_CODEC_H264_ENC) {
+				value = 0;
+				value2 = 0;
+				for (i = 0; i < (p->codec.h264.num_hier_layer & 0x07); i++) {
+					if (i <= 4)
+						value |= ((p->codec.h264.base_priority & 0x3F) + i) << (6 * i);
+					else
+						value2 |= ((p->codec.h264.base_priority & 0x3F) + i) << (6 * (i - 5));
+				}
+				MFC_WRITEL(value, S5P_FIMV_E_H264_HD_SVC_EXTENSION_0);
+				MFC_WRITEL(value2, S5P_FIMV_E_H264_HD_SVC_EXTENSION_1);
+				mfc_debug(3, "Temporal SVC: EXTENSION0 %#x, EXTENSION1 %#x\n",
+						value, value2);
+
+				value = MFC_READL(buf_ctrl->flag_addr);
+				value |= (1 << 12);
+				MFC_WRITEL(value, buf_ctrl->flag_addr);
+				mfc_debug(3, "Temporal SVC: E_PARAM_CHANGE %#x\n", value);
+			}
 		}
+
+		if (buf_ctrl->id == V4L2_CID_MPEG_MFC_H264_MARK_LTR) {
+			value = MFC_READL(S5P_FIMV_E_H264_NAL_CONTROL);
+			buf_ctrl->old_val2 = (value >> 8) & 0x7;
+			value &= ~(0x7 << 8);
+			value |= (buf_ctrl->val & 0x7) << 8;
+			MFC_WRITEL(value, S5P_FIMV_E_H264_NAL_CONTROL);
+		}
+		if (buf_ctrl->id == V4L2_CID_MPEG_MFC_H264_USE_LTR) {
+			value = MFC_READL(S5P_FIMV_E_H264_NAL_CONTROL);
+			buf_ctrl->old_val2 = (value >> 11) & 0x7;
+			value &= ~(0x7 << 11);
+			value |= (buf_ctrl->val & 0x7) << 11;
+			MFC_WRITEL(value, S5P_FIMV_E_H264_NAL_CONTROL);
+		}
+
 		if ((buf_ctrl->id == V4L2_CID_MPEG_MFC51_VIDEO_I_PERIOD_CH) && FW_HAS_GOP2(dev)) {
 			value = MFC_READL(S5P_FIMV_E_GOP_CONFIG2);
 			buf_ctrl->old_val |= (value << 16) & 0x3FFF0000;
@@ -672,6 +705,9 @@ static int enc_set_buf_ctrls_val(struct s5p_mfc_ctx *ctx, struct list_head *head
 			}
 			MFC_WRITEL(value, S5P_FIMV_E_H264_HD_SVC_EXTENSION_0);
 			MFC_WRITEL(value2, S5P_FIMV_E_H264_HD_SVC_EXTENSION_1);
+			p->codec.h264.base_priority = buf_ctrl->val;
+			mfc_debug(3, "Temporal SVC: EXTENSION0 %#x, EXTENSION1 %#x\n",
+					value, value2);
 		}
 		/* per buffer QP setting change */
 		if (buf_ctrl->id == V4L2_CID_MPEG_MFC_CONFIG_QP)
@@ -806,7 +842,7 @@ static int enc_set_buf_ctrls_val_nal_q(struct s5p_mfc_ctx *ctx,
 				((temporal_LC.temporal_layer_count > 3) &&
 				(ctx->codec_mode == S5P_FIMV_CODEC_VP9_ENC))) {
 				/* claer NUM_T_LAYER_CHANGE */
-				mfc_err_ctx("temporal layer count is invalid : %d\n",
+				mfc_err_ctx("Temporal SVC: layer count(%d) is invalid\n",
 						temporal_LC.temporal_layer_count);
 				return 0;
 			}
@@ -829,16 +865,32 @@ static int enc_set_buf_ctrls_val_nal_q(struct s5p_mfc_ctx *ctx,
 				pInStr->ParamChange |= (1 << 10);
 			else
 				pInStr->ParamChange &= ~(1 << 10);
-			mfc_debug(2, "temporal layer count : %d\n",
+			mfc_debug(3, "Temporal SVC layer count %d\n",
 					temporal_LC.temporal_layer_count & 0x7);
 
 			pInStr->NumTLayer &= ~(0x7);
 			pInStr->NumTLayer |= (temporal_LC.temporal_layer_count & 0x7);
 			for (i = 0; i < (temporal_LC.temporal_layer_count & 0x7); i++) {
-				mfc_debug(2, "temporal layer bitrate[%d] : %d\n",
+				mfc_debug(3, "Temporal SVC: layer bitrate[%d] %d\n",
 					i, temporal_LC.temporal_layer_bitrate[i]);
 				pInStr->HierarchicalBitRateLayer[i] =
 					temporal_LC.temporal_layer_bitrate[i];
+			}
+
+			/* priority change */
+			if (ctx->codec_mode == S5P_FIMV_CODEC_H264_ENC) {
+				for (i = 0; i < (temporal_LC.temporal_layer_count & 0x7); i++) {
+					if (i <= 4)
+						pInStr->H264HDSvcExtension0 |=
+							((p->codec.h264.base_priority & 0x3f) + i) << (6 * i);
+					else
+						pInStr->H264HDSvcExtension1 |=
+							((p->codec.h264.base_priority & 0x3f) + i) << (6 * (i - 5));
+				}
+				mfc_debug(3, "NAL-Q: Temporal SVC: EXTENSION0 %#x, EXTENSION1 %#x\n",
+						pInStr->H264HDSvcExtension0, pInStr->H264HDSvcExtension1);
+
+				pInStr->ParamChange |= (1 << 12);
 			}
 			break;
 		case V4L2_CID_MPEG_VIDEO_H264_HIERARCHICAL_CODING_LAYER:
@@ -880,6 +932,7 @@ static int enc_set_buf_ctrls_val_nal_q(struct s5p_mfc_ctx *ctx,
 				else
 					pInStr->H264HDSvcExtension1 |=
 						((buf_ctrl->val & 0x3f) + i) << (6 * (i - 5));
+			p->codec.h264.base_priority = buf_ctrl->val;
 			param_change = 1;
 			break;
 		case V4L2_CID_MPEG_MFC_CONFIG_QP:
@@ -943,7 +996,6 @@ static int enc_get_buf_ctrls_val_nal_q(struct s5p_mfc_ctx *ctx,
 
 	return 0;
 }
-
 
 static int enc_recover_buf_ctrls_val(struct s5p_mfc_ctx *ctx,
 						struct list_head *head)
@@ -1012,6 +1064,18 @@ static int enc_recover_buf_ctrls_val(struct s5p_mfc_ctx *ctx,
 			value &= ~(1 << 2);
 			MFC_WRITEL(value, buf_ctrl->flag_addr);
 		}
+		if (buf_ctrl->id == V4L2_CID_MPEG_MFC_H264_MARK_LTR) {
+			value = MFC_READL(S5P_FIMV_E_H264_NAL_CONTROL);
+			value &= ~(0x7 << 8);
+			value |= (buf_ctrl->old_val2 & 0x7) << 8;
+			MFC_WRITEL(value, S5P_FIMV_E_H264_NAL_CONTROL);
+		}
+		if (buf_ctrl->id == V4L2_CID_MPEG_MFC_H264_USE_LTR) {
+			value = MFC_READL(S5P_FIMV_E_H264_NAL_CONTROL);
+			value &= ~(0x7 << 11);
+			value |= (buf_ctrl->old_val2 & 0x7) << 11;
+			MFC_WRITEL(value, S5P_FIMV_E_H264_NAL_CONTROL);
+		}
 	}
 
 	return 0;
@@ -1051,16 +1115,12 @@ static int enc_pre_seq_start(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_buf *dst_mb;
-	dma_addr_t dst_addr;
-	unsigned int dst_size;
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->irqlock, flags);
 
 	dst_mb = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf, list);
-	dst_addr = s5p_mfc_mem_plane_addr(ctx, &dst_mb->vb, 0);
-	dst_size = (unsigned int)vb2_plane_size(&dst_mb->vb, 0);
-	s5p_mfc_set_enc_stream_buffer(ctx, dst_addr, dst_size);
+	s5p_mfc_set_enc_stream_buffer(ctx, dst_mb);
 
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
@@ -1134,8 +1194,7 @@ static int enc_pre_frame_start(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_raw_info *raw;
 	unsigned long flags;
 	dma_addr_t src_addr[3] = { 0, 0, 0 };
-	dma_addr_t dst_addr;
-	unsigned int dst_size, i;
+	unsigned int i;
 
 	raw = &ctx->raw_buf;
 	spin_lock_irqsave(&dev->irqlock, flags);
@@ -1154,13 +1213,9 @@ static int enc_pre_frame_start(struct s5p_mfc_ctx *ctx)
 	s5p_mfc_set_enc_frame_buffer(ctx, &src_addr[0], raw->num_planes);
 
 	dst_mb = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf, list);
-	dst_addr = s5p_mfc_mem_plane_addr(ctx, &dst_mb->vb, 0);
-	dst_size = (unsigned int)vb2_plane_size(&dst_mb->vb, 0);
-	s5p_mfc_set_enc_stream_buffer(ctx, dst_addr, dst_size);
+	s5p_mfc_set_enc_stream_buffer(ctx, dst_mb);
 
 	spin_unlock_irqrestore(&dev->irqlock, flags);
-
-	mfc_debug(2, "enc dst addr: 0x%08lx", (unsigned long)dst_addr);
 
 	return 0;
 }
@@ -1913,11 +1968,18 @@ static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 	int ret = -EINVAL;
 
 	mfc_debug_enter();
+
 	mfc_debug(2, "Enqueued buf: %d (type = %d)\n", buf->index, buf->type);
 	if (ctx->state == MFCINST_ERROR) {
 		mfc_err_ctx("Call on QBUF after unrecoverable error.\n");
 		return -EIO;
 	}
+
+	if (V4L2_TYPE_IS_MULTIPLANAR(buf->type) && !buf->length) {
+		mfc_err_ctx("multiplanar but length is zero\n");
+		return -EIO;
+	}
+
 	if (buf->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		ret = vb2_qbuf(&ctx->vq_src, buf);
 		if (!ret) {
@@ -2098,6 +2160,9 @@ static int enc_ext_info(struct s5p_mfc_ctx *ctx)
 
 	if (FW_HAS_ROI_CONTROL(dev))
 		val |= ENC_SET_ROI_CONTROL;
+
+	if (FW_HAS_FIXED_SLICE(dev))
+		val |= ENC_SET_FIXED_SLICE;
 
 	val |= ENC_SET_QP_BOUND_PB;
 
@@ -2511,6 +2576,9 @@ static int set_enc_param(struct s5p_mfc_ctx *ctx, struct v4l2_control *ctrl)
 	case V4L2_CID_MPEG_MFC_H264_ENABLE_LTR:
 		p->codec.h264.enable_ltr = ctrl->value;
 		break;
+	case V4L2_CID_MPEG_MFC_H264_NUM_OF_LTR:
+		p->codec.h264.num_of_ltr = ctrl->value;
+		break;
 	case V4L2_CID_MPEG_MFC_H264_BASE_PRIORITY:
 		p->codec.h264.base_priority = ctrl->value;
 		p->codec.h264.set_priority = 1;
@@ -2892,6 +2960,9 @@ static int set_enc_param(struct s5p_mfc_ctx *ctx, struct v4l2_control *ctrl)
 		break;
 	case V4L2_CID_MPEG_MFC_CONFIG_QP:
 		p->config_qp = ctrl->value;
+		break;
+	case V4L2_CID_MPEG_VIDEO_TEMPORAL_SHORTTERM_MAX_LAYER:
+		p->num_hier_max_layer = ctrl->value;
 		break;
 	default:
 		v4l2_err(&dev->v4l2_dev, "Invalid control\n");

@@ -32,7 +32,7 @@
 #include <linux/platform_data/sec_thermistor.h>
 #include <linux/sec_sysfs.h>
 
-#define ADC_SAMPLING_CNT	7
+#define ADC_SAMPLING_CNT	5
 
 struct sec_therm_info {
 	struct device *dev;

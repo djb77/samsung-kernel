@@ -68,12 +68,22 @@ typedef struct {
 	uint8_t reserved[RESERVED_BYTES];
 }kern_secure_info_t;
 
+#if ANDROID_VERSION >= 70000
+typedef struct {
+	secure_param_header_t header;
+	uint32_t sysscope_flag;
+	uint32_t trustboot_flag;
+	uint32_t tima_version_flag;
+	uint8_t reserved[RESERVED_BYTES - 4];
+}sys_secure_info_t;
+#else
 typedef struct {
 	secure_param_header_t header;
 	uint32_t sysscope_flag;
 	uint32_t trustboot_flag;
 	uint8_t reserved[RESERVED_BYTES];
 }sys_secure_info_t;
+#endif
 
 typedef struct {
 	bl_secure_info_t  bl_secure_info;
@@ -119,7 +129,6 @@ typedef struct {
 #define IMAGE_STATUS4		(BL_ICCC_TYPE_START+0x00011)
 #define IMAGE_STATUS5		(BL_ICCC_TYPE_START+0x00012)
 #define IMAGE_STATUS6		(BL_ICCC_TYPE_START+0x00013)
-#define BL_STRUCT			(BL_ICCC_TYPE_START+0x000FF)
 
 /* end BL Secure Parameters */
 
@@ -145,6 +154,7 @@ typedef struct {
 
 #define SYSSCOPE_FLAG		(SYS_ICCC_TYPE_START+0x00000)
 #define TRUSTBOOT_FLAG		(SYS_ICCC_TYPE_START+0x00001)
+#define TIMA_VERSION_FLAG	(SYS_ICCC_TYPE_START+0x00002)
 
 /* end System Parameter */
 

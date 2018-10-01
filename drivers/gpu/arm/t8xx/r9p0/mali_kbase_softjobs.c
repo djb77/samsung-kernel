@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -25,6 +25,7 @@
 #include <linux/syscalls.h>
 #include "mali_kbase_sync.h"
 #endif
+#include <mali_base_kernel.h>
 #include <mali_kbase_hwaccess_time.h>
 #include <linux/version.h>
 #include <linux/ktime.h>
@@ -340,6 +341,7 @@ static int kbase_fence_wait(struct kbase_jd_atom *katom)
 		queue_work(katom->kctx->jctx.job_done_wq, &katom->work);
 	}
 
+	katom->start_timestamp = ktime_get();
 	kbasep_add_waiting_soft_job(katom);
 
 /* MALI_SEC_INTEGRATION */
@@ -522,6 +524,216 @@ static void kbasep_soft_event_cancel_job(struct kbase_jd_atom *katom)
 		kbase_js_sched_all(katom->kctx->kbdev);
 }
 
+static int kbase_ext_res_prepare(struct kbase_jd_atom *katom)
+{
+	__user struct base_external_resource_list *user_ext_res;
+	struct base_external_resource_list *ext_res;
+	u64 count = 0;
+	size_t copy_size;
+	int ret;
+
+	user_ext_res = (__user struct base_external_resource_list *)
+			(uintptr_t) katom->jc;
+
+	/* Fail the job if there is no info structure */
+	if (!user_ext_res) {
+		ret = -EINVAL;
+		goto fail;
+	}
+
+	if (copy_from_user(&count, &user_ext_res->count, sizeof(u64)) != 0) {
+		ret = -EINVAL;
+		goto fail;
+	}
+
+	/* Is the number of external resources in range? */
+	if (!count || count > BASE_EXT_RES_COUNT_MAX) {
+		ret = -EINVAL;
+		goto fail;
+	}
+
+	/* Copy the information for safe access and future storage */
+	copy_size = sizeof(*ext_res);
+	copy_size += sizeof(struct base_external_resource) * (count - 1);
+	ext_res = kzalloc(copy_size, GFP_KERNEL);
+	if (!ext_res) {
+		ret = -ENOMEM;
+		goto fail;
+	}
+
+	if (copy_from_user(ext_res, user_ext_res, copy_size) != 0) {
+		ret = -EINVAL;
+		goto free_info;
+	}
+
+	/*
+	 * Overwrite the count with the first value incase it was changed
+	 * after the fact.
+	 */
+	ext_res->count = count;
+
+	/*
+	 * Replace the user pointer with our kernel allocated
+	 * ext_res structure.
+	 */
+	katom->jc = (u64)(uintptr_t) ext_res;
+
+	return 0;
+
+free_info:
+	kfree(ext_res);
+fail:
+	return ret;
+}
+
+static void kbase_ext_res_process(struct kbase_jd_atom *katom, bool map)
+{
+	struct base_external_resource_list *ext_res;
+	int i;
+	bool failed = false;
+
+	ext_res = (struct base_external_resource_list *) (uintptr_t) katom->jc;
+	if (!ext_res)
+		goto failed_jc;
+
+	kbase_gpu_vm_lock(katom->kctx);
+
+	for (i = 0; i < ext_res->count; i++) {
+		u64 gpu_addr;
+
+		gpu_addr = ext_res->ext_res[i].ext_resource &
+				~BASE_EXT_RES_ACCESS_EXCLUSIVE;
+		if (map) {
+			if (!kbase_sticky_resource_acquire(katom->kctx,
+					gpu_addr))
+				goto failed_loop;
+		} else
+			if (!kbase_sticky_resource_release(katom->kctx, NULL,
+					gpu_addr, false))
+				failed = true;
+	}
+
+	/*
+	 * In the case of unmap we continue unmapping other resources in the
+	 * case of failure but will always report failure if _any_ unmap
+	 * request fails.
+	 */
+	if (failed)
+		katom->event_code = BASE_JD_EVENT_JOB_INVALID;
+	else
+		katom->event_code = BASE_JD_EVENT_DONE;
+
+	kbase_gpu_vm_unlock(katom->kctx);
+
+	return;
+
+failed_loop:
+	while (--i > 0) {
+		u64 gpu_addr;
+
+		gpu_addr = ext_res->ext_res[i].ext_resource &
+				~BASE_EXT_RES_ACCESS_EXCLUSIVE;
+
+		kbase_sticky_resource_release(katom->kctx, NULL, gpu_addr,
+				false);
+	}
+
+	katom->event_code = BASE_JD_EVENT_JOB_INVALID;
+	kbase_gpu_vm_unlock(katom->kctx);
+
+failed_jc:
+	return;
+}
+
+static void kbase_ext_res_finish(struct kbase_jd_atom *katom)
+{
+	struct base_external_resource_list *ext_res;
+
+	ext_res = (struct base_external_resource_list *) (uintptr_t) katom->jc;
+	/* Free the info structure */
+	kfree(ext_res);
+}
+
+/* MALI_SEC_INTEGRATION */
+/* Job scheduler debugger */
+static char *kbase_fence_debug_status_string(int status)
+{
+	if (status == 0)
+		return "signaled";
+	else if (status > 0)
+		return "active";
+	else
+		return "error";
+}
+
+void kbase_debug_fence_wait_job(struct kbase_context *kctx)
+{
+	struct list_head *entry, *tmp;
+	int i;
+	unsigned long irq_flags;
+	struct kbase_jd_atom *atom;
+	s64 start_timestamp;
+
+	/* JS-related states */
+	spin_lock_irqsave(&kctx->kbdev->js_data.runpool_irq.lock, irq_flags);
+	for (i = 0; i != BASE_JD_ATOM_COUNT; ++i) {
+		atom = &kctx->jctx.atoms[i];
+		start_timestamp = 0;
+
+		if (atom->status == KBASE_JD_ATOM_STATE_UNUSED)
+			continue;
+
+		/* start_timestamp is cleared as soon as the atom leaves UNUSED state
+		 *		 * and set before a job is submitted to the h/w, a non-zero value means
+		 *				 * it is valid */
+		if (ktime_to_ns(atom->start_timestamp))
+			start_timestamp = ktime_to_ns(
+					ktime_sub(ktime_get(), atom->start_timestamp));
+
+		printk(KERN_ALERT
+				"%i,%u,%u,%u,%u %u,%lli,%llu\n",
+				i, atom->core_req, atom->status, atom->coreref_state,
+				(unsigned)(atom->dep[0].atom ?
+					atom->dep[0].atom - kctx->jctx.atoms : 0),
+				(unsigned)(atom->dep[1].atom ?
+					atom->dep[1].atom - kctx->jctx.atoms : 0),
+				(signed long long)start_timestamp,
+				(unsigned long long)(atom->time_spent_us ?
+					atom->time_spent_us * 1000 : start_timestamp)
+			  );
+	}
+	spin_unlock_irqrestore(&kctx->kbdev->js_data.runpool_irq.lock, irq_flags);
+
+	list_for_each_safe(entry, tmp, &kctx->waiting_soft_jobs) {
+		struct kbase_jd_atom *katom = list_entry(entry,
+				struct kbase_jd_atom, dep_item[0]);
+		s64 elapsed_time = ktime_to_ms(ktime_sub(ktime_get(),
+					katom->start_timestamp));
+
+		/* We are only interested in soft job stuck > MALI_WAIT_FENCE_TIME ms */
+		if (elapsed_time < (s64)MALI_WAIT_FENCE_TIME) {
+			continue;
+		}
+
+		if ((katom->core_req & BASEP_JD_REQ_ATOM_TYPE) ==
+				BASE_JD_REQ_SOFT_FENCE_WAIT) {
+			printk(KERN_ALERT "ctx %d_%d: Atom %d still waiting for fence [%p] after %dms\n",
+					kctx->tgid, kctx->id, kbase_jd_atom_id(kctx, katom), katom->fence, MALI_WAIT_FENCE_TIME);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
+			printk(KERN_ALERT "\tGuilty fence [%p] %s: %s\n",
+					katom->fence, katom->fence->name,
+					kbase_fence_debug_status_string(katom->fence->status));
+#else
+			printk(KERN_ALERT "\tGuilty fence [%p] %s: %s\n",
+					katom->fence, katom->fence->name,
+					kbase_fence_debug_status_string(atomic_read(&katom->fence->status)));
+#endif
+		}
+	}
+
+}
+
+
 int kbase_process_soft_job(struct kbase_jd_atom *katom)
 {
 	/* MALI_SEC_INTEGRATION */
@@ -553,6 +765,12 @@ int kbase_process_soft_job(struct kbase_jd_atom *katom)
 		break;
 	case BASE_JD_REQ_SOFT_EVENT_RESET:
 		kbasep_soft_event_update(katom, BASE_JD_SOFT_EVENT_RESET);
+		break;
+	case BASE_JD_REQ_SOFT_EXT_RES_MAP:
+		kbase_ext_res_process(katom, true);
+		break;
+	case BASE_JD_REQ_SOFT_EXT_RES_UNMAP:
+		kbase_ext_res_process(katom, false);
 		break;
 #ifdef CONFIG_MALI_DVFS_USER
 	case BASE_JD_REQ_SOFT_DVFS:
@@ -667,6 +885,10 @@ int kbase_prepare_soft_job(struct kbase_jd_atom *katom)
 		if (katom->jc == 0)
 			return -EINVAL;
 		break;
+        case BASE_JD_REQ_SOFT_EXT_RES_MAP:
+                return kbase_ext_res_prepare(katom);
+        case BASE_JD_REQ_SOFT_EXT_RES_UNMAP:
+                return kbase_ext_res_prepare(katom);
 #ifdef CONFIG_MALI_DVFS_USER
 	case BASE_JD_REQ_SOFT_DVFS:
 		break;
@@ -729,6 +951,12 @@ void kbase_finish_soft_job(struct kbase_jd_atom *katom)
 #endif
 		break;
 #endif				/* CONFIG_SYNC */
+        case BASE_JD_REQ_SOFT_EXT_RES_MAP:
+                kbase_ext_res_finish(katom);
+                break;
+        case BASE_JD_REQ_SOFT_EXT_RES_UNMAP:
+                kbase_ext_res_finish(katom);
+                break;
 #ifdef CONFIG_MALI_DVFS_USER
 	case BASE_JD_REQ_SOFT_DVFS:
 		break;

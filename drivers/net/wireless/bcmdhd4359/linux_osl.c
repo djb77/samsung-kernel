@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linux_osl.c 610535 2016-01-07 06:45:24Z $
+ * $Id: linux_osl.c 666683 2016-10-24 08:46:43Z $
  */
 
 #define LINUX_PORT
@@ -801,16 +801,39 @@ osl_pkt_tonative(osl_t *osh, void *pkt)
 void * BCMFASTPATH
 osl_pkt_frmnative(osl_t *osh, void *pkt)
 {
+	struct sk_buff *cskb;
 	struct sk_buff *nskb;
+	unsigned long pktalloced = 0;
+
 
 	if (osh->pub.pkttag)
 		OSL_PKTTAG_CLEAR(pkt);
 
-	/* Increment the packet counter */
-	for (nskb = (struct sk_buff *)pkt; nskb; nskb = nskb->next) {
-		atomic_add(PKTISCHAINED(nskb) ? PKTCCNT(nskb) : 1, &osh->cmn->pktalloced);
+	/* walk the PKTCLINK() list */
+	for (cskb = (struct sk_buff *)pkt;
+		cskb != NULL;
+		cskb = PKTISCHAINED(cskb) ? PKTCLINK(cskb) : NULL) {
 
+		/* walk the pkt buffer list */
+		for (nskb = cskb; nskb; nskb = nskb->next) {
+
+			/* Increment the packet counter */
+			pktalloced++;
+
+			/* clean the 'prev' pointer
+			 * Kernel 3.18 is leaving skb->prev pointer set to skb
+			 * to indicate a non-fragmented skb
+			 */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0))
+			nskb->prev = NULL;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0) */
+
+
+		}
 	}
+	/* Increment the packet counter */
+	atomic_add(pktalloced, &osh->cmn->pktalloced);
+
 	return (void *)pkt;
 }
 
@@ -1024,14 +1047,14 @@ osl_pktget_static(osl_t *osh, uint len)
 	down(&bcm_static_skb->osl_pkt_sem);
 
 	if (len <= DHD_SKB_1PAGE_BUFSIZE) {
-		for (i = 0; i < STATIC_PKT_MAX_NUM; i++) {
+		for (i = 0; i < STATIC_PKT_1PAGE_NUM; i++) {
 			if (bcm_static_skb->skb_4k[i] &&
 				bcm_static_skb->pkt_use[i] == 0) {
 				break;
 			}
 		}
 
-		if (i != STATIC_PKT_MAX_NUM) {
+		if (i != STATIC_PKT_1PAGE_NUM) {
 			bcm_static_skb->pkt_use[i] = 1;
 
 			skb = bcm_static_skb->skb_4k[i];
@@ -1162,8 +1185,8 @@ osl_pktfree_static(osl_t *osh, void *p, bool send)
 	}
 #endif
 	up(&bcm_static_skb->osl_pkt_sem);
-	osl_pktfree(osh, p, send);
 #endif /* DHD_USE_STATIC_CTRLBUF */
+	osl_pktfree(osh, p, send);
 }
 #endif /* CONFIG_DHD_USE_STATIC_BUF */
 

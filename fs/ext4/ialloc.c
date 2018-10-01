@@ -23,6 +23,7 @@
 #include <linux/bitops.h>
 #include <linux/blkdev.h>
 #include <asm/byteorder.h>
+#include <linux/ratelimit.h>
 
 #include "ext4.h"
 #include "ext4_jbd2.h"
@@ -779,8 +780,12 @@ struct inode *__ext4_new_inode(handle_t *handle, struct inode *dir,
 got_group:
 	EXT4_I(dir)->i_last_alloc_group = group;
 	err = -ENOSPC;
-	if (ret2 == -1)
+	if (ret2 == -1) {
+		printk_ratelimited(KERN_INFO "Return ENOSPC : No free inode (%d/%u)\n",
+			(int) percpu_counter_read_positive(&sbi->s_freeinodes_counter),
+			le32_to_cpu(sbi->s_es->s_inodes_count));
 		goto out;
+	}
 
 	/*
 	 * Normally we will only go through one pass of this loop,
@@ -867,6 +872,9 @@ next_group:
 			group = 0;
 	}
 	err = -ENOSPC;
+	printk_ratelimited(KERN_INFO "Return ENOSPC : No free inode (%d/%u)\n",
+		(int) percpu_counter_read_positive(&sbi->s_freeinodes_counter),
+		le32_to_cpu(sbi->s_es->s_inodes_count));
 	goto out;
 
 got:

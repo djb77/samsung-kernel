@@ -33,7 +33,7 @@ extern unsigned long cal_dfs_cached_get_rate(unsigned int id);
 extern unsigned long cal_dfs_get_rate(unsigned int id);
 extern int cal_dfs_get_rate_table(unsigned int id, unsigned long *table);
 extern int cal_dfs_get_asv_table(unsigned int id, unsigned int *table);
-extern unsigned int cal_asv_pmic_info(void);
+extern int cal_asv_pmic_info(void);
 extern int cal_asv_get_ids_info(unsigned int domain);
 
 
@@ -80,7 +80,7 @@ extern int cal_asv_get_grp(unsigned int id, unsigned int lv);
 extern void cal_asv_set_tablever(unsigned int version);
 extern int cal_asv_get_tablever(void);
 extern void cal_asv_set_ssa0(unsigned int id, unsigned int ssa0);
-
+extern void cal_dram_print_info(void);
 
 extern int cal_init(void);
 

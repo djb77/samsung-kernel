@@ -82,7 +82,7 @@ static const struct file_operations stlog_pipe_operations = {
 	.llseek		= stlog_llseek,
 };
 
-static const char DEF_STLOG_VER_STR[] = "1.0.2\n";
+static const char DEF_STLOG_VER_STR[] = "1.0.3\n";
 
 static ssize_t stlog_ver_read(struct file *file, char __user *buf,
 			 size_t count, loff_t *ppos)
@@ -124,14 +124,8 @@ module_init(stlog_init);
 //#define CONFIG_STLOG_CPU_ID
 #define CONFIG_STLOG_PID
 #define CONFIG_STLOG_TIME
-#ifdef CONFIG_STLOG
 #define CONFIG_RINGBUF_SHIFT 15 /*32KB*/
-#else
-#define CONFIG_RINGBUF_SHIFT 10 /*1KB*/
-#endif
-
 //#define DEBUG_STLOG
-
 
 #if defined(CONFIG_STLOG_CPU_ID)
 static bool stlog_cpu_id = 1;
@@ -190,6 +184,8 @@ static u32 ringbuf_next_idx;
 
 static u64 stlog_clear_seq;
 static u32 stlog_clear_idx;
+
+static u64 stlog_end_seq = -1;
 
 #define S_PREFIX_MAX		32
 #define RINGBUF_LINE_MAX		1024 - S_PREFIX_MAX
@@ -472,21 +468,22 @@ static int stlog_print(char __user *buf, int size)
 	return len;
 }
 
-static int stlog_print_all(char __user *buf, int size, bool clear)
+static int stlog_print_all(char __user *buf, int size)
 {
 	char *text;
 	int len = 0;
+	u64 seq = ringbuf_next_seq;
+	u32 idx = ringbuf_next_idx;
+
+	if (stlog_end_seq == -1)
+		stlog_end_seq = ringbuf_next_seq;
 
 	text = kmalloc(RINGBUF_LINE_MAX + S_PREFIX_MAX, GFP_KERNEL);
 	if (!text)
 		return -ENOMEM;
-
 	raw_spin_lock_irq(&ringbuf_lock);
 	if (buf) {
-		u64 next_seq;
-		u64 seq;
-		u32 idx;
-		enum ringbuf_flags prev;
+		enum ringbuf_flags prev = 0;
 
 		if (stlog_clear_seq < ringbuf_first_seq) {
 			/* messages are gone, move to first available one */
@@ -496,35 +493,8 @@ static int stlog_print_all(char __user *buf, int size, bool clear)
 
 		seq = stlog_clear_seq;
 		idx = stlog_clear_idx;
-		prev = 0;
-		while (seq < ringbuf_next_seq) {
-			struct ringbuf *msg = ringbuf_from_idx(idx);
 
-			len += stlog_print_text(msg, prev, false, NULL, 0);
-			prev = msg->flags;
-			idx = ringbuf_next(idx);
-			seq++;
-		}
-
-		/* move first record forward until length fits into the buffer */
-		seq = stlog_clear_seq;
-		idx = stlog_clear_idx;
-		prev = 0;
-		while (len > size && seq < ringbuf_next_seq) {
-			struct ringbuf *msg = ringbuf_from_idx(idx);
-
-			len -= stlog_print_text(msg, prev, false, NULL, 0);
-			prev = msg->flags;
-			idx = ringbuf_next(idx);
-			seq++;
-		}
-
-		/* last message fitting into this dump */
-		next_seq = ringbuf_next_seq;
-
-		len = 0;
-		prev = 0;
-		while (len >= 0 && seq < next_seq) {
+		while (seq < stlog_end_seq) {
 			struct ringbuf *msg = ringbuf_from_idx(idx);
 			int textlen;
 
@@ -532,6 +502,8 @@ static int stlog_print_all(char __user *buf, int size, bool clear)
 						 RINGBUF_LINE_MAX + S_PREFIX_MAX);
 			if (textlen < 0) {
 				len = textlen;
+				break;
+			} else if(len + textlen > size) {
 				break;
 			}
 			idx = ringbuf_next(idx);
@@ -541,12 +513,8 @@ static int stlog_print_all(char __user *buf, int size, bool clear)
 			raw_spin_unlock_irq(&ringbuf_lock);
 			if (copy_to_user(buf + len, text, textlen))
 				len = -EFAULT;
-			else{
-				#ifdef	DEBUG_STLOG
-				printk("[STLOG] %s seq %llu text %s \n",__func__,seq,text);
-				#endif
+			else
 				len += textlen;
-				}
 			raw_spin_lock_irq(&ringbuf_lock);
 
 			if (seq < ringbuf_first_seq) {
@@ -558,10 +526,9 @@ static int stlog_print_all(char __user *buf, int size, bool clear)
 		}
 	}
 
-	if (clear) {
-		stlog_clear_seq = ringbuf_next_seq;
-		stlog_clear_idx = ringbuf_next_idx;
-	}
+	stlog_clear_seq = seq;
+	stlog_clear_idx = idx;
+
 	raw_spin_unlock_irq(&ringbuf_lock);
 
 	kfree(text);
@@ -620,10 +587,13 @@ int do_stlog(int type, char __user *buf, int len, bool from_file)
 		if(stlog_clear_seq==ringbuf_next_seq){
 			stlog_clear_seq=ringbuf_first_seq;
 			stlog_clear_idx=ringbuf_first_idx;
+			stlog_end_seq = -1;
 			error=0;
 			goto out;
 		}
-		error = stlog_print_all(buf, len, true);
+		error = stlog_print_all(buf, len);
+		if (error == 0)
+			stlog_end_seq = -1;
 		break;
 	/* Size of the log buffer */
 	case STLOG_ACTION_SIZE_BUFFER:

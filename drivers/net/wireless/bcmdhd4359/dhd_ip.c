@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_ip.c 612549 2016-01-14 07:39:32Z $
+ * $Id: dhd_ip.c 647938 2016-07-08 10:21:30Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -340,8 +340,10 @@ int dhd_tcpack_suppress_set(dhd_pub_t *dhdp, uint8 mode)
 {
 	int ret = BCME_OK;
 	unsigned long flags;
+	tcpack_sup_module_t *tcpack_sup_module;
 
 	flags = dhd_os_tcpacklock(dhdp);
+	tcpack_sup_module = dhdp->tcpack_sup_module;
 
 	if (dhdp->tcpack_sup_mode == mode) {
 		DHD_ERROR(("%s %d: already set to %d\n", __FUNCTION__, __LINE__, mode));
@@ -364,11 +366,10 @@ int dhd_tcpack_suppress_set(dhd_pub_t *dhdp, uint8 mode)
 #ifdef BCMSDIO
 	/* Old tcpack_sup_mode is TCPACK_SUP_DELAYTX */
 	if (dhdp->tcpack_sup_mode == TCPACK_SUP_DELAYTX) {
-		tcpack_sup_module_t *tcpack_sup_mod = dhdp->tcpack_sup_module;
 		/* We won't need tdata_psh_info pool and tcpddata_info_tbl anymore */
-		_tdata_psh_info_pool_deinit(dhdp, tcpack_sup_mod);
-		tcpack_sup_mod->tcpdata_info_cnt = 0;
-		bzero(tcpack_sup_mod->tcpdata_info_tbl,
+		_tdata_psh_info_pool_deinit(dhdp, tcpack_sup_module);
+		tcpack_sup_module->tcpdata_info_cnt = 0;
+		bzero(tcpack_sup_module->tcpdata_info_tbl,
 			sizeof(tcpdata_info_t) * TCPDATA_INFO_MAXNUM);
 		/* For half duplex bus interface, tx precedes rx by default */
 		if (dhdp->bus)
@@ -378,25 +379,34 @@ int dhd_tcpack_suppress_set(dhd_pub_t *dhdp, uint8 mode)
 	dhdp->tcpack_sup_mode = mode;
 
 	if (mode == TCPACK_SUP_OFF) {
-		ASSERT(dhdp->tcpack_sup_module != NULL);
+		int i;
+		ASSERT(tcpack_sup_module != NULL);
 		/* Clean up timer/data structure for any remaining/pending packet or timer. */
-		dhd_tcpack_info_tbl_clean(dhdp);
-		MFREE(dhdp->osh, dhdp->tcpack_sup_module, sizeof(tcpack_sup_module_t));
+		if (tcpack_sup_module) {
+			for (i = 0; i < TCPACK_INFO_MAXNUM; i++) {
+				del_timer(&tcpack_sup_module->tcpack_info_tbl[i].timer);
+				if (tcpack_sup_module->tcpack_info_tbl[i].pkt_in_q) {
+					PKTFREE(dhdp->osh,
+						tcpack_sup_module->tcpack_info_tbl[i].pkt_in_q,
+						TRUE);
+				}
+			}
+		}
+		MFREE(dhdp->osh, tcpack_sup_module, sizeof(tcpack_sup_module_t));
 		dhdp->tcpack_sup_module = NULL;
 		goto exit;
 	}
 
-	if (dhdp->tcpack_sup_module == NULL) {
-		tcpack_sup_module_t *tcpack_sup_mod =
-			MALLOC(dhdp->osh, sizeof(tcpack_sup_module_t));
-		if (tcpack_sup_mod == NULL) {
+	if (tcpack_sup_module == NULL) {
+		tcpack_sup_module = MALLOC(dhdp->osh, sizeof(tcpack_sup_module_t));
+		if (tcpack_sup_module == NULL) {
 			DHD_ERROR(("%s %d: No MEM\n", __FUNCTION__, __LINE__));
 			dhdp->tcpack_sup_mode = TCPACK_SUP_OFF;
 			ret = BCME_NOMEM;
 			goto exit;
 		}
-		bzero(tcpack_sup_mod, sizeof(tcpack_sup_module_t));
-		dhdp->tcpack_sup_module = tcpack_sup_mod;
+		bzero(tcpack_sup_module, sizeof(tcpack_sup_module_t));
+		dhdp->tcpack_sup_module = tcpack_sup_module;
 	}
 
 #ifdef BCMSDIO
@@ -411,17 +421,15 @@ int dhd_tcpack_suppress_set(dhd_pub_t *dhdp, uint8 mode)
 
 	if (mode == TCPACK_SUP_HOLD) {
 		int i;
-		tcpack_sup_module_t *tcpack_sup_mod =
-			(tcpack_sup_module_t *)dhdp->tcpack_sup_module;
 		dhdp->tcpack_sup_ratio = CUSTOM_TCPACK_SUPP_RATIO;
 		dhdp->tcpack_sup_delay = CUSTOM_TCPACK_DELAY_TIME;
 		for (i = 0; i < TCPACK_INFO_MAXNUM; i++)
 		{
-			tcpack_sup_mod->tcpack_info_tbl[i].dhdp = dhdp;
-			init_timer(&tcpack_sup_mod->tcpack_info_tbl[i].timer);
-			tcpack_sup_mod->tcpack_info_tbl[i].timer.data =
-				(ulong)&tcpack_sup_mod->tcpack_info_tbl[i];
-			tcpack_sup_mod->tcpack_info_tbl[i].timer.function = dhd_tcpack_send;
+			tcpack_sup_module->tcpack_info_tbl[i].dhdp = dhdp;
+			init_timer(&tcpack_sup_module->tcpack_info_tbl[i].timer);
+			tcpack_sup_module->tcpack_info_tbl[i].timer.data =
+				(ulong)&tcpack_sup_module->tcpack_info_tbl[i];
+			tcpack_sup_module->tcpack_info_tbl[i].timer.function = dhd_tcpack_send;
 		}
 	}
 

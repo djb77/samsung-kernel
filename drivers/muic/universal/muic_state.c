@@ -84,6 +84,7 @@ static void muic_handle_attach(muic_data_t *pmuic,
 	case ATTACHED_DEV_CDP_MUIC:
 	case ATTACHED_DEV_JIG_USB_OFF_MUIC:
 	case ATTACHED_DEV_JIG_USB_ON_MUIC:
+	case ATTACHED_DEV_TIMEOUT_OPEN_MUIC:
 		if (new_dev != pmuic->attached_dev) {
 			pr_warn("%s:%s new(%d)!=attached(%d), assume detach\n",
 					MUIC_DEV_NAME, __func__, new_dev,
@@ -154,6 +155,9 @@ static void muic_handle_attach(muic_data_t *pmuic,
         case ATTACHED_DEV_AFC_CHARGER_5V_MUIC:
         case ATTACHED_DEV_AFC_CHARGER_5V_DUPLI_MUIC:
         case ATTACHED_DEV_AFC_CHARGER_9V_MUIC:
+        case ATTACHED_DEV_AFC_CHARGER_9V_DUPLI_MUIC:
+        case ATTACHED_DEV_AFC_CHARGER_12V_MUIC:
+        case ATTACHED_DEV_AFC_CHARGER_12V_DUPLI_MUIC:
         case ATTACHED_DEV_AFC_CHARGER_ERR_V_MUIC:
         case ATTACHED_DEV_AFC_CHARGER_ERR_V_DUPLI_MUIC:
         case ATTACHED_DEV_QC_CHARGER_PREPARE_MUIC:
@@ -181,10 +185,8 @@ static void muic_handle_attach(muic_data_t *pmuic,
 
 			if (pmuic->is_factory_start)
 				ret = detach_deskdock(pmuic);
-			else {
-				noti_f = false;
+			else
 				ret = detach_jig_uart_boot_on(pmuic);
-			}
 		}
 		break;
 	case ATTACHED_DEV_DESKDOCK_MUIC:
@@ -245,6 +247,7 @@ static void muic_handle_attach(muic_data_t *pmuic,
 	switch (new_dev) {
 	case ATTACHED_DEV_USB_MUIC:
 	case ATTACHED_DEV_CDP_MUIC:
+	case ATTACHED_DEV_TIMEOUT_OPEN_MUIC:
 		ret = attach_usb(pmuic, new_dev);
 		break;
 	case ATTACHED_DEV_OTG_MUIC:
@@ -263,6 +266,11 @@ static void muic_handle_attach(muic_data_t *pmuic,
                 if (pmuic->pdata->afc_disable)
                         pr_info("%s:%s AFC Disable(%d) by USER!\n", MUIC_DEV_NAME,
                                 __func__, pmuic->pdata->afc_disable);
+#if defined(CONFIG_MUIC_SUPPORT_CCIC)
+		else if (pmuic->afc_water_disable)
+                        pr_info("%s:%s AFC Disable(%d) by WATER!\n", MUIC_DEV_NAME,
+                                __func__, pmuic->afc_water_disable);
+#endif
                 else {
                         if ((pmuic->phv->is_afc_muic_ready == false) &&
 				vps_is_hv_ta(&pmuic->vps)) {
@@ -282,12 +290,10 @@ static void muic_handle_attach(muic_data_t *pmuic,
 		/* Keep AP UART path and
 		 *  call attach_deskdock to wake up the device in the Facory Build Binary.
 		 */
-		 if (pmuic->is_factory_start)
+		if (pmuic->is_factory_start)
 			ret = attach_deskdock(pmuic, new_dev);
-		 else {
-			noti_f = false;
+		else
 			ret = attach_jig_uart_boot_on(pmuic, new_dev);
-		}
 		break;
 	case ATTACHED_DEV_JIG_USB_OFF_MUIC:
 		ret = attach_jig_usb_boot_off(pmuic, vbvolt);
@@ -354,8 +360,9 @@ static void muic_handle_detach(muic_data_t *pmuic)
 
 	ret = com_to_open_with_vbus(pmuic);
 
-	//Fixme.
-	//muic_enable_accdet(pmuic);
+	enable_chgdet(pmuic, 1);
+	if (get_adc_scan_mode(pmuic) != ADC_SCANMODE_ONESHOT)
+		set_adc_scan_mode(pmuic, ADC_SCANMODE_ONESHOT);
 
 #if defined(CONFIG_MUIC_HV)
 	hv_do_detach(pmuic->phv);
@@ -366,6 +373,7 @@ static void muic_handle_detach(muic_data_t *pmuic)
 	case ATTACHED_DEV_JIG_USB_ON_MUIC:
 	case ATTACHED_DEV_USB_MUIC:
 	case ATTACHED_DEV_CDP_MUIC:
+	case ATTACHED_DEV_TIMEOUT_OPEN_MUIC:
 		ret = detach_usb(pmuic);
 		break;
 	case ATTACHED_DEV_OTG_MUIC:
@@ -390,10 +398,8 @@ static void muic_handle_detach(muic_data_t *pmuic)
 	case ATTACHED_DEV_JIG_UART_ON_MUIC:
 		if (pmuic->is_factory_start)
 			ret = detach_deskdock(pmuic);
-		else {
-			noti_f = false;
+		else
 			ret = detach_jig_uart_boot_on(pmuic);
-		}
 		break;
 	case ATTACHED_DEV_DESKDOCK_MUIC:
 	case ATTACHED_DEV_DESKDOCK_VB_MUIC:
@@ -447,7 +453,7 @@ static void muic_handle_detach(muic_data_t *pmuic)
 
 }
 
-void muic_detect_dev(muic_data_t *pmuic)
+void muic_detect_dev(muic_data_t *pmuic, int irq)
 {
 	muic_attached_dev_t new_dev = ATTACHED_DEV_UNKNOWN_MUIC;
 	int intr = MUIC_INTR_DETACH;
@@ -473,6 +479,14 @@ void muic_detect_dev(muic_data_t *pmuic)
 			pmuic->vps.t.adc, pmuic->vps.t.vbvolt, pmuic->vps.t.chgtyp, pmuic->vps.t.adcerr,
 			pmuic->vps.t.adclow, pmuic->vps.t.chgdetrun);
 
+#if defined(CONFIG_SEC_FACTORY) && defined(CONFIG_MUIC_SUPPORT_CCIC)
+		if (pmuic->vps.t.adc == ADC_CEA936ATYPE2_CHG) {
+			pr_info("%s:%s W/A for pogo adc 0x%x\n",
+					MUIC_DEV_NAME, __func__, pmuic->vps.t.adc);
+			pmuic->vps.t.adc = ADC_JIG_UART_OFF;
+		}
+#endif
+
 		adc = pmuic->vps.t.adc;
 		vbvolt = pmuic->vps.t.vbvolt;
 	}
@@ -483,9 +497,15 @@ void muic_detect_dev(muic_data_t *pmuic)
 	}
 
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
+	if (new_dev == ATTACHED_DEV_USB_MUIC && pmuic->is_dcdtmr_intr) {
+		new_dev = ATTACHED_DEV_TIMEOUT_OPEN_MUIC;
+	}
 	if (pmuic->opmode & OPMODE_CCIC) {
-		if (!mdev_continue_for_TA_USB(pmuic, new_dev))
-			return;
+		if (irq > 0) {
+			if (!mdev_continue_for_TA_USB(pmuic, new_dev))
+				return;
+		} else
+			muic_set_legacy_dev(pmuic, new_dev);
 	}
 #endif
 

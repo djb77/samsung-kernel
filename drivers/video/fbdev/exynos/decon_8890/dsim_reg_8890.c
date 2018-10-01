@@ -588,10 +588,10 @@ void dsim_reg_set_size_of_slice(u32 id, struct decon_lcd *lcd_info)
 		mask_23 = DSIM_SLICE23_SIZE_OF_SLICE3_MASK |
 			DSIM_SLICE23_SIZE_OF_SLICE2_MASK;
 	} else if (lcd_info->dsc_slice_num == 2 && lcd_info->dsc_cnt == 2) {
-		val_01 = DSIM_SLICE01_SIZE_OF_SLICE0(slice_w);
-		mask_01 = DSIM_SLICE01_SIZE_OF_SLICE0_MASK;
-		val_23 = DSIM_SLICE23_SIZE_OF_SLICE2(slice_w);
-		mask_23 = DSIM_SLICE23_SIZE_OF_SLICE2_MASK;
+		val_01 = DSIM_SLICE01_SIZE_OF_SLICE1(slice_w) |
+			DSIM_SLICE01_SIZE_OF_SLICE0(slice_w);
+		mask_01 = DSIM_SLICE01_SIZE_OF_SLICE1_MASK |
+			DSIM_SLICE01_SIZE_OF_SLICE0_MASK;
 	} else if (lcd_info->dsc_slice_num == 2 && lcd_info->dsc_cnt == 1) {
 		val_01 = DSIM_SLICE01_SIZE_OF_SLICE1(slice_w) |
 			DSIM_SLICE01_SIZE_OF_SLICE0(slice_w);

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -116,6 +116,11 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 	err = kbase_region_tracker_init(kctx);
 	if (err)
 		goto no_region_tracker;
+
+	err = kbase_sticky_resource_init(kctx);
+	if (err)
+		goto no_sticky;
+
 #ifdef CONFIG_GPU_TRACEPOINTS
 	atomic_set(&kctx->jctx.work_id, 0);
 #endif
@@ -140,6 +145,8 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 
 	return kctx;
 
+no_sticky:
+	kbase_region_tracker_term(kctx);
 no_region_tracker:
 	kbase_mem_pool_free(&kctx->mem_pool, kctx->aliasing_sink_page, false);
 no_sink_page:
@@ -227,6 +234,8 @@ void kbase_destroy_context(struct kbase_context *kctx)
 	kbase_event_cleanup(kctx);
 
 	kbase_gpu_vm_lock(kctx);
+
+	kbase_sticky_resource_term(kctx);
 
 	/* MMU is disabled as part of scheduling out the context */
 	kbase_mmu_free_pgd(kctx);

@@ -19,6 +19,8 @@
 enum {
 	SPI_PIN_STATE_HOST,
 	SPI_PIN_STATE_ISP_FW,
+	SPI_PIN_STATE_IDLE_INPD,
+	SPI_PIN_STATE_IDLE_INPU,
 	SPI_PIN_STATE_IDLE,
 };
 
@@ -39,6 +41,8 @@ struct fimc_is_spi {
 	struct pinctrl		*parent_pinctrl;
 	struct pinctrl_state 	*pin_ssn_out;
 	struct pinctrl_state 	*pin_ssn_fn;
+	struct pinctrl_state 	*pin_ssn_inpd;
+	struct pinctrl_state 	*pin_ssn_inpu;
 	struct pinctrl_state 	*parent_pin_out;
 	struct pinctrl_state 	*parent_pin_fn;
 };

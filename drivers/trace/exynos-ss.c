@@ -32,6 +32,7 @@
 #include <linux/platform_device.h>
 #include <linux/pstore_ram.h>
 #include <linux/clk-private.h>
+#include <linux/clockchips.h>
 #ifdef CONFIG_SEC_PM_DEBUG
 #include <linux/uaccess.h>
 #include <linux/proc_fs.h>
@@ -40,6 +41,7 @@
 #include <linux/of_address.h>
 #include <linux/exynos-busmon.h>
 
+#include <asm/cputype.h>
 #include <asm/cacheflush.h>
 #include <asm/ptrace.h>
 #include <asm/memory.h>
@@ -50,6 +52,10 @@
 #include <linux/sec_debug.h>
 
 extern void (*mach_restart)(char mode, const char *cmd);
+#endif
+
+#ifdef CONFIG_SEC_BSP
+#include <linux/sec_bsp.h>
 #endif
 
 extern int dhd_dongle_mem_dump(void);
@@ -117,7 +123,12 @@ struct exynos_ss_log {
 		unsigned long long time;
 		unsigned long sp;
 		struct task_struct *task;
+#if defined(CONFIG_SEC_DUMP_SUMMARY)	
+		unsigned long task_comm_addr;
+		int pid;
+#endif
 		char *task_comm;
+
 	} task[ESS_NR_CPUS][ESS_LOG_MAX_NUM];
 
 	struct work_log {
@@ -260,6 +271,7 @@ struct exynos_ss_log {
 #ifndef CONFIG_EXYNOS_SNAPSHOT_MINIMIZED_MODE
 	struct clockevent_log {
 		unsigned long long time;
+		struct clock_event_device* dev;
 		unsigned long long clc;
 		int64_t	delta;
 		ktime_t	next_event;
@@ -426,8 +438,11 @@ struct exynos_ss_interface {
 #ifdef CONFIG_S3C2410_WATCHDOG
 extern int s3c2410wdt_set_emergency_stop(void);
 extern int s3c2410wdt_set_emergency_reset(unsigned int timeout);
+extern int s3c2410wdt_keepalive_emergency(void);
 #else
-#define s3c2410wdt_set_emergency_stop()	(-1)
+#define s3c2410wdt_set_emergency_stop() 	(-1)
+#define s3c2410wdt_set_emergency_reset(a)	do { } while(0)
+#define s3c2410wdt_keepalive_emergency()	do { } while(0)
 #endif
 extern void *return_address(int);
 extern void (*arm_pm_restart)(char str, const char *cmd);
@@ -440,6 +455,9 @@ extern void register_hook_logbuf(void (*)(const char));
 extern void register_hook_logbuf(void (*)(const char *, size_t));
 #endif
 extern void register_hook_logger(void (*)(const char *, const char *, size_t));
+#ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
+void register_hook_pstore_log(void (*func)(const char *name, const char *buf, size_t size));
+#endif
 
 extern int exynos_check_hardlockup_reason(void);
 
@@ -447,6 +465,10 @@ typedef int (*ess_initcall_t)(const struct device_node *);
 
 #ifdef CONFIG_SEC_PM_DEBUG
 static bool sec_log_full;
+#endif
+
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+static void (*func_hook_auto_comm_lastfreq)(int type, int old_freq, int new_freq, u64 time);
 #endif
 
 /*
@@ -462,14 +484,16 @@ static struct exynos_ss_item ess_items[] = {
 	{"log_kevents",	{SZ_8M,		0, 0, false, true}, NULL ,NULL, 0},
 	{"log_kernel",	{SZ_2M,		0, 0, false, true}, NULL ,NULL, 0},
 #ifdef CONFIG_EXYNOS_SNAPSHOT_HOOK_LOGGER
-	{"log_main",	{SZ_2M,		0, 0, false, true}, NULL ,NULL, 0},
+	{"log_main",	{SZ_4M,		0, 0, false, true}, NULL ,NULL, 0},
 #endif
+#ifdef CONFIG_ANDROID_LOGGER
 	{"log_radio",	{SZ_2M,		0, 0, false, true}, NULL ,NULL, 0},
-#ifdef CONFIG_EXYNOS_SNAPSHOT_SFRDUMP
-	{"log_sfr",	{SZ_4M,		0, 0, false, true}, NULL ,NULL, 0},
 #endif
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
-	{"log_pstore",	{SZ_2M,		0, 0, true, true}, NULL ,NULL, 0},
+	{"log_pstore",	{SZ_2M, 	0, 0, true, true}, NULL ,NULL, 0},
+#endif
+#ifdef CONFIG_EXYNOS_SNAPSHOT_SFRDUMP
+	{"log_sfr",	{SZ_4M,		0, 0, false, true}, NULL ,NULL, 0},
 #endif
 #ifdef CONFIG_EXYNOS_CORESIGHT_ETR
 	{"log_etm",	{SZ_8M,		0, 0, true, true}, NULL ,NULL, 0},
@@ -478,7 +502,7 @@ static struct exynos_ss_item ess_items[] = {
 	{"log_kevents",	{SZ_2M,		0, 0, false, true}, NULL ,NULL, 0},
 	{"log_kernel",	{SZ_2M,		0, 0, false, true}, NULL ,NULL, 0},
 #ifdef CONFIG_EXYNOS_SNAPSHOT_HOOK_LOGGER
-	{"log_platform",{SZ_2M,		0, 0, false, true}, NULL ,NULL, 0},
+	{"log_main",{SZ_2M,		0, 0, false, true}, NULL ,NULL, 0},
 #endif
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
 	{"log_pstore",	{SZ_2M,		0, 0, true, true}, NULL ,NULL, 0},
@@ -550,8 +574,11 @@ static struct exynos_ss_log_idx ess_idx;
 static struct exynos_ss_log *ess_log = NULL;
 static struct exynos_ss_desc ess_desc;
 
+#define RESET_DELAYED_TIME 2000
+
 /* Extern variable */
 unsigned int *exynos_ss_base_enabled = &ess_base.enabled;
+bool exynos_ss_hardkey_triger = false;
 
 DEFINE_PER_CPU(struct pt_regs *, ess_core_reg);
 DEFINE_PER_CPU(struct exynos_ss_mmu_reg *, ess_mmu_reg);
@@ -701,6 +728,11 @@ int exynos_ss_prepare_panic(void)
 
 	if (unlikely(!ess_base.enabled))
 		return 0;
+	/*
+	 * kick watchdog to prevent unexpected reset during panic sequence
+	 * and it prevents the hang during panic sequence by watchedog
+	 */
+	s3c2410wdt_keepalive_emergency();
 
 	for (cpu = 0; cpu < ESS_NR_CPUS; cpu++) {
 		if (exynos_cpu.power_state(cpu))
@@ -708,9 +740,6 @@ int exynos_ss_prepare_panic(void)
 		else
 			exynos_ss_core_power_stat(ESS_SIGN_DEAD, cpu);
 	}
-	/* stop to watchdog for preventing unexpected reset
-	 * during printing panic message */
-	ess_desc.no_wdt_dev = s3c2410wdt_set_emergency_stop();
 
 	if(exynos_check_hardlockup_reason()) {
 		/* no core got stucks in EL3 monitor */
@@ -747,6 +776,14 @@ int exynos_ss_post_panic(void)
 		}
 #endif
 	}
+
+	// For debuging hardkeyReset case
+	if(exynos_ss_hardkey_triger) {		
+		printk("wait for RESET_DELAYED_TIME\n");
+		mdelay(RESET_DELAYED_TIME);
+		printk("end RESET_DELAYED_TIME\n");
+	}
+	
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PANIC_REBOOT
 	arm_pm_restart(0, "panic");
 #endif
@@ -797,10 +834,60 @@ int exynos_ss_dump(void)
 	 */
 #ifdef CONFIG_ARM64
 	unsigned long reg1, reg2;
-	asm ("mrs %0, S3_1_c15_c2_2\n\t"
-		"mrs %1, S3_1_c15_c2_3\n"
-		: "=r" (reg1), "=r" (reg2));
-	pr_emerg("CPUMERRSR: %016lx, L2MERRSR: %016lx\n", reg1, reg2);
+	bool error_set = false;
+
+	sec_debug_store_extra_buf(INFO_SYN_INFO, " C%d :", smp_processor_id());
+
+	if ((read_cpuid_implementor() == ARM_CPU_IMP_SEC)
+			&& (read_cpuid_part_number() == ARM_CPU_PART_MONGOOSE)){
+		/* for mngs */
+		asm ("mrs %0, S3_1_c15_c2_0\n\t"
+			"mrs %1, S3_1_c15_c2_4\n"
+			: "=r" (reg1), "=r" (reg2));
+		if(reg1 & 0x1) {
+			sec_debug_store_extra_buf(INFO_SYN_INFO,
+				" FEMERR0SR: %016lx FEMERR1SR: %016lx", reg1, reg2);
+		}
+		pr_emerg("FEMERR0SR: %016lx, FEMERR1SR: %016lx\n", reg1, reg2);
+		asm ("mrs %0, S3_1_c15_c2_1\n\t"
+			"mrs %1, S3_1_c15_c2_5\n"
+			: "=r" (reg1), "=r" (reg2));
+		if(reg1 & 0x1) {
+			sec_debug_store_extra_buf(INFO_SYN_INFO,
+				" LSMERR0SR: %016lx LSMERR1SR: %016lx", reg1, reg2);
+		}		
+		pr_emerg("LSMERR0SR: %016lx, LSMERR1SR: %016lx\n", reg1, reg2);
+		asm ("mrs %0, S3_1_c15_c2_2\n\t"
+			"mrs %1, S3_1_c15_c2_6\n"
+			: "=r" (reg1), "=r" (reg2));
+		if(reg1 & 0x1) {
+			sec_debug_store_extra_buf(INFO_SYN_INFO,
+				" TBWMERR0SR: %016lx TBWMERR1SR: %016lx", reg1, reg2);
+		}		
+		pr_emerg("TBWMERR0SR: %016lx, TBWMERR1SR: %016lx\n", reg1, reg2);
+		asm ("mrs %0, S3_1_c15_c2_3\n\t"
+			"mrs %1, S3_1_c15_c2_7\n"
+			: "=r" (reg1), "=r" (reg2));
+		if(reg1 & 0x1) {
+			sec_debug_store_extra_buf(INFO_SYN_INFO,
+				" L2MERR0SR: %016lx L2MERR1SR: %016lx", reg1, reg2);
+		}		
+		pr_emerg("L2MERR0SR: %016lx, L2MERR1SR: %016lx\n", reg1, reg2);
+
+	} else {
+		/* for apollo */
+		asm ("mrs %0, S3_1_c15_c2_2\n\t"
+			"mrs %1, S3_1_c15_c2_3\n"
+			: "=r" (reg1), "=r" (reg2));
+		if( (reg1 >> 31) & 0x1) {
+			sec_debug_store_extra_buf(INFO_SYN_INFO,
+				" CPUMERRSR: %016lx L2MERRSR: %016lx", reg1, reg2);
+		}
+		pr_emerg("CPUMERRSR: %016lx, L2MERRSR: %016lx\n", reg1, reg2);
+	}
+	
+	if(!error_set)
+		sec_debug_store_extra_buf(INFO_SYN_INFO, " OK");
 #else
 	unsigned long reg0;
 	asm ("mrc p15, 0, %0, c0, c0, 0\n": "=r" (reg0));
@@ -992,6 +1079,12 @@ static inline int exynos_ss_check_eob(struct exynos_ss_item *item,
 	else
 		return 0;
 }
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+void register_set_auto_comm_lastfreq(void (*func)(int type, int old_freq, int new_freq, u64 time))
+{
+	func_hook_auto_comm_lastfreq = func;
+}
+#endif
 
 #ifdef CONFIG_EXYNOS_SNAPSHOT_HOOK_LOGGER
 static inline void exynos_ss_hook_logger(const char *name,
@@ -1097,7 +1190,13 @@ static void exynos_ss_dump_one_task_info(struct task_struct *tsk, bool is_main)
 		state >>= 1;
 	}
 
+	/*
+	 * kick watchdog to prevent unexpected reset during panic sequence
+	 * and it prevents the hang during panic sequence by watchedog
+	 */
 	touch_softlockup_watchdog();
+	s3c2410wdt_keepalive_emergency();
+
 	pr_info("%8d %8d %8d %16lld %c(%d) %3d  %16zx %16zx  %16zx %c %16s [%s]\n",
 			tsk->pid, (int)(tsk->utime), (int)(tsk->stime),
 			tsk->se.exec_start, state_array[idx], (int)(tsk->state),
@@ -1688,6 +1787,11 @@ static int __init exynos_ss_output(void)
 			ess_items[i].entry.vaddr,
 			ess_items[i].entry.size);
 
+#ifdef CONFIG_S3C2410_WATCHDOG
+	ess_desc.no_wdt_dev = false;
+#else
+	ess_desc.no_wdt_dev = true;
+#endif
 	return 0;
 }
 
@@ -1853,7 +1957,8 @@ static int __init exynos_ss_fixmap(void)
 
 #ifdef CONFIG_SEC_DEBUG
 	sec_debug_save_last_kmsg(ess_items[ess_desc.log_kernel_num].head_ptr,
-				 ess_items[ess_desc.log_kernel_num].curr_ptr);
+			ess_items[ess_desc.log_kernel_num].curr_ptr,
+			ess_items[ess_desc.log_kernel_num].entry.size);
 #endif
 
 	return 0;
@@ -1921,9 +2026,12 @@ static int __init exynos_ss_init(void)
 
 		register_hook_logbuf(exynos_ss_hook_logbuf);
 
-#ifdef CONFIG_EXYNOS_SNAPSHOT_HOOK_LOGGER
+#if defined(CONFIG_EXYNOS_SNAPSHOT_HOOK_LOGGER) && defined(CONFIG_ANDROID_LOGGER)
 		register_hook_logger(exynos_ss_hook_logger);
 #endif
+#ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
+		register_hook_pstore_log(exynos_ss_hook_logger);
+#endif 
 		register_reboot_notifier(&nb_reboot_block);
 		atomic_notifier_chain_register(&panic_notifier_list, &nb_panic_block);
 	} else
@@ -1946,7 +2054,11 @@ void __exynos_ss_task(int cpu, void *v_task)
 		ess_log->task[cpu][i].time = cpu_clock(cpu);
 		ess_log->task[cpu][i].sp = (unsigned long) current_stack_pointer;
 		ess_log->task[cpu][i].task = (struct task_struct *)v_task;
-		ess_log->task[cpu][i].task_comm = ess_log->task[cpu][i].task->comm;
+#if defined(CONFIG_SEC_DUMP_SUMMARY)		
+		ess_log->task[cpu][i].pid = ((struct task_struct *)v_task)->pid;
+		ess_log->task[cpu][i].task_comm_addr = virt_to_phys(((struct task_struct *)v_task)->comm);
+#endif
+		ess_log->task[cpu][i].task_comm = ((struct task_struct *)v_task)->comm;
 	}
 }
 
@@ -2308,6 +2420,12 @@ void __exynos_ss_freq(int type, unsigned long old_freq, unsigned long target_fre
 		ess_log->freq[i].old_freq = old_freq;
 		ess_log->freq[i].target_freq = target_freq;
 		ess_log->freq[i].en = en;
+
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+		if(func_hook_auto_comm_lastfreq && en == ESS_FLAG_OUT)
+			func_hook_auto_comm_lastfreq(type, old_freq, target_freq, ess_log->freq[i].time);
+#endif
+
 	}
 }
 #endif
@@ -2411,8 +2529,45 @@ void __exynos_ss_reg(unsigned int read, size_t val, size_t reg, int en)
 }
 #endif
 
+#if defined(CONFIG_SEC_DUMP_SUMMARY)
+void exynos_ss_summary_set_sched_log_buf(struct sec_debug_summary *summary_info)
+{
+		summary_info->kernel.sched_log.task_buf_paddr = 
+			virt_to_phys(ess_info.info_event) + offsetof(struct exynos_ss_log, task);
+		summary_info->kernel.sched_log.task_struct_sz = sizeof(struct task_log);
+		summary_info->kernel.sched_log.task_array_cnt = ESS_LOG_MAX_NUM;
+
+		pr_info("%s, task_buf_paddr:0x%lx size:0x%x\n", __func__, 
+			summary_info->kernel.sched_log.task_buf_paddr, summary_info->kernel.sched_log.task_struct_sz );
+		
+		summary_info->kernel.sched_log.irq_buf_paddr = 
+			virt_to_phys(ess_info.info_event) + offsetof(struct exynos_ss_log, irq);
+		summary_info->kernel.sched_log.irq_struct_sz = sizeof(struct irq_log);
+		summary_info->kernel.sched_log.irq_array_cnt = ESS_LOG_MAX_NUM*2;
+
+		pr_info("%s, irq_buf_paddr:0x%lx size:0x%x\n", __func__, 
+			summary_info->kernel.sched_log.irq_buf_paddr, summary_info->kernel.sched_log.irq_struct_sz );
+		
+		summary_info->kernel.sched_log.work_buf_paddr = 
+			virt_to_phys(ess_info.info_event) + offsetof(struct exynos_ss_log, work);
+		summary_info->kernel.sched_log.work_struct_sz = sizeof(struct work_log);
+		summary_info->kernel.sched_log.work_array_cnt = ESS_LOG_MAX_NUM;
+
+		summary_info->kernel.sched_log.cpuidle_buf_paddr = 
+			virt_to_phys(ess_info.info_event) + offsetof(struct exynos_ss_log, cpuidle);
+		summary_info->kernel.sched_log.cpuidle_struct_sz = sizeof(struct cpuidle_log);
+		summary_info->kernel.sched_log.cpuidle_array_cnt = ESS_LOG_MAX_NUM;		
+#ifdef CONFIG_EXYNOS_SNAPSHOT_HRTIMER
+		summary_info->kernel.sched_log.timer_buf_paddr = 
+			virt_to_phys(ess_info.info_event) + offsetof(struct exynos_ss_log, hrtimers);
+		summary_info->kernel.sched_log.timer_struct_sz = sizeof(struct hrtimer_log);
+		summary_info->kernel.sched_log.timer_array_cnt = ESS_LOG_MAX_NUM;
+#endif
+}
+#endif
+
 #ifndef CONFIG_EXYNOS_SNAPSHOT_MINIMIZED_MODE
-void __exynos_ss_clockevent(unsigned long long clc, int64_t delta, void *next_event)
+void __exynos_ss_clockevent(void* dev, unsigned long long clc, int64_t delta, void *next_event)
 {
 	struct exynos_ss_item *item = &ess_items[ess_desc.kevents_num];
 
@@ -2427,6 +2582,7 @@ void __exynos_ss_clockevent(unsigned long long clc, int64_t delta, void *next_ev
 
 		ess_log->clockevent[cpu][i].time = cpu_clock(cpu);
 		ess_log->clockevent[cpu][i].clc = clc;
+		ess_log->clockevent[cpu][i].dev = (struct clock_event_device*)dev;
 		ess_log->clockevent[cpu][i].delta = delta;
 		ess_log->clockevent[cpu][i].next_event = *((ktime_t *)next_event);
 	}
@@ -2441,12 +2597,11 @@ void __exynos_ss_printk(const char *fmt, ...)
 	{
 		int cpu = get_current_cpunum();
 		va_list args;
-		int ret;
 		unsigned long j, i = atomic_inc_return(&ess_idx.printk_log_idx) &
 				(ARRAY_SIZE(ess_log->printk) - 1);
 
 		va_start(args, fmt);
-		ret = vsnprintf(ess_log->printk[i].log,
+		vsnprintf(ess_log->printk[i].log,
 				sizeof(ess_log->printk[i].log), fmt, args);
 		va_end(args);
 
@@ -2531,7 +2686,7 @@ typedef struct ess_logger {
 
 static ess_logger logger;
 
-void register_hook_logger(void (*func)(const char *name, const char *buf, size_t size))
+void register_hook_pstore_log(void (*func)(const char *name, const char *buf, size_t size))
 {
 	logger.func_hook_logger = func;
 	logger.buffer = vmalloc(PAGE_SIZE * 3);
@@ -2539,10 +2694,388 @@ void register_hook_logger(void (*func)(const char *name, const char *buf, size_t
 	if (logger.buffer)
 		pr_info("exynos-snapshot: logger buffer alloc address: 0x%p\n", logger.buffer);
 }
-EXPORT_SYMBOL(register_hook_logger);
+EXPORT_SYMBOL(register_hook_pstore_log);
 #endif
 
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
+#ifdef CONFIG_SEC_EVENT_LOG
+struct event_log_tag_t {
+	int nTagNum;
+	char *event_msg;
+};
+
+enum event_type {
+	EVENT_TYPE_INT		= 0,
+	EVENT_TYPE_LONG		= 1,
+	EVENT_TYPE_STRING	= 2,
+	EVENT_TYPE_LIST		= 3,
+	EVENT_TYPE_FLOAT 	= 4, 
+};
+
+// NOTICE : it must have order.
+struct event_log_tag_t event_tags[] = {
+	{ 42 , "answer"},
+	{ 314 , "pi"},
+	{ 1003 , "auditd"},
+	{ 2718 , "e"},
+	{ 2719 , "configuration_changed"},
+	{ 2720 , "sync"},
+	{ 2721 , "cpu"},
+	{ 2722 , "battery_level"},
+	{ 2723 , "battery_status"},
+	{ 2724 , "power_sleep_requested"},
+	{ 2725 , "power_screen_broadcast_send"},
+	{ 2726 , "power_screen_broadcast_done"},
+	{ 2727 , "power_screen_broadcast_stop"},
+	{ 2728 , "power_screen_state"},
+	{ 2729 , "power_partial_wake_state"},
+	{ 2730 , "battery_discharge"},
+	{ 2740 , "location_controller"},
+	{ 2741 , "force_gc"},
+	{ 2742 , "tickle"},
+	{ 2744 , "free_storage_changed"},
+	{ 2745 , "low_storage"},
+	{ 2746 , "free_storage_left"},
+	{ 2747 , "contacts_aggregation"},
+	{ 2748 , "cache_file_deleted"},
+	{ 2750 , "notification_enqueue"},
+	{ 2751 , "notification_cancel"},
+	{ 2752 , "notification_cancel_all"},
+	{ 2753 , "idle_maintenance_window_start"},
+	{ 2754 , "idle_maintenance_window_finish"},
+	{ 2755 , "fstrim_start"},
+	{ 2756 , "fstrim_finish"},
+	{ 2802 , "watchdog"},
+	{ 2803 , "watchdog_proc_pss"},
+	{ 2804 , "watchdog_soft_reset"},
+	{ 2805 , "watchdog_hard_reset"},
+	{ 2806 , "watchdog_pss_stats"},
+	{ 2807 , "watchdog_proc_stats"},
+	{ 2808 , "watchdog_scheduled_reboot"},
+	{ 2809 , "watchdog_meminfo"},
+	{ 2810 , "watchdog_vmstat"},
+	{ 2811 , "watchdog_requested_reboot"},
+	{ 2820 , "backup_data_changed"},
+	{ 2821 , "backup_start"},
+	{ 2822 , "backup_transport_failure"},
+	{ 2823 , "backup_agent_failure"},
+	{ 2824 , "backup_package"},
+	{ 2825 , "backup_success"},
+	{ 2826 , "backup_reset"},
+	{ 2827 , "backup_initialize"},
+	{ 2830 , "restore_start"},
+	{ 2831 , "restore_transport_failure"},
+	{ 2832 , "restore_agent_failure"},
+	{ 2833 , "restore_package"},
+	{ 2834 , "restore_success"},
+	{ 2840 , "full_backup_package"},
+	{ 2841 , "full_backup_agent_failure"},
+	{ 2842 , "full_backup_transport_failure"},
+	{ 2843 , "full_backup_success"},
+	{ 2844 , "full_restore_package"},
+	{ 2850 , "backup_transport_lifecycle"},
+	{ 3000 , "boot_progress_start"},
+	{ 3010 , "boot_progress_system_run"},
+	{ 3020 , "boot_progress_preload_start"},
+	{ 3030 , "boot_progress_preload_end"},
+	{ 3040 , "boot_progress_ams_ready"},
+	{ 3050 , "boot_progress_enable_screen"},
+	{ 3060 , "boot_progress_pms_start"},
+	{ 3070 , "boot_progress_pms_system_scan_start"},
+	{ 3080 , "boot_progress_pms_data_scan_start"},
+	{ 3090 , "boot_progress_pms_scan_end"},
+	{ 3100 , "boot_progress_pms_ready"},
+	{ 3110 , "unknown_sources_enabled"},
+	{ 3120 , "pm_critical_info"},
+	{ 4000 , "calendar_upgrade_receiver"},
+	{ 4100 , "contacts_upgrade_receiver"},
+	{ 20003 , "dvm_lock_sample"},
+	{ 27500 , "notification_panel_revealed"},
+	{ 27501 , "notification_panel_hidden"},
+	{ 27510 , "notification_visibility_changed"},
+	{ 27511 , "notification_expansion"},
+	{ 27520 , "notification_clicked"},
+	{ 27530 , "notification_canceled"},
+	{ 27531 , "notification_visibility" },
+	{ 30001 , "am_finish_activity"},
+	{ 30002 , "am_task_to_front"},
+	{ 30003 , "am_new_intent"},
+	{ 30004 , "am_create_task"},
+	{ 30005 , "am_create_activity"},
+	{ 30006 , "am_restart_activity"},
+	{ 30007 , "am_resume_activity"},
+	{ 30008 , "am_anr"},
+	{ 30009 , "am_activity_launch_time"},
+	{ 30010 , "am_proc_bound"},
+	{ 30011 , "am_proc_died"},
+	{ 30012 , "am_failed_to_pause"},
+	{ 30013 , "am_pause_activity"},
+	{ 30014 , "am_proc_start"},
+	{ 30015 , "am_proc_bad"},
+	{ 30016 , "am_proc_good"},
+	{ 30017 , "am_low_memory"},
+	{ 30018 , "am_destroy_activity"},
+	{ 30019 , "am_relaunch_resume_activity"},
+	{ 30020 , "am_relaunch_activity"},
+	{ 30021 , "am_on_paused_called"},
+	{ 30022 , "am_on_resume_called"},
+	{ 30023 , "am_kill"},
+	{ 30024 , "am_broadcast_discard_filter"},
+	{ 30025 , "am_broadcast_discard_app"},
+	{ 30030 , "am_create_service"},
+	{ 30031 , "am_destroy_service"},
+	{ 30032 , "am_process_crashed_too_much"},
+	{ 30033 , "am_drop_process"},
+	{ 30034 , "am_service_crashed_too_much"},
+	{ 30035 , "am_schedule_service_restart"},
+	{ 30036 , "am_provider_lost_process"},
+	{ 30037 , "am_process_start_timeout"},
+	{ 30039 , "am_crash"},
+	{ 30040 , "am_wtf"},
+	{ 30041 , "am_switch_user"},
+	{ 30042 , "am_activity_fully_drawn_time"},
+	{ 30043 , "am_focused_activity"},	
+	{ 30044 , "am_focused_stack"},
+	{ 30045 , "am_pre_boot"},
+	{ 30046 , "am_meminfo"},	
+	{ 30047 , "am_pss"},	
+	{ 30048 , "am_stop_activity"},
+	{ 30049 , "am_on_stop_called"},	
+	{ 30050 , "am_mem_factor"},	
+	{ 31000 , "wm_no_surface_memory"},
+	{ 31001 , "wm_task_created"},
+	{ 31002 , "wm_task_moved"},
+	{ 31003 , "wm_task_removed"},
+	{ 31004 , "wm_stack_created"},
+	{ 31005 , "wm_home_stack_moved"},
+	{ 31006 , "wm_stack_removed"},
+	{ 31007 , "boot_progress_enable_screen"},
+	{ 32000 , "imf_force_reconnect_ime"},
+	{ 36000 , "sysui_statusbar_touch"},
+	{ 36001 , "sysui_heads_up_status"},
+	{ 36004 , "sysui_status_bar_state"},
+	{ 36010 , "sysui_panelbar_touch"},
+	{ 36020 , "sysui_notificationpanel_touch"},
+	{ 36030 , "sysui_quickpanel_touch"},
+	{ 36040 , "sysui_panelholder_touch"},
+	{ 36050 , "sysui_searchpanel_touch"},
+	{ 40000 , "volume_changed" },
+	{ 40001 , "stream_devices_changed" },
+	{ 50000 , "menu_item_selected"},
+	{ 50001 , "menu_opened"},
+	{ 50020 , "connectivity_state_changed"},
+	{ 50021 , "wifi_state_changed"},
+	{ 50022 , "wifi_event_handled"},
+	{ 50023 , "wifi_supplicant_state_changed"},
+	{ 50100 , "pdp_bad_dns_address"},
+	{ 50101 , "pdp_radio_reset_countdown_triggered"},
+	{ 50102 , "pdp_radio_reset"},
+	{ 50103 , "pdp_context_reset"},
+	{ 50104 , "pdp_reregister_network"},
+	{ 50105 , "pdp_setup_fail"},
+	{ 50106 , "call_drop"},
+	{ 50107 , "data_network_registration_fail"},
+	{ 50108 , "data_network_status_on_radio_off"},
+	{ 50109 , "pdp_network_drop"},
+	{ 50110 , "cdma_data_setup_failed"},
+	{ 50111 , "cdma_data_drop"},
+	{ 50112 , "gsm_rat_switched"},
+	{ 50113 , "gsm_data_state_change"},
+	{ 50114 , "gsm_service_state_change"},
+	{ 50115 , "cdma_data_state_change"},
+	{ 50116 , "cdma_service_state_change"},
+	{ 50117 , "bad_ip_address"},
+	{ 50118 , "data_stall_recovery_get_data_call_list"},
+	{ 50119 , "data_stall_recovery_cleanup"},
+	{ 50120 , "data_stall_recovery_reregister"},
+	{ 50121 , "data_stall_recovery_radio_restart"},
+	{ 50122 , "data_stall_recovery_radio_restart_with_prop"},
+	{ 50123 , "gsm_rat_switched_new"},
+	{ 50125 , "exp_det_sms_denied_by_user"},
+	{ 50128 , "exp_det_sms_sent_by_user"},
+	{ 51100 , "netstats_mobile_sample"},
+	{ 51101 , "netstats_wifi_sample"},
+	{ 51200 , "lockdown_vpn_connecting"},
+	{ 51201 , "lockdown_vpn_connected"},
+	{ 51202 , "lockdown_vpn_error"},
+	{ 51300 , "config_install_failed"},
+	{ 51400 , "ifw_intent_matched"},
+	{ 52000 , "db_sample"},
+	{ 52001 , "http_stats"},
+	{ 52002 , "content_query_sample"},
+	{ 52003 , "content_update_sample"},
+	{ 52004 , "binder_sample"},
+	{ 60000 , "viewroot_draw"},
+	{ 60001 , "viewroot_layout"},
+	{ 60002 , "view_build_drawing_cache"},
+	{ 60003 , "view_use_drawing_cache"},
+	{ 60100 , "sf_frame_dur"},
+	{ 60110 , "sf_stop_bootanim"},
+	{ 65537 , "exp_det_netlink_failure"},
+	{ 70000 , "screen_toggled"},
+	{ 70101 , "browser_zoom_level_change"},
+	{ 70102 , "browser_double_tap_duration"},
+	{ 70103 , "browser_bookmark_added"},
+	{ 70104 , "browser_page_loaded"},
+	{ 70105 , "browser_timeonpage"},
+	{ 70150 , "browser_snap_center"},
+	{ 70151 , "exp_det_attempt_to_call_object_getclass"},
+	{ 70200 , "aggregation"},
+	{ 70201 , "aggregation_test"},
+	{ 70300 , "telephony_event"},
+	{ 70301 , "phone_ui_enter"},
+	{ 70302 , "phone_ui_exit"},
+	{ 70303 , "phone_ui_button_click"},
+	{ 70304 , "phone_ui_ringer_query_elapsed"},
+	{ 70305 , "phone_ui_multiple_query"},
+	{ 70310 , "telecom_event"},
+	{ 70311 , "telecom_service"},
+	{ 71001 , "qsb_start"},
+	{ 71002 , "qsb_click"},
+	{ 71003 , "qsb_search"},
+	{ 71004 , "qsb_voice_search"},
+	{ 71005 , "qsb_exit"},
+	{ 71006 , "qsb_latency"},
+	{ 73001 , "input_dispatcher_slow_event_processing"},
+	{ 73002 , "input_dispatcher_stale_event"},
+	{ 73100 , "looper_slow_lap_time"},
+	{ 73200 , "choreographer_frame_skip"},
+	{ 75000 , "sqlite_mem_alarm_current"},
+	{ 75001 , "sqlite_mem_alarm_max"},
+	{ 75002 , "sqlite_mem_alarm_alloc_attempt"},
+	{ 75003 , "sqlite_mem_released"},
+	{ 75004 , "sqlite_db_corrupt"},
+	{ 76001 , "tts_speak_success"},
+	{ 76002 , "tts_speak_failure"},
+	{ 76003 , "tts_v2_speak_success"},
+	{ 76004 , "tts_v2_speak_failure"},
+	{ 78001 , "exp_det_dispatchCommand_overflow"},
+	{ 80100 , "bionic_event_memcpy_buffer_overflow"},
+	{ 80105 , "bionic_event_strcat_buffer_overflow"},
+	{ 80110 , "bionic_event_memmov_buffer_overflow"},
+	{ 80115 , "bionic_event_strncat_buffer_overflow"},
+	{ 80120 , "bionic_event_strncpy_buffer_overflow"},
+	{ 80125 , "bionic_event_memset_buffer_overflow"},
+	{ 80130 , "bionic_event_strcpy_buffer_overflow"},
+	{ 80200 , "bionic_event_strcat_integer_overflow"},
+	{ 80205 , "bionic_event_strncat_integer_overflow"},
+	{ 80300 , "bionic_event_resolver_old_response"},
+	{ 80305 , "bionic_event_resolver_wrong_server"},
+	{ 80310 , "bionic_event_resolver_wrong_query"},
+	{ 90100 , "exp_det_cert_pin_failure"},
+	{ 90200 , "lock_screen_type"},
+	{ 90201 , "exp_det_device_admin_activated_by_user"},
+	{ 90202 , "exp_det_device_admin_declined_by_user"},
+	{ 90300 , "install_package_attempt"},
+	{ 201001 , "system_update"},
+	{ 201002 , "system_update_user"},
+	{ 202001 , "vending_reconstruct"},
+	{ 202901 , "transaction_event"},
+	{ 203001 , "sync_details"},
+	{ 203002 , "google_http_request"},
+	{ 204001 , "gtalkservice"},
+	{ 204002 , "gtalk_connection"},
+	{ 204003 , "gtalk_conn_close"},
+	{ 204004 , "gtalk_heartbeat_reset"},
+	{ 204005 , "c2dm"},
+	{ 205001 , "setup_server_timeout"},
+	{ 205002 , "setup_required_captcha"},
+	{ 205003 , "setup_io_error"},
+	{ 205004 , "setup_server_error"},
+	{ 205005 , "setup_retries_exhausted"},
+	{ 205006 , "setup_no_data_network"},
+	{ 205007 , "setup_completed"},
+	{ 205008 , "gls_account_tried"},
+	{ 205009 , "gls_account_saved"},
+	{ 205010 , "gls_authenticate"},
+	{ 205011 , "google_mail_switch"},
+	{ 206001 , "snet"},
+	{ 206003 , "exp_det_snet"},
+	{ 1050101 , "nitz_information"},
+	{ 1230000 , "am_create_stack"},
+	{ 1230001 , "am_remove_stack"},
+	{ 1230002 , "am_move_task_to_stack"},
+	{ 1230003 , "am_exchange_task_to_stack"},
+	{ 1230004 , "am_create_task_to_stack"},
+	{ 1230005 , "am_focus_stack"},
+	{ 1260001 , "vs_move_task_to_display"},
+	{ 1260002 , "vs_create_display"},
+	{ 1260003 , "vs_remove_display"},
+	{ 1261000 , "am_start_user "},
+	{ 1261001 , "am_stop_user "},
+	{ 1397638484 , "snet_event_log"},
+};
+
+static const char * find_tag_name_from_id ( int id )
+{
+	int l = 0;
+	int r = ARRAY_SIZE(event_tags)-1;
+	int mid = 0;
+	
+	while ( l <= r )
+	{		
+		mid = (l+r)/2;
+
+		if (event_tags[mid].nTagNum == id )
+			return event_tags[mid].event_msg;
+		else if ( event_tags[mid].nTagNum < id )
+			l = mid + 1;
+		else
+			r = mid - 1;
+	}
+	
+	return NULL;	
+}
+
+static char * parse_buffer(char *buffer, unsigned char type)
+{
+	unsigned int buf_len =0;
+	char buf[64] = {0};
+	
+	switch(type)
+	{
+		case EVENT_TYPE_INT:
+		{
+			int val = *(int *)buffer;
+			buffer+=sizeof(int);
+			buf_len = snprintf(buf, 64, "%d", val);
+			logger.func_hook_logger("log_main", buf, buf_len);
+		}
+		break;
+		case EVENT_TYPE_LONG:
+		{
+			long long val = *(long long *)buffer;
+			buffer+=sizeof(long long);
+			buf_len = snprintf(buf, 64, "%lld", val);
+			logger.func_hook_logger("log_main", buf, buf_len);
+		}
+		break;
+		case EVENT_TYPE_FLOAT:
+		{
+//			float val = *(float  *)buffer;
+			buffer+=sizeof(float);
+//			buf_len = snprintf(buf, 64, "%f", val);
+//			logger.func_hook_logger("log_platform", buf, buf_len);
+		}
+		break;
+		case EVENT_TYPE_STRING:
+		{
+  			unsigned int len = *(int *)buffer;
+  			unsigned int _len = len;
+  			if ( len >= 64 ) len = 63;
+  			buffer+=sizeof(int);
+			memcpy(buf, buffer, len);
+ 			logger.func_hook_logger("log_main", buf, len);
+            buffer+=_len;
+		}
+		break;
+	}
+	
+	return buffer;
+}
+
+#endif
+
 static int exynos_ss_combine_pmsg(char *buffer, size_t count, unsigned int level)
 {
 	char *logbuf = logger.buffer;
@@ -2556,10 +3089,10 @@ static int exynos_ss_combine_pmsg(char *buffer, size_t count, unsigned int level
 			u64 tv_kernel;
 			unsigned int logbuf_len;
 			unsigned long rem_nsec;
-
+#ifndef	CONFIG_SEC_EVENT_LOG
 			if (logger.id == ESS_LOG_ID_EVENTS)
 				break;
-
+#endif
 			tv_kernel = local_clock();
 			rem_nsec = do_div(tv_kernel, 1000000000);
 			time_to_tm(logger.tv_sec, 0, &tmBuf);
@@ -2572,7 +3105,7 @@ static int exynos_ss_combine_pmsg(char *buffer, size_t count, unsigned int level
 					tmBuf.tm_hour, tmBuf.tm_min, tmBuf.tm_sec,
 					logger.tv_nsec / 1000000, logger.pid, logger.tid);
 
-			logger.func_hook_logger("log_platform", logbuf, logbuf_len);
+			logger.func_hook_logger("log_main", logbuf, logbuf_len);
 		}
 		break;
 	case ESS_LOGGER_LEVEL_PREFIX:
@@ -2585,8 +3118,12 @@ static int exynos_ss_combine_pmsg(char *buffer, size_t count, unsigned int level
 
 			logbuf[0] = prio < strlen(kPrioChars) ? kPrioChars[prio] : '?';
 			logbuf[1] = ' ';
+			
+#ifdef CONFIG_SEC_EVENT_LOG
+			logger.msg[0] = 0xff;
+#endif
 
-			logger.func_hook_logger("log_platform", logbuf, ESS_LOGGER_LEVEL_PREFIX);
+			logger.func_hook_logger("log_main", logbuf, ESS_LOGGER_LEVEL_PREFIX);
 		}
 		break;
 	case ESS_LOGGER_LEVEL_TEXT:
@@ -2594,21 +3131,85 @@ static int exynos_ss_combine_pmsg(char *buffer, size_t count, unsigned int level
 			char *eatnl = buffer + count - ESS_LOGGER_STRING_PAD;
 
 			if (logger.id == ESS_LOG_ID_EVENTS)
+			{
+#ifdef CONFIG_SEC_EVENT_LOG
+				unsigned int buf_len;
+				char buf[64] = {0};
+				int tag_id = *(int *)buffer;
+				const char * tag_name  = NULL;
+				
+				if ( count == 4 && (tag_name = find_tag_name_from_id(tag_id)) != NULL )
+				{					
+					buf_len = snprintf(buf, 64, "# %s ", tag_name);
+					logger.func_hook_logger("log_main", buf, buf_len);
+				}
+				else
+				{
+					// SINGLE ITEM
+					// logger.msg[0] => count == 1 , if event log, it is type.
+					if ( logger.msg[0] == EVENT_TYPE_LONG || logger.msg[0] == EVENT_TYPE_INT || logger.msg[0] == EVENT_TYPE_FLOAT )
+						parse_buffer(buffer, logger.msg[0]);
+					else if ( count > 6 ) // TYPE(1) + ITEMS(1) + SINGLEITEM(5) or STRING(2+4+1>..)
+					// CASE 2,3:
+					// STRING OR LIST ITEM
+					{
+						if ( *buffer == EVENT_TYPE_LIST )
+						{
+							unsigned char items = *(buffer+1);
+							unsigned char i = 0;
+							buffer+=2;
+							
+							logger.func_hook_logger("log_main", "[", 1);
+							
+							for (;i<items;++i)
+							{
+								unsigned char type = *buffer;
+								buffer++;
+								buffer = parse_buffer(buffer, type);
+								logger.func_hook_logger("log_main", ":", 1);
+							}
+							
+							logger.func_hook_logger("log_main", "]", 1);
+		
+						}
+						else if ( *buffer == EVENT_TYPE_STRING )
+							parse_buffer(buffer+1, EVENT_TYPE_STRING);
+					}
+						
+					logger.msg[0]=0xff; // dummy value;	
+				}
+#else
 				break;
-			if (count == ESS_LOGGER_SKIP_COUNT && *eatnl != '\0')
-				break;
+#endif
+			}
+			else
+			{
+				if (count == ESS_LOGGER_SKIP_COUNT && *eatnl != '\0')
+					break;
 
-			memcpy((void *)logbuf, buffer, count);
-			eatnl = logbuf + count - ESS_LOGGER_STRING_PAD;
+				memcpy((void *)logbuf, buffer, count);
+				eatnl = logbuf + count - ESS_LOGGER_STRING_PAD;
 
-			/* Mark End of String for safe to buffer */
-			*eatnl = '\0';
-			while (--eatnl >= logbuf) {
-				if (*eatnl == '\n' || *eatnl == '\0')
-					*eatnl = ' ';
-			};
+				/* Mark End of String for safe to buffer */
+				*eatnl = '\0';
+				while (--eatnl >= logbuf) {
+					if (*eatnl == '\n' || *eatnl == '\0')
+						*eatnl = ' ';
+				};
 
-			logger.func_hook_logger("log_platform", logbuf, count);
+				logger.func_hook_logger("log_main", logbuf, count);
+#ifdef CONFIG_SEC_EXT
+				if (count > 1 && strncmp(logbuf, "!@", 2) == 0) {
+					logbuf[count-1] = '\0';
+					pr_info("%s\n", logbuf);
+#ifdef CONFIG_SEC_BSP
+					if (count > 5 && strncmp(logbuf, "!@Boot", 6) == 0){
+						sec_boot_stat_add(logbuf);
+					}
+#endif /* CONFIG_SEC_BOOTSTAT */
+				}
+#endif /* CONFIG_SEC_EXT */
+			}
 		}
 		break;
 	default:

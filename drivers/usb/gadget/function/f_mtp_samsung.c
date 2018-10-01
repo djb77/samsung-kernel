@@ -208,7 +208,7 @@ static struct usb_ss_ep_comp_descriptor mtpg_superspeed_bulk_comp_desc = {
 	.bDescriptorType =      USB_DT_SS_ENDPOINT_COMP,
 
 	/* the following 2 values can be tweaked if necessary */
-	/* .bMaxBurst =         0, */
+	.bMaxBurst =         4,
 	/* .bmAttributes =      0, */
 };
 
@@ -908,6 +908,12 @@ static void read_send_work(struct work_struct *work)
 	printk(KERN_DEBUG "[%s:%d] offset=[%lld]\t leth+hder=[%lld]\n",
 					 __func__, __LINE__, file_pos, count);
 
+	if(count<0) {
+		r = -EIO;
+		printk(KERN_ERR "[%s]\t%d ret = %d\n",
+						 __func__, __LINE__, r);
+		}
+
 	/* Zero Length Packet should be sent if the last trasfer
 	 * size is equals to the max packet size.
 	 */
@@ -1020,7 +1026,7 @@ static long  mtpg_ioctl(struct file *fd, unsigned int code, unsigned long arg)
 			usb_gadget_disconnect(cdev->gadget);
 			printk(KERN_DEBUG "[%s:%d] B4 disconectng gadget\n",
 							__func__, __LINE__);
-			msleep(20);
+			msleep(400);
 			usb_gadget_connect(cdev->gadget);
 			printk(KERN_DEBUG "[%s:%d] after usb_gadget_connect\n",
 							__func__, __LINE__);
@@ -1107,6 +1113,11 @@ static long  mtpg_ioctl(struct file *fd, unsigned int code, unsigned long arg)
 		size = buf[0];
 		printk(KERN_DEBUG "[%s]SET_SETUP_DATA size=%d line=[%d]\n",
 						 __func__, size, __LINE__);
+
+		if ( size > USB_PTPREQUEST_GETSTATUS_SIZE) {
+			size = USB_PTPREQUEST_GETSTATUS_SIZE;
+		}
+
 		memcpy(req->buf, buf, size);
 		req->zero = 0;
 		req->length = size;

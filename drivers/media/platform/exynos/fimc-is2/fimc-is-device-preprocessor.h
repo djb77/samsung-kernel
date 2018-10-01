@@ -62,5 +62,9 @@ int fimc_is_preproc_g_module(struct fimc_is_device_preproc *device,
 	struct fimc_is_module_enum **module);
 int fimc_is_preproc_runtime_suspend(struct device *dev);
 int fimc_is_preproc_runtime_resume(struct device *dev);
-
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+int fimc_is_preproc_fac_valid_check(struct fimc_is_device_preproc *device,
+	u32 input,
+	u32 scenario);
+#endif
 #endif

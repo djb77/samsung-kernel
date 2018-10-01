@@ -16,6 +16,9 @@
 #define DM_NAME_LEN 128
 #define DM_UUID_LEN 129
 
+#define MAX_CRYPTO_TYPE_NAME_LENGTH	64
+#define MAX_PROPERTY_LENGTH	92
+
 /*
  * A traditional ioctl interface for the device mapper.
  *
@@ -143,6 +146,9 @@ struct dm_ioctl {
 	char uuid[DM_UUID_LEN];	/* unique identifier for
 				 * the block device */
 	char data[7];		/* padding or data */
+
+	char crypto_type_name[MAX_CRYPTO_TYPE_NAME_LENGTH];
+	char encrypted_state[MAX_PROPERTY_LENGTH];
 };
 
 /*
@@ -240,7 +246,8 @@ enum {
 	/* Added later */
 	DM_LIST_VERSIONS_CMD,
 	DM_TARGET_MSG_CMD,
-	DM_DEV_SET_GEOMETRY_CMD
+	DM_DEV_SET_GEOMETRY_CMD,
+	DM_DEV_UPDATE_STATUS_CMD
 };
 
 #define DM_IOCTL 0xfd
@@ -265,6 +272,7 @@ enum {
 
 #define DM_TARGET_MSG	 _IOWR(DM_IOCTL, DM_TARGET_MSG_CMD, struct dm_ioctl)
 #define DM_DEV_SET_GEOMETRY	_IOWR(DM_IOCTL, DM_DEV_SET_GEOMETRY_CMD, struct dm_ioctl)
+#define DM_DEV_UPDATE_STATUS	_IOWR{DM_IOCTL, DM_DEV_UPDATE_STATUS_CMD, struct dm_ioctl)
 
 #define DM_VERSION_MAJOR	4
 #define DM_VERSION_MINOR	28

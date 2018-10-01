@@ -43,6 +43,12 @@ static int sdcardfs_d_revalidate(struct dentry *dentry, unsigned int flags)
 		spin_unlock(&dentry->d_lock);
 		return 1;
 	}
+	if (dentry->d_flags & DCACHE_WILL_INVALIDATE) {
+		dentry->d_flags &= ~DCACHE_WILL_INVALIDATE;
+		__d_drop(dentry);
+		spin_unlock(&dentry->d_lock);
+		return 0;
+	}
 	spin_unlock(&dentry->d_lock);
 
 	/* check uninitialized obb_dentry and  

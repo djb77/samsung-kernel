@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_custom_exynos.c 576700 2015-08-04 13:55:57Z $
+ * $Id: dhd_custom_exynos.c 672228 2016-11-25 07:39:42Z $
  */
 #include <linux/device.h>
 #include <linux/gpio.h>
@@ -244,6 +244,12 @@ dhd_wlan_init_gpio(void)
 }
 
 #if defined(CONFIG_ARGOS)
+#if defined(CONFIG_SPLIT_ARGOS_SET)
+#define ARGOS_WIFI_TABLE_LABEL "WIFI TX"
+#else /* CONFIG_SPLIT_ARGOS_SET */
+#define ARGOS_WIFI_TABLE_LABEL "WIFI"
+#endif /* CONFIG_SPLIT_ARGOS_SET  */
+
 #if defined(CONFIG_BCMDHD_PCIE)
 #if defined(CONFIG_MACH_UNIVERSAL7420) || defined(CONFIG_SOC_EXYNOS8890)
 #define ARGOS_IRQ_NUMBER 237
@@ -257,7 +263,7 @@ set_cpucore_for_interrupt(cpumask_var_t default_cpu_mask,
 	cpumask_var_t affinity_cpu_mask)
 {
 	argos_irq_affinity_setup_label(ARGOS_IRQ_NUMBER,
-		"WIFI", affinity_cpu_mask, default_cpu_mask);
+		ARGOS_WIFI_TABLE_LABEL, affinity_cpu_mask, default_cpu_mask);
 }
 EXPORT_SYMBOL(set_cpucore_for_interrupt);
 #endif /* CONFIG_ARGOS */

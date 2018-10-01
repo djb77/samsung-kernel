@@ -296,7 +296,7 @@ hook_ipv4(
         non_initial_fragment = (((ntohs(iph->frag_off)) & 0x1fff) != 0);
         udph = skb_header_pointer(skb, (iph->ihl << 2), 4, ports);
 
-        if (skb->sk != NULL)
+        if (skb->sk != NULL && hooknum == NF_INET_LOCAL_OUT)
         {
             packet_kuid = sock_i_uid(skb->sk);
         }
@@ -435,7 +435,7 @@ hook_ipv6(
 
         fields.ip_protocol = nexthdr;
 
-        if (skb->sk != NULL)
+        if (skb->sk != NULL && hooknum == NF_INET_LOCAL_OUT)
         {
             packet_kuid = sock_i_uid(skb->sk);
         }

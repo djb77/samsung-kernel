@@ -363,6 +363,7 @@ struct ufs_debug {
 	unsigned long flag;
 #define UFSHCD_DEBUG_LEVEL1	(1 << 0)
 #define UFSHCD_DEBUG_LEVEL2	(1 << 1)
+#define UFSHCD_DEBUG_DUMP	(1 << 2)
 };
 
 /**
@@ -541,6 +542,7 @@ struct ufs_hba {
 #define UFSHCI_QUIRK_BROKEN_REQ_LIST_CLR	BIT(1)
 #define UFSHCI_QUIRK_USE_OF_HCE			BIT(2)
 #define UFSHCI_QUIRK_SKIP_INTR_AGGR		BIT(3)
+#define UFSHCI_QUIRK_USE_ABORT_TASK		BIT(4)
 
 	/* Device deviations from standard UFS device spec. */
 	unsigned int dev_quirks;

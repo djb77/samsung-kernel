@@ -42,14 +42,23 @@
 		(value) = name; \
 	} while (0)
 
+/* Deprecated. Use  fimc_is_moudle_callback */ 
 typedef int (*fimc_is_moudle_dt_callback)(struct platform_device *pdev,
+	struct exynos_platform_fimc_is_module *pdata);
+
+/* New function for module callback. Use this instead of fimc_is_moudle_dt_callback */ 
+typedef int (*fimc_is_moudle_callback)(struct device *dev,
 	struct exynos_platform_fimc_is_module *pdata);
 
 int fimc_is_parse_dt(struct platform_device *pdev);
 int fimc_is_sensor_parse_dt(struct platform_device *pdev);
 int fimc_is_preprocessor_parse_dt(struct platform_device *pdev);
+/* Deprecated. Use  fimc_is_module_parse_dt */ 
 int fimc_is_sensor_module_parse_dt(struct platform_device *pdev,
 	fimc_is_moudle_dt_callback callback);
+/* New function for module parse dt. Use this instead of fimc_is_sensor_module_parse_dt */ 
+int fimc_is_module_parse_dt(struct device *dev,
+	fimc_is_moudle_callback callback);
 int fimc_is_spi_parse_dt(struct fimc_is_spi *spi);
 int fimc_is_power_setpin(struct device *dev, int position, int sensor_id);
 #endif

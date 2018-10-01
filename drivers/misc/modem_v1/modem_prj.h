@@ -221,6 +221,11 @@ static inline bool sipc_ps_ch(u8 ch)
 #define sipc5_is_not_reserved_channel(ch) \
 	((ch) != 0 && (ch) != 5 && (ch) != 6 && (ch) != 27 && (ch) != 255)
 
+#define MAX_NDEV_TX_Q 2
+#define MAX_NDEV_RX_Q 1
+/* mark value for high priority packet, hex QOSH */
+#define RAW_HPRIO	0x514F5348
+
 struct vnet {
 	struct io_device *iod;
 	struct link_device *ld;
@@ -514,6 +519,7 @@ struct modem_shared {
 
 	/* list of activated ndev */
 	struct list_head activated_ndev_list;
+	spinlock_t active_list_lock;
 
 	/* Array of pointers to IO devices corresponding to ch[n] */
 	struct io_device *ch2iod[256];

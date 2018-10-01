@@ -1288,14 +1288,16 @@ struct is_debug_region {
 	u32	reserved[PARAMETER_MAX_MEMBER-1];
 };
 
-typedef struct fast_ae_control {
-	u32 readyForNewCmd;
-	u32 cancelPicture;
-} IS_FastAeControlStr;
+struct fast_ctl_capture {
+	u32 ready;
+	u32 capture_intent;
+	u32 capture_count;
+	u32 capture_exposureTime;
+};
 
-typedef struct is_fast_control {
-	IS_FastAeControlStr fastAeControl;
-} IS_FastControlStr;
+struct is_fast_control {
+	struct fast_ctl_capture		fast_capture;
+};
 
 #define MAX_FRAME_COUNT		8
 #define MAX_FRAME_COUNT_PREVIEW	4
@@ -1310,8 +1312,8 @@ struct is_region {
 	struct is_frame_header	header[MAX_FRAME_COUNT];
 	struct is_face_marker	face[MAX_FACE_COUNT];
 	struct is_debug_region	debug;
-	IS_FastControlStr       FastControl;
-	u32			reserved[98];
+	struct is_fast_control	fast_ctl;
+	u32			reserved[96];
 	u32			shared[MAX_SHARED_COUNT];
 };
 

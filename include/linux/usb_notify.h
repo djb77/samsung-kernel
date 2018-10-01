@@ -6,12 +6,15 @@
  *
 */
 
+ /* usb notify layer v2.0 */
+
 #ifndef __LINUX_USB_NOTIFY_H__
 #define __LINUX_USB_NOTIFY_H__
 
 #include <linux/notifier.h>
 #include <linux/host_notify.h>
 #include <linux/external_notify.h>
+#include <linux/usblog_proc_notify.h>
 
 enum otg_notify_events {
 	NOTIFY_EVENT_NONE,
@@ -36,6 +39,7 @@ enum otg_notify_events {
 	NOTIFY_EVENT_MMD_EXT_CURRENT,
 	NOTIFY_EVENT_DEVICE_CONNECT,
 	NOTIFY_EVENT_GAMEPAD_CONNECT,
+	NOTIFY_EVENT_LANHUB_CONNECT,
 	NOTIFY_EVENT_VBUSPOWER,
 	NOTIFY_EVENT_VIRTUAL,
 };
@@ -76,15 +80,52 @@ enum otg_notify_gpio {
 	NOTIFY_REDRIVER,
 };
 
+enum otg_op_pos {
+	NOTIFY_OP_OFF,
+	NOTIFY_OP_POST,
+	NOTIFY_OP_PRE,
+};
+
 enum ovc_check_value {
 	HNOTIFY_LOW,
 	HNOTIFY_HIGH,
 	HNOTIFY_INITIAL,
 };
 
+enum usb_hw_param {
+	USB_CCIC_WATER_INT_COUNT,
+	USB_CCIC_DRY_INT_COUNT,
+	USB_CCIC_I2C_ERROR_COUNT,
+	USB_CCIC_OVC_COUNT,
+	USB_CCIC_OTG_USE_COUNT,
+	USB_CCIC_DP_USE_COUNT,
+	USB_CCIC_VR_USE_COUNT,
+	USB_HOST_SUPER_SPEED_COUNT,
+	USB_HOST_HIGH_SPEED_COUNT,
+	USB_HOST_FULL_SPEED_COUNT,
+	USB_HOST_LOW_SPEED_COUNT,
+	USB_CLIENT_SUPER_SPEED_COUNT,
+	USB_CLIENT_HIGH_SPEED_COUNT,
+	USB_HOST_CLASS_AUDIO_COUNT,
+	USB_HOST_CLASS_COMM_COUNT,
+	USB_HOST_CLASS_HID_COUNT,
+	USB_HOST_CLASS_PHYSICAL_COUNT,
+	USB_HOST_CLASS_IMAGE_COUNT,
+	USB_HOST_CLASS_PRINTER_COUNT,
+	USB_HOST_CLASS_STORAGE_COUNT,
+	USB_HOST_CLASS_HUB_COUNT,
+	USB_HOST_CLASS_CDC_COUNT,
+	USB_HOST_CLASS_CSCID_COUNT,
+	USB_HOST_CLASS_CONTENT_COUNT,
+	USB_HOST_CLASS_VIDEO_COUNT,
+	USB_HOST_CLASS_WIRELESS_COUNT,
+	USB_HOST_CLASS_MISC_COUNT,
+	USB_HOST_CLASS_APP_COUNT,
+	USB_HOST_CLASS_VENDOR_COUNT,
+	USB_CCIC_HW_PARAM_MAX,
+};
+
 struct otg_notify {
-	struct atomic_notifier_head	otg_notifier;
-	struct blocking_notifier_head extra_notifier;
 	int vbus_detect_gpio;
 	int redriver_en_gpio;
 	int is_wakelock;
@@ -94,6 +135,8 @@ struct otg_notify {
 	int booting_delay_sec;
 	int disable_control;
 	int device_check_sec;
+	int speed;
+	unsigned long long hw_param[USB_CCIC_HW_PARAM_MAX];
 	const char *muic_name;
 	int (*pre_gpio)(int gpio, int use);
 	int (*post_gpio)(int gpio, int use);
@@ -105,6 +148,7 @@ struct otg_notify {
 	int (*set_lanhubta)(int);
 	int (*set_battcall)(int, int);
 	void *o_data;
+	void *u_notify;
 };
 
 struct otg_booster {
@@ -113,31 +157,44 @@ struct otg_booster {
 };
 
 #ifdef CONFIG_USB_NOTIFY_LAYER
+extern const char *event_string(enum otg_notify_events event);
+extern const char *status_string(enum otg_notify_event_status status);
 extern void send_otg_notify(struct otg_notify *n,
 					unsigned long event, int enable);
-extern struct otg_booster *find_get_booster(void);
-extern int register_booster(struct otg_booster *b);
-extern int register_ovc_func(int (*check_state)(void *), void *data);
-extern int get_usb_mode(void);
-extern unsigned long get_cable_type(void);
+extern struct otg_booster *find_get_booster(struct otg_notify *n);
+extern int register_booster(struct otg_notify *n, struct otg_booster *b);
+extern int register_ovc_func(struct otg_notify *n,
+				int (*check_state)(void *), void *data);
+extern int get_usb_mode(struct otg_notify *n);
+extern unsigned long get_cable_type(struct otg_notify *n);
+extern int is_usb_host(struct otg_notify *n);
 extern void *get_notify_data(struct otg_notify *n);
 extern void set_notify_data(struct otg_notify *n, void *data);
 extern struct otg_notify *get_otg_notify(void);
 extern int set_otg_notify(struct otg_notify *n);
 extern void put_otg_notify(struct otg_notify *n);
+extern bool is_blocked(struct otg_notify *n, int type);
 #else
+static inline const char *event_string(enum otg_notify_events event)
+			{return NULL; }
+static inline const char *status_string(enum otg_notify_event_status status)
+			{return NULL; }
 static inline void send_otg_notify(struct otg_notify *n,
 					unsigned long event, int enable) { }
-static inline struct otg_booster *find_get_booster(void) {return NULL; }
-static inline int register_booster(struct otg_booster *b) {return 0; }
-static inline int register_ovc_func
-		(int (*check_state)(void *), void *data) {return 0; }
-static inline int get_usb_mode(void) {return 0; }
-static inline unsigned long get_cable_type(void) {return 0; }
+static inline struct otg_booster *find_get_booster(struct otg_notify *n)
+			{return NULL; }
+static inline int register_booster(struct otg_notify *n,
+					struct otg_booster *b) {return 0; }
+static inline int register_ovc_func(struct otg_notify *n,
+			int (*check_state)(void *), void *data) {return 0; }
+static inline int get_usb_mode(struct otg_notify *n) {return 0; }
+static inline unsigned long get_cable_type(struct otg_notify *n) {return 0; }
+static inline int is_usb_host(struct otg_notify *n) {return 0; }
 static inline void *get_notify_data(struct otg_notify *n) {return NULL; }
 static inline void set_notify_data(struct otg_notify *n, void *data) {}
 static inline struct otg_notify *get_otg_notify(void) {return NULL; }
 static inline int set_otg_notify(struct otg_notify *n) {return 0; }
 static inline void put_otg_notify(struct otg_notify *n) {}
+static inline bool is_blocked(struct otg_notify *n, int type) {return false; }
 #endif
 #endif /* __LINUX_USB_NOTIFY_H__ */

@@ -21,6 +21,13 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/pm.h>
 
+#define MMC_DRIVER_TYPE_0	0	/* Default, x1 */
+#define MMC_DRIVER_TYPE_1	1	/* x1.5 */
+#define MMC_DRIVER_TYPE_2	2	/* x0.75 */
+#define MMC_DRIVER_TYPE_3	3	/* x0.5 */
+#define MMC_DRIVER_TYPE_4	4	/* x1.2 */
+#define MMC_DRIVER_TYPE_5	5	/* x2 */
+
 struct mmc_ios {
 	unsigned int	clock;			/* clock rate */
 	unsigned short	vdd;
@@ -56,15 +63,15 @@ struct mmc_ios {
 #define MMC_TIMING_LEGACY	0
 #define MMC_TIMING_MMC_HS	1
 #define MMC_TIMING_SD_HS	2
-#define MMC_TIMING_UHS_SDR12	MMC_TIMING_LEGACY
-#define MMC_TIMING_UHS_SDR25	MMC_TIMING_MMC_HS
-#define MMC_TIMING_UHS_SDR50	3
-#define MMC_TIMING_UHS_SDR104	4
-#define MMC_TIMING_UHS_DDR50	5
-#define MMC_TIMING_MMC_DDR52	6
-#define MMC_TIMING_MMC_HS200	7
-#define MMC_TIMING_MMC_HS400	8
-#define MMC_TIMING_MMC_HS400_ES	9
+#define MMC_TIMING_UHS_SDR12	3
+#define MMC_TIMING_UHS_SDR25	4
+#define MMC_TIMING_UHS_SDR50	5
+#define MMC_TIMING_UHS_SDR104	6
+#define MMC_TIMING_UHS_DDR50	7
+#define MMC_TIMING_MMC_DDR52	8
+#define MMC_TIMING_MMC_HS200	9
+#define MMC_TIMING_MMC_HS400	10
+#define MMC_TIMING_MMC_HS400_ES	11
 
 	unsigned char	signal_voltage;		/* signalling voltage (1.8V or 3.3V) */
 
@@ -213,6 +220,7 @@ struct mmc_host {
 	unsigned int		f_min;
 	unsigned int		f_max;
 	unsigned int		f_init;
+	u32 			device_drv; /* device strength */
 	u32			ocr_avail;
 	u32			ocr_avail_sdio;	/* SDIO-specific OCR */
 	u32			ocr_avail_sd;	/* SD-specific OCR */
@@ -293,6 +301,8 @@ struct mmc_host {
 				 MMC_CAP2_HS400_1_2V)
 #define MMC_CAP2_SDIO_IRQ_NOTHREAD	(1 << 17)
 #define MMC_CAP2_STROBE_ENHANCED	(1 << 18) /* enhanced strobe */
+#define MMC_CAP2_SKIP_INIT_SCAN		(1 << 19) /* skip init mmc scan */
+#define MMC_CAP2_DETECT_ON_ERR	(1 << 20)	/* On I/O err check card removal */
 	mmc_pm_flag_t		pm_caps;	/* supported pm features */
 
 #ifdef CONFIG_MMC_CLKGATE

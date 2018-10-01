@@ -48,6 +48,10 @@
 #include <linux/muic/muic_notifier.h>
 #endif /* CONFIG_MUIC_NOTIFIER */
 
+#if defined(CONFIG_MUIC_SUPPORT_CCIC)
+#include "muic_ccic.h"
+#endif
+
 static bool debug_en_checklist = false;
 
 /* temp function for function pointer (TODO) */
@@ -60,30 +64,62 @@ enum act_function_num {
 	FUNC_PREPARE_DUPLI_TO_AFC_5V,
 	FUNC_PREPARE_DUPLI_TO_AFC_ERR_V,
 	FUNC_PREPARE_DUPLI_TO_AFC_9V,
+#if defined(CONFIG_MUIC_HV_12V)
+	FUNC_PREPARE_DUPLI_TO_AFC_12V,
+#endif
 	FUNC_PREPARE_DUPLI_TO_QC_PREPARE,
 	FUNC_AFC_5V_TO_AFC_5V_DUPLI,
 	FUNC_AFC_5V_TO_AFC_ERR_V,
 	FUNC_AFC_5V_TO_AFC_9V,
+#if defined(CONFIG_MUIC_HV_12V)
+	FUNC_AFC_5V_TO_AFC_12V,
+#endif
 	FUNC_AFC_5V_TO_QC_PREPARE,
 	FUNC_AFC_5V_DUPLI_TO_AFC_5V_DUPLI,
 	FUNC_AFC_5V_DUPLI_TO_AFC_ERR_V,
 	FUNC_AFC_5V_DUPLI_TO_AFC_9V,
-#if defined(CONFIG_MUIC_HV_12V)	
+#if defined(CONFIG_MUIC_HV_12V)
 	FUNC_AFC_5V_DUPLI_TO_AFC_12V,
 #endif
 	FUNC_AFC_5V_DUPLI_TO_QC_PREPARE,
 	FUNC_AFC_ERR_V_TO_AFC_ERR_V_DUPLI,
+	FUNC_AFC_ERR_V_TO_AFC_5V,
 	FUNC_AFC_ERR_V_TO_AFC_9V,
 	FUNC_AFC_ERR_V_TO_QC_PREPARE,
+#if defined(CONFIG_MUIC_HV_12V)
+	FUNC_AFC_ERR_V_TO_AFC_12V,
+#endif
 	FUNC_AFC_ERR_V_DUPLI_TO_AFC_ERR_V_DUPLI,
+	FUNC_AFC_ERR_V_DUPLI_TO_AFC_5V,
 	FUNC_AFC_ERR_V_DUPLI_TO_AFC_9V,
+#if defined(CONFIG_MUIC_HV_12V)
+	FUNC_AFC_ERR_V_DUPLI_TO_AFC_12V,
+#endif
 	FUNC_AFC_ERR_V_DUPLI_TO_QC_PREPARE,
-	FUNC_AFC_9V_TO_AFC_9V,
+	FUNC_AFC_9V_TO_AFC_9V_DUPLI,
+	FUNC_AFC_9V_TO_AFC_ERR_V,
+	FUNC_AFC_9V_TO_AFC_5V,
+	FUNC_AFC_9V_TO_QC_PREPARE,
+	FUNC_AFC_9V_DUPLI_TO_AFC_ERR_V,
+	FUNC_AFC_9V_DUPLI_TO_AFC_5V,
+	FUNC_AFC_9V_DUPLI_TO_AFC_9V_DUPLI,
+	FUNC_AFC_9V_DUPLI_TO_QC_PREPARE,
+#if defined(CONFIG_MUIC_HV_12V)
+	FUNC_AFC_12V_TO_AFC_12V_DUPLI,
+	FUNC_AFC_12V_TO_AFC_ERR_V,
+	FUNC_AFC_12V_TO_AFC_5V,
+	FUNC_AFC_12V_TO_AFC_9V,
+	FUNC_AFC_12V_TO_QC_PREPARE,
+	FUNC_AFC_12V_DUPLI_TO_AFC_ERR_V,
+	FUNC_AFC_12V_DUPLI_TO_AFC_5V,
+	FUNC_AFC_12V_DUPLI_TO_AFC_9V,
+	FUNC_AFC_12V_DUPLI_TO_AFC_12V_DUPLI,
+	FUNC_AFC_12V_DUPLI_TO_QC_PREPARE,
+#endif
 	FUNC_QC_PREPARE_TO_QC_5V,
 	FUNC_QC_PREPARE_TO_QC_9V,
-	FUNC_QC_5V_TO_QC_5V,
 	FUNC_QC_5V_TO_QC_9V,
-	FUNC_QC_9V_TO_QC_9V,
+	FUNC_QC_9V_TO_QC_5V,
 };
 
 static struct hv_data hv_afc;
@@ -157,6 +193,19 @@ muic_afc_data_t prepare_dupli_to_prepare_dupli = {
 	.next			= &prepare_dupli_to_qc_prepare,
 };
 
+#if defined(CONFIG_MUIC_HV_12V)
+muic_afc_data_t prepare_dupli_to_afc_12v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_12V_MUIC,
+	.afc_name		= "AFC charger 12V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_12V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_PREPARE_DUPLI_TO_AFC_12V,
+	.next			= &prepare_dupli_to_prepare_dupli,
+};
+#endif
+
 muic_afc_data_t prepare_dupli_to_afc_9v = {
 	.new_dev		= ATTACHED_DEV_AFC_CHARGER_9V_MUIC,
 	.afc_name		= "AFC charger 9V",
@@ -165,7 +214,11 @@ muic_afc_data_t prepare_dupli_to_afc_9v = {
 	.status3_vbadc		= VBADC_AFC_9V,
 	.status3_vdnmon		= VDNMON_DONTCARE,
 	.function_num		= FUNC_PREPARE_DUPLI_TO_AFC_9V,
+#if defined(CONFIG_MUIC_HV_12V)
+	.next			= &prepare_dupli_to_afc_12v,
+#else
 	.next			= &prepare_dupli_to_prepare_dupli,
+#endif
 };
 
 muic_afc_data_t prepare_dupli_to_afc_err_v = {
@@ -202,6 +255,19 @@ muic_afc_data_t afc_5v_to_qc_prepare = {
 	.next			= &afc_5v_to_qc_prepare,
 };
 
+#if defined(CONFIG_MUIC_HV_12V)
+muic_afc_data_t afc_5v_to_afc_12v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_12V_MUIC,
+	.afc_name		= "AFC charger 12V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_12V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_5V_TO_AFC_12V,
+	.next			= &afc_5v_to_qc_prepare,
+};
+#endif
+
 muic_afc_data_t afc_5v_to_afc_9v = {
 	.new_dev		= ATTACHED_DEV_AFC_CHARGER_9V_MUIC,
 	.afc_name		= "AFC charger 9V",
@@ -210,7 +276,11 @@ muic_afc_data_t afc_5v_to_afc_9v = {
 	.status3_vbadc		= VBADC_AFC_9V,
 	.status3_vdnmon		= VDNMON_DONTCARE,
 	.function_num		= FUNC_AFC_5V_TO_AFC_9V,
+#if defined(CONFIG_MUIC_HV_12V)
+	.next			= &afc_5v_to_afc_12v,
+#else
 	.next			= &afc_5v_to_qc_prepare,
+#endif
 };
 
 muic_afc_data_t afc_5v_to_afc_err_v = {
@@ -269,7 +339,6 @@ muic_afc_data_t afc_5v_dupli_to_afc_5v_dupli = {
 	.function_num		= FUNC_AFC_5V_DUPLI_TO_AFC_5V_DUPLI,
 	.next			= &afc_5v_dupli_to_afc_12v,
 };
-
 #else
 muic_afc_data_t afc_5v_dupli_to_afc_5v_dupli = {
 	.new_dev		= ATTACHED_DEV_AFC_CHARGER_5V_DUPLI_MUIC,
@@ -317,6 +386,34 @@ muic_afc_data_t afc_err_v_to_qc_prepare = {
 	.next			= &afc_err_v_to_qc_prepare,
 };
 
+#if defined(CONFIG_MUIC_HV_12V)
+muic_afc_data_t afc_err_v_to_afc_12v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_12V_MUIC,
+	.afc_name		= "AFC charger 12V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_12V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_ERR_V_TO_AFC_12V,
+	.next			= &afc_err_v_to_qc_prepare,
+};
+#endif
+
+muic_afc_data_t afc_err_v_to_afc_5v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_5V_MUIC,
+	.afc_name		= "AFC charger 5V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_5V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_ERR_V_TO_AFC_5V,
+#if defined(CONFIG_MUIC_HV_12V)
+	.next			= &afc_err_v_to_afc_12v,
+#else
+	.next			= &afc_err_v_to_qc_prepare,
+#endif
+};
+
 muic_afc_data_t afc_err_v_to_afc_9v = {
 	.new_dev		= ATTACHED_DEV_AFC_CHARGER_9V_MUIC,
 	.afc_name		= "AFC charger 9V",
@@ -325,7 +422,7 @@ muic_afc_data_t afc_err_v_to_afc_9v = {
 	.status3_vbadc		= VBADC_AFC_9V,
 	.status3_vdnmon		= VDNMON_DONTCARE,
 	.function_num		= FUNC_AFC_ERR_V_TO_AFC_9V,
-	.next			= &afc_err_v_to_qc_prepare,
+	.next			= &afc_err_v_to_afc_5v,
 };
 
 muic_afc_data_t afc_err_v_to_afc_err_v_dupli = {
@@ -351,6 +448,34 @@ muic_afc_data_t afc_err_v_dupli_to_qc_prepare = {
 	.next			= &afc_err_v_dupli_to_qc_prepare,
 };
 
+#if defined(CONFIG_MUIC_HV_12V)
+muic_afc_data_t afc_err_v_dupli_to_afc_12v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_12V_MUIC,
+	.afc_name		= "AFC charger 12V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_12V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_ERR_V_DUPLI_TO_AFC_12V,
+	.next			= &afc_err_v_dupli_to_qc_prepare,
+};
+#endif
+
+muic_afc_data_t afc_err_v_dupli_to_afc_5v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_5V_MUIC,
+	.afc_name		= "AFC charger 5V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_5V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_ERR_V_DUPLI_TO_AFC_5V,
+#if defined(CONFIG_MUIC_HV_12V)
+	.next			= &afc_err_v_dupli_to_afc_12v,
+#else
+	.next			= &afc_err_v_dupli_to_qc_prepare,
+#endif
+};
+
 muic_afc_data_t afc_err_v_dupli_to_afc_9v = {
 	.new_dev		= ATTACHED_DEV_AFC_CHARGER_9V_MUIC,
 	.afc_name		= "AFC charger 9V",
@@ -359,7 +484,7 @@ muic_afc_data_t afc_err_v_dupli_to_afc_9v = {
 	.status3_vbadc		= VBADC_AFC_9V,
 	.status3_vdnmon		= VDNMON_DONTCARE,
 	.function_num		= FUNC_AFC_ERR_V_DUPLI_TO_AFC_9V,
-	.next			= &afc_err_v_dupli_to_qc_prepare,
+	.next			= &afc_err_v_dupli_to_afc_5v,
 };
 
 muic_afc_data_t afc_err_v_dupli_to_afc_err_v_dupli = {
@@ -374,16 +499,216 @@ muic_afc_data_t afc_err_v_dupli_to_afc_err_v_dupli = {
 };
 
 /* afc_condition_checklist[ATTACHED_DEV_AFC_CHARGER_9V_MUIC] */
-muic_afc_data_t afc_9v_to_afc_9v = {
-	.new_dev		= ATTACHED_DEV_AFC_CHARGER_9V_MUIC,
-	.afc_name		= "AFC charger 9V",
-	.afc_irq		= MUIC_AFC_IRQ_DONTCARE,
+muic_afc_data_t afc_9v_to_qc_prepare = {
+	.new_dev		= ATTACHED_DEV_QC_CHARGER_PREPARE_MUIC,
+	.afc_name		= "QC charger Prepare",
+	.afc_irq		= MUIC_AFC_IRQ_MPNACK,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DONTCARE,
+	.status3_vbadc		= VBADC_DONTCARE,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_9V_TO_QC_PREPARE,
+	.next			= &afc_9v_to_qc_prepare,
+};
+
+muic_afc_data_t afc_9v_to_afc_err_v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_ERR_V_MUIC,
+	.afc_name		= "AFC charger ERR V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+#if defined(CONFIG_MUIC_HV_12V)
+	.status3_vbadc		= VBADC_DONTCARE, // 12V should be error
+#else
+	.status3_vbadc		= VBADC_AFC_ERR_V,
+#endif
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_9V_TO_AFC_ERR_V,
+	.next			= &afc_9v_to_qc_prepare,
+};
+
+muic_afc_data_t afc_9v_to_afc_5v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_5V_MUIC,
+	.afc_name		= "AFC charger 5V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_5V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_9V_TO_AFC_5V,
+	.next			= &afc_9v_to_afc_err_v,
+};
+
+muic_afc_data_t afc_9v_to_afc_9v_dupli = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_9V_DUPLI_MUIC,
+	.afc_name		= "AFC charger 9V (mrxrdy)",
+	.afc_irq		= MUIC_AFC_IRQ_MRXRDY,
 	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
 	.status3_vbadc		= VBADC_AFC_9V,
 	.status3_vdnmon		= VDNMON_DONTCARE,
-	.function_num		= FUNC_AFC_9V_TO_AFC_9V,
-	.next			= &afc_9v_to_afc_9v,
+	.function_num		= FUNC_AFC_9V_TO_AFC_9V_DUPLI,
+	.next			= &afc_9v_to_afc_5v,
 };
+
+/* afc_condition_checklist[ATTACHED_DEV_AFC_CHARGER_9V_DUPLI_MUIC] */
+muic_afc_data_t afc_9v_dupli_to_qc_prepare = {
+	.new_dev		= ATTACHED_DEV_QC_CHARGER_PREPARE_MUIC,
+	.afc_name		= "QC charger Prepare",
+	.afc_irq		= MUIC_AFC_IRQ_MPNACK,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DONTCARE,
+	.status3_vbadc		= VBADC_DONTCARE,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_9V_DUPLI_TO_QC_PREPARE,
+	.next			= &afc_9v_dupli_to_qc_prepare,
+};
+
+muic_afc_data_t afc_9v_dupli_to_afc_err_v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_ERR_V_MUIC,
+	.afc_name		= "AFC charger ERR V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+#if defined(CONFIG_MUIC_HV_12V)
+	.status3_vbadc		= VBADC_DONTCARE, // 12V should be error
+#else
+	.status3_vbadc		= VBADC_AFC_ERR_V,
+#endif
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_9V_DUPLI_TO_AFC_ERR_V,
+	.next			= &afc_9v_dupli_to_qc_prepare,
+};
+
+muic_afc_data_t afc_9v_dupli_to_afc_5v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_5V_MUIC,
+	.afc_name		= "AFC charger 5V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_5V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_9V_DUPLI_TO_AFC_5V,
+	.next			= &afc_9v_dupli_to_afc_err_v,
+};
+
+muic_afc_data_t afc_9v_dupli_to_afc_9v_dupli = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_9V_DUPLI_MUIC,
+	.afc_name		= "AFC charger 9V (mrxrdy)",
+	.afc_irq		= MUIC_AFC_IRQ_MRXRDY,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_9V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_9V_DUPLI_TO_AFC_9V_DUPLI,
+	.next			= &afc_9v_dupli_to_afc_5v,
+};
+
+#if defined(CONFIG_MUIC_HV_12V)
+/* afc_condition_checklist[ATTACHED_DEV_AFC_CHARGER_12V_MUIC] */
+muic_afc_data_t afc_12v_to_qc_prepare = {
+	.new_dev		= ATTACHED_DEV_QC_CHARGER_PREPARE_MUIC,
+	.afc_name		= "QC charger Prepare",
+	.afc_irq		= MUIC_AFC_IRQ_MPNACK,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DONTCARE,
+	.status3_vbadc		= VBADC_DONTCARE,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_12V_TO_QC_PREPARE,
+	.next			= &afc_12v_to_qc_prepare,
+};
+
+muic_afc_data_t afc_12v_to_afc_9v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_9V_MUIC,
+	.afc_name		= "AFC charger 9V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_9V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_12V_TO_AFC_9V,
+	.next			= &afc_12v_to_qc_prepare,
+};
+
+muic_afc_data_t afc_12v_to_afc_5v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_5V_MUIC,
+	.afc_name		= "AFC charger 5V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_5V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_12V_TO_AFC_5V,
+	.next			= &afc_12v_to_afc_9v,
+};
+
+muic_afc_data_t afc_12v_to_afc_err_v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_ERR_V_MUIC,
+	.afc_name		= "AFC charger ERR V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_ERR_V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_12V_TO_AFC_ERR_V,
+	.next			= &afc_12v_to_afc_5v,
+};
+
+muic_afc_data_t afc_12v_to_afc_12v_dupli = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_12V_DUPLI_MUIC,
+	.afc_name		= "AFC charger 12V (mrxrdy)",
+	.afc_irq		= MUIC_AFC_IRQ_MRXRDY,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_12V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_12V_TO_AFC_12V_DUPLI,
+	.next			= &afc_12v_to_afc_err_v,
+};
+
+/* afc_condition_checklist[ATTACHED_DEV_AFC_CHARGER_12V_DUPLI_MUIC] */
+muic_afc_data_t afc_12v_dupli_to_qc_prepare = {
+	.new_dev		= ATTACHED_DEV_QC_CHARGER_PREPARE_MUIC,
+	.afc_name		= "QC charger Prepare",
+	.afc_irq		= MUIC_AFC_IRQ_MPNACK,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DONTCARE,
+	.status3_vbadc		= VBADC_DONTCARE,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_12V_DUPLI_TO_QC_PREPARE,
+	.next			= &afc_12v_dupli_to_qc_prepare,
+};
+
+muic_afc_data_t afc_12v_dupli_to_afc_12v_dupli = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_12V_DUPLI_MUIC,
+	.afc_name		= "AFC charger 12V (mrxrdy)",
+	.afc_irq		= MUIC_AFC_IRQ_MRXRDY,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_12V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_12V_DUPLI_TO_AFC_12V_DUPLI,
+	.next			= &afc_12v_dupli_to_qc_prepare,
+};
+
+muic_afc_data_t afc_12v_dupli_to_afc_9v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_9V_MUIC,
+	.afc_name		= "AFC charger 9V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_9V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_12V_DUPLI_TO_AFC_9V,
+	.next			= &afc_12v_dupli_to_afc_12v_dupli,
+};
+
+muic_afc_data_t afc_12v_dupli_to_afc_5v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_5V_MUIC,
+	.afc_name		= "AFC charger 5V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_5V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_12V_DUPLI_TO_AFC_5V,
+	.next			= &afc_12v_dupli_to_afc_9v,
+};
+
+muic_afc_data_t afc_12v_dupli_to_afc_err_v = {
+	.new_dev		= ATTACHED_DEV_AFC_CHARGER_ERR_V_MUIC,
+	.afc_name		= "AFC charger ERR V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
+	.hvcontrol1_dpdnvden	= DPDNVDEN_DISABLE,
+	.status3_vbadc		= VBADC_AFC_ERR_V,
+	.status3_vdnmon		= VDNMON_DONTCARE,
+	.function_num		= FUNC_AFC_12V_DUPLI_TO_AFC_ERR_V,
+	.next			= &afc_12v_dupli_to_afc_5v,
+};
+#endif
 
 /* afc_condition_checklist[ATTACHED_DEV_QC_CHARGER_PREPARE_MUIC] */
 muic_afc_data_t qc_prepare_to_qc_9v = {
@@ -409,17 +734,6 @@ muic_afc_data_t qc_prepare_to_qc_5v = {
 };
 
 /* afc_condition_checklist[ATTACHED_DEV_QC_CHARGER_5V_MUIC] */
-muic_afc_data_t qc_5v_to_qc_5v = {
-	.new_dev		= ATTACHED_DEV_QC_CHARGER_5V_MUIC,
-	.afc_name		= "QC charger 5V",
-	.afc_irq		= MUIC_AFC_IRQ_DONTCARE,
-	.hvcontrol1_dpdnvden	= DPDNVDEN_ENABLE,
-	.status3_vbadc		= VBADC_QC_5V,
-	.status3_vdnmon		= VDNMON_DONTCARE,
-	.function_num		= FUNC_QC_5V_TO_QC_5V,
-	.next			= &qc_5v_to_qc_5v,
-};
-
 muic_afc_data_t qc_5v_to_qc_9v = {
 	.new_dev		= ATTACHED_DEV_QC_CHARGER_9V_MUIC,
 	.afc_name		= "QC charger 9V",
@@ -428,19 +742,19 @@ muic_afc_data_t qc_5v_to_qc_9v = {
 	.status3_vbadc		= VBADC_QC_9V,
 	.status3_vdnmon		= VDNMON_DONTCARE,
 	.function_num		= FUNC_QC_5V_TO_QC_9V,
-	.next			= &qc_5v_to_qc_5v,
+	.next			= &qc_5v_to_qc_9v,
 };
 
 /* afc_condition_checklist[ATTACHED_DEV_QC_CHARGER_9V_MUIC] */
-muic_afc_data_t qc_9v_to_qc_9v = {
-	.new_dev		= ATTACHED_DEV_QC_CHARGER_9V_MUIC,
-	.afc_name		= "QC charger 9V",
-	.afc_irq		= MUIC_AFC_IRQ_DONTCARE,
+muic_afc_data_t qc_9v_to_qc_5v = {
+	.new_dev		= ATTACHED_DEV_QC_CHARGER_5V_MUIC,
+	.afc_name		= "QC charger 5V",
+	.afc_irq		= MUIC_AFC_IRQ_VBADC,
 	.hvcontrol1_dpdnvden	= DPDNVDEN_ENABLE,
-	.status3_vbadc		= VBADC_QC_9V,
+	.status3_vbadc		= VBADC_QC_5V,
 	.status3_vdnmon		= VDNMON_DONTCARE,
-	.function_num		= FUNC_QC_9V_TO_QC_9V,
-	.next			= &qc_9v_to_qc_9v,
+	.function_num		= FUNC_QC_9V_TO_QC_5V,
+	.next			= &qc_9v_to_qc_5v,
 };
 
 muic_afc_data_t		*afc_condition_checklist[ATTACHED_DEV_NUM] = {
@@ -451,10 +765,15 @@ muic_afc_data_t		*afc_condition_checklist[ATTACHED_DEV_NUM] = {
 	[ATTACHED_DEV_AFC_CHARGER_5V_DUPLI_MUIC]= &afc_5v_dupli_to_afc_err_v,
 	[ATTACHED_DEV_AFC_CHARGER_ERR_V_MUIC]	= &afc_err_v_to_afc_err_v_dupli,
 	[ATTACHED_DEV_AFC_CHARGER_ERR_V_DUPLI_MUIC] = &afc_err_v_dupli_to_afc_err_v_dupli,
-	[ATTACHED_DEV_AFC_CHARGER_9V_MUIC]	= &afc_9v_to_afc_9v,
+	[ATTACHED_DEV_AFC_CHARGER_9V_MUIC]	= &afc_9v_to_afc_9v_dupli,
+	[ATTACHED_DEV_AFC_CHARGER_9V_DUPLI_MUIC]= &afc_9v_dupli_to_afc_9v_dupli,
+#if defined(CONFIG_MUIC_HV_12V)
+	[ATTACHED_DEV_AFC_CHARGER_12V_MUIC]	= &afc_12v_to_afc_12v_dupli,
+	[ATTACHED_DEV_AFC_CHARGER_12V_DUPLI_MUIC]= &afc_12v_dupli_to_afc_err_v,
+#endif
 	[ATTACHED_DEV_QC_CHARGER_PREPARE_MUIC]	= &qc_prepare_to_qc_9v,
-	[ATTACHED_DEV_QC_CHARGER_5V_MUIC]	= &qc_5v_to_qc_5v,
-	[ATTACHED_DEV_QC_CHARGER_9V_MUIC]	= &qc_9v_to_qc_9v,
+	[ATTACHED_DEV_QC_CHARGER_5V_MUIC]	= &qc_5v_to_qc_9v,
+	[ATTACHED_DEV_QC_CHARGER_9V_MUIC]	= &qc_9v_to_qc_5v,
 };
 
 struct afc_init_data_s {
@@ -473,6 +792,9 @@ static bool muic_check_is_hv_dev(struct hv_data *phv)
 	case ATTACHED_DEV_AFC_CHARGER_5V_MUIC:
 	case ATTACHED_DEV_AFC_CHARGER_5V_DUPLI_MUIC:
 	case ATTACHED_DEV_AFC_CHARGER_9V_MUIC:
+	case ATTACHED_DEV_AFC_CHARGER_9V_DUPLI_MUIC:
+	case ATTACHED_DEV_AFC_CHARGER_12V_MUIC:
+	case ATTACHED_DEV_AFC_CHARGER_12V_DUPLI_MUIC:
 	case ATTACHED_DEV_AFC_CHARGER_ERR_V_MUIC:
 	case ATTACHED_DEV_AFC_CHARGER_ERR_V_DUPLI_MUIC:
 	case ATTACHED_DEV_QC_CHARGER_PREPARE_MUIC:
@@ -642,10 +964,6 @@ static void max77854_hv_muic_set_afc_after_prepare
 	/* Set TX DATA */
 	value = phv->tx_data;
 
-#if defined(CONFIG_MUIC_HV_12V)	
-	value = 0x79; /* for 12V/2.1A TA */
-#endif
-
 	max77854_hv_muic_write_reg(i2c, MAX77854_MUIC_REG_HVTXBYTE, value);
 
 	/* Set HVCONTROL2 = 0x1B */
@@ -679,6 +997,8 @@ static void max77854_hv_muic_set_afc_charger_handshaking
 
 	for(i = 0; i < HVRXBYTE_MAX; i++) {
 		hvrxbyte[i] = muic_i2c_read_byte(i2c, (MAX77854_MUIC_REG_HVRXBYTE1+i));
+		if(hvrxbyte[i] == 0x47)
+			hvrxbyte[i] = 0x46;
 		if(hvrxbyte[i] == 0)
 			break;
 	}
@@ -699,6 +1019,20 @@ static void max77854_hv_muic_set_afc_charger_handshaking
 			if(hvtxbyte > selecthvtxbyte) {
 				pr_info(" selected hvtxbyte = %02x at %d", hvrxbyte[i], i);
 				selecthvtxbyte = hvrxbyte[i];
+			}
+		}
+		/* W/A of RX byte error */
+		if((phv->vps.hvcontrol[1] & 0x8) == 0) {
+			switch (selecthvtxbyte) {
+				case MUIC_HV_5V:
+				case MUIC_HV_9V:
+				case MUIC_HV_12V:
+					break;
+				default:
+					selecthvtxbyte = MUIC_HV_9V;
+					pr_info("%s:%s RXBYTE Error! selected hvtxbyte = %02x\n",
+							MUIC_HV_DEV_NAME, __func__, selecthvtxbyte);
+					break;
 			}
 		}
 		if(selecthvtxbyte != 0)
@@ -829,6 +1163,9 @@ static int max77854_hv_muic_handle_attach
 	int ret = 0;
 	bool noti = true;
 	muic_attached_dev_t	new_dev	= new_afc_data->new_dev;
+	int mping_missed = (phv->vps.hvcontrol[1] & 0x8);
+	if (mping_missed)
+		phv->afc_count = 0;
 
 	pr_info("%s:%s \n", MUIC_HV_DEV_NAME, __func__);
 
@@ -866,7 +1203,8 @@ static int max77854_hv_muic_handle_attach
 		cancel_delayed_work(&phv->hv_muic_mping_miss_wa);
 		phv->afc_count++;
 		max77854_hv_muic_set_afc_charger_handshaking(phv);
-		phv->is_afc_handshaking = true;
+		if (!mping_missed)
+			phv->is_afc_handshaking = true;
 		if (phv->afc_count > AFC_CHARGER_WA_PING) {
 			max77854_hv_muic_afc_control_ping(phv, false);
 		} else {
@@ -875,16 +1213,7 @@ static int max77854_hv_muic_handle_attach
 		}
 		break;
 	case FUNC_PREPARE_TO_AFC_5V:
-		if (!phv->is_afc_handshaking) {
-			max77854_hv_muic_set_afc_charger_handshaking(phv);
-			phv->is_afc_handshaking = true;
-		}
-		if (phv->afc_count > AFC_CHARGER_WA_PING) {
-			max77854_hv_muic_afc_control_ping(phv, false);
-		} else {
-			max77854_hv_muic_afc_control_ping(phv, true);
-			noti = false;
-		}
+		noti = false;
 		break;
 	case FUNC_PREPARE_TO_QC_PREPARE:
 		/* attached_dev is changed. MPING Missing did not happened
@@ -905,7 +1234,8 @@ static int max77854_hv_muic_handle_attach
 		phv->afc_count++;
 		if (!phv->is_afc_handshaking) {
 			max77854_hv_muic_set_afc_charger_handshaking(phv);
-			phv->is_afc_handshaking = true;
+			if (!mping_missed)
+				phv->is_afc_handshaking = true;
 		}
 		if (phv->afc_count > AFC_CHARGER_WA_PING) {
 			max77854_hv_muic_afc_control_ping(phv, false);
@@ -915,6 +1245,11 @@ static int max77854_hv_muic_handle_attach
 		}
 		break;
 	case FUNC_PREPARE_DUPLI_TO_AFC_5V:
+		if (!phv->is_afc_handshaking) {
+			max77854_hv_muic_set_afc_charger_handshaking(phv);
+			if (!mping_missed)
+				phv->is_afc_handshaking = true;
+		}
 		if (phv->afc_count > AFC_CHARGER_WA_PING) {
 			max77854_hv_muic_afc_control_ping(phv, false);
 		} else {
@@ -934,6 +1269,12 @@ static int max77854_hv_muic_handle_attach
 		max77854_hv_muic_afc_control_ping(phv, false);
 		max77854_hv_muic_adcmode_oneshot(phv);
 		break;
+#if defined(CONFIG_MUIC_HV_12V)
+	case FUNC_PREPARE_DUPLI_TO_AFC_12V:
+		max77854_hv_muic_afc_control_ping(phv, false);
+		max77854_hv_muic_adcmode_oneshot(phv);
+		break;
+#endif
 	case FUNC_PREPARE_DUPLI_TO_QC_PREPARE:
 		max77854_hv_muic_qc_charger(phv);
 		max77854_hv_muic_after_qc_prepare(phv);
@@ -945,6 +1286,11 @@ static int max77854_hv_muic_handle_attach
 			MUIC_HV_DEV_NAME, __func__, new_dev);
 		cancel_delayed_work(&phv->hv_muic_mping_miss_wa);
 		phv->afc_count++;
+		if (!phv->is_afc_handshaking) {
+			max77854_hv_muic_set_afc_charger_handshaking(phv);
+			if (!mping_missed)
+				phv->is_afc_handshaking = true;
+		}
 		if (phv->afc_count > AFC_CHARGER_WA_PING) {
 			max77854_hv_muic_afc_control_ping(phv, false);
 			max77854_hv_muic_adcmode_always_on(phv);
@@ -975,6 +1321,17 @@ static int max77854_hv_muic_handle_attach
 		max77854_hv_muic_afc_control_ping(phv, false);
 		max77854_hv_muic_adcmode_oneshot(phv);
 		break;
+#if defined(CONFIG_MUIC_HV_12V)
+	case FUNC_AFC_5V_TO_AFC_12V:
+		/* attached_dev is changed. MPING Missing did not happened
+		 * Cancel delayed work */
+		pr_info("%s:%s cancel_delayed_work(dev %d), Mping missing wa\n",
+			MUIC_HV_DEV_NAME, __func__, new_dev);
+		cancel_delayed_work(&phv->hv_muic_mping_miss_wa);
+		max77854_hv_muic_afc_control_ping(phv, false);
+		max77854_hv_muic_adcmode_oneshot(phv);
+		break;
+#endif
 	case FUNC_AFC_5V_TO_QC_PREPARE:
 		/* attached_dev is changed. MPING Missing did not happened
 		 * Cancel delayed work */
@@ -986,6 +1343,11 @@ static int max77854_hv_muic_handle_attach
 		break;
 	case FUNC_AFC_5V_DUPLI_TO_AFC_5V_DUPLI:
 		phv->afc_count++;
+		if (!phv->is_afc_handshaking) {
+			max77854_hv_muic_set_afc_charger_handshaking(phv);
+			if (!mping_missed)
+				phv->is_afc_handshaking = true;
+		}
 		if (phv->afc_count > AFC_CHARGER_WA_PING) {
 			max77854_hv_muic_afc_control_ping(phv, false);
 			max77854_hv_muic_adcmode_always_on(phv);
@@ -1023,10 +1385,20 @@ static int max77854_hv_muic_handle_attach
 			noti = false;
 		}
 		break;
+	case FUNC_AFC_ERR_V_TO_AFC_5V:
+		max77854_hv_muic_afc_control_ping(phv, false);
+		max77854_hv_muic_adcmode_oneshot(phv);
+		break;
 	case FUNC_AFC_ERR_V_TO_AFC_9V:
 		max77854_hv_muic_afc_control_ping(phv, false);
 		max77854_hv_muic_adcmode_oneshot(phv);
 		break;
+#if defined(CONFIG_MUIC_HV_12V)
+	case FUNC_AFC_ERR_V_TO_AFC_12V:
+		max77854_hv_muic_afc_control_ping(phv, false);
+		max77854_hv_muic_adcmode_oneshot(phv);
+		break;
+#endif
 	case FUNC_AFC_ERR_V_TO_QC_PREPARE:
 		max77854_hv_muic_qc_charger(phv);
 		max77854_hv_muic_after_qc_prepare(phv);
@@ -1041,18 +1413,138 @@ static int max77854_hv_muic_handle_attach
 			noti = false;
 		}
 		break;
+	case FUNC_AFC_ERR_V_DUPLI_TO_AFC_5V:
+		max77854_hv_muic_afc_control_ping(phv, false);
+		max77854_hv_muic_adcmode_oneshot(phv);
+		break;
 	case FUNC_AFC_ERR_V_DUPLI_TO_AFC_9V:
 		max77854_hv_muic_afc_control_ping(phv, false);
 		max77854_hv_muic_adcmode_oneshot(phv);
 		break;
+#if defined(CONFIG_MUIC_HV_12V)
+	case FUNC_AFC_ERR_V_DUPLI_TO_AFC_12V:
+		max77854_hv_muic_afc_control_ping(phv, false);
+		max77854_hv_muic_adcmode_oneshot(phv);
+		break;
+#endif
 	case FUNC_AFC_ERR_V_DUPLI_TO_QC_PREPARE:
 		max77854_hv_muic_qc_charger(phv);
 		max77854_hv_muic_after_qc_prepare(phv);
 		break;
-	case FUNC_AFC_9V_TO_AFC_9V:
+	case FUNC_AFC_9V_TO_AFC_9V_DUPLI:
+		phv->afc_count++;
+		if (phv->afc_count > AFC_CHARGER_WA_PING) {
+			max77854_hv_muic_afc_control_ping(phv, false);
+			max77854_hv_muic_adcmode_always_on(phv);
+		} else {
+			max77854_hv_muic_afc_control_ping(phv, true);
+			noti = false;
+		}
+		break;
+	case FUNC_AFC_9V_TO_AFC_ERR_V:
+		if (phv->afc_count > AFC_CHARGER_WA_PING) {
+			max77854_hv_muic_afc_control_ping(phv, false);
+		} else {
+			max77854_hv_muic_afc_control_ping(phv, true);
+			noti = false;
+		}
+		break;
+	case FUNC_AFC_9V_TO_AFC_5V:
 		max77854_hv_muic_afc_control_ping(phv, false);
 		max77854_hv_muic_adcmode_oneshot(phv);
 		break;
+	case FUNC_AFC_9V_TO_QC_PREPARE:
+		max77854_hv_muic_qc_charger(phv);
+		max77854_hv_muic_after_qc_prepare(phv);
+		break;
+	case FUNC_AFC_9V_DUPLI_TO_AFC_ERR_V:
+		if (phv->afc_count > AFC_CHARGER_WA_PING) {
+			max77854_hv_muic_afc_control_ping(phv, false);
+		} else {
+			max77854_hv_muic_afc_control_ping(phv, true);
+			noti = false;
+		}
+		break;
+	case FUNC_AFC_9V_DUPLI_TO_AFC_5V:
+		max77854_hv_muic_afc_control_ping(phv, false);
+		max77854_hv_muic_adcmode_oneshot(phv);
+		break;
+	case FUNC_AFC_9V_DUPLI_TO_AFC_9V_DUPLI:
+		phv->afc_count++;
+		if (phv->afc_count > AFC_CHARGER_WA_PING) {
+			max77854_hv_muic_afc_control_ping(phv, false);
+			max77854_hv_muic_adcmode_always_on(phv);
+		} else {
+			max77854_hv_muic_afc_control_ping(phv, true);
+			noti = false;
+		}
+		break;
+	case FUNC_AFC_9V_DUPLI_TO_QC_PREPARE:
+		max77854_hv_muic_qc_charger(phv);
+		max77854_hv_muic_after_qc_prepare(phv);
+		break;
+#if defined(CONFIG_MUIC_HV_12V)
+	case FUNC_AFC_12V_TO_AFC_12V_DUPLI:
+		phv->afc_count++;
+		if (phv->afc_count > AFC_CHARGER_WA_PING) {
+			max77854_hv_muic_afc_control_ping(phv, false);
+			max77854_hv_muic_adcmode_always_on(phv);
+		} else {
+			max77854_hv_muic_afc_control_ping(phv, true);
+			noti = false;
+		}
+		break;
+	case FUNC_AFC_12V_TO_AFC_ERR_V:
+		if (phv->afc_count > AFC_CHARGER_WA_PING) {
+			max77854_hv_muic_afc_control_ping(phv, false);
+		} else {
+			max77854_hv_muic_afc_control_ping(phv, true);
+			noti = false;
+		}
+		break;
+	case FUNC_AFC_12V_TO_AFC_5V:
+		max77854_hv_muic_afc_control_ping(phv, false);
+		max77854_hv_muic_adcmode_oneshot(phv);
+		break;
+	case FUNC_AFC_12V_TO_AFC_9V:
+		max77854_hv_muic_afc_control_ping(phv, false);
+		max77854_hv_muic_adcmode_oneshot(phv);
+		break;
+	case FUNC_AFC_12V_TO_QC_PREPARE:
+		max77854_hv_muic_qc_charger(phv);
+		max77854_hv_muic_after_qc_prepare(phv);
+		break;
+	case FUNC_AFC_12V_DUPLI_TO_AFC_ERR_V:
+		if (phv->afc_count > AFC_CHARGER_WA_PING) {
+			max77854_hv_muic_afc_control_ping(phv, false);
+		} else {
+			max77854_hv_muic_afc_control_ping(phv, true);
+			noti = false;
+		}
+		break;
+	case FUNC_AFC_12V_DUPLI_TO_AFC_5V:
+		max77854_hv_muic_afc_control_ping(phv, false);
+		max77854_hv_muic_adcmode_oneshot(phv);
+		break;
+	case FUNC_AFC_12V_DUPLI_TO_AFC_9V:
+		max77854_hv_muic_afc_control_ping(phv, false);
+		max77854_hv_muic_adcmode_oneshot(phv);
+		break;
+	case FUNC_AFC_12V_DUPLI_TO_AFC_12V_DUPLI:
+		phv->afc_count++;
+		if (phv->afc_count > AFC_CHARGER_WA_PING) {
+			max77854_hv_muic_afc_control_ping(phv, false);
+			max77854_hv_muic_adcmode_always_on(phv);
+		} else {
+			max77854_hv_muic_afc_control_ping(phv, true);
+			noti = false;
+		}
+		break;
+	case FUNC_AFC_12V_DUPLI_TO_QC_PREPARE:
+		max77854_hv_muic_qc_charger(phv);
+		max77854_hv_muic_after_qc_prepare(phv);
+		break;
+#endif
 	case FUNC_QC_PREPARE_TO_QC_5V:
 		if (phv->is_qc_vb_settle == true)
 			max77854_hv_muic_adcmode_oneshot(phv);
@@ -1063,17 +1555,11 @@ static int max77854_hv_muic_handle_attach
 		phv->is_qc_vb_settle = true;
 		max77854_hv_muic_adcmode_oneshot(phv);
 		break;
-	case FUNC_QC_5V_TO_QC_5V:
-		if (phv->is_qc_vb_settle == true)
-			max77854_hv_muic_adcmode_oneshot(phv);
-		else
-			noti = false;
-		break;
 	case FUNC_QC_5V_TO_QC_9V:
 		phv->is_qc_vb_settle = true;
 		max77854_hv_muic_adcmode_oneshot(phv);
 		break;
-	case FUNC_QC_9V_TO_QC_9V:
+	case FUNC_QC_9V_TO_QC_5V:
 		max77854_hv_muic_adcmode_oneshot(phv);
 		break;
 	default:
@@ -1088,6 +1574,8 @@ static int max77854_hv_muic_handle_attach
 		noti = false;
 	else if (new_dev == ATTACHED_DEV_AFC_CHARGER_PREPARE_DUPLI_MUIC || \
 		new_dev == ATTACHED_DEV_AFC_CHARGER_5V_DUPLI_MUIC || \
+		new_dev == ATTACHED_DEV_AFC_CHARGER_9V_DUPLI_MUIC || \
+		new_dev == ATTACHED_DEV_AFC_CHARGER_12V_DUPLI_MUIC || \
 		new_dev == ATTACHED_DEV_AFC_CHARGER_ERR_V_DUPLI_MUIC)
 		noti = false;
 
@@ -1095,6 +1583,10 @@ static int max77854_hv_muic_handle_attach
 		muic_notifier_attach_attached_dev(new_dev);
 #endif /* CONFIG_MUIC_NOTIFIER */
 
+#if defined(CONFIG_MUIC_SUPPORT_CCIC)
+	if (phv->pmuic->opmode & OPMODE_CCIC)
+		muic_set_legacy_dev(phv->pmuic, new_dev);		
+#endif
 	phv->attached_dev = new_dev;
 
 	//Fixme.
@@ -1186,6 +1678,7 @@ static bool muic_check_status3_vbadc
 		switch (vbadc) {
 		case VBADC_4V_5V:
 		case VBADC_5V_6V:
+		case VBADC_6V_7V:
 			ret = true;
 			goto out;
 		default:
@@ -1267,6 +1760,7 @@ static bool muic_check_status3_vbadc
 		switch (vbadc) {
 		case VBADC_4V_5V:
 		case VBADC_5V_6V:
+		case VBADC_6V_7V:
 			ret = true;
 			goto out;
 		default:
@@ -1401,6 +1895,10 @@ static bool muic_check_dev_ta(struct hv_data *phv)
 		muic_notifier_detach_attached_dev(phv->attached_dev);
 #endif
 		phv->attached_dev = ATTACHED_DEV_NONE_MUIC;
+#if defined(CONFIG_MUIC_SUPPORT_CCIC)
+		if (phv->pmuic->opmode & OPMODE_CCIC)
+			muic_set_legacy_dev(phv->pmuic, phv->attached_dev);		
+#endif
 		//Fixme.
 		/* update MUIC's attached_dev */
 		phv->pmuic->attached_dev = phv->attached_dev;
@@ -1575,6 +2073,9 @@ bool max77854_muic_check_change_dev_afc_charger
 		new_dev == ATTACHED_DEV_AFC_CHARGER_5V_MUIC || \
 		new_dev == ATTACHED_DEV_AFC_CHARGER_5V_DUPLI_MUIC || \
 		new_dev == ATTACHED_DEV_AFC_CHARGER_9V_MUIC || \
+		new_dev == ATTACHED_DEV_AFC_CHARGER_9V_DUPLI_MUIC || \
+		new_dev == ATTACHED_DEV_AFC_CHARGER_12V_MUIC || \
+		new_dev == ATTACHED_DEV_AFC_CHARGER_12V_DUPLI_MUIC || \
 		new_dev == ATTACHED_DEV_AFC_CHARGER_ERR_V_MUIC || \
 		new_dev == ATTACHED_DEV_AFC_CHARGER_ERR_V_DUPLI_MUIC || \
 		new_dev == ATTACHED_DEV_QC_CHARGER_PREPARE_MUIC || \
@@ -1617,6 +2118,62 @@ static void max77854_hv_muic_detect_after_charger_init(struct work_struct *work)
 	}
 
 	mutex_unlock(phv->pmutex);
+}
+
+void hv_muic_change_afc_voltage(muic_data_t *pmuic, int tx_data)
+{
+	struct hv_data *phv = pmuic->phv;
+	struct i2c_client *i2c = phv->i2c;
+	int value;
+
+	pr_info("%s: change afc voltage(%x)\n", __func__, tx_data);
+	value = muic_i2c_read_byte(i2c, MAX77854_MUIC_REG_HVTXBYTE);
+	if (value == tx_data) {
+		pr_info("%s: same to current voltage %x\n", __func__, value);
+		return;
+	}
+	phv->afc_count = 0;
+	max77854_hv_muic_write_reg(i2c, MAX77854_MUIC_REG_HVTXBYTE, tx_data);
+
+	/* QC Charger */
+	if (phv->attached_dev == ATTACHED_DEV_QC_CHARGER_5V_MUIC ||
+			phv->attached_dev == ATTACHED_DEV_QC_CHARGER_9V_MUIC) {
+		switch (tx_data) {
+			case MUIC_HV_5V:
+				set_adc_scan_mode(phv->pmuic,ADC_SCANMODE_CONTINUOUS);
+				max77854_hv_muic_write_reg(i2c, MAX77854_MUIC_REG_HVCONTROL1, 0x33);
+				break;
+			case MUIC_HV_9V:
+				set_adc_scan_mode(phv->pmuic,ADC_SCANMODE_CONTINUOUS);
+				max77854_hv_muic_write_reg(i2c, MAX77854_MUIC_REG_HVCONTROL1, 0x3D);
+				break;
+			default:
+				break;
+		}
+	}
+	/* AFC Charger */
+	else {
+		max77854_hv_muic_adcmode_always_on(phv);
+		max77854_hv_muic_afc_control_ping(phv, true);
+	}
+}
+
+int muic_afc_set_voltage(int vol)
+{
+	muic_data_t *pmuic = hv_afc.pmuic;
+
+	if (vol == 5) {
+		hv_muic_change_afc_voltage(pmuic, MUIC_HV_5V);			
+	} else if (vol == 9) {
+		hv_muic_change_afc_voltage(pmuic, MUIC_HV_9V);
+	} else if (vol == 12) {
+		hv_muic_change_afc_voltage(pmuic, MUIC_HV_12V);
+	} else {
+		pr_warn("%s:%s invalid value\n", MUIC_DEV_NAME, __func__);
+		return 0;
+	}
+
+	return 1;
 }
 
 void max77854_hv_muic_charger_init(void)
@@ -1767,6 +2324,11 @@ static irqreturn_t max77854_muic_hv_irq(int irq, void *data)
 	else if (phv->afc_disable)
 		pr_info("%s:%s AFC disable by USER (afc_disable[%c]\n", MUIC_HV_DEV_NAME,
 			__func__, (phv->afc_disable ? 'T' : 'F'));
+#if defined(CONFIG_MUIC_SUPPORT_CCIC)
+	else if (phv->pmuic->afc_water_disable)
+		pr_info("%s:%s AFC disable by WATER (afc_water_disable[%c]\n", MUIC_HV_DEV_NAME,
+			__func__, (phv->pmuic->afc_water_disable ? 'T' : 'F'));
+#endif
 	else
 		max77854_hv_muic_detect_dev(phv, irq);
 
@@ -1891,6 +2453,14 @@ void hv_initialize(muic_data_t *pmuic, struct hv_data **pphv)
 	*pphv = &hv_afc;
 }
 
+void hv_clear_hvcontrol(struct hv_data *phv)
+{
+	struct i2c_client *i2c = phv->i2c;
+
+	max77854_hv_muic_write_reg(i2c, MAX77854_MUIC_REG_HVCONTROL1, 0x00);
+	max77854_hv_muic_write_reg(i2c, MAX77854_MUIC_REG_HVCONTROL2, 0x00);
+}
+
 void hv_configure_AFC(struct hv_data *phv)
 {
 	int ret = 0;
@@ -1940,6 +2510,9 @@ bool hv_is_predetach_required(int mdev)
         case ATTACHED_DEV_AFC_CHARGER_5V_MUIC:
         case ATTACHED_DEV_AFC_CHARGER_5V_DUPLI_MUIC:
         case ATTACHED_DEV_AFC_CHARGER_9V_MUIC:
+        case ATTACHED_DEV_AFC_CHARGER_9V_DUPLI_MUIC:
+        case ATTACHED_DEV_AFC_CHARGER_12V_MUIC:
+        case ATTACHED_DEV_AFC_CHARGER_12V_DUPLI_MUIC:
         case ATTACHED_DEV_AFC_CHARGER_ERR_V_MUIC:
         case ATTACHED_DEV_AFC_CHARGER_ERR_V_DUPLI_MUIC:
         case ATTACHED_DEV_QC_CHARGER_PREPARE_MUIC:

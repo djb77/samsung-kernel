@@ -68,5 +68,6 @@ struct exynos5_i2c {
 	int			need_cs_enb;
 	int			idle_ip_index;
 	int			reset_before_trans;
+	unsigned int		secure_mode;
 };
 #endif /*__I2C_EXYNOS5_H */

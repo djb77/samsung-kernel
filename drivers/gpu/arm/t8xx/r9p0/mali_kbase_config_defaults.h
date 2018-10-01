@@ -189,7 +189,7 @@ enum {
 /*
  * Default scheduling tick granuality
  */
-#define DEFAULT_JS_SCHEDULING_PERIOD_NS    (100000000u) /* 100ms */
+#define DEFAULT_JS_SCHEDULING_PERIOD_NS    (50000000u) /* 100ms -> 50ms */
 
 /*
  * Default minimum number of scheduling ticks before jobs are soft-stopped.
@@ -197,29 +197,29 @@ enum {
  * This defines the time-slice for a job (which may be different from that of a
  * context)
  */
-#define DEFAULT_JS_SOFT_STOP_TICKS       (1) /* 100ms-200ms */
+#define DEFAULT_JS_SOFT_STOP_TICKS       (6) /* 100ms-200ms -> 300ms */
 
 /*
  * Default minimum number of scheduling ticks before CL jobs are soft-stopped.
  */
-#define DEFAULT_JS_SOFT_STOP_TICKS_CL    (1) /* 100ms-200ms */
+#define DEFAULT_JS_SOFT_STOP_TICKS_CL    (6) /* 100ms-200ms -> 300ms */
 
 /*
  * Default minimum number of scheduling ticks before jobs are hard-stopped
  */
-#define DEFAULT_JS_HARD_STOP_TICKS_SS    (50) /* 5s */
-#define DEFAULT_JS_HARD_STOP_TICKS_SS_8408  (300) /* 30s */
+#define DEFAULT_JS_HARD_STOP_TICKS_SS    (7) /* 5s -> 350ms */
+#define DEFAULT_JS_HARD_STOP_TICKS_SS_8408  (300) /* 30s -> 15s */
 
 /*
  * Default minimum number of scheduling ticks before CL jobs are hard-stopped.
  */
-#define DEFAULT_JS_HARD_STOP_TICKS_CL    (50) /* 5s */
+#define DEFAULT_JS_HARD_STOP_TICKS_CL    (7) /* 5s -> 350ms */
 
 /*
  * Default minimum number of scheduling ticks before jobs are hard-stopped
  * during dumping
  */
-#define DEFAULT_JS_HARD_STOP_TICKS_DUMPING   (15000) /* 1500s */
+#define DEFAULT_JS_HARD_STOP_TICKS_DUMPING   (15000) /* 1500s -> 750s */
 
 /*
  * Default timeout for software event jobs, after which these jobs will be
@@ -231,20 +231,20 @@ enum {
  * Default minimum number of scheduling ticks before the GPU is reset to clear a
  * "stuck" job
  */
-#define DEFAULT_JS_RESET_TICKS_SS           (55) /* 5.5s */
-#define DEFAULT_JS_RESET_TICKS_SS_8408     (450) /* 45s */
+#define DEFAULT_JS_RESET_TICKS_SS           (8) /* 5.5s -> 400ms */
+#define DEFAULT_JS_RESET_TICKS_SS_8408     (450) /* 45s -> 22.5s */
 
 /*
  * Default minimum number of scheduling ticks before the GPU is reset to clear a
  * "stuck" CL job.
  */
-#define DEFAULT_JS_RESET_TICKS_CL        (55) /* 5.5s */
+#define DEFAULT_JS_RESET_TICKS_CL        (8) /* 5.5s -> 400ms */
 
 /*
  * Default minimum number of scheduling ticks before the GPU is reset to clear a
  * "stuck" job during dumping.
  */
-#define DEFAULT_JS_RESET_TICKS_DUMPING   (15020) /* 1502s */
+#define DEFAULT_JS_RESET_TICKS_DUMPING   (15020) /* 1502s -> 751s */
 
 /*
  * Default number of milliseconds given for other jobs on the GPU to be

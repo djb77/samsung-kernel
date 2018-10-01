@@ -188,11 +188,6 @@ void sdcardfs_destroy_inode_cache(void)
 		kmem_cache_destroy(sdcardfs_inode_cachep);
 }
 
-/*
- * Used only in nfs, to kill any pending RPC tasks, so that subsequent
- * code can actually succeed and won't leave tasks that need handling.
- */
-
 static long sdcardfs_propagate_lookup(struct super_block *sb, char* pathname) {
 	long ret = 0;
 	char *propagate_path = NULL;
@@ -201,8 +196,12 @@ static long sdcardfs_propagate_lookup(struct super_block *sb, char* pathname) {
 	const struct cred *saved_cred = NULL;
 
 	sbi = SDCARDFS_SB(sb);
-	propagate_path = kmalloc(PATH_MAX, GFP_KERNEL);
 	OVERRIDE_ROOT_CRED(saved_cred);
+	propagate_path = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!propagate_path) {
+		REVERT_CRED(saved_cred);
+		return -ENOMEM;
+	}
 	if (sbi->options.type != TYPE_NONE && sbi->options.type != TYPE_DEFAULT) {
 		snprintf(propagate_path, PATH_MAX, "/mnt/runtime/default/%s%s",
 				sbi->options.label, pathname);
@@ -239,6 +238,10 @@ static long sdcardfs_propagate_lookup(struct super_block *sb, char* pathname) {
 	return ret;
 }
 
+/*
+ * Used only in nfs, to kill any pending RPC tasks, so that subsequent
+ * code can actually succeed and won't leave tasks that need handling.
+ */
 static void sdcardfs_umount_begin(struct super_block *sb)
 {
 	struct super_block *lower_sb;

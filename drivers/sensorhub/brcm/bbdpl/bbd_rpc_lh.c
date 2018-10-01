@@ -272,7 +272,7 @@ static int BbdBridge_OnRpcReceived(unsigned short usRpcId, unsigned char *pRpcPa
 	if (usRpcId == RPC_DEFINITION(IRpcSensorResponse, Data))
 	{
 		/* Read 2 byte size */
-		ssize_t result;
+		ssize_t result = 0;
 		unsigned short size = *pRpcPayload++;
 		size |= *pRpcPayload++ <<8;
 		result = bbd_sensor_write(pRpcPayload, size);

@@ -99,6 +99,11 @@ struct hv_data {
 };
 
 
+#define MUIC_HV_5V	0x08
+#define MUIC_HV_9V	0x46
+#define MUIC_HV_12V	0x79
+
+
 extern void hv_initialize(muic_data_t *pmuic, struct hv_data **pphv);
 extern void hv_configure_AFC(struct hv_data *phv);
 extern void hv_update_status(struct hv_data *phv, int mdev);
@@ -107,6 +112,8 @@ extern bool hv_do_predetach(struct hv_data *phv, int mdev);
 extern bool hv_is_running(struct hv_data *phv);
 extern void hv_do_detach(struct hv_data *phv);
 extern void hv_set_afc_by_user(struct hv_data *phv, bool onoff);
+extern void hv_muic_change_afc_voltage(muic_data_t *pmuic, int tx_data);
+extern void hv_clear_hvcontrol(struct hv_data *phv);
 
 #endif /* __MUIC_HV_H__ */
 

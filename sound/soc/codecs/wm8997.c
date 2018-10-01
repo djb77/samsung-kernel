@@ -253,7 +253,6 @@ SND_SOC_BYTES("LHPF4 Coefficients", ARIZONA_HPLPF4_2, 1),
 
 SOC_ENUM("ISRC1 FSL", arizona_isrc_fsl[0]),
 SOC_ENUM("ISRC2 FSL", arizona_isrc_fsl[1]),
-SOC_ENUM("ASRC RATE 1", arizona_asrc_rate1),
 
 ARIZONA_MIXER_CONTROLS("Mic", ARIZONA_MICMIX_INPUT_1_SOURCE),
 ARIZONA_MIXER_CONTROLS("Noise", ARIZONA_NOISEMIX_INPUT_1_SOURCE),
@@ -952,7 +951,7 @@ static int wm8997_set_fll(struct snd_soc_codec *codec, int fll_id, int source,
 	}
 }
 
-#define WM8997_RATES SNDRV_PCM_RATE_8000_192000
+#define WM8997_RATES SNDRV_PCM_RATE_KNOT
 
 #define WM8997_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
@@ -1130,6 +1129,9 @@ static int wm8997_probe(struct platform_device *pdev)
 	if (wm8997 == NULL)
 		return -ENOMEM;
 	platform_set_drvdata(pdev, wm8997);
+
+	/* Set of_node to parent from the SPI device*/
+	pdev->dev.of_node = arizona->dev->of_node;
 
 	wm8997->core.arizona = arizona;
 	wm8997->core.num_inputs = 4;

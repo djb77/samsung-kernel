@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -24,7 +24,9 @@
 #ifdef CONFIG_DMA_SHARED_BUFFER
 #include <linux/dma-buf.h>
 #endif				/* CONFIG_DMA_SHARED_BUFFER */
-
+#ifdef CONFIG_UMP
+#include <linux/ump.h>
+#endif				/* CONFIG_UMP */
 #include <linux/kernel.h>
 #include <linux/bug.h>
 #include <linux/compat.h>
@@ -36,6 +38,9 @@
 #include <mali_kbase_hw.h>
 #include <mali_kbase_gator.h>
 #include <mali_kbase_hwaccess_time.h>
+
+/* MALI_SEC_INTEGRATION */
+#include <linux/exynos_ion.h>
 
 #if defined(CONFIG_MALI_MIPE_ENABLED)
 #include <mali_kbase_tlstream.h>
@@ -615,6 +620,13 @@ void kbase_free_alloced_region(struct kbase_va_region *reg)
 {
 	KBASE_DEBUG_ASSERT(NULL != reg);
 	if (!(reg->flags & KBASE_REG_FREE)) {
+		/*
+		 * Remove the region from the sticky resource metadata
+		 * list should it be there.
+		 */
+		kbase_sticky_resource_release(reg->kctx, NULL,
+				reg->start_pfn << PAGE_SHIFT, true);
+
 		kbase_mem_phy_alloc_put(reg->cpu_alloc);
 		kbase_mem_phy_alloc_put(reg->gpu_alloc);
 		/* To detect use-after-free in debug builds */
@@ -903,6 +915,7 @@ static int kbase_do_syncset(struct kbase_context *kctx,
 	kbase_os_mem_map_lock(kctx);
 	kbase_gpu_vm_lock(kctx);
 
+	/* MALI_SEC_INTEGRATION */
 	if (set->basep_sset.size > 8*1024*1024)
 	{
 		flush_all_cpu_caches();
@@ -1409,3 +1422,499 @@ void kbase_gpu_vm_unlock(struct kbase_context *kctx)
 }
 
 KBASE_EXPORT_TEST_API(kbase_gpu_vm_unlock);
+
+static int kbase_jd_user_buf_map(struct kbase_context *kctx,
+		struct kbase_va_region *reg)
+{
+	long pinned_pages;
+	struct kbase_mem_phy_alloc *alloc;
+	struct page **pages;
+	phys_addr_t *pa;
+	long i;
+	int err = -ENOMEM;
+	unsigned long address;
+	struct task_struct *owner;
+	struct device *dev;
+	unsigned long offset;
+	unsigned long local_size;
+
+	alloc = reg->gpu_alloc;
+	pa = kbase_get_gpu_phy_pages(reg);
+	address = alloc->imported.user_buf.address;
+	owner = alloc->imported.user_buf.owner;
+
+	KBASE_DEBUG_ASSERT(alloc->type == KBASE_MEM_TYPE_IMPORTED_USER_BUF);
+
+	pages = alloc->imported.user_buf.pages;
+
+	pinned_pages = get_user_pages(owner, owner->mm,
+			address,
+			alloc->imported.user_buf.nr_pages,
+			reg->flags & KBASE_REG_GPU_WR,
+			0, pages, NULL);
+
+	if (pinned_pages <= 0)
+		return pinned_pages;
+
+	if (pinned_pages != alloc->imported.user_buf.nr_pages) {
+		for (i = 0; i < pinned_pages; i++)
+			put_page(pages[i]);
+		return -ENOMEM;
+	}
+
+	dev = kctx->kbdev->dev;
+	offset = address & ~PAGE_MASK;
+	local_size = alloc->imported.user_buf.size;
+
+	for (i = 0; i < pinned_pages; i++) {
+		dma_addr_t dma_addr;
+		unsigned long min;
+
+		min = MIN(PAGE_SIZE - offset, local_size);
+		dma_addr = dma_map_page(dev, pages[i],
+				offset, min,
+				DMA_BIDIRECTIONAL);
+		if (dma_mapping_error(dev, dma_addr))
+			goto unwind;
+
+		alloc->imported.user_buf.dma_addrs[i] = dma_addr;
+		pa[i] = page_to_phys(pages[i]);
+
+		local_size -= min;
+		offset = 0;
+	}
+
+	alloc->nents = pinned_pages;
+
+	err = kbase_mmu_insert_pages(kctx, reg->start_pfn, pa,
+			kbase_reg_current_backed_size(reg),
+			reg->flags);
+	if (err == 0)
+		return 0;
+
+	alloc->nents = 0;
+	/* fall down */
+unwind:
+	while (i--) {
+		dma_unmap_page(kctx->kbdev->dev,
+				alloc->imported.user_buf.dma_addrs[i],
+				PAGE_SIZE, DMA_BIDIRECTIONAL);
+		put_page(pages[i]);
+		pages[i] = NULL;
+	}
+
+	return err;
+}
+
+static void kbase_jd_user_buf_unmap(struct kbase_context *kctx,
+		struct kbase_mem_phy_alloc *alloc, bool writeable)
+{
+	long i;
+	struct page **pages;
+	unsigned long size = alloc->imported.user_buf.size;
+
+	KBASE_DEBUG_ASSERT(alloc->type == KBASE_MEM_TYPE_IMPORTED_USER_BUF);
+	pages = alloc->imported.user_buf.pages;
+	for (i = 0; i < alloc->imported.user_buf.nr_pages; i++) {
+		unsigned long local_size;
+		dma_addr_t dma_addr = alloc->imported.user_buf.dma_addrs[i];
+
+		local_size = MIN(size, PAGE_SIZE - (dma_addr & ~PAGE_MASK));
+		dma_unmap_page(kctx->kbdev->dev, dma_addr, local_size,
+				DMA_BIDIRECTIONAL);
+		if (writeable)
+			set_page_dirty_lock(pages[i]);
+		put_page(pages[i]);
+		pages[i] = NULL;
+
+		size -= local_size;
+	}
+	alloc->nents = 0;
+}
+
+#ifdef CONFIG_DMA_SHARED_BUFFER
+static int kbase_jd_umm_map(struct kbase_context *kctx,
+		struct kbase_va_region *reg)
+{
+	struct sg_table *sgt;
+	struct scatterlist *s;
+	int i;
+	phys_addr_t *pa;
+	int err;
+	size_t count = 0;
+	struct kbase_mem_phy_alloc *alloc;
+
+	alloc = reg->gpu_alloc;
+
+	KBASE_DEBUG_ASSERT(alloc->type == KBASE_MEM_TYPE_IMPORTED_UMM);
+	KBASE_DEBUG_ASSERT(NULL == alloc->imported.umm.sgt);
+	sgt = dma_buf_map_attachment(alloc->imported.umm.dma_attachment,
+			DMA_BIDIRECTIONAL);
+
+	if (IS_ERR_OR_NULL(sgt))
+		return -EINVAL;
+
+	/* save for later */
+	alloc->imported.umm.sgt = sgt;
+
+	pa = kbase_get_gpu_phy_pages(reg);
+	KBASE_DEBUG_ASSERT(pa);
+
+	for_each_sg(sgt->sgl, s, sgt->nents, i) {
+		int j;
+		size_t pages = PFN_UP(sg_dma_len(s));
+
+                /* MALI_SEC_INTEGRATION */
+                if (WARN(s == NULL, "s is NULL goto errout\n")) {
+                        err = -EINVAL;
+                        goto out;
+                }
+
+                /* MALI_SEC_INTEGRATION */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
+                pages = PFN_UP(sg_dma_len(s));
+#else
+                pages = PFN_UP(s->length);
+#endif
+
+		WARN_ONCE(sg_dma_len(s) & (PAGE_SIZE-1),
+		"sg_dma_len(s)=%u is not a multiple of PAGE_SIZE\n",
+		sg_dma_len(s));
+
+		WARN_ONCE(sg_dma_address(s) & (PAGE_SIZE-1),
+		"sg_dma_address(s)=%llx is not aligned to PAGE_SIZE\n",
+		(unsigned long long) sg_dma_address(s));
+
+		for (j = 0; (j < pages) && (count < reg->nr_pages); j++,
+				count++)
+			*pa++ = sg_dma_address(s) + (j << PAGE_SHIFT);
+		WARN_ONCE(j < pages,
+		"sg list from dma_buf_map_attachment > dma_buf->size=%zu\n",
+		alloc->imported.umm.dma_buf->size);
+	}
+
+	if (WARN_ONCE(count < reg->nr_pages,
+			"sg list from dma_buf_map_attachment < dma_buf->size=%zu\n",
+			alloc->imported.umm.dma_buf->size)) {
+		err = -EINVAL;
+		goto out;
+	}
+
+	/* Update nents as we now have pages to map */
+	alloc->nents = count;
+
+	err = kbase_mmu_insert_pages(kctx, reg->start_pfn,
+			kbase_get_gpu_phy_pages(reg),
+			kbase_reg_current_backed_size(reg),
+			reg->flags | KBASE_REG_GPU_WR | KBASE_REG_GPU_RD);
+
+out:
+	if (err) {
+		dma_buf_unmap_attachment(alloc->imported.umm.dma_attachment,
+				alloc->imported.umm.sgt, DMA_BIDIRECTIONAL);
+                /* MALI_SEC_INTEGRATION */
+                exynos_ion_sync_dmabuf_for_device(kctx->kbdev->dev, alloc->imported.umm.dma_buf, alloc->imported.umm.dma_buf->size, DMA_BIDIRECTIONAL);
+		alloc->imported.umm.sgt = NULL;
+	}
+
+	return err;
+}
+
+static void kbase_jd_umm_unmap(struct kbase_context *kctx,
+		struct kbase_mem_phy_alloc *alloc)
+{
+	KBASE_DEBUG_ASSERT(kctx);
+	KBASE_DEBUG_ASSERT(alloc);
+	KBASE_DEBUG_ASSERT(alloc->imported.umm.dma_attachment);
+	KBASE_DEBUG_ASSERT(alloc->imported.umm.sgt);
+	dma_buf_unmap_attachment(alloc->imported.umm.dma_attachment,
+	    alloc->imported.umm.sgt, DMA_BIDIRECTIONAL);
+	alloc->imported.umm.sgt = NULL;
+	alloc->nents = 0;
+}
+#endif				/* CONFIG_DMA_SHARED_BUFFER */
+
+#if (defined(CONFIG_KDS) && defined(CONFIG_UMP)) \
+		|| defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS)
+static void add_kds_resource(struct kds_resource *kds_res,
+		struct kds_resource **kds_resources, u32 *kds_res_count,
+		unsigned long *kds_access_bitmap, bool exclusive)
+{
+	u32 i;
+
+	for (i = 0; i < *kds_res_count; i++) {
+		/* Duplicate resource, ignore */
+		if (kds_resources[i] == kds_res)
+			return;
+	}
+
+	kds_resources[*kds_res_count] = kds_res;
+	if (exclusive)
+		set_bit(*kds_res_count, kds_access_bitmap);
+	(*kds_res_count)++;
+}
+#endif
+
+struct kbase_mem_phy_alloc *kbase_map_external_resource(
+		struct kbase_context *kctx, struct kbase_va_region *reg,
+		struct mm_struct *locked_mm
+#ifdef CONFIG_KDS
+		, u32 *kds_res_count, struct kds_resource **kds_resources,
+		unsigned long *kds_access_bitmap, bool exclusive
+#endif
+		)
+{
+	int err;
+
+	/* decide what needs to happen for this resource */
+	switch (reg->gpu_alloc->type) {
+	case BASE_MEM_IMPORT_TYPE_USER_BUFFER: {
+		if (reg->gpu_alloc->imported.user_buf.owner->mm != locked_mm)
+			goto exit;
+
+		reg->gpu_alloc->imported.user_buf.current_mapping_usage_count++;
+		if (1 == reg->gpu_alloc->imported.user_buf.current_mapping_usage_count) {
+			err = kbase_jd_user_buf_map(kctx, reg);
+			if (err) {
+				reg->gpu_alloc->imported.user_buf.current_mapping_usage_count--;
+				goto exit;
+			}
+		}
+	}
+	break;
+	case BASE_MEM_IMPORT_TYPE_UMP: {
+#if defined(CONFIG_KDS) && defined(CONFIG_UMP)
+		if (kds_res_count) {
+			struct kds_resource *kds_res;
+
+			kds_res = ump_dd_kds_resource_get(
+					reg->gpu_alloc->imported.ump_handle);
+			if (kds_res)
+				add_kds_resource(kds_res, kds_resources,
+						kds_res_count,
+						kds_access_bitmap, exclusive);
+		}
+#endif				/*defined(CONFIG_KDS) && defined(CONFIG_UMP) */
+		break;
+	}
+#ifdef CONFIG_DMA_SHARED_BUFFER
+	case BASE_MEM_IMPORT_TYPE_UMM: {
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+		if (kds_res_count) {
+			struct kds_resource *kds_res;
+
+			kds_res = get_dma_buf_kds_resource(
+					reg->gpu_alloc->imported.umm.dma_buf);
+			if (kds_res)
+				add_kds_resource(kds_res, kds_resources,
+						kds_res_count,
+						kds_access_bitmap, exclusive);
+		}
+#endif
+		reg->gpu_alloc->imported.umm.current_mapping_usage_count++;
+		if (1 == reg->gpu_alloc->imported.umm.current_mapping_usage_count) {
+			err = kbase_jd_umm_map(kctx, reg);
+			if (err) {
+				reg->gpu_alloc->imported.umm.current_mapping_usage_count--;
+				goto exit;
+			}
+		}
+		break;
+	}
+#endif
+	default:
+		goto exit;
+	}
+
+	return kbase_mem_phy_alloc_get(reg->gpu_alloc);
+exit:
+	return NULL;
+}
+
+void kbase_unmap_external_resource(struct kbase_context *kctx,
+		struct kbase_va_region *reg, struct kbase_mem_phy_alloc *alloc)
+{
+	switch (alloc->type) {
+#ifdef CONFIG_DMA_SHARED_BUFFER
+	case KBASE_MEM_TYPE_IMPORTED_UMM: {
+		alloc->imported.umm.current_mapping_usage_count--;
+
+		if (0 == alloc->imported.umm.current_mapping_usage_count) {
+			if (reg && reg->gpu_alloc == alloc)
+				kbase_mmu_teardown_pages(
+						kctx,
+						reg->start_pfn,
+						kbase_reg_current_backed_size(reg));
+
+			kbase_jd_umm_unmap(kctx, alloc);
+		}
+	}
+	break;
+#endif /* CONFIG_DMA_SHARED_BUFFER */
+	case KBASE_MEM_TYPE_IMPORTED_USER_BUF: {
+		alloc->imported.user_buf.current_mapping_usage_count--;
+
+		if (0 == alloc->imported.user_buf.current_mapping_usage_count) {
+			bool writeable = true;
+
+			if (reg && reg->gpu_alloc == alloc)
+				kbase_mmu_teardown_pages(
+						kctx,
+						reg->start_pfn,
+						kbase_reg_current_backed_size(reg));
+
+			if (reg && ((reg->flags & KBASE_REG_GPU_WR) == 0))
+				writeable = false;
+
+			kbase_jd_user_buf_unmap(kctx, alloc, writeable);
+		}
+	}
+	break;
+	default:
+	break;
+	}
+	kbase_mem_phy_alloc_put(alloc);
+}
+
+struct kbase_ctx_ext_res_meta *kbase_sticky_resource_acquire(
+		struct kbase_context *kctx, u64 gpu_addr)
+{
+	struct kbase_ctx_ext_res_meta *meta = NULL;
+	struct kbase_ctx_ext_res_meta *walker;
+
+	lockdep_assert_held(&kctx->reg_lock);
+
+	/*
+	 * Walk the per context externel resource metadata list for the
+	 * metadata which matches the region which is being acquired.
+	 */
+	list_for_each_entry(walker, &kctx->ext_res_meta_head, ext_res_node) {
+		if (walker->gpu_addr == gpu_addr) {
+			meta = walker;
+			break;
+		}
+	}
+
+	/* No metadata exists so create one. */
+	if (!meta) {
+		struct kbase_va_region *reg;
+
+		/* Find the region */
+		reg = kbase_region_tracker_find_region_enclosing_address(
+				kctx, gpu_addr);
+		if (NULL == reg || (reg->flags & KBASE_REG_FREE))
+			goto failed;
+
+		/* Allocate the metadata object */
+		meta = kzalloc(sizeof(*meta), GFP_KERNEL);
+		if (!meta)
+			goto failed;
+
+		/*
+		 * Fill in the metadata object and acquire a reference
+		 * for the physical resource.
+		 */
+		meta->alloc = kbase_map_external_resource(kctx, reg, NULL
+#ifdef CONFIG_KDS
+				, NULL, NULL,
+				NULL, false
+#endif
+				);
+
+		if (!meta->alloc)
+			goto fail_map;
+
+		meta->gpu_addr = reg->start_pfn << PAGE_SHIFT;
+		meta->refcount = 1;
+
+		list_add(&meta->ext_res_node, &kctx->ext_res_meta_head);
+	} else {
+		if (meta->refcount == UINT_MAX)
+			goto failed;
+
+		meta->refcount++;
+	}
+
+	return meta;
+
+fail_map:
+	kfree(meta);
+failed:
+	return NULL;
+}
+
+bool kbase_sticky_resource_release(struct kbase_context *kctx,
+		struct kbase_ctx_ext_res_meta *meta, u64 gpu_addr, bool force)
+{
+	struct kbase_ctx_ext_res_meta *walker;
+
+	lockdep_assert_held(&kctx->reg_lock);
+
+	/* Search of the metadata if one isn't provided. */
+	if (!meta) {
+		/*
+		 * Walk the per context externel resource metadata list for the
+		 * metadata which matches the region which is being released.
+		 */
+		list_for_each_entry(walker, &kctx->ext_res_meta_head,
+				ext_res_node) {
+			if (walker->gpu_addr == gpu_addr) {
+				meta = walker;
+				break;
+			}
+		}
+	}
+
+	/* No metadata so just return. */
+	if (!meta)
+		return false;
+
+	meta->refcount--;
+	if ((meta->refcount == 0) || force) {
+		/*
+		 * Last reference to the metadata, drop the physical memory
+		 * reference and free the metadata.
+		 */
+		struct kbase_va_region *reg;
+
+		reg = kbase_region_tracker_find_region_enclosing_address(
+				kctx,
+				meta->gpu_addr);
+
+		kbase_unmap_external_resource(kctx, reg, meta->alloc);
+		list_del(&meta->ext_res_node);
+		kfree(meta);
+	}
+
+	return true;
+}
+
+int kbase_sticky_resource_init(struct kbase_context *kctx)
+{
+	INIT_LIST_HEAD(&kctx->ext_res_meta_head);
+
+	return 0;
+}
+
+void kbase_sticky_resource_term(struct kbase_context *kctx)
+{
+	struct kbase_ctx_ext_res_meta *walker;
+
+	lockdep_assert_held(&kctx->reg_lock);
+
+	/*
+	 * Free any sticky resources which haven't been unmapped.
+	 *
+	 * Note:
+	 * We don't care about refcounts at this point as no future
+	 * references to the meta data will be made.
+	 * Region termination would find these if we didn't free them
+	 * here, but it's more efficient if we do the clean up here.
+	 */
+	while (!list_empty(&kctx->ext_res_meta_head)) {
+		walker = list_first_entry(&kctx->ext_res_meta_head,
+				struct kbase_ctx_ext_res_meta, ext_res_node);
+
+		kbase_sticky_resource_release(kctx, walker, 0, true);
+	}
+}

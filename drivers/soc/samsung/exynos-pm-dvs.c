@@ -116,7 +116,7 @@ static int exynos_pm_dvs_resume_early(struct device *dev)
 	int ret = 0;
 
 	list_for_each_entry(di, &regulator_list, node) {
-		regulator_set_voltage(di->regulator, di->init_volt, di->init_volt + di->volt_range);
+		ret = regulator_set_voltage(di->regulator, di->init_volt, di->init_volt + di->volt_range);
 		if(ret) {
 			dev_err(dev, "%s	failed to regulator restore voltage ", di->id);
 			break;

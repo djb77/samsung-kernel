@@ -34,11 +34,10 @@ static unsigned char SEQ_PARTIAL_AREA[] = {
 
 
 #ifdef CONFIG_PANEL_AID_DIMMING
-static const unsigned char *HBM_TABLE[HBM_STATUS_MAX] = {NULL, NULL}; 	// kyNam_151104_ {SEQ_HBM_OFF, SEQ_HBM_ON};
 static const unsigned char *ACL_CUTOFF_TABLE[ACL_STATUS_MAX] = {SEQ_ACL_OFF, SEQ_ACL_15};
 static const unsigned char *ACL_OPR_TABLE[ACL_OPR_MAX] = {SEQ_ACL_OFF_OPR_AVR, SEQ_ACL_ON_OPR_AVR};
 
-static const unsigned int br_tbl [256] = {
+static const unsigned int br_tbl[EXTEND_BRIGHTNESS + 1] = {
 	2, 2, 2, 3,	4, 5, 6, 7,	8,	9,	10,	11,	12,	13,	14,	15,		// 16
 	16,	17,	18,	19,	20,	21,	22,	23,	25,	27,	29,	31,	33,	36,   	// 14
 	39,	41,	41,	44,	44,	47,	47,	50,	50,	53,	53,	56,	56,	56,		// 14
@@ -60,48 +59,15 @@ static const unsigned int br_tbl [256] = {
 	282, 282, 282, 300, 300, 300, 300, 300,	300, 300, 300,
 	300, 300, 300, 300, 316, 316, 316, 316, 316, 316, 316,
 	316, 316, 316, 316, 316, 333, 333, 333, 333, 333, 333,
-	333, 333, 333, 333, 333, 333, 350							//7
-};
-
-
-static const unsigned gallery_br_tbl[256] = {
-	 2,  2,  2,  3,  5,  6,  8,  10,  11,  13,  15,  16,  18,  20,  21,  23,
-	 25,  26,  28,  29,  32,  33,  34,  36,  38,  39,  41,  43,  44,  46,  48,  50,
-	 51,  53,  55,  56,  57,  60,  61,  62,  64,  66,  68,  69,  71,  73,  74,  76,
-	 78,  79,  81,  83,  84,  86,  88,  89,  91,  92,  94,  96,  97,  99,  101, 102,
-	 104, 106, 107, 109, 111, 112, 114, 116, 117, 119, 120, 123, 124, 125, 127, 129,
-	 130, 132, 134, 135, 137, 139, 141, 142, 144, 146, 147, 148, 151, 152, 153, 155,
-	 157, 159, 160, 162, 164, 165, 167, 169, 170, 172, 174, 175, 177, 179, 180, 182,
-	 183, 185, 187, 188, 190, 192, 193, 195, 197, 198, 200, 202, 203, 205, 207, 208,
-	 210, 211, 214, 215, 216, 218, 220, 221, 223, 225, 226, 228, 230, 232, 233, 235,
-	 237, 238, 239, 242, 243, 244, 246, 248, 250, 251, 253, 255, 256, 258, 260, 261,
-	 263, 265, 266, 268, 270, 271, 273, 274, 276, 278, 279, 281, 283, 284, 286, 288,
-	 289, 291, 293, 294, 296, 298, 299, 301, 302, 305, 306, 307, 309, 311, 312, 314,
-	 316, 317, 319, 321, 323, 324, 326, 328, 329, 330, 333, 334, 335, 337, 339, 341,
-	 342, 344, 346, 347, 349, 351, 352, 354, 356, 357, 359, 361, 362, 364, 365, 367,
-	 369, 370, 372, 374, 375, 377, 379, 380, 382, 384, 385, 387, 389, 390, 392, 393,
-	 396, 397, 398, 400, 402, 403, 405, 407, 408, 410, 412, 414, 415, 417, 419, 430,
-};
-
-
-
-static const unsigned int hbm_interpolation_br_tbl[256] = {
-	2,		2,		2,		4,		7,		9,		11,		14,		16,		19,		21,		23,		26,		28,		30,		33,
-	35,		37,		40,		42,		45,		47,		49,		52,		54,		56,		59,		61,		63,		66,		68,		71,
-	73,		75,		78,		80,		82,		85,		87,		89,		92,		94,		97,		99,		101,	104,	106,	108,
-	111,	113,	115,	118,	120,	123,	125,	127,	130,	132,	134,	137,	139,	141,	144,	146,
-	149,	151,	153,	156,	158,	160,	163,	165,	167,	170,	172,	175,	177,	179,	182,	184,
-	186,	189,	191,	193,	196,	198,	201,	203,	205,	208,	210,	212,	215,	217,	219,	222,
-	224,	227,	229,	231,	234,	236,	238,	241,	243,	245,	248,	250,	253,	255,	257,	260,
-	262,	264,	267,	269,	271,	274,	276,	279,	281,	283,	286,	288,	290,	293,	295,	297,
-	300,	302,	305,	307,	309,	312,	314,	316,	319,	321,	323,	326,	328,	331,	333,	335,
-	338,	340,	342,	345,	347,	349,	352,	354,	357,	359,	361,	364,	366,	368,	371,	373,
-	375,	378,	380,	383,	385,	387,	390,	392,	394,	397,	399,	401,	404,	406,	409,	411,
-	413,	416,	418,	420,	423,	425,	427,	430,	432,	435,	437,	439,	442,	444,	446,	449,
-	451,	453,	456,	458,	461,	463,	465,	468,	470,	472,	475,	477,	479,	482,	484,	487,
-	489,	491,	494,	496,	498,	501,	503,	505,	508,	510,	513,	515,	517,	520,	522,	524,
-	527,	529,	531,	534,	536,	539,	541,	543,	546,	548,	550,	553,	555,	557,	560,	562,
-	565,	567,	569,	572,	574,	576,	579,	581,	583,	586,	588,	591,	593,	595,	598,	600
+	333, 333, 333, 333, 333, 333, 350,
+	[256 ... 281] = 382,
+	[282 ... 295] = 407,
+	[296 ... 309] = 433,
+	[310 ... 323] = 461,
+	[324 ... 336] = 491,
+	[337 ... 350] = 517,
+	[351 ... 364] = 545,
+	[365 ... 365] = 600
 };
 
 static const short center_gamma[NUM_VREF][CI_MAX] = {
@@ -195,7 +161,7 @@ struct SmtDimInfo tulip_dimming_info[MAX_BR_INFO] = {				// add hbm array
 	{.br = 600, .refBr = 600, .cGma = gma2p20, .rTbl = rtbl350nit, .cTbl = ctbl350nit, .aid = aid0072, .elvCaps = elvAcl08, .elv = elvAcl08, .way = W4},  // hbm is acl on
 };
 
- 
+
 static int set_gamma_to_center(struct SmtDimInfo *brInfo)
 {
 	int i, j;
@@ -449,8 +415,8 @@ static int init_dimming(struct dsim_device *dsim, u8 *mtp, u8 *hbm)
 		panel->octa_a2_read_data_work_q =
 				create_singlethread_workqueue("octa_a3_workqueue");
 /* support a3 line panel efs data end */
-	} else 
-#endif		
+	} else
+#endif
 	{
 			dsim_info("%s init dimming info for s6e3fa2 panel\n", __func__);
 			diminfo = tulip_dimming_info;
@@ -460,13 +426,8 @@ static int init_dimming(struct dsim_device *dsim, u8 *mtp, u8 *hbm)
 	panel->dim_info = (void *)diminfo;
 
 	panel->br_tbl = (unsigned int *)br_tbl;
-	panel->hbm_inter_br_tbl = (unsigned int *)hbm_interpolation_br_tbl;
-//	panel->gallery_br_tbl = (unsigned int *)gallery_br_tbl;
-	panel->hbm_tbl = (unsigned char **)HBM_TABLE;
 	panel->acl_cutoff_tbl = (unsigned char **)ACL_CUTOFF_TABLE;
 	panel->acl_opr_tbl = (unsigned char **)ACL_OPR_TABLE;
-	panel->hbm_index = MAX_BR_INFO - 1;
-//	panel->hbm_elvss_comp = S6E3FA2_HBM_ELVSS_COMP;
 
 	memcpy( panel->aid_set, aid9793, sizeof(aid9793) );
 	panel->aid_len = AID_CMD_CNT;
@@ -499,7 +460,7 @@ static int init_dimming(struct dsim_device *dsim, u8 *mtp, u8 *hbm)
 	}
 #endif
 
-	
+
 #ifdef SMART_DIMMING_DEBUG
 	dimm_info("Center Gamma Info : \n");
 	for(i=0;i<VMAX;i++) {
@@ -660,7 +621,7 @@ static int s6e3fa2_read_init_info(struct dsim_device *dsim, unsigned char* mtp, 
 	for(i = 0; i < S6E3FA2_CODE_LEN; i++)
 		dsim_info("%x, ", dsim->priv.code[i]);
 	dsim_info("\n");
-#endif 
+#endif
 
 	// tset
 	ret = dsim_read_hl_data(dsim, TSET_REG, TSET_LEN - 1, dsim->priv.tset_set);
@@ -998,7 +959,7 @@ static int s6e3fa2_wqhd_init(struct dsim_device *dsim)
 	msleep(5);
 
 	/* 9. Interface Setting */
-#if 0	
+#if 0
 	ret = dsim_write_hl_data(dsim, SEQ_MIC_ENABLE, ARRAY_SIZE(SEQ_MIC_ENABLE));
 	if (ret < 0) {
 		dsim_err("%s : fail to write CMD : SEQ_MIC_ENABLE\n", __func__);
@@ -1008,7 +969,7 @@ static int s6e3fa2_wqhd_init(struct dsim_device *dsim)
 	msleep(120);
 
 	/* Common Setting */
-#if 1	
+#if 1
 	ret = dsim_write_hl_data(dsim, SEQ_GAMMA_CONTROL_SET_350CD, ARRAY_SIZE(SEQ_GAMMA_CONTROL_SET_350CD));
 	if (ret < 0) {
 		dsim_err("%s : fail to write CMD : SEQ_GAMMA_CONTROL_SET_350CD\n", __func__);

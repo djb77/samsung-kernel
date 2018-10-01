@@ -564,7 +564,7 @@ static void process_uether_rx(struct eth_dev *dev)
 #ifndef CONFIG_USB_NCM_SUPPORT_MTU_CHANGE
 			DBG(dev, "rx length %d\n", skb->len);
 #else
-			printk(KERN_DEBUG "usb: %s Drop rx length %d\n",__func__,skb->len);
+			pr_debug("usb: %s Drop rx length %d\n",__func__,skb->len);
 #endif
 
 			DBG(dev, "rx length %d\n", skb->len);

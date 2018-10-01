@@ -179,117 +179,6 @@ err:
 	return ret;
 }
 
-static int m2m1shot_buffer_get_userptr_plane(struct m2m1shot_device *m21dev,
-				struct m2m1shot_buffer_plane_dma *plane,
-				unsigned long start, size_t len, int write)
-{
-	size_t last_size = 0;
-	struct page **pages;
-	int nr_pages = 0;
-	int ret = 0, i;
-	off_t start_off;
-	struct scatterlist *sgl;
-
-	last_size = (start + len) & ~PAGE_MASK;
-	if (last_size == 0)
-		last_size = PAGE_SIZE;
-
-	start_off = offset_in_page(start);
-
-	start = round_down(start, PAGE_SIZE);
-
-	nr_pages = PFN_DOWN(PAGE_ALIGN(len + start_off));
-
-	pages = vmalloc(nr_pages * sizeof(*pages));
-	if (!pages)
-		return -ENOMEM;
-
-	ret = get_user_pages_fast(start, nr_pages, write, pages);
-	if (ret != nr_pages) {
-		dev_err(m21dev->dev,
-			"%s: failed to pin user pages in %#lx ~ %#lx\n",
-			__func__, start, start + len);
-
-		if (ret < 0)
-			goto err_get;
-
-		nr_pages = ret;
-		ret = -EFAULT;
-		goto err_pin;
-	}
-
-	plane->sgt = kmalloc(sizeof(*plane->sgt), GFP_KERNEL);
-	if (!plane->sgt) {
-		dev_err(m21dev->dev,
-			"%s: failed to allocate sgtable\n", __func__);
-		ret = -ENOMEM;
-		goto err_sgtable;
-	}
-
-	ret = sg_alloc_table(plane->sgt, nr_pages, GFP_KERNEL);
-	if (ret) {
-		dev_err(m21dev->dev,
-			"%s: failed to allocate sglist\n", __func__);
-		goto err_sg;
-	}
-
-	sgl = plane->sgt->sgl;
-
-	sg_set_page(sgl, pages[0],
-			(nr_pages == 1) ? len : PAGE_SIZE - start_off,
-			start_off);
-	sg_dma_address(sgl) = page_to_phys(sg_page(sgl));
-
-	sgl = sg_next(sgl);
-
-	/* nr_pages == 1 if sgl == NULL here */
-	for (i = 1; i < (nr_pages - 1); i++) {
-		sg_set_page(sgl, pages[i], PAGE_SIZE, 0);
-		sg_dma_address(sgl) = page_to_phys(sg_page(sgl));
-		sgl = sg_next(sgl);
-	}
-
-	if (sgl) {
-		sg_set_page(sgl, pages[i], last_size, 0);
-		sg_dma_address(sgl) = page_to_phys(sg_page(sgl));
-	}
-
-	vfree(pages);
-
-	return 0;
-err_sg:
-	kfree(plane->sgt);
-err_sgtable:
-err_pin:
-	for (i = 0; i < nr_pages; i++)
-		put_page(pages[i]);
-err_get:
-	vfree(pages);
-
-	return ret;
-}
-
-static void m2m1shot_buffer_put_userptr_plane(
-			struct m2m1shot_buffer_plane_dma *plane, int write)
-{
-	if (plane->dmabuf) {
-		m2m1shot_buffer_put_dma_buf_plane(plane);
-	} else {
-		struct sg_table *sgt = plane->sgt;
-		struct scatterlist *sg;
-		int i;
-
-		for_each_sg(sgt->sgl, sg, sgt->orig_nents, i) {
-			if (write)
-				set_page_dirty_lock(sg_page(sg));
-			put_page(sg_page(sg));
-		}
-
-		sg_free_table(sgt);
-		kfree(sgt);
-	}
-}
-
 static struct dma_buf *m2m1shot_buffer_check_userptr(
 		struct m2m1shot_device *m21dev, unsigned long start, size_t len,
 		off_t *out_offset)
@@ -356,22 +245,13 @@ static int m2m1shot_buffer_get_userptr(struct m2m1shot_device *m21dev,
 				dma_buf_put(dmabuf);
 				goto err;
 			}
-		} else {
-			ret = m2m1shot_buffer_get_userptr_plane(m21dev,
-						&dma_buffer->plane[i],
-						buffer->plane[i].userptr,
-						buffer->plane[i].len,
-						write);
 		}
-
-		if (ret)
-			goto err;
 	}
 
 	return 0;
 err:
 	while (i-- > 0)
-		m2m1shot_buffer_put_userptr_plane(&dma_buffer->plane[i], write);
+		m2m1shot_buffer_put_dma_buf_plane(&dma_buffer->plane[i]);
 
 	return ret;
 }
@@ -383,7 +263,9 @@ static void m2m1shot_buffer_put_userptr(struct m2m1shot_buffer *buffer,
 	int i;
 
 	for (i = 0; i < buffer->num_planes; i++)
-		m2m1shot_buffer_put_userptr_plane(&dma_buffer->plane[i], write);
+		if (dma_buffer->plane[i].dmabuf)
+			m2m1shot_buffer_put_dma_buf_plane(
+							&dma_buffer->plane[i]);
 }
 
 static int m2m1shot_prepare_get_buffer(struct m2m1shot_context *ctx,

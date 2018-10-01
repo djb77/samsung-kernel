@@ -1894,8 +1894,8 @@ struct napi_gro_cb {
 	/* Used in ipv6_gro_receive() and foo-over-udp */
 	u16	proto;
 
-	/* Used in tunnel GRO receive */
-	u8	encap_mark:1;
+	/* Used in udp_gro_receive */
+	u8	udp_mark:1;
 
 	/* GRO checksum is valid */
 	u8	csum_valid:1;

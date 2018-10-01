@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pno.c 612549 2016-01-14 07:39:32Z $
+ * $Id: dhd_pno.c 629377 2016-04-05 05:22:34Z $
  */
 
 #if defined(GSCAN_SUPPORT) && !defined(PNO_SUPPORT)
@@ -1935,7 +1935,7 @@ dhd_pno_set_for_gscan(dhd_pub_t *dhd, struct dhd_pno_gscan_params *gscan_params)
 	int mode, i = 0, k;
 	uint16 _chan_list[WL_NUMCHANNELS];
 	int tot_nchan = 0;
-	int num_buckets_to_fw, tot_num_buckets, gscan_param_size;
+	int num_buckets_to_fw, tot_num_buckets, gscan_param_size = 0;
 	dhd_pno_status_info_t *_pno_state = PNO_GET_PNOSTATE(dhd);
 	wl_pfn_gscan_channel_bucket_t *ch_bucket = NULL;
 	wl_pfn_gscan_cfg_t *pfn_gscan_cfg_t = NULL;

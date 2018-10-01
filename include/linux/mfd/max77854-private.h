@@ -24,11 +24,6 @@
 
 #include <linux/i2c.h>
 
-#if defined(CONFIG_CHARGER_MAX77854) && defined(CONFIG_FUELGAUGE_MAX77854)
-#include <linux/battery/sec_charger.h>
-#include <linux/battery/sec_fuelgauge.h>
-#endif
-
 #define MAX77854_I2C_ADDR		(0x92)
 #define MAX77854_REG_INVALID		(0xff)
 
@@ -117,8 +112,11 @@ enum max77854_fuelgauge_reg {
 	ICHGTERM_REG                                 = 0x1E,
 	REMCAP_AV_REG                                = 0x1F,
 	FULLCAP_NOM_REG                              = 0x23,
+	FILTER_CFG_REG                               = 0x29,
 	MISCCFG_REG                                  = 0x2B,
+	COFFSET_REG                                  = 0x2F,
 	QRTABLE20_REG                                = 0x32,
+	FULLCAP_REP_REG								 = 0x35,
 	RCOMP_REG                                    = 0x38,
 	VEMPTY_REG				     = 0x3A,
 	FSTAT_REG                                    = 0x3D,

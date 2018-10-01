@@ -14,19 +14,18 @@
 
 
 void print_all_rrk(void){
-    struct task_struct * tsk;
-    struct thread_info * thread;
-
-    for_each_process(tsk){
-        thread = task_thread_info(tsk);
-        printk("rrk=0x%16lx, %s\n", thread->rrk, tsk->comm);    
-    }
-
+	struct task_struct * tsk;
+	struct thread_info * thread;
+	
+	for_each_process(tsk){
+		thread = task_thread_info(tsk);
+		printk("rrk=0x%16lx, %s\n", thread->rrk, tsk->comm);    
+	}
 }
 
 int is_prefix(const char * prefix, const char * string) 
 {
-    return strncmp(prefix, string, strlen(prefix)) == 0;
+	return strncmp(prefix, string, strlen(prefix)) == 0;
 }
 
 
@@ -56,17 +55,17 @@ static ssize_t cfp_write(struct file *file, const char __user *buf,
 	if (copy_from_user(data, buf, datalen))
 		goto out;
 
-    if (is_prefix("dump_stack", data)) {
-        dump_stack();
-    } else if (is_prefix("no_dec_dump_stack", data)) {
-        dump_stack_dec = 0x0;//disable dump_stack_dec
-        dump_stack();
-        dump_stack_dec = 0x1;
-    } else if (is_prefix("print_rrk", data)) {
-        print_all_rrk();
-    } else {
-        result = -EINVAL;
-    }
+	if (is_prefix("dump_stack", data)) {
+		dump_stack();
+	} else if (is_prefix("no_dec_dump_stack", data)) {
+		dump_stack_dec = 0x0;//disable dump_stack_dec
+		dump_stack();
+		dump_stack_dec = 0x1;
+	} else if (is_prefix("print_rrk", data)) {
+		print_all_rrk();
+	} else {
+		result = -EINVAL;
+	}
 
 out:
 	kfree(data);
@@ -75,10 +74,10 @@ out:
 
 ssize_t	cfp_read(struct file *filep, char __user *buf, size_t size, loff_t *offset)
 {	
-    printk("echo dump_stack     > /proc/cfp_debug  --> will dump the ROPP encrypted stack\n");
-    printk("echo dec_dump_stack > /proc/cfp_debug  --> will dump the ROPP decrypted stack\n");
-    printk("echo print_rrk      > /proc/cfp_debug  --> will print RRK of all processes\n");
-    return 0;
+	printk("echo dump_stack     > /proc/cfp_debug  --> will dump the ROPP encrypted stack\n");
+	printk("echo dec_dump_stack > /proc/cfp_debug  --> will dump the ROPP decrypted stack\n");
+	printk("echo print_rrk      > /proc/cfp_debug  --> will print RRK of all processes\n");
+	return 0;
 }
 
 static const struct file_operations cfp_proc_fops = {
@@ -86,11 +85,6 @@ static const struct file_operations cfp_proc_fops = {
 	.write		= cfp_write,
 };
 
-/**
- *      cfp_debug_read_init -  Initialization function for HYPERDRIVE
- *
- *      It creates and initializes cfp proc entry with initialized read handler 
- */
 static int __init cfp_debug_read_init(void)
 {
 	if (proc_create("cfp_debug", 0644,NULL, &cfp_proc_fops) == NULL) {
@@ -103,11 +97,6 @@ error_return:
 	return -1;
 }
 
-/**
- *      cfp_debug_read_exit -  Cleanup Code for HYPERDRIVE
- *
- *      It removes /proc/cfp proc entry and does the required cleanup operations 
- */
 static void __exit cfp_debug_read_exit(void)
 {
 	remove_proc_entry("cfp_debug", NULL);

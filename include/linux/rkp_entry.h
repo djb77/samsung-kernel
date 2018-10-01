@@ -31,11 +31,12 @@
 #define RKP_PGD_FREE RKP_CMDID(0x24)
 #define RKP_PGD_NEW  RKP_CMDID(0x25)
 
+#define CFP_ROPP_INIT		RKP_CMDID(0x90)
 #define CFP_ROPP_NEW_KEY	RKP_CMDID(0x91)
 #define CFP_ROPP_NEW_KEY_REENC	RKP_CMDID(0x92)
 #define CFP_ROPP_KEY_DEC	RKP_CMDID(0x93)
 #define CFP_ROPP_RET_KEY	RKP_CMDID(0x94)
-#define CFP_TEST		RKP_CMDID(0x99)
+#define CFP_JOPP_INIT		RKP_CMDID(0x98)
 
 #define RKP_INIT	 RKP_CMDID(0)
 #define RKP_DEF_INIT	 RKP_CMDID(1)
@@ -88,6 +89,7 @@ typedef struct rkp_init rkp_init_t;
 extern u8 rkp_started;
 extern void *rkp_ro_alloc(void);
 extern void rkp_ro_free(void *free_addr);
+extern unsigned int is_rkp_ro_page(u64 addr);
 extern int rkp_support_large_memory;
 
 struct rkp_init {

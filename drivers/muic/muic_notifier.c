@@ -56,7 +56,7 @@ static void __set_noti_cxt(int attach, int type)
 	muic_notifier.cxt.id = NOTI_ID_ATTACH;
 	muic_notifier.cxt.attach = attach;
 	muic_notifier.cxt.cable_type = type;
-	muic_notifier.cxt.reserved = 0;
+	muic_notifier.cxt.rprd = 0;
 }
 
 int muic_notifier_register(struct notifier_block *nb, notifier_fn_t notifier,
@@ -178,6 +178,13 @@ void muic_notifier_logically_detach_attached_dev(muic_attached_dev_t cur_dev)
 	__set_noti_cxt(0, ATTACHED_DEV_NONE_MUIC);
 }
 
+#ifdef CONFIG_CCIC_NOTIFIER
+extern int ccic_notifier_init(void);
+#endif
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+extern int manager_notifier_init(void);
+#endif
+
 static int __init muic_notifier_init(void)
 {
 	int ret = 0;
@@ -199,8 +206,16 @@ static int __init muic_notifier_init(void)
 	BLOCKING_INIT_NOTIFIER_HEAD(&(muic_notifier.notifier_call_chain));
 	__set_noti_cxt(0 ,ATTACHED_DEV_UNKNOWN_MUIC);
 
+#ifdef CONFIG_CCIC_NOTIFIER
+	ccic_notifier_init();
+#endif
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+	manager_notifier_init();
+#endif
+	
 out:
 	return ret;
 }
+
 device_initcall(muic_notifier_init);
 

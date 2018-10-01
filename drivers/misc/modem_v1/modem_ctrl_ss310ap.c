@@ -115,9 +115,6 @@ static void cp_active_handler(void *arg)
 	if (old_state != new_state) {
 		mif_err("new_state = %s\n", cp_state_str(new_state));
 
-		/* Disable debug Snapshot */
-		mif_set_snapshot(false);
-
 		list_for_each_entry(iod, &mc->modem_state_notify_list, list) {
 			if (iod && atomic_read(&iod->opened) > 0)
 				iod->modem_state_changed(iod, new_state);

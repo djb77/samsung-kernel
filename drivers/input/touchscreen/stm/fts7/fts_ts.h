@@ -288,6 +288,7 @@
 
 #define MODEL_ZERO	0x000000
 #define MODEL_HEROPLUS	0x001000
+#define MODEL_HEROEDGE	0x002000
 #define MODEL_NOBLE	0x001000
 #define MODEL_ZEN	0x002000
 
@@ -576,6 +577,7 @@ int fts_fw_wait_for_event(struct fts_ts_info *info, unsigned char eid);
 int fts_fw_wait_for_specific_event(struct fts_ts_info *info, unsigned char eid0, unsigned char eid1, unsigned char eid2);
 void fts_interrupt_set(struct fts_ts_info *info, int enable);
 int fts_irq_enable(struct fts_ts_info *info, bool enable);
+int fts_fw_wait_for_event_D3(struct fts_ts_info *info, unsigned char eid0, unsigned char eid1);
 #ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD
 bool get_PureAutotune_status(struct fts_ts_info *info);
 #endif

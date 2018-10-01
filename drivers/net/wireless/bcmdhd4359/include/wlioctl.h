@@ -27,7 +27,7 @@
  * other than the GPL, without Broadcom's express prior written consent.
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wlioctl.h 609280 2016-01-01 06:31:38Z $
+ * $Id: wlioctl.h 674982 2016-12-13 13:47:26Z $
  */
 
 #ifndef _wlioctl_h_
@@ -3846,6 +3846,7 @@ typedef enum wl_pkt_filter_type {
 	WL_PKT_FILTER_TYPE_MAGIC_PATTERN_MATCH=1, /* Magic packet match */
 	WL_PKT_FILTER_TYPE_PATTERN_LIST_MATCH=2, /* A pattern list (match all to match filter) */
 	WL_PKT_FILTER_TYPE_ENCRYPTED_PATTERN_MATCH=3, /* SECURE WOWL magic / net pattern match */
+	WL_PKT_FILTER_TYPE_APF_MATCH=4, /* Android packet filter match */
 } wl_pkt_filter_type_t;
 
 #define WL_PKT_FILTER_TYPE wl_pkt_filter_type_t
@@ -3854,7 +3855,9 @@ typedef enum wl_pkt_filter_type {
 #define WL_PKT_FILTER_TYPE_NAMES \
 	{ "PATTERN", WL_PKT_FILTER_TYPE_PATTERN_MATCH },       \
 	{ "MAGIC",   WL_PKT_FILTER_TYPE_MAGIC_PATTERN_MATCH }, \
-	{ "PATLIST", WL_PKT_FILTER_TYPE_PATTERN_LIST_MATCH }
+	{ "PATLIST", WL_PKT_FILTER_TYPE_PATTERN_LIST_MATCH }, \
+	{ "SECURE WOWL", WL_PKT_FILTER_TYPE_ENCRYPTED_PATTERN_MATCH },	\
+	{ "APF", WL_PKT_FILTER_TYPE_APF_MATCH }
 
 /* Secured WOWL packet was encrypted, need decrypted before check filter match */
 typedef struct wl_pkt_decrypter {
@@ -3894,6 +3897,13 @@ typedef struct wl_pkt_filter_pattern_list {
 	wl_pkt_filter_pattern_listel_t patterns[1]; /* Variable number of list elements */
 } wl_pkt_filter_pattern_list_t;
 
+typedef struct wl_apf_program {
+	uint16 version;
+	uint16 instr_len;       /* number of instruction blocks */
+	uint32 inst_ts;         /* program installation timestamp */
+	uint8 instrs[1];        /* variable length instructions */
+} wl_apf_program_t;
+
 /* IOVAR "pkt_filter_add" parameter. Used to install packet filters. */
 typedef struct wl_pkt_filter {
 	uint32	id;		/* Unique filter id, specified by app. */
@@ -3902,6 +3912,7 @@ typedef struct wl_pkt_filter {
 	union {			/* Filter definitions */
 		wl_pkt_filter_pattern_t pattern;	/* Pattern matching filter */
 		wl_pkt_filter_pattern_list_t patlist; /* List of patterns to match */
+		wl_apf_program_t apf_program; /* apf program */
 	} u;
 } wl_pkt_filter_t;
 
@@ -3916,6 +3927,14 @@ typedef struct wl_tcp_keep_set {
 #define WL_PKT_FILTER_PATTERN_LIST_FIXED_LEN OFFSETOF(wl_pkt_filter_pattern_list_t, patterns)
 #define WL_PKT_FILTER_PATTERN_LISTEL_FIXED_LEN	\
 			OFFSETOF(wl_pkt_filter_pattern_listel_t, mask_and_data)
+
+#define WL_APF_INTERNAL_VERSION 1
+#define WL_APF_PROGRAM_MAX_SIZE (2 * 1024)
+#define WL_APF_PROGRAM_FIXED_LEN	OFFSETOF(wl_apf_program_t, instrs)
+#define WL_APF_PROGRAM_LEN(apf_program)	\
+	(apf_program->instr_len * sizeof(apf_program->instrs[0]))
+#define WL_APF_PROGRAM_TOTAL_LEN(apf_program)	\
+	(WL_APF_PROGRAM_FIXED_LEN + WL_APF_PROGRAM_LEN(apf_program))
 
 /* IOVAR "pkt_filter_enable" parameter. */
 typedef struct wl_pkt_filter_enable {
@@ -7976,48 +7995,6 @@ enum {  /* mode selection for reading/writing tx iqlo cal coefficients */
 	NAN_BAND_INVALID = 0xFF
 };
 
-#if defined(WL_LINKSTAT)
-typedef struct {
-	uint32 preamble;
-	uint32 nss;
-	uint32 bw;
-	uint32 rateMcsIdx;
-	uint32 reserved;
-	uint32 bitrate;
-} wifi_rate;
-
-typedef struct {
-	uint16 version;
-	uint16 length;
-	uint32 tx_mpdu;
-	uint32 rx_mpdu;
-	uint32 mpdu_lost;
-	uint32 retries;
-	uint32 retries_short;
-	uint32 retries_long;
-	wifi_rate rate;
-} wifi_rate_stat_t;
-
-typedef int32 wifi_radio;
-
-typedef struct {
-	uint16 version;
-	uint16 length;
-	wifi_radio radio;
-	uint32 on_time;
-	uint32 tx_time;
-	uint32 rx_time;
-	uint32 on_time_scan;
-	uint32 on_time_nbd;
-	uint32 on_time_gscan;
-	uint32 on_time_roam_scan;
-	uint32 on_time_pno_scan;
-	uint32 on_time_hs20;
-	uint32 num_channels;
-	uint8 channels[1];
-} wifi_radio_stat;
-#endif /* WL_LINKSTAT */
-
 #ifdef WL11ULB
 /* ULB Mode configured via "ulb_mode" IOVAR */
 enum {
@@ -8114,5 +8091,13 @@ typedef struct wl_temp_control {
 	bool enable;
 	uint16 control_bit;
 } wl_temp_control_t;
+
+/* SensorHub Iovar */
+typedef struct {
+	bool	enable;
+	uint16	cmd;
+	uint16	op_mode;
+	uint16	interval;
+} shub_control_t;
 
 #endif /* _wlioctl_h_ */

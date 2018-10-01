@@ -235,11 +235,7 @@ section_table:
 ENTRY(stext)
 #ifdef CONFIG_RKP_CFP_ROPP
 	/* Must intialize RRK to zero */
-	mov RRK, #0
-#endif
-#ifdef CONFIG_RKP_CFP_JOPP
-	/* We need RRS to be loaded before we take our first instrumented BLR branch.  */
-	load_function_entry_magic_number_before_reloc head_magic
+	mov	RRK, #0
 #endif
 #ifdef CONFIG_RELOCATABLE_KERNEL
 	mov	x22, x1				// x1=PHYS_OFFSET
@@ -282,10 +278,6 @@ ENTRY(stext)
 	br	x12				// initialise processor
 ENDPROC(stext)
 
-#ifdef CONFIG_RKP_CFP_JOPP
-alloc_function_entry_magic_number head_magic
-#endif
-
 
 #ifdef CONFIG_RELOCATABLE_KERNEL
 
@@ -294,47 +286,29 @@ alloc_function_entry_magic_number head_magic
 
 
 
-	
+
 __relocate_kernel:
-	
+
 	sub	x23, x19, #TEXT_OFFSET
-	adrp 	x8, __dynsym_start		
+	adrp 	x8, __dynsym_start
 	add	x8, x8, :lo12:__dynsym_start	//x8: start of symbol table
-	adrp 	x9, __reloc_start		
+	adrp 	x9, __reloc_start
 	add 	x9, x9, :lo12:__reloc_start	//x9: start of relocation table
 	adrp	x10, __reloc_end
 	add	x10, x10, :lo12:__reloc_end 	//x10: end of relocation table
 
 0:	cmp	x9, x10
-	b.hs	2f
+	b.hs	1f
 	ldp	x11, x12, [x9], #24
 	cmp	x12, #R_AARCH64_RELATIVE
-	b.ne	1f
+	b.ne	0b
 	ldr	x12, [x9, #-8]
 	add	x12, x12, x23			// relocate origin x23 
 	add	x11, x11, x23
 	str	x12, [x11, x28]
 	b	0b
 
-1:	ubfx	x13, x12, #0, #32
-	cmp	x13, #R_AARCH64_ABS64
-	b.ne	0b
-	lsr	x13, x12, #32			// symbol index
-	ldr	x12, [x9, #-8]			// addend
-	add	x13, x13, x13, lsl #1		// x 3
-	add	x13, x8, x13, lsl #3		// x 8
-	ldrsh	w14, [x13, #6]			// Elf64_Sym::st_shndx
-	cbz	w14, 0b				// SHN_UNDEF:: Weak Symbol? Do NOT patch 
-	ldr	x15, [x13, #8]			// Elf64_Sym::st_value
-	cmp	w14, #-0xf			// SHN_ABS (0xfff1) ?
-	add	x14, x15, x23			// st_value + offset
-	csel	x15, x14, x15, ne
-	add	x15, x12, x15
-	add	x11, x11, x23
-	str	x15, [x11, x28]
-	b	0b
-	
-2:	ldr	x8, =vectors			// reload VBAR_EL1 with
+1:	ldr	x8, =vectors			// reload VBAR_EL1 with
 	msr	vbar_el1, x8			// relocated address
 	isb
 
@@ -550,9 +524,6 @@ ENTRY(secondary_startup)
 	/*
 	 * Common entry point for secondary CPUs.
 	 */
-#ifdef CONFIG_RKP_CFP_JOPP
-	load_function_entry_magic_number_no_mmu head_magic
-#endif
 	mrs	x22, midr_el1			// x22=cpuid
 	mov	x0, x22
 	bl	lookup_processor_type
@@ -591,9 +562,6 @@ ENTRY(__secondary_switched)
 	 */
 	get_thread_info tsk
 	load_key tsk
-#endif
-#ifdef CONFIG_RKP_CFP_JOPP
-	load_function_entry_magic_number_before_reloc head_magic
 #endif
 	mov	x29, #0
 	b	secondary_start_kernel

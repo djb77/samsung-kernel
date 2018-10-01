@@ -1368,11 +1368,24 @@ static int samsung_i2s_dai_probe(struct snd_soc_dai *dai)
 #ifdef CONFIG_SND_SAMSUNG_COMPR
 	struct i2s_dai *compr = i2s->compr_dai;
 
+#ifndef CONFIG_SND_SOC_EAX_SLOWPATH
 	if ((other && other->clk) || i2s->is_compress) /* If this is probe on secondary */
+		goto probe_exit;
+#else
+	if (other && other->clk) {
+		if (i2s->is_compress)  { /* If this is probe on secondary */
+			goto probe_exit;
+		} else {
+			eax_slowpath_dai_register(dai, &samsung_i2s_dai_ops,
+					i2s_suspend_force, i2s_resume_force);
+			goto probe_exit;
+		}
+	}
+#endif
 #else
 	if (other && other->clk) /* If this is probe on secondary */
-#endif
 		goto probe_exit;
+#endif
 
 	i2s->addr = ioremap(i2s->base, 0x100);
 	if (i2s->addr == NULL) {
@@ -1720,6 +1733,9 @@ static int samsung_i2s_probe(struct platform_device *pdev)
 		}
 
 		if (samsung_dai_type == TYPE_SEC) {
+#ifdef CONFIG_SND_SOC_EAX_SLOWPATH
+			lpass_register_subip(&pdev->dev, "i2s-sec");
+#endif
 			snd_soc_register_component(&cpu_dai->pdev->dev,
 					&samsung_i2s_component,
 					&cpu_dai->i2s_dai_drv, 1);
@@ -1818,8 +1834,12 @@ static int samsung_i2s_probe(struct platform_device *pdev)
 		if (of_find_property(np, "samsung,supports-sec-compr", NULL))
 			quirks |= QUIRK_SEC_DAI_COMPR;
 
+#ifdef CONFIG_SND_SOC_EAX_SLOWPATH
+		amixer = 2;
+#else
 		if (of_property_read_u32(np, "samsung,amixer", &amixer))
 			amixer = 0;
+#endif
 
 		if (of_find_property(np, "samsung,lpass-subip", NULL))
 			lpass_register_subip(&pdev->dev, "i2s");
@@ -1888,6 +1908,7 @@ static int samsung_i2s_probe(struct platform_device *pdev)
 
 		sec_dai->slotnum = pri_dai->slotnum;
 		sec_dai->dma_playback.dma_size = 4;
+		sec_dai->dma_playback.sec_dma_dev = &sec_dai->pdev->dev;
 		sec_dai->base = regs_base;
 		sec_dai->quirks = quirks;
 #ifdef CONFIG_SND_SAMSUNG_IDMA
@@ -1898,6 +1919,11 @@ static int samsung_i2s_probe(struct platform_device *pdev)
 
 		sec_dai->pri_dai = pri_dai;
 		pri_dai->sec_dai = sec_dai;
+
+#ifdef CONFIG_SND_SOC_EAX_SLOWPATH
+		eax_slowpath_dev_register(&sec_dai->pdev->dev, "i2s-sec",
+			     &sec_dai->dma_playback, 2);
+#endif
 
 		if (np)
 			sec_dai->pdev->dev.of_node = of_get_child_by_name(np, "i2s-sec");

@@ -454,7 +454,7 @@ int vps_find_attached_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, int *pi
 	}
 
 	if ((pmsr->t.vbvolt == VB_HIGH) && pmsr->t.chgdetrun &&
-		(pmsr->t.adc != ADC_AUDIODOCK)) {
+		(pmsr->t.adc != ADC_DESKDOCK)) {
 		pr_info("%s:%s chgdet is running.\n", MUIC_DEV_NAME, __func__);
 		return -1;
 	}

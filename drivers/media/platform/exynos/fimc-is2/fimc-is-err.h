@@ -273,7 +273,8 @@ enum ShotErrorType {
 	IS_SHOT_3AA_FRAME_END,
 	IS_SHOT_IP_CLOCK_OFF,
 	IS_SHOT_ENDPROC_DELAY,
-	SHOT_ERR_MISMATCH /* host error code */
+	SHOT_ERR_MISMATCH, /* host error code */
+	SHOT_ERR_PERFRAME
 };
 
 enum REPORT_ERR_TYPE {

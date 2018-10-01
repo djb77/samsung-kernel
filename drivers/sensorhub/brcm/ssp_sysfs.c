@@ -83,6 +83,11 @@ static void enable_sensor(struct ssp_data *data,
 			proximity_open_calibration(data);
 #endif
 			set_proximity_threshold(data);
+			data->sensor_dump_flag_proximity = true;
+		}
+		
+		if (iSensorType == PROXIMITY_ALERT_SENSOR) {
+			set_proximity_alert_threshold(data);
 		}
 
 #ifdef CONFIG_SENSORS_SSP_IRDATA_FOR_CAMERA
@@ -96,6 +101,11 @@ static void enable_sensor(struct ssp_data *data,
 			data->light_log_cnt = 0;
 		}
 #endif
+		if(iSensorType == LIGHT_SENSOR)
+		{
+			data->sensor_dump_cnt_light = 0;
+			data->sensor_dump_flag_light = true;
+		}
 
 #ifdef CONFIG_SENSORS_SSP_SX9306
 		if (iSensorType == GRIP_SENSOR) {
@@ -241,6 +251,10 @@ static int ssp_remove_sensor(struct ssp_data *data,
 		}
 	} else if (uChangedSensor == GYROSCOPE_SENSOR) {
 		data->cameraGyroSyncMode = false;
+	} else if(uChangedSensor == PROXIMITY_SENSOR)	{
+		data->sensor_dump_flag_proximity = false;
+	} else if(uChangedSensor == LIGHT_SENSOR)	{
+		data->sensor_dump_flag_light = false;
 	}
 
 	if (!data->bSspShutdown)
@@ -356,6 +370,10 @@ static ssize_t set_sensors_enable(struct device *dev,
 						proximity_open_calibration(data);
 #endif
 						set_proximity_threshold(data);
+					}
+					else if(uChangedSensor == PROXIMITY_ALERT_SENSOR)
+					{
+						set_proximity_alert_threshold(data);
 					}
 #ifdef CONFIG_SENSORS_SSP_SX9306
 					else if (uChangedSensor == GRIP_SENSOR) {
@@ -943,34 +961,158 @@ static ssize_t set_data_injection_enable(struct device *dev,
 	return size;
 }
 
-#if defined (CONFIG_SENSORS_SSP_VLTE)
-static ssize_t show_lcd_check_fold_state(struct device *dev,
+static ssize_t show_sensor_state(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct ssp_data *data  = dev_get_drvdata(dev);
-	return sprintf(buf, "%d\n", data->change_axis);
-	
+	return sprintf(buf, "%s\n", data->sensor_state);
 }
 
-static ssize_t set_lcd_check_fold_state(struct device *dev,
+static ssize_t show_timestamp_factor(struct device *dev,
+	struct device_attribute *attr, char *buf){
+	struct ssp_data *data = dev_get_drvdata(dev);
+	return sprintf(buf, "%lld\n", data->timestamp_factor);
+}
+
+static ssize_t set_timestamp_factor(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
-
-	if(folder_state == 1) // folding state
-	{
-		data->change_axis = true;
-		pr_err("[SSP]: %s - change_axis %d\n", __func__, data->change_axis);
-	}
-	else // spread state
-	{
-		data->change_axis = false;
-		pr_err("[SSP]: %s - change_axis %d\n", __func__, data->change_axis);
-	}
+	int64_t timestamp_factor = 0;
 	
+	if (kstrtoll(buf, 10, &timestamp_factor) < 0)
+		return -1;
+
+	data->timestamp_factor = (u64)timestamp_factor;
 	return size;
 }
-#endif
+
+//dev_attr_mcu_power
+static ssize_t show_mcu_power(struct device *dev,
+	struct device_attribute *attr, char *buf){
+	struct ssp_data *data = dev_get_drvdata(dev);
+
+	//pr_err("[SSP] %s++\n",__func__);
+	
+	if(data->regulator_vdd_mcu_1p8 != NULL){
+		pr_err("[SSP] %s: vdd_mcu_1p8, is enabled %d\n", __func__, regulator_is_enabled(data->regulator_vdd_mcu_1p8));
+		return sprintf(buf, "%d\n", regulator_is_enabled(data->regulator_vdd_mcu_1p8));
+	} else if(data->shub_en >= 0){
+		pr_err("[SSP] %s: shub_en(%d), is enabled %d\n", __func__, data->shub_en, gpio_get_value(data->shub_en));
+		return sprintf(buf, "%d\n", gpio_get_value(data->shub_en));
+	}
+	return 0;	
+}
+
+static ssize_t set_mcu_power(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct ssp_data *data = dev_get_drvdata(dev);
+	long long enable = 0;
+	int ret = 0;
+	
+	//pr_err("[SSP] %s++\n",__func__);
+
+	if (kstrtoll(buf, 8, &enable) < 0)
+		return -1;
+	
+	if(data->regulator_vdd_mcu_1p8 != NULL){
+		switch(enable){
+			case 0:
+				if (regulator_is_enabled(data->regulator_vdd_mcu_1p8)){
+					ret = regulator_disable(data->regulator_vdd_mcu_1p8);
+				}
+				break;
+			case 1:
+				if (!regulator_is_enabled(data->regulator_vdd_mcu_1p8))
+				ret = regulator_enable(data->regulator_vdd_mcu_1p8);
+				if(ret)
+					pr_err("[SSP] %s:failed to enable vdd_mcu_1p8(%d)\n", __func__, ret);
+				break;
+		}
+		msleep(20);
+		pr_err("[SSP] %s: enable vdd_mcu_1p8(%lld), is enabled %d\n", __func__, enable, regulator_is_enabled(data->regulator_vdd_mcu_1p8));
+	} 
+	else if(data->shub_en >= 0){
+		switch(enable){
+			case 0:
+				gpio_set_value(data->shub_en, 0);
+				break;
+			case 1:
+				gpio_set_value(data->shub_en, 1);
+				break;
+		}
+		msleep(20);
+		pr_err("[SSP] %s: enable shub_en(%d), is enabled %d\n", __func__, data->shub_en, gpio_get_value(data->shub_en));
+	}
+	else{
+		pr_err("[SSP] %s:no support to individual power source for sensorhub\n", __func__);
+	}
+	return size;
+}
+
+static ssize_t set_ssp_control(struct device *dev, 
+   struct device_attribute *attr, const char *buf, size_t size) 
+{ 
+   printk("[SSP] SSP_CONTROL : %s \n", buf); 
+
+   if (strstr(buf, SSP_DEBUG_TIME_FLAG_ON)) { 
+	   ssp_debug_time_flag = true; 
+   } else if(strstr(buf, SSP_DEBUG_TIME_FLAG_OFF)){ 
+	   ssp_debug_time_flag = false; 
+	}  
+
+   return size; 
+} 
+
+
+static ssize_t sensor_dump_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ssp_data *data  = dev_get_drvdata(dev);
+	
+	if(data->sensor_dump[PROXIMITY_SENSOR] == NULL
+		&& data->sensor_dump[LIGHT_SENSOR] == NULL)
+		return sprintf(buf, "there is no sensor dump\n");
+	else
+		return sprintf(buf, "proximity_sensor\n%s\nlight_sensor\n%s\n\n", 
+		(data->sensor_dump[PROXIMITY_SENSOR]==NULL)?"":data->sensor_dump[PROXIMITY_SENSOR],
+		(data->sensor_dump[LIGHT_SENSOR]==NULL)?"":data->sensor_dump[LIGHT_SENSOR]);
+}
+
+static ssize_t sensor_dump_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct ssp_data *data  = dev_get_drvdata(dev);
+	int sensor_type, ret;
+	char name[50] ={0,};
+
+	memset(name,0,50);
+	sscanf(buf, "%s", name);
+
+	pr_info("%s - buf : %s len = %d\n", __func__, name, (int)strlen(name));
+
+	if((strcmp(name, "all")) == 0)
+	{
+		ret = send_all_sensor_dump_command(data);
+	}
+	else
+	{
+		if(strcmp(name, "proximity") == 0)
+			sensor_type = PROXIMITY_SENSOR;
+		else if(strcmp(name, "light") == 0)
+			sensor_type = LIGHT_SENSOR;
+		else
+		{
+			pr_err("[SSP] %s - is not supported : %s",__func__,buf);
+			sensor_type = -1;
+			return -EINVAL;
+		}		
+		ret = send_sensor_dump_command(data,sensor_type);
+	}
+	
+	return (ret == SUCCESS)? size : ret;
+}
 
 static DEVICE_ATTR(mcu_rev, S_IRUGO, mcu_revision_show, NULL);
 static DEVICE_ATTR(mcu_name, S_IRUGO, mcu_model_name_show, NULL);
@@ -1047,10 +1189,18 @@ static struct device_attribute dev_attr_step_cnt_poll_delay
 static DEVICE_ATTR(data_injection_enable, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_data_injection_enable, set_data_injection_enable);
 
-#if defined (CONFIG_SENSORS_SSP_VLTE)
-static DEVICE_ATTR(lcd_check_fold_state, S_IRUGO | S_IWUSR | S_IWGRP,
-	show_lcd_check_fold_state, set_lcd_check_fold_state);
-#endif
+static DEVICE_ATTR(timestamp_factor, S_IRUGO | S_IWUSR | S_IWGRP,
+	show_timestamp_factor, set_timestamp_factor);
+
+
+static DEVICE_ATTR(ssp_control, S_IWUSR | S_IWGRP, NULL, set_ssp_control); 
+
+
+static DEVICE_ATTR(sensor_state, S_IRUGO, show_sensor_state, NULL);
+static DEVICE_ATTR(mcu_power, 0664, show_mcu_power, set_mcu_power);
+
+static DEVICE_ATTR(sensor_dump,S_IRUGO | S_IWUSR | S_IWGRP,
+	sensor_dump_show, sensor_dump_store);
 
 static struct device_attribute *mcu_attrs[] = {
 	&dev_attr_enable,
@@ -1078,9 +1228,10 @@ static struct device_attribute *mcu_attrs[] = {
 	&dev_attr_ssp_flush,
 	&dev_attr_shake_cam,
 	&dev_attr_data_injection_enable,
-#if defined (CONFIG_SENSORS_SSP_VLTE)
-	&dev_attr_lcd_check_fold_state,
-#endif
+	&dev_attr_sensor_state,
+	&dev_attr_timestamp_factor,
+	&dev_attr_ssp_control,
+	&dev_attr_sensor_dump,
 	NULL,
 };
 
@@ -1283,17 +1434,6 @@ static struct file_operations ssp_data_injection_fops = {
 
 };
 
-#if defined (CONFIG_SENSORS_SSP_VLTE)
-int folder_state;
-int ssp_ckeck_lcd(int state)
-{
-	folder_state = state;
-	pr_info("[SSP] %s folder_state %d \n", __func__, folder_state);
-
-	return folder_state;
-}
-#endif
-
 static void initialize_mcu_factorytest(struct ssp_data *data)
 {
 	sensors_register(data->mcu_device, data, mcu_attrs, "ssp_sensor");
@@ -1306,6 +1446,9 @@ static void remove_mcu_factorytest(struct ssp_data *data)
 
 int initialize_sysfs(struct ssp_data *data)
 {
+	struct device *sec_sensorhub_dev = sec_device_create(data, "sensorhub");
+	device_create_file(sec_sensorhub_dev, &dev_attr_mcu_power);	
+	
 	if (device_create_file(&data->gesture_input_dev->dev,
 		&dev_attr_gesture_poll_delay))
 		goto err_gesture_input_dev;
@@ -1358,8 +1501,11 @@ int initialize_sysfs(struct ssp_data *data)
 	initialize_pressure_factorytest(data);
 	initialize_magnetic_factorytest(data);
 	initialize_mcu_factorytest(data);
+#ifdef CONFIG_SENSORS_SSP_TMG399x
 	initialize_gesture_factorytest(data);
-#ifdef CONFIG_SENSORS_SSP_TMD4903
+#endif
+
+#ifdef CONFIG_SENSORS_SSP_IRLED
 	initialize_irled_factorytest(data);
 #endif
 #ifdef CONFIG_SENSORS_SSP_SHTC1
@@ -1370,6 +1516,9 @@ int initialize_sysfs(struct ssp_data *data)
 #endif
 #ifdef CONFIG_SENSORS_SSP_SX9306
 	initialize_grip_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_LIGHT_COLORID
+	initialize_hiddenhole_factorytest(data);
 #endif
 	/*snamy.jeong_0630 voice dump & data*/
 	initialize_voice_sysfs(data);
@@ -1447,8 +1596,10 @@ void remove_sysfs(struct ssp_data *data)
 	remove_pressure_factorytest(data);
 	remove_magnetic_factorytest(data);
 	remove_mcu_factorytest(data);
+#ifdef CONFIG_SENSORS_SSP_TMG399x
 	remove_gesture_factorytest(data);
-#ifdef CONFIG_SENSORS_SSP_TMD4903
+#endif
+#ifdef CONFIG_SENSORS_SSP_IRLED
 	remove_irled_factorytest(data);
 #endif
 #ifdef CONFIG_SENSORS_SSP_SHTC1
@@ -1459,6 +1610,9 @@ void remove_sysfs(struct ssp_data *data)
 #endif
 #ifdef CONFIG_SENSORS_SSP_SX9306
 	remove_grip_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_LIGHT_COLORID
+	remove_hiddenhole_factorytest(data);
 #endif
 	/*snamy.jeong_0630 voice dump & data*/
 	remove_voice_sysfs(data);

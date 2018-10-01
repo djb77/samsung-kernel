@@ -49,9 +49,9 @@ static ssize_t power_supply_show_property(struct device *dev,
 		"Wireless", "HV_Wireless", "PMA_Wireless", "CARDOCK", "UARTOFF", "OTG", "LAN_HUB",
 		"MHL_500", "MHL_900", "MHL_1500", "MHL_USB",
 		"SMART_OTG", "SMART_NOTG", "POWER_SHARING",
-		"HV_Mains", "HV_Prepare_Mains", "HV_ERR", "MHL_USB_100", "MHL_2000",
+		"HV_Mains", "HV_Mains_12V", "HV_Prepare_Mains", "HV_ERR", "MHL_USB_100", "MHL_2000",
 		"HV_Unknown", "MDOCK_TA", "HMT_CONNECTED", "HMT_CHARGE", "Wireless_Pack", "Wireless_Pack_TA",
-		"Wireless_Stand", "HV_Wireless_Stand"
+		"Wireless_Stand", "HV_Wireless_Stand", "PDIC", "HV_Mains_CHG_LIMIT"
 	};
 	static char *status_text[] = {
 		"Unknown", "Charging", "Discharging", "Not charging", "Full"
@@ -169,6 +169,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(power_design),
 	POWER_SUPPLY_ATTR(power_now),
 	POWER_SUPPLY_ATTR(power_avg),
+	POWER_SUPPLY_ATTR(filter_cfg),
 	POWER_SUPPLY_ATTR(charge_full_design),
 	POWER_SUPPLY_ATTR(charge_empty_design),
 	POWER_SUPPLY_ATTR(charge_full),

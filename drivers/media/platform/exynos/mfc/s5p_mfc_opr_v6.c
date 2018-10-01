@@ -152,8 +152,13 @@ static int s5p_mfc_init_decode(struct s5p_mfc_ctx *ctx)
 	reg = dec->sei_parse;
 	/* Enable realloc interface if SEI is enabled */
 	if (dec->sei_parse && FW_HAS_SEI_S3D_REALLOC(dev))
-		reg |= (0x1 << S5P_FIMV_D_SEI_NEED_INIT_BUFFER_SHIFT);
-	MFC_WRITEL(reg, S5P_FIMV_D_SEI_ENABLE);
+		reg |= (0x1 << S5P_FIMV_D_SEI_ENABLE_NEED_INIT_BUFFER_SHIFT);
+	if (FW_HAS_SEI_INFO_FOR_HDR(dev)) {
+		reg |= (0x1 << S5P_FIMV_D_SEI_ENABLE_CONTENT_LIGHT_SHIFT);
+		reg |= (0x1 << S5P_FIMV_D_SEI_ENABLE_MASTERING_DISPLAY_SHIFT);
+	}
+	MFC_WRITEL(reg, S5P_FIMV_D_SEI_ENABLE);	
+	mfc_debug(2, "SEI available was set, 0x%x\n", MFC_READL(S5P_FIMV_D_SEI_ENABLE));
 
 	MFC_WRITEL(ctx->inst_no, S5P_FIMV_INSTANCE_ID);
 	s5p_mfc_cmd_host2risc(dev, S5P_FIMV_CH_SEQ_HEADER, NULL);
@@ -486,8 +491,7 @@ static inline int s5p_mfc_run_dec_last_frames(struct s5p_mfc_ctx *ctx)
 					index, ctx->stream_protect_flag);
 		}
 
-		s5p_mfc_set_dec_stream_buffer(ctx,
-			s5p_mfc_mem_plane_addr(ctx, &temp_vb->vb, 0), 0, 0);
+		s5p_mfc_set_dec_stream_buffer(ctx, temp_vb, 0, 0);
 	}
 
 	if (dec->is_dynamic_dpb) {
@@ -633,17 +637,13 @@ static inline int s5p_mfc_run_dec_frame(struct s5p_mfc_ctx *ctx)
 		temp_vb->vb.v4l2_planes[0].bytesused = 0;
 
 	if (dec->consumed) {
-		s5p_mfc_set_dec_stream_buffer(ctx,
-				s5p_mfc_mem_plane_addr(ctx, &temp_vb->vb, 0),
-				dec->consumed, dec->remained_size);
+		s5p_mfc_set_dec_stream_buffer(ctx, temp_vb, dec->consumed, dec->remained_size);
 	} else {
 		if (temp_vb->consumed)
 			size = temp_vb->vb.v4l2_planes[0].bytesused - temp_vb->consumed;
 		else
 			size = temp_vb->vb.v4l2_planes[0].bytesused;
-		s5p_mfc_set_dec_stream_buffer(ctx,
-				s5p_mfc_mem_plane_addr(ctx, &temp_vb->vb, 0),
-				temp_vb->consumed, size);
+		s5p_mfc_set_dec_stream_buffer(ctx, temp_vb, temp_vb->consumed, size);
 	}
 
 	index = temp_vb->vb.v4l2_buf.index;
@@ -698,8 +698,7 @@ static inline int s5p_mfc_run_enc_last_frames(struct s5p_mfc_ctx *ctx)
 	unsigned long flags;
 	struct s5p_mfc_buf *dst_mb;
 	struct s5p_mfc_raw_info *raw;
-	dma_addr_t src_addr[3] = { 0, 0, 0 }, dst_addr;
-	unsigned int dst_size;
+	dma_addr_t src_addr[3] = { 0, 0, 0 };
 
 	raw = &ctx->raw_buf;
 	spin_lock_irqsave(&dev->irqlock, flags);
@@ -722,8 +721,6 @@ static inline int s5p_mfc_run_enc_last_frames(struct s5p_mfc_ctx *ctx)
 
 	dst_mb = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf, list);
 	dst_mb->used = 1;
-	dst_addr = s5p_mfc_mem_plane_addr(ctx, &dst_mb->vb, 0);
-	dst_size = (unsigned int)vb2_plane_size(&dst_mb->vb, 0);
 
 	/* encoder dst buffer CFW PROT */
 	if (ctx->is_drm) {
@@ -739,7 +736,7 @@ static inline int s5p_mfc_run_enc_last_frames(struct s5p_mfc_ctx *ctx)
 				index, ctx->stream_protect_flag);
 	}
 
-	s5p_mfc_set_enc_stream_buffer(ctx, dst_addr, dst_size);
+	s5p_mfc_set_enc_stream_buffer(ctx, dst_mb);
 
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
@@ -756,11 +753,7 @@ static inline int s5p_mfc_run_enc_frame(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_buf *dst_mb;
 	struct s5p_mfc_buf *src_mb;
 	struct s5p_mfc_raw_info *raw;
-	dma_addr_t src_addr[3] = { 0, 0, 0 }, dst_addr;
-	/*
-	unsigned int src_y_size, src_c_size;
-	*/
-	unsigned int dst_size;
+	dma_addr_t src_addr[3] = { 0, 0, 0 };
 	unsigned int index, i;
 	int last_frame = 0;
 
@@ -815,8 +808,6 @@ static inline int s5p_mfc_run_enc_frame(struct s5p_mfc_ctx *ctx)
 
 	dst_mb = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf, list);
 	dst_mb->used = 1;
-	dst_addr = s5p_mfc_mem_plane_addr(ctx, &dst_mb->vb, 0);
-	dst_size = (unsigned int)vb2_plane_size(&dst_mb->vb, 0);
 
 	/* encoder dst buffer CFW PROT */
 	if (ctx->is_drm) {
@@ -835,7 +826,7 @@ static inline int s5p_mfc_run_enc_frame(struct s5p_mfc_ctx *ctx)
 	mfc_debug(2, "nal start : dst index from dst_queue:%d\n",
 		dst_mb->vb.v4l2_buf.index);
 
-	s5p_mfc_set_enc_stream_buffer(ctx, dst_addr, dst_size);
+	s5p_mfc_set_enc_stream_buffer(ctx, dst_mb);
 
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
@@ -881,9 +872,7 @@ static inline int s5p_mfc_run_init_dec(struct s5p_mfc_ctx *ctx)
 
 
 	if (temp_vb->consumed) {
-		s5p_mfc_set_dec_stream_buffer(ctx,
-			s5p_mfc_mem_plane_addr(ctx, &temp_vb->vb, 0),
-			temp_vb->consumed,
+		s5p_mfc_set_dec_stream_buffer(ctx, temp_vb, temp_vb->consumed,
 			temp_vb->vb.v4l2_planes[0].bytesused - temp_vb->consumed);
 	} else {
 		/* decoder src buffer CFW PROT */
@@ -900,8 +889,7 @@ static inline int s5p_mfc_run_init_dec(struct s5p_mfc_ctx *ctx)
 					index, ctx->stream_protect_flag);
 		}
 
-		s5p_mfc_set_dec_stream_buffer(ctx,
-			s5p_mfc_mem_plane_addr(ctx, &temp_vb->vb, 0),
+		s5p_mfc_set_dec_stream_buffer(ctx, temp_vb,
 			0, temp_vb->vb.v4l2_planes[0].bytesused);
 	}
 
@@ -919,8 +907,6 @@ static inline int s5p_mfc_run_init_enc(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_dev *dev = ctx->dev;
 	unsigned long flags;
 	struct s5p_mfc_buf *dst_mb;
-	dma_addr_t dst_addr;
-	unsigned int dst_size;
 	int ret;
 
 	spin_lock_irqsave(&dev->irqlock, flags);
@@ -932,8 +918,6 @@ static inline int s5p_mfc_run_init_enc(struct s5p_mfc_ctx *ctx)
 	}
 
 	dst_mb = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf, list);
-	dst_addr = s5p_mfc_mem_plane_addr(ctx, &dst_mb->vb, 0);
-	dst_size = (unsigned int)vb2_plane_size(&dst_mb->vb, 0);
 	/* encoder dst buffer CFW PROT */
 	if (ctx->is_drm) {
 		int index = dst_mb->vb.v4l2_buf.index;
@@ -947,7 +931,7 @@ static inline int s5p_mfc_run_init_enc(struct s5p_mfc_ctx *ctx)
 		mfc_debug(2, "[%d] enc dst buf prot_flag: %#lx\n",
 				index, ctx->stream_protect_flag);
 	}
-	s5p_mfc_set_enc_stream_buffer(ctx, dst_addr, dst_size);
+	s5p_mfc_set_enc_stream_buffer(ctx, dst_mb);
 
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 

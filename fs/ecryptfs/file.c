@@ -522,17 +522,17 @@ static int ecryptfs_open(struct inode *inode, struct file *file)
 #ifdef CONFIG_DLP
 	if(crypt_stat->flags & ECRYPTFS_DLP_ENABLED) {
 #if DLP_DEBUG
-		printk("DLP %s: try to open %s with crypt_stat->flags %d\n",
-				__func__, ecryptfs_dentry->d_name.name, crypt_stat->flags);
+		printk("DLP %s: try to open %s [%lu] with crypt_stat->flags %d\n",
+				__func__, ecryptfs_dentry->d_name.name, inode->i_ino, crypt_stat->flags);
 #endif
 		if (dlp_is_locked(mount_crypt_stat->userid)) {
 			printk("%s: DLP locked\n", __func__);
 			rc = -EPERM;
 			goto out_put;
 		}
-		if(in_egroup_p(AID_KNOX_DLP) || in_egroup_p(AID_KNOX_DLP_RESTRICTED)) {
-			dlp_len = ecryptfs_getxattr_lower(
-					ecryptfs_dentry_to_lower(ecryptfs_dentry),
+		if(in_egroup_p(AID_KNOX_DLP) || in_egroup_p(AID_KNOX_DLP_RESTRICTED) || in_egroup_p(AID_KNOX_DLP_MEDIA)) {
+			dlp_len = ecryptfs_dentry->d_inode->i_op->getxattr(
+					ecryptfs_dentry,
 					KNOX_DLP_XATTR_NAME,
 					&dlp_data, sizeof(dlp_data));
 			if (dlp_len == sizeof(dlp_data)) {
@@ -541,11 +541,20 @@ static int ecryptfs_open(struct inode *inode, struct file *file)
 				printk("DLP %s: current time [%ld/%ld] %s\n",
 						__func__, (long)ts.tv_sec, (long)dlp_data.expiry_time.tv_sec, ecryptfs_dentry->d_name.name);
 #endif
-				if ((ts.tv_sec > dlp_data.expiry_time.tv_sec) && dlp_isInterestedFile(ecryptfs_dentry->d_name.name)==0) {
+				if ((ts.tv_sec > dlp_data.expiry_time.tv_sec) &&
+						dlp_isInterestedFile(mount_crypt_stat->userid, ecryptfs_dentry->d_name.name)==0) {
+					
+					if(in_egroup_p(AID_KNOX_DLP_MEDIA)) { //ignore media notifications
+					/* Command to delete expired file  */
+					cmd = sdp_fs_command_alloc(FSOP_DLP_FILE_REMOVE_MEDIA,
+							current->tgid, mount_crypt_stat->userid, mount_crypt_stat->partition_id,
+							inode->i_ino, GFP_KERNEL);
+					} else {
 					/* Command to delete expired file  */
 					cmd = sdp_fs_command_alloc(FSOP_DLP_FILE_REMOVE,
 							current->tgid, mount_crypt_stat->userid, mount_crypt_stat->partition_id,
 							inode->i_ino, GFP_KERNEL);
+					}
 					rc = -ENOENT;
 					goto out_put;
 				}
@@ -568,9 +577,20 @@ static int ecryptfs_open(struct inode *inode, struct file *file)
 				cmd = sdp_fs_command_alloc(FSOP_DLP_FILE_OPENED,
 						current->tgid, mount_crypt_stat->userid, mount_crypt_stat->partition_id,
 						inode->i_ino, GFP_KERNEL);
+			} else if(in_egroup_p(AID_KNOX_DLP)) {
+				cmd = sdp_fs_command_alloc(FSOP_DLP_FILE_OPENED_CREATOR,
+						current->tgid, mount_crypt_stat->userid, mount_crypt_stat->partition_id,
+						inode->i_ino, GFP_KERNEL);
+			} else {
+				printk("DLP %s: DLP open file file from Media process ignoring sending event\n", __func__);
 			}
 		} else {
 			printk("DLP %s: not DLP app [%s]\n", __func__, current->comm);
+			printk("DLP %s: DLP open file failed\n", __func__);
+			cmd = sdp_fs_command_alloc(FSOP_DLP_FILE_ACCESS_DENIED,
+							current->tgid, mount_crypt_stat->userid, mount_crypt_stat->partition_id,
+							inode->i_ino, GFP_KERNEL);
+							
 			rc = -EPERM;
 			goto out_put;
 		}

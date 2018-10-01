@@ -208,22 +208,6 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct usb_hcd	*hcd = platform_get_drvdata(dev);
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 	struct clk *clk = xhci->clk;
-	int timeout = 0;
-
-	/*
-	 * Sometimes deadlock occurred in this function.
-	 * So, below waiting for completion of hub_event was added.
-	 */
-	while (xhci->shared_hcd->is_in_hub_event || hcd->is_in_hub_event) {
-		msleep(10);
-		timeout += 10;
-		if (timeout >= XHCI_HUB_EVENT_TIMEOUT) {
-			xhci_err(xhci,
-				"ERROR: hub_event completion timeout\n");
-			break;
-		}
-	}
-	xhci_dbg(xhci, "%s: waited %dmsec", __func__, timeout);
 
 	usb_remove_hcd(xhci->shared_hcd);
 	usb_put_hcd(xhci->shared_hcd);

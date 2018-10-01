@@ -29,6 +29,9 @@
 #include <linux/suspend.h>
 #include <linux/tick.h>
 #include <trace/events/power.h>
+#ifdef CONFIG_SEC_DUMP_SUMMARY
+#include <linux/sec_debug.h>
+#endif
 
 /**
  * The "cpufreq driver" - the arch- or hardware-dependent low
@@ -2391,7 +2394,7 @@ static int cpufreq_cpu_callback(struct notifier_block *nfb,
 			__cpufreq_add_dev(dev, NULL);
 			break;
 
-		case CPU_DOWN_PREPARE:
+		case CPU_DOWN_LATE_PREPARE:
 			__cpufreq_remove_dev_prepare(dev, NULL);
 			break;
 
@@ -2616,6 +2619,30 @@ int cpufreq_unregister_driver(struct cpufreq_driver *driver)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(cpufreq_unregister_driver);
+
+#ifdef CONFIG_SEC_DUMP_SUMMARY
+int sec_debug_set_cpu_info(struct sec_debug_summary *summary_info, char *summary_log_buf)
+{
+	struct cpufreq_policy *data;
+	int i;
+	long val,size=0;
+
+	summary_info->kernel.cpu_info.cpu_offset_paddr = virt_to_phys(&__per_cpu_offset[0]);
+	summary_info->kernel.cpu_info.cpufreq_policy.paddr = virt_to_phys(summary_log_buf);
+
+	for(i=0;i<nr_cpu_ids;++i) {
+		data = per_cpu(cpufreq_cpu_data, i);
+		val = virt_to_phys(data);
+		memcpy(summary_log_buf+size,&val,sizeof(long)); size += sizeof(long);
+	}
+	summary_info->kernel.cpu_info.cpufreq_policy.name_length = CPUFREQ_NAME_LEN;
+	summary_info->kernel.cpu_info.cpufreq_policy.min_offset = offsetof(struct cpufreq_policy, min);
+	summary_info->kernel.cpu_info.cpufreq_policy.max_offset = offsetof(struct cpufreq_policy, max);
+	summary_info->kernel.cpu_info.cpufreq_policy.cur_offset = offsetof(struct cpufreq_policy, cur);
+
+	return size;
+}
+#endif
 
 static int __init cpufreq_core_init(void)
 {

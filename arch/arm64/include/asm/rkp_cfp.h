@@ -46,7 +46,7 @@ lr	.req	x30		// link register
 #endif
 
 #ifdef CONFIG_RKP_CFP_ROPP_HYPKEY
-	.macro _smc, imm
+	.macro	_smc, imm
 	stp	RRX, RRS, [sp, #-16]!
 	dsb	sy
 	isb
@@ -71,7 +71,7 @@ lr	.req	x30		// link register
 	ldp	RRX, RRS, [sp], #16
 	.endm
 #else //CONFIG_RKP_CFP_ROPP_HYPKEY
-	.macro _smc, imm
+	.macro	_smc, imm
 	stp	RRX, RRS, [sp, #-16]!
 	dsb	sy
 	isb
@@ -86,6 +86,8 @@ lr	.req	x30		// link register
 	ldp	RRX, RRS, [sp], #16
 	.endm
 #endif //CONFIG_RKP_CFP_ROPP_HYPKEY
+
+
 #endif // CONFIG_RKP_CFP_FIX_SMC_BUG
 
 //Use the STP_SPACER macro in assembly files to manually add 2 nop's above stp x29, x30, [...].

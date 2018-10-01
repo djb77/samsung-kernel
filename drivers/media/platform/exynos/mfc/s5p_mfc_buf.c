@@ -1001,12 +1001,13 @@ void s5p_mfc_dec_calc_dpb_size(struct s5p_mfc_ctx *ctx)
 }
 
 /* Set registers for decoding stream buffer */
-int s5p_mfc_set_dec_stream_buffer(struct s5p_mfc_ctx *ctx, dma_addr_t buf_addr,
+int s5p_mfc_set_dec_stream_buffer(struct s5p_mfc_ctx *ctx, struct s5p_mfc_buf *mfc_buf,
 		  unsigned int start_num_byte, unsigned int strm_size)
 {
 	struct s5p_mfc_dev *dev;
 	struct s5p_mfc_dec *dec;
 	size_t cpb_buf_size;
+	dma_addr_t addr;
 
 	mfc_debug_enter();
 	if (!ctx) {
@@ -1024,16 +1025,23 @@ int s5p_mfc_set_dec_stream_buffer(struct s5p_mfc_ctx *ctx, dma_addr_t buf_addr,
 		return -EINVAL;
 	}
 
+	if (mfc_buf)
+		addr = s5p_mfc_mem_plane_addr(ctx, &mfc_buf->vb, 0);
+	else
+		addr = 0;
+
 	cpb_buf_size = ALIGN(dec->src_buf_size, MFC_NV12M_HALIGN);
 
 	if (strm_size >= set_strm_size_max(cpb_buf_size)) {
 		mfc_info_ctx("Decrease strm_size : %u -> %zu, gap : %d\n",
 				strm_size, set_strm_size_max(cpb_buf_size), CPB_GAP);
 		strm_size = set_strm_size_max(cpb_buf_size);
+		if (mfc_buf)
+			mfc_buf->vb.v4l2_planes[0].bytesused = strm_size;
 	}
 
 	mfc_debug(2, "inst_no: %d, buf_addr: 0x%08llx\n", ctx->inst_no,
-		(unsigned long long)buf_addr);
+		(unsigned long long)addr);
 	mfc_debug(2, "strm_size: 0x%08x cpb_buf_size: %zu offset: 0x%08x\n",
 			strm_size, cpb_buf_size, start_num_byte);
 
@@ -1041,7 +1049,7 @@ int s5p_mfc_set_dec_stream_buffer(struct s5p_mfc_ctx *ctx, dma_addr_t buf_addr,
 		mfc_info_ctx("stream size is 0\n");
 
 	MFC_WRITEL(strm_size, S5P_FIMV_D_STREAM_DATA_SIZE);
-	MFC_WRITEL(buf_addr, S5P_FIMV_D_CPB_BUFFER_ADDR);
+	MFC_WRITEL(addr, S5P_FIMV_D_CPB_BUFFER_ADDR);
 	MFC_WRITEL(cpb_buf_size, S5P_FIMV_D_CPB_BUFFER_SIZE);
 	MFC_WRITEL(start_num_byte, S5P_FIMV_D_CPB_BUFFER_OFFSET);
 
@@ -1066,10 +1074,14 @@ void s5p_mfc_set_enc_frame_buffer(struct s5p_mfc_ctx *ctx,
 
 /* Set registers for encoding stream buffer */
 int s5p_mfc_set_enc_stream_buffer(struct s5p_mfc_ctx *ctx,
-		dma_addr_t addr, unsigned int size)
+		struct s5p_mfc_buf *mfc_buf)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
+	dma_addr_t addr;
+	unsigned int size;
 
+	addr = s5p_mfc_mem_plane_addr(ctx, &mfc_buf->vb, 0);
+	size = (unsigned int)vb2_plane_size(&mfc_buf->vb, 0);
 	size = ALIGN(size, 512);
 
 	MFC_WRITEL(addr, S5P_FIMV_E_STREAM_BUFFER_ADDR); /* 16B align */

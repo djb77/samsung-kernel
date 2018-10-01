@@ -45,6 +45,14 @@
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #endif
+#ifdef CONFIG_DLP
+#include "ecryptfs_dlp.h"
+#endif
+
+#ifdef CONFIG_ECRYPTFS_FEK_INTEGRITY
+#define HASH_OFFSET 512
+#define FEK_HASH_SIZE 32
+#endif
 
 #ifdef CONFIG_WTL_ENCRYPTION_FILTER
 #define ENC_NAME_FILTER_MAX_INSTANCE 5
@@ -293,6 +301,9 @@ struct ecryptfs_crypt_stat {
 	unsigned char cipher[ECRYPTFS_MAX_CIPHER_NAME_SIZE];
 	unsigned char key[ECRYPTFS_MAX_KEY_BYTES];
 	unsigned char root_iv[ECRYPTFS_MAX_IV_BYTES];
+#ifdef CONFIG_ECRYPTFS_FEK_INTEGRITY
+	unsigned char hash[FEK_HASH_SIZE];
+#endif
 	struct list_head keysig_list;
 	struct mutex keysig_list_mutex;
 	struct mutex cs_tfm_mutex;
@@ -301,6 +312,9 @@ struct ecryptfs_crypt_stat {
 #ifdef CONFIG_SDP
 	int engine_id;
 	dek_t sdp_dek;
+#endif
+#ifdef CONFIG_DLP
+	struct knox_dlp_data expiry;
 #endif
 };
 

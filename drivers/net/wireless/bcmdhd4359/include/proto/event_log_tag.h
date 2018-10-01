@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: event_log_tag.h 611454 2016-01-11 08:21:48Z $
+ * $Id: event_log_tag.h 636987 2016-05-11 08:04:24Z $
  */
 
 #ifndef _EVENT_LOG_TAG_H_
@@ -76,7 +76,11 @@
 #define EVENT_LOG_TAG_PCI_DBG	52
 #define EVENT_LOG_TAG_PCI_DATA  53
 #define EVENT_LOG_TAG_PCI_RING	54
+/* EVENT_LOG_TAG_AWDL_TRACE_RANGING will be removed after wlc_ranging merge from IGUANA
+ * keeping it here to avoid compilation error on trunk
+ */
 #define EVENT_LOG_TAG_AWDL_TRACE_RANGING	55
+#define EVENT_LOG_TAG_RANGING_TRACE	55
 #define EVENT_LOG_TAG_WL_ERROR		56
 #define EVENT_LOG_TAG_PHY_ERROR		57
 #define EVENT_LOG_TAG_OTP_ERROR		58
@@ -143,8 +147,23 @@
 #define EVENT_LOG_TAG_NAT_WARN                  119
 #define EVENT_LOG_TAG_NAT_INFO                  120
 #define EVENT_LOG_TAG_NAT_DEBUG                 121
+#define EVENT_LOG_TAG_STA_INFO			122
+#define EVENT_LOG_TAG_PROXD_ERROR		123
+#define EVENT_LOG_TAG_PROXD_TRACE		124
+#define EVENT_LOG_TAG_PROXD_INFO		125
+#define EVENT_LOG_TAG_IE_ERROR			126
+#define EVENT_LOG_TAG_ASSOC_ERROR		127
+#define EVENT_LOG_TAG_SCAN_ERR			128
+#define EVENT_LOG_TAG_AMSDU_ERROR		129
+#define EVENT_LOG_TAG_AMPDU_ERROR		130
+#define EVENT_LOG_TAG_KM_ERROR			131
+#define EVENT_LOG_TAG_DFS			132
+#define EVENT_LOG_TAG_REGULATORY	133
+#define EVENT_LOG_TAG_CSA				134
+#define EVENT_LOG_TAG_WNM_BSSTRANS_ERR	135
+
 /* EVENT_LOG_TAG_MAX	= Set to the same value of last tag, not last tag + 1 */
-#define EVENT_LOG_TAG_MAX			121
+#define EVENT_LOG_TAG_MAX			135
 /* Note: New event should be added/reserved in trunk before adding it to branches */
 
 

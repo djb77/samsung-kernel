@@ -238,7 +238,7 @@ static int s2mpb02_i2c_probe(struct i2c_client *i2c,
 err_irq_init:
 	mutex_destroy(&s2mpb02->i2c_lock);
 err:
-	kfree(pdata);
+	devm_kfree(&i2c->dev, (void*)pdata);
 	s2mpb02_irq_exit(s2mpb02);
 err_pdata:
 	kfree(s2mpb02);
@@ -318,6 +318,7 @@ static struct i2c_driver s2mpb02_i2c_driver = {
 #if defined(CONFIG_OF)
 		.of_match_table	= s2mpb02_i2c_dt_ids,
 #endif /* CONFIG_OF */
+		.suppress_bind_attrs = true,
 	},
 	.probe		= s2mpb02_i2c_probe,
 	.remove		= s2mpb02_i2c_remove,

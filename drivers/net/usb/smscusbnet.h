@@ -31,18 +31,18 @@ typedef unsigned char BOOLEAN;
 #define TRUE	((BOOLEAN)1)
 #define FALSE	((BOOLEAN)0)
 
-#define ID_REV_9500_CHIPID	0x9500
-#define ID_REV_9500A_CHIPID	0x9E00
-#define ID_REV_9512_CHIPID	0xEC00
+#define HS_USB_PKT_SIZE     512
+#define FS_USB_PKT_SIZE     64
+
+#define MAX_SINGLE_PACKET_SIZE  2048
+#define DEFAULT_HS_BURST_CAP_SIZE (16 *1024 + 5 * HS_USB_PKT_SIZE)
+#define DEFAULT_FS_BURST_CAP_SIZE (6 *1024 + 33 * FS_USB_PKT_SIZE)
+#define DEFAULT_TX_BUFFER_SIZE (7 * 1024)
+#define RX_SKB_COPY /* must be defined when rx_use_prealloc_buffers */
 
 #define EXTRA_HEADER_LEN	8
 #define VLAN_DUMMY		0xFFFF
 
-enum{
-	DEV_SMSC9500
-};
-
-#define RX_SKB_COPY
 enum{
 	RX_FIXUP_VALID_SKB,
 	RX_FIXUP_INVALID_SKB,
@@ -65,11 +65,11 @@ struct ExtraErrorCounter
 
 };
 
-#define AUTOSUSPEND_DYNAMIC		0x01  //Suspend on s0, work for lan9500 and lan9500a
-#define AUTOSUSPEND_DYNAMIC_S3	0x02  //Suspend on s3, only for lan9500a
-#define AUTOSUSPEND_LINKDOWN	0x04  //Suspend when link is down
-#define AUTOSUSPEND_INTFDOWN	0x08 //Suspend when interface is down
-#define AUTOSUSPEND_DETACH		0x10 //Enable net detach
+#define AUTOSUSPEND_DYNAMIC 	0x01  //Suspend on s0, work for lan9500 and lan9500a
+#define AUTOSUSPEND_DYNAMIC_S3 	0x02  //Suspend on s3, only for lan9500a
+#define AUTOSUSPEND_LINKDOWN 	0x04  //Suspend when link is down
+#define AUTOSUSPEND_INTFDOWN 	0x08 //Suspend when interface is down
+#define AUTOSUSPEND_DETACH	 	0x10 //Enable net detach
 
 enum{
 	FEATURE_SUSPEND3,
@@ -102,7 +102,7 @@ enum{
 struct usbnet {
 	/* housekeeping */
 	struct usb_device	*udev;
-    struct usb_interface *uintf;
+	struct usb_interface *uintf;
 	struct driver_info	*driver_info;
 	wait_queue_head_t	*wait;
 	int StopSummitUrb;
@@ -123,12 +123,13 @@ struct usbnet {
 	/* protocol/interface state */
 	struct net_device	*net;
 	struct net_device_stats	stats;
-    struct ExtraErrorCounter extra_error_cnts;
+	struct ExtraErrorCounter extra_error_cnts;
 	int			msg_enable;
 	unsigned long		data [5];
 	u32			xid;
 	u32			hard_mtu;	/* count any extra framing */
 	size_t		        rx_urb_size;    /* size for rx urbs  */
+	size_t		        tx_urb_size;    /* size for tx urbs, for bundling */
 	struct mii_if_info	mii;
 
 	/* various kinds of pending driver work */
@@ -136,12 +137,6 @@ struct usbnet {
 	struct sk_buff_head	txq;
 	struct sk_buff_head	tx_pending_q;
 	struct sk_buff_head	done;
-
-	struct urb	**rx_urb_pool; //idle urb pool
-	unsigned int rx_urb_pool_head;
-	unsigned int rx_urb_pool_tail;
-	unsigned int rx_urb_pool_size;
-	spinlock_t rx_urblist_lock;
 
 	struct urb	*tx_urb;
 
@@ -153,22 +148,28 @@ struct usbnet {
 	struct work_struct	myevent;
 	struct workqueue_struct  * MyWorkQueue;
 	unsigned long		flags;
-    BOOLEAN intr_urb_delay_submit;
+	BOOLEAN intr_urb_delay_submit;
 
-   int idleCount;
-   int linkcheck;
-   BOOLEAN pmLock;
-   struct semaphore pm_mutex;
-   int suspendFlag;	//Flag indicates link down suspend and select suspend
-   BOOLEAN netDetachDone;
-   u32 chipID;
-   u32 preRxFifoDroppedFrame; //Previous counter value
+	int idleCount;
+	int linkcheck;
+	BOOLEAN pmLock;
+	struct semaphore pm_mutex;
+	int suspendFlag;	//Flag indicates link down suspend and select suspend
+	BOOLEAN netDetachDone;
+	u32 chipID;
+	u32 preRxFifoDroppedFrame; //Previous counter value
 
-   int chipDependFeatures[FEATURE_MAX_NO]; //Flag for chip-depend feratures
-   struct vlan_group	*vlgrp;  //vlan support
+	int chipDependFeatures[FEATURE_MAX_NO]; //Flag for chip-depend feratures
+	struct vlan_group	*vlgrp;  //vlan support
 
-   int device_id;	//DEV_SMSC9500
-   int tx_hold_on_completion;
+	int turbo_mode;
+	int tx_hold_on_completion;
+	unsigned long tx_qlen;
+	unsigned long rx_qlen;
+	struct sk_buff_head rx_pool_queue;
+	int rx_use_prealloc_buffs;
+	struct sk_buff_head tx_pool_queue;
+	int tx_use_prealloc_buffs;
 };
 #define PM_IDLE_DELAY   3 //Time before auto-suspend
 enum{
@@ -259,9 +260,10 @@ extern void usbnet_cdc_unbind (struct usbnet *, struct usb_interface *);
 
 /* CDC and RNDIS support the same host-chosen packet filters for IN transfers */
 #define	DEFAULT_FILTER	(USB_CDC_PACKET_TYPE_BROADCAST \
-			|USB_CDC_PACKET_TYPE_ALL_MULTICAST \
-			|USB_CDC_PACKET_TYPE_PROMISCUOUS \
-			|USB_CDC_PACKET_TYPE_DIRECTED)
+ 			|USB_CDC_PACKET_TYPE_ALL_MULTICAST \
+ 			|USB_CDC_PACKET_TYPE_PROMISCUOUS \
+ 			|USB_CDC_PACKET_TYPE_DIRECTED)
+
 
 /* we record the state for each of our queued skbs */
 enum skb_state {

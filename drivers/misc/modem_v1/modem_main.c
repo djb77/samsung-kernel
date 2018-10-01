@@ -86,6 +86,7 @@ static struct modem_shared *create_modem_shared_data(
 	memcpy(msd->storage.addr, &size, MAX_MIF_SEPA_SIZE);
 	msd->storage.addr += MAX_MIF_SEPA_SIZE;
 	spin_lock_init(&msd->lock);
+	spin_lock_init(&msd->active_list_lock);
 
 	return msd;
 }

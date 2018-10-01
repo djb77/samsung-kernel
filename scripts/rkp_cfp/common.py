@@ -93,6 +93,7 @@ skip_br=set([
     'cpu_resume_mmu' ])
 
 skip_blr=set([
+    'secondary_startup', 
     'el0_svc_naked',
     '__sys_trace'
     ])

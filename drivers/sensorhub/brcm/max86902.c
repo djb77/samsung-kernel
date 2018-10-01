@@ -4347,13 +4347,13 @@ static struct device_attribute dev_attr_hrm_name =
 static struct device_attribute dev_attr_hrm_vendor =
 		__ATTR(vendor, S_IRUGO, max86900_hrm_vendor_show, NULL);
 
-static DEVICE_ATTR(thres1, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(thres1, S_IWUSR | S_IWGRP,
 	NULL, thres1_store);
-static DEVICE_ATTR(thres2, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(thres2, S_IWUSR | S_IWGRP,
 	NULL, thres2_store);
-static DEVICE_ATTR(thres3, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(thres3, S_IWUSR | S_IWGRP,
 	NULL, thres3_store);
-static DEVICE_ATTR(thres4, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(thres4, S_IWUSR | S_IWGRP,
 	NULL, thres4_store);
 static DEVICE_ATTR(led_current, S_IRUGO | S_IWUSR | S_IWGRP,
 	led_current_show, led_current_store);

@@ -88,7 +88,11 @@ extern "C"{
 * Defines the external source freqenecy in KHz.
 * Ex> #define RTV_SRC_CLK_FREQ_KHz	36000 // 36MHz
 *===========================================================================*/
+#ifdef CONFIG_TDMB_XTAL_FREQ
+#define RTV_SRC_CLK_FREQ_KHz		24000
+#else
 #define RTV_SRC_CLK_FREQ_KHz		24576
+#endif
 
 /*============================================================================
 * Defines the Host interface.

@@ -144,6 +144,8 @@ int vmm_init(void) {
 	if(ld_get_sect(vmm, ".bss", &base, &size)) { return -1; }
 
 	memset(base, 0, size);
+	printk(KERN_ALERT "Clear vmm area 0x%p, 0x%x\n", &_svmm, (int)(&_evmm - &_svmm));
+	memset(&_svmm, 0, (size_t)(&_evmm - &_svmm));
 
 	vmm_entry();
 

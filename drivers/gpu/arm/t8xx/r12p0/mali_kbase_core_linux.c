@@ -3396,7 +3396,7 @@ static int power_control_init(struct platform_device *pdev)
 
 #if defined(CONFIG_OF) && defined(CONFIG_PM_OPP)
 	/* Register the OPPs if they are available in device tree */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 23))
 	err = dev_pm_opp_of_add_table(kbdev->dev);
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0))
 	err = of_init_opp_table(kbdev->dev);
@@ -4362,7 +4362,7 @@ void kbase_trace_mali_total_alloc_pages_change(long long int event)
  * Called on job events to trigger ftrace logging
  * Pass the even type, job slot, context, atom_id (job identifier in a context?), job start timestamp (this is unique and used to track the job)
  */
-void kbase_systrace_mali_job_slots_event(u8 job_event, u8 job_slot, const struct kbase_context *kctx, u8 atom_id, u64 start_timestamp, u8 dep_0_id, u8 dep_0_type, u8 dep_1_id, u8 dep_1_type, u32 gles_ctx_handle)
+void kbase_systrace_mali_job_slots_event(u8 job_event, u8 job_slot, const struct kbase_context *kctx, u8 atom_id, u64 start_timestamp, u8 dep_0_id, u8 dep_0_type, u8 dep_1_id, u8 dep_1_type, u32 gles_ctx_handle, u32 frame_number, void* surfacep)
 {
     {
             unsigned int unit;
@@ -4390,13 +4390,19 @@ void kbase_systrace_mali_job_slots_event(u8 job_event, u8 job_slot, const struct
                     case SYSTRACE_EVENT_TYPE_START:
                             trace_mali_job_systrace_event_start(job_name, (kctx != NULL ? kctx->tgid : 0), (kctx != NULL ? kctx->pid : 0),
                                                                 atom_id, (kctx != NULL ? kctx->id : 0), (kctx != NULL ? kctx->cookies : 0),
-                                                                start_timestamp, dep_0_id, dep_0_type, dep_1_id, dep_1_type, gles_ctx_handle);
+                                                                start_timestamp, dep_0_id, dep_0_type, dep_1_id, dep_1_type, gles_ctx_handle,
+                                                                frame_number, surfacep);
+
+                            trace_mali_job_systrace_event_end(job_name, (kctx != NULL ? kctx->tgid : 0));
                             break;
+
                     case SYSTRACE_EVENT_TYPE_STOP:
                     default: // Some jobs can be soft-stopped, so ensure that this terminates the activity trace.
                             trace_mali_job_systrace_event_stop(job_name, (kctx != NULL ? kctx->tgid : 0), (kctx != NULL ? kctx->id : 0),
                                                                atom_id, (kctx != NULL ? kctx->id : 0), (kctx != NULL ? kctx->cookies : 0),
-                                                               start_timestamp, dep_0_id, dep_0_type, dep_1_id, dep_1_type, gles_ctx_handle);
+                                                               start_timestamp, dep_0_id, dep_0_type, dep_1_id, dep_1_type, gles_ctx_handle,
+                                                               frame_number, surfacep);
+                            trace_mali_job_systrace_event_end(job_name, (kctx != NULL ? kctx->tgid : 0));
                             break;
                     }
             }

@@ -33,16 +33,18 @@ extern "C" {
 /*----------------------------------------------------------------------*/
 /*  Constant & Macro Definitions                                        */
 /*----------------------------------------------------------------------*/
+#define get_next_clus(sb, pclu)		fat_ent_get(sb, *(pclu), pclu)
+#define get_next_clus_safe(sb, pclu)	fat_ent_get_safe(sb, *(pclu), pclu)
 
 /* file status */
-/* by Sanghoon Hong
-   this prevents 
-   ffsWriteStat, ffsMapCluster, ... w/ the unlinked inodes
-   from corrupting on-disk dentry data.
-
-   The fid->dir value of unlinked inode will be DIR_DELETED
-   and those functions must check if fid->dir is valid prior to the calling of get_dentry_in_dir()
-*/
+/* this prevents
+ * fscore_write_inode, fscore_map_clus, ... with the unlinked inodes
+ * from corrupting on-disk dentry data.
+ *
+ * The fid->dir value of unlinked inode will be DIR_DELETED
+ * and those functions must check if fid->dir is valid prior to
+ * the calling of get_dentry_in_dir()
+ */
 #define DIR_DELETED				0xFFFF0321
 
 /*----------------------------------------------------------------------*/
@@ -61,6 +63,8 @@ typedef struct {
 	void *__buf;
 } ENTRY_SET_CACHE_T;
 
+
+
 /*----------------------------------------------------------------------*/
 /*  External Function Declarations                                      */
 /*----------------------------------------------------------------------*/
@@ -77,7 +81,7 @@ s32 fscore_mount(struct super_block *sb);
 s32 fscore_umount(struct super_block *sb);
 s32 fscore_statfs(struct super_block *sb, VOL_INFO_T *info);
 s32 fscore_sync_fs(struct super_block *sb, s32 do_sync);
-s32 fscore_set_vol_flags(struct super_block *sb, u16 new_flag);
+s32 fscore_set_vol_flags(struct super_block *sb, u16 new_flag, s32 always_sync);
 u32 fscore_get_au_stat(struct super_block *sb, s32 mode);
 
 /* file management functions */
@@ -89,7 +93,7 @@ s32 fscore_truncate(struct inode *inode, u64 old_size, u64 new_size);
 s32 fscore_rename(struct inode *old_parent_inode, FILE_ID_T *fid, struct inode *new_parent_inode, struct dentry *new_dentry);
 s32 fscore_remove(struct inode *inode, FILE_ID_T *fid);
 s32 fscore_read_inode(struct inode *inode, DIR_ENTRY_T *info);
-s32 fscore_write_inode(struct inode *inode, DIR_ENTRY_T *info);
+s32 fscore_write_inode(struct inode *inode, DIR_ENTRY_T *info, int sync);
 s32 fscore_map_clus(struct inode *inode, s32 clu_offset, u32 *clu, int dest);
 s32 fscore_reserve_clus(struct inode *inode);
 s32 fscore_unlink(struct inode *inode, FILE_ID_T *fid);
@@ -136,6 +140,7 @@ s32   dcache_readahead(struct super_block *sb, u32 sec);
 s32 fat_ent_ops_init(struct super_block *sb);
 s32 fat_ent_get(struct super_block *sb, u32 loc, u32 *content);
 s32 fat_ent_set(struct super_block *sb, u32 loc, u32 content);
+s32 fat_ent_get_safe(struct super_block *sb, u32 loc, u32 *content);
 
 /* core_fat.c : core code for fat */
 s32 fat_generate_dos_name_new(struct super_block *sb, CHAIN_T *p_dir, DOS_NAME_T *p_dosname, s32 n_entries);
@@ -155,7 +160,7 @@ s32  mount_exfat(struct super_block *sb, pbr_t *p_pbr);
 
 /* amap_smart.c :  creation on mount / destroy on umount */
 int amap_create(struct super_block *sb, u32 pack_ratio, u32 sect_per_au, u32 hidden_sect);
-int amap_destroy(struct super_block *sb);
+void amap_destroy(struct super_block *sb);
 
 /* amap_smart.c : (de)allocation functions */
 s32 amap_fat_alloc_cluster(struct super_block *sb, s32 num_alloc, CHAIN_T *p_chain, int dest);
@@ -187,10 +192,19 @@ s32 read_sect(struct super_block *sb, u32 sec, struct buffer_head **bh, s32 read
 s32 write_sect(struct super_block *sb, u32 sec, struct buffer_head *bh, s32 sync);
 s32 read_msect(struct super_block *sb, u32 sec, struct buffer_head **bh, s32 num_secs, s32 read);
 s32 write_msect(struct super_block *sb, u32 sec, struct buffer_head *bh, s32 num_secs, s32 sync);
+s32 write_msect_zero(struct super_block *sb, u32 sec, s32 num_secs);
 
 /* misc.c */
 u8  calc_chksum_1byte(void *data, s32 len, u8 chksum);
 u16 calc_chksum_2byte(void *data, s32 len, u16 chksum, s32 type);
+
+/* extent.c */
+s32 extent_cache_init(struct super_block *sb);
+void extent_cache_shutdown(struct super_block *sb);
+void extent_cache_init_inode(struct inode *inode);
+void extent_cache_inval_inode(struct inode *inode);
+s32 extent_get_clus(struct inode *inode, s32 cluster, s32 *fclus,
+		u32 *dclus, u32 *last_dclus, s32 allow_eof);
 /*----------------------------------------------------------------------*/
 /*  Wrapper Function                                                    */
 /*----------------------------------------------------------------------*/

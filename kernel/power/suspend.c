@@ -465,7 +465,12 @@ static int enter_state(suspend_state_t state)
 
 	trace_suspend_resume(TPS("sync_filesystems"), 0, true);
 	printk(KERN_INFO "PM: Syncing filesystems ... ");
-	sys_sync();
+	if (intr_sync(NULL)) {
+		printk("canceled.\n");
+		trace_suspend_resume(TPS("sync_filesystems"), 0, false);
+		error = -EBUSY;
+		goto Unlock;
+	}
 	printk("done.\n");
 	trace_suspend_resume(TPS("sync_filesystems"), 0, false);
 

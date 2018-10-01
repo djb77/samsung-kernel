@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux_wq.h 597512 2015-11-05 11:37:36Z $
+ * $Id: dhd_linux_wq.h 642399 2016-06-08 15:09:47Z $
  */
 #ifndef _dhd_linux_wq_h_
 #define _dhd_linux_wq_h_
@@ -41,6 +41,7 @@ enum _wq_event {
 	DHD_WQ_WORK_HANG_MSG,
 	DHD_WQ_WORK_SOC_RAM_DUMP,
 	DHD_WQ_WORK_DHD_LOG_DUMP,
+	DHD_WQ_WORK_DEBUG_UART_DUMP,
 
 	DHD_MAX_WQ_EVENTS
 };

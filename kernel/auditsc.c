@@ -72,7 +72,6 @@
 #include <linux/fs_struct.h>
 #include <linux/compat.h>
 #include <linux/ctype.h>
-#include <asm/unistd.h>
 #include <linux/uaccess.h>
 
 #include "audit.h"
@@ -1348,7 +1347,9 @@ static void audit_log_exit(struct audit_context *context, struct task_struct *ts
 	/* tsk == current */
 	context->personality = tsk->personality;
 
-	if (context->major != __NR_setsockopt) {
+// [ SEC_SELINUX_PORTING_COMMON
+	if (context->major != __NR_setsockopt  && context->major != 294 ) {
+// ] SEC_SELINUX_PORTING_COMMON
 	ab = audit_log_start(context, GFP_KERNEL, AUDIT_SYSCALL);
 	if (!ab)
 		return;		/* audit_panic has been called */
@@ -1372,7 +1373,6 @@ static void audit_log_exit(struct audit_context *context, struct task_struct *ts
 	audit_log_task_info(ab, tsk);
 	audit_log_key(ab, context->filterkey);
 	audit_log_end(ab);
-	}
 
 	for (aux = context->aux; aux; aux = aux->next) {
 
@@ -1456,9 +1456,11 @@ static void audit_log_exit(struct audit_context *context, struct task_struct *ts
 			continue;
 		audit_log_name(context, n, NULL, i++, &call_panic);
 	}
-	if (context->major != __NR_setsockopt) {
+
 	audit_log_proctitle(tsk, context);
-	}
+// [ SEC_SELINUX_PORTING_COMMON
+	} // End of context->major != __NR_setsockopt
+// ] SEC_SELINUX_PORTING_COMMON
 	/* Send end of event record to help user space know we are finished */
 	ab = audit_log_start(context, GFP_KERNEL, AUDIT_EOE);
 	if (ab)

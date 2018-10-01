@@ -49,6 +49,7 @@
 #define FIMC_IS_OIS_DEV_NAME		"exynos-fimc-is-ois"
 #define OIS_GYRO_SCALE_FACTOR_IDG	175
 #define OIS_GYRO_SCALE_FACTOR_K2G	131
+#define OIS_I2C_RETRY_COUNT	2
 
  bool not_crc_bin;
 
@@ -60,7 +61,7 @@ struct fimc_is_ois_exif ois_exif_data;
 void fimc_is_ois_i2c_config(struct i2c_client *client, bool onoff)
 {
 	struct pinctrl *pinctrl_i2c = NULL;
-	struct device *i2c_dev = client->dev.parent->parent;
+	struct device *i2c_dev = NULL;
 	struct fimc_is_device_ois *ois_device = NULL;
 
 	if (client == NULL) {
@@ -68,6 +69,7 @@ void fimc_is_ois_i2c_config(struct i2c_client *client, bool onoff)
 		return;
 	}
 
+	i2c_dev = client->dev.parent->parent;
 	ois_device = i2c_get_clientdata(client);
 
 	if (ois_device->ois_hsi2c_status != onoff) {
@@ -126,7 +128,7 @@ int fimc_is_ois_i2c_read(struct i2c_client *client, u16 addr, u8 *data)
 
 int fimc_is_ois_i2c_write(struct i2c_client *client ,u16 addr, u8 data)
 {
-        int retries = I2C_RETRY_COUNT;
+        int retries = OIS_I2C_RETRY_COUNT;
         int ret = 0, err = 0;
         u8 buf[3] = {0,};
         struct i2c_msg msg = {
@@ -154,9 +156,9 @@ int fimc_is_ois_i2c_write(struct i2c_client *client ,u16 addr, u8 data)
         } while (--retries > 0);
 
         /* Retry occured */
-        if (unlikely(retries < I2C_RETRY_COUNT)) {
+        if (unlikely(retries < OIS_I2C_RETRY_COUNT)) {
                 err("i2c_write: error %d, write (%04X, %04X), retry %d\n",
-                        err, addr, data, I2C_RETRY_COUNT - retries);
+                        err, addr, data, retries);
         }
 
         if (unlikely(ret != 1)) {
@@ -169,7 +171,7 @@ int fimc_is_ois_i2c_write(struct i2c_client *client ,u16 addr, u8 data)
 
 int fimc_is_ois_i2c_write_multi(struct i2c_client *client ,u16 addr, u8 *data, size_t size)
 {
-	int retries = I2C_RETRY_COUNT;
+	int retries = OIS_I2C_RETRY_COUNT;
 	int ret = 0, err = 0;
 	ulong i = 0;
 	u8 buf[258] = {0,};
@@ -199,9 +201,9 @@ int fimc_is_ois_i2c_write_multi(struct i2c_client *client ,u16 addr, u8 *data, s
         } while (--retries > 0);
 
         /* Retry occured */
-        if (unlikely(retries < I2C_RETRY_COUNT)) {
+        if (unlikely(retries < OIS_I2C_RETRY_COUNT)) {
                 err("i2c_write: error %d, write (%04X, %04X), retry %d\n",
-                        err, addr, *data, I2C_RETRY_COUNT - retries);
+                        err, addr, *data, retries);
         }
 
         if (unlikely(ret != 1)) {
@@ -504,6 +506,7 @@ void fimc_is_ois_offset_test(struct fimc_is_core *core, long *raw_data_x, long *
 	sum = sum * 10 / avg_count;
 	*raw_data_x = sum * 1000 / scale_factor / 10;
 
+	sum = 0;
 	retries = avg_count;
 	for (i = 0; i < retries; retries--) {
 		fimc_is_ois_i2c_read(core->client1, 0x024A, &val);

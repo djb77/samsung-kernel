@@ -280,10 +280,15 @@ int csi_hw_s_config_dma(u32 __iomem *base_reg, u32 channel, struct fimc_is_image
 	else
 		dma_pack12 = CSIS_REG_DMA_NORMAL;
 
-	if (image->format.pixelformat == V4L2_PIX_FMT_SGRBG8)
+	switch (image->format.pixelformat) {
+	case V4L2_PIX_FMT_SGRBG8:
+	case V4L2_PIX_FMT_SBGGR8:
 		dma_dim = CSIS_REG_DMA_1D_DMA;
-	else
+		break;
+	default:
 		dma_dim = CSIS_REG_DMA_2D_DMA;
+		break;
+	}
 
 	val = fimc_is_hw_get_reg(base_reg, &csi_regs[CSIS_R_DMA0_FMT + (channel * 15)]);
 	val = fimc_is_hw_set_field_value(val, &csi_fields[CSIS_F_DMA_N_DIM], dma_dim);

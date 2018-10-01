@@ -6949,8 +6949,7 @@ static int sctp_wait_for_sndbuf(struct sctp_association *asoc, long *timeo_p,
 		 */
 		release_sock(sk);
 		current_timeo = schedule_timeout(current_timeo);
-		if (sk != asoc->base.sk)
-			goto do_error;
+		BUG_ON(sk != asoc->base.sk);
 		lock_sock(sk);
 
 		*timeo_p = current_timeo;

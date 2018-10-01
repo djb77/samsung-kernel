@@ -119,7 +119,7 @@ struct fimc_is_ishcain_mem {
 };
 
 struct fast_control_mgr {
-	u32 fast_ae_count;
+	u32 fast_capture_count;
 };
 
 struct fimc_is_device_ischain {
@@ -192,6 +192,8 @@ struct fimc_is_device_ischain {
 	u32					private_data;
 	struct fimc_is_device_sensor		*sensor;
 	struct pm_qos_request			user_qos;
+
+	/* Async metadata control to reduce frame delay */
 	struct fast_control_mgr			fastctlmgr;
 };
 

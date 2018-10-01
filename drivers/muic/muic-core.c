@@ -44,6 +44,10 @@
 #include <linux/muic/muic_notifier.h>
 #endif /* CONFIG_MUIC_NOTIFIER */
 
+#if defined(CONFIG_MUIC_SUPPORT_CCIC) && defined(CONFIG_CCIC_NOTIFIER)
+#include <linux/ccic/ccic_notifier.h>
+#endif
+
 #ifdef CONFIG_SWITCH
 static struct switch_dev switch_dock = {
 	.name = "dock",
@@ -79,14 +83,21 @@ static int muic_dock_detach_notify(void)
 static int muic_handle_dock_notification(struct notifier_block *nb,
 			unsigned long action, void *data)
 {
+#if defined(CONFIG_CCIC_NOTIFIER) && defined(CONFIG_MUIC_SUPPORT_CCIC)
+	CC_NOTI_ATTACH_TYPEDEF *pnoti = (CC_NOTI_ATTACH_TYPEDEF *)data;
+	muic_attached_dev_t attached_dev = pnoti->cable_type;
+#else
 	muic_attached_dev_t attached_dev = *(muic_attached_dev_t *)data;
+#endif
 	int type = MUIC_DOCK_DETACHED;
 	const char *name;
 
 	switch (attached_dev) {
 	case ATTACHED_DEV_DESKDOCK_MUIC:
 	case ATTACHED_DEV_DESKDOCK_VB_MUIC:
+#if defined(CONFIG_SEC_FACTORY)
 	case ATTACHED_DEV_JIG_UART_ON_MUIC:
+#endif
 		if (action == MUIC_NOTIFY_CMD_ATTACH) {
 			type = MUIC_DOCK_DESKDOCK;
 			name = "Desk Dock Attach";

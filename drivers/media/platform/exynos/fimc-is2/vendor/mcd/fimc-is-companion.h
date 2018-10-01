@@ -63,6 +63,9 @@ struct dcdc_power {
 #endif
 
 int fimc_is_comp_is_valid(void *core_data);
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+int fimc_is_comp_is_valid_fac(void *core_data);
+#endif
 int fimc_is_comp_loadfirm(void *core_data);
 #ifdef CONFIG_PREPROCESSOR_STANDBY_USE
 int fimc_is_comp_retention(void *core_data);
@@ -77,5 +80,8 @@ void fimc_is_s_int_comb_isp(void *core_data, bool on, u32 ch);
 u16 fimc_is_comp_get_ver(void);
 #ifndef CONFIG_COMPANION_DCDC_USE
 int fimc_is_comp_set_voltage(char *, int);
+#endif
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+int fimc_is_comp_fac_valid(void *core_data);
 #endif
 #endif /* FIMC_IS_COMPANION_H */

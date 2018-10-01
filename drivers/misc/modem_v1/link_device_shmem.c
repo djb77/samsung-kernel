@@ -780,7 +780,7 @@ static int xmit_ipc_to_rb(struct mem_link_device *mld, enum sipc_ch_id ch,
 	struct link_device *ld = &mld->link_dev;
 	struct io_device *iod = skbpriv(skb)->iod;
 	struct modem_ctl *mc = ld->mc;
-	struct sbd_ring_buffer *rb = sbd_ch2rb(&mld->sbd_link_dev, ch, TX);
+	struct sbd_ring_buffer *rb = sbd_ch2rb_with_skb(&mld->sbd_link_dev, ch, TX, skb);
 	struct sk_buff_head *skb_txq;
 	unsigned long flags;
 
@@ -1535,16 +1535,20 @@ static int shmem_send(struct link_device *ld, struct io_device *iod,
 	switch (id) {
 	case IPC_RAW:
 		if (unlikely(atomic_read(&ld->netif_stopped) > 0)) {
-			if (in_interrupt()) {
-				mif_err("raw tx is suspended, drop size=%d\n",
-						skb->len);
-				return -EBUSY;
-			}
+			if (skb->queue_mapping != 1) {
+				if (in_interrupt()) {
+					mif_err("raw tx is suspended, drop size=%d\n",
+							skb->len);
+					return -EBUSY;
+				}
 
-			mif_err("wait TX RESUME CMD...\n");
-			init_completion(&ld->raw_tx_resumed);
-			wait_for_completion(&ld->raw_tx_resumed);
-			mif_err("TX resumed done.\n");
+				mif_err("wait TX RESUME CMD...\n");
+				init_completion(&ld->raw_tx_resumed);
+				wait_for_completion(&ld->raw_tx_resumed);
+				mif_err("TX resumed done.\n");
+			} else {
+				mif_err_limited("Tx_flowctrl, but received ack from ch %d\n", ch);
+			}
 		}
 
 	case IPC_RFS:
@@ -1857,9 +1861,9 @@ static inline u16 read_ap2cp_irq(struct mem_link_device *mld)
 	return mbox_get_value(mld->mbx_ap2cp_msg);
 }
 
-#define SHMEM_SRINFO_OFFSET 0xF00 /* 4KB - 0x100 */
-#define SHMEM_SRINFO_SBD_OFFSET 0xFF00 /* 64KB - 0x100 */
-#define SHMEM_SRINFO_SIZE 0x100
+#define SHMEM_SRINFO_OFFSET 0x800 /* 4KB - 2KB */
+#define SHMEM_SRINFO_SBD_OFFSET 0xF800 /* 64KB - 2KB */
+#define SHMEM_SRINFO_SIZE 0x800
 #define SHMEM_SRINFO_DATA_STR 64
 
 struct shmem_srinfo {

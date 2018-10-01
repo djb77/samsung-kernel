@@ -77,7 +77,7 @@ get_aid_err:
 #endif
 
 
-static unsigned int get_actual_br_value(struct dsim_device *dsim, int index)
+unsigned int get_actual_br_value(struct dsim_device *dsim, int index)
 {
 	struct panel_private *panel = &dsim->priv;
 	struct SmtDimInfo *dimming_info = (struct SmtDimInfo *)panel->dim_info;
@@ -114,30 +114,11 @@ get_gamma_err:
 	return NULL;
 }
 
-static unsigned char *get_elvss_from_index(struct dsim_device *dsim, int index, int caps)
-{
-	struct panel_private *panel = &dsim->priv;
-	struct SmtDimInfo *dimming_info = (struct SmtDimInfo *)panel->dim_info;
-
-	if (dimming_info == NULL) {
-		dsim_err("%s : dimming info is NULL\n", __func__);
-		goto get_elvess_err;
-	}
-
-	if(caps)
-		return (unsigned char *)dimming_info[index].elvCaps;
-	else
-		return (unsigned char *)dimming_info[index].elv;
-
-get_elvess_err:
-	return NULL;
-}
-
 
 static void dsim_panel_gamma_ctrl(struct dsim_device *dsim)
 {
 	u8 *gamma = NULL;
-	
+
 	gamma = get_gamma_from_index(dsim, dsim->priv.br_index);
 	if (gamma == NULL) {
 		dsim_err("%s :faied to get gamma\n", __func__);
@@ -148,29 +129,6 @@ static void dsim_panel_gamma_ctrl(struct dsim_device *dsim)
 		dsim_err("%s : failed to write gamma \n", __func__);
 }
 
-static char dsim_panel_get_elvssoffset(struct dsim_device *dsim)
-{
-	char retVal = 0x00;
-	struct panel_private* panel = &(dsim->priv);
-	struct SmtDimInfo *dimming_info = (struct SmtDimInfo *)panel->dim_info;
-
-	if(UNDER_MINUS_20(panel->temperature)) {
-		retVal = dimming_info[panel->br_index].elvss_offset[UNDER_MINUS_TWENTY];
-		pr_info("%s under -20 %d %d\n",
-			__func__, retVal, dimming_info[panel->br_index].elvss_offset[UNDER_MINUS_TWENTY]);
-	} else if(UNDER_0(panel->temperature)) {
-		retVal = dimming_info[panel->br_index].elvss_offset[UNDER_ZERO];
-		pr_info("%s under 0 %d %d\n",
-			__func__, retVal, dimming_info[panel->br_index].elvss_offset[UNDER_ZERO]);
-	} else {
-		retVal = dimming_info[panel->br_index].elvss_offset[OVER_ZERO];
-		pr_info("%s over 0 %d %d\n",
-			__func__, retVal, dimming_info[panel->br_index].elvss_offset[OVER_ZERO]);
-	}
-
-	return retVal;
-
-}
 
 static void dsim_panel_aid_ctrl(struct dsim_device *dsim)
 {
@@ -179,18 +137,7 @@ static void dsim_panel_aid_ctrl(struct dsim_device *dsim)
 	struct panel_private *panel = &dsim->priv;
 	int i;
 
-#ifdef AID_INTERPOLATION
-	u8 recv[3];
-	if((panel->inter_aor_tbl!= NULL) && (panel->weakness_hbm_comp != HBM_COLORBLIND_ON)) {
-		u8 recv[3];
-		get_aid_interpolation(dsim, recv);
-		aid = recv;
-	}
-	else
-		aid = get_aid_from_index(dsim, dsim->priv.br_index);
-#else
 	aid = get_aid_from_index(dsim, dsim->priv.br_index);
-#endif
 
 
 	if (aid == NULL) {
@@ -209,121 +156,6 @@ static void dsim_panel_aid_ctrl(struct dsim_device *dsim)
 
 }
 
-static void dsim_panel_set_elvss(struct dsim_device *dsim)
-{
-	u8 *elvss = NULL;
-	unsigned char SEQ_ELVSS[ELVSS_LEN_MAX + 1] = {0, };
-	struct panel_private *panel = &dsim->priv;
-	int i;
-
-	// kyNam_151104_
-	return;
-
-	memcpy(SEQ_ELVSS, panel->elvss_set, panel->elvss_len);
-	elvss = get_elvss_from_index(dsim, dsim->priv.br_index, dsim->priv.caps_enable);
-	if (elvss == NULL) {
-		dsim_err("%s : failed to get elvss value\n", __func__);
-		return;
-	}
-	memcpy(&SEQ_ELVSS[panel->elvss_start_offset], elvss, 2);
-
-	SEQ_ELVSS[panel->elvss_temperature_offset] += dsim_panel_get_elvssoffset(dsim);
-
-	if(panel->elvss_tset_offset != 0xff) {
-		SEQ_ELVSS[panel->elvss_tset_offset] = (panel->temperature < 0) ? BIT(7) | abs(panel->temperature) : panel->temperature;
-	}
-	if (dsim_write_hl_data(dsim, SEQ_ELVSS, panel->elvss_len) < 0)
-		dsim_err("%s : failed to write elvss \n", __func__);
-
-
-	dsim_info("elvss len = %d\n", panel->elvss_len);
-	for(i = 0; i < panel->elvss_len; i++)
-		dsim_info("elvss %dth = %x\n", i, SEQ_ELVSS[i]);
-}
-
-
-static int dsim_panel_set_acl(struct dsim_device *dsim, int force)
-{
-	int ret = 0, level = ACL_STATUS_8P;
-	struct panel_private *panel = &dsim->priv;
-
-	// kyNam_151104_
-	return 0;
-
-	if (panel == NULL) {
-			dsim_err("%s : panel is NULL\n", __func__);
-			goto exit;
-	}
-
-	if (panel->siop_enable || LEVEL_IS_HBM(panel->auto_brightness))  // auto acl or hbm is acl on
-		goto acl_update;
-
-	if (!panel->acl_enable)
-		level = ACL_STATUS_0P;
-
-acl_update:
-	if(force || panel->current_acl != panel->acl_cutoff_tbl[level][1]) {
-		if((ret = dsim_write_hl_data(dsim,  panel->acl_opr_tbl[level], 2)) < 0) {
-			dsim_err("fail to write acl opr command.\n");
-			goto exit;
-		}
-		if((ret = dsim_write_hl_data(dsim, panel->acl_cutoff_tbl[level], 2)) < 0) {
-			dsim_err("fail to write acl command.\n");
-			goto exit;
-		}
-		dsim_info("(dsim) acl : %x, opr: %x\n",
-			panel->acl_cutoff_tbl[level][1], panel->acl_opr_tbl[level][1]);
-		panel->current_acl = panel->acl_cutoff_tbl[level][1];
-		dsim_info("(dsim) acl: %x, auto_brightness: %d\n", panel->current_acl, panel->auto_brightness);
-	}
-exit:
-	if (!ret)
-		ret = -EPERM;
-	return ret;
-}
-
-static int dsim_panel_set_vint(struct dsim_device *dsim, int force)
-{
-	int ret = 0;
-	int nit = 0;
-	int i, level = 0;
-	int arraySize = ARRAY_SIZE(VINT_DIM_TABLE);
-	struct panel_private* panel = &(dsim->priv);
-	unsigned char SEQ_VINT[VINT_LEN_MAX] = {0x00, };
-	unsigned char *vint_tbl = panel->vint_table;
-
-	return 0;	// kyNam_151104_
-	
-	level = arraySize - 1;
-
-	memcpy(SEQ_VINT, panel->vint_set, panel->vint_len);
-
-	if(UNDER_MINUS_20(panel->temperature))
-		goto set_vint;
-#ifdef CONFIG_LCD_HMT
-	if(panel->hmt_on == HMT_ON)
-		goto set_vint;
-#endif
-	nit = get_actual_br_value(dsim, panel->br_index);
-
-	for (i = 0; i < arraySize; i++) {
-		if (nit <= VINT_DIM_TABLE[i]) {
-			level = i;
-			goto set_vint;
-		}
-	}
-set_vint:
-	if(force || panel->current_vint != vint_tbl[level]) {
-		SEQ_VINT[panel->vint_len] = vint_tbl[level];
-		if ((ret = dsim_write_hl_data(dsim, SEQ_VINT, panel->vint_len)) < 0) {
-			dsim_err("fail to write vint command.\n");
-			ret = -EPERM;
-		}
-		panel->current_vint = vint_tbl[level];
-		dsim_info("vint: %02x\n", panel->current_vint);
-	}
-	return ret;
-}
 
 static int low_level_set_brightness(struct dsim_device *dsim ,int force)
 {
@@ -338,17 +170,8 @@ static int low_level_set_brightness(struct dsim_device *dsim ,int force)
 
 	dsim_panel_aid_ctrl(dsim);
 
-	dsim_panel_set_elvss(dsim);
-
-	dsim_panel_set_vint(dsim, force);
-
 	if (dsim_write_hl_data(dsim, SEQ_GAMMA_UPDATE, ARRAY_SIZE(SEQ_GAMMA_UPDATE)) < 0)
 		dsim_err("%s : failed to write gamma \n", __func__);
-
-//	if (dsim_write_hl_data(dsim, SEQ_GAMMA_UPDATE_L, ARRAY_SIZE(SEQ_GAMMA_UPDATE_L)) < 0)
-//			dsim_err("%s : failed to write gamma \n", __func__);
-
-	dsim_panel_set_acl(dsim, force);
 
 	if (dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_FC, ARRAY_SIZE(SEQ_TEST_KEY_OFF_FC)) < 0)
 			dsim_err("%s : fail to write F0 on command.\n", __func__);
@@ -359,7 +182,7 @@ static int low_level_set_brightness(struct dsim_device *dsim ,int force)
 	return 0;
 }
 
-static int get_acutal_br_index(struct dsim_device *dsim, int br)
+int get_acutal_br_index(struct dsim_device *dsim, int br)
 {
 	int i;
 	int min;
@@ -407,16 +230,9 @@ int dsim_panel_set_brightness(struct dsim_device *dsim, int force)
 	int p_br = panel->bd->props.brightness;
 	int acutal_br = 0;
 	int real_br = 0;
-	bool bIsHbm = (LEVEL_IS_HBM(panel->auto_brightness) && (p_br == panel->bd->props.max_brightness));
 
 	dsim_info( "%s +\n", __func__ );
 
-#ifdef CONFIG_LCD_HMT
-	if(panel->hmt_on == HMT_ON) {
-		pr_info("%s hmt is enabled, plz set hmt brightness \n", __func__);
-		goto set_br_exit;
-	}
-#endif
 
 	dimming = (struct dim_data *)panel->dim_data;
 	if ((dimming == NULL) || (panel->br_tbl == NULL)) {
@@ -426,25 +242,14 @@ int dsim_panel_set_brightness(struct dsim_device *dsim, int force)
 	acutal_br = panel->br_tbl[p_br];
 	panel->br_index = get_acutal_br_index(dsim, acutal_br);
 	real_br = get_actual_br_value(dsim, panel->br_index);
-	panel->caps_enable = CAPS_IS_ON(real_br);
-	panel->acl_enable = ACL_IS_ON(real_br);
-
-	if(bIsHbm) {
-		panel->br_index = panel->hbm_index;
-		panel->acl_enable = 1;				// hbm is acl on
-		panel->caps_enable = 1; 			// hbm is caps on
-		dsim_info("%s hbm %d\n", __func__, panel->br_index);
-	}
-	if(panel->siop_enable)					// check auto acl
-		panel->acl_enable = 1;
 
 	if (panel->state != PANEL_STATE_RESUMED) {
 		dsim_info("%s : panel is not active state..\n", __func__);
 		goto set_br_exit;
 	}
 
-	dsim_info("%s : platform : %d, : mapping : %d, real : %d, index : %d\n",
-		__func__, p_br, acutal_br, real_br, panel->br_index);
+	dsim_info("%s : platform : %d, : mapping : %d, real : %d, index : %d, lx: %d\n",
+		__func__, p_br, acutal_br, real_br, panel->br_index, panel->lux);
 
 	if (!force)
 		goto set_br_exit;
@@ -467,248 +272,6 @@ set_br_exit:
 
 }
 
-#ifdef CONFIG_LCD_HMT
-#ifdef CONFIG_PANEL_AID_DIMMING
-static unsigned char *get_gamma_from_index_for_hmt(struct dsim_device *dsim, int index)
-{
-	struct panel_private *panel = &dsim->priv;
-	struct SmtDimInfo *dimming_info = (struct SmtDimInfo *)panel->hmt_dim_info;
-
-	if (dimming_info == NULL) {
-		dsim_err("%s : dimming info is NULL\n", __func__);
-		goto get_gamma_err;
-	}
-
-	if (index > HMT_MAX_BR_INFO - 1)
-		index = HMT_MAX_BR_INFO - 1;
-
-	return (unsigned char *)dimming_info[index].gamma;
-
-get_gamma_err:
-	return NULL;
-}
-
-static unsigned char *get_aid_from_index_for_hmt(struct dsim_device *dsim, int index)
-{
-	struct panel_private *panel = &dsim->priv;
-	struct SmtDimInfo *dimming_info = (struct SmtDimInfo *)panel->hmt_dim_info;
-
-	if (dimming_info == NULL) {
-		dsim_err("%s : dimming info is NULL\n", __func__);
-		goto get_aid_err;
-	}
-
-	if (index > HMT_MAX_BR_INFO - 1)
-		index = HMT_MAX_BR_INFO - 1;
-
-	return (u8 *)dimming_info[index].aid;
-
-get_aid_err:
-	return NULL;
-}
-
-static unsigned char *get_elvss_from_index_for_hmt(struct dsim_device *dsim, int index, int caps)
-{
-	struct panel_private *panel = &dsim->priv;
-	struct SmtDimInfo *dimming_info = (struct SmtDimInfo *)panel->hmt_dim_info;
-
-	if (dimming_info == NULL) {
-		dsim_err("%s : dimming info is NULL\n", __func__);
-		goto get_elvess_err;
-	}
-
-	if(caps)
-		return (unsigned char *)dimming_info[index].elvCaps;
-	else
-		return (unsigned char *)dimming_info[index].elv;
-
-get_elvess_err:
-	return NULL;
-}
-
-
-static void dsim_panel_gamma_ctrl_for_hmt(struct dsim_device *dsim)
-{
-	u8 *gamma = NULL;
-	gamma = get_gamma_from_index_for_hmt(dsim, dsim->priv.hmt_br_index);
-	if (gamma == NULL) {
-		dsim_err("%s :faied to get gamma\n", __func__);
-		return;
-	}
-
-	if (dsim_write_hl_data(dsim, gamma, GAMMA_CMD_CNT) < 0)
-		dsim_err("%s : failed to write hmt gamma \n", __func__);
-}
-
-
-static void dsim_panel_aid_ctrl_for_hmt(struct dsim_device *dsim)
-{
-	u8 *aid = NULL;
-	unsigned char SEQ_AID[AID_LEN_MAX + 1] = { 0, };
-	struct panel_private *panel = &dsim->priv;
-	int i;
-
-	return ;
-	aid = get_aid_from_index_for_hmt(dsim, dsim->priv.br_index);
-
-	if (aid == NULL) {
-		dsim_err("%s : faield to get aid value\n", __func__);
-		return;
-	}
-	memcpy(SEQ_AID, panel->aid_set, panel->aid_len);
-	memcpy(&SEQ_AID[panel->aid_reg_offset], aid + 1, 2);
-
-	if (dsim_write_hl_data(dsim, SEQ_AID, panel->aid_len) < 0)
-		dsim_err("%s : failed to write aid \n", __func__);
-
-	dsim_info("aid len = %d\n", panel->aid_len);
-	for(i = 0; i < panel->aid_len; i++)
-		dsim_info("aid %dth = %x\n", i, SEQ_AID[i]);
-}
-
-static void dsim_panel_set_elvss_for_hmt(struct dsim_device *dsim)
-{
-	u8 *elvss = NULL;
-	unsigned char SEQ_ELVSS[ELVSS_LEN_MAX + 1] = {0, };
-	struct panel_private *panel = &dsim->priv;
-	int i;
-
-	memcpy(SEQ_ELVSS, panel->elvss_set, panel->elvss_len);
-	elvss = get_elvss_from_index_for_hmt(dsim, dsim->priv.hmt_br_index, dsim->priv.caps_enable);
-	if (elvss == NULL) {
-		dsim_err("%s : failed to get elvss value\n", __func__);
-		return;
-	}
-	memcpy(&SEQ_ELVSS[panel->elvss_start_offset], elvss, 2);
-
-	SEQ_ELVSS[panel->elvss_temperature_offset] += dsim_panel_get_elvssoffset(dsim);
-
-	if(panel->elvss_tset_offset != 0xff) {
-		SEQ_ELVSS[panel->elvss_tset_offset] = (panel->temperature < 0) ? BIT(7) | abs(panel->temperature) : panel->temperature;
-	}
-	if (dsim_write_hl_data(dsim, SEQ_ELVSS, panel->elvss_len) < 0)
-		dsim_err("%s : failed to write elvss \n", __func__);
-
-	dsim_info("elvss len = %d\n", panel->elvss_len);
-	for(i = 0; i < panel->elvss_len; i++)
-		dsim_info("elvss %dth = %x\n", i, SEQ_ELVSS[i]);
-}
-
-static int low_level_set_brightness_for_hmt(struct dsim_device *dsim ,int force)
-{
-	if (dsim_write_hl_data(dsim, SEQ_TEST_KEY_ON_F0, ARRAY_SIZE(SEQ_TEST_KEY_ON_F0)) < 0)
-		dsim_err("%s : fail to write F0 on command.\n", __func__);
-	if (dsim_write_hl_data(dsim, SEQ_TEST_KEY_ON_FC, ARRAY_SIZE(SEQ_TEST_KEY_ON_FC)) < 0)
-		dsim_err("%s : fail to write F0 on command.\n", __func__);
-
-	dsim_panel_gamma_ctrl_for_hmt(dsim);
-
-	dsim_panel_aid_ctrl_for_hmt(dsim);
-
-	dsim_panel_set_elvss_for_hmt(dsim);
-
-	dsim_panel_set_vint(dsim, force);
-
-	if (dsim_write_hl_data(dsim, SEQ_GAMMA_UPDATE, ARRAY_SIZE(SEQ_GAMMA_UPDATE)) < 0)
-		dsim_err("%s : failed to write gamma \n", __func__);
-	if (dsim_write_hl_data(dsim, SEQ_GAMMA_UPDATE_L, ARRAY_SIZE(SEQ_GAMMA_UPDATE_L)) < 0)
-		dsim_err("%s : failed to write gamma \n", __func__);
-
-	dsim_panel_set_acl(dsim, force);
-
-	if (dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_FC, ARRAY_SIZE(SEQ_TEST_KEY_OFF_FC)) < 0)
-		dsim_err("%s : fail to write F0 on command.\n", __func__);
-	if (dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_F0, ARRAY_SIZE(SEQ_TEST_KEY_OFF_F0)) < 0)
-		dsim_err("%s : fail to write F0 on command\n", __func__);
-
-	return 0;
-}
-
-static int get_acutal_br_index_for_hmt(struct dsim_device *dsim, int br)
-{
-	int i;
-	int min;
-	int gap;
-	int index = 0;
-	struct panel_private *panel = &dsim->priv;
-	struct SmtDimInfo *dimming_info = panel->hmt_dim_info;
-
-	if (dimming_info == NULL) {
-		dsim_err("%s : dimming_info is NULL\n", __func__);
-		return 0;
-	}
-
-	min = HMT_MAX_BRIGHTNESS;
-
-	for (i = 0; i < MAX_BR_INFO; i++) {
-		if (br > dimming_info[i].br)
-			gap = br - dimming_info[i].br;
-		else
-			gap = dimming_info[i].br - br;
-
-		if (gap == 0) {
-			index = i;
-			break;
-		}
-
-		if (gap < min) {
-			min = gap;
-			index = i;
-		}
-	}
-	return index;
-}
-
-#endif
-int dsim_panel_set_brightness_for_hmt(struct dsim_device *dsim, int force)
-{
-	int ret = 0;
-#ifndef CONFIG_PANEL_AID_DIMMING
-	dsim_info("%s:this panel does not support dimming \n", __func__);
-#else
-	struct dim_data *dimming;
-	struct panel_private *panel = &dsim->priv;
-	int p_br = panel->hmt_brightness;
-	int acutal_br = 0;
-	int prev_index = panel->hmt_br_index;
-
-	dimming = (struct dim_data *)panel->hmt_dim_data;
-	if ((dimming == NULL) || (panel->hmt_br_tbl == NULL)) {
-		dsim_info("%s : this panel does not support dimming\n", __func__);
-		return ret;
-	}
-
-	acutal_br = panel->hmt_br_tbl[p_br];
-	panel->acl_enable = 0;
-	panel->hmt_br_index = get_acutal_br_index_for_hmt(dsim, acutal_br);
-	if(panel->siop_enable)					// check auto acl
-		panel->acl_enable = 1;
-	if (panel->state != PANEL_STATE_RESUMED) {
-		dsim_info("%s : panel is not active state..\n", __func__);
-		goto set_br_exit;
-	}
-	if (!force && panel->hmt_br_index == prev_index)
-		goto set_br_exit;
-
-	dsim_info("%s : req : %d : nit : %d index : %d\n",
-		__func__, p_br, acutal_br, panel->hmt_br_index);
-
-	if (acutal_br == 0)
-		goto set_br_exit;
-
-	mutex_lock(&panel->lock);
-
-	ret = low_level_set_brightness_for_hmt(dsim, force);
-	if (ret) {
-		dsim_err("%s failed to hmt set brightness : %d\n", __func__, acutal_br);
-	}
-	mutex_unlock(&panel->lock);
-
-set_br_exit:
-#endif
-	return ret;
-}
-#endif
 
 
 
@@ -729,8 +292,8 @@ static int panel_set_brightness(struct backlight_device *bd)
 
 	dsim = container_of(priv, struct dsim_device, priv);
 
-	if (brightness < UI_MIN_BRIGHTNESS || brightness > UI_MAX_BRIGHTNESS) {
-		printk(KERN_ALERT "Brightness should be in the range of 0 ~ 255\n");
+	if (brightness < UI_MIN_BRIGHTNESS || brightness > EXTEND_BRIGHTNESS) {
+		pr_alert("Brightness %d is out of range\n", brightness);
 		ret = -EINVAL;
 		goto exit_set;
 	}
@@ -763,13 +326,8 @@ int dsim_backlight_probe(struct dsim_device *dsim)
 		ret = PTR_ERR(panel->bd);
 	}
 
-	panel->bd->props.max_brightness = UI_MAX_BRIGHTNESS;
+	panel->bd->props.max_brightness = EXTEND_BRIGHTNESS;
 	panel->bd->props.brightness = UI_DEFAULT_BRIGHTNESS;
 
-#ifdef CONFIG_LCD_HMT
-	panel->hmt_on = HMT_OFF;
-	panel->hmt_brightness = DEFAULT_HMT_BRIGHTNESS;
-	panel->hmt_br_index = 0;
-#endif
 	return ret;
 }

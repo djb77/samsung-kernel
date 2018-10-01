@@ -106,6 +106,20 @@ static int exynos_mp_cpufreq_deinit_smpl(void)
 	return 0;
 }
 
+#ifdef CONFIG_SEC_PM
+static unsigned int smpl_warn_number = 0;
+unsigned int get_smpl_warn_number(void)
+{
+	return smpl_warn_number;
+}
+EXPORT_SYMBOL(get_smpl_warn_number);
+
+void clear_smpl_warn_number(void)
+{
+	smpl_warn_number = 0;
+}
+EXPORT_SYMBOL(clear_smpl_warn_number);
+#endif
 static int exynos_mp_cpufreq_check_smpl(void)
 {
 	int ret = 0;
@@ -115,6 +129,9 @@ static int exynos_mp_cpufreq_check_smpl(void)
 	if (ret == 0) {
 		return ret;
 	} else if (ret > 0) {
+#ifdef CONFIG_SEC_PM
+		smpl_warn_number++;
+#endif
 		pr_info("CL1 : SMPL_WARN HAPPENED!\n");
 		return ret;
 	} else {

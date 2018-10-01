@@ -128,6 +128,7 @@ struct muic_irq_t {
 	int irq_adc;
 	int irq_chgtyp;
 	int irq_vbvolt;
+	int irq_dcdtmr;
 };
 
 typedef union _muic_vps_t {
@@ -180,6 +181,7 @@ typedef struct _muic_data_t {
 	bool			is_muic_ready;
 	bool			undefined_range;
 	bool			discard_interrupt;
+	bool			is_dcdtmr_intr;
 
 	struct hv_data		*phv;
 
@@ -193,12 +195,17 @@ typedef struct _muic_data_t {
 	muic_attached_dev_t	legacy_dev;
 
 	/* CCIC Notifier */
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+	struct notifier_block	manager_nb;
+#else
 	struct notifier_block	ccic_nb;
+#endif
 
 	struct delayed_work	ccic_work;
 
 	/* Operation Mode */
 	enum muic_op_mode	opmode;
+	bool 			afc_water_disable;
 #endif
 }muic_data_t;
 

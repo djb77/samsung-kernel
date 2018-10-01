@@ -566,7 +566,7 @@ defrag_map_cluster(
 	}
 	BUG_ON(!chunk);
 
-	fscore_set_vol_flags(sb, VOL_DIRTY);
+	fscore_set_vol_flags(sb, VOL_DIRTY, 0);
 
 	new_clu.dir = CLUS_EOF;
 	new_clu.size = 0;
@@ -965,9 +965,12 @@ defrag_update_fat_prev(
 				}
 			}
 
+			/* Clear extent cache */
+			extent_cache_inval_inode(inode);
+
 			/* Update FID info */
-			ino_info->fid.hint_last_off = -1;
-			ino_info->fid.hint_last_clu = 0;
+			ino_info->fid.hint_bmap.off = -1;
+			ino_info->fid.hint_bmap.clu = 0;
 
 			/* Clear old FAT-chain */
 			for (j = 0; j < chunk->nr_clus; j++)

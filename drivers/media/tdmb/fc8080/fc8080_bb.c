@@ -544,7 +544,7 @@ s32 fc8080_init(HANDLE handle)
 	bbm_write(handle, BBM_PS0_RF_ENABLE, 0x06);
 	bbm_write(handle, BBM_PS1_ADC_ENABLE, 0x07);
 	bbm_write(handle, BBM_PS2_BB_ENABLE, 0x07);
-	bbm_write(handle, BBM_PS2_BB_ADD_SHIFT, 0x21);
+	bbm_write(handle, BBM_PS2_BB_ADD_SHIFT, 0x31);
 #else
 	bbm_write(handle, BBM_PS0_RF_ENABLE, 0x04);
 	bbm_write(handle, BBM_PS1_ADC_ENABLE, 0x05);

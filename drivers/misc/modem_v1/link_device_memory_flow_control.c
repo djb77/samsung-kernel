@@ -142,12 +142,6 @@ int check_tx_flow_ctrl(struct mem_link_device *mld, struct mem_ipc_device *dev)
 
 	atomic_inc(&dev->txq.busy);
 
-	if (busy_count >= MAX_TX_BUSY_COUNT) {
-		mif_err("%s->%s: ERR! %s TXQ must be DEAD (busy_cnt %d)\n",
-			ld->name, mc->name, dev->name, busy_count);
-		return -EPIPE;
-	}
-
 	if (cp_online(mc) && count_flood(busy_count, BUSY_COUNT_MASK)) {
 		send_req_ack(mld, dev);
 		return -ETIME;

@@ -33,6 +33,9 @@
 #define ALLOC_COLD_PACKING	2
 #define ALLOC_COLD_SEQ		4
 
+/* Minimum sectors for support AMAP create */
+#define AMAP_MIN_SUPPORT_SECTORS	1048576
+
 #define amap_add_hot_au(amap, au) amap_insert_to_list(au, &amap->slist_hot)
 
 /* singly linked list */

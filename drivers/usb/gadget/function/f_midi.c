@@ -172,6 +172,24 @@ static struct usb_endpoint_descriptor midi_bulk_in_desc = {
 	.bmAttributes =		USB_ENDPOINT_XFER_BULK,
 };
 
+static struct usb_ss_ep_comp_descriptor midi_ss_in_comp_desc  = {
+	.bLength =              sizeof(midi_ss_in_comp_desc),
+	.bDescriptorType =      USB_DT_SS_ENDPOINT_COMP,
+
+	/* the following 2 values can be tweaked if necessary */
+	/* .bMaxBurst =         0, */
+	/* .bmAttributes =      0, */
+};
+
+static struct usb_ss_ep_comp_descriptor midi_ss_out_comp_desc  = {
+	.bLength =              sizeof(midi_ss_out_comp_desc),
+	.bDescriptorType =      USB_DT_SS_ENDPOINT_COMP,
+
+	/* the following 2 values can be tweaked if necessary */
+	/* .bMaxBurst =         0, */
+	/* .bmAttributes =      0, */
+};
+
 /* B.6.2  Class-specific MS Bulk IN Endpoint Descriptor */
 static struct usb_ms_endpoint_descriptor_16 midi_ms_in_desc = {
 	/* .bLength =		DYNAMIC */
@@ -360,6 +378,9 @@ static int f_midi_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	}
 
 	midi->out_ep->driver_data = midi;
+
+	if (midi->gadget->speed == USB_SPEED_SUPER)
+		midi->buflen = 1024;
 
 	/* allocate a bunch of read buffers and queue them all at once. */
 	for (i = 0; i < midi->qlen && err == 0; i++) {
@@ -772,8 +793,14 @@ f_midi_bind(struct usb_configuration *c, struct usb_function *f)
 	midi->out_ep->driver_data = cdev;	/* claim */
 
 	/* allocate temporary function list */
-	midi_function = kcalloc((MAX_PORTS * 4) + 9, sizeof(*midi_function),
-				GFP_KERNEL);
+	if (gadget_is_superspeed(c->cdev->gadget)) {
+		midi_function = kcalloc((MAX_PORTS * 4) + 11, sizeof(*midi_function),
+					GFP_KERNEL);
+	}
+	else {
+		midi_function = kcalloc((MAX_PORTS * 4) + 9, sizeof(*midi_function),
+					GFP_KERNEL);
+	}
 	if (!midi_function) {
 		status = -ENOMEM;
 		goto fail;
@@ -879,17 +906,37 @@ f_midi_bind(struct usb_configuration *c, struct usb_function *f)
 		goto fail_f_midi;
 
 	if (gadget_is_dualspeed(c->cdev->gadget)) {
-		midi_bulk_in_desc.wMaxPacketSize = cpu_to_le16(midi->buflen);
-		midi_bulk_out_desc.wMaxPacketSize = cpu_to_le16(midi->buflen);
+		midi_bulk_in_desc.wMaxPacketSize = cpu_to_le16(512);
+		midi_bulk_out_desc.wMaxPacketSize = cpu_to_le16(512);
 		f->hs_descriptors = usb_copy_descriptors(midi_function);
 		if (!f->hs_descriptors)
 			goto fail_f_midi;
+	}
+
+	if (gadget_is_superspeed(c->cdev->gadget)) {
+		i = i - 4;
+
+		midi_function[i++] = (struct usb_descriptor_header *)
+								&midi_ss_out_comp_desc;
+		midi_function[i++] = (struct usb_descriptor_header *) &midi_ms_out_desc;
+		midi_function[i++] = (struct usb_descriptor_header *) &midi_bulk_in_desc;
+		midi_function[i++] = (struct usb_descriptor_header *)
+								&midi_ss_in_comp_desc;
+		midi_function[i++] = (struct usb_descriptor_header *) &midi_ms_in_desc;
+		midi_function[i++] = NULL;
+		midi_bulk_in_desc.wMaxPacketSize = cpu_to_le16(1024);
+		midi_bulk_out_desc.wMaxPacketSize = cpu_to_le16(1024);
+		f->ss_descriptors = usb_copy_descriptors(midi_function);
+		if (!f->ss_descriptors)
+			goto  fail_ss_f_midi;
 	}
 
 	kfree(midi_function);
 
 	return 0;
 
+ fail_ss_f_midi:
+	usb_free_descriptors(f->ss_descriptors);
 fail_f_midi:
 	kfree(midi_function);
 	usb_free_descriptors(f->hs_descriptors);

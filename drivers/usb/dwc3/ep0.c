@@ -72,10 +72,21 @@ static int dwc3_ep0_start_trans(struct dwc3 *dwc, u8 epnum, dma_addr_t buf_dma,
 
 	trb = dwc->ep0_trb;
 
+	if (!trb) {
+		dev_err(dwc->dev, "trb is NULL\n");
+		return -EINVAL;
+	}
 	trb->bpl = lower_32_bits(buf_dma);
 	trb->bph = upper_32_bits(buf_dma);
 	trb->size = len;
 	trb->ctrl = type;
+
+	if (trb->bpl == 0 && trb->bph == 0) {
+		dev_err(dwc->dev, "trb buffer addr is NULL\n");
+		trb->size = 0;
+		trb->ctrl = 0;
+		return -EINVAL;
+	}
 
 	trb->ctrl |= (DWC3_TRB_CTRL_HWO
 			| DWC3_TRB_CTRL_LST
@@ -341,7 +352,9 @@ static int dwc3_ep0_handle_status(struct dwc3 *dwc,
 {
 	struct dwc3_ep		*dep;
 	u32			recip;
+#ifndef CONFIG_USB_ANDROID_SAMSUNG_DISABLE_U1_U2
 	u32			reg;
+#endif
 	u16			usb_status = 0;
 	__le16			*response_pkt;
 
@@ -353,6 +366,7 @@ static int dwc3_ep0_handle_status(struct dwc3 *dwc,
 		 */
 		usb_status |= dwc->is_selfpowered << USB_DEVICE_SELF_POWERED;
 
+#ifndef CONFIG_USB_ANDROID_SAMSUNG_DISABLE_U1_U2
 		if (dwc->speed == DWC3_DSTS_SUPERSPEED) {
 			reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 			if (reg & DWC3_DCTL_INITU1ENA)
@@ -360,6 +374,7 @@ static int dwc3_ep0_handle_status(struct dwc3 *dwc,
 			if (reg & DWC3_DCTL_INITU2ENA)
 				usb_status |= 1 << USB_DEV_STAT_U2_ENABLED;
 		}
+#endif
 
 		break;
 
@@ -401,7 +416,9 @@ static int dwc3_ep0_handle_feature(struct dwc3 *dwc,
 	u32			recip;
 	u32			wValue;
 	u32			wIndex;
+#ifndef CONFIG_USB_ANDROID_SAMSUNG_DISABLE_U1_U2
 	u32			reg;
+#endif
 	int			ret;
 	enum usb_device_state	state;
 
@@ -416,6 +433,7 @@ static int dwc3_ep0_handle_feature(struct dwc3 *dwc,
 		switch (wValue) {
 		case USB_DEVICE_REMOTE_WAKEUP:
 			break;
+#ifndef CONFIG_USB_ANDROID_SAMSUNG_DISABLE_U1_U2
 		/*
 		 * 9.4.1 says only only for SS, in AddressState only for
 		 * default control pipe
@@ -455,6 +473,7 @@ static int dwc3_ep0_handle_feature(struct dwc3 *dwc,
 				reg &= ~DWC3_DCTL_INITU2ENA;
 			dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 			break;
+#endif
 
 		case USB_DEVICE_LTM_ENABLE:
 			return -EINVAL;
@@ -559,7 +578,9 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 	enum usb_device_state state = dwc->gadget.state;
 	u32 cfg;
 	int ret;
+#ifndef CONFIG_USB_ANDROID_SAMSUNG_DISABLE_U1_U2
 	u32 reg;
+#endif
 
 	dwc->start_config_issued = false;
 	cfg = le16_to_cpu(ctrl->wValue);
@@ -584,6 +605,7 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 				usb_gadget_set_state(&dwc->gadget,
 						USB_STATE_CONFIGURED);
 
+#ifndef CONFIG_USB_ANDROID_SAMSUNG_DISABLE_U1_U2
 			/*
 			 * NEGATIVE RX DETECTION
 			 * Some host controllers (e.g. Intel) perform far-end
@@ -605,7 +627,7 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 						DWC3_DCTL_ACCEPTU2ENA);
 				dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 			}
-
+#endif
 			dwc->resize_fifos = true;
 			dwc3_trace(trace_dwc3_ep0, "resize FIFOs flag SET");
 		}

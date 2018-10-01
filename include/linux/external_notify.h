@@ -22,6 +22,8 @@
  *
  */
 
+  /* usb notify layer v2.0 */
+
 #ifndef __EXTERNAL_NOTIFY_H__
 #define __EXTERNAL_NOTIFY_H__
 
@@ -40,19 +42,20 @@ enum external_notify_device {
 	EXTERNAL_NOTIFY_DEV_CHARGER,
 };
 
-enum external_notify_status {
-	EXTERNAL_NOTIFY_DISABLE = 0,
-	EXTERNAL_NOTIFY_ENABLE,
+enum external_notify_condev {
+	EXTERNAL_NOTIFY_NONE = 0,
+	EXTERNAL_NOTIFY_GPAD,
+	EXTERNAL_NOTIFY_LANHUB,
 };
 
 #ifdef CONFIG_USB_EXTERNAL_NOTIFY
-extern int send_external_notify(unsigned long cmd, int enable);
+extern int send_external_notify(unsigned long cmd, int data);
 extern int usb_external_notify_register(struct notifier_block *nb,
 		notifier_fn_t notifier, int listener);
 extern int usb_external_notify_unregister(struct notifier_block *nb);
 #else
 static inline int send_external_notify(unsigned long cmd,
-			int enable) {return 0; }
+			int data) {return 0; }
 static inline int usb_external_notify_register(struct notifier_block *nb,
 			notifier_fn_t notifier, int listener) {return 0; }
 static inline int usb_external_notify_unregister(struct notifier_block *nb)

@@ -6,6 +6,7 @@
 #include "pwrcal-vclk.h"
 #include "pwrcal-rae.h"
 #include "pwrcal-asv.h"
+#include "pwrcal-dram.h"
 #include <linux/exynos-ss.h>
 
 #define MARGIN_UNIT 6250
@@ -599,7 +600,7 @@ int cal_dfs_get_rate_asv_table(unsigned int id,
 	return num_of_entry;
 }
 
-unsigned int cal_asv_pmic_info(void)
+int cal_asv_pmic_info(void)
 {
 	if (cal_asv_ops.asv_pmic_info)
 		return cal_asv_ops.asv_pmic_info();
@@ -666,6 +667,12 @@ int cal_asv_get_ids_info(unsigned int domain)
 		return cal_asv_ops.get_ids_info(domain);
 
 	return -1;
+}
+
+void cal_dram_print_info(void)
+{
+	if (cal_dram_ops.print_dram_info)
+		cal_dram_ops.print_dram_info();
 }
 
 int cal_init(void)

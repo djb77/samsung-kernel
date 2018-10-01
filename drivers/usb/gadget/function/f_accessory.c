@@ -41,6 +41,7 @@
 
 #include <linux/configfs.h>
 #include <linux/usb/composite.h>
+#include <linux/usb_notify.h>
 
 #define MAX_INST_NAME_LEN        40
 #define BULK_BUFFER_SIZE    16384
@@ -1038,6 +1039,9 @@ static void acc_start_work(struct work_struct *data)
 {
 	char *envp[2] = { "ACCESSORY=START", NULL };
 	kobject_uevent_env(&acc_device.this_device->kobj, KOBJ_CHANGE, envp);
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+	store_usblog_notify(NOTIFY_USBSTATE, (void *)envp[0], NULL);
+#endif
 }
 
 static int acc_hid_init(struct acc_hid_dev *hdev)

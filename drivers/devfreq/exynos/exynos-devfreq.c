@@ -30,6 +30,9 @@
 #include <soc/samsung/ect_parser.h>
 
 #include "../governor.h"
+#if defined(CONFIG_KFAULT_AUTO_SUMMARY)
+#include <linux/sec_debug.h>
+#endif
 
 static int exynos_devfreq_tmu_notifier(struct notifier_block *nb,
 					unsigned long event, void *v);
@@ -42,6 +45,14 @@ struct exynos_devfreq_init_func {
 
 static struct exynos_devfreq_init_func exynos_devfreq_init[DEVFREQ_TYPE_END];
 static struct exynos_devfreq_data *devfreq_data[DEVFREQ_TYPE_END];
+
+#if defined(CONFIG_KFAULT_AUTO_SUMMARY)
+static struct sec_debug_auto_comm_freq_info* auto_comm_devfreq_info;
+void sec_debug_set_auto_comm_last_devfreq_buf(struct sec_debug_auto_comm_freq_info* freq_info)
+{
+	auto_comm_devfreq_info = freq_info;;
+}
+#endif
 
 #ifdef CONFIG_ARM_EXYNOS_DEVFREQ_DEBUG
 static ssize_t show_exynos_devfreq_info(struct device *dev,
@@ -1341,7 +1352,7 @@ static int exynos_devfreq_target(struct device *dev,
 
 	if (data->use_cl_dvfs && !data->volt_offset) {
 		if (data->ops.cl_dvfs_start) {
-			data->ops.cl_dvfs_start(data);
+			ret = data->ops.cl_dvfs_start(data);
 			if (ret) {
 				dev_err(dev, "cl_dvfs does not start\n");
 				goto out;
@@ -1679,6 +1690,16 @@ static int exynos_devfreq_probe(struct platform_device *pdev)
 
 	dev_info(data->dev, "devfreq is initialized!!\n");
 
+#if defined(CONFIG_KFAULT_AUTO_SUMMARY)
+	if(auto_comm_devfreq_info) {
+		int offset = offsetof(struct exynos_devfreq_data, new_freq);
+		if(data->devfreq_type == DEVFREQ_INT)
+			auto_comm_devfreq_info[FREQ_INFO_INT].last_freq_info = virt_to_phys(data) + offset;
+		else if(data->devfreq_type == DEVFREQ_MIF)
+			auto_comm_devfreq_info[FREQ_INFO_MIF].last_freq_info = virt_to_phys(data) + offset;
+	}
+#endif
+
 	return 0;
 
 err_pm_noti:
@@ -1736,6 +1757,15 @@ err_data:
 static int exynos_devfreq_remove(struct platform_device *pdev)
 {
 	struct exynos_devfreq_data *data = platform_get_drvdata(pdev);
+
+#if defined(CONFIG_KFAULT_AUTO_SUMMARY)
+	if(auto_comm_devfreq_info) {
+		if(data->devfreq_type == DEVFREQ_INT)
+			auto_comm_devfreq_info[FREQ_INFO_INT].last_freq_info = 0;
+		else if(data->devfreq_type == DEVFREQ_MIF)
+			auto_comm_devfreq_info[FREQ_INFO_MIF].last_freq_info = 0;
+	}
+#endif
 
 #ifdef CONFIG_ARM_EXYNOS_DEVFREQ_DEBUG
 	sysfs_remove_group(&data->devfreq->dev.kobj,
@@ -1803,7 +1833,6 @@ static const struct dev_pm_ops exynos_devfreq_pm_ops = {
 };
 
 static struct platform_driver exynos_devfreq_driver = {
-	.probe		= exynos_devfreq_probe,
 	.remove		= exynos_devfreq_remove,
 	.id_table	= exynos_devfreq_driver_ids,
 	.driver = {
@@ -1814,7 +1843,7 @@ static struct platform_driver exynos_devfreq_driver = {
 	},
 };
 
-module_platform_driver(exynos_devfreq_driver);
+module_platform_driver_probe(exynos_devfreq_driver, exynos_devfreq_probe);
 
 MODULE_AUTHOR("Taekki Kim <taekki.kim@samsung.com>");
 MODULE_DESCRIPTION("Samsung EXYNOS Soc series devfreq common driver");

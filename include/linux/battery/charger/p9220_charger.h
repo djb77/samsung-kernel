@@ -89,7 +89,8 @@
 #define P9220_RXID_5_REG					0x61
 #define P9220_MOD_DEPTH_REG                 0x63
 #define P9220_WPC_FOD_0A_REG				0x68
-#define P9220_TX_PING_FREQ_REG				0xFC
+#define P9220_RX_PING_FREQ_L_REG			0xFC
+#define P9220_RX_PING_FREQ_H_REG			0xFD
 
 #define P9220_NUM_FOD_REG					12
 
@@ -236,7 +237,8 @@
 #define P9220_VOUT_7V_VAL					0x23
 #define P9220_VOUT_8V_VAL					0x2d
 /* We set VOUT to 10V actually for HERO for RE/CE standard authentication */
-#define P9220_VOUT_9V_VAL					0x41
+#define P9220_VOUT_9V_VAL					0x37
+#define P9220_VOUT_10V_VAL					0x41
 
 #define P9220_FW_RESULT_DOWNLOADING			2
 #define P9220_FW_RESULT_PASS				1
@@ -292,7 +294,7 @@ enum {
     P9220_ADC_ALLIGN_X,
     P9220_ADC_ALLIGN_Y,
     P9220_ADC_OP_FRQ,
-    P9220_ADC_TX_PING,
+    P9220_ADC_RX_PING_FRQ,
 };
 
 enum {
@@ -435,6 +437,8 @@ struct p9220_charger_platform_data {
 	int is_charging;
 	u32 *fod_data_cv;
 	u32 *fod_data;
+	u32 *fod_hv_data_cv;
+	u32 *fod_hv_data;
 	int fod_data_check;
 	bool ic_on_mode;
 	int hw_rev_changed; /* this is only for noble/zero2 */
@@ -453,6 +457,7 @@ struct p9220_charger_platform_data {
 	int wpc_cv_call_vout;
 	int wpc_cc_call_vout;
 	int opfq_cnt;
+	u32 hv_vout_wa; /* this is only for Hero/Poseidon */
 };
 
 #define p9220_charger_platform_data_t \
@@ -482,6 +487,7 @@ struct p9220_charger_data {
 	int size;
 	int is_afc;
 	int pad_vout;
+	int capacity;
 };
 
 #endif /* __p9220_CHARGER_H */

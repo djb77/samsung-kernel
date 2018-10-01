@@ -1248,7 +1248,16 @@ static void wq_func_subdev(struct fimc_is_subdev *leader,
 	BUG_ON(!sub_frame);
 
 	ldr_vctx = leader->vctx;
+	if (unlikely(!ldr_vctx)) {
+		mserr("ldr_vctx is NULL", subdev, subdev);
+		return;
+	}
+
 	sub_vctx = subdev->vctx;
+	if (unlikely(!sub_vctx)) {
+		mserr("ldr_vctx is NULL", subdev, subdev);
+		return;
+	}
 
 	ldr_framemgr = GET_FRAMEMGR(ldr_vctx);
 	sub_framemgr = GET_FRAMEMGR(sub_vctx);
@@ -1305,15 +1314,15 @@ static void wq_func_subdev(struct fimc_is_subdev *leader,
 
 	clear_bit(subdev->id, &ldr_frame->out_flag);
 
+	/* for debug */
+	DBG_DIGIT_TAG((ldr_frame->group) ? ((struct fimc_is_group *)ldr_frame->group)->slot : 0,
+			0, GET_QUEUE(sub_vctx), sub_frame, fcount);
+
 complete:
 	sub_frame->stream->fcount = fcount;
 	sub_frame->stream->rcount = rcount;
 
 	trans_frame(sub_framemgr, sub_frame, FS_COMPLETE);
-
-	/* for debug */
-	DBG_DIGIT_TAG((ldr_frame->group) ? ((struct fimc_is_group *)ldr_frame->group)->slot : 0,
-			0, GET_QUEUE(sub_vctx), sub_frame, fcount);
 
 	CALL_VOPS(sub_vctx, done, sub_frame->index, done_state);
 }
@@ -2237,14 +2246,23 @@ static void wq_func_group_xxx(struct fimc_is_groupmgr *groupmgr,
 	BUG_ON(!framemgr);
 	BUG_ON(!frame);
 
+	/* perframe error control */
+	if (test_bit(FIMC_IS_SUBDEV_PARAM_ERR, &group->leader.state)) {
+		if (!status) {
+			if (frame->lindex || frame->hindex)
+				clear_bit(FIMC_IS_SUBDEV_PARAM_ERR, &group->leader.state);
+			else
+				status = SHOT_ERR_PERFRAME;
+		}
+	} else {
+		if (status && (frame->lindex || frame->hindex))
+			set_bit(FIMC_IS_SUBDEV_PARAM_ERR, &group->leader.state);
+	}
+
 	if (status) {
 		mgrinfo("[ERR] NDONE(%d, E%X(L%X H%X))\n", group, group, frame, frame->index, status,
 			lindex, hindex);
 		done_state = VB2_BUF_STATE_ERROR;
-
-		/* specially force set is enabled when perframe control is fail */
-		if (lindex || hindex)
-			set_bit(FIMC_IS_SUBDEV_FORCE_SET, &group->leader.state);
 
 		if (status == IS_SHOT_OVERFLOW) {
 #ifdef OVERFLOW_PANIC_ENABLE
@@ -2566,32 +2584,48 @@ static void interface_timer(unsigned long data)
 
 			if (test_bit(FIMC_IS_GROUP_START, &device->group_3aa.state)) {
 				framemgr = GET_SUBDEV_FRAMEMGR(&device->group_3aa.leader);
-				framemgr_e_barrier_irqs(framemgr, FMGR_IDX_6, flags);
-				scount_3ax = framemgr->queued_count[FS_PROCESS];
-				shot_count += scount_3ax;
-				framemgr_x_barrier_irqr(framemgr, FMGR_IDX_6, flags);
+				if (framemgr) {
+					framemgr_e_barrier_irqs(framemgr, FMGR_IDX_6, flags);
+					scount_3ax = framemgr->queued_count[FS_PROCESS];
+					shot_count += scount_3ax;
+					framemgr_x_barrier_irqr(framemgr, FMGR_IDX_6, flags);
+				} else {
+					minfo("\n### 3aa framemgr is null ###\n", device);
+				}
 			}
 
 			if (test_bit(FIMC_IS_GROUP_START, &device->group_isp.state)) {
 				framemgr = GET_SUBDEV_FRAMEMGR(&device->group_isp.leader);
-				framemgr_e_barrier_irqs(framemgr, FMGR_IDX_7, flags);
-				scount_isp = framemgr->queued_count[FS_PROCESS];
-				shot_count += scount_isp;
-				framemgr_x_barrier_irqr(framemgr, FMGR_IDX_7, flags);
+				if (framemgr) {
+					framemgr_e_barrier_irqs(framemgr, FMGR_IDX_7, flags);
+					scount_isp = framemgr->queued_count[FS_PROCESS];
+					shot_count += scount_isp;
+					framemgr_x_barrier_irqr(framemgr, FMGR_IDX_7, flags);
+				} else {
+					minfo("\n### isp framemgr is null ###\n", device);
+				}
 			}
 
 			if (test_bit(FIMC_IS_GROUP_START, &device->group_dis.state)) {
 				framemgr = GET_SUBDEV_FRAMEMGR(&device->group_dis.leader);
-				framemgr_e_barrier_irqs(framemgr, FMGR_IDX_8, flags);
-				shot_count += framemgr->queued_count[FS_PROCESS];
-				framemgr_x_barrier_irqr(framemgr, FMGR_IDX_8, flags);
+				if (framemgr) {
+					framemgr_e_barrier_irqs(framemgr, FMGR_IDX_8, flags);
+					shot_count += framemgr->queued_count[FS_PROCESS];
+					framemgr_x_barrier_irqr(framemgr, FMGR_IDX_8, flags);
+				} else {
+					minfo("\n### dis framemgr is null ###\n", device);
+				}
 			}
 
 			if (test_bit(FIMC_IS_GROUP_START, &device->group_vra.state)) {
 				framemgr = GET_SUBDEV_FRAMEMGR(&device->group_vra.leader);
-				framemgr_e_barrier_irqs(framemgr, FMGR_IDX_31, flags);
-				shot_count += framemgr->queued_count[FS_PROCESS];
-				framemgr_x_barrier_irqr(framemgr, FMGR_IDX_31, flags);
+				if (framemgr) {
+					framemgr_e_barrier_irqs(framemgr, FMGR_IDX_31, flags);
+					shot_count += framemgr->queued_count[FS_PROCESS];
+					framemgr_x_barrier_irqr(framemgr, FMGR_IDX_31, flags);
+				} else {
+					minfo("\n### vra framemgr is null ###\n", device);
+				}
 			}
 		}
 
@@ -2995,7 +3029,7 @@ int fimc_is_interface_probe(struct fimc_is_interface *this,
 	init_waitqueue_head(&this->idle_wait_queue);
 	spin_lock_init(&this->shot_check_lock);
 
-	this->workqueue = alloc_workqueue("fimc-is/highpri", WQ_HIGHPRI, 0);
+	this->workqueue = alloc_workqueue("fimc-is/highpri", WQ_HIGHPRI | WQ_UNBOUND, 0);
 	if (!this->workqueue)
 		probe_warn("failed to alloc own workqueue, will be use global one");
 

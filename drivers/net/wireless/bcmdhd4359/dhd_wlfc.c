@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_wlfc.c 579277 2015-08-14 04:49:50Z $
+ * $Id: dhd_wlfc.c 656657 2016-08-29 14:34:56Z $
  *
  */
 
@@ -125,8 +125,7 @@ _dhd_wlfc_prec_enque(struct pktq *pq, int prec, void* p, bool qHead,
 		return;
 
 	ASSERT(prec >= 0 && prec < pq->num_prec);
-	/* queueing chains not allowed and no segmented SKB (Kernel-3.18.y) */
-	ASSERT(!((PKTLINK(p) != NULL) && (PKTLINK(p) != p)));
+	ASSERT(PKTLINK(p) == NULL);		/* queueing chains not allowed */
 
 	ASSERT(!pktq_full(pq));
 	ASSERT(!pktq_pfull(pq, prec));

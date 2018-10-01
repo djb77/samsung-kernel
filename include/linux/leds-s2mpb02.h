@@ -42,6 +42,22 @@
 #define S2MPB02_FLED_CTRL1_LV_ENABLE 1
 #define S2MPB02_FLED_CTRL1_LV_DISABLE 0
 
+#ifdef CONFIG_LEDS_IRIS_IRLED_CERTIFICATE_SUPPORT
+#define S2MPB02_FLED_CTRL2_TORCH_ON 0xF0
+#define S2MPB02_FLED_CTRL2_FLASH_ON 0x38
+#define S2MPB02_FLED_CTRL2_TORCH_MASK 0xFB
+
+#define S2MPB02_FLED_CUR2_TORCH_CUR2_MASK 0x0F
+
+#define S2MPB02_FLED_TIME2_IRMAX_TIMER_DISABLE 0x00
+#define S2MPB02_FLED_TIME2_IRMAX_TIMER_EN_MASK 0x01
+#endif
+
+#define S2MPB02_FLED2_MAX_TIME_MASK 0x1F
+#define S2MPB02_FLED2_MAX_TIME_CLEAR_MASK 0x04
+#define S2MPB02_FLED2_MAX_TIME_EN_MASK 0x01
+#define S2MPB02_FLED2_IRON2_MASK 0xC0
+
 enum s2mpb02_led_id {
 	S2MPB02_FLASH_LED_1,
 	S2MPB02_TORCH_LED_1,
@@ -139,5 +155,12 @@ struct s2mpb02_led_platform_data {
 	int num_leds;
 	struct s2mpb02_led leds[S2MPB02_LED_MAX];
 };
+
+#ifdef CONFIG_LEDS_IRIS_IRLED_SUPPORT
+extern int s2mpb02_ir_led_current(uint32_t current_value);
+extern int s2mpb02_ir_led_pulse_width(uint32_t width);
+extern int s2mpb02_ir_led_pulse_delay(uint32_t delay);
+extern int s2mpb02_ir_led_max_time(uint32_t max_time);
+#endif
 
 #endif

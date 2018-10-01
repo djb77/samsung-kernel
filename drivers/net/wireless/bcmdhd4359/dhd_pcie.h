@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.h 607608 2015-12-21 13:14:19Z $
+ * $Id: dhd_pcie.h 648967 2016-07-14 09:15:06Z $
  */
 
 
@@ -105,10 +105,6 @@ extern int exynos_pcie_deregister_event(struct exynos_pcie_register_event *reg);
 /* Device console log buffer state */
 #define CONSOLE_LINE_MAX	192
 #define CONSOLE_BUFFER_MAX	(8 * 1024)
-
-#ifndef MAX_CNTL_D3ACK_TIMEOUT
-#define MAX_CNTL_D3ACK_TIMEOUT 2
-#endif /* MAX_CNTL_D3ACK_TIMEOUT */
 
 #ifdef DHD_DEBUG
 

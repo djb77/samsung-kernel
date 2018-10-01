@@ -111,6 +111,10 @@ extern bool companion_front_lsc_isvalid;
 extern bool crc32_c1_check;
 extern bool crc32_c1_check_front;
 extern bool is_dumped_c1_fw_loading_needed;
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+extern int comp_fac_i2c_check;
+extern u16 comp_fac_valid_check;
+#endif
 static u16 companion_ver;
 bool pdaf_shad_valid;
 
@@ -1311,6 +1315,30 @@ exit:
 	return ret;
 }
 
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+int fimc_is_comp_is_valid_fac(void *core_data)
+{
+	struct fimc_is_core *core = core_data;
+	int ret = 0;
+	u16 companion_id = 0;
+
+	if (!core->spi1.device) {
+		info("spi1 device is not available\n");
+		goto exit;
+	}
+
+	/* check validation(Read data must be 0x73C3) */
+	ret = fimc_is_comp_i2c_read(core->client0, 0x0, &companion_id);
+	info("Companion validation: 0x%04x ret:%d\n", companion_id, ret);
+
+	comp_fac_i2c_check = ret;
+	comp_fac_valid_check = companion_id;
+
+exit:
+	return ret;
+}
+#endif
+
 int fimc_is_comp_read_ver(void *core_data)
 {
 	struct fimc_is_core *core = core_data;
@@ -1329,6 +1357,23 @@ int fimc_is_comp_read_ver(void *core_data)
 p_err:
 	return ret;
 }
+
+#ifdef CONFIG_COMPANION_FACTORY_VALIDATION
+int fimc_is_comp_fac_valid(void *core_data)
+{
+	struct fimc_is_core *core = core_data;
+	int ret = 0;
+	struct fimc_is_device_preproc *device_preproc;
+	struct fimc_is_vender_specific *specific;
+
+	device_preproc = &core->preproc;
+	specific = core->vender.private_data;
+	ret = fimc_is_preproc_fac_valid_check(device_preproc, specific->rear_sensor_id, 0);
+	info("%s: rear_sensor_id:0x%04x ret:%d\n", __func__, specific->rear_sensor_id, ret);
+
+	return ret;
+}
+#endif
 
 u16 fimc_is_comp_get_ver(void)
 {

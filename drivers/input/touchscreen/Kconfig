@@ -970,9 +970,18 @@ config TOUCHSCREEN_MXT540E
          To compile this driver as a module, choose M here: the
          module will be called mxt540e.
 
+config TOUCHSCREEN_SUPPORT_MULTIMEDIA
+	bool "TSP suppory multimedia"
+	help
+	  Say Y here to enable multimedia Touch in supported drivers.
+
+	  If unsure, say N.
+
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
 source "drivers/input/touchscreen/synaptics_dsx2/Kconfig"
 source "drivers/input/touchscreen/stm/Kconfig"
 source "drivers/input/touchscreen/stm/fts7/Kconfig"
+source "drivers/input/touchscreen/stm/fts8/Kconfig"
 source "drivers/input/touchscreen/sec_ts/Kconfig"
+source "drivers/input/touchscreen/mxt_t/Kconfig"
 endif

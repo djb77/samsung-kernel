@@ -103,12 +103,16 @@
 #define FW_IMX240_Q		"H16US"
 #define FW_IMX240_Q_C1		"H16UL"
 #define FW_IMX260_C		"C12LS"
+#define FW_IMX260_D		"D12LS"
 #define FW_2P2_12M		"G16LL"
 #define FW_4H5			"F08LL"
+#define FW_4H5YC_P        "P08LL"
 #define FW_2P3			"J16LL"
 #define FW_2T2			"A20LL"
 #define FW_3P3			"D16LL"
 #define FW_2L1_C		"C12LL"
+#define FW_2L1_D		"D12LL"
+#define FW_4E6		 	"I05LL"	
 
 #define SDCARD_FW
 #define FIMC_IS_FW_2P2				"fimc_is_fw2_2p2.bin"
@@ -117,24 +121,30 @@
 #define FIMC_IS_FW_3P3				"fimc_is_fw2_3p3.bin"
 #define FIMC_IS_FW_3L2				"fimc_is_fw2_3l2.bin"
 #define FIMC_IS_FW_4H5				"fimc_is_fw2_4h5.bin"
+#define FIMC_IS_FW_4E6				"fimc_is_fw2_4e6.bin"
 #define FIMC_IS_FW_IMX134			"fimc_is_fw2_imx134.bin"
 #define FIMC_IS_FW_IMX228			"fimc_is_fw2_imx228.bin"
 #define FIMC_IS_FW_IMX240		"fimc_is_fw2_imx240.bin"
 #define FIMC_IS_FW_IMX260		"fimc_is_fw2_imx260.bin"
+#define FIMC_IS_FW_IMX260_D		"fimc_is_fw2_imx260_d.bin"
 #define FIMC_IS_FW_2T2_EVT0				"fimc_is_fw2_2t2_evt0.bin"
 #define FIMC_IS_FW_2T2_EVT1				"fimc_is_fw2_2t2_evt1.bin"
 #define FIMC_IS_FW_2L1					"fimc_is_fw2_2l1.bin"
+#define FIMC_IS_FW_2L1_D					"fimc_is_fw2_2l1_d.bin"
 #define FIMC_IS_FW_COMPANION_EVT0				"companion_fw_evt0.bin"
 #define FIMC_IS_FW_COMPANION_EVT1				"companion_fw_evt1.bin"
 #define FIMC_IS_FW_COMPANION_2P2_EVT1				"companion_fw_2p2_evt1.bin"
 #define FIMC_IS_FW_COMPANION_2T2_EVT1				"companion_fw_2t2_evt1.bin"
 #define FIMC_IS_FW_COMPANION_2P2_12M_EVT1				"companion_fw_2p2_12m_evt1.bin"
 #define FIMC_IS_FW_COMPANION_2L1					"companion_fw_2l1.bin"
+#define FIMC_IS_FW_COMPANION_2L1_D					"companion_fw_2l1_d.bin"
 #define FIMC_IS_FW_COMPANION_IMX260					"companion_fw_imx260.bin"
+#define FIMC_IS_FW_COMPANION_IMX260_D				"companion_fw_imx260_d.bin"
 #define FIMC_IS_FW_COMPANION_IMX240_EVT1				"companion_fw_imx240_evt1.bin"
 #define FIMC_IS_FW_COMPANION_IMX228_EVT1				"companion_fw_imx228_evt1.bin"
 /*#define FIMC_IS_FW_SDCARD			"/data/media/0/fimc_is_fw.bin" */
 #define FIMC_IS_IMX260_SETF			"setfile_imx260.bin"
+#define FIMC_IS_IMX260_SETF_D		"setfile_imx260_d.bin"
 #define FIMC_IS_IMX240_SETF			"setfile_imx240.bin"
 #define FIMC_IS_IMX228_SETF			"setfile_imx228.bin"
 #define FIMC_IS_IMX135_SETF			"setfile_imx135.bin"
@@ -150,14 +160,20 @@
 #define FIMC_IS_2P3_SETF			"setfile_2p3.bin"
 #define FIMC_IS_3P3_SETF			"setfile_3p3.bin"
 #define FIMC_IS_2L1_SETF			"setfile_2l1.bin"
+#define FIMC_IS_2L1_SETF_D		    "setfile_2l1_d.bin"
+#define FIMC_IS_4E6_SETF			"setfile_4e6.bin"
 #define FIMC_IS_COMPANION_MASTER_SETF			"companion_master_setfile.bin"
 #define FIMC_IS_COMPANION_MODE_SETF			"companion_mode_setfile.bin"
 #define FIMC_IS_COMPANION_2P2_MASTER_SETF			"companion_2p2_master_setfile.bin"
 #define FIMC_IS_COMPANION_2P2_MODE_SETF			"companion_2p2_mode_setfile.bin"
 #define FIMC_IS_COMPANION_2L1_MASTER_SETF			"companion_2l1_master_setfile.bin"
 #define FIMC_IS_COMPANION_2L1_MODE_SETF				"companion_2l1_mode_setfile.bin"
+#define FIMC_IS_COMPANION_2L1_MASTER_SETF_D			"companion_2l1_master_setfile_d.bin"
+#define FIMC_IS_COMPANION_2L1_MODE_SETF_D				"companion_2l1_mode_setfile_d.bin"
 #define FIMC_IS_COMPANION_IMX260_MASTER_SETF			"companion_imx260_master_setfile.bin"
 #define FIMC_IS_COMPANION_IMX260_MODE_SETF			"companion_imx260_mode_setfile.bin"
+#define FIMC_IS_COMPANION_IMX260_MASTER_SETF_D			"companion_imx260_master_setfile_d.bin"
+#define FIMC_IS_COMPANION_IMX260_MODE_SETF_D			"companion_imx260_mode_setfile_d.bin"
 #define FIMC_IS_COMPANION_IMX240_MASTER_SETF			"companion_imx240_master_setfile.bin"
 #define FIMC_IS_COMPANION_IMX240_MODE_SETF			"companion_imx240_mode_setfile.bin"
 #define FIMC_IS_COMPANION_IMX228_MASTER_SETF			"companion_imx228_master_setfile.bin"
@@ -181,6 +197,7 @@
 #define FIMC_IS_PROJECT_NAME_SIZE    8
 #define FIMC_IS_ISP_SETFILE_VER_SIZE 6
 #define FIMC_IS_SENSOR_ID_SIZE       16
+#define FIMC_IS_MODULE_ID_SIZE       10
 
 #define FROM_VERSION_V002 '2'
 #define FROM_VERSION_V003 '3'
@@ -244,6 +261,7 @@ struct fimc_is_from_info {
 	char		load_front_setfile_name[50];
 	char		project_name[FIMC_IS_PROJECT_NAME_SIZE + 1];
 	char		from_sensor_id[FIMC_IS_SENSOR_ID_SIZE + 1];
+	u8		from_module_id[FIMC_IS_MODULE_ID_SIZE + 1];
 	bool		is_caldata_read;
 	bool		is_check_cal_reload;
 	u8		sensor_version;

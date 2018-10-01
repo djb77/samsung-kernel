@@ -237,8 +237,8 @@ if [ -n "${CONFIG_KALLSYMS}" ]; then
 fi
 
 if [ -n "${CONFIG_RKP_CFP}" ]; then
-    echo '  RKP_CFP : instrumenting vmlinux... '
-    "${srctree}/scripts/rkp_cfp/instrument.py" --vmlinux "${objtree}/vmlinux" --inplace
+	echo '  RKP_CFP : instrumenting vmlinux... '
+	"${srctree}/scripts/rkp_cfp/instrument.py" --vmlinux "${objtree}/vmlinux" --inplace
 fi
 
 if [ -n "${CONFIG_RELOCATABLE_KERNEL}" ]; then

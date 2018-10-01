@@ -400,3 +400,16 @@ struct dma_chan *of_dma_xlate_by_chan_id(struct of_phandle_args *dma_spec,
 	return dma_get_slave_channel(candidate);
 }
 EXPORT_SYMBOL_GPL(of_dma_xlate_by_chan_id);
+
+bool of_dma_multi_irq(struct device_node *np)
+{
+	bool ret = 0;
+	const __be32	*prop;
+
+	prop = of_get_property(np, "#dma-multi-irq", NULL);
+	if (prop)
+		ret = be32_to_cpup(prop);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(of_dma_multi_irq);

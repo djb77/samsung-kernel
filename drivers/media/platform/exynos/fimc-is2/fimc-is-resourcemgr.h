@@ -57,6 +57,7 @@ struct fimc_is_dvfs_ctrl {
 
 	struct fimc_is_dvfs_scenario_ctrl *static_ctrl;
 	struct fimc_is_dvfs_scenario_ctrl *dynamic_ctrl;
+	struct fimc_is_dvfs_scenario_ctrl *external_ctrl;
 };
 
 struct fimc_is_clk_gate_ctrl {

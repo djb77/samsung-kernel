@@ -26,7 +26,7 @@
 	model_info-platform = "android";
 	model_info-subtype = "samsung";
 	model_info-hw_rev = <9>;
-	model_info-hw_rev_end = <255>;
+	model_info-hw_rev_end = <9>;
 	compatible = "samsung,exynos8890", "samsung,UNIVERSAL8890";
 
 	audio_pdata {

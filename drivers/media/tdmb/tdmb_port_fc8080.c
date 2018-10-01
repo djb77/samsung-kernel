@@ -116,10 +116,18 @@ static bool __get_ensemble_info(struct ensemble_info_type *e_info
 					= fci_sub_info->ucServiceType;
 				e_info->sub_ch[sub_i].svc_id
 					= fci_sub_info->ulServiceID;
+
+				e_info->sub_ch[sub_i].ca_flags
+					= fci_sub_info->ucCAFlag;
+
 				e_info->sub_ch[sub_i].scids
 					= fci_sub_info->scids;
 				e_info->sub_ch[sub_i].ecc
 					= fci_sub_info->ecc;
+
+				if (fci_sub_info->ucCAFlag)
+					DPRINTK("%s: sub_channel_id(%d) ca_flag detected\n",
+					__func__, sub_i);	
 				if (i == 0)
 					memcpy(
 						e_info->sub_ch[sub_i].svc_label,

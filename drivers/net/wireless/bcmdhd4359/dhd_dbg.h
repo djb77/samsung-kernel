@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_dbg.h 598059 2015-11-07 07:31:52Z $
+ * $Id: dhd_dbg.h 668473 2016-11-03 13:40:32Z $
  */
 
 #ifndef _dhd_dbg_
@@ -32,14 +32,22 @@
 
 #if defined(DHD_DEBUG)
 #ifdef DHD_LOG_DUMP
-extern void dhd_log_dump_print(const char *fmt, ...);
+extern void dhd_log_dump_write(int type, const char *fmt, ...);
 extern char *dhd_log_dump_get_timestamp(void);
+#ifndef _DHD_LOG_DUMP_DEFINITIONS_
+#define _DHD_LOG_DUMP_DEFINITIONS_
+#define DLD_BUF_TYPE_GENERAL	0
+#define DLD_BUF_TYPE_SPECIAL	1
+#define DHD_LOG_DUMP_WRITE(fmt, ...)	dhd_log_dump_write(DLD_BUF_TYPE_GENERAL, fmt, ##__VA_ARGS__)
+#define DHD_LOG_DUMP_WRITE_EX(fmt, ...)	dhd_log_dump_write(DLD_BUF_TYPE_SPECIAL, fmt, ##__VA_ARGS__)
+#endif /* !_DHD_LOG_DUMP_DEFINITIONS_ */
+
 #define DHD_ERROR(args)	\
 do {	\
 	if (dhd_msg_level & DHD_ERROR_VAL) {	\
 		printf args;	\
-		dhd_log_dump_print("[%s] %s: ", dhd_log_dump_get_timestamp(), __func__);	\
-		dhd_log_dump_print args;	\
+		DHD_LOG_DUMP_WRITE("[%s] %s: ", dhd_log_dump_get_timestamp(), __func__);	\
+		DHD_LOG_DUMP_WRITE args;	\
 	}	\
 } while (0)
 #else
@@ -59,8 +67,8 @@ do {	\
 do {	\
 	if (dhd_msg_level & DHD_EVENT_VAL) {	\
 		printf args;	\
-		dhd_log_dump_print("[%s] %s: ", dhd_log_dump_get_timestamp(), __func__);	\
-		dhd_log_dump_print args;	\
+		DHD_LOG_DUMP_WRITE("[%s] %s: ", dhd_log_dump_get_timestamp(), __func__);	\
+		DHD_LOG_DUMP_WRITE args;	\
 	}	\
 } while (0)
 #else
@@ -76,8 +84,8 @@ do {	\
 do {	\
 	if (dhd_msg_level & DHD_MSGTRACE_VAL) {	\
 		printf args;	\
-		dhd_log_dump_print("[%s] %s: ", dhd_log_dump_get_timestamp(), __func__);	\
-		dhd_log_dump_print args;	\
+		DHD_LOG_DUMP_WRITE("[%s] %s: ", dhd_log_dump_get_timestamp(), __func__);	\
+		DHD_LOG_DUMP_WRITE args;	\
 	}   \
 } while (0)
 #else
@@ -88,14 +96,26 @@ do {	\
 #define DHD_IOV_INFO(args)	do {if (dhd_msg_level & DHD_IOV_INFO_VAL) printf args;} while (0)
 
 #ifdef DHD_LOG_DUMP
+#define DHD_ERROR_MEM(args)                 \
+do {                                        \
+	if (dhd_msg_level & DHD_ERROR_VAL) {    \
+		if (dhd_msg_level & DHD_ERROR_MEM_VAL) {    \
+			printf args;    \
+		}   \
+		DHD_LOG_DUMP_WRITE("[%s] %s: ", dhd_log_dump_get_timestamp(), __FUNCTION__);    \
+		DHD_LOG_DUMP_WRITE args;    \
+	}   \
+} while (0)
 #define DHD_ERROR_EX(args)                  \
 do {                                        \
 	if (dhd_msg_level & DHD_ERROR_VAL) {    \
-		dhd_log_dump_print("[%s] %s: ", dhd_log_dump_get_timestamp(), __func__);	\
-		dhd_log_dump_print args;	\
+		printf args;	\
+		DHD_LOG_DUMP_WRITE_EX("[%s] %s: ", dhd_log_dump_get_timestamp(), __func__);	\
+		DHD_LOG_DUMP_WRITE_EX args;	\
 	}	\
 } while (0)
 #else
+#define DHD_ERROR_MEM(args) DHD_ERROR(args)
 #define DHD_ERROR_EX(args) DHD_ERROR(args)
 #endif /* DHD_LOG_DUMP */
 
@@ -148,6 +168,7 @@ do {                                        \
 #define DHD_MSGTRACE_LOG(args)
 #define DHD_FWLOG(args)
 #define DHD_IOV_INFO(args)
+#define DHD_ERROR_MEM(args) DHD_ERROR(args)
 #define DHD_ERROR_EX(args) DHD_ERROR(args)
 
 #ifdef CUSTOMER_HW4_DEBUG

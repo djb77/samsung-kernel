@@ -693,15 +693,6 @@ int attach_deskdock(muic_data_t *pmuic,
 
 	pr_info("%s:%s\n", MUIC_DEV_NAME, __func__);
 
-	/* Audio-out doesn't work under AUTO switch mode, so turn it off */
-	/* set MANUAL SW mode */
-	set_switch_mode(pmuic,SWMODE_MANUAL);
-	ret = com_to_audio(pmuic);
-	if (ret < 0) {
-		pr_err("%s:%s fail.(%d)\n", MUIC_DEV_NAME, __func__, ret);
-		return ret;
-	}
-
 	pmuic->attached_dev = new_dev;
 
 	return ret;
@@ -713,7 +704,6 @@ int detach_deskdock(muic_data_t *pmuic)
 
 	pr_info("%s:%s\n", MUIC_DEV_NAME, __func__);
 
-	set_switch_mode(pmuic,SWMODE_AUTO);
 	pmuic->attached_dev = ATTACHED_DEV_NONE_MUIC;
 
 	return ret;

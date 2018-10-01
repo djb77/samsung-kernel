@@ -23,6 +23,24 @@ int dsim_panel_ops_init(struct dsim_device *dsim);
 /* dsim_panel_get_priv_ops() this function comes from XXXX_mipi_lcd.c */
 struct dsim_panel_ops *dsim_panel_get_priv_ops(struct dsim_device *dsim);
 
+#ifdef CONFIG_FB_DSU
+enum {
+	DSU_CONFIG_WQHD = 0,
+	DSU_CONFIG_FHD,
+	DSU_CONFIG_HD,
+	DSU_CONFIG_MAX
+};
+
+typedef struct {
+	char* id_str;
+	int xres;
+	int yres;
+	int	value;
+} type_dsu_config;
+
+static const type_dsu_config dsu_config[] = { {"WQHD", 1440, 2560, DSU_CONFIG_WQHD}, {"FHD", 1080, 1920, DSU_CONFIG_FHD}, {"HD", 720,1280, DSU_CONFIG_HD} };
+#endif
+
 /*lcd_init_sysfs() this function comes from lcd_sysfs.c */
 #if defined(CONFIG_EXYNOS_DECON_LCD_SYSFS)
 void lcd_init_sysfs(struct dsim_device *dsim);

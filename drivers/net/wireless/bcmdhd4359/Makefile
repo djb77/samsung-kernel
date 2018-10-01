@@ -119,7 +119,7 @@ DHDCFLAGS += -DBCMASSERT_LOG
 # Collect Current Assoc/Reject Status for Big Data logging
 DHDCFLAGS += -DDHD_ENABLE_BIGDATA_LOGGING
 # Enable SI utility error log
-DHDCFLAGS += -DBCMDBG_ERR
+DHDCFLAGS += -DSI_ERROR_ENFORCE
 
 # Print 8021X
 DHDCFLAGS += -DDHD_8021X_DUMP
@@ -234,7 +234,8 @@ DHDCFLAGS += -DCONFIG_HAS_WAKELOCK
 # Used short dwell time during initial scan
 DHDCFLAGS += -DUSE_INITIAL_SHORT_DWELL_TIME
 
-# Japan ccode revision will be fixed by nvram's value
+# Korea and Japan ccode revision will be fixed by nvram's value
+DHDCFLAGS += -DKEEP_KR_REGREV
 DHDCFLAGS += -DKEEP_JP_REGREV
 
 # NAN feature
@@ -249,6 +250,28 @@ DHDCFLAGS += -DFCC_PWR_LIMIT_2G
 DHDCFLAGS += -DUSE_WFA_CERT_CONF
 
 DHDCFLAGS += -DCUSTOMER_SCAN_TIMEOUT_SETTING
+
+# Android Version Check from Platform source
+CANDIDATE_VERSION_PATH := ./../../build/core ../../../../../../build/core out
+FOUND_VERSION_PATH := $(foreach dir,$(CANDIDATE_VERSION_PATH), $(wildcard $(dir)/version_defaults.mk))
+FOUND_VERSION_PATH := $(word 1, $(FOUND_VERSION_PATH))
+ifeq ($(FOUND_VERSION_PATH),)
+$(warning Not found Android version file. Set as Legacy mode)
+DHDCFLAGS += -DDHD_LEGACY_FILE_PATH
+DHDCFLAGS += -DDHD_DISABLE_ANDROID_FEATURE_SET
+else
+# Extract version string and get major number
+ANDROID_PLATFORM_VERSION := $(shell grep "PLATFORM_VERSION := " $(FOUND_VERSION_PATH) | cut -d "=" -f 2 | cut -d "." -f 1 | sed 's/ //g')
+$(warning Android Platform Version : $(ANDROID_PLATFORM_VERSION))
+# If Android version lower than 7(Nougat) => Use Legacy File path
+ifeq ($(shell expr $(ANDROID_PLATFORM_VERSION) \< 7),1)
+DHDCFLAGS += -DDHD_LEGACY_FILE_PATH
+DHDCFLAGS += -DDHD_DISABLE_ANDROID_FEATURE_SET
+$(warning Will be use Legacy file path)
+else
+DHDCFLAGS += -DDHD_SET_COUNTRY_SUPPORT
+endif
+endif
 
 ##############################
 # Android Platform Definition
@@ -267,12 +290,6 @@ DHDCFLAGS += -DWL_IFACE_COMB_NUM_CHANNELS
 DHDCFLAGS += -DWL_NEWCFG_PRIVCMD_SUPPORT
 # Link Statistics feature
 DHDCFLAGS += -DLINKSTAT_SUPPORT
-
-# To support GSCAN
-DHDCFLAGS += -DGSCAN_SUPPORT
-
-# To support RTT
-DHDCFLAGS += -DRTT_SUPPORT
 
 # To support WL_VENDOR_EXT_SUPPORT
 DHDCFLAGS += -DWL_VENDOR_EXT_SUPPORT
@@ -344,7 +361,11 @@ endif
   DHDCFLAGS += -DSUPPORT_2G_VHT
   DHDCFLAGS += -DSUPPORT_WL_TXPOWER
   DHDCFLAGS += -DWL11ULB
-  DHDCFLAGS += -DSUPPORT_SENSORHUB
+  DHDCFLAGS += -DENABLE_IPMCAST_FILTER
+ # Enable SensorHub Move/Stop
+#ifeq ($(filter y,$(CONFIG_WLAN_GRACE) $(CONFIG_SEC_GRACEQLTE_PROJECT)),y)
+# DHDCFLAGS += -DSUPPORT_SENSORHUB
+#endif
  # virtual interface for RSDB
   DHDCFLAGS += -DWL_VIRTUAL_APSTA
  # disable pruned scan
@@ -353,6 +374,15 @@ endif
   DHDCFLAGS := $(filter-out -DDISABLE_11H_SOFTAP,$(DHDCFLAGS))
  # Temperature Throttling control
   DHDCFLAGS += -DENABLE_TEMP_THROTTLING
+  DHDCFLAGS += -DTEMP_THROTTLE_CONTROL_BIT=0xD
+ # Block ARP during DHCP on STA/SoftAP concurrent mode
+  DHDCFLAGS += -DAPSTA_BLOCK_ARP_DURING_DHCP
+ # Use restricted channels on STA/SoftAP concurrent mode
+  DHDCFLAGS += -DAPSTA_RESTRICTED_CHANNEL
+# To support APF
+  DHDCFLAGS += -DAPF
+# To support CAC
+  DHDCFLAGS += -DSUPPORT_SET_CAC
 
 ifeq ($(filter y,$(CONFIG_ARCH_MSM8996) $(CONFIG_SOC_EXYNOS8890)),y)
  # Runtime PM
@@ -363,16 +393,24 @@ ifeq ($(filter y,$(CONFIG_ARCH_MSM8996) $(CONFIG_SOC_EXYNOS8890)),y)
   DHDCFLAGS := $(filter-out -DSOFTAP_SEND_HANGEVT,$(DHDCFLAGS))
  # CLM
   DHDCFLAGS += -DDHD_SUPPORT_GB_999
+ # Configure MU-MIMO capability
+ifeq ($(CONFIG_SOC_EXYNOS8890),y)
+  DHDCFLAGS += -DDYNAMIC_MUMIMO_CONTROL
+endif
 endif
 
 ifeq ($(filter y,$(CONFIG_WLAN_HERO) $(CONFIG_SEC_HEROQLTE_PROJECT)),y)
   DHDCFLAGS += -DDHD_SUPPORT_US_949
-  DHDCFLAGS += -DDHD_SUPPORT_JP968_RU986_UA16
 endif
 
 ifeq ($(filter y,$(CONFIG_WLAN_HERO2) $(CONFIG_SEC_HERO2QLTE_PROJECT)),y)
   DHDCFLAGS += -DDHD_SUPPORT_US_945
-  DHDCFLAGS += -DDHD_SUPPORT_JP968_RU986_UA16
+endif
+
+ifeq ($(filter y,$(CONFIG_WLAN_GRACE) $(CONFIG_SEC_GRACEQLTE_PROJECT)),y)
+  DHDCFLAGS += -DDHD_USE_CLMINFO_PARSER
+  # WBTEXT (11kv) feature
+  DHDCFLAGS += -DWBTEXT
 endif
 
  # RSDB mode from file config
@@ -385,6 +423,8 @@ ifeq ($(CONFIG_BCM4359),y)
   DHDCFLAGS += -DENABLE_INSMOD_NO_FW_LOAD
   DHDCFLAGS += -DUSE_LATE_INITCALL_SYNC
   DRIVER_TYPE = y
+else
+  DHDCFLAGS += -DEXYNOS_PCIE_MODULE_PATCH
 endif
 endif
 
@@ -838,6 +878,11 @@ DHDCFLAGS += -DBCMPCIE_OOB_HOST_WAKE
 endif
 endif #CONFIG_OF
 
+# DEBUG UART
+ifneq ($(CONFIG_WLAN_GRACE),)
+DHDCFLAGS += -DDHD_DEBUG_UART
+endif
+
 ##############################################################
 # dhd_sec_feature.h
 DHDCFLAGS += -include "dhd_sec_feature.h"
@@ -861,7 +906,7 @@ DHDOFILES := dhd_pno.o dhd_common.o dhd_ip.o dhd_custom_gpio.o dhd_custom_sec.o 
 	bcmutils.o bcmwifi_channels.o hndpmu.o linux_osl.o sbutils.o siutils.o \
 	wl_android.o wl_cfg80211.o wl_cfgp2p.o wl_cfg_btcoex.o wldev_common.o \
 	wl_linux_mon.o wl_roam.o dhd_linux_platdev.o dhd_linux_wq.o wl_cfg_btcoex.o \
-	hnd_pktq.o hnd_pktpool.o
+	hnd_pktq.o hnd_pktpool.o dhd_custom_cis.o
 
 
 ifeq ($(BUS_IFACE_SDIO),y)

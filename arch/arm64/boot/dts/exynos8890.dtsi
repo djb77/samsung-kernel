@@ -27,6 +27,18 @@
 	#address-cells = <2>;
 	#size-cells = <1>;
 
+	arm-pmu {
+		compatible = "arm,armv8-pmuv3";
+		interrupts = <0 25 4>,
+			     <0 26 4>,
+			     <0 27 4>,
+			     <0 28 4>,
+			     <0 40 4>,
+			     <0 41 4>,
+			     <0 42 4>,
+			     <0 43 4>;
+	};
+
 	aliases {
 		pinctrl0 = &pinctrl_0;
 		pinctrl1 = &pinctrl_1;
@@ -56,6 +68,22 @@
 		spi7 = &spi_7;
 		spi8 = &spi_8;
 		spi9 = &spi_9;
+		hsi2c0 = &hsi2c_0;
+		hsi2c1 = &hsi2c_1;
+		hsi2c2 = &hsi2c_2;
+		hsi2c3 = &hsi2c_3;
+		hsi2c4 = &hsi2c_4;
+		hsi2c5 = &hsi2c_5;
+		hsi2c6 = &hsi2c_6;
+		hsi2c7 = &hsi2c_7;
+		hsi2c8 = &hsi2c_8;
+		hsi2c9 = &hsi2c_9;
+		hsi2c10 = &hsi2c_10;
+		hsi2c11 = &hsi2c_11;
+		hsi2c12 = &hsi2c_12;
+		hsi2c13 = &hsi2c_13;
+		hsi2c14 = &hsi2c_14;
+		hsi2c15 = &hsi2c_15;
 		vpp0 = &idma_g0;
 		vpp1 = &idma_g1;
 		vpp2 = &idma_vg0;
@@ -101,6 +129,11 @@
 			semiboost_up_threshold = <254>;
 			semiboost_down_threshold = <163>;
 			bootboost-duration-us = <40000000>;
+
+			down_compensation_timeout = <30>;		/* ms */
+			down_compensation_high_freq = <1170000>;	/* min qos lock for little cpu */
+			down_compensation_mid_freq = <962000>;		/* min qos lock for little cpu */
+			down_compensation_low_freq = <858000>;		/* min qos lock for little cpu */
 		};
 
 		cpu@100 {
@@ -280,8 +313,8 @@
 		 *	        sicd	      sicd_cpd      sicd_aud	aftr          stop
 		 *	        dstop	      lpd           lpa		sleep
 		 */
-		wakeup_mask =  <0x400001C0>, <0x400001C0>, <0x400001C0>, <0x400001C0>,	<0x0>,
-			       <0x0>,	     <0x0>, 	   <0x400001C0>, <0x50077E7E>;
+		wakeup_mask =  <0x400001E0>, <0x400001E0>, <0x400001E0>, <0x400001E0>,	<0x0>,
+			       <0x0>,	     <0x0>, 	   <0x400001E0>, <0x50077E7E>;
 		wakeup_mask2 = <0x0>,	     <0x0>, 	   <0x0>, 	 <0x0>,		<0x0>,
 			       <0x0>, 	     <0x0>, 	   <0xFFFF00FF>, <0xFFFF00FF>;
 		wakeup_mask3 = <0x0>,	     <0x0>, 	   <0x0>,	 <0x0>,		<0x0>,
@@ -629,7 +662,7 @@
 		pinctrl-0 = <&uart3_bus>;
 		clocks = <&clock 260>, <&clock 265>, <&clock 265>;
 		clock-names = "gate_pclk3", "gate_uart3", "sclk_uart3";
-		status = "disabled";
+		status = "okay";
 	};
 
 	serial_4: uart@14C50000 {
@@ -1203,6 +1236,7 @@
 			#dma-channels = <8>;
 			#dma-requests = <16>;
 			#dma-mcode-addr = <0x03022000>;
+			#dma-multi-irq = <1>;
 			arm,primecell-periphid = <0x341330>;
 			samsung,lpass-subip;
 			status = "ok";
@@ -1388,7 +1422,7 @@
 		samsung,syscon-phandle = <&pmu_system_controller>;
 		pinctrl-names = "default", "clkreq_output";
 		pinctrl-0 = <&pcie0_clkreq &pcie0_perst &pcie_wake &cfg_wlanen &wlan_host_wake>;
-		pinctrl-1 = <&pcie0_clkreq_output &pcie0_perst &pcie_wake &cfg_wlanen &wlan_host_wake>;
+		pinctrl-1 = <&pcie0_perst &pcie_wake &cfg_wlanen &wlan_host_wake>;
 		#address-cells = <3>;
 		#size-cells = <2>;
 		device_type = "pci";
@@ -1425,7 +1459,7 @@
 		samsung,syscon-phandle = <&pmu_system_controller>;
 		pinctrl-names = "default", "clkreq_output";
 		pinctrl-0 = <&pcie1_clkreq &pcie1_perst>;
-		pinctrl-1 = <&pcie1_clkreq_output &pcie1_perst>;
+		pinctrl-1 = <&pcie1_perst>;
 		#address-cells = <3>;
 		#size-cells = <2>;
 		device_type = "pci";
@@ -1852,7 +1886,7 @@
 		ip_ver = <14>;
 		clock_rate = <400000000>;
 		min_rate = <100000>;
-		num_qos_steps = <12>;
+		num_qos_steps = <11>;
 		mfc_qos_table {
 			mfc_qos_variant_0 {
 				thrd_mb = <0>;
@@ -1863,7 +1897,7 @@
 				freq_kfc = <0>;
 				has_enc_table = <0>;
 			};
-			mfc_qos_variant_1 {		/* Emc table */
+			mfc_qos_variant_1 {		/* Enc table */
 				thrd_mb = <108000>;
 				freq_mfc = <168000>;
 				freq_int = <127000>;
@@ -1939,12 +1973,12 @@
 				thrd_mb = <1468800>;
 				freq_mfc = <598000>;
 				freq_int = <690000>;
-				freq_mif = <845000>;
+				freq_mif = <1144000>;
 				freq_cpu = <0>;
 				freq_kfc = <0>;
 				has_enc_table = <1>;
 			};
-			mfc_qos_variant_10 {		/* Enc table */
+			mfc_qos_variant_10 {
 				thrd_mb = <1958400>;
 				freq_mfc = <598000>;
 				freq_int = <690000>;
@@ -1952,15 +1986,6 @@
 				freq_cpu = <0>;
 				freq_kfc = <0>;
 				has_enc_table = <0>;
-			};
-			mfc_qos_variant_11 {
-				thrd_mb = <1958400>;
-				freq_mfc = <598000>;
-				freq_int = <690000>;
-				freq_mif = <1144000>;
-				freq_cpu = <0>;
-				freq_kfc = <0>;
-				has_enc_table = <1>;
 			};
 		};
 	};
@@ -2748,6 +2773,20 @@
 		ranges;
 	};
 
+	smc_info: mcinfo@10800000 {
+		compatible = "samsung,exynos-mcinfo";
+		reg =	<0x0 0x1080004C 0x4>,
+			<0x0 0x1090004C 0x4>,
+			<0x0 0x10A0004C 0x4>,
+			<0x0 0x10B0004C 0x4>;
+		bit_field = <20 3>;
+		/* start bit, width */
+		basecnt = <4>;
+		irqcnt = <0>;
+
+		interrupts = <0 385 0>, <0 393 0>, <0 401 0>, <0 409 0>;
+	};
+
 	devfreq_0: devfreq_mif@17000010 {
 		compatible = "samsung,exynos-devfreq";
 		reg = <0x0 0x17000010 0x0>;
@@ -3207,7 +3246,7 @@
 			/* Frequency table */
 			/* for level	:	1_Head 2_Tail*/
 			input_booster,cpu_freqs = <1040000 0>;
-			input_booster,hmp_boost = <1 0>;
+			input_booster,hmp_boost = <1 1>;
 			input_booster,kfc_freqs = <754000 1274000>;
 			input_booster,mif_freqs = <0 0>;
 			input_booster,int_freqs = <0 0>;

@@ -540,9 +540,6 @@ int gpu_disable_dvs(struct exynos_context *platform)
 int gpu_regulator_init(struct exynos_context *platform)
 {
 #ifdef CONFIG_MALI_DVFS
-	int gpu_voltage = 0;
-	int gpu_m_voltage = 0;
-
 	g3d_regulator = regulator_get(NULL, "vdd_g3d");
 	if (IS_ERR(g3d_regulator)) {
 		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "%s: failed to get vdd_g3d regulator, 0x%p\n", __func__, g3d_regulator);
@@ -557,27 +554,8 @@ int gpu_regulator_init(struct exynos_context *platform)
 		return -1;
 	}
 
-	if (!gpu_is_power_on()) {
-		GPU_LOG(DVFS_INFO, DUMMY, 0u, 0u, "%s: can't set voltage in the power-off state!\n", __func__);
-		return -1;
-	}
-
-	gpu_m_voltage = platform->gpu_default_vol;
-	if (regulator_set_voltage(g3d_m_regulator, gpu_m_voltage, gpu_m_voltage) != 0) {
-		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "%s: failed to set m_voltage [%d]\n", __func__, gpu_m_voltage);
-		return -1;
-	}
-
-	gpu_voltage = platform->gpu_default_vol;
-	if (regulator_set_voltage(g3d_regulator, gpu_voltage, gpu_voltage) != 0) {
-		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "%s: failed to set voltage [%d]\n", __func__, gpu_voltage);
-		return -1;
-	}
-
 	if (platform->dvs_status)
 		GPU_LOG(DVFS_INFO, DUMMY, 0u, 0u, "dvs GPIO PMU status enable\n");
-
-	GPU_LOG(DVFS_WARNING, DUMMY, 0u, 0u, "Sync with g3d & g3d_m\n");
 
 	GPU_LOG(DVFS_INFO, DUMMY, 0u, 0u, "regulator initialized\n");
 #endif

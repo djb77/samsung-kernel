@@ -336,8 +336,10 @@ const static struct file_operations asv_summary_fops = {
 #if defined(CONFIG_SEC_FACTORY)
 enum ids_info {
 	tg,
+	lg,
 	bg,
 	g3dg,
+	mifg,
 	bids,
 	gids,
 };

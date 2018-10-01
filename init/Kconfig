@@ -1657,6 +1657,14 @@ config SLUB_DEBUG
 	  SLUB sysfs support. /sys/slab will not exist and there will be
 	  no support for cache validation etc.
 
+config SLUB_DEBUG_LIGHT
+	default n
+	bool "Enable SLUB debugging support (light-weight version)" if !SLUB_DEBUG
+	depends on SLUB
+	help
+	  SLUB DEBUG light-weight version for tracking caller addr of kmalloc/kfree
+	  only in kmalloc-128.
+
 config PTRACK_DEBUG
 	default n
 	bool "Enable Ptrack debugging support"

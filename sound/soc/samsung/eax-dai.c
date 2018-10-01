@@ -48,7 +48,6 @@
 
 
 #define EAX_CH_MAX	8
-#define EAX_NAME_MAX	PLATFORM_NAME_SIZE
 
 #define EAX_RATES	SNDRV_PCM_RATE_8000_192000
 #define EAX_FMTS	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE)
@@ -65,17 +64,6 @@ static struct eax_info {
 	int (*master_dai_suspend)(struct snd_soc_dai *dai);
 	int (*master_dai_resume)(struct snd_soc_dai *dai);
 } ei;
-
-struct ch_info {
-	char				name[EAX_NAME_MAX];
-	struct platform_device		*pdev;
-	struct device			*dev_master;
-	struct s3c_dma_params		*dma_params;
-	struct snd_soc_dai_driver	dai_drv;
-	bool				opened;
-	bool				running;
-	struct list_head		node;
-};
 
 static LIST_HEAD(ch_list);
 
@@ -114,6 +102,7 @@ int eax_dev_register(struct device *dev_master, const char *name,
 		ci->dma_params = dma_params;
 		ci->opened = false;
 		ci->running = false;
+		ci->ch_id = n;
 		ci->dai_drv.name = name;
 		ci->dai_drv.symmetric_rates = 1;
 		ci->dai_drv.probe = eax_dai_probe;
@@ -207,12 +196,13 @@ static int eax_dai_trigger(struct snd_pcm_substream *substream,
 	int cmd, struct snd_soc_dai *dai)
 {
 	struct ch_info *ci = to_info(dai);
+	unsigned long flags;
 	int ret = 0;
 
 	if (!ei.master)
 		return -ENODEV;
 
-	spin_lock(&ei.lock);
+	spin_lock_irqsave(&ei.lock, flags);
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
@@ -231,7 +221,7 @@ static int eax_dai_trigger(struct snd_pcm_substream *substream,
 		break;
 	}
 
-	spin_unlock(&ei.lock);
+	spin_unlock_irqrestore(&ei.lock, flags);
 
 	return ret;
 }
@@ -240,15 +230,17 @@ static int eax_dai_trigger(struct snd_pcm_substream *substream,
 static int eax_dai_set_tdm_slot(struct snd_soc_dai *dai,
 	unsigned int tx_mask, unsigned int rx_mask, int slots, int slot_width)
 {
+	unsigned long flags;
+
 	if (!ei.master)
 		return -ENODEV;
 
-	spin_lock(&ei.lock);
+	spin_lock_irqsave(&ei.lock, flags);
 	if (eax_dai_any_tx_running()) {
-		spin_unlock(&ei.lock);
+		spin_unlock_irqrestore(&ei.lock, flags);
 		return 0;
 	}
-	spin_unlock(&ei.lock);
+	spin_unlock_irqrestore(&ei.lock, flags);
 
 	return (*ei.master_dai_ops->set_tdm_slot)(ei.master_dai,
 		tx_mask, rx_mask, slots, slot_width);
@@ -258,15 +250,17 @@ static int eax_dai_set_tdm_slot(struct snd_soc_dai *dai,
 static int eax_dai_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params, struct snd_soc_dai *dai)
 {
+	unsigned long flags;
+
 	if (!ei.master)
 		return -ENODEV;
 
-	spin_lock(&ei.lock);
+	spin_lock_irqsave(&ei.lock, flags);
 	if (eax_dai_any_tx_running()) {
-		spin_unlock(&ei.lock);
+		spin_unlock_irqrestore(&ei.lock, flags);
 		return 0;
 	}
-	spin_unlock(&ei.lock);
+	spin_unlock_irqrestore(&ei.lock, flags);
 
 	return (*ei.master_dai_ops->hw_params)(substream, params,
 						ei.master_dai);
@@ -274,30 +268,34 @@ static int eax_dai_hw_params(struct snd_pcm_substream *substream,
 
 static int eax_dai_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 {
+	unsigned long flags;
+
 	if (!ei.master)
 		return -ENODEV;
 
-	spin_lock(&ei.lock);
+	spin_lock_irqsave(&ei.lock, flags);
 	if (eax_dai_any_tx_running()) {
-		spin_unlock(&ei.lock);
+		spin_unlock_irqrestore(&ei.lock, flags);
 		return 0;
 	}
-	spin_unlock(&ei.lock);
+	spin_unlock_irqrestore(&ei.lock, flags);
 
 	return (*ei.master_dai_ops->set_fmt)(ei.master_dai, fmt);
 }
 
 static int eax_dai_set_clkdiv(struct snd_soc_dai *dai, int div_id, int div)
 {
+	unsigned long flags;
+
 	if (!ei.master)
 		return -ENODEV;
 
-	spin_lock(&ei.lock);
+	spin_lock_irqsave(&ei.lock, flags);
 	if (eax_dai_any_tx_running()) {
-		spin_unlock(&ei.lock);
+		spin_unlock_irqrestore(&ei.lock, flags);
 		return 0;
 	}
-	spin_unlock(&ei.lock);
+	spin_unlock_irqrestore(&ei.lock, flags);
 
 	return (*ei.master_dai_ops->set_clkdiv)(ei.master_dai, div_id, div);
 }
@@ -305,15 +303,17 @@ static int eax_dai_set_clkdiv(struct snd_soc_dai *dai, int div_id, int div)
 static int eax_dai_set_sysclk(struct snd_soc_dai *dai,
 	int clk_id, unsigned int rfs, int dir)
 {
+	unsigned long flags;
+
 	if (!ei.master)
 		return -ENODEV;
 
-	spin_lock(&ei.lock);
+	spin_lock_irqsave(&ei.lock, flags);
 	if (eax_dai_any_tx_running()) {
-		spin_unlock(&ei.lock);
+		spin_unlock_irqrestore(&ei.lock, flags);
 		return 0;
 	}
-	spin_unlock(&ei.lock);
+	spin_unlock_irqrestore(&ei.lock, flags);
 
 	return (*ei.master_dai_ops->set_sysclk)(ei.master_dai,
 						clk_id, rfs, dir);

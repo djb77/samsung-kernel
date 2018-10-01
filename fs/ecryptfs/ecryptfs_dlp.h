@@ -23,11 +23,17 @@
 #define KNOX_DLP_XATTR_NAME 	"user.knox_dlp"
 #define AID_KNOX_DLP			KGIDT_INIT(8002)
 #define AID_KNOX_DLP_RESTRICTED	KGIDT_INIT(8003)
+#define AID_KNOX_DLP_MEDIA      KGIDT_INIT(8004)
 
 #define DLP_DEBUG 1
 
+struct knox_expiry {
+	int64_t tv_sec;
+	int64_t tv_nsec;
+};
+
 struct knox_dlp_data {
-	struct timespec expiry_time;
+	struct knox_expiry expiry_time;
 };
 
 #endif /* ECRYPTFS_DLP_H */

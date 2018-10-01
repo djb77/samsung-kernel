@@ -93,12 +93,36 @@
 #define s5p_mfc_get_enc_strm_size()	MFC_READL(S5P_FIMV_E_STREAM_SIZE)
 #define s5p_mfc_get_enc_slice_type()	MFC_READL(S5P_FIMV_E_SLICE_TYPE)
 #define s5p_mfc_get_enc_pic_count()	MFC_READL(S5P_FIMV_E_PICTURE_COUNT)
-#define s5p_mfc_get_sei_avail_status()	MFC_READL(S5P_FIMV_D_FRAME_PACK_SEI_AVAIL)
+#define s5p_mfc_get_sei_avail()		MFC_READL(S5P_FIMV_D_SEI_AVAIL)
+#define s5p_mfc_get_sei_content_light()	MFC_READL(S5P_FIMV_D_CONTENT_LIGHT_LEVEL_INFO_SEI)
+#define s5p_mfc_get_sei_mastering0()	MFC_READL(S5P_FIMV_D_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_0)
+#define s5p_mfc_get_sei_mastering1()	MFC_READL(S5P_FIMV_D_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_1)
+#define s5p_mfc_get_sei_mastering2()	MFC_READL(S5P_FIMV_D_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_2)
+#define s5p_mfc_get_sei_mastering3()	MFC_READL(S5P_FIMV_D_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_3)
+#define s5p_mfc_get_sei_mastering4()	MFC_READL(S5P_FIMV_D_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_4)
+#define s5p_mfc_get_sei_mastering5()	MFC_READL(S5P_FIMV_D_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_5)
+#define s5p_mfc_get_sei_avail_frame_pack()	(MFC_READL(S5P_FIMV_D_SEI_AVAIL)	\
+							& S5P_FIMV_D_SEI_AVAIL_FRAME_PACK_MASK)
+#define s5p_mfc_get_sei_avail_content_light()	((MFC_READL(S5P_FIMV_D_SEI_AVAIL)	\
+							>> S5P_FIMV_D_SEI_AVAIL_CONTENT_LIGHT_SHIFT)	\
+							& S5P_FIMV_D_SEI_AVAIL_CONTENT_LIGHT_MASK)
+#define s5p_mfc_get_sei_avail_mastering_display()	((MFC_READL(S5P_FIMV_D_SEI_AVAIL)	\
+							>> S5P_FIMV_D_SEI_AVAIL_MASTERING_DISPLAY_SHIFT)	\
+							& S5P_FIMV_D_SEI_AVAIL_MASTERING_DISPLAY_MASK)
+#define s5p_mfc_get_video_signal_type()		((MFC_READL(S5P_FIMV_D_VIDEO_SIGNAL_TYPE)	\
+							>> S5P_FIMV_D_VIDEO_SIGNAL_TYPE_FLAG_SHIFT)	\
+							& S5P_FIMV_D_VIDEO_SIGNAL_TYPE_FLAG_MASK)
+#define s5p_mfc_get_colour_description()	((MFC_READL(S5P_FIMV_D_VIDEO_SIGNAL_TYPE)	\
+							>> S5P_FIMV_D_COLOUR_DESCRIPTIONS_PRESENT_FLAG_SHIFT)	\
+							& S5P_FIMV_D_COLOUR_DESCRIPTIONS_PRESENT_FLAG_MASK)
 #define s5p_mfc_get_mvc_num_views()	MFC_READL(S5P_FIMV_D_MVC_NUM_VIEWS)
 #define s5p_mfc_get_mvc_disp_view_id()	(MFC_READL(S5P_FIMV_D_MVC_VIEW_ID)		\
 					& S5P_FIMV_D_MVC_VIEW_ID_DISP_MASK)
 #define s5p_mfc_get_profile()		(MFC_READL(S5P_FIMV_D_DECODED_PICTURE_PROFILE)	\
 						& S5P_FIMV_DECODED_PIC_PROFILE_MASK)
+#define s5p_mfc_get_bit_depth_minus8()	((MFC_READL(S5P_FIMV_D_DECODED_PICTURE_PROFILE)	\
+						>> S5P_FIMV_BIT_DEPTH_MINUS8_SHIFT)	\
+						& S5P_FIMV_BIT_DEPTH_MINUS8_MASK)
 #define mfc_get_dec_used_flag()		MFC_READL(S5P_FIMV_D_USED_DPB_FLAG_LOWER)
 
 

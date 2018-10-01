@@ -12,6 +12,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/clk-private.h>
 #include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
@@ -282,6 +283,18 @@ static ssize_t store_pcie(struct device *dev,
 #endif
 	} else if (enable == 4) {
 		BUG_ON(1);
+	} else if (enable == 5) {
+		exynos_pcie_l1ss_ctrl(1, PCIE_L1SS_CTRL_SYSFS);
+		dev_info(dev, "VR requests pcie l1ss enable\n");
+	} else if (enable == 6) {
+		exynos_pcie_l1ss_ctrl(0, PCIE_L1SS_CTRL_SYSFS);
+		dev_info(dev, "VR requests pcie l1ss disable\n");
+	} else if (enable == 7) {
+		dev_info(dev, "%s: l1ss_ctrl_id_state = 0x%x\n",
+				__func__, exynos_pcie->l1ss_ctrl_id_state);
+	} else if (enable == 8) {
+		dev_info(dev, "LTSSM: 0x%08x\n",
+				readl(exynos_pcie->elbi_base + PCIE_ELBI_RDLH_LINKUP));
 	}
 
 	return count;
@@ -1073,7 +1086,7 @@ int exynos_pcie_poweron(int ch_num)
 			if (exynos_pcie->boot_cnt == 0) {
 				schedule_delayed_work(&exynos_pcie->work_l1ss, msecs_to_jiffies(40000));
 				exynos_pcie->boot_cnt++;
-				exynos_pcie->l1ss_ctrl_id_state = PCIE_L1SS_CTRL_BOOT;
+				exynos_pcie->l1ss_ctrl_id_state |= PCIE_L1SS_CTRL_BOOT;
 			}
 			/* L1.2 ASPM enable */
 			dw_pcie_config_l1ss(pp);

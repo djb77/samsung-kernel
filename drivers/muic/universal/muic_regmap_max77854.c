@@ -219,12 +219,12 @@ enum {
 #define COM_VALUE(dm, open, comp_onoff) ((dm<<3)|(dm<<0)|(open<<7)| \
 					(comp_onoff<<6))
 
-#define _COM_OPEN		COM_VALUE(_D_OPEN, _ID_OPEN, _NO_BC_COMP_OFF)
+#define _COM_OPEN		COM_VALUE(_D_OPEN, _ID_OPEN, _NO_BC_COMP_ON)
 #define _COM_OPEN_WITH_V_BUS	_COM_OPEN
-#define _COM_UART_AP		COM_VALUE(_D_UART, _ID_OPEN, _NO_BC_COMP_OFF)
-#define _COM_UART_CP		COM_VALUE(_D_UART_CP, _ID_OPEN, _NO_BC_COMP_OFF)
-#define _COM_USB_CP		COM_VALUE(_D_USB_CP, _ID_OPEN, _NO_BC_COMP_OFF)
-#define _COM_USB_AP		COM_VALUE(_D_USB, _ID_OPEN, _NO_BC_COMP_OFF)
+#define _COM_UART_AP		COM_VALUE(_D_UART, _ID_OPEN, _NO_BC_COMP_ON)
+#define _COM_UART_CP		COM_VALUE(_D_UART_CP, _ID_OPEN, _NO_BC_COMP_ON)
+#define _COM_USB_CP		COM_VALUE(_D_USB_CP, _ID_OPEN, _NO_BC_COMP_ON)
+#define _COM_USB_AP		COM_VALUE(_D_USB, _ID_OPEN, _NO_BC_COMP_ON)
 #define _COM_AUDIO		COM_VALUE(_D_AUDIO, _ID_OPEN, _NO_BC_COMP_OFF)
 
 static int max77854_com_value_tbl[] = {
@@ -449,7 +449,7 @@ static int max77854_start_otg_test(struct regmap_desc *pdesc, int started)
 	if (started) {
 		max77854_enable_chgdet(pdesc, 0);
 		max77854_enable_accdet(pdesc, 1);
-	} else 
+	} else
 		max77854_enable_chgdet(pdesc, 1);
 
 	return 0;
@@ -523,6 +523,59 @@ static void max77854_set_switching_mode(struct regmap_desc *pdesc, int mode)
 		pr_err("%s REG_CTRL write fail.\n", __func__);
 	else
 		_REGMAP_TRACE(pdesc, 'w', ret, attr, value);
+}
+
+static int max77854_get_vbus_value(struct regmap_desc *pdesc, int type)
+{
+	muic_data_t *muic = pdesc->muic;
+	int vbadc = 0, result = 0;
+	int adcmode, adcen;
+
+	/* type 0 : afc charger , type 1 : PD charger */
+	pr_info("%s, type %d\n", __func__, type);
+
+	/* for PD charger */
+	if (type == 1) {
+		adcmode = i2c_smbus_read_byte_data(muic->i2c, REG_CONTROL4);
+		adcen = i2c_smbus_read_byte_data(muic->i2c, REG_HVCONTROL1);
+		i2c_smbus_write_byte_data(muic->i2c, REG_CONTROL4, adcmode & 0x3F);
+		i2c_smbus_write_byte_data(muic->i2c, REG_HVCONTROL1, adcen | 0x20);
+		msleep(100);
+		vbadc = regmap_read_value(pdesc, STATUS3_VbADC);
+		i2c_smbus_write_byte_data(muic->i2c, REG_CONTROL4, adcmode);
+		i2c_smbus_write_byte_data(muic->i2c, REG_HVCONTROL1, adcen);
+	} else {
+		vbadc = regmap_read_value(pdesc, STATUS3_VbADC);
+	}
+
+	switch (vbadc) {
+	case 0:
+		result = 0;
+		break;
+	case 1:
+	case 2:
+		result = 5;
+		break;
+	case 3:
+	case 4:
+		result = vbadc+3;
+		break;
+	case 5:
+	case 6:
+		result = 9;
+		break;
+	case 7:
+	case 8:
+		result = 12;
+		break;
+	case (9)...(15):
+		result = vbadc+4;
+		break;
+	default:
+		break;
+	}
+
+	return result;
 }
 
 static void max77854_get_fromatted_dump(struct regmap_desc *pdesc, char *mesg)
@@ -609,6 +662,7 @@ static struct vendor_ops max77854_muic_vendor_ops = {
 	.run_chgdet = max77854_run_chgdet,
 	.start_otg_test = max77854_start_otg_test,
 	.get_vps_data = max77854_get_vps_data,
+	.get_vbus_value = max77854_get_vbus_value,
 };
 
 static struct regmap_desc max77854_muic_regmap_desc = {

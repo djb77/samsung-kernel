@@ -30,15 +30,16 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
+#include <linux/mutex.h>
 
 #if defined(CONFIG_CCIC_NOTIFIER)
 #include <linux/ccic/ccic_notifier.h>
 #endif
 
-#define AVAILABLE_VOLTAGE 13400
+#define AVAILABLE_VOLTAGE 12000
 #define UNIT_FOR_VOLTAGE 50
-#define CONFIG_SAMSUNG_S2MM003_SYSFS
-#define CONFIG_SAMSUNG_S2MM003_SRAM_BUG_WORKAROUND
+#define UNIT_FOR_CURRENT 10
+//#define CONFIG_SAMSUNG_S2MM003_SYSFS
 
 /******************************************************************************/
 /* definitions & structures                                                   */
@@ -120,6 +121,19 @@
 #define MSG_BUF_REQUEST_SIZE    0x8 // 1-Byte Length
 #define MSG_REQUEST_SIZE        0x2 // 4-Byte Length
 
+#define IND_REG_PDIC_MODE           0x13    // 2'b00:Factory   2'b01:DFP  2'b10:UFP  2'b11:DRP(Default)
+#define IND_REG_PDIC_PLUG_STATE     0x15    // b7:Attach b6:RpRd_sel b5~b3:CC2(100:Ra 010:Rd 001:Rp)  b2~b0:CC1(100:Ra 010:Rd 001:Rp)
+#define IND_REG_PDIC_PD_FUNC_STATE  0x16
+#define IND_REG_PDIC_MAIN_INT_NUM   0x17
+
+#define IND_REG_PDIC_1_INT          0x18
+#define IND_REG_PDIC_2_INT          0x19
+#define IND_REG_PDIC_3_INT          0x1A
+#define IND_REG_PDIC_4_INT          0x1B
+#define IND_REG_PDIC_5_INT          0x1C
+
+#define IND_REG_PDIC_RID            0x30
+
 #define b_RESET_START   (1 << 7)
 #define b_Reserved      (1 << 6)
 #define b_PD_FUNC_FLAG  (1 << 5)
@@ -129,7 +143,22 @@
 #define b_INT_2_FLAG    (1 << 1)
 #define b_INT_1_FLAG    (1 << 0)
 
-//  Interrupt Status3
+//  Interrupt Status1
+#define b_Cmd_Intial_State			0
+#define b_Cmd_Discover_Identity     0x1
+#define b_Cmd_Discover_SVIDs        0x2
+#define b_Cmd_Discover_Modes        0x4
+#define b_Cmd_Enter_Mode            0x8
+#define b_Cmd_Exit_Mode             0x10
+#define b_Cmd_Attention             0x20
+#define b_Msg_GoodCRC               0x40
+#define b_Msg_Accept                0x80
+
+// Interrupt Status2
+#define b_Msg_DR_SWAP           0x40
+#define b_Msg_PR_SWAP           0x80
+
+// Interrupt Status3
 #define b_Msg_VCONN_SWAP            0x1
 #define b_Msg_Wait                  0x2
 #define b_Msg_SRC_CAP               0x4
@@ -138,6 +167,144 @@
 #define b_msg_soft_reset            0x20
 #define b_RID_Detect_done           0x40
 
+// Function Status
+#define FUNCTION_STATUS_INITIAL_DETACH		 0
+#define FUNCTION_STATUS_SRC_SEND_CAPABILITY  3
+#define FUNCTION_STATUS_SRC_READY            6
+#define FUNCTION_STATUS_SRC_TIMEOUT          7
+#define FUNCTION_STATUS_SINK_DISCOVERY	     17
+#define FUNCTION_STATUS_SINK_READY           21
+#define FUNCTION_STATUS_SINK_TIMEOUT		 29
+
+typedef union
+{
+	uint16_t        DATA;
+	struct
+	{
+		uint8_t     BDATA[2];
+	}BYTES;
+	struct
+	{
+		uint16_t    Message_Type:4,
+				    Rsvd2_msg_header:1,
+				    Port_Data_Role:1,
+				    Specification_Revision:2,
+				    Port_Power_Role:1,
+			    	Message_ID:3,
+				    Number_of_obj:3,
+				    Rsvd_msg_header:1;
+	}BITS;
+} U_MSG_HEADER_Type;
+
+/* for alternate mode */
+#if defined(CONFIG_CCIC_ALTERNATE_MODE)
+typedef union
+{
+	uint32_t        DATA;
+	struct
+	{
+		uint8_t     BDATA[4];
+	}BYTES;
+	struct
+	{
+		uint32_t    VDM_command:5,
+				    Rsvd2_VDM_header:1,
+				    VDM_command_type:2,
+				    Object_Position:3,
+				    Rsvd_VDM_header:2,
+			    	Structured_VDM_Version:2,
+				    VDM_Type:1,
+				    Standard_Vendor_ID:16;
+	}BITS;
+}U_DATA_MSG_VDM_HEADER_Type;
+
+typedef union
+{
+	uint32_t        DATA;
+	struct
+	{
+		uint8_t     BDATA[4];
+	}BYTES;
+	struct
+	{
+		uint32_t    USB_Vendor_ID:16,
+			    	Rsvd_ID_header:10,
+				    Modal_Operation_Supported:1,
+				    Product_Type:3,
+				    Data_Capable_USB_Device:1,
+				    Data_Capable_USB_Host:1;
+	}BITS;
+}U_DATA_MSG_ID_HEADER_Type;
+
+typedef union
+{
+	uint32_t        DATA;
+	struct
+	{
+		uint8_t     BDATA[4];
+	}BYTES;
+	struct
+	{
+		uint32_t    Cert_TID:20,
+			    	Rsvd_cert_VDOer:12;
+	}BITS;
+}U_CERT_STAT_VDO_Type;
+
+typedef union
+{
+	uint32_t        DATA;
+	struct
+	{
+		uint8_t     BDATA[4];
+	}BYTES;
+	struct
+	{
+		uint32_t    Device_Version:16,
+			    	Product_ID:16;
+	}BITS;
+}U_PRODUCT_VDO_Type;
+
+typedef union
+{
+	uint32_t        DATA;
+	struct
+	{
+		uint8_t     BDATA[4];
+	}BYTES;
+	struct
+	{
+		uint32_t    USB_Superspeed_Signaling_Support:3,
+				    SOP_contoller_present:1,
+				    Vbus_through_cable:1,
+				    Vbus_Current_Handling_Capability:2,
+				    SSRX2_Directionality_Support:1,
+				    SSRX1_Directionality_Support:1,
+				    SSTX2_Directionality_Support:1,
+				    SSTX1_Directionality_Support:1,
+				    Cable_Termination_Type:2,
+				    Cable_Latency:4,
+				    TypeC_to_Plug_Receptacle:1,
+				    TypeC_to_ABC:2,
+				    Rsvd_CABLE_VDO:4,
+				    Cable_Firmware_Version:4,
+				    Cable_HW_Version:4;
+	}BITS;
+}U_CABLE_VDO_Type;
+
+typedef union
+{
+	uint32_t        DATA;
+	struct
+	{
+		uint8_t     BDATA[4];
+	}BYTES;
+	struct
+	{
+		uint32_t    SVID_0:16,
+				    SVID_1:16;
+	}BITS;
+}U_VDO1_Type;
+#endif
 typedef enum
 {
 	// PDO Message
@@ -171,6 +338,16 @@ typedef enum
 	MSG_Idx_RX_DISC_ATTENTION_RESP  = 31
 
 } Num_MSG_INDEX;
+
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
+typedef enum
+{
+	TYPE_C_DETACH = 0,
+	TYPE_C_ATTACH_DFP = 1, // Host
+	TYPE_C_ATTACH_UFP = 2, // Device
+	TYPE_C_ATTACH_DRP = 3, // Dual role
+} CCIC_OTP_MODE;
+#endif
 
 typedef struct
 {
@@ -216,6 +393,133 @@ typedef struct
 	uint32_t    PDO_Parameter:2;
 }SRC_VAR_SUPPLY_Typedef;
 
+
+typedef union
+{
+    uint16_t        DATA;
+
+    struct
+    {
+        uint8_t     BDATA[2];
+    }BYTES;
+
+    struct
+    {
+        uint32_t    Maximum_Current:10,
+                    Voltage_Unit:10,
+                    Peak_Current:2,
+                    Reserved:3,
+                    Data_Role_Swap:1,
+                    USB_Comm_Capable:1,
+                    Externally_POW:1,
+                    USB_Suspend_Support:1,
+                    Dual_Role_Power:1,
+                    PDO_Parameter:2;
+    }BITS;
+} U_SRC_FIXED_SUPPLY_Typedef;
+
+
+typedef union
+{
+    uint16_t        DATA;
+
+    struct
+    {
+        uint8_t     BDATA[2];
+    }BYTES;
+
+    struct
+    {
+        uint32_t    Maximum_Current:10,
+                    Minimum_Voltage:10,
+                    Maximum_Voltage:10,
+                    PDO_Parameter:2;
+    }BITS;
+} U_SRC_VAR_SUPPLY_Typedef;
+
+
+typedef union
+{
+    uint16_t        DATA;
+
+    struct
+    {
+        uint8_t     BDATA[2];
+    }BYTES;
+
+    struct
+    {
+        uint32_t    Maximum_Allow_Power:10,
+                    Minimum_Voltage:10,
+                    Maximum_Voltage:10,
+                    PDO_Parameter:2;
+    }BITS;
+} U_SRC_BAT_SUPPLY_Typedef;
+
+
+    // Sink Capabilities
+typedef union
+{
+    uint16_t        DATA;
+
+    struct
+    {
+        uint8_t     BDATA[2];
+    }BYTES;
+
+    struct
+    {
+        uint32_t    Maximum_Current:10,
+                    Voltage_Unit:10,
+                    Peak_Current:2,
+                    Reserved:3,
+                    Data_Role_Swap:1,
+                    USB_Comm_Capable:1,
+                    Externally_POW:1,
+                    Higher_Capability:1,
+                    Dual_Role_Power:1,
+                    PDO_Parameter:2;
+    }BITS;
+} U_SINK_FIXED_SUPPLY_Typedef;
+
+
+typedef union
+{
+    uint16_t        DATA;
+
+    struct
+    {
+        uint8_t     BDATA[2];
+    }BYTES;
+
+    struct
+    {
+        uint32_t    Operational_Current:10,
+                    Minimum_Voltage:10,
+                    Maximum_Voltage:10,
+                    PDO_Parameter:2;
+    }BITS;
+} U_SINK_VAR_SUPPLY_Typedef;
+
+
+typedef union
+{
+    uint16_t        DATA;
+
+    struct
+    {
+        uint8_t     BDATA[2];
+    }BYTES;
+
+    struct
+    {
+        uint32_t    Operational_Power:10,
+                    Minimum_Voltage:10,
+                    Maximum_Voltage:10,
+                    PDO_Parameter:2;
+    }BITS;
+} U_SINK_BAT_SUPPLY_Typedef;
+
 // ================== Request Message ================
 
 typedef struct
@@ -231,6 +535,29 @@ typedef struct
 	uint32_t    Reserved_2:1;
 } REQUEST_FIXED_SUPPLY_STRUCT_Typedef;
 
+typedef union
+{
+    uint32_t        DATA;
+
+    struct
+    {
+        uint8_t     BDATA[4];
+    }BYTES;
+
+    struct
+    {
+        uint32_t    Minimum_OP_Current:10,  // 10mA
+                    OP_Current:10,          // 10mA
+                    Reserved_1:4,           // Set to Zero
+                    No_USB_Suspend:1,
+                    USB_Comm_Capable:1,
+                    Capa_Mismatch:1,
+                    GiveBack_Flag:1,        // GiveBack Support set to 1
+                    Object_Position:3,      // 000 is reserved
+                    Reserved_2:1;
+    }BITS;
+}U_REQUEST_FIXED_SUPPLY_STRUCT_Typedef;
+
 #define S2MM003_REG_MASK(reg, mask)	((reg & mask##_MASK) >> mask##_SHIFT)
 
 
@@ -241,15 +568,54 @@ static ssize_t s2mm003_register_show(struct device *dev,
 static DEVICE_ATTR(s2mm003_register, S_IRUGO, s2mm003_register_show, NULL);
 #endif
 
-struct s2mm003_usbpd_data {
+struct s2mm003_data {
 	struct device *dev;
 	struct i2c_client *i2c;
 	int irq_gpio;
+	int redriver_en;
+	struct mutex i2c_mutex;
+	u8 attach;
+	u8 vbus_detach;
+
+	int wq_times;
+	int p_prev_rid;
+	int prev_rid;
+	int cur_rid;
+
+	u8 firm_ver[4];
+
+	int func_state;	
+
+	int plug_rprd_sel;
+	uint32_t Pdic_usb_state;
+#if defined(CONFIG_CCIC_ALTERNATE_MODE)
+	uint32_t Pdic_state_machine;
+	uint32_t SVID_0;
+	uint32_t SVID_1;
+	uint32_t Vendor_ID;
+	uint32_t Product_ID;
+	int acc_type;
+#endif
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
+	struct dual_role_phy_instance *dual_role;
+	struct dual_role_phy_desc *desc;
+	struct completion reverse_completion;
+	int power_role;
+	int try_state_change;
+#endif
 };
 
-int irq_times;
-int wq_times;
-int p_prev_rid = -1;
-int prev_rid = -1;
-int cur_rid = -1;
+#define DUAL_ROLE_SET_MODE_WAIT_MS 1500
+
+enum S2MM003_POWER {
+	S2MM003_CPU_RESET,
+	S2MM003_FULL_RESET,
+	S2MM003_START,
+};
+
+//int irq_times;
+//int wq_times;
+//int p_prev_rid = -1;
+//int prev_rid = -1;
+//int cur_rid = -1;
 #endif /* __S2MM003_H */

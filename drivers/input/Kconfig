@@ -236,12 +236,17 @@ config SENSORS_HALL_FOLDER
 	help
 	  Say Y here to use HALL IC for FOLDER.
 
-config V_HALL_FOLDING
-	bool "Valley HALL for Folding work"
-	depends on HALL
+config HALL_SW_LID
+	bool "Send event SW_LID"
 	default n
 	help
-	  Say Y here to use Valley HALL IC for Folding work.
+	  Say Y here to send event SW_LID
+
+config HALL_M1120
+	tristate "Enable HALL M1120"
+	default n
+	help
+	  Enable Hall M1120 Feature
 
 comment "Input Device Drivers"
 
@@ -254,6 +259,8 @@ source "drivers/input/joystick/Kconfig"
 source "drivers/input/tablet/Kconfig"
 
 source "drivers/input/touchscreen/Kconfig"
+
+source "drivers/input/wacom/Kconfig"
 
 source "drivers/input/misc/Kconfig"
 

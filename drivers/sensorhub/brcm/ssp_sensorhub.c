@@ -178,18 +178,20 @@ static ssize_t ssp_sensorhub_read(struct file *file, char __user *buf,
 	length = event->library_length;
 
 	while (retries--) {
-		ret = copy_to_user(buf,
-			event->library_data, event->library_length);
+		if(unlikely(!access_ok(VERIFY_WRITE, buf, event->library_length))){
+			sensorhub_err("[SSP]: fail to access user space, read library data err(%d/%d), address(%p/%p)",  length, event->library_event_number, buf, event->library_data);
+		}
+		ret = copy_to_user(buf, event->library_data, event->library_length);
 		if (likely(!ret))
 			break;
 	}
-	if (unlikely(ret)) {
-		sensorhub_err("read library data err(%d)", ret);
-		goto err;
-	}
 
-	ssp_sensorhub_log(__func__,
-		event->library_data, event->library_length);
+	if (unlikely(ret)){
+		sensorhub_err("read library data err(%d/%d/%d)", ret, length, event->library_event_number);
+		DEBUG_SSP_PACKET_HEX_RECV(event->library_data, event->library_length);
+	}
+	else
+		ssp_sensorhub_log(__func__, event->library_data, event->library_length);
 
 	/* remove first event from the list */
 	ret = kfifo_out(&hub_data->fifo, &event, sizeof(void *));
@@ -276,7 +278,24 @@ void ssp_sensorhub_report_notice(struct ssp_data *ssp_data, char notice)
 {
 	struct ssp_sensorhub_data *hub_data = ssp_data->hub_data;
 
-	input_report_rel(hub_data->sensorhub_input_dev, NOTICE, notice);
+    if(notice == MSG2SSP_AP_STATUS_RESET)
+    {
+        if(ssp_data->IsMcuCrashed == true)
+		{
+			input_report_rel(hub_data->sensorhub_input_dev, NOTICE, MCU_CRASHED);
+			ssp_data->IsMcuCrashed = false;
+		}
+		else if(ssp_data->intendedMcuReset == true)
+		{
+			input_report_rel(hub_data->sensorhub_input_dev, NOTICE, MCU_INTENDED_RESET);
+			ssp_data->intendedMcuReset = false;
+		}
+        else
+            input_report_rel(hub_data->sensorhub_input_dev, NOTICE, KERNEL_RESET);
+    }
+    else
+	    input_report_rel(hub_data->sensorhub_input_dev, NOTICE, notice);
+    
 	input_sync(hub_data->sensorhub_input_dev);
 
 	if (notice == MSG2SSP_AP_STATUS_WAKEUP)
@@ -316,7 +335,7 @@ static int ssp_sensorhub_list(struct ssp_sensorhub_data *hub_data,
 	}
 
 	ssp_sensorhub_log(__func__, dataframe, length);
-
+    pr_info("[SSP]: %s len: %d ev: %d\n", __func__, length, hub_data->event_number);
 	/* overwrite new event if list is full */
 	if (unlikely(kfifo_is_full(&hub_data->fifo))) {
 		ret = kfifo_out(&hub_data->fifo, &event, sizeof(void *));
@@ -340,7 +359,7 @@ static int ssp_sensorhub_list(struct ssp_sensorhub_data *hub_data,
 	memcpy(hub_data->events[hub_data->event_number].library_data,
 		dataframe, length);
 	hub_data->events[hub_data->event_number].library_length = length;
-
+    hub_data->events[hub_data->event_number].library_event_number = hub_data->event_number;
 	/* add new event into the end of list */
 	event = &hub_data->events[hub_data->event_number];
 	ret = kfifo_in(&hub_data->fifo, &event, sizeof(void *));
@@ -594,6 +613,7 @@ int ssp_sensorhub_initialize(struct ssp_data *ssp_data)
 	init_completion(&hub_data->read_done);
 	init_completion(&hub_data->big_read_done);
 	init_completion(&hub_data->big_write_done);
+	init_completion(&hub_data->mcu_init_done);
 	spin_lock_init(&hub_data->sensorhub_lock);
 	mutex_init(&hub_data->big_events_lock);
 

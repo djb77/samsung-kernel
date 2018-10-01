@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dngl_stats.h 523030 2014-12-25 17:28:07Z $
+ * $Id: dngl_stats.h 668337 2016-11-03 01:32:05Z $
  */
 
 #ifndef _dngl_stats_h_
@@ -109,7 +109,7 @@ typedef struct {
 	uint8 bssid[ETHER_ADDR_LEN];     /* bssid */
 	uint8 ap_country_str[3];         /* country string advertised by AP */
 	uint8 country_str[3];            /* country string for this association */
-} wifi_interface_info;
+} __attribute__ ((packed)) wifi_interface_info;
 
 typedef wifi_interface_info *wifi_interface_handle;
 
@@ -132,12 +132,25 @@ typedef struct {
 			/* HT/VHT it would be mcs index */
 	uint32 reserved;   /* reserved */
 	uint32 bitrate;    /* units of 100 Kbps */
+} wifi_rate_v2;
+
+typedef struct {
+	uint32 preamble   :3;   /* 0: OFDM, 1:CCK, 2:HT 3:VHT 4..7 reserved */
+	uint32 nss        :2;   /* 0:1x1, 1:2x2, 3:3x3, 4:4x4 */
+	uint32 bw         :3;   /* 0:20MHz, 1:40Mhz, 2:80Mhz, 3:160Mhz */
+	uint32 rateMcsIdx :8;   /* OFDM/CCK rate code would be as per ieee std
+					* in the units of 0.5mbps HT/VHT it would be
+					* mcs index
+					*/
+	uint32 reserved  :16;   /* reserved */
+	uint32 bitrate;         /* units of 100 Kbps */
 } wifi_rate;
+
 
 /* channel statistics */
 typedef struct {
 	wifi_channel_info channel;  /* channel */
-	uint32 on_time;         	/* msecs the radio is awake (32 bits number
+	uint32 on_time;				/* msecs the radio is awake (32 bits number
 				         * accruing over time)
 					 */
 	uint32 cca_busy_time;          /* msecs the CCA register is busy (32 bits number
@@ -183,20 +196,43 @@ typedef struct {
 	wifi_channel_stat channels[1];   /* channel statistics */
 } wifi_radio_stat;
 
+typedef struct {
+	wifi_radio radio;
+	uint32 on_time;
+	uint32 tx_time;
+	uint32 rx_time;
+	uint32 on_time_scan;
+	uint32 on_time_nbd;
+	uint32 on_time_gscan;
+	uint32 on_time_roam_scan;
+	uint32 on_time_pno_scan;
+	uint32 on_time_hs20;
+	uint32 num_channels;
+} wifi_radio_stat_h;
+
 /* per rate statistics */
 typedef struct {
-	struct {
-		uint16 version;
-		uint16 length;
-	};
+	wifi_rate rate;     /* rate information */
 	uint32 tx_mpdu;        /* number of successfully transmitted data pkts (ACK rcvd) */
 	uint32 rx_mpdu;        /* number of received data pkts */
 	uint32 mpdu_lost;      /* number of data packet losses (no ACK) */
 	uint32 retries;        /* total number of data pkt retries */
 	uint32 retries_short;  /* number of short data pkt retries */
 	uint32 retries_long;   /* number of long data pkt retries */
-	wifi_rate rate;     /* rate information */
 } wifi_rate_stat;
+
+typedef struct {
+	uint16 version;
+	uint16 length;
+	uint32 tx_mpdu;
+	uint32 rx_mpdu;
+	uint32 mpdu_lost;
+	uint32 retries;
+	uint32 retries_short;
+	uint32 retries_long;
+	wifi_rate_v2 rate;
+} wifi_rate_stat_v2;
+
 
 /* access categories */
 typedef enum {
@@ -261,9 +297,28 @@ typedef struct {
 	uint32 beacon_rx;                     /* access point beacon received count from
 					       * connected AP
 					       */
+	uint64 average_tsf_offset;	/* average beacon offset encountered (beacon_TSF - TBTT)
+					* The average_tsf_offset field is used so as to calculate
+					* the typical beacon contention time on the channel as well
+					* may be used to debug beacon synchronization and related
+					* power consumption issue
+					*/
+	uint32 leaky_ap_detected;	/* indicate that this AP
+					* typically leaks packets beyond
+					* the driver guard time.
+					*/
+	uint32 leaky_ap_avg_num_frames_leaked;	/* average number of frame leaked by AP after
+					* frame with PM bit set was ACK'ed by AP
+					*/
+	uint32 leaky_ap_guard_time;		/* guard time currently in force
+					* (when implementing IEEE power management
+					* based on frame control PM bit), How long
+					* driver waits before shutting down the radio and after
+					* receiving an ACK for a data frame with PM bit set)
+					*/
 	uint32 mgmt_rx;                       /* access point mgmt frames received count from
-					       * connected AP (including Beacon)
-					       */
+				       * connected AP (including Beacon)
+				       */
 	uint32 mgmt_action_rx;                /* action frames received count */
 	uint32 mgmt_action_tx;                /* action frames transmit count */
 	wifi_rssi rssi_mgmt;                  /* access Point Beacon and Management frames RSSI

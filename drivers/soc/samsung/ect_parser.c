@@ -976,17 +976,9 @@ err_binary_list_allocation:
 
 static void ect_present_test_data(char *version)
 {
-	if (version[1] == '.')
-		return;
-
-	if (version[3] == '0')
-		return;
-
 	pr_info("========================================\n");
 	pr_info("=\n");
-	pr_info("= [ECT] current version is TEST VERSION!!\n");
-	pr_info("= Please be aware that error can be happen.\n");
-	pr_info("= [VERSION] : %c%c%c%c\n", version[0], version[1], version[2], version[3]);
+	pr_info("= [ECT][VERSION] : %c%c%c%c\n", version[0], version[1], version[2], version[3]);
 	pr_info("=\n");
 	pr_info("========================================\n");
 }
@@ -2165,7 +2157,10 @@ int ect_strncmp(char *src1, char *src2, int length)
 {
 	int i;
 
-	for (i = 0; i < length; src1++, src2++)
+	if (length <= 0)
+		return -1;
+
+	for (i = 0; i < length; i++, src1++, src2++)
 		if (*src1 != *src2)
 			return ((*(unsigned char *)src1 < *(unsigned char *)src2) ? -1 : +1);
 
