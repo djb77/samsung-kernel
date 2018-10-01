@@ -394,6 +394,14 @@ static unsigned int init_ctrl_tables(struct sbd_link_device *sl, int num_iodevs,
 			++id;
 		}
 	}
+	
+#ifndef CONFIG_MODEM_IF_QOS
+	for (i = 0; i < num_iodevs; i++) {
+		int ch = iodevs[i].id;
+		if (sipc_ps_ch(ch))
+			sl->ch2id[ch] = sl->ch2id[QOS_HIPRIO];
+	}
+#endif
 
 	/* Finally, id has the number of actual link channels. */
 	return id;

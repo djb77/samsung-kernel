@@ -13,7 +13,9 @@
  *
  */
 #include "ssp.h"
+#include <linux/iio/iio.h>
 #include <linux/math64.h>
+#include <linux/string.h>
 
 #define BATCH_IOCTL_MAGIC		0xFC
 
@@ -32,6 +34,47 @@ int get_msdelay(int64_t dDelayRate)
 	return div_s64(dDelayRate, 1000000);
 }
 
+s32 SettingVDIS_Support(struct ssp_data *data, int64_t *dNewDelay)
+{
+	s32 dMsDelay = 0;
+	int64_t NewDelay = *dNewDelay;
+
+
+	if ((NewDelay == CAMERA_GYROSCOPE_SYNC || NewDelay == CAMERA_GYROSCOPE_VDIS_SYNC)
+		&& !data->IsVDIS_Enabled) {
+		data->IsVDIS_Enabled = true;
+		data->ts_stacked_cnt = 0;
+		send_vdis_flag(data, data->IsVDIS_Enabled);
+	} else if (!(NewDelay == CAMERA_GYROSCOPE_SYNC || NewDelay == CAMERA_GYROSCOPE_VDIS_SYNC)
+		&& data->IsVDIS_Enabled) {
+		data->IsVDIS_Enabled = false;
+		data->ts_stacked_cnt = 0;
+		send_vdis_flag(data, data->IsVDIS_Enabled);
+	}
+	if (NewDelay == CAMERA_GYROSCOPE_SYNC) {
+		*dNewDelay = CAMERA_GYROSCOPE_SYNC_DELAY;
+		data->cameraGyroSyncMode = true;
+	} else if (NewDelay == CAMERA_GYROSCOPE_VDIS_SYNC) {
+		*dNewDelay = CAMERA_GYROSCOPE_VDIS_SYNC_DELAY;
+		data->cameraGyroSyncMode = true;
+	} else {
+		data->cameraGyroSyncMode = false;
+		if ((data->adDelayBuf[GYROSCOPE_SENSOR] == NewDelay)
+			&& (data->aiCheckStatus[GYROSCOPE_SENSOR] == RUNNING_SENSOR_STATE)) {
+			pr_err("[SSP] same delay ignored!\n");
+			return 0;
+		}
+	}
+
+	if ((data->cameraGyroSyncMode == true) && (data->aiCheckStatus[GYROSCOPE_SENSOR] == RUNNING_SENSOR_STATE)) {
+		if (data->adDelayBuf[GYROSCOPE_SENSOR] == NewDelay)
+			return 0;
+	}
+
+	dMsDelay = get_msdelay(*dNewDelay);
+	return dMsDelay;
+}
+
 static void enable_sensor(struct ssp_data *data,
 	int iSensorType, int64_t dNewDelay)
 {
@@ -45,26 +88,9 @@ static void enable_sensor(struct ssp_data *data,
 
 	// SUPPORT CAMERA SYNC ++++++
 	if (iSensorType == GYROSCOPE_SENSOR) {
-		if (dNewDelay == CAMERA_GYROSCOPE_SYNC) {
-			dNewDelay = CAMERA_GYROSCOPE_SYNC_DELAY;
-			dMsDelay = get_msdelay(dNewDelay);
-			data->cameraGyroSyncMode = true;
-		} else if(dNewDelay == CAMERA_GYROSCOPE_VDIS_SYNC){
-			dNewDelay = CAMERA_GYROSCOPE_VDIS_SYNC_DELAY;
-			dMsDelay = get_msdelay(dNewDelay);
-			data->cameraGyroSyncMode = true;
-		} else {
-			data->cameraGyroSyncMode = false;
-			if((data->adDelayBuf[iSensorType] == dNewDelay) && (data->aiCheckStatus[iSensorType] == RUNNING_SENSOR_STATE)) {
-				pr_err("[SSP] same delay ignored! \n");
-				return;
-			}
-		}
-		
-		if((data->cameraGyroSyncMode == true) && (data->aiCheckStatus[iSensorType] == RUNNING_SENSOR_STATE)){
-			if(data->adDelayBuf[iSensorType] == dNewDelay)
-				return;
-		}
+		dMsDelay = SettingVDIS_Support(data, &dNewDelay);
+		if (dMsDelay == 0)
+			return;
 	}
 	// SUPPORT CAMERA SYNC -----
 
@@ -74,8 +100,8 @@ static void enable_sensor(struct ssp_data *data,
 
 	switch (data->aiCheckStatus[iSensorType]) {
 	case ADD_SENSOR_STATE:
-		ssp_dbg("[SSP]: %s - add %u, New = %lldns\n",
-			 __func__, 1 << iSensorType, dNewDelay);
+		ssp_dbg("[SSP]: %s - add %llu, New = %lldns\n",
+			 __func__, 1ULL << iSensorType, dNewDelay);
 
 		if (iSensorType == PROXIMITY_SENSOR) {
 #ifdef CONFIG_SENSORS_SSP_PROX_FACTORYCAL
@@ -85,7 +111,7 @@ static void enable_sensor(struct ssp_data *data,
 			set_proximity_threshold(data);
 			data->sensor_dump_flag_proximity = true;
 		}
-		
+
 		if (iSensorType == PROXIMITY_ALERT_SENSOR) {
 			set_proximity_alert_threshold(data);
 		}
@@ -129,7 +155,7 @@ static void enable_sensor(struct ssp_data *data,
 		if (ret <= 0) {
 			uNewEnable =
 				(u64)atomic64_read(&data->aSensorEnable)
-				& (~(u64)(1 << iSensorType));
+				& (~(u64)(1ULL << iSensorType));
 			atomic64_set(&data->aSensorEnable, uNewEnable);
 
 			data->aiCheckStatus[iSensorType] = NO_SENSOR_STATE;
@@ -144,8 +170,8 @@ static void enable_sensor(struct ssp_data *data,
 			== get_msdelay(data->adDelayBuf[iSensorType]))
 			break;
 
-		ssp_dbg("[SSP]: %s - Change %u, New = %lldns\n",
-			__func__, 1 << iSensorType, dNewDelay);
+		ssp_dbg("[SSP]: %s - Change %llu, New = %lldns\n",
+			__func__, 1ULL << iSensorType, dNewDelay);
 
 		memcpy(&uBuf[0], &dMsDelay, 4);
 		memcpy(&uBuf[4], &maxBatchReportLatency, 4);
@@ -169,26 +195,9 @@ static void change_sensor_delay(struct ssp_data *data,
 
 	// SUPPORT CAMERA SYNC ++++++
 	if (iSensorType == GYROSCOPE_SENSOR) {
-		if (dNewDelay == CAMERA_GYROSCOPE_SYNC) {
-			dNewDelay = CAMERA_GYROSCOPE_SYNC_DELAY;
-			dMsDelay = get_msdelay(dNewDelay);
-			data->cameraGyroSyncMode = true;
-		} else if(dNewDelay == CAMERA_GYROSCOPE_VDIS_SYNC){
-			dNewDelay = CAMERA_GYROSCOPE_VDIS_SYNC_DELAY;
-			dMsDelay = get_msdelay(dNewDelay);
-			data->cameraGyroSyncMode = true;
-		} else {
-			data->cameraGyroSyncMode = false;
-			if((data->adDelayBuf[iSensorType] == dNewDelay) && (data->aiCheckStatus[iSensorType] == RUNNING_SENSOR_STATE)) {
-				pr_err("[SSP] same delay ignored! \n");
-				return;
-			}
-		}
-
-		if((data->cameraGyroSyncMode == true) && (data->aiCheckStatus[iSensorType] == RUNNING_SENSOR_STATE)){
-			if(data->adDelayBuf[iSensorType] == dNewDelay)
-				return;
-		}
+		dMsDelay = SettingVDIS_Support(data, &dNewDelay);
+		if (dMsDelay == 0)
+			return;
 	}
 	// SUPPORT CAMERA SYNC -----
 
@@ -202,8 +211,8 @@ static void change_sensor_delay(struct ssp_data *data,
 			== get_msdelay(data->adDelayBuf[iSensorType]))
 			break;
 
-		ssp_dbg("[SSP]: %s - Change %u, New = %lldns\n",
-			__func__, 1 << iSensorType, dNewDelay);
+		ssp_dbg("[SSP]: %s - Change %llu, New = %lldns\n",
+			__func__, 1ULL << iSensorType, dNewDelay);
 
 		memcpy(&uBuf[0], &dMsDelay, 4);
 		memcpy(&uBuf[4], &maxBatchReportLatency, 4);
@@ -227,7 +236,7 @@ static int ssp_remove_sensor(struct ssp_data *data,
 	int64_t dSensorDelay = data->adDelayBuf[uChangedSensor];
 
 	ssp_dbg("[SSP]: %s - remove sensor = %lld, current state = %lld\n",
-		__func__, (u64)(1 << uChangedSensor), uNewEnable);
+		__func__, (u64)(1ULL << uChangedSensor), uNewEnable);
 
 	data->adDelayBuf[uChangedSensor] = DEFUALT_POLLING_DELAY;
 	data->batchLatencyBuf[uChangedSensor] = 0;
@@ -251,6 +260,10 @@ static int ssp_remove_sensor(struct ssp_data *data,
 		}
 	} else if (uChangedSensor == GYROSCOPE_SENSOR) {
 		data->cameraGyroSyncMode = false;
+		if (data->IsVDIS_Enabled) {
+			data->IsVDIS_Enabled = false;
+			send_vdis_flag(data, data->IsVDIS_Enabled);
+		}
 	} else if(uChangedSensor == PROXIMITY_SENSOR)	{
 		data->sensor_dump_flag_proximity = false;
 	} else if(uChangedSensor == LIGHT_SENSOR)	{
@@ -258,7 +271,7 @@ static int ssp_remove_sensor(struct ssp_data *data,
 	}
 
 	if (!data->bSspShutdown)
-		if (atomic64_read(&data->aSensorEnable) & (1 << uChangedSensor)) {
+		if (atomic64_read(&data->aSensorEnable) & (1ULL << uChangedSensor)) {
 			s32 dMsDelay = get_msdelay(dSensorDelay);
 			memcpy(&uBuf[0], &dMsDelay, 4);
 
@@ -347,10 +360,10 @@ static ssize_t set_sensors_enable(struct device *dev,
 
 	mutex_lock(&data->enable_mutex);
 	for (uChangedSensor = 0; uChangedSensor < SENSOR_MAX; uChangedSensor++) {
-		if ((atomic64_read(&data->aSensorEnable) & (1 << uChangedSensor))
-			!= (uNewEnable & (1 << uChangedSensor))) {
+		if ((atomic64_read(&data->aSensorEnable) & (1ULL << uChangedSensor))
+			!= (uNewEnable & (1ULL << uChangedSensor))) {
 
-			if (!(uNewEnable & (1 << uChangedSensor))) {
+			if (!(uNewEnable & (1ULL << uChangedSensor))) {
 				data->reportedData[uChangedSensor] = false;
 				ssp_remove_sensor(data, uChangedSensor,
 					uNewEnable); /* disable */
@@ -405,7 +418,7 @@ static ssize_t set_flush(struct device *dev,
 		return -EINVAL;
 
 	sensor_type = (u8)dTemp;
-	if (!(atomic64_read(&data->aSensorEnable) & (1 << sensor_type)))
+	if (!(atomic64_read(&data->aSensorEnable) & (1ULL << sensor_type)))
 		return -EINVAL;
 
 	if (flush(data, sensor_type) < 0) {
@@ -458,6 +471,54 @@ static ssize_t set_shake_cam(struct device *dev,
 
 	atomic64_set(&data->aSensorEnable, uNewEnable);
 	return size;
+}
+
+int get_index_by_name(struct iio_dev *indio_dev, struct ssp_data *data)
+{
+	int i = 0, index = -1;
+
+	for (i = 0; i < SENSOR_MAX; i++) {
+		if (data->indio_dev[i] != NULL && strcmp(data->indio_dev[i]->name, indio_dev->name) == 0) {
+			index = i;
+			break;
+		}
+	}
+
+	return index;
+}
+
+static ssize_t show_sensor_delay(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct ssp_data *data = dev_get_drvdata(dev);
+	int index = get_index_by_name(indio_dev, data);
+
+	if (index >= 0) {
+		snprintf(buf, PAGE_SIZE, "%lld\n", data->adDelayBuf[index]);
+	}
+
+	pr_err("[SSP]: %s, dev_name = %s index = %d\n", __func__, indio_dev->name, index);
+	return 0;
+}
+
+static ssize_t set_sensor_delay(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct ssp_data *data = dev_get_drvdata(dev);
+	int index = get_index_by_name(indio_dev, data);
+	int64_t delay = 0;
+
+	if (kstrtoll(buf, 10, &delay) < 0)
+		return -EINVAL;
+
+	if (index >= 0) {
+		change_sensor_delay(data, index, delay);
+	}
+
+	pr_err("[SSP]: %s, dev_name = %s index = %d\n", __func__, indio_dev->name, index);
+	return 0;
 }
 
 static ssize_t show_acc_delay(struct device *dev,
@@ -685,6 +746,29 @@ static ssize_t set_step_cnt_delay(struct device *dev,
 	return size;
 }
 
+static ssize_t show_prox_alert_delay(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ssp_data *data  = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%lld\n",
+		data->adDelayBuf[PROXIMITY_ALERT_SENSOR]);
+}
+
+static ssize_t set_prox_alert_delay(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	int64_t dNewDelay;
+	struct ssp_data *data  = dev_get_drvdata(dev);
+
+	if (kstrtoll(buf, 10, &dNewDelay) < 0)
+		return -1;
+
+	change_sensor_delay(data, PROXIMITY_ALERT_SENSOR, dNewDelay);
+	return size;
+}
+
+
 static ssize_t show_uncalib_gyro_delay(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -728,6 +812,7 @@ static ssize_t set_pressure_delay(struct device *dev,
 	return size;
 }
 
+#if ANDROID_VERSION < 80000
 static ssize_t show_gesture_delay(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -749,6 +834,7 @@ static ssize_t set_gesture_delay(struct device *dev,
 
 	return size;
 }
+#endif
 
 static ssize_t show_light_delay(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -768,6 +854,27 @@ static ssize_t set_light_delay(struct device *dev,
 		return -EINVAL;
 
 	change_sensor_delay(data, LIGHT_SENSOR, dNewDelay);
+	return size;
+}
+
+static ssize_t show_light_flicker_delay(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ssp_data *data  = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%lld\n", data->adDelayBuf[LIGHT_FLICKER_SENSOR]);
+}
+
+static ssize_t set_light_flicker_delay(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	int64_t dNewDelay;
+	struct ssp_data *data  = dev_get_drvdata(dev);
+
+	if (kstrtoll(buf, 10, &dNewDelay) < 0)
+		return -EINVAL;
+
+	change_sensor_delay(data, LIGHT_FLICKER_SENSOR, dNewDelay);
 	return size;
 }
 
@@ -815,6 +922,7 @@ static ssize_t set_prox_delay(struct device *dev,
 	return size;
 }
 
+#if ANDROID_VERSION < 80000
 static ssize_t show_temp_humi_delay(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -836,6 +944,7 @@ static ssize_t set_temp_humi_delay(struct device *dev,
 	change_sensor_delay(data, TEMPERATURE_HUMIDITY_SENSOR, dNewDelay);
 	return size;
 }
+#endif
 
 static ssize_t show_tilt_delay(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -889,6 +998,8 @@ ssize_t ssp_sensorhub_voicel_pcmdump_show(struct device *dev,
 
 	return sprintf(buf, "%s\n", (status ? "OK" : "NG"));
 }
+
+
 
 static DEVICE_ATTR(voice_pcmdump, S_IRUGO,
 	ssp_sensorhub_voicel_pcmdump_show, NULL);
@@ -961,6 +1072,35 @@ static ssize_t set_data_injection_enable(struct device *dev,
 	return size;
 }
 
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+static ssize_t show_lcd_check_fold_state(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ssp_data *data  = dev_get_drvdata(dev);
+	return sprintf(buf, "%d\n", data->change_axis);
+
+}
+
+static ssize_t set_lcd_check_fold_state(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct ssp_data *data = dev_get_drvdata(dev);
+
+	if(folder_state == 1) // folding state
+	{
+		data->change_axis = true;
+		pr_err("[SSP]: %s - change_axis %d\n", __func__, data->change_axis);
+	}
+	else // spread state
+	{
+		data->change_axis = false;
+		pr_err("[SSP]: %s - change_axis %d\n", __func__, data->change_axis);
+	}
+
+	return size;
+}
+#endif
+
 static ssize_t show_sensor_state(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -979,7 +1119,7 @@ static ssize_t set_timestamp_factor(struct device *dev,
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 	int64_t timestamp_factor = 0;
-	
+
 	if (kstrtoll(buf, 10, &timestamp_factor) < 0)
 		return -1;
 
@@ -993,7 +1133,7 @@ static ssize_t show_mcu_power(struct device *dev,
 	struct ssp_data *data = dev_get_drvdata(dev);
 
 	//pr_err("[SSP] %s++\n",__func__);
-	
+
 	if(data->regulator_vdd_mcu_1p8 != NULL){
 		pr_err("[SSP] %s: vdd_mcu_1p8, is enabled %d\n", __func__, regulator_is_enabled(data->regulator_vdd_mcu_1p8));
 		return sprintf(buf, "%d\n", regulator_is_enabled(data->regulator_vdd_mcu_1p8));
@@ -1001,7 +1141,7 @@ static ssize_t show_mcu_power(struct device *dev,
 		pr_err("[SSP] %s: shub_en(%d), is enabled %d\n", __func__, data->shub_en, gpio_get_value(data->shub_en));
 		return sprintf(buf, "%d\n", gpio_get_value(data->shub_en));
 	}
-	return 0;	
+	return 0;
 }
 
 static ssize_t set_mcu_power(struct device *dev,
@@ -1010,12 +1150,12 @@ static ssize_t set_mcu_power(struct device *dev,
 	struct ssp_data *data = dev_get_drvdata(dev);
 	long long enable = 0;
 	int ret = 0;
-	
+
 	//pr_err("[SSP] %s++\n",__func__);
 
 	if (kstrtoll(buf, 8, &enable) < 0)
 		return -1;
-	
+
 	if(data->regulator_vdd_mcu_1p8 != NULL){
 		switch(enable){
 			case 0:
@@ -1032,7 +1172,7 @@ static ssize_t set_mcu_power(struct device *dev,
 		}
 		msleep(20);
 		pr_err("[SSP] %s: enable vdd_mcu_1p8(%lld), is enabled %d\n", __func__, enable, regulator_is_enabled(data->regulator_vdd_mcu_1p8));
-	} 
+	}
 	else if(data->shub_en >= 0){
 		switch(enable){
 			case 0:
@@ -1051,33 +1191,51 @@ static ssize_t set_mcu_power(struct device *dev,
 	return size;
 }
 
-static ssize_t set_ssp_control(struct device *dev, 
-   struct device_attribute *attr, const char *buf, size_t size) 
-{ 
-   printk("[SSP] SSP_CONTROL : %s \n", buf); 
+static ssize_t set_ssp_control(struct device *dev,
+   struct device_attribute *attr, const char *buf, size_t size)
+{
+   printk("[SSP] SSP_CONTROL : %s \n", buf);
 
-   if (strstr(buf, SSP_DEBUG_TIME_FLAG_ON)) { 
-	   ssp_debug_time_flag = true; 
-   } else if(strstr(buf, SSP_DEBUG_TIME_FLAG_OFF)){ 
-	   ssp_debug_time_flag = false; 
-	}  
+   if (strstr(buf, SSP_DEBUG_TIME_FLAG_ON)) {
+	   ssp_debug_time_flag = true;
+   } else if(strstr(buf, SSP_DEBUG_TIME_FLAG_OFF)){
+	   ssp_debug_time_flag = false;
+	}
 
-   return size; 
-} 
+   return size;
+}
 
 
 static ssize_t sensor_dump_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct ssp_data *data  = dev_get_drvdata(dev);
-	
-	if(data->sensor_dump[PROXIMITY_SENSOR] == NULL
-		&& data->sensor_dump[LIGHT_SENSOR] == NULL)
-		return sprintf(buf, "there is no sensor dump\n");
+	int types[] = SENSOR_DUMP_SENSOR_LIST;
+	char str_no_sensor_dump[] = "there is no sensor dump";
+	int i=0, ret;
+	char* sensor_dump;
+	char temp[sensor_dump_length(DUMPREGISTER_MAX_SIZE)+LENGTH_SENSOR_TYPE_MAX+2]={0,};
+
+	sensor_dump = (char *)kzalloc((sensor_dump_length(DUMPREGISTER_MAX_SIZE)+LENGTH_SENSOR_TYPE_MAX+3)*(ARRAY_SIZE(types)), GFP_KERNEL);
+
+	for (i = 0; i < ARRAY_SIZE(types); i++) {
+
+		if (data->sensor_dump[types[i]] != NULL) {
+			snprintf(temp, (int)strlen(data->sensor_dump[types[i]])+LENGTH_SENSOR_TYPE_MAX+3,
+				"%3d\n%s\n\n",/* %3d -> 3 : LENGTH_SENSOR_TYPE_MAX */
+				types[i], data->sensor_dump[types[i]]);
+			strcpy(&sensor_dump[(int)strlen(sensor_dump)], temp);
+		}
+	}
+
+	if((int)strlen(sensor_dump) == 0)
+		ret = snprintf(buf, (int)strlen(str_no_sensor_dump)+1, "%s\n",str_no_sensor_dump);
 	else
-		return sprintf(buf, "proximity_sensor\n%s\nlight_sensor\n%s\n\n", 
-		(data->sensor_dump[PROXIMITY_SENSOR]==NULL)?"":data->sensor_dump[PROXIMITY_SENSOR],
-		(data->sensor_dump[LIGHT_SENSOR]==NULL)?"":data->sensor_dump[LIGHT_SENSOR]);
+		ret = snprintf(buf, (int)strlen(sensor_dump)+1, "%s\n", sensor_dump);
+
+	kfree(sensor_dump);
+
+	return ret;
 }
 
 static ssize_t sensor_dump_store(struct device *dev,
@@ -1085,12 +1243,9 @@ static ssize_t sensor_dump_store(struct device *dev,
 {
 	struct ssp_data *data  = dev_get_drvdata(dev);
 	int sensor_type, ret;
-	char name[50] ={0,};
+	char name[LENGTH_SENSOR_NAME_MAX+1] ={0,};
 
-	memset(name,0,50);
-	sscanf(buf, "%s", name);
-
-	pr_info("%s - buf : %s len = %d\n", __func__, name, (int)strlen(name));
+	sscanf(buf, "%30s", name);		/* 30 : LENGTH_SENSOR_NAME_MAX */
 
 	if((strcmp(name, "all")) == 0)
 	{
@@ -1098,7 +1253,15 @@ static ssize_t sensor_dump_store(struct device *dev,
 	}
 	else
 	{
-		if(strcmp(name, "proximity") == 0)
+		if(strcmp(name, "accelerometer") == 0)
+			sensor_type = ACCELEROMETER_SENSOR;
+		else if(strcmp(name, "gyroscope") == 0)
+			sensor_type = GYROSCOPE_SENSOR;
+		else if(strcmp(name, "magnetic") == 0)
+			sensor_type = GEOMAGNETIC_UNCALIB_SENSOR;
+		else if(strcmp(name, "pressure") == 0)
+			sensor_type = PRESSURE_SENSOR;
+		else if(strcmp(name, "proximity") == 0)
 			sensor_type = PROXIMITY_SENSOR;
 		else if(strcmp(name, "light") == 0)
 			sensor_type = LIGHT_SENSOR;
@@ -1107,23 +1270,168 @@ static ssize_t sensor_dump_store(struct device *dev,
 			pr_err("[SSP] %s - is not supported : %s",__func__,buf);
 			sensor_type = -1;
 			return -EINVAL;
-		}		
+		}
 		ret = send_sensor_dump_command(data,sensor_type);
 	}
-	
+
 	return (ret == SUCCESS)? size : ret;
 }
 
-static DEVICE_ATTR(mcu_rev, S_IRUGO, mcu_revision_show, NULL);
-static DEVICE_ATTR(mcu_name, S_IRUGO, mcu_model_name_show, NULL);
-static DEVICE_ATTR(mcu_update, S_IRUGO, mcu_update_kernel_bin_show, NULL);
-static DEVICE_ATTR(mcu_update2, S_IRUGO,
-	mcu_update_kernel_crashed_bin_show, NULL);
-static DEVICE_ATTR(mcu_update_ums, S_IRUGO, mcu_update_ums_bin_show, NULL);
-static DEVICE_ATTR(mcu_reset, S_IRUGO, mcu_reset_show, NULL);
-static DEVICE_ATTR(mcu_dump, S_IRUGO, mcu_dump_show, NULL);
+#if defined(CONFIG_SSP_REGISTER_RW)
+int htoi(char input)
+{
+    int ret = 0;
+    if('0' <= input && input <= '9')
+        return ret = input - '0';
+    else if('a'<= input && input <= 'f')
+        return ret = input - 'a' + 10;
+    else if('A' <= input && input <= 'F')
+        return ret = input - 'A' + 10;
+    else
+        return 0;
+}
 
-static DEVICE_ATTR(mcu_test, S_IRUGO | S_IWUSR | S_IWGRP,
+int checkInputtedRegisterString(const char* string, char* CheckString[4])
+{
+	int ret = 0;
+	int index = 0;
+	char *Dupstring = NULL;
+	char *pDupstring = NULL;
+
+	pDupstring = Dupstring = kstrdup(string, GFP_KERNEL);
+
+	while ((CheckString[index] = strsep(&Dupstring, " ")) != NULL) {
+		u32 tmp = 0;
+
+		switch (index) {
+		case 0:
+			if (kstrtou32(&CheckString[index][0], 10, &tmp) < 0 || (tmp >= SENSOR_MAX)) {
+				pr_info("[SSP] %s invalid(%d)\n", __func__, tmp);
+				goto exit;
+			}
+			break;
+		case 1:
+			if (CheckString[index][0] == 'r' || CheckString[index][0] == 'w') {
+				tmp = (CheckString[index][0] == 'w' ? 0 : 1);
+			} else if (kstrtou32(&CheckString[index][0], 10, &tmp) < 0 || ((tmp != 0) && (tmp != 1))) {
+				pr_info("[SSP] %s invalid r/w\n", __func__);
+				goto exit;
+			}
+			break;
+		case 2:
+		case 3:
+			if (CheckString[index][0] != '0' && CheckString[index][1] != 'x') {
+				pr_info("[SSP] %s invalid value(0xOO) %s\n", __func__, CheckString[index]);
+				goto exit;
+			}
+			tmp = (uint8_t)((htoi(CheckString[index][2]) << 4) | htoi(CheckString[index][3]));
+			ret = index;
+			break;
+		default:
+			ret = false;
+			goto exit;
+		}
+		CheckString[index++][0] = tmp;
+	}
+	kfree(pDupstring);
+return ret;
+exit:
+	ret = 0;
+	kfree(pDupstring);
+	pr_info("[SSP] %s - ret %d\n", __func__, ret);
+return ret;
+}
+
+static ssize_t register_rw_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+		struct ssp_data *data = dev_get_drvdata(dev);
+
+		if (data->registerValue[1] == 1) { // 1 is read
+			return sprintf(buf, "sensor(%d) %c regi(0x%x) val(0x%x) ret(%d)\n",
+						data->registerValue[0], data->registerValue[1] == 1 ? 'r' : 'w',
+						data->registerValue[2], data->registerValue[3], data->registerValue[4]);
+		} else {
+			if (data->registerValue[4] == true)
+				return sprintf(buf, "sensor(%d) %c regi(0x%x) val(0x%x) SUCCESS\n",
+						data->registerValue[0], data->registerValue[1] == 1 ? 'r' : 'w',
+						data->registerValue[2], data->registerValue[3]);
+			else
+				return sprintf(buf, "sensor(%d) %c regi(0x%x) val(0x%x) FAIL\n",
+						data->registerValue[0], data->registerValue[1] == 1 ? 'r' : 'w',
+						data->registerValue[2], data->registerValue[3]);
+		}
+}
+
+static ssize_t register_rw_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+        struct ssp_data *data = dev_get_drvdata(dev);
+        struct ssp_msg *msg;
+        int index = 0, iRet = 0;
+        char* CheckString[4] = {0, };
+        char sendBuff[5] = {0, };
+
+        msg = kzalloc(sizeof(*msg), GFP_KERNEL);
+        if (ZERO_OR_NULL_PTR(msg)) {
+                pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
+                return -ENOMEM;
+        }
+
+        iRet = checkInputtedRegisterString(buf, CheckString);
+
+        if(iRet == 0) return -1;
+
+        msg->cmd = MSG2SSP_AP_REGISTER_SETTING;
+        msg->length = 5;
+        msg->options = AP2HUB_READ;
+        msg->data = 0;
+        msg->buffer = sendBuff;
+        msg->free_buffer = 0;
+
+       for(index = 0; index <= iRet; index++)
+                msg->data |= (u32)(CheckString[index][0] << (24 - 8*index));
+
+        iRet = ssp_spi_sync(data, msg, 2000);
+
+        if (iRet != SUCCESS)
+            pr_err("[SSP] %s - fail %d\n", __func__, iRet);
+
+        memcpy(data->registerValue, sendBuff, sizeof(sendBuff));
+        return size;
+}
+static DEVICE_ATTR(register_rw,S_IRUGO | S_IWUSR | S_IWGRP,
+	register_rw_show, register_rw_store);
+
+#endif //CONFIG_SSP_REGISTER_RW
+
+static ssize_t reset_info_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ssp_data *data  = dev_get_drvdata(dev);
+	int ret = 0;
+	int totalLen = 0;
+
+	totalLen = (int)strlen(data->resetInfo)
+		+ (data->IsGpsWorking ? (int)strlen("GPS ON ") : (int)strlen("GPS OFF "));
+
+	if ((int)strlen(data->resetInfo))
+		ret = snprintf(buf, totalLen + 1, "%s%s",
+			(data->IsGpsWorking ? "GPS ON " : "GPS OFF "), data->resetInfo);
+	else
+		ret =  snprintf(buf, totalLen + 1, "%s", (data->IsGpsWorking ? "GPS ON " : "GPS OFF "));
+
+	memset(data->resetInfo, 0, ARRAY_SIZE(data->resetInfo));
+
+	return ret;
+}
+
+static DEVICE_ATTR(poll_delay, 0664, show_sensor_delay, set_sensor_delay);
+
+static DEVICE_ATTR(mcu_rev, 0444, mcu_revision_show, NULL);
+static DEVICE_ATTR(mcu_name, 0444, mcu_model_name_show, NULL);
+static DEVICE_ATTR(mcu_reset, 0444, mcu_reset_show, NULL);
+static DEVICE_ATTR(mcu_test, 0664,
 	mcu_factorytest_show, mcu_factorytest_store);
 static DEVICE_ATTR(mcu_sleep_test, S_IRUGO | S_IWUSR | S_IWGRP,
 	mcu_sleep_factorytest_show, mcu_sleep_factorytest_store);
@@ -1157,6 +1465,7 @@ static DEVICE_ATTR(tilt_poll_delay, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_tilt_delay, set_tilt_delay);
 static DEVICE_ATTR(pickup_poll_delay, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_pickup_delay, set_pickup_delay);
+#if ANDROID_VERSION < 80000
 static struct device_attribute dev_attr_gesture_poll_delay
 	= __ATTR(poll_delay, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_gesture_delay, set_gesture_delay);
@@ -1168,6 +1477,9 @@ static struct device_attribute dev_attr_light_ir_poll_delay
 	= __ATTR(poll_delay, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_light_ir_delay, set_light_ir_delay);
 #endif
+static struct device_attribute dev_attr_light_flicker_poll_delay
+	= __ATTR(poll_delay, 0664,
+	show_light_flicker_delay, set_light_flicker_delay);
 #ifdef CONFIG_SENSORS_SSP_INTERRUPT_GYRO_SENSOR
 static struct device_attribute dev_attr_interrupt_gyro_poll_delay
 	= __ATTR(poll_delay, S_IRUGO | S_IWUSR | S_IWGRP,
@@ -1185,6 +1497,32 @@ static struct device_attribute dev_attr_sig_motion_poll_delay
 static struct device_attribute dev_attr_step_cnt_poll_delay
 	= __ATTR(poll_delay, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_step_cnt_delay, set_step_cnt_delay);
+static struct device_attribute dev_attr_prox_alert_poll_delay
+	= __ATTR(poll_delay, 0664,
+	show_prox_alert_delay, set_prox_alert_delay);
+#else
+static struct device_attribute dev_attr_light_poll_delay
+	= __ATTR(light_poll_delay, 0664, show_light_delay, set_light_delay);
+#ifdef CONFIG_SENSORS_SSP_IRDATA_FOR_CAMERA
+static struct device_attribute dev_attr_light_ir_poll_delay
+	= __ATTR(light_ir_poll_delay, 0664, show_light_ir_delay, set_light_ir_delay);
+#endif
+static struct device_attribute dev_attr_light_flicker_poll_delay
+	= __ATTR(light_flicker_poll_delay, 0664, show_light_flicker_delay, set_light_flicker_delay);
+#ifdef CONFIG_SENSORS_SSP_INTERRUPT_GYRO_SENSOR
+static struct device_attribute dev_attr_interrupt_gyro_poll_delay
+	= __ATTR(interrupt_gyro_poll_delay, 0664, show_interrupt_gyro_delay, set_interrupt_gyro_delay);
+#endif
+static struct device_attribute dev_attr_prox_poll_delay
+	= __ATTR(prox_poll_delay, 0664,	show_prox_delay, set_prox_delay);
+static struct device_attribute dev_attr_sig_motion_poll_delay
+	= __ATTR(sig_motion_poll_delay, 0664, show_sig_motion_delay, set_sig_motion_delay);
+static struct device_attribute dev_attr_step_cnt_poll_delay
+	= __ATTR(step_cnt_poll_delay, 0664, show_step_cnt_delay, set_step_cnt_delay);
+static struct device_attribute dev_attr_prox_alert_poll_delay
+	= __ATTR(prox_alert_poll_delay, 0664, show_prox_alert_delay, set_prox_alert_delay);
+#endif
+
 // for data injection
 static DEVICE_ATTR(data_injection_enable, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_data_injection_enable, set_data_injection_enable);
@@ -1193,14 +1531,19 @@ static DEVICE_ATTR(timestamp_factor, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_timestamp_factor, set_timestamp_factor);
 
 
-static DEVICE_ATTR(ssp_control, S_IWUSR | S_IWGRP, NULL, set_ssp_control); 
+static DEVICE_ATTR(ssp_control, S_IWUSR | S_IWGRP, NULL, set_ssp_control);
+static DEVICE_ATTR(sensor_dump, 0664,
+	sensor_dump_show, sensor_dump_store);
+static DEVICE_ATTR(reset_info, 0440, reset_info_show, NULL);
 
+
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+static DEVICE_ATTR(lcd_check_fold_state, S_IRUGO | S_IWUSR | S_IWGRP,
+	show_lcd_check_fold_state, set_lcd_check_fold_state);
+#endif
 
 static DEVICE_ATTR(sensor_state, S_IRUGO, show_sensor_state, NULL);
 static DEVICE_ATTR(mcu_power, 0664, show_mcu_power, set_mcu_power);
-
-static DEVICE_ATTR(sensor_dump,S_IRUGO | S_IWUSR | S_IWGRP,
-	sensor_dump_show, sensor_dump_store);
 
 static struct device_attribute *mcu_attrs[] = {
 	&dev_attr_enable,
@@ -1208,10 +1551,6 @@ static struct device_attribute *mcu_attrs[] = {
 	&dev_attr_mcu_name,
 	&dev_attr_mcu_test,
 	&dev_attr_mcu_reset,
-	&dev_attr_mcu_dump,
-	&dev_attr_mcu_update,
-	&dev_attr_mcu_update2,
-	&dev_attr_mcu_update_ums,
 	&dev_attr_mcu_sleep_test,
 	&dev_attr_enable_irq,
 	&dev_attr_accel_poll_delay,
@@ -1227,11 +1566,28 @@ static struct device_attribute *mcu_attrs[] = {
 	&dev_attr_pickup_poll_delay,
 	&dev_attr_ssp_flush,
 	&dev_attr_shake_cam,
+#if ANDROID_VERSION >= 80000
+	&dev_attr_light_poll_delay,
+	&dev_attr_light_ir_poll_delay,
+	&dev_attr_light_flicker_poll_delay,
+	&dev_attr_interrupt_gyro_poll_delay,
+	&dev_attr_prox_poll_delay,
+	&dev_attr_sig_motion_poll_delay,
+	&dev_attr_step_cnt_poll_delay,
+	&dev_attr_prox_alert_poll_delay,
+#endif
 	&dev_attr_data_injection_enable,
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+	&dev_attr_lcd_check_fold_state,
+#endif
 	&dev_attr_sensor_state,
 	&dev_attr_timestamp_factor,
 	&dev_attr_ssp_control,
 	&dev_attr_sensor_dump,
+#if defined(CONFIG_SSP_REGISTER_RW)
+	&dev_attr_register_rw,
+#endif
+	&dev_attr_reset_info,
 	NULL,
 };
 
@@ -1248,6 +1604,7 @@ static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 	int retries = 2;
 	int ret = 0;
 	int sensor_type, ms_delay;
+	int64_t dNewDelay = 0;
 	int timeout_ms = 0;
 	u8 uBuf[9];
 
@@ -1272,11 +1629,21 @@ static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 		pr_err("[SSP] batch ioctl err(%d)\n", ret);
 		return -EINVAL;
 	}
+	dNewDelay = batch.delay;
 	ms_delay = get_msdelay(batch.delay);
 	timeout_ms = div_s64(batch.timeout, 1000000);
 	memcpy(&uBuf[0], &ms_delay, 4);
 	memcpy(&uBuf[4], &timeout_ms, 4);
 	uBuf[8] = batch.flag;
+
+	// SUPPORT CAMERA SYNC ++++++
+	if (sensor_type == GYROSCOPE_SENSOR) {
+		ms_delay = SettingVDIS_Support(data, &dNewDelay);
+		if (ms_delay == 0)
+			return 0;
+		memcpy(&uBuf[0], &ms_delay, 4);
+	}
+	// SUPPORT CAMERA SYNC -----
 
 	if (batch.timeout){ /* add or dry */
 
@@ -1285,19 +1652,19 @@ static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 			/* if sensor is not running state, enable will be called.
 			   MCU return fail when receive chage delay inst during NO_SENSOR STATE */
 			if (data->aiCheckStatus[sensor_type] == RUNNING_SENSOR_STATE) {
-				ret = send_instruction_sync(data, CHANGE_DELAY, sensor_type, uBuf, 9);
+				ret = send_instruction(data, CHANGE_DELAY, sensor_type, uBuf, 9);
 			}
 			if (ret > 0) { // ret 1 is success
 				data->batchOptBuf[sensor_type] = (u8)batch.flag;
 				data->batchLatencyBuf[sensor_type] = timeout_ms;
-				data->adDelayBuf[sensor_type] = batch.delay;
+				data->adDelayBuf[sensor_type] = dNewDelay;
 			}
 		} else { /* real batch, DRY RUN */
-			ret = send_instruction_sync(data, CHANGE_DELAY, sensor_type, uBuf, 9);
+			ret = send_instruction(data, CHANGE_DELAY, sensor_type, uBuf, 9);
 			if (ret > 0) { // ret 1 is success
 				data->batchOptBuf[sensor_type] = (u8)batch.flag;
 				data->batchLatencyBuf[sensor_type] = timeout_ms;
-				data->adDelayBuf[sensor_type] = batch.delay;
+				data->adDelayBuf[sensor_type] = dNewDelay;
 			}
 		}
 	} else { /* remove batch or normal change delay, remove or add will be called. */
@@ -1305,7 +1672,7 @@ static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 		if (!(batch.flag & SENSORS_BATCH_DRY_RUN)) { /* no batch, NOT DRY, change delay */
 			data->batchOptBuf[sensor_type] = 0;
 			data->batchLatencyBuf[sensor_type] = 0;
-			data->adDelayBuf[sensor_type] = batch.delay;
+			data->adDelayBuf[sensor_type] = dNewDelay;
 			if (data->aiCheckStatus[sensor_type] == RUNNING_SENSOR_STATE) {
 				send_instruction(data, CHANGE_DELAY, sensor_type, uBuf, 9);
 			}
@@ -1313,7 +1680,7 @@ static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 	}
 
 	pr_info("[SSP] batch %d: delay %lld, timeout %lld, flag %d, ret %d \n",
-		sensor_type, batch.delay, batch.timeout, batch.flag, ret);
+		sensor_type, dNewDelay, batch.timeout, batch.flag, ret);
 	if (!batch.timeout)
 		return 0;
 	if (ret <= 0)
@@ -1335,7 +1702,7 @@ static ssize_t ssp_data_injection_write(struct file *file, const char __user *bu
 	struct ssp_data *data
 		= container_of(file->private_data,
 			struct ssp_data, ssp_data_injection_device);
-	
+
 	struct ssp_msg *msg;
 	int ret = 0;
 	char *send_buffer;
@@ -1376,7 +1743,7 @@ static ssize_t ssp_data_injection_write(struct file *file, const char __user *bu
 			pr_info("[SSP] %s there in no sensor_type \n", __func__);
 		}
 	}
-	
+
 	for(x = 0; x < count; x++)
 	{
 		pr_info("[SSP] %s Data Injection : %d 0x%x\n", __func__, send_buffer[x], send_buffer[x]);
@@ -1434,6 +1801,17 @@ static struct file_operations ssp_data_injection_fops = {
 
 };
 
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+int folder_state;
+int ssp_ckeck_lcd(int state)
+{
+	folder_state = state;
+	pr_info("[SSP] %s folder_state %d \n", __func__, folder_state);
+
+	return folder_state;
+}
+#endif
+
 static void initialize_mcu_factorytest(struct ssp_data *data)
 {
 	sensors_register(data->mcu_device, data, mcu_attrs, "ssp_sensor");
@@ -1446,12 +1824,24 @@ static void remove_mcu_factorytest(struct ssp_data *data)
 
 int initialize_sysfs(struct ssp_data *data)
 {
+	int i = 0;
 	struct device *sec_sensorhub_dev = sec_device_create(data, "sensorhub");
-	device_create_file(sec_sensorhub_dev, &dev_attr_mcu_power);	
-	
+
+	device_create_file(sec_sensorhub_dev, &dev_attr_mcu_power);
+
+	for (i = 0; i < SENSOR_MAX; i++) {
+		if (data->indio_dev[i] != NULL) {
+			device_create_file(&data->indio_dev[i]->dev, &dev_attr_poll_delay);
+		}
+	}
+#if ANDROID_VERSION < 80000
 	if (device_create_file(&data->gesture_input_dev->dev,
 		&dev_attr_gesture_poll_delay))
 		goto err_gesture_input_dev;
+
+	if (device_create_file(&data->light_flicker_input_dev->dev,
+		&dev_attr_light_flicker_poll_delay))
+		goto err_light_flicker_input_dev;
 
 	if (device_create_file(&data->light_input_dev->dev,
 		&dev_attr_light_poll_delay))
@@ -1482,6 +1872,10 @@ int initialize_sysfs(struct ssp_data *data)
 		&dev_attr_step_cnt_poll_delay))
 		goto err_step_cnt_input_dev;
 
+	if (device_create_file(&data->prox_alert_input_dev->dev,
+		&dev_attr_prox_alert_poll_delay))
+		goto err_prox_alert_input_dev;
+#endif
 	data->batch_io_device.minor = MISC_DYNAMIC_MINOR;
 	data->batch_io_device.name = "batch_io";
 	data->batch_io_device.fops = &ssp_batch_fops;
@@ -1529,6 +1923,10 @@ err_ssp_data_injection_device:
 	ssp_batch_fops.unlocked_ioctl = NULL;
 	misc_deregister(&data->batch_io_device);
 err_batch_io_dev:
+#if ANDROID_VERSION < 80000
+	device_remove_file(&data->prox_alert_input_dev->dev,
+		&dev_attr_prox_alert_poll_delay);
+err_prox_alert_input_dev:
 	device_remove_file(&data->step_cnt_input_dev->dev,
 		&dev_attr_step_cnt_poll_delay);
 err_step_cnt_input_dev:
@@ -1551,18 +1949,23 @@ err_interrupt_gyro_input_dev:
 		&dev_attr_light_ir_poll_delay);
 err_light_ir_input_dev:
 #endif
+	device_remove_file(&data->light_flicker_input_dev->dev,
+		&dev_attr_light_flicker_poll_delay);
+err_light_flicker_input_dev:
 	device_remove_file(&data->light_input_dev->dev,
 		&dev_attr_light_poll_delay);
 err_light_input_dev:
 	device_remove_file(&data->gesture_input_dev->dev,
 		&dev_attr_gesture_poll_delay);
 err_gesture_input_dev:
+#endif
 	pr_err("[SSP] error init sysfs\n");
 	return ERROR;
 }
 
 void remove_sysfs(struct ssp_data *data)
 {
+#if ANDROID_VERSION < 80000
 	device_remove_file(&data->gesture_input_dev->dev,
 		&dev_attr_gesture_poll_delay);
 	device_remove_file(&data->light_input_dev->dev,
@@ -1575,6 +1978,8 @@ void remove_sysfs(struct ssp_data *data)
 	device_remove_file(&data->interrupt_gyro_input_dev->dev,
 		&dev_attr_interrupt_gyro_poll_delay);
 #endif
+	device_remove_file(&data->light_flicker_input_dev->dev,
+		&dev_attr_light_flicker_poll_delay);
 	device_remove_file(&data->prox_input_dev->dev,
 		&dev_attr_prox_poll_delay);
 	device_remove_file(&data->temp_humi_input_dev->dev,
@@ -1584,11 +1989,14 @@ void remove_sysfs(struct ssp_data *data)
 	device_remove_file(&data->step_cnt_input_dev->dev,
 		&dev_attr_step_cnt_poll_delay);
 	ssp_batch_fops.unlocked_ioctl = NULL;
+	device_remove_file(&data->prox_alert_input_dev->dev,
+		&dev_attr_prox_alert_poll_delay);
+#endif
 	misc_deregister(&data->batch_io_device);
 
 	ssp_data_injection_fops.write = NULL;
 	misc_deregister(&data->ssp_data_injection_device);
-	
+
 	remove_accel_factorytest(data);
 	remove_gyro_factorytest(data);
 	remove_prox_factorytest(data);

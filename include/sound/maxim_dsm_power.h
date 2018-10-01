@@ -14,6 +14,8 @@
 #define MAXDSM_POWER_CLASS_NAME "maxdsm_power"
 #define MAXDSM_POWER_DSM_NAME	"dsm"
 
+#define MAXDSM_POWER_START_DELAY 1000
+
 struct maxim_dsm_power_info {
 	int interval;
 	int duration;

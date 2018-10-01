@@ -426,7 +426,7 @@ void decon_reg_get_dispif_size(u32 id, int dsi_idx, u32 *p_width, u32 *p_height)
 void decon_reg_set_comp_size(u32 id, enum decon_mic_comp_ratio cr, enum decon_dsi_mode dsi_mode, struct decon_lcd *lcd_info)
 {
 	u32 ratio_type; /* 0 : 12N, 1: 12N4, 2 : 12N8, 3 : ratio2 */
-	u32 mic_width_in_bytes, mic_dummy_in_bytes;
+	u32 mic_width_in_bytes, mic_dummy_in_bytes = 0;
 	u32 width;
 	u32 temp_size, odd_n = 0;
 
@@ -1339,6 +1339,56 @@ void dsc_reg_set_pps_34_35_final_offset(u32 encoder_id, u32 chunk_size, u32 slic
 	dsc_write(encoder_id, (DSC_PPS32_35), reg);
 }
 
+u32 dsc_get_compressed_slice_width(u32 x_resol, u32 dscc_en, u32 ds_en)
+{
+	u32 slice_width;
+	u32 width_eff;
+	u32 slice_width_byte_unit, comp_slice_width_byte_unit;
+	u32 comp_slice_width_pixel_unit;
+	u32 overlap_w = 0;
+	u32 comp_slice_w = 0;
+	u32 i, j;
+
+	/* check if two encoders are used */
+	if (dscc_en)
+		width_eff = (x_resol >> 1) + overlap_w;
+	else
+		width_eff = x_resol + overlap_w;
+
+	/* check if dual slice is enabled */
+	if (ds_en)
+		slice_width = width_eff >> 1;
+	else
+		slice_width = width_eff;
+
+	/* 3bytes per pixel */
+	slice_width_byte_unit = slice_width * 3;
+	/* integer value, /3 for 1/3 compression */
+	comp_slice_width_byte_unit = slice_width_byte_unit / 3;
+	/* integer value, /3 for pixel unit */
+	comp_slice_width_pixel_unit = comp_slice_width_byte_unit / 3;
+
+	i = comp_slice_width_byte_unit % 3;
+	j = comp_slice_width_pixel_unit % 2;
+
+	if ( i == 0 && j == 0) {
+		comp_slice_w = comp_slice_width_pixel_unit;
+	} else if (i == 0 && j != 0) {
+		comp_slice_w = comp_slice_width_pixel_unit + 1;
+	} else if (i != 0) {
+		while (1) {
+			comp_slice_width_pixel_unit++;
+			j = comp_slice_width_pixel_unit % 2;
+			if (j == 0)
+				break;
+		}
+		comp_slice_w = comp_slice_width_pixel_unit;
+	}
+
+	return comp_slice_w;
+
+}
+
 void dsc_reg_set_encoder(u32 encoder_id, struct decon_lcd *lcd_info)
 {
 	u32 dual_slice = 0;
@@ -1411,10 +1461,20 @@ void dsc_reg_set_pps_size(u32 encoder_id, struct decon_lcd *lcd_info)
 
 void decon_reg_config_dsc_size(u32 id, enum decon_dsi_mode dsi_mode, struct decon_lcd *lcd_info)
 {
-	u32 width = lcd_info->xres / 3;
-	u32 fifo_w = width;
+	u32 width = 0;
+	u32 fifo_w = 0;
 	u32 dsc_id = id;
+	u32 dual_slice = 0;
+	u32 slice_mode_change = 0;
+	int dsi_cnt = 1;
 
+	if (lcd_info->dsc_slice_num == lcd_info->dsc_cnt *2) dual_slice = 1;
+	slice_mode_change = ((lcd_info->dsc_slice_num == lcd_info->dsc_cnt) != (lcd_info->dsc_slice_num == dsi_cnt));
+	decon_dbg("dual slice(%d), slice_mode_change(%d)\n", dual_slice, slice_mode_change);
+
+	width = dsc_get_compressed_slice_width(lcd_info->xres, slice_mode_change, dual_slice) * 2;
+
+	fifo_w = width;
 	/* DSC(pps) -> Splitter -> FF_FIFO -> DISPIF */
 	if (lcd_info->dsc_cnt == 2) {
 		/* Case of 1-Encoder, Decon_F -> DSC0, Decon_S -> DSC1 */
@@ -1910,7 +1970,7 @@ const signed long decon_clocks_table[][CLK_ID_MAX] = {
     {    42,   168,   400,    66,        42, 1440 * 2560,     MIC_COMP_BYPASS,         2},
     {   10.5,  168,   400,    66,      10.5,  720 * 1280,     MIC_COMP_BYPASS,         2},  /* HD */
     {    24,   168,   400,    66,        24, 1080 * 1920,     MIC_COMP_BYPASS,         2},  /* FHD */
-    {    63,   168,   400,    66,        63, 1600 * 2560,  MIC_COMP_RATIO_1_2,         0},  /* wqxga */
+    {    63,   224,   400,    66,        63, 1600 * 2560,  	  MIC_COMP_BYPASS,         2},  /* wqxga */
 };
 
 void decon_reg_get_clock_ratio(struct decon_clocks *clks, struct decon_lcd *lcd_info)

@@ -83,11 +83,30 @@ config ALWAYS_RELOAD_MTP_FACTORY_BUILD
 
 config CHECK_OCTA_CHIP_ID
 	bool "support to check octa chip id"
-	depends on SEC_FACTORY
 	default n
 
 config LCD_RES
 	bool "change LCD-resolution by BOOT_PARAM"
+	default n
+
+config DECON_SELF_REFRESH
+	bool "DECON self refresh"
+	depends on EXYNOS_DECON_8890
+	default n
+
+config LOGGING_BIGDATA_BUG
+	bool "Logging extra information when decon bug"
+	depends on EXYNOS_DECON_8890
+	default n
+
+config DUMPSTATE_LOGGING
+	bool "Support DumpState Logging"
+	depends on EXYNOS_DECON_8890
+	default n
+
+config CHECK_DECON_TIME
+	bool "Check Decon thread time"
+	depends on EXYNOS_DECON_8890 && DUMPSTATE_LOGGING
 	default n
 
 source "drivers/video/fbdev/exynos/decon_8890/vpp/Kconfig"

@@ -13,10 +13,13 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/clk.h>
+#include <linux/clk-private.h>
+#include <linux/clk-provider.h>
 #include <linux/io.h>
 #include <linux/err.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/clk-provider.h>
 
 #include <sound/exynos.h>
 #include <soc/samsung/exynos-powermode.h>
@@ -240,6 +243,11 @@ void lpass_update_lpclock_impl(struct device *dev, u32 ctrlid, bool active)
 		pr_err("[ERROR] Invalid audio power mode: 0x%04X\n",
 			g_current_power_mode);
 	}
+
+	dev_info(dev, "LPASS clk status aud_pll = %luHz, aud_lpass = %d\n",
+		lpass_cmu.aud_pll->rate,
+		lpass_cmu.aud_lpass->enable_count);
+
 	spin_unlock_irqrestore(&sicd_lock, flags);
 #endif
 }

@@ -208,6 +208,10 @@ struct max77854_charger_data {
 	struct device           *dev;
 	struct i2c_client       *i2c;
 	struct i2c_client       *pmic_i2c;
+#if defined(CONFIG_MAX77854_FG_SENSING_WA)
+	struct i2c_client	*gtest;
+	struct i2c_client	*otp;
+#endif
 	struct mutex            charger_mutex;
 
 	struct max77854_platform_data *max77854_pdata;
@@ -243,8 +247,8 @@ struct max77854_charger_data {
 	unsigned int	input_current;
 	unsigned int	charging_current;
 	unsigned int	vbus_state;
-	int		aicl_on;
-	bool	slow_charging;
+	bool		aicl_on;
+	bool		is_aicl;
 	int		status;
 	int		charge_mode;
 	int uvlo_attach_flag;
@@ -258,12 +262,13 @@ struct max77854_charger_data {
 	int		irq_wcin;
 	int		irq_chgin;
 	int		irq_aicl;
+	int		irq_aicl_enabled;
 	/* software regulation */
-	bool	soft_reg_state;
+	bool		soft_reg_state;
 	int		soft_reg_current;
 
 	/* unsufficient power */
-	bool	reg_loop_deted;
+	bool		reg_loop_deted;
 
 	/* wireless charge, w(wpc), v(vbus) */
 	int		wc_w_gpio;

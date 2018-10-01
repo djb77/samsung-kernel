@@ -44,9 +44,9 @@ static int maxdsm_cal_read_file(char *filename, char *data, size_t size)
 	set_fs(KERNEL_DS);
 	cal_filp = filp_open(filename, O_RDONLY, 0660);
 	if (IS_ERR(cal_filp)) {
-		pr_err("%s: dsm works with default calibration.\n", __func__);
-		ret = PTR_ERR(cal_filp);
+		pr_err("%s: there is no dsm_cal file\n", __func__);
 		set_fs(old_fs);
+		ret = 0;
 		return ret;
 	}
 	ret = cal_filp->f_op->read(cal_filp, data, size, &cal_filp->f_pos);
@@ -152,6 +152,21 @@ int maxdsm_cal_set_rdc(int value)
 }
 EXPORT_SYMBOL_GPL(maxdsm_cal_set_rdc);
 
+int maxdsm_cal_set_rdc_r(int value)
+{
+	char data[12];
+	int ret;
+
+	memset(data, 0x00, sizeof(data));
+	sprintf(data, "%x", value);
+	ret = maxdsm_cal_write_file(FILEPATH_RDC_CAL_R,
+			data, sizeof(data));
+	g_mdc->values.rdc_r = ret < 0 ? ret : value;
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(maxdsm_cal_set_rdc_r);
+
 int maxdsm_cal_get_rdc(int *value)
 {
 	char data[12];
@@ -168,6 +183,23 @@ int maxdsm_cal_get_rdc(int *value)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(maxdsm_cal_get_rdc);
+
+int maxdsm_cal_get_rdc_r(int *value)
+{
+	char data[12];
+	int ret;
+
+	memset(data, 0x00, sizeof(data));
+	ret = maxdsm_cal_read_file(FILEPATH_RDC_CAL_R,
+			data, sizeof(data));
+	if (ret < 0)
+		g_mdc->values.rdc_r = ret;
+	else
+		ret = kstrtos32(data, 16, value);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(maxdsm_cal_get_rdc_r);
 
 static int maxdsm_cal_regmap_write(struct regmap *regmap,
 		unsigned int reg,
@@ -197,13 +229,16 @@ static int maxdsm_cal_start_calibration(
 {
 	int ret = 0;
 	uint32_t feature_en;
+	uint32_t version = 0;
 
 #ifdef CONFIG_SND_SOC_MAXIM_DSM
 	mdc->platform_type = maxdsm_get_platform_type();
+	version = maxdsm_get_version();
 #else
 	mdc->platform_type = 0;
+	version = 0;
 #endif /* CONFIG_SND_SOC_MAXIM_DSM */
-	dbg_maxdsm("platform_type=%d", mdc->platform_type);
+	dbg_maxdsm("platform_type=%d, version=%d", mdc->platform_type, version);
 
 	switch (mdc->platform_type) {
 	case PLATFORM_TYPE_A:
@@ -222,6 +257,12 @@ static int maxdsm_cal_start_calibration(
 		maxdsm_cal_regmap_write(mdc->regmap,
 				ADDR_FEATURE_ENABLE,
 				feature_en);
+
+		if (version == VERSION_4_0_A_S) {
+			maxdsm_cal_regmap_write(mdc->regmap,
+					ADDR_FEATURE_ENABLE+DSM_4_0_LSI_STEREO_OFFSET,
+					feature_en);
+		}
 		break;
 	case PLATFORM_TYPE_B:
 #ifdef CONFIG_SND_SOC_MAXIM_DSM
@@ -261,16 +302,49 @@ static uint32_t maxdsm_cal_read_dcresistance(
 	return dcresistance;
 }
 
+static uint32_t maxdsm_cal_read_dcresistance_r(
+		struct maxim_dsm_cal *mdc)
+{
+	uint32_t dcresistance = 0;
+
+	switch (mdc->platform_type) {
+	case PLATFORM_TYPE_A:
+		maxdsm_cal_regmap_read(mdc->regmap,
+			ADDR_RDC+DSM_4_0_LSI_STEREO_OFFSET,
+			&dcresistance);
+		break;
+	case PLATFORM_TYPE_B:
+		break;
+	case PLATFORM_TYPE_C:
+		break;
+	default:
+		break;
+	}
+
+	return dcresistance;
+}
+
 static int maxdsm_cal_end_calibration(
 		struct maxim_dsm_cal *mdc)
 {
-	int ret = 0;
+	int version, ret = 0;
+
+#ifdef CONFIG_SND_SOC_MAXIM_DSM
+	version = maxdsm_get_version();
+#else
+	version = 0;
+#endif /* CONFIG_SND_SOC_MAXIM_DSM */
 
 	switch (mdc->platform_type) {
 	case PLATFORM_TYPE_A:
 		maxdsm_cal_regmap_write(mdc->regmap,
 				ADDR_FEATURE_ENABLE,
 				mdc->info.feature_en);
+		if (version == VERSION_4_0_A_S) {
+			maxdsm_cal_regmap_write(mdc->regmap,
+				ADDR_FEATURE_ENABLE+DSM_4_0_LSI_STEREO_OFFSET,
+				mdc->info.feature_en);
+		}
 		break;
 	case PLATFORM_TYPE_B:
 #ifdef CONFIG_SND_SOC_MAXIM_DSM
@@ -306,9 +380,18 @@ static int maxdsm_cal_get_temp_from_power_supply(void)
 
 static void maxdsm_cal_completed(struct maxim_dsm_cal *mdc)
 {
+#ifdef WRITE_SPEAKER_CAL_VALUE_AT_KERNEL
 	char rdc[12] = {0,};
+	char rdc_r[12] = {0,};
 	char temp[12] = {0,};
-	int ret;
+#endif
+	int ret, stereo = 0;
+
+#ifdef CONFIG_SND_SOC_MAXIM_DSM
+	stereo = maxdsm_is_stereo();
+#else
+	stereo = 0;
+#endif
 
 	ret = maxdsm_cal_end_calibration(mdc);
 	if (ret) {
@@ -320,7 +403,16 @@ static void maxdsm_cal_completed(struct maxim_dsm_cal *mdc)
 	/* We try to get ambient temp by using power supply core */
 	mdc->values.temp = maxdsm_cal_get_temp_from_power_supply();
 
+	if (stereo)
+		dbg_maxdsm("temp=%d rdc=0x%08x, rdc_r=0x%08x",
+			mdc->values.temp, mdc->values.rdc, mdc->values.rdc_r);
+	else
+		dbg_maxdsm("temp=%d rdc=0x%08x",
+			mdc->values.temp, mdc->values.rdc);
+
+#ifdef WRITE_SPEAKER_CAL_VALUE_AT_KERNEL
 	sprintf(rdc, "%x", mdc->values.rdc);
+	sprintf(rdc_r, "%x", mdc->values.rdc_r);
 	sprintf(temp, "%x",
 			mdc->values.temp < 0 ? 23 * 10 : mdc->values.temp);
 
@@ -334,36 +426,70 @@ static void maxdsm_cal_completed(struct maxim_dsm_cal *mdc)
 	if (ret < 0)
 		mdc->values.rdc = ret;
 
+	if (stereo) {
+		ret = maxdsm_cal_write_file(
+				FILEPATH_RDC_CAL_R, rdc_r, sizeof(rdc_r));
+		if (ret < 0)
+			mdc->values.rdc_r = ret;
+	}
+#endif
+
 	mdc->values.status = 0;
 
-	dbg_maxdsm("temp=%d rdc=0x%08x",
+	if (stereo)
+		dbg_maxdsm("temp=%d rdc=0x%08x, rdc_r=0x%08x",
+			mdc->values.temp, mdc->values.rdc, mdc->values.rdc_r);
+	else
+		dbg_maxdsm("temp=%d rdc=0x%08x",
 			mdc->values.temp, mdc->values.rdc);
 }
 
 static void maxdsm_cal_work(struct work_struct *work)
 {
 	struct maxim_dsm_cal *mdc;
-	unsigned int dcresistance = 0;
+	unsigned int dcresistance, dcresistance_r, stereo = 0;
 	unsigned long diff;
 
 	mdc = container_of(work, struct maxim_dsm_cal, work.work);
 
 	mutex_lock(&mdc->mutex);
 
+#ifdef CONFIG_SND_SOC_MAXIM_DSM
+	stereo = maxdsm_is_stereo();
+#else
+	stereo = 0;
+#endif
+
 	dcresistance = maxdsm_cal_read_dcresistance(mdc);
-	if (!(mdc->info.min > dcresistance
-				|| mdc->info.max < dcresistance) &&
-			((mdc->info.duration - mdc->info.remaining)
-			> mdc->info.ignored_t)) {
-		mdc->values.avg += dcresistance;
-		mdc->values.count++;
+	if (stereo) {
+		dcresistance_r = maxdsm_cal_read_dcresistance_r(mdc);
+		if ( dcresistance
+			&& !(mdc->info.min > dcresistance || mdc->info.max < dcresistance)
+			&& ((mdc->info.duration - mdc->info.remaining) > mdc->info.ignored_t) ) {
+			mdc->values.avg += dcresistance;
+			if (dcresistance_r) mdc->values.avg_r += dcresistance_r;
+			mdc->values.count++;
+		}
+	} else {
+		if ( dcresistance
+			&& !(mdc->info.min > dcresistance || mdc->info.max < dcresistance)
+			&& ((mdc->info.duration - mdc->info.remaining) > mdc->info.ignored_t) ) {
+			mdc->values.avg += dcresistance;
+			mdc->values.count++;
+		}
 	}
 
 	diff = jiffies - mdc->info.previous_jiffies;
 	mdc->info.remaining
 		-= jiffies_to_msecs(diff);
 
-	dbg_maxdsm("dcresistance=0x%08x remaining=%d duration=%d",
+	if (stereo)
+		dbg_maxdsm("dcresistance=0x%08x dcresistance_r=0x%08x remaining=%d duration=%d",
+			dcresistance, dcresistance_r,
+			mdc->info.remaining,
+			mdc->info.duration);
+	else
+		dbg_maxdsm("dcresistance=0x%08x remaining=%d duration=%d",
 			dcresistance,
 			mdc->info.remaining,
 			mdc->info.duration);
@@ -377,7 +503,12 @@ static void maxdsm_cal_work(struct work_struct *work)
 	} else {
 		mdc->values.count > 0 ?
 			do_div(mdc->values.avg, mdc->values.count) : 0;
+		if (stereo) {
+			mdc->values.count > 0 ?
+				do_div(mdc->values.avg_r, mdc->values.count) : 0;
+		}
 		mdc->values.rdc = mdc->values.avg;
+		mdc->values.rdc_r = mdc->values.avg_r;
 		maxdsm_cal_completed(mdc);
 	}
 
@@ -395,6 +526,7 @@ static int maxdsm_cal_check(
 	if (action) {
 		mdc->info.remaining = mdc->info.duration;
 		mdc->values.count = mdc->values.avg = 0;
+		mdc->values.avg_r =0;
 		ret = maxdsm_cal_start_calibration(mdc);
 		if (ret)
 			return ret;
@@ -496,6 +628,46 @@ static ssize_t maxdsm_cal_rdc_store(struct device *dev,
 }
 static DEVICE_ATTR(rdc, S_IRUGO | S_IWUSR | S_IWGRP,
 		maxdsm_cal_rdc_show, maxdsm_cal_rdc_store);
+
+static ssize_t maxdsm_cal_rdc_r_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	char rdc_r[12] = {0,};
+	int ret;
+
+	if (g_mdc->values.rdc_r == 0xFFFFFFFF) {
+		ret = maxdsm_cal_read_file(
+				FILEPATH_RDC_CAL_R, rdc_r, sizeof(rdc_r));
+		if (ret < 0)
+			g_mdc->values.rdc_r = ret;
+		else
+			ret = kstrtos32(rdc_r, 16, &g_mdc->values.rdc_r);
+	}
+
+	return sprintf(buf, "%x", g_mdc->values.rdc_r);
+}
+
+static ssize_t maxdsm_cal_rdc_r_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	char rdc_r[12] = {0,};
+	int ret;
+
+	if (kstrtos32(buf, 0, &g_mdc->values.rdc_r))
+		dev_err(dev,
+			"%s: Failed converting from str to u32.\n", __func__);
+	else {
+		sprintf(rdc_r, "%x", g_mdc->values.rdc_r);
+		ret = maxdsm_cal_write_file(
+				FILEPATH_RDC_CAL_R, rdc_r, sizeof(rdc_r));
+		if (ret < 0)
+			g_mdc->values.rdc_r = ret;
+	}
+
+	return size;
+}
+static DEVICE_ATTR(rdc_r, S_IRUGO | S_IWUSR | S_IWGRP,
+		maxdsm_cal_rdc_r_show, maxdsm_cal_rdc_r_store);
 
 static ssize_t maxdsm_cal_temp_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -611,6 +783,7 @@ static struct attribute *maxdsm_cal_attr[] = {
 	&dev_attr_max.attr,
 	&dev_attr_duration.attr,
 	&dev_attr_rdc.attr,
+	&dev_attr_rdc_r.attr,
 	&dev_attr_temp.attr,
 	&dev_attr_interval.attr,
 	&dev_attr_ignored_t.attr,
@@ -648,6 +821,7 @@ static int __init maxdsm_cal_init(void)
 	mdc->info.interval = 100;
 	mdc->info.ignored_t = 1000;
 	mdc->values.rdc = 0xFFFFFFFF;
+	mdc->values.rdc_r = 0xFFFFFFFF;
 	mdc->values.temp = 0xFFFFFFFF;
 	mdc->platform_type = 0xFFFFFFFF;
 

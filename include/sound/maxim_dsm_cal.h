@@ -19,6 +19,7 @@
 
 #define FILEPATH_TEMP_CAL	"/efs/maxim/temp_cal"
 #define FILEPATH_RDC_CAL	"/efs/maxim/rdc_cal"
+#define FILEPATH_RDC_CAL_R	"/efs/maxim/rdc_cal_r"
 
 #define CLASS_NAME			"maxdsm_cal"
 #define DSM_NAME			"dsm"
@@ -40,8 +41,10 @@ struct maxim_dsm_cal_info {
 struct maxim_dsm_cal_values {
 	uint32_t status;
 	int rdc;
+	int rdc_r;
 	int temp;
 	uint64_t avg;
+	uint64_t avg_r;
 	int count;
 };
 
@@ -63,5 +66,7 @@ extern struct regmap *maxdsm_cal_set_regmap(
 extern int maxdsm_cal_get_temp(int *temp);
 extern int maxdsm_cal_set_temp(int temp);
 extern int maxdsm_cal_get_rdc(int *rdc);
+extern int maxdsm_cal_get_rdc_r(int *rdc);
 extern int maxdsm_cal_set_rdc(int rdc);
+extern int maxdsm_cal_set_rdc_r(int rdc);
 #endif /* __SOUND_MAXIM_DSM_CAL_H__ */

@@ -465,8 +465,11 @@ static int bcm_ssi_rx( struct bcm_spi_priv *priv, size_t *length)
 	const unsigned char MAX_RX_LEN = 254;
 
 //	pr_info("[SSPBBD]: %s ++\n", __func__);
-
+#if ANDROID_VERSION < 80000
   	memset(tx, 0, MAX_RX_LEN);
+#else
+	memset(tx, 0, sizeof(struct bcm_ssi_tx_frame));
+#endif
   	tx->cmd = SSI_READ_HD;
     rx->status = 0;
   	if (bcm_spi_sync(priv, tx, rx, 2, 8))  // 2 for rx status + len

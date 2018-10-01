@@ -12,9 +12,7 @@
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- *  MA  02110-1301, USA.
+ *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 /************************************************************************/
@@ -141,7 +139,7 @@ static u32 __calc_default_au_size(struct super_block *sb)
 out:
 	if (sb->s_blocksize != 512) {
 		ASSERT(sb->s_blocksize_bits > 9);
-		sdfat_log_msg(sb, KERN_INFO, 
+		sdfat_log_msg(sb, KERN_INFO,
 			"adjustment est_au_size by logical block size(%lu)",
 			sb->s_blocksize);
 		est_au_sect >>= (sb->s_blocksize_bits - 9);
@@ -250,26 +248,31 @@ static s32 fat_free_cluster(struct super_block *sb, CHAIN_T *p_chain, s32 do_rel
 					goto out;
 			}
 		}
-		
+
 		prev = clu;
-		if (get_next_clus(sb, &clu))
-			goto out;
-		
-		/* FAT validity check */
-		if (IS_CLUS_FREE(clu)) {
-			/* GRACEFUL ERROR HANDLING */
-			/* Broken FAT chain (Already FREE) */
-			sdfat_fs_error(sb, "%s : deleting FAT entry beyond EOF (clu[%u]->0)", __func__, prev);
+		if (get_next_clus_safe(sb, &clu)) {
+			/* print more helpful log */
+			if (IS_CLUS_BAD(clu)) {
+				sdfat_log_msg(sb, KERN_ERR, "%s : "
+					"deleting bad cluster (clu[%u]->BAD)",
+					__func__, prev);
+			} else if (IS_CLUS_FREE(clu)) {
+				sdfat_log_msg(sb, KERN_ERR, "%s : "
+					"deleting free cluster (clu[%u]->FREE)",
+					__func__, prev);
+			}
 			goto out;
 		}
 
 		/* Free FAT chain */
 		if (fat_ent_set(sb, prev, CLUS_FREE))
 			goto out;
-		
+
 		/* Update AMAP if needed */
-		if (fsi->amap)
-			amap_release_cluster(sb, prev);
+		if (fsi->amap) {
+			if (amap_release_cluster(sb, prev))
+				return -EIO;
+		}
 
 		num_clusters++;
 
@@ -283,7 +286,7 @@ out:
 	return ret;
 } /* end of fat_free_cluster */
 
-static s32 fat_count_used_clusters(struct super_block *sb, u32* ret_count)
+static s32 fat_count_used_clusters(struct super_block *sb, u32 *ret_count)
 {
 	s32 i;
 	u32 clu, count = 0;
@@ -307,7 +310,7 @@ static s32 fat_count_used_clusters(struct super_block *sb, u32* ret_count)
  */
 static u32 fat_get_entry_type(DENTRY_T *p_entry)
 {
-	DOS_DENTRY_T *ep = (DOS_DENTRY_T *) p_entry;
+	DOS_DENTRY_T *ep = (DOS_DENTRY_T *)p_entry;
 
 	/* first byte of 32bytes dummy */
 	if (*(ep->name) == MSDOS_UNUSED)
@@ -335,7 +338,7 @@ static u32 fat_get_entry_type(DENTRY_T *p_entry)
 
 static void fat_set_entry_type(DENTRY_T *p_entry, u32 type)
 {
-	DOS_DENTRY_T *ep = (DOS_DENTRY_T *) p_entry;
+	DOS_DENTRY_T *ep = (DOS_DENTRY_T *)p_entry;
 
 	if (type == TYPE_UNUSED)
 		*(ep->name) = MSDOS_UNUSED; /* 0x0 */
@@ -358,14 +361,16 @@ static void fat_set_entry_type(DENTRY_T *p_entry, u32 type)
 
 static u32 fat_get_entry_attr(DENTRY_T *p_entry)
 {
-	DOS_DENTRY_T *ep = (DOS_DENTRY_T *) p_entry;
-	return((u32) ep->attr);
+	DOS_DENTRY_T *ep = (DOS_DENTRY_T *)p_entry;
+
+	return (u32)ep->attr;
 } /* end of fat_get_entry_attr */
 
 static void fat_set_entry_attr(DENTRY_T *p_entry, u32 attr)
 {
-	DOS_DENTRY_T *ep = (DOS_DENTRY_T *) p_entry;
-	ep->attr = (u8) attr;
+	DOS_DENTRY_T *ep = (DOS_DENTRY_T *)p_entry;
+
+	ep->attr = (u8)attr;
 } /* end of fat_set_entry_attr */
 
 static u8 fat_get_entry_flag(DENTRY_T *p_entry)
@@ -379,27 +384,30 @@ static void fat_set_entry_flag(DENTRY_T *p_entry, u8 flags)
 
 static u32 fat_get_entry_clu0(DENTRY_T *p_entry)
 {
-	DOS_DENTRY_T *ep = (DOS_DENTRY_T *) p_entry;
+	DOS_DENTRY_T *ep = (DOS_DENTRY_T *)p_entry;
 	/* FIXME : is ok? */
 	return(((u32)(le16_to_cpu(ep->start_clu_hi)) << 16) | le16_to_cpu(ep->start_clu_lo));
 } /* end of fat_get_entry_clu0 */
 
 static void fat_set_entry_clu0(DENTRY_T *p_entry, u32 start_clu)
 {
-	DOS_DENTRY_T *ep = (DOS_DENTRY_T *) p_entry;
+	DOS_DENTRY_T *ep = (DOS_DENTRY_T *)p_entry;
+
 	ep->start_clu_lo = cpu_to_le16(CLUSTER_16(start_clu));
 	ep->start_clu_hi = cpu_to_le16(CLUSTER_16(start_clu >> 16));
 } /* end of fat_set_entry_clu0 */
 
 static u64 fat_get_entry_size(DENTRY_T *p_entry)
 {
-	DOS_DENTRY_T *ep = (DOS_DENTRY_T *) p_entry;
-	return((u64) le32_to_cpu(ep->size));
+	DOS_DENTRY_T *ep = (DOS_DENTRY_T *)p_entry;
+
+	return (u64)le32_to_cpu(ep->size);
 } /* end of fat_get_entry_size */
 
 static void fat_set_entry_size(DENTRY_T *p_entry, u64 size)
 {
-	DOS_DENTRY_T *ep = (DOS_DENTRY_T *) p_entry;
+	DOS_DENTRY_T *ep = (DOS_DENTRY_T *)p_entry;
+
 	ep->size = cpu_to_le32((u32)size);
 } /* end of fat_set_entry_size */
 
@@ -488,7 +496,7 @@ static void __init_ext_entry(EXT_DENTRY_T *ep, s32 order, u8 chksum, u16 *uninam
 	}
 
 	/* aligned name */
-	for (i = 0; i < 6; i ++) {
+	for (i = 0; i < 6; i++) {
 		if (!end) {
 			ep->unicode_5_10[i] = cpu_to_le16(*uniname);
 			if (*uniname == 0x0)
@@ -608,15 +616,18 @@ static inline s32 __get_dentries_per_clu(FS_INFO_T *fsi, s32 clu)
 	return fsi->dentries_per_clu;
 }
 
-static s32 fat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, HINT_T *hint_stat, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *p_dosname, u32 type)
+static s32 fat_find_dir_entry(struct super_block *sb, FILE_ID_T *fid,
+		CHAIN_T *p_dir, UNI_NAME_T *p_uniname, s32 num_entries, DOS_NAME_T *p_dosname, u32 type)
 {
 	s32 i, rewind = 0, dentry = 0, end_eidx = 0;
 	s32 chksum = 0, lfn_ord = 0, lfn_len = 0;
-	s32 dentries_per_clu;
+	s32 dentries_per_clu, num_empty = 0;
 	u32 entry_type;
 	u16 entry_uniname[14], *uniname = NULL;
 	CHAIN_T clu;
 	DENTRY_T *ep;
+	HINT_T *hint_stat = &fid->hint_stat;
+	HINT_FEMP_T candi_empty;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
 	/*
@@ -633,6 +644,8 @@ static s32 fat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, HINT_T *hi
 		dentry = hint_stat->eidx;
 		end_eidx = dentry;
 	}
+
+	candi_empty.eidx = -1;
 
 	MMSG("lookup dir= %s\n", p_dosname->name);
 rewind:
@@ -659,6 +672,9 @@ rewind:
 				s32 len = 13;
 				u16 unichar;
 
+				num_empty = 0;
+				candi_empty.eidx = -1;
+
 				/* check whether new lfn or not */
 				if (cur_ord & MSDOS_LAST_LFN) {
 					cur_ord &= ~(MSDOS_LAST_LFN);
@@ -678,8 +694,8 @@ rewind:
 				}
 
 				/* invalid lfn order */
-				if ( !cur_ord || (cur_ord > MAX_LFN_ORDER) ||
-					((cur_ord + 1) != lfn_ord) )
+				if (!cur_ord || (cur_ord > MAX_LFN_ORDER) ||
+					((cur_ord + 1) != lfn_ord))
 					goto reset_dentry_set;
 
 				/* check checksum of directory entry set */
@@ -695,7 +711,7 @@ rewind:
 					continue;
 				}
 
-				if(!uniname) {
+				if (!uniname) {
 					sdfat_fs_error(sb,
 						"%s : abnormal dentry "
 						"(start_clu[%u], "
@@ -735,6 +751,10 @@ rewind:
 				u32 cur_chksum = (s32)calc_chksum_1byte(
 							(void *) dos_ep->name,
 							DOS_NAME_LENGTH, 0);
+
+				num_empty = 0;
+				candi_empty.eidx = -1;
+
 				MMSG("checking dir= %c%c%c%c%c%c%c%c%c%c%c\n",
 					dos_ep->name[0], dos_ep->name[1],
 					dos_ep->name[2], dos_ep->name[3],
@@ -749,27 +769,49 @@ rewind:
 				 */
 				if (!lfn_len || (cur_chksum != chksum)) {
 					/* check shortname */
-					if ( (p_dosname->name[0] != '\0') &&
+					if ((p_dosname->name[0] != '\0') &&
 						!nls_cmp_sfn(sb,
 							p_dosname->name,
-							dos_ep->name) ) {
+							dos_ep->name)) {
 						goto found;
 					}
 				/* check name length */
-				} else if ( (lfn_len > 0) &&
+				} else if ((lfn_len > 0) &&
 						((s32)p_uniname->name_len ==
-						 lfn_len) ) {
+						 lfn_len)) {
 					goto found;
 				}
 
 				/* DO HANDLE MISMATCHED SFN, FALL THROUGH */
-			} else if (entry_type == TYPE_UNUSED) {
-				goto not_found;
-			}
+			} else if ((entry_type == TYPE_UNUSED) || (entry_type == TYPE_DELETED)) {
+				num_empty++;
+				if (candi_empty.eidx == -1) {
+					if (num_empty == 1) {
+						candi_empty.cur.dir = clu.dir;
+						candi_empty.cur.size = clu.size;
+						candi_empty.cur.flags = clu.flags;
+					}
 
+					if (num_empty >= num_entries) {
+						candi_empty.eidx = dentry - (num_empty - 1);
+						ASSERT(0 <= candi_empty.eidx);
+						candi_empty.count = num_empty;
+
+						if ((fid->hint_femp.eidx == -1) ||
+								(candi_empty.eidx <= fid->hint_femp.eidx)) {
+							memcpy(&fid->hint_femp,
+									&candi_empty,
+									sizeof(HINT_FEMP_T));
+						}
+					}
+				}
+
+				if (entry_type == TYPE_UNUSED)
+					goto not_found;
+				/* FALL THROUGH */
+			}
 reset_dentry_set:
-			/* TYPE_DELETED OR TYPE_VOLUME */
-			/* OR MISMATCHED SFN */
+			/* TYPE_DELETED, TYPE_VOLUME OR MISMATCHED SFN */
 			lfn_ord = 0;
 			lfn_len = 0;
 			chksum = 0;
@@ -790,6 +832,13 @@ not_found:
 		rewind = 1;
 		dentry = 0;
 		clu.dir = p_dir->dir;
+		/* reset dentry set */
+		lfn_ord = 0;
+		lfn_len = 0;
+		chksum = 0;
+		/* reset empty hint_*/
+		num_empty = 0;
+		candi_empty.eidx = -1;
 		goto rewind;
 	}
 
@@ -832,12 +881,12 @@ static s32 fat_count_ext_entries(struct super_block *sb, CHAIN_T *p_dir, s32 ent
 	chksum = calc_chksum_1byte((void *) dos_ep->name, DOS_NAME_LENGTH, 0);
 
 	for (entry--; entry >= 0; entry--) {
-		ext_ep = (EXT_DENTRY_T*)get_dentry_in_dir(sb,p_dir,entry,NULL);
+		ext_ep = (EXT_DENTRY_T *)get_dentry_in_dir(sb, p_dir, entry, NULL);
 		if (!ext_ep)
 			return -EIO;
 
-		if ( (fat_get_entry_type((DENTRY_T*)ext_ep) == TYPE_EXTEND) &&
-			(ext_ep->checksum == chksum) ) {
+		if ((fat_get_entry_type((DENTRY_T *)ext_ep) == TYPE_EXTEND) &&
+			(ext_ep->checksum == chksum)) {
 			count++;
 			if (ext_ep->order > MSDOS_LAST_LFN)
 				return count;
@@ -860,7 +909,7 @@ static s32 __extract_uni_name_from_ext_entry(EXT_DENTRY_T *ep, u16 *uniname, s32
 	for (i = 0; i < 5; i++) {
 		*uniname = get_unaligned_le16(&(ep->unicode_0_4[i<<1]));
 		if (*uniname == 0x0)
-			return(len);
+			return len;
 		uniname++;
 		len++;
 	}
@@ -870,7 +919,7 @@ static s32 __extract_uni_name_from_ext_entry(EXT_DENTRY_T *ep, u16 *uniname, s32
 			/* FIXME : unaligned? */
 			*uniname = le16_to_cpu(ep->unicode_5_10[i]);
 			if (*uniname == 0x0)
-				return(len);
+				return len;
 			uniname++;
 			len++;
 		}
@@ -879,25 +928,25 @@ static s32 __extract_uni_name_from_ext_entry(EXT_DENTRY_T *ep, u16 *uniname, s32
 			/* FIXME : unaligned? */
 			*uniname = le16_to_cpu(ep->unicode_5_10[i]);
 			if (*uniname == 0x0)
-				return(len);
+				return len;
 			uniname++;
 			len++;
 		}
 		*uniname = 0x0; /* uniname[MAX_NAME_LENGTH] */
-		return(len);
+		return len;
 	}
 
 	for (i = 0; i < 2; i++) {
 		/* FIXME : unaligned? */
 		*uniname = le16_to_cpu(ep->unicode_11_12[i]);
 		if (*uniname == 0x0)
-			return(len);
+			return len;
 		uniname++;
 		len++;
 	}
 
 	*uniname = 0x0;
-	return(len);
+	return len;
 
 } /* end of __extract_uni_name_from_ext_entry */
 
@@ -919,6 +968,7 @@ static void fat_get_uniname_from_ext_entry(struct super_block *sb, CHAIN_T *p_di
 
 	for (entry--, i = 1; entry >= 0; entry--, i++) {
 		EXT_DENTRY_T *ep;
+
 		ep = (EXT_DENTRY_T *)get_dentry_in_dir(sb, p_dir, entry, NULL);
 		if (!ep)
 			goto invalid_lfn;
@@ -940,27 +990,21 @@ static void fat_get_uniname_from_ext_entry(struct super_block *sb, CHAIN_T *p_di
 	}
 invalid_lfn:
 	*uniname = (u16)0x0;
-	return;
 } /* end of fat_get_uniname_from_ext_entry */
 
 /* Find if the shortname exists
-   and check if there are free entries
-*/
-static s32 __fat_find_shortname_entry(struct super_block *sb, CHAIN_T *p_dir, u8 *p_dosname, s32 *offset, int n_entry_needed)
+ * and check if there are free entries
+ */
+static s32 __fat_find_shortname_entry(struct super_block *sb, CHAIN_T *p_dir,
+		u8 *p_dosname, s32 *offset, __attribute__((unused))int n_entry_needed)
 {
 	u32 type;
 	s32 i, dentry = 0;
-	s32 hint_n_empty = 0, hint_clu = 0;
 	s32 dentries_per_clu;
 	DENTRY_T *ep = NULL;
 	DOS_DENTRY_T *dos_ep = NULL;
 	CHAIN_T clu = *p_dir;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
-	if ((fsi->hint_uentry.dir == p_dir->dir)
-			&& (fsi->hint_uentry.n_entry >= n_entry_needed)) {
-		n_entry_needed = 0;		// No need for search
-	}
 
 	if (offset)
 		*offset = -1;
@@ -970,55 +1014,13 @@ static s32 __fat_find_shortname_entry(struct super_block *sb, CHAIN_T *p_dir, u8
 	else
 		dentries_per_clu = fsi->dentries_per_clu;
 
-	while(!IS_CLUS_EOF(clu.dir)) {
+	while (!IS_CLUS_EOF(clu.dir)) {
 		for (i = 0; i < dentries_per_clu; i++, dentry++) {
 			ep = get_dentry_in_dir(sb, &clu, i, NULL);
 			if (!ep)
 				return -EIO;
 
 			type = fat_get_entry_type(ep);
-			if (n_entry_needed > 0) {
-				/* Update unused hint */
-
-				if (type == TYPE_DELETED) {
-					if (hint_n_empty == 0)
-						hint_clu = clu.dir;
-
-					hint_n_empty++;
-				} else if (type == TYPE_UNUSED) {
-					/* Hint entry = end of dir */
-					if (hint_n_empty == 0)
-						hint_clu = clu.dir;
-
-					if (fsi->hint_uentry.entry == -1) {
-						fsi->hint_uentry.dir = p_dir->dir;
-						fsi->hint_uentry.entry = dentry - hint_n_empty;
-						fsi->hint_uentry.n_entry = INT_MAX;
-
-						fsi->hint_uentry.clu.dir = hint_clu;
-						fsi->hint_uentry.clu.size = clu.size;
-						fsi->hint_uentry.clu.flags = clu.flags;
-
-						MMSG("find_shortname: uentry_hint added (clu:0x%08x ent:%d) UNUSED\n", fsi->hint_uentry.clu.dir, fsi->hint_uentry.entry);
-					}
-				} else {
-					if ((fsi->hint_uentry.entry == -1) \
-							&& (hint_n_empty >= n_entry_needed)) {
-						/* Hint entry = an empty entry */
-						fsi->hint_uentry.dir = p_dir->dir;
-						fsi->hint_uentry.entry = dentry - hint_n_empty;
-						fsi->hint_uentry.n_entry = hint_n_empty;
-
-						fsi->hint_uentry.clu.dir = hint_clu;
-						fsi->hint_uentry.clu.size = clu.size;
-						fsi->hint_uentry.clu.flags = clu.flags;
-
-						MMSG("find_shortname: uentry_hint added (clu:0x%08x ent:%d)\n", fsi->hint_uentry.clu.dir, fsi->hint_uentry.entry);
-					}
-
-					hint_n_empty = 0;
-				}
-			}
 
 			if ((type == TYPE_FILE) || (type == TYPE_DIR))  {
 				dos_ep = (DOS_DENTRY_T *)ep;
@@ -1080,8 +1082,9 @@ s32 fat_generate_dos_name_new(struct super_block *sb, CHAIN_T *p_dir, DOS_NAME_T
 	memset(work, ' ', DOS_NAME_LENGTH);
 	memcpy(work, p_dosname->name, DOS_NAME_LENGTH);
 
-	while(baselen && (work[--baselen] == ' '));
-
+	while (baselen && (work[--baselen] == ' ')) {
+		/* DO NOTHING, JUST FOR CHECK_PATCH */
+	}
 
 	if (baselen > 6)
 		baselen = 6;
@@ -1099,7 +1102,7 @@ s32 fat_generate_dos_name_new(struct super_block *sb, CHAIN_T *p_dir, DOS_NAME_T
 			/* void return */
 			__fat_attach_count_to_dos_name(p_dosname->name, i);
 			return 0;
-		} 
+		}
 
 		/* any other error */
 		if (err)
@@ -1149,6 +1152,14 @@ static s32 fat_calc_num_entries(UNI_NAME_T *p_uniname)
 
 } /* end of calc_num_enties */
 
+static s32 fat_check_max_dentries(FILE_ID_T *fid)
+{
+	if ((fid->size >> DENTRY_SIZE_BITS) >= MAX_FAT_DENTRIES) {
+		/* FAT spec allows a dir to grow upto 65536 dentries */
+		return -ENOSPC;
+	}
+	return 0;
+} /* end of check_max_dentries */
 
 
 /*
@@ -1166,6 +1177,7 @@ static FS_FUNC_T fat_fs_func = {
 	.get_uniname_from_ext_entry = fat_get_uniname_from_ext_entry,
 	.count_ext_entries = fat_count_ext_entries,
 	.calc_num_entries = fat_calc_num_entries,
+	.check_max_dentries = fat_check_max_dentries,
 
 	.get_entry_type = fat_get_entry_type,
 	.set_entry_type = fat_set_entry_type,
@@ -1193,6 +1205,7 @@ static FS_FUNC_T amap_fat_fs_func = {
 	.get_uniname_from_ext_entry = fat_get_uniname_from_ext_entry,
 	.count_ext_entries = fat_count_ext_entries,
 	.calc_num_entries = fat_calc_num_entries,
+	.check_max_dentries = fat_check_max_dentries,
 
 	.get_entry_type = fat_get_entry_type,
 	.set_entry_type = fat_set_entry_type,
@@ -1356,7 +1369,7 @@ s32 mount_fat32(struct super_block *sb, pbr_t *p_pbr)
 
 	fsi->num_clusters = ((fsi->num_sectors-num_reserved) >> fsi->sect_per_clus_bits) + 2;
 	/* because the cluster index starts with 2 */
-	
+
 	fsi->vol_type = FAT32;
 	fsi->vol_id = get_unaligned_le32(p_bpb->bsx.vol_serial);
 
@@ -1390,23 +1403,23 @@ s32 mount_fat32(struct super_block *sb, pbr_t *p_pbr)
 				"sector   : bpb(%u) != ondisk(%u)",
 				hidden_sectors, calc_hid_sect);
 			if (SDFAT_SB(sb)->options.adj_hidsect) {
-				sdfat_log_msg(sb, KERN_INFO, 
+				sdfat_log_msg(sb, KERN_INFO,
 					"adjustment hidden sector : "
-					"bpb(%u) -> ondisk(%u)", 
+					"bpb(%u) -> ondisk(%u)",
 					hidden_sectors, calc_hid_sect);
 				hidden_sectors = calc_hid_sect;
 			}
 		}
 
 		SDFAT_SB(sb)->options.amap_opt.misaligned_sect = hidden_sectors;
-		
+
 		/* calculate AU size if it's not set */
 		if (!SDFAT_SB(sb)->options.amap_opt.sect_per_au) {
-			SDFAT_SB(sb)->options.amap_opt.sect_per_au = 
+			SDFAT_SB(sb)->options.amap_opt.sect_per_au =
 				__calc_default_au_size(sb);
 		}
-		
-		ret = amap_create(sb, 
+
+		ret = amap_create(sb,
 				SDFAT_SB(sb)->options.amap_opt.pack_ratio,
 				SDFAT_SB(sb)->options.amap_opt.sect_per_au,
 				SDFAT_SB(sb)->options.amap_opt.misaligned_sect);
@@ -1420,8 +1433,8 @@ s32 mount_fat32(struct super_block *sb, pbr_t *p_pbr)
 	}
 
 	/* Check dependency of mount options */
-	if (SDFAT_SB(sb)->options.improved_allocation != 
-				(SDFAT_ALLOC_DELAY | SDFAT_ALLOC_SMART) ) {
+	if (SDFAT_SB(sb)->options.improved_allocation !=
+				(SDFAT_ALLOC_DELAY | SDFAT_ALLOC_SMART)) {
 		sdfat_log_msg(sb, KERN_INFO, "disabling defragmentation because"
 					" smart, delay options are disabled");
 		SDFAT_SB(sb)->options.defrag = 0;

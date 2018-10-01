@@ -41,6 +41,7 @@ static ssize_t light_vendor_show(struct device *dev,
 static ssize_t light_name_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	struct ssp_data *data = dev_get_drvdata(dev);
 	int device_id = 0;
 	device_id = get_proximity_device_id(data);
@@ -58,6 +59,9 @@ static ssize_t light_name_show(struct device *dev,
 		pr_err("[SSP]: %s - Unkown proximity device \n", __func__);
 		return sprintf(buf, "%s\n", "UNKNOWN");
 	}
+#else
+	return sprintf(buf, "%s\n", CHIP_ID);
+#endif
 }
 
 static ssize_t light_lux_show(struct device *dev,

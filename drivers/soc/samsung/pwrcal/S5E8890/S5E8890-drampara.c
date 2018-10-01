@@ -1326,7 +1326,7 @@ void pwrcal_dmc_set_dvfs(unsigned long long target_mif_freq, unsigned int timing
 			pwrcal_writel(PHY_ZQ_CON0[n],	 ZQ_CON0.data);
 		}
 
-		mr13 = (0x1 << 7) | (0x0 << 6) | (0x0 << 5) | (0x1 << 3);	//FSP-OP=0x1, FSP-WR=0x0, DMD=0x0, VRCG=0x1
+		mr13 = (0x1 << 7) | (0x0 << 6) | (0x0 << 5) | (0x0 << 3);	//FSP-OP=0x1, FSP-WR=0x0, DMD=0x0, VRCG=0x0
 		smc_mode_register_write(DRAM_MR13, mr13);
 		smc_mode_register_write(DRAM_MR1, g_dram_dfs_table[target_mif_level_idx].DirectCmd_MR1);
 		smc_mode_register_write(DRAM_MR2, g_dram_dfs_table[target_mif_level_idx].DirectCmd_MR2);
@@ -1456,7 +1456,7 @@ void pwrcal_dmc_set_dvfs(unsigned long long target_mif_freq, unsigned int timing
 		}
 
 
-		mr13 = (0x0 << 7) | (0x1 << 6) | (0x0 << 5) | (0x1 << 3);	//FSP-OP=0x0, FSP-WR=0x1, DMD=0x0, VRCG=0x1
+		mr13 = (0x0 << 7) | (0x1 << 6) | (0x0 << 5) | (0x0 << 3);	//FSP-OP=0x0, FSP-WR=0x1, DMD=0x0, VRCG=0x0
 		smc_mode_register_write(DRAM_MR13, mr13);
 		smc_mode_register_write(DRAM_MR1, g_dram_dfs_table[target_mif_level_switch_idx].DirectCmd_MR1);
 		smc_mode_register_write(DRAM_MR2, g_dram_dfs_table[target_mif_level_switch_idx].DirectCmd_MR2);

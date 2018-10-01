@@ -1,7 +1,159 @@
-BCM4358 DHD 1.47.46 for Android Lollipop T/Zero Project
-Notes: 
+BCM4358 DHD 1.47.61 for Android T/Zero Project
+Notes:
+- 1.47.x is twigged off from 1.201.39.65
 - Must sync up DHD and FW for additional message to eliminate spurious D0 interrupt.
 . additional message to eliminate spurious D0 interrupt is enabled from DHD 1.47.20 and FW 7.112.20.5/7.112.20.2(IBSS) 
+
+DHD 1.47.61 - 2017.09.07
+Kernel Panic
+ - CS2714944 Fixed the Kernel Panic during dynamic TCP ACK suppress mode change in SDIO platform
+ - CS2993965 Fixed kernel panic by PCIE register access before pcie enumeration
+ - CS3204538 Fixed Kernel panic when D3_ACK timeout is occurred
+
+Security Patch
+ - CVE-2017-0705 Added boundary check in wl_cfgvendor_significant_change_cfg()
+ - CVE-2017-0706 Added boundary check in wl_cfg80211_mgmt_tx()
+ - CVE-2017-0786 V2017060101 Added boundary check in wl_escan_handler()
+ - CVE-2017-0788 V2017053103 Added boundary check in dhd_handle_hotlist_scan_evt()
+ - CVE-2017-0789 V2017053102 Fixed Heap overflow in dhd_handle_swc_evt()
+ - CVE-2017-0790 V2017053101 Added boundary check in dhd_process_full_gscan_result()
+ - CVE-2017-0791 V2017052302 Added event length check in wl_notify_rx_mgmt_frame()
+ - V2017063001 Removed not required IOVAR for SDIO
+ - Enhanced event length check in is_wlc_event_frame()
+ - Fixed overflow issue in wl_android_set_ibss_beacon_ouidata()
+
+Others
+ - CS2472434 Fixed roam failure on PMF required APs
+ - CS2675989 Fixed reverse-order of EAP-Failure and deauth packet
+ - CS2901316 Fixed to send up common error code for Android-O VTS
+ - CS3247015 Fixed disconnection during roaming on CISCO hidden networks
+ - Added P2P IE length check code in wl_find_listen_channel()
+
+
+DHD 1.47.59 - 2017.05.16
+New Feature
+ - CS2608655 Enabled CLM blob download feature
+
+Kernel Panic
+ - CS1969303(CSP:1125179) Enabled dongle_isolation for Exynos7420 platform
+ - CS2017043(CSP:1104692) Fixed pktid audit failure issue with adding memory barrier
+ - CS2477559(CSP:1138383) Implement exception handling routines if DMA mapping error for TX data packet is happened
+
+Security Patch
+ - CVE-2017-0567 Fixed memory buffer overrun with interworking IE
+ - CVE-2017-0570 V2017051815 Removed unused file (wl_iw.c/wl_iw.h)
+ - CVE-2017-0573 V2017051816 Fixed size overflow issue in wl_android_set_roampref()
+ - CVE-2017-0633 Enhanced wrong buffer usage in IOCTL path
+ - CVE-2017-0633 V2017022301 Enhanced wrong buffer usage in IOCTL path
+ - CVE-2017-0740 V2017030901 Fixed length overflow issue in dhd_wl_ioctl() function
+ - CVE-2017-0568 V2017051814 Fixed buffer overrun in wl_run_escan()
+
+Others
+ - CS1661701(CSP:1125141) Enhanced the PKTID error handler
+ - CS1734099(CSP:1095855) Improved DHD_LOG_DUMP feature in order to logging for semi-permanent log
+ - CS1807896(CSP:886357) added random MAC address scan feature
+ - CS1812684(CSP:1100314) Fixed the calculation of read/write offset for debug ring to avoid the possibility of buffer overflow
+ - CS1812688(CSP:1125601) Invalidate PCI configuration saved state in order to reduce PCI resume latency
+ - CS2471300 Fixed Buffer overflow issue
+ - CS2555123 Fixed page fault issue in dhd_wl_ioctl()
+ - CS2642368 Fixed type casting issue in wl_android_send_action_frame()
+ - Added ICMP dump log
+ - Removed unnecessary country code list in translate_custom_table
+
+
+DHD 1.47.56 - 2017.01.24
+Others
+ - CSP:1103989 Unnecessary mpc setting code is removed
+ - CSP:1115484 Fixed Build error with GSCAN
+ - CSP:1118306 Introduce a new wakelock for legacy SCAN
+ - CSP:1118325 Disabled Temperature throttling feature
+ - CSP:1118451 Prevent to duplicate connection request without disconnection
+ - CSP:1120070 Added recovery method when reading shared memory is failed
+ - Enabled "SUPPORT_TRIGGER_HANG_EVENT" for hang test
+ - Fixed vulnerability issues
+
+
+DHD 1.47.52 - 2016.12.30
+Others
+ - CSP:1097702 Fixed to miss check SSID length on cfg80211_get_bss()
+ - CSP:1100087 Added to set Country code by HAL
+ - CSP:1102273 Fixed prevent issue
+ - CSP:1102277 Fixed get feature by HAL
+ - CSP:1104300 Set rps_cpus to big core in system late resume condition to resolve short frame rx performance degradation issue
+ - CSP:1104452 Fixed for P2P connection failure due to M1 packet goes up with wrong interface
+ - CSP:1105985 Fixed send up connection failure event to wpa_supplicant
+ - CSP:1106932 Changed channel buf size to 8 bytes alignment to get valid channel list
+ - CSP:1110795 Added check reason of file_open error
+ - CSP:1111136 Added LOCK/UNLOCK mechanism to protect TDLS peer list
+ - CSP:1114716 Increased P2P Provision Discovery Response dwell time
+ - CSP:1115484 Fixed vulnerability issues
+ - CSP:1115750 Fixed disconnect issue during country code setting time
+ - Added channel information log for roaming done
+ - Merged mkeep alive feature
+ - Re-factorize MSM CFG function selection
+ - Support Split ARGOS table
+
+
+DHD 1.47.51 - 2016.11.04
+Kernel Panic
+ - CSP:1092776 Replaced API for file writing to prevent kernel panic
+ - CSP:1094253 Fixed Kernel Panic by registering Invalid netdev interface
+
+Others
+ - CSP:1084284 Fixed scan fail(-16) at wifi on(set country)
+ - CSP:1091412 Implement Kernel API for taking SOCRAM dump from other Kernel modules
+ - CSP:1093614 Fixed Prevent warning issues
+ - CSP:1093614, 1101569 Fixed host memory leak issue by missing cfg80211_put_bss()
+ - CSP:1094025 Fixed DHCP failure on WiFi-Sharing mode
+ - CSP:1096065 Added COB type definition dependency in Kernel Config
+ - CSP:1096065 Supported Kernel 4.x compatibility
+ - CSP:1097620 Added MSM kernel cfg function selection code
+ - CSP:1097948 DHD info file path changed above android 7.0 version
+ - CSP:1097967 Replaced ccode regrev ZA/19 in translate_custom_table
+   (This patch should be sync up with FW 7.112.49 or higher version.)
+ - CSP:1101569 changed firmware busy debug message log level
+ - Added Android packet filter(N-OS)
+ - Added PCIe patches to improve PCIe Stability
+ - Fixed cfg80211_get_bss() function argument as kernel version
+ - Fixed scan busy during association
+ - Support the PCI Kernel API for Kernel 4.x version
+
+
+DHD 1.47.49 - 2016.08.29
+Kernel Panic
+ - CSP:1062516 Prevent invalid address access due to PCIe Linkdown
+ - CSP:1063099 Fixed Kernel panic when host failed to create a kernel thread
+ - CSP:1066646 Fixed kernel panic due to not deleted tcpack suppress timer
+
+Others
+ - CSP:1042751 Changed event handler using workqueue
+ - CSP:1042751 Seperated wakelock for pm_handler and tx_flow from wlan_wake
+ - CSP:1045070 Disabled DHD_ACKSUPPRESS for MSM platform(Veyron Platform)
+ - CSP:1045070 Fixed compatibility issue with Kernel version 3.15 or higher version
+ - CSP:1059462 Clear supported feature set of cfgvendor for Samsung Project.
+ - CSP:1061564 Prevent kernel panic due to invalid memory access when called dhd_set_mcast_list_handler()
+ - CSP:1062950 Removing dhd_os_sdlock/unlock from PCIe
+ - CSP:1065376 Added ccode regrev AM/1 in translate_custom_table
+   (This patch should be sync up with FW 7.112.46, 7.112.44.1 or higher version.)
+ - CSP:1069391 Replaced ccode regrev MY/19 in translate_custom_table
+   (This patch should be sync up with FW 7.112.46, 7.112.44.1 or higher version.)
+ - CSP:1070247 Fix netdev notifier callback for linux-3.11 and above
+ - CSP:1073788,1045070 Support MULTIPLE_MODULE_CIS for HAECHI, VEYRON project
+ - CSP:1073993 Replaced ccode regrev DZ/2 in translate_custom_table
+   (This patch should be sync up with FW 7.112.46 or higher version.)
+ - CSP:1079421 Replaced ccode regrev TW/65 in translate_custom_table
+   (This patch should be sync up with FW 7.112.44.4 or higher version.)
+ - Apply Country code/regrev of nvram when Country code is KR for PCIe
+ - Fixed failure of join pref command
+ - Fixed pm_handler timeout due to wrong value
+ - Fixed possible deadlock of dhd_tcp_acksuppress feature
+ - Fixed vulnerability issue from PNO command
+ - Fixed wl_event_handler thread is not terminated issue for module type
+ - Free the data packets which has ETHER_TYPE_BRCM type for strengthening security
+ - Prevent corner case of eSCO param sometimes unrecovered issue
+ - Security Enhancement for ETHER_TYPE_BRCM frame
+   (This patch should be sync up with FW 7.112.46 or higher version.)
+
 
 DHD 1.47.46 - 2016.05.19
 Kernel Panic

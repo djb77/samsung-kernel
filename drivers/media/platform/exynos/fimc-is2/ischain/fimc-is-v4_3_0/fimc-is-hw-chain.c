@@ -118,6 +118,12 @@ int fimc_is_hw_group_cfg(void *group_data)
 		group->subdev[ENTRY_M3P] = &device->m3p;
 		group->subdev[ENTRY_M4P] = &device->m4p;
 		group->subdev[ENTRY_VRA] = &device->group_vra.leader;
+
+		device->m0p.param_dma_ot = PARAM_MCS_OUTPUT0;
+		device->m1p.param_dma_ot = PARAM_MCS_OUTPUT1;
+		device->m2p.param_dma_ot = PARAM_MCS_OUTPUT2;
+		device->m3p.param_dma_ot = PARAM_MCS_OUTPUT3;
+		device->m4p.param_dma_ot = PARAM_MCS_OUTPUT4;
 		break;
 	case GROUP_SLOT_VRA:
 		group->subdev[ENTRY_3AA] = NULL;

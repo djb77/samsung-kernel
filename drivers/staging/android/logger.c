@@ -1009,7 +1009,7 @@ static int __init create_log(char *log_name, int size)
 		pr_err("failed to vmalloc ess_sync_buf %s log\n",
 				log->misc.name);
 
-	if (exynos_ss_get_enable(log->misc.name) == true) {
+	if (exynos_ss_get_enable(log->misc.name, false) == true) {
 		buffer = vmalloc(ESS_MAX_BUF_SIZE);
 		if (buffer)
 			log->ess_buf = buffer;
@@ -1091,7 +1091,7 @@ static int __init create_log(char *log_name, int size)
 		pr_err("failed to vmalloc ess_sync_buf %s log\n",
 				log->misc.name);
 
-	if (exynos_ss_get_enable(log->misc.name) == true) {
+	if (exynos_ss_get_enable(log->misc.name, false) == true) {
 		buffer = vmalloc(ESS_MAX_BUF_SIZE);
 		if (!buffer) {
 			pr_err("failed to use hooking platform %s log\n", log->misc.name);

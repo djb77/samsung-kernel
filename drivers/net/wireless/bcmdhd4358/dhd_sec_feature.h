@@ -1,7 +1,7 @@
 /*
  * Customer HW 4 dependant file
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -68,7 +68,7 @@
 #define READ_MACADDR
 #endif  /* CONFIG_WIFI_BROADCOM_COB */
 
-#if defined(CONFIG_WIFI_BROADCOM_COB) && defined(CONFIG_BCMDHD_PCIE) && defined(CONFIG_SOC_EXYNOS8890)
+#if defined(CONFIG_WIFI_BROADCOM_COB) && defined(CONFIG_BCMDHD_PCIE)
 #define OTP_WRITE_ON
 #endif /* CONFIG_WIFI_BROADCOM_COB && CONFIG_BCMDHD_PCIE */
 
@@ -82,18 +82,12 @@
 #endif /* CONFIG_SEC_TRLTE_PROJECT  || defined(CONFIG_SEC_TBLTE_PROJECT) */
 
 #if defined(CONFIG_MACH_UNIVERSAL7420) || defined(CONFIG_ARCH_MSM8994) || \
-	defined(CONFIG_ARCH_MSM8996)|| defined(CONFIG_SOC_EXYNOS8890)
+	defined(CONFIG_ARCH_MSM8996) || defined(CONFIG_SOC_EXYNOS8890)
 #define SUPPORT_MULTIPLE_MODULE_CIS
 #endif /* defined(CONFIG_MACH_UNIVERSAL7420) || defined(CONFIG_ARCH_MSM8994) ||
-		* defined(CONFIG_ARCH_MSM8996)|| defined(CONFIG_SOC_EXYNOS8890)
+		* defined(CONFIG_ARCH_MSM8996) || defined(CONFIG_SOC_EXYNOS8890)
 		*/
 
-/* For EXYNOS PCIe RC Control */
-#if defined(CONFIG_MACH_UNIVERSAL5433) || defined(CONFIG_MACH_UNIVERSAL7420) || \
-	defined(CONFIG_SOC_EXYNOS8890)
-#define EXYNOS_PCIE_LINKDOWN_RECOVERY
-#define USE_EXYNOS_PCIE_RC_PMPATCH
-#endif /* CONFIG_MACH_UNIVERSAL5433 || CONFIGA_MACH_UNIVERSAL7420 || CONFIG_SOC_EXYNOS8890 */
 /* PROJECTS START */
 
 #if defined(CONFIG_MACH_SAMSUNG_ESPRESSO) || defined(CONFIG_MACH_SAMSUNG_ESPRESSO_10)

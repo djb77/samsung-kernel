@@ -34,18 +34,26 @@ config CALC_TIME_TO_FULL
 	help
 	  Say Y to use calc time to full function.
 
-config SW_SELF_DISCHARGING
-	bool "enable sw_self_discharging"
-	default n
-	help
-	  Say Y to enable CONFIG_SW_SELF_DISCHARGING
-
 config BATTERY_AGE_FORECAST
 	tristate "battery age forecast"
 	default n
 	depends on BATTERY_SWELLING
 	help
-	Say Y to use calc time to full function.
+	Say Y to use battery age forecast
+
+config BATTERY_AGE_FORECAST_DETACHABLE
+	tristate "battery age forecast for detachable"
+	default n
+	select BATTERY_AGE_FORECAST
+	help
+	Say Y to use battery age forecast for detachable
+
+config BATTERY_AGE_FORECAST_B2B
+	tristate "battery age forecast for B2B"
+	default n
+	select BATTERY_AGE_FORECAST
+	help
+	Say Y to use battery age forecast for B2B
 
 config MULTI_CHARGING
 	bool "support for multi charger ICs"
@@ -64,12 +72,32 @@ config UPDATE_BATTERY_DATA
 	help
 	 Say Y to include support for step charging
 
-config SAMSUNG_BATTERY_ENG_TEST
+config ENG_BATTERY_CONCEPT
 	tristate "set test mode in eng build"
 	default n
 	depends on BATTERY_SAMSUNG
 	help
 	 Say Y to set test mode in eng build
+
+config AFC_CURR_CONTROL_BY_TEMP
+	tristate "fast charging current control by temp"
+	default n
+	depends on BATTERY_SAMSUNG
+	help
+	 Say Y to set afc current control by temp
+
+ config BATTERY_CISD
+	 bool "support for cisd"
+	 help
+	 Say Y to include support for cisd
+	 cisd means cell internal short detection
+
+config MAX77854_FG_SENSING_WA
+	tristate "set to enable max77854 fg sensing w/a"
+	default n
+	depends on BATTERY_SAMSUNG
+	help
+	 Say Y to Enable MAX77854 FG Sensing W/A
 
 # Fuel Gauge
 
@@ -189,6 +217,15 @@ config FUELGAUGE_MAX77854
 	help
 	 Say Y to include support
 	 for MAXIM MAX77854 fuel gauge driver.
+	 This fuel-gauge can be used in coulomb-counting mode.
+
+config FUELGAUGE_MAX77865
+	tristate "MAX77865 fuel gauge driver"
+	default n
+	depends on BATTERY_SAMSUNG
+	help
+	 Say Y to include support
+	 for MAXIM MAX77865 fuel gauge driver.
 	 This fuel-gauge can be used in coulomb-counting mode.
 
 config FUELGAUGE_MAX77823_VOLTAGE_TRACKING
@@ -326,6 +363,12 @@ config CHARGER_MAX77854
 	help
 	  Say Y here to enable support for the MAX77854 charger
 
+config CHARGER_MAX77865
+	tristate "MAX77865 battery charger support"
+	depends on BATTERY_SAMSUNG
+	help
+	  Say Y here to enable support for the MAX77865 charger
+
 config CHARGER_MAX77804
 	tristate "MAX77804 battery charger support"
 	depends on (MFD_MAX77804 || MFD_MAX77804K) && I2C
@@ -387,17 +430,31 @@ config WIRELESS_CHARGER_P9220
 	  Say Y here to enable support for the p9220 charger
 	  p9220 wireless charger driver.
 
+config WIRELESS_CHARGER_S2MIW03
+	tristate "s2miw03 wireless battery charger support"
+	depends on BATTERY_SAMSUNG && I2C
+	help
+	  Say Y here to enable support for the S2MIW03 charger
+	  S2MIW03 wireless charger driver.
+
+config WIRELESS_CHARGER_MFC
+	tristate "MFC IC charger support"
+	depends on BATTERY_SAMSUNG && I2C
+	help
+	  Say Y here to enable support for the MFC IC
+	  MFC wireless charger driver.
+
 config WIRELESS_FIRMWARE_UPDATE
 	tristate "p9220 battery charger support"
-	depends on WIRELESS_CHARGER_P9220
+	depends on BATTERY_SAMSUNG
 	help
-	  Say Y here to enable support for the p9220 charger firmware update
-	  p9220 wireless charger IC firmware update.
+	  Say Y here to enable support for the wireless charger firmware update
+	  wireless charger IC firmware update.
 
 config AFC_CHARGER_MODE
 	bool "afc charging support in sec battery driver"
 	default n
-	depends on CHARGER_MAX77854
+	depends on BATTERY_SAMSUNG
 	help
 	  Say Y to include support for sec afc charging support
 
@@ -422,8 +479,27 @@ config STORE_MODE
        help
 	 Say Y to enable CONFIG_STORE_MODE
 
+config BATTERY_SBM_DATA
+	tristate "battery manager data"
+	default n
+	depends on BATTERY_SAMSUNG
+	help
+	Say Y to use update battery manager data
+
+config QH_ALGORITHM
+       bool "enable QH algorithm"
+       default n
+       help
+	 Say Y to enable CONFIG_QH_ALGORITHM
+
 config BATTERY_NOTIFIER
 	bool "battery notifier"
 	default n
 	help
 	  Say Y to enable battery notifier
+
+config ENABLE_100MA_CHARGING_BEFORE_USB_CONFIGURED
+	bool "enable 100mA before usb configured"
+	default n
+	help
+	  Say Y to enable 100mA before usb configured

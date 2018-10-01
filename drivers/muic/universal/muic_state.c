@@ -52,7 +52,10 @@
 
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
 #include "muic_ccic.h"
+#include <linux/ccic/s2mm005.h>
 #endif
+
+#include "../../battery_v2/include/sec_charging_common.h"
 
 extern void muic_send_dock_intent(int type);
 
@@ -235,6 +238,15 @@ static void muic_handle_attach(muic_data_t *pmuic,
 	case ATTACHED_DEV_UNDEFINED_CHARGING_MUIC:
 	case ATTACHED_DEV_UNDEFINED_RANGE_MUIC:
 		break;
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	case ATTACHED_DEV_POGO_DOCK_MUIC:
+	case ATTACHED_DEV_POGO_DOCK_5V_MUIC:
+	case ATTACHED_DEV_POGO_DOCK_9V_MUIC:
+		hv_do_detach(pmuic->phv);
+		pmuic->attached_dev = ATTACHED_DEV_NONE_MUIC;
+		detach_ta(pmuic);
+		break;
+#endif
 
 	default:
 		noti_f = false;
@@ -270,6 +282,15 @@ static void muic_handle_attach(muic_data_t *pmuic,
 		else if (pmuic->afc_water_disable)
                         pr_info("%s:%s AFC Disable(%d) by WATER!\n", MUIC_DEV_NAME,
                                 __func__, pmuic->afc_water_disable);
+		else if (!pmuic->is_ccic_attach)
+			pr_info("%s:%s AFC Disable(%d), not CC attach!\n", MUIC_DEV_NAME,
+				__func__, pmuic->is_ccic_attach);
+		else if (pmuic->afc_tsub_disable)
+			pr_info("%s:%s AFC Disable(%d) by TSUB too hot!\n", MUIC_DEV_NAME,
+				__func__, pmuic->afc_tsub_disable);
+		else if (pmuic->is_ccic_afc_enable == Rp_Abnormal)
+			pr_info("%s:%s AFC Disable(%d) by CC or SBU short!\n", MUIC_DEV_NAME,
+				__func__, pmuic->is_ccic_afc_enable);
 #endif
                 else {
                         if ((pmuic->phv->is_afc_muic_ready == false) &&
@@ -330,6 +351,14 @@ static void muic_handle_attach(muic_data_t *pmuic,
 	case ATTACHED_DEV_GAMEPAD_MUIC:
 		ret = attach_gamepad(pmuic, new_dev);
 		break;
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	case ATTACHED_DEV_POGO_DOCK_MUIC:
+		max77854_muic_prepare_afc_pogo_dock(pmuic->phv);
+		attach_ta(pmuic);
+		mdelay(150);
+		pmuic->attached_dev = new_dev;
+		break;
+#endif
 	default:
 		pr_warn("%s:%s unsupported dev=%d, adc=0x%x, vbus=%c\n",
 				MUIC_DEV_NAME, __func__, new_dev, adc,
@@ -434,6 +463,14 @@ static void muic_handle_detach(muic_data_t *pmuic)
 	case ATTACHED_DEV_GAMEPAD_MUIC:
 		ret = detach_gamepad(pmuic);
 		break;
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	case ATTACHED_DEV_POGO_DOCK_MUIC:
+	case ATTACHED_DEV_POGO_DOCK_5V_MUIC:
+	case ATTACHED_DEV_POGO_DOCK_9V_MUIC:
+		pmuic->attached_dev = ATTACHED_DEV_NONE_MUIC;
+		detach_ta(pmuic);
+		break;
+#endif
 	default:
 		pr_info("%s:%s invalid attached_dev type(%d)\n", MUIC_DEV_NAME,
 			__func__, pmuic->attached_dev);
@@ -458,6 +495,9 @@ void muic_detect_dev(muic_data_t *pmuic, int irq)
 	muic_attached_dev_t new_dev = ATTACHED_DEV_UNKNOWN_MUIC;
 	int intr = MUIC_INTR_DETACH;
 	u8 adc = 0, vbvolt = 0;
+#if !defined(CONFIG_SEC_FACTORY) && defined(CONFIG_MUIC_SUPPORT_CCIC)
+	union power_supply_propval tsub_val;
+#endif
 
 	get_vps_data(pmuic, &pmuic->vps);
 
@@ -487,6 +527,12 @@ void muic_detect_dev(muic_data_t *pmuic, int irq)
 		}
 #endif
 
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+		if (gpio_is_valid(pmuic->dock_int_ap))
+			pr_info("%s:%s dock_int_ap(%c)\n", MUIC_DEV_NAME, __func__,
+				gpio_get_value(pmuic->dock_int_ap) ? 'x' : 'o');
+#endif
+
 		adc = pmuic->vps.t.adc;
 		vbvolt = pmuic->vps.t.vbvolt;
 	}
@@ -507,7 +553,19 @@ void muic_detect_dev(muic_data_t *pmuic, int irq)
 		} else
 			muic_set_legacy_dev(pmuic, new_dev);
 	}
-#endif
+
+#if !defined(CONFIG_SEC_FACTORY)
+	if (irq < 0) {
+		pmuic->afc_tsub_disable = false;
+	} else {
+		psy_do_property("battery", get, POWER_SUPPLY_EXT_PROP_SUB_PBA_TEMP_REC, tsub_val);
+		if (!tsub_val.intval)
+			pmuic->afc_tsub_disable = true;
+		else
+			pmuic->afc_tsub_disable = false;
+	}
+#endif /* CONFIG_SEC_FACTORY */
+#endif /* CONFIG_MUIC_SUPPORT_CCIC */
 
 	if (intr == MUIC_INTR_ATTACH)
 		muic_handle_attach(pmuic, new_dev, adc, vbvolt);

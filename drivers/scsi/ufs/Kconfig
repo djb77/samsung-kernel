@@ -75,6 +75,13 @@ config SCSI_UFSHCD_PLATFORM
 
 	  If unsure, say N.
 
+config SCSI_UFS_TEST_MODE
+	bool "Samsung UFS TEST feature"
+	depends on SCSI_UFSHCD && SCSI_UFSHCD_PLATFORM
+	---help---
+	  This selects support for test mode for debugging.
+	  Select this option if this feature is needed on working.
+	  
 config SCSI_UFS_EXYNOS
 	tristate "EXYNOS UFS Host Controller Driver"
 	depends on SCSI_UFSHCD && SCSI_UFSHCD_PLATFORM
@@ -84,3 +91,7 @@ config SCSI_UFS_EXYNOS
 	  If you have a controller with this interface, say Y or M here.
 
 	  If unsure, say N.
+
+config NO_ORDERED_DISCARD
+	bool "Do not set ordered flag on discard"
+	default n

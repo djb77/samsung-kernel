@@ -43,9 +43,11 @@
 #include "muic_debug.h"
 #include "muic_regmap.h"
 #include "muic_state.h"
+#include "muic_vps.h"
 
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
 #include <linux/ccic/ccic_notifier.h>
+#include <linux/ccic/s2mm005.h>
 #endif
 #if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
 #include <linux/usb/manager/usb_typec_manager_notifier.h>
@@ -61,7 +63,6 @@
 #define MUIC_CCIC_NOTI_UNDEFINED (0)
 
 struct mdev_rid_desc_t {
-	char *name;
 	int mdev;
 };
 
@@ -78,14 +79,14 @@ static struct mdev_desc_t {
 static int __ccic_info = 0;
 
 static struct mdev_rid_desc_t mdev_rid_tbl[] = {
-	[RID_UNDEFINED] = {"UNDEFINED", ATTACHED_DEV_NONE_MUIC},
-	[RID_000K] = {"000K", ATTACHED_DEV_OTG_MUIC},
-	[RID_001K] = {"001K", ATTACHED_DEV_MHL_MUIC},
-	[RID_255K] = {"255K", ATTACHED_DEV_JIG_USB_OFF_MUIC},
-	[RID_301K] = {"301K", ATTACHED_DEV_JIG_USB_ON_MUIC},
-	[RID_523K] = {"523K", ATTACHED_DEV_JIG_UART_OFF_MUIC},
-	[RID_619K] = {"619K", ATTACHED_DEV_JIG_UART_ON_MUIC},
-	[RID_OPEN] = {"OPEN", ATTACHED_DEV_NONE_MUIC},
+	[RID_UNDEFINED] = {ATTACHED_DEV_NONE_MUIC},
+	[RID_000K] = {ATTACHED_DEV_OTG_MUIC},
+	[RID_001K] = {ATTACHED_DEV_MHL_MUIC},
+	[RID_255K] = {ATTACHED_DEV_JIG_USB_OFF_MUIC},
+	[RID_301K] = {ATTACHED_DEV_JIG_USB_ON_MUIC},
+	[RID_523K] = {ATTACHED_DEV_JIG_UART_OFF_MUIC},
+	[RID_619K] = {ATTACHED_DEV_JIG_UART_ON_MUIC},
+	[RID_OPEN] = {ATTACHED_DEV_NONE_MUIC},
 };
 
 /*
@@ -134,6 +135,9 @@ int muic_is_ccic_supported_dev(muic_data_t *pmuic, muic_attached_dev_t new_dev)
 	case ATTACHED_DEV_CDP_MUIC:
 	case ATTACHED_DEV_TA_MUIC:
 	case ATTACHED_DEV_TIMEOUT_OPEN_MUIC:
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	case ATTACHED_DEV_POGO_DOCK_MUIC:
+#endif
 		return 1;
 	default:
 		break;
@@ -170,6 +174,10 @@ static bool mdev_is_supported(int mdev)
 
 static int mdev_com_to(muic_data_t *pmuic, int path)
 {
+#if defined(CONFIG_HICCUP_CHARGER)
+	if (pmuic->afc_water_disable)
+		return 0;
+#endif
 #if defined(CONFIG_MUIC_HV)
 	hv_clear_hvcontrol(pmuic->phv);
 #endif
@@ -223,6 +231,10 @@ static void mdev_handle_ccic_detach(muic_data_t *pmuic)
 #if defined(CONFIG_MUIC_HV)
 	hv_do_detach(pmuic->phv);
 #endif
+	pmuic->is_ccic_attach = false;
+	pmuic->is_ccic_afc_enable = 0;
+	pmuic->is_ccic_rp56_enable = false;
+
 	if (pdesc->ccic_evt_rprd) {
 		if (pvendor && pvendor->enable_chgdet)
 			pvendor->enable_chgdet(pmuic->regmapdesc, 1);
@@ -288,6 +300,23 @@ int mdev_continue_for_TA_USB(muic_data_t *pmuic, int mdev)
 					__func__, MUIC_DEV_NAME);
 			mdev_com_to(pmuic, MUIC_PATH_USB_AP);
 		}
+#if defined(CONFIG_HICCUP_CHARGER)
+		if (pmuic->afc_water_disable) {
+			pr_info("%s:%s:HICCUP MODE. set path to Aux USB\n",
+					__func__, MUIC_DEV_NAME);
+			com_to_usb_cp(pmuic);
+
+			if (vbus) {
+				if (pmuic->legacy_dev != ATTACHED_DEV_TA_MUIC)
+					mdev_noti_detached(pmuic->legacy_dev);
+
+				pmuic->legacy_dev = ATTACHED_DEV_TA_MUIC;
+				mdev_noti_attached(pmuic->legacy_dev);
+			}
+
+			return 0;
+		}
+#endif
 		if (pdesc->ccic_evt_rid == 0) {
 			pr_info("%s:%s: No rid\n", __func__, MUIC_DEV_NAME);
 			return 0;
@@ -459,6 +488,42 @@ static int muic_handle_ccic_ATTACH(muic_data_t *pmuic, CC_NOTI_ATTACH_TYPEDEF *p
 	/* Attached */
 	if (pdesc->ccic_evt_attached == MUIC_CCIC_NOTI_ATTACH) {
 		pr_info("%s: Attach\n", __func__);
+		pmuic->is_ccic_attach = true;
+		pmuic->is_ccic_afc_enable = pnoti->cable_type;
+
+		switch (pnoti->cable_type) {
+		case Rp_56K:
+			if (!pmuic->is_ccic_rp56_enable) {
+				switch (pmuic->attached_dev) {
+				case ATTACHED_DEV_AFC_CHARGER_5V_MUIC:
+					pr_info("%s: 9V HV Charging Start!\n", __func__);
+					pmuic->phv->tx_data = MUIC_HV_9V;
+					max77854_hv_muic_connect_start(pmuic->phv);
+					break;
+				default:
+					break;
+				}
+				pmuic->is_ccic_rp56_enable = true;
+			}
+			break;
+		case Rp_Abnormal:
+			/* Chgtype re-detect for AFC detach -> TA attach */
+			switch (pmuic->attached_dev) {
+			case ATTACHED_DEV_AFC_CHARGER_5V_MUIC:
+			case ATTACHED_DEV_AFC_CHARGER_9V_MUIC:
+			case ATTACHED_DEV_QC_CHARGER_5V_MUIC:
+			case ATTACHED_DEV_QC_CHARGER_9V_MUIC:
+				pr_info("%s: CC or SBU short. Chgdet Re-run.\n", __func__);
+				hv_muic_chgdet_ready(pmuic->phv);
+				if (pvendor && pvendor->run_chgdet)
+					pvendor->run_chgdet(pmuic->regmapdesc, 1);
+				break;
+			default:
+				break;
+			}
+		default:
+			break;
+		}
 
 		if (pdesc->ccic_evt_roleswap) {
 			pr_info("%s: roleswap event, attach USB\n", __func__);
@@ -477,6 +542,7 @@ static int muic_handle_ccic_ATTACH(muic_data_t *pmuic, CC_NOTI_ATTACH_TYPEDEF *p
 				pvendor->enable_chgdet(pmuic->regmapdesc, 0);
 			pdesc->mdev = ATTACHED_DEV_OTG_MUIC;
 			mdev_com_to(pmuic, MUIC_PATH_USB_AP);
+			mdev_noti_attached(pdesc->mdev);
 			return 0;
 		}
 
@@ -487,9 +553,29 @@ static int muic_handle_ccic_ATTACH(muic_data_t *pmuic, CC_NOTI_ATTACH_TYPEDEF *p
 
 		/* CCIC ATTACH means NO WATER */
 		if (pmuic->afc_water_disable) {
+#if defined(CONFIG_HICCUP_CHARGER)
+			enable_chgdet(pmuic, 1);
+#endif
 			pr_info("%s: Water is not detected, AFC Enable\n", __func__);
 			pmuic->afc_water_disable = false;
 		}
+
+#if defined(CONFIG_MUIC_HV)
+		/* For dry case after water */
+		if (pmuic->attached_dev == ATTACHED_DEV_TA_MUIC) {
+			if (pmuic->pdata->afc_disable)
+				pr_info("%s: AFC Disabled(%d) by USER\n", __func__, pmuic->pdata->afc_disable);
+			else if (pmuic->attached_dev == ATTACHED_DEV_TA_MUIC) {
+				if ((pmuic->phv->is_afc_muic_ready == false) &&
+						vps_is_hv_ta(&pmuic->vps)) {
+					if (pmuic->is_ccic_afc_enable == Rp_56K) {
+						pmuic->phv->is_afc_muic_prepare = true;
+						max77854_muic_prepare_afc_charger(pmuic->phv);
+					}
+				}
+			}
+		}
+#endif
 
 		/* W/A for Incomplete insertion case */
 		pdesc->ccic_evt_dcdcnt = 0;
@@ -632,6 +718,11 @@ static int muic_handle_ccic_WATER(muic_data_t *pmuic, CC_NOTI_ATTACH_TYPEDEF *pn
 
 	if (pnoti->attach == CCIC_NOTIFY_ATTACH) {
 		pr_info("%s: Water detect\n", __func__);
+#if defined(CONFIG_HICCUP_CHARGER)
+		/* set path open initially at WATER state */
+		enable_chgdet(pmuic, 0);
+		mdev_com_to(pmuic, MUIC_PATH_OPEN);
+#endif
 		pmuic->afc_water_disable = true;
 	} else {
 		pr_info("%s: Undefined notification, Discard\n", __func__);
@@ -734,55 +825,6 @@ void muic_register_ccic_notifier(muic_data_t *pmuic)
 		INIT_DELAYED_WORK(&pmuic->ccic_work, __delayed_ccic_notifier);
 		schedule_delayed_work(&pmuic->ccic_work, msecs_to_jiffies(8000));
 		return;
-	}
-
-	pr_info("%s: done.\n", __func__);
-}
-
-static void muic_pseudo_ATTACH(int attached)
-{
-	CC_NOTI_ATTACH_TYPEDEF attach_noti;
-
-	pr_info("%s: attached=%d\n", __func__, attached);
-
-	attach_noti.src = CCIC_NOTIFY_DEV_CCIC;
-	attach_noti.dest = CCIC_NOTIFY_DEV_MUIC;
-	attach_noti.id = CCIC_NOTIFY_ID_ATTACH;
-	attach_noti.attach = attached;
-	attach_noti.cable_type = 0;
-
-	ccic_notifier_notify((CC_NOTI_TYPEDEF*)&attach_noti, NULL, 0);
-}
-
-static void muic_pseudo_RID(int rid)
-{
-	CC_NOTI_RID_TYPEDEF rid_noti;
-
-	pr_info("%s: rid=%d\n", __func__, rid);
-
-	rid_noti.src = CCIC_NOTIFY_DEV_CCIC;
-	rid_noti.dest = CCIC_NOTIFY_DEV_MUIC;
-	rid_noti.id = CCIC_NOTIFY_ID_RID;
-	rid_noti.rid = rid;
-	rid_noti.sub2 = 0;
-	rid_noti.sub3 = 0;
-	ccic_notifier_notify((CC_NOTI_TYPEDEF*)&rid_noti, NULL, 0);
-}
-
-void muic_ccic_pseudo_noti(int mid, int rid)
-{
-
-	pr_info("%s: Rcvd => mid=%d, rid=%d\n", __func__, mid, rid);
-
-	switch (mid) {
-	case CCIC_NOTIFY_ID_ATTACH:
-		muic_pseudo_ATTACH(rid);
-		break;
-	case CCIC_NOTIFY_ID_RID:
-		muic_pseudo_RID(rid);
-		break;
-	default:
-		break;
 	}
 
 	pr_info("%s: done.\n", __func__);

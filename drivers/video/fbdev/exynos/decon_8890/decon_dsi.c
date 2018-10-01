@@ -778,7 +778,11 @@ static void decon_lpd_handler(struct work_struct *work)
 	if (!decon || !decon->lpd_init_status)
 		return;
 
+#ifdef CONFIG_DECON_SELF_REFRESH
+	if (decon_lpd_enter_cond(decon) && !decon->dsr_on)
+#else
 	if (decon_lpd_enter_cond(decon))
+#endif
 		decon_enter_lpd(decon);
 }
 

@@ -45,6 +45,10 @@
 #define I2C_ADDR_MUIC	(0x4A >> 1)
 #define I2C_ADDR_CHG    (0xD2 >> 1)
 #define I2C_ADDR_FG     (0x6C >> 1)
+#if defined(CONFIG_MAX77854_FG_SENSING_WA)
+#define I2C_ADDR_GTST	(0x4C >> 1)	/* Global test to enable writing to trim register */
+#define I2C_ADDR_OTP	(0xE4 >> 1)	/* Charger OTP Register */
+#endif
 
 static struct mfd_cell max77854_devs[] = {
 #if defined(CONFIG_MUIC_UNIVERSAL)
@@ -292,6 +296,14 @@ static int max77854_i2c_probe(struct i2c_client *i2c,
 
 	max77854->fuelgauge = i2c_new_dummy(i2c->adapter, I2C_ADDR_FG);
 	i2c_set_clientdata(max77854->fuelgauge, max77854);
+
+#if defined(CONFIG_MAX77854_FG_SENSING_WA)
+	max77854->gtest = i2c_new_dummy(i2c->adapter, I2C_ADDR_GTST);
+	i2c_set_clientdata(max77854->gtest, max77854);
+
+	max77854->otp = i2c_new_dummy(i2c->adapter, I2C_ADDR_OTP);
+	i2c_set_clientdata(max77854->otp, max77854);
+#endif
 
 	ret = max77854_irq_init(max77854);
 

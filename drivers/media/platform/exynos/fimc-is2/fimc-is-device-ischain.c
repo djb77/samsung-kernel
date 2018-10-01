@@ -59,7 +59,6 @@
 #include "fimc-is-clk-gate.h"
 #include "fimc-is-dvfs.h"
 #include "fimc-is-device-preprocessor.h"
-#include "fimc-is-interface-fd.h"
 #include "fimc-is-vender-specific.h"
 #include "exynos-fimc-is-module.h"
 
@@ -799,17 +798,25 @@ void fimc_is_ischain_version(enum fimc_is_bin_type type, const char *load_bin, u
 	char version_str[60];
 
 	if (type == FIMC_IS_BIN_FW) {
-		memcpy(version_str, &load_bin[size - FIMC_IS_VERSION_SIZE],
-			FIMC_IS_VERSION_SIZE);
-		version_str[FIMC_IS_VERSION_SIZE] = '\0';
+		if (size > FIMC_IS_VERSION_SIZE) {
+			memcpy(version_str, &load_bin[size - FIMC_IS_VERSION_SIZE],
+				FIMC_IS_VERSION_SIZE);
+			version_str[FIMC_IS_VERSION_SIZE] = '\0';
 
-		info("Phone FW version : %s\n", version_str);
+			info("Phone FW version : %s\n", version_str);
+		} else {
+			err("Phone FW has wrong size(%d).\n", size);
+		}
 	} else {
-		memcpy(version_str, &load_bin[size - FIMC_IS_SETFILE_VER_OFFSET],
-			FIMC_IS_SETFILE_VER_SIZE);
-		version_str[FIMC_IS_SETFILE_VER_SIZE] = '\0';
+		if (size > FIMC_IS_SETFILE_VER_OFFSET) {
+			memcpy(version_str, &load_bin[size - FIMC_IS_SETFILE_VER_OFFSET],
+				FIMC_IS_SETFILE_VER_SIZE);
+			version_str[FIMC_IS_SETFILE_VER_SIZE] = '\0';
 
-		info("SETFILE version : %s\n", version_str);
+			info("SETFILE version : %s\n", version_str);
+		} else {
+			err("SETFILE has wrong size(%d).\n", size);
+		}
 	}
 }
 
@@ -841,13 +848,18 @@ static int fimc_is_ischain_loadfirm(struct fimc_is_device_ischain *device,
 
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
+#ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
 	fp = filp_open(vender->fw_path, O_RDONLY, 0);
-	if (IS_ERR_OR_NULL(fp)) {
+	if (IS_ERR_OR_NULL(fp))
+#endif
+	{
 		fw_load_ret = fimc_is_vender_fw_filp_open(vender, &fp, FIMC_IS_BIN_FW);
-		if(fw_load_ret == FW_SKIP)
+		if (fw_load_ret == FW_SKIP) {
 			goto request_fw;
-		else if(fw_load_ret == FW_FAIL)
+		} else if(fw_load_ret == FW_FAIL) {
+			fw_requested = 0;
 			goto out;
+		}
 	}
 
 	fw_requested = 0;
@@ -869,9 +881,14 @@ static int fimc_is_ischain_loadfirm(struct fimc_is_device_ischain *device,
 		goto out;
 	}
 
-	memcpy((void *)device->imemory.kvaddr, (void *)buf, fsize);
-	fimc_is_ischain_cache_flush(device, 0, fsize + 1);
-	fimc_is_ischain_version(FIMC_IS_BIN_FW, buf, fsize);
+	if (FIMC_IS_A5_MEM_SIZE > fsize) {
+		memcpy((void *)device->imemory.kvaddr, (void *)buf, fsize);
+		fimc_is_ischain_cache_flush(device, 0, fsize + 1);
+		fimc_is_ischain_version(FIMC_IS_BIN_FW, buf, fsize);
+	} else {
+		err("firmware size(%ld) is larger than max size.", fsize);
+		goto out;
+	}
 
 request_fw:
 	if (fw_requested) {
@@ -1062,13 +1079,18 @@ static int fimc_is_ischain_loadsetf(struct fimc_is_device_ischain *device,
 
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
+#ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
 	fp = filp_open(vender->setfile_path, O_RDONLY, 0);
-	if (IS_ERR_OR_NULL(fp)) {
+	if (IS_ERR_OR_NULL(fp))
+#endif
+	{
 		fw_load_ret = fimc_is_vender_fw_filp_open(vender, &fp, FIMC_IS_BIN_SETFILE);
-		if(fw_load_ret == FW_SKIP)
+		if (fw_load_ret == FW_SKIP) {
 			goto request_fw;
-		else if(fw_load_ret == FW_FAIL)
+		} else if(fw_load_ret == FW_FAIL) {
+			fw_requested = 0;
 			goto out;
+		}
 	}
 
 	fw_requested = 0;
@@ -1091,9 +1113,14 @@ static int fimc_is_ischain_loadsetf(struct fimc_is_device_ischain *device,
 	}
 
 	address = (void *)(device->imemory.kvaddr + load_addr);
-	memcpy((void *)address, (void *)buf, fsize);
-	fimc_is_ischain_cache_flush(device, load_addr, fsize + 1);
-	fimc_is_ischain_version(FIMC_IS_BIN_SETFILE, buf, fsize);
+	if (FIMC_IS_A5_MEM_SIZE > fsize) {
+		memcpy((void *)address, (void *)buf, fsize);
+		fimc_is_ischain_cache_flush(device, load_addr, fsize + 1);
+		fimc_is_ischain_version(FIMC_IS_BIN_SETFILE, buf, fsize);
+	} else {
+		err("setfile size(%ld) is larger than max size.", fsize);
+		goto out;
+	}
 
 request_fw:
 	if (fw_requested) {

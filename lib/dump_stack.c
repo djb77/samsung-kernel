@@ -9,22 +9,10 @@
 #include <linux/smp.h>
 #include <linux/atomic.h>
 
-#ifdef CONFIG_KFAULT_AUTO_SUMMARY
-static void __dump_stack(bool for_auto_summary)
-#else
 static void __dump_stack(void)
-#endif
 {
 	dump_stack_print_info(KERN_DEFAULT);
-
-#ifdef CONFIG_KFAULT_AUTO_SUMMARY
-	if (for_auto_summary)
-		show_stack_auto_summary(NULL, NULL);
-	else
-		show_stack(NULL, NULL);
-#else
 	show_stack(NULL, NULL);
-#endif
 }
 
 /**
@@ -35,7 +23,7 @@ static void __dump_stack(void)
 #ifdef CONFIG_SMP
 static atomic_t dump_lock = ATOMIC_INIT(-1);
 
-asmlinkage __visible void _dump_stack(bool auto_summary)
+asmlinkage __visible void dump_stack(void)
 {
 	int was_locked;
 	int old;
@@ -59,23 +47,13 @@ retry:
 		goto retry;
 	}
 
-#ifdef CONFIG_KFAULT_AUTO_SUMMARY
-	__dump_stack(auto_summary);
-#else
 	__dump_stack();
-#endif
 
 	if (!was_locked)
 		atomic_set(&dump_lock, -1);
 
 	preempt_enable();
 }
-
-asmlinkage __visible void dump_stack(void)
-{
-	_dump_stack(false);
-}
-
 #else
 asmlinkage __visible void dump_stack(void)
 {

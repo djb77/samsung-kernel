@@ -18,7 +18,7 @@ static inline int printk_get_level(const char *buffer)
 	if (buffer[0] == KERN_SOH_ASCII && buffer[1]) {
 		switch (buffer[1]) {
 		case '0' ... '7':
-#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+#ifdef CONFIG_SEC_DEBUG_AUTO_SUMMARY
 		case 'B' ... 'J':
 #endif
 		case 'd':	/* KERN_DEFAULT */
@@ -251,7 +251,7 @@ extern asmlinkage void dump_stack(void) __cold;
 #define pr_cont(fmt, ...) \
 	printk(KERN_CONT fmt, ##__VA_ARGS__)
 
-#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+#ifdef CONFIG_SEC_DEBUG_AUTO_SUMMARY
 #define pr_auto(index, fmt, ...) \
 	printk(KERN_AUTO index pr_fmt(fmt), ##__VA_ARGS__)
 #define pr_auto_disable(index) \

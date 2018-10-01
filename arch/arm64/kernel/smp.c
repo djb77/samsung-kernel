@@ -71,6 +71,7 @@ enum ipi_msg_type {
 	IPI_TIMER,
 	IPI_IRQ_WORK,
 	IPI_WAKEUP,
+	IPI_SGI_15_IRQ = 15,
 };
 
 /*
@@ -119,6 +120,7 @@ int __cpu_up(unsigned int cpu, struct task_struct *idle)
 	}
 
 	secondary_data.stack = NULL;
+	restore_pcpu_tick(cpu);
 
 	return ret;
 }
@@ -277,6 +279,8 @@ void __cpu_die(unsigned int cpu)
 	 */
 	if (!op_cpu_kill(cpu))
 		pr_warn("CPU%d may not have shut down cleanly\n", cpu);
+
+	save_pcpu_tick(cpu);
 }
 
 /*
@@ -622,7 +626,8 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 	case IPI_WAKEUP:
 		pr_info("%s: IPI_WAKEUP\n", __func__);
 		break;
-
+	case IPI_SGI_15_IRQ:
+		break;
 	default:
 		pr_crit("CPU%u: Unknown IPI message 0x%x\n", cpu, ipinr);
 		break;

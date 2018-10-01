@@ -397,6 +397,7 @@ static void exynos_usbdrd_set_hstune(struct exynos_usbdrd_phy *phy_drd,
 			if (phy_drd->drv_data->ip_type == TYPE_USB3DRD) {
 				hs_tune->tx_vref	= 0x1;
 				hs_tune->tx_pre_emp	= 0x0;
+				hs_tune->tx_res 	= 0x3;
 				hs_tune->compdis	= 0x7;
 			}
 			break;

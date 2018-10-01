@@ -5,7 +5,7 @@
  *
  * Definitions subject to change without notice.
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -25,7 +25,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhdioctl.h 517407 2014-11-25 07:30:31Z $
+ * $Id: dhdioctl.h 692227 2017-03-27 07:15:20Z $
  */
 
 #ifndef _dhdioctl_h_
@@ -94,6 +94,7 @@ enum {
 #define DHD_WL_VAL2		0x40000
 #define DHD_PNO_VAL		0x80000
 #define DHD_RTT_VAL		0x100000
+#define DHD_ERROR_MEM_VAL  0x4000000
 
 #ifdef SDTEST
 /* For pktgen iovar */

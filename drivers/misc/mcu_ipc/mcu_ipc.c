@@ -23,13 +23,160 @@
 #include "regs-mcu_ipc.h"
 #include "mcu_ipc.h"
 
+#ifdef CONFIG_MCU_IPC_LOG
+#define LOG_MAX_NUM	SZ_4K
+#define LOG_DIR_RX	0
+#define LOG_DIR_TX	1
+
+struct mailbox_log {
+	int mcu_int;
+
+	atomic_t gic_mbox_rx_idx;
+	atomic_t mbox_idx;
+
+	struct gic_mbox_rx {
+		unsigned long long time;
+		unsigned int count;
+	} gic_mbox_rx_log[LOG_MAX_NUM];
+
+	struct mbox_rx_tx {
+		unsigned long long time;
+		int dir;
+		unsigned int count_rx;
+		unsigned int count_tx;
+		u32 intgr0;
+		u32 intmr0;
+		u32 intsr0;
+		u32 intmsr0;
+	} mbox_rx_tx_log[LOG_MAX_NUM * 2];
+};
+
+static struct mailbox_log mbx_log;
+
+#ifdef CONFIG_ARM64
+static inline unsigned long pure_arch_local_irq_save(void)
+{
+	unsigned long flags;
+
+	asm volatile(
+		"mrs	%0, daif		// arch_local_irq_save\n"
+		"msr	daifset, #2"
+		: "=r" (flags)
+		:
+		: "memory");
+
+	return flags;
+}
+
+static inline void pure_arch_local_irq_restore(unsigned long flags)
+{
+	asm volatile(
+		"msr    daif, %0                // arch_local_irq_restore"
+		:
+		: "r" (flags)
+		: "memory");
+}
+#else
+static inline unsigned long arch_local_irq_save(void)
+{
+	unsigned long flags;
+
+	asm volatile(
+		"	mrs	%0, cpsr	@ arch_local_irq_save\n"
+		"	cpsid	i"
+		: "=r" (flags) : : "memory", "cc");
+	return flags;
+}
+
+static inline void arch_local_irq_restore(unsigned long flags)
+{
+	asm volatile(
+		"	msr	cpsr_c, %0	@ local_irq_restore"
+		:
+		: "r" (flags)
+		: "memory", "cc");
+}
+#endif
+
+void mbox_check_mcu_irq(int irq)
+{
+	unsigned long flags;
+	static unsigned int count;
+
+	if (mbx_log.mcu_int != irq)
+		return;
+
+	flags = pure_arch_local_irq_save();
+	{
+		unsigned long i;
+		int cpu = get_current_cpunum();
+
+		i = atomic_inc_return(&mbx_log.gic_mbox_rx_idx) &
+			(ARRAY_SIZE(mbx_log.gic_mbox_rx_log) - 1);
+
+		mbx_log.gic_mbox_rx_log[i].time = cpu_clock(cpu);
+		mbx_log.gic_mbox_rx_log[i].count = count++;
+	}
+	pure_arch_local_irq_restore(flags);
+
+}
+EXPORT_SYMBOL_GPL(mbox_check_mcu_irq);
+
+static void mbox_save_rx_tx_log(int dir)
+{
+	unsigned long flags;
+	static unsigned int count_rx;
+	static unsigned int count_tx;
+
+	flags = pure_arch_local_irq_save();
+	{
+		unsigned long i;
+		int cpu = get_current_cpunum();
+
+		i = atomic_inc_return(&mbx_log.mbox_idx) &
+			(ARRAY_SIZE(mbx_log.mbox_rx_tx_log) - 1);
+
+		mbx_log.mbox_rx_tx_log[i].time = cpu_clock(cpu);
+		mbx_log.mbox_rx_tx_log[i].dir = dir;
+		if (dir == LOG_DIR_RX)
+			mbx_log.mbox_rx_tx_log[i].count_rx = count_rx++;
+		else
+			mbx_log.mbox_rx_tx_log[i].count_tx = count_tx++;
+
+		mbx_log.mbox_rx_tx_log[i].intgr0 =
+			mcu_ipc_readl(EXYNOS_MCU_IPC_INTGR0);
+		mbx_log.mbox_rx_tx_log[i].intmr0 =
+			mcu_ipc_readl(EXYNOS_MCU_IPC_INTMR0);
+		mbx_log.mbox_rx_tx_log[i].intsr0 =
+			mcu_ipc_readl(EXYNOS_MCU_IPC_INTSR0);
+		mbx_log.mbox_rx_tx_log[i].intmsr0 =
+			mcu_ipc_readl(EXYNOS_MCU_IPC_INTMSR0);
+	}
+	pure_arch_local_irq_restore(flags);
+}
+#endif
+
 static irqreturn_t mcu_ipc_handler(int irq, void *data)
 {
 	u32 irq_stat, i;
+	u32 mr0;
 
 	if (!mcu_dat.ioaddr) {
 		pr_err("%s: can't exec this func, probe failure\n", __func__);
 		goto exit;
+	}
+
+#ifdef CONFIG_MCU_IPC_LOG
+	mbox_save_rx_tx_log(LOG_DIR_RX);
+#endif
+
+	/* Check SFR vs Memory for INTMR0 */
+	mr0 = mcu_ipc_readl(EXYNOS_MCU_IPC_INTMR0) & 0xFFFF0000;
+	if (mr0 != mcu_dat.mr0) {
+		dev_info(mcu_dat.mcu_ipc_dev, "ERR: INTMR0 is not matched. memory:%X SFR:%X\n"
+				, mr0, mcu_dat.mr0);
+		dev_info(mcu_dat.mcu_ipc_dev, "Update memory value to SFR\n");
+		mcu_ipc_writel(mcu_dat.mr0, EXYNOS_MCU_IPC_INTMR0);
 	}
 
 	irq_stat = mcu_ipc_readl(EXYNOS_MCU_IPC_INTSR0) & 0xFFFF0000;
@@ -57,6 +204,8 @@ exit:
 
 int mbox_request_irq(u32 int_num, void (*handler)(void *), void *data)
 {
+	u32 mr0;
+
 	if ((!handler) || (int_num > 15) || !mcu_dat.ioaddr)
 		return -EINVAL;
 
@@ -64,12 +213,22 @@ int mbox_request_irq(u32 int_num, void (*handler)(void *), void *data)
 	mcu_dat.hd[int_num].handler = handler;
 	mcu_dat.registered_irq |= 1 << (int_num + 16);
 
+	/* Update SFR */
+	mr0 = mcu_ipc_readl(EXYNOS_MCU_IPC_INTMR0) & 0xFFFF0000;
+	mr0 &= ~(1 << (int_num + 16));
+	mcu_ipc_writel(mr0, EXYNOS_MCU_IPC_INTMR0);
+
+	/* Update Memory */
+	mcu_dat.mr0 &= ~(1 << (int_num + 16));
+
 	return 0;
 }
 EXPORT_SYMBOL(mbox_request_irq);
 
 int mcu_ipc_unregister_handler(u32 int_num, void (*handler)(void *))
 {
+	u32 mr0;
+
 	if (!handler || !mcu_dat.ioaddr ||
 			(mcu_dat.hd[int_num].handler != handler))
 		return -EINVAL;
@@ -77,6 +236,14 @@ int mcu_ipc_unregister_handler(u32 int_num, void (*handler)(void *))
 	mcu_dat.hd[int_num].data = NULL;
 	mcu_dat.hd[int_num].handler = NULL;
 	mcu_dat.registered_irq &= ~(1 << (int_num + 16));
+
+	/* Update SFR */
+	mr0 = mcu_ipc_readl(EXYNOS_MCU_IPC_INTMR0) & 0xFFFF0000;
+	mr0 |= (1 << (int_num + 16));
+	mcu_ipc_writel(mr0, EXYNOS_MCU_IPC_INTMR0);
+
+	/* Update Memory */
+	mcu_dat.mr0 |= (1 << (int_num + 16));
 
 	return 0;
 }
@@ -92,6 +259,10 @@ void mbox_set_interrupt(u32 int_num)
 	/* generate interrupt */
 	if (int_num < 16)
 		mcu_ipc_writel(0x1 << int_num, EXYNOS_MCU_IPC_INTGR1);
+
+#ifdef CONFIG_MCU_IPC_LOG
+	mbox_save_rx_tx_log(LOG_DIR_TX);
+#endif
 }
 EXPORT_SYMBOL(mbox_set_interrupt);
 
@@ -119,6 +290,10 @@ void mcu_ipc_clear_all_interrupt(void)
 	}
 
 	mcu_ipc_writel(0xFFFF, EXYNOS_MCU_IPC_INTCR1);
+
+	/* apply all interrupt mask */
+	mcu_ipc_writel(0xFFFF0000, EXYNOS_MCU_IPC_INTMR0);
+	mcu_dat.mr0 = 0xFFFF0000;
 }
 
 u32 mbox_get_value(u32 mbx_num)
@@ -254,6 +429,10 @@ static int mcu_ipc_probe(struct platform_device *pdev)
 		goto unmap_ioaddr;
 	}
 
+#ifdef CONFIG_MCU_IPC_LOG
+	mbx_log.mcu_int = mcu_ipc_irq;
+#endif
+
 	mcu_ipc_clear_all_interrupt();
 
 	/* set argos irq affinity */
@@ -321,6 +500,7 @@ static struct platform_driver mcu_ipc_driver = {
 		.owner = THIS_MODULE,
 		.of_match_table = of_match_ptr(exynos_mcu_ipc_dt_match),
 		.pm = &mcu_ipc_pm_ops,
+		.suppress_bind_attrs = true,
 	},
 };
 module_platform_driver(mcu_ipc_driver);

@@ -116,8 +116,6 @@ static void crypto_cc_rng_get_bytes(u8 *data, unsigned int len)
 	ret = crypto_rng_get_bytes(rng, data, len);
 	if (ret < 0) {
 		ecryptfs_printk(KERN_ERR, "generate_random failed to generate random number (%d)\n", ret);
-	} else {
-		ecryptfs_printk(KERN_ERR, "generate_random succesfully generated random number (%d)\n", ret);
 	}
 	crypto_free_rng(rng);
 
@@ -1501,12 +1499,10 @@ static int ecryptfs_write_headers_virt(char *page_virt, size_t max,
 	int rc;
 	size_t written;
 	size_t offset;
-
-	offset = ECRYPTFS_FILE_SIZE_BYTES;
 #ifdef CONFIG_ECRYPTFS_FEK_INTEGRITY
-	memset(crypt_stat->hash, 0, FEK_HASH_SIZE);
 	crypt_stat->flags |= ECRYPTFS_ENABLE_HMAC;
 #endif
+	offset = ECRYPTFS_FILE_SIZE_BYTES;
 	write_ecryptfs_marker((page_virt + offset), &written);
 	offset += written;
 	ecryptfs_write_crypt_stat_flags((page_virt + offset), crypt_stat,
@@ -1729,9 +1725,6 @@ static int ecryptfs_read_headers_virt(char *page_virt,
 	int rc = 0;
 	int offset;
 	int bytes_read;
-#ifdef CONFIG_ECRYPTFS_FEK_INTEGRITY
-	memcpy(crypt_stat->hash, (page_virt + HASH_OFFSET), FEK_HASH_SIZE);
-#endif
 
 	ecryptfs_set_default_sizes(crypt_stat);
 	crypt_stat->mount_crypt_stat = &ecryptfs_superblock_to_private(
@@ -1769,6 +1762,11 @@ static int ecryptfs_read_headers_virt(char *page_virt,
 		offset += bytes_read;
 	} else
 		set_default_header_data(crypt_stat);
+#ifdef CONFIG_ECRYPTFS_FEK_INTEGRITY
+	if(crypt_stat->flags & ECRYPTFS_ENABLE_HMAC) {
+		memcpy(crypt_stat->hash, (page_virt + HASH_OFFSET), FEK_HASH_SIZE);
+	}
+#endif
 	rc = ecryptfs_parse_packet_set(crypt_stat, (page_virt + offset),
 				       ecryptfs_dentry);
 out:

@@ -39,6 +39,7 @@
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 #include <linux/t-base-tui.h>
 struct sec_ts_data *tui_tsp_info;
+extern int tui_force_close(uint32_t arg);
 #ifdef CONFIG_EPEN_WACOM_W9018
 extern void epen_disable_mode(int mode);
 #endif
@@ -916,17 +917,17 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 		else if (coordinate.action == SEC_TS_Coordinate_Action_Release) {
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 			input_info(true, &ts->client->dev,
-				"%s: [R] tID:%d mc:%d tc:%d lx:%d ly:%d cal:0x%x(%X|%X), [SE%02X%02X%02X]\n",
+				"%s: [R] tID:%d mc:%d tc:%d lx:%d ly:%d cal:0x%x(%X|%X), [SE%02X%02X%02X] P%02X\n",
 				__func__, t_id, ts->coord[t_id].mcount, ts->touch_count,
 				ts->coord[t_id].x, ts->coord[t_id].y, ts->cal_status, ts->nv, ts->cal_count,
 				ts->plat_data->panel_revision, ts->plat_data->img_version_of_ic[2],
-				ts->plat_data->img_version_of_ic[3]);
+				ts->plat_data->img_version_of_ic[3], ts->cal_pos);
 #else
 			input_info(true, &ts->client->dev,
-				"%s: [R] tID:%d mc:%d tc:%d cal:0x%x(%X|%X) [SE%02X%02X%02X]\n",
+				"%s: [R] tID:%d mc:%d tc:%d cal:0x%x(%X|%X) [SE%02X%02X%02X] P%02X\n",
 				__func__, t_id, ts->coord[t_id].mcount, ts->touch_count, ts->cal_status,
 				ts->nv, ts->cal_count, ts->plat_data->panel_revision, ts->plat_data->img_version_of_ic[2],
-				ts->plat_data->img_version_of_ic[3]);
+				ts->plat_data->img_version_of_ic[3], ts->cal_pos);
 #endif
 			ts->coord[t_id].mcount = 0;
 		}
@@ -1222,6 +1223,13 @@ static ssize_t sec_ts_regread_show(struct device *dev, struct device_attribute *
 	disable_irq(ts->client->irq);
 
 	mutex_lock(&ts->device_mutex);
+
+	if ((lv1_readsize <= 0) || (lv1_readsize > PAGE_SIZE)) {
+		input_err(true, &ts->client->dev, "%s: invalid lv1_readsize = %d\n",
+						__func__, lv1_readsize);
+		lv1_readsize = 0;
+		goto malloc_err;
+	}
 
 	read_lv1_buff = (u8 *)kzalloc(sizeof(u8)*lv1_readsize, GFP_KERNEL);
 	if (!read_lv1_buff) {
@@ -1850,6 +1858,7 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ts->power_status = SEC_TS_STATE_POWER_ON;
 	sec_ts_delay(60);
 	sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
+	ts->external_factory = false;
 
 #ifndef CONFIG_FW_UPDATE_ON_PROBE
 	input_info(true, &ts->client->dev, "%s: fw update on probe disabled!\n", __func__);
@@ -2201,8 +2210,9 @@ static void sec_ts_read_nv_work(struct work_struct *work)
 
 	ts->nv = get_tsp_nvm_data(ts, SEC_TS_NVM_OFFSET_FAC_RESULT);
 	ts->cal_count = get_tsp_nvm_data(ts, SEC_TS_NVM_OFFSET_CAL_COUNT);
+	ts->cal_pos = get_tsp_nvm_data(ts, SEC_TS_NVM_OFFSET_CAL_POS);
 
-	input_info(true, &ts->client->dev, "%s: fac_nv:%02X, cal_nv:%02X\n", __func__, ts->nv, ts->cal_count);
+	input_info(true, &ts->client->dev, "%s: fac_nv:%02X, cal_nv:%02X cal_pos:%02X\n", __func__, ts->nv, ts->cal_count, ts->cal_pos);
 #ifdef USE_HW_PARAMETER
 #ifndef CONFIG_SEC_FACTORY
 	/* run self-test */
@@ -2210,7 +2220,7 @@ static void sec_ts_read_nv_work(struct work_struct *work)
 	execute_selftest(ts);
 	enable_irq(ts->client->irq);
 
-	input_info(true, &ts->client->dev, "%s: %02X %02X %02X %02X\n",
+	input_raw_info(true, &ts->client->dev, "%s: ITO %02X %02X %02X %02X\n",
 		__func__, ts->ito_test[0], ts->ito_test[1]
 		, ts->ito_test[2], ts->ito_test[3]);
 
@@ -2232,6 +2242,20 @@ static int sec_ts_input_open(struct input_dev *dev)
 	int ret;
 
 	input_info(true, &ts->client->dev, "%s, wet:%d, dive:%d\n", __func__, ts->wet_mode, ts->dive_mode);
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+		input_err(true, &ts->client->dev, "%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+			input_err(true, &ts->client->dev, "%s TUI flag force clear!\n",	__func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
 
 	if (ts->lowpower_status) {
 #ifdef USE_OPEN_POWER_RESET
@@ -2262,6 +2286,20 @@ static void sec_ts_input_close(struct input_dev *dev)
 	struct sec_ts_data *ts = input_get_drvdata(dev);
 
 	input_info(true, &ts->client->dev, "%s, wet:%d, dive:%d\n", __func__, ts->wet_mode, ts->dive_mode);
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+		input_err(true, &ts->client->dev, "%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+			input_err(true, &ts->client->dev, "%s TUI flag force clear!\n",	__func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
 
 	cancel_delayed_work(&ts->reset_work);
 

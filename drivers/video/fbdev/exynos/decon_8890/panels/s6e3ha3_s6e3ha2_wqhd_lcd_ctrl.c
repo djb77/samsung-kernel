@@ -38,6 +38,21 @@ void update_mdnie_coordinate( u16 coordinate0, u16 coordinate1 );
 static int lcd_reload_mtp(int lcd_type, struct dsim_device *dsim);
 #endif
 
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+unsigned int g_rddpm = 0xff;
+unsigned int g_rddsm = 0xff;
+
+unsigned int get_panel_bigdata(void)
+{
+	unsigned int val = 0;
+
+	val = (g_rddsm << 8) | g_rddpm;
+
+	return val;
+}
+#endif
+
+
 #ifdef CONFIG_PANEL_AID_DIMMING
 static const unsigned char *ACL_CUTOFF_TABLE[ACL_STATUS_MAX] = { SEQ_ACL_OFF, SEQ_ACL_ON };
 
@@ -1976,7 +1991,7 @@ static int s6e3ha2_read_init_info(struct dsim_device *dsim, unsigned char *mtp, 
 	ret = dsim_read_hl_data(dsim, S6E3HA2_ID_REG, S6E3HA2_ID_LEN, panel->id);
 	if (ret != S6E3HA2_ID_LEN) {
 		dsim_err("%s : can't find connected panel. check panel connection\n", __func__);
-		panel->lcdConnected = PANEL_DISCONNEDTED;
+		panel->lcdConnected = PANEL_DISCONNECTED;
 		goto read_exit;
 	}
 	dsim_info("READ ID : ");
@@ -2189,7 +2204,7 @@ static int s6e3ha2_wqhd_probe(struct dsim_device *dsim)
 #endif
 
 	ret = s6e3ha2_read_init_info(dsim, mtp, hbm);
-	if (panel->lcdConnected == PANEL_DISCONNEDTED) {
+	if (panel->lcdConnected == PANEL_DISCONNECTED) {
 		dsim_err("dsim : %s lcd was not connected\n", __func__);
 		goto probe_exit;
 	}
@@ -2578,7 +2593,7 @@ static int s6e3ha3_read_init_info(struct dsim_device *dsim, unsigned char *mtp, 
 	ret = dsim_read_hl_data(dsim, S6E3HA3_ID_REG, S6E3HA3_ID_LEN, panel->id);
 	if (ret != S6E3HA3_ID_LEN) {
 		dsim_err("%s : can't find connected panel. check panel connection\n", __func__);
-		panel->lcdConnected = PANEL_DISCONNEDTED;
+		panel->lcdConnected = PANEL_DISCONNECTED;
 		goto read_exit;
 	}
 
@@ -2768,6 +2783,11 @@ static int s6e3ha3_wqhd_dump(struct dsim_device *dsim)
 	if (rddsm[0] & 0x01)
 		dsim_info("* DSI_ERR : Found\n");
 
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+	g_rddsm = (unsigned int)rddsm[0];
+	g_rddpm = (unsigned int)rddpm[0];
+#endif
+
 	// id
 	ret = dsim_read_hl_data(dsim, S6E3HA3_ID_REG, S6E3HA3_ID_LEN, id);
 	if (ret != S6E3HA3_ID_LEN) {
@@ -2810,7 +2830,7 @@ static int s6e3ha3_wqhd_probe(struct dsim_device *dsim)
 	dsim_info(" +  : %s\n", __func__);
 
 	ret = s6e3ha3_read_init_info(dsim, mtp, hbm);
-	if (panel->lcdConnected == PANEL_DISCONNEDTED) {
+	if (panel->lcdConnected == PANEL_DISCONNECTED) {
 		dsim_err("dsim : %s lcd was not connected\n", __func__);
 		goto probe_exit;
 	}
@@ -3517,7 +3537,7 @@ static int s6e3hf4_read_init_info(struct dsim_device *dsim, unsigned char *mtp, 
 	ret = dsim_read_hl_data(dsim, S6E3HF4_ID_REG, S6E3HF4_ID_LEN, panel->id);
 	if (ret != S6E3HF4_ID_LEN) {
 		dsim_err("%s : can't find connected panel. check panel connection\n",__func__);
-		panel->lcdConnected = PANEL_DISCONNEDTED;
+		panel->lcdConnected = PANEL_DISCONNECTED;
 		goto read_exit;
 	}
 
@@ -3708,6 +3728,11 @@ static int s6e3hf4_wqhd_dump(struct dsim_device *dsim)
 	if (rddsm[0] & 0x01)
 		dsim_info("* DSI_ERR : Found\n");
 
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+	g_rddsm = (unsigned int)rddsm[0];
+	g_rddpm = (unsigned int)rddpm[0];
+#endif
+
 	ret = dsim_read_hl_data(dsim, S6E3HF4_ID_REG, S6E3HF4_ID_LEN, id);
 	if (ret != S6E3HF4_ID_LEN) {
 		dsim_err("%s : can't read panel id\n",__func__);
@@ -3749,7 +3774,7 @@ static int s6e3hf4_wqhd_probe(struct dsim_device *dsim)
 #endif
 
 	ret = s6e3hf4_read_init_info(dsim, mtp, hbm);
-	if (panel->lcdConnected == PANEL_DISCONNEDTED) {
+	if (panel->lcdConnected == PANEL_DISCONNECTED) {
 		dsim_err("dsim : %s lcd was not connected\n", __func__);
 		goto probe_exit;
 	}

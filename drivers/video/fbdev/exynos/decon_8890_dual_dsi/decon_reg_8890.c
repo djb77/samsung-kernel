@@ -285,7 +285,7 @@ void decon_reg_set_splitter(u32 id, enum decon_dsi_mode dsi_mode, u32 width, u32
 	u32 val;
 	u32 num_dsi = (dsi_mode == DSI_MODE_DUAL_DSI) ? 2 : 1;
 	u32 start_x = (dsi_mode == DSI_MODE_DUAL_DSI) ? width : 0;
-	
+
 	if (id)
 		return;
 
@@ -1358,7 +1358,7 @@ int dsc_check_pps_tbl(enum decon_dsi_mode dsi_mode, struct decon_lcd *lcd_info)
 			/* PPS00 could be different */
 			i++;
 		} else if (i == 8) {
-			/* picture width could be different */ 
+			/* picture width could be different */
 			u32 picture_w_reg = ((pps_tbl_reg[8] << 8) | pps_tbl_reg[9]);
 			u32 picture_w_panel  = ((pps_tbl_panel[8] << 8) | pps_tbl_panel[9]);
 #ifdef CONFIG_EXYNOS_DECON_DUAL_DSI
@@ -1523,7 +1523,7 @@ void decon_reg_config_dsc_size(u32 id, enum decon_dsi_mode dsi_mode, struct deco
 	decon_dbg("dispif_width : %d\n", dispif_width);
 	decon_dbg("dsi_mode : %d\n", dsi_mode);
 }
- 
+
 void dsc_reg_print(u32 dsc_id)
 {
 	u32 reg, reg_id, pps_size = 88;
@@ -1605,7 +1605,7 @@ int decon_reg_init(u32 id, u32 dsi_idx, struct decon_param *p)
 	decon_reg_reset(id);
 
 	decon_reg_set_clkgate_mode(id, 1);
-#if 0 
+#if 0
 	if (psr->dsi_mode == DSI_MODE_DUAL_DSI)
 		/* (denom, num) : VCLK=VCLK_SRC * (num+1)/(denom+1) */
 		decon_reg_set_vclk_divider(id, 2, 1);
@@ -2055,6 +2055,7 @@ const unsigned long decon_clocks_table[][CLK_ID_MAX] = {
 	{   141, 137.5,   400,    66,       141, 1440 * 2560,     MIC_COMP_BYPASS,         0},
 	{    42,   337,   400,    66,        42, 1440 * 2560,     MIC_COMP_BYPASS,         1},
 	{    42,   168,   400,    66,        42, 1440 * 2560,     MIC_COMP_BYPASS,         2},
+	{    30,   168,   400,    66,        63, 1080 * 1920,     MIC_COMP_RATIO_1_2,      0},
 };
 
 void decon_reg_get_clock_ratio(struct decon_clocks *clks, struct decon_lcd *lcd_info)
@@ -2068,16 +2069,8 @@ void decon_reg_get_clock_ratio(struct decon_clocks *clks, struct decon_lcd *lcd_
 		clks->decon[CLK_ID_ACLK] = decon_clocks_table[1][CLK_ID_ACLK];
 		clks->decon[CLK_ID_PCLK] = decon_clocks_table[1][CLK_ID_PCLK];
 		clks->decon[CLK_ID_DPLL] = decon_clocks_table[1][CLK_ID_DPLL];
-	} else {
-		/* set reset value */
-		clks->decon[CLK_ID_VCLK] = decon_clocks_table[0][CLK_ID_VCLK];
-		clks->decon[CLK_ID_ECLK] = decon_clocks_table[0][CLK_ID_ECLK];
-		clks->decon[CLK_ID_ACLK] = decon_clocks_table[0][CLK_ID_ACLK];
-		clks->decon[CLK_ID_PCLK] = decon_clocks_table[0][CLK_ID_PCLK];
-		clks->decon[CLK_ID_DPLL] = decon_clocks_table[0][CLK_ID_DPLL];
-	}
-
-	return;
+		return;	
+	} 
 
 	for (; i >= 0; i--) {
 		if (decon_clocks_table[i][CLK_ID_RESOLUTION]

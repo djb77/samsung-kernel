@@ -18,6 +18,7 @@
 #include <linux/kernel.h>
 #include <asm/ptrace.h>
 #include "exynos-ss-soc.h"
+#include <linux/bug.h>
 
 extern unsigned int *exynos_ss_base_enabled;
 
@@ -29,7 +30,7 @@ extern void __exynos_ss_suspend(void *fn, void *dev, int en);
 extern void __exynos_ss_irq(int irq, void *fn, unsigned long val, int en);
 extern int exynos_ss_try_enable(const char *name, unsigned long long duration);
 extern int exynos_ss_set_enable(const char *name, int en);
-extern int exynos_ss_get_enable(const char *name);
+extern int exynos_ss_get_enable(const char *name, bool init);
 extern int exynos_ss_save_context(void *regs);
 extern int exynos_ss_save_reg(void *regs);
 extern int exynos_ss_dump_panic(char *str, size_t len);
@@ -41,10 +42,14 @@ extern int exynos_ss_get_hardlockup(void);
 extern unsigned int exynos_ss_get_item_size(char *);
 extern unsigned int exynos_ss_get_item_paddr(char *);
 extern void exynos_ss_panic_handler_safe(struct pt_regs *regs);
+extern unsigned long exynos_ss_get_last_pc(unsigned int cpu);
+extern unsigned long exynos_ss_get_last_pc_paddr(void);
+extern void exynos_ss_hook_hardlockup_entry(void *v_regs);
+extern void exynos_ss_hook_hardlockup_exit(void);
+
 #ifdef CONFIG_EXYNOS_DRAMTEST
 extern int disable_mc_powerdn(void);
 #endif
-
 /* option */
 #ifdef CONFIG_EXYNOS_SNAPSHOT_REGULATOR
 extern void __exynos_ss_regulator(char *f_name, unsigned int addr, unsigned int volt, int en);
@@ -281,8 +286,15 @@ static inline void exynos_ss_irq(int irq, void *fn, unsigned long val, int en)
 #define exynos_ss_get_hardlockup()	do { } while(0)
 #define exynos_ss_get_item_size(a)	do { } while(0)
 #define exynos_ss_get_item_paddr(a)	do { } while(0)
-#define exynos_ss_check_crash_key(a,b)	do { } while(0);
+#define exynos_ss_check_crash_key(a,b)	do { } while(0)
+#define exynos_ss_panic_handler_safe() do { } while(0)
+#define exynos_ss_get_last_pc(a)       do { } while(0)
+#define exynos_ss_get_last_pc_paddr()  do { } while(0)
+#define exynos_ss_hook_hardlockup_entry(a) do { } while(0)
+#define exynos_ss_hook_hardlockup_exit() do { } while(0)
 #endif /* CONFIG_EXYNOS_SNAPSHOT */
+
+static inline void exynos_ss_bug(void) {BUG();}
 
 /**
  * esslog_flag - added log information supported.

@@ -133,6 +133,7 @@ struct s3c2410_wdt {
 	spinlock_t		lock;
 	unsigned long		wtcon_save;
 	unsigned long		wtdat_save;
+	unsigned long		freq;
 	struct watchdog_device	wdt_device;
 	struct notifier_block	freq_transition;
 	struct notifier_block	restart_handler;
@@ -359,7 +360,7 @@ static inline int s3c2410wdt_is_running(struct s3c2410_wdt *wdt)
 static int s3c2410wdt_set_min_max_timeout(struct watchdog_device *wdd)
 {
 	struct s3c2410_wdt *wdt = watchdog_get_drvdata(wdd);
-	unsigned long freq = clk_get_rate(wdt->rate_clock);
+	unsigned long freq = wdt->freq;
 
 	if(freq == 0) {
 		dev_err(wdd->dev, "failed to get platdata\n");
@@ -376,7 +377,7 @@ static int s3c2410wdt_set_min_max_timeout(struct watchdog_device *wdd)
 static int s3c2410wdt_set_heartbeat(struct watchdog_device *wdd, unsigned timeout)
 {
 	struct s3c2410_wdt *wdt = watchdog_get_drvdata(wdd);
-	unsigned long freq = clk_get_rate(wdt->rate_clock);
+	unsigned long freq = wdt->freq;
 	unsigned int count;
 	unsigned int divisor = 1;
 	unsigned long wtcon;
@@ -726,6 +727,7 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to enable rate clock\n");
 		return ret;
 	}
+	wdt->freq = clk_get_rate(wdt->rate_clock);
 
 	ret = s3c2410wdt_cpufreq_register(wdt);
 	if (ret < 0) {

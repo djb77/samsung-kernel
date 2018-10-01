@@ -2,7 +2,7 @@
  * customer HW 4 dependant file
  * OTP header for device of COB && PCIE type
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you

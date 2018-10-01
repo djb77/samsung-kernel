@@ -87,6 +87,7 @@ static void fw_update(void *device_data);
 static void get_fw_ver_bin(void *device_data);
 static void get_fw_ver_ic(void *device_data);
 static void get_config_ver(void *device_data);
+static void get_cm_spec_over(void *device_data);
 static void get_threshold(void *device_data);
 static void module_off_master(void *device_data);
 static void module_on_master(void *device_data);
@@ -118,6 +119,7 @@ static void run_self_delta_read(void *device_data);
 static void run_self_delta_read_all(void *device_data);
 static void get_selfcap(void *device_data);
 static void run_force_calibration(void *device_data);
+static void set_external_factory(void *device_data);
 static void get_force_calibration(void *device_data);
 static void set_tsp_test_result(void *device_data);
 static void get_tsp_test_result(void *device_data);
@@ -163,6 +165,7 @@ struct ft_cmd ft_cmds[] = {
 	{FT_CMD("get_fw_ver_ic", get_fw_ver_ic),},
 	{FT_CMD("get_config_ver", get_config_ver),},
 	{FT_CMD("get_threshold", get_threshold),},
+	{FT_CMD("get_cm_spec_over", get_cm_spec_over),},
 	{FT_CMD("module_off_master", module_off_master),},
 	{FT_CMD("module_on_master", module_on_master),},
 	/* {FT_CMD("module_off_slave", not_support_cmd),}, */
@@ -196,6 +199,7 @@ struct ft_cmd ft_cmds[] = {
 	{FT_CMD("get_selfcap", get_selfcap),},
 	{FT_CMD("run_force_calibration", run_force_calibration),},
 	{FT_CMD("get_force_calibration", get_force_calibration),},
+	{FT_CMD("set_external_factory", set_external_factory),},
 	{FT_CMD("run_trx_short_test", run_trx_short_test),},
 	{FT_CMD("set_tsp_test_result", set_tsp_test_result),},
 	{FT_CMD("get_tsp_test_result", get_tsp_test_result),},
@@ -466,6 +470,27 @@ static void clear_cover_cmd_work(struct work_struct *work)
 }
 EXPORT_SYMBOL(clear_cover_cmd_work);
 
+static void set_wirelesscharger_mode_work(struct work_struct *work)
+{
+	struct sec_ts_data *ts = container_of(work, struct sec_ts_data,
+									set_wirelesscharger_mode_work.work);
+	if (ts->cmd_is_running) {
+		schedule_delayed_work(&ts->set_wirelesscharger_mode_work, msecs_to_jiffies(5));
+	} else {
+		/* check lock   */
+		mutex_lock(&ts->cmd_lock);
+		ts->cmd_is_running = true;
+		mutex_unlock(&ts->cmd_lock);
+
+		ts->cmd_state = CMD_STATUS_RUNNING;
+		input_info(true, &ts->client->dev, "%s param = %d\n", __func__, ts->wirelesscharger_delayed_cmd_param[0]);
+
+		ts->cmd_param[0] = ts->wirelesscharger_delayed_cmd_param[0];
+		strcpy(ts->cmd, "set_wirelesscharger_mode");
+		set_wirelesscharger_mode(ts);
+	}
+}
+
 static ssize_t cmd_store(struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t count)
 {
@@ -486,8 +511,15 @@ static ssize_t cmd_store(struct device *dev, struct device_attribute *attr,
 		return -EINVAL;
 	}
 
-	if (strlen(buf) >= CMD_STR_LEN) {		
-		input_err(true, &ts->client->dev, "%s: cmd length is over (%s,%d)!!\n", __func__, buf, (int)strlen(buf));
+	if (strlen(buf) >= CMD_STR_LEN) {
+		input_err(true, &ts->client->dev, "%s: cmd length(strlen(buf)) is over (%d,%s)!!\n",
+					__func__, (unsigned int)strlen(buf), buf);
+		return -EINVAL;
+	}
+
+	if (count >= (unsigned int)CMD_STR_LEN) {
+		input_err(true, &ts->client->dev, "%s %s: cmd length(count) is over (%d,%s)!!\n",
+				SECLOG, __func__, (unsigned int)count, buf);
 		return -EINVAL;
 	}
 
@@ -502,6 +534,13 @@ static ssize_t cmd_store(struct device *dev, struct device_attribute *attr,
 			if (ts->delayed_cmd_param[0] > 1)
 				ts->delayed_cmd_param[1] = buf[19]-'0';
 				schedule_delayed_work(&ts->cover_cmd_work, msecs_to_jiffies(10));
+		}
+		if (strncmp("set_wirelesscharger_mode", buf, 24) == 0) {
+			cancel_delayed_work(&ts->set_wirelesscharger_mode_work);
+			input_err(true, &ts->client->dev,
+						"[cmd is delayed] %d, param = %d\n", __LINE__, buf[25] - '0');
+			ts->wirelesscharger_delayed_cmd_param[0] = buf[25] - '0';
+				schedule_delayed_work(&ts->set_wirelesscharger_mode_work, msecs_to_jiffies(10));
 		}
 		return -EBUSY;
 	}
@@ -768,6 +807,80 @@ static int sec_ts_release_tmode(struct sec_ts_data *ts)
 	return ret;
 }
 
+static void sec_ts_cm_spec_over_check(struct sec_ts_data *ts)
+{
+	int i = 0;
+	int j = 0;
+	int by, bx, ty1, tx1, ty2, tx2, bpos, tpos1, tpos2;
+	int vb, vt1, vt2, gap1, gap2, specover_count;
+
+	input_info(true, &ts->client->dev, "%s\n", __func__);
+	input_info(true, &ts->client->dev, "rx_max(%d)  tx_max(%d) \n", ts->rx_count, ts->tx_count);
+
+	specover_count = 0;
+	for (i = 0; i < ts->rx_count-1; i++) {
+		for (j = 0; j < ts->tx_count-1; j++) {
+			bx = i; by = j;  bpos = (by * ts->rx_count) + bx;
+			tx1 = i + 1; ty1 = j;  tpos1 = (ty1 * ts->rx_count) + tx1;
+			tx2 = i; ty2 = j + 1;  tpos2 = (ty2 * ts->rx_count) + tx2;
+			vb = ts->pFrame[bpos]; vt1 = ts->pFrame[tpos1]; vt2 = ts->pFrame[tpos2];
+
+			if (vb > vt1)
+				gap1 = vb - vt1;
+			else
+				gap1 = vt1 - vb;
+			if (vb > vt2)
+				gap2 = vb - vt2;
+			else
+				gap2 = vt2 - vb;
+
+			/* y direction */
+			gap1 = gap1 * 100 / vb;
+			/*  x direction */
+			gap2 = gap2 * 100 / vb;
+
+			/*
+			 * input_info(true, &ts->client->dev, "b  y(%d) x(%d) p(%d) v(%d) \n", by,bx,bpos,vb);
+			 * input_info(true, &ts->client->dev, "t1 y(%d) x(%d) p(%d) v(%d)  g(%d)\n", ty1,tx1,tpos1,vt1,gap1);
+			 *input_info(true, &ts->client->dev, "t2 y(%d) x(%d) p(%d) v(%d)  g(%d)\n", ty2,tx2,tpos2,vt2,gap2);
+			 */
+			if (by == 0 || (by == ts->rx_count-2)) {
+				if (bx == 0 || bx == ts->rx_count-2) {
+					if (gap1 > 18)
+						specover_count++;
+					if (gap2 > 18)
+						specover_count++;
+				} else {
+					if (gap1 > 10)
+						specover_count++;
+					if (gap2 > 10)
+						specover_count++;
+				}
+			} else if (bx == 0 || (bx == ts->tx_count-2)) {
+				if (by == 0 || by == ts->tx_count-2) {
+					if (gap1 > 18)
+						specover_count++;
+					if (gap2 > 18)
+						specover_count++;
+				} else {
+					if (gap1 > 10)
+						specover_count++;
+					if (gap2 > 10)
+						specover_count++;
+				}
+			} else {
+				/* check 	  x : 5    / y : 6 */
+				if (gap1 > 6)
+					specover_count++;
+				if (gap2 > 5)
+					specover_count++;
+			}
+		}
+	}
+	ts->cm_specover = specover_count;
+	input_info(true, &ts->client->dev, "spect out(%d)\n",specover_count);
+}
+
 void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 {
 	int i = 0;
@@ -790,7 +903,7 @@ void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 		strncat(pStr, pTmp, 6 * ts->tx_count);
 	}
 
-	input_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
+	input_raw_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
 	memset(pStr, 0x0, 6 * (ts->tx_count + 1));
 	snprintf(pTmp, sizeof(pTmp), " +");
 	strncat(pStr, pTmp, 6 * ts->tx_count);
@@ -800,7 +913,7 @@ void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 		strncat(pStr, pTmp, 6 * ts->rx_count);
 	}
 
-	input_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
+	input_raw_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
 
 	for (i = 0; i < ts->rx_count; i++) {
 		memset(pStr, 0x0, 6 * (ts->tx_count + 1));
@@ -819,7 +932,7 @@ void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 			}
 			strncat(pStr, pTmp, 6 * ts->rx_count);
 		}
-	input_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
+	input_raw_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
 	}
 	kfree(pStr);
 }
@@ -835,7 +948,7 @@ int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min, short *max)
 	int j = 0;
 	short *temp = NULL;
 
-	input_info(true, &ts->client->dev, "%s\n", __func__);
+	input_raw_info(true, &ts->client->dev, "%s: type %d\n", __func__, type);
 
 	/* set data length, allocation buffer memory */
 	readbytes = ts->rx_count * ts->tx_count * 2;
@@ -893,6 +1006,9 @@ int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min, short *max)
 #endif
 	sec_ts_print_frame(ts, min, max);
 
+	if (type == TYPE_OFFSET_DATA_SDC)
+		sec_ts_cm_spec_over_check(ts);
+
 	temp = kzalloc(readbytes, GFP_KERNEL);
 	if (temp == NULL) {
 		input_info(true, &ts->client->dev, "Read frame kzalloc failed\n");
@@ -943,7 +1059,7 @@ void sec_ts_print_self_frame(struct sec_ts_data *ts, short *min, short *max,
 		strncat(pStr, pTmp, 6 * num_short_ch);
 	}
 
-	input_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
+	input_raw_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
 	memset(pStr, 0x0, 6 * (num_short_ch + 1));
 	snprintf(pTmp, sizeof(pTmp), "      +");
 	strncat(pStr, pTmp, 6 * num_short_ch);
@@ -953,7 +1069,7 @@ void sec_ts_print_self_frame(struct sec_ts_data *ts, short *min, short *max,
 		strncat(pStr, pTmp, 6 * num_short_ch);
 	}
 
-	input_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
+	input_raw_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
 
 	memset(pStr, 0x0, 6 * (num_short_ch + 1));
 	for (i = 0; i < num_short_ch; i++) {
@@ -965,7 +1081,7 @@ void sec_ts_print_self_frame(struct sec_ts_data *ts, short *min, short *max,
 			*max = ts->sFrame[i];
 	}
 
-	input_info(true, &ts->client->dev, "SEC_TS        %s\n", pStr);
+	input_raw_info(true, &ts->client->dev, "SEC_TS        %s\n", pStr);
 
 	for (i = 0; i < num_long_ch; i++) {
 		memset(pStr, 0x0, 6 * (num_short_ch + 1));
@@ -979,7 +1095,7 @@ void sec_ts_print_self_frame(struct sec_ts_data *ts, short *min, short *max,
 		if (ts->sFrame[num_short_ch + i] > *max)
 			*max = ts->sFrame[num_short_ch + i];
 
-		input_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
+		input_raw_info(true, &ts->client->dev, "SEC_TS %s\n", pStr);
 	}
 	kfree(pStr);
 }
@@ -994,7 +1110,7 @@ static int sec_ts_read_channel(struct sec_ts_data *ts, u8 type, short *min, shor
 	u8 w_data[2];
 	u8 mode = TYPE_INVALID_DATA;
 
-	input_info(true, &ts->client->dev, "%s\n", __func__);
+	input_raw_info(true, &ts->client->dev, "%s: type %d\n", __func__, type);
 
 	pRead = kzalloc(PRE_DEFINED_DATA_LENGTH, GFP_KERNEL);
 	if (IS_ERR_OR_NULL(pRead))
@@ -1053,7 +1169,7 @@ static int sec_ts_read_channel(struct sec_ts_data *ts, u8 type, short *min, shor
 		*min = min(*min, ts->pFrame[jj]);
 		*max = max(*max, ts->pFrame[jj]);
 
-		input_info(true, &ts->client->dev, "%s: [%s][%d] %d\n", __func__,
+		input_raw_info(true, &ts->client->dev, "%s: [%s][%d] %d\n", __func__,
 				(jj < ts->tx_count) ? "TX" : "RX", jj, ts->pFrame[jj]);
 		jj++;
 	}
@@ -1088,7 +1204,7 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts, struct sec_ts_test_mode *mode)
 		goto error_power_state;
 	}
 
-	input_info(true, &ts->client->dev, "%s: %d, %s\n",
+	input_raw_info(true, &ts->client->dev, "%s: %d, %s\n",
 			__func__, mode->type, mode->allnode ? "ALL" : "");
 
 	ret = sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
@@ -1189,6 +1305,20 @@ static void get_fw_ver_ic(void *device_data)
 	sprintf(buff, "SE%02X%02X%02X",
 		ts->plat_data->panel_revision, img_ver[2], img_ver[3]);
 
+	set_cmd_result(ts, buff, strnlen(buff, sizeof(buff)));
+	ts->cmd_state = CMD_STATUS_OK;
+	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
+}
+
+static void get_cm_spec_over(void *device_data)
+{
+	struct sec_ts_data *ts = (struct sec_ts_data *)device_data;
+	char buff[20] = { 0 };
+
+	set_default_result(ts);
+
+	sprintf(buff, "%3d",
+			ts->cm_specover);
 	set_cmd_result(ts, buff, strnlen(buff, sizeof(buff)));
 	ts->cmd_state = CMD_STATUS_OK;
 	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
@@ -1556,6 +1686,7 @@ static void get_checksum_data(void *device_data)
 	char buff[16] = { 0 };
 	char csum_result[4] = { 0 };
 	u8 nv_result;
+	char data[5] = { 0 };
 	u8 cal_result;
 	u8 temp = 0;
 	u8 csum = 0;
@@ -1567,6 +1698,44 @@ static void get_checksum_data(void *device_data)
 		snprintf(buff, sizeof(buff), "%s", "TSP turned off");
 		goto err;
 	}
+
+	disable_irq(ts->client->irq);
+
+	ts->plat_data->power(ts, false);
+	ts->power_status = SEC_TS_STATE_POWER_OFF;
+	sec_ts_delay(50);
+
+	ts->plat_data->power(ts, true);
+	ts->power_status = SEC_TS_STATE_POWER_ON;
+	sec_ts_delay(70);
+	
+	ret = sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
+	if (ret < 0) {
+		enable_irq(ts->client->irq);
+		input_err(true, &ts->client->dev, "%s: boot complete failed\n", __func__);
+		snprintf(buff, sizeof(buff), "%s", "NG");
+		goto err;
+	}
+
+	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS, &data[1], 1);
+	if (ret < 0 || (data[1] != SEC_TS_STATUS_APP_MODE)) {
+		enable_irq(ts->client->irq);
+		input_err(true, &ts->client->dev, "%s: boot status failed, ret:%d, data:%X\n", __func__, ret, data[0]);
+		snprintf(buff, sizeof(buff), "%s", "NG");
+		goto err;
+	}
+
+	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_TS_STATUS, &data[2], 4);
+	if (ret < 0 || (data[3] == TOUCH_SYSTEM_MODE_FLASH)) {
+		enable_irq(ts->client->irq);
+		input_err(true, &ts->client->dev, "%s: touch status failed, ret:%d, data:%X\n", __func__, ret, data[3]);
+		snprintf(buff, sizeof(buff), "%s", "NG");
+		goto err;
+	}
+
+	enable_irq(ts->client->irq);
+
+	input_err(true, &ts->client->dev, "%s: data[0]:%X, data[1]:%X, data[3]:%X\n", __func__, data[0], data[1], data[3]);
 
 	temp = DO_FW_CHECKSUM | DO_PARA_CHECKSUM;
 	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_GET_CHECKSUM, &temp, 1);
@@ -1907,6 +2076,7 @@ void sec_ts_run_rawdata_all(struct sec_ts_data *ts)
 	short min, max;
 	int ret;
 
+	input_raw_data_clear();
 	sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
 	ret = sec_ts_read_frame(ts, TYPE_OFFSET_DATA_SEC, &min, &max);
 	if (ret < 0) {
@@ -2932,6 +3102,20 @@ static void get_force_calibration(void *device_data)
 	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
 }
 
+static void set_external_factory(void *device_data)
+{
+	struct sec_ts_data *ts = (struct sec_ts_data *)device_data;
+	char buff[CMD_STR_LEN] = {0};
+
+	set_default_result(ts);
+
+	ts->external_factory = true;
+	snprintf(buff, sizeof(buff), "%s", "OK");
+
+	set_cmd_result(ts, buff, strnlen(buff, sizeof(buff)));
+	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
+}
+
 static void run_force_calibration(void *device_data)
 {
 	struct sec_ts_data *ts = (struct sec_ts_data *)device_data;
@@ -2995,6 +3179,26 @@ static void run_force_calibration(void *device_data)
 		ts->cal_count = get_tsp_nvm_data(ts, SEC_TS_NVM_OFFSET_CAL_COUNT);
 #endif
 
+		/* Save nv data   cal_position 
+		 * 0xE0 :  External
+		 * 0x01 :  LCiA
+		 * 0xFF :  Developer/Tech -Default
+		 */
+		if (ts->external_factory)  ts->cal_pos = 0xE0;
+		else  ts->cal_pos = 0x01;
+		buff[0] = SEC_TS_NVM_OFFSET_CAL_POS;
+		buff[1] = 0;
+		buff[2] = ts->cal_pos;
+		input_info(true, &ts->client->dev, "%s: write to nvm cal_pos(0x%2X)\n",
+					__func__, buff[2]);
+		
+		rc = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_NVM, buff, 3);
+		if (rc < 0) {
+			input_err(true, &ts->client->dev,
+				"%s: nvm write failed. ret: %d\n", __func__, rc);
+		}
+		sec_ts_delay(20);
+
 		if(ts->plat_data->mis_cal_check){
 
 			buff[0] = 0;			
@@ -3036,6 +3240,7 @@ static void run_force_calibration(void *device_data)
 
 out_force_cal:
 	set_cmd_result(ts, buff, strnlen(buff, sizeof(buff)));
+	ts->external_factory = false;
 
 	mutex_lock(&ts->cmd_lock);
 	ts->cmd_is_running = false;
@@ -3951,6 +4156,7 @@ int sec_ts_fn_init(struct sec_ts_data *ts)
 	ts->reinit_done = true;
 
 	INIT_DELAYED_WORK(&ts->cover_cmd_work, clear_cover_cmd_work);
+	INIT_DELAYED_WORK(&ts->set_wirelesscharger_mode_work, set_wirelesscharger_mode_work);
 
 	return 0;
 

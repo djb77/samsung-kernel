@@ -1269,6 +1269,9 @@ static ssize_t store_mode(struct cpufreq_interactive_tunables
 	if (ret < 0)
 		return ret;
 
+	if (val < 0 || val >= MAX_PARAM_SET)
+		return count;
+
 	val &= PERF_MODE | SLOW_MODE | NORMAL_MODE;
 	tunables->mode = val;
 	return count;
@@ -1289,6 +1292,9 @@ static ssize_t store_param_index(struct cpufreq_interactive_tunables
 	ret = strict_strtoul(buf, 0, &val);
 	if (ret < 0)
 		return ret;
+
+	if (val < 0 || val >= MAX_PARAM_SET)
+		return count;
 
 	val &= PERF_MODE | SLOW_MODE | NORMAL_MODE;
 

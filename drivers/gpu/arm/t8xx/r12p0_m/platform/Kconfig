@@ -22,3 +22,4 @@
 # Where xxx is the platform name is the name set in MALI_PLATFORM_THIRDPARTY_NAME
 #
 
+source "drivers/gpu/arm/t8xx/r12p0_m/platform/exynos/Kconfig"

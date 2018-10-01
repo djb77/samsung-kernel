@@ -1,7 +1,7 @@
 /*
  * Customer HW 4 dependant file
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -87,17 +87,43 @@
 	* CONFIG_ARCH_MSM8996 || CONFIG_SOC_EXYNOS8890
 	*/
 
-#if defined(CONFIG_ARCH_MSM8996) || defined(CONFIG_SOC_EXYNOS8890)
+#if defined(CONFIG_ARCH_MSM8996) || defined(CONFIG_SOC_EXYNOS8890) || \
+	defined(CONFIG_ARCH_MSM8998)
 #define SUPPORT_BCM4359_MIXED_MODULES
-#define SUPPORT_RANDOM_MAC_SCAN
-#endif /* CONFIG_ARCH_MSM8996 || CONFIG_SOC_EXYNOS8890 */
+#endif /* MSM8996 || EXYNOS8890 || MSM8998 */
 
+#ifdef BCMPCIE
 /* For EXYNOS PCIe RC Control */
 #if defined(CONFIG_MACH_UNIVERSAL5433) || defined(CONFIG_MACH_UNIVERSAL7420) || \
-	defined(CONFIG_SOC_EXYNOS8890)
+	defined(CONFIG_SOC_EXYNOS8890) || defined(CONFIG_SOC_EXYNOS8895)
 #define EXYNOS_PCIE_LINKDOWN_RECOVERY
 #define USE_EXYNOS_PCIE_RC_PMPATCH
-#endif /* CONFIG_MACH_UNIVERSAL5433 || CONFIGA_MACH_UNIVERSAL7420 || CONFIG_SOC_EXYNOS8890 */
+#endif /* CONFIG_MACH_UNIVERSAL5433 || CONFIGA_MACH_UNIVERSAL7420 ||
+	* CONFIG_SOC_EXYNOS8890 || CONFIG_SOC_EXYNOS8895
+	*/
+#endif /* BCMPCIE */
+
+#if defined(CONFIG_ARGOS)
+#if defined(CONFIG_SPLIT_ARGOS_SET)
+#define ARGOS_IRQ_WIFI_TABLE_LABEL "WIFI TX"
+#define ARGOS_WIFI_TABLE_LABEL "WIFI RX"
+#if defined(DYNAMIC_MUMIMO_CONTROL)
+#define ARGOS_WIFI_TABLE_FOR_MIMO_LABEL "WIFI"
+#endif /* DYNAMIC_MUMIMO_CONTROL */
+#else /* CONFIG_SPLIT_ARGOS_SET */
+#define ARGOS_IRQ_WIFI_TABLE_LABEL "WIFI"
+#define ARGOS_WIFI_TABLE_LABEL "WIFI"
+#endif /* CONFIG_SPLIT_ARGOS_SET */
+#define ARGOS_P2P_TABLE_LABEL "P2P"
+#endif /* CONFIG_ARGOS */
+
+#if defined(CONFIG_ARCH_MSM8998)
+#ifndef DHD_LB_IRQSET
+#define SET_PCIE_IRQ_CPU_CORE
+#define PCIE_IRQ_BIG_CORE 6
+#define PCIE_IRQ_LITTLE_CORE 0
+#endif /* DHD_LB_IRQSET */
+#endif /* CONFIG_ARCH_MSM8998 */
 
 /* PROJECTS START */
 
@@ -106,42 +132,58 @@
 #define HW_OOB
 #endif /* CONFIG_MACH_SAMSUNG_ESPRESSO && CONFIG_MACH_SAMSUNG_ESPRESSO_10 */
 
-#if defined(CONFIG_MACH_UNIVERSAL5433) || defined(CONFIG_MACH_UNIVERSAL7420) || \
-	defined(CONFIG_SOC_EXYNOS8890)
+#if defined(CONFIG_MACH_UNIVERSAL5430) && !defined(CONFIG_BCM43455)
+#undef CUSTOM_SET_CPUCORE
+#define PRIMARY_CPUCORE 0
+#define DPC_CPUCORE 4
+#define RXF_CPUCORE 7
+#define ARGOS_CPU_SCHEDULER
+#elif (defined(CONFIG_MACH_UNIVERSAL5430) || defined(CONFIG_MACH_UNIVERSAL5433)) && \
+	defined(CONFIG_BCM43455)
+#define CUSTOM_SET_CPUCORE
+#define PRIMARY_CPUCORE 0
+#define MAX_RETRY_SET_CPUCORE 5
+#define DPC_CPUCORE 0
+#define RXF_CPUCORE 4
+#elif defined(CONFIG_MACH_UNIVERSAL7580) && defined(CONFIG_BCM43455)
+#define CUSTOM_SET_CPUCORE
+#define PRIMARY_CPUCORE 0
+#define MAX_RETRY_SET_CPUCORE 5
+#define DPC_CPUCORE 1
+#define RXF_CPUCORE 2
+#elif defined(CONFIG_SOC_EXYNOS7870) && defined(CONFIG_BCM43455)
+#define CUSTOM_SET_CPUCORE
+#define PRIMARY_CPUCORE 0
+#define MAX_RETRY_SET_CPUCORE 5
+#define DPC_CPUCORE 1
+#define RXF_CPUCORE 2
+#define ARGOS_CPU_SCHEDULER
+#elif defined(CONFIG_SOC_EXYNOS7870) && defined(CONFIG_BCM43456)
+#define CUSTOM_SET_CPUCORE
+#define PRIMARY_CPUCORE 0
+#define MAX_RETRY_SET_CPUCORE 5
+#define DPC_CPUCORE 1
+#define RXF_CPUCORE 2
+#define ARGOS_CPU_SCHEDULER
+#elif defined(CONFIG_MACH_UNIVERSAL5433) || defined(CONFIG_MACH_UNIVERSAL7420) || \
+	defined(CONFIG_SOC_EXYNOS8890) || defined(CONFIG_SOC_EXYNOS8895)
 #undef CUSTOM_SET_CPUCORE
 #define PRIMARY_CPUCORE 0
 #define DPC_CPUCORE 4
 #define RXF_CPUCORE 5
 #define TASKLET_CPUCORE 5
+#ifndef DHD_LB_IRQSET
 #define ARGOS_CPU_SCHEDULER
+#endif /* DHD_LB_IRQSET */
 #define ARGOS_RPS_CPU_CTL
-/*
- * Note that EXYNOS5433, EXYNOS7420 and EXYNOS8890 are big/little
- * platform so the CPU Masks are defined accordingly. That is
- * Big Cores are 7-4 and Little Cores are 3-1.
- */
-#if defined(DHD_LB)
-#if defined(CONFIG_SOC_EXYNOS8890)
-/*
- * Removed core 6~7 from NAPI CPU mask.
- * Exynos 8890 disabled core 6~7 by default.
- */
-#define DHD_LB_PRIMARY_CPUS	(0x30)
-#else
-#define DHD_LB_PRIMARY_CPUS     (0xF0)
-#endif
-#define DHD_LB_SECONDARY_CPUS	(0x0E)
-#else
+
+#ifdef CONFIG_SOC_EXYNOS8895
 #define ARGOS_DPC_TASKLET_CTL
-#endif /* !defined(DHD_LB) */
+#endif /* CONFIG_SOC_EXYNOS8895 */
 
 #ifdef CONFIG_MACH_UNIVERSAL7420
 #define EXYNOS_PCIE_DEBUG
 #endif /* CONFIG_MACH_UNIVERSAL7420 */
-
-#elif defined(CONFIG_ARCH_MSM8996) && defined(DHD_LB)
-#define DHD_LB_PRIMARY_CPUS     (0x0C)
-#define DHD_LB_SECONDARY_CPUS   (0x03)
 
 #elif defined(CONFIG_MACH_HL3G) || defined(CONFIG_MACH_HLLTE) || \
 	defined(CONFIG_MACH_UNIVERSAL5422) || defined(CONFIG_MACH_UNIVERSAL5430)
@@ -152,7 +194,36 @@
 #define RXF_CPUCORE 5
 #endif /* CONFIG_MACH_UNIVERSAL5433 || CONFIG_MACH_UNIVERSAL7420  || CONFIG_SOC_EXYNOS8890 */
 
-#if defined(CONFIG_ARCH_MSM)
+#if defined(DHD_LB)
+#if defined(CONFIG_SOC_EXYNOS8890)
+/*
+ * Removed core 6~7 from NAPI CPU mask.
+ * Exynos 8890 disabled core 6~7 by default.
+ */
+#define DHD_LB_PRIMARY_CPUS     (0x30)
+#define DHD_LB_SECONDARY_CPUS   (0x0E)
+#elif defined(CONFIG_SOC_EXYNOS8895)
+/* using whole big core with NAPI mask */
+#define DHD_LB_PRIMARY_CPUS     (0xF0)
+#define DHD_LB_SECONDARY_CPUS   (0x0E)
+#elif defined(CONFIG_ARCH_MSM8998)
+#define DHD_LB_PRIMARY_CPUS     (0x20)
+#define DHD_LB_SECONDARY_CPUS   (0x0E)
+#elif defined(CONFIG_ARCH_MSM8996)
+#define DHD_LB_PRIMARY_CPUS     (0x0C)
+#define DHD_LB_SECONDARY_CPUS   (0x03)
+#else /* Default LB masks */
+/* using whole big core with NAPI mask */
+#define DHD_LB_PRIMARY_CPUS     (0xF0)
+#define DHD_LB_SECONDARY_CPUS   (0x0E)
+#endif /* CONFIG_SOC_EXYNOS8890 */
+#else /* !DHD_LB */
+#ifdef BCMPCIE
+#define ARGOS_DPC_TASKLET_CTL
+#endif /* BCMPCIE */
+#endif /* !DHD_LB */
+
+#if defined(CONFIG_ARCH_MSM) || defined(CONFIG_SOC_EXYNOS8895)
 #if defined(CONFIG_BCMDHD_PCIE)
 #define BCMPCIE_DISABLE_ASYNC_SUSPEND
 #endif /* CONFIG_BCMDHD_PCIE */
@@ -209,7 +280,14 @@
 /* GAN LITE NAT KEEPALIVE FILTER */
 #define GAN_LITE_NAT_KEEPALIVE_FILTER
 #endif /* CONFIG_WLAN_REGION_CODE == 101 */
+#if (CONFIG_WLAN_REGION_CODE == 150) /* EUR FD(DualSIM) */
+#define SUPPORT_MULTIPLE_BOARD_REV_FROM_HW
+#endif /* CONFIG_WLAN_REGION_CODE == 150 */
 #endif /* CONFIG_WLAN_REGION_CODE >= 100 && CONFIG_WLAN_REGION_CODE < 200 */
+
+#if defined(CONFIG_WIFI_MULTIPLE_CHIP)
+#define SUPPORT_MULTIPLE_CHIP_4345X
+#endif /* CONFIG_WIFI_MULTIPLE_CHIP */
 
 #if defined(CONFIG_V1A) || defined(CONFIG_V2A) || defined(CONFIG_MACH_VIENNAEUR)
 #define SUPPORT_MULTIPLE_CHIPS

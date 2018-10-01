@@ -166,6 +166,9 @@ typedef struct _muic_data_t {
 	char *chip_name;
 
 	int gpio_uart_sel;
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	int dock_int_ap;
+#endif
 
 	/* muic Device ID */
 	u8 muic_vendor;			/* Vendor ID */
@@ -206,6 +209,10 @@ typedef struct _muic_data_t {
 	/* Operation Mode */
 	enum muic_op_mode	opmode;
 	bool 			afc_water_disable;
+	bool			afc_tsub_disable;
+	bool			is_ccic_attach;
+	int			is_ccic_afc_enable;
+	int			is_ccic_rp56_enable;
 #endif
 }muic_data_t;
 

@@ -75,6 +75,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_MAX98505 if I2C
 	select SND_SOC_MAX98505A if I2C
 	select SND_SOC_MAX98506 if I2C
+	select SND_SOC_MAX98512 if I2C
 	select SND_SOC_MAX9850 if I2C
 	select SND_SOC_MAX9768 if I2C
 	select SND_SOC_MAX9877 if I2C
@@ -488,6 +489,8 @@ config SND_SOC_MAXIM_DSM
 	default m if SND_SOC_MAX98505=m
 	default y if SND_SOC_MAX98506=y
 	default m if SND_SOC_MAX98506=m
+	default y if SND_SOC_MAX98512=y
+	default m if SND_SOC_MAX98512=m
 	help
 	MAXIM DSM Log Driver
 
@@ -499,6 +502,8 @@ config SND_SOC_MAXIM_DSM_CAL
 	default m if SND_SOC_MAX98505=m
 	default y if SND_SOC_MAX98506=y
 	default m if SND_SOC_MAX98506=m
+	default y if SND_SOC_MAX98512=y
+	default m if SND_SOC_MAX98512=m
 	help
 	MAXIM Calibration Driver
 
@@ -519,6 +524,12 @@ config SND_SOC_MAX98506
 	depends on I2C
 	help
 	MAX98506 driver
+
+config SND_SOC_MAX98512
+	tristate "Support MAX98512"
+	depends on I2C
+	help
+	MAX98512 driver
 
 config SND_SOC_MAX9850
 	tristate

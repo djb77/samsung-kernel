@@ -1,7 +1,7 @@
 /*
  * Platform Dependent file for Qualcomm MSM/APQ
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_custom_msm.c 632765 2016-04-20 11:29:41Z $
+ * $Id: dhd_custom_msm.c 719112 2017-09-04 02:49:00Z $
  *
  */
 
@@ -93,9 +93,9 @@ dhd_wifi_init_gpio(void)
 	/* Wait for WIFI_TURNON_DELAY due to power stability */
 	msleep(WIFI_TURNON_DELAY);
 
-#if defined(CONFIG_ARCH_MSM8996) && defined(CONFIG_BCM4359)
+#if defined(CONFIG_ARCH_MSM8996)
 	msm_pcie_enumerate(MSM_PCIE_CH_NUM);
-#endif /* CONFIG_ARCH_MSM8996 && CONFIG_BCM4359 */
+#endif /* CONFIG_ARCH_MSM8996 */
 
 	/* ========== WLAN_HOST_WAKE ============ */
 	wlan_host_wake_up = of_get_named_gpio(root_node, "wlan-host-wake-gpio", 0);

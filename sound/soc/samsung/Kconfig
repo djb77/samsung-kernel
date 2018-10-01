@@ -365,5 +365,8 @@ config SND_SOC_EAX_NONE_KMIXING
 	help
 	  Say Y if you want to add support for EAX slowpath on the Universal8890
 
+config SND_SAMSUNG_PDM_EXT_AMP
+	tristate "Enable PDM interface with external amp"
+
 # For support SEIREN audio
 source "sound/soc/samsung/seiren/Kconfig"

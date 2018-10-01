@@ -34,14 +34,11 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/apm-exynos.h>
-#ifdef CONFIG_MUIC_SUPPORT_CCIC
-#include <linux/of_gpio.h>
-#endif
 
 #include <asm/smp_plat.h>
 #include <asm/cputype.h>
 
-#if defined(CONFIG_SEC_PM) && defined(CONFIG_MUIC_NOTIFIER) && !defined(CONFIG_MUIC_SUPPORT_CCIC)
+#if defined(CONFIG_SEC_PM) && defined(CONFIG_MUIC_NOTIFIER)
 #include <linux/muic/muic.h>
 #include <linux/muic/muic_notifier.h>
 #endif
@@ -52,10 +49,6 @@
 #include <soc/samsung/tmu.h>
 #include <soc/samsung/ect_parser.h>
 #include <soc/samsung/exynos-pmu.h>
-
-#if defined(CONFIG_KFAULT_AUTO_SUMMARY)
-#include <linux/sec_debug.h>
-#endif
 
 #define POWER_COEFF_15P		68 /* percore param */
 #define POWER_COEFF_7P		10 /* percore  param */
@@ -98,10 +91,6 @@ static bool cluster1_hotplugged = false;
 static int self_discharging;
 #endif
 
-#ifdef CONFIG_MUIC_SUPPORT_CCIC
-int jig_on;
-#endif
-
 /* Include CPU mask of each cluster */
 cluster_type exynos_boot_cluster;
 static cluster_type boot_cluster;
@@ -120,7 +109,7 @@ static struct pm_qos_request core_max_qos_real[CL_END];
 static struct pm_qos_request exynos_mif_qos[CL_END];
 static struct pm_qos_request ipa_max_qos[CL_END];
 static struct pm_qos_request reboot_max_qos[CL_END];
-#if defined(CONFIG_SEC_PM) && defined(CONFIG_MUIC_NOTIFIER) && !defined(CONFIG_MUIC_SUPPORT_CCIC)
+#if defined(CONFIG_SEC_PM) && defined(CONFIG_MUIC_NOTIFIER)
 static struct pm_qos_request jig_boot_max_qos[CL_END];
 #endif
 
@@ -136,14 +125,6 @@ struct pm_qos_request cpufreq_cpu_hotplug_max_request;
  * CPUFREQ init notifier
  */
 static BLOCKING_NOTIFIER_HEAD(exynos_cpufreq_init_notifier_list);
-
-#if defined(CONFIG_KFAULT_AUTO_SUMMARY)
-static struct sec_debug_auto_comm_freq_info* auto_comm_cpufreq_info;
-void sec_debug_set_auto_comm_last_cpufreq_buf(struct sec_debug_auto_comm_freq_info* freq_info)
-{
-	auto_comm_cpufreq_info = freq_info;	
-}
-#endif
 
 int exynos_cpufreq_init_register_notifier(struct notifier_block *nb)
 {
@@ -2481,7 +2462,7 @@ static int exynos_mp_cpufreq_parse_dt(struct device_node *np, cluster_type cl)
 			return -ENODEV;
 		if (of_property_read_u32(np, "cl1_reboot_limit_freq", &ptr->reboot_limit_freq))
 			return -ENODEV;
-#if defined(CONFIG_SEC_PM) && defined(CONFIG_MUIC_NOTIFIER) && !defined(CONFIG_MUIC_SUPPORT_CCIC)
+#if defined(CONFIG_SEC_PM) && defined(CONFIG_MUIC_NOTIFIER)
 		if (of_property_read_u32(np, "cl1_jig_boot_max_qos", &ptr->jig_boot_cpu_max_qos))
 			return -ENODEV;
 #endif
@@ -2504,16 +2485,6 @@ static int exynos_mp_cpufreq_parse_dt(struct device_node *np, cluster_type cl)
 	if (of_property_read_string(np, (cl ? "cl1_dvfs_domain_name" : "cl0_dvfs_domain_name"),
 				&cluster_domain_name))
 		return -ENODEV;
-
-#ifdef CONFIG_MUIC_SUPPORT_CCIC
-	jig_on = of_get_named_gpio(np, "cpufreq,jig_on", 0);
-	if (jig_on < 0) {
-		pr_err("%s error reading jig_on = %d\n", __func__,jig_on);
-		jig_on = 0;
-	} else {
-		pr_info("%s use JIG ON gpio for detecting Jig cable(HWrev04 or later)\n", __func__);
-	}
-#endif
 
 #if defined(CONFIG_ECT)
 	not_using_ect = exynos_mp_cpufreq_parse_frequency((char *)cluster_domain_name, ptr);
@@ -2632,14 +2603,6 @@ static int exynos_mp_cpufreq_probe(struct platform_device *pdev)
 		}
 	}
 
-#if defined(CONFIG_KFAULT_AUTO_SUMMARY)
-	if(auto_comm_cpufreq_info) {
-		int offset = offsetof(struct cpufreq_freqs, new);
-		auto_comm_cpufreq_info[FREQ_INFO_CLD0].last_freq_info = virt_to_phys(freqs[CL_ZERO]) + offset;
-		auto_comm_cpufreq_info[FREQ_INFO_CLD0].last_freq_info = virt_to_phys(freqs[CL_ZERO]) + offset;
-	}
-#endif
-
 	return ret;
 
 err_init:
@@ -2731,14 +2694,6 @@ static int exynos_mp_cpufreq_remove(struct platform_device *pdev)
 #endif
 
 	cpufreq_unregister_driver(&exynos_driver);
-
-#if defined(CONFIG_KFAULT_AUTO_SUMMARY)
-	if(auto_comm_cpufreq_info) {
-		auto_comm_cpufreq_info[FREQ_INFO_CLD0].last_freq_info = 0;
-		auto_comm_cpufreq_info[FREQ_INFO_CLD0].last_freq_info = 0;
-	}
-#endif
-
 	return 0;
 }
 
@@ -2774,7 +2729,19 @@ device_initcall(exynos_mp_cpufreq_init);
 late_initcall(exynos_mp_cpufreq_init);
 #endif
 
-#if defined(CONFIG_SEC_PM) && defined(CONFIG_MUIC_NOTIFIER) && !defined(CONFIG_MUIC_SUPPORT_CCIC)
+#if defined(CONFIG_SEC_PM) && defined(CONFIG_MUIC_NOTIFIER)
+
+/* In case of CCIC, check jig detection by boot param */
+#if defined(CONFIG_MUIC_SUPPORT_CCIC) && defined(CONFIG_SEC_FACTORY)
+static bool jig_is_attached = false;
+static __init int get_jig_status(char *arg)
+{
+	jig_is_attached = true;	
+	return 0;
+}
+
+early_param("jig", get_jig_status);
+#else
 static struct notifier_block cpufreq_muic_nb;
 static bool jig_is_attached;
 
@@ -2801,7 +2768,7 @@ static int exynos_cpufreq_muic_notifier(struct notifier_block *nb,
 
 	return NOTIFY_DONE;
 }
-
+#endif
 static int __init exynos_cpufreq_late_init(void)
 {
 	cluster_type cluster;
@@ -2811,8 +2778,8 @@ static int __init exynos_cpufreq_late_init(void)
 	timeout = 100 * USEC_PER_SEC;
 #endif
 
-#ifdef CONFIG_MUIC_SUPPORT_CCIC
-	if(!jig_on || !gpio_get_value(jig_on))
+#if defined(CONFIG_MUIC_SUPPORT_CCIC) && defined(CONFIG_SEC_FACTORY)
+	if (!jig_is_attached)
 		return 0;
 #else
 	muic_notifier_register(&cpufreq_muic_nb,

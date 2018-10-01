@@ -61,6 +61,7 @@
 #define MULTI_FUNCTION_1 "mtp"
 #define MULTI_FUNCTION_2 "acm0"
 #define MULTI_EXCEPTION_FUNCTION "adb"
+#define MULTI_EXCEPTION_FUNCTION_F_FS "Function FS Gadget"
 
 #define MAC_REQUEST	0
 #define OTHER_REQUEST	1

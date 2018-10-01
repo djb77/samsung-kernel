@@ -365,14 +365,17 @@ void p9220_set_vout(struct p9220_charger_data *charger, int vout)
 	switch (vout) {
 		case P9220_VOUT_5V:
 			p9220_reg_write(charger->client, P9220_VOUT_SET_REG, P9220_VOUT_5V_VAL);
+			charger->pdata->rx_vout = WIRELESS_VOUT_5V;			
 			msleep(100);
 			pr_info("%s vout read = %d mV \n", __func__,  p9220_get_adc(charger, P9220_ADC_VOUT));
 			break;
+#if 0			
 		case P9220_VOUT_6V:
 			p9220_reg_write(charger->client, P9220_VOUT_SET_REG, P9220_VOUT_6V_VAL);
 			msleep(100);
 			pr_info("%s vout read = %d mV \n", __func__,  p9220_get_adc(charger, P9220_ADC_VOUT));
 			break;
+#endif
 		case P9220_VOUT_9V:
 			psy_do_property(charger->pdata->wired_charger_name, get, POWER_SUPPLY_PROP_CHARGE_OTG_CONTROL, value);
 			if (value.intval) {
@@ -380,31 +383,49 @@ void p9220_set_vout(struct p9220_charger_data *charger, int vout)
 				break;
 			}
 			/* We set VOUT to 10V actually for HERO for RE/CE standard authentication */
-			if (charger->pdata->hv_vout_wa)
+			if (charger->pdata->hv_vout_wa) {
 				p9220_reg_write(charger->client, P9220_VOUT_SET_REG, charger->pdata->hv_vout_wa);
-			else
+				charger->pdata->rx_vout = WIRELESS_VOUT_10V;
+			} else {
 				p9220_reg_write(charger->client, P9220_VOUT_SET_REG, P9220_VOUT_9V_VAL);
+				charger->pdata->rx_vout = WIRELESS_VOUT_9V;
+			}
 			msleep(100);
 			pr_info("%s vout read = %d mV \n", __func__,  p9220_get_adc(charger, P9220_ADC_VOUT));
 			break;
+		case P9220_VOUT_10V:
+			psy_do_property(charger->pdata->wired_charger_name, get, POWER_SUPPLY_PROP_CHARGE_OTG_CONTROL, value);
+			if (value.intval) {
+				pr_info("%s CHGIN_OTG now ON, do not set VOUT 10V \n", __func__);
+				break;
+			}
+			p9220_reg_write(charger->client, P9220_VOUT_SET_REG, P9220_VOUT_10V_VAL);
+			charger->pdata->rx_vout = WIRELESS_VOUT_10V;
+			msleep(100);
+			pr_info("%s vout read = %d mV \n", __func__,  p9220_get_adc(charger, P9220_ADC_VOUT));
+			break;			
 		case P9220_VOUT_CC_CV:
 			p9220_reg_write(charger->client, P9220_VOUT_SET_REG,
 							(charger->pdata->wpc_cc_cv_vout - 3500) / 100);
+			charger->pdata->rx_vout = WIRELESS_VOUT_CC_CV_VOUT;
 			msleep(100);
 			pr_info("%s vout read = %d mV \n", __func__,  p9220_get_adc(charger, P9220_ADC_VOUT));
 			break;
 		case P9220_VOUT_CV_CALL:
 			p9220_reg_write(charger->client, P9220_VOUT_SET_REG,
 							(charger->pdata->wpc_cv_call_vout - 3500) / 100);
+			charger->pdata->rx_vout = WIRELESS_VOUT_CV_CALL;
 			msleep(100);
 			pr_info("%s vout read = %d mV \n", __func__,  p9220_get_adc(charger, P9220_ADC_VOUT));
 			break;
 		case P9220_VOUT_CC_CALL:
 			p9220_reg_write(charger->client, P9220_VOUT_SET_REG,
 							(charger->pdata->wpc_cc_call_vout - 3500) / 100);
+			charger->pdata->rx_vout = WIRELESS_VOUT_CC_CALL;
 			msleep(100);
 			pr_info("%s vout read = %d mV \n", __func__,  p9220_get_adc(charger, P9220_ADC_VOUT));
 			break;
+#if 0			
 		case P9220_VOUT_9V_STEP:
 			p9220_reg_write(charger->client, P9220_VOUT_SET_REG, P9220_VOUT_6V_VAL);
 			msleep(1000);
@@ -416,6 +437,7 @@ void p9220_set_vout(struct p9220_charger_data *charger, int vout)
 			msleep(1000);		
 			pr_info("%s vout read = %d mV \n", __func__,  p9220_get_adc(charger, P9220_ADC_VOUT));
 			break;
+#endif
 		default:
 			break;
 	}
@@ -484,7 +506,7 @@ void p9220_set_cmd_reg(struct p9220_charger_data *charger, u8 val, u8 mask)
 				break;
 		}
 		i++;
-	}while(temp != 0);
+    } while ((temp != 0) && (i < 3));
 }
 
 void p9220_send_eop(struct p9220_charger_data *charger, int health_mode)
@@ -798,6 +820,46 @@ int p9220_get_ic_grade(struct p9220_charger_data *charger, int read_mode)
 			break;
 	}
 	return ret;
+}
+
+void p9220_fod_set_hero_pad_5v(struct p9220_charger_data *charger)
+{
+	int i = 0;
+	u8 fod[12] = {0, };
+
+	pr_info("%s \n", __func__);
+
+	if (charger->pdata->fod_hero_5v_data) {
+		for(i=0; i< P9220_NUM_FOD_REG; i++) {
+			p9220_reg_write(charger->client, P9220_WPC_FOD_0A_REG+i, charger->pdata->fod_hero_5v_data[i]);
+		}
+		msleep(2);
+		for(i=0; i< P9220_NUM_FOD_REG; i++) {
+			p9220_reg_read(charger->client, P9220_WPC_FOD_0A_REG+i, &fod[i]);
+		}
+		pr_info("%s: HERO 5V FOD(%d %d %d %d %d %d %d %d %d %d %d %d)\n", __func__,
+			fod[0], fod[1], fod[2], fod[3], fod[4], fod[5], fod[6], fod[7], fod[8], fod[9], fod[10], fod[11]);
+	}
+}
+
+void p9220_fod_set_stand_pad_hv(struct p9220_charger_data *charger)
+{
+	int i = 0;
+	u8 fod[12] = {0, };
+
+	pr_info("%s \n", __func__);
+
+	if (charger->pdata->fod_hv_stand_data) {
+		for(i=0; i< P9220_NUM_FOD_REG; i++) {
+			p9220_reg_write(charger->client, P9220_WPC_FOD_0A_REG+i, charger->pdata->fod_hv_stand_data[i]);
+		}
+		msleep(2);
+		for(i=0; i< P9220_NUM_FOD_REG; i++) {
+			p9220_reg_read(charger->client, P9220_WPC_FOD_0A_REG+i, &fod[i]);
+		}
+		pr_info("%s: HV FOD(%d %d %d %d %d %d %d %d %d %d %d %d)\n", __func__,
+			fod[0], fod[1], fod[2], fod[3], fod[4], fod[5], fod[6], fod[7], fod[8], fod[9], fod[10], fod[11]);
+	}
 }
 
 void p9220_wireless_chg_init(struct p9220_charger_data *charger)
@@ -1388,6 +1450,9 @@ static int p9220_chg_get_property(struct power_supply *psy,
 		pr_info("%s cable_type =%d \n ", __func__, charger->pdata->cable_type);
 		val->intval = charger->pdata->cable_type;
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		val->intval = charger->pdata->rx_vout;
+		break;
 	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION:
 		val->intval = charger->pdata->vout_status;
 		break;
@@ -1493,9 +1558,9 @@ static int p9220_chg_set_property(struct power_supply *psy,
 			}
 			break;
 		case POWER_SUPPLY_PROP_ONLINE:
-			if(val->intval == POWER_SUPPLY_TYPE_WIRELESS ||
-				val->intval == POWER_SUPPLY_TYPE_HV_WIRELESS ||
-				val->intval == POWER_SUPPLY_TYPE_PMA_WIRELESS ) {
+			if(val->intval == SEC_BATTERY_CABLE_WIRELESS ||
+				val->intval == SEC_BATTERY_CABLE_HV_WIRELESS ||
+				val->intval == SEC_BATTERY_CABLE_PMA_WIRELESS ) {
 				charger->pdata->ic_on_mode = true;
 			} else {
 				charger->pdata->ic_on_mode = false;
@@ -1562,6 +1627,9 @@ static int p9220_chg_set_property(struct power_supply *psy,
 			} else if (val->intval == WIRELESS_VOUT_9V) {
 				p9220_set_vout(charger, P9220_VOUT_9V);
 				pr_info("%s: Wireless Vout forced set to 9V\n", __func__);
+			} else if (val->intval == WIRELESS_VOUT_10V) {
+				p9220_set_vout(charger, P9220_VOUT_10V);
+				pr_info("%s: Wireless Vout forced set to 10V\n", __func__);
 			} else if (val->intval == WIRELESS_VOUT_9V_OTG) {
 				p9220_set_vout(charger, P9220_VOUT_9V);
 				pr_info("%s: Wireless Vout forced set to 9V OTG\n", __func__);
@@ -1760,6 +1828,8 @@ static void p9220_wpc_det_work(struct work_struct *work)
 		charger->wc_w_state, wc_w_state);
 
 	charger->wc_w_state = wc_w_state;
+	charger->pdata->rx_vout = WIRELESS_VOUT_5V;
+	charger->pdata->pad_vout = PAD_VOUT_5V;
 	wake_unlock(&charger->wpc_wake_lock);
 }
 
@@ -1791,7 +1861,7 @@ static void p9220_wpc_isr_work(struct work_struct *work)
 	if (cmd_data == P9220_TX_DATA_COM_AFC_TX) {
 		switch (val_data) {
 		case 0x00:
-			charger->pad_vout = PAD_VOUT_5V;
+			charger->pdata->pad_vout = PAD_VOUT_5V;
 			break;
 		case 0x01:
 			pr_info("%s: AFC wireless charger\n", __func__);
@@ -1829,7 +1899,7 @@ static void p9220_wpc_isr_work(struct work_struct *work)
 				p9220_fan_control(charger, false);
 				msleep(250);
 			}
-			charger->pad_vout = PAD_VOUT_10V;
+			charger->pdata->pad_vout = PAD_VOUT_10V;
 			break;
 		case 0x02:
 		case 0x03:
@@ -1863,32 +1933,63 @@ static void p9220_wpc_isr_work(struct work_struct *work)
 		switch (val_data) {
 		case 0x00:
 			break;
-		case 0x30:
-			if (charger->pad_vout == PAD_VOUT_10V) {
+		case 0x10:
+			pr_info("%s: NOBLE Wireless Charge PAD %s\n", __func__,
+				charger->pdata->pad_vout == PAD_VOUT_10V ? "HV" : "");
+			value.intval = charger->pdata->cable_type;
+			break;
+		case 0x30: /* Hero Stand Pad */
+			if (charger->pdata->pad_vout == PAD_VOUT_10V) {
+				charger->pdata->cable_type = P9220_PAD_MODE_WPC_STAND_HV;
+				value.intval = SEC_WIRELESS_PAD_WPC_STAND_HV;
+			} else {
+				charger->pdata->cable_type = P9220_PAD_MODE_WPC_STAND;
+				value.intval = SEC_WIRELESS_PAD_WPC_STAND;
+				p9220_fod_set_hero_pad_5v(charger); // set fod value for hero pad
+			}
+			pr_info("%s: HERO STAND Wireless Charge PAD %s\n", __func__,
+				charger->pdata->pad_vout == PAD_VOUT_10V ? "HV" : "");
+			break;
+		case 0x31: /* Dream Stand Pad */
+			if (charger->pdata->pad_vout == PAD_VOUT_10V) {
 				charger->pdata->cable_type = P9220_PAD_MODE_WPC_STAND_HV;
 				value.intval = SEC_WIRELESS_PAD_WPC_STAND_HV;
 			} else {
 				charger->pdata->cable_type = P9220_PAD_MODE_WPC_STAND;
 				value.intval = SEC_WIRELESS_PAD_WPC_STAND;
 			}
-			pr_info("%s: STAND Wireless Charge PAD %s\n", __func__,
-				charger->pad_vout == PAD_VOUT_10V ? "HV" : "");
-			break;
+			pr_info("%s: DREAM STAND Wireless Charge PAD %s\n", __func__,
+				charger->pdata->pad_vout == PAD_VOUT_10V ? "HV" : "");
+			break;			
 		case 0x40:
-			charger->pdata->cable_type = P9220_PAD_MODE_WPC_PACK;
-			value.intval = SEC_WIRELESS_PAD_WPC_PACK;
-			pr_info("%s: WIRELESS BATTERY PACK\n", __func__);
+			if(!charger->pdata->unsupported_pack) {
+				charger->pdata->cable_type = P9220_PAD_MODE_WPC_PACK;
+				value.intval = SEC_WIRELESS_PAD_WPC_PACK;
+				pr_info("%s: WIRELESS BATTERY PACK\n", __func__);
+			} else {
+				pr_info("%s: This model dose not support BATTERY PACK, will be dettached \n", __func__);
+				p9220_send_eop(charger, POWER_SUPPLY_HEALTH_OVERHEAT); /* Battery Pack TX will be paused for 15 mins */
+			}
 			break;
 		case 0x41:
-			charger->pdata->cable_type = P9220_PAD_MODE_WPC_PACK_TA;
-			value.intval = SEC_WIRELESS_PAD_WPC_PACK_TA;
-			pr_info("%s: WIRELESS BATTERY PACK with TA\n", __func__);
+			if(!charger->pdata->unsupported_pack) {
+				charger->pdata->cable_type = P9220_PAD_MODE_WPC_PACK_TA;
+				value.intval = SEC_WIRELESS_PAD_WPC_PACK_TA;
+				pr_info("%s: WIRELESS BATTERY PACK with TA\n", __func__);
+			} else {
+				pr_info("%s: This model dose not support BATTERY PACK, will be dettached \n", __func__);
+				p9220_send_eop(charger, POWER_SUPPLY_HEALTH_OVERHEAT); /* Battery Pack TX will be paused for 15 mins */				
+			}
 			break;
 		default:
 			value.intval = charger->pdata->cable_type;
 			pr_info("%s: UNDEFINED PAD\n", __func__);
 		}
 
+		if(val_data > 0x10 && charger->pdata->pad_vout == PAD_VOUT_10V) {
+			pr_info("%s: set HV fod except Noble pad \n", __func__);
+			p9220_fod_set_stand_pad_hv(charger); // set fod value for hv stand pad
+		}
 		psy_do_property("wireless", set, POWER_SUPPLY_PROP_ONLINE, value);
 	}
 
@@ -2030,6 +2131,36 @@ static int p9220_chg_parse_dt(struct device *dev,
 			pr_err("%s there is not fod_data_cv\n", __func__);
 		}
 
+		p = of_get_property(np, "battery,fod_hero_5v_data", &len);
+		if (p) {
+			len = len / sizeof(u32);
+			pdata->fod_hero_5v_data = kzalloc(sizeof(*pdata->fod_hero_5v_data) * len, GFP_KERNEL);
+			ret = of_property_read_u32_array(np, "battery,fod_hero_5v_data",
+							 pdata->fod_hero_5v_data, len);
+			pdata->fod_data_check = 1;
+
+			for(i = 0; i <len; i++)
+				pr_info("%s fod Hero 5V data = 0x%x ",__func__,pdata->fod_hero_5v_data[i]);
+		} else {
+			pdata->fod_data_check = 0;
+			pr_err("%s there is not fod_hero_5v_data\n", __func__);
+		}
+
+		p = of_get_property(np, "battery,fod_hv_stand_data", &len);
+		if (p) {
+			len = len / sizeof(u32);
+			pdata->fod_hv_stand_data = kzalloc(sizeof(*pdata->fod_hv_stand_data) * len, GFP_KERNEL);
+			ret = of_property_read_u32_array(np, "battery,fod_hv_stand_data",
+							 pdata->fod_hv_stand_data, len);
+			pdata->fod_data_check = 1;
+
+			for(i = 0; i <len; i++)
+				pr_info("%s fod HV Stand data = 0x%x ",__func__,pdata->fod_hv_stand_data[i]);
+		} else {
+			pdata->fod_data_check = 0;
+			pr_err("%s there is not fod_hv_stand_data\n", __func__);
+		}		
+
 		ret = of_property_read_string(np,
 			"battery,wireless_charger_name", (char const **)&pdata->wireless_charger_name);
 		if (ret < 0)
@@ -2062,6 +2193,13 @@ static int p9220_chg_parse_dt(struct device *dev,
 			pdata->hv_vout_wa = 0;
 		}
 
+		ret = of_property_read_u32(np, "battery,unsupported_pack",
+						&pdata->unsupported_pack);
+		if (ret < 0) {
+			pr_info("%s: no need unsupported_pack. \n", __func__);
+			pdata->unsupported_pack = 0;
+		}
+
 		/* wpc_det */
 		ret = pdata->wpc_det = of_get_named_gpio_flags(np, "battery,wpc_det",
 				0, &irq_gpio_flags);
@@ -2092,7 +2230,8 @@ static ssize_t p9220_store_addr(struct device *dev,
 	struct p9220_charger_data *charger = container_of(psy, struct p9220_charger_data, psy_chg);
 	int x;
 	if (sscanf(buf, "0x%x\n", &x) == 1) {
-		charger->addr = x;
+		if (x >= 0 && x <= 0x8000)
+			charger->addr = x;
 	}
 	return count;
 }
@@ -2114,7 +2253,8 @@ static ssize_t p9220_store_size(struct device *dev,
 	struct p9220_charger_data *charger = container_of(psy, struct p9220_charger_data, psy_chg);
 	int x;
 	if (sscanf(buf, "%d\n", &x) == 1) {
-		charger->size = x;
+		if (x > 0  && x < (PAGE_SIZE/50))
+			charger->size = x;
 	}
 	return count;
 }
@@ -2244,6 +2384,8 @@ static int p9220_charger_probe(
 	charger->pdata->tx_status = 0;
 	charger->pdata->cs100_status = 0;
 	charger->pdata->vout_status = P9220_VOUT_0V;
+	charger->pdata->rx_vout = WIRELESS_VOUT_5V;
+	charger->pdata->pad_vout = PAD_VOUT_5V;
 	charger->pdata->opfq_cnt = 0;
 	charger->pdata->tx_data_cmd = 0;
 	charger->pdata->tx_data_val = 0;

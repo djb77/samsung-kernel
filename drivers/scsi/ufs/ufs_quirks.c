@@ -151,7 +151,7 @@ int ufs_get_device_info(struct ufs_hba *hba, struct ufs_card_info *card_data)
 
 	ufs_set_sec_unique_number(hba, str_desc_buf, desc_buf);
 
-	printk("%s: UNIQUE NUMBER = %s , LT: 0x%02x \n",
+	printk("%s: UFS = %s , LT: 0x%02x \n",
 		__FUNCTION__, hba->unique_number, health_buf[3]<<4|health_buf[4]);
 
 out:

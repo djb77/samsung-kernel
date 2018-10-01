@@ -559,6 +559,7 @@ static void esa_fw_snapshot(void)
 		memcpy(si.fwmem_sram_bak, si.sram, SRAM_FW_MAX);
 	} else {
 		esa_err("%s : Can't store seiren firmware\n", __func__);
+		set_fs(old_fs);
 		return;
 	}
 
@@ -811,9 +812,13 @@ static int esa_fw_startup(void)
 		esa_err("%s: fw not ready!!! (%d)\n", __func__,
 			readl(si.mailbox + LAST_CHECKPT));
 #endif
-		lpass_reset(LPASS_IP_CA5, LPASS_OP_RESET);
+		cfg = readl(si.sram); /* Save Reset Vector */
+		writel(0xE320F003, si.sram); /* Enter CA5 into WFI */
+		lpass_reset_toggle(LPASS_IP_CA5);
 		if (!check_esa_compr_state())
 			lpass_update_lpclock(LPCLK_CTRLID_OFFLOAD, false);
+		udelay(100);
+		writel(cfg, si.sram); /* Restore Reset Vector */
 		lpass_update_lpclock(LPCLK_CTRLID_LEGACY, false);
 		si.fw_use_dram = false;
 		return -EBUSY;

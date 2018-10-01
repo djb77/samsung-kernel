@@ -188,6 +188,11 @@ struct max77854_charger_data {
 	struct device           *dev;
 	struct i2c_client       *i2c;
 	struct i2c_client       *pmic_i2c;
+#if defined(CONFIG_MAX77854_FG_SENSING_WA)
+	struct i2c_client	*gtest;
+	struct i2c_client	*otp;
+	bool enable_fg_sensing_wa;
+#endif
 	struct mutex            charger_mutex;
 
 	struct max77854_platform_data *max77854_pdata;
@@ -204,7 +209,7 @@ struct max77854_charger_data {
 	struct delayed_work	chgin_init_work;	/*  chgin init work */
 	struct delayed_work wc_current_work;
 
-/* mutex */
+	/* mutex */
 	struct mutex irq_lock;
 	struct mutex ops_lock;
 

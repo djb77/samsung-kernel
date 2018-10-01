@@ -32,10 +32,13 @@
 #include <linux/smc.h>
 #include <linux/debugfs.h>
 #include <linux/of_gpio.h>
+#include <linux/sched.h>
 
 #include <media/exynos_mc.h>
 #include <video/mipi_display.h>
 #include <media/v4l2-subdev.h>
+
+#include <linux/sec_debug.h>
 
 #include "decon.h"
 #include "dsim.h"
@@ -137,6 +140,52 @@ static void vpp_dump(struct decon_device *decon);
 #ifdef CONFIG_USE_VSYNC_SKIP
 static atomic_t extra_vsync_wait;
 #endif /* CCONFIG_USE_VSYNC_SKIP */
+
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+extern unsigned int get_panel_bigdata(void);
+
+/* Gen Big Data Error for Decon's Bug
+
+return value
+1. 31 ~ 28 : decon_id
+2. 27 ~ 24 : decon eing pend register
+3. 23 ~ 16 : dsim underrun count
+4. 15 ~  8 : 0x0e panel register
+5.  7 ~  0 : 0x0a panel register
+*/
+
+unsigned int gen_decon_bug_bigdata(struct decon_device *decon)
+{
+	unsigned int value = 0, panel_value = 0;
+	unsigned int underrun_cnt = 0;
+
+	/* for decon id */
+	value = decon->id << 28;
+
+	if (decon->id == 0) {
+		/* for eint pend value */
+		value |= (decon->eint_pend_for_big & 0x0f) << 24;
+
+		/* for underrun count */
+		underrun_cnt = decon->underrun_stat.total_underrun_cnt;
+		if (underrun_cnt > 0xff) {
+			decon_info("DECON:INFO:%s:decon underrun exceed 1byte : %d\n",
+				__func__, underrun_cnt);
+			underrun_cnt = 0xff;
+		}
+		value |= underrun_cnt << 16;
+
+		/* for panel dump */
+		panel_value = get_panel_bigdata();
+		value |= panel_value & 0xffff;
+	}
+
+	decon_info("DECON:INFO:%s:big data : %x\n", __func__, value);
+	return value;
+}
+
+#endif
+
 
 void decon_dump(struct decon_device *decon)
 {
@@ -593,7 +642,6 @@ static inline bool is_decon_opaque_format(int format)
 	case DECON_PIXEL_FORMAT_ARGB_8888:
 	case DECON_PIXEL_FORMAT_ABGR_8888:
 		return false;
-
 	default:
 		return true;
 	}
@@ -1629,9 +1677,14 @@ int decon_wait_for_vsync(struct decon_device *decon, u32 timeout)
 
 	if (timeout && ret == 0) {
 		if (decon->eint_pend && decon->eint_mask) {
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+			decon->eint_pend_for_big = readl(decon->eint_pend);
 			decon_err("decon%d wait for vsync timeout(p:0x%x, m:0x%x)\n",
-				decon->id, readl(decon->eint_pend),
-				readl(decon->eint_mask));
+				decon->id, decon->eint_pend_for_big, readl(decon->eint_mask));
+#else
+			decon_err("decon%d wait for vsync timeout(p:0x%x, m:0x%x)\n",
+				decon->id, readl(decon->eint_pend),	readl(decon->eint_mask));
+#endif
 		} else {
 			decon_err("decon%d wait for vsync timeout\n", decon->id);
 		}
@@ -2416,6 +2469,7 @@ static int decon_reg_set_win_update_config(struct decon_device *decon, struct de
 	if (regs->need_update) {
 		decon_reg_ddi_partial_cmd(decon, &regs->update_win);
 		ret = decon_win_update_disp_config(decon, &regs->update_win);
+		DISP_SS_EVENT_LOG(DISP_EVT_PARTIAL_UPDATE, &decon->sd, ktime_set(0, 0));
 	}
 
 	return ret;
@@ -2634,6 +2688,28 @@ static int decon_dsu_dsc_reconfig(struct decon_device *decon)
 }
 #endif
 
+
+bool is_valid_debug_state(struct decon_device *decon)
+{
+	bool retVal = true;
+
+	if (!decon->id && decon->pdata->out_type == DECON_OUT_DSI) {
+		if(decon->state == DECON_STATE_ON) {
+#ifdef CONFIG_LCD_DOZE_MODE
+			if(decon->decon_doze != DECON_DOZE_STATE_NORMAL) {
+				retVal = false;
+			}
+#endif
+		} else {
+			retVal = false;
+		}
+	} else {
+		retVal = false;
+	}
+	return retVal;
+}
+
+
 static void __decon_update_regs(struct decon_device *decon, struct decon_reg_data *regs)
 {
 	unsigned short i, j;
@@ -2661,7 +2737,11 @@ static void __decon_update_regs(struct decon_device *decon, struct decon_reg_dat
 	decon->win_id[1] = -1;
 	decon->vpp_id[0] = -1;
 	decon->vpp_id[1] = -1;
-
+#ifdef CONFIG_CHECK_DECON_TIME
+	if(is_valid_debug_state(decon)) {
+		set_time_to_buffer(decon->debug_time, TIME_ENTER_VPP_SET);
+	}
+#endif
 	for (i = 0; i < decon->pdata->max_win; i++) {
 		struct decon_win *win = decon->windows[i];
 
@@ -2693,6 +2773,7 @@ static void __decon_update_regs(struct decon_device *decon, struct decon_reg_dat
 				}
 			}
 
+			DISP_SS_EVENT_LOG(DISP_EVT_START_VPP_SET, &decon->sd, ktime_set(0, 0));
 			vpp_ret = v4l2_subdev_call(sd, core, ioctl,
 					VPP_WIN_CONFIG, &regs->vpp_config[i]);
 			if (vpp_ret) {
@@ -2704,7 +2785,6 @@ static void __decon_update_regs(struct decon_device *decon, struct decon_reg_dat
 			}
 		}
 	}
-
 	if (decon->pdata->out_type == DECON_OUT_WB) {
 		/* Resizing related with data path */
 		if (decon->lcd_info->xres != regs->vpp_config[ODMA_WB].dst.w
@@ -2745,7 +2825,11 @@ static void __decon_update_regs(struct decon_device *decon, struct decon_reg_dat
 		decon_set_vpp_disp_min_lock(decon, regs);
 		decon_set_vpp_min_lock_early(decon, regs);
 #endif
-
+#ifdef CONFIG_CHECK_DECON_TIME
+	if(is_valid_debug_state(decon)) {
+		set_time_to_buffer(decon->debug_time, TIME_FINISH_VPP_SET);
+	}
+#endif
 	/* DMA protection(SFW) enable must be happen on vpp domain is alive */
 	decon_set_protected_content(decon, regs);
 	decon_cfw_buf_ctrl(decon, regs, SMC_DRM_SECBUF_CFW_PROT);
@@ -2758,6 +2842,7 @@ static void __decon_update_regs(struct decon_device *decon, struct decon_reg_dat
 	decon_to_psr_info(decon, &psr);
 	if (decon_reg_start(decon->id, &psr) < 0)
 		BUG();
+
 	DISP_SS_EVENT_LOG(DISP_EVT_TRIG_UNMASK, &decon->sd, ktime_set(0, 0));
 #ifdef CONFIG_DECON_MIPI_DSI_PKTGO
 	if (!decon->id) {
@@ -2768,14 +2853,131 @@ static void __decon_update_regs(struct decon_device *decon, struct decon_reg_dat
 #endif
 }
 
-static void decon_fence_wait(struct sync_fence *fence)
+int decon_print_fence_err(struct decon_device *decon, struct seq_file *s)
+
+{
+	int i, idx;
+	u64 time, before_time;
+	ktime_t cur_time = ktime_get();
+	struct disp_fence_err *fence_err;
+
+	idx = (decon->fence_err_cnt - 1) % DISP_FENCE_ERR_LIST_CNT;
+	//idx = idx < 0 ? DISP_FENCE_ERR_LIST_CNT - 1 : idx;
+
+	if (s != NULL)
+		seq_printf(s, "---------- Decon Fence Error History (Total Cnt: %d) ----------\n",
+			decon->fence_err_cnt);
+	else
+		decon_info("---------- Decon Fence Error History (Total Cnt: %d) ----------\n",
+			decon->fence_err_cnt);
+
+	if (decon->fence_err_cnt <= 0)
+		return 0;
+
+	fence_err = &decon->first_fence_err;
+	if (fence_err == NULL) {
+		decon_err("DECON:ERR:%s:first_fence_err is null\n", __func__);
+		goto exit_dump;
+	}
+	time = ktime_to_ms(fence_err->time);
+	before_time = ktime_to_ms(ktime_sub(cur_time, fence_err->time));
+	if (s != NULL)
+		seq_printf(s, "First Err: %s, Win: %d, Stat: %d, Time: %lld.%lldm, Before: %lld.%lldm\n",
+			fence_err->name, fence_err->win_id, fence_err->status,
+			time / 1000, time % 1000,
+			before_time / 1000, before_time % 1000);
+	else
+		decon_info("First Err: %s, Win: %d, Stat: %d, Time: %lld.%lldm, Before: %lld.%lldm\n",
+			fence_err->name, fence_err->win_id, fence_err->status,
+			time / 1000, time % 1000,
+			before_time / 1000, before_time % 1000);
+
+
+	for (i = idx ; i >= 0; i--) {
+		fence_err = &decon->fence_err_list[i];
+		if (fence_err == NULL) {
+			decon_err("DECON:ERR:%s:fence_err_list is null\n", __func__);
+			goto exit_dump;
+		}
+
+		time = ktime_to_ms(fence_err->time);
+		before_time = ktime_to_ms(ktime_sub(cur_time, fence_err->time));
+		if (s != NULL)
+			seq_printf(s, "Fence: %s, Win: %d, Stat: %d, Time: %lld.%lldm, Before: %lld.%lldm\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+
+		else
+			decon_info("Fence: %s, Win: %d, Stat: %d, Time: %lld.%lldm, Before: %lld.%lldm\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+
+	}
+
+	if(decon->fence_err_cnt <= DISP_FENCE_ERR_LIST_CNT)
+		goto exit_dump;
+
+	for (i = DISP_FENCE_ERR_LIST_CNT - 1; i >= idx + 1; i--) {
+		fence_err = &decon->fence_err_list[i];
+		if (fence_err == NULL) {
+			decon_err("DECON:ERR:%s:fence_err_list is null\n", __func__);
+			goto exit_dump;
+		}
+
+		time = ktime_to_ms(fence_err->time);
+		before_time = ktime_to_ms(ktime_sub(cur_time, fence_err->time));
+		if (s != NULL)
+			seq_printf(s, "Fence: %s, Win: %d, Stat: %d, Time: %lld.%lldm, Before: %lld.%lldm\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+
+		else
+			decon_info("Fence: %s, Win: %d, Stat: %d, Time: %lld.%lldm, Before: %lld.%lldm\n",
+				fence_err->name, fence_err->win_id, fence_err->status,
+				time / 1000, time % 1000,
+				before_time / 1000, before_time % 1000);
+	}
+exit_dump:
+	return 0;
+}
+
+
+void decon_fence_err_log(struct decon_device *decon, int idx, struct sync_fence *fence)
+
+{
+	int err_idx;
+	int namelen;
+
+	namelen = strlen(fence->name);
+	namelen = namelen <= 32 ? namelen : 32;
+
+	if (decon->fence_err_cnt == 0) {
+		decon->first_fence_err.win_id = idx;
+		decon->first_fence_err.time = ktime_get();
+		decon->first_fence_err.status = atomic_read(&fence->status);
+		strncpy(decon->first_fence_err.name, fence->name, namelen);
+	}
+
+	err_idx = decon->fence_err_cnt % DISP_FENCE_ERR_LIST_CNT;
+	decon->fence_err_list[err_idx].win_id = idx;
+	decon->fence_err_list[err_idx].time = ktime_get();
+	decon->fence_err_list[err_idx].status = atomic_read(&fence->status);
+	strncpy(decon->fence_err_list[err_idx].name, fence->name, namelen);
+
+	decon->fence_err_cnt += 1;
+
+	decon_print_fence_err(decon, NULL);
+}
+
+static int decon_fence_wait(struct sync_fence *fence)
 {
 	int err = sync_fence_wait(fence, 900);
-	if (err >= 0)
-		return;
-
 	if (err < 0)
 		decon_warn("error waiting on acquire fence: %d\n", err);
+	return err;
 }
 
 int decon_wait_until_size_match(struct decon_device *decon,
@@ -2888,6 +3090,7 @@ static void __decon_update_clear(struct decon_device *decon, struct decon_reg_da
 
 static void decon_update_regs(struct decon_device *decon, struct decon_reg_data *regs)
 {
+	int ret = 0;
 	struct decon_dma_buf_data old_dma_bufs[decon->pdata->max_win][MAX_BUF_PLANE_CNT];
 	int old_plane_cnt[MAX_DECON_WIN];
 	struct decon_mode_info psr;
@@ -2896,6 +3099,9 @@ static void decon_update_regs(struct decon_device *decon, struct decon_reg_data 
 	int vsync_wait_cnt = 0;
 #endif /* CONFIG_USE_VSYNC_SKIP */
 	char strace_str[20];
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+	unsigned int bug_err_num;
+#endif
 
 #if defined(CONFIG_LCD_HMT) || defined(CONFIG_LCD_DOZE_MODE)
 	struct dsim_device *dsim = NULL;
@@ -2905,6 +3111,11 @@ static void decon_update_regs(struct decon_device *decon, struct decon_reg_data 
 #endif
 	if( !decon->systrace_pid ) decon->systrace_pid = current->pid;
 	decon->tracing_mark_write( decon->systrace_pid, 'B', "decon_update_regs", 0 );
+#ifdef CONFIG_CHECK_DECON_TIME
+	if(is_valid_debug_state(decon)) {
+		set_time_to_buffer(decon->debug_time, TIME_ENTER_UPDATE_TH);
+	}
+#endif
 #ifdef CONFIG_FB_DSU
 	if (!decon->id && decon->pdata->out_type == DECON_OUT_DSI)
 		mutex_lock(&decon->dsu_lock);
@@ -2933,13 +3144,18 @@ static void decon_update_regs(struct decon_device *decon, struct decon_reg_data 
 			sprintf( strace_str, "decon_fence_wait%d", i );
 			decon->tracing_mark_write( decon->systrace_pid, 'B', strace_str, 0 );
 
-			decon_fence_wait(regs->dma_buf_data[i][0].fence);
-
+			ret = decon_fence_wait(regs->dma_buf_data[i][0].fence);
+			if(ret != 0)
+				decon_fence_err_log(decon, i,  regs->dma_buf_data[i][0].fence);
 			decon->tracing_mark_write( decon->systrace_pid, 'E', strace_str, 0 );
 		}
 	}
 	decon->tracing_mark_write( decon->systrace_pid, 'E', "decon_fence_wait", 0 );
-
+#ifdef CONFIG_CHECK_DECON_TIME
+	if(is_valid_debug_state(decon)) {
+		set_time_to_buffer(decon->debug_time, TIME_FINISH_FENCE_WAIT);
+	}
+#endif
 	decon_check_vpp_used(decon, regs);
 	DISP_SS_EVENT_LOG_WINCON(&decon->sd, regs);
 
@@ -2962,15 +3178,26 @@ static void decon_update_regs(struct decon_device *decon, struct decon_reg_data 
 #endif /* CONFIG_USE_VSYNC_SKIP */
 
 	decon_to_psr_info(decon, &psr);
+
+
 #if defined(CONFIG_LCD_HMT)
-	if ((regs->num_of_window) || ((dsim != NULL) && (dsim->priv.hmt_on))){
+#if defined(CONFIG_DECON_SELF_REFRESH)
+	if ((regs->num_of_window) || (decon->dsr_on) || ((dsim != NULL) && (dsim->priv.hmt_on))) {
+#else
+	if ((regs->num_of_window) || ((dsim != NULL) && (dsim->priv.hmt_on))) {
+#endif
+#else
+#if defined(CONFIG_DECON_SELF_REFRESH)
+	if (regs->num_of_window || decon->dsr_on) {
 #else
 	if (regs->num_of_window) {
+#endif
 #endif
 #if defined(CONFIG_LCD_HMT)
 		if ((dsim != NULL) && (dsim->priv.hmt_prev_status == 1))
 			dsim->priv.hmt_prev_status = 0;
 #endif
+		DISP_SS_EVENT_LOG(DISP_EVT_ENT_UPDATE, &decon->sd, ktime_set(0, 0));
 		__decon_update_regs(decon, regs);
 	} else {
 
@@ -3000,7 +3227,6 @@ static void decon_update_regs(struct decon_device *decon, struct decon_reg_data 
 #endif
 
 		decon->frame_start_cnt_target = decon->frame_start_cnt_cur + 1;
-
 #ifdef CONFIG_DSIM_ESD_REMOVE_DISP_DET
 		ret_vsync = decon_wait_for_vsync(decon, VSYNC_TIMEOUT_MSEC);
 #else
@@ -3011,6 +3237,16 @@ static void decon_update_regs(struct decon_device *decon, struct decon_reg_data 
 		decon_wait_for_vstatus(decon, 50);
 		if (decon_reg_wait_for_update_timeout(decon->id, SHADOW_UPDATE_TIMEOUT) < 0) {
 			decon_dump(decon);
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+			bug_err_num = gen_decon_bug_bigdata(decon);
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+			sec_debug_set_extra_info_decon(bug_err_num);
+#endif
+#endif
+#ifdef CONFIG_CHECK_DECON_TIME
+			show_debug_time(decon->debug_time, NULL);
+#endif
+
 #ifdef CONFIG_DSIM_ESD_REMOVE_DISP_DET
 			if (decon->state == DECON_STATE_ON && ret_vsync == -ETIMEDOUT)
 			{
@@ -3049,7 +3285,11 @@ static void decon_update_regs(struct decon_device *decon, struct decon_reg_data 
 
 		/* wait until decon & dsim size matches */
 		decon_wait_until_size_match(decon, decon->pdata->out_idx, 50 * 1000); /* 50ms */
-
+#ifdef CONFIG_CHECK_DECON_TIME
+		if(is_valid_debug_state(decon)) {
+			set_time_to_buffer(decon->debug_time, TIME_FINISH_UPDATE_WAIT);
+		}
+#endif
 		if (!decon->id) {
 			/* clear I80 Framedone pending interrupt */
 			decon_write_mask(decon->id, INTERRUPT_PENDING, ~0,
@@ -3058,10 +3298,19 @@ static void decon_update_regs(struct decon_device *decon, struct decon_reg_data 
 		}
 
 #ifdef CONFIG_LCD_HMT
+#if defined(CONFIG_DECON_SELF_REFRESH)
+		if (!decon->id && decon->pdata->trig_mode == DECON_HW_TRIG
+			&& decon->pdata->out_type == DECON_OUT_DSI && dsim->priv.hmt_on == 0 && !decon->dsr_on)
+#else
 		if (!decon->id && decon->pdata->trig_mode == DECON_HW_TRIG
 			&& decon->pdata->out_type == DECON_OUT_DSI && dsim->priv.hmt_on == 0)
+#endif
+#else
+#if defined(CONFIG_DECON_SELF_REFRESH)
+		if (!decon->id && decon->pdata->trig_mode == DECON_HW_TRIG && !decon->dsr_on)
 #else
 		if (!decon->id && decon->pdata->trig_mode == DECON_HW_TRIG)
+#endif
 #endif
 			decon_reg_set_trigger(decon->id, &psr, DECON_TRIG_DISABLE);
 	}
@@ -3088,6 +3337,14 @@ end:
 
 	decon_cfw_buf_release(decon, regs);
 	decon_vpp_stop(decon, false);
+#ifdef CONFIG_CHECK_DECON_TIME
+	if(is_valid_debug_state(decon)) {
+		set_time_to_buffer(decon->debug_time, TIME_FINISH_UPDATE_TH);
+		if(check_diff_time(decon->debug_time)) {
+			pr_info("%s over time diff\n", __func__);
+		}
+	}
+#endif
 #if defined(CONFIG_EXYNOS8890_BTS_OPTIMIZATION)
 	/* NOTE: Must be called after VPP_STOP
 	 * update min lock(MIF, INT, DISP) */
@@ -3103,7 +3360,7 @@ end:
 		dsim->req_display_on = true;
 		call_panel_ops(dsim, displayon, dsim);
 		decon->req_display_on = 0;
-}
+	}
 #endif
 
 #ifdef CONFIG_FB_DSU
@@ -3200,11 +3457,11 @@ static void decon_dsu_handler(struct decon_device *decon)
 	/* 1 frame delay after Display-off : change of PPS is showing at once. therefore, PPS change must be next frame of display-off */
 	v4l2_subdev_call(decon->output_sd, core, ioctl, DSIM_IOC_DISPLAY_ONOFF, (void*) 0);
 	usleep_range(17000, 17000);
-#endif	
+#endif
 #ifdef CONFIG_FB_DSU_REG_LOCK
 	decon->dsu_lock_cnt = 2;
 	v4l2_subdev_call(decon->output_sd, core, ioctl, DSIM_IOC_REG_LOCK, (void*) 1);
-#endif	
+#endif
 #endif
 
 	loop_out = false;
@@ -3412,10 +3669,10 @@ static int decon_set_win_config(struct decon_device *decon,
 	if( decon->dsu_lock_cnt > 0  ) {
 		decon->dsu_lock_cnt--;
 		if( decon->dsu_lock_cnt == 0 ) {
-#ifdef CONFIG_FB_DSU_REG_LOCK			
+#ifdef CONFIG_FB_DSU_REG_LOCK
 			v4l2_subdev_call(decon->output_sd, core, ioctl, DSIM_IOC_REG_LOCK, (void*) 0);
 #endif
-#ifdef CONFIG_FB_DSU_NOT_SEAMLESS			
+#ifdef CONFIG_FB_DSU_NOT_SEAMLESS
 			v4l2_subdev_call(decon->output_sd, core, ioctl, DSIM_IOC_DISPLAY_ONOFF, (void*) 1);
 #endif
 		}
@@ -3917,6 +4174,9 @@ static int decon_ioctl(struct fb_info *info, unsigned int cmd,
 	struct decon_device *decon = win->decon;
 	int ret = 0;
 	u32 crtc;
+#ifdef CONFIG_DECON_SELF_REFRESH
+	bool dsr_enable;
+#endif
 #ifdef CONFIG_LCD_DOZE_MODE
 	u32 pwr_mode;
 #endif
@@ -4044,6 +4304,22 @@ static int decon_ioctl(struct fb_info *info, unsigned int cmd,
 		}
 		break;
 #endif
+#ifdef CONFIG_DECON_SELF_REFRESH
+	case S3CFB_DECON_SELF_REFRESH:
+		if (get_user(dsr_enable, (bool __user *)arg)) {
+			ret = -EFAULT;
+			break;
+		}
+		if (dsr_enable) {
+			decon_lpd_block_exit(decon);
+			DISP_SS_EVENT_LOG(DISP_EVT_DSR_ENABLE, &decon->sd, ktime_set(0, 0));
+		} else {
+			decon_lpd_unblock(decon);
+			DISP_SS_EVENT_LOG(DISP_EVT_DSR_DISABLE, &decon->sd, ktime_set(0, 0));
+		}
+		decon->dsr_on = dsr_enable;
+		break;
+#endif
 	default:
 		decon_err("%s : invalied command\n", __func__);
 		ret = -ENOTTY;
@@ -4056,6 +4332,7 @@ static int decon_ioctl(struct fb_info *info, unsigned int cmd,
 
 	return ret;
 }
+
 
 int decon_release(struct fb_info *info, int user)
 {
@@ -5037,6 +5314,59 @@ static const struct file_operations decon_event_fops = {
 };
 #endif
 
+#ifdef CONFIG_DUMPSTATE_LOGGING
+static void decon_show_debug_info(struct decon_device *decon, struct seq_file *s)
+{
+	if (s != NULL)
+		seq_printf(s, "Current update list count : %d\n",
+			decon->update_regs_list_cnt);
+	else
+		decon_info("Current update list count : %d\n",
+			decon->update_regs_list_cnt);
+
+	if (s != NULL)
+		seq_printf(s, "Current timeline max : %d\n",
+			decon->timeline_max);
+	else
+		decon_info("Current timeline max : %d\n",
+			decon->timeline_max);
+
+	if (s != NULL)
+		seq_printf(s, "Frame Count : %d\n",
+			decon->frame_start_cnt_cur);
+	else
+		decon_info("Frame Count : %d\n",
+			decon->frame_start_cnt_cur);
+}
+
+
+
+static int decon_debug_info_show(struct seq_file *s, void *unused)
+{
+	struct decon_device *decon = s->private;
+
+	decon_show_debug_info(decon, s);
+#ifdef CONFIG_CHECK_DECON_TIME
+	show_debug_time(decon->debug_time, s);
+#endif
+	return 0;
+}
+
+static int decon_debug_info_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, decon_debug_info_show, inode->i_private);
+}
+
+static const struct file_operations decon_debug_fops = {
+	.open = decon_debug_info_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
+#endif
+
+
 /* --------- DRIVER INITIALIZATION ---------- */
 static int decon_probe(struct platform_device *pdev)
 {
@@ -5218,6 +5548,12 @@ static int decon_probe(struct platform_device *pdev)
 	decon->debug_event = debugfs_create_file(debug_name, 0444,
 						decon->debug_root,
 						decon, &decon_event_fops);
+#endif
+#ifdef CONFIG_DUMPSTATE_LOGGING
+	if (decon->id == 0) {
+		decon->debug_info = debugfs_create_file("debug", 0444,
+				decon->debug_root, decon, &decon_debug_fops);
+		}
 #endif
 
 	/* register internal and external DECON as entity */
@@ -5502,6 +5838,15 @@ decon_rest_init:
 		decon_esd_enable_interrupt(decon);
 
 	decon->force_fullupdate = 0;
+	decon->fence_err_cnt = 0;
+#ifdef CONFIG_CHECK_DECON_TIME
+	decon->debug_time = devm_kzalloc(dev, sizeof(struct time_buffer), GFP_KERNEL);
+	if (decon->debug_time == NULL) {
+		decon_err("no memory for decon debug time\n");
+		return -ENOMEM;
+	}
+	init_debug_buffer(decon->debug_time);
+#endif
 	decon_info("decon%d registered successfully", decon->id);
 
 	return 0;
@@ -5552,7 +5897,6 @@ static int decon_remove(struct platform_device *pdev)
 		decon_release_windows(decon->windows[i]);
 
 	debugfs_remove_recursive(decon->debug_root);
-	kfree(decon);
 
 	decon_info("remove sucessful\n");
 	return 0;
@@ -5585,6 +5929,7 @@ static struct platform_driver decon_driver __refdata = {
 		.owner	= THIS_MODULE,
 		.pm	= &decon_pm_ops,
 		.of_match_table = of_match_ptr(decon_device_table),
+		.suppress_bind_attrs = true,
 	}
 };
 

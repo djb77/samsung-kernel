@@ -1123,8 +1123,10 @@ int bts_update_winlayer(unsigned int layers)
 		freq = 845000;
 		break;
 	case 7:
-	case 8:
 		freq = 1014000;
+		break;
+	case 8:
+		freq = 1352000;
 		break;
 	default:
 		break;

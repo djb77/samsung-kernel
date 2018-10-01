@@ -521,6 +521,8 @@ static void dw_mci_exynos_set_ios(struct dw_mci *host, struct mmc_ios *ios)
 			dw_mci_card_int_hwacg_ctrl(host, HWACG_Q_ACTIVE_DIS);
 	}
 
+	host->cclk_in = wanted;
+
 	/* Set clock timing for the requested speed mode*/
 	dw_mci_exynos_set_clksel_timing(host, clksel);
 
@@ -1292,14 +1294,203 @@ static ssize_t sd_detection_cnt_show(struct device *dev,
 	return  sprintf(buf, "%u", host->card_detect_cnt);
 }
 
+static ssize_t sd_detection_maxmode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct dw_mci *host = dev_get_drvdata(dev);
+	const char *uhs_bus_speed_mode = "";
+	struct device_node *np = host->dev->of_node;
+	
+	if (of_find_property(np, "sd-uhs-sdr104", NULL))
+		uhs_bus_speed_mode = "SDR104";
+	else if (of_find_property(np, "sd-uhs-ddr50", NULL))
+		uhs_bus_speed_mode = "DDR50";
+	else if (of_find_property(np, "sd-uhs-sdr50", NULL))
+		uhs_bus_speed_mode = "SDR50";
+	else if (of_find_property(np, "sd-uhs-sdr25", NULL))
+		uhs_bus_speed_mode = "SDR25";
+	else if (of_find_property(np, "sd-uhs-sdr12", NULL))
+		uhs_bus_speed_mode = "SDR12";
+	else
+		uhs_bus_speed_mode = "HS";
+
+	dev_info(host->dev, "%s : Max supported Host Speed Mode = %s\n", __func__, uhs_bus_speed_mode);
+	return  sprintf(buf, "%s\n", uhs_bus_speed_mode);
+}
+static ssize_t sd_detection_curmode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct dw_mci *host = dev_get_drvdata(dev);
+
+	const char *uhs_bus_speed_mode = "";
+	static const char *const uhs_speeds[] = {
+		[UHS_SDR12_BUS_SPEED] 	= "SDR12",
+		[UHS_SDR25_BUS_SPEED] 	= "SDR25",
+		[UHS_SDR50_BUS_SPEED] 	= "SDR50",
+		[UHS_SDR104_BUS_SPEED] 	= "SDR104",
+		[UHS_DDR50_BUS_SPEED] 	= "DDR50",
+	};
+
+	if (host->cur_slot && host->cur_slot->mmc && host->cur_slot->mmc->card) {
+		if (mmc_card_uhs(host->cur_slot->mmc->card))
+			uhs_bus_speed_mode = uhs_speeds[host->cur_slot->mmc->card->sd_bus_speed];
+		else
+			uhs_bus_speed_mode = "HS";
+		dev_info(host->dev, "%s : Current SD Card Speed = %s\n", __func__, uhs_bus_speed_mode);
+	} else
+		uhs_bus_speed_mode = "No Card";
+	return  sprintf(buf, "%s\n", uhs_bus_speed_mode);
+}
+
+static ssize_t sdcard_summary_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct dw_mci *host = dev_get_drvdata(dev);
+	struct mmc_card *card;
+	const char *uhs_bus_speed_mode = "";
+	static const char *const uhs_speeds[] = {
+		[UHS_SDR12_BUS_SPEED] = "SDR12",
+		[UHS_SDR25_BUS_SPEED] = "SDR25",
+		[UHS_SDR50_BUS_SPEED] = "SDR50",
+		[UHS_SDR104_BUS_SPEED] = "SDR104",
+		[UHS_DDR50_BUS_SPEED] = "DDR50",
+	};
+	static const char *const unit[] = {"KB", "MB", "GB", "TB"};
+	unsigned int size, serial;
+	int	digit = 1;
+	char ret_size[6];
+
+	if (host->cur_slot && host->cur_slot->mmc && host->cur_slot->mmc->card) {
+		card = host->cur_slot->mmc->card;
+
+		/* MANID */
+		/* SERIAL */
+		serial = card->cid.serial & (0x0000FFFF);
+
+		/*SIZE*/
+		if (card->csd.read_blkbits == 9)			/* 1 Sector = 512 Bytes */
+			size = (card->csd.capacity) >> 1;
+		else if (card->csd.read_blkbits == 11)	/* 1 Sector = 2048 Bytes */
+			size = (card->csd.capacity) << 1;
+		else								/* 1 Sector = 1024 Bytes */
+			size = card->csd.capacity;
+
+		if (size >= 380000000 && size <= 410000000) {	/* QUIRK 400GB SD Card */ 
+			sprintf(ret_size, "400GB"); 
+		} else if(size >= 190000000 && size <= 210000000) {	/* QUIRK 200GB SD Card */
+			sprintf(ret_size, "200GB");
+		} else {
+			while ((size >> 1) > 0) {
+				size = size >> 1;
+				digit++;
+			}
+			sprintf(ret_size, "%d%s", 1 << (digit%10), unit[digit/10]);
+		}
+
+		/* SPEEDMODE */
+		if (mmc_card_uhs(card))
+			uhs_bus_speed_mode = uhs_speeds[card->sd_bus_speed];
+		else if (mmc_card_hs(card))
+			uhs_bus_speed_mode = "HS";
+		else
+			uhs_bus_speed_mode = "DS";
+
+		/* SUMMARY */
+		dev_info(host->dev, "MANID : 0x%02X, SERIAL : %04X, SIZE : %s, SPEEDMODE : %s\n",
+				card->cid.manfid, serial, ret_size, uhs_bus_speed_mode);
+		return sprintf(buf, "\"MANID\":\"0x%02X\",\"SERIAL\":\"%04X\""\
+				",\"SIZE\":\"%s\",\"SPEEDMODE\":\"%s\"\n",
+				card->cid.manfid, serial, ret_size, uhs_bus_speed_mode);
+	} else {
+		/* SUMMARY : No SD Card Case */
+		dev_info(host->dev, "%s : No SD Card\n", __func__);
+		return sprintf(buf, "\"MANID\":\"NoCard\",\"SERIAL\":\"NoCard\""\
+			",\"SIZE\":\"NoCard\",\"SPEEDMODE\":\"NoCard\"\n");
+	}
+}
+
+static struct device *sd_info_cmd_dev;
+static ssize_t sd_count_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{	
+	struct dw_mci *host = dev_get_drvdata(dev);
+	struct mmc_card *cur_card = NULL;
+	struct mmc_card_error_log *err_log;
+	u64 total_cnt = 0;
+	int len = 0;
+	int i = 0;
+
+	if (host->cur_slot && host->cur_slot->mmc && host->cur_slot->mmc->card)
+		cur_card = host->cur_slot->mmc->card;
+	else {
+		len = snprintf(buf, PAGE_SIZE, "no card\n");
+		goto out;
+	}
+
+	err_log = cur_card->err_log;
+
+	for (i = 0; i < 6; i++) {
+		if(total_cnt < MAX_CNT_U64)
+			total_cnt += err_log[i].count;
+	}
+	len = snprintf(buf, PAGE_SIZE, "%lld\n", total_cnt);
+
+out:
+	return len;
+}
+
+static struct device *sd_data_cmd_dev;
+static ssize_t sd_data_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{	
+	struct dw_mci *host = dev_get_drvdata(dev);
+	struct mmc_card *cur_card = NULL;
+	struct mmc_card_error_log *err_log;
+	u64 total_c_cnt = 0;
+	u64 total_t_cnt = 0;
+	int len = 0;
+	int i = 0;
+
+	if (host->cur_slot && host->cur_slot->mmc && host->cur_slot->mmc->card)
+		cur_card = host->cur_slot->mmc->card;
+	else {
+		len = snprintf(buf, PAGE_SIZE,
+			"\"GE\":\"0\",\"CC\":\"0\",\"ECC\":\"0\",\"WP\":\"0\"\
+,\"OOR\":\"0\",\"CRC\":\"0\",\"TMO\":\"0\"\n");
+		goto out;
+	}
+
+	err_log = cur_card->err_log;
+
+	for (i = 0; i < 6; i++) {
+		if(err_log[i].err_type == -EILSEQ && total_c_cnt < MAX_CNT_U64)
+			total_c_cnt += err_log[i].count;	
+		if(err_log[i].err_type == -ETIMEDOUT && total_t_cnt < MAX_CNT_U64)
+			total_t_cnt += err_log[i].count;		
+	}	
+
+	len = snprintf(buf, PAGE_SIZE,
+			"\"GE\":\"%d\",\"CC\":\"%d\",\"ECC\":\"%d\",\"WP\":\"%d\"\
+,\"OOR\":\"%d\",\"CRC\":\"%lld\",\"TMO\":\"%lld\"\n",
+			err_log[0].ge_cnt, err_log[0].cc_cnt, err_log[0].ecc_cnt, err_log[0].wp_cnt,
+			err_log[0].oor_cnt, total_c_cnt, total_t_cnt); 
+out:
+	return len;
+}
+
 static DEVICE_ATTR(status, 0444, sd_detection_cmd_show, NULL);
 static DEVICE_ATTR(cd_cnt, 0444, sd_detection_cnt_show, NULL);
+static DEVICE_ATTR(max_mode, 0444, sd_detection_maxmode_show, NULL);
+static DEVICE_ATTR(current_mode, 0444, sd_detection_curmode_show, NULL);
+static DEVICE_ATTR(sdcard_summary, 0444, sdcard_summary_show, NULL);
+static DEVICE_ATTR(sd_count, 0444, sd_count_show, NULL);
+static DEVICE_ATTR(sd_data, 0444, sd_data_show, NULL);
 
 static int dw_mci_exynos_request_ext_irq(struct dw_mci *host,
 		irq_handler_t func)
 {
-	 struct dw_mci_exynos_priv_data *priv = host->priv;
-	 int ext_cd_irq = 0;
+	struct dw_mci_exynos_priv_data *priv = host->priv;
+	int ext_cd_irq = 0;
 	if ((priv->sec_sd_slot_type) >= 0) {
 		if (!sd_detection_cmd_dev) {
 			sd_detection_cmd_dev = sec_device_create(host, "sdcard");
@@ -1313,23 +1504,53 @@ static int dw_mci_exynos_request_ext_irq(struct dw_mci *host,
 			if (device_create_file(sd_detection_cmd_dev,
 						&dev_attr_cd_cnt) < 0)
 				pr_err("Fail to create cd_cnt sysfs file\n");
+
+			if (device_create_file(sd_detection_cmd_dev,
+						&dev_attr_max_mode) < 0)
+				pr_err("Fail to create max_mode sysfs file\n");
+
+			if (device_create_file(sd_detection_cmd_dev,
+						&dev_attr_current_mode) < 0)
+				pr_err("Fail to create current_mode sysfs file\n");
+
+			if (device_create_file(sd_detection_cmd_dev,
+						&dev_attr_sdcard_summary) < 0)
+				pr_err("Fail to create sdcard_summary sysfs file\n");
+		}
+
+		if (!sd_info_cmd_dev) {
+			sd_info_cmd_dev = sec_device_create(host, "sdinfo");
+			if (IS_ERR(sd_info_cmd_dev))
+				pr_err("Fail to create sysfs dev\n");
+			if (device_create_file(sd_info_cmd_dev,
+						&dev_attr_sd_count) < 0)
+				pr_err("Fail to create status sysfs file\n");
+		}
+		if (!sd_data_cmd_dev) {
+			sd_data_cmd_dev = sec_device_create(host, "sddata");
+			if (IS_ERR(sd_data_cmd_dev))
+				pr_err("Fail to create sysfs dev\n");
+			if (device_create_file(sd_data_cmd_dev,
+						&dev_attr_sd_data) < 0)
+				pr_err("Fail to create status sysfs file\n");
 		}
 	}
-	 if (gpio_is_valid(priv->cd_gpio) &&
-			 !gpio_request(priv->cd_gpio, "DWMCI_EXT_CD")) {
-		 ext_cd_irq = gpio_to_irq(priv->cd_gpio);
-		 if (ext_cd_irq &&
+
+	if (gpio_is_valid(priv->cd_gpio) &&
+			!gpio_request(priv->cd_gpio, "DWMCI_EXT_CD")) {
+		ext_cd_irq = gpio_to_irq(priv->cd_gpio);
+		if (ext_cd_irq &&
 				devm_request_irq(host->dev, ext_cd_irq, func,
 					IRQF_TRIGGER_RISING |
 					IRQF_TRIGGER_FALLING |
 					IRQF_ONESHOT,
 					"tflash_det", host) == 0) {
-			 dev_warn(host->dev, "success to request irq for card detect.\n");
-			 enable_irq_wake(ext_cd_irq);
-		 } else
-			 dev_warn(host->dev, "cannot request irq for card detect.\n");
-	 }
-	 return 0;
+			dev_warn(host->dev, "success to request irq for card detect.\n");
+			enable_irq_wake(ext_cd_irq);
+		} else
+			dev_warn(host->dev, "cannot request irq for card detect.\n");
+	}
+	return 0;
 }
 
 static int dw_mci_exynos_check_cd(struct dw_mci *host)
@@ -1411,6 +1632,7 @@ static struct platform_driver dw_mci_exynos_pltfm_driver = {
 		.name		= "dwmmc_exynos",
 		.of_match_table	= dw_mci_exynos_match,
 		.pm		= &dw_mci_exynos_pmops,
+		.suppress_bind_attrs = true,
 	},
 };
 

@@ -46,6 +46,10 @@ config PANEL_S6E3HF4_WQHD
 	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSI
 	tristate "S6E3HF4 AMOLED SUPPORT WQHD RESOLUTION"
 
+config PANEL_S6E3HF4_WQHD_HAECHI
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSI
+	tristate "S6E3HF4 AMOLED SUPPORT WQHD RESOLUTION FOR HAECHI"
+
 config PANEL_S6E3HA5_WQHD
 	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSI
 	tristate "S6E3HA5 AMOLED SUPPORT WQHD RESOLUTION"
@@ -57,6 +61,10 @@ config PANEL_S6E3FA2_FHD
 config PANEL_S6E3HF2_WQXGA
 	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSI
 	tristate "S6E3HF2 AMOLED SUPPORT WQXGA RESOLUTION"
+
+config PANEL_S6E3HF4_WQXGA
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSI
+	tristate "S6E3HF4 AMOLED SUPPORT WQXGA RESOLUTION"
 
 config PANEL_S6E3HA3_DYNAMIC
 	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSI
@@ -85,4 +93,29 @@ config LCD_BURNIN_CORRECTION
 
 config VDDR_1p5V_ALPM
 	tristate "Grace : VDDR 1.5V in AOD mode"
+	default n
+
+config DISPLAY_USE_INFO
+	depends on EXYNOS_DECON_LCD
+	tristate "Support display use info logging"
+	default n
+
+config PANEL_CALL_MDNIE
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSI
+	tristate "Support panel call mdnie update"
+	default n
+
+config SUPPORT_POC_FLASH
+	depends on EXYNOS_DECON_LCD && PANEL_S6E3HA5_WQHD
+	tristate "Support display poc flash"
+	default n
+
+config POC_GRACE
+	depends on EXYNOS_DECON_LCD && PANEL_S6E3HA5_WQHD && SUPPORT_POC_FLASH
+	tristate "Support poc for grace"
+	default n
+
+config PANEL_GRAY_SPOT
+	depends on EXYNOS_DECON_LCD
+	tristate "Support gray spot test"
 	default n

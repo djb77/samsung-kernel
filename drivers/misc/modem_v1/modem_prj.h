@@ -221,7 +221,11 @@ static inline bool sipc_ps_ch(u8 ch)
 #define sipc5_is_not_reserved_channel(ch) \
 	((ch) != 0 && (ch) != 5 && (ch) != 6 && (ch) != 27 && (ch) != 255)
 
+#if defined(CONFIG_MODEM_IF_LEGACY_QOS) || defined(CONFIG_MODEM_IF_QOS)
 #define MAX_NDEV_TX_Q 2
+#else
+#define MAX_NDEV_TX_Q 1
+#endif
 #define MAX_NDEV_RX_Q 1
 /* mark value for high priority packet, hex QOSH */
 #define RAW_HPRIO	0x514F5348
@@ -411,14 +415,10 @@ struct link_device {
 	struct modem_data *mdm_data;
 
 	/* TX queue of socket buffers */
-	struct sk_buff_head sk_fmt_tx_q;
-	struct sk_buff_head sk_raw_tx_q;
-	struct sk_buff_head *skb_txq[MAX_SIPC_DEVICES];
+	struct sk_buff_head skb_txq[MAX_SIPC_MAP];
 
 	/* RX queue of socket buffers */
-	struct sk_buff_head sk_fmt_rx_q;
-	struct sk_buff_head sk_raw_rx_q;
-	struct sk_buff_head *skb_rxq[MAX_SIPC_DEVICES];
+	struct sk_buff_head skb_rxq[MAX_SIPC_MAP];
 
 	/* Stop/resume control for network ifaces */
 	spinlock_t netif_lock;
@@ -696,5 +696,6 @@ static inline bool rx_possible(struct modem_ctl *mc)
 }
 
 int sipc5_init_io_device(struct io_device *iod);
+void sipc5_deinit_io_device(struct io_device *iod);
 
 #endif

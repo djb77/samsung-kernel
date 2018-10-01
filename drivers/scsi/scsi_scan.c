@@ -290,9 +290,9 @@ static struct scsi_device *scsi_alloc_sdev(struct scsi_target *starget,
 
 #ifdef CONFIG_JOURNAL_DATA_TAG
 	if (shost->journal_tag == JOURNAL_TAG_ON)
-		queue_flag_set(QUEUE_FLAG_JOURNAL_TAG, sdev->request_queue);
+		queue_flag_set_unlocked(QUEUE_FLAG_JOURNAL_TAG, sdev->request_queue);
 	else
-		queue_flag_clear(QUEUE_FLAG_JOURNAL_TAG, sdev->request_queue);
+		queue_flag_clear_unlocked(QUEUE_FLAG_JOURNAL_TAG, sdev->request_queue);
 #endif
 
 	scsi_sysfs_device_initialize(sdev);

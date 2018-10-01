@@ -217,19 +217,19 @@ static void max77854_rgb_set_state(struct led_classdev *led_cdev,
 		/* apply brightness ratio for optimize each led brightness*/
 		switch(n) {
 		case RED:
-			if (device_type == 2 && led_lowpower_mode == 1)
+			if ((device_type == 2 || device_type == 3) && led_lowpower_mode == 1)
 				brightness = brightness * brightness_ratio_r_low / 100;
 			else
 				brightness = brightness * brightness_ratio_r / 100;
 			break;
 		case GREEN:
-			if (device_type == 2 && led_lowpower_mode == 1)
+			if ((device_type == 2 || device_type == 3) && led_lowpower_mode == 1)
 				brightness = brightness * brightness_ratio_g_low / 100;
 			else
 				brightness = brightness * brightness_ratio_g / 100;
 			break;
 		case BLUE:
-			if (device_type == 2 && led_lowpower_mode == 1)
+			if ((device_type == 2 || device_type == 3) && led_lowpower_mode == 1)
 				brightness = brightness * brightness_ratio_b_low / 100;
 			else
 				brightness = brightness * brightness_ratio_b / 100;
@@ -538,7 +538,7 @@ static struct max77854_rgb_platform_data
 	}
 	pr_info("leds-max77854-rgb: %s, brightness_ratio_b = %x\n", __func__, brightness_ratio_b);
 
-	if (device_type == 2) {
+	if (device_type == 2 || device_type == 3) {
 		/* get led red brightness ratio lowpower */
 		ret = of_property_read_u32(np, br_ratio_r_low, &temp);
 		if (IS_ERR_VALUE(ret)) {

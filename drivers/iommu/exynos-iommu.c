@@ -653,15 +653,12 @@ static void show_fault_information(struct sysmmu_drvdata *drvdata,
 	unsigned int info;
 	phys_addr_t pgtable;
 	int fault_id = SYSMMU_FAULT_ID(flags);
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
 	char temp_buf[SZ_128];
+#endif
 
 	pgtable = __raw_readl(drvdata->sfrbase + REG_PT_BASE_PPN);
 	pgtable <<= PAGE_SHIFT;
-
-	snprintf(temp_buf, SZ_128, "%s %s %s at %#010lx (page table @ %pa)",
-		dev_name(drvdata->sysmmu),
-		(flags & IOMMU_FAULT_WRITE) ? "WRITE" : "READ",
-		sysmmu_fault_name[fault_id], fault_addr, &pgtable);
 
 	pr_auto_once(4);
 	pr_auto(ASL4, "----------------------------------------------------------\n");
@@ -670,8 +667,12 @@ static void show_fault_information(struct sysmmu_drvdata *drvdata,
 		(flags & IOMMU_FAULT_WRITE) ? "WRITE" : "READ",
 		sysmmu_fault_name[fault_id], fault_addr, &pgtable);
 
-#ifdef CONFIG_SEC_DEBUG
-	sec_debug_store_extra_buf(INFO_SYSMMU, "%s", temp_buf);	
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	snprintf(temp_buf, SZ_128, "%s %s %s at %#010lx (%pa)",
+		dev_name(drvdata->sysmmu),
+		(flags & IOMMU_FAULT_WRITE) ? "WRITE" : "READ",
+		sysmmu_fault_name[fault_id], fault_addr, &pgtable);
+	sec_debug_set_extra_info_sysmmu(temp_buf);
 #endif
 
 	if (fault_id == SYSMMU_FAULT_UNKNOWN) {
@@ -694,6 +695,7 @@ static void show_fault_information(struct sysmmu_drvdata *drvdata,
 	if (fault_id == SYSMMU_FAULT_PTW_ACCESS){
 		pr_auto(ASL4, "System MMU has failed to access page table\n");
 	}
+
 	if (!pfn_valid(pgtable >> PAGE_SHIFT)) {
 		pr_auto(ASL4, "Page table base is not in a valid memory region\n");
 	} else {

@@ -4,7 +4,7 @@
  *
  * Definitions subject to change without notice.
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -477,9 +477,10 @@
 #define WAPI_AUTH_UNSPECIFIED	0x0400	/* over AS */
 #define WAPI_AUTH_PSK		0x0800	/* Pre-shared key */
 #endif /* BCMWAPI_WAI || BCMWAPI_WPI */
-#define WPA2_AUTH_MFP           0x1000  /* MFP (11w) in contrast to CCX */
-#define WPA2_AUTH_TPK		0x2000 	/* TDLS Peer Key */
-#define WPA2_AUTH_FT		0x4000 	/* Fast Transition. */
+#define WPA2_AUTH_1X_SHA256	0x1000  /* 1X with SHA256 key derivation */
+#define WPA2_AUTH_TPK		0x2000	/* TDLS Peer Key */
+#define WPA2_AUTH_FT		0x4000	/* Fast Transition. */
+#define WPA2_AUTH_PSK_SHA256	0x8000	/* PSK with SHA256 key derivation */
 #define WPA_AUTH_PFN_ANY	0xffffffff	/* for PFN, match only ssid */
 
 /* pmkid */

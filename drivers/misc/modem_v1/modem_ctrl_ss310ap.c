@@ -44,6 +44,8 @@ static inline int change_cp_pmu_manual_reset(void) {return 0; }
 
 static struct modem_ctl *g_mc;
 
+static int sys_rev;
+
 static irqreturn_t cp_wdt_handler(int irq, void *arg)
 {
 	struct modem_ctl *mc = (struct modem_ctl *)arg;
@@ -122,6 +124,16 @@ static void cp_active_handler(void *arg)
 	}
 }
 
+#ifdef CONFIG_HW_REV_DETECT
+static int __init console_setup(char *str)
+{
+	get_option(&str, &sys_rev);
+	mif_info("board_rev : %d\n", sys_rev);
+	
+	return 0;
+}
+__setup("androidboot.hw_rev=", console_setup);
+#else
 static int get_system_rev(struct device_node *np)
 {
 	int value, cnt, gpio_cnt;
@@ -146,6 +158,7 @@ static int get_system_rev(struct device_node *np)
 
 	return hw_rev;
 }
+#endif
 
 #ifdef CONFIG_GPIO_DS_DETECT
 static int get_ds_detect(struct device_node *np)
@@ -177,7 +190,7 @@ static int init_mailbox_regs(struct modem_ctl *mc)
 	struct platform_device *pdev = to_platform_device(mc->dev);
 	struct device_node *np = pdev->dev.of_node;
 	unsigned int info_val, val;
-	int sys_rev, ds_det, i;
+	int ds_det, i;
 
 	for (i = 0; i < MAX_MBOX_NUM; i++)
 		mbox_set_value(i, 0);
@@ -185,7 +198,9 @@ static int init_mailbox_regs(struct modem_ctl *mc)
 	if (np) {
 		mif_dt_read_u32(np, "mbx_ap2cp_info_value", info_val);
 
+#ifndef CONFIG_HW_REV_DETECT
 		sys_rev = get_system_rev(np);
+#endif
 		ds_det = get_ds_detect(np);
 		if (sys_rev < 0 || ds_det < 0)
 			return -EINVAL;

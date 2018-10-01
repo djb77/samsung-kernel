@@ -12,6 +12,14 @@ config MCU_IPC
 	   and 256 bytes memory for communicating messages.
 	   AP and CP can share the messages through this device.
 
+config MCU_IPC_LOG
+	bool "MCU IPC LOG Support"
+	depends on MCU_IPC
+	default n
+	help
+	   This enables MCU_IPC log in GIC & mailbox interrupt handler.
+	   It collects time stamp, interrupt counts and SFR information in memory.
+
 config MCU_IPC_TEST
      bool "MCU_IPC driver test"
      depends on MCU_IPC

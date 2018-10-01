@@ -42,6 +42,11 @@ struct hall_drvdata {
 	bool irq_state;
 	bool cover_state;
 #endif
+	int gpio_sub_det;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pins_default;
+	struct pinctrl_state *pins_pulldown;
+	struct device *hall_dev;
 };
 
 static bool flip_cover = 1;
@@ -145,6 +150,20 @@ static struct attribute_group hall_attr_group = {
 	.attrs = hall_attrs,
 };
 
+#ifdef CONFIG_V_HALL_FOLDING
+BLOCKING_NOTIFIER_HEAD(hall_ic_notifier_list);
+
+void hall_ic_register_notify(struct notifier_block *nb) {
+	blocking_notifier_chain_register(&hall_ic_notifier_list, nb);
+}
+EXPORT_SYMBOL(hall_ic_register_notify);
+
+void hall_ic_unregister_notify(struct notifier_block *nb) {
+	blocking_notifier_chain_unregister(&hall_ic_notifier_list, nb);
+}
+EXPORT_SYMBOL(hall_ic_unregister_notify);
+#endif
+
 #ifdef CONFIG_SEC_FACTORY
 static void flip_cover_work(struct work_struct *work)
 {
@@ -168,6 +187,10 @@ static void flip_cover_work(struct work_struct *work)
 
 		input_report_switch(ddata->input, ddata->event_val, flip_cover);
 		input_sync(ddata->input);
+
+#ifdef CONFIG_V_HALL_FOLDING
+		blocking_notifier_call_chain(&hall_ic_notifier_list, flip_cover, NULL);
+#endif
 	}
 }
 #else
@@ -238,6 +261,10 @@ static void flip_cover_work(struct work_struct *work)
 
 	input_report_switch(ddata->input, ddata->event_val, flip_cover);
 	input_sync(ddata->input);
+
+#ifdef CONFIG_V_HALL_FOLDING
+	blocking_notifier_call_chain(&hall_ic_notifier_list, flip_cover, NULL);
+#endif
 }
 #endif
 #endif
@@ -267,6 +294,13 @@ static irqreturn_t flip_cover_detect(int irq, void *dev_id)
 
 	printk(KERN_DEBUG "keys:%s flip_status : %d\n",
 		 __func__, flip_status);
+
+#ifdef CONFIG_V_HALL_FOLDING
+	if ((system_state == SYSTEM_POWER_OFF) || (system_state == SYSTEM_RESTART)) {
+		printk(KERN_DEBUG "[keys] %s don't need to work hall irq\n", __func__);
+		return IRQ_HANDLED;
+	}
+#endif
 
 	__flip_cover_detect(ddata, flip_status);
 
@@ -347,9 +381,66 @@ static int of_hall_data_parsing_dt(struct hall_drvdata *ddata)
 	}
 	ddata->irq_flip_cover = gpio;
 
+	ddata->gpio_sub_det = of_get_named_gpio(np_haptic, "sub_pcb_det,gpio_flip_cover", 0);
+	if (gpio_is_valid(ddata->gpio_sub_det))
+		pr_info("%s sub_det:%d, value:%d\n", __func__, ddata->gpio_sub_det,
+				gpio_get_value(ddata->gpio_sub_det));
+	else
+		pr_err("%s sub_det is invalid\n", __func__);
+
+	ddata->pinctrl = devm_pinctrl_get(ddata->hall_dev);
+	if (IS_ERR(ddata->pinctrl))
+		pr_err("%s could not get pinctrl\n", __func__);
+
+	ddata->pins_default = pinctrl_lookup_state(ddata->pinctrl, "hall-irq_nopull");
+	if (IS_ERR(ddata->pins_default))
+		pr_err("%s could not get hall-int_nopull\n", __func__);
+
+	ddata->pins_pulldown = pinctrl_lookup_state(ddata->pinctrl, "hall-irq_pulldown");
+	if (IS_ERR(ddata->pins_pulldown))
+		pr_err("%s could not get hall-int_pulldown\n", __func__);
+
 	return 0;
 }
 #endif
+
+/**
+ * hall_check_sub_det() - Workaround for floating hall_int
+ *
+ * If sub pcb does not exist(that is hall IC does not exist), hall_int pin state goes to float.
+ * So Interrupt is occur frequently and send many cover events.
+ * To avoid it, we check sub pcb via sub_det pin and set pull down resistor at hall_int pin.
+ */
+static void hall_check_sub_det(struct hall_drvdata *ddata)
+{
+	int ret;
+
+	if (!gpio_is_valid(ddata->gpio_sub_det)) {
+		pr_info("%s do not check sub_det\n", __func__);
+		return;
+	}
+
+	if (IS_ERR(ddata->pinctrl) || IS_ERR(ddata->pins_default) || IS_ERR(ddata->pins_pulldown)) {
+		pr_err("%s cannot get pinctrl state\n", __func__);
+		return;
+	}
+
+	if (gpio_get_value(ddata->gpio_sub_det) > 0) {
+		ret = pinctrl_select_state(ddata->pinctrl, ddata->pins_pulldown);
+		if (ret)
+			pr_err("%s can not change pins_pulldown %d\n", __func__, ret);
+		else
+			pr_info("%s change pins_pulldown\n", __func__);
+	} else {
+		ret = pinctrl_select_state(ddata->pinctrl, ddata->pins_default);
+		if (ret)
+			pr_err("%s can not change pins_default %d\n", __func__, ret);
+		else
+			pr_info("%s change pins_default\n", __func__);
+	}
+
+	return;
+}
 
 static int hall_probe(struct platform_device *pdev)
 {
@@ -365,6 +456,8 @@ static int hall_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	ddata->hall_dev = dev;
+
 #ifdef CONFIG_OF
 	if(dev->of_node) {
 		error = of_hall_data_parsing_dt(ddata);
@@ -374,6 +467,7 @@ static int hall_probe(struct platform_device *pdev)
 		}
 	}
 #endif
+	hall_check_sub_det(ddata);
 
 	input = input_allocate_device();
 	if (!input) {
@@ -396,7 +490,11 @@ static int hall_probe(struct platform_device *pdev)
 
 	input->evbit[0] |= BIT_MASK(EV_SW);
 
+#ifdef CONFIG_V_HALL_FOLDING
+	ddata->event_val = SW_FOLDING;
+#else
 	ddata->event_val = SW_FLIP;
+#endif
 	input_set_capability(input, EV_SW, ddata->event_val);
 
 	input->open = hall_open;

@@ -2331,6 +2331,10 @@ static int arizona_micd_button_process(struct arizona_extcon_info *info,
 		for (i = 0; i < info->num_micd_ranges; i++) {
 			if (val <= info->micd_ranges[i].max) {
 				key = info->micd_ranges[i].key;
+
+				if (info->ptt_state)
+					key = KEY_HOT;
+
 				input_report_key(info->input, key, 1);
 				input_sync(info->input);
 				break;

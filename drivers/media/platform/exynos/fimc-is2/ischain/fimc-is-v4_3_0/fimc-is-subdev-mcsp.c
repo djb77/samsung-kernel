@@ -58,33 +58,12 @@ static int fimc_is_ischain_mxp_cfg(struct fimc_is_subdev *subdev,
 		msinfo("CRange:N\n", device, subdev);
 	}
 
-	switch (subdev->vid) {
-	case FIMC_IS_VIDEO_M0P_NUM:
-		mcs_output = fimc_is_itf_g_param(device, frame, PARAM_MCS_OUTPUT0);
-		break;
-	case FIMC_IS_VIDEO_M1P_NUM:
-		mcs_output = fimc_is_itf_g_param(device, frame, PARAM_MCS_OUTPUT1);
-		break;
-	case FIMC_IS_VIDEO_M2P_NUM:
-		mcs_output = fimc_is_itf_g_param(device, frame, PARAM_MCS_OUTPUT2);
-		break;
-	case FIMC_IS_VIDEO_M3P_NUM:
-		mcs_output = fimc_is_itf_g_param(device, frame, PARAM_MCS_OUTPUT3);
-		break;
-	case FIMC_IS_VIDEO_M4P_NUM:
-		mcs_output = fimc_is_itf_g_param(device, frame, PARAM_MCS_OUTPUT4);
-		break;
-	default:
-		mserr("vid(%d) is not matched", device, subdev, subdev->vid);
-		ret = -EINVAL;
-		goto p_err;
-	}
+	mcs_output = fimc_is_itf_g_param(device, frame, subdev->param_dma_ot);
 
 	mcs_output->otf_format = OTF_OUTPUT_FORMAT_YUV422;
 	mcs_output->otf_bitwidth = OTF_OUTPUT_BIT_WIDTH_8BIT;
 	mcs_output->otf_order = OTF_OUTPUT_ORDER_BAYER_GR_BG;
 
-	mcs_output->dma_cmd = DMA_OUTPUT_COMMAND_DISABLE;
 	mcs_output->dma_bitwidth = DMA_OUTPUT_BIT_WIDTH_8BIT;
 	mcs_output->dma_format = format->hw_format;
 	mcs_output->dma_order = format->hw_order;
@@ -113,7 +92,21 @@ static int fimc_is_ischain_mxp_cfg(struct fimc_is_subdev *subdev,
 		mcs_output->hwfc = 0; /* TODO: enum */
 #endif
 
-	mcs_output->otf_cmd = OTF_OUTPUT_COMMAND_DISABLE;
+#ifdef SOC_VRA
+	if (device->group_mcs.junction == subdev) {
+		struct param_otf_input *otf_input;
+		otf_input = fimc_is_itf_g_param(device, frame, PARAM_FD_OTF_INPUT);
+		otf_input->width = width;
+		otf_input->height = height;
+		*lindex |= LOWBIT_OF(PARAM_FD_OTF_INPUT);
+		*hindex |= HIGHBIT_OF(PARAM_FD_OTF_INPUT);
+		(*indexes)++;
+	}
+#endif
+
+	*lindex |= LOWBIT_OF(subdev->param_dma_ot);
+	*hindex |= HIGHBIT_OF(subdev->param_dma_ot);
+	(*indexes)++;
 
 p_err:
 	return ret;
@@ -142,14 +135,14 @@ static int fimc_is_ischain_mxp_adjust_crop(struct fimc_is_device_ischain *device
 	if (*output_crop_w < (input_crop_w + 23) / 24) {
 		mwarn("Cannot be scaled down beyond 1/16 times(%d -> %d)",
 			device, input_crop_w, *output_crop_w);
-		*output_crop_w = (input_crop_w + 23) / 24;
+		*output_crop_w = ALIGN((input_crop_w + 23) / 24, 16);
 		changed |= 0x10;
 	}
 
 	if (*output_crop_h < (input_crop_h + 23) / 24) {
 		mwarn("Cannot be scaled down beyond 1/16 times(%d -> %d)",
 			device, input_crop_h, *output_crop_h);
-		*output_crop_h = (input_crop_h + 23) / 24;
+		*output_crop_h = ALIGN((input_crop_h + 23) / 24, 2);
 		changed |= 0x20;
 	}
 

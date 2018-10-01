@@ -60,6 +60,11 @@ static inline sdp_fs_command_t *sdp_fs_command_alloc(int opcode, int pid,
 
     cmd = kmalloc(sizeof(sdp_fs_command_t), gfp);
 
+    if(cmd == NULL) {
+	printk(KERN_ERR "sdp_fs_command_alloc is failed\n");
+	return NULL;
+    }
+
     cmd->opcode = opcode;
     cmd->pid = pid;
     cmd->user_id = userid;

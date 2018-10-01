@@ -57,6 +57,11 @@ static DEFINE_SPINLOCK(vnswap_original_bio_lock);
 
 void vnswap_init_disksize(u64 disksize)
 {
+	if ((vnswap_device->init_success & VNSWAP_INIT_DISKSIZE_SUCCESS) != 0x0) {
+		pr_err("%s %d: disksize is already initialized (disksize = %llu)\n",
+				__func__, __LINE__, vnswap_device->disksize);
+		return;
+	}
 	vnswap_device->disksize = PAGE_ALIGN(disksize);
 	if ((vnswap_device->disksize/PAGE_SIZE > MAX_SWAP_AREA_SIZE_PAGES) ||
 		!vnswap_device->disksize) {

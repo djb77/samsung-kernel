@@ -23,7 +23,7 @@
 
 #ifndef __BATTERY_NOTIFIER_H__
 #define __BATTERY_NOTIFIER_H__
-#define MAX 7
+#define MAX_PDO_NUM 7
 
 typedef enum {
 	CHARGER_NOTIFY = 0,
@@ -80,6 +80,7 @@ typedef enum {
 	PDIC_NOTIFY_EVENT_CCIC_ATTACH,
 	PDIC_NOTIFY_EVENT_PD_SINK,
 	PDIC_NOTIFY_EVENT_PD_SOURCE,
+	PDIC_NOTIFY_EVENT_PD_SINK_CAP,
 } pdic_notifier_event_t;
 
 typedef struct _power_list {
@@ -87,11 +88,20 @@ typedef struct _power_list {
 	int max_current;
 } POWER_LIST;
 
+typedef enum
+{
+	RP_CURRENT_LEVEL_NONE = 0,
+	RP_CURRENT_LEVEL_DEFAULT,
+	RP_CURRENT_LEVEL2,
+	RP_CURRENT_LEVEL3,
+} RP_CURRENT_LEVEL;
+
 typedef struct _pdic_sink_status {
-	POWER_LIST power_list[MAX];
+	POWER_LIST power_list[MAX_PDO_NUM+1];
 	int available_pdo_num; // the number of available PDO
 	int selected_pdo_num; // selected number of PDO to change
 	int current_pdo_num; // current number of PDO
+	unsigned int rp_currentlvl; // rp current level by ccic
 } PDIC_SINK_STATUS;
 
 struct pdic_notifier_struct {

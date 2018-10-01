@@ -84,7 +84,7 @@ static inline void ts2utc(struct timespec *ts, struct utc_time *utc)
 	struct tm tm;
 
 	time_to_tm((ts->tv_sec - (sys_tz.tz_minuteswest * 60)), 0, &tm);
-	utc->year = 1900 + tm.tm_year;
+	utc->year = 1900 + (u32)tm.tm_year;
 	utc->mon = 1 + tm.tm_mon;
 	utc->day = tm.tm_mday;
 	utc->hour = tm.tm_hour;
@@ -245,7 +245,7 @@ static inline void dump2hex(char *buff, size_t buff_size,
 {
 	char *dest = buff;
 	size_t len;
-	int i;
+	size_t i;
 
 	if (buff_size < (data_len * 3))
 		len = buff_size / 3;

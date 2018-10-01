@@ -89,6 +89,7 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/random.h>
 #include <linux/slab.h>
+#include <linux/netfilter/xt_qtaguid.h>
 
 #include <asm/uaccess.h>
 
@@ -124,6 +125,13 @@
 
 #ifdef CONFIG_ANDROID_PARANOID_NETWORK
 #include <linux/android_aid.h>
+
+/* START_OF_KNOX_NPA */
+#include <net/ncm.h>
+#include <linux/kfifo.h>
+#include <asm/current.h>
+#include <linux/pid.h>
+/* END_OF_KNOX_NPA */
 
 static inline int current_has_network(void)
 {
@@ -412,6 +420,17 @@ out_rcu_unlock:
 	goto out;
 }
 
+/* START_OF_KNOX_NPA */
+/** The function is used to check if the ncm feature is enabled or not;
+ * if enabled then collect the socket meta-data information;
+ * if enabled then it calls knox_collect_socket_data function in ncm.c to record all the socket data; **/
+static void knox_collect_metadata(struct socket *sock)
+{
+	if (check_ncm_flag()) {
+		knox_collect_socket_data(sock);
+	}
+}
+/* END_OF_KNOX_NPA */
 
 /*
  *	The peer socket should always be NULL (or else). When we call this
@@ -425,6 +444,9 @@ int inet_release(struct socket *sock)
 	if (sk) {
 		long timeout;
 
+#ifdef CONFIG_NETFILTER_XT_MATCH_QTAGUID
+		qtaguid_untag(sock, true);
+#endif
 		sock_rps_reset_flow(sk);
 
 		/* Applications forget to leave groups before exiting */
@@ -441,6 +463,9 @@ int inet_release(struct socket *sock)
 		if (sock_flag(sk, SOCK_LINGER) &&
 		    !(current->flags & PF_EXITING))
 			timeout = sk->sk_lingertime;
+		/* START_OF_KNOX_NPA */
+		knox_collect_metadata(sock);
+		/* END_OF_KNOX_NPA */
 		sock->sk = NULL;
 		sk->sk_prot->close(sk, timeout);
 	}
@@ -771,6 +796,7 @@ int inet_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg,
 		 size_t size)
 {
 	struct sock *sk = sock->sk;
+	int err;
 
 	sock_rps_record_flow(sk);
 
@@ -779,7 +805,16 @@ int inet_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg,
 	    inet_autobind(sk))
 		return -EAGAIN;
 
-	return sk->sk_prot->sendmsg(iocb, sk, msg, size);
+    err = sk->sk_prot->sendmsg(iocb, sk, msg, size);
+
+    if (err >= 0) {
+        if(sock->knox_sent + err > ULLONG_MAX) {
+            sock->knox_sent = ULLONG_MAX;
+        } else {
+            sock->knox_sent = sock->knox_sent + err;
+        }
+    }
+    return err;
 }
 EXPORT_SYMBOL(inet_sendmsg);
 
@@ -812,8 +847,14 @@ int inet_recvmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg,
 
 	err = sk->sk_prot->recvmsg(iocb, sk, msg, size, flags & MSG_DONTWAIT,
 				   flags & ~MSG_DONTWAIT, &addr_len);
-	if (err >= 0)
+	if (err >= 0) {
 		msg->msg_namelen = addr_len;
+        if(sock->knox_recv + err > ULLONG_MAX) {
+            sock->knox_recv = ULLONG_MAX;
+        } else {
+            sock->knox_recv = sock->knox_recv + err;
+        }
+    }
 	return err;
 }
 EXPORT_SYMBOL(inet_recvmsg);

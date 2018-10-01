@@ -38,8 +38,8 @@
 #define NAME_LEN		32
 #define MAX_BUF_LEN	512
 
-//#define HRM_DBG
-//#define HRM_INFO
+/* #define HRM_DBG */
+/* #define HRM_INFO */
 
 #ifdef HRM_DBG
 #define HRM_dbg(format, arg...)		\
@@ -67,7 +67,9 @@ enum hrm_mode {
 	MODE_HRMLED_IR		= 4,
 	MODE_HRMLED_RED		= 5,
 	MODE_HRMLED_BOTH	= 6,
-	MODE_UNKNOWN			= 7,
+	MODE_MELANIN		= 7,
+	MODE_SKINTONE		= 8,
+	MODE_UNKNOWN		= 9,
 };
 
 struct hrm_output_data {
@@ -76,6 +78,8 @@ struct hrm_output_data {
 	s32 data_main[6];
 	s32 sub_num;
 	s32 data_sub[8];
+	s32 fifo_main[4][32];
+	s32 fifo_num;
 };
 
 struct hrm_func {
@@ -91,7 +95,9 @@ struct hrm_func {
 	int (*get_chipid)(u64 *chip_id);
 	int (*get_part_type)(u16 *part_type);
 	int (*get_i2c_err_cnt)(u32 *err_cnt);
+	int (*set_i2c_err_cnt)(void);
 	int (*get_curr_adc)(u16 *ir_curr, u16 *red_curr, u32 *ir_adc, u32 *red_adc);
+	int (*set_curr_adc)(void);
 	int (*get_name_chipset)(char *name);
 	int (*get_name_vendor)(char *name);
 	int (*get_threshold)(s32 *threshold);
@@ -101,6 +107,8 @@ struct hrm_func {
 	int (*get_eol_status)(u8 *status);
 	int (*hrm_debug_set)(u8 mode);
 	int (*get_fac_cmd)(char *cmd_result);
+	int (*get_version)(char *version);
+	int (*get_sensor_info)(char *sensor_info_data);
 };
 
 struct hrm_device_data {
@@ -145,5 +153,7 @@ extern int sensors_register(struct device *dev, void *drvdata,
 #endif
 extern void sensors_unregister(struct device *dev,
 	struct device_attribute *attributes[]);
+
+extern unsigned int lpcharge;
 
 #endif /* _HRMSENSOR_H_ */

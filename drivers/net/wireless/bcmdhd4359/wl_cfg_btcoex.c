@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver - Dongle Host Driver (DHD) related
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg_btcoex.c 638301 2016-05-17 09:06:40Z $
+ * $Id: wl_cfg_btcoex.c 748337 2018-02-22 11:50:54Z $
  */
 
 #include <net/rtnetlink.h>
@@ -94,7 +94,7 @@ dev_wlc_intvar_get_reg(struct net_device *dev, char *name,
 
 	bcm_mkiovar(name, (char *)(&reg), sizeof(reg),
 		(char *)(&var), sizeof(var.buf));
-	error = wldev_ioctl(dev, WLC_GET_VAR, (char *)(&var), sizeof(var.buf), false);
+	error = wldev_ioctl_get(dev, WLC_GET_VAR, (char *)(&var), sizeof(var.buf));
 
 	*retval = dtoh32(var.val);
 	return (error);
@@ -107,7 +107,7 @@ dev_wlc_bufvar_set(struct net_device *dev, char *name, char *buf, int len)
 
 	bcm_mkiovar(name, buf, len, ioctlbuf_local, sizeof(ioctlbuf_local));
 
-	return (wldev_ioctl(dev, WLC_SET_VAR, ioctlbuf_local, sizeof(ioctlbuf_local), true));
+	return (wldev_ioctl_set(dev, WLC_SET_VAR, ioctlbuf_local, sizeof(ioctlbuf_local)));
 }
 /*
 get named driver variable to uint register value and return error indication
@@ -306,7 +306,14 @@ static void wl_cfg80211_bt_handler(struct work_struct *work)
 {
 	struct btcoex_info *btcx_inf;
 
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif
 	btcx_inf = container_of(work, struct btcoex_info, work);
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 	if (btcx_inf->timer_on) {
 		btcx_inf->timer_on = 0;
@@ -441,8 +448,7 @@ int wl_cfg80211_set_btcoex_dhcp(struct net_device *dev, dhd_pub_t *dhd, char *co
 		dhd->dhcp_in_progress = 1;
 
 #if defined(WL_VIRTUAL_APSTA) && defined(APSTA_BLOCK_ARP_DURING_DHCP)
-		if ((dhd->op_mode & DHD_FLAG_CONCURR_STA_HOSTAP_MODE) ==
-			DHD_FLAG_CONCURR_STA_HOSTAP_MODE) {
+		if (DHD_OPMODE_STA_SOFTAP_CONCURR(dhd)) {
 			/* Block ARP frames while DHCP of STA interface is in
 			 * progress in case of STA/SoftAP concurrent mode
 			 */
@@ -502,8 +508,7 @@ int wl_cfg80211_set_btcoex_dhcp(struct net_device *dev, dhd_pub_t *dhd, char *co
 		WL_TRACE_HW4(("DHCP is complete \n"));
 
 #if defined(WL_VIRTUAL_APSTA) && defined(APSTA_BLOCK_ARP_DURING_DHCP)
-		if ((dhd->op_mode & DHD_FLAG_CONCURR_STA_HOSTAP_MODE) ==
-			DHD_FLAG_CONCURR_STA_HOSTAP_MODE) {
+		if (DHD_OPMODE_STA_SOFTAP_CONCURR(dhd)) {
 			/* Unblock ARP frames */
 			wl_cfg80211_block_arp(dev, FALSE);
 		} else

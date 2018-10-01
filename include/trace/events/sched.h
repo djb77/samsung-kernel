@@ -712,6 +712,9 @@ TRACE_EVENT(sched_task_usage_ratio,
 #define HMP_MIGRATE_FORCE	1
 #define HMP_MIGRATE_OFFLOAD	2
 #define HMP_MIGRATE_IDLE_PULL	3
+#define HMP_MIGRATE_FAMILY	4
+#define HMP_MIGRATE_INFORM	99
+
 TRACE_EVENT(sched_hmp_migrate,
 
 	TP_PROTO(struct task_struct *tsk, int dest, int force),

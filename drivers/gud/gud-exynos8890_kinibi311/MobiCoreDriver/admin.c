@@ -25,16 +25,6 @@
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/delay.h>
-#include "platform.h"		/* MC_NO_UIDGIT_H */
-#ifndef MC_NO_UIDGIT_H
-#include <linux/uidgid.h>
-#else /* !MC_NO_UIDGIT_H */
-#define kuid_t uid_t
-static inline uid_t __kuid_val(kuid_t uid)
-{
-	return uid;
-}
-#endif /* MC_NO_UIDGIT_H */
 
 #include "public/mc_user.h"
 #include "public/mc_admin.h"
@@ -101,6 +91,12 @@ static struct tee_object *tee_object_alloc(bool is_sp_trustlet, size_t length)
 		size += header_length + 3 * MAX_SO_CONT_SIZE;
 	}
 
+	/* Check size for overflow */
+	if (size < length) {
+		mc_dev_err("cannot allocate object of size %zu", length);
+		return NULL;
+	}
+
 	/* Allocate memory */
 	obj = vzalloc(size);
 	if (!obj)
@@ -162,6 +158,8 @@ static int request_send(u32 command, const struct mc_uuid_t *uuid, bool is_gp,
 {
 	int counter = 10;
 	int ret = 0;
+	/* ExySp */
+	unsigned long timeout = msecs_to_jiffies(10 * 1000); /* 10 seconds */
 
 	/* Prepare request */
 	mutex_lock(&g_request.states_mutex);
@@ -210,7 +208,12 @@ static int request_send(u32 command, const struct mc_uuid_t *uuid, bool is_gp,
 	mc_dev_devel("request sent");
 
 	/* Wait for header (could be interruptible, but then needs more work) */
-	wait_for_completion(&g_request.server_complete);
+	/* ExySp */
+	if (wait_for_completion_timeout(&g_request.server_complete, timeout) == 0) {
+		mc_dev_err("daemon is not responding\n");
+		ret = -EPIPE;
+		goto end;
+	}
 	mc_dev_devel("response received");
 
 	/* Server should be waiting with some data for us */
@@ -781,6 +784,7 @@ int is_authenticator_pid(pid_t pid)
 	/* Now compare (under locks to avoid a race-based attack) */
 	if (!service) {
 		mc_dev_err("No authenticator connected\n");
+		/* ExySp */
 		mutex_unlock(&admin_ctx.services_mutex);
 		return -ENOTCONN;
 	}
@@ -1029,6 +1033,8 @@ static int admin_open(struct inode *inode, struct file *file)
 {
 	struct service *service = NULL;
 	int ret = 0;
+	/* ExySp: print open process info */
+	mc_dev_info("opened by PID(%d), name(%s)\n", current->pid, current->comm);
 
 	/* Only two connections allowed to admin interface */
 	mutex_lock(&admin_ctx.services_mutex);

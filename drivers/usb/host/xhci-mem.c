@@ -1796,7 +1796,11 @@ void xhci_mem_cleanup(struct xhci_hcd *xhci)
 	int size;
 	int i, j, num_ports;
 
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+	cancel_delayed_work_sync(&xhci->cmd_timer);
+#else
 	del_timer_sync(&xhci->cmd_timer);
+#endif
 
 	/* Free the Event Ring Segment Table and the actual Event Ring */
 	size = sizeof(struct xhci_erst_entry)*(xhci->erst.num_entries);
@@ -2354,6 +2358,10 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	int i;
 
 	INIT_LIST_HEAD(&xhci->cmd_list);
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+	INIT_DELAYED_WORK(&xhci->cmd_timer, xhci_handle_command_timeout);
+	init_completion(&xhci->cmd_ring_stop_completion);
+#endif
 
 	page_size = readl(&xhci->op_regs->page_size);
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init,
@@ -2538,12 +2546,12 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 			"Wrote ERST address to ir_set 0.");
 	xhci_print_ir_set(xhci, 0);
-
+#if !defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
 	/* init command timeout timer */
 	init_timer(&xhci->cmd_timer);
 	xhci->cmd_timer.data = (unsigned long) xhci;
 	xhci->cmd_timer.function = xhci_handle_command_timeout;
-
+#endif
 	/*
 	 * XXX: Might need to set the Interrupter Moderation Register to
 	 * something other than the default (~1ms minimum between interrupts).

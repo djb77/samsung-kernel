@@ -543,7 +543,7 @@ void ssp_pcm_dump_task(struct work_struct *work)
 
 	snprintf(pcm_path, BIN_PATH_SIZE,
 		"/data/voice%d.pcm", hub_data->pcm_cnt);
-	voice_filp = filp_open(pcm_path, O_RDWR | O_CREAT | O_APPEND, 0666);
+	voice_filp = filp_open(pcm_path, O_RDWR | O_CREAT | O_APPEND, 0660);
 	if (IS_ERR(voice_filp)) {
 		sensorhub_err("open pcm dump file err");
 		goto exit;

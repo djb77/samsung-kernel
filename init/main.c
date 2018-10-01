@@ -84,7 +84,7 @@
 #endif
 
 #if defined(CONFIG_SEC_INITCALL_DEBUG)
-#include <linux/sec_debug.h>
+#include <linux/sec_ext.h>
 #endif
 
 #include <asm/io.h>
@@ -1114,28 +1114,28 @@ static int try_to_run_init_process(const char *init_filename)
 extern initcall_t __deferred_initcall_start[], __deferred_initcall_end[];
 
 /* call deferred init routines */
-void __ref do_deferred_initcalls(void)
+static void __ref do_deferred_initcalls(struct work_struct *work)
 {
 	initcall_t *call;
-	static int already_run=0;
+	static bool already_run;
 
 	if (already_run) {
-		printk("do_deferred_initcalls() has already run\n");
+		pr_warn("%s() has already run\n", __func__);
 		return;
 	}
 
-	already_run=1;
+	already_run = true;
 
-	printk("Running do_deferred_initcalls()\n");
+	pr_err("Running %s()\n", __func__);
 
 	for(call = __deferred_initcall_start;
 		call < __deferred_initcall_end; call++)
 		do_one_initcall(*call);
 
-	flush_scheduled_work();
-
 	free_initmem();
 }
+
+static DECLARE_WORK(deferred_initcall_work, do_deferred_initcalls);
 #endif
 
 #ifdef CONFIG_SEC_GPIO_DVS
@@ -1171,8 +1171,12 @@ static int __ref kernel_init(void *unused)
 
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
-		if (!ret)
+		if (!ret) {
+#ifdef CONFIG_DEFERRED_INITCALLS
+			schedule_work(&deferred_initcall_work);
+#endif
 			return 0;
+		}
 		pr_err("Failed to execute %s (error %d)\n",
 		       ramdisk_execute_command, ret);
 	}

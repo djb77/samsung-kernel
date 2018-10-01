@@ -515,6 +515,11 @@ static void thread_mailbox_work(struct work_struct *work)
 	} else {
 		/* This condition is lcd off */
 		if (sram_status == SRAM_STABLE) {
+			if (cl_init.apm_status == APM_OFF) {
+				pr_info("APM device already disable staus \n");
+				return;
+			}
+
 #if (defined(CONFIG_EXYNOS_CL_DVFS_CPU) || defined(CONFIG_EXYNOS_CL_DVFS_G3D) || defined(CONFIG_EXYNOS_CL_DVFS_MIF))
 			exynos_cl_dvfs_mode_disable();
 			cl_init.apm_status = APM_OFF;
@@ -539,7 +544,8 @@ static void thread_mailbox_work(struct work_struct *work)
 			/* local power down(reset) to CORTEX M3 */
 			exynos_apm_power_down();
 
-			exynos_update_ip_idle_status(idle_ip_index, 1); }
+			exynos_update_ip_idle_status(idle_ip_index, 1);
+		}
 	}
 }
 static DECLARE_WORK(mailbox_work, thread_mailbox_work);

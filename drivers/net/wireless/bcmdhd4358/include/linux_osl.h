@@ -1,7 +1,7 @@
 /*
  * Linux OS Independent Layer
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: linux_osl.h 632785 2016-04-20 12:20:03Z $
+ * $Id: linux_osl.h 689168 2017-03-09 08:49:09Z $
  */
 
 #ifndef _linux_osl_h_
@@ -179,8 +179,7 @@ extern void osl_dma_unmap(osl_t *osh, dmaaddr_t pa, uint size, int direction);
 extern void osl_cpu_relax(void);
 #define OSL_CPU_RELAX() osl_cpu_relax()
 
-#if (defined(USE_KMALLOC_FOR_FLOW_RING) && defined(__ARM_ARCH_7A__)) || \
-	defined(CONFIG_SOC_EXYNOS8890)
+#if (defined(USE_KMALLOC_FOR_FLOW_RING) && defined(__ARM_ARCH_7A__))
 	extern void osl_cache_flush(void *va, uint size);
 	extern void osl_cache_inv(void *va, uint size);
 	extern void osl_prefetch(const void *ptr);
@@ -251,10 +250,31 @@ extern int osl_error(int bcmerror);
 
 /* register access macros */
 
+#ifdef CONFIG_64BIT
+/* readq is defined only for 64 bit platform */
 #define R_REG(osh, r) (\
 	SELECT_BUS_READ(osh, \
 		({ \
-			__typeof(*(r)) __osl_v; \
+			__typeof(*(r)) __osl_v = 0; \
+			switch (sizeof(*(r))) { \
+				case sizeof(uint8):	__osl_v = \
+					readb((volatile uint8*)(r)); break; \
+				case sizeof(uint16):	__osl_v = \
+					readw((volatile uint16*)(r)); break; \
+				case sizeof(uint32):	__osl_v = \
+					readl((volatile uint32*)(r)); break; \
+				case sizeof(uint64):	__osl_v = \
+					readq((volatile uint64*)(r)); break;  \
+			} \
+			__osl_v; \
+		}), \
+		OSL_READ_REG(osh, r)) \
+)
+#else /* !CONFIG_64BIT */
+#define R_REG(osh, r) (\
+	SELECT_BUS_READ(osh, \
+		({ \
+			__typeof(*(r)) __osl_v = 0; \
 			switch (sizeof(*(r))) { \
 				case sizeof(uint8):	__osl_v = \
 					readb((volatile uint8*)(r)); break; \
@@ -267,7 +287,21 @@ extern int osl_error(int bcmerror);
 		}), \
 		OSL_READ_REG(osh, r)) \
 )
+#endif /* CONFIG_64BIT */
 
+#ifdef CONFIG_64BIT
+/* writeq is defined only for 64 bit platform */
+#define W_REG(osh, r, v) do { \
+	SELECT_BUS_WRITE(osh, \
+		switch (sizeof(*(r))) { \
+			case sizeof(uint8):	writeb((uint8)(v), (volatile uint8*)(r)); break; \
+			case sizeof(uint16):	writew((uint16)(v), (volatile uint16*)(r)); break; \
+			case sizeof(uint32):	writel((uint32)(v), (volatile uint32*)(r)); break; \
+			case sizeof(uint64):	writeq((uint64)(v), (volatile uint64*)(r)); break; \
+		}, \
+		(OSL_WRITE_REG(osh, r, v))); \
+	} while (0)
+#else /* !CONFIG_64BIT */
 #define W_REG(osh, r, v) do { \
 	SELECT_BUS_WRITE(osh, \
 		switch (sizeof(*(r))) { \
@@ -277,6 +311,7 @@ extern int osl_error(int bcmerror);
 		}, \
 		(OSL_WRITE_REG(osh, r, v))); \
 	} while (0)
+#endif /* CONFIG_64BIT */
 
 #define	AND_REG(osh, r, v)		W_REG(osh, (r), R_REG(osh, r) & (v))
 #define	OR_REG(osh, r, v)		W_REG(osh, (r), R_REG(osh, r) | (v))

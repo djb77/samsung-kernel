@@ -16,7 +16,7 @@
 #define __SEC_BATT_H
 
 #include <linux/module.h>
-#include <linux/sec_debug.h>
+#include <linux/sec_ext.h>
 
 extern unsigned int lpcharge;
 extern int charging_night_mode;

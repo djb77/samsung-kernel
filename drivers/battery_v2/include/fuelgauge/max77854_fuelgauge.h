@@ -77,6 +77,8 @@ enum {
 	FG_AVCAP,
 	FG_REPCAP,
 	FG_CYCLE,
+	FG_QH,
+	FG_QH_VF_SOC,
 };
 
 enum {
@@ -97,6 +99,7 @@ struct battery_data_t {
 	u32 V_empty;
 	u32 V_empty_origin;
 	u32 sw_v_empty_vol;
+	u32 sw_v_empty_vol_cisd;
 	u32 sw_v_empty_recover_vol;	
 	u32 QResidual20;
 	u32 QResidual30;
@@ -175,6 +178,7 @@ struct max77854_fuelgauge_data {
 	int raw_capacity;
 	int current_now;
 	int current_avg;
+	unsigned int ttf_capacity;
 	struct cv_slope *cv_data;
 	int cv_data_lenth;
 
@@ -191,6 +195,10 @@ struct max77854_fuelgauge_data {
 	u32 discharge_volt_threshold;
 
 	u32 fg_resistor;
+
+#if defined(CONFIG_BATTERY_CISD)
+	bool valert_count_flag;
+#endif
 };
 
 #endif /* __MAX77854_FUELGAUGE_H */

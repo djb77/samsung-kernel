@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -16,14 +16,22 @@
 #define _MC_USER_H_
 
 #define MCDRVMODULEAPI_VERSION_MAJOR 4
-#define MCDRVMODULEAPI_VERSION_MINOR 1
+#define MCDRVMODULEAPI_VERSION_MINOR 2
 
 #include <linux/types.h>
+
+#ifndef __KERNEL__
+#define BIT(n)				(1 << (n))
+#endif /* __KERNEL__ */
 
 #define MC_USER_DEVNODE		"mobicore-user"
 
 /** Maximum length of MobiCore product ID string. */
 #define MC_PRODUCT_ID_LEN	64
+
+/** Flags for session */
+#define MC_IO_SESSION_REMOTE_BUFFERS	BIT(0)
+#define MC_IO_SESSION_NO_MULTIMAP	BIT(1)
 
 /** Number of buffers that can be mapped at once */
 #define MC_MAP_MAX		4
@@ -32,12 +40,11 @@
 #define BUFFER_LENGTH_MAX	0x100000
 
 /** Flags for buffers to map (aligned on GP) */
-#define MC_IO_MAP_INPUT		0x1
-#define MC_IO_MAP_OUTPUT	0x2
+#define MC_IO_MAP_INPUT			BIT(0)
+#define MC_IO_MAP_OUTPUT		BIT(1)
 #define MC_IO_MAP_INPUT_OUTPUT	(MC_IO_MAP_INPUT | MC_IO_MAP_OUTPUT)
-
-/** Flags for session */
-#define MC_IO_SESSION_REMOTE_BUFFERS	0x1
+/** Extra flags for buffers to map (proprietary) */
+#define MC_IO_MAP_PERSISTENT		BIT(20)
 
 /*
  * Universally Unique Identifier (UUID) according to ISO/IEC 11578.

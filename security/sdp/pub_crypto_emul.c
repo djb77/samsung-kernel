@@ -467,7 +467,10 @@ void pub_crypto_control_init(pub_crypto_control_t *con) {
 	PUB_CRYPTO_LOGD("pub_crypto_control_init");
 	spin_lock_init(&con->lock);
 	INIT_LIST_HEAD(&con->pending_list);
+	
+	spin_lock(&con->lock);
 	con->reqctr = 0;
+	spin_unlock(&con->lock);
 }
 
 static int __init pub_crypto_mod_init(void) {

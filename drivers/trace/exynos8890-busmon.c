@@ -594,10 +594,6 @@ static void busmon_report_route(struct busmon_dev *busmon,
 				"Master IP:%s's %s ---> Target:%s\n",
 				master->port_name, master->master_name, rpath->dest_name);
 
-#ifdef CONFIG_SEC_DEBUG
-			sec_debug_store_extra_buf(INFO_BUSMON, "Master IP:%s's %s ---> Target:%s\n",
-				master->port_name, master->master_name, rpath->dest_name);
-#endif
 			busmon_post_handler_by_master(busmon, group,
 							master->port_name,
 							master->master_name,
@@ -613,6 +609,9 @@ static void busmon_report_info(struct busmon_dev *busmon,
 {
 	unsigned int int_info, errcode, info0, info1, info2;
 	bool read = false, req = false;
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	char temp_buf[SZ_128];
+#endif
 
 	int_info = __raw_readl(node->regs + offset + REG_INT_INFO);
 	if (!BIT_ERR_VALID(int_info)) {
@@ -696,15 +695,6 @@ static void busmon_report_info(struct busmon_dev *busmon,
 		break;
 	}
 
-#ifdef CONFIG_SEC_DEBUG
-	sec_debug_store_extra_buf(INFO_BUSMON, "Detect reason   : %s\n"
-		"Target address  : 0x%llX\n"
-		"Error type      : %s",
-		node->comment,
-		(unsigned long long)((info1 & (GENMASK(3, 0)) << 32) | info0),
-		busmon_errcode[errcode]);
-#endif
-
 	pr_auto(ASL3, "\n--------------------------------------------------------------------------------\n"
 		"Transaction information => [%s, %s] Fail to access\n\n"
 		"Detect reason   : %s\n"
@@ -728,6 +718,13 @@ static void busmon_report_info(struct busmon_dev *busmon,
 		"--------------------------------------------------------------------------------\n",
 		node->name, node->phy_regs + offset,
 		int_info, info0, info1, info2);
+
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	snprintf(temp_buf, SZ_128, "%s (0x%08X) / 0x%08X / Target : 0x%08X / 0x%08X / 0x%08X",
+		node->name, node->phy_regs + offset,
+		int_info, info0, info1, info2);
+	sec_debug_set_extra_info_busmon(temp_buf);
+#endif
 
 }
 

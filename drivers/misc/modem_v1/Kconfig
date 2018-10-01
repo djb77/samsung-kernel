@@ -87,5 +87,20 @@ config CP_SECURE_BOOT
 config GPIO_DS_DETECT
 	bool "Support GPIO DS Detect"
 	default n
+
+config HW_REV_DETECT
+	bool "Support HW REV Detect"
+	default n
+
+config MODEM_IF_LEGACY_QOS
+	bool "Implement QoS for legacy"
+	depends on LINK_DEVICE_SHMEM
+	default n
+
+config MODEM_IF_QOS
+	bool "Implement QoS for sbd"
+	depends on LINK_DEVICE_SHMEM
+	default n
+
 endmenu
 endif

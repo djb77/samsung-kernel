@@ -1,7 +1,7 @@
 /*
  * DHD Linux header file (dhd_linux exports for cfg80211 and other components)
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.h 591285 2015-10-07 11:56:29Z $
+ * $Id: dhd_linux.h 733907 2017-11-30 12:20:38Z $
  */
 
 /* wifi platform functions for power, interrupt and pre-alloc, either
@@ -47,13 +47,13 @@
 #if defined(CONFIG_HAS_EARLYSUSPEND) && defined(DHD_USE_EARLYSUSPEND)
 #include <linux/earlysuspend.h>
 #endif /* defined(CONFIG_HAS_EARLYSUSPEND) && defined(DHD_USE_EARLYSUSPEND) */
-
 #if defined(CONFIG_WIFI_CONTROL_FUNC)
 #include <linux/wlan_plat.h>
 #endif
 
 #if !defined(CONFIG_WIFI_CONTROL_FUNC)
-#define WLAN_PLAT_NODFS_FLAG    0x01
+#define WLAN_PLAT_NODFS_FLAG	0x01
+#define WLAN_PLAT_AP_FLAG	0x02
 struct wifi_platform_data {
 	int (*set_power)(int val);
 	int (*set_reset)(int val);
@@ -65,8 +65,9 @@ struct wifi_platform_data {
 #else /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 58)) || defined (CUSTOM_COUNTRY_CODE) */
 	void *(*get_country_code)(char *ccode);
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 58)) */
- };
+};
 #endif /* CONFIG_WIFI_CONTROL_FUNC */
+
 #define DHD_REGISTRATION_TIMEOUT  12000  /* msec : allowed time to finished dhd registration */
 
 typedef struct wifi_adapter_info {
@@ -79,6 +80,9 @@ typedef struct wifi_adapter_info {
 	uint		bus_type;
 	uint		bus_num;
 	uint		slot_num;
+#if defined(BT_OVER_SDIO)
+	const char	*btfw_path;
+#endif /* defined (BT_OVER_SDIO) */
 } wifi_adapter_info_t;
 
 typedef struct bcmdhd_wifi_platdata {
@@ -108,7 +112,7 @@ int wifi_platform_get_irq_number(wifi_adapter_info_t *adapter, unsigned long *ir
 int wifi_platform_get_mac_addr(wifi_adapter_info_t *adapter, unsigned char *buf);
 #ifdef CUSTOM_COUNTRY_CODE
 void *wifi_platform_get_country_code(wifi_adapter_info_t *adapter, char *ccode,
-   u32 flags);
+	u32 flags);
 #else
 void *wifi_platform_get_country_code(wifi_adapter_info_t *adapter, char *ccode);
 #endif /* CUSTOM_COUNTRY_CODE */
@@ -118,4 +122,28 @@ void* wifi_platform_get_prealloc_func_ptr(wifi_adapter_info_t *adapter);
 int dhd_get_fw_mode(struct dhd_info *dhdinfo);
 bool dhd_update_fw_nv_path(struct dhd_info *dhdinfo);
 
+#if defined(BT_OVER_SDIO)
+int dhd_net_bus_get(struct net_device *dev);
+int dhd_net_bus_put(struct net_device *dev);
+#endif /* BT_OVER_SDIO */
+#ifdef HOFFLOAD_MODULES
+extern void dhd_free_module_memory(struct dhd_bus *bus, struct module_metadata *hmem);
+extern void* dhd_alloc_module_memory(struct dhd_bus *bus, uint32_t size,
+	struct module_metadata *hmem);
+#endif /* HOFFLOAD_MODULES */
+#if defined(WLADPS) || defined(WLADPS_PRIVATE_CMD)
+#define ADPS_ENABLE	1
+#define ADPS_DISABLE	0
+typedef struct bcm_iov_buf {
+	uint16 version;
+	uint16 len;
+	uint16 id;
+	uint16 data[1];
+} bcm_iov_buf_t;
+
+int dhd_enable_adps(dhd_pub_t *dhd, uint8 on);
+#endif /* WLADPS || WLADPS_PRIVATE_CMD */
+#ifdef DHD_DISABLE_VHTMODE
+void dhd_disable_vhtmode(dhd_pub_t *dhd);
+#endif /* DHD_DISABLE_VHTMODE */
 #endif /* __DHD_LINUX_H__ */

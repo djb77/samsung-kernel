@@ -259,7 +259,7 @@
 #else
 #define ENABLE_IS_CORE
 #undef ENABLE_RESERVED_INTERNAL_DMA
-#define ENABLE_FW_SHARE_DUMP
+/* #define ENABLE_FW_SHARE_DUMP */
 #endif
 
 #if defined(DEBUG)

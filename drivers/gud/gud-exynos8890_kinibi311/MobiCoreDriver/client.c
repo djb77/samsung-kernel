@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,6 +17,14 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/err.h>
+#include <linux/sched.h>	/* struct task_struct */
+#include <linux/version.h>
+#if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
+#include <linux/sched/mm.h>	/* get_task_mm */
+#include <linux/sched/task.h>	/* put_task_struct */
+#endif
+#include <net/sock.h>		/* sockfd_lookup */
+#include <linux/file.h>		/* fput */
 
 #include "public/mc_user.h"
 #include "public/mc_admin.h"
@@ -183,9 +191,9 @@ static void client_release(struct kref *kref)
 	atomic_dec(&g_ctx.c_clients);
 }
 
-void client_put(struct tee_client *client)
+int client_put(struct tee_client *client)
 {
-	kref_put(&client->kref, client_release);
+	return kref_put(&client->kref, client_release);
 }
 
 /*
@@ -583,7 +591,7 @@ int client_map_session_wsms(struct tee_client *client, u32 session_id,
 		return -ENXIO;
 
 	/* Add buffer to the session */
-	ret = session_wsms_add(session, bufs);
+	ret = session_map(session, bufs);
 	/* Put session */
 	session_put(session);
 	mc_dev_devel("session %x, exit with %d\n", session_id, ret);
@@ -603,7 +611,7 @@ int client_unmap_session_wsms(struct tee_client *client, u32 session_id,
 		return -ENXIO;
 
 	/* Remove buffer from session */
-	ret = session_wsms_remove(session, bufs);
+	ret = session_unmap(session, bufs);
 	/* Put session */
 	session_put(session);
 	mc_dev_devel("session %x, exit with %d\n", session_id, ret);
@@ -630,7 +638,7 @@ static void cbuf_vm_close(struct vm_area_struct *vmarea)
 	cbuf_put(cbuf);
 }
 
-static struct vm_operations_struct cbuf_vm_ops = {
+static const struct vm_operations_struct cbuf_vm_ops = {
 	.open = cbuf_vm_open,
 	.close = cbuf_vm_close,
 };

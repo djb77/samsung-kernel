@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2016 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -36,7 +36,9 @@ int mc_clock_init(void)
 	int ret = 0;
 #ifdef MC_CLOCK_CORESRC_DEFAULTRATE
 	int core_src_rate = MC_CLOCK_CORESRC_DEFAULTRATE;
-
+#ifdef MC_CRYPTO_CLOCK_CORESRC_PROPNAME
+	u32 of_core_src_rate = MC_CLOCK_CORESRC_DEFAULTRATE;
+#endif
 	/* Get core clk src */
 	clk_ctx.mc_ce_core_src_clk = clk_get(g_ctx.mcd, "core_clk_src");
 	if (IS_ERR(clk_ctx.mc_ce_core_src_clk)) {
@@ -48,10 +50,12 @@ int mc_clock_init(void)
 #ifdef MC_CRYPTO_CLOCK_CORESRC_PROPNAME
 	if (of_property_read_u32(g_ctx.mcd->of_node,
 				 MC_CRYPTO_CLOCK_CORESRC_PROPNAME,
-				 &core_src_rate)) {
+				 &of_core_src_rate)) {
 		core_src_rate = MC_CLOCK_CORESRC_DEFAULTRATE;
 		mc_dev_err("cannot get ce clock frequency from DT, use %d\n",
 			   core_src_rate);
+	} else {
+		core_src_rate = of_core_src_rate;
 	}
 #endif /* MC_CRYPTO_CLOCK_CORESRC_PROPNAME */
 

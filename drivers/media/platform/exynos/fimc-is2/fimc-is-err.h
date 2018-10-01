@@ -273,6 +273,9 @@ enum ShotErrorType {
 	IS_SHOT_3AA_FRAME_END,
 	IS_SHOT_IP_CLOCK_OFF,
 	IS_SHOT_ENDPROC_DELAY,
+	IS_SHOT_UNPROCESSED, /* Shot is coming in advance at PROCESS_STOP command */
+	IS_SHOT_INSUFFICIENT_RESOURCES, /* FrameDescriptor is overflow */
+	IS_SHOT_3AA_ERROR, /* 3AA error except for overflow */
 	SHOT_ERR_MISMATCH, /* host error code */
 	SHOT_ERR_PERFRAME
 };

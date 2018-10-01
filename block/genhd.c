@@ -1189,7 +1189,6 @@ static struct device_type disk_type = {
 };
 
 #ifdef CONFIG_PROC_FS
-#define PG2KB(x) ((unsigned long)((x) << (PAGE_SHIFT - 10)))
 /*
  * aggregate disk stat collector.  Uses the same stats that the sysfs
  * entries do, above, but makes them available through one seq_file.
@@ -1204,11 +1203,6 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 	struct hd_struct *hd;
 	char buf[BDEVNAME_SIZE];
 	int cpu;
-	u64 uptime;
-	unsigned long thresh = 0;
-	unsigned long bg_thresh = 0;
-	struct backing_dev_info *bdi;
-	unsigned int nread, nwrite;
 
 	/*
 	if (&disk_to_dev(gp)->kobj.entry == block_class.devices.next)
@@ -1218,7 +1212,67 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 				"\n\n");
 	*/
 
-	/* Enhanced diskstats for IOD V 2.1 */
+	disk_part_iter_init(&piter, gp, DISK_PITER_INCL_EMPTY_PART0);
+	while ((hd = disk_part_iter_next(&piter))) {
+		cpu = part_stat_lock();
+		part_round_stats(cpu, hd);
+		part_stat_unlock();
+		seq_printf(seqf, "%4d %7d %s %lu %lu %lu "
+			   "%u %lu %lu %lu %u %u %u %u\n",
+			   MAJOR(part_devt(hd)), MINOR(part_devt(hd)),
+			   disk_name(gp, hd->partno, buf),
+			   part_stat_read(hd, ios[READ]),
+			   part_stat_read(hd, merges[READ]),
+			   part_stat_read(hd, sectors[READ]),
+			   jiffies_to_msecs(part_stat_read(hd, ticks[READ])),
+			   part_stat_read(hd, ios[WRITE]),
+			   part_stat_read(hd, merges[WRITE]),
+			   part_stat_read(hd, sectors[WRITE]),
+			   jiffies_to_msecs(part_stat_read(hd, ticks[WRITE])),
+			   part_in_flight(hd),
+			   jiffies_to_msecs(part_stat_read(hd, io_ticks)),
+			   jiffies_to_msecs(part_stat_read(hd, time_in_queue))
+			);
+	}
+	disk_part_iter_exit(&piter);
+
+	return 0;
+}
+
+static const struct seq_operations diskstats_op = {
+	.start	= disk_seqf_start,
+	.next	= disk_seqf_next,
+	.stop	= disk_seqf_stop,
+	.show	= diskstats_show
+};
+
+static int diskstats_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &diskstats_op);
+}
+
+static const struct file_operations proc_diskstats_operations = {
+	.open		= diskstats_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= seq_release,
+};
+
+#define PG2KB(x) ((unsigned long)((x) << (PAGE_SHIFT - 10)))
+static int iostats_show(struct seq_file *seqf, void *v)
+{
+	struct gendisk *gp = v;
+	struct disk_part_iter piter;
+	struct hd_struct *hd;
+	char buf[BDEVNAME_SIZE];
+	int cpu;
+	u64 uptime;
+	unsigned long thresh = 0;
+	unsigned long bg_thresh = 0;
+	struct backing_dev_info *bdi;
+	unsigned int nread, nwrite;
+
+	/* Enhanced diskstats for IOD V 2.2 */
 	global_dirty_limits(&bg_thresh, &thresh);
 
 	disk_part_iter_init(&piter, gp, DISK_PITER_INCL_EMPTY_PART0);
@@ -1274,20 +1328,20 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 	return 0;
 }
 
-static const struct seq_operations diskstats_op = {
+static const struct seq_operations iostats_op = {
 	.start	= disk_seqf_start,
 	.next	= disk_seqf_next,
 	.stop	= disk_seqf_stop,
-	.show	= diskstats_show
+	.show	= iostats_show
 };
 
-static int diskstats_open(struct inode *inode, struct file *file)
+static int iostats_open(struct inode *inode, struct file *file)
 {
-	return seq_open(file, &diskstats_op);
+	return seq_open(file, &iostats_op);
 }
 
-static const struct file_operations proc_diskstats_operations = {
-	.open		= diskstats_open,
+static const struct file_operations proc_iostats_operations = {
+	.open		= iostats_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= seq_release,
@@ -1295,6 +1349,7 @@ static const struct file_operations proc_diskstats_operations = {
 
 static int __init proc_genhd_init(void)
 {
+	proc_create("iostats", 0, NULL, &proc_iostats_operations);
 	proc_create("diskstats", 0, NULL, &proc_diskstats_operations);
 	proc_create("partitions", 0, NULL, &proc_partitions_operations);
 	return 0;

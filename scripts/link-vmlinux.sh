@@ -105,6 +105,15 @@ mksysmap()
 	${CONFIG_SHELL} "${srctree}/scripts/mksysmap" ${1} ${2}
 }
 
+# Examine vmlinux file if it has correct JOPP magic.
+# It jusk check about only one function.
+# ${1} - vmlinux file
+# ${2} - JOPP magic
+checkup_jopp()
+{
+	${CONFIG_SHELL} "${srctree}/scripts/checkup_jopp.sh" ${1} ${2}
+}
+
 sortextable()
 {
 	${objtree}/scripts/sortextable ${1}
@@ -258,6 +267,10 @@ else
     fi
 fi
 
+if [ -n "${CONFIG_RKP_CFP_JOPP}" ]; then
+	echo "  JOPP : double-checking jopp magic of vmlinux"
+	checkup_jopp vmlinux ${CONFIG_RKP_CFP_JOPP_MAGIC}
+fi
 
 
 # We made a new kernel - delete old version file

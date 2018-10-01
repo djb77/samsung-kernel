@@ -1493,6 +1493,7 @@ static int exynos_tmu_remove(struct platform_device *pdev)
 	list_for_each_entry(devnode, &dtm_dev_list, node) {
 		if (devnode->id == data->id) {
 			list_del(&devnode->node);
+			break;
 		}
 	}
 	mutex_unlock(&data->lock);
@@ -1539,6 +1540,7 @@ static struct platform_driver exynos_tmu_driver = {
 		.owner  = THIS_MODULE,
 		.pm     = EXYNOS_TMU_PM,
 		.of_match_table = exynos_tmu_match,
+		.suppress_bind_attrs = true,
 	},
 	.probe = exynos_tmu_probe,
 	.remove	= exynos_tmu_remove,

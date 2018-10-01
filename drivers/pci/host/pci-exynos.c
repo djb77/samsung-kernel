@@ -285,10 +285,10 @@ static ssize_t store_pcie(struct device *dev,
 		BUG_ON(1);
 	} else if (enable == 5) {
 		exynos_pcie_l1ss_ctrl(1, PCIE_L1SS_CTRL_SYSFS);
-		dev_info(dev, "VR requests pcie l1ss enable\n");
+		dev_info(dev, "SYSFS requests pcie l1ss enable\n");
 	} else if (enable == 6) {
 		exynos_pcie_l1ss_ctrl(0, PCIE_L1SS_CTRL_SYSFS);
-		dev_info(dev, "VR requests pcie l1ss disable\n");
+		dev_info(dev, "SYSFS requests pcie l1ss disable\n");
 	} else if (enable == 7) {
 		dev_info(dev, "%s: l1ss_ctrl_id_state = 0x%x\n",
 				__func__, exynos_pcie->l1ss_ctrl_id_state);
@@ -445,7 +445,7 @@ retry:
 	count = 0;
 	while (count < MAX_TIMEOUT) {
 		val = exynos_elb_readl(exynos_pcie, PCIE_ELBI_RDLH_LINKUP) & 0x1f;
-		if (val >= 0x0d && val <= 0x15)
+		if (val >= 0x0d && val <= 0x14)
 			break;
 
 		count++;
@@ -471,15 +471,37 @@ retry:
 			goto retry;
 		} else {
 			exynos_pcie_print_link_history(pp);
+
+#ifdef CONFIG_SEC_PANIC_PCIE_ERR
+			dev_info(dev, "%s: [Case#1] PCIe link fail\n",__func__);
+#else
 			if (of_device_is_compatible(pp->dev->of_node, "samsung,exynos8890-pcie") && (exynos_pcie->ch_num == 0)) {
 				return -EPIPE;
 			}
+#endif
 			BUG_ON(1);
 			return -EPIPE;
 		}
 	} else {
 		dev_info(dev, "%s: Link up:%x\n", __func__,
 			 exynos_elb_readl(exynos_pcie, PCIE_ELBI_RDLH_LINKUP));
+
+		val = exynos_elb_readl(exynos_pcie, PCIE_ELBI_RDLH_LINKUP) & 0x1f;
+		if (val >= 0x0d && val <= 0x14) {
+			dev_info(dev, "%s: Link up:%x\n", __func__, val);
+		} else {
+			dev_info(dev, "%s: Link state:%x\n", __func__, val);
+			dev_info(dev, "%s: Before set perst, gpio val = %d\n",
+					__func__, gpio_get_value(exynos_pcie->perst_gpio));
+			gpio_set_value(exynos_pcie->perst_gpio, 0);
+			dev_info(dev, "%s: After set perst, gpio val = %d\n",
+					__func__, gpio_get_value(exynos_pcie->perst_gpio));
+			/* LTSSM disable */
+			exynos_elb_writel(exynos_pcie, PCIE_ELBI_LTSSM_DISABLE,
+					PCIE_APP_LTSSM_ENABLE);
+			exynos_pcie_phy_clock_enable(pp, 0);
+			goto retry;
+		}
 
 		if (of_device_is_compatible(pp->dev->of_node, "samsung,exynos8890-pcie")) {
 			val = exynos_elb_readl(exynos_pcie, PCIE_IRQ_PULSE);
@@ -580,6 +602,10 @@ static irqreturn_t exynos_pcie_irq_handler(int irq, void *arg)
 			exynos_pcie_dump_link_down_status(exynos_pcie->ch_num);
 			exynos_pcie_register_dump(exynos_pcie->ch_num);
 			queue_work(exynos_pcie->pcie_wq, &exynos_pcie->work.work);
+#ifdef CONFIG_SEC_PANIC_PCIE_ERR
+			dev_info(pp->dev, "%s: [Case#4] PCIe link down occured\n",__func__);
+			BUG_ON(1);
+#endif
 		}
 	}
 
@@ -1201,6 +1227,7 @@ void exynos_pcie_send_pme_turn_off(struct exynos_pcie *exynos_pcie)
 	u32 __maybe_unused val;
 
 	val = readl(exynos_pcie->elbi_base + PCIE_ELBI_RDLH_LINKUP) & 0x1f;
+	dev_info(dev, "%s: link state:%x\n", __func__, val);
 	if (!(val >= 0x0d && val <= 0x14)) {
 		dev_info(dev, "%s, pcie link is not up\n", __func__);
 		return;
@@ -1247,8 +1274,13 @@ void exynos_pcie_send_pme_turn_off(struct exynos_pcie *exynos_pcie)
 		count++;
 	} while (count < MAX_TIMEOUT);
 
-	if (count >= MAX_TIMEOUT)
+	if (count >= MAX_TIMEOUT) {
 		dev_err(dev, "cannot receive L23_READY DLLP packet\n");
+#ifdef CONFIG_SEC_PANIC_PCIE_ERR
+		dev_err(dev, "%s: [Case#5] PCIe : PM_Enter_L23 is NOT received\n",__func__);
+		BUG_ON(1);
+#endif
+	}
 }
 
 void exynos_pcie_pm_suspend(int ch_num)

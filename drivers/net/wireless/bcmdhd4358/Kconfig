@@ -140,3 +140,15 @@ config BCMDHD_PREALLOC_MEMDUMP
 	depends on BROADCOM_WIFI_RESERVED_MEM
 	---help---
 	  Preallocated memory support for dongle memory dump
+
+config WIFI_BROADCOM_COB
+        bool "BROADCOM COB type chip is enabled"
+        depends on BROADCOM_WIFI
+        ---help---
+          This is a configuration for broadcom WIFI COB type.
+
+config SPLIT_ARGOS_SET
+	bool "Support argos table"
+	depends on BROADCOM_WIFI
+	---help---
+	To support SPLIT_ARGOS_SET 

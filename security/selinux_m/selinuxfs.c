@@ -1937,7 +1937,9 @@ static struct kobject *selinuxfs_kobj;
 static int __init init_sel_fs(void)
 {
 	int err;
-
+#ifdef CONFIG_ALWAYS_ENFORCE
+	selinux_enabled = 1;
+#endif
 	if (!selinux_enabled)
 		return 0;
 

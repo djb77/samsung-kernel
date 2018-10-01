@@ -76,6 +76,21 @@
 #include <linux/compiler.h>
 #include <linux/exynos-ss.h>
 
+#include <linux/sched/sysctl.h>
+#include <linux/kernel.h>
+#include <linux/kthread.h>
+#include <linux/mutex.h>
+#include <linux/workqueue.h>
+#include <linux/cpufreq.h>
+#include <linux/platform_device.h>
+#include <linux/err.h>
+#include <linux/of.h>
+#include <linux/sysfs.h>
+#include <linux/sec_sysfs.h>
+#include <linux/types.h>
+#include <linux/sched/rt.h>
+#include <linux/cpumask.h>
+
 #include <asm/switch_to.h>
 #include <asm/tlb.h>
 #include <asm/irq_regs.h>
@@ -94,6 +109,8 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
+
+#define HEAVY_TASK_LOAD_THRESHOLD 1000
 
 void start_bandwidth_timer(struct hrtimer *period_timer, ktime_t period)
 {
@@ -1346,19 +1363,24 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
 	const struct cpumask *nodemask = NULL;
 	enum { cpuset, possible, fail } state = cpuset;
 	int dest_cpu;
+	struct cpumask target_mask;
 
 	/*
 	 * If the node that the cpu is on has been offlined, cpu_to_node()
 	 * will return -1. There is no cpu on the node, and we should
 	 * select the cpu on the other node.
 	 */
+	cpumask_and(&target_mask, cpu_active_mask, cpu_coregroup_mask(cpu));
+	if (cpumask_empty(&target_mask))
+		cpumask_setall(&target_mask);
+	else if (!cpumask_intersects(&target_mask, tsk_cpus_allowed(p)))
+		cpumask_copy(&target_mask, tsk_cpus_allowed(p));
+
 	if (nid != -1) {
 		nodemask = cpumask_of_node(nid);
 
 		/* Look for allowed, online CPU in same node. */
-		for_each_cpu(dest_cpu, nodemask) {
-			if (!cpu_online(dest_cpu))
-				continue;
+		for_each_cpu_and(dest_cpu, nodemask, &target_mask) {
 			if (!cpu_active(dest_cpu))
 				continue;
 			if (cpumask_test_cpu(dest_cpu, tsk_cpus_allowed(p)))
@@ -1368,10 +1390,10 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
 
 	for (;;) {
 		/* Any allowed, online CPU? */
-		for_each_cpu(dest_cpu, tsk_cpus_allowed(p)) {
-			if (!cpu_online(dest_cpu))
+		for_each_cpu_and(dest_cpu, tsk_cpus_allowed(p), &target_mask) {
+			if (!(p->flags & PF_KTHREAD) && !cpu_active(dest_cpu))
 				continue;
-			if (!cpu_active(dest_cpu))
+			if (!cpu_online(dest_cpu))
 				continue;
 			goto out;
 		}
@@ -1389,6 +1411,11 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
 			break;
 
 		case fail:
+			pr_warn("cpu %d, task %s, active_mask %x, target_mask %x\n", cpu,
+				p->comm, *(unsigned int *)cpumask_bits(cpu_active_mask),
+				*(unsigned int *)cpumask_bits(&target_mask));
+			dest_cpu = 0;
+			goto out;
 			BUG();
 			break;
 		}
@@ -2349,15 +2376,14 @@ static inline void post_schedule(struct rq *rq)
 asmlinkage __visible void schedule_tail(struct task_struct *prev)
 	__releases(rq->lock)
 {
-	struct rq *rq = this_rq();
+	struct rq *rq;
 
+	/* finish_task_switch() drops rq->lock and enables preemtion */
+	preempt_disable();
+	rq = this_rq();
 	finish_task_switch(rq, prev);
-
-	/*
-	 * FIXME: do we need to worry about rq being invalidated by the
-	 * task_switch?
-	 */
 	post_schedule(rq);
+	preempt_enable();
 
 	if (current->set_child_tid)
 		put_user(task_pid_vnr(current), current->set_child_tid);
@@ -2590,6 +2616,88 @@ void scheduler_tick(void)
 #endif
 	rq_last_tick_reset(rq);
 }
+
+#ifdef NR_CPUS
+static unsigned int heavy_cpu_count = NR_CPUS;
+#else
+static unsigned int heavy_cpu_count = 8;
+#endif
+
+static ssize_t heavy_task_cpu_show(struct device *dev,
+    struct device_attribute *attr, char *buf)
+{
+    int count = 0;
+    long unsigned int task_util;
+    long unsigned int cfs_load;
+    long unsigned int no_task;
+    long unsigned int remaining_load;
+    long unsigned int avg_load;
+    int cpu;
+
+    for_each_cpu(cpu, cpu_online_mask)
+    {
+        struct rq *rq = cpu_rq(cpu);
+        struct task_struct *p = rq->curr;
+        task_util = (long unsigned int)p->se.avg.load_avg_contrib;
+        cfs_load = (long unsigned int)rq->cfs.runnable_load_avg;
+        no_task = (long unsigned int)rq->cfs.h_nr_running;
+
+        if(task_util > HEAVY_TASK_LOAD_THRESHOLD)
+        {
+            count ++;
+        }
+        else if(task_util <= HEAVY_TASK_LOAD_THRESHOLD && no_task > 1)
+        {
+            remaining_load = cfs_load - task_util;
+            avg_load = remaining_load / (no_task-1);
+            if(avg_load > HEAVY_TASK_LOAD_THRESHOLD)
+                count++; 
+        }
+    }
+
+    heavy_cpu_count = count;
+
+    return snprintf(buf, 4, "%d\n", heavy_cpu_count);
+}
+
+static ssize_t heavy_task_cpu_store(struct device *dev,
+    struct device_attribute *attr, const char *buf, size_t size)
+{
+    sscanf(buf, "%d", &heavy_cpu_count);
+
+    return size;
+}
+
+static DEVICE_ATTR(heavy_task_cpu, 0664, heavy_task_cpu_show, heavy_task_cpu_store);
+
+static struct attribute *bench_mark_attributes[] = {
+    &dev_attr_heavy_task_cpu.attr,
+    NULL
+};
+
+static const struct attribute_group bench_mark_attr_group = {
+    .attrs = bench_mark_attributes,
+};
+
+int __init sched_heavy_cpu_init(void)
+{
+    int ret = 0;
+    struct device *dev;
+
+    dev = sec_device_create(NULL, "sec_heavy_cpu");
+
+    if (IS_ERR(dev)) {
+        dev_err(dev, "%s: fail to create sec_dev\n", __func__);
+        return PTR_ERR(dev);
+    }
+    ret = sysfs_create_group(&dev->kobj, &bench_mark_attr_group);
+    if (ret) {
+        dev_err(dev, "failed to create sysfs group\n");
+    }
+
+    return 0;
+}
+late_initcall(sched_heavy_cpu_init);
 
 #ifdef CONFIG_NO_HZ_FULL
 /**
@@ -3684,6 +3792,14 @@ change:
 		enqueue_task(rq, p, oldprio <= p->prio ? ENQUEUE_HEAD : 0);
 	}
 
+	if (p->sched_class == &rt_sched_class) {
+		struct cpumask mask;
+
+		cpumask_andnot(&mask, &p->cpus_allowed, cpu_coregroup_mask(4));
+		if (!cpumask_empty(&mask))
+			do_set_cpus_allowed(p, &mask);
+	}
+
 	check_class_changed(rq, p, prev_class, oldprio);
 	task_rq_unlock(rq, p, &flags);
 
@@ -4743,6 +4859,24 @@ static struct rq *move_queued_task(struct task_struct *p, int new_cpu)
 	check_preempt_curr(rq, p, 0);
 
 	return rq;
+}
+
+/*
+ * move_queue_task_for_bwc - move a queued task to new rq for bandwidth control
+ */
+void move_queued_task_for_bwc(struct task_struct *p, int new_cpu)
+{
+	struct rq *source_rq = task_rq(p);
+	struct rq *target_rq;
+
+	raw_spin_lock(&p->pi_lock);
+
+	target_rq = move_queued_task(p, new_cpu);
+
+	raw_spin_unlock(&target_rq->lock);
+	raw_spin_unlock(&p->pi_lock);
+	raw_spin_lock(&source_rq->lock);
+
 }
 
 void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)

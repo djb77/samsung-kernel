@@ -112,7 +112,7 @@
 #define HVRXBYTE_MAX			16
 
 /* MAX77854 AFC charger W/A Check NUM */
-#define AFC_CHARGER_WA_PING		3
+#define AFC_CHARGER_WA_PING		5
 
 /* MAX77854 MPing miss SW Workaround - delay time */
 #define MPING_MISS_WA_TIME		2000
@@ -231,8 +231,13 @@ extern void max77854_muic_set_adcmode_oneshot(struct hv_data *phv);
 extern void max77854_hv_muic_adcmode_oneshot(struct hv_data *phv);
 
 extern void max77854_muic_prepare_afc_charger(struct hv_data *phv);
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+extern void max77854_muic_prepare_afc_pogo_dock(struct hv_data *phv);
+#endif
 extern bool max77854_muic_check_change_dev_afc_charger
 	(struct hv_data *phv, muic_attached_dev_t new_dev);
+extern void max77854_hv_muic_connect_start(struct hv_data *phv);
+extern void hv_muic_chgdet_ready(struct hv_data *phv);
 
 #endif /* __MAX77854_MUIC_HV_H__ */
 

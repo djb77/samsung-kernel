@@ -132,12 +132,14 @@ struct bio {
 #define BIO_JOURNAL_TAG_MASK	((1UL << BIO_JOURNAL) | (1UL << BIO_JMETA))
 #endif
 
+#define BIO_BYPASS	13
+
 /*
  * Flags starting here get preserved by bio_reset() - this includes
  * BIO_POOL_IDX()
  */
-#define BIO_RESET_BITS	13	/* should be larger then BIO_JMETA */
-#define BIO_OWNS_VEC	13	/* bio_free() should free bvec */
+#define BIO_RESET_BITS	14	/* should be larger then BIO_BYPASS */
+#define BIO_OWNS_VEC	14	/* bio_free() should free bvec */
 
 #define bio_flagged(bio, flag)	((bio)->bi_flags & (1 << (flag)))
 

@@ -19,7 +19,7 @@
 #include "../decon.h"
 
 #ifdef CONFIG_FB_DSU
-#include <linux/sec_debug.h>
+#include <linux/sec_ext.h>
 #endif
 
 #ifdef CONFIG_PANEL_DDI_SPI
@@ -28,6 +28,13 @@
 
 #if defined(CONFIG_EXYNOS_DECON_MDNIE_LITE)
 #include "mdnie.h"
+#endif
+
+#ifdef CONFIG_DISPLAY_USE_INFO
+#include "dpui.h"
+#endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+#include "poc.h"
 #endif
 
 extern struct kset *devices_kset;
@@ -98,6 +105,35 @@ static struct lcd_seq_info SEQ_MCD_OFF_SET_HA5[] = {
 };
 #endif
 
+#ifdef CONFIG_PANEL_S6E3HF4_WQHD_HAECHI
+static struct lcd_seq_info SEQ_MCD_ON_SET_HAECHI[] = {
+	{(u8 *)SEQ_MCD_ON_HAECHI_SET01, ARRAY_SIZE(SEQ_MCD_ON_HAECHI_SET01), 0 },
+	{(u8 *)SEQ_MCD_ON_HAECHI_SET02, ARRAY_SIZE(SEQ_MCD_ON_HAECHI_SET02), 0 },
+	{(u8 *)SEQ_MCD_ON_HAECHI_SET03, ARRAY_SIZE(SEQ_MCD_ON_HAECHI_SET03), 0 },
+	{(u8 *)SEQ_MCD_ON_HAECHI_SET04, ARRAY_SIZE(SEQ_MCD_ON_HAECHI_SET04), 0 },
+	{(u8 *)SEQ_MCD_ON_HAECHI_SET05, ARRAY_SIZE(SEQ_MCD_ON_HAECHI_SET05), 0 },
+	{(u8 *)SEQ_MCD_ON_HAECHI_SET06, ARRAY_SIZE(SEQ_MCD_ON_HAECHI_SET06), 0 },
+	{(u8 *)SEQ_MCD_ON_HAECHI_SET07, ARRAY_SIZE(SEQ_MCD_ON_HAECHI_SET07), 100 },
+	{(u8 *)SEQ_MCD_ON_HAECHI_SET08, ARRAY_SIZE(SEQ_MCD_ON_HAECHI_SET08), 0 },
+	{(u8 *)SEQ_MCD_ON_HAECHI_SET09, ARRAY_SIZE(SEQ_MCD_ON_HAECHI_SET09), 0 },
+	{(u8 *)SEQ_MCD_ON_HAECHI_SET10, ARRAY_SIZE(SEQ_MCD_ON_HAECHI_SET10), 100 },
+};
+
+static struct lcd_seq_info SEQ_MCD_OFF_SET_HAECHI[] = {
+	{(u8 *)SEQ_MCD_OFF_HAECHI_SET01, ARRAY_SIZE(SEQ_MCD_OFF_HAECHI_SET01), 0 },
+	{(u8 *)SEQ_MCD_OFF_HAECHI_SET02, ARRAY_SIZE(SEQ_MCD_OFF_HAECHI_SET02), 0 },
+	{(u8 *)SEQ_MCD_OFF_HAECHI_SET03, ARRAY_SIZE(SEQ_MCD_OFF_HAECHI_SET03), 0 },
+	{(u8 *)SEQ_MCD_OFF_HAECHI_SET04, ARRAY_SIZE(SEQ_MCD_OFF_HAECHI_SET04), 0 },
+	{(u8 *)SEQ_MCD_OFF_HAECHI_SET05, ARRAY_SIZE(SEQ_MCD_OFF_HAECHI_SET05), 0 },
+	{(u8 *)SEQ_MCD_OFF_HAECHI_SET06, ARRAY_SIZE(SEQ_MCD_OFF_HAECHI_SET06), 0 },
+	{(u8 *)SEQ_MCD_OFF_HAECHI_SET07, ARRAY_SIZE(SEQ_MCD_OFF_HAECHI_SET07), 100 },
+	{(u8 *)SEQ_MCD_OFF_HAECHI_SET08, ARRAY_SIZE(SEQ_MCD_OFF_HAECHI_SET08), 0 },
+	{(u8 *)SEQ_MCD_OFF_HAECHI_SET09, ARRAY_SIZE(SEQ_MCD_OFF_HAECHI_SET09), 0 },
+	{(u8 *)SEQ_MCD_OFF_HAECHI_SET10, ARRAY_SIZE(SEQ_MCD_OFF_HAECHI_SET10), 100 },
+};
+
+#endif
+
 static int mcd_write_set(struct dsim_device *dsim, struct lcd_seq_info *seq, u32 num)
 {
 	int ret = 0, i;
@@ -131,6 +167,11 @@ void mcd_mode_set(struct dsim_device *dsim)
 		mcd_seq_size = (panel->mcd_on ? ARRAY_SIZE(SEQ_MCD_ON_SET_HA5) : ARRAY_SIZE(SEQ_MCD_OFF_SET_HA5) ); // overwrite
 	}
 #endif
+#ifdef CONFIG_PANEL_S6E3HF4_WQHD_HAECHI
+	mcd_seq = (panel->mcd_on ? SEQ_MCD_ON_SET_HAECHI : SEQ_MCD_OFF_SET_HAECHI); // overwrite
+	mcd_seq_size = (panel->mcd_on ? ARRAY_SIZE(SEQ_MCD_ON_SET_HAECHI) : ARRAY_SIZE(SEQ_MCD_OFF_SET_HAECHI) ); // overwrite
+#endif
+
 	pr_info("%s MCD : %d\n", __func__, panel->mcd_on);
 
 	dsim_write_hl_data(dsim, SEQ_TEST_KEY_ON_F0, ARRAY_SIZE(SEQ_TEST_KEY_ON_F0));
@@ -177,6 +218,70 @@ static ssize_t mcd_mode_store(struct device *dev,
 	return size;
 }
 static DEVICE_ATTR(mcd_mode, 0664, mcd_mode_show, mcd_mode_store);
+#endif
+
+#ifdef CONFIG_PANEL_GRAY_SPOT
+
+void grayspot_test(struct dsim_device *dsim)
+{
+	struct panel_private *panel = &dsim->priv;
+
+	switch(panel->gray_spot)
+	{
+	case GRAYSPOT_OFF:							// off
+		dsim_write_hl_data(dsim, SEQ_TEST_KEY_ON_F0, ARRAY_SIZE(SEQ_TEST_KEY_ON_F0));
+		dsim_write_hl_data(dsim, SEQ_SOURCE_ON_SET, ARRAY_SIZE(SEQ_SOURCE_ON_SET));
+		dsim_panel_set_elvss(dsim);
+		dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_F0, ARRAY_SIZE(SEQ_TEST_KEY_OFF_F0));
+		pr_info("%s off\n", __func__);
+		break;
+	case GRAYSPOT_ON:							// on
+		dsim_write_hl_data(dsim, SEQ_TEST_KEY_ON_F0, ARRAY_SIZE(SEQ_TEST_KEY_ON_F0));
+		dsim_write_hl_data(dsim, SEQ_SOURCE_OFF_SET, ARRAY_SIZE(SEQ_SOURCE_OFF_SET));
+		dsim_write_hl_data(dsim, SEQ_GRAYSPOT_ELVSS_SET, ARRAY_SIZE(SEQ_GRAYSPOT_ELVSS_SET));
+		dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_F0, ARRAY_SIZE(SEQ_TEST_KEY_OFF_F0));
+		pr_info("%s on\n", __func__);
+		break;
+	default:						// invalid
+		pr_info("%s invalid input %d\n", __func__, panel->gray_spot);
+		break;
+	}
+}
+static ssize_t grayspot_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct panel_private *priv = dev_get_drvdata(dev);
+
+	sprintf(buf, "%u\n", priv->gray_spot);
+
+	return strlen(buf);
+}
+
+static ssize_t grayspot_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct dsim_device *dsim;
+	struct panel_private *priv = dev_get_drvdata(dev);
+	int value;
+	int rc;
+
+	dsim = container_of(priv, struct dsim_device, priv);
+
+	rc = kstrtouint(buf, (unsigned int)0, &value);
+	if (rc < 0)
+		return rc;
+
+	if ((priv->state == PANEL_STATE_RESUMED) && (priv->gray_spot != value)) {
+		priv->gray_spot = value;
+		grayspot_test(dsim);
+	}
+
+	dev_info(dev, "%s: %d\n", __func__, priv->gray_spot);
+
+	return size;
+}
+
+static DEVICE_ATTR(grayspot, 0664, grayspot_show, grayspot_store);
 #endif
 
 #ifdef CONFIG_LCD_HMT
@@ -773,6 +878,7 @@ static ssize_t alpm_doze_store(struct device *dev,
 					dsim_panel_set_brightness(dsim, 1);
 					prev_brightness = 0;
 				}
+				dsim->req_display_on = true;
 				call_panel_ops(dsim, displayon, dsim);
 			}
 			break;
@@ -1598,6 +1704,166 @@ static ssize_t adaptive_control_store(struct device *dev,
 	return size;
 }
 
+#ifdef CONFIG_DISPLAY_USE_INFO
+/*
+ * HW PARAM LOGGING SYSFS NODE
+ */
+static ssize_t dpui_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int ret;
+
+	update_dpui_log(DPUI_LOG_LEVEL_INFO, DPUI_TYPE_PANEL);
+	ret = get_dpui_log(buf, DPUI_LOG_LEVEL_INFO, DPUI_TYPE_PANEL);
+	if (ret < 0) {
+		pr_err("%s failed to get log %d\n", __func__, ret);
+		return ret;
+	}
+
+	pr_info("%s\n", buf);
+	return ret;
+}
+
+static ssize_t dpui_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	if (buf[0] == 'C' || buf[0] == 'c')
+		clear_dpui_log(DPUI_LOG_LEVEL_INFO, DPUI_TYPE_PANEL);
+
+	return size;
+}
+
+/*
+ * [DEV ONLY]
+ * HW PARAM LOGGING SYSFS NODE
+ */
+static ssize_t dpui_dbg_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int ret;
+
+	update_dpui_log(DPUI_LOG_LEVEL_DEBUG, DPUI_TYPE_PANEL);
+	ret = get_dpui_log(buf, DPUI_LOG_LEVEL_DEBUG, DPUI_TYPE_PANEL);
+	if (ret < 0) {
+		pr_err("%s failed to get log %d\n", __func__, ret);
+		return ret;
+	}
+
+	pr_info("%s\n", buf);
+	return ret;
+}
+
+static ssize_t dpui_dbg_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	if (buf[0] == 'C' || buf[0] == 'c')
+		clear_dpui_log(DPUI_LOG_LEVEL_DEBUG, DPUI_TYPE_PANEL);
+
+	return size;
+}
+
+
+static DEVICE_ATTR(dpui, 0660, dpui_show, dpui_store);
+static DEVICE_ATTR(dpui_dbg, 0660, dpui_dbg_show, dpui_dbg_store);
+#endif
+
+#ifdef CONFIG_SUPPORT_POC_FLASH
+static ssize_t poc_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct panel_private *panel = dev_get_drvdata(dev);
+	struct panel_poc_device *poc_dev;
+	struct panel_poc_info *poc_info;
+	int ret;
+
+	if (panel == NULL) {
+		pr_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+
+	if (panel->state != PANEL_STATE_RESUMED) {
+		pr_err("%s:panel is not active\n", __func__);
+		return -EAGAIN;
+	}
+
+	poc_dev = &panel->poc_dev;
+	poc_info = &poc_dev->poc_info;
+
+	ret = set_panel_poc(poc_dev, POC_OP_CHECKPOC);
+	if (unlikely(ret < 0)) {
+		pr_err("%s, failed to chkpoc (ret %d)\n", __func__, ret);
+		return ret;
+	}
+
+	ret = set_panel_poc(poc_dev, POC_OP_CHECKSUM);
+	if (unlikely(ret < 0)) {
+		pr_err("%s, failed to chksum (ret %d)\n", __func__, ret);
+		return ret;
+	}
+
+	snprintf(buf, PAGE_SIZE, "%d %d %02x\n", poc_info->poc,
+			poc_info->poc_chksum[4], poc_info->poc_ctrl[3]);
+
+	dev_info(dev, "%s poc:%d chk:%d gray:%02x\n", __func__, poc_info->poc,
+			poc_info->poc_chksum[4], poc_info->poc_ctrl[3]);
+
+	return strlen(buf);
+}
+
+static ssize_t poc_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct panel_private *panel = dev_get_drvdata(dev);
+	struct panel_poc_device *poc_dev;
+	struct panel_poc_info *poc_info;
+	int rc, ret;
+	unsigned int value;
+
+	if (panel == NULL) {
+		pr_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+	poc_dev = &panel->poc_dev;
+	poc_info = &poc_dev->poc_info;
+
+	rc = kstrtouint(buf, (unsigned int)0, &value);
+	if (rc < 0)
+		return rc;
+
+	if (!IS_VALID_POC_OP(value)) {
+		pr_err("%s invalid poc_op %d\n", __func__, value);
+		return -EINVAL;
+	}
+
+	if (value == POC_OP_WRITE || value == POC_OP_READ) {
+		pr_err("%s unsupported poc_op %d\n", __func__, value);
+		return size;
+	}
+
+	if (value == POC_OP_CANCEL) {
+		atomic_set(&poc_dev->cancel, 1);
+	} else {
+		ret = set_panel_poc(poc_dev, value);
+		if (unlikely(ret < 0)) {
+			pr_err("%s, failed to poc_op %d(ret %d)\n", __func__, value, ret);
+			mutex_unlock(&panel->lock);
+			return -EINVAL;
+		}
+	}
+
+	mutex_lock(&panel->lock);
+	panel->poc_op = value;
+
+	mutex_unlock(&panel->lock);
+
+	pr_info("%s poc_op %d\n",
+			__func__, panel->poc_op);
+
+	return size;
+}
+static DEVICE_ATTR(poc, 0664, poc_show, poc_store);
+#endif
+
 static DEVICE_ATTR(adaptive_control, 0664, adaptive_control_show, adaptive_control_store);
 static DEVICE_ATTR(lcd_type, 0444, lcd_type_show, NULL);
 static DEVICE_ATTR(window_type, 0444, window_type_show, NULL);
@@ -1678,6 +1944,12 @@ void lcd_init_sysfs(struct dsim_device *dsim)
 		dev_err(&dsim->lcd->dev, "failed to add sysfs entries, %d\n", __LINE__);
 #endif
 
+#ifdef CONFIG_PANEL_GRAY_SPOT
+	ret = device_create_file(&dsim->lcd->dev, &dev_attr_grayspot);
+	if (ret < 0)
+		dev_err(&dsim->lcd->dev, "failed to add sysfs entries, %d\n", __LINE__);
+#endif
+
 #ifdef CONFIG_LCD_HMT
 #ifdef CONFIG_PANEL_AID_DIMMING
 	ret = device_create_file(&dsim->lcd->dev, &dev_attr_hmt_bright);
@@ -1709,6 +1981,22 @@ void lcd_init_sysfs(struct dsim_device *dsim)
 
 #ifdef CONFIG_PANEL_DDI_SPI
 	ret = device_create_file(&dsim->lcd->dev, &dev_attr_read_copr);
+	if (ret < 0)
+		dev_err(&dsim->lcd->dev, "failed to add sysfs entries, %d\n", __LINE__);
+#endif
+
+#ifdef CONFIG_DISPLAY_USE_INFO
+	ret = device_create_file(&dsim->lcd->dev, &dev_attr_dpui);
+	if (ret < 0)
+		dev_err(&dsim->lcd->dev, "failed to add sysfs entries, %d\n", __LINE__);
+
+	ret = device_create_file(&dsim->lcd->dev, &dev_attr_dpui_dbg);
+	if (ret < 0)
+		dev_err(&dsim->lcd->dev, "failed to add sysfs entries, %d\n", __LINE__);
+#endif
+
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	ret = device_create_file(&dsim->lcd->dev, &dev_attr_poc);
 	if (ret < 0)
 		dev_err(&dsim->lcd->dev, "failed to add sysfs entries, %d\n", __LINE__);
 #endif

@@ -844,6 +844,11 @@ SOC_SINGLE_TLV("IN5R Digital Volume", ARIZONA_ADC_DIGITAL_VOLUME_5R,
 SOC_ENUM("Input Ramp Up", arizona_in_vi_ramp),
 SOC_ENUM("Input Ramp Down", arizona_in_vd_ramp),
 
+SOC_ENUM_EXT("IN1 Mode", arizona_ip_mode[0],
+	       snd_soc_get_enum_double, arizona_ip_mode_put),
+SOC_ENUM_EXT("IN2 Mode", arizona_ip_mode[1],
+	       snd_soc_get_enum_double, arizona_ip_mode_put),
+
 SND_SOC_BYTES("RXANC Coefficients", ARIZONA_ANC_COEFF_START,
 	      ARIZONA_ANC_COEFF_END - ARIZONA_ANC_COEFF_START + 1),
 SND_SOC_BYTES("RXANCL Config", ARIZONA_FCL_FILTER_CONTROL, 1),

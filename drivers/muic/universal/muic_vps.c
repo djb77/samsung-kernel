@@ -164,6 +164,12 @@ static struct vps_cfg cfg_UNDEFINED_CHARGING = {
 	.name = "Undefined Charging",
 	.attr = MATTR(VCOM_OPEN, VB_HIGH) | MATTR_SUPP,
 };
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+static struct vps_cfg cfg_POGO_DOCK = {
+	.name = "Pogo dock",
+	.attr = MATTR(VCOM_OPEN, VB_HIGH) | MATTR_SUPP,
+};
+#endif
 
 static struct vps_tbl_data vps_table[] = {
 	[MDEV(OTG)]			= {0x00, "GND",	&cfg_OTG,},
@@ -190,6 +196,9 @@ static struct vps_tbl_data vps_table[] = {
 	[MDEV(USB)]			= {0x1f, "OPEN",	&cfg_USB,},
 	[MDEV(CDP)]			= {0x1f, "OPEN",	&cfg_CDP,},
 	[MDEV(UNDEFINED_CHARGING)]	= {0xfe, "UNDEFINED",	&cfg_UNDEFINED_CHARGING,},
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	[MDEV(POGO_DOCK)]		= {0x1f, "OPEN",	&cfg_POGO_DOCK,},
+#endif
 	[ATTACHED_DEV_NUM]		= {0x00, "NUM", NULL,},
 };
 
@@ -472,6 +481,16 @@ int vps_find_attached_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, int *pi
 					MUIC_DEV_NAME, __func__, mdev, pvps->cfg->name);
 			break;
 		}
+
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+		if (gpio_is_valid(pmuic->dock_int_ap) && gpio_get_value(pmuic->dock_int_ap) == 0
+				&& pmsr->t.vbvolt == VB_HIGH) {
+			new_dev = MDEV(POGO_DOCK);
+			pr_info("%s:%s POGO DOCK found at mdev:%d\n",
+					MUIC_DEV_NAME, __func__, mdev);
+			break;
+		}
+#endif
 
 		if (!vps_is_adc(pmsr, pvps))
 			continue;

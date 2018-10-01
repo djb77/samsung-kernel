@@ -92,6 +92,9 @@ struct lpass_info {
 	int			kfc_qos;
 	int			mif_qos;
 	int			int_qos;
+#ifdef CONFIG_SOC_EXYNOS8890
+	void			*sram_fw_back;
+#endif
 };
 
 extern void __iomem *lpass_get_regs(void);

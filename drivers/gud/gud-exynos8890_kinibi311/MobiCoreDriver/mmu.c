@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -21,6 +21,7 @@
 #include <linux/kthread.h>
 #include <linux/pagemap.h>
 #include <linux/device.h>
+#include <linux/version.h>
 
 #include "public/mc_user.h"
 
@@ -68,6 +69,54 @@
  * this must be exactly one page, we can hold up to 512 entries.
  */
 #define L1_ENTRIES_MAX	512
+
+#if KERNEL_VERSION(4, 6, 0) > LINUX_VERSION_CODE
+static inline long gup_local(struct mm_struct *mm, uintptr_t start,
+			     unsigned long nr_pages, int write,
+			     struct page **pages)
+{
+	return get_user_pages(NULL, mm, start, nr_pages, write, 0, pages, NULL);
+}
+#elif KERNEL_VERSION(4, 9, 0) > LINUX_VERSION_CODE
+static inline long gup_local(struct mm_struct *mm, uintptr_t start,
+			     unsigned long nr_pages, int write,
+			     struct page **pages)
+{
+	unsigned int flags = 0;
+
+	if (write)
+		flags |= FOLL_WRITE;
+
+	return get_user_pages_remote(NULL, mm, start, nr_pages, write, 0, pages,
+				     NULL);
+}
+#elif KERNEL_VERSION(4, 10, 0) > LINUX_VERSION_CODE
+static inline long gup_local(struct mm_struct *mm, uintptr_t start,
+			     unsigned long nr_pages, int write,
+			     struct page **pages)
+{
+	unsigned int flags = 0;
+
+	if (write)
+		flags |= FOLL_WRITE;
+
+	return get_user_pages_remote(NULL, mm, start, nr_pages, flags, pages,
+				     NULL);
+}
+#else
+static inline long gup_local(struct mm_struct *mm, uintptr_t start,
+			     unsigned long nr_pages, int write,
+			     struct page **pages)
+{
+	unsigned int flags = 0;
+
+	if (write)
+		flags |= FOLL_WRITE;
+
+	return get_user_pages_remote(NULL, mm, start, nr_pages, flags, pages,
+				     NULL, NULL);
+}
+#endif
 
 /*
  * Fake L1 MMU table.
@@ -188,7 +237,7 @@ static inline int map_buffer(struct task_struct *task, const void *data,
 	/* Get number of L2 tables needed */
 	mmu_table->l2_tables_nr = (total_pages_nr + L2_ENTRIES_MAX - 1) /
 				  L2_ENTRIES_MAX;
-	mc_dev_devel("total_pages_nr %lu l2_tables_nr %zu",
+	mc_dev_devel("total_pages_nr %lu l2_tables_nr %zu\n",
 		     total_pages_nr, mmu_table->l2_tables_nr);
 
 	/* Get a page to store page pointers */
@@ -365,30 +414,38 @@ static inline void unmap_buffer(struct tee_mmu *mmu_table)
 
 	/* Release all locked user space pages */
 	for (t = 0; t < (size_t)mmu_table->l2_tables_nr; t++) {
-		if (g_ctx.f_lpae) {
-			u64 *pte = mmu_table->l2_tables[t].ptes_64;
+		u64 *pte64 = mmu_table->l2_tables[t].ptes_64;
+		u32 *pte32 = mmu_table->l2_tables[t].ptes_32;
+		pte_t pte;
 			int i;
 
-			for (i = 0; i < L2_ENTRIES_MAX; i++, pte++) {
+		for (i = 0; i < L2_ENTRIES_MAX; i++) {
+#if (KERNEL_VERSION(4, 7, 0) > LINUX_VERSION_CODE) || defined(CONFIG_ARM)
+			{
+				if (g_ctx.f_lpae)
+					pte = *pte64++;
+				else
+					pte = *pte32++;
+			}
+
 				/* Unused entries are 0 */
-				if (!*pte)
+			if (!pte)
 					break;
+#else
+			{
+				if (g_ctx.f_lpae)
+					pte.pte = *pte64++;
+				else
+					pte.pte = *pte32++;
+			}
+
+				/* Unused entries are 0 */
+			if (!pte.pte)
+					break;
+#endif
 
 				/* pte_page() cannot return NULL */
-				page_cache_release(pte_page(*pte));
-			}
-		} else {
-			u32 *pte = mmu_table->l2_tables[t].ptes_32;
-			int i;
-
-			for (i = 0; i < L2_ENTRIES_MAX; i++, pte++) {
-				/* Unused entries are 0 */
-				if (!*pte)
-					break;
-
-				/* pte_page() cannot return NULL */
-				page_cache_release(pte_page(*pte));
-			}
+			put_page(pte_page(pte));
 		}
 	}
 
@@ -452,6 +509,24 @@ struct tee_mmu *tee_mmu_create(struct task_struct *task, const void *addr,
 		     mmu->offset, mmu->l1_table.page ? 1 : 2,
 		     mmu_table_pointer(mmu));
 	return mmu;
+}
+
+bool client_mmu_matches(const struct tee_mmu *left,
+			const struct tee_mmu *right)
+{
+	const void *left_page = left->l2_tables[0].ptes_32;
+	const void *right_page = right->l2_tables[0].ptes_32;
+	bool ret;
+
+	/* L1 not supported */
+	if (left->l1_table.page || right->l1_table.page)
+		return false;
+
+	/* Only need to compare contents of L2 page */
+	ret = !memcmp(left_page, right_page, PAGE_SIZE);
+	mc_dev_devel("MMU tables virt %p and %p %smatch\n", left, right,
+		     ret ? "" : "do not ");
+	return ret;
 }
 
 void tee_mmu_buffer(const struct tee_mmu *mmu, struct mcp_buffer_map *map)

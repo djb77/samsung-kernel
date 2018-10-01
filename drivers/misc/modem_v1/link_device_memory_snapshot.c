@@ -204,7 +204,7 @@ static void __take_mem_status(struct mem_link_device *mld, enum direction dir,
 	mst->magic = get_magic(mld);
 	mst->access = get_access(mld);
 
-	for (i = 0; i < MAX_SIPC5_DEVICES; i++) {
+	for (i = 0; i < MAX_SIPC_MAP; i++) {
 		struct mem_ipc_device *dev = mld->dev[i];
 		mst->head[i][TX] = get_txq_head(dev);
 		mst->tail[i][TX] = get_txq_tail(dev);
@@ -240,4 +240,3 @@ struct mst_buff *mem_take_snapshot(struct mem_link_device *mld,
 }
 
 #endif
-

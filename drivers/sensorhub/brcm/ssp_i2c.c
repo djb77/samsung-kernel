@@ -659,6 +659,17 @@ void set_proximity_threshold(struct ssp_data *data)
 
 	msg->buffer[0] = (char)data->uProxHiThresh;
 	msg->buffer[1] = (char)data->uProxLoThresh;
+#elif defined(CONFIG_SENSORS_SSP_TMD3725)
+	msg->cmd = MSG2SSP_AP_SENSOR_PROXTHRESHOLD;
+	msg->length = 4;
+	msg->options = AP2HUB_WRITE;
+	msg->buffer = (char *) kzalloc(4, GFP_KERNEL);
+	msg->free_buffer = 1;
+
+	msg->buffer[0] = (char) data->uProxHiThresh;
+	msg->buffer[1] = (char) data->uProxLoThresh;
+	msg->buffer[2] = (char) data->uProxHiThresh_detect;
+	msg->buffer[3] = (char) data->uProxLoThresh_detect;
 #elif defined(CONFIG_SENSORS_SSP_PROX_AUTOCAL_AMS)
 	msg->cmd = MSG2SSP_AP_SENSOR_PROXTHRESHOLD;
 	msg->length = 8;
@@ -686,11 +697,13 @@ void set_proximity_threshold(struct ssp_data *data)
 	msg->buffer[2] = ((char) (data->uProxLoThresh >> 8) & 0xff);
 	msg->buffer[3] = (char) data->uProxLoThresh;
 
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	//for tmd4904
 	msg->buffer[4] = ((char) (data->uProxHiThresh_tmd4904>> 8) & 0xff);
 	msg->buffer[5] = (char) data->uProxHiThresh_tmd4904;
 	msg->buffer[6] = ((char) (data->uProxLoThresh_tmd4904>> 8) & 0xff);
 	msg->buffer[7] = (char) data->uProxLoThresh_tmd4904;
+#endif
 #endif
 
 	iRet = ssp_spi_async(data, msg);
@@ -706,8 +719,13 @@ void set_proximity_threshold(struct ssp_data *data)
 		data->uProxHiThresh, data->uProxLoThresh,
 		data->uProxHiThresh_detect, data->uProxLoThresh_detect);
 #else
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	pr_info("[SSP]: Proximity Threshold - %d, %d / %d %d\n",
 		data->uProxHiThresh, data->uProxLoThresh, data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904);
+#else
+	pr_info("[SSP]: Proximity Threshold - %d, %d\n",
+		data->uProxHiThresh, data->uProxLoThresh);
+#endif
 #endif
 }
 
@@ -938,7 +956,7 @@ u64 get_sensor_scanning_info(struct ssp_data *data)
 
 	data->sensor_state[SENSOR_MAX] = '\0';
 	for (z = 0; z < SENSOR_MAX; z++)
-		data->sensor_state[SENSOR_MAX - 1 - z] = (result & (1 << z)) ? '1' : '0';
+		data->sensor_state[SENSOR_MAX - 1 - z] = (result & (1ULL << z)) ? '1' : '0';
 	pr_err("[SSP]: state: %s\n", data->sensor_state);
 
 	return result;
@@ -1169,4 +1187,28 @@ int send_motor_state(struct ssp_data *data)
 	return data->motor_state;
 }
 #endif
+
+u8 get_accel_range (struct ssp_data *data)
+{
+	int iRet = 0;
+	struct ssp_msg *msg;
+    u8 rxbuffer[1] = {0x00};
+	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
+
+	msg->cmd = MSG2SSP_AP_MCU_GET_ACCEL_RANGE;
+	msg->length = 1;
+	msg->options = AP2HUB_READ;
+	msg->buffer = rxbuffer;
+	msg->free_buffer = 0;
+
+	iRet = ssp_spi_sync(data, msg, 1000);
+	if (iRet != SUCCESS) {
+		pr_err("[SSP]: %s - fail %d\n",
+				__func__, iRet);
+		return iRet;
+	}
+    
+	pr_info("[SSP] %s - Range : %u\n", __func__, rxbuffer[0]);
+	return rxbuffer[0];
+}
 

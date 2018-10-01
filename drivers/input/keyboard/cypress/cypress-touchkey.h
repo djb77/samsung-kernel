@@ -106,7 +106,7 @@ extern int get_lcd_attached(char *);
 #define TKEY_FW_PATH "/sdcard/Firmware/TOUCHKEY/fw.bin"
 #define TKEY_FW_FFU_PATH "ffu_tk.bin"
 
-#ifdef EFS_CHECK_LIGHT
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 #define LIGHT_VERSION_PATH		"/efs/FactoryApp/tkey_light_version"
 #define LIGHT_TABLE_PATH		"/efs/FactoryApp/tkey_light"
 #define LIGHT_CRC_PATH			"/efs/FactoryApp/tkey_light_crc"
@@ -290,7 +290,7 @@ struct touchkey_i2c {
 	int (*power)(void *, bool);
 	void (*register_cb)(void *);
 
-#ifdef EFS_CHECK_LIGHT
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 	struct delayed_work efs_open_work;
 	int light_version_efs;
 	char light_version_full_efs[LIGHT_VERSION_LEN];

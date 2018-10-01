@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2016 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -27,7 +27,7 @@ struct tee_object {
 /* Structure to hold all mapped buffer data to pass to MCP */
 struct mcp_buffer_map {
 	u64	phys_addr;	/** Page-aligned physical address */
-	u64	secure_va;	/** Page-aligned physical address */
+	u64	secure_va;	/** SWd virtual address */
 	u32	offset;		/** Data offset inside the first page */
 	u32	length;		/** Length of the data */
 	u32	type;		/** Type of MMU */
@@ -120,10 +120,10 @@ int mcp_open_session(struct mcp_session *session,
 		     const struct mcp_buffer_map *tci_map);
 int mcp_close_session(struct mcp_session *session);
 void mcp_kill_session(struct mcp_session *session);
-int mcp_map(u32 session_id, struct mcp_buffer_map *buffer_map);
-int mcp_unmap(u32 session_id, const struct mcp_buffer_map *buffer_map);
-int mcp_multimap(u32 session_id, struct mcp_buffer_map *buffer_maps);
-int mcp_multiunmap(u32 session_id, const struct mcp_buffer_map *buffer_maps);
+int mcp_multimap(u32 session_id, struct mcp_buffer_map *maps,
+		 bool use_multimap);
+int mcp_multiunmap(u32 session_id, struct mcp_buffer_map *maps,
+		   bool use_multimap);
 int mcp_notify(struct mcp_session *mcp_session);
 
 /* MCP initialisation/cleanup */

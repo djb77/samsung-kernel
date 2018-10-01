@@ -39,16 +39,17 @@ int debug_crash_dump(struct ssp_data *data, char *pchRcvDataFrame, int iLength)
 	if (data->bMcuDumpMode == true)	{
 		wake_lock(&data->ssp_wake_lock);
 
+		backup_fs = get_fs();
+		set_fs(get_ds());
+
 		if (data->realtime_dump_file == NULL) {
-			backup_fs = get_fs();
-			set_fs(get_ds());
 
 			do_gettimeofday(&cur_time);
 
 			snprintf(strFilePath, sizeof(strFilePath), "%s%d.dump",
 				DEBUG_DUMP_FILE_PATH, (int)cur_time.tv_sec);
 			data->realtime_dump_file = filp_open(strFilePath,
-					O_RDWR | O_CREAT | O_APPEND, 0666);
+					O_RDWR | O_CREAT | O_APPEND, 0660);
 
 			ssp_err("save_crash_dump : open file(%s)", strFilePath);
 
@@ -56,11 +57,9 @@ int debug_crash_dump(struct ssp_data *data, char *pchRcvDataFrame, int iLength)
 				ssp_errf("Can't open dump file");
 				set_fs(backup_fs);
 				iRet = PTR_ERR(data->realtime_dump_file);
-				filp_close(data->realtime_dump_file,
-					current->files);
 				data->realtime_dump_file = NULL;
 				wake_unlock(&data->ssp_wake_lock);
-				return FAIL;
+				return iRet;
 			}
 		}
 
@@ -71,19 +70,22 @@ int debug_crash_dump(struct ssp_data *data, char *pchRcvDataFrame, int iLength)
 					&data->realtime_dump_file->f_pos);
 		if (iRetWrite < 0) {
 			ssp_errf("Can't write dump to file");
+			filp_close(data->realtime_dump_file, current->files);
+			set_fs(backup_fs);
 			wake_unlock(&data->ssp_wake_lock);
 			return FAIL;
 		}
 
 		if (datacount == DEBUG_DUMP_DATA_COMPLETE) {
 			ssp_errf("close file(size=%d)", data->total_dump_size);
-			filp_close(data->realtime_dump_file, current->files);
-			set_fs(backup_fs);
 			data->uDumpCnt++;
 			data->total_dump_size = 0;
 			data->realtime_dump_file = NULL;
 			data->bDumping = false;
 		}
+
+		filp_close(data->realtime_dump_file, current->files);
+		set_fs(backup_fs);
 
 		wake_unlock(&data->ssp_wake_lock);
 

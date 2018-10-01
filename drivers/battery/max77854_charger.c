@@ -121,6 +121,58 @@ static void max77854_test_read(struct max77854_charger_data *charger)
 	pr_info("MAX77854 : %s\n", str);
 }
 
+#if defined(CONFIG_MAX77854_FG_SENSING_WA)
+static void max77854_current_sensing_wa(struct max77854_charger_data *charger)
+{
+	u8 reg_data;
+	u8 backup_otp[16] = {0, };
+	int i = 0;
+	static bool is_enable_wa;
+	union power_supply_propval value = {0, };
+
+	psy_do_property("max77854-fuelgauge", get,
+			POWER_SUPPLY_PROP_VOLTAGE_NOW, value);
+
+	max77854_read_reg(charger->i2c, MAX77854_CHG_REG_CNFG_00, &reg_data);
+
+	if (value.intval < 3800 && ((reg_data & 0xF) == 0x04) &&
+			(charger->cable_type != POWER_SUPPLY_TYPE_BATTERY)) {
+		if (!is_enable_wa) {
+			/* 1. Write 0xD2, 0xFF, 0xC5 to enable test register access */
+			max77854_write_reg(charger->i2c, 0xFE, 0xC5);
+			/* 2. Write 0xC4, 0xB3, 0x3C to set GTST='1' (Global test to enable writing to trim register */
+			max77854_write_reg(charger->gtest, 0xB3, 0x3C);
+			/* 3. Read & backup otp register */
+			for (i = 0; i < 16; i++) {
+				max77854_read_reg(charger->otp, 0x21 + i, &backup_otp[i]);
+			}
+
+			for (i = 0; i < 16; i++) {
+				if (i != 12)
+					max77854_write_reg(charger->otp, 0x21 + i, backup_otp[i]);
+			} 
+
+			max77854_write_reg(charger->otp, 0x31, 0xE4);
+			/* Overwrite OTP data */
+			max77854_write_reg(charger->otp, 0x20, 0x40);
+			is_enable_wa = true;
+		}
+	} else  {
+		if (is_enable_wa) {
+			/* 1. use factory OTP trim */
+			max77854_write_reg(charger->otp, 0x20, 0x0);
+			/* 2. GTST set to '0' */
+			max77854_write_reg(charger->gtest, 0xB3, 0x30);
+			/* 3. exit test */
+			max77854_write_reg(charger->i2c, 0xFE, 0x0);
+			is_enable_wa = false;
+		}
+	}
+
+	pr_info("%s: en_wa : %d, VCELL : %d, CNFG_00 Status : 0x%x\n", __func__, is_enable_wa, value.intval, reg_data);
+}
+#endif
+
 static int max77854_get_vbus_state(struct max77854_charger_data *charger)
 {
 	u8 reg_data;
@@ -708,6 +760,16 @@ static void max77854_charger_initialize(struct max77854_charger_data *charger)
 	int jig_gpio;
 	pr_info("%s\n", __func__);
 
+#if defined(CONFIG_MAX77854_FG_SENSING_WA)
+	/* OTP Set Default */
+	/* 1. use factory OTP trim */
+	max77854_write_reg(charger->otp, 0x20, 0x0);
+	/* 2. GTST set to '0' */
+	max77854_write_reg(charger->gtest, 0xB3, 0x30);
+	/* 3. exit test */
+	max77854_write_reg(charger->i2c, 0xFE, 0x0);
+#endif
+
 	/* unmasked: CHGIN_I, WCIN_I, BATP_I, BYP_I	*/
 	/*max77854_write_reg(charger->i2c, MAX77854_CHG_REG_INT_MASK, 0x9a);*/
 
@@ -922,6 +984,10 @@ static int max77854_chg_get_property(struct power_supply *psy,
 		return -ENODATA;
 #endif
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
+#if defined(CONFIG_MAX77854_FG_SENSING_WA)
+		if (charger->enable_fg_sensing_wa)
+			max77854_current_sensing_wa(charger);
+#endif
 		max77854_read_reg(charger->i2c,
 				  MAX77854_CHG_REG_DETAILS_01, &reg_data);
 		reg_data &= 0x0F;
@@ -1913,6 +1979,10 @@ static int max77854_charger_parse_dt(struct max77854_charger_data *charger)
 					__func__, charger->jig_gpio);
 			charger->jig_gpio = 0;
 		}
+#if defined(CONFIG_MAX77854_FG_SENSING_WA)
+		charger->enable_fg_sensing_wa = of_property_read_bool(np,
+			"fuelgauge,fg_sensing_wa");
+#endif
 	}
 
 	return ret;
@@ -1945,6 +2015,10 @@ static int __devinit max77854_charger_probe(struct platform_device *pdev)
 	charger->dev = &pdev->dev;
 	charger->i2c = max77854->charger;
 	charger->pmic_i2c = max77854->i2c;
+#if defined(CONFIG_MAX77854_FG_SENSING_WA)
+	charger->gtest = max77854->gtest;
+	charger->otp = max77854->otp;
+#endif
 	charger->pdata = charger_data;
 	charger->aicl_on = false;
 	charger->is_aicl = false;

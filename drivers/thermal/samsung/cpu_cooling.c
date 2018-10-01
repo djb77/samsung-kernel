@@ -92,7 +92,7 @@ static int is_cpufreq_valid(int cpu)
 {
 	struct cpufreq_policy policy;
 
-	return (!cpufreq_get_policy(&policy, cpu) && policy.user_policy.governor);
+	return (!cpufreq_get_policy(&policy, cpu) && (cpu == policy.cpu) && policy.user_policy.governor);
 }
 
 enum cpufreq_cooling_property {

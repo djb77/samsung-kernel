@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 vendor command/event handlers of DHD
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_cfg_vendor.c 487126 2014-06-24 23:06:12Z $
+ * $Id: dhd_cfg_vendor.c 655255 2016-08-18 14:58:25Z $
  */
 
 #include <linuxver.h>
@@ -33,6 +33,7 @@
 #include <wl_cfgvendor.h>
 #include <dngl_stats.h>
 #include <dhd.h>
+#include <dhd_dbg.h>
 #include <dhdioctl.h>
 #include <brcm_nl80211.h>
 

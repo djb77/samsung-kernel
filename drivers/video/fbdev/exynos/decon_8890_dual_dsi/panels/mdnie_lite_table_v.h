@@ -6,10 +6,10 @@
 /* SCR Position can be different each panel */
 static struct mdnie_scr_info scr_info = {
 	.index = 1,
-	.color_blind = 131,	/* ASCR_WIDE_CR[7:0] */
-	.white_r = 149,		/* ASCR_WIDE_WR[7:0] */
-	.white_g = 151,		/* ASCR_WIDE_WG[7:0] */
-	.white_b = 153		/* ASCR_WIDE_WB[7:0] */
+	.cr = 131,		/* ASCR_WIDE_CR[7:0] */
+	.wr = 149,		/* ASCR_WIDE_WR[7:0] */
+	.wg = 151,		/* ASCR_WIDE_WG[7:0] */
+	.wb = 153		/* ASCR_WIDE_WB[7:0] */
 };
 
 static inline int color_offset_f1(int x, int y)
@@ -8408,7 +8408,7 @@ static struct mdnie_tune tune_info = {
 	.coordinate_table = coordinate_data,
 	.scr_info = &scr_info,
 	.get_hbm_index = get_hbm_index,
-	.color_offset = {color_offset_f1, color_offset_f2, color_offset_f3, color_offset_f4}
+	.color_offset = {NULL, color_offset_f1, color_offset_f2, color_offset_f3, color_offset_f4}
 };
 
 #endif

@@ -10,10 +10,6 @@
 #ifndef _MAX98505_H
 #define _MAX98505_H
 
-#ifdef CONFIG_SND_SOC_MAXIM_DSM
-#include <sound/maxim_dsm.h>
-#endif /* CONFIG_SND_SOC_MAXIM_DSM */
-
 /* Maximum number of MAX98505 devices in the system this driver can support */
 #define MAX_NUM_MAX98505                           2
 #define	MAX98505_VERSION						0x51
@@ -853,6 +849,9 @@ struct max98505_priv {
 	struct class *dev_log_class;
 	struct device *dev_log;
 #endif
+	struct i2c_client *sub_i2c;
+	struct regmap *sub_regmap;
+	bool nodsm;
 };
 
 #endif

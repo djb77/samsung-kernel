@@ -420,8 +420,10 @@ static inline struct sbd_ring_buffer *sbd_ch2rb_with_skb(struct sbd_link_device 
 {
 	u16 id;
 
+#ifdef CONFIG_MODEM_IF_QOS
 	if (sipc_ps_ch(ch))
 		ch = (skb && skb->queue_mapping == 1) ? QOS_HIPRIO : QOS_NORMAL;
+#endif
 
 	id = sbd_ch2id(sl, ch);
 	return (id < MAX_LINK_CHANNELS) ? &sl->ipc_dev[id].rb[dir] : NULL;

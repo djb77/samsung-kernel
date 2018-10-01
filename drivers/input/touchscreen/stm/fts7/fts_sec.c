@@ -45,6 +45,8 @@ static void module_off_master(void *device_data);
 static void module_on_master(void *device_data);
 static void get_chip_vendor(void *device_data);
 static void get_chip_name(void *device_data);
+static void get_mis_cal_info(void *device_data);
+static void get_wet_mode(void *device_data);
 static void get_x_num(void *device_data);
 static void get_y_num(void *device_data);
 static void get_checksum_data(void *device_data);
@@ -174,6 +176,8 @@ struct ft_cmd ft_commands[] = {
 	{FT_CMD("get_chip_vendor", get_chip_vendor),},
 	{FT_CMD("get_chip_name", get_chip_name),},
 	{FT_CMD("get_module_vendor", not_support_cmd),},
+	{FT_CMD("get_mis_cal_info", get_mis_cal_info),},
+	{FT_CMD("get_wet_mode", get_wet_mode),},
 	{FT_CMD("get_x_num", get_x_num),},
 	{FT_CMD("get_y_num", get_y_num),},
 	{FT_CMD("get_checksum_data", get_checksum_data),},
@@ -1279,6 +1283,96 @@ static void get_chip_name(void *device_data)
 	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
 	info->cmd_state = CMD_STATUS_OK;
 	tsp_debug_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
+}
+
+static void get_mis_cal_info(void *device_data)
+{
+	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
+	char buff[16] = { 0 };
+	unsigned char regAdd[3] = { 0 };
+	unsigned char data[2] = { 0 };
+	int ret = 0;
+
+	set_default_result(info);
+
+	regAdd[0] = 0xC7;
+	regAdd[1] = 0x05;
+
+	ret = fts_write_reg(info, regAdd, 2);
+	if (ret < 0)
+		goto err_miscal;
+
+	fts_delay(50);
+
+	regAdd[0] = 0xD0;
+	regAdd[1] = 0x00;
+	regAdd[2] = 0x67;
+
+	ret = fts_read_reg(info, regAdd, 3, data, 2);
+	if (ret < 0)
+		goto err_miscal;
+
+	tsp_debug_info(true, &info->client->dev, "%s: %02X, %02X\n", __func__, data[0], data[1]);
+
+	mutex_lock(&info->cmd_lock);
+	info->cmd_is_running = false;
+	mutex_unlock(&info->cmd_lock);
+
+	snprintf(buff, sizeof(buff), "%d", data[1]);
+	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
+	info->cmd_state = CMD_STATUS_OK;
+	return;
+
+err_miscal:
+	mutex_lock(&info->cmd_lock);
+	info->cmd_is_running = false;
+	mutex_unlock(&info->cmd_lock);
+
+	tsp_debug_err(true, &info->client->dev, "%s: failed.\n", __func__);
+	snprintf(buff, sizeof(buff), "NG");
+	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
+	info->cmd_state = CMD_STATUS_FAIL;
+}
+
+static void get_wet_mode(void *device_data)
+{
+	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
+	char buff[16] = { 0 };
+	unsigned char regAdd[3] = { 0 };
+	unsigned char data[2] = { 0 };
+	int ret;
+
+	set_default_result(info);
+
+	regAdd[0] = 0xD0;
+	regAdd[1] = 0x00;
+	regAdd[2] = 0x66;
+
+	ret = fts_read_reg(info, regAdd, 3, data, 2);
+	if (ret < 0)
+		goto err_wetmode;
+
+	tsp_debug_info(true, &info->client->dev, "%s: %02X, %02X\n", __func__, data[0], data[1]);
+
+	mutex_lock(&info->cmd_lock);
+	info->cmd_is_running = false;
+	mutex_unlock(&info->cmd_lock);
+
+	snprintf(buff, sizeof(buff), "%d", data[1]);
+
+	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
+	info->cmd_state = CMD_STATUS_OK;
+	return;
+
+err_wetmode:
+	mutex_lock(&info->cmd_lock);
+	info->cmd_is_running = false;
+	mutex_unlock(&info->cmd_lock);
+
+	tsp_debug_err(true, &info->client->dev, "%s: failed.\n", __func__);
+	snprintf(buff, sizeof(buff), "NG");
+	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
+	info->cmd_state = CMD_STATUS_FAIL;
 }
 
 static void get_x_num(void *device_data)

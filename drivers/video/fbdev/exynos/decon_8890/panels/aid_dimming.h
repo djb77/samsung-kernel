@@ -15,7 +15,7 @@
 
 #if defined(CONFIG_PANEL_S6E3HA3_DYNAMIC)
 #include "s6e3ha3_wqhd_dimming.h"
-#elif defined(CONFIG_PANEL_S6E3HF4_WQHD)
+#elif defined(CONFIG_PANEL_S6E3HF4_WQHD) || defined(CONFIG_PANEL_S6E3HF4_WQHD_HAECHI)
 #include "s6e3hf4_wqhd_dimming.h"
 #elif defined(CONFIG_PANEL_S6E3HA5_WQHD)
 #include "s6e3ha5_wqhd_dimming.h"
@@ -23,6 +23,8 @@
 #include "s6e3fa2_fhd_dimming.h"
 #elif defined(CONFIG_PANEL_S6E3HF2_WQXGA)
 #include "s6e3hf2_wqxga_dimming.h"
+#elif defined(CONFIG_PANEL_S6E3HF4_WQXGA)
+#include "s6e3hf4_wqxga_dimming.h"
 #else
 #error "ERROR !! Check LCD Panel Header File"
 #endif

@@ -101,6 +101,7 @@ static int fimc_is_ischain_mcs_cfg(struct fimc_is_subdev *leader,
 	struct param_mcs_input *input;
 	struct param_control *control;
 	struct fimc_is_device_ischain *device;
+	struct fimc_is_subdev *subdev;
 
 	device = (struct fimc_is_device_ischain *)device_data;
 
@@ -157,6 +158,29 @@ static int fimc_is_ischain_mcs_cfg(struct fimc_is_subdev *leader,
 	(*indexes)++;
 
 	leader->input.crop = *incrop;
+
+	switch (group->junction->vid) {
+	case FIMC_IS_VIDEO_M0P_NUM:
+		subdev = group->subdev[ENTRY_M0P];
+		break;
+	case FIMC_IS_VIDEO_M1P_NUM:
+		subdev = group->subdev[ENTRY_M1P];
+		break;
+	case FIMC_IS_VIDEO_M2P_NUM:
+		subdev = group->subdev[ENTRY_M2P];
+		break;
+	case FIMC_IS_VIDEO_M3P_NUM:
+		subdev = group->subdev[ENTRY_M3P];
+		break;
+	case FIMC_IS_VIDEO_M4P_NUM:
+		subdev = group->subdev[ENTRY_M4P];
+		break;
+	default:
+		mwarn("VRA is not connected\n", device);
+		goto p_err;
+	}
+
+	CALL_SOPS(subdev, cfg, device, frame, incrop, NULL, lindex, hindex, indexes);
 
 p_err:
 	return ret;

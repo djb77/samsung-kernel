@@ -496,7 +496,7 @@ int open_vctx(struct file *file,
 		goto p_err;
 	}
 
-	*vctx = kzalloc(sizeof(struct fimc_is_video_ctx), GFP_KERNEL);
+	*vctx = vzalloc(sizeof(struct fimc_is_video_ctx));
 	if (*vctx == NULL) {
 		err("kzalloc is fail");
 		ret = -ENOMEM;
@@ -520,7 +520,7 @@ int close_vctx(struct file *file,
 {
 	int ret = 0;
 
-	kfree(vctx);
+	vfree(vctx);
 	file->private_data = NULL;
 	ret = vref_put(video, NULL);
 

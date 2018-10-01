@@ -76,6 +76,18 @@ config SENSORS_SSP_K6DS3TR
 	  To compile this driver as a module, choose M here: the
 	  module will be called ssp.
 
+config SENSORS_SSP_LSM6DSL
+	tristate "Sensors ssp lsm6dsl"
+	default n
+	depends on SPI
+	help
+	  This option enables lsm6dsl 6axis sensor.
+	  If you say yes here you get lsm6dsl support for
+	  factory test.
+	  To compile this driver as a module, choose M here: the
+	  module will be called ssp.
+
+
 config SENSORS_SSP_AK09911
 	tristate "Sensors ssp ak09911"
 	default n
@@ -174,6 +186,13 @@ config SENSORS_SSP_LPS25H
 	  factory test.
 	  To compile this driver as a module, choose M here: the
 	  module will be called ssp.
+
+config SENSORS_SSP_LPS22H
+	tristate "Sensors ssp lps22h"
+	default n
+	depends on SPI
+	help
+	  This option enables lps22h barometer sensor.
 
 config SENSORS_SSP_SHTC1
 	tristate "Sensors ssp shtc1"
@@ -327,6 +346,17 @@ config SENSORS_SSP_TMD4903
 	help
 	  tmd4903 file for factory test in ssp driver.
           If you say yes here you get tmd4903 support for
+	  factory test.
+	  To compile this driver as a module, choose M here: the
+	  module will be called ssp.
+	  
+config SENSORS_SSP_TMD3725
+	tristate "Sensors ssp tmd3725"
+	default n
+	depends on SPI
+	help
+	  tmd3725 file for factory test in ssp driver.
+          If you say yes here you get tmd3725 support for
 	  factory test.
 	  To compile this driver as a module, choose M here: the
 	  module will be called ssp.
@@ -499,6 +529,16 @@ config SENSORS_SX9320_NORMAL_TOUCH_THRESHOLD
 	  This value is the standard of normal touch using
 	  SemTech sx9320 device driver.
 
+config SENSORS_SX9320_SUB
+	depends on I2C
+	tristate "SX9320 sub driver"
+	default n
+	help
+	  Say Y here if you use sx9320 sub.
+	  This option enables grip sensors using
+	  SemTech sx9320 sub device driver.
+	  Say N here if you do not use sx9320 sub.
+
 config SENSORS_SSP_INTERRUPT_GYRO_SENSOR
          tristate "Sensors ssp interrpt gyro"
          default n
@@ -513,6 +553,17 @@ config SENSORS_SSP_HIFI_BATCHING
          help
          	If you want to use hifi batching, it should be set.
          	
+config SENSORS_SSP_VLTE
+	tristate "V Proejct"
+	default n
+	depends on SPI
+	help
+	  Binary file for ssp driver.
+          If you say yes here you get V project support for
+       	  factory test.
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called ssp.
+
 config SENSORS_SSP_NOBLELTE
 	tristate "NOBLE Proejct"
 	default n
@@ -568,6 +619,28 @@ config SENSORS_SSP_HAECHI
  	  To compile this driver as a module, choose M here: the
  	  module will be called ssp.
 
+config SENSORS_SSP_HAECHI_880
+	tristate "HAECHI Proejct"
+	default n
+	depends on SPI
+	help
+	  Binary file for ssp driver.
+          If you say yes here you get GRACE project support for
+       	  factory test.
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called ssp.
+
+config SENSORS_SSP_HAECHI_888
+	tristate "HAECHI Proejct"
+	default n
+	depends on SPI
+	help
+	  Binary file for ssp driver.
+          If you say yes here you get GRACE project support for
+       	  factory test.
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called ssp.
+
 config SSP_MOTOR
 	tristate "Sensors support motor"
 	default n
@@ -575,5 +648,17 @@ config SSP_MOTOR
 	help
 	  If you want to use royce project, it should be set.
 
+config SSP_REGISTER_RW
+	tristate "SensorHub support Register RW"
+	default n
+	help
+	  If you want to use Register RW sysfs, it should be set.
+
+config SSP_SUPPORT_MAGNETIC_OVERFLOW
+	tristate "SensorHub support Register RW"
+	default n
+	help
+	  If you want to use Register RW sysfs, it should be set.
+      
 source "drivers/sensorhub/brcm/max_notchfilter/Kconfig"
 source "drivers/sensorhub/brcm/bbdpl/Kconfig"

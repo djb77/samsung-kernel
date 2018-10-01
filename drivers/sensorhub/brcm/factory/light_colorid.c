@@ -34,6 +34,14 @@ struct light_coef_predefine_item {
 	unsigned int thresh[2];	/* high,low*/
 }; 
 
+#if defined(CONFIG_SENSORS_SSP_HAECHI_880)
+struct light_coef_predefine_item light_coef_predefine_table[COLOR_NUM+1] =
+{
+    {170920,     COLOR_ID_DEFUALT,   {-830, 1100, -1180, 1000, 814, 3521, 2095},      {55,40}},
+    {170920,     COLOR_ID_UTYPE,      {-830, 1100, -1180, 1000, 814, 3521, 2095},     {55,40}},
+    {170920,     COLOR_ID_BLACK,     {-830, 1100, -1180, 1000, 814, 3521, 2095},      {55,40}},
+};
+#else
 struct light_coef_predefine_item light_coef_predefine_table[COLOR_NUM+1] =
 {
 	{160616,     COLOR_ID_DEFUALT,   {-138,-899,-128,1000,3336,1861,2161},      {470,310}},
@@ -44,7 +52,7 @@ struct light_coef_predefine_item light_coef_predefine_table[COLOR_NUM+1] =
     {160616,     COLOR_ID_BLUE,      {-783,-484,-122,1000,3535,11334,1833},     {450,300}},
     {160809,     COLOR_ID_PINKGOLD,  {-872,112,-51,1000,2016,13838,1841},		{410,280}},
 };
-
+#endif
 /* Color ID functions */
 
 int light_corloid_read_colorid(void)
@@ -53,12 +61,10 @@ int light_corloid_read_colorid(void)
 	mm_segment_t old_fs;
 	struct file *colorid_filp = NULL;
 	int color_id;
-	char buf[8];
+	char buf[8] = {0, };
 	char temp;
 	char *token, *str;
 
-	memset(buf,0,sizeof(char)*8);
-	
 	//read current colorid
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
@@ -73,9 +79,9 @@ int light_corloid_read_colorid(void)
 		return iRet;
 	}
 
-	iRet = colorid_filp->f_op->read(colorid_filp,
+	iRet = vfs_read(colorid_filp,
 		(char *)buf, sizeof(char)*8, &colorid_filp->f_pos);
-	if (iRet != sizeof(char)*8) {
+	if (iRet < 0) {
 		pr_err("[SSP] %s - Can't read the colorid data\n", __func__);
 		filp_close(colorid_filp, current->files);
 		set_fs(old_fs);
@@ -119,11 +125,11 @@ int light_colorid_read_efs_version(char buf[], int buf_length)
 		return iRet;
 	}
 
-	iRet = version_filp->f_op->read(version_filp,
+	iRet = vfs_read(version_filp,
 		(char *)buf, buf_length * sizeof(char), &version_filp->f_pos);
 	
 	
-	if (iRet != buf_length * sizeof(char)) {
+	if (iRet < 0) {
 		pr_err("[SSP] %s - Can't read the version data %d\n", __func__,iRet);
 	}
 
@@ -140,12 +146,11 @@ int light_colorid_write_efs_version(int version, char* color_ids)
 	int iRet = 0;
 	mm_segment_t old_fs;
 	struct file *version_filp = NULL;
-	char file_contents[COLOR_ID_VERSION_FILE_LENGTH];
+	char file_contents[COLOR_ID_VERSION_FILE_LENGTH] = {0, };
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	memset(file_contents,0,sizeof(char)*COLOR_ID_VERSION_FILE_LENGTH);
-	sprintf(file_contents,"%d.%s",version,color_ids);
+	snprintf(file_contents, sizeof(file_contents), "%d.%s",version,color_ids);
 
 	version_filp = filp_open(VERSION_FILE_NAME,
 			O_CREAT | O_TRUNC | O_WRONLY | O_SYNC, 0660);
@@ -157,9 +162,9 @@ int light_colorid_write_efs_version(int version, char* color_ids)
 		return iRet;
 	}
 
-	iRet = version_filp->f_op->write(version_filp, (char *)&file_contents,
+	iRet = vfs_write(version_filp, (char *)&file_contents,
 		sizeof(char)*COLOR_ID_VERSION_FILE_LENGTH, &version_filp->f_pos);
-	if (iRet != sizeof(char)*COLOR_ID_VERSION_FILE_LENGTH) {
+	if (iRet < 0) {
 		pr_err("[SSP] %s - Can't write the version data to file\n", __func__);
 		iRet = -EIO;
 	}
@@ -217,16 +222,14 @@ int light_colorid_write_predefined_file(int color_id, int coef[], int thresh[])
 	int iRet = 0, crc;
 	mm_segment_t old_fs;
 	struct file *coef_filp = NULL;
-	char file_name[COLOR_ID_PREDEFINED_FILENAME_LENTH];
-	char file_contents[COLOR_ID_PREDEFINED_FILE_LENGTH];
+	char file_name[COLOR_ID_PREDEFINED_FILENAME_LENTH] = {0, };
+	char file_contents[COLOR_ID_PREDEFINED_FILE_LENGTH] = {0, };
 
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	sprintf(file_name,"%s%d",PREDEFINED_FILE_NAME,color_id);
+	snprintf(file_name, sizeof(file_name), "%s%d",PREDEFINED_FILE_NAME,color_id);
 
-	memset(file_contents,0,sizeof(char)*COLOR_ID_PREDEFINED_FILE_LENGTH);
-	
 	crc = coef[0] + coef[1] + coef[2] + coef[3] + coef[4] + coef[5] + coef[6] + thresh[0] + thresh[1];
 	sprintf(file_contents,"%d,%d,%d,%d,%d,%d,%d,%u,%u,%d", 
 		coef[0], coef[1], coef[2], coef[3], coef[4], coef[5], coef[6], thresh[0], thresh[1], crc);
@@ -241,9 +244,8 @@ int light_colorid_write_predefined_file(int color_id, int coef[], int thresh[])
 		return iRet;
 	}
 
-	iRet = coef_filp->f_op->write(coef_filp, (char *)file_contents,
-		sizeof(char)*COLOR_ID_PREDEFINED_FILE_LENGTH, &coef_filp->f_pos);
-	if (iRet != sizeof(char)*COLOR_ID_PREDEFINED_FILE_LENGTH) {
+	iRet = vfs_write(coef_filp, (char *)file_contents, sizeof(char)*COLOR_ID_PREDEFINED_FILE_LENGTH, &coef_filp->f_pos);
+	if (iRet < 0) {
 		pr_err("[SSP] %s - Can't write the coef data to file\n", __func__);
 		iRet = -EIO;
 	}
@@ -259,16 +261,14 @@ int light_colorid_read_predefined_file(int color_id, int coef[], unsigned int th
 	int iRet = 0, crc, i;
 	mm_segment_t old_fs;
 	struct file *coef_filp = NULL;
-	char file_name[COLOR_ID_PREDEFINED_FILENAME_LENTH];
-	char file_contents[COLOR_ID_PREDEFINED_FILE_LENGTH];
+	char file_name[COLOR_ID_PREDEFINED_FILENAME_LENTH] = {0, };
+	char file_contents[COLOR_ID_PREDEFINED_FILE_LENGTH] = {0, };
 	char *token, *str;
 
-	memset(file_contents,0,sizeof(char)*COLOR_ID_PREDEFINED_FILE_LENGTH);
-	
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 	
-	sprintf(file_name,"%s%d",PREDEFINED_FILE_NAME,color_id);
+	snprintf(file_name, sizeof(file_name), "%s%d",PREDEFINED_FILE_NAME,color_id);
 
 	coef_filp = filp_open(file_name, O_RDONLY, 0660);
 
@@ -281,7 +281,7 @@ int light_colorid_read_predefined_file(int color_id, int coef[], unsigned int th
 		return iRet;
 	}
 
-	iRet = coef_filp->f_op->read(coef_filp,
+	iRet = vfs_read(coef_filp,
 		(char *)file_contents, sizeof(char)*COLOR_ID_PREDEFINED_FILE_LENGTH, &coef_filp->f_pos);
 	
 	if (iRet != sizeof(char)*COLOR_ID_PREDEFINED_FILE_LENGTH) {
@@ -342,6 +342,13 @@ int light_colorid_read_predefined_file(int color_id, int coef[], unsigned int th
 	}
 
 	token = strsep(&str, ",\n");
+	if(token == NULL)
+	{
+		pr_err("[SSP] %s - too few arguments (1 needed)\n",__func__);
+		memcpy(coef,light_coef_predefine_table[0].coef,sizeof(int)*7);
+		memcpy(thresh,light_coef_predefine_table[0].thresh,sizeof(unsigned int)*2);
+		return -EINVAL;
+	}
 	iRet = kstrtos32(token, 10, &crc);
 		
 	if(crc != (coef[0] + coef[1] + coef[2] + coef[3] + coef[4] + coef[5] + coef[6] + thresh[0] + thresh[1]))
@@ -382,7 +389,7 @@ int light_colorid_write_all_predefined_data(void)
 		if(version < light_coef_predefine_table[i].version)
 			version = light_coef_predefine_table[i].version;
 
-		sprintf(buf,"%x",light_coef_predefine_table[i].color_id);
+		snprintf(buf, sizeof(buf), "%x",light_coef_predefine_table[i].color_id);
 		strcat(str_ids, buf);
 	}
 
@@ -445,7 +452,7 @@ ssize_t light_hiddendhole_version_show(struct device *dev,
 		if(version < light_coef_predefine_table[i].version)
 			version = light_coef_predefine_table[i].version;
 
-		sprintf(idsbuf,"%x",light_coef_predefine_table[i].color_id);
+		snprintf(idsbuf, sizeof(idsbuf), "%x",light_coef_predefine_table[i].color_id);
 		strcat(str_ids, idsbuf);
 	}
 
@@ -481,9 +488,9 @@ ssize_t light_hiddendhole_version_show(struct device *dev,
 	}
 
 	if(err == 1)
-		return sprintf(buf, "%d,%d\n", 0,0);
+		return snprintf(buf, PAGE_SIZE, "%d,%d\n", 0,0);
 	else
-		return sprintf(buf, "P%s.%s,P%d.%s\n", efs_version,str,version,str_ids);
+		return snprintf(buf, PAGE_SIZE, "P%s.%s,P%d.%s\n", efs_version,str,version,str_ids);
 }
 
 ssize_t light_hiddenhole_version_store(struct device *dev,
@@ -496,7 +503,7 @@ ssize_t light_hiddenhole_version_store(struct device *dev,
 		
 	pr_info("[SSP] %s - %s\n", __func__,buf);
 
-	sscanf(buf,"%c%d",&temp, &version);
+	sscanf(buf,"%c%6d",&temp, &version);
 
 	str = (char*)buf;
 	token = strsep(&str, ".");
@@ -508,7 +515,7 @@ ssize_t light_hiddenhole_version_store(struct device *dev,
 	}
 		
 	if(strlen(str) < COLOR_ID_IDS_LENGTH)
-		sscanf(str,"%s",str_ids);
+		sscanf(str,"%20s",str_ids);
 	else
 	{
 		pr_err("[SSP] %s - ids overflow\n",__func__);
@@ -552,45 +559,47 @@ ssize_t light_hiddendhole_hh_write_all_data_show(struct device *dev,
 		pr_err("[SSP] %s - write fail\n",__func__);
 	}
 	
-	return sprintf(buf, "%s\n", (err==0)?"TRUE":"FALSE");
+	return snprintf(buf, PAGE_SIZE, "%s\n", (err==0)?"TRUE":"FALSE");
 }
 
 ssize_t light_hiddenhole_write_all_data_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {
-	int color_id;
-	int coef[7];	/* r_coef,g_coef,b_coef,c_coef,dgf,cct_coef,cct_offset */
-	unsigned int thresh[2];	/* high,low*/
-	char temp = 0;
+	int color_id = 0;
+	int coef[7] = {0, };	/* r_coef,g_coef,b_coef,c_coef,dgf,cct_coef,cct_offset */
+	unsigned int thresh[2] = {0, };	/* high,low*/
 	int crc = 0;
 	int iRet = 0;
+	int temp_ret = 0;
 	mm_segment_t old_fs;
 	struct file *coef_filp = NULL;
-	char file_name[COLOR_ID_PREDEFINED_FILENAME_LENTH];
-	char file_contents[COLOR_ID_PREDEFINED_FILE_LENGTH];
+	char file_name[COLOR_ID_PREDEFINED_FILENAME_LENTH] = {0, };
+	char file_contents[COLOR_ID_PREDEFINED_FILE_LENGTH] = {0, };
 
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 	pr_info("[SSP] %s - %s\n", __func__,buf);
 
-	sscanf(buf, "%d%c%d%c%d%c%d%c%d%c%d%c%d%c%d%c%d%c%d%c%d",
-		&color_id, &temp, &coef[4], &temp, &coef[0], &temp, &coef[1], &temp,
-		&coef[2], &temp, &coef[3], &temp, &coef[5], &temp, &coef[6], &temp,
-		&thresh[0], &temp, &thresh[1], &temp, &crc);
+	temp_ret = sscanf(buf, "%2d,%6d,%6d,%6d,%6d,%6d,%6d,%6d,%6d,%6d,%7d",
+		&color_id, &coef[4], &coef[0], &coef[1],
+		&coef[2], &coef[3], &coef[5], &coef[6],
+		&thresh[0], &thresh[1], &crc);
 
-	pr_info("[SSP] %s - %d%c%d%c%d%c%d%c%d%c%d%c%d%c%d%c%d%c%d%c%d",__func__,
-		color_id, temp, coef[4], temp, coef[0], temp, coef[1], temp,
-		coef[2], temp, coef[3], temp, coef[5], temp, coef[6], temp,
-		thresh[0], temp, thresh[1], temp, crc);
-	
-	if(coef[0]+coef[1]+coef[2]+coef[3]+coef[4]+coef[5]+coef[6]+thresh[0]+thresh[1] != crc)
+	if((coef[0]+coef[1]+coef[2]+coef[3]+coef[4]+coef[5]+coef[6]+thresh[0]+thresh[1] != crc) ||
+		(temp_ret != WRITE_ALL_DATA_NUMBER))
 	{
+		set_fs(old_fs);
 		pr_info("[SSP] %s - crc is wrong\n", __func__);
 		return -EINVAL;
 	}
+
+	pr_info("[SSP] %s - %d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",__func__,
+		color_id, coef[4], coef[0], coef[1], 
+		coef[2], coef[3], coef[5], coef[6],
+		thresh[0], thresh[1], crc);
 	
-	sprintf(file_name,"%s%d",PREDEFINED_FILE_NAME,color_id);
-	sprintf(file_contents,"%d,%d,%d,%d,%d,%d,%d,%u,%u,%d", 
+	snprintf(file_name, sizeof(file_name), "%s%d",PREDEFINED_FILE_NAME,color_id);
+	snprintf(file_contents, sizeof(file_contents), "%d,%d,%d,%d,%d,%d,%d,%u,%u,%d", 
 		coef[0], coef[1], coef[2], coef[3], coef[4], coef[5], coef[6], thresh[0], thresh[1], crc);
 
 	coef_filp = filp_open(file_name,
@@ -603,12 +612,17 @@ ssize_t light_hiddenhole_write_all_data_store(struct device *dev,
 		return iRet;
 	}
 
-	iRet = coef_filp->f_op->write(coef_filp, (char *)file_contents,
+	iRet = vfs_write(coef_filp, (char *)file_contents,
 		sizeof(char)*COLOR_ID_PREDEFINED_FILE_LENGTH, &coef_filp->f_pos);
-	if (iRet != sizeof(char)*COLOR_ID_PREDEFINED_FILE_LENGTH) {
+	if (iRet < 0) {
 		pr_err("[SSP] %s - Can't write the coef data to file\n", __func__);
-		iRet = -EIO;
+		filp_close(coef_filp, current->files);		
+		set_fs(old_fs);
+		return -EIO;
 	}
+
+	filp_close(coef_filp, current->files);
+	set_fs(old_fs);
 
 	pr_info("[SSP] %s - Success %d\n", __func__, iRet);
 	return size;
@@ -635,7 +649,7 @@ ssize_t  light_hiddendhole_is_exist_efs_show(struct device *dev,
 		old_fs = get_fs();
 		set_fs(KERNEL_DS);
 
-		sprintf(file_name,"%s%d",PREDEFINED_FILE_NAME,colorid);
+		snprintf(file_name, sizeof(file_name), "%s%d",PREDEFINED_FILE_NAME,colorid);
 
 		coef_filp = filp_open(file_name, O_RDONLY, 0660);
 
@@ -650,12 +664,12 @@ ssize_t  light_hiddendhole_is_exist_efs_show(struct device *dev,
 			set_fs(old_fs);
 		}
 	}
-	return sprintf(buf, "%s\n", (is_exist==1)?"TRUE":"FALSE");
+	return snprintf(buf, PAGE_SIZE, "%s\n", (is_exist==1)?"TRUE":"FALSE");
 }
 
 ssize_t light_hiddendhole_check_coef_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%d", 1);
+	return snprintf(buf, PAGE_SIZE, "%d", 1);
 }
 ssize_t light_hiddendhole_check_coef_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)

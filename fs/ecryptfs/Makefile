@@ -3,7 +3,7 @@
 #
 
 ifneq "$(strip $(CONFIG_MMC_DW_FMP_ECRYPT_FS) $(CONFIG_UFS_FMP_ECRYPT_FS))" ""
-ccflags-y += -Ifs/sdcardfs
+ccflags-y += -Ifs/sdcardfs/m
 endif
 
 obj-$(CONFIG_ECRYPT_FS) += ecryptfs.o

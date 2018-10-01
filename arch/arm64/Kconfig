@@ -55,7 +55,7 @@ config ARM64
 	select HAVE_FUNCTION_TRACER
 	select HAVE_FUNCTION_GRAPH_TRACER
 	select HAVE_GENERIC_DMA_COHERENT
-	select HAVE_HW_BREAKPOINT if PERF_EVENTS
+#	select HAVE_HW_BREAKPOINT if PERF_EVENTS
 	select HAVE_MEMBLOCK
 	select HAVE_PATA_PLATFORM
 	select HAVE_PERF_EVENTS
@@ -447,6 +447,7 @@ config TIMA_RKP_DEBUG
 config RKP_KDP
 	bool "Protection for cred structure"
 	depends on TIMA_RKP
+	depends on SAMSUNG_PRODUCT_SHIP
 	default n
 	help
 	  Prevents unauthorized cred modification.

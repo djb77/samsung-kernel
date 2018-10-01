@@ -60,8 +60,8 @@ static int vfat_revalidate_shortname(struct dentry *dentry)
 {
 	int ret = 1;
 	spin_lock(&dentry->d_lock);
-	if ((dentry->d_time != dentry->d_parent->d_inode->i_version) &&
-		! __check_dstate_locked(dentry)) {
+	if ((!dentry->d_inode) && (!__check_dstate_locked(dentry)) &&
+		(dentry->d_time != dentry->d_parent->d_inode->i_version)) {
 		ret = 0;
 	}
 	spin_unlock(&dentry->d_lock);

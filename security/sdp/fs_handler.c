@@ -306,7 +306,10 @@ static void control_init(sdp_fs_handler_control_t *con) {
     SDP_FS_HANDLER_LOGD("sdp_fs_handler_control_init");
     spin_lock_init(&con->lock);
     INIT_LIST_HEAD(&con->pending_list);
+
+    spin_lock(&con->lock);
     con->reqctr = 0;
+    spin_unlock(&con->lock);
 }
 
 static int __init sdp_fs_handler_mod_init(void) {

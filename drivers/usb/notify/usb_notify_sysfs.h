@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Samsung Electronics Co. Ltd.
+ * Copyright (C) 2015-2017 Samsung Electronics Co. Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -7,14 +7,13 @@
  * (at your option) any later version.
  */
 
-  /* usb notify layer v2.0 */
+  /* usb notify layer v3.0 */
+
 
 #ifndef __LINUX_USB_NOTIFY_SYSFS_H__
 #define __LINUX_USB_NOTIFY_SYSFS_H__
 
 #define MAX_DISABLE_STR_LEN 32
-#define MAX_HWPARAM_STR_LEN 1024
-#define MAX_HWPARAM_STRING 10
 
 
 struct usb_notify_dev {

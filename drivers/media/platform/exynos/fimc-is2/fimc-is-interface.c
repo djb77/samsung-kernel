@@ -2456,7 +2456,9 @@ static void wq_func_shot(struct work_struct *data)
 			PROGRAM_COUNT(14);
 		} else {
 			mgerr("invalid shot done(%d)", device, group, fcount);
+#if 0 /* remove it temporarily. */
 			frame_manager_print_queues(framemgr);
+#endif
 		}
 
 		framemgr_x_barrier_irqr(framemgr, FMGR_IDX_5, flags);

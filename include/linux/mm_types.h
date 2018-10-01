@@ -489,6 +489,7 @@ struct mm_struct {
 	bool tlb_flush_pending;
 #endif
 	struct uprobes_state uprobes_state;
+	void *async_put_work;
 };
 
 static inline void mm_init_cpumask(struct mm_struct *mm)

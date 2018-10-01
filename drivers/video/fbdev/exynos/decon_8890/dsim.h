@@ -26,10 +26,13 @@
 
 #include <media/v4l2-subdev.h>
 #include <media/media-entity.h>
+#include <linux/debugfs.h>
 
 #include "./panels/decon_lcd.h"
 #include "regs-dsim.h"
 #include "dsim_common.h"
+#include "./panels/poc.h"
+#include "./panels/mdnie.h"
 
 #define DSIM_PAD_SINK		0
 #define DSIM_PADS_NUM		1
@@ -63,7 +66,7 @@ extern struct dsim_device *dsim1_for_decon;
 #define PANEL_STATE_RESUMED		1
 #define PANEL_STATE_SUSPENDING	2
 
-#define PANEL_DISCONNEDTED		0
+#define PANEL_DISCONNECTED		0
 #define PANEL_CONNECTED			1
 
 extern struct mipi_dsim_lcd_driver s6e3hf4_mipi_lcd_driver;
@@ -183,6 +186,10 @@ struct panel_private {
 	unsigned int mcd_on;
 #endif
 
+#ifdef CONFIG_PANEL_GRAY_SPOT
+	unsigned int gray_spot;
+#endif
+
 #ifdef CONFIG_LCD_HMT
 	unsigned int hmt_on;
 	unsigned int hmt_prev_status;
@@ -216,6 +223,18 @@ struct panel_private {
 	unsigned int adaptive_control;
 	int lux;
 	struct class *mdnie_class;
+
+#ifdef CONFIG_DISPLAY_USE_INFO
+	struct notifier_block dpui_notif;
+#endif
+
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	struct panel_poc_device poc_dev;
+	unsigned int poc_op;
+	unsigned int poc_allow_chechsum_read;
+	unsigned char poc_ctrl_set[4];
+	unsigned char poc_checksum_set[5];
+#endif
 };
 
 struct dsim_panel_ops {
@@ -232,6 +251,16 @@ struct dsim_panel_ops {
 #ifdef CONFIG_FB_DSU
 	int (*dsu_cmd)(struct dsim_device *dsim);
 #endif
+};
+
+#define MAX_UNDERRUN_LIST		10
+struct dsim_underrun_info {
+	ktime_t time;
+	unsigned long mif_freq;
+	unsigned long int_freq;
+	unsigned long disp_freq;
+	unsigned int prev_bw;
+	unsigned int cur_bw;
 };
 
 struct dsim_device {
@@ -285,6 +314,14 @@ struct dsim_device {
 	unsigned int	dsu_param_value;
 #endif
 	bool req_display_on;
+
+#ifdef CONFIG_DUMPSTATE_LOGGING
+	struct dentry *debug_root;
+	struct dentry *debug_info;
+#endif
+	int under_list_idx;
+	struct dsim_underrun_info under_list[MAX_UNDERRUN_LIST];
+	int total_underrun_cnt;
 };
 
 /**

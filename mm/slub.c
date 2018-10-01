@@ -525,8 +525,6 @@ static inline void check_freelist_addr(unsigned long addr, struct kmem_cache *s)
 
 	if (addr && (((addr >> 40) & 0xffffff) != 0xffffff)) {
 		pr_err("check_freelist_addr error : addr = 0x%lx\n", addr);
-
-		sec_debug_store_extra_buf(INFO_SLUB_DBG, "%s", s->name);
 		temp = *(unsigned long *)addr;
 		pr_err("check_freelist_addr error : temp = 0x%lx\n", temp);
 		BUG();

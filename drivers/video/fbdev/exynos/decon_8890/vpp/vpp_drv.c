@@ -89,6 +89,10 @@ static void vpp_dump_cfw_register(void)
 
 static void vpp_dump_registers(struct vpp_dev *vpp)
 {
+	if (!test_bit(VPP_RUNNING, &vpp->state)) {
+		dev_err(DEV, "vpp clocks are disabled\n");
+		return;
+	}
 	vpp_dump_cfw_register();
 	dev_info(DEV, "=== VPP%d SFR DUMP ===\n", vpp->id);
 	dev_info(DEV, "start count : %d, done count : %d\n",
@@ -500,6 +504,7 @@ static int vpp_set_config(struct vpp_dev *vpp)
 		}
 		/* The state need to be set here to handle err case */
 		set_bit(VPP_RUNNING, &vpp->state);
+		DISP_SS_EVENT_LOG(DISP_EVT_VPP_SET_RUNNING, vpp->sd, ktime_set(0, 0));
 		spin_unlock_irqrestore(&vpp->slock, flags);
 		enable_irq(vpp->irq);
 	}
@@ -1107,6 +1112,7 @@ static struct platform_driver vpp_driver __refdata = {
 		.owner	= THIS_MODULE,
 		.pm	= &vpp_pm_ops,
 		.of_match_table = of_match_ptr(vpp_device_table),
+		.suppress_bind_attrs = true,
 	}
 };
 

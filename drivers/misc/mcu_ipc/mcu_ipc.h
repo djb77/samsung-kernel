@@ -60,6 +60,8 @@ struct mcu_ipc_drv_data {
 
 	struct device *mcu_ipc_dev;
 	struct mcu_ipc_ipc_handler hd[16];
+
+	u32 mr0;	/* Interrupt mask register */
 };
 
 static struct mcu_ipc_drv_data mcu_dat;

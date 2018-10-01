@@ -13,7 +13,7 @@
 
 #include "../dsim.h"
 #include "smart_dimming_core.h"
-#if defined(CONFIG_PANEL_S6E3FA3_FHD)
+#if defined(CONFIG_PANEL_S6E3FA3_FHD) || defined(CONFIG_PANEL_S6E3HF3_FHD)
 #include "s6e3fa3_fhd_aid_dimming.h"
 #endif
 //#define TEST

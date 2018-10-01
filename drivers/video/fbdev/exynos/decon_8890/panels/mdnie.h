@@ -22,7 +22,7 @@ enum SCENARIO {
 	BROWSER_MODE,
 	EBOOK_MODE,
 	EMAIL_MODE,
-#if defined(CONFIG_PANEL_S6E3HA3_DYNAMIC) || defined(CONFIG_PANEL_S6E3HF4_WQHD) || defined(CONFIG_PANEL_S6E3HA5_WQHD)
+#if defined(CONFIG_PANEL_S6E3HA3_DYNAMIC) || defined(CONFIG_PANEL_S6E3HF4_WQHD) || defined(CONFIG_PANEL_S6E3HA5_WQHD) || defined(CONFIG_PANEL_S6E3HF4_WQHD_HAECHI)
 	GAME_LOW_MODE,
 	GAME_MID_MODE,
 	GAME_HIGH_MODE,
@@ -59,6 +59,15 @@ enum HBM {
 	HBM_MAX
 };
 
+enum COLOR_OFFSET_FUNC {
+	COLOR_OFFSET_FUNC_NONE,
+	COLOR_OFFSET_FUNC_F1,
+	COLOR_OFFSET_FUNC_F2,
+	COLOR_OFFSET_FUNC_F3,
+	COLOR_OFFSET_FUNC_F4,
+	COLOR_OFFSET_FUNC_MAX
+};
+
 enum hmt_mode {
 	HMT_MDNIE_OFF,
 	HMT_MDNIE_ON,
@@ -84,6 +93,18 @@ enum HDR {
 	HDR_MAX
 };
 
+enum COLOR_LENS {
+	COLOR_LENS_OFF,
+	COLOR_LENS_ON,
+	COLOR_LENS_MAX
+};
+
+enum LIGHT_NOTIFICATION {
+	LIGHT_NOTIFICATION_OFF,
+	LIGHT_NOTIFICATION_ON,
+	LIGHT_NOTIFICATION_MAX
+};
+
 struct mdnie_seq_info {
 	mdnie_t *cmd;
 	unsigned int len;
@@ -98,10 +119,10 @@ struct mdnie_table {
 
 struct mdnie_scr_info {
 	u32 index;
-	u32 color_blind;	/* Cyan Red */
-	u32 white_r;
-	u32 white_g;
-	u32 white_b;
+	u32 cr;
+	u32 wr;
+	u32 wg;
+	u32 wb;
 };
 
 struct mdnie_trans_info {
@@ -111,8 +132,14 @@ struct mdnie_trans_info {
 };
 
 struct mdnie_night_info {
-	u32 index_max_num;
-	u32 index_size;
+	u32 max_w;
+	u32 max_h;
+};
+
+struct mdnie_color_lens_info {
+	u32 max_color;
+	u32 max_level;
+	u32 max_w;
 };
 
 struct mdnie_tune {
@@ -124,16 +151,25 @@ struct mdnie_tune {
 	struct mdnie_table	*dmb_table;
 	struct mdnie_table	*night_table;
 	struct mdnie_table	*hdr_table;
+	struct mdnie_table	*light_notification_table;
+	struct mdnie_table	*lens_table;
 
 	struct mdnie_scr_info	*scr_info;
 	struct mdnie_trans_info	*trans_info;
 	struct mdnie_night_info	*night_info;
+	struct mdnie_color_lens_info *color_lens_info;
 	unsigned char **coordinate_table;
 	unsigned char **adjust_ldu_table;
 	unsigned char *night_mode_table;
-	unsigned int max_adjust_ldu;
+	unsigned char *color_lens_table;
 	int (*get_hbm_index)(int);
 	int (*color_offset[])(int, int);
+};
+
+struct rgb_info {
+	int r;
+	int g;
+	int b;
 };
 
 struct mdnie_ops {
@@ -161,10 +197,13 @@ struct mdnie_info {
 	enum hmt_mode		hmt_mode;
 	enum NIGHT_MODE		night_mode;
 	enum HDR		hdr;
+	enum LIGHT_NOTIFICATION	light_notification;
+	enum COLOR_LENS	color_lens;
 
 	unsigned int		tuning;
 	unsigned int		accessibility;
 	unsigned int		color_correction;
+	unsigned int		coordinate[2];
 
 	char			path[50];
 
@@ -173,29 +212,29 @@ struct mdnie_info {
 	struct mdnie_ops	ops;
 
 	struct notifier_block	fb_notif;
+#ifdef CONFIG_DISPLAY_USE_INFO
+	struct notifier_block	dpui_notif;
+#endif
 
-	unsigned int white_r;
-	unsigned int white_g;
-	unsigned int white_b;
-	int white_default_r;
-	int white_default_g;
-	int white_default_b;
-	int white_balance_r;
-	int white_balance_g;
-	int white_balance_b;
+	struct rgb_info		wrgb_current;
+	struct rgb_info		wrgb_default;
+	struct rgb_info		wrgb_balance;
+
 	unsigned int white_rgb_enabled;
 	unsigned int disable_trans_dimming;
 	unsigned int night_mode_level;
+	unsigned int color_lens_color;
+	unsigned int color_lens_level;
 
 	struct mdnie_table table_buffer;
 	mdnie_t sequence_buffer[256];
-	unsigned int coordinate[2];
 };
 
-extern int mdnie_calibration(int *r);
-extern int mdnie_open_file(const char *path, char **fp);
+#ifdef CONFIG_PANEL_CALL_MDNIE
+void mdnie_update_for_panel(void);
+#endif
+
 extern int mdnie_register(struct device *p, void *data, mdnie_w w, mdnie_r r, unsigned int *coordinate, struct mdnie_tune *tune);
-extern uintptr_t mdnie_request_table(char *path, struct mdnie_table *s);
 extern ssize_t attr_store_for_each(struct class *cls, const char *name, const char *buf, size_t size);
 extern struct class *get_mdnie_class(void);
 

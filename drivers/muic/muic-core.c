@@ -52,6 +52,12 @@
 static struct switch_dev switch_dock = {
 	.name = "dock",
 };
+
+#ifdef CONFIG_SEC_FACTORY
+struct switch_dev switch_attached_muic_cable = {
+	.name = "attached_muic_cable", /* sys/class/switch/attached_muic_cable/state */
+};
+#endif
 #endif /* CONFIG_SWITCH */
 
 #if defined(CONFIG_MUIC_NOTIFIER)
@@ -64,6 +70,17 @@ void muic_send_dock_intent(int type)
 	switch_set_state(&switch_dock, type);
 #endif
 }
+
+#ifdef CONFIG_SEC_FACTORY
+void muic_send_attached_muic_cable_intent(int type)
+{
+	pr_info("%s: MUIC attached_muic_cable type(%d)\n", __func__, type);
+#ifdef CONFIG_SWITCH
+	switch_set_state(&switch_attached_muic_cable, type);
+#endif
+}
+#endif
+
 static int muic_dock_attach_notify(int type, const char *name)
 {
 	pr_info("%s: %s\n", __func__, name);
@@ -242,6 +259,16 @@ static void muic_init_switch_dev_cb(void)
 				__func__, ret);
 		return;
 	}
+
+#ifdef CONFIG_SEC_FACTORY
+	/* for cable type event */
+	ret = switch_dev_register(&switch_attached_muic_cable);
+	if (ret < 0) {
+		pr_err("%s: Failed to register attached_muic_cable switch(%d)\n",
+				__func__, ret);
+		return;
+	}
+#endif
 #endif /* CONFIG_SWITCH */
 
 #if defined(CONFIG_MUIC_NOTIFIER)

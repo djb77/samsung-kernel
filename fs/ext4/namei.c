@@ -2635,12 +2635,6 @@ int ext4_orphan_add(handle_t *handle, struct inode *inode)
 	list_add(&EXT4_I(inode)->i_orphan, &sbi->s_orphan);
 	mutex_unlock(&sbi->s_orphan_lock);
 
-	if (test_opt(sb, DEBUG_BDINFO)) {
-		sbi->s_es->s_bd_reset_cnt = cpu_to_le32(sbi->s_bd_reset_cnt);
-		strncpy(sbi->s_es->s_bd_reset_time, sbi->s_bd_reset_time, 16);
-		dirty = true;
-	}
-
 	if (dirty) {
 		err = ext4_handle_dirty_super(handle, sb);
 		rc = ext4_mark_iloc_dirty(handle, inode, &iloc);
@@ -2718,14 +2712,6 @@ int ext4_orphan_del(handle_t *handle, struct inode *inode)
 		}
 		sbi->s_es->s_last_orphan = cpu_to_le32(ino_next);
 		mutex_unlock(&sbi->s_orphan_lock);
-
-		if (test_opt(inode->i_sb, DEBUG_BDINFO)) {
-			sbi->s_es->s_bd_reset_cnt = cpu_to_le32(
-					sbi->s_bd_reset_cnt);
-			strncpy(sbi->s_es->s_bd_reset_time,
-					sbi->s_bd_reset_time, 16);
-		}
-
 		err = ext4_handle_dirty_super(handle, inode->i_sb);
 	} else {
 		struct ext4_iloc iloc2;

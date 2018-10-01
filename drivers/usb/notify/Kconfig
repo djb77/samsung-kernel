@@ -58,11 +58,27 @@ config USB_EXTERNAL_NOTIFY
 	  Added usb external notify.
 	  The usb external notify broadcast special situation
 	  to muic and charger.
-	  
+
 config USB_NOTIFY_PROC_LOG
 	boolean "USB proc log"
 	depends on USB_NOTIFY_LAYER
+	depends on USB_HOST_NOTIFY
 	help
 	  Added proc usblog.
 	  The USB STATE, The USB MODE, Cable event 
 	  are saved in usblog heap.
+
+config USB_HOST_SAMSUNG_FEATURE
+	boolean "USB Host Samsung Feature"
+	depends on USB
+	help
+	  USB Host Samsung Feature.
+	  It is different from LSI BSP code.
+
+config USB_HW_PARAM
+    boolean "USB H/W Parameter"
+    depends on USB_NOTIFY_LAYER
+    depends on USB_HOST_NOTIFY
+    help
+      Added USB H/W Parameter for DQA Agent.
+      You need more works for USB PDIC driver.

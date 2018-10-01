@@ -1565,6 +1565,15 @@ dt_exit:
 }
 
 #ifdef CONFIG_SENSORS_FINGERPRINT_SYSFS
+static ssize_t vfsspi_bfs_values_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	struct vfsspi_device_data *data = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "\"FP_SPICLK\":\"%d\"\n",
+			data->current_spi_speed);
+}
+
 static ssize_t vfsspi_type_check_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -1597,7 +1606,7 @@ static ssize_t vfsspi_retain_show(struct device *dev,
 	if (g_data->retain_pin)
 		return sprintf(buf, "%d\n", gpio_get_value(g_data->retain_pin));
 	else
-		return 0;
+		return sprintf(buf, "-1\n");
 }
 
 static ssize_t vfsspi_retain_store(struct device *dev,
@@ -1620,7 +1629,8 @@ static ssize_t vfsspi_retain_store(struct device *dev,
 	return count;
 }
 #endif
-
+static DEVICE_ATTR(bfs_values, S_IRUGO,
+	vfsspi_bfs_values_show, NULL);
 static DEVICE_ATTR(type_check, S_IRUGO,
 	vfsspi_type_check_show, NULL);
 static DEVICE_ATTR(vendor, S_IRUGO,
@@ -1635,6 +1645,7 @@ static DEVICE_ATTR(retain_pin, S_IRUGO | S_IWUSR | S_IWGRP,
 #endif
 
 static struct device_attribute *fp_attrs[] = {
+	&dev_attr_bfs_values,
 	&dev_attr_type_check,
 	&dev_attr_vendor,
 	&dev_attr_name,

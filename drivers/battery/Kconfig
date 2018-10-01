@@ -61,6 +61,13 @@ config SAMSUNG_BATTERY_ENG_TEST
 	help
 	 Say Y to set test mode in eng build
 
+config MAX77854_FG_SENSING_WA
+	tristate "set to enable max77854 fg sensing w/a"
+	default n
+	depends on BATTERY_SAMSUNG
+	help
+	 Say Y to Enable MAX77854 FG Sensing W/A
+
 # Fuel Gauge
 
 config FUELGAUGE_DUMMY

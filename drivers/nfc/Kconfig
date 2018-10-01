@@ -113,6 +113,14 @@ config NFC_PN547_LDO_CONTROL
 	  Say Y here to compile support for NXP PN547 LDO CONTROL feature into the
 	  kernel.
 
+config NFC_CLKREQ_SUSPEND
+	bool "SEC NFC driver"
+	depends on SEC_NFC
+	default n
+	help
+	  SEC NFC Driver.
+	  This can be used when it needs to observe NFC_CLK_REQ pin at suspend.
+
 source "drivers/nfc/secnfc/Kconfig"
 
 endmenu

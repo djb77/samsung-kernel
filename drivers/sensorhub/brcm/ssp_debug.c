@@ -15,8 +15,8 @@
 #include "ssp.h"
 #include <linux/fs.h>
 #include <linux/sec_debug.h>
-
-
+#include <linux/iio/iio.h>
+#include <linux/iio/buffer.h>
 
 #define SSP_DEBUG_TIMER_SEC		(5 * HZ)
 
@@ -221,8 +221,14 @@ void ssp_temp_task(struct work_struct *work)
 int print_mcu_debug(char *pchRcvDataFrame, int *pDataIdx,
 		int iRcvDataFrameLength)
 {
-	int iLength = pchRcvDataFrame[(*pDataIdx)++];
+	int iLength = 0;
 	int cur = *pDataIdx;
+#if ANDROID_VERSION < 80000
+	iLength = pchRcvDataFrame[(*pDataIdx)++];
+#else
+	memcpy(&iLength, pchRcvDataFrame + *pDataIdx, sizeof(u16));
+	*pDataIdx += sizeof(u16);
+#endif
 
 	if (iLength > iRcvDataFrameLength - *pDataIdx || iLength <= 0) {
 		ssp_dbg("[SSP]: MSG From MCU - invalid debug length(%d/%d/%d)\n",
@@ -242,6 +248,10 @@ void reset_mcu(struct ssp_data *data)
 	ssp_enable(data, false);
 	clean_pending_list(data);
 	bbd_mcu_reset();
+
+	data->uTimeOutCnt = 0;
+	data->uComFailCnt = 0;
+	data->mcuAbnormal = false;
 }
 
 void sync_sensor_state(struct ssp_data *data)
@@ -270,7 +280,7 @@ void sync_sensor_state(struct ssp_data *data)
 
 	for (uSensorCnt = 0; uSensorCnt < SENSOR_MAX; uSensorCnt++) {
 		mutex_lock(&data->enable_mutex);
-		if (atomic64_read(&data->aSensorEnable) & (1 << uSensorCnt)) {
+		if (atomic64_read(&data->aSensorEnable) & (1ULL << uSensorCnt)) {
 			s32 dMsDelay =
 				get_msdelay(data->adDelayBuf[uSensorCnt]);
 			memcpy(&uBuf[0], &dMsDelay, 4);
@@ -282,6 +292,9 @@ void sync_sensor_state(struct ssp_data *data)
 		mutex_unlock(&data->enable_mutex);
 	}
 
+        if (atomic64_read(&data->aSensorEnable) & (1ULL << GYROSCOPE_SENSOR))
+                send_vdis_flag(data, data->IsVDIS_Enabled);
+
 	if (data->bProximityRawEnabled == true) {
 		s32 dMsDelay = 20;
 
@@ -291,9 +304,9 @@ void sync_sensor_state(struct ssp_data *data)
 
 	set_proximity_threshold(data);
 	set_light_coef(data);
-
+#if ANDROID_VERSION < 80000
 	set_gyro_cal_lib_enable(data, true);
-
+#endif
 	data->bMcuDumpMode = ssp_check_sec_dump_mode();
 	iRet = ssp_send_cmd(data, MSG2SSP_AP_MCU_SET_DUMPMODE,
 		data->bMcuDumpMode);
@@ -335,8 +348,8 @@ static void print_sensordata(struct ssp_data *data, unsigned int uSensor)
 		break;
 	case PRESSURE_SENSOR:
 		ssp_dbg("[SSP] %u : %d, %d (%ums, %dms)\n", uSensor,
-			data->buf[uSensor].pressure[0],
-			data->buf[uSensor].pressure[1],
+			data->buf[uSensor].pressure,
+			data->buf[uSensor].temperature,
 			get_msdelay(data->adDelayBuf[uSensor]),
 			data->batchLatencyBuf[uSensor]);
 		break;
@@ -359,14 +372,27 @@ static void print_sensordata(struct ssp_data *data, unsigned int uSensor)
 			data->buf[uSensor].a_time, data->buf[uSensor].a_gain,
 			get_msdelay(data->adDelayBuf[uSensor]));
 		break;
+	case LIGHT_FLICKER_SENSOR:
+		ssp_dbg("[SSP] %u : %u, (%ums)\n", uSensor,
+			data->buf[uSensor].light_flicker, get_msdelay(data->adDelayBuf[uSensor]));
+		break;
+#if ANDROID_VERSION >= 80000
+	case LIGHT_CCT_SENSOR:
+		ssp_dbg("[SSP] %u : %u, %u, %u, %u, %u, %u (%ums)\n", uSensor,
+			data->buf[uSensor].r, data->buf[uSensor].g,
+			data->buf[uSensor].b, data->buf[uSensor].w,
+			data->buf[uSensor].a_time, data->buf[uSensor].a_gain,
+			get_msdelay(data->adDelayBuf[uSensor]));
+		break;
+#endif
 	case PROXIMITY_SENSOR:
 		ssp_dbg("[SSP] %u : %d, %d (%ums)\n", uSensor,
-			data->buf[uSensor].prox[0], data->buf[uSensor].prox[1],
+			data->buf[uSensor].prox_detect, data->buf[uSensor].prox_adc,
 			get_msdelay(data->adDelayBuf[uSensor]));
 		break;
 	case PROXIMITY_ALERT_SENSOR:
 		ssp_dbg("[SSP] %u : %d, %d (%ums)\n", uSensor,
-			data->buf[uSensor].prox_alert[0], data->buf[uSensor].prox_alert[1],
+			data->buf[uSensor].prox_alert_detect, data->buf[uSensor].prox_alert_adc,
 			get_msdelay(data->adDelayBuf[uSensor]));
 		break;
 	case STEP_DETECTOR:
@@ -402,6 +428,37 @@ static void print_sensordata(struct ssp_data *data, unsigned int uSensor)
 			data->buf[uSensor].step_diff,
 			get_msdelay(data->adDelayBuf[uSensor]));
 		break;
+	case LIGHT_IR_SENSOR:
+		ssp_dbg("[SSP] %u : %u, %u, %u, %u, %u, %u, %u (%ums)\n", uSensor,
+			data->buf[uSensor].irdata,
+			data->buf[uSensor].ir_r, data->buf[uSensor].ir_g,
+			data->buf[uSensor].ir_b, data->buf[uSensor].ir_w,
+			data->buf[uSensor].ir_a_time, data->buf[uSensor].ir_a_gain,
+			get_msdelay(data->adDelayBuf[uSensor]));
+		break;
+	case TILT_DETECTOR:
+		ssp_dbg("[SSP] %u : %u(%ums)\n", uSensor,
+			data->buf[uSensor].tilt_detector,
+		get_msdelay(data->adDelayBuf[uSensor]));
+		break;
+	case PICKUP_GESTURE:
+		ssp_dbg("[SSP] %u : %u(%ums)\n", uSensor,
+			data->buf[uSensor].pickup_gesture,
+			get_msdelay(data->adDelayBuf[uSensor]));
+		break;
+#if ANDROID_VERSION >= 80000
+	case ACCEL_UNCALIB_SENSOR:
+		ssp_dbg("[SSP] %u : %d, %d, %d, %d, %d, %d (%ums)\n", uSensor,
+			data->buf[uSensor].uncal_x, data->buf[uSensor].uncal_y,
+			data->buf[uSensor].uncal_z, data->buf[uSensor].offset_x,
+			data->buf[uSensor].offset_y,
+			data->buf[uSensor].offset_z,
+			get_msdelay(data->adDelayBuf[uSensor]));
+		break;
+#endif
+	case BULK_SENSOR:
+	case GPS_SENSOR:
+		break;
 	default:
 		ssp_dbg("[SSP] Wrong sensorCnt: %u\n", uSensor);
 		break;
@@ -427,8 +484,7 @@ bool check_wait_event(struct ssp_data *data)
 			//non batching mode
 			&& data->IsBypassMode[sensor] == 1
 			//there is no sensor event over 3sec
-			&& data->LastSensorTimeforReset[sensor] + 3000000000ULL < timestamp)
-		{
+			&& data->LastSensorTimeforReset[sensor] + 7000000000ULL < timestamp) {
 			pr_info("[SSP] %s - sensor(%d) last = %lld, cur = %lld\n",
 				__func__,sensor,data->LastSensorTimeforReset[sensor],timestamp);
 			res = true;
@@ -446,14 +502,24 @@ static void debug_work_func(struct work_struct *work)
 	unsigned int uSensorCnt;
 	struct ssp_data *data = container_of(work, struct ssp_data, work_debug);
 
-	ssp_dbg("[SSP]: %s(%u) - Sensor state: 0x%llx, RC: %u(%u), CC: %u, TC: %u NSC: %u EC: %u\n",
+	ssp_dbg("[SSP]: %s(%u) - Sensor state: 0x%llx, RC: %u(%u, %u), CC: %u, TC: %u NSC: %u EC: %u\n",
 		__func__, data->uIrqCnt, data->uSensorState, data->uResetCnt, data->mcuCrashedCnt,
-		data->uComFailCnt, data->uTimeOutCnt, data->uNoRespSensorCnt, data->errorCount);
+		data->resetCntGPSisOn, data->uComFailCnt, data->uTimeOutCnt, data->uNoRespSensorCnt, data->errorCount);
 
-	for (uSensorCnt = 0; uSensorCnt < SENSOR_MAX; uSensorCnt++)
-		if ((atomic64_read(&data->aSensorEnable) & (1 << uSensorCnt))
-			|| data->batchLatencyBuf[uSensorCnt])
+	for (uSensorCnt = 0; uSensorCnt < SENSOR_MAX; uSensorCnt++) {
+		if ((atomic64_read(&data->aSensorEnable) & (1ULL << uSensorCnt))
+			|| data->batchLatencyBuf[uSensorCnt]) {
 			print_sensordata(data, uSensorCnt);
+			if (data->indio_dev[uSensorCnt] != NULL
+					&& list_empty(&data->indio_dev[uSensorCnt]->buffer->buffer_list)) {
+				pr_err("[SSP] %u : buffer_list of iio:device%d is empty!\n",
+						 uSensorCnt, data->indio_dev[uSensorCnt]->id);
+			}
+		}
+	}
+
+	if (data->resetting)
+		goto exit;
 
 	if (((atomic64_read(&data->aSensorEnable) & (1 << ACCELEROMETER_SENSOR))
 		&& (data->batchLatencyBuf[ACCELEROMETER_SENSOR] == 0)
@@ -468,19 +534,17 @@ static void debug_work_func(struct work_struct *work)
 				!list_empty(&data->pending_list));
 			reset_mcu(data);
 		mutex_unlock(&data->ssp_enable_mutex);
-
-		data->uTimeOutCnt = 0;
-		data->uComFailCnt = 0;
-		data->mcuAbnormal = false;
 	}
 
+exit:
 	data->uIrqCnt = 0;
-
+#if ANDROID_VERSION < 80000
 	if(data->gyro_lib_state == GYRO_CALIBRATION_STATE_EVENT_OCCUR)
 		set_gyro_cal_lib_enable(data, false);
 
 	if(data->sensor_dump_flag_proximity == true || data->sensor_dump_flag_light == true)
 		send_sensor_dump_command(data,PROXIMITY_SENSOR);
+#endif
 }
 
 static void debug_timer_func(unsigned long ptr)

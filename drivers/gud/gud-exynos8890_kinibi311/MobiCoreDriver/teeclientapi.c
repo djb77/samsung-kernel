@@ -170,6 +170,8 @@ static u32 _teec_setup_operation(struct teec_session_imp *session,
 					map.bufs[n_buf].flags =
 					    ext->memref.parent->flags &
 						TEEC_MEM_INOUT;
+					map.bufs[n_buf].flags |=
+						MC_IO_MAP_PERSISTENT;
 					imps[n_buf] = imp;
 					n_buf++;
 				}
@@ -190,8 +192,8 @@ static u32 _teec_setup_operation(struct teec_session_imp *session,
 				      TEEC_MEM_INPUT) &&
 				      (param_type ==
 				      TEEC_MEMREF_PARTIAL_OUTPUT)) ||
-				    (((ext->memref.parent->
-				       flags & TEEC_MEM_INOUT) ==
+				    (((ext->memref.parent->flags
+				       & TEEC_MEM_INOUT) ==
 				      TEEC_MEM_OUTPUT) &&
 				     (param_type ==
 					 TEEC_MEMREF_PARTIAL_INPUT))) {
@@ -223,6 +225,8 @@ static u32 _teec_setup_operation(struct teec_session_imp *session,
 					    (u32)ext->memref.size;
 					map.bufs[n_buf].flags =
 					    param_type & TEEC_MEM_INOUT;
+					map.bufs[n_buf].flags |=
+						MC_IO_MAP_PERSISTENT;
 					imps[n_buf] = imp;
 					n_buf++;
 				}
@@ -658,34 +662,9 @@ u32 teec_open_session(struct teec_context *context,
 		return TEEC_ERROR_BAD_PARAMETERS;
 	}
 
-	if ((connection_method != TEEC_LOGIN_PUBLIC) &&
-	    (connection_method != TEEC_LOGIN_USER) &&
-	    (connection_method != TEEC_LOGIN_GROUP) &&
-	    (connection_method != TEEC_LOGIN_APPLICATION) &&
-	    (connection_method != TEEC_LOGIN_USER_APPLICATION) &&
-	    (connection_method != TEEC_LOGIN_GROUP_APPLICATION)) {
-		mc_dev_err("connection_method not supported");
-		if (return_origin)
-			*return_origin = TEEC_ORIGIN_API;
-
-		return TEEC_ERROR_NOT_IMPLEMENTED;
-	}
-
-	if ((connection_method == TEEC_LOGIN_GROUP) ||
-	    (connection_method == TEEC_LOGIN_GROUP_APPLICATION)) {
-		if (!connection_data) {
-			mc_dev_err("connection_data is NULL");
-			if (return_origin)
-				*return_origin = TEEC_ORIGIN_API;
-
-			return TEEC_ERROR_BAD_PARAMETERS;
-		}
-	}
-
+	connection_method = TEEC_LOGIN_KERNEL;
 	session->imp.active = false;
-
 	_lib_uuid_to_array(destination, tauuid.value);
-
 	if (operation)
 		operation->imp.session = &session->imp;
 
@@ -713,10 +692,7 @@ u32 teec_open_session(struct teec_context *context,
 	memcpy(&tci->destination, destination, sizeof(tci->destination));
 
 	identity.login_type = (enum mc_login_type)connection_method;
-	if (connection_data) {
-		memcpy(&identity.login_data, connection_data,
-		       sizeof(identity.login_data));
-	}
+
 	/* Wait for GP loading to be possible, maximum 30s */
 	timeout = 30;
 	do {

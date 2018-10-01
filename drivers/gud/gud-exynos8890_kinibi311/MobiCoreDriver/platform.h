@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -64,12 +64,6 @@
 #endif
 
 #endif /* !CONFIG_SOC_EXYNOS3472 */
-
-/* uidgid.h does not exist in kernels before 3.5 */
-#if defined(CONFIG_SOC_EXYNOS3250) || defined(CONFIG_SOC_EXYNOS3472) || \
-	defined(CONFIG_SOC_EXYNOS3475)
-#define MC_NO_UIDGIT_H
-#endif /* CONFIG_SOC_EXYNOS3250|CONFIG_SOC_EXYNOS3472|CONFIG_SOC_EXYNOS3475 */
 
 /* SWd LPAE */
 #if defined(CONFIG_SOC_EXYNOS5433) || defined(CONFIG_SOC_EXYNOS7420) || \

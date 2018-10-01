@@ -157,11 +157,6 @@ enum bug_trap_type report_bug(unsigned long bugaddr, struct pt_regs *regs)
 		warning = (bug->flags & BUGFLAG_WARNING) != 0;
 	}
 
-#ifdef CONFIG_SEC_DEBUG
-	if(file)
-		sec_debug_store_extra_buf(INFO_BUG, "%s:%u!", file, line);
-#endif
-
 	if (warning) {
 		/* this is a WARN_ON rather than BUG/BUG_ON */
 		pr_warn("------------[ cut here ]------------\n");
@@ -181,6 +176,11 @@ enum bug_trap_type report_bug(unsigned long bugaddr, struct pt_regs *regs)
 	}
 
 	printk(KERN_DEFAULT "------------[ cut here ]------------\n");
+
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	if (file)
+		sec_debug_set_extra_info_bug(file, line);
+#endif
 
 	if (file)
 		pr_auto(ASL1, "kernel BUG at %s:%u!\n", file, line);

@@ -340,7 +340,7 @@ static int set_brightness(struct backlight_device *bd)
 
 	dsim = container_of(priv, struct dsim_device, priv);
 
-	if (priv->lcdConnected == PANEL_DISCONNEDTED) {
+	if (priv->lcdConnected == PANEL_DISCONNECTED) {
 		dsim_info("WARN:%d:%s:Panel disconnected\n", dsim->id, __func__);
 		goto exit_set;
 	}

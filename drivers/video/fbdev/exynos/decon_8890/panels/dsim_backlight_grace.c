@@ -334,7 +334,7 @@ static void ha5_dsim_panel_set_elvss(struct dsim_device *dsim)
 		dsim_err("%s : failed to write elvss \n", __func__);
 }
 
-static void dsim_panel_set_elvss(struct dsim_device *dsim)
+void dsim_panel_set_elvss(struct dsim_device *dsim)
 {
 	switch( dsim->priv.panel_type ) {
 	case LCD_TYPE_S6E3HA5_WQHD:

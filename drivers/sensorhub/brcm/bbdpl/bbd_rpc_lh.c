@@ -99,12 +99,22 @@ static const unsigned char XOFF_CHARACTER = 0x13;
 /*
  * The following are used for the protocol.
  */
+#if ANDROID_VERSION < 80000
 static const unsigned char ESCAPE_CHARACTER         = 0xB0;
 static const unsigned char SOP_CHARACTER            = 0x00;
 static const unsigned char EOP_CHARACTER            = 0x01;
 static const unsigned char ESCAPED_ESCAPE_CHARACTER = 0x03;
 static const unsigned char ESCAPED_XON_CHARACTER    = 0x04;
 static const unsigned char ESCAPED_XOFF_CHARACTER   = 0x05;
+#else
+static const unsigned char ESCAPE_CHARACTER		= 0xB0;
+//static const unsigned char SOP_CHARACTER		= 0x00;
+static const unsigned char SOP_CHARACTER;
+static const unsigned char EOP_CHARACTER		= 0x01;
+static const unsigned char ESCAPED_ESCAPE_CHARACTER	= 0x03;
+static const unsigned char ESCAPED_XON_CHARACTER	= 0x04;
+static const unsigned char ESCAPED_XOFF_CHARACTER	= 0x05;
+#endif
 /*
  * The following are the bit field definition for the flags
  */

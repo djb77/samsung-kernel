@@ -149,7 +149,7 @@ TSPFIRMWARE_DIRECTORY = firmware/tsp_stm
 ifeq ($(shell test -d $(TSPFIRMWARE_DIRECTORY) && echo yes),yes)
 fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += tsp_stm/stm_z1.fw tsp_stm/stm_z2a.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_FTS7) += tsp_stm/hero2i.fw tsp_stm/hero2a.fw tsp_stm/hero_e.fw
-fw-shipped-$(CONFIG_TOUCHSCREEN_FTS7_VALLEY) += tsp_stm/stm_vjfa.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS7_VALLEY) += tsp_stm/fts7bd50_vlte.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_FTS7_HAECHI) += tsp_stm/fts7bd50_haechi.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_FTS8) += tsp_stm/fts9cd56_of.fw
 else
@@ -188,10 +188,17 @@ else
 $(warning '$(TSPFIRMWARE_DIRECTORY)' directory dose not exist)
 endif
 
+TSPFIRMWARE_DIRECTORY = firmware/tsp_g2tsp
+ifeq ($(shell test -d $(TSPFIRMWARE_DIRECTORY) && echo yes),yes)
+fw-shipped-$(CONFIG_TOUCHSCREEN_G2TOUCH) += tsp_g2tsp/g7400_of.bin
+else
+$(warning '$(TSPFIRMWARE_DIRECTORY)' directory dose not exist)
+endif
+
 fw-shipped-$(CONFIG_KEYBOARD_CYPRESS_TOUCH_MBR31X5) += cypress/cy8cmbr3145_grace.fw cypress/cy8cmbr3145_hero.fw
 fw-shipped-$(CONFIG_KEYBOARD_ABOV_FT16XX_TOUCH) += abov/abov_hero.fw abov/abov_hero2.fw abov/abov_valley.fw
-fw-shipped-$(CONFIG_KEYBOARD_ABOV_FT16XX_TOUCH_VALLEY) += abov/abov_valley.fw abov/abov_valley_sub.fw \
-								abov/abov_vjf.fw abov/abov_vjf_sub.fw
+fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_A96TA316) += abov/a96ta316aun_vlte.fw
+
 fw-shipped-all := $(fw-shipped-y) $(fw-shipped-m) $(fw-shipped-)
 
 quiet_cmd_ihex  = IHEX    $@

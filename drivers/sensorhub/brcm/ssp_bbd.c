@@ -145,6 +145,14 @@ int bbd_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 			pr_err("[SSPBBD] %s(): completion is timeout!\n",
 				__func__);
 
+			if (data->regulator_vdd_mcu_1p8 != NULL) {
+				pr_err("[SSPBBD] %s(): state of mcu power(%d)\n", __func__,
+						regulator_is_enabled(data->regulator_vdd_mcu_1p8));
+			} else if (data->shub_en >= 0) {
+				pr_err("[SSPBBD] %s: shub_en(%d), is enabled %d\n", __func__,
+						data->shub_en, gpio_get_value(data->shub_en));
+			}
+
 			bcm4773_debug_info();
 
 			status = -2;
@@ -179,6 +187,14 @@ int bbd_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 		wake_unlock(&data->ssp_comm_wake_lock);
 	}
 	mutex_unlock(&data->comm_mutex);
+
+	if (status == -2) {
+		u64 current_timestamp = get_current_timestamp();
+
+		pr_err("[SSPBBD] %s(): queue work to sensorhub reset(%lld, %lld)\n",
+				__func__, data->resumeTimestamp, current_timestamp);
+		schedule_delayed_work(&data->work_ssp_reset, msecs_to_jiffies(100));
+	}
 
 	return status;
 }
@@ -247,8 +263,11 @@ int callback_bbd_on_mcu_ready(void *ssh_data, bool ready)
 	if (ready == true) {
 		/* Start queue work for initializing MCU */
 		data->bFirstRef == true ? data->bFirstRef = false : data->uResetCnt++;
+		if (data->IsGpsWorking)
+			data->resetCntGPSisOn++;
 		memset(&ssp_pkt, 0, sizeof(ssp_pkt));
 		ssp_pkt.required = 4;
+		wake_lock_timeout(&data->ssp_wake_lock, HZ);
 		queue_work(data->bbd_mcu_ready_wq, &data->work_bbd_mcu_ready);
 	} else {
 		/* Disable SSP */
@@ -278,7 +297,14 @@ int callback_bbd_on_control(void *ssh_data, const char *str_ctrl)
     if (strstr(str_ctrl, ESW_CTRL_CRASHED)){
         data->IsMcuCrashed = true;
 		data->mcuCrashedCnt++;
-    }
+	} else if (strstr(str_ctrl, BBD_CTRL_GPS_OFF) || strstr(str_ctrl, BBD_CTRL_GPS_ON)) {
+		data->IsGpsWorking = (strstr(str_ctrl, "CORE_OFF") ? 0 : 1);
+	} else if (strstr(str_ctrl, BBD_CTRL_LHD_STOP)) {
+		int prefixLen = (int)strlen(BBD_CTRL_LHD_STOP) + 1; //puls one is for blank ex) "LHD:STOP "
+		int totalLen = (int)strlen(str_ctrl);
+
+		memcpy(data->resetInfo, str_ctrl + prefixLen, totalLen - prefixLen);
+	}
 	dprint("Received string command from LHD(=%s)\n", str_ctrl);
 
 	return 0;
@@ -295,8 +321,8 @@ int callback_bbd_on_mcu_reset(void *ssh_data)
 {
 	struct ssp_data *data = (struct ssp_data *)ssh_data;
 	if (!data)
-	       	return -1;
-
+		return -1;
+	data->resetting = true;
 	//data->uResetCnt++;
 
 	return 0;
@@ -324,7 +350,7 @@ void bbd_mcu_ready_work_func(struct work_struct *work)
 	int ret = 0;
 	int retries = 0;
 
-	//msleep(1000);
+	
 	if(data->vdd_mcu_1p8_name != NULL){
 		//clean_pending_list(data);
 		ret = wait_for_completion_timeout(&data->hub_data->mcu_init_done, COMPLETION_TIMEOUT);
@@ -332,7 +358,9 @@ void bbd_mcu_ready_work_func(struct work_struct *work)
 			pr_err("[SSPBBD] Sensors of MCU are not ready!\n");			
 		} else
 			pr_err("[SSPBBD] Sensors of MCU are ready!\n");	
-	}	
+	}
+	else
+		msleep(1000); //this model doesn't vdd divided
 
 	dprint("MCU is ready.(work_queue)\n");
 
@@ -369,6 +397,8 @@ retries:
 		ssp_send_cmd(data, data->uLastAPState, 0);
 	if (data->uLastResumeState != 0)
 		ssp_send_cmd(data, data->uLastResumeState, 0);
+
+	data->resetting = false;
 }
 
 /**
@@ -630,7 +660,29 @@ static inline void bbd_complete_ssp_msg(struct ssp_data *data, struct ssp_msg *m
 
 	clean_msg(msg);
 }
+#if ANDROID_VERSION >= 80000
+static inline void bbd_send_timestamp(void)
+{
+		struct ssp_msg msg;
+		unsigned char *bmsg = kzalloc(SSP_INSTRUCTION_PACKET + sizeof(s64), GFP_KERNEL);
+		struct timespec curr_ts = ktime_to_timespec(ktime_get_boottime());
+		s64 timestamp = timespec_to_ns(&curr_ts);
 
+		memset(&msg, 0, sizeof(struct ssp_msg));
+		msg.cmd = MSG2SSP_INST_CURRENT_TIMESTAMP; //you should modify this to proper command
+		msg.options = AP2HUB_WRITE;
+		msg.length = sizeof(s64);
+
+		memcpy(bmsg, &msg, SSP_INSTRUCTION_PACKET);
+		memcpy(bmsg + SSP_INSTRUCTION_PACKET, &timestamp, sizeof(s64));
+
+		bbd_send_packet(bmsg, SSP_INSTRUCTION_PACKET + sizeof(s64));
+
+		kfree(bmsg);
+}
+
+static int count = 1;
+#endif
 int callback_bbd_on_packet(void *ssh_data, const char *buf, size_t size)
 {
 	struct ssp_data *data = (struct ssp_data *)ssh_data;
@@ -684,6 +736,10 @@ int callback_bbd_on_packet(void *ssh_data, const char *buf, size_t size)
 			case HUB2AP_WRITE:
 				ssp_pkt.state = WAITFOR_PKT_COMPLETE;
 				memcpy(&ssp_pkt.required, &ssp_pkt.buf[2], 2);
+#if ANDROID_VERSION >= 80000
+				if (count++ % 3 == 0)
+					bbd_send_timestamp();
+#endif
 				break;
 			case AP2HUB_WRITE:
 				if (!(msg = bbd_find_ssp_msg(data)))
@@ -721,13 +777,13 @@ unlock:
 			/* packet completed!! */
 			switch (ssp_pkt.type) {
 			case AP2HUB_READ:
-				BUG_ON(ssp_pkt.msg == NULL);
-				BUG_ON(ssp_pkt.rxlen != ssp_pkt.msg->length);
-				memcpy(ssp_pkt.msg->buffer, ssp_pkt.buf,
-					       	ssp_pkt.rxlen);
-				bbd_complete_ssp_msg(data, ssp_pkt.msg);
-				ssp_pkt.msg = NULL;
-
+				//BUG_ON(ssp_pkt.msg == NULL);
+				//BUG_ON(ssp_pkt.rxlen != ssp_pkt.msg->length);
+				if (ssp_pkt.msg != NULL) {
+					memcpy(ssp_pkt.msg->buffer, ssp_pkt.buf, ssp_pkt.rxlen);
+					bbd_complete_ssp_msg(data, ssp_pkt.msg);
+					ssp_pkt.msg = NULL;
+				}
 				ssp_pkt.islocked = false;
 				mutex_unlock(&data->pending_mutex);
 				break;

@@ -32,7 +32,6 @@
 #include <linux/firmware.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
-#include <linux/usb_notify.h>
 #include <linux/wakelock.h>
 
 #if defined(CONFIG_CCIC_NOTIFIER)
@@ -47,15 +46,18 @@
 #define UNIT_FOR_CURRENT 10
 
 #define REG_I2C_SLV_CMD		0x10
+#define REG_TX_SINK_CAPA_MSG    0x0220
 #define REG_TX_REQUEST_MSG	0x0240
 #define REG_RX_SRC_CAPA_MSG	0x0260
 
-#define CCIC_VERSION_INVALID -1
+#define CCIC_FW_VERSION_INVALID -1
+#define CCIC_I2C_VALUE_INVALID 274
 
 /******************************************************************************/
 /* definitions & structures                                                   */
 /******************************************************************************/
 #define USBPD005_DEV_NAME  "usbpd-s2mm005"
+
 /*
 ******************************************************************************
 * @file    EXT_SRAM.h
@@ -68,9 +70,64 @@
 /* Define to prevent recursive inclusion -------------------------------------*/
 typedef union
 {
+	uint32_t DATA;
+	struct
+	{
+		uint32_t Message_Type:4,
+			Rsvd2_msg_header:1,
+			Port_Data_Role:1,
+			Specification_Revision:2,
+			Port_Power_Role:1,
+			Message_ID:3,
+			Number_of_obj:3,
+			Rsvd_msg_header:1,
+			Reserved:16;
+	} BITS;
+} MSG_HEADER_Typedef;
+
+typedef union
+{
+	uint32_t DATA;
+	uint8_t  BYTES[4];
+	struct
+	{
+		uint32_t Maximum_Current:10,
+			Voltage_Unit:10,
+			Peak_Current:2,
+			Reserved:3,
+			Data_Role_Swap:1,
+			USB_Comm_Capable:1,
+			Externally_POW:1,
+			Higher_Capability:1,
+			Dual_Role_Power:1,
+			PDO_Parameter:2;
+	} BITS;
+} SINK_FIXED_SUPPLY_Typedef;
+
+typedef union
+{
+	uint32_t DATA;
+	uint8_t BYTES[4];
+	struct {
+		uint32_t Operational_Current:10,
+		Minimum_Voltage:10,
+		Maximum_Voltage:10,
+		PDO_Parameter:2;
+	} BITS;
+} SINK_VAR_SUPPLY_Typedef;
+
+typedef union
+{
+	MSG_HEADER_Typedef MSG_HEADER;
+	SINK_FIXED_SUPPLY_Typedef MSG_FIXED_SUPPLY;
+	SINK_VAR_SUPPLY_Typedef MSG_VAR_SUPPLY;
+}SINK_CAPABILITY_MESSAGE_Typedef;
+
+typedef union
+{
     uint32_t DATA;
     struct {
-        uint32_t   Reserved:32;      
+        uint32_t   Reserved:32;
 	}BITS;
 } EXT_SRAM_Reserved_Type;
 
@@ -119,18 +176,54 @@ typedef union
 
 typedef union
 {
-	uint32_t        DATA;
+	uint32_t	DATA;
+	uint8_t	BYTE[4];
+	struct {
+        uint32_t    PD_State:8,
+                    RSP_BYTE1:8,
+                    PD_Next_State:8,
+                    RSP_BYTE2:8;
+	}BYTES;
     struct {
         uint32_t    PD_State:8,
-                    RSP_BYTE2:8,
+                    CC1_PLUG_STATE:3,
+                    RSP_BYTE1:1,
+                    CC2_PLUG_STATE:3,
+                    RSP_BYTE2:1,
                     PD_Next_State:8,
-                    RSP_BYTE4:8;
+                    ATTACH_DONE:1,
+                    IS_SOURCE:1,
+                    IS_DFP:1,
+                    RP_CurrentLvl:2,
+                    VBUS_CC_Short:1,
+			VBUS_SBU_Short:1,
+                    RESET:1;
 	}BITS;
 } FUNC_STATE_Type;
 
 typedef union
 {
+	uint32_t	DATA;
+	uint8_t	BYTE[4];
+	struct {
+        uint32_t    AUTO_LP_ENABLE_BIT:1,
+                    LOW_POWER_BIT:1,
+                    Force_LP_BIT:1,
+                    WATER_DET:1,
+                    SW_JIGON:1,
+                    RUN_DRY:1,
+                    removing_charge_by_sbu_low:1,
+                    BOOTING_RUN_DRY:1,
+			Sleep_Cable_Detect:1, //b8
+			PDSTATE29_SBU_DONE:1, //b9
+			RSP_BYTE:22;		//b10 ~ b31
+	} BITS;
+} LP_STATE_Type;
+
+typedef union
+{
 	uint32_t        DATA;
+	uint8_t	BYTE[4];
     struct {
         uint32_t    Flash_State:8,
                     Reserved:24;
@@ -265,33 +358,55 @@ typedef union
 
 typedef union
 {
-    uint32_t DATA;
-    uint8_t  BYTES[4];
-    struct {
-        uint32_t    Vdm_Flag_Reserve_b0:1,          // b0
-                    Vdm_Flag_Discover_ID:1,         // b1
-                    Vdm_Flag_Discover_SVIDs:1,      // b2
-                    Vdm_Flag_Discover_MODEs:1,      // b3
-                    Vdm_Flag_Enter_Mode:1,          // b4
-                    Vdm_Flag_Exit_Mode:1,           // b5
-                    Vdm_Flag_Attention:1,           // b6
-                    Vdm_Flag_Reserved:25;           // b7 - b31
-
-    }BITS;
+	uint32_t DATA;
+	uint8_t  BYTES[4];
+	struct {
+	    uint32_t	Vdm_Flag_Reserve_b0:1,		// b0
+			Vdm_Flag_Discover_ID:1,		// b1
+			Vdm_Flag_Discover_SVIDs:1,	// b2
+			Vdm_Flag_Discover_MODEs:1,	// b3
+			Vdm_Flag_Enter_Mode:1,		// b4
+			Vdm_Flag_Exit_Mode:1,		// b5
+			Vdm_Flag_Attention:1,		// b6
+			Vdm_Flag_Reserved:9,		// b7 - b15
+			Vdm_Flag_DP_Status_Update:1,	// b16
+			Vdm_Flag_DP_Configure:1,	// b17
+			Vdm_Flag_Reserved2:14;		// b18 - b31
+	}BITS;
 } VDM_MSG_IRQ_STATUS_Type;
-
 
 typedef union
 {
     uint32_t DATA;
     uint8_t  BYTES[4];
     struct {
-        uint32_t    Ssm_Flag_Reserve_b0:1,      // b0
-                    Ssm_Flag_Identification:1,  // b1
-                    Ssm_Flag_RandomNumber:1,    // b2
-                    Ssm_Flag_Encrypted_Data:1,  // b3
-                    Ssm_Flag_Unstructured_Data:1,  // b4
-                    Ssm_Flag_Reserved:26,       // b5 - b30
+        uint32_t    AP_Req_Get:2,                   // b0-b1
+                    UPSM_By_I2C:1,                  // b2
+                    Reserved:1,                     // b3
+                    Is_HardReset:1,                 // b4
+                    FAC_Abnormal_Repeat_State:1,    // b5
+                    FAC_Abnormal_Repeat_RID:1,      // b6
+                    FAC_Abnormal_RID0:1,            // b7
+                    SBU1_CNT:8,                     // b8 - b15
+                    SBU2_CNT:8,                     // b16 - b23
+                    SBU_LOW_CNT:4,                  // b24 - b27
+                    Alt_Mode_By_I2C:2,              // b28 - b29
+                    AP_Req_Reserved_H:1,            // b30
+                    Func_Abnormal_State:1;          // b31
+  } BITS;
+} AP_REQ_GET_STATUS_Type;
+
+typedef union
+{
+    uint32_t DATA;
+    uint8_t  BYTES[4];
+    struct {
+        uint32_t    Ssm_Flag_Reserve_b0:1,		// b0
+                    Ssm_Flag_Identification:1,		// b1
+                    Ssm_Flag_RandomNumber:1,		// b2
+                    Ssm_Flag_Encrypted_Data:1,		// b3
+                    Ssm_Flag_Unstructured_Data:1,	// b4
+                    Ssm_Flag_Reserved:26,		// b5 - b30
                     Ssm_Flag_AES_Done:1;
   } BITS;
 } SSM_MSG_IRQ_STATUS_Type;
@@ -330,40 +445,39 @@ typedef union
     }BITS;
 } SSM_HW_USE_MSG_Type;
 
-
 typedef struct
 {
-    HW_VERSION_Type     HW_VERSION_1;   // 0x0000h
-    HW_VERSION_Type     HW_VERSION_2;   // 0x0004h
-    SW_VERSION_Type     SW_VERSION_1;   // 0x0008h
-    SW_VERSION_Type     SW_VERSION_2;   // 0x000Ch
-    I2C_SLV_CMD_Type    I2C_SLV_CMD;    // 0x0010h
-    I2C_SLV_RSP_Type    I2C_SLV_RSP;    // 0x0014h
-    EXT_SRAM_Reserved_Type       Reserved_18h;   // 0x0018h
-    EXT_SRAM_Reserved_Type       Reserved_1Ch;   // 0x001Ch
-    FUNC_STATE_Type     FUNC_STATE;     // 0x0020h
-    FLASH_STATE_Type    FLASH_STATE;    // 0x0024h
-    EXT_SRAM_Reserved_Type      Reserved_28h;   // 0x0028h
-    EXT_SRAM_Reserved_Type      Reserved_2Ch;   // 0x002Ch
-    SYNC_STATUS_Type            SYNC_STATUS;            // 0x0030h
-    CTRL_MSG_STATUS_Type        CTRL_MSG_STATUS;        // 0x0034h
-    DATA_MSG_STATUS_Type        DATA_MSG_STATUS;        // 0x0038h
-    EXTENDED_MSG_STATUS_Type    EXTENDED_MSG_STATUS;    // 0x003Ch
-    MSG_IRQ_STATUS_Type         MSG_IRQ_STATUS;         // 0x0040h
-    VDM_MSG_IRQ_STATUS_Type     VDM_MSG_IRQ_STATUS;     // 0x0044h
-    SSM_MSG_IRQ_STATUS_Type     SSM_MSG_IRQ_STATUS;     // 0x0048h
-    VDM_MSG_IRQ_STATUS_Type     DBG_VDM_MSG_IRQ_STATUS;     // 0x004Ch
-    SSM_HW_ID_VALUE_Type        SSM_HW_ID_VALUE;        // 0x0050h
-    SSM_HW_PID_VALUE_Type       SSM_HW_PID_VALUE;       // 0x0054h
-    SSM_HW_USE_MSG_Type         SSM_HW_USE_MSG;         // 0x0058h
+    HW_VERSION_Type		HW_VERSION_1;		// 0x0000h
+    HW_VERSION_Type		HW_VERSION_2;		// 0x0004h
+    SW_VERSION_Type		SW_VERSION_1;		// 0x0008h
+    SW_VERSION_Type		SW_VERSION_2;		// 0x000Ch
+    I2C_SLV_CMD_Type		I2C_SLV_CMD;		// 0x0010h
+    I2C_SLV_RSP_Type		I2C_SLV_RSP;		// 0x0014h
+    EXT_SRAM_Reserved_Type	Reserved_18h;		// 0x0018h
+    EXT_SRAM_Reserved_Type	Reserved_1Ch;		// 0x001Ch
+    FUNC_STATE_Type		FUNC_STATE;		// 0x0020h
+    FLASH_STATE_Type		FLASH_STATE;		// 0x0024h
+    EXT_SRAM_Reserved_Type	Reserved_28h;		// 0x0028h
+    EXT_SRAM_Reserved_Type	Reserved_2Ch;		// 0x002Ch
+    SYNC_STATUS_Type		SYNC_STATUS;		// 0x0030h
+    CTRL_MSG_STATUS_Type	CTRL_MSG_STATUS;	// 0x0034h
+    DATA_MSG_STATUS_Type	DATA_MSG_STATUS;	// 0x0038h
+    EXTENDED_MSG_STATUS_Type	EXTENDED_MSG_STATUS;	// 0x003Ch
+    MSG_IRQ_STATUS_Type		MSG_IRQ_STATUS;		// 0x0040h
+    VDM_MSG_IRQ_STATUS_Type	VDM_MSG_IRQ_STATUS;	// 0x0044h
+    SSM_MSG_IRQ_STATUS_Type	SSM_MSG_IRQ_STATUS;	// 0x0048h
+    AP_REQ_GET_STATUS_Type      AP_REQ_GET_STATUS;      // 0x004Ch
+    SSM_HW_ID_VALUE_Type	SSM_HW_ID_VALUE;	// 0x0050h
+    SSM_HW_PID_VALUE_Type	SSM_HW_PID_VALUE;	// 0x0054h
+    SSM_HW_USE_MSG_Type		SSM_HW_USE_MSG;		// 0x0058h
 } EXT_SRAM_Type;
 
 typedef struct
-    {
-    uint32_t    SW_Version;
-    uint32_t    SW_Start_Addr;
-    uint32_t    SW_End_Addr;
-    uint32_t    SW_CRC_VALUE;
+{
+    uint32_t	SW_Version;
+    uint32_t	SW_Start_Addr;
+    uint32_t	SW_End_Addr;
+    uint32_t	SW_CRC_VALUE;
 } SW_IMAGE_HEADER_Type;
 
 
@@ -427,6 +541,7 @@ typedef struct
 
 // ================== Capabilities Message ==============
 // Source Capabilities
+
 typedef struct
 {
 	uint32_t    Maximum_Current:10;
@@ -616,44 +731,46 @@ typedef union
 
 // Function Status (0x20)
 typedef enum {
-	State_PE_Initial_detach							= 0,
+	State_PE_Initial_detach			= 0,
 
 	// source Port
-	State_PE_SRC_Startup								= 1,
-	State_PE_SRC_Discovery							= 2,
-	State_PE_SRC_Send_Capabilities			= 3,
-	State_PE_SRC_Negotiate_Capability		= 4,
-	State_PE_SRC_Transition_Supply			= 5,
-	State_PE_SRC_Ready								= 6,
-	State_PE_SRC_Disabled							= 7,
-	State_PE_SRC_Capability_Response		= 8,
-	State_PE_SRC_Hard_Rest						= 9,
+	State_PE_SRC_Startup			= 1,
+	State_PE_SRC_Discovery			= 2,
+	State_PE_SRC_Send_Capabilities		= 3,
+	State_PE_SRC_Negotiate_Capability	= 4,
+	State_PE_SRC_Transition_Supply		= 5,
+	State_PE_SRC_Ready			= 6,
+	State_PE_SRC_Disabled			= 7,
+	State_PE_SRC_Capability_Response	= 8,
+	State_PE_SRC_Hard_Rest			= 9,
 	State_PE_SRC_Hard_Rest_Received		= 10,
-	State_PE_SRC_Transition_to_default		= 11,
-	State_PE_SRC_Give_Source_Cap			= 12,
-	State_PE_SRC_Get_Sink_Cap					= 13,
+	State_PE_SRC_Transition_to_default	= 11,
+	State_PE_SRC_Give_Source_Cap		= 12,
+	State_PE_SRC_Get_Sink_Cap		= 13,
 	State_PE_SRC_Wait_New_Capabilities	= 14,
 
 	// Sink Port
-	State_PE_SNK_Startup								= 15,
-	State_PE_SNK_Discovery							= 16,
-	State_PE_SNK_Wait_for_Capabilities		= 17,
-	State_PE_SNK_Evaluate_Capability			= 18,
-	State_PE_SNK_Select_Capability				= 19,
-	State_PE_SNK_Transition_Sink				= 20,
-	State_PE_SNK_Ready								= 21,
-	State_PE_SNK_Hard_Reset						= 22,
-	State_PE_SNK_Transition_to_default		= 23,
-	State_PE_SNK_Give_Sink_Cap				= 24,
-	State_PE_SNK_Get_Source_Cap				= 25,
+	State_PE_SNK_Startup			= 15,
+	State_PE_SNK_Discovery			= 16,
+	State_PE_SNK_Wait_for_Capabilities	= 17,
+	State_PE_SNK_Evaluate_Capability	= 18,
+	State_PE_SNK_Select_Capability		= 19,
+	State_PE_SNK_Transition_Sink		= 20,
+	State_PE_SNK_Ready			= 21,
+	State_PE_SNK_Hard_Reset			= 22,
+	State_PE_SNK_Transition_to_default	= 23,
+	State_PE_SNK_Give_Sink_Cap		= 24,
+	State_PE_SNK_Get_Source_Cap		= 25,
 
 	// Source Startup Structured VDM Discover Indentity
 	State_PE_SRC_CABLE_VDM_Identity_Request	= 26,
-	State_PE_SRC_CABLE_VDM_Identity_ACKed		= 27,
-	State_PE_SRC_CABLE_VDM_Identity_NAKed		= 28,
+	State_PE_SRC_CABLE_VDM_Identity_ACKed	= 27,
+	State_PE_SRC_CABLE_VDM_Identity_NAKed	= 28,
 
 	// Type-C referenced states
-	State_ErrorRecovery									= 29,
+	State_ErrorRecovery			= 29,
+	State_PE_PRS_SRC_SNK_Transition_to_off	= 52,
+	State_PE_PRS_SNK_SRC_Source_on		= 64,
 } function_status_t;
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 typedef enum
@@ -681,11 +798,12 @@ typedef enum
 
 typedef enum
 {
-	RP_CURRENT_LEVEL_NONE = 0,
-	RP_CURRENT_LEVEL_DEFAULT,
-	RP_CURRENT_LEVEL2,
-	RP_CURRENT_LEVEL3,
-} CCIC_RP_CURRENT_LEVEL;
+	Rp_Sbu_check = 0,
+	Rp_56K = 1,	/* 80uA */
+	Rp_22K = 2,	/* 180uA */
+	Rp_10K = 3,	/* 330uA */
+	Rp_Abnormal = 4,
+} CCIC_RP_CurrentLvl;
 
 #define S2MM005_REG_MASK(reg, mask)	((reg & mask##_MASK) >> mask##_SHIFT)
 
@@ -696,6 +814,7 @@ struct ccic_state_work {
 	int id;
 	int attach;
 	int event;
+	int sub;
 };
 #endif
 
@@ -711,6 +830,7 @@ struct s2mm005_data {
 	int s2mm005_om;
 	int s2mm005_sda;
 	int s2mm005_scl;
+	int s2mm005_i2c_err;
 	u32 hw_rev;
 	struct mutex i2c_mutex;
 	u8 attach;
@@ -721,7 +841,13 @@ struct s2mm005_data {
 	int p_prev_rid;
 	int prev_rid;
 	int cur_rid;
+	int water_detect_support;
 	int water_det;
+	int run_dry;
+	int booting_run_dry;
+#if defined(CONFIG_SEC_FACTORY)
+	int fac_booting_dry_check;
+#endif
 
 	u8 firm_ver[4];
 
@@ -740,9 +866,23 @@ struct s2mm005_data {
 	uint32_t acc_type;
 	uint32_t Vendor_ID;
 	uint32_t Product_ID;
+	uint32_t Device_Version;
 	uint32_t SVID_0;
 	uint32_t SVID_1;
 	struct delayed_work acc_detach_work;
+	uint32_t dp_is_connect;
+	uint32_t dp_hs_connect;
+	uint32_t dp_selected_pin;
+	u8 pin_assignment;
+	uint32_t is_sent_pin_configuration;
+	wait_queue_head_t host_turn_on_wait_q;
+	int host_turn_on_event;
+	int host_turn_on_wait_time;
+	int is_samsung_accessory_enter_mode;
+	int is_in_first_sec_uvdm_req;
+	int is_in_sec_uvdm_out;
+	struct completion uvdm_out_wait;
+	struct completion uvdm_longpacket_in_wait;
 #endif
 	int manual_lpm_mode;
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
@@ -753,6 +893,18 @@ struct s2mm005_data {
 	int try_state_change;
 	struct delayed_work role_swap_work;
 #endif
+
+	int s2mm005_fw_product_id;
+	u8 fw_product_id;
+
+#if defined(CONFIG_SEC_FACTORY)
+	int fac_water_enable;
+#endif
+	struct delayed_work ccic_init_work;
+	int ccic_check_at_booting;
+	struct delayed_work usb_external_notifier_register_work;
+	struct notifier_block usb_external_notifier_nb;
+	int vconn_en;
 
 };
 #endif /* __S2MM005_H */

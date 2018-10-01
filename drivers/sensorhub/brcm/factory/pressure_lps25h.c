@@ -33,7 +33,7 @@ static ssize_t sea_level_pressure_store(struct device *dev,
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
-	sscanf(buf, "%d", &data->sealevelpressure);
+	sscanf(buf, "%65535d", &data->sealevelpressure);
 
 	if (data->sealevelpressure == 0) {
 		pr_info("%s, our->temperature = 0\n", __func__);
@@ -128,10 +128,7 @@ static ssize_t eeprom_check_show(struct device *dev,
 	struct ssp_data *data = dev_get_drvdata(dev);
 
 	struct ssp_msg *msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-	if (msg == NULL) {
-		pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-		goto exit;
-	}
+
 	msg->cmd = PRESSURE_FACTORY;
 	msg->length = 1;
 	msg->options = AP2HUB_READ;
@@ -172,21 +169,22 @@ static ssize_t pressure_temperature_show(struct device *dev,
 	s32 temperature = 0;
 	s32 float_temperature = 0;
 	s32 temp = 0;
-	temp = (s32) (data->buf[PRESSURE_SENSOR].pressure[1]);
+
+	temp = (s32) (data->buf[PRESSURE_SENSOR].temperature);
 	temperature = (4250) + ((temp / (120 * 4))*100); //(42.5f) + (temperature/(120 * 4));
 	float_temperature = ((temperature%100) > 0 ? (temperature%100) : -(temperature%100));
-	
+
 	return sprintf(buf, "%d.%02d\n", (temperature/100), float_temperature);
 }
 
-static DEVICE_ATTR(vendor,  S_IRUGO, pressure_vendor_show, NULL);
-static DEVICE_ATTR(name,  S_IRUGO, pressure_name_show, NULL);
+static DEVICE_ATTR(vendor,  0444, pressure_vendor_show, NULL);
+static DEVICE_ATTR(name,  0444, pressure_name_show, NULL);
 /*static DEVICE_ATTR(eeprom_check, S_IRUGO, eeprom_check_show, NULL); */
-static DEVICE_ATTR(calibration,  S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(calibration,  0664,
 	pressure_cabratioin_show, pressure_cabratioin_store);
-static DEVICE_ATTR(sea_level_pressure, /*S_IRUGO |*/ S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(sea_level_pressure, /*S_IRUGO |*/ 0220,
 	NULL, sea_level_pressure_store);
-static DEVICE_ATTR(temperature, S_IRUGO, pressure_temperature_show, NULL);
+static DEVICE_ATTR(temperature, 0444, pressure_temperature_show, NULL);
 
 #if 0
 static struct device_attribute *pressure_attrs_bmp280[] = {

@@ -38,10 +38,11 @@ int exynos_smc(unsigned long cmd, unsigned long arg1, unsigned long arg2, unsign
 {
 #ifdef CONFIG_EXYNOS_SMC_LOGGING
 	unsigned long flags;
+	unsigned int ret;
 #endif
 
 #ifdef CONFIG_EXYNOS_SMC_LOGGING
-	if ((uint32_t)cmd >= SMC_PROTECTION_SET && (uint32_t)cmd < MC_FC_SET_CFW_PROT) {
+	if ((uint32_t)cmd >= SMC_PROTECTION_SET && (uint32_t)cmd <= MC_FC_SET_CFW_PROT) {
 		pr_debug("%s: cmd: 0x%x, arg1: 0x%x, arg2: 0x%x, arg3: 0x%x\n",
 			__func__, (u32)cmd, (u32)arg1, (u32)arg2, (u32)arg3);
 		spin_lock_irqsave(&drm_smc_log_lock, flags);
@@ -57,5 +58,23 @@ int exynos_smc(unsigned long cmd, unsigned long arg1, unsigned long arg2, unsign
 	}
 #endif
 
+#ifndef CONFIG_EXYNOS_SMC_LOGGING
 	return __exynos_smc(cmd, arg1, arg2, arg3);
+#else
+	ret = __exynos_smc(cmd, arg1, arg2, arg3);
+	if ((uint32_t)cmd >= SMC_PROTECTION_SET && (uint32_t)cmd <= MC_FC_SET_CFW_PROT) {
+		spin_lock_irqsave(&drm_smc_log_lock, flags);
+		drm_smc_log[drm_smc_log_idx].cpu_clk = local_clock();
+		drm_smc_log[drm_smc_log_idx].cmd = (u32)cmd;
+		drm_smc_log[drm_smc_log_idx].arg1 = (u32)ret;
+		/* Magic Code for Debugging */
+		drm_smc_log[drm_smc_log_idx].arg2 = (u32)0xAFAFAFAF;
+		drm_smc_log[drm_smc_log_idx].arg3 = (u32)arg3;
+		drm_smc_log_idx++;
+		if (drm_smc_log_idx == EXYNOS_SMC_LOG_SIZE)
+			drm_smc_log_idx = 0;
+		spin_unlock_irqrestore(&drm_smc_log_lock, flags);
+	}
+	return ret;
+#endif
 }

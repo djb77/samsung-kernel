@@ -201,6 +201,8 @@ static void csis_s_all_vc_dma_buf(struct fimc_is_device_csi *csi)
 			clear_bit((CSIS_BUF_ERR_VC0 + vc), &csi->state);
 		}
 
+		cur_dma_enable = csi_hw_g_output_cur_dma_enable(csi->base_reg, vc);
+
 		framemgr_e_barrier(framemgr, 0);
 
 		frame = peek_frame(framemgr, FS_REQUEST);
@@ -224,8 +226,21 @@ static void csis_s_all_vc_dma_buf(struct fimc_is_device_csi *csi)
 				 *  2) if there's no "request frame"
 				 *  3) if dma was enabled in current frame(N)
 				 */
-				if (csi_hw_g_output_cur_dma_enable(csi->base_reg, vc))
+				if (cur_dma_enable) {
 					csi_s_output_dma(csi, vc, false);
+				} else {
+					if (framemgr->queued_count[FS_PROCESS]
+						&& !csi_hw_g_output_dma_enable(csi->base_reg, vc)) {
+						csi_s_output_dma(csi, vc, true);
+						frame = peek_frame(framemgr, FS_PROCESS);
+						warn("[VC%d][CF%d][FF%d][DF%d] Invalide DMA off [%d/%d/%d]\n",
+							vc, atomic_read(&csi->fcount),
+							frame->fcount, csi->dbg_fcount,
+							framemgr->queued_count[FS_REQUEST],
+							framemgr->queued_count[FS_PROCESS],
+							framemgr->queued_count[FS_COMPLETE]);
+					}
+				}
 			}
 		} else {
 			warn("[VC%d][F%d] process count is too many..(%d/%d/%d)",
@@ -236,11 +251,9 @@ static void csis_s_all_vc_dma_buf(struct fimc_is_device_csi *csi)
 		}
 
 		/* print infomation DMA on/off */
-		cur_dma_enable = csi_hw_g_output_cur_dma_enable(csi->base_reg, vc);
-
 		if (test_bit(CSIS_START_STREAM, &csi->state) &&
 			csi->pre_dma_enable[vc] != cur_dma_enable) {
-			info("[VC%d][F%d] DMA %s [%d/%d/%d]", vc, atomic_read(&csi->fcount),
+			info("[VC%d][F%d] DMA %s [%d/%d/%d]\n", vc, atomic_read(&csi->fcount),
 					(cur_dma_enable ? "on" : "off"),
 					framemgr->queued_count[FS_REQUEST],
 					framemgr->queued_count[FS_PROCESS],
@@ -455,6 +468,7 @@ static void csi_dma_tag(struct v4l2_subdev *subdev,
 			if (frame) {
 				frame_done = frame;
 				trans_frame(framemgr, frame, FS_COMPLETE);
+				csi->dbg_fcount = frame->fcount;
 			} else {
 				merr("[CSI][VC%d] sensor process is empty", csi, vc);
 				frame_manager_print_queues(framemgr);

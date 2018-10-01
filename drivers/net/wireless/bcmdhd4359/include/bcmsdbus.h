@@ -2,7 +2,7 @@
  * Definitions for API from sdio common code (bcmsdh) to individual
  * host controller drivers.
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -25,11 +25,15 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmsdbus.h 514727 2014-11-12 03:02:48Z $
+ * $Id: bcmsdbus.h 644725 2016-06-21 12:26:04Z $
  */
 
 #ifndef	_sdio_api_h_
 #define	_sdio_api_h_
+
+#if defined(BT_OVER_SDIO)
+#include <linux/mmc/sdio_func.h>
+#endif /* defined (BT_OVER_SDIO) */
 
 
 #define SDIOH_API_RC_SUCCESS                          (0x00)
@@ -78,6 +82,10 @@ typedef struct sdioh_info sdioh_info_t;
 
 /* callback function, taking one arg */
 typedef void (*sdioh_cb_fn_t)(void *);
+#if defined(BT_OVER_SDIO)
+extern
+void sdioh_sdmmc_card_enable_func_f3(sdioh_info_t *sd, struct sdio_func *func);
+#endif /* defined (BT_OVER_SDIO) */
 
 extern SDIOH_API_RC sdioh_interrupt_register(sdioh_info_t *si, sdioh_cb_fn_t fn, void *argh);
 extern SDIOH_API_RC sdioh_interrupt_deregister(sdioh_info_t *si);

@@ -135,16 +135,28 @@ static unsigned char bbd_patch[] =
 {
 #if defined (CONFIG_SENSORS_SSP_GRACE)
 	#if ANDROID_VERSION < 70000
-	#include "m_os/bbd_patch_file_grace.h"	
+		#include "m_os/bbd_patch_file_grace.h"
+	#elif ANDROID_VERSION >= 80000
+		#include "o_os/bbd_patch_file_grace.h"
 	#else
-	#include "n_os/bbd_patch_file_grace.h"
+		#include "n_os/bbd_patch_file_grace.h"
 	#endif
+#elif defined (CONFIG_SENSORS_SSP_HAECHI_888)
+#include "bbd_patch_file_haechi_888.h"
+#elif defined (CONFIG_SENSORS_SSP_HAECHI_880)
+#include "bbd_patch_file_haechi_880.h"
+#elif defined (CONFIG_SENSORS_SSP_HAECHI)
+#include "bbd_patch_file_haechi.h"
 #elif defined (CONFIG_SENSORS_SSP_LUCKY)
 	#if ANDROID_VERSION < 70000
-	#include "m_os/bbd_patch_file_lucky.h"
+		#include "m_os/bbd_patch_file_lucky.h"
+	#elif ANDROID_VERSION >= 80000
+		#include "o_os/bbd_patch_file_lucky.h"
 	#else
-	#include "n_os/bbd_patch_file_lucky.h"
+		#include "n_os/bbd_patch_file_lucky.h"
 	#endif
+#elif defined (CONFIG_SENSORS_SSP_VLTE)
+#include "bbd_patch_file_valley.h"
 #endif
 };
 
@@ -602,7 +614,7 @@ static ssize_t bbd_common_read(struct file *filp, char __user *buf, size_t size,
 	size_t rd_size=0;
 
 	BUG_ON(minor >= BBD_DEVICE_INDEX);
-	pr_info("%s[%s]++\n", __func__, bbd.priv[minor].name);
+	//pr_info("%s[%s]++\n", __func__, bbd.priv[minor].name);
 
 	mutex_lock(&bbd.priv[minor].lock);
 
@@ -627,7 +639,7 @@ static ssize_t bbd_common_read(struct file *filp, char __user *buf, size_t size,
 #ifdef DEBUG_1HZ_STAT
 	bbd_update_stat(STAT_RX_LHD, rd_size);
 #endif
-	pr_info("%s[%s]--\n", __func__, bbd.priv[minor].name);
+	//pr_info("%s[%s]--\n", __func__, bbd.priv[minor].name);
 	return rd_size;
 }
 

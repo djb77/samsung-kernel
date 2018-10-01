@@ -1636,6 +1636,103 @@ static ssize_t camera_iris_info_show(struct device *dev,
 #endif
 #endif
 
+#ifdef USE_CAMERA_HW_BIG_DATA
+static ssize_t rear_camera_hw_param_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct cam_hw_param *ec_param = NULL;
+
+	read_from_firmware_version(SENSOR_POSITION_REAR);
+
+	fimc_is_sec_get_rear_hw_param(&ec_param);
+
+	if (fimc_is_sec_is_valid_moduleid(finfo->from_module_id)) {
+		return sprintf(buf, "\"CAMIR_ID\":\"%c%c%c%c%cXX%02X%02X%02X\",\"I2CR_AF\":\"%d\","
+			"\"I2CR_COM\":\"%d\",\"I2CR_OIS\":\"%d\",\"I2CR_SEN\":\"%d\",\"MIPIR_COM\":\"%d\",\"MIPIR_SEN\":\"%d\"\n",
+			finfo->from_module_id[0], finfo->from_module_id[1], finfo->from_module_id[2], finfo->from_module_id[3],
+			finfo->from_module_id[4], finfo->from_module_id[7], finfo->from_module_id[8], finfo->from_module_id[9],
+			ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_ois_err_cnt,
+			ec_param->i2c_sensor_err_cnt, ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
+	} else {
+		return sprintf(buf, "\"CAMIR_ID\":\"MIR_ERR\",\"I2CR_AF\":\"%d\","
+			"\"I2CR_COM\":\"%d\",\"I2CR_OIS\":\"%d\",\"I2CR_SEN\":\"%d\",\"MIPIR_COM\":\"%d\",\"MIPIR_SEN\":\"%d\"\n",
+			ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_ois_err_cnt,
+			ec_param->i2c_sensor_err_cnt, ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
+	}
+}
+
+static ssize_t rear_camera_hw_param_store(struct device *dev,
+				    struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct cam_hw_param *ec_param = NULL;
+
+	if (!strncmp(buf, "c", 1)) {
+		fimc_is_sec_get_rear_hw_param(&ec_param);
+
+		if (ec_param)
+			fimc_is_sec_init_err_cnt_file(ec_param);
+	}
+
+	return count;
+}
+
+static ssize_t front_camera_hw_param_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct cam_hw_param *ec_param = NULL;
+
+	fimc_is_sec_get_front_hw_param(&ec_param);
+
+	return sprintf(buf, "\"CAMIF_ID\":\"MIR_NO\",\"I2CF_AF\":\"%d\","
+		"\"I2CF_COM\":\"%d\",\"I2CF_OIS\":\"%d\",\"I2CF_SEN\":\"%d\",\"MIPIF_COM\":\"%d\",\"MIPIF_SEN\":\"%d\"\n",
+		ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_ois_err_cnt, ec_param->i2c_sensor_err_cnt,
+		ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
+}
+
+static ssize_t front_camera_hw_param_store(struct device *dev,
+				    struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct cam_hw_param *ec_param = NULL;
+
+	if (!strncmp(buf, "c", 1)) {
+		fimc_is_sec_get_front_hw_param(&ec_param);
+
+		if (ec_param)
+			fimc_is_sec_init_err_cnt_file(ec_param);
+	}
+
+	return count;
+}
+
+static ssize_t iris_camera_hw_param_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct cam_hw_param *ec_param = NULL;
+
+	fimc_is_sec_get_iris_hw_param(&ec_param);
+
+	return sprintf(buf, "\"I2CI_AF\":\"%d\",\"I2CI_COM\":\"%d\",\"I2CI_OIS\":\"%d\","
+		"\"I2CI_SEN\":\"%d\",\"MIPII_COM\":\"%d\",\"MIPII_SEN\":\"%d\"\n",
+		ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_ois_err_cnt,
+		ec_param->i2c_sensor_err_cnt, ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
+}
+
+static ssize_t iris_camera_hw_param_store(struct device *dev,
+				    struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct cam_hw_param *ec_param = NULL;
+
+	if (!strncmp(buf, "c", 1)) {
+		fimc_is_sec_get_iris_hw_param(&ec_param);
+
+		if (ec_param)
+			fimc_is_sec_init_err_cnt_file(ec_param);
+	}
+
+	return count;
+}
+#endif
+
 #ifdef CAMERA_MODULE_DUALIZE
 static DEVICE_ATTR(from_write, S_IRUGO,
 		camera_rear_writefw_show, NULL);
@@ -1711,6 +1808,15 @@ static DEVICE_ATTR(iris_checkfw_user, S_IRUGO, camera_iris_checkfw_user_show, NU
 #ifdef CAMERA_SYSFS_V2
 static DEVICE_ATTR(iris_caminfo, S_IRUGO, camera_iris_info_show, NULL);
 #endif
+#endif
+
+#ifdef USE_CAMERA_HW_BIG_DATA
+static DEVICE_ATTR(rear_hwparam, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
+				rear_camera_hw_param_show, rear_camera_hw_param_store);
+static DEVICE_ATTR(front_hwparam, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
+				front_camera_hw_param_show, front_camera_hw_param_store);
+static DEVICE_ATTR(iris_hwparam, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
+				iris_camera_hw_param_show, iris_camera_hw_param_store);
 #endif
 
 int svc_cheating_prevent_device_file_create(struct kobject **obj)
@@ -1806,6 +1912,14 @@ int fimc_is_create_sysfs(struct fimc_is_core *core)
 				dev_attr_front_sensorid_exif.attr.name);
 		}
 #endif
+#ifdef USE_CAMERA_HW_BIG_DATA
+		if (device_create_file(camera_front_dev,
+				&dev_attr_front_hwparam) < 0) {
+			printk(KERN_ERR
+				"failed to create front device file, %s\n",
+				dev_attr_front_hwparam.attr.name);
+		}
+#endif
 	}
 #ifdef CAMERA_SYSFS_V2
 		if (device_create_file(camera_front_dev,
@@ -1859,6 +1973,12 @@ int fimc_is_create_sysfs(struct fimc_is_core *core)
 			printk(KERN_ERR
 				"failed to create rear device file, %s\n",
 				dev_attr_rear_caminfo.attr.name);
+		}
+#endif
+#ifdef USE_CAMERA_HW_BIG_DATA
+		if (device_create_file(camera_rear_dev, &dev_attr_rear_hwparam) < 0) {
+			printk(KERN_ERR "failed to create rear device file, %s\n",
+				dev_attr_rear_hwparam.attr.name);
 		}
 #endif
 #ifdef CONFIG_COMPANION_USE
@@ -1978,11 +2098,15 @@ int fimc_is_create_sysfs(struct fimc_is_core *core)
 				dev_attr_iris_checkfw_factory.attr.name);
 		}
 #ifdef CAMERA_SYSFS_V2
-		if (device_create_file(camera_secure_dev,
-					&dev_attr_iris_caminfo) < 0) {
-			printk(KERN_ERR
-				"failed to create iris device file, %s\n",
+		if (device_create_file(camera_secure_dev, &dev_attr_iris_caminfo) < 0) {
+			printk(KERN_ERR "failed to create iris device file, %s\n",
 				dev_attr_iris_caminfo.attr.name);
+		}
+#endif
+#ifdef USE_CAMERA_HW_BIG_DATA
+		if (device_create_file(camera_secure_dev, &dev_attr_iris_hwparam) < 0) {
+			printk(KERN_ERR "failed to create iris device file, %s\n",
+				dev_attr_iris_hwparam.attr.name);
 		}
 #endif
 	}

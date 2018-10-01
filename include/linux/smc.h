@@ -24,6 +24,7 @@
 /* For setting memory for debug */
 #define SMC_CMD_SET_DEBUG_MEM		(-120)
 #define SMC_CMD_GET_LOCKUP_REASON	(-121)
+#define SMC_CMD_KERNEL_PANIC_NOTICE	(-122)
 
 /* Command ID for smc */
 #define SMC_PROTECTION_SET		(0x82002010)

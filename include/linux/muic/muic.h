@@ -185,6 +185,10 @@ typedef enum {
 	ATTACHED_DEV_GAMEPAD_MUIC,
 
 	ATTACHED_DEV_TIMEOUT_OPEN_MUIC,
+	ATTACHED_DEV_POGO_DOCK_MUIC,
+	ATTACHED_DEV_POGO_DOCK_5V_MUIC,
+	ATTACHED_DEV_POGO_DOCK_9V_MUIC,
+	ATTACHED_DEV_HICCUP_MUIC,
 	ATTACHED_DEV_UNKNOWN_MUIC,
 	ATTACHED_DEV_NUM,
 } muic_attached_dev_t;
@@ -240,4 +244,7 @@ struct muic_platform_data {
 int get_switch_sel(void);
 int get_afc_mode(void);
 void muic_set_hmt_status(int status);
+#ifdef CONFIG_SEC_FACTORY
+extern void muic_send_attached_muic_cable_intent(int type);
+#endif /* CONFIG_SEC_FACTORY */
 #endif /* __MUIC_H__ */

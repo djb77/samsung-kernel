@@ -80,6 +80,10 @@ static const unsigned int s2mps16_ldo_coeffs[38] = {S2MPS16_L600, S2MPS16_L300, 
 
 static struct wakeup_source *rtc_ws;
 
+#ifdef CONFIG_RTC_RESET_COUNT
+static int rtc_status = 0;
+#endif
+
 enum S2M_RTC_OP {
 	S2M_RTC_READ,
 	S2M_RTC_WRITE_TIME,
@@ -1313,6 +1317,11 @@ static int s2m_rtc_init_reg(struct s2m_rtc_info *info,
 	if ((ctrl_val & MODEL24_MASK) && (capsel_val == 0xf8))
 		return 0;
 
+#ifdef CONFIG_RTC_RESET_COUNT
+	/* If RTC registers were reset, set 1 to rtc_status */
+	rtc_status = 1;
+#endif
+
 	/* Set RTC control register : Binary mode, 24hour mode */
 	data = MODEL24_MASK;
 	ret = sec_rtc_write(info->iodev, S2M_RTC_CTRL, data);
@@ -1339,6 +1348,25 @@ static int s2m_rtc_init_reg(struct s2m_rtc_info *info,
 	}
 	return ret;
 }
+
+#ifdef CONFIG_RTC_RESET_COUNT
+static ssize_t show_rtc_status(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int count = 0;
+
+	/* Return rtc status
+	 * 0: Keep rtc registers, 1: Reset rtc registers
+	 */
+	count += sprintf(&buf[count], "%d\n", rtc_status);
+	rtc_status = 0;
+
+	return count;
+}
+
+static DEVICE_ATTR(rtc_status, 0444, show_rtc_status, NULL);
+#endif
 
 static int s2m_rtc_probe(struct platform_device *pdev)
 {
@@ -1518,6 +1546,13 @@ static int s2m_rtc_probe(struct platform_device *pdev)
 		goto err_rtc_dev_register;
 	}
 	enable_irq(info->irq);
+
+#ifdef CONFIG_RTC_RESET_COUNT
+	/* create sysfs group */
+	ret = sysfs_create_file(power_kobj, &dev_attr_rtc_status.attr);
+	if (ret)
+		pr_err("%s: failed to create rtc_status attribute file\n", __func__);
+#endif
 
 	return 0;
 

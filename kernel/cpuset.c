@@ -172,6 +172,7 @@ typedef enum {
 	CS_SCHED_LOAD_BALANCE,
 	CS_SPREAD_PAGE,
 	CS_SPREAD_SLAB,
+	CS_FAMILY_BOOST,
 } cpuset_flagbits_t;
 
 /* convenient tests for these bits */
@@ -219,6 +220,11 @@ static struct cpuset top_cpuset = {
 	.flags = ((1 << CS_ONLINE) | (1 << CS_CPU_EXCLUSIVE) |
 		  (1 << CS_MEM_EXCLUSIVE)),
 };
+
+static inline int is_family_boost_enabled(const struct cpuset *cs)
+{
+    return test_bit(CS_FAMILY_BOOST, &cs->flags);
+}
 
 /**
  * cpuset_for_each_child - traverse online children of a cpuset
@@ -320,6 +326,20 @@ static struct file_system_type cpuset_fs_type = {
 	.name = "cpuset",
 	.mount = cpuset_mount,
 };
+
+int is_top_task(struct task_struct *p)
+{
+	struct cpuset *cpuset_for_task;
+	int ret;
+
+	rcu_read_lock();
+	cpuset_for_task = task_cs(p);
+	ret = is_family_boost_enabled(cpuset_for_task);
+	rcu_read_unlock();
+
+	return ret;
+}
+EXPORT_SYMBOL(is_top_task);
 
 /*
  * Return in pmask the portion of a cpusets's cpus_allowed that
@@ -1571,6 +1591,7 @@ typedef enum {
 	FILE_MEMORY_PRESSURE,
 	FILE_SPREAD_PAGE,
 	FILE_SPREAD_SLAB,
+	FILE_FAMILY_BOOST,
 } cpuset_filetype_t;
 
 static int cpuset_write_u64(struct cgroup_subsys_state *css, struct cftype *cft,
@@ -1613,6 +1634,9 @@ static int cpuset_write_u64(struct cgroup_subsys_state *css, struct cftype *cft,
 		break;
 	case FILE_SPREAD_SLAB:
 		retval = update_flag(CS_SPREAD_SLAB, cs, val);
+		break;
+	case FILE_FAMILY_BOOST:
+		retval = update_flag(CS_FAMILY_BOOST, cs, val);
 		break;
 	default:
 		retval = -EINVAL;
@@ -1785,6 +1809,8 @@ static u64 cpuset_read_u64(struct cgroup_subsys_state *css, struct cftype *cft)
 		return is_spread_page(cs);
 	case FILE_SPREAD_SLAB:
 		return is_spread_slab(cs);
+	case FILE_FAMILY_BOOST:
+		return is_family_boost_enabled(cs);
 	default:
 		BUG();
 	}
@@ -1912,6 +1938,13 @@ static struct cftype files[] = {
 		.read_u64 = cpuset_read_u64,
 		.write_u64 = cpuset_write_u64,
 		.private = FILE_MEMORY_PRESSURE_ENABLED,
+	},
+
+	{
+		.name = "family_boost",
+		.read_u64 = cpuset_read_u64,
+		.write_u64 = cpuset_write_u64,
+		.private = FILE_FAMILY_BOOST,
 	},
 
 	{ }	/* terminate */
@@ -2169,8 +2202,10 @@ hotplug_update_tasks_legacy(struct cpuset *cs,
 	 * Don't call update_tasks_cpumask() if the cpuset becomes empty,
 	 * as the tasks will be migratecd to an ancestor.
 	 */
+#ifndef CONFIG_EXYNOS_HOTPLUG_GOVERNOR
 	if (cpus_updated && !cpumask_empty(cs->cpus_allowed))
 		update_tasks_cpumask(cs);
+#endif
 	if (mems_updated && !nodes_empty(cs->mems_allowed))
 		update_tasks_nodemask(cs);
 
@@ -2205,8 +2240,10 @@ hotplug_update_tasks(struct cpuset *cs,
 	cs->effective_mems = *new_mems;
 	mutex_unlock(&callback_mutex);
 
+#ifndef CONFIG_EXYNOS_HOTPLUG_GOVERNOR
 	if (cpus_updated)
 		update_tasks_cpumask(cs);
+#endif
 	if (mems_updated)
 		update_tasks_nodemask(cs);
 }

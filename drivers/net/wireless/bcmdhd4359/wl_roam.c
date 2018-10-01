@@ -1,7 +1,7 @@
 /*
  * Linux roam cache
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_roam.c 613173 2016-01-18 03:01:57Z $
+ * $Id: wl_roam.c 731718 2017-11-14 08:10:43Z $
  */
 
 
@@ -39,7 +39,7 @@
 #endif
 #include <wldev_common.h>
 
-#define MAX_ROAM_CACHE		100
+#define MAX_ROAM_CACHE		200
 #define MAX_SSID_BUFSIZE	36
 
 #define ROAMSCAN_MODE_NORMAL	0
@@ -121,12 +121,14 @@ int set_roamscan_mode(struct net_device *dev, int mode)
 	return error;
 }
 
-int get_roamscan_channel_list(struct net_device *dev, unsigned char channels[])
+int get_roamscan_channel_list(struct net_device *dev, unsigned char channels[],
+	int n_channels)
 {
 	int n = 0;
+	int max_channel_number = MIN(n_channels, n_roam_cache);
 
 	if (roamscan_mode == ROAMSCAN_MODE_WES) {
-		for (n = 0; n < n_roam_cache; n++) {
+		for (n = 0; n < max_channel_number; n++) {
 			channels[n] = roam_cache[n].chanspec & WL_CHANSPEC_CHAN_MASK;
 
 			WL_DBG(("channel[%d] - [%02d] \n", n, channels[n]));
@@ -249,7 +251,7 @@ static bool is_duplicated_channel(const chanspec_t *channels, int n_channels, ch
 }
 
 int get_roam_channel_list(int target_chan,
-	chanspec_t *channels, const wlc_ssid_t *ssid, int ioctl_ver)
+	chanspec_t *channels, int n_channels, const wlc_ssid_t *ssid, int ioctl_ver)
 {
 	int i, n = 1;
 	char chanbuf[CHANSPEC_STR_LEN];
@@ -280,6 +282,10 @@ int get_roam_channel_list(int target_chan,
 				WL_DBG(("%s: Chanspec = %s\n", __FUNCTION__,
 					wf_chspec_ntoa_ex(ch, chanbuf)));
 				channels[n++] = ch;
+				if (n >= n_channels) {
+					WL_ERR(("Too many roam scan channels\n"));
+					return n;
+				}
 			}
 		}
 
@@ -303,6 +309,10 @@ int get_roam_channel_list(int target_chan,
 			WL_DBG(("%s: Chanspec = %s\n", __FUNCTION__,
 				wf_chspec_ntoa_ex(ch, chanbuf)));
 			channels[n++] = ch;
+			if (n >= n_channels) {
+				WL_ERR(("Too many roam scan channels\n"));
+				return n;
+			}
 		}
 	}
 
@@ -375,6 +385,10 @@ void update_roam_cache(struct bcm_cfg80211 *cfg, int ioctl_ver)
 	*/
 	error = wldev_iovar_getbuf(dev, "roamscan_channels", 0, 0,
 		(void *)&channel_list, sizeof(channel_list), NULL);
+	if (error) {
+		WL_ERR(("Failed to get roamscan channels, error = %d\n", error));
+		return;
+	}
 
 	error = wldev_get_ssid(dev, &ssid);
 	if (error) {

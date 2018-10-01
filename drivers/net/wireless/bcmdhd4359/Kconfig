@@ -47,6 +47,13 @@ config BCM4354
 	  This module adds support for wireless adapters based on
 	  Broadcom 4354 chipset.
 
+config BCM43012
+	tristate "Broadcom 43012 wireless cards support"
+	depends on BROADCOM_WIFI
+	---help---
+	  This module adds support for wireless adapters based on
+	  Broadcom 43012 chipset.
+
 config BCM4358
 	tristate "Broadcom 4358 wireless cards support"
 	depends on BROADCOM_WIFI
@@ -61,6 +68,13 @@ config BCM4359
 	  This module adds support for wireless adapters based on
 	  Broadcom 4359 chipset.
 
+config BCM4361
+	tristate "Broadcom 4361 wireless cards support"
+	depends on BROADCOM_WIFI
+	---help---
+	  This module adds support for wireless adapters based on
+	  Broadcom 4361 chipset.
+
 config BCM43241
 	tristate "Broadcom 43241 wireless cards support"
 	depends on BROADCOM_WIFI
@@ -68,12 +82,12 @@ config BCM43241
 	  This module adds support for wireless adapters based on
 	  Broadcom 43241 chipset.
 
-config BCM4334W
-	tristate "Broadcom 4334W wireless cards support"
-	depends on BROADCOM_WIFI
-	---help---
-	  This module adds support for wireless adapters based on
-	  Broadcom 4334W chipset.
+config BCM43456
+        tristate "Broadcom 43456 wireless cards support"
+        depends on BROADCOM_WIFI
+        ---help---
+          This module adds support for wireless adapters based on
+          Broadcom 43456 chipset.
 
 config BCM43455
         tristate "Broadcom 43455 wireless cards support"
@@ -81,20 +95,34 @@ config BCM43455
         ---help---
           This module adds support for wireless adapters based on
           Broadcom 43455 chipset.
+	  
+config BCM4334W
+	tristate "Broadcom 4334W wireless cards support"
+	depends on BROADCOM_WIFI
+	---help---
+	  This module adds support for wireless adapters based on
+	  Broadcom 4334W chipset.
+
+config BCM43454
+        tristate "Broadcom 43454 wireless cards support"
+        depends on BROADCOM_WIFI
+        ---help---
+          This module adds support for wireless adapters based on
+          Broadcom 43454 chipset.
 
 config BCMDHD_FW_PATH
 	depends on BROADCOM_WIFI
 	string "Firmware path"
-	default "/system/etc/firmware/fw_bcmdhd.bin"
+	default "/etc/wifi/bcmdhd_sta.bin"
 	---help---
 	  Path to the firmware file.
 
 config BCMDHD_NVRAM_PATH
 	depends on BROADCOM_WIFI
 	string "NVRAM path"
-	default "/system/etc/wifi/bcmdhd.cal"
+	default "/etc/wifi/nvram_net.txt"
 	---help---
-	  Path to the calibration file.
+	  Path to the nvram file.
 
 config BROADCOM_WIFI_RESERVED_MEM
 	bool "BROADCOM Reserved memory for wifi device"
@@ -104,7 +132,7 @@ config BROADCOM_WIFI_RESERVED_MEM
 
 config WIFI_BROADCOM_COB
         bool "BROADCOM WIFI COB"
-        depends on (BCM43455 || BCM4343)
+        depends on (BCM43456 || BCM43455 || BCM4343 || BCM43454 || BCM43012)
         ---help---
           This is a configuration for Broadcom WIFI COB Type.
 
@@ -131,14 +159,14 @@ config WLAN_REGION_CODE
 
 config WLAIBSS
 	bool "Advanced IBSS mode"
-	depends on (BCM4335 || BCM4339 || BCM4354 || BCM4358 || BCM4359)
+	depends on (BCM4335 || BCM4339 || BCM4354 || BCM4358 || BCM4359 || BCM4361)
 	default y
 	---help---
 	  This is a configuration for Oxygen Network.
 
 config WL_RELMCAST
 	bool "Reliable Multicast Support"
-	depends on (BCM4335 || BCM4339 || BCM4354 || BCM4358 || BCM4359)
+	depends on (BCM4335 || BCM4339 || BCM4354 || BCM4358 || BCM4359 || BCM4361)
 	default y
 	---help---
 	  This is a configuration for RMC.
@@ -152,7 +180,7 @@ config WL_NAN
 
 config BCMDHD_PCIE
 	bool "Enable PCIe I/F Support"
-	depends on (BCM4354 || BCM4358 || BCM4359)
+	depends on (BCM4354 || BCM4358 || BCM4359 || BCM4361)
 	---help---
 	  Enable PCI Express I/F Support
 
@@ -181,14 +209,48 @@ config WLAN_HERO2
 	---help---
 	  This is configuration for USA regrev
 
-config WLAN_GRACE
-	bool "model code for grace"
+config BCMDHD_OOB_HOST_WAKE
+	bool "Use the external WLAN_HOST_WAKE pin"
 	depends on BROADCOM_WIFI
+	default y
 	---help---
-	  This is configuration for Grace feature
+	  Use the external GPIO pin to wake up host
 
 config SPLIT_ARGOS_SET
 	bool "Support argos table"
 	depends on BROADCOM_WIFI
 	---help---
 	To support SPLIT_ARGOS_SET
+
+config WLAN_GRACE
+       bool "Model code for GRACE"
+       depends on BROADCOM_WIFI
+       ---help---
+       This is configuration for Grace feature
+
+config WLAN_GREAT
+	bool "model code for GREAT"
+	depends on BROADCOM_WIFI
+	---help---
+	This is configuration for Great feature
+
+config BCM_DETECT_CONSECUTIVE_HANG
+	bool "Detect consecutive hang event"
+	depends on BROADCOM_WIFI
+	default n
+	---help---
+	Detecting defect module from consecutive hang event
+
+config WLAN_VHTDISABLE
+	bool "WLAN Disable 11ac"
+	depends on BCM43456
+	default n
+	---help---
+	This is a configuration to disable 11ac.
+
+config WLAN_5GDISABLE
+	bool "Enable to block Band A(5G)"
+	depends on BROADCOM_WIFI
+	default n
+	---help---
+	This is configuration for block band A

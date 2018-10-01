@@ -758,6 +758,7 @@ static int fimc_is_comp_load_binary(struct fimc_is_core *core, char *name, int b
 
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
+#ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
 	if (bin_type == COMPANION_FW) {
 		snprintf(fw_name, sizeof(fw_name), "%s%s",FIMC_IS_SETFILE_SDCARD_PATH, COMP_FW_SDCARD);
 	} else if (bin_type == COMPANION_MASTER) {
@@ -769,7 +770,9 @@ static int fimc_is_comp_load_binary(struct fimc_is_core *core, char *name, int b
 	}
 
 	fp = filp_open(fw_name, O_RDONLY, 0);
-	if (IS_ERR_OR_NULL(fp)) {
+	if (IS_ERR_OR_NULL(fp))
+#endif
+	{
 		if (is_dumped_c1_fw_loading_needed && bin_type == COMPANION_FW) {
 			snprintf(fw_name, sizeof(fw_name), "%s%s",
 				FIMC_IS_FW_DUMP_PATH, sysfs_finfo->load_c1_fw_name);

@@ -257,6 +257,11 @@ int gpu_dvfs_decide_next_freq(struct kbase_device *kbdev, int utilization)
 	gpu_dvfs_get_next_level(platform, utilization);
 	spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
 
+#ifdef MALI_SEC_CL_BOOST
+	if (kbdev->pm.backend.metrics.is_full_compute_util)
+		platform->step = gpu_dvfs_get_level(platform->gpu_max_clock_limit);
+#endif
+
 #ifdef CONFIG_CPU_THERMAL_IPA
 	ipa_mali_dvfs_requested(platform->table[platform->step].clock);
 #endif /* CONFIG_CPU_THERMAL_IPA */

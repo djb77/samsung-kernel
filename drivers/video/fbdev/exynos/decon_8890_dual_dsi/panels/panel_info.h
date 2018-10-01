@@ -10,6 +10,9 @@
 #include "s6e3hf4_fhd_param.h"
 #endif
 
+#if defined(CONFIG_PANEL_S6E3HF3_FHD)
+#include "s6e3hf3_fhd_param.h"
+#endif
 
 #include "smart_dimming_core.h"
 
@@ -45,7 +48,7 @@ enum {
 #define PANEL_STATE_RESUMED		1
 #define PANEL_STATE_SUSPENDING	2
 
-#define PANEL_DISCONNEDTED		0
+#define PANEL_DISCONNECTED		0
 #define PANEL_CONNECTED			1
 
 #define CUR_MAIN_LCD_ON	 0x00
@@ -147,6 +150,8 @@ struct panel_private {
 	unsigned int adaptive_control;
 	int lux;
 	struct class *mdnie_class;
+
+	int panel_pos;
 
 /*new feature */
 	struct panel_info command;

@@ -120,6 +120,7 @@ struct kbasep_pm_metrics_data {
 	struct kbase_device *kbdev;
 #ifdef MALI_SEC_CL_BOOST
 	atomic_t time_compute_jobs, time_vertex_jobs, time_fragment_jobs;
+	bool is_full_compute_util;	/* Only compute utilisation is 100% */
 #endif
 };
 

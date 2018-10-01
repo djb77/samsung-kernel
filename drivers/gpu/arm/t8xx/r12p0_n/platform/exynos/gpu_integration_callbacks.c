@@ -421,7 +421,7 @@ int gpu_memory_seq_show(struct seq_file *sfile, void *data)
 			spin_lock(&(element->kctx->mem_pool.pool_lock));
 			each_free_size = element->kctx->mem_pool.cur_size;
 			spin_unlock(&(element->kctx->mem_pool.pool_lock));
-			ret = seq_printf(sfile, "  (%24s), %s-0x%p    %12u  %10zu\n", \
+			ret = seq_printf(sfile, "  (%24s), %s-0x%pK    %12u  %10zu\n", \
 					element->kctx->name, \
 					"kctx", \
 					element->kctx, \
@@ -950,7 +950,7 @@ int gpu_pm_get_dvfs_utilisation(struct kbase_device *kbdev, int *util_gl_share, 
 	vertex_time = atomic_read(&kbdev->pm.backend.metrics.time_vertex_jobs);
 	fragment_time = atomic_read(&kbdev->pm.backend.metrics.time_fragment_jobs);
 	total_time = compute_time + vertex_time + fragment_time;
-
+#if 0
 	if (compute_time > 0 && total_time > 0)
 	{
 		compute_time_rate = (100 * compute_time) / total_time;
@@ -959,6 +959,15 @@ int gpu_pm_get_dvfs_utilisation(struct kbase_device *kbdev, int *util_gl_share, 
 
 		if (utilisation >= 100) utilisation = 100;
 	}
+#endif
+	if (compute_time > 0) {
+		compute_time_rate = (100 * compute_time) / total_time;
+		if (compute_time_rate == 100)
+			kbdev->pm.backend.metrics.is_full_compute_util = true;
+		else
+			kbdev->pm.backend.metrics.is_full_compute_util = false;
+	} else
+		kbdev->pm.backend.metrics.is_full_compute_util = false;
 #endif
  out:
 
@@ -999,12 +1008,8 @@ static bool gpu_mem_profile_check_kctx(void *ctx)
 	bool found_element = false;
 
 	kctx = (struct kbase_context *)ctx;
-	KBASE_DEBUG_ASSERT(kctx != NULL);
+	kbdev = gpu_get_device_structure();
 
-	kbdev = kctx->kbdev;
-	KBASE_DEBUG_ASSERT(kbdev != NULL);
-
-	mutex_lock(&kbdev->kctx_list_lock);
 	list_for_each_entry_safe(element, tmp, &kbdev->kctx_list, link) {
 		if (element->kctx == kctx) {
 			if (kctx->destroying_context == false) {
@@ -1013,8 +1018,7 @@ static bool gpu_mem_profile_check_kctx(void *ctx)
 			}
 		}
 	}
-	mutex_unlock(&kbdev->kctx_list_lock);
-
+	
 	return found_element;
 }
 

@@ -1,7 +1,7 @@
 /*
  * Common function shared by Linux WEXT, cfg80211 and p2p drivers
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wldev_common.h 619215 2016-02-16 02:01:14Z $
+ * $Id: wldev_common.h 698063 2017-05-08 02:44:57Z $
  */
 #ifndef __WLDEV_COMMON_H__
 #define __WLDEV_COMMON_H__
@@ -32,8 +32,12 @@
  *  netdev_ops->ndo_do_ioctl in new kernels)
  *  @dev: the net_device handle
  */
-s32 wldev_ioctl(
-	struct net_device *dev, u32 cmd, void *arg, u32 len, u32 set);
+
+s32 wldev_ioctl_get(
+	struct net_device *dev, u32 cmd, void *arg, u32 len);
+
+s32 wldev_ioctl_set(
+	struct net_device *dev, u32 cmd, const void *arg, u32 len);
 
 /** Retrieve named IOVARs, this function calls wl_dev_ioctl with
  *  WLC_GET_VAR IOCTL code
@@ -102,7 +106,7 @@ extern int net_os_set_dtim_skip(struct net_device *dev, int val);
 extern int net_os_set_suspend_disable(struct net_device *dev, int val);
 extern int net_os_set_suspend(struct net_device *dev, int val, int force);
 extern int net_os_set_max_dtim_enable(struct net_device *dev, int val);
-extern int wl_iw_parse_ssid_list_tlv(char** list_str, wlc_ssid_ext_t* ssid,
+extern int wl_parse_ssid_list_tlv(char** list_str, wlc_ssid_ext_t* ssid,
 	int max, int *bytes_left);
 
 /* Get the link speed from dongle, speed is in kpbs */

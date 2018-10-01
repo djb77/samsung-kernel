@@ -69,6 +69,7 @@ struct fimc_is_device_csi {
 	struct v4l2_subdev		**subdev;
 	struct phy			*phy;
 
+	u32				dbg_fcount;
 #ifndef ENABLE_IS_CORE
 	atomic_t                        vblank_count; /* Increase at CSI frame end */
 

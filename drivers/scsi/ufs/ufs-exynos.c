@@ -813,6 +813,11 @@ dump:
 	printk("dump_once_again %d\n", dump_once_again);
 	WARN_ON(1);
 
+#if defined(CONFIG_SCSI_UFS_TEST_MODE)
+		/* do not recover system if test mode is enabled */
+		BUG();
+#endif
+
 	if (hba->debug.flag & UFSHCD_DEBUG_DUMP)
 		dump_once_again = 0;
 
@@ -1821,6 +1826,15 @@ static void exynos_ufs_host_reset(struct ufs_hba *hba)
 	exynos_ufs_attr_dump(hba);
 }
 
+static inline void exynos_ufs_dev_reset_ctrl(struct exynos_ufs *ufs, bool en)
+{
+
+	if (en)
+		hci_writel(ufs, 1 << 0, HCI_GPIO_OUT);
+	else
+		hci_writel(ufs, 0 << 0, HCI_GPIO_OUT);
+}
+
 static void exynos_ufs_dev_hw_reset(struct ufs_hba *hba)
 {
 	struct exynos_ufs *ufs = to_exynos_ufs(hba);
@@ -1959,6 +1973,8 @@ static int __exynos_ufs_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	struct exynos_ufs *ufs = to_exynos_ufs(hba);
 
 	pm_qos_update_request(&ufs->pm_qos_int, 0);
+
+	exynos_ufs_dev_reset_ctrl(ufs, false);
 
 	exynos_ufs_ctrl_phy_pwr(ufs, false);
 
@@ -2815,6 +2831,7 @@ static struct platform_driver exynos_ufs_driver = {
 		.owner = THIS_MODULE,
 		.pm = &exynos_ufs_dev_pm_ops,
 		.of_match_table = exynos_ufs_match,
+		.suppress_bind_attrs = true,
 	},
 	.probe = exynos_ufs_probe,
 	.remove = exynos_ufs_remove,

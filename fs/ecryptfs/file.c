@@ -525,16 +525,27 @@ static int ecryptfs_open(struct inode *inode, struct file *file)
 		printk("DLP %s: try to open %s [%lu] with crypt_stat->flags %d\n",
 				__func__, ecryptfs_dentry->d_name.name, inode->i_ino, crypt_stat->flags);
 #endif
+
+		dlp_len = ecryptfs_dentry->d_inode->i_op->getxattr(
+			ecryptfs_dentry,
+			KNOX_DLP_XATTR_NAME,
+			&dlp_data, sizeof(dlp_data));
+
+		if(dlp_data.expiry_time.tv_sec <= 0){
+#if DLP_DEBUG
+			printk("[LOG] %s: DLP flag is set but it is not DLP file -> media created file but not DLP [%s]\n",
+				__func__, ecryptfs_dentry->d_name.name);
+#endif
+			goto dlp_out;
+		}
+
 		if (dlp_is_locked(mount_crypt_stat->userid)) {
 			printk("%s: DLP locked\n", __func__);
 			rc = -EPERM;
 			goto out_put;
 		}
+
 		if(in_egroup_p(AID_KNOX_DLP) || in_egroup_p(AID_KNOX_DLP_RESTRICTED) || in_egroup_p(AID_KNOX_DLP_MEDIA)) {
-			dlp_len = ecryptfs_dentry->d_inode->i_op->getxattr(
-					ecryptfs_dentry,
-					KNOX_DLP_XATTR_NAME,
-					&dlp_data, sizeof(dlp_data));
 			if (dlp_len == sizeof(dlp_data)) {
 				getnstimeofday(&ts);
 #if DLP_DEBUG
@@ -595,6 +606,8 @@ static int ecryptfs_open(struct inode *inode, struct file *file)
 			goto out_put;
 		}
 	}
+
+dlp_out:
 #endif
 
 	ecryptfs_printk(KERN_DEBUG, "inode w/ addr = [0x%p], i_ino = "

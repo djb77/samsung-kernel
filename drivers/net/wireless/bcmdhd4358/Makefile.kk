@@ -47,6 +47,8 @@ ifeq ($(BUS_IFACE_PCIE),y)
 	DHDCFLAGS += -DCUSTOM_DHD_WATCHDOG_MS=0
 	# Enable Link down recovery
 	DHDCFLAGS += -DSUPPORT_LINKDOWN_RECOVERY
+	# Enable Dongle Isolation
+	DHDCFLAGS += -DDONGLE_ENABLE_ISOLATION
 #ifeq ($(CONFIG_BCMDHD_DEBUG_PAGEALLOC),y)
 	# Debugging Pagealloc
 #	DHDCFLAGS += -DDHD_DEBUG_PAGEALLOC
@@ -55,7 +57,8 @@ ifeq ($(BUS_IFACE_PCIE),y)
 	DHDCFLAGS += -DDHD_PKTID_AUDIT_ENABLED
 	# Extended HANG event with reason codes
 	DHDCFALGS += -DDHD_USE_EXTENDED_HANG_REASON
-
+	# Enable wakelock for legacy scan
+	DHDCFLAGS += -DDHD_USE_SCAN_WAKELOCK
 endif
 
 #################
@@ -88,6 +91,9 @@ DHDCFLAGS += -DDHD_8021X_DUMP
 
 # Print DHCP
 DHDCFLAGS += -DDHD_DHCP_DUMP
+
+# Print ICMP
+DHDCFLAGS += -DDHD_ICMP_DUMP
 
 # VSDB
 DHDCFLAGS += -DVSDB
@@ -181,7 +187,8 @@ DHDCFLAGS += -DCONFIG_HAS_WAKELOCK
 # Used short dwell time during initial scan
 DHDCFLAGS += -DUSE_INITIAL_SHORT_DWELL_TIME
 
-# Japan ccode revision will be fixed by nvram's value
+# Korea and Japan ccode revision will be fixed by nvram's value
+DHDCFLAGS += -DKEEP_KR_REGREV
 DHDCFLAGS += -DKEEP_JP_REGREV
 
 # NAN feature
@@ -197,6 +204,37 @@ DHDCFLAGS += -DUSE_WFA_CERT_CONF
 
 # Customer scan timeout setting
 DHDCFLAGS += -DCUSTOMER_SCAN_TIMEOUT_SETTING
+
+# Enable HANG event test private command
+DHDCFLAGS += -DSUPPORT_TRIGGER_HANG_EVENT
+
+# Random mac scan
+DHDCFLAGS += -DSUPPORT_RANDOM_MAC_SCAN
+
+# Enable Checking Blob existence
+DHDCFLAGS += -DDHD_BLOB_EXISTENCE_CHECK
+
+# Android Version Check from Platform source
+CANDIDATE_VERSION_PATH := ./../../build/core ../../../../../../build/core out
+FOUND_VERSION_PATH := $(foreach dir,$(CANDIDATE_VERSION_PATH), $(wildcard $(dir)/version_defaults.mk))
+FOUND_VERSION_PATH := $(word 1, $(FOUND_VERSION_PATH))
+ifeq ($(FOUND_VERSION_PATH),)
+$(warning Not found Android version file. Set as Legacy mode)
+DHDCFLAGS += -DDHD_LEGACY_FILE_PATH
+DHDCFLAGS += -DDHD_DISABLE_ANDROID_FEATURE_SET
+else
+# Extract version string and get major number
+ANDROID_PLATFORM_VERSION := $(shell grep "PLATFORM_VERSION := " $(FOUND_VERSION_PATH) | cut -d "=" -f 2 | cut -d "." -f 1 | sed 's/ //g')
+$(warning Android Platform Version : $(ANDROID_PLATFORM_VERSION))
+# If Android version lower than 7(Nougat) => Use Legacy File path
+ifeq ($(shell expr $(ANDROID_PLATFORM_VERSION) \< 7),1)
+DHDCFLAGS += -DDHD_LEGACY_FILE_PATH
+DHDCFLAGS += -DDHD_DISABLE_ANDROID_FEATURE_SET
+$(warning Will be use Legacy file path)
+else
+DHDCFLAGS += -DDHD_SET_COUNTRY_SUPPORT
+endif
+endif
 
 ##############################
 # Android Platform Definition
@@ -235,6 +273,8 @@ ifneq ($(CONFIG_BCM4358),)
   DHDCFLAGS += -DDHD_DONOT_FORWARD_BCMEVENT_AS_NETWORK_PKT
   DHDCFLAGS += -DCUSTOM_BCN_TIMEOUT=6
   DHDCFLAGS += -DSOFTAP_UAPSD_OFF
+# To support APF
+  DHDCFLAGS += -DAPF
 # tput enhancement for common
   DHDCFLAGS += -DUSE_WL_TXBF
   DHDCFLAGS += -DUSE_WL_FRAMEBURST
@@ -267,6 +307,8 @@ ifeq ($(BUS_IFACE_PCIE),y)
   DHDCFLAGS += -DCUSTOM_AMPDU_RELEASE=16
   DHDCFLAGS += -DCUSTOM_AMSDU_AGGSF=4
   DHDCFLAGS += -DDHDTCPACK_SUPPRESS
+  DHDCFLAGS += -DCUSTOM_TCPACK_SUPP_RATIO=15
+  DHDCFLAGS += -DCUSTOM_TCPACK_DELAY_TIME=10
 endif
 
 # Disabled DHDTCPACK_SUPPRESS for T Project / Enabled for Zero Project
@@ -276,11 +318,7 @@ endif
 
 ifeq ($(CONFIG_ARCH_MSM),y)
   DHDCFLAGS += -DSET_RPS_CPUS
-endif
-
-ifeq ($(CONFIG_ARCH_MSM8996),y)
-# Enable Dongle Isolation
-  DHDCFLAGS += -DDONGLE_ENABLE_ISOLATION
+  DHDCFLAGS := $(filter-out -DDHDTCPACK_SUPPRESS,$(DHDCFLAGS))
 endif
 
 # New Features
@@ -309,6 +347,9 @@ endif
 ifeq ($(BUS_IFACE_SDIO),y)
   DHDCFLAGS += -DCUSTOM_PSPRETEND_THR=30
 endif
+
+# Enable concate blob path
+  DHDCFLAGS += -DCONCATE_BLOB
 endif
 
 ifneq ($(CONFIG_BCM4354),)
@@ -587,8 +628,8 @@ ifneq ($(CONFIG_MACH_UNIVERSAL7420),)
 DHDCFLAGS += -DDHD_OF_SUPPORT
 DHDCFLAGS += -DBCMPCIE_OOB_HOST_WAKE
 # For enable temperature throttling feature at BCM4358A3
-DHDCFLAGS += -DENABLE_TEMP_THROTTLING
-DHDCFLAGS += -DTEMP_THROTTLE_CONTROL_BIT=0xD
+# DHDCFLAGS += -DENABLE_TEMP_THROTTLING
+# DHDCFLAGS += -DTEMP_THROTTLE_CONTROL_BIT=0xD
 endif
 ifneq ($(CONFIG_MACH_UNIVERSAL5433),)
 DHDCFLAGS += -DDHD_OF_SUPPORT

@@ -16,7 +16,6 @@
 #include "fimc-is-param.h"
 #include "fimc-is-video.h"
 #include "fimc-is-type.h"
-#include "fimc-is-interface-fd.h"
 
 static int fimc_is_ischain_vra_cfg(struct fimc_is_subdev *leader,
 	void *device_data,

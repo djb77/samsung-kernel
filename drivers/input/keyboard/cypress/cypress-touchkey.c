@@ -15,7 +15,7 @@
 static u8 module_divider[] = {0, 0xff};
 #endif
 
-#ifdef EFS_CHECK_LIGHT
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 /**************************************************/
 #define LIGHT_VERSION			160719
 #define LIGHT_TABLE_MAX			6
@@ -55,7 +55,7 @@ static struct touchkey_i2c *tkey_info;
 #endif
 
 int touchkey_mode_change(struct touchkey_i2c *tkey_i2c, int cmd);
-#ifdef EFS_CHECK_LIGHT
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 static int efs_read_light_table_version(struct touchkey_i2c *tkey_i2c);
 #endif
 static void change_touch_key_led_voltage(struct device *dev, int vol_mv)
@@ -92,7 +92,7 @@ static ssize_t brightness_control(struct device *dev,
 	return size;
 }
 
-#ifdef EFS_CHECK_LIGHT
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 static int read_window_type(void)
 {
 	struct file *type_filp = NULL;
@@ -115,17 +115,20 @@ static int read_window_type(void)
 	if (ret != 9 * sizeof(char)) {
 		pr_err("%s touchkey %s: fd read fail\n", SECLOG, __func__);
 		ret = -EIO;
-		return ret;
+		goto out;
 	}
 
-	filp_close(type_filp, current->files);
-	set_fs(old_fs);
-
-	if (window_type[1] < '0' || window_type[1] >= 'f')
-		return -EAGAIN;
+	if (window_type[1] < '0' || window_type[1] >= 'f') {
+		ret = -EAGAIN;
+		goto out;
+	}
 
 	ret = (window_type[1] - '0') & 0x0f;
 	pr_info("%s touchkey %s: %d\n", SECLOG, __func__, ret);
+out:
+	filp_close(type_filp, current->files);
+	set_fs(old_fs);
+
 	return ret;
 }
 
@@ -2143,7 +2146,7 @@ static ssize_t set_touchkey_firm_status_show(struct device *dev,
 	return count;
 }
 
-#ifdef EFS_CHECK_LIGHT
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 static ssize_t touchkey_light_version_read(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -2436,7 +2439,7 @@ static DEVICE_ATTR(flip_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
 #endif
 static DEVICE_ATTR(keyboard_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
 		keyboard_cover_mode_enable);
-#ifdef EFS_CHECK_LIGHT
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 static DEVICE_ATTR(touchkey_light_version, S_IRUGO, touchkey_light_version_read, NULL);
 static DEVICE_ATTR(touchkey_light_update, S_IWUSR | S_IWGRP, NULL, touchkey_light_update);
 static DEVICE_ATTR(touchkey_light_id_compare, S_IRUGO, touchkey_light_id_compare, NULL);
@@ -2468,7 +2471,7 @@ static struct attribute *touchkey_attributes[] = {
 	&dev_attr_flip_mode.attr,
 #endif
 	&dev_attr_keyboard_mode.attr,
-#ifdef EFS_CHECK_LIGHT	
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS	
 	&dev_attr_touchkey_light_version.attr,
 	&dev_attr_touchkey_light_update.attr,
 	&dev_attr_touchkey_light_id_compare.attr,
@@ -2661,7 +2664,7 @@ static int i2c_touchkey_probe(struct i2c_client *client,
 	struct input_dev *input_dev;
 	int i;
 	int ret = 0;
-#ifdef EFS_CHECK_LIGHT
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 	char tmp[2] = {0, };
 #endif
 
@@ -2742,7 +2745,7 @@ static int i2c_touchkey_probe(struct i2c_client *client,
 	INIT_WORK(&tkey_i2c->mode_change_work, touchkey_i2c_mode_change_work);
 	wake_lock_init(&tkey_i2c->fw_wakelock, WAKE_LOCK_SUSPEND, "touchkey");
 
-#ifdef EFS_CHECK_LIGHT
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 	INIT_DELAYED_WORK(&tkey_i2c->efs_open_work, touchkey_efs_open_work);
 #endif
 	for (i = 1; i < touchkey_count; i++)
@@ -2830,7 +2833,7 @@ static int i2c_touchkey_probe(struct i2c_client *client,
 			input_err(true, &client->dev, "Failed to connect link\n");
 	}
 
-#ifdef EFS_CHECK_LIGHT
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 	tkey_i2c->light_table_crc = LIGHT_VERSION;
 	sprintf(tkey_i2c->light_version_full_bin, "T%d.", LIGHT_VERSION);
 	for (i = 0; i < LIGHT_TABLE_MAX; i++) {
@@ -2886,7 +2889,7 @@ void touchkey_shutdown(struct i2c_client *client)
 		return;
 
 	input_err(true, &tkey_i2c->client->dev, "%s\n", __func__);
-#ifdef EFS_CHECK_LIGHT
+#ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 	cancel_delayed_work(&tkey_i2c->efs_open_work);
 #endif
 	touchkey_stop(tkey_i2c);

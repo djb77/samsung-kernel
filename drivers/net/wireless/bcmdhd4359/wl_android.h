@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver - Android related functions
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_android.h 608194 2015-12-24 04:34:35Z $
+ * $Id: wl_android.h 607319 2015-12-18 14:16:55Z $
  */
 
 #include <linux/module.h>
@@ -34,7 +34,7 @@
 /* If any feature uses the Generic Netlink Interface, put it here to enable WL_GENL
  * automatically
  */
-#if defined(BT_WIFI_HANDOVER) || defined(WL_NAN)
+#if defined(BT_WIFI_HANDOVER)
 #define WL_GENL
 #endif
 
@@ -42,6 +42,20 @@
 #ifdef WL_GENL
 #include <net/genetlink.h>
 #endif
+
+typedef struct _android_wifi_priv_cmd {
+    char *buf;
+    int used_len;
+    int total_len;
+} android_wifi_priv_cmd;
+
+#ifdef CONFIG_COMPAT
+typedef struct _compat_android_wifi_priv_cmd {
+    compat_caddr_t buf;
+    int used_len;
+    int total_len;
+} compat_android_wifi_priv_cmd;
+#endif /* CONFIG_COMPAT */
 
 /**
  * Android platform dependent functions, feel free to add Android specific functions here
@@ -59,6 +73,7 @@ void wl_android_post_init(void);
 int wl_android_wifi_on(struct net_device *dev);
 int wl_android_wifi_off(struct net_device *dev, bool on_failure);
 int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd);
+int wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len);
 
 #ifdef WL_GENL
 typedef struct bcm_event_hdr {
@@ -101,9 +116,9 @@ enum {
 };
 
 s32 wl_genl_send_msg(struct net_device *ndev, u32 event_type,
-	u8 *string, u16 len, u8 *hdr, u16 hdrlen);
+	const u8 *string, u16 len, u8 *hdr, u16 hdrlen);
 #endif /* WL_GENL */
-s32 wl_netlink_send_msg(int pid, int type, int seq, void *data, size_t size);
+s32 wl_netlink_send_msg(int pid, int type, int seq, const void *data, size_t size);
 
 /* hostap mac mode */
 #define MACLIST_MODE_DISABLED   0
@@ -123,4 +138,3 @@ s32 wl_netlink_send_msg(int pid, int type, int seq, void *data, size_t size);
 #define MAX_NUM_MAC_FILT        10
 
 int wl_android_set_ap_mac_list(struct net_device *dev, int macmode, struct maclist *maclist);
-int wl_android_set_roam_offload_bssid_list(struct net_device *dev, const char *cmd);

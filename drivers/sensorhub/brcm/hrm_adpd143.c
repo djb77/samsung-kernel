@@ -30,19 +30,18 @@
 #include "hrmsensor.h"
 #include "hrm_adpd143.h"
 
-#define MELANIN_IDX_SUPPORT
-
 #define __USE_PD34__
-//#define __USE_LOWPASS_FIR_FILTER__
-//#define __USE_TIME_DOMAIN_SNR__
 
 extern int hrm_debug;
 extern int hrm_info;
 
 #define MAX_NUM_SAMPLE 4
 
-#define CHIP_NAME			"ADPD143RI"
-#define VENDOR				"ADI"
+#define CHIP_NAME				"ADPD143RI"
+#define VENDOR					"ADI"
+
+#define VENDOR_VERISON			"2"
+#define VERSION					"29"
 
 #define ADPD143_SLAVE_ADDR		0x64
 
@@ -51,7 +50,6 @@ extern int hrm_info;
 #define ADPD_CHIPID_2			0x0216
 #define ADPD_CHIPID_3			0x0316
 #define ADPD_CHIPID_4			0x0416
-
 #define ADPD_CHIPID(id)			ADPD_CHIPID_##id
 
 #define ADPD_INT_STATUS_ADDR		0x00
@@ -105,43 +103,43 @@ extern int hrm_info;
 #define ADPD_RED_INTRCPT_ADDR		0x73
 #define ADPD_IR_INTRCPT_ADDR		0x74
 
-#define MAX_CONFIG_REG_CNT			128
+#define MAX_CONFIG_REG_CNT		128
 
-#define I2C_RETRY_DELAY			5
-#define I2C_RETRIES			0
+#define I2C_RETRY_DELAY			0
+#define I2C_RETRIES				100
+#define I2C_FAIL_TIME_SEC		30
 
-#define MAX_BUFFER			128
+#define MAX_BUFFER				128
 #define GLOBAL_OP_MODE_OFF		0 /* standby */
 #define GLOBAL_OP_MODE_IDLE		1 /* program */
-#define GLOBAL_OP_MODE_GO			2 /* normal operation */
+#define GLOBAL_OP_MODE_GO		2 /* normal operation */
 
 #define SET_GLOBAL_OP_MODE(val, cmd)	((val & 0xFC) | cmd)
 
-#define EN_FIFO_CLK			0x3B5B
-#define DS_FIFO_CLK			0x3050
+#define EN_FIFO_CLK				0x3B5B
+#define DS_FIFO_CLK				0x3050
 #define DISABLE_NONE			0x0
 #define DISABLE_SLOTA_LED		BIT(8) /* RED */
 #define DISABLE_SLOTB_LED		BIT(9) /* IR */
-#define LED_SCALE_100			0x3030 /* 100% strength */
-
+#define LED_SCALE_100			0x3070 /* 100% strength */
 
 /* USR MODE */
 #define IDLE_MODE				0x00
 #define SAMPLE_XY_A_MODE		0x30 /* RED */
 #define SAMPLE_XY_AB_MODE		0x31 /* RED/IR */
 #define SAMPLE_XY_B_MODE		0x32 /* IR */
-#define SAMPLE_TIA_ADC_MODE	0x51 /* Ambient rejection off */
-#define SAMPLE_EOL_MODE		0x71
-#define GET_USR_MODE(usr_val)	((usr_val & 0xF0) >> 4)
+#define SAMPLE_TIA_ADC_MODE		0x51 /* Ambient rejection off */
+#define SAMPLE_EOL_MODE			0x71
+#define GET_USR_MODE(usr_val)		((usr_val & 0xF0) >> 4)
 #define GET_USR_SUB_MODE(usr_val)	(usr_val & 0xF)
 
 /* OPERATING MODE & DATA MODE */
-#define R_RDATA_FLAG_EN		(0x1 << 15)
-#define R_PACK_START_EN		(0x0 << 14)
+#define R_RDATA_FLAG_EN			(0x1 << 15)
+#define R_PACK_START_EN			(0x0 << 14)
 #define	R_RDOUT_MODE			(0x0 << 13)
 #define R_FIFO_PREVENT_EN		(0x1 << 12)
-#define	R_SAMP_OUT_MODE		(0x0 << 9)
-#define DEFAULT_OP_MODE_CFG_VAL(cfg_x)  (R_RDATA_FLAG_EN + R_PACK_START_EN +\
+#define	R_SAMP_OUT_MODE			(0x0 << 9)
+#define DEFAULT_OP_MODE_CFG_VAL(cfg_x)		(R_RDATA_FLAG_EN + R_PACK_START_EN +\
 											R_RDOUT_MODE + R_FIFO_PREVENT_EN+\
 											R_SAMP_OUT_MODE)
 
@@ -152,12 +150,11 @@ extern int hrm_info;
 
 /* INTERRUPT MASK */
 #define INTR_MASK_IDLE_USR			0x0000
-#define INTR_MASK_SAMPLE_USR			0x0020
+#define INTR_MASK_SAMPLE_USR		0x0020
 #define INTR_MASK_S_SAMP_XY_A_USR	0x0020
 #define INTR_MASK_S_SAMP_XY_AB_USR	0x0040
 #define	INTR_MASK_S_SAMP_XY_B_USR	0x0040
 #define SET_INTR_MASK(usr_val)		((~(INTR_MASK_##usr_val)) & 0x1FF)
-
 
 /* ADPD143 DIFFERENT MODE */
 /* Main mode */
@@ -167,37 +164,36 @@ extern int hrm_info;
 #define EOL_USR				7
 /* Sub mode */
 #define S_SAMP_XY_A			0
-#define S_SAMP_XY_AB			1
+#define S_SAMP_XY_AB		1
 #define S_SAMP_XY_B			2
-/*
-OPERATING MODE ==>      MAIN_mode[20:16] |
-			OP_mode_A[15:12] |
-			DATA_mode_A[11:8]|
-			OP_mode_B[7:4]   |
-			DATA_mode_B[3:0]
-*/
+/* OPERATING MODE ==>	MAIN_mode[20:16] |
+						OP_mode_A[15:12] |
+						DATA_mode_A[11:8]|
+						OP_mode_B[7:4]   |
+						DATA_mode_B[3:0]	*/
 #define IDLE_OFF			((IDLE_USR << 16) | (0x0000))
 
-#define SAMPLE_XY_A		((SLOTA_EN) | (SLOTA_FIFO_CONFIG << 2))
+#define SAMPLE_XY_A			((SLOTA_EN) | (SLOTA_FIFO_CONFIG << 2))
 #define SAMPLE_XY_AB		((SLOTA_EN) | (SLOTA_FIFO_CONFIG << 2) | (SLOTB_EN << 5) | (SLOTB_FIFO_CONFIG << 6))
-#define SAMPLE_XY_B		((SLOTB_EN << 5) | (SLOTB_FIFO_CONFIG << 6))
+#define SAMPLE_XY_B			((SLOTB_EN << 5) | (SLOTB_FIFO_CONFIG << 6))
 
-#define MAX_MODE                        8
+#define MAX_MODE				8
 
 #define MAX_IDLE_MODE			1
-#define MAX_SAMPLE_MODE		3
+#define MAX_SAMPLE_MODE			3
 
-#define MAX_LIB_VER			20
+#define MAX_LIB_VER				20
 #define OSC_TRIM_ADDR26_REG		0x26
 #define OSC_TRIM_ADDR28_REG		0x28
 #define OSC_TRIM_ADDR29_REG		0x29
-#define OSC_TRIM_32K_REG			0x4B
-#define OSC_TRIM_32M_REG			0x4D
+#define OSC_TRIM_32K_REG		0x4B
+#define OSC_TRIM_32M_REG		0x4D
+#define OSC_TRIM_BIT_MASK		0x2680
 #define OSC_DEFAULT_32K_SET		0x2695
 #define OSC_DEFAULT_32M_SET		0x4272
 #define OSCILLATOR_TRIM_FILE_PATH	"/efs/FactoryApp/hrm_osc_trim"
 
-#define FLOAT_MODE_SATURATION_CONTROL_CODE			8500
+#define FLOAT_MODE_SATURATION_CONTROL_CODE		8500
 #define TIA_ADC_MODE_DARK_CALIBRATION_CNT		6
 #define FLOAT_MODE_DARK_CALIBRATION_CNT			6
 
@@ -210,7 +206,6 @@ struct adpd_platform_data {
 	unsigned short config_size;
 	unsigned int config_data[MAX_CONFIG_REG_CNT];
 };
-
 
 enum {
 	DEBUG_WRITE_REG_TO_FILE = 1,
@@ -230,25 +225,31 @@ enum {
 };
 
 /* MAX == 262140 */
-
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
+#if defined(__USE_PD1234__)
+#define ADPD_THRESHOLD_DEFAULT 95000
+static unsigned int pd_start_num = 0, pd_end_num = 3;
+#elif defined(__USE_PD123__)
 #define ADPD_THRESHOLD_DEFAULT 100000
+static unsigned int pd_start_num = 0, pd_end_num = 2;
 #elif defined(__USE_PD234__)
 #define ADPD_THRESHOLD_DEFAULT 80000
+static unsigned int pd_start_num = 1, pd_end_num = 3;
 #elif defined(__USE_PD34__)
 #define ADPD_THRESHOLD_DEFAULT 50000
+static unsigned int pd_start_num = 2, pd_end_num = 3;
 #elif defined(__USE_PD4__)
 #define ADPD_THRESHOLD_DEFAULT 20000
+static unsigned int pd_start_num = 3, pd_end_num = 3;
 #endif
 
 static u8 agc_is_enabled = 1;
-static u8 fifo_is_32bit;
 
 struct mode_mapping {
 	char *name;
 	int *mode_code;
 	unsigned int size;
 };
+
 int _mode_IDLE[MAX_IDLE_MODE] = { IDLE_OFF };
 int _mode_SAMPLE[MAX_SAMPLE_MODE] = { SAMPLE_XY_A, SAMPLE_XY_AB, SAMPLE_XY_B };
 
@@ -291,9 +292,7 @@ struct mode_mapping __mode_recv_frm_usr[MAX_MODE] = {
 	}
 };
 
-/**
-general data buffer that is required to store the recieved buffer
-*/
+/* general data buffer that is required to store the recieved buffer */
 static unsigned short data_buffer[MAX_BUFFER] = { 0 };
 
 struct adpd_stats {
@@ -301,7 +300,14 @@ struct adpd_stats {
 	atomic_t fifo_bytes[4];
 };
 
-typedef enum __EOL_state{
+typedef enum __dark_cal_state {
+	ST_DARK_CAL_IDLE = 0,
+	ST_DARK_CAL_INIT,
+	ST_DARK_CAL_RUNNING,
+	ST_DARK_CAL_DONE,
+} t_dark_cal_state;
+
+typedef enum __EOL_state {
 	ST_EOL_IDLE = 0,
 
 	ST_EOL_CLOCK_CAL_INIT,
@@ -324,11 +330,9 @@ typedef enum __EOL_state{
 	ST_EOL_AC_RUNNING,
 	ST_EOL_AC_DONE,
 
-#ifdef MELANIN_IDX_SUPPORT
 	ST_EOL_MELANIN_DC_INIT,
 	ST_EOL_MELANIN_DC_RUNNING,
 	ST_EOL_MELANIN_DC_DONE,
-#endif
 
 	ST_EOL_DONE,
 } EOL_state;
@@ -374,7 +378,7 @@ unsigned short g_eol_regNumbers[32] = {
 struct timeval prev_interrupt_trigger_ts;
 struct timeval curr_interrupt_trigger_ts;
 
-typedef enum __OBJ_PROXIMITY_STATUS__{
+typedef enum __OBJ_PROXIMITY_STATUS__ {
 	OBJ_DARKOFFSET_CAL = -1,
 	OBJ_DETACHED = 0,
 	OBJ_DETECTED,
@@ -382,23 +386,23 @@ typedef enum __OBJ_PROXIMITY_STATUS__{
 	OBJ_PROXIMITY_ON,
 	OBJ_HARD_PRESSURE,
 	DEVICE_ON_TABLE,
+	OBJ_DARKOFFSET_CAL_DONE_IN_NONHRM,
 } OBJ_PROXIMITY_STATUS;
 
-#define OBJ_DETACH_FROM_DETECTION_DC_PERCENT      	80
-#define OBJ_DETACH_FROM_PROXIMITY_DC_PERCENT      	70
-#define OBJ_DETECTION_CNT_DC_PERCENT    			90
-#define OBJ_PROXIMITY_CNT_DC_PERCENT     			80
-#define CNT_THRESHOLD_OBJ_PROXIMITY_ON   			5
-#define CNT_THRESHOLD_AGC_STEP_ON   				1
-static unsigned cntThreshAgcStepOn = CNT_THRESHOLD_AGC_STEP_ON;
+#define OBJ_DETACH_FROM_DETECTION_DC_PERCENT		80
+#define OBJ_DETACH_FROM_PROXIMITY_DC_PERCENT		70
+#define OBJ_DETECTION_CNT_DC_PERCENT				90
+#define OBJ_PROXIMITY_CNT_DC_PERCENT				80
+#define CNT_THRESHOLD_OBJ_PROXIMITY_ON				5
+#define CNT_THRESHOLD_AGC_STEP_ON					1
 
 #define CNT_THRESHOLD_DC_SATURATION					10
-#define CNT_ENABLE_SKIP_SAMPLE   					5
+#define CNT_ENABLE_SKIP_SAMPLE						5
 
 #define __USE_EOL_US_INT_SPACE__
 #define __USE_EOL_ADC_OFFSET__
-#define CNT_SAMPLE_PER_EOL_CYCLE   	50
-#define CNT_EOL_SKIP_SAMPLE   		5
+#define CNT_SAMPLE_PER_EOL_CYCLE	50
+#define CNT_EOL_SKIP_SAMPLE			5
 
 unsigned short g_org_regValues[33];
 unsigned g_eol_ADCOffset[8];
@@ -407,10 +411,10 @@ unsigned g_dc_buffB[CNT_SAMPLE_PER_EOL_CYCLE];
 unsigned g_ac_buffA[CNT_SAMPLE_PER_EOL_CYCLE];
 unsigned g_ac_buffB[CNT_SAMPLE_PER_EOL_CYCLE];
 
-/**
-structure hold adpd143 chip structure, and parameter used
-to control the adpd143 software part.
-*/
+unsigned dark_cal_bef_pulseA, dark_cal_bef_pulseB;
+
+/* structure hold adpd143 chip structure, and parameter used
+to control the adpd143 software part. */
 struct adpd_device_data {
 	struct i2c_client *client;
 	struct mutex mutex;/*for chip structure*/
@@ -443,30 +447,18 @@ struct adpd_device_data {
 	unsigned char cnt_proximity_buf;
 	unsigned char begin_proximity_buf;
 	unsigned char Is_Hrm_Dark_Calibrated;
+	unsigned char dark_cal_counter;
+	t_dark_cal_state dark_cal_state;
 
 	int (*read)(struct adpd_device_data *, u8 reg_addr, int len, u16 *buf);
 	int (*write)(struct adpd_device_data *, u8 reg_addr, int len, u16 data);
 	u8 eol_test_is_enable;
 	u8 eol_test_status;
 
-	u8 osc_trim_open_enable;
-
 	int hrm_mode;
-#ifdef __USE_ADPD_32BIT_FIFO__
-	unsigned long sum_slot_a;
-	unsigned long sum_slot_b;
-#ifdef __USE_LOWPASS_FIR_FILTER__
-	unsigned long fltr_sum_slot_a;
-	unsigned long fltr_sum_slot_b;
-#endif
-#else
+
 	unsigned int sum_slot_a;
 	unsigned int sum_slot_b;
-#ifdef __USE_LOWPASS_FIR_FILTER__
-	unsigned fltr_sum_slot_a;
-	unsigned fltr_sum_slot_b;
-#endif
-#endif
 	unsigned int slot_data[8];
 	unsigned agc_threshold;
 	u8 agc_mode;
@@ -477,7 +469,6 @@ struct adpd_device_data {
 	/* for HRM mode */
 	EOL_state eol_state;
 	unsigned char eol_counter;
-	int msec_eol_int_space;
 	int usec_eol_int_space;
 	long eol_measured_period;
 
@@ -500,12 +491,10 @@ struct adpd_device_data {
 	unsigned short eol_res_red_high_noise;
 	unsigned short eol_res_red_ac;
 
-#ifdef MELANIN_IDX_SUPPORT
 	unsigned eol_res_melanin_red_dc;
 	unsigned eol_res_melanin_ir_dc;
 	unsigned eol_res_melanin_red_noise;
 	unsigned eol_res_melanin_ir_noise;
-#endif
 
 	u8 led_current_1;
 	u8 led_current_2;
@@ -513,7 +502,8 @@ struct adpd_device_data {
 
 	struct mutex flickerdatalock;
 	struct miscdevice miscdev;
-	int *flicker_data;
+	unsigned int *flicker_data;
+	unsigned int *flicker_ioctl_data;
 	int flicker_data_cnt;
 
 	u32 i2c_err_cnt;
@@ -523,49 +513,44 @@ struct adpd_device_data {
 	u32 red_adc;
 };
 
-#define FLICKER_DATA_CNT	56
-#define ADPD143_IOCTL_MAGIC		0xFD
+#define FIFO_DATA_CNT				56
+#define FLICKER_DATA_CNT			(14 * 10)
+#define ADPD143_IOCTL_MAGIC			0xFD
 #define ADPD143_IOCTL_READ_FLICKER	_IOR(ADPD143_IOCTL_MAGIC, 0x01, int *)
-
 
 static struct adpd_device_data *adpd_data;
 
-typedef struct _adpd_eol_result_{
-unsigned char eol_res_odr;
+typedef struct _adpd_eol_result_ {
+	unsigned char eol_res_odr;
 
-unsigned eol_res_red_low_dc;
-unsigned eol_res_ir_low_dc;
-unsigned short eol_res_red_low_noise;
-unsigned short eol_res_ir_low_noise;
+	unsigned eol_res_red_low_dc;
+	unsigned eol_res_ir_low_dc;
+	unsigned short eol_res_red_low_noise;
+	unsigned short eol_res_ir_low_noise;
 
-unsigned eol_res_red_med_dc;
-unsigned eol_res_ir_med_dc;
-unsigned short eol_res_red_med_noise;
-unsigned short eol_res_ir_med_noise;
+	unsigned eol_res_red_med_dc;
+	unsigned eol_res_ir_med_dc;
+	unsigned short eol_res_red_med_noise;
+	unsigned short eol_res_ir_med_noise;
 
-unsigned eol_res_red_high_dc;
-unsigned eol_res_ir_high_dc;
-unsigned short eol_res_red_high_noise;
-unsigned short eol_res_ir_high_noise;
+	unsigned eol_res_red_high_dc;
+	unsigned eol_res_ir_high_dc;
+	unsigned short eol_res_red_high_noise;
+	unsigned short eol_res_ir_high_noise;
 
-unsigned short eol_res_red_ac;
-unsigned short eol_res_ir_ac;
+	unsigned short eol_res_red_ac;
+	unsigned short eol_res_ir_ac;
 
-#ifdef MELANIN_IDX_SUPPORT
-unsigned eol_res_melanin_red_dc;
-unsigned eol_res_melanin_ir_dc;
-#endif
+	unsigned eol_res_melanin_red_dc;
+	unsigned eol_res_melanin_ir_dc;
 } adpd_eol_result;
 
-
-typedef union __ADPD_EOL_RESULT__{
+typedef union __ADPD_EOL_RESULT__ {
 	adpd_eol_result st_eol_res;
 	char buf[49];
 } ADPD_EOL_RESULT;
 
-/**
-structure hold adpd143 configuration data to be written during probe.
-*/
+/* structure hold adpd143 configuration data to be written during probe. */
 static struct adpd_platform_data adpd_config_data = {
 	.config_size = 42,
 	.config_data = {
@@ -591,8 +576,8 @@ static struct adpd_platform_data adpd_config_data = {
 		0x00202000,
 		0x00212000,
 		0x00223030,
-		0x00233035,
-		0x0024303f,
+		0x00233075,
+		0x0024307f,
 		0x00250000,
 		0x00300330,
 		0x00310813,
@@ -621,7 +606,7 @@ static struct adpd_platform_data adpd_tia_adc_config_data = {
 		0x000080ff,
 		0x000101ff,
 		0x00020005,
-		0x00063600,
+		0x00063500,
 		0x00111131,
 		0x00120020,
 		0x00130320,
@@ -639,8 +624,8 @@ static struct adpd_platform_data adpd_tia_adc_config_data = {
 		0x001f1f40,
 		0x00201f40,
 		0x00211f40,
-		0x00231030,
-		0x00241030,
+		0x00230000,
+		0x00240000,
 		0x00250000,
 		0x00260000,
 		0x00270800,
@@ -678,7 +663,7 @@ static struct adpd_platform_data adpd_tia_adc_config_data = {
 		0x00500000,
 		0x00523000,
 		0x0053e400,
-		0x0054002a,
+		0x00540020,
 		0x00580080,
 		0x00597f08,
 		0x005a0000,
@@ -694,10 +679,10 @@ static unsigned short Is_Float_Dark_Calibrated;
 static unsigned rawDarkCh[8];
 static unsigned rawDataCh[8];
 
-#define CH1_APPROXIMATE_FLOAT_SATURATION_VALUE_IN_TIA_ADC   (1800*5/4)
-#define CH2_APPROXIMATE_FLOAT_SATURATION_VALUE_IN_TIA_ADC   (2400*5/4)
-#define CH3_APPROXIMATE_FLOAT_SATURATION_VALUE_IN_TIA_ADC   (3300*5/4)
-#define CH4_APPROXIMATE_FLOAT_SATURATION_VALUE_IN_TIA_ADC   (6700*5/4)
+#define CH1_APPROXIMATE_FLOAT_SATURATION_VALUE_IN_TIA_ADC	(1800*5/4)
+#define CH2_APPROXIMATE_FLOAT_SATURATION_VALUE_IN_TIA_ADC	(2400*5/4)
+#define CH3_APPROXIMATE_FLOAT_SATURATION_VALUE_IN_TIA_ADC	(3300*5/4)
+#define CH4_APPROXIMATE_FLOAT_SATURATION_VALUE_IN_TIA_ADC	(6700*5/4)
 
 static unsigned ch1FloatSat = CH1_APPROXIMATE_FLOAT_SATURATION_VALUE_IN_TIA_ADC;
 static unsigned ch2FloatSat = CH2_APPROXIMATE_FLOAT_SATURATION_VALUE_IN_TIA_ADC;
@@ -711,6 +696,8 @@ static int __adpd_i2c_reg_read(struct adpd_device_data *adpd_data, u8 reg_addr, 
 	int err;
 	int tries = 0;
 	int icnt = 0;
+	struct timeval prev_tv;
+	struct timeval curr_tv;
 
 	struct i2c_msg msgs[] = {
 		{
@@ -726,12 +713,20 @@ static int __adpd_i2c_reg_read(struct adpd_device_data *adpd_data, u8 reg_addr, 
 			.buf = (s8 *)buf,
 		},
 	};
+	do_gettimeofday(&prev_tv);
 
 	do {
 		err = i2c_transfer(adpd_data->client->adapter, msgs, 2);
-
-		if (err < 0)
-			HRM_dbg("%s - i2c_transfer error = %d\n", __func__, err);
+		if (err != 2)
+			msleep_interruptible(I2C_RETRY_DELAY);
+		if (err < 0) {
+			HRM_info("%s - i2c_transfer read error = %d\n", __func__, err);
+			do_gettimeofday(&curr_tv);
+			if ((curr_tv.tv_sec - prev_tv.tv_sec) > I2C_FAIL_TIME_SEC) {
+				HRM_dbg("%s - i2c_transfer read time error\n", __func__);
+				break;
+			}
+		}
 	} while ((err != 2) && (++tries < I2C_RETRIES));
 
 	if (err != 2) {
@@ -750,14 +745,15 @@ static int __adpd_i2c_reg_read(struct adpd_device_data *adpd_data, u8 reg_addr, 
 	return err;
 }
 
-static int __adpd_i2c_reg_write(struct adpd_device_data *adpd_data, u8 reg_addr, int len,
-		   u16 data)
+static int __adpd_i2c_reg_write(struct adpd_device_data *adpd_data, u8 reg_addr, int len, u16 data)
 {
 	struct i2c_msg msgs[1];
 	int err;
 	int tries = 0;
 	unsigned short data_to_write = cpu_to_be16(data);
 	char buf[4];
+	struct timeval prev_tv;
+	struct timeval curr_tv;
 
 	buf[0] = (s8) reg_addr;
 	memcpy(buf + 1, &data_to_write, sizeof(unsigned short));
@@ -765,13 +761,20 @@ static int __adpd_i2c_reg_write(struct adpd_device_data *adpd_data, u8 reg_addr,
 	msgs[0].flags = adpd_data->client->flags & I2C_M_TEN;
 	msgs[0].len = 1 + (1 * sizeof(unsigned short));
 	msgs[0].buf = buf;
+	do_gettimeofday(&prev_tv);
 
 	do {
 		err = i2c_transfer(adpd_data->client->adapter, msgs, 1);
 		if (err != 1)
 			msleep_interruptible(I2C_RETRY_DELAY);
-		if (err < 0)
-			HRM_dbg("%s - i2c_transfer error = %d\n", __func__, err);
+		if (err < 0) {
+			HRM_info("%s - i2c_transfer write error = %d\n", __func__, err);
+			do_gettimeofday(&curr_tv);
+			if ((curr_tv.tv_sec - prev_tv.tv_sec) > I2C_FAIL_TIME_SEC) {
+				HRM_dbg("%s - i2c_transfer write time error\n", __func__);
+				break;
+			}
+		}
 	} while ((err != 1) && (++tries < I2C_RETRIES));
 
 	if (err != 1) {
@@ -788,6 +791,7 @@ static int __adpd_i2c_reg_write(struct adpd_device_data *adpd_data, u8 reg_addr,
 static inline u16 __adpd_reg_read(struct adpd_device_data *adpd_data, u16 reg)
 {
 	u16 value;
+
 	if (!adpd_data->read(adpd_data, reg, 1, &value))
 		return value;
 	return 0xFFFF;
@@ -803,21 +807,17 @@ static inline u16 __adpd_reg_write(struct adpd_device_data *adpd_data, u16 reg, 
 	return adpd_data->write(adpd_data, reg, 1, value);
 }
 
-
 static unsigned int __adpd_normalized_data(struct adpd_device_data *adpd_data, unsigned int ir_red, unsigned int raw_data)
 {
 	unsigned long long normal_data;
 
 	if (ir_red) {
 		normal_data = (unsigned long long)raw_data * 256 * SF_IR_CH / (adpd_data->efuseIrSlope + 128) / 100;
-
 		HRM_info("%s - efuseIrSlope = 0x%x, rawdata = %d, normal_data = %lld\n", __func__, adpd_data->efuseIrSlope, raw_data, normal_data);
 	} else {
 		normal_data = (unsigned long long)raw_data * 256 * SF_RED_CH / (adpd_data->efuseRedSlope + 128) / 100;
-
 		HRM_info("%s - efuseRedSlope = 0x%x, rawdata = %d, normal_data = %lld\n", __func__, adpd_data->efuseRedSlope, raw_data, normal_data);
 	}
-
 	return (unsigned int)normal_data;
 }
 
@@ -843,53 +843,48 @@ typedef enum {
 	AGC_Slot_B = 0x02,
 } AGC_mode_t;
 
+#define DOC_INIT_VALUE		0x2000
 
-#define DOC_INIT_VALUE      0x2000
+static unsigned maxPulseCodeACh[4];
+static unsigned maxPulseCodeBCh[4];
 
-static unsigned maxPulseCodeACh1;
-static unsigned maxPulseCodeACh2;
-static unsigned maxPulseCodeACh3;
-static unsigned maxPulseCodeACh4;
-static unsigned maxPulseCodeBCh1;
-static unsigned maxPulseCodeBCh2;
-static unsigned maxPulseCodeBCh3;
-static unsigned maxPulseCodeBCh4;
-
-/*#define CH_RAW_32BIT_DATA_SIZE */
 #define MAX_CODE_AFTER_ADC_OFFSET_PER_PULSE  0x2000
 #define MAX_CODE_16BIT  0xffff
-#define MAX_CODE_32BIT  0xffffffff
+#define MAX_CODE_32BIT  0x7ffffff
 #define MAX_CODE_PERCENTAGE_A  90
 #define MAX_CODE_PERCENTAGE_B  90
 #define AGC_STOP_MARGIN_PERCENTAGE_A 10
 #define AGC_STOP_MARGIN_PERCENTAGE_B 10
 
 /* LED driver current - 25~250mA */
-#define POWER_PREF_MAX_LED_DRV_CURRENT_A 250
-#define POWER_PREF_MIN_LED_DRV_CURRENT_A 25
-#define POWER_PREF_MAX_LED_DRV_CURRENT_B 250
-#define POWER_PREF_MIN_LED_DRV_CURRENT_B 25
+#define POWER_PREF_MAX_LED_DRV_CURRENT_A	250
+#define POWER_PREF_MIN_LED_DRV_CURRENT_A	25
+#define POWER_PREF_MAX_LED_DRV_CURRENT_B	250
+#define POWER_PREF_MIN_LED_DRV_CURRENT_B	25
  /* if prefMinPower = 0 */
-#define PERF_PREF_MAX_LED_DRV_CURRENT_A 250
-#define PERF_PREF_MIN_LED_DRV_CURRENT_A 40
-#define PERF_PREF_MAX_LED_DRV_CURRENT_B 250
-#define PERF_PREF_MIN_LED_DRV_CURRENT_B 40
+#define PERF_PREF_MAX_LED_DRV_CURRENT_A		250
+#define PERF_PREF_MIN_LED_DRV_CURRENT_A		40
+#define PERF_PREF_MAX_LED_DRV_CURRENT_B		250
+#define PERF_PREF_MIN_LED_DRV_CURRENT_B		40
 
 /* TIA gain - 200k : x8, 100k :x 4, 50k : x2, 25k : x1 */
-#define MAX_TIA_GAIN_A        8
-#define MIN_TIA_GAIN_A        1
-#define MAX_TIA_GAIN_B        8
-#define MIN_TIA_GAIN_B        1
+#define MAX_TIA_GAIN_A		1
+#define MIN_TIA_GAIN_A		1
+#define MAX_TIA_GAIN_B		1
+#define MIN_TIA_GAIN_B		1
 /* AFE gain - x1~x4 */
-#define MAX_AFE_GAIN_A        4
-#define MIN_AFE_GAIN_A        1
-#define MAX_AFE_GAIN_B        4
-#define MIN_AFE_GAIN_B        1
+#define MAX_AFE_GAIN_A		4
+#define MIN_AFE_GAIN_A		1
+#define MAX_AFE_GAIN_B		4
+#define MIN_AFE_GAIN_B		1
 /* # of samples to skip */
-#define NO_OF_SAMPLES_TO_SKIP_IN_AGC  0
+#define NO_OF_SAMPLES_TO_SKIP_IN_AGC	0
+
+#define MAX_NUM_TOT_PULSES	21
+#define MAX_NUM_PULSES		8
 
 /* Public function prototypes -----------------------------------------------*/
-AGC_ErrCode_t __adpd_initAGC(unsigned char  param_prefMinPower, AGC_mode_t agc_mode);
+AGC_ErrCode_t __adpd_initAGC(unsigned char param_prefMinPower, AGC_mode_t agc_mode);
 /* AGC_ErrCode_t confAGC(); */
 AGC_ErrCode_t __adpd_stepAGC(unsigned *rawDataA, unsigned *rawDataB);
 /* AGC_ErrCode_t runAGC(); */
@@ -917,8 +912,8 @@ static unsigned char cntStepAgcA, cntStepAgcB;
 static unsigned prevStepDiffAgcA, prevStepDiffAgcB;
 
 static unsigned TargetDcLevelA, TargetDcLevelB;
-static unsigned char  pulseA, pulseB;
-static unsigned char  sumA, sumB;
+static unsigned char pulseA, pulseB;
+static unsigned char sumA, sumB;
 
 static unsigned short maxLedCurrentRegValA;
 static unsigned short minLedCurrentRegValA;
@@ -933,10 +928,10 @@ static unsigned short minTiaGainRegValB;
 static unsigned short maxAfeGainRegValB;
 static unsigned short minAfeGainRegValB;
 
-static unsigned char  prefMinPower;
-static unsigned char  NoSkipSamples; /* # of samples to skip */
-static unsigned char  maxLEDcurrDrvA, minLEDcurrDrvA;
-static unsigned char  maxLEDcurrDrvB, minLEDcurrDrvB;
+static unsigned char prefMinPower;
+static unsigned char NoSkipSamples; /* # of samples to skip */
+static unsigned char maxLEDcurrDrvA, minLEDcurrDrvA;
+static unsigned char maxLEDcurrDrvB, minLEDcurrDrvB;
 
 typedef enum {
 	AgcStage_LedA_Init = 0,
@@ -957,17 +952,25 @@ AgcStage_t __adpd_getAGCstate(void)
 	return AgcStage;
 }
 
-/* #define CH_RAW_32BIT_DATA_SIZE */
-/* unsinged uAgcRawDataA[4]; */
-/* unsinged uAgcRawDataB[4]; */
-
-AGC_ErrCode_t __adpd_initAGC(unsigned char  param_prefMinPower, AGC_mode_t agc_mode)
+static unsigned short maxSlotValue(unsigned *dataSlot, unsigned short size)
 {
-#ifdef CH_RAW_32BIT_DATA_SIZE /* 20150730 ADI Joshua Yoon for Gear4 AGC */
-	unsigned temp32;
-#endif
-	unsigned short temp16, slotA_led, slotB_led;
-	unsigned reg_value, targetDcLevelA, targetDcLevelB;
+	unsigned tempMax = dataSlot[0];
+	unsigned short tmpMaxIdx = 0;
+	unsigned short i;
+
+	for (i = 1; i < size; i++) {
+		if (dataSlot[i] > tempMax) {
+			tempMax = dataSlot[i];
+			tmpMaxIdx = i;
+		}
+	}
+	return tmpMaxIdx + (4 - size);
+}
+
+AGC_ErrCode_t __adpd_initAGC(unsigned char param_prefMinPower, AGC_mode_t agc_mode)
+{
+	unsigned short slotA_led, slotB_led;
+	unsigned reg_value;
 
 	if (!adpd_data) {
 		HRM_dbg("%s - ADPD should be initialized first before __adpd_initAGC()!!!!\r\n", __func__);
@@ -976,13 +979,10 @@ AGC_ErrCode_t __adpd_initAGC(unsigned char  param_prefMinPower, AGC_mode_t agc_m
 
 	prefMinPower = param_prefMinPower;
 
-    /* read reg14 */
+	/* read reg14 */
 	reg_value = __adpd_reg_read(adpd_data, ADPD_PD_SELECT_ADDR);
 	slotA_led = reg_value & 0x03;
 	slotB_led = (reg_value & 0x0C) >> 2;
-
-	slotA_led = 1;
-	slotB_led = 2;//Grace hardcode
 
 	HRM_info("%s - slotA_led : %d, slotB_led : %d\n", __func__, slotA_led, slotB_led);
 	/* Find the current LED allocation to each slotA/B */
@@ -1063,18 +1063,8 @@ AGC_ErrCode_t __adpd_initAGC(unsigned char  param_prefMinPower, AGC_mode_t agc_m
 	reg_value = __adpd_reg_read(adpd_data, ADPD_DEC_MODE_ADDR);
 	sumA = (reg_value >> 4) & 0x7;
 
-#ifndef CH_RAW_32BIT_DATA_SIZE /* for 16bit raw data */
-	targetDcLevelA = MAX_CODE_AFTER_ADC_OFFSET_PER_PULSE * MAX_CODE_PERCENTAGE_A * pulseA / 100;
-	temp16 = MAX_CODE_16BIT / 100 * MAX_CODE_PERCENTAGE_A;
-	if (targetDcLevelA > temp16)
-		targetDcLevelA = temp16;
-#else /* for 32bit raw data */
-	targetDcLevelA = MAX_CODE_AFTER_ADC_OFFSET_PER_PULSE * MAX_CODE_PERCENTAGE_A * pulseA / 100;
-	targetDcLevelA <<= pulseA;
-	temp32 = MAX_CODE_32BIT / 100 * MAX_CODE_PERCENTAGE_A;
-	if (targetDcLevelA > temp32)
-		targetDcLevelA = temp32;
-#endif
+	if (pulseA > MAX_NUM_TOT_PULSES)
+		__adpd_reg_write(adpd_data, ADPD_PULSE_PERIOD_A_ADDR, MAX_NUM_TOT_PULSES << 8 | 0x13);
 
 	reg_value = __adpd_reg_read(adpd_data, ADPD_PULSE_PERIOD_B_ADDR);
 	pulseB = (reg_value >> 8) & 0xFF;
@@ -1082,35 +1072,19 @@ AGC_ErrCode_t __adpd_initAGC(unsigned char  param_prefMinPower, AGC_mode_t agc_m
 	reg_value = __adpd_reg_read(adpd_data, ADPD_DEC_MODE_ADDR);
 	sumB = (reg_value >> 8) & 0x7;
 
-#ifndef CH_RAW_32BIT_DATA_SIZE /* for 16bit raw data */
-	targetDcLevelB = MAX_CODE_AFTER_ADC_OFFSET_PER_PULSE*MAX_CODE_PERCENTAGE_B * pulseB / 100;
-	temp16 = MAX_CODE_16BIT / 100 * MAX_CODE_PERCENTAGE_B;
+	if (pulseB > MAX_NUM_TOT_PULSES)
+		__adpd_reg_write(adpd_data, ADPD_PULSE_PERIOD_B_ADDR, MAX_NUM_TOT_PULSES << 8 | 0x13);
 
-	if (targetDcLevelB > temp16)
-		targetDcLevelB = temp16;
-
-#else /*for 32bit raw data */
-	targetDcLevelB = MAX_CODE_AFTER_ADC_OFFSET_PER_PULSE*MAX_CODE_PERCENTAGE_B * pulseB / 100;
-	targetDcLevelB <<= pulseB;
-	temp32 = MAX_CODE_32BIT / 100 * MAX_CODE_PERCENTAGE_B;
-
-	if (targetDcLevelB > temp32)
-		targetDcLevelB = temp32;
-#endif
-
-	TargetDcLevelA = targetDcLevelA;
-	TargetDcLevelB = targetDcLevelB;
 	HRM_info("%s - LED PulseA = %d PulseB = %d\n", __func__, pulseA, pulseB);
-	HRM_info("%s - LED TargetA = %d TargetB = %d\n", __func__, TargetDcLevelA, TargetDcLevelB);
 
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x1);
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
 
 	/* set slotB pusle count */
 	/* regRead(ADPD_PULSE_PERIOD_B_ADDR, &reg_value); */
 	/* pulseB=(reg_value>>8)&0xFF; */
 	/* regWrite(ADPD_PULSE_PERIOD_B_ADDR, 0x1013); */
 
-	if (prefMinPower) { /* if power preference, start from 100% LED scale,  min LED power & max TIA gain */
+	if (prefMinPower) { /* if power preference, start from 100% LED scale, min LED power & max TIA gain */
 		reg_value = __adpd_reg_read(adpd_data, ADPD_SLOTA_GAIN_ADDR);
 		__adpd_reg_write(adpd_data, ADPD_SLOTA_GAIN_ADDR, (reg_value & 0xfffc) | maxTiaGainRegValA);
 
@@ -1124,14 +1098,14 @@ AGC_ErrCode_t __adpd_initAGC(unsigned char  param_prefMinPower, AGC_mode_t agc_m
 		__adpd_reg_write(adpd_data, ADPD_SLOTB_GAIN_ADDR, (reg_value & 0xfffc) | minTiaGainRegValB);
 	}
 
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x2);
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 
 	NoSkipSamples = 0;
 	cntStepAgcA = cntStepAgcB = 0;
 	prevStepDiffAgcA = prevStepDiffAgcB = 0xffffffff;
 
 	AgcMode = agc_mode;
-	if (AgcMode & AGC_Slot_A  && AgcMode & AGC_Slot_B) {
+	if (AgcMode & AGC_Slot_A && AgcMode & AGC_Slot_B) {
 		if (RegAddrLedDrvA != 0)
 			AgcStage = AgcStage_LedA;
 		else if (RegAddrLedDrvB != 0)
@@ -1161,12 +1135,12 @@ AGC_ErrCode_t __adpd_initAGC(unsigned char  param_prefMinPower, AGC_mode_t agc_m
 
 AGC_ErrCode_t __adpd_stepAGC(unsigned *rawDataA, unsigned *rawDataB)
 {
-	unsigned char retVal = 0;
+	AGC_ErrCode_t retVal = 0;
 
 	if (NoSkipSamples++ < NO_OF_SAMPLES_TO_SKIP_IN_AGC)
 		return MwErrProcessing;
 
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x1);
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
 
 	if (AgcStage == AgcStage_LedA) {
 		if (rawDataA != NULL) {
@@ -1183,8 +1157,6 @@ AGC_ErrCode_t __adpd_stepAGC(unsigned *rawDataA, unsigned *rawDataB)
 			AgcStage = AgcStage_LedB;
 	}
 
-	HRM_info("%s - AgcStage = %d\n", __func__, AgcStage);
-
 	if (AgcStage == AgcStage_LedB) {
 		if (rawDataB != NULL) {
 			retVal = __adpd_stepAgcLedB(rawDataB);
@@ -1198,53 +1170,16 @@ AGC_ErrCode_t __adpd_stepAGC(unsigned *rawDataA, unsigned *rawDataB)
 
 	HRM_info("%s - AgcStage = %d\n", __func__, AgcStage);
 
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x2);
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 
 	return retVal;
 }
-
-AGC_ErrCode_t __adpd_stepAGC2(unsigned *rawDataA, unsigned *rawDataB)
-{
-	unsigned char retVal = 0;
-
-	if (AgcStage == AgcStage_LedA) {
-		if (rawDataA != NULL) {
-			retVal = __adpd_stepAgcLedA(rawDataA);
-			HRM_info("%s - __adpd_stepAgcLedA = 0x%x\n", __func__, retVal);
-
-			if (retVal == MwErrLedAOutofRange || retVal == MwErrPass) {
-				if (RegAddrLedDrvB != 0 && AgcMode & AGC_Slot_B)
-					AgcStage = AgcStage_LedB;
-				else
-					AgcStage = AgcStage_Done;
-			}
-		} else
-			AgcStage = AgcStage_LedB;
-	}
-
-	HRM_info("%s - AgcStage = %d\n", __func__, AgcStage);
-
-	if (AgcStage == AgcStage_LedB) {
-		if (rawDataB != NULL) {
-			retVal = __adpd_stepAgcLedB(rawDataB);
-			HRM_info("%s - __adpd_stepAgcLedB = 0x%x\n", __func__, retVal);
-
-			if (retVal == MwErrLedAOutofRange || retVal == MwErrPass)
-				AgcStage = AgcStage_Done;
-		} else
-			AgcStage = AgcStage_Done;
-	}
-
-	HRM_info("%s - AgcStage = %d\n", __func__, AgcStage);
-
-	return retVal;
-}
-
 
 static AGC_ErrCode_t __adpd_stepAgcLedA(unsigned *rawData)
 {
 	unsigned raw_max, diff;
 	unsigned char toInc = 0;
+	unsigned char raw_max_idx;
 	unsigned reg_val;
 	unsigned short currLedCoarseCurrent;
 	unsigned short tgtLedCoarseCurrent;
@@ -1263,18 +1198,14 @@ static AGC_ErrCode_t __adpd_stepAgcLedA(unsigned *rawData)
 	reg_val = __adpd_reg_read(adpd_data, ADPD_PULSE_PERIOD_A_ADDR);
 	pulseA = (reg_val >> 8) & 0xFF;
 
-	reg_val = __adpd_reg_read(adpd_data, ADPD_PULSE_PERIOD_B_ADDR);
-	pulseB = (reg_val >> 8) & 0xFF;
+	raw_max_idx = maxSlotValue(rawData + pd_start_num, pd_end_num - pd_start_num + 1);
+	raw_max = rawData[raw_max_idx];
 
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-	raw_max = rawData[0]; //__adpd_maxValueAGC(rawData, MAX_NUM_SAMPLE);
-#elif defined(__USE_PD234__)
-	raw_max = rawData[1];//__adpd_maxValueAGC(rawData, MAX_NUM_SAMPLE-1);
-#elif defined(__USE_PD34__)
-	raw_max = rawData[2];//__adpd_maxValueAGC(rawData, MAX_NUM_SAMPLE-2);
-#elif defined(__USE_PD4__)
-	raw_max = rawData[3];//__adpd_maxValueAGC(rawData, MAX_NUM_SAMPLE-3);
-#endif
+	if (pulseA > MAX_NUM_PULSES)
+		TargetDcLevelA = MAX_CODE_16BIT / 100 * MAX_CODE_PERCENTAGE_A;
+	else
+		TargetDcLevelA = maxPulseCodeACh[raw_max_idx] * pulseA / 100 * MAX_CODE_PERCENTAGE_A;
+	HRM_info("%s - LED TargetA = %d\n", __func__, TargetDcLevelA);
 
 	HRM_info("%s - [start : %u]\n", __func__, cntStepAgcA++);
 	HRM_info("%s - maxLedCurrentRegValA : %u minLedCurrentRegValA : %u maxTiaGainRegValA : %u minTiaGainRegValA : %u\n",
@@ -1290,16 +1221,18 @@ static AGC_ErrCode_t __adpd_stepAgcLedA(unsigned *rawData)
 		toInc = 1;
 	}
 
-	HRM_info("%s - CurrLedScaleA : %d,  CurrLedCoarseA : %d, CurrTIAgainA : %d, CurrAFEgainA : %d\n",
+	HRM_info("%s - CurrLedScaleA : %d, CurrLedCoarseA : %d, CurrTIAgainA : %d, CurrAFEgainA : %d\n",
 		__func__, CurrLedScaleA, CurrLedCoarseA, CurrTIAgainA, CurrAFEgainA);
-	HRM_info("%s - PrevLedScaleA : %d,  PrevLedCoarseA : %d, PrevTIAgainA : %d, PrevAFEgainA : %d\n",
+	HRM_info("%s - PrevLedScaleA : %d, PrevLedCoarseA : %d, PrevTIAgainA : %d, PrevAFEgainA : %d\n",
 		__func__, PrevLedScaleA, PrevLedCoarseA, PrevTIAgainA, PrevAFEgainA);
 
-	HRM_info("%s - current diff : %d,  toInc : %d\n", __func__, diff, toInc);
+	HRM_info("%s - current diff : %d, toInc : %d\n", __func__, diff, toInc);
 
 	if (prevStepDiffAgcA < diff) {
-		reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTA_GAIN_ADDR);
-		__adpd_reg_write(adpd_data, ADPD_SLOTA_GAIN_ADDR, (reg_val & 0xfffc) | PrevTIAgainA);
+		if (prefMinPower) {
+			reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTA_GAIN_ADDR);
+			__adpd_reg_write(adpd_data, ADPD_SLOTA_GAIN_ADDR, (reg_val & 0xfffc) | PrevTIAgainA);
+		}
 		reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvA);
 		__adpd_reg_write(adpd_data, RegAddrLedDrvA, (reg_val & 0xfff0) | PrevLedCoarseA);
 
@@ -1320,38 +1253,27 @@ static AGC_ErrCode_t __adpd_stepAgcLedA(unsigned *rawData)
 	if (!toInc) {
 		if (diff >= raw_max >> 1) {
 			if (!prefMinPower) { /* min TIA gain, max LED current */
-				if (CurrTIAgainA < minTiaGainRegValA) {
-					reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTA_GAIN_ADDR);
-					__adpd_reg_write(adpd_data, ADPD_SLOTA_GAIN_ADDR, (reg_val & 0xfffc) | (CurrTIAgainA + 1));
+				if (CurrLedCoarseA > minLedCurrentRegValA) {
+					currLedCoarseCurrent = CurrLedCoarseA * 15 + 25;
+					tgtLedCoarseCurrent = currLedCoarseCurrent >> 1;
 
+					if (tgtLedCoarseCurrent < minLEDcurrDrvA)
+						tgtLedCoarseCurrent = minLEDcurrDrvA;
+
+					reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvA);
+					__adpd_reg_write(adpd_data, RegAddrLedDrvA, (reg_val & 0xfff0) | ((tgtLedCoarseCurrent - 25) / 15));
+
+					adpd_data->led_current_2 = (tgtLedCoarseCurrent - 25) / 15; /* RED */
 					NoSkipSamples = 0;
 
-					HRM_info("%s - MwErrProcessing1[End]\n", __func__);
+					HRM_info("%s - MwErrProcessing2[End]\n", __func__);
 
 					return MwErrProcessing;
 				} else {
-					if (CurrLedCoarseA > minLedCurrentRegValA) {
-						currLedCoarseCurrent = CurrLedCoarseA * 15 + 25;
-						tgtLedCoarseCurrent = currLedCoarseCurrent >> 1;
+					NoSkipSamples = 0;
+					HRM_dbg("%s - MwErrLedAOutofRange1[End]\n", __func__);
 
-						if (tgtLedCoarseCurrent < minLEDcurrDrvA)
-							tgtLedCoarseCurrent = minLEDcurrDrvA;
-
-						reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvA);
-						__adpd_reg_write(adpd_data, RegAddrLedDrvA, (reg_val & 0xfff0) | ((tgtLedCoarseCurrent - 25) / 15));
-
-						adpd_data->led_current_2 = (tgtLedCoarseCurrent - 25) / 15; /* RED */
-						NoSkipSamples = 0;
-
-						HRM_info("%s - MwErrProcessing2[End]\n", __func__);
-
-						return MwErrProcessing;
-					} else {
-						NoSkipSamples = 0;
-						HRM_dbg("%s - MwErrLedAOutofRange1[End]\n", __func__);
-
-						return MwErrLedAOutofRange;
-					}
+					return MwErrLedAOutofRange;
 				}
 			} else { /* max TIA gain, min LED current */
 				if (CurrLedCoarseA > minLedCurrentRegValA) {
@@ -1388,32 +1310,23 @@ static AGC_ErrCode_t __adpd_stepAgcLedA(unsigned *rawData)
 			}
 		} else if (diff > TargetDcLevelA * AGC_STOP_MARGIN_PERCENTAGE_A / 100) {
 			if (!prefMinPower) { /* min TIA gain, max LED current */
-				if (CurrTIAgainA < minTiaGainRegValA) {
-					reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTA_GAIN_ADDR);
-					__adpd_reg_write(adpd_data, ADPD_SLOTA_GAIN_ADDR, (reg_val & 0xfffc) | (CurrTIAgainA + 1));
+				if (CurrLedCoarseA > minLedCurrentRegValA) {
+					reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvA);
+					__adpd_reg_write(adpd_data, RegAddrLedDrvA, (reg_val & 0xfff0) | (CurrLedCoarseA - 1));
 
+					adpd_data->led_current_2 = CurrLedCoarseA - 1; /* RED */
 					NoSkipSamples = 0;
-					HRM_dbg("%s - MwErrLedAOutofRange3[End]\n", __func__);
+
+					HRM_info("%s - MwErrProcessing5[End]\n", __func__);
+
+					return MwErrProcessing;
+				} else {
+					NoSkipSamples = 0;//<--here
+					HRM_dbg("%s - MwErrLedAOutofRange4[End]\n", __func__);
 					return MwErrLedAOutofRange;
-				} else{
-					if (CurrLedCoarseA > minLedCurrentRegValA) {
-						reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvA);
-						__adpd_reg_write(adpd_data, RegAddrLedDrvA, (reg_val & 0xfff0) | (CurrLedCoarseA - 1));
-
-						adpd_data->led_current_2 = CurrLedCoarseA - 1; /* RED */
-						NoSkipSamples = 0;
-
-						HRM_info("%s - MwErrProcessing5[End]\n", __func__);
-
-						return MwErrProcessing;
-					} else {
-						NoSkipSamples = 0;//<--here
-						HRM_dbg("%s - MwErrLedAOutofRange4[End]\n", __func__);
-						return MwErrLedAOutofRange;
-					}
 				}
 			} else { /* max TIA gain, min LED current */
-				if (CurrLedCoarseB > minLedCurrentRegValA) {
+				if (CurrLedCoarseA > minLedCurrentRegValA) {
 					reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvA);
 					__adpd_reg_write(adpd_data, RegAddrLedDrvA, (reg_val & 0xfff0) | (CurrLedCoarseA - 1));
 
@@ -1424,7 +1337,7 @@ static AGC_ErrCode_t __adpd_stepAgcLedA(unsigned *rawData)
 
 					return MwErrProcessing;
 				} else {
-					if (CurrTIAgainB < minTiaGainRegValA) {
+					if (CurrTIAgainA < minTiaGainRegValA) {
 						reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTA_GAIN_ADDR);
 						__adpd_reg_write(adpd_data, ADPD_SLOTA_GAIN_ADDR, (reg_val & 0xfffc) | (CurrTIAgainA + 1));
 					}
@@ -1460,21 +1373,10 @@ static AGC_ErrCode_t __adpd_stepAgcLedA(unsigned *rawData)
 
 					return MwErrProcessing;
 				} else {
-					if (CurrTIAgainA > maxTiaGainRegValA) {
-						reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTA_GAIN_ADDR);
-						__adpd_reg_write(adpd_data, ADPD_SLOTA_GAIN_ADDR, (reg_val & 0xfffc) | (CurrTIAgainA - 1));
+					NoSkipSamples = 0;
+					HRM_dbg("%s - MwErrLedAOutofRange6[End]\n", __func__);
 
-						NoSkipSamples = 0;
-
-						HRM_info("%s - MwErrProcessing8[End]\n", __func__);
-
-						return MwErrProcessing;
-					} else {
-						NoSkipSamples = 0;
-						HRM_dbg("%s - MwErrLedAOutofRange6[End]\n", __func__);
-
-						return MwErrLedAOutofRange;
-					}
+					return MwErrLedAOutofRange;
 				}
 			} else { /* max TIA gain, min LED current*/
 				if (CurrTIAgainA > maxTiaGainRegValA) {
@@ -1532,21 +1434,9 @@ static AGC_ErrCode_t __adpd_stepAgcLedA(unsigned *rawData)
 
 					return MwErrProcessing;
 				} else {
-					if (CurrLedCoarseA < maxLedCurrentRegValA) {
-						reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvA);
-						__adpd_reg_write(adpd_data, RegAddrLedDrvA, (reg_val & 0xfff0) | (CurrLedCoarseA + 1));
-
-						adpd_data->led_current_2 = CurrLedCoarseA + 1; /* RED */
-						NoSkipSamples = 0;
-
-						HRM_info("%s - MwErrProcessing13[End]\n", __func__);
-
-						return MwErrProcessing;
-					} else {
-						NoSkipSamples = 0;//<--here
-						HRM_dbg("%s - MwErrLedAOutofRange9[End]\n", __func__);
-						return MwErrLedAOutofRange;
-					}
+					NoSkipSamples = 0;//<--here
+					HRM_dbg("%s - MwErrLedAOutofRange9[End]\n", __func__);
+					return MwErrLedAOutofRange;
 				}
 			}
 		} else {
@@ -1562,6 +1452,7 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 {
 	unsigned raw_max, diff;
 	unsigned char toInc = 0;
+	unsigned char raw_max_idx;
 	unsigned reg_val;
 	unsigned short currLedCoarseCurrent;
 	unsigned short tgtLedCoarseCurrent;
@@ -1576,22 +1467,19 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 	CurrTIAgainB = reg_val & 0x3;
 	CurrAFEgainB = (reg_val & 0x0300) >> 8;
 
-	reg_val = __adpd_reg_read(adpd_data, ADPD_PULSE_PERIOD_A_ADDR);
-	pulseA = (reg_val >> 8) & 0xFF;
-
 	reg_val = __adpd_reg_read(adpd_data, ADPD_PULSE_PERIOD_B_ADDR);
 	pulseB = (reg_val >> 8) & 0xFF;
 
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-	raw_max = rawData[0];//__adpd_maxValueAGC(rawData, MAX_NUM_SAMPLE);
-#elif defined(__USE_PD234__)
-	raw_max = rawData[1];//__adpd_maxValueAGC(rawData, MAX_NUM_SAMPLE-1);
-#elif defined(__USE_PD34__)
-	raw_max = rawData[2];//__adpd_maxValueAGC(rawData, MAX_NUM_SAMPLE-2);
-#elif defined(__USE_PD4__)
-	raw_max = rawData[3];//__adpd_maxValueAGC(rawData, MAX_NUM_SAMPLE-3);
-#endif
+	raw_max_idx = maxSlotValue(rawData + pd_start_num, pd_end_num - pd_start_num + 1);
 
+	raw_max = rawData[raw_max_idx];
+
+	if (pulseB > MAX_NUM_PULSES)
+		TargetDcLevelB = MAX_CODE_16BIT / 100 * MAX_CODE_PERCENTAGE_B;
+	else
+		TargetDcLevelB = maxPulseCodeBCh[raw_max_idx] * pulseB / 100 * MAX_CODE_PERCENTAGE_B;
+
+	HRM_info("%s - LED TargetB = %d\n", __func__, TargetDcLevelB);
 	HRM_info("%s - [start : %u]\n", __func__, cntStepAgcB++);
 	HRM_info("%s - maxLedCurrentRegValB : %u minLedCurrentRegValB : %u maxTiaGainRegValB : %u minTiaGainRegValB : %u\n",
 		__func__, maxLedCurrentRegValB, minLedCurrentRegValB, maxTiaGainRegValB, minTiaGainRegValB);
@@ -1606,14 +1494,18 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 		toInc = 1;
 	}
 
-	HRM_info("%s - CurrLedScaleB : %d,  CurrLedCoarseB : %d, CurrTIAgainB : %d, CurrAFEgainB : %d\n",
+	HRM_info("%s - CurrLedScaleB : %d, CurrLedCoarseB : %d, CurrTIAgainB : %d, CurrAFEgainB : %d\n",
 		__func__, CurrLedScaleB, CurrLedCoarseB, CurrTIAgainB, CurrAFEgainB);
-	HRM_info("%s - PrevLedScaleB : %d,  PrevLedCoarseB : %d, PrevTIAgainB : %d, PrevAFEgainB : %d\n",
+	HRM_info("%s - PrevLedScaleB : %d, PrevLedCoarseB : %d, PrevTIAgainB : %d, PrevAFEgainB : %d\n",
 		__func__, PrevLedScaleB, PrevLedCoarseB, PrevTIAgainB, PrevAFEgainB);
 
-	HRM_info("%s - current diff : %d,  toInc : %d\n", __func__, diff, toInc);
+	HRM_info("%s - current diff : %d, toInc : %d\n", __func__, diff, toInc);
 
 	if (prevStepDiffAgcB < diff) {
+		if (prefMinPower) {
+			reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTB_GAIN_ADDR);
+			__adpd_reg_write(adpd_data, ADPD_SLOTB_GAIN_ADDR, (reg_val & 0xfffc) | PrevTIAgainB);
+		}
 		reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvB);
 		__adpd_reg_write(adpd_data, RegAddrLedDrvB, (reg_val & 0xfff0) | PrevLedCoarseB);
 
@@ -1786,7 +1678,7 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 					}
 				}
 			}
-		} else if (diff > TargetDcLevelB*AGC_STOP_MARGIN_PERCENTAGE_B / 100) {
+		} else if (diff > TargetDcLevelB * AGC_STOP_MARGIN_PERCENTAGE_B / 100) {
 			if (!prefMinPower) { /* min TIA gain, max LED current */
 				if (CurrLedCoarseB < maxLedCurrentRegValB) {
 					reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvB);
@@ -1805,14 +1697,12 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 					return MwErrLedAOutofRange;
 				}
 			} else { /* max TIA gain, min LED current */
-				if (CurrLedCoarseB < maxLedCurrentRegValB) {
-					reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvB);
-					__adpd_reg_write(adpd_data, RegAddrLedDrvB, (reg_val & 0xfff0) | (CurrLedCoarseB + 1));
+				if (CurrTIAgainB > maxTiaGainRegValB) {
+					reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTB_GAIN_ADDR);
+					__adpd_reg_write(adpd_data, ADPD_SLOTB_GAIN_ADDR, (reg_val & 0xfffc) | (CurrTIAgainB - 1));
 
-					adpd_data->led_current_1 = CurrLedCoarseB + 1; /* IR */
 					NoSkipSamples = 0;
-
-					HRM_info("%s - MwErrProcessing13[End]\n", __func__);
+					HRM_info("%s - MwErrProcessing12[End]\n", __func__);
 
 					return MwErrProcessing;
 				} else {
@@ -1829,249 +1719,6 @@ static AGC_ErrCode_t __adpd_stepAgcLedB(unsigned *rawData)
 	}
 }
 
-#ifdef __USE_LOWPASS_FIR_FILTER__
-static unsigned firFilterIrBuf[100], firFilterRedBuf[100];
-#ifdef __USE_ADPD_32BIT_FIFO__
-static unsigned long firFilterIrBufSum = 0, firFilterRedBufSum = 0;
-#else
-static unsigned firFilterIrBufSum = 0, firFilterRedBufSum = 0;
-#endif
-static unsigned firFilterBufBegin = 0, firFilterBufEnd = 0, firFilterBufCnt = 0;
-#define CNT_FIR_FLTR_TAB_FOR_PPG_SAMPLE  7
-#endif
-
-#ifdef __USE_LOWPASS_FIR_FILTER__
-static void __adpd_initLPF(void)
-{
-	firFilterBufBegin = firFilterBufEnd = firFilterBufCnt = 0;
-}
-
-static void __adpd_getLPFdata
-#ifdef __USE_ADPD_32BIT_FIFO__
-(unsigned long *sum_a, unsigned long *sum_b)
-#else
-(unsigned *sum_a, unsigned *sum_b)
-#endif
-{
-	unsigned i, j;
-
-	firFilterIrBufSum = firFilterRedBufSum = 0;
-	if (firFilterBufCnt++ < CNT_FIR_FLTR_TAB_FOR_PPG_SAMPLE) {
-		firFilterIrBuf[firFilterBufEnd] = *sum_b;
-		firFilterRedBuf[firFilterBufEnd++] = *sum_a;
-	} else {
-		firFilterBufCnt = CNT_FIR_FLTR_TAB_FOR_PPG_SAMPLE;
-		if (firFilterBufBegin >= CNT_FIR_FLTR_TAB_FOR_PPG_SAMPLE)
-			firFilterBufBegin = 0;
-		firFilterIrBuf[firFilterBufBegin] = *sum_b;
-		firFilterRedBuf[firFilterBufBegin++] = *sum_a;
-	}
-
-	for (i = (firFilterBufBegin > 0 ? firFilterBufBegin - 1 : 0), j = 0; i < firFilterBufCnt; i++, j++) {
-		firFilterIrBufSum += firFilterIrBuf[i];
-		firFilterRedBufSum += firFilterRedBuf[i];
-	}
-	for (i = 0; i < (firFilterBufBegin > 0 ? firFilterBufBegin - 1 : 0); i++) {
-		firFilterIrBufSum += firFilterIrBuf[i];
-		firFilterRedBufSum += firFilterRedBuf[i];
-	}
-
-	firFilterIrBufSum /= firFilterBufCnt;
-	firFilterRedBufSum /= firFilterBufCnt;
-
-	*sum_a = firFilterRedBufSum;
-	*sum_b = firFilterIrBufSum;
-
-}
-#endif
-
-#ifdef __USE_TIME_DOMAIN_SNR__
-#ifdef __USE_LOWPASS_FIR_FILTER__
-static unsigned sigDataChBackup[200][4], nosDataChBackup[30][4];
-static unsigned sigCurrAMax = 0, sigCurrAMin = 0xffffffff, sigCurrBMax = 0, sigCurrBMin = 0xffffffff;
-static unsigned sigFltrCurrAMax = 0, sigFltrCurrAMin = 0xffffffff, sigFltrCurrBMax = 0, sigFltrCurrBMin = 0xffffffff;
-static unsigned nosCurrAMax = 0, nosCurrAMin = 0xffffffff, nosCurrBMax = 0, nosCurrBMin = 0xffffffff;
-static unsigned nosFltrCurrAMax = 0, nosFltrCurrAMin = 0xffffffff, nosFltrCurrBMax = 0, nosFltrCurrBMin = 0xffffffff;
-static unsigned short sigDataChBackupIdx = 0, nosDataChBackupIdx = 0;
-static unsigned short sigFltrDataChBackupIdx = 0, nosFltrDataChBackupIdx = 0;
-static unsigned sigCurrA = 0, nosCurrA = 0, snrCurrA = 0;
-static unsigned sigFltrCurrA = 0, nosFltrCurrA = 0, snrFltrCurrA = 0;
-static unsigned sigCurrB = 0, nosCurrB = 0, snrCurrB = 0;
-static unsigned sigFltrCurrB = 0, nosFltrCurrB = 0, snrFltrCurrB = 0;
-#else
-static unsigned sigDataChBackup[200][2], nosDataChBackup[30][2];
-static unsigned sigCurrAMax = 0, sigCurrAMin = 0xffffffff, sigCurrBMax = 0, sigCurrBMin = 0xffffffff;
-static unsigned nosCurrAMax = 0, nosCurrAMin = 0xffffffff, nosCurrBMax = 0, nosCurrBMin = 0xffffffff;
-static unsigned short sigDataChBackupIdx = 0, nosDataChBackupIdx = 0;
-static unsigned sigCurrA = 0, nosCurrA = 0, snrCurrA = 0;
-static unsigned sigCurrB = 0, nosCurrB = 0, snrCurrB = 0;
-#endif
-#define NOISE_CAL_TD_RANGE 20
-#define SIGNAL_CAL_TD_RANGE 150
-#endif
-
-#ifdef __USE_TIME_DOMAIN_SNR__
-static void __adpd_initSnrAtTD(void)
-{
-	sigDataChBackupIdx = nosDataChBackupIdx = 0;
-	sigCurrA = nosCurrA = snrCurrA = 0;
-	sigCurrB = nosCurrB = snrCurrB = 0;
-#ifdef __USE_LOWPASS_FIR_FILTER__
-	sigFltrDataChBackupIdx = nosFltrDataChBackupIdx = 0;
-	sigFltrCurrA = nosFltrCurrA = snrFltrCurrA = 0;
-	sigFltrCurrB = nosFltrCurrB = snrFltrCurrB = 0;
-#endif
-}
-
-static void __adpd_updateSnrAtTD
-#ifdef __USE_ADPD_32BIT_FIFO__
-#ifdef __USE_LOWPASS_FIR_FILTER__
-(unsigned long sum_a, unsigned long sum_b, unsigned long fltr_sum_a, unsigned long fltr_sum_b)
-#else
-(unsigned long sum_a, unsigned long sum_b)
-#endif
-#else
-#ifdef __USE_LOWPASS_FIR_FILTER__
-(unsigned sum_a, unsigned sum_b, unsigned fltr_sum_a, unsigned fltr_sum_b)
-#else
-(unsigned sum_a, unsigned sum_b)
-#endif
-#endif
-{
-    unsigned i;
-	unsigned nosOut = 0;
-#ifdef __USE_LOWPASS_FIR_FILTER__
-	unsigned nosFltrOut = 0;
-#endif
-
-#ifdef __USE_LOWPASS_FIR_FILTER__
-	nosDataChBackup[nosDataChBackupIdx][0] = sum_a;
-	nosDataChBackup[nosDataChBackupIdx++][1] = sum_b;
-	nosDataChBackup[nosFltrDataChBackupIdx][2] = fltr_sum_a;
-	nosDataChBackup[nosFltrDataChBackupIdx++][3] = fltr_sum_b;
-#else
-	nosDataChBackup[nosDataChBackupIdx][0] = sum_a;
-	nosDataChBackup[nosDataChBackupIdx++][1] = sum_b;
-#endif
-
-	if (nosDataChBackupIdx >= NOISE_CAL_TD_RANGE) {
-		nosCurrAMax = nosCurrBMax = 0; nosCurrAMin = nosCurrBMin = 0xffffffff;
-		for (i = 0; i < nosDataChBackupIdx; i++) {
-			if (nosDataChBackup[i][0] > nosCurrAMax)
-				nosCurrAMax = nosDataChBackup[i][0];
-			if (nosDataChBackup[i][0] < nosCurrAMin)
-				nosCurrAMin = nosDataChBackup[i][0];
-			if (nosDataChBackup[i][1] > nosCurrBMax)
-				nosCurrBMax = nosDataChBackup[i][1];
-			if (nosDataChBackup[i][1] < nosCurrBMin)
-				nosCurrBMin = nosDataChBackup[i][1];
-		}
-		nosCurrA = nosCurrAMax - nosCurrAMin;
-		nosCurrB = nosCurrBMax - nosCurrBMin;
-		HRM_info("%s - [ nosCurrAMax : %d, nosCurrAMin : %d, nosCurrBMax : %d, nosCurrBMin : %d ]\n", __func__,
-			nosCurrAMax, nosCurrAMin,
-			nosCurrBMax, nosCurrBMin);
-
-		nosOut = 1;
-		nosDataChBackupIdx = 0;
-	}
-#ifdef __USE_LOWPASS_FIR_FILTER__
-	sigDataChBackup[sigDataChBackupIdx][0] = sum_a;
-	sigDataChBackup[sigDataChBackupIdx++][1] = sum_b;
-	sigDataChBackup[sigFltrDataChBackupIdx][2] = fltr_sum_a;
-	sigDataChBackup[sigFltrDataChBackupIdx++][3] = fltr_sum_b;
-#else
-	sigDataChBackup[sigDataChBackupIdx][0] = sum_a;
-	sigDataChBackup[sigDataChBackupIdx++][1] = sum_b;
-#endif
-	if (sigDataChBackupIdx >= SIGNAL_CAL_TD_RANGE) {
-		sigCurrAMax = sigCurrBMax = 0; sigCurrAMin = sigCurrBMin = 0xffffffff;
-		for (i = 0; i < sigDataChBackupIdx; i++) {
-			if (sigDataChBackup[i][0] > sigCurrAMax)
-				sigCurrAMax = sigDataChBackup[i][0];
-			if (sigDataChBackup[i][0] < sigCurrAMin)
-				sigCurrAMin = sigDataChBackup[i][0];
-			if (sigDataChBackup[i][1] > sigCurrBMax)
-				sigCurrBMax = sigDataChBackup[i][1];
-			if (sigDataChBackup[i][1] < sigCurrBMin)
-				sigCurrBMin = sigDataChBackup[i][1];
-		}
-
-		sigCurrA = sigCurrAMax - sigCurrAMin;
-		sigCurrB = sigCurrBMax - sigCurrBMin;
-		HRM_info("%s - [ sigCurrAMax : %d, sigCurrAMin : %d, sigCurrBMax : %d, sigCurrBMin : %d ]\n", __func__,
-			sigCurrAMax, sigCurrAMin,
-			sigCurrBMax, sigCurrBMin);
-
-		if (nosOut) {
-			snrCurrA = sigCurrA / nosCurrA;
-			snrCurrB = sigCurrB / nosCurrB;
-
-			HRM_info("%s - [ SNR_A : %d, SNR_B : %d, PI_A : %d, PI_B : %d ]\n", __func__,
-				snrCurrA, snrCurrB,
-				sigCurrA * 10000 / sigCurrAMax, sigCurrB*10000 / sigCurrBMax);
-			nosOut = 0;
-		}
-
-		sigDataChBackupIdx = 0;
-	}
-
-#ifdef __USE_LOWPASS_FIR_FILTER__
-	if (nosFltrDataChBackupIdx >= NOISE_CAL_TD_RANGE) {
-		nosFltrCurrAMax = nosFltrCurrBMax = 0; nosFltrCurrAMin = nosFltrCurrBMin = 0xffffffff;
-		for (i = 0; i < nosFltrDataChBackupIdx; i++) {
-			if (nosDataChBackup[i][2] > nosFltrCurrAMax)
-				nosFltrCurrAMax = nosDataChBackup[i][2];
-			if (nosDataChBackup[i][2] < nosFltrCurrAMin)
-				nosFltrCurrAMin = nosDataChBackup[i][2];
-			if (nosDataChBackup[i][3] > nosFltrCurrBMax)
-				nosFltrCurrBMax = nosDataChBackup[i][3];
-			if (nosDataChBackup[i][3] < nosFltrCurrBMin)
-				nosFltrCurrBMin = nosDataChBackup[i][3];
-		}
-		nosFltrCurrA = nosFltrCurrAMax - nosFltrCurrAMin;
-		nosFltrCurrB = nosFltrCurrBMax - nosFltrCurrBMin;
-		HRM_info("%s - [ nosFltrCurrAMax : %d, nosFltrCurrAMin : %d, nosFltrCurrBMax : %d, nosFltrCurrBMin : %d ]\n", __func__,
-			nosFltrCurrAMax, nosFltrCurrAMin,
-			nosFltrCurrBMax, nosFltrCurrBMin);
-
-		nosFltrOut = 1;
-		nosFltrDataChBackupIdx = 0;
-	}
-	if (sigFltrDataChBackupIdx >= SIGNAL_CAL_TD_RANGE) {
-		sigFltrCurrAMax = sigFltrCurrBMax = 0; sigFltrCurrAMin = sigFltrCurrBMin = 0xffffffff;
-		for (i = 0; i < sigFltrDataChBackupIdx; i++) {
-			if (sigDataChBackup[i][2] > sigFltrCurrAMax)
-				sigFltrCurrAMax = sigDataChBackup[i][2];
-			if (sigDataChBackup[i][2] < sigFltrCurrAMin)
-				sigFltrCurrAMin = sigDataChBackup[i][2];
-			if (sigDataChBackup[i][3] > sigFltrCurrBMax)
-				sigFltrCurrBMax = sigDataChBackup[i][3];
-			if (sigDataChBackup[i][3] < sigFltrCurrBMin)
-				sigFltrCurrBMin = sigDataChBackup[i][3];
-		}
-
-		sigFltrCurrA = sigFltrCurrAMax - sigFltrCurrAMin;
-		sigFltrCurrB = sigFltrCurrBMax - sigFltrCurrBMin;
-		HRM_info("%s - [ sigFltrCurrAMax : %d, sigFltrCurrAMin : %d, sigFltrCurrBMax : %d, sigFltrCurrBMin : %d ]\n", __func__,
-			sigFltrCurrAMax, sigFltrCurrAMin,
-			sigFltrCurrBMax, sigFltrCurrBMin);
-
-		if (nosFltrOut) {
-			snrFltrCurrA = sigFltrCurrA / nosFltrCurrA;
-			snrFltrCurrB = sigFltrCurrB / nosFltrCurrB;
-
-			HRM_info("%s - [Flitered] [ SNR_A : %d, SNR_B : %d, PI_A : %d, PI_B : %d ]\n", __func__,
-				snrFltrCurrA, snrFltrCurrB,
-				sigFltrCurrA * 10000 / sigFltrCurrAMax, sigFltrCurrB * 10000 / sigFltrCurrBMax);
-			nosFltrOut = 0;
-		}
-		sigFltrDataChBackupIdx = 0;
-	}
-#endif
-}
-#endif
-
 void __adpd_setObjProximityThreshold(unsigned thresh)
 {
 	 adpd_data->obj_proximity_theshld = thresh;
@@ -2081,111 +1728,133 @@ OBJ_PROXIMITY_STATUS __adpd_getObjProximity(void)
 {
 	return adpd_data->st_obj_proximity;
 }
-static EOL_state __adpd_dark_offset_calibration(unsigned *dataInA, unsigned *dataInB);
 
-static unsigned prev_sum_dataIn = 0;
+static t_dark_cal_state __adpd_dark_offset_calibration(unsigned *dataInA, unsigned *dataInB);
+static unsigned prev_sum_dataIn;
 
 #define CH1_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL 100
 #define CH2_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL 100
 #define CH3_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL 50
 #define CH4_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL 50
 
-#define MARGIN_FOR_CH_SATURATION_PER_PULSE   100
-#define ST_LED1_CURRENT_SETTING 	0x3035
-#define ST_LED2_CURRENT_SETTING 	0x303f
+#define MARGIN_FOR_CH_SATURATION_PER_PULSE	100
+#define LED1_DEFAULT_CURRENT_COARSE			0x5
+#define LED2_DEFAULT_CURRENT_COARSE			0xf
+#define LED_MAX_CURRENT_COARSE				0xf
 
 static void __adpd_InitProximityDetection(void)
 {
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x1);
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
 	__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, 0x1ff);
 	__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, 0x80ff);
 	__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, ~(0x0040) & 0x1ff);
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 
-	if (agc_is_enabled) {
-		__adpd_reg_write(adpd_data, ADPD_LED2_DRV_ADDR, ST_LED2_CURRENT_SETTING);
-		adpd_data->led_current_1 = ST_LED2_CURRENT_SETTING & 0xf; /* IR */
-	}
-
-	__adpd_reg_write(adpd_data, ADPD_LED_DISABLE_ADDR, 0x0100);
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x2);
+	if (agc_is_enabled)
+		__adpd_set_current(LED2_DEFAULT_CURRENT_COARSE, 0, 0, 0);
 }
 
 static void __adpd_SetProximityOn(void)
 {
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x1);
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
 	__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, 0x1ff);
 	__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, 0x80ff);
 	__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, ~(0x0040) & 0x1ff);
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 
-	if (agc_is_enabled) {
-		__adpd_reg_write(adpd_data, ADPD_LED1_DRV_ADDR, ST_LED1_CURRENT_SETTING);
-		__adpd_reg_write(adpd_data, ADPD_LED2_DRV_ADDR, ST_LED2_CURRENT_SETTING);
-		adpd_data->led_current_1 = ST_LED2_CURRENT_SETTING & 0xf; /* IR */
-		adpd_data->led_current_2 = ST_LED1_CURRENT_SETTING & 0xf; /* RED */
-		cntThreshAgcStepOn = CNT_THRESHOLD_AGC_STEP_ON;
-	} else
-		cntThreshAgcStepOn = 1;
-
-	__adpd_reg_write(adpd_data, ADPD_LED_DISABLE_ADDR, 0x0);
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x2);
+	if (agc_is_enabled)
+		__adpd_set_current(LED2_DEFAULT_CURRENT_COARSE, LED1_DEFAULT_CURRENT_COARSE, 0, 0);
 }
 
 static void __adpd_ClearFifo(void)
 {
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x1);
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
 	__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, 0x80ff);
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x2);
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 }
 
-static unsigned char isClearSaturationRed = 0;
-static unsigned char isClearSaturationIr = 0;
+static unsigned char isClearSaturationRed;
+static unsigned char isClearSaturationIr;
 
 static void __adpd_ClearSaturation(unsigned short isSlotB)
 {
 	unsigned short reg_val;
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x1);
+
+	if (agc_is_enabled == 0)
+		return;
+
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
 
 	/* RED */
 	if (!isSlotB) {
 		isClearSaturationRed = 1;
+		if (!prefMinPower) { /* min TIA gain, max LED current */
+			reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTA_GAIN_ADDR);
 
-		reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTA_GAIN_ADDR);
-		
-		if ((reg_val & 0x0003) < 3)
-			__adpd_reg_write(adpd_data, ADPD_SLOTA_GAIN_ADDR, reg_val + 1);
+			if ((reg_val & 0x0003) < 3)
+				__adpd_reg_write(adpd_data, ADPD_SLOTA_GAIN_ADDR, reg_val + 1);
 
-		else {
+			else {
+				reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvA);
+
+				if ((reg_val & 0x000f) > 0) {
+					__adpd_reg_write(adpd_data, RegAddrLedDrvA, reg_val - 1);
+					adpd_data->led_current_2 = (reg_val & 0xf) - 1;
+				} else
+					HRM_dbg("%s : Current SlotA DC Saturation can't be resolved...PPG SNR will be decreased...", __func__);
+			}
+		} else {/* max TIA gain, min LED current */
 			reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvA);
 
 			if ((reg_val & 0x000f) > 0) {
 				__adpd_reg_write(adpd_data, RegAddrLedDrvA, reg_val - 1);
 				adpd_data->led_current_2 = (reg_val & 0xf) - 1;
-			} else
-				HRM_dbg("%s : Current SlotA DC Saturation can't be resolved...PPG SNR will be decreased...", __func__);
+			} else {
+				reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTA_GAIN_ADDR);
+
+				if ((reg_val & 0x0003) < 3)
+					__adpd_reg_write(adpd_data, ADPD_SLOTA_GAIN_ADDR, reg_val + 1);
+				else
+					HRM_dbg("%s : Current SlotA DC Saturation can't be resolved...PPG SNR will be decreased...", __func__);
+			}
 		}
-	/* IR */	
+	/* IR */
 	} else {
 		isClearSaturationIr = 1;
 
-		reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTB_GAIN_ADDR);
-		
-		if ((reg_val & 0x0003) < 3)
-			__adpd_reg_write(adpd_data, ADPD_SLOTB_GAIN_ADDR, reg_val + 1);
+		if (!prefMinPower) { /* min TIA gain, max LED current */
+			reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTB_GAIN_ADDR);
 
-		else {
+			if ((reg_val & 0x0003) < 3)
+				__adpd_reg_write(adpd_data, ADPD_SLOTB_GAIN_ADDR, reg_val + 1);
+			else {
+				reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvB);
+
+				if ((reg_val & 0x000f) > 0) {
+					__adpd_reg_write(adpd_data, RegAddrLedDrvB, reg_val - 1);
+					adpd_data->led_current_1 = (reg_val & 0xf) - 1;
+				} else
+					HRM_dbg("%s : Current SlotB DC Saturation can't be resolved...PPG SNR will be decreased...", __func__);
+			}
+		} else { /* max TIA gain, min LED current */
 			reg_val = __adpd_reg_read(adpd_data, RegAddrLedDrvB);
 
 			if ((reg_val & 0x000f) > 0) {
 				__adpd_reg_write(adpd_data, RegAddrLedDrvB, reg_val - 1);
 				adpd_data->led_current_1 = (reg_val & 0xf) - 1;
-			} else
-				HRM_dbg("%s : Current SlotB DC Saturation can't be resolved...PPG SNR will be decreased...", __func__);
+			} else {
+				reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTB_GAIN_ADDR);
+
+				if ((reg_val & 0x0003) < 3)
+					__adpd_reg_write(adpd_data, ADPD_SLOTB_GAIN_ADDR, reg_val + 1);
+				else
+					HRM_dbg("%s : Current SlotB DC Saturation can't be resolved...PPG SNR will be decreased...", __func__);
+			}
 		}
 	}
 
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x2);
+	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 }
-
 
 #define PROXIMITY_STABLIZATION_THRESHOLD 0
 
@@ -2193,96 +1862,69 @@ OBJ_PROXIMITY_STATUS __adpd_checkObjProximity(unsigned *dataInA, unsigned *dataI
 {
 	unsigned dataInMax = 0;
 	unsigned dataInAMax = 0;
+	unsigned char dataInMax_idx = 0, dataInAMax_idx = 0;
 	unsigned sum_dataIn = 0, sum_dataIn_raw = 0;
 	unsigned sum_dataInA = 0, sum_dataInA_raw = 0;
 
 	unsigned tempData[4] = {0, 0, 0, 0};
+	unsigned int i = 0;
 
-	if (AgcMode & AGC_Slot_B && !dataIn)
+	if ((AgcMode & AGC_Slot_B && !dataIn) || (AgcMode & AGC_Slot_A && !dataInA))
 		return adpd_data->st_obj_proximity;
-	if (AgcMode & AGC_Slot_A && !dataInA)
-		return adpd_data->st_obj_proximity;
 
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
 	if (AgcMode & AGC_Slot_B && dataIn) {
-		dataInMax = dataIn[0];
-		sum_dataIn_raw = dataIn[0]+dataIn[1]+dataIn[2]+dataIn[3];
-	}
-	if (AgcMode & AGC_Slot_A && dataInA) {
-		dataInAMax = dataInA[0];
-		sum_dataInA_raw = dataInA[0]+dataInA[1]+dataInA[2]+dataInA[3];
-	}
-#elif defined(__USE_PD234__)
-	if (AgcMode & AGC_Slot_B && dataIn) {
-		dataInMax = dataIn[1];
-		sum_dataIn_raw = dataIn[1]+dataIn[2]+dataIn[3];
-	}
-	if (AgcMode & AGC_Slot_A && dataInA) {
-		dataInAMax = dataInA[1];
-		sum_dataInA_raw = dataInA[1]+dataInA[2]+dataInA[3];
-	}
-#elif defined(__USE_PD34__)
-	if (AgcMode & AGC_Slot_B && dataIn) {
-		dataInMax = dataIn[2];
-		sum_dataIn_raw = dataIn[2]+dataIn[3];
-	}
-	if (AgcMode & AGC_Slot_A && dataInA) {
-		dataInAMax = dataInA[2];
-		sum_dataInA_raw = dataInA[2]+dataInA[3];
-	}
-#elif defined(__USE_PD4__)
-	if (AgcMode & AGC_Slot_B && dataIn) {
-		dataInMax = dataIn[3];
-		sum_dataIn_raw = dataIn[3];
-	}
-	if (AgcMode & AGC_Slot_A && dataInA) {
-		dataInAMax = dataInA[3];
-		sum_dataInA_raw = dataInA[3];
-	}
-#endif
-
-	if (AgcMode & AGC_Slot_A && dataInA)
-		sum_dataInA = __adpd_normalized_data(adpd_data, 0, sum_dataIn_raw);
-	if (AgcMode & AGC_Slot_B && dataIn)
+		dataInMax_idx = maxSlotValue(&dataIn[pd_start_num], pd_end_num - pd_start_num + 1);
+		for (i = pd_start_num; i <= pd_end_num; i++)
+			sum_dataIn_raw += dataIn[i];
 		sum_dataIn = __adpd_normalized_data(adpd_data, 1, sum_dataIn_raw);
+	}
+
+	if (AgcMode & AGC_Slot_A && dataInA) {
+		dataInAMax_idx = maxSlotValue(&dataInA[pd_start_num], pd_end_num - pd_start_num + 1);
+		for (i = pd_start_num; i <= pd_end_num; i++)
+			sum_dataInA_raw += dataInA[i];
+		sum_dataInA = __adpd_normalized_data(adpd_data, 0, sum_dataInA_raw);
+	}
+
+	if (!dataInA)
+		dataInA = tempData;
+	if (!dataIn)
+		dataIn = tempData;
+
+	dataInMax = dataIn[dataInMax_idx];
+	dataInAMax = dataInA[dataInAMax_idx];
 
 	HRM_info("%s - dataInMax = %d, dataInAMax = %d, priv st_obj_proximity = %d\n", __func__, dataInMax, dataInAMax, adpd_data->st_obj_proximity);
 
 	switch (adpd_data->st_obj_proximity) {
 	case OBJ_DARKOFFSET_CAL:
-		if (AgcMode & AGC_Slot_A && AgcMode & AGC_Slot_B && dataInA && dataIn) {
+		if (AgcMode & AGC_Slot_A && AgcMode & AGC_Slot_B) {
 			HRM_info("%s - OBJ_DARKOFFSET_CAL AB( %u %u %u %u %u %u %u %u )\n", __func__,
 			dataInA[0], dataInA[1], dataInA[2], dataInA[3], dataIn[0], dataIn[1], dataIn[2], dataIn[3]);
-		} else if (AgcMode & AGC_Slot_A && dataInA) {
-			HRM_info("%s - OBJ_DARKOFFSET_CAL A( %u %u %u %u )\n", __func__,
-			dataInA[0], dataInA[1], dataInA[2], dataInA[3]);
-		} else if (AgcMode & AGC_Slot_B && dataIn) {
-			HRM_info("%s - OBJ_DARKOFFSET_CAL B( %u %u %u %u )\n", __func__,
-			dataIn[0], dataIn[1], dataIn[2], dataIn[3]);
+		} else if (AgcMode & AGC_Slot_A) {
+			HRM_info("%s - OBJ_DARKOFFSET_CAL A( %u %u %u %u )\n", __func__, dataInA[0], dataInA[1], dataInA[2], dataInA[3]);
+		} else if (AgcMode & AGC_Slot_B) {
+			HRM_info("%s - OBJ_DARKOFFSET_CAL B( %u %u %u %u )\n", __func__, dataIn[0], dataIn[1], dataIn[2], dataIn[3]);
 		}
 
-		if (!dataInA)
-			dataInA = tempData;
-
-		if (!dataIn)
-			dataIn = tempData;
-
-		if (__adpd_dark_offset_calibration(dataInA, dataIn) == ST_EOL_CLOCK_CAL_DONE) {
+		if (__adpd_dark_offset_calibration(dataInA, dataIn) == ST_DARK_CAL_DONE) {
 			HRM_info("%s - Measured DarkOffset ( %u %u %u %u	%u %u %u %u )\n", __func__,
 				g_eol_ADCOffset[0], g_eol_ADCOffset[1], g_eol_ADCOffset[2], g_eol_ADCOffset[3],
 				g_eol_ADCOffset[4], g_eol_ADCOffset[5], g_eol_ADCOffset[6], g_eol_ADCOffset[7]);
 
-			__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x1);
+			__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
 
 			//More safety offet to guarantee any remaning DC noise after dark calibration
-			g_eol_ADCOffset[0] += CH1_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
-			g_eol_ADCOffset[1] += CH2_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
-			g_eol_ADCOffset[2] += CH3_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
-			g_eol_ADCOffset[3] += CH4_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
-			g_eol_ADCOffset[4] += CH1_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
-			g_eol_ADCOffset[5] += CH2_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
-			g_eol_ADCOffset[6] += CH3_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
-			g_eol_ADCOffset[7] += CH4_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
+			if (!adpd_data->Is_Hrm_Dark_Calibrated) {
+				g_eol_ADCOffset[0] += CH1_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
+				g_eol_ADCOffset[1] += CH2_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
+				g_eol_ADCOffset[2] += CH3_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
+				g_eol_ADCOffset[3] += CH4_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
+				g_eol_ADCOffset[4] += CH1_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
+				g_eol_ADCOffset[5] += CH2_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
+				g_eol_ADCOffset[6] += CH3_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
+				g_eol_ADCOffset[7] += CH4_OFFSET_PER_PULSE_FOR_DC_NOISE_REMOVAL;
+			}
 			__adpd_reg_write(adpd_data, ADPD_CH1_OFFSET_A_ADDR, g_eol_ADCOffset[0]);
 			__adpd_reg_write(adpd_data, ADPD_CH2_OFFSET_A_ADDR, g_eol_ADCOffset[1]);
 			__adpd_reg_write(adpd_data, ADPD_CH3_OFFSET_A_ADDR, g_eol_ADCOffset[2]);
@@ -2292,52 +1934,54 @@ OBJ_PROXIMITY_STATUS __adpd_checkObjProximity(unsigned *dataInA, unsigned *dataI
 			__adpd_reg_write(adpd_data, ADPD_CH3_OFFSET_B_ADDR, g_eol_ADCOffset[6]);
 			__adpd_reg_write(adpd_data, ADPD_CH4_OFFSET_B_ADDR, g_eol_ADCOffset[7]);
 
-			maxPulseCodeACh1 = 0x4000 - g_eol_ADCOffset[0];
-			maxPulseCodeACh2 = 0x4000 - g_eol_ADCOffset[1];
-			maxPulseCodeACh3 = 0x4000 - g_eol_ADCOffset[2];
-			maxPulseCodeACh4 = 0x4000 - g_eol_ADCOffset[3];
-			maxPulseCodeBCh1 = 0x4000 - g_eol_ADCOffset[4];
-			maxPulseCodeBCh2 = 0x4000 - g_eol_ADCOffset[5];
-			maxPulseCodeBCh3 = 0x4000 - g_eol_ADCOffset[6];
-			maxPulseCodeBCh4 = 0x4000 - g_eol_ADCOffset[7];
+			maxPulseCodeACh[0] = 0x3fff - g_eol_ADCOffset[0];
+			maxPulseCodeACh[1] = 0x3fff - g_eol_ADCOffset[1];
+			maxPulseCodeACh[2] = 0x3fff - g_eol_ADCOffset[2];
+			maxPulseCodeACh[3] = 0x3fff - g_eol_ADCOffset[3];
+			maxPulseCodeBCh[0] = 0x3fff - g_eol_ADCOffset[4];
+			maxPulseCodeBCh[1] = 0x3fff - g_eol_ADCOffset[5];
+			maxPulseCodeBCh[2] = 0x3fff - g_eol_ADCOffset[6];
+			maxPulseCodeBCh[3] = 0x3fff - g_eol_ADCOffset[7];
 
 			HRM_info("%s - Measured Max Codes Per Pulse ( %u %u %u %u %u %u %u %u )\n", __func__,
-				maxPulseCodeACh1, maxPulseCodeACh2, maxPulseCodeACh3, maxPulseCodeACh4,
-				maxPulseCodeBCh1, maxPulseCodeBCh2, maxPulseCodeBCh3, maxPulseCodeBCh4);
+				maxPulseCodeACh[0], maxPulseCodeACh[1], maxPulseCodeACh[2], maxPulseCodeACh[3],
+				maxPulseCodeBCh[0], maxPulseCodeBCh[1], maxPulseCodeBCh[2], maxPulseCodeBCh[3]);
 
-			__adpd_reg_write(adpd_data, ADPD_SAMPLING_FREQ_ADDR, 0xa);
-			__adpd_reg_write(adpd_data, ADPD_DEC_MODE_ADDR, 0x330);
-			__adpd_reg_write(adpd_data, ADPD_PULSE_PERIOD_A_ADDR, 0x813);
-			__adpd_reg_write(adpd_data, ADPD_PULSE_PERIOD_B_ADDR, 0x813);
-			__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x2);
-			adpd_data->Is_Hrm_Dark_Calibrated = 1;
+			__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 
-			__adpd_InitProximityDetection();
-			adpd_data->st_obj_proximity = OBJ_DETACHED;
+			if (adpd_data->agc_mode == M_HRM) {
+				adpd_data->Is_Hrm_Dark_Calibrated = 1;
+				__adpd_InitProximityDetection();
+				adpd_data->st_obj_proximity = OBJ_DETACHED;
+			} else {
+				if (adpd_data->agc_mode == M_HRMLED_BOTH)
+					adpd_data->Is_Hrm_Dark_Calibrated = 1;
+
+				adpd_data->st_obj_proximity = OBJ_DARKOFFSET_CAL_DONE_IN_NONHRM;
+			}
 		}
 		break;
 
 	case OBJ_DETACHED:
 		prev_sum_dataIn = 0;
 
+		if (adpd_data->led_current_1 != LED2_DEFAULT_CURRENT_COARSE)
+			__adpd_InitProximityDetection();
+
 		HRM_info("%s - Measured Max Codes ( %u %u %u %u %u %u %u %u )\n", __func__,
-			maxPulseCodeACh1*pulseA, maxPulseCodeACh2*pulseA, maxPulseCodeACh3*pulseA, maxPulseCodeACh4*pulseA,
-			maxPulseCodeBCh1*pulseB, maxPulseCodeBCh2*pulseB, maxPulseCodeBCh3*pulseB, maxPulseCodeBCh4*pulseB);
+			maxPulseCodeACh[0]*pulseA, maxPulseCodeACh[1]*pulseA, maxPulseCodeACh[2]*pulseA, maxPulseCodeACh[3]*pulseA,
+			maxPulseCodeBCh[0]*pulseB, maxPulseCodeBCh[1]*pulseB, maxPulseCodeBCh[2]*pulseB, maxPulseCodeBCh[3]*pulseB);
 
 		if (sum_dataIn > adpd_data->obj_proximity_theshld) {
-			HRM_info("%s - OBJ_DETECTED ( %u %u )\n", __func__,
-			sum_dataIn, adpd_data->obj_proximity_theshld);
 			adpd_data->st_obj_proximity = OBJ_DETECTED;
 			adpd_data->cnt_proximity_on = 0;
 		} else {
-			HRM_info("%s - OBJ_DETACHED ( %u %u )\n", __func__,
-			sum_dataIn, adpd_data->obj_proximity_theshld);
+			HRM_info("%s - OBJ_DETACHED ( %u %u )\n", __func__, sum_dataIn, adpd_data->obj_proximity_theshld);
 		}
 		break;
 
 	case OBJ_DETECTED:
-		HRM_info("%s - OBJ_DETECTED ( %u %u )\n", __func__,
-			sum_dataIn, adpd_data->obj_proximity_theshld);
+		HRM_info("%s - OBJ_DETECTED ( %u %u )\n", __func__, sum_dataIn, adpd_data->obj_proximity_theshld);
 
 		if (sum_dataIn < adpd_data->obj_proximity_theshld * OBJ_DETACH_FROM_DETECTION_DC_PERCENT / 100)
 			adpd_data->st_obj_proximity = OBJ_DETACHED;
@@ -2347,36 +1991,17 @@ OBJ_PROXIMITY_STATUS __adpd_checkObjProximity(unsigned *dataInA, unsigned *dataI
 			adpd_data->cnt_proximity_on = (adpd_data->cnt_proximity_on > 100) ? 100 : adpd_data->cnt_proximity_on + 1;
 
 		if (adpd_data->cnt_proximity_on >= CNT_THRESHOLD_OBJ_PROXIMITY_ON) {
-			HRM_info("%s - OBJ_DETECTED : OBJ_PROXIMITY_RED_ON ( %u )\n",
-				__func__, adpd_data->cnt_proximity_on);
+			HRM_info("%s - OBJ_DETECTED : OBJ_PROXIMITY_RED_ON ( %u )\n", __func__, adpd_data->cnt_proximity_on);
 			adpd_data->st_obj_proximity = OBJ_PROXIMITY_RED_ON;
 			adpd_data->cnt_proximity_on = 0;
-			adpd_data->cur_proximity_dc_level = sum_dataIn * 70 / 100;
-			adpd_data->cur_proximity_red_dc_level = sum_dataInA * 70 / 100;
+			adpd_data->cur_proximity_dc_level = sum_dataIn;
+			adpd_data->cur_proximity_red_dc_level = sum_dataInA;
 			__adpd_SetProximityOn();
-
-			if (AgcMode & AGC_Slot_A && AgcMode & AGC_Slot_B) {
-				if (RegAddrLedDrvA != 0)
-					AgcStage = AgcStage_LedA;
-				else if (RegAddrLedDrvB != 0)
-					AgcStage = AgcStage_LedB;
-				else
-					AgcStage = AgcStage_Done;
-			} else if (AgcMode & AGC_Slot_A) {
-				if (RegAddrLedDrvA != 0)
-					AgcStage = AgcStage_LedA;
-				else {
-					AgcStage = AgcStage_Done;
-				}
-			} else if (AgcMode & AGC_Slot_B) {
-				if (RegAddrLedDrvB != 0)
-					AgcStage = AgcStage_LedB;
-				else
-					AgcStage = AgcStage_Done;
-			}
 
 			if (agc_is_enabled)
 				__adpd_initAGC(POWER_PREF, AgcMode);
+			else
+				AgcStage = AgcStage_Done;
 
 			prev_sum_dataIn = 0;
 
@@ -2395,7 +2020,8 @@ OBJ_PROXIMITY_STATUS __adpd_checkObjProximity(unsigned *dataInA, unsigned *dataI
 			adpd_data->cnt_proximity_on = 0;
 		}
 
-		if (sum_dataIn < adpd_data->cur_proximity_dc_level * OBJ_DETACH_FROM_PROXIMITY_DC_PERCENT / 100) {
+		if (sum_dataIn < adpd_data->cur_proximity_dc_level * OBJ_DETACH_FROM_PROXIMITY_DC_PERCENT / 100
+			|| sum_dataIn < adpd_data->obj_proximity_theshld) {
 			HRM_info("%s - OBJ_PROXIMITY_RED_ON ( %u < %u )\n", __func__,
 				sum_dataIn, adpd_data->cur_proximity_dc_level * OBJ_DETACH_FROM_PROXIMITY_DC_PERCENT / 100);
 			adpd_data->st_obj_proximity = OBJ_DETACHED;
@@ -2404,51 +2030,36 @@ OBJ_PROXIMITY_STATUS __adpd_checkObjProximity(unsigned *dataInA, unsigned *dataI
 			break;
 
 		} else if (sum_dataIn < adpd_data->cur_proximity_dc_level * OBJ_PROXIMITY_CNT_DC_PERCENT / 100) {
-			HRM_info("%s - OBJ_PROXIMITY_RED_ON( %u < %u )\n", __func__,
-			sum_dataIn, adpd_data->cur_proximity_dc_level);
+			HRM_info("%s - OBJ_PROXIMITY_RED_ON( %u < %u )\n", __func__, sum_dataIn, adpd_data->cur_proximity_dc_level);
 			adpd_data->cnt_proximity_on = (adpd_data->cnt_proximity_on > 0) ? adpd_data->cnt_proximity_on - 1 : 0;
 		} else {
-			HRM_info("%s - OBJ_PROXIMITY_RED_ON ( %u %u )\n", __func__,
-				sum_dataIn, adpd_data->cur_proximity_dc_level);
+			HRM_info("%s - OBJ_PROXIMITY_RED_ON ( %u %u )\n", __func__, sum_dataIn, adpd_data->cur_proximity_dc_level);
 			adpd_data->cnt_proximity_on = (adpd_data->cnt_proximity_on > 100) ? 100 : adpd_data->cnt_proximity_on + 1;
 		}
 
 		if ((adpd_data->cnt_proximity_on >= CNT_THRESHOLD_AGC_STEP_ON && __adpd_getAGCstate() == AgcStage_Done) ||
 			!agc_is_enabled) {
-			HRM_info("%s - OBJ_PROXIMITY_RED_ON ( %u ), agc_is_enabled : %d\n", __func__,
-				adpd_data->cnt_proximity_on, agc_is_enabled);
+			HRM_info("%s - OBJ_PROXIMITY_RED_ON ( %u ), agc_is_enabled : %d\n", __func__, adpd_data->cnt_proximity_on, agc_is_enabled);
 			adpd_data->st_obj_proximity = OBJ_PROXIMITY_ON;
 			adpd_data->cnt_proximity_on = 3;
 			adpd_data->cur_proximity_dc_level = (sum_dataIn > adpd_data->obj_proximity_theshld) ? sum_dataIn : adpd_data->obj_proximity_theshld;
 			adpd_data->cur_proximity_red_dc_level = (sum_dataInA > adpd_data->cur_proximity_red_dc_level) ? sum_dataInA : adpd_data->cur_proximity_red_dc_level;
 			adpd_data->cnt_slotA_dc_saturation = 0;
 			adpd_data->cnt_slotB_dc_saturation = 0;
-			
+
 			adpd_data->ir_curr = adpd_data->led_current_1;
 			adpd_data->red_curr = adpd_data->led_current_2;
 			adpd_data->ir_adc = sum_dataIn;
 			adpd_data->red_adc = sum_dataInA;
-			
+
 			HRM_info("%s - ir_curr = 0x%2x, red_curr = 0x%2x, ir_adc = %d, red_adc = %d\n",
 				__func__, adpd_data->ir_curr, adpd_data->red_curr, adpd_data->ir_adc, adpd_data->red_adc);
-
-#ifdef __USE_LOWPASS_FIR_FILTER__
-			__adpd_initLPF();
-#endif
-#ifdef __USE_TIME_DOMAIN_SNR__
-			__adpd_initSnrAtTD();
-#endif
 		}
 		prev_sum_dataIn = sum_dataIn;
 
 		break;
 
 	case OBJ_PROXIMITY_ON:
-#ifdef __ALL_TIME_AGC__
-		AgcStage = AgcStage_LedA;
-		__adpd_stepAGC2(dataInA, dataIn);
-#endif
-
 		if (isClearSaturationIr) {
 			adpd_data->cur_proximity_dc_level = (sum_dataIn < adpd_data->cur_proximity_dc_level) ? sum_dataIn : adpd_data->cur_proximity_dc_level;
 			isClearSaturationIr = 0;
@@ -2457,24 +2068,16 @@ OBJ_PROXIMITY_STATUS __adpd_checkObjProximity(unsigned *dataInA, unsigned *dataI
 			adpd_data->cur_proximity_red_dc_level = (sum_dataInA < adpd_data->cur_proximity_red_dc_level) ? sum_dataInA : adpd_data->cur_proximity_red_dc_level;
 			isClearSaturationRed = 0;
 		}
-		if (sum_dataIn < adpd_data->cur_proximity_dc_level * OBJ_DETACH_FROM_PROXIMITY_DC_PERCENT / 100) {
-			HRM_info("%s - OBJ_DETACHED ( %u < %u )\n", __func__,
-				sum_dataIn, adpd_data->cur_proximity_dc_level * OBJ_DETACH_FROM_PROXIMITY_DC_PERCENT / 100);
+		if (sum_dataIn < adpd_data->cur_proximity_dc_level * OBJ_DETACH_FROM_PROXIMITY_DC_PERCENT / 100
+			|| sum_dataIn < adpd_data->obj_proximity_theshld) {
+			HRM_info("%s - OBJ_DETACHED ( %u < %u )\n", __func__, sum_dataIn, adpd_data->cur_proximity_dc_level * OBJ_DETACH_FROM_PROXIMITY_DC_PERCENT / 100);
 			adpd_data->st_obj_proximity = OBJ_DETACHED;
 
 			__adpd_InitProximityDetection();
 
 			break;
 		} else {
-#ifdef __USE_TIME_DOMAIN_SNR__
-			HRM_info("%s - OBJ_PROXIMITY_ON ( %u %u ), SNR_A : %d, SNR_B : %d, PI_A : %d, PI_B : %d\n", __func__,
-				sum_dataIn, adpd_data->cur_proximity_dc_level,
-				snrCurrA, snrCurrB,
-				sigCurrA*10000/sigCurrAMax, sigCurrB*10000/sigCurrBMax);
-#else
-			HRM_info("%s - OBJ_PROXIMITY_ON ( %u %u )\n", __func__,
-				sum_dataIn, adpd_data->cur_proximity_dc_level);
-#endif
+			HRM_info("%s - OBJ_PROXIMITY_ON ( %u %u )\n", __func__, sum_dataIn, adpd_data->cur_proximity_dc_level);
 		}
 		if (sum_dataIn > adpd_data->cur_proximity_dc_level) {
 			adpd_data->cur_proximity_dc_level = adpd_data->cur_proximity_dc_level*7 + sum_dataIn;
@@ -2485,78 +2088,34 @@ OBJ_PROXIMITY_STATUS __adpd_checkObjProximity(unsigned *dataInA, unsigned *dataI
 			adpd_data->cur_proximity_red_dc_level >>= 3;
 		}
 
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-		if (dataInMax >= (maxPulseCodeBCh1 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#elif defined(__USE_PD234__)
-		if (dataInMax >= (maxPulseCodeBCh2 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#elif defined(__USE_PD34__)
-		if (dataInMax >= (maxPulseCodeBCh3 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#elif defined(__USE_PD4__)
-		if (dataInMax >= (maxPulseCodeBCh4 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#endif
-#if defined(__USE_PD1234__) || defined(__USE_PD234__) || defined(__USE_PD34__) || defined(__USE_PD123__) || defined(__USE_PD4__)
-		{
+		if (dataInMax >= (maxPulseCodeBCh[dataInMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB
+			|| (dataInMax >= MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_B + AGC_STOP_MARGIN_PERCENTAGE_B) / 100)) {
 			adpd_data->cnt_slotB_dc_saturation = (adpd_data->cnt_slotB_dc_saturation > 100) ? 100 : adpd_data->cnt_slotB_dc_saturation + 1;
+
 			if (adpd_data->cnt_slotB_dc_saturation > CNT_THRESHOLD_DC_SATURATION) {
-				HRM_info("%s - Slot B saturation!!! (ChB %u >= %u )\n", __func__,
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-				dataInMax, (maxPulseCodeBCh1 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#elif defined(__USE_PD234__)
-				dataInMax, (maxPulseCodeBCh2 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#elif defined(__USE_PD34__)
-				dataInMax, (maxPulseCodeBCh3 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#elif defined(__USE_PD4__)
-				dataInMax, (maxPulseCodeBCh4 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#endif
+				HRM_info("%s - Slot B saturation!!! (ChB %u >= %u or %u)\n", __func__,
+					dataInMax, (maxPulseCodeBCh[dataInMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB,
+					MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_B + AGC_STOP_MARGIN_PERCENTAGE_B) / 100);
+
 				__adpd_ClearSaturation(1);
-#ifdef __USE_LOWPASS_FIR_FILTER__
-				__adpd_initLPF();
-#endif
-#ifdef __USE_TIME_DOMAIN_SNR__
-				__adpd_initSnrAtTD();
-#endif
 			}
-			//break;
 		} else
 			adpd_data->cnt_slotB_dc_saturation = (adpd_data->cnt_slotB_dc_saturation > 0) ? adpd_data->cnt_slotB_dc_saturation - 1 : 0;
-#endif
 
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-			if (dataInAMax >= (maxPulseCodeACh1 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#elif defined(__USE_PD234__)
-			if (dataInAMax >= (maxPulseCodeACh2 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#elif defined(__USE_PD34__)
-			if (dataInAMax >= (maxPulseCodeACh3 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#elif defined(__USE_PD4__)
-			if (dataInAMax >= (maxPulseCodeACh4 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#endif
-#if defined(__USE_PD1234__) || defined(__USE_PD234__) || defined(__USE_PD34__) || defined(__USE_PD123__) || defined(__USE_PD4__)
-			{
-				adpd_data->cnt_slotA_dc_saturation = (adpd_data->cnt_slotA_dc_saturation > 100) ? 100 : adpd_data->cnt_slotA_dc_saturation + 1;
-				if (adpd_data->cnt_slotA_dc_saturation > CNT_THRESHOLD_DC_SATURATION) {
-					HRM_info("%s - Slot A saturation!!! (ChA %u >= %u )\n", __func__,
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-						dataInAMax, (maxPulseCodeACh1 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#elif defined(__USE_PD234__)
-						dataInAMax, (maxPulseCodeACh2 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#elif defined(__USE_PD34__)
-						dataInAMax, (maxPulseCodeACh3 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#elif defined(__USE_PD4__)
-						dataInAMax, (maxPulseCodeACh4 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#endif
-					__adpd_ClearSaturation(0);
-#ifdef __USE_LOWPASS_FIR_FILTER__
-					__adpd_initLPF();
-#endif
-#ifdef __USE_TIME_DOMAIN_SNR__
-					__adpd_initSnrAtTD();
-#endif
-				}
-				//break;
+		if (dataInAMax >= (maxPulseCodeACh[dataInAMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA
+			|| (dataInAMax >= MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_A + AGC_STOP_MARGIN_PERCENTAGE_A) / 100)) {
+			adpd_data->cnt_slotA_dc_saturation = (adpd_data->cnt_slotA_dc_saturation > 100) ? 100 : adpd_data->cnt_slotA_dc_saturation + 1;
+
+			if (adpd_data->cnt_slotA_dc_saturation > CNT_THRESHOLD_DC_SATURATION) {
+				HRM_info("%s - Slot A saturation!!! (ChA %u >= %u or %u )\n", __func__,
+					dataInAMax, (maxPulseCodeACh[dataInAMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA,
+					MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_A + AGC_STOP_MARGIN_PERCENTAGE_A) / 100);
+
+				__adpd_ClearSaturation(0);
 			}
-		else
+		} else
 			adpd_data->cnt_slotA_dc_saturation = (adpd_data->cnt_slotA_dc_saturation > 0) ? adpd_data->cnt_slotA_dc_saturation - 1 : 0;
-#endif
+
 		break;
 
 	case OBJ_HARD_PRESSURE:
@@ -2577,7 +2136,7 @@ static int __adpd_osc_trim_efs_register_open(struct adpd_device_data *adpd_data)
 	struct file *osc_filp = NULL;
 	char buffer[60] = {0, };
 	int err = 0;
-	int osc_trim_32k;
+	int osc_trim_32k = 0;
 	mm_segment_t old_fs;
 
 	old_fs = get_fs();
@@ -2592,21 +2151,29 @@ static int __adpd_osc_trim_efs_register_open(struct adpd_device_data *adpd_data)
 		} else {
 			HRM_dbg("%s - No such file or directory, err = %d\n", __func__, err);
 		}
+
 		set_fs(old_fs);
 		return err;
 	}
 
-	err = osc_filp->f_op->read(osc_filp,
-		(char *)buffer,
-		60 * sizeof(char), &osc_filp->f_pos);
+	err = vfs_read(osc_filp, (char *)buffer, 60 * sizeof(char), &osc_filp->f_pos);
 	if (err != (60 * sizeof(char))) {
 		HRM_dbg("%s - Can't read the oscillator trim data from file\n", __func__);
+
+		filp_close(osc_filp, current->files);
+		set_fs(old_fs);
+
+		return -EIO;
+	}
+	sscanf(buffer, "%9d", &osc_trim_32k);
+	HRM_dbg("%s - osc_trim_32k = 0x%04x\n", __func__, osc_trim_32k);
+
+	if ((osc_trim_32k & 0xFFC0) == OSC_TRIM_BIT_MASK)
+		adpd_data->oscRegValue = osc_trim_32k;
+	else {
+		HRM_dbg("%s - oscillator trim data error, please remove hrm_osc_trim file in efs\n", __func__);
 		err = -EIO;
 	}
-	sscanf(buffer, "%d", &osc_trim_32k);
-	HRM_info("%s - osc_trim_32k = 0x%04x\n", __func__, osc_trim_32k);
-
-	adpd_data->oscRegValue = osc_trim_32k;
 
 	filp_close(osc_filp, current->files);
 	set_fs(old_fs);
@@ -2619,7 +2186,7 @@ static int __adpd_osc_trim_efs_register_save(struct adpd_device_data *adpd_data)
 	struct file *osc_filp = NULL;
 	mm_segment_t old_fs;
 	char buffer[60] = {0, };
-	int osc_trim_32k;
+	int osc_trim_32k = 0;
 	int err = 0;
 
 	old_fs = get_fs();
@@ -2637,13 +2204,11 @@ static int __adpd_osc_trim_efs_register_save(struct adpd_device_data *adpd_data)
 	osc_trim_32k = __adpd_reg_read(adpd_data, OSC_TRIM_32K_REG);
 
 	sprintf(buffer, "%d", osc_trim_32k);
-	HRM_info("%s - osc_trim_32k = 0x%04x\n", __func__, osc_trim_32k);
+	HRM_dbg("%s - osc_trim_32k = 0x%04x\n", __func__, osc_trim_32k);
 
-	err = osc_filp->f_op->write(osc_filp,
-		(char *)&buffer,
-		60 * sizeof(char), &osc_filp->f_pos);
+	err = vfs_write(osc_filp, (char *)&buffer, 60 * sizeof(char), &osc_filp->f_pos);
 	if (err != (60 * sizeof(char))) {
-		HRM_dbg("%s - Can't write the oscillator trim data to file\n",	__func__);
+		HRM_dbg("%s - Can't write the oscillator trim data to file\n", __func__);
 		err = -EIO;
 	}
 	adpd_data->oscRegValue = osc_trim_32k;
@@ -2654,15 +2219,35 @@ static int __adpd_osc_trim_efs_register_save(struct adpd_device_data *adpd_data)
 	return err;
 }
 
-static void __adpd_clr_intr_fifo(struct adpd_device_data *adpd_data)
+static int __adpd_write_osc_trim_efs_register(struct adpd_device_data *adpd_data)
 {
-	__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, 0x80FF);
+	int osc_trim_err = 0;
+
+	if (__adpd_osc_trim_efs_register_save(adpd_data) < 0) {
+		HRM_dbg("%s - fail to osc_trim_efs_save. try to save one more\n", __func__);
+		osc_trim_err = -1;
+	} else if (__adpd_osc_trim_efs_register_open(adpd_data) < 0) {
+		HRM_dbg("%s - fail to osc_trim_efs_open. try to save one more\n", __func__);
+		osc_trim_err = -1;
+	}
+
+	if (osc_trim_err < 0) {
+		if (__adpd_osc_trim_efs_register_save(adpd_data) < 0) {
+			HRM_dbg("%s - twice fail to osc_trim_efs_save\n ", __func__);
+		} else if (__adpd_osc_trim_efs_register_open(adpd_data) < 0) {
+			HRM_dbg("%s - twice fail to osc_trim_efs_open\n", __func__);
+		} else {
+			HRM_dbg("%s - success to write osc_trim_efs file\n", __func__);
+			osc_trim_err = 0;
+		}
+	}
+
+	return osc_trim_err;
 }
 
 static void __adpd_clr_intr_status(struct adpd_device_data *adpd_data, unsigned short mode)
 {
-	__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR,
-		  adpd_data->intr_status_val);
+	__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, adpd_data->intr_status_val);
 }
 
 static unsigned short __adpd_rd_intr_fifo(struct adpd_device_data *adpd_data)
@@ -2670,6 +2255,7 @@ static unsigned short __adpd_rd_intr_fifo(struct adpd_device_data *adpd_data)
 	unsigned short regval = 0;
 	unsigned short fifo_size = 0;
 	unsigned short usr_mode = 0;
+
 	regval = __adpd_reg_read(adpd_data, ADPD_INT_STATUS_ADDR);
 	if (GET_USR_MODE(atomic_read(&adpd_data->adpd_mode)) != TIA_ADC_USR) {
 		fifo_size = ((regval & 0xFF00) >> 8);
@@ -2687,7 +2273,7 @@ static unsigned short __adpd_rd_intr_fifo(struct adpd_device_data *adpd_data)
 
 		usr_mode = atomic_read(&adpd_data->adpd_mode);
 
-		if (0 != usr_mode) {
+		if (usr_mode != 0) {
 			unsigned int mask = 0;
 			unsigned int mod = 0;
 
@@ -2711,102 +2297,56 @@ static unsigned short __adpd_rd_intr_fifo(struct adpd_device_data *adpd_data)
 
 	adpd_data->intr_status_val = regval;
 
-	HRM_info("%s - FIFO_SIZE=%d\n", __func__,
-		adpd_data->fifo_size);
+	HRM_info("%s - FIFO_SIZE=%d\n", __func__, adpd_data->fifo_size);
 
 	return adpd_data->intr_status_val;
 }
-
-#ifdef __USE_ADPD_32BIT_FIFO__
-static unsigned short __adpd_rd_intr_fifo32(struct adpd_device_data *adpd_data)
-{
-	unsigned short regval = 0;
-	unsigned short fifo_size = 0;
-	unsigned short usr_mode = 0;
-	regval = __adpd_reg_read(adpd_data, ADPD_INT_STATUS_ADDR);
-	fifo_size = ((regval & 0xFF00) >> 8);
-	adpd_data->fifo_size = ((fifo_size >> 2) + (fifo_size & 3));
-	adpd_data->intr_status_val = (regval & 0xFF);
-
-	usr_mode = atomic_read(&adpd_data->adpd_mode);
-	if (0 != usr_mode) {
-		unsigned int mask = 0;
-		unsigned int mod = 0;
-
-		switch (GET_USR_SUB_MODE(usr_mode)) {
-		case S_SAMP_XY_AB:
-			mask = 0x07;
-			break;
-		default:
-			mask = 0x03;
-			break;
-		};
-
-		mod = adpd_data->fifo_size & mask;
-		if (mod) {
-			adpd_data->fifo_size &= ~mask;
-			atomic_inc(&adpd_data->stats.fifo_requires_sync);
-		}
-	}
-
-	return adpd_data->intr_status_val;
-}
-#endif
 
 static unsigned int __adpd_rd_fifo_data(struct adpd_device_data *adpd_data)
 {
 	unsigned short for_p2p_clkfifo = 0;
+	unsigned short i, div;
+	unsigned short usr_mode = 0;
+	unsigned short sub_mode = 0;
+
+	usr_mode = atomic_read(&adpd_data->adpd_mode);
+	sub_mode = GET_USR_SUB_MODE(usr_mode);
 
 	if (!adpd_data->fifo_size)
 		goto err_rd_fifo_data;
 
-	if (0 != atomic_read(&adpd_data->adpd_mode) && adpd_data->fifo_size & 0x3) {
-		HRM_dbg("%s - unexpected FIFO_SIZE=%d, should be multiple of four (channels)!\n", __func__,
-			adpd_data->fifo_size);
+	if (atomic_read(&adpd_data->adpd_mode) != 0 && adpd_data->fifo_size & 0x3)
+		HRM_info("%s - unexpected FIFO_SIZE=%d, should be multiple of four (channels)!\n", __func__, adpd_data->fifo_size);
+
+	if (sub_mode == S_SAMP_XY_A || sub_mode == S_SAMP_XY_B) {
+		adpd_data->fifo_size = adpd_data->fifo_size / 4 * 4;
+		div = 4;
+	} else {
+		adpd_data->fifo_size = adpd_data->fifo_size / 8 * 8;
+		div = 8;
 	}
 
 	for_p2p_clkfifo = __adpd_reg_read(adpd_data, ADPD_ACCESS_CTRL_ADDR);
 	__adpd_reg_write(adpd_data, ADPD_ACCESS_CTRL_ADDR, for_p2p_clkfifo|1);
 	__adpd_reg_write(adpd_data, ADPD_ACCESS_CTRL_ADDR, for_p2p_clkfifo|1);
 
-	__adpd_multi_reg_read(adpd_data, ADPD_DATA_BUFFER_ADDR,
-		adpd_data->fifo_size, adpd_data->ptr_data_buffer);
-
-	return adpd_data->fifo_size;
-
-err_rd_fifo_data:
-	return 0;
-}
-
-#ifdef __USE_ADPD_32BIT_FIFO__
-static unsigned int __adpd_rd_fifo32_data(struct adpd_device_data *adpd_data)
-{
-	unsigned short for_p2p_clkfifo = 0;
-
-	if (!adpd_data->fifo_size)
-		goto err_rd_fifo_data;
-
-	if (0 != atomic_read(&adpd_data->adpd_mode) &&
-		adpd_data->fifo_size & 0x3) {
-			HRM_dbg("%s - unexpected FIFO_SIZE=%d, should be multiple of four (channels)!\n", __func__,
-			adpd_data->fifo_size);
+	for (i = 0; i < adpd_data->fifo_size / div; i++) {
+		if (__adpd_multi_reg_read(adpd_data, ADPD_DATA_BUFFER_ADDR,	div, adpd_data->ptr_data_buffer + div * i)) {
+			__adpd_ClearFifo();
+			return 0;
+		}
 	}
 
-	for_p2p_clkfifo = __adpd_reg_read(adpd_data, ADPD_ACCESS_CTRL_ADDR);
-	__adpd_reg_write(adpd_data, ADPD_ACCESS_CTRL_ADDR, for_p2p_clkfifo|1);
-	__adpd_reg_write(adpd_data, ADPD_ACCESS_CTRL_ADDR, for_p2p_clkfifo|1);
-	__adpd_multi_reg_read(adpd_data, ADPD_DATA_BUFFER_ADDR,
-		adpd_data->fifo_size, adpd_data->ptr_data_buffer);
-
 	return adpd_data->fifo_size;
+
 err_rd_fifo_data:
 	return 0;
 }
-#endif
 
 static void __adpd_config_prerequisite(struct adpd_device_data *adpd_data, u32 global_mode)
 {
 	unsigned short regval = 0;
+
 	regval = __adpd_reg_read(adpd_data, ADPD_OP_MODE_ADDR);
 	regval = SET_GLOBAL_OP_MODE(regval, global_mode);
 
@@ -2831,10 +2371,8 @@ static int __adpd_configuration(struct adpd_device_data *adpd_data, unsigned cha
 		return -EINVAL;
 
 	for (cnt = 0; cnt < ptr_config->config_size; cnt++) {
-		addr = (unsigned short) ((0xFFFF0000 &
-					  ptr_config->config_data[cnt]) >> 16);
-		data = (unsigned short) (0x0000FFFF &
-					 ptr_config->config_data[cnt]);
+		addr = (unsigned short) ((0xFFFF0000 & ptr_config->config_data[cnt]) >> 16);
+		data = (unsigned short) (0x0000FFFF & ptr_config->config_data[cnt]);
 
 		__adpd_reg_write(adpd_data, addr, data);
 	}
@@ -2842,7 +2380,7 @@ static int __adpd_configuration(struct adpd_device_data *adpd_data, unsigned cha
 	if (adpd_data->oscRegValue || __adpd_osc_trim_efs_register_open(adpd_data) >= 0)
 		__adpd_reg_write(adpd_data, ADPD_OSC32K_ADDR, adpd_data->oscRegValue);
 
-	HRM_info("%s - oscRegValue : 0x%04x\n",	__func__, adpd_data->oscRegValue);
+	HRM_info("%s - oscRegValue : 0x%04x\n", __func__, adpd_data->oscRegValue);
 
 	return ret;
 }
@@ -2858,6 +2396,7 @@ static void __adpd_mode_switching(struct adpd_device_data *adpd_data, u32 usr_mo
 	unsigned short sub_mode = GET_USR_SUB_MODE(usr_mode);
 
 	u32 prev_mode = atomic_read(&adpd_data->adpd_mode);
+
 	if (prev_mode == usr_mode) {
 		HRM_dbg("%s - skip usr_mode = 0x%x prev_mode = 0x%x\n", __func__, usr_mode, prev_mode);
 		return;
@@ -2866,7 +2405,6 @@ static void __adpd_mode_switching(struct adpd_device_data *adpd_data, u32 usr_mo
 	HRM_info("%s - usr_mode = 0x%x\n", __func__, usr_mode);
 
 	atomic_set(&adpd_data->adpd_mode, 0);
-	mutex_lock(&adpd_data->mutex);
 
 	/*Depending upon the mode get the value need to write Operatin mode*/
 	opmode_val = *(__mode_recv_frm_usr[main_mode].mode_code + (sub_mode));
@@ -2882,7 +2420,7 @@ static void __adpd_mode_switching(struct adpd_device_data *adpd_data, u32 usr_mo
 	__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, intr_mask_val);
 
 	/*clear FIFO and flush buffer */
-	__adpd_clr_intr_fifo(adpd_data);
+	__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, 0x80FF);
 	__adpd_rd_intr_fifo(adpd_data);
 	if (adpd_data->fifo_size != 0) {
 		__adpd_clr_intr_status(adpd_data, IDLE_USR);
@@ -2898,58 +2436,49 @@ static void __adpd_mode_switching(struct adpd_device_data *adpd_data, u32 usr_mo
 	case IDLE_USR:
 		HRM_dbg("%s - IDLE MODE\n", __func__);
 		intr_mask_val = SET_INTR_MASK(IDLE_USR);
-		fifo_is_32bit = 0;
 		break;
 
 	case SAMPLE_USR:
 		HRM_dbg("%s - SAMPLE MODE\n", __func__);
+
+		__adpd_configuration(adpd_data, SAMPLE_USR);
+
 		/*enable interrupt only when data written to FIFO */
 		switch (sub_mode) {
 		case S_SAMP_XY_A:
 			intr_mask_val = SET_INTR_MASK(S_SAMP_XY_A_USR);
-			if (!adpd_data->Is_Hrm_Dark_Calibrated) {
-				adpd_data->st_obj_proximity = OBJ_DARKOFFSET_CAL;
-				adpd_data->eol_state = ST_EOL_IDLE;
-			} else {
-				adpd_data->st_obj_proximity = OBJ_DARKOFFSET_CAL;
-				adpd_data->eol_state = ST_EOL_CLOCK_CAL_DONE;
-			}
+			adpd_data->st_obj_proximity = OBJ_DARKOFFSET_CAL;
+			if (!adpd_data->Is_Hrm_Dark_Calibrated)
+				adpd_data->dark_cal_state = ST_DARK_CAL_IDLE;
+			else
+				adpd_data->dark_cal_state = ST_DARK_CAL_DONE;
 
-
-			__adpd_initAGC(POWER_PREF, AGC_Slot_A);
-
-			fifo_is_32bit = 0;
+			if (agc_is_enabled)
+				__adpd_initAGC(POWER_PREF, AGC_Slot_A);
 			break;
 
 		case S_SAMP_XY_AB:
 			intr_mask_val = SET_INTR_MASK(S_SAMP_XY_AB_USR);
-			if (!adpd_data->Is_Hrm_Dark_Calibrated) {
-				adpd_data->st_obj_proximity = OBJ_DARKOFFSET_CAL;
-				adpd_data->eol_state = ST_EOL_IDLE;
-			} else {
-				adpd_data->st_obj_proximity = OBJ_DARKOFFSET_CAL;
-				adpd_data->eol_state = ST_EOL_CLOCK_CAL_DONE;
-			}
+			adpd_data->st_obj_proximity = OBJ_DARKOFFSET_CAL;
+			if (!adpd_data->Is_Hrm_Dark_Calibrated)
+				adpd_data->dark_cal_state = ST_DARK_CAL_IDLE;
+			else
+				adpd_data->dark_cal_state = ST_DARK_CAL_DONE;
 
-			__adpd_initAGC(POWER_PREF, AGC_Slot_A | AGC_Slot_B);
-
-			fifo_is_32bit = 0;
+			if (agc_is_enabled)
+				__adpd_initAGC(POWER_PREF, AGC_Slot_A | AGC_Slot_B);
 			break;
 
 		case S_SAMP_XY_B:
 			intr_mask_val = SET_INTR_MASK(S_SAMP_XY_B_USR);
-			if (!adpd_data->Is_Hrm_Dark_Calibrated) {
-				adpd_data->st_obj_proximity = OBJ_DARKOFFSET_CAL;
-				adpd_data->eol_state = ST_EOL_IDLE;
-			} else {
-				adpd_data->st_obj_proximity = OBJ_DARKOFFSET_CAL;
-				adpd_data->eol_state = ST_EOL_CLOCK_CAL_DONE;
-			}
+			adpd_data->st_obj_proximity = OBJ_DARKOFFSET_CAL;
+			if (!adpd_data->Is_Hrm_Dark_Calibrated)
+				adpd_data->dark_cal_state = ST_DARK_CAL_IDLE;
+			else
+				adpd_data->dark_cal_state = ST_DARK_CAL_DONE;
 
-
-			__adpd_initAGC(POWER_PREF, AGC_Slot_B);
-
-			fifo_is_32bit = 0;
+			if (agc_is_enabled)
+				__adpd_initAGC(POWER_PREF, AGC_Slot_B);
 			break;
 
 		default:
@@ -2958,9 +2487,6 @@ static void __adpd_mode_switching(struct adpd_device_data *adpd_data, u32 usr_mo
 		};
 
 		intr_mask_val |= 0xC000;
-
-		__adpd_configuration(adpd_data, SAMPLE_USR);
-
 		break;
 
 	case TIA_ADC_USR:
@@ -2977,7 +2503,6 @@ static void __adpd_mode_switching(struct adpd_device_data *adpd_data, u32 usr_mo
 
 		intr_mask_val |= 0xC000;
 
-		fifo_is_32bit = 0;
 		HRM_dbg("%s - TIA_ADC_configuration\n", __func__);
 		__adpd_configuration(adpd_data, TIA_ADC_USR);
 		break;
@@ -3006,7 +2531,6 @@ static void __adpd_mode_switching(struct adpd_device_data *adpd_data, u32 usr_mo
 		};
 		intr_mask_val |= 0xC000;
 
-		fifo_is_32bit = 0;
 		HRM_dbg("%s - EOL_configuration\n", __func__);
 		__adpd_configuration(adpd_data, SAMPLE_USR);
 		break;
@@ -3017,28 +2541,21 @@ static void __adpd_mode_switching(struct adpd_device_data *adpd_data, u32 usr_mo
 		break;
 	};
 
-	HRM_info("%s - INT_MASK_ADDR[0x%04x] = 0x%04x\n", __func__,
-		ADPD_INT_MASK_ADDR, intr_mask_val);
+	HRM_info("%s - INT_MASK_ADDR[0x%04x] = 0x%04x\n", __func__, ADPD_INT_MASK_ADDR, intr_mask_val);
 	adpd_data->intr_mask_val = intr_mask_val;
 
-	/*Fetch Default opmode configuration other than OP mode
-	   and DATA_OUT mode */
+	/* Fetch Default opmode configuration other than OP mode and DATA_OUT mode */
 	mode_val = DEFAULT_OP_MODE_CFG_VAL(adpd_data);
-	/*Get Mode value from the opmode value,
-	to hardocde the macro, change SET_MODE_VALUE macro and concern
-	mode macro
-	*/
+	/* Get Mode value from the opmode value, to hardocde the macro,
+	change SET_MODE_VALUE macro and concern mode macro */
 	mode_val += opmode_val;
 
-	HRM_info("%s - OP_MODE_CFG[0x%04x] = 0x%04x\n", __func__,
-		ADPD_OP_MODE_CFG_ADDR, mode_val);
+	HRM_info("%s - OP_MODE_CFG[0x%04x] = 0x%04x\n", __func__, ADPD_OP_MODE_CFG_ADDR, mode_val);
 
 	atomic_set(&adpd_data->adpd_mode, usr_mode);
 
 	__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, adpd_data->intr_mask_val);
 	__adpd_reg_write(adpd_data, ADPD_OP_MODE_CFG_ADDR, mode_val);
-
-	mutex_unlock(&adpd_data->mutex);
 
 	if (main_mode != IDLE_USR)
 		__adpd_config_prerequisite(adpd_data, GLOBAL_OP_MODE_GO);
@@ -3069,28 +2586,26 @@ unsigned short __adpd_32khzTrim(void)
 	oscRegValue &= 0xFFC0;
 	oscRegValue |= oscTrimValue;
 
-	HRM_info("%s - oscRegValue : 0x%04x, error : %d\n",
-				__func__, oscRegValue, error);
+	HRM_info("%s - oscRegValue : 0x%04x, error : %d\n", __func__, oscRegValue, error);
 
 	__adpd_reg_write(adpd_data, ADPD_OSC32K_ADDR, oscRegValue);
 	return oscRegValue; /* Joshua, for saving Clock Calibration result */
 }
 
-static EOL_state __adpd_dark_offset_calibration(unsigned *dataInA, unsigned *dataInB)
+static t_dark_cal_state __adpd_dark_offset_calibration(unsigned *dataInA, unsigned *dataInB)
 {
 	/*adpd_data->mutex is necessary for clock cal. */
 	unsigned short i = 0;
 
-	if (adpd_data->eol_state == ST_EOL_IDLE) {
-		adpd_data->eol_state = ST_EOL_CLOCK_CAL_INIT;
+	if (adpd_data->dark_cal_state == ST_DARK_CAL_IDLE) {
+		adpd_data->dark_cal_state = ST_DARK_CAL_INIT;
+		dark_cal_bef_pulseA = __adpd_reg_read(adpd_data, ADPD_PULSE_PERIOD_A_ADDR);
+		dark_cal_bef_pulseB = __adpd_reg_read(adpd_data, ADPD_PULSE_PERIOD_B_ADDR);
 
 		for (i = 0; i < 8; i++)
 			g_eol_ADCOffset[i] = 0;
 
-		for (i = 0; i < 32; i++)
-			g_org_regValues[i] = __adpd_reg_read(adpd_data, g_eol_regNumbers[i]);
-
-		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x1);
+		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
 		__adpd_reg_write(adpd_data, ADPD_SAMPLING_FREQ_ADDR, 8000 / EOL_ODR_TARGET);
 		__adpd_reg_write(adpd_data, ADPD_DEC_MODE_ADDR, 0x0);
 
@@ -3116,16 +2631,16 @@ static EOL_state __adpd_dark_offset_calibration(unsigned *dataInA, unsigned *dat
 			__adpd_reg_write(adpd_data, ADPD_CH4_OFFSET_B_ADDR, 0);
 		}
 
-		adpd_data->eol_counter = 0;
-		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x2);
-	} else if (adpd_data->eol_state == ST_EOL_CLOCK_CAL_INIT) {
-		if (adpd_data->eol_counter++ > 20) {
-			adpd_data->eol_state = ST_EOL_CLOCK_CAL_RUNNING;
-			adpd_data->eol_counter = 0;
+		adpd_data->dark_cal_counter = 0;
+		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
+	} else if (adpd_data->dark_cal_state == ST_DARK_CAL_INIT) {
+		if (adpd_data->dark_cal_counter++ > 20) {
+			adpd_data->dark_cal_state = ST_DARK_CAL_RUNNING;
+			adpd_data->dark_cal_counter = 0;
 		}
-	} else if (adpd_data->eol_state == ST_EOL_CLOCK_CAL_RUNNING) {
-		adpd_data->eol_counter++;
-		if (adpd_data->eol_counter <= 16) {
+	} else if (adpd_data->dark_cal_state == ST_DARK_CAL_RUNNING) {
+		adpd_data->dark_cal_counter++;
+		if (adpd_data->dark_cal_counter <= 16) {
 			for (i = 0; i < 4; i++) {
 				if (dataInA)
 					g_eol_ADCOffset[i] += dataInA[i];
@@ -3133,16 +2648,29 @@ static EOL_state __adpd_dark_offset_calibration(unsigned *dataInA, unsigned *dat
 				if (dataInB)
 					g_eol_ADCOffset[i+4] += dataInB[i];
 			}
-		} else if (adpd_data->eol_counter == 17) {
+		} else if (adpd_data->dark_cal_counter == 17) {
 			for (i = 0; i < 8; i++) {
 				g_eol_ADCOffset[i] >>= 4;
 				HRM_info("%s - g_eol_ADCOffset[i] : 0x%04x\n", __func__, g_eol_ADCOffset[i]);
-				adpd_data->eol_state = ST_EOL_CLOCK_CAL_DONE;
 			}
+			adpd_data->dark_cal_state = ST_DARK_CAL_DONE;
+			__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
+			__adpd_reg_write(adpd_data, ADPD_SAMPLING_FREQ_ADDR, 0xa);
+			__adpd_reg_write(adpd_data, ADPD_DEC_MODE_ADDR, sumA << 4 | sumB << 8);
+			if (adpd_data->agc_mode == M_HRMLED_RED)
+				__adpd_reg_write(adpd_data, ADPD_LED_DISABLE_ADDR, 0x200);
+			else if (adpd_data->agc_mode == M_HRMLED_IR || adpd_data->hrm_mode == MODE_PROX)
+				__adpd_reg_write(adpd_data, ADPD_LED_DISABLE_ADDR, 0x100);
+			else if (adpd_data->agc_mode == M_HRMLED_BOTH)
+				__adpd_reg_write(adpd_data, ADPD_LED_DISABLE_ADDR, 0x0);
+
+			__adpd_reg_write(adpd_data, ADPD_PULSE_PERIOD_A_ADDR, dark_cal_bef_pulseA);
+			__adpd_reg_write(adpd_data, ADPD_PULSE_PERIOD_B_ADDR, dark_cal_bef_pulseB);
+			__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 		}
 	}
 
-	return adpd_data->eol_state;
+	return adpd_data->dark_cal_state;
 }
 static EOL_state __adpd_step_EOL_clock_calibration(unsigned *dataInA, unsigned *dataInB)
 {
@@ -3152,8 +2680,10 @@ static EOL_state __adpd_step_EOL_clock_calibration(unsigned *dataInA, unsigned *
 	if (adpd_data->eol_state == ST_EOL_IDLE) {
 		adpd_data->eol_state = ST_EOL_CLOCK_CAL_INIT;
 
-		for (i = 0; i < 8; i++)
-			g_eol_ADCOffset[i] = 0;
+		if (!adpd_data->Is_Hrm_Dark_Calibrated) {
+			for (i = 0; i < 8; i++)
+				g_eol_ADCOffset[i] = 0;
+		}
 
 		for (i = 0; i < 32; i++)
 			g_org_regValues[i] = __adpd_reg_read(adpd_data, g_eol_regNumbers[i]);
@@ -3200,37 +2730,29 @@ static EOL_state __adpd_step_EOL_clock_calibration(unsigned *dataInA, unsigned *
 	} else if (adpd_data->eol_state == ST_EOL_CLOCK_CAL_RUNNING) {
 		adpd_data->eol_counter++;
 
-#ifndef __USE_EOL_US_INT_SPACE__
-		adpd_data->eol_measured_period += adpd_data->msec_eol_int_space;
-		HRM_info("%s - eol_counter : %d, msec_eol_int_space : %dms, eol_measured_period : %ldms, adpd_data->eol_res_odr : %dhz\n",
-					__func__, adpd_data->eol_counter, adpd_data->msec_eol_int_space, adpd_data->eol_measured_period, adpd_data->eol_res_odr);
-#else
 		adpd_data->eol_measured_period += adpd_data->usec_eol_int_space;
 		HRM_info("%s - eol_counter : %d, usec_eol_int_space : %dus, eol_measured_period : %ldus, adpd_data->eol_res_odr : %dhz\n",
 					__func__, adpd_data->eol_counter, adpd_data->usec_eol_int_space, adpd_data->eol_measured_period, adpd_data->eol_res_odr);
-#endif
-		if (adpd_data->eol_counter <= 16) {
-			for (i = 0; i < 4; i++) {
-				if (dataInA)
-					g_eol_ADCOffset[i] += dataInA[i];
 
-				if (dataInB)
-					g_eol_ADCOffset[i+4] += dataInB[i];
-			}
-		} else if (adpd_data->eol_counter == 17) {
-			for (i = 0; i < 8; i++)	{
-			  g_eol_ADCOffset[i] >>= 4;
+		if (!adpd_data->Is_Hrm_Dark_Calibrated) {
+			if (adpd_data->eol_counter <= 16) {
+				for (i = 0; i < 4; i++) {
+					if (dataInA)
+						g_eol_ADCOffset[i] += dataInA[i];
 
-			  HRM_info("%s - g_eol_ADCOffset[i] : 0x%04x\n", __func__, g_eol_ADCOffset[i]);
+					if (dataInB)
+						g_eol_ADCOffset[i+4] += dataInB[i];
+				}
+			} else if (adpd_data->eol_counter == 17) {
+				for (i = 0; i < 8; i++)	{
+					g_eol_ADCOffset[i] >>= 4;
+
+					HRM_info("%s - g_eol_ADCOffset[i] : 0x%04x\n", __func__, g_eol_ADCOffset[i]);
+				}
 			}
 		}
-#ifndef __USE_EOL_US_INT_SPACE__
-		if (adpd_data->eol_measured_period >= 498) {
-			adpd_data->eol_res_odr = (adpd_data->eol_counter * 1000 / adpd_data->eol_measured_period);
-#else
 		if (adpd_data->eol_measured_period >= 498000) {
 			adpd_data->eol_res_odr = (adpd_data->eol_counter * 1000*1000 / adpd_data->eol_measured_period);
-#endif
 
 			if ((adpd_data->eol_res_odr - EOL_ODR_TARGET) > EOL_ALLOWABLE_ODR_ERROR || (EOL_ODR_TARGET - adpd_data->eol_res_odr) > EOL_ALLOWABLE_ODR_ERROR) {
 				__adpd_32khzTrim();
@@ -3251,26 +2773,26 @@ static EOL_state __adpd_step_EOL_clock_calibration(unsigned *dataInA, unsigned *
 static EOL_state __adpd_step_EOL_low_DC(unsigned *dataInA, unsigned *dataInB)
 {
 	unsigned short i = 0;
+	unsigned short set_current = 1;
 
 	if (adpd_data->eol_state == ST_EOL_CLOCK_CAL_DONE) {
-
 		adpd_data->eol_state = ST_EOL_LOW_DC_INIT;
-		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
 
-		__adpd_reg_write(adpd_data, ADPD_SAMPLING_FREQ_ADDR, 8000 / (EOL_ODR_TARGET<<3));
+		if (dataInA && dataInB)
+			__adpd_set_current(set_current, set_current, 0, 0);
+		else if (dataInA)
+			__adpd_set_current(0, set_current, 0, 0);
+		else if (dataInB)
+			__adpd_set_current(set_current, 0, 0, 0);
+
+		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
+		__adpd_reg_write(adpd_data, ADPD_SAMPLING_FREQ_ADDR, 8000 / ((EOL_ODR_TARGET / 2) << 3));
 		__adpd_reg_write(adpd_data, ADPD_DEC_MODE_ADDR, 0x333);
 
 		if (dataInA)
 			__adpd_reg_write(adpd_data, ADPD_PULSE_PERIOD_A_ADDR, 0x0813);
 		if (dataInB)
 			__adpd_reg_write(adpd_data, ADPD_PULSE_PERIOD_B_ADDR, 0x0813);
-		if (dataInA)
-			__adpd_reg_write(adpd_data, ADPD_LED1_DRV_ADDR, 0x3031);
-		if (dataInB)
-			__adpd_reg_write(adpd_data, ADPD_LED2_DRV_ADDR, 0x3031);
-
-		__adpd_reg_write(adpd_data, ADPD_LED_DISABLE_ADDR, 0x0000);
-
 #ifdef __USE_EOL_ADC_OFFSET__
 		__adpd_reg_write(adpd_data, ADPD_CH1_OFFSET_A_ADDR, 0x1fff);
 		__adpd_reg_write(adpd_data, ADPD_CH2_OFFSET_A_ADDR, 0x1fff);
@@ -3360,24 +2882,25 @@ static EOL_state __adpd_step_EOL_low_DC(unsigned *dataInA, unsigned *dataInB)
 static EOL_state __adpd_step_EOL_med_DC(unsigned *dataInA, unsigned *dataInB)
 {
 	unsigned short i = 0;
+	unsigned short set_current = 4;
 
 	if (adpd_data->eol_state == ST_EOL_LOW_DC_DONE) {
 		adpd_data->eol_state = ST_EOL_MED_DC_INIT;
 
+		if (dataInA && dataInB)
+			__adpd_set_current(set_current, set_current, 0, 0);
+		else if (dataInA)
+			__adpd_set_current(0, set_current, 0, 0);
+		else if (dataInB)
+			__adpd_set_current(set_current, 0, 0, 0);
+
 		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
-
-		if (dataInA)
-			__adpd_reg_write(adpd_data, ADPD_LED1_DRV_ADDR, 0x3034);
-
-		if (dataInB)
-			__adpd_reg_write(adpd_data, ADPD_LED2_DRV_ADDR, 0x3034);
-
 		__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, 0x1ff);
 		__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, 0x80ff);
 		__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, ~(0x0040) & 0x1ff);
+		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 
 		adpd_data->eol_counter = 0;
-		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 	} else if (adpd_data->eol_state == ST_EOL_MED_DC_INIT) {
 		if (adpd_data->eol_counter++ > CNT_EOL_SKIP_SAMPLE) {
 			adpd_data->eol_state = ST_EOL_MED_DC_RUNNING;
@@ -3430,24 +2953,25 @@ static EOL_state __adpd_step_EOL_med_DC(unsigned *dataInA, unsigned *dataInB)
 static EOL_state __adpd_step_EOL_high_DC(unsigned *dataInA, unsigned *dataInB)
 {
 	unsigned short i = 0;
+	unsigned short set_current = 7;
 
 	if (adpd_data->eol_state == ST_EOL_MED_DC_DONE) {
 		adpd_data->eol_state = ST_EOL_HIGH_DC_INIT;
 
+		if (dataInA && dataInB)
+			__adpd_set_current(set_current, set_current, 0, 0);
+		else if (dataInA)
+			__adpd_set_current(0, set_current, 0, 0);
+		else if (dataInB)
+			__adpd_set_current(set_current, 0, 0, 0);
+
 		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
-
-		if (dataInA)
-			__adpd_reg_write(adpd_data, ADPD_LED1_DRV_ADDR, 0x3037);
-
-		if (dataInB)
-			__adpd_reg_write(adpd_data, ADPD_LED2_DRV_ADDR, 0x3037);
-
 		__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, 0x1ff);
 		__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, 0x80ff);
 		__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, ~(0x0040) & 0x1ff);
+		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 
 		adpd_data->eol_counter = 0;
-		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 	} else if (adpd_data->eol_state == ST_EOL_HIGH_DC_INIT) {
 		if (adpd_data->eol_counter++ > CNT_EOL_SKIP_SAMPLE) {
 			adpd_data->eol_state = ST_EOL_HIGH_DC_RUNNING;
@@ -3499,23 +3023,25 @@ static EOL_state __adpd_step_EOL_high_DC(unsigned *dataInA, unsigned *dataInB)
 static EOL_state __adpd_step_EOL_AC(unsigned *dataInA, unsigned *dataInB)
 {
 	unsigned short i = 0;
+	unsigned short set_current = 5;
 
 	if (adpd_data->eol_state == ST_EOL_HIGH_DC_DONE) {
 		adpd_data->eol_state = ST_EOL_AC_INIT;
 
+		if (dataInA && dataInB)
+			__adpd_set_current(set_current, set_current, 0, 0);
+		else if (dataInA)
+			__adpd_set_current(0, set_current, 0, 0);
+		else if (dataInB)
+			__adpd_set_current(set_current, 0, 0, 0);
+
 		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
-
-		if (dataInA)
-			__adpd_reg_write(adpd_data, ADPD_LED1_DRV_ADDR, 0x3035);
-		if (dataInB)
-			__adpd_reg_write(adpd_data, ADPD_LED2_DRV_ADDR, 0x3035);
-
 		__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, 0x1ff);
 		__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, 0x80ff);
 		__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, ~(0x0040) & 0x1ff);
+		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 
 		adpd_data->eol_counter = 0;
-		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 	} else if (adpd_data->eol_state == ST_EOL_AC_INIT) {
 		if (adpd_data->eol_counter++ > CNT_EOL_SKIP_SAMPLE) {
 			adpd_data->eol_state = ST_EOL_AC_RUNNING;
@@ -3554,28 +3080,43 @@ static EOL_state __adpd_step_EOL_AC(unsigned *dataInA, unsigned *dataInB)
 
 }
 
-#ifdef MELANIN_IDX_SUPPORT
-static EOL_state __adpd_step_Melanin_DC(unsigned *dataInA, unsigned *dataInB)
+static EOL_state __adpd_step_EOL_Final(void)
 {
 	unsigned short i = 0;
 
 	if (adpd_data->eol_state == ST_EOL_MELANIN_DC_DONE) {
+		for (i = 0; i < 32; i++)
+			if ((g_eol_regNumbers[i] < 0x18 || g_eol_regNumbers[i] > 0x21) && (g_eol_regNumbers[i] != 0x4B))
+				__adpd_reg_write(adpd_data, g_eol_regNumbers[i], g_org_regValues[i]);
+		adpd_data->eol_state = ST_EOL_DONE;
+		adpd_data->eol_test_status = 1;
+	}
+
+	return adpd_data->eol_state;
+}
+
+static EOL_state __adpd_step_Melanin_DC(unsigned *dataInA, unsigned *dataInB)
+{
+	unsigned short i = 0;
+	unsigned short set_current = 7;
+
+	if (adpd_data->eol_state == ST_EOL_AC_DONE) {
 		adpd_data->eol_state = ST_EOL_MELANIN_DC_INIT;
 
+		if (dataInA && dataInB)
+			__adpd_set_current(set_current, set_current, 0, 0);
+		else if (dataInA)
+			__adpd_set_current(0, set_current, 0, 0);
+		else if (dataInB)
+			__adpd_set_current(set_current, 0, 0, 0);
+
 		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
-
-		if (dataInA)
-			__adpd_reg_write(adpd_data, ADPD_LED1_DRV_ADDR, 0x3037);//130mA
-
-		if (dataInB)
-			__adpd_reg_write(adpd_data, ADPD_LED2_DRV_ADDR, 0x3037);//130mA
-
 		__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, 0x1ff);
 		__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, 0x80ff);
 		__adpd_reg_write(adpd_data, ADPD_INT_MASK_ADDR, ~(0x0040) & 0x1ff);
+		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 
 		adpd_data->eol_counter = 0;
-		__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 	} else if (adpd_data->eol_state == ST_EOL_MELANIN_DC_INIT) {
 		if (adpd_data->eol_counter++ > CNT_EOL_SKIP_SAMPLE) {
 			adpd_data->eol_state = ST_EOL_MELANIN_DC_RUNNING;
@@ -3625,12 +3166,9 @@ static EOL_state __adpd_step_Melanin_DC(unsigned *dataInA, unsigned *dataInB)
 	return adpd_data->eol_state;
 
 }
-#endif
 
 static EOL_state __adpd_stepEOL(unsigned *dataInA, unsigned *dataInB)
 {
-	unsigned short i = 0;
-
 	switch (adpd_data->eol_state) {
 	case ST_EOL_IDLE:
 		HRM_dbg("******************EOL started*****************\n");
@@ -3642,9 +3180,11 @@ static EOL_state __adpd_stepEOL(unsigned *dataInA, unsigned *dataInB)
 		break;
 
 	case ST_EOL_CLOCK_CAL_DONE:
-		if (__adpd_osc_trim_efs_register_save(adpd_data) < 0)
-			adpd_data->oscRegValue = __adpd_reg_read(adpd_data, ADPD_OSC32K_ADDR);
 		HRM_dbg("******************Clock Calibration Finished : %dhz, 0x%04x*****************\n", adpd_data->eol_res_odr, adpd_data->oscRegValue);
+		if (__adpd_write_osc_trim_efs_register(adpd_data) < 0) {
+			adpd_data->eol_res_odr = 0;
+			HRM_dbg("******************Write osc_trim_file to efs error : %dhz*****************\n", adpd_data->eol_res_odr);
+		}
 	case ST_EOL_LOW_DC_INIT:
 		HRM_dbg("******************Low DC Statistics Init : %d*****************\n", adpd_data->eol_counter);
 	case ST_EOL_LOW_DC_RUNNING:
@@ -3682,38 +3222,23 @@ static EOL_state __adpd_stepEOL(unsigned *dataInA, unsigned *dataInB)
 		__adpd_step_EOL_AC(dataInA, dataInB);
 		break;
 
-#ifdef MELANIN_IDX_SUPPORT
 	case ST_EOL_AC_DONE:
 		HRM_dbg("****************** [AC statistics] Red AC : %d, IR AC : %d *****************\n",
 			adpd_data->eol_res_red_ac, adpd_data->eol_res_ir_ac);
-		adpd_data->eol_state = ST_EOL_MELANIN_DC_INIT;
 	case ST_EOL_MELANIN_DC_INIT:
 		HRM_dbg("******************Melanin DC Statistics Init : %d*****************\n", adpd_data->eol_counter);
 	case ST_EOL_MELANIN_DC_RUNNING:
 		HRM_dbg("******************Melanin DC Statistics Running : %d*****************\n", adpd_data->eol_counter);
 		__adpd_step_Melanin_DC(dataInA, dataInB);
 		break;
+
 	case ST_EOL_MELANIN_DC_DONE:
 		HRM_dbg("****************** [ Melanin DC ]: Red DC :%d, IR DC : %d *****************\n",
-			adpd_data->eol_res_melanin_red_dc, adpd_data->eol_res_melanin_ir_dc);
-		adpd_data->eol_state = ST_EOL_DONE;
-		adpd_data->eol_test_status = 1;
-		break;
-
-#else
-	case ST_EOL_AC_DONE:
-		HRM_dbg("****************** [AC statistics] Red AC : %d, IR AC : %d *****************\n",
-			adpd_data->eol_res_red_ac, adpd_data->eol_res_ir_ac);
-		adpd_data->eol_state = ST_EOL_DONE;
-		adpd_data->eol_test_status = 1;
-		break;
-#endif
+		adpd_data->eol_res_melanin_red_dc, adpd_data->eol_res_melanin_ir_dc);
+		__adpd_step_EOL_Final();
 
 	case ST_EOL_DONE:
 		HRM_dbg("******************EOL Completed*****************\n");
-		for (i = 0; i < 32; i++)
-			if ((g_eol_regNumbers[i] < 0x18 || g_eol_regNumbers[i] > 0x21) && (g_eol_regNumbers[i] != 0x4B))
-				__adpd_reg_write(adpd_data, g_eol_regNumbers[i], g_org_regValues[i]);
 		break;
 
 	default:
@@ -3727,6 +3252,14 @@ static EOL_state __adpd_getEOLstate(void)
 	return adpd_data->eol_state;
 }
 
+static unsigned int get_agcRawData(struct adpd_device_data *adpd_data, unsigned int ir_red, unsigned int pos)
+{
+#ifdef __USE_EOL_RAW_DATA__
+	return (unsigned int)adpd_data->ptr_data_buffer[pos];
+#else
+	return __adpd_normalized_data(adpd_data, ir_red, adpd_data->ptr_data_buffer[pos]);
+#endif
+}
 static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 {
 	unsigned short usr_mode = 0;
@@ -3739,6 +3272,7 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 
 	unsigned uAgcRawDataA[4] = {0,};
 	unsigned uAgcRawDataB[4] = {0,};
+	unsigned char uAgcRawDataAMax_idx, uAgcRawDataBMax_idx;
 
 	unsigned int sum_slot_a = 0;
 	unsigned int sum_slot_b = 0;
@@ -3754,7 +3288,7 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 	switch (sub_mode) {
 	case S_SAMP_XY_A:
 		if (adpd_data->fifo_size < 4 || (adpd_data->fifo_size & 0x3)) {
-			HRM_dbg("%s - Unexpected FIFO_SIZE=%d\n", __func__,	adpd_data->fifo_size);
+			HRM_dbg("%s - Unexpected FIFO_SIZE=%d\n", __func__, adpd_data->fifo_size);
 
 			break;
 		}
@@ -3764,18 +3298,9 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 				if (__adpd_getEOLstate() != ST_EOL_DONE) {
 					for (cnt = 0; cnt < adpd_data->fifo_size; cnt += 4) {
 						for (k = 0; k < 4; k++)
-#ifdef __USE_EOL_RAW_DATA__
-							uAgcRawDataA[k] = (unsigned)adpd_data->ptr_data_buffer[cnt + k];
-#else
-							uAgcRawDataA[k] = __adpd_normalized_data(adpd_data, 0, adpd_data->ptr_data_buffer[cnt + k]);
-#endif
-
+							uAgcRawDataA[k] = get_agcRawData(adpd_data, 0, cnt + k);
 						if (cnt > 0)
-#ifndef __USE_EOL_US_INT_SPACE__
-							adpd_data->msec_eol_int_space = 0;
-#else
 							adpd_data->usec_eol_int_space = 0;
-#endif
 
 						__adpd_stepEOL(uAgcRawDataA, NULL);
 					}
@@ -3785,52 +3310,22 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 			}
 
 			for (cnt = 0; cnt < adpd_data->fifo_size; cnt += 4) {
-				 sum_slot_a = 0;
+				sum_slot_a = 0;
 
-#if defined(__USE_PD1234__)
-				for (channel = 0; channel < 4; ++channel) {
+				for (channel = pd_start_num; channel <= pd_end_num; ++channel) {
 					adpd_data->slot_data[channel] = adpd_data->ptr_data_buffer[cnt + channel];
 					sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel];
 				}
-#elif defined(__USE_PD123__)
-				for (channel = 0; channel < 3; ++channel) {
+				/* defined(__USE_PD123__) */
+				if (pd_end_num == 2) {
 					adpd_data->slot_data[channel] = adpd_data->ptr_data_buffer[cnt + channel];
-					sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel];
+					sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel - 1];
 				}
-				adpd_data->slot_data[channel] = adpd_data->ptr_data_buffer[cnt + channel];
-				sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel - 1];
-#elif defined(__USE_PD234__)
-				for (channel = 1; channel < 4; ++channel) {
-					adpd_data->slot_data[channel] = adpd_data->ptr_data_buffer[cnt + channel];
-					sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel];
-				}
-#elif defined(__USE_PD34__)
-			    for (channel = 2; channel < 4; ++channel) {
-				    adpd_data->slot_data[channel] = adpd_data->ptr_data_buffer[cnt + channel];
-					sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel];
-			    }
-#elif defined(__USE_PD4__)
-				for (channel = 3; channel < 4; ++channel) {
-				    adpd_data->slot_data[channel] = adpd_data->ptr_data_buffer[cnt + channel];
-					sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel];
-				}
-#endif
+				HRM_info("%s hrm_sensor_pd_info - SLOT A PD1:%d, PD2:%d, PD3:%d, PD4:%d\n", __func__, adpd_data->slot_data[0],
+											adpd_data->slot_data[1], adpd_data->slot_data[2], adpd_data->slot_data[3]);
 
 				adpd_data->sum_slot_a = __adpd_normalized_data(adpd_data, 0, sum_slot_a);
 
-#ifdef __USE_LOWPASS_FIR_FILTER__
-				 adpd_data->fltr_sum_slot_a = adpd_data->sum_slot_a;
-				 adpd_data->fltr_sum_slot_b = adpd_data->sum_slot_b;
-				 __adpd_getLPFdata(&adpd_data->fltr_sum_slot_a, &adpd_data->fltr_sum_slot_b);
-#endif
-
-#ifdef __USE_TIME_DOMAIN_SNR__
-#ifdef __USE_LOWPASS_FIR_FILTER__
-				 __adpd_updateSnrAtTD(adpd_data->sum_slot_a, 0, adpd_data->fltr_sum_slot_a, 0);
-#else
-				 __adpd_updateSnrAtTD(adpd_data->sum_slot_a, 0);
-#endif
-#endif
 				HRM_info("%s - fifo_size %d, sum_a - %d\n", __func__, adpd_data->fifo_size, adpd_data->sum_slot_a);
 			}
 
@@ -3838,42 +3333,33 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 			for (k = 0; k < 4; k++)
 				uAgcRawDataA[k] = (unsigned)adpd_data->ptr_data_buffer[cnt+k];
 
+			uAgcRawDataAMax_idx = maxSlotValue(uAgcRawDataA + pd_start_num, pd_end_num - pd_start_num + 1);
+
 			if (adpd_data->agc_mode == M_HRM)
-			    __adpd_checkObjProximity(uAgcRawDataA, NULL);
+				__adpd_checkObjProximity(uAgcRawDataA, NULL);
 			else {
+				if (adpd_data->st_obj_proximity != OBJ_DARKOFFSET_CAL_DONE_IN_NONHRM) {
+					__adpd_checkObjProximity(uAgcRawDataA, NULL);
+					break;
+				}
 				if (agc_is_enabled && __adpd_getAGCstate() != AgcStage_Done) {
 					__adpd_stepAGC(uAgcRawDataA, NULL);
 					__adpd_ClearFifo();
 					break;
 				}
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-				if (uAgcRawDataA[0] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#elif defined(__USE_PD234__)
-				if (uAgcRawDataA[1] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#elif defined(__USE_PD34__)
-				if (uAgcRawDataA[2] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#elif defined(__USE_PD4__)
-				if (uAgcRawDataA[3] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#endif
-#if defined(__USE_PD1234__) || defined(__USE_PD234__) || defined(__USE_PD34__) || defined(__USE_PD123__) || defined(__USE_PD4__)
-				{
+
+				if (uAgcRawDataA[uAgcRawDataAMax_idx] >= (maxPulseCodeACh[uAgcRawDataAMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA
+					|| (uAgcRawDataA[uAgcRawDataAMax_idx] >= MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_A + AGC_STOP_MARGIN_PERCENTAGE_A) / 100)) {
 					adpd_data->cnt_slotA_dc_saturation = (adpd_data->cnt_slotA_dc_saturation > 100) ? 100 : adpd_data->cnt_slotA_dc_saturation + 1;
 					if (adpd_data->cnt_slotA_dc_saturation > CNT_THRESHOLD_DC_SATURATION) {
-						HRM_info("%s - Slot A saturation!!! (ChA %u >= %u )\n", __func__,
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-							uAgcRawDataA[0], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#elif defined(__USE_PD234__)
-							uAgcRawDataA[1], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#elif defined(__USE_PD34__)
-							uAgcRawDataA[2], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#elif defined(__USE_PD4__)
-							uAgcRawDataA[3], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#endif
+						HRM_info("%s - Slot A saturation!!! (ChA %u >= %u or %u )\n", __func__,
+							uAgcRawDataA[uAgcRawDataAMax_idx], (maxPulseCodeACh[uAgcRawDataAMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA,
+							MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_A + AGC_STOP_MARGIN_PERCENTAGE_A) / 100);
+
 						__adpd_ClearSaturation(0);
 					}
 				} else
 					adpd_data->cnt_slotA_dc_saturation = (adpd_data->cnt_slotA_dc_saturation > 0) ? adpd_data->cnt_slotA_dc_saturation - 1 : 0;
-#endif
 
 			}
 		} else {
@@ -3905,7 +3391,7 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 				}
 
 				for (channel = 0; channel < 4; ++channel) {
-					HRM_info("%s - SLOT A(Float mode) : rawDataCh%d : %d, rawDarkCh%d : %d\n", __func__,	channel, adpd_data->ptr_data_buffer[cnt + channel], channel, rawDarkCh[channel]);
+					HRM_info("%s - SLOT A(Float mode) : rawDataCh%d : %d, rawDarkCh%d : %d\n", __func__, channel, adpd_data->ptr_data_buffer[cnt + channel], channel, rawDarkCh[channel]);
 					rawDataCh[channel] = adpd_data->ptr_data_buffer[cnt + channel] - rawDarkCh[channel];
 				}
 
@@ -3924,8 +3410,7 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 
 	case S_SAMP_XY_AB:
 		if ((adpd_data->fifo_size < 8 || (adpd_data->fifo_size & 0x7)) && GET_USR_MODE(usr_mode) != TIA_ADC_USR) {
-			HRM_dbg("%s - Unexpected FIFO_SIZE=%d\n", __func__,
-				adpd_data->fifo_size);
+			HRM_dbg("%s - Unexpected FIFO_SIZE=%d\n", __func__,	adpd_data->fifo_size);
 			break;
 		}
 
@@ -3934,25 +3419,12 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 				if (__adpd_getEOLstate() != ST_EOL_DONE) {
 					for (cnt = 0; cnt < adpd_data->fifo_size; cnt += 8) {
 						for (k = 0; k < 4; k++)
-#ifdef __USE_EOL_RAW_DATA__
-							uAgcRawDataA[k] = (unsigned)adpd_data->ptr_data_buffer[cnt + k];
-#else
-							uAgcRawDataA[k] = __adpd_normalized_data(adpd_data, 0, adpd_data->ptr_data_buffer[cnt + k]);
-#endif
-
+							uAgcRawDataA[k] = get_agcRawData(adpd_data, 0, cnt + k);
 						for (k = 4; k < 8; k++)
-#ifdef __USE_EOL_RAW_DATA__
-							uAgcRawDataB[k-4] = (unsigned)adpd_data->ptr_data_buffer[cnt + k];
-#else
-							uAgcRawDataB[k-4] = __adpd_normalized_data(adpd_data, 1, adpd_data->ptr_data_buffer[cnt + k]);
-#endif
+							uAgcRawDataB[k-4] = get_agcRawData(adpd_data, 1, cnt + k);
 
 						if (cnt > 0)
-#ifndef __USE_EOL_US_INT_SPACE__
-							adpd_data->msec_eol_int_space = 0;
-#else
 							adpd_data->usec_eol_int_space = 0;
-#endif
 
 						__adpd_stepEOL(uAgcRawDataA, uAgcRawDataB);
 					}
@@ -3966,31 +3438,17 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 				sum_slot_b = 0;
 
 				for (channel = 0; channel < 4; ++channel) {
-					if (fifo_is_32bit)
-						uAgcRawDataA[channel] = (((unsigned)adpd_data->ptr_data_buffer[cnt*2+channel*2+1])<<16)+(unsigned)adpd_data->ptr_data_buffer[cnt*2+channel*2];
-					else
-						uAgcRawDataA[channel] = (unsigned)adpd_data->ptr_data_buffer[cnt+channel];
-
+					uAgcRawDataA[channel] = (unsigned)adpd_data->ptr_data_buffer[cnt+channel];
 					adpd_data->slot_data[channel] = adpd_data->ptr_data_buffer[cnt + channel];
 
-#if defined(__USE_PD1234__)
-					sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel];
-#elif defined(__USE_PD123__)
-					if (channel < 3)
+					if (channel >= pd_start_num && channel <= pd_end_num)
 						sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel];
-					else
-						sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel - 1];
-#elif defined(__USE_PD234__)
-					if (channel > 0)
-						sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel];
-#elif defined(__USE_PD34__)
-					if (channel > 1)
-						sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel];
-#elif defined(__USE_PD4__)
-					if (channel > 2)
-						sum_slot_a += adpd_data->ptr_data_buffer[cnt + channel];
-#endif
+
 					HRM_info("%s - SLOT A(HRM mode) : rawDataCh%d : %d\n", __func__, channel, adpd_data->ptr_data_buffer[cnt + channel]);
+				}
+				/* defined(__USE_PD123__) */
+				if (pd_end_num == 2) {
+					sum_slot_a += adpd_data->ptr_data_buffer[cnt + 2];
 				}
 
 				adpd_data->sum_slot_a = __adpd_normalized_data(adpd_data, 0, sum_slot_a);
@@ -3998,118 +3456,71 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 				HRM_info("%s - fifo_size %d, sum_a - %d\n", __func__, adpd_data->fifo_size, adpd_data->sum_slot_a);
 
 				for (channel = 4; channel < 8; ++channel) {
-
-					if (fifo_is_32bit)
-						uAgcRawDataB[channel-4] = (((unsigned)adpd_data->ptr_data_buffer[cnt*2+channel*2+1])<<16)+(unsigned)adpd_data->ptr_data_buffer[cnt*2+channel*2];
-					else
-						uAgcRawDataB[channel-4] = (unsigned)adpd_data->ptr_data_buffer[cnt+channel];
-
+					uAgcRawDataB[channel-4] = (unsigned)adpd_data->ptr_data_buffer[cnt+channel];
 					adpd_data->slot_data[channel] = adpd_data->ptr_data_buffer[cnt + channel];
 
-#if defined(__USE_PD1234__)
-					sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel];
-#elif defined(__USE_PD123__)
-					if (channel < 7)
+					if (channel >= (pd_start_num + 4) && channel <= (pd_end_num + 4))
 						sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel];
-					else
-						sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel - 1];
-#elif defined(__USE_PD234__)
-					if (channel > 4)
-						sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel];
-#elif defined(__USE_PD34__)
-					if (channel > 5)
-						sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel];
-#elif defined(__USE_PD4__)
-					if (channel > 6)
-						sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel];
-#endif
+
 					HRM_info("%s - SLOT B(HRM mode) : rawDataCh%d : %d\n", __func__, channel, adpd_data->ptr_data_buffer[cnt + channel]);
 				}
+				/* defined(__USE_PD123__) */
+				if (pd_end_num == 2) {
+					sum_slot_b += adpd_data->ptr_data_buffer[cnt + 6];
+				}
+
+				HRM_info("%s hrm_sensor_pd_info - SLOT A PD1:%d, PD2:%d, PD3:%d, PD4:%d\n", __func__, adpd_data->slot_data[0],
+											adpd_data->slot_data[1], adpd_data->slot_data[2], adpd_data->slot_data[3]);
+				HRM_info("%s hrm_sensor_pd_info - SLOT B PD1:%d, PD2:%d, PD3:%d, PD4:%d\n", __func__, adpd_data->slot_data[4],
+											adpd_data->slot_data[5], adpd_data->slot_data[6], adpd_data->slot_data[7]);
 
 				adpd_data->sum_slot_b = __adpd_normalized_data(adpd_data, 1, sum_slot_b);
 
 				HRM_info("%s - fifo_size %d, sum_b - %d\n", __func__, adpd_data->fifo_size, adpd_data->sum_slot_b);
-#ifdef __USE_LOWPASS_FIR_FILTER__
-				adpd_data->fltr_sum_slot_a = adpd_data->sum_slot_a;
-				adpd_data->fltr_sum_slot_b = adpd_data->sum_slot_b;
-				__adpd_getLPFdata(&adpd_data->fltr_sum_slot_a, &adpd_data->fltr_sum_slot_b);
-#endif
-
-#ifdef __USE_TIME_DOMAIN_SNR__
-#ifdef __USE_LOWPASS_FIR_FILTER__
-				__adpd_updateSnrAtTD (adpd_data->sum_slot_a, adpd_data->sum_slot_b, adpd_data->fltr_sum_slot_a, adpd_data->fltr_sum_slot_b);
-#else
-				__adpd_updateSnrAtTD (adpd_data->sum_slot_a, adpd_data->sum_slot_b);
-#endif
-#endif
 			}
 
 			if (adpd_data->agc_mode == M_HRM)
 				__adpd_checkObjProximity(uAgcRawDataA, uAgcRawDataB);
 			else {
+				if (adpd_data->st_obj_proximity != OBJ_DARKOFFSET_CAL_DONE_IN_NONHRM) {
+					__adpd_checkObjProximity(uAgcRawDataA, uAgcRawDataB);
+					break;
+				}
 				if (agc_is_enabled && __adpd_getAGCstate() != AgcStage_Done) {
 					__adpd_stepAGC(uAgcRawDataA, uAgcRawDataB);
 					__adpd_ClearFifo();
 					break;
 				}
 
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-				if (uAgcRawDataB[0] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#elif defined(__USE_PD234__)
-				if (uAgcRawDataB[1] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#elif defined(__USE_PD34__)
-				if (uAgcRawDataB[2] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#elif defined(__USE_PD4__)
-				if (uAgcRawDataB[3] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#endif
-#if defined(__USE_PD1234__) || defined(__USE_PD234__) || defined(__USE_PD34__) || defined(__USE_PD123__) || defined(__USE_PD4__)
-				{
+				uAgcRawDataAMax_idx = maxSlotValue(uAgcRawDataA + pd_start_num, pd_end_num - pd_start_num + 1);
+				uAgcRawDataBMax_idx = maxSlotValue(uAgcRawDataB + pd_start_num, pd_end_num - pd_start_num + 1);
+
+				if (uAgcRawDataB[uAgcRawDataBMax_idx] >= (maxPulseCodeBCh[uAgcRawDataBMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB
+					|| (uAgcRawDataB[uAgcRawDataBMax_idx] >= MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_B + AGC_STOP_MARGIN_PERCENTAGE_B) / 100)) {
 					adpd_data->cnt_slotB_dc_saturation = (adpd_data->cnt_slotB_dc_saturation > 100) ? 100 : adpd_data->cnt_slotB_dc_saturation + 1;
+
 					if (adpd_data->cnt_slotB_dc_saturation > CNT_THRESHOLD_DC_SATURATION) {
-						HRM_info("%s - Slot B saturation!!! (ChB %u >= %u )\n", __func__,
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-						uAgcRawDataB[0], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#elif defined(__USE_PD234__)
-						uAgcRawDataB[1], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#elif defined(__USE_PD34__)
-						uAgcRawDataB[2], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#elif defined(__USE_PD4__)
-						uAgcRawDataB[3], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#endif
+						HRM_info("%s - Slot B saturation!!! (ChB %u >= %u or %u )\n", __func__,
+						uAgcRawDataB[uAgcRawDataBMax_idx], (maxPulseCodeBCh[uAgcRawDataBMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB,
+						MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_B + AGC_STOP_MARGIN_PERCENTAGE_B) / 100);
+
 						__adpd_ClearSaturation(1);
 					}
 				} else
 					adpd_data->cnt_slotB_dc_saturation = (adpd_data->cnt_slotB_dc_saturation > 0) ? adpd_data->cnt_slotB_dc_saturation - 1 : 0;
-#endif
-
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-				if (uAgcRawDataA[0] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#elif defined(__USE_PD234__)
-				if (uAgcRawDataA[1] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#elif defined(__USE_PD34__)
-				if (uAgcRawDataA[2] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#elif defined(__USE_PD4__)
-				if (uAgcRawDataA[3] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA)
-#endif
-#if defined(__USE_PD1234__) || defined(__USE_PD234__) || defined(__USE_PD34__) || defined(__USE_PD123__) || defined(__USE_PD4__)
-				{
+				if (uAgcRawDataA[uAgcRawDataAMax_idx] >= (maxPulseCodeACh[uAgcRawDataAMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA
+					|| (uAgcRawDataA[uAgcRawDataAMax_idx] >= MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_A + AGC_STOP_MARGIN_PERCENTAGE_A) / 100)) {
 					adpd_data->cnt_slotA_dc_saturation = (adpd_data->cnt_slotA_dc_saturation > 100) ? 100 : adpd_data->cnt_slotA_dc_saturation + 1;
+
 					if (adpd_data->cnt_slotA_dc_saturation > CNT_THRESHOLD_DC_SATURATION) {
-						HRM_info("%s - Slot A saturation!!! (ChA %u >= %u )\n", __func__,
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-							uAgcRawDataA[0], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#elif defined(__USE_PD234__)
-							uAgcRawDataA[1], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#elif defined(__USE_PD34__)
-							uAgcRawDataA[2], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#elif defined(__USE_PD4__)
-							uAgcRawDataA[3], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA);
-#endif
+						HRM_info("%s - Slot A saturation!!! (ChA %u >= %u or %u)\n", __func__,
+							uAgcRawDataA[uAgcRawDataAMax_idx], (maxPulseCodeACh[uAgcRawDataAMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseA,
+							MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_A + AGC_STOP_MARGIN_PERCENTAGE_A) / 100);
+
 						__adpd_ClearSaturation(0);
 					}
 				} else
 					adpd_data->cnt_slotA_dc_saturation = (adpd_data->cnt_slotA_dc_saturation > 0) ? adpd_data->cnt_slotA_dc_saturation - 1 : 0;
-#endif
 
 			}
 
@@ -4119,7 +3530,7 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 					for (k = 0; k < 4; k++) {
 						if (rawDarkCh[k] < adpd_data->ptr_data_buffer[cnt + k] || !rawDarkCh[k])
 							rawDarkCh[k] = adpd_data->ptr_data_buffer[cnt + k];
-						HRM_info("%s - SLOT A(TIA mode) : rawDataCh%d : %d, rawDarkCh%d : %d\n", __func__,	k, adpd_data->ptr_data_buffer[cnt + k], k, rawDarkCh[k]);
+						HRM_info("%s - SLOT A(TIA mode) : rawDataCh%d : %d, rawDarkCh%d : %d\n", __func__, k, adpd_data->ptr_data_buffer[cnt + k], k, rawDarkCh[k]);
 					}
 					Is_TIA_ADC_Dark_Calibrated++;
 
@@ -4134,6 +3545,7 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 
 				} else if (Is_TIA_ADC_Dark_Calibrated < TIA_ADC_MODE_DARK_CALIBRATION_CNT) {
 					Is_TIA_ADC_Dark_Calibrated++;
+					continue;
 				}
 				if (Is_Float_Dark_Calibrated < FLOAT_MODE_DARK_CALIBRATION_CNT && Is_Float_Dark_Calibrated > 1) {
 					for (k = 4; k < 8; k++) {
@@ -4155,10 +3567,11 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 				} else if (Is_Float_Dark_Calibrated == 100) {
 					__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_IDLE);
 					__adpd_reg_write(adpd_data, ADPD_PD_SELECT_ADDR, 0x0441);
+					__adpd_reg_write(adpd_data, ADPD_INT_STATUS_ADDR, 0x80ff);
 					__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, GLOBAL_OP_MODE_GO);
 
 					Is_Float_Dark_Calibrated++;
-					continue;
+					break;
 				}
 
 				if (adpd_data->ptr_data_buffer[cnt + 4] > 12000 || adpd_data->ptr_data_buffer[cnt + 5] > 12000 ||
@@ -4168,7 +3581,7 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 				}
 
 				for (channel = 0; channel < 4; ++channel) {
-					HRM_info("%s - SLOT A(TIA mode) : rawDataCh%d : %d, rawDarkCh%d : %d\n", __func__,	channel, adpd_data->ptr_data_buffer[cnt + channel], channel, rawDarkCh[channel]);
+					HRM_info("%s - SLOT A(TIA mode) : rawDataCh%d : %d, rawDarkCh%d : %d\n", __func__, channel, adpd_data->ptr_data_buffer[cnt + channel], channel, rawDarkCh[channel]);
 					rawDataCh[channel] = (rawDarkCh[channel] > adpd_data->ptr_data_buffer[cnt + channel]) ? (rawDarkCh[channel] - adpd_data->ptr_data_buffer[cnt + channel]) : 0;
 				}
 				mutex_lock(&adpd_data->flickerdatalock);
@@ -4182,12 +3595,16 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 
 					rawDataCh[channel] *= 3;
 					adpd_data->slot_data[channel] = rawDataCh[channel];
-					if (adpd_data->flicker_data_cnt * 8 < FLICKER_DATA_CNT)
-						adpd_data->flicker_data[adpd_data->flicker_data_cnt * 8 + channel] = (int)rawDataCh[channel];
 
-					HRM_info("%s - flicker_data : %d, cnt : %d", __func__, adpd_data->flicker_data[adpd_data->flicker_data_cnt * 8 + channel], adpd_data->flicker_data_cnt * 8 + channel);
+					if (channel == 3) {
+						if (adpd_data->flicker_data_cnt * 2 < FLICKER_DATA_CNT)
+							adpd_data->flicker_data[adpd_data->flicker_data_cnt * 2] = (unsigned int)(rawDataCh[0]+rawDataCh[1]+rawDataCh[2]+rawDataCh[3]);
 
-					HRM_info("%s - (After Dark Cal) adpd143 SLOT A %d:%d\n", __func__,	channel, rawDataCh[channel]);
+						HRM_info("%s - flicker_data : %u, cnt : %d", __func__, adpd_data->flicker_data[adpd_data->flicker_data_cnt * 2], adpd_data->flicker_data_cnt * 2);
+
+					}
+
+					HRM_info("%s - (After Dark Cal) adpd143 SLOT A %d:%d\n", __func__, channel, rawDataCh[channel]);
 				}
 
 				if (uncoated_ch3 == 0) {
@@ -4216,15 +3633,19 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 							coated_ch4 = rawDataCh[7];
 
 						adpd_data->slot_data[channel] = rawDataCh[channel];
-						if (adpd_data->flicker_data_cnt * 8 < FLICKER_DATA_CNT)
-							adpd_data->flicker_data[adpd_data->flicker_data_cnt * 8 + channel] = (int)rawDataCh[channel];
 
-						HRM_info("%s - flicker_data : %d, cnt : %d", __func__, adpd_data->flicker_data[adpd_data->flicker_data_cnt * 8 + channel], adpd_data->flicker_data_cnt * 8 + channel);
-						HRM_info("%s - (After Dark Cal) adpd143 SLOT B %d:%d\n", __func__,	channel, rawDataCh[channel]);
+						if (channel == 7) {
+							if (adpd_data->flicker_data_cnt * 2 < FLICKER_DATA_CNT)
+								adpd_data->flicker_data[adpd_data->flicker_data_cnt * 2 + 1] = (unsigned int)(rawDataCh[4]+rawDataCh[5]+rawDataCh[6]+rawDataCh[7]);
+
+							HRM_info("%s - flicker_data : %u, cnt : %d", __func__, adpd_data->flicker_data[adpd_data->flicker_data_cnt * 2 + 1], adpd_data->flicker_data_cnt * 2 + 1);
+						}
+
+						HRM_info("%s - (After Dark Cal) adpd143 SLOT B %d:%d\n", __func__, channel, rawDataCh[channel]);
 					}
 				}
 
-				if (adpd_data->flicker_data_cnt * 8 < FLICKER_DATA_CNT)
+				if (adpd_data->flicker_data_cnt * 2 < FLICKER_DATA_CNT)
 					adpd_data->flicker_data_cnt++;
 
 				mutex_unlock(&adpd_data->flickerdatalock);
@@ -4244,8 +3665,7 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 
 	case S_SAMP_XY_B:
 		if (adpd_data->fifo_size < 4 || (adpd_data->fifo_size & 0x3)) {
-			HRM_dbg("%s - Unexpected FIFO_SIZE=%d\n", __func__,
-				adpd_data->fifo_size);
+			HRM_dbg("%s - Unexpected FIFO_SIZE=%d\n", __func__,	adpd_data->fifo_size);
 
 			break;
 		}
@@ -4255,18 +3675,10 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 				if (__adpd_getEOLstate() != ST_EOL_DONE) {
 					for (cnt = 0; cnt < adpd_data->fifo_size; cnt += 4) {
 						for (k = 0; k < 4; k++)
-#ifdef __USE_EOL_RAW_DATA__
-							uAgcRawDataB[k] = (unsigned)adpd_data->ptr_data_buffer[cnt + k];
-#else
-							uAgcRawDataB[k] = __adpd_normalized_data(adpd_data, 1, adpd_data->ptr_data_buffer[cnt + k]);
-#endif
-
+							uAgcRawDataB[k] = get_agcRawData(adpd_data, 1, cnt + k);
 						if (cnt > 0)
-#ifndef __USE_EOL_US_INT_SPACE__
-							adpd_data->msec_eol_int_space = 0;
-#else
 							adpd_data->usec_eol_int_space = 0;
-#endif
+
 						__adpd_stepEOL(NULL, uAgcRawDataB);
 					}
 				}
@@ -4275,51 +3687,21 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 			}
 
 			for (cnt = 0; cnt < adpd_data->fifo_size; cnt += 4) {
-				 sum_slot_b = 0;
-#if defined(__USE_PD1234__)
-				 for (channel = 0; channel < 4; ++channel) {
-					 adpd_data->slot_data[channel+4] = adpd_data->ptr_data_buffer[cnt + channel];
-					 sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel];
-				 }
-#elif defined(__USE_PD123__)
-				for (channel = 0; channel < 3; ++channel) {
+				sum_slot_b = 0;
+				for (channel = pd_start_num; channel <= pd_end_num; ++channel) {
 					adpd_data->slot_data[channel+4] = adpd_data->ptr_data_buffer[cnt + channel];
 					sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel];
 				}
-				adpd_data->slot_data[channel+4] = adpd_data->ptr_data_buffer[cnt + channel];
-				sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel - 1];
-#elif defined(__USE_PD234__)
-				for (channel = 1; channel < 4; ++channel) {
+				/* defined(__USE_PD123__) */
+				if (pd_end_num == 2) {
 					adpd_data->slot_data[channel+4] = adpd_data->ptr_data_buffer[cnt + channel];
-					sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel];
-				}
-#elif defined(__USE_PD34__)
-				for (channel = 2; channel < 4; ++channel) {
-					adpd_data->slot_data[channel+4] = adpd_data->ptr_data_buffer[cnt + channel];
-					sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel];
-				}
-#elif defined(__USE_PD4__)
-				for (channel = 3; channel < 4; ++channel) {
-					adpd_data->slot_data[channel+4] = adpd_data->ptr_data_buffer[cnt + channel];
-					sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel];
+					sum_slot_b += adpd_data->ptr_data_buffer[cnt + channel - 1];
 				}
 
-#endif
+				HRM_info("%s hrm_sensor_pd_info - SLOT B PD1:%d, PD2:%d, PD3:%d, PD4:%d\n", __func__, adpd_data->slot_data[4],
+											adpd_data->slot_data[5], adpd_data->slot_data[6], adpd_data->slot_data[7]);
 				adpd_data->sum_slot_b = __adpd_normalized_data(adpd_data, 1, sum_slot_b);
 
-#ifdef __USE_LOWPASS_FIR_FILTER__
-				adpd_data->fltr_sum_slot_a = adpd_data->sum_slot_a;
-				adpd_data->fltr_sum_slot_b = adpd_data->sum_slot_b;
-				__adpd_getLPFdata(&adpd_data->fltr_sum_slot_a, &adpd_data->fltr_sum_slot_b);
-#endif
-
-#ifdef __USE_TIME_DOMAIN_SNR__
-#ifdef __USE_LOWPASS_FIR_FILTER__
-				__adpd_updateSnrAtTD(0, adpd_data->sum_slot_b, 0, adpd_data->fltr_sum_slot_b);
-#else
-				__adpd_updateSnrAtTD(0, adpd_data->sum_slot_b);
-#endif
-#endif
 				HRM_info("%s - fifo_size %d, sum_b - %d\n", __func__, adpd_data->fifo_size, adpd_data->sum_slot_b);
 			}
 
@@ -4330,39 +3712,31 @@ static void __adpd_sample_data(struct adpd_device_data *adpd_data)
 			if (adpd_data->agc_mode == M_HRM)
 				__adpd_checkObjProximity(NULL, uAgcRawDataB);
 			else {
+				if (adpd_data->st_obj_proximity != OBJ_DARKOFFSET_CAL_DONE_IN_NONHRM) {
+					__adpd_checkObjProximity(NULL, uAgcRawDataB);
+					break;
+				}
 				if (agc_is_enabled && __adpd_getAGCstate() != AgcStage_Done) {
 					__adpd_stepAGC(NULL, uAgcRawDataB);
 					__adpd_ClearFifo();
 					break;
 				}
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-				if (uAgcRawDataB[0] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#elif defined(__USE_PD234__)
-				if (uAgcRawDataB[1] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#elif defined(__USE_PD34__)
-				if (uAgcRawDataB[2] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#elif defined(__USE_PD4__)
-				if (uAgcRawDataB[3] >= (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB)
-#endif
-#if defined(__USE_PD1234__) || defined(__USE_PD234__) || defined(__USE_PD34__) || defined(__USE_PD123__) || defined(__USE_PD4__)
-				{
+
+				uAgcRawDataBMax_idx = maxSlotValue(uAgcRawDataB + pd_start_num, pd_end_num - pd_start_num + 1);
+
+				if (uAgcRawDataB[uAgcRawDataBMax_idx] >= (maxPulseCodeBCh[uAgcRawDataBMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB
+					|| (uAgcRawDataB[uAgcRawDataBMax_idx] >= MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_B + AGC_STOP_MARGIN_PERCENTAGE_B) / 100)) {
 					adpd_data->cnt_slotB_dc_saturation = (adpd_data->cnt_slotB_dc_saturation > 100) ? 100 : adpd_data->cnt_slotB_dc_saturation + 1;
+
 					if (adpd_data->cnt_slotB_dc_saturation > CNT_THRESHOLD_DC_SATURATION) {
-						HRM_info("%s - Slot B saturation!!! (ChB %u >= %u )\n", __func__,
-#if defined(__USE_PD1234__) || defined(__USE_PD123__)
-						uAgcRawDataB[0], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#elif defined(__USE_PD234__)
-						uAgcRawDataB[1], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#elif defined(__USE_PD34__)
-						uAgcRawDataB[2], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#elif defined(__USE_PD4__)
-						uAgcRawDataB[3], (8000 - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB);
-#endif
+						HRM_info("%s - Slot B saturation!!! (ChB %u >= %u or %u)\n", __func__,
+							uAgcRawDataB[uAgcRawDataBMax_idx], (maxPulseCodeBCh[uAgcRawDataBMax_idx] - MARGIN_FOR_CH_SATURATION_PER_PULSE) * pulseB,
+							MAX_CODE_16BIT * (MAX_CODE_PERCENTAGE_B + AGC_STOP_MARGIN_PERCENTAGE_B) / 100);
+
 						__adpd_ClearSaturation(1);
 					}
 				} else
 					adpd_data->cnt_slotB_dc_saturation = (adpd_data->cnt_slotB_dc_saturation > 0) ? adpd_data->cnt_slotB_dc_saturation - 1 : 0;
-#endif
 			}
 		} else {
 			for (cnt = 0; cnt < adpd_data->fifo_size; cnt += 4) {
@@ -4437,17 +3811,10 @@ static int __adpd_set_reg_hrm(void)
 		return -EIO;
 	}
 
-	__adpd_mode_switching(adpd_data, SAMPLE_XY_AB_MODE);
-	adpd_data->st_obj_proximity = OBJ_DARKOFFSET_CAL;
 	adpd_data->eol_state = ST_EOL_IDLE;
 	adpd_data->agc_mode = M_HRM;
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x1);
-	__adpd_reg_write(adpd_data, ADPD_LED1_DRV_ADDR, ST_LED1_CURRENT_SETTING);
-	__adpd_reg_write(adpd_data, ADPD_LED2_DRV_ADDR, ST_LED2_CURRENT_SETTING);
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x2);
-
-	adpd_data->led_current_1 = ST_LED2_CURRENT_SETTING & 0xf; /* IR */
-	adpd_data->led_current_2 = ST_LED1_CURRENT_SETTING & 0xf; /* RED */
+	__adpd_mode_switching(adpd_data, SAMPLE_XY_AB_MODE);
+	__adpd_set_current(LED_MAX_CURRENT_COARSE, 0, 0, 0);
 
 	return err;
 }
@@ -4460,18 +3827,10 @@ static int __adpd_set_reg_hrmled_both(void)
 		HRM_dbg("%s __adpd_init failed\n", __func__);
 		return -EIO;
 	}
-	__adpd_mode_switching(adpd_data, SAMPLE_XY_AB_MODE);
 	adpd_data->agc_mode = M_HRMLED_BOTH;
-	__adpd_reg_write(adpd_data, ADPD_LED_DISABLE_ADDR, 0x000);
+	__adpd_mode_switching(adpd_data, SAMPLE_XY_AB_MODE);
+	__adpd_set_current(LED_MAX_CURRENT_COARSE, LED_MAX_CURRENT_COARSE, 0, 0);
 	adpd_data->cnt_slotB_dc_saturation = adpd_data->cnt_slotA_dc_saturation = 0;
-
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x1);
-	__adpd_reg_write(adpd_data, ADPD_LED1_DRV_ADDR, ST_LED1_CURRENT_SETTING);
-	__adpd_reg_write(adpd_data, ADPD_LED2_DRV_ADDR, ST_LED2_CURRENT_SETTING);
-	__adpd_reg_write(adpd_data, ADPD_OP_MODE_ADDR, 0x2);
-
-	adpd_data->led_current_1 = ST_LED2_CURRENT_SETTING & 0xf; /* IR */
-	adpd_data->led_current_2 = ST_LED1_CURRENT_SETTING & 0xf; /* RED */
 
 	return err;
 }
@@ -4488,7 +3847,7 @@ static int __adpd_set_reg_hrmled_red(void)
 
 	adpd_data->agc_mode = M_HRMLED_RED;
 	__adpd_mode_switching(adpd_data, SAMPLE_XY_A_MODE);
-	__adpd_reg_write(adpd_data, ADPD_LED_DISABLE_ADDR, 0x200);
+	__adpd_set_current(0, LED_MAX_CURRENT_COARSE, 0, 0);
 	adpd_data->cnt_slotA_dc_saturation = 0;
 
 	return err;
@@ -4506,7 +3865,7 @@ static int __adpd_set_reg_hrmled_ir(void)
 
 	adpd_data->agc_mode = M_HRMLED_IR;
 	__adpd_mode_switching(adpd_data, SAMPLE_XY_B_MODE);
-	__adpd_reg_write(adpd_data, ADPD_LED_DISABLE_ADDR, 0x100);
+	__adpd_set_current(LED_MAX_CURRENT_COARSE, 0, 0, 0);
 	adpd_data->cnt_slotB_dc_saturation = 0;
 
 	return err;
@@ -4515,6 +3874,7 @@ static int __adpd_set_reg_hrmled_ir(void)
 static int __adpd_set_reg_ambient(void)
 {
 	int err = 0;
+
 	err = __adpd_init();
 	if (err != 0) {
 		HRM_dbg("%s __adpd_init failed\n", __func__);
@@ -4523,9 +3883,8 @@ static int __adpd_set_reg_ambient(void)
 	/* turn off ambient rejection */
 
 	adpd_data->agc_mode = M_NONE;
-	__adpd_mode_switching(adpd_data, SAMPLE_TIA_ADC_MODE);
-
 	adpd_data->flicker_data_cnt = 0;
+	__adpd_mode_switching(adpd_data, SAMPLE_TIA_ADC_MODE);
 
 	return err;
 }
@@ -4541,7 +3900,7 @@ static int __adpd_set_reg_prox(void)
 	}
 	adpd_data->agc_mode = M_NONE;
 	__adpd_mode_switching(adpd_data, SAMPLE_XY_B_MODE);
-	__adpd_set_current(0xf, 0, 0, 0);
+	__adpd_set_current(LED_MAX_CURRENT_COARSE, 0, 0, 0);
 	return err;
 }
 
@@ -4564,15 +3923,10 @@ static int __adpd_write_reg_to_file(void)
 	for (i = 0; i < 128; i++) {
 		reg_read[i] = __adpd_reg_read(adpd_data, i);
 		HRM_info("%s - 0x%02x 0x%04x\n", __func__, i, reg_read[i]);
+		j += snprintf(file_data + j, 13, "0x%02x 0x%04x\n", i, reg_read[i]);
 	}
 
-	for (i = 0; i < 128; i++) {
-		if (j > ARRAY_SIZE(file_data))
-			break;
-		j += snprintf(file_data + j, ARRAY_SIZE(file_data) - j, "0x%02x 0x%04x\n", i, reg_read[i]);
-	}
-
-	if (j <= ARRAY_SIZE(file_data))
+	if (j <= ARRAY_SIZE(file_data) - 50) /* strlcpy string size 50 */
 		strlcpy(file_data + j, "Do not remove this line : For check end of file.\n", ARRAY_SIZE(file_data) - j);
 
 	set_fs(KERNEL_DS);
@@ -4593,8 +3947,8 @@ static int __adpd_write_file_to_reg(void)
 	int fd;
 	int line = 0, i = 0, j = 0, k = 0;
 	int reg_flag = 1;
-	char reg_add[5];
-	char reg_data[9];
+	char reg_add[5] = {0, };
+	char reg_data[9] = {0, };
 	static char file_data_int[128 * 20];
 	unsigned int reg[128];
 	mm_segment_t old_fs = get_fs();
@@ -4735,10 +4089,12 @@ int adpd_i2c_read(u32 reg, u32 *value, u32 *size)
 {
 	int err;
 
+	mutex_lock(&adpd_data->mutex);
 	err = __adpd_i2c_reg_read(adpd_data, (u8)reg, 1, (u16 *)value);
 
 	*size = 2;
 
+	mutex_unlock(&adpd_data->mutex);
 	return err;
 }
 
@@ -4746,7 +4102,9 @@ int adpd_i2c_write(u32 reg, u32 value)
 {
 	int err;
 
+	mutex_lock(&adpd_data->mutex);
 	err = __adpd_i2c_reg_write(adpd_data, (u8)reg, 1, (u16)value);
+	mutex_unlock(&adpd_data->mutex);
 
 	return err;
 }
@@ -4764,7 +4122,7 @@ static long __adpd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case ADPD143_IOCTL_READ_FLICKER:
 		ret = copy_to_user(argp,
-			data->flicker_data,
+			data->flicker_ioctl_data,
 			sizeof(int)*FLICKER_DATA_CNT);
 		if (unlikely(ret)) {
 			HRM_dbg("%s - read flicker data err(%d)\n", __func__, ret);
@@ -4791,7 +4149,7 @@ static const struct file_operations __adpd_fops = {
 
 int adpd_init_device(struct i2c_client *client)
 {
-	int err = 0, i = 0;
+	int err = 0, i = 0, p2p_read_cnt = 0;
 	unsigned short u16_regval = 0;
 	u16 for_p2p_reg_value, for_p2p_clk32K, for_p2p_clkfifo;
 
@@ -4811,14 +4169,20 @@ int adpd_init_device(struct i2c_client *client)
 	adpd_data->miscdev.mode = S_IRUGO;
 	err = misc_register(&adpd_data->miscdev);
 	if (err < 0) {
-		pr_err("%s - failed to register Device\n", __func__);
+		HRM_dbg("%s - failed to register Device\n", __func__);
 		goto err_misc_register_fail;
 	}
 
 	adpd_data->flicker_data = kzalloc(sizeof(int)*FLICKER_DATA_CNT, GFP_KERNEL);
 	if (adpd_data->flicker_data == NULL) {
-		pr_err("%s - couldn't allocate flicker memory\n", __func__);
+		HRM_dbg("%s - couldn't allocate flicker memory\n", __func__);
 		goto err_flicker_alloc_fail;
+	}
+
+	adpd_data->flicker_ioctl_data = kzalloc(sizeof(int)*FLICKER_DATA_CNT, GFP_KERNEL);
+	if (adpd_data->flicker_ioctl_data == NULL) {
+		HRM_dbg("%s - couldn't allocate flicker ioctl memory\n", __func__);
+		goto err_flicker_ioctl_data_alloc_fail;
 	}
 
 	mutex_init(&adpd_data->flickerdatalock);
@@ -4832,9 +4196,9 @@ int adpd_init_device(struct i2c_client *client)
 	adpd_data->write = __adpd_i2c_reg_write;
 
 	adpd_data->i2c_err_cnt = 0;
-	adpd_data->ir_curr= 0;
-	adpd_data->red_curr= 0;
-	adpd_data->ir_adc= 0;
+	adpd_data->ir_curr = 0;
+	adpd_data->red_curr = 0;
+	adpd_data->ir_adc = 0;
 	adpd_data->red_adc = 0;
 
 	/*chip ID verification */
@@ -4844,8 +4208,6 @@ int adpd_init_device(struct i2c_client *client)
 	case ADPD_CHIPID(0):
 	case ADPD_CHIPID(1):
 	case ADPD_CHIPID(2):
-		adpd_data->osc_trim_open_enable = 1;
-
 	case ADPD_CHIPID(3):
 	case ADPD_CHIPID(4):
 		for (i = 0; i < 8; i++)
@@ -4876,8 +4238,8 @@ int adpd_init_device(struct i2c_client *client)
 
 	do {
 		for_p2p_reg_value = __adpd_reg_read(adpd_data, ADPD_P2P_REG_ADDR);
-		HRM_info("%s - Reg0x67 : 0x%x\n", __func__, for_p2p_reg_value);
-	} while ((for_p2p_reg_value & 0x7) != 0x4);
+		HRM_info("%s - Reg0x67 : 0x%x , Read Count : %d\n", __func__, for_p2p_reg_value, ++p2p_read_cnt);
+	} while ((for_p2p_reg_value & 0x7) != 0x4 && p2p_read_cnt < 100); /* temporary p2p read conut 100 */
 
 	if ((for_p2p_reg_value & 0x7) == 0x4) {
 		adpd_data->efuseRedSlope = __adpd_reg_read(adpd_data, ADPD_RED_SLOPE_ADDR);
@@ -4895,6 +4257,9 @@ int adpd_init_device(struct i2c_client *client)
 		HRM_info("%s - efuseIrSlope : %d\n", __func__, adpd_data->efuseIrSlope);
 		HRM_info("%s - efuseRedIntrcpt : %d\n", __func__, adpd_data->efuseRedIntrcpt);
 		HRM_info("%s - efuseIrIntrcpt : %d\n", __func__, adpd_data->efuseIrIntrcpt);
+	} else {
+		HRM_dbg("%s - can`t read p2p reg.\n", __func__);
+		goto err_p2p_reg_read;
 	}
 	__adpd_reg_write(adpd_data, ADPD_EFUSE_CTRL_ADDR, 0x0);
 
@@ -4920,10 +4285,13 @@ int adpd_init_device(struct i2c_client *client)
 
 	goto done;
 
+err_p2p_reg_read:
 exit_chipid_verification:
 	mutex_unlock(&adpd_data->mutex);
 	mutex_destroy(&adpd_data->mutex);
 	mutex_destroy(&adpd_data->flickerdatalock);
+	kfree(adpd_data->flicker_ioctl_data);
+err_flicker_ioctl_data_alloc_fail:
 	kfree(adpd_data->flicker_data);
 err_flicker_alloc_fail:
 	misc_deregister(&adpd_data->miscdev);
@@ -4940,14 +4308,19 @@ int adpd_deinit_device(void)
 {
 	HRM_dbg("%s\n", __func__);
 
+	mutex_lock(&adpd_data->mutex);
 	__adpd_mode_switching(adpd_data, IDLE_MODE);
 	i2c_set_clientdata(adpd_data->client, NULL);
 
-	mutex_destroy(&adpd_data->mutex);
 	mutex_destroy(&adpd_data->flickerdatalock);
 
+	kfree(adpd_data->flicker_ioctl_data);
 	kfree(adpd_data->flicker_data);
 	misc_deregister(&adpd_data->miscdev);
+
+	mutex_unlock(&adpd_data->mutex);
+	mutex_destroy(&adpd_data->mutex);
+	
 	kfree(adpd_data);
 	adpd_data = NULL;
 
@@ -4958,6 +4331,7 @@ int adpd_enable(enum hrm_mode mode)
 {
 	int err = 0;
 
+	mutex_lock(&adpd_data->mutex);
 	adpd_data->hrm_mode = mode;
 	adpd_data->cnt_enable = 0;
 
@@ -4978,6 +4352,7 @@ int adpd_enable(enum hrm_mode mode)
 		err = __adpd_set_reg_hrmled_both();
 	else
 		HRM_dbg("%s - MODE_UNKNOWN\n", __func__);
+	mutex_unlock(&adpd_data->mutex);
 
 	return err;
 }
@@ -4986,32 +4361,39 @@ int adpd_disable(enum hrm_mode mode)
 {
 	int err = 0;
 
+	mutex_lock(&adpd_data->mutex);
 	adpd_data->hrm_mode = 0;
 	HRM_dbg("%s - disable_m : 0x%x\t cur_m : 0x%x\n", __func__, mode, adpd_data->hrm_mode);
 	__adpd_print_mode(adpd_data->hrm_mode);
 
 	if (adpd_data->hrm_mode == 0) {
 		__adpd_mode_switching(adpd_data, IDLE_MODE);
+		mutex_unlock(&adpd_data->mutex);
 		return err;
 	}
 
-	adpd_data->flicker_data_cnt = 0;
-
+	mutex_unlock(&adpd_data->mutex);
 	return err;
 }
 
 int adpd_get_current(u8 *d1, u8 *d2, u8 *d3, u8 *d4)
 {
+	mutex_lock(&adpd_data->mutex);
 	*d1 = adpd_data->led_current_1; /* IR */
 	*d2 = adpd_data->led_current_2; /* RED */
 	*d3 = 0;
 	*d4 = 0;
+	mutex_unlock(&adpd_data->mutex);
 
 	return 0;
 }
 int adpd_set_current(u8 d1, u8 d2, u8 d3, u8 d4) /* d1 : IR, d2 : Red */
 {
-	return __adpd_set_current(d1, d2, d3, d4);
+	int ret;
+	mutex_lock(&adpd_data->mutex);
+	ret = __adpd_set_current(d1, d2, d3, d4);
+	mutex_unlock(&adpd_data->mutex);
+	return ret;
 }
 
 int adpd_read_data(struct hrm_output_data *data)
@@ -5022,6 +4404,7 @@ int adpd_read_data(struct hrm_output_data *data)
 	unsigned short sub_mode = 0;
 	int ch;
 
+	mutex_lock(&adpd_data->mutex);
 	data->mode = adpd_data->hrm_mode;
 
 	data->main_num = 0;
@@ -5033,15 +4416,14 @@ int adpd_read_data(struct hrm_output_data *data)
 
 	__adpd_rd_intr_fifo(adpd_data);
 
-	if (adpd_data->intr_status_val == 0) {
+	if (adpd_data->intr_status_val == 0)
 		HRM_dbg("%s - intr_status_val : 0x%x\n", __func__, adpd_data->intr_status_val);
-	}
 
-	if (adpd_data->fifo_size < FLICKER_DATA_CNT && main_mode == TIA_ADC_USR) {
-		HRM_info("%s - ERROR FIFO_SIZE = %d\n", __func__,
-			adpd_data->fifo_size);
+	if (adpd_data->fifo_size < FIFO_DATA_CNT && main_mode == TIA_ADC_USR) {
+		HRM_info("%s - ERROR FIFO_SIZE = %d\n", __func__, adpd_data->fifo_size);
 		__adpd_clr_intr_status(adpd_data, main_mode);
-		return -EIO;
+		mutex_unlock(&adpd_data->mutex);
+		return -ENODATA;
 	}
 
 	__adpd_clr_intr_status(adpd_data, main_mode);
@@ -5049,39 +4431,29 @@ int adpd_read_data(struct hrm_output_data *data)
 	do_gettimeofday(&curr_interrupt_trigger_ts);
 
 	if (prev_interrupt_trigger_ts.tv_sec > 0) {
-#ifndef __USE_EOL_US_INT_SPACE__
-		adpd_data->msec_eol_int_space = (curr_interrupt_trigger_ts.tv_sec - prev_interrupt_trigger_ts.tv_sec) * USEC_PER_SEC
+#ifdef __USE_EOL_US_INT_SPACE__
+		adpd_data->usec_eol_int_space = (curr_interrupt_trigger_ts.tv_sec - prev_interrupt_trigger_ts.tv_sec) * USEC_PER_SEC
 										+ (curr_interrupt_trigger_ts.tv_usec - prev_interrupt_trigger_ts.tv_usec);
-		if (adpd_data->msec_eol_int_space - ((int)(adpd_data->msec_eol_int_space / USEC_PER_MSEC)) * USEC_PER_MSEC >= USEC_PER_MSEC / 2)
-			adpd_data->msec_eol_int_space = ((int)(adpd_data->msec_eol_int_space / USEC_PER_MSEC)) + 1;
-		else
-			adpd_data->msec_eol_int_space = ((int)(adpd_data->msec_eol_int_space / USEC_PER_MSEC));
-
-		if (adpd_data->msec_eol_int_space < 2)
-			HRM_dbg("%s - msec_eol_int_space : %dms\n", __func__, adpd_data->msec_eol_int_space);
 #else
 		adpd_data->usec_eol_int_space = (curr_interrupt_trigger_ts.tv_sec - prev_interrupt_trigger_ts.tv_sec) * USEC_PER_SEC
 										+ (curr_interrupt_trigger_ts.tv_usec - prev_interrupt_trigger_ts.tv_usec);
+		if (adpd_data->usec_eol_int_space - ((int)(adpd_data->usec_eol_int_space / USEC_PER_MSEC)) * USEC_PER_MSEC >= USEC_PER_MSEC / 2)
+			adpd_data->usec_eol_int_space = ((int)(adpd_data->usec_eol_int_space / USEC_PER_MSEC)) + 1;
+		else
+			adpd_data->usec_eol_int_space = ((int)(adpd_data->usec_eol_int_space / USEC_PER_MSEC));
 
+		adpd_data->usec_eol_int_space *= 1000;
+
+#endif
 		if (adpd_data->usec_eol_int_space < 2000)
 			HRM_dbg("%s - usec_eol_int_space : %dus\n", __func__, adpd_data->usec_eol_int_space);
-#endif
 	} else
-#ifndef __USE_EOL_US_INT_SPACE__
-		adpd_data->msec_eol_int_space = -1;
-#else
 		adpd_data->usec_eol_int_space = -1;
-#endif
 
 	memcpy(&prev_interrupt_trigger_ts, &curr_interrupt_trigger_ts, sizeof(curr_interrupt_trigger_ts));
 
 	switch (main_mode) {
 	case IDLE_USR:
-#ifdef __USE_ADPD_32BIT_FIFO__
-		if (fifo_is_32bit)
-			 __adpd_rd_fifo32_data(adpd_data);
-		else
-#endif
 		__adpd_rd_fifo_data(adpd_data);
 		break;
 
@@ -5089,13 +4461,9 @@ int adpd_read_data(struct hrm_output_data *data)
 		HRM_info("%s - EOL SAMPLE MODE\n", __func__);
 
 	case SAMPLE_USR:
-	    HRM_info("HRM SAMPLE MODE - [ agc_mode : %d ]\n", adpd_data->agc_mode);
-#ifdef __USE_ADPD_32BIT_FIFO__
-		if (fifo_is_32bit)
-			 __adpd_rd_fifo32_data(adpd_data);
-		else
-#endif
-		__adpd_rd_fifo_data(adpd_data);
+		HRM_info("HRM SAMPLE MODE - [ agc_mode : %d ]\n", adpd_data->agc_mode);
+		if (!__adpd_rd_fifo_data(adpd_data))
+			break;
 		__adpd_sample_data(adpd_data);
 
 		switch (sub_mode) {
@@ -5104,11 +4472,7 @@ int adpd_read_data(struct hrm_output_data *data)
 				(adpd_data->agc_mode != M_HRM && ((agc_is_enabled && __adpd_getAGCstate() == AgcStage_Done) || !agc_is_enabled))) &&
 				 adpd_data->cnt_enable >= CNT_ENABLE_SKIP_SAMPLE){
 				data->main_num = 2;
-	#ifdef __USE_LOWPASS_FIR_FILTER__
-				data->data_main[1] = adpd_data->fltr_sum_slot_a;
-	#else
 				data->data_main[1] = adpd_data->sum_slot_a;
-	#endif
 				data->sub_num = 4;
 				for (ch = 0; ch < data->sub_num; ch++)
 					data->data_sub[ch] = adpd_data->slot_data[ch];
@@ -5125,13 +4489,8 @@ int adpd_read_data(struct hrm_output_data *data)
 				(adpd_data->agc_mode != M_HRM && ((agc_is_enabled && __adpd_getAGCstate() == AgcStage_Done) || !agc_is_enabled))) &&
 				adpd_data->cnt_enable >= CNT_ENABLE_SKIP_SAMPLE){
 				data->main_num = 2;
-	#ifdef __USE_LOWPASS_FIR_FILTER__
-				data->data_main[1] = adpd_data->fltr_sum_slot_a;
-				data->data_main[0] = adpd_data->fltr_sum_slot_b;
-	#else
 				data->data_main[1] = adpd_data->sum_slot_a;
 				data->data_main[0] = adpd_data->sum_slot_b;
-	#endif
 				data->sub_num = 8;
 				for (ch = 0; ch < data->sub_num; ch++)
 					data->data_sub[ch] = adpd_data->slot_data[ch];
@@ -5148,11 +4507,7 @@ int adpd_read_data(struct hrm_output_data *data)
 				(adpd_data->agc_mode != M_HRM && ((agc_is_enabled && __adpd_getAGCstate() == AgcStage_Done) || !agc_is_enabled))) &&
 				adpd_data->cnt_enable >= CNT_ENABLE_SKIP_SAMPLE){
 				data->main_num = 1;
-	#ifdef __USE_LOWPASS_FIR_FILTER__
-				data->data_main[0] = adpd_data->fltr_sum_slot_b;
-	#else
 				data->data_main[0] = adpd_data->sum_slot_b;
-	#endif
 				data->sub_num = 4;
 				for (ch = 0; ch < data->sub_num; ch++)
 					data->data_sub[ch+4] = adpd_data->slot_data[ch+4];
@@ -5164,19 +4519,15 @@ int adpd_read_data(struct hrm_output_data *data)
 			}
 			break;
 
-		 default:
+		default:
 			break;
 		}
 		break;
 
-	 case TIA_ADC_USR:
+	case TIA_ADC_USR:
 		HRM_info("TIA_ADC SAMPLE MODE\n");
-#ifdef __USE_ADPD_32BIT_FIFO__
-		if (fifo_is_32bit)
-			__adpd_rd_fifo32_data(adpd_data);
-		else
-#endif
-		__adpd_rd_fifo_data(adpd_data);
+		if (!__adpd_rd_fifo_data(adpd_data))
+			break;
 		__adpd_sample_data(adpd_data);
 
 		switch (sub_mode) {
@@ -5198,8 +4549,9 @@ int adpd_read_data(struct hrm_output_data *data)
 				data->main_num = 2;
 				data->data_main[1] = adpd_data->sum_slot_a;
 				data->data_main[0] = adpd_data->sum_slot_b;
-				if (adpd_data->flicker_data_cnt * 8 == FLICKER_DATA_CNT) {
+				if (adpd_data->flicker_data_cnt * 2 == FLICKER_DATA_CNT) {
 					data->data_main[1] = -2;
+					memcpy(adpd_data->flicker_ioctl_data, adpd_data->flicker_data, sizeof(int)*FLICKER_DATA_CNT);
 					adpd_data->flicker_data_cnt = 0;
 				} else
 					data->data_main[1] = 0;
@@ -5231,18 +4583,14 @@ int adpd_read_data(struct hrm_output_data *data)
 		}
 		break;
 
-		default:
-#ifdef __USE_ADPD_32BIT_FIFO__
-		if (fifo_is_32bit)
-			__adpd_rd_fifo32_data(adpd_data);
-		else
-#endif
-			__adpd_rd_fifo_data(adpd_data);
+	default:
+		__adpd_rd_fifo_data(adpd_data);
 		break;
-	 };
+	};
 
 	HRM_info("%s - sum_slot_a : %d,\t sum_slot_b : %d\n", __func__, adpd_data->sum_slot_a, adpd_data->sum_slot_b);
 
+	mutex_unlock(&adpd_data->mutex);
 	return err;
 }
 
@@ -5250,7 +4598,9 @@ int adpd_get_chipid(u64 *chip_id)
 {
 	int err = 0;
 
+	mutex_lock(&adpd_data->mutex);
 	*chip_id = adpd_data->device_id;
+	mutex_unlock(&adpd_data->mutex);
 
 	return err;
 }
@@ -5259,7 +4609,9 @@ int adpd_get_part_type(u16 *part_type)
 {
 	int err = 0;
 
+	mutex_lock(&adpd_data->mutex);
 	*part_type = __adpd_reg_read(adpd_data, ADPD_CHIPID_ADDR);
+	mutex_unlock(&adpd_data->mutex);
 
 	return err;
 }
@@ -5268,7 +4620,20 @@ int adpd_get_i2c_err_cnt(u32 *err_cnt)
 {
 	int err = 0;
 
+	mutex_lock(&adpd_data->mutex);
 	*err_cnt = adpd_data->i2c_err_cnt;
+	mutex_unlock(&adpd_data->mutex);
+
+	return err;
+}
+
+int adpd_set_i2c_err_cnt(void)
+{
+	int err = 0;
+
+	mutex_lock(&adpd_data->mutex);
+	adpd_data->i2c_err_cnt = 0;
+	mutex_unlock(&adpd_data->mutex);
 
 	return err;
 }
@@ -5277,10 +4642,26 @@ int adpd_get_curr_adc(u16 *ir_curr, u16 *red_curr, u32 *ir_adc, u32 *red_adc)
 {
 	int err = 0;
 
+	mutex_lock(&adpd_data->mutex);
 	*ir_curr = adpd_data->ir_curr;
 	*red_curr = adpd_data->red_curr;
 	*ir_adc = adpd_data->ir_adc;
 	*red_adc = adpd_data->red_adc;
+	mutex_unlock(&adpd_data->mutex);
+
+	return err;
+}
+
+int adpd_set_curr_adc(void)
+{
+	int err = 0;
+
+	mutex_lock(&adpd_data->mutex);
+	adpd_data->ir_curr = 0;
+	adpd_data->red_curr = 0;
+	adpd_data->ir_adc = 0;
+	adpd_data->red_adc = 0;
+	mutex_unlock(&adpd_data->mutex);
 
 	return err;
 }
@@ -5305,53 +4686,71 @@ int adpd_get_name_vendor(char *name)
 
 int adpd_get_threshold(s32 *agc_threshold)
 {
+	mutex_lock(&adpd_data->mutex);
 	*agc_threshold = adpd_data->agc_threshold;
-	if (*agc_threshold != adpd_data->agc_threshold)
+	if (*agc_threshold != adpd_data->agc_threshold) {
+		mutex_unlock(&adpd_data->mutex);
 		return -EINVAL;
-	else
+	} else {
+		mutex_unlock(&adpd_data->mutex);
 		return 0;
+	}
 }
 
 int adpd_set_threshold(s32 agc_threshold)
 {
+	mutex_lock(&adpd_data->mutex);
 	adpd_data->agc_threshold = agc_threshold;
 
 	__adpd_setObjProximityThreshold(agc_threshold);
 
-	if (agc_threshold != adpd_data->agc_threshold)
+	if (agc_threshold != adpd_data->agc_threshold) {
+		mutex_unlock(&adpd_data->mutex);
 		return -EINVAL;
-	else
+	} else {
+		mutex_unlock(&adpd_data->mutex);
 		return 0;
+	}
 }
 
 int adpd_set_eol_enable(u8 enable)
 {
+	mutex_lock(&adpd_data->mutex);
 	HRM_dbg("%s - enable = %d)\n", __func__, enable);
 
 	if (adpd_data) {
 		adpd_data->eol_test_is_enable = enable;
 
 		if (enable) {
+			if (adpd_data->hrm_mode == 0) {
+				HRM_dbg("%s - eol enable set fail. hrm mode is IDLE \n", __func__);
+				adpd_data->eol_test_is_enable = 0;
+				mutex_unlock(&adpd_data->mutex);
+				return -EPERM;
+			}
 			__adpd_mode_switching(adpd_data, SAMPLE_EOL_MODE);
 			adpd_data->eol_test_status = 0;
 		} else
 			__adpd_mode_switching(adpd_data, IDLE_MODE);
 	}
 
+	mutex_unlock(&adpd_data->mutex);
+
 	return 0;
 }
 
 int adpd_get_eol_result(char *result)
 {
+	mutex_lock(&adpd_data->mutex);
 	if (adpd_data->eol_test_status == 0) {
-		HRM_info("%s - adpd_data->eol_test_status is 0\n",
-			__func__);
-		adpd_data->eol_test_status = 0;
-		return snprintf(result, PAGE_SIZE, "%s\n", "NO_EOL_TEST");
+		HRM_info("%s - adpd_data->eol_test_status is 0\n", __func__);
+		mutex_unlock(&adpd_data->mutex);
+		return snprintf(result, MAX_BUF_LEN, "%s\n", "NO_EOL_TEST");
 	}
 
-	if (adpd_data && result) {
+	if (result) {
 		ADPD_EOL_RESULT temp;
+
 		temp.st_eol_res.eol_res_odr = adpd_data->eol_res_odr;
 
 		temp.st_eol_res.eol_res_red_low_dc = adpd_data->eol_res_red_low_dc;
@@ -5368,35 +4767,40 @@ int adpd_get_eol_result(char *result)
 		temp.st_eol_res.eol_res_melanin_red_dc = adpd_data->eol_res_melanin_red_dc;
 		temp.st_eol_res.eol_res_melanin_ir_dc = adpd_data->eol_res_melanin_ir_dc;
 
-		snprintf(result, PAGE_SIZE, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+		snprintf(result, MAX_BUF_LEN, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
 			adpd_data->eol_res_odr,
 			adpd_data->eol_res_red_low_dc, adpd_data->eol_res_ir_low_dc,
 			adpd_data->eol_res_red_med_dc, adpd_data->eol_res_ir_med_dc,
 			adpd_data->eol_res_red_med_noise, adpd_data->eol_res_ir_med_noise,
-			adpd_data->eol_res_red_high_dc,	adpd_data->eol_res_ir_high_dc,
+			adpd_data->eol_res_red_high_dc, adpd_data->eol_res_ir_high_dc,
 			adpd_data->eol_res_melanin_red_dc, adpd_data->eol_res_melanin_ir_dc);
 
 		adpd_data->eol_test_is_enable = 0;
 		adpd_data->eol_test_status = 0;
 	}
+	mutex_unlock(&adpd_data->mutex);
 
 	return 0;
 }
 
 int adpd_get_eol_status(u8 *status)
 {
+	mutex_lock(&adpd_data->mutex);
 	*status = adpd_data->eol_test_status;
-	if (*status != adpd_data->eol_test_status)
+	if (*status != adpd_data->eol_test_status) {
+		mutex_unlock(&adpd_data->mutex);
 		return -EINVAL;
-	else
+	} else {
+		mutex_unlock(&adpd_data->mutex);
 		return 0;
+	}
 }
 
 int adpd_debug_set(u8 mode)
 {
-
 	HRM_dbg("%s - mode = %d\n", __func__, mode);
 
+	mutex_lock(&adpd_data->mutex);
 	switch (mode) {
 	case DEBUG_WRITE_REG_TO_FILE:
 		__adpd_write_reg_to_file();
@@ -5416,15 +4820,45 @@ int adpd_debug_set(u8 mode)
 	default:
 		break;
 	}
+	mutex_unlock(&adpd_data->mutex);
 
 	return 0;
 }
 
 int adpd_get_fac_cmd(char *cmd_result)
 {
-	HRM_dbg("%s - efuseRedSlope : %d\n", __func__, adpd_data->efuseRedSlope);
-	HRM_dbg("%s - efuseIrSlope : %d\n", __func__, adpd_data->efuseIrSlope);
-
-	return snprintf(cmd_result, PAGE_SIZE, "%u,%u",
+	return snprintf(cmd_result, MAX_BUF_LEN, "%u,%u",
 		adpd_data->efuseRedSlope, adpd_data->efuseIrSlope);
+}
+
+int adpd_get_version(char *version)
+{
+	return snprintf(version, MAX_BUF_LEN, "%s%s", VENDOR_VERISON, VERSION);
+}
+
+int adpd_get_sensor_info(char *sensor_info_data)
+{
+	unsigned int reg_val = 0;
+	unsigned int ir_tia = 0, red_tia = 0;
+	unsigned int ir_pulse = 0, red_pulse = 0;
+
+	if (adpd_data->hrm_mode != 0) {
+		mutex_lock(&adpd_data->mutex);
+
+		reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTB_GAIN_ADDR);
+		ir_tia = reg_val & 0x3;
+		reg_val = __adpd_reg_read(adpd_data, ADPD_PULSE_PERIOD_B_ADDR);
+		ir_pulse = (reg_val >> 8) & 0xFF;
+		reg_val = __adpd_reg_read(adpd_data, ADPD_SLOTA_GAIN_ADDR);
+		red_tia = reg_val & 0x3;
+		reg_val = __adpd_reg_read(adpd_data, ADPD_PULSE_PERIOD_A_ADDR);
+		red_pulse = (reg_val >> 8) & 0xFF;
+
+		mutex_unlock(&adpd_data->mutex);
+	}
+
+	return snprintf(sensor_info_data, MAX_BUF_LEN, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", ir_tia, red_tia,
+										ir_pulse, red_pulse, adpd_data->slot_data[4], adpd_data->slot_data[5],
+										adpd_data->slot_data[6], adpd_data->slot_data[7], adpd_data->slot_data[0],
+										adpd_data->slot_data[1], adpd_data->slot_data[2], adpd_data->slot_data[3]);
 }

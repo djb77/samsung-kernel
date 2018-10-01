@@ -21,4 +21,10 @@
 #
 # Where xxx is the platform name is the name set in MALI_PLATFORM_THIRDPARTY_NAME
 #
+config EXYNOS_SOC_NAME
+    depends on MALI_T8XX
+    string "Third party soc name"
+    help
+      soc name.
+
 

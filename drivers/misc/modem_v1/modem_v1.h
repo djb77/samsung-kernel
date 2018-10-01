@@ -61,8 +61,16 @@ enum dev_format {
 	MAX_DEV_FORMAT,
 };
 
-#define MAX_SIPC_DEVICES	(IPC_RFS + 1)	/* FMT, RAW, RFS */
-#define MAX_SIPC5_DEVICES	(IPC_RAW + 1)	/* FMT, RAW */
+enum legacy_ipc_map {
+	IPC_MAP_FMT = 0,
+#ifdef CONFIG_MODEM_IF_LEGACY_QOS
+	IPC_MAP_HPRIO_RAW,
+#endif
+	IPC_MAP_NORM_RAW,
+	MAX_SIPC_MAP,
+};
+
+#define MAX_SIPC5_DEVICES	(IPC_RAW + 1) /* FMT, RAW */
 
 #define MAX_SIPC_CHANNELS	256	/* 2 ^ 8		*/
 #define MAX_LINK_CHANNELS	32	/* up to 32 channels	*/
@@ -224,7 +232,6 @@ enum read_write {
 
 #define STR_CP_FAIL	"cp_fail"
 #define STR_CP_WDT	"cp_wdt"	/* CP watchdog timer */
-
 
 /* You can define modem specific attribute here.
  * It could be all the different behaviour between many modem vendor.

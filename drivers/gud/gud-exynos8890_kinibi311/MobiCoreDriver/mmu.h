@@ -31,6 +31,12 @@ struct tee_mmu *tee_mmu_create(struct task_struct *task, const void *wsm_buffer,
 void tee_mmu_delete(struct tee_mmu *mmu);
 
 /*
+ * Compare physical addresses from two MMU tables.
+ */
+bool client_mmu_matches(const struct tee_mmu *left,
+			const struct tee_mmu *right);
+
+/*
  * Fill in buffer info for MMU table.
  */
 void tee_mmu_buffer(const struct tee_mmu *mmu, struct mcp_buffer_map *map);

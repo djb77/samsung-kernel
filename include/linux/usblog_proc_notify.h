@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Samsung Electronics Co. Ltd.
+ * Copyright (C) 2016-2017 Samsung Electronics Co. Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -7,17 +7,18 @@
  * (at your option) any later version.
  */
 
-  /* usb notify layer v2.0 */
+  /* usb notify layer v3.0 */
 
 #ifndef __LINUX_USBLOG_PROC_NOTIFY_H__
 #define __LINUX_USBLOG_PROC_NOTIFY_H__
 
 enum usblog_type {
 	NOTIFY_FUNCSTATE,
+	NOTIFY_ALTERNATEMODE,
 	NOTIFY_CCIC_EVENT,
 	NOTIFY_MANAGER,
 	NOTIFY_USBMODE,
-	NOTIFY_USBMODE_FUNC,
+	NOTIFY_USBMODE_EXTRA,
 	NOTIFY_USBSTATE,
 	NOTIFY_EVENT,
 };
@@ -63,7 +64,11 @@ enum ccic_device {
 	NOTIFY_DEV_PDIC,
 	NOTIFY_DEV_MUIC,
 	NOTIFY_DEV_CCIC,
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 	NOTIFY_DEV_MANAGER,
+#endif
+	NOTIFY_DEV_DP,
+	NOTIFY_DEV_USB_DP,
 };
 
 enum ccic_id {
@@ -71,9 +76,16 @@ enum ccic_id {
 	NOTIFY_ID_ATTACH,
 	NOTIFY_ID_RID,
 	NOTIFY_ID_USB,
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 	NOTIFY_ID_POWER_STATUS,
+#endif
 	NOTIFY_ID_WATER,
 	NOTIFY_ID_VCONN,
+	NOTIFY_ID_DP_CONNECT,
+	NOTIFY_ID_DP_HPD,
+	NOTIFY_ID_DP_LINK_CONF,
+	NOTIFY_ID_USB_DP,
+	NOTIFY_ID_ROLE_SWAP,
 };
 
 enum ccic_rid {
@@ -96,6 +108,28 @@ enum ccic_rprd {
 	NOTIFY_RD = 0,
 	NOTIFY_RP,
 };
+
+enum ccic_hpd {
+	NOTIFY_HPD_LOW = 0,
+	NOTIFY_HPD_HIGH,
+	NOTIFY_HPD_IRQ,
+};
+
+enum ccic_pin_assignment {
+	NOTIFY_DP_PIN_UNKNOWN =0,
+	NOTIFY_DP_PIN_A,
+	NOTIFY_DP_PIN_B,
+	NOTIFY_DP_PIN_C,
+	NOTIFY_DP_PIN_D,
+	NOTIFY_DP_PIN_E,
+	NOTIFY_DP_PIN_F,
+};
+
+#define ALTERNATE_MODE_NOT_READY	(1 << 0)
+#define ALTERNATE_MODE_READY		(1 << 1)
+#define ALTERNATE_MODE_STOP		(1 << 2)
+#define ALTERNATE_MODE_START		(1 << 3)
+#define ALTERNATE_MODE_RESET		(1 << 4)
 
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
 extern void store_usblog_notify(int type, void *param1, void *parma2);

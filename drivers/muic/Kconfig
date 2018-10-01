@@ -92,10 +92,23 @@ config MUIC_HV_12V
 	help
 	  If you say yes here you will get support for the AFC.
 
-
 config MUIC_SUPPORT_CCIC
 	bool "MUIC supports CCIC chip interface"
 	depends on MUIC_UNIVERSAL
 	default n
 	help
 	  If you say yes here you will get support for the CCIC chip.
+
+config MUIC_HV_SUPPORT_POGO_DOCK
+	bool "MUIC_HV_SUPPORT_POGO_DOCK"
+	depends on MUIC_HV
+	default n
+	help
+	  If you say yes here you will get support for the AFC pogo dock.
+
+config HICCUP_CHARGER
+	bool  "Using HICCUP charger"
+	depends on USE_MUIC && !SEC_FACTORY
+	default n
+	help
+	  If you say yes here you will get support for the hiccup charger.

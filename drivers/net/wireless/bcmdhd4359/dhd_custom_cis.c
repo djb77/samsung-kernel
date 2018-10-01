@@ -2,7 +2,7 @@
  * Process CIS information from OTP for customer platform
  * (Handle the MAC address and module information)
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -25,14 +25,14 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_cis.c 665983 2016-10-19 13:13:32Z $
+ * $Id: dhd_custom_cis.c 699163 2017-05-12 05:18:23Z $
  */
 
 #include <typedefs.h>
 #include <linuxver.h>
 #include <osl.h>
 
-#include <proto/ethernet.h>
+#include <ethernet.h>
 #include <dngl_stats.h>
 #include <bcmutils.h>
 #include <dhd.h>
@@ -50,8 +50,11 @@
 #define MACINFO	PLATFORM_PATH".mac.info"
 #define CIDINFO	PLATFORM_PATH".cid.info"
 #define	REVINFO	PLATFORM_PATH".rev"
-
+#ifdef PLATFORM_SLP
+#define MACINFO_EFS "/csa/.mac.info"
+#else
 #define MACINFO_EFS "/efs/wifi/.mac.info"
+#endif /* PLATFORM_SLP */
 
 /* Definitions for MAC address */
 #define MAC_BUF_SIZE 20
@@ -64,6 +67,8 @@
 #elif defined(BCM4334_CHIP)
 #define CIS_BUF_SIZE            256
 #elif defined(BCM4359_CHIP)
+#define CIS_BUF_SIZE            1280
+#elif defined(BCM4361_CHIP)
 #define CIS_BUF_SIZE            1280
 #else
 #define CIS_BUF_SIZE            512
@@ -78,7 +83,11 @@
 #define CIS_TUPLE_NULL                  0X00
 
 #ifdef CONFIG_BCMDHD_PCIE
+#ifdef BCM4361_CHIP
+#define OTP_OFFSET 208
+#else
 #define OTP_OFFSET 128
+#endif /* BCM4361_CHIP */
 #else /* CONFIG_BCMDHD_PCIE */
 #define OTP_OFFSET 12 /* SDIO */
 #endif /* CONFIG_BCMDHD_PCIE */
@@ -119,6 +128,12 @@ dhd_read_cis(dhd_pub_t *dhdp)
 	int ret = 0;
 	cis_rw_t *cish;
 	int buf_size = CIS_BUF_SIZE;
+	int length = strlen("cisdump");
+
+	if (length >= buf_size) {
+		DHD_ERROR(("%s: check CIS_BUF_SIZE\n", __FUNCTION__));
+		return BCME_BADLEN;
+	}
 
 	/* Try reading out from CIS */
 	g_cis_buf = MALLOCZ(dhdp->osh, buf_size);
@@ -128,13 +143,14 @@ dhd_read_cis(dhd_pub_t *dhdp)
 		return BCME_NOMEM;
 	} else {
 		DHD_ERROR(("%s: Local CIS buffer is alloced\n", __FUNCTION__));
+		memset(g_cis_buf, 0, buf_size);
 	}
 
 	cish = (cis_rw_t *)(g_cis_buf + 8);
 	cish->source = 0;
 	cish->byteoff = 0;
 	cish->nbytes = buf_size;
-	strcpy(g_cis_buf, "cisdump");
+	strncpy(g_cis_buf, "cisdump", length);
 
 	ret = dhd_wl_ioctl_cmd(dhdp, WLC_GET_VAR, g_cis_buf, buf_size, 0, 0);
 	if (ret < 0) {
@@ -277,6 +293,9 @@ dhd_set_macaddr_from_file(dhd_pub_t *dhdp)
 {
 	char mac_buf[MAC_BUF_SIZE];
 	char *filepath_efs = MACINFO_EFS;
+#ifdef PLATFORM_SLP
+	char *filepath_mac = MACINFO;
+#endif /* PLATFORM_SLP */
 	int ret;
 	struct dhd_info *dhd;
 	struct ether_addr *mac;
@@ -314,6 +333,16 @@ dhd_set_macaddr_from_file(dhd_pub_t *dhdp)
 				__FUNCTION__, mac_buf, filepath_efs));
 		}
 	}
+#ifdef PLATFORM_SLP
+	/* Write random MAC address for framework */
+	if (dhd_write_file(filepath_mac, mac_buf, sizeof(mac_buf)) < 0) {
+		DHD_ERROR(("%s: MAC address [%s] Failed to write into File:"
+			" %s\n", __FUNCTION__, mac_buf, filepath_mac));
+	} else {
+		DHD_ERROR(("%s: MAC address [%s] written into File: %s\n",
+			__FUNCTION__, mac_buf, filepath_mac));
+	}
+#endif /* PLATFORM_SLP */
 
 	mac_buf[sizeof(mac_buf) - 1] = '\0';
 
@@ -339,6 +368,7 @@ dhd_set_default_macaddr(dhd_pub_t *dhdp)
 {
 	char iovbuf[WLC_IOCTL_SMLEN];
 	struct ether_addr *mac;
+	int ret;
 
 	if (!dhdp) {
 		DHD_ERROR(("%s: dhdp is NULL\n", __FUNCTION__));
@@ -348,10 +378,9 @@ dhd_set_default_macaddr(dhd_pub_t *dhdp)
 	mac = &dhdp->mac;
 
 	/* Read the default MAC address */
-	memset(iovbuf, 0, sizeof(iovbuf));
-	bcm_mkiovar("cur_etheraddr", 0, 0, iovbuf, sizeof(iovbuf));
-	if (dhd_wl_ioctl_cmd(dhdp, WLC_GET_VAR, iovbuf,
-		sizeof(iovbuf), FALSE, 0) < 0) {
+	ret = dhd_iovar(dhdp, 0, "cur_etheraddr", NULL, 0, iovbuf, sizeof(iovbuf),
+			FALSE);
+	if (ret < 0) {
 		DHD_ERROR(("%s: Can't get the default MAC address\n", __FUNCTION__));
 		return BCME_NOTUP;
 	}
@@ -551,7 +580,7 @@ dhd_write_macaddr(struct ether_addr *mac)
 #ifdef USE_CID_CHECK
 /* Definitions for module information */
 #define MAX_VID_LEN		8
-#define MAX_VNAME_LEN		16
+#define MAX_VNAME_LEN		30
 
 #ifdef	SUPPORT_MULTIPLE_BOARDTYPE
 #define MAX_BNAME_LEN		6
@@ -562,6 +591,14 @@ typedef struct {
 	char bname[MAX_BNAME_LEN];
 } board_info_t;
 
+#if defined(BCM4361_CHIP)
+board_info_t semco_PA_info[] = {
+	{ 3, { 0x0f, 0x08, }, { "_ePA" } },     /* semco All ePA */
+	{ 3, { 0x27, 0x08, }, { "_iPA" } },     /* semco 2g iPA, 5g ePA */
+	{ 3, { 0x1a, 0x08, }, { "_iPA" } },		/* semco 2g iPA, 5g ePA old */
+	{ 0, { 0x00, }, { "" } }   /* Default: Not specified yet */
+};
+#else
 board_info_t semco_board_info[] = {
 	{ 3, { 0x51, 0x07, }, { "_b90b" } },     /* semco three antenna */
 	{ 3, { 0x61, 0x07, }, { "_b90b" } },     /* semco two antenna */
@@ -573,6 +610,7 @@ board_info_t murata_board_info[] = {
 	{ 3, { 0xb1, 0x07, }, { "_es5" } },     /* murata two antenna */
 	{ 0, { 0x00, }, { "" } }   /* Default: Not specified yet */
 };
+#endif /* BCM4361_CHIP */
 #else
 #define MAX_BNAME_LEN		0
 #endif /* SUPPORT_MULTIPLE_BOARDTYPE */
@@ -580,7 +618,7 @@ board_info_t murata_board_info[] = {
 typedef struct {
 	uint8 vid_length;
 	unsigned char vid[MAX_VID_LEN];
-	char vname[MAX_VNAME_LEN];
+	char cid_info[MAX_VNAME_LEN];
 } vid_info_t;
 
 #if defined(BCM4330_CHIP)
@@ -677,6 +715,36 @@ vid_info_t vid_info[] = {
 	{ 0, { 0x00, }, { "samsung" } }           /* Default: Not specified yet */
 #endif /* SUPPORT_BCM4359_MIXED_MODULES */
 };
+#elif defined(BCM4361_CHIP)
+vid_info_t vid_info[] = {
+#if defined(SUPPORT_BCM4361_MIXED_MODULES)
+	{ 3, { 0x66, 0x33, }, { "semco_sky_r00a_e000_a0" } },
+	{ 3, { 0x30, 0x33, }, { "semco_sky_r01a_e30a_a1" } },
+	{ 3, { 0x31, 0x33, }, { "semco_sky_r02a_e30a_a1" } },
+	{ 3, { 0x32, 0x33, }, { "semco_sky_r02a_e30a_a1" } },
+	{ 3, { 0x51, 0x33, }, { "semco_sky_r01d_e31_b0" } },
+	{ 3, { 0x61, 0x33, }, { "semco_sem_r01f_e31_b0" } },
+	{ 3, { 0x62, 0x33, }, { "semco_sem_r02g_e31_b0" } },
+	{ 3, { 0x71, 0x33, }, { "semco_sky_r01h_e32_b0" } },
+	{ 3, { 0x81, 0x33, }, { "semco_sem_r01i_e32_b0" } },
+	{ 3, { 0x82, 0x33, }, { "semco_sem_r02j_e32_b0" } },
+	{ 3, { 0x12, 0x22, }, { "murata_nxp_r012_1kl_a1" } },
+	{ 3, { 0x13, 0x22, }, { "murata_mur_r013_1kl_b0" } },
+	{ 3, { 0x14, 0x22, }, { "murata_mur_r014_1kl_b0" } },
+	{ 3, { 0x15, 0x22, }, { "murata_mur_r015_1kl_b0" } },
+	{ 3, { 0x20, 0x22, }, { "murata_mur_r020_1kl_b0" } },
+	{ 3, { 0x21, 0x22, }, { "murata_mur_r021_1kl_b0" } },
+	{ 3, { 0x22, 0x22, }, { "murata_mur_r022_1kl_b0" } },
+	{ 3, { 0x23, 0x22, }, { "murata_mur_r023_1kl_b0" } },
+	{ 3, { 0x24, 0x22, }, { "murata_mur_r024_1kl_b0" } },
+	{ 3, { 0x30, 0x22, }, { "murata_mur_r030_1kl_b0" } },
+	{ 3, { 0x31, 0x22, }, { "murata_mur_r031_1kl_b0" } },
+	{ 3, { 0x32, 0x22, }, { "murata_mur_r032_1kl_b0" } },
+	{ 3, { 0x33, 0x22, }, { "murata_mur_r033_1kl_b0" } },
+	{ 3, { 0x34, 0x22, }, { "murata_mur_r034_1kl_b0" } },
+	{ 0, { 0x00, }, { "samsung" } }           /* Default: Not specified yet */
+#endif /* SUPPORT_BCM4359_MIXED_MODULES */
+};
 #else
 vid_info_t vid_info[] = {
 	{ 0, { 0x00, }, { "samsung" } }			/* Default: Not specified yet */
@@ -710,6 +778,21 @@ dhd_find_tuple_idx_from_otp(dhd_pub_t *dhdp, int req_tup, unsigned char *req_tup
 	dhd_free_tuple_entry(dhdp, &head);
 
 	return start_idx;
+}
+
+char *
+dhd_get_cid_info(unsigned char *vid, int vid_length)
+{
+	int i;
+
+	for (i = 0; i < ARRAYSIZE(vid_info); i++) {
+		if (vid_info[i].vid_length-1 == vid_length &&
+				!memcmp(vid_info[i].vid, vid, vid_length)) {
+			return vid_info[i].cid_info;
+		}
+	}
+
+	return NULL;
 }
 
 int
@@ -746,7 +829,7 @@ dhd_check_module_cid(dhd_pub_t *dhdp)
 		return BCME_ERROR;
 	}
 
-	DHD_ERROR(("%s: Reading CIS from local buffer\n", __FUNCTION__));
+	DHD_INFO(("%s: Reading CIS from local buffer\n", __FUNCTION__));
 #ifdef DUMP_CIS
 	dhd_dump_cis_buf(48);
 #endif /* DUMP_CIS */
@@ -801,17 +884,20 @@ check_board_type:
 	} else {
 		boardtype_len = 0;
 	}
-
-	if (strcmp(cur_info->vname, "semco") == 0) {
+#if defined(BCM4361_CHIP)
+	vendor_b_info = semco_PA_info;
+	max = sizeof(semco_PA_info) / sizeof(board_info_t);
+#else
+	if (strcmp(cur_info->cid_info, "semco") == 0) {
 		vendor_b_info = semco_board_info;
 		max = sizeof(semco_board_info) / sizeof(board_info_t);
-	} else if (strcmp(cur_info->vname, "murata") == 0) {
+	} else if (strcmp(cur_info->cid_info, "murata") == 0) {
 		vendor_b_info = murata_board_info;
 		max = sizeof(murata_board_info) / sizeof(board_info_t);
 	} else {
 		max = 0;
 	}
-
+#endif /* BCM4361_CHIP */
 	if (boardtype_len) {
 		for (idx = 0; idx < max; idx++) {
 			cur_b_info = vendor_b_info;
@@ -832,13 +918,13 @@ check_board_type:
 write_cid:
 #ifdef SUPPORT_MULTIPLE_BOARDTYPE
 	if (cur_b_info && cur_b_info->b_len > 0) {
-		strcpy(cid_info, cur_info->vname);
-		strcpy(cid_info + strlen(cur_info->vname), cur_b_info->bname);
+		strcpy(cid_info, cur_info->cid_info);
+		strcpy(cid_info + strlen(cur_info->cid_info), cur_b_info->bname);
 	} else
 #endif /* SUPPORT_MULTIPLE_BOARDTYPE */
-		strcpy(cid_info, cur_info->vname);
+		strcpy(cid_info, cur_info->cid_info);
 
-	DHD_ERROR(("%s: CIS MATCH FOUND : %s\n", __FUNCTION__, cid_info));
+	DHD_INFO(("%s: CIS MATCH FOUND : %s\n", __FUNCTION__, cid_info));
 	dhd_write_file(cidfilepath, cid_info, strlen(cid_info) + 1);
 
 #ifdef BCM4334_CHIP
@@ -888,7 +974,7 @@ write_cid:
 }
 
 #ifdef SUPPORT_MULTIPLE_MODULE_CIS
-static bool
+bool
 dhd_check_module(char *module_name)
 {
 	char vname[MAX_VNAME_LEN];
@@ -897,12 +983,10 @@ dhd_check_module(char *module_name)
 
 	memset(vname, 0, sizeof(vname));
 	ret = dhd_read_file(cidfilepath, vname, sizeof(vname));
-	DHD_ERROR(("%s: This module is %s \n", __FUNCTION__, vname));
-
 	if (ret < 0) {
 		return FALSE;
 	}
-
+	DHD_INFO(("%s: This module is %s \n", __FUNCTION__, vname));
 	return strstr(vname, module_name) ? TRUE : FALSE;
 }
 
@@ -944,5 +1028,49 @@ dhd_check_module_b90(void)
 	return ret;
 }
 #endif /* SUPPORT_MULTIPLE_MODULE_CIS */
+
+#if defined(SUPPORT_BCM4361_MIXED_MODULES)
+#define CID_FEM_MURATA	"_mur_"
+/* extract module type from cid information */
+int
+dhd_check_module_bcm4361(char *module_type, int index, bool *is_murata_fem)
+{
+	int ret, i;
+	char vname[MAX_VNAME_LEN];
+	const char *cidfilepath = CIDINFO;
+	char *ptr = NULL;
+
+	memset(vname, 0, sizeof(vname));
+
+	ret = dhd_read_file(cidfilepath, vname, sizeof(vname)-1);
+	if (ret < 0) {
+		DHD_ERROR(("%s: failed to get module infomaion from .cid.info\n",
+			__FUNCTION__));
+		return ret;
+	}
+
+	for (i = 1, ptr = vname; i < index && ptr; i++) {
+		ptr = bcmstrstr(ptr, "_");
+		if (ptr) {
+			ptr++;
+		}
+	}
+
+	if (bcmstrnstr(vname, MAX_VNAME_LEN, CID_FEM_MURATA, 5)) {
+		*is_murata_fem = TRUE;
+	}
+
+	if (ptr) {
+		memcpy(module_type, ptr, strlen(ptr));
+	} else {
+		DHD_ERROR(("%s: failed to get module infomaion\n", __FUNCTION__));
+		return BCME_ERROR;
+	}
+
+	DHD_INFO(("%s: module type = %s \n", __FUNCTION__, module_type));
+
+	return ret;
+}
+#endif /* SUPPORT_BCM4361_MIXED_MODULES */
 #endif /* USE_CID_CHECK */
 #endif /* DHD_USE_CISINFO */

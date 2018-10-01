@@ -124,6 +124,7 @@ enum max77854_fuelgauge_reg {
 	QRTABLE30_REG                                = 0x42,
 	DQACC_REG                                    = 0x45,
 	DPACC_REG                                    = 0x46,
+	QH_REG                                       = 0x4D,
 	CONFIG2_REG                                  = 0xBB,
 	OCV_REG                                      = 0xEE,
 	VFOCV_REG                                    = 0xFB,
@@ -238,6 +239,10 @@ struct max77854_dev {
 	struct i2c_client *charger; /* 0xD2; Charger */
 	struct i2c_client *fuelgauge; /* 0x6C; Fuelgauge */
 	struct i2c_client *muic; /* 0x4A; MUIC */
+#if defined(CONFIG_MAX77854_FG_SENSING_WA)
+	struct i2c_client *gtest;
+	struct i2c_client *otp;
+#endif
 	struct mutex i2c_lock;
 
 	int type;

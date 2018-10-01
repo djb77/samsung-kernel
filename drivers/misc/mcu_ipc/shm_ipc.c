@@ -151,10 +151,23 @@ void shm_release_region(void)
 		vunmap(pdata.v_ipc);
 }
 
+#ifdef CONFIG_OF_RESERVED_MEM
+static int __init modem_if_reserved_mem_setup(struct reserved_mem *remem)
+{
+	pdata.p_addr = remem->base;
+	pdata.t_size = remem->size;
+
+	pr_err("%s: memory reserved: paddr=%lu, t_size=%u\n",
+		__func__, pdata.p_addr, pdata.t_size);
+
+	return 0;
+}
+RESERVEDMEM_OF_DECLARE(modem_if, "exynos,modem_if", modem_if_reserved_mem_setup);
+#endif /* CONFIG_OF_RESERVED_MEM */
+
 static int shm_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct resource *res = NULL;
 	int ret;
 
 	dev_err(dev, "%s: shmem driver init\n", __func__);
@@ -177,15 +190,20 @@ static int shm_probe(struct platform_device *pdev)
 		/* To do: In case of non-DT */
 	}
 
-	/* resource for mcu_ipc SFR region */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(dev, "no memory resource defined\n");
-		return -ENOENT;
-	}
+#ifndef CONFIG_OF_RESERVED_MEM
+	{
+		struct resource *res = NULL;
+		/* resource for mcu_ipc SFR region */
+		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+		if (!res) {
+			dev_err(dev, "no memory resource defined\n");
+			return -ENOENT;
+		}
 
-	pdata.p_addr = res->start;
-	pdata.t_size = resource_size(res);
+		pdata.p_addr = res->start;
+		pdata.t_size = resource_size(res);
+	}
+#endif /* !CONFIG_OF_RESERVED_MEM */
 
 	dev_err(dev, "paddr=%lu, t_size=%u, ipc_off=%u, ipc_size=%u\n",
 		pdata.p_addr, pdata.t_size,
@@ -213,6 +231,7 @@ static struct platform_driver shmem_driver = {
 		.name = "shm_ipc",
 		.owner = THIS_MODULE,
 		.of_match_table = of_match_ptr(exynos_shm_dt_match),
+		.suppress_bind_attrs = true,
 	},
 };
 module_platform_driver(shmem_driver);

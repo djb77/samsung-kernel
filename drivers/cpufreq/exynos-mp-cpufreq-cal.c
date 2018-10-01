@@ -27,6 +27,10 @@
 #include "../../drivers/soc/samsung/pwrcal/pwrcal.h"
 #include "../../drivers/soc/samsung/pwrcal/S5E8890/S5E8890-vclk.h"
 
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+#include <linux/sec_debug.h>
+#endif
+
 static struct exynos_dvfs_info *exynos_info[CL_END];
 
 static unsigned int exynos_mp_cpufreq_cl0_get_freq(void)
@@ -131,6 +135,9 @@ static int exynos_mp_cpufreq_check_smpl(void)
 	} else if (ret > 0) {
 #ifdef CONFIG_SEC_PM
 		smpl_warn_number++;
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+		sec_debug_set_extra_info_smpl(smpl_warn_number);
+#endif
 #endif
 		pr_info("CL1 : SMPL_WARN HAPPENED!\n");
 		return ret;

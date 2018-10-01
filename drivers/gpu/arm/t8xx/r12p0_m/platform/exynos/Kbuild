@@ -14,7 +14,7 @@
 
 MALI_CUSTOMER_RELEASE = 1
 
-platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
+platform_name := $(shell echo $(CONFIG_EXYNOS_SOC_NAME))
 
 obj-y += gpu_integration_callbacks.o
 obj-y += mali_kbase_platform.o

@@ -17,10 +17,16 @@
 #define	VENDOR		"AMS"
 #if defined(CONFIG_SENSORS_SSP_TMG399x)
 #define	CHIP_ID		"TMG399X"
+#elif defined(CONFIG_SENSORS_SSP_TMD3725)
+#define CHIP_ID		"TMD3725"
 #elif defined(CONFIG_SENSORS_SSP_TMD3782)
 #define CHIP_ID		"TMD3782"
 #elif defined(CONFIG_SENSORS_SSP_TMD4903)
 #define CHIP_ID		"TMD4903"
+#elif defined(CONFIG_SENSORS_SSP_TMD4904)
+#define CHIP_ID		"TMD4904"
+#else
+#define CHIP_ID		"UNKNOWN"
 #endif
 
 #define CANCELATION_FILE_PATH	"/efs/FactoryApp/prox_cal"
@@ -51,6 +57,7 @@ static ssize_t prox_vendor_show(struct device *dev,
 static ssize_t prox_name_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	struct ssp_data *data = dev_get_drvdata(dev);
 	int device_id = 0;
 	device_id = get_proximity_device_id(data);
@@ -68,6 +75,9 @@ static ssize_t prox_name_show(struct device *dev,
 		pr_err("[SSP]: %s - Unkown proximity device \n", __func__);
 		return sprintf(buf, "%s\n", "UNKNOWN");
 	}
+#else
+	return sprintf(buf, "%s\n", CHIP_ID);
+#endif
 }
 
 static ssize_t proximity_avg_show(struct device *dev,
@@ -76,9 +86,9 @@ static ssize_t proximity_avg_show(struct device *dev,
 	struct ssp_data *data = dev_get_drvdata(dev);
 
 	return snprintf(buf, PAGE_SIZE, "%d,%d,%d\n",
-		data->buf[PROXIMITY_RAW].prox[1],
-		data->buf[PROXIMITY_RAW].prox[2],
-		data->buf[PROXIMITY_RAW].prox[3]);
+		data->buf[PROXIMITY_RAW].prox_raw[1],
+		data->buf[PROXIMITY_RAW].prox_raw[2],
+		data->buf[PROXIMITY_RAW].prox_raw[3]);
 }
 
 static ssize_t proximity_avg_store(struct device *dev,
@@ -119,11 +129,11 @@ static u16 get_proximity_rawdata(struct ssp_data *data)
 	if (data->bProximityRawEnabled == false) {
 		send_instruction(data, ADD_SENSOR, PROXIMITY_RAW, chTempbuf, 4);
 		msleep(200);
-		uRowdata = data->buf[PROXIMITY_RAW].prox[0];
+		uRowdata = data->buf[PROXIMITY_RAW].prox_raw[0];
 		send_instruction(data, REMOVE_SENSOR, PROXIMITY_RAW,
 			chTempbuf, 4);
 	} else {
-		uRowdata = data->buf[PROXIMITY_RAW].prox[0];
+		uRowdata = data->buf[PROXIMITY_RAW].prox_raw[0];
 	}
 
 	return uRowdata;
@@ -214,9 +224,11 @@ void get_proximity_threshold(struct ssp_data *data)
 	data->uProxHiThresh = data->uProxHiThresh_default;
 	data->uProxLoThresh = data->uProxLoThresh_default;
 
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	//for tmd4904
 	data->uProxHiThresh_tmd4904 = data->uProxHiThresh_default_tmd4904;
 	data->uProxLoThresh_tmd4904 = data->uProxLoThresh_default_tmd4904;
+#endif
 }
 
 int proximity_open_calibration(struct ssp_data *data)
@@ -224,11 +236,7 @@ int proximity_open_calibration(struct ssp_data *data)
 	int iRet = 0;
 	mm_segment_t old_fs;
 	struct file *cancel_filp = NULL;
-
-	//for tmd4904
-	int device_id = 0;
-	device_id = get_proximity_device_id(data);
-
+	
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 
@@ -249,10 +257,14 @@ int proximity_open_calibration(struct ssp_data *data)
 		iRet = -EIO;
 	}
 
-	if (data->uProxCanc != 0) {
+	/*If there is an offset cal data. */
+	if (data->uProxCanc != 0) {	
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
+		//for tmd4904
+		int device_id = 0;
+		device_id = get_proximity_device_id(data);
 		if(device_id == TMD4903)
 		{
-			/*If there is an offset cal data. */
 			data->uProxHiThresh =
 				data->uProxHiThresh_default + data->uProxCanc;
 			data->uProxLoThresh =
@@ -274,6 +286,15 @@ int proximity_open_calibration(struct ssp_data *data)
 		{
 			pr_info("[SSP] %s: unkonwn proximity \n", __func__);
 		}
+#else
+		data->uProxHiThresh =
+			data->uProxHiThresh_default + data->uProxCanc;
+		data->uProxLoThresh =
+			data->uProxLoThresh_default + data->uProxCanc;
+		
+		pr_info("[SSP] %s: proximity ps_canc = %d, ps_thresh hi - %d lo - %d\n",
+			__func__, data->uProxCanc, data->uProxHiThresh, data->uProxLoThresh);
+#endif
 	}
 
 	filp_close(cancel_filp, current->files);
@@ -285,6 +306,7 @@ exit:
 
 static int calculate_proximity_threshold(struct ssp_data *data)
 {
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	//for tmd4904
 	int device_id = 0;
 	device_id = get_proximity_device_id(data);
@@ -354,6 +376,26 @@ static int calculate_proximity_threshold(struct ssp_data *data)
 		pr_info("[SSP] %s - UNKNOWN crosstalk_offset = %u(%u), HI_THD = %u, LOW_THD = %u\n",
 			__func__, data->uProxCanc, data->uCrosstalk, data->uProxHiThresh, data->uProxLoThresh);
 	}
+#else
+	if (data->uCrosstalk < data->uProxLoThresh_cal) {
+			data->uProxCanc = 0;
+			data->uProxCalResult = 2;
+		} else if (data->uCrosstalk <= data->uProxHiThresh_cal) {
+			data->uProxCanc = data->uCrosstalk * 5 / 10;
+			data->uProxCalResult = 1;
+		} else {
+			data->uProxCanc = 0;
+			data->uProxCalResult = 0;
+			pr_info("[SSP] crosstalk > %d, calibration failed\n",
+				data->uProxHiThresh_cal);
+			return ERROR;
+		}
+		data->uProxHiThresh = data->uProxHiThresh_default + data->uProxCanc;
+		data->uProxLoThresh = data->uProxLoThresh_default + data->uProxCanc;
+
+		pr_info("[SSP] %s - crosstalk_offset = %u(%u), HI_THD = %u, LOW_THD = %u\n",
+			__func__, data->uProxCanc, data->uCrosstalk, data->uProxHiThresh, data->uProxLoThresh);
+#endif
 
 	return SUCCESS;
 }
@@ -371,9 +413,11 @@ static int proximity_store_cancelation(struct ssp_data *data, int iCalCMD)
 		data->uProxHiThresh = data->uProxHiThresh_default;
 		data->uProxLoThresh = data->uProxLoThresh_default;
 		
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 		//for tmd 4904
 		data->uProxHiThresh_tmd4904 = data->uProxHiThresh_default_tmd4904;
 		data->uProxLoThresh_tmd4904 = data->uProxLoThresh_default_tmd4904;
+#endif
 		data->uProxCanc = 0;
 	}
 
@@ -410,6 +454,7 @@ static ssize_t proximity_cancel_show(struct device *dev,
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	//for tmd4904
 	int device_id = 0;
 	device_id = get_proximity_device_id(data);
@@ -434,6 +479,13 @@ static ssize_t proximity_cancel_show(struct device *dev,
 	{
 		ssp_dbg("[SSP] %s: UNKNOWN Proximity device \n", __func__);
 	}
+#else
+	ssp_dbg("[SSP]: uProxThresh : hi : %u lo : %u, uProxCanc = %u\n",
+		data->uProxHiThresh, data->uProxLoThresh, data->uProxCanc);
+
+	return sprintf(buf, "%u,%u,%u\n", data->uProxCanc,
+		data->uProxHiThresh, data->uProxLoThresh);
+#endif
 
 	return sprintf(buf, "%u,%u,%u\n", data->uProxCanc,
 		data->uProxHiThresh, data->uProxLoThresh);
@@ -470,6 +522,7 @@ static ssize_t proximity_thresh_high_show(struct device *dev,
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	//for tmd4904
 	int device_id = 0;
 	device_id = get_proximity_device_id(data);
@@ -492,6 +545,12 @@ static ssize_t proximity_thresh_high_show(struct device *dev,
 	{
 		ssp_dbg("[SSP]: %s - UNKNOWN Proximity Device \n", __func__);
 	}
+#else 
+	ssp_dbg("[SSP]: TMD4903 uProxThresh = hi - %u, lo - %u\n",
+		data->uProxHiThresh, data->uProxLoThresh);
+
+	return sprintf(buf, "%u,%u\n", data->uProxHiThresh, data->uProxLoThresh);
+#endif
 
 	return sprintf(buf, "%u,%u\n", data->uProxHiThresh, data->uProxLoThresh);
 }
@@ -502,11 +561,9 @@ static ssize_t proximity_thresh_high_store(struct device *dev,
 	u16 uNewThresh;
 	int iRet = 0;
 	struct ssp_data *data = dev_get_drvdata(dev);
-
-
-	//for tmd4904
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	int device_id = 0;
-	device_id = get_proximity_device_id(data);
+#endif
 
 	iRet = kstrtou16(buf, 10, &uNewThresh);
 	if (iRet < 0)
@@ -517,6 +574,10 @@ static ssize_t proximity_thresh_high_store(struct device *dev,
 		else {
 			uNewThresh &= 0x3fff;
 
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
+			//for tmd4904
+			device_id = get_proximity_device_id(data);
+
 			if(device_id == TMD4903)
 			{
 				data->uProxHiThresh = data->uProxHiThresh_default = uNewThresh;
@@ -526,12 +587,20 @@ static ssize_t proximity_thresh_high_store(struct device *dev,
 				//for tmd4904
 				data->uProxHiThresh_tmd4904 = data->uProxHiThresh_default_tmd4904 = uNewThresh;
 			}
+#else
+			data->uProxHiThresh = data->uProxHiThresh_default = uNewThresh;
+#endif
 			set_proximity_threshold(data);
 		}
 	}
 
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	ssp_dbg("[SSP]: %s - new prox threshold : hi - %u, lo - %u, hi - %u, lo - %u \n",
 		__func__, data->uProxHiThresh, data->uProxLoThresh, data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904);
+#else
+	ssp_dbg("[SSP]: %s - new prox threshold : hi - %u, lo - %u\n",
+		__func__, data->uProxHiThresh, data->uProxLoThresh);
+#endif
 
 	return size;
 }
@@ -541,6 +610,7 @@ static ssize_t proximity_thresh_low_show(struct device *dev,
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	//for tmd4904
 	int device_id = 0;
 	device_id = get_proximity_device_id(data);
@@ -563,7 +633,10 @@ static ssize_t proximity_thresh_low_show(struct device *dev,
 	{
 		ssp_dbg("[SSP]: %s - UNKNOWN Proximity Device \n",__func__);
 	}
-
+#else
+	ssp_dbg("[SSP]: uProxThresh = hi - %u, lo - %u\n",
+			data->uProxHiThresh, data->uProxLoThresh);
+#endif
 	return sprintf(buf, "%u,%u\n", data->uProxHiThresh,
 		data->uProxLoThresh);
 }
@@ -574,11 +647,9 @@ static ssize_t proximity_thresh_low_store(struct device *dev,
 	u16 uNewThresh;
 	int iRet = 0;
 	struct ssp_data *data = dev_get_drvdata(dev);
-
-
-	//for tmd4904
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	int device_id = 0;
-	device_id = get_proximity_device_id(data);
+#endif
 
 	iRet = kstrtou16(buf, 10, &uNewThresh);
 	if (iRet < 0)
@@ -588,6 +659,10 @@ static ssize_t proximity_thresh_low_store(struct device *dev,
 			pr_err("[SSP]: %s - allow 14bits.(%d)\n", __func__, uNewThresh);
 		else {
 			uNewThresh &= 0x3fff;
+
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
+			//for tmd4904
+			device_id = get_proximity_device_id(data);
 			if(device_id == TMD4903)
 			{
 				data->uProxLoThresh = data->uProxLoThresh_default = uNewThresh;
@@ -597,13 +672,21 @@ static ssize_t proximity_thresh_low_store(struct device *dev,
 				// for tmd4904
 				data->uProxLoThresh_tmd4904 = data->uProxLoThresh_default_tmd4904 = uNewThresh;
 			}
+#else
+			data->uProxLoThresh = data->uProxLoThresh_default = uNewThresh;
+#endif
 			set_proximity_threshold(data);
 		}
 	}
 
+
+#ifdef CONFIG_SENSORS_SSP_PROX_DUALIZATION
 	ssp_dbg("[SSP]: %s - new prox threshold : hi - %u, lo - %u, hi - %u, lo - %u \n",
 		__func__, data->uProxHiThresh, data->uProxLoThresh, data->uProxHiThresh_tmd4904, data->uProxLoThresh_tmd4904);
-
+#else
+	ssp_dbg("[SSP]: %s - new prox threshold : hi - %u, lo - %u\n",
+		__func__, data->uProxHiThresh, data->uProxLoThresh);
+#endif
 	return size;
 }
 

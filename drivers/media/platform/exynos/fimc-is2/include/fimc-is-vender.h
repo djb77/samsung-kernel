@@ -35,6 +35,29 @@ enum {
 	FW_FAIL,
 };
 
+#ifdef USE_CAMERA_HW_BIG_DATA
+struct cam_hw_param {
+	u32 i2c_sensor_err_cnt;
+	u32 i2c_comp_err_cnt;
+	u32 i2c_ois_err_cnt;
+	u32 i2c_af_err_cnt;
+	u32 mipi_sensor_err_cnt;
+	u32 mipi_comp_err_cnt;
+} __attribute__((__packed__));
+
+struct cam_hw_param_collector {
+	struct cam_hw_param rear_hwparam;
+	struct cam_hw_param front_hwparam;
+	struct cam_hw_param iris_hwparam;
+}__attribute__((__packed__));
+
+void fimc_is_sec_init_err_cnt_file(struct cam_hw_param *hw_param);
+int fimc_is_sec_get_rear_hw_param(struct cam_hw_param **hw_param);
+int fimc_is_sec_get_front_hw_param(struct cam_hw_param **hw_param);
+int fimc_is_sec_get_iris_hw_param(struct cam_hw_param **hw_param);
+bool fimc_is_sec_is_valid_moduleid(char *moduleid);
+#endif
+
 int fimc_is_vender_probe(struct fimc_is_vender *vender);
 int fimc_is_vender_dt(struct device_node *np);
 int fimc_is_vender_fw_prepare(struct fimc_is_vender *vender);

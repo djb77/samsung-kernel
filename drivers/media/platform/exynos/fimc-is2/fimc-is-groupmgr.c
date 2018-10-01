@@ -1359,21 +1359,6 @@ int fimc_is_groupmgr_start(struct fimc_is_groupmgr *groupmgr,
 			goto p_err;
 		}
 
-		for (subdev_id = ENTRY_3AA; subdev_id < ENTRY_ISCHAIN_END; ++subdev_id) {
-			subdev = group->subdev[subdev_id];
-			if (!subdev)
-				continue;
-
-			if (!test_bit(FIMC_IS_SUBDEV_OPEN, &subdev->state))
-				continue;
-
-			ret = CALL_SOPS(subdev, cfg, device, NULL, &incrop, &otcrop, &lindex, &hindex, &indexes);
-			if (ret) {
-				mgerr("subdev cfg callback is fail(%d)", group, group, ret);
-				goto p_err;
-			}
-		}
-
 		group = group->next;
 	}
 	minfo(" =======================\n", device);

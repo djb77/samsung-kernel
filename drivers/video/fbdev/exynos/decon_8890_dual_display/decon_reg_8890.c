@@ -426,7 +426,7 @@ void decon_reg_get_dispif_size(u32 id, int dsi_idx, u32 *p_width, u32 *p_height)
 void decon_reg_set_comp_size(u32 id, enum decon_mic_comp_ratio cr, enum decon_dsi_mode dsi_mode, struct decon_lcd *lcd_info)
 {
 	u32 ratio_type; /* 0 : 12N, 1: 12N4, 2 : 12N8, 3 : ratio2 */
-	u32 mic_width_in_bytes, mic_dummy_in_bytes;
+	u32 mic_width_in_bytes, mic_dummy_in_bytes = 0;
 	u32 width;
 	u32 temp_size, odd_n = 0;
 	u32 cr_0_setting_guide = 0;	/* 0 : guide about 1/2 mic, 1 : UM's guide about 1/2 mic */
@@ -1879,7 +1879,7 @@ void decon_reg_get_clock_ratio(struct decon_clocks *clks, struct decon_lcd *lcd_
 	}
 	return;
 
-#if 0 
+#if 0
 	/* set reset value */
 	clks->decon[CLK_ID_VCLK] = decon_clocks_table[0][CLK_ID_VCLK];
 	clks->decon[CLK_ID_ECLK] = decon_clocks_table[0][CLK_ID_ECLK];

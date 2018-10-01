@@ -714,6 +714,7 @@ struct max98506_priv {
 #endif /* USE_DSM_LOG */
 	struct i2c_client *sub_i2c;
 	struct regmap *sub_regmap;
+	int speaker_dac_enable;
 };
 
 #endif /* _MAX98506_H */

@@ -977,6 +977,14 @@ config TOUCHSCREEN_SUPPORT_MULTIMEDIA
 
 	  If unsure, say N.
 
+config GLOVE_TOUCH
+	tristate "enable glove mode"
+	depends on I2C
+	help
+	  Say Y here to enable GLOVE MODE.
+
+	  If unsure, say N.
+
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
 source "drivers/input/touchscreen/synaptics_dsx2/Kconfig"
 source "drivers/input/touchscreen/stm/Kconfig"
@@ -984,4 +992,5 @@ source "drivers/input/touchscreen/stm/fts7/Kconfig"
 source "drivers/input/touchscreen/stm/fts8/Kconfig"
 source "drivers/input/touchscreen/sec_ts/Kconfig"
 source "drivers/input/touchscreen/mxt_t/Kconfig"
+source "drivers/input/touchscreen/g2touch/Kconfig"
 endif

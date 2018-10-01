@@ -29,7 +29,7 @@
 #include <linux/delay.h>
 #include <linux/host_notify.h>
 #include <linux/string.h>
-#include <linux/sec_debug.h>
+#include <linux/sec_ext.h>
 #include <linux/power_supply.h>
 
 #include <linux/muic/muic.h>
@@ -243,98 +243,6 @@ static ssize_t muic_show_usb_state(struct device *dev,
 	return 0;
 }
 
-#ifdef DEBUG_MUIC
-static ssize_t muic_show_registers(struct device *dev,
-					   struct device_attribute *attr,
-					   char *buf)
-{
-	muic_data_t *pmuic = dev_get_drvdata(dev);
-	char mesg[256] = "";
-
-	mutex_lock(&pmuic->muic_mutex);
-	muic_read_reg_dump(pmuic, mesg);
-	mutex_unlock(&pmuic->muic_mutex);
-	pr_info("%s:%s\n", __func__, mesg);
-
-	return sprintf(buf, "%s\n", mesg);
-}
-
-static char reg_dump_buf[256];
-static ssize_t muic_show_reg_sel(struct device *dev,
-					   struct device_attribute *attr,
-					   char *buf)
-{
-	pr_info("%s:%s\n", __func__, reg_dump_buf);
-
-	return sprintf(buf, "%s\n", reg_dump_buf);
-}
-
-static ssize_t muic_set_reg_sel(struct device *dev,
-					  struct device_attribute *attr,
-					  const char *buf, size_t count)
-{
-	muic_data_t *pmuic = dev_get_drvdata(dev);
-	int len = strlen(buf);
-	unsigned int reg_base = 0, reg_num = 0;
-	int ret = -EINVAL, i = 0;
-
-#if 0 /* For the compatibility in 64 bit */
-	pr_info("%s:%s -> %s(%d, %d)\n", MUIC_DEV_NAME, __func__,
-		buf, count, len);
-#endif
-	if (len < 6) {
-		ret = kstrtoint(buf, 0, &reg_base);
-		if (ret) {
-			pr_err("%s: Undefined Regs\n", __func__);
-			goto err;
-		}
-		reg_num = 1;
-	} else if (len < 10) {
-		char *ptr;
-		char reg_buf[8];
-
-		strcpy(reg_buf, buf);
-		ptr = strstr(reg_buf, "++");
-		*ptr = 0x00;
-		ret = kstrtoint(reg_buf, 0, &reg_base);
-		if (ret) {
-			pr_err("%s: Undefined Regs\n", __func__);
-			goto err;
-		}
-		ret = kstrtoint(ptr + 2, 0, &reg_num);
-		if (ret) {
-			pr_err("%s: Undefined Regs\n", __func__);
-			goto err;
-		}
-	} else {
-		pr_err("%s: Undefined Regs\n", __func__);
-		goto err;
-	}
-
-	pr_info(" (reg_base,reg_num) = (0x%02x,%d)\n", reg_base, reg_num);
-
-	memset(reg_dump_buf, 0x00, sizeof(reg_dump_buf));
-
-	while (reg_num--) {
-		mutex_lock(&pmuic->muic_mutex);
-		ret = muic_i2c_read_byte(pmuic->i2c, reg_base + i);
-		mutex_unlock(&pmuic->muic_mutex);
-		if (ret < 0) {
-			pr_err("%s:%s err read %d\n", MUIC_DEV_NAME, __func__,
-					reg_base);
-			goto err;
-		}
-		pr_info(" [%02x] : %02x\n", reg_base, ret);
-
-		sprintf(reg_dump_buf + strlen(reg_dump_buf),
-			" [%02x] : %02x\n", reg_base + i++, ret);
-	}
-
-err:
-	return count;
-}
-#endif
-
 #if defined(CONFIG_USB_HOST_NOTIFY)
 static ssize_t muic_show_otg_test(struct device *dev,
 					   struct device_attribute *pattr,
@@ -459,6 +367,11 @@ static ssize_t muic_show_attached_dev(struct device *dev,
 	case ATTACHED_DEV_QC_CHARGER_5V_MUIC:
 	case ATTACHED_DEV_QC_CHARGER_9V_MUIC:
 		return sprintf(buf, "AFC Charger\n");
+	case ATTACHED_DEV_POGO_DOCK_MUIC:
+	case ATTACHED_DEV_POGO_DOCK_5V_MUIC:
+		return sprintf(buf, "POGO Dock/5V\n");
+	case ATTACHED_DEV_POGO_DOCK_9V_MUIC:
+		return sprintf(buf, "POGO Dock/9V\n");
 	default:
 		break;
 	}
@@ -652,72 +565,27 @@ static ssize_t muic_store_afc_set_voltage(struct device *dev,
 #endif
 #endif /* CONFIG_MUIC_HV */
 
-#if defined(CONFIG_MUIC_SUPPORT_CCIC)
-static ssize_t cc_xx_show(struct device *dev,
-					   struct device_attribute *attr,
-					   char *buf)
+#if defined(CONFIG_HICCUP_CHARGER)
+static ssize_t hiccup_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
 {
-	const char *mode = "UNKNOWN\n";
-
-	pr_info("%s:%s %s", MUIC_DEV_NAME, __func__, mode);
-
-	return sprintf(buf, mode);
+	return sprintf(buf, "ENABLE\n");
 }
 
-static ssize_t cc_xx_set(struct device *dev,
-					  struct device_attribute *attr,
-					  const char *buf, size_t count)
+static ssize_t hiccup_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
 {
 	muic_data_t *pmuic = dev_get_drvdata(dev);
-	int mid = 0, rid = 0;
-	int ret = 0;
 
-	pr_info("%s:%s buf=%s\n", MUIC_DEV_NAME, __func__, buf);
+	if (!strncasecmp(buf, "DISABLE", 7)) {
+		pr_info("%s\n", __func__);
+		com_to_open_with_vbus(pmuic);
+	} else
+		pr_warn("%s invalid com : %s\n", __func__, buf);
 
-	if (buf[1] != ':') {
-		pr_err("A wrong Input Fomat!\n");
-		return count;
-	}
-
-	if ((buf[0]=='A') || (buf[0]=='a'))
-		mid = 1; /* ATTACH */
-
-	else if ((buf[0]=='R') || (buf[0]=='r'))
-		mid = 2; /* RID */
-
-	else if ((buf[0]=='M') || (buf[0]=='m'))
-		mid = 100; /* MODE */
-	else {
-		pr_err("Undefined Command!\n");
-		return count;
-	}
-
-	ret = kstrtoint(buf + 2, 0, &rid);
-	if (ret) {
-		pr_err("%s: Undefined rid\n", __func__);
-		goto err;
-	}
-
-	if (mid == 100) {
-		pmuic->opmode  = rid ? OPMODE_CCIC : OPMODE_MUIC;
-		pr_info("%s:%s OP_MODE=%d\n", MUIC_DEV_NAME, __func__, pmuic->opmode);
-		if (pmuic->opmode & OPMODE_CCIC) {
-			muic_notifier_set_new_noti(true);
-			muic_register_ccic_notifier(pmuic);
-		}
-
-		return count;
-	}
-
-	muic_ccic_pseudo_noti(mid, rid);
-
-err:
 	return count;
 }
-
-static DEVICE_ATTR(cc_xx, 0664, cc_xx_show,
-		cc_xx_set);
-#endif
+#endif /* CONFIG_HICCUP_CHARGER */
 
 static DEVICE_ATTR(uart_en, 0664, muic_show_uart_en, muic_set_uart_en);
 static DEVICE_ATTR(uart_sel, 0664, muic_show_uart_sel,
@@ -725,10 +593,6 @@ static DEVICE_ATTR(uart_sel, 0664, muic_show_uart_sel,
 static DEVICE_ATTR(usb_sel, 0664,
 		muic_show_usb_sel, muic_set_usb_sel);
 static DEVICE_ATTR(adc, 0664, muic_show_adc, NULL);
-#ifdef DEBUG_MUIC
-static DEVICE_ATTR(reg_dump, 0664, muic_show_registers, NULL);
-static DEVICE_ATTR(reg_sel, 0664, muic_show_reg_sel, muic_set_reg_sel);
-#endif
 static DEVICE_ATTR(usb_state, 0664, muic_show_usb_state, NULL);
 #if defined(CONFIG_USB_HOST_NOTIFY)
 static DEVICE_ATTR(otg_test, 0664,
@@ -750,19 +614,15 @@ static DEVICE_ATTR(afc_set_voltage, 0220,
 		NULL, muic_store_afc_set_voltage);
 #endif
 #endif
+#if defined(CONFIG_HICCUP_CHARGER)
+static DEVICE_ATTR_RW(hiccup);
+#endif
 
 static struct attribute *muic_attributes[] = {
-#if defined(CONFIG_MUIC_SUPPORT_CCIC)
-	&dev_attr_cc_xx.attr,
-#endif
 	&dev_attr_uart_en.attr,
 	&dev_attr_uart_sel.attr,
 	&dev_attr_usb_sel.attr,
 	&dev_attr_adc.attr,
-#ifdef DEBUG_MUIC
-	&dev_attr_reg_dump.attr,
-	&dev_attr_reg_sel.attr,
-#endif
 	&dev_attr_usb_state.attr,
 #if defined(CONFIG_USB_HOST_NOTIFY)
 	&dev_attr_otg_test.attr,
@@ -777,6 +637,9 @@ static struct attribute *muic_attributes[] = {
 #if defined(CONFIG_MUIC_HV_12V) && defined(CONFIG_SEC_FACTORY)
 	&dev_attr_afc_set_voltage.attr,
 #endif
+#endif
+#if defined(CONFIG_HICCUP_CHARGER)
+	&dev_attr_hiccup.attr,
 #endif
 	NULL
 };

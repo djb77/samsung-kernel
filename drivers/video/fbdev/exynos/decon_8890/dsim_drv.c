@@ -331,7 +331,7 @@ int dsim_write_hl_data(struct dsim_device *dsim, const u8 *cmd, u32 cmdSize)
 	int retry;
 	struct panel_private *panel = &dsim->priv;
 
-	if (panel->lcdConnected == PANEL_DISCONNEDTED)
+	if (panel->lcdConnected == PANEL_DISCONNECTED)
 		return cmdSize;
 
 	//mutex_lock(&dsim->rdwr_lock);
@@ -361,12 +361,12 @@ int dsim_read_hl_data(struct dsim_device *dsim, u8 addr, u32 size, u8 *buf)
 	int retry = 5;
 	struct panel_private *panel = &dsim->priv;
 
-	if (panel->lcdConnected == PANEL_DISCONNEDTED)
+	if (panel->lcdConnected == PANEL_DISCONNECTED)
 		return size;
 
 try_read:
 	ret = dsim_read_data(dsim, MIPI_DSI_DCS_READ, (u32)addr, size, buf);
-	dsim_info("%s read ret : %d\n", __func__, ret);
+//	dsim_info("%s read ret : %d\n", __func__, ret);
 	if (ret != size) {
 		if (--retry)
 			goto try_read;
@@ -386,7 +386,7 @@ static int dsim_esd_idle_mode_command(struct dsim_device *dsim, void *arg)
 	int retry;
 
 	dsim_dbg("%s: +\n", __func__);
-	if (panel->lcdConnected == PANEL_DISCONNEDTED)
+	if (panel->lcdConnected == PANEL_DISCONNECTED)
 		return 0;
 
 	retry = 2;
@@ -414,7 +414,7 @@ static int dsim_partial_area_command(struct dsim_device *dsim, void *arg)
 
 	dsim_dbg("%s: (%d, %d, %d,%d)\n", __func__,
 			win_rect->x, win_rect->y, win_rect->w, win_rect->h);
-	if (panel->lcdConnected == PANEL_DISCONNEDTED)
+	if (panel->lcdConnected == PANEL_DISCONNECTED)
 		return 0;
 
 	/* w is right & h is bottom */
@@ -897,9 +897,9 @@ int dsim_set_panel_power(struct dsim_device *dsim, bool on)
 	dsim_info("%s(%d) +\n", __func__, on);
 
 	if (on) {
-		if (panel->lcdConnected == PANEL_DISCONNEDTED)
+		if (panel->lcdConnected == PANEL_DISCONNECTED)
 		{
-			dsim_err("%s : PANEL_DISCONNEDTED -> Not Apply Panel Power!\n", __func__);
+			dsim_err("%s : PANEL_DISCONNECTED -> Not Apply Panel Power!\n", __func__);
 			return 0;
 		}
 		if (res->regulator_18V) {
@@ -1022,7 +1022,9 @@ int dsim_set_panel_power(struct dsim_device *dsim, bool on)
 
 static int dsim_enable(struct dsim_device *dsim)
 {
+#ifdef CONFIG_LCD_DOZE_MODE
 	struct decon_device *decon = (struct decon_device *)dsim->decon;
+#endif
 
 	pr_info("%s ++\n", __func__);
 	if (dsim->state == DSIM_STATE_HSCLKEN) {
@@ -1094,7 +1096,6 @@ static int dsim_enable(struct dsim_device *dsim)
 	}
 #else
 	call_panel_ops(dsim, displayon, dsim);
-	decon->req_display_on = 1;
 #endif
 
 exit_dsim_enable:
@@ -1207,6 +1208,9 @@ static int dsim_doze_enable(struct dsim_device *dsim)
 	}
 set_state_doze:
 	dsim->dsim_doze = DSIM_DOZE_STATE_DOZE;
+#ifdef CONFIG_PANEL_CALL_MDNIE
+	mdnie_update_for_panel();
+#endif
 
 	call_panel_ops(dsim, displayon, dsim);
 
@@ -1260,7 +1264,7 @@ static int dsim_doze_suspend(struct dsim_device *dsim)
 #else
 	dsim_runtime_suspend(dsim->dev);
 #endif
-	
+
 exit_doze_disable:
 	dsim_info("-- %s\n", __func__);
 	return 0;
@@ -1806,6 +1810,115 @@ static int dsim_parse_lcd_info(struct dsim_device *dsim)
 	return 0;
 }
 
+#ifdef CONFIG_DUMPSTATE_LOGGING
+void dsim_print_underrung_info(struct dsim_device *dsim, struct seq_file *s)
+{
+	int i, idx;
+	u64 time;
+	struct dsim_underrun_info *underrun;
+
+	idx = dsim->under_list_idx - 1;
+	idx = idx < 0 ? MAX_UNDERRUN_LIST - 1 : idx;
+
+	if (s != NULL)
+		seq_printf(s, "---------- DSIM Underrun History (Total Cnt: %d) ----------\n",
+			dsim->total_underrun_cnt);
+	else
+		dsim_info("---------- DSIM Underrun History (Total Cnt: %d) ----------\n",
+			dsim->total_underrun_cnt);
+
+	for (i = idx; i >= 0; i--) {
+		underrun = &dsim->under_list[i];
+		if (!underrun) {
+			dsim_info("DSIM:ERR:%s:underlist is null\n", __func__);
+			goto exit_print;
+		}
+		time = ktime_to_ms(underrun->time);
+		if (time == 0)
+			goto exit_print;
+
+		if (s != NULL) {
+			seq_printf(s, "Time:%lld.%lldm, ",
+				time / 1000, time % 1000);
+			seq_printf(s, "MIF:%lu, INT:%lu, DISP:%lu, Total BW:%u->%u\n",
+				underrun->mif_freq,
+				underrun->int_freq,
+				underrun->disp_freq,
+				underrun->prev_bw,
+				underrun->cur_bw);
+		}
+	}
+	for (i = MAX_UNDERRUN_LIST - 1; i >= idx + 1; i--) {
+		underrun = &dsim->under_list[i];
+		if (!underrun) {
+			dsim_info("DSIM:ERR:%s:underlist is null\n", __func__);
+			goto exit_print;
+		}
+		time = ktime_to_ms(underrun->time);
+		if (time == 0)
+			goto exit_print;
+
+		if (s != NULL) {
+			seq_printf(s, "Time:%lld.%lldm, ",
+				time / 1000, time % 1000);
+			seq_printf(s, "MIF:%lu, INT:%lu, DISP:%lu, Total BW:%u->%u\n",
+				underrun->mif_freq,
+				underrun->int_freq,
+				underrun->disp_freq,
+				underrun->prev_bw,
+				underrun->cur_bw);
+		}
+	}
+exit_print:
+	return;
+}
+
+static int dsim_debug_info_show(struct seq_file *s, void *unused)
+{
+	struct dsim_device *dsim = s->private;
+
+	dsim_print_underrung_info(dsim, s);
+
+	return 0;
+}
+
+static int dsim_debug_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, dsim_debug_info_show, inode->i_private);
+}
+
+static const struct file_operations dsim_debug_fops = {
+	.open = dsim_debug_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
+int dsim_create_debugfs(struct dsim_device *dsim)
+{
+	int ret = 0;
+
+	if (dsim->id == 0) {
+		dsim->debug_root = debugfs_create_dir("dsim", NULL);
+		if (!dsim->debug_root) {
+			dsim_err("DSIM:ERR:%s:failed to create debugfs dir\n", __func__);
+			ret = -ENOENT;
+			goto create_err;
+		}
+		dsim->debug_info = debugfs_create_file("debug", 0444,
+			dsim->debug_root, dsim, &dsim_debug_fops);
+		if (!dsim->debug_info) {
+			dsim_err("DSIM:ERR:%s:failed to create debug info\n", __func__);
+			ret = -ENOENT;
+			goto create_err;
+		}
+	}
+create_err:
+	return ret;
+}
+
+#endif
+
 static int dsim_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -1948,6 +2061,14 @@ dsim_init_done:
 #ifdef CONFIG_LCD_DOZE_MODE
 	dsim->dsim_doze = DSIM_DOZE_STATE_NORMAL;
 #endif
+#ifdef CONFIG_DUMPSTATE_LOGGING
+	ret = dsim_create_debugfs(dsim);
+	if (ret) {
+		dsim_err("DSIM:ERR:%s:failed to create debugfs\n", __func__);
+		goto err_irq;
+	}
+#endif
+
 	call_panel_ops(dsim, probe, dsim);
 	/* TODO: displayon is moved to decon probe only in case of lcd on probe */
 	/* call_panel_ops(dsim, displayon, dsim); */
@@ -1961,7 +2082,7 @@ dsim_init_done:
 #ifdef CONFIG_LCD_ALPM
 	dsim->alpm = 0;
 #endif
-
+	dsim->req_display_on = true;
 	return 0;
 
 err_irq:
@@ -1989,7 +2110,6 @@ static int dsim_remove(struct platform_device *pdev)
 	pm_runtime_disable(dev);
 	dsim_put_clocks(dsim);
 	mutex_destroy(&dsim_rd_wr_mutex);
-	kfree(dsim);
 	dev_info(dev, "mipi-dsi driver removed\n");
 
 	return 0;
@@ -2068,6 +2188,7 @@ static struct platform_driver dsim_driver __refdata = {
 		.owner		= THIS_MODULE,
 		.pm		= &dsim_pm_ops,
 		.of_match_table	= of_match_ptr(dsim_match),
+		.suppress_bind_attrs = true,
 	}
 };
 

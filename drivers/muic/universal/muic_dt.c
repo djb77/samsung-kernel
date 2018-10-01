@@ -251,6 +251,14 @@ int of_muic_hv_dt(muic_data_t *pmuic)
         pr_info("%s:%s phv->tx_data:0x%02x\n", MUIC_DEV_NAME, __func__,
                                 phv->tx_data);
 
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	pmuic->dock_int_ap = of_get_named_gpio(np_muic, "muic,dock_int_ap", 0);
+	if (gpio_is_valid(pmuic->dock_int_ap))
+		pr_info("%s:%s dock_int_ap:%d, value:%d\n", MUIC_DEV_NAME, __func__, 
+				pmuic->dock_int_ap, gpio_get_value(pmuic->dock_int_ap));
+	else
+		pr_err("%s:%s dock_int_ap is invalid\n", MUIC_DEV_NAME, __func__);
+#endif
 
 err:
 	of_node_put(np_muic);

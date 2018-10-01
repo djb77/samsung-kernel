@@ -105,6 +105,12 @@ static int muic_notifier_notify(void)
 	pr_info("%s: CMD=%d, DATA=%d\n", __func__, muic_notifier.cxt.attach,
 			muic_notifier.cxt.cable_type);
 
+#ifdef CONFIG_SEC_FACTORY
+	if (muic_notifier.cxt.attach != 0)
+		muic_send_attached_muic_cable_intent(muic_notifier.cxt.cable_type);
+	else
+		muic_send_attached_muic_cable_intent(0);
+#endif
 	pcxt = muic_uses_new_noti ? &(muic_notifier.cxt) : \
 			(void *)&(muic_notifier.attached_dev);
 
@@ -206,13 +212,6 @@ static int __init muic_notifier_init(void)
 	BLOCKING_INIT_NOTIFIER_HEAD(&(muic_notifier.notifier_call_chain));
 	__set_noti_cxt(0 ,ATTACHED_DEV_UNKNOWN_MUIC);
 
-#ifdef CONFIG_CCIC_NOTIFIER
-	ccic_notifier_init();
-#endif
-#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
-	manager_notifier_init();
-#endif
-	
 out:
 	return ret;
 }

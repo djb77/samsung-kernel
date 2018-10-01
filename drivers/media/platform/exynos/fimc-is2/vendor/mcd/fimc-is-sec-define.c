@@ -1507,6 +1507,12 @@ int fimc_is_sec_readcal_eeprom(struct device *dev, int position)
 		client = specific->eeprom_client0;
 	}
 
+	if (client == NULL) {
+		err("i2c client is null. position(%d)\n", position);
+		ret = -ENODEV;
+		goto exit;
+	}
+
 #if defined(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT)
 	if(position == SENSOR_POSITION_FRONT) {
 		if (specific->use_ois_hsi2c) {

@@ -32,28 +32,31 @@
 static int kbasep_mem_profile_seq_show(struct seq_file *sfile, void *data)
 {
 	struct kbase_context *kctx = sfile->private;
+	struct kbase_device *kbdev = gpu_get_device_structure();
 
 	/* MALI_SEC_INTEGRATION - Destroyed context */
-	if (kctx == NULL)
-		return 0;
-
-	/* MALI_SEC_INTEGRATION */
+	mutex_lock(&kbdev->kctx_list_lock);
 	{
-		struct kbase_device *kbdev = kctx->kbdev;
+		if (kctx == NULL) {
+			mutex_unlock(&kbdev->kctx_list_lock);
+			return 0;
+		}
+		else {
+			if(kbdev->vendor_callbacks->mem_profile_check_kctx) {
+				if (!kbdev->vendor_callbacks->mem_profile_check_kctx(kctx)) {
+					mutex_unlock(&kbdev->kctx_list_lock);
+					return 0;
+				}
+			}
 
-		atomic_inc(&kctx->mem_profile_showing_state);
-		if(kbdev->vendor_callbacks->mem_profile_check_kctx)
-			if (!kbdev->vendor_callbacks->mem_profile_check_kctx(kctx)) {
-				atomic_dec(&kctx->mem_profile_showing_state);
+			if(kctx->destroying_context == true) {
+				mutex_unlock(&kbdev->kctx_list_lock);
 				return 0;
 			}
+		}
+		atomic_inc(&kctx->mem_profile_showing_state);
 	}
-
-	/* MALI_SEC_INTEGRATION */
-	if (kctx->destroying_context) {
-		atomic_dec(&kctx->mem_profile_showing_state);
-		return 0;
-	}
+	mutex_unlock(&kbdev->kctx_list_lock);
 
 	mutex_lock(&kctx->mem_profile_lock);
 	/* MALI_SEC_INTEGRATION */

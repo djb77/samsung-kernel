@@ -229,4 +229,4 @@ void check_crash_keys_in_user(unsigned int code, int state)
 		}
 	}
 }
-EXPORT_SYMBOL(check_crash_keys_in_user)
+EXPORT_SYMBOL(check_crash_keys_in_user);

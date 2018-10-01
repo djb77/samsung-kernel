@@ -11,6 +11,7 @@
  */
 
 #include <exynos-fimc-is-module.h>
+#include "fimc-is-binary.h"
 #include "fimc-is-vender.h"
 #include "fimc-is-vender-specific.h"
 #include "fimc-is-core.h"
@@ -47,6 +48,58 @@ static u32  secure_sensor_id;
 #ifdef CAMERA_PARALLEL_RETENTION_SEQUENCE
 struct workqueue_struct *sensor_pwr_ctrl_wq = 0;
 #define CAMERA_WORKQUEUE_MAX_WAITING	1000
+#endif
+
+#ifdef USE_CAMERA_HW_BIG_DATA
+static struct cam_hw_param_collector cam_hwparam_collector;
+
+void fimc_is_sec_init_err_cnt_file(struct cam_hw_param *hw_param)
+{
+	if (hw_param) {
+		memset(hw_param, 0, sizeof(struct cam_hw_param));
+	}
+}
+
+int fimc_is_sec_get_rear_hw_param(struct cam_hw_param **hw_param)
+{
+	*hw_param = &cam_hwparam_collector.rear_hwparam;
+	return 0;
+}
+
+int fimc_is_sec_get_front_hw_param(struct cam_hw_param **hw_param)
+{
+	*hw_param = &cam_hwparam_collector.front_hwparam;
+	return 0;
+}
+
+int fimc_is_sec_get_iris_hw_param(struct cam_hw_param **hw_param)
+{
+	*hw_param = &cam_hwparam_collector.iris_hwparam;
+	return 0;
+}
+
+bool fimc_is_sec_is_valid_moduleid(char *moduleid)
+{
+	int i = 0;
+	
+	if (moduleid == NULL || strlen(moduleid) < 5) {
+		goto err;
+	}
+	
+	for (i = 0; i < 5; i++)
+	{
+		if (!((moduleid[i] > 47 && moduleid[i] < 58) || // 0 to 9
+			(moduleid[i] > 64 && moduleid[i] < 91))) {  // A to Z
+			goto err;
+		}
+	}
+	
+	return true;
+	
+err:
+	warn("invalid moduleid\n");
+	return false;
+}
 #endif
 
 int fimc_is_vender_probe(struct fimc_is_vender *vender)

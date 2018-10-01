@@ -61,7 +61,7 @@ extern struct dsim_device *dsim1_for_decon;
 #define PANEL_STATE_RESUMED		1
 #define PANEL_STATE_SUSPENDING	2
 
-#define PANEL_DISCONNEDTED		0
+#define PANEL_DISCONNECTED		0
 #define PANEL_CONNECTED			1
 
 extern struct mipi_dsim_lcd_driver s6e3hf4_mipi_lcd_driver;
