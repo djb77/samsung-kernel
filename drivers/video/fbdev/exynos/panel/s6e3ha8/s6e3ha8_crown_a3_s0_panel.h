@@ -793,6 +793,7 @@ static u8 CROWN_A3_S0_PASET[] = { 0x2B, 0x00, 0x00, 0x09, 0xFF };
 #endif
 static u8 CROWN_A3_S0_LPM_AOR[] =  { 0xB1, 0x0B, 0x74 };
 static u8 CROWN_A3_S0_LPM_NIT[] = {0xBB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+static u8 CROWN_A3_S0_LPM_VOLTAGE[] = {0xBB, 0x88, 0x80};
 static u8 CROWN_A3_S0_LPM_MODE[] = { 0x53, 0x00 };
 static u8 CROWN_A3_S0_LPM_OFF_NIT[] = {0xBB, 0x05};
 static u8 CROWN_A3_S0_AVS_ON[] = { 0xFD, 0x03 };
@@ -959,6 +960,7 @@ static DEFINE_PKTUI(crown_a3_s0_lpm_off_nit, &crown_a3_s0_maptbl[LPM_OFF_MAPTBL]
 static DEFINE_VARIABLE_PACKET(crown_a3_s0_lpm_off_nit, DSI_PKT_TYPE_WR, CROWN_A3_S0_LPM_OFF_NIT, 0);
 static DEFINE_PKTUI(crown_a3_s0_lpm_nit, &crown_a3_s0_maptbl[LPM_NIT_MAPTBL], 1);
 static DEFINE_VARIABLE_PACKET(crown_a3_s0_lpm_nit, DSI_PKT_TYPE_WR, CROWN_A3_S0_LPM_NIT, 0);
+static DEFINE_STATIC_PACKET(crown_a3_s0_lpm_voltage, DSI_PKT_TYPE_WR, CROWN_A3_S0_LPM_VOLTAGE, 0x25);
 static DEFINE_STATIC_PACKET(crown_a3_s0_avs_on, DSI_PKT_TYPE_WR, CROWN_A3_S0_AVS_ON, 0x2B);
 static DEFINE_STATIC_PACKET(crown_a3_s0_avc2_on, DSI_PKT_TYPE_WR, CROWN_A3_S0_AVC2_ON, 0);
 static DEFINE_STATIC_PACKET(crown_a3_s0_avc2_off, DSI_PKT_TYPE_WR, CROWN_A3_S0_AVC2_OFF, 0);
@@ -1359,6 +1361,7 @@ static void *crown_a3_s0_alpm_enter_cmdtbl[] = {
 	&DLYINFO(crown_a3_s0_wait_1_frame_in_60hz),
 	&KEYINFO(crown_a3_s0_level2_key_enable),
 	&PKTINFO(crown_a3_s0_lpm_nit),
+	&PKTINFO(crown_a3_s0_lpm_voltage),
 	&KEYINFO(crown_a3_s0_level3_key_enable),
 	&PKTINFO(crown_a3_s0_avs_on),
 	&KEYINFO(crown_a3_s0_level3_key_disable),

@@ -206,7 +206,7 @@ static int task_defex_check_creds(struct task_struct *p)
 		goto exit;
 	} else {
 		check_deeper = 0;
-		if ((cur_uid != uid) || (cur_euid != uid) || (cur_fsuid != fsuid) || (cur_egid != egid)) {
+		if ((cur_uid != uid) || (cur_euid != uid) || !((cur_fsuid == fsuid) || (cur_fsuid == uid)) || (cur_egid != egid)) {
 			check_deeper = 1;
 			set_task_creds(p->pid, cur_euid, cur_fsuid, cur_egid);
 		}

@@ -325,6 +325,8 @@ int gpu_control_enable_customization(struct kbase_device *kbdev)
 		platform->inter_frame_pm_status = false;
 	else if (platform->ctx_need_qos == true)
 		platform->inter_frame_pm_status = false;
+	else if (kbdev->pm.backend.metrics.is_full_compute_util)
+		platform->inter_frame_pm_status = false;
 	else
 		platform->inter_frame_pm_status = true;
 

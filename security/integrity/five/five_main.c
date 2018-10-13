@@ -333,7 +333,7 @@ void five_task_free(struct task_struct *task)
 }
 
 /* Returns string representation of input function */
-static const char *get_string_fn(enum five_hooks fn)
+const char *get_string_fn(enum five_hooks fn)
 {
 	switch (fn) {
 	case FILE_CHECK:
@@ -503,7 +503,7 @@ out:
 
 			task_integrity_reset(integrity);
 			tint = task_integrity_read(integrity);
-			five_audit_info(task, file, get_string_fn(fn),
+			five_audit_verbose(task, file, get_string_fn(fn),
 					prev_tint, tint, "reset-integrity", rc);
 		}
 

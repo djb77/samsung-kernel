@@ -119,3 +119,8 @@ config DISPLAY_USE_INFO
 	depends on EXYNOS_DECON_LCD
 	tristate "Support display use info logging"
 	default n
+
+config SELF_MOVE_3PX
+	depends on EXYNOS_DECON_LCD
+	tristate "self move 3 pixel"
+	default n

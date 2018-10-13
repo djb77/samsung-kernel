@@ -75,4 +75,5 @@ int five_digsig_verify(struct five_cert *cert,
 			    const char *digest, int digestlen);
 void __init five_load_built_x509(void);
 int __init five_keyring_init(void);
+const char *get_string_fn(enum five_hooks fn);
 #endif

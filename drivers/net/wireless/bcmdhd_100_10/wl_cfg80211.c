@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.c 767641 2018-06-14 14:22:46Z $
+ * $Id: wl_cfg80211.c 777330 2018-08-20 09:08:38Z $
  */
 /* */
 #include <typedefs.h>
@@ -804,11 +804,6 @@ static s32 wl_inform_single_bss(struct bcm_cfg80211 *cfg, wl_bss_info_t *bi, boo
 static s32 wl_update_bss_info(struct bcm_cfg80211 *cfg, struct net_device *ndev, bool roam);
 static chanspec_t wl_cfg80211_get_shared_freq(struct wiphy *wiphy);
 s32 wl_cfg80211_channel_to_freq(u32 channel);
-
-#ifdef WL_IRQSET
-static void wl_irq_set_work_handler(struct work_struct *work);
-#define IRQ_SET_DURATION 23000
-#endif /* WL_IRQSET */
 
 static void wl_cfg80211_work_handler(struct work_struct *work);
 static s32 wl_add_keyext(struct wiphy *wiphy, struct net_device *dev,
@@ -2519,7 +2514,7 @@ wl_cfg80211_del_if(struct bcm_cfg80211 *cfg, struct net_device *primary_ndev,
 		return -ENODEV;
 	}
 
-	WL_INFORM_MEM(("del vif. wdev_ptr:%p cfg_iftype:%d\n", wdev, wdev->iftype));
+	WL_INFORM_MEM(("del vif. wdev cfg_iftype:%d\n", wdev->iftype));
 
 	wiphy = wdev->wiphy;
 #ifdef WL_CFG80211_P2P_DEV_IF
@@ -11087,9 +11082,6 @@ wl_cfg80211_start_ap(
 		}
 	}
 #endif /* SUPPORT_AP_RADIO_PWRSAVE */
-#ifdef WL_IRQSET
-	dhd_irq_set_affinity(dhd);
-#endif /* WL_IRQSET */
 
 fail:
 	if (err) {
@@ -14721,9 +14713,6 @@ wl_bss_connect_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	s32 err = 0;
 	u8 *curbssid = wl_read_prof(cfg, ndev, WL_PROF_BSSID);
 	u32 event_type = ntoh32(e->event_type);
-#ifdef WL_IRQSET
-	int delta_time = 0;
-#endif /* WL_IRQSET */
 	struct cfg80211_bss *bss = NULL;
 	dhd_pub_t *dhdp;
 	dhdp = (dhd_pub_t *)(cfg->pub);
@@ -14791,14 +14780,6 @@ wl_bss_connect_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 				WL_ERR(("CUSTOM_LONG_RETRY_LIMIT set fail!\n"));
 			}
 #endif /* CUSTOM_LONG_RETRY_LIMIT */
-#ifdef WL_IRQSET
-			dhd_irq_set_affinity(dhdp);
-			delta_time = IRQ_SET_DURATION - local_clock() / USEC_PER_SEC;
-			if (delta_time > 0) {
-				schedule_delayed_work(&cfg->irq_set_work,
-					msecs_to_jiffies((const unsigned int)delta_time));
-			}
-#endif /* WL_IRQSET */
 			memset(&cfg->last_roamed_addr, 0, ETHER_ADDR_LEN);
 		}
 
@@ -17915,9 +17896,6 @@ s32 wl_cfg80211_attach(struct net_device *ndev, void *context)
 #endif /* WL_ENABLE_P2P_IF || WL_NEWCFG_PRIVCMD_SUPPORT */
 
 	INIT_DELAYED_WORK(&cfg->pm_enable_work, wl_cfg80211_work_handler);
-#ifdef WL_IRQSET
-	INIT_DELAYED_WORK(&cfg->irq_set_work, wl_irq_set_work_handler);
-#endif /* WL_IRQSET */
 	mutex_init(&cfg->pm_sync);
 #ifdef WL_NAN
 	mutex_init(&cfg->nancfg.nan_sync);
@@ -17946,9 +17924,6 @@ void wl_cfg80211_detach(struct bcm_cfg80211 *cfg)
 		return;
 	}
 	wl_add_remove_pm_enable_work(cfg, WL_PM_WORKQ_DEL);
-#ifdef WL_IRQSET
-	cancel_delayed_work_sync(&cfg->irq_set_work);
-#endif /* WL_IRQSET */
 
 #if defined(COEX_DHCP)
 	wl_cfg80211_btcoex_deinit();
@@ -18909,9 +18884,6 @@ static s32 __wl_cfg80211_down(struct bcm_cfg80211 *cfg)
 
 	/* Delete pm_enable_work */
 	wl_add_remove_pm_enable_work(cfg, WL_PM_WORKQ_DEL);
-#ifdef WL_IRQSET
-	cancel_delayed_work_sync(&cfg->irq_set_work);
-#endif /* WL_IRQSET */
 
 	if (cfg->p2p_supported) {
 		wl_clr_p2p_status(cfg, GO_NEG_PHASE);
@@ -24027,18 +23999,6 @@ wl_cfg80211_check_for_nan_support(struct bcm_cfg80211 *cfg)
 	}
 	return TRUE;
 }
-
-#ifdef WL_IRQSET
-static void wl_irq_set_work_handler(struct work_struct * work)
-{
-	struct bcm_cfg80211 *cfg = NULL;
-	BCM_SET_CONTAINER_OF(cfg, work, struct bcm_cfg80211, irq_set_work.work);
-
-	if (cfg) {
-		dhd_irq_set_affinity(cfg->pub);
-	}
-}
-#endif /* WL_IRQSET */
 
 #ifdef WL_WPS_SYNC
 static void wl_wps_reauth_timeout(unsigned long data)

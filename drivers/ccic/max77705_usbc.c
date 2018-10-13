@@ -2496,6 +2496,19 @@ static void max77705_usbc_mask_irq(struct max77705_usbc_platform_data *usbc_data
 			   i2c_data);
 }
 
+static void max77705_dp_detach_cb(void)
+{
+	struct max77705_usbc_platform_data *usbpd_data = NULL;
+
+	usbpd_data = g_usbc_data;
+
+	if (!usbpd_data)
+		return;
+
+	pr_info("%s\n", __func__);
+	wake_up_interruptible(&usbpd_data->dp_detach_wait_q);
+}
+
 static int pdic_handle_usb_external_notifier_notification(struct notifier_block *nb,
 				unsigned long action, void *data)
 {
@@ -2506,13 +2519,12 @@ static int pdic_handle_usb_external_notifier_notification(struct notifier_block 
 	pr_info("%s : action=%lu , enable=%d\n", __func__, action, enable);
 	switch (action) {
 	case EXTERNAL_NOTIFY_HOSTBLOCK_PRE:
-		if (enable) {
+		if (enable)
 			max77705_set_enable_alternate_mode(ALTERNATE_MODE_STOP);
-			if (usbpd_data->dp_is_connect)
-				max77705_dp_detach(usbpd_data);
-		} else {
-			if (usbpd_data->dp_is_connect)
-				max77705_dp_detach(usbpd_data);
+		if (usbpd_data->dp_is_connect) {
+			max77705_dp_detach(usbpd_data);
+			wait_event_interruptible_timeout(usbpd_data->dp_detach_wait_q, !dp_use_informed, DP_DETACH_WAIT_TIME);
+			pr_info("%s : dp_use_informed=%d\n", __func__, dp_use_informed);
 		}
 		break;
 	case EXTERNAL_NOTIFY_HOSTBLOCK_POST:
@@ -2520,6 +2532,19 @@ static int pdic_handle_usb_external_notifier_notification(struct notifier_block 
 		} else {
 			max77705_set_enable_alternate_mode(ALTERNATE_MODE_START);
 		}
+		break;
+	case EXTERNAL_NOTIFY_MDMBLOCK_PRE:
+		if (usbpd_data->dp_is_connect) {
+			max77705_dp_detach(usbpd_data);
+			wait_event_interruptible_timeout(usbpd_data->dp_detach_wait_q, !dp_use_informed, DP_DETACH_WAIT_TIME);
+			pr_info("%s : dp_use_informed=%d\n", __func__, dp_use_informed);
+		}
+		break;
+	case EXTERNAL_NOTIFY_MDMBLOCK_POST:
+		if (enable)
+			;
+		else
+			;
 		break;
 	default:
 		break;
@@ -2705,6 +2730,7 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	usbc_data->cc_pin_status = NO_DETERMINATION;
 	usbc_data->power_role = DUAL_ROLE_PROP_PR_NONE;
 	usbc_data->auto_vbus_en = false;
+	usbc_data->is_first_booting = 1;
 #if defined(CONFIG_USB_HOST_NOTIFY)
 	send_otg_notify(o_notify, NOTIFY_EVENT_POWER_SOURCE, 0);
 #endif
@@ -2742,7 +2768,6 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	max77705_pd_init(usbc_data);
 	max77705_write_reg(usbc_data->muic, REG_PD_INT_M, 0x1C);
 	max77705_write_reg(usbc_data->muic, REG_VDM_INT_M, 0xFF);
-	usbc_data->is_first_booting = 1;
 	max77705_usbc_disable_auto_vbus(usbc_data);
 	INIT_DELAYED_WORK(&usbc_data->vbus_hard_reset_work,
 				vbus_control_hard_reset);
@@ -2784,6 +2809,7 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	pccic_data->misc_dev->uvdm_write = max77705_sec_uvdm_out_request_message;
 	pccic_data->misc_dev->uvdm_ready = max77705_sec_uvdm_ready;
 	pccic_data->misc_dev->uvdm_close = max77705_sec_uvdm_close;
+	pccic_data->misc_dev->dp_detach_cb = max77705_dp_detach_cb;
 #endif
 	/* Register ccic handler to ccic notifier block list */
 	ret = usb_external_notify_register(&usbc_data->usb_external_notifier_nb,
@@ -2796,8 +2822,9 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	max77705->cc_booting_complete = 1;
 	max77705_usbc_umask_irq(usbc_data);
 	init_waitqueue_head(&usbc_data->host_turn_on_wait_q);
+	init_waitqueue_head(&usbc_data->dp_detach_wait_q);
 	max77705_set_host_turn_on_event(0);
-	usbc_data->host_turn_on_wait_time = 3;
+	usbc_data->host_turn_on_wait_time = 10;
 
 
 	msg_maxim("probing Complete..");

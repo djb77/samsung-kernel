@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 767637 2018-06-14 13:58:51Z $
+ * $Id: dhd_linux.c 777330 2018-08-20 09:08:38Z $
  */
 
 #include <typedefs.h>
@@ -456,9 +456,6 @@ static int argos_status_notifier_wifi_cb(struct notifier_block *notifier,
 	unsigned long speed, void *v);
 static int argos_status_notifier_p2p_cb(struct notifier_block *notifier,
 	unsigned long speed, void *v);
-
-/* PCIe interrupt affinity threshold (Mbps) */
-#define PCIE_IRQ_AFFINITY_THRESHOLD 300
 
 /* ARGOS notifer data */
 static struct notifier_block argos_wifi; /* STA */
@@ -4903,6 +4900,10 @@ __dhd_sendpkt(dhd_pub_t *dhdp, int ifidx, void *pktbuf)
 #endif /* !PKTPRIO_OVERRIDE */
 	}
 
+#ifdef SUPPORT_SET_TID
+	dhd_set_tid_based_on_uid(dhdp, pktbuf);
+#endif	/* SUPPORT_SET_TID */
+
 #ifdef PCIE_FULL_DONGLE
 	/*
 	 * Lkup the per interface hash table, for a matching flowring. If one is not
@@ -5807,6 +5808,21 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 #endif /* DHD_WAKE_STATUS */
 
 		eh = (struct ether_header *)PKTDATA(dhdp->osh, pktbuf);
+
+		if (ifidx >= DHD_MAX_IFS) {
+			DHD_ERROR(("%s: ifidx(%d) Out of bound. drop packet\n",
+				__FUNCTION__, ifidx));
+			if (ntoh16(eh->ether_type) == ETHER_TYPE_BRCM) {
+#ifdef DHD_USE_STATIC_CTRLBUF
+				PKTFREE_STATIC(dhdp->osh, pktbuf, FALSE);
+#else
+				PKTFREE(dhdp->osh, pktbuf, FALSE);
+#endif /* DHD_USE_STATIC_CTRLBUF */
+			} else {
+				PKTCFREE(dhdp->osh, pktbuf, FALSE);
+			}
+			continue;
+		}
 
 		ifp = dhd->iflist[ifidx];
 		if (ifp == NULL) {
@@ -9379,18 +9395,24 @@ dhd_trace_read_proc(struct file *file, char __user *buffer, size_t tt, loff_t *l
 	mutex_lock(&g_dhd_pub->dhd_trace_lock);
 	trace_buf_info = (trace_buf_info_t *)MALLOC(g_dhd_pub->osh,
 			sizeof(trace_buf_info_t));
-	if (trace_buf_info != NULL) {
+	if (trace_buf_info) {
 		dhd_get_read_buf_ptr(g_dhd_pub, trace_buf_info);
 		if (copy_to_user(buffer, (void*)trace_buf_info->buf, MIN(trace_buf_info->size, tt)))
-			return -EFAULT;
+		{
+			ret = -EFAULT;
+			goto exit;
+		}
 		if (trace_buf_info->availability == BUF_NOT_AVAILABLE)
 			ret = BUF_NOT_AVAILABLE;
 		else
 			ret = trace_buf_info->size;
-		MFREE(g_dhd_pub->osh, trace_buf_info, sizeof(trace_buf_info_t));
 	} else
 		DHD_ERROR(("Memory allocation Failed\n"));
 
+exit:
+	if (trace_buf_info) {
+		MFREE(g_dhd_pub->osh, trace_buf_info, sizeof(trace_buf_info_t));
+	}
 	mutex_unlock(&g_dhd_pub->dhd_trace_lock);
 	return ret;
 }
@@ -10000,7 +10022,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	dhd_found++;
 
 	g_dhd_pub = &dhd->pub;
-	DHD_ERROR(("%s: g_dhd_pub %p\n", __FUNCTION__, g_dhd_pub));
+	DHD_INFO(("%s: g_dhd_pub %p\n", __FUNCTION__, g_dhd_pub));
 
 #ifdef DHD_DUMP_MNGR
 	dhd->pub.dump_file_manage =
@@ -11178,12 +11200,11 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #ifdef CUSTOM_SET_OCLOFF
 	dhd->ocl_off = FALSE;
 #endif /* CUSTOM_SET_OCLOFF */
-#ifdef DHD_TID_MODE
-	dhd->changeTIDmode = 0;
-	dhd->changeTIDtid = 0;
-	dhd->changeTIDuid = 0;
-	dhd->changeTIDdestip = 0;
-#endif /* DHD_TID_MODE */
+#ifdef SUPPORT_SET_TID
+	dhd->tid_mode = SET_TID_OFF;
+	dhd->target_uid = 0;
+	dhd->target_tid = 0;
+#endif /* SUPPORT_SET_TID */
 	DHD_TRACE(("Enter %s\n", __FUNCTION__));
 	dhd->op_mode = 0;
 
@@ -14593,8 +14614,11 @@ int net_os_set_suspend_bcn_li_dtim(struct net_device *dev, int val)
 {
 	dhd_info_t *dhd = DHD_DEV_INFO(dev);
 
-	if (dhd)
+	if (dhd) {
+		DHD_ERROR(("%s: Set bcn_li_dtim in suspend %d\n",
+			__FUNCTION__, val));
 		dhd->pub.suspend_bcn_li_dtim = val;
+	}
 
 	return 0;
 }
@@ -17962,6 +17986,7 @@ void dhd_get_memdump_info(dhd_pub_t *dhd)
 {
 	struct file *fp = NULL;
 	uint32 mem_val = DUMP_MEMFILE_MAX;
+	char *p_mem_val = NULL;
 	int ret = 0;
 	char *filepath = MEMDUMPINFO;
 
@@ -17995,7 +18020,9 @@ void dhd_get_memdump_info(dhd_pub_t *dhd)
 		goto done;
 	}
 
-	mem_val = bcm_atoi((char *)&mem_val);
+	p_mem_val = (char*)&mem_val;
+	p_mem_val[sizeof(uint32) - 1] = '\0';
+	mem_val = bcm_atoi(p_mem_val);
 
 	filp_close(fp, NULL);
 
@@ -19482,19 +19509,6 @@ argos_status_notifier_wifi_cb(struct notifier_block *notifier,
 	if (dhdp == NULL || !dhdp->up) {
 		goto exit;
 	}
-#if defined(ARGOS_NOTIFY_CB)
-	if (speed > PCIE_IRQ_AFFINITY_THRESHOLD) {
-		if (dhdpcie_get_pcieirq(dhd->pub.bus, &pcie_irq)) {
-			DHD_ERROR(("%s, Failed to get PCIe IRQ\n", __FUNCTION__));
-		} else {
-			DHD_ERROR(("%s, PCIe IRQ:%u set Core %d\n",
-				__FUNCTION__, pcie_irq, PCIE_IRQ_CPU_CORE));
-			irq_set_affinity(pcie_irq, cpumask_of(PCIE_IRQ_CPU_CORE));
-		}
-	} else {
-		dhd_irq_set_affinity(dhdp);
-	}
-#endif /* ARGOS_NOTIFY_CB */
 	/* Check if reported TPut value is more than threshold value */
 	if (speed > RPS_TPUT_THRESHOLD) {
 		if (argos_rps_ctrl_data.argos_rps_cpus_enabled == 0) {
@@ -20756,11 +20770,13 @@ dhd_schedule_dmaxfer_free(dhd_pub_t *dhdp, dmaxref_mem_map_t *dmmap)
 }
 #endif /* PCIE_FULL_DONGLE */
 /* ---------------------------- End of sysfs implementation ------------------------------------- */
+
 #ifdef SET_PCIE_IRQ_CPU_CORE
 void
-dhd_set_irq_cpucore(dhd_pub_t *dhdp, int set)
+dhd_set_irq_cpucore(dhd_pub_t *dhdp, int affinity_cmd)
 {
-	unsigned int irq;
+	unsigned int pcie_irq = 0;
+
 	if (!dhdp) {
 		DHD_ERROR(("%s : dhd is NULL\n", __FUNCTION__));
 		return;
@@ -20771,11 +20787,35 @@ dhd_set_irq_cpucore(dhd_pub_t *dhdp, int set)
 		return;
 	}
 
-	if (dhdpcie_get_pcieirq(dhdp->bus, &irq)) {
+	DHD_ERROR(("Enter %s, PCIe affinity cmd=0x%x\n", __FUNCTION__, affinity_cmd));
+
+	if (dhdpcie_get_pcieirq(dhdp->bus, &pcie_irq)) {
+		DHD_ERROR(("%s : Can't get interrupt number\n", __FUNCTION__));
 		return;
 	}
 
-	set_irq_cpucore(irq, set);
+	/*
+		irq_set_affinity() assign dedicated CPU core PCIe interrupt
+		If dedicated CPU core is not on-line,
+		PCIe interrupt scheduled on CPU core 0
+	*/
+	switch (affinity_cmd) {
+		case PCIE_IRQ_AFFINITY_OFF:
+			break;
+		case PCIE_IRQ_AFFINITY_BIG_CORE_ANY:
+			irq_set_affinity(pcie_irq, dhdp->info->cpumask_primary);
+			break;
+#ifdef CONFIG_SOC_EXYNOS9810
+		case PCIE_IRQ_AFFINITY_BIG_CORE_EXYNOS:
+			DHD_ERROR(("%s, PCIe IRQ:%u set Core %d\n",
+				__FUNCTION__, pcie_irq, PCIE_IRQ_CPU_CORE));
+			irq_set_affinity(pcie_irq, cpumask_of(PCIE_IRQ_CPU_CORE));
+			break;
+#endif /* CONFIG_SOC_EXYNOS9810 */
+		default:
+			DHD_ERROR(("%s, Unknown PCIe affinity cmd=0x%x\n",
+				__FUNCTION__, affinity_cmd));
+	}
 }
 #endif /* SET_PCIE_IRQ_CPU_CORE */
 
@@ -22278,3 +22318,53 @@ dhd_get_host_whitelist_region(void *buf, uint len)
 	host_reg->hreg_end.addr_high = EXTRACT_HIGH32(wl_end);
 	return BCME_OK;
 }
+
+#ifdef SUPPORT_SET_TID
+/*
+ * Set custom TID value for UDP frame based on UID value.
+ * This will be triggered by android private command below.
+ * DRIVER SET_TID <Mode:uint8> <Target UID:uint32> <Custom TID:uint8>
+ * Mode 0(SET_TID_OFF) : Disable changing TID
+ * Mode 1(SET_TID_ALL_UDP) : Change TID for all UDP frames
+ * Mode 2(SET_TID_BASED_ON_UID) : Change TID for UDP frames based on target UID
+*/
+void
+dhd_set_tid_based_on_uid(dhd_pub_t *dhdp, void *pkt)
+{
+	struct ether_header *eh = NULL;
+	struct sock *sk = NULL;
+	uint8 *pktdata = NULL;
+	uint8 *ip_hdr = NULL;
+	uint8 cur_prio;
+	uint8 prio;
+	uint32 uid;
+
+	if (dhdp->tid_mode == SET_TID_OFF) {
+		return;
+	}
+
+	pktdata = (uint8 *)PKTDATA(dhdp->osh, pkt);
+	eh = (struct ether_header *) pktdata;
+	ip_hdr = (uint8 *)eh + ETHER_HDR_LEN;
+
+	if (IPV4_PROT(ip_hdr) != IP_PROT_UDP) {
+		return;
+	}
+
+	cur_prio = PKTPRIO(pkt);
+	prio = dhdp->target_tid;
+	uid = dhdp->target_uid;
+
+	if ((cur_prio == prio) ||
+		(cur_prio != PRIO_8021D_BE)) {
+			return;
+	}
+
+	sk = ((struct sk_buff*)(pkt))->sk;
+
+	if ((dhdp->tid_mode == SET_TID_ALL_UDP) ||
+		(sk && (uid == __kuid_val(sock_i_uid(sk))))) {
+		PKTSETPRIO(pkt, prio);
+	}
+}
+#endif /* SUPPORT_SET_TID */

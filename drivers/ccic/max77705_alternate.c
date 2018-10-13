@@ -1087,11 +1087,6 @@ void max77705_set_enable_alternate_mode(int mode)
 					max77705_vdm_process_set_samsung_alternate_mode(usbpd_data,
 						MAXIM_ENABLE_ALTERNATE_SRC_VDM);
 					msg_maxim("[NO BOOTING TIME] !!!alternate mode is started!");
-					if (usbpd_data->cc_data->current_pr == SNK && (pd_data->current_dr == DFP)) {
-						max77705_vdm_process_set_identity_req(usbpd_data);
-						msg_maxim("[NO BOOTING TIME] SEND THE PACKET (DEX HUB) ");
-					}
-
 				} else if (mode & ALTERNATE_MODE_STOP) {
 					max77705_vdm_process_set_samsung_alternate_mode(usbpd_data,
 						MAXIM_ENABLE_ALTERNATE_SRCCAP);
@@ -1124,11 +1119,6 @@ void max77705_set_enable_alternate_mode(int mode)
 						status[3], status[4], status[5], status[6]);
 					msg_maxim("UIC_INT_M:0x%x, CC_INT_M:0x%x, PD_INT_M:0x%x, VDM_INT_M:0x%x",
 						status[7], status[8], status[9], status[10]);
-					if (usbpd_data->cc_data->current_pr == SNK && pd_data->current_dr == DFP
-						&& usbpd_data->is_first_booting) {
-						max77705_vdm_process_set_identity_req(usbpd_data);
-						msg_maxim("[ON BOOTING TIME] SEND THE PACKET (DEX HUB)  ");
-					}
 					max77705_write_reg(usbpd_data->muic, REG_VDM_INT_M, 0xF0);
 					max77705_write_reg(usbpd_data->muic, REG_PD_INT_M, 0x0);
 					max77705_read_reg(usbpd_data->muic, MAX77705_USBC_REG_PD_INT_M, &status[9]);

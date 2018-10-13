@@ -791,6 +791,9 @@ int verity_map(struct dm_target *ti, struct bio *bio)
 	nblks = bio->bi_iter.bi_size >> v->data_dev_block_bits;
 
 	while (nblks) {
+		if (bitpos >= v->data_blocks)
+			break;
+
 		if (!test_bit(bitpos, (const volatile unsigned long *)v->verity_bitmap)) {
 			skip = false;
 			break;

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_android.c 753372 2018-03-21 07:50:11Z $
+ * $Id: wl_android.c 777330 2018-08-20 09:08:38Z $
  */
 
 #include <linux/module.h>
@@ -65,7 +65,6 @@
 #ifdef DHD_PKT_LOGGING
 #include <dhd_pktlog.h>
 #endif /* DHD_PKT_LOGGING */
-#include <bcmendian.h>
 /*
  * Android private command strings, PLEASE define new private commands here
  * so they can be updated easily in the future (if needed)
@@ -86,6 +85,7 @@
 #define CMD_BTCOEXMODE		"BTCOEXMODE"
 #define CMD_SETSUSPENDOPT	"SETSUSPENDOPT"
 #define CMD_SETSUSPENDMODE      "SETSUSPENDMODE"
+#define CMD_SETDTIM_IN_SUSPEND  "SET_DTIM_IN_SUSPEND"
 #define CMD_MAXDTIM_IN_SUSPEND  "MAX_DTIM_IN_SUSPEND"
 #define CMD_P2P_DEV_ADDR	"P2P_DEV_ADDR"
 #define CMD_SETFWPATH		"SETFWPATH"
@@ -146,6 +146,10 @@
 #define CMD_TEST_GET_TX_POWER		"TEST_GET_TX_POWER"
 #endif /* TEST_TX_POWER_CONTROL */
 #define CMD_SARLIMIT_TX_CONTROL		"SET_TX_POWER_CALLING"
+#ifdef SUPPORT_SET_TID
+#define CMD_SET_TID		"SET_TID"
+#define CMD_GET_TID		"GET_TID"
+#endif /* SUPPORT_SET_TID */
 #endif /* CUSTOMER_HW4_PRIVATE_CMD */
 #define CMD_KEEP_ALIVE		"KEEPALIVE"
 
@@ -379,11 +383,6 @@ struct connection_stats {
 #ifdef SUPPORT_LQCM
 #define CMD_SET_LQCM_ENABLE			"SET_LQCM_ENABLE"
 #define CMD_GET_LQCM_REPORT			"GET_LQCM_REPORT"
-#endif // endif
-
-#ifdef DHD_TID_MODE
-#define CMD_SET_TID_MODE			"SET_TID_MODE"
-#define CMD_GET_TID_MODE			"GET_TID_MODE"
 #endif // endif
 
 static LIST_HEAD(miracast_resume_list);
@@ -1051,6 +1050,30 @@ static int wl_android_set_csa(struct net_device *dev, char *command)
 		return -1;
 	}
 	return 0;
+}
+
+static int
+wl_android_set_bcn_li_dtim(struct net_device *dev, char *command)
+{
+	int ret = 0;
+	int dtim;
+
+	dtim = *(command + strlen(CMD_SETDTIM_IN_SUSPEND) + 1) - '0';
+
+	if (dtim > (MAX_DTIM_ALLOWED_INTERVAL / MAX_DTIM_SKIP_BEACON_INTERVAL)) {
+		DHD_ERROR(("%s: failed, invalid dtim %d\n",
+			__FUNCTION__, dtim));
+		return BCME_ERROR;
+	}
+
+	if (!(ret = net_os_set_suspend_bcn_li_dtim(dev, dtim))) {
+		DHD_TRACE(("%s: SET bcn_li_dtim in suspend %d\n",
+			__FUNCTION__, dtim));
+	} else {
+		DHD_ERROR(("%s: failed %d\n", __FUNCTION__, ret));
+	}
+
+	return ret;
 }
 
 static int
@@ -4359,6 +4382,98 @@ wl_android_set_sarlimit_txctrl(struct net_device *dev, const char* string_num)
 	}
 	return 1;
 }
+
+#ifdef SUPPORT_SET_TID
+static int
+wl_android_set_tid(struct net_device *dev, char* command)
+{
+	int err = BCME_ERROR;
+	char *pos = command;
+	char *token = NULL;
+	uint8 mode = 0;
+	uint32 uid = 0;
+	uint8 prio = 0;
+	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(dev);
+
+	if (!dhdp) {
+		WL_ERR(("dhd is NULL\n"));
+		return err;
+	}
+
+	WL_DBG(("%s: command[%s]\n", __FUNCTION__, command));
+
+	/* drop command */
+	token = bcmstrtok(&pos, " ", NULL);
+
+	token = bcmstrtok(&pos, " ", NULL);
+	if (!token) {
+		WL_ERR(("Invalid arguments\n"));
+		return err;
+	}
+
+	mode = bcm_atoi(token);
+
+	if (mode < SET_TID_OFF || mode > SET_TID_BASED_ON_UID) {
+		WL_ERR(("Invalid arguments, mode %d\n", mode));
+			return err;
+	}
+
+	if (mode) {
+		token = bcmstrtok(&pos, " ", NULL);
+		if (!token) {
+			WL_ERR(("Invalid arguments for target uid\n"));
+			return err;
+		}
+
+		uid = bcm_atoi(token);
+
+		token = bcmstrtok(&pos, " ", NULL);
+		if (!token) {
+			WL_ERR(("Invalid arguments for target tid\n"));
+			return err;
+		}
+
+		prio = bcm_atoi(token);
+		if (prio >= 0 && prio <= MAXPRIO) {
+			dhdp->tid_mode = mode;
+			dhdp->target_uid = uid;
+			dhdp->target_tid = prio;
+		} else {
+			WL_ERR(("Invalid arguments, prio %d\n", prio));
+			return err;
+		}
+	} else {
+		dhdp->tid_mode = SET_TID_OFF;
+		dhdp->target_uid = 0;
+		dhdp->target_tid = 0;
+	}
+
+	WL_DBG(("%s mode [%d], uid [%d], tid [%d]\n", __FUNCTION__,
+		dhdp->tid_mode, dhdp->target_uid, dhdp->target_tid));
+
+	err = BCME_OK;
+	return err;
+}
+
+static int
+wl_android_get_tid(struct net_device *dev, char* command, int total_len)
+{
+	int bytes_written = BCME_ERROR;
+	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(dev);
+
+	if (!dhdp) {
+		WL_ERR(("dhd is NULL\n"));
+		return bytes_written;
+	}
+
+	bytes_written = snprintf(command, total_len, "mode %d uid %d tid %d",
+		dhdp->tid_mode, dhdp->target_uid, dhdp->target_tid);
+
+	WL_DBG(("%s: command results %s\n", __FUNCTION__, command));
+
+	return bytes_written;
+}
+#endif /* SUPPORT_SET_TID */
 #endif /* CUSTOMER_HW4_PRIVATE_CMD */
 
 int wl_android_set_roam_mode(struct net_device *dev, char *command)
@@ -5723,14 +5838,20 @@ wl_android_get_rssi_logging(struct net_device *dev, char *command, int total_len
 
 #ifdef SET_PCIE_IRQ_CPU_CORE
 void
-wl_android_set_irq_cpucore(struct net_device *net, int set)
+wl_android_set_irq_cpucore(struct net_device *net, int affinity_cmd)
 {
 	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(net);
 	if (!dhdp) {
 		WL_ERR(("dhd is NULL\n"));
 		return;
 	}
-	dhd_set_irq_cpucore(dhdp, set);
+
+	if (affinity_cmd < PCIE_IRQ_AFFINITY_OFF || affinity_cmd > PCIE_IRQ_AFFINITY_LAST) {
+		WL_ERR(("Wrong Affinity cmds:%d, %s\n", affinity_cmd, __FUNCTION__));
+		return;
+	}
+
+	dhd_set_irq_cpucore(dhdp, affinity_cmd);
 }
 #endif /* SET_PCIE_IRQ_CPU_CORE */
 
@@ -6395,103 +6516,6 @@ wl_android_pktlog_change_size(struct net_device *dev, char *command, int total_l
 }
 #endif /* DHD_PKT_LOGGING */
 
-#ifdef DHD_TID_MODE
-static int
-wl_android_set_tid_mode(
-	struct net_device *dev, char* command, int total_len)
-{
-	char *pos, *token;
-	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(dev);
-	uint32 uid, destip = 0;
-	int mode, tid = 0;
-
-	if (!dhdp)
-		return -EINVAL;
-
-	/*
-	 * DRIVER SET_TID_MODE <mode(int)> <tid(int)> <uid(uint32)> <dest_ip>
-	 */
-	pos = command;
-
-	/* drop command */
-	token = bcmstrtok(&pos, " ", NULL);
-
-	/* mode */
-	token = bcmstrtok(&pos, " ", NULL);
-	if (!token)
-		return -EINVAL;
-	mode = bcm_atoi(token);
-	if (mode > 3 || mode < 0) {
-		WL_ERR(("Failed to set tid_mode, mode %d\n", dhdp->changeTIDmode));
-		return -EINVAL;
-	}
-
-	/* tid for change */
-	token = bcmstrtok(&pos, " ", NULL);
-	if (!token)
-		return -EINVAL;
-	tid = bcm_atoi(token);
-	if (tid > PRIO_8021D_NC || tid < PRIO_8021D_BE) {
-		WL_ERR(("Failed to set tid_mode, tid %d\n", dhdp->changeTIDtid));
-		return -EINVAL;
-	}
-
-	/* uid for filter */
-	token = bcmstrtok(&pos, " ", NULL);
-	if (!token)
-		return -EINVAL;
-	uid = bcm_atoi(token);
-
-	/* ip address for filter */
-	token = bcmstrtok(&pos, " ", NULL);
-	bcm_atoipv4(token, (struct ipv4_addr *)&destip);
-	dhdp->changeTIDmode	= mode;
-	dhdp->changeTIDuid = uid;
-	dhdp->changeTIDtid = tid;
-	dhdp->changeTIDdestip = hton32(destip);
-
-	if (dhdp->changeTIDmode == 0) { /* off */
-		dhdp->changeTIDtid = 0;
-		dhdp->changeTIDuid = 0;
-		dhdp->changeTIDdestip = 0;
-	} else if (dhdp->changeTIDmode == 1) { /* all UDP */
-		dhdp->changeTIDuid = 0;
-		dhdp->changeTIDdestip = 0;
-	} else if (dhdp->changeTIDmode == 2) {
-		dhdp->changeTIDdestip = 0;
-	}
-
-	WL_ERR(("[SET_TID_MODE] enable %d, uid %u, tid %d, ip_addr=0x%x\n",
-		dhdp->changeTIDmode, dhdp->changeTIDuid,
-		dhdp->changeTIDtid, dhdp->changeTIDdestip));
-
-	return BCME_OK;
-}
-static int
-wl_android_get_tid_mode(
-	struct net_device *dev, char *command, int total_len)
-{
-	int bytes_written = 0;
-	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(dev);
-	char buf[16];
-	uint32 destip = 0;
-
-	if (!dhdp)
-		return -EINVAL;
-
-	/*
-	 * DRIVER GET_TID_MODE
-	 * returns <mode(int)> <tid(int)> <uid(uint32)> <desp_ip>
-	 */
-	destip = ntoh32(dhdp->changeTIDdestip);
-	bcm_ip_ntoa((struct ipv4_addr *)&destip, buf);
-
-	bytes_written = snprintf(command, total_len, "%s %d %d %u %s",
-		CMD_GET_TID_MODE, dhdp->changeTIDmode, dhdp->changeTIDtid,
-		dhdp->changeTIDuid, buf);
-	return bytes_written;
-}
-#endif /* DHD_TID_MODE */
 #ifdef DHD_EVENT_LOG_FILTER
 uint32 dhd_event_log_filter_serialize(dhd_pub_t *dhdp, char *buf, uint32 tot_len, int type);
 static int
@@ -6781,6 +6805,9 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 	}
 	else if (strnicmp(command, CMD_SETSUSPENDMODE, strlen(CMD_SETSUSPENDMODE)) == 0) {
 		bytes_written = wl_android_set_suspendmode(net, command);
+	}
+	else if (strnicmp(command, CMD_SETDTIM_IN_SUSPEND, strlen(CMD_SETDTIM_IN_SUSPEND)) == 0) {
+		bytes_written = wl_android_set_bcn_li_dtim(net, command);
 	}
 	else if (strnicmp(command, CMD_MAXDTIM_IN_SUSPEND, strlen(CMD_MAXDTIM_IN_SUSPEND)) == 0) {
 		bytes_written = wl_android_set_max_dtim(net, command);
@@ -7211,6 +7238,14 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 		int skip = strlen(CMD_SARLIMIT_TX_CONTROL) + 1;
 		wl_android_set_sarlimit_txctrl(net, (const char*)command+skip);
 	}
+#ifdef SUPPORT_SET_TID
+	else if (strnicmp(command, CMD_SET_TID, strlen(CMD_SET_TID)) == 0) {
+		bytes_written = wl_android_set_tid(net, command);
+	}
+	else if (strnicmp(command, CMD_GET_TID, strlen(CMD_GET_TID)) == 0) {
+		bytes_written = wl_android_get_tid(net, command, priv_cmd.total_len);
+	}
+#endif /* SUPPORT_SET_TID */
 #endif /* CUSTOMER_HW4_PRIVATE_CMD */
 	else if (strnicmp(command, CMD_HAPD_MAC_FILTER, strlen(CMD_HAPD_MAC_FILTER)) == 0) {
 		int skip = strlen(CMD_HAPD_MAC_FILTER) + 1;
@@ -7452,8 +7487,8 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 #endif /* DHD_LOG_DUMP */
 #ifdef SET_PCIE_IRQ_CPU_CORE
 	else if (strnicmp(command, CMD_PCIE_IRQ_CORE, strlen(CMD_PCIE_IRQ_CORE)) == 0) {
-		int set = *(command + strlen(CMD_PCIE_IRQ_CORE) + 1) - '0';
-		wl_android_set_irq_cpucore(net, set);
+		int affinity_cmd = *(command + strlen(CMD_PCIE_IRQ_CORE) + 1) - '0';
+		wl_android_set_irq_cpucore(net, affinity_cmd);
 	}
 #endif /* SET_PCIE_IRQ_CPU_CORE */
 #if defined(DHD_HANG_SEND_UP_TEST)
@@ -7542,14 +7577,6 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 		bytes_written = wl_android_ewp_filter(net, command, priv_cmd.total_len);
 	}
 #endif /* DHD_EVENT_LOG_FILTER */
-#ifdef DHD_TID_MODE
-	else if (strnicmp(command, CMD_SET_TID_MODE, strlen(CMD_SET_TID_MODE)) == 0) {
-		bytes_written = wl_android_set_tid_mode(net, command, priv_cmd.total_len);
-	}
-	else if (strnicmp(command, CMD_GET_TID_MODE, strlen(CMD_GET_TID_MODE)) == 0) {
-		bytes_written = wl_android_get_tid_mode(net, command, priv_cmd.total_len);
-	}
-#endif	/* DHD_TID_MODE */
 	else {
 		DHD_ERROR(("Unknown PRIVATE command %s - ignored\n", command));
 		bytes_written = scnprintf(command, sizeof("FAIL"), "FAIL");

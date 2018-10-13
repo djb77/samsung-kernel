@@ -987,29 +987,4 @@ set_irq_cpucore(unsigned int irq, cpumask_var_t default_cpu_mask,
 		ARGOS_P2P_TABLE_LABEL,
 		affinity_cpu_mask, default_cpu_mask);
 }
-#elif defined(SET_PCIE_IRQ_CPU_CORE)
-void
-set_irq_cpucore(unsigned int irq, int set)
-{
-	if (set < 0 || set > 1) {
-		DHD_ERROR(("%s, PCIe CPU core set error\n", __FUNCTION__));
-		return;
-	}
-
-	if (set) {
-		DHD_ERROR(("%s, PCIe IRQ:%u set Core %d\n",
-			__FUNCTION__, irq, PCIE_IRQ_BIG_CORE));
-		irq_set_affinity(irq, cpumask_of(PCIE_IRQ_BIG_CORE));
-	} else {
-		DHD_ERROR(("%s, PCIe IRQ:%u set Core %d\n",
-			__FUNCTION__, irq, PCIE_IRQ_LITTLE_CORE));
-		irq_set_affinity(irq, cpumask_of(PCIE_IRQ_LITTLE_CORE));
-	}
-}
-#else
-void
-set_irq_cpucore(void)
-{
-	DHD_ERROR(("Unsupported IRQ affinity\n"));
-}
 #endif /* SET_PCIE_IRQ_CPU_CORE && !DHD_LB_IRQSET */

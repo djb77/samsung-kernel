@@ -2994,7 +2994,7 @@ int sensor_2l3_cis_compensate_gain_for_extremely_br(struct v4l2_subdev *subdev, 
 	u32 vt_pic_clk_freq_mhz = 0;
 	u32 line_length_pck = 0;
 	u32 min_fine_int = 0;
-	u16 coarse_int = 0;
+	u32 coarse_int = 0;
 	u32 compensated_again = 0;
 	u32 remainder_cit = 0;
 

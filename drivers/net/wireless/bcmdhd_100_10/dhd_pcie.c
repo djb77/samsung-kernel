@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.c 768455 2018-06-20 09:13:01Z $
+ * $Id: dhd_pcie.c 774405 2018-07-31 07:49:56Z $
  */
 
 /* include files */
@@ -61,7 +61,6 @@
 #include <dhd_ip.h>
 #endif /* DHDTCPACK_SUPPRESS */
 #include <bcmevent.h>
-#include <net/sock.h>
 
 #ifdef DHD_PCIE_NATIVE_RUNTIMEPM
 #include <linux/pm_runtime.h>
@@ -3451,6 +3450,11 @@ dhd_bus_schedule_queue(struct dhd_bus  *bus, uint16 flow_id, bool txs)
 
 	flow_ring_node = DHD_FLOW_RING(bus->dhd, flow_id);
 
+	if (flow_ring_node->prot_info == NULL) {
+	    DHD_ERROR((" %s : invalid flow_ring_node \n", __FUNCTION__));
+	    return BCME_NOTREADY;
+	}
+
 #ifdef DHD_LOSSLESS_ROAMING
 	if ((dhdp->dequeue_prec_map & (1 << flow_ring_node->flow_info.tid)) == 0) {
 		DHD_INFO(("%s: tid %d is not in precedence map. block scheduling\n",
@@ -3463,10 +3467,10 @@ dhd_bus_schedule_queue(struct dhd_bus  *bus, uint16 flow_id, bool txs)
 		unsigned long flags;
 		void *txp = NULL;
 		flow_queue_t *queue;
-#if defined(DHD_LOSSLESS_ROAMING) || defined(DHD_TID_MODE)
+#ifdef DHD_LOSSLESS_ROAMING
 		struct ether_header *eh;
 		uint8 *pktdata;
-#endif /* DHD_LOSSLESS_ROAMING || DHD_TID_MODE */
+#endif /* DHD_LOSSLESS_ROAMING */
 
 		queue = &flow_ring_node->queue; /* queue associated with flow ring */
 
@@ -3508,59 +3512,6 @@ dhd_bus_schedule_queue(struct dhd_bus  *bus, uint16 flow_id, bool txs)
 				}
 			}
 #endif /* DHD_LOSSLESS_ROAMING */
-#ifdef DHD_TID_MODE
-			/* Change prio for packet to tid for better latency */
-			/* 1. check if TID_MODE ON */
-			if (dhdp->changeTIDmode) {
-				uint8 *iph = NULL;
-				kuid_t uid_l = {0, };
-				struct sock *sk_l = NULL;
-				uint8 prot = 0;
-				uint32 dest_ip = 0;
-
-				/* 2. parse ether header */
-				if (txp) {
-					pktdata = (uint8 *)PKTDATA(OSH_NULL, txp);
-					eh = (struct ether_header *) pktdata;
-
-					iph = (uint8 *)eh + ETHER_HDR_LEN;
-					prot = *((uint8 *)(iph + IPV4_PROT_OFFSET));
-				}
-				else
-					DHD_ERROR(("Error! txp ptr is NULL\n"));
-
-				/* 3. check if UDP */
-				if (prot == IP_PROT_UDP) {
-					/* change of uid-matched packets */
-					if (dhdp->changeTIDmode == 2 || dhdp->changeTIDmode == 3) {
-						pktdata = (uint8 *)PKTSK(txp);
-						sk_l = (struct sock *) pktdata;
-						if (sk_l) {
-							uid_l = sock_i_uid(sk_l);
-						}
-						else
-							DHD_ERROR(("Error! sk ptr is NULL\n"));
-					}
-					if (dhdp->changeTIDmode == 3) {
-						dest_ip = ntoh32(*((uint32 *)(iph +
-							IPV4_DEST_IP_OFFSET)));
-					}
-					if ((dhdp->changeTIDtid >= PRIO_8021D_BE) &&
-							(dhdp->changeTIDtid <= PRIO_8021D_NC)) {
-						if (dhdp->changeTIDmode == 1) {
-							PKTSETPRIO(txp, dhdp->changeTIDtid);
-						} else if (dhdp->changeTIDmode == 2 &&
-							uid_l.val == dhdp->changeTIDuid) {
-							PKTSETPRIO(txp, dhdp->changeTIDtid);
-						} else if (dhdp->changeTIDmode == 3 &&
-							uid_l.val == dhdp->changeTIDuid &&
-							dest_ip == dhdp->changeTIDdestip) {
-							PKTSETPRIO(txp, dhdp->changeTIDtid);
-						}
-					}
-				}
-			}
-#endif	/* DHD_TID_MODE */
 			/* Attempt to transfer packet over flow ring */
 			ret = dhd_prot_txdata(bus->dhd, txp, flow_ring_node->flow_info.ifindex);
 			if (ret != BCME_OK) { /* may not have resources in flow ring */
@@ -8316,8 +8267,26 @@ dhd_bus_flow_ring_create_response(dhd_bus_t *bus, uint16 flowid, int32 status)
 
 	DHD_INFO(("%s :Flow Response %d \n", __FUNCTION__, flowid));
 
+	/* Boundary check of the flowid */
+	if (flowid >= bus->dhd->num_flow_rings) {
+		DHD_ERROR(("%s: flowid is invalid %d, max %d\n", __FUNCTION__,
+			flowid, bus->dhd->num_flow_rings));
+		return;
+	}
+
 	flow_ring_node = DHD_FLOW_RING(bus->dhd, flowid);
+	if (!flow_ring_node) {
+		DHD_ERROR(("%s: flow_ring_node is NULL\n", __FUNCTION__));
+		return;
+	}
+
 	ASSERT(flow_ring_node->flowid == flowid);
+	if (flow_ring_node->flowid != flowid) {
+		DHD_ERROR(("%s: flowid %d is different from the flowid "
+			"of the flow_ring_node %d\n", __FUNCTION__, flowid,
+			flow_ring_node->flowid));
+		return;
+	}
 
 	if (status != BCME_OK) {
 		DHD_ERROR(("%s Flow create Response failure error status = %d \n",
@@ -8405,8 +8374,26 @@ dhd_bus_flow_ring_delete_response(dhd_bus_t *bus, uint16 flowid, uint32 status)
 
 	DHD_INFO(("%s :Flow Delete Response %d \n", __FUNCTION__, flowid));
 
+	/* Boundary check of the flowid */
+	if (flowid >= bus->dhd->num_flow_rings) {
+		DHD_ERROR(("%s: flowid is invalid %d, max %d\n", __FUNCTION__,
+			flowid, bus->dhd->num_flow_rings));
+		return;
+	}
+
 	flow_ring_node = DHD_FLOW_RING(bus->dhd, flowid);
+	if (!flow_ring_node) {
+		DHD_ERROR(("%s: flow_ring_node is NULL\n", __FUNCTION__));
+		return;
+	}
+
 	ASSERT(flow_ring_node->flowid == flowid);
+	if (flow_ring_node->flowid != flowid) {
+		DHD_ERROR(("%s: flowid %d is different from the flowid "
+			"of the flow_ring_node %d\n", __FUNCTION__, flowid,
+			flow_ring_node->flowid));
+		return;
+	}
 
 	if (status != BCME_OK) {
 		DHD_ERROR(("%s Flow Delete Response failure error status = %d \n",
@@ -8470,8 +8457,26 @@ dhd_bus_flow_ring_flush_response(dhd_bus_t *bus, uint16 flowid, uint32 status)
 		return;
 	}
 
+	/* Boundary check of the flowid */
+	if (flowid >= bus->dhd->num_flow_rings) {
+		DHD_ERROR(("%s: flowid is invalid %d, max %d\n", __FUNCTION__,
+			flowid, bus->dhd->num_flow_rings));
+		return;
+	}
+
 	flow_ring_node = DHD_FLOW_RING(bus->dhd, flowid);
+	if (!flow_ring_node) {
+		DHD_ERROR(("%s: flow_ring_node is NULL\n", __FUNCTION__));
+		return;
+	}
+
 	ASSERT(flow_ring_node->flowid == flowid);
+	if (flow_ring_node->flowid != flowid) {
+		DHD_ERROR(("%s: flowid %d is different from the flowid "
+			"of the flow_ring_node %d\n", __FUNCTION__, flowid,
+			flow_ring_node->flowid));
+		return;
+	}
 
 	flow_ring_node->status = FLOW_RING_STATUS_OPEN;
 	return;

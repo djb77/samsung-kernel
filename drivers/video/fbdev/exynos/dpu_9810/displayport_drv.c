@@ -31,6 +31,7 @@
 #include <soc/samsung/exynos-powermode.h>
 #include <sound/samsung/dp_ado.h>
 #include <linux/smc.h>
+#include <linux/switch.h>
 #if defined(CONFIG_ION_EXYNOS)
 #include <linux/exynos_iovmm.h>
 #endif
@@ -74,11 +75,20 @@ static void displayport_dump_registers(struct displayport_device *displayport)
 			displayport->res.link_regs, 0xC0, false);
 }
 
+struct switch_dev switch_secdp_msg;
+static void displayport_set_switch_poor_connect(void)
+{
+	displayport_err("set poor connect switch event\n");
+	switch_set_state(&switch_secdp_msg, 1);
+	switch_set_state(&switch_secdp_msg, 0);
+}
+
 static int displayport_remove(struct platform_device *pdev)
 {
 	struct displayport_device *displayport = platform_get_drvdata(pdev);
 
 	pm_runtime_disable(&pdev->dev);
+	switch_dev_unregister(&switch_secdp_msg);
 #if defined(CONFIG_EXTCON)
 	devm_extcon_dev_unregister(displayport->dev, displayport->extcon_displayport);
 	//devm_extcon_dev_unregister(displayport->dev, displayport->audio_switch);
@@ -837,16 +847,18 @@ static int displayport_check_dfp_type(void)
 	return port_type;
 }
 
-static void displayport_link_sink_status_read(void)
+static int displayport_link_sink_status_read(void)
 {
 	u8 val[DPCD_BUF_SIZE] = {0, };
+	int ret = 0;
 
-	displayport_reg_dpcd_read_burst(DPCD_ADD_REVISION_NUMBER, DPCD_BUF_SIZE, val);
+	ret = displayport_reg_dpcd_read_burst(DPCD_ADD_REVISION_NUMBER, DPCD_BUF_SIZE, val);
 
 	displayport_info("Read DPCD REV NUM 0_5 %02x %02x %02x %02x %02x %02x\n",
 			val[0], val[1], val[2], val[3], val[4], val[5]);
 	displayport_info("Read DPCD REV NUM 6_B %02x %02x %02x %02x %02x %02x\n",
 			val[6], val[7], val[8], val[9], val[10], val[11]);
+	return ret;
 }
 
 static int displayport_read_branch_revision(struct displayport_device *displayport)
@@ -873,9 +885,14 @@ static int displayport_link_status_read(void)
 {
 	u8 val[DPCP_LINK_SINK_STATUS_FIELD_LENGTH] = {0, };
 	int count = 200;
+	int ret = 0;
 
 	/* for Link CTS : Branch Device Detection*/
-	displayport_link_sink_status_read();
+	ret = displayport_link_sink_status_read();
+	if (ret != 0) {
+		displayport_err("link_sink_status_read fail\n");
+		return -EINVAL;
+	}
 	do {
 		displayport_reg_dpcd_read(DPCD_ADD_SINK_COUNT, 1, val);
 		if ((val[0] & (SINK_COUNT1 | SINK_COUNT2)) != 0)
@@ -1018,6 +1035,7 @@ void displayport_hpd_changed(int state)
 
 		/* for Link CTS : (4.2.2.3) EDID Read */
 		if (displayport_link_status_read()) {
+			displayport_set_switch_poor_connect();
 			displayport_err("link_status_read fail\n");
 			goto HPD_FAIL;
 		}
@@ -1029,6 +1047,7 @@ void displayport_hpd_changed(int state)
 		ret = displayport_link_training();
 		if (ret < 0) {
 			displayport_dbg("link training fail\n");
+			displayport_set_switch_poor_connect();
 			goto HPD_FAIL;
 		}
 
@@ -4011,6 +4030,12 @@ static int displayport_probe(struct platform_device *pdev)
 #else
 	displayport_info("Not compiled EXTCON driver\n");
 #endif
+
+	switch_secdp_msg.name = "secdp_msg";
+	ret = switch_dev_register(&switch_secdp_msg);
+	if (ret)
+		displayport_err("Failed to register dp msg switch\n");
+
 	displayport->hpd_state = HPD_UNPLUG;
 
 	pm_runtime_enable(dev);

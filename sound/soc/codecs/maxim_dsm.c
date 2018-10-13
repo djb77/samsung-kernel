@@ -1187,8 +1187,8 @@ void maxdsm_update_param(void)
 						&maxdsm.param[(BEFORE_BUFSIZE/sizeof(uint32_t))+BEFORE_BUFSIZE+1],
 						&maxdsm.param[((BEFORE_BUFSIZE/sizeof(uint32_t))+BEFORE_BUFSIZE)+(AFTER_BUFSIZE/sizeof(uint32_t))+1],
 						&maxdsm.param[((BEFORE_BUFSIZE/sizeof(uint32_t))+BEFORE_BUFSIZE)+(AFTER_BUFSIZE/sizeof(uint32_t))+AFTER_BUFSIZE+1]);
-				maxdsm_read_all();
 			}
+			maxdsm_read_all();
 			break;
 		case MAX98512_OSM_MONO_R:
 			maxdsm_channel = LOG_RIGHT;

@@ -248,7 +248,6 @@ int five_appraise_measurement(struct task_struct *task, int func,
 			      const unsigned char *filename,
 			      struct five_cert *cert)
 {
-	static const char op[] = "appraise_data";
 	char *cause = "unknown";
 	struct dentry *dentry = NULL;
 	struct inode *inode = NULL;
@@ -402,7 +401,7 @@ int five_appraise_measurement(struct task_struct *task, int func,
 out:
 	iint->version = file_inode(file)->i_version;
 	if (status == FIVE_FILE_FAIL || status == FIVE_FILE_UNKNOWN)
-		five_audit_info(task, file, op, prev_integrity,
+		five_audit_info(task, file, get_string_fn(func), prev_integrity,
 				prev_integrity, cause, rc);
 
 	five_set_cache_status(iint, status);

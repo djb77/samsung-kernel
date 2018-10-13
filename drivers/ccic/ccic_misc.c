@@ -34,6 +34,14 @@ static struct ccic_misc_dev *c_dev;
 #define NODE_OF_MISC "ccic_misc"
 #define CCIC_IOCTL_UVDM _IOWR('C', 0, struct uvdm_data)
 
+struct ccic_misc_dev *get_ccic_misc_dev(void)
+{
+	if (!c_dev)
+		return NULL;
+	return c_dev;
+}
+EXPORT_SYMBOL(get_ccic_misc_dev);
+
 static inline int _lock(atomic_t *excl)
 {
 	if (atomic_inc_return(excl) == 1)

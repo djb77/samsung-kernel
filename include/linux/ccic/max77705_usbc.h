@@ -148,6 +148,7 @@ struct max77705_usbc_platform_data {
 	u8 pin_assignment;
 	uint32_t is_sent_pin_configuration;
 	wait_queue_head_t host_turn_on_wait_q;
+	wait_queue_head_t dp_detach_wait_q;
 	int host_turn_on_event;
 	int host_turn_on_wait_time;
 	int is_samsung_accessory_enter_mode;
@@ -232,6 +233,8 @@ typedef enum {
 #define ROLE_REJECT			0x2
 #define ROLE_BUSY			0x3
 
+#define DP_DETACH_WAIT_TIME		5000
+
 int max77705_pd_init(struct max77705_usbc_platform_data *usbc_data);
 int max77705_cc_init(struct max77705_usbc_platform_data *usbc_data);
 int max77705_muic_init(struct max77705_usbc_platform_data *usbc_data);
@@ -269,6 +272,7 @@ extern void max77705_set_host_turn_on_event(int mode);
 
 extern const uint8_t BOOT_FLASH_FW_PASS2[];
 extern const uint8_t BOOT_FLASH_FW_PASS3[];
+extern int dp_use_informed;
 
 #if defined(CONFIG_SEC_FACTORY)
 void factory_execute_monitor(int);

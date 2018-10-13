@@ -95,6 +95,7 @@ struct ccic_misc_dev {
 	int (*uvdm_read)(void *data);
 	int (*uvdm_ready)(void);
 	void (*uvdm_close)(void);
+	void (*dp_detach_cb)(void);
 };
 
 typedef struct _ccic_data_t {

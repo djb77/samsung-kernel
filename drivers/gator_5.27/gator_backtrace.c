@@ -16,7 +16,7 @@
 #endif
 
 /* on 4.10 walk_stackframe was unexported so use save_stack_trace instead */
-#if defined(MODULE) && defined(__aarch64__) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0))
+#if defined(MODULE) && defined(__aarch64__) && ((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)) || defined(CONFIG_THREAD_INFO_IN_TASK))
 #define GATOR_KERNEL_UNWINDING_USE_WALK_STACKFRAME  0
 #else
 #define GATOR_KERNEL_UNWINDING_USE_WALK_STACKFRAME  1

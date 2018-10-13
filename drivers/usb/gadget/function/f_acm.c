@@ -543,15 +543,20 @@ static int acm_notify_serial_state(struct f_acm *acm)
 	__le16			serial_state;
 
 	spin_lock(&acm->lock);
-	if (acm->notify_req) {
-		dev_dbg(&cdev->gadget->dev, "acm ttyGS%d serial state %04x\n",
-			acm->port_num, acm->serial_state);
-		serial_state = cpu_to_le16(acm->serial_state);
-		status = acm_cdc_notify(acm, USB_CDC_NOTIFY_SERIAL_STATE,
-				0, &serial_state, sizeof(acm->serial_state));
+	if (acm->notify->enabled) {
+		if (acm->notify_req) {
+			dev_dbg(&cdev->gadget->dev, "acm ttyGS%d serial state %04x\n",
+				acm->port_num, acm->serial_state);
+			serial_state = cpu_to_le16(acm->serial_state);
+			status = acm_cdc_notify(acm, USB_CDC_NOTIFY_SERIAL_STATE,
+					0, &serial_state, sizeof(acm->serial_state));
+		} else {
+			acm->pending = true;
+			status = 0;
+		}
 	} else {
-		acm->pending = true;
-		status = 0;
+		status = -EAGAIN;
+		printk(KERN_DEBUG "usb: %s acm function already disabled\n", __func__);
 	}
 	spin_unlock(&acm->lock);
 	return status;
@@ -579,15 +584,16 @@ static void acm_cdc_notify_complete(struct usb_ep *ep, struct usb_request *req)
 int acm_notify(void *dev, u16 state)
 {
 	struct f_acm    *acm = (struct f_acm *)dev;
+	int status = 0;
 
 	if (acm && acm->notify->enabled) {
 		acm->serial_state = state;
-		acm_notify_serial_state(acm);
+		status = acm_notify_serial_state(acm);
 	} else {
 		printk(KERN_DEBUG "usb: %s not ready\n", __func__);
-		return -EAGAIN;
+		status = -EAGAIN;
 	}
-	return 0;
+	return status;
 }
 #endif
 

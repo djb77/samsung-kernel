@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd.h 767554 2018-06-14 06:37:31Z $
+ * $Id: dhd.h 777330 2018-08-20 09:08:38Z $
  */
 
 /****************
@@ -1177,12 +1177,11 @@ typedef struct dhd_pub {
 	int (*pom_func_deregister)(pom_func_handler_t *func);
 	int (*pom_toggle_reg_on)(uchar func_id, uchar reason);
 #endif /* DHD_ERPOM */
-#ifdef DHD_TID_MODE
-	int changeTIDmode;
-	int changeTIDtid;
-	uint32 changeTIDuid;
-	uint32 changeTIDdestip;
-#endif // endif
+#ifdef SUPPORT_SET_TID
+	uint8 tid_mode;
+	uint32 target_uid;
+	uint8 target_tid;
+#endif /* SUPPORT_SET_TID */
 } dhd_pub_t;
 
 typedef struct {
@@ -2844,8 +2843,13 @@ int dhd_check_valid_ie(dhd_pub_t *dhdp, uint8 *buf, int len);
 uint16 dhd_prot_get_ioctl_trans_id(dhd_pub_t *dhdp);
 
 #ifdef SET_PCIE_IRQ_CPU_CORE
-extern void dhd_set_irq_cpucore(dhd_pub_t *dhdp, int set);
-extern void set_irq_cpucore(unsigned int irq, int set);
+enum {
+	PCIE_IRQ_AFFINITY_OFF = 0,
+	PCIE_IRQ_AFFINITY_BIG_CORE_ANY,
+	PCIE_IRQ_AFFINITY_BIG_CORE_EXYNOS,
+	PCIE_IRQ_AFFINITY_LAST
+};
+extern void dhd_set_irq_cpucore(dhd_pub_t *dhdp, int affinity_cmd);
 #endif /* SET_PCIE_IRQ_CPU_CORE */
 #if defined(DHD_HANG_SEND_UP_TEST)
 extern void dhd_make_hang_with_reason(struct net_device *dev, const char *string_num);
@@ -2943,4 +2947,15 @@ extern int dhd_d2h_h2d_ring_dump(dhd_pub_t *dhd, void *file, unsigned long *file
 #define HD_PREFIX_SIZE  2   /* hexadecimal prefix size */
 #define HD_BYTE_SIZE    2   /* hexadecimal byte size */
 
+#ifdef SUPPORT_SET_TID
+enum dhd_set_tid_mode {
+	/* Disalbe changing TID */
+	SET_TID_OFF = 0,
+	/* Change TID for all UDP frames */
+	SET_TID_ALL_UDP,
+	/* Change TID for UDP frames based on UID */
+	SET_TID_BASED_ON_UID
+};
+extern void dhd_set_tid_based_on_uid(dhd_pub_t *dhdp, void *pkt);
+#endif /* SUPPORT_SET_TID */
 #endif /* _dhd_h_ */

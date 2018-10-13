@@ -408,8 +408,8 @@
 		mres_dsc_width = <720 540 360>;
 		mres_dsc_height = <40 30 74>;
 		mres_dsc_en = <1 1 1>;
-		hdr_num = <1>;		/* max: 4 */
-		hdr_type = <2 0 0 0>;	/* 1: DOLBY_VISION, 2: HDR10, 3: HLG */
+		hdr_num = <2>;		/* max: 4 */
+		hdr_type = <2 3 0 0>;	/* 1: DOLBY_VISION, 2: HDR10, 3: HLG */
 		hdr_max_luma = <5400000>;		/* 540 */
 		hdr_max_avg_luma = <1200000>;	/* 120 */
 		hdr_min_luma = <5>;				/* 0.0005 */

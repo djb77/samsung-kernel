@@ -1866,8 +1866,9 @@ struct camera2_uctl {
 	struct camera2_is_hw_lls_uctl	hwlls_mode;
 	uint32_t			statsRoi[4];
 	enum aa_cameratype		masterCam;
-	int32_t                         productColorInfo;    
-	uint32_t			reserved[9];
+	int32_t                         productColorInfo;
+	uint8_t                         countryCode[4];
+	uint32_t			reserved[8];
 };
 
 struct camera2_udm {

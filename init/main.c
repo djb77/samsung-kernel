@@ -622,7 +622,6 @@ void kdp_init(void)
 
 	cred.bp_cred_secptr 	= rkp_get_offset_bp_cred();
 
-	cred.task_threadinfo = offsetof(struct thread_info,task);
 	cred.verifiedbootstate = (u64)verifiedbootstate;
 	uh_call(UH_APP_RKP, 0x40, (u64)&cred, 0, 0, 0);
 }

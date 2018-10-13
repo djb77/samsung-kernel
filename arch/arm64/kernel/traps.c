@@ -40,6 +40,7 @@
 #include <asm/esr.h>
 #include <asm/insn.h>
 #include <asm/traps.h>
+#include <asm/stack_pointer.h>
 #include <asm/stacktrace.h>
 #include <asm/exception.h>
 #include <asm/system_misc.h>
@@ -182,6 +183,9 @@ static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 	if (!tsk)
 		tsk = current;
 
+	if (!try_get_task_stack(tsk))
+		return;
+
 	/*
 	 * Switching between stacks is valid when tracing current and in
 	 * non-preemptible context.
@@ -253,6 +257,8 @@ static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 					 stack + sizeof(struct pt_regs));
 		}
 	}
+
+	put_task_stack(tsk);
 }
 
 #ifdef CONFIG_SEC_DEBUG_AUTO_SUMMARY
@@ -371,10 +377,9 @@ void show_stack(struct task_struct *tsk, unsigned long *sp)
 #endif
 #define S_SMP " SMP"
 
-static int __die(const char *str, int err, struct thread_info *thread,
-		 struct pt_regs *regs)
+static int __die(const char *str, int err, struct pt_regs *regs)
 {
-	struct task_struct *tsk = thread->task;
+	struct task_struct *tsk = current;
 	static int die_counter;
 	int ret;
 
@@ -390,7 +395,8 @@ static int __die(const char *str, int err, struct thread_info *thread,
 	print_modules();
 	__show_regs(regs);
 	pr_emerg("Process %.*s (pid: %d, stack limit = 0x%p)\n",
-		 TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk), thread + 1);
+		 TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk),
+		 end_of_stack(tsk));
 
 	if (!user_mode(regs)) {
 		dump_mem(KERN_EMERG, "Stack: ", regs->sp,
@@ -417,7 +423,6 @@ static DEFINE_RAW_SPINLOCK(die_lock);
  */
 void die(const char *str, struct pt_regs *regs, int err)
 {
-	struct thread_info *thread = current_thread_info();
 	int ret;
 
 	oops_enter();
@@ -429,9 +434,9 @@ void die(const char *str, struct pt_regs *regs, int err)
 #ifdef CONFIG_SEC_DUMP_SUMMARY
 	sec_debug_save_die_info(str, regs);
 #endif
-	ret = __die(str, err, thread, regs);
+	ret = __die(str, err, regs);
 
-	if (regs && kexec_should_crash(thread->task))
+	if (regs && kexec_should_crash(current))
 		crash_kexec(regs);
 
 	bust_spinlocks(0);

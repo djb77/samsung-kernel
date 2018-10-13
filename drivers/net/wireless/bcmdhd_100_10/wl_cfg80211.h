@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 764043 2018-05-23 11:21:10Z $
+ * $Id: wl_cfg80211.h 777330 2018-08-20 09:08:38Z $
  */
 
 /**
@@ -838,12 +838,6 @@ typedef struct wl_rssi_ant_mimo {
 #define GET_BSS_INFO_LEN 90
 #endif /* DHD_ENABLE_BIGDATA_LOGGING */
 
-#ifdef DHD_LB_IRQSET
-#if defined(CONFIG_ARCH_MSM8998) || defined(CONFIG_ARCH_SDM845)
-#define WL_IRQSET
-#endif /* CONFIG_ARCH_MSM8998 | CONFIG_ARCH_SDM845) */
-#endif /* DHD_LB_IRQSET */
-
 #ifdef WES_SUPPORT
 #ifdef CUSTOMER_SCAN_TIMEOUT_SETTING
 #define CUSTOMER_WL_SCAN_TIMER_INTERVAL_MS	25000 /* Scan timeout */
@@ -1050,9 +1044,6 @@ struct bcm_cfg80211 {
 	struct mutex event_sync;	/* maily for up/down synchronization */
 	bool disable_roam_event;
 	struct delayed_work pm_enable_work;
-#ifdef WL_IRQSET
-	struct delayed_work irq_set_work;
-#endif /* WL_IRQSET */
 	struct workqueue_struct *event_workq;   /* workqueue for event */
 	struct work_struct event_work;		/* work item for event */
 	struct mutex pm_sync;	/* mainly for pm work synchronization */
@@ -1205,11 +1196,8 @@ wl_probe_wdev_all(struct bcm_cfg80211 *cfg)
 	GCC_DIAGNOSTIC_PUSH();
 	BCM_LIST_FOR_EACH_ENTRY_SAFE(_net_info, next,
 		&cfg->net_list, list) {
-		WL_INFORM_MEM(("%s: net_list[%d] bssidx: %d, "
-			"ndev: %p, wdev: %p \n", __FUNCTION__,
-			idx++, _net_info->bssidx,
-			OSL_OBFUSCATE_BUF(_net_info->ndev),
-			OSL_OBFUSCATE_BUF(_net_info->wdev)));
+		WL_INFORM_MEM(("%s: net_list[%d] bssidx: %d\n",
+			__FUNCTION__, idx++, _net_info->bssidx));
 	}
 	GCC_DIAGNOSTIC_POP();
 	spin_unlock_irqrestore(&cfg->net_list_sync, flags);

@@ -264,6 +264,12 @@ void dwc3_otg_ldo_control(struct otg_fsm *fsm, int on)
 	struct device	*dev = dotg->dwc->dev;
 	int i, ret1, ret2, ret3;
 
+	if (!on && dp_use_informed) {
+		ldo_off_delayed = 1;
+		dev_info(dev, "return %s, ldo_off_delayed is %d.\n", __func__, ldo_off_delayed);
+		return;
+	}
+	
 	dev_info(dev, "Turn %s LDO\n", on ? "on" : "off");
 
 	if (on) {
@@ -383,6 +389,7 @@ static int dwc3_otg_start_host(struct otg_fsm *fsm, int on)
 
 	if (on) {
 		otg_connection = 1;
+		ldo_off_delayed = 0;
 		dwc3_otg_ldo_control(fsm, 1);
 		pm_runtime_get_sync(dev);
 		ret = dwc3_phy_setup(dwc);
