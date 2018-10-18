@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 769691 2018-06-27 08:23:25Z $
+ * $Id: dhd_linux.c 776854 2018-08-16 02:50:15Z $
  */
 
 #include <typedefs.h>
@@ -5753,6 +5753,23 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 		}
 #endif /* DHD_WAKE_STATUS */
 
+		eh = (struct ether_header *)PKTDATA(dhdp->osh, pktbuf);
+
+		if (ifidx >= DHD_MAX_IFS) {
+			DHD_ERROR(("%s: ifidx(%d) Out of bound. drop packet\n",
+				__FUNCTION__, ifidx));
+			if (ntoh16(eh->ether_type) == ETHER_TYPE_BRCM) {
+#ifdef DHD_USE_STATIC_CTRLBUF
+				PKTFREE_STATIC(dhdp->osh, pktbuf, FALSE);
+#else
+				PKTFREE(dhdp->osh, pktbuf, FALSE);
+#endif /* DHD_USE_STATIC_CTRLBUF */
+			} else {
+				PKTCFREE(dhdp->osh, pktbuf, FALSE);
+			}
+			continue;
+		}
+
 		ifp = dhd->iflist[ifidx];
 		if (ifp == NULL) {
 			DHD_ERROR(("%s: ifp is NULL. drop packet\n",
@@ -5760,8 +5777,6 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 			PKTCFREE(dhdp->osh, pktbuf, FALSE);
 			continue;
 		}
-
-		eh = (struct ether_header *)PKTDATA(dhdp->osh, pktbuf);
 
 		/* Dropping only data packets before registering net device to avoid kernel panic */
 #ifndef PROP_TXSTATUS_VSDB
@@ -14325,9 +14340,11 @@ int net_os_set_suspend_bcn_li_dtim(struct net_device *dev, int val)
 {
 	dhd_info_t *dhd = DHD_DEV_INFO(dev);
 
-	if (dhd)
+	if (dhd) {
+		DHD_ERROR(("%s: Set bcn_li_dtim in suspend %d\n",
+			__FUNCTION__, val));
 		dhd->pub.suspend_bcn_li_dtim = val;
-
+	}
 	return 0;
 }
 
@@ -17686,6 +17703,7 @@ void dhd_get_memdump_info(dhd_pub_t *dhd)
 {
 	struct file *fp = NULL;
 	uint32 mem_val = DUMP_MEMFILE_MAX;
+	char *p_mem_val = NULL;
 	int ret = 0;
 	char *filepath = MEMDUMPINFO;
 
@@ -17719,7 +17737,9 @@ void dhd_get_memdump_info(dhd_pub_t *dhd)
 		goto done;
 	}
 
-	mem_val = bcm_atoi((char *)&mem_val);
+	p_mem_val = (char*)&mem_val;
+	p_mem_val[sizeof(uint32) - 1] = '\0';
+	mem_val = bcm_atoi(p_mem_val);
 
 	filp_close(fp, NULL);
 

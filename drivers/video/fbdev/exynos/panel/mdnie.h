@@ -102,9 +102,9 @@ enum SCENARIO {
 	UI_MODE,
 	VIDEO_NORMAL_MODE,
 	CAMERA_MODE = 4,
-	NAVI_MODE,
+	CAMERA_SWA_MODE,
 	GALLERY_MODE,
-	VT_MODE,
+	GALLERY_SWA_MODE,
 	BROWSER_MODE,
 	EBOOK_MODE,
 	EMAIL_MODE,
@@ -269,9 +269,9 @@ enum MDNIE_MAPTBL {
 	MDNIE_UI_MAPTBL = MDNIE_SCENARIO_MAPTBL_START,
 	MDNIE_VIDEO_MAPTBL,
 	MDNIE_CAMERA_MAPTBL = 4,
-	MDNIE_NAVI_MAPTBL,
+	MDNIE_CAMERA_SWA_MAPTBL,
 	MDNIE_GALLERY_MAPTBL,
-	MDNIE_VT_MAPTBL,
+	MDNIE_GALLERY_SWA_MAPTBL,
 	MDNIE_BROWSER_MAPTBL,
 	MDNIE_EBOOK_MAPTBL,
 	MDNIE_EMAIL_MAPTBL,
@@ -416,6 +416,7 @@ struct mdnie_tune {
 	u32 num_night_level;
 	u32 num_color_lens_color;
 	u32 num_color_lens_level;
+	u8 swa_wrgb_ofs[MAX_COLOR];
 };
 
 struct mdnie_properties {
@@ -451,7 +452,12 @@ struct mdnie_properties {
 	u8 cur_wrgb[MAX_COLOR];
 	/* default whiteRGB : color coordinated wrgb */
 	u8 def_wrgb[MAX_COLOR];
+	/* default whiteRGB for swa comera gallery wrgb */
+	s8 swa_wrgb_ofs[MAX_COLOR];
 	s8 def_wrgb_ofs[MAX_COLOR];
+
+
+
 #ifdef CONFIG_SUPPORT_AFC
 	u8 afc_roi[MAX_AFC_ROI_LEN];
 	bool afc_on;

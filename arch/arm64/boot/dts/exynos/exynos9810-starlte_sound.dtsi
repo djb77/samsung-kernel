@@ -38,7 +38,7 @@
 	vts: vts@0x13870000 {
 		status = "okay";
 		lpsd-gain = <0>;
-		dmic-gain = <1>;
+		dmic-gain = <0>;
 		amic-gain = <4>;
 	};
 

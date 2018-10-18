@@ -145,7 +145,7 @@ void s5p_mfc_cleanup_queue(spinlock_t *plock, struct s5p_mfc_buf_queue *queue);
 void s5p_mfc_handle_released_info(struct s5p_mfc_ctx *ctx,
 		unsigned int released_flag, int index);
 
-void s5p_mfc_move_reuse_buffer(struct s5p_mfc_ctx *ctx, int release_index);
+struct s5p_mfc_buf *s5p_mfc_move_reuse_buffer(struct s5p_mfc_ctx *ctx, int release_index);
 
 void s5p_mfc_cleanup_enc_src_queue(struct s5p_mfc_ctx *ctx);
 void s5p_mfc_cleanup_enc_dst_queue(struct s5p_mfc_ctx *ctx);

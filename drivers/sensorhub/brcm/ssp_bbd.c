@@ -610,14 +610,10 @@ static inline struct ssp_msg *bbd_find_ssp_msg(struct ssp_data *data)
 	struct ssp_msg *msg, *n;
 	bool found = false;
 
-	if (ssp_pkt.islocked) {
-		pr_err("[SSP] %s() mismatch pending_mutex\n", __func__);
-		mutex_unlock(&data->pending_mutex);
-	}
 	mutex_lock(&data->pending_mutex);
-	ssp_pkt.islocked = true;
 	if (list_empty(&data->pending_list)) {
 		pr_err("[SSP] list empty error!\n");
+	    mutex_unlock(&data->pending_mutex);
 		goto errexit;
 	}
 
@@ -628,6 +624,8 @@ static inline struct ssp_msg *bbd_find_ssp_msg(struct ssp_data *data)
 			break;
 		}
 	}
+	mutex_unlock(&data->pending_mutex);
+
 	if (!found) {
 		pr_err("[SSP] %s %d - Not match error\n", __func__, ssp_pkt.opts);
 		goto errexit;
@@ -648,9 +646,6 @@ static inline struct ssp_msg *bbd_find_ssp_msg(struct ssp_data *data)
 	return msg;
 
 errexit:
-	ssp_pkt.islocked = false;
-	mutex_unlock(&data->pending_mutex);
-
 	pr_err("[SSPBBD] %s opts:%d, state:%d, type:%d\n", __func__,
 			ssp_pkt.opts, ssp_pkt.state, ssp_pkt.type);
 	print_hex_dump(KERN_INFO, "[SSPBBD]: ",
@@ -768,20 +763,20 @@ int callback_bbd_on_packet(void *ssh_data, const char *buf, size_t size)
 				reset_ssp_pkt();
 				if (bbd_send_packet(msg->buffer, msg->length) < 0) {
 					pr_err("[SSP]: %s bbd_send_packet failed(AP2HUB_WRITE)\n", __func__);
-					goto unlock;
+                    break;
 				}
 				DEBUG_SHOW_HEX_SEND(msg->buffer, msg->length);
+                mutex_lock(&data->pending_mutex);
 				if (ssp_pkt.opts & AP2HUB_RETURN) {
 					msg->options = AP2HUB_READ | AP2HUB_RETURN;
 					msg->length = 1;
-					list_add_tail(&msg->list,
-						&data->pending_list);
-					goto unlock;
+					list_add_tail(&msg->list, &data->pending_list);
 				}
-				bbd_complete_ssp_msg(data, msg);
-unlock:
-				ssp_pkt.islocked = false;
-				mutex_unlock(&data->pending_mutex);
+                else
+                {
+				    bbd_complete_ssp_msg(data, msg);
+                }
+                mutex_unlock(&data->pending_mutex);
 				break;
 			default:
 				pr_err("[SSP]No type error(%d)\n", ssp_pkt.type);
@@ -799,12 +794,14 @@ unlock:
 				//BUG_ON(ssp_pkt.msg == NULL);
 				//BUG_ON(ssp_pkt.rxlen != ssp_pkt.msg->length);
 				if (ssp_pkt.msg != NULL) {
+                    mutex_lock(&data->pending_mutex);
+
 					memcpy(ssp_pkt.msg->buffer, ssp_pkt.buf, ssp_pkt.rxlen);
 					bbd_complete_ssp_msg(data, ssp_pkt.msg);
+
+                    mutex_unlock(&data->pending_mutex);
 					ssp_pkt.msg = NULL;
 				}
-				ssp_pkt.islocked = false;
-				mutex_unlock(&data->pending_mutex);
 				break;
 			case HUB2AP_WRITE:
 				DEBUG_SHOW_HEX_RECV(ssp_pkt.buf, ssp_pkt.rxlen);

@@ -306,8 +306,6 @@ static int ss310ap_on(struct modem_ctl *mc)
 			mif_err("%s: AP2CP_CFG ioremap failed.\n", __func__);
 			ret = -EACCES;
 			return ret;
-		} else {
-			mif_err("AP2CP_CFG : 0x%p\n", AP2CP_CFG);
 		}
 
 		mif_err("__raw_readl(AP2CP_CFG): 0x%08x\n", __raw_readl(AP2CP_CFG));
@@ -584,8 +582,6 @@ static int ss310ap_dump_start(struct modem_ctl *mc)
 		if (AP2CP_CFG == NULL) {
 			mif_err("%s: AP2CP_CFG ioremap failed.\n", __func__);
 			return -EACCES;
-		} else {
-			mif_err("AP2CP_CFG : 0x%p\n", AP2CP_CFG);
 		}
 
 		mif_err("__raw_readl(AP2CP_CFG): 0x%08x\n", __raw_readl(AP2CP_CFG));

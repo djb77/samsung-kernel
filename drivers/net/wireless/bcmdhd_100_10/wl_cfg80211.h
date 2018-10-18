@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 765757 2018-06-05 07:48:03Z $
+ * $Id: wl_cfg80211.h 776889 2018-08-16 05:17:15Z $
  */
 
 /**
@@ -1118,11 +1118,8 @@ wl_probe_wdev_all(struct bcm_cfg80211 *cfg)
 	GCC_DIAGNOSTIC_PUSH();
 	BCM_LIST_FOR_EACH_ENTRY_SAFE(_net_info, next,
 		&cfg->net_list, list) {
-		WL_INFORM_MEM(("%s: net_list[%d] bssidx: %d, "
-			"ndev: %p, wdev: %p \n", __FUNCTION__,
-			idx++, _net_info->bssidx,
-			OSL_OBFUSCATE_BUF(_net_info->ndev),
-			OSL_OBFUSCATE_BUF(_net_info->wdev)));
+		WL_INFORM_MEM(("%s: net_list[%d] bssidx: %d\n",
+			__FUNCTION__, idx++, _net_info->bssidx));
 	}
 	GCC_DIAGNOSTIC_POP();
 	spin_unlock_irqrestore(&cfg->net_list_sync, flags);

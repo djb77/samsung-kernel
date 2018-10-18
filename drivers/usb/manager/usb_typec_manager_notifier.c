@@ -25,6 +25,9 @@
 #include <linux/ccic/max77705_usbc.h>
 #include <linux/ccic/max77705_alternate.h>
 
+/* dwc3 irq storm patch */
+/* need to check dwc3 link state during dcd time out case */
+extern int dwc3_gadget_get_cmply_link_state_wrapper(void);
 #define DEBUG
 #define SET_MANAGER_NOTIFIER_BLOCK(nb, fn, dev) do {	\
 		(nb)->notifier_call = (fn);		\
@@ -287,14 +290,16 @@ static void cable_type_check(struct work_struct *work)
 {
 	CC_NOTI_USB_STATUS_TYPEDEF p_usb_noti;
 	CC_NOTI_ATTACH_TYPEDEF p_batt_noti;
+	int dwc3_link_check = 0;
 
+	dwc3_link_check= dwc3_gadget_get_cmply_link_state_wrapper();
 	if ( (typec_manager.ccic_drp_state != USB_STATUS_NOTIFY_ATTACH_UFP) ||
-		typec_manager.is_UFPS ){
-		pr_info("usb: [M] %s: skip case\n", __func__);
+		typec_manager.is_UFPS || dwc3_link_check == 1 ){
+		pr_info("usb: [M] %s: skip case : dwc3_link = %d\n", __func__, dwc3_link_check);
 		return;
 	}
+	pr_info("usb: [M] %s: usb=%d, pd=%d cable_type=%d, dwc3_link_check=%d\n", __func__, typec_manager.usb_enum_state, typec_manager.pd_con_state, typec_manager.cable_type, dwc3_link_check);
 
-	pr_info("usb: [M] %s: usb=%d, pd=%d cable_type=%d\n", __func__, typec_manager.usb_enum_state, typec_manager.pd_con_state, typec_manager.cable_type);
 	if(!typec_manager.usb_enum_state ||
 		(typec_manager.muic_data_refresh
 		&& typec_manager.cable_type==MANAGER_NOTIFY_MUIC_CHARGER)) {

@@ -240,7 +240,8 @@ static int abox_rdma_mailbox_send_cmd(struct device *dev, unsigned int cmd)
 	struct device *dev_abox = &platform_data->pdev_abox->dev;
 	struct abox_compr_data *data = &platform_data->compr_data;
 	ABOX_IPC_MSG ipc;
-	int ret, n, ack;
+	u64 timeout;
+	int ret;
 
 	dev_dbg(dev, "%s(%x)\n", __func__, cmd);
 
@@ -293,29 +294,26 @@ static int abox_rdma_mailbox_send_cmd(struct device *dev, unsigned int cmd)
 		return -EINVAL;
 	}
 
-	spin_lock(&data->cmd_lock);
+	mutex_lock(&data->cmd_lock);
 
 	abox_rdma_mailbox_write(dev, COMPR_HANDLE_ID, data->handle_id);
 	abox_rdma_mailbox_write(dev, COMPR_CMD_CODE, cmd);
-	ret = abox_request_ipc(dev_abox, IPC_OFFLOAD, &ipc, 0, 1, 1);
+	ret = abox_request_ipc(dev_abox, IPC_OFFLOAD, &ipc, 0, 0, 1);
 
-	for (n = 0, ack = 0; n < 2000; n++) {
-		/* Wait for ACK */
-		if (abox_rdma_mailbox_read(dev, COMPR_ACK)) {
-			ack = 1;
-			break;
+	timeout = local_clock() + (1 * NSEC_PER_SEC);
+	while (!abox_rdma_mailbox_read(dev, COMPR_ACK)) {
+		if (local_clock() <= timeout) {
+			cond_resched();
+			continue;
 		}
-		udelay(100);
+		dev_err(dev, "%s: No ack error!(%x)", __func__, cmd);
+		ret = -EFAULT;
+		break;
 	}
 	/* clear ACK */
 	abox_rdma_mailbox_write(dev, COMPR_ACK, 0);
 
-	spin_unlock(&data->cmd_lock);
-
-	if (!ack) {
-		dev_err(dev, "%s: No ack error!(%x)", __func__, cmd);
-		ret = -EFAULT;
-	}
+	mutex_unlock(&data->cmd_lock);
 
 	return ret;
 }
@@ -1855,7 +1853,7 @@ static int samsung_abox_rdma_probe(struct platform_device *pdev)
 	data->abox_data = platform_get_drvdata(data->pdev_abox);
 
 	spin_lock_init(&data->compr_data.lock);
-	spin_lock_init(&data->compr_data.cmd_lock);
+	mutex_init(&data->compr_data.cmd_lock);
 	init_waitqueue_head(&data->compr_data.flush_wait);
 	init_waitqueue_head(&data->compr_data.exit_wait);
 	init_waitqueue_head(&data->compr_data.ipc_wait);

@@ -471,9 +471,12 @@ int s5p_mfc_set_dynamic_dpb(struct s5p_mfc_ctx *ctx, struct s5p_mfc_buf *dst_mb)
 
 	for (i = 0; i < raw->num_planes; i++) {
 		MFC_WRITEL(raw->plane_size[i],
-				S5P_FIMV_D_FIRST_PLANE_DPB_SIZE + i*4);
+				S5P_FIMV_D_FIRST_PLANE_DPB_SIZE + i * 4);
 		MFC_WRITEL(dst_mb->planes.raw[i],
-				S5P_FIMV_D_FIRST_PLANE_DPB0 + (i*0x100 + dst_index*4));
+				S5P_FIMV_D_FIRST_PLANE_DPB0 + (i * 0x100 + dst_index * 4));
+		if (ctx->is_10bit)
+			MFC_WRITEL(raw->plane_size_2bits[i],
+					S5P_FIMV_D_FIRST_PLANE_2BIT_DPB_SIZE + (i * 4));
 	}
 
 	MFC_TRACE_CTX("Set dst[%d] fd: %d, %#llx / avail %#lx used %#x\n",

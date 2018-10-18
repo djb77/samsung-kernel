@@ -342,7 +342,7 @@ void __init setup_arch(char **cmdline_p)
 	conswitchp = &dummy_con;
 #endif
 #endif
-#ifndef CONFIG_RELOCATABLE_KERNEL
+#if !(defined CONFIG_RELOCATABLE_KERNEL) && !(defined CONFIG_RANDOMIZE_BASE)
 	if (boot_args[1] || boot_args[2] || boot_args[3]) {
 		pr_err("WARNING: x1-x3 nonzero in violation of boot protocol:\n"
 			"\tx1: %016llx\n\tx2: %016llx\n\tx3: %016llx\n"

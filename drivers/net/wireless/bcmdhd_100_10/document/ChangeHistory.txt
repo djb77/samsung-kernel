@@ -1,5 +1,48 @@
-BCM4361 DHD 100.11.5 for Android STAR Project
+BCM4361 DHD 100.11.7.2 for Android STAR Project
 (Notes: 100.11.x is twigged off from 100.10.163)
+
+DHD 100.11.7.2 - 2018.08.20
+Security Patch
+ - CS5549090(By Min SungBin) SI-11784: Added the validation routine of ifidx variable to fix the security issue
+ - CS5550321(By Min SungBin) SI-11785: Added the boundary check routine for flowid to fix the security issue
+ - CS5844556(By Kang Hyung Wook) SI-12304: Hided wdev and ndev pointer information to fix the security issue
+ - CS5844633(By Kang Hyung Wook) SI-12262: Changed the print format specifier to hide pointer information
+ - CS5844688(By Kang Hyung Wook) SI-12227: Fixed out of bounds read in dhd_get_memdump_info() function
+
+
+DHD 100.11.7 - 2018.07.06
+Kernel Panic
+ - CS5126440(By Kim Gwang Min) Restricted processing the remaining data when SMMU fault is triggered
+ - CS5301020(By Min SungBin) Added PCIe link down check routine while Wi-Fi power on
+ - CS5318818(By Min SungBin) Restricted race condition avoidance implementation for BME bit clear only for Wi-Fi power on case to avoid NOC error
+
+Security Patch
+ - CS5120366(By Jeong Min Cheol) SI-11983: Fixed potential buffer overflow due to sscanf
+ - CS5168121(By Kim Tae-Yong) Hide host memory address information for security
+ - CS5188660(By Min SungBin) SI-11783: Fixed potential kernel panic from malicious message
+ - CS5219404(By Choi Hyeonu) SI-12070: Fixed vulnerability issue due to NULL pointer dereference
+ - CS5262126(By Min SungBin) SI-11164: Fixed buffer overflow in handling PKTLOG_FILTER_ADD command
+ - CS5264403(By Min SungBin) SI-12150: Fixed out of bounds read in dhd_ioctl_process()
+ - CS5270298(By Kang Hyung Wook) CS5844595(By Kang Hyung Wook) SI-12140 SI-12268: Fixed not to print out wdev and netdev pointer
+ - CS5272148(By Kang Hyung Wook) SI-12126: Fixed buffer overflow when parsing MAC by file
+ - CS5368479(By Min SungBin) SI-12312: Hided pointer information
+
+Others
+ - CS4227562(By Min SungBin) Supported the list of bad APs which have abnormal PS mode operation
+ - CS4417297(By Jeong Min Cheol) Fixed vulnerability issue by repeated INTERFACE_CREATE command
+ - CS4679906(By Yoon Jae Ho) Added to check MFP condition when enabling MFP
+ - CS4985606(By Kim MinSoo) HFS upload TPUT enhancement for Exynos 9810 platform
+ - CS4996816(By Kim Gwang Min) Fixed prevent issue
+ - CS5212235(By Min SungBin) Fixed the race condition between BME bit clear at host and the Memory Read Request from dongle
+ - Added DHD_LOG_MEM macro for saving log to memory only (not print out to kernel message)
+ - Added dump code for all PCIe rings in debug_dump
+ - Added invalid flowid check routine
+ - Added virtual and physical address information log of BAR0/BAR1 to support PCIe related issue
+ - Enhanced STA/SoftAP concurrent mode support
+ - Fixed boundary check for the number of flowring
+ - Fixed PCIe ring dump delay issue
+ - Fixed Race condition between wl_cfg80211_add_if() and event_handler context
+
 
 DHD 100.11.5 - 2018.04.30
 Major Issue

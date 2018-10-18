@@ -198,6 +198,7 @@ struct sec_battery_info {
 	int status;
 	int health;
 	bool present;
+	unsigned int charger_mode;
 
 	int voltage_now;		/* cell voltage (mV) */
 	int voltage_avg;		/* average voltage (mV) */

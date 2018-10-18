@@ -120,6 +120,7 @@
 #define CODEC_INTERLACED(ctx)	(IS_H264_DEC(ctx) || IS_H264_MVC_DEC(ctx) ||	\
 				IS_MPEG2_DEC(ctx) || IS_MPEG4_DEC(ctx) ||	\
 				IS_VC1_DEC(ctx) || IS_VC1_RCV_DEC(ctx))
+#define CODEC_MBAFF(ctx)	(IS_H264_DEC(ctx) || IS_H264_MVC_DEC(ctx))
 #define CODEC_MULTIFRAME(ctx)	(IS_MPEG4_DEC(ctx) || IS_VP9_DEC(ctx) ||	\
 				IS_FIMV2_DEC(ctx) || IS_FIMV3_DEC(ctx) || IS_FIMV4_DEC(ctx))
 #define CODEC_10BIT(ctx)	(IS_HEVC_DEC(ctx) || IS_HEVC_ENC(ctx) ||	\
@@ -154,6 +155,8 @@
 #define	ENC_SET_PVC_MODE		(1 << 7)
 #define	ENC_SET_RATIO_OF_INTRA		(1 << 8)
 #define	ENC_SET_COLOR_ASPECT		(1 << 9)
+#define	ENC_SET_HP_BITRATE_CONTROL	(1 << 10)
+#define	ENC_SET_STATIC_INFO		(1 << 11)
 
 #define MFC_VER_MAJOR(dev)	((s5p_mfc_version(dev) >> 8) & 0xFF)
 #define MFC_VER_MINOR(dev)	(s5p_mfc_version(dev) & 0xFF)
@@ -188,6 +191,8 @@
 					(dev->fw.date >= 0x171113))
 #define FW_HAS_ENC_COLOR_ASPECT(dev)	(FROM_MFCV11X(dev) &&		\
 					(dev->fw.date >= 0x171023))
+#define FW_HAS_ENC_STATIC_INFO(dev)	(IS_MFCV12X(dev) &&		\
+					(dev->fw.date >= 0x180314))
 
 static inline unsigned int s5p_mfc_version(struct s5p_mfc_dev *dev)
 {

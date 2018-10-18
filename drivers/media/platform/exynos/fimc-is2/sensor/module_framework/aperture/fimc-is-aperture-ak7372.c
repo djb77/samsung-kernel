@@ -306,7 +306,7 @@ int sensor_ak7372_aperture_deinit(struct v4l2_subdev *subdev, int value)
 	}
 
 	sensor_ak7372_aperture_set_start_value_step1(subdev, value);
-	usleep_range(5000, 6000);
+	usleep_range(10000, 11000);
 
 p_err:
 	info("[%s] end\n", __func__);

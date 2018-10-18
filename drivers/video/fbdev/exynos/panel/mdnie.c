@@ -38,8 +38,9 @@ static const char * const mdnie_maptbl_name[] = {
 	[MDNIE_UI_MAPTBL] = "ui",
 	[MDNIE_VIDEO_MAPTBL] = "video",
 	[MDNIE_CAMERA_MAPTBL] = "camera",
+	[MDNIE_CAMERA_SWA_MAPTBL] = "camera_swa",
 	[MDNIE_GALLERY_MAPTBL] = "gallery",
-	[MDNIE_VT_MAPTBL] = "vt",
+	[MDNIE_GALLERY_SWA_MAPTBL] = "gallery_swa",
 	[MDNIE_BROWSER_MAPTBL] = "browser",
 	[MDNIE_EBOOK_MAPTBL] = "ebook",
 	[MDNIE_EMAIL_MAPTBL] = "email",
@@ -109,9 +110,9 @@ static const char * const scenario_name[] = {
 	[UI_MODE] = "ui",
 	[VIDEO_NORMAL_MODE] = "video_normal",
 	[CAMERA_MODE] = "camera",
-	[NAVI_MODE] = "navi",
+	[CAMERA_SWA_MODE] = "camera_swa",
 	[GALLERY_MODE] = "gallery",
-	[VT_MODE] = "vt",
+	[GALLERY_SWA_MODE] = "gallery_swa",
 	[BROWSER_MODE] = "browser",
 	[EBOOK_MODE] = "ebook",
 	[EMAIL_MODE] = "email",
@@ -1471,6 +1472,10 @@ int mdnie_probe(struct panel_device *panel, struct mdnie_tune *mdnie_tune)
 	mdnie->props.cal_x_center = mdnie_tune->cal_x_center;
 	mdnie->props.cal_y_center = mdnie_tune->cal_y_center;
 	mdnie->props.cal_boundary_center = mdnie_tune->cal_boundary_center;
+
+	for (i = 0; i < MAX_COLOR; i++) {
+		mdnie->props.swa_wrgb_ofs[i] = mdnie_tune->swa_wrgb_ofs[i];
+	}
 
 	mdnie->seqtbl = mdnie_tune->seqtbl;
 	mdnie->nr_seqtbl = mdnie_tune->nr_seqtbl;

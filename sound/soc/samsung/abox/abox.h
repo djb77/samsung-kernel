@@ -674,7 +674,7 @@ struct abox_compr_data {
 	uint32_t exit_ack;
 
 	spinlock_t lock;
-	spinlock_t cmd_lock;
+	struct mutex cmd_lock;
 
 	int (*isr_handler)(void *data);
 

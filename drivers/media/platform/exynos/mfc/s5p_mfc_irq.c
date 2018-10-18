@@ -75,11 +75,14 @@ static void mfc_handle_black_bar_info(struct s5p_mfc_dev *dev, struct s5p_mfc_ct
 static unsigned int mfc_handle_frame_field(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
-	unsigned int interlace_type = 0, is_interlace = 0;
+	unsigned int interlace_type = 0, is_interlace = 0, is_mbaff = 0;
 	unsigned int field;
 
 	if (CODEC_INTERLACED(ctx))
 		is_interlace = s5p_mfc_is_interlace_picture();
+
+	if (CODEC_MBAFF(ctx))
+		is_mbaff = s5p_mfc_is_mbaff_picture();
 
 	if (is_interlace) {
 		interlace_type = s5p_mfc_get_interlace_type();
@@ -87,12 +90,14 @@ static unsigned int mfc_handle_frame_field(struct s5p_mfc_ctx *ctx)
 			field = V4L2_FIELD_INTERLACED_TB;
 		else
 			field = V4L2_FIELD_INTERLACED_BT;
+	} else if (is_mbaff) {
+		field = V4L2_FIELD_INTERLACED_TB;
 	} else {
 		field = V4L2_FIELD_NONE;
 	}
 
-	mfc_debug(2, "is_interlace : %d interlace_type : %d, field: 0x%#x\n",
-			is_interlace, interlace_type, field);
+	mfc_debug(2, "is_interlace : %d interlace_type : %d, is_mbaff: %d, field: 0x%#x\n",
+			is_interlace, interlace_type, is_mbaff, field);
 
 	return field;
 }
@@ -508,10 +513,17 @@ static void mfc_handle_reuse_buffer(struct s5p_mfc_ctx *ctx)
 	if (!released_flag)
 		return;
 
-	/* reuse not referenced buf anymore */
+	/* Reuse not referenced buf anymore */
 	for (i = 0; i < MFC_MAX_DPBS; i++)
 		if (released_flag & (1 << i))
-			s5p_mfc_move_reuse_buffer(ctx, i);
+			if (s5p_mfc_move_reuse_buffer(ctx, i))
+				released_flag &= ~(1 << i);
+
+	/* Not reused buffer should be released when there is a display frame */
+	dec->dec_only_release_flag |= released_flag;
+	for (i = 0; i < MFC_MAX_DPBS; i++)
+		if (released_flag & (1 << i))
+			clear_bit(i, &dec->available_dpb);
 }
 
 static void mfc_handle_frame_input(struct s5p_mfc_ctx *ctx, unsigned int err)
@@ -1050,7 +1062,7 @@ static int mfc_handle_seq_dec(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_dec *dec = ctx->dec_priv;
-	int i;
+	int i, is_interlace, is_mbaff;
 
 	if (ctx->src_fmt->fourcc != V4L2_PIX_FMT_FIMV1) {
 		ctx->img_width = s5p_mfc_get_img_width();
@@ -1088,9 +1100,13 @@ static int mfc_handle_seq_dec(struct s5p_mfc_ctx *ctx)
 	else
 		s5p_mfc_change_state(ctx, MFCINST_HEAD_PARSED);
 
-	if (ctx->state == MFCINST_HEAD_PARSED)
-		dec->is_interlaced =
-			s5p_mfc_is_interlace_picture();
+	if (ctx->state == MFCINST_HEAD_PARSED) {
+		is_interlace = s5p_mfc_is_interlace_picture();
+		is_mbaff = s5p_mfc_is_mbaff_picture();
+		if (is_interlace || is_mbaff)
+			dec->is_interlaced = 1;
+		mfc_debug(3, "interlace: %d, mbaff: %d\n", is_interlace, is_mbaff);
+	}
 
 	if (IS_H264_DEC(ctx) || IS_H264_MVC_DEC(ctx) || IS_HEVC_DEC(ctx)) {
 		struct s5p_mfc_buf *src_mb = s5p_mfc_get_buf(&ctx->buf_queue_lock, &ctx->src_buf_queue, MFC_BUF_NO_TOUCH_USED);

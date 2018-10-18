@@ -1866,7 +1866,8 @@ struct camera2_uctl {
 	uint32_t			statsRoi[4];
 	enum aa_cameratype		masterCam;
 	int32_t                         productColorInfo;    
-	uint32_t			reserved[9];
+	uint8_t                     countryCode[4];
+	uint32_t			reserved[8];
 };
 
 struct camera2_udm {

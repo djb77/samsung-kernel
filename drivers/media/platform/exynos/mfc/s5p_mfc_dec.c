@@ -152,6 +152,7 @@ static void mfc_dec_change_format(struct s5p_mfc_ctx *ctx)
 		case V4L2_PIX_FMT_NV61M_S10B:
 		case V4L2_PIX_FMT_NV16M_P210:
 		case V4L2_PIX_FMT_NV61M_P210:
+			/* It is right format */
 			break;
 		case V4L2_PIX_FMT_NV12M:
 		case V4L2_PIX_FMT_NV16M:
@@ -180,6 +181,7 @@ static void mfc_dec_change_format(struct s5p_mfc_ctx *ctx)
 			case V4L2_PIX_FMT_NV21M_S10B:
 			case V4L2_PIX_FMT_NV12M_P010:
 			case V4L2_PIX_FMT_NV21M_P010:
+				/* It is right format */
 				break;
 			case V4L2_PIX_FMT_NV12M:
 			case V4L2_PIX_FMT_NV16M:
@@ -203,6 +205,7 @@ static void mfc_dec_change_format(struct s5p_mfc_ctx *ctx)
 		switch (org_fmt) {
 		case V4L2_PIX_FMT_NV16M:
 		case V4L2_PIX_FMT_NV61M:
+			/* It is right format */
 			break;
 		case V4L2_PIX_FMT_NV12M:
 		case V4L2_PIX_FMT_NV12M_S10B:
@@ -223,6 +226,27 @@ static void mfc_dec_change_format(struct s5p_mfc_ctx *ctx)
 			break;
 		}
 		ctx->raw_buf.num_planes = 2;
+	} else {
+		/* YUV420 8bit */
+		switch (org_fmt) {
+		case V4L2_PIX_FMT_NV16M:
+		case V4L2_PIX_FMT_NV12M_S10B:
+		case V4L2_PIX_FMT_NV16M_S10B:
+		case V4L2_PIX_FMT_NV12M_P010:
+		case V4L2_PIX_FMT_NV16M_P210:
+			ctx->dst_fmt = (struct s5p_mfc_fmt *)&dec_formats[5];
+			break;
+		case V4L2_PIX_FMT_NV61M:
+		case V4L2_PIX_FMT_NV21M_S10B:
+		case V4L2_PIX_FMT_NV61M_S10B:
+		case V4L2_PIX_FMT_NV21M_P010:
+		case V4L2_PIX_FMT_NV61M_P210:
+			ctx->dst_fmt = (struct s5p_mfc_fmt *)&dec_formats[10];
+			break;
+		default:
+			/* It is right format */
+			break;
+		}
 	}
 
 	if (org_fmt != ctx->dst_fmt->fourcc)

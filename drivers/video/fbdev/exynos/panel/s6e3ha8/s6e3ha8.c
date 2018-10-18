@@ -1336,6 +1336,8 @@ static void copy_color_coordinate_maptbl(struct maptbl *tbl, u8 *dst)
 		value = mdnie->props.def_wrgb[i] +
 			(char)((mdnie->props.mode == AUTO) ?
 				mdnie->props.def_wrgb_ofs[i] : 0);
+		if ((mdnie->props.mode == AUTO) && (mdnie->props.scenario == CAMERA_SWA_MODE || mdnie->props.scenario == GALLERY_SWA_MODE))
+			value += mdnie->props.swa_wrgb_ofs[i];
 		mdnie->props.cur_wrgb[i] = value;
 		dst[i * 2] = value;
 
@@ -1409,6 +1411,8 @@ static void copy_adjust_ldu_maptbl(struct maptbl *tbl, u8 *dst)
 		value = tbl->arr[idx + i] +
 			(((mdnie->props.mode == AUTO) && (mdnie->props.scenario != EBOOK_MODE)) ?
 				mdnie->props.def_wrgb_ofs[i] : 0);
+		if ((mdnie->props.mode == AUTO) && (mdnie->props.scenario == CAMERA_SWA_MODE || mdnie->props.scenario == GALLERY_SWA_MODE))
+			value += mdnie->props.swa_wrgb_ofs[i];
 		mdnie->props.cur_wrgb[i] = value;
 		dst[i * 2] = value;
 

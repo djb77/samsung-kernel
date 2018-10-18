@@ -153,6 +153,7 @@ static int mfc_init_dec_ctx(struct s5p_mfc_ctx *ctx)
 	dec->immediate_display = 0;
 	dec->is_dts_mode = 0;
 	dec->err_reuse_flag = 0;
+	dec->dec_only_release_flag = 0;	
 
 	dec->is_dynamic_dpb = 1;
 	dec->dynamic_used = 0;

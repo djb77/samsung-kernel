@@ -455,6 +455,7 @@ static void mfc_dec_dst_stop_streaming(struct s5p_mfc_ctx *ctx)
 
 	dec->dynamic_used = 0;
 	dec->err_reuse_flag = 0;
+	dec->dec_only_release_flag = 0;	
 
 	s5p_mfc_cleanup_queue(&ctx->buf_queue_lock, &ctx->dst_buf_queue);
 

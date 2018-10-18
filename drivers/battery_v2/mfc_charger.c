@@ -645,6 +645,7 @@ void mfc_send_command(struct mfc_charger_data *charger, int cmd_mode)
 {
 	u8 data_val[4];
 	u8 cmd = 0;
+	u8 i;
 
 	switch (cmd_mode) {
 	case MFC_AFC_CONF_5V:
@@ -711,6 +712,30 @@ void mfc_send_command(struct mfc_charger_data *charger, int cmd_mode)
 #else
 			queue_delayed_work(charger->wqueue, &charger->wpc_afc_vout_work, msecs_to_jiffies(8000));
 #endif
+		}
+		break;
+	case MFC_AFC_CONF_5V_TX:
+		for (i = 0; i < CMD_CNT; i++) {
+			cmd = WPC_COM_AFC_SET;
+			data_val[0] = 0x05; /* Value for WPC AFC_SET 5V */
+			pr_info("%s set 5V to TX, cnt = %d \n", __func__, i);
+			mfc_send_packet(charger, MFC_HEADER_AFC_CONF, cmd, data_val, 1);
+			mfc_reg_read(charger->client, MFC_WPC_RX_DATA_COM_REG, &data_val[0]);
+			mfc_reg_read(charger->client, MFC_WPC_RX_DATA_VALUE0_REG, &data_val[0]);
+			mfc_reg_read(charger->client, MFC_AP2MFC_CMD_L_REG, &data_val[0]);
+			msleep(100);
+		}
+		break;
+	case MFC_AFC_CONF_10V_TX:
+		for (i = 0; i < CMD_CNT; i++) {
+			cmd = WPC_COM_AFC_SET;
+			data_val[0] = 0x2c; /* Value for WPC AFC_SET 10V */
+			pr_info("%s set 10V to TX, cnt = %d \n", __func__, i);
+			mfc_send_packet(charger, MFC_HEADER_AFC_CONF, cmd, data_val, 1);
+			mfc_reg_read(charger->client, MFC_WPC_RX_DATA_COM_REG, &data_val[0]);
+			mfc_reg_read(charger->client, MFC_WPC_RX_DATA_VALUE0_REG, &data_val[0]);
+			mfc_reg_read(charger->client, MFC_AP2MFC_CMD_L_REG, &data_val[0]);
+			msleep(100);
 		}
 		break;
 	case MFC_LED_CONTROL_ON:
@@ -1488,9 +1513,8 @@ static void mfc_wpc_afc_vout_work(struct work_struct *work)
 {
 	struct mfc_charger_data *charger =
 		container_of(work, struct mfc_charger_data, wpc_afc_vout_work.work);
-	u8 data_val[4];
 	u8 cmd = 0;
-	u8 i;
+	int is_otg_on = 0;
 	union power_supply_propval value = {0, };
 
 	pr_info("%s start\n", __func__);
@@ -1516,17 +1540,15 @@ static void mfc_wpc_afc_vout_work(struct work_struct *work)
 	if (value.intval)
 		goto skip_set_afc_vout;
 #endif
+	psy_do_property("otg", get,
+		POWER_SUPPLY_PROP_ONLINE, value);
+	is_otg_on = value.intval;
+	pr_info("%s: check OTG status(%d)\n", __func__, is_otg_on);
 
-	for (i = 0; i < CMD_CNT; i++) {
-		cmd = WPC_COM_AFC_SET;
-		data_val[0] = 0x2c; /* Value for WPC AFC_SET 10V */
-		pr_info("%s set 10V , cnt = %d\n", __func__, i);
-		mfc_send_packet(charger, MFC_HEADER_AFC_CONF, cmd, data_val, 1);
-		mfc_reg_read(charger->client, MFC_WPC_RX_DATA_COM_REG, &data_val[0]);
-		mfc_reg_read(charger->client, MFC_WPC_RX_DATA_VALUE0_REG, &data_val[0]);
-		mfc_reg_read(charger->client, MFC_AP2MFC_CMD_L_REG, &data_val[0]);
-		msleep(100);
-	}
+	if (is_otg_on)
+		goto skip_set_afc_vout;
+
+	mfc_send_command(charger, MFC_AFC_CONF_10V_TX);
 	charger->is_afc_tx = true;
 	pr_info("%s: is_afc_tx = %d vout read = %d\n",
 		__func__, charger->is_afc_tx, mfc_get_adc(charger, MFC_ADC_VOUT));
@@ -1536,12 +1558,10 @@ static void mfc_wpc_afc_vout_work(struct work_struct *work)
 	mfc_reg_read(charger->client, MFC_RX_COMM_MOD_FET_REG, &cmd);
 	pr_info("%s: CM FET setting(0x%x)\n", __func__, cmd);
 
-	psy_do_property("otg", get,
-		POWER_SUPPLY_PROP_ONLINE, value);
-	pr_info("%s: check state(%d, %d, %d)\n", __func__,
-		charger->vout_mode, charger->pdata->vout_status, value.intval);
+	pr_info("%s: check state(Vmode:%d, Vstatus:%d, Otg:%d)\n", __func__,
+		charger->vout_mode, charger->pdata->vout_status, is_otg_on);
 
-	if (!charger->is_full_status && !value.intval &&
+	if (!charger->is_full_status &&
 		charger->vout_mode != WIRELESS_VOUT_5V &&
 		charger->vout_mode != WIRELESS_VOUT_5V_STEP) {
 		charger->vout_mode = WIRELESS_VOUT_10V;
@@ -1551,9 +1571,7 @@ static void mfc_wpc_afc_vout_work(struct work_struct *work)
 			&charger->wpc_vout_mode_work, 0);
 	}
 
-#if defined(CONFIG_BATTERY_SWELLING)
 skip_set_afc_vout:
-#endif
 	wake_unlock(&charger->wpc_afc_vout_lock);
 }
 
@@ -1968,10 +1986,7 @@ static void mfc_wpc_vout_mode_work(struct work_struct *work)
 		charger->pdata->cable_type == MFC_PAD_WPC_STAND_HV ||
 		charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV) &&
 		charger->pdata->vout_status <= MFC_VOUT_5V && charger->is_full_status) {
-		u8 data = 0x05;
-		/* send data for decreasing VRECT to 5V */
-		mfc_send_packet(charger, MFC_HEADER_AFC_CONF,
-			WPC_COM_AFC_SET, &data, 1);
+		mfc_send_command(charger, MFC_AFC_CONF_5V_TX);
 		pr_info("%s: set TX 5V after cs100\n", __func__);
 	}
 #endif
@@ -2138,19 +2153,10 @@ static int mfc_chg_set_property(struct power_supply *psy,
 			val->intval == WIRELESS_VOUT_10V_STEP) {
 			if (!charger->is_full_status) {
 				if (!charger->is_afc_tx) {
-					u8 data_val[4], cmd = 0;
+					u8 cmd = 0;
 
 					pr_info("%s: need to set afc tx before vout control\n", __func__);
-					for (i = 0; i < CMD_CNT; i++) {
-						cmd = WPC_COM_AFC_SET;
-						data_val[0] = 0x2c; /* Value for WPC AFC_SET 10V */
-						pr_info("%s set 10V , cnt = %d \n", __func__, i);
-						mfc_send_packet(charger, MFC_HEADER_AFC_CONF, cmd, data_val, 1);
-						mfc_reg_read(charger->client, MFC_WPC_RX_DATA_COM_REG, &data_val[0]);
-						mfc_reg_read(charger->client, MFC_WPC_RX_DATA_VALUE0_REG, &data_val[0]);
-						mfc_reg_read(charger->client, MFC_AP2MFC_CMD_L_REG, &data_val[0]);
-						msleep(100);
-					}
+					mfc_send_command(charger, MFC_AFC_CONF_10V_TX);
 					charger->is_afc_tx = true;
 					pr_info("%s: is_afc_tx = %d vout read = %d \n",
 						__func__, charger->is_afc_tx, mfc_get_adc(charger, MFC_ADC_VOUT));
@@ -2391,6 +2397,11 @@ static void mfc_wpc_det_work(struct work_struct *work)
 
 		/* read vrect adjust */
 		mfc_reg_read(charger->client, MFC_VRECT_ADJ_REG, &vrect);
+
+		value.intval = 1;
+		psy_do_property(charger->pdata->wired_charger_name, set,
+				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT, value);
+		pr_info("%s: set md05 skip mode (auto)\n", __func__);
 
 		pr_info("%s: wireless charger activated, set V_INT as PN\n", __func__);
 

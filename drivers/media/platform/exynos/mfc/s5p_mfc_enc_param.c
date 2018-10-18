@@ -661,7 +661,7 @@ void s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 		reg &= ~(0xFF);
 		reg |= p->matrix_coefficients;
 		MFC_WRITEL(reg, S5P_FIMV_E_VIDEO_SIGNAL_TYPE);
-		mfc_debug(2, "H264 ENC Color aspect: range:%s, pri:%d, trans:%d, mat:%d\n",
+		mfc_debug(2, "[HDR] H264 ENC Color aspect: range(%s), pri(%d), trans(%d), mat(%d)\n",
 				p->color_range ? "Full" : "Limited", p->colour_primaries,
 				p->transfer_characteristics, p->matrix_coefficients);
 	}
@@ -1103,7 +1103,7 @@ void s5p_mfc_set_enc_params_vp9(struct s5p_mfc_ctx *ctx)
 		reg &= ~(0x1 << 25);
 		reg |= p->color_range << 25;
 		MFC_WRITEL(reg, S5P_FIMV_E_VIDEO_SIGNAL_TYPE);
-		mfc_debug(2, "VP9 ENC Color aspect: range:%s, space: %d\n",
+		mfc_debug(2, "[HDR] VP9 ENC Color aspect: range(%s), space(%d)\n",
 				p->color_range ? "Full" : "Limited", p->colour_primaries);
 	}
 
@@ -1341,9 +1341,44 @@ void s5p_mfc_set_enc_params_hevc(struct s5p_mfc_ctx *ctx)
 		reg &= ~(0xFF);
 		reg |= p->matrix_coefficients;
 		MFC_WRITEL(reg, S5P_FIMV_E_VIDEO_SIGNAL_TYPE);
-		mfc_debug(2, "HEVC ENC Color aspect: range:%s, pri:%d, trans:%d, mat:%d\n",
+		mfc_debug(2, "[HDR] HEVC ENC Color aspect: range(%s), pri(%d), trans(%d), mat(%d)\n",
 				p->color_range ? "Full" : "Limited", p->colour_primaries,
 				p->transfer_characteristics, p->matrix_coefficients);
+	}
+
+	if (FW_HAS_ENC_STATIC_INFO(dev) && p->static_info_enable && ctx->is_10bit) {
+		reg = MFC_READL(S5P_FIMV_E_HEVC_OPTIONS_2);
+		/* HDR_STATIC_INFO_ENABLE */
+		reg |= p->static_info_enable;
+		MFC_WRITEL(reg, S5P_FIMV_E_HEVC_OPTIONS_2);
+		/* MAX_PIC_AVERAGE_LIGHT & MAX_CONTENT_LIGHT */
+		reg = p->max_pic_average_light;
+		reg |= (p->max_content_light << 16);
+		MFC_WRITEL(reg, S5P_FIMV_E_CONTENT_LIGHT_LEVEL_INFO_SEI);
+		/* MAX_DISPLAY_LUMINANCE */
+		MFC_WRITEL(p->max_display_luminance, S5P_FIMV_E_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_0);
+		/* MIN DISPLAY LUMINANCE */
+		MFC_WRITEL(p->min_display_luminance, S5P_FIMV_E_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_1);
+		/* WHITE_POINT */
+		MFC_WRITEL(p->white_point, S5P_FIMV_E_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_2);
+		/* DISPLAY PRIMARIES_0 */
+		MFC_WRITEL(p->display_primaries_0, S5P_FIMV_E_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_3);
+		/* DISPLAY PRIMARIES_1 */
+		MFC_WRITEL(p->display_primaries_1, S5P_FIMV_E_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_4);
+		/* DISPLAY PRIMARIES_2 */
+		MFC_WRITEL(p->display_primaries_2, S5P_FIMV_E_MASTERING_DISPLAY_COLOUR_VOLUME_SEI_5);
+
+		mfc_debug(2, "[HDR] HEVC ENC static info: enable(%d), max_pic(0x%x), max_content(0x%x)\n",
+				p->static_info_enable, p->max_pic_average_light, p->max_content_light);
+		mfc_debug(2, "[HDR] max_disp(0x%x), min_disp(0x%x), white_point(0x%x)\n",
+				p->max_display_luminance, p->min_display_luminance, p->white_point);
+		mfc_debug(2, "[HDR] disp_pri_0(0x%x), disp_pri_1(0x%x), disp_pri_2(0x%x)\n",
+				p->display_primaries_0, p->display_primaries_1, p->display_primaries_2);
+	} else {
+		reg = MFC_READL(S5P_FIMV_E_HEVC_OPTIONS_2);
+		/* HDR_STATIC_INFO_ENABLE */
+		reg &=  ~(0x1);
+		MFC_WRITEL(reg, S5P_FIMV_E_HEVC_OPTIONS_2);
 	}
 
 	mfc_debug_leave();

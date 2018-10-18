@@ -526,10 +526,33 @@ void s5p_mfc_cleanup_queue(spinlock_t *plock, struct s5p_mfc_buf_queue *queue)
 	spin_unlock_irqrestore(plock, flags);
 }
 
+struct s5p_mfc_buf *mfc_find_buf_index(spinlock_t *plock, struct s5p_mfc_buf_queue *queue,
+		int index)
+{
+	unsigned long flags;
+	struct s5p_mfc_buf *mfc_buf = NULL;
+	int buf_index;
+
+	spin_lock_irqsave(plock, flags);
+
+	mfc_debug(2, "Looking for index: %d\n", index);
+	list_for_each_entry(mfc_buf, &queue->head, list) {
+		buf_index = mfc_buf->vb.vb2_buf.index;
+
+		if (index == buf_index) {
+			mfc_debug(2, "Found index: %d\n", buf_index);
+			spin_unlock_irqrestore(plock, flags);
+			return mfc_buf;
+		}
+	}
+
+	spin_unlock_irqrestore(plock, flags);
+	return NULL;
+}
+
 /*
- * Check released buffers are enqueued again.
- * s5p_mfc_dec.assigned_fd
- * s5p_mfc_dec.available_dpb
+ * Check released and enqueued buffers. (dst queue)
+ * Check and move reuse buffers. (ref -> dst queue)
  */
 static void mfc_check_ref_frame(spinlock_t *plock, struct s5p_mfc_buf_queue *dst_queue,
 		struct s5p_mfc_buf_queue *ref_queue,
@@ -543,6 +566,7 @@ static void mfc_check_ref_frame(spinlock_t *plock, struct s5p_mfc_buf_queue *dst
 
 	spin_lock_irqsave(plock, flags);
 
+	/* reuse buffers : error frame, decoding only frame (ref -> dst queue) */
 	list_for_each_entry_safe(ref_mb, tmp_mb, &ref_queue->head, list) {
 		index = ref_mb->vb.vb2_buf.index;
 		if (index == ref_index) {
@@ -562,6 +586,7 @@ static void mfc_check_ref_frame(spinlock_t *plock, struct s5p_mfc_buf_queue *dst
 		}
 	}
 
+	/* released and enqueued buffers (dst queue) */
 	if (!found) {
 		list_for_each_entry_safe(ref_mb, tmp_mb, &dst_queue->head, list) {
 			index = ref_mb->vb.vb2_buf.index;
@@ -593,15 +618,34 @@ void s5p_mfc_handle_released_info(struct s5p_mfc_ctx *ctx,
 		return;
 	}
 	refBuf = &dec->ref_info[index];
-
+	
+	if (dec->dec_only_release_flag) {
+		for (t = 0; t < MFC_MAX_DPBS; t++) {
+			if (dec->dec_only_release_flag & (1 << t)) {
+				mfc_debug(2, "Release FD[%d] = %03d (already released in dec only)\n",
+						t, dec->assigned_fd[t]);
+				refBuf->dpb[ncount].fd[0] = dec->assigned_fd[t];
+				ncount++;
+				dec->dec_only_release_flag &= ~(1 << t);
+			}
+		}
+	}
+	
 	if (released_flag) {
 		for (t = 0; t < MFC_MAX_DPBS; t++) {
 			if (released_flag & (1 << t)) {
 				if (dec->err_reuse_flag & (1 << t)) {
-					mfc_debug(2, "Released, but reuse. FD[%d] = %03d\n",
+					/* reuse buffer with error : do not update released info */
+					mfc_debug(2, "Released, but reuse(error frame). FD[%d] = %03d\n",
 							t, dec->assigned_fd[t]);
 					dec->err_reuse_flag &= ~(1 << t);
+				} else if ((t != index) &&
+						mfc_find_buf_index(&ctx->buf_queue_lock, &ctx->ref_buf_queue, t)) {
+					/* decoding only frame: do not update released info */
+					mfc_debug(2, "Released, but reuse(decoding only). FD[%d] = %03d\n",
+							t, dec->assigned_fd[t]);
 				} else {
+					/* displayed and released frame */
 					mfc_debug(2, "Release FD[%d] = %03d\n",
 							t, dec->assigned_fd[t]);
 					refBuf->dpb[ncount].fd[0] = dec->assigned_fd[t];
@@ -618,7 +662,7 @@ void s5p_mfc_handle_released_info(struct s5p_mfc_ctx *ctx,
 		refBuf->dpb[ncount].fd[0] = MFC_INFO_INIT_FD;
 }
 
-void s5p_mfc_move_reuse_buffer(struct s5p_mfc_ctx *ctx, int release_index)
+struct s5p_mfc_buf *s5p_mfc_move_reuse_buffer(struct s5p_mfc_ctx *ctx, int release_index)
 {
 	struct s5p_mfc_dec *dec = ctx->dec_priv;
 	struct s5p_mfc_buf_queue *dst_queue = &ctx->dst_buf_queue;
@@ -645,10 +689,14 @@ void s5p_mfc_move_reuse_buffer(struct s5p_mfc_ctx *ctx, int release_index)
 
 			clear_bit(index, &dec->available_dpb);
 			mfc_debug(2, "buffer[%d] is moved to dst queue for reuse\n", index);
+
+			spin_unlock_irqrestore(plock, flags);
+			return ref_mb;
 		}
 	}
 
 	spin_unlock_irqrestore(plock, flags);
+	return NULL;
 }
 
 void s5p_mfc_cleanup_enc_src_queue(struct s5p_mfc_ctx *ctx)

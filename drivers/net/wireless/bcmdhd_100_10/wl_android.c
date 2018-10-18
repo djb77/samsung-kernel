@@ -85,6 +85,7 @@
 #define CMD_BTCOEXMODE		"BTCOEXMODE"
 #define CMD_SETSUSPENDOPT	"SETSUSPENDOPT"
 #define CMD_SETSUSPENDMODE      "SETSUSPENDMODE"
+#define CMD_SETDTIM_IN_SUSPEND  "SET_DTIM_IN_SUSPEND"
 #define CMD_MAXDTIM_IN_SUSPEND  "MAX_DTIM_IN_SUSPEND"
 #define CMD_P2P_DEV_ADDR	"P2P_DEV_ADDR"
 #define CMD_SETFWPATH		"SETFWPATH"
@@ -1046,6 +1047,30 @@ static int wl_android_set_csa(struct net_device *dev, char *command)
 		return -1;
 	}
 	return 0;
+}
+
+static int
+wl_android_set_bcn_li_dtim(struct net_device *dev, char *command)
+{
+	int ret = 0;
+	int dtim;
+
+	dtim = *(command + strlen(CMD_SETDTIM_IN_SUSPEND) + 1) - '0';
+
+	if (dtim > (MAX_DTIM_ALLOWED_INTERVAL / MAX_DTIM_SKIP_BEACON_INTERVAL)) {
+		DHD_ERROR(("%s: failed, invalid dtim %d\n",
+			__FUNCTION__, dtim));
+		return BCME_ERROR;
+	}
+
+	if (!(ret = net_os_set_suspend_bcn_li_dtim(dev, dtim))) {
+		DHD_TRACE(("%s: Set bcn_li_dtim in suspend %d\n",
+			__FUNCTION__, dtim));
+	} else {
+		DHD_ERROR(("%s: failed %d\n", __FUNCTION__, ret));
+	}
+
+	return ret;
 }
 
 static int
@@ -6719,6 +6744,9 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 	}
 	else if (strnicmp(command, CMD_SETSUSPENDMODE, strlen(CMD_SETSUSPENDMODE)) == 0) {
 		bytes_written = wl_android_set_suspendmode(net, command);
+	}
+	else if (strnicmp(command, CMD_SETDTIM_IN_SUSPEND, strlen(CMD_SETDTIM_IN_SUSPEND)) == 0) {
+		bytes_written = wl_android_set_bcn_li_dtim(net, command);
 	}
 	else if (strnicmp(command, CMD_MAXDTIM_IN_SUSPEND, strlen(CMD_MAXDTIM_IN_SUSPEND)) == 0) {
 		bytes_written = wl_android_set_max_dtim(net, command);

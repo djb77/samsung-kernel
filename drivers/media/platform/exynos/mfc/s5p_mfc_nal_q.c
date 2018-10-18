@@ -744,6 +744,8 @@ static int mfc_nal_q_run_in_buf_dec(struct s5p_mfc_ctx *ctx, DecoderInputStr *pI
 	for (i = 0; i < raw->num_planes; i++) {
 		pInStr->FrameSize[i] = raw->plane_size[i];
 		pInStr->FrameAddr[i] = dst_mb->planes.raw[i];
+		if (ctx->is_10bit)
+			pInStr->Frame2BitSize[i] = raw->plane_size_2bits[i];
 	}
 	mfc_debug(2, "NAL Q: dst addr[0]: 0x%08llx\n",
 			dst_mb->planes.raw[0]);
@@ -965,8 +967,14 @@ static void mfc_nal_q_handle_reuse_buffer(struct s5p_mfc_ctx *ctx, DecoderOutput
 
 	for (i = 0; i < MFC_MAX_DPBS; i++)
 		if (released_flag & (1 << i))
-			s5p_mfc_move_reuse_buffer(ctx, i);
+			if (s5p_mfc_move_reuse_buffer(ctx, i))
+				released_flag &= ~(1 << i);
 
+	/* Not reused buffer should be released when there is a display frame */
+	dec->dec_only_release_flag |= released_flag;
+	for (i = 0; i < MFC_MAX_DPBS; i++)
+		if (released_flag & (1 << i))
+			clear_bit(i, &dec->available_dpb);
 }
 
 static void mfc_nal_q_handle_ref_frame(struct s5p_mfc_ctx *ctx, DecoderOutputStr *pOutStr)

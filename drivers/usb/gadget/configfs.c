@@ -52,6 +52,7 @@ EXPORT_SYMBOL_GPL(create_function_device);
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 void set_usb_enumeration_state(bool state);
 void set_usb_enable_state(void);
+extern int dwc3_gadget_get_cmply_link_state(struct usb_gadget *g);
 #endif
 
 #define CHIPID_SIZE	(16)
@@ -162,6 +163,30 @@ struct gadget_config_name {
 	struct config_group group;
 	struct list_head list;
 };
+
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+int dwc3_gadget_get_cmply_link_state_wrapper(void)
+{
+	struct gadget_info *dev;
+	struct usb_composite_dev *cdev;
+	struct usb_gadget		*gadget;
+	int ret = -ENODEV;
+
+	if (android_device && !IS_ERR(android_device)) {
+		dev = dev_get_drvdata(android_device);
+		cdev = &dev->cdev;
+		if (cdev) {
+		 	gadget = cdev->gadget;
+			 if (gadget)
+				ret = dwc3_gadget_get_cmply_link_state(gadget);
+			 else
+			 	pr_err("usb: %s:gadget pointer is null\n", __func__);
+		 }
+	}
+	return ret;
+}
+EXPORT_SYMBOL(dwc3_gadget_get_cmply_link_state_wrapper);
+#endif
 
 static int usb_string_copy(const char *s, char **s_copy)
 {

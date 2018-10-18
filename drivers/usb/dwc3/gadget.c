@@ -114,6 +114,39 @@ int dwc3_gadget_set_test_mode(struct dwc3 *dwc, int mode)
 	return 0;
 }
 
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+/**
+ * dwc3_gadget_get_cmply_link_state - Gets current state of USB Link
+ * @dwc: pointer to our context structure
+ *
+ * extern module can check dwc3 core link state  This function will
+ * return 1 link is on compliance of loopback mode else 0.
+ */
+int dwc3_gadget_get_cmply_link_state(struct usb_gadget *g)
+{
+	struct dwc3 *dwc = gadget_to_dwc(g);
+	u32		reg = 0;
+	u32		ret = -ENODEV;
+
+ 	if (!dwc)
+		return ret;
+
+	if (dwc->pullups_connected) {
+		reg= dwc3_gadget_get_link_state(dwc);
+
+		dev_info(dwc->dev, "%s: link state = %d\n", __func__, reg);
+		if ((reg == DWC3_LINK_STATE_CMPLY) || (reg == DWC3_LINK_STATE_LPBK))
+			ret = 1;
+		else
+			ret = 0;
+	} else
+		dev_info(dwc->dev, "%s: udc not enabled \n", __func__);
+
+	return ret;
+}
+EXPORT_SYMBOL(dwc3_gadget_get_cmply_link_state);
+#endif
+
 /**
  * dwc3_gadget_get_link_state - Gets current state of USB Link
  * @dwc: pointer to our context structure

@@ -502,15 +502,17 @@ enum {
 	MFC_POWER_CTR_HOLD_OFF,			/* 5 */
 	MFC_AFC_CONF_5V,				/* 6 */
 	MFC_AFC_CONF_10V,				/* 7 */
-	MFC_CONFIGURATION,				/* 8 */
-	MFC_IDENTIFICATION,				/* 9 */
-	MFC_EXTENDED_IDENT,				/* 10 */
-	MFC_LED_CONTROL_ON,				/* 11 */
-	MFC_LED_CONTROL_OFF,			/* 12 */
-	MFC_FAN_CONTROL_ON,				/* 13 */
-	MFC_FAN_CONTROL_OFF,			/* 14 */
-	MFC_REQUEST_AFC_TX,				/* 15 */
-	MFC_REQUEST_TX_ID,				/* 16 */
+	MFC_AFC_CONF_5V_TX,				/* 8 */
+	MFC_AFC_CONF_10V_TX,			/* 9 */
+	MFC_CONFIGURATION,				/* 10 */
+	MFC_IDENTIFICATION,				/* 11 */
+	MFC_EXTENDED_IDENT,				/* 12 */
+	MFC_LED_CONTROL_ON,				/* 13 */
+	MFC_LED_CONTROL_OFF,			/* 14 */
+	MFC_FAN_CONTROL_ON,				/* 15 */
+	MFC_FAN_CONTROL_OFF,			/* 16 */
+	MFC_REQUEST_AFC_TX,				/* 17 */
+	MFC_REQUEST_TX_ID,				/* 18 */
 };
 
 enum mfc_irq_source {

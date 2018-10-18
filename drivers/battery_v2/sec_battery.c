@@ -294,6 +294,12 @@ char *sec_bat_health_str[] = {
 	"VbatOVP",
 };
 
+char *sec_bat_charge_mode_str[] = {
+	"Charging-On",
+	"Charging-Off",
+	"Buck-Off",
+};
+
 extern int bootmode;
 
 static void sec_bat_set_misc_event(struct sec_battery_info *battery,
@@ -1065,6 +1071,9 @@ static int sec_bat_set_charge(
 		chg_mode = SEC_BAT_CHG_MODE_CHARGING_OFF;
 	}
 
+	battery->charger_mode = chg_mode;
+	pr_info("%s set %s mode\n", __func__, sec_bat_charge_mode_str[chg_mode]);
+
 	val.intval = battery->status;
 	psy_do_property(battery->pdata->charger_name, set,
 		POWER_SUPPLY_PROP_STATUS, val);
@@ -1630,7 +1639,6 @@ static void sec_bat_swelling_check(struct sec_battery_info *battery)
 	union power_supply_propval val = {0, };
 	int swelling_rechg_voltage = battery->pdata->swelling_high_rechg_voltage;
 	bool en_swelling = false, en_rechg = false;
-	int float_voltage = battery->pdata->swelling_drop_float_voltage;
 	int swelling_high_recovery = battery->pdata->swelling_high_temp_recov;
 
 	if (is_wireless_type(battery->cable_type)) {
@@ -1664,7 +1672,7 @@ static void sec_bat_swelling_check(struct sec_battery_info *battery)
 			pr_info("%s: swelling mode start. stop charging\n", __func__);
 			battery->swelling_mode = SWELLING_MODE_CHARGING;
 			battery->swelling_full_check_cnt = 0;
-			sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING_OFF);
+			sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_BUCK_OFF);
 
 			if (battery->temperature >= battery->pdata->swelling_high_temp_block) {
 #if defined(CONFIG_BATTERY_CISD)
@@ -1702,21 +1710,6 @@ static void sec_bat_swelling_check(struct sec_battery_info *battery)
 			swelling_rechg_voltage = battery->pdata->swelling_low_rechg_voltage;
 		}
 
-		if (val.intval != float_voltage) {
-			pr_info("%s: float voltage change(%d -> %d)\n", __func__, val.intval, float_voltage);
-			if (!battery->charging_block) {
-				sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING_OFF);
-				val.intval = float_voltage;
-				psy_do_property(battery->pdata->charger_name, set,
-						POWER_SUPPLY_PROP_VOLTAGE_MAX, val);
-				sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING);
-			} else {
-				val.intval = float_voltage;
-				psy_do_property(battery->pdata->charger_name, set,
-						POWER_SUPPLY_PROP_VOLTAGE_MAX, val);
-			}
-		}
-
 		if ((battery->temperature <= swelling_high_recovery) &&
 		    (battery->temperature >= battery->pdata->swelling_low_temp_recov_2nd)) {
 			pr_info("%s: swelling mode end. restart charging\n", __func__);
@@ -1745,7 +1738,10 @@ static void sec_bat_swelling_check(struct sec_battery_info *battery)
 				__func__, battery->voltage_now);
 			battery->charging_mode = SEC_BATTERY_CHARGING_1ST;
 			en_rechg = true;
-
+			/* change drop float voltage */
+			val.intval = battery->pdata->swelling_drop_float_voltage;
+			psy_do_property(battery->pdata->charger_name, set,
+					POWER_SUPPLY_PROP_VOLTAGE_MAX, val);
 			/* set charging enable */
 			sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING);
 			if (battery->temperature < battery->pdata->swelling_low_temp_recov_2nd) {
@@ -2102,6 +2098,9 @@ static bool sec_bat_temperature_check(
 					battery->vbus_limit = true;
 					pr_info("%s: Set AFC TA to 0V\n", __func__);
 				}
+			} else if (battery->health == POWER_SUPPLY_HEALTH_OVERHEAT) {
+				/* to discharge battery */
+				sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_BUCK_OFF);
 			} else {
 				sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING_OFF);
 			}
@@ -2115,6 +2114,17 @@ static bool sec_bat_temperature_check(
 
 			}
 			return false;
+		}
+		/* dose not need buck control at low temperature */
+		if (battery->health == POWER_SUPPLY_HEALTH_OVERHEATLIMIT ||
+			battery->health == POWER_SUPPLY_HEALTH_OVERHEAT) {
+			if((battery->charger_mode == SEC_BAT_CHG_MODE_BUCK_OFF) &&
+				(battery->voltage_now < (battery->pdata->swelling_drop_float_voltage / battery->pdata->chg_float_voltage_conv))) {
+				pr_info("%s: Vnow(%dmV) < %dmV has dropped enough to get buck on mode \n", __func__,
+					battery->voltage_now,
+					(battery->pdata->swelling_drop_float_voltage / battery->pdata->chg_float_voltage_conv));
+				sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING_OFF);
+			}
 		}
 	} else {
 		/* if recovered from not charging */
@@ -2136,7 +2146,7 @@ static bool sec_bat_temperature_check(
 				pr_info("%s: swelling mode start. stop charging\n", __func__);
 				battery->swelling_mode = SWELLING_MODE_CHARGING;
 				battery->swelling_full_check_cnt = 0;
-				sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING_OFF);
+				sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_BUCK_OFF);
 				if (battery->temperature > battery->pdata->swelling_high_temp_recov) {
 					sec_bat_set_current_event(battery, SEC_BAT_CURRENT_EVENT_HIGH_TEMP_SWELLING,
 							SEC_BAT_CURRENT_EVENT_HIGH_TEMP_SWELLING);
@@ -3898,7 +3908,8 @@ static void sec_bat_cable_work(struct work_struct *work)
 
 #if defined(CONFIG_BATTERY_SWELLING)
 	if ((current_cable_type == SEC_BATTERY_CABLE_NONE) ||
-		(battery->cable_type == SEC_BATTERY_CABLE_NONE && battery->swelling_mode == SWELLING_MODE_NONE)) {
+		(battery->cable_type == SEC_BATTERY_CABLE_NONE && battery->swelling_mode == SWELLING_MODE_NONE) ||
+		(battery->cable_type == SEC_BATTERY_CABLE_OTG && battery->swelling_mode == SWELLING_MODE_NONE)) {
 		battery->swelling_mode = SWELLING_MODE_NONE;
 		/* restore 4.4V float voltage */
 		val.intval = battery->pdata->swelling_normal_float_voltage;

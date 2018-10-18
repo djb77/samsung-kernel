@@ -75,6 +75,9 @@
 #define s5p_mfc_is_interlace_picture()	((MFC_READL(S5P_FIMV_D_DISPLAY_STATUS)		\
 						>> S5P_FIMV_DISP_STATUS_INTERLACE_SHIFT)\
 						& S5P_FIMV_DISP_STATUS_INTERLACE_MASK)
+#define s5p_mfc_is_mbaff_picture()	((MFC_READL(S5P_FIMV_D_H264_INFO)		\
+						>> S5P_FIMV_D_H264_INFO_MBAFF_FRAME_FLAG_SHIFT)\
+						& S5P_FIMV_D_H264_INFO_MBAFF_FRAME_FLAG_MASK)
 #define s5p_mfc_get_img_width()		MFC_READL(S5P_FIMV_D_DISPLAY_FRAME_WIDTH)
 #define s5p_mfc_get_img_height()	MFC_READL(S5P_FIMV_D_DISPLAY_FRAME_HEIGHT)
 #define s5p_mfc_get_disp_y_addr()	MFC_READL(S5P_FIMV_D_DISPLAY_LUMA_ADDR)

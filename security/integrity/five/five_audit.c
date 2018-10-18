@@ -112,6 +112,27 @@ exit:
 		__putname(pathbuf);
 }
 
+void five_audit_tee_msg(const char *func, const char *cause, int rc,
+							uint32_t origin)
+{
+	struct audit_buffer *ab;
+
+	ab = audit_log_start(current->audit_context, GFP_KERNEL,
+			AUDIT_INTEGRITY_DATA);
+	if (unlikely(!ab)) {
+		pr_err("Can't get a context of audit logs\n");
+		return;
+	}
+
+	audit_log_format(ab, " func=");
+	audit_log_string(ab, func);
+	audit_log_format(ab, " cause=");
+	audit_log_string(ab, cause);
+	audit_log_format(ab, " rc=0x%x, ", rc);
+	audit_log_format(ab, " origin=0x%x", origin);
+	audit_log_end(ab);
+}
+
 void five_audit_hexinfo(struct file *file, const char *msg, char *data,
 		size_t data_length)
 {

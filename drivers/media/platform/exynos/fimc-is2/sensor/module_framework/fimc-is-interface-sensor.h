@@ -51,6 +51,9 @@
 #define FPS_TO_DURATION_US(x)  ((x == 0) ? (0) : ((1000 * 1000) / x))
 #define DURATION_US_TO_FPS(x)  ((x == 0) ? (0) : ((1000 * 1000) / x))
 
+/* static memory size for DDK/RTA backup data */
+#define STATIC_DATA_SIZE	50
+
 enum DIFF_BET_SEN_ISP { /* Set to 0: 3AA 3frame delay, 1: 3AA 4frame delay, 3: M2M */
 	DIFF_OTF_DELAY	= 0,
 	DIFF_M2M_DELAY	= 3
@@ -59,6 +62,11 @@ enum DIFF_BET_SEN_ISP { /* Set to 0: 3AA 3frame delay, 1: 3AA 4frame delay, 3: M
 enum SENSOR_CONTROL_DELAY {
 	N_PLUS_TWO_FRAME = 0,
 	N_PLUS_ONE_FRAME = 1,
+};
+
+enum {
+	ITF_CTRL_ID_DDK = 0,
+	ITF_CTRL_ID_RTA = 1,
 };
 
 /* DEVICE SENSOR INTERFACE */
@@ -731,7 +739,9 @@ struct fimc_is_cis_ext2_interface_ops {
 	int (*set_low_noise_mode)(struct fimc_is_sensor_interface *itf, u32 mode);
 	int (*get_sensor_max_dynamic_fps)(struct fimc_is_sensor_interface *itf,
 				u32 *max_dynamic_fps);
-	void *reserved[18];
+	/* Get static memory address for DDK/RTA backup data */
+	int (*get_static_mem)(int ctrl_id, void **mem, int *size);
+	void *reserved[17];
 };
 
 struct fimc_is_cis_event_ops {

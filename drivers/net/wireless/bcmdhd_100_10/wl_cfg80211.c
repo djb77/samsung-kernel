@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.c 769678 2018-06-27 07:11:29Z $
+ * $Id: wl_cfg80211.c 776877 2018-08-16 04:07:22Z $
  */
 /* */
 #include <typedefs.h>
@@ -2495,7 +2495,7 @@ wl_cfg80211_del_if(struct bcm_cfg80211 *cfg, struct net_device *primary_ndev,
 		return -ENODEV;
 	}
 
-	WL_INFORM_MEM(("del vif. wdev_ptr:%p cfg_iftype:%d\n", wdev, wdev->iftype));
+	WL_INFORM_MEM(("del vif. wdev cfg_iftype:%d\n", wdev->iftype));
 
 	wiphy = wdev->wiphy;
 #ifdef WL_CFG80211_P2P_DEV_IF
