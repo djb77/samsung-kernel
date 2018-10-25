@@ -371,9 +371,6 @@ static int s5p_mfc_dec_start_streaming(struct vb2_queue *q, unsigned int count)
 		return -EINVAL;
 	}
 
-	if (ctx->state == MFCINST_FINISHING)
-		s5p_mfc_change_state(ctx, MFCINST_RUNNING);
-
 	/* If context is ready then dev = work->data;schedule it to run */
 	if (s5p_mfc_dec_ctx_ready(ctx)) {
 		s5p_mfc_set_bit(ctx->num, &dev->work_bits);
@@ -414,7 +411,6 @@ static void s5p_mfc_dec_stop_streaming(struct vb2_queue *q)
 				test_bit(ctx->num, &dev->hwlock.bits), q->type);
 	MFC_TRACE_CTX("** DEC streamoff(type:%d)\n", q->type);
 
-	MFC_TRACE_CTX_HWLOCK("**DEC streamoff(type:%d)\n", q->type);
 	/* If a H/W operation is in progress, wait for it complete */
 	ret = s5p_mfc_get_hwlock_ctx(ctx);
 	if (ret < 0) {
@@ -424,7 +420,7 @@ static void s5p_mfc_dec_stop_streaming(struct vb2_queue *q)
 
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		s5p_mfc_cleanup_assigned_fd(ctx);
-		s5p_mfc_cleanup_queue(&ctx->buf_queue_lock, &dec->ref_buf_queue);
+		s5p_mfc_cleanup_queue(&ctx->buf_queue_lock, &ctx->ref_buf_queue);
 
 		dec->dynamic_used = 0;
 		dec->err_reuse_flag = 0;

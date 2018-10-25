@@ -164,7 +164,6 @@ int s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
 /* Check whether a context should be run on hardware */
 int s5p_mfc_dec_ctx_ready(struct s5p_mfc_ctx *ctx)
 {
-	struct s5p_mfc_dec *dec = ctx->dec_priv;
 	struct s5p_mfc_dev *dev = ctx->dev;
 	int src_buf_queue_greater_than_0 = 0;
 	int dst_buf_queue_greater_than_0 = 0;
@@ -175,7 +174,7 @@ int s5p_mfc_dec_ctx_ready(struct s5p_mfc_ctx *ctx)
 		  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->dst_buf_queue),
 		  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->src_buf_nal_queue),
 		  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->dst_buf_nal_queue),
-		  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &dec->ref_buf_queue),
+		  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->ref_buf_queue),
 		  ctx->state, ctx->capture_state);
 	mfc_debug(2, "wait_state = %d\n", ctx->wait_state);
 
@@ -184,7 +183,7 @@ int s5p_mfc_dec_ctx_ready(struct s5p_mfc_ctx *ctx)
 	dst_buf_queue_greater_than_0
 		= s5p_mfc_is_queue_count_greater(&ctx->buf_queue_lock, &ctx->dst_buf_queue, 0);
 	ref_buf_queue_same_dpb_count_plus_5
-		= s5p_mfc_is_queue_count_same(&ctx->buf_queue_lock, &dec->ref_buf_queue, (ctx->dpb_count + 5));
+		= s5p_mfc_is_queue_count_same(&ctx->buf_queue_lock, &ctx->ref_buf_queue, (ctx->dpb_count + 5));
 
 	/* If shutdown is called, do not try any cmd */
 	if (dev->shutdown)
@@ -238,7 +237,7 @@ int s5p_mfc_enc_ctx_ready(struct s5p_mfc_ctx *ctx)
 		  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->dst_buf_queue),
 		  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->src_buf_nal_queue),
 		  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->dst_buf_nal_queue),
-		  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &enc->ref_buf_queue),
+		  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->ref_buf_queue),
 		  ctx->state);
 
 	src_buf_queue_greater_than_0

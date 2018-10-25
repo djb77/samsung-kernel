@@ -192,9 +192,7 @@ void s5p_mfc_deinit_hw(struct s5p_mfc_dev *dev)
 int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 {
 	struct s5p_mfc_ctx *ctx;
-	int ret;
-	int old_state, i;
-	int need_cache_flush = 0;
+	int ret, i, need_cache_flush = 0;
 
 	mfc_debug_enter();
 
@@ -202,6 +200,18 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 		mfc_err_dev("no mfc device to run\n");
 		return -EINVAL;
 	}
+
+	ret = s5p_mfc_get_hwlock_dev(dev);
+	if (ret < 0) {
+		mfc_err_dev("Failed to get hwlock.\n");
+		mfc_err_dev("dev.hwlock.dev = 0x%lx, bits = 0x%lx, owned_by_irq = %d, wl_count = %d, transfer_owner = %d\n",
+				dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
+				dev->hwlock.wl_count, dev->hwlock.transfer_owner);
+		return -EBUSY;
+	}
+
+	mfc_info_dev("curr_ctx_is_drm:%d, hwlock.bits:%lu, hwlock.dev:%lu\n",
+			dev->curr_ctx_is_drm, dev->hwlock.bits, dev->hwlock.dev);
 
 	ctx = dev->ctx[dev->curr_ctx];
 	if (!ctx) {
@@ -225,22 +235,6 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 			}
 		}
 	}
-	old_state = ctx->state;
-	s5p_mfc_change_state(ctx, MFCINST_ABORT);
-	MFC_TRACE_DEV_HWLOCK("**sleep (ctx:%d)\n", ctx->num);
-	ret = s5p_mfc_get_hwlock_dev(dev);
-	if (ret < 0) {
-		mfc_err_dev("Failed to get hwlock.\n");
-		mfc_err_dev("dev.hwlock.dev = 0x%lx, bits = 0x%lx, owned_by_irq = %d, wl_count = %d, transfer_owner = %d\n",
-				dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
-				dev->hwlock.wl_count, dev->hwlock.transfer_owner);
-		return -EBUSY;
-	}
-
-	mfc_info_dev("curr_ctx_is_drm:%d, hwlock.bits:%lu, hwlock.dev:%lu\n",
-			dev->curr_ctx_is_drm, dev->hwlock.bits, dev->hwlock.dev);
-
-	s5p_mfc_change_state(ctx, old_state);
 	s5p_mfc_pm_clock_on(dev);
 
 	if (need_cache_flush)
@@ -289,7 +283,6 @@ int s5p_mfc_wakeup(struct s5p_mfc_dev *dev)
 	}
 	mfc_info_dev("curr_ctx_is_drm:%d\n", dev->curr_ctx_is_drm);
 
-	MFC_TRACE_DEV_HWLOCK("**wakeup\n");
 	ret = s5p_mfc_get_hwlock_dev(dev);
 	if (ret < 0) {
 		mfc_err_dev("Failed to get hwlock.\n");

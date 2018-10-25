@@ -308,7 +308,6 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 			mfc_err_ctx("failed to set capture format\n");
 			return -EINVAL;
 		}
-		s5p_mfc_change_state(ctx, MFCINST_INIT);
 
 		ctx->dst_fmt = fmt;
 		ctx->codec_mode = ctx->dst_fmt->codec_mode;
@@ -334,7 +333,7 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 				return -ENOMEM;
 			}
 		}
-		MFC_TRACE_CTX_HWLOCK("**ENC s_fmt\n");
+
 		ret = s5p_mfc_get_hwlock_ctx(ctx);
 		if (ret < 0) {
 			mfc_err_dev("Failed to get hwlock.\n");
@@ -343,7 +342,9 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 			return -EBUSY;
 		}
 
+		s5p_mfc_change_state(ctx, MFCINST_INIT);
 		s5p_mfc_set_bit(ctx->num, &dev->work_bits);
+
 		ret = s5p_mfc_just_run(dev, ctx->num);
 		if (ret) {
 			mfc_err_ctx("Failed to run MFC.\n");

@@ -19,41 +19,29 @@
 #include "s5p_mfc_utils.h"
 
 extern int nal_q_parallel_enable;
-int s5p_mfc_open_inst(struct s5p_mfc_ctx *ctx)
+void s5p_mfc_open_inst(struct s5p_mfc_ctx *ctx)
 {
-	int ret;
-
 	/* Preparing decoding - getting instance number */
 	mfc_debug(2, "Getting instance number\n");
-	s5p_mfc_clean_ctx_int_flags(ctx);
-	ret = s5p_mfc_cmd_open_inst(ctx);
-	if (ret) {
-		mfc_err_ctx("Failed to create a new instance.\n");
-		s5p_mfc_change_state(ctx, MFCINST_ERROR);
-	}
 
-	return ret;
+	s5p_mfc_clean_ctx_int_flags(ctx);
+	s5p_mfc_cmd_open_inst(ctx);
 }
 
 int s5p_mfc_close_inst(struct s5p_mfc_ctx *ctx)
 {
-	int ret = -EINVAL;
-
 	/* Closing decoding instance  */
 	mfc_debug(2, "Returning instance number\n");
-	s5p_mfc_clean_ctx_int_flags(ctx);
+
 	if (ctx->state == MFCINST_FREE) {
 		mfc_err_ctx("ctx already free status\n");
-		return ret;
+		return -EINVAL;
 	}
 
-	ret = s5p_mfc_cmd_close_inst(ctx);
-	if (ret) {
-		mfc_err_ctx("Failed to return an instance.\n");
-		s5p_mfc_change_state(ctx, MFCINST_ERROR);
-	}
+	s5p_mfc_clean_ctx_int_flags(ctx);
+	s5p_mfc_cmd_close_inst(ctx);
 
-	return ret;
+	return 0;
 }
 
 int s5p_mfc_abort_inst(struct s5p_mfc_ctx *ctx)

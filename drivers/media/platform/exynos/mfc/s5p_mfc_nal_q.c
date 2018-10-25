@@ -40,11 +40,6 @@ int s5p_mfc_nal_q_check_enable(struct s5p_mfc_dev *dev)
 
 	mfc_debug_enter();
 
-	if (!dev) {
-		mfc_err_dev("no mfc device to run\n");
-		return -EINVAL;
-	}
-
 	if (nal_q_disable)
 		return 0;
 
@@ -214,38 +209,27 @@ static nal_queue_out_handle* mfc_nal_q_create_out_q(struct s5p_mfc_dev *dev,
 	return nal_q_out_handle;
 }
 
-static int mfc_nal_q_destroy_in_q(nal_queue_in_handle *nal_q_in_handle)
+static void mfc_nal_q_destroy_in_q(nal_queue_in_handle *nal_q_in_handle)
 {
 	mfc_debug_enter();
 
-	if (!nal_q_in_handle)
-		return -EINVAL;
-
-	if (nal_q_in_handle->in_alloc)
+	if (nal_q_in_handle) {
 		s5p_mfc_mem_free(nal_q_in_handle->in_alloc);
-	if (nal_q_in_handle)
 		kfree(nal_q_in_handle);
+	}
 
 	mfc_debug_leave();
-
-	return 0;
 }
-
-static int mfc_nal_q_destroy_out_q(nal_queue_out_handle *nal_q_out_handle)
+static void mfc_nal_q_destroy_out_q(nal_queue_out_handle *nal_q_out_handle)
 {
 	mfc_debug_enter();
 
-	if (!nal_q_out_handle)
-		return -EINVAL;
-
-	if (nal_q_out_handle->out_alloc)
+	if (nal_q_out_handle) {
 		s5p_mfc_mem_free(nal_q_out_handle->out_alloc);
-	if (nal_q_out_handle)
 		kfree(nal_q_out_handle);
+	}
 
 	mfc_debug_leave();
-
-	return 0;
 }
 
 /*
@@ -275,7 +259,7 @@ nal_queue_handle *s5p_mfc_nal_q_create(struct s5p_mfc_dev *dev)
 		return NULL;
 	}
 
-	spin_lock_init(&nal_q_handle->nal_q_in_handle->lock);
+	spin_lock_init(&nal_q_handle->lock);
 
 	nal_q_handle->nal_q_out_handle = mfc_nal_q_create_out_q(dev, nal_q_handle);
 	if (!nal_q_handle->nal_q_out_handle) {
@@ -294,40 +278,20 @@ nal_queue_handle *s5p_mfc_nal_q_create(struct s5p_mfc_dev *dev)
 	return nal_q_handle;
 }
 
-int s5p_mfc_nal_q_destroy(struct s5p_mfc_dev *dev, nal_queue_handle *nal_q_handle)
+void s5p_mfc_nal_q_destroy(struct s5p_mfc_dev *dev, nal_queue_handle *nal_q_handle)
 {
-	int ret = 0;
-
 	mfc_debug_enter();
 
-	if (!dev) {
-		mfc_err_dev("NAL Q: no mfc device to run\n");
-		return -EINVAL;
-	}
+	if (nal_q_handle->nal_q_out_handle)
+		mfc_nal_q_destroy_out_q(nal_q_handle->nal_q_out_handle);
 
-	if (!nal_q_handle) {
-		mfc_err_dev("there isn't nal_q_handle\n");
-		return -EINVAL;
-	}
-
-	ret = mfc_nal_q_destroy_out_q(nal_q_handle->nal_q_out_handle);
-	if (ret) {
-		mfc_err_dev("failed nal_q_out_handle destroy\n");
-		return ret;
-	}
-
-	ret = mfc_nal_q_destroy_in_q(nal_q_handle->nal_q_in_handle);
-	if (ret) {
-		mfc_err_dev("failed nal_q_in_handle destroy\n");
-		return ret;
-	}
+	if (nal_q_handle->nal_q_in_handle)
+		mfc_nal_q_destroy_in_q(nal_q_handle->nal_q_in_handle);
 
 	kfree(nal_q_handle);
 	dev->nal_q_handle = NULL;
 
 	mfc_debug_leave();
-
-	return ret;
 }
 
 void s5p_mfc_nal_q_init(struct s5p_mfc_dev *dev, nal_queue_handle *nal_q_handle)
@@ -651,7 +615,7 @@ static int mfc_nal_q_run_in_buf_dec(struct s5p_mfc_ctx *ctx, DecoderInputStr *pI
 
 	if (s5p_mfc_is_queue_count_same(&ctx->buf_queue_lock, &ctx->dst_buf_queue, 0) &&
 			s5p_mfc_is_queue_count_smaller(&ctx->buf_queue_lock,
-				&dec->ref_buf_queue, (ctx->dpb_count + 5))) {
+				&ctx->ref_buf_queue, (ctx->dpb_count + 5))) {
 		mfc_err_dev("NAL Q: no dst buffers\n");
 		return -EAGAIN;
 	}
@@ -844,7 +808,7 @@ static void mfc_nal_q_handle_stream(struct s5p_mfc_ctx *ctx, EncoderOutputStr *p
 	if (slice_type >= 0) {
 		if (ctx->state == MFCINST_RUNNING_NO_OUTPUT ||
 			ctx->state == MFCINST_RUNNING_BUF_FULL)
-			ctx->state = MFCINST_RUNNING;
+			s5p_mfc_change_state(ctx, MFCINST_RUNNING);
 
 		mfc_nal_q_get_enc_frame_buffer(ctx, &enc_addr[0],
 					raw->num_planes, pOutStr);
@@ -863,12 +827,12 @@ static void mfc_nal_q_handle_stream(struct s5p_mfc_ctx *ctx, EncoderOutputStr *p
 		vb2_buffer_done(&src_mb->vb.vb2_buf, VB2_BUF_STATE_DONE);
 
 		ref_mb = s5p_mfc_find_del_buf_vb(&ctx->buf_queue_lock,
-				&enc->ref_buf_queue, enc_addr[0]);
+				&ctx->ref_buf_queue, enc_addr[0]);
 		if (ref_mb)
 			vb2_buffer_done(&ref_mb->vb.vb2_buf, VB2_BUF_STATE_DONE);
 	} else if (s5p_mfc_is_queue_count_greater(&ctx->buf_queue_lock, &ctx->src_buf_nal_queue, 0)) {
 		src_mb = s5p_mfc_get_move_buf_used(&ctx->buf_queue_lock,
-				&enc->ref_buf_queue, &ctx->src_buf_nal_queue);
+				&ctx->ref_buf_queue, &ctx->src_buf_nal_queue);
 		if (!src_mb) {
 			mfc_err_dev("NAL Q: no src buffers\n");
 			return;
@@ -882,7 +846,7 @@ static void mfc_nal_q_handle_stream(struct s5p_mfc_ctx *ctx, EncoderOutputStr *p
 		/* slice_type = 4 && strm_size = 0, skipped enable
 		   should be considered */
 		if ((slice_type == -1) && (strm_size == 0)) {
-			ctx->state = MFCINST_RUNNING_NO_OUTPUT;
+			s5p_mfc_change_state(ctx, MFCINST_RUNNING_NO_OUTPUT);
 
 			dst_mb = s5p_mfc_get_move_buf(&ctx->buf_queue_lock,
 				&ctx->dst_buf_queue, &ctx->dst_buf_nal_queue, MFC_BUF_RESET_USED, MFC_QUEUE_ADD_TOP);
@@ -898,7 +862,7 @@ static void mfc_nal_q_handle_stream(struct s5p_mfc_ctx *ctx, EncoderOutputStr *p
 		mfc_debug(2, "NAL Q: slice_type: %d, ctx->state: %d\n", slice_type, ctx->state);
 		mfc_debug(2, "NAL Q: enc src count: %d, enc ref count: %d\n",
 			  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->src_buf_queue),
-			  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &enc->ref_buf_queue));
+			  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->ref_buf_queue));
 	}
 
 	mfc_debug_leave();
@@ -958,7 +922,7 @@ static void mfc_nal_q_handle_ref_frame(struct s5p_mfc_ctx *ctx, DecoderOutputStr
 			dec_addr, disp_addr);
 
 	dst_mb = s5p_mfc_find_move_buf_vb_used(&ctx->buf_queue_lock,
-		&dec->ref_buf_queue, &ctx->dst_buf_nal_queue, dec_addr);
+		&ctx->ref_buf_queue, &ctx->dst_buf_nal_queue, dec_addr);
 	if (dst_mb) {
 		buf_addr = s5p_mfc_mem_get_daddr_vb(&dst_mb->vb.vb2_buf, 0);
 		mfc_debug(2, "NAL Q: Found in dst queue, "
@@ -1002,7 +966,7 @@ static void mfc_nal_q_handle_frame_copy_timestamp(struct s5p_mfc_ctx *ctx, Decod
 	}
 
 	ref_mb = s5p_mfc_find_buf_vb(&ctx->buf_queue_lock,
-			&dec->ref_buf_queue, dec_y_addr);
+			&ctx->ref_buf_queue, dec_y_addr);
 	if (ref_mb) {
 		memcpy(&ref_mb->vb.timestamp,
 				&src_mb->vb.timestamp,
@@ -1095,7 +1059,7 @@ static void mfc_nal_q_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err
 			(disp_err == S5P_FIMV_ERR_BROKEN_LINK)) {
 
 		dst_mb = s5p_mfc_find_move_buf_vb(&ctx->buf_queue_lock,
-				&ctx->dst_buf_queue, &dec->ref_buf_queue, dspl_y_addr, released_flag);
+				&ctx->dst_buf_queue, &ctx->ref_buf_queue, dspl_y_addr, released_flag);
 		if (dst_mb) {
 			mfc_debug(2, "NAL Q: find display buf, index: %d\n", dst_mb->vb.vb2_buf.index);
 			/* Check if this is the buffer we're looking for */
@@ -1118,7 +1082,7 @@ static void mfc_nal_q_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err
 		}
 	} else {
 		ref_mb = s5p_mfc_find_del_buf_vb(&ctx->buf_queue_lock,
-				&dec->ref_buf_queue, dspl_y_addr);
+				&ctx->ref_buf_queue, dspl_y_addr);
 		if (ref_mb) {
 			mfc_debug(2, "NAL Q: find display buf, index: %d\n", ref_mb->vb.vb2_buf.index);
 			/* Check if this is the buffer we're looking for */
@@ -1363,6 +1327,9 @@ void mfc_nal_q_handle_frame(struct s5p_mfc_ctx *ctx, DecoderOutputStr *pOutStr)
 			dec->remained_size = src_mb->vb.vb2_buf.planes[0].bytesused
 					- dec->consumed;
 			dec->has_multiframe = 1;
+
+			MFC_TRACE_CTX("** consumed:%ld, remained:%ld, addr:0x%08llx\n",
+				dec->consumed, dec->remained_size, dec->y_addr_for_pb);
 			/* Do not move src buffer to done_list */
 			goto leave_handle_frame;
 		}
@@ -1514,7 +1481,7 @@ int s5p_mfc_nal_q_enqueue_in_buf(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ct
 		return -EINVAL;
 	}
 
-	spin_lock_irqsave(&nal_q_in_handle->lock, flags);
+	spin_lock_irqsave(&nal_q_in_handle->nal_q_handle->lock, flags);
 
 	input_count = s5p_mfc_get_nal_q_input_count();
 	input_exe_count = s5p_mfc_get_nal_q_input_exe_count();
@@ -1534,7 +1501,7 @@ int s5p_mfc_nal_q_enqueue_in_buf(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ct
 
 	if ((input_diff < 0) || (input_diff >= NAL_Q_IN_QUEUE_SIZE)) {
 		mfc_err_dev("NAL Q: No available input slot(%d)\n", input_diff);
-		spin_unlock_irqrestore(&nal_q_in_handle->lock, flags);
+		spin_unlock_irqrestore(&nal_q_in_handle->nal_q_handle->lock, flags);
 		return -EINVAL;
 	}
 
@@ -1550,7 +1517,7 @@ int s5p_mfc_nal_q_enqueue_in_buf(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ct
 
 	if (ret != 0) {
 		mfc_debug(2, "NAL Q: Failed to set input queue\n");
-		spin_unlock_irqrestore(&nal_q_in_handle->lock, flags);
+		spin_unlock_irqrestore(&nal_q_in_handle->nal_q_handle->lock, flags);
 		return ret;
 	}
 
@@ -1569,7 +1536,7 @@ int s5p_mfc_nal_q_enqueue_in_buf(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ct
 		s5p_mfc_watchdog_start_tick(dev);
 	MFC_TRACE_LOG_DEV("N%d", input_diff);
 
-	spin_unlock_irqrestore(&nal_q_in_handle->lock, flags);
+	spin_unlock_irqrestore(&nal_q_in_handle->nal_q_handle->lock, flags);
 
 	MFC_TRACE_CTX("NAL %s in: diff %d count %d exe %d\n",
 			ctx->type == MFCINST_ENCODER ? "ENC" : "DEC",
@@ -1603,7 +1570,7 @@ EncoderOutputStr *s5p_mfc_nal_q_dequeue_out_buf(struct s5p_mfc_dev *dev,
 		return pStr;
 	}
 
-	spin_lock_irqsave(&nal_q_out_handle->nal_q_handle->nal_q_in_handle->lock, flags);
+	spin_lock_irqsave(&nal_q_out_handle->nal_q_handle->lock, flags);
 
 	output_count = s5p_mfc_get_nal_q_output_count();
 	output_exe_count = nal_q_out_handle->out_exe_count;
@@ -1621,7 +1588,7 @@ EncoderOutputStr *s5p_mfc_nal_q_dequeue_out_buf(struct s5p_mfc_dev *dev,
 	mfc_debug(2, "NAL Q: output_diff = %d(out: %d, exe: %d)\n",
 			output_diff, output_count, output_exe_count);
 	if ((output_diff <= 0) || (output_diff > NAL_Q_OUT_QUEUE_SIZE)) {
-		spin_unlock_irqrestore(&nal_q_out_handle->nal_q_handle->nal_q_in_handle->lock, flags);
+		spin_unlock_irqrestore(&nal_q_out_handle->nal_q_handle->lock, flags);
 		mfc_debug(2, "NAL Q: No available output slot(%d)\n", output_diff);
 		return pStr;
 	}
@@ -1659,7 +1626,7 @@ EncoderOutputStr *s5p_mfc_nal_q_dequeue_out_buf(struct s5p_mfc_dev *dev,
 		s5p_mfc_watchdog_reset_tick(dev);
 	}
 
-	spin_unlock_irqrestore(&nal_q_out_handle->nal_q_handle->nal_q_in_handle->lock, flags);
+	spin_unlock_irqrestore(&nal_q_out_handle->nal_q_handle->lock, flags);
 
 	MFC_TRACE_CTX("NAL %s out: diff %d count %d exe %d\n",
 			ctx->type == MFCINST_ENCODER ? "ENC" : "DEC",

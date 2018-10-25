@@ -20,8 +20,8 @@ int s5p_mfc_cmd_sys_init(struct s5p_mfc_dev *dev,
 				enum mfc_buf_usage_type buf_type);
 void s5p_mfc_cmd_sleep(struct s5p_mfc_dev *dev);
 void s5p_mfc_cmd_wakeup(struct s5p_mfc_dev *dev);
-int s5p_mfc_cmd_open_inst(struct s5p_mfc_ctx *ctx);
-int s5p_mfc_cmd_close_inst(struct s5p_mfc_ctx *ctx);
+void s5p_mfc_cmd_open_inst(struct s5p_mfc_ctx *ctx);
+void s5p_mfc_cmd_close_inst(struct s5p_mfc_ctx *ctx);
 int s5p_mfc_cmd_dpb_flush(struct s5p_mfc_ctx *ctx);
 int s5p_mfc_cmd_cache_flush(struct s5p_mfc_dev *dev);
 int s5p_mfc_cmd_dec_init_buffers(struct s5p_mfc_ctx *ctx);
