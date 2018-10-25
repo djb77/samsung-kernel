@@ -19,6 +19,7 @@
 
 void s5p_mfc_dump_buffer_info(struct s5p_mfc_dev *dev, unsigned long addr);
 void s5p_mfc_dump_info_and_stop_hw(struct s5p_mfc_dev *dev);
+void s5p_mfc_dump_context_info(struct s5p_mfc_dev *dev);
 void s5p_mfc_watchdog_worker(struct work_struct *work);
 
 #endif /* __S5P_MFC_WATCHDOG_H */

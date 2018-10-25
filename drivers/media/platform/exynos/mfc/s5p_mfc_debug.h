@@ -98,24 +98,24 @@ struct _mfc_trace_logging {
 
 
 /* If there is no ctx structure */
-#define MFC_TRACE_DEV_HWLOCK(fmt, args...)							\
+#define MFC_TRACE_DEV_LT(fmt, args...)							\
 	do {											\
 		int cpu = raw_smp_processor_id();						\
 		int cnt;									\
-		cnt = atomic_inc_return(&dev->trace_ref_hwlock) & (MFC_TRACE_COUNT_MAX - 1);	\
-		dev->mfc_trace_hwlock[cnt].time = cpu_clock(cpu);				\
-		snprintf(dev->mfc_trace_hwlock[cnt].str, MFC_TRACE_STR_LEN,			\
+		cnt = atomic_inc_return(&dev->trace_ref_longterm) & (MFC_TRACE_COUNT_MAX - 1);	\
+		dev->mfc_trace_longterm[cnt].time = cpu_clock(cpu);				\
+		snprintf(dev->mfc_trace_longterm[cnt].str, MFC_TRACE_STR_LEN,			\
 				fmt, ##args);							\
 	} while (0)
 
 /* If there is ctx structure */
-#define MFC_TRACE_CTX_HWLOCK(fmt, args...)							\
+#define MFC_TRACE_CTX_LT(fmt, args...)							\
 	do {											\
 		int cpu = raw_smp_processor_id();						\
 		int cnt;									\
-		cnt = atomic_inc_return(&dev->trace_ref_hwlock) & (MFC_TRACE_COUNT_MAX - 1);	\
-		dev->mfc_trace_hwlock[cnt].time = cpu_clock(cpu);				\
-		snprintf(dev->mfc_trace_hwlock[cnt].str, MFC_TRACE_STR_LEN,			\
+		cnt = atomic_inc_return(&dev->trace_ref_longterm) & (MFC_TRACE_COUNT_MAX - 1);	\
+		dev->mfc_trace_longterm[cnt].time = cpu_clock(cpu);				\
+		snprintf(dev->mfc_trace_longterm[cnt].str, MFC_TRACE_STR_LEN,			\
 				"[c:%d] " fmt, ctx->num, ##args);				\
 	} while (0)
 

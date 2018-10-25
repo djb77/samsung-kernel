@@ -97,7 +97,7 @@ int s5p_mfc_run_dec_frame(struct s5p_mfc_ctx *ctx)
 
 	if (s5p_mfc_is_queue_count_same(&ctx->buf_queue_lock, &ctx->dst_buf_queue, 0) &&
 			s5p_mfc_is_queue_count_smaller(&ctx->buf_queue_lock,
-				&dec->ref_buf_queue, (ctx->dpb_count + 5))) {
+				&ctx->ref_buf_queue, (ctx->dpb_count + 5))) {
 		return -EAGAIN;
 	}
 

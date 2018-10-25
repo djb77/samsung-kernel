@@ -104,17 +104,12 @@ void s5p_mfc_cmd_wakeup(struct s5p_mfc_dev *dev)
 }
 
 /* Open a new instance and get its number */
-int s5p_mfc_cmd_open_inst(struct s5p_mfc_ctx *ctx)
+void s5p_mfc_cmd_open_inst(struct s5p_mfc_ctx *ctx)
 {
-	struct s5p_mfc_dev *dev;
+	struct s5p_mfc_dev *dev = ctx->dev;
 
 	mfc_debug_enter();
 
-	if (!ctx) {
-		mfc_err_dev("no mfc context to run\n");
-		return -EINVAL;
-	}
-	dev = ctx->dev;
 	mfc_debug(2, "Requested codec mode: %d\n", ctx->codec_mode);
 
 	MFC_WRITEL(ctx->codec_mode, S5P_FIMV_CODEC_TYPE);
@@ -126,30 +121,19 @@ int s5p_mfc_cmd_open_inst(struct s5p_mfc_ctx *ctx)
 	s5p_mfc_cmd_host2risc(dev, S5P_FIMV_H2R_CMD_OPEN_INSTANCE);
 
 	mfc_debug_leave();
-
-	return 0;
 }
 
 /* Close instance */
-int s5p_mfc_cmd_close_inst(struct s5p_mfc_ctx *ctx)
+void s5p_mfc_cmd_close_inst(struct s5p_mfc_ctx *ctx)
 {
-	struct s5p_mfc_dev *dev;
+	struct s5p_mfc_dev *dev = ctx->dev;
 
 	mfc_debug_enter();
 
-	if (!ctx) {
-		mfc_err_dev("no mfc context to run\n");
-		return -EINVAL;
-	}
-	dev = ctx->dev;
-
 	MFC_WRITEL(ctx->inst_no, S5P_FIMV_INSTANCE_ID);
-
 	s5p_mfc_cmd_host2risc(dev, S5P_FIMV_H2R_CMD_CLOSE_INSTANCE);
 
 	mfc_debug_leave();
-
-	return 0;
 }
 
 int s5p_mfc_cmd_dpb_flush(struct s5p_mfc_ctx *ctx)

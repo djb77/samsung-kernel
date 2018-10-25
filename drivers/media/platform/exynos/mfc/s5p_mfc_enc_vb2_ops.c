@@ -310,7 +310,6 @@ static void s5p_mfc_enc_stop_streaming(struct vb2_queue *q)
 {
 	struct s5p_mfc_ctx *ctx = q->drv_priv;
 	struct s5p_mfc_dev *dev = ctx->dev;
-	struct s5p_mfc_enc *enc = ctx->enc_priv;
 	int index = 0;
 	int aborted = 0;
 	int ret = 0;
@@ -327,7 +326,7 @@ static void s5p_mfc_enc_stop_streaming(struct vb2_queue *q)
 		}
 		aborted = 1;
 	}
-	MFC_TRACE_CTX_HWLOCK("**ENC streamoff(type:%d)\n", q->type);
+
 	ret = s5p_mfc_get_hwlock_ctx(ctx);
 	if (ret < 0) {
 		mfc_err_ctx("Failed to get hwlock.\n");
@@ -345,7 +344,7 @@ static void s5p_mfc_enc_stop_streaming(struct vb2_queue *q)
 			index++;
 		}
 	} else if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-		s5p_mfc_move_all_bufs(&ctx->buf_queue_lock, &ctx->src_buf_queue, &enc->ref_buf_queue, MFC_QUEUE_ADD_BOTTOM);
+		s5p_mfc_move_all_bufs(&ctx->buf_queue_lock, &ctx->src_buf_queue, &ctx->ref_buf_queue, MFC_QUEUE_ADD_BOTTOM);
 		s5p_mfc_cleanup_enc_src_queue(ctx);
 
 		while (index < MFC_MAX_BUFFERS) {

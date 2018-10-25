@@ -207,7 +207,6 @@ typedef struct _nal_queue_in_handle {
 	void *in_alloc;
 	unsigned int in_exe_count;
 	nal_in_queue *nal_q_in_addr;
-	spinlock_t lock;
 } nal_queue_in_handle;
 
 typedef struct _nal_queue_out_handle {
@@ -222,6 +221,7 @@ typedef struct _nal_queue_handle {
 	nal_queue_in_handle *nal_q_in_handle;
 	nal_queue_out_handle *nal_q_out_handle;
 	nal_queue_state nal_q_state;
+	spinlock_t lock;
 	int nal_q_exception;
 } nal_queue_handle;
 

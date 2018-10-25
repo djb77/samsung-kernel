@@ -149,28 +149,30 @@ static void mfc_merge_errorinfo_data(struct s5p_mfc_dev *dev, bool px_fault)
 	}
 
 	/* SYSMMU info */
-	ret = snprintf(errorinfo + idx, 3, "/");
-	idx += ret;
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->is_secure, 1, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->has_lv2, 1, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->fault_addr, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->lv1_entry, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->lv2_entry, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->tlb_ppn, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->tlb_attr, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->sbb_link, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->sbb_attr, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->flags, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->map_start, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->map_end, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->unmap_start, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->unmap_end, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->fault_time.tv_sec, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->fault_time.tv_usec, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->map_time.tv_sec, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->map_time.tv_usec, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->unmap_time.tv_sec, 8, errorinfo, idx);
-	idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->unmap_time.tv_usec, 8, errorinfo, idx);
+	if (dev->logging_data->mmu_fi) {
+		ret = snprintf(errorinfo + idx, 3, "/");
+		idx += ret;
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->is_secure, 1, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->has_lv2, 1, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->fault_addr, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->lv1_entry, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->lv2_entry, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->tlb_ppn, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->tlb_attr, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->sbb_link, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->sbb_attr, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->flags, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->map_start, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->map_end, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->unmap_start, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->unmap_end, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->fault_time.tv_sec, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->fault_time.tv_usec, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->map_time.tv_sec, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->map_time.tv_usec, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->unmap_time.tv_sec, 8, errorinfo, idx);
+		idx = mfc_change_hex_to_ascii(dev->logging_data->mmu_fi->unmap_time.tv_usec, 8, errorinfo, idx);
+	}
 
 	/* driver info */
 	ret = snprintf(errorinfo + idx, 3, "/");
@@ -309,6 +311,7 @@ static void mfc_save_logging_sfr(struct s5p_mfc_dev *dev)
 
 static void mfc_display_state(struct s5p_mfc_dev *dev)
 {
+	nal_queue_handle *nal_q_handle = dev->nal_q_handle;
 	int i;
 
 	pr_err("-----------dumping MFC device info-----------\n");
@@ -320,16 +323,23 @@ static void mfc_display_state(struct s5p_mfc_dev *dev)
 			dev->hwlock.bits, dev->hwlock.dev,
 			dev->curr_ctx, dev->curr_ctx_is_drm,
 			dev->preempt_ctx, s5p_mfc_get_bits(&dev->work_bits));
+	pr_err("NAL-Q state:%d, exception:%d, in_exe_cnt: %d, out_exe_cnt: %d\n",
+			nal_q_handle->nal_q_state, nal_q_handle->nal_q_exception,
+			nal_q_handle->nal_q_in_handle->in_exe_count,
+			nal_q_handle->nal_q_out_handle->out_exe_count);
 
 	for (i = 0; i < MFC_NUM_CONTEXTS; i++)
 		if (dev->ctx[i])
-			pr_err("MFC ctx[%d] %s(%d) state:%d, queue_cnt(src:%d, dst:%d),"
-				" interrupt(cond:%d, type:%d, err:%d)\n",
+			pr_err("MFC ctx[%d] %s(%d) state:%d, queue_cnt(src:%d, dst:%d, ref:%d, qsrc:%d, qdst:%d),"
+				"     interrupt(cond:%d, type:%d, err:%d)\n",
 				dev->ctx[i]->num,
 				dev->ctx[i]->type == MFCINST_DECODER ? "DEC" : "ENC",
 				dev->ctx[i]->codec_mode, dev->ctx[i]->state,
 				s5p_mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->src_buf_queue),
 				s5p_mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->dst_buf_queue),
+				s5p_mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->ref_buf_queue),
+				s5p_mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->src_buf_nal_queue),
+				s5p_mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->dst_buf_nal_queue),
 				dev->ctx[i]->int_condition, dev->ctx[i]->int_reason,
 				dev->ctx[i]->int_err);
 }
@@ -345,6 +355,20 @@ static void mfc_print_trace(struct s5p_mfc_dev *dev)
 		cnt = ((trace_cnt + MFC_TRACE_COUNT_MAX) - i) % MFC_TRACE_COUNT_MAX;
 		pr_err("MFC trace[%d]: time=%llu, str=%s", cnt,
 				dev->mfc_trace[cnt].time, dev->mfc_trace[cnt].str);
+	}
+}
+
+static void mfc_print_trace_longterm(struct s5p_mfc_dev *dev)
+{
+	int i, cnt, trace_cnt;
+
+	pr_err("-----------dumping MFC trace long-term info-----------\n");
+
+	trace_cnt = atomic_read(&dev->trace_ref_longterm);
+	for (i = MFC_TRACE_COUNT_PRINT - 1; i >= 0; i--) {
+		cnt = ((trace_cnt + MFC_TRACE_COUNT_MAX) - i) % MFC_TRACE_COUNT_MAX;
+		pr_err("MFC trace longterm[%d]: time=%llu, str=%s", cnt,
+				dev->mfc_trace_longterm[cnt].time, dev->mfc_trace_longterm[cnt].str);
 	}
 }
 
@@ -430,6 +454,12 @@ void s5p_mfc_dump_info_and_stop_hw(struct s5p_mfc_dev *dev)
 	mfc_dump_regs(dev);
 	exynos_sysmmu_show_status(dev->device);
 	BUG();
+}
+
+void s5p_mfc_dump_context_info(struct s5p_mfc_dev *dev)
+{
+	mfc_display_state(dev);
+	mfc_print_trace_longterm(dev);
 }
 
 void s5p_mfc_watchdog_worker(struct work_struct *work)

@@ -205,7 +205,7 @@ static void mfc_handle_frame_copy_timestamp(struct s5p_mfc_ctx *ctx)
 	}
 
 	ref_mb = s5p_mfc_find_buf_vb(&ctx->buf_queue_lock,
-			&dec->ref_buf_queue, dec_y_addr);
+			&ctx->ref_buf_queue, dec_y_addr);
 	if (ref_mb) {
 		memcpy(&ref_mb->vb.timestamp,
 				&src_mb->vb.timestamp,
@@ -306,7 +306,7 @@ static void mfc_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err)
 		(s5p_mfc_get_warn(err) == S5P_FIMV_ERR_BROKEN_LINK)) {
 
 		ref_mb = s5p_mfc_find_move_buf_vb(&ctx->buf_queue_lock,
-				&ctx->dst_buf_queue, &dec->ref_buf_queue, dspl_y_addr, released_flag);
+				&ctx->dst_buf_queue, &ctx->ref_buf_queue, dspl_y_addr, released_flag);
 		if (ref_mb) {
 			mfc_debug(2, "Listing: %d\n", ref_mb->vb.vb2_buf.index);
 			/* Check if this is the buffer we're looking for */
@@ -329,7 +329,7 @@ static void mfc_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err)
 		}
 	} else {
 		ref_mb = s5p_mfc_find_del_buf_vb(&ctx->buf_queue_lock,
-				&dec->ref_buf_queue, dspl_y_addr);
+				&ctx->ref_buf_queue, dspl_y_addr);
 		if (ref_mb) {
 			mfc_debug(2, "Listing: %d\n", ref_mb->vb.vb2_buf.index);
 			/* Check if this is the buffer we're looking for */
@@ -543,7 +543,7 @@ static void mfc_handle_ref_frame(struct s5p_mfc_ctx *ctx)
 
 	/* Try to search decoded address in whole dst queue */
 	dst_mb = s5p_mfc_find_move_buf_vb_used(&ctx->buf_queue_lock,
-			&dec->ref_buf_queue, &ctx->dst_buf_queue, dec_addr);
+			&ctx->ref_buf_queue, &ctx->dst_buf_queue, dec_addr);
 	if (dst_mb) {
 		mfc_debug(2, "Found in dst queue = 0x%08llx, buf = 0x%08llx\n",
 				dec_addr, s5p_mfc_mem_get_daddr_vb(&dst_mb->vb.vb2_buf, 0));
@@ -754,6 +754,9 @@ static void mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 			dec->remained_size = src_mb->vb.vb2_buf.planes[0].bytesused
 					- dec->consumed;
 			dec->has_multiframe = 1;
+
+			MFC_TRACE_CTX("** consumed:%ld, remained:%ld, addr:0x%08llx\n",
+				dec->consumed, dec->remained_size, dec->y_addr_for_pb);
 			/* Do not move src buffer to done_list */
 			goto leave_handle_frame;
 		}
@@ -979,7 +982,7 @@ static int mfc_handle_stream(struct s5p_mfc_ctx *ctx)
 		}
 
 		ref_mb = s5p_mfc_find_del_buf_raw(&ctx->buf_queue_lock,
-			&enc->ref_buf_queue, enc_addr[0]);
+			&ctx->ref_buf_queue, enc_addr[0]);
 		if (ref_mb) {
 			vb2_buffer_done(&ref_mb->vb.vb2_buf, VB2_BUF_STATE_DONE);
 
@@ -1028,7 +1031,7 @@ static int mfc_handle_stream(struct s5p_mfc_ctx *ctx)
 		 (ctx->state == MFCINST_RUNNING_BUF_FULL))) {
 
 		s5p_mfc_move_first_buf_used(&ctx->buf_queue_lock,
-			&enc->ref_buf_queue, &ctx->src_buf_queue, MFC_QUEUE_ADD_BOTTOM);
+			&ctx->ref_buf_queue, &ctx->src_buf_queue, MFC_QUEUE_ADD_BOTTOM);
 
 		/* slice_type = 4 && strm_size = 0, skipped enable
 		   should be considered */
@@ -1038,7 +1041,7 @@ static int mfc_handle_stream(struct s5p_mfc_ctx *ctx)
 		mfc_debug(2, "slice_type: %d, ctx->state: %d\n", slice_type, ctx->state);
 		mfc_debug(2, "enc src count: %d, enc ref count: %d\n",
 			  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->src_buf_queue),
-			  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &enc->ref_buf_queue));
+			  s5p_mfc_get_queue_count(&ctx->buf_queue_lock, &ctx->ref_buf_queue));
 	}
 
 	return 0;

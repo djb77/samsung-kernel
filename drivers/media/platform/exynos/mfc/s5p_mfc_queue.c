@@ -608,7 +608,7 @@ void s5p_mfc_handle_released_info(struct s5p_mfc_ctx *ctx,
 					ncount++;
 				}
 				dec->assigned_fd[t] = MFC_INFO_INIT_FD;
-				mfc_check_ref_frame(&ctx->buf_queue_lock, &ctx->dst_buf_queue, &dec->ref_buf_queue, ctx, t);
+				mfc_check_ref_frame(&ctx->buf_queue_lock, &ctx->dst_buf_queue, &ctx->ref_buf_queue, ctx, t);
 			}
 		}
 	}
@@ -621,7 +621,7 @@ void s5p_mfc_move_reuse_buffer(struct s5p_mfc_ctx *ctx, int release_index)
 {
 	struct s5p_mfc_dec *dec = ctx->dec_priv;
 	struct s5p_mfc_buf_queue *dst_queue = &ctx->dst_buf_queue;
-	struct s5p_mfc_buf_queue *ref_queue = &dec->ref_buf_queue;
+	struct s5p_mfc_buf_queue *ref_queue = &ctx->ref_buf_queue;
 	struct s5p_mfc_buf *ref_mb, *tmp_mb;
 	spinlock_t *plock = &ctx->buf_queue_lock;
 	unsigned long flags;
@@ -743,7 +743,7 @@ struct s5p_mfc_buf *mfc_check_full_refered_dpb(struct s5p_mfc_ctx *ctx)
 		return NULL;
 	}
 
-	sum_dpb = ctx->dst_buf_queue.count + dec->ref_buf_queue.count;
+	sum_dpb = ctx->dst_buf_queue.count + ctx->ref_buf_queue.count;
 
 	if ((ctx->dst_buf_queue.count > 1) && (sum_dpb >= (ctx->dpb_count + 5))) {
 		if (list_empty(&ctx->dst_buf_queue.head)) {
@@ -754,17 +754,17 @@ struct s5p_mfc_buf *mfc_check_full_refered_dpb(struct s5p_mfc_ctx *ctx)
 		mfc_buf = list_entry(ctx->dst_buf_queue.head.next,
 				struct s5p_mfc_buf, list);
 	} else if ((ctx->dst_buf_queue.count == 0)
-			&& ((dec->ref_buf_queue.count) == (ctx->dpb_count + 5))) {
-		if (list_empty(&dec->ref_buf_queue.head)) {
+			&& ((ctx->ref_buf_queue.count) == (ctx->dpb_count + 5))) {
+		if (list_empty(&ctx->ref_buf_queue.head)) {
 			mfc_err_ctx("ref_buf_queue is empty\n");
 			return NULL;
 		}
 		mfc_debug(2, "All buffers are referenced.\n");
-		mfc_buf = list_entry(dec->ref_buf_queue.head.next,
+		mfc_buf = list_entry(ctx->ref_buf_queue.head.next,
 				struct s5p_mfc_buf, list);
 	} else {
 		mfc_debug(2, "waiting for dst buffer, ref = %d, dst = %d\n",
-				dec->ref_buf_queue.count, ctx->dst_buf_queue.count);
+				ctx->ref_buf_queue.count, ctx->dst_buf_queue.count);
 		ctx->clear_work_bit = 1;
 	}
 
