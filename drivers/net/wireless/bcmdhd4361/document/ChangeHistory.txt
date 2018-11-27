@@ -1,5 +1,57 @@
-BCM4361 DHD 1.77.71 for Android Great/Dream/Hero & BCM4345X & BCM4343X Project
+BCM4361 DHD 1.77.72.1 for Android Great/Dream/Hero & BCM4345X & BCM4343X Project
 (Notes: 1.77.x is twigged off from 1.579.235.9)
+
+DHD 1.77.72.1 - 2018.10.17
+Others
+ - CS6302259(By Kang Hyung Wook) Supported DHD driven Random MAC feature
+
+
+DHD 1.77.72 - 2018.09.07
+Security Patch
+ - CS5120366(By Jeong Min Cheol) SI-11983: Fixed potential buffer overflow due to sscanf
+ - CS5168121(By Kim Tae-Yong) Hide host memory address information for security
+ - CS5188660(By Min SungBin) SI-11783: Fixed potential kernel panic from malicious message
+ - CS5262126(By Min SungBin) SI-11164 Fixed buffer overflow in handling PKTLOG_FILTER_ADD command
+ - CS5264403(By Min SungBin) SI-12150: Fixed out of bounds read in dhd_ioctl_process()
+ - CS5272148(By Kang Hyung Wook) SI-12126: Fixed buffer overflow when parsing MAC by file
+ - CS5368479(By Min SungBin) SI-12312: Hided pointer information
+ - CS5549090(By Min SungBin) SI-11784: Added the validation routine of ifidx variable to fix the security issue
+ - CS5550321(By Min SungBin) SI-11785: Added the boundary check routine for flowid to fix the security issue
+ - CS5844556(By Kang Hyung Wook) SI-12304: Hided wdev and ndev pointer information for security issue
+ - CS5844633(By Kang Hyung Wook) SI-12262: Changed the print format specifier to hide pointer information
+ - CS5844688(By Kang Hyung Wook) SI-12227: Fixed out of bounds read in dhd_get_memdump_info() function
+
+Others
+ - CS3550383(By Ahn Byunghun) Fixed battery hydrant due to wakelock
+ - CS4447594(By Min SungBin) Fixed can't be reading RD/WR indices of common ring issue when PCIe link down is occurred
+ - CS4541746(By Park HeeBae) Adding log for pkt info received during sleep
+ - CS5117925(By Park HeeBae) Removal unnecessary wakelock for TPut enhancement
+ - CS5117925(By Park HeeBae) TPut parameter change
+ - CS5152496(By Huang Junming) Code change for W2019 bring-up
+ - CS5152496(By Huang Junming) Split the DHD_DT_COMPAT_ENTRY into two different definition to support backward compatibility
+ - CS5219364(By Park HeeBae) Reading dongle memory via workq
+ - CS5395053(By Min SungBin) Added memory boundary check routine in dhdpcie_readshared() function
+ - CS5488359(By Min SungBin) Added Qatar country regrev QA/6 in translate_custom_table for HERO project
+   (This patch should be sync up with BCM4359C0 - FW 9.96.11 or higher version)
+ - CS5550621(By Park HeeBae) Triggering hang on KSO failure
+ - CS5635953(By Choi Junsu) Added private command to set fixed bcn_li_dtim
+ - CS5943720(By Junming Huang) Code change for W2018 O OS bring-up
+ - Added virtual and physical address information log of BAR0/BAR1 to support PCIe related issue
+ - Disable DEBUG_UART feature at DHD
+ - Fixed wrong BDC data offset calculation in Lossless Roaming
+ - Moved the closednet configuration to appropriate position in order to support Android P OS
+
+
+DHD 1.77.71.2 - 2018.07.27
+Others
+ - CS3550383(By Park HeeBae) Added wakelock patch in Solis to Galileo
+ - CS4541746(By Park HeeBae) Adding log for pkt info received during sleep
+ - CS5117925(By Park HeeBae) Removal unnecessary wakelock for TPut enhancement
+ - CS5117925(By Park HeeBae) TPut parameter change
+ - CS5219364(By Park HeeBae) Reading dongle memory via workq
+ - CS5550621(By Park HeeBae) Triggering hang on KSO failure
+ - Fixed wrong BDC data offset calculation in Lossless Roaming
+
 
 DHD 1.77.71 - 2018.06.15
 Security Patch

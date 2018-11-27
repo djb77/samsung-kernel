@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 764459 2018-05-25 10:35:52Z $
+ * $Id: dhd_linux.c 784024 2018-10-10 04:44:24Z $
  */
 
 #include <typedefs.h>
@@ -492,11 +492,11 @@ argos_mumimo_ctrl argos_mumimo_ctrl_data;
 #endif /* DYNAMIC_MUMIMO_CONTROL */
 
 #ifdef BCMPCIE
-#define RPS_TPUT_THRESHOLD		300
+#define RPS_TPUT_THRESHOLD			300
 #else
-#define RPS_TPUT_THRESHOLD		150
+#define RPS_TPUT_THRESHOLD			150
 #endif
-#define DELAY_TO_CLEAR_RPS_CPUS		300
+#define DELAY_TO_CLEAR_RPS_CPUS			300
 #define SUMIMO_TO_MUMIMO_TPUT_THRESHOLD		0
 #define MUMIMO_TO_SUMIMO_TPUT_THRESHOLD		150
 #else
@@ -514,6 +514,9 @@ void traffic_mgmt_pkt_set_prio(dhd_pub_t *dhdp, void * pktbuf);
 #endif 
 
 #ifdef DHD_FW_COREDUMP
+#ifdef BCMSDIO
+int dhdsdio_read_dongle_memory_from_bus(dhd_pub_t *dhdp, uint8 *buf, int size);
+#endif /* BCMSDIO */
 static void dhd_mem_dump(void *dhd_info, void *event_info, u8 event);
 #endif /* DHD_FW_COREDUMP */
 #ifdef DHD_LOG_DUMP
@@ -3047,7 +3050,7 @@ dhd_lb_rx_napi_dispatch(dhd_pub_t *dhdp)
 
 	on_cpu = atomic_read(&dhd->rx_napi_cpu);
 	DHD_INFO(("%s : curr_cpu : %d, cpumask : 0x%lx\n", __FUNCTION__,
-		    curr_cpu, *cpumask_bits(dhd->cpumask_primary)));
+		curr_cpu, *cpumask_bits(dhd->cpumask_primary)));
 
 	if (0 ||
 #ifdef DHD_LB_IRQSET
@@ -3081,25 +3084,25 @@ dhd_lb_rx_pkt_enqueue(dhd_pub_t *dhdp, void *pkt, int ifidx)
 void
 dhd_irq_set_affinity(dhd_pub_t *dhdp)
 {
-    unsigned int irq = (unsigned int)-1;
-    int err = BCME_OK;
+	unsigned int irq = (unsigned int)-1;
+	int err = BCME_OK;
 
-    if (!dhdp) {
-	DHD_ERROR(("%s : dhdp is NULL\n", __FUNCTION__));
-	return;
-    }
+	if (!dhdp) {
+		DHD_ERROR(("%s : dhdp is NULL\n", __FUNCTION__));
+		return;
+	}
 
-    if (!dhdp->bus) {
-	DHD_ERROR(("%s : bus is NULL\n", __FUNCTION__));
-	return;
-    }
+	if (!dhdp->bus) {
+		DHD_ERROR(("%s : bus is NULL\n", __FUNCTION__));
+		return;
+	}
 
-    dhdpcie_get_pcieirq(dhdp->bus, &irq);
-    err = irq_set_affinity(irq, dhdp->info->cpumask_primary);
-    if (err) {
-	DHD_ERROR(("%s : irq set affinity is failed cpu:0x%lx\n",
-		    __FUNCTION__, *cpumask_bits(dhdp->info->cpumask_primary)));
-    }
+	dhdpcie_get_pcieirq(dhdp->bus, &irq);
+	err = irq_set_affinity(irq, dhdp->info->cpumask_primary);
+	if (err) {
+		DHD_ERROR(("%s : irq set affinity is failed cpu:0x%lx\n",
+			__FUNCTION__, *cpumask_bits(dhdp->info->cpumask_primary)));
+	}
 }
 #endif /* DHD_LB_IRQSET */
 #endif /* DHD_LB */
@@ -5436,7 +5439,7 @@ dhd_event_logtrace_flush_queue(dhd_pub_t *dhdp)
 
 #ifdef ENABLE_WAKEUP_PKT_DUMP
 static void
-update_wake_pkt_info(struct sk_buff *skb)
+update_wake_pkt_info(struct sk_buff *skb, uint len)
 {
 	struct iphdr *ip_header;
 	struct ipv6hdr *ipv6_header;
@@ -5465,7 +5468,7 @@ update_wake_pkt_info(struct sk_buff *skb)
 #else
 				skb->mac.raw,
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 22) */
-				skb->len, &evu);
+				len, &evu);
 		if (ret != BCME_OK) {
 			DHD_ERROR(("%s: wl_host_event_get_data err = %d\n",
 				__FUNCTION__, ret));
@@ -5511,7 +5514,7 @@ update_wake_pkt_info(struct sk_buff *skb)
 				&(ip_header->daddr), dport));
 		}
 
-		temp_raw |= dport << 16;
+		temp_raw |= (long long)dport << 16;
 	}
 }
 #endif /* ENABLE_WAKEUP_PKT_DUMP */
@@ -5593,15 +5596,38 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 		}
 #endif /* DHD_WAKE_STATUS */
 
+		eh = (struct ether_header *)PKTDATA(dhdp->osh, pktbuf);
+
+		if (ifidx >= DHD_MAX_IFS) {
+			DHD_ERROR(("%s: ifidx(%d) Out of bound. drop packet\n",
+				__FUNCTION__, ifidx));
+			if (ntoh16(eh->ether_type) == ETHER_TYPE_BRCM) {
+#ifdef DHD_USE_STATIC_CTRLBUF
+				PKTFREE_STATIC(dhdp->osh, pktbuf, FALSE);
+#else
+				PKTFREE(dhdp->osh, pktbuf, FALSE);
+#endif /* DHD_USE_STATIC_CTRLBUF */
+			} else {
+				PKTCFREE(dhdp->osh, pktbuf, FALSE);
+			}
+			continue;
+		}
+
 		ifp = dhd->iflist[ifidx];
 		if (ifp == NULL) {
 			DHD_ERROR(("%s: ifp is NULL. drop packet\n",
 				__FUNCTION__));
-			PKTCFREE(dhdp->osh, pktbuf, FALSE);
+			if (ntoh16(eh->ether_type) == ETHER_TYPE_BRCM) {
+#ifdef DHD_USE_STATIC_CTRLBUF
+				PKTFREE_STATIC(dhdp->osh, pktbuf, FALSE);
+#else
+				PKTFREE(dhdp->osh, pktbuf, FALSE);
+#endif /* DHD_USE_STATIC_CTRLBUF */
+			} else {
+				PKTCFREE(dhdp->osh, pktbuf, FALSE);
+			}
 			continue;
 		}
-
-		eh = (struct ether_header *)PKTDATA(dhdp->osh, pktbuf);
 
 		/* Dropping only data packets before registering net device to avoid kernel panic */
 #ifndef PROP_TXSTATUS_VSDB
@@ -5828,7 +5854,10 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 			if (DHD_INFO_ON()) {
 				prhex("wake_pkt", (char*) eth, MIN(len, 48));
 			}
-			update_wake_pkt_info(skb);
+			update_wake_pkt_info(skb, len);
+			DHD_ERROR(("wake_pkt %s(%d), raw_info=0x%016llx\n",
+				__FUNCTION__, __LINE__, temp_raw));
+			temp_raw = 0;
 #ifdef CONFIG_IRQ_HISTORY
 			add_irq_history(0, "WIFI");
 #endif
@@ -7423,7 +7452,17 @@ int dhd_ioctl_process(dhd_pub_t *pub, int ifidx, dhd_ioctl_t *ioc, void *data_bu
 #ifdef WL_MONITOR
 	/* Intercept monitor ioctl here, add/del monitor if */
 	if (bcmerror == BCME_OK && ioc->cmd == WLC_SET_MONITOR) {
-		dhd_set_monitor(pub, ifidx, *(int32*)data_buf);
+		int val = 0;
+		if (data_buf != NULL && buflen != 0) {
+			if (buflen >= 4) {
+				val = *(int*)data_buf;
+			} else if (buflen >= 2) {
+				val = *(short*)data_buf;
+			} else {
+				val = *(char*)data_buf;
+			}
+		}
+		dhd_set_monitor(pub, ifidx, val);
 	}
 #endif
 
@@ -8385,12 +8424,12 @@ dhd_open(struct net_device *net)
 #endif
 
 exit:
+	DHD_PERIM_UNLOCK(&dhd->pub);
+	DHD_OS_WAKE_UNLOCK(&dhd->pub);
+
 	if (ret) {
 		dhd_stop(net);
 	}
-
-	DHD_PERIM_UNLOCK(&dhd->pub);
-	DHD_OS_WAKE_UNLOCK(&dhd->pub);
 
 #if defined(MULTIPLE_SUPPLICANT)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)) && defined(BCMSDIO)
@@ -8897,13 +8936,13 @@ dhd_init_static_strs_array(osl_t *osh, dhd_event_log_t *temp, char *str_file, ch
 		if (strstr(str_file, ram_file_str) != NULL) {
 			if (temp->raw_sstr != NULL) {
 				MFREE(osh, temp->raw_sstr, temp->raw_sstr_size);
-			temp->raw_sstr = NULL;
+				temp->raw_sstr = NULL;
 			}
 		} else if (strstr(str_file, rom_file_str) != NULL) {
 			if (temp->rom_raw_sstr != NULL) {
 				MFREE(osh, temp->rom_raw_sstr, temp->rom_raw_sstr_size);
-			temp->rom_raw_sstr = NULL;
-		}
+				temp->rom_raw_sstr = NULL;
+			}
 		}
 		return error;
 	}
@@ -8989,13 +9028,13 @@ fail1:
 	if (strstr(str_file, ram_file_str) != NULL) {
 		if (temp->raw_sstr != NULL) {
 			MFREE(osh, temp->raw_sstr, temp->raw_sstr_size);
-		temp->raw_sstr = NULL;
+			temp->raw_sstr = NULL;
 		}
 	} else if (strstr(str_file, rom_file_str) != NULL) {
 		if (temp->rom_raw_sstr != NULL) {
 			MFREE(osh, temp->rom_raw_sstr, temp->rom_raw_sstr_size);
-		temp->rom_raw_sstr = NULL;
-	}
+			temp->rom_raw_sstr = NULL;
+		}
 	}
 
 	return error;
@@ -9855,7 +9894,7 @@ bool dhd_validate_chipid(dhd_pub_t *dhdp)
 #if defined(BT_OVER_SDIO)
 wlan_bt_handle_t dhd_bt_get_pub_hndl(void)
 {
-	DHD_ERROR(("%s: g_dhd_pub %p\n", __FUNCTION__, g_dhd_pub));
+	DHD_INFO(("%s: g_dhd_pub %p\n", __FUNCTION__, g_dhd_pub));
 	/* assuming that dhd_pub_t type pointer is available from a global variable */
 	return (wlan_bt_handle_t) g_dhd_pub;
 } EXPORT_SYMBOL(dhd_bt_get_pub_hndl);
@@ -13111,12 +13150,12 @@ dhd_reboot_callback(struct notifier_block *this, unsigned long code, void *unuse
 #if defined(CONFIG_DEFERRED_INITCALLS) && !defined(EXYNOS_PCIE_MODULE_PATCH)
 #if defined(CONFIG_MACH_UNIVERSAL7420) || defined(CONFIG_SOC_EXYNOS8890) || \
 	defined(CONFIG_ARCH_MSM8996) || defined(CONFIG_SOC_EXYNOS8895) || \
-	defined(CONFIG_ARCH_MSM8998)
+	defined(CONFIG_ARCH_MSM8998) || defined(CONFIG_ARCH_SDM845)
 deferred_module_init_sync(dhd_module_init);
 #else
 deferred_module_init(dhd_module_init);
 #endif /* CONFIG_MACH_UNIVERSAL7420 || CONFIG_SOC_EXYNOS8890 ||
-	* CONFIG_ARCH_MSM8996 || CONFIG_SOC_EXYNOS8895 || CONFIG_ARCH_MSM8998
+	* CONFIG_ARCH_MSM8996 || CONFIG_SOC_EXYNOS8895 || CONFIG_ARCH_MSM8998 || CONFIG_ARCH_SDM845
 	*/
 #elif defined(USE_LATE_INITCALL_SYNC)
 late_initcall_sync(dhd_module_init);
@@ -13640,19 +13679,11 @@ dhd_os_sdunlock_txq(dhd_pub_t *pub)
 void
 dhd_os_sdlock_rxq(dhd_pub_t *pub)
 {
-	dhd_info_t *dhd;
-
-	dhd = (dhd_info_t *)(pub->info);
-	spin_lock_bh(&dhd->rxqlock);
 }
 
 void
 dhd_os_sdunlock_rxq(dhd_pub_t *pub)
 {
-	dhd_info_t *dhd;
-
-	dhd = (dhd_info_t *)(pub->info);
-	spin_unlock_bh(&dhd->rxqlock);
 }
 
 static void
@@ -14044,8 +14075,11 @@ int net_os_set_suspend_bcn_li_dtim(struct net_device *dev, int val)
 {
 	dhd_info_t *dhd = DHD_DEV_INFO(dev);
 
-	if (dhd)
+	if (dhd) {
+		DHD_ERROR(("%s: Set bcn_li_dtim in suspend %d\n",
+			__FUNCTION__, val));
 		dhd->pub.suspend_bcn_li_dtim = val;
+	}
 
 	return 0;
 }
@@ -14197,7 +14231,9 @@ dhd_dev_get_feature_set(struct net_device *dev)
 #ifdef KEEP_ALIVE
 	feature_set |= WIFI_FEATURE_MKEEP_ALIVE;
 #endif /* KEEP_ALIVE */
-
+#ifdef SUPPORT_RANDOM_MAC_SCAN
+	feature_set |= WIFI_FEATURE_SCAN_RAND;
+#endif /* SUPPORT_RANDOM_MAC_SCAN */
 	return feature_set;
 }
 
@@ -17394,6 +17430,7 @@ void dhd_get_memdump_info(dhd_pub_t *dhd)
 {
 	struct file *fp = NULL;
 	uint32 mem_val = DUMP_MEMFILE_MAX;
+	char *p_mem_val = NULL;
 	int ret = 0;
 	char *filepath = MEMDUMPINFO;
 
@@ -17427,7 +17464,9 @@ void dhd_get_memdump_info(dhd_pub_t *dhd)
 		goto done;
 	}
 
-	mem_val = bcm_atoi((char *)&mem_val);
+	p_mem_val = (char*)&mem_val;
+	p_mem_val[sizeof(uint32) - 1] = '\0';
+	mem_val = bcm_atoi(p_mem_val);
 
 	filp_close(fp, NULL);
 
@@ -17457,13 +17496,17 @@ void dhd_schedule_memdump(dhd_pub_t *dhdp, uint8 *buf, uint32 size)
 	dump->buf = buf;
 	dump->bufsize = size;
 
+	if ((dhdp->memdump_enabled == DUMP_MEMONLY) ||
+		(dhdp->memdump_enabled == DUMP_MEMFILE_BUGON)) {
 #if defined(CONFIG_ARM64)
-	DHD_ERROR(("%s: buf(va)=%llx, buf(pa)=%llx, bufsize=%d\n", __FUNCTION__,
-		(uint64)buf, (uint64)__virt_to_phys((ulong)buf), size));
+		DHD_ERROR(("%s: buf(va)=%llx, buf(pa)=%llx, bufsize=%d\n", __FUNCTION__,
+			(uint64)buf, (uint64)__virt_to_phys((ulong)buf), size));
 #elif defined(__ARM_ARCH_7A__)
-	DHD_ERROR(("%s: buf(va)=%x, buf(pa)=%x, bufsize=%d\n", __FUNCTION__,
-		(uint32)buf, (uint32)__virt_to_phys((ulong)buf), size));
+		DHD_ERROR(("%s: buf(va)=%x, buf(pa)=%x, bufsize=%d\n", __FUNCTION__,
+			(uint32)buf, (uint32)__virt_to_phys((ulong)buf), size));
 #endif /* __ARM_ARCH_7A__ */
+	}
+
 	if (dhdp->memdump_enabled == DUMP_MEMONLY) {
 		BUG_ON(1);
 	}
@@ -17497,6 +17540,10 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 		DHD_ERROR(("%s: dump is NULL\n", __FUNCTION__));
 		return;
 	}
+
+#ifdef BCMSDIO
+	dhdsdio_read_dongle_memory_from_bus(&dhd->pub, dump->buf, dump->bufsize);
+#endif /* BCMSDIO */
 
 	if (write_dump_to_file(&dhd->pub, dump->buf, dump->bufsize, "mem_dump")) {
 		DHD_ERROR(("%s: writing SoC_RAM dump to the file failed\n", __FUNCTION__));

@@ -261,8 +261,7 @@ static int abox_start_ipc_transaction_atomic(struct device *dev,
 	long result = 0;
 	unsigned long flag;
 
-	dev_dbg(dev, "%s(%d, %p, %zu, %d)\n", __func__, hw_irq,
-			supplement, size, sync);
+	dev_dbg(dev, "%s(%d, %zu, %d)\n", __func__, hw_irq, size, sync);
 
 	if (pm_runtime_suspended(dev)) {
 		dev_info(dev, "%s: abox has been suspended\n", __func__);
@@ -346,8 +345,7 @@ static void abox_process_ipc(struct work_struct *work)
 		const unsigned char *supplement = ipc->supplement;
 		size_t size = ipc->size;
 
-		dev_dbg(dev, "%s(%d, %p, %zu)\n", __func__, hw_irq,
-				supplement, size);
+		dev_dbg(dev, "%s(%d, %zu)\n", __func__, hw_irq, size);
 
 		*state = SEND_MSG;
 		memcpy(tx_sram_base, supplement, size);
@@ -3694,8 +3692,9 @@ int abox_try_to_asrc_off(struct device *dev, struct abox_data *data,
 	snd_soc_dapm_mutex_unlock(snd_soc_component_get_dapm(cmpnt));
 
 	if (!w_asrc || !srate) {
-		dev_warn(dev, "%s: incomplete path: w_asrc=%p, srate=%d",
-				__func__, w_asrc, srate);
+		dev_warn(dev, "%s: incomplete path: w_asrc=%s, srate=%d",
+				__func__, w_asrc ? w_asrc->name : "(null)",
+				srate);
 		return -EINVAL;
 	}
 
@@ -4925,7 +4924,7 @@ int abox_request_l2c(struct device *dev, struct abox_data *data,
 	struct abox_l2c_request *request;
 	size_t length = ARRAY_SIZE(data->l2c_requests);
 
-	dev_info(dev, "%s(%p, %d)\n", __func__, id, on);
+	dev_info(dev, "%s(%#lx, %d)\n", __func__, (unsigned long)id, on);
 
 	for (request = data->l2c_requests;
 			request - data->l2c_requests < length
@@ -4938,8 +4937,8 @@ int abox_request_l2c(struct device *dev, struct abox_data *data,
 	request->id = id;
 
 	if (request - data->l2c_requests >= ARRAY_SIZE(data->l2c_requests)) {
-		dev_err(dev, "%s: out of index. id=%p, on=%d\n",
-				__func__, id, on);
+		dev_err(dev, "%s: out of index. id=%#lx, on=%d\n",
+				__func__, (unsigned long)id, on);
 		return -ENOMEM;
 	}
 
@@ -5168,8 +5167,7 @@ static void abox_request_iva_firmware(struct abox_data *data)
 		return;
 	}
 
-	dev_info(dev, "IVA firmware loaded at %p (%zu)\n",
-			data->firmware_iva->data, data->firmware_iva->size);
+	dev_info(dev, "IVA firmware loaded\n");
 }
 
 static void abox_complete_dram_firmware_request(const struct firmware *fw,
@@ -5186,7 +5184,7 @@ static void abox_complete_dram_firmware_request(const struct firmware *fw,
 
 	data->firmware_dram = fw;
 
-	dev_info(dev, "DRAM firmware loaded at %p (%zu)\n", fw->data, fw->size);
+	dev_info(dev, "DRAM firmware loaded\n");
 
 	abox_request_extra_firmware(data);
 	abox_request_iva_firmware(data);
@@ -5209,7 +5207,7 @@ static void abox_complete_sram_firmware_request(const struct firmware *fw,
 
 	data->firmware_sram = fw;
 
-	dev_info(dev, "SRAM firmware loaded at %p (%zu)\n", fw->data, fw->size);
+	dev_info(dev, "SRAM firmware loaded\n");
 
 	request_firmware_nowait(THIS_MODULE,
 		FW_ACTION_HOTPLUG,
@@ -5411,9 +5409,7 @@ static int samsung_abox_probe(struct platform_device *pdev)
 				PTR_ERR(data->dram_base));
 		return PTR_ERR(data->dram_base);
 	}
-	dev_info(&pdev->dev, "%s(%pa) is mapped on %p with size of %d\n",
-			"dram firmware", &data->dram_base_phys, data->dram_base,
-			DRAM_FIRMWARE_SIZE);
+	dev_info(dev, "%s(%#x) alloc\n", "dram firmware", DRAM_FIRMWARE_SIZE);
 	iommu_map(data->iommu_domain, IOVA_DRAM_FIRMWARE, data->dram_base_phys,
 			DRAM_FIRMWARE_SIZE, 0);
 
@@ -5424,15 +5420,11 @@ static int samsung_abox_probe(struct platform_device *pdev)
 				PTR_ERR(data->iva_base));
 		return PTR_ERR(data->iva_base);
 	}
-	dev_info(&pdev->dev, "%s(%pa) is mapped on %p with size of %d\n",
-			"iva firmware", &data->iva_base_phys, data->iva_base,
-			IVA_FIRMWARE_SIZE);
+	dev_info(dev, "%s(%#x) alloc\n", "iva firmware", IVA_FIRMWARE_SIZE);
 	iommu_map(data->iommu_domain, IOVA_IVA_FIRMWARE, data->iva_base_phys,
 			IVA_FIRMWARE_SIZE, 0);
 
-	dev_dbg(&pdev->dev, "vss firmware is on 0x%08lx with size of %d\n",
-			shm_get_phys_base() + shm_get_cp_size(),
-			shm_get_vss_size());
+	dev_dbg(dev, "%s(%#x) alloc\n", "vss firmware", shm_get_vss_size());
 	iommu_map(data->iommu_domain, IOVA_VSS_FIRMWARE,
 			shm_get_phys_base() + shm_get_cp_size(),
 			shm_get_vss_size(), 0);

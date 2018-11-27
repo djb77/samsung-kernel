@@ -27,10 +27,6 @@ void __iomem *devm_not_request_and_map(struct platform_device *pdev,
 		return ERR_PTR(-EFAULT);
 	}
 
-	dev_dbg(&pdev->dev, "%s: %s(%p) is mapped on %p with size of %zu",
-			__func__, name, (void *)res->start, result,
-			(size_t)resource_size(res));
-
 	return result;
 }
 
@@ -64,10 +60,6 @@ void __iomem *devm_request_and_map(struct platform_device *pdev,
 		return ERR_PTR(-EFAULT);
 	}
 
-	dev_dbg(&pdev->dev, "%s: %s(%p) is mapped on %p with size of %zu",
-			__func__, name, (void *)res->start, result,
-			(size_t)resource_size(res));
-
 	return result;
 }
 
@@ -99,10 +91,6 @@ void __iomem *devm_request_and_map_byname(struct platform_device *pdev,
 		dev_err(&pdev->dev, "Failed to map %s\n", name);
 		return ERR_PTR(-EFAULT);
 	}
-
-	dev_dbg(&pdev->dev, "%s: %s(%p) is mapped on %p with size of %zu",
-			__func__, name, (void *)res->start, result,
-			(size_t)resource_size(res));
 
 	return result;
 }

@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd.h 763050 2018-05-17 04:42:47Z $
+ * $Id: dhd.h 784024 2018-10-10 04:44:24Z $
  */
 
 /****************
@@ -1535,6 +1535,7 @@ extern void dhd_txcomplete(dhd_pub_t *dhdp, void *txp, bool success);
 #define WIFI_FEATURE_MKEEP_ALIVE        0x100000    /* WiFi mkeep_alive			*/
 #define WIFI_FEATURE_CONFIG_NDO         0x200000    /* ND offload configure             */
 #define WIFI_FEATURE_TX_TRANSMIT_POWER  0x400000    /* Capture Tx transmit power levels	*/
+#define WIFI_FEATURE_SCAN_RAND          0x2000000	/* Support MAC & Prb SN randomization */
 #define WIFI_FEATURE_INVALID            0xFFFFFFFF  /* Invalid Feature                  */
 
 #define MAX_FEATURE_SET_CONCURRRENT_GROUPS  3
@@ -2719,5 +2720,8 @@ extern uint dhd_get_chiprev_id(dhd_pub_t *dhdp);
 #define CHECK_IS_BLOB(dhdp)		FALSE
 #define CHECK_IS_MULT_REGREV(dhdp)	TRUE
 #endif /* DHD_BLOB_EXISTENCE_CHECK && DHD_USE_CLMINFO_PARSER */
+
+#define HD_PREFIX_SIZE  2   /* hexadecimal prefix size */
+#define HD_BYTE_SIZE    2   /* hexadecimal byte size */
 
 #endif /* _dhd_h_ */
