@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_android.c 761914 2018-05-10 02:02:30Z $
+ * $Id: wl_android.c 784024 2018-10-10 04:44:24Z $
  */
 
 #include <linux/module.h>
@@ -86,6 +86,7 @@
 #define CMD_BTCOEXMODE		"BTCOEXMODE"
 #define CMD_SETSUSPENDOPT	"SETSUSPENDOPT"
 #define CMD_SETSUSPENDMODE      "SETSUSPENDMODE"
+#define CMD_SETDTIM_IN_SUSPEND  "SET_DTIM_IN_SUSPEND"
 #define CMD_MAXDTIM_IN_SUSPEND  "MAX_DTIM_IN_SUSPEND"
 #define CMD_P2P_DEV_ADDR	"P2P_DEV_ADDR"
 #define CMD_SETFWPATH		"SETFWPATH"
@@ -185,10 +186,6 @@
 #define CMD_COUNTRYREV_GET "GETCOUNTRYREV"
 #endif /* ROAM_API */
 
-#if defined(SUPPORT_RANDOM_MAC_SCAN)
-#define ENABLE_RANDOM_MAC "ENABLE_RANDOM_MAC"
-#define DISABLE_RANDOM_MAC "DISABLE_RANDOM_MAC"
-#endif /* SUPPORT_RANDOM_MAC_SCAN */
 
 #ifdef WES_SUPPORT
 #define CMD_GETROAMSCANCONTROL "GETROAMSCANCONTROL"
@@ -1056,6 +1053,30 @@ static int wl_android_set_csa(struct net_device *dev, char *command, int total_l
 		return -1;
 	}
 	return 0;
+}
+
+static int
+wl_android_set_bcn_li_dtim(struct net_device *dev, char *command)
+{
+	int ret = 0;
+	int dtim;
+
+	dtim = *(command + strlen(CMD_SETDTIM_IN_SUSPEND) + 1) - '0';
+
+	if (dtim > (MAX_DTIM_ALLOWED_INTERVAL / MAX_DTIM_SKIP_BEACON_INTERVAL)) {
+		DHD_ERROR(("%s: failed, invalid dtim %d\n",
+			__FUNCTION__, dtim));
+		return BCME_ERROR;
+	}
+
+	if (!(ret = net_os_set_suspend_bcn_li_dtim(dev, dtim))) {
+		DHD_TRACE(("%s: SET bcn_li_dtim in suspend %d\n",
+			__FUNCTION__, dtim));
+	} else {
+		DHD_ERROR(("%s: failed %d\n", __FUNCTION__, ret));
+	}
+
+	return ret;
 }
 
 static int
@@ -3762,15 +3783,15 @@ wl_android_set_auto_channel(struct net_device *dev, const char* cmd_str,
 	}
 	WL_INFORM(("HAPD_AUTO_CHANNEL = %d, band=%d \n", channel, band));
 
-		/* If STA is connected, return is STA channel, else ACS can be issued,
-		 * set spect to 0 and proceed with ACS
-		 */
+	/* If STA is connected, return is STA channel, else ACS can be issued,
+	 * set spect to 0 and proceed with ACS
+	 */
 	channel = wl_cfg80211_get_sta_channel(cfg);
-		if (channel) {
+	if (channel) {
 		channel = (channel <= CH_MAX_2G_CHANNEL) ?
 			channel : APCS_DEFAULT_2G_CH;
-			goto done2;
-		}
+		goto done2;
+	}
 
 	ret = wldev_ioctl_get(dev, WLC_GET_SPECT_MANAGMENT, &spect, sizeof(spect));
 	if (ret) {
@@ -5445,7 +5466,7 @@ wl_android_get_murx_bfe_cap(struct net_device *dev, char *command, int total_len
 	bytes_written = snprintf(command, total_len, "%s %d", CMD_GET_MURX_BFE_CAP, cap);
 
 	return bytes_written;
-	}
+}
 
 int
 wl_android_set_murx_bfe_cap(struct net_device *dev, int val)
@@ -6618,6 +6639,9 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 	else if (strnicmp(command, CMD_SETSUSPENDMODE, strlen(CMD_SETSUSPENDMODE)) == 0) {
 		bytes_written = wl_android_set_suspendmode(net, command, priv_cmd.total_len);
 	}
+	else if (strnicmp(command, CMD_SETDTIM_IN_SUSPEND, strlen(CMD_SETDTIM_IN_SUSPEND)) == 0) {
+		bytes_written = wl_android_set_bcn_li_dtim(net, command);
+	}
 	else if (strnicmp(command, CMD_MAXDTIM_IN_SUSPEND, strlen(CMD_MAXDTIM_IN_SUSPEND)) == 0) {
 		bytes_written = wl_android_set_max_dtim(net, command, priv_cmd.total_len);
 	}
@@ -6672,9 +6696,9 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 		if (CHECK_IS_BLOB(dhdp) && !CHECK_IS_MULT_REGREV(dhdp)) {
 			revinfo = 0;
 		} else if ((rev_info_delim) &&
-			(strnicmp(rev_info_delim, CMD_COUNTRY_DELIMITER,
-			strlen(CMD_COUNTRY_DELIMITER)) == 0) &&
-			(rev_info_delim + 1)) {
+				(strnicmp(rev_info_delim, CMD_COUNTRY_DELIMITER,
+				strlen(CMD_COUNTRY_DELIMITER)) == 0) &&
+				(rev_info_delim + 1)) {
 			revinfo  = bcm_atoi(rev_info_delim + 1);
 		}
 
@@ -7260,13 +7284,6 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 				priv_cmd.total_len);
 	}
 #endif /* DHD_ENABLE_BIGDATA_LOGGING */
-#if defined(SUPPORT_RANDOM_MAC_SCAN)
-	else if (strnicmp(command, ENABLE_RANDOM_MAC, strlen(ENABLE_RANDOM_MAC)) == 0) {
-		bytes_written = wl_cfg80211_set_random_mac(net, TRUE);
-	} else if (strnicmp(command, DISABLE_RANDOM_MAC, strlen(DISABLE_RANDOM_MAC)) == 0) {
-		bytes_written = wl_cfg80211_set_random_mac(net, FALSE);
-	}
-#endif /* SUPPORT_RANDOM_MAC_SCAN */
 #ifdef WL_NATOE
 	else if (strnicmp(command, CMD_NATOE, strlen(CMD_NATOE)) == 0) {
 		bytes_written = wl_android_process_natoe_cmd(net, command,

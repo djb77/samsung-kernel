@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie_linux.c 737516 2017-12-21 08:20:40Z $
+ * $Id: dhd_pcie_linux.c 776852 2018-08-16 02:48:56Z $
  */
 
 
@@ -1070,7 +1070,7 @@ int dhdpcie_get_resource(dhdpcie_info_t *dhdpcie_info)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0))
 	if (bcm_pcie_default_state) {
 		pci_load_saved_state(pdev, bcm_pcie_default_state);
-	pci_restore_state(pdev);
+		pci_restore_state(pdev);
 	}
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
 #endif /* EXYNOS_MODULE_PATCH */
@@ -1163,6 +1163,37 @@ int dhdpcie_scan_resource(dhdpcie_info_t *dhdpcie_info)
 
 	return -1; /* FAILURE */
 
+}
+
+void dhdpcie_dump_resource(dhd_bus_t *bus)
+{
+	dhdpcie_info_t *pch;
+
+	if (bus == NULL) {
+		DHD_ERROR(("%s: bus is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	if (bus->dev == NULL) {
+		DHD_ERROR(("%s: bus->dev is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	pch = pci_get_drvdata(bus->dev);
+	if (pch == NULL) {
+		DHD_ERROR(("%s: pch is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	/* BAR0 */
+	DHD_ERROR(("%s: BAR0(VA): 0x%pK, BAR0(PA): "PRINTF_RESOURCE", SIZE: %d\n",
+		__FUNCTION__, pch->regs, pci_resource_start(bus->dev, 0),
+		DONGLE_REG_MAP_SIZE));
+
+	/* BAR1 */
+	DHD_ERROR(("%s: BAR1(VA): 0x%pK, BAR1(PA): "PRINTF_RESOURCE", SIZE: %d\n",
+		__FUNCTION__, pch->tcm, pci_resource_start(bus->dev, 2),
+		pch->tcm_size));
 }
 
 #ifdef SUPPORT_LINKDOWN_RECOVERY

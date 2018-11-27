@@ -380,8 +380,8 @@ static int abox_rdma_compr_set_param(struct platform_device *pdev,
 	int id = platform_data->id;
 	int ret;
 
-	dev_info(dev, "%s[%d] buffer: %p(%llu)\n", __func__, id,
-			runtime->buffer, runtime->buffer_size);
+	dev_info(dev, "%s[%d] buffer: %llu\n", __func__, id,
+			runtime->buffer_size);
 
 #ifdef COMPR_USE_FIXED_MEMORY
 	/* free memory allocated by ALSA */
@@ -1206,13 +1206,11 @@ static int abox_rdma_hw_params(struct snd_pcm_substream *substream,
 	abox_request_big_freq(dev, data->abox_data, dev, big_freq);
 	abox_request_hmp_boost(dev, data->abox_data, dev, hmp_boost);
 
-	dev_info(dev, "%s:DmaAddr=%pad Total=%zu PrdSz=%u(%u) #Prds=%u dma_area=%p rate=%u, width=%d, channels=%u\n",
-			snd_pcm_stream_str(substream), &runtime->dma_addr,
-			runtime->dma_bytes, params_period_size(params),
-			params_period_bytes(params), params_periods(params),
-			runtime->dma_area, params_rate(params),
-			snd_pcm_format_width(params_format(params)),
-			params_channels(params));
+	dev_info(dev, "%s:Total=%zu PrdSz=%u(%u) #Prds=%u rate=%u, width=%d, channels=%u\n",
+			snd_pcm_stream_str(substream), runtime->dma_bytes,
+			params_period_size(params), params_period_bytes(params),
+			params_periods(params), params_rate(params),
+			params_width(params), params_channels(params));
 
 	return 0;
 }

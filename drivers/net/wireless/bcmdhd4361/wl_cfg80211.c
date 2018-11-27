@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.c 763128 2018-05-17 08:38:35Z $
+ * $Id: wl_cfg80211.c 784024 2018-10-10 04:44:24Z $
  */
 /* */
 #include <typedefs.h>
@@ -917,6 +917,7 @@ static int wl_cfg80211_delayed_roam(struct bcm_cfg80211 *cfg, struct net_device 
 	const struct ether_addr *bssid);
 static s32 __wl_update_wiphybands(struct bcm_cfg80211 *cfg, bool notify);
 
+bool wl_is_wps_enrollee_active(struct net_device *ndev, u8 *ie_ptr, u16 len);
 #ifdef WL_CFGVENDOR_SEND_HANG_EVENT
 static void wl_cfgvendor_send_hang_event(struct net_device *dev, u16 reason,
 	char *string, int hang_info_cnt);
@@ -1167,7 +1168,8 @@ static int maxrxpktglom = 0;
 /* IOCtl version read from targeted driver */
 int ioctl_version;
 #ifdef DEBUGFS_CFG80211
-#define S_SUBLOGLEVEL 20
+#define SUBLOGLEVEL 20
+#define SUBLOGLEVELZ SUBLOGLEVEL + 1
 static const struct {
 	u32 log_level;
 	char *sublogname;
@@ -1180,6 +1182,12 @@ static const struct {
 	{WL_DBG_P2P_ACTION, "P2PACTION"}
 };
 #endif
+
+#define BUFSZ 5
+#define BUFSZN	BUFSZ + 1
+
+#define _S(x) #x
+#define S(x) _S(x)
 
 #ifdef CUSTOMER_HW4_DEBUG
 uint prev_dhd_console_ms = 0;
@@ -2833,6 +2841,10 @@ wl_get_valid_channels(struct net_device *ndev, u8 *valid_chan_list, s32 size)
 bool g_first_broadcast_scan = TRUE;
 #endif /* USE_INITIAL_2G_SCAN || USE_INITIAL_SHORT_DWELL_TIME */
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0) && defined(SUPPORT_RANDOM_MAC_SCAN)
+#define SCAN_REQUEST_IE_MAX_LEN 256
+#endif
+
 static s32
 wl_run_escan(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	struct cfg80211_scan_request *request, uint16 action)
@@ -2852,6 +2864,10 @@ wl_run_escan(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	wl_uint32_list_t *list;
 	s32 bssidx = -1;
 	struct net_device *dev = NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0) && defined(SUPPORT_RANDOM_MAC_SCAN)
+	u8 scan_req_ies[SCAN_REQUEST_IE_MAX_LEN] = {0, };
+#endif
+
 #if defined(USE_INITIAL_2G_SCAN) || defined(USE_INITIAL_SHORT_DWELL_TIME)
 	bool is_first_init_2g_scan = false;
 #endif /* USE_INITIAL_2G_SCAN || USE_INITIAL_SHORT_DWELL_TIME */
@@ -2864,6 +2880,26 @@ wl_run_escan(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		err = -EINVAL;
 		goto exit;
 	}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0) && defined(SUPPORT_RANDOM_MAC_SCAN)
+	if (request->ie_len > SCAN_REQUEST_IE_MAX_LEN) {
+		WL_ERR(("IE length is bigger than buffer size\n"));
+		err = BCME_ERROR;
+		goto exit;
+	}
+
+	bcopy(request->ie, scan_req_ies, MIN(request->ie_len, SCAN_REQUEST_IE_MAX_LEN));
+
+	if ((request != NULL) && !ETHER_ISNULLADDR(request->mac_addr) &&
+		!ETHER_ISNULLADDR(request->mac_addr_mask) &&
+		!wl_is_wps_enrollee_active(ndev, scan_req_ies, request->ie_len)) {
+		wl_cfg80211_random_mac_enable(ndev, request->mac_addr,
+			request->mac_addr_mask);
+	} else {
+		wl_cfg80211_random_mac_disable(ndev);
+	}
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0) && defined(SUPPORT_RANDOM_MAC_SCAN) */
+
 	if (!cfg->p2p_supported || !p2p_scan(cfg)) {
 		/* LEGACY SCAN TRIGGER */
 		WL_SCAN((" LEGACY E-SCAN START\n"));
@@ -3393,6 +3429,7 @@ __wl_cfg80211_scan(struct wiphy *wiphy, struct net_device *ndev,
 			}
 		}
 	}
+
 	err = wl_do_escan(cfg, wiphy, ndev, request);
 	if (likely(!err))
 		goto scan_success;
@@ -5538,7 +5575,7 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 	memset(chanspec_list, 0, (sizeof(chanspec_t) * MAX_ROAM_CHANNEL));
 #endif /* ROAM_CHANNEL_CACHE */
 #if defined(SUPPORT_RANDOM_MAC_SCAN)
-	wl_cfg80211_set_random_mac(dev, FALSE);
+	wl_cfg80211_random_mac_disable(dev);
 #endif /* SUPPORT_RANDOM_MAC_SCAN */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0))
@@ -9270,12 +9307,6 @@ static s32 wl_cfg80211_bcn_set_params(
 		}
 	}
 
-	if (info->hidden_ssid != NL80211_HIDDEN_SSID_NOT_IN_USE) {
-		if ((err = wldev_iovar_setint(dev, "closednet", 1)) < 0)
-			WL_ERR(("failed to set hidden : %d\n", err));
-		WL_DBG(("hidden_ssid_enum_val: %d \n", info->hidden_ssid));
-	}
-
 	return err;
 }
 #endif /* LINUX_VERSION >= VERSION(3,4,0) || WL_COMPAT_WIRELESS */
@@ -10099,7 +10130,7 @@ wl_cfg80211_start_ap(
 	WL_DBG(("Enter \n"));
 
 #if defined(SUPPORT_RANDOM_MAC_SCAN)
-	wl_cfg80211_set_random_mac(dev, FALSE);
+	wl_cfg80211_random_mac_disable(dev);
 #endif /* SUPPORT_RANDOM_MAC_SCAN */
 
 	if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) < 0) {
@@ -10216,6 +10247,13 @@ wl_cfg80211_start_ap(
 			WL_DBG(("set WLC_E_PROBREQ_MSG\n"));
 			wl_add_remove_eventmsg(dev, WLC_E_PROBREQ_MSG, true);
 		}
+	}
+
+	/* Configure hidden SSID */
+	if (info->hidden_ssid != NL80211_HIDDEN_SSID_NOT_IN_USE) {
+		if ((err = wldev_iovar_setint(dev, "closednet", 1)) < 0)
+			WL_ERR(("failed to set hidden : %d\n", err));
+		WL_DBG(("hidden_ssid_enum_val: %d \n", info->hidden_ssid));
 	}
 
 #ifdef SUPPORT_AP_RADIO_PWRSAVE
@@ -11352,7 +11390,11 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 	KERNEL_VERSION(3, 3, 0))) && defined(WL_IFACE_COMB_NUM_CHANNELS)
 	wdev->wiphy->flags &= ~WIPHY_FLAG_ENFORCE_COMBINATIONS;
 #endif
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0) && defined(SUPPORT_RANDOM_MAC_SCAN)
+	wdev->wiphy->features |= (NL80211_FEATURE_SCHED_SCAN_RANDOM_MAC_ADDR |
+		NL80211_FEATURE_SCAN_RANDOM_MAC_ADDR);
+	wdev->wiphy->max_sched_scan_plans = 1; /* multiple plans not supported */
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0) */
 	return err;
 }
 
@@ -13494,6 +13536,10 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 #if defined(WLADPS_SEAK_AP_WAR) || defined(WBTEXT)
 	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
 #endif /* WLADPS_SEAK_AP_WAR || WBTEXT */
+#if (defined(CONFIG_ARCH_MSM) && defined(CFG80211_ROAMED_API_UNIFIED)) || \
+	(LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0))
+	struct cfg80211_roam_info roam_info;
+#endif /* (CONFIG_ARCH_MSM && CFG80211_ROAMED_API_UNIFIED) || LINUX_VERSION >= 4.12.0 */
 #ifdef WLFBT
 	uint32 data_len = 0;
 	if (data)
@@ -13554,6 +13600,18 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	WL_ERR(("%s succeeded to " MACDBG " (ch:%d)\n", __FUNCTION__,
 		MAC2STRDBG((const u8*)(&e->addr)), *channel));
 
+#if (defined(CONFIG_ARCH_MSM) && defined(CFG80211_ROAMED_API_UNIFIED)) || \
+	(LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0))
+	memset(&roam_info, 0, sizeof(struct cfg80211_roam_info));
+	roam_info.channel = notify_channel;
+	roam_info.bssid = curbssid;
+	roam_info.req_ie = conn_info->req_ie;
+	roam_info.req_ie_len = conn_info->req_ie_len;
+	roam_info.resp_ie = conn_info->resp_ie;
+	roam_info.resp_ie_len = conn_info->resp_ie_len;
+
+	cfg80211_roamed(ndev, &roam_info, GFP_KERNEL);
+#else
 	cfg80211_roamed(ndev,
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 39)) || defined(WL_COMPAT_WIRELESS)
 		notify_channel,
@@ -13561,6 +13619,7 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		curbssid,
 		conn_info->req_ie, conn_info->req_ie_len,
 		conn_info->resp_ie, conn_info->resp_ie_len, GFP_KERNEL);
+#endif /* (CONFIG_ARCH_MSM && CFG80211_ROAMED_API_UNIFIED) || LINUX_VERSION >= 4.12.0 */
 	WL_DBG(("Report roaming result\n"));
 
 	memcpy(&cfg->last_roamed_addr, &e->addr, ETHER_ADDR_LEN);
@@ -16641,9 +16700,8 @@ s32 wl_cfg80211_attach(struct net_device *ndev, void *context)
 		goto cfg80211_attach_out;
 #endif 
 #if defined(SUPPORT_RANDOM_MAC_SCAN)
-	cfg->random_mac_enabled = FALSE;
+	cfg->random_mac_running = FALSE;
 #endif /* SUPPORT_RANDOM_MAC_SCAN */
-
 
 #if defined(WL_ENABLE_P2P_IF) || defined(WL_NEWCFG_PRIVCMD_SUPPORT)
 	err = wl_cfg80211_attach_p2p(cfg);
@@ -18885,7 +18943,7 @@ static ssize_t
 wl_debuglevel_write(struct file *file, const char __user *userbuf,
 	size_t count, loff_t *ppos)
 {
-	char tbuf[S_SUBLOGLEVEL * ARRAYSIZE(sublogname_map)], sublog[S_SUBLOGLEVEL];
+	char tbuf[SUBLOGLEVELZ * ARRAYSIZE(sublogname_map)], sublog[SUBLOGLEVELZ];
 	char *params, *token, *colon;
 	uint i, tokens, log_on = 0;
 	size_t minsize = min_t(size_t, (sizeof(tbuf) - 1), count);
@@ -18896,7 +18954,7 @@ wl_debuglevel_write(struct file *file, const char __user *userbuf,
 		return -EFAULT;
 	}
 
-	tbuf[minsize + 1] = '\0';
+	tbuf[minsize] = '\0';
 	params = &tbuf[0];
 	colon = strchr(params, '\n');
 	if (colon != NULL)
@@ -18911,7 +18969,7 @@ wl_debuglevel_write(struct file *file, const char __user *userbuf,
 		if (colon != NULL) {
 			*colon = ' ';
 		}
-		tokens = sscanf(token, "%s %u", sublog, &log_on);
+		tokens = sscanf(token, "%"S(SUBLOGLEVEL)"s %u", sublog, &log_on);
 		if (colon != NULL)
 			*colon = ':';
 
@@ -18942,7 +19000,7 @@ wl_debuglevel_read(struct file *file, char __user *user_buf,
 	size_t count, loff_t *ppos)
 {
 	char *param;
-	char tbuf[S_SUBLOGLEVEL * ARRAYSIZE(sublogname_map)];
+	char tbuf[SUBLOGLEVELZ * ARRAYSIZE(sublogname_map)];
 	uint i;
 	memset(tbuf, 0, sizeof(tbuf));
 	param = &tbuf[0];
@@ -19611,12 +19669,6 @@ exit:
 	}
 	return err;
 }
-
-#define BUFSZ 5
-#define BUFSZN	BUFSZ + 1
-
-#define _S(x) #x
-#define S(x) _S(x)
 
 int wl_cfg80211_wbtext_weight_config(struct net_device *ndev, char *data,
 		char *command, int total_len)
@@ -21391,62 +21443,58 @@ wl_cfg80211_get_new_roc_id(struct bcm_cfg80211 *cfg)
 
 #if defined(SUPPORT_RANDOM_MAC_SCAN)
 int
-wl_cfg80211_set_random_mac(struct net_device *dev, bool enable)
+wl_cfg80211_random_mac_enable(struct net_device *dev, uint8 *rand_mac, uint8 *rand_mask)
 {
-	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
-	int ret;
-
-	if (cfg->random_mac_enabled == enable) {
-		WL_ERR(("Random MAC already %s\n", enable ? "Enabled" : "Disabled"));
-		return BCME_OK;
-	}
-
-	if (enable) {
-		ret = wl_cfg80211_random_mac_enable(dev);
-	} else {
-		ret = wl_cfg80211_random_mac_disable(dev);
-	}
-
-	if (!ret) {
-		cfg->random_mac_enabled = enable;
-	}
-
-	return ret;
-}
-
-int
-wl_cfg80211_random_mac_enable(struct net_device *dev)
-{
-	u8 random_mac[ETH_ALEN] = {0, };
-	u8 rand_bytes[3] = {0, };
+	u8 random_mac_addr[ETHER_ADDR_LEN] = {0, };
 	s32 err = BCME_ERROR;
+	int i = 0;
 	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
 
-	if (wl_get_drv_status_all(cfg, CONNECTED) || wl_get_drv_status_all(cfg, CONNECTING) ||
-	    wl_get_drv_status_all(cfg, AP_CREATED) || wl_get_drv_status_all(cfg, AP_CREATING)) {
-		WL_ERR(("fail to Set random mac, current state is wrong\n"));
+	if ((rand_mac == NULL) || (rand_mask == NULL)) {
+		err = BCME_BADARG;
+		WL_ERR(("Fail to Set random mac, bad argument\n"));
+		wl_cfg80211_random_mac_disable(dev);
 		return err;
 	}
 
-	memcpy(random_mac, bcmcfg_to_prmry_ndev(cfg)->dev_addr, ETH_ALEN);
-	get_random_bytes(&rand_bytes, sizeof(rand_bytes));
-
-	if (rand_bytes[2] == 0x0 || rand_bytes[2] == 0xff) {
-		rand_bytes[2] = 0xf0;
+	if (ETHER_ISNULLADDR(rand_mac)) {
+		WL_DBG(("Fail to Set random mac, Invalid rand mac\n"));
+		wl_cfg80211_random_mac_disable(dev);
+		return err;
 	}
 
-	memcpy(&random_mac[3], rand_bytes, sizeof(rand_bytes));
+	if (wl_get_drv_status_all(cfg, CONNECTED) || wl_get_drv_status_all(cfg, CONNECTING) ||
+	    wl_get_drv_status_all(cfg, AP_CREATED) || wl_get_drv_status_all(cfg, AP_CREATING)) {
+		WL_ERR(("Skip to set random mac by current stastus\n"));
+		return err;
+	}
+
+	/* Generate 6 bytes random address */
+	get_random_bytes(&random_mac_addr, sizeof(random_mac_addr));
+
+	/* Overwrite unmasked MAC address */
+	for (i = 0; i < ETHER_ADDR_LEN; i++) {
+		if (rand_mask[i]) {
+			random_mac_addr[i] = rand_mac[i];
+		}
+	}
+
+	/* Modify last mac address if 0x00 or 0xff */
+	if (random_mac_addr[5] == 0x0 || random_mac_addr[5] == 0xff) {
+		random_mac_addr[5] = 0xf0;
+	}
 
 	err = wldev_iovar_setbuf_bsscfg(bcmcfg_to_prmry_ndev(cfg), "cur_etheraddr",
-		random_mac, ETH_ALEN, cfg->ioctl_buf, WLC_IOCTL_SMLEN, 0, &cfg->ioctl_buf_sync);
+		random_mac_addr, ETHER_ADDR_LEN, cfg->ioctl_buf, WLC_IOCTL_SMLEN,
+		0, &cfg->ioctl_buf_sync);
 
 	if (err != BCME_OK) {
-		WL_ERR(("failed to set random generate MAC address\n"));
+		WL_ERR(("Failed to set random generate MAC address\n"));
 	} else {
-		WL_ERR(("set mac " MACDBG " to " MACDBG "\n",
+		cfg->random_mac_running = TRUE;
+		WL_INFORM(("Set random mac " MACDBG " to " MACDBG "\n",
 			MAC2STRDBG((const u8 *)bcmcfg_to_prmry_ndev(cfg)->dev_addr),
-			MAC2STRDBG((const u8 *)&random_mac)));
-		WL_ERR(("random MAC enable done"));
+			MAC2STRDBG((const u8 *)&random_mac_addr)));
 	}
 
 	return err;
@@ -21458,19 +21506,21 @@ wl_cfg80211_random_mac_disable(struct net_device *dev)
 	s32 err = BCME_ERROR;
 	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
 
-	WL_ERR(("set original mac " MACDBG "\n",
-		MAC2STRDBG((const u8 *)bcmcfg_to_prmry_ndev(cfg)->dev_addr)));
+	if (cfg->random_mac_running) {
+		WL_INFORM(("Restore to original MAC address " MACDBG "\n",
+			MAC2STRDBG((const u8 *)bcmcfg_to_prmry_ndev(cfg)->dev_addr)));
 
-	err = wldev_iovar_setbuf_bsscfg(bcmcfg_to_prmry_ndev(cfg), "cur_etheraddr",
-		bcmcfg_to_prmry_ndev(cfg)->dev_addr, ETH_ALEN,
-		cfg->ioctl_buf, WLC_IOCTL_SMLEN, 0, &cfg->ioctl_buf_sync);
+		err = wldev_iovar_setbuf_bsscfg(bcmcfg_to_prmry_ndev(cfg), "cur_etheraddr",
+			bcmcfg_to_prmry_ndev(cfg)->dev_addr, ETHER_ADDR_LEN,
+			cfg->ioctl_buf, WLC_IOCTL_SMLEN, 0, &cfg->ioctl_buf_sync);
 
-	if (err != BCME_OK) {
-		WL_ERR(("failed to set original MAC address\n"));
-	} else {
-		WL_ERR(("random MAC disable done\n"));
+		if (err != BCME_OK) {
+			WL_ERR(("Failed to restore original MAC address\n"));
+		} else {
+			cfg->random_mac_running = FALSE;
+			WL_ERR(("Random MAC disable done\n"));
+		}
 	}
-
 	return err;
 }
 #endif /* SUPPORT_RANDOM_MAC_SCAN */
@@ -23200,3 +23250,103 @@ wl_copy_hang_info_if_falure(struct net_device *dev, u16 reason, s32 ret)
 	return;
 }
 #endif /* WL_CFGVENDOR_SEND_HANG_EVENT */
+
+u8 *
+wl_find_attribute(u8 *buf, u16 len, u16 element_id)
+{
+	u8 *attrib;
+	u16 attrib_id;
+	u16 attrib_len;
+
+	if (!buf) {
+		WL_ERR(("buf null\n"));
+		return NULL;
+	}
+
+	attrib = buf;
+	while (len >= 4) {
+		/* attribute id */
+		attrib_id = *attrib++ << 8;
+		attrib_id |= *attrib++;
+		len -= 2;
+
+		/* 2-byte little endian */
+		attrib_len = *attrib++ << 8;
+		attrib_len |= *attrib++;
+
+		len -= 2;
+		if (attrib_id == element_id) {
+			/* This will point to start of subelement attrib after
+			 * attribute id & len
+			 */
+			return attrib;
+		}
+		if (len > attrib_len) {
+			len -= attrib_len;	/* for the remaining subelt fields */
+			WL_DBG(("Attribue:%4x attrib_len:%d rem_len:%d\n",
+				attrib_id, attrib_len, len));
+
+			/* Go to next subelement */
+			attrib += attrib_len;
+		} else {
+			WL_ERR(("Incorrect Attribue:%4x attrib_len:%d\n",
+				attrib_id, attrib_len));
+			return NULL;
+		}
+	}
+	return NULL;
+}
+
+
+static  u8 *
+wl_retrieve_wps_attribute(u8 *buf, u16 element_id)
+{
+	 wl_wps_ie_t *ie = NULL;
+	 u16 len = 0;
+	 u8 *attrib;
+
+	if (!buf) {
+		WL_ERR(("WPS IE not present"));
+		return 0;
+	}
+
+	ie = (wl_wps_ie_t*) buf;
+	len = ie->len;
+
+	/* Point subel to the P2P IE's subelt field.
+	 * Subtract the preceding fields (id, len, OUI, oui_type) from the length.
+	 */
+	attrib = ie->attrib;
+	len -= 4;	/* exclude OUI + OUI_TYPE */
+
+	/* Search for attrib */
+	return wl_find_attribute(attrib, len, element_id);
+}
+
+#define WPS_ATTR_REQ_TYPE 0x103a
+#define WPS_REQ_TYPE_ENROLLEE 0x01
+bool
+wl_is_wps_enrollee_active(struct net_device *ndev, u8 *ie_ptr, u16 len)
+{
+	 u8 *ie;
+	 u8 *attrib;
+
+	if ((ie = (u8 *)wl_cfgp2p_find_wpsie(ie_ptr, len)) == NULL) {
+		WL_DBG(("WPS IE not present. Do nothing.\n"));
+		return false;
+	}
+
+	if ((attrib = wl_retrieve_wps_attribute(ie, WPS_ATTR_REQ_TYPE)) == NULL) {
+		WL_DBG(("WPS_ATTR_REQ_TYPE not found!\n"));
+		return false;
+	}
+
+	if (*attrib == WPS_REQ_TYPE_ENROLLEE) {
+		WL_DBG(("WPS Enrolle Active\n"));
+		return true;
+	} else {
+		WL_DBG(("WPS_REQ_TYPE:%d\n", *attrib));
+	}
+
+	return false;
+}
