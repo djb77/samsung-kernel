@@ -219,6 +219,9 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	if ((node && of_property_read_bool(node, "usb3-lpm-capable")) ||
 			(pdata && pdata->usb3_lpm_capable))
 		xhci->quirks |= XHCI_LPM_SUPPORT;
+#ifdef CONFIG_USB_HOST_L1_SUPPORT
+	xhci->quirks |= XHCI_LPM_L1_SUPPORT;
+#endif
 	hcd->usb_phy = devm_usb_get_phy_by_phandle(&pdev->dev, "usb-phy", 0);
 	if (IS_ERR(hcd->usb_phy)) {
 		ret = PTR_ERR(hcd->usb_phy);
@@ -280,6 +283,18 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct clk *clk = xhci->clk;
 	int timeout = 0;
 
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+	pr_info("%s \n", __func__);
+	/* In order to prevent kernel panic */
+	if(!pm_runtime_suspended(&xhci->shared_hcd->self.root_hub->dev)) {
+		pr_info("%s, shared_hcd pm_runtime_forbid\n", __func__);
+		pm_runtime_forbid(&xhci->shared_hcd->self.root_hub->dev);
+	}
+	if(!pm_runtime_suspended(&xhci->main_hcd->self.root_hub->dev)) {
+		pr_info("%s, main_hcd pm_runtime_forbid\n", __func__);
+		pm_runtime_forbid(&xhci->main_hcd->self.root_hub->dev);
+	}
+#endif
 	/*
 	 * Sometimes deadlock occurred in this function.
 	 * So, below waiting for completion of hub_event was added.
@@ -294,7 +309,9 @@ static int xhci_plat_remove(struct platform_device *dev)
 		}
 	}
 
+#if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
 	manager_notifier_unregister(&xhci->ccic_xhci_nb);
+#endif
 
 	xhci->xhc_state |= XHCI_STATE_REMOVING;
 	usb_remove_hcd(xhci->shared_hcd);

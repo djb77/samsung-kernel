@@ -2552,7 +2552,7 @@ static void wacom_usb_typec_nb_register_work(struct work_struct *work)
 
 	ret = manager_notifier_register(&wac_i2c->typec_nb,
 					wacom_usb_typec_notification_cb,
-					MANAGER_NOTIFY_CCIC_DP);
+					MANAGER_NOTIFY_CCIC_WACOM);
 	if (ret) {
 		count++;
 		schedule_delayed_work(&wac_i2c->typec_nb_reg_work, msecs_to_jiffies(10));
