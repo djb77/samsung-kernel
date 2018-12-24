@@ -680,8 +680,11 @@ void xhci_stop(struct usb_hcd *hcd)
 	u32 temp;
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+	if (!usb_hcd_is_primary_hcd(hcd))
+		return;
+#endif
 	mutex_lock(&xhci->mutex);
-
 	if (!(xhci->xhc_state & XHCI_STATE_HALTED)) {
 		spin_lock_irq(&xhci->lock);
 
@@ -693,10 +696,12 @@ void xhci_stop(struct usb_hcd *hcd)
 		spin_unlock_irq(&xhci->lock);
 	}
 
+#ifndef CONFIG_USB_HOST_SAMSUNG_FEATURE
 	if (!usb_hcd_is_primary_hcd(hcd)) {
 		mutex_unlock(&xhci->mutex);
 		return;
 	}
+#endif
 
 	xhci_cleanup_msix(xhci);
 
@@ -912,7 +917,7 @@ int xhci_suspend(struct xhci_hcd *xhci, bool do_wakeup)
 		xhci_disable_port_wake_on_bits(xhci);
 
 	/* Don't poll the roothubs on bus suspend. */
-	xhci_dbg(xhci, "%s: stopping port polling.\n", __func__);
+	xhci_info(xhci, "%s: stopping port polling.\n", __func__);
 	clear_bit(HCD_FLAG_POLL_RH, &hcd->flags);
 	del_timer_sync(&hcd->rh_timer);
 	clear_bit(HCD_FLAG_POLL_RH, &xhci->shared_hcd->flags);
