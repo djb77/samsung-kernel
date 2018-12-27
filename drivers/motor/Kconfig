@@ -1,0 +1,31 @@
+
+config MOTOR_DRV_MAX77865
+	tristate "Maxim MAX77854 motor"
+	default n
+	depends on MFD_MAX77865
+	help
+	  If you say yes here you will get support for the
+	  motor of Maxim MAX77865 PMIC.
+	  To enable this driver, MFD_MAX77865 should be enabled and
+	  MFD_MAX77865 calls this driver.
+
+config MOTOR_DRV_MAX77705
+	tristate "Maxim MAX77705 motor"
+	default n
+	depends on MFD_MAX77705
+	help
+	  If you say yes here you will get support for the
+	  motor of Maxim MAX77705 PMIC.
+	  To enable this driver, MFD_MAX77705 should be enabled and
+	  MFD_MAX77705 calls this driver.
+
+config SEC_HAPTIC
+	tristate "sec haptic"
+	default n
+	depends on SEC_SYSFS
+	help
+	  If you say yes here you will get support for the
+	  sec haptic driver.
+	  To enable this driver, SEC_SYSFS should be enabled and
+	  motor driver calls this driver.
+

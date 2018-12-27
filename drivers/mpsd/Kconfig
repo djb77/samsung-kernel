@@ -1,0 +1,18 @@
+menu "MPSD System Intelligence kernel module"
+
+config MPSD
+	bool "Samsung Electronics Co. Ltd. MPSD driver"
+	help
+	  Kernel module to interact with the kernel drivers from
+	  user land to initiate the QoS dialog and get feedback
+	  about the current kernel configuration of different performance
+	  centric modules.
+
+config MPSD_DEBUG
+	bool "Samsung Electronics Co. Ltd. MPSD driver debugger"
+	help
+	  MPSD debugger for verification of the functionalities.
+	  use /sys/mpsd interface
+	  enable only during engineer build to avoid overhead
+
+endmenu
