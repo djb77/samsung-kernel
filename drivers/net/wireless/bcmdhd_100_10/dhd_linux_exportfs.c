@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id$
+ * $Id: dhd_linux_exportfs.c 795947 2018-12-20 10:57:27Z $
  */
 #include <linux/kobject.h>
 #include <linux/proc_fs.h>
@@ -289,7 +289,7 @@ show_mac_addr(struct dhd_info *dev, char *buf)
 {
 	ssize_t ret = 0;
 
-	ret = scnprintf(buf, PAGE_SIZE - 1, MACF"\n",
+	ret = scnprintf(buf, PAGE_SIZE - 1, MACF,
 		(uint32)sysfs_mac_addr.octet[0], (uint32)sysfs_mac_addr.octet[1],
 		(uint32)sysfs_mac_addr.octet[2], (uint32)sysfs_mac_addr.octet[3],
 		(uint32)sysfs_mac_addr.octet[4], (uint32)sysfs_mac_addr.octet[5]);

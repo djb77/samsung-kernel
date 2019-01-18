@@ -239,16 +239,20 @@ void get_customized_country_code(void *adapter, char *country_iso_code, wl_count
 
 #ifdef DHD_PM_CONTROL_FROM_FILE
 extern bool g_pm_control;
+extern uint32 pmmode_val;
 void sec_control_pm(dhd_pub_t *dhd, uint *power_mode)
 {
+#ifndef DHD_EXPORT_CNTL_FILE
 	struct file *fp = NULL;
 	char *filepath = PSMINFO;
+#endif /* DHD_EXPORT_CNTL_FILE */
 	char power_val = 0;
 	int ret = 0;
 #ifdef DHD_ENABLE_LPC
 	uint32 lpc = 0;
 #endif /* DHD_ENABLE_LPC */
 
+#ifndef DHD_EXPORT_CNTL_FILE
 	g_pm_control = FALSE;
 	fp = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(fp) || (fp == NULL)) {
@@ -262,8 +266,27 @@ void sec_control_pm(dhd_pub_t *dhd, uint *power_mode)
 	} else {
 		kernel_read(fp, fp->f_pos, &power_val, 1);
 		DHD_ERROR(("[WIFI_SEC] %s: POWER_VAL = %c \r\n", __FUNCTION__, power_val));
+		filp_close(fp, NULL);
+	}
+#else
+	if (!g_pm_control) {
+		/* Enable PowerSave Mode */
+		dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)power_mode,
+			sizeof(uint), TRUE, 0);
+		DHD_ERROR(("[WIFI_SEC] %s: doesn't set from sysfs"
+			" so set PM to %d\n",
+			__FUNCTION__, *power_mode));
+		return;
+	} else {
+		power_val = (char)pmmode_val;
+	}
+#endif /* !DHD_EXPORT_CNTL_FILE */
 
+#ifdef DHD_EXPORT_CNTL_FILE
+	if (power_val == 0) {
+#else
 	if (power_val == '0') {
+#endif /* DHD_EXPORT_CNTL_FILE */
 #ifdef ROAM_ENABLE
 		uint roamvar = 1;
 #endif // endif
@@ -336,49 +359,22 @@ void sec_control_pm(dhd_pub_t *dhd, uint *power_mode)
 			sizeof(uint), TRUE, 0);
 	}
 }
-
-	if (fp)
-		filp_close(fp, NULL);
-}
 #endif /* DHD_PM_CONTROL_FROM_FILE */
 
 #ifdef MIMO_ANT_SETTING
-int dhd_sel_ant_from_file(dhd_pub_t *dhd)
+int get_ant_val_from_file(uint32 *read_val)
 {
-	struct file *fp = NULL;
 	int ret = -1;
-	uint32 ant_val = 0;
-	uint32 btc_mode = 0;
+	struct file *fp = NULL;
 	char *filepath = ANTINFO;
-	uint chip_id = dhd_bus_chip_id(dhd);
 	char *p_ant_val = NULL;
-#ifndef CUSTOM_SET_ANTNPM
-	wl_config_t rsdb_mode;
-
-	memset(&rsdb_mode, 0, sizeof(rsdb_mode));
-#endif /* !CUSTOM_SET_ANTNPM */
-
-	/* Check if this chip can support MIMO */
-	if (chip_id != BCM4350_CHIP_ID &&
-		chip_id != BCM4354_CHIP_ID &&
-		chip_id != BCM43569_CHIP_ID &&
-		chip_id != BCM4358_CHIP_ID &&
-		chip_id != BCM4359_CHIP_ID &&
-		chip_id != BCM4355_CHIP_ID &&
-		chip_id != BCM4347_CHIP_ID &&
-		chip_id != BCM4361_CHIP_ID) {
-		DHD_ERROR(("[WIFI_SEC] %s: This chipset does not support MIMO\n",
-			__FUNCTION__));
-		return ret;
-	}
+	uint32 ant_val = 0;
 
 	/* Read antenna settings from the file */
 	fp = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		DHD_ERROR(("[WIFI_SEC] %s: File [%s] doesn't exist\n", __FUNCTION__, filepath));
-#ifdef CUSTOM_SET_ANTNPM
-		dhd->mimo_ant_set = 0;
-#endif /* CUSTOM_SET_ANTNPM */
+		ret = -ENOENT;
 		return ret;
 	} else {
 		ret = kernel_read(fp, 0, (char *)&ant_val, sizeof(uint32));
@@ -402,6 +398,49 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 			return -1;
 		}
 	}
+	*read_val = ant_val;
+	return ret;
+}
+
+int dhd_sel_ant_from_file(dhd_pub_t *dhd)
+{
+	int ret = -1;
+	uint32 ant_val = 0;
+	uint32 btc_mode = 0;
+	uint chip_id = dhd_bus_chip_id(dhd);
+#ifndef CUSTOM_SET_ANTNPM
+	wl_config_t rsdb_mode;
+
+	memset(&rsdb_mode, 0, sizeof(rsdb_mode));
+#endif /* !CUSTOM_SET_ANTNPM */
+
+	/* Check if this chip can support MIMO */
+	if (chip_id != BCM4350_CHIP_ID &&
+		chip_id != BCM4354_CHIP_ID &&
+		chip_id != BCM43569_CHIP_ID &&
+		chip_id != BCM4358_CHIP_ID &&
+		chip_id != BCM4359_CHIP_ID &&
+		chip_id != BCM4355_CHIP_ID &&
+		chip_id != BCM4347_CHIP_ID &&
+		chip_id != BCM4361_CHIP_ID &&
+		chip_id != BCM4375_CHIP_ID) {
+		DHD_ERROR(("[WIFI_SEC] %s: This chipset does not support MIMO\n",
+			__FUNCTION__));
+		return ret;
+	}
+
+#ifndef DHD_EXPORT_CNTL_FILE
+	ret = get_ant_val_from_file(&ant_val);
+#else
+	ant_val = antsel;
+#endif /* !DHD_EXPORT_CNTL_FILE */
+	if (ant_val == 0) {
+#ifdef CUSTOM_SET_ANTNPM
+		dhd->mimo_ant_set = 0;
+#endif /* CUSTOM_SET_ANTNPM */
+		return ret;
+		}
+		DHD_ERROR(("[WIFI_SEC]%s: ANT val = %d\n", __FUNCTION__, ant_val));
 
 	/* bt coex mode off */
 	if (dhd_get_fw_mode(dhd->info) == DHD_FLAG_MFG_MODE) {
@@ -457,6 +496,7 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
  */
 int dhd_logtrace_from_file(dhd_pub_t *dhd)
 {
+#ifndef DHD_EXPORT_CNTL_FILE
 	struct file *fp = NULL;
 	int ret = -1;
 	uint32 logtrace = 0;
@@ -493,10 +533,16 @@ int dhd_logtrace_from_file(dhd_pub_t *dhd)
 	}
 
 	return (int)logtrace;
+#else
+	DHD_ERROR(("[WIFI_SEC] %s : LOGTRACE On/Off from sysfs = %d\n",
+		__FUNCTION__, (int)logtrace_val));
+	return (int)logtrace_val;
+#endif /* !DHD_EXPORT_CNTL_FILE */
 }
 #endif /* LOGTRACE_FROM_FILE */
 
 #ifdef USE_WFA_CERT_CONF
+#ifndef DHD_EXPORT_CNTL_FILE
 int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 {
 	struct file *fp = NULL;
@@ -511,12 +557,16 @@ int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 	}
 
 	switch (mode) {
+#ifdef BCMSDIO
 		case SET_PARAM_BUS_TXGLOM_MODE:
 			filepath = PLATFORM_PATH".bustxglom.info";
 			break;
+#endif /* BCMSDIO */
+#if defined(ROAM_ENABLE) || defined(DISABLE_BUILTIN_ROAM)
 		case SET_PARAM_ROAMOFF:
 			filepath = PLATFORM_PATH".roamoff.info";
 			break;
+#endif /* ROAM_ENABLE || DISABLE_BUILTIN_ROAM */
 #ifdef USE_WL_FRAMEBURST
 		case SET_PARAM_FRAMEBURST:
 			filepath = PLATFORM_PATH".frameburst.info";
@@ -558,7 +608,9 @@ int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 	val = bcm_atoi(p_val);
 
 	switch (mode) {
+#if defined(ROAM_ENABLE) || defined(DISABLE_BUILTIN_ROAM)
 		case SET_PARAM_ROAMOFF:
+#endif /* ROAM_ENABLE || DISABLE_BUILTIN_ROAM */
 #ifdef USE_WL_FRAMEBURST
 		case SET_PARAM_FRAMEBURST:
 #endif /* USE_WL_FRAMEBURST */
@@ -580,6 +632,65 @@ int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 	*read_val = (uint)val;
 	return BCME_OK;
 }
+#else
+int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
+{
+	uint val = 0;
+
+	if (!dhd || (mode < SET_PARAM_BUS_TXGLOM_MODE) ||
+		(mode >= PARAM_LAST_VALUE)) {
+		DHD_ERROR(("[WIFI_SEC] %s: invalid argument\n", __FUNCTION__));
+		return BCME_ERROR;
+	}
+
+	switch (mode) {
+#ifdef BCMSDIO
+		case SET_PARAM_BUS_TXGLOM_MODE:
+			if (bus_txglom == VALUENOTSET)
+				return BCME_ERROR;
+			else
+			    val = (uint)bus_txglom;
+			break;
+#endif /* BCMSDIO */
+#if defined(ROAM_ENABLE) || defined(DISABLE_BUILTIN_ROAM)
+		case SET_PARAM_ROAMOFF:
+			if (roam_off == VALUENOTSET)
+				return BCME_ERROR;
+			else
+			    val = (uint)roam_off;
+			break;
+#endif /* ROAM_ENABLE || DISABLE_BUILTIN_ROAM */
+#ifdef USE_WL_FRAMEBURST
+		case SET_PARAM_FRAMEBURST:
+			if (frameburst == VALUENOTSET)
+				return BCME_ERROR;
+			else
+			    val = (uint)frameburst;
+			break;
+#endif /* USE_WL_FRAMEBURST */
+#ifdef USE_WL_TXBF
+		case SET_PARAM_TXBF:
+			if (txbf == VALUENOTSET)
+				return BCME_ERROR;
+			else
+			    val = (uint)txbf;
+			break;
+#endif /* USE_WL_TXBF */
+#ifdef PROP_TXSTATUS
+		case SET_PARAM_PROPTX:
+			if (proptx == VALUENOTSET)
+				return BCME_ERROR;
+			else
+			    val = (uint)proptx;
+			break;
+#endif /* PROP_TXSTATUS */
+		default:
+		    return BCME_ERROR;
+	}
+	*read_val = val;
+	return BCME_OK;
+}
+#endif /* !DHD_EXPORT_CNTL_FILE */
 #endif /* USE_WFA_CERT_CONF */
 
 #ifdef WRITE_WLANINFO
@@ -590,8 +701,8 @@ int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 #define max_len(a, b) ((sizeof(a)/(2)) - (strlen(b)) - (3))
 #define tstr_len(a, b) ((strlen(a)) + (strlen(b)) + (3))
 
-char version_info[512];
-char version_old_info[512];
+char version_info[MAX_VERSION_LEN];
+char version_old_info[MAX_VERSION_LEN];
 
 int write_filesystem(struct file *file, unsigned long long offset,
 	unsigned char* data, unsigned int size)
@@ -610,9 +721,11 @@ int write_filesystem(struct file *file, unsigned long long offset,
 
 uint32 sec_save_wlinfo(char *firm_ver, char *dhd_ver, char *nvram_p, char *clm_ver)
 {
+#ifndef DHD_EXPORT_CNTL_FILE
 	struct file *fp = NULL;
-	struct file *nvfp = NULL;
 	char *filepath = WIFIVERINFO;
+#endif /* DHD_EXPORT_CNTL_FILE */
+	struct file *nvfp = NULL;
 	int min_len, str_len = 0;
 	int ret = 0;
 	char* nvram_buf;
@@ -698,6 +811,7 @@ uint32 sec_save_wlinfo(char *firm_ver, char *dhd_ver, char *nvram_p, char *clm_v
 	DHD_INFO(("[WIFI_SEC] version_info : %s, strlen : %zu\n",
 		version_info, strlen(version_info)));
 
+#ifndef DHD_EXPORT_CNTL_FILE
 	fp = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(fp) || (fp == NULL)) {
 		DHD_ERROR(("[WIFI_SEC] %s: .wifiver.info File open failed.\n", __FUNCTION__));
@@ -722,6 +836,7 @@ uint32 sec_save_wlinfo(char *firm_ver, char *dhd_ver, char *nvram_p, char *clm_v
 		DHD_ERROR(("[WIFI_SEC] save .wifiver.info file.\n"));
 		filp_close(fp, NULL);
 	}
+#endif /* DHD_EXPORT_CNTL_FILE */
 	return ret;
 }
 #endif /* WRITE_WLANINFO */
@@ -742,7 +857,6 @@ early_param("androidboot.hw_rev", get_hw_rev);
 
 #ifdef GEN_SOFTAP_INFO_FILE
 #define SOFTAP_INFO_FILE_FIRST_LINE    "#.softap.info"
-#define SOFTAP_INFO_BUF_SZ 512
 /*
  * # Whether both wifi and hotspot can be turned on at the same time?
  * DualBandConcurrency
@@ -783,8 +897,10 @@ const char *softap_info_values[] = {
 #ifdef GEN_SOFTAP_INFO_FILE
 uint32 sec_save_softap_info(void)
 {
+#ifndef DHD_EXPORT_CNTL_FILE
 	struct file *fp = NULL;
 	char *filepath = SOFTAPINFO;
+#endif /* DHD_EXPORT_CNTL_FILE */
 	char temp_buf[SOFTAP_INFO_BUF_SZ];
 	int ret = -1, idx = 0, rem = 0, written = 0;
 	char *pos = NULL;
@@ -808,6 +924,7 @@ uint32 sec_save_softap_info(void)
 			softap_info_items[idx], softap_info_values[idx]);
 	} while (softap_info_items[++idx] != NULL);
 
+#ifndef DHD_EXPORT_CNTL_FILE
 	fp = filp_open(filepath, O_RDWR | O_CREAT, 0664);
 	if (IS_ERR(fp) || (fp == NULL)) {
 		DHD_ERROR(("[WIFI_SEC] %s: %s File open failed.\n",
@@ -818,6 +935,11 @@ uint32 sec_save_softap_info(void)
 		DHD_ERROR(("[WIFI_SEC] save %s file.\n", SOFTAPINFO));
 		filp_close(fp, NULL);
 	}
+#else
+	strlcpy(softapinfostr, temp_buf, SOFTAP_INFO_BUF_SZ);
+
+	ret = BCME_OK;
+#endif /* !DHD_EXPORT_CNTL_FILE */
 	return ret;
 }
 #endif /* GEN_SOFTAP_INFO_FILE */

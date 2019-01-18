@@ -530,7 +530,7 @@ static inline swp_entry_t get_swap_page(void)
 
 #endif /* CONFIG_SWAP */
 
-#ifdef CONFIG_MEMCG
+#if defined(CONFIG_MEMCG) && !(CONFIG_MEMCG_FORCE_USE_VM_SWAPPINESS)
 static inline int mem_cgroup_swappiness(struct mem_cgroup *memcg)
 {
 	/* Cgroup2 doesn't have per-cgroup swappiness */

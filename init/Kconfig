@@ -1099,6 +1099,11 @@ config MEMCG_SWAP_ENABLED
 	  select this option (if, for some reason, they need to disable it
 	  then swapaccount=0 does the trick).
 
+config MEMCG_FORCE_USE_VM_SWAPPINESS
+	bool "Force to use vm_swappiness instead of memcg->swappiness"
+	depends on MEMCG_SWAP
+	default y
+
 config BLK_CGROUP
 	bool "IO controller"
 	depends on BLOCK

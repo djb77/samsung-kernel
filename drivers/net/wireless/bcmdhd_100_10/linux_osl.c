@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linux_osl.c 782801 2018-10-01 15:16:38Z $
+ * $Id: linux_osl.c 795952 2018-12-20 11:39:02Z $
  */
 
 #define LINUX_PORT
@@ -97,7 +97,11 @@ static void osl_sec_dma_free_consistent(osl_t *osh, void *va, uint size, dmaaddr
 
 /* PCMCIA attribute space access macros */
 
+#ifdef CUSTOMER_HW4_DEBUG
+uint32 g_assert_type = 1; /* By Default not cause Kernel Panic */
+#else
 uint32 g_assert_type = 0; /* By Default Kernel Panic */
+#endif /* CUSTOMER_HW4_DEBUG */
 
 module_param(g_assert_type, int, 0);
 #ifdef	BCM_SECURE_DMA
@@ -115,9 +119,13 @@ static int secdma_found = 0;
 #endif /* BCM_SECURE_DMA */
 
 #ifdef USE_DMA_LOCK
-#define DMA_LOCK(osh)		spin_lock_bh(&(osh)->dma_lock)
-#define DMA_UNLOCK(osh)		spin_unlock_bh(&(osh)->dma_lock)
-#define DMA_LOCK_INIT(osh)	spin_lock_init(&(osh)->dma_lock)
+static void osl_dma_lock(osl_t *osh);
+static void osl_dma_unlock(osl_t *osh);
+static void osl_dma_lock_init(osl_t *osh);
+
+#define DMA_LOCK(osh)		osl_dma_lock(osh)
+#define DMA_UNLOCK(osh)		osl_dma_unlock(osh)
+#define DMA_LOCK_INIT(osh)	osl_dma_lock_init(osh);
 #else
 #define DMA_LOCK(osh)		do { /* noop */ } while(0)
 #define DMA_UNLOCK(osh)		do { /* noop */ } while(0)
@@ -1964,3 +1972,34 @@ osl_timer_del(osl_t *osh, osl_timer_t *t)
 	}
 	return (TRUE);
 }
+
+#ifdef USE_DMA_LOCK
+static void
+osl_dma_lock(osl_t *osh)
+{
+	if (likely(in_irq() || irqs_disabled())) {
+		spin_lock(&osh->dma_lock);
+	} else {
+		spin_lock_bh(&osh->dma_lock);
+		osh->dma_lock_bh = TRUE;
+	}
+}
+
+static void
+osl_dma_unlock(osl_t *osh)
+{
+	if (unlikely(osh->dma_lock_bh)) {
+		osh->dma_lock_bh = FALSE;
+		spin_unlock_bh(&osh->dma_lock);
+	} else {
+		spin_unlock(&osh->dma_lock);
+	}
+}
+
+static void
+osl_dma_lock_init(osl_t *osh)
+{
+	spin_lock_init(&osh->dma_lock);
+	osh->dma_lock_bh = FALSE;
+}
+#endif /* USE_DMA_LOCK */

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.c 784324 2018-10-11 14:43:41Z $
+ * $Id: dhd_pcie.c 795932 2018-12-20 10:27:35Z $
  */
 
 /* include files */
@@ -1940,7 +1940,6 @@ static int concate_revision_bcm4359(dhd_bus_t *bus, char *fw_path, char *nv_path
 #define DEFAULT_CIDINFO_FOR_A1		"r01a_e30a_a1"
 #define DEFAULT_CIDINFO_FOR_B0		"r01i_e32_b0"
 #define MAX_VID_LEN					8
-#define MAX_VNAME_LEN				30
 #define CIS_TUPLE_HDR_LEN		2
 #define CIS_TUPLE_START_ADDRESS		0x18011110
 #define CIS_TUPLE_END_ADDRESS		0x18011167

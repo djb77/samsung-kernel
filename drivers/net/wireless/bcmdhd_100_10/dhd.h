@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd.h 785520 2018-10-19 05:46:02Z $
+ * $Id: dhd.h 795949 2018-12-20 11:06:23Z $
  */
 
 /****************
@@ -88,6 +88,8 @@ int get_scheduler_policy(struct task_struct *p);
 #ifdef DHD_ERPOM
 #include <pom.h>
 #endif /* DHD_ERPOM */
+
+#include <dngl_stats.h>
 
 #ifdef DEBUG_DPC_THREAD_WATCHDOG
 #define MAX_RESCHED_CNT 600
@@ -720,7 +722,21 @@ extern void copy_debug_dump_time(char *dest, char *src);
 #define WL_MAX_PRESERVE_BUFFER	8
 #define FW_LOGSET_MASK_ALL 0xFF
 
+#ifdef WL_MONITOR
+#define MONPKT_EXTRA_LEN	48u
+#endif /* WL_MONITOR */
+
+#define DHDIF_FWDER(dhdif)      FALSE
+
 #if defined(CUSTOMER_HW4)
+#if defined(ANDROID_PLATFORM_VERSION)
+#if (ANDROID_PLATFORM_VERSION >= 9)
+#ifdef DHD_COMMON_DUMP_PATH
+#undef DHD_COMMON_DUMP_PATH
+#endif /* DHD_COMMON_DUMP_PATH */
+#define DHD_COMMON_DUMP_PATH	"/data/vendor/log/wifi/"
+#endif /* ANDROID_PLATFORM_VERSION >= 9 */
+#endif /* ANDROID_PLATFORM_VERSION */
 #ifndef DHD_COMMON_DUMP_PATH
 #define DHD_COMMON_DUMP_PATH	"/data/media/wifi/log/"
 #endif /* !DHD_COMMON_DUMP_PATH */
@@ -2340,6 +2356,9 @@ extern char fw_path2[MOD_PARAM_PATHLEN];
 #if (ANDROID_PLATFORM_VERSION >= 9)
 #define PLATFORM_PATH	"/data/vendor/conn/"
 #define DHD_MAC_ADDR_EXPORT
+#define DHD_ADPS_BAM_EXPORT
+#define DHD_EXPORT_CNTL_FILE
+#define DHD_SOFTAP_DUAL_IF_INFO
 /* ANDROID P(9.0) and later, always use single nvram file */
 #ifndef DHD_USE_SINGLE_NVRAM_FILE
 #define DHD_USE_SINGLE_NVRAM_FILE
@@ -2376,6 +2395,10 @@ extern int dhd_write_macaddr(struct ether_addr *mac);
 static INLINE int dhd_write_macaddr(struct ether_addr *mac) { return 0; }
 #endif /* WRITE_MACADDR */
 #ifdef USE_CID_CHECK
+#define MAX_VNAME_LEN		64
+#ifdef DHD_EXPORT_CNTL_FILE
+extern char cidinfostr[MAX_VNAME_LEN];
+#endif /* DHD_EXPORT_CNTL_FILE */
 extern int dhd_check_module_cid(dhd_pub_t *dhdp);
 extern char *dhd_get_cid_info(unsigned char *vid, int vid_length);
 #else
@@ -2515,6 +2538,20 @@ enum {
 	PARAM_LAST_VALUE
 };
 extern int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val);
+#ifdef DHD_EXPORT_CNTL_FILE
+#define VALUENOTSET 0xFFFFFFFFu
+extern uint32 bus_txglom;
+extern uint32 roam_off;
+#ifdef USE_WL_FRAMEBURST
+extern uint32 frameburst;
+#endif /* USE_WL_FRAMEBURST */
+#ifdef USE_WL_TXBF
+extern uint32 txbf;
+#endif /* USE_WL_TXBF */
+#ifdef PROP_TXSTATUS
+extern uint32 proptx;
+#endif /* PROP_TXSTATUS */
+#endif /* DHD_EXPORT_CNTL_FILE */
 #endif /* USE_WFA_CERT_CONF */
 
 #define dhd_add_flowid(pub, ifidx, ac_prio, ea, flowid)  do {} while (0)
@@ -2975,6 +3012,16 @@ typedef struct _dhd_dump_file_manage {
 
 extern void dhd_dump_file_manage_enqueue(dhd_pub_t *dhd, char *dump_path, char *fname);
 #endif /* DHD_DUMP_MNGR */
+#ifdef DHD_8021X_DUMP
+extern void dhd_dump_eapol_4way_message(char *ifname, unsigned char *dump_data, bool direction);
+#endif /* DHD_8021X_DUMP */
+
+#ifdef PKT_FILTER_SUPPORT
+extern void dhd_pktfilter_offload_set(dhd_pub_t * dhd, char *arg);
+extern void dhd_pktfilter_offload_enable(dhd_pub_t * dhd, char *arg, int enable, int master_mode);
+extern void dhd_pktfilter_offload_delete(dhd_pub_t *dhd, int id);
+#endif // endif
+
 extern uint32 wlreg_l;
 extern uint32 wlreg_h;
 

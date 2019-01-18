@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_cis.c 784308 2018-10-11 13:15:28Z $
+ * $Id: dhd_custom_cis.c 795950 2018-12-20 11:09:00Z $
  */
 
 #include <typedefs.h>
@@ -558,11 +558,16 @@ dhd_check_module_mac(dhd_pub_t *dhdp)
 #ifndef DHD_MAC_ADDR_EXPORT
 		dhd_write_file(filepath_efs, otp_mac_buf, strlen(otp_mac_buf));
 #else
+		/* Export otp_mac_buf to the sys/mac_addr */
 		if (!bcm_ether_atoe(otp_mac_buf, &sysfs_mac_addr)) {
 			DHD_ERROR(("%s : mac parsing err\n", __FUNCTION__));
 			if (dhd_set_default_macaddr(dhdp) < 0) {
 				return BCME_BADARG;
 			}
+		} else {
+			DHD_INFO(("%s : set mac address properly\n", __FUNCTION__));
+			/* set otp mac to sysfs */
+			memcpy(mac, &sysfs_mac_addr, sizeof(sysfs_mac_addr));
 		}
 #endif /* !DHD_MAC_ADDR_EXPORT */
 	}
@@ -638,7 +643,6 @@ dhd_write_macaddr(struct ether_addr *mac)
 #ifdef USE_CID_CHECK
 /* Definitions for module information */
 #define MAX_VID_LEN		8
-#define MAX_VNAME_LEN		30
 
 #ifdef	SUPPORT_MULTIPLE_BOARDTYPE
 #define MAX_BNAME_LEN		6
@@ -669,8 +673,6 @@ board_info_t murata_board_info[] = {
 	{ 0, { 0x00, }, { "" } }   /* Default: Not specified yet */
 };
 #endif /* BCM4361_CHIP */
-#else
-#define MAX_BNAME_LEN		0
 #endif /* SUPPORT_MULTIPLE_BOARDTYPE */
 
 typedef struct {
@@ -852,12 +854,14 @@ int
 dhd_check_module_cid(dhd_pub_t *dhdp)
 {
 	int ret = -1;
+#ifndef DHD_EXPORT_CNTL_FILE
 	const char *cidfilepath = CIDINFO;
+#endif /* DHD_EXPORT_CNTL_FILE */
 	int idx, max;
 	vid_info_t *cur_info;
 	unsigned char *tuple_start = NULL;
 	unsigned char tuple_length = 0;
-	unsigned char cid_info[MAX_VNAME_LEN + MAX_BNAME_LEN];
+	unsigned char cid_info[MAX_VNAME_LEN];
 	int found = FALSE;
 #ifdef SUPPORT_MULTIPLE_BOARDTYPE
 	board_info_t *cur_b_info = NULL;
@@ -968,12 +972,17 @@ write_cid:
 		strcpy(cid_info, cur_info->cid_info);
 
 	DHD_INFO(("%s: CIS MATCH FOUND : %s\n", __FUNCTION__, cid_info));
+#ifndef DHD_EXPORT_CNTL_FILE
 	dhd_write_file(cidfilepath, cid_info, strlen(cid_info) + 1);
+#else
+	strlcpy(cidinfostr, cid_info, MAX_VNAME_LEN);
+#endif /* DHD_EXPORT_CNTL_FILE */
 
 	return ret;
 }
 
 #ifdef SUPPORT_MULTIPLE_MODULE_CIS
+#ifndef DHD_EXPORT_CNTL_FILE
 static bool
 dhd_check_module(char *module_name)
 {
@@ -989,6 +998,13 @@ dhd_check_module(char *module_name)
 	DHD_INFO(("%s: This module is %s \n", __FUNCTION__, vname));
 	return strstr(vname, module_name) ? TRUE : FALSE;
 }
+#else
+bool
+dhd_check_module(char *module_name)
+{
+	return strstr(cidinfostr, module_name) ? TRUE : FALSE;
+}
+#endif /* !DHD_EXPORT_CNTL_FILE */
 
 int
 dhd_check_module_b85a(void)
@@ -1035,19 +1051,25 @@ dhd_check_module_b90(void)
 int
 dhd_check_module_bcm4361(char *module_type, int index, bool *is_murata_fem)
 {
-	int ret, i;
+	int ret = 0, i;
 	char vname[MAX_VNAME_LEN];
-	const char *cidfilepath = CIDINFO;
 	char *ptr = NULL;
+#ifndef DHD_EXPORT_CNTL_FILE
+	const char *cidfilepath = CIDINFO;
+#endif /* DHD_EXPORT_CNTL_FILE */
 
 	memset(vname, 0, sizeof(vname));
 
+#ifndef DHD_EXPORT_CNTL_FILE
 	ret = dhd_read_file(cidfilepath, vname, sizeof(vname) - 1);
 	if (ret < 0) {
 		DHD_ERROR(("%s: failed to get module infomaion from .cid.info\n",
 			__FUNCTION__));
 		return ret;
 	}
+#else
+	strlcpy(vname, cidinfostr, MAX_VNAME_LEN);
+#endif /* DHD_EXPORT_CNTL_FILE */
 
 	for (i = 1, ptr = vname; i < index && ptr; i++) {
 		ptr = bcmstrstr(ptr, "_");

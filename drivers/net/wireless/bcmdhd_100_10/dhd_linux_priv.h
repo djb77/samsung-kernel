@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id$
+ * $Id: dhd_linux_priv.h 795928 2018-12-20 10:21:06Z $
  */
 
 #ifndef __DHD_LINUX_PRIV_H__

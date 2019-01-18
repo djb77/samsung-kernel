@@ -1351,7 +1351,7 @@ DHDOFILES := dhd_pno.o dhd_common.o dhd_ip.o dhd_custom_gpio.o dhd_custom_sec.o 
 	wl_android.o wl_cfg80211.o wl_cfgp2p.o wl_cfg_btcoex.o wldev_common.o \
 	wl_linux_mon.o wl_roam.o dhd_linux_platdev.o dhd_linux_wq.o wl_cfg_btcoex.o \
 	hnd_pktq.o hnd_pktpool.o dhd_custom_cis.o dhd_debug.o dhd_debug_linux.o dhd_mschdbg.o \
-	dhd_dbg_ring.o
+	dhd_dbg_ring.o dhd_linux_exportfs.o
 
 ifeq ($(BUS_IFACE_SDIO),y)
 DHDOFILES += bcmsdh.o bcmsdh_linux.o bcmsdh_sdmmc.o bcmsdh_sdmmc_linux.o
