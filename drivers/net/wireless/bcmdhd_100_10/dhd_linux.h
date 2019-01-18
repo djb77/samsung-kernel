@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.h 791278 2018-11-29 01:05:18Z $
+ * $Id: dhd_linux.h 795937 2018-12-20 10:37:13Z $
  */
 
 /* wifi platform functions for power, interrupt and pre-alloc, either
@@ -50,6 +50,171 @@
 #if defined(CONFIG_WIFI_CONTROL_FUNC)
 #include <linux/wlan_plat.h>
 #endif // endif
+
+#ifdef WL_MONITOR
+#include <bcmmsgbuf.h>
+#define MAX_RADIOTAP_SIZE      256 /* Maximum size to hold HE Radiotap header format */
+#define MAX_MON_PKT_SIZE       (4096 + MAX_RADIOTAP_SIZE)
+#endif /* WL_MONITOR */
+
+#define htod32(i) (i)
+#define htod16(i) (i)
+#define dtoh32(i) (i)
+#define dtoh16(i) (i)
+#define htodchanspec(i) (i)
+#define dtohchanspec(i) (i)
+
+#ifdef BLOCK_IPV6_PACKET
+#define HEX_PREF_STR	"0x"
+#define UNI_FILTER_STR	"010000000000"
+#define ZERO_ADDR_STR	"000000000000"
+#define ETHER_TYPE_STR	"0000"
+#define IPV6_FILTER_STR	"20"
+#define ZERO_TYPE_STR	"00"
+#endif /* BLOCK_IPV6_PACKET */
+
+typedef struct dhd_if_event {
+	struct list_head	list;
+	wl_event_data_if_t	event;
+	char			name[IFNAMSIZ+1];
+	uint8			mac[ETHER_ADDR_LEN];
+} dhd_if_event_t;
+
+/* Interface control information */
+typedef struct dhd_if {
+	struct dhd_info *info;			/* back pointer to dhd_info */
+	/* OS/stack specifics */
+	struct net_device *net;
+	int				idx;			/* iface idx in dongle */
+	uint			subunit;		/* subunit */
+	uint8			mac_addr[ETHER_ADDR_LEN];	/* assigned MAC address */
+	bool			set_macaddress;
+	bool			set_multicast;
+	uint8			bssidx;			/* bsscfg index for the interface */
+	bool			attached;		/* Delayed attachment when unset */
+	bool			txflowcontrol;	/* Per interface flow control indicator */
+	char			name[IFNAMSIZ+1]; /* linux interface name */
+	char			dngl_name[IFNAMSIZ+1]; /* corresponding dongle interface name */
+	struct net_device_stats stats;
+#ifdef PCIE_FULL_DONGLE
+	struct list_head sta_list;		/* sll of associated stations */
+	spinlock_t	sta_list_lock;		/* lock for manipulating sll */
+#endif /* PCIE_FULL_DONGLE */
+	uint32  ap_isolate;			/* ap-isolation settings */
+#ifdef DHD_L2_FILTER
+	bool parp_enable;
+	bool parp_discard;
+	bool parp_allnode;
+	arp_table_t *phnd_arp_table;
+	/* for Per BSS modification */
+	bool dhcp_unicast;
+	bool block_ping;
+	bool grat_arp;
+	bool block_tdls;
+#endif /* DHD_L2_FILTER */
+#ifdef DHD_MCAST_REGEN
+	bool mcast_regen_bss_enable;
+#endif // endif
+	bool rx_pkt_chainable;		/* set all rx packet to chainable config by default */
+	cumm_ctr_t cumm_ctr;		/* cummulative queue length of child flowrings */
+	uint8 tx_paths_active;
+	bool del_in_progress;
+	bool static_if;			/* used to avoid some operations on static_if */
+#ifdef DHD_4WAYM4_FAIL_DISCONNECT
+	struct delayed_work m4state_work;
+	atomic_t m4state;
+#endif /* DHD_4WAYM4_FAIL_DISCONNECT */
+#ifdef DHDTCPSYNC_FLOOD_BLK
+	uint32 tsync_rcvd;
+	uint32 tsyncack_txed;
+	u64 last_sync;
+	struct work_struct  blk_tsfl_work;
+#endif /* DHDTCPSYNC_FLOOD_BLK */
+} dhd_if_t;
+
+struct ipv6_work_info_t {
+	uint8			if_idx;
+	char			ipv6_addr[IPV6_ADDR_LEN];
+	unsigned long		event;
+};
+
+typedef struct dhd_dump {
+	uint8 *buf;
+	int bufsize;
+	uint8 *hscb_buf;
+	int hscb_bufsize;
+} dhd_dump_t;
+
+#ifdef DHD_PCIE_NATIVE_RUNTIMEPM
+struct dhd_rx_tx_work {
+	struct work_struct work;
+	struct sk_buff *skb;
+	struct net_device *net;
+	struct dhd_pub *pub;
+};
+#endif /* DHD_PCIE_NATIVE_RUNTIMEPM */
+
+#if defined(DHD_LB)
+#if !defined(PCIE_FULL_DONGLE)
+#error "DHD Loadbalancing only supported on PCIE_FULL_DONGLE"
+#endif /* !PCIE_FULL_DONGLE */
+#endif /* DHD_LB */
+
+#if defined(DHD_LB_RXP) || defined(DHD_LB_RXC) || defined(DHD_LB_TXC) || \
+	defined(DHD_LB_STATS)
+#if !defined(DHD_LB)
+#error "DHD loadbalance derivatives are supported only if DHD_LB is defined"
+#endif /* !DHD_LB */
+#endif /* DHD_LB_RXP || DHD_LB_RXC || DHD_LB_TXC || DHD_LB_STATS */
+
+#if defined(DHD_LB)
+/* Dynamic CPU selection for load balancing */
+#include <linux/cpu.h>
+#include <linux/cpumask.h>
+#include <linux/notifier.h>
+#include <linux/workqueue.h>
+#include <asm/atomic.h>
+
+#if !defined(DHD_LB_PRIMARY_CPUS)
+#define DHD_LB_PRIMARY_CPUS     0x0 /* Big CPU coreids mask */
+#endif // endif
+#if !defined(DHD_LB_SECONDARY_CPUS)
+#define DHD_LB_SECONDARY_CPUS   0xFE /* Little CPU coreids mask */
+#endif // endif
+
+#define HIST_BIN_SIZE	9
+
+#if defined(DHD_LB_TXP)
+/* Pkttag not compatible with PROP_TXSTATUS or WLFC */
+typedef struct dhd_tx_lb_pkttag_fr {
+	struct net_device *net;
+	int ifidx;
+} dhd_tx_lb_pkttag_fr_t;
+
+#define DHD_LB_TX_PKTTAG_SET_NETDEV(tag, netdevp)	((tag)->net = netdevp)
+#define DHD_LB_TX_PKTTAG_NETDEV(tag)			((tag)->net)
+
+#define DHD_LB_TX_PKTTAG_SET_IFIDX(tag, ifidx)	((tag)->ifidx = ifidx)
+#define DHD_LB_TX_PKTTAG_IFIDX(tag)		((tag)->ifidx)
+#endif /* DHD_LB_TXP */
+
+#endif /* DHD_LB */
+
+#ifdef FILTER_IE
+#define FILTER_IE_PATH "/etc/wifi/filter_ie"
+#define FILTER_IE_BUFSZ 1024 /* ioc buffsize for FILTER_IE */
+#define FILE_BLOCK_READ_SIZE 256
+#define WL_FILTER_IE_IOV_HDR_SIZE OFFSETOF(wl_filter_ie_iov_v1_t, tlvs)
+#endif /* FILTER_IE */
+
+#define NULL_CHECK(p, s, err)  \
+			do { \
+				if (!(p)) { \
+					printk("NULL POINTER (%s) : %s\n", __FUNCTION__, (s)); \
+					err = BCME_ERROR; \
+					return err; \
+				} \
+			} while (0)
 
 #if !defined(CONFIG_WIFI_CONTROL_FUNC)
 #define WLAN_PLAT_NODFS_FLAG	0x01
@@ -104,6 +269,103 @@ typedef struct dhd_sta {
 	int ifidx;              /* index of interface in dhd */
 } dhd_sta_t;
 typedef dhd_sta_t dhd_sta_pool_t;
+
+#ifdef CUSTOMER_HW4
+#ifdef MIMO_ANT_SETTING
+#ifdef DHD_EXPORT_CNTL_FILE
+extern unsigned long antsel;
+#endif /* DHD_EXPORT_CNTL_FILE */
+extern int dhd_sel_ant_from_file(dhd_pub_t *dhd);
+#endif /* MIMO_ANT_SETTING */
+#ifdef WRITE_WLANINFO
+#define MAX_VERSION_LEN		512
+#ifdef DHD_EXPORT_CNTL_FILE
+extern char version_info[MAX_VERSION_LEN];
+#endif /* DHD_EXPORT_CNTL_FILE */
+extern uint32 sec_save_wlinfo(char *firm_ver, char *dhd_ver, char *nvram_p, char *clm_ver);
+#endif /* WRITE_WLANINFO */
+#ifdef DHD_OF_SUPPORT
+extern void interrupt_set_cpucore(int set, unsigned int dpc_cpucore, unsigned int primary_cpucore);
+#endif /* DHD_OF_SUPPORT */
+#ifdef LOGTRACE_FROM_FILE
+extern int dhd_logtrace_from_file(dhd_pub_t *dhd);
+#ifdef DHD_EXPORT_CNTL_FILE
+extern unsigned long logtrace_val;
+#endif /* DHD_EXPORT_CNTL_FILE */
+#endif /* LOGTRACE_FROM_FILE */
+#ifdef GEN_SOFTAP_INFO_FILE
+#define SOFTAP_INFO_BUF_SZ 512
+#ifdef DHD_EXPORT_CNTL_FILE
+extern char softapinfostr[SOFTAP_INFO_BUF_SZ];
+#endif /* DHD_EXPORT_CNTL_FILE */
+extern uint32 sec_save_softap_info(void);
+#endif /* GEN_SOFTAP_INFO_FILE */
+#endif /* CUSTOMER_HW4 */
+
+#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET)
+extern int argos_task_affinity_setup_label(struct task_struct *p, const char *label,
+	struct cpumask * affinity_cpu_mask, struct cpumask * default_cpu_mask);
+extern struct cpumask hmp_slow_cpu_mask;
+extern struct cpumask hmp_fast_cpu_mask;
+extern void set_irq_cpucore(unsigned int irq, cpumask_var_t default_cpu_mask,
+	cpumask_var_t affinity_cpu_mask);
+#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET */
+
+#if (defined(ARGOS_CPU_SCHEDULER) && defined(ARGOS_RPS_CPU_CTL)) || \
+	defined(ARGOS_NOTIFY_CB)
+int argos_register_notifier_init(struct net_device *net);
+int argos_register_notifier_deinit(void);
+
+extern int sec_argos_register_notifier(struct notifier_block *n, char *label);
+extern int sec_argos_unregister_notifier(struct notifier_block *n, char *label);
+
+typedef struct {
+	struct net_device *wlan_primary_netdev;
+	int argos_rps_cpus_enabled;
+} argos_rps_ctrl;
+
+#define RPS_TPUT_THRESHOLD		300
+#define DELAY_TO_CLEAR_RPS_CPUS		300
+#endif /* (ARGOS_RPS_CPU_CTL && ARGOS_CPU_SCHEDULER) || ARGOS_NOTIFY_CB */
+
+#if defined(BT_OVER_SDIO)
+extern void wl_android_set_wifi_on_flag(bool enable);
+#endif /* BT_OVER_SDIO */
+
+#ifdef DHD_LOG_DUMP
+/* 0: DLD_BUF_TYPE_GENERAL, 1: DLD_BUF_TYPE_PRESERVE
+* 2: DLD_BUF_TYPE_SPECIAL
+*/
+#define DLD_BUFFER_NUM 3
+
+#ifndef CUSTOM_LOG_DUMP_BUFSIZE_MB
+#define CUSTOM_LOG_DUMP_BUFSIZE_MB	4 /* DHD_LOG_DUMP_BUF_SIZE 4 MB static memory in kernel */
+#endif /* CUSTOM_LOG_DUMP_BUFSIZE_MB */
+
+#define LOG_DUMP_TOTAL_BUFSIZE (1024 * 1024 * CUSTOM_LOG_DUMP_BUFSIZE_MB)
+#define LOG_DUMP_GENERAL_MAX_BUFSIZE (384 * 1024 * CUSTOM_LOG_DUMP_BUFSIZE_MB)
+#define LOG_DUMP_PRESERVE_MAX_BUFSIZE (128 * 1024 * CUSTOM_LOG_DUMP_BUFSIZE_MB)
+#define LOG_DUMP_SPECIAL_MAX_BUFSIZE (8 * 1024)
+#define LOG_DUMP_ECNTRS_MAX_BUFSIZE (384 * 1024 * CUSTOM_LOG_DUMP_BUFSIZE_MB)
+#define LOG_DUMP_FILTER_MAX_BUFSIZE (128 * 1024 * CUSTOM_LOG_DUMP_BUFSIZE_MB)
+#define LOG_DUMP_MAX_FILESIZE (8 *1024 * 1024) /* 8 MB default */
+#ifdef CONFIG_LOG_BUF_SHIFT
+/* 15% of kernel log buf size, if for example klog buf size is 512KB
+* 15% of 512KB ~= 80KB
+*/
+#define LOG_DUMP_KERNEL_TAIL_FLUSH_SIZE \
+	(15 * ((1 << CONFIG_LOG_BUF_SHIFT)/100))
+#endif /* CONFIG_LOG_BUF_SHIFT */
+
+#define LOG_DUMP_COOKIE_BUFSIZE	1024u
+
+typedef struct {
+	char *hdr_str;
+	log_dump_section_type_t sec_type;
+} dld_hdr_t;
+
+#define DHD_PRINT_BUF_NAME_LEN 30
+#endif /* DHD_LOG_DUMP */
 
 int dhd_wifi_platform_register_drv(void);
 void dhd_wifi_platform_unregister_drv(void);

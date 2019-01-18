@@ -24,27 +24,52 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_bam.h 762150 2018-05-11 03:49:59Z $
+ * $Id: wl_bam.h 795942 2018-12-20 10:51:23Z $
  */
 #ifndef _WL_BAM_H_
 #define _WL_BAM_H_
 #include <typedefs.h>
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
+#include <net/cfg80211.h>
 
 #include <wl_cfgp2p.h>
+#include <dhd.h>
+
+#define WL_BAD_AP_MAX_ENTRY_NUM		20u
 
 typedef struct wl_bad_ap_mngr {
+	osl_t *osh;
+
 	uint32 num;
 	spinlock_t lock;
+#if !defined(DHD_ADPS_BAM_EXPORT)
 	struct mutex fs_lock;		/* lock for bad ap file list */
+#endif  /* !DHD_ADPS_BAM_EXPORT */
 	struct list_head list;
-
-	wl_event_adps_bad_ap_t data;
 } wl_bad_ap_mngr_t;
+
+typedef struct wl_bad_ap_info {
+	struct	ether_addr bssid;
+#if !defined(DHD_ADPS_BAM_EXPORT)
+	struct	tm tm;
+	uint32	status;
+	uint32	reason;
+	uint32	connect_count;
+#endif	/* !DHD_ADPS_BAM_EXPORT */
+} wl_bad_ap_info_t;
+
+typedef struct wl_bad_ap_info_entry {
+	wl_bad_ap_info_t bad_ap;
+	struct list_head list;
+} wl_bad_ap_info_entry_t;
 
 void wl_bad_ap_mngr_init(struct bcm_cfg80211 *cfg);
 void wl_bad_ap_mngr_deinit(struct bcm_cfg80211 *cfg);
+
+int wl_bad_ap_mngr_add(wl_bad_ap_mngr_t *bad_ap_mngr, wl_bad_ap_info_t *bad_ap_info);
+wl_bad_ap_info_entry_t* wl_bad_ap_mngr_find(wl_bad_ap_mngr_t *bad_ap_mngr,
+        const struct ether_addr *bssid);
 
 bool wl_adps_bad_ap_check(struct bcm_cfg80211 *cfg, const struct ether_addr *bssid);
 int wl_adps_enabled(struct bcm_cfg80211 *cfg, struct net_device *ndev);
