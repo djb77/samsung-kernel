@@ -86,3 +86,8 @@ config PROC_STLOG
 	bool "Enable Storage log"
 	depends on PROC_FS
 	default y
+
+config PROC_PARSE_OPTION_ON_MOUNT
+	bool "Parsing mount option on mount"
+	depends on PROC_FS
+	default y

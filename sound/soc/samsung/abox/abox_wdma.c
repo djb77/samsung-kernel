@@ -167,13 +167,11 @@ static int abox_wdma_hw_params(struct snd_pcm_substream *substream,
 		abox_request_cpu_gear_dai(dev, abox_data, rtd->cpu_dai,
 				abox_data->cpu_gear_min - 1);
 
-	dev_info(dev, "%s:DmaAddr=%pad Total=%zu PrdSz=%u(%u) #Prds=%u dma_area=%p rate=%u, width=%d, channels=%u\n",
-			snd_pcm_stream_str(substream), &runtime->dma_addr,
-			runtime->dma_bytes, params_period_size(params),
-			params_period_bytes(params), params_periods(params),
-			runtime->dma_area, params_rate(params),
-			snd_pcm_format_width(params_format(params)),
-			params_channels(params));
+	dev_info(dev, "%s:Total=%zu PrdSz=%u(%u) #Prds=%u rate=%u, width=%d, channels=%u\n",
+			snd_pcm_stream_str(substream), runtime->dma_bytes,
+			params_period_size(params), params_period_bytes(params),
+			params_periods(params), params_rate(params),
+			params_width(params), params_channels(params));
 
 	return 0;
 }

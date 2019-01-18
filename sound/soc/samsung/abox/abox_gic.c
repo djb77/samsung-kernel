@@ -48,7 +48,7 @@ int abox_gic_register_irq_handler(struct device *dev, unsigned int irq,
 {
 	struct abox_gic_data *data = dev_get_drvdata(dev);
 
-	dev_info(dev, "%s(%u, %p, %p)\n", __func__, irq, handler, dev_id);
+	dev_info(dev, "%s(%u, %pf)\n", __func__, irq, handler);
 
 	if (irq >= ARRAY_SIZE(data->handler)) {
 		dev_err(dev, "invalid irq: %d\n", irq);

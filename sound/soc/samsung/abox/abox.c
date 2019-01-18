@@ -620,7 +620,7 @@ static int abox_schedule_ipc(struct device *dev, struct abox_data *data,
 	int retry = 0;
 	int ret;
 
-	dev_dbg(dev, "%s(%d, %p, %zu, %d, %d)\n", __func__, hw_irq, supplement,
+	dev_dbg(dev, "%s(%d, %zu, %d, %d)\n", __func__, hw_irq,
 			size, atomic, sync);
 
 	if (unlikely(sizeof(ipc->msg) < size)) {
@@ -3927,8 +3927,9 @@ int abox_try_to_asrc_off(struct device *dev, struct abox_data *data,
 	snd_soc_dapm_mutex_unlock(snd_soc_component_get_dapm(cmpnt));
 
 	if (!w_asrc || !out_rate || !out_width) {
-		dev_warn(dev, "%s: incomplete path: w_asrc=%p, out_rate=%u, out_width=%u",
-				__func__, w_asrc, out_rate, out_width);
+		dev_warn(dev, "%s: incomplete path: w_asrc=%s, out_rate=%u, out_width=%u",
+				__func__, w_asrc ? w_asrc->name : "(null)",
+				out_rate, out_width);
 		return -EINVAL;
 	}
 
@@ -4851,9 +4852,7 @@ static void abox_reload_extra_firmware(struct abox_data *data, const char *name)
 					ext_fw->name);
 			break;
 		}
-		dev_info(dev, "%s is reloaded at %p (%zu)\n", name,
-				ext_fw->firmware->data,
-				ext_fw->firmware->size);
+		dev_info(dev, "%s is reloaded\n", name);
 	}
 }
 
@@ -4968,8 +4967,7 @@ static int abox_request_firmware(struct device *dev,
 	if (ret < 0) {
 		dev_err(dev, "%s: %s request failed\n", __func__, name);
 	} else {
-		dev_info(dev, "%s is loaded at %p (%zu)\n", name,
-				(*fw)->data, (*fw)->size);
+		dev_info(dev, "%s is loaded\n", name);
 	}
 
 	return ret;
@@ -4992,7 +4990,7 @@ static void abox_complete_sram_firmware_request(const struct firmware *fw,
 
 	data->firmware_sram = fw;
 
-	dev_info(dev, "SRAM firmware loaded at %p (%zu)\n", fw->data, fw->size);
+	dev_info(dev, "SRAM firmware loaded\n");
 
 	abox_request_firmware(dev, &data->firmware_dram, "calliope_dram.bin");
 	abox_request_firmware(dev, &data->firmware_iva, "calliope_iva.bin");
@@ -5359,7 +5357,7 @@ int abox_request_l2c(struct device *dev, struct abox_data *data,
 	if (!abox_test_quirk(data, ABOX_QUIRK_BIT_SHARE_VTS_SRAM))
 		return 0;
 
-	dev_info(dev, "%s(%p, %d)\n", __func__, id, on);
+	dev_info(dev, "%s(%#lx, %d)\n", __func__, (unsigned long)id, on);
 
 	for (request = data->l2c_requests;
 			request - data->l2c_requests < length
@@ -5372,8 +5370,8 @@ int abox_request_l2c(struct device *dev, struct abox_data *data,
 	request->id = id;
 
 	if (request - data->l2c_requests >= ARRAY_SIZE(data->l2c_requests)) {
-		dev_err(dev, "%s: out of index. id=%p, on=%d\n",
-				__func__, id, on);
+		dev_err(dev, "%s: out of index. id=%#lx, on=%d\n",
+				__func__, (unsigned long)id, on);
 		return -ENOMEM;
 	}
 
@@ -5910,9 +5908,7 @@ static int samsung_abox_probe(struct platform_device *pdev)
 				PTR_ERR(data->dram_base));
 		return PTR_ERR(data->dram_base);
 	}
-	dev_info(&pdev->dev, "%s(%pa) is mapped on %p with size of %d\n",
-			"dram firmware", &data->dram_base_phys, data->dram_base,
-			DRAM_FIRMWARE_SIZE);
+	dev_info(dev, "%s(%#x) alloc\n", "dram firmware", DRAM_FIRMWARE_SIZE);
 	iommu_map(data->iommu_domain, IOVA_DRAM_FIRMWARE, data->dram_base_phys,
 			DRAM_FIRMWARE_SIZE, 0);
 
@@ -5923,22 +5919,17 @@ static int samsung_abox_probe(struct platform_device *pdev)
 				PTR_ERR(data->iva_base));
 		return PTR_ERR(data->iva_base);
 	}
-	dev_info(&pdev->dev, "%s(%pa) is mapped on %p with size of %d\n",
-			"iva firmware", &data->iva_base_phys, data->iva_base,
-			IVA_FIRMWARE_SIZE);
+	dev_info(dev, "%s(%#x) alloc\n", "iva firmware", IVA_FIRMWARE_SIZE);
 	iommu_map(data->iommu_domain, IOVA_IVA_FIRMWARE, data->iva_base_phys,
 			IVA_FIRMWARE_SIZE, 0);
 
 	paddr = shm_get_vss_base();
-	dev_info(&pdev->dev, "%s(%pa) is mapped on %p with size of %d\n",
-			"vss firmware", &paddr, phys_to_virt(paddr),
-			shm_get_vss_size());
+	dev_info(dev, "%s(%#x) alloc\n", "vss firmware", shm_get_vss_size());
 	iommu_map(data->iommu_domain, IOVA_VSS_FIRMWARE, paddr,
 			shm_get_vss_size(), 0);
 
 	paddr = shm_get_vparam_base();
-	dev_info(&pdev->dev, "%s(%pa) is mapped on %p with size of %d\n",
-			"vss parameter", &paddr, phys_to_virt(paddr),
+	dev_info(dev, "%s(%#x) alloc\n", "vss parameter",
 			shm_get_vparam_size());
 	iommu_map(data->iommu_domain, IOVA_VSS_PARAMETER, paddr,
 			shm_get_vparam_size(), 0);

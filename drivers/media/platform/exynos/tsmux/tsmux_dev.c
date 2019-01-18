@@ -286,7 +286,7 @@ static int tsmux_open(struct inode *inode, struct file *filp)
 	ctx->set_hex_info = true;
 
 	filp->private_data = ctx;
-	print_tsmux(TSMUX_COMMON, "filp->private_data 0x%p\n",
+	print_tsmux(TSMUX_COMMON, "filp->private_data 0x%pK\n",
 		filp->private_data);
 
 	g_tsmux_dev = tsmux_dev;
@@ -442,17 +442,25 @@ int tsmux_ioctl_m2m_map_buf(struct tsmux_context *ctx, int buf_fd, int buf_size,
 	print_tsmux(TSMUX_M2M, "map m2m in_buf\n");
 
 	buf_info->dmabuf = dma_buf_get(buf_fd);
-	print_tsmux(TSMUX_M2M, "dma_buf_get(%d) ret dmabuf %p\n",
+	print_tsmux(TSMUX_M2M, "dma_buf_get(%d) ret dmabuf %pK\n",
 		buf_fd, buf_info->dmabuf);
 
-	buf_info->dmabuf_att = dma_buf_attach(buf_info->dmabuf, tsmux_dev->dev);
-	print_tsmux(TSMUX_M2M, "dma_buf_attach() ret dmabuf_att %p\n",
-		buf_info->dmabuf_att);
+	if (IS_ERR(buf_info->dmabuf)) {
+		buf_info->dmabuf_att = ERR_PTR(-EINVAL);
+	} else {
+		buf_info->dmabuf_att = dma_buf_attach(buf_info->dmabuf, tsmux_dev->dev);
+		print_tsmux(TSMUX_M2M, "dma_buf_attach() ret dmabuf_att %pK\n",
+			buf_info->dmabuf_att);
+	}
 
-	buf_info->dma_addr = ion_iovmm_map(buf_info->dmabuf_att, 0, buf_size,
-				DMA_TO_DEVICE, 0);
-	print_tsmux(TSMUX_M2M, "ion_iovmm_map() ret dma_addr_t 0x%llx\n",
-		buf_info->dma_addr);
+	if (IS_ERR(buf_info->dmabuf_att)) {
+		buf_info->dma_addr = -EINVAL;
+	} else {
+		buf_info->dma_addr = ion_iovmm_map(buf_info->dmabuf_att, 0, buf_size,
+			DMA_TO_DEVICE, 0);
+		print_tsmux(TSMUX_M2M, "ion_iovmm_map() ret dma_addr_t 0x%llx\n",
+			buf_info->dma_addr);
+	}
 
 	print_tsmux(TSMUX_M2M, "%s--\n", __func__);
 
@@ -476,23 +484,22 @@ int tsmux_ioctl_m2m_unmap_buf(struct tsmux_context *ctx,
 
 	print_tsmux(TSMUX_M2M, "unmap m2m in_buf\n");
 
-
-	if (buf_info->dma_addr) {
-		print_tsmux(TSMUX_M2M, "ion_iovmm_unmap(%p, 0x%llx)\n",
-			buf_info->dmabuf_att, buf_info->dma_addr);
+	if (!IS_ERR_VALUE(buf_info->dma_addr) && buf_info->dma_addr) {
+		print_tsmux(TSMUX_M2M, "ion_iovmm_unmap(%pK, %pK)\n",
+			buf_info->dmabuf_att, (void *)buf_info->dma_addr);
 		ion_iovmm_unmap(buf_info->dmabuf_att, buf_info->dma_addr);
 		buf_info->dma_addr = 0;
 	}
 
-	if (buf_info->dmabuf_att) {
-		print_tsmux(TSMUX_M2M, "dma_buf_detach(%p, %p)\n",
+	if (!IS_ERR_OR_NULL(buf_info->dmabuf_att)) {
+		print_tsmux(TSMUX_M2M, "dma_buf_detach(%pK, %pK)\n",
 			buf_info->dmabuf, buf_info->dmabuf_att);
 		dma_buf_detach(buf_info->dmabuf, buf_info->dmabuf_att);
 		buf_info->dmabuf_att = 0;
 	}
 
-	if (buf_info->dmabuf) {
-		print_tsmux(TSMUX_M2M, "dma_buf_put(%p)\n", buf_info->dmabuf);
+	if (!IS_ERR_OR_NULL(buf_info->dmabuf)) {
+		print_tsmux(TSMUX_M2M, "dma_buf_put(%pK)\n", buf_info->dmabuf);
 		dma_buf_put(buf_info->dmabuf);
 		buf_info->dmabuf = 0;
 	}
@@ -692,6 +699,8 @@ int packetize(struct packetizing_param *param)
 	uint64_t pts = 0;
 	ktime_t ktime;
 	int64_t timestamp;
+	int psi_validation = 0;
+	int psi_len = 0;
 
 	ktime = ktime_get();
 	timestamp = ktime_to_us(ktime);
@@ -744,7 +753,14 @@ int packetize(struct packetizing_param *param)
 	pts = (param->time_stamp * 9ll) / 100ll;
 	config = &ctx->otf_cmd_queue.config;
 
-	if (ctx->otf_cmd_queue.config.pkt_ctrl.psi_en == 1) {
+	psi_validation = 1;
+	if (ctx->psi_info.pat_len < 0 || ctx->psi_info.pmt_len < 0 || ctx->psi_info.pcr_len)
+		psi_validation = 0;
+	psi_len = ctx->psi_info.pat_len + ctx->psi_info.pmt_len + ctx->psi_info.pcr_len;
+	if (psi_len >= TSMUX_PSI_SIZE)
+		psi_validation = 0;
+
+	if (ctx->otf_cmd_queue.config.pkt_ctrl.psi_en == 1 && psi_validation) {
 		/* PCR should be set by tsmux device driver */
 		pcr = param->time_stamp * 27;	// PCR based on a 27MHz clock
 		pcr_base = pcr / 300;
@@ -926,12 +942,16 @@ static bool tsmux_ioctl_otf_q_buf(struct tsmux_context *ctx)
 	spin_lock_irqsave(&tsmux_dev->device_spinlock, flags);
 
 	index = ctx->otf_cmd_queue.cur_buf_num;
-	if (ctx->otf_outbuf_info[index].buf_state == BUF_DQ) {
-		ctx->otf_outbuf_info[index].buf_state = BUF_FREE;
-		print_tsmux(TSMUX_OTF, "otf buf status: BUF_DQ -> BUF_FREE, index: %d\n", index);
-	} else {
-		print_tsmux(TSMUX_ERR, "otf buf unexpected state: %d\n",
+	if (index >= 0 && index < TSMUX_OUT_BUF_CNT) {
+		if (ctx->otf_outbuf_info[index].buf_state == BUF_DQ) {
+			ctx->otf_outbuf_info[index].buf_state = BUF_FREE;
+			print_tsmux(TSMUX_OTF, "otf buf status: BUF_FREE, index: %d\n", index);
+		} else {
+			print_tsmux(TSMUX_ERR, "otf buf unexpected state: %d\n",
 				ctx->otf_outbuf_info[index].buf_state);
+		}
+	} else {
+		print_tsmux(TSMUX_ERR, "otf buf index is invalid %d\n", index);
 	}
 
 	spin_unlock_irqrestore(&tsmux_dev->device_spinlock, flags);
@@ -957,28 +977,32 @@ static bool tsmux_ioctl_otf_map_buf(struct tsmux_context *ctx)
 		out_buf_info = &ctx->otf_outbuf_info[i];
 		user_info = &ctx->otf_cmd_queue.out_buf[i];
 
-		if (user_info->ion_buf_fd > 0) {
-			out_buf_info->dmabuf =
-				dma_buf_get(user_info->ion_buf_fd);
-			print_tsmux(TSMUX_OTF, "dma_buf_get(%d) ret dmabuf %p\n",
-					user_info->ion_buf_fd,
-					out_buf_info->dmabuf);
-
+		out_buf_info->dmabuf =
+			dma_buf_get(user_info->ion_buf_fd);
+		print_tsmux(TSMUX_OTF, "dma_buf_get(%d) ret dmabuf %pK\n",
+			user_info->ion_buf_fd, out_buf_info->dmabuf);
+ 
+		if (IS_ERR(out_buf_info->dmabuf)) {
+			out_buf_info->dmabuf_att = ERR_PTR(-EINVAL);
+		} else {
 			out_buf_info->dmabuf_att =
-				dma_buf_attach(out_buf_info->dmabuf,
-						tsmux_dev->dev);
-			print_tsmux(TSMUX_OTF, "dma_buf_attach() ret dmabuf_att %p\n",
-					out_buf_info->dmabuf_att);
+				dma_buf_attach(out_buf_info->dmabuf, tsmux_dev->dev);
+			print_tsmux(TSMUX_OTF, "dma_buf_attach() ret dmabuf_att %pK\n",
+				out_buf_info->dmabuf_att);
+		}
 
+		if (IS_ERR(out_buf_info->dmabuf_att)) {
+			out_buf_info->dma_addr = -EINVAL;
+		} else {
 			out_buf_info->dma_addr =
 				ion_iovmm_map(out_buf_info->dmabuf_att,
-						0, user_info->buffer_size,
-						DMA_TO_DEVICE, 0);
+					0, user_info->buffer_size,
+					DMA_TO_DEVICE, 0);
 			print_tsmux(TSMUX_OTF, "ion_iovmm_map() ret dma_addr_t 0x%llx\n",
-					out_buf_info->dma_addr);
-
-			out_buf_info->buf_state = BUF_FREE;
+				out_buf_info->dma_addr);
 		}
+
+		out_buf_info->buf_state = BUF_FREE;
 	}
 
 	return true;
@@ -1000,10 +1024,10 @@ int tsmux_ioctl_otf_unmap_buf(struct tsmux_context *ctx)
 	for (i = 0; i < TSMUX_OUT_BUF_CNT; i++) {
 		out_buf_info = &ctx->otf_outbuf_info[i];
 
-		if (out_buf_info->dma_addr) {
-			print_tsmux(TSMUX_OTF, "ion_iovmm_unmmap(%p, 0x%llx)\n",
+		if (!IS_ERR_VALUE(out_buf_info->dma_addr) && out_buf_info->dma_addr) {
+			print_tsmux(TSMUX_OTF, "ion_iovmm_unmmap(%pK, %pK)\n",
 					out_buf_info->dmabuf_att,
-					out_buf_info->dma_addr);
+					(void *)out_buf_info->dma_addr);
 			ion_iovmm_unmap(out_buf_info->dmabuf_att,
 					out_buf_info->dma_addr);
 			out_buf_info->dma_addr = 0;
@@ -1011,8 +1035,8 @@ int tsmux_ioctl_otf_unmap_buf(struct tsmux_context *ctx)
 
 		print_tsmux(TSMUX_OTF, "ion_iovmm_unmap() ok\n");
 
-		if (out_buf_info->dmabuf_att) {
-			print_tsmux(TSMUX_OTF, "dma_buf_detach(%p, %p)\n",
+		if (!IS_ERR_OR_NULL(out_buf_info->dmabuf_att)) {
+			print_tsmux(TSMUX_OTF, "dma_buf_detach(%pK, %pK)\n",
 					out_buf_info->dmabuf,
 					out_buf_info->dmabuf_att);
 			dma_buf_detach(out_buf_info->dmabuf,
@@ -1022,8 +1046,8 @@ int tsmux_ioctl_otf_unmap_buf(struct tsmux_context *ctx)
 
 		print_tsmux(TSMUX_OTF, "dma_buf_detach() ok\n");
 
-		if (out_buf_info->dmabuf) {
-			print_tsmux(TSMUX_OTF, "dma_buf_put(%p)\n",
+		if (!IS_ERR_OR_NULL(out_buf_info->dmabuf)) {
+			print_tsmux(TSMUX_OTF, "dma_buf_put(%pK)\n",
 					out_buf_info->dmabuf);
 			dma_buf_put(out_buf_info->dmabuf);
 			out_buf_info->dmabuf = 0;

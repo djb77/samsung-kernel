@@ -256,14 +256,14 @@ static void abox_dump_auto_dump_work_func(struct work_struct *work)
 				info->auto_pointer = pointer;
 				first = true;
 			}
-			dev_dbg(dev, "%pad, %p, %zx, %zx)\n",
+			dev_dbg(dev, "%pad, %pK, %zx, %zx)\n",
 					&info->buffer.addr, area, bytes,
 					info->auto_pointer);
 			if (pointer < info->auto_pointer || first) {
 				vfs_write(filp, area + info->auto_pointer,
 						bytes - info->auto_pointer,
 						&filp->f_pos);
-				dev_dbg(dev, "vfs_write(%p, %zx)\n",
+				dev_dbg(dev, "vfs_write(%pK, %zx)\n",
 						area + info->auto_pointer,
 						bytes - info->auto_pointer);
 				info->auto_pointer = 0;
@@ -271,7 +271,7 @@ static void abox_dump_auto_dump_work_func(struct work_struct *work)
 			vfs_write(filp, area + info->auto_pointer,
 					pointer - info->auto_pointer,
 					&filp->f_pos);
-			dev_dbg(dev, "vfs_write(%p, %zx)\n",
+			dev_dbg(dev, "vfs_write(%pK, %zx)\n",
 					area + info->auto_pointer,
 					pointer - info->auto_pointer);
 			info->auto_pointer = pointer;
@@ -303,7 +303,8 @@ void abox_dump_register_buffer_work_func(struct work_struct *work)
 			ARRAY_SIZE(abox_dump_list); info++) {
 		id = info->id;
 		if (info->dev && !abox_dump_get_buffer_info(id)) {
-			dev_info(info->dev, "%s[%d]\n", __func__, id);
+			dev_info(info->dev, "%s(%d, %s, %#zx)\n", __func__,
+					id, info->name, info->buffer.bytes);
 			list_add_tail(&info->list, &abox_dump_list_head);
 			platform_device_register_data(info->dev,
 					"samsung-abox-dump", id, NULL, 0);
@@ -319,7 +320,7 @@ int abox_dump_register_buffer(struct device *dev, int id, const char *name,
 {
 	struct abox_dump_buffer_info *info;
 
-	dev_dbg(dev, "%s[%d] %p(%pa)\n", __func__, id, area, &addr);
+	dev_dbg(dev, "%s[%d](%s, %#zx)\n", __func__, id, name, bytes);
 
 	if (id < 0 || id >= ARRAY_SIZE(abox_dump_list)) {
 		dev_err(dev, "invalid id: %d\n", id);
