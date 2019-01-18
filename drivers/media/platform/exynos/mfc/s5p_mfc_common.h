@@ -116,7 +116,8 @@
 #define IS_VP9_ENC(ctx)		((ctx)->codec_mode == S5P_FIMV_CODEC_VP9_ENC)
 #define IS_BPG_ENC(ctx)		((ctx)->codec_mode == S5P_FIMV_CODEC_BPG_ENC)
 
-#define CODEC_NOT_CODED(ctx)	(IS_MPEG4_DEC(ctx) || IS_VC1_DEC(ctx) || IS_VC1_RCV_DEC(ctx))
+#define CODEC_NOT_CODED(ctx)	(IS_MPEG4_DEC(ctx) || IS_VC1_DEC(ctx) ||	\
+				IS_VC1_RCV_DEC(ctx) || IS_VP9_DEC(ctx))
 #define CODEC_INTERLACED(ctx)	(IS_H264_DEC(ctx) || IS_H264_MVC_DEC(ctx) ||	\
 				IS_MPEG2_DEC(ctx) || IS_MPEG4_DEC(ctx) ||	\
 				IS_VC1_DEC(ctx) || IS_VC1_RCV_DEC(ctx))
@@ -137,6 +138,8 @@
 #define OVER_UHD_ENC60(ctx)	((((ctx)->img_width * (ctx)->img_height) == MFC_UHD_RES) && \
 				((ctx)->type == MFCINST_ENCODER) &&	\
 				((ctx)->framerate / 1000) >= 60)
+
+#define IS_SUPER64_BFRAME(ctx, size, type)	((ctx->is_10bit) && (size >= 2) && (type == 3))
 
 /* Extra information for Decoder */
 #define	DEC_SET_DUAL_DPB		(1 << 0)

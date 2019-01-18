@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.c 736010 2017-12-13 08:45:59Z $
+ * $Id: wl_cfgvendor.c 791700 2018-11-30 08:27:58Z $
  */
 
 /*
@@ -318,6 +318,8 @@ wl_cfgvendor_set_country(struct wiphy *wiphy,
 	int err = BCME_ERROR, rem, type;
 	char country_code[WLC_CNTRY_BUF_SZ] = {0};
 	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct net_device *primary_ndev = bcmcfg_to_prmry_ndev(cfg);
 
 	nla_for_each_attr(iter, data, len, rem) {
 		type = nla_type(iter);
@@ -332,7 +334,8 @@ wl_cfgvendor_set_country(struct wiphy *wiphy,
 		}
 	}
 
-	err = wldev_set_country(wdev->netdev, country_code, true, true, -1);
+	/* country code is unique for dongle..hence using primary interface. */
+	err = wldev_set_country(primary_ndev, country_code, true, true, -1);
 	if (err < 0) {
 		WL_ERR(("Set country failed ret:%d\n", err));
 	}
@@ -2279,17 +2282,23 @@ wl_cfgvendor_priv_string_handler(struct wiphy *wiphy,
 		return OSL_ERROR(BCME_DONGLE_DOWN);
 	}
 
+	if (nlioc->offset != sizeof(struct bcm_nlmsg_hdr) ||
+		len <= sizeof(struct bcm_nlmsg_hdr)) {
+		WL_ERR(("invalid offset %d\n", nlioc->offset));
+		return BCME_BADARG;
+	}
 	len -= sizeof(struct bcm_nlmsg_hdr);
 	ret_len = nlioc->len;
 	if (ret_len > 0 || len > 0) {
-		if (len > DHD_IOCTL_MAXLEN) {
+		if (len >= DHD_IOCTL_MAXLEN) {
 			WL_ERR(("oversize input buffer %d\n", len));
-			len = DHD_IOCTL_MAXLEN;
+			len = DHD_IOCTL_MAXLEN - 1;
 		}
-		if (ret_len > DHD_IOCTL_MAXLEN) {
+		if (ret_len >= DHD_IOCTL_MAXLEN) {
 			WL_ERR(("oversize return buffer %d\n", ret_len));
-			ret_len = DHD_IOCTL_MAXLEN;
+			ret_len = DHD_IOCTL_MAXLEN - 1;
 		}
+
 		payload = max(ret_len, len) + 1;
 		buf = vzalloc(payload);
 		if (!buf) {
@@ -2344,12 +2353,13 @@ wl_cfgvendor_priv_string_handler(struct wiphy *wiphy,
 
 struct net_device *
 wl_cfgvendor_get_ndev(struct bcm_cfg80211 *cfg, struct wireless_dev *wdev,
-	const void *data, unsigned long int *out_addr)
+	const char *data, unsigned long int *out_addr)
 {
 	char *pos, *pos1;
 	char ifname[IFNAMSIZ + 1] = {0};
 	struct net_info *iter, *next;
 	struct net_device *ndev = NULL;
+	u32 ifname_len;
 	*out_addr = (unsigned long int) data; /* point to command str by default */
 
 	/* check whether ifname=<ifname> is provided in the command */
@@ -2361,7 +2371,12 @@ wl_cfgvendor_get_ndev(struct bcm_cfg80211 *cfg, struct wireless_dev *wdev,
 			WL_ERR(("command format error \n"));
 			return NULL;
 		}
-		memcpy(ifname, pos, (pos1 - pos));
+
+		ifname_len = pos1 - pos;
+		if (memcpy(ifname, pos, ifname_len) != BCME_OK) {
+			WL_ERR(("Failed to copy data. len: %d\n", ifname_len));
+			return NULL;
+		}
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-qual"
@@ -2398,6 +2413,10 @@ wl_cfgvendor_get_ndev(struct bcm_cfg80211 *cfg, struct wireless_dev *wdev,
  * string.
  */
 #define WL_DRIVER_PRIV_CMD_LEN 512
+
+#ifdef BCM_PRIV_CMD_SUPPORT
+/* strlen("ifname=") + IFNAMESIZE + strlen(" ") + '\0' */
+#define ANDROID_PRIV_CMD_IF_PREFIX_LEN	(7 + IFNAMSIZ + 2)
 static int
 wl_cfgvendor_priv_bcm_handler(struct wiphy *wiphy,
 	struct wireless_dev *wdev, const void  *data, int len)
@@ -2431,62 +2450,105 @@ wl_cfgvendor_priv_bcm_handler(struct wiphy *wiphy,
 			goto exit;
 		}
 
+#if defined(WL_ANDROID_PRIV_CMD_OVER_NL80211)
 		if (type == BRCM_ATTR_DRIVER_CMD) {
-			if (cmd_len >= WL_DRIVER_PRIV_CMD_LEN) {
-				WL_ERR(("Unexpected command length. Ignore the command\n"));
+			if ((cmd_len >= WL_DRIVER_PRIV_CMD_LEN) ||
+				(cmd_len < ANDROID_PRIV_CMD_IF_PREFIX_LEN)) {
+				WL_ERR(("Unexpected command length (%u). Ignore the command\n",
+					cmd_len));
 				err = -EINVAL;
 				goto exit;
 			}
-			net = wl_cfgvendor_get_ndev(cfg, wdev, cmd, &cmd_out);
-			if (!cmd_out || !net) {
-				err = -ENODEV;
-				goto exit;
-			}
-			cmd = (char *)cmd_out;
-			reply_buf = (char *)MALLOCZ(cfg->osh, reply_len);
-			if (!reply_buf) {
-				WL_ERR(("memory alloc failed for %u \n", cmd_len));
+
+			/* check whether there is any ifname prefix provided */
+			if (memcpy(cmd_prefix, cmd, ANDROID_PRIV_CMD_IF_PREFIX_LEN) != BCME_OK) {
+				WL_ERR(("memcpy failed for cmd buffer. len:%d\n", cmd_len));
 				err = -ENOMEM;
 				goto exit;
 			}
-			memcpy(reply_buf, cmd, cmd_len);
-			WL_DBG(("vendor_command: %s len: %u \n", cmd, cmd_len));
-			bytes_written = wl_handle_private_cmd(net, reply_buf, reply_len);
+
+			net = wl_cfgvendor_get_ndev(cfg, wdev, cmd_prefix, &cmd_out);
+			if (!cmd_out || !net) {
+				WL_ERR(("ndev not found\n"));
+				err = -ENODEV;
+				goto exit;
+			}
+
+			/* find offset of the command */
+			current_pos = (char *)cmd_out;
+			cmd_offset = current_pos - cmd_prefix;
+
+			if (!current_pos || (cmd_offset) > ANDROID_PRIV_CMD_IF_PREFIX_LEN) {
+				WL_ERR(("Invalid len cmd_offset: %u \n", cmd_offset));
+				err = -EINVAL;
+				goto exit;
+			}
+
+			/* Private command data in expected to be in str format. To ensure that
+			 * the data is null terminated, copy to a local buffer before use
+			 */
+			cmd_buf = (char *)MALLOCZ(cfg->osh, cmd_buf_len);
+			if (!cmd_buf) {
+				WL_ERR(("memory alloc failed for %u \n", cmd_buf_len));
+				err = -ENOMEM;
+				goto exit;
+			}
+
+			/* Point to the start of command */
+			if (memcpy(cmd_buf, (const void *)(cmd + cmd_offset),
+				(cmd_len - cmd_offset - 1)) != BCME_OK) {
+				WL_ERR(("memcpy failed for cmd buffer. len:%d\n", cmd_len));
+				err = -ENOMEM;
+				goto exit;
+			}
+			cmd_buf[WL_DRIVER_PRIV_CMD_LEN - 1] = '\0';
+
+			WL_DBG(("vendor_command: %s len: %u \n", cmd_buf, cmd_buf_len));
+			bytes_written = wl_handle_private_cmd(net, cmd_buf, cmd_buf_len);
 			WL_DBG(("bytes_written: %d \n", bytes_written));
 			if (bytes_written == 0) {
-				snprintf(reply_buf, reply_len, "%s", "OK");
+				snprintf(cmd_buf, cmd_buf_len, "%s", "OK");
 				data_len = strlen("OK");
 			} else if (bytes_written > 0) {
-				data_len = bytes_written > reply_len ?
-					reply_len : bytes_written;
+				if (bytes_written >= (cmd_buf_len - 1)) {
+					/* Not expected */
+					ASSERT(0);
+					err = -EINVAL;
+					goto exit;
+				}
+				data_len = bytes_written;
 			} else {
 				/* -ve return value. Propagate the error back */
 				err = bytes_written;
 				goto exit;
 			}
-			break;
-		}
-	}
-
-	if ((data_len > 0) && reply_buf) {
-		err =  wl_cfgvendor_send_cmd_reply(wiphy, reply_buf, data_len+1);
-		if (unlikely(err))
+			if ((data_len > 0) && (data_len < (cmd_buf_len - 1)) && cmd_buf) {
+				err =  wl_cfgvendor_send_cmd_reply(wiphy, cmd_buf, data_len+1);
+				if (unlikely(err)) {
 			WL_ERR(("Vendor Command reply failed ret:%d \n", err));
-		else
+				} else {
 			WL_DBG(("Vendor Command reply sent successfully!\n"));
+				}
 	} else {
 		/* No data to be sent back as reply */
-		WL_ERR(("Vendor_cmd: No reply expected. data_len:%u reply_buf %p \n",
-			data_len, reply_buf));
+				WL_ERR(("Vendor_cmd: No reply expected. data_len:%u cmd_buf %p \n",
+					data_len, cmd_buf));
+			}
+			break;
+		}
+#endif /* WL_ANDROID_PRIV_CMD_OVER_NL80211 && OEM_ANDROID */
 	}
 
 exit:
-	if (reply_buf) {
-		MFREE(cfg->osh, reply_buf, reply_len);
+#if defined(WL_ANDROID_PRIV_CMD_OVER_NL80211)
+	if (cmd_buf) {
+		MFREE(cfg->osh, cmd_buf, cmd_buf_len);
 	}
+#endif /* WL_ANDROID_PRIV_CMD_OVER_NL80211 && OEM_ANDROID */
 	net_os_wake_unlock(ndev);
 	return err;
 }
+#endif /* BCM_PRIV_CMD_SUPPORT */
 
 #ifdef WL_NAN
 static const char *nan_attr_to_str(u16 cmd)
@@ -2598,6 +2660,7 @@ static const char *nan_attr_to_str(u16 cmd)
 	C2S(NAN_ATTRIBUTE_DISC_IND_CFG)
 	C2S(NAN_ATTRIBUTE_DWELL_TIME_5G)
 	C2S(NAN_ATTRIBUTE_SCAN_PERIOD_5G)
+	C2S(NAN_ATTRIBUTE_SUB_SID_BEACON)
 	default:
 		return "NAN_ATTRIBUTE_UNKNOWN";
 	}
@@ -2659,6 +2722,9 @@ wl_cfgvendor_brcm_to_nanhal_status(int32 vendor_status)
 			break;
 		case WL_NAN_E_SD_TX_LIST_FULL:
 			hal_status = NAN_STATUS_FOLLOWUP_QUEUE_FULL;
+			break;
+		case WL_NAN_E_BAD_INSTANCE:
+			hal_status = NAN_STATUS_INVALID_PUBLISH_SUBSCRIBE_ID;
 			break;
 		default:
 			WL_ERR(("%s Unknown vendor status, status = %d\n",
@@ -2757,7 +2823,7 @@ wl_cfgvendor_nan_parse_dp_sec_info_args(struct wiphy *wiphy,
 
 	nla_for_each_attr(iter, buf, len, rem) {
 		attr_type = nla_type(iter);
-		WL_DBG(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
+		WL_TRACE(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
 
 		switch (attr_type) {
 		case NAN_ATTRIBUTE_MAC_ADDR:
@@ -2798,7 +2864,7 @@ wl_cfgvendor_nan_parse_datapath_args(struct wiphy *wiphy,
 
 	nla_for_each_attr(iter, buf, len, rem) {
 		attr_type = nla_type(iter);
-		WL_DBG(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
+		WL_TRACE(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
 
 		switch (attr_type) {
 		case NAN_ATTRIBUTE_NDP_ID:
@@ -2910,7 +2976,7 @@ wl_cfgvendor_nan_parse_datapath_args(struct wiphy *wiphy,
 				ret = -EINVAL;
 				goto exit;
 			}
-			WL_DBG(("valid chanspec, chanspec = 0x%04x \n",
+			WL_TRACE(("valid chanspec, chanspec = 0x%04x \n",
 				cmd_data->avail_params.chanspec[0]));
 			break;
 		}
@@ -3000,7 +3066,8 @@ wl_cfgvendor_nan_parse_datapath_args(struct wiphy *wiphy,
 				ret = -ENOMEM;
 				goto exit;
 			}
-			memcpy(cmd_data->svc_info.data, nla_data(iter), cmd_data->svc_info.dlen);
+			memcpy(cmd_data->svc_info.data,
+					nla_data(iter), cmd_data->svc_info.dlen);
 			break;
 		case NAN_ATTRIBUTE_PUBLISH_ID:
 			if (nla_len(iter) != sizeof(uint32)) {
@@ -3015,7 +3082,7 @@ wl_cfgvendor_nan_parse_datapath_args(struct wiphy *wiphy,
 				goto exit;
 			}
 			cmd_data->csid = nla_get_u8(iter);
-			WL_DBG(("CSID = %u\n", cmd_data->csid));
+			WL_TRACE(("CSID = %u\n", cmd_data->csid));
 			break;
 		case NAN_ATTRIBUTE_KEY_TYPE:
 			if (nla_len(iter) != sizeof(uint8)) {
@@ -3023,7 +3090,7 @@ wl_cfgvendor_nan_parse_datapath_args(struct wiphy *wiphy,
 				goto exit;
 			}
 			cmd_data->key_type = nla_get_u8(iter);
-			WL_DBG(("Key Type = %u\n", cmd_data->key_type));
+			WL_TRACE(("Key Type = %u\n", cmd_data->key_type));
 			break;
 		case NAN_ATTRIBUTE_KEY_LEN:
 			if (nla_len(iter) != sizeof(uint32)) {
@@ -3041,7 +3108,7 @@ wl_cfgvendor_nan_parse_datapath_args(struct wiphy *wiphy,
 				ret = -EINVAL;
 				goto exit;
 			}
-			WL_DBG(("valid key length = %u\n", cmd_data->key.dlen));
+			WL_TRACE(("valid key length = %u\n", cmd_data->key.dlen));
 			break;
 		case NAN_ATTRIBUTE_KEY_DATA:
 			if ((!cmd_data->key.dlen) ||
@@ -3097,7 +3164,7 @@ wl_cfgvendor_nan_parse_discover_args(struct wiphy *wiphy,
 
 	nla_for_each_attr(iter, buf, len, rem) {
 		attr_type = nla_type(iter);
-		WL_DBG(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
+		WL_TRACE(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
 
 		switch (attr_type) {
 		case NAN_ATTRIBUTE_TRANSAC_ID:
@@ -3166,7 +3233,8 @@ wl_cfgvendor_nan_parse_discover_args(struct wiphy *wiphy,
 				ret = -ENOMEM;
 				goto exit;
 			}
-			memcpy(cmd_data->svc_info.data, nla_data(iter), cmd_data->svc_info.dlen);
+			memcpy(cmd_data->svc_info.data,
+					nla_data(iter), cmd_data->svc_info.dlen);
 			break;
 		case NAN_ATTRIBUTE_SUBSCRIBE_ID:
 			if (nla_len(iter) != sizeof(uint16)) {
@@ -3477,7 +3545,7 @@ wl_cfgvendor_nan_parse_discover_args(struct wiphy *wiphy,
 			val_u8 =  nla_get_u8(iter);
 			if (val_u8 == 0) {
 				cmd_data->flags |= WL_NAN_PUB_BCAST;
-				WL_DBG(("NAN_ATTRIBUTE_TX_TYPE: flags=NAN_PUB_BCAST\n"));
+				WL_TRACE(("NAN_ATTRIBUTE_TX_TYPE: flags=NAN_PUB_BCAST\n"));
 			}
 			break;
 		case NAN_ATTRIBUTE_SDE_CONTROL_CONFIG_DP:
@@ -3537,7 +3605,7 @@ wl_cfgvendor_nan_parse_discover_args(struct wiphy *wiphy,
 				goto exit;
 			}
 			cmd_data->csid = nla_get_u8(iter);
-			WL_DBG(("CSID = %u\n", cmd_data->csid));
+			WL_TRACE(("CSID = %u\n", cmd_data->csid));
 			break;
 		case NAN_ATTRIBUTE_KEY_TYPE:
 			if (nla_len(iter) != sizeof(uint8)) {
@@ -3545,7 +3613,7 @@ wl_cfgvendor_nan_parse_discover_args(struct wiphy *wiphy,
 				goto exit;
 			}
 			cmd_data->key_type = nla_get_u8(iter);
-			WL_DBG(("Key Type = %u\n", cmd_data->key_type));
+			WL_TRACE(("Key Type = %u\n", cmd_data->key_type));
 			break;
 		case NAN_ATTRIBUTE_KEY_LEN:
 			if (nla_len(iter) != sizeof(uint32)) {
@@ -3563,7 +3631,7 @@ wl_cfgvendor_nan_parse_discover_args(struct wiphy *wiphy,
 					cmd_data->key.dlen));
 				break;
 			}
-			WL_DBG(("valid key length = %u\n", cmd_data->key.dlen));
+			WL_TRACE(("valid key length = %u\n", cmd_data->key.dlen));
 			break;
 		case NAN_ATTRIBUTE_KEY_DATA:
 			if (!cmd_data->key.dlen ||
@@ -3594,7 +3662,11 @@ wl_cfgvendor_nan_parse_discover_args(struct wiphy *wiphy,
 				ret = -EINVAL;
 				goto exit;
 			}
-			cmd_data->rssi_threshold_flag = nla_get_u8(iter);
+			if (nla_get_u8(iter) == 1) {
+				cmd_data->flags |=
+					WL_NAN_RANGE_LIMITED;
+				break;
+			}
 			break;
 		case NAN_ATTRIBUTE_DISC_IND_CFG:
 			if (nla_len(iter) != sizeof(uint8)) {
@@ -3712,13 +3784,13 @@ wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
 	const struct nlattr *iter;
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	int chan;
-	u8 sid_beacon;
+	u8 sid_beacon = 0, sub_sid_beacon = 0;
 
 	NAN_DBG_ENTER();
 
 	nla_for_each_attr(iter, buf, len, rem) {
 		attr_type = nla_type(iter);
-		WL_DBG(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
+		WL_TRACE(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
 
 		switch (attr_type) {
 		/* NAN Enable request attributes */
@@ -3762,11 +3834,24 @@ wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
 				goto exit;
 			}
 			sid_beacon = nla_get_u8(iter);
-			cmd_data->sid_beacon.sid_enable = ((sid_beacon & 0x80) >> 7);
+			cmd_data->sid_beacon.sid_enable = (sid_beacon & 0x01);
 			if (cmd_data->sid_beacon.sid_enable) {
-				cmd_data->sid_beacon.sid_count = (sid_beacon & 0x7f);
+				cmd_data->sid_beacon.sid_count = (sid_beacon >> 1);
+				*nan_attr_mask |= NAN_ATTR_SID_BEACON_CONFIG;
 			}
-			*nan_attr_mask |= NAN_ATTR_SID_BEACON_CONFIG;
+			break;
+		}
+		case NAN_ATTRIBUTE_SUB_SID_BEACON: {
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			sub_sid_beacon = nla_get_u8(iter);
+			cmd_data->sid_beacon.sub_sid_enable = (sub_sid_beacon & 0x01);
+			if (cmd_data->sid_beacon.sub_sid_enable) {
+				cmd_data->sid_beacon.sub_sid_count = (sub_sid_beacon >> 1);
+				*nan_attr_mask |= NAN_ATTR_SUB_SID_BEACON_CONFIG;
+			}
 			break;
 		}
 		case NAN_ATTRIBUTE_SYNC_DISC_2G_BEACON:
@@ -3831,7 +3916,7 @@ wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
 			}
 			cmd_data->nan_oui = nla_get_u32(iter);
 			*nan_attr_mask |= NAN_ATTR_OUI_CONFIG;
-			WL_DBG(("NAN_ATTRIBUTE_OUI: nan_oui=%d\n", cmd_data->nan_oui));
+			WL_TRACE(("nan_oui=%d\n", cmd_data->nan_oui));
 			break;
 		case NAN_ATTRIBUTE_WARMUP_TIME:
 			if (nla_len(iter) != sizeof(uint16)) {
@@ -3861,7 +3946,7 @@ wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
 				ret = -EINVAL;
 				goto exit;
 			}
-			WL_DBG(("valid chanspec, chanspec = 0x%04x \n",
+			WL_TRACE(("valid chanspec, chanspec = 0x%04x \n",
 				cmd_data->chanspec[0]));
 			break;
 		}
@@ -3880,7 +3965,7 @@ wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
 				break;
 			}
 			*nan_attr_mask |= NAN_ATTR_2G_CHAN_CONFIG;
-			WL_DBG(("valid 2.4GHz chanspec, chanspec = 0x%04x \n",
+			WL_TRACE(("valid 2.4GHz chanspec, chanspec = 0x%04x \n",
 				cmd_data->chanspec[1]));
 			break;
 		}
@@ -3899,7 +3984,7 @@ wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
 				break;
 			}
 			*nan_attr_mask |= NAN_ATTR_5G_CHAN_CONFIG;
-			WL_DBG(("valid 5GHz chanspec, chanspec = 0x%04x \n",
+			WL_TRACE(("valid 5GHz chanspec, chanspec = 0x%04x \n",
 				cmd_data->chanspec[2]));
 			break;
 		}
@@ -4019,7 +4104,7 @@ wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
 				goto exit;
 			}
 			cmd_data->csid = nla_get_u8(iter);
-			WL_DBG(("CSID = %u\n", cmd_data->csid));
+			WL_TRACE(("CSID = %u\n", cmd_data->csid));
 			break;
 		case NAN_ATTRIBUTE_SCID_LEN:
 			if (nla_len(iter) != sizeof(uint32)) {
@@ -4037,7 +4122,7 @@ wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
 				WL_ERR(("Not allowed beyond %d\n", MAX_SCID_LEN));
 				goto exit;
 			}
-			WL_DBG(("valid scid length = %u\n", cmd_data->scid.dlen));
+			WL_TRACE(("valid scid length = %u\n", cmd_data->scid.dlen));
 			break;
 		case NAN_ATTRIBUTE_SCID:
 			if (!cmd_data->scid.dlen || (nla_len(iter) != cmd_data->scid.dlen)) {
@@ -4109,7 +4194,18 @@ wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
 			memcpy((char*)&cmd_data->mac_addr, (char*)nla_data(iter),
 				ETHER_ADDR_LEN);
 			break;
-
+		case NAN_ATTRIBUTE_RANDOMIZATION_INTERVAL:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->nmi_rand_intvl = nla_get_u8(iter);
+			if (cmd_data->nmi_rand_intvl > 0) {
+				cfg->nancfg.mac_rand = true;
+			} else {
+				cfg->nancfg.mac_rand = false;
+			}
+			break;
 		default:
 			WL_ERR(("%s: Unknown type, %d\n", __FUNCTION__, attr_type));
 			ret = -EINVAL;
@@ -4128,12 +4224,407 @@ exit:
 
 }
 
+static int
+wl_cfgvendor_nan_dp_estb_event_data_filler(struct sk_buff *msg,
+	nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	ret = nla_put_u32(msg, NAN_ATTRIBUTE_NDP_ID, event_data->ndp_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put NDP ID, ret=%d\n", ret));
+		goto fail;
+	}
+	/*
+	 * NDI mac address of the peer
+	 * (required to derive target ipv6 address)
+	 */
+	ret = nla_put(msg, NAN_ATTRIBUTE_PEER_NDI_MAC_ADDR, ETH_ALEN,
+			event_data->responder_ndi.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put resp ndi, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_RSP_CODE, event_data->status);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put response code, ret=%d\n", ret));
+		goto fail;
+	}
+	if (event_data->svc_info.dlen && event_data->svc_info.data) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN,
+				event_data->svc_info.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info len, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO,
+				event_data->svc_info.dlen, event_data->svc_info.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+
+fail:
+	return ret;
+}
+static int
+wl_cfgvendor_nan_dp_ind_event_data_filler(struct sk_buff *msg,
+		nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID,
+			event_data->pub_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put pub ID, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u32(msg, NAN_ATTRIBUTE_NDP_ID, event_data->ndp_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put NDP ID, ret=%d\n", ret));
+		goto fail;
+	}
+	/* Discovery MAC addr of the peer/initiator */
+	ret = nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETH_ALEN,
+			event_data->remote_nmi.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put remote NMI, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_SECURITY, event_data->security);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put security, ret=%d\n", ret));
+		goto fail;
+	}
+	if (event_data->svc_info.dlen && event_data->svc_info.data) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN,
+				event_data->svc_info.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info len, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO,
+				event_data->svc_info.dlen, event_data->svc_info.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_tx_followup_ind_event_data_filler(struct sk_buff *msg,
+	nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_TRANSAC_ID, event_data->token);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put transaction id, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->local_inst_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put handle, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_STATUS, event_data->status);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put nan status, ret=%d\n", ret));
+		goto fail;
+	}
+	if (event_data->status == NAN_STATUS_SUCCESS) {
+		ret = nla_put(msg, NAN_ATTRIBUTE_REASON,
+				strlen("NAN_STATUS_SUCCESS"), event_data->nan_reason);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put nan reason, ret=%d\n", ret));
+			goto fail;
+		}
+	} else {
+		ret = nla_put(msg, NAN_ATTRIBUTE_REASON,
+				strlen("NAN_STATUS_NO_OTA_ACK"), event_data->nan_reason);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put nan reason, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_svc_terminate_event_filler(struct sk_buff *msg,
+	struct bcm_cfg80211 *cfg, int event_id, nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->local_inst_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put handle, ret=%d\n", ret));
+		goto fail;
+	}
+
+	if (event_id == GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_SUBSCRIBE_ID,
+				event_data->local_inst_id);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put local inst id, ret=%d\n", ret));
+			goto fail;
+		}
+	} else {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID,
+				event_data->local_inst_id);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put local inst id, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_STATUS, event_data->status);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put status, ret=%d\n", ret));
+		goto fail;
+	}
+	if (event_data->status == NAN_STATUS_SUCCESS) {
+		ret = nla_put(msg, NAN_ATTRIBUTE_REASON,
+				strlen("NAN_STATUS_SUCCESS"), event_data->nan_reason);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put nan reason, ret=%d\n", ret));
+			goto fail;
+		}
+	} else {
+		ret = nla_put(msg, NAN_ATTRIBUTE_REASON,
+				strlen("NAN_STATUS_INTERNAL_FAILURE"), event_data->nan_reason);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put nan reason, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+
+	ret = wl_cfgnan_remove_inst_id(cfg, event_data->local_inst_id);
+	if (ret) {
+		WL_ERR(("failed to free svc instance-id[%d], ret=%d, event_id = %d\n",
+				event_data->local_inst_id, ret, event_id));
+		goto fail;
+	}
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_opt_params_filler(struct sk_buff *msg,
+	nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	/* service specific info data */
+	if (event_data->svc_info.dlen && event_data->svc_info.data) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN,
+				event_data->svc_info.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info len, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO,
+				event_data->svc_info.dlen, event_data->svc_info.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info, ret=%d\n", ret));
+			goto fail;
+		}
+		WL_TRACE(("svc info len = %d\n", event_data->svc_info.dlen));
+	}
+
+	/* sdea service specific info data */
+	if (event_data->sde_svc_info.dlen && event_data->sde_svc_info.data) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO_LEN,
+				event_data->sde_svc_info.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put sdea svc info len, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO,
+				event_data->sde_svc_info.dlen,
+				event_data->sde_svc_info.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put sdea svc info, ret=%d\n", ret));
+			goto fail;
+		}
+		WL_TRACE(("sdea svc info len = %d\n", event_data->sde_svc_info.dlen));
+	}
+	/* service control discovery range limit */
+	/* TODO: */
+
+	/* service control binding bitmap */
+	/* TODO: */
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_tx_followup_event_filler(struct sk_buff *msg,
+		nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	/* In followup pkt, instance id and requestor instance id are configured
+	 * from the transmitter perspective. As the event is processed with the
+	 * role of receiver, the local handle should use requestor instance
+	 * id (peer_inst_id)
+	 */
+	WL_TRACE(("handle=%d\n", event_data->requestor_id));
+	WL_TRACE(("inst id (local id)=%d\n", event_data->local_inst_id));
+	WL_TRACE(("peer id (remote id)=%d\n", event_data->requestor_id));
+	WL_TRACE(("peer mac addr=" MACDBG "\n",
+			MAC2STRDBG(event_data->remote_nmi.octet)));
+	WL_TRACE(("peer rssi: %d\n", event_data->fup_rssi));
+	WL_TRACE(("attribute no: %d\n", event_data->attr_num));
+	WL_TRACE(("attribute len: %d\n", event_data->attr_list_len));
+
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->requestor_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put handle, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u32(msg, NAN_ATTRIBUTE_INST_ID, event_data->local_inst_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put local inst id, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_PEER_ID, event_data->requestor_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put requestor inst id, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETHER_ADDR_LEN,
+			event_data->remote_nmi.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put remote nmi, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_s8(msg, NAN_ATTRIBUTE_RSSI_PROXIMITY,
+			event_data->fup_rssi);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put fup rssi, ret=%d\n", ret));
+		goto fail;
+	}
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_sub_match_event_filler(struct sk_buff *msg,
+	nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	WL_TRACE(("handle (sub_id)=%d\n", event_data->sub_id));
+	WL_TRACE(("pub id=%d\n", event_data->pub_id));
+	WL_TRACE(("sub id=%d\n", event_data->sub_id));
+	WL_TRACE(("pub mac addr=" MACDBG "\n",
+			MAC2STRDBG(event_data->remote_nmi.octet)));
+	WL_TRACE(("attr no: %d\n", event_data->attr_num));
+	WL_TRACE(("attr len: %d\n", event_data->attr_list_len));
+
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->sub_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put handle, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID, event_data->pub_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put pub id, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_SUBSCRIBE_ID, event_data->sub_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put Sub Id, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETHER_ADDR_LEN,
+			event_data->remote_nmi.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put remote NMI, ret=%d\n", ret));
+		goto fail;
+	}
+	if (event_data->publish_rssi) {
+		event_data->publish_rssi = -event_data->publish_rssi;
+		ret = nla_put_u8(msg, NAN_ATTRIBUTE_RSSI_PROXIMITY,
+				event_data->publish_rssi);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put publish rssi, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+	if (event_data->ranging_result_present) {
+		ret = nla_put_u32(msg, NAN_ATTRIBUTE_RANGING_INDICATION,
+				event_data->ranging_ind);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put ranging ind, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put_u32(msg, NAN_ATTRIBUTE_RANGING_RESULT,
+				event_data->range_measurement_cm);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put range measurement cm, ret=%d\n",
+					ret));
+			goto fail;
+		}
+	}
+	/*
+	 * handling optional service control, service response filter
+	 */
+	if (event_data->tx_match_filter.dlen && event_data->tx_match_filter.data) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_TX_MATCH_FILTER_LEN,
+				event_data->tx_match_filter.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put tx match filter len, ret=%d\n",
+					ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_TX_MATCH_FILTER,
+				event_data->tx_match_filter.dlen,
+				event_data->tx_match_filter.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put tx match filter data, ret=%d\n",
+					ret));
+			goto fail;
+		}
+		WL_TRACE(("tx matching filter (%d):\n",
+				event_data->tx_match_filter.dlen));
+	}
+
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_de_event_filler(struct sk_buff *msg, nan_event_data_t *event_data)
+{
+	int ret = BCME_OK;
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_ENABLE_STATUS, event_data->enabled);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put event_data->enabled, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_DE_EVENT_TYPE,
+			event_data->nan_de_evt_type);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put nan_de_evt_type, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put(msg, NAN_ATTRIBUTE_CLUSTER_ID, ETH_ALEN,
+			event_data->clus_id.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put clust id, ret=%d\n", ret));
+		goto fail;
+	}
+	/* OOB tests requires local nmi */
+	ret = nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETH_ALEN,
+			event_data->local_nmi.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put NMI, ret=%d\n", ret));
+		goto fail;
+	}
+fail:
+	return ret;
+}
+
 int
 wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
 	int event_id, nan_event_data_t *event_data)
 {
 	int ret = BCME_OK;
-	int buf_len = NAN_EVENT_BUFFER_SIZE;
+	int buf_len = NAN_EVENT_BUFFER_SIZE_LARGE;
 	u16 kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
 
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
@@ -4160,166 +4651,65 @@ wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
 		WL_INFORM_MEM(("[NAN] GOOGLE_NAN_DE_EVENT cluster id=" MACDBG "nmi= " MACDBG "\n",
 			MAC2STRDBG(event_data->clus_id.octet),
 			MAC2STRDBG(event_data->local_nmi.octet)));
-		nla_put_u8(msg, NAN_ATTRIBUTE_ENABLE_STATUS, event_data->enabled);
-		nla_put_u8(msg, NAN_ATTRIBUTE_DE_EVENT_TYPE,
-			event_data->nan_de_evt_type);
-		nla_put(msg, NAN_ATTRIBUTE_CLUSTER_ID, ETH_ALEN,
-				event_data->clus_id.octet);
-		/* OOB tests requires local nmi */
-		nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETH_ALEN,
-				event_data->local_nmi.octet);
-#ifdef WL_NAN_DEBUG
-		WL_DBG(("NAN_EVENT_DE_EVENT:\n"));
-		WL_DBG(("enabled=%d\n", event_data->enabled));
-		WL_DBG(("de_evt_type=%d:\n", event_data->nan_de_evt_type));
-#endif /* WL_NAN_DEBUG */
+		ret = wl_cfgvendor_nan_de_event_filler(msg, event_data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to fill de event data, ret=%d\n", ret));
+			goto fail;
+		}
 		break;
 	}
 	case GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH:
 	case GOOGLE_NAN_EVENT_FOLLOWUP: {
 		if (event_id == GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH) {
 			WL_DBG(("GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH\n"));
-
-			WL_DBG(("handle (sub_id)=%d\n", event_data->sub_id));
-			WL_DBG(("pub id=%d\n", event_data->pub_id));
-			WL_DBG(("sub id=%d\n", event_data->sub_id));
-			WL_DBG(("pub mac addr=" MACDBG "\n",
-				MAC2STRDBG(event_data->remote_nmi.octet)));
-			WL_DBG(("attr no: %d\n", event_data->attr_num));
-			WL_DBG(("attr len: %d\n", event_data->attr_list_len));
-
-			nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->sub_id);
-			nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID, event_data->pub_id);
-			nla_put_u16(msg, NAN_ATTRIBUTE_SUBSCRIBE_ID, event_data->sub_id);
-			nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETHER_ADDR_LEN,
-				event_data->remote_nmi.octet);
-			if (event_data->publish_rssi) {
-				event_data->publish_rssi = -event_data->publish_rssi;
-				nla_put_u8(msg, NAN_ATTRIBUTE_RSSI_PROXIMITY,
-						event_data->publish_rssi);
-			}
-			if (event_data->ranging_result_present) {
-				nla_put_u32(msg, NAN_ATTRIBUTE_RANGING_INDICATION,
-						event_data->ranging_ind);
-				nla_put_u32(msg, NAN_ATTRIBUTE_RANGING_RESULT,
-						event_data->range_measurement_cm);
-			}
-			/*
-			 * handling optional service control, service response filter
-			 */
-			if (event_data->tx_match_filter.dlen && event_data->tx_match_filter.data) {
-				nla_put_u16(msg, NAN_ATTRIBUTE_TX_MATCH_FILTER_LEN,
-						event_data->tx_match_filter.dlen);
-				nla_put(msg, NAN_ATTRIBUTE_TX_MATCH_FILTER,
-						event_data->tx_match_filter.dlen,
-						event_data->tx_match_filter.data);
-				WL_DBG(("tx matching filter (%d):\n",
-					event_data->tx_match_filter.dlen));
+			ret = wl_cfgvendor_nan_sub_match_event_filler(msg, event_data);
+			if (unlikely(ret)) {
+				WL_ERR(("Failed to fill sub match event data, ret=%d\n", ret));
+				goto fail;
 			}
 		} else if (event_id == GOOGLE_NAN_EVENT_FOLLOWUP) {
 			WL_DBG(("GOOGLE_NAN_EVENT_FOLLOWUP\n"));
-
-			/* In followup pkt, instance id and requestor instance id are configured
-			 * from the transmitter perspective. As the event is processed with the
-			 * role of receiver, the local handle should use requestor instance
-			 * id (peer_inst_id)
-			 */
-			WL_DBG(("handle=%d\n", event_data->peer_inst_id));
-			WL_DBG(("inst id (local id)=%d\n", event_data->local_inst_id));
-			WL_DBG(("peer id (remote id)=%d\n", event_data->peer_inst_id));
-			WL_DBG(("peer mac addr=" MACDBG "\n",
-				MAC2STRDBG(event_data->remote_nmi.octet)));
-			WL_DBG(("peer rssi: %d\n", event_data->fup_rssi));
-			WL_DBG(("attribute no: %d\n", event_data->attr_num));
-			WL_DBG(("attribute len: %d\n", event_data->attr_list_len));
-
-			nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->peer_inst_id);
-			nla_put_u32(msg, NAN_ATTRIBUTE_INST_ID, event_data->local_inst_id);
-			nla_put_u16(msg, NAN_ATTRIBUTE_PEER_ID, event_data->peer_inst_id);
-			nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETHER_ADDR_LEN,
-				event_data->remote_nmi.octet);
-			nla_put_s8(msg, NAN_ATTRIBUTE_RSSI_PROXIMITY,
-				event_data->fup_rssi);
+			ret = wl_cfgvendor_nan_tx_followup_event_filler(msg, event_data);
+			if (unlikely(ret)) {
+				WL_ERR(("Failed to fill sub match event data, ret=%d\n", ret));
+				goto fail;
+			}
 		}
-		/* service specific info data */
-		if (event_data->svc_info.dlen && event_data->svc_info.data) {
-			nla_put_u16(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN,
-				event_data->svc_info.dlen);
-			nla_put(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO,
-					event_data->svc_info.dlen, event_data->svc_info.data);
-			WL_DBG(("svc info len = %d\n", event_data->svc_info.dlen));
-		}
-
-		/* sdea service specific info data */
-		if (event_data->sde_svc_info.dlen && event_data->sde_svc_info.data) {
-			nla_put_u16(msg, NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO_LEN,
-					event_data->sde_svc_info.dlen);
-			nla_put(msg, NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO,
-					event_data->sde_svc_info.dlen,
-					event_data->sde_svc_info.data);
-			WL_DBG(("sdea svc info len = %d\n", event_data->sde_svc_info.dlen));
-		}
-		/* service control discovery range limit */
-		/* TODO: */
-
-		/* service control binding bitmap */
-		/* TODO: */
-
-		break;
-	}
-
-	case GOOGLE_NAN_EVENT_DISABLED: {
-		WL_INFORM_MEM(("[NAN] GOOGLE_NAN_EVENT_DISABLED\n"));
-		nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, 0);
-		nla_put_u16(msg, NAN_ATTRIBUTE_STATUS, event_data->status);
-		nla_put(msg, NAN_ATTRIBUTE_REASON,
-			strlen("NAN_STATUS_SUCCESS"), event_data->nan_reason);
-		break;
-	}
-
-	case GOOGLE_NAN_EVENT_PUBLISH_TERMINATED: {
-		WL_DBG(("GOOGLE_NAN_EVENT_PUBLISH_TERMINATED\n"));
-
-		nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->local_inst_id);
-		nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID, event_data->local_inst_id);
-		nla_put_u16(msg, NAN_ATTRIBUTE_STATUS, event_data->status);
-		if (event_data->status == NAN_STATUS_SUCCESS) {
-			nla_put(msg, NAN_ATTRIBUTE_REASON,
-			strlen("NAN_STATUS_SUCCESS"), event_data->nan_reason);
-		} else {
-			nla_put(msg, NAN_ATTRIBUTE_REASON,
-			strlen("NAN_STATUS_INTERNAL_FAILURE"), event_data->nan_reason);
-		}
-
-		ret = wl_cfgnan_remove_inst_id(cfg, event_data->local_inst_id);
-		if (ret) {
-			WL_ERR(("failed to free publisher instance-id[%d], ret=%d\n",
-				event_data->local_inst_id, ret));
-			ret = -EINVAL;
+		ret = wl_cfgvendor_nan_opt_params_filler(msg, event_data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to fill sub match event data, ret=%d\n", ret));
 			goto fail;
 		}
 		break;
 	}
 
-	case GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED: {
-		WL_DBG(("GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED\n"));
-
-		nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->local_inst_id);
-		nla_put_u16(msg, NAN_ATTRIBUTE_SUBSCRIBE_ID, event_data->local_inst_id);
-		nla_put_u16(msg, NAN_ATTRIBUTE_STATUS, event_data->status);
-		if (event_data->status == NAN_STATUS_SUCCESS) {
-			nla_put(msg, NAN_ATTRIBUTE_REASON,
-			strlen("NAN_STATUS_SUCCESS"), event_data->nan_reason);
-		} else {
-			nla_put(msg, NAN_ATTRIBUTE_REASON,
-			strlen("NAN_STATUS_INTERNAL_FAILURE"), event_data->nan_reason);
+	case GOOGLE_NAN_EVENT_DISABLED: {
+		WL_INFORM_MEM(("[NAN] GOOGLE_NAN_EVENT_DISABLED\n"));
+		ret = nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, 0);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put handle, ret=%d\n", ret));
+			goto fail;
 		}
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_STATUS, event_data->status);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put status, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_REASON,
+			strlen("NAN_STATUS_SUCCESS"), event_data->nan_reason);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put reason code, ret=%d\n", ret));
+			goto fail;
+		}
+		break;
+	}
 
-		ret = wl_cfgnan_remove_inst_id(cfg, event_data->local_inst_id);
-		if (ret) {
-			WL_ERR(("failed to free subscriber instance-id[%d], ret=%d\n",
-				event_data->local_inst_id, ret));
-			ret = -EINVAL;
+	case GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED:
+	case GOOGLE_NAN_EVENT_PUBLISH_TERMINATED: {
+		WL_DBG(("GOOGLE_NAN_SVC_TERMINATED, %d\n", event_id));
+		ret = wl_cfgvendor_nan_svc_terminate_event_filler(msg, cfg, event_id, event_data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to fill svc terminate event data, ret=%d\n", ret));
 			goto fail;
 		}
 		break;
@@ -4328,15 +4718,10 @@ wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
 	case GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND: {
 		WL_DBG(("GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND %d\n",
 			GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND));
-		nla_put_u16(msg, NAN_ATTRIBUTE_TRANSAC_ID, event_data->token);
-		nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->local_inst_id);
-		nla_put_u16(msg, NAN_ATTRIBUTE_STATUS, event_data->status);
-		if (event_data->status == NAN_STATUS_SUCCESS) {
-			nla_put(msg, NAN_ATTRIBUTE_REASON,
-			strlen("NAN_STATUS_SUCCESS"), event_data->nan_reason);
-		} else {
-			nla_put(msg, NAN_ATTRIBUTE_REASON,
-			strlen("NAN_STATUS_NO_OTA_ACK"), event_data->nan_reason);
+		ret = wl_cfgvendor_nan_tx_followup_ind_event_data_filler(msg, event_data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to fill tx follow up ind event data, ret=%d\n", ret));
+			goto fail;
 		}
 
 		break;
@@ -4344,49 +4729,37 @@ wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
 
 	case GOOGLE_NAN_EVENT_DATA_REQUEST: {
 		WL_INFORM_MEM(("[NAN] GOOGLE_NAN_EVENT_DATA_REQUEST\n"));
-
-		nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID,
-				event_data->pub_id);
-		nla_put_u32(msg, NAN_ATTRIBUTE_NDP_ID, event_data->ndp_id);
-		/* Discovery MAC addr of the peer/initiator */
-		nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETH_ALEN,
-				event_data->remote_nmi.octet);
-		nla_put_u8(msg, NAN_ATTRIBUTE_SECURITY, event_data->security);
-		if (event_data->svc_info.dlen && event_data->svc_info.data) {
-			nla_put_u16(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN,
-					event_data->svc_info.dlen);
-			nla_put(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO,
-					event_data->svc_info.dlen, event_data->svc_info.data);
+		ret = wl_cfgvendor_nan_dp_ind_event_data_filler(msg, event_data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to fill dp ind event data, ret=%d\n", ret));
+			goto fail;
 		}
-
 		break;
 	}
 
 	case GOOGLE_NAN_EVENT_DATA_CONFIRMATION: {
 		WL_INFORM_MEM(("[NAN] GOOGLE_NAN_EVENT_DATA_CONFIRMATION\n"));
 
-		nla_put_u32(msg, NAN_ATTRIBUTE_NDP_ID, event_data->ndp_id);
-		/*
-		 * NDI mac address of the peer
-		 * (required to derive target ipv6 address)
-		 */
-		nla_put(msg, NAN_ATTRIBUTE_PEER_NDI_MAC_ADDR, ETH_ALEN,
-				event_data->responder_ndi.octet);
-		nla_put_u8(msg, NAN_ATTRIBUTE_RSP_CODE, event_data->status);
-		if (event_data->svc_info.dlen && event_data->svc_info.data) {
-			nla_put_u16(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN,
-					event_data->svc_info.dlen);
-			nla_put(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO,
-					event_data->svc_info.dlen, event_data->svc_info.data);
+		ret = wl_cfgvendor_nan_dp_estb_event_data_filler(msg, event_data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to fill dp estb event data, ret=%d\n", ret));
+			goto fail;
 		}
-
 		break;
 	}
 
 	case GOOGLE_NAN_EVENT_DATA_END: {
 		WL_INFORM_MEM(("[NAN] GOOGLE_NAN_EVENT_DATA_END\n"));
-		nla_put_u8(msg, NAN_ATTRIBUTE_INST_COUNT, 1);
-		nla_put_u32(msg, NAN_ATTRIBUTE_NDP_ID, event_data->ndp_id);
+		ret = nla_put_u8(msg, NAN_ATTRIBUTE_INST_COUNT, 1);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put inst count, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put_u32(msg, NAN_ATTRIBUTE_NDP_ID, event_data->ndp_id);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put ndp id, ret=%d\n", ret));
+			goto fail;
+		}
 		break;
 	}
 
@@ -4400,9 +4773,10 @@ wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
 
 fail:
 	dev_kfree_skb_any(msg);
-	WL_ERR(("Event not implemented or unknown -- Free skb, event_id = %d\n", event_id));
+	WL_ERR(("Event not implemented or unknown -- Free skb, event_id = %d, ret = %d\n",
+			event_id, ret));
 	NAN_DBG_EXIT();
-	return -EINVAL;
+	return ret;
 }
 
 static int
@@ -4441,6 +4815,8 @@ wl_cfgvendor_nan_req_subscribe(struct wiphy *wiphy,
 			WL_ERR(("failed to generate instance-id for subscribe\n"));
 			goto exit;
 		}
+	} else {
+		cmd_data->svc_update = true;
 	}
 
 	ret = wl_cfgnan_subscribe_handler(wdev->netdev, cfg, cmd_data);
@@ -4502,6 +4878,8 @@ wl_cfgvendor_nan_req_publish(struct wiphy *wiphy,
 			WL_ERR(("failed to generate instance-id for publisher\n"));
 			goto exit;
 		}
+	} else {
+		cmd_data->svc_update = true;
 	}
 
 	ret = wl_cfgnan_publish_handler(wdev->netdev, cfg, cmd_data);
@@ -4544,12 +4922,6 @@ wl_cfgvendor_nan_start_handler(struct wiphy *wiphy,
 		goto exit;
 	}
 	NAN_DBG_ENTER();
-
-	if (!cfg->nan_init_state) {
-		WL_ERR(("nan is not initialized\n"));
-		ret = BCME_ERROR;
-		goto exit;
-	}
 
 	if (cfg->nan_enable) {
 		WL_ERR(("nan is already enabled\n"));
@@ -4596,53 +4968,18 @@ wl_cfgvendor_nan_stop_handler(struct wiphy *wiphy,
 	int ret = 0;
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	nan_hal_resp_t nan_req_resp;
-	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(wdev->netdev);
-	int i;
-	const struct nlattr *iter;
-	int attr_type;
-	int rem = len;
-	bool disable_events = false;
-
 	NAN_DBG_ENTER();
 
-	/* Blocking nan disable if NAN is not enable */
-	if (!cfg->nan_enable) {
-		WL_INFORM(("Nan is not enabled\n"));
+	if (!cfg->nan_init_state) {
+		WL_ERR(("nan is not initialized/nmi doesnt exists\n"));
 		ret = BCME_OK;
 		goto exit;
 	}
-	cfg->nancfg.disable_pending = TRUE;
-	nla_for_each_attr(iter, data, len, rem) {
-		attr_type = nla_type(iter);
-		WL_DBG(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
 
-		switch (attr_type) {
-			/* NAN Enable request attributes */
-			case NAN_ATTRIBUTE_EVENT_MASK:{
-				disable_events = nla_get_u8(iter);
-				break;
-			}
-			default:
-				WL_DBG(("Unknown attribute fro disable\n"));
-				break;
-		}
-	}
-	ret = wl_cfgnan_stop_handler(wdev->netdev, cfg, dhdp->up, disable_events);
-	if (ret) {
-		WL_ERR(("failed to stop nan error[%d]\n", ret));
-		goto exit;
-	}
-
-	/* We have to remove NDIs so that P2P/Softap can work */
-	for (i = 0; i < NAN_MAX_NDI; i++) {
-		if (cfg->nancfg.ndi[i].in_use) {
-			WL_INFORM_MEM(("Deleting NAN NDI IDX:%d\n", i));
-			ret = wl_cfgnan_data_path_iface_create_delete_handler(wdev->netdev, cfg,
-				(char*)cfg->nancfg.ndi[i].ifname,
-				NAN_WIFI_SUBCMD_DATA_PATH_IFACE_DELETE, dhdp->up);
-			if (ret) {
-				WL_ERR(("failed to delete ndp iface [%d]\n", ret));
-			}
+	if (cfg->nan_enable) {
+		ret = wl_cfgnan_disable(cfg, NAN_USER_INITIATED);
+		if (ret) {
+			WL_ERR(("failed to disable nan, error[%d]\n", ret));
 		}
 	}
 	memset(&nan_req_resp, 0, sizeof(nan_req_resp));
@@ -4902,16 +5239,16 @@ wl_cfgvendor_nan_data_path_iface_create(struct wiphy *wiphy,
 	/* Store the iface name to pub data so that it can be used
 	 * during NAN enable
 	 */
-	if (!cfg->nan_enable) { /* old framework Impl */
-		if ((idx = wl_cfgnan_get_ndi_idx(cfg)) < 0) {
-			WL_ERR(("No free idx for NAN NDI\n"));
-			goto exit;
-		}
-		wl_cfgnan_add_ndi_data(cfg, idx, (char*)cmd_data->ndp_iface);
-	} else { /* new framework Impl, iface create called after nan enab */
+	if ((idx = wl_cfgnan_get_ndi_idx(cfg)) < 0) {
+		WL_ERR(("No free idx for NAN NDI\n"));
+		goto exit;
+	}
+	wl_cfgnan_add_ndi_data(cfg, idx, (char*)cmd_data->ndp_iface);
+	if (cfg->nan_enable) { /* new framework Impl, iface create called after nan enab */
 		wl_cfgnan_data_path_iface_create_delete_handler(wdev->netdev,
 			cfg, cmd_data->ndp_iface,
 			NAN_WIFI_SUBCMD_DATA_PATH_IFACE_CREATE, dhdp->up);
+		cfg->nancfg.ndi[idx].created = true;
 	}
 exit:
 	ret = wl_cfgvendor_nan_cmd_reply(wiphy, NAN_WIFI_SUBCMD_DATA_PATH_IFACE_CREATE,
@@ -6220,6 +6557,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wl_cfgvendor_priv_string_handler
 	},
+#ifdef BCM_PRIV_CMD_SUPPORT
 	{
 		{
 			.vendor_id = OUI_BRCM,
@@ -6228,6 +6566,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wl_cfgvendor_priv_bcm_handler
 	},
+#endif /* BCM_PRIV_CMD_SUPPORT */
 #ifdef GSCAN_SUPPORT
 	{
 		{

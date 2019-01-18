@@ -577,7 +577,7 @@ struct camera2_scaler_sm {
 struct camera2_jpeg_ctl {
 	uint8_t		gpsLocation;
 	double		gpsCoordinates[3];
-	uint8_t		gpsProcessingMethod[32];
+	uint8_t		gpsProcessingMethod[33];
 	uint64_t	gpsTimestamp;
 	uint32_t	orientation;
 	uint8_t		quality;
@@ -588,7 +588,7 @@ struct camera2_jpeg_ctl {
 struct camera2_jpeg_dm {
 	uint8_t		gpsLocation;
 	double		gpsCoordinates[3];
-	uint8_t		gpsProcessingMethod[32];
+	uint8_t		gpsProcessingMethod[33];
 	uint64_t	gpsTimestamp;
 	uint32_t	orientation;
 	uint8_t		quality;
@@ -716,6 +716,7 @@ enum aa_capture_intent {
 	AA_CAPTURE_INTENT_VIDEO_SNAPSHOT,
 	AA_CAPTURE_INTENT_ZERO_SHUTTER_LAG,
 	AA_CAPTURE_INTENT_MANUAL,
+	AA_CAPTURE_INTENT_MOTION_TRACKING,
 
 	/* vendor feature */
 	AA_CAPTURE_INTENT_STILL_CAPTURE_OIS_SINGLE = 100,
@@ -728,7 +729,8 @@ enum aa_capture_intent {
 	AA_CAPTURE_INTENT_STILL_CAPTURE_DEBLUR_DYNAMIC_SHOT,
 	AA_CAPTURE_INTENT_STILL_CAPTURE_OIS_DYNAMIC_SHOT,
 	AA_CAPTURE_INTENT_STILL_CAPTURE_EXPOSURE_DYNAMIC_SHOT,
-	AA_CAPTURE_INTENT_STILL_CAPTURE_HDR_DYNAMIC_SHOT,
+	AA_CAPTURE_INTENT_STILL_CAPTURE_MFHDR_DYNAMIC_SHOT,
+	AA_CAPTURE_INTENT_STILL_CAPTURE_LLHDR_DYNAMIC_SHOT,
 	AA_CAPTURE_INTENT_STILL_CAPTURE_CANCEL,
 };
 
@@ -792,6 +794,9 @@ enum aa_scene_mode {
 	AA_SCENE_MODE_HYPERLAPSE,
 	AA_SCENE_MODE_FACTORY_LN2,
 	AA_SCENE_MODE_FACTORY_LN4,
+	AA_SCENE_MODE_LABS,
+	AA_SCENE_MODE_SELFI_FOCUS,
+	AA_SCENE_MODE_STICKER,
 };
 
 enum aa_effect_mode {
@@ -1008,6 +1013,11 @@ enum aa_available_mode {
 	 * AA_OFF_KEEP_STATE, */
 };
 
+enum aa_af_scene_change {
+	AA_AF_NOT_DETECTED = 0,
+	AA_AF_DETECTED,
+};
+
 struct camera2_aa_ctl {
 	enum aa_ae_antibanding_mode	aeAntibandingMode;
 	int32_t				aeExpCompensation;
@@ -1046,7 +1056,9 @@ struct camera2_aa_ctl {
 	uint32_t			vendor_captureCount;
 	uint32_t			vendor_captureExposureTime;
 	float				vendor_objectDistanceCm;
-	uint32_t			vendor_reserved[9];
+	int32_t				vendor_colorTempKelvin;
+	int32_t				vendor_enableDynamicShotDm;
+	uint32_t			vendor_reserved[8];
 };
 
 struct camera2_aa_dm {
@@ -1071,6 +1083,7 @@ struct camera2_aa_dm {
 	enum aa_mode			mode;
 	enum aa_scene_mode		sceneMode;
 	enum aa_videostabilization_mode videoStabilizationMode;
+	enum aa_af_scene_change		afSceneChange;
 
 	/* vendor feature */
 	float				vendor_aeExpCompensationStep;
@@ -1090,13 +1103,16 @@ struct camera2_aa_dm {
 	uint32_t			vendor_captureCount;
 	uint32_t			vendor_captureExposureTime;
 	float				vendor_objectDistanceCm;
+	int32_t				vendor_colorTempKelvin;
+	int32_t				vendor_lightConditionValue;
+	uint32_t			vendor_reserved[9];
 
 	//For dual
 	uint32_t			vendor_wideTeleConvEv;
 	uint32_t			vendor_teleSync;
 	uint32_t			vendor_fusionCaptureAeInfo;
 	uint32_t			vendor_fusionCaptureAfInfo;
-	uint32_t			vendor_reserved[9];
+	uint32_t			vendor_reserved_dual[9];
 };
 
 struct camera2_aa_sm {
@@ -1334,8 +1350,8 @@ struct camera2_obj_af_info {
 struct camera2_hrm_sensor_info {
 	uint32_t	visible_data;
 	uint32_t	ir_data;
-	uint32_t	flicker_data; // 0: No flicker detect, 100: 50Hz, 120: 60Hz
-	int32_t		status;
+	int32_t	flicker_data; // 0: No flicker detect, 100: 50Hz, 120: 60Hz, -3/-4/-5: reporting mode
+	int32_t	status;
 };
 
 struct camera2_illuminaion_sensor_info {
@@ -1865,8 +1881,8 @@ struct camera2_uctl {
 	struct camera2_is_hw_lls_uctl	hwlls_mode;
 	uint32_t			statsRoi[4];
 	enum aa_cameratype		masterCam;
-	int32_t                         productColorInfo;    
-	uint8_t                     countryCode[4];
+	int32_t                         productColorInfo;
+	uint8_t                         countryCode[4];
 	uint32_t			reserved[8];
 };
 

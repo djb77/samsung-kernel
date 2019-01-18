@@ -59,6 +59,7 @@ struct dwc3_exynos {
 };
 
 void dwc3_otg_run_sm(struct otg_fsm *fsm);
+void dwc3_otg_ldo_control(struct otg_fsm *fsm, int on);
 
 static const struct of_device_id exynos_dwc3_match[] = {
 	{
@@ -335,6 +336,33 @@ int dwc3_exynos_vbus_event(struct device *dev, bool vbus_active)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(dwc3_exynos_vbus_event);
+
+/**
+ * dwc3_exynos_start_ldo - received ldo control event.
+ */
+int dwc3_exynos_start_ldo(struct device *dev, bool on)
+{
+	struct dwc3_exynos	*exynos;
+	struct dwc3_exynos_rsw	*rsw;
+	struct otg_fsm		*fsm;
+
+	dev_dbg(dev, "%s, %s\n", __func__, on ? "on" : "off");
+
+	exynos = dev_get_drvdata(dev);
+	if (!exynos)
+		return -ENOENT;
+
+	rsw = &exynos->rsw;
+
+	fsm = rsw->fsm;
+	if (!fsm)
+		return -ENOENT;
+
+	dwc3_otg_ldo_control(fsm, on);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dwc3_exynos_start_ldo);
 
 static int dwc3_exynos_register_phys(struct dwc3_exynos *exynos)
 {

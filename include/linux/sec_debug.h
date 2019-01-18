@@ -31,7 +31,8 @@ extern void sec_debug_reboot_handler(void *p);
 extern void sec_debug_panic_handler(void *buf, bool dump);
 extern void sec_debug_post_panic_handler(void);
 
-extern int  sec_debug_get_debug_level(void);
+extern int sec_debug_get_debug_level(void);
+extern int sec_debug_enter_upload(void);
 extern void sec_debug_disable_printk_process(void);
 extern char *verbose_reg(int cpu_type, int reg_name, unsigned long reg_val);
 /* getlog support */
@@ -193,6 +194,7 @@ enum sec_debug_extra_buf_type {
 	INFO_BUSMON,
 	INFO_DPM,
 	INFO_SMPL,
+	INFO_RSTCNT,
 	INFO_ETC,
 	INFO_ESR,
 	INFO_MERR,
@@ -225,6 +227,8 @@ enum sec_debug_extra_buf_type {
 	INFO_PINT2,
 	INFO_PINT5,
 	INFO_PINT6,
+	INFO_PSTS1,
+	INFO_PSTS2,
 	INFO_RVD1,
 	INFO_RVD2,
 	INFO_RVD3,
@@ -240,6 +244,18 @@ enum sec_debug_extra_buf_type {
 	INFO_CPU5,
 	INFO_CPU6,
 	INFO_CPU7,
+	INFO_FRQL0,
+	INFO_FRQL1,
+	INFO_FRQL2,
+	INFO_FRQB0,
+	INFO_FRQB1,
+	INFO_FRQB2,
+	INFO_FRQM0,
+	INFO_FRQM1,
+	INFO_FRQM2,
+	INFO_FRQI0,
+	INFO_FRQI1,
+	INFO_FRQI2,
 	INFO_MAX_C,
 
 	INFO_MID = INFO_MAX_C,
@@ -276,6 +292,8 @@ enum sec_debug_extra_fault_type {
 	ACCESS_USER_FAULT,          /* 7 */
 	EXE_USER_FAULT,             /* 8 */
 	ACCESS_USER_OUTSIDE_FAULT,  /* 9 */
+	BUG_FAULT,                  /* 10 */
+	PANIC_FAULT,
 	FAULT_MAX,
 };
 
@@ -308,6 +326,7 @@ struct sec_debug_ksyms {
 	} sect;
 	uint64_t relative_base;
 	uint64_t offsets_pa;
+	uint64_t kimage_voffset;
 };
 
 struct sec_debug_shared_info {
@@ -337,7 +356,7 @@ extern void sec_debug_set_kallsyms_info(struct sec_debug_ksyms *ksyms, int magic
 extern struct exynos_chipid_info exynos_soc_info;
 extern unsigned int get_smpl_warn_number(void);
 
-extern void sec_debug_init_extra_info(struct sec_debug_shared_info *);
+extern void sec_debug_init_extra_info(struct sec_debug_shared_info *, int magic_status);
 extern void sec_debug_finish_extra_info(void);
 extern void sec_debug_store_extra_info(int start, int end);
 extern void sec_debug_store_extra_info_A(void);
@@ -366,10 +385,13 @@ extern void sec_debug_set_extra_info_batt(int cap, int volt, int temp, int curr)
 extern void sec_debug_set_extra_info_ufs_error(char *str);
 extern void sec_debug_set_extra_info_zswap(char *str);
 extern void sec_debug_set_extra_info_mfc_error(char *str);
+extern void sec_debug_set_extra_info_rvd1(char *str);
+extern void sec_debug_set_extra_info_rvd2(char *str);
+extern void sec_debug_set_extra_info_rvd3(char *str);
 
 #else
 
-#define sec_debug_init_extra_info(a)	do { } while (0)
+#define sec_debug_init_extra_info(a, b)	do { } while (0)
 #define sec_debug_finish_extra_info()	do { } while (0)
 #define sec_debug_store_extra_info(a, b)	do { } while (0)
 #define sec_debug_store_extra_info_A()		do { } while (0)
@@ -410,6 +432,28 @@ extern void register_set_auto_comm_lastfreq(void (*func)(int type, int old_freq,
 extern void print_ppmpu_protection(struct pt_regs *regs);
 #else
 static inline void print_ppmpu_protection(struct pt_regs *regs) {}
+#endif
+
+#ifdef CONFIG_SEC_DEBUG_BRANCH_VERIFIER
+enum br_state {
+	BRSTATE_INIT,
+	BRSTATE_PCLR,
+	BRSTATE_NORMAL,
+	BRSTATE_NORMAL_PC,
+};
+
+struct branch_info {
+	unsigned long lr;
+	unsigned long regs_lr;
+	unsigned long regs_fp;
+	int state;
+	int log_pos;
+};
+
+extern void init_branch_info(struct branch_info *info);
+extern void pre_check_backtrace_auto_summary(struct branch_info *info, unsigned long where, unsigned long fp);
+extern void check_backtrace(struct branch_info *info, unsigned long where, unsigned long fp, unsigned int fromirq, struct pt_regs *regs);
+extern void check_backtrace_auto_summary(struct branch_info *info, unsigned long where, unsigned long fp, unsigned int fromirq, struct pt_regs *regs);
 #endif
 
 #ifdef CONFIG_SEC_DEBUG_LAST_KMSG
@@ -567,6 +611,7 @@ extern void sec_debug_irq_sched_log(unsigned int irq, void *fn, int en);
 extern void sec_debug_irq_enterexit_log(unsigned int irq,
 						unsigned long long start_time);
 extern void sec_debug_set_kallsyms_info(struct sec_debug_ksyms *ksyms, int magic);
+extern int sec_debug_check_sj(void);
 
 int sec_debug_save_cpu_info(void);
 int sec_debug_save_die_info(const char *str, struct pt_regs *regs);

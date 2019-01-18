@@ -27,4 +27,6 @@ int mc_switch_core(int core_num);
  */
 int mc_active_core(void);
 
+int mc_switch_core_ctrl(uint32_t core_num, uint32_t ctrl_idx);
+
 #endif /* _MC_LINUX_API_H_ */

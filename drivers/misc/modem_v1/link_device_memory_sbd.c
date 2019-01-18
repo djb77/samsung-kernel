@@ -20,12 +20,12 @@
  */
 
 #include <soc/samsung/exynos-modem-ctrl.h>
+#include <linux/mcu_ipc.h>
 #include "modem_prj.h"
 #include "modem_utils.h"
 #include "link_device_memory.h"
 #include "include/sbd.h"
-
-static int setup_zerocopy_adaptor(struct sbd_ipc_device *ipc_dev);
+#include "include/smapper.h"
 
 #ifdef GROUP_MEM_LINK_SBD
 /**
@@ -173,11 +173,9 @@ static int setup_sbd_rb(struct sbd_link_device *sl, struct sbd_ring_buffer *rb,
 	for (i = 0; i < rb->len; i++)
 		rb->buff[i] = rb->buff_rgn + (i * rb->buff_size);
 
-#if 0
-	mif_err("RB[%d:%d][%s] buff_rgn {addr:0x%p offset:%d size:%lu}\n",
+	mif_err("RB[%d:%d][%s] buff_rgn {addr:0x%pK offset:%d size:%lu}\n",
 		rb->id, rb->ch, udl_str(dir), rb->buff_rgn,
 		calc_offset(rb->buff_rgn, sl->shmem), alloc_size);
-#endif
 
 	/*
 	Prepare SBD array in SHMEM.
@@ -214,7 +212,7 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	size_t size;
 
 #if 1
-	mif_err("SHMEM {base:0x%p size:%d}\n",
+	mif_err("SHMEM {base:0x%pK size:%d}\n",
 		sl->shmem, sl->shmem_size);
 #endif
 
@@ -225,15 +223,15 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	sl->g_desc = (struct sbd_global_desc *)desc_alloc(sl, size);
 
 #if 1
-	mif_err("G_DESC_OFFSET = %d(0x%p)\n",
+	mif_err("G_DESC_OFFSET = %d(0x%pK)\n",
 		calc_offset(sl->g_desc, sl->shmem),
 		sl->g_desc);
 
-	mif_err("RB_CH_OFFSET = %d (0x%p)\n",
+	mif_err("RB_CH_OFFSET = %d (0x%pK)\n",
 		calc_offset(sl->g_desc->rb_ch, sl->shmem),
 		sl->g_desc->rb_ch);
 
-	mif_err("RBD_PAIR_OFFSET = %d (0x%p)\n",
+	mif_err("RBD_PAIR_OFFSET = %d (0x%pK)\n",
 		calc_offset(sl->g_desc->rb_desc, sl->shmem),
 		sl->g_desc->rb_desc);
 #endif
@@ -241,7 +239,7 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	size = sizeof(u16) * ULDL * RDWR * sl->num_channels;
 	sl->rbps = (u16 *)desc_alloc(sl, size);
 #if 1
-	mif_err("RBP_SET_OFFSET = %d (0x%p)\n",
+	mif_err("RBP_SET_OFFSET = %d (0x%pK)\n",
 		calc_offset(sl->rbps, sl->shmem), sl->rbps);
 #endif
 
@@ -281,10 +279,14 @@ static void setup_link_attr(struct sbd_link_attr *link_attr, u16 id, u16 ch,
 	link_attr->rb_len[DL] = io_dev->dl_num_buffers;
 	link_attr->buff_size[DL] = io_dev->dl_buffer_size;
 
-	if (io_dev->attrs & IODEV_ATTR(ATTR_ZEROCOPY))
+	link_attr->smapper = false;
+	if (io_dev->attrs & IODEV_ATTR(ATTR_ZEROCOPY)) {
 		link_attr->zerocopy = true;
-	else
+		if (io_dev->attrs & IODEV_ATTR(ATTR_SMAPPER))
+			link_attr->smapper = true;
+	} else {
 		link_attr->zerocopy = false;
+	}
 }
 
 static u64 recv_offset_from_zerocopy_adaptor(struct zerocopy_adaptor *zdptr)
@@ -323,7 +325,7 @@ static u8* data_offset_to_buffer(u64 offset, struct sbd_ring_buffer *rb)
 		buf_offset = offset - NET_HEADROOM;
 		buf = v_zmb + (buf_offset - sl->shmem_size);
 		if (!(buf >= v_zmb && buf < (v_zmb + zmb_size))) {
-			mif_err("invalid buf (1st pool) : %p\n", buf);
+			mif_err("invalid buf (1st pool) : %pK\n", buf);
 			return NULL;
 		}
 	} else {
@@ -357,7 +359,7 @@ static u8* unused_data_offset_to_buffer(u64 offset, struct sbd_ring_buffer *rb)
 		buf_offset = offset - NET_HEADROOM;
 		buf = v_zmb + (buf_offset - sl->shmem_size);
 		if (!(buf >= v_zmb && buf < (v_zmb + zmb_size))) {
-			mif_err("invalid buf (1st pool) : %p\n", buf);
+			mif_err("invalid buf (1st pool) : %pK\n", buf);
 			return NULL;
 		}
 	} else {
@@ -370,17 +372,28 @@ static u8* unused_data_offset_to_buffer(u64 offset, struct sbd_ring_buffer *rb)
 
 static inline void free_zerocopy_data(struct sbd_ring_buffer *rb, u16 *out)
 {
+	struct sbd_link_device *sl = rb->sl;
 	struct zerocopy_adaptor *zdptr = rb->zdptr;
 	unsigned int qlen = zdptr->len;
 	u64 offset;
 	u8* buff;
 	u8* src = rb->buff[*out] + rb->payload_offset;
+	struct device *dev = sl->ld->dev;
+	dma_addr_t dma_addr;
 
-	memcpy(&offset, src, sizeof(offset));
+	if (smapper_active(sl)) {
+		dma_addr = zdptr->smapper_dma_addresses[*out];
+		dma_unmap_single(dev, dma_addr, SMAPPER_PKT_SIZE, DMA_FROM_DEVICE);
 
-	buff = unused_data_offset_to_buffer(offset, rb);
+		buff = zdptr->smapper_skb_addresses[*out];
+		skb_free_frag(buff);
+	} else {
+		memcpy(&offset, src, sizeof(offset));
 
-	free_mif_buff(g_mif_buff_mng, buff);
+		buff = unused_data_offset_to_buffer(offset, rb);
+
+		free_mif_buff(g_mif_buff_mng, buff);
+	}
 
 	*out = circ_new_ptr(qlen, *out, 1);
 }
@@ -403,12 +416,14 @@ static inline void cancel_datalloc_timer(struct mem_link_device *mld,
 void __reset_zerocopy(struct mem_link_device *mld, struct sbd_ring_buffer *rb)
 {
 	struct zerocopy_adaptor *zdptr = rb->zdptr;
+	struct sbd_link_device *sl = rb->sl;
 	u16 out = *zdptr->rp;
 	unsigned long flags;
 
 	mif_err("__reset_zerocopy [ch : %d]\n", rb->ch);
 
-	cancel_datalloc_timer(mld, &zdptr->datalloc_timer);
+	if (!smapper_active(sl))
+		cancel_datalloc_timer(mld, &zdptr->datalloc_timer);
 
 	spin_lock_irqsave(&zdptr->lock, flags);
 	while (*zdptr->wp != out) {
@@ -443,6 +458,284 @@ void reset_zerocopy(struct link_device *ld)
 	mif_err("---\n");
 }
 
+static int smapper_alloc_skb(struct zerocopy_adaptor *zdptr, int num_of_bank)
+{
+	int ret = 0, i, j;
+	int needed_bank, empty_space;
+	u8 *buf;
+	u32 current_bank, used_bank;
+	unsigned int qlen = zdptr->len;
+	int bank_index;
+	unsigned long flags;
+	int cp_status = 0;
+	struct sbd_ring_buffer *rb = zdptr->rb;
+	struct link_device *ld = rb->ld;
+	struct device *dev = ld->dev;
+	struct modem_ctl *mc = ld->mc;
+	struct modem_mbox *mbox = mc->mdm_data->mbx;
+	dma_addr_t dma_addr;
+
+	if (cp_offline(mc)) {
+		mif_err_limited("CP is offline\n");
+		return -EPERM;
+	}
+
+	spin_lock_irqsave(&zdptr->lock, flags);
+
+	/* Check CP status */
+	if (mbox) {
+		cp_status = mbox_extract_value(MCU_CP, mbox->mbx_cp2ap_status,
+						mbox->sbi_cp_status_mask,
+						mbox->sbi_cp_status_pos);
+		if (cp_status == 0) {
+			mif_err_limited("CP status: sleep. Skip to alloc skb\n");
+			spin_unlock_irqrestore(&zdptr->lock, flags);
+			return -EPERM;
+		}
+
+		mbox_update_value(MCU_CP, mbox->mbx_ap2cp_status, 1,
+				mbox->sbi_ap2cp_wakelock_mask,
+				mbox->sbi_ap2cp_wakelock_pos);
+	}
+
+	/* Check empty space and alloc SMAPPER BANKS */
+	empty_space = circ_get_space(qlen, *(zdptr->rp), *(zdptr->wp));
+	needed_bank = num_of_bank - (empty_space / ENRTY_PER_BANK) - 1;
+	used_bank = zdptr->pre_rp / ENRTY_PER_BANK;
+
+	/* check init */
+	if (*(zdptr->wp) == *(zdptr->rp)) {
+		mif_info("Queue is empty\n");
+		needed_bank = MAX_PREALLOC_BANK_NUM;
+	}
+
+	/* alloc skb */
+	current_bank = *(zdptr->wp) / ENRTY_PER_BANK;
+	for (i = current_bank; i < current_bank + needed_bank; i++) {
+		if (i < TOTAL_BANK_NUM)
+			bank_index = i;
+		else
+			bank_index = i - TOTAL_BANK_NUM;
+		if (bank_index == used_bank) {
+			if (*(zdptr->wp) != *(zdptr->rp)) {
+				mif_info("bank:%d wp:0x%x rp:0x%x pre_rp:0x%x\n",
+					bank_index, *(zdptr->wp), *(zdptr->rp), zdptr->pre_rp);
+				break;
+			}
+			mif_info("Init state\n");
+		}
+
+		writel(0, zdptr->smapper_base + ADDR_MAP_EN_0 + (bank_index * CTRL_REG_OFFSET));
+		writel(1, zdptr->smapper_base + SRAM_WRITE_CTRL_0 + (bank_index * CTRL_REG_OFFSET));
+
+		for (j = 0; j < ENRTY_PER_BANK; j++) {
+			u32 sram_reg_offset = SRAM_BANK0_INDEX + (bank_index * SRAM_BANK_INDEX_OFFSET) + (j * 4);
+
+#ifdef CONFIG_LINK_DEVICE_NAPI
+			buf = napi_alloc_frag(SMAPPER_PKT_SIZE);
+#else
+			buf = netdev_alloc_frag(SMAPPER_PKT_SIZE);
+#endif
+			if (unlikely(!buf)) {
+				mif_err("alloc_frag() error\n");
+				ret = -ENOMEM;
+				goto alloc_exit;
+			}
+			
+			dma_addr = dma_map_single(dev, buf, SMAPPER_PKT_SIZE, DMA_FROM_DEVICE);
+			if (unlikely(dma_mapping_error(dev, dma_addr))) {
+				mif_err("dma_mapping_error\n");
+				ret = -EIO;
+				goto alloc_exit;
+			}
+
+			writel((virt_to_phys(buf) >> SHIFT_2K), zdptr->smapper_base + sram_reg_offset);
+			zdptr->smapper_skb_addresses[(bank_index * ENRTY_PER_BANK) + j] = buf;
+			zdptr->smapper_dma_addresses[(bank_index * ENRTY_PER_BANK) + j] = dma_addr;
+		}
+
+		writel(0, zdptr->smapper_base + SRAM_WRITE_CTRL_0 + (bank_index * CTRL_REG_OFFSET));
+		writel(1, zdptr->smapper_base + ADDR_MAP_EN_0 + (bank_index * CTRL_REG_OFFSET));
+
+		*zdptr->wp = circ_new_ptr(qlen, *zdptr->wp, ENRTY_PER_BANK);
+	}
+
+alloc_exit:
+	if (mbox) {
+		mbox_update_value(MCU_CP, mbox->mbx_ap2cp_status, 0,
+				mbox->sbi_ap2cp_wakelock_mask,
+				mbox->sbi_ap2cp_wakelock_pos);
+	}
+
+	spin_unlock_irqrestore(&zdptr->lock, flags);
+
+	return ret;
+}
+
+int smapper_restore(struct sbd_ring_buffer *rb)
+{
+	int empty_space;
+	int ret = 0, rp_bank, i, j;
+	int init_bank_num;
+	int set_bank;
+	struct zerocopy_adaptor *zdptr = rb->zdptr;
+	unsigned int qlen = zdptr->len;
+	u32 reg_val;
+
+	spin_lock(&zdptr->lock);
+
+	rp_bank = *(zdptr->rp) / ENRTY_PER_BANK;
+
+	/* check already enabled */
+	reg_val = readl(zdptr->smapper_base + ADDR_MAP_EN_0 + (rp_bank * CTRL_REG_OFFSET));
+	if (reg_val == 1) {
+		mif_err("Bank%d already enabled\n", rp_bank);
+		ret = -EPERM;
+		goto restore_exit;
+	}
+
+	/* set registers */
+	writel(SMAPPER_AW_START, zdptr->smapper_base + AW_START_ADDR);
+	writel(SMAPPER_AW_END, zdptr->smapper_base + AW_END_ADDR);
+	for (i = 0; i < TOTAL_BANK_NUM; i++) {
+		writel(SMAPPER_CP_BASE_ADDR + (i * SMAPPER_SRAM_OFFSET),
+				zdptr->smapper_base + START_ADDR_0 + (i * CTRL_REG_OFFSET));
+		writel(GRANUL_2K,
+				zdptr->smapper_base + ADDR_GRANULATY_0 + (i * CTRL_REG_OFFSET));
+	}
+
+	/* set skb information again */
+	empty_space = circ_get_space(qlen, *(zdptr->rp), *(zdptr->wp));
+	init_bank_num = empty_space / ENRTY_PER_BANK + 1;
+	for (i = 0; i < init_bank_num; i++) {
+		int start_rp_index = 0;
+
+		set_bank = rp_bank + i;
+		if (set_bank >= TOTAL_BANK_NUM)
+			set_bank -= TOTAL_BANK_NUM;
+
+		writel(1, zdptr->smapper_base + SRAM_WRITE_CTRL_0 + (set_bank * CTRL_REG_OFFSET));
+
+		if (set_bank == rp_bank) {
+			start_rp_index = *(zdptr->rp) % ENRTY_PER_BANK;
+			mif_debug("Bank%d rp:%d\n", set_bank, start_rp_index);
+		}
+		for (j = start_rp_index; j < ENRTY_PER_BANK; j++) {
+			u32 sram_reg_offset = SRAM_BANK0_INDEX + ((set_bank) * SRAM_BANK_INDEX_OFFSET) + (j * 4);
+
+			writel((virt_to_phys(zdptr->smapper_skb_addresses[set_bank * ENRTY_PER_BANK + j]) >> SHIFT_2K),
+					zdptr->smapper_base + sram_reg_offset);
+		}
+
+		writel(0, zdptr->smapper_base + SRAM_WRITE_CTRL_0 + (set_bank * CTRL_REG_OFFSET));
+		writel(1, zdptr->smapper_base + ADDR_MAP_EN_0 + (set_bank * CTRL_REG_OFFSET));
+	}
+
+restore_exit:
+	spin_unlock(&zdptr->lock);
+
+	return ret;
+}
+
+static void smapper_alloc_work_func(struct work_struct *ws)
+{
+	struct zerocopy_adaptor *zdptr =
+		container_of(ws, struct zerocopy_adaptor, smapper_alloc_work);
+
+	smapper_alloc_skb(zdptr, MAX_PREALLOC_BANK_NUM);
+}
+
+static int smapper_init(struct zerocopy_adaptor *zdptr)
+{
+	struct sbd_link_device *sl = zdptr->rb->sl;
+	struct device *dev = sl->ld->dev;
+	struct sbd_ring_buffer *rb = zdptr->rb;
+	int i, j;
+	int index = 0;
+	size_t alloc_size;
+	u64 *sm_buf = (u64 *)rb->buff_rgn;
+	u32 addr_v_offset = calc_offset(sm_buf, sl->shmem);
+
+	mif_info("+++\n");
+	mif_info("sbd id:%d ch id:%d addr:0x%pK offset:%d\n",
+		rb->id, rb->ch, rb->buff_rgn, addr_v_offset);
+
+	/* get resources */
+	if (zdptr->smapper_alloc_queue == NULL) {
+		mif_info("Init workqueue\n");
+		zdptr->smapper_alloc_queue = create_singlethread_workqueue("smapper_alloc_queue");
+		if (!zdptr->smapper_alloc_queue) {
+			mif_err("create_singlethread_workqueue() error\n");
+			return -EPERM;
+		}
+		INIT_WORK(&zdptr->smapper_alloc_work, smapper_alloc_work_func);
+	}
+	if (zdptr->smapper_base == NULL) {
+		mif_info("Get resource\n");
+		zdptr->smapper_base = ioremap(SMAPPER_REG_BASE_ADDR, SZ_16K);
+		if (!zdptr->smapper_base) {
+			mif_err("ioremap() error\n");
+			return -EACCES;
+		}
+	}
+	if (zdptr->smapper_skb_addresses == NULL) {
+		mif_info("Get buffer for smapper addresses\n");
+		alloc_size = (MAX_SMAPPER_ENTRY * sizeof(u8 *));
+		zdptr->smapper_skb_addresses = kzalloc(alloc_size, GFP_KERNEL);
+		if (!zdptr->smapper_skb_addresses) {
+			mif_err("kzalloc() error\n");
+			return -ENOMEM;
+		}
+		alloc_size = (MAX_SMAPPER_ENTRY * sizeof(dma_addr_t *));
+		zdptr->smapper_dma_addresses = kzalloc(alloc_size, GFP_KERNEL);
+		if (!zdptr->smapper_dma_addresses) {
+			mif_err("kzalloc() dma error\n");
+			return -ENOMEM;
+		}
+	}
+
+	dma_set_mask(dev, DMA_BIT_MASK(36));
+
+	/* set smapper descriptor */
+	mif_info("Set smapper descriptor\n");
+	for (i = 0; i < TOTAL_BANK_NUM; i++) {
+		mif_info("Bank%d\n", i);
+		for (j = 0; j < ENRTY_PER_BANK; j++) {
+			rb->addr_v[index] = addr_v_offset + (8 * index);
+			sm_buf[index] = SMAPPER_CP_BASE_ADDR +
+				(i * SMAPPER_SRAM_OFFSET) +
+				(j * SMAPPER_PKT_SIZE) + NET_HEADROOM;
+			if (j < 4)
+				mif_info("%d 0x%08x 0x%llx\n",
+					index, rb->addr_v[index], sm_buf[index]);
+			index++;
+		}
+		mif_info("...\n");
+	}
+
+	/* set registers */
+	writel(SMAPPER_AW_START, zdptr->smapper_base + AW_START_ADDR);
+	writel(SMAPPER_AW_END, zdptr->smapper_base + AW_END_ADDR);
+	for (i = 0; i < TOTAL_BANK_NUM; i++) {
+		writel(SMAPPER_CP_BASE_ADDR + (i * SMAPPER_SRAM_OFFSET),
+				zdptr->smapper_base + START_ADDR_0 + (i * CTRL_REG_OFFSET));
+		writel(GRANUL_2K,
+				zdptr->smapper_base + ADDR_GRANULATY_0 + (i * CTRL_REG_OFFSET));
+		mif_info("Bank%d CP address:0x%08x\n",
+				i, readl(zdptr->smapper_base + START_ADDR_0 + (i * CTRL_REG_OFFSET)));
+	}
+
+	/* allock skb */
+	smapper_alloc_skb(zdptr, MAX_PREALLOC_BANK_NUM);
+
+	/* set done flag 0 as reset_zerocopy func works */
+	sl->reset_zerocopy_done = 0;
+
+	mif_info("---\n");
+
+	return 0;
+}
+
 static int setup_zerocopy_adaptor(struct sbd_ipc_device *ipc_dev)
 {
 	struct zerocopy_adaptor *zdptr;
@@ -475,13 +768,18 @@ static int setup_zerocopy_adaptor(struct sbd_ipc_device *ipc_dev)
 	rb->zdptr = zdptr;
 
 	spin_lock_init(&zdptr->lock);
-	spin_lock_init(&zdptr->lock_kfifo);
 	zdptr->rb = rb;
 	zdptr->rp = rb->wp; /* swap wp, rp  when zerocopy DL */
 	zdptr->wp = rb->rp; /* swap wp, rp  when zerocopy DL */
 	zdptr->pre_rp = *zdptr->rp;
 	zdptr->len = rb->len;
 
+	if (smapper_active(sl)) {
+		mif_info("Smapper is activated\n");
+		return smapper_init(zdptr);
+	}
+
+	spin_lock_init(&zdptr->lock_kfifo);
 	if (kfifo_initialized(&zdptr->fifo)) {
 		struct sbd_link_device *sl = rb->sl;
 		struct device *dev = sl->ld->dev;
@@ -530,6 +828,7 @@ static int init_sbd_ipc(struct sbd_link_device *sl,
 		ipc_dev[i].id = link_attr[i].id;
 		ipc_dev[i].ch = link_attr[i].ch;
 		ipc_dev[i].zerocopy = link_attr[i].zerocopy;
+		ipc_dev[i].smapper = link_attr[i].smapper;
 
 		/*
 		Setup UL Ring Buffer in the ipc_dev[$i]
@@ -911,15 +1210,22 @@ struct sk_buff *sbd_pio_rx(struct sbd_ring_buffer *rb)
 	return skb;
 }
 
-struct sk_buff *zerocopy_alloc_skb(u8* buf, unsigned int data_len)
+struct sk_buff *zerocopy_alloc_skb(u8* buf, unsigned int data_len, struct sbd_link_device *sl)
 {
 	struct sk_buff *skb;
 
-	skb = __build_skb(buf, SKB_DATA_ALIGN(data_len + NET_HEADROOM)
+	if (smapper_active(sl)) {
+		skb = build_skb(buf, SKB_DATA_ALIGN(data_len + NET_HEADROOM)
 			+ SKB_DATA_ALIGN(sizeof(struct skb_shared_info)));
+	} else {
+		skb = __build_skb(buf, SKB_DATA_ALIGN(data_len + NET_HEADROOM)
+			+ SKB_DATA_ALIGN(sizeof(struct skb_shared_info)));
+	}
 
-	if (unlikely(!skb))
+	if (unlikely(!skb)) {
+		mif_err("build_skb error\n");
 		return NULL;
+	}
 
 	skb_reserve(skb, NET_HEADROOM);
 	skb_put(skb, data_len);
@@ -947,6 +1253,8 @@ struct sk_buff *zerocopy_alloc_skb_with_memcpy(u8* buf, unsigned int data_len)
 
 struct sk_buff *sbd_pio_rx_zerocopy_adaptor(struct sbd_ring_buffer *rb, int use_memcpy)
 {
+	struct sbd_link_device *sl = rb->sl;
+	struct device *dev = sl->ld->dev;
 	struct sk_buff *skb;
 	struct zerocopy_adaptor *zdptr = rb->zdptr;
 	unsigned int qlen = zdptr->len;
@@ -954,17 +1262,26 @@ struct sk_buff *sbd_pio_rx_zerocopy_adaptor(struct sbd_ring_buffer *rb, int use_
 	unsigned int data_len = rb->size_v[out] & 0xFFFF;
 	u64 offset;
 	u8* buff;
+	dma_addr_t dma_addr;
 
-	offset = recv_offset_from_zerocopy_adaptor(zdptr);
-	buff = data_offset_to_buffer(offset, rb);
+	if (smapper_active(sl)) {
+		buff = zdptr->smapper_skb_addresses[zdptr->pre_rp];
+		dma_addr = zdptr->smapper_dma_addresses[zdptr->pre_rp];
+		dma_unmap_single(dev, dma_addr, SMAPPER_PKT_SIZE, DMA_FROM_DEVICE);
+	} else {
+		offset = recv_offset_from_zerocopy_adaptor(zdptr);
+		buff = data_offset_to_buffer(offset, rb);
+	}
 
-	if (!buff)
-		return NULL;
+	if (unlikely(!buff)) {
+		mif_err("ERR! buff is null\n");
+ 		return NULL;
+	}
 
 	if (use_memcpy)
 		skb = zerocopy_alloc_skb_with_memcpy(buff, data_len);
 	else
-		skb = zerocopy_alloc_skb(buff, data_len);
+		skb = zerocopy_alloc_skb(buff, data_len, sl);
 
 	if (unlikely(!skb)) {
 		mif_err("ERR! Socket buffer doesn't exist\n");
@@ -1020,6 +1337,7 @@ static u64 buffer_to_data_offset(u8* buf, struct sbd_ring_buffer *rb)
 int allocate_data_in_advance(struct zerocopy_adaptor *zdptr)
 {
 	struct sbd_ring_buffer *rb = zdptr->rb;
+	struct sbd_link_device *sl = rb->sl;
 	struct modem_ctl *mc = rb->sl->ld->mc;
 	struct mif_buff_mng *mif_buff_mng = rb->ld->mif_buff_mng;
 	unsigned int qlen = rb->len;
@@ -1028,6 +1346,11 @@ int allocate_data_in_advance(struct zerocopy_adaptor *zdptr)
 	u64 offset;
 	u8 *dst;
 	int alloc_cnt = 0;
+
+	if (smapper_active(sl)) {
+		mif_info("Smapper is activated. Skip this function\n");
+		return 0;
+	}
 
 	spin_lock_irqsave(&zdptr->lock, flags);
 	if (cp_offline(mc)) {

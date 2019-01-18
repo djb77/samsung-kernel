@@ -43,6 +43,8 @@
 #define ABS(a) ((a) > 0 ? (a) : -(a))
 #endif
 
+#define SELFTEST_REVISED 1
+
 #define CALDATATOTALMAX		15
 #define CALDATAFIELDLENGTH  17
 static u8 gyroCalDataInfo[CALDATATOTALMAX][CALDATAFIELDLENGTH];
@@ -59,6 +61,12 @@ static ssize_t gyro_name_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%s\n", CHIP_ID);
+}
+
+static ssize_t selftest_revised_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", SELFTEST_REVISED);
 }
 
 int gyro_open_calibration(struct ssp_data *data)
@@ -241,6 +249,8 @@ static ssize_t lsm6dsl_gyro_selftest(struct device *dev,
 	int bias_thresh = DEF_BIAS_LSB_THRESH_SELF;
 	int fifo_ret = 0;
 	int cal_ret = 0;
+	int self_test_ret = 0;
+	int self_test_zro_ret = 0;
 	struct ssp_data *data = dev_get_drvdata(dev);
 	s16 st_zro[3] = {0, };
 	s16 st_bias[3] = {0, };
@@ -324,6 +334,7 @@ static ssize_t lsm6dsl_gyro_selftest(struct device *dev,
 	pr_info("[SSP] hw_result: %d, %d, %d, %d\n", hw_result,
 		shift_ratio[0], shift_ratio[1],	shift_ratio[2]);
 	pr_info("[SSP] avg %+8ld %+8ld %+8ld (LSB)\n", avg[0], avg[1], avg[2]);
+	pr_info("[SSP] st_zro %+8d %+8d %+8d (LSB)\n", st_zro[0], st_zro[1], st_zro[2]);
 	pr_info("[SSP] rms %+8ld %+8ld %+8ld (LSB)\n", rms[0], rms[1], rms[2]);
 
 	//FIFO ZRO check pass / fail
@@ -350,7 +361,15 @@ static ssize_t lsm6dsl_gyro_selftest(struct device *dev,
 	} else
 		cal_ret = fifo_ret = 1;
 
-	if (hw_result < 0) {
+	if ((gyro_self_diff[0] >= 150 && gyro_self_diff[0] <= 700)
+			&& (gyro_self_diff[1] >= 150 && gyro_self_diff[1] <= 700)
+			&& (gyro_self_diff[2] >= 150 && gyro_self_diff[2] <= 700))
+		self_test_ret = 1;
+
+	if (ABS(gyro_self_zro[0]) <= 40 && ABS(gyro_self_zro[1]) <= 40 && ABS(gyro_self_zro[2]) <= 40)
+		self_test_zro_ret = 1;
+
+	if (hw_result < 1) {
 		pr_err("[SSP] %s - hw selftest fail(%d), sw selftest skip\n",
 			__func__, hw_result);
 		if (shift_ratio[0] == GYRO_LIB_DL_FAIL &&
@@ -372,7 +391,7 @@ static ssize_t lsm6dsl_gyro_selftest(struct device *dev,
 			 */
 			ssp_dbg("[SSP]: %s - %d,%d,%d fail.\n",	__func__, gyro_self_diff[0],
 					gyro_self_diff[1], gyro_self_diff[2]);
-			return sprintf(buf, "%d,%d,%d\n", gyro_self_diff[0], gyro_self_diff[1], gyro_self_diff[2]);
+			//return sprintf(buf, "%d,%d,%d\n", gyro_self_diff[0], gyro_self_diff[1], gyro_self_diff[2]);
 		}
 	}
 
@@ -439,8 +458,8 @@ exit:
 		gyro_self_zro[0], gyro_self_zro[1], gyro_self_zro[2],
 		gyro_self_bias[0], gyro_self_bias[1], gyro_self_bias[2],
 		gyro_self_diff[0], gyro_self_diff[1], gyro_self_diff[2],
-		fifo_ret,
-		cal_ret);
+		self_test_ret,
+		self_test_zro_ret);
 
 	// Gyro Calibration pass / fail, buffer 1~6 values.
 	if ((fifo_ret == 0) || (cal_ret == 0))
@@ -452,8 +471,8 @@ exit:
 		gyro_self_zro[0], gyro_self_zro[1], gyro_self_zro[2],
 		gyro_self_bias[0], gyro_self_bias[1], gyro_self_bias[2],
 		gyro_self_diff[0], gyro_self_diff[1], gyro_self_diff[2],
-		fifo_ret,
-		cal_ret);
+		self_test_ret,
+		self_test_zro_ret);
 }
 
 static ssize_t gyro_selftest_dps_store(struct device *dev,
@@ -614,6 +633,7 @@ static DEVICE_ATTR(selftest, 0440, lsm6dsl_gyro_selftest, NULL);
 static DEVICE_ATTR(selftest_dps, 0660,
 	gyro_selftest_dps_show, gyro_selftest_dps_store);
 static DEVICE_ATTR(calibration_info, 0440, gyro_calibration_info_show, NULL);
+static DEVICE_ATTR(selftest_revised, 0440, selftest_revised_show, NULL);
 
 static struct device_attribute *gyro_attrs[] = {
 	&dev_attr_name,
@@ -624,6 +644,7 @@ static struct device_attribute *gyro_attrs[] = {
 	&dev_attr_temperature,
 	&dev_attr_selftest_dps,
 	&dev_attr_calibration_info,
+	&dev_attr_selftest_revised,
 	NULL,
 };
 

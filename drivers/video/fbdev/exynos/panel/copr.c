@@ -481,6 +481,8 @@ int copr_roi_get_value(struct copr_info *copr, struct copr_roi *roi, int size, u
 		if (ret < 0) {
 			panel_err("%s failed to get copr (ret %d)\n",
 					__func__, ret);
+			/* restore r/g/b efficiency & roi */
+			memcpy(&copr->props.reg, &reg, sizeof(copr->props.reg));
 			mutex_unlock(&copr->lock);
 			return -EINVAL;
 		}
@@ -494,6 +496,8 @@ int copr_roi_get_value(struct copr_info *copr, struct copr_roi *roi, int size, u
 		if (ret < 0) {
 			panel_err("%s failed to get copr (ret %d)\n",
 					__func__, ret);
+			/* restore r/g/b efficiency & roi */
+			memcpy(&copr->props.reg, &reg, sizeof(copr->props.reg));
 			mutex_unlock(&copr->lock);
 			return -EINVAL;
 		}

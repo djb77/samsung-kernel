@@ -14,6 +14,7 @@
 
 #include <linux/pm_wakeup.h>
 #include <sound/samsung/abox.h>
+#include <media/videobuf2-ion.h>
 
 #define ABOX_MASK(name) (GENMASK(ABOX_##name##_H, ABOX_##name##_L))
 #define ABOX_MASK_ARG(name, x) (GENMASK(ABOX_##name##_H(x), ABOX_##name##_L(x)))
@@ -277,7 +278,7 @@
 #define ABOX_RDMA_BUF_END		(0x0C)
 #define ABOX_RDMA_BUF_OFFSET		(0x10)
 #define ABOX_RDMA_STR_POINT		(0x14)
-#define ABOX_RDMA_VOL_FACTOR		(0x18)
+#define ABOX_RDMA_VOL_FACTOR(x)	ABOX_IDX_ARG(RDMA, 0x18, x)
 #define ABOX_RDMA_VOL_CHANGE		(0x1C)
 #ifdef CONFIG_SOC_EXYNOS8895
 #define ABOX_RDMA_STATUS		(0x20)
@@ -299,6 +300,10 @@
 #define ABOX_RDMA_RBUF_CNT_L		(0)
 #define ABOX_RDMA_RBUF_CNT_H		(12)
 #define ABOX_RDMA_RBUF_CNT_MASK		(ABOX_MASK(RDMA_RBUF_CNT))
+/* ABOX_RDMA_VOL_FACTOR */
+#define ABOX_RDMA_VOL_FACTOR_H		(23)
+#define ABOX_RDMA_VOL_FACTOR_L		(0)
+#define ABOX_RDMA_VOL_FACTOR_MASK	(ABOX_MASK(RDMA_VOL_FACTOR))
 
 /* WDMA */
 #define ABOX_WDMA_BASE			(0x2000)
@@ -638,8 +643,10 @@ struct abox_data {
 	struct mutex ima_lock;
 	struct work_struct boot_done_work;
 	struct delayed_work tickle_work;
+	unsigned long long audio_mode_time;
 	enum audio_mode audio_mode;
 	enum sound_type sound_type;
+	struct ion_client *client;
 };
 
 struct abox_compr_data {
@@ -691,6 +698,11 @@ enum abox_platform_type {
 	PLATFORM_REALTIME,
 	PLATFORM_VI_SENSING,
 	PLATFORM_SYNC,
+};
+
+enum abox_buffer_type {
+	BUFFER_TYPE_DMA,
+	BUFFER_TYPE_ION,
 };
 
 enum abox_rate {
@@ -774,7 +786,27 @@ static inline int abox_ipcid_to_stream(enum IPC_ID ipcid)
 		return -EINVAL;
 }
 
+struct abox_ion_buf {
+	size_t size;
+	void *kva;
+
+	struct dma_buf *dma_buf;
+	struct dma_buf_attachment *attachment;
+	enum dma_data_direction direction;
+	int fd;
+
+	struct ion_client *client;
+	unsigned long alignment;
+	long flags;
+	struct ion_handle *handle;
+	struct vb2_ion_cookie cookie;
+	int iommu_active_cnt;
+
+	void *priv;
+};
+
 struct abox_platform_data {
+	struct platform_device *pdev;
 	void __iomem *sfr_base;
 	void __iomem *mailbox_base;
 	unsigned int id;
@@ -789,6 +821,11 @@ struct abox_platform_data {
 	bool ack_enabled;
 	struct abox_compr_data compr_data;
 	struct regmap *mailbox;
+	struct snd_dma_buffer dmab;
+	struct abox_ion_buf ion_buf;
+	struct snd_hwdep *hwdep;
+	bool mmap_fd_state;
+	enum abox_buffer_type buf_type;
 };
 
 /**

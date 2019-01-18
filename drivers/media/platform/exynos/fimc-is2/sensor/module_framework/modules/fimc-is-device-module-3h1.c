@@ -159,6 +159,9 @@ static int sensor_module_3h1_power_setpin(struct device *dev,
 	SET_PIN_INIT(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF);
 
 	/********** FRONT CAMERA  - POWER ON **********/
+#ifdef USE_BUCK2_REGULATOR_CONTROL
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_none, "VDD_EXT_1P3_PB02", PIN_REGULATOR, 1, 0);
+#endif
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_none, "VDDAF_2.8V_VT", PIN_REGULATOR, 1, 0);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_none, "VDDA_2.8V_VT", PIN_REGULATOR, 1, 0);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_none, "VDDIO_1.8V_VT", PIN_REGULATOR, 1, 0);
@@ -183,6 +186,9 @@ static int sensor_module_3h1_power_setpin(struct device *dev,
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "VDDD_1.05V_VT", PIN_REGULATOR, 0, 0);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "VDDA_2.8V_VT", PIN_REGULATOR, 0, 0);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "VDDIO_1.8V_VT", PIN_REGULATOR, 0, 0);
+#ifdef USE_BUCK2_REGULATOR_CONTROL
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "VDD_EXT_1P3_PB02", PIN_REGULATOR, 0, 0);
+#endif
 	dev_info(dev, "%s X v4\n", __func__);
 
 	/******************** READ_ROM - POWER ON ********************/

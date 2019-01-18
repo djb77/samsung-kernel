@@ -34,6 +34,9 @@
 #include <linux/ion.h>
 #include <linux/exynos_iovmm.h>
 #endif
+#ifdef CONFIG_SEC_ABC
+#include <linux/sti/abc_common.h>
+#endif
 
 #ifdef CONFIG_EXYNOS_COMMON_PANEL
 #include "../panel/panel_drv.h"
@@ -94,6 +97,8 @@ extern struct decon_bts_ops decon_bts_control;
 #ifndef MSEC
 #define MSEC (1000)
 #endif
+
+#define FHD (1080 * 1920)
 
 #define SHADOW_UPDATE_TIMEOUT	(300 * 1000) /* 300ms */
 #define IDLE_WAIT_TIMEOUT	(50 * 1000) /* 50ms */
@@ -463,10 +468,12 @@ enum dpp_csc_eq {
 	CSC_BT_709 = 1,
 	CSC_BT_2020 = 2,
 	CSC_DCI_P3 = 3,
+	CSC_STANDARD_UNSPECIFIED = 63,
 	/* eq_mode : 3bits [8:6] */
 	CSC_RANGE_SHIFT = 6,
 	CSC_RANGE_LIMITED = 0x0,
 	CSC_RANGE_FULL = 0x1,
+	CSC_RANGE_UNSPECIFIED = 7,
 };
 
 enum dpp_comp_src {
@@ -824,9 +831,8 @@ struct dpu_size_err_info {
 };
 
 /* Definitions below are used in the DECON */
-#define	DPU_EVENT_LOG_MAX	SZ_1K
-#define	DPU_EVENT_PRINT_MAX	512
-#define	DPU_EVENT_SIZE_ERR_MAX	16
+#define	DPU_EVENT_LOG_MAX	SZ_512
+#define	DPU_EVENT_PRINT_MAX	(DPU_EVENT_LOG_MAX >> 1)
 typedef enum dpu_event_log_level_type {
 	DPU_EVENT_LEVEL_LOW = 0,
 	DPU_EVENT_LEVEL_HIGH,
@@ -960,7 +966,8 @@ struct decon_debug {
 	struct dentry *debug_recovery_cnt;
 	struct dentry *debug_cmd_lp_ref;
 
-	struct dpu_log event_log[DPU_EVENT_LOG_MAX];
+	struct dpu_log *event_log;
+	u32 event_log_cnt;
 	atomic_t event_log_idx;
 	dpu_log_level_t event_log_level;
 #endif
@@ -1000,6 +1007,10 @@ struct decon_fsync {
 #endif
 
 struct decon_hiber {
+#if defined(CONFIG_EXYNOS_HIBERNATION_THREAD)
+	wait_queue_head_t wait;
+#endif
+	ktime_t timestamp;
 	struct mutex lock;
 	struct task_struct *thread;
 	struct kthread_worker worker;
@@ -1115,6 +1126,9 @@ struct decon_device {
 	int frame_cnt_target;
 	wait_queue_head_t wait_vstatus;
 	int eint_status;
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+	int eint_pend;
+#endif
 
 	u32 prev_protection_bitmask;
 	unsigned long prev_aclk_khz;
@@ -1131,6 +1145,9 @@ struct decon_device {
 #if defined(CONFIG_EXYNOS_COMMON_PANEL)
 	atomic_t bypass;
 	struct decon_reg_data last_regs;
+#endif
+#ifdef CONFIG_DISPLAY_USE_INFO
+	struct notifier_block dpui_notif;
 #endif
 #ifdef CONFIG_SUPPORT_DSU
 	struct dsu_info dsu;
@@ -1442,6 +1459,10 @@ static inline int decon_reset_panel_global(u32 id)
 
 	return decon_reset_panel(decon);
 }
+#endif
+
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+void log_decon_bigdata(struct decon_device *decon);
 #endif
 
 enum disp_pwr_mode {

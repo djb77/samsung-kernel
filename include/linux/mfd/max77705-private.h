@@ -123,6 +123,7 @@ enum max77705_fuelgauge_reg {
 	ICHGTERM_REG				= 0x1E,
 	REMCAP_AV_REG				= 0x1F,
 	FULLCAP_NOM_REG				= 0x23,
+	LEARN_CFG_REG				= 0x28,
 	FILTER_CFG_REG				= 0x29,
 	MISCCFG_REG				= 0x2B,
 	QRTABLE20_REG				= 0x32,
@@ -138,6 +139,9 @@ enum max77705_fuelgauge_reg {
 	AVGISYS_REG				= 0x4B,
 	QH_REG					= 0x4D,
 	VSYS_REG				= 0xB1,
+	TALRTTH2_REG				= 0xB2,
+	/* "not used REG(0xB2)" is for checking fuelgague init result. */
+	FG_INIT_RESULT_REG			= TALRTTH2_REG,
 	VBYP_REG				= 0xB3,
 	CONFIG2_REG				= 0xBB,
 	IIN_REG					= 0xD0,

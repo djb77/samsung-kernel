@@ -74,7 +74,7 @@
 				2 2 0 0 /* IN1 */
 				2 2 1 1 /* IN2 */
 			>;
-			cirrus,out-mono = <0 0 0 1 0 0>;
+			cirrus,out-mono = <0 0 1 0 0 0>;
 			cirrus,auxpdm-falling-edge;
 
 			pinctrl-names = "default";
@@ -234,8 +234,8 @@
 				"IN2BL", "FM",
 				"IN2BR", "FM",
 				"VTS PAD DPDM", "DMIC1",
-				"RECEIVER", "HPOUT4L",
-				"RECEIVER", "HPOUT4R",
+				"RECEIVER", "HPOUT3L",
+				"RECEIVER", "HPOUT3R",
 				"HEADPHONE", "HPOUT2L",
 				"HEADPHONE", "HPOUT2R",
 				"BLUETOOTH SPK", "ABOX UAIF3 Playback",

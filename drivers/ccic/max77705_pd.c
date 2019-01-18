@@ -40,6 +40,8 @@
 #endif
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 #include <linux/usb/class-dual-role.h>
+#elif defined(CONFIG_TYPEC)
+#include <linux/usb/typec.h>
 #endif
 #include "../battery_v2/include/sec_charging_common.h"
 
@@ -156,6 +158,9 @@ void max77705_vbus_turn_on_ctrl(struct max77705_usbc_platform_data *usbc_data, b
 #if defined(CONFIG_USB_HOST_NOTIFY)
 	struct otg_notify *o_notify = get_otg_notify();
 	bool must_block_host = is_blocked(o_notify, NOTIFY_BLOCK_TYPE_HOST);
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+	int event;
+#endif
 
 	pr_info("%s : enable=%d, auto_vbus_en=%d, must_block_host=%d, swaped=%d\n",
 		__func__, enable, usbc_data->auto_vbus_en, must_block_host, swaped);
@@ -195,6 +200,10 @@ void max77705_vbus_turn_on_ctrl(struct max77705_usbc_platform_data *usbc_data, b
 					// this case is USB Killer.
 					pr_info("%s : do not turn on VBUS because of USB Killer.\n",
 						__func__);
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+					event = NOTIFY_EXTRA_USBKILLER;
+					store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 #if defined(CONFIG_USB_HW_PARAM)
 					if (o_notify)
 						inc_hw_param(o_notify, USB_CCIC_USB_KILLER_COUNT);
@@ -381,14 +390,17 @@ void max77705_notify_rp_current_level(struct max77705_usbc_platform_data *usbc_d
 	unsigned int rp_currentlvl;
 
 	switch (usbc_data->cc_data->ccistat) {
-	case 1:
+	case CCI_500mA:
 		rp_currentlvl = RP_CURRENT_LEVEL_DEFAULT;
 		break;
-	case 2:
+	case CCI_1_5A:
 		rp_currentlvl = RP_CURRENT_LEVEL2;
 		break;
-	case 3:
+	case CCI_3_0A:
 		rp_currentlvl = RP_CURRENT_LEVEL3;
+		break;
+	case CCI_SHORT:
+		rp_currentlvl = RP_CURRENT_ABNORMAL;
 		break;
 	default:
 		rp_currentlvl = RP_CURRENT_LEVEL_NONE;
@@ -414,6 +426,9 @@ static void max77705_pd_check_pdmsg(struct max77705_usbc_platform_data *usbc_dat
 	union power_supply_propval val;
 	/*int dr_swap, pr_swap, vcon_swap = 0; u8 value[2], rc = 0;*/
 	MAX77705_VDM_MSG_IRQ_STATUS_Type VDM_MSG_IRQ_State;
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+	int event;
+#endif
 
 	VDM_MSG_IRQ_State.DATA = 0x0;
 	msg_maxim(" pd_msg [%x]", pd_msg);
@@ -430,6 +445,7 @@ static void max77705_pd_check_pdmsg(struct max77705_usbc_platform_data *usbc_dat
 	case Sink_PD_Error_Recovery:
 		break;
 	case Sink_PD_SenderResponseTimer_Timeout:
+		msg_maxim("Sink_PD_SenderResponseTimer_Timeout received.");
 	/*	queue_work(usbc_data->op_send_queue, &usbc_data->op_send_work); */
 		break;
 	case Source_PD_PSRdy_Sent:
@@ -445,17 +461,19 @@ static void max77705_pd_check_pdmsg(struct max77705_usbc_platform_data *usbc_dat
 		schedule_delayed_work(&usbc_data->vbus_hard_reset_work, msecs_to_jiffies(800));
 		break;
 	case PD_DR_Swap_Request_Received:
-		msg_maxim("%s DR_SWAP received.", __func__);
+		msg_maxim("DR_SWAP received.");
 		/* currently, do nothing
 		 * calling max77705_check_pdo() has been moved to max77705_psrdy_irq()
 		 * for specific PD charger issue
 		 */
+		if (usbc_data->dr_swap_cnt < INT_MAX)
+			usbc_data->dr_swap_cnt++;
 		break;
 	case PD_PR_Swap_Request_Received:
-		msg_maxim("%s PR_SWAP received.", __func__);
+		msg_maxim("PR_SWAP received.");
 		break;
 	case PD_VCONN_Swap_Request_Received:
-		msg_maxim("%s VCONN_SWAP received.", __func__);
+		msg_maxim("VCONN_SWAP received.");
 		break;
 	case Received_PD_Message_in_illegal_state:
 		break;
@@ -482,12 +500,26 @@ static void max77705_pd_check_pdmsg(struct max77705_usbc_platform_data *usbc_dat
 		usbc_data->pd_pr_swap = cc_SINK;
 		break;
 	case HARDRESET_RECEIVED:
+		/*turn off the vbus both Source and Sink*/
+		if (usbc_data->cc_data->current_pr == SRC) {
+			max77705_vbus_turn_on_ctrl(usbc_data, OFF, false);
+			schedule_delayed_work(&usbc_data->vbus_hard_reset_work, msecs_to_jiffies(760));
+		}
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+		event = NOTIFY_EXTRA_HARDRESET_RECEIVED;
+		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
+		break;
 	case HARDRESET_SENT:
 		/*turn off the vbus both Source and Sink*/
 		if (usbc_data->cc_data->current_pr == SRC) {
 			max77705_vbus_turn_on_ctrl(usbc_data, OFF, false);
 			schedule_delayed_work(&usbc_data->vbus_hard_reset_work, msecs_to_jiffies(760));
 		}
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+		event = NOTIFY_EXTRA_HARDRESET_SENT;
+		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 		break;
 	case Get_Vbus_turn_on:
 		break;
@@ -606,6 +638,9 @@ static void max77705_pd_rid(struct max77705_usbc_platform_data *usbc_data, u8 fc
 			|| pd_data->device == DEV_FCT_523K || pd_data->device == DEV_FCT_619K) {
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 			usbc_data->power_role = DUAL_ROLE_PROP_PR_NONE;
+#elif defined(CONFIG_TYPEC)
+			usbc_data->typec_power_role = TYPEC_SINK;
+
 #endif
 			/* usb or otg */
 			max77705_ccic_event_work(usbc_data,
@@ -635,8 +670,32 @@ static irqreturn_t max77705_pdmsg_irq(int irq, void *data)
 static irqreturn_t max77705_psrdy_irq(int irq, void *data)
 {
 	struct max77705_usbc_platform_data *usbc_data = data;
-
+	u8 psrdy_received = 0;
+#if defined(CONFIG_TYPEC)
+	enum typec_pwr_opmode mode = TYPEC_PWR_MODE_USB;
+#endif
 	msg_maxim("IN");
+	max77705_read_reg(usbc_data->muic, REG_PD_STATUS1, &usbc_data->pd_status1);
+	psrdy_received = (usbc_data->pd_status1 & BIT_PD_PSRDY)
+			>> FFS(BIT_PD_PSRDY);
+
+	if (psrdy_received && !usbc_data->pd_support
+			&& usbc_data->pd_data->cc_status != CC_NO_CONN)
+		usbc_data->pd_support = true;
+#if defined(CONFIG_TYPEC)
+	if (usbc_data->typec_try_state_change == TRY_ROLE_SWAP_PR &&
+		usbc_data->pd_support) {
+		/* Role change try and new mode detected */
+		msg_maxim("typec_reverse_completion");
+		usbc_data->typec_try_state_change = TRY_ROLE_SWAP_NONE;
+		complete(&usbc_data->typec_reverse_completion);
+	}
+	mode = max77705_get_pd_support(usbc_data);
+	typec_set_pwr_opmode(usbc_data->port, mode);
+#endif
+	msg_maxim("psrdy_received=%d, usbc_data->pd_support=%d, cc_status=%d",
+		psrdy_received, usbc_data->pd_support, usbc_data->pd_data->cc_status);
+
 	if (usbc_data->pd_data->cc_status == CC_SNK) {
 		max77705_check_pdo(usbc_data);
 		usbc_data->pd_data->psrdy_received = true;
@@ -676,6 +735,15 @@ static void max77705_datarole_irq_handler(void *data, int irq)
 				if (pd_data->previous_dr != 0xFF)
 					msg_maxim("%s detach previous usb connection\n", __func__);
 				max77705_notify_dr_status(usbc_data, 1);
+#if defined(CONFIG_TYPEC) 
+				if (usbc_data->typec_try_state_change == TRY_ROLE_SWAP_DR ||
+					usbc_data->typec_try_state_change == TRY_ROLE_SWAP_TYPE) {
+					/* Role change try and new mode detected */
+					msg_maxim("typec_reverse_completion");
+					usbc_data->typec_try_state_change = TRY_ROLE_SWAP_NONE;
+					complete(&usbc_data->typec_reverse_completion);
+				}
+#endif 
 			}
 			msg_maxim(" UFP");
 			break;
@@ -688,9 +756,16 @@ static void max77705_datarole_irq_handler(void *data, int irq)
 					msg_maxim("%s detach previous usb connection\n", __func__);
 
 				max77705_notify_dr_status(usbc_data, 1);
-				if (usbc_data->cc_data->current_pr == SNK && !(usbc_data->send_vdm_identity)
-					&& !(usbc_data->is_first_booting)) {
-					usbc_data->send_vdm_identity = 1;
+#if defined(CONFIG_TYPEC) 
+				if (usbc_data->typec_try_state_change == TRY_ROLE_SWAP_DR ||
+					usbc_data->typec_try_state_change == TRY_ROLE_SWAP_TYPE) {
+					/* Role change try and new mode detected */
+					msg_maxim("typec_reverse_completion");
+					usbc_data->typec_try_state_change = TRY_ROLE_SWAP_NONE;
+					complete(&usbc_data->typec_reverse_completion);
+				}
+#endif 
+				if (usbc_data->cc_data->current_pr == SNK && !(usbc_data->is_first_booting)) {
 					max77705_vdm_process_set_identity_req(usbc_data);
 					msg_maxim("SEND THE IDENTITY REQUEST FROM DFP HANDLER");
 				}

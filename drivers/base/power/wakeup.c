@@ -18,6 +18,9 @@
 #include <linux/types.h>
 #ifdef CONFIG_SEC_PM_DEBUG
 #include <linux/fb.h>
+#include <linux/irq.h>
+#include <linux/interrupt.h>
+#include <linux/wakeup_reason.h>
 #endif
 #include <trace/events/power.h>
 
@@ -970,6 +973,24 @@ bool pm_wakeup_pending(void)
 		pm_print_active_wakeup_sources();
 	}
 
+#ifdef CONFIG_SEC_PM_DEBUG
+	if (pm_abort_suspend) {
+		struct irq_desc *desc = irq_to_desc(pm_wakeup_irq);
+
+		if (desc && desc->action && desc->action->name) {
+			log_suspend_abort_reason("pm_abort_suspend: %u(%s)",
+					pm_wakeup_irq, desc->action->name);
+			pr_info("PM: %s: Abort suspend: %u(%s)\n", __func__,
+					pm_wakeup_irq, desc->action->name);
+		} else {
+			log_suspend_abort_reason("pm_abort_suspend: %u",
+					pm_wakeup_irq);
+			pr_info("PM: %s: Abort suspend: %u\n", __func__,
+					pm_wakeup_irq);
+		}
+	}
+#endif /* CONFIG_SEC_PM_DEBUG */
+
 	return ret || pm_abort_suspend;
 }
 
@@ -991,6 +1012,9 @@ void pm_system_irq_wakeup(unsigned int irq_number)
 	if (pm_wakeup_irq == 0) {
 		pm_wakeup_irq = irq_number;
 		pm_system_wakeup();
+#ifdef CONFIG_SEC_PM_DEBUG
+		pr_info("PM: %s: %u\n", __func__, irq_number);
+#endif
 	}
 }
 

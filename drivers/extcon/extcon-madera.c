@@ -1041,7 +1041,7 @@ static void madera_extcon_set_mode(struct madera_extcon *info, int mode)
 		 info->micd_modes[mode].bias, info->micd_modes[mode].gpio,
 		 info->micd_modes[mode].hp_gnd);
 
-	if (info->micd_pol_gpio > 0)
+	if (info->micd_pol_gpio)
 		gpiod_set_value_cansleep(info->micd_pol_gpio,
 					 info->micd_modes[mode].gpio);
 
@@ -1428,6 +1428,7 @@ static void madera_hs_mic_control(struct madera_extcon *info, int state)
 				   addr,
 				   MADERA_IN1L_MUTE_MASK,
 				   MADERA_MIC_MUTE << MADERA_IN1L_MUTE_SHIFT);
+		madera->hs_mic_muted = true;
 		snd_soc_dapm_mutex_unlock(madera->dapm);
 		break;
 	case MADERA_MIC_UNMUTE:
@@ -1441,6 +1442,8 @@ static void madera_hs_mic_control(struct madera_extcon *info, int state)
 		if (ret)
 			dev_err(info->dev,
 				"Failed to read input status: %d\n", ret);
+
+		madera->hs_mic_muted = false;
 
 		if (!ret && (in_bit & val))
 			regmap_update_bits(madera->regmap,
@@ -1892,6 +1895,9 @@ err:
 static void madera_hpdet_moisture_stop(struct madera_extcon *info)
 {
 	struct madera *madera = info->madera;
+
+	/* Wait for any running detect to finish */
+	madera_hpdet_wait(info);
 
 	switch (madera->type) {
 	case CS47L35:
@@ -2846,14 +2852,14 @@ static void madera_extcon_process_accdet_node(struct madera_extcon *info,
 	madera_extcon_get_micd_configs(info, node, pdata);
 	madera_extcon_of_get_micd_ranges(info, node, pdata);
 
-	info->micd_pol_gpio = devm_get_gpiod_from_child(madera->dev,
+	info->micd_pol_gpio = devm_get_gpiod_from_child(info->dev,
 							"cirrus,micd-pol",
 							node);
 	if (IS_ERR(info->micd_pol_gpio)) {
 		dev_warn(info->dev,
 			 "Malformed cirrus,micd-pol-gpios ignored: %ld\n",
 			 PTR_ERR(info->micd_pol_gpio));
-		info->micd_pol_gpio = 0;
+		info->micd_pol_gpio = NULL;
 	}
 
 
@@ -2947,11 +2953,11 @@ static void madera_extcon_dump_config(struct madera_extcon *info)
 		MADERA_EXTCON_PDATA_DUMP(micd_open_circuit_declare, "%u");
 		MADERA_EXTCON_PDATA_DUMP(micd_software_compare, "%u");
 
-		if (info->micd_pol_gpio > 0)
+		if (info->micd_pol_gpio)
 			dev_dbg(info->dev, "micd_pol_gpio: %d\n",
 				desc_to_gpio(info->micd_pol_gpio));
 		else
-			dev_dbg(info->dev, "micd_pol_gpio: 0\n");
+			dev_dbg(info->dev, "micd_pol_gpio: unused\n");
 
 		dev_dbg(info->dev, "\tmicd_ranges {\n");
 		for (j = 0; j < info->num_micd_ranges; ++j)

@@ -651,6 +651,7 @@ static int ion_handle_add(struct ion_client *client, struct ion_handle *handle)
 }
 
 unsigned int ion_parse_heap_id(unsigned int heap_id_mask, unsigned int flags);
+unsigned int ion_buffer_flag_sanity_check(unsigned int heap_id_mask, unsigned int flags);
 
 static size_t ion_buffer_get_total_size_by_pid(struct ion_client *client)
 {
@@ -695,13 +696,15 @@ struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
 	 * succeeded or all heaps have been tried
 	 */
 	len = PAGE_ALIGN(len);
-	if (WARN_ON(!len)) {
+	if (!len) {
 		trace_ion_alloc_fail(client->name, EINVAL, len,
 				align, heap_id_mask, flags);
 		return ERR_PTR(-EINVAL);
 	}
 
 	heap_id_mask = ion_parse_heap_id(heap_id_mask, flags);
+	flags = ion_buffer_flag_sanity_check(heap_id_mask, flags);
+
 	if (heap_id_mask == 0)
 		return ERR_PTR(-EINVAL);
 

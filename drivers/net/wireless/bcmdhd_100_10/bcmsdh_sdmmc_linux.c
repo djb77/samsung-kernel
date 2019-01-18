@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Proprietary,Open:>>
  *
- * $Id: bcmsdh_sdmmc_linux.c 689795 2017-03-13 14:57:21Z $
+ * $Id: bcmsdh_sdmmc_linux.c 753315 2018-03-21 04:10:12Z $
  */
 
 #include <typedefs.h>
@@ -49,6 +49,10 @@
 #endif /* !defined(SDIO_VENDOR_ID_BROADCOM) */
 
 #define SDIO_DEVICE_ID_BROADCOM_DEFAULT	0x0000
+
+#if !defined(SDIO_DEVICE_ID_BROADCOM_4362)
+#define SDIO_DEVICE_ID_BROADCOM_4362    0x4362
+#endif // endif
 
 extern void wl_cfg80211_set_parent_dev(void *dev);
 extern void sdioh_sdmmc_devintr_off(sdioh_info_t *sd);
@@ -180,7 +184,7 @@ static void bcmsdh_sdmmc_remove(struct sdio_func *func)
 /* devices we support, null terminated */
 static const struct sdio_device_id bcmsdh_sdmmc_ids[] = {
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_DEFAULT) },
-	{ SDIO_DEVICE_CLASS(SDIO_CLASS_NONE)		},
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4362) },
 	{ 0, 0, 0, 0 /* end: all zeroes */
 	},
 };
@@ -255,6 +259,14 @@ static struct semaphore *notify_semaphore = NULL;
 static int dummy_probe(struct sdio_func *func,
                               const struct sdio_device_id *id)
 {
+	if (func)
+		sd_info(("%s: func->num=0x%x; \n", __FUNCTION__, func->num));
+	if (id) {
+		sd_info(("%s: class=0x%x; vendor=0x%x; device=0x%x\n", __FUNCTION__,
+			id->class, id->vendor, id->device));
+		if (id->vendor != SDIO_VENDOR_ID_BROADCOM)
+				return -ENODEV;
+	}
 	if (func && (func->num != 2)) {
 		return 0;
 	}

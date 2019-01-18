@@ -184,6 +184,8 @@ static int alloc_freepages_range(struct zone *zone, unsigned int order,
 				if ((page_to_pfn(page) >= 0xF0000) &&
 						(page_to_pfn(page) <= 0xFFFFF))
 					continue;
+				if (page_to_pfn(page) > end_pfn)
+					continue;
 
 				list_del(&page->lru);
 				__ClearPageBuddy(page);
@@ -272,7 +274,7 @@ retry:
 			continue;
 
 		/* CMA pages should not be reclaimed */
-		if (is_migrate_cma(
+		if (is_migrate_cma_rbin(
 				get_pageblock_migratetype(pfn_to_page(pfn)))) {
 			/* nr_pages is added before next iteration */
 			pfn = ALIGN(pfn + 1, pageblock_nr_pages) - nr_pages;
@@ -348,6 +350,9 @@ static int __init init_highorder_pages_allocator(void)
 		start_pfn = __phys_to_pfn(memblock_start_of_DRAM());
 		end_pfn = max_pfn;
 	}
+
+	if (end_pfn > 0x97FFFF)
+		end_pfn = 0x97FFFF;
 
 	cached_scan_pfn = start_pfn;
 

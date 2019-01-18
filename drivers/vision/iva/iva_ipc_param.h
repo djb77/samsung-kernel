@@ -266,6 +266,8 @@ struct orb_in_param {
 	uint32_t	har_on;
 	uint32_t	x_scale;
 	uint32_t	y_scale;
+	uint32_t	nms_size;
+	uint32_t	int_fast_th;
 	uint32_t	iterations;
 
 	uint32_t	p_keypoint_ptr;

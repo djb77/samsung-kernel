@@ -23,7 +23,6 @@
 #define IVA_CTRL_EXIT_MCU		_IOW(IVA_CTRL_MAGIC, 3, uint32_t)
 
 #define IVA_CTRL_GET_STATUS		_IOR(IVA_CTRL_MAGIC, 4, struct iva_status_param)
-
 #define IVA_IPC_QUEUE_SEND_CMD		_IOW(IVA_CTRL_MAGIC, 5, struct ipc_cmd_param)
 #define IVA_IPC_QUEUE_RECEIVE_RSP	_IOR(IVA_CTRL_MAGIC, 6, struct ipc_res_param)
 
@@ -34,6 +33,8 @@
 #define IVA_ION_FREE			_IOWR(IVA_CTRL_MAGIC, 10, struct iva_ion_param)
 #define IVA_ION_SYNC_FOR_CPU		_IOWR(IVA_CTRL_MAGIC, 11, struct iva_ion_param)
 #define IVA_ION_SYNC_FOR_DEVICE		_IOWR(IVA_CTRL_MAGIC, 12, struct iva_ion_param)
+
+#define IVA_CTRL_SET_CLK		_IOWR(IVA_CTRL_MAGIC, 13, uint32_t)
 
 #define SYNC_ALL_TYPE_LOC		(30)
 

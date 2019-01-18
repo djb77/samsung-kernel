@@ -15,7 +15,7 @@
 
 #include "s5p_mfc_common.h"
 
-int s5p_mfc_open_inst(struct s5p_mfc_ctx *ctx);
+void s5p_mfc_open_inst(struct s5p_mfc_ctx *ctx);
 int s5p_mfc_close_inst(struct s5p_mfc_ctx *ctx);
 int s5p_mfc_abort_inst(struct s5p_mfc_ctx *ctx);
 

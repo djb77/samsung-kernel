@@ -22,11 +22,6 @@
 struct score_frame;
 struct score_context;
 
-enum score_context_state {
-	SCORE_CONTEXT_START,
-	SCORE_CONTEXT_STOP
-};
-
 /**
  * struct score_context_ops - Operations controlling context
  * @queue: prepare command and send that to SCore device
@@ -43,7 +38,6 @@ struct score_context_ops {
  * @state: state of context (TODO this is not fixed)
  * @mmu_ctx: object about score_mmu_context structure
  * @list: list to be included in score_core
- * @ref_count: reference count of thread attaching this context
  * @frame_list: list of frame running in this context
  * @frame_count: count of frame running in this context
  * @wait_time: max time that context can wait result response (unit : ms)
@@ -57,9 +51,9 @@ struct score_context {
 	unsigned int			state;
 	struct score_mmu_context	*mmu_ctx;
 	struct list_head		list;
-	atomic_t			ref_count;
 	struct list_head		frame_list;
 	unsigned int			frame_count;
+	unsigned int			frame_total_count;
 	unsigned int			wait_time;
 
 	const struct score_context_ops	*ctx_ops;

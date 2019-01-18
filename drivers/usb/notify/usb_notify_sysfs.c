@@ -6,7 +6,7 @@
  *
 */
 
- /* usb notify layer v3.1 */
+ /* usb notify layer v3.2 */
 
 #define pr_fmt(fmt) "usb_notify: " fmt
 
@@ -61,6 +61,8 @@ usb_hw_param_print[USB_CCIC_HW_PARAM_MAX][MAX_HWPARAM_STRING] = {
 	{"CC_WTIME"},
 	{"CC_WVBUS"},
 	{"CC_WVTIME"},
+	{"CC_WLVBS"},
+	{"CC_WLVTM"},
 	{"CC_CSHORT"},
 	{"CC_SVSHT"},
 	{"CC_SGSHT"},
@@ -316,13 +318,19 @@ static ssize_t usb_hw_param_show(struct device *dev,
 		*p_param += get_usb210_count();
 	p_param = get_hw_param(n, USB_CCIC_WATER_TIME_DURATION);
 	if (p_param)
-		*p_param += get_waterDet_duration();
+		*p_param += get_waterdet_duration();
 	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_COUNT);
 	if (p_param)
-		*p_param += get_waterChg_count();
+		*p_param += get_waterchg_count(0);
+	p_param = get_hw_param(n, USB_CCIC_WATER_LPM_VBUS_COUNT);
+	if (p_param)
+		*p_param += get_waterchg_count(1);
 	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_TIME_DURATION);
 	if (p_param)
-		*p_param += get_wVbus_duration();
+		*p_param += get_wvbus_duration(0);
+	p_param = get_hw_param(n, USB_CCIC_WATER_LPM_VBUS_TIME_DURATION);
+	if (p_param)
+		*p_param += get_wvbus_duration(1);
 	p_param = get_hw_param(n, USB_CCIC_VERSION);
 #if defined(CONFIG_USB_NOTIFY_PROC_LOG)
 	if (p_param)
@@ -411,13 +419,19 @@ static ssize_t hw_param_show(struct device *dev,
 		*p_param += get_usb210_count();
 	p_param = get_hw_param(n, USB_CCIC_WATER_TIME_DURATION);
 	if (p_param)
-		*p_param += get_waterDet_duration();
+		*p_param += get_waterdet_duration();
 	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_COUNT);
 	if (p_param)
-		*p_param += get_waterChg_count();
+		*p_param += get_waterchg_count(0);
+	p_param = get_hw_param(n, USB_CCIC_WATER_LPM_VBUS_COUNT);
+	if (p_param)
+		*p_param += get_waterchg_count(1);
 	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_TIME_DURATION);
 	if (p_param)
-		*p_param += get_wVbus_duration();
+		*p_param += get_wvbus_duration(0);
+	p_param = get_hw_param(n, USB_CCIC_WATER_LPM_VBUS_TIME_DURATION);
+	if (p_param)
+		*p_param += get_wvbus_duration(1);
 	p_param = get_hw_param(n, USB_CCIC_VERSION);
 #if defined(CONFIG_USB_NOTIFY_PROC_LOG)
 	if (p_param)

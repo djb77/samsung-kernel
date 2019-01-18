@@ -19,6 +19,7 @@
 #include <linux/of_gpio.h>
 #endif
 #include <linux/gpio_keys.h>
+#include <linux/moduleparam.h>
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
@@ -38,6 +39,11 @@ static ktime_t hold_time;
 static struct hrtimer hard_reset_hook_timer;
 static bool hard_reset_occurred;
 static int all_pressed;
+
+/* Proc node to enable hard reset */
+static bool hard_reset_hook_enable = 1;
+module_param_named(hard_reset_hook_enable, hard_reset_hook_enable, bool, 0664);
+MODULE_PARM_DESC(hard_reset_hook_enable, "1: Enabled, 0: Disabled");
 
 static bool is_hard_reset_key(unsigned int code)
 {
@@ -174,6 +180,9 @@ static int hard_reset_hook(struct notifier_block *nb,
 	unsigned int code = (unsigned int)c;
 	int pressed = *(int *)v;
 
+	if (unlikely(!hard_reset_hook_enable))
+		return NOTIFY_DONE;
+
 	if (!is_hard_reset_key(code))
 		return NOTIFY_DONE;
 
@@ -182,11 +191,14 @@ static int hard_reset_hook(struct notifier_block *nb,
 	else
 		hard_reset_key_unset(code);
 
-	if (hard_reset_key_all_pressed())
+	if (hard_reset_key_all_pressed()) {
 		hrtimer_start(&hard_reset_hook_timer,
-			      hold_time, HRTIMER_MODE_REL);
-	else
-		hrtimer_cancel(&hard_reset_hook_timer);
+			      hold_time, HRTIMER_MODE_REL);		
+		pr_info("%s : hrtimer_start\n", __func__);
+	}
+	else {
+		hrtimer_try_to_cancel(&hard_reset_hook_timer);
+	}
 
 	return NOTIFY_OK;
 }

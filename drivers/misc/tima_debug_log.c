@@ -39,33 +39,24 @@ unsigned long *tima_secure_log_addr;
 ssize_t	tima_read(struct file *filep, char __user *buf, size_t size, loff_t *offset)
 {
 	/* First check is to get rid of integer overflow exploits */
-	if (size > DEBUG_LOG_SIZE || (*offset) + size > DEBUG_LOG_SIZE) {
+	if(size > DEBUG_LOG_SIZE || (*offset) + size > DEBUG_LOG_SIZE) {
 		pr_err("Extra read\n");
 		return -EINVAL;
 	}
-	if( !strcmp(filep->f_path.dentry->d_iname, "tima_debug_log")) {
+	if( !strcmp(filep->f_path.dentry->d_iname, "tima_debug_log"))
 		tima_log_addr = tima_debug_log_addr;
-		if(copy_to_user(buf, (const char *)tima_log_addr + (*offset), size)){
-			pr_err("Copy to user failed\n");
-			return -1;
-		} else {
-			*offset += size;
-			return size;
-		}
-	}
-	else if( !strcmp(filep->f_path.dentry->d_iname, "tima_secure_log")) {
+	else if( !strcmp(filep->f_path.dentry->d_iname, "tima_secure_log"))
 		tima_log_addr = tima_secure_log_addr;
-		if(copy_to_user(buf, (const char *)tima_log_addr + (*offset), size)){
-			pr_err("Copy to user failed\n");
-			return -1;
-		} else {
-			*offset += size;
-			return size;
-		}
-	}
 	else {
 		pr_err("NO tima*log\n");
 		return -1;
+	}
+	if(copy_to_user(buf, (const char *)tima_log_addr + (*offset), size)) {
+		pr_err("Copy to user failed\n");
+		return -1;
+	} else {
+		*offset += size;
+		return size;
 	}
 }
 
@@ -80,32 +71,23 @@ static const struct file_operations tima_proc_fops = {
  */
 static int __init tima_debug_log_read_init(void)
 {
-	if (proc_create("tima_debug_log", 0644, NULL, &tima_proc_fops) == NULL) {
+	if(proc_create("tima_debug_log", 0644, NULL, &tima_proc_fops) == NULL) {
 		pr_err("tima_debug_log_read_init: Error creating proc entry\n");
 		goto error_return;
 	}
-	if (proc_create("tima_secure_log", 0644, NULL, &tima_proc_fops) == NULL) {
+	if(proc_create("tima_secure_log", 0644, NULL, &tima_proc_fops) == NULL) {
 		pr_err("tima_secure_log_read_init: Error creating proc entry\n");
 		goto remove_debug_entry;
 	}
 	pr_info("%s: Registering /proc/tima_debug_log Interface\n", __func__);
 
-	tima_debug_log_addr = (unsigned long *)ioremap(TIMA_DEBUG_LOGGING_START, DEBUG_LOG_SIZE);
-	tima_secure_log_addr = (unsigned long *)ioremap(TIMA_SECURE_LOGGING_START, DEBUG_LOG_SIZE);
-	if (tima_debug_log_addr == NULL) {
-		pr_err("%s: ioremap Failed\n", __func__);
-		goto remove_debug_entry;
-	}
-	if (tima_secure_log_addr == NULL) {
-		pr_err("tima_secure_log_read_init: ioremap Failed\n");
-		goto remove_secure_entry;
-	}
+	tima_debug_log_addr = (unsigned long *)phys_to_virt(TIMA_DEBUG_LOGGING_START);
+	tima_secure_log_addr = (unsigned long *)phys_to_virt(TIMA_SECURE_LOGGING_START);
+
 	return 0;
 
 remove_debug_entry:
 	remove_proc_entry("tima_debug_log", NULL);
-remove_secure_entry:
-	remove_proc_entry("tima_secure_log", NULL);
 error_return:
 	return -1;
 }
@@ -121,10 +103,6 @@ static void __exit tima_debug_log_read_exit(void)
 	remove_proc_entry("tima_secure_log", NULL);
 
 	pr_info("Deregistering /proc/tima_debug_log Interface\n");
-	if (tima_debug_log_addr != NULL)
-		iounmap(tima_debug_log_addr);
-	if (tima_secure_log_addr != NULL)
-		iounmap(tima_secure_log_addr);
 }
 
 module_init(tima_debug_log_read_init);

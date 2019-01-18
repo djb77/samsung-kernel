@@ -30,6 +30,7 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/pcm_params.h>
+#include <sound/tlv.h>
 #include <sound/samsung/abox.h>
 #include <sound/samsung/vts.h>
 
@@ -107,6 +108,8 @@ static void update_mask_value(void __iomem *sfr,
 #define IPC_TIMEOUT_US			(10000)
 #define BOOT_DONE_TIMEOUT_MS		(10000)
 #define IPC_RETRY			(10)
+
+#define DMA_VOL_FACTOR_MAX_STEPS	(0xFFFFFF)
 
 #define ERAP(wname, wcontrols, event_fn, wparams) \
 {	.id = snd_soc_dapm_dai_link, .name = wname, \
@@ -1495,6 +1498,7 @@ static int abox_audio_mode_put_ipc(struct device *dev, enum audio_mode mode)
 	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
 
 	dev_dbg(dev, "%s(%d)\n", __func__, mode);
+	data->audio_mode_time = local_clock();
 
 	msg.ipcid = IPC_SYSTEM;
 	system_msg->msgtype = ABOX_SET_MODE;
@@ -1652,6 +1656,76 @@ static int abox_tickle_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int abox_rdma_vol_factor_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
+	struct device *dev = cmpnt->dev;
+	struct abox_data *data = dev_get_drvdata(dev);
+	struct soc_mixer_control *mc =
+			(struct soc_mixer_control *)kcontrol->private_value;
+	int id = (int)mc->reg;
+	unsigned int volumes;
+	unsigned int value = 0;
+	int ret = 0;
+
+	ret = regmap_read(data->regmap,
+			ABOX_RDMA_VOL_FACTOR(id), &value);
+	if (ret < 0) {
+		dev_err(dev, "sfr access failed: %d\n", ret);
+
+		return ret;
+	}
+
+	volumes = (value & ABOX_RDMA_VOL_FACTOR_MASK);
+
+	dev_dbg(dev, "%s(0x%08x, %u)\n", __func__, id, volumes);
+
+	ucontrol->value.integer.value[0] = volumes;
+
+	return 0;
+}
+
+static int abox_rdma_vol_factor_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
+	struct device *dev = cmpnt->dev;
+	struct abox_data *data = dev_get_drvdata(dev);
+	struct soc_mixer_control *mc =
+			(struct soc_mixer_control *)kcontrol->private_value;
+	int id = (int)mc->reg;
+	unsigned int volumes;
+	unsigned int value = 0;
+	int ret = 0;
+
+	volumes = (unsigned int)ucontrol->value.integer.value[0];
+	dev_dbg(dev, "%s[%d]: %u\n", __func__, id, volumes);
+
+	ret = regmap_read(data->regmap,
+			ABOX_RDMA_VOL_FACTOR(id), &value);
+	if (ret < 0) {
+		dev_err(dev, "sfr access failed: %d\n", ret);
+
+		return ret;
+	}
+
+	set_value_by_name(value, ABOX_RDMA_VOL_FACTOR, volumes);
+
+	ret = regmap_write(data->regmap,
+			ABOX_RDMA_VOL_FACTOR(id), value);
+	if (ret < 0) {
+		dev_err(dev, "sfr access failed: %d\n", ret);
+
+		return ret;
+	}
+
+	return 0;
+}
+
+static const DECLARE_TLV_DB_LINEAR(abox_rdma_vol_factor_gain, 0,
+		DMA_VOL_FACTOR_MAX_STEPS);
+
 static const struct snd_kcontrol_new abox_cmpnt_controls[] = {
 	SOC_SINGLE_EXT("Sampling Rate Mixer", SET_MIXER_SAMPLE_RATE,
 			8000, 384000, 0,
@@ -1770,6 +1844,10 @@ static const struct snd_kcontrol_new abox_cmpnt_controls[] = {
 	SOC_VALUE_ENUM_EXT("Sound Type", abox_sound_type_enum,
 			abox_sound_type_get, abox_sound_type_put),
 	SOC_SINGLE_EXT("Tickle", 0, 0, 1, 0, abox_tickle_get, abox_tickle_put),
+	SOC_SINGLE_EXT_TLV("RDMA VOL FACTOR3", 3, 0,
+			DMA_VOL_FACTOR_MAX_STEPS, 0,
+			abox_rdma_vol_factor_get, abox_rdma_vol_factor_put,
+			abox_rdma_vol_factor_gain),
 };
 
 static const char * const spus_inx_texts[] = {"RDMA", "SIFSM"};
@@ -2631,6 +2709,7 @@ static bool abox_readable_reg(struct device *dev, unsigned int reg)
 	case ABOX_UAIF_STATUS(4):
 	case ABOX_DSIF_CTRL:
 	case ABOX_DSIF_STATUS:
+	case ABOX_RDMA_VOL_FACTOR(3):
 		return true;
 	default:
 		return false;
@@ -2670,6 +2749,7 @@ static bool abox_writeable_reg(struct device *dev, unsigned int reg)
 	case ABOX_UAIF_CTRL0(4):
 	case ABOX_UAIF_CTRL1(4):
 	case ABOX_DSIF_CTRL:
+	case ABOX_RDMA_VOL_FACTOR(3):
 		return true;
 	default:
 		return false;
@@ -2795,6 +2875,7 @@ static const struct reg_default abox_reg_defaults_9810[] = {
 	{0x054C, 0x00000000},
 	{0x0550, 0x00000000},
 	{0x0554, 0x00000000},
+	{0x1318, 0x00000000},
 };
 
 static struct regmap_config abox_regmap_config = {
@@ -3060,6 +3141,10 @@ int abox_hw_params_fixup_helper(struct snd_soc_pcm_runtime *rtd,
 
 	if (dai->driver->symmetric_rates && dai->rate && dai->rate != rate)
 		rate = dai->rate;
+
+	abox_set_sif_format(data, msg_format, format);
+	abox_set_sif_channels(data, msg_format, channels);
+	abox_set_sif_rate(data, msg_rate, rate);
 
 	dev_dbg(dev, "%s: set to %u bit, %u channel, %uHz\n", __func__,
 			width, channels, rate);
@@ -3789,6 +3874,25 @@ int abox_iommu_map(struct device *dev, unsigned long iova,
 	return 0;
 }
 EXPORT_SYMBOL(abox_iommu_map);
+
+int abox_iommu_map_sg(struct device *dev, unsigned long iova,
+		struct scatterlist *sg, unsigned int nents,
+		int prot, size_t bytes, void *area)
+{
+	struct abox_data *data = dev_get_drvdata(dev);
+	int ret;
+
+	dev_dbg(dev, "%s(%#lx)\n", __func__, iova);
+
+	ret = iommu_map_sg(data->iommu_domain, iova, sg, nents, prot);
+	if (ret < 0) {
+		dev_err(dev, "Failed to iommu_map_sg(%#lx): %d\n", iova, ret);
+		return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(abox_iommu_map_sg);
 
 int abox_iommu_unmap(struct device *dev, unsigned long iova,
 		phys_addr_t paddr, size_t size)
@@ -5806,6 +5910,15 @@ static DEVICE_ATTR_RO(calliope_version);
 static DEVICE_ATTR_WO(calliope_debug);
 static DEVICE_ATTR_WO(calliope_cmd);
 
+static int ion_mem_probe(struct abox_data *data)
+{
+	struct device *dev_abox = &data->pdev->dev;
+
+	data->client = exynos_ion_client_create(dev_name(dev_abox));
+
+	return 0;
+}
+
 static int samsung_abox_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -5825,6 +5938,10 @@ static int samsung_abox_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, data);
 	data->pdev = pdev;
 	p_abox_data = data;
+
+	ret = ion_mem_probe(data);
+	if (ret < 0)
+		dev_err(dev, "ion_ctx_probe err (%d)\n", ret);
 
 	abox_probe_quirks(data, np);
 	init_waitqueue_head(&data->ipc_wait_queue);
@@ -6061,7 +6178,7 @@ static int samsung_abox_probe(struct platform_device *pdev)
 			&abox_regmap_config);
 
 	pm_runtime_enable(dev);
-	pm_runtime_set_autosuspend_delay(dev, 1);
+	pm_runtime_set_autosuspend_delay(dev, 500);
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_get(dev);
 

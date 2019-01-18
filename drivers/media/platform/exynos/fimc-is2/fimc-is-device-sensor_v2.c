@@ -849,13 +849,9 @@ static void fimc_is_sensor_dtp(unsigned long data)
 
 	FIMC_BUG_VOID(!device);
 
-	if (device->dtp_del_flag) {
-		del_timer(&device->dtp_timer);
-		device->dtp_del_flag = false;
-	}
-
 	/* Don't need to dtp check */
-	if (!device->force_stop && !device->dtp_check)
+	if ((!device->force_stop && !device->dtp_check) ||
+		!test_bit(FIMC_IS_SENSOR_FRONT_START, &device->state))
 		return;
 
 	err("forcely reset due to 0x%08lx", device->force_stop);
@@ -1047,7 +1043,6 @@ static int fimc_is_sensor_notify_by_fstr(struct fimc_is_device_sensor *device, v
 	int ret = 0;
 	struct fimc_is_framemgr *framemgr;
 	struct fimc_is_frame *frame;
-	u32 hashkey;
 	struct fimc_is_device_csi *csi;
 	struct fimc_is_subdev *dma_subdev;
 	struct v4l2_control ctrl;
@@ -1063,10 +1058,6 @@ static int fimc_is_sensor_notify_by_fstr(struct fimc_is_device_sensor *device, v
 		if (device->instant_cnt == 0)
 			wake_up(&device->instant_wait);
 	}
-
-	hashkey = device->fcount % FIMC_IS_TIMESTAMP_HASH_KEY;
-	device->timestamp[hashkey] = fimc_is_get_timestamp();
-	device->timestampboot[hashkey] = fimc_is_get_timestamp_boot();
 
 #ifdef MEASURE_TIME
 #ifdef MONITOR_TIME
@@ -1387,7 +1378,6 @@ static void fimc_is_sensor_instanton(struct work_struct *data)
 #ifdef ENABLE_DTP
 	if (device->dtp_check) {
 		mod_timer(&device->dtp_timer, jiffies +  msecs_to_jiffies(300));
-		device->dtp_del_flag = true;
 		info("DTP checking...\n");
 	}
 #endif
@@ -1492,7 +1482,6 @@ static int __init fimc_is_sensor_probe(struct platform_device *pdev)
 	device->pdata = pdata;
 	device->groupmgr = &core->groupmgr;
 	device->devicemgr = &core->devicemgr;
-	device->dtp_del_flag = false;
 
 	platform_set_drvdata(pdev, device);
 	init_waitqueue_head(&device->instant_wait);
@@ -1877,8 +1866,10 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 	u32 video_id)
 {
 	int ret = 0;
+#if !defined(USE_NONE_SECURED_CAMERA)
 #if defined(CONFIG_SECURE_CAMERA_USE)
 	int ret_smc = 0;
+#endif
 #endif
 	struct fimc_is_core *core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
 	struct fimc_is_vender_specific *priv = core->vender.private_data;
@@ -2145,6 +2136,7 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 		mutex_unlock(&core->secure_state_lock);
 #endif
 
+#if !defined(USE_NONE_SECURED_CAMERA)
 #if defined(SECURE_CAMERA_EMULATE)
 		ret = exynos_smc(SMC_SECCAM_PREPARE, 0, 0, 0);
 #else
@@ -2158,6 +2150,7 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 						device, ret, device->smc_state, FIMC_IS_SENSOR_SMC_PREPARE);
 			device->smc_state = FIMC_IS_SENSOR_SMC_PREPARE;
 		}
+#endif
 	}
 #endif
 
@@ -2270,6 +2263,7 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 p_err:
 #if defined(CONFIG_SECURE_CAMERA_USE)
 	if (ret && (device->pdata->scenario == SENSOR_SCENARIO_SECURE)) {
+#if !defined(USE_NONE_SECURED_CAMERA)
 		if (device->smc_state == FIMC_IS_SENSOR_SMC_PREPARE) {
 #if defined(SECURE_CAMERA_EMULATE)
 			ret_smc = exynos_smc(SMC_SECCAM_UNPREPARE, 0, 0, 0);
@@ -2284,6 +2278,8 @@ p_err:
 				device->smc_state = FIMC_IS_SENSOR_SMC_UNPREPARE;
 			}
 		}
+#endif
+
 #if defined(NOT_SEPERATED_SYSREG)
 		mutex_lock(&core->secure_state_lock);
 		if (core->secure_state == FIMC_IS_STATE_SECURED) {
@@ -3608,6 +3604,7 @@ int fimc_is_sensor_runtime_suspend(struct device *dev)
 p_err:
 #if defined(CONFIG_SECURE_CAMERA_USE)
 	if (device->pdata->scenario == SENSOR_SCENARIO_SECURE) {
+#if !defined(USE_NONE_SECURED_CAMERA)
 		if (device->smc_state == FIMC_IS_SENSOR_SMC_PREPARE) {
 #if defined(SECURE_CAMERA_EMULATE)
 			ret = exynos_smc(SMC_SECCAM_UNPREPARE, 0, 0, 0);
@@ -3622,6 +3619,8 @@ p_err:
 				device->smc_state = FIMC_IS_SENSOR_SMC_UNPREPARE;
 			}
 		}
+#endif
+
 #if defined(NOT_SEPERATED_SYSREG)
 		mutex_lock(&core->secure_state_lock);
 		if (core->secure_state == FIMC_IS_STATE_SECURED) {

@@ -168,6 +168,7 @@ struct madera {
 	unsigned int hp_impedance_x100[MADERA_MAX_ACCESSORY];
 
 	struct madera_extcon *extcon_info;
+	bool hs_mic_muted;
 
 	struct snd_soc_dapm_context *dapm;
 

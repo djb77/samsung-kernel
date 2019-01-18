@@ -33,7 +33,7 @@
 #define DEBUG_POINT_FRAME_START		1
 #define DEBUG_POINT_FRAME_END		2
 #define DEBUG_POINT_FRAME_DMA_END	3
-#define DEBUG_POINT_MAX			4
+#define DEBUG_POINT_MAX			8 /* HACK: original value is 4 */
 
 #define SET_FILE_MAGIC_NUMBER		(0x12345679)
 #define FIMC_IS_MAX_SCENARIO		(64)
@@ -363,8 +363,24 @@ struct fimc_is_hardware {
 	bool				video_mode;
 };
 
-void framemgr_e_barrier_common(struct fimc_is_framemgr *this, u32 index, ulong flag);
-void framemgr_x_barrier_common(struct fimc_is_framemgr *this, u32 index, ulong flag);
+#define framemgr_e_barrier_common(this, index, flag)		\
+	do {							\
+		if (in_interrupt()) {				\
+			framemgr_e_barrier(this, index);	\
+		} else {						\
+			framemgr_e_barrier_irqs(this, index, flag);	\
+		}							\
+	} while (0)
+
+#define framemgr_x_barrier_common(this, index, flag)		\
+	do {							\
+		if (in_interrupt()) {				\
+			framemgr_x_barrier(this, index);	\
+		} else {						\
+			framemgr_x_barrier_irqr(this, index, flag);	\
+		}							\
+	} while (0)
+
 u32 get_hw_id_from_group(u32 group_id);
 void fimc_is_hardware_flush_frame(struct fimc_is_hw_ip *hw_ip,
 	enum fimc_is_hw_frame_state state,
@@ -406,6 +422,7 @@ void fimc_is_hardware_clk_gate_dump(struct fimc_is_hardware *hardware);
 int fimc_is_hardware_runtime_resume(struct fimc_is_hardware *hardware);
 int fimc_is_hardware_runtime_suspend(struct fimc_is_hardware *hardware);
 void fimc_is_hardware_sfr_dump(struct fimc_is_hardware *hardware, u32 hw_id, bool flag_print_log);
+void print_hw_frame_count(struct fimc_is_hw_ip *hw_ip);
 void print_all_hw_frame_count(struct fimc_is_hardware *hardware);
 void fimc_is_hardware_clk_gate(struct fimc_is_hw_ip *hw_ip, u32 instance,
 	bool on, bool close);

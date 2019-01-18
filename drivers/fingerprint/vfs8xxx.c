@@ -694,8 +694,7 @@ static int vfsspi_register_drdy_signal(struct vfsspi_device_data *vfsspi_device,
 			return -ENODEV;
 		}
 		rcu_read_unlock();
-		pr_info("%s Searching task with PID=%08x, t = %p\n",
-			__func__, vfsspi_device->user_pid, vfsspi_device->t);
+		pr_info("%s Searching task successfully\n", __func__);
 	} else {
 		pr_err("%s Failed copy from user.\n", __func__);
 		return -EFAULT;

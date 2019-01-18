@@ -31,7 +31,7 @@
 #include "panel.h"
 #include "mdnie.h"
 #include "copr.h"
-#ifdef CONFIG_SUPPORT_POC_FLASH
+#ifdef CONFIG_SUPPORT_DDI_FLASH
 #include "panel_poc.h"
 #endif
 #ifdef CONFIG_ACTIVE_CLOCK
@@ -45,8 +45,6 @@
 #endif
 
 extern int panel_log_level;
-
-#define CONFIG_DISP_PMIC_SSD
 
 void clear_disp_det_pend(struct panel_device *panel);
 
@@ -177,6 +175,38 @@ struct host_cb {
 	void *data;
 };
 
+enum GAMMA_FLASH_RESULT {
+	GAMMA_FLASH_ERROR_MTP_OFFSET = -4,
+	GAMMA_FLASH_ERROR_CHECKSUM_MISMATCH = -3,
+	GAMMA_FLASH_ERROR_NOT_EXIST = -2,
+	GAMMA_FLASH_ERROR_READ_FAIL = -1,
+	GAMMA_FLASH_PROGRESS = 0,
+	GAMMA_FLASH_SUCCESS = 1,
+};
+
+struct dim_flash_result {
+	u8 mtp_reg[34];
+	u8 mtp_flash[34];
+	bool exist;
+
+	u32 dim_chksum_ok;
+	u32 dim_chksum_by_calc;
+	u32 dim_chksum_by_read;
+
+	u32 mtp_chksum_ok;
+	u32 mtp_chksum_by_calc;
+	u32 mtp_chksum_by_read;
+};
+
+struct panel_work {
+	struct mutex lock;
+	struct workqueue_struct *wq;
+	struct delayed_work dwork;
+	struct dim_flash_result result;
+	atomic_t running;
+	int ret;
+};
+
 struct panel_device {
 	int id;
 	int dsi_id;
@@ -225,7 +255,7 @@ struct panel_device {
 #ifdef CONFIG_EXTEND_LIVE_CLOCK
 	struct aod_dev_info aod;
 #endif
-#ifdef CONFIG_SUPPORT_POC_FLASH
+#ifdef CONFIG_SUPPORT_DDI_FLASH
 	struct panel_poc_device poc_dev;
 #endif
 #ifdef CONFIG_SUPPORT_TDMB_TUNE
@@ -235,7 +265,15 @@ struct panel_device {
 
 	ktime_t ktime_panel_on;
 	ktime_t ktime_panel_off;
+
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+	struct panel_work dim_flash_work;
+#endif
 };
+
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+int panel_update_dim_type(struct panel_device *panel, u32 dim_type);
+#endif
 
 static inline bool IS_PANEL_PWR_ON_STATE(struct panel_device *panel)
 {
@@ -248,6 +286,9 @@ static inline bool IS_PANEL_PWR_OFF_STATE(struct panel_device *panel)
 {
 	return panel->state.cur_state == PANEL_STATE_OFF;
 }
+
+int panel_display_on(struct panel_device *panel);
+int __set_panel_power(struct panel_device *panel, int power);
 
 #ifdef CONFIG_EXTEND_LIVE_CLOCK
 static inline int panel_aod_init_panel(struct panel_device *panel)

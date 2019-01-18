@@ -83,10 +83,10 @@ typedef struct bcm_tlv_ext {
 #define BCM_TLV_EXT_SIZE(_tlv_ext) (BCM_TLV_EXT_HDR_SIZE + (_tlv_ext)->len)
 
 /* find the next tlv */
-bcm_tlv_t *bcm_next_tlv(const  bcm_tlv_t *elt, int *buflen);
+bcm_tlv_t *bcm_next_tlv(const  bcm_tlv_t *elt, uint *buflen);
 
 /* find the tlv for a given id */
-bcm_tlv_t *bcm_parse_tlvs(const  void *buf, int buflen, uint key);
+bcm_tlv_t *bcm_parse_tlvs(const  void *buf, uint buflen, uint key);
 
 /*
  * Traverse tlvs and return pointer to the first tlv that
@@ -101,8 +101,8 @@ bcm_tlv_t *bcm_parse_tlvs_dot11(const  void *buf, int buflen, uint key, bool id_
 const  bcm_tlv_t *bcm_parse_ordered_tlvs(const  void *buf, int buflen, uint key);
 
 /* find a tlv with DOT11_MNG_PROPR_ID as id, and the given oui and type */
-	bcm_tlv_t *bcm_find_vendor_ie(const  void *tlvs, int tlvs_len, const char *voui,
-	                              uint8 *type, int type_len);
+	bcm_tlv_t *bcm_find_vendor_ie(const  void *tlvs, uint tlvs_len, const char *voui,
+	                              uint8 *type, uint type_len);
 
 /* write tlv at dst and return next tlv ptr */
 uint8 *bcm_write_tlv(int type, const void *data, int datalen, uint8 *dst);

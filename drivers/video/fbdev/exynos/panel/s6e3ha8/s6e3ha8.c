@@ -24,17 +24,42 @@
 #include "../panel_drv.h"
 
 #ifdef CONFIG_PANEL_AID_DIMMING
-static int hbm_ctoi(s32 (*dst)[MAX_COLOR], u8 *hbm, int nr_tp)
+static int gamma_ctoi(s32 (*dst)[MAX_COLOR], u8 *hbm, int nr_tp)
 {
 	unsigned int i, c, pos = 1;
 
 	for (i = nr_tp - 1; i > 0; i--) {
 		for_each_color(c) {
 			if (i == nr_tp - 1)
-				dst[i][c] = ((hbm[0] >> c) & 0x01) << 8;
-			dst[i][c] |= hbm[pos++];
+				dst[i][c] = ((hbm[0] >> c) & 0x01) << 8 | hbm[pos++];
+			else
+				dst[i][c] = hbm[pos++];
 		}
 	}
+
+	dst[0][RED] = hbm[pos + 1] & 0xF;
+	dst[0][GREEN] = (hbm[pos + 2] >> 4) & 0xF;
+	dst[0][BLUE] = hbm[pos + 2] & 0xF;
+
+	return 0;
+}
+
+static int gamma_ctoi_v0(s32 (*dst)[MAX_COLOR], u8 *hbm, int nr_tp)
+{
+	unsigned int i, c, pos = 1;
+
+	for (i = nr_tp - 1; i > 1; i--) {
+		for_each_color(c) {
+			if (i == nr_tp - 1)
+				dst[i][c] = ((hbm[0] >> c) & 0x01) << 8 | hbm[pos++];
+			else
+				dst[i][c] = hbm[pos++];
+		}
+	}
+
+	dst[1][RED] = (hbm[pos + 0] >> 4) & 0xF;
+	dst[1][GREEN] = hbm[pos + 0] & 0xF;
+	dst[1][BLUE] = (hbm[pos + 1] >> 4) & 0xF;
 
 	dst[0][RED] = hbm[pos + 1] & 0xF;
 	dst[0][GREEN] = (hbm[pos + 2] >> 4) & 0xF;
@@ -65,6 +90,34 @@ static void mtp_ctoi(s32 (*dst)[MAX_COLOR], char *src, int nr_tp)
 	dst[0][GREEN] = (src[pos + 2] >> 4) & 0xF;
 	dst[0][BLUE] = src[pos + 2] & 0xF;
 }
+
+static void mtp_ctoi_v0(s32 (*dst)[MAX_COLOR], char *src, int nr_tp)
+{
+	int i, c, pos = 1, sign;
+
+	for (i = nr_tp - 1; i > 1; i--) {
+		for_each_color(c) {
+			if (i == nr_tp - 1) {
+				sign = (src[0] & 0x01) ? -1 : 1;
+				dst[i][c] = sign * src[pos];
+				pos += 1;
+			} else {
+				sign = (src[pos] & 0x80) ? -1 : 1;
+				dst[i][c] = sign * (src[pos] & 0x7F);
+				pos += 1;
+			}
+		}
+	}
+
+	dst[1][RED] = (src[pos + 0] >> 4) & 0xF;
+	dst[1][GREEN] = src[pos + 0] & 0xF;
+	dst[1][BLUE] = (src[pos + 1] >> 4) & 0xF;
+
+	dst[0][RED] = src[pos + 1] & 0xF;
+	dst[0][GREEN] = (src[pos + 2] >> 4) & 0xF;
+	dst[0][BLUE] = src[pos + 2] & 0xF;
+}
+
 
 static void copy_tpout_center(u8 *output, u32 value, u32 v, u32 color)
 {
@@ -105,35 +158,214 @@ static void copy_tpout_center(u8 *output, u32 value, u32 v, u32 color)
 	}
 }
 
-static int init_dimming(struct panel_info *panel_data, int id,
-		s32 (*mtp)[MAX_COLOR], s32 (*hbm)[MAX_COLOR])
+static void copy_tpout_center_v0(u8 *output, u32 value, u32 v, u32 color)
 {
-	int i, j, len, ret = 0;
-	struct panel_dimming_info *panel_dim_info;
+	int index = (S6E3HA8_USING_V0_NR_TP - v - 1);
+
+	if (v == S6E3HA8_USING_V0_NR_TP - 1) {
+		output[0] &= ~(1 << color);
+		output[0] |= ((value & 0x0100) ? 1 : 0) << color;
+		output[color + 1] = value & 0x00FF;
+		if (value > 511)
+			pr_err("%s, error : exceed output range tp:%d c:%d value:%d!!\n",
+					__func__, index, color, value);
+	} else if (v == 1) {
+		if (color == RED) {
+			output[index * MAX_COLOR + 1] &= ~(0xF << 4);
+			output[index * MAX_COLOR + 1] |= (value & 0xF) << 4;
+		} else if (color == GREEN) {
+			output[index * MAX_COLOR + 1] &= ~0xF;
+			output[index * MAX_COLOR + 1] |= (value & 0xF);
+		} else if (color == BLUE) {
+			output[index * MAX_COLOR + 2] &= ~(0xF << 4);
+			output[index * MAX_COLOR + 2] |= (value & 0xF) << 4;
+		}
+		if (value > 15)
+			pr_err("%s, error : exceed output range tp:%d c:%d value:%d!!\n",
+					__func__, index, color, value);
+	} else if (v == 0) {
+		if (color == RED) {
+			output[(index - 1) * MAX_COLOR + 2] &= ~0xF;
+			output[(index - 1) * MAX_COLOR + 2] |= (value & 0xF);
+		} else if (color == GREEN) {
+			output[(index - 1) * MAX_COLOR + 3] &= ~(0xF << 4);
+			output[(index - 1) * MAX_COLOR + 3] |= (value & 0xF) << 4;
+		} else if (color == BLUE) {
+			output[(index - 1) * MAX_COLOR + 3] &= ~0xF;
+			output[(index - 1) * MAX_COLOR + 3] |= (value & 0xF);
+		}
+		if (value > 15)
+			pr_err("%s, error : exceed output range tp:%d c:%d value:%d!!\n",
+					__func__, index, color, value);
+	} else {
+		output[index * MAX_COLOR + color + 1] = value & 0x00FF;
+		if (value > 255)
+			pr_err("%s, error : exceed output range tp:%d c:%d value:%d!!\n",
+					__func__, index, color, value);
+	}
+}
+
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+static int copy_from_dim_flash(struct panel_info *panel_data,
+		u8 *dst, enum dim_flash_items item, int row, int col, int size)
+{
+	static struct resinfo *res[MAX_DIM_FLASH];
+	char *name = s6e3ha8_dim_flash_info[item].name;
+	int nrow = s6e3ha8_dim_flash_info[item].nrow;
+	int ncol = s6e3ha8_dim_flash_info[item].ncol;
+
+	if (!res[item])
+		res[item] = find_panel_resource(panel_data, name);
+
+	if (unlikely(!res[item])) {
+		pr_warn("%s resource(%s) not found\n", __func__, name);
+		return -EIO;
+	}
+
+	memcpy(dst, &res[item]->data[(nrow - row - 1) * ncol + col], size);
+	return 0;
+}
+#endif
+
+void print_gamma_table(struct panel_info *panel_data, int id)
+{
+	int i, j, len, luminance;
 	char strbuf[1024];
+	struct panel_device *panel = to_panel_device(panel_data);
+	struct panel_bl_device *panel_bl = &panel->panel_bl;
+	struct maptbl *gamma_maptbl = NULL;
+	struct brightness_table *brt_tbl;
+
+#ifndef CONFIG_SUPPORT_HMD
+	if (id == PANEL_BL_SUBDEV_TYPE_HMD)
+		return;
+#endif
+
+	brt_tbl = &panel_bl->subdev[id].brt_tbl;
+	gamma_maptbl = find_panel_maptbl_by_index(panel_data,
+			(id == PANEL_BL_SUBDEV_TYPE_HMD) ? HMD_GAMMA_MAPTBL : GAMMA_MAPTBL);
+	if (unlikely(!gamma_maptbl))
+		return;
+
+	for (i = 0; i < brt_tbl->sz_lum; i++) {
+		luminance = brt_tbl->lum[i];
+		len = snprintf(strbuf, 1024, "gamma[%3d] : ", luminance);
+		for (j = 0; j < S6E3HA8_GAMMA_CMD_CNT - 1; j++)
+			len += snprintf(strbuf + len, max(1024 - len, 0),
+					"%02X ", gamma_maptbl->arr[i * sizeof_row(gamma_maptbl) + j]);
+		pr_info("%s\n", strbuf);
+	}
+}
+
+static int generate_hbm_gamma_table(struct panel_info *panel_data, int id)
+{
+	struct panel_device *panel = to_panel_device(panel_data);
+	struct panel_bl_device *panel_bl = &panel->panel_bl;
+	struct panel_dimming_info *panel_dim_info;
+	struct maptbl *gamma_maptbl = NULL;
+	struct resinfo *hbm_gamma_res;
+	struct brightness_table *brt_tbl;
+	s32 (*out_gamma_tbl)[MAX_COLOR] = NULL;
+	s32 (*nor_gamma_tbl)[MAX_COLOR] = NULL;
+	s32 (*hbm_gamma_tbl)[MAX_COLOR] = NULL;
+	int luminance, nr_luminance, nr_hbm_luminance, nr_extend_hbm_luminance;
+	int i, v, c, nr_tp, ret = 0;
+
+	panel_dim_info = panel_data->panel_dim_info[id];
+	brt_tbl = &panel_bl->subdev[id].brt_tbl;
+	nr_tp = panel_dim_info->dim_init_info.nr_tp;
+	nr_luminance = panel_dim_info->nr_luminance;
+	nr_hbm_luminance = panel_dim_info->nr_hbm_luminance;
+	nr_extend_hbm_luminance = panel_dim_info->nr_extend_hbm_luminance;
+
+	hbm_gamma_res = find_panel_resource(panel_data, "hbm_gamma");
+	if (unlikely(!hbm_gamma_res)) {
+		pr_warn("%s panel_bl-%d hbm_gamma not found\n", __func__, id);
+		return -EIO;
+	}
+	out_gamma_tbl = kzalloc(sizeof(s32) * nr_tp * MAX_COLOR, GFP_KERNEL);
+	nor_gamma_tbl = kzalloc(sizeof(s32) * nr_tp * MAX_COLOR, GFP_KERNEL);
+	hbm_gamma_tbl = kzalloc(sizeof(s32) * nr_tp * MAX_COLOR, GFP_KERNEL);
+
+	gamma_maptbl = find_panel_maptbl_by_index(panel_data,
+			(id == PANEL_BL_SUBDEV_TYPE_HMD) ? HMD_GAMMA_MAPTBL : GAMMA_MAPTBL);
+	if (unlikely(!gamma_maptbl)) {
+		pr_err("%s panel_bl-%d gamma_maptbl not found\n", __func__, id);
+		ret = -EINVAL;
+		goto err;
+	}
+
+	if (nr_tp == S6E3HA8_USING_V0_NR_TP) {
+		gamma_ctoi_v0(nor_gamma_tbl, &gamma_maptbl->arr[(nr_luminance - 1) *
+				sizeof_row(gamma_maptbl)], nr_tp);
+		gamma_ctoi_v0(hbm_gamma_tbl, hbm_gamma_res->data, nr_tp);
+	} else {
+		gamma_ctoi(nor_gamma_tbl, &gamma_maptbl->arr[(nr_luminance - 1) *
+				sizeof_row(gamma_maptbl)], nr_tp);
+		gamma_ctoi(hbm_gamma_tbl, hbm_gamma_res->data, nr_tp);
+	}
+	for (i = nr_luminance; i < nr_luminance +
+			nr_hbm_luminance + nr_extend_hbm_luminance; i++) {
+		luminance = brt_tbl->lum[i];
+		if (i < nr_luminance + nr_hbm_luminance)
+			/* UI MAX BRIGHTNESS ~ HBM MAX BRIGHTNESS */
+			gamma_table_interpolation(nor_gamma_tbl, hbm_gamma_tbl, out_gamma_tbl,
+					nr_tp, luminance - panel_dim_info->target_luminance,
+					panel_dim_info->hbm_target_luminance - panel_dim_info->target_luminance);
+		else
+			/* UI MAX BRIGHTNESS ~ EXTENDED HBM MAX BRIGHTNESS */
+			memcpy(out_gamma_tbl, hbm_gamma_tbl, sizeof(s32) * nr_tp * MAX_COLOR);
+
+		for (v = nr_tp - 1; v >= 0; v--) {
+			for_each_color(c) {
+				if (nr_tp == S6E3HA8_USING_V0_NR_TP)
+					copy_tpout_center_v0(
+							(u8 *)&gamma_maptbl->arr[i * sizeof_row(gamma_maptbl)],
+							out_gamma_tbl[v][c], v, c);
+				else
+					copy_tpout_center(
+							(u8 *)&gamma_maptbl->arr[i * sizeof_row(gamma_maptbl)],
+							out_gamma_tbl[v][c], v, c);
+
+			}
+		}
+	}
+
+err:
+	kfree(out_gamma_tbl);
+	kfree(nor_gamma_tbl);
+	kfree(hbm_gamma_tbl);
+
+	return ret;
+}
+
+static int generate_gamma_table_using_lut(struct panel_info *panel_data, int id)
+{
+	struct panel_dimming_info *panel_dim_info;
 	struct dimming_info *dim_info;
 	struct maptbl *gamma_maptbl = NULL;
-	u32 luminance, nr_luminance, nr_hbm_luminance, nr_extend_hbm_luminance;
 	struct panel_device *panel = to_panel_device(panel_data);
-	struct panel_bl_device *panel_bl;
+	struct panel_bl_device *panel_bl = &panel->panel_bl;
 	struct brightness_table *brt_tbl;
-	struct panel_bl_sub_dev *subdev;
+	struct resinfo *res;
+	s32 (*mtp)[MAX_COLOR] = NULL;
+	int i, ret, nr_tp;
+	u32 nr_luminance;
 
-	panel_bl = &panel->panel_bl;
+#ifndef CONFIG_SUPPORT_HMD
+	if (id == PANEL_BL_SUBDEV_TYPE_HMD)
+		return -EINVAL;
+#endif
+
 	if (id >= MAX_PANEL_BL_SUBDEV) {
 		panel_err("%s panel_bl-%d invalid id\n", __func__, id);
 		return -EINVAL;
 	}
 
-	subdev = &panel_bl->subdev[id];
-	brt_tbl = &subdev->brt_tbl;
-
+	brt_tbl = &panel_bl->subdev[id].brt_tbl;
 	panel_dim_info = panel_data->panel_dim_info[id];
-	if (unlikely(!panel_dim_info)) {
-		pr_err("%s panel_bl-%d panel_dim_info not found\n",
-				__func__, id);
-		return -EINVAL;
-	}
+	nr_tp = panel_dim_info->dim_init_info.nr_tp;
+	nr_luminance = panel_dim_info->nr_luminance;
 
 #ifdef CONFIG_SUPPORT_PANEL_SWAP
 	if (panel_data->dim_info[id]) {
@@ -142,11 +374,6 @@ static int init_dimming(struct panel_info *panel_data, int id,
 		pr_info("%s panel_bl-%d free dimming info\n", __func__, id);
 	}
 #endif
-
-	if (panel_data->dim_info[id]) {
-		pr_warn("%s panel_bl-%d already initialized\n", __func__, id);
-		return -EINVAL;
-	}
 
 	dim_info = kzalloc(sizeof(struct dimming_info), GFP_KERNEL);
 	if (unlikely(!dim_info)) {
@@ -157,68 +384,100 @@ static int init_dimming(struct panel_info *panel_data, int id,
 	ret = init_dimming_info(dim_info, &panel_dim_info->dim_init_info);
 	if (unlikely(ret)) {
 		pr_err("%s panel_bl-%d failed to init_dimming_info\n", __func__, id);
-		kfree(dim_info);
-		return ret;
+		ret = -EINVAL;
+		goto err;
 	}
 
-	memcpy(brt_tbl, panel_dim_info->brt_tbl, sizeof(struct brightness_table));
-	nr_luminance = panel_dim_info->nr_luminance;
-	nr_hbm_luminance = panel_dim_info->nr_hbm_luminance;
-	nr_extend_hbm_luminance = panel_dim_info->nr_extend_hbm_luminance;
-
-	if (id == PANEL_BL_SUBDEV_TYPE_HMD) {
-#ifdef CONFIG_SUPPORT_HMD
-		gamma_maptbl = find_panel_maptbl_by_index(panel_data, HMD_GAMMA_MAPTBL);
-#endif
+	if (panel_dim_info->dimming_maptbl) {
+		gamma_maptbl = &panel_dim_info->dimming_maptbl[DIMMING_GAMMA_MAPTBL];
 	} else {
-		gamma_maptbl = find_panel_maptbl_by_index(panel_data, GAMMA_MAPTBL);
+		gamma_maptbl = find_panel_maptbl_by_index(panel_data,
+				(id == PANEL_BL_SUBDEV_TYPE_HMD) ?
+				HMD_GAMMA_MAPTBL : GAMMA_MAPTBL);
 	}
 	if (unlikely(!gamma_maptbl)) {
 		pr_err("%s panel_bl-%d gamma_maptbl not found\n", __func__, id);
-		kfree(dim_info);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err;
 	}
 
+	/* GET MTP OFFSET */
+	res = find_panel_resource(panel_data, "mtp");
+	if (unlikely(!res)) {
+		pr_warn("%s panel_bl-%d resource(mtp) not found\n", __func__, id);
+		ret = -EINVAL;
+		goto err;
+	}
+
+	mtp = kzalloc(sizeof(s32) * nr_tp * MAX_COLOR, GFP_KERNEL);
+	if (nr_tp == S6E3HA8_USING_V0_NR_TP)
+		mtp_ctoi_v0(mtp, res->data, nr_tp);
+	else
+		mtp_ctoi(mtp, res->data, nr_tp);
 	init_dimming_mtp(dim_info, mtp);
-	if (hbm && (panel_dim_info->hbm_target_luminance >
-			panel_dim_info->target_luminance))
-		init_dimming_hbm_info(dim_info,
-				hbm, panel_dim_info->hbm_target_luminance);
 	process_dimming(dim_info);
 
-	for (i = 0; i < brt_tbl->sz_lum; i++) {
-		if (i >= nr_luminance + nr_hbm_luminance)
-			luminance = brt_tbl->lum[nr_luminance + nr_hbm_luminance - 1];
-		else
-			luminance = brt_tbl->lum[i];
-		get_dimming_gamma(dim_info, luminance,
-				(u8 *)&gamma_maptbl->arr[i * gamma_maptbl->ncol],
-				copy_tpout_center);
-	}
+	for (i = 0; i < nr_luminance; i++)
+		get_dimming_gamma(dim_info, brt_tbl->lum[i],
+				(u8 *)&gamma_maptbl->arr[i * sizeof_row(gamma_maptbl)],
+				(nr_tp == S6E3HA8_USING_V0_NR_TP) ?
+				copy_tpout_center_v0 : copy_tpout_center);
 
 	panel_data->dim_info[id] = dim_info;
 
-	for (i = 0; i < brt_tbl->sz_lum; i++) {
-		luminance = brt_tbl->lum[i];
-		len = snprintf(strbuf, 1024, "gamma[%3d] : ", luminance);
-		for (j = 0; j < S6E3HA8_GAMMA_CMD_CNT - 1; j++)
-			len += snprintf(strbuf + len, max(1024 - len, 0),
-					"%02X ", gamma_maptbl->arr[i * gamma_maptbl->ncol + j]);
-		pr_info("%s\n", strbuf);
+	pr_info("%s panel_bl-%d done\n", __func__, id);
+	kfree(mtp);
+
+	return 0;
+
+err:
+	kfree(dim_info);
+	return ret;
+}
+
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+static int generate_gamma_table_using_flash(struct panel_info *panel_data, int id)
+{
+	struct maptbl *tbl = NULL;
+	int i, ret;
+	u32 nr_luminance;
+
+#ifndef CONFIG_SUPPORT_HMD
+	if (id == PANEL_BL_SUBDEV_TYPE_HMD)
+		return -EINVAL;
+#endif
+
+	if (id >= MAX_PANEL_BL_SUBDEV) {
+		panel_err("%s panel_bl-%d invalid id\n", __func__, id);
+		return -EINVAL;
 	}
+
+	nr_luminance = panel_data->panel_dim_info[id]->nr_luminance;
+	tbl = find_panel_maptbl_by_index(panel_data,
+			(id == PANEL_BL_SUBDEV_TYPE_HMD) ? HMD_GAMMA_MAPTBL : GAMMA_MAPTBL);
+	if (unlikely(!tbl)) {
+		pr_err("%s panel_bl-%d gamma_maptbl not found\n", __func__, id);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < nr_luminance; i++)
+		ret = copy_from_dim_flash(panel_data,
+				tbl->arr + maptbl_index(tbl, 0, i, 0),
+				(id == PANEL_BL_SUBDEV_TYPE_HMD) ?
+				DIM_FLASH_HMD_GAMMA : DIM_FLASH_GAMMA,
+				i, 0, sizeof_row(tbl));
+
+	pr_info("%s panel_bl-%d done\n", __func__, id);
 
 	return 0;
 }
 
-static int init_subdev_gamma_table(struct maptbl *tbl, int id)
+static int init_subdev_gamma_table_using_flash(struct maptbl *tbl, int id)
 {
-	struct resinfo *res;
-	int ret, nr_tp;
-	s32 (*mtp_offset)[MAX_COLOR] = NULL;
-	s32 (*hbm_gamma_tbl)[MAX_COLOR] = NULL;
 	struct panel_info *panel_data;
 	struct panel_device *panel;
 	struct panel_dimming_info *panel_dim_info;
+	int ret;
 
 	if (unlikely(!tbl || !tbl->pdata)) {
 		panel_err("%s panel_bl-%d invalid param (tbl %p, pdata %p)\n",
@@ -239,46 +498,98 @@ static int init_subdev_gamma_table(struct maptbl *tbl, int id)
 		return -EINVAL;
 	}
 
-	nr_tp = panel_dim_info->dim_init_info.nr_tp;
+	/* initialize brightness_table */
+	memcpy(&panel->panel_bl.subdev[id].brt_tbl,
+			panel_dim_info->brt_tbl, sizeof(struct brightness_table));
 
-	res = find_panel_resource(panel_data, "mtp");
-	if (unlikely(!res)) {
-		pr_warn("%s panel_bl-%d resource(mtp) not found\n", __func__, id);
+	if (!panel_resource_initialized(panel_data,
+			(id == PANEL_BL_SUBDEV_TYPE_HMD) ?
+			s6e3ha8_dim_flash_info[DIM_FLASH_HMD_GAMMA].name :
+			s6e3ha8_dim_flash_info[DIM_FLASH_GAMMA].name)) {
+		pr_warn("%s resource(%s) not initialized\n", __func__,
+				(id == PANEL_BL_SUBDEV_TYPE_HMD) ?
+				s6e3ha8_dim_flash_info[DIM_FLASH_HMD_GAMMA].name :
+				s6e3ha8_dim_flash_info[DIM_FLASH_GAMMA].name);
 		return -EINVAL;
 	}
 
-	mtp_offset = kzalloc(sizeof(s32) * nr_tp * MAX_COLOR, GFP_KERNEL);
-	mtp_ctoi(mtp_offset, res->data, nr_tp);
+	ret = generate_gamma_table_using_flash(panel_data, id);
+	if (ret < 0) {
+		pr_err("%s failed to generate gamma using flash\n", __func__);
+		return ret;
+	}
 
-	if (panel_dim_info->nr_hbm_luminance > 0) {
-		res = find_panel_resource(panel_data, "hbm_gamma");
-		if (unlikely(!res)) {
-			pr_warn("%s panel_bl-%d hbm_gamma not found\n", __func__, id);
-			kfree(mtp_offset);
-			return -EIO;
+	if (id == PANEL_BL_SUBDEV_TYPE_DISP) {
+		ret = generate_hbm_gamma_table(panel_data, id);
+		if (ret < 0) {
+			pr_err("%s failed to generate hbm gamma\n", __func__);
+			return ret;
 		}
-
-		hbm_gamma_tbl = kzalloc(sizeof(s32) * nr_tp * MAX_COLOR, GFP_KERNEL);
-		hbm_ctoi(hbm_gamma_tbl, res->data, nr_tp);
 	}
-
-	ret = init_dimming(panel_data, id, mtp_offset, hbm_gamma_tbl);
-	if (unlikely(ret)) {
-		pr_err("%s panel_bl-%d failed to init_dimming\n", __func__, id);
-		kfree(mtp_offset);
-		kfree(hbm_gamma_tbl);
-		return -ENODEV;
-	}
-
-	kfree(mtp_offset);
-	kfree(hbm_gamma_tbl);
 
 	panel_info("%s panel_bl-%d gamma_table initialized\n", __func__, id);
+	print_gamma_table(panel_data, id);
 
 	return 0;
 }
+#endif /* CONFIG_SUPPORT_DIM_FLASH */
+
+static int init_subdev_gamma_table_using_lut(struct maptbl *tbl, int id)
+{
+	struct panel_info *panel_data;
+	struct panel_device *panel;
+	struct panel_dimming_info *panel_dim_info;
+	int ret;
+
+	if (unlikely(!tbl || !tbl->pdata)) {
+		panel_err("%s panel_bl-%d invalid param (tbl %p, pdata %p)\n",
+				__func__, id, tbl, tbl ? tbl->pdata : NULL);
+		return -EINVAL;
+	}
+
+	if (id >= MAX_PANEL_BL_SUBDEV) {
+		panel_err("%s panel_bl-%d invalid id\n", __func__, id);
+		return -EINVAL;
+	}
+
+	panel = tbl->pdata;
+	panel_data = &panel->panel_data;
+	panel_dim_info = panel_data->panel_dim_info[id];
+	if (unlikely(!panel_dim_info)) {
+		pr_err("%s panel_bl-%d panel_dim_info is null\n", __func__, id);
+		return -EINVAL;
+	}
+
+	/* initialize brightness_table */
+	memcpy(&panel->panel_bl.subdev[id].brt_tbl,
+			panel_dim_info->brt_tbl, sizeof(struct brightness_table));
+
+	ret = generate_gamma_table_using_lut(panel_data, id);
+	if (ret < 0) {
+		pr_err("%s failed to generate gamma using lut\n", __func__);
+		return ret;
+	}
+
+	if (panel_dim_info->dimming_maptbl)
+		maptbl_memcpy(tbl,
+				&panel_dim_info->dimming_maptbl[DIMMING_GAMMA_MAPTBL]);
+
+	if (id == PANEL_BL_SUBDEV_TYPE_DISP) {
+		ret = generate_hbm_gamma_table(panel_data, id);
+		if (ret < 0) {
+			pr_err("%s failed to generate hbm gamma\n", __func__);
+			return ret;
+		}
+	}
+
+	panel_info("%s panel_bl-%d gamma_table initialized\n", __func__, id);
+	print_gamma_table(panel_data, id);
+
+	return 0;
+}
+
 #else
-static int init_subdev_gamma_table(struct maptbl *tbl, int id)
+static int init_subdev_gamma_table_using_lut(struct maptbl *tbl, int id)
 {
 	panel_err("%s aid dimming unspported\n", __func__);
 	return -ENODEV;
@@ -302,7 +613,17 @@ int init_common_table(struct maptbl *tbl)
 
 static int init_gamma_table(struct maptbl *tbl)
 {
-	return init_subdev_gamma_table(tbl, PANEL_BL_SUBDEV_TYPE_DISP);
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+	struct panel_device *panel = tbl->pdata;
+	struct panel_info *panel_data = &panel->panel_data;
+
+	if (panel_data->props.cur_dim_type == DIM_TYPE_DIM_FLASH)
+		return init_subdev_gamma_table_using_flash(tbl, PANEL_BL_SUBDEV_TYPE_DISP);
+	else
+		return init_subdev_gamma_table_using_lut(tbl, PANEL_BL_SUBDEV_TYPE_DISP);
+#else
+	return init_subdev_gamma_table_using_lut(tbl, PANEL_BL_SUBDEV_TYPE_DISP);
+#endif
 }
 
 static int getidx_common_maptbl(struct maptbl *tbl)
@@ -330,7 +651,17 @@ static int getidx_dimming_maptbl(struct maptbl *tbl)
 #ifdef CONFIG_SUPPORT_HMD
 static int init_hmd_gamma_table(struct maptbl *tbl)
 {
-	return init_subdev_gamma_table(tbl, PANEL_BL_SUBDEV_TYPE_HMD);
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+	struct panel_device *panel = tbl->pdata;
+	struct panel_info *panel_data = &panel->panel_data;
+
+	if (panel_data->props.cur_dim_type == DIM_TYPE_DIM_FLASH)
+		return init_subdev_gamma_table_using_flash(tbl, PANEL_BL_SUBDEV_TYPE_HMD);
+	else
+		return init_subdev_gamma_table_using_lut(tbl, PANEL_BL_SUBDEV_TYPE_HMD);
+#else
+	return init_subdev_gamma_table_using_lut(tbl, PANEL_BL_SUBDEV_TYPE_HMD);
+#endif
 }
 
 static int getidx_hmd_dimming_mtptbl(struct maptbl *tbl)
@@ -383,6 +714,7 @@ static int init_aod_dimming_table(struct maptbl *tbl)
 #endif
 #endif
 
+#if (PANEL_BACKLIGHT_PAC_STEPS == 512 || PANEL_BACKLIGHT_PAC_STEPS == 256)
 static int getidx_brt_tbl(struct maptbl *tbl)
 {
 	struct panel_device *panel = (struct panel_device *)tbl->pdata;
@@ -418,6 +750,183 @@ static int getidx_irc_table(struct maptbl *tbl)
 {
 	return getidx_brt_tbl(tbl);
 }
+#endif
+
+static int generate_hbm_gamma(struct panel_info *panel_data,
+		struct maptbl *gamma_maptbl, u8 *dst)
+{
+	struct panel_device *panel = to_panel_device(panel_data);
+	struct panel_bl_device *panel_bl = &panel->panel_bl;
+	struct panel_dimming_info *panel_dim_info;
+	struct resinfo *hbm_gamma_res;
+	struct brightness_table *brt_tbl;
+	s32 (*out_gamma_tbl)[MAX_COLOR] = NULL;
+	s32 (*nor_gamma_tbl)[MAX_COLOR] = NULL;
+	s32 (*hbm_gamma_tbl)[MAX_COLOR] = NULL;
+	int luminance, nr_luminance, nr_hbm_luminance, nr_extend_hbm_luminance;
+	int id, v, c, nr_tp, brightness, ret = 0;
+	int upper_idx, lower_idx, nor_max_idx, hbm_max_idx;
+	u32 upper_lum, lower_lum, nor_max_lum, hbm_max_lum;
+	u32 upper_brt, lower_brt, nor_max_brt, hbm_max_brt;
+
+	id = panel_bl->props.id;
+	panel_dim_info = panel_data->panel_dim_info[id];
+	brt_tbl = &panel_bl->subdev[id].brt_tbl;
+	brightness = panel_bl->props.brightness_of_step;
+
+	nr_tp = panel_dim_info->dim_init_info.nr_tp;
+	nr_luminance = panel_dim_info->nr_luminance;
+	nr_hbm_luminance = panel_dim_info->nr_hbm_luminance;
+	nr_extend_hbm_luminance = panel_dim_info->nr_extend_hbm_luminance;
+
+	upper_idx = panel_bl->props.actual_brightness_index;
+	lower_idx = max(0, (upper_idx - 1));
+	upper_lum = brt_tbl->lum[upper_idx];
+	lower_lum = brt_tbl->lum[lower_idx];
+	upper_brt = brt_tbl->brt[upper_idx];
+	lower_brt = brt_tbl->brt[lower_idx];
+
+	hbm_max_idx = nr_luminance + nr_hbm_luminance - 1;
+	nor_max_idx = nr_luminance - 1;
+	hbm_max_lum = brt_tbl->lum[hbm_max_idx];
+	nor_max_lum = brt_tbl->lum[nor_max_idx];
+	hbm_max_brt = brt_tbl->brt[hbm_max_idx];
+	nor_max_brt = brt_tbl->brt[nor_max_idx];
+
+	hbm_gamma_res = find_panel_resource(panel_data, "hbm_gamma");
+	if (unlikely(!hbm_gamma_res)) {
+		pr_warn("%s panel_bl-%d hbm_gamma not found\n", __func__, id);
+		return -EIO;
+	}
+	out_gamma_tbl = kzalloc(sizeof(s32) * nr_tp * MAX_COLOR, GFP_KERNEL);
+	nor_gamma_tbl = kzalloc(sizeof(s32) * nr_tp * MAX_COLOR, GFP_KERNEL);
+	hbm_gamma_tbl = kzalloc(sizeof(s32) * nr_tp * MAX_COLOR, GFP_KERNEL);
+
+	if (nr_tp == S6E3HA8_USING_V0_NR_TP) {
+		gamma_ctoi_v0(nor_gamma_tbl, &gamma_maptbl->arr[(nr_luminance - 1) *
+				sizeof_row(gamma_maptbl)], nr_tp);
+		gamma_ctoi_v0(hbm_gamma_tbl, hbm_gamma_res->data, nr_tp);
+	} else {
+		gamma_ctoi(nor_gamma_tbl, &gamma_maptbl->arr[(nr_luminance - 1) *
+				sizeof_row(gamma_maptbl)], nr_tp);
+		gamma_ctoi(hbm_gamma_tbl, hbm_gamma_res->data, nr_tp);
+	}
+
+	luminance = interpolation(lower_lum, upper_lum,
+			(s32)((u64)brightness - lower_brt), (s32)(upper_brt - lower_brt));
+
+	if (luminance <= panel_dim_info->hbm_target_luminance)
+		/* UI MAX BRIGHTNESS ~ HBM MAX BRIGHTNESS */
+		gamma_table_interpolation(nor_gamma_tbl, hbm_gamma_tbl, out_gamma_tbl,
+				nr_tp, luminance - nor_max_lum, hbm_max_lum - nor_max_lum);
+	else
+		/* UI MAX BRIGHTNESS ~ EXTENDED HBM MAX BRIGHTNESS */
+		memcpy(out_gamma_tbl, hbm_gamma_tbl, sizeof(s32) * nr_tp * MAX_COLOR);
+
+	for (v = nr_tp - 1; v >= 0; v--) {
+		for_each_color(c) {
+			if (nr_tp == S6E3HA8_USING_V0_NR_TP)
+				copy_tpout_center_v0(dst, out_gamma_tbl[v][c], v, c);
+			else
+				copy_tpout_center(dst, out_gamma_tbl[v][c], v, c);
+		}
+	}
+
+	kfree(out_gamma_tbl);
+	kfree(nor_gamma_tbl);
+	kfree(hbm_gamma_tbl);
+
+	return ret;
+}
+
+static void copy_gamma_maptbl(struct maptbl *tbl, u8 *dst)
+{
+	struct panel_device *panel;
+	struct panel_bl_device *panel_bl;
+	int id, brightness, ret;
+
+	if (!tbl || !dst) {
+		pr_err("%s, invalid parameter (tbl %p, dst %p\n",
+				__func__, tbl, dst);
+		return;
+	}
+
+	panel = (struct panel_device *)tbl->pdata;
+	panel_bl = &panel->panel_bl;
+	id = panel_bl->props.id;
+	brightness = panel_bl->props.brightness;
+
+	if (!is_hbm_brightness(panel_bl, brightness)) {
+		copy_common_maptbl(tbl, dst);
+		return;
+	}
+
+	ret = generate_hbm_gamma(&panel->panel_data, tbl, dst);
+	if (ret < 0) {
+		pr_err("%s, invalid gamma (ret %d)\n", __func__, ret);
+		return;
+	}
+}
+
+static void copy_aor_maptbl(struct maptbl *tbl, u8 *dst)
+{
+	struct panel_device *panel;
+	struct panel_bl_device *panel_bl;
+	struct brightness_table *brt_tbl;
+	int id, aor, brightness;
+
+	if (!tbl || !dst) {
+		pr_err("%s, invalid parameter (tbl %p, dst %p\n",
+				__func__, tbl, dst);
+		return;
+	}
+
+	panel = (struct panel_device *)tbl->pdata;
+	panel_bl = &panel->panel_bl;
+	id = panel_bl->props.id;
+	brightness = panel_bl->props.brightness;
+	brt_tbl = &panel_bl->subdev[id].brt_tbl;
+
+	if (is_hbm_brightness(panel_bl, brightness)) {
+		copy_common_maptbl(tbl, dst);
+		return;
+	}
+
+	aor = panel_bl_aor_interpolation(panel_bl, id, (u8 (*)[2])tbl->arr);
+	if (aor < 0) {
+		pr_err("%s, invalid aor %d\n", __func__, aor);
+		return;
+	}
+	dst[0] = (aor >> 8) & 0xFF;
+	dst[1] = aor & 0xFF;
+}
+
+static void copy_irc_maptbl(struct maptbl *tbl, u8 *dst)
+{
+	struct panel_device *panel;
+	struct panel_bl_device *panel_bl;
+	struct brightness_table *brt_tbl;
+	int id, brightness, ret;
+
+	if (!tbl || !dst) {
+		pr_err("%s, invalid parameter (tbl %p, dst %p\n",
+				__func__, tbl, dst);
+		return;
+	}
+
+	panel = (struct panel_device *)tbl->pdata;
+	panel_bl = &panel->panel_bl;
+	id = panel_bl->props.id;
+	brightness = panel_bl->props.brightness;
+	brt_tbl = &panel_bl->subdev[id].brt_tbl;
+
+	ret = panel_bl_irc_interpolation(panel_bl, id,
+			(u8 (*)[MAX_IRC_PARAM])tbl->arr, dst);
+	if (ret < 0) {
+		pr_err("%s, invalid irc (ret %d)\n", __func__, ret);
+		return;
+	}
+}
 
 static int getidx_irc_mode_table(struct maptbl *tbl)
 {
@@ -442,6 +951,192 @@ static int getidx_mps_table(struct maptbl *tbl)
 			panel_bl->props.brightness) <= 39) ? 0 : 1;
 
 	return maptbl_index(tbl, 0, row, 0);
+}
+
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+static int init_maptbl_from_table(struct maptbl *tbl, enum dim_flash_items item)
+{
+	struct panel_info *panel_data;
+	struct panel_device *panel;
+	struct panel_dimming_info *panel_dim_info;
+	int index, id;
+
+	if (tbl == NULL || tbl->pdata == NULL) {
+		panel_err("PANEL:ERR:%s:maptbl is null\n", __func__);
+		return -EINVAL;
+	}
+
+	panel = tbl->pdata;
+	panel_data = &panel->panel_data;
+	id = (item == DIM_FLASH_HMD_GAMMA || item == DIM_FLASH_HMD_AOR) ?
+		PANEL_BL_SUBDEV_TYPE_HMD : PANEL_BL_SUBDEV_TYPE_DISP;
+	panel_dim_info = panel_data->panel_dim_info[id];
+
+	if (!panel_dim_info->dimming_maptbl) {
+		panel_err("PANEL:ERR:%s:dimming_maptbl is null\n", __func__);
+		return -EINVAL;
+	}
+
+	/* TODO : HMD DIMMING MAPTBL */
+	if (item == DIM_FLASH_GAMMA || item == DIM_FLASH_HMD_GAMMA) {
+		index = DIMMING_GAMMA_MAPTBL;
+	} else if (item == DIM_FLASH_AOR || item == DIM_FLASH_HMD_AOR)
+		index = DIMMING_AOR_MAPTBL;
+	else if (item == DIM_FLASH_VINT)
+		index = DIMMING_VINT_MAPTBL;
+	else if (item == DIM_FLASH_ELVSS)
+		index = DIMMING_ELVSS_MAPTBL;
+	else if (item == DIM_FLASH_IRC)
+		index = DIMMING_IRC_MAPTBL;
+	else
+		return -EINVAL;
+
+	if (!sizeof_maptbl(&panel_dim_info->dimming_maptbl[index]))
+		return -EINVAL;
+
+	maptbl_memcpy(tbl, &panel_dim_info->dimming_maptbl[index]);
+
+	pr_info("%s copy from %s to %s, size %d, item:%d, index:%d\n",
+			__func__, panel_dim_info->dimming_maptbl[index].name, tbl->name,
+			sizeof_maptbl(tbl), item, index);
+
+	//print_maptbl(tbl);
+
+	return 0;
+}
+
+static int init_maptbl_from_flash(struct maptbl *tbl, enum dim_flash_items item)
+{
+	struct panel_info *panel_data;
+	struct panel_device *panel;
+	int layer, row, ret;
+
+	if (tbl == NULL || tbl->pdata == NULL) {
+		panel_err("PANEL:ERR:%s:maptbl is null\n", __func__);
+		return -EINVAL;
+	}
+
+	panel = tbl->pdata;
+	panel_data = &panel->panel_data;
+	if (!panel_resource_initialized(panel_data,
+				s6e3ha8_dim_flash_info[item].name)) {
+		pr_warn("%s resource(%s) not initialized\n",
+				__func__, s6e3ha8_dim_flash_info[item].name);
+		return init_common_table(tbl);
+	}
+
+	for_each_layer(tbl, layer) {
+		for_each_row(tbl, row) {
+			if (row >= s6e3ha8_dim_flash_info[item].nrow)
+				continue;
+			if (item == DIM_FLASH_ELVSS) {
+				ret = copy_from_dim_flash(panel_data,
+						tbl->arr + maptbl_index(tbl, layer, row, 0),
+						item, row, layer, tbl->sz_copy);
+			} else if (item == DIM_FLASH_GAMMA || item == DIM_FLASH_AOR ||
+					item == DIM_FLASH_VINT || item == DIM_FLASH_HMD_GAMMA ||
+					item == DIM_FLASH_HMD_AOR) {
+				ret = copy_from_dim_flash(panel_data,
+						tbl->arr + maptbl_index(tbl, layer, row, 0),
+						item, row, 0, tbl->sz_copy);
+			} else if (item == DIM_FLASH_IRC) {
+				ret = copy_from_dim_flash(panel_data,
+						tbl->arr + maptbl_index(tbl, layer, row, 0),
+						item, row, 0, tbl->sz_copy);
+			}
+		}
+	}
+
+
+	//print_maptbl(tbl);
+
+	return 0;
+}
+#endif
+
+static int init_elvss_table(struct maptbl *tbl)
+{
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+	struct panel_device *panel = tbl->pdata;
+	struct panel_info *panel_data = &panel->panel_data;
+
+	if (panel_data->props.cur_dim_type == DIM_TYPE_DIM_FLASH)
+		return init_maptbl_from_flash(tbl, DIM_FLASH_ELVSS);
+	else
+		return init_maptbl_from_table(tbl, DIM_FLASH_ELVSS);
+
+	return 0;
+#else
+	return init_common_table(tbl);
+#endif
+}
+
+static int init_vint_table(struct maptbl *tbl)
+{
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+	struct panel_device *panel = tbl->pdata;
+	struct panel_info *panel_data = &panel->panel_data;
+
+	if (panel_data->props.cur_dim_type == DIM_TYPE_DIM_FLASH)
+		return init_maptbl_from_flash(tbl, DIM_FLASH_VINT);
+	else
+		return init_maptbl_from_table(tbl, DIM_FLASH_VINT);
+
+	return 0;
+#else
+	return init_common_table(tbl);
+#endif
+}
+
+static int init_aor_table(struct maptbl *tbl)
+{
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+	struct panel_device *panel = tbl->pdata;
+	struct panel_info *panel_data = &panel->panel_data;
+
+	if (panel_data->props.cur_dim_type == DIM_TYPE_DIM_FLASH)
+		return init_maptbl_from_flash(tbl, DIM_FLASH_AOR);
+	else
+		return init_maptbl_from_table(tbl, DIM_FLASH_AOR);
+
+	return 0;
+#else
+	return init_common_table(tbl);
+#endif
+}
+
+static int init_irc_table(struct maptbl *tbl)
+{
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+	struct panel_device *panel = tbl->pdata;
+	struct panel_info *panel_data = &panel->panel_data;
+
+	if (panel_data->props.cur_dim_type == DIM_TYPE_DIM_FLASH)
+		return init_maptbl_from_flash(tbl, DIM_FLASH_IRC);
+	else
+		return init_maptbl_from_table(tbl, DIM_FLASH_IRC);
+
+	return 0;
+#else
+	return init_common_table(tbl);
+#endif
+}
+
+static int init_hmd_aor_table(struct maptbl *tbl)
+{
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+	struct panel_device *panel = tbl->pdata;
+	struct panel_info *panel_data = &panel->panel_data;
+
+	if (panel_data->props.cur_dim_type == DIM_TYPE_DIM_FLASH)
+		return init_maptbl_from_flash(tbl, DIM_FLASH_HMD_AOR);
+	else
+		return init_maptbl_from_table(tbl, DIM_FLASH_HMD_AOR);
+
+	return 0;
+#else
+	return init_common_table(tbl);
+#endif
 }
 
 static int init_elvss_temp_table(struct maptbl *tbl)
@@ -716,49 +1411,6 @@ static int getidx_lpm_dyn_vlin_table(struct maptbl *tbl)
 	return maptbl_index(tbl, 0, row, 0);
 }
 
-#ifdef CONFIG_SUPPORT_POC_FLASH
-static void copy_poc_maptbl(struct maptbl *tbl, u8 *dst)
-{
-	struct panel_device *panel;
-	struct panel_info *panel_data;
-	u8 octa_id[PANEL_OCTA_ID_LEN] = { 0, };
-	u8 poc_ctrl[PANEL_POC_CTRL_LEN] = { 0, };
-	u8 poc, gray;
-	int ret;
-
-	if (!tbl || !dst)
-		return;
-
-	panel = (struct panel_device *)tbl->pdata;
-	if (unlikely(!panel))
-		return;
-
-	panel_data = &panel->panel_data;
-
-	ret = resource_copy_by_name(panel_data, octa_id, "octa_id");
-	if (unlikely(ret < 0)) {
-		pr_err("%s failed to copy resource(octa_id)\n", __func__);
-		return;
-	}
-
-	ret = resource_copy_by_name(panel_data, poc_ctrl, "poc_ctrl");
-	if (unlikely(ret < 0)) {
-		pr_err("%s failed to copy resource(poc_ctrl)\n", __func__);
-		return;
-	}
-
-	poc = octa_id[1] & 0x0F;
-	gray = poc_ctrl[3];
-
-	if (poc == 0x00)
-		*dst = 0xFF;
-	else
-		*dst = (gray == 0x33) ? 0x64 : gray;
-
-	pr_info("%s poc %d, gray %02x->%02x\n", __func__, poc, gray, *dst);
-}
-#endif
-
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
 static int s6e3ha8_getidx_vddm_table(struct maptbl *tbl)
 {
@@ -791,6 +1443,11 @@ static int s6e3ha8_getidx_tdmb_tune_table(struct maptbl *tbl)
 	return maptbl_index(tbl, 0, props->tdmb_on, 0);
 }
 #endif
+
+static void copy_dummy_maptbl(struct maptbl *tbl, u8 *dst)
+{
+	return;
+}
 
 static void copy_common_maptbl(struct maptbl *tbl, u8 *dst)
 {
@@ -833,6 +1490,23 @@ static void copy_tset_maptbl(struct maptbl *tbl, u8 *dst)
 	*dst = (panel_data->props.temperature < 0) ?
 		BIT(7) | abs(panel_data->props.temperature) :
 		panel_data->props.temperature;
+}
+
+static void copy_mcd_resistance_maptbl(struct maptbl *tbl, u8 *dst)
+{
+	struct panel_device *panel;
+	struct panel_info *panel_data;
+
+	if (!tbl || !dst)
+		return;
+
+	panel = (struct panel_device *)tbl->pdata;
+	if (unlikely(!panel))
+		return;
+
+	panel_data = &panel->panel_data;
+	*dst = panel_data->props.mcd_resistance;
+	pr_debug("%s mcd resistance %02X\n", __func__, *dst);
 }
 
 #ifdef CONFIG_EXYNOS_DECON_LCD_COPR
@@ -1176,7 +1850,8 @@ int init_mdnie_color_lens_table(struct maptbl *tbl)
 		return -EINVAL;
 	}
 
-	maptbl_copy(color_lens_maptbl, &tbl->arr[S6E3HA8_COLOR_LENS_OFS]);
+	if (IS_COLOR_LENS_MODE(mdnie))
+		maptbl_copy(color_lens_maptbl, &tbl->arr[S6E3HA8_COLOR_LENS_OFS]);
 
 	return 0;
 }
@@ -1336,8 +2011,6 @@ static void copy_color_coordinate_maptbl(struct maptbl *tbl, u8 *dst)
 		value = mdnie->props.def_wrgb[i] +
 			(char)((mdnie->props.mode == AUTO) ?
 				mdnie->props.def_wrgb_ofs[i] : 0);
-		if ((mdnie->props.mode == AUTO) && (mdnie->props.scenario == CAMERA_SWA_MODE || mdnie->props.scenario == GALLERY_SWA_MODE))
-			value += mdnie->props.swa_wrgb_ofs[i];
 		mdnie->props.cur_wrgb[i] = value;
 		dst[i * 2] = value;
 
@@ -1411,8 +2084,6 @@ static void copy_adjust_ldu_maptbl(struct maptbl *tbl, u8 *dst)
 		value = tbl->arr[idx + i] +
 			(((mdnie->props.mode == AUTO) && (mdnie->props.scenario != EBOOK_MODE)) ?
 				mdnie->props.def_wrgb_ofs[i] : 0);
-		if ((mdnie->props.mode == AUTO) && (mdnie->props.scenario == CAMERA_SWA_MODE || mdnie->props.scenario == GALLERY_SWA_MODE))
-			value += mdnie->props.swa_wrgb_ofs[i];
 		mdnie->props.cur_wrgb[i] = value;
 		dst[i * 2] = value;
 
@@ -1712,8 +2383,6 @@ static void show_err_fg(struct dumpinfo *info)
 	}
 
 	panel_info("==================================================\n");
-
-	inc_dpui_u32_field(DPUI_KEY_PNESDE, (err_fg[0] & 0x4D) ? 1 : 0);
 }
 
 static void show_dsi_err(struct dumpinfo *info)

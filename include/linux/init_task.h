@@ -163,9 +163,10 @@ extern struct task_group root_task_group;
 #ifdef CONFIG_FIVE
 # define INIT_TASK_INTEGRITY(integrity) {				\
 	.user_value = INTEGRITY_NONE,					\
-	.value = ATOMIC_INIT(INTEGRITY_NONE),				\
+	.value = INTEGRITY_NONE,					\
 	.usage_count = ATOMIC_INIT(1),					\
-	.lock = __SPIN_LOCK_UNLOCKED(integrity.lock),		\
+	.value_lock = __SPIN_LOCK_UNLOCKED(integrity.value_lock),	\
+	.list_lock = __SPIN_LOCK_UNLOCKED(integrity.list_lock),		\
 	.events = { .list = LIST_HEAD_INIT(integrity.events.list),},   \
 }
 

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Proprietary,Open:>>
  *
- * $Id: bcmsdh_sdmmc.c 709805 2017-07-10 17:48:19Z $
+ * $Id: bcmsdh_sdmmc.c 783638 2018-10-08 02:24:49Z $
  */
 #include <typedefs.h>
 
@@ -38,21 +38,30 @@
 #include <sdiovar.h>	/* ioctl/iovars */
 
 #include <linux/mmc/core.h>
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3, 0, 0))
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3, 0, 0)) || (LINUX_VERSION_CODE >= \
+	KERNEL_VERSION(4, 4, 0))
 #include <drivers/mmc/core/host.h>
-void
+
+static inline void
 mmc_host_clk_hold(struct mmc_host *host)
 {
 	BCM_REFERENCE(host);
 	return;
 }
 
-void
+static inline void
 mmc_host_clk_release(struct mmc_host *host)
 {
 	BCM_REFERENCE(host);
 	return;
 }
+
+static inline unsigned int
+mmc_host_clk_rate(struct mmc_host *host)
+{
+	return host->ios.clock;
+}
+
 #elif (LINUX_VERSION_CODE <= KERNEL_VERSION(3, 0, 8))
 #include <drivers/mmc/core/host.h>
 #else
@@ -109,7 +118,7 @@ uint sd_divisor = 2;			/* Default 48MHz/2 = 24MHz */
 uint sd_power = 1;		/* Default to SD Slot powered ON */
 uint sd_clock = 1;		/* Default to SD Clock turned ON */
 uint sd_hiok = FALSE;	/* Don't use hi-speed mode by default */
-uint sd_msglevel = 0x01;
+uint sd_msglevel = SDH_ERROR_VAL;
 uint sd_use_dma = TRUE;
 
 #ifndef CUSTOM_RXCHAIN
@@ -239,6 +248,7 @@ sdioh_attach(osl_t *osh, struct sdio_func *func)
 
 	sd->sd_clk_rate = sdmmc_get_clock_rate(sd);
 	DHD_ERROR(("%s: sd clock rate = %u\n", __FUNCTION__, sd->sd_clk_rate));
+
 	sdioh_sdmmc_card_enablefuncs(sd);
 
 	sd_trace(("%s: Done\n", __FUNCTION__));
@@ -1063,7 +1073,9 @@ sdioh_request_packet_chain(sdioh_info_t *sd, uint fix_inc, uint write, uint func
 			 * a restriction on max tx/glom count (based on host->max_segs).
 			 */
 			if (sg_count >= ARRAYSIZE(sd->sg_list)) {
-				sd_err(("%s: sg list entries exceed limit\n", __FUNCTION__));
+				sd_err(("%s: sg list entries(%u) exceed limit(%u),"
+					" sd blk_size=%u\n",
+					__FUNCTION__, sg_count, ARRAYSIZE(sd->sg_list), blk_size));
 				return (SDIOH_API_RC_FAIL);
 			}
 			pdata += pkt_offset;
@@ -1075,8 +1087,9 @@ sdioh_request_packet_chain(sdioh_info_t *sd, uint fix_inc, uint write, uint func
 			 * DMA descriptor, use multiple sg buffers when xfer_size is bigger than
 			 * max_seg_size
 			 */
-			if (sg_data_size > host->max_seg_size)
+			if (sg_data_size > host->max_seg_size) {
 				sg_data_size = host->max_seg_size;
+			}
 			sg_set_buf(&sd->sg_list[sg_count++], pdata, sg_data_size);
 
 			ttl_len += sg_data_size;

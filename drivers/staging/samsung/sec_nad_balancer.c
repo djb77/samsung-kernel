@@ -37,7 +37,7 @@ static int parse_qos_data(struct device *dev,
 	u32 freq_item;
 
 	for_each_child_of_node(np, cnp) {
-		cqos = &pdata->qos_items[ncount];
+		cqos = &pdata->qos_items[ncount++];
 
 		cqos->desc = of_get_property(cnp, "qos,label", NULL);
 
@@ -48,27 +48,97 @@ static int parse_qos_data(struct device *dev,
 
 		if (of_property_read_u32(cnp, "qos,table_size", &cqos->table_size)) {
 			dev_err(dev, "Failed to get table size: node not exist\n");
-			return -EINVAL;
-		}
 
-		if (!cqos->tables) {
-			cqos->tables = devm_kzalloc(dev, sizeof(struct freq_table) * cqos->table_size,
-						    GFP_KERNEL);
-
-			if (!cqos->tables) {
-				dev_err(dev, "Failed to allocate memory of freq_table\n");
-				return -ENOMEM;
+			if (of_property_read_u32(cnp, "qos,big_turbo_enable", &cqos->big_turbo_enable)) {
+				dev_err(dev, "Failed to get big_turbo_enable: node not exist\n");
+				return -EINVAL;
 			}
 		}
 
-		for (i = 0; i < cqos->table_size; i++) {
-			if (of_property_read_u32_index(cnp, "qos,table", i, &freq_item))
-				return -EINVAL;
-
-			cqos->tables[i].freq = freq_item;
+		/* single dvfs tables */
+		if (cqos->table_size != 0) {
+			if (!cqos->tables) {
+				cqos->tables = devm_kzalloc(dev, sizeof(struct freq_table) * cqos->table_size,
+						    GFP_KERNEL);
+				if (!cqos->tables) {
+					dev_err(dev, "Failed to allocate memory of freq_table\n");
+					return -ENOMEM;
+				}
+			}
+			for (i = 0; i < cqos->table_size; i++) {
+				if (of_property_read_u32_index(cnp, "qos,table", i, &freq_item))
+					return -EINVAL;
+				cqos->tables[i].freq = freq_item;
+			}
 		}
-
-		ncount++;
+		/* multi dvfs tables - big cluster */
+		else {
+			if ((cqos->big_turbo_enable & NAD_BALANCER_MODE_SINGLE) == NAD_BALANCER_MODE_SINGLE) {
+				if (of_property_read_u32(cnp, "qos,s_table_size", &cqos->single_table_size)) {
+					dev_err(dev, "Failed to get s_table_size : check configurations\n");
+					return -EINVAL;
+				}
+				if (!cqos->single_tables) {
+					cqos->single_tables = devm_kzalloc(dev, sizeof(struct freq_table) * cqos->single_table_size,
+						    GFP_KERNEL);
+					if (!cqos->single_tables) {
+						dev_err(dev, "Failed to allocate memory of single_freq_table\n");
+						return -ENOMEM;
+					}
+				}
+				for (i = 0; i < cqos->single_table_size; i++) {
+					if (of_property_read_u32_index(cnp, "qos,s_table", i, &freq_item)) {
+						dev_err(dev, "Fail to read s_table [%d]\n", i);
+						return -EINVAL;
+					}
+					cqos->single_tables[i].freq = freq_item;
+				}
+			} 
+			if ((cqos->big_turbo_enable & NAD_BALANCER_MODE_DUAL) == NAD_BALANCER_MODE_DUAL) {
+				if (of_property_read_u32(cnp, "qos,d_table_size", &cqos->dual_table_size)) {
+					dev_err(dev, "Failed to get d_table_size : check configurations\n");
+					return -EINVAL;
+				}
+				if (!cqos->dual_tables) {
+					cqos->dual_tables = devm_kzalloc(dev, sizeof(struct freq_table) * cqos->dual_table_size,
+						    GFP_KERNEL);
+					if (!cqos->dual_tables) {
+						dev_err(dev, "Failed to allocate memory of dual_freq_table\n");
+						return -ENOMEM;
+					}
+				}
+				for (i = 0; i < cqos->dual_table_size; i++) {
+					if (of_property_read_u32_index(cnp, "qos,d_table", i, &freq_item)) {
+						dev_err(dev, "Fail to read d_table [%d]\n", i);
+						return -EINVAL;
+					}
+					cqos->dual_tables[i].freq = freq_item;
+				}
+			}
+			if ((cqos->big_turbo_enable & NAD_BALANCER_MODE_QUAD) == NAD_BALANCER_MODE_QUAD) {
+				if (of_property_read_u32(cnp, "qos,q_table_size", &cqos->quad_table_size)) {
+					dev_err(dev, "Failed to get q_table_size : check configurations\n");
+					return -EINVAL;
+				}
+				if (!cqos->quad_tables) {
+					cqos->quad_tables = devm_kzalloc(dev, sizeof(struct freq_table) * cqos->quad_table_size,
+						    GFP_KERNEL);
+					if (!cqos->quad_tables) {
+						dev_err(dev, "Failed to allocate memory of quad_freq_table\n");
+						return -ENOMEM;
+					}
+				}
+				for (i = 0; i < cqos->quad_table_size; i++) {
+					if (of_property_read_u32_index(cnp, "qos,q_table", i, &freq_item)) {
+						dev_err(dev, "Fail to read q_table [%d]\n", i);
+						return -EINVAL;
+					}
+					cqos->quad_tables[i].freq = freq_item;
+				}
+			}
+			/* set as default quad mode */
+			cqos->current_mode = NAD_BALANCER_MODE_QUAD;
+		}
 	}
 	return 0;
 }
@@ -270,7 +340,16 @@ static int on_run(void *data)
 			break;
 		}
 
-		idx = prandom_u32() % pqos->table_size;
+		if (!pqos->tables) {
+			if (pqos->current_mode == NAD_BALANCER_MODE_SINGLE)
+				idx = prandom_u32() % pqos->single_table_size;
+			else if (pqos->current_mode == NAD_BALANCER_MODE_DUAL)
+				idx = prandom_u32() % pqos->dual_table_size;
+			else if (pqos->current_mode == NAD_BALANCER_MODE_QUAD)
+				idx = prandom_u32() % pqos->quad_table_size;
+		} else {
+			idx = prandom_u32() % pqos->table_size;
+		}
 
 		/* limit qos cl0 min throughput */
 		if (!strncmp(pqos->desc, "LIT", 3)) {
@@ -291,9 +370,33 @@ static int on_run(void *data)
 		/* limit qos cl1 max throughput */
 		if (!strncmp(pqos->desc, "BIG", 3)) {
 			if (req_big == 0) {
-				UPDATE_PM_QOS(&pqos->big_qos, policy ?
-					      PM_QOS_CLUSTER1_FREQ_MAX : PM_QOS_CLUSTER1_FREQ_MIN,
-					      pqos->tables[idx].freq);
+				if (!pqos->tables) {
+					if (pqos->current_mode == NAD_BALANCER_MODE_SINGLE) {
+						//pr_info("single\n");
+						UPDATE_PM_QOS(&pqos->big_qos, policy ?
+							PM_QOS_CLUSTER1_FREQ_MAX : PM_QOS_CLUSTER1_FREQ_MIN,
+							pqos->single_tables[idx].freq);
+
+					} else if (pqos->current_mode == NAD_BALANCER_MODE_DUAL) {
+						//pr_info("dual\n");
+						UPDATE_PM_QOS(&pqos->big_qos, policy ?
+							PM_QOS_CLUSTER1_FREQ_MAX : PM_QOS_CLUSTER1_FREQ_MIN,
+							pqos->dual_tables[idx].freq);
+					
+					} else if (pqos->current_mode == NAD_BALANCER_MODE_QUAD) {
+						//pr_info("quad\n");
+						UPDATE_PM_QOS(&pqos->big_qos, policy ?
+							PM_QOS_CLUSTER1_FREQ_MAX : PM_QOS_CLUSTER1_FREQ_MIN,
+							pqos->quad_tables[idx].freq);
+					}
+
+				} else {
+					//pr_info("normal\n");
+					UPDATE_PM_QOS(&pqos->big_qos, policy ?
+						PM_QOS_CLUSTER1_FREQ_MAX : PM_QOS_CLUSTER1_FREQ_MIN,
+						pqos->tables[idx].freq);
+
+				}
 				req_big = 1;
 			} else {
 				REMOVE_PM_QOS(&pqos->big_qos);
@@ -452,6 +555,64 @@ static ssize_t show_nad_timeout(struct device *dev,
 
 static DEVICE_ATTR(timeout, 0644, show_nad_timeout, store_nad_timeout);
 
+static ssize_t store_nad_big_turbo_mode(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct nad_balancer_info *pinfo = dev_get_drvdata(dev);
+	int mode;
+	int ret, i;
+
+	NAD_PRINT("%s\n", __func__);
+
+	ret = kstrtoint(buf, 10, &mode);
+        if (ret) {
+                pr_err("Invalid input %s ret %d\n", buf, ret);
+                return 0;
+        }
+
+	if (!((mode == NAD_BALANCER_MODE_SINGLE) || (mode == NAD_BALANCER_MODE_DUAL)
+		|| (mode == NAD_BALANCER_MODE_QUAD))) {
+		pr_err("nad balancer big rutbo only support below mode\n");
+		pr_err("1. single\n");
+		pr_err("2. dual\n");
+		pr_err("4. quad\n");
+		return 0;
+	}
+
+	for (i = 0; i < pinfo->pdata->nQos; i++) {
+		if (!pinfo->pdata->qos_items[i].tables) {
+			pinfo->pdata->qos_items[i].current_mode = mode;
+			pr_info("update big turbo mode[%s][%d]\n",
+				pinfo->pdata->qos_items[i].desc,
+				pinfo->pdata->qos_items[i].current_mode);
+			break;
+		}
+	}
+	return count;
+}
+
+static ssize_t show_nad_big_turbo_mode(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	struct nad_balancer_info *pinfo = dev_get_drvdata(dev);
+	int i;
+
+	for (i = 0; i < pinfo->pdata->nQos; i++) {
+		if (!pinfo->pdata->qos_items[i].tables) {
+			break;
+		}
+	}
+	NAD_PRINT("%s: current mode (%s)(%d)\n", __func__,
+			 pinfo->pdata->qos_items[i].desc,
+			 pinfo->pdata->qos_items[i].current_mode);
+	return sprintf(buf, "%d\n", pinfo->pdata->qos_items[i].current_mode);
+}
+
+static DEVICE_ATTR(big_turbo_mode, 0644, show_nad_big_turbo_mode, store_nad_big_turbo_mode);
+
+
 static const struct dev_pm_ops sec_nad_balancer_pm = {
 	.prepare = sec_nad_balancer_prepare,
 	.resume = sec_nad_balancer_resume,
@@ -545,17 +706,22 @@ static int sec_nad_balancer_probe(struct platform_device *pdev)
 	}
 	ret = device_create_file(pinfo->dev, &dev_attr_balancer);
 	if (ret) {
-		pr_err("%s: Failed to create device file\n", __func__);
+		pr_err("%s: Failed to create balnacer device file\n", __func__);
 		goto err_create_nad_balancer_sysfs;
 	}
 	ret = device_create_file(pinfo->dev, &dev_attr_status);
 	if (ret) {
-		pr_err("%s: Failed to create device file\n", __func__);
+		pr_err("%s: Failed to create status device file\n", __func__);
 		goto err_create_nad_balancer_sysfs;
 	}
 	ret = device_create_file(pinfo->dev, &dev_attr_timeout);
 	if (ret) {
-		pr_err("%s: Failed to create device file\n", __func__);
+		pr_err("%s: Failed to create timeout device file\n", __func__);
+		goto err_create_nad_balancer_sysfs;
+	}
+	ret = device_create_file(pinfo->dev, &dev_attr_big_turbo_mode);
+	if (ret) {
+		pr_err("%s: Failed to create big_turbo_mode device file\n", __func__);
 		goto err_create_nad_balancer_sysfs;
 	}
 

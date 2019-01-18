@@ -2,6 +2,7 @@
 #include <linux/exynos-ss.h>
 #include <soc/samsung/ect_parser.h>
 #include <soc/samsung/cal-if.h>
+#include <soc/samsung/acpm_mfd.h>
 
 #include "pwrcal-env.h"
 #include "pwrcal-rae.h"
@@ -167,16 +168,24 @@ unsigned int cal_dfs_get_resume_freq(unsigned int id)
 int cal_pd_control(unsigned int id, int on)
 {
 	unsigned int index;
+	int ret;
 
 	if ((id & 0xFFFF0000) != BLKPWR_MAGIC)
 		return -1;
 
 	index = id & 0x0000FFFF;
 
-	if (on)
-		return pmucal_local_enable(index);
-	else
-		return pmucal_local_disable(index);
+	if (on) {
+		if ((id & 0xffff) == 0x8)
+			exynos_acpm_update_reg(0x3, 0x2a, 0x3 << 6, 0x3 << 6);
+		ret = pmucal_local_enable(index);
+	} else {
+		ret = pmucal_local_disable(index);
+		if ((id & 0xffff) == 0x8)
+			exynos_acpm_update_reg(0x3, 0x2a, 0x0 << 6, 0x3 << 6);
+	}
+
+	return ret;
 }
 
 int cal_pd_status(unsigned int id)

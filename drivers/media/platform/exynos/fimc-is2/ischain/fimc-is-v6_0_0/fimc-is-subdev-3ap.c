@@ -234,7 +234,7 @@ static int fimc_is_ischain_3ap_tag(struct fimc_is_subdev *subdev,
 		goto p_err;
 	}
 
-	scenario_id = fimc_is_dvfs_sel_static(device);
+	scenario_id = device->resourcemgr->dvfs_ctrl.static_ctrl->cur_scenario_id;
 
 	pixelformat = queue->framecfg.format->pixelformat;
 	otcrop = (struct fimc_is_crop *)node->output.cropRegion;

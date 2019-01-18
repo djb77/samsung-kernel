@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-  /* usb notify layer v3.1 */
+  /* usb notify layer v3.2 */
 
 #ifndef __LINUX_USBLOG_PROC_NOTIFY_H__
 #define __LINUX_USBLOG_PROC_NOTIFY_H__
@@ -21,6 +21,7 @@ enum usblog_type {
 	NOTIFY_USBMODE_EXTRA,
 	NOTIFY_USBSTATE,
 	NOTIFY_EVENT,
+	NOTIFY_EXTRA,
 };
 
 enum usblog_state {
@@ -86,6 +87,8 @@ enum ccic_id {
 	NOTIFY_ID_DP_LINK_CONF,
 	NOTIFY_ID_USB_DP,
 	NOTIFY_ID_ROLE_SWAP,
+	NOTIFY_ID_FAC,
+	NOTIFY_ID_CC_PIN_STATUS,
 };
 
 enum ccic_rid {
@@ -111,7 +114,7 @@ enum ccic_rprd {
 
 enum ccic_rpstatus {
 	NOTIFY_RP_NONE = 0,
-	NOTIFY_RP_56K,	/* 80uA */
+	NOTIFY_RP_56K ,	/* 80uA */
 	NOTIFY_RP_22K,		/* 180uA */
 	NOTIFY_RP_10K,		/* 330uA */
 	NOTIFY_RP_ABNORMAL,
@@ -133,6 +136,25 @@ enum ccic_pin_assignment {
 	NOTIFY_DP_PIN_F,
 };
 
+enum ccic_pin_status {
+	NOTIFY_PIN_NOTERMINATION = 0,
+	NOTIFY_PIN_CC1_ACTIVE,
+	NOTIFY_PIN_CC2_ACTIVE,
+	NOTIFY_PIN_AUDIO_ACCESSORY,
+};
+
+enum extra {
+	NOTIFY_EXTRA_USBKILLER = 0,
+	NOTIFY_EXTRA_HARDRESET_SENT,
+	NOTIFY_EXTRA_HARDRESET_RECEIVED,
+	NOTIFY_EXTRA_SYSERROR_BOOT_WDT,
+	NOTIFY_EXTRA_SYSMSG_BOOT_POR,
+	NOTIFY_EXTRA_SYSMSG_CC_SHORT,
+	NOTIFY_EXTRA_SYSMSG_SBU_GND_SHORT,
+	NOTIFY_EXTRA_SYSMSG_SBU_VBUS_SHORT,
+	NOTIFY_EXTRA_UVDM_TIMEOUT,
+};
+
 #define ALTERNATE_MODE_NOT_READY	(1 << 0)
 #define ALTERNATE_MODE_READY		(1 << 1)
 #define ALTERNATE_MODE_STOP		(1 << 2)
@@ -143,7 +165,8 @@ enum ccic_pin_assignment {
 extern void store_usblog_notify(int type, void *param1, void *parma2);
 extern void store_ccic_version(unsigned char *hw, unsigned char *sw_main,
 			unsigned char *sw_boot);
-extern void store_ccic_bin_version(const unsigned char *sw_main, const unsigned char *sw_boot);
+extern void store_ccic_bin_version(const unsigned char *sw_main,
+					const unsigned char *sw_boot);
 extern int register_usblog_proc(void);
 extern void unregister_usblog_proc(void);
 #else

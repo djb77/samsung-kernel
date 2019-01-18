@@ -14,6 +14,7 @@
 #define SMC_HDCP_INIT			((unsigned int)0x82004010)
 #define SMC_HDCP_TERMINATE		((unsigned int)0x82004011)
 #define SMC_HDCP_PROT_MSG		((unsigned int)0x82004012)
+#define SMC_CHECK_STREAM_TYPE_FALG	((unsigned int)0x82004022)
 
 #define SMC_DRM_HDCP_AUTH_INFO		((unsigned int)0x82002140)
 

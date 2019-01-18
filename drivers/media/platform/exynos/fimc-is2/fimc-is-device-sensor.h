@@ -394,7 +394,6 @@ struct fimc_is_device_sensor {
 	bool						dtp_check;
 	struct timer_list				dtp_timer;
 	unsigned long					force_stop;
-	u32						dtp_del_flag;
 
 	/* for early buffer done */
 	u32						early_buf_done_mode;

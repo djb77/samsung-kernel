@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wpa.h 700076 2017-05-17 14:42:22Z $
+ * $Id: wpa.h 758863 2018-04-21 00:29:12Z $
  */
 
 #ifndef _proto_wpa_h_
@@ -135,6 +135,10 @@ typedef BWL_PRE_PACKED_STRUCT struct
 
 #define WPA_CIPHER_AES_GCM	8	/* AES (GCM) */
 #define WPA_CIPHER_AES_GCM256	9	/* AES (GCM256) */
+#define WPA_CIPHER_CCMP_256 	10	/* CCMP-256 */
+#define WPA_CIPHER_BIP_GMAC_128	11	/* BIP_GMAC_128 */
+#define WPA_CIPHER_BIP_GMAC_256 12	/* BIP_GMAC_256 */
+#define WPA_CIPHER_BIP_CMAC_256 13	/* BIP_CMAC_256 */
 
 #ifdef BCMWAPI_WAI
 #define WAPI_CIPHER_NONE	WPA_CIPHER_NONE
@@ -165,6 +169,26 @@ typedef BWL_PRE_PACKED_STRUCT struct
 				WAPI_CSE_WPI_SMS4 : WAPI_CIPHER_NONE)
 #endif /* BCMWAPI_WAI */
 
+#define IS_VALID_AKM(akm) ((akm) == RSN_AKM_NONE || \
+			(akm) == RSN_AKM_UNSPECIFIED || \
+			(akm) == RSN_AKM_PSK || \
+			(akm) == RSN_AKM_FBT_1X || \
+			(akm) == RSN_AKM_FBT_PSK || \
+			(akm) == RSN_AKM_MFP_1X || \
+			(akm) == RSN_AKM_MFP_PSK || \
+			(akm) == RSN_AKM_SHA256_1X || \
+			(akm) == RSN_AKM_SHA256_PSK || \
+			(akm) == RSN_AKM_TPK || \
+			(akm) == RSN_AKM_SAE_PSK || \
+			(akm) == RSN_AKM_SAE_PSK || \
+			(akm) == RSN_AKM_FILS_SHA256 || \
+			(akm) == RSN_AKM_FILS_SHA384 || \
+			(akm) == RSN_AKM_OWE)
+
+#define IS_VALID_BIP_CIPHER(cipher) ((cipher) == WPA_CIPHER_BIP || \
+					(cipher) == WPA_CIPHER_BIP_GMAC_128 || \
+					(cipher) == WPA_CIPHER_BIP_GMAC_256 || \
+					(cipher) == WPA_CIPHER_BIP_CMAC_256)
 /* WPA TKIP countermeasures parameters */
 #define WPA_TKIP_CM_DETECT	60	/* multiple MIC failure window (seconds) */
 #define WPA_TKIP_CM_BLOCK	60	/* countermeasures active window (seconds) */
@@ -204,6 +228,45 @@ typedef BWL_PRE_PACKED_STRUCT struct
 #define	WPA_CAP_WPA2_PREAUTH		RSN_CAP_PREAUTH
 
 #define WPA2_PMKID_COUNT_LEN	2
+
+/* RSN dev type in rsn_info struct */
+typedef enum {
+	DEV_NONE = 0,
+	DEV_STA = 1,
+	DEV_AP = 2
+} device_type_t;
+
+typedef uint32 rsn_akm_mask_t;			/* RSN_AKM_... see 802.11.h */
+typedef uint8  rsn_cipher_t;			/* WPA_CIPHER_xxx */
+typedef uint32 rsn_ciphers_t;			/* mask of rsn_cipher_t */
+typedef uint8 rsn_akm_t;
+typedef uint8 auth_ie_type_mask_t;
+
+typedef struct rsn_ie_info {
+	uint8 version;
+	rsn_cipher_t g_cipher;
+	uint8 p_count;
+	uint8 akm_count;
+	uint8 pmkid_count;
+	rsn_akm_t sta_akm;			/* single STA akm */
+	uint16 caps;
+	rsn_ciphers_t p_ciphers;
+	rsn_akm_mask_t akms;
+	uint8 pmkids_offset;			/* offset into the IE */
+	rsn_cipher_t g_mgmt_cipher;
+	device_type_t dev_type;			/* AP or STA */
+	rsn_cipher_t sta_cipher;		/* single STA cipher */
+	uint16 key_desc;			/* key descriptor version as STA */
+	int parse_status;
+	uint16 mic_len;				/* unused. keep for ROM compatibility. */
+	auth_ie_type_mask_t auth_ie_type;	/* bit field of WPA, WPA2 and (not yet) CCX WAPI */
+	uint8 pmk_len;				/* EAPOL PMK */
+	uint8 kck_mic_len;			/* EAPOL MIC (by KCK) */
+	uint8 kck_len;				/* EAPOL KCK */
+	uint8 kek_len;				/* EAPOL KEK */
+	uint8 tk_len;				/* EAPOL TK */
+	uint8 ptk_len;				/* EAPOL PTK */
+} rsn_ie_info_t;
 
 #ifdef BCMWAPI_WAI
 #define WAPI_CAP_PREAUTH		RSN_CAP_PREAUTH

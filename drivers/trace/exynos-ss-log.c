@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Samsung Electronics Co., Ltd.
+ * Copyright (c) 2013-2018 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
  *
  * Exynos-SnapShot debugging framework for Exynos SoC
@@ -138,10 +138,8 @@ struct exynos_ss_log {
 		unsigned long sp;
 		unsigned long long jiffies;
 		raw_spinlock_t *lock;
-#ifdef CONFIG_DEBUG_SPINLOCK
 		u16 next;
 		u16 owner;
-#endif
 		int en;
 		void *caller[ESS_CALLSTACK_MAX_NUM];
 	} spinlock[ESS_NR_CPUS][ESS_LOG_MAX_NUM];
@@ -242,6 +240,15 @@ struct exynos_ss_log {
 		unsigned int data;
 	} acpm[ESS_LOG_MAX_NUM];
 #endif
+#ifdef CONFIG_EXYNOS_SNAPSHOT_UART
+	struct __uart_log {
+		unsigned long long time;
+		int cpu;
+		struct s3c24xx_uart_port *ourport;
+		int flag;
+		int en;
+} uart[ESS_LOG_MAX_NUM];
+#endif
 #ifdef CONFIG_EXYNOS_SNAPSHOT_I2C
 	struct __i2c_log {
 		unsigned long long time;
@@ -260,6 +267,18 @@ struct exynos_ss_log {
 		struct spi_message *cur_msg;
 		int en;
 	} spi[ESS_LOG_MAX_NUM];
+#endif
+#ifdef CONFIG_EXYNOS_SNAPSHOT_LOGGING_HVC_CALL
+	struct __hvc_log {
+		unsigned long long time;
+		int cpu;
+		enum __UH_APP_ID app_id;
+		enum __RKP_CMD_ID command;
+		u64 arg0;
+		u64 arg1;
+		u64 arg2;
+		int en;
+	} hvc[ESS_LOG_MAX_NUM];
 #endif
 
 #ifndef CONFIG_EXYNOS_SNAPSHOT_MINIMIZED_MODE
@@ -327,11 +346,17 @@ struct exynos_ss_log_idx {
 #ifdef CONFIG_EXYNOS_SNAPSHOT_REGULATOR
 	atomic_t thermal_log_idx;
 #endif
+#ifdef CONFIG_EXYNOS_SNAPSHOT_UART
+	atomic_t uart_log_idx;
+#endif
 #ifdef CONFIG_EXYNOS_SNAPSHOT_I2C
 	atomic_t i2c_log_idx;
 #endif
 #ifdef CONFIG_EXYNOS_SNAPSHOT_SPI
 	atomic_t spi_log_idx;
+#endif
+#ifdef CONFIG_EXYNOS_SNAPSHOT_LOGGING_HVC_CALL
+	atomic_t hvc_log_idx;
 #endif
 #ifndef CONFIG_EXYNOS_SNAPSHOT_MINIMIZED_MODE
 	atomic_t clockevent_log_idx[ESS_NR_CPUS];
@@ -436,11 +461,17 @@ void __init exynos_ss_log_idx_init(void)
 #ifdef CONFIG_EXYNOS_SNAPSHOT_ACPM
 	atomic_set(&(ess_idx.acpm_log_idx), -1);
 #endif
+#ifdef CONFIG_EXYNOS_SNAPSHOT_UART
+	atomic_set(&(ess_idx.uart_log_idx), -1);
+#endif
 #ifdef CONFIG_EXYNOS_SNAPSHOT_I2C
 	atomic_set(&(ess_idx.i2c_log_idx), -1);
 #endif
 #ifdef CONFIG_EXYNOS_SNAPSHOT_SPI
 	atomic_set(&(ess_idx.spi_log_idx), -1);
+#endif
+#ifdef CONFIG_EXYNOS_SNAPSHOT_LOGGING_HVC_CALL
+	atomic_set(&(ess_idx.hvc_log_idx), -1);
 #endif
 	atomic_set(&(ess_idx.suspend_log_idx), -1);
 
@@ -1188,7 +1219,6 @@ void exynos_ss_spinlock(void *v_lock, int en)
 #endif
 		ess_log->spinlock[cpu][i].sp = (unsigned long) current_stack_pointer;
 		ess_log->spinlock[cpu][i].jiffies = jiffies_64;
-#ifdef CONFIG_DEBUG_SPINLOCK
 		ess_log->spinlock[cpu][i].lock = lock;
 		if (en == 3) {
 			/* unlock */
@@ -1198,7 +1228,6 @@ void exynos_ss_spinlock(void *v_lock, int en)
 			ess_log->spinlock[cpu][i].next = lock->raw_lock.next;
 			ess_log->spinlock[cpu][i].owner = lock->raw_lock.owner;
 		}
-#endif
 		ess_log->spinlock[cpu][i].en = en;
 
 		for (j = 0; j < ess_desc.callstack; j++) {
@@ -1438,7 +1467,26 @@ void exynos_ss_hrtimer(void *timer, s64 *now, void *fn, int en)
 	}
 }
 #endif
+#ifdef CONFIG_EXYNOS_SNAPSHOT_UART
+void exynos_ss_uart(struct s3c24xx_uart_port *ourport, int flag, int en)
+{
+	struct exynos_ss_item *item = &ess_items[ess_desc.kevents_num];
 
+	if (unlikely(!ess_base.enabled || !item->entry.enabled))
+		return;
+	{
+		int cpu = raw_smp_processor_id();
+		unsigned long i = atomic_inc_return(&ess_idx.uart_log_idx) &
+			(ARRAY_SIZE(ess_log->uart) - 1);
+
+		ess_log->uart[i].time = cpu_clock(cpu);
+		ess_log->uart[i].cpu = cpu;
+		ess_log->uart[i].ourport = ourport;
+		ess_log->uart[i].flag = flag;
+		ess_log->uart[i].en = en;
+	}
+}
+#endif
 #ifdef CONFIG_EXYNOS_SNAPSHOT_I2C
 void exynos_ss_i2c(struct i2c_adapter *adap, struct i2c_msg *msgs, int num, int en)
 {
@@ -1478,6 +1526,30 @@ void exynos_ss_spi(struct spi_master *master, struct spi_message *cur_msg, int e
 		ess_log->spi[i].master = master;
 		ess_log->spi[i].cur_msg = cur_msg;
 		ess_log->spi[i].en = en;
+	}
+}
+#endif
+
+#ifdef CONFIG_EXYNOS_SNAPSHOT_LOGGING_HVC_CALL
+void exynos_ss_hvc(u64 app_id, u64 command, u64 arg0, u64 arg1, u64 arg2, int en)
+{
+	struct exynos_ss_item *item = &ess_items[ess_desc.kevents_num];
+
+	if (unlikely(!ess_base.enabled || !item->entry.enabled))
+		return;
+	{
+		int cpu = raw_smp_processor_id();
+		unsigned long i = atomic_inc_return(&ess_idx.hvc_log_idx) &
+				(ARRAY_SIZE(ess_log->hvc) - 1);
+
+		ess_log->hvc[i].time = cpu_clock(cpu);
+		ess_log->hvc[i].cpu = cpu;
+		ess_log->hvc[i].app_id = (enum __UH_APP_ID)app_id;
+		ess_log->hvc[i].command = (enum __RKP_CMD_ID)command;
+		ess_log->hvc[i].arg0 = arg0;
+		ess_log->hvc[i].arg1 = arg1;
+		ess_log->hvc[i].arg2 = arg2;
+		ess_log->hvc[i].en = en;
 	}
 }
 #endif
@@ -1851,10 +1923,8 @@ EXPORT_SYMBOL(exynos_ss_hook_pmsg);
  */
 
 static struct ramoops_platform_data ess_ramoops_data = {
-	.record_size	= SZ_512K,
-	.console_size	= 0,
-	.ftrace_size	= SZ_512K,
-	.pmsg_size	= SZ_512K,
+	.record_size	= SZ_4K,
+	.pmsg_size	= SZ_4K,
 	.dump_oops	= 1,
 };
 
@@ -1870,6 +1940,8 @@ static int __init ess_pstore_init(void)
 	if (exynos_ss_get_enable("log_pstore")) {
 		ess_ramoops_data.mem_size = exynos_ss_get_item_size("log_pstore");
 		ess_ramoops_data.mem_address = exynos_ss_get_item_paddr("log_pstore");
+		ess_ramoops_data.pmsg_size = ess_ramoops_data.mem_size / 2;
+		ess_ramoops_data.record_size = ess_ramoops_data.mem_size / 2;
 	}
 	return platform_device_register(&ess_ramoops);
 }

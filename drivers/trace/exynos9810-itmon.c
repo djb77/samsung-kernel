@@ -208,6 +208,8 @@ struct itmon_platdata {
 	struct itmon_traceinfo traceinfo[TRANS_TYPE_NUM];
 	struct list_head tracelist[TRANS_TYPE_NUM];
 	unsigned int err_cnt;
+	unsigned int err_cnt_by_cpu;
+	ktime_t last_time;
 	bool panic_allowed;
 	bool crash_in_progress;
 	unsigned int sysfs_tmout_val;
@@ -880,24 +882,30 @@ static void itmon_post_handler_by_master(struct itmon_dev *itmon,
 	/* After treatment by port */
 	if (!traceinfo->port || strlen(traceinfo->port) < 1)
 		return;
-
+	/*
+	 * if master is CPU or SCI_CCM or SCI_IRPM,
+	 * then we expect any exception at CPU
+	 */
 	if ((!strncmp(traceinfo->port, "CPU", strlen("CPU"))) ||
-	    (!strncmp(traceinfo->port, "SCI_CCM", strlen("SCI_CCM")))) {
-		/* if master is CPU or SCI_CCM, then we expect any exception */
-		if (pdata->err_cnt > PANIC_ALLOWED_THRESHOLD) {
-			pdata->err_cnt = 0;
-			itmon_init(itmon, false);
-			pr_info("ITMON is turn-off when CPU transaction is detected repeatly\n");
-		} else {
-			pr_info("ITMON skips CPU transaction detected\n");
-		}
+	    (!strncmp(traceinfo->port, "SCI_CCM", strlen("SCI_CCM"))) ||
+	    (!strncmp(traceinfo->port, "SCI_IRPM", strlen("SCI_IRPM")))) {
+		ktime_t now, interval;
+
+		now = ktime_get();
+		interval = ktime_sub(now, pdata->last_time);
+		pdata->last_time = now;
+		pdata->err_cnt_by_cpu++;
+		pr_info("ITMON skips CPU transaction detected - "
+			"err_cnt_by_cpu: %u, interval: %lluns\n",
+			pdata->err_cnt_by_cpu,
+			(unsigned long long)ktime_to_ns(interval));
 	} else if (!strncmp(traceinfo->port, CP_COMMON_STR, strlen(CP_COMMON_STR))) {
 		/* if master is DSP and operation is read, we don't care this */
 		if (traceinfo->master && traceinfo->target_addr == INVALID_REMAPPING &&
 			!strncmp(traceinfo->master, "LCPU", strlen(traceinfo->master))) {
-			pdata->err_cnt = 0;
 			pr_info("ITMON skips CP's DSP(CR4MtoL2) detected\n");
 		} else {
+			pr_info("CP Crash sequence in progress\n");
 			/* Disable busmon all interrupts */
 			itmon_init(itmon, false);
 #if defined(CONFIG_SEC_SIPC_MODEM_IF)
@@ -905,6 +913,9 @@ static void itmon_post_handler_by_master(struct itmon_dev *itmon,
 			ss310ap_force_crash_exit_ext();
 #endif
 		}
+	} else {
+		pdata->err_cnt++;
+		pr_info("ITMON increases error count - err_cnt:%u\n", pdata->err_cnt);
 	}
 }
 
@@ -1306,8 +1317,10 @@ static void itmon_route_tracedata(struct itmon_dev *itmon)
 		pr_auto(ASL3, "--------------------------------------------------------------------------\n");
 
 	for (trans_type = 0; trans_type < TRANS_TYPE_NUM; trans_type++) {
-		itmon_post_handler_to_notifier(itmon, trans_type);
-		itmon_post_handler_by_master(itmon, trans_type);
+		if (!pdata->crash_in_progress) {
+			itmon_post_handler_to_notifier(itmon, trans_type);
+			itmon_post_handler_by_master(itmon, trans_type);
+		}
 	}
 }
 
@@ -1536,11 +1549,18 @@ static irqreturn_t itmon_irq_handler(int irq, void *data)
 		if (irq == nodegroup[i].irq) {
 			group = &pdata->nodegroup[i];
 			if (group->phy_regs != 0) {
-				pr_info("\nITMON Detected: %d irq, %s group, 0x%x vec, err_cnt:%u\n",
-					irq, group->name, __raw_readl(group->regs), pdata->err_cnt);
+				pr_info("\nITMON Detected: %d irq, %s group, 0x%x vec, "
+					"err_cnt:%u err_cnt_by_cpu:%u\n",
+					irq, group->name,
+					__raw_readl(group->regs),
+					pdata->err_cnt,
+					pdata->err_cnt_by_cpu);
 			} else {
-				pr_info("\nITMON Detected: %d irq, %s group, err_cnt:%u\n",
-					irq, group->name, pdata->err_cnt);
+				pr_info("\nITMON Detected: %d irq, %s group, "
+					"err_cnt:%u err_cnt_by_cpu:%u\n",
+					irq, group->name,
+					pdata->err_cnt,
+					pdata->err_cnt_by_cpu);
 			}
 			break;
 		}
@@ -1556,7 +1576,7 @@ static irqreturn_t itmon_irq_handler(int irq, void *data)
 			itmon_switch_s2d(itmon);
 		}
 
-		if (pdata->err_cnt++ > PANIC_ALLOWED_THRESHOLD)
+		if (pdata->err_cnt > PANIC_ALLOWED_THRESHOLD)
 			pdata->panic_allowed = true;
 	}
 
@@ -1949,6 +1969,17 @@ static int itmon_probe(struct platform_device *pdev)
 	itmon->pdata->masterinfo = masterinfo;
 	itmon->pdata->rpathinfo = rpathinfo;
 	itmon->pdata->nodegroup = nodegroup;
+
+#ifdef CONFIG_SEC_DEBUG
+	if (sec_debug_check_sj()) {
+		printk("%s: LOCKED, no s2d\n", __func__);
+		itmon->pdata->sysfs_s2d = 0;
+	} else {
+		printk("%s: UNLOCKED, s2d\n", __func__);
+		itmon->pdata->sysfs_s2d = 1;
+	}
+#endif
+
 
 	for (i = 0; i < (int)ARRAY_SIZE(nodegroup); i++) {
 		dev_name = nodegroup[i].name;

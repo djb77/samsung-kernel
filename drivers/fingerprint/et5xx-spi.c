@@ -837,7 +837,21 @@ static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		pr_info("%s FP_SET_WAKE_UP_SIGNAL\n", __func__);
 		break;
 #endif
+	case FP_SENSOR_ORIENT:
+		pr_info("%s: orient is %d(0: normal, 1: upside down)\n",
+			__func__, etspi->orient);
+
+		retval = put_user(etspi->orient, (u8 __user *) (uintptr_t)ioc->rx_buf);
+		if (retval != 0)
+			pr_err("%s FP_SENSOR_ORIENT put_user fail: %d\n", __func__, retval);
+		break;
+
+	case FP_SPI_VALUE:
+		etspi->spi_value = ioc->len;
+		pr_info("%s spi_value: 0x%x\n", __func__,etspi->spi_value);
+			break;
 	case FP_IOCTL_RESERVED_01:
+	case FP_IOCTL_RESERVED_02:
 			break;
 	default:
 		retval = -EFAULT;
@@ -1101,6 +1115,10 @@ static int etspi_parse_dt(struct device *dev,
 	}
 	pr_info("%s: chipid: %s\n", __func__, data->chipid);
 
+	if (of_property_read_u32(np, "etspi-orient", &data->orient))
+		data->orient = 0;
+	pr_info("%s: orient: %d\n", __func__, data->orient);
+
 	data->p = pinctrl_get_select_default(dev);
 	if (IS_ERR(data->p)) {
 		errorno = -EINVAL;
@@ -1185,14 +1203,23 @@ static int etspi_type_check(struct etspi_data *etspi)
 	 * type check return value
 	 * ET510C : 0X00 / 0X66 / 0X00 / 0X33
 	 * ET510D : 0x03 / 0x0A / 0x05
-	 * ET516A : 0x00 / 0x10 / 0x05
+	 * ET516B : 0x01 or 0x02 / 0x10 / 0x05
+	 * ET520  : 0x03 / 0x14 / 0x05
+	 * ET523  : 0x00 / 0x17 / 0x05
 	 */
-	if ((buf1 == 0x00) && (buf2 == 0x10) && (buf3 == 0x05)) {
+	if (((buf1 == 0x01) || (buf1 == 0x02))
+		&& (buf2 == 0x10) && (buf3 == 0x05)) {
 		etspi->sensortype = SENSOR_EGIS;
-		pr_info("%s sensor type is EGIS ET516A sensor\n", __func__);
+		pr_info("%s sensor type is EGIS ET516B sensor\n", __func__);
 	} else  if ((buf1 == 0x03) && (buf2 == 0x0A) && (buf3 == 0x05)) {
 		etspi->sensortype = SENSOR_EGIS;
 		pr_info("%s sensor type is EGIS ET510D sensor\n", __func__);
+	} else  if ((buf1 == 0x03) && (buf2 == 0x14) && (buf3 == 0x05)) {
+		etspi->sensortype = SENSOR_EGIS;
+		pr_info("%s sensor type is EGIS ET520 sensor\n", __func__);
+	} else if((buf1 == 0x00) && (buf2 == 0x17) && (buf3 == 0x05)) {
+		etspi->sensortype = SENSOR_EGIS;
+		pr_info("%s sensor type is EGIS ET523 sensor\n", __func__);
 	} else {
 		if ((buf4 == 0x00) && (buf5 == 0x66)
 				&& (buf6 == 0x00) && (buf7 == 0x33)) {
@@ -1223,7 +1250,17 @@ static ssize_t etspi_type_check_show(struct device *dev,
 {
 	struct etspi_data *data = dev_get_drvdata(dev);
 #ifndef ENABLE_SENSORS_FPRINT_SECURE
-	etspi_type_check(data);
+	int retry = 0;
+	int status = 0;
+
+	do {
+		status = etspi_type_check(data);
+		pr_info("%s type (%u), retry (%d)\n"
+			, __func__, data->sensortype, retry);
+	} while (!data->sensortype && ++retry < 3);
+
+	if (status == -ENODEV)
+		pr_info("%s type check fail\n", __func__);
 #endif
 	return snprintf(buf, PAGE_SIZE, "%d\n", data->sensortype);
 }
@@ -1268,10 +1305,10 @@ static void etspi_work_func_debug(struct work_struct *work)
 	if (g_data->ldo_pin)
 		ldo_value = gpio_get_value(g_data->ldo_pin);
 
-	pr_info("%s ldo: %d, sleep: %d, tz: %d, type: %s\n",
+	pr_info("%s ldo: %d, sleep: %d, tz: %d, spi_value: 0x%x, type: %s\n",
 		__func__,
 		ldo_value, gpio_get_value(g_data->sleepPin),
-		g_data->tz_mode,
+		g_data->tz_mode, g_data->spi_value,
 		sensor_status[g_data->sensortype + 2]);
 }
 
@@ -1419,7 +1456,7 @@ static int etspi_probe(struct spi_device *spi)
 		return status;
 	}
 #endif
-
+	etspi->spi_value = 0;
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
 	etspi->sensortype = SENSOR_UNKNOWN;
 #else

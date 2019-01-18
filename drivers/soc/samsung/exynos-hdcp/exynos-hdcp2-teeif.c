@@ -500,8 +500,6 @@ int teei_verify_m_prime(uint8_t *m_prime, uint8_t *input, size_t input_len)
 	}
 
 	ret = hdcp_tee_comm(hci);
-	if (ret != 0)
-		return 0;
 
 	return ret;
 }

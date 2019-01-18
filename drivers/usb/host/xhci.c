@@ -1596,8 +1596,20 @@ int xhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 		}
 		ep->ep_state |= EP_HALT_PENDING;
 		ep->stop_cmds_pending++;
+#if !defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
 		ep->stop_cmd_timer.expires = jiffies +
 			XHCI_STOP_EP_CMD_TIMEOUT * HZ;
+#else
+		if (xhci->xhc_state & XHCI_STATE_REMOVING) {
+			ep->stop_cmd_timer.expires = jiffies + 1 * HZ;
+			xhci_info(xhci, "stop_cmd_timer: 1 sec\n");
+
+		} else {
+			ep->stop_cmd_timer.expires = jiffies +
+				XHCI_STOP_EP_CMD_TIMEOUT * HZ;
+			xhci_info(xhci, "stop_cmd_timer: 5 sec\n");
+		}
+#endif
 		add_timer(&ep->stop_cmd_timer);
 		xhci_queue_stop_endpoint(xhci, command, urb->dev->slot_id,
 					 ep_index, 0);

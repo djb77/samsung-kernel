@@ -5,7 +5,7 @@
  * JTAG, 0/1/2 UARTs, clock frequency control, a watchdog interrupt timer,
  * GPIO interface, extbus, and support for serial and parallel flashes.
  *
- * $Id: sbchipc.h 732401 2017-11-17 01:38:44Z $
+ * $Id: sbchipc.h 753903 2018-03-23 08:21:12Z $
  *
  * Copyright (C) 1999-2018, Broadcom.
  *
@@ -1117,15 +1117,17 @@ typedef volatile struct {
 #define SYCC_CD_SHIFT		16
 
 /* watchdogcounter */
-#define SSRESET_PCIE_F0			0x10000000
-#define SSRESET_PCIE_F1			0x20000000
-#define SSRESET_PCIE_F2			0x40000000
-#define WD_RESET_EN				0x80000000
-#define WD_COUNTER_MASK			0x0fffffff
-#define WD_SSRESET_PCIE_F0_EN		(WD_RESET_EN | SSRESET_PCIE_F0)
-#define WD_SSRESET_PCIE_F1_EN		(WD_RESET_EN | SSRESET_PCIE_F1)
+/* WL sub-system reset */
+#define WD_SSRESET_PCIE_F0_EN			0x10000000
+/* BT sub-system reset */
+#define WD_SSRESET_PCIE_F1_EN			0x20000000
+#define WD_SSRESET_PCIE_F2_EN			0x40000000
+/* Both WL and BT sub-system reset */
+#define WD_SSRESET_PCIE_ALL_FN_EN		0x80000000
+#define WD_COUNTER_MASK				0x0fffffff
 #define WD_ENABLE_MASK	\
-	(WD_RESET_EN | SSRESET_PCIE_F0 | SSRESET_PCIE_F1 | SSRESET_PCIE_F2)
+	(WD_SSRESET_PCIE_F0_EN | WD_SSRESET_PCIE_F1_EN | \
+	WD_SSRESET_PCIE_F2_EN | WD_SSRESET_PCIE_ALL_FN_EN)
 
 /* Indirect backplane access */
 #define	BPIA_BYTEEN		0x0000000f
@@ -3310,6 +3312,7 @@ created for 4369
 #define CR4_4362_RAM_BASE                    (0x170000)
 #define CR4_4369_RAM_BASE                    (0x170000)
 #define CR4_4377_RAM_BASE                    (0x170000)
+#define CR4_43751_RAM_BASE                   (0x170000)
 #define CA7_4367_RAM_BASE                    (0x200000)
 #define CR4_4378_RAM_BASE                    (0x352000)
 

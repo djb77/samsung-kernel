@@ -1108,8 +1108,12 @@ static void ecd_dump_stacktrace_task(struct pt_regs *regs, struct task_struct *t
 	walk_stackframe(NULL, &frame, report_trace, NULL);
 }
 
+#ifndef CONFIG_THREAD_INFO_IN_TASK
 #define THREAD_INFO(sp) ((struct thread_info *) \
 		((unsigned long)(sp) & ~(THREAD_SIZE - 1)))
+#else
+#define THREAD_INFO(tsk) ((struct thread_info *)(tsk))
+#endif
 
 static void ecd_dump_stacktrace(const struct pt_regs *regs, void *ssp)
 {
@@ -1395,10 +1399,12 @@ void ecd_do_break_now(void)
 
 static int __init add_exception_func(void)
 {
-	hook_debug_fault_code(DBG_ESR_EVT_HWBP, ecd_do_breakpoint, SIGTRAP,
-			      TRAP_HWBKPT, "hw-breakpoint handler");
-	hook_debug_fault_code(DBG_ESR_EVT_HWWP, ecd_do_watchpoint, SIGTRAP,
-			      TRAP_HWBKPT, "hw-watchpoint handler");
+	if (!initial_no_firmware) {
+		hook_debug_fault_code(DBG_ESR_EVT_HWBP, ecd_do_breakpoint, SIGTRAP,
+		                     TRAP_HWBKPT, "hw-breakpoint handler");
+		hook_debug_fault_code(DBG_ESR_EVT_HWWP, ecd_do_watchpoint, SIGTRAP,
+		                     TRAP_HWBKPT, "hw-watchpoint handler");
+	}
 	return 0;
 }
 arch_initcall(add_exception_func);

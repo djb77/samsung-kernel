@@ -4110,12 +4110,7 @@ no_journal:
 		goto failed_mount_wq;
 	}
 
-
-	/* Remove to check DUMMY_ENCRYTIION_ENABLE to set ext4_set_feature_encrypt
-	 * even if dummy encryption isn't enabled (HACK patch)
-	 * if (DUMMY_ENCRYPTION_ENABLED(sbi) && !(sb->s_flags & MS_RDONLY) &&
-	 */
-	if (!(sb->s_flags & MS_RDONLY) &&
+	if (DUMMY_ENCRYPTION_ENABLED(sbi) && !(sb->s_flags & MS_RDONLY) &&
 	    !ext4_has_feature_encrypt(sb)) {
 		ext4_set_feature_encrypt(sb);
 		ext4_commit_super(sb, 1);
@@ -4143,10 +4138,11 @@ no_journal:
 				ext4_sec_r_blocks_count(es) >>
 				sbi->s_cluster_bits);
 
-	if (le32_to_cpu(es->s_sec_magic) == EXT4_SEC_DATA_MAGIC) {
+	if (le32_to_cpu(es->s_sec_magic) == EXT4_SEC_DATA_MAGIC ||
+			strncmp(es->s_volume_name, "data", 4) == 0) {
 		sbi->s_r_inodes_count = EXT4_DEF_RESERVE_INODE;
 		ext4_msg(sb, KERN_INFO, "Reserve inodes (%d/%u)",
-			EXT4_DEF_RESERVE_INODE,
+			EXT4_DEF_RESERVE_INODE * 2,
 			le32_to_cpu(es->s_inodes_count));
 	}
 

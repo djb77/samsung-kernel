@@ -31,10 +31,30 @@ static int is_dp_logger_init;
 static int is_buf_full;
 static int log_max_count = -1;
 
+void dp_logger_print_date_time(void)
+{
+	char tmp[64] = {0x0, };
+	struct tm tm;
+	u64 time;
+	unsigned long nsec;
+	unsigned long sec;
+
+	time = local_clock();
+	nsec = do_div(time, 1000000000);
+	sec = get_seconds() - (sys_tz.tz_minuteswest * 60);
+	time_to_tm(sec, 0, &tm);
+	snprintf(tmp, sizeof(tmp), "!@[%02d-%02d %02d:%02d:%02d.%03lu]", tm.tm_mon + 1, tm.tm_mday,
+						tm.tm_hour, tm.tm_min, tm.tm_sec, nsec / 1000000);
+
+	dp_logger_print("%s\n", tmp);
+}
+
 /* set max log count, if count is -1, no limit */
 void dp_logger_set_max_count(int count)
 {
 	log_max_count = count;
+
+	dp_logger_print_date_time();
 }
 
 void dp_logger_print(const char *fmt, ...)
@@ -44,6 +64,7 @@ void dp_logger_print(const char *fmt, ...)
 	char buf[MAX_STR_LEN + 16];
 	u64 time;
 	unsigned long nsec;
+	volatile unsigned int curpos;
 
 	if (!is_dp_logger_init)
 		return;
@@ -61,11 +82,12 @@ void dp_logger_print(const char *fmt, ...)
 	len += vsnprintf(buf + len, MAX_STR_LEN, fmt, args);
 	va_end(args);
 
-	if (g_curpos + len >= BUF_SIZE) {
-		g_curpos = 0;
+	curpos = g_curpos; 
+	if (curpos + len >= BUF_SIZE) { 
+		g_curpos = curpos = 0; 
 		is_buf_full = 1;
 	}
-	memcpy(log_buf + g_curpos, buf, len);
+	memcpy(log_buf + curpos, buf, len);
 	g_curpos += len;
 }
 
@@ -106,11 +128,12 @@ static ssize_t dp_logger_read(struct file *file, char __user *buf, size_t len, l
 	loff_t pos = *offset;
 	ssize_t count;
 	size_t size;
+	volatile unsigned int curpos = g_curpos;
 
-	if (is_buf_full)
+	if (is_buf_full || BUF_SIZE <= curpos)
 		size = BUF_SIZE;
 	else
-		size = (size_t)g_curpos;
+		size = (size_t)curpos;
 
 	if (pos >= size)
 		return 0;

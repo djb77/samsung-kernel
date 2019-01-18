@@ -156,6 +156,17 @@ struct tsmux_otf_cmd_queue {
 	struct tsmux_otf_config config;
 };
 
+struct tsmux_rtp_ts_info {
+	int32_t rtp_seq_number;
+	int32_t rtp_seq_override;
+
+	int32_t ts_pat_cc;
+	int32_t ts_pmt_cc;
+
+	int32_t ts_video_cc;
+	int32_t ts_audio_cc;
+};
+
 #define TSMUX_IOCTL_SET_INFO		\
 	_IOW('T', 0x1, struct tsmux_psi_info)
 
@@ -176,5 +187,10 @@ struct tsmux_otf_cmd_queue {
 	_IOW('A', 0x16, int32_t)
 #define TSMUX_IOCTL_OTF_SET_CONFIG		\
 	_IOW('A', 0x17, struct tsmux_otf_config)
+
+#define TSMUX_IOCTL_SET_RTP_TS_INFO		\
+	_IOW('A', 0x20, struct tsmux_rtp_ts_info)
+#define TSMUX_IOCTL_GET_RTP_TS_INFO		\
+	_IOR('A', 0x21, struct tsmux_rtp_ts_info)
 
 #endif /* TSMUX_H */

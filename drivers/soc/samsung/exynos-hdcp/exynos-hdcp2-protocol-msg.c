@@ -740,7 +740,7 @@ static int cap_ske_send_eks(uint8_t *m, size_t *m_len, struct hdcp_tx_ctx *tx_ct
 }
 
 #ifdef TEST_HDCP_V2_0
-void parse_rcvid_list(uint8_t *msg, struct hdcp_tx_ctx *tx_ctx)
+int parse_rcvid_list(uint8_t *msg, struct hdcp_tx_ctx *tx_ctx)
 {
         /* get PRE META values */
         tx_ctx->rcv_list.devs_exd = (uint8_t)*msg;
@@ -755,6 +755,8 @@ void parse_rcvid_list(uint8_t *msg, struct hdcp_tx_ctx *tx_ctx)
         /* get receiver ID list */
         msg += 34;
         memcpy(tx_ctx->rcv_list.rcv_id, msg, tx_ctx->rcv_list.devs_count * HDCP_RCV_ID_LEN);
+
+	return 0;
 }
 
 void convert_rcvlist2authmsg(struct hdcp_rcvlist *rcv_list, uint8_t *src_msg, size_t *msg_len)
@@ -784,7 +786,7 @@ void convert_rcvlist2authmsg(struct hdcp_rcvlist *rcv_list, uint8_t *src_msg, si
         *msg_len += 1;
 }
 #else
-void parse_rcvid_list(uint8_t *msg, struct hdcp_tx_ctx *tx_ctx)
+int parse_rcvid_list(uint8_t *msg, struct hdcp_tx_ctx *tx_ctx)
 {
         /* get PRE META values */
         tx_ctx->rpauth_info.devs_exd = (uint8_t)*msg;
@@ -801,7 +803,14 @@ void parse_rcvid_list(uint8_t *msg, struct hdcp_tx_ctx *tx_ctx)
 
         /* get receiver ID list */
         msg += HDCP_RP_RCV_LIST_META_LEN;
+	if (tx_ctx->rpauth_info.devs_count > HDCP_RCV_DEVS_COUNT_MAX) {
+		hdcp_err("invalid DEVS count (%d)\n", tx_ctx->rpauth_info.devs_count);
+		return -1;
+	}
+
         memcpy(tx_ctx->rpauth_info.u_rcvid.arr, msg, tx_ctx->rpauth_info.devs_count * HDCP_RCV_ID_LEN);
+
+	return 0;
 }
 
 void convert_rcvlist2authmsg(struct hdcp_rpauth_info *rpauth_info, uint8_t *src_msg, size_t *msg_len)
@@ -862,7 +871,9 @@ static int decap_RepeaterAuth_send_ReceiverID_List(uint8_t *m,
 	if (ret)
 		return ret;
 
-	parse_rcvid_list(m + 1, tx_ctx);
+	if (parse_rcvid_list(m + 1, tx_ctx))
+		return -1;
+
 	convert_rcvlist2authmsg(&tx_ctx->rpauth_info, source_msg, &msg_len);
 
 	ret = teei_set_rcvlist_info(NULL, NULL, tx_ctx->rpauth_info.v_prime,

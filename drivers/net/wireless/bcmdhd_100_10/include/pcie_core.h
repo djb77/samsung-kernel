@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: pcie_core.h 769920 2018-06-28 15:44:12Z $
+ * $Id: pcie_core.h 758765 2018-04-20 09:35:41Z $
  */
 #ifndef	_PCIE_CORE_H
 #define	_PCIE_CORE_H
@@ -910,11 +910,12 @@ typedef volatile struct sbpcieregs {
 #define PCIMSIVecAssign	0x58
 
 /* HMAP Registers */
-#define PCI_HMAP_WINDOW_BASE		0x540 /* base of all HMAP window registers */
-#define PCI_HMAP_VIOLATION_ADDR_L	0x5C0
-#define PCI_HMAP_VIOLATION_ADDR_U	0x5C4
-#define PCI_HMAP_VIOLATION_INFO		0x5C8
-#define PCI_HMAP_WINDOW_CONFIG		0x5D0
+/* base of all HMAP window registers */
+#define PCI_HMAP_WINDOW_BASE(rev)		(REV_GE_64(rev) ? 0x580u : 0x540u)
+#define PCI_HMAP_VIOLATION_ADDR_L(rev)		(REV_GE_64(rev) ? 0x600u : 0x5C0u)
+#define PCI_HMAP_VIOLATION_ADDR_U(rev)		(REV_GE_64(rev) ? 0x604u : 0x5C4u)
+#define PCI_HMAP_VIOLATION_INFO(rev)		(REV_GE_64(rev) ? 0x608u : 0x5C8u)
+#define PCI_HMAP_WINDOW_CONFIG(rev)		(REV_GE_64(rev) ? 0x610u : 0x5D0u)
 #define PCI_HMAP_NWINDOWS_SHIFT		8
 #define PCI_HMAP_NWINDOWS_MASK		0x0000ff00 /* bits 8:15 */
 
@@ -936,6 +937,9 @@ typedef volatile struct sbpcieregs {
 #define PCIECFGREG_PM_CSR_STATE_D3_COLD 4
 
 /* Direct Access regs */
+#define DAR_ERRADDR(rev)		(REV_GE_64(rev) ? \
+						OFFSETOF(sbpcieregs_t, u1.dar_64.erraddr) : \
+						OFFSETOF(sbpcieregs_t, u1.dar.erraddr))
 #define DAR_ERRLOG(rev)			(REV_GE_64(rev) ? \
 						OFFSETOF(sbpcieregs_t, u1.dar_64.errlog) : \
 						OFFSETOF(sbpcieregs_t, u1.dar.errlog))

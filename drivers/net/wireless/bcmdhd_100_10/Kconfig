@@ -75,6 +75,13 @@ config BCM4361
 	  This module adds support for wireless adapters based on
 	  Broadcom 4361 chipset.
 
+config BCM4375
+	tristate "Broadcom 4375 wireless cards support"
+	depends on BROADCOM_WIFI
+	---help---
+	  This module adds support for wireless adapters based on
+	  Broadcom 4375 chipset.
+
 config BCM43241
 	tristate "Broadcom 43241 wireless cards support"
 	depends on BROADCOM_WIFI
@@ -152,14 +159,14 @@ config WLAN_REGION_CODE
 
 config WLAIBSS
 	bool "Advanced IBSS mode"
-	depends on (BCM4335 || BCM4339 || BCM4354 || BCM4358 || BCM4359 || BCM4361)
+	depends on (BCM4335 || BCM4339 || BCM4354 || BCM4358 || BCM4359 || BCM4361 || BCM4375)
 	default y
 	---help---
 	  This is a configuration for Oxygen Network.
 
 config WL_RELMCAST
 	bool "Reliable Multicast Support"
-	depends on (BCM4335 || BCM4339 || BCM4354 || BCM4358 || BCM4359 || BCM4361)
+	depends on (BCM4335 || BCM4339 || BCM4354 || BCM4358 || BCM4359 || BCM4361 || BCM4375)
 	default y
 	---help---
 	  This is a configuration for RMC.
@@ -173,7 +180,7 @@ config WL_NAN
 
 config BCMDHD_PCIE
 	bool "Enable PCIe I/F Support"
-	depends on (BCM4354 || BCM4358 || BCM4359 || BCM4361)
+	depends on (BCM4354 || BCM4358 || BCM4359 || BCM4361 || BCM4375)
 	---help---
 	  Enable PCI Express I/F Support
 
@@ -210,3 +217,10 @@ config BCM_DETECT_CONSECUTIVE_HANG
 	default n
 	---help---
 	Detecting defect module from consecutive hang event
+
+config WLAN_TSQ_MULTIPLIER
+	bool "Enable TCP TSQ_MULTIPLIER"
+	depends on BROADCOM_WIFI
+	default n
+	---help---
+	This is configuration for TCP TSQ_MULTIPLIER

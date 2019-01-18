@@ -209,6 +209,16 @@ static bool dsim_fifo_empty_needed(struct dsim_device *dsim, unsigned int data_i
 {
 	/* read case or partial update command */
 	if (data_id == MIPI_DSI_DCS_READ
+			|| ((data_id == MIPI_DSI_DCS_SHORT_WRITE
+					|| data_id == MIPI_DSI_DCS_SHORT_WRITE_PARAM)
+				&& (data0 == MIPI_DCS_SOFT_RESET
+					|| data0 == MIPI_DCS_SET_DISPLAY_OFF
+					|| data0 == MIPI_DCS_SET_DISPLAY_ON
+					|| data0 == MIPI_DCS_ENTER_SLEEP_MODE
+					|| data0 == MIPI_DCS_EXIT_SLEEP_MODE))
+			/* for poc write */
+			|| data0 == 0xC1
+			|| data0 == 0xC0
 			|| data0 == MIPI_DCS_SET_COLUMN_ADDRESS
 			|| data0 == MIPI_DCS_SET_PAGE_ADDRESS) {
 		dsim_dbg("%s: id:%d, data=%ld\n", __func__, data_id, data0);
@@ -500,8 +510,10 @@ static irqreturn_t dsim_irq_handler(int irq, void *dev_id)
 		complete(&dsim->rd_comp);
 	if (int_src & DSIM_INTSRC_FRAME_DONE)
 		dsim_dbg("dsim%d framedone irq occurs\n", dsim->id);
-	if (int_src & DSIM_INTSRC_ERR_RX_ECC)
+	if (int_src & DSIM_INTSRC_ERR_RX_ECC) {
 		dsim_err("RX ECC Multibit error was detected!\n");
+		__dsim_dump(dsim);
+	}
 
 	if (int_src & DSIM_INTSRC_UNDER_RUN) {
 		dsim->total_underrun_cnt++;

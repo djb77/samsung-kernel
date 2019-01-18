@@ -365,7 +365,7 @@ int exynos_ss_post_panic(void)
 #ifdef CONFIG_EXYNOS_SDM
 		if ((__raw_readl(exynos_ss_get_base_vaddr() +
 				ESS_OFFSET_SCRATCH) == ESS_SIGN_SCRATCH) &&
-			sec_debug_get_debug_level())
+			sec_debug_enter_upload())
 			exynos_sdm_dump_secure_region();
 #endif
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PANIC_REBOOT
@@ -695,7 +695,6 @@ static int exynos_ss_save_core_safe(struct pt_regs *regs, int cpu)
 
 int exynos_ss_save_core(void *v_regs)
 {
-	register unsigned long sp asm ("sp");
 	struct pt_regs *regs = (struct pt_regs *)v_regs;
 	struct pt_regs *core_reg =
 			per_cpu(ess_core_reg, smp_processor_id());
@@ -737,7 +736,7 @@ int exynos_ss_save_core(void *v_regs)
 		    "str x29, [x0, #232]\n\t"
 		    "str x30, [x0, #240]\n\t" :
 		    : "r"(core_reg));
-		core_reg->sp = (unsigned long)(sp + 0x30);
+		core_reg->sp = (unsigned long)__builtin_frame_address(1);
 		core_reg->regs[29] = core_reg->sp;
 		core_reg->pc =
 			(unsigned long)(core_reg->regs[30] - sizeof(unsigned int));
@@ -790,6 +789,8 @@ static void exynos_ss_dump_one_task_info(struct task_struct *tsk, bool is_main)
 	unsigned long pc = 0;
 	char symname[KSYM_NAME_LEN];
 
+	if (!try_get_task_stack(tsk))
+		return;
 	pc = KSTK_EIP(tsk);
 	wchan = get_wchan(tsk);
 	if (lookup_symbol_name(wchan, symname) < 0)
@@ -1049,7 +1050,7 @@ void __init exynos_ss_utils_init(void)
 
 #ifdef CONFIG_EXYNOS_SNAPSHOT_CRASH_KEY
 #ifdef CONFIG_SEC_DEBUG
-	if ((sec_debug_get_debug_level() & 0x1) == 0x1)
+	if (sec_debug_enter_upload())
 		register_gpio_keys_notifier(&nb_gpio_keys);
 #endif
 #endif

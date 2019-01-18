@@ -28,7 +28,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhdioctl.h 760444 2018-05-02 05:18:22Z $
+ * $Id: dhdioctl.h 755895 2018-04-05 07:17:15Z $
  */
 
 #ifndef _dhdioctl_h_

@@ -29,7 +29,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_flowring.h 735999 2017-12-13 07:18:24Z $
+ * $Id: dhd_flowring.h 756473 2018-04-09 09:14:33Z $
  */
 
 /****************
@@ -63,7 +63,7 @@
 #define DHD_FLOWRING_RX_BUFPOST_PKTSZ	2048
 /* Maximum Mu MIMO frame size */
 #ifdef WL_MONITOR
-#define DHD_MAX_MON_FLOWRING_RX_BUFPOST_PKTSZ	2624
+#define DHD_MAX_MON_FLOWRING_RX_BUFPOST_PKTSZ	4096
 #endif /* WL_MONITOR */
 
 #define DHD_FLOW_PRIO_AC_MAP		0
@@ -148,17 +148,17 @@ typedef struct flow_queue {
 #define DHD_FLOW_QUEUE_SET_L2CLEN(queue, grandparent_clen_ptr)  \
 	((queue)->l2clen_ptr) = (void *)(grandparent_clen_ptr)
 
-/*  see wlfc_proto.h for tx status details */
-#define DHD_FLOWRING_MAXSTATUS_MSGS	9
 #define DHD_FLOWRING_TXSTATUS_CNT_UPDATE(bus, flowid, txstatus)
 
 /* Pkttag not compatible with PROP_TXSTATUS or WLFC */
 typedef struct dhd_pkttag_fr {
 	uint16  flowid;
 	uint16  ifid;
+#ifdef DHD_LB_TXC
 	int     dataoff;
 	dmaaddr_t physaddr;
 	uint32 pa_len;
+#endif /* DHD_LB_TXC */
 } dhd_pkttag_fr_t;
 
 #define DHD_PKTTAG_SET_IFID(tag, idx)       ((tag)->ifid = (uint16)(idx))
@@ -174,6 +174,12 @@ typedef struct flow_info {
 	uint8		ifindex;
 	char		sa[ETHER_ADDR_LEN];
 	char		da[ETHER_ADDR_LEN];
+#ifdef TX_STATUS_LATENCY_STATS
+	/* total number of tx_status received on this flowid */
+	uint64           num_tx_status;
+	/* cumulative tx_status latency for this flowid */
+	uint64          cum_tx_status_latency;
+#endif /* TX_STATUS_LATENCY_STATS */
 } flow_info_t;
 
 /** a flow ring is used for outbound (towards antenna) 802.3 packets */
@@ -194,7 +200,6 @@ typedef struct flow_ring_node {
 #ifdef IDLE_TX_FLOW_MGMT
 	uint64		last_active_ts; /* contains last active timestamp */
 #endif /* IDLE_TX_FLOW_MGMT */
-
 } flow_ring_node_t;
 
 typedef flow_ring_node_t flow_ring_table_t;

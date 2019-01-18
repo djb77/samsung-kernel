@@ -1517,7 +1517,7 @@ static bool dw_mci_wait_data_busy(struct dw_mci *host, struct mmc_request *mrq)
 	bool ret = false;
 
 	do {
-		if (!readl_poll_timeout_atomic(host->regs + SDMMC_STATUS, status,
+		if (!readl_poll_timeout(host->regs + SDMMC_STATUS, status,
 				!(status & SDMMC_STATUS_BUSY),
 				10, 100 * USEC_PER_MSEC)) {
 			ret = true;
@@ -1677,7 +1677,8 @@ static void __dw_mci_start_request(struct dw_mci *host,
 	mrq = slot->mrq;
 
 	if (mrq->cmd->opcode == MMC_SEND_TUNING_BLOCK ||
-			mrq->cmd->opcode == MMC_SEND_TUNING_BLOCK_HS200)
+			mrq->cmd->opcode == MMC_SEND_TUNING_BLOCK_HS200 ||
+			mrq->cmd->opcode == SD_APP_SEND_SCR)
 		mod_timer(&host->timer, jiffies + msecs_to_jiffies(500));
 	else if (host->pdata->sw_timeout)
 		mod_timer(&host->timer,
@@ -2430,33 +2431,6 @@ static void dw_mci_tasklet_func(unsigned long priv)
 			}
 
 			if (cmd->data && err) {
-				/*
-				 * During UHS tuning sequence, sending the stop
-				 * command after the response CRC error would
-				 * throw the system into a confused state
-				 * causing all future tuning phases to report
-				 * failure.
-				 *
-				 * In such case controller will move into a data
-				 * transfer state after a response error or
-				 * response CRC error. Let's let that finish
-				 * before trying to send a stop, so we'll go to
-				 * STATE_SENDING_DATA.
-				 *
-				 * Although letting the data transfer take place
-				 * will waste a bit of time (we already know
-				 * the command was bad), it can't cause any
-				 * errors since it's possible it would have
-				 * taken place anyway if this tasklet got
-				 * delayed. Allowing the transfer to take place
-				 * avoids races and keeps things simple.
-				 */
-				if ((err != -ETIMEDOUT) &&
-				    (cmd->opcode == MMC_SEND_TUNING_BLOCK)) {
-					state = STATE_SENDING_DATA;
-					continue;
-				}
-
 				dw_mci_fifo_reset(host->dev, host);
 				dw_mci_stop_dma(host);
 				send_stop_abort(host, data);
@@ -3625,8 +3599,7 @@ out:
 
 bool dw_mci_fifo_reset(struct device *dev, struct dw_mci *host)
 {
-	unsigned long timeout = jiffies + msecs_to_jiffies(1000);
-	unsigned int ctrl;
+	unsigned int ctrl, loop_count = 3;
 	bool result;
 
 	do {
@@ -3648,7 +3621,7 @@ bool dw_mci_fifo_reset(struct device *dev, struct dw_mci *host)
 				return true;
 			}
 		}
-	} while (time_before(jiffies, timeout));
+	} while (loop_count--);
 
 	dev_err(dev, "%s: Timeout while resetting host controller after err\n",
 		__func__);

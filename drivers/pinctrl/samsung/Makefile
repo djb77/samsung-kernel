@@ -1,5 +1,7 @@
 # Samsung pin control drivers
 
+ccflags-y := $(KBUILD_FP_SENSOR_CFLAGS)
+
 obj-$(CONFIG_PINCTRL_SAMSUNG)	+= pinctrl-samsung.o
 obj-$(CONFIG_PINCTRL_EXYNOS)	+= pinctrl-exynos.o
 obj-$(CONFIG_PINCTRL_EXYNOS5440)	+= pinctrl-exynos5440.o

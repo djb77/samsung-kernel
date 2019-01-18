@@ -270,7 +270,8 @@ enum iodev_attr_bit {
 	ATTR_NO_CHECK_MAXQ,     /* no need to check rxq overflow condition */
 	ATTR_DUALSIM,		/* support Dual SIM */
 	ATTR_OPTION_REGION,	/* region & operator info */
-	ATTR_ZEROCOPY,		/* suppoert Zerocopy : 0x1 << 12*/
+	ATTR_ZEROCOPY,		/* support Zerocopy : 0x1 << 12*/
+	ATTR_SMAPPER,		/* support zerocopty with SMAPPER */
 };
 #define IODEV_ATTR(b)	(0x1 << b)
 
@@ -365,6 +366,7 @@ struct modem_mbox {
 	unsigned int int_ap2cp_wakeup;
 	unsigned int int_ap2cp_status;
 	unsigned int int_ap2cp_uart_noti;
+	unsigned int int_ap2cp_smapper;
 
 	unsigned int irq_cp2ap_msg;
 	unsigned int irq_cp2ap_active;
@@ -372,6 +374,7 @@ struct modem_mbox {
 	unsigned int irq_cp2ap_status;
 	unsigned int irq_cp2ap_wakelock;
 	unsigned int irq_cp2ap_rat_mode;
+	unsigned int irq_cp2ap_smapper;
 
 	/* Performance request */
 	unsigned int mbx_ap2cp_perf_req;
@@ -393,6 +396,8 @@ struct modem_mbox {
 	unsigned int sbi_lte_active_pos;
 	unsigned int sbi_cp_status_mask;
 	unsigned int sbi_cp_status_pos;
+	unsigned int sbi_cp_smapper_mask;
+	unsigned int sbi_cp_smapper_pos;
 	unsigned int sbi_cp2ap_wakelock_mask;
 	unsigned int sbi_cp2ap_wakelock_pos;
 	unsigned int sbi_cp2ap_rat_mode_mask;
@@ -402,6 +407,8 @@ struct modem_mbox {
 	unsigned int sbi_pda_active_pos;
 	unsigned int sbi_ap_status_mask;
 	unsigned int sbi_ap_status_pos;
+	unsigned int sbi_ap2cp_wakelock_mask;
+	unsigned int sbi_ap2cp_wakelock_pos;
 
 	unsigned int sbi_ap2cp_kerneltime_sec_mask;
 	unsigned int sbi_ap2cp_kerneltime_sec_pos;

@@ -267,6 +267,32 @@ static const struct max77705_muic_vps_data muic_vps_table[] = {
 		.attached_dev	= ATTACHED_DEV_QC_CHARGER_5V_MUIC,
 	},
 #endif
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	{
+		.adc		= MAX77705_UIADC_POGO_DOCK,
+		.vbvolt		= VB_HIGH,
+		.chgtyp		= CHGTYP_DONTCARE,
+		.muic_switch	= COM_OPEN,
+		.vps_name	= "POGO Dock",
+		.attached_dev	= ATTACHED_DEV_POGO_DOCK_MUIC,
+	},
+	{
+		.adc		= MAX77705_UIADC_POGO_DOCK,
+		.vbvolt		= VB_HIGH,
+		.chgtyp		= CHGTYP_DONTCARE,
+		.muic_switch	= COM_OPEN,
+		.vps_name	= "POGO Dock/5V",
+		.attached_dev	= ATTACHED_DEV_POGO_DOCK_5V_MUIC,
+	},
+	{
+		.adc		= MAX77705_UIADC_POGO_DOCK_9V,
+		.vbvolt		= VB_HIGH,
+		.chgtyp		= CHGTYP_DONTCARE,
+		.muic_switch	= COM_OPEN,
+		.vps_name	= "POGO Dock/9V",
+		.attached_dev	= ATTACHED_DEV_POGO_DOCK_9V_MUIC,
+	},
+#endif
 };
 
 static int muic_lookup_vps_table(muic_attached_dev_t new_dev,
@@ -894,7 +920,7 @@ static ssize_t max77705_muic_set_apo_factory(struct device *dev,
 	return count;
 }
 
-#if defined(CONFIG_HV_MUIC_MAX77705_AFC)
+#if defined(CONFIG_HV_MUIC_MAX77705_AFC) || defined(CONFIG_SUPPORT_QC30)
 static ssize_t max77705_muic_show_afc_disable(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -917,9 +943,7 @@ static ssize_t max77705_muic_set_afc_disable(struct device *dev,
 	struct max77705_muic_data *muic_data = dev_get_drvdata(dev);
 	struct muic_platform_data *pdata = muic_data->pdata;
 	int param_val, ret = 0;
-#if defined(CONFIG_MUIC_HV) || defined(CONFIG_SUPPORT_QC30)
 	union power_supply_propval psy_val;
-#endif
 
 	if (!strncasecmp(buf, "1", 1)) {
 		ret = sec_set_param(CM_OFFSET + 1, '1');
@@ -946,11 +970,8 @@ static ssize_t max77705_muic_set_afc_disable(struct device *dev,
 #endif
 	pr_info("%s afc_disable(%d)\n", __func__, pdata->afc_disable);
 
-#if defined(CONFIG_MUIC_HV) || defined(CONFIG_SUPPORT_QC30)
-		psy_val.intval = param_val;
-		psy_do_property("battery", set,
-			POWER_SUPPLY_EXT_PROP_HV_DISABLE, psy_val);
-#endif
+	psy_val.intval = param_val;
+	psy_do_property("battery", set, POWER_SUPPLY_EXT_PROP_HV_DISABLE, psy_val);
 
 	return count;
 }
@@ -1203,6 +1224,13 @@ static int max77705_muic_handle_detach(struct max77705_muic_data *muic_data, int
 	case ATTACHED_DEV_NONE_MUIC:
 		com_to_open(muic_data);
 		break;
+	case ATTACHED_DEV_USB_MUIC:
+	case ATTACHED_DEV_CDP_MUIC:
+	case ATTACHED_DEV_OTG_MUIC:
+	case ATTACHED_DEV_TIMEOUT_OPEN_MUIC:
+		if (muic_data->ccic_info_data.ccic_evt_attached == MUIC_CCIC_NOTI_DETACH)
+			com_to_open(muic_data);
+		break;
 	case ATTACHED_DEV_UNOFFICIAL_ID_MUIC:
 		goto out_without_noti;
 	default:
@@ -1279,6 +1307,12 @@ static int max77705_muic_logically_detach(struct max77705_muic_data *muic_data,
 	case ATTACHED_DEV_HICCUP_MUIC:
 		break;
 #endif /* CONFIG_HICCUP_CHARGER */
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	case ATTACHED_DEV_POGO_DOCK_MUIC:
+	case ATTACHED_DEV_POGO_DOCK_5V_MUIC:
+	case ATTACHED_DEV_POGO_DOCK_9V_MUIC:
+		break;
+#endif /* CONFIG_MUIC_HV_SUPPORT_POGO_DOCK */
 	case ATTACHED_DEV_NONE_MUIC:
 		force_path_open = false;
 		goto out;
@@ -1382,6 +1416,12 @@ handle_attach:
 		ret = com_to_usb_cp(muic_data);
 		break;
 #endif /* CONFIG_HICCUP_CHARGER */
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	case ATTACHED_DEV_POGO_DOCK_MUIC:
+	case ATTACHED_DEV_POGO_DOCK_5V_MUIC:
+	case ATTACHED_DEV_POGO_DOCK_9V_MUIC:
+		break;
+#endif /* CONFIG_MUIC_HV_SUPPORT_POGO_DOCK */
 	default:
 		pr_warn("%s unsupported dev(%d)\n", __func__,
 				new_dev);
@@ -1593,6 +1633,9 @@ muic_attached_dev_t max77705_muic_check_new_dev(struct max77705_muic_data *muic_
 	u8 chgtyp = muic_data->status3 & BC_STATUS_CHGTYP_MASK;
 	u8 spchgtyp = (muic_data->status3 & BC_STATUS_PRCHGTYP_MASK) >> BC_STATUS_PRCHGTYP_SHIFT;
 	u8 dcdtmo = (muic_data->status3 & BC_STATUS_DCDTMO_MASK) >> BC_STATUS_DCDTMO_SHIFT;
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	u8 vbadc = (muic_data->status1 & USBC_STATUS1_VBADC_MASK) >> USBC_STATUS1_VBADC_SHIFT;
+#endif /* CONFIG_MUIC_HV_SUPPORT_POGO_DOCK */
 	unsigned long i;
 
 	chgtyp = max77705_resolve_chgtyp(muic_data, chgtyp, spchgtyp, dcdtmo, irq);
@@ -1603,6 +1646,16 @@ muic_attached_dev_t max77705_muic_check_new_dev(struct max77705_muic_data *muic_
 	if ((muic_data->pdata->opmode & OPMODE_CCIC) && (adc == MAX77705_UIADC_523K))
 		vbvolt = 0;
 #endif /* CONFIG_MUIC_MAX77705_CCIC */
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	/* dock_int_ap value is low => Pogo dock is attached */
+	if (gpio_is_valid(muic_data->dock_int_ap)
+			&& gpio_get_value(muic_data->dock_int_ap) == 0) {
+		if (vbadc > MAX77705_VBADC_6_5V_TO_7_5V)
+			adc = MAX77705_UIADC_POGO_DOCK_9V;
+		else
+			adc = MAX77705_UIADC_POGO_DOCK;
+	}
+#endif /* CONFIG_MUIC_HV_SUPPORT_POGO_DOCK */
 
 	for (i = 0; i < (int)ARRAY_SIZE(muic_vps_table); i++) {
 		tmp_vps = &(muic_vps_table[i]);
@@ -1674,6 +1727,11 @@ static void max77705_muic_detect_dev(struct max77705_muic_data *muic_data,
 
 	pr_info("%s adc:0x%x vbvolt:0x%x chgtyp:0x%x spchgtyp:0x%x sysmsg:0x%x vbadc:0x%x dcdtmo:0x%x\n",
 		__func__, adc, vbvolt, chgtyp, spchgtyp, sysmsg, vbadc, dcdtmo);
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	if (gpio_is_valid(muic_data->dock_int_ap))
+		pr_info("%s pogo_dock:%s\n", __func__,
+				gpio_get_value(muic_data->dock_int_ap) == 0 ? "attach" : "detach");
+#endif /* CONFIG_MUIC_HV_SUPPORT_POGO_DOCK */
 
 	/* Set the fake_vbus charger type */
 	muic_data->fake_chgtyp = chgtyp;
@@ -1713,6 +1771,24 @@ static void max77705_muic_detect_dev(struct max77705_muic_data *muic_data,
 			}
 			return;
 #endif /* CONFIG_HV_MUIC_MAX77705_AFC */
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+		} else if (muic_data->attached_dev == ATTACHED_DEV_POGO_DOCK_MUIC) {
+			/* Cancel vbus_wa_work at POGO Dock */
+			wake_unlock(&muic_data->muic_wake_lock);
+			cancel_delayed_work(&(muic_data->vbus_wa_work));
+			if (vbadc > MAX77705_VBADC_6_5V_TO_7_5V) {
+				pr_info("%s POGO DOCK 9V\n", __func__);
+				muic_data->attached_dev = ATTACHED_DEV_POGO_DOCK_9V_MUIC;
+			} else {
+				pr_info("%s POGO DOCK 5V\n", __func__);
+				muic_data->attached_dev = ATTACHED_DEV_POGO_DOCK_5V_MUIC;
+			}
+#if defined(CONFIG_MUIC_NOTIFIER)
+			muic_notifier_attach_attached_dev(muic_data->attached_dev);
+#endif /* CONFIG_MUIC_NOTIFIER */
+			return;
+
+#endif /* CONFIG_MUIC_HV_SUPPORT_POGO_DOCK */
 		} else {
 			pr_info("%s vbadc irq(%d), return\n",
 					__func__, muic_data->irq_vbadc);
@@ -2158,6 +2234,15 @@ static int of_max77705_muic_dt(struct max77705_muic_data *muic_data)
 		pr_debug("%s pmuic_support_list[%d] = %c\n", __func__,
 			i, (muic_data->muic_support_list[i] ? 'T' : 'F'));
 
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	muic_data->dock_int_ap = of_get_named_gpio(np_muic, "muic,dock_int_ap", 0);
+	if (gpio_is_valid(muic_data->dock_int_ap))
+		pr_info("%s:%s dock_int_ap:%d, value:%d\n", MUIC_DEV_NAME, __func__, 
+				muic_data->dock_int_ap, gpio_get_value(muic_data->dock_int_ap));
+	else
+		pr_err("%s:%s dock_int_ap is invalid\n", MUIC_DEV_NAME, __func__);
+#endif /* CONFIG_MUIC_HV_SUPPORT_POGO_DOCK */
+
 err:
 	of_node_put(np_muic);
 
@@ -2419,9 +2504,6 @@ int max77705_muic_remove(struct max77705_usbc_platform_data *usbc_data)
 
 		max77705_muic_free_irqs(muic_data);
 
-		if (muic_data->pdata->cleanup_switch_dev_cb)
-			muic_data->pdata->cleanup_switch_dev_cb();
-
 		cancel_delayed_work(&(muic_data->vbus_wa_work));
 
 #if defined(CONFIG_MUIC_MAX77705_CCIC)
@@ -2438,6 +2520,9 @@ int max77705_muic_remove(struct max77705_usbc_platform_data *usbc_data)
 		muic_unregister_usb_notifier(muic_data);
 		cancel_delayed_work_sync(&(muic_data->debug_work));
 
+		if (muic_data->pdata->cleanup_switch_dev_cb)
+			muic_data->pdata->cleanup_switch_dev_cb();
+
 		mutex_destroy(&muic_data->muic_mutex);
 		wake_lock_destroy(&muic_data->muic_wake_lock);
 	}
@@ -2448,7 +2533,6 @@ int max77705_muic_remove(struct max77705_usbc_platform_data *usbc_data)
 void max77705_muic_shutdown(struct max77705_usbc_platform_data *usbc_data)
 {
 	struct max77705_muic_data *muic_data = usbc_data->muic_data;
-	struct i2c_client *i2c;
 
 	pr_info("%s +\n", __func__);
 
@@ -2462,17 +2546,6 @@ void max77705_muic_shutdown(struct max77705_usbc_platform_data *usbc_data)
 	com_to_open(muic_data);
 
 	max77705_muic_free_irqs(muic_data);
-
-	i2c = muic_data->i2c;
-
-	if (!i2c) {
-		pr_err("%s no muic i2c client\n", __func__);
-		goto out_cleanup;
-	}
-
-out_cleanup:
-	if (muic_data->pdata && muic_data->pdata->cleanup_switch_dev_cb)
-		muic_data->pdata->cleanup_switch_dev_cb();
 
 	cancel_delayed_work(&(muic_data->vbus_wa_work));
 

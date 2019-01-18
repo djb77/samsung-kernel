@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: 802.11.h 748934 2018-02-27 02:44:11Z $
+ * $Id: 802.11.h 759325 2018-04-25 00:30:00Z $
  */
 
 #ifndef _802_11_H_
@@ -968,6 +968,9 @@ typedef BWL_PRE_PACKED_STRUCT struct dot11_esp_ie_info_list {
 #define DOT11_ESP_INFO_LIST_AC_VI	2u	/* access category of esp information list AC_VI */
 #define DOT11_ESP_INFO_LIST_AC_VO	3u	/* access category of esp information list AC_VO */
 
+#define DOT11_ESP_INFO_LIST_DF_MASK    0x18		/* Data Format Mask */
+#define DOT11_ESP_INFO_LIST_BAWS_MASK  0xE0		/* BA window size mask */
+
 /* nom_msdu_size */
 #define FIXED_MSDU_SIZE 0x8000		/* MSDU size is fixed */
 #define MSDU_SIZE_MASK	0x7fff		/* (Nominal or fixed) MSDU size */
@@ -1523,17 +1526,19 @@ typedef struct ccx_qfl_ie ccx_qfl_ie_t;
  * i.e. the values should include 255 (DOT11_MNG_ID_EXT_ID + ID Extension).
  */
 #define DOT11_MNG_ID_EXT_ID			255	/* Element ID Extension 11mc D4.3 */
-#define EXT_MNG_HE_CAP_ID			35	/* HE Capabilities, 11ax */
+#define EXT_MNG_OWE_DH_PARAM_ID			32u	/* OWE DH Param ID - RFC 8110 */
+#define DOT11_MNG_OWE_DH_PARAM_ID		(DOT11_MNG_ID_EXT_ID + EXT_MNG_OWE_DH_PARAM_ID)
+#define EXT_MNG_HE_CAP_ID			35u	/* HE Capabilities, 11ax */
 #define DOT11_MNG_HE_CAP_ID			(DOT11_MNG_ID_EXT_ID + EXT_MNG_HE_CAP_ID)
-#define EXT_MNG_HE_OP_ID			36	/* HE Operation IE, 11ax */
+#define EXT_MNG_HE_OP_ID			36u	/* HE Operation IE, 11ax */
 #define DOT11_MNG_HE_OP_ID			(DOT11_MNG_ID_EXT_ID + EXT_MNG_HE_OP_ID)
-#define EXT_MNG_RAPS_ID				37	/* OFDMA Random Access Parameter Set */
+#define EXT_MNG_RAPS_ID				37u	/* OFDMA Random Access Parameter Set */
 #define DOT11_MNG_RAPS_ID			(DOT11_MNG_ID_EXT_ID + EXT_MNG_RAPS_ID)
-#define EXT_MNG_MU_EDCA_ID			38	/* MU EDCA Parameter Set */
+#define EXT_MNG_MU_EDCA_ID			38u	/* MU EDCA Parameter Set */
 #define DOT11_MNG_MU_EDCA_ID			(DOT11_MNG_ID_EXT_ID + EXT_MNG_MU_EDCA_ID)
-#define EXT_MNG_SRPS_ID				39	/* Spatial Reuse Parameter Set */
+#define EXT_MNG_SRPS_ID				39u	/* Spatial Reuse Parameter Set */
 #define DOT11_MNG_SRPS_ID			(DOT11_MNG_ID_EXT_ID + EXT_MNG_SRPS_ID)
-#define EXT_MNG_BSSCOLOR_CHANGE_ID		42	/* BSS Color Change Announcement */
+#define EXT_MNG_BSSCOLOR_CHANGE_ID		42u	/* BSS Color Change Announcement */
 #define DOT11_MNG_BSSCOLOR_CHANGE_ID		(DOT11_MNG_ID_EXT_ID + EXT_MNG_BSSCOLOR_CHANGE_ID)
 
 /* FILS and OCE ext ids */
@@ -2232,7 +2237,7 @@ BWL_PRE_PACKED_STRUCT struct dot11_tclas_ie {
 	dot11_tclas_fc_t fc;
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_tclas_ie dot11_tclas_ie_t;
-#define DOT11_TCLAS_IE_LEN		3	/* Fixed length, include id and len */
+#define DOT11_TCLAS_IE_LEN		3u	/* Fixed length, include id and len */
 
 /** TCLAS processing element */
 BWL_PRE_PACKED_STRUCT struct dot11_tclas_proc_ie {
@@ -2287,7 +2292,7 @@ BWL_PRE_PACKED_STRUCT struct dot11_tfs_resp_ie {
 	uint8 data[1];
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_tfs_resp_ie dot11_tfs_resp_ie_t;
-#define DOT11_TFS_RESP_IE_LEN		1	/* Fixed length, without id and len */
+#define DOT11_TFS_RESP_IE_LEN		1u	/* Fixed length, without id and len */
 
 /** TFS response subelement IDs (same subelments, but different IDs than in TFS request */
 #define DOT11_TFS_RESP_TFS_STATUS_SE_ID		1
@@ -3547,7 +3552,7 @@ BWL_PRE_PACKED_STRUCT struct dot11_neighbor_rep_ie {
 	uint8 data[1]; 		/* Variable size subelements */
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_neighbor_rep_ie dot11_neighbor_rep_ie_t;
-#define DOT11_NEIGHBOR_REP_IE_FIXED_LEN	13
+#define DOT11_NEIGHBOR_REP_IE_FIXED_LEN	13u
 
 /* MLME Enumerations */
 #define DOT11_BSSTYPE_INFRASTRUCTURE		0	/* d11 infrastructure */
@@ -3821,15 +3826,15 @@ BWL_PRE_PACKED_STRUCT struct vndr_ie {
 	uchar id;
 	uchar len;
 	uchar oui [3];
-	uchar data [1]; 	/* Variable size data */
+	uchar data [1];   /* Variable size data */
 } BWL_POST_PACKED_STRUCT;
 typedef struct vndr_ie vndr_ie_t;
 
-#define VNDR_IE_HDR_LEN		2	/* id + len field */
-#define VNDR_IE_MIN_LEN		3	/* size of the oui field */
+#define VNDR_IE_HDR_LEN		2u	/* id + len field */
+#define VNDR_IE_MIN_LEN		3u	/* size of the oui field */
 #define VNDR_IE_FIXED_LEN	(VNDR_IE_HDR_LEN + VNDR_IE_MIN_LEN)
 
-#define VNDR_IE_MAX_LEN		255	/* vendor IE max length, without ID and len */
+#define VNDR_IE_MAX_LEN		255u	/* vendor IE max length, without ID and len */
 
 /** BRCM PROP DEVICE PRIMARY MAC ADDRESS IE */
 BWL_PRE_PACKED_STRUCT struct member_of_brcm_prop_ie {
@@ -4375,10 +4380,12 @@ typedef struct vht_features_ie_hdr vht_features_ie_hdr_t;
 #define WPA_OUI_LEN		3		/* WPA OUI length */
 #define WPA_OUI_TYPE		1
 #define WPA_VERSION		1		/* WPA version */
+#define WPA_VERSION_LEN 2 /* WPA version length */
 #define WPA2_OUI		"\x00\x0F\xAC"	/* WPA2 OUI */
 #define WPA2_OUI_LEN		3		/* WPA2 OUI length */
 #define WPA2_VERSION		1		/* WPA2 version */
 #define WPA2_VERSION_LEN	2		/* WAP2 version length */
+#define MAX_RSNE_SUPPORTED_VERSION  WPA2_VERSION	/* Max supported version */
 
 /* ************* WPS definitions. ************* */
 #define WPS_OUI			"\x00\x50\xF2"	/* WPS OUI */
@@ -4386,23 +4393,25 @@ typedef struct vht_features_ie_hdr vht_features_ie_hdr_t;
 #define WPS_OUI_TYPE		4
 
 /* ************* WFA definitions. ************* */
-#if defined(WL_LEGACY_P2P)
-#define MAC_OUI			"\x00\x17\xF2"	/* MACOSX OUI */
-#define MAC_OUI_TYPE_P2P	5
+#define WFA_OUI			"\x50\x6F\x9A"  /* WFA OUI */
+#define WFA_OUI_LEN		3   /* WFA OUI length */
+#define WFA_OUI_TYPE_P2P	9
+
+#ifdef WL_LEGACY_P2P
+#define APPLE_OUI           "\x00\x17\xF2"	/* MACOSX OUI */
+#define APPLE_OUI_LEN		3
+#define APPLE_OUI_TYPE_P2P	9
 #endif /* WL_LEGACY_P2P */
 
-#ifdef P2P_IE_OVRD
-#define WFA_OUI			MAC_OUI
+#ifndef WL_LEGACY_P2P
+#define P2P_OUI         WFA_OUI
+#define P2P_OUI_LEN     WFA_OUI_LEN
+#define P2P_OUI_TYPE    WFA_OUI_TYPE_P2P
 #else
-#define WFA_OUI			"\x50\x6F\x9A"	/* WFA OUI */
-#endif /* P2P_IE_OVRD */
-#define WFA_OUI_LEN		3		/* WFA OUI length */
-#ifdef P2P_IE_OVRD
-#define WFA_OUI_TYPE_P2P	MAC_OUI_TYPE_P2P
-#else
-#define WFA_OUI_TYPE_TPC	8
-#define WFA_OUI_TYPE_P2P	9
-#endif // endif
+#define P2P_OUI         APPLE_OUI
+#define P2P_OUI_LEN     APPLE_OUI_LEN
+#define P2P_OUI_TYPE    APPLE_OUI_TYPE_P2P
+#endif /* !WL_LEGACY_P2P */
 
 #define WFA_OUI_TYPE_TPC	8
 #ifdef WLTDLS
@@ -4417,24 +4426,31 @@ typedef struct vht_features_ie_hdr vht_features_ie_hdr_t;
 #define WFA_OUI_TYPE_MBO_OCE	0x16
 
 /* RSN authenticated key managment suite */
-#define RSN_AKM_NONE		0	/* None (IBSS) */
-#define RSN_AKM_UNSPECIFIED	1	/* Over 802.1x */
-#define RSN_AKM_PSK		2	/* Pre-shared Key */
-#define RSN_AKM_FBT_1X		3	/* Fast Bss transition using 802.1X */
-#define RSN_AKM_FBT_PSK		4	/* Fast Bss transition using Pre-shared Key */
+#define RSN_AKM_NONE			0	/* None (IBSS) */
+#define RSN_AKM_UNSPECIFIED		1	/* Over 802.1x */
+#define RSN_AKM_PSK			2	/* Pre-shared Key */
+#define RSN_AKM_FBT_1X			3	/* Fast Bss transition using 802.1X */
+#define RSN_AKM_FBT_PSK			4	/* Fast Bss transition using Pre-shared Key */
 /* RSN_AKM_MFP_1X and RSN_AKM_MFP_PSK are not used any more
  * Just kept here to avoid build issue in BISON/CARIBOU branch
  */
-#define RSN_AKM_MFP_1X		5	/* SHA256 key derivation, using 802.1X */
-#define RSN_AKM_MFP_PSK		6	/* SHA256 key derivation, using Pre-shared Key */
-#define RSN_AKM_SHA256_1X	5	/* SHA256 key derivation, using 802.1X */
-#define RSN_AKM_SHA256_PSK	6	/* SHA256 key derivation, using Pre-shared Key */
-#define RSN_AKM_TPK		7	/* TPK(TDLS Peer Key) handshake */
-#define RSN_AKM_SAE_PSK         8       /* AKM for SAE with 4-way handshake */
-#define RSN_AKM_SAE_FBT         9       /* AKM for SAE with FBT */
-#define RSN_AKM_FILS_SHA256	14	/* SHA256 key derivation, using FILS */
-#define RSN_AKM_FILS_SHA384	15	/* SHA384 key derivation, using FILS */
-
+#define RSN_AKM_MFP_1X			5	/* SHA256 key derivation, using 802.1X */
+#define RSN_AKM_MFP_PSK			6	/* SHA256 key derivation, using Pre-shared Key */
+#define RSN_AKM_SHA256_1X		5	/* SHA256 key derivation, using 802.1X */
+#define RSN_AKM_SHA256_PSK		6	/* SHA256 key derivation, using Pre-shared Key */
+#define RSN_AKM_TPK			7	/* TPK(TDLS Peer Key) handshake */
+#define RSN_AKM_SAE_PSK			8       /* AKM for SAE with 4-way handshake */
+#define RSN_AKM_SAE_FBT			9       /* AKM for SAE with FBT */
+#define RSN_AKM_SUITEB_SHA256_1X	11	/* Suite B SHA256 */
+#define RSN_AKM_SUITEB_SHA384_1X	12	/* Suite B-192 SHA384 */
+#define RSN_AKM_FBT_SHA384_1X		13	/* FBT SHA384 */
+#define RSN_AKM_FILS_SHA256		14	/* SHA256 key derivation, using FILS */
+#define RSN_AKM_FILS_SHA384		15	/* SHA384 key derivation, using FILS */
+#define RSN_AKM_FBT_SHA256_FILS		16
+#define RSN_AKM_FBT_SHA384_FILS		17
+#define RSN_AKM_OWE			18	/* RFC 8110  OWE */
+#define RSN_AKM_FBT_SHA384_PSK		19
+#define RSN_AKM_PSK_SHA384		20
 /* OSEN authenticated key managment suite */
 #define OSEN_AKM_UNSPECIFIED	RSN_AKM_UNSPECIFIED	/* Over 802.1x */
 
@@ -5015,6 +5031,26 @@ typedef struct dot11_ftm_sync_info dot11_ftm_sync_info_t;
 #define DOT11_FTM_IS_SYNC_INFO_IE(_ie) (\
 	DOT11_MNG_IE_ID_EXT_MATCH(_ie, DOT11_MNG_FTM_SYNC_INFO) && \
 	(_ie)->len == DOT11_FTM_SYNC_INFO_IE_LEN)
+
+BWL_PRE_PACKED_STRUCT struct dot11_dh_param_ie {
+	uint8   id;	/* OWE */
+	uint8   len;
+	uint8   ext_id;	/* EXT_MNG_OWE_DH_PARAM_ID */
+	uint16  group;
+	uint8   pub_key[0];
+} BWL_POST_PACKED_STRUCT;
+typedef struct dot11_dh_param_ie dot11_dh_param_ie_t;
+
+#define DOT11_DH_EXTID_OFFSET   (OFFSETOF(dot11_dh_param_ie_t, ext_id))
+
+#define DOT11_OWE_DH_PARAM_IE(_ie) (\
+	DOT11_MNG_IE_ID_EXT_MATCH(_ie, EXT_MNG_OWE_DH_PARAM_ID))
+
+#define DOT11_MNG_OWE_IE_ID_EXT_INIT(_ie, _id, _len) do {\
+	(_ie)->id = DOT11_MNG_ID_EXT_ID; \
+	(_ie)->len = _len; \
+	(_ie)->ext_id = _id; \
+} while (0)
 
 /* 802.11u interworking access network options */
 #define IW_ANT_MASK					0x0f

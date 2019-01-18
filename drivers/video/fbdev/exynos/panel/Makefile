@@ -16,5 +16,5 @@ obj-$(CONFIG_EXYNOS_DECON_LCD_SPI) += spi.o
 obj-$(CONFIG_EXYNOS_DECON_LCD_COPR) += copr.o
 obj-$(CONFIG_ACTIVE_CLOCK) += active_clock.o
 obj-$(CONFIG_DISPLAY_USE_INFO) += dpui.o
-obj-$(CONFIG_SUPPORT_POC_FLASH) += panel_poc.o
+obj-$(CONFIG_SUPPORT_DDI_FLASH) += panel_poc.o
 obj-$(CONFIG_EXTEND_LIVE_CLOCK) += aod/aod_drv.o

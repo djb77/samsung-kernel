@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_bam.h 765757 2018-06-05 07:48:03Z $
+ * $Id: wl_bam.h 762150 2018-05-11 03:49:59Z $
  */
 #ifndef _WL_BAM_H_
 #define _WL_BAM_H_

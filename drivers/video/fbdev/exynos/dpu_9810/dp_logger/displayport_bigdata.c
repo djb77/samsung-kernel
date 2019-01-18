@@ -192,7 +192,7 @@ static void secdp_bigdata_save_item_char(enum DP_BD_ITEM_LIST item, char val)
 
 static void secdp_bigdata_save_item_str(enum DP_BD_ITEM_LIST item, char *val)
 {
-	if (!item_to_column[item].data)
+	if (!item_to_column[item].data || !val)
 		return;
 
 	if (item == BD_EDID && val[0] != 'X') {
@@ -210,6 +210,27 @@ static void secdp_bigdata_save_item_str(enum DP_BD_ITEM_LIST item, char *val)
 	} else {
 		strlcpy((char *)item_to_column[item].data, val,
 				item_to_column[item].str_max_len + 1);
+
+		if (item == BD_SINK_NAME) {
+			int i;
+			char t;
+			for (i = 0; i < item_to_column[item].str_max_len; i++) {
+				t = ((char *)item_to_column[item].data)[i];
+				if (t == '\0')
+					break;
+				switch (t) {
+				case '0'...'9':
+				case 'a'...'z':
+				case 'A'...'Z':
+				case '-':
+				case '_':
+					break;
+				default:
+					((char *)item_to_column[item].data)[i] = ' ';
+					break;
+				}
+			}
+		}
 	}
 }
 
@@ -293,7 +314,7 @@ static void secdp_bigdata_save_data(void)
 				"\"%s\":\"%c\",",
 				item_to_column[i].name,
 				(item_to_column[i].data != NULL) ?
-				*((int *)item_to_column[i].data) : 'X');
+				*((char *)item_to_column[i].data) : 'X');
 			break;
 		case ERR:
 			ret += scnprintf(err_data_buf + ret, ERR_DATA_BUF_SIZE - ret,

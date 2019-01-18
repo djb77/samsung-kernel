@@ -1310,11 +1310,9 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 		return -EINVAL;
 	}
 
-#ifdef CONFIG_MODEM_IF_NET_GRO
 	if (!(tun->flags & IFF_NO_PI))
 		if (pi.flags & htons(CHECKSUM_UNNECESSARY))
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
-#endif
 
 	switch (tun->flags & TUN_TYPE_MASK) {
 	case IFF_TUN:

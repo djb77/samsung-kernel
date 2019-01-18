@@ -206,10 +206,15 @@ static long secmem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 #endif
 	case (uint32_t)SECMEM_IOC_GET_DRM_ONOFF:
+	{
+		int drm_status = 0;
+
 		smp_rmb();
-		if (copy_to_user((void __user *)arg, &drm_onoff, sizeof(int)))
+		drm_status = (int)drm_onoff;
+		if (copy_to_user((void __user *)arg, &drm_status, sizeof(int)))
 			return -EFAULT;
 		break;
+	}
 	case (uint32_t)SECMEM_IOC_SET_DRM_ONOFF:
 	{
 		int ret, val = 0;

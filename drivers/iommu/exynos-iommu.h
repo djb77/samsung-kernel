@@ -200,6 +200,9 @@ typedef u32 sysmmu_pte_t;
 #define MMU_TLB_ENTRY_VALID(reg)	((reg) >> 28)
 #define MMU_SBB_ENTRY_VALID(reg)	((reg) >> 28)
 
+#define MMU_VADDR_FROM_SBB(reg)		(((reg) & 0xFFFFF) << 12)
+#define MMU_PADDR_FROM_SBB(reg)		(((reg) & 0x3FFFFFF) << 10)
+
 #define MMU_FAULT_INFO_READ_REQUEST	0
 #define MMU_FAULT_INFO_WRITE_REQUEST	1
 #define MMU_IS_READ_FAULT(reg)		\

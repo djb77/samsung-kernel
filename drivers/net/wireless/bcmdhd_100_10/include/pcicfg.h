@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: pcicfg.h 722942 2017-09-22 03:49:44Z $
+ * $Id: pcicfg.h 756835 2018-04-10 21:24:10Z $
  */
 
 #ifndef	_h_pcicfg_
@@ -246,6 +246,11 @@ typedef struct _pcie_enhanced_caphdr {
 #define PCI_PHY_DBG_CLKREG_1	0x1e14
 #define PCI_PHY_DBG_CLKREG_2	0x1e18
 #define PCI_PHY_DBG_CLKREG_3	0x1e1c
+
+/* Bit settings for PCIE_CFG_SUBSYSTEM_CONTROL register */
+#define PCIE_SSRESET_STATUS_BIT		13
+#define PCIE_SSRESET_DISABLE_BIT	14
+#define PCIE_SSRESET_DIS_ENUM_RST_BIT		15
 
 /* Bit settings for PCI_UC_ERR_STATUS register */
 #define PCI_UC_ERR_URES			(1 << 20)	/* Unsupported Request Error Status */

@@ -428,7 +428,7 @@ static void cmd_init_start_handler(struct mem_link_device *mld)
 {
 	struct link_device *ld = &mld->link_dev;
 	struct modem_ctl *mc = ld->mc;
-	int err;
+	int ret;
 
 	mif_err("%s: INIT_START <- %s (%s.state:%s cp_boot_done:%d)\n",
 		ld->name, mc->name, mc->name, mc_state(mc),
@@ -439,9 +439,24 @@ static void cmd_init_start_handler(struct mem_link_device *mld)
 		return;
 	}
 
-	err = init_sbd_link(&mld->sbd_link_dev);
-	if (err < 0) {
-		mif_err("%s: init_sbd_link fail(%d)\n", ld->name, err);
+#ifdef CONFIG_CP_SMAPPER
+	ret = mbox_extract_value(MCU_CP, mld->mbx_cp2ap_status,
+			mld->sbi_cp_smapper_mask, mld->sbi_cp_smapper_pos);
+	mif_info("CP smapper status:0x%x\n", ret);
+	if (ret) {
+		mif_info("Activate smapper feature\n");
+		smapper_activate(&mld->sbd_link_dev);
+	} else {
+		mif_info("Deactivate smapper feature\n");
+		smapper_deactivate(&mld->sbd_link_dev);
+	}
+#else
+	smapper_deactivate(&mld->sbd_link_dev);
+#endif
+
+	ret = init_sbd_link(&mld->sbd_link_dev);
+	if (ret < 0) {
+		mif_err("%s: init_sbd_link fail(%d)\n", ld->name, ret);
 		return;
 	}
 
@@ -555,7 +570,6 @@ static void cmd_phone_start_handler(struct mem_link_device *mld)
 		if (phone_start_count < 100) {
 			if (phone_start_count++ > 3) {
 				phone_start_count = 101;
-				set_dflags(127);
 				mcu_ipc_reg_dump(0);
 				send_ipc_irq(mld,
 					cmd2int(phone_start_count - 100));
@@ -1564,14 +1578,14 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 	int ret;
 
 	if (unlikely(!cp_online(mc))) {
-		mif_err_limited("ERR! CP not online!, skb:%p\n", skb);
+		mif_err_limited("ERR! CP not online!, skb:%pK\n", skb);
 		dev_kfree_skb_any(skb);
 		return;
 	}
 
 	priv = skbpriv(skb);
 	if (unlikely(!priv)) {
-		mif_err("%s: ERR! No PRIV in skb@%p\n", ld->name, skb);
+		mif_err("%s: ERR! No PRIV in skb@%pK\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
 		shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 			"ERR! No PRIV in pass_skb_to_net()");
@@ -1580,7 +1594,7 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 
 	iod = priv->iod;
 	if (unlikely(!iod)) {
-		mif_err("%s: ERR! No IOD in skb@%p\n", ld->name, skb);
+		mif_err("%s: ERR! No IOD in skb@%pK\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
 		shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 			"ERR! No IOD in pass_skb_to_net()");
@@ -1607,6 +1621,7 @@ static int rx_net_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb,
 	int rcvd = 0;
 	struct link_device *ld = rb->ld;
 	struct mem_link_device *mld = ld_to_mem_link_device(ld);
+	struct sbd_link_device *sl = rb->sl;
 	struct zerocopy_adaptor *zdptr = rb->zdptr;
 	unsigned int num_frames;
 	int use_memcpy = 0;
@@ -1617,13 +1632,15 @@ static int rx_net_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb,
 	num_frames = rb_usage(rb);
 #endif /* CONFIG_LINK_DEVICE_NAPI */
 
-	if (mld->force_use_memcpy || (num_frames > ld->mif_buff_mng->free_cell_count)
-		|| (FREE_RB_BUF_COUNT > circ_get_space(zdptr->len, *(zdptr->rp), *(zdptr->wp)))) {
-		use_memcpy = 1;
-		mld->memcpy_packet_count++;
-	} else {
-		use_memcpy = 0;
-		mld->zeromemcpy_packet_count++;
+	if (!smapper_active(sl)) {
+		if (mld->force_use_memcpy || (num_frames > ld->mif_buff_mng->free_cell_count)
+			|| (circ_get_space(zdptr->len, *(zdptr->rp), *(zdptr->wp)) < FREE_RB_BUF_COUNT)) {
+			use_memcpy = 1;
+			mld->memcpy_packet_count++;
+		} else {
+			use_memcpy = 0;
+			mld->zeromemcpy_packet_count++;
+		}
 	}
 
 	while (rcvd < num_frames) {
@@ -1650,9 +1667,15 @@ static int rx_net_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb,
 
 #ifdef CONFIG_LINK_DEVICE_NAPI
 	*work_done = rcvd;
-	allocate_data_in_advance(zdptr);
+	if (smapper_active(sl))
+		queue_work(zdptr->smapper_alloc_queue, &zdptr->smapper_alloc_work);
+	else
+		allocate_data_in_advance(zdptr);
 #else /* !CONFIG_LINK_DEVICE_NAPI */
-	start_datalloc_timer(mld, &zdptr->datalloc_timer);
+	if (smapper_active(sl))
+		queue_work(zdptr->smapper_alloc_queue, &zdptr->smapper_alloc_work);
+	else
+		start_datalloc_timer(mld, &zdptr->datalloc_timer);
 #endif /* CONFIG_LINK_DEVICE_NAPI */
 
 	return rcvd;
@@ -1706,6 +1729,7 @@ static int rx_ipc_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb)
 	int rcvd = 0;
 	struct link_device *ld = rb->ld;
 	struct mem_link_device *mld = ld_to_mem_link_device(ld);
+	struct sbd_link_device *sl = &mld->sbd_link_dev;
 	struct zerocopy_adaptor *zdptr = rb->zdptr;
 	unsigned int num_frames = zerocopy_adaptor_usage(zdptr);
 
@@ -1750,7 +1774,8 @@ static int rx_ipc_frames_from_zerocopy_adaptor(struct sbd_ring_buffer *rb)
 			ld->name, iod->name, mc->name, rcvd, num_frames);
 	}
 
-	start_datalloc_timer(mld, &zdptr->datalloc_timer);
+	if (!smapper_active(sl))
+		start_datalloc_timer(mld, &zdptr->datalloc_timer);
 
 	return rcvd;
 }
@@ -2102,6 +2127,7 @@ static int shmem_send(struct link_device *ld, struct io_device *iod,
 static void shmem_boot_on(struct link_device *ld, struct io_device *iod)
 {
 	struct mem_link_device *mld = to_mem_link_device(ld);
+	struct sbd_link_device *sl = &mld->sbd_link_dev;
 	unsigned long flags;
 
 	atomic_set(&mld->cp_boot_done, 0);
@@ -2117,7 +2143,8 @@ static void shmem_boot_on(struct link_device *ld, struct io_device *iod)
 		sbd_deactivate(&mld->sbd_link_dev);
 #endif
 		cancel_tx_timer(mld, &mld->sbd_tx_timer);
-		cancel_datalloc_timer(mld);
+		if (!smapper_active(sl))
+			cancel_datalloc_timer(mld);
 
 		if (mld->iosm) {
 			memset(mld->base + CMD_RGN_OFFSET, 0, CMD_RGN_SIZE);
@@ -2263,7 +2290,7 @@ exit:
 }
 
 #ifdef CONFIG_MODEM_IF_NET_GRO
-static long gro_flush_time = 100000L;
+long gro_flush_time = 0;
 module_param(gro_flush_time, long, 0644);
 
 static void gro_flush_timer(struct link_device *ld)
@@ -2271,8 +2298,10 @@ static void gro_flush_timer(struct link_device *ld)
 	struct mem_link_device *mld = to_mem_link_device(ld);
 	struct timespec curr, diff;
 
-	if (!gro_flush_time)
+	if (!gro_flush_time) {
+		napi_gro_flush(&mld->mld_napi, false);
 		return;
+	}
 
 	if (unlikely(mld->flush_time.tv_sec == 0)) {
 		getnstimeofday(&mld->flush_time);
@@ -2280,7 +2309,7 @@ static void gro_flush_timer(struct link_device *ld)
 		getnstimeofday(&(curr));
 		diff = timespec_sub(curr, mld->flush_time);
 		if ((diff.tv_sec > 0) || (diff.tv_nsec > gro_flush_time)) {
-			napi_gro_flush(napi_get_current(), false);
+			napi_gro_flush(&mld->mld_napi, false);
 			getnstimeofday(&mld->flush_time);
 		}
 	}
@@ -2885,6 +2914,37 @@ static void shmem_cp2ap_wakelock_handler(void *data)
 	}
 }
 
+#ifdef CONFIG_CP_SMAPPER
+static void shmem_cp2ap_smapper_handler(void *data)
+{
+	struct mem_link_device *mld = (struct mem_link_device *)data;
+	struct sbd_link_device *sl = &mld->sbd_link_dev;
+	struct sbd_ipc_device *ipc_dev =  sl->ipc_dev;
+	struct sbd_ring_buffer *rb;
+	struct link_device *ld = &mld->link_dev;
+	struct modem_ctl *mc = ld->mc;
+	int i;
+
+	if (!cp_online(mc)) {
+		mif_err_limited("CP is not online\n");
+		return;
+	}
+	if (!smapper_active(sl)) {
+		mif_err_limited("smapper is not active\n");
+		return;
+	}
+
+	for (i = 0; i < sl->num_channels; i++) {
+		rb = &ipc_dev[i].rb[DL];
+		if (ipc_dev[i].smapper)
+			smapper_restore(rb);
+	}
+
+	/* mbx_perf_req_int : to notify smapper init state to CP */
+	mbox_set_value(MCU_CP, mld->mbx_perf_req_int, 0x1);
+}
+#endif
+
 #if defined(CONFIG_PCI_EXYNOS)
 static void shmem_cp2ap_rat_mode_handler(void *data)
 {
@@ -3289,7 +3349,7 @@ static ssize_t rx_napi_list_show(struct device *dev,
 
 	count += sprintf(&buf[count], "[%s`s napi_list]\n", netdev_name(netdev));
 	list_for_each_entry(n, &netdev->napi_list, dev_list)
-		count += sprintf(&buf[count], "state: %s(%ld), weight: %d, poll: 0x%p\n",
+		count += sprintf(&buf[count], "state: %s(%ld), weight: %d, poll: 0x%pK\n",
 				test_bit(NAPI_STATE_SCHED, &n->state) ? "NAPI_STATE_SCHED" : "NAPI_STATE_COMPLETE",
 				n->state, n->weight, (void *)n->poll);
 	return count;
@@ -3591,7 +3651,7 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 		mif_err("Failed to vmap boot_region\n");
 		goto error;
 	}
-	mif_err("boot_base=%p, boot_size=%lu\n",
+	mif_err("boot_base=%pK, boot_size=%lu\n",
 		mld->boot_base, (unsigned long)mld->boot_size);
 
 	/**
@@ -3603,7 +3663,7 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 		mif_err("Failed to vmap ipc_region\n");
 		goto error;
 	}
-	mif_err("ipc_base=%p, ipc_size=%lu\n",
+	mif_err("ipc_base=%pK, ipc_size=%lu\n",
 		mld->base, (unsigned long)mld->size);
 
 	/**
@@ -3614,7 +3674,7 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 		mif_err("Failed to vmap vss_region\n");
 		goto error;
 	}
-	mif_err("vss_base=%p\n", mld->vss_base);
+	mif_err("vss_base=%pK\n", mld->vss_base);
 
 	/**
 	 * Initialize memory maps for ACPM (physical map -> logical map)
@@ -3625,14 +3685,14 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 		mif_err("Failed to vmap acpm_region\n");
 		goto error;
 	}
-	mif_err("acpm_base=%p acpm_size:0x%X\n", mld->acpm_base,
+	mif_err("acpm_base=%pK acpm_size:0x%X\n", mld->acpm_base,
 			mld->acpm_size);
 
 	/**
 	 * Initialize memory maps for Zero Memory Copy
 	 */
 	shm_get_zmb_region();
-	mif_err("zmb_base=%p zmb_size:0x%X\n", shm_get_zmb_region(),
+	mif_err("zmb_base=%pK zmb_size:0x%X\n", shm_get_zmb_region(),
 			shm_get_zmb_size());
 
 	remap_4mb_map_to_ipc_dev(mld);
@@ -3661,6 +3721,10 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 
 	mld->sbi_cp_status_mask = modem->mbx->sbi_cp_status_mask;
 	mld->sbi_cp_status_pos = modem->mbx->sbi_cp_status_pos;
+#ifdef CONFIG_CP_SMAPPER
+	mld->sbi_cp_smapper_mask = modem->mbx->sbi_cp_smapper_mask;
+	mld->sbi_cp_smapper_pos = modem->mbx->sbi_cp_smapper_pos;
+#endif
 	mld->sbi_cp2ap_wakelock_mask = modem->mbx->sbi_cp2ap_wakelock_mask;
 	mld->sbi_cp2ap_wakelock_pos = modem->mbx->sbi_cp2ap_wakelock_pos;
 	mld->sbi_cp_rat_mode_mask = modem->mbx->sbi_cp2ap_rat_mode_mask;
@@ -3682,6 +3746,9 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 	mld->irq_perf_req_cpu = modem->mbx->irq_cp2ap_perf_req_cpu;
 	mld->irq_perf_req_mif = modem->mbx->irq_cp2ap_perf_req_mif;
 	mld->irq_perf_req_int = modem->mbx->irq_cp2ap_perf_req_int;
+#ifdef CONFIG_CP_SMAPPER
+	mld->irq_smapper = modem->mbx->irq_cp2ap_smapper;
+#endif
 
 	mld->ap_clk_table = modem->mbx->ap_clk_table;
 	mld->ap_clk_cnt = modem->mbx->ap_clk_cnt;
@@ -3748,6 +3815,16 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 	if (err) {
 		mif_err("%s: ERR! mbox_request_irq(MCU_CP, %u) fail (%d)\n",
 			ld->name, mld->irq_cp2ap_rat_mode, err);
+		goto error;
+	}
+#endif
+
+#ifdef CONFIG_CP_SMAPPER
+	err = mbox_request_irq(MCU_CP, mld->irq_smapper,
+			shmem_cp2ap_smapper_handler, mld);
+	if (err) {
+		mif_err("%s: ERR! mbox_request_irq(MCU_CP, %u) fail (%d)\n",
+			ld->name, mld->irq_smapper, err);
 		goto error;
 	}
 #endif

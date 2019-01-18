@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmevent.h 749068 2018-02-27 13:33:30Z $
+ * $Id: bcmevent.h 759112 2018-04-24 01:34:08Z $
  *
  */
 
@@ -290,9 +290,11 @@ typedef union bcm_event_msg_u {
 #define WLC_E_PHY_CAL		174	/* Phy calibration start indication to host */
 #define WLC_E_RPSNOA		175	/* Radio power save start/end indication to host */
 #define WLC_E_ADPS		176	/* ADPS event */
-#define WLC_E_LAST			177	/* highest val + 1 for range checking */
-#if (WLC_E_LAST > 177)
-#error "WLC_E_LAST: Invalid value for last event; must be <= 177."
+#define WLC_E_SLOTTED_BSS_PEER_OP	177	/* Per peer SCB delete */
+#define WLC_E_HWA                178	/* HWA events */
+#define WLC_E_LAST			179	/* highest val + 1 for range checking */
+#if (WLC_E_LAST > 179)
+#error "WLC_E_LAST: Invalid value for last event; must be <= 178."
 #endif /* WLC_E_LAST */
 
 /* define an API for getting the string name of an event */
@@ -328,6 +330,8 @@ void wl_event_to_network_order(wl_event_msg_t * evt);
 #endif /* BCMCCX */
 #define WLC_E_STATUS_CS_ABORT		15	/* abort channel select */
 #define WLC_E_STATUS_ERROR		16	/* request failed due to error */
+#define WLC_E_STATUS_SLOTTED_PEER_ADD	17	/* Slotted scb for peer addition status */
+#define WLC_E_STATUS_SLOTTED_PEER_DEL	18	/* Slotted scb for peer deletion status */
 #define WLC_E_STATUS_INVALID 0xff  /* Invalid status code to init variables. */
 
 /* 4-way handshake event type */
@@ -397,6 +401,8 @@ typedef struct wl_event_sdb_trans {
 #define WLC_E_REASON_LOW_RSSI_CU	12	/* roamed due to low RSSI and Channel Usage */
 #define WLC_E_REASON_RADAR_DETECTED	13	/* roamed due to radar detection by STA */
 #define WLC_E_REASON_CSA	        14	/* roamed due to CSA from AP */
+#define WLC_E_REASON_ESTM_LOW      15  /* roamed due to ESTM low tput */
+#define WLC_E_REASON_LAST		16	/* NOTE: increment this as you add reasons above */
 
 /* prune reason codes */
 #define WLC_E_PRUNE_ENCR_MISMATCH	1	/* encryption mismatch */
@@ -776,6 +782,7 @@ typedef enum wl_nan_events {
 	WL_NAN_EVENT_SLOT_START			= 42,	/* SLOT_START event */
 	WL_NAN_EVENT_SLOT_END			= 43,	/* SLOT_END event */
 	WL_NAN_EVENT_HOST_ASSIST_REQ		= 44,	/* Requesting host assist */
+	WL_NAN_EVENT_RX_MGMT_FRM		= 45,	/* NAN management frame received */
 
 	WL_NAN_EVENT_INVALID				/* delimiter for max value */
 } nan_app_events_e;
@@ -1039,6 +1046,14 @@ typedef struct wl_hc_temp_stats {
 	uint8 pad[2];
 } wl_hc_temp_stats_v1_t;
 
+#define WL_PHY_HC_TEMP_STATS_VER_2 (2)
+typedef struct {
+	uint16 version;
+	uint16 chanspec;
+	int16 curtemp; /* Temperature */
+	uint8 pad[2];
+} wl_hc_temp_stats_v2_t;
+
 #define WL_PHY_HC_VCOCAL_STATS_VER (1)
 typedef struct wl_hc_vcocal_stats {
 	uint16 version;
@@ -1068,6 +1083,20 @@ typedef struct wl_hc_tx_stats {
 	int8 min_txpower; /* min tx power per ant */
 	uint8 pad[3];
 } wl_hc_txpwr_stats_v1_t;
+
+#define WL_PHY_HC_TXPWR_STATS_VER_2 (2)
+typedef struct {
+	uint16 version;
+	uint16 chanspec;
+	int8 tgt_pwr[MAX_PHY_CORE_NUM]; /* Target pwr (qdBm) */
+	uint8 estPwr[MAX_PHY_CORE_NUM]; /* Rate corrected (qdBm) */
+	uint8 estPwr_adj[MAX_PHY_CORE_NUM]; /* Max power (qdBm) */
+	uint8 baseindex[MAX_PHY_CORE_NUM]; /* Tx base index */
+	int16 temp;	/* Temperature */
+	uint16 TxCtrlWrd[3]; /* 6 PHY ctrl bytes */
+	int8 min_txpower; /* min tx power per ant */
+	uint8 pad[3];
+} wl_hc_txpwr_stats_v2_t;
 
 typedef enum wl_mbo_event_type {
 	WL_MBO_E_CELLULAR_NW_SWITCH = 1,
@@ -1104,17 +1133,32 @@ struct wl_event_mbo_cell_nw_switch {
 	uint32 assoc_time_remain;
 };
 
-/* WLC_E_ADPS event data */
-#define WL_EVENT_ADPS_VER_1		1
+/* WLC_E_HWA Event structure */
+typedef struct wl_event_hwa {
+	uint16 version; /* structure version */
+	uint16 length; /* length of structure */
+	uint32 sub_type; /* Sub event type */
+	uint8 data[0]; /* variable length data */
+} wl_event_hwa_t;
 
-/* WLC_E_ADPS event type */
-#define WL_E_TYPE_ADPS_BAD_AP		1
+#define WL_HWA_EVENT_VER	1
+
+typedef enum wl_event_hwa_subtype {
+	WL_HWA_EVENT_SUBTYPE_ERROR = 1,
+	WL_HWA_EVENT_SUBTYPE_LAST = 2
+} wl_event_hwa_subtype_t;
 
 /* WLC_E_ADPS status */
 enum {
 	WL_E_STATUS_ADPS_DEAUTH = 0,
 	WL_E_STATUS_ADPS_MAX
 };
+
+/* WLC_E_ADPS event data */
+#define WL_EVENT_ADPS_VER_1		1
+
+/* WLC_E_ADPS event type */
+#define WL_E_TYPE_ADPS_BAD_AP		1
 
 typedef struct wl_event_adps_bad_ap {
 	uint32 status;

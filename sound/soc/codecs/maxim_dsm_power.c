@@ -32,6 +32,8 @@ pr_info("[MAXIM_DSM_POWER] %s: " format "\n", __func__, ## args)
 
 struct maxim_dsm_power *g_mdp;
 
+static struct maxim_dsm_ppr_init_values ppr_init_value;
+
 static int maxdsm_power_check(
 		struct maxim_dsm_power *mdp, int action, int delay)
 {
@@ -227,6 +229,27 @@ static void maxdsm_power_work_ppr(struct work_struct *work)
 	}
 	mutex_unlock(&mdp->mutex);
 }
+
+int maxdsm_update_ppr_info(uint32_t *ppr_info)
+{
+	int ret = 0;
+	int32_t *data = ppr_info;
+
+	if (ppr_info == NULL) {
+		pr_err("%s: ppr_info was not set.\n",
+				__func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	ppr_init_value.target_temp[MAXDSM_LEFT] = data[PARAM_OFFSET_PPR_TARGET_TEMP];
+	ppr_init_value.target_temp[MAXDSM_RIGHT] = data[PARAM_OFFSET_PPR_TARGET_TEMP_R];
+	ppr_init_value.exit_temp[MAXDSM_LEFT] = data[PARAM_OFFSET_PPR_EXIT_TEMP];
+	ppr_init_value.exit_temp[MAXDSM_RIGHT] = data[PARAM_OFFSET_PPR_EXIT_TEMP_R];
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(maxdsm_update_ppr_info);
 
 static ssize_t maxdsm_power_duration_show(struct device *dev,
 					  struct device_attribute *attr,
@@ -438,7 +461,7 @@ static ssize_t maxdsm_power_ppr_env_temp_store(struct device *dev,
 					   struct device_attribute *attr,
 					   const char *buf, size_t size)
 {
-	if (kstrtou32(buf, 0, &g_mdp->values_ppr[MAXDSM_LEFT].env_temp))
+	if (kstrtos32(buf, 0, &g_mdp->values_ppr[MAXDSM_LEFT].env_temp))
 		dev_err(dev, "%s: Failed converting from str to u32.\n",
 			__func__);
 	return size;
@@ -457,7 +480,7 @@ static ssize_t maxdsm_power_ppr_env_temp_r_store(struct device *dev,
 					   struct device_attribute *attr,
 					   const char *buf, size_t size)
 {
-	if (kstrtou32(buf, 0, &g_mdp->values_ppr[MAXDSM_RIGHT].env_temp))
+	if (kstrtos32(buf, 0, &g_mdp->values_ppr[MAXDSM_RIGHT].env_temp))
 		dev_err(dev, "%s: Failed converting from str to u32.\n",
 			__func__);
 	return size;
@@ -660,10 +683,10 @@ static int __init maxdsm_power_init(void)
 	for (i = 0 ; i < MAXDSM_CHANNEL ; i++) {
 		mdp->values_ppr[i].cutoff_frequency = 0x3E801;
 		mdp->values_ppr[i].env_temp = 2500;
-		mdp->values_ppr[i].target_temp = 3400;
+		mdp->values_ppr[i].target_temp = ppr_init_value.target_temp[i];
 		mdp->values_ppr[i].spk_t = 2500;
 		mdp->values_ppr[i].threshold_level = 0xE20189;
-		mdp->values_ppr[i].exit_temp = 3250;
+		mdp->values_ppr[i].exit_temp = ppr_init_value.exit_temp[i];
 	}
 
 #ifdef CONFIG_SND_SOC_MAXIM_DSM_CAL

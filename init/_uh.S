@@ -15,8 +15,11 @@
 
 #include <linux/uh.h>
 
+#ifdef CONFIG_UH_RKP_8G
+#define uh_ELF_PATH "init/uh.8g.elf"
+#else
 #define uh_ELF_PATH "init/uh.elf"
-
+#endif
 #define SMC_64BIT_RET_MAGIC 0xC2000401
 
 .section .init.text, "ax"

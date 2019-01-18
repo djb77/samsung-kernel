@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_event_log_filter.c 734369 2017-12-04 11:22:30Z $
+ * $Id: dhd_event_log_filter.c 765264 2018-06-01 05:38:52Z $
  */
 
 /*
@@ -90,7 +90,10 @@
 /* EWPF element of slice type */
 typedef struct {
 	uint32 armcycle; /* dongle arm cycle for this record */
-	wl_periodic_compact_cntrs_v1_t compact_cntr;
+	union {
+		wl_periodic_compact_cntrs_v1_t compact_cntr_v1;
+		wl_periodic_compact_cntrs_v2_t compact_cntr_v2;
+	};
 } EWPF_slc_elem_t;
 
 /* EWPF element for interface type */
@@ -304,6 +307,7 @@ typedef struct _EWPF_tbl {
 	int idx_type;			/* structure specific info: belonged type */
 	int	max_idx;			/* structure specific info: ALLOWED MAX IDX */
 	uint32 offset; /* offset of structure in EWPF_elem-t, valid if cb is not null */
+	uint32 member_length;	/* MAX length of reserved for this structure */
 	struct _EWPF_tbl *tbl; /* sub table if XTLV map to XLTV */
 } EWPF_tbl_t;
 
@@ -313,16 +317,22 @@ typedef struct {
 	EWPF_tbl_t *tbl;
 } EWPF_ctx_t;
 
-#define SLICE_INFO(a) EWPF_IDX_TYPE_SLICE, EWPF_MAX_SLICE, OFFSETOF(EWPF_slc_elem_t, a)
-#define IFACE_INFO(a) EWPF_IDX_TYPE_IFACE, EWPF_MAX_IFACE, OFFSETOF(EWPF_ifc_elem_t, a)
-#define NONE_INFO(a) 0, 0, a
+#define SLICE_INFO(a) EWPF_IDX_TYPE_SLICE, EWPF_MAX_SLICE, OFFSETOF(EWPF_slc_elem_t, a), \
+	sizeof(((EWPF_slc_elem_t *)NULL)->a)
+#define IFACE_INFO(a) EWPF_IDX_TYPE_IFACE, EWPF_MAX_IFACE, OFFSETOF(EWPF_ifc_elem_t, a), \
+	sizeof(((EWPF_ifc_elem_t *)NULL)->a)
+
+#define SLICE_U_SIZE(a) sizeof(((EWPF_slc_elem_t *)NULL)->a)
+#define SLICE_INFO_UNION(a) EWPF_IDX_TYPE_SLICE, EWPF_MAX_SLICE, OFFSETOF(EWPF_slc_elem_t, a)
+#define NONE_INFO(a) 0, 0, a, 0
 /* XTLV TBL for WL_SLICESTATS_XTLV_PERIODIC_STATE */
 static EWPF_tbl_t EWPF_periodic[] =
 {
 	{
 		WL_STATE_COMPACT_COUNTERS,
 		evt_xtlv_copy_cb,
-		SLICE_INFO(compact_cntr),
+		SLICE_INFO_UNION(compact_cntr_v1),
+		MAX(SLICE_U_SIZE(compact_cntr_v1), SLICE_U_SIZE(compact_cntr_v2)),
 		NULL
 	},
 	{EWPF_XTLV_INVALID, NULL, NONE_INFO(0), NULL}
@@ -516,6 +526,12 @@ evt_xtlv_copy_cb(void *ctx, const uint8 *data, uint16 type, uint16 len)
 	DHD_FILTER_ERR(("idx:%d write_:%p %d %d\n",
 		filter->xtlv_idx, target, *armcycle, filter->tmp_armcycle));
 #endif // endif
+
+	if (len > cur_ctx->tbl[tbl_idx].member_length) {
+		DHD_FILTER_ERR(("data Length is too big to save: (alloc = %d), (data = %d)\n",
+			cur_ctx->tbl[tbl_idx].member_length, len));
+		return BCME_ERROR;
+	}
 
 	ptr = (uint8 *)target;
 	memcpy(ptr + cur_ctx->tbl[tbl_idx].offset, data, len);
@@ -729,18 +745,40 @@ typedef struct {
 	uint32 *delta_list;		/* IN delta values to find */
 } ewpr_lock_param_t;
 
+#define MAX_MULTI_VER	2
+typedef struct {
+	uint32	version;		/* VERSION for multiple version struct */
+	uint32	offset;			/* offset of the member at the version */
+} ewpr_MVT_offset_elem_t;	/* elem for multi version type */
+
+typedef struct {
+	uint32	version_offset;		/* offset of version */
+	ewpr_MVT_offset_elem_t opv[MAX_MULTI_VER];	/* offset per version */
+} ewpr_MVT_offset_t;			/* multi_version type */
+
 typedef struct {
 	char name[EWP_REPORT_NAME_MAX];
-	int ring_type; /* Ring Type : EWPF_IDX_TYPE_SLICE, EWPF_IDX_TYPE_IFACE */
-	uint32 offset; /* Offset from start of element structure */
-	int data_type; /* Data type : one of EWP Filter Data Type */
-	int display_format; /* Display format : one of EWP Reporter display */
-	int display_type; /* MAX display BYTE: valid for HEX FORM */
+	int ring_type;		/* Ring Type : EWPF_IDX_TYPE_SLICE, EWPF_IDX_TYPE_IFACE */
+	int	is_multi_version;		/* is multi version */
+	union {
+		uint32 offset;			/* Offset from start of element structure */
+		ewpr_MVT_offset_t v_info;
+	};
+	int data_type;				/* Data type : one of EWP Filter Data Type */
+	int display_format;			/* Display format : one of EWP Reporter display */
+	int display_type;			/* MAX display BYTE: valid for HEX FORM */
 } ewpr_serial_info_t;
 
 /* offset defines */
-#define EWPR_CNT_OFFSET(a) \
-	(OFFSETOF(EWPF_slc_elem_t, compact_cntr) + OFFSETOF(wl_periodic_compact_cntrs_v1_t, a))
+#define EWPR_CNT_VERSION_OFFSET \
+	OFFSETOF(EWPF_slc_elem_t, compact_cntr_v1)
+
+#define EWPR_CNT_V1_OFFSET(a) \
+	WL_PERIODIC_COMPACT_CNTRS_VER_1, \
+	(OFFSETOF(EWPF_slc_elem_t, compact_cntr_v1) + OFFSETOF(wl_periodic_compact_cntrs_v1_t, a))
+#define EWPR_CNT_V2_OFFSET(a) \
+	WL_PERIODIC_COMPACT_CNTRS_VER_2, \
+	(OFFSETOF(EWPF_slc_elem_t, compact_cntr_v2) + OFFSETOF(wl_periodic_compact_cntrs_v2_t, a))
 #define EWPR_STAT_OFFSET(a) \
 	(OFFSETOF(EWPF_ifc_elem_t, if_stat) + OFFSETOF(wl_if_stats_t, a))
 #define EWPR_INFRA_OFFSET(a) \
@@ -756,36 +794,42 @@ typedef struct {
 
 /* serail info type define */
 #define EWPR_SERIAL_CNT(a) {\
-	#a, EWPF_IDX_TYPE_SLICE, EWPR_CNT_OFFSET(a), \
+	#a, EWPF_IDX_TYPE_SLICE, TRUE, \
+	.v_info = { EWPR_CNT_VERSION_OFFSET, \
+		{{EWPR_CNT_V1_OFFSET(a)}, \
+		{EWPR_CNT_V2_OFFSET(a)}}}, \
 	EWP_UINT32, EWP_HEX, EWP_UINT32}
 #define EWPR_SERIAL_CNT_16(a) {\
-	#a, EWPF_IDX_TYPE_SLICE, EWPR_CNT_OFFSET(a), \
+	#a, EWPF_IDX_TYPE_SLICE, TRUE, \
+	.v_info = { EWPR_CNT_VERSION_OFFSET, \
+		{{EWPR_CNT_V1_OFFSET(a)}, \
+		{EWPR_CNT_V2_OFFSET(a)}}}, \
 	EWP_UINT32, EWP_HEX, EWP_UINT16}
 #define EWPR_SERIAL_STAT(a) {\
-	#a, EWPF_IDX_TYPE_IFACE, EWPR_STAT_OFFSET(a), \
+	#a, EWPF_IDX_TYPE_IFACE, FALSE, .offset = EWPR_STAT_OFFSET(a), \
 	EWP_UINT64, EWP_HEX, EWP_UINT32}
 #define EWPR_SERIAL_INFRA(a) {\
-	#a, EWPF_IDX_TYPE_IFACE, EWPR_INFRA_OFFSET(a), \
+	#a, EWPF_IDX_TYPE_IFACE, FALSE, .offset = EWPR_INFRA_OFFSET(a), \
 	EWP_UINT32, EWP_HEX, EWP_UINT16}
 #define EWPR_SERIAL_MGMT(a) {\
-	#a, EWPF_IDX_TYPE_IFACE, EWPR_MGMT_OFFSET(a), \
+	#a, EWPF_IDX_TYPE_IFACE, FALSE, .offset = EWPR_MGMT_OFFSET(a), \
 	EWP_UINT32, EWP_HEX, EWP_UINT16}
 #define EWPR_SERIAL_LQM(a) {\
-	#a, EWPF_IDX_TYPE_IFACE, EWPR_LQM_OFFSET(a), \
+	#a, EWPF_IDX_TYPE_IFACE, FALSE, .offset = EWPR_LQM_OFFSET(a), \
 	EWP_INT32, EWP_DEC, EWP_INT8}
 #define EWPR_SERIAL_SIGNAL(a) {\
-	#a, EWPF_IDX_TYPE_IFACE, EWPR_SIGNAL_OFFSET(a), \
+	#a, EWPF_IDX_TYPE_IFACE, FALSE, .offset = EWPR_SIGNAL_OFFSET(a), \
 	EWP_INT32, EWP_DEC, EWP_INT8}
 #define EWPR_SERIAL_IFCOMP_8(a) {\
-	#a, EWPF_IDX_TYPE_IFACE, EWPR_IF_COMP_OFFSET(a), \
+	#a, EWPF_IDX_TYPE_IFACE, FALSE, .offset = EWPR_IF_COMP_OFFSET(a), \
 	EWP_INT8, EWP_DEC, EWP_INT8}
 #define EWPR_SERIAL_IFCOMP_16(a) {\
-	#a, EWPF_IDX_TYPE_IFACE, EWPR_IF_COMP_OFFSET(a), \
+	#a, EWPF_IDX_TYPE_IFACE, FALSE, .offset = EWPR_IF_COMP_OFFSET(a), \
 	EWP_UINT16, EWP_DEC, EWP_UINT16}
 #define EWPR_SERIAL_ARM(a) {\
-	"armcycle:" #a, EWPF_IDX_TYPE_##a, 0, \
+	"armcycle:" #a, EWPF_IDX_TYPE_##a, FALSE, {0, }, \
 	EWP_UINT32, EWP_DEC, EWP_UINT32}
-#define EWPR_SERIAL_NONE {"", EWPF_INVALID, 0, 0, 0, 0}
+#define EWPR_SERIAL_NONE {"", EWPF_INVALID, FALSE, {0, }, 0, 0, 0}
 
 ewpr_serial_info_t
 ewpr_serial_CSDCLIENT_key_tbl[] = {
@@ -899,12 +943,52 @@ ewpr_serial_basic(char *buf, int buf_len, uint32 data, int format, int display_t
 	return 0;
 }
 
+static int
+ewpr_get_multi_offset(uint16 looking_version, ewpr_serial_info_t *info)
+{
+	int idx;
+	ewpr_MVT_offset_elem_t *opv;
+
+	DHD_FILTER_TRACE(("FINDING MULTI OFFSET: type = %s version = %d\n",
+		info->name, looking_version));
+	for (idx = 0; idx < MAX_MULTI_VER; idx ++) {
+		opv = &(info->v_info.opv[idx]);
+
+		/* END OF MULTI VERSION */
+		if (opv->version == 0) {
+			DHD_FILTER_ERR(("NO VERSION of finding(%d) type = %s\n",
+				looking_version, info->name));
+			return EWPF_INVALID;
+		}
+		if (looking_version == opv->version) {
+			return opv->offset;
+		}
+	}
+	DHD_FILTER_ERR(("NO VERSION of finding(%d) type = %s\n",
+		looking_version, info->name));
+	return EWPF_INVALID;
+}
 int
 ewpr_single_serial(ewpr_serial_info_t *info, char *buf, int buf_len, void *_ptr, char del)
 {
 	uint32 sval = 0;
+	char *ptr = (char *)_ptr;
+	uint32 offset = EWPF_INVALID;
+	uint16	version;
 
-	char *ptr = (char *)_ptr + info->offset;
+	if (info->is_multi_version == TRUE) {
+		version = *(uint16 *)((char *)_ptr + info->v_info.version_offset);
+		offset = ewpr_get_multi_offset(version, info);
+	} else {
+		offset = info->offset;
+	}
+
+	if (offset == EWPF_INVALID) {
+		DHD_FILTER_ERR(("INVALID TYPE to OFFSET:%s\n", info->name));
+		return 0;
+	}
+
+	ptr += offset;
 
 	switch (info->data_type) {
 		case EWP_INT8:
@@ -945,9 +1029,23 @@ ewpr_diff_serial(ewpr_serial_info_t *info,
 	char *f_op = (char *)_f_op;
 	char *s_op = (char *)_s_op;
 	uint32 diff;
+	uint32 offset = EWPF_INVALID;
+	uint16	version;
 
-	f_op = f_op + info->offset;
-	s_op = s_op + info->offset;
+	if (info->is_multi_version == TRUE) {
+		version = *(uint16 *)(f_op + info->v_info.version_offset);
+		offset = ewpr_get_multi_offset(version, info);
+	} else {
+		offset = info->offset;
+	}
+
+	if (offset == EWPF_INVALID) {
+		DHD_FILTER_ERR(("INVALID TYPE to OFFSET:%s\n", info->name));
+		return 0;
+	}
+
+	f_op = f_op + offset;
+	s_op = s_op + offset;
 
 	switch (info->data_type) {
 		case EWP_INT8:

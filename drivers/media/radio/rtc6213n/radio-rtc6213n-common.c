@@ -164,7 +164,7 @@ stop:
 	retval = rtc6213n_get_register(radio, STATUS);
 
 done:
-	dev_info(&radio->videodev->dev, "rtc6213n_set_chans is done\n");
+	dev_info(&radio->videodev->dev, "%s is done\n", __func__);
 	dev_info(&radio->videodev->dev, "CHANNEL=0x%4.4hx SEEKCFG1=0x%4.4hx STATUS=0x%4.4hx\n",
 		radio->registers[CHANNEL], radio->registers[SEEKCFG1],
 		radio->registers[STATUS]);
@@ -745,6 +745,10 @@ static int rtc6213n_vidioc_g_ctrl(struct file *file, void *priv,
 		ctrl->value = ((radio->registers[MPXCFG] &
 			MPXCFG_CSR0_DIS_SMUTE) == 0) ? 1 : 0;
 		break;
+	case V4L2_CID_PRIVATE_CSR0_BLNDADJUST:
+		ctrl->value = ((radio->registers[MPXCFG] &
+			MPXCFG_CSR0_BLNDADJUST) >> 8);	
+		break;		
 	case V4L2_CID_PRIVATE_CSR0_BAND:
 		ctrl->value = ((radio->registers[CHANNEL] &
 			CHANNEL_CSR0_BAND) >> 12);
@@ -1015,6 +1019,13 @@ static int rtc6213n_vidioc_s_ctrl(struct file *file, void *priv,
 			radio->registers[MPXCFG] |= MPXCFG_CSR0_DEEM;
 		else
 			radio->registers[MPXCFG] &= ~MPXCFG_CSR0_DEEM;
+		retval = rtc6213n_set_register(radio, MPXCFG);
+		break;
+	case V4L2_CID_PRIVATE_CSR0_BLNDADJUST:
+		dev_info(&radio->videodev->dev,	"V4L2_CID_PRIVATE_CSR0_BLNDADJUST : MPXCFG=0x%4.4hx POWERCFG=0x%4.4hx\n",
+				radio->registers[MPXCFG], radio->registers[POWERCFG]);
+			radio->registers[MPXCFG] &= ~MPXCFG_CSR0_BLNDADJUST;
+			radio->registers[MPXCFG] |= (ctrl->value << 8);
 		retval = rtc6213n_set_register(radio, MPXCFG);
 		break;
 	case V4L2_CID_PRIVATE_CSR0_BAND:

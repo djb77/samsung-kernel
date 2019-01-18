@@ -2307,6 +2307,9 @@ static inline int weight_from_rtprio(int prio)
 {
 	int idx = (prio >> 1);
 
+	if (!rt_prio(prio))
+		return sched_prio_to_weight[prio - MAX_RT_PRIO];
+
 	if ((idx << 1) == prio)
 		return rtprio_to_weight[idx];
 	else

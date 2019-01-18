@@ -88,7 +88,9 @@ static void exynos_iommu_debug_log_show(struct seq_file *s,
 		break;
 	case EVENT_SYSMMU_IOMMU_ALLOCSLPD:
 	case EVENT_SYSMMU_IOMMU_FREESLPD:
-		seq_printf(s, " @ %#010x\n", log->eventdata.addr);
+		seq_printf(s, " @ [iova:%#010x, entry:%#010x)\n",
+				log->eventdata.range.start,
+				log->eventdata.range.end);
 		break;
 	case EVENT_SYSMMU_TLB_INV_RANGE:
 	case EVENT_SYSMMU_IOMMU_UNMAP:

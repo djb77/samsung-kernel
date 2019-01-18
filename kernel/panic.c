@@ -143,7 +143,12 @@ void panic(const char *fmt, ...)
 	int state = 0;
 	int old_cpu, this_cpu;
 	bool _crash_kexec_post_notifiers = crash_kexec_post_notifiers;
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	struct pt_regs regs;
 
+	regs.regs[30] = _RET_IP_;
+	regs.pc = regs.regs[30] - sizeof(unsigned int);
+#endif
 	exynos_trace_stop();
 	if (ecd_get_enable() &&
 		ecd_get_debug_panic() &&
@@ -192,7 +197,10 @@ void panic(const char *fmt, ...)
 	if (buf[strlen(buf) - 1] == '\n')
 		buf[strlen(buf) - 1] = '\0';
 #endif
-
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	if (strncmp(buf, "Fatal exception", 15))
+		sec_debug_set_extra_info_fault(PANIC_FAULT, (unsigned long)regs.pc, &regs);
+#endif
 	ecd_printf("Kernel Panic - not syncing: %s\n", buf);
 	pr_auto(ASL5, "Kernel panic - not syncing: %s\n", buf);
 

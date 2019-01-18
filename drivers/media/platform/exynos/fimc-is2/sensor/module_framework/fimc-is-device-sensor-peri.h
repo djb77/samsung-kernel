@@ -220,6 +220,9 @@ struct fimc_is_ois {
 	u8				pre_coef;
 	bool				fadeupdown;
 	bool				initial_centering_mode;
+#ifdef CAMERA_REAR2_OIS
+	int				ois_power_mode;
+#endif
 	struct work_struct		ois_set_init_work;
 };
 

@@ -297,20 +297,16 @@ static int rx_raw_misc(struct sk_buff *skb)
 }
 
 #ifdef CONFIG_MODEM_IF_NET_GRO
-static int region = 0;
-module_param(region, int, S_IRUGO | S_IWUSR | S_IWGRP);
-
 static int check_gro_support(struct sk_buff *skb)
 {
-	if (region) {
-		switch (skb->data[0] & 0xF0) {
+	switch (skb->data[0] & 0xF0) {
 		case 0x40:
 			return (ip_hdr(skb)->protocol == IPPROTO_TCP);
 
 		case 0x60:
 			return (ipv6_hdr(skb)->nexthdr == IPPROTO_TCP);
-		}
 	}
+
 	return 0;
 }
 #else
@@ -970,7 +966,8 @@ static ssize_t misc_write(struct file *filp, const char __user *data,
 	if (iod->format <= IPC_RFS && iod->id == 0)
 		return -EINVAL;
 
-	if (unlikely(!cp_online(mc)) && sipc5_ipc_ch(iod->id)) {
+	if (unlikely(!cp_online(mc)) &&
+			(sipc5_ipc_ch(iod->id) || sipc5_dm_ch(iod->id))) {
 		mif_debug("%s: ERR! %s->state == %s\n",
 			iod->name, mc->name, mc_state(mc));
 		return -EPERM;
@@ -1537,9 +1534,9 @@ int sipc5_init_io_device(struct io_device *iod)
 			free_netdev(iod->ndev);
 		}
 
-		mif_debug("iod 0x%p\n", iod);
+		mif_debug("iod 0x%pK\n", iod);
 		vnet = netdev_priv(iod->ndev);
-		mif_debug("vnet 0x%p\n", vnet);
+		mif_debug("vnet 0x%pK\n", vnet);
 		vnet->iod = iod;
 
 		break;

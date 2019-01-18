@@ -20,6 +20,12 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/of_platform.h>
+#include <linux/miscdevice.h>
+#include <linux/poll.h>
+#include <linux/kernel.h>
+#include <linux/slab.h>
+#include <linux/skbuff.h>
+#include <linux/netdevice.h>
 
 #include <linux/dev_ril_bridge.h>
 
@@ -34,6 +40,58 @@
 #define drb_info(fmt, ...) \
 	pr_info(LOG_TAG "%s: " pr_fmt(fmt), __func__, ##__VA_ARGS__)
 
+struct drb_dev {
+	atomic_t opened;
+	wait_queue_head_t wq;
+	struct sk_buff_head sk_rx_q;
+	struct miscdevice miscdev;
+};
+
+static struct drb_dev *drb_dev;
+
+int dev_ril_bridge_send_msg(int id, int size, void *buf)
+{
+	struct sk_buff *skb;
+	struct sk_buff_head *rxq;
+	struct sipc_fmt_hdr *sipc_hdr;
+	unsigned int alloc_size;
+	unsigned int headroom;
+
+	drb_info("id=%d size=%d\n", id, size);
+	if (!drb_dev) {
+		drb_err("ERR! dev_ril_bridge is not ready\n");
+		return -ENODEV;
+	}
+
+	rxq = &drb_dev->sk_rx_q;
+	headroom = sizeof(struct sipc_fmt_hdr);
+	alloc_size = size + headroom;
+
+	skb = alloc_skb(alloc_size, GFP_ATOMIC);
+	if (!skb) {
+		drb_err("ERR! alloc_skb fail\n");
+		return -ENOMEM;
+	}
+
+	skb_reserve(skb, headroom);
+	memcpy(skb_put(skb, size), buf, size);
+
+	sipc_hdr = (struct sipc_fmt_hdr *)skb_push(skb, headroom);
+	sipc_hdr->len = alloc_size;
+	sipc_hdr->main_cmd = 0x27;
+	sipc_hdr->sub_cmd = id;
+	sipc_hdr->cmd_type = 0x05;
+
+	skb_queue_tail(rxq, skb);
+
+	if (atomic_read(&drb_dev->opened) > 0)
+		wake_up(&drb_dev->wq);
+	else
+		return -EPIPE;
+
+	return 0;
+}
+
 static RAW_NOTIFIER_HEAD(dev_ril_bridge_chain);
 
 int register_dev_ril_bridge_event_notifier(struct notifier_block *nb)
@@ -44,34 +102,143 @@ int register_dev_ril_bridge_event_notifier(struct notifier_block *nb)
 	return raw_notifier_chain_register(&dev_ril_bridge_chain, nb);
 }
 
-static ssize_t notify_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static int misc_open(struct inode *inode, struct file *filp)
 {
-	/* no need to prepare read function */
+	filp->private_data = (void *)drb_dev;
+	atomic_inc(&drb_dev->opened);
+
+	drb_info("drb (opened %d) by %s\n",
+			atomic_read(&drb_dev->opened), current->comm);
+
 	return 0;
 }
 
-static ssize_t notify_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
+static int misc_release(struct inode *inode, struct file *filp)
 {
-	/* buf head may be consist of some structures */
+	struct drb_dev *drb_dev = (struct drb_dev *)filp->private_data;
 
-	drb_info("event notify (%ld) ++\n", size);
-	raw_notifier_call_chain(&dev_ril_bridge_chain, size, (void *)buf);
-	drb_info("event notify (%ld) --\n", size);
+	if (atomic_dec_and_test(&drb_dev->opened)) {
+		skb_queue_purge(&drb_dev->sk_rx_q);
+	}
+	
+	filp->private_data = NULL;
+
+	drb_info("drb (opened %d) by %s\n",
+			atomic_read(&drb_dev->opened), current->comm);
+
+	return 0;
+}
+
+static unsigned int misc_poll(struct file *filp, struct poll_table_struct *wait)
+{
+	struct drb_dev *drb_dev = (struct drb_dev *)filp->private_data;
+	struct sk_buff_head *rxq;
+	int ret = 0;
+
+	if (!drb_dev)
+		return POLLERR;
+
+	rxq = &drb_dev->sk_rx_q;
+
+	if (skb_queue_empty(rxq))
+		poll_wait(filp, &drb_dev->wq, wait);
+
+	if (!skb_queue_empty(rxq))
+		ret = POLLIN | POLLRDNORM;
+
+	drb_info("poll done by %s (%d)\n", current->comm, ret);
+
+	return ret;
+}
+
+static ssize_t misc_write(struct file *filp, const char __user *data,
+			size_t count, loff_t *fops)
+{
+	struct dev_ril_bridge_msg msg;
+	struct sipc_fmt_hdr *sipc_hdr;
+	char buf[256] = { 0, };
+	unsigned int size;
+	
+	if (count <= sizeof(struct sipc_fmt_hdr)) {
+		drb_err("ERR! too small size data(count %lu)\n",
+			(unsigned long)count);
+		return -EFAULT;
+	}
+
+	size = min_t(unsigned int, count, sizeof(buf) * sizeof(char));
+	if (copy_from_user(buf, data, size)) {
+		drb_err("ERR! copy_from_user fail(count %lu)\n",
+			(unsigned long)count);
+		return -EFAULT;
+	}
+
+	sipc_hdr = (struct sipc_fmt_hdr *)buf;
+
+	if (sipc_hdr->main_cmd != 0x27 || sipc_hdr->cmd_type != 0x03) {
+		drb_err("ERR! wrong cmd(main_cmd=%02x, cmd_type=%02x)\n",
+				sipc_hdr->main_cmd, sipc_hdr->cmd_type);
+		return -EFAULT;
+	}
+	
+	msg.dev_id = sipc_hdr->sub_cmd;
+	msg.data_len = size - sizeof(struct sipc_fmt_hdr);
+	msg.data = (void *)(buf + sizeof(struct sipc_fmt_hdr));
+
+	drb_info("notifier_call: dev_id=%u data_len=%u\n", msg.dev_id, msg.data_len);
+
+	raw_notifier_call_chain(&dev_ril_bridge_chain, 
+			sizeof(struct dev_ril_bridge_msg), (void *)&msg);
 
 	return size;
 }
-static DEVICE_ATTR_RW(notify);
 
-static struct attribute *dev_ril_bridge_attrs[] = {
-	&dev_attr_notify.attr,
-	NULL,
+static ssize_t misc_read(struct file *filp, char *buf, size_t count,
+			loff_t *fops)
+{
+	struct drb_dev *drb_dev = (struct drb_dev *)filp->private_data;
+	struct sk_buff_head *rxq = &drb_dev->sk_rx_q;
+	struct sk_buff *skb;
+	unsigned int copied;
+
+	if (skb_queue_empty(rxq)) {
+		long tmo = msecs_to_jiffies(100);
+		wait_event_timeout(drb_dev->wq, !skb_queue_empty(rxq), tmo);
+	}
+
+	skb = skb_dequeue(rxq);
+	if (unlikely(!skb)) {
+		drb_err("No data in RXQ\n");
+		return 0;
+	}
+
+	copied = skb->len > count ? count : skb->len;
+
+	if (copy_to_user(buf, skb->data, copied)) {
+		drb_err("ERR! copy_to_user fail\n");
+		dev_kfree_skb_any(skb);
+		return -EFAULT;
+	}
+
+	drb_info("data:%d copied:%d qlen:%d\n", skb->len, copied, rxq->qlen);
+
+	if (skb->len > copied) {
+		skb_pull(skb, copied);
+		skb_queue_head(rxq, skb);
+	} else {
+		dev_kfree_skb_any(skb);
+	}
+
+	return copied;
+}
+
+static const struct file_operations misc_io_fops = {
+	.owner = THIS_MODULE,
+	.open = misc_open,
+	.release = misc_release,
+	.poll = misc_poll,
+	.write = misc_write,
+	.read = misc_read,
 };
-ATTRIBUTE_GROUPS(dev_ril_bridge);
-
-static struct class *dev_ril_bridge_class;
-static struct device *dev_ril_bridge_device;
 
 static int dev_ril_bridge_probe(struct platform_device *pdev)
 {
@@ -79,30 +246,27 @@ static int dev_ril_bridge_probe(struct platform_device *pdev)
 
 	drb_info("+++\n");
 
-	/* node /sys/class/dev_ril_bridge/dev_ril_bridge/notify */
+	drb_dev = kzalloc(sizeof(struct drb_dev), GFP_KERNEL);
+	if (drb_dev == NULL)
+		return -ENOMEM;
 
-	dev_ril_bridge_class = class_create(THIS_MODULE, "dev_ril_bridge");
-	if (IS_ERR(dev_ril_bridge_class)) {
-		drb_err("couldn't register device class\n");
-		err = PTR_ERR(dev_ril_bridge_class);
+	init_waitqueue_head(&drb_dev->wq);
+	skb_queue_head_init(&drb_dev->sk_rx_q);
+
+	drb_dev->miscdev.minor = MISC_DYNAMIC_MINOR;
+	drb_dev->miscdev.name = "drb";
+	drb_dev->miscdev.fops = &misc_io_fops;
+
+	err = misc_register(&drb_dev->miscdev);
+	if (err) {
+		drb_err("misc_register fail\n");
 		goto out;
-	}
-
-	dev_ril_bridge_device = device_create_with_groups(dev_ril_bridge_class,
-			NULL, 0, MKDEV(0, 0), dev_ril_bridge_groups, "%s",
-			"dev_ril_bridge");
-	if (IS_ERR(dev_ril_bridge_device)) {
-		drb_err("couldn't register system device\n");
-		err = PTR_ERR(dev_ril_bridge_device);
-		goto out_class;
 	}
 
 	drb_info("---\n");
 
 	return 0;
 
-out_class:
-	class_destroy(dev_ril_bridge_class);
 out:
 	drb_info("err = %d ---\n", err);
 	return err;
@@ -110,8 +274,8 @@ out:
 
 static void dev_ril_bridge_shutdown(struct platform_device *pdev)
 {
-	device_unregister(dev_ril_bridge_device);
-	class_destroy(dev_ril_bridge_class);
+	misc_deregister(&drb_dev->miscdev);
+	kfree(drb_dev);
 }
 
 #ifdef CONFIG_PM

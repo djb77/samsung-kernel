@@ -185,11 +185,10 @@ struct zswap_pool {
  *          decompression
  * pool - the zswap_pool the entry's data is in
  * handle - zpool allocation handle that stores the compressed page data
- * zero_flag - the flag indicating the page for the zswap_entry is a zero page.
- *            zswap does not store the page during compression.
- *            It memsets the page with 0 during decompression.
+ *          if page is zero-filled, handle is 0.
  * #else
  * zhandle - pointer to struct zswap_handle where length and handle are moved into.
+ *           if page is zero-filled, zhandle is NULL.
  * #endif
  */
 #ifndef CONFIG_ZSWAP_SAME_PAGE_SHARING
@@ -200,7 +199,6 @@ struct zswap_entry {
 	unsigned int length;
 	struct zswap_pool *pool;
 	unsigned long handle;
-	unsigned char zero_flag;
 };
 #else
 struct zswap_entry {
@@ -209,7 +207,6 @@ struct zswap_entry {
 	int refcount;
 	struct zswap_pool *pool;
 	struct zswap_handle *zhandle;
-	unsigned char zero_flag;
 };
 #endif
 
@@ -309,9 +306,11 @@ static struct zswap_entry *zswap_entry_cache_alloc(gfp_t gfp)
 	if (!entry)
 		return NULL;
 	entry->refcount = 1;
-	entry->zero_flag = 0;
 #ifdef CONFIG_ZSWAP_SAME_PAGE_SHARING
 	entry->zhandle = NULL;
+#else
+	entry->handle = 0;
+	entry->length = 0;
 #endif
 	RB_CLEAR_NODE(&entry->rbnode);
 	return entry;
@@ -320,6 +319,15 @@ static struct zswap_entry *zswap_entry_cache_alloc(gfp_t gfp)
 static void zswap_entry_cache_free(struct zswap_entry *entry)
 {
 	kmem_cache_free(zswap_entry_cache, entry);
+}
+
+static int is_page_zero_filled(struct zswap_entry *entry)
+{
+#ifdef CONFIG_ZSWAP_SAME_PAGE_SHARING
+	return entry->zhandle == NULL;
+#else
+	return entry->handle == 0;
+#endif
 }
 
 #ifdef CONFIG_ZSWAP_SAME_PAGE_SHARING
@@ -520,7 +528,7 @@ static struct zswap_handle *zswap_same_page_search(struct zswap_pool *pool, stru
  */
 static void zswap_free_entry(struct zswap_entry *entry)
 {
-	if (entry->zero_flag == 1) {
+	if (is_page_zero_filled(entry)) {
 		atomic_dec(&zswap_zero_pages);
 		goto zeropage_out;
 	}
@@ -1307,17 +1315,9 @@ static int zswap_frontswap_store(unsigned type, pgoff_t offset,
 	src = kmap_atomic(page);
 	if (page_zero_filled(src)) {
 		atomic_inc(&zswap_zero_pages);
-		entry->zero_flag = 1;
 		kunmap_atomic(src);
-
-#ifdef CONFIG_ZSWAP_SAME_PAGE_SHARING
 		entry->offset = offset;
 		goto insert_entry;
-#else
-		handle = 0;
-		dlen = PAGE_SIZE;
-		goto zeropage_out;
-#endif
 	}
 #ifdef CONFIG_ZSWAP_SAME_PAGE_SHARING
 	checksum = jhash2((const u32 *)src, PAGE_SIZE / 4, 17);
@@ -1375,9 +1375,6 @@ static int zswap_frontswap_store(unsigned type, pgoff_t offset,
 	zpool_unmap_handle(entry->pool->zpool, handle);
 	put_cpu_var(zswap_dstmem);
 
-#ifndef CONFIG_ZSWAP_SAME_PAGE_SHARING
-zeropage_out:
-#endif
 	/* populate entry */
 	entry->offset = offset;
 #ifdef CONFIG_ZSWAP_SAME_PAGE_SHARING
@@ -1390,19 +1387,17 @@ zeropage_out:
 	entry->zhandle->handle = handle;
 	entry->zhandle->length = dlen;
 	entry->zhandle->checksum = checksum;
+
+	spin_lock(&tree->lock);
+	ret = zswap_handle_rb_insert(&tree->zhandleroot,
+				entry->zhandle, &duphandle);
+	spin_unlock(&tree->lock);
 #else
 	entry->handle = handle;
 	entry->length = dlen;
 #endif
 
-#ifdef CONFIG_ZSWAP_SAME_PAGE_SHARING
-	spin_lock(&tree->lock);
-	ret = zswap_handle_rb_insert(&tree->zhandleroot,
-				entry->zhandle, &duphandle);
-	spin_unlock(&tree->lock);
-
 insert_entry:
-#endif
 	/* map */
 	spin_lock(&tree->lock);
 	do {
@@ -1464,7 +1459,7 @@ static int zswap_frontswap_load(unsigned type, pgoff_t offset,
 	}
 	spin_unlock(&tree->lock);
 
-	if (entry->zero_flag == 1) {
+	if (is_page_zero_filled(entry)) {
 		dst = kmap_atomic(page);
 		memset(dst, 0, PAGE_SIZE);
 		kunmap_atomic(dst);

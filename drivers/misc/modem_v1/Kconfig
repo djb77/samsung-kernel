@@ -18,6 +18,10 @@ config CP_ZEROCOPY
 	bool "Support zero memory copy"
 	default y
 
+config CP_SMAPPER
+	bool "Support SMAPPER"
+	default n
+
 menu "Configuration Description"
 config BOOT_DEVICE_SPI
 	bool "boot device: SPI"

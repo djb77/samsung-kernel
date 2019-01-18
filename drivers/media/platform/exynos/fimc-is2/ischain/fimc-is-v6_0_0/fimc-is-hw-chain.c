@@ -1790,9 +1790,9 @@ int fimc_is_hw_query_cap(void *cap_data, int hw_id)
 			cap->out_hwfc[3] = MCSC_CAP_SUPPORT;
 			cap->out_hwfc[4] = MCSC_CAP_SUPPORT;
 			cap->enable_shared_output = true;
-			cap->tdnr = MCSC_CAP_SUPPORT;
+			cap->tdnr = MCSC_CAP_NOT_SUPPORT;
 			cap->djag = MCSC_CAP_SUPPORT;
-			cap->ysum = MCSC_CAP_SUPPORT;
+			cap->ysum = MCSC_CAP_NOT_SUPPORT;
 			cap->ds_vra = MCSC_CAP_SUPPORT;
 		}
 		break;

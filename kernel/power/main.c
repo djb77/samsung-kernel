@@ -38,6 +38,17 @@ int unregister_pm_notifier(struct notifier_block *nb)
 }
 EXPORT_SYMBOL_GPL(unregister_pm_notifier);
 
+bool is_pm_chain_notifier(struct notifier_block **notifier_block,
+		unsigned long val)
+{
+	if ((&pm_chain_head.head == notifier_block) &&
+			((val == PM_SUSPEND_PREPARE) || (val == PM_POST_SUSPEND)))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(is_pm_chain_notifier);
+
 int __pm_notifier_call_chain(unsigned long val, int nr_to_call, int *nr_calls)
 {
 	int ret;

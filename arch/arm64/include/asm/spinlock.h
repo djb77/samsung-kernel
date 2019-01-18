@@ -83,26 +83,30 @@ static inline void arch_spin_unlock_wait(arch_spinlock_t *lock)
 
 static inline void arch_spin_lock(arch_spinlock_t *lock)
 {
-	unsigned int tmp;
+	unsigned int tmp, tmp2;
 	arch_spinlock_t lockval, newval;
 
 	asm volatile(
 	/* Atomically increment the next ticket. */
 	ARM64_LSE_ATOMIC_INSN(
 	/* LL/SC */
+"	mov	%w4, #0x1\n"
+"	lsl	%w4, %w4, #31\n"
 "	prfm	pstl1strm, %3\n"
 "1:	ldaxr	%w0, %3\n"
-"	add	%w1, %w0, %w5\n"
+"	add	%w1, %w0, %w6\n"
 "	stxr	%w2, %w1, %3\n"
-"	cbnz	%w2, 1b\n",
+"	cbz	%w2, 4f\n"
+"	add	%w4, %w4, #0x1\n"
+"	b	1b\n",
 	/* LSE atomics */
-"	mov	%w2, %w5\n"
+"	mov	%w2, %w6\n"
 "	ldadda	%w2, %w0, %3\n"
-	__nops(3)
+	__nops(7)
 	)
 
 	/* Did we get the lock? */
-"	eor	%w1, %w0, %w0, ror #16\n"
+"4:	eor	%w1, %w0, %w0, ror #16\n"
 "	cbz	%w1, 3f\n"
 	/*
 	 * No: spin on the owner. Send a local event to avoid missing an
@@ -110,12 +114,12 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 	 */
 "	sevl\n"
 "2:	wfe\n"
-"	ldaxrh	%w2, %4\n"
+"	ldaxrh	%w2, %5\n"
 "	eor	%w1, %w2, %w0, lsr #16\n"
 "	cbnz	%w1, 2b\n"
 	/* We got the lock. Critical section starts here. */
 "3:"
-	: "=&r" (lockval), "=&r" (newval), "=&r" (tmp), "+Q" (*lock)
+	: "=&r" (lockval), "=&r" (newval), "=&r" (tmp), "+Q" (*lock), "=&r" (tmp2)
 	: "Q" (lock->owner), "I" (1 << TICKET_SHIFT)
 	: "memory");
 }

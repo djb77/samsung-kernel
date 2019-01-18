@@ -2341,6 +2341,22 @@ static ssize_t camera_rear_mtf_exif_show(struct device *dev,
 	return FIMC_IS_RESOLUTION_DATA_SIZE;
 }
 
+static ssize_t camera_rear_paf_cal_check_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	char *cal_buf;
+	u8 data[5] = {0, };
+	u32 paf_err_data_result = 0;
+
+	read_from_firmware_version(SENSOR_POSITION_REAR);
+	fimc_is_sec_get_cal_buf(&cal_buf);
+
+	memcpy(data, &cal_buf[FROM_PAF_CAL_DATA_START_ADDR + FROM_PAF_CAL_ERR_CHECK_OFFSET], 4);
+	paf_err_data_result = *data | ( *(data + 1) << 8) | ( *(data + 2) << 16) | (*(data + 3) << 24);
+
+	return sprintf(buf, "%08X\n", paf_err_data_result);
+}
+
 #ifdef FROM_SUPPORT_APERTURE_F2
 static ssize_t camera_rear_mtf2_exif_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -2352,6 +2368,74 @@ static ssize_t camera_rear_mtf2_exif_show(struct device *dev,
 
 	memcpy(buf, &cal_buf[finfo->mtf_f2_data_addr], FIMC_IS_RESOLUTION_DATA_SIZE);
 	return FIMC_IS_RESOLUTION_DATA_SIZE;
+}
+
+/* F2 PAF MID offset read */
+static ssize_t camera_rear_f2_paf_offset_mid_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+#ifdef FROM_F2_PAF_OFFSET_MID_ADDR
+	char *cal_buf;
+	char tempbuf[10];
+	int i;
+
+	memset(tempbuf, 0, sizeof(tempbuf));
+	read_from_firmware_version(SENSOR_POSITION_REAR);
+	fimc_is_sec_get_cal_buf(&cal_buf);
+
+	for (i = 0; i < FROM_F2_PAF_OFFSET_MID_SIZE / 8 - 1; i++) {
+		sprintf(tempbuf, "%d,", *((s16 *)&cal_buf[FROM_F2_PAF_OFFSET_MID_ADDR + 8 * i]));
+		strncat(buf, tempbuf, strlen(tempbuf));
+		memset(tempbuf, 0, sizeof(tempbuf));
+	}
+
+	sprintf(tempbuf, "%d", *((s16 *)&cal_buf[FROM_F2_PAF_OFFSET_MID_ADDR + 8 * i]));
+	strncat(buf, tempbuf, strlen(tempbuf));
+	strncat(buf, "\n", strlen("\n"));
+#endif
+	return strlen(buf);
+}
+
+/* F2 PAF PAN offset read */
+static ssize_t camera_rear_f2_paf_offset_far_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+#ifdef FROM_F2_PAF_OFFSET_PAN_ADDR
+	char *cal_buf;
+	char tempbuf[10];
+	int i;
+
+	memset(tempbuf, 0, sizeof(tempbuf));
+	read_from_firmware_version(SENSOR_POSITION_REAR);
+	fimc_is_sec_get_cal_buf(&cal_buf);
+
+	for (i = 0; i < FROM_F2_PAF_OFFSET_PAN_SIZE / 2 - 1; i++) {
+		sprintf(tempbuf, "%d,", *((s16 *)&cal_buf[FROM_F2_PAF_OFFSET_PAN_ADDR + 2 * i]));
+		strncat(buf, tempbuf, strlen(tempbuf));
+		memset(tempbuf, 0, sizeof(tempbuf));
+	}
+
+	sprintf(tempbuf, "%d", *((s16 *)&cal_buf[FROM_F2_PAF_OFFSET_PAN_ADDR + 2 * i]));
+	strncat(buf, tempbuf, strlen(tempbuf));
+	strncat(buf, "\n", strlen("\n"));
+#endif
+	return strlen(buf);
+}
+
+static ssize_t camera_rear_f2_paf_cal_check_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	char *cal_buf;
+	u8 data[5] = {0, };
+	u32 paf_err_data_result = 0;
+
+	read_from_firmware_version(SENSOR_POSITION_REAR);
+	fimc_is_sec_get_cal_buf(&cal_buf);
+
+	memcpy(data, &cal_buf[FROM_F2_PAF_CAL_DATA_START_ADDR + FROM_PAF_CAL_ERR_CHECK_OFFSET], 4);
+	paf_err_data_result = *data | ( *(data + 1) << 8) | ( *(data + 2) << 16) | (*(data + 3) << 24);
+
+	return sprintf(buf, "%08X\n", paf_err_data_result);
 }
 #endif
 
@@ -3064,8 +3148,12 @@ static DEVICE_ATTR(rear_paf_offset_far, S_IRUGO, camera_rear_paf_offset_far_show
 static DEVICE_ATTR(rear_sensorid_exif, S_IRUGO, camera_rear_sensorid_exif_show, NULL);
 static DEVICE_ATTR(rear_moduleid, S_IRUGO, camera_rear_moduleid_show, NULL);
 static DEVICE_ATTR(rear_mtf_exif, S_IRUGO, camera_rear_mtf_exif_show, NULL);
+static DEVICE_ATTR(rear_paf_cal_check, S_IRUGO, camera_rear_paf_cal_check_show, NULL);
 #ifdef FROM_SUPPORT_APERTURE_F2
 static DEVICE_ATTR(rear_mtf2_exif, S_IRUGO, camera_rear_mtf2_exif_show, NULL);
+static DEVICE_ATTR(rear_f2_paf_offset_mid, S_IRUGO, camera_rear_f2_paf_offset_mid_show, NULL);
+static DEVICE_ATTR(rear_f2_paf_offset_far, S_IRUGO, camera_rear_f2_paf_offset_far_show, NULL);
+static DEVICE_ATTR(rear_f2_paf_cal_check, S_IRUGO, camera_rear_f2_paf_cal_check_show, NULL);
 #endif
 static DEVICE_ATTR(rear_awb_master, S_IRUGO, camera_rear_awb_master_show, NULL);
 static DEVICE_ATTR(rear_awb_module, S_IRUGO, camera_rear_awb_module_show, NULL);
@@ -3117,19 +3205,19 @@ int svc_cheating_prevent_device_file_create(struct kobject **obj)
 		/* try to create svc kobject */
 		data = kobject_create_and_add("svc", &devices_kset->kobj);
 		if (IS_ERR_OR_NULL(data))
-			pr_info("Failed to create sys/devices/svc already exist svc : 0x%p\n", data);
+			pr_info("Failed to create sys/devices/svc already exist svc : 0x%pK\n", data);
 		else
-			pr_info("Success to create sys/devices/svc svc : 0x%p\n", data);
+			pr_info("Success to create sys/devices/svc svc : 0x%pK\n", data);
 	} else {
 		data = (struct kobject *)svc_sd->priv;
-		pr_info("Success to find svc_sd : 0x%p svc : 0x%p\n", svc_sd, data);
+		pr_info("Success to find svc_sd : 0x%pK svc : 0x%pK\n", svc_sd, data);
 	}
 
 	Camera = kobject_create_and_add("Camera", data);
 	if (IS_ERR_OR_NULL(Camera))
-		pr_info("Failed to create sys/devices/svc/Camera : 0x%p\n", Camera);
+		pr_info("Failed to create sys/devices/svc/Camera : 0x%pK\n", Camera);
 	else
-		pr_info("Success to create sys/devices/svc/Camera : 0x%p\n", Camera);
+		pr_info("Success to create sys/devices/svc/Camera : 0x%pK\n", Camera);
 
 	*obj = Camera;
 
@@ -3391,6 +3479,18 @@ int fimc_is_create_sysfs(struct fimc_is_core *core)
 			pr_err("failed to create rear device file, %s\n",
 					dev_attr_rear_mtf2_exif.attr.name);
 		}
+		if (device_create_file(camera_rear_dev, &dev_attr_rear_f2_paf_offset_mid) < 0) {
+			printk(KERN_ERR "failed to create rear device file, %s\n",
+					dev_attr_rear_f2_paf_offset_mid.attr.name);
+		}
+		if (device_create_file(camera_rear_dev, &dev_attr_rear_f2_paf_offset_far) < 0) {
+			printk(KERN_ERR "failed to create rear device file, %s\n",
+					dev_attr_rear_f2_paf_offset_far.attr.name);
+		}
+		if (device_create_file(camera_rear_dev, &dev_attr_rear_f2_paf_cal_check) < 0) {
+			printk(KERN_ERR "failed to create rear device file, %s\n",
+					dev_attr_rear_f2_paf_cal_check.attr.name);
+		}
 #endif
 		if (device_create_file(camera_rear_dev, &dev_attr_rear_awb_master) < 0) {
 			pr_err("failed to create rear device file, %s\n",
@@ -3421,6 +3521,10 @@ int fimc_is_create_sysfs(struct fimc_is_core *core)
 		if (device_create_file(camera_rear_dev, &dev_attr_rear_paf_offset_far) < 0) {
 			printk(KERN_ERR "failed to create rear device file, %s\n",
 					dev_attr_rear_paf_offset_far.attr.name);
+		}
+		if (device_create_file(camera_rear_dev, &dev_attr_rear_paf_cal_check) < 0) {
+			printk(KERN_ERR "failed to create rear device file, %s\n",
+					dev_attr_rear_paf_cal_check.attr.name);
 		}
 	}
 
@@ -3587,6 +3691,9 @@ int fimc_is_destroy_sysfs(struct fimc_is_core *core)
 		device_remove_file(camera_rear_dev, &dev_attr_rear_mtf_exif);
 #ifdef FROM_SUPPORT_APERTURE_F2
 		device_remove_file(camera_rear_dev, &dev_attr_rear_mtf2_exif);
+		device_remove_file(camera_rear_dev, &dev_attr_rear_f2_paf_offset_mid);
+		device_remove_file(camera_rear_dev, &dev_attr_rear_f2_paf_offset_far);
+		device_remove_file(camera_rear_dev, &dev_attr_rear_f2_paf_cal_check);
 #endif
 		device_remove_file(camera_rear_dev, &dev_attr_rear_awb_master);
 		device_remove_file(camera_rear_dev, &dev_attr_rear_awb_module);
@@ -3601,6 +3708,7 @@ int fimc_is_destroy_sysfs(struct fimc_is_core *core)
 		device_remove_file(camera_rear_dev, &dev_attr_rear_camfw_all);
 		device_remove_file(camera_rear_dev, &dev_attr_rear_paf_offset_mid);
 		device_remove_file(camera_rear_dev, &dev_attr_rear_paf_offset_far);
+		device_remove_file(camera_rear_dev, &dev_attr_rear_paf_cal_check);
 	}
 
 #if defined (CONFIG_OIS_USE)

@@ -66,6 +66,9 @@ unsigned int mif_rps_thresh = 200;
 module_param(mif_rps_thresh, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(mif_rps_thresh, "threshold speed");
 
+int mif_gro_flush_thresh[] = {100, 200, -1};
+long mif_gro_flush_time[] = {0, 10000, 100000};
+
 static int mif_store_rps_map(struct netdev_rx_queue *queue, char *buf, size_t len)
 {
 	struct rps_map *old_map, *map;
@@ -171,6 +174,24 @@ static void mif_update_ndevs_rps(const char *ndev_prefix, unsigned int rps_value
 	}
 }
 
+#ifdef CONFIG_MODEM_IF_NET_GRO
+extern long gro_flush_time;
+
+static void mif_argos_notifier_gro_flushtime(unsigned long speed)
+{
+	int loop;
+
+	for (loop = 0; mif_gro_flush_thresh[loop] != -1; loop++)
+		if (speed < mif_gro_flush_thresh[loop])
+			break;
+	gro_flush_time = mif_gro_flush_time[loop];
+
+	mif_info("Speed: %luMbps, GRO flush time: %ld\n", speed, gro_flush_time);
+}
+#else
+static inline void mif_argos_notifier_gro_flushtime(unsigned long speed) {}
+#endif
+
 static int mif_argos_notifier_ipc(struct notifier_block *nb, unsigned long speed, void *data)
 {
 	struct argos_notifier *nf = container_of(nb, struct argos_notifier, ipc_nb);
@@ -193,6 +214,8 @@ static int mif_argos_notifier_ipc(struct notifier_block *nb, unsigned long speed
 		mif_info("Speed: %luMbps, IPC|CLAT: 0x%02x|0x%02x -> 0x%02x|0x%02x\n",
 			speed, prev_ipc_rps, nf->prev_clat_rps, new_ipc_rps, nf->prev_clat_rps);
 	}
+
+	mif_argos_notifier_gro_flushtime(speed);
 
 	return NOTIFY_OK;
 }
@@ -234,6 +257,9 @@ static int mif_argos_notifier_clat(struct notifier_block *nb, unsigned long spee
 		mif_info("Speed: %luMbps, IPC|CLAT: 0x%02x|0x%02x -> 0x%02x|0x%02x\n",
 			speed, prev_ipc_rps, prev_clat_rps, new_ipc_rps, new_clat_rps);
 	}
+
+	mif_argos_notifier_gro_flushtime(speed);
+
 	return NOTIFY_OK;
 }
 

@@ -33,28 +33,6 @@
 
 #define INTERNAL_SHOT_EXIST	(1)
 
-void framemgr_e_barrier_common(struct fimc_is_framemgr *this, u32 index, ulong flag)
-{
-	if (in_interrupt()) {
-		framemgr_e_barrier(this, index);
-	} else {
-		framemgr_e_barrier_irqs(this, index, flag);
-	}
-
-	return;
-}
-
-void framemgr_x_barrier_common(struct fimc_is_framemgr *this, u32 index, ulong flag)
-{
-	if (in_interrupt()) {
-		framemgr_x_barrier(this, index);
-	} else {
-		framemgr_x_barrier_irqr(this, index, flag);
-	}
-
-	return;
-}
-
 static int __get_free_work_irq(struct fimc_is_work_list *this,
 	struct fimc_is_work **work)
 {
@@ -1040,10 +1018,9 @@ int fimc_is_hardware_get_meta(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame 
 	switch (hw_ip->id) {
 	case DEV_HW_3AA0:
 	case DEV_HW_3AA1:
+		copy_ctrl_to_dm(frame->shot);
 	case DEV_HW_ISP0:
 	case DEV_HW_ISP1:
-		copy_ctrl_to_dm(frame->shot);
-
 		ret = CALL_HW_OPS(hw_ip, get_meta, frame, hw_map);
 		if (ret) {
 			mserr_hw("[F:%d] get_meta fail", instance, hw_ip, frame->fcount);

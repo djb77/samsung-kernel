@@ -748,6 +748,9 @@ struct Scsi_Host {
 	unsigned long issue_LBA_list[SEC_MAX_LBA_LOGGING]; 
 	unsigned int issue_LBA_count; 
 	u64 issue_region_map; 
+	unsigned int  ufs_system_start;
+	unsigned int  ufs_system_end;
+	bool ufs_sys_log_en;
 
 	/*
 	 * We should ensure that this is aligned, both for better performance

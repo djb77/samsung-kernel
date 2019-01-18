@@ -1,53 +1,96 @@
 #
-# Makefile for the SCore driver
+# Makefile for the SCore common driver
 #
 
-ccflags-$(FPGA_SCORE) += -DSCORE_EVT1
-ccflags-$(FPGA_SCORE) += -DCONFIG_FPGA_SCORE
-ccflags-$(FPGA_SCORE) += -I./
+ccflags-$(CONFIG_EXYNOS_SCORE_FPGA)	+= -DCONFIG_EXYNOS_SCORE_FPGA
+ccflags-$(CONFIG_EXYNOS_SCORE_V2)	+= -DCONFIG_EXYNOS_SCORE_V2
+ccflags-$(CONFIG_EXYNOS_SCORE_V3)	+= -DCONFIG_EXYNOS_SCORE_V3
 
-ccflags-$(STANDALONE_SCORE) += -DCONFIG_STANDALONE_SCORE
-ccflags-$(MMIP_SCORE) += -DCONFIG_MMIP_SCORE
+ccflags-$(CONFIG_EXYNOS_SCORE_FPGA)	+= -DSCORE_EVT1
 
 ifeq ($(CONFIG_SOC_EXYNOS9810_EVT1),y)
-ccflags-$(CONFIG_EXYNOS_SCORE) += -DSCORE_EVT1
+ccflags-$(CONFIG_SOC_EXYNOS9810)	+= -DSCORE_EVT1
 else
-ccflags-$(CONFIG_EXYNOS_SCORE) += -DSCORE_EVT0
+ccflags-$(CONFIG_SOC_EXYNOS9810)	+= -DSCORE_EVT0
 endif
-ccflags-$(CONFIG_EXYNOS_SCORE) += -Idrivers/vision/score
 
-score-objs-y += score_device.o
-score-objs-y += score_system.o
-score-objs-y += score_interface.o
-score-objs-y += score_firmware.o
-score-objs-y += score_frame.o
-score-objs-y += score_print.o
-score-objs-y += score_scq.o
-score-objs-y += score_sm.o
-score-objs-y += score_sr.o
-score-objs-y += score_core.o
-score-objs-y += score_ioctl.o
+ifeq ($(CONFIG_SOC_EXYNOS9820_EVT1),y)
+ccflags-$(CONFIG_SOC_EXYNOS9820)	+= -DSCORE_EVT1
+else
+ccflags-$(CONFIG_SOC_EXYNOS9820)	+= -DSCORE_EVT0
+endif
+
+ifeq ($(CONFIG_EXYNOS_SCORE_FPGA),y)
+ccflags-y				+= -I${src}/
+ccflags-$(CONFIG_EXYNOS_SCORE_V2)	+= -I${src}/hardware/v2
+ccflags-$(CONFIG_EXYNOS_SCORE_V2)	+= -I${src}/hardware/v2/v2_0
+ccflags-$(CONFIG_EXYNOS_SCORE_V3)	+= -I${src}/hardware/v3
+ccflags-$(CONFIG_EXYNOS_SCORE_V3)	+= -I${src}/hardware/v3/v3_0
+else
+ccflags-$(CONFIG_EXYNOS_SCORE)		+= -Idrivers/vision/score
+ccflags-$(CONFIG_EXYNOS_SCORE_V2)	+= -Idrivers/vision/score/hardware/v2
+ccflags-$(CONFIG_EXYNOS_SCORE_V2)	+= -Idrivers/vision/score/hardware/v2/v2_1
+ccflags-$(CONFIG_EXYNOS_SCORE_V3)	+= -Idrivers/vision/score/hardware/v3
+ccflags-$(CONFIG_EXYNOS_SCORE_V3)	+= -Idrivers/vision/score/hardware/v3/v3_1
+endif
+
+score-objs				:= score_device.o
+score-objs				+= score_core.o
+score-objs				+= score_ioctl.o
 ifeq ($(CONFIG_COMPAT),y)
-  score-objs-y += score_compat_ioctl.o
+score-objs				+= score_compat_ioctl.o
 endif
-score-objs-y += score_context.o
-score-objs-y += score_dpmu.o
-score-objs-y += score_util.o
-score-objs-y += score_profiler.o
-score-objs-y += score_mmu.o
-score-objs-y += score_sysfs.o
+score-objs				+= score_frame.o
+score-objs				+= score_context.o
+score-objs				+= score_util.o
+score-objs				+= score_mmu.o
 
-score-objs-$(FPGA_SCORE) += fpga/score_pm.o
-score-objs-$(FPGA_SCORE) += fpga/score_clk.o
-score-objs-$(FPGA_SCORE) += fpga/score_memory.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/score_system.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/score_interface.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/score_firmware.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/score_scq.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/score_sm.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/score_sr.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/score_print.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/score_dpmu.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/score_profiler.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/score_sysfs.o
 
-score-objs-$(CONFIG_EXYNOS_SCORE) += exynos/score_pm.o
-score-objs-$(CONFIG_EXYNOS_SCORE) += exynos/score_clk.o
-score-objs-$(CONFIG_EXYNOS_SCORE) += exynos/score_memory.o
-score-objs-$(CONFIG_EXYNOS_SCORE) += exynos/score_ion.o
+ifeq ($(CONFIG_EXYNOS_SCORE_FPGA),y)
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/v2_0/score_memory.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/v2_0/score_clk.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/v2_0/score_pm.o
+else
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/v2_1/score_memory.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/v2_1/score_clk.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/v2_1/score_pm.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V2)	+= hardware/v2/v2_1/score_ion.o
+endif
 
-score-objs := $(score-objs-y)
-ifeq ($(FPGA_SCORE),y)
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/score_system.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/score_interface.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/score_firmware.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/score_scq.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/score_sm.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/score_sr.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/score_print.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/score_dpmu.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/score_profiler.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/score_sysfs.o
+
+ifeq ($(CONFIG_EXYNOS_SCORE_FPGA),y)
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/v3_0/score_memory.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/v3_0/score_clk.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/v3_0/score_pm.o
+else
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/v3_1/score_memory.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/v3_1/score_clk.o
+score-objs-$(CONFIG_EXYNOS_SCORE_V3)	+= hardware/v3/v3_1/score_pm.o
+endif
+
+score-objs				+= $(score-objs-y)
+
+ifeq ($(CONFIG_EXYNOS_SCORE_FPGA),y)
   obj-m += score.o
 else
   obj-$(CONFIG_EXYNOS_SCORE) += score.o

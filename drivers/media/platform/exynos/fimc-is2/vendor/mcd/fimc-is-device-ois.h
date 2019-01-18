@@ -49,7 +49,7 @@ struct fimc_is_ois_shared_info {
 #define FIMC_OIS_FW_NAME_SEC		"ois_fw_sec.bin"
 #define FIMC_OIS_FW_NAME_SEC_2		"ois_fw_sec_2.bin"
 #define FIMC_OIS_FW_NAME_DOM		"ois_fw_dom.bin"
-#define FIMC_IS_OIS_SDCARD_PATH		"/data/media/0/"
+#define FIMC_IS_OIS_SDCARD_PATH		"/data/vendor/camera/"
 
 struct i2c_client *fimc_is_ois_i2c_get_client(struct fimc_is_core *core);
 int fimc_is_ois_i2c_read(struct i2c_client *client, u16 addr, u8 *data);

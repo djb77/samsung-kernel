@@ -395,5 +395,6 @@ void dma_reg_set_common_debug(u32 id);
 #define DPP_DUMP			_IOW('P', 2, u32)
 #define DPP_WAIT_IDLE			_IOR('P', 4, unsigned long)
 #define DPP_SET_RECOVERY_NUM		_IOR('P', 5, unsigned long)
+#define DPP_GET_RECOVERY_CNT		_IOR('P', 6, unsigned long)
 
 #endif /* __SAMSUNG_DPP_H__ */

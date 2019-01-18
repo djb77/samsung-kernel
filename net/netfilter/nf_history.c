@@ -5,23 +5,30 @@
 #include <linux/seq_file.h>
 #include <linux/netdevice.h>
 
-#define nf_history_buffer_size (1024 * 16)
+#define nf_history_buffer_size (1024 * 128)
 
 static char *nf_history_buffer;
 static int nf_history_index;
+static bool nf_eof = false;
 
 static ssize_t nf_history_read(struct file *file,
 			       char __user *buf,
 				size_t len, loff_t *offset)
 {
 	ssize_t count = min_t(size_t, len, (size_t)nf_history_buffer_size);
-	loff_t pos = *offset;
+	int pos = (int)*offset;
 
 	if (!nf_history_buffer)
 		return 0;
 
 	if (pos + count > nf_history_buffer_size)
 		return 0;
+
+	if (!nf_eof && pos + count >= nf_history_index) {
+		count = nf_history_index - pos;
+		if (!count)
+			return 0;
+	}
 
 	if (copy_to_user(buf, nf_history_buffer + pos, count))
 		return -EFAULT;
@@ -59,6 +66,8 @@ static ssize_t nf_history_write(struct file *file,
 							len + nf_history_index - nf_history_buffer_size))
 			return -EFAULT;
 		nf_history_index = len + nf_history_index - nf_history_buffer_size;
+
+		nf_eof = true;
 	}
 
 	return len;
@@ -99,4 +108,3 @@ static void __exit nf_history_exit(void)
 
 module_init(nf_history_init);
 module_exit(nf_history_exit);
-

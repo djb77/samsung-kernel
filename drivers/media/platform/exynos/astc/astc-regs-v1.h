@@ -1,6 +1,6 @@
-/* linux/drivers/media/platform/exynos/astc-regs-v1.h
+/* drivers/media/platform/exynos/astc/astc-regs-v1.h
  *
- * Register definition file for Samsung ASTC encoder driver
+ * Register definition file for Samsung ASTC encoder of Exynos9810 SoC
  *
  * Copyright (c) 2017 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com

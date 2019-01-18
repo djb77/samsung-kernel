@@ -94,5 +94,5 @@ void score_util_print_diff_timespec(const char *prefix_str,
 
 	diff = score_util_diff_timespec(start, end);
 
-	score_note("%s %ld.%09ld sec\n", prefix_str, diff.tv_sec, diff.tv_nsec);
+	score_info("%s %ld.%09ld sec\n", prefix_str, diff.tv_sec, diff.tv_nsec);
 }

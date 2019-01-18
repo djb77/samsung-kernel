@@ -96,24 +96,26 @@ static int notifier_call_chain(struct notifier_block **nl,
 			continue;
 		}
 #endif
-		if (val == PM_SUSPEND_PREPARE || val == PM_POST_SUSPEND)
+		if (is_pm_chain_notifier(nl, val)) {
 			exynos_ss_suspend(nb->notifier_call, NULL, ESS_FLAG_IN);
 #ifdef CONFIG_DEBUG_NOTIFIERS_PRINT_ELAPSED_TIME
-		if (val == PM_SUSPEND_PREPARE)
-			start = jiffies;
+			if (val == PM_SUSPEND_PREPARE)
+				start = jiffies;
 #endif
-		ret = nb->notifier_call(nb, val, v);
-#ifdef CONFIG_DEBUG_NOTIFIERS_PRINT_ELAPSED_TIME
-		if (val == PM_SUSPEND_PREPARE) {
-			end = jiffies;
-			elapsed = jiffies_to_usecs(end - start);
-			if( elapsed > 4000)
-				printk(KERN_ERR "%s: %pS takes over 4000(%d) usec for execution.\n", 
-					__func__, (void *)(nb->notifier_call), elapsed);
 		}
+		ret = nb->notifier_call(nb, val, v);
+		if (is_pm_chain_notifier(nl, val)) {
+#ifdef CONFIG_DEBUG_NOTIFIERS_PRINT_ELAPSED_TIME
+			if (val == PM_SUSPEND_PREPARE) {
+				end = jiffies;
+				elapsed = jiffies_to_usecs(end - start);
+				if( elapsed > 4000)
+					printk(KERN_ERR "%s: %pS takes over 4000(%d) usec for execution.\n", 
+						__func__, (void *)(nb->notifier_call), elapsed);
+			}
 #endif
-		if (val == PM_SUSPEND_PREPARE || val == PM_POST_SUSPEND)
 			exynos_ss_suspend(nb->notifier_call, NULL, ESS_FLAG_OUT);
+		}
 
 		if (nr_calls)
 			(*nr_calls)++;

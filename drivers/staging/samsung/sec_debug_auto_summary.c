@@ -19,11 +19,14 @@
 #include <linux/kallsyms.h>
 #include <linux/memblock.h>
 #include <linux/sec_debug.h>
+#include <linux/vmalloc.h>
+#include <linux/slab.h>
 #include <asm/sections.h>
 
 #define AUTO_SUMMARY_SIZE 0xf3c
 #define AUTO_SUMMARY_MAGIC 0xcafecafe
 #define AUTO_SUMMARY_TAIL_MAGIC 0x00c0ffee
+#define AUTO_SUMMARY_EDATA_MAGIC 0x43218765
 
 enum {
 	PRIO_LV0 = 0,
@@ -49,12 +52,20 @@ enum sec_debug_FREQ_INFO {
 };
 
 struct sec_debug_auto_comm_buf {
-	atomic_t logging_entry;
-	atomic_t logging_disable;
-	atomic_t logging_count;
+	int reserved_0;
+	int reserved_1;
+	int reserved_2;
 	unsigned int offset;
 	char buf[SZ_4K];
 };
+
+struct sec_debug_auto_comm_log_idx {
+	atomic_t logging_entry;
+	atomic_t logging_disable;
+	atomic_t logging_count;
+};
+	
+static struct sec_debug_auto_comm_log_idx ac_idx[SEC_DEBUG_AUTO_COMM_BUF_SIZE];
 
 struct sec_debug_auto_comm_freq_info {
 	int old_freq;
@@ -62,6 +73,11 @@ struct sec_debug_auto_comm_freq_info {
 	u64 time_stamp;
 	int en;
 	u64 last_freq_info;
+};
+
+struct sec_debug_auto_comm_extra_data {
+	unsigned long magic;
+	unsigned long data[10];
 };
 
 struct sec_debug_auto_summary {
@@ -78,6 +94,8 @@ struct sec_debug_auto_summary {
 	u64 pa_text;
 	u64 pa_start_rodata;
 	int tail_magic;
+
+	struct sec_debug_auto_comm_extra_data edata;
 };
 
 static struct sec_debug_auto_summary *auto_summary_info;
@@ -103,15 +121,15 @@ static const struct auto_summary_log_map init_data[SEC_DEBUG_AUTO_COMM_BUF_SIZE]
 
 void sec_debug_auto_summary_log_disable(int type)
 {
-	atomic_inc(&auto_summary_info->auto_comm_buf[type].logging_disable);
+	atomic_inc(&(ac_idx[type].logging_disable));
 }
 
 void sec_debug_auto_summary_log_once(int type)
 {
-	if (atomic64_read(&auto_summary_info->auto_comm_buf[type].logging_entry))
+	if (atomic64_read(&(ac_idx[type].logging_entry)))
 		sec_debug_auto_summary_log_disable(type);
 	else
-		atomic_inc(&auto_summary_info->auto_comm_buf[type].logging_entry);
+		atomic_inc(&(ac_idx[type].logging_entry));
 }
 
 static inline void sec_debug_hook_auto_comm_lastfreq(int type,
@@ -130,14 +148,14 @@ static inline void sec_debug_hook_auto_comm(int type, const char *buf, size_t si
 	struct sec_debug_auto_comm_buf *p = &auto_summary_info->auto_comm_buf[type];
 	unsigned int offset = p->offset;
 
-	if (atomic64_read(&p->logging_disable))
+	if (atomic64_read(&(ac_idx[type].logging_disable)))
 		return;
 
 	if (offset + size > SZ_4K)
 		return;
 
 	if (init_data[type].max_count &&
-	    (atomic64_read(&p->logging_count) > init_data[type].max_count))
+	    (atomic64_read(&(ac_idx[type].logging_count)) > init_data[type].max_count))
 		return;
 
 	if (!(auto_summary_info->fault_flag & 1 << type)) {
@@ -149,24 +167,70 @@ static inline void sec_debug_hook_auto_comm(int type, const char *buf, size_t si
 		auto_summary_info->order_map[auto_summary_info->order_map_cnt++] = type;
 	}
 
-	atomic_inc(&p->logging_count);
+	atomic_inc(&(ac_idx[type].logging_count));
 
 	memcpy(p->buf + offset, buf, size);
 	p->offset += (unsigned int)size;
 }
 
+extern ulong entry_dbg_saved_data[];
+
 static void sec_auto_summary_init_print_buf(unsigned long base)
 {
-	auto_summary_buf = (char *)phys_to_virt(base);
-	auto_summary_info = (struct sec_debug_auto_summary *)phys_to_virt(base + SZ_4K);
+	auto_summary_buf = (char *)base;
+	auto_summary_info = (struct sec_debug_auto_summary *)(base + SZ_4K);
 
 	memset(auto_summary_info, 0, sizeof(struct sec_debug_auto_summary));
 
 	auto_summary_info->pa_text = virt_to_phys(_text);
 	auto_summary_info->pa_start_rodata = virt_to_phys(__start_rodata);
 
+	auto_summary_info->edata.data[0] = virt_to_phys(entry_dbg_saved_data);
+
 	register_set_auto_comm_buf(sec_debug_hook_auto_comm);
 	register_set_auto_comm_lastfreq(sec_debug_hook_auto_comm_lastfreq);
+}
+
+static unsigned long sas_size;
+static unsigned long sas_base;
+
+static void * __init sec_auto_summary_remap(unsigned long size, unsigned long base)
+{
+	unsigned long i;
+	pgprot_t prot = __pgprot(PROT_NORMAL_NC);
+	int page_size;
+	struct page *page;
+	struct page **pages;
+	void *addr;
+
+	pr_info("%s: base: 0x%lx size: 0x%lx\n", __func__, base, size);
+
+	page_size = (size + PAGE_SIZE - 1) / PAGE_SIZE; 
+
+	pages = kzalloc(sizeof(struct page *) * page_size, GFP_KERNEL);
+	if (!pages) {
+		pr_err("%s: failed to allocate pages\n", __func__);
+
+		return NULL;
+	}
+
+	page = phys_to_page(base);
+
+	for (i = 0; i < page_size; i++)
+		pages[i] = page++;
+
+	addr = vm_map_ram(pages, page_size, -1, prot);
+	if (!addr) {
+		pr_err("%s: failed to mapping between virt and phys\n", __func__);
+		kfree(pages);
+		return NULL;
+	}
+
+	pr_info("%s: virt: 0x%p\n", __func__, addr);
+
+	kfree(pages);
+
+	return addr;
 }
 
 static int __init sec_auto_summary_log_setup(char *str)
@@ -177,8 +241,18 @@ static int __init sec_auto_summary_log_setup(char *str)
 	/* If we encounter any problem parsing str ... */
 	if (!size || *str != '@' || kstrtoul(str + 1, 0, &base)) {
 		pr_err("%s: failed to parse address.\n", __func__);
-		goto out;
+
+		return -1;
 	}
+
+	if (size < sizeof(struct sec_debug_auto_summary)) {
+		pr_err("%s: not enough size for auto summary\n", __func__);
+
+		return -1;
+	}
+
+	sas_base = base;
+	sas_size = size;
 
 #ifdef CONFIG_NO_BOOTMEM
 	if (memblock_is_region_reserved(base, size) ||
@@ -189,23 +263,46 @@ static int __init sec_auto_summary_log_setup(char *str)
 		/* size is not match with -size and size + sizeof(...) */
 		pr_err("%s: failed to reserve size:0x%lx at base 0x%lx\n",
 		       __func__, size, base);
-		goto out;
+
+		sas_base = 0;
+		sas_size = 0;
+
+		return -1;
 	}
 
-	sec_auto_summary_init_print_buf(base);
-
-	pr_info("%s, base:0x%lx size:0x%lx\n", __func__, base, size);
-
-out:
-	return 0;
+	return 1;
 }
 __setup("auto_summary_log=", sec_auto_summary_log_setup);
+
+static int __init sec_auto_summary_base_init(void)
+{
+	void *addr;
+
+	if (!sas_size) {
+		pr_err("%s: failed to get size of auto summary\n", __func__);
+
+		return -1;
+	}
+
+	addr = sec_auto_summary_remap(sas_size, sas_base);
+	if (!addr) {
+		pr_err("%s: failed to remap size:0x%lx at base 0x%lx\n",
+				__func__, sas_size, sas_base);
+		return -1;
+	}
+
+	sec_auto_summary_init_print_buf((unsigned long)addr);
+
+	return 0;
+}
+early_initcall(sec_auto_summary_base_init);
 
 static int __init sec_auto_summary_log_init(void)
 {
 	if (auto_summary_info) {
 		auto_summary_info->header_magic = AUTO_SUMMARY_MAGIC;
 		auto_summary_info->tail_magic = AUTO_SUMMARY_TAIL_MAGIC;
+		auto_summary_info->edata.magic = AUTO_SUMMARY_EDATA_MAGIC;
 	}
 
 	pr_debug("%s, done.\n", __func__);
@@ -250,6 +347,13 @@ static const struct file_operations sec_reset_auto_summary_proc_fops = {
 static int __init sec_debug_auto_summary_init(void)
 {
 	struct proc_dir_entry *entry;
+	int i;
+
+	for (i = 0; i < SEC_DEBUG_AUTO_COMM_BUF_SIZE; i++) {
+		atomic_set(&(ac_idx[i].logging_entry), 0);
+		atomic_set(&(ac_idx[i].logging_disable), 0);
+		atomic_set(&(ac_idx[i].logging_count), 0);
+	}
 
 	entry = proc_create("auto_comment", S_IWUGO, NULL,
 			    &sec_reset_auto_summary_proc_fops);

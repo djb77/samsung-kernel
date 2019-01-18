@@ -71,6 +71,11 @@
 #include <net/tcp_states.h>
 #include <linux/net_tstamp.h>
 
+/* START_OF_KNOX_NPA */
+#define NAP_PROCESS_NAME_LEN	128
+#define NAP_DOMAIN_NAME_LEN	255
+/* END_OF_KNOX_NPA */
+
 /*
  * This structure really needs to be cleaned up.
  * Most of it is for TCP, and not used by any of
@@ -441,14 +446,16 @@ struct sock {
 	struct sock_cgroup_data	sk_cgrp_data;
 	struct mem_cgroup	*sk_memcg;
 	/* START_OF_KNOX_NPA */
-	uid_t           knox_uid;
-    pid_t           knox_pid;
-    uid_t	    	knox_dns_uid;
-    __be32	    	sk_udp_daddr_v6[4];
-    __be32	    	sk_udp_saddr_v6[4];
-    __be16          sk_udp_dport;
-    __be16          sk_udp_sport;
-    char 			domain_name[255];
+	uid_t			knox_uid;
+	pid_t			knox_pid;
+	uid_t			knox_dns_uid;
+	char 			domain_name[NAP_DOMAIN_NAME_LEN];
+	char			process_name[NAP_PROCESS_NAME_LEN];
+	uid_t			knox_puid;
+	pid_t			knox_ppid;
+	char			parent_process_name[NAP_PROCESS_NAME_LEN];
+	pid_t			knox_dns_pid;
+	char 			dns_process_name[NAP_PROCESS_NAME_LEN];
 	/* END_OF_KNOX_NPA */
 	void			(*sk_state_change)(struct sock *sk);
 	void			(*sk_data_ready)(struct sock *sk);

@@ -37,6 +37,11 @@ config DISPLAYPORT_ENG
 	depends on EXYNOS_DISPLAYPORT
 	default n
 
+config LOGGING_BIGDATA_BUG
+	bool "Logging extra information when decon bug"
+	depends on EXYNOS_DECON_9810
+	default y
+
 config EXYNOS_ZEBU_EMUL_DISP
 	bool "Zebu Emulator Display driver"
 	depends on EXYNOS_DECON_9810
@@ -60,6 +65,11 @@ config DECON_EVENT_LOG
 config DECON_HIBER
 	bool "DECON hiber mode"
         depends on EXYNOS_DECON_9810
+        default n
+
+config EXYNOS_HIBERNATION_THREAD
+	bool "DECON hiber mode using single thread"
+        depends on DECON_HIBER
         default n
 
 config SUPPORT_DOZE

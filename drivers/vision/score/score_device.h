@@ -48,26 +48,32 @@ enum score_device_state {
  * struct score_device - Object including SCore driver connected with APCPU
  * @dev: device structure registered in platform
  * @pdev: platform device structure allocated in platform_driver_register
+ * @open_count: the number of user that opens SCore device
  * @state: state of SCore driver by APCPU device
+ * @cur_firmware_id:
  * @system: object including data of SCore driver about SCore H/W
  * @pm: object about power manager
  * @clk: object about clock manager
  * @core: object about file operations controller
- * @open_count: the number of user that opens SCore device
  */
 struct score_device {
 	struct device			*dev;
 	struct platform_device		*pdev;
+	atomic_t			open_count;
 	unsigned int			state;
+	unsigned int			cur_firmware_id;
 
 	struct score_system		system;
 	struct score_pm			pm;
 	struct score_clk		clk;
 	struct score_core		core;
-	atomic_t			open_count;
 };
 
+int score_device_check_start(struct score_device *device);
 int score_device_open(struct score_device *device);
-void score_device_close(struct score_device *device);
+int score_device_start(struct score_device *device,
+		unsigned int firmware_id, unsigned int flag);
+void score_device_get(struct score_device *device);
+void score_device_put(struct score_device *device);
 
 #endif

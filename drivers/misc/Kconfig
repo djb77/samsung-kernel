@@ -774,6 +774,13 @@ config UID_SYS_STATS
 	  Per UID based io statistics exported to /proc/uid_io
 	  Per UID based procstat control in /proc/uid_procstat
 
+config DEBUG_UID_CPUTIME
+	bool "Record each uid cputime"
+	depends on UID_SYS_STATS
+	default n
+	help
+	  Record each uid cputime for debugging
+
 config UID_SYS_STATS_DEBUG
 	bool "Per-TASK statistics"
 	depends on UID_SYS_STATS
@@ -816,5 +823,4 @@ source "drivers/misc/mcu_ipc/Kconfig"
 source "drivers/misc/modem_v1/Kconfig"
 source "drivers/misc/modem_if/Kconfig"
 source "drivers/misc/dev_ril_bridge/Kconfig"
-source "drivers/misc/five_tee_driver/Kconfig"
 endmenu

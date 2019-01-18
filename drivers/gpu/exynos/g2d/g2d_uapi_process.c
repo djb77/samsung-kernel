@@ -134,6 +134,12 @@ static int g2d_prepare_buffer(struct g2d_device *g2d_dev,
 
 	BUG_ON(!fmt);
 
+	if (data->num_buffers == 0) {
+		dev_err(dev, "Invalid number of buffer %u for %s\n",
+			data->num_buffers, fmt->name);
+		return -EINVAL;
+	}
+
 	if ((data->num_buffers > 1) && (data->num_buffers != fmt->num_planes)) {
 		/* NV12 8+2 in two buffers is valid */
 		if ((fmt->num_planes != 4) || (data->num_buffers != 2)) {
@@ -541,6 +547,7 @@ static int g2d_get_source(struct g2d_device *g2d_dev, struct g2d_task *task,
 
 	layer->flags = data->flags;
 	layer->buffer_type = data->buffer_type;
+	layer->fence = NULL;
 
 	if (!G2D_BUFTYPE_VALID(layer->buffer_type)) {
 		dev_err(dev, "%s: invalid buffer type %u specified\n",
@@ -655,7 +662,6 @@ static int g2d_get_target(struct g2d_device *g2d_dev, struct g2d_context *ctx,
 	if (IS_HWFC(task->flags)) {
 		struct g2d_task *ptask;
 		unsigned long flags;
-		u32 idx;
 
 		target->buffer_type = G2D_BUFTYPE_DMABUF;
 
@@ -665,14 +671,14 @@ static int g2d_get_target(struct g2d_device *g2d_dev, struct g2d_context *ctx,
 		 * avoid overwriting the buffer index and job id while MFC is
 		 * running.
 		 */
-		ret = hwfc_get_valid_buffer(&idx);
+		ret = hwfc_get_valid_buffer(&task->bufidx);
 		if (ret < 0) {
 			dev_err(dev, "%s: Failed to get valid buffer from repeater\n",
 				__func__);
 			return ret;
 		}
 
-		BUG_ON(idx >= ctx->hwfc_info->buffer_count);
+		BUG_ON(task->bufidx >= ctx->hwfc_info->buffer_count);
 
 		spin_lock_irqsave(&task->g2d_dev->lock_task, flags);
 
@@ -683,10 +689,10 @@ static int g2d_get_target(struct g2d_device *g2d_dev, struct g2d_context *ctx,
 				ptask = ptask->next;
 				continue;
 			}
-			if ((ptask->job_id == idx) &&
+			if ((ptask->job_id == task->bufidx) &&
 					!is_task_state_idle(ptask)) {
 				dev_err(dev, "%s: The %d task is not idle\n",
-				__func__, idx);
+				__func__, task->bufidx);
 
 				spin_unlock_irqrestore(
 					&task->g2d_dev->lock_task, flags);
@@ -696,15 +702,16 @@ static int g2d_get_target(struct g2d_device *g2d_dev, struct g2d_context *ctx,
 			ptask = ptask->next;
 		}
 
-		g2d_stamp_task(task, G2D_STAMP_STATE_HWFCBUF, idx);
+		g2d_stamp_task(task, G2D_STAMP_STATE_HWFCBUF, task->bufidx);
 
-		task->job_id = idx;
+		task->job_id = task->bufidx;
 
 		spin_unlock_irqrestore(&task->g2d_dev->lock_task, flags);
 
 		data->num_buffers = 1;
 		data->buffer[0].dmabuf.offset = 0;
-		data->buffer[0].length = (__u32)ctx->hwfc_info->bufs[idx]->size;
+		data->buffer[0].length =
+			(__u32)ctx->hwfc_info->bufs[task->bufidx]->size;
 	}
 
 	if (target->buffer_type == G2D_BUFTYPE_EMPTY) {

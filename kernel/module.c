@@ -64,22 +64,126 @@
 #include <uapi/linux/module.h>
 #include "module-internal.h"
 
+#ifdef CONFIG_TIMA_LKMAUTH_CODE_PROT
+#include <asm/tlbflush.h>
+#endif/*CONFIG_TIMA_LKMAUTH_CODE_PROT*/
 #define CREATE_TRACE_POINTS
 #include <trace/events/module.h>
+#ifdef CONFIG_TIMA_LKMAUTH_CODE_PROT
+#define TIMA_SET_PTE_RO 1
+#define TIMA_SET_PTE_NX 2
+#endif/*CONFIG_TIMA_LKMAUTH_CODE_PROT*/
 
 #ifndef ARCH_SHF_SMALL
 #define ARCH_SHF_SMALL 0
 #endif
+
+#ifdef CONFIG_TIMA_LKMAUTH
+
+/*
+ * TEE-dependent configurations
+ */
+#include <../drivers/gud/gud-exynos9810/MobiCoreDriver/public/mobicore_driver_api.h>
+
+#include <linux/fs.h>
+#include <linux/delay.h>
+#include <asm/uaccess.h>
+
+#define TL_TIMA_LKMAUTH_UUID {{ 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xb }}
+
+/* Commands for lkmauth tl */
+#define CMD_TIMA_LKMAUTH_LOAD_HASH				0x00000009
+#define CMD_TIMA_LKMAUTH_VERIFY_MODULE			0x00000010
+#define CMD_TIMA_LKMAUTH_LKM_BLOCK				0x00000011
+#define CMD_TIMA_LKMAUTH_UNKNOWN				0x7FFFFFFF
+
+/* Return codes for lkmauth tl */
+#define	RET_TL_TIMA_LKMAUTH_OK					0x00000000
+#define	RET_TL_TIMA_LKMAUTH_HASH_LOADED			0x00000001
+#define	RET_TL_TIMA_LKMAUTH_LKM_BLOCK_FORCE		0x00000002
+
+/* Error codes for lkmauth tl */
+#define	RET_TL_TIMA_LKMAUTH_LG_MAXKO			0x00000010
+#define	RET_TL_TIMA_LKMAUTH_SHA1_INIT_FAIL		0x00000020
+#define	RET_TL_TIMA_LKMAUTH_SHA1_FINAL_FAIL		0x00000030
+#define	RET_TL_TIMA_LKMAUTH_VERIFY_FAIL			0x00000040
+
+/* Return codes for lkmauth function */
+#define	RET_LKMAUTH_SUCCESS				0
+#define	RET_LKMAUTH_FAIL				-1
+
+#define HASH_SIZE 20
+#define TIMA_SIGN_LEN 256	/* the rsa signature length of lkm_sec_info */
+#define MC_MAPPING_MAX_SIZE 0x100000
+
+uint8_t *tci = NULL;
+uint8_t *drv_tci = NULL;
+uint8_t lkmauth_tl_loaded = 0;
+uint8_t lkm_sec_info_loaded = 0;
+struct mc_session_handle mchandle;
+struct mc_session_handle drv_mchandle;
+
+/*
+ * TEE-independent configurations
+ */
+#include <linux/kobject.h>
+DEFINE_MUTEX(lkmauth_mutex);
+extern struct device *tima_uevent_dev;
+
+/* Message types for the lkmauth command */
+typedef struct lkmauth_hash_s {
+	uint32_t cmd_id;
+	uint32_t hash_buf_start;	/* starting address of buf for ko hashes */
+	uint32_t hash_buf_len;	/* length of hash buf, should be multiples of 20 bytes */
+} __attribute__ ((packed)) lkmauth_hash_t;
+
+typedef struct lkmauth_req_s {
+	uint32_t cmd_id;
+	uint32_t module_addr_start;
+	uint32_t module_len;
+	uint32_t min;
+	uint32_t max;
+	char module_name[280];
+	int module_name_len;
+} __attribute__ ((packed)) lkmauth_req_t;
+
+typedef struct lkmauth_rsp_s {
+	/* First 4 bytes should always be command id */
+	uint32_t cmd_id;
+	int ret;
+	union {
+		unsigned char hash[HASH_SIZE];
+		char result_ondemand[256];
+	} __attribute__ ((packed)) result;
+} __attribute__ ((packed)) lkmauth_rsp_t;
+
+typedef struct {
+	union {
+		lkmauth_hash_t lkmauth_hash;
+		lkmauth_req_t lkmauth_req;
+		lkmauth_rsp_t lkmauth_rsp;
+	};
+} tciMessage_t;
+#endif /* End CONFIG_TIMA_LKMAUTH */
 
 /*
  * Modules' sections will be aligned on page boundaries
  * to ensure complete separation of code and data, but
  * only when CONFIG_DEBUG_SET_MODULE_RONX=y
  */
+ 
+#ifdef CONFIG_TIMA_LKMAUTH_CODE_PROT
+# define debug_align(X) ALIGN(X, PAGE_SIZE)
+#else
+#ifdef TIMA_LKM_SET_PAGE_ATTRIB
+#define debug_align(X) ALIGN(X, PAGE_SIZE)
+#else
 #ifdef CONFIG_DEBUG_SET_MODULE_RONX
 # define debug_align(X) ALIGN(X, PAGE_SIZE)
 #else
 # define debug_align(X) (X)
+#endif
+#endif
 #endif
 
 /* If this is set, the section belongs in the init part of the module */
@@ -2671,6 +2775,480 @@ static void add_kallsyms(struct module *mod, const struct load_info *info)
 }
 #endif /* CONFIG_KALLSYMS */
 
+#ifdef CONFIG_TIMA_LKMAUTH
+/* read file into the buf, return the file size */
+int read_file_buf(char *filename, void **buf)
+{
+	struct file *f;
+	int file_size = 0;
+	mm_segment_t fs;
+
+	f = filp_open(filename, O_RDONLY, 0);
+	if (!IS_ERR(f)) {
+		// Get current segment descriptor
+		fs = get_fs();
+		// Set segment descriptor associated to kernel space
+		set_fs(get_ds());
+		file_size = f->f_mapping->host->i_size;
+		pr_info("TIMA: lkmauth--File %s has %d bytes.\n", filename,
+			file_size);
+		*buf = vmalloc(file_size);
+		// Read the file
+		f->f_op->read(f, *buf, file_size, &f->f_pos);
+		// Restore segment descriptor
+		set_fs(fs);
+		filp_close(f, NULL);
+	} else {
+		pr_err("TIMA: lkmauth--filp_open error for %s!!.\n", filename);
+	}
+	return file_size;
+}
+
+int send_notification(lkmauth_rsp_t * krsp, int ret)
+{
+	char *envp[3], *status, *result;
+
+	/* Send a notification through uevent. Note that the lkmauth tzapp
+	 * should have already raised an alert in TZ Security log.
+	 */
+	status = kzalloc(16, GFP_KERNEL);
+	if (!status) {
+		pr_err("TIMA: lkmauth--%s kmalloc failed.\n", __func__);
+		return -1;
+	}
+	snprintf(status, 16, "TIMA_STATUS=%d", ret);
+	envp[0] = status;
+
+	result = kzalloc(256, GFP_KERNEL);
+	if (!result) {
+		pr_err("TIMA: lkmauth--%s kmalloc failed.\n", __func__);
+		kfree(envp[0]);
+		return -1;
+	}
+	snprintf(result, 256, "TIMA_RESULT=%s",
+			krsp->result.result_ondemand);
+	pr_warn("TIMA: %s result (%s) \n", krsp->result.result_ondemand,
+			result);
+	envp[1] = result;
+	envp[2] = NULL;
+
+	kobject_uevent_env(&tima_uevent_dev->kobj, KOBJ_CHANGE, envp);
+	kfree(envp[0]);
+	kfree(envp[1]);
+	return 0;
+}
+
+#ifndef CONFIG_TIMA_LKM_BLOCK
+static int lkmauth(Elf_Ehdr * hdr, int len)
+{
+	int ret = RET_LKMAUTH_FAIL;	/* value to be returned for lkmauth */
+	lkmauth_hash_t *khashreq = NULL;
+	lkmauth_req_t *kreq = NULL;
+	lkmauth_rsp_t *krsp = NULL;
+	enum mc_result mc_ret;
+	struct mc_uuid_t uuid = TL_TIMA_LKMAUTH_UUID;
+	struct mc_bulk_map map_info;
+	void *buf;
+	int buf_len;
+	int nb_of_1mb_section;
+	int idx_mapping_section;
+	int mapping_len;
+	uint8_t *hdr_local = (uint8_t *)hdr;
+
+	mutex_lock(&lkmauth_mutex);
+	nb_of_1mb_section = ( len + MC_MAPPING_MAX_SIZE - 1 )/MC_MAPPING_MAX_SIZE;
+	pr_warn
+	    ("TIMA: lkmauth--launch the tl to check kernel module; module len is %d\n",
+	     len);
+
+	/* Load the lkmauth tl and handle potential error conditions.
+	 */
+	if (!lkmauth_tl_loaded) {
+		mc_ret = mc_open_device(MC_DEVICE_ID_DEFAULT);
+		if (mc_ret != MC_DRV_OK) {
+			pr_err
+			    ("TIMA: lkmauth--cannot get mobicore handle from kernel. %d\n",
+			     mc_ret);
+			ret = RET_LKMAUTH_FAIL;
+			goto lkmauth_ret;
+		}
+		/* open session for lkmauth trustlet */
+		mc_ret =
+		    mc_malloc_wsm(MC_DEVICE_ID_DEFAULT, 0, sizeof(tciMessage_t),
+				  &tci, 0);
+		if (mc_ret != MC_DRV_OK) {
+			pr_err
+			    ("TIMA: lkmauth--cannot alloc world shared memory.\n");
+			ret = RET_LKMAUTH_FAIL;
+			goto lkmauth_close_device;
+		}
+		memset(&mchandle, 0, sizeof(struct mc_session_handle));
+		mchandle.device_id = MC_DEVICE_ID_DEFAULT;
+		mc_ret =
+		    mc_open_session(&mchandle, &uuid, tci,
+				    sizeof(tciMessage_t));
+		if (mc_ret != MC_DRV_OK) {
+			pr_err
+			    ("TIMA: lkmauth--cannot open mobicore session from kernel. %d\n",
+			     mc_ret);
+			ret = RET_LKMAUTH_FAIL;
+			goto lkmauth_free_wsm;
+		}
+		/* open session for tima driver */
+		mc_ret =
+		    mc_malloc_wsm(MC_DEVICE_ID_DEFAULT, 0, 4096, &drv_tci, 0);
+		if (mc_ret != MC_DRV_OK) {
+			pr_err
+			    ("TIMA: lkmauth--cannot alloc world shared memory for tima driver.\n");
+			ret = RET_LKMAUTH_FAIL;	/* lkm authentication failed. */
+			goto lkmauth_close_session;	/* leave the function now. */
+		}
+		memset(&drv_mchandle, 0, sizeof(struct mc_session_handle));
+		drv_mchandle.device_id = MC_DEVICE_ID_DEFAULT;
+		lkmauth_tl_loaded = 1;	/* both lkmauth tl and tima secure driver is loaded */
+	}
+
+	if (!lkm_sec_info_loaded) {
+		/* load lkm_sec_info */
+		buf_len = read_file_buf("/system/lkm_sec_info", &buf);
+		if (buf_len == 0) {
+			pr_err
+			    ("TIMA: lkmauth-- cannot allocate buffer for lkm_sec_info\n");
+			ret = RET_LKMAUTH_FAIL;
+			goto lkmauth_ret;
+		}
+
+		/* map lkm_sec_info buf to tl virutal space */
+		mc_ret = mc_map(&mchandle, (void *)buf, buf_len, &map_info);
+		if (mc_ret != MC_DRV_OK) {
+			pr_err
+			    ("TIMA: lkmauth--cannot map lkm_sec_info buf to tl virtual space\n");
+			ret = RET_LKMAUTH_FAIL;
+			vfree(buf);
+			goto lkmauth_ret;
+		}
+
+		/* Generate the request cmd to load lkm_sec_info.
+		 */
+		khashreq = (struct lkmauth_hash_s *)tci;
+		khashreq->cmd_id = CMD_TIMA_LKMAUTH_LOAD_HASH;
+		/* pr_warn("TIMA: lkmauth -- virtual address of lkm_sec_info buffer in tl is : %x\n", (uint32_t)map_info.secure_virt_addr);
+		 */
+		khashreq->hash_buf_start = (uint32_t) map_info.secure_virt_addr;
+		khashreq->hash_buf_len = buf_len;
+
+		/* prepare the response buffer */
+		krsp = (struct lkmauth_rsp_s *)tci;
+
+		/* Send the command to the tl.
+		 */
+		mc_ret = mc_notify(&mchandle);
+		if (mc_ret != MC_DRV_OK) {
+			pr_err("TIMA: lkmauth--mc_notify failed.\n");
+			ret = RET_LKMAUTH_FAIL;
+			mc_unmap(&mchandle, (void *)buf, &map_info);
+			vfree(buf);
+			goto lkmauth_ret;
+		}
+
+retry1:
+		mc_ret = mc_wait_notification(&mchandle, -1);
+		if (MC_DRV_ERR_INTERRUPTED_BY_SIGNAL == mc_ret) {
+			usleep_range(1000, 5000);
+			goto retry1;
+		}
+
+		if (mc_ret != MC_DRV_OK) {
+			pr_err("TIMA: lkmauth--wait_notify failed.\n");
+			ret = RET_LKMAUTH_FAIL;
+			mc_unmap(&mchandle, buf, &map_info);
+			vfree(buf);
+			goto lkmauth_ret;
+		}
+		pr_warn("TIMA: lkmauth--wait_notify completed.\n");
+
+		/* Process potential error conditions for the tl response.
+		 */
+		mc_ret = mc_unmap(&mchandle, buf, &map_info);
+		if (mc_ret != MC_DRV_OK) {
+			pr_err
+			    ("TIMA: lkmauth--cannot unmap lkm_sec_info buf\n");
+			ret = RET_LKMAUTH_FAIL;
+			vfree(buf);
+			goto lkmauth_ret;
+		}
+
+		vfree(buf);
+
+		/* Parse the tl response for loading lkm_sec_info.
+		 */
+		if (krsp->ret == RET_TL_TIMA_LKMAUTH_OK) {
+			pr_info
+			    ("TIMA: lkmauth--lkm_sec_info sucessfully loaded\n");
+			ret = RET_LKMAUTH_SUCCESS;
+			lkm_sec_info_loaded = 1;
+		} else if (krsp->ret == RET_TL_TIMA_LKMAUTH_HASH_LOADED) {
+			pr_info("TIMA: lkmauth--lkm_sec_info already loaded\n");
+			ret = RET_LKMAUTH_FAIL;
+			lkm_sec_info_loaded = 1;
+		} else {
+			pr_err("TIMA: lkmauth--lkm_sec_info load error (%d)\n",
+			       krsp->ret);
+			ret = RET_LKMAUTH_FAIL;
+			send_notification(krsp, ret);
+			goto lkmauth_ret;
+		}
+	}
+
+	/* map ko buf to tl virtual space */
+	for ( idx_mapping_section = 0; idx_mapping_section < nb_of_1mb_section; idx_mapping_section++ ){
+		if ( idx_mapping_section == nb_of_1mb_section -1 ){
+			mapping_len =  len - idx_mapping_section * MC_MAPPING_MAX_SIZE;
+		}
+		else
+		{
+			mapping_len = MC_MAPPING_MAX_SIZE;
+		}
+		mc_ret = mc_map(&mchandle, (void *)hdr_local, mapping_len, &map_info);
+		
+		if (mc_ret != MC_DRV_OK) {
+			pr_err
+				("TIMA: lkmauth--cannot map ko buf to tl virtual space %d\n", mc_ret);
+			ret = RET_LKMAUTH_FAIL;
+			goto lkmauth_ret;
+		}
+
+		/* Generate the request cmd to verify hash of ko.
+		*/
+		kreq = (struct lkmauth_req_s *)tci;
+		kreq->cmd_id = CMD_TIMA_LKMAUTH_VERIFY_MODULE;
+		/* pr_warn("TIMA: lkmauth -- virtual address of ko buffer in tl is : %x\n", (uint32_t)map_info.secure_virt_addr);
+		*/
+		kreq->module_addr_start = (uint32_t) map_info.secure_virt_addr;
+		kreq->module_len = mapping_len;
+
+		/* prepare the response buffer */
+		krsp = (struct lkmauth_rsp_s *)tci;
+
+		/* Send the command to the tl.
+		*/
+		mc_ret = mc_notify(&mchandle);
+		if (mc_ret != MC_DRV_OK) {
+			pr_err("TIMA: lkmauth--mc_notify failed.\n");
+			ret = RET_LKMAUTH_FAIL;
+			mc_unmap(&mchandle, (void *)hdr_local, &map_info);
+			goto lkmauth_ret;
+		}
+
+retry2:
+		mc_ret = mc_wait_notification(&mchandle, -1);
+		if (MC_DRV_ERR_INTERRUPTED_BY_SIGNAL == mc_ret) {
+			usleep_range(1000, 5000);
+			goto retry2;
+		}
+
+		if (mc_ret != MC_DRV_OK) {
+			pr_err("TIMA: lkmauth--wait_notify failed.\n");
+			ret = RET_LKMAUTH_FAIL;
+			mc_unmap(&mchandle, (void *)hdr_local, &map_info);
+			goto lkmauth_ret;
+		}
+		pr_warn("TIMA: lkmauth--wait_notify completed.\n");
+
+		mc_ret = mc_unmap(&mchandle, (void *)hdr_local, &map_info);
+		if (mc_ret != MC_DRV_OK) {
+			pr_err("TIMA: lkmauth--cannot unmap ko memory\n");
+		}
+
+		/* Parse the tl response.
+		*/
+		if (krsp->ret == 0) {
+			pr_warn("TIMA: lkmauth--section verification succeeded idx : %d\n", idx_mapping_section);
+			hdr_local = hdr_local + MC_MAPPING_MAX_SIZE;
+			continue;
+			} else {
+
+			pr_err("TIMA: lkmauth--verification failed %d\n", krsp->ret);
+			ret = RET_LKMAUTH_FAIL;
+			send_notification(krsp, ret);
+			goto lkmauth_ret;
+		}
+	}
+		pr_warn("TIMA: lkmauth--verification succeeded.\n");
+		ret = RET_LKMAUTH_SUCCESS;	/* ret should already be 0 before the assignment. */
+	goto lkmauth_ret;
+
+lkmauth_close_session:
+	if (mc_close_session(&mchandle) != MC_DRV_OK) {
+		pr_err("TIMA: lkmauth--failed to close mobicore session.\n");
+	}
+
+lkmauth_free_wsm:
+	if (mc_free_wsm(MC_DEVICE_ID_DEFAULT, tci) != MC_DRV_OK) {
+		pr_err("TIMA: lkmauth--failed to free wsm.\n");
+	}
+
+lkmauth_close_device:
+	if (mc_close_device(MC_DEVICE_ID_DEFAULT) != MC_DRV_OK) {
+		pr_err
+		    ("TIMA: lkmauth--failed to shutdown mobicore instance.\n");
+	}
+
+lkmauth_ret:
+	mutex_unlock(&lkmauth_mutex);
+	return ret;
+}
+#else
+static int lkmauth(Elf_Ehdr * hdr, int len)
+{
+	int ret = RET_LKMAUTH_FAIL;	/* value to be returned for lkmauth */
+	lkmauth_req_t *kreq = NULL;
+	lkmauth_rsp_t *krsp = NULL;
+	enum mc_result mc_ret;
+	struct mc_uuid_t uuid = TL_TIMA_LKMAUTH_UUID;
+	struct mc_bulk_map map_info;
+	uint8_t *hdr_local = (uint8_t *)hdr;
+
+	mutex_lock(&lkmauth_mutex);
+	pr_warn
+	    ("TIMA: lkmauth--launch the tl to check kernel module; module len is %d\n",
+	     len);
+
+	/* Load the lkmauth tl and handle potential error conditions.
+	 */
+	if (!lkmauth_tl_loaded) {
+		mc_ret = mc_open_device(MC_DEVICE_ID_DEFAULT);
+		if (mc_ret != MC_DRV_OK) {
+			pr_err
+			    ("TIMA: lkmauth--cannot get mobicore handle from kernel. %d\n",
+			     mc_ret);
+			ret = RET_LKMAUTH_FAIL;
+			goto lkmauth_ret;
+		}
+		/* open session for lkmauth trustlet */
+		mc_ret =
+		    mc_malloc_wsm(MC_DEVICE_ID_DEFAULT, 0, sizeof(tciMessage_t),
+				  &tci, 0);
+		if (mc_ret != MC_DRV_OK) {
+			pr_err
+			    ("TIMA: lkmauth--cannot alloc world shared memory.\n");
+			ret = RET_LKMAUTH_FAIL;
+			goto lkmauth_close_device;
+		}
+		memset(&mchandle, 0, sizeof(struct mc_session_handle));
+		mchandle.device_id = MC_DEVICE_ID_DEFAULT;
+		mc_ret =
+		    mc_open_session(&mchandle, &uuid, tci,
+				    sizeof(tciMessage_t));
+		if (mc_ret != MC_DRV_OK) {
+			pr_err
+			    ("TIMA: lkmauth--cannot open mobicore session from kernel. %d\n",
+			     mc_ret);
+			ret = RET_LKMAUTH_FAIL;
+			goto lkmauth_free_wsm;
+		}
+		/* open session for tima driver */
+		mc_ret =
+		    mc_malloc_wsm(MC_DEVICE_ID_DEFAULT, 0, 4096, &drv_tci, 0);
+		if (mc_ret != MC_DRV_OK) {
+			pr_err
+			    ("TIMA: lkmauth--cannot alloc world shared memory for tima driver.\n");
+			ret = RET_LKMAUTH_FAIL;	/* lkm authentication failed. */
+			goto lkmauth_close_session;	/* leave the function now. */
+		}
+		memset(&drv_mchandle, 0, sizeof(struct mc_session_handle));
+		drv_mchandle.device_id = MC_DEVICE_ID_DEFAULT;
+		lkmauth_tl_loaded = 1;	/* both lkmauth tl and tima secure driver is loaded */
+	}
+
+	/* map ko buf to tl virtual space */
+	mc_ret = mc_map(&mchandle, (void *)hdr_local, len, &map_info);
+		
+	if (mc_ret != MC_DRV_OK) {
+		pr_err
+			("TIMA: lkmauth--cannot map ko buf to tl virtual space %d\n", mc_ret);
+		ret = RET_LKMAUTH_FAIL;
+		goto lkmauth_ret;
+	}
+
+	/* Generate the request cmd to verify hash of ko.
+	*/
+	kreq = (struct lkmauth_req_s *)tci;
+	kreq->cmd_id = CMD_TIMA_LKMAUTH_LKM_BLOCK;
+	/* pr_warn("TIMA: lkmauth -- virtual address of ko buffer in tl is : %x\n", (uint32_t)map_info.secure_virt_addr);
+	*/
+	kreq->module_addr_start = (uint32_t) map_info.secure_virt_addr;
+	kreq->module_len = len;
+
+	/* prepare the response buffer */
+	krsp = (struct lkmauth_rsp_s *)tci;
+
+	/* Send the command to the tl.
+	*/
+	mc_ret = mc_notify(&mchandle);
+	if (mc_ret != MC_DRV_OK) {
+		pr_err("TIMA: lkmauth--mc_notify failed.\n");
+		ret = RET_LKMAUTH_FAIL;
+		mc_unmap(&mchandle, (void *)hdr_local, &map_info);
+		goto lkmauth_ret;
+	}
+
+retry:
+	mc_ret = mc_wait_notification(&mchandle, -1);
+	if (MC_DRV_ERR_INTERRUPTED_BY_SIGNAL == mc_ret) {
+		usleep_range(1000, 5000);
+		goto retry;
+	}
+
+	if (mc_ret != MC_DRV_OK) {
+		pr_err("TIMA: lkmauth--wait_notify failed.\n");
+		ret = RET_LKMAUTH_FAIL;
+		mc_unmap(&mchandle, (void *)hdr_local, &map_info);
+		goto lkmauth_ret;
+	}
+	pr_warn("TIMA: lkmauth--wait_notify completed.\n");
+
+	mc_ret = mc_unmap(&mchandle, (void *)hdr_local, &map_info);
+	if (mc_ret != MC_DRV_OK) {
+		pr_err("TIMA: lkmauth--cannot unmap ko memory\n");
+	}
+
+	/* Parse the tl response.
+	*/
+	if (krsp->ret == RET_TL_TIMA_LKMAUTH_LKM_BLOCK_FORCE) {
+		pr_warn("TIMA: lkmauth--Succeeded to block lkm through TZ.\n");
+		ret = krsp->ret;
+		send_notification(krsp, ret);
+	} else {
+		pr_err("TIMA: lkmauth--Failed to block lkm through TZ. ret = %x\n", krsp->ret);
+		ret = RET_LKMAUTH_FAIL;
+		send_notification(krsp, ret);
+	}
+	goto lkmauth_ret;
+
+lkmauth_close_session:
+	if (mc_close_session(&mchandle) != MC_DRV_OK) {
+		pr_err("TIMA: lkmauth--failed to close mobicore session.\n");
+	}
+
+lkmauth_free_wsm:
+	if (mc_free_wsm(MC_DEVICE_ID_DEFAULT, tci) != MC_DRV_OK) {
+		pr_err("TIMA: lkmauth--failed to free wsm.\n");
+	}
+
+lkmauth_close_device:
+	if (mc_close_device(MC_DEVICE_ID_DEFAULT) != MC_DRV_OK) {
+		pr_err
+		    ("TIMA: lkmauth--failed to shutdown mobicore instance.\n");
+	}
+
+lkmauth_ret:
+	mutex_unlock(&lkmauth_mutex);
+	return ret;
+}
+#endif /* CONFIG_TIMA_LKM_BLOCK */
+#endif /* CONFIG_TIMA_LKMAUTH */
+
 static void dynamic_debug_setup(struct _ddebug *debug, unsigned int num)
 {
 	if (!debug)
@@ -2774,6 +3352,14 @@ static int elf_header_check(struct load_info *info)
 		info->len - info->hdr->e_shoff))
 		return -ENOEXEC;
 
+#ifdef CONFIG_TIMA_LKMAUTH
+	if (lkmauth(info->hdr, info->len) != RET_LKMAUTH_SUCCESS) {
+		pr_err
+		    ("TIMA: lkmauth--unable to load kernel module; module len is %lu.\n",
+		     info->len);
+		return -ENOEXEC;
+	}
+#endif
 	return 0;
 }
 
@@ -3344,6 +3930,166 @@ static void do_mod_ctors(struct module *mod)
 #endif
 }
 
+#ifdef CONFIG_TIMA_LKMAUTH_CODE_PROT
+#ifndef TIMA_KERNEL_L1_MANAGE
+static inline pmd_t *tima_pmd_off_k(unsigned long virt)
+{
+		return pmd_offset(pud_offset(pgd_offset_k(virt), virt), virt);
+}
+
+void tima_set_pte_val(unsigned long virt,int numpages,int flags)
+{
+        unsigned long start = virt;
+        unsigned long end   = virt + (numpages << PAGE_SHIFT);
+        unsigned long pmd_end;
+        pmd_t *pmd;
+        pte_t *pte;
+
+        while (virt < end) 
+        {
+                pmd =tima_pmd_off_k(virt);
+                pmd_end = min(ALIGN(virt + 1, PMD_SIZE), end);
+
+                if ((pmd_val(*pmd) & PMD_TYPE_MASK) != PMD_TYPE_TABLE) {
+                        //printk("Not a pagetable\n");
+                        virt = pmd_end;
+                        continue;
+                }
+
+                while (virt < pmd_end) 
+                {
+                        pte = pte_offset_kernel(pmd, virt);
+                        if(flags == TIMA_SET_PTE_RO)
+                        {
+                                /*Make pages readonly*/
+                                ptep_set_wrprotect(current->mm, virt,pte);
+                        }
+                        if(flags == TIMA_SET_PTE_NX)
+                        { 
+                                /*Make pages Non Executable*/
+                                ptep_set_nxprotect(current->mm, virt,pte);
+                        }
+                        virt += PAGE_SIZE;
+                }
+        }
+
+        flush_tlb_kernel_range(start, end);        
+}
+#endif
+
+/**
+ *    tima_mod_page_change_access  - Wrapper function to change access control permissions of pages 
+ *
+ *     It sends code and data pages to secure side to  make code pages readonly and data pages non executable
+ * 
+ */
+
+void tima_mod_page_change_access(struct module *mod)
+{
+        unsigned int    *vatext,*vadata;/* base virtual address of text and data regions*/
+        unsigned int    text_count,data_count;/* Number of text and data pages present in core section */
+     
+     /*Lets first pickup core section */
+        vatext      = mod->module_core;
+        vadata      = (int *)((char *)(mod->module_core) + mod->core_ro_size);
+        text_count  = ((char *)vadata - (char *)vatext);
+        data_count  = debug_align(mod->core_size) - text_count;
+        text_count  = text_count / PAGE_SIZE;
+        data_count  = data_count / PAGE_SIZE;
+
+        /*Should be atleast a page */
+        if(!text_count)
+                text_count = 1;
+        if(!data_count)
+                data_count = 1;
+ /* Change permissive bits for core section and making Code read only, Data Non Executable*/
+        tima_set_pte_val( (unsigned long)vatext,text_count,TIMA_SET_PTE_RO);
+        tima_set_pte_val( (unsigned long)vadata,data_count,TIMA_SET_PTE_NX); 
+
+     /*Lets pickup init section */
+        vatext      = mod->module_init;
+        vadata      = (int *)((char *)(mod->module_init) + mod->init_ro_size);
+        text_count  = ((char *)vadata - (char *)vatext);
+        data_count  = debug_align(mod->init_size) - text_count;
+        text_count  = text_count / PAGE_SIZE;
+        data_count  = data_count / PAGE_SIZE;
+
+/* Change permissive bits for init section and making Code read only,Data Non Executable*/
+        tima_set_pte_val( (unsigned long)vatext,text_count,TIMA_SET_PTE_RO);
+        tima_set_pte_val( (unsigned long)vadata,data_count,TIMA_SET_PTE_NX);
+}
+#endif /*CONFIG_TIMA_LKMAUTH_CODE_PROT*/
+
+#ifdef TIMA_LKM_SET_PAGE_ATTRIB
+void tima_mod_send_smc_instruction(unsigned int *vatext, unsigned int *vadata,
+				   unsigned int text_count,
+				   unsigned int data_count)
+{
+	unsigned long cmd_id = TIMA_PAC_CMD_ID;
+	/*Call SMC instruction */
+#if __GNUC__ >= 4 && __GNUC_MINOR__ >= 6
+	__asm__ __volatile__(".arch_extension sec\n");
+#endif
+	__asm__ __volatile__("stmfd  sp!,{r0-r4,r11}\n"
+			     "mov    r11, r0\n"
+			     "mov    r0, %0\n"
+			     "mov    r1, %1\n"
+			     "mov    r2, %2\n"
+			     "mov    r3, %3\n"
+			     "mov    r4, %4\n"
+			     "smc    #11\n"
+			     "mov    r6, #0\n"
+			     "pop    {r0-r4,r11}\n"
+			     "mcr    p15, 0, r6, c8, c3, 0\n"
+			     "dsb\n"
+			     "isb\n"::"r"(cmd_id), "r"(vatext), "r"(text_count),
+			     "r"(vadata), "r"(data_count):"r0", "r1", "r2",
+			     "r3", "r4", "r11", "cc");
+
+}
+
+/**
+ *    tima_mod_page_change_access  - Wrapper function to change access control permissions of pages 
+ *
+ *     It sends code and data pages to secure side to  make code pages readonly and data pages non executable
+ * 
+ */
+
+void tima_mod_page_change_access(struct module *mod)
+{
+	unsigned int *vatext, *vadata;	/* base virtual address of text and data regions */
+	unsigned int text_count, data_count;	/* Number of text and data pages present in core section */
+
+	/*Lets first pickup core section */
+	vatext = mod->module_core;
+	vadata = (int *)((char *)(mod->module_core) + mod->core_ro_size);
+	text_count = ((char *)vadata - (char *)vatext);
+	data_count = debug_align(mod->core_size) - text_count;
+	text_count = text_count / PAGE_SIZE;
+	data_count = data_count / PAGE_SIZE;
+
+	/*Should be atleast a page */
+	if (!text_count)
+		text_count = 1;
+	if (!data_count)
+		data_count = 1;
+
+	/* Change permissive bits for core section */
+	tima_mod_send_smc_instruction(vatext, vadata, text_count, data_count);
+
+	/*Lets pickup init section */
+	vatext = mod->module_init;
+	vadata = (int *)((char *)(mod->module_init) + mod->init_ro_size);
+	text_count = ((char *)vadata - (char *)vatext);
+	data_count = debug_align(mod->init_size) - text_count;
+	text_count = text_count / PAGE_SIZE;
+	data_count = data_count / PAGE_SIZE;
+
+	/* Change permissive bits for init section */
+	tima_mod_send_smc_instruction(vatext, vadata, text_count, data_count);
+}
+#endif
+
 /* For freeing module_init on success, in case kallsyms traversing */
 struct mod_initfree {
 	struct rcu_head rcu;
@@ -3400,6 +4146,10 @@ static noinline int do_init_module(struct module *mod)
 	mod->state = MODULE_STATE_LIVE;
 	blocking_notifier_call_chain(&module_notify_list,
 				     MODULE_STATE_LIVE, mod);
+
+#ifdef TIMA_LKM_SET_PAGE_ATTRIB
+	tima_mod_page_change_access(mod);
+#endif
 
 	/*
 	 * We need to finish all async code before the module init sequence
@@ -3528,6 +4278,9 @@ static int complete_formation(struct module *mod, struct load_info *info)
 	/* This relies on module_mutex for list integrity. */
 	module_bug_finalize(info->hdr, info->sechdrs, mod);
 
+#ifdef CONFIG_TIMA_LKMAUTH_CODE_PROT
+	tima_mod_page_change_access(mod);
+#endif /*CONFIG_TIMA_LKMAUTH_CODE_PROT*/
 	module_enable_ro(mod, false);
 	module_enable_nx(mod);
 

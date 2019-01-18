@@ -220,6 +220,8 @@ source "drivers/ccic/Kconfig"
 
 source "drivers/sensorhub/brcm/Kconfig"
 
+source "drivers/optics/Kconfig"
+
 source "drivers/gps/Kconfig"
 
 source "drivers/bts/Kconfig"
@@ -232,4 +234,7 @@ source "drivers/fingerprint/Kconfig"
 
 source "drivers/gator_5.27/Kconfig"
 
+source "drivers/five/Kconfig"
+
+source "drivers/mpsd/Kconfig"
 endmenu

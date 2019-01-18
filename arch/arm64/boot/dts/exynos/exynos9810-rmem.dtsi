@@ -38,16 +38,8 @@
 			reg = <0x0 0x80000000 0x1000>;
 		};
 
-		/* rkp_region */
-		rkp_region: rkp_region@0xAF800000 {
-			compatible = "removed-dma-pool";
-			reg = <0x0 0xAF800000 0x1800000>;
-		};
-
-		/* reserve 2MB for TIMA logging */
 		tima_mem: tima_region@0xB8000000 {
 			compatible = "removed-dma-pool";
-			no-map;
 			reg = <0x0 0xB8000000 0x200000>;
 		};
 

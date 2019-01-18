@@ -36,7 +36,7 @@
 #ifdef CONFIG_SEC_NFC_MARGINTIME
 #define SEC_NFC_VEN_WAIT_TIME	(150)
 #else
-#define SEC_NFC_VEN_WAIT_TIME	(100)
+#define SEC_NFC_VEN_WAIT_TIME	(20)
 #endif
 
 /* gpio pin configuration */

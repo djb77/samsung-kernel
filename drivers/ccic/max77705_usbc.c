@@ -61,6 +61,8 @@
 #include <linux/ccic/max77705_alternate.h>
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 #include <linux/usb/class-dual-role.h>
+#elif defined(CONFIG_TYPEC)
+#include <linux/usb/typec.h>
 #endif
 
 static enum ccic_sysfs_property max77705_sysfs_properties[] = {
@@ -83,6 +85,7 @@ static enum ccic_sysfs_property max77705_sysfs_properties[] = {
 	CCIC_SYSFS_PROP_USBPD_TYPE,
 	CCIC_SYSFS_PROP_CC_PIN_STATUS,
 	CCIC_SYSFS_PROP_RAM_TEST,
+	CCIC_SYSFS_PROP_SBU_ADC,
 };
 #endif /* CONFIG_CCIC_NOTIFIER */
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
@@ -308,17 +311,15 @@ static void max77705_set_forcetrimi(struct max77705_usbc_platform_data *usbc_dat
 }
 #endif
 
-#if defined(CONFIG_DUAL_ROLE_USB_INTF)
-static void max77705_toggling_control(struct max77705_usbc_platform_data *usbpd_data, u8 mode)
+static void max77705_send_role_swap_message(struct max77705_usbc_platform_data *usbpd_data, u8 mode)
 {
 	usbc_cmd_data write_data;
 
-	/* 0x1 : SRC, 0x2 : SNK, 0x3: DRP */
-	msg_maxim("mode=0x%x", mode);
 	max77705_usbc_clear_queue(usbpd_data);
 	init_usbc_cmd_data(&write_data);
 	write_data.opcode = 0x37;
-	write_data.write_data[0] = 0x4;
+	/* 0x1 : DR_SWAP, 0x2 : PR_SWAP, 0x4: Manual Role Swap */
+	write_data.write_data[0] = mode;
 	write_data.write_length = 0x1;
 	write_data.read_length = 0x1;
 	max77705_usbc_opcode_write(usbpd_data, &write_data);
@@ -326,134 +327,176 @@ static void max77705_toggling_control(struct max77705_usbc_platform_data *usbpd_
 
 void max77705_rprd_mode_change(struct max77705_usbc_platform_data *usbpd_data, u8 mode)
 {
-	msg_maxim("+++ mode=0x%x", mode);
+	msg_maxim("mode = 0x%x", mode);
 
 	switch (mode) {
-	case TYPE_C_ATTACH_DFP: /* SRC */
-	case TYPE_C_ATTACH_UFP: /* SNK */
-	case TYPE_C_ATTACH_DRP: /* DRP */
-		max77705_toggling_control(usbpd_data, TYPE_C_ATTACH_DRP);
+	case TYPE_C_ATTACH_DFP:
+	case TYPE_C_ATTACH_UFP:
+		max77705_send_role_swap_message(usbpd_data, MANUAL_ROLE_SWAP);
 		msleep(1000);
 		break;
 	default:
 		break;
 	};
-	msg_maxim("--- mode=0x%x", mode);
 }
 
-void max77705_role_swap_check(struct work_struct *wk)
+void max77705_power_role_change(struct max77705_usbc_platform_data *usbpd_data, int power_role)
 {
-	struct delayed_work *delay_work =
-		container_of(wk, struct delayed_work, work);
-	struct max77705_usbc_platform_data *usbpd_data =
-		container_of(delay_work, struct max77705_usbc_platform_data, role_swap_work);
-	int mode;
+	msg_maxim("power_role = 0x%x", power_role);
 
-	msg_maxim("ccic_set_dual_role check again usbpd_data->pd_state=%d",
-			usbpd_data->pd_state);
-
-	usbpd_data->try_state_change = 0;
-
-	if (usbpd_data->pd_state == max77705_State_PE_Initial_detach) {
-		msg_maxim("ccic_set_dual_role reverse failed, set mode to DRP");
-		/* disable_irq(usbpd_data->irq); */
-		/* exit from Disabled state and set mode to DRP */
-		mode =  TYPE_C_ATTACH_DRP;
-		max77705_rprd_mode_change(usbpd_data, mode);
-		/* enable_irq(usbpd_data->irq); */
-	}
+	switch (power_role) {
+	case TYPE_C_ATTACH_SRC:
+	case TYPE_C_ATTACH_SNK:
+		max77705_send_role_swap_message(usbpd_data, POWER_ROLE_SWAP);
+		break;
+	};
 }
 
+void max77705_data_role_change(struct max77705_usbc_platform_data *usbpd_data, int data_role)
+{
+	msg_maxim("data_role = 0x%x", data_role);
+
+	switch (data_role) {
+	case TYPE_C_ATTACH_DFP:
+	case TYPE_C_ATTACH_UFP:
+		max77705_send_role_swap_message(usbpd_data, DATA_ROLE_SWAP);
+		break;
+	};
+}
+
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 static int max77705_ccic_set_dual_role(struct dual_role_phy_instance *dual_role,
 				   enum dual_role_property prop,
 				   const unsigned int *val)
 {
 	struct max77705_usbc_platform_data *usbpd_data = dual_role_get_drvdata(dual_role);
-	struct i2c_client *i2c;
-
 	USB_STATUS attached_state;
-	int mode;
 	int timeout = 0;
-	int ret = 0;
 
-	if (!usbpd_data) {
-		msg_maxim("usbpd_data is null");
+	if (!usbpd_data)
 		return -EINVAL;
-	}
 
-	i2c = usbpd_data->i2c;
-
-	/* Get Current Role */
 	attached_state = usbpd_data->data_role;
-	msg_maxim("request prop = %d , attached_state = %d",
-			prop, attached_state);
 
-	if (attached_state != USB_STATUS_NOTIFY_ATTACH_DFP
-	    && attached_state != USB_STATUS_NOTIFY_ATTACH_UFP) {
-		msg_maxim("current mode : %d - just return", attached_state);
-		return 0;
-	}
-
-	if (attached_state == USB_STATUS_NOTIFY_ATTACH_DFP
-	    && *val == DUAL_ROLE_PROP_MODE_DFP) {
-		msg_maxim("current mode : %d - request mode : %d just return",
-			attached_state, *val);
-		return 0;
-	}
-
-	if (attached_state == USB_STATUS_NOTIFY_ATTACH_UFP
-	    && *val == DUAL_ROLE_PROP_MODE_UFP) {
-		msg_maxim("current mode : %d - request mode : %d just return",
-			attached_state, *val);
-		return 0;
-	}
+	if (prop == DUAL_ROLE_PROP_MODE) {
+		if (attached_state != USB_STATUS_NOTIFY_ATTACH_DFP
+		    && attached_state != USB_STATUS_NOTIFY_ATTACH_UFP)
+			return -EPERM;
+		if (attached_state == USB_STATUS_NOTIFY_ATTACH_DFP
+		    && *val == DUAL_ROLE_PROP_MODE_DFP)
+			return -EPERM;
+		if (attached_state == USB_STATUS_NOTIFY_ATTACH_UFP
+		    && *val == DUAL_ROLE_PROP_MODE_UFP)
+			return -EPERM;
+	} else if (prop == DUAL_ROLE_PROP_DR)
+		return -EPERM;
 
 	reinit_completion(&usbpd_data->reverse_completion);
 
 	if (attached_state == USB_STATUS_NOTIFY_ATTACH_DFP) {
-		/* Current mode DFP and Source  */
-		msg_maxim("try reversing, from Source to Sink");
-		/* turns off VBUS first */
-		/* vbus_turn_on_ctrl(0); */
+		msg_maxim("try reversing, from DFP(Source) to UFP(Sink)");
 #if defined(CONFIG_CCIC_NOTIFIER)
-		/* muic */
 		max77705_ccic_event_work(usbpd_data,
 			CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_ATTACH,
 			0/*attach*/, 0/*rprd*/, 0);
 #endif
-		/* exit from Disabled state and set mode to UFP */
-		mode =  TYPE_C_ATTACH_UFP;
 		usbpd_data->try_state_change = TYPE_C_ATTACH_UFP;
-		max77705_rprd_mode_change(usbpd_data, mode);
+		max77705_rprd_mode_change(usbpd_data, TYPE_C_ATTACH_UFP);
 	} else {
-		/* Current mode UFP and Sink  */
-		msg_maxim("try reversing, from Sink to Source");
-		/* exit from Disabled state and set mode to UFP */
-		mode =  TYPE_C_ATTACH_DFP;
+		msg_maxim("try reversing, from UFP(Sink) to DFP(Source)");
 		usbpd_data->try_state_change = TYPE_C_ATTACH_DFP;
-		max77705_rprd_mode_change(usbpd_data, mode);
+		max77705_rprd_mode_change(usbpd_data, TYPE_C_ATTACH_DFP);
 	}
 
-	timeout =
-	    wait_for_completion_timeout(&usbpd_data->reverse_completion,
-					msecs_to_jiffies
-					(DUAL_ROLE_SET_MODE_WAIT_MS));
+	timeout = wait_for_completion_timeout(&usbpd_data->reverse_completion,
+				msecs_to_jiffies(DUAL_ROLE_SET_MODE_WAIT_MS));
 
 	if (!timeout && usbpd_data->try_state_change) {
-		msg_maxim("reverse failed, set mode to DRP");
-		/* disable_irq(usbpd_data->irq); */
-		/* exit from Disabled state and set mode to DRP */
-		mode =  TYPE_C_ATTACH_DRP;
-		max77705_rprd_mode_change(usbpd_data, mode);
-		/* enable_irq(usbpd_data->irq); */
-		ret = -EIO;
-	} else {
-		msg_maxim("reverse success, one more check");
-		schedule_delayed_work(&usbpd_data->role_swap_work, msecs_to_jiffies(DUAL_ROLE_SET_MODE_WAIT_MS));
+		msg_maxim("reverse failed to change the role");
+		return -EIO;
+	} else
+		msg_maxim("reverse success");
+
+	return 0;
+}
+
+static int max77705_ccic_set_power_role(struct dual_role_phy_instance *dual_role,
+				   enum dual_role_property prop,
+				   const unsigned int *val)
+{
+	struct max77705_usbc_platform_data *usbpd_data = dual_role_get_drvdata(dual_role);
+	int power_role = DUAL_ROLE_PROP_PR_NONE;
+	USB_STATUS attached_state = USB_STATUS_NOTIFY_DETACH;
+
+	if (!usbpd_data)
+		return -EINVAL;
+
+	power_role = usbpd_data->power_role;
+	attached_state = usbpd_data->data_role;
+	msg_maxim("power_role=%d, *val=%d, attached_state=%d", power_role, *val, attached_state);
+
+	if (power_role != DUAL_ROLE_PROP_PR_SRC
+	    && power_role != DUAL_ROLE_PROP_PR_SNK)
+		return -EPERM;
+	if (power_role == DUAL_ROLE_PROP_PR_SRC
+	    && *val == DUAL_ROLE_PROP_PR_SRC)
+		return -EPERM;
+	if (power_role == DUAL_ROLE_PROP_PR_SNK
+	    && *val == DUAL_ROLE_PROP_PR_SNK)
+		return -EPERM;
+
+	if (power_role == DUAL_ROLE_PROP_PR_SRC && attached_state == USB_STATUS_NOTIFY_ATTACH_DFP)
+		return max77705_ccic_set_dual_role(dual_role, prop, val);
+	else if (power_role == DUAL_ROLE_PROP_PR_SNK && attached_state == USB_STATUS_NOTIFY_ATTACH_UFP)
+		return max77705_ccic_set_dual_role(dual_role, prop, val);
+
+	if (power_role == DUAL_ROLE_PROP_PR_SRC) {
+		msg_maxim("try reversing, from Source to Sink");
+		usbpd_data->try_state_change = TYPE_C_ATTACH_SNK;
+		max77705_power_role_change(usbpd_data, TYPE_C_ATTACH_SNK);
+	} else if (power_role == DUAL_ROLE_PROP_PR_SNK) {
+		msg_maxim("try reversing, from Sink to Source");
+		usbpd_data->try_state_change = TYPE_C_ATTACH_SRC;
+		max77705_power_role_change(usbpd_data, TYPE_C_ATTACH_SRC);
 	}
 
-	msg_maxim("-> data role : %d", *val);
-	return ret;
+	return 0;
+}
+
+static int max77705_ccic_set_data_role(struct dual_role_phy_instance *dual_role,
+				   enum dual_role_property prop,
+				   const unsigned int *val)
+{
+	struct max77705_usbc_platform_data *usbpd_data = dual_role_get_drvdata(dual_role);
+	USB_STATUS attached_state;
+
+	if (!usbpd_data)
+		return -EINVAL;
+
+	attached_state = usbpd_data->data_role;
+	msg_maxim("attached_state=%d, *val=%d", attached_state, *val);
+
+	if (attached_state != USB_STATUS_NOTIFY_ATTACH_DFP
+	    && attached_state != USB_STATUS_NOTIFY_ATTACH_UFP)
+		return -EPERM;
+	if (attached_state == USB_STATUS_NOTIFY_ATTACH_DFP
+	    && *val == DUAL_ROLE_PROP_DR_HOST)
+		return -EPERM;
+	if (attached_state == USB_STATUS_NOTIFY_ATTACH_UFP
+	    && *val == DUAL_ROLE_PROP_DR_DEVICE)
+		return -EPERM;
+
+	if (attached_state == USB_STATUS_NOTIFY_ATTACH_DFP) {
+		msg_maxim("try reversing, from DFP to UFP");
+		usbpd_data->try_state_change = TYPE_C_ATTACH_UFP;
+		max77705_data_role_change(usbpd_data, TYPE_C_ATTACH_UFP);
+	} else if (attached_state == USB_STATUS_NOTIFY_ATTACH_UFP) {
+		msg_maxim("try reversing, from UFP to DFP");
+		usbpd_data->try_state_change = TYPE_C_ATTACH_DFP;
+		max77705_data_role_change(usbpd_data, TYPE_C_ATTACH_DFP);
+	}
+
+	return 0;
 }
 
 /* Decides whether userspace can change a specific property */
@@ -467,7 +510,7 @@ int max77705_dual_role_is_writeable(struct dual_role_phy_instance *drp,
 }
 
 /* Callback for "cat /sys/class/dual_role_usb/otg_default/<property>" */
-int max77705_dual_role_get_local_prop(struct dual_role_phy_instance *dual_role,
+int max77705_dual_role_get_prop(struct dual_role_phy_instance *dual_role,
 				    enum dual_role_property prop,
 				    unsigned int *val)
 {
@@ -476,10 +519,9 @@ int max77705_dual_role_get_local_prop(struct dual_role_phy_instance *dual_role,
 	USB_STATUS attached_state;
 	int power_role;
 
-	if (!usbpd_data) {
-		msg_maxim("usbpd_data is null : request prop = %d", prop);
+	if (!usbpd_data)
 		return -EINVAL;
-	}
+
 	attached_state = usbpd_data->data_role;
 	power_role = usbpd_data->power_role;
 
@@ -536,14 +578,154 @@ int max77705_dual_role_get_local_prop(struct dual_role_phy_instance *dual_role,
  * On failure, we fall back to Try.SNK state machine.
  */
 int max77705_dual_role_set_prop(struct dual_role_phy_instance *dual_role,
-			      enum dual_role_property prop,
-			      const unsigned int *val)
+				  enum dual_role_property prop,
+				  const unsigned int *val)
 {
 	msg_maxim("request prop = %d , *val = %d", prop, *val);
+
 	if (prop == DUAL_ROLE_PROP_MODE)
 		return max77705_ccic_set_dual_role(dual_role, prop, val);
+	else if (prop == DUAL_ROLE_PROP_PR)
+		return max77705_ccic_set_power_role(dual_role, prop, val);
+	else if (prop == DUAL_ROLE_PROP_DR)
+		return max77705_ccic_set_data_role(dual_role, prop, val);
 	else
 		return -EINVAL;
+}
+#elif defined(CONFIG_TYPEC)
+static int max77705_dr_set(const struct typec_capability *cap, enum typec_data_role role)
+{
+	struct max77705_usbc_platform_data *usbpd_data = container_of(cap, struct max77705_usbc_platform_data, typec_cap);
+
+	if (!usbpd_data)
+		return -EINVAL;
+
+	msg_maxim("typec_power_role=%d, typec_data_role=%d, role=%d",
+		usbpd_data->typec_power_role, usbpd_data->typec_data_role, role);
+	
+	if (usbpd_data->typec_data_role != TYPEC_DEVICE
+		&& usbpd_data->typec_data_role != TYPEC_HOST)
+		return -EPERM;
+	else if (usbpd_data->typec_data_role == role)
+		return -EPERM;
+
+	reinit_completion(&usbpd_data->typec_reverse_completion);
+	if (role == TYPEC_DEVICE) {
+		msg_maxim("try reversing, from DFP to UFP");
+		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_DR;
+		max77705_data_role_change(usbpd_data, TYPE_C_ATTACH_UFP);
+	} else if (role == TYPEC_HOST) {
+		msg_maxim("try reversing, from UFP to DFP");
+		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_DR;
+		max77705_data_role_change(usbpd_data, TYPE_C_ATTACH_DFP);
+	} else {
+		msg_maxim("invalid typec_role");
+		return -EIO;
+	}
+	if (!wait_for_completion_timeout(&usbpd_data->typec_reverse_completion, 
+				msecs_to_jiffies(TRY_ROLE_SWAP_WAIT_MS))) {
+		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_NONE;
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
+static int max77705_pr_set(const struct typec_capability *cap, enum typec_role role)
+{
+	struct max77705_usbc_platform_data *usbpd_data = container_of(cap, struct max77705_usbc_platform_data, typec_cap);
+
+	if (!usbpd_data)
+		return -EINVAL;
+
+	msg_maxim("typec_power_role=%d, typec_data_role=%d, role=%d",
+		usbpd_data->typec_power_role, usbpd_data->typec_data_role, role);
+
+	if (usbpd_data->typec_power_role != TYPEC_SINK
+	    && usbpd_data->typec_power_role != TYPEC_SOURCE)
+		return -EPERM;
+	else if (usbpd_data->typec_power_role == role)
+		return -EPERM;
+
+	reinit_completion(&usbpd_data->typec_reverse_completion);
+	if (role == TYPEC_SINK) {
+		msg_maxim("try reversing, from Source to Sink");
+		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_PR;
+		max77705_power_role_change(usbpd_data, TYPE_C_ATTACH_SNK);
+	} else if (role == TYPEC_SOURCE) {
+		msg_maxim("try reversing, from Sink to Source");
+		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_PR;
+		max77705_power_role_change(usbpd_data, TYPE_C_ATTACH_SRC);
+	} else {
+		msg_maxim("invalid typec_role");
+		return -EIO;
+	}
+	if (!wait_for_completion_timeout(&usbpd_data->typec_reverse_completion, 
+				msecs_to_jiffies(TRY_ROLE_SWAP_WAIT_MS))) {
+		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_NONE;
+		if (usbpd_data->typec_power_role != role)
+			return -ETIMEDOUT;
+	} 
+
+	return 0;
+}
+
+static int max77705_port_type_set(const struct typec_capability *cap, enum typec_port_type port_type)
+{
+	struct max77705_usbc_platform_data *usbpd_data = container_of(cap, struct max77705_usbc_platform_data, typec_cap);
+
+	if (!usbpd_data)
+		return -EINVAL;
+
+	msg_maxim("typec_power_role=%d, typec_data_role=%d, port_type=%d",
+		usbpd_data->typec_power_role, usbpd_data->typec_data_role, port_type);
+
+	reinit_completion(&usbpd_data->typec_reverse_completion);
+	if (port_type == TYPEC_PORT_DFP) {
+		msg_maxim("try reversing, from UFP(Sink) to DFP(Source)");
+		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_TYPE;
+		max77705_rprd_mode_change(usbpd_data, TYPE_C_ATTACH_DFP);
+	} else if (port_type == TYPEC_PORT_UFP) {
+		msg_maxim("try reversing, from DFP(Source) to UFP(Sink)");
+#if defined(CONFIG_CCIC_NOTIFIER)
+		max77705_ccic_event_work(usbpd_data,
+			CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_ATTACH,
+			0/*attach*/, 0/*rprd*/, 0);
+#endif
+		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_TYPE;
+		max77705_rprd_mode_change(usbpd_data, TYPE_C_ATTACH_UFP);
+	} else {
+		msg_maxim("invalid typec_role");
+		return -EIO;
+	}
+
+	if (!wait_for_completion_timeout(&usbpd_data->typec_reverse_completion, 
+				msecs_to_jiffies(TRY_ROLE_SWAP_WAIT_MS))) {
+		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_NONE;
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
+int max77705_get_pd_support(struct max77705_usbc_platform_data *usbc_data)
+{
+	bool support_pd_role_swap = false;
+	struct device_node *np = NULL;
+
+	np = of_find_compatible_node(NULL, NULL, "maxim,max77705");
+
+	if (np)
+		support_pd_role_swap = of_property_read_bool(np, "support_pd_role_swap");
+	else
+		msg_maxim("np is null");
+
+	msg_maxim("support_pd_role_swap is %d, usbc_data->pd_support : %d", support_pd_role_swap, usbc_data->pd_support);
+
+	if (support_pd_role_swap && usbc_data->pd_support)
+		return TYPEC_PWR_MODE_PD;
+
+	return usbc_data->pwr_opmode;
 }
 #endif
 
@@ -719,7 +901,7 @@ void max77705_response_sbu_read(struct max77705_usbc_platform_data *usbpd_data, 
 		usbpd_data->sbu[1] = 0;
 	else
 		usbpd_data->sbu[1] = 1;
-	usbpd_data->is_sbu_done = 1;
+	complete(&usbpd_data->ccic_sysfs_completion);
 }
 
 void max77705_request_sbu_read(struct max77705_usbc_platform_data *usbpd_data)
@@ -732,24 +914,19 @@ void max77705_request_sbu_read(struct max77705_usbc_platform_data *usbpd_data)
 	write_data.write_length = 0x1;
 	write_data.read_length = 0x2;
 	max77705_usbc_opcode_write(usbpd_data, &write_data);
-	usbpd_data->is_sbu_done = 0;
 }
 
 void max77705_response_selftest_read(struct max77705_usbc_platform_data *usbpd_data, unsigned char *data)
 {
-	u8 cc = 0, sbu1 = 0, sbu2 = 0;
+	u8 cc = 0;
 
 	cc = data[1];
-	sbu1 = data[2];
-	sbu2 = data[3];
+	usbpd_data->sbu[0] = data[2];
+	usbpd_data->sbu[1] = data[3];
 
-	msg_maxim("SELFTEST CC = %x SBU1 = 0x%x, SBU2 = 0x%x", cc, sbu1, sbu2);
-
-	if (sbu1 >= 7 && sbu2 >= 7)
-		usbpd_data->selftest = 1;
-	else
-		usbpd_data->selftest = 0;
-	usbpd_data->is_selftest_done = 1;
+	msg_maxim("SELFTEST CC = %x SBU1 = 0x%x, SBU2 = 0x%x", cc,
+		  usbpd_data->sbu[0], usbpd_data->sbu[1]);
+	complete(&usbpd_data->ccic_sysfs_completion);
 }
 
 void max77705_request_selftest_read(struct max77705_usbc_platform_data *usbpd_data)
@@ -759,17 +936,9 @@ void max77705_request_selftest_read(struct max77705_usbc_platform_data *usbpd_da
 	init_usbc_cmd_data(&write_data);
 	write_data.opcode = OPCODE_READ_SELFTEST;
 	write_data.write_length = 0x1;
-	write_data.write_data[0] = 0x0;
-	max77705_usbc_opcode_write(usbpd_data, &write_data);
-
-	msleep(500);
-	init_usbc_cmd_data(&write_data);
-	write_data.opcode = OPCODE_READ_SELFTEST;
-	write_data.write_length = 0x1;
 	write_data.write_data[0] = 0x1;
 	write_data.read_length = 0x3;
 	max77705_usbc_opcode_write(usbpd_data, &write_data);
-	usbpd_data->is_selftest_done = 0;
 }
 
 void max77705_firmware_update_ums(struct max77705_usbc_platform_data *usbpd_data)
@@ -850,17 +1019,17 @@ static int max77705_sysfs_get_local_prop(struct _ccic_data_t *pccic_data,
 				usbpd_data->cur_rid);
 		break;
 	case CCIC_SYSFS_PROP_BOOTING_DRY:
+		usbpd_data->sbu[0] = 0;usbpd_data->sbu[1] = 0; 
+		reinit_completion(&usbpd_data->ccic_sysfs_completion);
 		max77705_request_selftest_read(usbpd_data);
-		for (i = 0; i < 50; i++) {
-			/* register update timing delay */
-			msleep(100);
-			/* check selftest register values after interrupt */
-			msg_maxim("i : %d, is_selftest_done : %d", i, usbpd_data->is_selftest_done);
-			if (usbpd_data->is_selftest_done)
-				break;
-		}
-		retval = sprintf(buf, "%d\n", usbpd_data->selftest);
-		msg_maxim("usb: CCIC_SYSFS_PROP_BOOTING_DRY : %d", usbpd_data->selftest);
+		i = wait_for_completion_timeout(&usbpd_data->ccic_sysfs_completion, msecs_to_jiffies(1000 * 5));
+		if (i == 0)
+			msg_maxim("CCIC SYSFS COMPLETION TIMEOUT");
+		msg_maxim("usb: CCIC_SYSFS_PROP_BOOTING_DRY timeout : %d", i);
+		if (usbpd_data->sbu[0] >= 7 && usbpd_data->sbu[1]  >= 7)
+			retval = sprintf(buf, "%d\n", 1);
+		else
+			retval = sprintf(buf, "%d\n", 0);
 		break;
 	case CCIC_SYSFS_PROP_FW_UPDATE_STATUS:
 		retval = sprintf(buf, "%s\n", usbpd_data->fw_update == 1 ? "UPDATE" : "NORMAL");
@@ -878,18 +1047,15 @@ static int max77705_sysfs_get_local_prop(struct _ccic_data_t *pccic_data,
 				usbpd_data->Device_Version);
 		break;
 	case CCIC_SYSFS_PROP_CONTROL_GPIO:
+		usbpd_data->sbu[0] = 0;usbpd_data->sbu[1] = 0; 
+		reinit_completion(&usbpd_data->ccic_sysfs_completion);
 		max77705_request_sbu_read(usbpd_data);
-		for (i = 0; i < 5; i++) {
-			/* register update timing delay */
-			msleep(100);
-			/* compare SBU1, SBU2 values after interrupt */
-			msg_maxim("i : %d, is_sbu_done : %d", i, usbpd_data->is_sbu_done);
-			if (usbpd_data->is_sbu_done)
-				break;
-		}
+		i = wait_for_completion_timeout(&usbpd_data->ccic_sysfs_completion, msecs_to_jiffies(200 * 5));
+		if (i == 0)
+			msg_maxim("CCIC SYSFS COMPLETION TIMEOUT");
 		/* compare SBU1, SBU2 values after interrupt */
-		msg_maxim("usb: CCIC_SYSFS_PROP_CONTROL_GPIO SBU1 = 0x%x ,SBU2 = 0x%x",
-		usbpd_data->sbu[0], usbpd_data->sbu[1]);
+		msg_maxim("usb: CCIC_SYSFS_PROP_CONTROL_GPIO SBU1 = 0x%x ,SBU2 = 0x%x timeout:%d",
+		usbpd_data->sbu[0], usbpd_data->sbu[1], i);
 		retval = sprintf(buf, "%d %d\n", usbpd_data->sbu[0], usbpd_data->sbu[1]);
 		break;
 	case CCIC_SYSFS_PROP_USBPD_IDS:
@@ -922,6 +1088,17 @@ static int max77705_sysfs_get_local_prop(struct _ccic_data_t *pccic_data,
 		retval = sprintf(buf, "%d\n", usbpd_data->ram_test_result);
 		break;
 #endif
+	case CCIC_SYSFS_PROP_SBU_ADC:
+		usbpd_data->sbu[0] = 0;usbpd_data->sbu[1] = 0; 
+		reinit_completion(&usbpd_data->ccic_sysfs_completion);
+		max77705_request_selftest_read(usbpd_data);
+		i = wait_for_completion_timeout(&usbpd_data->ccic_sysfs_completion, msecs_to_jiffies(1000 * 5));
+		if (i == 0)
+			msg_maxim("CCIC SYSFS COMPLETION TIMEOUT");
+		msg_maxim("usb: CCIC_SYSFS_PROP_SBU_ADC : %d %d timeout : %d", usbpd_data->sbu[0], usbpd_data->sbu[1], i);
+		retval = sprintf(buf, "%d %d\n", usbpd_data->sbu[0],
+				 usbpd_data->sbu[1]);
+		break;
 	default:
 		msg_maxim("prop read not supported prop (%d)", prop);
 		retval = -ENODATA;
@@ -929,6 +1106,15 @@ static int max77705_sysfs_get_local_prop(struct _ccic_data_t *pccic_data,
 	}
 
 	return retval;
+}
+
+static void max77705_control_gpio_for_sbu(int onoff)
+{
+	struct otg_notify *o_notify = get_otg_notify();
+	struct usb_notifier_platform_data *pdata = get_notify_data(o_notify);
+
+	if (o_notify)
+		o_notify->set_ldo_onoff(pdata, onoff);
 }
 
 static ssize_t max77705_sysfs_set_prop(struct _ccic_data_t *pccic_data,
@@ -1040,6 +1226,7 @@ static ssize_t max77705_sysfs_set_prop(struct _ccic_data_t *pccic_data,
 		 *                         mode 1 : SBU1/SBU2 set as default status - Pull up
 		 *  But, max77705 is always open-drain status so we don't need to control it.
 		 */
+		max77705_control_gpio_for_sbu(!mode);
 		break;
 	default:
 		pr_info("%s prop write not supported prop (%d)\n", __func__, prop);
@@ -1953,6 +2140,9 @@ void max77705_usbc_check_sysmsg(struct max77705_usbc_platform_data *usbc_data, u
 #if defined(CONFIG_USB_HW_PARAM)
 	struct otg_notify *o_notify = get_otg_notify();
 #endif
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+	int event;
+#endif
 
 	if (usbc_data->shut_down) {
 		msg_maxim("IGNORE SYSTEM_MSG IN SHUTDOWN MODE!!");
@@ -1982,6 +2172,10 @@ void max77705_usbc_check_sysmsg(struct max77705_usbc_platform_data *usbc_data, u
 			usbc_data->ram_test_enable = MAX77705_RAM_TEST_STOP_MODE;
 		}
 #endif
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+		event = NOTIFY_EXTRA_SYSERROR_BOOT_WDT;
+		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 		break;
 	case SYSERROR_BOOT_SWRSTREQ:
 		break;
@@ -2000,6 +2194,10 @@ void max77705_usbc_check_sysmsg(struct max77705_usbc_platform_data *usbc_data, u
 		usbc_data->is_first_booting = 1;
 		max77705_set_enable_alternate_mode(ALTERNATE_MODE_START);
 		max77705_usbc_umask_irq(usbc_data);
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+		event = NOTIFY_EXTRA_SYSMSG_BOOT_POR;
+		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 		break;
 	case SYSERROR_HV_NOVBUS:
 		break;
@@ -2078,6 +2276,12 @@ void max77705_usbc_check_sysmsg(struct max77705_usbc_platform_data *usbc_data, u
 		if (o_notify)
 			inc_hw_param(o_notify, USB_CCIC_VBUS_CC_SHORT_COUNT);
 #endif
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+		event = NOTIFY_EXTRA_SYSMSG_CC_SHORT;
+		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
+		usbc_data->cc_data->ccistat = CCI_SHORT;
+		max77705_notify_rp_current_level(usbc_data);
 		break;
 	case SYSMSG_SBUx_GND_SHORT:
 		msg_maxim("SBU-GND SHORT");
@@ -2085,12 +2289,20 @@ void max77705_usbc_check_sysmsg(struct max77705_usbc_platform_data *usbc_data, u
 		if (o_notify)
 			inc_hw_param(o_notify, USB_CCIC_GND_SBU_SHORT_COUNT);
 #endif
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+		event = NOTIFY_EXTRA_SYSMSG_SBU_GND_SHORT;
+		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 		break;
 	case SYSMSG_SBUx_5V_SHORT:
 		msg_maxim("SBU-VBUS SHORT");
 #if defined(CONFIG_USB_HW_PARAM)
 		if (o_notify)
 			inc_hw_param(o_notify, USB_CCIC_VBUS_SBU_SHORT_COUNT);
+#endif
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+		event = NOTIFY_EXTRA_SYSMSG_SBU_VBUS_SHORT;
+		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
 #endif
 		break;
 	case SYSERROR_POWER_NEGO:
@@ -2419,6 +2631,19 @@ static void max77705_usbc_mask_irq(struct max77705_usbc_platform_data *usbc_data
 			   i2c_data);
 }
 
+static void max77705_dp_detach_cb(void)
+{
+	struct max77705_usbc_platform_data *usbpd_data = NULL;
+
+	usbpd_data = g_usbc_data;
+
+	if (!usbpd_data)
+		return;
+
+	pr_info("%s\n", __func__);
+	wake_up_interruptible(&usbpd_data->dp_detach_wait_q);
+}
+
 static int pdic_handle_usb_external_notifier_notification(struct notifier_block *nb,
 				unsigned long action, void *data)
 {
@@ -2429,13 +2654,12 @@ static int pdic_handle_usb_external_notifier_notification(struct notifier_block 
 	pr_info("%s : action=%lu , enable=%d\n", __func__, action, enable);
 	switch (action) {
 	case EXTERNAL_NOTIFY_HOSTBLOCK_PRE:
-		if (enable) {
+		if (enable)
 			max77705_set_enable_alternate_mode(ALTERNATE_MODE_STOP);
-			if (usbpd_data->dp_is_connect)
-				max77705_dp_detach(usbpd_data);
-		} else {
-			if (usbpd_data->dp_is_connect)
-				max77705_dp_detach(usbpd_data);
+		if (usbpd_data->dp_is_connect) {
+			max77705_dp_detach(usbpd_data);
+			wait_event_interruptible_timeout(usbpd_data->dp_detach_wait_q, !dp_use_informed, DP_DETACH_WAIT_TIME);
+			pr_info("%s : dp_use_informed=%d\n", __func__, dp_use_informed);
 		}
 		break;
 	case EXTERNAL_NOTIFY_HOSTBLOCK_POST:
@@ -2443,6 +2667,19 @@ static int pdic_handle_usb_external_notifier_notification(struct notifier_block 
 		} else {
 			max77705_set_enable_alternate_mode(ALTERNATE_MODE_START);
 		}
+		break;
+	case EXTERNAL_NOTIFY_MDMBLOCK_PRE:
+		if (usbpd_data->dp_is_connect) {
+			max77705_dp_detach(usbpd_data);
+			wait_event_interruptible_timeout(usbpd_data->dp_detach_wait_q, !dp_use_informed, DP_DETACH_WAIT_TIME);
+			pr_info("%s : dp_use_informed=%d\n", __func__, dp_use_informed);
+		}
+		break;
+	case EXTERNAL_NOTIFY_MDMBLOCK_POST:
+		if (enable)
+			;
+		else
+			;
 		break;
 	default:
 		break;
@@ -2626,14 +2863,60 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	usbc_data->vconn_en = 1;
 	usbc_data->cur_rid = RID_OPEN;
 	usbc_data->cc_pin_status = NO_DETERMINATION;
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 	usbc_data->power_role = DUAL_ROLE_PROP_PR_NONE;
+	desc =
+		devm_kzalloc(usbc_data->dev,
+				 sizeof(struct dual_role_phy_desc), GFP_KERNEL);
+	if (!desc) {
+		pr_err("unable to allocate dual role descriptor\n");
+		return -ENOMEM;
+	}
+
+	desc->name = "otg_default";
+	desc->supported_modes = DUAL_ROLE_SUPPORTED_MODES_DFP_AND_UFP;
+	desc->get_property = max77705_dual_role_get_prop;
+	desc->set_property = max77705_dual_role_set_prop;
+	desc->properties = fusb_drp_properties;
+	desc->num_properties = ARRAY_SIZE(fusb_drp_properties);
+	desc->property_is_writeable = max77705_dual_role_is_writeable;
+	dual_role =
+		devm_dual_role_instance_register(usbc_data->dev, desc);
+	dual_role->drv_data = usbc_data;
+	usbc_data->dual_role = dual_role;
+	usbc_data->desc = desc;
+	init_completion(&usbc_data->reverse_completion);
+#elif defined(CONFIG_TYPEC)
+	usbc_data->typec_cap.revision = USB_TYPEC_REV_1_2;
+	usbc_data->typec_cap.pd_revision = 0x300;
+	usbc_data->typec_cap.prefer_role = TYPEC_NO_PREFERRED_ROLE;
+	usbc_data->typec_cap.pr_set = max77705_pr_set;
+	usbc_data->typec_cap.dr_set = max77705_dr_set;
+	usbc_data->typec_cap.port_type_set = max77705_port_type_set;
+
+	usbc_data->typec_cap.type = TYPEC_PORT_DRP;
+
+	usbc_data->typec_power_role = TYPEC_SINK;
+	usbc_data->typec_data_role = TYPEC_DEVICE;
+	usbc_data->typec_try_state_change = TRY_ROLE_SWAP_NONE;
+
+	usbc_data->port = typec_register_port(usbc_data->dev, &usbc_data->typec_cap);
+	if (IS_ERR(usbc_data->port))
+		pr_err("unable to register typec_register_port\n");
+	else
+		msg_maxim("success typec_register_port port=%p", usbc_data->port);
+	init_completion(&usbc_data->typec_reverse_completion);
+#endif
 	usbc_data->auto_vbus_en = false;
+	usbc_data->is_first_booting = 1;
+	usbc_data->pd_support = false;
 #if defined(CONFIG_USB_HOST_NOTIFY)
 	send_otg_notify(o_notify, NOTIFY_EVENT_POWER_SOURCE, 0);
 #endif
 
 #endif
 	init_completion(&usbc_data->op_completion);
+	init_completion(&usbc_data->ccic_sysfs_completion);
 	usbc_data->op_wait_queue = create_singlethread_workqueue("op_wait");
 	if (usbc_data->op_wait_queue == NULL)
 		return -ENOMEM;
@@ -2665,36 +2948,11 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	max77705_pd_init(usbc_data);
 	max77705_write_reg(usbc_data->muic, REG_PD_INT_M, 0x1C);
 	max77705_write_reg(usbc_data->muic, REG_VDM_INT_M, 0xFF);
-	usbc_data->is_first_booting = 1;
 	max77705_usbc_disable_auto_vbus(usbc_data);
 	INIT_DELAYED_WORK(&usbc_data->vbus_hard_reset_work,
 				vbus_control_hard_reset);
 	/* turn on the VBUS automatically. */
 	// max77705_usbc_enable_auto_vbus(usbc_data);
-#if defined(CONFIG_DUAL_ROLE_USB_INTF)
-	desc =
-		devm_kzalloc(usbc_data->dev,
-				 sizeof(struct dual_role_phy_desc), GFP_KERNEL);
-	if (!desc) {
-		pr_err("unable to allocate dual role descriptor\n");
-		return -ENOMEM;
-	}
-
-	desc->name = "otg_default";
-	desc->supported_modes = DUAL_ROLE_SUPPORTED_MODES_DFP_AND_UFP;
-	desc->get_property = max77705_dual_role_get_local_prop;
-	desc->set_property = max77705_dual_role_set_prop;
-	desc->properties = fusb_drp_properties;
-	desc->num_properties = ARRAY_SIZE(fusb_drp_properties);
-	desc->property_is_writeable = max77705_dual_role_is_writeable;
-	dual_role =
-		devm_dual_role_instance_register(usbc_data->dev, desc);
-	dual_role->drv_data = usbc_data;
-	usbc_data->dual_role = dual_role;
-	usbc_data->desc = desc;
-	init_completion(&usbc_data->reverse_completion);
-	INIT_DELAYED_WORK(&usbc_data->role_swap_work, max77705_role_swap_check);
-#endif
 	INIT_DELAYED_WORK(&usbc_data->acc_detach_work, max77705_acc_detach_check);
 	ccic_register_switch_device(1);
 	INIT_DELAYED_WORK(&usbc_data->usb_external_notifier_register_work,
@@ -2708,6 +2966,7 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	pccic_data->misc_dev->uvdm_write = max77705_sec_uvdm_out_request_message;
 	pccic_data->misc_dev->uvdm_ready = max77705_sec_uvdm_ready;
 	pccic_data->misc_dev->uvdm_close = max77705_sec_uvdm_close;
+	pccic_data->misc_dev->dp_detach_cb = max77705_dp_detach_cb;
 #endif
 	/* Register ccic handler to ccic notifier block list */
 	ret = usb_external_notify_register(&usbc_data->usb_external_notifier_nb,
@@ -2720,9 +2979,10 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	max77705->cc_booting_complete = 1;
 	max77705_usbc_umask_irq(usbc_data);
 	init_waitqueue_head(&usbc_data->host_turn_on_wait_q);
+	init_waitqueue_head(&usbc_data->dp_detach_wait_q);
 	max77705_set_host_turn_on_event(0);
-	usbc_data->host_turn_on_wait_time = 3;
-
+	usbc_data->host_turn_on_wait_time = 10;
+	usbc_data->dr_swap_cnt = 0;
 
 	msg_maxim("probing Complete..");
 	return 0;
@@ -2743,6 +3003,8 @@ static int max77705_usbc_remove(struct platform_device *pdev)
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 	devm_dual_role_instance_unregister(usbc_data->dev, usbc_data->dual_role);
 	devm_kfree(usbc_data->dev, usbc_data->desc);
+#elif defined(CONFIG_TYPEC)
+	typec_unregister_port(usbc_data->port);
 #endif
 	ccic_register_switch_device(0);
 #if defined(CONFIG_CCIC_NOTIFIER)

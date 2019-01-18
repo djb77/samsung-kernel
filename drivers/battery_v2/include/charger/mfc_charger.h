@@ -23,10 +23,19 @@
 #include <linux/i2c.h>
 #include "../sec_charging_common.h"
 
+#if defined(CONFIG_WIRELESS_FIRMWARE_65)
+#define MFC_FW_BIN_VERSION			0x65
+#define MFC_FW_BIN_FULL_VERSION		0x00650001
+#define MFC_FW_BIN_VERSION_ADDR		0x167C //fw rev65 address
+#define MFC_FLASH_FW_HEX_PATH		"mfc/mfc_fw65_flash.bin"
+#define MFC_FW_SDCARD_BIN_PATH		"/sdcard/mfc_fw65_flash.bin"
+#else
 #define MFC_FW_BIN_VERSION			0x58
 #define MFC_FW_BIN_FULL_VERSION		0x00580001
 #define MFC_FW_BIN_VERSION_ADDR		0x14a8 //fw rev58 address
-#define FW_ADDRES_MAX 7
+#define MFC_FLASH_FW_HEX_PATH		"mfc/mfc_fw_flash.bin"
+#define MFC_FW_SDCARD_BIN_PATH		"/sdcard/mfc_fw_flash.bin"
+#endif
 
 /* REGISTER MAPS */
 #define MFC_CHIP_ID_L_REG					0x00
@@ -254,11 +263,12 @@ enum {
 #define	WPC_COM_CHG_LEVEL				0x0F /* Battery level */
 
 /* MFC_TX_DATA_COM_REG (0x58) : TX Command */
-#define	WPC_TX_COM_UNKNOWN					0x00
-#define	WPC_TX_COM_TX_ID					0x01
-#define	WPC_TX_COM_AFC_SET					0x02
-#define	WPC_TX_COM_ACK						0x03
-#define	WPC_TX_COM_NAK						0x04
+#define	WPC_TX_COM_UNKNOWN		0x00
+#define	WPC_TX_COM_TX_ID		0x01
+#define	WPC_TX_COM_AFC_SET		0x02
+#define	WPC_TX_COM_ACK			0x03
+#define	WPC_TX_COM_NAK			0x04
+#define WPC_TX_COM_CHG_ERR		0x05
 
 #define TX_AFC_SET_5V			0x00
 #define TX_AFC_SET_10V			0x01
@@ -280,6 +290,16 @@ enum {
 #define TX_ID_BATT_PACK_TA			0x41
 #define TX_ID_DREAM_STAND			0x31
 #define TX_ID_DREAM_DOWN			0x14
+#define TX_ID_UNO_TX				0x72
+#define TX_ID_UNO_TX_B0				0x80
+#define TX_ID_UNO_TX_B1				0x81
+#define TX_ID_UNO_TX_B2				0x82
+#define TX_ID_UNO_TX_MAX			0x9F
+
+#define TX_CHG_ERR_OTP			0x12
+#define TX_CHG_ERR_OCP			0x13
+#define TX_CHG_ERR_DARKZONE		0x14
+#define TX_CHG_ERR_FOD			0x20 ... 0x27
 
 #define	WPC_COM_AFC_DEBOUNCE			0x07 /* Data Values [ 0~1000mV : 0x0000~0x03E8 ], 2 bytes*/
 
@@ -455,9 +475,6 @@ enum {
 #define MFC_FW_RESULT_DOWNLOADING			2
 #define MFC_FW_RESULT_PASS				1
 #define MFC_FW_RESULT_FAIL				0
-
-#define MFC_FLASH_FW_HEX_PATH		"mfc/mfc_fw_flash.bin"
-#define MFC_FW_SDCARD_BIN_PATH		"/sdcard/mfc_fw_flash.bin"
 
 enum {
 	MFC_EVENT_IRQ = 0,

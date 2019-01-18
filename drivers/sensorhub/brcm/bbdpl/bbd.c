@@ -49,6 +49,8 @@ static struct spi_device dummy_spi = {
 
 #ifdef CONFIG_BCM_GPS_SPI_DRIVER
 extern bool ssi_dbg;
+extern bool ssi_dbg_pzc;
+extern bool ssi_dbg_rng;
 #endif
 
 void bbd_log_hex(const char *pIntroduction, const unsigned char *pData, unsigned long ulDataLen);
@@ -128,9 +130,19 @@ static struct bbd_device bbd;
  */
 static unsigned char bbd_patch[] = {
 #if defined(CONFIG_SENSORS_SSP_STAR)
-#include "bbd_patch_file_star.h"
+#if ANDROID_VERSION < 90000
+#include "o_os/bbd_patch_file_star.h"
+#else
+#include "p_os/bbd_patch_file_star.h"
+#endif
 #elif defined(CONFIG_SENSORS_SSP_CROWN)
-#include "bbd_patch_file_crown.h"
+#if ANDROID_VERSION < 90000
+#include "o_os/bbd_patch_file_crown.h"
+#else
+#include "p_os/bbd_patch_file_crown.h"
+#endif
+#elif defined(CONFIG_SENSORS_SSP_HAECHI)
+#include "bbd_patch_file_haechi.h"
 #endif
 };
 
@@ -493,6 +505,14 @@ ssize_t bbd_control(const char *buf, ssize_t len)
 		ssi_dbg = true;
 	} else if (strstr(buf, SSI_DEBUG_OFF)) {
 		ssi_dbg = false;
+	} else if (strstr(buf, PZC_DEBUG_ON)) {
+		ssi_dbg_pzc = true;
+	} else if (strstr(buf, PZC_DEBUG_OFF)) {
+		ssi_dbg_pzc = false;
+	} else if (strstr(buf, RNG_DEBUG_ON)) {
+		ssi_dbg_rng = true;
+	} else if (strstr(buf, RNG_DEBUG_OFF)) {
+		ssi_dbg_rng = false;
 #endif
 #ifdef CONFIG_LHD_KILLER
 	} else if (strstr(buf, BBD_CTRL_PASSTHRU_ON)) {
@@ -675,8 +695,7 @@ static unsigned int bbd_common_poll(struct file *filp, poll_table *wait)
  * @buf: contains sensor packet coming from gpsd/lhd
  *
  */
-
-static unsigned long init_time;
+static unsigned long init_time = 0;
 static unsigned long clock_get_ms(void)
 {
 	struct timeval t;

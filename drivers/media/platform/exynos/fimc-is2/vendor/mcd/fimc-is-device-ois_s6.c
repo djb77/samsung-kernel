@@ -1932,6 +1932,55 @@ p_err:
 	return ret;
 }
 
+u8 fimc_is_read_ois_mode_s6(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	u8 mode = OPTICAL_STABILIZATION_MODE_OFF;
+	struct fimc_is_ois *ois = NULL;
+	struct i2c_client *client = NULL;
+
+	ois = (struct fimc_is_ois *)v4l2_get_subdevdata(subdev);
+	if (!ois) {
+		err("ois is NULL");
+		return OPTICAL_STABILIZATION_MODE_OFF;
+	}
+
+	client = ois->client;
+	if (!client) {
+		err("client is NULL");
+		return OPTICAL_STABILIZATION_MODE_OFF;
+	}
+
+	ret = fimc_is_ois_i2c_read(client, 0x0002, &mode);
+	if (ret) {
+		err("i2c read fail\n");
+		return OPTICAL_STABILIZATION_MODE_OFF;
+	}
+
+	switch(mode) {
+		case 0x00:
+			mode = OPTICAL_STABILIZATION_MODE_STILL;
+			break;
+		case 0x01:
+			mode = OPTICAL_STABILIZATION_MODE_VIDEO;
+			break;
+		case 0x05:
+			mode = OPTICAL_STABILIZATION_MODE_CENTERING;
+			break;
+		case 0x13:
+			mode = OPTICAL_STABILIZATION_MODE_STILL_ZOOM;
+			break;
+		case 0x14:
+			mode = OPTICAL_STABILIZATION_MODE_VDIS;
+			break;
+		default:
+			dbg_ois("%s: ois_mode value(%d)\n", __func__, mode);
+			break;
+	}
+
+	return mode;
+}
+
 int fimc_is_set_ois_mode_s6(struct v4l2_subdev *subdev, int mode)
 {
 	int ret = 0;
@@ -2281,6 +2330,9 @@ int fimc_is_ois_init_s6(struct v4l2_subdev *subdev)
 	ois->pre_coef = 255;
 	ois->fadeupdown = false;
 	ois->initial_centering_mode = false;
+#ifdef CAMERA_REAR2_OIS
+	ois->ois_power_mode = -1;
+#endif
 
 #ifdef USE_OIS_SLEEP_MODE
 	I2C_MUTEX_LOCK(ois->i2c_lock);
@@ -2648,6 +2700,74 @@ int fimc_is_ois_shift_s6(struct v4l2_subdev *subdev)
 	return ret;
 }
 
+#ifdef CAMERA_REAR2_OIS
+int fimc_is_ois_set_power_mode(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	struct fimc_is_ois *ois = NULL;
+	struct i2c_client *client = NULL;
+	struct fimc_is_core *core;
+	struct fimc_is_dual_info *dual_info = NULL;
+	struct fimc_is_module_enum *module = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+
+	ois = (struct fimc_is_ois *)v4l2_get_subdevdata(subdev);
+	if (!ois) {
+		err("ois is NULL");
+		return -EINVAL;
+	}
+
+	sensor_peri = ois->sensor_peri;
+	if (!sensor_peri) {
+		err("%s, sensor_peri is NULL", __func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	module = sensor_peri->module;
+	if (!module) {
+		err("%s, module is NULL", __func__);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	client = ois->client;
+	if (!client) {
+		err("client is NULL");
+		return -EINVAL;
+	}
+
+	core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
+	if (!core) {
+		err("core is null");
+		return -EINVAL;
+	}
+
+	dual_info = &core->dual_info;
+
+	I2C_MUTEX_LOCK(ois->i2c_lock);
+
+	if ((dual_info->mode != FIMC_IS_DUAL_MODE_NOTHING)
+		|| (dual_info->mode == FIMC_IS_DUAL_MODE_NOTHING &&
+			module->position == SENSOR_POSITION_REAR2)) {
+		ret = fimc_is_ois_i2c_write(client, 0x00BE, 0x03);
+		ois->ois_power_mode = OIS_POWER_MODE_DUAL;
+	} else {
+		ret = fimc_is_ois_i2c_write(client, 0x00BE, 0x01);
+		ois->ois_power_mode = OIS_POWER_MODE_SINGLE;
+	}
+
+	if (ret < 0)
+		err("ois dual setting is fail");
+	else
+		info("%s ois power setting is %d\n", __func__, ois->ois_power_mode);
+
+	I2C_MUTEX_UNLOCK(ois->i2c_lock);
+
+	return ret;
+}
+#endif
+
 int fimc_is_ois_set_ggfadeupdown_s6(struct v4l2_subdev *subdev, int up, int down)
 {
 	int ret = 0;
@@ -2769,6 +2889,7 @@ static struct fimc_is_ois_ops ois_ops_s6 = {
 	.ois_auto_test = fimc_is_ois_auto_test_s6,
 #ifdef CAMERA_REAR2_OIS
 	.ois_auto_test_rear2 = fimc_is_ois_auto_test_rear2_s6,
+	.ois_set_power_mode = fimc_is_ois_set_power_mode,
 #endif
 	.ois_check_fw = fimc_is_ois_check_fw_s6,
 	.ois_enable = fimc_is_ois_enable_s6,
@@ -2782,6 +2903,7 @@ static struct fimc_is_ois_ops ois_ops_s6 = {
 	.ois_read_fw_ver = fimc_is_ois_read_fw_ver_s6,
 	.ois_center_shift = fimc_is_ois_shift_s6,
 	.ois_set_center = fimc_is_ois_set_centering_s6,
+	.ois_read_mode = fimc_is_read_ois_mode_s6,
 };
 
 int ois_rumbaS6_probe(struct i2c_client *client,

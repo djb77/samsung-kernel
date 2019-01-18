@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: p2p.h 700076 2017-05-17 14:42:22Z $
+ * $Id: p2p.h 757905 2018-04-16 23:16:27Z $
  */
 
 #ifndef _P2P_H_
@@ -40,7 +40,6 @@
 #include <packed_section_start.h>
 
 /* WiFi P2P OUI values */
-#define P2P_OUI			WFA_OUI			/* WiFi P2P OUI */
 #define P2P_VER			WFA_OUI_TYPE_P2P	/* P2P version: 9=WiFi P2P v1.0 */
 
 #define P2P_IE_ID		0xdd			/* P2P IE element ID */

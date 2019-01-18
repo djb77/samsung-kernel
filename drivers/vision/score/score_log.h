@@ -25,26 +25,26 @@
 /**
  * Definition of log to add prefix for SCore
  */
-#define score_note(fmt, args...) \
-	pr_info("SCore: " fmt, ##args)
 #define score_info(fmt, args...) \
-	pr_info("SCore: %s(%d): " fmt, __func__, __LINE__, ##args)
+	pr_info("SCore:" fmt, ##args)
+#define score_note(fmt, args...) \
+	pr_info("SCore:[LOG](%d):" fmt, __LINE__, ##args)
 #define score_warn(fmt, args...) \
-	pr_warn("SCore: [WRN]%s(%d): " fmt, __func__, __LINE__, ##args)
+	pr_warn("SCore:[WRN](%d):" fmt, __LINE__, ##args)
 #define score_err(fmt, args...) \
-	pr_err("SCore: [ERR]%s(%d): " fmt, __func__, __LINE__, ##args)
+	pr_err("SCore:[ERR](%d):" fmt, __LINE__, ##args)
 
 #if defined(ENABLE_DBG_LOG)
 #define score_dbg(fmt, args...) \
-	pr_info("SCore: [DBG]%s(%d): " fmt, __func__, __LINE__, ##args)
+	pr_info("SCore: [DBG](%d): " fmt, __LINE__, ##args)
 #else
 #define score_dbg(fmt, args...)
 #endif
 
 #if defined(DBG_CALL_PATH_LOG)
-#define score_enter()			score_info("enter\n")
-#define score_leave()			score_info("leave\n")
-#define score_check()			score_info("check\n")
+#define score_enter()			score_note("enter (%s)\n", __func__)
+#define score_leave()			score_note("leave (%s)\n", __func__)
+#define score_check()			score_note("check (%s)\n", __func__)
 #else
 #define score_enter()
 #define score_leave()

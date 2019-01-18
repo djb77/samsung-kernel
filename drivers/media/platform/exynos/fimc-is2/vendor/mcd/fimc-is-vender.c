@@ -232,6 +232,7 @@ static bool g_init_notifier;
 static int fimc_is_vendor_ril_notifier(struct notifier_block *nb,
 				unsigned long size, void *buf)
 {
+	struct dev_ril_bridge_msg *msg;
 	struct cam_cp_noti_info *cp_noti_info;
 
 	if (!g_init_notifier) {
@@ -240,19 +241,22 @@ static int fimc_is_vendor_ril_notifier(struct notifier_block *nb,
 	}
 
 	info("%s: ril notification size [%ld]\n", __func__, size);
-	if (size == sizeof(struct cam_cp_noti_info)) {
-		cp_noti_info = (struct cam_cp_noti_info *)buf;
 
-		if (cp_noti_info->len == 0x0010 && cp_noti_info->main_cmd == 0x27 &&
-			cp_noti_info->sub_cmd == 0x01 && cp_noti_info->cmd_type == 0x03) {
-			mutex_lock(&g_mipi_mutex);
-			memcpy(&g_cp_noti_info, buf, sizeof(struct cam_cp_noti_info));
-			mutex_unlock(&g_mipi_mutex);
+	msg = (struct dev_ril_bridge_msg *)buf;
 
-			info("%s: update mipi channel [%d,%d,%d]\n",
-				__func__, g_cp_noti_info.rat, g_cp_noti_info.band, g_cp_noti_info.channel);
-			return NOTIFY_OK;
-		}
+	if (size == sizeof(struct dev_ril_bridge_msg)
+			&& msg->dev_id == IPC_SYSTEM_CP_CHANNEL_INFO
+			&& msg->data_len == sizeof(struct cam_cp_noti_info)) {
+		cp_noti_info = (struct cam_cp_noti_info *)msg->data;
+
+		mutex_lock(&g_mipi_mutex);
+		memcpy(&g_cp_noti_info, msg->data, sizeof(struct cam_cp_noti_info));
+		mutex_unlock(&g_mipi_mutex);
+		
+		info("%s: update mipi channel [%d,%d,%d]\n",
+			__func__, g_cp_noti_info.rat, g_cp_noti_info.band, g_cp_noti_info.channel);
+
+		return NOTIFY_OK;
 	}
 
 	return NOTIFY_DONE;
@@ -1990,7 +1994,8 @@ int fimc_is_vender_video_s_ctrl(struct v4l2_control *ctrl,
 		if (captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_DEBLUR_DYNAMIC_SHOT
 			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_OIS_DYNAMIC_SHOT
 			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_EXPOSURE_DYNAMIC_SHOT
-			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_HDR_DYNAMIC_SHOT) {
+			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_MFHDR_DYNAMIC_SHOT
+			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_LLHDR_DYNAMIC_SHOT) {
 			captureCount = value & 0x0000FFFF;
 		} else {
 			captureIntent = ctrl->value;

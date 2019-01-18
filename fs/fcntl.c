@@ -23,6 +23,7 @@
 #include <linux/user_namespace.h>
 #include <linux/shmem_fs.h>
 #include <linux/task_integrity.h>
+#include <linux/proca_fcntl.h>
 
 #include <asm/poll.h>
 #include <asm/siginfo.h>
@@ -343,9 +344,9 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 	case F_FIVE_VERIFY_SYNC:
 		err = five_fcntl_verify_sync(filp);
 		break;
-#ifdef CONFIG_FIVE_PA_FEATURE
+#if defined(CONFIG_FIVE_PA_FEATURE) || defined(CONFIG_PROCA)
 	case F_FIVE_PA_SETXATTR:
-		err = fivepa_fcntl_setxattr(filp, (void __user *)arg);
+		err = proca_fcntl_setxattr(filp, (void __user *)arg);
 		break;
 #endif
 #endif

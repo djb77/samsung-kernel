@@ -954,7 +954,7 @@ static int maxdsm_write_wrapper(unsigned int reg,
 		maxdsm_regmap_read(reg, &ret);
 		break;
 	case PLATFORM_TYPE_B:
-		if (reg > maxdsm.param_size)
+		if (reg > (maxdsm.param_size - 1))
 			pr_err("%s: Unknown parameter index. %d\n",
 					__func__, reg);
 		else {
@@ -966,7 +966,7 @@ static int maxdsm_write_wrapper(unsigned int reg,
 		}
 		break;
 	case PLATFORM_TYPE_C:
-		if (reg > maxdsm.param_size)
+		if (reg > (maxdsm.param_size - 1))
 			pr_err("%s: Unknown parameter index. %d\n",
 					__func__, reg);
 		else {
@@ -1001,6 +1001,10 @@ void maxdsm_log_update(const void *byte_log_array,
 		log_max_prev_array[i] = maxdsm_int_log_max_array[maxdsm_channel][i];
 		int_log_overcnt_array[i] = maxdsm_int_log_array[maxdsm_channel][i];
 	}
+
+	dbg_maxdsm("@#@# excursion prev max[%d] : %d / now max : %d, temp prev max[%d] : %d / now max : %d",
+		maxdsm_channel, log_max_prev_array[0],maxdsm_int_log_max_array[maxdsm_channel][0], 
+		maxdsm_channel, log_max_prev_array[1],maxdsm_int_log_max_array[maxdsm_channel][1]);
 
 	memcpy(maxdsm_byte_log_array[maxdsm_channel],
 			byte_log_array, sizeof(maxdsm_byte_log_array[maxdsm_channel]));
@@ -1173,13 +1177,18 @@ void maxdsm_update_param(void)
 						&maxdsm);
 				mutex_unlock(&dsm_dsp_lock);
 
+				dbg_maxdsm("@#@# excursion max[%d] : %d, temp max[%d] : %d",chan,
+					maxdsm.param[((BEFORE_BUFSIZE/sizeof(uint32_t))+BEFORE_BUFSIZE)+(AFTER_BUFSIZE/sizeof(uint32_t))+AFTER_BUFSIZE+1],
+					chan,
+					maxdsm.param[((BEFORE_BUFSIZE/sizeof(uint32_t))+BEFORE_BUFSIZE)+(AFTER_BUFSIZE/sizeof(uint32_t))+AFTER_BUFSIZE+2]);
+
 				maxdsm_log_update(&maxdsm.param[1],
 						&maxdsm.param[(BEFORE_BUFSIZE/sizeof(uint32_t))+1],
 						&maxdsm.param[(BEFORE_BUFSIZE/sizeof(uint32_t))+BEFORE_BUFSIZE+1],
 						&maxdsm.param[((BEFORE_BUFSIZE/sizeof(uint32_t))+BEFORE_BUFSIZE)+(AFTER_BUFSIZE/sizeof(uint32_t))+1],
 						&maxdsm.param[((BEFORE_BUFSIZE/sizeof(uint32_t))+BEFORE_BUFSIZE)+(AFTER_BUFSIZE/sizeof(uint32_t))+AFTER_BUFSIZE+1]);
-				maxdsm_read_all();
 			}
+			maxdsm_read_all();
 			break;
 		case MAX98512_OSM_MONO_R:
 			maxdsm_channel = LOG_RIGHT;
@@ -2023,7 +2032,7 @@ EXPORT_SYMBOL_GPL(maxdsm_set_v_validation_mode);
 
 int maxdsm_set_amp_screen_validation_mode(int on)
 {
-	int index, ret = 0;
+	int ret = 0;
 	int i = 0;
 
 	for (i = 0 ; i < 2 ; i++) {
@@ -2034,7 +2043,7 @@ int maxdsm_set_amp_screen_validation_mode(int on)
 		else
 			break;
 
-		if (index < 0 || (maxdsm.platform_type != PLATFORM_TYPE_C))
+		if (maxdsm.platform_type != PLATFORM_TYPE_C)
 			return -ENODATA;
 
 		maxdsm_read_all();
@@ -2773,12 +2782,8 @@ int maxdsm_update_param_info(struct maxim_dsm *maxdsm)
 	}
 
 	kfree(maxdsm->param);
-	if (maxdsm->version == VERSION_5_0_C || maxdsm->version == VERSION_5_0_C_S)
-		maxdsm->param = kzalloc(
-				sizeof(uint32_t) * maxdsm->param_size * 3, GFP_KERNEL);
-	else
-		maxdsm->param = kzalloc(
-				sizeof(uint32_t) * maxdsm->param_size, GFP_KERNEL);
+	maxdsm->param = kzalloc(
+			sizeof(uint32_t) * maxdsm->param_size, GFP_KERNEL);
 	if (!maxdsm->param) {
 		kfree(maxdsm->binfo);
 		return -ENOMEM;

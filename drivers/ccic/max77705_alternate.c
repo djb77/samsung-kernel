@@ -1087,18 +1087,10 @@ void max77705_set_enable_alternate_mode(int mode)
 					max77705_vdm_process_set_samsung_alternate_mode(usbpd_data,
 						MAXIM_ENABLE_ALTERNATE_SRC_VDM);
 					msg_maxim("[NO BOOTING TIME] !!!alternate mode is started!");
-					if (usbpd_data->cc_data->current_pr == SNK && !(usbpd_data->send_vdm_identity)
-						&& (pd_data->current_dr == DFP)) {
-						usbpd_data->send_vdm_identity = 1;
-						max77705_vdm_process_set_identity_req(usbpd_data);
-						msg_maxim("[NO BOOTING TIME] SEND THE PACKET (DEX HUB) ");
-					}
-
 				} else if (mode & ALTERNATE_MODE_STOP) {
 					max77705_vdm_process_set_samsung_alternate_mode(usbpd_data,
 						MAXIM_ENABLE_ALTERNATE_SRCCAP);
 					msg_maxim("[NO BOOTING TIME] alternate mode is stopped!");
-					usbpd_data->send_vdm_identity = 0;
 				}
 
 				break;
@@ -1127,12 +1119,6 @@ void max77705_set_enable_alternate_mode(int mode)
 						status[3], status[4], status[5], status[6]);
 					msg_maxim("UIC_INT_M:0x%x, CC_INT_M:0x%x, PD_INT_M:0x%x, VDM_INT_M:0x%x",
 						status[7], status[8], status[9], status[10]);
-					if (usbpd_data->cc_data->current_pr == SNK && !(usbpd_data->send_vdm_identity)
-						&& (pd_data->current_dr == DFP) && usbpd_data->is_first_booting) {
-						usbpd_data->send_vdm_identity = 1;
-						max77705_vdm_process_set_identity_req(usbpd_data);
-						msg_maxim("[ON BOOTING TIME] SEND THE PACKET (DEX HUB)  ");
-					}
 					max77705_write_reg(usbpd_data->muic, REG_VDM_INT_M, 0xF0);
 					max77705_write_reg(usbpd_data->muic, REG_PD_INT_M, 0x0);
 					max77705_read_reg(usbpd_data->muic, MAX77705_USBC_REG_PD_INT_M, &status[9]);
@@ -1376,6 +1362,9 @@ static int max77705_send_sec_unstructured_short_vdm_message(void *data, void *bu
 	/* Message Type Definition */
 	uint8_t received_data = 0;
 	int time_left;
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+	int event;
+#endif
 
 	if ((buf == NULL) || size <= 0) {
 		msg_maxim("given data is not valid !");
@@ -1407,6 +1396,10 @@ static int max77705_send_sec_unstructured_short_vdm_message(void *data, void *bu
 							  msecs_to_jiffies(SASMSUNGUVDM_WAIT_MS));
 		if (time_left <= 0) {
 			usbpd_data->is_in_first_sec_uvdm_req = false;
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+			event = NOTIFY_EXTRA_UVDM_TIMEOUT;
+			store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 			return -ETIME;
 		}
 		if (usbpd_data->uvdm_error) {
@@ -1433,6 +1426,9 @@ static int max77705_send_sec_unstructured_long_vdm_message(void *data, void *buf
 	int time_left;
 	int i;
 	int received_data_index;
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+	int event;
+#endif
 
 	usbpd_data = data;
 	if (!usbpd_data)
@@ -1492,8 +1488,13 @@ static int max77705_send_sec_unstructured_long_vdm_message(void *data, void *buf
 		time_left =
 			wait_for_completion_interruptible_timeout(&usbpd_data->uvdm_longpacket_out_wait,
 							  msecs_to_jiffies(SASMSUNGUVDM_WAIT_MS));
-		if (time_left <= 0)
+		if (time_left <= 0) {
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+			event = NOTIFY_EXTRA_UVDM_TIMEOUT;
+			store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 			return -ETIME;
+		}
 
 		if (usbpd_data->uvdm_error)
 			return -EBUSY;
@@ -1659,6 +1660,9 @@ int max77705_sec_uvdm_in_request_message(void *data)
 	int time_left = 0;
 	int cal_checksum = 0;
 	int i = 0;
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+	int event;
+#endif
 
 	usbpd_data = g_usbc_data;
 	if (!usbpd_data)
@@ -1698,6 +1702,10 @@ int max77705_sec_uvdm_in_request_message(void *data)
 
 		if (time_left <= 0) {
 			msg_maxim("timeout");
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+			event = NOTIFY_EXTRA_UVDM_TIMEOUT;
+			store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 			return -ETIME;
 		}
 		if (usbpd_data->uvdm_error)
@@ -1772,6 +1780,10 @@ int max77705_sec_uvdm_in_request_message(void *data)
 				msecs_to_jiffies(SASMSUNGUVDM_WAIT_MS));
 	if (time_left <= 0) {
 		msg_maxim("last in request timeout");
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+		event = NOTIFY_EXTRA_UVDM_TIMEOUT;
+		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 		return -ETIME;
 	}
 	if (usbpd_data->uvdm_error)

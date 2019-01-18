@@ -281,6 +281,15 @@ static ssize_t show_detect_conn_enabled(struct device *dev,
 
 static DEVICE_ATTR(enabled, 0644, show_detect_conn_enabled, store_detect_conn_enabled);
 
+static ssize_t show_detect_conn_available_pins(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	return sprintf(buf, "%s\n", sec_detect_available_pins_string);
+}
+
+static DEVICE_ATTR(available_pins, 0644, show_detect_conn_available_pins, NULL);
+
 #ifdef CONFIG_OF
 /**
  * Parse the device tree and get gpio number, irq type.
@@ -365,6 +374,24 @@ static int detect_conn_init_irq(void)
 
 }
 
+static int sec_detect_conn_item_make(void)
+{
+	struct detect_conn_info *pinfo;
+	struct sec_det_conn_p_data *pdata;
+	int i = 0;
+
+	pinfo = gpinfo;
+	pdata = pinfo->pdata;
+
+	for (i = 0; i < pdata->gpio_cnt; i++) {
+		strcat(sec_detect_available_pins_string,pdata->name[i]);
+		strcat(sec_detect_available_pins_string, "/");
+	}
+	sec_detect_available_pins_string[strlen(sec_detect_available_pins_string)-1] = '\0';
+
+	return 0;
+}
+
 static int sec_detect_conn_probe(struct platform_device *pdev)
 {
 	struct sec_det_conn_p_data *pdata;
@@ -428,6 +455,14 @@ static int sec_detect_conn_probe(struct platform_device *pdev)
 		goto err_create_detect_conn_sysfs;
 	}
 
+	/* Create sys node /sys/class/sec/sec_detect_conn/available_pins */
+	ret = device_create_file(pinfo->dev, &dev_attr_available_pins);
+
+	if (ret) {
+		dev_err(&pdev->dev, "%s: Failed to create device file.\n", __func__);
+		goto err_create_detect_conn_sysfs;
+	}
+
 	/*save pinfo data to pdata to interrupt enable*/
 	pdata->pinfo = pinfo;
 
@@ -439,6 +474,9 @@ static int sec_detect_conn_probe(struct platform_device *pdev)
 
 	/* detect_conn_init_irq thread create*/
 	ret = detect_conn_init_irq();
+
+	/* make sec_detect_conn item*/
+	ret = sec_detect_conn_item_make();
 
 	return ret;
 

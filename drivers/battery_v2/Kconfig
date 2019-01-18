@@ -479,6 +479,13 @@ config AFC_CHARGER_MODE
 	help
 	  Say Y to include support for sec afc charging support
 
+config SUPPORT_HV_CTRL
+	bool "afc charging support in sec battery driver"
+	default n
+	depends on AFC_CHARGER_MODE
+	help
+	  Say Y to include support for sec afc charging support
+
 config SAMSUNG_LPM_MODE
 	bool "Off charging mode support in sec battery driver"
 	default n
@@ -517,3 +524,11 @@ config ENABLE_100MA_CHARGING_BEFORE_USB_CONFIGURED
 	default n
 	help
 	  Say Y to enable 100mA before usb configured
+
+config WIRELESS_FIRMWARE_65
+	tristate "p9220 battery charger support"
+	depends on BATTERY_SAMSUNG
+	help
+	  Say Y here to enable support for the wireless charger firmware update
+	  wireless charger IC firmware update.
+

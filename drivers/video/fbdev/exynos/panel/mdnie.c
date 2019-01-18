@@ -38,9 +38,8 @@ static const char * const mdnie_maptbl_name[] = {
 	[MDNIE_UI_MAPTBL] = "ui",
 	[MDNIE_VIDEO_MAPTBL] = "video",
 	[MDNIE_CAMERA_MAPTBL] = "camera",
-	[MDNIE_CAMERA_SWA_MAPTBL] = "camera_swa",
 	[MDNIE_GALLERY_MAPTBL] = "gallery",
-	[MDNIE_GALLERY_SWA_MAPTBL] = "gallery_swa",
+	[MDNIE_VT_MAPTBL] = "vt",
 	[MDNIE_BROWSER_MAPTBL] = "browser",
 	[MDNIE_EBOOK_MAPTBL] = "ebook",
 	[MDNIE_EMAIL_MAPTBL] = "email",
@@ -110,9 +109,9 @@ static const char * const scenario_name[] = {
 	[UI_MODE] = "ui",
 	[VIDEO_NORMAL_MODE] = "video_normal",
 	[CAMERA_MODE] = "camera",
-	[CAMERA_SWA_MODE] = "camera_swa",
+	[NAVI_MODE] = "navi",
 	[GALLERY_MODE] = "gallery",
-	[GALLERY_SWA_MODE] = "gallery_swa",
+	[VT_MODE] = "vt",
 	[BROWSER_MODE] = "browser",
 	[EBOOK_MODE] = "ebook",
 	[EMAIL_MODE] = "email",
@@ -138,29 +137,51 @@ static const char * const accessibility_name[] = {
 
 int mdnie_current_state(struct mdnie_info *mdnie)
 {
+	struct panel_device *panel =
+		container_of(mdnie, struct panel_device, mdnie);
+	int mdnie_mode;
+
 	if (IS_BYPASS_MODE(mdnie))
-		return MDNIE_BYPASS_MODE;
-	if (IS_LIGHT_NOTIFICATION_MODE(mdnie))
-		return MDNIE_LIGHT_NOTIFICATION_MODE;
-	if (IS_ACCESSIBILITY_MODE(mdnie))
-		return MDNIE_ACCESSIBILITY_MODE;
-	if (IS_COLOR_LENS_MODE(mdnie))
-		return MDNIE_COLOR_LENS_MODE;
-	if (IS_HDR_MODE(mdnie))
-		return MDNIE_HDR_MODE;
-	if (IS_HMD_MODE(mdnie))
-		return MDNIE_HMD_MODE;
-	if (IS_NIGHT_MODE(mdnie))
-		return MDNIE_NIGHT_MODE;
-	if (IS_HBM_MODE(mdnie))
-		return MDNIE_HBM_MODE;
+		mdnie_mode = MDNIE_BYPASS_MODE;
+	else if (IS_LIGHT_NOTIFICATION_MODE(mdnie))
+		mdnie_mode = MDNIE_LIGHT_NOTIFICATION_MODE;
+	else if (IS_ACCESSIBILITY_MODE(mdnie))
+		mdnie_mode = MDNIE_ACCESSIBILITY_MODE;
+	else if (IS_COLOR_LENS_MODE(mdnie))
+		mdnie_mode = MDNIE_COLOR_LENS_MODE;
+	else if (IS_HDR_MODE(mdnie))
+		mdnie_mode = MDNIE_HDR_MODE;
+	else if (IS_HMD_MODE(mdnie))
+		mdnie_mode = MDNIE_HMD_MODE;
+	else if (IS_NIGHT_MODE(mdnie))
+		mdnie_mode = MDNIE_NIGHT_MODE;
+	else if (IS_HBM_MODE(mdnie))
+		mdnie_mode = MDNIE_HBM_MODE;
 #if defined(CONFIG_TDMB)
-	if (IS_DMB_MODE(mdnie))
-		return MDNIE_DMB_MODE;
+	else if (IS_DMB_MODE(mdnie))
+		mdnie_mode = MDNIE_DMB_MODE;
 #endif
-	if (IS_SCENARIO_MODE(mdnie))
-		return MDNIE_SCENARIO_MODE;
-	return MDNIE_OFF_MODE;
+	else if (IS_SCENARIO_MODE(mdnie))
+		mdnie_mode = MDNIE_SCENARIO_MODE;
+	else
+		mdnie_mode = MDNIE_OFF_MODE;
+
+	if (panel->state.cur_state == PANEL_STATE_ALPM &&
+            ((mdnie_mode == MDNIE_ACCESSIBILITY_MODE &&
+             (mdnie->props.accessibility == NEGATIVE ||
+             mdnie->props.accessibility == GRAYSCALE_NEGATIVE)) ||
+             (mdnie_mode == MDNIE_SCENARIO_MODE && !IS_LDU_MODE(mdnie)) ||
+             mdnie_mode == MDNIE_COLOR_LENS_MODE ||
+             mdnie_mode == MDNIE_DMB_MODE ||
+             mdnie_mode == MDNIE_HDR_MODE ||
+             mdnie_mode == MDNIE_HMD_MODE)) {
+		pr_debug("%s block mdnie (%s->%s) in doze mode\n",
+				__func__, mdnie_mode_name[mdnie_mode],
+				mdnie_mode_name[MDNIE_BYPASS_MODE]);
+		mdnie_mode = MDNIE_BYPASS_MODE;
+	}
+
+	return mdnie_mode;
 }
 
 int mdnie_get_maptbl_index(struct mdnie_info *mdnie)
@@ -395,6 +416,7 @@ static int panel_set_mdnie(struct panel_device *panel)
 {
 	int ret;
 	struct mdnie_info *mdnie = &panel->mdnie;
+	int mdnie_mode = mdnie_current_state(mdnie);
 
 	if (panel == NULL) {
 		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
@@ -404,7 +426,14 @@ static int panel_set_mdnie(struct panel_device *panel)
 	if (!IS_PANEL_ACTIVE(panel))
 		return 0;
 
-	pr_info("%s, do mdnie-seq\n", __func__);
+#ifdef CONFIG_SUPPORT_AFC
+	pr_info("%s, do mdnie-seq (mode:%s, afc:%s)\n",
+			__func__, mdnie_mode_name[mdnie_mode],
+			!mdnie->props.afc_on ? "off" : "on");
+#else
+	pr_info("%s, do mdnie-seq (mode:%s)\n",
+			__func__, mdnie_mode_name[mdnie_mode]);
+#endif
 
 	ret = 0;
 	mutex_lock(&panel->op_lock);
@@ -468,13 +497,16 @@ static void mdnie_update_scr_white_mode(struct mdnie_info *mdnie)
 				 mdnie->props.scenario == EBOOK_MODE)) {
 			mdnie->props.scr_white_mode = SCR_WHITE_MODE_SENSOR_RGB;
 			mdnie->props.update_sensorRGB = false;
-		} else if (mdnie->props.scenario <= EMAIL_MODE &&
+		} else if (mdnie->props.scenario <= SCENARIO_MAX &&
 				mdnie->props.scenario != EBOOK_MODE) {
 			mdnie->props.scr_white_mode =
 				SCR_WHITE_MODE_COLOR_COORDINATE;
 		} else {
 			mdnie->props.scr_white_mode = SCR_WHITE_MODE_NONE;
 		}
+	} else if (mdnie_mode == MDNIE_HBM_MODE) {
+		mdnie->props.scr_white_mode =
+				SCR_WHITE_MODE_COLOR_COORDINATE;
 	} else {
 		mdnie->props.scr_white_mode = SCR_WHITE_MODE_NONE;
 	}
@@ -655,7 +687,7 @@ static ssize_t accessibility_store(struct device *dev,
 		return ret;
 	}
 
-	if (value >= ACCESSIBILITY_MAX) {
+	if (value < 0 || value >= ACCESSIBILITY_MAX) {
 		pr_warn("%s, unknown accessibility %d\n", __func__, value);
 		return -EINVAL;
 	}
@@ -1472,10 +1504,6 @@ int mdnie_probe(struct panel_device *panel, struct mdnie_tune *mdnie_tune)
 	mdnie->props.cal_x_center = mdnie_tune->cal_x_center;
 	mdnie->props.cal_y_center = mdnie_tune->cal_y_center;
 	mdnie->props.cal_boundary_center = mdnie_tune->cal_boundary_center;
-
-	for (i = 0; i < MAX_COLOR; i++) {
-		mdnie->props.swa_wrgb_ofs[i] = mdnie_tune->swa_wrgb_ofs[i];
-	}
 
 	mdnie->seqtbl = mdnie_tune->seqtbl;
 	mdnie->nr_seqtbl = mdnie_tune->nr_seqtbl;

@@ -1968,7 +1968,7 @@ static int crypt_ctr_cipher(struct dm_target *ti,
 
 	if ((strcmp(chainmode, "xts") == 0) && ivmode &&
 			(strcmp(cipher, "aes") == 0) &&
-			(strcmp(ivmode, "fmp") == 0)) {
+			(!strcmp(ivmode, "fmp") || !strcmp(ivmode, "disk"))) {
 		ret = req_crypt_fmp_get_dev(cc);
 		if (ret) {
 			ti->error = "Cannot get FMP device";

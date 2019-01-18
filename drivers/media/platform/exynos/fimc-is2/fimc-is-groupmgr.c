@@ -2037,7 +2037,6 @@ int fimc_is_group_start(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_group_task *gtask;
 	u32 sensor_fcount;
 	u32 framerate;
-	u32 shot_inc;
 	enum fimc_is_ex_mode ex_mode;
 
 	FIMC_BUG(!groupmgr);
@@ -2098,14 +2097,8 @@ int fimc_is_group_start(struct fimc_is_groupmgr *groupmgr,
 			memset(&group->intent_ctl, 0, sizeof(struct camera2_aa_ctl));
 
 			/* shot resource */
-			if ((group->init_shots + group->sync_shots) > smp_shot_get(group)) {
-				shot_inc = (group->init_shots + group->sync_shots) - smp_shot_get(group);
-				while (shot_inc > 0) {
-					up(&gtask->smp_resource);
-					smp_shot_inc(group);
-					shot_inc--;
-				}
-			}
+			sema_init(&gtask->smp_resource, group->asyn_shots + group->sync_shots);
+			smp_shot_init(group, group->asyn_shots + group->sync_shots);
 		} else {
 			if (framerate > 120)
 				group->asyn_shots = MIN_OF_ASYNC_SHOTS_240FPS;
@@ -2702,10 +2695,10 @@ static int fimc_is_group_check_pre(struct fimc_is_groupmgr *groupmgr,
 		fimc_is_gframe_group_head(group, &gframe);
 		if (unlikely(!gframe)) {
 			mgrerr("gframe is NULL1", device, group, frame);
-			fimc_is_stream_status(groupmgr, group_leader);
 			fimc_is_gframe_print_free(gframemgr);
 			fimc_is_gframe_print_group(group_leader);
 			spin_unlock_irqrestore(&gframemgr->gframe_slock, flags);
+			fimc_is_stream_status(groupmgr, group_leader);
 			ret = -EINVAL;
 			goto p_err;
 		}
@@ -2733,10 +2726,10 @@ static int fimc_is_group_check_pre(struct fimc_is_groupmgr *groupmgr,
 		fimc_is_gframe_free_head(gframemgr, &gframe);
 		if (unlikely(!gframe)) {
 			mgerr("gframe is NULL2", device, group);
-			fimc_is_stream_status(groupmgr, group_leader);
 			fimc_is_gframe_print_free(gframemgr);
 			fimc_is_gframe_print_group(group_leader);
 			spin_unlock_irqrestore(&gframemgr->gframe_slock, flags);
+			fimc_is_stream_status(groupmgr, group_leader);
 			group->fcount -= frame->num_buffers;
 			ret = -EINVAL;
 			goto p_err;
@@ -2766,10 +2759,10 @@ static int fimc_is_group_check_pre(struct fimc_is_groupmgr *groupmgr,
 		fimc_is_gframe_group_head(group, &gframe);
 		if (unlikely(!gframe)) {
 			mgrerr("gframe is NULL3", device, group, frame);
-			fimc_is_stream_status(groupmgr, group_leader);
 			fimc_is_gframe_print_free(gframemgr);
 			fimc_is_gframe_print_group(group_leader);
 			spin_unlock_irqrestore(&gframemgr->gframe_slock, flags);
+			fimc_is_stream_status(groupmgr, group_leader);
 			ret = -EINVAL;
 			goto p_err;
 		}
@@ -2797,10 +2790,10 @@ static int fimc_is_group_check_pre(struct fimc_is_groupmgr *groupmgr,
 		fimc_is_gframe_free_head(gframemgr, &gframe);
 		if (unlikely(!gframe)) {
 			mgerr("gframe is NULL4", device, group);
-			fimc_is_stream_status(groupmgr, group_leader);
 			fimc_is_gframe_print_free(gframemgr);
 			fimc_is_gframe_print_group(group_leader);
 			spin_unlock_irqrestore(&gframemgr->gframe_slock, flags);
+			fimc_is_stream_status(groupmgr, group_leader);
 			ret = -EINVAL;
 			goto p_err;
 		}
@@ -3020,15 +3013,6 @@ int fimc_is_group_shot(struct fimc_is_groupmgr *groupmgr,
 			frame->fcount = atomic_read(&group->sensor_fcount);
 		}
 		atomic_set(&group->backup_fcount, frame->fcount);
-
-		/* real automatic increase */
-		if (!try_sync_shot && (smp_shot_get(group) > MIN_OF_SYNC_SHOTS)) {
-			/* for multi-buffer */
-			if (frame->num_buffers)
-				atomic_add(frame->num_buffers, &group->sensor_fcount);
-			else
-				atomic_inc(&group->sensor_fcount);
-		}
 	} else {
 		if (test_bit(FIMC_IS_GROUP_OTF_INPUT, &group->state)) {
 			/* for multi-buffer */

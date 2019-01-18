@@ -4,7 +4,7 @@
 #ifndef __ASSEMBLY__
 
 /* uH_RKP Command ID */
-enum {
+enum __RKP_CMD_ID {
 	RKP_START = 1,
 	RKP_DEFERRED_START,
 	RKP_WRITE_PGT1,
@@ -23,38 +23,45 @@ enum {
 	RKP_ROPP_RELOAD,
 	/* and KDT cmds */
 	RKP_NOSHIP,
+#ifdef CONFIG_RKP_TEST
+	CMD_ID_TEST_GET_PAR = 0x81,
+	CMD_ID_TEST_GET_RO = 0x83,
+	CMD_ID_TEST_GET_VA_XN,
+	CMD_ID_TEST_GET_VMM_INFO,
+#endif
 	RKP_MAX
 };
 
 #define RKP_PREFIX  UL(0x83800000)
 
+#ifdef CONFIG_RKP_TEST
+#define RKP_INIT_MAGIC		0x5afe0002
+#else
 #define RKP_INIT_MAGIC		0x5afe0001
+#endif
+
 #define RKP_VMM_BUFFER		0x600000
 #define RKP_RO_BUFFER		UL(0x800000)
 
 #define RKP_FIMC_FAIL		0x10
 #define RKP_FIMC_SUCCESS	0xa5
 
-/* For RKP mem reserves */
-#define RKP_NUM_MEM		0x01
-
-/* For 6G RAM */
-#ifdef CONFIG_UH_RKP_6G
-#define RKP_PHYS_MAP_START	(0xAFE00000)
-#define RKP_PHYS_MAP_SIZE	(7ULL << 20)
-#define RKP_PGT_BITMAP_LEN	0x30000
+/* For 8G RAM */
+#ifdef CONFIG_UH_RKP_8G
+#define RKP_EXTRA_MEM_START	(0xAF600000)
+#define RKP_PGT_BITMAP_LEN	(0x40000)
+#define RKP_ROBUF_SIZE		(14ULL << 20)
 #else
-#define RKP_PHYS_MAP_START	(0xB0000000)
-#define RKP_PHYS_MAP_SIZE	(5ULL << 20)
-#define RKP_PGT_BITMAP_LEN	0x20000
+#define RKP_EXTRA_MEM_START	(0xAF800000)
+#define RKP_PGT_BITMAP_LEN	(0x30000)
+#define RKP_ROBUF_SIZE		(12ULL << 20)
 #endif
 
-#define RKP_ROBUF_START		0xB0808000
-#define RKP_ROBUF_SIZE		(0x7f8000ULL)
+#define RKP_EXTRA_MEM_SIZE	(0x600000)
+#define RKP_ROBUF_START		(0xB0800000)
 
-//#define RKP_EXTRA_MEM_START	(RKP_ROBUF_START + RKP_ROBUF_SIZE)
-#define RKP_EXTRA_MEM_START	(0xAF800000)
-#define RKP_EXTRA_MEM_SIZE	0x600000
+#define RKP_REGION_START	(RKP_EXTRA_MEM_START)
+#define RKP_REGION_SIZE		(RKP_REGION_START - RKP_ROBUF_START + RKP_ROBUF_SIZE)
 
 #define RKP_RBUF_VA		(phys_to_virt(RKP_ROBUF_START))
 #define RO_PAGES		(RKP_ROBUF_SIZE >> PAGE_SHIFT) // (RKP_ROBUF_SIZE/PAGE_SIZE)
@@ -68,12 +75,14 @@ extern int boot_mode_security;
 
 extern u8 rkp_pgt_bitmap[];
 extern u8 rkp_map_bitmap[];
+extern u8 __rkp_start_prot_page[];
+extern u8 __rkp_end_prot_page[];
 
 typedef struct rkp_init rkp_init_t;
 extern u8 rkp_started;
-extern void *rkp_ro_alloc(void);
-extern void rkp_ro_free(void *free_addr);
-extern unsigned int is_rkp_ro_page(u64 addr);
+void *rkp_ro_alloc(void);
+void rkp_ro_free(void *free_addr);
+unsigned int is_rkp_ro_page(u64 addr);
 
 struct rkp_init { //copy from uh (app/rkp/rkp.h)
          u32 magic;
@@ -85,7 +94,8 @@ struct rkp_init { //copy from uh (app/rkp/rkp.h)
          u64 rkp_pgt_bitmap;
          u64 rkp_dbl_bitmap;
          u32 rkp_bitmap_size;
-         u32 no_fimc_verify;
+         u32 rkp_prot_page_size;
+         u32 fimc_type;
 	 u64 fimc_phys_addr;
          u64 _text;
          u64 _etext;
@@ -95,6 +105,8 @@ struct rkp_init { //copy from uh (app/rkp/rkp.h)
          u64 _srodata;
          u64 _erodata;
          u32 large_memory;
+         u64 tramp_pgd;
+         u64 tramp_valias;
 };
 
 #ifdef CONFIG_RKP_KDP
@@ -117,7 +129,7 @@ typedef struct kdp_init_struct {
 	u32 rp_task;
 	u32 comm_task;
 	u32 bp_cred_secptr;
-	u32 task_threadinfo;
+	u64 verifiedbootstate;
 } kdp_init_t;
 #endif  /* CONFIG_RKP_KDP */
 
@@ -156,10 +168,10 @@ do {						\
 #define	PHYS_PFN_OFFSET_MIN_DRAM1	(0x80000ULL)
 #define	PHYS_PFN_OFFSET_MAX_DRAM1	(0x100000ULL)
 #define	PHYS_PFN_OFFSET_MIN_DRAM2	(0x880000ULL)
-#ifdef CONFIG_UH_RKP_6G
-#define	PHYS_PFN_OFFSET_MAX_DRAM2	(0x980000ULL)
+#ifdef CONFIG_UH_RKP_8G
+#define	PHYS_PFN_OFFSET_MAX_DRAM2	(0xA00000ULL)
 #else
-#define	PHYS_PFN_OFFSET_MAX_DRAM2	(0x900000ULL)
+#define	PHYS_PFN_OFFSET_MAX_DRAM2	(0x980000ULL)
 #endif
 
 #define DRAM_PFN_GAP			(PHYS_PFN_OFFSET_MIN_DRAM2 - PHYS_PFN_OFFSET_MAX_DRAM1)

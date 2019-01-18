@@ -21,6 +21,7 @@
 
 #include <soc/samsung/bts.h>
 #include "cal_bts9810.h"
+#include <soc/samsung/exynos-itmon.h>
 
 #define BTS_DBG(x...)		if (exynos_bts_log) pr_info(x)
 
@@ -50,6 +51,15 @@ static unsigned int exynos_nqmax_r;
 static unsigned int *exynos_qmax_w;
 static unsigned int exynos_nqmax_w;
 static unsigned int exynos_mif_freq = INITIAL_MIF_FREQ;
+
+#if defined(CONFIG_EXYNOS_ITMON)
+struct bts_itmon {
+	struct notifier_block itmon_nb;
+	bool notified;
+};
+
+struct bts_itmon *bts_dbg;
+#endif
 
 enum bts_index {
 	BTS_IDX_CP,
@@ -1520,6 +1530,34 @@ static int bts_debugfs(void)
 	return 0;
 }
 
+#if defined(CONFIG_EXYNOS_ITMON)
+static int bts_itmon_notifier(struct notifier_block *nb,
+			unsigned long action, void *nb_data)
+{
+	struct bts_info *info;
+	struct itmon_notifier *itmon_data = nb_data;
+
+	if (bts_dbg->notified)
+		return NOTIFY_DONE;
+
+	if (IS_ERR_OR_NULL(itmon_data))
+		return NOTIFY_DONE;
+
+	/* Check Master is CP */
+	if ((itmon_data->port && (strncmp("CP_", itmon_data->port,
+					sizeof("CP_") - 1) == 0))) {
+		info = &exynos_bts[BTS_IDX_CP];
+		pr_info("%s: %d QUSTATUS: %u\n",
+				__func__, __LINE__,
+				__raw_readl((info->va_base) + 0x14));
+		bts_dbg->notified = true;
+		return NOTIFY_OK;
+	}
+
+	return NOTIFY_DONE;
+}
+#endif
+
 static void bts_initialize_domains(void)
 {
 	unsigned long i;
@@ -1751,6 +1789,16 @@ static int __init exynos_bts_init(void)
 
 	pm_qos_add_request(&exynos_mif_bts_qos, PM_QOS_BUS_THROUGHPUT, 0);
 	pm_qos_add_request(&exynos_int_bts_qos, PM_QOS_DEVICE_THROUGHPUT, 0);
+
+#if defined(CONFIG_EXYNOS_ITMON)
+	bts_dbg = kmalloc(sizeof(struct bts_itmon), GFP_KERNEL);
+	if (!bts_dbg)
+		return -ENOMEM;
+
+	bts_dbg->itmon_nb.notifier_call = bts_itmon_notifier;
+	itmon_notifier_chain_register(&bts_dbg->itmon_nb);
+	bts_dbg->notified = false;
+#endif
 
 	register_syscore_ops(&exynos_bts_syscore_ops);
 	pr_info("BTS: driver is initialized\n");

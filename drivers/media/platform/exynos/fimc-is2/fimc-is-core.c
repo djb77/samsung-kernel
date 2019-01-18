@@ -1322,6 +1322,8 @@ static int __init fimc_is_probe(struct platform_device *pdev)
 	}
 #endif
 
+	mutex_init(&core->ois_mode_lock);
+
 	/* set sysfs for debuging */
 	sysfs_debug.en_clk_gate = 0;
 	sysfs_debug.en_dvfs = 1;

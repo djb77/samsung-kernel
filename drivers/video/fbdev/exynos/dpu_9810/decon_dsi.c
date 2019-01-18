@@ -444,8 +444,14 @@ static irqreturn_t decon_ext_irq_handler(int irq, void *dev_id)
 
 #ifdef CONFIG_DECON_HIBER
 	if (decon->state == DECON_STATE_ON && decon->dt.out_type == DECON_OUT_DSI) {
-		if (decon_min_lock_cond(decon))
+		if (decon_min_lock_cond(decon)) {
+			decon->hiber.timestamp = timestamp;
+#if defined(CONFIG_EXYNOS_HIBERNATION_THREAD)
+			wake_up_interruptible_all(&decon->hiber.wait);
+#else
 			kthread_queue_work(&decon->hiber.worker, &decon->hiber.work);
+#endif
+		}
 	}
 #endif
 #ifdef CONFIG_DECON_SYSTRACE_DISABLE
@@ -1034,8 +1040,13 @@ int decon_exit_hiber(struct decon_device *decon)
 
 	DPU_EVENT_START();
 
+	if (!decon->hiber.init_status)
+		return 0;
+
 	decon_hiber_block(decon);
+#if !defined(CONFIG_EXYNOS_HIBERNATION_THREAD)
 	kthread_flush_worker(&decon->hiber.worker);
+#endif
 	mutex_lock(&decon->hiber.lock);
 
 	if (decon->state != DECON_STATE_HIBER)
@@ -1173,6 +1184,63 @@ int decon_hiber_block_exit(struct decon_device *decon)
 	return ret;
 }
 
+#if defined(CONFIG_EXYNOS_HIBERNATION_THREAD)
+static int decon_hiber_thread(void *data)
+{
+	struct decon_device *decon = data;
+	ktime_t timestamp;
+	int ret;
+
+	while (!kthread_should_stop()) {
+		timestamp = decon->hiber.timestamp;
+		ret = wait_event_interruptible(decon->hiber.wait,
+				!ktime_equal(timestamp, decon->hiber.timestamp)
+				&& decon->hiber.init_status);
+
+		if (!ret) {
+			if (decon_hiber_enter_cond(decon))
+				decon_enter_hiber(decon);
+		}
+	}
+
+	return 0;
+}
+
+int decon_register_hiber_work(struct decon_device *decon)
+{
+	struct sched_param param;
+
+	mutex_init(&decon->hiber.lock);
+
+	if (decon->dt.out_type != DECON_OUT_DSI) {
+		decon_info("hiber thread is only needed for DSI path\n");
+		return 0;
+	}
+
+	atomic_set(&decon->hiber.trig_cnt, 0);
+	atomic_set(&decon->hiber.block_cnt, 0);
+
+	decon->hiber.thread = kthread_run(decon_hiber_thread,
+			decon, "decon_hiber");
+	if (IS_ERR(decon->hiber.thread)) {
+		decon->hiber.thread = NULL;
+		decon_err("failed to run hibernation thread\n");
+		return PTR_ERR(decon->hiber.thread);
+	}
+	param.sched_priority = 20;
+	sched_setscheduler_nocheck(decon->hiber.thread, SCHED_FIFO, &param);
+
+	decon->hiber.init_status = true;
+
+	return 0;
+}
+
+void decon_destroy_hiber_thread(struct decon_device *decon)
+{
+	if (decon->hiber.thread)
+		kthread_stop(decon->hiber.thread);
+}
+#else
 static void decon_hiber_handler(struct kthread_work *work)
 {
 	struct decon_hiber *hiber =
@@ -1212,3 +1280,4 @@ int decon_register_hiber_work(struct decon_device *decon)
 
 	return 0;
 }
+#endif

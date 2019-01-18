@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: nan.h 744033 2018-01-31 07:33:59Z $
+ * $Id: nan.h 758133 2018-04-17 19:07:15Z $
  */
 #ifndef _NAN_H_
 #define _NAN_H_
@@ -37,7 +37,7 @@
 #include <packed_section_start.h>
 
 /* WiFi NAN OUI values */
-#define NAN_OUI			WFA_OUI     /* WiFi OUI */
+#define NAN_OUI			"\x50\x6F\x9A"     /* WFA OUI. WiFi-Alliance OUI */
 /* For oui_type field identifying the type and version of the NAN IE. */
 #define NAN_OUI_TYPE		0x13        /* Type/Version */
 #define NAN_AF_OUI_TYPE		0x18        /* Type/Version */
@@ -119,6 +119,17 @@
 #define NAN_AVAIL_ENTRY_LEN_RES0 7      /* Avail entry len in FAM attribute for resolution 16TU */
 #define NAN_AVAIL_ENTRY_LEN_RES1 5      /* Avail entry len in FAM attribute for resolution 32TU */
 #define NAN_AVAIL_ENTRY_LEN_RES2 4      /* Avail entry len in FAM attribute for resolution 64TU */
+
+/* map id field */
+#define NAN_MAPID_SPECIFIC_MAP_MASK	0x01 /* apply to specific map */
+#define NAN_MAPID_MAPID_MASK		0x1E
+#define NAN_MAPID_MAPID_SHIFT		1
+#define NAN_MAPID_SPECIFIC_MAP(_mapid)	((_mapid) & NAN_MAPID_SPECIFIC_MAP_MASK)
+#define NAN_MAPID_ALL_MAPS(_mapid)	(!NAN_MAPID_SPECIFIC_MAP(_mapid))
+#define NAN_MAPID_MAPID(_mapid)		(((_mapid) & NAN_MAPID_MAPID_MASK) \
+		>> NAN_MAPID_MAPID_SHIFT)
+#define NAN_MAPID_SET_SPECIFIC_MAPID(map_id)	((((map_id) << NAN_MAPID_MAPID_SHIFT) \
+		& NAN_MAPID_MAPID_MASK) | NAN_MAPID_SPECIFIC_MAP_MASK)
 
 /* Vendor-specific public action frame for NAN */
 typedef BWL_PRE_PACKED_STRUCT struct nan_pub_act_frame_s {
@@ -933,6 +944,9 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_dev_cap_s {
 #define NAN_DEV_CAP_RX_ANT_SHIFT		4
 #define NAN_DEV_CAP_TX_ANT_MASK			0x0F
 #define NAN_DEV_CAP_RX_ANT_MASK			0xF0
+#define NAN_DEV_CAP_TX_ANT(_ant)		((_ant) & NAN_DEV_CAP_TX_ANT_MASK)
+#define NAN_DEV_CAP_RX_ANT(_ant)		(((_ant) & NAN_DEV_CAP_RX_ANT_MASK) \
+		>> NAN_DEV_CAP_RX_ANT_SHIFT)
 
 /* Device capabilities */
 
@@ -956,6 +970,10 @@ enum {
 	NAN_BAND_ID_60G			= 5
 };
 typedef uint8 nan_band_id_t;
+
+/* NAN supported band in device capability */
+#define NAN_DEV_CAP_SUPPORTED_BANDS_2G	(1 << NAN_BAND_ID_2G)
+#define NAN_DEV_CAP_SUPPORTED_BANDS_5G	(1 << NAN_BAND_ID_5G)
 
 /*
  * Unaligned schedule attribute section 10.7.19.6 spec. ver r15

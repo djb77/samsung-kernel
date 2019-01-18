@@ -168,6 +168,7 @@ typedef struct wifi_rate {
 
 typedef struct rtt_target_info {
 	struct ether_addr addr;
+	struct ether_addr local_addr;
 	rtt_type_t type; /* rtt_type */
 	rtt_peer_type_t peer; /* peer type */
 	wifi_channel_info_t channel; /* channel information */

@@ -314,7 +314,7 @@
 		fuelgauge,using_temp_compensation;
 		fuelgauge,low_temp_limit = <100>;
 		fuelgauge,using_hw_vempty;
-		fuelgauge,v_empty = <0xA7E2>; /* Empty: 3260mV, Recover: 3480mV */
+		fuelgauge,v_empty = <0xA7E2>; /* Empty: 3350mV, Recover: 3920mV */
 		fuelgauge,v_empty_origin = <0x7D54>; /* Empty: 2500mV, Recover: 3360mV */
 		fuelgauge,sw_v_empty_voltage = <3200>;
 		fuelgauge,sw_v_empty_voltage_cisd = <3100>;
@@ -457,7 +457,8 @@
  *  30	TIMEOUT,
  *  31	SMART_OTG,
  *  32	SMART_NOTG,
- *  33	CABLE_MAX,
+ *  33	WIRELESS_TX,
+ *  34	CABLE_MAX,
  */
 	cable-info {
 		default_input_current = <1800>;
@@ -491,7 +492,7 @@
 		       charging_current = <2500>;
 		};
 		current_group_6 {
-			cable_number = <10 12 14 15 27>;
+			cable_number = <10 12 14 15 27 33>;
 			input_current = <900>;
 			charging_current = <1400>;
 		};

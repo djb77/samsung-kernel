@@ -984,30 +984,30 @@ static void fmptask_routine(struct work_struct *work)
 int fmp_fips_open(struct inode *inode, struct file *file)
 {
 	int i, ret = 0;
-	struct fmp_fips_info *info = NULL;
+	struct fmp_fips_info *info;
 	struct todo_list_item *tmp;
 	struct exynos_fmp *fmp = container_of(file->private_data,
 			struct exynos_fmp, miscdev);
 
 	if (!fmp || !fmp->dev) {
 		pr_err("%s: Invalid fmp driver\n", __func__);
-		ret = -EINVAL;
-		goto err;
+		return -EINVAL;
 	}
 
 	dev_info(fmp->dev, "fmp fips driver name : %s\n", dev_name(fmp->dev));
 	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info) {
-		ret = -ENOMEM;
-		goto err;
+		dev_err(fmp->dev, "%s: Fail to get mem for fips data\n",
+				__func__);
+		return -ENOMEM;
 	}
-	memset(info, 0, sizeof(*info));
 
 	info->data = do_fmp_fips_init(fmp);
-	if (ret) {
-		dev_err(fmp->dev, "%s: Fail to initialize fips test. ret(%d)\n",
-				__func__, ret);
-		goto err;
+	if (!info->data) {
+		dev_err(fmp->dev, "%s: Fail to initialize fips test\n",
+				__func__);
+		kzfree(info);
+		return -EINVAL;
 	}
 
 	mutex_init(&info->fcrypt.sem);
@@ -1033,10 +1033,6 @@ int fmp_fips_open(struct inode *inode, struct file *file)
 	file->private_data = info;
 
 	dev_info(fmp->dev, "%s opened.\n", dev_name(fmp->dev));
-	return ret;
-err:
-	if (info)
-		do_fmp_fips_exit(info->data);
 	return ret;
 }
 

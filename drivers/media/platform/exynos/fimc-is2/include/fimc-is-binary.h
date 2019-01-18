@@ -25,17 +25,17 @@
 #else
 #ifdef VENDER_PATH
 #define FIMC_IS_FW_PATH 			"/system/vendor/firmware/"
-#define FIMC_IS_FW_DUMP_PATH			"/data/camera/"
-#define FIMC_IS_SETFILE_SDCARD_PATH		"/data/media/0/"
-#define FIMC_IS_FW_SDCARD			"/data/media/0/fimc_is_fw.bin"
+#define FIMC_IS_FW_DUMP_PATH			"/data/vendor/camera/"
+#define FIMC_IS_SETFILE_SDCARD_PATH		"/data/vendor/camera/"
+#define FIMC_IS_FW_SDCARD			"/data/vendor/camera/fimc_is_fw.bin"
 #define FIMC_IS_FW				"fimc_is_fw.bin"
 #define FIMC_IS_LIB_PATH			"/system/vendor/firmware/"
 #ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
 #define FIMC_IS_ISP_LIB_SDCARD_PATH		NULL
 #else
-#define FIMC_IS_ISP_LIB_SDCARD_PATH		"/data/media/0/"
+#define FIMC_IS_ISP_LIB_SDCARD_PATH		"/data/vendor/camera/"
 #endif
-#define FIMC_IS_REAR_CAL_SDCARD_PATH		"/data/media/0/"
+#define FIMC_IS_REAR_CAL_SDCARD_PATH		"/data/vendor/camera/"
 #define FIMC_IS_FRONT_CAL_SDCARD_PATH		"/data/media/0/"
 #else
 #define FIMC_IS_FW_PATH 			"/system/vendor/firmware/"

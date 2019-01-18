@@ -67,6 +67,7 @@ static void five_audit_msg(struct task_struct *task, struct file *file,
 	unsigned long ino = 0;
 	char *dev = "";
 	struct task_struct *tsk = task ? task : current;
+	struct integrity_iint_cache *iint = NULL;
 
 	if (file) {
 		inode = file_inode(file);
@@ -81,8 +82,7 @@ static void five_audit_msg(struct task_struct *task, struct file *file,
 	}
 
 	audit_log_format(ab, " pid=%d", task_pid_nr(tsk));
-	audit_log_format(ab, " gpid=%d",
-			task_pid_nr(tsk->group_leader));
+	audit_log_format(ab, " tgid=%d", task_tgid_nr(tsk));
 	audit_log_task_context(ab);
 	audit_log_format(ab, " op=");
 	audit_log_string(ab, op);
@@ -103,6 +103,10 @@ static void five_audit_msg(struct task_struct *task, struct file *file,
 		audit_log_format(ab, " ino=%lu", inode->i_ino);
 		ino = inode->i_ino;
 		dev = inode->i_sb->s_id;
+		iint = integrity_inode_get(inode);
+		if (iint)
+			audit_log_format(ab, " five_status=%d ",
+							iint->five_status);
 	}
 	audit_log_format(ab, " res=%d", result);
 	audit_log_end(ab);
@@ -162,9 +166,12 @@ void five_audit_hexinfo(struct file *file, const char *msg, char *data,
 		audit_log_format(ab, " i_version=%lu ",
 				(unsigned long)inode->i_version);
 		iint = integrity_inode_get(inode);
-		if (iint)
+		if (iint) {
 			audit_log_format(ab, " cache_value=%lu ",
 							iint->five_flags);
+			audit_log_format(ab, " five_status=%d ",
+							iint->five_status);
+		}
 	}
 
 	audit_log_string(ab, msg);

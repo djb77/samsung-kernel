@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_sdio.c 721361 2017-09-14 05:33:32Z $
+ * $Id: dhd_sdio.c 784292 2018-10-11 11:34:26Z $
  */
 
 #include <typedefs.h>
@@ -902,7 +902,10 @@ dhdsdio_sr_cap(dhd_bus_t *bus)
 		(bus->sih->chip == BCM4358_CHIP_ID) ||
 		(BCM4349_CHIP(bus->sih->chip))		||
 		(bus->sih->chip == BCM4350_CHIP_ID) ||
-		(bus->sih->chip == BCM43012_CHIP_ID)) {
+		(bus->sih->chip == BCM4362_CHIP_ID) ||
+		(bus->sih->chip == BCM43012_CHIP_ID) ||
+		(bus->sih->chip == BCM43014_CHIP_ID) ||
+		(bus->sih->chip == BCM43751_CHIP_ID)) {
 		core_capext = TRUE;
 	} else {
 			core_capext = bcmsdh_reg_read(bus->sdh,
@@ -974,7 +977,10 @@ dhdsdio_sr_init(dhd_bus_t *bus)
 	if (CHIPID(bus->sih->chip) == BCM43430_CHIP_ID ||
 		CHIPID(bus->sih->chip) == BCM43018_CHIP_ID ||
 		CHIPID(bus->sih->chip) == BCM4339_CHIP_ID ||
-		CHIPID(bus->sih->chip) == BCM43012_CHIP_ID)
+		CHIPID(bus->sih->chip) == BCM43012_CHIP_ID ||
+		CHIPID(bus->sih->chip) == BCM4362_CHIP_ID ||
+		CHIPID(bus->sih->chip) == BCM43014_CHIP_ID ||
+		CHIPID(bus->sih->chip) == BCM43751_CHIP_ID)
 		dhdsdio_devcap_set(bus, SDIOD_CCCR_BRCM_CARDCAP_CMD_NODEC);
 
 	if (bus->sih->chip == BCM43012_CHIP_ID) {
@@ -2744,7 +2750,8 @@ dhd_bus_txctl(struct dhd_bus *bus, uchar *msg, uint msglen)
 			}
 #ifdef DHD_FW_COREDUMP
 			/* Collect socram dump */
-			if (bus->dhd->memdump_enabled) {
+			if ((bus->dhd->memdump_enabled) &&
+				(bus->dhd->txcnt_timeout >= MAX_CNTL_TX_TIMEOUT)) {
 				/* collect core dump */
 				bus->dhd->memdump_type = DUMP_TYPE_RESUMED_ON_TIMEOUT_TX;
 				dhd_os_sdunlock(bus->dhd);
@@ -4189,8 +4196,10 @@ dhdsdio_doiovar(dhd_bus_t *bus, const bcm_iovar_t *vi, uint32 actionid, const ch
 		ASSERT(bus->dhd->osh);
 		/* ASSERT(bus->cl_devid); */
 
+		/* must release sdlock, since devreset also acquires it */
+		dhd_os_sdunlock(bus->dhd);
 		dhd_bus_devreset(bus->dhd, (uint8)bool_val);
-
+		dhd_os_sdlock(bus->dhd);
 		break;
 	/*
 	 * softap firmware is updated through module parameter or android private command
@@ -7406,6 +7415,7 @@ dhd_bus_watchdog(dhd_pub_t *dhdp)
 
 	DHD_LINUX_GENERAL_LOCK(dhdp, flags);
 	DHD_BUS_BUSY_CLEAR_IN_WD(dhdp);
+	dhd_os_busbusy_wake(dhdp);
 	DHD_LINUX_GENERAL_UNLOCK(dhdp, flags);
 
 	return bus->ipend;
@@ -7529,6 +7539,16 @@ dhdsdio_chipmatch(uint16 chipid)
 
 	if (chipid == BCM43012_CHIP_ID)
 		return TRUE;
+
+	if (chipid == BCM43014_CHIP_ID)
+		return TRUE;
+
+	if (chipid == BCM4369_CHIP_ID)
+		return TRUE;
+
+	if (BCM4378_CHIP(chipid)) {
+		return TRUE;
+	}
 
 	return FALSE;
 }
@@ -7706,8 +7726,10 @@ dhdsdio_probe(uint16 venid, uint16 devid, uint16 bus_no, uint16 slot,
 	 */
 	dhdsdio_bus_usr_cnt_inc(bus->dhd);
 #endif /* BT_OVER_SDIO */
+
 	/* Ok, have the per-port tell the stack we're open for business */
-	if (dhd_register_if(bus->dhd, 0, TRUE) != 0) {
+	if (dhd_attach_net(bus->dhd, TRUE) != 0)
+	{
 		DHD_ERROR(("%s: Net attach failed!!\n", __FUNCTION__));
 		goto fail;
 	}
@@ -7752,6 +7774,7 @@ dhdsdio_probe_attach(struct dhd_bus *bus, osl_t *osh, void *sdh, void *regsva,
 	int32 value;
 	int err = 0;
 
+	BCM_REFERENCE(value);
 	bus->alp_only = TRUE;
 	bus->sih = NULL;
 
@@ -7834,14 +7857,14 @@ dhdsdio_probe_attach(struct dhd_bus *bus, osl_t *osh, void *sdh, void *regsva,
 			}
 #endif /* DHD_DEBUG */
 		}
-#else
-	BCM_REFERENCE(cis);
-	BCM_REFERENCE(fn);
-#endif /* DHD_DEBUG */
 	while (fn-- > 0) {
 		ASSERT(cis[fn]);
 		MFREE(osh, cis[fn], SBSDIO_CIS_SIZE_LIMIT);
 	}
+#else
+	BCM_REFERENCE(cis);
+	BCM_REFERENCE(fn);
+#endif /* DHD_DEBUG */
 
 	if (err) {
 		DHD_ERROR(("dhdsdio_probe: failure reading or parsing CIS\n"));
@@ -7921,6 +7944,12 @@ dhdsdio_probe_attach(struct dhd_bus *bus, osl_t *osh, void *sdh, void *regsva,
 				break;
 			case BCM4364_CHIP_ID:
 				bus->dongle_ram_base = CR4_4364_RAM_BASE;
+				break;
+			case BCM4369_CHIP_ID:
+				bus->dongle_ram_base = CR4_4369_RAM_BASE;
+				break;
+			case BCM4378_CHIP_GRPID:
+				bus->dongle_ram_base = CR4_4378_RAM_BASE;
 				break;
 			default:
 				bus->dongle_ram_base = 0;
@@ -8477,13 +8506,14 @@ dhdsdio_download_code_file(struct dhd_bus *bus, char *pfw_path)
 	DHD_INFO(("%s: download firmware %s\n", __FUNCTION__, pfw_path));
 
 	image = dhd_os_open_image1(bus->dhd, pfw_path);
-	if (image == NULL)
+	if (image == NULL) {
+		DHD_ERROR(("%s: Failed to open fw file !\n", __FUNCTION__));
 		goto err;
+	}
 
 	/* Update the dongle image download block size depending on the F1 block size */
 	if (sd_f1_blocksize == 512)
 		memblock_size = MAX_MEMBLOCK;
-
 	memptr = memblock = MALLOC(bus->dhd->osh, memblock_size + DHD_SDALIGN);
 	if (memblock == NULL) {
 		DHD_ERROR(("%s: Failed to allocate memory %d bytes\n", __FUNCTION__,
@@ -8738,7 +8768,7 @@ _dhdsdio_download_firmware(struct dhd_bus *bus)
 
 	/* Out immediately if no image to download */
 	if ((bus->fw_path == NULL) || (bus->fw_path[0] == '\0')) {
-		return 0;
+		return bcmerror;
 	}
 
 	/* Keep arm in reset */
@@ -8954,7 +8984,6 @@ dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)
 			/* Expect app to have torn down any connection before calling */
 			/* Stop the bus, disable F2 */
 			dhd_bus_stop(bus, FALSE);
-
 #if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID)
 			/* Clean up any pending IRQ */
 			dhd_enable_oob_intr(bus, FALSE);
@@ -8981,14 +9010,15 @@ dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)
 	} else {
 		/* App must have restored power to device before calling */
 
-		DHD_TRACE(("\n\n%s: == WLAN ON ==\n", __FUNCTION__));
+		DHD_ERROR(("\n\n%s: == Power ON ==\n", __FUNCTION__));
 
 		if (bus->dhd->dongle_reset) {
 			/* Turn on WLAN */
 			dhd_os_sdlock(dhdp);
-			/* Reset SD client */
+			/* Reset SD client -- required if devreset is called
+			* via 'dhd devreset' iovar
+			*/
 			bcmsdh_reset(bus->sdh);
-
 			/* Attempt to re-attach & download */
 			if (dhdsdio_probe_attach(bus, bus->dhd->osh, bus->sdh,
 				(uint32 *)(uintptr)si_enum_base(bus->cl_devid),
@@ -8997,6 +9027,7 @@ dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)
 				DHD_LINUX_GENERAL_LOCK(bus->dhd, flags);
 				bus->dhd->busstate = DHD_BUS_DOWN;
 				DHD_LINUX_GENERAL_UNLOCK(bus->dhd, flags);
+
 				/* Attempt to download binary to the dongle */
 				if (dhdsdio_probe_init(bus, bus->dhd->osh, bus->sdh) &&
 				    dhdsdio_download_firmware(bus, bus->dhd->osh, bus->sdh) >= 0) {

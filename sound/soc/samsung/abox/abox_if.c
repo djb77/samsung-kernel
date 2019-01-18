@@ -814,6 +814,16 @@ int abox_if_hw_params_fixup_by_dai(struct snd_soc_dai *dai,
 	channels = data->config[ABOX_IF_CHANNEL];
 	width = data->config[ABOX_IF_WIDTH];
 
+	/* don't break symmetric limitation */
+	if (dai->driver->symmetric_rates && dai->rate && dai->rate != rate)
+		rate = dai->rate;
+	if (dai->driver->symmetric_channels && dai->channels &&
+			dai->channels != channels)
+		channels = dai->channels;
+	if (dai->driver->symmetric_samplebits && dai->sample_width &&
+			dai->sample_width != width)
+		width = dai->sample_width;
+
 	if (rate)
 		hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE)->min = rate;
 

@@ -32,7 +32,7 @@ struct s2dos05_dev {
 	int type;
 	u8 rev_num; /* pmic Rev */
 	bool wakeup;
-	int dp_irq;
+	int dp_pmic_irq;
 	int		adc_mode;
 	int		adc_sync_mode;
 	u8 adc_en_val;
@@ -51,7 +51,7 @@ struct s2dos05_platform_data {
 	int num_regulators;
 	struct	s2dos05_regulator_data *regulators;
 	int	device_type;
-	int dp_irq;
+	int dp_pmic_irq;
 
 	/* adc_mode
 	 * 0 : not use
@@ -84,6 +84,7 @@ enum S2DOS05_reg {
 	S2DOS05_REG_IRQ = 0x11,
 #ifdef CONFIG_SEC_PM
 	S2DOS05_REG_SSD_TSD = 0x0E,
+	S2DOS05_REG_UVLO_FD = 0x0F,
 	S2DOS05_REG_OCL = 0x10,
 #endif
 };
@@ -181,5 +182,8 @@ extern int s2dos05_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest);
 extern int s2dos05_write_reg(struct i2c_client *i2c, u8 reg, u8 value);
 extern int s2dos05_update_reg(struct i2c_client *i2c, u8 reg, u8 val, u8 mask);
 
+#ifdef CONFIG_SEC_PM
+extern struct device *sec_disp_pmic_dev;
+#endif /* CONFIG_SEC_PM */
 
 #endif /*  __LINUX_MFD_S2DOS05_H */

@@ -98,8 +98,10 @@ static void spay_enable(void *device_data);
 static void set_aod_rect(void *device_data);
 static void get_aod_rect(void *device_data);
 static void aod_enable(void *device_data);
+static void singletap_enable(void *device_data);
 static void set_grip_data(void *device_data);
 static void dex_enable(void *device_data);
+static void external_noise_mode(void *device_data);
 static void brush_enable(void *device_data);
 static void set_touchable_area(void *device_data);
 static void set_log_level(void *device_data);
@@ -206,8 +208,10 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("set_aod_rect", set_aod_rect),},
 	{SEC_CMD("get_aod_rect", get_aod_rect),},
 	{SEC_CMD("aod_enable", aod_enable),},
+	{SEC_CMD("singletap_enable", singletap_enable),},
 	{SEC_CMD("set_grip_data", set_grip_data),},
 	{SEC_CMD("dex_enable", dex_enable),},
+	{SEC_CMD("external_noise_mode", external_noise_mode),},	
 	{SEC_CMD("brush_enable", brush_enable),},
 	{SEC_CMD("set_touchable_area", set_touchable_area),},
 	{SEC_CMD("set_log_level", set_log_level),},
@@ -1498,6 +1502,28 @@ static ssize_t prox_power_off_store(struct device *dev,
 	return count;
 }
 
+static ssize_t read_support_feature(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	u32 feature = 0;
+
+	if (ts->plat_data->support_pressure)
+		feature |= INPUT_FEATURE_ENABLE_PRESSURE;
+
+	if (ts->plat_data->sync_reportrate_120)
+		feature |= INPUT_FEATURE_ENABLE_SYNC_RR120;
+
+	input_info(true, &ts->client->dev, "%s: %d%s%s%s\n",
+			__func__, feature,
+			feature & INPUT_FEATURE_ENABLE_SETTINGS_AOT ? " aot" : "",
+			feature & INPUT_FEATURE_ENABLE_PRESSURE ? " pressure" : "",
+			feature & INPUT_FEATURE_ENABLE_SYNC_RR120 ? " RR120hz" : "");
+
+	return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", feature);
+}
+
 static DEVICE_ATTR(ito_check, 0444, read_ito_check_show, NULL);
 static DEVICE_ATTR(raw_check, 0444, read_raw_check_show, NULL);
 static DEVICE_ATTR(multi_count, 0664, read_multi_count_show, clear_multi_count_store);
@@ -1529,6 +1555,7 @@ static DEVICE_ATTR(cmoffset_main, 0444, get_cmoffset_main, NULL);
 static DEVICE_ATTR(cfoffset_strength, 0444, get_pressure_cfoffset_strength_all, NULL);
 #endif
 static DEVICE_ATTR(prox_power_off, 0664, prox_power_off_show, prox_power_off_store);
+static DEVICE_ATTR(support_feature, 0444, read_support_feature, NULL);
 
 static struct attribute *cmd_attributes[] = {
 	&dev_attr_scrub_pos.attr,
@@ -1563,6 +1590,7 @@ static struct attribute *cmd_attributes[] = {
 	&dev_attr_cfoffset_strength.attr,
 #endif
 	&dev_attr_prox_power_off.attr,
+	&dev_attr_support_feature.attr,
 	NULL,
 };
 
@@ -2454,7 +2482,7 @@ static int sec_ts_read_rawp2p_data_all(struct sec_ts_data *ts,
 
 	input_info(true, &ts->client->dev, "%s: start\n", __func__);
 
-	readbytes = ts->tx_count + ts->rx_count;
+	readbytes = (ts->tx_count + ts->rx_count) * 2;
 
 	p2p_min = kzalloc(readbytes, GFP_KERNEL);
 	if (!p2p_min)
@@ -5103,7 +5131,7 @@ static void run_15khz_cm3_gap_read(void *device_data)
 	memset(&spec[0][0], 0x00, ts->tx_count * ts->rx_count * 2);
 	for (ii = 0; ii < ts->rx_count; ii++) {
 		for (jj = 0; jj < ts->tx_count; jj++) {
-			spec[ii][jj] = 7;
+			spec[ii][jj] = 11;
 		}
 	}
 	spec[0][0] = 40;
@@ -6804,6 +6832,7 @@ static void factory_cmd_result_all(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	char buff[16] = { 0 };
 
 	sec->item_count = 0;
 	memset(sec->cmd_result_all, 0x00, SEC_CMD_RESULT_STR_LEN);
@@ -6821,6 +6850,9 @@ static void factory_cmd_result_all(void *device_data)
 
 	sec->cmd_all_factory_state = SEC_CMD_STATUS_RUNNING;
 
+	snprintf(buff, sizeof(buff), "%d", ts->plat_data->item_version);
+	sec_cmd_set_cmd_result_all(sec, buff, sizeof(buff), "ITEM_VERSION");	
+
 	get_chip_vendor(sec);
 	get_chip_name(sec);
 	get_fw_ver_bin(sec);
@@ -6830,12 +6862,12 @@ static void factory_cmd_result_all(void *device_data)
 	get_gap_data(sec);
 	run_reference_read(sec);
 
-	run_raw_p2p_read_all(sec);
-
 	run_self_rawcap_read(sec);
 	get_self_channel_data(sec, TYPE_OFFSET_DATA_SDC);
 	run_self_reference_read(sec);
 	get_self_channel_data(sec, TYPE_OFFSET_DATA_SEC);
+
+	run_raw_p2p_read_all(sec);
 
 	get_wet_mode(sec);
 	get_mis_cal_info(sec);
@@ -6895,17 +6927,17 @@ static void set_wirelesscharger_mode(void *device_data)
 		mode = true;
 	}
 
-	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
-		input_err(true, &ts->client->dev, "%s: fail to enable w-charger status, POWER_STATUS=OFF\n", __func__);
-		goto NG;
-	}
-
 	if (sec->cmd_param[0] == 1)
 		ts->charger_mode = ts->charger_mode | SEC_TS_BIT_CHARGER_MODE_WIRELESS_CHARGER;
 	else if (sec->cmd_param[0] == 3)
 		ts->charger_mode = ts->charger_mode | SEC_TS_BIT_CHARGER_MODE_WIRELESS_BATTERY_PACK;
 	else if (mode == false)
 		ts->charger_mode = ts->charger_mode & (~SEC_TS_BIT_CHARGER_MODE_WIRELESS_CHARGER) & (~SEC_TS_BIT_CHARGER_MODE_WIRELESS_BATTERY_PACK);
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		input_err(true, &ts->client->dev, "%s: fail to enable w-charger status, POWER_STATUS=OFF\n", __func__);
+		goto NG;
+	}
 
 	w_data[0] = ts->charger_mode;
 	ret = ts->sec_ts_i2c_write(ts, SET_TS_CMD_SET_CHARGER_MODE, w_data, 1);
@@ -6975,15 +7007,21 @@ static void set_aod_rect(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	struct irq_desc *desc = irq_to_desc(ts->client->irq);
 	char buff[SEC_CMD_STR_LEN] = { 0 };
 	u8 data[10] = {0x02, 0};
 	int ret, i;
 
 	sec_cmd_set_default_result(sec);
 
-	input_info(true, &ts->client->dev, "%s: w:%d, h:%d, x:%d, y:%d\n",
+	ts->irq_gpio_status = gpio_get_value(ts->plat_data->irq_gpio);
+	ts->irq_depth = desc->depth;
+	ts->irq_count = desc->irq_count;
+
+	input_info(true, &ts->client->dev, "%s: w:%d, h:%d, x:%d, y:%d, (%d,%d,%d)\n",
 			__func__, sec->cmd_param[0], sec->cmd_param[1],
-			sec->cmd_param[2], sec->cmd_param[3]);
+			sec->cmd_param[2], sec->cmd_param[3],
+			ts->irq_gpio_status, ts->irq_depth, ts->irq_count);
 
 	for (i = 0; i < 4; i++) {
 		data[i * 2 + 2] = sec->cmd_param[i] & 0xFF;
@@ -7084,6 +7122,40 @@ static void aod_enable(void *device_data)
 
 	if (ts->use_sponge)
 		sec_ts_set_custom_library(ts);
+
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec_cmd_set_cmd_exit(sec);
+	return;
+
+NG:
+	snprintf(buff, sizeof(buff), "%s", "NG");
+	sec->cmd_state = SEC_CMD_STATUS_FAIL;
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec_cmd_set_cmd_exit(sec);
+}
+
+static void singletap_enable(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	char buff[SEC_CMD_STR_LEN] = { 0 };
+
+	sec_cmd_set_default_result(sec);
+
+	if (!ts->use_sponge || sec->cmd_param[0] < 0 || sec->cmd_param[0] > 1)
+		goto NG;
+
+	if (sec->cmd_param[0])
+		ts->lowpower_mode |= SEC_TS_MODE_SPONGE_SINGLE_TAP;
+	else
+		ts->lowpower_mode &= ~SEC_TS_MODE_SPONGE_SINGLE_TAP;
+
+	input_info(true, &ts->client->dev, "%s: %s, %02X\n",
+			__func__, sec->cmd_param[0] ? "on" : "off", ts->lowpower_mode);
+
+	sec_ts_set_custom_library(ts);
 
 	snprintf(buff, sizeof(buff), "%s", "OK");
 	sec->cmd_state = SEC_CMD_STATUS_OK;
@@ -7336,6 +7408,117 @@ static void dex_enable(void *device_data)
 				sec->cmd_param[1] ? "iris " : "");
 		goto NG;
 	}
+
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec_cmd_set_cmd_exit(sec);
+	return;
+
+NG:
+	snprintf(buff, sizeof(buff), "%s", "NG");
+	sec->cmd_state = SEC_CMD_STATUS_FAIL;
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec_cmd_set_cmd_exit(sec);
+}
+
+/*
+ * Enable or disable external_noise_mode
+ *
+ * If mode has EXT_NOISE_MODE_MAX,
+ * then write enable cmd for all enabled mode. (set as ts->external_noise_mode bit value)
+ * This routine need after IC power reset. TSP IC need to be re-wrote all enabled modes.
+ *
+ * Else if mode has specific value like EXT_NOISE_MODE_MONITOR,
+ * then write enable/disable cmd about for that mode's latest setting value.
+ *
+ * If you want to add new mode,
+ * please define new enum value like EXT_NOISE_MODE_MONITOR,
+ * then set cmd for that mode like below. (it is in this function)
+ * noise_mode_cmd[EXT_NOISE_MODE_MONITOR] = SEC_TS_CMD_SET_MONITOR_NOISE_MODE;
+ */
+int sec_ts_set_external_noise_mode(struct sec_ts_data *ts, u8 mode)
+{
+	int i, ret, fail_count = 0;
+	u8 mode_bit_to_set, check_bit, mode_enable;
+	u8 noise_mode_cmd[EXT_NOISE_MODE_MAX] = { 0 };
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
+		return -ENODEV;
+	}
+
+	if (mode == EXT_NOISE_MODE_MAX) {
+		/* write all enabled mode */
+		mode_bit_to_set = ts->external_noise_mode;
+	} else {
+		/* make enable or disable the specific mode */
+		mode_bit_to_set = 1 << mode;
+	}
+
+	input_info(true, &ts->client->dev, "%s: %sable %d\n", __func__,
+			ts->external_noise_mode & mode_bit_to_set ? "en" : "dis", mode_bit_to_set);
+
+	/* set cmd for each mode */
+	noise_mode_cmd[EXT_NOISE_MODE_MONITOR] = SEC_TS_CMD_SET_MONITOR_NOISE_MODE;
+
+	/* write mode */
+	for (i = EXT_NOISE_MODE_NONE + 1; i < EXT_NOISE_MODE_MAX; i++) {
+		check_bit = 1 << i;
+		if (mode_bit_to_set & check_bit) {
+			mode_enable = !!(ts->external_noise_mode & check_bit);
+			ret = ts->sec_ts_i2c_write(ts, noise_mode_cmd[i], &mode_enable, 1);
+			if (ret < 0) {
+				input_err(true, &ts->client->dev, "%s: failed to set 0x%02X %d\n",
+						__func__, noise_mode_cmd[i], mode_enable);
+				fail_count++;
+			}
+		}
+	}
+
+	if (fail_count != 0)
+		return -EIO;
+	else
+		return 0;
+}
+
+/*
+ * FOR Dex 3.0
+ * Enable or disable specific external_noise_mode (sec_cmd)
+ *
+ * This cmd has 2 params.
+ * param 0 : the mode that you want to change.
+ * param 1 : enable or disable the mode.
+ *
+ * For example,
+ * enable EXT_NOISE_MODE_MONITOR mode,
+ * write external_noise_mode,1,1
+ * disable EXT_NOISE_MODE_MONITOR mode,
+ * write external_noise_mode,1,0
+ */
+static void external_noise_mode(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	char buff[SEC_CMD_STR_LEN] = { 0 };
+	int ret;
+
+	sec_cmd_set_default_result(sec);
+
+	if (sec->cmd_param[0] <= EXT_NOISE_MODE_NONE || sec->cmd_param[0] >= EXT_NOISE_MODE_MAX ||
+			sec->cmd_param[1] < 0 || sec->cmd_param[1] > 1) {
+		input_err(true, &ts->client->dev, "%s: not support param\n", __func__);
+		goto NG;
+	}
+
+	if (sec->cmd_param[1] == 1)
+		ts->external_noise_mode |= 1 << sec->cmd_param[0];
+	else
+		ts->external_noise_mode &= ~(1 << sec->cmd_param[0]);
+
+	ret = sec_ts_set_external_noise_mode(ts, sec->cmd_param[0]);
+	if (ret < 0)
+		goto NG;
 
 	snprintf(buff, sizeof(buff), "%s", "OK");
 	sec->cmd_state = SEC_CMD_STATUS_OK;

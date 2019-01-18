@@ -30,6 +30,8 @@
 struct ion_cma_heap {
 	struct ion_heap heap;
 	struct cma *cma;
+	unsigned long unprot_count;
+	unsigned long unprot_size;
 };
 
 #define to_cma_heap(x) container_of(x, struct ion_cma_heap, heap)
@@ -109,14 +111,20 @@ static void ion_cma_free(struct ion_buffer *buffer)
 	struct ion_cma_heap *cma_heap = to_cma_heap(buffer->heap);
 	struct ion_buffer_info *info = buffer->priv_virt;
 	unsigned long size = buffer->size;
+	int unprot_err = 0;
 
 	if (buffer->flags & ION_FLAG_PROTECTED) {
-		ion_secure_unprotect(buffer);
+		unprot_err = ion_secure_unprotect(buffer);
 		size = ALIGN(size, ION_PROTECTED_BUF_ALIGN);
 	}
 
-	cma_release(cma_heap->cma, sg_page(buffer->sg_table->sgl),
-		    (PAGE_ALIGN(size) >> PAGE_SHIFT));
+	if (unprot_err) {
+		cma_heap->unprot_count++;
+		cma_heap->unprot_size += size;
+	} else {
+		cma_release(cma_heap->cma, sg_page(buffer->sg_table->sgl),
+			    (PAGE_ALIGN(size) >> PAGE_SHIFT));
+	}
 
 	sg_free_table(buffer->sg_table);
 	kfree(info);
@@ -130,6 +138,17 @@ static struct ion_heap_ops ion_cma_ops = {
 	.unmap_kernel = ion_heap_unmap_kernel,
 };
 
+static int cma_heap_debug_show(struct ion_heap *heap, struct seq_file *s,
+			       void *unused)
+{
+	struct ion_cma_heap *cma_heap = to_cma_heap(heap);
+
+	seq_printf(s, "\n[%s] unprotect error: count %lu, size %lu\n",
+		   heap->name, cma_heap->unprot_count, cma_heap->unprot_size);
+
+	return 0;
+}
+
 struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *data)
 {
 	struct ion_cma_heap *cma_heap;
@@ -142,6 +161,7 @@ struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *data)
 	cma_heap->heap.ops = &ion_cma_ops;
 	cma_heap->cma = data->priv;
 	cma_heap->heap.type = ION_HEAP_TYPE_DMA;
+	cma_heap->heap.debug_show = cma_heap_debug_show;
 	return &cma_heap->heap;
 }
 

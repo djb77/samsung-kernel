@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux_platdev.c 732962 2017-11-22 14:04:49Z $
+ * $Id: dhd_linux_platdev.c 753315 2018-03-21 04:10:12Z $
  */
 #include <typedefs.h>
 #include <linux/kernel.h>
@@ -700,6 +700,7 @@ static int dhd_wifi_platform_load_sdio(void)
 
 	BCM_REFERENCE(i);
 	BCM_REFERENCE(adapter);
+
 	/* Sanity check on the module parameters
 	 * - Both watchdog and DPC as tasklets are ok
 	 * - If both watchdog and DPC are threads, TX must be deferred
@@ -714,7 +715,7 @@ static int dhd_wifi_platform_load_sdio(void)
 
 	if (dhd_wifi_platdata == NULL) {
 		DHD_ERROR(("DHD wifi platform data is required for Android build\n"));
-		DHD_ERROR(("DHD registeing bus directly\n"));
+		DHD_ERROR(("DHD registering bus directly\n"));
 		/* x86 bring-up PC needs no power-up operations */
 		err = dhd_bus_register();
 		return err;
@@ -745,6 +746,7 @@ static int dhd_wifi_platform_load_sdio(void)
 			}
 			err = wifi_platform_set_power(adapter, TRUE, WIFI_TURNON_DELAY);
 			if (err) {
+				DHD_ERROR(("%s: wifi pwr on error ! \n", __FUNCTION__));
 				dhd_bus_unreg_sdio_notify();
 				/* WL_REG_ON state unknown, Power off forcely */
 				wifi_platform_set_power(adapter, FALSE, WIFI_TURNOFF_DELAY);

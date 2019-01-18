@@ -232,19 +232,15 @@ static struct ufs_cal_phy_cfg calib_of_hs_rate_a[] = {
 	{0x128, 0x08, PMD_HS_G1_L2, PHY_PMA_TRSV, 0},
 	{0x128, 0x02, PMD_HS_G2_L2, PHY_PMA_TRSV, 0},
 	{0x128, 0x00, PMD_HS_G3_L2, PHY_PMA_TRSV, 0},
-	{0x12C, 0x00, PMD_HS_G1_L2|PMD_HS_G3_L2, PHY_PMA_TRSV, 1},
-	{0x12C, 0x10, PMD_HS_G1_L2|PMD_HS_G3_L2, PHY_PMA_TRSV, 2},
 	{0x12C, 0x00, PMD_HS_G2_L2, PHY_PMA_TRSV, 0},
 	{0x134, 0xd3, PMD_HS_G1_L2, PHY_PMA_TRSV, 0},
 	{0x134, 0x73, PMD_HS_G2_L2, PHY_PMA_TRSV, 0},
 	{0x134, 0x63, PMD_HS_G3_L2, PHY_PMA_TRSV, 0},
-	{0x108, 0x5D, PMD_HS, PHY_PMA_TRSV, 1},
-	{0x10C, 0x90, PMD_HS, PHY_PMA_TRSV, 1},
 	{},
 };
 
 static struct ufs_cal_phy_cfg post_calib_of_hs_rate_a[] = {
-	{0x1fc, 0x40, PMD_HS, PHY_CDR_WAIT, 0},
+	{0x1fc, 0x40, PMD_HS, PHY_CDR_AFC_WAIT, 0},
 	{},
 };
 
@@ -269,19 +265,15 @@ static struct ufs_cal_phy_cfg calib_of_hs_rate_b[] = {
 	{0x128, 0x08, PMD_HS_G1_L2, PHY_PMA_TRSV, 0},
 	{0x128, 0x02, PMD_HS_G2_L2, PHY_PMA_TRSV, 0},
 	{0x128, 0x00, PMD_HS_G3_L2, PHY_PMA_TRSV, 0},
-	{0x12C, 0x00, PMD_HS_G1_L2|PMD_HS_G3_L2, PHY_PMA_TRSV, 1},
-	{0x12C, 0x10, PMD_HS_G1_L2|PMD_HS_G3_L2, PHY_PMA_TRSV, 2},
 	{0x12C, 0x00, PMD_HS_G2_L2, PHY_PMA_TRSV, 0},
 	{0x134, 0xd3, PMD_HS_G1_L2, PHY_PMA_TRSV, 0},
 	{0x134, 0x73, PMD_HS_G2_L2, PHY_PMA_TRSV, 0},
 	{0x134, 0x63, PMD_HS_G3_L2, PHY_PMA_TRSV, 0},
-	{0x108, 0x5D, PMD_HS, PHY_PMA_TRSV, 1},
-	{0x10C, 0x90, PMD_HS, PHY_PMA_TRSV, 1},
 	{},
 };
 
 static struct ufs_cal_phy_cfg post_calib_of_hs_rate_b[] = {
-	{0x1fc, 0x40, PMD_HS, PHY_CDR_WAIT, 0},
+	{0x1fc, 0x40, PMD_HS, PHY_CDR_AFC_WAIT, 0},
 	{},
 };
 

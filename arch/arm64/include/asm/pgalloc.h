@@ -25,6 +25,9 @@
 #include <asm/tlbflush.h>
 #ifdef CONFIG_UH_RKP
 #include <linux/rkp.h>
+
+#define FIMC_VA	 (0xffffff80fa000000ULL)
+#define FIMC_SIZE	(0x780000)
 #endif
 
 #define check_pgt_cache()		do { } while (0)
@@ -137,7 +140,14 @@ extern void pgd_free(struct mm_struct *mm, pgd_t *pgd);
 static inline pte_t *
 pte_alloc_one_kernel(struct mm_struct *mm, unsigned long addr)
 {
+#ifdef CONFIG_UH_RKP
+	if (addr >= FIMC_VA && addr < FIMC_VA + FIMC_SIZE)
+		return (pte_t *)rkp_ro_alloc();
+	else	
+		return (pte_t *)__get_free_page(PGALLOC_GFP);
+#else
 	return (pte_t *)__get_free_page(PGALLOC_GFP);
+#endif
 }
 
 static inline pgtable_t

@@ -64,9 +64,7 @@ int copy_ctrl_to_dm(struct camera2_shot *shot)
 	 * both af_data, gyroInfo are meaningful
 	 * only for a sensor with AF actuator.
 	 */
-	enum sensor_state state = shot->udm.aa.gyroInfo.state;
 	copy_aa_udm(&shot->uctl, &shot->udm);
-	shot->udm.aa.gyroInfo.state = state;
 	/* lens */
 	copy_lens_udm(&shot->uctl, &shot->udm);
 	/* mode */

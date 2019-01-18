@@ -3638,8 +3638,10 @@ EXPORT_SYMBOL(d_genocide);
 
 void __init vfs_caches_init_early(void)
 {
+	set_memsize_kernel_type(MEMSIZE_KERNEL_VFSHASH);
 	dcache_init_early();
 	inode_init_early();
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 }
 
 void __init vfs_caches_init(void)

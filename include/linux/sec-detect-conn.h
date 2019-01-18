@@ -53,4 +53,6 @@ struct detect_conn_info {
 	struct sec_det_conn_p_data *pdata;
 };
 
+static char sec_detect_available_pins_string[15*10] = {0,};
+
 #endif

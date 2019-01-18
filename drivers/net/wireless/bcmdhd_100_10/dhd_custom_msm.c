@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_msm.c 717191 2017-08-23 12:04:52Z $
+ * $Id: dhd_custom_msm.c 758779 2018-04-20 10:26:22Z $
  *
  */
 
@@ -125,10 +125,10 @@ dhd_wifi_init_gpio(void)
 	wlan_host_wake_irq = gpio_to_irq(wlan_host_wake_up);
 #endif /* CONFIG_BCMDHD_OOB_HOST_WAKE */
 
-#if defined(CONFIG_BCM4359) || defined(CONFIG_BCM4361)
+#if defined(CONFIG_BCM4359) || defined(CONFIG_BCM4361) || defined(CONFIG_BCM4375)
 	printk(KERN_INFO "%s: Call msm_pcie_enumerate\n", __FUNCTION__);
 	msm_pcie_enumerate(MSM_PCIE_CH_NUM);
-#endif /* CONFIG_BCM4359 || CONFIG_BCM4361 */
+#endif /* CONFIG_BCM4359 || CONFIG_BCM4361 || CONFIG_BCM4375 */
 
 	return 0;
 }

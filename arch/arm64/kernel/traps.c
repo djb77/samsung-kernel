@@ -40,6 +40,7 @@
 #include <asm/esr.h>
 #include <asm/insn.h>
 #include <asm/traps.h>
+#include <asm/stack_pointer.h>
 #include <asm/stacktrace.h>
 #include <asm/exception.h>
 #include <asm/system_misc.h>
@@ -109,7 +110,7 @@ static void dump_backtrace_entry(unsigned long where)
 	print_ip_sym(where);
 }
 
-#ifdef CONFIG_SEC_DEBUG_AUTO_SUMMARY
+#if defined(CONFIG_SEC_DEBUG_AUTO_SUMMARY) && !defined(CONFIG_SEC_DEBUG_BRANCH_VERIFIER)
 static void dump_backtrace_entry_auto_summary(unsigned long where)
 {
 	/*
@@ -182,6 +183,9 @@ static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 	if (!tsk)
 		tsk = current;
 
+	if (!try_get_task_stack(tsk))
+		return;
+
 	/*
 	 * Switching between stacks is valid when tracing current and in
 	 * non-preemptible context.
@@ -253,6 +257,8 @@ static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 					 stack + sizeof(struct pt_regs));
 		}
 	}
+
+	put_task_stack(tsk);
 }
 
 #ifdef CONFIG_SEC_DEBUG_AUTO_SUMMARY
@@ -261,6 +267,9 @@ static void dump_backtrace_auto_summary(struct pt_regs *regs, struct task_struct
 	struct stackframe frame;
 	unsigned long irq_stack_ptr;
 	int skip;
+#ifdef CONFIG_SEC_DEBUG_BRANCH_VERIFIER
+	struct branch_info binfo;
+#endif
 
 	pr_debug("%s(regs = %p tsk = %p)\n", __func__, regs, tsk);
 
@@ -291,6 +300,10 @@ static void dump_backtrace_auto_summary(struct pt_regs *regs, struct task_struct
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
 	frame.graph = tsk->curr_ret_stack;
 #endif
+#ifdef CONFIG_SEC_DEBUG_BRANCH_VERIFIER
+	frame.pc_from_irq = 0;
+	init_branch_info(&binfo);
+#endif
 
 	skip = !!regs;
 	pr_auto_once(2);
@@ -302,7 +315,12 @@ static void dump_backtrace_auto_summary(struct pt_regs *regs, struct task_struct
 
 		/* skip until specified stack frame */
 		if (!skip) {
+#ifdef CONFIG_SEC_DEBUG_BRANCH_VERIFIER
+			pre_check_backtrace_auto_summary(&binfo, where, frame.fp);
+			check_backtrace_auto_summary(&binfo, where, frame.fp, frame.pc_from_irq, NULL);
+#else
 			dump_backtrace_entry_auto_summary(where);
+#endif
 			exynos_ss_save_log(raw_smp_processor_id(), where);
 		} else if (frame.fp == regs->regs[29]) {
 			skip = 0;
@@ -313,7 +331,11 @@ static void dump_backtrace_auto_summary(struct pt_regs *regs, struct task_struct
 			 * at which an exception has taken place, use regs->pc
 			 * instead.
 			 */
+#ifdef CONFIG_SEC_DEBUG_BRANCH_VERIFIER
+			check_backtrace_auto_summary(&binfo, regs->pc, frame.fp, frame.pc_from_irq, regs);
+#else
 			dump_backtrace_entry_auto_summary(regs->pc);
+#endif
 			exynos_ss_save_log(raw_smp_processor_id(), regs->pc);
 		}
 		ret = unwind_frame(tsk, &frame);
@@ -355,10 +377,9 @@ void show_stack(struct task_struct *tsk, unsigned long *sp)
 #endif
 #define S_SMP " SMP"
 
-static int __die(const char *str, int err, struct thread_info *thread,
-		 struct pt_regs *regs)
+static int __die(const char *str, int err, struct pt_regs *regs)
 {
-	struct task_struct *tsk = thread->task;
+	struct task_struct *tsk = current;
 	static int die_counter;
 	int ret;
 
@@ -374,7 +395,8 @@ static int __die(const char *str, int err, struct thread_info *thread,
 	print_modules();
 	__show_regs(regs);
 	pr_emerg("Process %.*s (pid: %d, stack limit = 0x%p)\n",
-		 TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk), thread + 1);
+		 TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk),
+		 end_of_stack(tsk));
 
 	if (!user_mode(regs)) {
 		dump_mem(KERN_EMERG, "Stack: ", regs->sp,
@@ -401,26 +423,26 @@ static DEFINE_RAW_SPINLOCK(die_lock);
  */
 void die(const char *str, struct pt_regs *regs, int err)
 {
-	struct thread_info *thread = current_thread_info();
 	int ret;
+	unsigned long flags;
 
 	oops_enter();
 
-	raw_spin_lock_irq(&die_lock);
+	raw_spin_lock_irqsave(&die_lock, flags);
 
 	console_verbose();
 	bust_spinlocks(1);
 #ifdef CONFIG_SEC_DUMP_SUMMARY
 	sec_debug_save_die_info(str, regs);
 #endif
-	ret = __die(str, err, thread, regs);
+	ret = __die(str, err, regs);
 
-	if (regs && kexec_should_crash(thread->task))
+	if (regs && kexec_should_crash(current))
 		crash_kexec(regs);
 
 	bust_spinlocks(0);
 	add_taint(TAINT_DIE, LOCKDEP_NOW_UNRELIABLE);
-	raw_spin_unlock_irq(&die_lock);
+	raw_spin_unlock_irqrestore(&die_lock, flags);
 
 	oops_exit();
 
@@ -690,6 +712,12 @@ static void ctr_read_handler(unsigned int esr, struct pt_regs *regs)
 	regs->pc += 4;
 }
 
+struct sys64_hook {
+	unsigned int esr_mask;
+	unsigned int esr_val;
+	void (*handler)(unsigned int esr, struct pt_regs *regs);
+};
+
 static void cntvct_read_handler(unsigned int esr, struct pt_regs *regs)
 {
 	int rt = (esr & ESR_ELx_SYS64_ISS_RT_MASK) >> ESR_ELx_SYS64_ISS_RT_SHIFT;
@@ -708,12 +736,6 @@ static void cntfrq_read_handler(unsigned int esr, struct pt_regs *regs)
 		regs->regs[rt] = read_sysreg(cntfrq_el0);
 	regs->pc += 4;
 }
-
-struct sys64_hook {
-	unsigned int esr_mask;
-	unsigned int esr_val;
-	void (*handler)(unsigned int esr, struct pt_regs *regs);
-};
 
 static struct sys64_hook sys64_hooks[] = {
 	{
@@ -921,6 +943,9 @@ static int bug_handler(struct pt_regs *regs, unsigned int esr)
 
 	switch (report_bug(regs->pc, regs)) {
 	case BUG_TRAP_TYPE_BUG:
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+		sec_debug_set_extra_info_fault(BUG_FAULT, (unsigned long)regs->pc, regs);
+#endif		
 		die("Oops - BUG", regs, 0);
 		break;
 

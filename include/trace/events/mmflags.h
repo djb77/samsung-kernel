@@ -48,6 +48,7 @@
 	{(unsigned long)__GFP_RECLAIM,		"__GFP_RECLAIM"},	\
 	{(unsigned long)__GFP_DIRECT_RECLAIM,	"__GFP_DIRECT_RECLAIM"},\
 	{(unsigned long)__GFP_KSWAPD_RECLAIM,	"__GFP_KSWAPD_RECLAIM"},\
+	{(unsigned long)__GFP_RBIN,		"__GFP_RBIN"},		\
 	{(unsigned long)__GFP_OTHER_NODE,	"__GFP_OTHER_NODE"}	\
 
 #define show_gfp_flags(flags)						\

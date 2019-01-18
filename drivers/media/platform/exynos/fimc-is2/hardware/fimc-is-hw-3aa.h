@@ -24,7 +24,7 @@ struct fimc_is_hw_3aa {
 int fimc_is_hw_3aa_probe(struct fimc_is_hw_ip *hw_ip, struct fimc_is_interface *itf,
 	struct fimc_is_interface_ischain *itfc, int id, const char *name);
 int fimc_is_hw_3aa_mode_change(struct fimc_is_hw_ip *hw_ip, u32 instance, ulong hw_map);
-void fimc_is_hw_3aa_update_param(struct fimc_is_hw_ip *hw_ip, struct is_region *region,
+void fimc_is_hw_3aa_update_param(struct fimc_is_hw_ip *hw_ip, struct is_param_region *region,
 	struct taa_param_set *param_set, u32 lindex, u32 hindex, u32 instance);
 int fimc_is_hw_3aa_reset(struct fimc_is_hw_ip *hw_ip);
 void fimc_is_hw_3aa_dump(void);

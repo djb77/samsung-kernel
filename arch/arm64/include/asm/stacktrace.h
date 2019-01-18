@@ -25,6 +25,9 @@ struct stackframe {
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
 	unsigned int graph;
 #endif
+#ifdef CONFIG_SEC_DEBUG_BRANCH_VERIFIER
+	unsigned int pc_from_irq;
+#endif
 };
 
 extern int unwind_frame(struct task_struct *tsk, struct stackframe *frame);

@@ -43,7 +43,7 @@ MODULE_PARM_DESC(ahash_minsize, "Minimum file size for ahash use");
 
 /* default is 0 - 1 page. */
 static int five_maxorder;
-static unsigned int five_bufsize = PAGE_SIZE;
+static unsigned long five_bufsize = PAGE_SIZE;
 
 static int param_set_bufsize(const char *val, const struct kernel_param *kp)
 {
@@ -66,7 +66,7 @@ static const struct kernel_param_ops param_ops_bufsize = {
 
 #define param_check_bufsize(name, p) __param_check(name, p, unsigned int)
 
-module_param_named(ahash_bufsize, five_bufsize, bufsize, 0644);
+module_param_named(ahash_bufsize, five_bufsize, ulong, 0644);
 MODULE_PARM_DESC(ahash_bufsize, "Maximum ahash buffer size");
 
 static struct crypto_shash *five_shash_tfm;

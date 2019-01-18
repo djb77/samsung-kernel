@@ -1329,11 +1329,14 @@ int fimc_is_sec_check_reload(struct fimc_is_core *core)
 	struct file *supend_resume_key_fp = NULL;
 	mm_segment_t old_fs;
 	struct fimc_is_vender_specific *specific = core->vender.private_data;
+	char file_path[100];
 
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	reload_key_fp = filp_open("/data/camera/reload/r1e2l3o4a5d.key", O_RDONLY, 0);
+	memset(file_path, 0x00, sizeof(file_path));
+	snprintf(file_path, sizeof(file_path), "%sreload/r1e2l3o4a5d.key", FIMC_IS_FW_DUMP_PATH);
+	reload_key_fp = filp_open(file_path, O_RDONLY, 0);
 	if (IS_ERR(reload_key_fp)) {
 		reload_key_fp = NULL;
 	} else {
@@ -1345,7 +1348,9 @@ int fimc_is_sec_check_reload(struct fimc_is_core *core)
 	if (reload_key_fp)
 		filp_close(reload_key_fp, current->files);
 
-	supend_resume_key_fp = filp_open("/data/camera/i1s2p3s4r.key", O_RDONLY, 0);
+	memset(file_path, 0x00, sizeof(file_path));
+	snprintf(file_path, sizeof(file_path), "%si1s2p3s4r.key", FIMC_IS_FW_DUMP_PATH);
+	supend_resume_key_fp = filp_open(file_path, O_RDONLY, 0);
 	if (IS_ERR(supend_resume_key_fp)) {
 		supend_resume_key_fp = NULL;
 	} else {
@@ -1367,24 +1372,32 @@ void fimc_is_sec_cal_dump(void)
 	struct file *key_fp = NULL;
 	struct file *dump_fp = NULL;
 	mm_segment_t old_fs;
+	char file_path[100];
+
 	loff_t pos = 0;
 
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
-	key_fp = filp_open("/data/camera/1q2w3e4r.key", O_RDONLY, 0);
+	memset(file_path, 0x00, sizeof(file_path));
+	snprintf(file_path, sizeof(file_path), "%s1q2w3e4r.key", FIMC_IS_FW_DUMP_PATH);
+	key_fp = filp_open(file_path, O_RDONLY, 0);
 	if (IS_ERR(key_fp)) {
 		info("KEY does not exist.\n");
 		key_fp = NULL;
 		goto key_err;
 	} else {
-		dump_fp = filp_open("/data/camera/dump", O_RDONLY, 0);
+		memset(file_path, 0x00, sizeof(file_path));
+		snprintf(file_path, sizeof(file_path), "%sdump", FIMC_IS_FW_DUMP_PATH);
+		dump_fp = filp_open(file_path, O_RDONLY, 0);
 		if (IS_ERR(dump_fp)) {
 			info("dump folder does not exist.\n");
 			dump_fp = NULL;
 			goto key_err;
 		} else {
 			info("dump folder exist, Dump FROM cal data.\n");
-			if (write_data_to_file("/data/camera/dump/from_cal.bin", cal_buf, FIMC_IS_DUMP_CAL_SIZE, &pos) < 0) {
+			memset(file_path, 0x00, sizeof(file_path));
+			snprintf(file_path, sizeof(file_path), "%sdump/from_cal.bin", FIMC_IS_FW_DUMP_PATH);
+			if (write_data_to_file(file_path, cal_buf, FIMC_IS_DUMP_CAL_SIZE, &pos) < 0) {
 				info("Failedl to dump cal data.\n");
 				goto dump_err;
 			}
@@ -1392,7 +1405,9 @@ void fimc_is_sec_cal_dump(void)
 			pos = 0;
 #if defined(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT)
 			info("dump folder exist, Dump EEPROM cal data.\n");
-			if (write_data_to_file("/data/camera/dump/eeprom_cal.bin", cal_buf_front, FIMC_IS_MAX_CAL_SIZE_FRONT, &pos) < 0) {
+			memset(file_path, 0x00, sizeof(file_path));
+			snprintf(file_path, sizeof(file_path), "%sdump/eeprom_cal.bin", FIMC_IS_FW_DUMP_PATH);
+			if (write_data_to_file(file_path, cal_buf_front, FIMC_IS_MAX_CAL_SIZE_FRONT, &pos) < 0) {
 				info("Failedl to dump cal data.\n");
 				goto dump_err;
 			}
@@ -1505,7 +1520,10 @@ int fimc_is_sec_readcal_eeprom(struct device *dev, int position)
 
 #ifdef DEBUG_FORCE_DUMP_ENABLE
 {
+	char file_path[100];
+
 	loff_t pos = 0;
+
 	fimc_is_i2c_read(client, buf, 0x0, cal_size);
 	info("EEPROM DUMP START %d\n", cal_size);
 	{
@@ -1516,7 +1534,9 @@ int fimc_is_sec_readcal_eeprom(struct device *dev, int position)
 	}
 	info("EEPROM DUMP END\n");
 
-	if (write_data_to_file("/data/camera/eeprom_cal.bin", cal_buf_front, cal_size, &pos) < 0) {
+	memset(file_path, 0x00, sizeof(file_path));
+	snprintf(file_path, sizeof(file_path), "%seeprom_cal.bin", FIMC_IS_FW_DUMP_PATH);
+	if (write_data_to_file(file_path, cal_buf_front, cal_size, &pos) < 0) {
 		info("Failedl to dump cal data.\n");
 	}
 	retry = 0;
@@ -1787,8 +1807,9 @@ int fimc_is_sec_readcal_otprom(struct device *dev, int position)
 	struct file *key_fp = NULL;
 	struct file *dump_fp = NULL;
 	mm_segment_t old_fs;
-	loff_t pos = 0;
+	char file_path[100];
 	char selected_page[2] = {0,};
+	loff_t pos = 0;
 
 	if (position == SENSOR_POSITION_FRONT) {
 #if defined(CONFIG_CAMERA_OTPROM_SUPPORT_FRONT)
@@ -1954,13 +1975,17 @@ crc_retry:
 
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
-	key_fp = filp_open("/data/camera/1q2w3e4r.key", O_RDONLY, 0);
+	memset(file_path, 0x00, sizeof(file_path));
+	snprintf(file_path, sizeof(file_path), "%s1q2w3e4r.key", FIMC_IS_FW_DUMP_PATH);
+	key_fp = filp_open(file_path, O_RDONLY, 0);
 	if (IS_ERR(key_fp)) {
 		pr_info("KEY does not exist.\n");
 		key_fp = NULL;
 		goto key_err;
 	} else {
-		dump_fp = filp_open("/data/camera/dump", O_RDONLY, 0);
+		memset(file_path, 0x00, sizeof(file_path));
+		snprintf(file_path, sizeof(file_path), "%sdump", FIMC_IS_FW_DUMP_PATH);
+		dump_fp = filp_open(file_path, O_RDONLY, 0);
 		if (IS_ERR(dump_fp)) {
 			pr_info("dump folder does not exist.\n");
 			dump_fp = NULL;
@@ -2628,9 +2653,13 @@ crc_retry:
 
 #ifdef DEBUG_FORCE_DUMP_ENABLE
 	{
+		char file_path[100];
+
 		loff_t pos = 0;
 
-		if (write_data_to_file("/data/camera/from_cal.bin", cal_buf, FIMC_IS_DUMP_CAL_SIZE, &pos) < 0)
+		memset(file_path, 0x00, sizeof(file_path));
+		snprintf(file_path, sizeof(file_path), "%sfrom_cal.bin", FIMC_IS_FW_DUMP_PATH);
+		if (write_data_to_file(file_path, cal_buf, FIMC_IS_DUMP_CAL_SIZE, &pos) < 0)
 			info("Failed to dump cal data.\n");
 	}
 #endif
@@ -3709,9 +3738,9 @@ int fimc_is_sec_run_fw_sel(struct device *dev, int position)
 	int ret = 0;
 	struct fimc_is_vender_specific *specific = core->vender.private_data;
 
-	/* /data/camera folder cannot access until User unlock handset */
+	/* FIMC_IS_FW_DUMP_PATH folder cannot access until User unlock handset */
 	if (!sysfs_finfo.is_check_cal_reload) {
-		if (fimc_is_sec_file_exist("/data/camera/")) {
+		if (fimc_is_sec_file_exist(FIMC_IS_FW_DUMP_PATH)) {
 			/* Check reload cal data enabled */
 			fimc_is_sec_check_reload(core);
 			sysfs_finfo.is_check_cal_reload = true;

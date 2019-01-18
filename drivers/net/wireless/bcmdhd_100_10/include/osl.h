@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: osl.h 729333 2017-10-31 12:16:35Z $
+ * $Id: osl.h 782801 2018-10-01 15:16:38Z $
  */
 
 #ifndef _osl_h_
@@ -38,7 +38,7 @@ enum {
 	TAIL_BYTES_TYPE_MIC = 3
 };
 
-#define OSL_PKTTAG_SZ	32 /* Size of PktTag */
+#define OSL_PKTTAG_SZ   48 /* standard linux pkttag size is 48 bytes */
 
 /* Drivers use PKTFREESETCB to register a callback function when a packet is freed by OSL */
 typedef void (*pktfree_cb_fn_t)(void *ctx, void *pkt, unsigned int status);
@@ -89,6 +89,18 @@ typedef void  (*osl_wreg_fn_t)(void *ctx, volatile void *reg, unsigned int val, 
 #else
 #define OSL_SYSUPTIME_SUPPORT TRUE
 #endif /* OSL_SYSUPTIME */
+
+#ifndef OSL_GET_LOCALTIME
+#define OSL_GET_LOCALTIME(sec, usec)	\
+	do { \
+		BCM_REFERENCE(sec); \
+		BCM_REFERENCE(usec); \
+	} while (0)
+#endif /* OSL_GET_LOCALTIME */
+
+#ifndef OSL_LOCALTIME_NS
+#define OSL_LOCALTIME_NS()	do {} while (0)
+#endif /* OSL_LOCALTIME_NS */
 
 #ifndef OSL_SYS_HALT
 #define OSL_SYS_HALT()	do {} while (0)

@@ -4825,7 +4825,11 @@ static void hub_port_connect(struct usb_hub *hub, int port1, u16 portstatus,
 
 	status = 0;
 	for (i = 0; i < SET_CONFIG_TRIES; i++) {
-
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+		dev_err(&port_dev->dev,
+			"%s : before usb_alloc_dev() port %d, status %04x, change %04x, %s\n",
+			__func__, port1, portstatus, portchange, portspeed(hub, portstatus));
+#endif
 		/* reallocate for each attempt, since references
 		 * to the previous one can escape in various ways
 		 */
@@ -4835,7 +4839,11 @@ static void hub_port_connect(struct usb_hub *hub, int port1, u16 portstatus,
 					"couldn't allocate usb_device\n");
 			goto done;
 		}
-
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+		dev_err(&port_dev->dev,
+			"%s : after usb_alloc_dev() port %d, status %04x, change %04x, %s\n",
+			__func__, port1, portstatus, portchange, portspeed(hub, portstatus));
+#endif
 		usb_set_device_state(udev, USB_STATE_POWERED);
 		udev->bus_mA = hub->mA_per_port;
 		udev->level = hdev->level + 1;

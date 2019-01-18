@@ -110,6 +110,7 @@
 			etspi-drdyPin = <&gpa1 3 0x00>;
 			etspi-ldoPin = <&gpm43 0 0x00>;
 			etspi-chipid = "ET510";
+			etspi-orient = <0>;
 
 			controller-data {
 				cs-gpio = <&gpp0 3 0>;

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmdevs.h 724604 2017-10-03 11:03:38Z $
+ * $Id: bcmdevs.h 753903 2018-03-23 08:21:12Z $
  */
 
 #ifndef	_BCMDEVS_H
@@ -221,6 +221,9 @@
 #define BCM43012_D11N_ID	0xA804		/* 43012 802.11n dualband device */
 #define BCM43012_D11N2G_ID	0xA805		/* 43012 802.11n 2.4G device */
 #define BCM43012_D11N5G_ID	0xA806		/* 43012 802.11n 5G device */
+#define BCM43014_D11N_ID	0x4495		/* 43014 802.11n dualband device */
+#define BCM43014_D11N2G_ID	0x4496		/* 43014 802.11n 2.4G device */
+#define BCM43014_D11N5G_ID	0x4497		/* 43014 802.11n 5G device */
 
 /* PCI Subsystem ID */
 #define BCM94313HMGBL_SSID_VEN1	0x0608
@@ -280,6 +283,15 @@
 #define BCM4366_D11AC_ID	0x43c3
 #define BCM4366_D11AC2G_ID	0x43c4
 #define BCM4366_D11AC5G_ID	0x43c5
+
+/* TBD change below values */
+#define BCM4369_D11AX_ID	0x4470		/* 4369 802.11ax dualband device */
+#define BCM4369_D11AX2G_ID	0x4471		/* 4369 802.11ax 2.4G device */
+#define BCM4369_D11AX5G_ID	0x4472		/* 4369 802.11ax 5G device */
+
+#define BCM4375_D11AX_ID	0x4475		/* 4375 802.11ax dualband device */
+#define BCM4375_D11AX2G_ID	0x4476		/* 4375 802.11ax 2.4G device */
+#define BCM4375_D11AX5G_ID	0x4477		/* 4375 802.11ax 5G device */
 
 #define BCM43349_D11N_ID	0x43e6		/* 43349 802.11n dualband id */
 #define BCM43349_D11N2G_ID	0x43e7		/* 43349 802.11n 2.4Ghz band id */
@@ -446,6 +458,8 @@
 #define BCM43570_CHIP_ID	0xAA32          /* 43570 chipcommon chipid */
 #define BCM4358_CHIP_ID		0x4358          /* 4358 chipcommon chipid */
 #define	BCM43012_CHIP_ID	0xA804			/* 43012 chipcommon chipid */
+#define	BCM43014_CHIP_ID	0xA806			/* 43014 chipcommon chipid */
+#define	BCM4369_CHIP_ID		0x4369			/* 4369 chipcommon chipid */
 
 #define BCM4350_CHIP(chipid)	((CHIPID(chipid) == BCM4350_CHIP_ID) || \
 				(CHIPID(chipid) == BCM4354_CHIP_ID) || \
@@ -495,6 +509,9 @@
 #define BCM4347_CHIP_ID		0x4347          /* 4347 chipcommon chipid */
 #define BCM4357_CHIP_ID		0x4357          /* 4357 chipcommon chipid */
 #define BCM4361_CHIP_ID		0x4361          /* 4361 chipcommon chipid */
+#define BCM4369_CHIP_ID		0x4369          /* 4369/ chipcommon chipid */
+#define BCM4375_CHIP_ID		0x4375          /* 4375/ chipcommon chipid */
+#define BCM4377_CHIP_ID		0x4377          /* 4377/ chipcommon chipid */
 
 #define BCM4347_CHIP(chipid)	((CHIPID(chipid) == BCM4347_CHIP_ID) || \
 				(CHIPID(chipid) == BCM4357_CHIP_ID) || \
@@ -502,6 +519,11 @@
 #define BCM4347_CHIP_GRPID		BCM4347_CHIP_ID: \
 					case BCM4357_CHIP_ID: \
 					case BCM4361_CHIP_ID
+
+#define BCM4369_CHIP(chipid)	((CHIPID(chipid) == BCM4369_CHIP_ID) || \
+				(CHIPID(chipid) == BCM4377_CHIP_ID))
+#define BCM4369_CHIP_GRPID		BCM4369_CHIP_ID: \
+					case BCM4377_CHIP_ID
 
 #define BCM4365_CHIP_ID		0x4365		/* 4365 chipcommon chipid */
 #define BCM4366_CHIP_ID		0x4366		/* 4366 chipcommon chipid */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2018 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -24,7 +24,7 @@
 void reset_global_command_id(void);
 int tlc_wait_cmd(struct tlc_tui_command_t *cmd);
 int tlc_ack_cmd(struct tlc_tui_response_t *rsp_id);
-int tlc_display_cmd(struct tlc_tui_display_t *rsp_id);
+int tlc_display_cmd(struct tlc_tui_resolution_t *rsp_id);
 bool tlc_notify_event(u32 event_type);
 int tlc_init_driver(void);
 u32 send_cmd_to_user(u32 command_id, u32 data0, u32 data1);

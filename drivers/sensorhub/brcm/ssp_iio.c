@@ -55,6 +55,7 @@ static struct sensor_info info_table[] = {
 	SENSOR_INFO_PROXIMITY_POCKET,
 	SENSOR_INFO_ACCEL_UNCALIBRATED,
 	SENSOR_INFO_META,
+	SENSOR_INFO_WAKE_UP_MOTION, 
 };
 
 #define IIO_ST(si, rb, sb, sh)	\
@@ -98,14 +99,22 @@ err_config_ring_buffer:
 static int ssp_push_iio_buffer(struct iio_dev *indio_dev, u64 timestamp, u8 *data, int data_len)
 {
 	u8 buf[data_len + sizeof(timestamp)];
-	int iRet = 0;
+	int iRet = 0, retry = 3;
 
 	memcpy(buf, data, data_len);
 	memcpy(&buf[data_len], &timestamp, sizeof(timestamp));
 
 	mutex_lock(&indio_dev->mlock);
 
-	iRet = iio_push_to_buffers(indio_dev, buf);
+	do {
+		if(retry != 3)
+			usleep_range(150, 151);
+
+		iRet = iio_push_to_buffers(indio_dev, buf);
+	} while(iRet < 0 && retry-- > 0);
+
+	if(retry == 0 && iRet < 0)
+		pr_err("[SSP] %s - %s push fail erro %d", __func__, indio_dev->name, iRet);
 
 	mutex_unlock(&indio_dev->mlock);
 
@@ -286,12 +295,12 @@ void report_light_cct_data(struct ssp_data *data, struct sensor_value *lightdata
 
 	if (data->light_log_cnt < 3) {
 #ifdef CONFIG_SENSORS_SSP_LIGHT_REPORT_LUX
-		ssp_dbg("[SSP] #>L lux=%u cct=%d r=%d g=%d b=%d c=%d atime=%d again=%d",
+		ssp_dbg("[SSP] #>CCT lux=%u cct=%d r=%d g=%d b=%d c=%d atime=%d again=%d",
 			data->buf[LIGHT_CCT_SENSOR].lux, data->buf[LIGHT_CCT_SENSOR].cct,
 			data->buf[LIGHT_CCT_SENSOR].r, data->buf[LIGHT_CCT_SENSOR].g, data->buf[LIGHT_CCT_SENSOR].b,
 			data->buf[LIGHT_CCT_SENSOR].w, data->buf[LIGHT_CCT_SENSOR].a_time, data->buf[LIGHT_CCT_SENSOR].a_gain);
 #else
-		ssp_dbg("[SSP] #>L r=%d g=%d b=%d c=%d atime=%d again=%d",
+		ssp_dbg("[SSP] #>CCT r=%d g=%d b=%d c=%d atime=%d again=%d",
 			data->buf[LIGHT_CCT_SENSOR].r, data->buf[LIGHT_CCT_SENSOR].g, data->buf[LIGHT_CCT_SENSOR].b,
 			data->buf[LIGHT_CCT_SENSOR].w, data->buf[LIGHT_CCT_SENSOR].a_time, data->buf[LIGHT_CCT_SENSOR].a_gain);
 #endif
@@ -395,6 +404,14 @@ void report_pickup_data(struct ssp_data *data,
 	report_iio_data(data, PICKUP_GESTURE, pickup_data);
 	wake_lock_timeout(&data->ssp_wake_lock, 0.3*HZ);
 	pr_err("[SSP]: %s: %d", __func__,  pickup_data->pickup_gesture);
+}
+
+void report_wakeup_motion_data(struct ssp_data *data,
+		struct sensor_value *wakeup_motion_data)
+{
+	report_iio_data(data, WAKE_UP_MOTION, wakeup_motion_data);
+	wake_lock_timeout(&data->ssp_wake_lock, 0.3*HZ);
+	pr_err("[SSP]: %s: %d", __func__,  wakeup_motion_data->wakeup_motion);
 }
 
 void report_scontext_data(struct ssp_data *data,

@@ -28,10 +28,9 @@ struct adc_info *adc_meter;
 struct device *s2mps18_adc_dev;
 struct class *s2mps18_adc_class;
 
-static DEFINE_MUTEX(s2mps18_pm_lock);
-
 struct adc_info {
 	struct i2c_client *i2c;
+	struct mutex adc_lock;
 	u8 adc_mode;
 	u8 adc_sync_mode;
 	u8 *adc_reg;
@@ -39,7 +38,6 @@ struct adc_info {
 	u8 adc_ctrl1;
 	u8 *current_val;
 	u16 *power_val;
-	struct work_struct pm_update;
 };
 
 static const unsigned int current_buck_coeffs[14] = {CURRENT_BS, CURRENT_BT, CURRENT_BS,
@@ -93,7 +91,7 @@ static void s2m_adc_read_data(struct device *dev, int channel)
 	int i;
 	u8 data_l, data_h;
 
-	mutex_lock(&s2mps18_pm_lock);
+	mutex_lock(&adc_meter->adc_lock);
 
 	/* ASYNCRD bit '1' --> 2ms delay --> read  in case of ADC Async mode */
 	if (adc_meter->adc_sync_mode == ASYNC_MODE) {
@@ -101,13 +99,13 @@ static void s2m_adc_read_data(struct device *dev, int channel)
 		usleep_range(2000, 2100);
 	}
 
-	s2m_adc_read_data2(dev, -1);
+	s2m_adc_read_data2(dev, channel);
 
 	if (adc_meter->adc_mode == CURRENT_METER) {
 		s2mps18_update_reg(adc_meter->i2c, S2MPS18_REG_ADC_CTRL3,
 				CURRENT_MODE, ADC_PGEN_MASK);
 		if(channel < 0) {
-			for (i = 0; i < 8; i++) 
+			for (i = 0; i < 8; i++)
 				adc_meter->adc_val[i] = adc_meter->current_val[i];
 		} else {
 			adc_meter->adc_val[channel] = adc_meter->current_val[channel];
@@ -153,7 +151,7 @@ static void s2m_adc_read_data(struct device *dev, int channel)
 		dev_err(dev, "%s: invalid adc mode(%d)\n", __func__, adc_meter->adc_mode);
 	}
 
-	mutex_unlock(&s2mps18_pm_lock);
+	mutex_unlock(&adc_meter->adc_lock);
 }
 
 static unsigned int get_coeff(struct device *dev, u8 adc_reg_num)
@@ -200,7 +198,7 @@ static unsigned int get_coeff(struct device *dev, u8 adc_reg_num)
 	return coeff;
 }
 
-static unsigned int get_coeff_c(u8 adc_reg_num)
+static unsigned int get_coeff_c(struct device *dev, u8 adc_reg_num)
 {
 	unsigned int coeff;
 
@@ -211,12 +209,12 @@ static unsigned int get_coeff_c(u8 adc_reg_num)
 		else if (adc_reg_num >= S2MPS18_BUCK_START && adc_reg_num <= S2MPS18_BUCK_END)
 			coeff = current_buck_coeffs[adc_reg_num - S2MPS18_BUCK_START];
 		else {
-			pr_err("%s: invalid adc regulator number(%d)\n", __func__, adc_reg_num);
+			dev_err(dev, "%s: invalid adc regulator number(%d)\n", __func__, adc_reg_num);
 			coeff = 0;
 		}
 	return coeff;
 }
-static unsigned int get_coeff_p(u8 adc_reg_num)
+static unsigned int get_coeff_p(struct device *dev, u8 adc_reg_num)
 {
 	unsigned int coeff;
 		/* if the regulator is LDO */
@@ -226,7 +224,7 @@ static unsigned int get_coeff_p(u8 adc_reg_num)
 		else if (adc_reg_num >= S2MPS18_BUCK_START && adc_reg_num <= S2MPS18_BUCK_END)
 			coeff = power_buck_coeffs[adc_reg_num - S2MPS18_BUCK_START];
 		else {
-			pr_err("%s: invalid adc regulator number(%d)\n", __func__, adc_reg_num);
+			dev_err(dev, "%s: invalid adc regulator number(%d)\n", __func__, adc_reg_num);
 			coeff = 0;
 		}
 
@@ -238,7 +236,7 @@ static void s2m_adc_read_data2(struct device *dev, int channel)
 	int i;
 	u8 data_l, data_h;
 
-	if(channel < 0) {
+	if (channel < 0) {
 		/* current */
 		s2mps18_update_reg(adc_meter->i2c, S2MPS18_REG_ADC_CTRL3,
 				CURRENT_MODE, ADC_PGEN_MASK);
@@ -272,7 +270,6 @@ static void s2m_adc_read_data2(struct device *dev, int channel)
 		s2mps18_read_reg(adc_meter->i2c, S2MPS18_REG_ADC_DATA,
 					&data_l);
 		adc_meter->current_val[channel] = data_l;
-			
 		/* power */
 		s2mps18_update_reg(adc_meter->i2c, S2MPS18_REG_ADC_CTRL3,
 				 POWER_MODE, ADC_PGEN_MASK);
@@ -288,83 +285,34 @@ static void s2m_adc_read_data2(struct device *dev, int channel)
 		adc_meter->power_val[channel] = ((data_h & 0xff) << 8) | (data_l & 0xff);
 	}
 }
-void s2mps18_print_adc_val_power(void)
-{
-	pr_info("CH0[%d]:%d uW (%d), CH1[%d]:%d uW (%d), CH2[%d]:%d uW (%d), CH3[%d]:%d uW (%d)\nCH4[%d]:%d uW (%d), CH5[%d]:%d uW (%d), CH6[%d]:%d uW (%d), CH7[%d]:%d uW (%d)\n",
-			adc_meter->adc_reg[0], (adc_meter->power_val[0] * get_coeff_p(adc_meter->adc_reg[0]))/10, adc_meter->power_val[0],
-			adc_meter->adc_reg[1], (adc_meter->power_val[1] * get_coeff_p(adc_meter->adc_reg[1]))/10, adc_meter->power_val[1],
-			adc_meter->adc_reg[2], (adc_meter->power_val[2] * get_coeff_p(adc_meter->adc_reg[2]))/10, adc_meter->power_val[2],
-			adc_meter->adc_reg[3], (adc_meter->power_val[3] * get_coeff_p(adc_meter->adc_reg[3]))/10, adc_meter->power_val[3],
-			adc_meter->adc_reg[4], (adc_meter->power_val[4] * get_coeff_p(adc_meter->adc_reg[4]))/10, adc_meter->power_val[4],
-			adc_meter->adc_reg[5], (adc_meter->power_val[5] * get_coeff_p(adc_meter->adc_reg[5]))/10, adc_meter->power_val[5],
-			adc_meter->adc_reg[6], (adc_meter->power_val[6] * get_coeff_p(adc_meter->adc_reg[6]))/10, adc_meter->power_val[6],
-			adc_meter->adc_reg[7], (adc_meter->power_val[7] * get_coeff_p(adc_meter->adc_reg[7]))/10, adc_meter->power_val[7]);
 
-	schedule_work(&adc_meter->pm_update);
-}
-
-static void s2mps18_print_power_n_current(void)
-{
-	pr_info("CH0[%d]:%d uW (%d), CH1[%d]:%d uW (%d), CH2[%d]:%d uW (%d), CH3[%d]:%d uW (%d)\nCH4[%d]:%d uW (%d), CH5[%d]:%d uW (%d), CH6[%d]:%d uW (%d), CH7[%d]:%d uW (%d)\n",
-			adc_meter->adc_reg[0], (adc_meter->power_val[0] * get_coeff_p(adc_meter->adc_reg[0]))/10, adc_meter->power_val[0],
-			adc_meter->adc_reg[1], (adc_meter->power_val[1] * get_coeff_p(adc_meter->adc_reg[1]))/10, adc_meter->power_val[1],
-			adc_meter->adc_reg[2], (adc_meter->power_val[2] * get_coeff_p(adc_meter->adc_reg[2]))/10, adc_meter->power_val[2],
-			adc_meter->adc_reg[3], (adc_meter->power_val[3] * get_coeff_p(adc_meter->adc_reg[3]))/10, adc_meter->power_val[3],
-			adc_meter->adc_reg[4], (adc_meter->power_val[4] * get_coeff_p(adc_meter->adc_reg[4]))/10, adc_meter->power_val[4],
-			adc_meter->adc_reg[5], (adc_meter->power_val[5] * get_coeff_p(adc_meter->adc_reg[5]))/10, adc_meter->power_val[5],
-			adc_meter->adc_reg[6], (adc_meter->power_val[6] * get_coeff_p(adc_meter->adc_reg[6]))/10, adc_meter->power_val[6],
-			adc_meter->adc_reg[7], (adc_meter->power_val[7] * get_coeff_p(adc_meter->adc_reg[7]))/10, adc_meter->power_val[7]);
-
-	pr_info("CH0[%d]:%d uA (%d), CH1[%d]:%d uA (%d), CH2[%d]:%d uA (%d), CH3[%d]:%d uA (%d)\nCH4[%d]:%d uA (%d), CH5[%d]:%d uA (%d), CH6[%d]:%d uA (%d), CH7[%d]:%d uA (%d)\n",
-			adc_meter->adc_reg[0], adc_meter->current_val[0] * get_coeff_c(adc_meter->adc_reg[0]), adc_meter->current_val[0],
-			adc_meter->adc_reg[1], adc_meter->current_val[1] * get_coeff_c(adc_meter->adc_reg[1]), adc_meter->current_val[1],
-			adc_meter->adc_reg[2], adc_meter->current_val[2] * get_coeff_c(adc_meter->adc_reg[2]), adc_meter->current_val[2],
-			adc_meter->adc_reg[3], adc_meter->current_val[3] * get_coeff_c(adc_meter->adc_reg[3]), adc_meter->current_val[3],
-			adc_meter->adc_reg[4], adc_meter->current_val[4] * get_coeff_c(adc_meter->adc_reg[4]), adc_meter->current_val[4],
-			adc_meter->adc_reg[5], adc_meter->current_val[5] * get_coeff_c(adc_meter->adc_reg[5]), adc_meter->current_val[5],
-			adc_meter->adc_reg[6], adc_meter->current_val[6] * get_coeff_c(adc_meter->adc_reg[6]), adc_meter->current_val[6],
-			adc_meter->adc_reg[7], adc_meter->current_val[7] * get_coeff_c(adc_meter->adc_reg[7]), adc_meter->current_val[7]);
-}
-
-static void s2mps18_pm_update(struct work_struct *work)
-{
-	struct device *dev = s2mps18_adc_dev;
-
-	pr_info("%s\n", __func__);
-
-	s2m_adc_read_data(dev, -1);
-	s2mps18_print_power_n_current();
-
-	usleep_range(5000, 5100);
-
-	s2m_adc_read_data(dev, -1);
-	s2mps18_print_power_n_current();
-}
+#ifdef CONFIG_SEC_PM_DEBUG
+void s2mps18_print_adc_val_power(void) { }
+#endif
 
 static ssize_t adc_val_power_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 		return snprintf(buf, PAGE_SIZE, "CH0[%x]:%d uW (%d), CH1[%x]:%d uW (%d), CH2[%x]:%d uW (%d), CH3[%x]:%d uW (%d)\nCH4[%x]:%d uW (%d), CH5[%x]:%d uW (%d), CH6[%x]:%d uW (%d), CH7[%x]:%d uW (%d)\n",
-			adc_meter->adc_reg[0], (adc_meter->power_val[0] * get_coeff_p(adc_meter->adc_reg[0]))/10, adc_meter->power_val[0],
-			adc_meter->adc_reg[1], (adc_meter->power_val[1] * get_coeff_p(adc_meter->adc_reg[1]))/10, adc_meter->power_val[1],
-			adc_meter->adc_reg[2], (adc_meter->power_val[2] * get_coeff_p(adc_meter->adc_reg[2]))/10, adc_meter->power_val[2],
-			adc_meter->adc_reg[3], (adc_meter->power_val[3] * get_coeff_p(adc_meter->adc_reg[3]))/10, adc_meter->power_val[3],
-			adc_meter->adc_reg[4], (adc_meter->power_val[4] * get_coeff_p(adc_meter->adc_reg[4]))/10, adc_meter->power_val[4],
-			adc_meter->adc_reg[5], (adc_meter->power_val[5] * get_coeff_p(adc_meter->adc_reg[5]))/10, adc_meter->power_val[5],
-			adc_meter->adc_reg[6], (adc_meter->power_val[6] * get_coeff_p(adc_meter->adc_reg[6]))/10, adc_meter->power_val[6],
-			adc_meter->adc_reg[7], (adc_meter->power_val[7] * get_coeff_p(adc_meter->adc_reg[7]))/10, adc_meter->power_val[7]);
+			adc_meter->adc_reg[0], (adc_meter->power_val[0] * get_coeff_p(dev, adc_meter->adc_reg[0]))/10, adc_meter->power_val[0],
+			adc_meter->adc_reg[1], (adc_meter->power_val[1] * get_coeff_p(dev, adc_meter->adc_reg[1]))/10, adc_meter->power_val[1],
+			adc_meter->adc_reg[2], (adc_meter->power_val[2] * get_coeff_p(dev, adc_meter->adc_reg[2]))/10, adc_meter->power_val[2],
+			adc_meter->adc_reg[3], (adc_meter->power_val[3] * get_coeff_p(dev, adc_meter->adc_reg[3]))/10, adc_meter->power_val[3],
+			adc_meter->adc_reg[4], (adc_meter->power_val[4] * get_coeff_p(dev, adc_meter->adc_reg[4]))/10, adc_meter->power_val[4],
+			adc_meter->adc_reg[5], (adc_meter->power_val[5] * get_coeff_p(dev, adc_meter->adc_reg[5]))/10, adc_meter->power_val[5],
+			adc_meter->adc_reg[6], (adc_meter->power_val[6] * get_coeff_p(dev, adc_meter->adc_reg[6]))/10, adc_meter->power_val[6],
+			adc_meter->adc_reg[7], (adc_meter->power_val[7] * get_coeff_p(dev, adc_meter->adc_reg[7]))/10, adc_meter->power_val[7]);
 }
-
 static ssize_t adc_val_current_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 		return snprintf(buf, PAGE_SIZE, "CH0[%x]:%d uA (%d), CH1[%x]:%d uA (%d), CH2[%x]:%d uA (%d), CH3[%x]:%d uA (%d)\nCH4[%x]:%d uA (%d), CH5[%x]:%d uA (%d), CH6[%x]:%d uA (%d), CH7[%x]:%d uA (%d)\n",
-			adc_meter->adc_reg[0], adc_meter->current_val[0] * get_coeff_c(adc_meter->adc_reg[0]), adc_meter->current_val[0],
-			adc_meter->adc_reg[1], adc_meter->current_val[1] * get_coeff_c(adc_meter->adc_reg[1]), adc_meter->current_val[1],
-			adc_meter->adc_reg[2], adc_meter->current_val[2] * get_coeff_c(adc_meter->adc_reg[2]), adc_meter->current_val[2],
-			adc_meter->adc_reg[3], adc_meter->current_val[3] * get_coeff_c(adc_meter->adc_reg[3]), adc_meter->current_val[3],
-			adc_meter->adc_reg[4], adc_meter->current_val[4] * get_coeff_c(adc_meter->adc_reg[4]), adc_meter->current_val[4],
-			adc_meter->adc_reg[5], adc_meter->current_val[5] * get_coeff_c(adc_meter->adc_reg[5]), adc_meter->current_val[5],
-			adc_meter->adc_reg[6], adc_meter->current_val[6] * get_coeff_c(adc_meter->adc_reg[6]), adc_meter->current_val[6],
-			adc_meter->adc_reg[7], adc_meter->current_val[7] * get_coeff_c(adc_meter->adc_reg[7]), adc_meter->current_val[7]);
+			adc_meter->adc_reg[0], adc_meter->current_val[0] * get_coeff_c(dev, adc_meter->adc_reg[0]), adc_meter->current_val[0],
+			adc_meter->adc_reg[1], adc_meter->current_val[1] * get_coeff_c(dev, adc_meter->adc_reg[1]), adc_meter->current_val[1],
+			adc_meter->adc_reg[2], adc_meter->current_val[2] * get_coeff_c(dev, adc_meter->adc_reg[2]), adc_meter->current_val[2],
+			adc_meter->adc_reg[3], adc_meter->current_val[3] * get_coeff_c(dev, adc_meter->adc_reg[3]), adc_meter->current_val[3],
+			adc_meter->adc_reg[4], adc_meter->current_val[4] * get_coeff_c(dev, adc_meter->adc_reg[4]), adc_meter->current_val[4],
+			adc_meter->adc_reg[5], adc_meter->current_val[5] * get_coeff_c(dev, adc_meter->adc_reg[5]), adc_meter->current_val[5],
+			adc_meter->adc_reg[6], adc_meter->current_val[6] * get_coeff_c(dev, adc_meter->adc_reg[6]), adc_meter->current_val[6],
+			adc_meter->adc_reg[7], adc_meter->current_val[7] * get_coeff_c(dev, adc_meter->adc_reg[7]), adc_meter->current_val[7]);
 }
 
 static ssize_t adc_val_all_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -878,6 +826,7 @@ void s2mps18_powermeter_init(struct s2mps18_dev *s2mps18)
 
 	adc_meter->adc_mode = s2mps18->adc_mode;
 	adc_meter->adc_sync_mode = s2mps18->adc_sync_mode;
+	mutex_init(&adc_meter->adc_lock);
 
 	/* POWER_METER mode needs bigger SMP_NUM to get stable value */
 	switch (adc_meter->adc_mode) {
@@ -956,80 +905,77 @@ void s2mps18_powermeter_init(struct s2mps18_dev *s2mps18)
 	/* create sysfs entries */
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_en);
 	if (ret)
-		goto remove_adc_en;
+		goto err_free;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_mode);
 	if (ret)
-		goto remove_adc_mode;
+		goto remove_adc_en;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_sync_mode);
 	if (ret)
-		goto remove_adc_sync_mode;
+		goto remove_adc_mode;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_val_all);
 	if (ret)
-		goto remove_adc_val_all;
+		goto remove_adc_sync_mode;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_power_val_all);
 	if (ret)
 		goto remove_adc_val_all;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_current_val_all);
 	if (ret)
-		goto remove_adc_val_all;
+		goto remove_power_val_all;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_val_0);
 	if (ret)
-		goto remove_adc_val_0;
+		goto remove_current_val_all;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_val_1);
 	if (ret)
-		goto remove_adc_val_1;
+		goto remove_adc_val_0;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_val_2);
 	if (ret)
-		goto remove_adc_val_2;
+		goto remove_adc_val_1;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_val_3);
 	if (ret)
-		goto remove_adc_val_3;
+		goto remove_adc_val_2;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_val_4);
 	if (ret)
-		goto remove_adc_val_4;
+		goto remove_adc_val_3;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_val_5);
 	if (ret)
-		goto remove_adc_val_5;
+		goto remove_adc_val_4;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_val_6);
 	if (ret)
-		goto remove_adc_val_6;
+		goto remove_adc_val_5;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_val_7);
 	if (ret)
-		goto remove_adc_val_7;
+		goto remove_adc_val_6;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_reg_0);
 	if (ret)
-		goto remove_adc_reg_0;;
+		goto remove_adc_val_7;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_reg_1);
 	if (ret)
-		goto remove_adc_reg_1;
+		goto remove_adc_reg_0;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_reg_2);
 	if (ret)
-		goto remove_adc_reg_2;
+		goto remove_adc_reg_1;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_reg_3);
 	if (ret)
-		goto remove_adc_reg_3;
+		goto remove_adc_reg_2;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_reg_4);
 	if (ret)
-		goto remove_adc_reg_4;
+		goto remove_adc_reg_3;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_reg_5);
 	if (ret)
-		goto remove_adc_reg_5;
+		goto remove_adc_reg_4;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_reg_6);
 	if (ret)
-		goto remove_adc_reg_6;
+		goto remove_adc_reg_5;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_reg_7);
 	if (ret)
-		goto remove_adc_reg_7;
+		goto remove_adc_reg_6;
 	ret = device_create_file(s2mps18_adc_dev, &dev_attr_adc_ctrl1);
 	if (ret)
-		goto remove_adc_ctrl1;
-
-	INIT_WORK(&adc_meter->pm_update, s2mps18_pm_update);
+		goto remove_adc_reg_7;
 
 	pr_info("%s: s2mps18 power meter init end\n", __func__);
 	return ;
-remove_adc_ctrl1:
-	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_ctrl1);
+
 remove_adc_reg_7:
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_reg_7);
 remove_adc_reg_6:
@@ -1062,6 +1008,10 @@ remove_adc_val_1:
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_val_1);
 remove_adc_val_0:
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_val_0);
+remove_current_val_all:
+	device_remove_file(s2mps18_adc_dev, &dev_attr_current_val_all);
+remove_power_val_all:
+	device_remove_file(s2mps18_adc_dev, &dev_attr_power_val_all);
 remove_adc_val_all:
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_val_all);
 remove_adc_sync_mode:
@@ -1070,7 +1020,7 @@ remove_adc_mode:
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_mode);
 remove_adc_en:
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_en);
-
+err_free:
 	kfree(adc_meter->adc_val);
 	kfree(adc_meter->adc_reg);
 	dev_info(s2mps18->dev, "%s : fail to create sysfs\n",__func__);
@@ -1082,6 +1032,8 @@ void s2mps18_powermeter_deinit(struct s2mps18_dev *s2mps18)
 	/* remove sysfs entries */
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_en);
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_val_all);
+	device_remove_file(s2mps18_adc_dev, &dev_attr_power_val_all);
+	device_remove_file(s2mps18_adc_dev, &dev_attr_current_val_all);
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_mode);
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_sync_mode);
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_val_0);
@@ -1092,6 +1044,14 @@ void s2mps18_powermeter_deinit(struct s2mps18_dev *s2mps18)
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_val_5);
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_val_6);
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_val_7);
+	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_reg_0);
+	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_reg_1);
+	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_reg_2);
+	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_reg_3);
+	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_reg_4);
+	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_reg_5);
+	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_reg_6);
+	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_reg_7);
 	device_remove_file(s2mps18_adc_dev, &dev_attr_adc_ctrl1);
 
 	/* ADC turned off */

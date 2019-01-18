@@ -24,20 +24,13 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_dbg.h 761450 2018-05-08 07:09:38Z $
+ * $Id: dhd_dbg.h 759128 2018-04-24 03:48:17Z $
  */
 
 #ifndef _dhd_dbg_
 #define _dhd_dbg_
 
-#define PRINT_RATE_LIMIT_PERIOD 5000000000u /* 5s in units of ns */
-
 #ifdef DHD_LOG_DUMP
-extern char *dhd_log_dump_get_timestamp(void);
-extern void dhd_log_dump_write(int type, char *binary_data,
-		int binary_len, const char *fmt, ...);
-#ifndef _DHD_LOG_DUMP_DEFINITIONS_
-#define _DHD_LOG_DUMP_DEFINITIONS_
 typedef enum {
 	DLD_BUF_TYPE_GENERAL = 0,
 	DLD_BUF_TYPE_PRESERVE,
@@ -46,6 +39,11 @@ typedef enum {
 	DLD_BUF_TYPE_FILTER,
 	DLD_BUF_TYPE_ALL
 } log_dump_type_t;
+extern char *dhd_log_dump_get_timestamp(void);
+extern void dhd_log_dump_write(int type, char *binary_data,
+		int binary_len, const char *fmt, ...);
+#ifndef _DHD_LOG_DUMP_DEFINITIONS_
+#define _DHD_LOG_DUMP_DEFINITIONS_
 #define GENERAL_LOG_HDR "\n-------------------- General log ---------------------------\n"
 #define PRESERVE_LOG_HDR "\n-------------------- Preserve log ---------------------------\n"
 #define SPECIAL_LOG_HDR "\n-------------------- Special log ---------------------------\n"
@@ -330,13 +328,14 @@ do {	\
 #endif /* DHD_PCIE_NATIVE_RUNTIMEPM */
 #endif // endif
 
+#define PRINT_RATE_LIMIT_PERIOD 5000000u /* 5s in units of us */
 #define DHD_ERROR_RLMT(args) \
 do {	\
 	if (dhd_msg_level & DHD_ERROR_VAL) {	\
 		static uint64 __err_ts = 0; \
 		static uint32 __err_cnt = 0; \
 		uint64 __cur_ts = 0; \
-		__cur_ts = local_clock(); \
+		__cur_ts = OSL_SYSUPTIME_US(); \
 		if (__err_ts == 0 || (__cur_ts > __err_ts && \
 		(__cur_ts - __err_ts > PRINT_RATE_LIMIT_PERIOD))) { \
 			__err_ts = __cur_ts; \

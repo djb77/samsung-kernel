@@ -108,7 +108,7 @@ void g2d_hw_timeout_handler(unsigned long arg)
 		goto out;
 	}
 
-	mod_timer(&task->timer,
+	mod_timer(&task->hw_timer,
 	  jiffies + msecs_to_jiffies(G2D_HW_TIMEOUT_MSEC));
 
 	if (!g2d_hw_stuck_state(g2d_dev) &&
@@ -392,6 +392,9 @@ static long g2d_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 		ret = g2d_get_userdata(g2d_dev, ctx, task, &data);
 		if (ret < 0) {
+			/* release hwfc buffer */
+			if (IS_HWFC(task->flags) && (task->bufidx >= 0))
+				hwfc_set_valid_buffer(task->bufidx, -1);
 			g2d_put_free_task(g2d_dev, task);
 			break;
 		}
@@ -503,7 +506,7 @@ static int g2d_compat_get_layerdata(struct device *dev,
 				struct g2d_layer_data __user *img,
 				struct compat_g2d_layer_data __user *cimg)
 {
-	__u32 uw;
+	__u32 uw, num_buffers, buftype;
 	__s32 sw;
 	compat_ulong_t l;
 	unsigned int i;
@@ -513,18 +516,21 @@ static int g2d_compat_get_layerdata(struct device *dev,
 	ret |= put_user(uw, &img->flags);
 	ret |= get_user(sw, &cimg->fence);
 	ret |= put_user(sw, &img->fence);
-	ret |= get_user(uw, &cimg->buffer_type);
-	ret |= put_user(uw, &img->buffer_type);
-	ret |= get_user(uw, &cimg->num_buffers);
-	ret |= put_user(uw, &img->num_buffers);
+	ret |= get_user(buftype, &cimg->buffer_type);
+	ret |= put_user(buftype, &img->buffer_type);
+	ret |= get_user(num_buffers, &cimg->num_buffers);
+	ret |= put_user(num_buffers, &img->num_buffers);
 
-	for (i = 0; i < uw; i++) { /* uw contains num_buffers */
-		ret |= get_user(l, &cimg->buffer[i].userptr);
-		ret |= put_user(l, &img->buffer[i].userptr);
-		ret |= get_user(uw, &cimg->buffer[i].dmabuf.offset);
-		ret |= put_user(uw, &img->buffer[i].dmabuf.offset);
-		ret |= get_user(sw, &cimg->buffer[i].dmabuf.fd);
-		ret |= put_user(sw, &img->buffer[i].dmabuf.fd);
+	for (i = 0; i < num_buffers; i++) {
+		if (buftype == G2D_BUFTYPE_DMABUF) {
+			ret |= get_user(uw, &cimg->buffer[i].dmabuf.offset);
+			ret |= put_user(uw, &img->buffer[i].dmabuf.offset);
+			ret |= get_user(sw, &cimg->buffer[i].dmabuf.fd);
+			ret |= put_user(sw, &img->buffer[i].dmabuf.fd);
+		} else {
+			ret |= get_user(l, &cimg->buffer[i].userptr);
+			ret |= put_user(l, &img->buffer[i].userptr);
+		}
 		ret |= get_user(uw, &cimg->buffer[i].length);
 		ret |= put_user(uw, &img->buffer[i].length);
 	}

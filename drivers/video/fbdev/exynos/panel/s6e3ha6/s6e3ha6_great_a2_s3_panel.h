@@ -1704,7 +1704,6 @@ u8 GREAT_A2_S3_MST_OFF_02[] = { 0xBF, 0x00, 0x07, 0xFF, 0x00, 0x00, 0x10 };
 #endif
 
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
-static u8 GREAT_A2_S3_GRAM_IMG_PATTERN[S6E3HA6_GRAM_IMG_SIZE] = { 0, };
 static u8 GREAT_A2_S3_VDDM_PARA[] = { 0xB0, 0x09 };
 static u8 GREAT_A2_S3_VDDM_ORIG[] = { 0xF4, 0x00 };
 static u8 GREAT_A2_S3_VDDM_VOLT[] = { 0xF4, 0x00 };
@@ -1801,9 +1800,9 @@ static DEFINE_VARIABLE_PACKET(great_a2_s3_vddm_volt, DSI_PKT_TYPE_WR, GREAT_A2_S
 static DEFINE_STATIC_PACKET(great_a2_s3_vddm_update_enable, DSI_PKT_TYPE_WR, GREAT_A2_S3_VDDM_UPDATE_ENABLE, 0);
 static DEFINE_STATIC_PACKET(great_a2_s3_vddm_update_disable, DSI_PKT_TYPE_WR, GREAT_A2_S3_VDDM_UPDATE_DISABLE, 0);
 static DEFINE_PKTUI(great_a2_s3_gram_img_pattern_0, &great_a2_s3_maptbl[GRAM_IMG_0_MAPTBL], 0);
-static DEFINE_VARIABLE_PACKET(great_a2_s3_gram_img_pattern_0, DSI_PKT_TYPE_WR_MEM, GREAT_A2_S3_GRAM_IMG_PATTERN, 0);
+static DEFINE_VARIABLE_PACKET(great_a2_s3_gram_img_pattern_0, DSI_PKT_TYPE_WR_MEM, S6E3HA6_GRAM_IMG, 0);
 static DEFINE_PKTUI(great_a2_s3_gram_img_pattern_1, &great_a2_s3_maptbl[GRAM_IMG_1_MAPTBL], 0);
-static DEFINE_VARIABLE_PACKET(great_a2_s3_gram_img_pattern_1, DSI_PKT_TYPE_WR_MEM, GREAT_A2_S3_GRAM_IMG_PATTERN, 0);
+static DEFINE_VARIABLE_PACKET(great_a2_s3_gram_img_pattern_1, DSI_PKT_TYPE_WR_MEM, S6E3HA6_GRAM_IMG, 0);
 #endif
 
 static DEFINE_PKTUI(great_a2_s3_gamma, &great_a2_s3_maptbl[GAMMA_MAPTBL], 1);
@@ -2238,12 +2237,6 @@ static void *great_a2_s3_gct_exit_cmdtbl[] = {
 	&DLYINFO(great_a2_s3_wait_vddm_update),
 	&KEYINFO(great_a2_s3_level3_key_disable),
 	&KEYINFO(great_a2_s3_level2_key_disable),
-
-	&KEYINFO(great_a2_s3_level1_key_enable),
-	&PKTINFO(great_a2_s3_sw_reset),
-	&DLYINFO(great_a2_s3_wait_120msec),
-	&KEYINFO(great_a2_s3_level1_key_disable),
-	&SEQINFO(great_a2_s3_seqtbl[PANEL_INIT_SEQ]),
 };
 #endif
 

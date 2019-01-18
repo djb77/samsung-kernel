@@ -282,7 +282,8 @@ struct tcp_sock {
 	} rack;
 	u16	advmss;		/* Advertised MSS			*/
 	u8	rate_app_limited:1,  /* rate_{delivered,interval_us} limited? */
-		unused:7;
+		fastopen_connect:1, /* FASTOPEN_CONNECT sockopt */
+		unused:6;
 	u8	nonagle     : 4,/* Disable Nagle algorithm?             */
 		thin_lto    : 1,/* Use linear timeouts for thin streams */
 		thin_dupack : 1,/* Fast retransmit on first dupack      */
@@ -399,10 +400,8 @@ struct tcp_sock {
 	u32 netpm_rttvar;
 	int netpm_cwnd_est;
 	int netpm_tcp_rmem_max;
-	int netpm_tcp_rmem_max_base;
-	int netpm_rwnd_max_adjust; // the number of rwnd cut after last rwnd grown
 	int netpm_max_tput;
-	int netpm_rmem_max_curbdp[2];
+	int netpm_rmem_max_curbdp;
 #endif
 
 /* Receiver side RTT estimation */

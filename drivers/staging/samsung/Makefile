@@ -23,7 +23,6 @@ obj-$(CONFIG_SEC_REBOOT)             += sec_reboot.o
 obj-$(CONFIG_SEC_DEBUG)              += sec_debug.o
 obj-$(CONFIG_SEC_DEBUG)              += sec_debug_test.o
 obj-$(CONFIG_SEC_DEBUG)              += sec_debug_hard_reset_hook.o
-obj-$(CONFIG_SEC_DEBUG)              += sec_gaf.o
 obj-$(CONFIG_SEC_DEBUG_UPLOAD)       += sec_debug_upload.o
 obj-$(CONFIG_SEC_DEBUG_RESET_REASON) += sec_debug_reset_reason.o
 obj-$(CONFIG_SEC_DEBUG_EXTRA_INFO)	+= sec_debug_extra_info.o
@@ -31,11 +30,15 @@ obj-$(CONFIG_SEC_DEBUG_HW_PARAM)	+= sec_debug_hw_param.o
 obj-$(CONFIG_SEC_DEBUG_AUTO_SUMMARY)	+= sec_debug_auto_summary.o
 obj-$(CONFIG_SEC_DEBUG_LAST_KMSG)	+= sec_debug_last_kmsg.o
 obj-$(CONFIG_SEC_DEBUG_PPMPU)		+= sec_debug_ppmpu.o
-
+obj-$(CONFIG_SEC_DEBUG_UBSAN)	+= sec_debug_ubsan.o
+obj-$(CONFIG_SEC_DEBUG_KASAN)	+= sec_debug_kasan.o
+obj-$(CONFIG_SEC_DEBUG_BRANCH_VERIFIER)	+=sec_debug_branch_verifier.o
 # Samsung TN BSP Options
 obj-$(CONFIG_ARGOS)                  += sec_argos.o
 obj-$(CONFIG_SEC_PARAM)		+= sec_param.o
 obj-$(CONFIG_SEC_BOOTSTAT)	+= sec_bootstat.o
+
+obj-$(CONFIG_SEC_DEBUG_GAF_V4)		+= sec_gaf_v4.o
 
 # Samsung sec NAD Feature
 obj-$(CONFIG_SEC_NAD)		+= sec_nad.o
@@ -48,3 +51,6 @@ obj-$(CONFIG_SEC_HEAVY_TASK_CPU)		+= sec_heavy_task_cpu.o
 
 # Samsung Mobile Power Management Debugging Support
 obj-$(CONFIG_SEC_PM_DEBUG)		+= sec_pm_debug.o
+
+# Samsung HQM device feature
+obj-$(CONFIG_SEC_HQM_DEVICE)		+= sec_hqm_device.o

@@ -82,6 +82,8 @@ static inline void __buffer_relink_io(struct journal_head *jh)
 	transaction->t_checkpoint_io_list = jh;
 }
 
+extern int ignore_fs_panic;
+
 /*
  * Try to release a checkpointed buffer from its transaction.
  * Returns 1 if we released it and 2 if we also released the
@@ -111,7 +113,7 @@ static int __try_to_free_cp_buf(struct journal_head *jh)
 					(long unsigned int) bh->b_size,
 					(void *) bh->b_data,
 					(long unsigned int) bh->b_blocknr);
-			jbd2_journal_abort(journal, -EIO);
+			BUG_ON(!ignore_fs_panic);
 		}
 	}
 	return ret;

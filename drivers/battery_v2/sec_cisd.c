@@ -37,9 +37,6 @@ const char *cisd_data_str_d[] = {
 	"VBAT_OVP_D", "USB_OVERHEAT_RAPID_CHANGE_D", "BUCK_OFF_D", "USB_OVERHEAT_ALONE_D", "DROP_SENSOR_D"
 };
 
-const char *cisd_wc_data_str[] = {"INDEX", "SNGL_NOBLE", "SNGL_VEHICLE", "SNGL_MINI", "SNGL_ZERO", "SNGL_DREAM",
-	"STAND_HERO", "STAND_DREAM", "EXT_PACK", "EXT_PACK_TA"};
-
 bool sec_bat_cisd_check(struct sec_battery_info *battery)
 {
 	union power_supply_propval incur_val = {0, };
@@ -292,4 +289,194 @@ void sec_battery_cisd_init(struct sec_battery_info *battery)
 
 	/* set cisd pointer */
 	gcisd = &battery->cisd;
+
+	/* initialize pad data */
+	mutex_init(&battery->cisd.padlock);
+	init_cisd_pad_data(&battery->cisd);
+}
+
+static struct pad_data* create_pad_data(unsigned int pad_id, unsigned int pad_count)
+{
+	struct pad_data* temp_data;
+
+	temp_data = kzalloc(sizeof(struct pad_data), GFP_KERNEL);
+	if (temp_data == NULL)
+		return NULL;
+
+	temp_data->id = pad_id;
+	temp_data->count = pad_count;
+	temp_data->prev = temp_data->next = NULL;
+
+	return temp_data;
+}
+
+static struct pad_data* find_pad_data_by_id(struct cisd* cisd, unsigned int pad_id)
+{
+	struct pad_data* temp_data = cisd->pad_array->next;
+
+	if (cisd->pad_count <= 0 || temp_data == NULL)
+		return NULL;
+
+	while ((temp_data->id != pad_id) &&
+		((temp_data = temp_data->next) != NULL));
+
+	return temp_data;
+}
+
+static void add_pad_data(struct cisd* cisd, unsigned int pad_id, unsigned int pad_count)
+{
+	struct pad_data* temp_data = cisd->pad_array->next;
+	struct pad_data* pad_data;
+
+	if (pad_id == 0 || pad_id >= MAX_PAD_ID)
+		return;
+
+	pad_data = create_pad_data(pad_id, pad_count);
+	if (pad_data == NULL)
+		return;
+
+	pr_info("%s: id(0x%x), count(%d)\n", __func__, pad_id, pad_count);
+	while (temp_data) {
+		if (temp_data->id > pad_id) {
+			temp_data->prev->next = pad_data;
+			pad_data->prev = temp_data->prev;
+			pad_data->next = temp_data;
+			temp_data->prev = pad_data;
+			cisd->pad_count++;
+			return;
+		}
+		temp_data = temp_data->next;
+	}
+
+	pr_info("%s: failed to add pad_data(%d, %d)\n",
+		__func__, pad_id, pad_count);
+	kfree(pad_data);
+}
+
+void init_cisd_pad_data(struct cisd* cisd)
+{
+	struct pad_data* temp_data = cisd->pad_array;
+
+	mutex_lock(&cisd->padlock);
+	while (temp_data) {
+		struct pad_data* next_data = temp_data->next;
+
+		kfree(temp_data);
+		temp_data = next_data;
+	}
+
+	/* create dummy data */
+	cisd->pad_count = 0;
+	cisd->pad_array = create_pad_data(0, 0);
+	if (cisd->pad_array == NULL)
+		return;
+	temp_data = create_pad_data(MAX_PAD_ID, 0);
+	if (temp_data == NULL) {
+		kfree(cisd->pad_array);
+		return;
+	}
+	cisd->pad_array->next = temp_data;
+	temp_data->prev = cisd->pad_array;
+	mutex_unlock(&cisd->padlock);
+}
+
+void count_cisd_pad_data(struct cisd* cisd, unsigned int pad_id)
+{
+	struct pad_data* pad_data;
+
+	mutex_lock(&cisd->padlock);
+	if ((pad_data = find_pad_data_by_id(cisd, pad_id)) != NULL)
+		pad_data->count++;
+	else
+		add_pad_data(cisd, pad_id, 1);
+	mutex_unlock(&cisd->padlock);
+}
+
+static unsigned int convert_wc_index_to_pad_id(unsigned int wc_index)
+{
+	switch (wc_index) {
+	case WC_SNGL_NOBLE:
+		return WC_PAD_ID_SNGL_NOBLE;
+	case WC_SNGL_VEHICLE:
+		return WC_PAD_ID_SNGL_VEHICLE;
+	case WC_SNGL_MINI:
+		return WC_PAD_ID_SNGL_MINI;
+	case WC_SNGL_ZERO:
+		return WC_PAD_ID_SNGL_ZERO;
+	case WC_SNGL_DREAM:
+		return WC_PAD_ID_SNGL_DREAM;
+	case WC_STAND_HERO:
+		return WC_PAD_ID_STAND_HERO;
+	case WC_STAND_DREAM:
+		return WC_PAD_ID_STAND_DREAM;
+	case WC_EXT_PACK:
+		return WC_PAD_ID_EXT_BATT_PACK;
+	case WC_EXT_PACK_TA:
+		return WC_PAD_ID_EXT_BATT_PACK_TA;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+void set_cisd_pad_data(struct sec_battery_info *battery, const char* buf)
+{
+	struct cisd* pcisd = &battery->cisd;
+	unsigned int pad_index, pad_total_count, pad_id, pad_count;
+	struct pad_data* pad_data;
+	int i, x;
+
+	pr_info("%s: %s\n", __func__, buf);
+	if (sscanf(buf, "%10d%n", &pad_index, &x) <= 0) {
+		pr_info("%s: failed to read pad index\n", __func__);
+		return;
+	}
+	buf += (size_t)x;
+	pr_info("%s: stored pad_index(%d)\n", __func__, pad_index);
+
+	if (pcisd->pad_count > 0)
+		init_cisd_pad_data(pcisd);
+
+	if (!pad_index) {
+		for (i = WC_DATA_INDEX + 1; i < WC_DATA_MAX; i++) {
+			if (sscanf(buf, "%10d%n", &pad_count, &x) <= 0)
+				break;
+			buf += (size_t)x;
+
+			if (pad_count > 0) {
+				pad_id = convert_wc_index_to_pad_id(i);
+
+				mutex_lock(&pcisd->padlock);
+				if ((pad_data = find_pad_data_by_id(pcisd, pad_id)) != NULL)
+					pad_data->count = pad_count;
+				else
+					add_pad_data(pcisd, pad_id, pad_count);
+				mutex_unlock(&pcisd->padlock);
+			}
+		}
+	} else {
+		if ((sscanf(buf + 1, "%10d%n", &pad_total_count, &x) <= 0) ||
+			(pad_total_count >= MAX_PAD_ID))
+			return;
+		buf += (size_t)(x + 1);
+
+		pr_info("%s: add pad data(count: %d)\n", __func__, pad_total_count);
+		for (i = 0; i < pad_total_count; i++) {
+			if (sscanf(buf, " 0x%02x:%10d%n", &pad_id, &pad_count, &x) != 2) {
+				pr_info("%s: failed to read pad data(0x%x, %d, %d)!!!re-init pad data\n",
+					__func__, pad_id, pad_count, x);
+				init_cisd_pad_data(pcisd);
+				break;
+			}
+			buf += (size_t)x;
+
+			mutex_lock(&pcisd->padlock);
+			if ((pad_data = find_pad_data_by_id(pcisd, pad_id)) != NULL)
+				pad_data->count = pad_count;
+			else
+				add_pad_data(pcisd, pad_id, pad_count);
+			mutex_unlock(&pcisd->padlock);
+		}
+	}
 }

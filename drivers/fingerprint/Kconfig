@@ -45,15 +45,6 @@ config SENSORS_VFS8XXX
 	  Namsan is the touch type fingerprint sensor.
 	  Namsan module can support WOF mode.
 
-config SENSORS_VFS9XXX
-	tristate "VFS9XXX fingerprint sensor support"
-	default n
-	help
-	  Fingerprint sensor driver.
-	  If you say yes here you get support for CPID sensor.
-	  CPID is the indisplay touch type fingerprint sensor.
-	  CPID module can not support WOF mode.
-
 config SENSORS_ET5XX
 	tristate "ET5XX fingerprint sensor supprot"
 	default n

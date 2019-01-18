@@ -31,7 +31,7 @@ static int tdmbspi_probe(struct spi_device *spi)
 
 	spi_dmb = spi;
 
-	DPRINTK("%s() spi_dmb : 0x%p\n", __func__, spi_dmb);
+	DPRINTK("%s()\n", __func__);
 
 	spi->mode = SPI_MODE_0;
 	spi->bits_per_word = 8;
@@ -76,7 +76,7 @@ static void __exit tdmb_spi_exit(void)
 
 unsigned long tdmb_get_if_handle(void)
 {
-	DPRINTK("%s : spi_dmb 0x%p\n", __func__, spi_dmb);
+	DPRINTK("%s\n", __func__);
 	return (unsigned long)spi_dmb;
 }
 EXPORT_SYMBOL_GPL(tdmb_get_if_handle);

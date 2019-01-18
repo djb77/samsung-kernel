@@ -23,7 +23,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_debug.c 760444 2018-05-02 05:18:22Z $
+ * $Id: dhd_debug.c 755895 2018-04-05 07:17:15Z $
  */
 
 #include <typedefs.h>
@@ -833,9 +833,10 @@ dhd_dbg_verboselog_printf(dhd_pub_t *dhdp, event_log_hdr_t *hdr,
 				raw_event->fmts[hdr->fmt_num >> 2]);
 			hdr->count++;
 		} else {
-			snprintf(fmtstr_loc_buf, FMTSTR_SIZE, "CONSOLE_E:%u:%u %6d.%3d %s",
+			snprintf(fmtstr_loc_buf, FMTSTR_SIZE, "CONSOLE_E:%u:%u %06d.%03d %s",
 				logset, block,
-				log_ptr[hdr->count-1]/1000, (log_ptr[hdr->count - 1] % 1000),
+				(uint32)(log_ptr[hdr->count - 1] / EL_MSEC_PER_SEC),
+				(uint32)(log_ptr[hdr->count - 1] % EL_MSEC_PER_SEC),
 				raw_event->fmts[hdr->fmt_num >> 2]);
 		}
 		c_ptr = fmtstr_loc_buf;
@@ -1091,20 +1092,23 @@ dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
 		log_ptr = (uint32 *)log_hdr - log_hdr->count;
 		dll_delete(cur);
 		MFREE(dhdp->osh, log_item, sizeof(*log_item));
-
 #if defined(DEBUGABILITY_ECNTRS_LOGGING) && defined(DHD_LOG_DUMP)
 		if ((log_hdr->tag == EVENT_LOG_TAG_ECOUNTERS_TIME_DATA) ||
 				((log_hdr->tag == EVENT_LOG_TAG_STATS) &&
 				(log_hdr->fmt_num == 0xffff))) {
 			if (!ecntr_pushed && dhd_log_dump_ecntr_enabled()) {
-				/* check msg hdr len before pushing */
-				if (msg_hdr.len > (sizeof(*logentry_header) +
-						PAYLOAD_ECNTR_MAX_LEN)) {
+				/*
+				 * check msg hdr len before pushing.
+				 * FW msg_hdr.len includes length of event log hdr,
+				 * logentry header and payload.
+				 */
+				if (msg_hdr.len > (sizeof(*logentry_header) + sizeof(*log_hdr) +
+					PAYLOAD_ECNTR_MAX_LEN)) {
 					DHD_ERROR(("%s: EVENT_LOG_VALIDATION_FAILS: "
-						"msg_hdr.len=%u, max allowed for ecntrs=%u",
+						"msg_hdr.len=%u, max allowed for ecntrs=%u\n",
 						__FUNCTION__, msg_hdr.len,
 						(uint32)(sizeof(*logentry_header) +
-						PAYLOAD_ECNTR_MAX_LEN)));
+						sizeof(*log_hdr) + PAYLOAD_ECNTR_MAX_LEN)));
 					goto exit;
 				}
 				dhd_dbg_ring_push(dhdp->ecntr_dbg_ring, &msg_hdr, logbuf);

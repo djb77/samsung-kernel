@@ -13,6 +13,7 @@
 
 #include <linux/device.h>
 #include <linux/irqreturn.h>
+#include <linux/scatterlist.h>
 #include <sound/soc.h>
 #include <sound/samsung/abox_ipc.h>
 
@@ -108,6 +109,21 @@ extern int abox_iommu_map(struct device *dev, unsigned long iova,
 		phys_addr_t paddr, size_t size);
 
 /**
+ * iommu map for abox
+ * @param[in]	dev	pointer to abox device
+ * @param[in]	iova	device virtual address
+ * @param[in]	sg	scatter list
+ * @param[in]	nents	nents of scatter list
+ * @param[in]	prot	protection parameter
+ * @param[in]	bytes	size of the mapping area
+ * @param[in]	area	kernel virtual address
+ * @return	error code if any
+ */
+extern int abox_iommu_map_sg(struct device *dev, unsigned long iova,
+		struct scatterlist *sg, unsigned int nents,
+		int prot, size_t bytes, void *area);
+
+/**
  * iommu unmap for abox
  * @param[in]	dev	pointer to abox device
  * @param[in]	iova	device virtual address
@@ -168,6 +184,13 @@ static inline int abox_hw_params_fixup_helper(struct snd_soc_pcm_runtime *rtd,
 
 static inline int abox_iommu_map(struct device *dev, unsigned long iova,
 		phys_addr_t paddr, size_t size)
+{
+	return -ENODEV;
+}
+
+static inline int abox_iommu_map_sg(struct device *dev, unsigned long iova,
+		struct scatterlist *sg, unsigned int nents,
+		int prot, size_t bytes, void *area)
 {
 	return -ENODEV;
 }

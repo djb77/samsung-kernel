@@ -33,8 +33,6 @@
 #endif
 #if defined(CONFIG_EXYNOS_DECON_LCD_S6E3HA2K)
 #include "./panels/s6e3ha2k_param.h"
-#elif defined(CONFIG_EXYNOS_DECON_LCD_S6E3HF4)
-#include "./panels/s6e3hf4_param.h"
 #elif defined(CONFIG_EXYNOS_DECON_LCD_EMUL_DISP)
 #include "./panels/emul_disp_param.h"
 #elif defined(CONFIG_EXYNOS_DECON_LCD_S6E3HA6)

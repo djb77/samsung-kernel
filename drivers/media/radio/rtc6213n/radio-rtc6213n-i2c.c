@@ -234,6 +234,7 @@ int rtc6213n_fops_open(struct file *file)
 		/* Disable Softmute / Disable Mute / De-emphasis / Volume 8 */
 		radio->registers[MPXCFG] = 0x0000 |
 			MPXCFG_CSR0_DIS_SMUTE | MPXCFG_CSR0_DIS_MUTE |
+			((radio->blend_level << 8) & MPXCFG_CSR0_BLNDADJUST) |
 			((de << 12) & MPXCFG_CSR0_DEEM) | 0x0008;
 		retval = rtc6213n_set_register(radio, MPXCFG);
 		if (retval < 0)
@@ -585,6 +586,15 @@ static int rtc6213n_i2c_probe(struct i2c_client *client,
 			dev_err(&client->dev, "%s: fm lna gpio request failed(%d)\n", __func__, radio->fm_lna_gpio);
 		else
 			dev_info(&client->dev, "%s: fm lna gpio(%d)\n", __func__, radio->fm_lna_gpio);
+	}
+
+	if (!of_property_read_u8(client->dev.of_node, "blend_lvl", &radio->blend_level)) {
+		dev_info(&client->dev, "%s: blend_level = %d\n", __func__,
+				radio->blend_level);
+	} else {
+		radio->blend_level = 0;
+		dev_info(&client->dev, "%s: can not find the blend level in the dt\n",
+		__func__);
 	}
 
 	/* mark Seek/Tune Complete Interrupt enabled */

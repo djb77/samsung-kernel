@@ -54,7 +54,7 @@ static void mfc_dump_regs(struct s5p_mfc_dev *dev)
 		{ 0xC000, 0x84 },
 	};
 
-	pr_err("-----------dumping MFC registers (SFR base = %p, dev = %p)\n",
+	pr_err("-----------dumping MFC registers (SFR base = %pK, dev = %pK)\n",
 				dev->regs_base, dev);
 
 	s5p_mfc_enable_all_clocks(dev);
@@ -163,8 +163,8 @@ static void mfc_display_state(struct s5p_mfc_dev *dev)
 
 	for (i = 0; i < MFC_NUM_CONTEXTS; i++)
 		if (dev->ctx[i])
-			pr_err("MFC ctx[%d] %s(%d) state:%d, queue_cnt(src:%d, dst:%d, ref:%d, qsrc:%d, qdst:%d)\n"
-				"     interrupt(cond:%d, type:%d, err:%d)\n",
+			pr_err("MFC ctx[%d] %s(%d) state:%d, queue_cnt(src:%d, dst:%d, ref:%d, qsrc:%d, qdst:%d),"
+				" interrupt(cond:%d, type:%d, err:%d)\n",
 				dev->ctx[i]->num,
 				dev->ctx[i]->type == MFCINST_DECODER ? "DEC" : "ENC",
 				dev->ctx[i]->codec_mode, dev->ctx[i]->state,
@@ -191,6 +191,20 @@ static void mfc_print_trace(struct s5p_mfc_dev *dev)
 	}
 }
 
+static void mfc_print_trace_longterm(struct s5p_mfc_dev *dev)
+{
+	int i, cnt, trace_cnt;
+
+	pr_err("-----------dumping MFC trace long-term info-----------\n");
+
+	trace_cnt = atomic_read(&dev->trace_ref_longterm);
+	for (i = MFC_TRACE_COUNT_PRINT - 1; i >= 0; i--) {
+		cnt = ((trace_cnt + MFC_TRACE_COUNT_MAX) - i) % MFC_TRACE_COUNT_MAX;
+		pr_err("MFC trace longterm[%d]: time=%llu, str=%s", cnt,
+				dev->mfc_trace_longterm[cnt].time, dev->mfc_trace_longterm[cnt].str);
+	}
+}
+
 void s5p_mfc_dump_buffer_info(struct s5p_mfc_dev *dev, unsigned long addr)
 {
 	struct s5p_mfc_ctx *ctx;
@@ -198,9 +212,17 @@ void s5p_mfc_dump_buffer_info(struct s5p_mfc_dev *dev, unsigned long addr)
 	ctx = dev->ctx[dev->curr_ctx];
 	if (ctx) {
 		pr_err("-----------dumping MFC buffer info (fault at: %#lx)\n", addr);
-		pr_err("common:%#llx~%#llx, instance:%#llx~%#llx, codec:%#llx~%#llx\n",
+		pr_err("Normal FW:%llx~%#llx (common ctx buf:%#llx~%#llx)\n",
+				dev->fw_buf.daddr, dev->fw_buf.daddr + dev->fw_buf.size,
 				dev->common_ctx_buf.daddr,
-				dev->common_ctx_buf.daddr + PAGE_ALIGN(0x7800),
+				dev->common_ctx_buf.daddr + PAGE_ALIGN(0x7800));
+#ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
+		pr_err("Secure FW:%llx~%#llx (common ctx buf:%#llx~%#llx)\n",
+				dev->drm_fw_buf.daddr, dev->drm_fw_buf.daddr + dev->drm_fw_buf.size,
+				dev->drm_common_ctx_buf.daddr,
+				dev->drm_common_ctx_buf.daddr + PAGE_ALIGN(0x7800));
+#endif
+		pr_err("instance buf:%#llx~%#llx, codec buf:%#llx~%#llx\n",
 				ctx->instance_ctx_buf.daddr,
 				ctx->instance_ctx_buf.daddr + ctx->instance_ctx_buf.size,
 				ctx->codec_buf.daddr,
@@ -273,6 +295,12 @@ void s5p_mfc_dump_info_and_stop_hw(struct s5p_mfc_dev *dev)
 	mfc_dump_regs(dev);
 	exynos_sysmmu_show_status(dev->device);
 	BUG();
+}
+
+void s5p_mfc_dump_context_info(struct s5p_mfc_dev *dev)
+{
+	mfc_display_state(dev);
+	mfc_print_trace_longterm(dev);
 }
 
 void s5p_mfc_watchdog_worker(struct work_struct *work)

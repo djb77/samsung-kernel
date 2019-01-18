@@ -300,9 +300,10 @@ int callback_bbd_on_mcu_ready(void *ssh_data, bool ready)
         int i, idx = 0, totalLen = (int)strlen(src);
         
         for(i = 0; i < totalLen; i++) {
-            pr_info("%c", src[i]);
             if(src[i] == '"' || src[i] == '<' || src[i] == '>')
                 continue;
+            if(src[i] == ';')
+                break;
                 dst[idx++] = src[i];
         }
 }
@@ -403,6 +404,7 @@ retries:
 		if (++retries > 3) {
 			pr_err("[SSPBBD] fail to initialize mcu\n");
 			ssp_enable(data, false);
+                        data->resetting = false;
 			return;
 		}
 		goto retries;
@@ -522,7 +524,7 @@ process_one:
 			}
 			if (msg_type == AP2HUB_READ) {
 				if (nDataLen <= 0) {
-					dprint("Waiting 2nd message...(msg=%p, length=%d)\n",
+					dprint("Waiting 2nd message...(msg=%pK, length=%d)\n",
 						msg, msg->length);
 					iRet = bbd_pull_packet(msg->buffer, msg->length,
 								BBD_PULL_TIMEOUT);

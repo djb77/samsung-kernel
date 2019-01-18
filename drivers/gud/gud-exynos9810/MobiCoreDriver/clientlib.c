@@ -101,30 +101,42 @@ static bool clientlib_client_get(void)
 static void clientlib_client_put(void)
 {
 	mutex_lock(&dev_mutex);
-	client_put(client);
+	if (client_put(client))
+		client = NULL;
+
 	mutex_unlock(&dev_mutex);
 }
 
 enum mc_result mc_open_device(u32 device_id)
 {
 	enum mc_result mc_result = MC_DRV_OK;
+	int ret;
 
 	/* Check parameters */
 	if (!is_valid_device(device_id))
 		return MC_DRV_ERR_UNKNOWN_DEVICE;
 
 	mutex_lock(&dev_mutex);
+	/* Make sure TEE was started */
+	ret = mc_wait_tee_start();
+	if (ret) {
+		mc_dev_err("TEE failed to start, now or in the past");
+		mc_result = MC_DRV_ERR_INVALID_DEVICE_FILE;
+		goto end;
+	}
+
 	if (!open_count)
 		client = client_create(true);
 
 	if (client) {
 		open_count++;
-		mc_dev_devel("Successfully opened the device");
+		mc_dev_devel("successfully opened the device");
 	} else {
 		mc_result = MC_DRV_ERR_INVALID_DEVICE_FILE;
-		mc_dev_devel("Could not open device");
+		mc_dev_err("could not open device");
 	}
 
+end:
 	mutex_unlock(&dev_mutex);
 	return mc_result;
 }
@@ -138,12 +150,10 @@ enum mc_result mc_close_device(u32 device_id)
 	if (!is_valid_device(device_id))
 		return MC_DRV_ERR_UNKNOWN_DEVICE;
 
-	mutex_lock(&dev_mutex);
-	if (!client) {
-		mc_result = MC_DRV_ERR_DAEMON_DEVICE_NOT_OPEN;
-		goto end;
-	}
+	if (!clientlib_client_get())
+		return MC_DRV_ERR_DAEMON_DEVICE_NOT_OPEN;
 
+	mutex_lock(&dev_mutex);
 	if (open_count > 1) {
 		open_count--;
 		goto end;
@@ -157,11 +167,11 @@ enum mc_result mc_close_device(u32 device_id)
 
 	/* Close the device */
 	client_close(client);
-	client = NULL;
 	open_count = 0;
 
 end:
 	mutex_unlock(&dev_mutex);
+	clientlib_client_put();
 	return mc_result;
 }
 EXPORT_SYMBOL(mc_close_device);
@@ -280,8 +290,8 @@ enum mc_result mc_wait_notification(struct mc_session_handle *session,
 		ret = convert(client_waitnotif_session(client,
 						       session->session_id,
 						       timeout, false));
-	} while ((MC_INFINITE_TIMEOUT == timeout) &&
-		 (MC_DRV_ERR_INTERRUPTED_BY_SIGNAL == ret));
+	} while ((timeout == MC_INFINITE_TIMEOUT) &&
+		 (ret == MC_DRV_ERR_INTERRUPTED_BY_SIGNAL));
 
 	clientlib_client_put();
 	return ret;

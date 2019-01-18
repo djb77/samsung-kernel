@@ -24,6 +24,7 @@
 #include <linux/io.h>
 
 #include <linux/uh.h>
+#include <linux/uh_fault_handler.h>
 #include "ld.h"
 
 #define UH_32BIT_SMC_CALL_MAGIC 0x82000400
@@ -133,7 +134,7 @@ int __init uh_init(void)
 	/* jump */
 	ret = uh_entry(&uh_reserved);
 	BUG_ON(ret != 0);
-
+	uh_call(UH_APP_INIT, 0, uh_get_fault_handler(), kimage_voffset, 0, 0);
 	return 0;
 }
 EXPORT_SYMBOL(uh_init);

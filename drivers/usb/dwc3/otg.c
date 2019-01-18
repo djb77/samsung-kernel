@@ -257,21 +257,49 @@ static void dwc3_otg_drv_vbus(struct otg_fsm *fsm, int on)
 						on ? "on" : "off");
 }
 
-static void dwc3_otg_ldo_control(struct otg_fsm *fsm, int on)
+void dwc3_otg_ldo_control(struct otg_fsm *fsm, int on)
 {
 	struct usb_otg	*otg = fsm->otg;
 	struct dwc3_otg	*dotg = container_of(otg, struct dwc3_otg, otg);
 	struct device	*dev = dotg->dwc->dev;
-	int i;
+	int i, ret1, ret2, ret3;
 
+	if (!on && dp_use_informed) {
+		ldo_off_delayed = 1;
+		dev_info(dev, "return %s, ldo_off_delayed is %d.\n", __func__, ldo_off_delayed);
+		return;
+	}
+	
 	dev_info(dev, "Turn %s LDO\n", on ? "on" : "off");
 
 	if (on) {
 		for (i = 0; i < dotg->ldos; i++)
 			s2m_ldo_set_mode(dotg->ldo_num[i], 0x3);
+
+		if (dotg->ldo_manual_control == 1) {
+			ret1 = regulator_enable(dotg->ldo12);
+			ret2 = regulator_enable(dotg->ldo13);
+			ret3 = regulator_enable(dotg->ldo14);
+			if (ret1 || ret2 || ret3) {
+				dev_err(dev, "Failed to enable USB LDOs: %d %d %d\n",
+					ret1, ret2, ret3);
+				return;
+			}
+		}
 	} else {
 		for (i = 0; i < dotg->ldos; i++)
 			s2m_ldo_set_mode(dotg->ldo_num[i], 0x1);
+
+		if (dotg->ldo_manual_control == 1) {
+			ret1 = regulator_disable(dotg->ldo12);
+			ret2 = regulator_disable(dotg->ldo13);
+			ret3 = regulator_disable(dotg->ldo14);
+			if (ret1 || ret2 || ret3) {
+				dev_err(dev, "Failed to disable USB LDOs: %d %d %d\n",
+					ret1, ret2, ret3);
+				return;
+			}
+		}
 	}
 
 	return;
@@ -361,6 +389,7 @@ static int dwc3_otg_start_host(struct otg_fsm *fsm, int on)
 
 	if (on) {
 		otg_connection = 1;
+		ldo_off_delayed = 0;
 		dwc3_otg_ldo_control(fsm, 1);
 		pm_runtime_get_sync(dev);
 		ret = dwc3_phy_setup(dwc);
@@ -442,6 +471,8 @@ static int dwc3_otg_start_gadget(struct otg_fsm *fsm, int on)
 
 	if (on) {
 		wake_lock(&dotg->wakelock);
+		if (dotg->ldo_manual_control == 1)
+			dwc3_otg_ldo_control(fsm, 1);
 		pm_runtime_get_sync(dev);
 		ret = dwc3_phy_setup(dwc);
 		if (ret) {
@@ -482,6 +513,8 @@ err2:
 		dwc3_core_exit(dwc);
 err1:
 		pm_runtime_put_sync(dev);
+		if (dotg->ldo_manual_control == 1)
+			dwc3_otg_ldo_control(fsm, 0);
 		wake_unlock(&dotg->wakelock);
 	}
 
@@ -820,19 +853,59 @@ int dwc3_otg_init(struct dwc3 *dwc)
 	dwc->dotg = dotg;
 	dotg->dwc = dwc;
 
+	if (of_property_read_bool(dwc->dev->of_node, "ldo_manual_control"))
+		dotg->ldo_manual_control = 1;
+	else
+		dotg->ldo_manual_control = 0;
+	dev_info(dwc->dev, "%s, ldo_man_control = %d\n",
+			__func__, dotg->ldo_manual_control);
+
 	ret = of_property_read_u32(dwc->dev->of_node,"ldos", &dotg->ldos);
 	if (ret < 0) {
 		dev_err(dwc->dev, "can't get ldo information\n");
 		return -EINVAL;
+	}
+
+	if (dotg->ldo_manual_control) {
+		/*
+		 * ldo 12, 13, 14 is controlled manually,
+		 * decrement ldo numbers
+		 */
+		dotg->ldos = dotg->ldos - 3;
+	}
+
+	if (dotg->ldos) {
+		dev_info(dwc->dev, "have %d LDOs for USB L2 suspend\n",
+			dotg->ldos);
+		dotg->ldo_num = (int *)devm_kmalloc(dwc->dev,
+			sizeof(int) * (dotg->ldos), GFP_KERNEL);
+		ret = of_property_read_u32_array(dwc->dev->of_node,
+				"ldo_number", dotg->ldo_num, dotg->ldos);
 	} else {
-		if (dotg->ldos) {
-			dev_info(dwc->dev, "have %d LDOs for supporting USB L2 suspend \n", dotg->ldos);
-			dotg->ldo_num = (int *)devm_kmalloc(dwc->dev, sizeof(int) * (dotg->ldos),
-				GFP_KERNEL);
-			ret = of_property_read_u32_array(dwc->dev->of_node,
-					"ldo_number", dotg->ldo_num, dotg->ldos);
-		} else {
-			dev_info(dwc->dev, "don't have LDOs for supporting USB L2 suspend \n");
+		dev_info(dwc->dev,
+			"don't have LDOs for USB L2 suspend\n");
+	}
+
+	if (dotg->ldo_manual_control == 1) {
+		dotg->ldo12 = regulator_get(dwc->dev, "vdd_ldo12");
+		if (IS_ERR(dotg->ldo12) || dotg->ldo12 == NULL) {
+			dev_err(dwc->dev, "%s - ldo12_usb regulator_get fail %p %d\n",
+				__func__, dotg->ldo12, IS_ERR(dotg->ldo12));
+			return -ENODEV;
+		}
+
+		dotg->ldo13 = regulator_get(dwc->dev, "vdd_ldo13");
+		if (IS_ERR(dotg->ldo13) || dotg->ldo13 == NULL) {
+			dev_err(dwc->dev, "%s - ldo13_usb regulator_get fail %p %d\n",
+				__func__, dotg->ldo13, IS_ERR(dotg->ldo13));
+			return -ENODEV;
+		}
+
+		dotg->ldo14 = regulator_get(dwc->dev, "vdd_ldo14");
+		if (IS_ERR(dotg->ldo14) || dotg->ldo14 == NULL) {
+			dev_err(dwc->dev, "%s - ldo14_usb regulator_get fail %p %d\n",
+				__func__, dotg->ldo14, IS_ERR(dotg->ldo14));
+			return -ENODEV;
 		}
 	}
 

@@ -122,11 +122,6 @@ struct socket {
 	struct file		*file;
 	struct sock		*sk;
 	const struct proto_ops	*ops;
-	/* START_OF_KNOX_VPN */
-	__u64 knox_sent;
-	__u64 knox_recv;
-	__u64 open_time;
-	/* END_OF_KNOX_VPN */
 };
 
 struct vm_area_struct;

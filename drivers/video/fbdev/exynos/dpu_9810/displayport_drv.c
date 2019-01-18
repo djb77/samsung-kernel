@@ -30,6 +30,8 @@
 #include <media/v4l2-dv-timings.h>
 #include <soc/samsung/exynos-powermode.h>
 #include <sound/samsung/dp_ado.h>
+#include <linux/smc.h>
+#include <linux/switch.h>
 #if defined(CONFIG_ION_EXYNOS)
 #include <linux/exynos_iovmm.h>
 #endif
@@ -46,13 +48,13 @@
 #define HDCP_SUPPORT
 #define HDCP_2_2
 
-#define HDCP_2_2_AUTH_DONE     1
 #define HDCP_2_2_NOT_AUTH      0
+#define HDCP_2_2_AUTH_DONE     1
 
 int displayport_log_level = 6;
 static u8 max_lane_cnt;
 static u8 max_link_rate;
-static u64 reduced_resolution;
+static int reduced_resolution;
 struct displayport_debug_param g_displayport_debug_param;
 int auth_done = HDCP_2_2_NOT_AUTH;
 
@@ -73,11 +75,21 @@ static void displayport_dump_registers(struct displayport_device *displayport)
 			displayport->res.link_regs, 0xC0, false);
 }
 
+struct switch_dev switch_secdp_msg;
+static void displayport_set_switch_poor_connect(void)
+{
+	displayport_err("set poor connect switch event\n");
+	switch_set_state(&switch_secdp_msg, 1);
+	switch_set_state(&switch_secdp_msg, 0);
+}
+
 static int displayport_remove(struct platform_device *pdev)
 {
 	struct displayport_device *displayport = platform_get_drvdata(pdev);
 
+	pm_qos_remove_request(&displayport->fsys0_qos);
 	pm_runtime_disable(&pdev->dev);
+	switch_dev_unregister(&switch_secdp_msg);
 #if defined(CONFIG_EXTCON)
 	devm_extcon_dev_unregister(displayport->dev, displayport->extcon_displayport);
 	//devm_extcon_dev_unregister(displayport->dev, displayport->audio_switch);
@@ -88,6 +100,7 @@ static int displayport_remove(struct platform_device *pdev)
 	mutex_destroy(&displayport->hpd_lock);
 	mutex_destroy(&displayport->aux_lock);
 	mutex_destroy(&displayport->training_lock);
+	mutex_destroy(&displayport->hdcp2_lock);
 	destroy_workqueue(displayport->dp_wq);
 	destroy_workqueue(displayport->hdcp2_wq);
 	displayport_info("displayport driver removed\n");
@@ -141,7 +154,7 @@ static int displayport_get_min_link_rate(u8 rx_link_rate, u8 lane_cnt)
 
 	max_pclk = displayport_find_edid_max_pixelclock();
 	for (i = 0; i < 2; i++) {
-		if ((u64)lane_cnt * pc1lane[i] >= max_pclk)
+		if ((u64)lane_cnt * pc1lane[i] * 8 / 10 >= max_pclk)
 			break;
 	}
 
@@ -181,6 +194,7 @@ static int displayport_full_link_training(void)
 	u8 pre_emphasis_lane[MAX_LANE_CNT];
 	u8 max_reach_value[MAX_LANE_CNT];
 	int training_retry_no, eq_training_retry_no, i;
+	int need_retraining, training_retry_no2;
 	u8 val[DPCD_BUF_SIZE] = {0,};
 	u8 eq_val[DPCD_BUF_SIZE] = {0,};
 	u8 lane_cr_done;
@@ -222,12 +236,19 @@ static int displayport_full_link_training(void)
 		link_rate = g_displayport_debug_param.link_rate;
 		lane_cnt = g_displayport_debug_param.lane_cnt;
 	}
+	if (link_rate == LINK_RATE_5_4Gbps) {
+		if (pm_qos_request_active(&displayport->fsys0_qos)) {
+			pm_qos_update_request(&displayport->fsys0_qos, 0);
+			displayport_info("displayport->fsys0_qos 336000Mhz\n");
+		} else
+			displayport_err("displayport->fsys0_qos setting error\n");
+	}
 
 	displayport_reg_dpcd_read(DPCD_ADD_TRAINING_AUX_RD_INTERVAL, 1, val);
 	training_aux_rd_interval = val[0];
 
 Reduce_Link_Rate_Retry:
-	displayport_info("Reduce_Link_Rate_Retry\n");
+	displayport_info("Reduce_Link_Rate_Retry(0x%X)\n", link_rate);
 
 	if (!displayport->hpd_current_state) {
 		displayport_info("hpd is low in link rate retry\n");
@@ -241,10 +262,17 @@ Reduce_Link_Rate_Retry:
 	}
 
 	training_retry_no = 0;
+	training_retry_no2 = 0;
 
 	if (decon->state != DECON_STATE_ON
 		|| displayport_reg_get_link_bw() != link_rate
 		|| displayport_reg_get_lane_count() != lane_cnt) {
+
+		if (decon->state == DECON_STATE_ON) {
+			displayport_info("phy_reset not permitted on decon on state\n");			
+			return -EINVAL;
+		}
+
 		displayport_reg_phy_reset(1);
 		displayport_reg_phy_init_setting();
 		displayport_reg_phy_mode_setting();
@@ -337,8 +365,23 @@ Voltage_Swing_Retry:
 		return -EINVAL;
 	}
 
-	if (!(drive_current[0] == 3 && drive_current[1] == 3
-				&& drive_current[2] == 3 && drive_current[3] == 3)) {
+	need_retraining = 0;
+	switch(lane_cnt) {
+	case 4:
+		if (drive_current[2] != 3 || drive_current[3] != 3)
+			need_retraining = 1;
+	case 2:
+		if (drive_current[1] != 3)
+			need_retraining = 1;
+	case 1:
+		if (drive_current[0] != 3)
+			need_retraining = 1;
+		break;
+	default:
+		displayport_err("lane_cnt(%d) not valid\n", lane_cnt);
+		return -EINVAL;
+	}
+	if (need_retraining) {
 		displayport_reg_dpcd_read_burst(DPCD_ADD_ADJUST_REQUEST_LANE0_1, 2, val);
 		voltage_swing_lane[0] = (val[0] & VOLTAGE_SWING_LANE0);
 		pre_emphasis_lane[0] = (val[0] & PRE_EMPHASIS_LANE0) >> 2;
@@ -350,6 +393,13 @@ Voltage_Swing_Retry:
 		voltage_swing_lane[3] = (val[1] & VOLTAGE_SWING_LANE3) >> 4;
 		pre_emphasis_lane[3] = (val[1] & PRE_EMPHASIS_LANE3) >> 6;
 
+		displayport_info("check voltage swing(%d): val(%d,%d) %d/%d, %d/%d, %d/%d, %d/%d\n",
+				training_retry_no, val[0], val[1],
+				drive_current[0], voltage_swing_lane[0],
+				drive_current[1], voltage_swing_lane[1],
+				drive_current[2], voltage_swing_lane[2],
+				drive_current[3], voltage_swing_lane[3]);
+
 		if (drive_current[0] == voltage_swing_lane[0] &&
 				drive_current[1] == voltage_swing_lane[1] &&
 				drive_current[2] == voltage_swing_lane[2] &&
@@ -358,8 +408,13 @@ Voltage_Swing_Retry:
 				goto Check_Link_rate;
 			else
 				training_retry_no++;
-		} else
-			training_retry_no = 1;
+		} else {
+			training_retry_no = 0;
+			if (training_retry_no2++ >= 16) {
+				displayport_err("too many voltage swing retries\n");
+				goto Check_Link_rate;
+			}				
+		}
 
 		for (i = 0; i < 4; i++) {
 			drive_current[i] = voltage_swing_lane[i];
@@ -377,6 +432,12 @@ Check_Link_rate:
 	displayport_info("Check_Link_rate\n");
 
 	if (link_rate == LINK_RATE_5_4Gbps) {
+		if (pm_qos_request_active(&displayport->fsys0_qos)) {
+			pm_qos_update_request(&displayport->fsys0_qos, 0);
+			displayport_info("displayport->fsys0_qos release\n");
+		} else
+			displayport_err("displayport->fsys0_qos release error\n");
+
 		link_rate = LINK_RATE_2_7Gbps;
 		goto Reduce_Link_Rate_Retry;
 	} else if (link_rate == LINK_RATE_2_7Gbps) {
@@ -564,6 +625,7 @@ EQ_Training_Retry:
 	goto EQ_Training_Retry;
 }
 
+#if 0
 static int displayport_fast_link_training(void)
 {
 	u8 link_rate;
@@ -782,7 +844,7 @@ static int displayport_fast_link_training(void)
 #endif
 	return -EINVAL;
 }
-
+#endif
 static int displayport_check_dfp_type(void)
 {
 	u8 val = 0;
@@ -799,16 +861,18 @@ static int displayport_check_dfp_type(void)
 	return port_type;
 }
 
-static void displayport_link_sink_status_read(void)
+static int displayport_link_sink_status_read(void)
 {
 	u8 val[DPCD_BUF_SIZE] = {0, };
+	int ret = 0;
 
-	displayport_reg_dpcd_read_burst(DPCD_ADD_REVISION_NUMBER, DPCD_BUF_SIZE, val);
+	ret = displayport_reg_dpcd_read_burst(DPCD_ADD_REVISION_NUMBER, DPCD_BUF_SIZE, val);
 
 	displayport_info("Read DPCD REV NUM 0_5 %02x %02x %02x %02x %02x %02x\n",
 			val[0], val[1], val[2], val[3], val[4], val[5]);
 	displayport_info("Read DPCD REV NUM 6_B %02x %02x %02x %02x %02x %02x\n",
 			val[6], val[7], val[8], val[9], val[10], val[11]);
+	return ret;
 }
 
 static int displayport_read_branch_revision(struct displayport_device *displayport)
@@ -835,9 +899,14 @@ static int displayport_link_status_read(void)
 {
 	u8 val[DPCP_LINK_SINK_STATUS_FIELD_LENGTH] = {0, };
 	int count = 200;
+	int ret = 0;
 
 	/* for Link CTS : Branch Device Detection*/
-	displayport_link_sink_status_read();
+	ret = displayport_link_sink_status_read();
+	if (ret != 0) {
+		displayport_err("link_sink_status_read fail\n");
+		return -EINVAL;
+	}
 	do {
 		displayport_reg_dpcd_read(DPCD_ADD_SINK_COUNT, 1, val);
 		if ((val[0] & (SINK_COUNT1 | SINK_COUNT2)) != 0)
@@ -882,6 +951,40 @@ static int displayport_link_status_read(void)
 	return 0;
 }
 
+static void displayport_find_proper_ratio_video_for_dex(struct displayport_device *displayport)
+{
+	enum video_ratio_t best_ratio = supported_videos[displayport->best_video].ratio;
+	int i = displayport->best_video;
+	displayport->dex_video_pick = 0;
+	if (!displayport->dex_setting)
+		return;
+	if (best_ratio == RATIO_16_9 ||
+			best_ratio == RATIO_16_10 ||
+			best_ratio == RATIO_21_9) {
+		displayport_dbg("dex support ratio\n");
+	} else {
+		displayport_info("not dex support ratio\n");
+		return;
+	}
+	/* for test */
+	if (reduced_resolution) {
+		i = reduced_resolution;
+	}
+	/* find same ratio timing from best timing */
+	for (;i >= V1600X900P59; i--) {
+		if (supported_videos[i].edid_support_match &&
+				supported_videos[i].dex_support &&
+				supported_videos[i].ratio == best_ratio) {
+			displayport->dex_video_pick = i;
+			displayport_info("found dex support ratio: %s %d/%d\n",
+					supported_videos[i].name, i, best_ratio);
+			break;
+		}
+	}
+	if (!displayport->dex_video_pick)
+		displayport_info("not found dex support ratio\n");
+}
+
 static int displayport_link_training(void)
 {
 	u8 val;
@@ -903,15 +1006,12 @@ static int displayport_link_training(void)
 #endif
 	}
 
+	displayport_find_proper_ratio_video_for_dex(displayport);
+
 	displayport_reg_dpcd_read(DPCD_ADD_MAX_DOWNSPREAD, 1, &val);
 	displayport_dbg("DPCD_ADD_MAX_DOWNSPREAD = %x\n", val);
 
-	if (val & NO_AUX_HANDSHAKE_LINK_TRANING) {
-		ret = displayport_fast_link_training();
-		if (ret < 0)
-			ret = displayport_full_link_training();
-	} else
-		ret = displayport_full_link_training();
+	ret = displayport_full_link_training();
 
 	mutex_unlock(&displayport->training_lock);
 
@@ -985,6 +1085,7 @@ void displayport_hpd_changed(int state)
 
 		/* for Link CTS : (4.2.2.3) EDID Read */
 		if (displayport_link_status_read()) {
+			displayport_set_switch_poor_connect();
 			displayport_err("link_status_read fail\n");
 			goto HPD_FAIL;
 		}
@@ -996,6 +1097,7 @@ void displayport_hpd_changed(int state)
 		ret = displayport_link_training();
 		if (ret < 0) {
 			displayport_dbg("link training fail\n");
+			displayport_set_switch_poor_connect();
 			goto HPD_FAIL;
 		}
 
@@ -1019,8 +1121,7 @@ void displayport_hpd_changed(int state)
 		displayport_reg_print_audio_state();
 #if defined(CONFIG_EXYNOS_HDCP2)
 		if (displayport->hdcp_ver == HDCP_VERSION_2_2) {
-
-			hdcp_dplink_hpd_changed();
+			hdcp_dplink_cancel_auth();
 			displayport_hdcp22_enable(0);
 		}
 #endif
@@ -1067,6 +1168,12 @@ void displayport_hpd_changed(int state)
 				displayport_disable(displayport);
 			}
 		}
+		if (pm_qos_request_active(&displayport->fsys0_qos)) {
+			pm_qos_update_request(&displayport->fsys0_qos, 0);
+			displayport_info("displayport->fsys0_qos release in hpd 0\n");
+		} else
+			displayport_err("displayport->fsys0_qos release error\n");
+
 		pm_relax(displayport->dev);
 		displayport->hdcp_ver = 0;
 	}
@@ -1165,13 +1272,14 @@ static int displayport_check_dpcd_lane_status(u8 lane0_1_status,
 		return -EINVAL;
 	}
 
+	/* if link status update bit is not set, return */
+	if (!(lane_align_status & LINK_STATUS_UPDATE))
+		return 0;
+
+	displayport_err("%s() link_status_update bit is set\n", __func__);
+
 	if ((lane_align_status & INTERLANE_ALIGN_DONE) != INTERLANE_ALIGN_DONE) {
 		displayport_err("%s() interlane align error\n", __func__);
-		return -EINVAL;
-	}
-
-	if ((lane_align_status & LINK_STATUS_UPDATE) == LINK_STATUS_UPDATE) {
-		displayport_err("%s() link status update req\n", __func__);
 		return -EINVAL;
 	}
 
@@ -1460,19 +1568,17 @@ static int displayport_hdcp22_irq_handler(void)
 		}
 	} else if (rxstatus & DPCD_HDCP22_RXSTATUS_REAUTH_REQ) {
 		/* hdcp22 disable while re-authentication */
+		if (displayport_reg_get_hdcp22_encryption_enable())
+			displayport_info("REAUTH_REQ HDCP2 enc on\n");
+		else
+			displayport_info("REAUTH_REQ HDCP2 enc off\n");
+
+		hdcp_dplink_cancel_auth();
 		ret = hdcp_dplink_set_reauth();
 
 		displayport_hdcp22_enable(0);
-		if (displayport_reg_get_hdcp22_encryption_enable()) {
-			queue_delayed_work(displayport->dp_wq, &displayport->hpd_unplug_work, 0);
-
-			displayport_info("REAUTH_REQ HDCP2 enc on\n");
-		} else {
-			queue_delayed_work(displayport->hdcp2_wq,
+		queue_delayed_work(displayport->hdcp2_wq,
 				&displayport->hdcp22_work, msecs_to_jiffies(1000));
-
-			displayport_info("REAUTH_REQ HDCP2 enc off\n");
-		}
 	} else if (rxstatus & DPCD_HDCP22_RXSTATUS_PAIRING_AVAILABLE) {
 		/* set pairing avaible flag */
 		ret = hdcp_dplink_set_paring_available();
@@ -1485,11 +1591,10 @@ static int displayport_hdcp22_irq_handler(void)
 		ret = hdcp_dplink_set_rp_ready();
 		if (auth_done) {
 			auth_done = HDCP_2_2_NOT_AUTH;
-			if (hdcp_dplink_authenticate() != 0) 
-				displayport_reg_video_mute(1);
-			else {
+			if (hdcp_dplink_authenticate() != 0) {
+				auth_done = HDCP_2_2_NOT_AUTH;
+			} else {
 				auth_done = HDCP_2_2_AUTH_DONE;
-				displayport_reg_video_mute(0);
 			}
 		}
 	} else {
@@ -1528,7 +1633,26 @@ static void displayport_hpd_irq_work(struct work_struct *work)
 			return;
 		}
 
-		if ((val[1] & CP_IRQ) == CP_IRQ) {
+		if ((val[1] & AUTOMATED_TEST_REQUEST) == AUTOMATED_TEST_REQUEST) {
+			if (displayport_Automated_Test_Request() == 0)
+				return;
+		}
+
+		if (displayport_check_dpcd_lane_status(val[2], val[3], val[4]) != 0) {
+			displayport_info("link training in HPD IRQ work2\n");
+#ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
+			secdp_bigdata_inc_error_cnt(ERR_INF_IRQHPD);
+#endif
+			hdcp_dplink_set_reauth();
+			displayport_hdcp22_enable(0);
+
+			displayport_link_training();
+
+			queue_delayed_work(displayport->hdcp2_wq,
+					&displayport->hdcp22_work, msecs_to_jiffies(2000));
+
+		}
+		else if ((val[1] & CP_IRQ) == CP_IRQ) {
 			u8 cpirq_bit = CP_IRQ;
 
 			displayport_info("hdcp22: detect CP_IRQ\n");
@@ -1538,27 +1662,7 @@ static void displayport_hpd_irq_work(struct work_struct *work)
 
 			if (ret == 0)
 				return;
-		} else {
-			displayport_info("hdcp22: detect hpd_irq!!!!\n");
 
-			if ((val[1] & AUTOMATED_TEST_REQUEST) == AUTOMATED_TEST_REQUEST) {
-				if (displayport_Automated_Test_Request() == 0)
-					return;
-			}
-
-			if (displayport_check_dpcd_lane_status(val[2], val[3], val[4]) != 0) {
-				displayport_info("link training in HPD IRQ work2\n");
-#ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
-				secdp_bigdata_inc_error_cnt(ERR_INF_IRQHPD);
-#endif
-				displayport_link_training();
-
-				hdcp_dplink_set_reauth();
-				displayport_hdcp22_enable(0);
-				queue_delayed_work(displayport->hdcp2_wq,
-					&displayport->hdcp22_work, msecs_to_jiffies(2000));
-
-			}
 		}
 		return;
 	}
@@ -1827,6 +1931,9 @@ static int displayport_make_hdr_infoframe_data
 		displayport_dbg("hdr_infoframe->data[%d] = 0x%02x", i,
 			hdr_infoframe->data[i]);
 	}
+	
+	print_hex_dump(KERN_INFO, "HDR: ", DUMP_PREFIX_NONE, 32, 1,
+			hdr_infoframe->data, HDR_INFOFRAME_LENGTH, false);
 
 	return 0;
 }
@@ -2106,8 +2213,51 @@ static void displayport_hdcp13_run(struct work_struct *work)
 static void displayport_hdcp22_run(struct work_struct *work)
 {
 #if defined(CONFIG_EXYNOS_HDCP2)
+	struct displayport_device *displayport = get_displayport_drvdata();
+#ifndef CONFIG_HDCP2_FUNC_TEST_MODE
+	int i;
+#endif
 	u8 val[2] = {0, };
 
+	mutex_lock(&displayport->hdcp2_lock);
+	if (displayport_get_hpd_state() == 0) {
+		displayport_info("stop hdcp2 : HPD is low\n");
+		goto exit_hdcp;
+	}
+
+#ifndef CONFIG_HDCP2_FUNC_TEST_MODE
+	if(displayport->drm_start_state == DRM_OFF) {
+		displayport_info("DRM is not started, HDCP wq stop \n");
+		goto exit_hdcp;
+	}
+
+	for (i = 0; i < 1000; i++) {
+		displayport->drm_smc_state = exynos_smc(SMC_CHECK_STREAM_TYPE_ID, 0, 0, 0);
+		if (displayport->drm_smc_state || !(displayport->hpd_current_state)) {
+			displayport_err("drm state %d hpd state %d \n",displayport->drm_smc_state, displayport->hpd_current_state);
+			break;
+		}
+		msleep(200);
+	}
+
+	if (displayport->drm_smc_state == DRM_SAME_STREAM_TYPE && auth_done == HDCP_2_2_AUTH_DONE) {
+		displayport_info("stop drm_smc_state = %d , auth_done %d\n",displayport->drm_smc_state, auth_done);
+		goto exit_hdcp;
+	}
+
+	if (displayport->drm_smc_state == DRM_ON && displayport_reg_get_hdcp22_encryption_enable()) {
+		displayport_info("DRM Stream ID change : DP Reset!!!!\n");
+		queue_delayed_work(displayport->dp_wq, &displayport->hpd_unplug_work, 0);
+		goto exit_hdcp;
+	}
+#endif
+
+	if (displayport_get_hpd_state() == 0) {
+		displayport_info("stop hdcp2 : HPD is low\n");
+		goto exit_hdcp;
+	}
+
+	hdcp_dplink_clear_all();
 	auth_done = HDCP_2_2_NOT_AUTH;
 	if (hdcp_dplink_authenticate() != 0) {
 		displayport_reg_video_mute(1);
@@ -2119,8 +2269,12 @@ static void displayport_hdcp22_run(struct work_struct *work)
 		auth_done = HDCP_2_2_AUTH_DONE;
 		displayport_reg_video_mute(0);
 	}
+
 	displayport_dpcd_read_for_hdcp22(DPCD_HDCP22_RX_INFO, 2, val);
 	displayport_info("HDCP2.2 rx_info: 0:0x%X, 8:0x%X\n", val[1], val[0]);
+
+exit_hdcp:
+	mutex_unlock(&displayport->hdcp2_lock);
 #else
 	displayport_info("Not compiled EXYNOS_HDCP2 driver\n");
 #endif
@@ -2175,7 +2329,7 @@ static void hdcp_start(struct displayport_device *displayport)
 				msecs_to_jiffies(2500));
 	else if (displayport->hdcp_ver == HDCP_VERSION_1_3)
 		queue_delayed_work(displayport->dp_wq, &displayport->hdcp13_work,
-						msecs_to_jiffies(4500));
+				msecs_to_jiffies(4500));
 	else
 		displayport_info("HDCP is not supported\n");
 #endif
@@ -2420,10 +2574,30 @@ static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
 		return -E2BIG;
 	}
 
-	if (displayport->dex_setting && !supported_videos[timings->index].dex_support) {
-		displayport_dbg("not supported video_format : %s in dex mode\n",
-			supported_videos[timings->index].name);
+	if (!supported_videos[timings->index].edid_support_match) {
+		displayport_dbg("not supported video_format : %s\n",
+				supported_videos[timings->index].name);
 		return -EINVAL;
+	}
+
+	if (displayport->dex_setting) {
+		if (displayport->dex_video_pick &&
+				timings->index > displayport->dex_video_pick) {
+			displayport_info("dex proper ratio video pick %d\n", displayport->dex_video_pick);
+			return -E2BIG;
+		}
+		if (supported_videos[timings->index].dex_support == DEX_NOT_SUPPORT) {
+			displayport_dbg("not supported video_format : %s in dex mode\n",
+					supported_videos[timings->index].name);
+			return -EINVAL;
+		}
+		if (supported_videos[timings->index].dex_support > displayport->dex_adapter_type) {
+			displayport_info("%s not supported, adapter:%d, resolution:%d in dex mode\n",
+					supported_videos[timings->index].name,
+					displayport->dex_adapter_type,
+					supported_videos[timings->index].dex_support);
+			return -EINVAL;
+		}
 	}
 
 	/* reduce the timing by lane count and link rate */
@@ -2431,6 +2605,7 @@ static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
 		px = supported_videos[timings->index].dv_timings.bt.pixelclock / 8 * 6;
 	else
 		px = supported_videos[timings->index].dv_timings.bt.pixelclock;
+
 	if (px > displayport_get_max_pixelclock()) {
 		displayport_info("Max pixelclock = %llu, lane: %d, rate: 0x%x, idx: %d, bpc:%d\n",
 				displayport_get_max_pixelclock(), max_lane_cnt, max_link_rate,
@@ -2438,20 +2613,14 @@ static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
 		return -E2BIG;
 	}
 
-	if (reduced_resolution && reduced_resolution <
-			supported_videos[timings->index].dv_timings.bt.pixelclock) {
-		displayport_info("reduced_resolution: %llu, idx: %d\n",
+	if (reduced_resolution && reduced_resolution < timings->index) {
+		displayport_info("reduced_resolution: %d, idx: %d\n",
 				reduced_resolution, timings->index);
 		return -E2BIG;
 	}
 
-	if (supported_videos[timings->index].edid_support_match) {
-		displayport_dbg("matched video_format : %s\n",
-			supported_videos[timings->index].name);
-		timings->timings = supported_videos[timings->index].dv_timings;
-	} else {
-		return -EINVAL;
-	}
+	displayport_dbg("matched video_format : %s\n", supported_videos[timings->index].name);
+	timings->timings = supported_videos[timings->index].dv_timings;
 
 	return 0;
 }
@@ -2635,6 +2804,12 @@ static int displayport_init_resources(struct displayport_device *displayport, st
 		return -EINVAL;
 	}
 
+	displayport->res.usbdp_regs = ioremap(USBDP_PHY_CONTROL, SZ_4);
+	if (!displayport->res.usbdp_regs) {
+		displayport_err("failed to remap USBDP SFR region\n");
+		return -EINVAL;
+	}
+
 	displayport->res.phy_regs = phy_exynos_usbdp_get_address();
 	if (!displayport->res.phy_regs) {
 		displayport_err("failed to get USBDP combo PHY SFR region\n");
@@ -2701,6 +2876,31 @@ static void displayport_aux_sel(struct displayport_device *displayport)
 	}
 }
 
+static void displayport_check_adapter_type(struct displayport_device *displayport)
+{
+	displayport->dex_adapter_type = DEX_FHD_SUPPORT;
+
+	if (displayport->ven_id != 0x04e8)
+		return;
+
+	switch(displayport->prod_id) {
+	case 0xa029: /* PAD */
+	case 0xa020: /* Station */
+	case 0xa02a:
+	case 0xa02b:
+	case 0xa02c:
+	case 0xa02d:
+	case 0xa02e:
+	case 0xa02f:
+	case 0xa030:
+	case 0xa031:
+	case 0xa032:
+	case 0xa033:
+		displayport->dex_adapter_type = DEX_WQHD_SUPPORT;
+		break;
+	};
+}
+
 static int usb_typec_displayport_notification(struct notifier_block *nb,
 		unsigned long action, void *data)
 {
@@ -2719,6 +2919,7 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 	case CCIC_NOTIFY_ID_DP_CONNECT:
 		switch (usb_typec_info.sub1) {
 		case CCIC_NOTIFY_DETACH:
+			dp_logger_set_max_count(100);
 			displayport_info("CCIC_NOTIFY_ID_DP_CONNECT, %x\n", usb_typec_info.sub1);
 			displayport->ccic_notify_dp_conf = CCIC_NOTIFY_DP_PIN_UNKNOWN;
 			displayport->ccic_link_conf = false;
@@ -2737,6 +2938,7 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 			displayport_info("CCIC_NOTIFY_ID_DP_CONNECT, %x\n", usb_typec_info.sub1);
 			displayport->ven_id = usb_typec_info.sub2;
 			displayport->prod_id = usb_typec_info.sub3;
+			displayport_check_adapter_type(displayport);
 			displayport_info("VID:0x%llX, PID:0x%llX\n", displayport->ven_id, displayport->prod_id);
 #ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
 			secdp_bigdata_connection();
@@ -2785,9 +2987,10 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 			displayport->ccic_notify_dp_conf = CCIC_NOTIFY_DP_PIN_UNKNOWN;
 			break;
 		}
-		displayport->ccic_link_conf = true;
-		if (displayport->ccic_hpd) {
-			displayport_hpd_changed(1);
+		if (displayport->ccic_notify_dp_conf) {
+			displayport->ccic_link_conf = true;
+			if (displayport->ccic_hpd)
+				displayport_hpd_changed(1);
 		}
 		break;
 
@@ -2831,6 +3034,9 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 static void displayport_notifier_register_work(struct work_struct *work)
 {
 	struct displayport_device *displayport = get_displayport_drvdata();
+
+	if (displayport->dp_not_support)
+		return;
 
 	if (!displayport->notifier_registered) {
 		displayport->notifier_registered = 1;
@@ -3295,15 +3501,33 @@ static ssize_t displayport_edid_test_store(struct class *dev,
 
 	edid_test_buf[0] = 0;
 
+	if (displayport_log_level >= 7)
+		pr_cont("EDID test: ");
 	for (i = 0; i < size && i < max_size; i++) {
 		temp = *(buf + buf_idx++);
 		if (temp == ',' || temp == ' ') { /* value is separated by comma or space */
-			edid_test_buf[edid_idx++] = hex;
+			if (hex_cnt != 0) {
+				if (displayport_log_level >= 7) {
+					pr_cont("%02X ", hex);
+					if (edid_idx % 16 == 0) {
+						pr_info("\n");
+						pr_cont("EDID test: ");
+					}
+				}
+				edid_test_buf[edid_idx++] = hex;
+			} 
 			hex = 0;
 			hex_cnt = 0;
-		} else if (hex_cnt == 0 && (temp == '0' || temp == 'x'))
+		} else if (hex_cnt == 0 && temp == '0') {
+			hex_cnt++;
 			continue;
-		else if (!temp || temp == '\x0A') { /* EOL, line feed */
+		} else if (temp == 'x' || temp == 'X') {
+			hex_cnt = 0;
+			hex = 0;
+			continue;
+		} else if (!temp || temp == '\x0A') { /* EOL, line feed */
+			if (displayport_log_level >= 7)
+				pr_cont("%02X ", hex);
 			displayport_info("parse end. edid cnt: %d\n", edid_idx);
 			break;
 		} else if (temp >= '0' && temp <= '9') {
@@ -3321,7 +3545,7 @@ static ssize_t displayport_edid_test_store(struct class *dev,
 		}
 
 		if (hex_cnt > 2 || edid_idx > 256) {
-			displayport_info("wrong input. %d, %d\n", hex_cnt, edid_idx);
+			displayport_info("wrong input. %d, %d, [%c]\n", hex_cnt, edid_idx, temp);
 			return size;
 		}
 	}
@@ -3370,6 +3594,32 @@ static ssize_t secdp_unit_test_store(struct class *dev,
 }
 
 static CLASS_ATTR(unit_test, 0664, secdp_unit_test_show, secdp_unit_test_store);
+
+static ssize_t secdp_drm_show(struct class *class, struct class_attribute *attr, char *buf)
+{
+	struct displayport_device *displayport = get_displayport_drvdata();
+	displayport_info("DRM state %d\n", displayport->drm_start_state);
+
+	return sprintf(buf, "DRM state %d\n", displayport->drm_start_state);
+}
+
+static ssize_t secdp_drm_store(struct class *dev, struct class_attribute *attr, const char *buf, size_t size)
+{
+	struct displayport_device *displayport = get_displayport_drvdata();
+	int val[3] = {0, };
+
+	get_options(buf, 2, val);
+
+	displayport->drm_start_state = val[1];
+
+	displayport_err("drm %s!!\n", displayport->drm_start_state ? "start" :"end");
+	queue_delayed_work(displayport->hdcp2_wq,
+			&displayport->hdcp22_work, msecs_to_jiffies(0));
+
+	return size;
+}
+
+static CLASS_ATTR(dp_drm, 0664, secdp_drm_show, secdp_drm_store);
 
 static ssize_t displayport_dp_test_show(struct class *class,
 		struct class_attribute *attr,
@@ -3508,7 +3758,7 @@ static ssize_t displayport_reduced_resolution_show(struct class *class,
 {
 	int ret = 0;
 
-	ret = scnprintf(buf, PAGE_SIZE, "%llu\n", reduced_resolution);
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n", reduced_resolution);
 
 	return ret;
 }
@@ -3524,21 +3774,8 @@ static ssize_t displayport_reduced_resolution_store(struct class *dev,
 
 	if (val[1] < 0 || val[1] >= supported_videos_pre_cnt || val[0] < 1)
 		reduced_resolution = 0;
-	else {
-		switch (val[1]) {
-		case 1:
-			reduced_resolution = PIXELCLK_2160P30HZ;
-			break;
-		case 2:
-			reduced_resolution = PIXELCLK_1080P60HZ;
-			break;
-		case 3:
-			reduced_resolution = PIXELCLK_1080P30HZ;
-			break;
-		default:
-			reduced_resolution = 0;
-		};
-	}
+	else
+		reduced_resolution = val[1];
 
 	return size;
 }
@@ -3567,6 +3804,9 @@ static ssize_t displayport_dex_store(struct class *dev,
 	int dex_run;
 	int need_reconnect = 0;
 
+	if (displayport->dp_not_support)
+		return size;
+
 	get_options(buf, 2, val);
 
 	displayport->dex_setting = (val[1] & 0xF0) >> 4;
@@ -3591,24 +3831,26 @@ static ssize_t displayport_dex_store(struct class *dev,
 			displayport->dex_state != DEX_RECONNECTING)
 		need_reconnect = 1;
 
-	/* if current resolution is dex supported, then do not reconnect */
-	if (displayport->dex_setting && supported_videos[displayport->cur_video].dex_support)
-		need_reconnect = 0;
-	/* if current resolution is best, then do not reconnect */
-	if (!displayport->dex_setting && displayport->cur_video == displayport->best_video)
-		need_reconnect = 0;
+	if (displayport->dex_setting) {
+		/* if current resolution is dex supported, then do not reconnect */
+		if (supported_videos[displayport->cur_video].dex_support != DEX_NOT_SUPPORT &&
+			supported_videos[displayport->cur_video].dex_support <= displayport->dex_adapter_type) {
+			displayport_info("current video support dex %d\n", displayport->cur_video);
+			need_reconnect = 0;
+		}
+	} else {
+		/* if current resolution is best, then do not reconnect */
+		if (displayport->cur_video == displayport->best_video) {
+			displayport_info("current video is best %d\n", displayport->cur_video);
+			need_reconnect = 0;
+		}
+	}
 
 	displayport->dex_state = dex_run;
 
-#ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
-	if (displayport->dex_state == DEX_ON)
-		secdp_bigdata_save_item(BD_DP_MODE, "DEX");
-	else if (displayport->dex_state == DEX_OFF)
-		secdp_bigdata_save_item(BD_DP_MODE, "MIRROR");
-#endif
 	/* reconnect if setting was mirroring(0) and dex is running(1), */
 	if (displayport->hpd_current_state && need_reconnect) {
-		displayport_info("reconnecting to dex mode\n");
+		displayport_info("reconnecting to %s mode\n", dex_run ? "dex":"mirroring");
 		displayport->dex_state = DEX_RECONNECTING;
 		displayport_hpd_changed(0);
 		msleep(1000);
@@ -3772,6 +4014,7 @@ static int displayport_probe(struct platform_device *pdev)
 	mutex_init(&displayport->hpd_lock);
 	mutex_init(&displayport->aux_lock);
 	mutex_init(&displayport->training_lock);
+	mutex_init(&displayport->hdcp2_lock);
 	init_waitqueue_head(&displayport->dp_wait);
 	init_waitqueue_head(&displayport->audio_wait);
 
@@ -3801,6 +4044,11 @@ static int displayport_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&displayport->hdcp22_work, displayport_hdcp22_run);
 	INIT_DELAYED_WORK(&displayport->hdcp13_integrity_check_work, displayport_hdcp13_integrity_check_work);
 
+	/* Check Displayport support or not */
+	if (of_get_property(dev->of_node, "dp,displayport_not_support", NULL) != NULL) {
+		displayport_info("displayport does not support\n");
+		displayport->dp_not_support = true;
+	}
 #if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
 	INIT_DELAYED_WORK(&displayport->notifier_register_work,
 			displayport_notifier_register_work);
@@ -3839,6 +4087,12 @@ static int displayport_probe(struct platform_device *pdev)
 #else
 	displayport_info("Not compiled EXTCON driver\n");
 #endif
+
+	switch_secdp_msg.name = "secdp_msg";
+	ret = switch_dev_register(&switch_secdp_msg);
+	if (ret)
+		displayport_err("Failed to register dp msg switch\n");
+
 	displayport->hpd_state = HPD_UNPLUG;
 
 	pm_runtime_enable(dev);
@@ -3868,7 +4122,7 @@ static int displayport_probe(struct platform_device *pdev)
 		dev_err(displayport->dev, "failed to init wakeup device\n");
 		return -EINVAL;
 	}
-
+	pm_qos_add_request(&displayport->fsys0_qos, PM_QOS_FSYS0_THROUGHPUT, 0);
 	dp_class = class_create(THIS_MODULE, "dp_sec");
 	if (IS_ERR(dp_class))
 		displayport_err("failed to creat dp_class\n");
@@ -3893,6 +4147,11 @@ static int displayport_probe(struct platform_device *pdev)
 		ret = class_create_file(dp_class, &class_attr_unit_test);
 		if (ret)
 			displayport_err("failed to create attr_unit_test\n");
+#if defined(CONFIG_EXYNOS_HDCP2)
+		ret = class_create_file(dp_class, &class_attr_dp_drm);
+		if (ret)
+			displayport_err("failed to create attr_dp_drm\n");
+#endif
 		ret = class_create_file(dp_class, &class_attr_phy_tune);
 		if (ret)
 			displayport_err("failed to create attr_phy_tune\n");
@@ -3940,6 +4199,9 @@ static int displayport_probe(struct platform_device *pdev)
 	displayport->bist_type = COLOR_BAR;
 	displayport->dyn_range = CEA_RANGE;
 	displayport->do_unit_test = 0;
+#if defined(CONFIG_EXYNOS_HDCP2)
+	displayport->drm_start_state = DRM_OFF;
+#endif
 
 	/* add aux control */
 	secdp_aux_dev_init(displayport_i2c_write, displayport_i2c_read,

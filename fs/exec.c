@@ -68,8 +68,15 @@
 
 #include <trace/events/sched.h>
 
+#ifdef CONFIG_SECURITY_DEFEX
+#include <linux/defex.h>
+#endif
+
 #ifdef CONFIG_RKP_KDP
 #define rkp_is_nonroot(x) ((x->cred->type)>>1 & 1)
+#ifdef CONFIG_LOD_SEC
+#define rkp_is_lod(x) ((x->cred->type)>>3 & 1)
+#endif /*CONFIG_LOD_SEC*/
 #endif /*CONFIG_RKP_KDP*/
 
 int suid_dumpable = 0;
@@ -1263,9 +1270,22 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 }
 #ifdef CONFIG_RKP_NS_PROT
 extern struct super_block *sys_sb;	/* pointer to superblock */
+extern struct super_block *odm_sb;	/* pointer to superblock */
+extern struct super_block *vendor_sb;	/* pointer to superblock */
 extern struct super_block *rootfs_sb;	/* pointer to superblock */
 extern int is_recovery;
 
+static int kdp_check_sb_mismatch(struct super_block *sb) 
+{	
+	if(is_recovery) {
+		return 0;
+	}
+	if((sb != rootfs_sb) && (sb != sys_sb)
+		&& (sb != odm_sb) && (sb != vendor_sb)) {
+		return 1;
+	}
+	return 0;
+}
 static int invalid_drive(struct linux_binprm * bprm) 
 {
 	struct super_block *sb =  NULL;
@@ -1274,16 +1294,14 @@ static int invalid_drive(struct linux_binprm * bprm)
 	vfsmnt = bprm->file->f_path.mnt;
 	if(!vfsmnt || 
 		!rkp_ro_page((unsigned long)vfsmnt)) {
-		printk("\nInvalid Drive #%s# #%p#\n",bprm->filename,vfsmnt);
+		printk("\nInvalid Drive #%s# #%p#\n",bprm->filename, vfsmnt);
 		return 1;
 	} 
 	sb = vfsmnt->mnt_sb;
 
-	if((!is_recovery) &&
-		sb != rootfs_sb   
-		&& sb != sys_sb) {
-		printk("\n Superblock Mismatch #%s# vfsmnt #%p#sb #%p:%p:%p#\n",
-					bprm->filename,vfsmnt,sb,rootfs_sb,sys_sb);
+	if(kdp_check_sb_mismatch(sb)) {
+		printk("\n Superblock Mismatch #%s# vfsmnt #%p#sb #%p:%p:%p:%p:%p#\n",
+					bprm->filename, vfsmnt, sb, rootfs_sb, sys_sb, odm_sb, vendor_sb);
 		return 1;
 	}
 
@@ -1330,7 +1348,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	if(rkp_cred_enable &&
 		is_rkp_priv_task() && 
 		invalid_drive(bprm)) {
-		//panic("\n Illegal Execution file_name #%s#\n",bprm->filename);
+		panic("\n KDP_NS_PROT: Illegal Execution of file #%s#\n",bprm->filename);
 	}
 #endif /*CONFIG_RKP_NS_PROT*/
 	retval = exec_mmap(bprm->mm);
@@ -1698,17 +1716,12 @@ int search_binary_handler(struct linux_binprm *bprm)
 		if (printable(bprm->buf[0]) && printable(bprm->buf[1]) &&
 		    printable(bprm->buf[2]) && printable(bprm->buf[3]))
 			return retval;
-		if (request_module("binfmt-%04x",
-					*(ushort *)(bprm->buf + 2)) < 0) {
-			task_integrity_delayed_reset(current);
+		if (request_module(
+			      "binfmt-%04x", *(ushort *)(bprm->buf + 2)) < 0)
 			return retval;
-		}
 		need_retry = false;
 		goto retry;
 	}
-
-	if (retval < 0)
-		task_integrity_delayed_reset(current);
 
 	return retval;
 }
@@ -1780,6 +1793,13 @@ static int rkp_restrict_fork(struct filename *path)
 	if(!strcmp(path->name,"/system/bin/patchoat")){
 		return 0 ;
 	}
+        /* If the Process is from Linux on Dex, 
+        then no need to reduce privilege */
+#ifdef CONFIG_LOD_SEC
+	if(rkp_is_lod(current)){
+            return 0;
+        }
+#endif
 	if(rkp_is_nonroot(current)){
 		shellcred = prepare_creds();
 		if (!shellcred) {
@@ -1879,6 +1899,8 @@ static int exec_binprm(struct linux_binprm *bprm)
 		trace_sched_process_exec(current, old_pid, bprm);
 		ptrace_event(PTRACE_EVENT_EXEC, old_vpid);
 		proc_exec_connector(current);
+	} else {
+		task_integrity_delayed_reset(current);
 	}
 
 	return ret;
@@ -1938,6 +1960,14 @@ static int do_execveat_common(int fd, struct filename *filename,
 	if (IS_ERR(file))
 		goto out_unmark;
 
+#ifdef CONFIG_SECURITY_DEFEX
+	retval = task_defex_enforce(current, file, -__NR_execve);
+	if (retval < 0) {
+		bprm->file = file;
+		retval = -EPERM;
+		goto out_unmark;
+	 }
+#endif
 	sched_exec();
 
 	bprm->file = file;
@@ -2120,7 +2150,6 @@ SYSCALL_DEFINE3(execve,
 		const char __user *const __user *, argv,
 		const char __user *const __user *, envp)
 {
-#if defined CONFIG_SEC_RESTRICT_FORK
 #ifdef CONFIG_RKP_KDP
 	struct filename *path = getname(filename);
 	int error = PTR_ERR(path);
@@ -2132,6 +2161,7 @@ SYSCALL_DEFINE3(execve,
 		uh_call(UH_APP_RKP,0x4b,(u64)path->name,0,0,0);
 	}
 #endif
+#if defined CONFIG_SEC_RESTRICT_FORK
   if (CHECK_ROOT_UID(current)) {
     if (sec_restrict_fork()) {
       PRINT_LOG("Restricted making process. PID = %d(%s) "
@@ -2155,9 +2185,11 @@ SYSCALL_DEFINE3(execve,
 			return -EACCES;
 		}
 	}
-	putname(path);
 #endif
 #endif// End of CONFIG_SEC_RESTRICT_FORK
+#ifdef CONFIG_RKP_KDP
+	putname(path);
+#endif
 	return do_execve(getname(filename), argv, envp);
 }
 

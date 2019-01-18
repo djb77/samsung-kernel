@@ -66,6 +66,7 @@ obj-$(CONFIG_FB_I810)           += video/fbdev/i810/
 obj-$(CONFIG_FB_INTEL)          += video/fbdev/intelfb/
 
 obj-$(CONFIG_VBUS_NOTIFIER)	+= staging/samsung/sec_notifier/
+obj-$(CONFIG_DEV_RIL_BRIDGE)	+= misc/dev_ril_bridge/
 obj-$(CONFIG_USE_MUIC)		+= muic/
 
 obj-$(CONFIG_PARPORT)		+= parport/
@@ -188,6 +189,10 @@ obj-$(CONFIG_FPGA)		+= fpga/
 # Sensorhub driver
 obj-$(CONFIG_SENSORS_SSP)	+= sensorhub/
 
+# HRM sensor driver
+obj-$(CONFIG_SENSORS_HRMSENSOR)	+= optics/
+obj-$(CONFIG_SENSORS_MAX86915)	+= optics/
+
 # Gps driver
 obj-$(CONFIG_GPS_BCMxxxxx)	+= gps/
 
@@ -205,6 +210,9 @@ obj-$(CONFIG_EXYNOS_BTS)	+= bts/
 # Mobicore driver
 obj-$(CONFIG_TRUSTONIC_TEE)     += gud/
 
+# FIVE TEE driver
+obj-$(CONFIG_FIVE_TEE_DRIVER)	+= five/
+
 # Vision driver
 obj-$(CONFIG_VISION_SUPPORT)	+= vision/
 
@@ -213,3 +221,11 @@ obj-$(CONFIG_SENSORS_FINGERPRINT)       += fingerprint/
 
 # uH
 obj-$(CONFIG_UH)		+= uh/
+
+#MPSD driver
+obj-$(CONFIG_MPSD)	+= mpsd/
+
+#$(info kpermon_CURDIR="$(shell pwd)")
+ifeq (exist, $(shell [ -e ../../system/core/liblog/include/log/perflog.h ] && echo exist))
+	obj-y				+= kperfmon/
+endif

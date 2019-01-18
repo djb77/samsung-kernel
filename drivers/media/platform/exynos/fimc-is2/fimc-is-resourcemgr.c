@@ -573,7 +573,8 @@ static int __init fimc_is_reserved_mem_setup(struct reserved_mem *rmem)
 
 	fimc_is_lib_vm.phys_addr = rmem->base;
 	fimc_is_lib_vm.addr = (void *)kbase;
-	fimc_is_lib_vm.size = LIB_SIZE + PAGE_SIZE;
+	fimc_is_lib_vm.size = rmem->size;
+	fimc_is_lib_vm.flags = VM_NO_GUARD;
 
 	BUG_ON(rmem->size < LIB_SIZE);
 

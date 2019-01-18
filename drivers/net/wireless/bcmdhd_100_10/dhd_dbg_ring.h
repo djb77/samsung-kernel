@@ -23,7 +23,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_dbg_ring.h 737951 2017-12-25 13:35:49Z $
+ * $Id: dhd_dbg_ring.h 754183 2018-03-26 11:15:16Z $
  */
 
 #ifndef __DHD_DBG_RING_H__
@@ -108,7 +108,7 @@ typedef struct dhd_dbg_ring {
 #define DBG_RING_ENTRY_SIZE (sizeof(dhd_dbg_ring_entry_t))
 #define ENTRY_LENGTH(hdr) ((hdr)->len + DBG_RING_ENTRY_SIZE)
 #define PAYLOAD_MAX_LEN 65535
-#define PAYLOAD_ECNTR_MAX_LEN 1404
+#define PAYLOAD_ECNTR_MAX_LEN 1648u
 #define PENDING_LEN_MAX 0xFFFFFFFF
 #define DBG_RING_STATUS_SIZE (sizeof(dhd_dbg_ring_status_t))
 

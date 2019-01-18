@@ -128,6 +128,13 @@ config UFS_DATA_LOG
 	  This feature support for UFS Data logging.
 	  Select this option if this feature is needed on working.
 
+config UFS_DATA_LOG_MAGIC_CODE
+	bool "Samsung UFS DATA logging"
+	depends on SCSI_UFSHCD && SCSI_UFSHCD_PLATFORM && UFS_DATA_LOG
+	---help---
+	  This feature support for UFS Data logging include magic code.
+	  Select this option if this feature is needed on working.
+
 config SCSI_UFS_QCOM
 	tristate "QCOM specific hooks to UFS controller platform driver"
 	depends on SCSI_UFSHCD_PLATFORM && ARCH_QCOM

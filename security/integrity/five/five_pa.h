@@ -18,21 +18,8 @@
 #define __LINUX_FIVE_PROCA_H
 
 #ifdef CONFIG_FIVE_PA_FEATURE
-int fivepa_push_set_xattr_event(struct task_struct *task, struct file *file);
-int fivepa_init_signature_wq(void);
 void fivepa_fsignature_free(struct file *file);
 #else
-static inline int fivepa_push_set_xattr_event(struct task_struct *task,
-				       struct file *file)
-{
-	return 0;
-}
-
-static inline int fivepa_init_signature_wq(void)
-{
-	return 0;
-}
-
 static inline void fivepa_fsignature_free(struct file *file)
 {
 }

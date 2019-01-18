@@ -29,7 +29,7 @@
 
 #define DEFAULT_BOOT_ENABLE_MS (40000)		/* 40 s */
 #define NUM_OF_GROUP	2
-#define ATTR_COUNT	9
+#define ATTR_COUNT	14
 
 #define LIT	0
 #define BIG	1
@@ -40,11 +40,16 @@ enum hpgov_event {
 
 struct hpgov_attrib {
 	struct kobj_attribute	enabled;
+	struct kobj_attribute	skip_lit_enabled;
+	struct kobj_attribute	ldsum_enabled;
 	struct kobj_attribute	single_change_ms;
 	struct kobj_attribute	dual_change_ms;
 	struct kobj_attribute	quad_change_ms;
 	struct kobj_attribute	big_heavy_thr;
 	struct kobj_attribute	lit_heavy_thr;
+	struct kobj_attribute	big_idle_thr;
+	struct kobj_attribute	lit_idle_thr;
+	struct kobj_attribute	ldsum_heavy_thr;
 	struct kobj_attribute	cl_busy_ratio;
 	struct kobj_attribute	user_mode;
 
@@ -69,13 +74,24 @@ struct {
 	unsigned int			user_mode;
 	unsigned int			boostable;
 
+	bool				big_busy;
+	int				skip_lit_enabled;
+
 	int				single_change_ms;
 	int				dual_change_ms;
 	int				quad_change_ms;
 	int				big_heavy_thr;
 	int				lit_heavy_thr;
+	int				big_idle_thr;
+	int				lit_idle_thr;
+	int				ldsum_heavy_thr;
+	int				ldsum_enabled;
 	int				change_ms;
 	int				cl_busy_ratio;
+	
+	unsigned long			pol_max;
+	unsigned long			qos_max;
+
 	struct hpgov_attrib		attrib;
 	struct mutex			attrib_lock;
 	struct task_struct		*task;
@@ -171,6 +187,30 @@ static unsigned long get_hpgov_maxfreq(void)
 	return max_freq;
 }
 
+static void exynos_hpgov_set_boostable(void)
+{
+	unsigned long quad_freq = exynos_hpgov.maxfreq_table[QUAD];
+
+	if ((exynos_hpgov.qos_max <= quad_freq) ||
+		exynos_hpgov.pol_max < quad_freq)
+		exynos_hpgov.boostable = false;
+	else
+		exynos_hpgov.boostable = true;
+}
+
+static int exynos_hpgov_qos_callback(struct notifier_block *nb,
+					unsigned long val, void *v)
+{
+	exynos_hpgov.qos_max = val;
+	exynos_hpgov_set_boostable();
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block hpgov_pm_qos_max_notifier = {
+	.notifier_call = exynos_hpgov_qos_callback,
+};
+
 static int cpufreq_policy_notifier(struct notifier_block *nb,
 				    unsigned long event, void *data)
 {
@@ -189,10 +229,8 @@ static int cpufreq_policy_notifier(struct notifier_block *nb,
 		break;
 
 	case CPUFREQ_NOTIFY:
-		if (policy->max < exynos_hpgov.maxfreq_table[QUAD])
-			exynos_hpgov.boostable = false;
-		else
-			exynos_hpgov.boostable = true;
+		exynos_hpgov.pol_max = policy->max;
+		exynos_hpgov_set_boostable();
 		break;
 	}
 
@@ -530,6 +568,9 @@ static bool is_cluster_busy(int cluster, int ratio)
 		> ((exynos_hpgov.load_info[cluster].max_load_sum * ratio) / 100))
 		busy = true;
 
+	if (cluster == BIG)
+		exynos_hpgov.big_busy = busy;
+
 	trace_hpgov_cluster_busy(cluster, ratio,
 		exynos_hpgov.load_info[cluster].load_sum,
 		exynos_hpgov.load_info[cluster].max_load_sum, busy);
@@ -555,30 +596,37 @@ static struct sched_group * get_cl_group(unsigned int cl)
 	return sg;
 }
 
-static int clamp_heavy_thr(int heavy_thr)
+static int clamp_thr(int thr, bool heavy)
 {
-	return exynos_hpgov.mode != QUAD ? (heavy_thr * 9 / 10) : heavy_thr;
+	int margin = heavy ? 9 : 11;
+
+	return exynos_hpgov.mode != QUAD ? (thr * margin / 10) : thr;
 }
 
 /* return number of imbalance heavy cpu */
 static int exynos_hpgov_get_imbal_cpus(unsigned int cluster)
 {
 	int cpu, imbal_heavy_cnt = 0;
-	int heavy_cnt = 0, active_cnt = 0, idle_cnt = 0;
+	int heavy_cnt = 0, active_cnt = 0, idle_cnt = 0, ldsum_heavy_cnt = 0;
 	struct sched_group *sg = get_cl_group(cluster);
-	unsigned long idle_thr;
-	int heavy_thr;
+	int heavy_thr, idle_thr, ldsum_heavy_thr = 1;
+	unsigned int active_util = 0;
+
+	if (exynos_hpgov.skip_lit_enabled &&
+			cluster == LIT && !exynos_hpgov.big_busy)
+		return 0;
 
 	if (!sg || !cpumask_weight(sched_group_cpus(sg)))
 		return 0;
 
 	/* get the min capaicity of cpu */
-	idle_thr = sg->sge->cap_states[0].cap;
 	if (cluster == LIT) {
-		heavy_thr = clamp_heavy_thr(exynos_hpgov.lit_heavy_thr);
+		heavy_thr = clamp_thr(exynos_hpgov.lit_heavy_thr, 1);
+		idle_thr = clamp_thr(exynos_hpgov.lit_idle_thr, 0);
 	} else {
-		idle_thr = idle_thr >> 1;
-		heavy_thr = clamp_heavy_thr(exynos_hpgov.big_heavy_thr);
+		heavy_thr = clamp_thr(exynos_hpgov.big_heavy_thr, 1);
+		idle_thr = clamp_thr(exynos_hpgov.big_idle_thr, 0);
+		ldsum_heavy_thr = clamp_thr(exynos_hpgov.ldsum_heavy_thr, 0);
 	}
 
 	for_each_cpu(cpu, cpu_coregroup_mask(cpumask_first(sched_group_cpus(sg)))) {
@@ -592,17 +640,28 @@ static int exynos_hpgov_get_imbal_cpus(unsigned int cluster)
 
 		if (sa->util_avg >= heavy_thr)
 			heavy_cnt++;
-		else if (cluster != LIT && sa->util_avg >= idle_thr)
+		else if (cluster != LIT && sa->util_avg >= idle_thr) {
 			active_cnt++;
-		else
+			active_util += sa->util_avg;
+		} else
 			idle_cnt++;
 	}
 
-	if (heavy_cnt >= SINGLE)
-		imbal_heavy_cnt = heavy_cnt + active_cnt;
-	else
-		imbal_heavy_cnt = 0;
+	if (!heavy_cnt)
+		goto exit;
 
+	if (exynos_hpgov.ldsum_enabled && cluster == BIG && active_util) {
+		ldsum_heavy_cnt = (active_util / ldsum_heavy_thr) + 1;
+
+		trace_hpgov_load_sum(active_util,
+				ldsum_heavy_thr, active_cnt, ldsum_heavy_cnt);
+
+		active_cnt = ldsum_heavy_cnt;
+	}
+
+	imbal_heavy_cnt = heavy_cnt + active_cnt;
+
+exit:
 	trace_hpgov_load_imbalance(cluster, idle_thr, heavy_thr,
 				idle_cnt, active_cnt, imbal_heavy_cnt);
 
@@ -611,8 +670,8 @@ static int exynos_hpgov_get_imbal_cpus(unsigned int cluster)
 
 static bool exynos_hpgov_system_busy(void)
 {
-	if (is_cluster_busy(LIT, exynos_hpgov.cl_busy_ratio)
-		&& is_cluster_busy(BIG, exynos_hpgov.cl_busy_ratio))
+	if (is_cluster_busy(BIG, exynos_hpgov.cl_busy_ratio)
+		&& is_cluster_busy(LIT, exynos_hpgov.cl_busy_ratio))
 			return true;
 	return false;
 }
@@ -805,6 +864,47 @@ static int exynos_hpgov_set_lit_heavy_thr(int val)
 	return 0;
 }
 
+static int exynos_hpgov_set_big_idle_thr(int val)
+{
+	if (!(val > 0))
+		return -EINVAL;
+
+	exynos_hpgov.big_idle_thr = val;
+
+	return 0;
+}
+
+static int exynos_hpgov_set_lit_idle_thr(int val)
+{
+	if (!(val > 0))
+		return -EINVAL;
+
+	exynos_hpgov.lit_idle_thr = val;
+
+	return 0;
+}
+
+static int exynos_hpgov_set_ldsum_heavy_thr(int val)
+{
+	if (!(val > 0))
+		return -EINVAL;
+
+	exynos_hpgov.ldsum_heavy_thr = val;
+
+	return 0;
+}
+
+static int exynos_hpgov_set_ldsum_enabled(int val)
+{
+	exynos_hpgov.ldsum_enabled = val;
+	return 0;
+}
+
+static int exynos_hpgov_set_skip_lit_enabled(int val)
+{
+	exynos_hpgov.skip_lit_enabled = val;
+	return 0;
+}
 
 static int exynos_hpgov_set_quad_change_ms(int val)
 {
@@ -878,6 +978,11 @@ HPGOV_PARAM(enabled, exynos_hpgov.enabled);
 HPGOV_PARAM(user_mode, exynos_hpgov.user_mode);
 HPGOV_PARAM(big_heavy_thr, exynos_hpgov.big_heavy_thr);
 HPGOV_PARAM(lit_heavy_thr, exynos_hpgov.lit_heavy_thr);
+HPGOV_PARAM(big_idle_thr, exynos_hpgov.big_idle_thr);
+HPGOV_PARAM(lit_idle_thr, exynos_hpgov.lit_idle_thr);
+HPGOV_PARAM(ldsum_heavy_thr, exynos_hpgov.ldsum_heavy_thr);
+HPGOV_PARAM(ldsum_enabled, exynos_hpgov.ldsum_enabled);
+HPGOV_PARAM(skip_lit_enabled, exynos_hpgov.skip_lit_enabled);
 HPGOV_PARAM(cl_busy_ratio, exynos_hpgov.cl_busy_ratio);
 HPGOV_PARAM(single_change_ms, exynos_hpgov.single_change_ms);
 HPGOV_PARAM(dual_change_ms, exynos_hpgov.dual_change_ms);
@@ -906,7 +1011,7 @@ static int exynos_hp_gov_pm_suspend_notifier(struct notifier_block *notifier,
 	online_cnt = min(pm_qos_request(PM_QOS_CPU_ONLINE_MIN),
 				pm_qos_request(PM_QOS_CPU_ONLINE_MAX));
 
-	timeout = jiffies + msecs_to_jiffies(1000);
+	timeout = jiffies + msecs_to_jiffies(10000);
 	/* waiting for qoad mode */
 	if (online_cnt > cpumask_weight(cpu_coregroup_mask(0)))
 		while (cpumask_weight(cpu_online_mask) < online_cnt) {
@@ -961,6 +1066,21 @@ static int __init exynos_hpgov_parse_dt(void)
 		goto exit;
 
 	if (of_property_read_u32(np, "lit_heavy_thr", &exynos_hpgov.lit_heavy_thr))
+		goto exit;
+
+	if (of_property_read_u32(np, "big_idle_thr", &exynos_hpgov.big_idle_thr))
+		goto exit;
+
+	if (of_property_read_u32(np, "lit_idle_thr", &exynos_hpgov.lit_idle_thr))
+		goto exit;
+
+	if (of_property_read_u32(np, "ldsum_heavy_thr", &exynos_hpgov.ldsum_heavy_thr))
+		goto exit;
+
+	if (of_property_read_u32(np, "ldsum_enabled", &exynos_hpgov.ldsum_enabled))
+		goto exit;
+
+	if (of_property_read_u32(np, "skip_lit_enabled", &exynos_hpgov.skip_lit_enabled))
 		goto exit;
 
 	if (of_property_read_u32(np, "cl_busy_ratio", &exynos_hpgov.cl_busy_ratio))
@@ -1051,6 +1171,11 @@ static int __init exynos_hpgov_init(void)
 	HPGOV_RW_ATTRIB(attr_count - (i_attr--), enabled);
 	HPGOV_RW_ATTRIB(attr_count - (i_attr--), big_heavy_thr);
 	HPGOV_RW_ATTRIB(attr_count - (i_attr--), lit_heavy_thr);
+	HPGOV_RW_ATTRIB(attr_count - (i_attr--), big_idle_thr);
+	HPGOV_RW_ATTRIB(attr_count - (i_attr--), lit_idle_thr);
+	HPGOV_RW_ATTRIB(attr_count - (i_attr--), ldsum_heavy_thr);
+	HPGOV_RW_ATTRIB(attr_count - (i_attr--), ldsum_enabled);
+	HPGOV_RW_ATTRIB(attr_count - (i_attr--), skip_lit_enabled);
 	HPGOV_RW_ATTRIB(attr_count - (i_attr--), cl_busy_ratio);
 	HPGOV_RW_ATTRIB(attr_count - (i_attr--), user_mode);
 	HPGOV_RW_ATTRIB(attr_count - (i_attr--), single_change_ms);
@@ -1066,6 +1191,8 @@ static int __init exynos_hpgov_init(void)
 	}
 
 	/* set default valuse */
+	exynos_hpgov.pol_max = ULONG_MAX;
+	exynos_hpgov.qos_max = ULONG_MAX;
 	exynos_hpgov.enabled = 0;
 	exynos_hpgov.mode = QUAD;
 	exynos_hpgov.user_mode = DISABLE;
@@ -1099,6 +1226,10 @@ static int __init exynos_hpgov_init(void)
 	/* register pm notifier */
 	register_pm_notifier(&exynos_hp_gov_suspend_nb);
 	register_pm_notifier(&exynos_hp_gov_resume_nb);
+
+	/* register pm qos notifier */
+	pm_qos_add_notifier(PM_QOS_CLUSTER1_FREQ_MAX,
+				&hpgov_pm_qos_max_notifier);
 
 	schedule_delayed_work_on(0, &hpgov_boot_work,
 			msecs_to_jiffies(DEFAULT_BOOT_ENABLE_MS));

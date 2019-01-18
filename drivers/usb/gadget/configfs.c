@@ -50,7 +50,7 @@ EXPORT_SYMBOL_GPL(create_function_device);
 #endif
 
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
-void set_usb_enumeration_state(bool state);
+void set_usb_enumeration_state(int state);
 void set_usb_enable_state(void);
 extern int dwc3_gadget_get_cmply_link_state(struct usb_gadget *g);
 #endif
@@ -519,25 +519,26 @@ static int config_usb_cfg_link(
 
 	/* usb tethering */
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-	list_for_each_entry(gs, &gi->string_list, list) {
-		src = gs->serialnumber;
-	}
+	if (fi->set_inst_eth_addr) {
+		list_for_each_entry(gs, &gi->string_list, list) {
+			src = gs->serialnumber;
+		}
 
-	if (!ethaddr[0]) {
-		for (i = 0; i < ETH_ALEN; i++)
-			ethaddr[i] = 0;
-		/* create a fake MAC address from our serial number.
-		 * first byte is 0x02 to signify locally administered.
-		 */
-		ethaddr[0] = 0x02;
-		for (i = 0; (i < 256) && *src; i++) {
-			/* XOR the USB serial across the remaining bytes */
-			ethaddr[i % (ETH_ALEN - 1) + 1] ^= *src++;
+		if (src) {
+			for (i = 0; i < ETH_ALEN; i++)
+				ethaddr[i] = 0;
+			/* create a fake MAC address from our serial number.
+			 * first byte is 0x02 to signify locally administered.
+			 */
+			ethaddr[0] = 0x02;
+			for (i = 0; (i < 256) && *src; i++) {
+				/* XOR the USB serial across the remaining bytes */
+				ethaddr[i % (ETH_ALEN - 1) + 1] ^= *src++;
+			}
+
+			fi->set_inst_eth_addr(fi, ethaddr);
 		}
 	}
-
-	if (fi->set_inst_eth_addr)
-		fi->set_inst_eth_addr(fi, ethaddr);
 #endif
 	f = usb_get_function(fi);
 	if (IS_ERR(f)) {
@@ -1362,7 +1363,7 @@ static void purge_configs_funcs(struct gadget_info *gi)
 			list_move_tail(&f->list, &cfg->func_list);
 			if (f->unbind) {
 				dev_err(&gi->cdev.gadget->dev,
-				         "unbind function '%s'/%p\n",
+				         "unbind function '%s'/%pK\n",
 				         f->name, f);
 				f->unbind(c, f);
 			}
@@ -1534,7 +1535,10 @@ static void android_work(struct work_struct *data)
 	bool status[3] = { false, false, false };
 	unsigned long flags;
 	bool uevent_sent = false;
-
+	if (!android_device && IS_ERR(android_device)) {
+		pr_info("usb: cannot send uevent because android_device not available \n");
+		return;
+	}	
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (cdev->config)
 		status[1] = true;
@@ -1994,15 +1998,17 @@ static struct device_attribute *android_usb_attributes[] = {
 
 static int android_device_create(struct gadget_info *gi)
 {
+	struct device *device;
 	struct device_attribute **attrs;
 	struct device_attribute *attr;
 
 	INIT_WORK(&gi->work, android_work);
-	android_device = device_create(android_class, NULL,
+	device = device_create(android_class, NULL,
 				MKDEV(0, 0), NULL, "android0");
-	if (IS_ERR(android_device))
-		return PTR_ERR(android_device);
+	if (IS_ERR(device))
+		return PTR_ERR(device);
 
+	android_device = device;
 	dev_set_drvdata(android_device, gi);
 
 	attrs = android_usb_attributes;
@@ -2095,8 +2101,10 @@ static struct config_group *gadgets_make(
 	if (!gi->composite.gadget_driver.function)
 		goto err;
 
-	if (android_device_create(gi) < 0)
+	if (android_device_create(gi) < 0) {
+		kfree(gi->composite.gadget_driver.function);
 		goto err;
+	}	
 
 	return &gi->group;
 

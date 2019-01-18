@@ -16,6 +16,9 @@
 struct cma;
 
 extern unsigned long totalcma_pages;
+extern unsigned long totalrbin_pages;
+extern atomic_t rbin_allocated_pages;
+extern atomic_t rbin_pool_pages;
 extern phys_addr_t cma_get_base(const struct cma *cma);
 extern unsigned long cma_get_size(const struct cma *cma);
 
@@ -32,6 +35,13 @@ static inline int cma_declare_contiguous(phys_addr_t base,
 						order_per_bit, fixed, res_cma,
 						NULL);
 }
+
+#ifdef CONFIG_RBIN
+extern void cma_set_rbin(struct cma *cma);
+#else
+static inline void cma_set_rbin(struct cma *cma) {}
+#endif
+
 extern int cma_init_reserved_mem_with_name(phys_addr_t base, phys_addr_t size,
 					unsigned int order_per_bit,
 					struct cma **res_cma, const char *name);

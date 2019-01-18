@@ -15,7 +15,10 @@
  */
 
 #include <linux/task_integrity.h>
+#include <linux/file.h>
+#include <linux/fs.h>
 #include <linux/slab.h>
+#include "five_porting.h"
 
 static struct kmem_cache *task_integrity_cache;
 
@@ -24,7 +27,8 @@ static void init_once(void *foo)
 	struct task_integrity *intg = foo;
 
 	memset(intg, 0, sizeof(*intg));
-	spin_lock_init(&intg->lock);
+	spin_lock_init(&intg->value_lock);
+	spin_lock_init(&intg->list_lock);
 }
 
 static int __init task_integrity_cache_init(void)
@@ -57,25 +61,42 @@ struct task_integrity *task_integrity_alloc(void)
 void task_integrity_free(struct task_integrity *intg)
 {
 	if (intg) {
-		spin_lock(&intg->lock);
+		/* These values should be changed under "value_lock" spinlock.
+		   But then lockdep prints warning because this function can be called
+		   from sw-irq (from function free_task).
+		   Actually deadlock never happens because this function is called
+		   only if usage_count is 0 (no reference to this struct),
+		   so changing these values without spinlock is safe.
+		*/
 		kfree(intg->label);
 		intg->label = NULL;
 		intg->user_value = INTEGRITY_NONE;
-		spin_unlock(&intg->lock);
-
+		intg->value = INTEGRITY_NONE;
 		atomic_set(&intg->usage_count, 0);
-		atomic_set(&intg->value, INTEGRITY_NONE);
+
+		intg->reset_cause = CAUSE_UNKNOWN;
+		if (intg->reset_file) {
+			fput(intg->reset_file);
+			intg->reset_file = NULL;
+		}
+
 		kmem_cache_free(task_integrity_cache, intg);
 	}
 }
 
 void task_integrity_clear(struct task_integrity *tint)
 {
-	spin_lock(&tint->lock);
-	atomic_set(&tint->value, INTEGRITY_NONE);
+	task_integrity_set(tint, INTEGRITY_NONE);
+	spin_lock(&tint->value_lock);
 	kfree(tint->label);
 	tint->label = NULL;
-	spin_unlock(&tint->lock);
+	spin_unlock(&tint->value_lock);
+
+	tint->reset_cause = CAUSE_UNKNOWN;
+	if (tint->reset_file) {
+		fput(tint->reset_file);
+		tint->reset_file = NULL;
+	}
 }
 
 static int copy_label(struct task_integrity *from, struct task_integrity *to)
@@ -83,7 +104,7 @@ static int copy_label(struct task_integrity *from, struct task_integrity *to)
 	int ret = 0;
 	struct integrity_label *l = NULL;
 
-	if (atomic_read(&from->value) && from->label)
+	if (task_integrity_read(from) && from->label)
 		l = from->label;
 
 	if (l) {
@@ -107,17 +128,66 @@ exit:
 int task_integrity_copy(struct task_integrity *from, struct task_integrity *to)
 {
 	int rc = -EPERM;
-	enum task_integrity_value value = atomic_read(&from->value);
+	enum task_integrity_value value = task_integrity_read(from);
 
-	spin_lock(&to->lock);
-	atomic_set(&to->value, value);
+	task_integrity_set(to, value);
 
 	if (list_empty(&from->events.list))
 		to->user_value = value;
 
-	spin_unlock(&to->lock);
-
 	rc = copy_label(from, to);
 
+	to->reset_cause = from->reset_cause;
+	if (from->reset_file) {
+		get_file(from->reset_file);
+		to->reset_file = from->reset_file;
+	}
+
 	return rc;
+}
+
+char const * const tint_reset_cause_to_string(
+	enum task_integrity_reset_cause cause)
+{
+	static const char *tint_cause2str[] = {
+		[CAUSE_UNKNOWN] = "unknown",
+		[CAUSE_MISMATCH_LABEL] = "mismatch-label",
+		[CAUSE_BAD_FS] = "bad-fs",
+		[CAUSE_NO_CERT] = "no-cert",
+		[CAUSE_INVALID_HASH_LENGTH] = "invalid-hash-length",
+		[CAUSE_INVALID_HEADER] = "invalid-header",
+		[CAUSE_CALC_HASH_FAILED] = "calc-hash-failed",
+		[CAUSE_INVALID_LABEL_DATA] = "invalid-label-data",
+		[CAUSE_INVALID_SIGNATURE_DATA] = "invalid-signature-data",
+		[CAUSE_INVALID_HASH] = "invalid-hash",
+		[CAUSE_INVALID_CALC_CERT_HASH] = "invalid-calc-cert-hash",
+		[CAUSE_INVALID_UPDATE_LABEL] = "invalid-update-label",
+		[CAUSE_INVALID_SIGNATURE] = "invalid-signature",
+		[CAUSE_UKNOWN_FIVE_DATA] = "unknow-five-data",
+		[CAUSE_MAX] = "incorrect-cause",
+	};
+
+	if (cause > CAUSE_MAX)
+		cause = CAUSE_MAX;
+
+	return tint_cause2str[cause];
+}
+
+/*
+ * task_integrity_set_reset_reason
+ *
+ * Only first call of this function per task will have effect, because first
+ * reason will be root cause.
+ */
+void task_integrity_set_reset_reason(struct task_integrity *intg,
+	enum task_integrity_reset_cause cause, struct file *file)
+{
+	if (intg->reset_cause != CAUSE_UNKNOWN)
+		return;
+
+	intg->reset_cause = cause;
+	if (file) {
+		get_file(file);
+		intg->reset_file = file;
+	}
 }

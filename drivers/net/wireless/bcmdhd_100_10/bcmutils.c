@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmutils.c 735061 2017-12-07 06:01:20Z $
+ * $Id: bcmutils.c 759570 2018-04-26 00:14:59Z $
  */
 
 #include <bcm_cfg.h>
@@ -1514,7 +1514,7 @@ bcm_print_bytes(const char *name, const uchar *data, int len)
 
 /* Look for vendor-specific IE with specified OUI and optional type */
 bcm_tlv_t *
-bcm_find_vendor_ie(const  void *tlvs, int tlvs_len, const char *voui, uint8 *type, int type_len)
+bcm_find_vendor_ie(const  void *tlvs, uint tlvs_len, const char *voui, uint8 *type, uint type_len)
 {
 	const  bcm_tlv_t *ie;
 	uint8 ie_len;
@@ -2889,9 +2889,9 @@ testcrc32(void)
  * by the TLV parameter's length if it is valid.
  */
 bcm_tlv_t *
-bcm_next_tlv(const  bcm_tlv_t *elt, int *buflen)
+bcm_next_tlv(const  bcm_tlv_t *elt, uint *buflen)
 {
-	int len;
+	uint len;
 
 	/* validate current elt */
 	if (!bcm_valid_tlv(elt, *buflen)) {
@@ -2919,7 +2919,7 @@ bcm_next_tlv(const  bcm_tlv_t *elt, int *buflen)
  * matches tag
  */
 bcm_tlv_t *
-bcm_parse_tlvs(const void *buf, int buflen, uint key)
+bcm_parse_tlvs(const void *buf, uint buflen, uint key)
 {
 	const bcm_tlv_t *elt;
 	int totlen;
@@ -2927,17 +2927,17 @@ bcm_parse_tlvs(const void *buf, int buflen, uint key)
 	if ((elt = (const bcm_tlv_t*)buf) == NULL) {
 		return NULL;
 	}
-	totlen = buflen;
+	totlen = (int)buflen;
 
 	/* find tagged parameter */
 	while (totlen >= TLV_HDR_LEN) {
-		int len = elt->len;
+		uint len = elt->len;
 
 		/* validate remaining totlen */
 		if ((elt->id == key) && (totlen >= (int)(len + TLV_HDR_LEN))) {
-		GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
-		return (bcm_tlv_t *)(elt);
-		GCC_DIAGNOSTIC_POP();
+			GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+			return (bcm_tlv_t *)(elt);
+			GCC_DIAGNOSTIC_POP();
 		}
 
 		elt = (const bcm_tlv_t*)((const uint8*)elt + (len + TLV_HDR_LEN));

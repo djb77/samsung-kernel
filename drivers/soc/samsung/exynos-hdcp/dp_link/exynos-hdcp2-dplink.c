@@ -40,7 +40,7 @@ static struct hdcp_link_data *lk_data;
 
 extern struct hdcp_session_list g_hdcp_session_list;
 extern uint8_t rp_ready;
-uint8_t hpd_off;
+uint8_t auth_end_flag;
 struct hdcp_sess_info ss_info;
 struct hdcp_link_info lk_info;
 
@@ -169,7 +169,6 @@ int do_dplink_auth(struct hdcp_link_info *lk_handle)
 			if (hdcp_enabled)
 				hdcp_dplink_config(DP_HDCP22_ENABLE);
 			/* Transmitter has completed the authentication protocol */
-
 			ret = exynos_smc(SMC_DRM_HDCP_AUTH_INFO, DP_HDCP22_ENABLE, 0, 0);
 			return HDCP_SUCCESS;
 		case LINK_ST_A6_WAIT_RECEIVER_ID_LIST:
@@ -235,7 +234,7 @@ int hdcp_dplink_authenticate(void)
 	int ret;
 	int i;
 
-	hpd_off = 0;
+	auth_end_flag = 0;
 	for (i = 0; i < HDCP_AUTH_RETRY_COUNT; i++) {
 		if (!rp_ready) {
 			hdcp_clear_session(ss_info.ss_id);
@@ -262,12 +261,13 @@ int hdcp_dplink_authenticate(void)
 			hdcp_err("Success HDCP authenticate done.\n");
 			return 0;
 		} else {
-			/* hpd_off flag check */
-			if (hpd_off == 1) {
-				hdcp_info("Stop authenticate, HPD off.\n");
-				hpd_off = 0;
+			/* auth_end_flag flag check */
+			if (auth_end_flag == 1) {
+				hdcp_info("Stop authenticate.\n");
+				auth_end_flag = 0;
 				break;
 			}
+
 			/* retry */
 			dplink_clear_irqflag_all();
 			hdcp_err("HDCP auth failed. retry(%d)!\n", i);
@@ -284,8 +284,8 @@ void hdcp_clear_session(uint32_t id)
 	struct hdcp_link_info lk;
 
 	ss.ss_id = id;
-	lk.lk_id = id;
 	lk.ss_id = id;
+	lk.lk_id = id;
 	hdcp_link_close(&lk);
 	hdcp_session_close(&ss);
 	hdcp_err("Displayport: HDCP session clear\n");
@@ -345,15 +345,24 @@ int hdcp_dplink_set_integrity_fail(void)
 	return dplink_set_integrity_fail();
 }
 
-int hdcp_dplink_hpd_changed(void)
+int hdcp_dplink_cancel_auth(void)
 {
 	uint32_t ret = 0;
 
-	hdcp_info("Hpd changed off.\n");
+	hdcp_info("Cancel authenticate.\n");
 	ret = exynos_smc(SMC_DRM_HDCP_AUTH_INFO, DP_HDCP22_DISABLE, 0, 0);
-	hpd_off = 1;
+	auth_end_flag = 1;
 
 	return dplink_set_integrity_fail();
+}
+
+void hdcp_dplink_clear_all(void)
+{
+	uint32_t ret = 0;
+
+	hdcp_info("HDCP flag clear\n");
+	ret = exynos_smc(SMC_DRM_HDCP_AUTH_INFO, DP_HDCP22_DISABLE, 0,0);
+	dplink_clear_irqflag_all();
 }
 
 int hdcp_dplink_is_auth_state(void)

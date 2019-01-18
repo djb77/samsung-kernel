@@ -27,21 +27,6 @@
 		parameter_size = <0x32000>;
 	};
 
-	memory@80000000 {
-		device_type = "memory";
-		reg = <0x0 0x80000000 0x80000000>;
-	};
-
-	memory@880000000 {
-		device_type = "memory";
-		reg = <0x00000008 0x80000000 0x80000000>;
-	};
-
-	memory@900000000 {
-		device_type = "memory";
-		reg = <0x00000009 0x00000000 0x0>;
-	};
-
 	chosen {
 		bootargs = "console=ram root=/dev/ram0 clk_ignore_unused bcm_setup=0xffffff80f8e00000 androidboot.hardware=samsungexynos9810 androidboot.selinux=permissive androidboot.debug_level=0x4948 ecd_setup=disable pmic_info=0x3 ccic_info=0x1 firmware_class.path=/vendor/firmware reserve-fimc=0xffffff80fa000000";
 		linux,initrd-start = <0x82000000>;
@@ -1009,8 +994,6 @@
 					regulator-name = "VDD_EXT_1P3_PB02";
 					regulator-min-microvolt = <1300000>;
 					regulator-max-microvolt = <1300000>;
-					regulator-always-on;
-					regulator-boot-on;
 				};
 
 				_buckboost_reg: s2mpb02-bb {
@@ -1226,9 +1209,11 @@
 			pinctrl-0 = <&attn_irq>;
 			pinctrl-1 = <&attn_input>;
 			pressure-sensor = "Y";
+			sync-reportrate-120 = "Y";
 			sec,irq_gpio = <&gpa1 0 0>;
 			sec,irq_type = <8200>;
 			sec,max_coords = <4096 4096>;
+			sec,area-size = <133 266 341>; /* indicator: 24dp navigator:48dp edge:60px dpi=320 */
 			sec,mis_cal_check = <1>;
 			sec,regulator_dvdd = "tsp_io";
 			sec,regulator_avdd = "tsp_avdd";
@@ -1239,6 +1224,7 @@
 			sec,project_name = "Star2", "G965";
 			sec,firmware_name = "tsp_sec/y761_star2.fw", "tsp_sec/y761_star2.fw";
 			support_dex_mode;
+			sec,factory_item_version = <2>;
 		};
 	};
 
@@ -2431,6 +2417,7 @@
 
 	serial_1: uart@10840000 {
 		samsung,uart-logging;
+		samsung,uart-panic-log;
 		status = "okay";
 	};
 
@@ -2589,9 +2576,9 @@
 				cl1 {
 					qos,label="BIG";
 					qos,delay_time=<8>;
-					qos,table_size=<12>;
-					qos,table=<2002000 1924000 1794000 1690000 1586000 1469000 1261000 1170000
-						1066000 962000 858000 741000>;
+					qos,table_size=<11>;
+					qos,table=<1794000 1690000 1586000 1469000 1261000 1170000 1066000 962000 858000
+						741000 650000>;
 				};
 
 				mif {
@@ -2632,7 +2619,7 @@
 			cond,det_conn_gpios = <&gpa2 5 0			/* UB_CON_DET */
 								   &gpm6 0 0           /* SUB_DET */
 								   &gpm7 0 0>;         /* CAM_DET */
-			cond,name="sub_cond","ub_cond","cam_cond";
+			cond,name="ub_cond","sub_cond","cam_cond";
 			cond,det_conn_irq_type = <3>, /* UB_CON_DETECT BOTH EDGE*/
 								<3>, /* SUB_DETECT BOTH EDGE*/
 								<3>; /* CAM_DETECT BOTH EDGE*/
@@ -2641,9 +2628,9 @@
 		};
 
 		bootc {
-			bootc,time_spec_user = <40000>; /* user binary user build */
-			bootc,time_spec_eng = <90000>; /* user binary eng build */
-			bootc,time_spec_fac = <30000>; /* factory binary */
+			bootc,time_spec_user = <100000>; /* user binary user build */
+			bootc,time_spec_eng = <100000>; /* user binary eng build */
+			bootc,time_spec_fac = <100000>; /* factory binary */
 		};
 	};
 
@@ -2692,7 +2679,7 @@
 			net_boost,table= <
 				100 0 0 1053000 0 845000 0 0 0 0
 				150 0 0 1248000 0 1014000 0 0 0 0
-				200 12610000 0 1690000 0 1794000 0 0 0 0
+				200 1261000 0 1690000 0 1794000 0 0 0 0
 				>;
 		};
 		boot_device@2 {

@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: siutils.h 729061 2017-10-30 08:41:27Z $
+ * $Id: siutils.h 748669 2018-02-24 00:53:11Z $
  */
 
 #ifndef	_siutils_h_
@@ -94,6 +94,8 @@ struct si_pub {
 #ifdef BCM_BACKPLANE_TIMEOUT
 	si_axi_error_info_t * err_info;
 #endif /* BCM_BACKPLANE_TIMEOUT */
+
+	bool	_multibp_enable;
 };
 
 /* for HIGH_ONLY driver, the si_t must be writable to allow states sync from BMAC to HIGH driver
@@ -773,6 +775,17 @@ extern uint32 si_srpwr_domain(si_t *sih);
 #else
 	#define SRPWR_ENAB()            (0)
 #endif /* BCMSRPWR */
+
+/*
+ * Multi-BackPlane architecture.  Each can power up/down independently.
+ *   Common backplane: shared between BT and WL
+ *      ChipC, PCIe, GCI, PMU, SRs
+ *      HW powers up as needed
+ *   WL BackPlane (WLBP):
+ *      ARM, TCM, Main, Aux
+ *      Host needs to power up
+ */
+#define MULTIBP_ENAB(sih)      ((sih) && (sih)->_multibp_enable)
 
 uint32 si_enum_base(uint devid);
 

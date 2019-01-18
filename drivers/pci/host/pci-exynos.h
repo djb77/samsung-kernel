@@ -90,6 +90,7 @@ struct exynos_pcie {
 	bool			use_sysmmu;
 	bool			use_ia;
 	spinlock_t		conf_lock;
+	spinlock_t		reg_lock;	
 	struct workqueue_struct	*pcie_wq;
 	struct exynos_pcie_clks	clks;
 	struct pcie_port	pp;
@@ -332,6 +333,12 @@ struct exynos_pcie {
 /* PCIe PHY definitions */
 #define PHY_PLL_STATE			0xBC
 #define CHK_PHY_PLL_LOCK		0x3
+
+
+/* For Set NCLK OFF to avoid system hang */
+#define EXYNOS_PCIE_MAX_NAME_LEN	10
+#define PCIE_L12ERR_CTRL		0x2F0
+#define NCLK_OFF_OFFSET			0x2
 
 void exynos_pcie_phy_init(struct pcie_port *pp);
 extern int sec_argos_register_notifier(struct notifier_block *n, char *label);

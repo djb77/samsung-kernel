@@ -510,6 +510,9 @@ int etspi_io_nvm_write(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 		.len = 2,
 	};
 
+	if (ioc->len > (MAX_NVM_LEN + 1))
+		return -EINVAL;
+
 	spi_message_init(&m);
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);

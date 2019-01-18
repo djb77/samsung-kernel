@@ -878,7 +878,7 @@ int aod_drv_probe(struct panel_device *panel, struct aod_tune *aod_tune)
 	aod->reset_flag = 1;
 	props->first_clk_update = 1;
 
-	props->self_mask_en = 1;
+	props->self_mask_en = aod_tune->self_mask_en;
 	props->self_reset_cnt = 0;
 
 	mutex_init(&aod->lock);

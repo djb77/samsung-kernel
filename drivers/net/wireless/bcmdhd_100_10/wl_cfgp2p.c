@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgp2p.c 737834 2017-12-22 13:23:46Z $
+ * $Id: wl_cfgp2p.c 783638 2018-10-08 02:24:49Z $
  *
  */
 #include <typedefs.h>
@@ -149,7 +149,7 @@ bool wl_cfgp2p_find_gas_subtype(u8 subtype, u8* data, u32 len)
 	u16 id, flen;
 
 	/* Skipped first ANQP Element, if frame has anqp elemnt */
-	ie = bcm_parse_tlvs(ie, (int)len, DOT11_MNG_ADVERTISEMENT_ID);
+	ie = bcm_parse_tlvs(ie, len, DOT11_MNG_ADVERTISEMENT_ID);
 
 	if (ie == NULL)
 		return false;
@@ -1150,7 +1150,7 @@ wl_cfgp2p_find_wpaie(const u8 *parse, u32 len)
 {
 	const bcm_tlv_t *ie;
 
-	while ((ie = bcm_parse_tlvs(parse, (u32)len, DOT11_MNG_VS_ID))) {
+	while ((ie = bcm_parse_tlvs(parse, len, DOT11_MNG_VS_ID))) {
 		if (wl_cfgp2p_is_wpa_ie((const u8*)ie, (u8 const **)&parse, &len)) {
 			return (const wpa_ie_fixed_t *)ie;
 		}
@@ -1163,7 +1163,7 @@ wl_cfgp2p_find_wpsie(const u8 *parse, u32 len)
 {
 	const bcm_tlv_t *ie;
 
-	while ((ie = bcm_parse_tlvs(parse, (u32)len, DOT11_MNG_VS_ID))) {
+	while ((ie = bcm_parse_tlvs(parse, len, DOT11_MNG_VS_ID))) {
 		if (wl_cfgp2p_is_wps_ie((const u8*)ie, (u8 const **)&parse, &len)) {
 			return (const wpa_ie_fixed_t *)ie;
 		}
@@ -1176,7 +1176,7 @@ wl_cfgp2p_find_p2pie(const u8 *parse, u32 len)
 {
 	bcm_tlv_t *ie;
 
-	while ((ie = bcm_parse_tlvs(parse, (int)len, DOT11_MNG_VS_ID))) {
+	while ((ie = bcm_parse_tlvs(parse, len, DOT11_MNG_VS_ID))) {
 		if (wl_cfgp2p_is_p2p_ie((const uint8*)ie, (u8 const **)&parse, &len)) {
 			return (wifi_p2p_ie_t *)ie;
 		}
@@ -1189,7 +1189,7 @@ wl_cfgp2p_find_wfdie(const u8 *parse, u32 len)
 {
 	const bcm_tlv_t *ie;
 
-	while ((ie = bcm_parse_tlvs(parse, (int)len, DOT11_MNG_VS_ID))) {
+	while ((ie = bcm_parse_tlvs(parse, len, DOT11_MNG_VS_ID))) {
 		if (wl_cfgp2p_is_wfd_ie((const uint8*)ie, (u8 const **)&parse, &len)) {
 			return (const wifi_wfd_ie_t *)ie;
 		}
@@ -1629,7 +1629,7 @@ wl_cfgp2p_tx_action_frame(struct bcm_cfg80211 *cfg, struct net_device *dev,
 {
 	s32 ret = BCME_OK;
 	s32 evt_ret = BCME_OK;
-	s32 timeout = 0;
+	long timeout = 0;
 	wl_eventmsg_buf_t buf;
 
 	CFGP2P_DBG(("\n"));
@@ -2159,7 +2159,7 @@ wl_cfgp2p_find_attrib_in_all_p2p_Ies(const u8 *parse, u32 len, u32 attrib)
 	const u8* pAttrib;
 
 	CFGP2P_DBG(("Starting parsing parse %p attrib %d remaining len %d ", parse, attrib, len));
-	while ((ie = bcm_parse_tlvs(parse, (int)len, DOT11_MNG_VS_ID))) {
+	while ((ie = bcm_parse_tlvs(parse, len, DOT11_MNG_VS_ID))) {
 		if (wl_cfgp2p_is_p2p_ie((const uint8*)ie, (u8 const **)&parse, &len) == TRUE) {
 			/* Have the P2p ie. Now check for attribute */
 			if ((pAttrib = wl_cfgp2p_retreive_p2pattrib(ie, attrib)) != NULL) {

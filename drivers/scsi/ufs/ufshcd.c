@@ -229,15 +229,25 @@ static struct ufs_pm_lvl_states ufs_pm_lvl_states[] = {
 };
 
 #if defined(CONFIG_UFS_DATA_LOG)
+#if defined(CONFIG_UFS_DATA_LOG_MAGIC_CODE)
 #define	UFS_DATA_BUF_SIZE	8
-#define	UFS_DATA_LOG_MAX	512
+#endif
+#define UFS_CMDQ_DEPTH_MAX  32
+#define	UFS_DATA_LOG_MAX	1024
+
+static int queuing_req[UFS_CMDQ_DEPTH_MAX];
 
 struct ufs_data_log_summary {
+	u64 start_time;
 	u64	end_time;
 	sector_t	sector;
-	u64	*virt_addr;
 	int	segments_cnt;
+	int done;
+#if defined(CONFIG_UFS_DATA_LOG_MAGIC_CODE)
+	u64 *virt_addr;
 	char	datbuf[UFS_DATA_BUF_SIZE];
+#endif
+
 };
 
 static struct ufs_data_log_summary ufs_data_log[UFS_DATA_LOG_MAX] __cacheline_aligned;
@@ -281,8 +291,8 @@ static int ufshcd_send_request_sense(struct ufs_hba *hba,
                                struct scsi_device *sdp);
 
 #if defined(SEC_UFS_ERROR_COUNT)
-#include <scsi/scsi_proto.h> 
-#define MAX_U8_VALUE	0xff 
+#include <scsi/scsi_proto.h>
+#define MAX_U8_VALUE	0xff
 
 static void SEC_ufs_operation_check(struct ufs_hba *hba, u32 command)
 {
@@ -1593,9 +1603,13 @@ static int ufshcd_map_sg(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	int sector_offset = 0;
 
 #if defined(CONFIG_UFS_DATA_LOG)
-	void  *virt_sg_addr;
-	u8 opcode;
+	unsigned int dump_index;
+	int cpu = raw_smp_processor_id();
+	int id = 0;
+
+#if defined(CONFIG_UFS_DATA_LOG_MAGIC_CODE)
 	unsigned long  magicword[1];
+	void  *virt_sg_addr;
 	/*
 	 * 0x1F5E3A7069245CBE
 	 * 0x4977C72608FCE51F
@@ -1603,25 +1617,48 @@ static int ufshcd_map_sg(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	 * 0x05D3D11A26CF3142
 	 */
 	magicword[0] = 0x1F5E3A7069245CBE;
-#if 0
-	magicword[1] = 0x4977C72608FCE51F;
-	magicword[2] = 0x524E74A9005F0D1B;
-	magicword[3] = 0x05D3D11A26CF3142;
 #endif
 #endif
+
 	cmd = lrbp->cmd;
+
 #if defined(CONFIG_UFS_DATA_LOG)
-	opcode = (u8)(*lrbp->cmd->cmnd);
-	if (opcode == READ_10) {
-		sg_segments = scsi_sg_count(cmd);
-		scsi_for_each_sg(cmd, sg, sg_segments, i) {
-		/*
-		 * Write magicword each memory location pointed  by SG element
-		 */
-			virt_sg_addr = sg_virt(sg);
-			memcpy(virt_sg_addr, magicword, 8);
+	if (cmd->request && hba->host->ufs_sys_log_en){
+		/*condition of data log*/
+		/*read request of system area for debugging dm verity issue*/
+		if (rq_data_dir(cmd->request) == READ &&
+			cmd->request->__sector >= hba->host->ufs_system_start &&
+			cmd->request->__sector < hba->host->ufs_system_end) {
+
+			for (id = 0; id < UFS_DATA_LOG_MAX; id++){
+				dump_index = atomic_inc_return(&hba->log_count) & (UFS_DATA_LOG_MAX - 1);
+				if (ufs_data_log[dump_index].done != 0xA)
+					break;
+			}
+			
+			if (id == UFS_DATA_LOG_MAX)
+				queuing_req[cmd->request->tag] = UFS_DATA_LOG_MAX - 1;
+			else
+				queuing_req[cmd->request->tag] = dump_index;
+
+			ufs_data_log[dump_index].done = 0xA;
+			ufs_data_log[dump_index].start_time = cpu_clock(cpu);
+			ufs_data_log[dump_index].end_time = 0;
+			ufs_data_log[dump_index].sector = cmd->request->__sector;
+
+#if defined(CONFIG_UFS_DATA_LOG_MAGIC_CODE)		
+			sg_segments = scsi_sg_count(cmd);
+			scsi_for_each_sg(cmd, sg, sg_segments, i) {
+				/*
+				 * Write magicword each memory location pointed  by SG element
+				 */
+				virt_sg_addr = sg_virt(sg);
+				ufs_data_log[dump_index].virt_addr = virt_sg_addr;
+				memcpy(virt_sg_addr, magicword, UFS_DATA_BUF_SIZE);
+			}
+#endif
+			}
 		}
-	}
 #endif
 
 	sg_segments = scsi_dma_map(cmd);
@@ -2988,7 +3025,8 @@ static int UFS_Toshiba_K2_query_fatal_mode(struct ufs_hba *hba)
 				__func__, result);
 	else {
 		hba->UFS_fatal_mode_done = true;
-		printk("[UFS_TEST] %s success fatal mode\n", __func__);
+		dev_err(hba->dev, "%s: Success to enter Toshiba K2 fatal mode. result = %d\n",
+				__func__, result);
 	}
 
 	return result;
@@ -4594,10 +4632,12 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba, int reason,
 	int index;
 	struct request *req;
 #if defined(CONFIG_UFS_DATA_LOG)
+#if defined(CONFIG_UFS_DATA_LOG_MAGIC_CODE)
 	struct scatterlist *sg;
 	int sg_segments;
-	int i;
-	u8 opcode;
+	unsigned long magicword_rb = 0;
+#endif
+	int i = 0;
 	int cpu = raw_smp_processor_id();
 	unsigned int dump_index;
 #endif
@@ -4616,24 +4656,35 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba, int reason,
 			result = ufshcd_transfer_rsp_status(hba, lrbp);
 
 #if defined(CONFIG_UFS_DATA_LOG)
-			opcode = (u8)(*lrbp->cmd->cmnd);
-			/*
-			 * only for UFS READ operation
-			 */
-			if (opcode == READ_10) {
-				sg_segments = scsi_sg_count(cmd);
-				scsi_for_each_sg(cmd, sg, sg_segments, i) {
-					/*
-					 * Attempt to SG element for check magic word.
-					 * If magic word should have been overwritten in read case,
-					 * memory location will not be updated.
-					 */
-					dump_index = atomic_inc_return(&hba->log_count) & (UFS_DATA_LOG_MAX - 1);
+			if (cmd->request && hba->host->ufs_sys_log_en){
+				/*condition of data log*/
+				if (rq_data_dir(cmd->request) == READ &&
+						cmd->request->__sector >= hba->host->ufs_system_start &&
+						cmd->request->__sector < hba->host->ufs_system_end) {
+					dump_index = queuing_req[cmd->request->tag];
+					queuing_req[cmd->request->tag] = 0;
 					ufs_data_log[dump_index].end_time = cpu_clock(cpu);
-					ufs_data_log[dump_index].sector = cmd->request->__sector;
-					ufs_data_log[dump_index].virt_addr = sg_virt(sg);
-					ufs_data_log[dump_index].segments_cnt = i;
-					memcpy(&ufs_data_log[dump_index].datbuf, sg_virt(sg), UFS_DATA_BUF_SIZE);
+					sg_segments = scsi_sg_count(cmd);
+					ufs_data_log[dump_index].segments_cnt = sg_segments;
+					ufs_data_log[dump_index].done = 0xF;
+
+#if defined(CONFIG_UFS_DATA_LOG_MAGIC_CODE)
+					scsi_for_each_sg(cmd, sg, sg_segments, i) {
+						/*
+						 * Attempt to SG element for check magic word.
+						 * If magic word should have been overwritten in read case,
+						 * memory location will not be updated.
+						 */
+						
+						ufs_data_log[dump_index].virt_addr = sg_virt(sg);
+						memcpy(&ufs_data_log[dump_index].datbuf, sg_virt(sg), UFS_DATA_BUF_SIZE);
+						memcpy(&magicword_rb, sg_virt(sg), UFS_DATA_BUF_SIZE);
+						if (magicword_rb == 0x1F5E3A7069245CBE) {
+							printk(KERN_ALERT "tag%d:sg[%d]:%p: page_link=%lx, offset=%d, length=%d\n",
+								index, i, sg, sg->page_link, sg->offset, sg->length);
+						}
+					}
+#endif
 				}
 			}
 #endif
@@ -7767,7 +7818,16 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	int ret;
 	enum uic_link_state old_link_state;
 	enum ufs_pm_level pm_lvl;
+	unsigned long flags;
 	bool gating_allowed = !ufshcd_can_fake_clkgating(hba);
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	if ((!hba->lrb_in_use) && (hba->clk_gating.active_reqs != 1)) {
+		dev_err(hba->dev, "%s: hba->clk_gating.active_reqs = %d\n",
+				__func__, hba->clk_gating.active_reqs);
+		hba->clk_gating.active_reqs = 1;
+	}
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
 	hba->pm_op_in_progress = 1;
 	if (ufshcd_is_system_pm(pm_op))
@@ -8323,7 +8383,6 @@ static struct attribute *ufs_attributes[] = {
 	&dev_attr_SEC_UFS_fatal_cnt.attr,
 	&dev_attr_SEC_UFS_utp_cnt.attr,
 	&dev_attr_SEC_UFS_query_cnt.attr,
-
 	&dev_attr_SEC_UFS_err_sum.attr,
 #endif
 	NULL

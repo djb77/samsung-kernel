@@ -20,6 +20,7 @@ struct sec_ts_data *ts_dup;
 static void sec_ts_reset_work(struct work_struct *work);
 #endif
 static void sec_ts_read_info_work(struct work_struct *work);
+static void sec_ts_print_info_work(struct work_struct *work);
 
 #ifdef USE_OPEN_CLOSE
 static int sec_ts_input_open(struct input_dev *dev);
@@ -119,7 +120,9 @@ static ssize_t secure_touch_enable_store(struct device *dev,
 			input_err(true, &ts->client->dev, "%s: failed to get pm_runtime\n", __func__);
 			return -EIO;
 		}
-
+#ifdef CONFIG_INPUT_WACOM
+		epen_disable_mode(1);
+#endif
 		reinit_completion(&ts->secure_powerdown);
 		reinit_completion(&ts->secure_interrupt);
 #if defined(CONFIG_TRUSTONIC_TRUSTED_UI) || defined(CONFIG_TRUSTONIC_TRUSTED_UI_QC)
@@ -152,6 +155,9 @@ static ssize_t secure_touch_enable_store(struct device *dev,
 		complete(&ts->st_irq_received);
 #endif
 
+#ifdef CONFIG_INPUT_WACOM
+		epen_disable_mode(0);
+#endif
 		input_info(true, &ts->client->dev, "%s: secure touch disable\n", __func__);
 
 		ret = sec_ts_release_tmode(ts);
@@ -286,6 +292,29 @@ static void secure_touch_stop(struct sec_ts_data *ts, bool stop)
 }
 #endif
 
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+void trustedui_mode_on(void)
+{
+	if (!tsp_info)
+		return;
+
+	sec_ts_unlocked_release_all_finger(tsp_info);
+#ifdef CONFIG_INPUT_WACOM
+	epen_disable_mode(1);
+#endif
+}
+
+void trustedui_mode_off(void)
+{
+	if (!tsp_info)
+		return;
+
+#ifdef CONFIG_INPUT_WACOM
+	epen_disable_mode(0);
+#endif
+}
+#endif
+
 int sec_ts_i2c_write(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
 {
 	u8 buf[I2C_WRITE_BUFFER_SIZE + 1];
@@ -361,7 +390,7 @@ int sec_ts_i2c_write(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
 #endif
 	}
 
-	if (ts->debug_flag & SEC_TS_DEBUG_PRINT_I2C_CMD) {
+	if (ts->debug_flag & SEC_TS_DEBUG_PRINT_I2C_WRITE_CMD) {
 		pr_info("sec_input:i2c_cmd: W: %02X | ", reg);
 		for (i = 0; i < len; i++)
 			pr_cont("%02X ", data[i]);
@@ -507,7 +536,7 @@ int sec_ts_i2c_read(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
 
 	}
 
-	if (ts->debug_flag & SEC_TS_DEBUG_PRINT_I2C_CMD) {
+	if (ts->debug_flag & SEC_TS_DEBUG_PRINT_I2C_READ_CMD) {
 		pr_info("sec_input:i2c_cmd: R: %02X | ", reg);
 		for (i = 0; i < len; i++)
 			pr_cont("%02X ", data[i]);
@@ -687,25 +716,28 @@ int sec_ts_wait_for_ready(struct sec_ts_data *ts, unsigned int ack)
 	int retry = 0;
 	u8 tBuff[SEC_TS_EVENT_BUFF_SIZE] = {0,};
 
-	while (sec_ts_i2c_read(ts, SEC_TS_READ_ONE_EVENT, tBuff, SEC_TS_EVENT_BUFF_SIZE) > 0) {
-		if (((tBuff[0] >> 2) & 0xF) == TYPE_STATUS_EVENT_INFO) {
-			if (tBuff[1] == ack) {
-				rc = 0;
-				break;
+	while (retry <= SEC_TS_WAIT_RETRY_CNT) {
+		if (gpio_get_value(ts->plat_data->irq_gpio) == 0) {
+			if (sec_ts_i2c_read(ts, SEC_TS_READ_ONE_EVENT, tBuff, SEC_TS_EVENT_BUFF_SIZE) > 0) {
+				if (((tBuff[0] >> 2) & 0xF) == TYPE_STATUS_EVENT_INFO) {
+					if (tBuff[1] == ack) {
+						rc = 0;
+						break;
+					}
+				} else if (((tBuff[0] >> 2) & 0xF) == TYPE_STATUS_EVENT_VENDOR_INFO) {
+					if (tBuff[1] == ack) {
+						rc = 0;
+						break;
+					}
+				}
 			}
-		} else if (((tBuff[0] >> 2) & 0xF) == TYPE_STATUS_EVENT_VENDOR_INFO) {
-			if (tBuff[1] == ack) {
-				rc = 0;
-				break;
-			}
-		}
-
-		if (retry++ > SEC_TS_WAIT_RETRY_CNT) {
-			input_err(true, &ts->client->dev, "%s: Time Over\n", __func__);
-			break;
 		}
 		sec_ts_delay(20);
+		retry++;
 	}
+
+	if (retry > SEC_TS_WAIT_RETRY_CNT)
+		input_err(true, &ts->client->dev, "%s: Time Over\n", __func__);
 
 	input_info(true, &ts->client->dev,
 			"%s: %02X, %02X, %02X, %02X, %02X, %02X, %02X, %02X [%d]\n",
@@ -811,13 +843,7 @@ void sec_ts_reinit(struct sec_ts_data *ts)
 
 		sec_ts_set_grip_type(ts, ONLY_EDGE_HANDLER);
 
-		if (ts->dex_mode) {
-			input_info(true, &ts->client->dev, "%s: set dex mode\n", __func__);
-			ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_DEX_MODE, &ts->dex_mode, 1);
-			if (ret < 0)
-				input_err(true, &ts->client->dev,
-						"%s: failed to set dex mode %x\n", __func__, ts->dex_mode);
-		}
+		sec_ts_set_external_noise_mode(ts, EXT_NOISE_MODE_MAX);
 
 		if (ts->brush_mode) {
 			input_info(true, &ts->client->dev, "%s: set brush mode\n", __func__);
@@ -839,6 +865,57 @@ void sec_ts_reinit(struct sec_ts_data *ts)
 	return;
 }
 
+void sec_ts_print_info(struct sec_ts_data *ts)
+{
+	ts->print_info_cnt_open++;
+	if(ts->print_info_cnt_open > 0xfff0){
+		ts->print_info_cnt_open = 0;
+	}
+	if(ts->touch_count == 0)
+		ts->print_info_cnt_release++;
+
+	ts->irq_gpio_status = gpio_get_value(ts->plat_data->irq_gpio);
+	input_info(true, &ts->client->dev,
+			"mode:%04X noise:%x iq:%d lp:(%x/%d) D%05X // v:%02X%02X cal:%02X(%02X)C%02XT%04X.%4s%s F%02X%02X // sp:%d e:%d id(%d,%d) // #%d %d\n",
+			ts->print_info_currnet_mode, ts->touch_noise_status, ts->irq_gpio_status,
+			ts->lowpower_mode, ts->pressure_caller_id, ts->defect_probability,
+			ts->plat_data->img_version_of_ic[2], ts->plat_data->img_version_of_ic[3],
+			ts->cal_status, ts->nv,
+			ts->tdata->nvdata.cal_count, ts->tdata->nvdata.tune_fix_ver,
+			ts->tdata->tclm_string[ts->tdata->nvdata.cal_position].f_name,
+			(ts->tdata->tclm_level == TCLM_LEVEL_LOCKDOWN) ? ".L" : " ",
+			ts->pressure_cal_base, ts->pressure_cal_delta,
+			ts->spen_mode_val, ts->evt_info, ts->tspid_val, ts->tspicid_val,
+			ts->print_info_cnt_open, ts->print_info_cnt_release);
+}
+
+/************************************************************
+*  720  * 1480 : <48 96 60> indicator: 24dp navigator:48dp edge:60px dpi=320
+* 1080  * 2220 :  4096 * 4096 : <133 266 341>  (approximately value)
+************************************************************/
+void location_detect(struct sec_ts_data *ts, char *loc, int x, int y)
+{
+	int i;
+	for (i = 0 ; i < 6 ; ++i){
+		loc[i] = 0;
+	}
+
+	if (x < ts->plat_data->area_edge)
+		strcat(loc, "E.");
+	else if (x < (ts->plat_data->max_x - ts->plat_data->area_edge))
+		strcat(loc, "C.");
+	else
+		strcat(loc, "e.");
+
+	if (y < ts->plat_data->area_indicator)
+		strcat(loc, "S");
+	else if (y < (ts->plat_data->max_y - ts->plat_data->area_navigation))
+		strcat(loc, "C");
+	else
+		strcat(loc, "N");
+}
+
+
 #define MAX_EVENT_COUNT 32
 static void sec_ts_read_event(struct sec_ts_data *ts)
 {
@@ -854,10 +931,14 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 	int curr_pos;
 	int remain_event_count = 0;
 	int pre_ttype = 0;
+	int pre_action = 0;
 	static bool error_report;
 	u8 force_strength = 1;
+	char location[6] = { 0, };
 
 	if (ts->power_status == SEC_TS_STATE_LPM) {
+		wake_lock_timeout(&ts->wakelock, msecs_to_jiffies(500));
+
 		/* waiting for blsp block resuming, if not occurs i2c error */
 		ret = wait_for_completion_interruptible_timeout(&ts->resume_done, msecs_to_jiffies(500));
 		if (ret == 0) {
@@ -944,6 +1025,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 					(p_event_status->status_id == SEC_TS_ACK_BOOT_COMPLETE) &&
 					(p_event_status->status_data_1 == 0x20)) {
 
+				ts->ic_reset_count++;
 				sec_ts_unlocked_release_all_finger(ts);
 
 				ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SENSE_ON, NULL, 0);
@@ -977,6 +1059,20 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 			}
 
 			if ((p_event_status->stype == TYPE_STATUS_EVENT_VENDOR_INFO) &&
+					(p_event_status->status_id == SEC_TS_VENDOR_STATE_CHANGED)) {
+
+				ts->print_info_currnet_mode = ((event_buff[2] & 0xFF) << 8) + (event_buff[3] & 0xFF);
+				
+				if (p_event_status->status_data_1 == 2 && p_event_status->status_data_2 == 2){
+					input_info(true, &ts->client->dev, "%s: Normal changed\n", __func__);
+				} else if (p_event_status->status_data_1 == 5 && p_event_status->status_data_2 == 2){
+					input_info(true, &ts->client->dev, "%s: lp changed\n", __func__);
+				} else if (p_event_status->status_data_1 == 6){
+					input_info(true, &ts->client->dev, "%s: sleep changed\n", __func__);
+				}
+			}
+
+			if ((p_event_status->stype == TYPE_STATUS_EVENT_VENDOR_INFO) &&
 					(p_event_status->status_id == SEC_TS_VENDOR_ACK_NOISE_STATUS_NOTI)) {
 
 				ts->touch_noise_status = !!p_event_status->status_data_1;
@@ -991,7 +1087,11 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 		case SEC_TS_COORDINATE_EVENT:
 			if (ts->power_status != SEC_TS_STATE_POWER_ON) {
-				input_err(true, &ts->client->dev, "%s: device is closed\n", __func__);
+				input_err(true, &ts->client->dev,
+						"%s: device is closed %x %x %x %x %x %x %x %x\n", __func__,
+						event_buff[0], event_buff[1], event_buff[2],
+						event_buff[3], event_buff[4], event_buff[5],
+						event_buff[6], event_buff[7]);
 				if (!error_report) {
 					error_report = true;
 #ifdef CONFIG_SEC_ABC
@@ -1006,9 +1106,16 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 			t_id = (p_event_coord->tid - 1);
 
+#ifdef CONFIG_EPEN_WACOM_W9018
+			if (ts->spen_mode_val == SPEN_ENABLE_MODE) {
+				input_err(true, &ts->client->dev, "%s: COORDINATE_EVENT[%d] in spen_mode(1)\n",
+						__func__, t_id);
+			}
+#endif
 			if (t_id < MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT) {
 				pre_ttype = ts->coord[t_id].ttype;
 				ts->coord[t_id].id = t_id;
+				pre_action = ts->coord[t_id].action;
 				ts->coord[t_id].action = p_event_coord->tchsta;
 				ts->coord[t_id].x = (p_event_coord->x_11_4 << 4) | (p_event_coord->x_3_0);
 				ts->coord[t_id].y = (p_event_coord->y_11_4 << 4) | (p_event_coord->y_3_0);
@@ -1062,11 +1169,6 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 						s16 max_force_p = 0;
 						u8 rbuf[2] = {0, };
 
-						do_gettimeofday(&ts->time_released[t_id]);
-
-						if (ts->time_longest < (ts->time_released[t_id].tv_sec - ts->time_pressed[t_id].tv_sec))
-							ts->time_longest = (ts->time_released[t_id].tv_sec - ts->time_pressed[t_id].tv_sec);
-
 						ret = sec_ts_i2c_read(ts, SEC_TS_READ_FORCE_SIG_MAX_VAL, rbuf, 2);
 						if (ret < 0)
 							input_err(true, &ts->client->dev,
@@ -1086,41 +1188,29 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 							input_report_key(ts->input_dev, BTN_TOUCH, 0);
 							input_report_key(ts->input_dev, BTN_TOOL_FINGER, 0);
 							ts->check_multi = 0;
+							ts->print_info_cnt_release = 0;
 						}
 
+						location_detect(ts, location, ts->coord[t_id].x, ts->coord[t_id].y);
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 						input_info(true, &ts->client->dev,
-								"%s[R] tID:%d mc:%d tc:%d lx:%d ly:%d f:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d noise:%x lp:(%x/%d) C%02XT01%02X.%4s%s F%02X%02X D%05X\n",
-								ts->dex_name,
-								t_id, ts->coord[t_id].mcount, ts->touch_count,
+								"[R] tID:%d p:%s dd:%d,%d mc:%d tc:%d lx:%d ly:%d f:%d p:%d noise:%x\n",
+								t_id, location,
+								ts->coord[t_id].x - ts->coord[t_id].p_x,
+								ts->coord[t_id].y - ts->coord[t_id].p_y,
+								ts->coord[t_id].mcount, ts->touch_count,
 								ts->coord[t_id].x, ts->coord[t_id].y, max_force_p,
-								ts->plat_data->img_version_of_ic[2],
-								ts->plat_data->img_version_of_ic[3],
-								ts->cal_status, ts->nv, ts->tspid_val,
-								ts->tspicid_val, ts->coord[t_id].palm_count,
-								ts->touch_noise_status, ts->lowpower_mode,
-								ts->pressure_caller_id,
-								ts->tdata->cal_count, ts->tdata->tune_fix_ver,
-								ts->tdata->tclm_string[ts->tdata->cal_position].f_name,
-								(ts->tdata->tclm_level == TCLM_LEVEL_LOCKDOWN) ? ".L" : " ",
-								ts->pressure_cal_base, ts->pressure_cal_delta,
-								ts->defect_probability);
+								ts->coord[t_id].palm_count,
+								ts->touch_noise_status);
 #else
 						input_info(true, &ts->client->dev,
-								"%s[R] tID:%d mc:%d tc:%d f:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d noise:%x lp:(%x/%d) C%02XT01%02X.%4s%s F%02X%02X D%05X\n",
-								ts->dex_name,
-								t_id, ts->coord[t_id].mcount, ts->touch_count,
-								max_force_p, ts->plat_data->img_version_of_ic[2],
-								ts->plat_data->img_version_of_ic[3],
-								ts->cal_status, ts->nv, ts->tspid_val,
-								ts->tspicid_val, ts->coord[t_id].palm_count,
-								ts->touch_noise_status, ts->lowpower_mode,
-								ts->pressure_caller_id,
-								ts->tdata->cal_count, ts->tdata->tune_fix_ver,
-								ts->tdata->tclm_string[ts->tdata->cal_position].f_name,
-								(ts->tdata->tclm_level == TCLM_LEVEL_LOCKDOWN) ? ".L" : " ",
-								ts->pressure_cal_base, ts->pressure_cal_delta,
-								ts->defect_probability);
+								"[R] tID:%d p:%s dd:%d,%d mc:%d tc:%d f:%d p:%d noise:%x\n",
+								t_id, location,
+								ts->coord[t_id].x - ts->coord[t_id].p_x,
+								ts->coord[t_id].y - ts->coord[t_id].p_y,
+								ts->coord[t_id].mcount, ts->touch_count,
+								max_force_p, ts->coord[t_id].palm_count,
+								ts->touch_noise_status);
 #endif
 						ts->coord[t_id].action = SEC_TS_COORDINATE_ACTION_NONE;
 						ts->coord[t_id].mcount = 0;
@@ -1128,14 +1218,8 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 
 					} else if (ts->coord[t_id].action == SEC_TS_COORDINATE_ACTION_PRESS) {
-						do_gettimeofday(&ts->time_pressed[t_id]);
-
 						ts->touch_count++;
 						ts->all_finger_count++;
-
-						ts->max_z_value = max((unsigned int)ts->coord[t_id].z, ts->max_z_value);
-						ts->min_z_value = min((unsigned int)ts->coord[t_id].z, ts->min_z_value);
-						ts->sum_z_value += (unsigned int)ts->coord[t_id].z;
 
 						input_mt_slot(ts->input_dev, t_id);
 						input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 1);
@@ -1162,24 +1246,47 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 							ts->check_multi = 1;
 							ts->multi_count++;
 						}
+						location_detect(ts, location, ts->coord[t_id].x, ts->coord[t_id].y);
+
+						ts->coord[t_id].p_x = ts->coord[t_id].x;
+						ts->coord[t_id].p_y = ts->coord[t_id].y;
 
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 						input_info(true, &ts->client->dev,
-								"%s[P] tID:%d x:%d y:%d z:%d major:%d minor:%d tc:%d type:%X noise:%x\n",
-								ts->dex_name, t_id, ts->coord[t_id].x,
-								ts->coord[t_id].y, ts->coord[t_id].z,
+								"[P] tID:%d.%d x:%d y:%d z:%d major:%d minor:%d p:%s tc:%d type:%X noise:%x,%d\n",
+								t_id, (ts->input_dev->mt->trkid - 1) & TRKID_MAX,
+								ts->coord[t_id].x, ts->coord[t_id].y, ts->coord[t_id].z,
 								ts->coord[t_id].major, ts->coord[t_id].minor,
-								ts->touch_count,
-								ts->coord[t_id].ttype, ts->touch_noise_status);
+								location, ts->touch_count,
+								ts->coord[t_id].ttype,
+								ts->touch_noise_status, ts->external_noise_mode);
 #else
 						input_info(true, &ts->client->dev,
-								"%s[P] tID:%d z:%d major:%d minor:%d tc:%d type:%X noise:%x\n",
-								ts->dex_name,
-								t_id, ts->coord[t_id].z, ts->coord[t_id].major,
-								ts->coord[t_id].minor, ts->touch_count,
-								ts->coord[t_id].ttype, ts->touch_noise_status);
+								"[P] tID:%d.%d z:%d major:%d minor:%d p:%s tc:%d type:%X noise:%x,%d\n",
+								t_id, (ts->input_dev->mt->trkid - 1) & TRKID_MAX,
+								ts->coord[t_id].z, ts->coord[t_id].major,
+								ts->coord[t_id].minor, location, ts->touch_count,
+								ts->coord[t_id].ttype,
+								ts->touch_noise_status, ts->external_noise_mode);
 #endif
 					} else if (ts->coord[t_id].action == SEC_TS_COORDINATE_ACTION_MOVE) {
+						if (pre_action == SEC_TS_COORDINATE_ACTION_NONE || pre_action == SEC_TS_COORDINATE_ACTION_RELEASE){
+							location_detect(ts, location, ts->coord[t_id].x, ts->coord[t_id].y);
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+							input_info(true, &ts->client->dev,
+									"[M] tID:%d x:%d y:%d z:%d major:%d minor:%d p:%s tc:%d type:%X noise:%x\n",
+									t_id, ts->coord[t_id].x, ts->coord[t_id].y, ts->coord[t_id].z,
+									ts->coord[t_id].major, ts->coord[t_id].minor, location, ts->touch_count,
+									ts->coord[t_id].ttype, ts->touch_noise_status);
+#else
+							input_info(true, &ts->client->dev,
+									"[M] tID:%d z:%d major:%d minor:%d p:%s tc:%d type:%X noise:%x\n",
+									t_id, ts->coord[t_id].z, 
+									ts->coord[t_id].major, ts->coord[t_id].minor, location, ts->touch_count,
+									ts->coord[t_id].ttype, ts->touch_noise_status);
+#endif
+						}
+
 						if ((ts->coord[t_id].ttype == SEC_TS_TOUCHTYPE_GLOVE) && !ts->touchkey_glove_mode_status) {
 							ts->touchkey_glove_mode_status = true;
 							input_report_switch(ts->input_dev, SW_GLOVE, 1);
@@ -1236,9 +1343,6 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 		case SEC_TS_GESTURE_EVENT:
 			p_gesture_status = (struct sec_ts_gesture_status *)event_buff;
 
-			if (ts->power_status == SEC_TS_STATE_LPM)
-				wake_lock_timeout(&ts->wakelock, msecs_to_jiffies(500));
-
 			switch (p_gesture_status->stype) {
 			case SEC_TS_GESTURE_CODE_SPAY:
 				ts->scrub_id = SPONGE_EVENT_TYPE_SPAY;
@@ -1261,6 +1365,21 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 #endif
 				input_report_key(ts->input_dev, KEY_BLACK_UI_GESTURE, 1);
 				ts->all_aod_tap_count++;
+				break;
+			case SEC_TS_GESTURE_CODE_SINGLE_TAP:
+				ts->scrub_id = SPONGE_EVENT_TYPE_SINGLE_TAP;
+				ts->scrub_x = (p_gesture_status->gesture_data_1 << 4)
+							| (p_gesture_status->gesture_data_3 >> 4);
+				ts->scrub_y = (p_gesture_status->gesture_data_2 << 4)
+							| (p_gesture_status->gesture_data_3 & 0x0F);
+			
+#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
+				input_info(true, &ts->client->dev, "%s: SINGLE TAP: %d\n", __func__, ts->scrub_id);
+#else
+				input_info(true, &ts->client->dev, "%s: SINGLE TAP: %d, %d, %d\n",
+						__func__, ts->scrub_id, ts->scrub_x, ts->scrub_y);
+#endif
+				input_report_key(ts->input_dev, KEY_BLACK_UI_GESTURE, 1);
 				break;
 			case SEC_TS_GESTURE_CODE_FORCE:
 				if (ts->power_status == SEC_TS_STATE_POWER_ON) {
@@ -1347,6 +1466,7 @@ static irqreturn_t sec_ts_irq_thread(int irq, void *ptr)
 
 	mutex_lock(&ts->eventlock);
 
+	ts->irq_unhandled = ts->irq_reset = 0;
 	sec_ts_read_event(ts);
 
 	mutex_unlock(&ts->eventlock);
@@ -1608,6 +1728,9 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 #if defined(CONFIG_EXYNOS_DECON_FB)
 	int connected;
 #endif
+	u32 px_zone[3] = { 0 };
+	bool is_prev_panel = false;
+	int index = 0;
 
 	pdata->tsp_icid = of_get_named_gpio(np, "sec,tsp-icid_gpio", 0);
 	if (gpio_is_valid(pdata->tsp_icid)) {
@@ -1739,6 +1862,15 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	if (of_property_read_string(np, "pressure-sensor", &pdata->support_pressure) < 0)
 		input_err(true, dev, "%s: Failed to get pressure-sensor property\n", __func__);
 
+	pdata->sync_reportrate_120 = of_property_read_bool(np, "sync-reportrate-120");
+
+	pdata->force_sensor_version_gpio = of_get_named_gpio(np, "sec,force_sensor_ch_gpio", 0);
+	if (gpio_is_valid(pdata->force_sensor_version_gpio)) {
+		input_info(true, dev, "%s: force_sensor_version : %d\n", __func__, gpio_get_value(pdata->force_sensor_version_gpio));
+	} else {
+		input_err(true, dev, "%s: Failed to get force_sensor_ch_gpio gpio\n", __func__);
+	}
+
 	if (of_property_read_u32(np, "sec,bringup", &pdata->bringup) < 0)
 		pdata->bringup = 0;
 
@@ -1749,21 +1881,91 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	pdata->support_sidegesture = of_property_read_bool(np, "sec,support_sidegesture");
 	pdata->support_dex = of_property_read_bool(np, "support_dex_mode");
 
+	if (of_property_read_u32_array(np, "sec,area-size", px_zone, 3)){
+		input_info(true, &client->dev, "Failed to get zone's size\n");
+		pdata->area_indicator = 48;
+		pdata->area_navigation = 96;
+		pdata->area_edge = 60;
+	} else {
+		pdata->area_indicator = px_zone[0];
+		pdata->area_navigation = px_zone[1];
+		pdata->area_edge = px_zone[2];
+	}
+	input_info(true, &client->dev, "%s : zone's size - indicator:%d, navigation:%d, edge:%d\n",
+		__func__, pdata->area_indicator, pdata->area_navigation ,pdata->area_edge);
+
+	if (of_property_read_u32(np, "sec,factory_item_version", &pdata->item_version) < 0)
+		pdata->item_version = 0;
+
+	np = of_find_all_nodes(NULL);
+	if (of_property_read_u32(np, "model_info-hw_rev", &pdata->hw_rev) < 0)
+		input_err(true, &client->dev, "%s: Failed to get model_info-hw_rev property\n", __func__);
+
+	/* ------------------- using for prev panel -------------------
+	 * delete zigzag pattern and more thin (0.6T -> 0.5T) for crown
+	 */
+	np = dev->of_node;
+	if (of_property_read_u32(np, "sec,support_hw_rev", &pdata->support_hw_rev) < 0)
+		input_err(true, dev, "%s: Failed to get support_hw_rev property\n", __func__);
+
+	if (of_property_read_u32_array(np, "sec,tclm_level", pdata->tclm_levels, 3) < 0) {
+		memset(pdata->tclm_levels, 0x00, sizeof(int) * 3);
+		input_err(true, dev, "%s: Failed to get tclm_level property\n", __func__);
+	}
+
+	if (of_property_read_u32_array(np, "sec,afe_base", pdata->afe_bases, 3) < 0) {
+		memset(pdata->afe_bases, 0x00, sizeof(int) * 3);
+		input_err(true, dev, "%s: Failed to get afe_base property\n", __func__);
+	}
+
+	/* If value of 0xDA cmd's D5 and D4 is '0x01', it is new panel which delete zigzag pattern */
+	if (((lcdtype >> 20) & 0x3) != 0x01) {
+		input_info(true, &client->dev, "%s: used prev panel(0x%02x, 0x%02x)\n",
+				__func__, pdata->support_hw_rev, pdata->hw_rev);
+		is_prev_panel = true;
+		index = 2;
+	} else {
+		/* If value of 0xDC cmd's D3 ~ D0 less than '0x07', it is thick panel */
+		if ((lcdtype & 0x0F) < 0x07) {
+			input_info(true, &client->dev, "%s: used prev panel(0x%02x, 0x%02x)\n",
+					__func__, pdata->support_hw_rev, pdata->hw_rev);
+			is_prev_panel = true;
+			index = 1;
+		}
+	}
+
+	of_property_read_string_index(np, "sec,firmware_name", index, &pdata->firmware_name);
+
+	pdata->tclm_levels[3] = pdata->tclm_levels[index];
+	pdata->afe_bases[3] = pdata->afe_bases[index];
+
+	if (pdata->hw_rev && pdata->support_hw_rev) {
+		if (is_prev_panel && (pdata->support_hw_rev < pdata->hw_rev)) {
+			pdata->bringup = 2;
+			input_info(true, &client->dev, "%s: do not support fw update for prev panel(0x%02x, 0x%02x)\n",
+					__func__, pdata->support_hw_rev, pdata->hw_rev);
+		}
+	}
+
+	/* ------------------- using for prev panel ------------------- */
+
 #ifdef CONFIG_SEC_FACTORY
 	pdata->support_mt_pressure = true;
 #endif
 
-	input_err(true, &client->dev, "%s: i2c buffer limit: %d, lcd_id:%06X, bringup:%d, FW:%s(%d), id:%d,%d, mis_cal:%d dex:%d, gesture:%d pressure:%s\n",
-		__func__, pdata->i2c_burstmax, lcdtype, pdata->bringup, pdata->firmware_name,
+	input_err(true, &client->dev, "%s: i2c buffer limit: %d, lcd_id:%06X, bringup:%d, FW:%s(%d), id:%d,%d, mis_cal:%d dex:%d, gesture:%d pressure:%s max(%d/%d)\n",
+			__func__, pdata->i2c_burstmax, lcdtype, pdata->bringup, pdata->firmware_name,
 			count, pdata->tsp_id, pdata->tsp_icid, pdata->mis_cal_check,
-			pdata->support_dex, pdata->support_sidegesture, pdata->support_pressure);
+			pdata->support_dex, pdata->support_sidegesture, pdata->support_pressure,
+			pdata->max_x, pdata->max_y);
 	return ret;
 }
 
-static void sec_tclm_parse_dt(struct i2c_client *client, struct sec_tclm_data *tdata)
+void sec_tclm_parse_dt(struct i2c_client *client, struct sec_tclm_data *tdata)
 {
 	struct device *dev = &client->dev;
 	struct device_node *np = dev->of_node;
+	struct sec_ts_plat_data *pdata = dev_get_platdata(dev);
 
 	if (of_property_read_u32(np, "sec,tclm_level", &tdata->tclm_level) < 0) {
 		tdata->tclm_level = 0;
@@ -1774,6 +1976,17 @@ static void sec_tclm_parse_dt(struct i2c_client *client, struct sec_tclm_data *t
 		tdata->afe_base = 0;
 		input_err(true, dev, "%s: Failed to get afe_base property\n", __func__);
 	}
+
+	tdata->support_tclm_test = of_property_read_bool(np, "support_tclm_test");
+
+	/* ------------------- using for prev panel -------------------
+	 * delete zigzag pattern and more thin (0.6T -> 0.5T) for crown
+	 */
+	if (pdata->tclm_levels[3] && pdata->afe_bases[3]) {
+		tdata->tclm_level = pdata->tclm_levels[3];
+		tdata->afe_base = pdata->afe_bases[3];
+	}
+	/* ------------------- using for prev panel ------------------- */
 
 	input_err(true, &client->dev, "%s: tclm_level %d, sec_afe_base %d\n", __func__, tdata->tclm_level, tdata->afe_base);
 
@@ -1806,11 +2019,6 @@ int sec_ts_read_information(struct sec_ts_data *ts)
 		return ret;
 	}
 
-	input_info(true, &ts->client->dev,
-			"%s: nTX:%X, nRX:%X, rY:%d, rX:%d\n",
-			__func__, data[8], data[9],
-			(data[2] << 8) | data[3], (data[0] << 8) | data[1]);
-
 	/* Set X,Y Resolution from IC information. */
 	if (((data[0] << 8) | data[1]) > 0)
 		ts->plat_data->max_x = ((data[0] << 8) | data[1]) - 1;
@@ -1818,8 +2026,18 @@ int sec_ts_read_information(struct sec_ts_data *ts)
 	if (((data[2] << 8) | data[3]) > 0)
 		ts->plat_data->max_y = ((data[2] << 8) | data[3]) - 1;
 
+	/* Set X,Y Display Resolution from IC information. */
+	ts->plat_data->dispay_x = ((data[4] << 8) | data[5]) - 1;
+	ts->plat_data->dispay_y = ((data[6] << 8) | data[7]) - 1;
+
 	ts->tx_count = data[8];
 	ts->rx_count = data[9];
+
+	input_info(true, &ts->client->dev,
+			"%s: nTX:%d, nRX:%d,  rX:%d, rY:%d, dX:%d, dY:%d\n",
+			__func__, ts->tx_count , ts->rx_count,
+			ts->plat_data->max_x, ts->plat_data->max_y,
+			ts->plat_data->dispay_x, ts->plat_data->dispay_y);
 
 	data[0] = 0;
 	ret = sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS, data, 1);
@@ -1928,6 +2146,7 @@ static void sec_ts_set_input_prop(struct sec_ts_data *ts, struct input_dev *dev,
 	set_bit(BTN_TOUCH, dev->keybit);
 	set_bit(BTN_TOOL_FINGER, dev->keybit);
 	set_bit(KEY_BLACK_UI_GESTURE, dev->keybit);
+	set_bit(KEY_INT_CANCEL, dev->keybit);
 #ifdef SEC_TS_SUPPORT_TOUCH_KEY
 	if (ts->plat_data->support_mskey) {
 		int i;
@@ -2043,19 +2262,21 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ts->tdata = tdata;
 	if (!ts->tdata)
 		goto err_null_tdata;
-	sec_tclm_initialize(ts->tdata);
+
 #ifdef TCLM_CONCEPT
+	sec_tclm_initialize(ts->tdata);
 	ts->tdata->client = ts->client;
 	ts->tdata->tclm_read = sec_tclm_data_read;
 	ts->tdata->tclm_write = sec_tclm_data_write;
 	ts->tdata->tclm_execute_force_calibration = sec_tclm_execute_force_calibration;
-	ts->tdata->irq = client->irq;
+	ts->tdata->tclm_parse_dt = sec_tclm_parse_dt;
 #endif
 
 #ifdef USE_POWER_RESET_WORK
 	INIT_DELAYED_WORK(&ts->reset_work, sec_ts_reset_work);
 #endif
 	INIT_DELAYED_WORK(&ts->work_read_info, sec_ts_read_info_work);
+	INIT_DELAYED_WORK(&ts->work_print_info, sec_ts_print_info_work);
 
 	i2c_set_clientdata(client, ts);
 
@@ -2064,6 +2285,9 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	if (gpio_is_valid(ts->plat_data->tsp_icid))
 		ts->tspicid_val = gpio_get_value(ts->plat_data->tsp_icid);
+
+	if (gpio_is_valid(ts->plat_data->force_sensor_version_gpio))
+		ts->force_sensor_version = gpio_get_value(ts->plat_data->force_sensor_version_gpio);
 
 	ts->input_dev = input_allocate_device();
 	if (!ts->input_dev) {
@@ -2085,10 +2309,6 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ts->sec_ts_i2c_write = sec_ts_i2c_write;
 	ts->sec_ts_i2c_read = sec_ts_i2c_read;
 	ts->sec_ts_read_sponge = sec_ts_read_from_sponge;
-
-	ts->max_z_value = 0;
-	ts->min_z_value = 0xFFFFFFFF;
-	ts->sum_z_value = 0;
 
 	mutex_init(&ts->lock);
 	mutex_init(&ts->device_mutex);
@@ -2190,6 +2410,15 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	if (ret < 0)
 		input_err(true, &ts->client->dev, "%s: Failed to send touch func_mode command", __func__);
 
+	if (gpio_is_valid(pdata->force_sensor_version_gpio)) {
+		input_info(true, &ts->client->dev, "%s: set force sensor version %d\n", __func__, ts->force_sensor_version);
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_GET_FORCE_SENSOR_VERSION, &ts->force_sensor_version, 1);
+		if (ret < 0) {
+			input_err(true, &ts->client->dev,
+					"%s: failed to set force sensor version\n", __func__);
+		}
+	}
+
 	/* Sense_on */
 	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SENSE_ON, NULL, 0);
 	if (ret < 0) {
@@ -2207,7 +2436,6 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		ts->input_dev_pad->name = "sec_touchpad";
 		sec_ts_set_input_prop(ts, ts->input_dev_pad, INPUT_PROP_POINTER);
 	}
-	ts->dex_name = "";
 
 	ts->input_dev->name = "sec_touchscreen";
 	sec_ts_set_input_prop(ts, ts->input_dev, INPUT_PROP_DIRECT);
@@ -2260,8 +2488,6 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		secure_touch_init(ts);
 #endif
 
-	device_init_wakeup(&client->dev, true);
-
 #ifdef SEC_TS_SUPPORT_SPONGELIB
 	sec_ts_check_custom_library(ts);
 	if (ts->use_sponge)
@@ -2269,7 +2495,12 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 #endif
 
+	device_init_wakeup(&client->dev, true);
+
 	schedule_delayed_work(&ts->work_read_info, msecs_to_jiffies(50));
+
+	/* check evt info */
+	sec_ts_read_evt_info(ts);
 
 #if defined(CONFIG_TOUCHSCREEN_DUMP_MODE)
 	dump_callbacks.inform_dump = dump_tsp_log;
@@ -2326,6 +2557,8 @@ error_allocate_mem:
 		gpio_free(pdata->tsp_id);
 	if (gpio_is_valid(pdata->tsp_icid))
 		gpio_free(pdata->tsp_icid);
+	if (gpio_is_valid(pdata->force_sensor_version_gpio))
+		gpio_free(pdata->force_sensor_version_gpio);
 
 error_allocate_tdata:
 error_allocate_pdata:
@@ -2347,6 +2580,7 @@ error_allocate_pdata:
 void sec_ts_unlocked_release_all_finger(struct sec_ts_data *ts)
 {
 	int i;
+	char location[6] = { 0, };
 
 	for (i = 0; i < MAX_SUPPORT_TOUCH_COUNT; i++) {
 		input_mt_slot(ts->input_dev, i);
@@ -2355,22 +2589,30 @@ void sec_ts_unlocked_release_all_finger(struct sec_ts_data *ts)
 		if ((ts->coord[i].action == SEC_TS_COORDINATE_ACTION_PRESS) ||
 				(ts->coord[i].action == SEC_TS_COORDINATE_ACTION_MOVE)) {
 
-			ts->coord[i].action = SEC_TS_COORDINATE_ACTION_RELEASE;
+
+			location_detect(ts, location, ts->coord[i].x, ts->coord[i].y);
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 			input_info(true, &ts->client->dev,
-					"%s: [RA] tID:%d mc:%d tc:%d v:%02X%02X, id(%d,%d) p:%d, D%05X, C%02XT%04X.%4s%s\n",
-					__func__, i, ts->coord[i].mcount, ts->touch_count,
-					ts->plat_data->img_version_of_ic[2],
-					ts->plat_data->img_version_of_ic[3],
-					ts->tspid_val, ts->tspicid_val,
-					ts->coord[i].palm_count, ts->defect_probability,
-					ts->tdata->cal_count, ts->tdata->tune_fix_ver,
-					ts->tdata->tclm_string[ts->tdata->cal_position].f_name,
-					(ts->tdata->tclm_level == TCLM_LEVEL_LOCKDOWN)?".L":" ");
+					"[RA] tID:%d p:%s dd:%d,%d mc:%d tc:%d lx:%d ly:%d p:%d noise:%x\n",
+					i, location,
+					ts->coord[i].x - ts->coord[i].p_x,
+					ts->coord[i].y - ts->coord[i].p_y,
+					ts->coord[i].mcount, ts->touch_count,
+					ts->coord[i].x, ts->coord[i].y,
+					ts->coord[i].palm_count,
+					ts->touch_noise_status);
+#else
+			input_info(true, &ts->client->dev,
+					"[RA] tID:%d p:%s dd:%d,%d mc:%d tc:%d p:%d noise:%x\n",
+					i, location,
+					ts->coord[i].x - ts->coord[i].p_x,
+					ts->coord[i].y - ts->coord[i].p_y,
+					ts->coord[i].mcount, ts->touch_count,
+					ts->coord[i].palm_count,
+					ts->touch_noise_status);
+#endif
 
-			do_gettimeofday(&ts->time_released[i]);
-
-			if (ts->time_longest < (ts->time_released[i].tv_sec - ts->time_pressed[i].tv_sec))
-				ts->time_longest = (ts->time_released[i].tv_sec - ts->time_pressed[i].tv_sec);
+			ts->coord[i].action = SEC_TS_COORDINATE_ACTION_RELEASE;
 		}
 
 		ts->coord[i].mcount = 0;
@@ -2401,6 +2643,7 @@ void sec_ts_unlocked_release_all_finger(struct sec_ts_data *ts)
 void sec_ts_locked_release_all_finger(struct sec_ts_data *ts)
 {
 	int i;
+	char location[6] = { 0, };
 
 	mutex_lock(&ts->eventlock);
 
@@ -2411,23 +2654,29 @@ void sec_ts_locked_release_all_finger(struct sec_ts_data *ts)
 		if ((ts->coord[i].action == SEC_TS_COORDINATE_ACTION_PRESS) ||
 				(ts->coord[i].action == SEC_TS_COORDINATE_ACTION_MOVE)) {
 
-			ts->coord[i].action = SEC_TS_COORDINATE_ACTION_RELEASE;
+			location_detect(ts, location, ts->coord[i].x, ts->coord[i].y);
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 			input_info(true, &ts->client->dev,
-					"%s: [RA] tID:%d mc: %d tc:%d, v:%02X%02X, cal:%X(%X) C%02XT01%02X.%4s%s id(%d,%d), p:%d, D%05X\n",
-					__func__, i, ts->coord[i].mcount, ts->touch_count,
-					ts->plat_data->img_version_of_ic[2],
-					ts->plat_data->img_version_of_ic[3],
-					ts->cal_status, ts->nv,
-					ts->tdata->cal_count, ts->tdata->tune_fix_ver,
-					ts->tdata->tclm_string[ts->tdata->cal_position].f_name,
-					(ts->tdata->tclm_level == TCLM_LEVEL_LOCKDOWN) ? ".L" : " ",
-					ts->tspid_val, ts->tspicid_val, ts->coord[i].palm_count,
-					ts->defect_probability);
+					"[RA] tID:%d p:%s dd:%d,%d mc:%d tc:%d lx:%d ly:%d p:%d noise:%x\n",
+					i, location,
+					ts->coord[i].x - ts->coord[i].p_x,
+					ts->coord[i].y - ts->coord[i].p_y,
+					ts->coord[i].mcount, ts->touch_count,
+					ts->coord[i].x, ts->coord[i].y,
+					ts->coord[i].palm_count,
+					ts->touch_noise_status);
+#else
+			input_info(true, &ts->client->dev,
+					"[RA] tID:%d p:%s dd:%d,%d mc:%d tc:%d p:%d noise:%x\n",
+					i, location,
+					ts->coord[i].x - ts->coord[i].p_x,
+					ts->coord[i].y - ts->coord[i].p_y,
+					ts->coord[i].mcount, ts->touch_count,
+					ts->coord[i].palm_count,
+					ts->touch_noise_status);
+#endif
 
-			do_gettimeofday(&ts->time_released[i]);
-
-			if (ts->time_longest < (ts->time_released[i].tv_sec - ts->time_pressed[i].tv_sec))
-				ts->time_longest = (ts->time_released[i].tv_sec - ts->time_pressed[i].tv_sec);
+			ts->coord[i].action = SEC_TS_COORDINATE_ACTION_RELEASE;
 		}
 
 		ts->coord[i].mcount = 0;
@@ -2476,6 +2725,7 @@ static void sec_ts_reset_work(struct work_struct *work)
 	}
 
 	mutex_lock(&ts->modechange);
+	wake_lock(&ts->wakelock);
 
 	ts->reset_is_on_going = true;
 	input_info(true, &ts->client->dev, "%s\n", __func__);
@@ -2495,6 +2745,8 @@ static void sec_ts_reset_work(struct work_struct *work)
 		if (ts->debug_flag & SEC_TS_DEBUG_SEND_UEVENT)
 			send_event_to_user(ts, 0, UEVENT_TSP_I2C_RESET);
 
+		wake_unlock(&ts->wakelock);
+
 		return;
 	}
 
@@ -2509,6 +2761,7 @@ static void sec_ts_reset_work(struct work_struct *work)
 				cancel_delayed_work(&ts->reset_work);
 				schedule_delayed_work(&ts->reset_work, msecs_to_jiffies(TOUCH_RESET_DWORK_TIME));
 				mutex_unlock(&ts->modechange);
+				wake_unlock(&ts->wakelock);
 				return;
 			}
 		} else {
@@ -2539,10 +2792,25 @@ static void sec_ts_reset_work(struct work_struct *work)
 	ts->reset_is_on_going = false;
 	mutex_unlock(&ts->modechange);
 
+	if (ts->power_status == SEC_TS_STATE_POWER_ON) {
+		if (ts->fix_active_mode)
+			sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
+	}
+
 	if (ts->debug_flag & SEC_TS_DEBUG_SEND_UEVENT)
 		send_event_to_user(ts, 0, UEVENT_TSP_I2C_RESET);
+
+	wake_unlock(&ts->wakelock);
 }
 #endif
+
+static void sec_ts_print_info_work(struct work_struct *work)
+{
+	struct sec_ts_data *ts = container_of(work, struct sec_ts_data,
+			work_print_info.work);
+	sec_ts_print_info(ts);
+	schedule_delayed_work(&ts->work_print_info, msecs_to_jiffies(TOUCH_PRINT_INFO_DWORK_TIME));
+}
 
 static void sec_ts_read_info_work(struct work_struct *work)
 {
@@ -2551,27 +2819,58 @@ static void sec_ts_read_info_work(struct work_struct *work)
 #ifdef TCLM_CONCEPT
 	int ret;
 
+	disable_irq(ts->client->irq);
+
 	ret = sec_tclm_check_cal_case(ts->tdata);
-	if (!ret) /* already read in calibration */
-		ret = sec_tclm_get_nvm_all(ts->tdata);
+	input_info(true, &ts->client->dev, "%s: sec_tclm_check_cal_case ret: %d \n", __func__, ret);
 
-	if (ret) {
-		ts->tdata->tune_fix_ver = ts->tdata->tclm_read(ts->tdata->client, SEC_TCLM_NVM_OFFSET_TUNE_VERSION);
-		input_info(true, &ts->client->dev, "%s: tune_fix_ver [01%02X]\n",
-			__func__, ts->tdata->tune_fix_ver);
-
-		sec_tclm_position_history(ts->tdata);
-	}
+	enable_irq(ts->client->irq);
 #endif
-	ts->nv = ts->tdata->nvm_all_data[SEC_TS_NVM_OFFSET_FAC_RESULT];
-	ts->pressure_cal_base = ts->tdata->nvm_all_data[SEC_TS_NVM_OFFSET_PRESSURE_BASE_CAL_COUNT];
-	ts->pressure_cal_delta = ts->tdata->nvm_all_data[SEC_TS_NVM_OFFSET_PRESSURE_DELTA_CAL_COUNT];
 
+/* ts->nv data read through tclm_data_Read */
+#ifdef USE_PRESSURE_SENSOR
+	ts->pressure_cal_base = get_tsp_nvm_data(ts, SEC_TS_NVM_OFFSET_PRESSURE_BASE_CAL_COUNT);
+	ts->pressure_cal_delta = get_tsp_nvm_data(ts, SEC_TS_NVM_OFFSET_PRESSURE_DELTA_CAL_COUNT);
+#endif
 	input_info(true, &ts->client->dev, "%s: fac_nv:%02X\n", __func__, ts->nv);
 	input_log_fix();
 
 	sec_ts_run_rawdata_all(ts, false);
 	ts->info_work_done = true;
+
+	schedule_work(&ts->work_print_info.work);
+
+}
+
+void sec_ts_recovery_irq_thread_fn(struct sec_ts_data *ts)
+{
+	struct irq_desc *desc = irq_to_desc(ts->client->irq);
+	int ret;
+
+	if ((ts->lowpower_mode && (desc->irq_count == ts->irq_count)) || ts->irq_unhandled) {
+		ts->irq_gpio_status = gpio_get_value(ts->plat_data->irq_gpio);
+		if (ts->irq_gpio_status == 0) {
+			if (ts->irq_reset == 0) {
+				disable_irq_nosync(ts->client->irq);
+				free_irq(ts->client->irq, ts);
+				ret = request_threaded_irq(ts->client->irq, NULL, sec_ts_irq_thread,
+						ts->plat_data->irq_type, SEC_TS_I2C_NAME, ts);
+				if (ret < 0)
+					input_err(true, &ts->client->dev, "%s: Unable to request threaded irq\n", __func__);
+
+				ts->irq_reset = 1;
+				input_info(true, &ts->client->dev, "%s: %d,%d,%d,%d\n", __func__,
+							ts->irq_gpio_status, ts->irq_depth, ts->irq_count, ts->irq_reset);
+				ts->irq_recovery_count++;
+			} else {
+				input_info(true, &ts->client->dev, "%s: no irq\n", __func__);
+			}
+		} else {
+			ts->irq_reset = 0;
+		}
+	} else {
+		ts->irq_reset = 0;
+	}
 }
 
 int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode)
@@ -2597,6 +2896,21 @@ int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode)
 			input_err(true, &ts->client->dev, "%s: Failed to set\n", __func__);
 			goto i2c_error;
 		}
+
+		/* optional reg : SEC_TS_CMD_LPM_AOD_OFF_ON(0x9B)			*/
+		/* 0 : aod off : change tsp scan freq , avoid wacom scan noise 	*/
+		/* 1 : aod on->off : change tsp scan freq , avoid wacom scan noise in lpm mode*/
+		/* 2 : aod on : scan based on vsync/hsync					*/
+		if (ts->lowpower_mode & SEC_TS_MODE_SPONGE_AOD)
+			data = SEC_TS_CMD_LPM_AOD_ON;
+		else
+			data = SEC_TS_CMD_LPM_AOD_OFF;
+
+		ret = sec_ts_i2c_write(ts, SEC_TS_CMD_LPM_AOD_OFF_ON, &data, 1);
+		if (ret < 0) {
+			input_err(true, &ts->client->dev, "%s: Failed to set aod off_on\n", __func__);
+			goto i2c_error;
+		}
 	}
 
 retry_pmode:
@@ -2618,6 +2932,7 @@ retry_pmode:
 
 	if (mode != para) {
 		retrycnt++;
+		ts->mode_change_failed_count++;
 		if (retrycnt < 5)
 			goto retry_pmode;
 	}
@@ -2651,6 +2966,93 @@ i2c_error:
 }
 
 #ifdef USE_OPEN_CLOSE
+#ifdef CONFIG_SEC_FACTORY
+static void check_panel_id(struct sec_ts_data *ts)
+{
+
+	static int prev_lcdtype = 0;
+	int lcdtype;
+	int index = 0;
+#if defined(CONFIG_EXYNOS_DECON_FB)
+	int connected;
+#endif
+	const struct firmware *fw_entry;
+	int ret;
+
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	lcdtype = get_lcd_attached("GET");
+	if (lcdtype == 0xFFFFFF) {
+		input_err(true, &ts->client->dev, "%s: lcd is not attached(0x%08X)\n",
+				__func__, lcdtype);
+		return;
+	}
+#endif
+#if defined(CONFIG_EXYNOS_DECON_FB)
+	connected = get_lcd_info("connected");
+	if (connected < 0) {
+		input_err(true, &ts->client->dev, "%s: Failed to get lcd info(%d)\n",
+				__func__, connected);
+		return;
+	}
+
+	if (!connected) {
+		input_err(true, &ts->client->dev, "%s: lcd is disconnected\n",
+				__func__);
+		return;
+	}
+
+	lcdtype = get_lcd_info("id");
+	if (lcdtype < 0) {
+		input_err(true, &ts->client->dev, "%s: Failed to get lcd info(%d)\n",
+				__func__, lcdtype);
+		return;
+	}
+#endif
+
+	input_info(true, &ts->client->dev, "%s: prev_lcdtype 0x%08X, lcdtype 0x%08X\n",
+			__func__, prev_lcdtype, lcdtype);
+
+	if (((lcdtype >> 20) & 0x03) != 0x01) {
+		index = 2;
+	} else {
+		if ((lcdtype & 0x0F) < 0x07)
+			index = 1;
+	}
+
+	if (!prev_lcdtype || (prev_lcdtype != lcdtype)) {
+		ret = of_property_read_string_index(ts->client->dev.of_node,
+				"sec,firmware_name", index, &ts->plat_data->firmware_name);
+		if (ret) {
+			input_err(true, &ts->client->dev, "%s: Failed to get firmware name property(%d)\n",
+					__func__, ret);
+			return;
+		}
+
+		ret = request_firmware(&fw_entry, ts->plat_data->firmware_name,
+					&ts->client->dev);
+		if (ret != 0) {
+			input_err(true, &ts->client->dev, "%s: firmware is not available\n",
+					__func__);
+			return;
+		}
+
+		input_info(true, &ts->client->dev, "%s: load %s firmware\n",
+				__func__, ts->plat_data->firmware_name);
+
+		sec_ts_check_firmware_version(ts, fw_entry->data);
+
+		prev_lcdtype = lcdtype;
+
+		release_firmware(fw_entry);
+
+		if (ts->plat_data->tclm_levels[index] && ts->plat_data->afe_bases[index]) {
+			ts->tdata->tclm_level = ts->plat_data->tclm_levels[index];
+			ts->tdata->afe_base = ts->plat_data->afe_bases[index];
+		}
+	}
+}
+#endif
+
 static int sec_ts_input_open(struct input_dev *dev)
 {
 	struct sec_ts_data *ts = input_get_drvdata(dev);
@@ -2665,7 +3067,7 @@ static int sec_ts_input_open(struct input_dev *dev)
 
 	ts->input_closed = false;
 
-	input_info(true, &ts->client->dev, "%s\n", __func__);
+	input_info(true, &ts->client->dev, "%s %d\n", __func__, ts->irq_reset);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	if (TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()) {
@@ -2700,7 +3102,24 @@ static int sec_ts_input_open(struct input_dev *dev)
 	/* because edge and dead zone will recover soon */
 	sec_ts_set_grip_type(ts, ONLY_EDGE_HANDLER);
 
+	if (ts->fix_active_mode)
+		sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
+
+	sec_ts_recovery_irq_thread_fn(ts);
+
 	mutex_unlock(&ts->modechange);
+
+#ifdef CONFIG_SEC_FACTORY
+	check_panel_id(ts);
+#endif
+
+	/* check evt info */
+	sec_ts_read_evt_info(ts);
+
+	cancel_delayed_work(&ts->work_print_info);
+	ts->print_info_cnt_open = 0;
+	ts->print_info_cnt_release = 0;
+	schedule_work(&ts->work_print_info.work);
 
 	return 0;
 }
@@ -2708,6 +3127,11 @@ static int sec_ts_input_open(struct input_dev *dev)
 static void sec_ts_input_close(struct input_dev *dev)
 {
 	struct sec_ts_data *ts = input_get_drvdata(dev);
+	struct irq_desc *desc = irq_to_desc(ts->client->irq);
+	int thread_flags = -1;
+	struct timeval current_time;
+	int ret;
+	u8 data[6] = {SEC_TS_CMD_SPONGE_OFFSET_UTC, 0};
 
 	if (!ts->info_work_done) {
 		input_err(true, &ts->client->dev, "%s not finished info work\n", __func__);
@@ -2718,7 +3142,18 @@ static void sec_ts_input_close(struct input_dev *dev)
 
 	ts->input_closed = true;
 
-	input_info(true, &ts->client->dev, "%s\n", __func__);
+	if (ts->irq_count == desc->irq_count)
+		ts->irq_unhandled++;
+
+	ts->irq_gpio_status = gpio_get_value(ts->plat_data->irq_gpio);
+	ts->irq_depth = desc->depth;
+	ts->irq_count = desc->irq_count;
+	if (desc->action != NULL)
+		thread_flags = desc->action->thread_flags;
+
+	input_info(true, &ts->client->dev, "%s: %d,%d,%d,%d,%d\n", __func__,
+			ts->irq_gpio_status, ts->irq_depth, ts->irq_count, ts->irq_unhandled, thread_flags);
+
 
 #ifdef TCLM_CONCEPT
 	sec_tclm_debug_info(ts->tdata);
@@ -2726,6 +3161,9 @@ static void sec_ts_input_close(struct input_dev *dev)
 #ifdef MINORITY_REPORT
 	minority_report_sync_latest_value(ts);
 #endif
+
+	cancel_delayed_work(&ts->work_print_info);
+	sec_ts_print_info(ts);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	if (TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()) {
@@ -2758,10 +3196,30 @@ static void sec_ts_input_close(struct input_dev *dev)
 	if (ts->prox_power_off) {
 		sec_ts_stop_device(ts);
 	} else {
-		if (ts->lowpower_mode)
+		if (ts->lowpower_mode) {
+
+			if (ts->use_sponge) {
+				do_gettimeofday( &current_time );
+				data[2] = (0xFF & (u8)((current_time.tv_sec) >> 0));
+				data[3] = (0xFF & (u8)((current_time.tv_sec) >> 8));
+				data[4] = (0xFF & (u8)((current_time.tv_sec) >> 16));
+				data[5] = (0xFF & (u8)((current_time.tv_sec) >> 24));
+				input_info(true, &ts->client->dev, "Write UTC to Sponge = %X\n", (int)(current_time.tv_sec));
+
+				disable_irq(ts->client->irq);
+				ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SPONGE_WRITE_PARAM, &data[0], 6);
+				if (ret < 0)
+					input_err(true, &ts->client->dev, "%s: Failed to write offset\n", __func__);
+
+				ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SPONGE_NOTIFY_PACKET, NULL, 0);
+				if (ret < 0)
+					input_err(true, &ts->client->dev, "%s: Failed to send notify\n", __func__);
+				enable_irq(ts->client->irq);
+			}
 			sec_ts_set_lowpowermode(ts, TO_LOWPOWER_MODE);
-		else
+		} else {
 			sec_ts_stop_device(ts);
+		}
 	}
 
 	ts->prox_power_off = 0;
@@ -2779,6 +3237,9 @@ static int sec_ts_remove(struct i2c_client *client)
 
 	cancel_delayed_work_sync(&ts->work_read_info);
 	flush_delayed_work(&ts->work_read_info);
+
+	cancel_delayed_work_sync(&ts->work_print_info);
+	flush_delayed_work(&ts->work_print_info);
 
 	disable_irq_nosync(ts->client->irq);
 	free_irq(ts->client->irq, ts);
@@ -2850,6 +3311,13 @@ int sec_ts_stop_device(struct sec_ts_data *ts)
 
 	ts->power_status = SEC_TS_STATE_POWER_OFF;
 
+	if (ts->prox_power_off) {
+		input_report_key(ts->input_dev, KEY_INT_CANCEL, 1);
+		input_sync(ts->input_dev);
+		input_report_key(ts->input_dev, KEY_INT_CANCEL, 0);
+		input_sync(ts->input_dev);
+	}
+
 	sec_ts_locked_release_all_finger(ts);
 
 	ts->plat_data->power(ts, false);
@@ -2919,6 +3387,18 @@ int sec_ts_start_device(struct sec_ts_data *ts)
 		goto err;
 	}
 
+#ifdef CONFIG_EPEN_WACOM_W9018
+	/* spen mode for note models */
+	if (ts->spen_mode_val != 0) {
+		input_info(true, &ts->client->dev, "%s: spen_mode: 0x%X\n", __func__, ts->spen_mode_val);
+
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_SPENMODE, (u8 *)&ts->spen_mode_val, 1);
+		if (ret < 0) {
+			input_err(true, &ts->client->dev, "%s: Failed to send spen mode", __func__);
+		}
+	}
+#endif
+
 	if (ts->use_sponge) {
 		ret = sec_ts_set_custom_library(ts);
 		if (ret < 0)
@@ -2927,15 +3407,9 @@ int sec_ts_start_device(struct sec_ts_data *ts)
 
 	sec_ts_set_grip_type(ts, ONLY_EDGE_HANDLER);
 
-	if (ts->dex_mode) {
-		input_info(true, &ts->client->dev, "%s: set dex mode\n", __func__);
-		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_DEX_MODE, &ts->dex_mode, 1);
-		if (ret < 0) {
-			input_err(true, &ts->client->dev,
-					"%s: failed to set dex mode %x\n", __func__, ts->dex_mode);
-			goto err;
-		}
-	}
+	ret = sec_ts_set_external_noise_mode(ts, EXT_NOISE_MODE_MAX);
+	if (ret < 0)
+		goto err;
 
 	if (ts->brush_mode) {
 		input_info(true, &ts->client->dev, "%s: set brush mode\n", __func__);
@@ -2955,6 +3429,23 @@ int sec_ts_start_device(struct sec_ts_data *ts)
 					"%s: failed to set 16:9 mode\n", __func__);
 			goto err;
 		}
+	}
+
+	if (gpio_is_valid(ts->plat_data->force_sensor_version_gpio)) {
+		input_info(true, &ts->client->dev, "%s: set force sensor version %d\n", __func__, ts->force_sensor_version);
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_GET_FORCE_SENSOR_VERSION, &ts->force_sensor_version, 1);
+		if (ret < 0) {
+			input_err(true, &ts->client->dev,
+					"%s: failed to set force sensor version\n", __func__);
+			goto err;
+		}
+	}
+
+	if (ts->charger_mode != SEC_TS_BIT_CHARGER_MODE_NO) {
+		ret = sec_ts_i2c_write(ts, SET_TS_CMD_SET_CHARGER_MODE, &ts->charger_mode, 1);
+		if (ret < 0)
+			input_err(true, &ts->client->dev, "%s: Failed to send command(0x%x)",
+					__func__, SET_TS_CMD_SET_CHARGER_MODE);
 	}
 
 err:
@@ -3018,22 +3509,6 @@ static int sec_ts_pm_resume(struct device *dev)
 		complete_all(&ts->resume_done);
 
 	return 0;
-}
-#endif
-
-#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-void trustedui_mode_on(void)
-{
-	if (!tsp_info)
-		return;
-
-	sec_ts_unlocked_release_all_finger(tsp_info);
-}
-
-void trustedui_mode_off(void)
-{
-	if (!tsp_info)
-		return;
 }
 #endif
 

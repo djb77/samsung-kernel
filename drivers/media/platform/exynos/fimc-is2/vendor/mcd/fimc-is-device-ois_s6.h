@@ -48,6 +48,11 @@ enum{
 	eLIT_ENDIAN = 1  // little endian
 };
 
+enum fimc_is_ois_power_mode {
+	OIS_POWER_MODE_SINGLE = 0,
+	OIS_POWER_MODE_DUAL,
+};
+
 bool fimc_is_ois_read_userdata_s6(struct fimc_is_core *core);
 bool fimc_is_ois_fw_version_s6(struct fimc_is_core *core);
 int fimc_is_ois_open_fw_s6(struct fimc_is_core *core, char *name, u8 **buf);

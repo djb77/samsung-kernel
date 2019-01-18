@@ -801,6 +801,7 @@ static int do_recv_rp_stream_ready(struct hdcp_link_data *lk)
 	memcpy(msg_info.msg, &m_strm_ready, sizeof(struct dp_rp_stream_ready));
 	msg_info.msg_len = sizeof(struct dp_rp_stream_ready);
 	ret = dp_recv_protocol_msg(lk, DP_REPEATERAUTH_STREAM_READY, &msg_info);
+
 	if (ret < 0) {
 		hdcp_err("HDCP recv RepeaterAuth_Stream_Ready failed. ret(%d)\n", ret);
 		return -1;

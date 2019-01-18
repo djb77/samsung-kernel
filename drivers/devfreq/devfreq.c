@@ -338,11 +338,10 @@ int update_devfreq(struct devfreq *devfreq)
 		pm_qos_max = (unsigned long)pm_qos_request(gov_data->pm_qos_class_max);
 #endif
 	if (devfreq->str_freq)
-		policy_update_call_to_DM(dm_type, devfreq->str_freq,
-					 devfreq->str_freq);
+		policy_update_with_DM_CALL(dm_type, devfreq->str_freq,
+					 devfreq->str_freq, &freq);
 	else
-		policy_update_call_to_DM(dm_type, freq, pm_qos_max);
-	DM_CALL(dm_type, &freq);
+		policy_update_with_DM_CALL(dm_type, freq, pm_qos_max, &freq);
 #else
 	/*
 	 * Adjust the frequency with user freq and QoS.

@@ -21,6 +21,7 @@
 #include <linux/exynos-ss.h>
 #include <asm-generic/io.h>
 #include <linux/ctype.h>
+#include <linux/pm_qos.h>
 
 #include <soc/samsung/exynos-pmu.h>
 
@@ -47,6 +48,7 @@ static void simulate_SOFT_LOCKUP(char *arg);
 static void simulate_HARD_LOCKUP(char *arg);
 static void simulate_BAD_SCHED(char *arg);
 static void simulate_SPIN_LOCKUP(char *arg);
+static void simulate_ALLSPIN_LOCKUP(char *arg);
 static void simulate_PC_ABORT(char *arg);
 static void simulate_SP_ABORT(char *arg);
 static void simulate_JUMP_ZERO(char *arg);
@@ -76,6 +78,7 @@ enum {
 	FORCE_SOFT_LOCKUP,		/* SOFT LOCKUP */
 	FORCE_HARD_LOCKUP,		/* HARD LOCKUP */
 	FORCE_SPIN_LOCKUP,		/* SPIN LOCKUP */
+	FORCE_ALLSPIN_LOCKUP,		/* ALL SPIN LOCKUP */
 	FORCE_PC_ABORT,			/* PC ABORT */
 	FORCE_SP_ABORT,			/* SP ABORT */
 	FORCE_JUMP_ZERO,		/* JUMP TO ZERO */
@@ -118,6 +121,7 @@ struct force_error force_error_vector = {
 		{"softlockup",	&simulate_SOFT_LOCKUP},
 		{"hardlockup",	&simulate_HARD_LOCKUP},
 		{"spinlockup",	&simulate_SPIN_LOCKUP},
+		{"allspinlockup", &simulate_ALLSPIN_LOCKUP},
 		{"pcabort",	&simulate_PC_ABORT},
 		{"spabort",	&simulate_SP_ABORT},
 		{"jumpzero",	&simulate_JUMP_ZERO},
@@ -288,6 +292,7 @@ static void simulate_PANIC(char *arg)
 {
 	pr_crit("%s()\n", __func__);
 	panic("simulate_panic");
+	pr_crit("DUMMY!\n");
 }
 
 static void simulate_BUG(char *arg)
@@ -403,6 +408,40 @@ static void simulate_HARD_LOCKUP(char *arg)
 			smp_call_function_single(cpu, simulate_HARD_LOCKUP_handler, 0, 0);
 		}
 	}
+}
+
+static void simulate_ALLSPIN_LOCKUP_handler(void *info)
+{
+	unsigned long flags = 0;
+
+	int cpu = smp_processor_id();
+
+	pr_crit("%s()/cpu:%d\n", __func__, cpu);
+	spin_lock_irqsave(&sec_debug_test_lock, flags);
+	spin_lock_irqsave(&sec_debug_test_lock, flags);
+}
+
+static struct pm_qos_request sec_min_pm_qos;
+
+static void simulate_ALLSPIN_LOCKUP(char *arg)
+{
+	unsigned long flags;
+
+	pr_crit("%s()\n", __func__);
+
+	pm_qos_add_request(&sec_min_pm_qos, PM_QOS_CPU_ONLINE_MIN,
+			   PM_QOS_CPU_ONLINE_MIN_DEFAULT_VALUE);
+	pm_qos_update_request(&sec_min_pm_qos,
+			      PM_QOS_CPU_ONLINE_MAX_DEFAULT_VALUE);
+	while (true) {
+		if (num_online_cpus() == PM_QOS_CPU_ONLINE_MAX_DEFAULT_VALUE)
+			break;
+	}
+
+	preempt_disable();
+	smp_call_function(simulate_ALLSPIN_LOCKUP_handler, NULL, 0);
+	spin_lock_irqsave(&sec_debug_test_lock, flags);
+	spin_lock_irqsave(&sec_debug_test_lock, flags);
 }
 
 static void simulate_SPIN_LOCKUP(char *arg)

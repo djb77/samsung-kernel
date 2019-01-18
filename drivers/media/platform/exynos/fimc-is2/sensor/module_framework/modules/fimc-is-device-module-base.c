@@ -524,6 +524,15 @@ int sensor_module_g_ctrl(struct v4l2_subdev *subdev, struct v4l2_control *ctrl)
 			goto p_err;
 		}
 		break;
+	case V4L2_CID_SENSOR_GET_SSM_THRESHOLD:
+		ret = CALL_CISOPS(&sensor_peri->cis, cis_get_super_slow_motion_threshold,
+				sensor_peri->subdev_cis, &ctrl->value);
+		if (ret < 0) {
+			err("err!!! ret(%d)", ret);
+			ret = -EINVAL;
+			goto p_err;
+		}
+		break;
 	default:
 		err("err!!! Unknown CID(%#x)", ctrl->id);
 		ret = -EINVAL;
@@ -655,6 +664,14 @@ int sensor_module_s_ctrl(struct v4l2_subdev *subdev, struct v4l2_control *ctrl)
 			goto p_err;
 		}
 		break;
+	case V4L2_CID_SENSOR_SET_SSM_THRESHOLD:
+		ret = CALL_CISOPS(&sensor_peri->cis, cis_set_super_slow_motion_threshold,
+			sensor_peri->subdev_cis, ctrl->value);
+		if (ret < 0) {
+			err("failed to control super slow motion: %d\n", ctrl->value);
+			goto p_err;
+		}
+		break;
 	default:
 		err("err!!! Unknown CID(%#x)", ctrl->id);
 		ret = -EINVAL;
@@ -689,6 +706,8 @@ int sensor_module_s_ext_ctrls(struct v4l2_subdev *subdev, struct v4l2_ext_contro
 	struct v4l2_control ctrl;
 	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
 	struct v4l2_rect ssm_roi;
+	struct fimc_is_device_sensor *device;
+	struct fimc_is_core *core;
 
 	FIMC_BUG(!subdev);
 	FIMC_BUG(!ctrls);
@@ -696,6 +715,12 @@ int sensor_module_s_ext_ctrls(struct v4l2_subdev *subdev, struct v4l2_ext_contro
 	module = (struct fimc_is_module_enum *)v4l2_get_subdevdata(subdev);
 	sensor_peri = (struct fimc_is_device_sensor_peri *)module->private_data;
 	WARN_ON(!sensor_peri);
+
+	device = (struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(subdev);
+	WARN_ON(!device);
+
+	core = device->private_data;
+	WARN_ON(!core);
 
 	for (i = 0; i < ctrls->count; i++) {
 		ext_ctrl = (ctrls->controls + i);
@@ -720,18 +745,33 @@ int sensor_module_s_ext_ctrls(struct v4l2_subdev *subdev, struct v4l2_ext_contro
 #ifdef CAMERA_MODULE_DUAL_CAL_AVAILABLE_VERSION
 			char *dual_cal = NULL;
 			struct fimc_is_from_info *finfo = NULL;
+			bool ver_valid = false;
 			int cal_size = 0;
 
 			fimc_is_sec_get_sysfs_finfo(&finfo);
-			if (finfo->header_ver[10] < CAMERA_MODULE_DUAL_CAL_AVAILABLE_VERSION) {
+			ver_valid = fimc_is_sec_check_from_ver(core, SENSOR_POSITION_REAR);
+			if (ver_valid == false || finfo->header_ver[10] < CAMERA_MODULE_DUAL_CAL_AVAILABLE_VERSION) {
 				err("FROM version is low. Not apply dual cal.");
 				ret = -EINVAL;
 				goto p_err;
 			} else {
-				fimc_is_get_rear_dual_cal_buf(&dual_cal, &cal_size);
-				ret = copy_to_user(ext_ctrl->ptr, dual_cal, cal_size);
-				if (ret) {
-					err("failed copying %d bytes of data\n", ret);
+				char *cal_buf;
+				u8 dummy_flag = 0;
+
+				fimc_is_sec_get_cal_buf(&cal_buf);
+				dummy_flag = cal_buf[FROM_REAR2_FLAG_DUMMY_ADDR];
+
+				if (dummy_flag == 7) {
+					fimc_is_get_rear_dual_cal_buf(&dual_cal, &cal_size);
+					ret = copy_to_user(ext_ctrl->ptr, dual_cal, cal_size);
+					if (ret) {
+						err("failed copying %d bytes of data\n", ret);
+						ret = -EINVAL;
+						goto p_err;
+					}
+				} else {
+					err("invalid dummy_flag in dual cal.(%d)", dummy_flag);
+					ret = -EINVAL;
 					goto p_err;
 				}
 			}

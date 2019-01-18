@@ -69,7 +69,7 @@ static int fimc_is_ischain_mxp_cfg(struct fimc_is_subdev *subdev,
 	width = queue->framecfg.width;
 	height = queue->framecfg.height;
 	fimc_is_ischain_mxp_adjust_crop(device, incrop->w, incrop->h, &width, &height);
-	scenario_id = fimc_is_dvfs_sel_static(device);
+	scenario_id = device->resourcemgr->dvfs_ctrl.static_ctrl->cur_scenario_id;
 
 	if (queue->framecfg.quantization == V4L2_QUANTIZATION_FULL_RANGE) {
 		crange = SCALER_OUTPUT_YUV_RANGE_FULL;
@@ -245,7 +245,7 @@ static int fimc_is_ischain_mxp_start(struct fimc_is_device_ischain *device,
 
 	otf_input = NULL;
 
-	scenario_id = fimc_is_dvfs_sel_static(device);
+	scenario_id = device->resourcemgr->dvfs_ctrl.static_ctrl->cur_scenario_id;
 
 	/* if output DS, skip check a incrop & input mcs param
 	 * because, DS input size set to preview port output size
@@ -480,7 +480,7 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 
 	mcs_output = fimc_is_itf_g_param(device, ldr_frame, index);
 
-	scenario_id = fimc_is_dvfs_sel_static(device);
+	scenario_id = device->resourcemgr->dvfs_ctrl.static_ctrl->cur_scenario_id;
 
 	if (node->request) {
 		incrop = (struct fimc_is_crop *)node->input.cropRegion;

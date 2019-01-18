@@ -22,7 +22,7 @@
 static unsigned int current_core, new_core;
 static DEFINE_MUTEX(sec_os_ctrl_lock);
 
-int mc_switch_core(uint32_t core_num);
+int mc_switch_core_ctrl(uint32_t core_num, uint32_t ctrl_idx);
 uint32_t mc_active_core(void);
 
 static struct bus_type sec_os_ctrl_subsys = {
@@ -70,7 +70,7 @@ static ssize_t migrate_os_store(struct kobject *kobj,
 		pr_err("Fail to get lock\n");
 		return count;
 	}
-	ret = mc_switch_core(new_core);
+	ret = mc_switch_core_ctrl(new_core, 0);
 	mutex_unlock(&sec_os_ctrl_lock);
 	if (ret != 0) {
 		pr_err("Secure OS migration is failed!\n");

@@ -26,6 +26,7 @@
 #include <linux/ion.h>
 #include <linux/notifier.h>
 #include <linux/pm_runtime.h>
+#include <linux/pm_opp.h>
 #include <linux/clk-provider.h>
 #include <linux/of_device.h>
 #ifdef CONFIG_EXT_BOOTMEM
@@ -394,7 +395,6 @@ static int32_t iva_ctrl_mcu_boot_file(struct iva_proc *proc,
 	if (!iva_ctrl_is_iva_on(iva)) {
 		dev_dbg(dev, "%s() mcu boot request w/o iva init(0x%lx)\n",
 				__func__, iva->state);
-
 		return -EIO;
 	}
 
@@ -546,6 +546,54 @@ static int32_t iva_ctrl_get_iva_status_usr(struct iva_dev_data *iva,
 	return 0;
 }
 
+static int32_t iva_ctrl_set_clk_usr(struct iva_dev_data *iva,
+		uint32_t __user *usr_clk_rate)
+{
+	struct device *dev = &iva->iva_dvfs_dev->dev;
+	int32_t 	iva_clk_rate;
+	bool		hit = false;
+
+	get_user(iva_clk_rate, usr_clk_rate);
+
+	if ((iva_clk_rate < IVA_PM_IVA_MIN) || (iva_clk_rate > IVA_PM_QOS_IVA_REQ)){
+		dev_err(iva->dev, "invalid usr clk rate provided.\n");
+		return -EINVAL;
+	}
+
+	if (iva->iva_dvfs_dev) {
+		struct dev_pm_opp *opp;
+		unsigned long freq = 0;
+
+		rcu_read_lock();
+		do {
+			opp = dev_pm_opp_find_freq_ceil(dev, &freq);
+			if (IS_ERR(opp))
+				break;
+
+			if (freq == iva_clk_rate) {
+				hit = true;
+				break;
+			}
+
+			freq++;
+		} while (1);
+		rcu_read_unlock();
+	}
+
+	if (hit) {
+		iva->iva_qos_rate = iva_clk_rate;
+		pm_qos_update_request(&iva->iva_qos_iva, iva->iva_qos_rate);
+	} else {
+		dev_warn(dev, "fail to set qos rate, req(%dKhz), cur(%dKhz)\n",
+				iva_clk_rate, iva->iva_qos_rate);
+	}
+
+	dev_dbg(dev, "%s() iva_clk rate(%ld)\n", __func__,
+			clk_get_rate(iva->iva_clk));
+
+	return 0;
+}
+
 const char *iva_ctrl_get_ioctl_str(unsigned int cmd)
 {
 	#define IOCTL_STR_ENTRY(cmd_nr, cmd_str)[cmd_nr] = cmd_str
@@ -563,6 +611,7 @@ const char *iva_ctrl_get_ioctl_str(unsigned int cmd)
 		IOCTL_STR_ENTRY(_IOC_NR(IVA_ION_FREE),			"ION_FREE"),
 		IOCTL_STR_ENTRY(_IOC_NR(IVA_ION_SYNC_FOR_CPU),		"ION_SYNC_FOR_CPU"),
 		IOCTL_STR_ENTRY(_IOC_NR(IVA_ION_SYNC_FOR_DEVICE),	"ION_SYNC_FOR_DEVICE"),
+		IOCTL_STR_ENTRY(_IOC_NR(IVA_CTRL_SET_CLK),		"SET_IVA_CLK"),
 	};
 
 	unsigned int cmd_nr = _IOC_NR(cmd);
@@ -628,6 +677,9 @@ static long iva_ctrl_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 		break;
 	case IVA_IPC_QUEUE_RECEIVE_RSP:
 		ret = iva_ipcq_wait_res_usr(proc, (struct ipc_res_param __user *) p);
+		break;
+	case IVA_CTRL_SET_CLK:
+		ret = iva_ctrl_set_clk_usr(iva, (uint32_t __user *) p);
 		break;
 	case IVA_ION_GET_IOVA:
 	case IVA_ION_PUT_IOVA:

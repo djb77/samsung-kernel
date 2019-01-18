@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_flowring.c 765807 2018-06-05 13:57:13Z $
+ * $Id: dhd_flowring.c 765580 2018-06-04 17:19:56Z $
  */
 
 #include <typedefs.h>
@@ -695,6 +695,9 @@ dhd_flowid_lookup(dhd_pub_t *dhdp, uint8 ifindex,
 		if (!ETHER_ISMULTI(da) &&
 		    ((if_flow_lkup[ifindex].role == WLC_E_IF_ROLE_AP) ||
 		    (FALSE) ||
+#ifdef WL_NAN
+		    (if_flow_lkup[ifindex].role == WLC_E_IF_ROLE_NAN) ||
+#endif /* WL_NAN */
 		    (if_flow_lkup[ifindex].role == WLC_E_IF_ROLE_P2P_GO)) &&
 		    (!is_sta_assoc)) {
 			DHD_ERROR_RLMT(("Attempt to send pkt with out peer/scb addition\n"));
@@ -726,6 +729,10 @@ dhd_flowid_lookup(dhd_pub_t *dhdp, uint8 ifindex,
 		flow_ring_node->active = TRUE;
 		flow_ring_node->status = FLOW_RING_STATUS_CREATE_PENDING;
 
+#ifdef TX_STATUS_LATENCY_STATS
+		flow_ring_node->flow_info.num_tx_status = 0;
+		flow_ring_node->flow_info.cum_tx_status_latency = 0;
+#endif /* TX_STATUS_LATENCY_STATS */
 		DHD_FLOWRING_UNLOCK(flow_ring_node->lock, flags);
 
 		/* Create and inform device about the new flow */

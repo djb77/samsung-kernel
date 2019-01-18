@@ -55,6 +55,8 @@ struct usb_notifier_platform_data {
 
 #if defined(CONFIG_CCIC_NOTIFIER)
 	struct delayed_work usb_ldo_work;
+#define USB_LDOCONTROL_EXYNOS8895	1 /* legacy */
+#define USB_LDOCONTROL_EXYNOS9810	2
 	unsigned int usb_ldocontrol;
 	unsigned int usb_ldo_onoff;
 	bool usb_ldo_off_working;
@@ -258,6 +260,30 @@ static void usb_dp_regulator_onoff(struct usb_notifier_platform_data *pdata,
 	regulator_put(vdd3p3_dp);
 }
 
+static void usb_ldo_manual_control(bool on)
+{
+	struct device_node *np = NULL;
+	struct platform_device *pdev = NULL;
+
+	pr_info("%s ldo = %d\n", __func__, on);
+
+	np = exynos_udc_parse_dt();
+	if (np) {
+		pdev = of_find_device_by_node(np);
+		of_node_put(np);
+		if (pdev) {
+			pr_info("%s: get the %s platform_device\n",
+				__func__, pdev->name);
+			dwc3_exynos_start_ldo(&pdev->dev, on);
+			goto end;
+		}
+	}
+
+	pr_err("%s: failed to get the platform_device\n", __func__);
+end:
+	return;
+}
+
 static void usb_regulator_onoff(void *data, unsigned int onoff)
 {
 	struct usb_notifier_platform_data *pdata =
@@ -265,7 +291,7 @@ static void usb_regulator_onoff(void *data, unsigned int onoff)
 	pr_info("usb: %s - Turn %s (ldocontrol=%d, usb_ldo_off_working=%d)\n", __func__,
 		onoff ? "on":"off", pdata->usb_ldocontrol, pdata->usb_ldo_off_working);
 
-	if (pdata->usb_ldocontrol) {
+	if (pdata->usb_ldocontrol == USB_LDOCONTROL_EXYNOS8895) {
 		if (onoff) {
 			if (!pdata->usb_ldo_onoff) {
 				if (pdata->usb_ldo_off_working) {
@@ -288,6 +314,8 @@ static void usb_regulator_onoff(void *data, unsigned int onoff)
 			}
 		}
 		pdata->usb_ldo_onoff = onoff;
+	} else if (pdata->usb_ldocontrol == USB_LDOCONTROL_EXYNOS9810) {
+		usb_ldo_manual_control(onoff);
 	} else {
 		pr_err("%s: can't control\n", __func__);
 	}
@@ -660,7 +688,7 @@ static struct otg_notify dwc_lsi_notify = {
 	.set_peripheral	= exynos_set_peripheral,
 	.vbus_detect_gpio = -1,
 	.is_wakelock = 1,
-	.booting_delay_sec = 10,
+	.booting_delay_sec = 9,
 #if !defined(CONFIG_CCIC_NOTIFIER)
 	.auto_drive_vbus = NOTIFY_OP_POST,
 #endif

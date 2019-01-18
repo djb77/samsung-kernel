@@ -15,78 +15,29 @@
  */
 
 #include <linux/file.h>
+#include <linux/module.h>
 #include <linux/task_integrity.h>
+#include <linux/proca_fcntl.h>
 #include <linux/xattr.h>
 
 #include "five.h"
 #include "five_pa.h"
-#include "lv.h"
+#include "five_hooks.h"
+#include "five_lv.h"
+#include "five_porting.h"
 
-
-static struct workqueue_struct *g_f_signature_workqueue;
-
-static void f_signature_handler(struct work_struct *in_data)
+static void process_file(struct task_struct *task, struct file *file)
 {
-	struct task_integrity *tint;
-	struct file *file;
-	struct f_signature_task *f_signature_task;
-	struct f_signature_context *context = container_of(in_data,
-		struct f_signature_context, data_work);
-
-	if (unlikely(!context))
-		return;
-
-	f_signature_task = &context->payload;
-	tint = f_signature_task->tint;
-	file = f_signature_task->file;
-
-	if (task_integrity_user_read(tint) && !file->f_signature) {
-		char *xattr_value = NULL;
-
-		five_read_xattr(file->f_path.dentry, &xattr_value);
-		file->f_signature = xattr_value;
-	}
-
-	task_integrity_put(tint);
-	fput(file);
-
-	kfree(context);
-}
-
-int fivepa_push_set_xattr_event(struct task_struct *task, struct file *file)
-{
-	struct f_signature_context *context;
-	struct f_signature_task *f_signature_task;
+	char *xattr_value = NULL;
 
 	if (file->f_signature)
-		return 0;
+		return;
 
 	if (five_check_params(task, file))
-		return 0;
+		return;
 
-	context = kmalloc(sizeof(struct f_signature_context), GFP_KERNEL);
-	if (unlikely(!context))
-		return -ENOMEM;
-
-	task_integrity_get(task->integrity);
-	get_file(file);
-
-	f_signature_task = &context->payload;
-	f_signature_task->tint = task->integrity;
-	f_signature_task->file = file;
-
-	INIT_WORK(&context->data_work, f_signature_handler);
-	return queue_work(g_f_signature_workqueue, &context->data_work) ? 0 : 1;
-}
-
-int fivepa_init_signature_wq(void)
-{
-	g_f_signature_workqueue =
-			create_singlethread_workqueue("f_signature_wq");
-	if (!g_f_signature_workqueue)
-		return -ENOMEM;
-
-	return 0;
+	five_read_xattr(file->f_path.dentry, &xattr_value);
+	file->f_signature = xattr_value;
 }
 
 void fivepa_fsignature_free(struct file *file)
@@ -95,14 +46,12 @@ void fivepa_fsignature_free(struct file *file)
 	file->f_signature = NULL;
 }
 
-int fivepa_fcntl_setxattr(struct file *file, void __user *lv_xattr)
+int proca_fcntl_setxattr(struct file *file, void __user *lv_xattr)
 {
 	struct inode *inode = file_inode(file);
 	struct lv lv_hdr = {0};
 	int rc = -EPERM;
 	void *x = NULL;
-	enum task_integrity_value tint =
-				    task_integrity_read(current->integrity);
 
 	if (unlikely(!file || !lv_xattr))
 		return -EINVAL;
@@ -131,9 +80,7 @@ int fivepa_fcntl_setxattr(struct file *file, void __user *lv_xattr)
 
 	inode_lock(inode);
 
-	if (tint == INTEGRITY_PRELOAD_ALLOW_SIGN
-				|| tint == INTEGRITY_MIXED_ALLOW_SIGN
-				|| tint == INTEGRITY_DMVERITY_ALLOW_SIGN) {
+	if (task_integrity_allow_sign(current->integrity)) {
 		rc = __vfs_setxattr_noperm(file->f_path.dentry,
 						XATTR_NAME_PA,
 						x,
@@ -147,3 +94,40 @@ out:
 
 	return rc;
 }
+
+static void proca_hook_file_processed(struct task_struct *task,
+				struct file *file, void *xattr,
+				size_t xattr_size, int result);
+
+static void proca_hook_file_skipped(struct task_struct *task,
+				struct file *file);
+
+static struct five_hook_list five_ops[] = {
+	FIVE_HOOK_INIT(file_processed, proca_hook_file_processed),
+	FIVE_HOOK_INIT(file_skipped, proca_hook_file_skipped),
+};
+
+static void proca_hook_file_processed(struct task_struct *task,
+				struct file *file, void *xattr,
+				size_t xattr_size, int result)
+{
+	process_file(task, file);
+}
+
+static void proca_hook_file_skipped(struct task_struct *task,
+				struct file *file)
+{
+	process_file(task, file);
+}
+
+static __init int proca_module_init(void)
+{
+	five_add_hooks(five_ops, ARRAY_SIZE(five_ops));
+	pr_info("PROCA was initialized\n");
+
+	return 0;
+}
+late_initcall(proca_module_init);
+
+MODULE_DESCRIPTION("PROCA module");
+MODULE_LICENSE("GPL");

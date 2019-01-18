@@ -95,6 +95,7 @@ typedef enum
 	RP_CURRENT_LEVEL_DEFAULT,
 	RP_CURRENT_LEVEL2,
 	RP_CURRENT_LEVEL3,
+	RP_CURRENT_ABNORMAL,
 } RP_CURRENT_LEVEL;
 
 typedef struct _pdic_sink_status {

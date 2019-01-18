@@ -59,14 +59,33 @@ enum five_hooks {
 	POST_SETATTR
 };
 
+struct file_verification_result {
+	struct task_struct *task;
+	struct file *file;
+	struct integrity_iint_cache *iint;
+	enum five_hooks fn;
+	int check;
+	void *xattr;
+	size_t xattr_len;
+};
+
+static inline void file_verification_result_init(
+		struct file_verification_result *result)
+{
+	memset(result, 0, sizeof(*result));
+}
+
+static inline void file_verification_result_deinit(
+		struct file_verification_result *result)
+{
+	kfree(result->xattr);
+	memset(result, 0, sizeof(*result));
+}
+
 int five_appraise_measurement(struct task_struct *task, int func,
 			      struct integrity_iint_cache *iint,
 			      struct file *file,
-			      const unsigned char *filename,
 			      struct five_cert *cert);
-void five_update_xattr(struct task_struct *task,
-			struct integrity_iint_cache *iint, struct file *file,
-			struct integrity_label *label);
 enum five_file_integrity five_get_cache_status(
 					struct integrity_iint_cache *iint);
 
@@ -78,4 +97,6 @@ int five_digsig_verify(struct five_cert *cert,
 			    const char *digest, int digestlen);
 void __init five_load_built_x509(void);
 int __init five_keyring_init(void);
+
+const char *five_get_string_fn(enum five_hooks fn);
 #endif

@@ -479,6 +479,7 @@ static int parse_dt_mbox_pdata(struct device *dev, struct device_node *np,
 	mif_dt_read_u32 (np, "mif,int_ap2cp_wakeup", mbox->int_ap2cp_wakeup);
 	mif_dt_read_u32 (np, "mif,int_ap2cp_status", mbox->int_ap2cp_status);
 	mif_dt_read_u32 (np, "mif,int_ap2cp_active", mbox->int_ap2cp_active);
+	mif_dt_read_u32_noerr (np, "mif,int_ap2cp_smapper", mbox->int_ap2cp_smapper);
 
 	mif_dt_read_u32 (np, "mif,irq_cp2ap_msg", mbox->irq_cp2ap_msg);
 	mif_dt_read_u32 (np, "mif,irq_cp2ap_status", mbox->irq_cp2ap_status);
@@ -491,6 +492,7 @@ static int parse_dt_mbox_pdata(struct device *dev, struct device_node *np,
 	mif_dt_read_u32 (np, "mif,irq_cp2ap_active", mbox->irq_cp2ap_active);
 	mif_dt_read_u32 (np, "mif,irq_cp2ap_wakelock", mbox->irq_cp2ap_wakelock);
 	mif_dt_read_u32 (np, "mif,irq_cp2ap_ratmode", mbox->irq_cp2ap_rat_mode);
+	mif_dt_read_u32 (np, "mif,irq_cp2ap_smapper", mbox->irq_cp2ap_smapper);
 
 	mif_dt_read_u32 (np, "mbx_ap2cp_msg", mbox->mbx_ap2cp_msg);
 	mif_dt_read_u32 (np, "mbx_cp2ap_msg", mbox->mbx_cp2ap_msg);
@@ -506,6 +508,8 @@ static int parse_dt_mbox_pdata(struct device *dev, struct device_node *np,
 	mif_dt_read_u32 (np, "sbi_lte_active_pos", mbox->sbi_lte_active_pos);
 	mif_dt_read_u32 (np, "sbi_cp_status_mask", mbox->sbi_cp_status_mask);
 	mif_dt_read_u32 (np, "sbi_cp_status_pos", mbox->sbi_cp_status_pos);
+	mif_dt_read_u32_noerr (np, "sbi_cp_smapper_mask", mbox->sbi_cp_smapper_mask);
+	mif_dt_read_u32_noerr (np, "sbi_cp_smapper_pos", mbox->sbi_cp_smapper_pos);
 	mif_dt_read_u32 (np, "sbi_cp_rat_mode_mask", mbox->sbi_cp2ap_rat_mode_mask);
 	mif_dt_read_u32 (np, "sbi_cp_rat_mode_pos", mbox->sbi_cp2ap_rat_mode_pos);
 	mif_dt_read_u32 (np, "sbi_cp2ap_wakelock_mask", mbox->sbi_cp2ap_wakelock_mask);
@@ -514,6 +518,8 @@ static int parse_dt_mbox_pdata(struct device *dev, struct device_node *np,
 	mif_dt_read_u32 (np, "sbi_pda_active_pos", mbox->sbi_pda_active_pos);
 	mif_dt_read_u32 (np, "sbi_ap_status_mask", mbox->sbi_ap_status_mask);
 	mif_dt_read_u32 (np, "sbi_ap_status_pos", mbox->sbi_ap_status_pos);
+	mif_dt_read_u32_noerr (np, "sbi_ap2cp_wakelock_mask", mbox->sbi_ap2cp_wakelock_mask);
+	mif_dt_read_u32_noerr (np, "sbi_ap2cp_wakelock_pos", mbox->sbi_ap2cp_wakelock_pos);
 	mif_dt_read_u32 (np, "sbi_crash_type_mask", mbox->sbi_crash_type_mask);
 	mif_dt_read_u32 (np, "sbi_crash_type_pos", mbox->sbi_crash_type_pos);
 

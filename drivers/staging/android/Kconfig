@@ -42,6 +42,12 @@ config ANDROID_INTF_ALARM_DEV
 	  elapsed realtime, and a non-wakeup alarm on the monotonic clock.
 	  Also exports the alarm interface to user-space.
 
+config SAMSUNG_FREECESS
+	bool "thraw frozen process when recv sig"
+	default n
+	help
+	  thraw frozen process when recv sig.
+
 source "drivers/staging/android/ion/Kconfig"
 source "drivers/staging/android/switch/Kconfig"
 

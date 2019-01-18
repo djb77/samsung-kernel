@@ -1230,8 +1230,6 @@ void s6e3hf3_show_err_fg(struct dumpinfo *info)
 	}
 
 	panel_info("==================================================\n");
-
-	inc_dpui_u32_field(DPUI_KEY_PNESDE, (err_fg & 0x4D) ? 1 : 0);
 }
 
 void s6e3hf3_show_dsi_err(struct dumpinfo *info)

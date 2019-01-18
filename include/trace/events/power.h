@@ -736,6 +736,32 @@ TRACE_EVENT(hpgov_cluster_busy,
 			__entry->busy)
 );
 
+TRACE_EVENT(hpgov_load_sum,
+
+	TP_PROTO(unsigned int active_util, int ldsum_heavy_thr,
+				int active_cnt, int ldsum_active_cnt),
+
+	TP_ARGS(active_util, ldsum_heavy_thr, active_cnt, ldsum_active_cnt),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, active_util)
+		__field(int, ldsum_heavy_thr)
+		__field(int, active_cnt)
+		__field(int, ldsum_active_cnt)
+	),
+
+	TP_fast_assign(
+		__entry->active_util = active_util;
+		__entry->ldsum_heavy_thr = ldsum_heavy_thr;
+		__entry->active_cnt = active_cnt;
+		__entry->ldsum_active_cnt = ldsum_active_cnt;
+	),
+
+	TP_printk("active_util=%u, ldsum_heavy_thr=%d, active_cnt=%d -> %d",
+		 __entry->active_util, __entry->ldsum_heavy_thr,
+			__entry->active_cnt, __entry->ldsum_active_cnt)
+);
+
 TRACE_EVENT(hpgov_load_imbalance,
 
 	TP_PROTO(int cluster, unsigned long idle_thr, int heavy_thr,

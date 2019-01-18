@@ -90,6 +90,10 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/task.h>
 
+#ifdef CONFIG_SECURITY_DEFEX
+#include <linux/defex.h>
+#endif
+
 /*
  * Minimum number of threads to boot the kernel
  */
@@ -1472,7 +1476,7 @@ static int dup_task_integrity(unsigned long clone_flags,
 	} else {
 		tsk->integrity = task_integrity_alloc();
 
-		if (!tsk->integrity) 
+		if (!tsk->integrity)
 			ret = -ENOMEM;
 	}
 
@@ -2037,6 +2041,10 @@ long _do_fork(unsigned long clone_flags,
 
 		pid = get_task_pid(p, PIDTYPE_PID);
 		nr = pid_vnr(pid);
+
+#ifdef CONFIG_SECURITY_DEFEX
+		task_defex_zero_creds(p);
+#endif
 
 		if (clone_flags & CLONE_PARENT_SETTID)
 			put_user(nr, parent_tidptr);

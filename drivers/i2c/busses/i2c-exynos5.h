@@ -40,6 +40,7 @@ struct exynos5_i2c {
 	/* Controller operating frequency */
 	unsigned int		fs_clock;
 	unsigned int		hs_clock;
+	unsigned int		fs_plus_clock;
 	unsigned int		stand_clock;
 
 	/* to set the source clock */

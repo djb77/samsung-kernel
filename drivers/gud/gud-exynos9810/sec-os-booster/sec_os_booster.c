@@ -44,14 +44,12 @@
 #define NS_DIV_MS (1000ull * 1000ull)
 #define WAIT_TIME (10ull * NS_DIV_MS)
 
-int mc_switch_core(uint32_t core_num);
+int mc_switch_core_ctrl(uint32_t core_num, uint32_t ctrl_idx);
 void mc_set_schedule_policy(int core);
 uint32_t mc_active_core(void);
 
 int mc_boost_usage_count;
 struct mutex boost_lock;
-
-unsigned int current_core;
 
 unsigned int is_suspend_prepared;
 
@@ -182,8 +180,6 @@ int secos_booster_start(enum secos_boost_policy policy)
 		goto error;
 	}
 
-	current_core = mc_active_core();
-
 	boost_time = (((uint32_t)policy) >> BOOST_TIME_OFFSET) & 0xFFFF;
 	boost_policy = (((uint32_t)policy) >> BOOST_POLICY_OFFSET) & 0xFFFF;
 
@@ -221,7 +217,7 @@ int secos_booster_start(enum secos_boost_policy policy)
 		goto error;
 	}
 
-	ret = mc_switch_core(MIGRATE_TARGET_CORE);
+	ret = mc_switch_core_ctrl(MIGRATE_TARGET_CORE, 1);
 	if (ret) {
 		pr_err("%s: mc switch failed : err:%d\n", __func__, ret);
 		secos_booster_request_pm_qos(&secos_booster_cluster1_qos, 0);
@@ -265,7 +261,7 @@ int secos_booster_stop(void)
 	} else if(mc_boost_usage_count == 0) {
 		hrtimer_cancel(&timer);
 		pr_debug("%s: mc switch to little core \n", __func__);
-		ret = mc_switch_core(current_core);
+		ret = mc_switch_core_ctrl(NONBOOT_LITTLE_CORE, 1);
 		if (ret)
 			pr_err("%s: mc switch core failed. err:%d\n", __func__, ret);
 

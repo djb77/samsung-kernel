@@ -22,8 +22,53 @@
 #include <linux/interrupt.h>
 #include <linux/of_gpio.h>
 #include <linux/sec_class.h>
+#include <asm/io.h>
 
 #define SEC_CONN_PRINT(format, ...) pr_info("[ABC_COND] " format, ##__VA_ARGS__)
+#define WEINT_GPA2_CON		0x14050708
+#define NWEINT_GPM06_CON	0x14220718
+#define NWEINT_GPM07_CON	0x1422071C
+
+#define WEINT_GPA2_CON_MASK		0x00400000
+#define WEINT_GPA2_CON_CLEAR	0xFF0FFFFF
+
+static void detect_con_weint_dump(void)
+{
+    void __iomem *ub_int_reg;
+	void __iomem *sub_int_reg;
+	void __iomem *cam_int_reg;
+	u32 ub_tmp_reg;
+	u32 sub_tmp_reg;
+	u32 cam_tmp_reg;
+	u32 temp;
+	
+	ub_int_reg = ioremap(WEINT_GPA2_CON, 0x10);
+    sub_int_reg = ioremap(NWEINT_GPM06_CON, 0x10);
+    cam_int_reg = ioremap(NWEINT_GPM07_CON, 0x10);
+
+	ub_tmp_reg = readl(ub_int_reg);
+	sub_tmp_reg = readl(sub_int_reg);
+	cam_tmp_reg = readl(cam_int_reg);
+	
+	SEC_CONN_PRINT("GPA2[5] 0x14050708: %#x\n", ub_tmp_reg);
+    SEC_CONN_PRINT("GPM0[6] 0x14220718: %#x\n", sub_tmp_reg);
+	SEC_CONN_PRINT("GPM0[7] 0x1422071c: %#x\n", cam_tmp_reg);
+
+	/* UB_DET LOW Level Check */
+	temp = ub_tmp_reg & WEINT_GPA2_CON_MASK;
+	if(temp == 0) {
+		ub_tmp_reg &= WEINT_GPA2_CON_CLEAR;
+		ub_tmp_reg |= WEINT_GPA2_CON_MASK;
+		writel(ub_tmp_reg, ub_int_reg);
+		SEC_CONN_PRINT("GPA2[5] 0x14050708: Forced set to Both edge %#x\n", readl(ub_int_reg));
+	}
+	
+	iounmap(ub_int_reg);
+	iounmap(sub_int_reg);
+	iounmap(cam_int_reg);
+}
+
+
 
 static irqreturn_t abc_hub_cond_interrupt_handler(int irq, void *handle)
 {
@@ -34,7 +79,7 @@ static irqreturn_t abc_hub_cond_interrupt_handler(int irq, void *handle)
 	type = irq_get_trigger_type(irq);
 
 	SEC_CONN_PRINT("%s\n", __func__);
-
+	detect_con_weint_dump();
 	/*Send Uevent Data*/
 	for (i = 0; i < pinfo->pdata->cond_pdata.gpio_cnt; i++) {
 		if (irq == pinfo->pdata->cond_pdata.irq_number[i]) {
@@ -76,7 +121,9 @@ int abc_hub_cond_irq_enable(struct device *dev, int enable)
 							__func__, retval, pinfo->pdata->cond_pdata.irq_number[i],
 							pinfo->pdata->cond_pdata.irq_type[i], pinfo->pdata->cond_pdata.name[i]);
 #endif
+	msleep(1);
 	}
+
 	return 0;
 }
 

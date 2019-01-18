@@ -365,6 +365,9 @@ struct mem_link_device {
 	unsigned int sbi_cp_status_mask;
 	unsigned int sbi_cp_status_pos;
 
+	unsigned int sbi_cp_smapper_mask;
+	unsigned int sbi_cp_smapper_pos;
+
 	unsigned int mbx_perf_req;
 	unsigned int mbx_perf_req_cpu;
 	unsigned int mbx_perf_req_mif;
@@ -377,6 +380,8 @@ struct mem_link_device {
 	struct work_struct pm_qos_work_cpu;
 	struct work_struct pm_qos_work_mif;
 	struct work_struct pm_qos_work_int;
+
+	unsigned int irq_smapper;
 
 	struct freq_table cl0_table;
 	struct freq_table cl1_table;

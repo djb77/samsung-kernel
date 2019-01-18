@@ -37,7 +37,6 @@ struct score_device;
  * struct score_dev - Device data to register SCore device
  * @minor: minor device number of SCore driver
  * @name: name of SCore device file
- * @dev: device structure registered in platform
  * @miscdev: object about miscdevice structure
  * @cdev: object about cdev structure
  * @parent: parent device
@@ -48,7 +47,6 @@ struct score_dev {
 	int				minor;
 	char				name[SCORE_DEV_NAME_LEN];
 
-	struct device			dev;
 	struct miscdevice		miscdev;
 	struct cdev			*cdev;
 	struct device			*parent;

@@ -3181,6 +3181,37 @@ static void sd_probe_async(void *data, async_cookie_t cookie)
 	if (sdkp->capacity)
 		sd_dif_config_host(sdkp);
 
+#if defined(CONFIG_UFS_DATA_LOG)
+		if (sdp->host->by_ufs && !strcmp(gd->disk_name, "sda")) {
+			struct hd_struct *part;
+			int i;
+			sdp->host->ufs_system_start = 0;
+			sdp->host->ufs_system_end = 0;
+			sdp->host->ufs_sys_log_en = false;
+	
+			for (i = 1; i < 30 ; i++) {
+				if (!gd->part_tbl)
+					break;
+
+				part = gd->part_tbl->part[i];
+				if (!part)
+					break;
+				if (!strncmp(part->info->volname, "SYSTEM", 6) ||
+						!strncmp(part->info->volname, "system", 6)) {
+					sdp->host->ufs_system_start = part->start_sect;
+					sdp->host->ufs_system_end = (part->start_sect + part->nr_sects);
+					sdp->host->ufs_sys_log_en = true;
+					sd_printk(KERN_NOTICE, sdkp, "UFS data logging enabled\n");
+					sd_printk(KERN_NOTICE, sdkp, "UFS %s partition, from : %ld, to %ld\n",
+						part->info->volname,
+						(unsigned long)sdp->host->ufs_system_start,
+						(unsigned long)sdp->host->ufs_system_end);
+					break;
+				}
+			}
+		}
+#endif
+
 	sd_revalidate_disk(gd);
 
 	sd_printk(KERN_NOTICE, sdkp, "Attached SCSI %sdisk\n",
@@ -3299,7 +3330,7 @@ static int sd_probe(struct device *dev)
 		/* apply more throttle on non-ufs scsi device */
 		q->backing_dev_info.capabilities |= BDI_CAP_STRICTLIMIT;
 		bdi_set_min_ratio(&q->backing_dev_info, 20);
-		bdi_set_max_ratio(&q->backing_dev_info, 20);
+		bdi_set_max_ratio(&q->backing_dev_info, 60);
 #endif
 		pr_info("Parameters for SCSI-dev(%s): min/max_ratio: %u/%u "
 			"strictlimit: on nr_requests: %lu read_ahead_kb: %lu\n",
@@ -3379,6 +3410,17 @@ static int sd_remove(struct device *dev)
 {
 	struct scsi_disk *sdkp;
 	dev_t devt;
+
+#ifdef CONFIG_LARGE_DIRTY_BUFFER
+	struct scsi_device *sdp;
+
+	/* restore bdi min/max ratio before device removal */
+	sdp = to_scsi_device(dev);
+	if (sdp && sdp->request_queue && &sdp->request_queue->backing_dev_info) {
+		bdi_set_min_ratio(&sdp->request_queue->backing_dev_info, 0);
+		bdi_set_max_ratio(&sdp->request_queue->backing_dev_info, 100);
+	}
+#endif
 
 	sdkp = dev_get_drvdata(dev);
 	devt = disk_devt(sdkp->disk);

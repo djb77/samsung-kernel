@@ -235,6 +235,7 @@ static bool mtv319_scan_ch(struct ensemble_info_type *e_info
 							, unsigned long freq)
 {
 	bool ret = false;
+	int scan_result = 1;
 
 	if (mtv319_pwr_on == true && e_info != NULL) {
 		rtvTDMB_CloseAllSubChannels();
@@ -247,7 +248,8 @@ static bool mtv319_scan_ch(struct ensemble_info_type *e_info
 			return false;
 		rtvFICDEC_Init();
 #endif
-		if (rtvTDMB_ScanFrequency(freq/1000) == RTV_SUCCESS) {
+		scan_result = rtvTDMB_ScanFrequency(freq/1000);
+		if (scan_result == RTV_SUCCESS) {
 #if defined(TDMB_FIC_USE_TSIF)
 			unsigned int lock_s;
 
@@ -268,6 +270,7 @@ static bool mtv319_scan_ch(struct ensemble_info_type *e_info
 #else
 			enum E_RTV_FIC_DEC_RET_TYPE dc;
 			unsigned int i;
+			int parser_status = 0;
 
 			rtvFICDEC_Init(); /* FIC parser Init */
 
@@ -280,20 +283,27 @@ static bool mtv319_scan_ch(struct ensemble_info_type *e_info
 					if (dc == RTV_FIC_RET_GOING)
 						continue;
 
-					if (dc == RTV_FIC_RET_DONE)
-						ret = true;
+					if (dc == RTV_FIC_RET_DONE) {
+						parser_status = 1;
+						break; /* Stop */
+					}
 
-					break; /* Stop */
+					if (dc == RTV_FIC_RET_SEMI_DONE) {
+						parser_status = 2;
+						continue;
+					}
+				} else {
+					DPRINTK("mtv319_scan_ch READ Fail\n");
 				}
-				DPRINTK("%s READ Fail\n", __func__);
 			}
 
 			rtvTDMB_CloseFIC();
 #endif
-			if (ret == true)
+			if ((parser_status == 1) || (parser_status == 2))
 				ret = __get_ensemble_info(e_info, (freq));
+			DPRINTK("%s : parser_status : %d\n", __func__, parser_status);
 		} else {
-			DPRINTK("%s : Scan fail : %ld\n", __func__, freq);
+			DPRINTK("%s : Scan fail : %ld : %d\n", __func__, freq, scan_result);
 			ret = false;
 		}
 	}

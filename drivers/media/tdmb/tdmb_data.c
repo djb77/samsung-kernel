@@ -170,10 +170,7 @@ static int __add_to_ringbuffer(unsigned char *data, unsigned long data_size)
 		if ((tdmb_ts_size-dist) < size) {
 			DPRINTK("small space is left in ring(len:%d/free:%d)\n",
 				size, (tdmb_ts_size-dist));
-			DPRINTK("ts_head:0x%p, ts_tail:0x%p/head:%d,tail:%d\n",
-				tdmb_ts_head,
-				tdmb_ts_tail,
-				head, tail);
+			DPRINTK("head:%d,tail:%d\n", head, tail);
 		} else {
 			if (head+size <= tdmb_ts_size) {
 				memcpy((tdmb_ts_buffer+head),

@@ -144,7 +144,7 @@
 /* svoice net(0x8000) & grammar(0x300) binary sizes defined in firmware */
 #define SOUND_MODEL_SVOICE_SIZE_MAX (0x8000 + 0x300)
 
-/* google binary size defined in firmware */
+/* google binary size defined in firmware (It is same with VTSDRV_MISC_MODEL_BIN_MAXSZ) */
 #define SOUND_MODEL_GOOGLE_SIZE_MAX (0xB500)
 
 /* VTS Model Binary Max buffer sizes */
@@ -292,6 +292,7 @@ struct vts_data {
 	struct snd_dma_buffer dmab;
 	struct snd_dma_buffer dmab_rec;
 	struct snd_dma_buffer dmab_log;
+	struct snd_dma_buffer dmab_model;
 	u32 target_size;
 	volatile enum trigger active_trigger;
 	u32 voicerecog_start;
@@ -337,4 +338,5 @@ extern int vts_send_ipc_ack(struct vts_data *data, u32 result);
 extern void vts_register_dma(struct platform_device *pdev_vts,
 		struct platform_device *pdev_vts_dma, unsigned int id);
 extern int vts_set_dmicctrl(struct platform_device *pdev, int micconf_type, bool enable);
+extern int vts_sound_machine_drv_register(void);
 #endif /* __SND_SOC_VTS_H */

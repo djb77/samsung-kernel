@@ -284,6 +284,8 @@ static void dpp_get_params(struct dpp_device *dpp, struct dpp_params_info *p)
 	p->addr[3] = 0;
 	p->eq_mode = config->dpp_parm.eq_mode;
 	p->hdr = config->dpp_parm.hdr_std;
+	p->max_luminance = config->dpp_parm.max_luminance;
+	p->min_luminance = config->dpp_parm.min_luminance;
 	p->is_4p = false;
 	p->y_2b_strd = 0;
 	p->c_2b_strd = 0;
@@ -763,6 +765,11 @@ static long dpp_subdev_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg
 		dma_reg_set_recovery_num(dpp->id, (u32)val);
 		break;
 
+	case DPP_GET_RECOVERY_CNT:
+		if (arg)
+			*((int *)arg) = dpp->d.recovery_cnt;
+		break;
+
 	default:
 		break;
 	}
@@ -862,6 +869,11 @@ static irqreturn_t dma_irq_handler(int irq, void *priv)
 				val == DPP_COMP_SRC_G2D ? "G2D" : "GPU",
 				get_dpp_drvdata(IDMA_VGF0)->d.recovery_cnt,
 				get_dpp_drvdata(IDMA_VGF1)->d.recovery_cnt);
+
+#ifdef CONFIG_SEC_ABC
+		if (!(dpp->d.recovery_cnt % 10))
+			sec_abc_send_event("MODULE=display@ERROR=afbc_recovery");
+#endif
 		goto irq_end;
 	}
 

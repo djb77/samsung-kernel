@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.h 731071 2017-11-09 16:47:26Z $
+ * $Id: wl_cfgvendor.h 740003 2018-01-10 10:47:17Z $
  */
 
 #ifndef _wl_cfgvendor_h_
@@ -488,45 +488,6 @@ typedef enum gscan_geofence_attribute {
 	ATTR_GSCAN_NUM_HOTLIST_BSSID,
 	ATTR_GSCAN_HOTLIST_BSSID
 } gscan_geofence_attribute_t;
-
-/*
- *   Various NAN Protocol Response code
- */
-typedef enum {
-	/* NAN Protocol Response Codes */
-	NAN_STATUS_SUCCESS = 0,
-	/*  NAN Discovery Engine/Host driver failures */
-	NAN_STATUS_INTERNAL_FAILURE = 1,
-	/*  NAN OTA failures */
-	NAN_STATUS_PROTOCOL_FAILURE = 2,
-	/* if the publish/subscribe id is invalid */
-	NAN_STATUS_INVALID_PUBLISH_SUBSCRIBE_ID = 3,
-	/* If we run out of resources allocated */
-	NAN_STATUS_NO_RESOURCE_AVAILABLE = 4,
-	/* if invalid params are passed */
-	NAN_STATUS_INVALID_PARAM = 5,
-	/*  if the requestor instance id is invalid */
-	NAN_STATUS_INVALID_REQUESTOR_INSTANCE_ID = 6,
-	/*  if the ndp id is invalid */
-	NAN_STATUS_INVALID_NDP_ID = 7,
-	/* if NAN is enabled when wifi is turned off */
-	NAN_STATUS_NAN_NOT_ALLOWED = 8,
-	/* if over the air ack is not received */
-	NAN_STATUS_NO_OTA_ACK = 9,
-	/* If NAN is already enabled and we are try to re-enable the same */
-	NAN_STATUS_ALREADY_ENABLED = 10,
-	/* If followup message internal queue is full */
-	NAN_STATUS_FOLLOWUP_QUEUE_FULL = 11,
-	/* Unsupported concurrency session enabled, NAN disabled notified */
-	NAN_STATUS_UNSUPPORTED_CONCURRENCY_NAN_DISABLED = 12
-} nan_status_type_t;
-
-#define NAN_ERROR_STR_LEN	255
-
-typedef struct {
-	nan_status_type_t status;
-	char nan_reason[NAN_ERROR_STR_LEN]; /* Describe the NAN reason type */
-} nan_hal_status_t;
 
 typedef enum gscan_complete_event {
 	WIFI_SCAN_COMPLETE,

@@ -21,13 +21,7 @@
 #define CAM_MIPI_NOT_INITIALIZED	-1
 
 /* refer to platform/hardware/ril/secril/modem/ipc/ipc41/ipcdefv41.h */
-struct cam_cp_noti_info {
-	u16 len;
-	u8 msg_seq;
-	u8 ack_seq;
-	u8 main_cmd;
-	u8 sub_cmd;
-	u8 cmd_type;
+struct __packed cam_cp_noti_info {
 	u8 rat;
 	u32 band;
 	u32 channel;

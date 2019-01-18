@@ -415,6 +415,7 @@ void restore_processor_state(void);
 /* kernel/power/main.c */
 extern int register_pm_notifier(struct notifier_block *nb);
 extern int unregister_pm_notifier(struct notifier_block *nb);
+extern bool is_pm_chain_notifier(struct notifier_block **notifier_block, unsigned long val);
 
 #define pm_notifier(fn, pri) {				\
 	static struct notifier_block fn##_nb =			\

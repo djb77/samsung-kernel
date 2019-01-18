@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgnan.h 735075 2017-12-07 08:00:17Z $
+ * $Id: wl_cfgnan.h 755932 2018-04-05 11:31:48Z $
  */
 
 #ifndef _wl_cfgnan_h_
@@ -34,15 +34,17 @@
 */
 #define NAN_HAL_VERSION_1	0x1
 
+#define NAN_EVENT_BUFFER_SIZE_LARGE	1024u
+
 #define WL_NAN_IOV_BATCH_VERSION	0x8000
 #define WL_NAN_AVAIL_REPEAT_INTVL	0x0200
 #define WL_NAN_AVAIL_START_INTVL	160
 #define WL_NAN_AVAIL_DURATION_INTVL	336
-#define NAN_IOCTL_BUF_SIZE		256
-#define NAN_IOCTL_BUF_SIZE_MED		512
-#define NAN_IOCTL_BUF_SIZE_LARGE	1024
-#define NAN_EVENT_NAME_MAX_LEN		40
-#define NAN_RTT_IOVAR_BUF_SIZE		1024
+#define NAN_IOCTL_BUF_SIZE		256u
+#define NAN_IOCTL_BUF_SIZE_MED		512u
+#define NAN_IOCTL_BUF_SIZE_LARGE	1024u
+#define NAN_EVENT_NAME_MAX_LEN		40u
+#define NAN_RTT_IOVAR_BUF_SIZE		1024u
 #define WL_NAN_EVENT_CLEAR_BIT		32
 #define NAN_EVENT_MASK_ALL			0x7fffffff
 #define NAN_MAX_AWAKE_DW_INTERVAL	5
@@ -52,6 +54,7 @@
 #define NAN_ID_MAX	255
 #define NAN_DEF_SOCIAL_CHAN_2G	6
 #define NAN_DEF_SOCIAL_CHAN_5G	149
+#define NAN_DEF_SEC_SOCIAL_CHAN_5G	44
 #define NAN_MAX_SOCIAL_CHANNELS	3
 /* Keeping RSSI threshold value to be -70dBm */
 #define NAN_DEF_RSSI_NOTIF_THRESH -70
@@ -68,12 +71,9 @@
 #define NAN_RANGING_PERIOD WL_AVAIL_PERIOD_1024
 #define NAN_SYNC_DEF_AWAKE_DW	1
 
-#define NAN_BLOOM_LENGTH_DEFAULT        240
+#define NAN_BLOOM_LENGTH_DEFAULT        240u
 #define NAN_SRF_MAX_MAC (NAN_BLOOM_LENGTH_DEFAULT / ETHER_ADDR_LEN)
-#define NAN_SRF_CTRL_FIELD_LEN 1
-
-/* Binding Bitmap length */
-#define NAN_BINDING_BITMAP_LEN	2
+#define NAN_SRF_CTRL_FIELD_LEN 1u
 
 #define MAX_IF_ADD_WAIT_TIME	1000
 #define NAN_DP_ROLE_INITIATOR  0x0001
@@ -100,15 +100,14 @@
 #define NAN_DBG_EXIT() {WL_DBG(("Exit: %s\n", __FUNCTION__));}
 
 /* Service Control Type length */
-#define NAN_SVC_CONTROL_TYPE_LEN	2
 #define NAN_SVC_CONTROL_TYPE_MASK	((1 << NAN_SVC_CONTROL_TYPE_LEN) - 1)
 
 #ifndef strtoul
 #define strtoul(nptr, endptr, base) bcm_strtoul((nptr), (endptr), (base))
 #endif // endif
 
-#define NAN_MAC_ADDR_LEN 6
-#define NAN_DP_MAX_APP_INFO_LEN	512
+#define NAN_MAC_ADDR_LEN 6u
+#define NAN_DP_MAX_APP_INFO_LEN	512u
 
 #define NAN_SDE_CF_DP_REQUIRED      (1 << 2)
 #define NAN_SDE_CF_DP_TYPE      (1 << 3)
@@ -132,34 +131,34 @@
 #define WL_NAN_EVENT_SUPPRESS_FOLLOWUP_RECEIVE_BIT	0
 
 #define C2S(x)  case x: return #x;
-#define NAN_BLOOM_LENGTH_DEFAULT        240
+#define NAN_BLOOM_LENGTH_DEFAULT        240u
 #define NAN_SRF_MAX_MAC (NAN_BLOOM_LENGTH_DEFAULT / ETHER_ADDR_LEN)
-#define NAN_MAX_PMK_LEN		32
-#define NAN_ERROR_STR_LEN	255
+#define NAN_MAX_PMK_LEN		32u
+#define NAN_ERROR_STR_LEN	255u
 
 /* NAN related Capabilities */
 #define MAX_CONCURRENT_NAN_CLUSTERS 1
-#define MAX_PUBLISHES	8
-#define MAX_SUBSCRIBES	8
-#define MAX_SVC_NAME_LEN	255
-#define MAX_MATCH_FILTER_LEN	255
-#define MAX_TOTAL_MATCH_FILTER_LEN	510
-#define	NAN_MAX_SERVICE_SPECIFIC_INFO_LEN	255
+#define MAX_PUBLISHES	8u
+#define MAX_SUBSCRIBES	8u
+#define MAX_SVC_NAME_LEN	255u
+#define MAX_MATCH_FILTER_LEN	255u
+#define MAX_TOTAL_MATCH_FILTER_LEN	510u
+#define	NAN_MAX_SERVICE_SPECIFIC_INFO_LEN	255u
 #define MAX_NDI_INTERFACES	1
-#define MAX_NDP_SESSIONS	1
-#define MAX_APP_INFO_LEN	255
+#define MAX_NDP_SESSIONS	5
+#define MAX_APP_INFO_LEN	255u
 #define	MAX_QUEUED_TX_FOLLOUP_MSGS	10
-#define	MAX_SDEA_SVC_INFO_LEN	255
+#define	MAX_SDEA_SVC_INFO_LEN	255u
 #define	MAX_SUBSCRIBE_ADDRESS	10
 #define	CIPHER_SUITE_SUPPORTED	1
 #define	MAX_SCID_LEN	0
 #define	IS_NDP_SECURITY_SUPPORTED	true
 #define	NDP_SUPPORTED_BANDS	2
 
-#define NAN_MAX_RANGING_INST 8
+#define NAN_MAX_RANGING_INST 8u
 #define NAN_MAX_SVC_INST (MAX_PUBLISHES + MAX_SUBSCRIBES)
-#define NAN_SVC_INST_SIZE 32
-#define NAN_START_STOP_TIMEOUT	1000
+#define NAN_SVC_INST_SIZE 32u
+#define NAN_START_STOP_TIMEOUT	5000
 
 #ifdef WL_NAN_DEBUG
 #define NAN_MUTEX_LOCK() {WL_DBG(("Mutex Lock: Enter: %s\n", __FUNCTION__)); \
@@ -198,10 +197,18 @@
 #define	NAN_ATTR_CLUSTER_VAL_CONFIG		(1<<25)
 #define	NAN_ATTR_IF_ADDR_CONFIG			(1<<26)
 #define	NAN_ATTR_OUI_CONFIG			(1<<27)
-#define NAN_IOVAR_NAME_SIZE	4
+#define	NAN_ATTR_SUB_SID_BEACON_CONFIG		(1<<28)
+#define NAN_IOVAR_NAME_SIZE	4u
 #define NAN_XTLV_ID_LEN_SIZE OFFSETOF(bcm_xtlv_t, data)
 
 typedef uint32 nan_data_path_id;
+
+typedef enum nan_stop_reason_code {
+	NAN_CONCURRENCY_CONFLICT = 0,
+	NAN_USER_INITIATED = 1,
+	NAN_BUS_IS_DOWN = 2,
+	NAN_DEINITIALIZED = 3
+} nan_stop_reason_code_t;
 
 typedef enum nan_range_status {
 	NAN_RANGING_INVALID = 0,
@@ -225,6 +232,8 @@ typedef struct nan_svc_info {
 	uint32 ranging_interval;
 	uint32 ingress_limit;
 	uint32 egress_limit;
+	uint8 tx_match_filter[MAX_MATCH_FILTER_LEN];        /* TX match filter */
+	uint8 tx_match_filter_len;
 } nan_svc_info_t;
 
 typedef struct nan_ranging_inst {
@@ -304,6 +313,8 @@ typedef struct nan_mac_list {
 typedef struct wl_nan_sid_beacon_tune {
 	uint8 sid_enable;	/* flag for sending service id in beacon */
 	uint8 sid_count;	/* Limit for number of SIDs to be included in Beacons */
+	uint8 sub_sid_enable;	/* flag for sending subscribe service id in beacon */
+	uint8 sub_sid_count;	/* Limit for number of SUb SIDs to be included in Beacons */
 } wl_nan_sid_beacon_ctrl_t;
 
 typedef struct nan_avail_cmd_data {
@@ -345,7 +356,6 @@ typedef struct nan_discover_cmd_data {
 	uint8 srf_include;      /* SRF include */
 	uint8 use_srf;          /* use SRF */
 	uint8 recv_ind_flag;    /* Receive Indication Flag */
-	uint8 rssi_threshold_flag;	/* RSSI threshold flag */
 	uint8 disc_ind_cfg;	/* Discovery Ind cfg */
 	uint8 ranging_indication;
 	uint32 ranging_intvl_msec; /* ranging interval in msec */
@@ -353,6 +363,7 @@ typedef struct nan_discover_cmd_data {
 	uint32 egress_limit;
 	bool response;
 	uint8 service_responder_policy;
+	bool svc_update;
 } nan_discover_cmd_data_t;
 
 typedef struct nan_datapath_cmd_data {
@@ -428,6 +439,7 @@ typedef struct nan_config_cmd_data {
 	uint8 config_cluster_val;
 	uint8 disc_ind_cfg;	/* Discovery Ind cfg */
 	uint8 csid;	/* cipher suite type */
+	uint32 nmi_rand_intvl; /* nmi randomization interval */
 } nan_config_cmd_data_t;
 
 typedef struct nan_event_hdr {
@@ -448,7 +460,7 @@ typedef struct nan_event_data {
 	wl_nan_instance_id_t pub_id;          /* publisher id */
 	wl_nan_instance_id_t sub_id;          /* subscriber id */
 	wl_nan_instance_id_t local_inst_id;   /* local instance id */
-	wl_nan_instance_id_t peer_inst_id;    /* Peer instance id */
+	wl_nan_instance_id_t requestor_id;    /* Requestor instance id */
 	int publish_rssi;	/* discovery rssi value */
 	int sub_rssi;	/* Sub rssi value */
 	int fup_rssi;		/* followup rssi */
@@ -473,6 +485,43 @@ typedef struct nan_event_data {
 	uint32 ranging_ind;
 	uint8 rng_id;
 } nan_event_data_t;
+
+/*
+ *   Various NAN Protocol Response code
+*/
+typedef enum {
+	/* NAN Protocol Response Codes */
+	NAN_STATUS_SUCCESS = 0,
+	/*  NAN Discovery Engine/Host driver failures */
+	NAN_STATUS_INTERNAL_FAILURE = 1,
+	/*  NAN OTA failures */
+	NAN_STATUS_PROTOCOL_FAILURE = 2,
+	/* if the publish/subscribe id is invalid */
+	NAN_STATUS_INVALID_PUBLISH_SUBSCRIBE_ID = 3,
+	/* If we run out of resources allocated */
+	NAN_STATUS_NO_RESOURCE_AVAILABLE = 4,
+	/* if invalid params are passed */
+	NAN_STATUS_INVALID_PARAM = 5,
+	/*  if the requestor instance id is invalid */
+	NAN_STATUS_INVALID_REQUESTOR_INSTANCE_ID = 6,
+	/*  if the ndp id is invalid */
+	NAN_STATUS_INVALID_NDP_ID = 7,
+	/* if NAN is enabled when wifi is turned off */
+	NAN_STATUS_NAN_NOT_ALLOWED = 8,
+	/* if over the air ack is not received */
+	NAN_STATUS_NO_OTA_ACK = 9,
+	/* If NAN is already enabled and we are try to re-enable the same */
+	NAN_STATUS_ALREADY_ENABLED = 10,
+	/* If followup message internal queue is full */
+	NAN_STATUS_FOLLOWUP_QUEUE_FULL = 11,
+	/* Unsupported concurrency session enabled, NAN disabled notified */
+	NAN_STATUS_UNSUPPORTED_CONCURRENCY_NAN_DISABLED = 12
+} nan_status_type_t;
+
+typedef struct {
+	nan_status_type_t status;
+	char nan_reason[NAN_ERROR_STR_LEN]; /* Describe the NAN reason type */
+} nan_hal_status_t;
 
 typedef struct nan_parse_event_ctx {
 	struct bcm_cfg80211 *cfg;
@@ -560,7 +609,7 @@ extern int wl_cfgnan_config_eventmask(struct net_device *ndev, struct bcm_cfg802
 extern int wl_cfgnan_start_handler(struct net_device *ndev,
 	struct bcm_cfg80211 *cfg, nan_config_cmd_data_t *cmd_data, uint32 nan_attr_mask);
 extern int wl_cfgnan_stop_handler(struct net_device *ndev,
-		struct bcm_cfg80211 *cfg, uint8 busstate, bool disable_events);
+	struct bcm_cfg80211 *cfg, bool disable_events);
 extern int wl_cfgnan_config_handler(struct net_device *ndev,
 	struct bcm_cfg80211 *cfg, nan_config_cmd_data_t *cmd_data, uint32 nan_attr_mask);
 extern int wl_cfgnan_support_handler(struct net_device *ndev,
@@ -604,6 +653,7 @@ extern s32 wl_cfgnan_get_ndi_idx(struct bcm_cfg80211 *cfg);
 extern s32 wl_cfgnan_add_ndi_data(struct bcm_cfg80211 *cfg, s32 idx, char *name);
 extern s32 wl_cfgnan_del_ndi_data(struct bcm_cfg80211 *cfg, char *name);
 extern struct wl_ndi_data *wl_cfgnan_get_ndi_data(struct bcm_cfg80211 *cfg, char *name);
+extern int wl_cfgnan_disable(struct bcm_cfg80211 *cfg, nan_stop_reason_code_t reason);
 
 typedef enum {
 	NAN_ATTRIBUTE_HEADER                            = 100,
@@ -727,6 +777,8 @@ typedef enum {
 	NAN_ATTRIBUTE_DWELL_TIME_5G                     = 215,
 	NAN_ATTRIBUTE_SCAN_PERIOD_5G                    = 216,
 	NAN_ATTRIBUTE_SVC_RESPONDER_POLICY              = 217,
-	NAN_ATTRIBUTE_EVENT_MASK			= 218
+	NAN_ATTRIBUTE_EVENT_MASK			= 218,
+	NAN_ATTRIBUTE_SUB_SID_BEACON                    = 219,
+	NAN_ATTRIBUTE_RANDOMIZATION_INTERVAL            = 220
 } NAN_ATTRIBUTE;
 #endif	/* _wl_cfgnan_h_ */

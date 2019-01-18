@@ -25,6 +25,14 @@
 #include "../ion_priv.h"
 #include "ion_hpa_heap.h"
 
+struct ion_hpa_heap {
+	struct ion_heap heap;
+	unsigned long unprot_count;
+	unsigned long unprot_size;
+};
+
+#define to_hpa_heap(x) container_of(x, struct ion_hpa_heap, heap)
+
 static int ion_hpa_compare_pages(const void *p1, const void *p2)
 {
 	if (*((unsigned long *)p1) > (*((unsigned long *)p2)))
@@ -100,7 +108,9 @@ static int ion_hpa_heap_allocate(struct ion_heap *heap,
 		info->prot_desc.chunk_size = ION_HPA_DEFAULT_SIZE;
 		info->prot_desc.bus_address = (count == 1) ?  phys[0] :
 						virt_to_phys(phys);
-		ion_secure_protect(buffer);
+		ret = ion_secure_protect(buffer);
+		if (ret)
+			goto err_prot;
 
 		if (count > 1)
 			kmemleak_ignore(pages);
@@ -111,6 +121,10 @@ static int ion_hpa_heap_allocate(struct ion_heap *heap,
 	}
 
 	return 0;
+err_prot:
+	for (i = 0; i < count; i++)
+		__free_pages(phys_to_page(phys[i]), ION_HPA_DEFAULT_ORDER);
+
 err_hpa:
 	sg_free_table(&info->table);
 err_sg:
@@ -125,17 +139,31 @@ static void ion_hpa_heap_free(struct ion_buffer *buffer)
 {
 	struct ion_buffer_info *info = buffer->priv_virt;
 	struct scatterlist *sg;
-	unsigned int i;
+	int unprot_err = 0;
 
 	if (buffer->flags & ION_FLAG_PROTECTED) {
-		ion_secure_unprotect(buffer);
+		unprot_err = ion_secure_unprotect(buffer);
 
 		if (info->prot_desc.chunk_count > 1)
 			kfree(phys_to_virt(info->prot_desc.bus_address));
 	}
 
-	for_each_sg(info->table.sgl, sg, info->table.orig_nents, i)
-		__free_pages(sg_page(sg), ION_HPA_DEFAULT_ORDER);
+	if (unprot_err) {
+		struct ion_hpa_heap *hpa_heap = to_hpa_heap(buffer->heap);
+
+		hpa_heap->unprot_count++;
+		hpa_heap->unprot_size += ALIGN(buffer->size,
+					       ION_PROTECTED_BUF_ALIGN);
+	} else {
+		unsigned int i;
+		/*
+		 * leave the pages allocated if unprotection to that pages fail.
+		 * Otherwise, access in Linux to that pages may cause system
+		 * error.
+		 */
+		for_each_sg(info->table.sgl, sg, info->table.orig_nents, i)
+			__free_pages(sg_page(sg), ION_HPA_DEFAULT_ORDER);
+	}
 
 	sg_free_table(&info->table);
 	kfree(info);
@@ -149,22 +177,36 @@ static struct ion_heap_ops ion_hpa_ops = {
 	.unmap_kernel = ion_heap_unmap_kernel,
 };
 
+static int hpa_heap_debug_show(struct ion_heap *heap, struct seq_file *s,
+			       void *unused)
+{
+	struct ion_hpa_heap *hpa_heap = to_hpa_heap(heap);
+
+	seq_printf(s, "\n[%s] unprotect error: count %lu, size %lu\n",
+		   heap->name, hpa_heap->unprot_count, hpa_heap->unprot_size);
+
+	return 0;
+}
+
 struct ion_heap *ion_hpa_heap_create(struct ion_platform_heap *data)
 {
-	struct ion_heap *heap;
+	struct ion_hpa_heap *heap;
 
 	heap = kzalloc(sizeof(*heap), GFP_KERNEL);
 	if (!heap)
 		return ERR_PTR(-ENOMEM);
 
-	heap->ops = &ion_hpa_ops;
-	heap->type = ION_HEAP_TYPE_HPA;
+	heap->heap.ops = &ion_hpa_ops;
+	heap->heap.type = ION_HEAP_TYPE_HPA;
+	heap->heap.debug_show = hpa_heap_debug_show;
 	pr_info("%s: HPA heap %s(%d) is created\n", __func__,
 			data->name, data->id);
-	return heap;
+	return &heap->heap;
 }
 
 void ion_hpa_heap_destroy(struct ion_heap *heap)
 {
-	kfree(heap);
+	struct ion_hpa_heap *hpa = to_hpa_heap(heap);
+
+	kfree(hpa);
 }

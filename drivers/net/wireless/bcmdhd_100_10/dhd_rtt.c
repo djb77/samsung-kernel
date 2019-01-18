@@ -1179,6 +1179,7 @@ rtt_handle_config_general(wl_proxd_session_id_t session_id, wl_proxd_tlv_t **p_t
 				break;
 			case WL_PROXD_TLV_ID_BSSID: /* mac address */
 			case WL_PROXD_TLV_ID_PEER_MAC:
+			case WL_PROXD_TLV_ID_CUR_ETHER_ADDR:
 				p_src_data = &p_config_param_info->mac_addr;
 				src_data_size = sizeof(struct ether_addr);
 				break;
@@ -1500,6 +1501,7 @@ dhd_rtt_start(dhd_pub_t *dhd)
 	rtt_target_info_t *rtt_target;
 	rtt_status_info_t *rtt_status;
 	struct net_device *dev = dhd_linux_get_primary_netdev(dhd);
+	u8 ioctl_buf[WLC_IOCTL_SMLEN];
 	NULL_CHECK(dhd, "dhd is NULL", err);
 
 	rtt_status = GET_RTTSTATE(dhd);
@@ -1562,6 +1564,23 @@ dhd_rtt_start(dhd_pub_t *dhd)
 	ftm_configs[ftm_cfg_cnt++].flags = WL_PROXD_SESSION_FLAG_INITIATOR;
 	dhd_rtt_ftm_config(dhd, FTM_DEFAULT_SESSION, FTM_CONFIG_CAT_OPTIONS,
 		ftm_configs, ftm_cfg_cnt);
+
+	memset(ioctl_buf, 0, WLC_IOCTL_SMLEN);
+	err = wldev_iovar_getbuf(dev, "cur_etheraddr", NULL, 0,
+			ioctl_buf, WLC_IOCTL_SMLEN, NULL);
+	if (err) {
+		WL_ERR(("WLC_GET_CUR_ETHERADDR failed, error %d\n", err));
+		goto exit;
+	}
+	memcpy(rtt_target->local_addr.octet, ioctl_buf, ETHER_ADDR_LEN);
+
+	/* local mac address */
+	if (!ETHER_ISNULLADDR(rtt_target->local_addr.octet)) {
+		ftm_params[ftm_param_cnt].mac_addr = rtt_target->local_addr;
+		ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_CUR_ETHER_ADDR;
+		bcm_ether_ntoa(&rtt_target->local_addr, eabuf);
+		DHD_RTT((">\t local %s\n", eabuf));
+	}
 	/* target's mac address */
 	if (!ETHER_ISNULLADDR(rtt_target->addr.octet)) {
 		ftm_params[ftm_param_cnt].mac_addr = rtt_target->addr;

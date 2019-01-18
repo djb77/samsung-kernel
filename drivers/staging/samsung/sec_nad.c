@@ -1159,6 +1159,50 @@ static ssize_t show_nad_support(struct device *dev,
 }
 static DEVICE_ATTR(nad_support, S_IRUGO, show_nad_support, NULL);
 
+
+static ssize_t show_nad_version(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	unsigned int nad_project_index;
+	unsigned int nad_project_index2;
+	unsigned int nad_fw_version;
+	char chipset_name[12];
+	
+	nad_project_index = (sec_nad_env.nad_data >> 28) & 0xF;
+	nad_project_index2 = (sec_nad_env.nad_inform2_data >> 29) & 0xF;
+	nad_fw_version = ((sec_nad_env.nad_data<<4) >> 28) & 0xF;
+
+	memset(chipset_name, 0x0, sizeof(chipset_name));
+	NAD_PRINT("%s\n", __func__);
+	
+	if(sec_nad_env.nad_data != 0)
+	{
+	    if(nad_project_index == EXYNOS7885) {
+			if(nad_project_index2 == 0) {
+				strcpy(chipset_name, "EXYNOS7885");
+			} 
+			else if (nad_project_index2 == 1) {
+				strcpy(chipset_name, "EXYNOS7884");
+			} 
+			else if (nad_project_index2 == 2)
+			{
+				strcpy(chipset_name, "EXYNOS7883");
+			}
+		}
+		else
+		{
+			strcpy(chipset_name, nad_chipset_name[nad_project_index]);
+		}
+		return sprintf(buf,"NAD_%s_Ver.0x%x\n", chipset_name, nad_fw_version);	
+			
+	}
+	else
+		return sprintf(buf,"NAD_NO_INFORMATION\n");
+	
+}
+static DEVICE_ATTR(nad_version, S_IRUGO, show_nad_version, NULL);
+
 #if defined(CONFIG_SEC_NAD_API)
 static void make_result_data_to_string(void)
 {
@@ -1264,6 +1308,13 @@ static int __init sec_nad_init(void)
 		goto err_create_nad_sysfs;
 	}
 #endif
+
+
+	ret = device_create_file(sec_nad, &dev_attr_nad_version);
+	if (ret) {
+		pr_err("%s: Failed to create device file\n", __func__);
+		goto err_create_nad_sysfs;
+	}
 
 	/* Initialize nad param struct */
 	sec_nad_param_data.offset = NAD_ENV_OFFSET;

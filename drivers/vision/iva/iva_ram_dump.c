@@ -272,6 +272,74 @@ static void iva_ram_dump_copy_section_sfrs(struct iva_dev_data *iva,
 	}
 }
 
+static void iva_ram_dump_pretty_print_vcm_dbg(char *dst_buf, uint32_t dst_buf_sz,
+						int *copy_size, uint32_t mux_sel,
+						uint32_t reg_val)
+{
+	uint32_t i;
+
+#define GET_BIT(pos) GET_BITS((pos), 1)
+#define GET_BITS(pos, count) ((reg_val >> (pos)) & ((1u << (count)) - 1))
+#define NUM_CMD_BUF 8
+#define NUM_SCH 8
+#define CMD_STATE(val) ((val) == 0 ? "IDLE" : (val) == 1 ? "RUN" : (val) == 2 \
+	? "WAIT" : "UNKNOWN")
+#define PRINT_TO_BUF(fmt, ...) \
+	*copy_size += snprintf(dst_buf + *copy_size, \
+			dst_buf_sz - *copy_size - 1, fmt, __VA_ARGS__);
+
+	if (mux_sel == 0x00) {
+		PRINT_TO_BUF("%-7s | %-7s | %s\n", "Sched", "Active", "State");
+		for (i = 0; i < NUM_SCH; ++i)
+			PRINT_TO_BUF("%-7u | %-7u | %s\n", \
+				i, GET_BIT(8 + i), CMD_STATE(GET_BIT(NUM_SCH - i - 1)));
+	} else if (mux_sel == 0x01) {
+		PRINT_TO_BUF("%-7s | %-10s | %-10s | %-10s | %s\n", \
+			"Sched", "Cmd valid", "Cmd ready", "Cmd done", "Cmd rerun");
+		for (i = 0; i < NUM_SCH; ++i)
+			PRINT_TO_BUF("%-7u | %-10u | %-10u | %-10u | %u\n", \
+				i, GET_BIT(24 + i), GET_BIT(16 + i),
+				GET_BIT(8 + i), GET_BIT(0 + i));
+	} else if (mux_sel >= 0x04 && mux_sel <= 0x1D) {
+		i = mux_sel / 4 - 1;
+		if (i >= 6) // Debug info for scheduler 6 is not available!
+			++i;
+
+		if (mux_sel % 2 == 0) {
+			PRINT_TO_BUF("%-7s | %-7s | %-15s | %s\n", \
+				"Sched", "PC", "Outer loop iter", "Inner loop iter");
+			PRINT_TO_BUF("%-7u | %-7u | %-15u | %u\n", \
+				i, GET_BITS(24, 7), GET_BITS(12, 12), GET_BITS(0, 12));
+		} else {
+			PRINT_TO_BUF("%-7s | %s\n", "Sched", "Back-Off counter");
+			PRINT_TO_BUF("%-7u | %u\n", i, GET_BITS(0, 16));
+		}
+	} else if (mux_sel == 0x1E) {
+		PRINT_TO_BUF("%-7s | %-7s | %-15s | %s\n", \
+			"Command", "State", "AXI Cmd valid", "AXI Cmd ready");
+		for (i = 0; i < NUM_CMD_BUF; ++i)
+			PRINT_TO_BUF("%-7u | %-7s | %-15u | %u\n", \
+				i, CMD_STATE(GET_BITS(i * 2, 2)), \
+				GET_BIT(24 + i), GET_BIT(16 + i));
+	} else if (mux_sel == 0x1F) {
+		PRINT_TO_BUF("%-7s | %-10s | %-10s | %-10s | %-10s | %-15s | %s\n", \
+			"AXI", "Cmd valid", "Cmd ready", "Data valid", \
+			"Data ready", "Response valid", "Response ready");
+		PRINT_TO_BUF("%-7s | %-10u | %-10u | %-10u | %-10u | %-15u | %u\n", \
+			"Write", GET_BIT(17), GET_BIT(16), GET_BIT(15), \
+			GET_BIT(14), GET_BIT(13), GET_BIT(12));
+		PRINT_TO_BUF("%-7s | %-10u | %-10u | %-10u | %-10u | %-15s |\n", \
+			"Read", GET_BIT(11), GET_BIT(10), GET_BIT(9), GET_BIT(8), "");
+	}
+	PRINT_TO_BUF("%c", '\n');
+#undef PRINT_TO_BUF
+#undef CMD_STATE
+#undef NUM_SCH
+#undef NUM_CMD_BUF
+#undef GET_BITS
+#undef GET_BIT
+}
+
 void iva_ram_dump_copy_vcm_dbg(struct iva_dev_data *iva,
 		void *dst_buf, uint32_t dst_buf_sz)
 {
@@ -311,6 +379,10 @@ void iva_ram_dump_copy_vcm_dbg(struct iva_dev_data *iva,
 				dst_buf_sz - copy_size - 1 /* including null*/,
 				"DBGSEL[%02x]=0x%08x\n",
 				vcm_dbg_mux_sel[i], reg_val);
+#ifdef CONFIG_SOC_EXYNOS9810
+		iva_ram_dump_pretty_print_vcm_dbg(dst_buf, dst_buf_sz, &copy_size,
+				vcm_dbg_mux_sel[i], reg_val);
+#endif
 	}
 
 	if (copy_size != 0)

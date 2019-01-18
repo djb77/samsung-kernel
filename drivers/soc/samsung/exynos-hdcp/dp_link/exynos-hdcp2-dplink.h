@@ -30,9 +30,9 @@ int hdcp_dplink_set_hprime_available(void);
 int hdcp_dplink_set_rp_ready(void);
 int hdcp_dplink_set_reauth(void);
 int hdcp_dplink_set_integrity_fail(void);
-int hdcp_dplink_hpd_changed(void);
+int hdcp_dplink_cancel_auth(void);
 int hdcp_dplink_stream_manage(void);
 int hdcp_dplink_is_auth_state(void);
-void hdcp_clear_session(uint32_t);
-
+void hdcp_clear_session(uint32_t id);
+void hdcp_dplink_clear_all(void);
 #endif

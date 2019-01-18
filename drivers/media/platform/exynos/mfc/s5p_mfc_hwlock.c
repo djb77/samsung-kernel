@@ -140,11 +140,6 @@ int s5p_mfc_get_hwlock_dev(struct s5p_mfc_dev *dev)
 	int ret = 0;
 	unsigned long flags;
 
-	if (!dev) {
-		mfc_err_dev("no mfc device to run\n");
-		return -EINVAL;
-	}
-
 	mutex_lock(&dev->hwlock_wq.wait_mutex);
 
 	spin_lock_irqsave(&dev->hwlock.lock, flags);
@@ -169,11 +164,6 @@ int s5p_mfc_get_hwlock_dev(struct s5p_mfc_dev *dev)
 			((dev->hwlock.transfer_owner == 1) && (dev->hwlock.dev == 1)),
 			msecs_to_jiffies(MFC_INT_TIMEOUT));
 
-		MFC_TRACE_DEV_HWLOCK("get_hwlock_dev: before waiting\n");
-		MFC_TRACE_DEV_HWLOCK(">>dev:0x%lx, bits:0x%lx, owned:%d, wl:%d, trans:%d\n",
-				dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
-				dev->hwlock.wl_count, dev->hwlock.transfer_owner);
-
 		dev->hwlock.transfer_owner = 0;
 		mfc_remove_listable_wq_dev(dev);
 		if (ret == 0) {
@@ -190,11 +180,6 @@ int s5p_mfc_get_hwlock_dev(struct s5p_mfc_dev *dev)
 		dev->hwlock.bits = 0;
 		dev->hwlock.dev = 1;
 		dev->hwlock.owned_by_irq = 0;
-
-		MFC_TRACE_DEV_HWLOCK("get_hwlock_dev: no waiting\n");
-		MFC_TRACE_DEV_HWLOCK(">>dev:0x%lx, bits:0x%lx, owned:%d, wl:%d, trans:%d\n",
-				dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
-				dev->hwlock.wl_count, dev->hwlock.transfer_owner);
 
 		mfc_print_hwlock(dev);
 		spin_unlock_irqrestore(&dev->hwlock.lock, flags);
@@ -216,21 +201,9 @@ int s5p_mfc_get_hwlock_dev(struct s5p_mfc_dev *dev)
  */
 int s5p_mfc_get_hwlock_ctx(struct s5p_mfc_ctx *curr_ctx)
 {
-	struct s5p_mfc_dev *dev;
-	struct s5p_mfc_ctx *ctx = curr_ctx;
-	int ret = 0;
+	struct s5p_mfc_dev *dev = curr_ctx->dev;
 	unsigned long flags;
-
-	if (!curr_ctx) {
-		mfc_err_dev("no mfc context to run\n");
-		return -EINVAL;
-	}
-
-	dev = curr_ctx->dev;
-	if (!dev) {
-		mfc_err_dev("no mfc device to run\n");
-		return -EINVAL;
-	}
+	int ret = 0;
 
 	mutex_lock(&curr_ctx->hwlock_wq.wait_mutex);
 
@@ -250,21 +223,11 @@ int s5p_mfc_get_hwlock_ctx(struct s5p_mfc_ctx *curr_ctx)
 
 		spin_unlock_irqrestore(&dev->hwlock.lock, flags);
 
-		MFC_TRACE_CTX_HWLOCK("get_hwlock_ctx: before waiting\n");
-		MFC_TRACE_CTX_HWLOCK(">>dev:0x%lx, bits:0x%lx, owned:%d, wl:%d, trans:%d\n",
-				dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
-				dev->hwlock.wl_count, dev->hwlock.transfer_owner);
-
 		mfc_debug(2, "Waiting for hwlock to be released.\n");
 
 		ret = wait_event_timeout(curr_ctx->hwlock_wq.wait_queue,
 			((dev->hwlock.transfer_owner == 1) && (test_bit(curr_ctx->num, &dev->hwlock.bits))),
 			msecs_to_jiffies(MFC_INT_TIMEOUT));
-
-		MFC_TRACE_CTX_HWLOCK("get_hwlock_ctx: after waiting, ret:%d\n", ret);
-		MFC_TRACE_CTX_HWLOCK(">>dev:0x%lx, bits:0x%lx, owned:%d, wl:%d, trans:%d\n",
-				dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
-				dev->hwlock.wl_count, dev->hwlock.transfer_owner);
 
 		dev->hwlock.transfer_owner = 0;
 		mfc_remove_listable_wq_ctx(curr_ctx);
@@ -283,11 +246,6 @@ int s5p_mfc_get_hwlock_ctx(struct s5p_mfc_ctx *curr_ctx)
 		dev->hwlock.dev = 0;
 		set_bit(curr_ctx->num, &dev->hwlock.bits);
 		dev->hwlock.owned_by_irq = 0;
-
-		MFC_TRACE_CTX_HWLOCK("get_hwlock_ctx: no waiting\n");
-		MFC_TRACE_CTX_HWLOCK(">>dev:0x%lx, bits:0x%lx, owned:%d, wl:%d, trans:%d\n",
-				dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
-				dev->hwlock.wl_count, dev->hwlock.transfer_owner);
 
 		mfc_print_hwlock(dev);
 		spin_unlock_irqrestore(&dev->hwlock.lock, flags);
@@ -347,11 +305,6 @@ int s5p_mfc_release_hwlock_dev(struct s5p_mfc_dev *dev)
 
 		dev->hwlock.transfer_owner = 1;
 
-		MFC_TRACE_DEV_HWLOCK("release_hwlock_dev: wakeup.\n");
-		MFC_TRACE_DEV_HWLOCK(">>dev:0x%lx, bits:0x%lx, owned:%d, wl:%d, trans:%d\n",
-				dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
-				dev->hwlock.wl_count, dev->hwlock.transfer_owner);
-
 		wake_up(&listable_wq->wait_queue);
 		ret = 1;
 	}
@@ -371,7 +324,6 @@ int s5p_mfc_release_hwlock_dev(struct s5p_mfc_dev *dev)
 static int mfc_release_hwlock_ctx_protected(struct s5p_mfc_ctx *curr_ctx)
 {
 	struct s5p_mfc_dev *dev;
-	struct s5p_mfc_ctx *ctx = curr_ctx;
 	struct s5p_mfc_listable_wq *listable_wq;
 	int ret = -1;
 
@@ -411,11 +363,6 @@ static int mfc_release_hwlock_ctx_protected(struct s5p_mfc_ctx *curr_ctx)
 		}
 
 		dev->hwlock.transfer_owner = 1;
-
-		MFC_TRACE_CTX_HWLOCK("release_hwlock_ctx: wakeup.\n");
-		MFC_TRACE_CTX_HWLOCK(">>dev:0x%lx, bits:0x%lx, owned:%d, wl:%d, trans:%d\n",
-				dev->hwlock.dev, dev->hwlock.bits, dev->hwlock.owned_by_irq,
-				dev->hwlock.wl_count, dev->hwlock.transfer_owner);
 
 		wake_up(&listable_wq->wait_queue);
 		ret = 1;
@@ -635,14 +582,8 @@ void s5p_mfc_cache_flush(struct s5p_mfc_dev *dev, int is_drm)
 static int mfc_nal_q_just_run(struct s5p_mfc_ctx *ctx, int need_cache_flush)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
-	unsigned int ret = -1;
-
 	nal_queue_handle *nal_q_handle = dev->nal_q_handle;
-
-	if (!nal_q_handle) {
-		mfc_err_dev("nal_q_handle is NULL\n");
-		return ret;
-	}
+	unsigned int ret = -1;
 
 	if (nal_q_handle->nal_q_state != NAL_Q_STATE_STARTED
 			&& nal_q_handle->nal_q_state != NAL_Q_STATE_STOPPED) {
@@ -745,7 +686,7 @@ static int mfc_just_run_dec(struct s5p_mfc_ctx *ctx)
 		ret = s5p_mfc_run_dec_frame(ctx);
 		break;
 	case MFCINST_INIT:
-		ret = s5p_mfc_open_inst(ctx);
+		s5p_mfc_open_inst(ctx);
 		break;
 	case MFCINST_RETURN_INST:
 		ret = s5p_mfc_close_inst(ctx);
@@ -803,7 +744,7 @@ static int mfc_just_run_enc(struct s5p_mfc_ctx *ctx)
 			ret = s5p_mfc_run_enc_frame(ctx);
 			break;
 		case MFCINST_INIT:
-			ret = s5p_mfc_open_inst(ctx);
+			s5p_mfc_open_inst(ctx);
 			break;
 		case MFCINST_RETURN_INST:
 			ret = s5p_mfc_close_inst(ctx);
@@ -832,20 +773,9 @@ static int mfc_just_run_enc(struct s5p_mfc_ctx *ctx)
 /* Run an operation on hardware */
 int s5p_mfc_just_run(struct s5p_mfc_dev *dev, int new_ctx_index)
 {
-	struct s5p_mfc_ctx *ctx;
+	struct s5p_mfc_ctx *ctx = dev->ctx[new_ctx_index];
 	unsigned int ret = 0;
 	int need_cache_flush = 0;
-
-	if (!dev) {
-		mfc_err_dev("no mfc device to run\n");
-		return -EINVAL;
-	}
-
-	ctx = dev->ctx[new_ctx_index];
-	if (!ctx) {
-		mfc_err_dev("no mfc context to run\n");
-		return -EINVAL;
-	}
 
 	if (ctx->state == MFCINST_RUNNING)
 		s5p_mfc_clean_ctx_int_flags(ctx);

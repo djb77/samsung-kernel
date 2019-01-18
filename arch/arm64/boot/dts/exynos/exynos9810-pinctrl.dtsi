@@ -1093,22 +1093,22 @@
 		spi1_bus: spi1-bus {
 			samsung,pins = "gpp0-2", "gpp0-1", "gpp0-0";
 			samsung,pin-function = <2>;
-			samsung,pin-pud = <3>;
-			samsung,pin-drv = <0>;
+			samsung,pin-pud = <1>;
+			samsung,pin-drv = <2>;
 		};
 
 		spi1_cs: spi1-cs {
 			samsung,pins = "gpp0-3";
 			samsung,pin-function = <1>;
 			samsung,pin-pud = <3>;
-			samsung,pin-drv = <0>;
+			samsung,pin-drv = <2>;
 		};
 
 		spi1_cs_func: spi1-cs-func {
 			samsung,pins = "gpp0-3";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
-			samsung,pin-drv = <0>;
+			samsung,pin-drv = <2>;
 		};
 
 		/* PERIC0 USI01_SPI */

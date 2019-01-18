@@ -388,6 +388,7 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 			if (regs) {
 				sec_debug_set_extra_info_fault(WATCHDOG_FAULT, (unsigned long)regs->pc, regs);
 				sec_debug_set_extra_info_backtrace(regs);
+				sec_debug_set_extra_info_backtrace_cpu(regs, smp_processor_id());
 			}
 #endif
 			panic("softlockup: hung tasks");

@@ -12,8 +12,21 @@
 &reserved_memory {
 	camera {
 		compatible = "exynos8890-ion,camera";
+		ion,recyclable;
 		size = <0xE400000>;
 		alloc-ranges = <0x0 0x40000000 0xC0000000>;
+		alignment = <0x0 0x00400000>;
 		id = <10>;
+	};
+	camera_contig {
+		compatible = "exynos8890-ion,camera_contig";
+		size = <0x46A000>;
+		alloc-ranges = <0x0 0x40000000 0xC0000000>;
+		alignment = <0x0 0x00400000>;
+		id = <12>;
+	};
+	rkp_region: rkp_region@0xAF800000 {
+		compatible = "removed-dma-pool";
+		reg = <0x0 0xAF800000 0x1C00000>;
 	};
 };

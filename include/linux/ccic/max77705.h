@@ -175,6 +175,7 @@
  * REG_PD_STATUS1
  */
 #define BIT_PD_DataRole			BIT(7)
+#define BIT_PD_PSRDY			BIT(4)
 #define BIT_FCT_ID				BITS(3, 0)
 
 /*
@@ -252,6 +253,13 @@ enum {
 	RFU,
 };
 
+enum {
+	NOT_IN_UFP_MODE = 0,
+	CCI_500mA,
+	CCI_1_5A,
+	CCI_3_0A,
+	CCI_SHORT,
+};
 
 /*
  * All type of Interrupts

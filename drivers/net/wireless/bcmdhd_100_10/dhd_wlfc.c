@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_wlfc.c 735303 2017-12-08 06:20:29Z $
+ * $Id: dhd_wlfc.c 743239 2018-01-25 08:33:18Z $
  *
  */
 
@@ -687,7 +687,10 @@ _dhd_wlfc_prec_drop(dhd_pub_t *dhdp, int prec, void* p, bool bPktInQ)
 	void *pout = NULL;
 
 	ASSERT(dhdp && p);
-	ASSERT(prec >= 0 && prec <= WLFC_PSQ_PREC_COUNT);
+	if (prec < 0 || prec >= WLFC_PSQ_PREC_COUNT) {
+		ASSERT(0);
+		return BCME_BADARG;
+	}
 
 	ctx = (athost_wl_status_info_t*)dhdp->wlfc_state;
 

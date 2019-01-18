@@ -673,9 +673,16 @@ void fimc_is_sensor_flash_fire_work(struct work_struct *data)
 	} else if (flash->flash_ae.main_fls_ae_reset == true) {
 		if (flash->flash_ae.main_fls_strm_on_off_step == 0) {
 			if (flash->flash_data.flash_fired == false) {
-				flash->flash_data.mode = CAM2_FLASH_MODE_SINGLE;
-				flash->flash_data.intensity = 10;
-				flash->flash_data.firing_time_us = 500000;
+				if(flash->flash_data.intensity == 50) {
+					flash->flash_data.mode = CAM2_FLASH_MODE_TORCH;
+					flash->flash_data.intensity = 255;
+					flash->flash_data.firing_time_us = 0;
+				}
+				else {
+					flash->flash_data.mode = CAM2_FLASH_MODE_SINGLE;
+					flash->flash_data.intensity = 10;
+					flash->flash_data.firing_time_us = 500000;
+				}
 
 				info("[%s] main-flash ON(%d), pow(%d), time(%d)\n",
 					__func__,
@@ -810,6 +817,8 @@ void fimc_is_sensor_aperture_set_start_work(struct work_struct *data)
 	int ret = 0;
 	struct fimc_is_aperture *aperture;
 	struct fimc_is_device_sensor_peri *sensor_peri;
+	struct fimc_is_device_sensor *device;
+	struct fimc_is_core *core;
 
 	WARN_ON(!data);
 
@@ -818,15 +827,30 @@ void fimc_is_sensor_aperture_set_start_work(struct work_struct *data)
 
 	sensor_peri = aperture->sensor_peri;
 
-	if (!sensor_peri->ois->initial_centering_mode) {
-		ret = CALL_OISOPS(sensor_peri->ois, ois_set_mode, sensor_peri->subdev_ois,
-			OPTICAL_STABILIZATION_MODE_CENTERING);
-		if (ret < 0)
-			err("v4l2_subdev_call(ois_set_mode) is fail(%d)", ret);
+	device = v4l2_get_subdev_hostdata(sensor_peri->subdev_aperture);
+	WARN_ON(!device);
 
-		usleep_range(10000, 11000);
-	} else {
-		sensor_peri->ois->initial_centering_mode = false;
+	core = (struct fimc_is_core *)device->private_data;
+
+	if (sensor_peri->subdev_ois) {
+		u8 ois_mode = 0;
+
+		mutex_lock(&core->ois_mode_lock);
+
+		ois_mode = CALL_OISOPS(sensor_peri->ois, ois_read_mode, sensor_peri->subdev_ois);
+
+		if (!sensor_peri->ois->initial_centering_mode ||
+			ois_mode != OPTICAL_STABILIZATION_MODE_CENTERING) {
+			sensor_peri->ois->pre_ois_mode = OPTICAL_STABILIZATION_MODE_OFF;
+			ret = CALL_OISOPS(sensor_peri->ois, ois_set_mode, sensor_peri->subdev_ois,
+				OPTICAL_STABILIZATION_MODE_CENTERING);
+			if (ret < 0)
+				err("v4l2_subdev_call(ois_set_mode) is fail(%d)", ret);
+
+			usleep_range(10000, 11000);
+		} else {
+			sensor_peri->ois->initial_centering_mode = false;
+		}
 	}
 
 	ret = CALL_APERTUREOPS(sensor_peri->aperture, set_aperture_start_value_step1, sensor_peri->subdev_aperture,
@@ -852,6 +876,8 @@ void fimc_is_sensor_aperture_set_start_work(struct work_struct *data)
 		ret = CALL_OISOPS(sensor_peri->ois, ois_set_mode, sensor_peri->subdev_ois, sensor_peri->ois->ois_mode);
 		if (ret < 0)
 			err("v4l2_subdev_call(ois_mode_change, mode:%d) is fail(%d)", sensor_peri->ois->ois_mode, ret);
+
+		mutex_unlock(&core->ois_mode_lock);
 	}
 }
 
@@ -1717,16 +1743,27 @@ int fimc_is_sensor_peri_s_stream(struct fimc_is_device_sensor *device,
 			fimc_is_sensor_ois_start((struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(subdev_module));
 #endif
 
+		/* For dual camera project to  reduce power consumption of ois */
+#ifdef CAMERA_REAR2_OIS
+		if (sensor_peri->subdev_ois) {
+			ret = CALL_OISOPS(sensor_peri->ois, ois_set_power_mode, sensor_peri->subdev_ois);
+			if (ret < 0)
+				err("v4l2_subdev_call(ois_set_power_mode) is fail(%d)", ret);
+		}
+#endif
+
 		/* set aperture as start value */
 		if (sensor_peri->aperture && (sensor_peri->aperture->start_value != sensor_peri->aperture->cur_value)) {
 			flush_work(&sensor_peri->ois->ois_set_init_work);
 			schedule_work(&sensor_peri->aperture->aperture_set_start_work);
 		} else {
 			if (sensor_peri->subdev_ois) {
+				mutex_lock(&core->ois_mode_lock);
 				ret = CALL_OISOPS(sensor_peri->ois, ois_set_mode, sensor_peri->subdev_ois,
 					sensor_peri->ois->ois_mode);
 				if (ret < 0)
 					err("v4l2_subdev_call(ois_set_mode) is fail(%d)", ret);
+				mutex_unlock(&core->ois_mode_lock);
 			}
 		}
 

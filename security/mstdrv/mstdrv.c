@@ -16,6 +16,7 @@
 #include <linux/wakelock.h>
 #include <linux/delay.h>
 #include <linux/power_supply.h>
+#include <linux/exynos-pci-ctrl.h>
 //#include <mach/exynos-pm.h>
 #include "mstdrv.h"
 
@@ -115,6 +116,10 @@ static void of_mst_hw_onoff(bool on)
 		gpio_set_value(mst_pwr_en, 1);
 		printk("%s : mst_pwr_en gets the HIGH\n", __func__);
 
+		/* PCIe LPM Disable */
+		printk("%s : l1ss disable, id : %d\n", __func__, PCIE_L1SS_CTRL_MST);
+		exynos_pcie_l1ss_ctrl(0, PCIE_L1SS_CTRL_MST);
+
 		mdelay(40);
 
 		while (--retry_cnt) {
@@ -147,6 +152,10 @@ static void of_mst_hw_onoff(bool on)
 				POWER_SUPPLY_PROP_TECHNOLOGY, value);
 		printk("%s : MST_MODE_OFF notify : %d\n", __func__,
 		       value.intval);
+
+		/* PCIe LPM Enable */
+		printk("%s : l1ss enable, id : %d\n", __func__, PCIE_L1SS_CTRL_MST);
+		exynos_pcie_l1ss_ctrl(1, PCIE_L1SS_CTRL_MST);
 
 		ret = regulator_disable(regulator3_0);
 		if (ret < 0) {

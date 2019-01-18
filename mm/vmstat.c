@@ -945,6 +945,7 @@ const char * const vmstat_text[] = {
 	"numa_other",
 #endif
 	"nr_free_cma",
+	"nr_free_rbin",
 
 	/* Node-based counters */
 	"nr_inactive_anon",

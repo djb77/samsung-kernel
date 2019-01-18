@@ -12,11 +12,14 @@
 #ifdef CONFIG_USB_DWC3
 extern int dwc3_exynos_id_event(struct device *dev, int state);
 extern int dwc3_exynos_vbus_event(struct device *dev, int state);
+extern int dwc3_exynos_start_ldo(struct device *dev, bool on);
 #else
 static inline int dwc3_exynos_id_event
 		(struct device *dev, int state) {return 0; }
 static inline int dwc3_exynos_vbus_event
 		(struct device *dev, int state) {return 0; }
+static inline int dwc3_exynos_start_ldo
+		(struct device *dev, bool on) {return 0; }
 #endif
 #ifdef CONFIG_USB_S3C_OTGD
 extern int exynos_otg_vbus_event(struct platform_device *pdev, int state);

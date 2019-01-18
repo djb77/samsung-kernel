@@ -110,10 +110,12 @@ static const struct regmap_irq_chip madera_irq = {
 
 static int madera_map_irq(struct madera *madera, int irq)
 {
-	struct madera_irq_priv *priv = dev_get_drvdata(madera->irq_dev);
+	struct madera_irq_priv *priv;
 
 	if (!madera->irq_dev)
 		return -ENOENT;
+
+	priv = dev_get_drvdata(madera->irq_dev);
 
 	return regmap_irq_get_virq(priv->irq_data, irq);
 }
@@ -203,8 +205,22 @@ static int madera_resume(struct device *dev)
 static irqreturn_t madera_boot_done(int irq, void *data)
 {
 	struct madera *madera = data;
+	unsigned int val = 0;
+	int ret;
 
-	dev_warn(madera->dev, "BOOT_DONE\n");
+	switch (madera->type) {
+	case CS47L92:
+	case CS47L93:
+		ret = regmap_read(madera->regmap, MADERA_CTRL_SCRATCH, &val);
+		if (ret != 0)
+			dev_warn(madera->dev,
+				 "Failed to read scratch reg: %d\n", ret);
+		dev_warn(madera->dev, "BOOT_DONE: 0x%x\n", val);
+		break;
+	default:
+		dev_warn(madera->dev, "BOOT_DONE\n");
+		break;
+	}
 
 	return IRQ_HANDLED;
 }
@@ -292,12 +308,11 @@ static int madera_irq_remove(struct platform_device *pdev)
 	 * it starts cleaning up all child drivers
 	 */
 
-	priv->madera->irq_dev = NULL;
-
 	madera_free_irq(priv->madera, MADERA_IRQ_BOOT_DONE, priv->madera);
 
+	priv->madera->irq_dev = NULL;
+
 	regmap_del_irq_chip(priv->irq, priv->irq_data);
-	free_irq(priv->irq, priv);
 
 	return 0;
 }

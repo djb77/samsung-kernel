@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: event_log_tag.h 745704 2018-02-09 03:31:32Z $
+ * $Id: event_log_tag.h 759112 2018-04-24 01:34:08Z $
  */
 
 #ifndef _EVENT_LOG_TAG_H_
@@ -237,6 +237,11 @@
 #define EVENT_LOG_TAG_HND_SMD_ERROR		216
 #define EVENT_LOG_TAG_PSBW_INFO			217
 #define EVENT_LOG_TAG_PHY_CAL_DBG		218
+#define EVENT_LOG_TAG_FILS_DBG			219
+#define EVENT_LOG_TAG_FILS_INFO			220
+#define EVENT_LOG_TAG_FILS_ERROR		221
+#define EVENT_LOG_TAG_HWA_TXPOST		222
+#define EVENT_LOG_TAG_HWA_TXDMA			223
 
 /* Debug tags for making debug builds */
 #define EVENT_LOG_TAG_DBG1			251
@@ -247,8 +252,63 @@
 
 /* Insert new tags here for Koala onwards */
 
+/* NAN INFO/ERR evnt tags */
+#define EVENT_LOG_TAG_NAN_SYNC_INFO             256
+#define EVENT_LOG_TAG_NAN_DPE_INFO              257
+#define EVENT_LOG_TAG_NAN_SCHED_INFO            258
+#define EVENT_LOG_TAG_NAN_RNG_INFO              259
+#define EVENT_LOG_TAG_NAN_DAM_INFO              260
+#define EVENT_LOG_TAG_NAN_NA_INFO               261
+#define EVENT_LOG_TAG_NAN_NDL_INFO              262
+#define EVENT_LOG_TAG_NAN_NDP_INFO              263
+#define EVENT_LOG_TAG_NAN_SEC_INFO              264
+#define EVENT_LOG_TAG_NAN_MAC_INFO              265
+#define EVENT_LOG_TAG_NAN_FSM_INFO              266
+#define EVENT_LOG_TAG_NAN_PEER_INFO             267
+#define EVENT_LOG_TAG_NAN_AVAIL_INFO            268
+#define EVENT_LOG_TAG_NAN_CMN_INFO              269
+#define EVENT_LOG_TAG_NAN_SYNC_ERR              270
+#define EVENT_LOG_TAG_NAN_DPE_ERR               271
+#define EVENT_LOG_TAG_NAN_SCHED_ERR             272
+#define EVENT_LOG_TAG_NAN_RNG_ERR               273
+#define EVENT_LOG_TAG_NAN_DAM_ERR               274
+#define EVENT_LOG_TAG_NAN_NA_ERR                275
+#define EVENT_LOG_TAG_NAN_NDL_ERR               276
+#define EVENT_LOG_TAG_NAN_NDP_ERR               277
+#define EVENT_LOG_TAG_NAN_SEC_ERR               278
+#define EVENT_LOG_TAG_NAN_MAC_ERR               279
+#define EVENT_LOG_TAG_NAN_FSM_ERR               280
+#define EVENT_LOG_TAG_NAN_PEER_ERR              281
+#define EVENT_LOG_TAG_NAN_AVAIL_ERR             282
+#define EVENT_LOG_TAG_NAN_CMN_ERR               283
+
+/* More NAN DBG evt Tags */
+#define EVENT_LOG_TAG_NAN_PEER                  284
+#define EVENT_LOG_TAG_NAN_AVAIL                 285
+#define EVENT_LOG_TAG_NAN_CMN                   286
+
+#define EVENT_LOG_TAG_SAE_ERROR			287
+#define EVENT_LOG_TAG_SAE_INFO			288
+
+/* rxsig module logging */
+#define EVENT_LOG_TAG_RXSIG_ERROR               289
+#define EVENT_LOG_TAG_RXSIG_DEBUG               290
+#define EVENT_LOG_TAG_RXSIG_INFO                291
+
+/* HE TWT HEB EVEVNT_LOG_TAG */
+#define EVENT_LOG_TAG_WL_HE_INFO                292
+#define EVENT_LOG_TAG_WL_HE_TRACE               293
+#define EVENT_LOG_TAG_WL_HE_WARN                294
+#define EVENT_LOG_TAG_WL_HE_ERROR               295
+#define EVENT_LOG_TAG_WL_TWT_INFO               296
+#define EVENT_LOG_TAG_WL_TWT_TRACE              297
+#define EVENT_LOG_TAG_WL_TWT_WARN               298
+#define EVENT_LOG_TAG_WL_TWT_ERROR              299
+#define EVENT_LOG_TAG_WL_HEB_ERROR              300
+#define EVENT_LOG_TAG_WL_HEB_TRACE              301
+
 /* EVENT_LOG_TAG_MAX	= Set to the same value of last tag, not last tag + 1 */
-#define EVENT_LOG_TAG_MAX			255
+#define EVENT_LOG_TAG_MAX			301
 #define EVENT_LOG_TAG_MAX_LEGACY_FORMAT		255
 /* Note: New event should be added/reserved in trunk before adding it to branches */
 

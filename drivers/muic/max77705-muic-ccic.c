@@ -157,8 +157,11 @@ static int max77705_muic_handle_ccic_WATER(struct max77705_muic_data *muic_data,
 		muic_data->afc_water_disable = true;
 		pr_info("%s: Water detect, do workqueue\n", __func__);
 		schedule_work(&(muic_data->ccic_info_data_work));
-	} else {
-		pr_info("%s: Undefined notification, Discard\n", __func__);
+	} else if (pnoti->attach == CCIC_NOTIFY_DETACH) {
+		muic_data->afc_water_disable = false;
+		muic_data->ccic_evt_id = CCIC_NOTIFY_ID_WATER;
+		schedule_work(&(muic_data->ccic_info_data_work));
+		pr_info("%s: Dry detect, do workqueue\n", __func__);
 	}
 
 	return 0;

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmutils.h 738149 2017-12-27 07:54:37Z $
+ * $Id: bcmutils.h 784503 2018-10-12 06:07:30Z $
  */
 
 #ifndef	_bcmutils_h_
@@ -414,7 +414,8 @@ int bcmstrnicmp(const char* s1, const char* s2, int cnt);
 #define BCME_DACBUF_RCCAL_FAIL		-65		/* RCCAL failed */
 #define BCME_VCOCAL_FAIL		-66		/* VCOCAL failed */
 #define BCME_BANDLOCKED			-67	/* interface is restricted to a band */
-#define BCME_LAST			BCME_BANDLOCKED
+#define BCME_DNGL_DEVRESET		-68	/* dongle re-attach during DEVRESET */
+#define BCME_LAST			BCME_DNGL_DEVRESET
 
 #define BCME_NOTENABLED BCME_DISABLED
 
@@ -498,6 +499,7 @@ int bcmstrnicmp(const char* s1, const char* s2, int cnt);
 	"DAC buf RC Cal failed", \
 	"VCO Cal failed", \
 	"band locked", \
+	"Dongle Devreset", \
 }
 
 #ifndef ABS
@@ -576,7 +578,7 @@ int bcmstrnicmp(const char* s1, const char* s2, int cnt);
 #define SIZE_OF(type, field) sizeof(((type *)0)->field)
 
 #ifndef ARRAYSIZE
-#define ARRAYSIZE(a)		(sizeof(a) / sizeof(a[0]))
+#define ARRAYSIZE(a)		(uint32)(sizeof(a) / sizeof(a[0]))
 #endif // endif
 
 #ifndef ARRAYLAST /* returns pointer to last array element */
@@ -715,17 +717,17 @@ DECLARE_MAP_API(8, 2, 3, 3U, 0x00FF) /* setbit8() and getbit8() */
 							(ea).octet[5]
 #if !defined(SIMPLE_MAC_PRINT)
 #define MACDBG "%02x:%02x:%02x:%02x:%02x:%02x"
-#define MAC2STRDBG(ea) (ea)[0], (ea)[1], (ea)[2], (ea)[3], (ea)[4], (ea)[5]
+#define MAC2STRDBG(ea) CONST_ETHERP_TO_MACF(ea)
 #else
 #define MACDBG				"%02x:xx:xx:xx:x%x:%02x"
-#define MAC2STRDBG(ea) (ea)[0], ((ea)[4] & 0xf), (ea)[5]
+#define MAC2STRDBG(ea) ((uint8*)(ea))[0], (((uint8*)(ea))[4] & 0xf), ((uint8*)(ea))[5]
 #endif /* SIMPLE_MAC_PRINT */
 
 #define MACOUIDBG "%02x:%x:%02x"
-#define MACOUI2STRDBG(ea) (ea)[0], (ea)[1] & 0xf, (ea)[2]
+#define MACOUI2STRDBG(ea) ((uint8*)(ea))[0], ((uint8*)(ea))[1] & 0xf, ((uint8*)(ea))[2]
 
 #define MACOUI "%02x:%02x:%02x"
-#define MACOUI2STR(ea) (ea)[0], (ea)[1], (ea)[2]
+#define MACOUI2STR(ea) ((uint8*)(ea))[0], ((uint8*)(ea))[1], ((uint8*)(ea))[2]
 
 /* bcm_format_flags() bit description structure */
 typedef struct bcm_bit_desc {
@@ -928,11 +930,11 @@ C_bcm_count_leading_zeros(uint32 u32arg)
 /* The HOST need to provided 64 bytes (512 bits) entropy for the bcm SW RNG */
 #define BCM_ENTROPY_MAGIC_SIZE		4u
 #define BCM_ENTROPY_COUNT_SIZE		4u
-#define BCM_ENTROPY_SEED_NBYTES		64u
-#define BCM_ENTROPY_NONCE_NBYTES	16u
-#define BCM_ENTROPY_HOST_NBYTES		(BCM_ENTROPY_SEED_NBYTES + BCM_ENTROPY_NONCE_NBYTES)
-#define BCM_ENTROPY_HOST_MAXSIZE 	\
-	(BCM_ENTROPY_MAGIC_SIZE + BCM_ENTROPY_COUNT_SIZE + BCM_ENTROPY_HOST_NBYTES)
+#define BCM_ENTROPY_MIN_NBYTES		64u
+#define BCM_ENTROPY_MAX_NBYTES		512u
+#define BCM_ENTROPY_HOST_NBYTES		128u
+#define BCM_ENTROPY_HOST_MAXSIZE	\
+	(BCM_ENTROPY_MAGIC_SIZE + BCM_ENTROPY_COUNT_SIZE + BCM_ENTROPY_MAX_NBYTES)
 
 /* Keep BCM MAX_RAND NUMBERS definition for the current dongle image. It will be
  * removed after the dongle image is updated to use the bcm RNG.
@@ -945,9 +947,14 @@ C_bcm_count_leading_zeros(uint32 u32arg)
 #define BCM_NVRAM_RNG_SIGNATURE		0xFEEDC0DEu
 
 typedef struct bcm_rand_metadata {
-	uint32 signature;	/* host fills it in, FW verfies before reading rand */
 	uint32 count;		/* number of random numbers in bytes */
+	uint32 signature;	/* host fills it in, FW verfies before reading rand */
 } bcm_rand_metadata_t;
+
+typedef struct bcm_host_whitelist_metadata {
+	uint32 signature;	/* host fills it in, FW verfies before reading Whitelist region */
+	uint32 count;		/* size of whitelist region in bytes */
+} bcm_host_whitelist_metadata_t;
 
 #ifdef BCMDRIVER
 /*
@@ -1058,8 +1065,8 @@ extern bool id16_map_audit(void * id16_map_hndl);
 #define MASK_32_BITS	(~0)
 #define MASK_8_BITS	((1 << 8) - 1)
 
-#define EXTRACT_LOW32(num)	(uint32)(num & MASK_32BITS)
-#define EXTRACT_HIGH32(num)	(uint32)(((uint64)num >> 32) & MASK_32BITS)
+#define EXTRACT_LOW32(num)	(uint32)(num & MASK_32_BITS)
+#define EXTRACT_HIGH32(num)	(uint32)(((uint64)num >> 32) & MASK_32_BITS)
 
 #define MAXIMUM(a, b) ((a > b) ? a : b)
 #define MINIMUM(a, b) ((a < b) ? a : b)

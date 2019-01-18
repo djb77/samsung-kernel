@@ -77,11 +77,6 @@ void g2d_fence_timeout_handler(unsigned long arg)
 		spin_unlock_irqrestore(&task->fence_timeout_lock, flags);
 		pr_err("All fences have been signaled. (work_busy? %d)\n",
 			work_busy(&task->work));
-		/* If this happens again, the problem is obviously caused by the
-		 * workqueue that does not schedule the work of this context.
-		 */
-		mod_timer(&task->timer,
-			  jiffies + msecs_to_jiffies(G2D_FENCE_TIMEOUT_MSEC));
 		return;
 	}
 

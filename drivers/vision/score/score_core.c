@@ -23,73 +23,128 @@
 
 static struct score_dev *score_dev;
 
-static struct score_core *score_get_coredata(void)
+static int score_ioctl_boot(struct score_context *sctx,
+		struct score_ioctl_boot *boot)
 {
-	return dev_get_drvdata(&score_dev->dev);
-}
-
-static void *__score_core_get_context(struct score_core *core,
-		struct file *file)
-{
-	int ret;
-	struct score_context *sctx;
-	unsigned long flags;
+	int ret = 0;
+	struct score_core *core;
 
 	score_enter();
-	spin_lock_irqsave(&core->ctx_slock, flags);
-	sctx = file->private_data;
-	if (!sctx) {
-		score_err("context was already destroyed\n");
-		ret = -ECONNREFUSED;
+	core = sctx->core;
+
+	if (mutex_lock_interruptible(&core->device_lock)) {
+		score_err("device_lock failed\n");
+		ret = -ERESTARTSYS;
 		goto p_err;
 	}
 
-	if (sctx->state == SCORE_CONTEXT_STOP) {
-		score_err("context already stopped\n");
-		ret = -ECONNREFUSED;
-		goto p_err;
-	}
-	atomic_inc(&sctx->ref_count);
-	spin_unlock_irqrestore(&core->ctx_slock, flags);
+	ret = score_device_open(core->device);
+	if (ret)
+		goto p_err_open;
+
+	ret = score_device_start(core->device, boot->firmware_id, boot->flag);
+	if (ret)
+		goto p_err_start;
+
+	mutex_unlock(&core->device_lock);
+	boot->ret = 0;
+
 	score_leave();
-	return sctx;
+	return 0;
+p_err_start:
+p_err_open:
+	mutex_unlock(&core->device_lock);
 p_err:
-	spin_unlock_irqrestore(&core->ctx_slock, flags);
-	return ERR_PTR(ret);
+	boot->ret = ret;
+	return 0;
 }
 
-static void __score_core_put_context(struct score_context *sctx)
+static int score_ioctl_get_dvfs(struct score_context *sctx,
+		struct score_ioctl_dvfs *dvfs)
 {
+	int ret = 0;
+	struct score_pm *pm;
+
 	score_enter();
-	atomic_dec(&sctx->ref_count);
+	pm = &sctx->core->device->pm;
+	ret = score_pm_qos_get_info(pm,
+			&dvfs->qos_count, &dvfs->min_qos, &dvfs->max_qos,
+			&dvfs->default_qos, &dvfs->current_qos);
+	if (ret)
+		score_warn("runtime pm is not supported (%d)\n", ret);
+
 	score_leave();
+	dvfs->ret = ret;
+	return 0;
 }
 
-static int score_ioctl_request(struct file *file,
+static int score_ioctl_set_dvfs(struct score_context *sctx,
+		struct score_ioctl_dvfs *dvfs)
+{
+	int ret = 0;
+	struct score_pm *pm;
+	struct score_ioctl_dvfs cur_dvfs;
+
+	score_enter();
+	pm = &sctx->core->device->pm;
+	score_pm_qos_update(pm, dvfs->request_qos);
+	ret = score_pm_qos_get_info(pm,
+			&cur_dvfs.qos_count, &cur_dvfs.min_qos,
+			&cur_dvfs.max_qos, &cur_dvfs.default_qos,
+			&cur_dvfs.current_qos);
+	if (ret) {
+		score_warn("runtime pm is not supported (%d)\n", ret);
+		goto p_err;
+	}
+
+	if (dvfs->request_qos > cur_dvfs.min_qos ||
+			dvfs->request_qos < cur_dvfs.max_qos) {
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	dvfs->current_qos = cur_dvfs.current_qos;
+	score_leave();
+p_err:
+	dvfs->ret = ret;
+	return 0;
+}
+
+static int score_ioctl_request(struct score_context *sctx,
 		struct score_ioctl_request *req)
 {
 	int ret = 0;
 	struct score_core *core;
-	struct score_context *sctx;
 	struct score_system *system;
+	struct score_frame_manager *framemgr;
 	struct score_frame *frame;
 	struct score_mmu_packet packet;
 
 	score_enter();
-	core = score_get_coredata();
-	sctx = __score_core_get_context(core, file);
-	if (IS_ERR(sctx)) {
-		req->ret = PTR_ERR(sctx);
+	core = sctx->core;
+	if (mutex_lock_interruptible(&core->device_lock)) {
+		score_err("device_lock failed\n");
+		req->ret = -ERESTARTSYS;
+		goto p_err;
+	}
+	ret = score_device_check_start(core->device);
+	mutex_unlock(&core->device_lock);
+	if (ret) {
+		score_err("The device is not working (state:%#x)\n", ret);
+		req->ret = -ENOSTR;
 		goto p_err;
 	}
 
 	system = sctx->system;
-	frame = score_frame_create(&system->interface.framemgr, sctx, true);
-	if (!frame) {
-		req->ret = -ENOMEM;
-		score_err("Fail to alloc frame (sctx id %d)\n", sctx->id);
-		goto p_err_frame;
+	framemgr = &system->interface.framemgr;
+	frame = score_frame_create(framemgr, sctx, TYPE_BLOCK);
+	if (IS_ERR(frame)) {
+		req->ret = PTR_ERR(frame);
+		goto p_err;
 	}
+	req->kctx_id = sctx->id;
+	req->task_id = frame->frame_id;
+	frame->kernel_id = req->kernel_id;
 
 	packet.fd = req->packet_fd;
 	ret = score_mmu_packet_prepare(&system->mmu, &packet);
@@ -98,6 +153,7 @@ static int score_ioctl_request(struct file *file,
 		goto p_err_prepare;
 	}
 	frame->packet = packet.kvaddr;
+	frame->packet_size = packet.size;
 
 	ret = sctx->ctx_ops->queue(sctx, frame);
 	if (ret)
@@ -115,7 +171,6 @@ static int score_ioctl_request(struct file *file,
 		frame->timestamp[SCORE_TIME_ISR];
 
 	score_frame_destroy(frame);
-	__score_core_put_context(sctx);
 
 	score_leave();
 	return 0;
@@ -124,116 +179,74 @@ p_err_queue:
 	score_frame_done(frame, &req->ret);
 p_err_prepare:
 	score_frame_destroy(frame);
-p_err_frame:
-	__score_core_put_context(sctx);
 p_err:
 	/* return value is included in req->ret */
 	return 0;
 }
 
-static int score_ioctl_get_dvfs(struct file *file,
-		struct score_ioctl_get_dvfs *info)
+#if defined(CONFIG_EXYNOS_SCORE_FPGA)
+static int score_ioctl_request_nonblock(struct score_context *sctx,
+		struct score_ioctl_request *req, bool wait)
 {
-	int ret = 0;
-	struct score_core *core;
-	struct score_context *sctx;
-	struct score_pm *pm;
-
 	score_enter();
-	core = score_get_coredata();
-	sctx = __score_core_get_context(core, file);
-	if (IS_ERR(sctx)) {
-		ret = PTR_ERR(sctx);
-		goto p_err;
-	}
-
-	pm = &sctx->core->device->pm;
-	ret = score_pm_qos_get_info(pm,
-			&info->qos_count, &info->min_qos, &info->max_qos,
-			&info->default_qos, &info->current_qos);
-	if (ret)
-		score_warn("runtime pm is not supported (%d)\n", ret);
-
-	__score_core_put_context(sctx);
+	req->ret = -EINVAL;
+	score_err("Not supported [%s]\n", __func__);
 	score_leave();
-p_err:
-	info->ret = ret;
 	return 0;
 }
 
-static int score_ioctl_set_dvfs(struct file *file,
-		struct score_ioctl_set_dvfs *req)
+static int score_ioctl_request_wait(struct score_context *sctx,
+		struct score_ioctl_request *req)
 {
-	int ret = 0;
-	struct score_core *core;
-	struct score_context *sctx;
-	struct score_pm *pm;
-	struct score_ioctl_get_dvfs info;
-
 	score_enter();
-	core = score_get_coredata();
-	sctx = __score_core_get_context(core, file);
-	if (IS_ERR(sctx)) {
-		ret = PTR_ERR(sctx);
-		goto p_err;
-	}
-
-	pm = &sctx->core->device->pm;
-	score_pm_qos_update(pm, req->request_qos);
-	ret = score_pm_qos_get_info(pm,
-			&info.qos_count, &info.min_qos, &info.max_qos,
-			&info.default_qos, &info.current_qos);
-	if (ret) {
-		score_warn("runtime pm is not supported (%d)\n", ret);
-		goto p_err_put;
-	}
-	req->current_qos = info.current_qos;
-
-	if (req->request_qos > info.min_qos ||
-			req->request_qos < info.max_qos) {
-		ret = -EINVAL;
-		goto p_err_put;
-	}
-
+	req->ret = -EINVAL;
+	score_err("Not supported [%s]\n", __func__);
 	score_leave();
-p_err_put:
-	__score_core_put_context(sctx);
-p_err:
-	req->ret = ret;
 	return 0;
 }
-
-static int score_ioctl_secure(struct file *file, struct score_ioctl_secure *sec)
-{
-	/* for secure mode change */
-	return 0;
-}
-
-static int score_ioctl_request_nonblock(struct file *file,
-		struct score_ioctl_request_nonblock *req)
+#else
+static int score_ioctl_request_nonblock(struct score_context *sctx,
+		struct score_ioctl_request *req, bool wait)
 {
 	int ret = 0;
 	struct score_core *core;
-	struct score_context *sctx;
 	struct score_system *system;
+	struct score_frame_manager *framemgr;
 	struct score_frame *frame;
 	struct score_mmu_packet packet;
+	int frame_type;
+	unsigned long flags;
 
 	score_enter();
-	core = score_get_coredata();
-	sctx = __score_core_get_context(core, file);
-	if (IS_ERR(sctx)) {
-		ret = PTR_ERR(sctx);
+	core = sctx->core;
+	if (mutex_lock_interruptible(&core->device_lock)) {
+		score_err("device_lock failed\n");
+		ret = -ERESTARTSYS;
+		goto p_err;
+	}
+	ret = score_device_check_start(core->device);
+	mutex_unlock(&core->device_lock);
+	if (ret) {
+		score_err("The device is not working (state:%#x)\n", ret);
+		ret = -ENOSTR;
 		goto p_err;
 	}
 
 	system = sctx->system;
-	frame = score_frame_create(&system->interface.framemgr, sctx, false);
-	if (!frame) {
-		ret = -ENOMEM;
-		score_err("Fail to alloc frame (sctx id %d)\n", sctx->id);
-		goto p_err_frame;
+	framemgr = &system->interface.framemgr;
+	if (wait)
+		frame_type = TYPE_NONBLOCK;
+	else
+		frame_type = TYPE_NONBLOCK_NOWAIT;
+
+	frame = score_frame_create(framemgr, sctx, frame_type);
+	if (IS_ERR(frame)) {
+		ret = PTR_ERR(frame);
+		goto p_err;
 	}
+	req->kctx_id = sctx->id;
+	req->task_id = frame->frame_id;
+	frame->kernel_id = req->kernel_id;
 
 	packet.fd = req->packet_fd;
 	ret = score_mmu_packet_prepare(&system->mmu, &packet);
@@ -241,65 +254,60 @@ static int score_ioctl_request_nonblock(struct file *file,
 		goto p_err_prepare;
 
 	frame->packet = packet.kvaddr;
+	frame->packet_size = packet.size;
 
 	ret = sctx->ctx_ops->queue(sctx, frame);
 	if (ret)
 		goto p_err_queue;
 
 	score_mmu_packet_unprepare(&system->mmu, &packet);
-	__score_core_put_context(sctx);
 
 	req->ret = 0;
-	req->kctx_id = frame->sctx->id;
-	req->task_id = frame->frame_id;
 	score_leave();
 	return 0;
 p_err_queue:
 	score_mmu_packet_unprepare(&system->mmu, &packet);
 p_err_prepare:
-	score_frame_destroy(frame);
-p_err_frame:
-	__score_core_put_context(sctx);
+	spin_lock_irqsave(&framemgr->slock, flags);
+	if (score_frame_check_type(frame, TYPE_NONBLOCK_NOWAIT) ||
+			score_frame_check_type(frame, TYPE_NONBLOCK))
+		score_frame_set_type_remove(frame);
+	spin_unlock_irqrestore(&framemgr->slock, flags);
+
+	if (score_frame_check_type(frame, TYPE_NONBLOCK_REMOVE))
+		score_frame_destroy(frame);
 p_err:
 	req->ret = ret;
 	return 0;
 }
 
-static int score_ioctl_request_wait(struct file *file,
-		struct score_ioctl_request_nonblock *req)
+static int score_ioctl_request_wait(struct score_context *sctx,
+		struct score_ioctl_request *req)
 {
 	int ret = 0;
-	struct score_core *core;
-	struct score_context *sctx;
 	struct score_frame_manager *framemgr;
 	struct score_frame *frame;
 	unsigned long flags;
 
 	score_enter();
-	core = score_get_coredata();
-	sctx = __score_core_get_context(core, file);
-	if (IS_ERR(sctx)) {
-		req->ret = PTR_ERR(sctx);
-		goto p_err;
-	}
-
 	framemgr = &sctx->system->interface.framemgr;
 	spin_lock_irqsave(&framemgr->slock, flags);
 	frame = score_frame_get_by_id(framemgr, req->task_id);
 	if (!frame) {
 		spin_unlock_irqrestore(&framemgr->slock, flags);
 		req->ret = -EINVAL;
-		score_warn("frame is already completed (task_id:%d)\n",
-				req->task_id);
+		score_warn("frame is already completed (%u,%u)\n",
+				req->task_id, sctx->id);
 		goto p_err_frame;
 	} else {
-		if (score_frame_is_nonblock(frame)) {
-			score_frame_set_block(frame);
+		if (score_frame_check_type(frame, TYPE_NONBLOCK)) {
+			score_frame_set_type_block(frame);
 		} else {
 			spin_unlock_irqrestore(&framemgr->slock, flags);
 			req->ret = -EINVAL;
-			score_warn("frame isn't nonblocking (task_id:%d)\n",
-					req->task_id);
+			score_warn("frame isn't nonblock (%d,%u,%u,%u)\n",
+					frame->type, frame->sctx->id,
+					frame->frame_id, frame->kernel_id);
 			goto p_err_frame;
 		}
 	}
@@ -307,7 +315,7 @@ static int score_ioctl_request_wait(struct file *file,
 
 	ret = sctx->ctx_ops->deque(sctx, frame);
 	if (ret)
-		goto p_err_queue;
+		goto p_err_deque;
 
 	score_frame_done(frame, &req->ret);
 	req->timestamp[SCORE_TIME_SCQ_WRITE] =
@@ -316,59 +324,68 @@ static int score_ioctl_request_wait(struct file *file,
 		frame->timestamp[SCORE_TIME_ISR];
 
 	score_frame_destroy(frame);
-	__score_core_put_context(sctx);
 
 	score_leave();
 	return 0;
-p_err_queue:
+p_err_deque:
 	score_frame_done(frame, &req->ret);
 	score_frame_destroy(frame);
 p_err_frame:
-	__score_core_put_context(sctx);
-p_err:
+	return 0;
+}
+#endif
+
+static int score_ioctl_secure(struct score_context *sctx,
+		struct score_ioctl_secure *sec)
+{
+	/* for secure mode change */
 	return 0;
 }
 
-static int score_ioctl_test(struct file *file, struct score_ioctl_test *info)
+static int score_ioctl_test(struct score_context *sctx,
+		struct score_ioctl_test *info)
 {
 	/* verification */
 	return 0;
 }
 
 const struct score_ioctl_ops score_ioctl_ops = {
-	.score_ioctl_request		= score_ioctl_request,
+	.score_ioctl_boot		= score_ioctl_boot,
 	.score_ioctl_get_dvfs		= score_ioctl_get_dvfs,
 	.score_ioctl_set_dvfs		= score_ioctl_set_dvfs,
-	.score_ioctl_secure		= score_ioctl_secure,
+	.score_ioctl_request		= score_ioctl_request,
 	.score_ioctl_request_nonblock	= score_ioctl_request_nonblock,
 	.score_ioctl_request_wait	= score_ioctl_request_wait,
+	.score_ioctl_secure		= score_ioctl_secure,
 	.score_ioctl_test		= score_ioctl_test
 };
 
 static int score_open(struct inode *inode, struct file *file)
 {
 	int ret = 0;
+	struct miscdevice *miscdev;
+	struct device *dev;
+	struct score_device *device;
 	struct score_core *core;
 	struct score_context *sctx;
 
 	score_enter();
-	core = score_get_coredata();
+	miscdev = file->private_data;
+	dev = miscdev->parent;
+	device = dev_get_drvdata(dev);
+	core = &device->core;
 
 	if (mutex_lock_interruptible(&core->device_lock)) {
-		score_err("mutex_lock_interruptible is fail\n");
-		return -ERESTARTSYS;
-	}
-
-	ret = score_device_open(core->device);
-	if (ret)
+		score_err("device_lock failed\n");
+		ret = -ERESTARTSYS;
 		goto p_err;
-
+	}
+	score_device_get(device);
 	mutex_unlock(&core->device_lock);
 
 	sctx = score_context_create(core);
-	if (IS_ERR_OR_NULL(sctx)) {
+	if (IS_ERR(sctx)) {
 		ret = PTR_ERR(sctx);
-		mutex_lock(&core->device_lock);
 		goto p_err_create_context;
 	}
 	file->private_data = sctx;
@@ -376,37 +393,27 @@ static int score_open(struct inode *inode, struct file *file)
 	score_leave();
 	return ret;
 p_err_create_context:
-	score_device_close(core->device);
-p_err:
+	mutex_lock(&core->device_lock);
+	score_device_put(device);
 	mutex_unlock(&core->device_lock);
+p_err:
 	return ret;
 }
 
 static int score_release(struct inode *inode, struct file *file)
 {
 	int ret = 0;
-	struct score_core *core;
 	struct score_context *sctx;
-	unsigned long flags;
+	struct score_core *core;
 
 	score_enter();
-	core = score_get_coredata();
-
-	spin_lock_irqsave(&core->ctx_slock, flags);
 	sctx = file->private_data;
-	file->private_data = NULL;
-	sctx->state = SCORE_CONTEXT_STOP;
-	spin_unlock_irqrestore(&core->ctx_slock, flags);
+	core = sctx->core;
 
 	score_context_destroy(sctx);
 
-	if (mutex_lock_interruptible(&core->device_lock)) {
-		score_err("mutex_lock_interruptible is fail\n");
-		return -ERESTARTSYS;
-	}
-
-	score_device_close(core->device);
-
+	mutex_lock(&core->device_lock);
+	score_device_put(core->device);
 	mutex_unlock(&core->device_lock);
 
 	score_leave();
@@ -435,10 +442,10 @@ int score_core_probe(struct score_device *device)
 	INIT_LIST_HEAD(&core->ctx_list);
 	core->ctx_count = 0;
 	spin_lock_init(&core->ctx_slock);
-#if defined(CONFIG_EXYNOS_SCORE)
-	core->wait_time = 10000;
-#else /* FPGA */
+#if defined(CONFIG_EXYNOS_SCORE_FPGA)
 	core->wait_time = 50000;
+#else
+	core->wait_time = 10000;
 #endif
 	score_util_bitmap_init(core->ctx_map, SCORE_MAX_CONTEXT);
 	mutex_init(&core->device_lock);
@@ -449,7 +456,6 @@ int score_core_probe(struct score_device *device)
 	score_dev->miscdev.name = "score";
 	score_dev->miscdev.fops = &score_file_ops;
 	score_dev->miscdev.parent = device->dev;
-	dev_set_drvdata(&score_dev->dev, core);
 
 	ret = misc_register(&score_dev->miscdev);
 	if (ret)

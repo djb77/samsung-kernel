@@ -68,9 +68,6 @@ static void exynos_pd_power_on_pre(struct exynos_pm_domain *pd)
 	if (pd->devfreq_index >= 0) {
 		exynos_bts_scitoken_setting(true);
 	}
-
-	if ((pd->cal_pdid & 0xffff) == 0x8)
-		exynos_acpm_update_reg(0x3, 0x2a, 0x3 << 6, 0x3 << 6);
 }
 
 static void exynos_pd_power_on_post(struct exynos_pm_domain *pd)
@@ -96,9 +93,6 @@ static void exynos_pd_power_off_pre(struct exynos_pm_domain *pd)
 
 static void exynos_pd_power_off_post(struct exynos_pm_domain *pd)
 {
-	if ((pd->cal_pdid & 0xffff) == 0x8)
-		exynos_acpm_update_reg(0x3, 0x2a, 0x0 << 6, 0x3 << 6);
-
 	exynos_update_ip_idle_status(pd->idle_ip_index, 1);
 
 	if (pd->devfreq_index >= 0) {

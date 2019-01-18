@@ -208,6 +208,15 @@
 			     <0 INTREQ__CPUCL0_PMUIRQ_1 4>,
 			     <0 INTREQ__CPUCL0_PMUIRQ_2 4>,
 			     <0 INTREQ__CPUCL0_PMUIRQ_3 4>;
+
+		interrupt-affinity = <&cpu4>,
+					<&cpu5>,
+					<&cpu6>,
+					<&cpu7>,
+					<&cpu0>,
+					<&cpu1>,
+					<&cpu2>,
+					<&cpu3>;			     
 	};
 
 	cpus {
@@ -229,10 +238,10 @@
 					35
 					35
 					35
-					DISABLED
-					DISABLED
-					DISABLED
-					DISABLED>;
+					35
+					35
+					35
+					35>;
 
 			/* ontime migration */
 			up-threshold = <79>;
@@ -437,7 +446,7 @@
 		    <0x0 0x10101200 0x100>;
 		reg-names = "gpio_alive_base",
 				"gicd_ispendrn_base";
-		num-eint = <32>;
+		num-eint = <34>;
 		num-gic = <16>;
 		suspend_mode_idx = <8>;		/* SYS_SLEEP */
 		suspend_psci_idx = <133>;	/* PSCI_SYSTEM_SLEEP */
@@ -765,11 +774,61 @@
 		reg = <0x0 0x17500000 0x5000>;
 		interrupts = <0 INTREQ__G3D_IRQJOB 0>,
 		             <0 INTREQ__G3D_IRQMMU 0>,
-			     <0 INTREQ__G3D_IRQGPU 0>;
+		             <0 INTREQ__G3D_IRQGPU 0>;
 		interrupt-names = "JOB", "MMU", "GPU";
 		g3d_cmu_cal_id = <ACPM_DVFS_G3D>;
 		samsung,power-domain = <&pd_embedded_g3d>;
+		g3d_genpd_name = "pd-embedded_g3d"; /*KC: pg-g3d, LT,MK: pd-embedded_g3d*/
 		#cooling-cells = <2>; /* min followed by max */
+		governor = "interactive";
+		interactive_info = <338000 94 0>;
+		gpu_dvfs_table_size = <6 7>; /*<row col>*/
+		gpu_dvfs_table = <  572000    78  100   5  1794000  1950000      0
+		                    546000    78   99   1  1794000  1950000      0
+		                    455000    78   85   1  1539000  1794000      0
+		                    338000    78   85   1  1352000  1248000      0
+		                    299000    78   85   1  1014000        0      0
+		                    260000    78   85   1   676000        0      0 >;
+		gpu_sustainable_info = <0 0 0 0 0>; /* Not used */
+		gpu_pmqos_cpu_cluster_num = <2>;
+		gpu_pmu_status_reg_offset = <0x4044>;
+		gpu_pmu_status_local_pwr_mask = <0xF>; /*0xF << 0*/
+		gpu_max_clock = <572000>;
+		gpu_max_clock_limit = <572000>;
+		gpu_min_clock = <260000>;
+		gpu_dvfs_start_clock = <260000>;
+		gpu_dvfs_bl_config_clock = <260000>;
+		gpu_default_voltage = <800000>;
+		gpu_cold_minimum_vol = <0>;
+		gpu_voltage_offset_margin = <37500>;
+		gpu_tmu_control = <1>;
+		gpu_temp_throttling_level_num = <6>;
+		gpu_temp_throttling = <572000 546000 455000 338000 260000 260000>;
+		gpu_power_coeff = <625>;
+		gpu_dvfs_time_interval = <5>; /*1 tick : 10ms*/
+		gpu_default_wakeup_lock = <1>;
+		gpu_dynamic_abb = <0>;
+		gpu_early_clk_gating = <0>;
+		gpu_dvs = <0>;
+		gpu_inter_frame_pm = <1>;
+		gpu_perf_gathering = <0>;
+		gpu_runtime_pm_delay_time = <50>;
+		gpu_dvfs_polling_time = <30>;
+		gpu_pmqos_int_disable = <1>;
+		gpu_pmqos_mif_max_clock = <1794000>;
+		gpu_pmqos_mif_max_clock_base = <572000>;
+		gpu_cl_dvfs_start_base = <455000>;
+		gpu_debug_level = <3>; /*DEBUG(1) INFO(2) WARNING(3) ERROR(4)*/
+		gpu_trace_level = <8>; /*TRACE_ALL*/
+		gpu_mo_min_clock = <455000>;
+		gpu_boost_gpu_min_lock = <0>;
+		gpu_boost_egl_min_lock = <1872000>;
+		gpu_vk_boost_max_lock = <338000>;
+		gpu_vk_boost_mif_min_lock = <1794000>;
+		gpu_bts_support = <1>;
+		gpu_asv_cali_lock_val = <0>; /*Should check this value when MALI_ASV_CALIBRATION_SUPPORT is enabled*/
+		gpu_set_pmu_duration_reg = <0>; /* only for KC for now*/
+		gpu_set_pmu_duration_val = <0>; /* only for KC for now*/
 	};
 
 	ITMON@0 {
@@ -3350,6 +3409,7 @@
 		clocks = <&clock GATE_MSCL>;
 		clock-names = "gate";
 		iommus = <&sysmmu_g2d2>;
+		dma-coherent;
 
 		/* MIF / INT */
 		mscl_qos_table = <
@@ -3569,75 +3629,6 @@
 		compatible = "samsung,exynos-repeater";
 		/* power domain */
 		samsung,power-domain = <&pd_g2d>;
-	};
-
-	sysmmu_dcf: sysmmu@16A30000 {
-		compatible = "samsung,exynos-sysmmu";
-		reg = <0x0 0x16A30000 0x9000>;
-		interrupts = <0 INTREQ_BLK_DCF_SYSMMU_DCF_O_INTERRUPT_NONSECURE 0>,
-			     <0 INTREQ_BLK_DCF_SYSMMU_DCF_O_INTERRUPT_SECURE 0>;
-		qos = <15>;
-		clock-names = "aclk";
-		clocks = <&clock GATE_IS_DCF_SYSMMU>;
-		port-name = "CIP1/2";
-		sysmmu,secure-irq;
-		sysmmu,secure_base = <0x16A20000>;
-		sysmmu,tlb_property =
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_READWRITE(0x0) | SYSMMU_BL1) SYSMMU_NOID>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_READWRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0x1, 0x1)>;
-		#iommu-cells = <0>;
-	};
-
-	iommu-domain_dcf {
-		compatible = "samsung,exynos-iommu-bus";
-		#address-cells = <2>;
-		#size-cells = <1>;
-		ranges;
-
-		domain-clients = <&dummy_dcf>;
-	};
-
-	dummy_dcf: dummy_dcf {
-		compatible = "samsung,exynos8890-mmu_test";
-		reg = <0x0 0xCAFE0000 0x1000>;
-		interrupts = <0 INTREQ__USI_CMGP00 0>;
-		iommus = <&sysmmu_dcf>;
-	};
-
-	sysmmu_dcrd: sysmmu@16830000 {
-		compatible = "samsung,exynos-sysmmu";
-		reg = <0x0 0x16830000 0x9000>;
-		interrupts = <0 INTREQ_BLK_DCRD_SYSMMU_DCRD_O_INTERRUPT_NONSECURE 0>,
-			     <0 INTREQ_BLK_DCRD_SYSMMU_DCRD_O_INTERRUPT_SECURE 0>;
-		qos = <15>;
-		clock-names = "aclk";
-		clocks = <&clock GATE_IS_DCRD_SYSMMU>;
-		port-name = "DCP";
-		sysmmu,secure-irq;
-		sysmmu,secure_base = <0x16820000>;
-		sysmmu,tlb_property =
-			<(SYSMMU_PORT_NO_PREFETCH_READ(0x0) | SYSMMU_BL32) SYSMMU_NOID>,
-			<(SYSMMU_PORT_NO_PREFETCH_READ(0x1) | SYSMMU_BL32) SYSMMU_ID_MASK(0x1, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0x0, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0x1, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0x2, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0x3, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0x4, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0x5, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0x6, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0x7, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0x8, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0x9, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0xA, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0xB, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0xC, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_READ(0x1)  | SYSMMU_BL1) SYSMMU_ID_MASK(0x2, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_READ(0x1)  | SYSMMU_BL1) SYSMMU_ID_MASK(0x3, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_READ(0x1)  | SYSMMU_BL1) SYSMMU_ID_MASK(0x4, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_READ(0x1)  | SYSMMU_BL1) SYSMMU_ID_MASK(0x5, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0xD, 0x1F)>,
-			<(SYSMMU_PORT_PREFETCH_PREDICTION_WRITE(0x1) | SYSMMU_BL1) SYSMMU_ID_MASK(0xE, 0x1F)>;
-		#iommu-cells = <0>;
 	};
 
 	sysmmu_isphq: sysmmu@16650000 {
@@ -4681,6 +4672,7 @@
 			reg = <0x0 0x17C51000 0x100>;
 			id = <0>;
 			type = "normal";
+			buffer_type = "dma";
 		};
 
 		abox_rdma_1: abox_rdma@0x17C51100 {
@@ -4688,6 +4680,7 @@
 			reg = <0x0 0x17C51100 0x100>;
 			id = <1>;
 			type = "normal";
+			buffer_type = "dma";
 		};
 
 		abox_rdma_2: abox_rdma@0x17C51200 {
@@ -4695,6 +4688,7 @@
 			reg = <0x0 0x17C51200 0x100>;
 			id = <2>;
 			type = "normal";
+			buffer_type = "dma";
 		};
 
 		abox_rdma_3: abox_rdma@0x17C51300 {
@@ -4702,6 +4696,7 @@
 			reg = <0x0 0x17C51300 0x100>;
 			id = <3>;
 			type = "sync";
+			buffer_type = "ion";
 		};
 
 		abox_rdma_4: abox_rdma@0x17C51400 {
@@ -4709,6 +4704,7 @@
 			reg = <0x0 0x17C51400 0x100>;
 			id = <4>;
 			type = "call";
+			buffer_type = "dma";
 		};
 
 		abox_rdma_5: abox_rdma@0x17C51500 {
@@ -4716,6 +4712,7 @@
 			reg = <0x0 0x17C51500 0x100>, <0x0 0x17D30600 0x70>;
 			id = <5>;
 			type = "compress";
+			buffer_type = "dma";
 		};
 
 		abox_rdma_6: abox_rdma@0x17C51600 {
@@ -4723,6 +4720,7 @@
 			reg = <0x0 0x17C51600 0x100>;
 			id = <6>;
 			type = "realtime";
+			buffer_type = "dma";
 		};
 
 		abox_rdma_7: abox_rdma@0x17C51700 {
@@ -4730,6 +4728,7 @@
 			reg = <0x0 0x17C51700 0x100>;
 			id = <7>;
 			type = "realtime";
+			buffer_type = "dma";
 		};
 
 		abox_wdma_0: abox_wdma@0x17C52000 {
@@ -4737,6 +4736,7 @@
 			reg = <0x0 0x17C52000 0x100>;
 			id = <0>;
 			type = "realtime";
+			buffer_type = "dma";
 		};
 
 		abox_wdma_1: abox_wdma@0x17C52100 {
@@ -4744,6 +4744,7 @@
 			reg = <0x0 0x17C52100 0x100>;
 			id = <1>;
 			type = "normal";
+			buffer_type = "ion";
 		};
 
 		abox_wdma_2: abox_wdma@0x17C52200 {
@@ -4751,6 +4752,7 @@
 			reg = <0x0 0x17C52200 0x100>;
 			id = <2>;
 			type = "call";
+			buffer_type = "dma";
 		};
 
 		abox_wdma_3: abox_wdma@0x17C52300 {
@@ -4758,6 +4760,7 @@
 			reg = <0x0 0x17C52300 0x100>;
 			id = <3>;
 			type = "realtime";
+			buffer_type = "dma";
 		};
 
 		abox_wdma_4: abox_wdma@0x17C52400 {
@@ -4765,6 +4768,7 @@
 			reg = <0x0 0x17C52400 0x100>;
 			id = <4>;
 			type = "vi-sensing";
+			buffer_type = "dma";
 		};
 
 		abox_uaif_0: abox_uaif@0x17C50500 {
@@ -4995,7 +4999,7 @@
 			boost_table = < 20 858000 15 962000 5 1261000 0 >;
 			up_rate_limit_table = < 5 >;
 			down_rate_limit_table = < 5 >;
-			upscale_ratio_table = < 80 >;
+			upscale_ratio_table = < 50 962000 65 >;
 		};
 	};
 
@@ -5013,6 +5017,11 @@
 		quad_change_ms = <15>;
 		big_heavy_thr = <600>;
 		lit_heavy_thr = <180>;
+		big_idle_thr = <106>;
+		lit_idle_thr = <46>;
+		ldsum_heavy_thr = <800>;
+		ldsum_enabled = <0>;
+		skip_lit_enabled = <0>;
 		cl_busy_ratio = <65>;
 		/* single_freq is parsed from ECT */
 		dual_freq = <2314000>;
@@ -5113,12 +5122,12 @@
 						  2652000 1794000
 						  2496000 1794000
 						  2314000 1794000
-						  2158000 1539000
-						  2002000 1539000
-						  1924000 1539000
-						  1794000 1539000
-						  1690000 1014000
-						  1586000  845000
+						  2158000 1794000
+						  2002000 1794000
+						  1924000 1794000
+						  1794000 1794000
+						  1690000 1539000
+						  1586000 1014000
 						  1469000  845000
 						  1261000  676000
 						  1170000  676000

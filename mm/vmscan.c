@@ -1329,6 +1329,53 @@ unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 	return ret;
 }
 
+/* A caller should guarantee that start and end pfns are in the same zone */
+void reclaim_contig_migrate_range(unsigned long start,
+						unsigned long end, bool drain)
+{
+	/* This function is based on __alloc_contig_migrate_range */
+	unsigned long nr_reclaimed;
+	unsigned long pfn = start;
+	struct compact_control cc = {
+		.mode = MIGRATE_SYNC_LIGHT,
+	};
+	unsigned long total_reclaimed = 0;
+
+	cc.nr_freepages = 0;
+	cc.nr_migratepages = 0;
+	cc.zone = page_zone(pfn_to_page(start));
+	INIT_LIST_HEAD(&cc.freepages);
+	INIT_LIST_HEAD(&cc.migratepages);
+
+	if (drain)
+		migrate_prep();
+
+	while (pfn < end) {
+		if (fatal_signal_pending(current)) {
+			pr_warn_once("%s %d got fatal signal\n",
+						__func__, __LINE__);
+			break;
+		}
+
+		if (list_empty(&cc.migratepages)) {
+			cc.nr_migratepages = 0;
+			pfn = isolate_migratepages_range(&cc, pfn, end);
+			if (!pfn)
+				break;
+		}
+
+		nr_reclaimed = reclaim_clean_pages_from_list(cc.zone,
+							&cc.migratepages);
+		cc.nr_migratepages -= nr_reclaimed;
+		total_reclaimed += nr_reclaimed;
+
+		/* Skip pages not reclaimed in the above */
+		if (cc.nr_migratepages)
+			putback_movable_pages(&cc.migratepages);
+	}
+	trace_printk("%lu\n", total_reclaimed << PAGE_SHIFT);
+}
+
 /*
  * Attempt to remove the specified page from its LRU.  Only take this page
  * if it is of the appropriate PageActive status.  Pages which are being
@@ -2108,15 +2155,51 @@ enum mem_boost {
 };
 static int mem_boost_mode = NO_BOOST;
 static unsigned long last_mode_change;
+static bool memory_boosting_disabled = false;
+
+bool is_mem_boost_high(void)
+{
+	return mem_boost_mode == BOOST_HIGH;
+}
 
 #define MEM_BOOST_MAX_TIME (5 * HZ) /* 5 sec */
 
 #ifdef CONFIG_SYSFS
+enum rbin_alloc_policy {
+	RBIN_ALLOW = 0,
+	RBIN_DENY = 1,
+};
+
+#ifdef CONFIG_RBIN
+static void set_rbin_alloc_policy(enum rbin_alloc_policy val)
+{
+	struct zone *zone;
+
+	if (val == RBIN_ALLOW)
+		wake_ion_rbin_heap_shrink();
+	for_each_populated_zone(zone) {
+		atomic_set(&zone->rbin_alloc, val);
+		if (val)
+			wakeup_kswapd(zone, 0, gfp_zone(GFP_KERNEL));
+	}
+}
+#else
+static inline void set_rbin_alloc_policy(enum rbin_alloc_policy val) {}
+#endif
+
+void test_and_set_mem_boost_timeout(void)
+{
+	if ((mem_boost_mode != NO_BOOST) &&
+	    time_after(jiffies, last_mode_change + MEM_BOOST_MAX_TIME)) {
+		mem_boost_mode = NO_BOOST;
+		set_rbin_alloc_policy(RBIN_ALLOW);
+	}
+}
+
 static ssize_t mem_boost_mode_show(struct kobject *kobj,
 				    struct kobj_attribute *attr, char *buf)
 {
-	if (time_after(jiffies, last_mode_change + MEM_BOOST_MAX_TIME))
-		mem_boost_mode = NO_BOOST;
+	test_and_set_mem_boost_timeout();
 	return sprintf(buf, "%d\n", mem_boost_mode);
 }
 
@@ -2132,7 +2215,39 @@ static ssize_t mem_boost_mode_store(struct kobject *kobj,
 		return -EINVAL;
 
 	mem_boost_mode = mode;
+	trace_printk("memboost start\n");
 	last_mode_change = jiffies;
+	if (mem_boost_mode == BOOST_HIGH) {
+#ifdef CONFIG_ION_RBIN_HEAP
+		wake_ion_rbin_heap_prereclaim();
+#endif
+		set_rbin_alloc_policy(RBIN_DENY);
+	}
+
+	return count;
+}
+
+static ssize_t disable_mem_boost_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	int ret;
+
+	ret = memory_boosting_disabled ? 1 : 0;
+	return sprintf(buf, "%d\n", ret);
+}
+
+static ssize_t disable_mem_boost_store(struct kobject *kobj,
+				     struct kobj_attribute *attr,
+				     const char *buf, size_t count)
+{
+	int mode;
+	int err;
+
+	err = kstrtoint(buf, 10, &mode);
+	if (err || (mode != 0 && mode != 1))
+		return -EINVAL;
+
+	memory_boosting_disabled = mode ? true : false;
 
 	return count;
 }
@@ -2141,9 +2256,11 @@ static ssize_t mem_boost_mode_store(struct kobject *kobj,
 	static struct kobj_attribute _name##_attr = \
 		__ATTR(_name, 0644, _name##_show, _name##_store)
 MEM_BOOST_ATTR(mem_boost_mode);
+MEM_BOOST_ATTR(disable_mem_boost);
 
 static struct attribute *mem_boost_attrs[] = {
 	&mem_boost_mode_attr.attr,
+	&disable_mem_boost_attr.attr,
 	NULL,
 };
 
@@ -2174,8 +2291,10 @@ static inline bool need_memory_boosting(struct pglist_data *pgdat)
 {
 	bool ret;
 
-	if (time_after(jiffies, last_mode_change + MEM_BOOST_MAX_TIME))
-		mem_boost_mode = NO_BOOST;
+	test_and_set_mem_boost_timeout();
+
+	if (memory_boosting_disabled)
+		return false;
 
 	switch (mem_boost_mode) {
 	case BOOST_HIGH:
@@ -3089,9 +3208,7 @@ unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
 				sc.may_writepage,
 				gfp_mask,
 				sc.reclaim_idx);
-
 	nr_reclaimed = do_try_to_free_pages(zonelist, &sc);
-
 	trace_mm_vmscan_direct_reclaim_end(nr_reclaimed);
 
 	return nr_reclaimed;
@@ -3201,9 +3318,13 @@ static void age_active_anon(struct pglist_data *pgdat,
 	} while (memcg);
 }
 
+#define MEM_BOOST_WMARK_SCALE_FACTOR 1
 static bool zone_balanced(struct zone *zone, int order, int classzone_idx)
 {
 	unsigned long mark = high_wmark_pages(zone);
+
+	if (current_is_kswapd() && need_memory_boosting(zone->zone_pgdat))
+		mark *= MEM_BOOST_WMARK_SCALE_FACTOR;
 
 	if (!zone_watermark_ok_safe(zone, order, mark, classzone_idx))
 		return false;
@@ -3625,6 +3746,9 @@ void wakeup_kswapd(struct zone *zone, int order, enum zone_type classzone_idx)
 	if (!waitqueue_active(&pgdat->kswapd_wait))
 		return;
 
+	if (need_memory_boosting(pgdat))
+		goto wakeup;
+
 	/* Only wake kswapd if all zones are unbalanced */
 	for (z = 0; z <= classzone_idx; z++) {
 		zone = pgdat->node_zones + z;
@@ -3634,7 +3758,7 @@ void wakeup_kswapd(struct zone *zone, int order, enum zone_type classzone_idx)
 		if (zone_balanced(zone, order, classzone_idx))
 			return;
 	}
-
+wakeup:
 	trace_mm_vmscan_wakeup_kswapd(pgdat->node_id, zone_idx(zone), order);
 	wake_up_interruptible(&pgdat->kswapd_wait);
 }

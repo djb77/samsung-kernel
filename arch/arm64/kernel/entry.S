@@ -31,6 +31,7 @@
 #include <asm/memory.h>
 #include <asm/mmu.h>
 #include <asm/ptrace.h>
+#include <asm/processor.h>
 #include <asm/thread_info.h>
 #include <asm/uaccess.h>
 #include <asm/asm-uaccess.h>
@@ -121,20 +122,19 @@ alternative_else_nop_endif
 
 	.if	\el == 0
 	mrs	x21, sp_el0
-	mov	tsk, sp
-	and	tsk, tsk, #~(THREAD_SIZE - 1)	// Ensure MDSCR_EL1.SS is clear,
-	ldr	x19, [tsk, #TI_FLAGS]		// since we can unmask debug
+	ldr_this_cpu	tsk, __entry_task, x20	// Ensure MDSCR_EL1.SS is clear,
+	ldr	x19, [tsk, #TSK_TI_FLAGS]	// since we can unmask debug
 	disable_step_tsk x19, x20		// exceptions when scheduling.
 
 	mov	x29, xzr			// fp pointed to user-space
 	.else
 	add	x21, sp, #(S_FRAME_SIZE+PRESERVE_STACK_SIZE)
 	get_thread_info tsk
-	/* Save the task's original addr_limit and set USER_DS (TASK_SIZE_64) */
-	ldr	x20, [tsk, #TI_ADDR_LIMIT]
+	/* Save the task's original addr_limit and set USER_DS */
+	ldr	x20, [tsk, #TSK_TI_ADDR_LIMIT]
 	str	x20, [sp, #S_ORIG_ADDR_LIMIT]
-	mov	x20, #TASK_SIZE_64
-	str	x20, [tsk, #TI_ADDR_LIMIT]
+	mov	x20, #USER_DS
+	str	x20, [tsk, #TSK_TI_ADDR_LIMIT]
 	/* No need to reset PSTATE.UAO, hardware's already set it to 0 for us */
 	.endif /* \el == 0 */
 	mrs	x22, elr_el1
@@ -196,7 +196,7 @@ alternative_else_nop_endif
 	.if	\el != 0
 	/* Restore the task's original addr_limit. */
 	ldr	x20, [sp, #S_ORIG_ADDR_LIMIT]
-	str	x20, [tsk, #TI_ADDR_LIMIT]
+	str	x20, [tsk, #TSK_TI_ADDR_LIMIT]
 
 	/* No need to restore UAO, it will be restored from SPSR_EL1 */
 	.endif
@@ -300,15 +300,16 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 	mov	x19, sp			// preserve the original sp
 
 	/*
-	 * Compare sp with the current thread_info, if the top
-	 * ~(THREAD_SIZE - 1) bits match, we are on a task stack, and
-	 * should switch to the irq stack.
+	 * Compare sp with the base of the task stack.
+	 * If the top ~(THREAD_SIZE - 1) bits match, we are on a task stack,
+	 * and should switch to the irq stack.
 	 */
-	and	x25, x19, #~(THREAD_SIZE - 1)
-	cmp	x25, tsk
-	b.ne	9998f
+	ldr	x25, [tsk, TSK_STACK]
+	eor	x25, x25, x19
+	and	x25, x25, #~(THREAD_SIZE - 1)
+	cbnz	x25, 9998f
 
-	this_cpu_ptr irq_stack, x25, x26
+	adr_this_cpu x25, irq_stack, x26
 	mov	x26, #IRQ_STACK_START_SP
 	add	x26, x25, x26
 
@@ -407,6 +408,100 @@ END(vectors)
 	b	bad_mode
 	.endm
 
+/*
+ * wdt reset for i-cache preservation
+ * local irq disable is assumed for wdt reset
+ */
+	.macro	wdt_reset_for_icache, el
+1:	/* register save */
+	stp	x0, x1, [sp, #-0x20]!
+	stp	x2, x3, [sp,#0x10]
+
+	/* check sj locked */
+	ldr_l	x0, __debug_sj_lock
+	cmp	x0, #0
+	b.ne	3f
+
+	/* check if core is big */
+	mrs	x0, MIDR_EL1
+	lsr	x0, x0, #24
+	cmp	x0, #0x53
+	b.ne	3f
+
+	/* check if it is the case */
+	/* pc alignment            */
+	/* undef from init task    */
+	mrs	x2, esr_el1			// read the syndrome register
+	lsr	x1, x2, #ESR_ELx_EC_SHIFT	// exception class
+
+	/*
+	 * check if exception class is data/instruction abort with tlb conflict
+	 * at any exception level
+	 *
+	 * EC: IABT(10000x) && IFSC: 110000
+	 * EC: DABT(10010x) && DFSC: 110000
+	 */
+	mov	x0, #0x3a
+	and	x3, x1, x0			// bit mask 111010 
+	cmp	x3, #0x20			// check d/i abort 
+	b.ne	4f
+
+	mov	x0, #0x3f
+	and	x3, x2, x0			// bit mask 111111
+	cmp	x3, #0x30			// check IFSC/DFSC
+	b.eq	2f
+
+4:
+	/* check pc alignment exception */
+	cmp	x1, #ESR_ELx_EC_PC_ALIGN	// pc alignment exception
+	.if	\el == 0
+	b	3f
+	.else	/* el == 1 */
+	/* go to wdt reset right away */
+	b.eq	2f
+	.endif
+
+	/* check if exception class is undef & task is init*/
+	cmp	x1, #ESR_ELx_EC_UNKNOWN	// unknown exception in EL1
+	b.ne	3f
+
+2:	/* wdt reset */
+	/* wdt_reset, x0:reg_base, x1:con, x2:dat, x3:cnt(=5 tick)*/
+
+	/* save important information */
+	ldr	x1, =entry_dbg_saved_data
+	mov	x0, \el			// 
+	str	x0, [x1, #0x8]		// save el
+	mrs	x0, esr_el1		// read the syndrome register	
+	str	x0, [x1, #0x10]		// save esr
+	mrs	x0, elr_el1
+	str	x0, [x1, #0x18]		// save elr
+	mrs	x0, far_el1
+	str	x0, [x1, #0x20]		// save elr
+	ldr	x0, =0x57445200
+	str	x0, [x1]		// save magic
+
+	/* do wdt reset */
+	ldr	x1, =s3c_wdt
+	ldr	x1, [x1]
+	ldr	x0, [x1, #0x18]
+
+	ldr	w1, [x0]
+	mov	w2, #0
+	str	w2, [x0, #4]
+	mov	w3, #2 // 2 tick
+	str	w3, [x0,#0x8]
+	mov	w3, #0x21
+	orr	w1, w1,w3
+	str	w1, [x0]
+	b	.
+
+3:	/* register restore */
+	ldp x0, x1, [sp]
+	ldp x2, x3, [sp,#0x10]
+	add sp, sp, #0x20
+	.endm
+
 el0_sync_invalid:
 	inv_entry 0, BAD_SYNC
 ENDPROC(el0_sync_invalid)
@@ -454,6 +549,27 @@ ENDPROC(el1_error_invalid)
  */
 	.align	6
 el1_sync:
+	stp	x0, x1, [sp, #-0x10]!
+	mrs	x0, esr_el1
+/* get Exeption Class */
+	lsr	x0, x0, #0x1A
+/* check data abort fault */
+	cmp	x0, #0x25
+	b.ne	1f
+/* check branch instruction */
+	mrs	x0, elr_el1
+
+	ldr	x0, [x0]
+	lsr	x0, x0, #0x19
+	and	x0, x0, #0x7f
+	cmp	x0, #0x2a
+	b.ne	1f
+/* halt for watchdog */
+	hlt	#0xff
+1:
+	ldp	x0, x1, [sp]
+	add	sp, sp, #0x10
+
 /* store used gprs(x0, x1) through stack */
 	stp     x0, x1, [sp, #-0x10]!
 	mrs     x0, esr_el1
@@ -498,6 +614,7 @@ el1_sync:
 skip:
 	ldp	x0, x1, [sp]
 	add	sp, sp, #0x10
+	wdt_reset_for_icache 1
 	kernel_entry 1
 	mov	x9, #0
 	str_l	x9, __tlb_conflict_cnt, x8
@@ -587,9 +704,9 @@ el1_irq:
 	irq_handler
 
 #ifdef CONFIG_PREEMPT
-	ldr	w24, [tsk, #TI_PREEMPT]		// get preempt count
+	ldr	w24, [tsk, #TSK_TI_PREEMPT]	// get preempt count
 	cbnz	w24, 1f				// preempt count != 0
-	ldr	x0, [tsk, #TI_FLAGS]		// get flags
+	ldr	x0, [tsk, #TSK_TI_FLAGS]	// get flags
 	tbz	x0, #TIF_NEED_RESCHED, 1f	// needs rescheduling?
 	bl	el1_preempt
 1:
@@ -604,7 +721,7 @@ ENDPROC(el1_irq)
 el1_preempt:
 	mov	x24, lr
 1:	bl	preempt_schedule_irq		// irq en/disable is done inside
-	ldr	x0, [tsk, #TI_FLAGS]		// get new tasks TI_FLAGS
+	ldr	x0, [tsk, #TSK_TI_FLAGS]	// get new tasks TI_FLAGS
 	tbnz	x0, #TIF_NEED_RESCHED, 1b	// needs rescheduling?
 	ret	x24
 #endif
@@ -614,6 +731,7 @@ el1_preempt:
  */
 	.align	6
 el0_sync:
+	wdt_reset_for_icache 0
 	kernel_entry 0
 	mrs	x25, esr_el1			// read the syndrome register
 	lsr	x24, x25, #ESR_ELx_EC_SHIFT	// exception class
@@ -835,8 +953,7 @@ ENTRY(cpu_switch_to)
 	ldp	x29, x9, [x8], #16
 	ldr	lr, [x8]
 	mov	sp, x9
-	and	x9, x9, #~(THREAD_SIZE - 1)
-	msr	sp_el0, x9
+	msr	sp_el0, x1
 	ret
 ENDPROC(cpu_switch_to)
 
@@ -847,7 +964,7 @@ ENDPROC(cpu_switch_to)
 ret_fast_syscall:
 	disable_irq				// disable interrupts
 	str	x0, [sp, #S_X0]			// returned x0
-	ldr	x1, [tsk, #TI_FLAGS]		// re-check for syscall tracing
+	ldr	x1, [tsk, #TSK_TI_FLAGS]	// re-check for syscall tracing
 	and	x2, x1, #_TIF_SYSCALL_WORK
 	cbnz	x2, ret_fast_syscall_trace
 	and	x2, x1, #_TIF_WORK_MASK
@@ -867,14 +984,14 @@ work_pending:
 #ifdef CONFIG_TRACE_IRQFLAGS
 	bl	trace_hardirqs_on		// enabled while in userspace
 #endif
-	ldr	x1, [tsk, #TI_FLAGS]		// re-check for single-step
+	ldr	x1, [tsk, #TSK_TI_FLAGS]	// re-check for single-step
 	b	finish_ret_to_user
 /*
  * "slow" syscall return path.
  */
 ret_to_user:
 	disable_irq				// disable interrupts
-	ldr	x1, [tsk, #TI_FLAGS]
+	ldr	x1, [tsk, #TSK_TI_FLAGS]
 	and	x2, x1, #_TIF_WORK_MASK
 	cbnz	x2, work_pending
 finish_ret_to_user:
@@ -907,11 +1024,34 @@ el0_svc_naked:					// compat entry point
 	enable_dbg_and_irq
 	ct_user_exit 1
 
-	ldr	x16, [tsk, #TI_FLAGS]		// check for syscall hooks
+	ldr	x16, [tsk, #TSK_TI_FLAGS]	// check for syscall hooks
 	tst	x16, #_TIF_SYSCALL_WORK
 	b.ne	__sys_trace
 	cmp     scno, sc_nr                     // check upper syscall limit
 	b.hs	ni_sys
+#ifdef CONFIG_SECURITY_DEFEX
+/*
+ * Defex enter hook
+ */
+
+	ldr	x16, =defex_syscall_catch_enter
+	ldr	x16, [x16]
+	cmp	x16, xzr
+	b.eq	2f
+	mov	x0, scno
+	mov	x1, sp
+	blr	x16
+
+	cbnz	w0, ret_fast_syscall		// block this syscall?
+#	adr	lr, ret_fast_syscall		// return address (not needed here)
+
+	ldp	x0, x1, [sp]			// restore the syscall args
+	ldp	x2, x3, [sp, #S_X2]
+	ldp	x4, x5, [sp, #S_X4]
+	ldp	x6, x7, [sp, #S_X6]
+
+2:
+#endif
 	ldr	x16, [stbl, scno, lsl #3]	// address in the syscall table
 	blr	x16				// call sys_* routine
 	b	ret_fast_syscall
@@ -939,6 +1079,23 @@ __sys_trace:
 	mov	x1, sp				// pointer to regs
 	cmp	scno, sc_nr			// check upper syscall limit
 	b.hs	__ni_sys_trace
+#ifdef CONFIG_SECURITY_DEFEX
+/*
+ * Defex enter hook
+ */
+
+	ldr	x16, =defex_syscall_catch_enter
+	ldr	x16, [x16]
+	cmp	x16, xzr
+	b.eq	3f
+	mov	x0, scno
+	mov	x1, sp
+	blr	x16
+
+	cbnz	w0, __sys_trace_return		// block this syscall?
+#	adr	lr, __sys_trace_return		// return address (not neede here)
+3:
+#endif
 	ldp	x0, x1, [sp]			// restore the syscall args
 	ldp	x2, x3, [sp, #S_X2]
 	ldp	x4, x5, [sp, #S_X4]
@@ -1087,3 +1244,13 @@ ENTRY(sys_rt_sigreturn_wrapper)
 	b	sys_rt_sigreturn
 ENDPROC(sys_rt_sigreturn_wrapper)
 
+
+	.section .bss
+	.align 3
+	.globl	entry_dbg_saved_data
+entry_dbg_saved_data:
+	.dword	0	//magic
+	.dword	0	//el
+	.dword	0	//esr_el1
+	.dword	0	//elr_el1
+	.dword	0	//far_el1

@@ -166,12 +166,9 @@ struct fmp_fips_data *do_fmp_fips_init(struct exynos_fmp *fmp)
 	}
 
 	dev = fmp->dev;
-
 	data = kmalloc(sizeof(struct fmp_fips_data), GFP_KERNEL);
-	if (!data) {
-		ret = -ENOMEM;
-		goto err;
-	}
+	if (!data)
+		return NULL;
 
 	ret = exynos_fmp_host_get_type(dev, data);
 	if (ret) {
@@ -182,14 +179,6 @@ struct fmp_fips_data *do_fmp_fips_init(struct exynos_fmp *fmp)
 	data->devt = find_devt_for_selftest(fmp, data);
 	if (!data->devt) {
 		dev_err(dev, "%s: Fail to find devt for self test\n", __func__);
-		ret = -ENODEV;
-		goto err;
-	}
-
-	data->bdev = blkdev_get_by_dev(data->devt, fmode, NULL);
-	if (IS_ERR(data->bdev)) {
-		dev_err(dev, "%s: Fail to open block device\n", __func__);
-		ret = -ENODEV;
 		goto err;
 	}
 
@@ -199,6 +188,11 @@ struct fmp_fips_data *do_fmp_fips_init(struct exynos_fmp *fmp)
 		goto err;
 	}
 
+	data->bdev = blkdev_get_by_dev(data->devt, fmode, NULL);
+	if (IS_ERR(data->bdev)) {
+		dev_err(dev, "%s: Fail to open block device\n", __func__);
+		goto err;
+	}
 	inode = data->bdev->bd_inode;
 	sb = inode->i_sb;
 	blocksize = sb->s_blocksize;

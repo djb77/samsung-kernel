@@ -1387,7 +1387,7 @@ static const struct cam_mipi_channel sensor_3h1_setfile_A_mipi_channel_BINNING[]
 };
 
 static const struct cam_mipi_sensor_mode sensor_3h1_setfile_A_mipi_sensor_mode[] = {
-	{ SENSOR_3H1_3280X2464_30FPS,
+	{ SENSOR_3H1_3264X2448_30FPS,
 		sensor_3h1_setfile_A_mipi_channel_FULL,	ARRAY_SIZE(sensor_3h1_setfile_A_mipi_channel_FULL),
 		sensor_3h1_setfile_A_mipi_setting_FULL,	ARRAY_SIZE(sensor_3h1_setfile_A_mipi_setting_FULL)
 	},
@@ -1435,7 +1435,7 @@ static const struct cam_mipi_sensor_mode sensor_3h1_setfile_A_mipi_sensor_mode[]
 
 /* structure for only verifying channel list. to prevent redundant checking */
 const int sensor_3h1_setfile_A_verify_sensor_mode[] = {
-	SENSOR_3H1_3280X2464_30FPS, /* sensor_3h1_setfile_A_mipi_channel_FULL */
+	SENSOR_3H1_3264X2448_30FPS, /* sensor_3h1_setfile_A_mipi_channel_FULL */
 	SENSOR_3H1_1632X918_60FPS, /* sensor_3h1_setfile_A_mipi_channel_BINNING */
 };
 #endif

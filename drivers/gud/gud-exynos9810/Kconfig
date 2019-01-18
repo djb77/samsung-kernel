@@ -19,7 +19,7 @@ config TRUSTONIC_TEE_LPAE
 config TRUSTONIC_TEE_DEBUG
     bool "Trustonic TEE driver debug mode"
     depends on TRUSTONIC_TEE
-    default n
+    default y
     ---help---
       Enable the debug mode in the Trustonic TEE Driver.
 

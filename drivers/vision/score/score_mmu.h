@@ -17,11 +17,9 @@
 #define __SCORE_MMU_H__
 
 #include <linux/device.h>
-#if defined(CONFIG_EXYNOS_SCORE)
-#include "exynos/score_memory.h"
-#elif defined(CONFIG_FPGA_SCORE)
-#include "fpga/score_memory.h"
-#endif
+#include "score_memory.h"
+
+#define UNMAP_TRY	(30)
 
 struct score_system;
 struct score_mmu;
@@ -66,7 +64,9 @@ struct score_mmu {
 	spinlock_t                      free_slock;
 	int				free_count;
 	wait_queue_head_t		waitq;
-	struct task_struct		*task;
+	struct task_struct		*free_task;
+	struct kthread_worker		unmap_worker;
+	struct task_struct		*unmap_task;
 };
 
 /**
@@ -76,11 +76,14 @@ struct score_mmu_context {
 	struct score_mmu		*mmu;
 	struct list_head                dbuf_list;
 	int                             dbuf_count;
-	struct mutex			dbuf_lock;
+	spinlock_t			dbuf_slock;
 
 	struct list_head                userptr_list;
 	int                             userptr_count;
-	struct mutex			userptr_lock;
+	spinlock_t			userptr_slock;
+
+	struct kthread_work		work;
+	bool				work_run;
 };
 
 /**
@@ -108,6 +111,7 @@ struct score_mmu_buffer {
 	struct sg_table                 *sgt;
 	dma_addr_t                      dvaddr;
 	void                            *kvaddr;
+	off_t				offset;
 	bool				mirror;
 };
 

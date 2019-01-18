@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_memprealloc.c 742964 2018-01-24 08:51:35Z $
+ * $Id: dhd_custom_memprealloc.c 744015 2018-01-31 05:51:10Z $
  */
 
 #include <linux/device.h>
@@ -66,7 +66,8 @@
 #define WLAN_DHD_WLFC_BUF_SIZE		(16 * 1024)
 #define WLAN_DHD_IF_FLOW_LKUP_SIZE	(20 * 1024)
 #endif /* CONFIG_64BIT */
-#define WLAN_DHD_MEMDUMP_SIZE		(1536 * 1024)
+/* Have 2MB ramsize to accomodate future chips */
+#define WLAN_DHD_MEMDUMP_SIZE		(2048 * 1024)
 
 #define PREALLOC_WLAN_SEC_NUM		4
 #define PREALLOC_WLAN_BUF_NUM		160

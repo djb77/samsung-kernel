@@ -351,6 +351,7 @@ struct fimc_is_core {
 
 	unsigned long                           sensor_map;
 	struct fimc_is_dual_info		dual_info;
+	struct mutex				ois_mode_lock;
 };
 
 #if defined(CONFIG_VIDEOBUF2_CMA_PHYS)

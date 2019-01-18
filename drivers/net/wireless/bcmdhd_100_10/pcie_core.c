@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: pcie_core.c 735808 2017-12-12 11:35:02Z $
+ * $Id: pcie_core.c 746407 2018-02-13 06:28:42Z $
  */
 
 #include <bcm_cfg.h>
@@ -84,7 +84,7 @@ void pcie_watchdog_reset(osl_t *osh, si_t *sih, uint32 wd_mask, uint32 wd_val)
 #endif // endif
 		val = si_corereg(sih, SI_CC_IDX, OFFSETOF(chipcregs_t, intstatus), 0, 0);
 		si_corereg(sih, SI_CC_IDX, OFFSETOF(chipcregs_t, intstatus),
-			wd_mask, val);
+			wd_mask, val & wd_mask);
 	} else {
 		si_corereg(sih, SI_CC_IDX, OFFSETOF(chipcregs_t, watchdog), ~0, 4);
 		OSL_DELAY(100000);

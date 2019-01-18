@@ -64,12 +64,13 @@ void exynos_init_entity_util_avg(struct sched_entity *se)
 	struct sched_avg *sa = &se->avg;
 	int cpu = cpu_of(cfs_rq->rq);
 	unsigned long cap_org = capacity_orig_of(cpu);
-	long cap = (long)(cap_org - cfs_rq->avg.util_avg) / 2;
+	long cap = (long)(cap_org - cfs_rq->avg.util_avg);
 
 	if (cap > 0) {
 		if (cfs_rq->avg.util_avg != 0) {
 			sa->util_avg  = cfs_rq->avg.util_avg * se->load.weight;
 			sa->util_avg /= (cfs_rq->avg.load_avg + 1);
+			sa->util_avg = sa->util_avg << 1;
 
 			if (sa->util_avg > cap)
 				sa->util_avg = cap;
@@ -1039,17 +1040,20 @@ ontime_pick_heavy_task(struct sched_entity *se, struct cpumask *dst_cpus,
 	struct task_struct *p;
 	unsigned int max_util_avg = 0;
 	int task_count = 0;
-	int boosted = !!global_boost();
+	int boosted = !!global_boost() || !!schedtune_prefer_perf(task_of(se));
 
 	/*
 	 * Since current task does not exist in entity list of cfs_rq,
 	 * check first that current task is heavy.
 	 */
-	if (boosted || ontime_load_avg(task_of(se)) >= up_threshold) {
+	if (boosted) {
+		*boost_migration = 1;
+		return task_of(se);
+	}
+	if (ontime_load_avg(task_of(se)) >= up_threshold) {
 		heaviest_task = task_of(se);
 		max_util_avg = ontime_load_avg(task_of(se));
-		if (boosted)
-			*boost_migration = 1;
+		*boost_migration = 0;
 	}
 
 	se = __pick_first_entity(se->cfs_rq);
@@ -1065,14 +1069,14 @@ ontime_pick_heavy_task(struct sched_entity *se, struct cpumask *dst_cpus,
 			break;
 		}
 
-		if (!boosted && ontime_load_avg(p) < up_threshold)
+		if (ontime_load_avg(p) < up_threshold)
 			goto next_entity;
 
 		if (ontime_load_avg(p) > max_util_avg &&
 		    cpumask_intersects(dst_cpus, tsk_cpus_allowed(p))) {
 			heaviest_task = p;
 			max_util_avg = ontime_load_avg(p);
-			*boost_migration = boosted;
+			*boost_migration = 0;
 		}
 
 next_entity:
@@ -1081,6 +1085,47 @@ next_entity:
 	}
 
 	return heaviest_task;
+}
+static struct task_struct *
+ontime_pick_vip_task(struct sched_entity *se, int src_cpu, int dst_cpu)
+{
+	struct task_struct *vip_task = NULL;
+	struct task_struct *p;
+	unsigned int max_util_avg = 0;
+	int task_count = 0;
+
+	if (!lbt_overutilized(src_cpu, dst_cpu) || cpu_rq(src_cpu)->nr_running <= 1)
+		return NULL;
+
+	if (src_cpu == dst_cpu)
+		return NULL;
+
+	p = task_of(se);
+	if (cpumask_test_cpu(dst_cpu, tsk_cpus_allowed(p))) {
+		vip_task = p;
+		max_util_avg = ontime_load_avg(p);
+	}
+
+	se = __pick_first_entity(se->cfs_rq);
+	while (se && task_count < TASK_TRACK_COUNT) {
+		/* Skip non-task entity */
+		if (entity_is_cfs_rq(se))
+			goto next_entity;
+
+		p = task_of(se);
+
+		if (ontime_load_avg(p) > max_util_avg &&
+		    cpumask_test_cpu(dst_cpu, tsk_cpus_allowed(p))) {
+			vip_task = p;
+			max_util_avg = ontime_load_avg(p);
+		}
+
+next_entity:
+		se = __pick_next_entity(se);
+		task_count++;
+	}
+
+	return vip_task;
 }
 
 void ontime_new_entity_load(struct task_struct *parent, struct sched_entity *se)
@@ -1248,7 +1293,7 @@ void ontime_migration(void)
 
 	do {
 		dst_sg = src_sg->next;
-		for_each_cpu_and(cpu, sched_group_cpus(src_sg), cpu_active_mask) {
+		for_each_cpu(cpu, cpu_active_mask) {
 			unsigned long flags;
 			struct rq *rq;
 			struct sched_entity *se;
@@ -1305,11 +1350,19 @@ void ontime_migration(void)
 			 * Pick task to be migrated. Return NULL if there is no
 			 * heavy task in rq.
 			 */
-			p = ontime_pick_heavy_task(se, sched_group_cpus(dst_sg),
-							&boost_migration);
-			if (!p) {
-				raw_spin_unlock_irqrestore(&rq->lock, flags);
-				continue;
+			if (!cpumask_test_cpu(cpu, cpu_coregroup_mask(maxcap_cpu))) {
+				p = ontime_pick_heavy_task(se, sched_group_cpus(dst_sg),
+						&boost_migration);
+				if (!p) {
+					raw_spin_unlock_irqrestore(&rq->lock, flags);
+					continue;
+				}
+			} else {
+				p = ontime_pick_vip_task(se, cpu, dst_cpu);
+				if (!p) {
+					raw_spin_unlock_irqrestore(&rq->lock, flags);
+					continue;
+				}
 			}
 
 			ontime_flag(p) = ONTIME_MIGRATING;
@@ -1342,8 +1395,8 @@ ontime_migration_exit:
 
 int ontime_can_migration(struct task_struct *p, int cpu)
 {
-	u64 now = cpu_rq(0)->clock_task;
 	int target_cpu = cpu < 0 ? task_cpu(p) : cpu;
+	u64 delta;
 
 	if (ontime_flag(p) & NOT_ONTIME) {
 		trace_ehmp_ontime_check_migrate(target_cpu, true, "not_ontime");
@@ -1356,39 +1409,38 @@ int ontime_can_migration(struct task_struct *p, int cpu)
 		return false;
 	}
 
-	/* check condition either ontime release or not*/
-	if (((now - ontime_migration_time(p)) >> 10 > min_residency_us
-		&& ontime_load_avg(p) < down_threshold)) {
-		trace_ehmp_ontime_check_migrate(target_cpu, true, "down_condition");
-		goto ontime_release;
+	if (cpumask_test_cpu(target_cpu, cpu_coregroup_mask(maxcap_cpu))) {
+		trace_ehmp_ontime_check_migrate(target_cpu, true, "ontime on big");
+		return true;
 	}
 
-	/* check migrate to big */
-	if (cpumask_test_cpu(target_cpu, cpu_coregroup_mask(maxcap_cpu))) {
-		if (!idle_cpu(target_cpu)) {
-			trace_ehmp_ontime_check_migrate(target_cpu, false, "big_is_busy");
-			goto check_prev;
-		}
-		trace_ehmp_ontime_check_migrate(target_cpu, false, "big_is_idle");
+	/*
+	 * At this point, task is "ontime task" and running on big
+	 * and load balancer is trying to migrate task to LITTLE.
+	 */
+	delta = cpu_rq(0)->clock_task - ontime_migration_time(p);
+	delta = delta >> 10;
+	if (delta <= min_residency_us) {
+		trace_ehmp_ontime_check_migrate(target_cpu, false, "min residency");
 		return false;
 	}
 
-check_prev:
-	/* check leave to prev cpu */
-	if (!idle_cpu(task_cpu(p))) {
-		trace_ehmp_ontime_check_migrate(target_cpu, true, "prev_is_busy");
-		goto ontime_release;
+	if (cpu_rq(task_cpu(p))->nr_running > 1) {
+		trace_ehmp_ontime_check_migrate(target_cpu, true, "big is busy");
+		goto release;
 	}
 
-	trace_ehmp_ontime_check_migrate(target_cpu, false, "prev_is_idle");
-	return false;
-
-ontime_release:
-	/* allow migration */
-	exclude_ontime_task(p);
+	if (ontime_load_avg(p) >= down_threshold) {
+		trace_ehmp_ontime_check_migrate(target_cpu, false, "heavy task");
+		return false;
+	}
 
 	trace_ehmp_ontime_check_migrate(target_cpu, true, "ontime_release");
+release:
+	exclude_ontime_task(p);
+
 	return true;
+
 }
 
 static int ontime_wakeup_migration(struct task_struct *p, int target_cpu)

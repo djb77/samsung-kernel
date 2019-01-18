@@ -45,6 +45,7 @@ struct exynos_ion_platform_heap {
 	unsigned int compat_ids;
 	bool secure;
 	bool reusable;
+	bool recyclable;
 	bool protected;
 	atomic_t secure_ref;
 	struct ion_heap *heap;
@@ -230,8 +231,17 @@ static int __ion_secure_protect_buffer(struct exynos_ion_platform_heap *pdata,
 			sizeof(unsigned long) * prot->chunk_count);
 
 	ret = exynos_smc(SMC_DRM_PPMP_PROT, virt_to_phys(prot), 0, 0);
-	if (ret != DRMDRV_OK)
+	if (ret != DRMDRV_OK) {
 		pr_crit("%s: smc call failed, err=%d\n", __func__, ret);
+		pr_info("prot desc dump: nr_chk %u, sz_chk %u, flags %#x\n",
+			prot->chunk_count, prot->chunk_size, prot->flags);
+		pr_info("prot desc dump: dma_addr %#x, paddr %#lx\n",
+			prot->dma_addr,
+			prot->chunk_count == 1 ? prot->bus_address : -1L);
+		ret = -EINVAL;
+		ion_secure_iova_free(info->prot_desc.dma_addr,
+				     prot->chunk_count * prot->chunk_size);
+	}
 
 	return ret;
 }
@@ -263,18 +273,31 @@ static int __ion_secure_unprotect_buffer(struct exynos_ion_platform_heap *pdata,
 					struct ion_buffer *buffer)
 {
 	struct ion_buffer_info *info = buffer->priv_virt;
+	struct ion_buffer_prot_info *prot = &info->prot_desc;
 	unsigned int size = 0;
-	int ret = 0;
+	int ret;
 
 	ret = exynos_smc(SMC_DRM_PPMP_UNPROT,
-			virt_to_phys(&info->prot_desc), 0, 0);
-	if (ret != DRMDRV_OK)
+			 virt_to_phys(prot), 0, 0);
+	if (ret != DRMDRV_OK) {
 		pr_crit("%s: smc call failed, err=%d\n", __func__, ret);
+		pr_info("prot desc dump: nr_chk %u, sz_chk %u, flags %#x\n",
+			prot->chunk_count, prot->chunk_size, prot->flags);
+		pr_info("prot desc dump: dma_addr %#x, paddr %#lx\n",
+			prot->dma_addr,
+			prot->chunk_count == 1 ? prot->bus_address : -1L);
+		BUG();
+		/*
+		 * retain the secure iova to mark the area unusable because the
+		 * next protection request on that area might fail.
+		 */
+		return -EINVAL;
+	}
 
 	size = info->prot_desc.chunk_count * info->prot_desc.chunk_size;
 	ion_secure_iova_free(info->prot_desc.dma_addr, size);
 
-	return ret;
+	return 0;
 }
 
 int ion_secure_unprotect(struct ion_buffer *buffer)
@@ -325,6 +348,55 @@ bool ion_is_heap_available(struct ion_heap *heap,
 	return true;
 }
 
+/*
+ * Parse the heap ids of camera and camera_contig heaps during boot up
+ * - SEC MOBILE, kernel core memory
+ */
+unsigned int camera_heap_id;
+unsigned int camera_contig_heap_id;
+
+static void exynos_ion_init_camera_heaps(void)
+{
+	int i;
+	for (i = 0; i < nr_heaps; i++) {
+		if (plat_heaps[i].heap) {
+			struct ion_heap *heap = plat_heaps[i].heap;
+			if (!strncmp(heap->name, "camera_contig", 13)) {
+				WARN_ON(camera_contig_heap_id);
+				camera_contig_heap_id = heap->id;
+			} else if (!strncmp(heap->name, "camera", 6)) {
+				WARN_ON(camera_heap_id);
+				camera_heap_id = heap->id;
+			}
+		}
+	}
+	pr_info("%s: [heap id] camera %d, camera_contig %d\n",
+			__func__, camera_heap_id, camera_contig_heap_id);
+}
+
+/*
+ * This function should be called with the final heap_id_mask before ion buffer alloc.
+ * - SEC MOBILE, kernel core memory
+ */
+unsigned int ion_buffer_flag_sanity_check(unsigned int heap_id_mask, unsigned int flags)
+{
+	/*
+	 * Buffer alloc request on "camera | camera_contig heap" id uses
+	 * ION_FLAG_PROTECTED to indicate which heap the request should go.
+	 * (with this bit, goto camera_contig.)
+	 * After deciding the target heap in ion_parse_heap_id(),
+	 * the flag is meaningless. So remove it.
+	 * This is the exynos9810-specific requirement.
+	 * - SEC MOBILE, kernel core memory
+	 */
+	if (flags && ION_FLAG_PROTECTED) {
+		if ((camera_heap_id && (heap_id_mask == (1 << camera_heap_id))) ||
+		    (camera_contig_heap_id && (heap_id_mask == (1 << camera_contig_heap_id))))
+			return flags & ~ION_FLAG_PROTECTED;
+	}
+	return flags;
+}
+
 unsigned int ion_parse_heap_id(unsigned int heap_id_mask, unsigned int flags)
 {
 	unsigned int heap_id = 1;
@@ -332,6 +404,25 @@ unsigned int ion_parse_heap_id(unsigned int heap_id_mask, unsigned int flags)
 
 	pr_debug("%s: heap_id_mask=%#x, flags=%#x\n",
 			__func__, heap_id_mask, flags);
+
+	/*
+	 * Buffer alloc request on "camera heap" id with ION_FLAG_PROTECTED
+	 * should go to camera_contig heap.
+	 * This is the exynos9810-specific requirement.
+	 * - SEC MOBILE, kernel core memory
+	 */
+	if (camera_heap_id && (heap_id_mask == (1 << camera_heap_id))
+			       && (flags & ION_FLAG_PROTECTED))
+		return camera_contig_heap_id ? (1 << camera_contig_heap_id) :
+						heap_id_mask;
+
+	/*
+	 * User space cannot request camera_contig heap directly
+	 * - SEC MOBILE, kernel core memory
+	 */
+	if (camera_contig_heap_id &&
+	    (heap_id_mask == (1 << camera_contig_heap_id)))
+		return 0;
 
 	if (heap_id_mask != EXYNOS_ION_HEAP_EXYNOS_CONTIG_MASK)
 		return heap_id_mask;
@@ -390,6 +481,11 @@ static int __init exynos_ion_reserved_mem_setup(struct reserved_mem *rmem)
 	pdata = &plat_heaps[nr_heaps];
 	pdata->secure = !!of_get_flat_dt_prop(rmem->fdt_node, "ion,secure", NULL);
 	pdata->reusable = !!of_get_flat_dt_prop(rmem->fdt_node, "ion,reusable", NULL);
+#ifdef CONFIG_ION_RBIN_HEAP
+	pdata->recyclable = !!of_get_flat_dt_prop(rmem->fdt_node, "ion,recyclable", NULL);
+#else
+	pdata->recyclable = false;
+#endif
 
 	prop = of_get_flat_dt_prop(rmem->fdt_node, "id", &len);
 	if (!prop) {
@@ -422,6 +518,7 @@ static int __init exynos_ion_reserved_mem_setup(struct reserved_mem *rmem)
 
 	rmem->ops = &exynos_ion_rmem_ops;
 	pdata->rmem = rmem;
+	rmem->reusable = pdata->reusable | pdata->recyclable;
 
 	heap_data = &pdata->heap_data;
 	heap_data->id = pdata->id;
@@ -447,11 +544,14 @@ static int __init exynos_ion_reserved_mem_setup(struct reserved_mem *rmem)
 	else
 		heap_data->align = be32_to_cpu(prop[0]);
 
-	if (pdata->reusable) {
+	if (pdata->reusable || pdata->recyclable) {
 		int ret;
 		struct cma *cma;
 
-		heap_data->type = ION_HEAP_TYPE_DMA;
+		if (pdata->reusable)
+			heap_data->type = ION_HEAP_TYPE_DMA;
+		else
+			heap_data->type = ION_HEAP_TYPE_RBIN;
 
 		ret = cma_init_reserved_mem_with_name(
 				heap_data->base, heap_data->size, 0, &cma,
@@ -462,9 +562,23 @@ static int __init exynos_ion_reserved_mem_setup(struct reserved_mem *rmem)
 			return ret;
 		}
 
+		if (pdata->recyclable) {
+			cma_set_rbin(cma);
+			totalrbin_pages += (heap_data->size / PAGE_SIZE);
+			/*
+			 * # of cma pages was increased by this RBIN memory in
+			 * cma_init_reserved_mem_with_name(). Need to deduct.
+			 */
+			totalcma_pages -= (heap_data->size / PAGE_SIZE);
+		}
+
 		heap_data->priv = cma;
 
-		pr_info("CMA memory[%d]: %s:%#lx\n", heap_data->id,
+		if (pdata->reusable)
+			pr_info("CMA memory[%d]: %s:%#lx\n", heap_data->id,
+				heap_data->name, (unsigned long)rmem->size);
+		else
+			pr_info("rbin CMA memory[%d]: %s:%#lx\n", heap_data->id,
 				heap_data->name, (unsigned long)rmem->size);
 	} else {
 		heap_data->type = ION_HEAP_TYPE_CARVEOUT;
@@ -490,6 +604,7 @@ DECLARE_EXYNOS_ION_RESERVED_REGION("exynos8890-ion,", vframe);
 DECLARE_EXYNOS_ION_RESERVED_REGION("exynos8890-ion,", vscaler);
 DECLARE_EXYNOS_ION_RESERVED_REGION("exynos8890-ion,", camera);
 DECLARE_EXYNOS_ION_RESERVED_REGION("exynos8890-ion,", secure_camera);
+DECLARE_EXYNOS_ION_RESERVED_REGION("exynos8890-ion,", camera_contig);
 
 static int __init exynos_ion_populate_heaps(struct ion_device *ion_dev)
 {
@@ -528,6 +643,7 @@ static int __init exynos_ion_populate_heaps(struct ion_device *ion_dev)
 		ion_device_add_heap(ion_exynos, plat_heaps[i].heap);
 	}
 
+	exynos_ion_init_camera_heaps();
 	return 0;
 
 err:

@@ -232,12 +232,9 @@ void get_customized_country_code(void *adapter, char *country_iso_code, wl_count
 }
 
 #define PSMINFO PLATFORM_PATH".psm.info"
-#define REVINFO PLATFORM_PATH".rev"
 #define ANTINFO PLATFORM_PATH".ant.info"
 #define WIFIVERINFO     PLATFORM_PATH".wifiver.info"
-#define RSDBINFO        PLATFORM_PATH".rsdb.info"
 #define LOGTRACEINFO    PLATFORM_PATH".logtrace.info"
-#define ADPSINFO        PLATFORM_PATH".adps.info"
 #define SOFTAPINFO      PLATFORM_PATH".softap.info"
 
 #ifdef DHD_PM_CONTROL_FROM_FILE
@@ -266,79 +263,79 @@ void sec_control_pm(dhd_pub_t *dhd, uint *power_mode)
 		kernel_read(fp, fp->f_pos, &power_val, 1);
 		DHD_ERROR(("[WIFI_SEC] %s: POWER_VAL = %c \r\n", __FUNCTION__, power_val));
 
-		if (power_val == '0') {
+	if (power_val == '0') {
 #ifdef ROAM_ENABLE
-			uint roamvar = 1;
+		uint roamvar = 1;
 #endif // endif
-			uint32 wl_updown = 1;
+		uint32 wl_updown = 1;
 
-			*power_mode = PM_OFF;
-			/* Disable PowerSave Mode */
-			dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)power_mode,
-				sizeof(uint), TRUE, 0);
+		*power_mode = PM_OFF;
+		/* Disable PowerSave Mode */
+		dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)power_mode,
+			sizeof(uint), TRUE, 0);
 #ifndef CUSTOM_SET_ANTNPM
-			/* Turn off MPC in AP mode */
-			ret = dhd_iovar(dhd, 0, "mpc", (char *)power_mode, sizeof(*power_mode),
-					NULL, 0, TRUE);
+		/* Turn off MPC in AP mode */
+		ret = dhd_iovar(dhd, 0, "mpc", (char *)power_mode, sizeof(*power_mode),
+				NULL, 0, TRUE);
 #endif /* !CUSTOM_SET_ANTNPM */
-			g_pm_control = TRUE;
+		g_pm_control = TRUE;
 #ifdef ROAM_ENABLE
-			/* Roaming off of dongle */
-			ret = dhd_iovar(dhd, 0, "roam_off", (char *)&roamvar, sizeof(roamvar), NULL,
-					0, TRUE);
+		/* Roaming off of dongle */
+		ret = dhd_iovar(dhd, 0, "roam_off", (char *)&roamvar, sizeof(roamvar), NULL,
+				0, TRUE);
 #endif // endif
 #ifdef DHD_ENABLE_LPC
-			/* Set lpc 0 */
-			ret = dhd_iovar(dhd, 0, "lpc", (char *)&lpc, sizeof(lpc), NULL, 0, TRUE);
-			if (ret < 0) {
-				DHD_ERROR(("[WIFI_SEC] %s: Set lpc failed  %d\n",
-				__FUNCTION__, ret));
-			}
+		/* Set lpc 0 */
+		ret = dhd_iovar(dhd, 0, "lpc", (char *)&lpc, sizeof(lpc), NULL, 0, TRUE);
+		if (ret < 0) {
+			DHD_ERROR(("[WIFI_SEC] %s: Set lpc failed  %d\n",
+			__FUNCTION__, ret));
+		}
 #endif /* DHD_ENABLE_LPC */
 #ifdef DHD_PCIE_RUNTIMEPM
-			DHD_ERROR(("[WIFI_SEC] %s : Turn Runtime PM off \n", __FUNCTION__));
-			/* Turn Runtime PM off */
-			dhdpcie_block_runtime_pm(dhd);
+		DHD_ERROR(("[WIFI_SEC] %s : Turn Runtime PM off \n", __FUNCTION__));
+		/* Turn Runtime PM off */
+		dhdpcie_block_runtime_pm(dhd);
 #endif /* DHD_PCIE_RUNTIMEPM */
-			/* Disable ocl */
-			if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_UP, (char *)&wl_updown,
-					sizeof(wl_updown), TRUE, 0)) < 0) {
-				DHD_ERROR(("[WIFI_SEC] %s: WLC_UP faield %d\n", __FUNCTION__, ret));
-			}
+		/* Disable ocl */
+		if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_UP, (char *)&wl_updown,
+				sizeof(wl_updown), TRUE, 0)) < 0) {
+			DHD_ERROR(("[WIFI_SEC] %s: WLC_UP faield %d\n", __FUNCTION__, ret));
+		}
 
 #ifndef CUSTOM_SET_OCLOFF
-			{
-				uint32 ocl_enable = 0;
-				ret = dhd_iovar(dhd, 0, "ocl_enable", (char *)&ocl_enable,
-						sizeof(ocl_enable), NULL, 0, TRUE);
-				if (ret < 0) {
-					DHD_ERROR(("[WIFI_SEC] %s: Set ocl_enable %d failed %d\n",
-						__FUNCTION__, ocl_enable, ret));
-				} else {
-					DHD_ERROR(("[WIFI_SEC] %s: Set ocl_enable %d OK %d\n",
-						__FUNCTION__, ocl_enable, ret));
-				}
+		{
+			uint32 ocl_enable = 0;
+			ret = dhd_iovar(dhd, 0, "ocl_enable", (char *)&ocl_enable,
+					sizeof(ocl_enable), NULL, 0, TRUE);
+			if (ret < 0) {
+				DHD_ERROR(("[WIFI_SEC] %s: Set ocl_enable %d failed %d\n",
+					__FUNCTION__, ocl_enable, ret));
+			} else {
+				DHD_ERROR(("[WIFI_SEC] %s: Set ocl_enable %d OK %d\n",
+					__FUNCTION__, ocl_enable, ret));
 			}
+		}
 #else
-			dhd->ocl_off = TRUE;
+		dhd->ocl_off = TRUE;
 #endif /* CUSTOM_SET_OCLOFF */
 #ifdef WLADPS
-			if ((ret = dhd_enable_adps(dhd, ADPS_DISABLE)) < 0) {
-				DHD_ERROR(("[WIFI_SEC] %s: dhd_enable_adps failed %d\n",
-						__FUNCTION__, ret));
-			}
+		if ((ret = dhd_enable_adps(dhd, ADPS_DISABLE)) < 0) {
+			DHD_ERROR(("[WIFI_SEC] %s: dhd_enable_adps failed %d\n",
+					__FUNCTION__, ret));
+		}
 #endif /* WLADPS */
 
-			if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_DOWN, (char *)&wl_updown,
-					sizeof(wl_updown), TRUE, 0)) < 0) {
-				DHD_ERROR(("[WIFI_SEC] %s: WLC_DOWN faield %d\n",
-						__FUNCTION__, ret));
-			}
-		} else {
-			dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)power_mode,
-				sizeof(uint), TRUE, 0);
+		if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_DOWN, (char *)&wl_updown,
+				sizeof(wl_updown), TRUE, 0)) < 0) {
+			DHD_ERROR(("[WIFI_SEC] %s: WLC_DOWN faield %d\n",
+					__FUNCTION__, ret));
 		}
+	} else {
+		dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)power_mode,
+			sizeof(uint), TRUE, 0);
 	}
+}
 
 	if (fp)
 		filp_close(fp, NULL);
@@ -354,6 +351,7 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 	uint32 btc_mode = 0;
 	char *filepath = ANTINFO;
 	uint chip_id = dhd_bus_chip_id(dhd);
+	char *p_ant_val = NULL;
 #ifndef CUSTOM_SET_ANTNPM
 	wl_config_t rsdb_mode;
 
@@ -383,14 +381,16 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 #endif /* CUSTOM_SET_ANTNPM */
 		return ret;
 	} else {
-		ret = kernel_read(fp, 0, (char *)&ant_val, 4);
+		ret = kernel_read(fp, 0, (char *)&ant_val, sizeof(uint32));
 		if (ret < 0) {
 			DHD_ERROR(("[WIFI_SEC] %s: File read error, ret=%d\n", __FUNCTION__, ret));
 			filp_close(fp, NULL);
 			return ret;
 		}
 
-		ant_val = bcm_atoi((char *)&ant_val);
+		p_ant_val = (char *)&ant_val;
+		p_ant_val[sizeof(uint32) - 1] = '\0';
+		ant_val = bcm_atoi(p_ant_val);
 
 		DHD_ERROR(("[WIFI_SEC]%s: ANT val = %d\n", __FUNCTION__, ant_val));
 		filp_close(fp, NULL);
@@ -448,65 +448,6 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 }
 #endif /* MIMO_ANTENNA_SETTING */
 
-#ifdef RSDB_MODE_FROM_FILE
-/*
- * RSDBOFFINFO = .rsdb.info
- *  - rsdb_mode = 1            => Don't change RSDB mode / RSDB stay as turn on
- *  - rsdb_mode = 0            => Trun Off RSDB mode
- *  - file not exist          => Don't change RSDB mode / RSDB stay as turn on
- */
-int dhd_rsdb_mode_from_file(dhd_pub_t *dhd)
-{
-	struct file *fp = NULL;
-	int ret = -1;
-	wl_config_t rsdb_mode;
-	uint32 rsdb_configuration = 0;
-	char *filepath = RSDBINFO;
-
-	memset(&rsdb_mode, 0, sizeof(rsdb_mode));
-
-	/* Read RSDB on/off request from the file */
-	fp = filp_open(filepath, O_RDONLY, 0);
-	if (IS_ERR(fp)) {
-		DHD_ERROR(("[WIFI_SEC] %s: File [%s] doesn't exist\n", __FUNCTION__, filepath));
-		return ret;
-	} else {
-		ret = kernel_read(fp, 0, (char *)&rsdb_configuration, 4);
-		if (ret < 0) {
-			DHD_ERROR(("[WIFI_SEC] %s: File read error, ret=%d\n", __FUNCTION__, ret));
-			filp_close(fp, NULL);
-			return ret;
-		}
-
-		rsdb_mode.config = bcm_atoi((char *)&rsdb_configuration);
-
-		DHD_ERROR(("[WIFI_SEC] %s: RSDB mode from file = %d\n",
-			__FUNCTION__, rsdb_mode.config));
-		filp_close(fp, NULL);
-
-		/* Check value from the file */
-		if (rsdb_mode.config > 2) {
-			DHD_ERROR(("[WIFI_SEC] %s: Invalid value %d read from the file %s\n",
-				__FUNCTION__, rsdb_mode.config, filepath));
-			return -1;
-		}
-	}
-
-	if (rsdb_mode.config == 0) {
-		ret = dhd_iovar(dhd, 0, "rsdb_mode", (char *)&rsdb_mode, sizeof(rsdb_mode), NULL, 0,
-				TRUE);
-		if (ret < 0) {
-			DHD_ERROR(("[WIFI_SEC] %s: rsdb_mode ret= %d\n", __FUNCTION__, ret));
-		} else {
-			DHD_ERROR(("[WIFI_SEC] %s: rsdb_mode to MIMO(RSDB OFF) succeeded\n",
-				__FUNCTION__));
-		}
-	}
-
-	return ret;
-}
-#endif /* RSDB_MODE_FROM_FILE */
-
 #ifdef LOGTRACE_FROM_FILE
 /*
  * LOGTRACEINFO = .logtrace.info
@@ -520,6 +461,7 @@ int dhd_logtrace_from_file(dhd_pub_t *dhd)
 	int ret = -1;
 	uint32 logtrace = 0;
 	char *filepath = LOGTRACEINFO;
+	char *p_logtrace = NULL;
 
 	/* Read LOGTRACE Event on/off request from the file */
 	fp = filp_open(filepath, O_RDONLY, 0);
@@ -527,14 +469,16 @@ int dhd_logtrace_from_file(dhd_pub_t *dhd)
 		DHD_ERROR(("[WIFI_SEC] %s: File [%s] doesn't exist\n", __FUNCTION__, filepath));
 		return 0;
 	} else {
-		ret = kernel_read(fp, 0, (char *)&logtrace, 4);
+		ret = kernel_read(fp, 0, (char *)&logtrace, sizeof(uint32));
 		if (ret < 0) {
 			DHD_ERROR(("[WIFI_SEC] %s: File read error, ret=%d\n", __FUNCTION__, ret));
 			filp_close(fp, NULL);
 			return 0;
 		}
 
-		logtrace = bcm_atoi((char *)&logtrace);
+		p_logtrace = (char *)&logtrace;
+		p_logtrace[sizeof(uint32) - 1] = '\0';
+		logtrace = bcm_atoi(p_logtrace);
 
 		DHD_ERROR(("[WIFI_SEC] %s: LOGTRACE On/Off from file = %d\n",
 			__FUNCTION__, logtrace));
@@ -558,6 +502,7 @@ int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 	struct file *fp = NULL;
 	char *filepath = NULL;
 	int val = 0;
+	char *p_val = NULL;
 
 	if (!dhd || (mode < SET_PARAM_BUS_TXGLOM_MODE) ||
 		(mode >= PARAM_LAST_VALUE)) {
@@ -598,7 +543,7 @@ int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 			__FUNCTION__, filepath));
 		return BCME_ERROR;
 	} else {
-		if (kernel_read(fp, fp->f_pos, (char *)&val, 4) < 0) {
+		if (kernel_read(fp, fp->f_pos, (char *)&val, sizeof(uint32)) < 0) {
 			filp_close(fp, NULL);
 			/* File operation is failed so we will return error code */
 			DHD_ERROR(("[WIFI_SEC] %s: read failed, file path=%s\n",
@@ -608,7 +553,9 @@ int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 		filp_close(fp, NULL);
 	}
 
-	val = bcm_atoi((char *)&val);
+	p_val = (char *)&val;
+	p_val[sizeof(uint32) - 1] = '\0';
+	val = bcm_atoi(p_val);
 
 	switch (mode) {
 		case SET_PARAM_ROAMOFF:
@@ -791,68 +738,6 @@ __init get_hw_rev(char *arg)
 
 early_param("androidboot.hw_rev", get_hw_rev);
 #endif /* SUPPORT_MULTIPLE_BOARD_REV_FROM_HW */
-
-#ifdef ADPS_MODE_FROM_FILE
-/*
- * ADPSINFO = .asdp.info
- *  - adps mode = 1 => Enable ADPS mode
- *  - adps mode = 0 => Disalbe ADPS mode
- *  - file not exit => Enable ADPS mode
- */
-void dhd_adps_mode_from_file(dhd_pub_t *dhd)
-{
-	struct file *fp = NULL;
-	int ret = 0;
-	uint32 adps_mode = 0;
-	char *filepath = ADPSINFO;
-
-	/* Read ASDP on/off request from the file */
-	fp = filp_open(filepath, O_RDONLY, 0);
-	if (IS_ERR(fp)) {
-		DHD_ERROR(("[WIFI_SEC] %s: File [%s] doesn't exist\n", __FUNCTION__, filepath));
-		if ((ret = dhd_enable_adps(dhd, ADPS_ENABLE)) < 0) {
-			DHD_ERROR(("%s dhd_enable_adps failed %d\n", __FUNCTION__, ret));
-		}
-		return;
-	} else {
-		ret = kernel_read(fp, 0, (char *)&adps_mode, 4);
-		if (ret < 0) {
-			DHD_ERROR(("[WIFI_SEC] %s: File read error, ret=%d\n", __FUNCTION__, ret));
-			filp_close(fp, NULL);
-			return;
-		}
-
-		adps_mode = bcm_atoi((char *)&adps_mode);
-
-		DHD_ERROR(("[WIFI_SEC] %s: ASDP mode from file = %d\n", __FUNCTION__, adps_mode));
-		filp_close(fp, NULL);
-
-		/* Check value from the file */
-		if (adps_mode > 2) {
-			DHD_ERROR(("[WIFI_SEC] %s: Invalid value %d read from the file %s\n",
-				__FUNCTION__, adps_mode, filepath));
-			return;
-		}
-	}
-
-	if (adps_mode < 2) {
-		adps_mode = adps_mode == OFF ? ADPS_DISABLE : ADPS_ENABLE;
-
-		if ((ret = dhd_enable_adps(dhd, adps_mode)) < 0) {
-			DHD_ERROR(("[WIFI_SEC] %s: dhd_enable_adps failed %d\n",
-					__FUNCTION__, ret));
-			return;
-		}
-#ifdef WLADPS_SEAK_AP_WAR
-		if (adps_mode == ADPS_DISABLE) {
-			dhd->disabled_adps = TRUE;
-		}
-#endif /* WLADPS_SEAK_AP_WAR */
-	}
-
-	return;
-}
-#endif /* ADPS_MODE_FROM_FILE */
 #endif /* CUSTOMER_HW4 || CUSTOMER_HW40 */
 
 #ifdef GEN_SOFTAP_INFO_FILE
@@ -986,30 +871,5 @@ set_irq_cpucore(unsigned int irq, cpumask_var_t default_cpu_mask,
 	argos_irq_affinity_setup_label(irq,
 		ARGOS_P2P_TABLE_LABEL,
 		affinity_cpu_mask, default_cpu_mask);
-}
-#elif defined(SET_PCIE_IRQ_CPU_CORE)
-void
-set_irq_cpucore(unsigned int irq, int set)
-{
-	if (set < 0 || set > 1) {
-		DHD_ERROR(("%s, PCIe CPU core set error\n", __FUNCTION__));
-		return;
-	}
-
-	if (set) {
-		DHD_ERROR(("%s, PCIe IRQ:%u set Core %d\n",
-			__FUNCTION__, irq, PCIE_IRQ_BIG_CORE));
-		irq_set_affinity(irq, cpumask_of(PCIE_IRQ_BIG_CORE));
-	} else {
-		DHD_ERROR(("%s, PCIe IRQ:%u set Core %d\n",
-			__FUNCTION__, irq, PCIE_IRQ_LITTLE_CORE));
-		irq_set_affinity(irq, cpumask_of(PCIE_IRQ_LITTLE_CORE));
-	}
-}
-#else
-void
-set_irq_cpucore(void)
-{
-	DHD_ERROR(("Unsupported IRQ affinity\n"));
 }
 #endif /* SET_PCIE_IRQ_CPU_CORE && !DHD_LB_IRQSET */

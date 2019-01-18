@@ -1286,3 +1286,24 @@ int tick_check_oneshot_change(int allow_nohz)
 	tick_nohz_switch_to_nohz();
 	return 0;
 }
+
+struct tick_sched saved_pcpu_ts[NR_CPUS];
+void save_pcpu_tick(int cpu)
+{
+	saved_pcpu_ts[cpu] = per_cpu(tick_cpu_sched, cpu);
+	kcpustat_cpu(cpu).cpustat[CPUTIME_IDLE] =
+		usecs_to_cputime64(ktime_to_us(saved_pcpu_ts[cpu].idle_sleeptime));
+	kcpustat_cpu(cpu).cpustat[CPUTIME_IOWAIT] =
+		usecs_to_cputime64(ktime_to_us(saved_pcpu_ts[cpu].iowait_sleeptime));
+}
+EXPORT_SYMBOL(save_pcpu_tick);
+
+void restore_pcpu_tick(int cpu)
+{
+	struct tick_sched *ts = &per_cpu(tick_cpu_sched, cpu);
+
+	ts->idle_sleeptime = saved_pcpu_ts[cpu].idle_sleeptime;
+	ts->iowait_sleeptime = saved_pcpu_ts[cpu].iowait_sleeptime;
+	ts->idle_calls = saved_pcpu_ts[cpu].idle_calls;
+}
+EXPORT_SYMBOL(restore_pcpu_tick);

@@ -506,7 +506,10 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_DUAL_SYNC_FHD_CAMCORDING)
 	if ((test_bit(SENSOR_POSITION_REAR, &sensor_map)) &&
 		(test_bit(SENSOR_POSITION_REAR2, &sensor_map)) &&
 		setfile_flag &&
-		(stream_cnt > 1) && (resol <= SIZE_12MP_FHD_BDS) &&
+		(stream_cnt > 1) &&
+#ifdef BDS_IN_VIDEO
+		(resol <= SIZE_12MP_FHD_BDS) &&
+#endif
 		(dual_info->mode == FIMC_IS_DUAL_MODE_SYNC))
 		return 1;
 	else
@@ -538,7 +541,10 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_DUAL_SYNC_UHD_CAMCORDING)
 	if ((test_bit(SENSOR_POSITION_REAR, &sensor_map)) &&
 		(test_bit(SENSOR_POSITION_REAR2, &sensor_map)) &&
 		setfile_flag &&
-		(stream_cnt > 1) && (resol > SIZE_12MP_FHD_BDS) &&
+		(stream_cnt > 1) &&
+#ifdef BDS_IN_VIDEO
+		(resol > SIZE_12MP_FHD_BDS) &&
+#endif
 		(dual_info->mode == FIMC_IS_DUAL_MODE_SYNC))
 		return 1;
 	else
@@ -621,7 +627,10 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_DUAL_FHD_CAMCORDING)
 	if ((test_bit(SENSOR_POSITION_REAR, &sensor_map)) &&
 		(test_bit(SENSOR_POSITION_REAR2, &sensor_map)) &&
 		setfile_flag &&
-		(stream_cnt > 1) && (resol <= SIZE_12MP_FHD_BDS))
+#ifdef BDS_IN_VIDEO
+		(resol <= SIZE_12MP_FHD_BDS) &&
+#endif
+		(stream_cnt > 1))
 		return 1;
 	else
 		return 0;
@@ -651,7 +660,10 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_DUAL_UHD_CAMCORDING)
 	if ((test_bit(SENSOR_POSITION_REAR, &sensor_map)) &&
 		(test_bit(SENSOR_POSITION_REAR2, &sensor_map)) &&
 		setfile_flag &&
-		(stream_cnt > 1) && (resol > SIZE_12MP_FHD_BDS))
+#ifdef BDS_IN_VIDEO
+		(resol > SIZE_12MP_FHD_BDS) &&
+#endif
+		(stream_cnt > 1))
 		return 1;
 	else
 		return 0;
@@ -742,7 +754,9 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_VIDEO_HIGH_SPEED_60FPS)
 	if ((position == SENSOR_POSITION_REAR || position == SENSOR_POSITION_REAR2) &&
 			(fps > 30) &&
 			(fps <= 60) &&
+#ifdef BDS_IN_VIDEO
 			(resol <= SIZE_12MP_FHD_BDS) &&
+#endif
 			setfile_flag)
 		return 1;
 	else
@@ -800,7 +814,9 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR2_CAMCORDING_FHD)
 
 	if ((position == SENSOR_POSITION_REAR2) &&
 			(fps <= 30) &&
+#ifdef BDS_IN_VIDEO
 			(resol <= SIZE_12MP_FHD_BDS) &&
+#endif
 			setfile_flag)
 		return 1;
 	else
@@ -817,7 +833,9 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_FHD)
 
 	if ((position == SENSOR_POSITION_REAR) &&
 			(fps <= 30) &&
+#ifdef BDS_IN_VIDEO
 			(resol <= SIZE_12MP_FHD_BDS) &&
+#endif
 			setfile_flag)
 		return 1;
 	else
@@ -829,16 +847,16 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_WHD)
 {
 	u32 mask = (device->setfile & FIMC_IS_SETFILE_MASK);
 	bool setfile_flag = ((mask == ISS_SUB_SCENARIO_VIDEO) ||
-			(mask == ISS_SUB_SCENARIO_VIDEO_WDR_ON) ||
 			(mask == ISS_SUB_SCENARIO_UHD_30FPS) ||
 			(mask == ISS_SUB_SCENARIO_UHD_30FPS_WDR_ON) ||
-			(mask == ISS_SUB_SCENARIO_UHD_30FPS_WDR_AUTO) ||
-			(mask == ISS_SUB_SCENARIO_VIDEO_WDR_AUTO));
+			(mask == ISS_SUB_SCENARIO_UHD_30FPS_WDR_AUTO));
 
 	if ((position == SENSOR_POSITION_REAR || position == SENSOR_POSITION_REAR2) &&
 			(fps <= 30) &&
+#ifdef BDS_IN_VIDEO
 			(resol > SIZE_12MP_FHD_BDS) &&
 			(resol <= SIZE_12MP_QHD_BDS) &&
+#endif
 			setfile_flag)
 		return 1;
 	else
@@ -855,7 +873,9 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_UHD)
 
 	if ((position == SENSOR_POSITION_REAR || position == SENSOR_POSITION_REAR2) &&
 			(fps <= 30) &&
+#ifdef BDS_IN_VIDEO
 			(resol > SIZE_12MP_QHD_BDS) &&
+#endif
 			setfile_flag)
 		return 1;
 	else
@@ -873,7 +893,9 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_UHD_60FPS)
 	if ((position == SENSOR_POSITION_REAR || position == SENSOR_POSITION_REAR2) &&
 			(fps > 30) &&
 			(fps <= 60) &&
+#ifdef BDS_IN_VIDEO
 			(resol > SIZE_12MP_FHD_BDS) &&
+#endif
 			setfile_flag)
 		return 1;
 	else
@@ -923,7 +945,6 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_PREVIEW_FHD)
 			(fps <= 30) &&
 			(resol <= SIZE_12MP_FHD_BDS) &&
 			(!setfile_flag))
-
 		return 1;
 	else
 		return 0;
@@ -1027,7 +1048,10 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_FRONT_CAMCORDING)
 			(mask == ISS_SUB_SCENARIO_VIDEO_WDR_AUTO));
 
 	if ((position == SENSOR_POSITION_FRONT) &&
-		setfile_flag && (resol <= SIZE_8MP_FHD_BDS))
+#ifdef BDS_IN_VIDEO
+		(resol <= SIZE_8MP_FHD_BDS) &&
+#endif
+		setfile_flag)
 		return 1;
 	else
 		return 0;
@@ -1044,7 +1068,10 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_FRONT_CAMCORDING_WHD)
 			(mask == ISS_SUB_SCENARIO_VIDEO_WDR_AUTO));
 
 	if ((position == SENSOR_POSITION_FRONT) &&
-		setfile_flag && (resol <= SIZE_8MP_QHD_BDS))
+#ifdef BDS_IN_VIDEO
+		(resol <= SIZE_8MP_QHD_BDS) &&
+#endif
+		setfile_flag)
 		return 1;
 	else
 		return 0;
@@ -1174,7 +1201,7 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_UHD_CAPTURE)
 
 	if ((position == SENSOR_POSITION_REAR || position == SENSOR_POSITION_REAR2) &&
 		test_bit(FIMC_IS_ISCHAIN_REPROCESSING, &device->state) &&
-		 (static_ctrl->cur_scenario_id == FIMC_IS_SN_REAR_CAMCORDING_UHD)
+		(static_ctrl->cur_scenario_id == FIMC_IS_SN_REAR_CAMCORDING_UHD)
 		)
 		return 1;
 	else
@@ -1187,7 +1214,8 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_VIDEO_HIGH_SPEED_60FPS_CAPTURE)
 
 	if ((position == SENSOR_POSITION_REAR) &&
 		test_bit(FIMC_IS_ISCHAIN_REPROCESSING, &device->state) &&
-		(static_ctrl->cur_scenario_id == FIMC_IS_SN_VIDEO_HIGH_SPEED_60FPS)
+		((static_ctrl->cur_scenario_id == FIMC_IS_SN_VIDEO_HIGH_SPEED_60FPS) ||
+		(static_ctrl->cur_scenario_id == FIMC_IS_SN_REAR_CAMCORDING_UHD_60FPS))
 		)
 		return 1;
 	else

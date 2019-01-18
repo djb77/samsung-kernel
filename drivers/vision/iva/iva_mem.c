@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <asm/cacheflush.h>
+#include <linux/delay.h>
 
 #include "iva_mem.h"
 #include "iva_mem_sync.h"
@@ -29,7 +30,7 @@
 #define CALL_SHOW_PROC_MAP_LIST
 
 //#define ENABLE_MAP_ATTACHMENT
-#define ENABLE_CACHE_FLUSH_ALL
+#undef ENABLE_CACHE_FLUSH_ALL
 
 /* should be same as iva_ext_ram.h in user space */
 #define IVA_MEM_ALLOC_TYPE_FD_SHIFT	(24)
@@ -218,9 +219,15 @@ static struct iva_mem_map *iva_mem_ion_alloc(struct iva_proc *proc,
 	/* close() should be called for full release operation*/
 	ion_shared_fd = dma_buf_fd(dmabuf, O_CLOEXEC);
 	if (ion_shared_fd < 0) {
-		dev_err(dev, "%s() ion with getting dma_buf_fd failed.\n",
-				__func__);
-		goto err_dmabuf_fd;
+		usleep_range(10000, 100000);
+		dev_dbg(dev, "%s() retry to get dma_buf_fd.\n", __func__);
+
+		ion_shared_fd = dma_buf_fd(dmabuf, O_CLOEXEC);
+		if (ion_shared_fd < 0) {
+			dev_err(dev, "%s() ion with getting dma_buf_fd failed.\n",
+					__func__);
+			goto err_dmabuf_fd;
+		}
 	}
 
 	iva_map_node->shared_fd	= ion_shared_fd;

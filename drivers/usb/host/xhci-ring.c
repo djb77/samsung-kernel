@@ -370,6 +370,7 @@ static int xhci_abort_cmd_ring(struct xhci_hcd *xhci, unsigned long flags)
 					  msecs_to_jiffies(2000));
 	if (!ret) {
 		xhci_info(xhci, "No stop event for abort, ring start fail?\n");
+		cancel_delayed_work(&xhci->cmd_timer);
 		xhci_cleanup_command_queue(xhci);
 		xhci->current_cmd = NULL;
 	} else {
@@ -1279,7 +1280,9 @@ void xhci_handle_command_timeout(struct work_struct *work)
 	u64 hw_ring_state;
 
 	xhci = container_of(to_delayed_work(work), struct xhci_hcd, cmd_timer);
-
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	xhci_err(xhci, "++++ %s\n", __func__);
+#endif
 	spin_lock_irqsave(&xhci->lock, flags);
 
 	/*
@@ -1327,6 +1330,9 @@ void xhci_handle_command_timeout(struct work_struct *work)
 
 time_out_completed:
 	spin_unlock_irqrestore(&xhci->lock, flags);
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	xhci_err(xhci, "---- %s\n", __func__);
+#endif
 	return;
 }
 

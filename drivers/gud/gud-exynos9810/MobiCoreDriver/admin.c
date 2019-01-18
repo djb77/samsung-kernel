@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2018 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -39,7 +39,7 @@
 #include "client.h"
 #include "admin.h"
 
-static struct admin_ctx {
+static struct {
 	struct mutex admin_tgid_mutex;  /* Lock for admin_tgid below */
 	pid_t admin_tgid;
 	int (*tee_start_cb)(void);
@@ -74,6 +74,18 @@ static struct mc_admin_driver_request {
 	size_t size;			/* Size of the reception buffer */
 	bool lock_channel_during_freeze;/* Is freezing ongoing ? */
 } g_request;
+
+#if KERNEL_VERSION(3, 13, 0) <= LINUX_VERSION_CODE
+static inline void reinit_completion_local(struct completion *x)
+{
+	reinit_completion(x);
+}
+#else
+static inline void reinit_completion_local(struct completion *x)
+{
+	INIT_COMPLETION(*x);
+}
+#endif
 
 /* The mutex around the channel communication has to be wrapped in order
  * to handle this use case :
@@ -148,7 +160,7 @@ static struct tee_object *tee_object_alloc(bool is_sp_trustlet, size_t length)
 	}
 
 	/* Check size for overflow */
-	if (size < length) {
+	if (size < length || size > OBJECT_LENGTH_MAX) {
 		mc_dev_err("cannot allocate object of size %zu", length);
 		return NULL;
 	}
@@ -306,7 +318,7 @@ end:
 	if (ret)
 		request_cancel();
 
-	mc_dev_devel("request_send ret=%d", ret);
+	mc_dev_devel("%s ret=%d", __func__, ret);
 	return ret;
 }
 
@@ -508,6 +520,9 @@ static void mc_admin_sendcrashdump(void)
 {
 	int ret = 0;
 
+	/* Prevent daemon reconnection */
+	admin_ctx.last_start_ret = -EHOSTUNREACH;
+
 	/* Lock communication channel */
 	channel_lock();
 
@@ -597,6 +612,13 @@ struct tee_object *tee_object_read(u32 spid, uintptr_t address, size_t length)
 	if (copy_from_user(&thdr, addr, sizeof(thdr))) {
 		mc_dev_err("header: copy_from_user failed");
 		return ERR_PTR(-EFAULT);
+	}
+
+	/* Check header */
+	if ((thdr.intro.magic != MC_SERVICE_HEADER_MAGIC_BE) &&
+	    (thdr.intro.magic != MC_SERVICE_HEADER_MAGIC_LE)) {
+		mc_dev_err("header: invalid magic");
+		return ERR_PTR(-EINVAL);
 	}
 
 	/* Allocate memory */
@@ -880,6 +902,7 @@ static long admin_ioctl(struct file *file, unsigned int cmd,
 		}
 
 		/* Block until a request is available */
+		server_state_change(READY);
 		ret = wait_for_completion_interruptible(
 						&g_request.client_complete);
 		if (ret)
@@ -1046,8 +1069,9 @@ static int admin_open(struct inode *inode, struct file *file)
 		return admin_ctx.last_start_ret;
 	}
 
+	reinit_completion_local(&g_request.client_complete);
+	reinit_completion_local(&g_request.server_complete);
 	/* Requests from driver to daemon */
-	server_state_change(READY);
 	mc_dev_info("daemon connection open, TGID %d", admin_ctx.admin_tgid);
 	return 0;
 }
@@ -1080,7 +1104,7 @@ int mc_admin_init(struct cdev *cdev, int (*tee_start_cb)(void),
 	/* Register the call back for starting the secure world */
 	admin_ctx.tee_start_cb = tee_start_cb;
 	admin_ctx.tee_stop_cb = tee_stop_cb;
-	admin_ctx.last_start_ret = 1;
+	admin_ctx.last_start_ret = TEE_START_NOT_TRIGGERED;
 	return 0;
 }
 

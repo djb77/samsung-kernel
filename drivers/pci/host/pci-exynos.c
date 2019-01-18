@@ -20,6 +20,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of_gpio.h>
+#include <linux/of_address.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -42,6 +43,15 @@
 #include <linux/random.h>
 
 /* #define CONFIG_DYNAMIC_PHY_OFF */
+
+#ifdef CONFIG_SOC_EXYNOS9810
+/*
+ * NCLK_OFF_CONTROL is to avoid system hang by speculative access.
+ * It is only for EXYNOS9810.
+ */
+#define NCLK_OFF_CONTROL
+void __iomem *elbi_nclk_reg[MAX_RC_NUM];
+#endif
 
 struct exynos_pcie g_pcie[MAX_RC_NUM];
 #ifdef CONFIG_PM_DEVFREQ
@@ -119,7 +129,13 @@ static struct pci_dev *exynos_pcie_get_pci_dev(struct pcie_port *pp)
 
 	/* Get EP vendor/device ID to get pci_dev structure */
 	ep_pci_bus = pci_find_bus(0, 1); /* Find bus Domain 0, Bus 1(WIFI) */
+	if (ep_pci_bus == NULL) {
+		dev_err(pp->dev, 
+					"Failed to find EP PCIe bus(ep_pci_bus == NULL)!!!\n");
+	}
+	
 	exynos_pcie_rd_other_conf(pp, ep_pci_bus, 0, PCI_VENDOR_ID, 4, &val);
+	dev_err(pp->dev, "%s : device_id & vendor_id = 0x%08x\n", __func__, val);
 
 	ep_pci_dev = pci_get_device(val & ID_MASK, (val >> 16) & ID_MASK, NULL);
 
@@ -141,7 +157,7 @@ static int exynos_pcie_set_l1ss(int enable, struct pcie_port *pp, int id)
 		return -EINVAL;
 	}
 
-	dev_dbg(pp->dev, "%s: START (state = 0x%x, id = 0x%x, enable = %d)\n",
+	dev_info(pp->dev, "%s: START (state = 0x%x, id = 0x%x, enable = %d)\n",
 			__func__, exynos_pcie->l1ss_ctrl_id_state, id, enable);
 	spin_lock_irqsave(&exynos_pcie->conf_lock, flags);
 	if (exynos_pcie->state != STATE_LINK_UP || exynos_pcie->atu_ok == 0) {
@@ -203,7 +219,7 @@ static int exynos_pcie_set_l1ss(int enable, struct pcie_port *pp, int id)
 		}
 	}
 	spin_unlock_irqrestore(&exynos_pcie->conf_lock, flags);
-	dev_dbg(pp->dev, "%s: END (state = 0x%x, id = 0x%x, enable = %d)\n",
+	dev_info(pp->dev, "%s: END (state = 0x%x, id = 0x%x, enable = %d)\n",
 			__func__, exynos_pcie->l1ss_ctrl_id_state, id, enable);
 	return 0;
 }
@@ -1450,6 +1466,9 @@ static int exynos_pcie_rd_own_conf(struct pcie_port *pp, int where, int size,
 	int is_linked = 0;
 	int ret = 0;
 	u32 __maybe_unused reg_val;
+	unsigned long flags;
+
+	spin_lock_irqsave(&exynos_pcie->reg_lock, flags);
 
 #ifdef CONFIG_DYNAMIC_PHY_OFF
 	ret = regmap_read(exynos_pcie->pmureg,
@@ -1469,6 +1488,10 @@ static int exynos_pcie_rd_own_conf(struct pcie_port *pp, int where, int size,
 		exynos_pcie_phy_clock_enable(&exynos_pcie->pp,
 				PCIE_ENABLE_CLOCK);
 
+#ifdef NCLK_OFF_CONTROL
+		if (exynos_pcie->ip_ver == 0x981000)
+			exynos_elb_writel(exynos_pcie, 0x0, PCIE_L12ERR_CTRL);
+#endif
 		if (exynos_pcie->phy_ops.phy_check_rx_elecidle != NULL)
 			exynos_pcie->phy_ops.phy_check_rx_elecidle(
 				exynos_pcie->phy_pcs_base, IGNORE_ELECIDLE,
@@ -1483,9 +1506,17 @@ static int exynos_pcie_rd_own_conf(struct pcie_port *pp, int where, int size,
 				exynos_pcie->phy_pcs_base, ENABLE_ELECIDLE,
 				exynos_pcie->ch_num);
 
+#ifdef NCLK_OFF_CONTROL
+		if (exynos_pcie->ip_ver == 0x981000)
+			exynos_elb_writel(exynos_pcie, (0x1 << NCLK_OFF_OFFSET),
+							PCIE_L12ERR_CTRL);
+#endif
 		exynos_pcie_phy_clock_enable(pp, PCIE_DISABLE_CLOCK);
 		exynos_pcie_clock_enable(pp, PCIE_DISABLE_CLOCK);
 	}
+
+	spin_unlock_irqrestore(&exynos_pcie->reg_lock, flags);
+
 
 	return ret;
 }
@@ -1497,6 +1528,9 @@ static int exynos_pcie_wr_own_conf(struct pcie_port *pp, int where, int size,
 	int is_linked = 0;
 	int ret = 0;
 	u32 __maybe_unused reg_val;
+	unsigned long flags;
+
+	spin_lock_irqsave(&exynos_pcie->reg_lock, flags);	
 
 #ifdef CONFIG_DYNAMIC_PHY_OFF
 	ret = regmap_read(exynos_pcie->pmureg,
@@ -1516,6 +1550,11 @@ static int exynos_pcie_wr_own_conf(struct pcie_port *pp, int where, int size,
 		exynos_pcie_phy_clock_enable(&exynos_pcie->pp,
 				PCIE_ENABLE_CLOCK);
 
+#ifdef NCLK_OFF_CONTROL
+		if (exynos_pcie->ip_ver == 0x981000)
+			exynos_elb_writel(exynos_pcie, 0x0, PCIE_L12ERR_CTRL);
+#endif
+
 		if (exynos_pcie->phy_ops.phy_check_rx_elecidle != NULL)
 			exynos_pcie->phy_ops.phy_check_rx_elecidle(
 				exynos_pcie->phy_pcs_base, IGNORE_ELECIDLE,
@@ -1530,9 +1569,16 @@ static int exynos_pcie_wr_own_conf(struct pcie_port *pp, int where, int size,
 				exynos_pcie->phy_pcs_base, ENABLE_ELECIDLE,
 				exynos_pcie->ch_num);
 
+#ifdef NCLK_OFF_CONTROL
+		if (exynos_pcie->ip_ver == 0x981000)
+			exynos_elb_writel(exynos_pcie, (0x1 << NCLK_OFF_OFFSET),
+							PCIE_L12ERR_CTRL);
+#endif
 		exynos_pcie_phy_clock_enable(pp, PCIE_DISABLE_CLOCK);
 		exynos_pcie_clock_enable(pp, PCIE_DISABLE_CLOCK);
 	}
+
+	spin_unlock_irqrestore(&exynos_pcie->reg_lock, flags);
 
 	return ret;
 }
@@ -1622,9 +1668,30 @@ static void exynos_pcie_host_init(struct pcie_port *pp)
 	/* Setup RC to avoid initialization faile in PCIe stack */
 	dw_pcie_setup_rc(pp);
 }
+
+#ifdef NCLK_OFF_CONTROL
+u32 exynos_pcie_readl_rc(struct pcie_port *pp, u32 reg)
+{
+	u32 val;
+
+	exynos_pcie_rd_own_conf(pp, reg, 4, &val);
+
+	return val;
+}
+
+void exynos_pcie_writel_rc(struct pcie_port *pp, u32 reg, u32 val)
+{
+	exynos_pcie_wr_own_conf(pp, reg, 4, val);
+}
+#endif
+
 static struct pcie_host_ops exynos_pcie_host_ops = {
 	.rd_own_conf = exynos_pcie_rd_own_conf,
 	.wr_own_conf = exynos_pcie_wr_own_conf,
+#ifdef NCLK_OFF_CONTROL
+	.readl_rc = exynos_pcie_readl_rc,
+	.writel_rc = exynos_pcie_writel_rc,
+#endif
 	.rd_other_conf = exynos_pcie_rd_other_conf,
 	.wr_other_conf = exynos_pcie_wr_other_conf,
 	.link_up = exynos_pcie_link_up,
@@ -1655,6 +1722,7 @@ static int __init add_pcie_port(struct pcie_port *pp,
 
 	exynos_pcie_setup_rc(pp);
 	spin_lock_init(&exynos_pcie->conf_lock);
+	spin_lock_init(&exynos_pcie->reg_lock);	
 	ret = dw_pcie_host_init(pp);
 #ifdef CONFIG_PCI_MSI
 	dw_pcie_msi_init(pp);
@@ -2067,6 +2135,20 @@ static int __exit exynos_pcie_remove(struct platform_device *pdev)
 {
 	struct exynos_pcie *exynos_pcie = platform_get_drvdata(pdev);
 
+#ifdef NCLK_OFF_CONTROL
+	/* Set NCLK_OFF for Speculative access issue after resume. */
+	int i;
+
+	for (i = 0; i < MAX_RC_NUM; i++) {
+		if (elbi_nclk_reg[i] != NULL)
+			iounmap(elbi_nclk_reg[i]);
+	}
+
+	if (exynos_pcie->ip_ver == 0x981000)
+		exynos_elb_writel(exynos_pcie, (0x1 << NCLK_OFF_OFFSET),
+							PCIE_L12ERR_CTRL);
+#endif
+
 #ifdef CONFIG_CPU_IDLE
 	exynos_pm_unregister_notifier(&exynos_pcie->power_mode_nb);
 #endif
@@ -2154,6 +2236,9 @@ void exynos_pcie_config_l1ss(struct pcie_port *pp)
 	if (ep_pci_dev == NULL) {
 		dev_err(pp->dev,
 			"Failed to set L1SS Enable (pci_dev == NULL)!!!\n");
+#ifdef CONFIG_SEC_PANIC_PCIE_ERR			
+		panic("No ep_pci_dev found!!!\n");
+#endif		
 		return ;
 	}
 
@@ -2281,6 +2366,10 @@ int exynos_pcie_poweron(int ch_num)
 			dev_err(pp->dev, "pcie link up fail\n");
 			goto poweron_fail;
 		}
+#ifdef NCLK_OFF_CONTROL
+		if (exynos_pcie->ip_ver == 0x981000)
+			exynos_elb_writel(exynos_pcie, 0x0, PCIE_L12ERR_CTRL);
+#endif		
 		exynos_pcie->state = STATE_LINK_UP;
 
 		if (!exynos_pcie->probe_ok) {
@@ -2428,6 +2517,11 @@ void exynos_pcie_poweroff(int ch_num)
 					exynos_pcie->idle_ip_index,
 					PCIE_IS_IDLE);
 #endif
+#ifdef NCLK_OFF_CONTROL
+		if (exynos_pcie->ip_ver == 0x981000)
+			exynos_elb_writel(exynos_pcie, (0x1 << NCLK_OFF_OFFSET),
+							PCIE_L12ERR_CTRL);
+#endif
 	}
 
 	/* Set wakeup mask */
@@ -2445,8 +2539,8 @@ void exynos_pcie_send_pme_turn_off(struct exynos_pcie *exynos_pcie)
 {
 	struct pcie_port *pp = &exynos_pcie->pp;
 	struct device *dev = pp->dev;
-	int __maybe_unused count = 0, retry_cnt = 0;
-	u32 __maybe_unused val;
+	int count = 0, retry_cnt = 0;
+	u32 val;
 
 	val = readl(exynos_pcie->elbi_base + PCIE_ELBI_RDLH_LINKUP) & 0x1f;
 	dev_info(dev, "%s: link state:%x\n", __func__, val);
@@ -2554,6 +2648,19 @@ static int exynos_pcie_resume_noirq(struct device *dev)
 {
 	struct exynos_pcie *exynos_pcie = dev_get_drvdata(dev);
 
+#ifdef NCLK_OFF_CONTROL
+	/* Set NCLK_OFF for Speculative access issue after resume. */
+	int i;
+
+	for (i = 0; i < MAX_RC_NUM; i++) {
+		if (elbi_nclk_reg[i] != NULL)
+			writel((0x1 << NCLK_OFF_OFFSET), elbi_nclk_reg[i]);
+	}
+
+	if (exynos_pcie->ip_ver == 0x981000)
+		exynos_elb_writel(exynos_pcie, (0x1 << NCLK_OFF_OFFSET),
+							PCIE_L12ERR_CTRL);
+#endif
 	if (exynos_pcie->state == STATE_LINK_DOWN) {
 		exynos_pcie_resumed_phydown(&exynos_pcie->pp);
 
@@ -2720,6 +2827,58 @@ static int exynos_pci_power_mode_event(struct notifier_block *nb,
 
 static int __init pcie_init(void)
 {
+#ifdef NCLK_OFF_CONTROL
+	/*
+	 * This patch is to avoid system hang by speculative access at disabled
+	 * channel. Configuration of NCLK_OFF will return bus error when someone
+	 * access PCIe outbound memory of disabled channel.
+	 */
+	struct device_node *np;
+	const char *status;
+	char *pci_name;
+	struct resource elbi_res;
+	int i, elbi_index;
+
+	pci_name = kmalloc(EXYNOS_PCIE_MAX_NAME_LEN, GFP_KERNEL);
+
+	for (i = 0; i < MAX_RC_NUM; i++) {
+		snprintf(pci_name, EXYNOS_PCIE_MAX_NAME_LEN, "pcie%d", i);
+		np = of_find_node_by_name(NULL, pci_name);
+		if (np == NULL) {
+			pr_err("PCIe%d node is NULL!!!\n", i);
+			continue;
+		}
+
+		if (of_property_read_string(np, "status", &status)) {
+			pr_err("Can't Read PCIe%d Status!!!\n", i);
+			continue;
+		}
+
+		if (!strncmp(status, "disabled", 8)) {
+			pr_info("PCIe%d is Disabled - Set NCLK_OFF...\n", i);
+			elbi_index = of_property_match_string(np,
+							"reg-names", "elbi");
+			if (of_address_to_resource(np, elbi_index, &elbi_res)) {
+				pr_err("Can't get ELBI resource!!!\n");
+				continue;
+			}
+			elbi_nclk_reg[i] = ioremap(elbi_res.start +
+						PCIE_L12ERR_CTRL, SZ_4);
+
+			if (elbi_nclk_reg[i] == NULL) {
+				pr_err("Can't get elbi addr!!!\n");
+				continue;
+			}
+			pr_info("PADDR : 0x%llx, VADDR : 0x%p\n",
+					elbi_res.start, elbi_nclk_reg[i]);
+
+			writel((0x1 << NCLK_OFF_OFFSET), elbi_nclk_reg[i]);
+		}
+	}
+
+	kfree(pci_name);
+#endif
+
 	return platform_driver_probe(&exynos_pcie_driver, exynos_pcie_probe);
 }
 device_initcall(pcie_init);

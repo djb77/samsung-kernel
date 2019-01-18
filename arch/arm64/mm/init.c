@@ -62,6 +62,8 @@
 s64 memstart_addr __ro_after_init = -1;
 phys_addr_t arm64_dma_phys_limit __ro_after_init;
 
+extern int rkp_cred_enable;
+
 #ifdef CONFIG_BLK_DEV_INITRD
 static int __init early_initrd(char *p)
 {
@@ -213,6 +215,7 @@ void __init arm64_memblock_init(void)
 {
 	const s64 linear_region_size = -(s64)PAGE_OFFSET;
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_STOP);
 	/*
 	 * Ensure that the linear region takes up exactly half of the kernel
 	 * virtual address space. This way, we can distinguish a linear address
@@ -300,10 +303,17 @@ void __init arm64_memblock_init(void)
 	 * Register the kernel text, kernel data, initrd, and initial
 	 * pagetables with memblock.
 	 */
+	set_memsize_kernel_type(MEMSIZE_KERNEL_KERNEL);
 	memblock_reserve(__pa(_text), _end - _text);
+	set_memsize_kernel_type(MEMSIZE_KERNEL_STOP);
+	record_memsize_reserved("initmem", __pa(__init_begin),
+				__init_end - __init_begin, false, false);
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (initrd_start) {
 		memblock_reserve(initrd_start, initrd_end - initrd_start);
+		record_memsize_reserved("initrd", initrd_start,
+					initrd_end - initrd_start, false,
+					false);
 
 		/* the generic initrd code expects virtual addresses */
 		initrd_start = __phys_to_virt(initrd_start);
@@ -322,6 +332,7 @@ void __init arm64_memblock_init(void)
 	else
 		arm64_dma_phys_limit = PHYS_MASK + 1;
 	dma_contiguous_reserve(arm64_dma_phys_limit);
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 
 	memblock_allow_resize();
 }
@@ -330,6 +341,7 @@ void __init bootmem_init(void)
 {
 	unsigned long min, max;
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_PAGING);
 	min = PFN_UP(memblock_start_of_DRAM());
 	max = PFN_DOWN(memblock_end_of_DRAM());
 
@@ -349,6 +361,7 @@ void __init bootmem_init(void)
 
 	high_memory = __va((max << PAGE_SHIFT) - 1) + 1;
 	memblock_dump_all();
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 }
 
 #ifndef CONFIG_SPARSEMEM_VMEMMAP
@@ -519,6 +532,7 @@ void free_initmem(void)
 	 * is not supported by kallsyms.
 	 */
 	unmap_kernel_range((u64)__init_begin, (u64)(__init_end - __init_begin));
+ 
 #ifdef CONFIG_UH_RKP
 	uh_call(UH_APP_RKP, RKP_DEFERRED_START, 0, 0, 0, 0);
 #endif
@@ -544,7 +558,7 @@ static int __init keepinitrd_setup(char *__unused)
 __setup("keepinitrd", keepinitrd_setup);
 #endif
 
-#ifdef CONFIG_RELOCATABLE_KERNEL
+#if defined(CONFIG_RELOCATABLE_KERNEL) || defined(CONFIG_RELOCATABLE)
 static unsigned long kaslr_mem  __initdata;
 static unsigned long kaslr_size  __initdata;
 

@@ -83,7 +83,7 @@ config ARM64
 	select HAVE_FUNCTION_GRAPH_TRACER
 	select HAVE_GCC_PLUGINS
 	select HAVE_GENERIC_DMA_COHERENT
-#	select HAVE_HW_BREAKPOINT if PERF_EVENTS
+	select HAVE_HW_BREAKPOINT if PERF_EVENTS
 	select HAVE_IRQ_TIME_ACCOUNTING
 	select HAVE_MEMBLOCK
 	select HAVE_MEMBLOCK_NODE_MAP if NUMA
@@ -110,6 +110,7 @@ config ARM64
 	select SPARSE_IRQ
 	select SYSCTL_EXCEPTION_TRACE
 	select SECCOMP
+	select THREAD_INFO_IN_TASK
 	help
 	  ARM 64-bit (AArch64) Linux support.
 
@@ -1193,12 +1194,37 @@ config BUILD_ARM64_APPENDED_KERNEL_IMAGE_NAME
 	default "Image.gz-dtb" if IMG_GZ_DTB
 	default "Image-dtb" if IMG_DTB
 
+config LOD_SEC
+	bool "kernel security re-enforcement for Linux On Dex, including cap re-check and seccomp report"
+	default n
+
 config TIMA
 	bool "Enable TIMA(Trustzone based Integrity Measurement Archtecture) feature"
 	default n
 
+config TIMA_LKMAUTH
+	bool "Enable LKM authentication by TIMA"
+	depends on MODULES
+	help
+	  TIMA authenticates loaded kernel modules. Disable it if you don't
+	  want TIMA enabled.
+
+config TIMA_LKM_BLOCK
+	bool "Block LKM by TIMA"
+	help
+	  LKM is disapproved by Samsung security policy.
+
+config TIMA_LKMAUTH_CODE_PROT
+	bool "Support kernel Module"
+	depends on MODULES
+	default n
+	help
+	  When enabled, this feature will mark all Executable sections in an
+	  LKM as RO
+
 config UH
 	bool "Enable micro hypervisor feature"
+	depends on !SEC_FACTORY
 	default n
 	help
 	  It enables a micro hypervisor.
@@ -1208,22 +1234,24 @@ config UH
 
 config UH_DEBUG
     bool "Enable micro hypervisor debug feature"
+	depends on UH
 	default n
 	help
 	  It's for debugging uH.
 
 config UH_RKP
 	bool "Enable RKP (Realtime Kernel Protection) UH feature"
-	select UH
+	depends on UH
 	default n
 	help
 	  it protects a kernel text and etc.
 
-config UH_RKP_6G
-	bool "Support 6G Model"
+config UH_RKP_8G
+	bool "Support 8G Model"
+	depends on UH_RKP
 	default n
 	help
-	  support 6G
+	  support 8G
 
 config UH_INFORM
     bool "Debugfs for information of the security feature's active/inactive statue"
@@ -1232,17 +1260,23 @@ config UH_INFORM
 	  This config has the information of RKP,JOPP,ROPP,KDP,DMV.
 	  It informs that the above feature are whether active or inactive.
 
+config UH_RKP_FIMC_TYPE
+	bool "Select FIMC type"
+	depends on UH_RKP
+	default n
+	help
+	  it protects a kernel text and etc.
+
 config RKP_KDP
 	bool "Protection for cred structure"
-	depends on !SEC_FACTORY
 	depends on UH_RKP
+	depends on !SEC_VTS_TEST
 	default n
 	help
 	  Prevents unauthorized cred modification.
 
 config RKP_NS_PROT
 	bool "Protection for namespace structure"
-	depends on !SEC_FACTORY
 	depends on RKP_KDP
 	default n
 	help
@@ -1250,11 +1284,24 @@ config RKP_NS_PROT
 
 config RKP_DMAP_PROT
 	bool "Page Double Mapping protection"
-	depends on !SEC_FACTORY
 	depends on RKP_KDP
 	default n
 	help
 	  Prevents unauthorized mapping for page table.
+
+config RKP_TEST
+	bool "Enables rkp test"
+	depends on UH_RKP && !SAMSUNG_PRODUCT_SHIP
+	default n
+	help
+	  it enables rkp test.
+
+config KDP_TEST
+	bool "Enable KDP test"
+	depends on RKP_KDP && RKP_NS_PROT && !SAMSUNG_PRODUCT_SHIP
+	default n
+	help
+	  enable KDP test.
 
 config BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES
 	string "Default dtb names"

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: etd.h 730252 2017-11-06 12:25:27Z $
+ * $Id: etd.h 751605 2018-03-13 03:32:30Z $
  */
 
 #ifndef _ETD_H_
@@ -59,6 +59,7 @@ typedef struct hnd_ext_trap_hdr {
 } hnd_ext_trap_hdr_t;
 
 typedef enum {
+	TAG_TRAP_NONE		 = 0,  /* None trap type */
 	TAG_TRAP_SIGNATURE       = 1,  /* Processor register dumps */
 	TAG_TRAP_STACK           = 2,  /* Processor stack dump (possible code locations) */
 	TAG_TRAP_MEMORY          = 3,  /* Memory subsystem dump */
@@ -75,6 +76,8 @@ typedef enum {
 	TAG_TRAP_PHYTXERR_THRESH = 18, /* Phy Tx Err */
 	TAG_TRAP_HC_DATA        = 19,  /* Data collected by HC module */
 	TAG_TRAP_LOG_DATA	= 20,
+	TAG_TRAP_CODE		= 21, /* The trap type */
+	TAG_TRAP_HMAP		= 22, /* HMAP violation Address and Info */
 	TAG_TRAP_LAST  /* This must be the last entry */
 } hnd_ext_tag_trap_t;
 
@@ -452,7 +455,7 @@ typedef struct eventlog_trap_buf_info {
 #if defined(ETD) && !defined(WLETD)
 #define ETD_SW_FLAG_MEM		0x00000001
 
-void etd_init(osl_t *osh);
+int etd_init(osl_t *osh);
 int etd_register_trap_ext_callback(void *cb, void *arg);
 int (etd_register_trap_ext_callback_late)(void *cb, void *arg);
 uint32 *etd_get_trap_ext_data(void);
@@ -461,6 +464,13 @@ void etd_set_trap_ext_swflag(uint32 flag);
 void etd_notify_trap_ext_callback(trap_t *tr);
 reg_dump_config_t *etd_get_reg_dump_config_tbl(void);
 uint etd_get_reg_dump_config_len(void);
+
+extern bool _etd_enab;
+
+	#define ETD_ENAB(pub)		(_etd_enab)
+
+#else
+#define ETD_ENAB(pub)		(0)
 #endif /* WLETD */
 
 #endif /* !LANGUAGE_ASSEMBLY */

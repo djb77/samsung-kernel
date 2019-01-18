@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmevent.c 739966 2018-01-10 09:01:47Z $
+ * $Id: bcmevent.c 755881 2018-04-05 06:32:32Z $
  */
 
 #include <typedefs.h>
@@ -194,6 +194,13 @@ static const bcmevent_name_str_t bcmevent_names[] = {
 	BCMEVENT_NAME(WLC_E_PFN_BSSID_SCAN_BACKOFF),
 	BCMEVENT_NAME(WLC_E_AGGR_EVENT),
 	BCMEVENT_NAME(WLC_E_TVPM_MITIGATION),
+#ifdef WL_NAN
+	BCMEVENT_NAME(WLC_E_NAN_CRITICAL),
+	BCMEVENT_NAME(WLC_E_NAN_NON_CRITICAL),
+	BCMEVENT_NAME(WLC_E_NAN),
+#endif /* WL_NAN */
+	BCMEVENT_NAME(WLC_E_RPSNOA),
+	BCMEVENT_NAME(WLC_E_PHY_CAL),
 };
 
 const char *bcmevent_get_name(uint event_type)

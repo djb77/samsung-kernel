@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg_btcoex.c 738572 2018-01-02 16:04:54Z $
+ * $Id: wl_cfg_btcoex.c 740404 2018-01-11 15:00:13Z $
  */
 
 #include <net/rtnetlink.h>

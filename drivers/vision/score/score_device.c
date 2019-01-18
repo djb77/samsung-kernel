@@ -65,13 +65,13 @@ static int score_device_suspend(struct device *dev)
 		framemgr = &system->interface.framemgr;
 
 		spin_lock_irqsave(&framemgr->slock, flags);
-		score_frame_block(framemgr);
+		score_frame_manager_block(framemgr);
 		score_frame_flush_all(framemgr, -ENOSTR);
 		spin_unlock_irqrestore(&framemgr->slock, flags);
 		wake_up_all(&framemgr->done_wq);
 
-		score_interface_target_halt(&system->interface, SCORE_KNIGHT1);
-		score_interface_target_halt(&system->interface, SCORE_KNIGHT2);
+		score_print_close(&system->print);
+		ret = score_system_halt(system);
 		ret = score_system_sw_reset(system);
 		score_pm_qos_suspend(pm);
 	}
@@ -98,10 +98,11 @@ static int score_device_resume(struct device *dev)
 		framemgr = &system->interface.framemgr;
 
 		score_pm_qos_resume(pm);
+		score_print_open(&system->print);
 		ret = score_system_boot(system);
 
 		spin_lock_irqsave(&framemgr->slock, flags);
-		score_frame_unblock(framemgr);
+		score_frame_manager_unblock(framemgr);
 		spin_unlock_irqrestore(&framemgr->slock, flags);
 	}
 
@@ -194,6 +195,46 @@ static int __score_device_open(struct score_device *device)
 {
 	int ret = 0;
 	struct score_system *system;
+
+	score_enter();
+	system = &device->system;
+	ret = score_system_open(system);
+	if (ret)
+		goto p_err;
+
+	device->cur_firmware_id = -1;
+	device->state = BIT(SCORE_DEVICE_STATE_OPEN);
+	score_info("The device is opened (not boot)\n");
+	score_leave();
+	return ret;
+p_err:
+	device->state = BIT(SCORE_DEVICE_STATE_CLOSE);
+	score_info("The device failed to be opened\n");
+	return ret;
+}
+
+static void __score_device_close(struct score_device *device)
+{
+	struct score_system *system;
+
+	score_enter();
+	if (!((device->state & BIT(SCORE_DEVICE_STATE_OPEN)) |
+			(device->state & BIT(SCORE_DEVICE_STATE_STOP))))
+		return;
+
+	system = &device->system;
+	score_system_close(system);
+
+	device->state = BIT(SCORE_DEVICE_STATE_CLOSE);
+	score_info("The device closed\n");
+	score_leave();
+}
+
+static int __score_device_start(struct score_device *device,
+		unsigned int firmware_id)
+{
+	int ret = 0;
+	struct score_system *system;
 	struct score_frame_manager *framemgr;
 	unsigned long flags;
 
@@ -205,28 +246,62 @@ static int __score_device_open(struct score_device *device)
 	if (ret)
 		goto p_err_power_on;
 
-	ret = score_system_open(system);
+	ret = score_system_start(system, firmware_id);
 	if (ret)
 		goto p_err_system;
 
 	spin_lock_irqsave(&framemgr->slock, flags);
-	score_frame_unblock(framemgr);
+	score_frame_manager_unblock(framemgr);
 	spin_unlock_irqrestore(&framemgr->slock, flags);
 
+	device->cur_firmware_id = firmware_id;
+	device->state = BIT(SCORE_DEVICE_STATE_START);
+	score_info("The device successfully started (firmware:%u)\n",
+			firmware_id);
 	score_leave();
-	score_note("The device successfully opened\n");
 	return ret;
 p_err_system:
 	__score_device_power_off(device);
 p_err_power_on:
-	atomic_set(&device->open_count, 0);
-	score_note("The device failed to be opened\n");
+	device->state = BIT(SCORE_DEVICE_STATE_STOP);
+	score_info("The device failed to be started (firmware:%u)\n",
+			firmware_id);
 	return ret;
-
 }
 
-static void __score_device_close(struct score_device *device)
+static void __score_device_stop(struct score_device *device)
 {
+	struct score_system *system;
+	struct score_frame_manager *framemgr;
+	unsigned long flags;
+
+	score_enter();
+	if (!(device->state & BIT(SCORE_DEVICE_STATE_START)))
+		return;
+
+	system = &device->system;
+	framemgr = &system->interface.framemgr;
+
+	spin_lock_irqsave(&framemgr->slock, flags);
+	score_frame_manager_block(framemgr);
+	score_frame_flush_all(framemgr, -ENOSTR);
+	spin_unlock_irqrestore(&framemgr->slock, flags);
+	wake_up_all(&framemgr->done_wq);
+	score_frame_remove_nonblock_all(framemgr);
+
+	score_system_stop(system);
+	device->cur_firmware_id = -1;
+	__score_device_power_off(device);
+
+	device->state = BIT(SCORE_DEVICE_STATE_STOP);
+	score_info("The device stopped\n");
+	score_leave();
+}
+
+static int __score_device_restart(struct score_device *device,
+		unsigned int firmware_id)
+{
+	int ret = 0;
 	struct score_system *system;
 	struct score_frame_manager *framemgr;
 	unsigned long flags;
@@ -236,30 +311,120 @@ static void __score_device_close(struct score_device *device)
 	framemgr = &system->interface.framemgr;
 
 	spin_lock_irqsave(&framemgr->slock, flags);
-	score_frame_block(framemgr);
+	score_frame_manager_block(framemgr);
 	score_frame_flush_all(framemgr, -ENOSTR);
 	spin_unlock_irqrestore(&framemgr->slock, flags);
 	wake_up_all(&framemgr->done_wq);
 	score_frame_remove_nonblock_all(framemgr);
 
-	score_system_close(system);
-	__score_device_power_off(device);
+	score_system_stop(system);
+
+	ret = score_system_start(system, firmware_id);
+	if (ret)
+		goto p_err_system;
+
+	spin_lock_irqsave(&framemgr->slock, flags);
+	score_frame_manager_unblock(framemgr);
+	spin_unlock_irqrestore(&framemgr->slock, flags);
+
+	device->cur_firmware_id = firmware_id;
+	device->state = BIT(SCORE_DEVICE_STATE_START);
+	score_info("The device successfully re-started(%u)\n", firmware_id);
+
 	score_leave();
-	score_note("The device closed\n");
+	return ret;
+p_err_system:
+	__score_device_power_off(device);
+	device->state = BIT(SCORE_DEVICE_STATE_STOP);
+	score_info("The device failed to be re-started(%u)\n", firmware_id);
+	return ret;
+}
+
+int score_device_check_start(struct score_device *device)
+{
+	if (device->state & BIT(SCORE_DEVICE_STATE_START))
+		return 0;
+	else
+		return device->state;
+}
+
+int score_device_start(struct score_device *device,
+		unsigned int firmware_id, unsigned int flag)
+{
+	int ret = 0;
+
+	score_enter();
+	if (device->state & BIT(SCORE_DEVICE_STATE_OPEN)) {
+		ret = __score_device_start(device, firmware_id);
+		if (ret)
+			__score_device_close(device);
+	} else if (device->state & BIT(SCORE_DEVICE_STATE_START)) {
+		if (firmware_id != device->cur_firmware_id) {
+			if (flag & SCORE_BOOT_FORCE) {
+				ret = __score_device_restart(device,
+						firmware_id);
+			} else {
+				ret = -EBUSY;
+				score_warn("firmware(%u) is working(fail:%u)\n",
+						device->cur_firmware_id,
+						firmware_id);
+			}
+		} else {
+			score_info("The device is already ready(%u)\n",
+					device->cur_firmware_id);
+		}
+	} else {
+		ret = -EINVAL;
+		score_err("State(%#x) of the device is wrong\n", device->state);
+	}
+
+	score_leave();
+	return ret;
 }
 
 int score_device_open(struct score_device *device)
 {
-	score_check();
-	return (atomic_inc_return(&device->open_count) == 1) ?
-		__score_device_open(device) : 0;
+	int ret = 0;
+
+	score_enter();
+	if (!atomic_read(&device->open_count)) {
+		ret = -ENODEV;
+		score_err("device is not opened\n");
+		goto p_err;
+	}
+
+	if (device->state & BIT(SCORE_DEVICE_STATE_CLOSE))
+		ret = __score_device_open(device);
+
+	return ret;
+p_err:
+	return ret;
 }
 
-void score_device_close(struct score_device *device)
+void score_device_get(struct score_device *device)
 {
 	score_enter();
-	if (atomic_dec_return(&device->open_count) == 0)
+	atomic_inc(&device->open_count);
+	score_info("The device count incresed(count:%d)\n",
+			atomic_read(&device->open_count));
+	score_leave();
+}
+
+void score_device_put(struct score_device *device)
+{
+	int count;
+
+	score_enter();
+	if (!atomic_read(&device->open_count))
+		return;
+
+	count = atomic_dec_return(&device->open_count);
+	score_info("The device count decresed(count:%d)\n", count);
+
+	if (!count) {
+		__score_device_stop(device);
 		__score_device_close(device);
+	}
 	score_leave();
 }
 
@@ -357,13 +522,12 @@ static void score_device_shutdown(struct platform_device *pdev)
 		framemgr = &system->interface.framemgr;
 
 		spin_lock_irqsave(&framemgr->slock, flags);
-		score_frame_block(framemgr);
+		score_frame_manager_block(framemgr);
 		score_frame_flush_all(framemgr, -ENOSTR);
 		spin_unlock_irqrestore(&framemgr->slock, flags);
 		wake_up_all(&framemgr->done_wq);
 
-		score_interface_target_halt(&system->interface, SCORE_KNIGHT1);
-		score_interface_target_halt(&system->interface, SCORE_KNIGHT2);
+		score_system_halt(system);
 		score_system_sw_reset(system);
 	}
 

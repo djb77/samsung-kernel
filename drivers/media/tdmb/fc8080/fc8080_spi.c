@@ -175,7 +175,7 @@ s32 fc8080_spi_init(HANDLE handle, unsigned long param)
 {
 	fc8080_spi = param;
 
-	DPRINTK("%s : 0x%p\n", __func__, (struct spi_device *)fc8080_spi);
+	DPRINTK("%s\n", __func__);
 
 	return BBM_OK;
 }

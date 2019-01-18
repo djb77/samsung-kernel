@@ -88,10 +88,12 @@ struct g2d_task {
 
 	unsigned int		flags;
 	unsigned int		job_id;
+	unsigned int		bufidx;
 	unsigned long		state;
 	struct sync_file	*release_fence;
 	struct kref		starter;
-	struct timer_list	timer;
+	struct timer_list	fence_timer;
+	struct timer_list	hw_timer;
 
 	struct g2d_layer	source[G2D_MAX_IMAGES];
 	struct g2d_layer	target;

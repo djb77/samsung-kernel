@@ -1125,11 +1125,10 @@ SYSCALL_DEFINE4(ptrace, long, request, long, pid, unsigned long, addr,
 	long ret;
 
 	if (request == PTRACE_TRACEME) {
+		five_ptrace(current, request);
 		ret = ptrace_traceme();
-		if (!ret) {
+		if (!ret)
 			arch_ptrace_attach(current);
-			five_ptrace(request, current);
-		}
 		goto out;
 	}
 
@@ -1139,16 +1138,16 @@ SYSCALL_DEFINE4(ptrace, long, request, long, pid, unsigned long, addr,
 		goto out;
 	}
 
+	five_ptrace(child, request);
+
 	if (request == PTRACE_ATTACH || request == PTRACE_SEIZE) {
 		ret = ptrace_attach(child, request, addr, data);
 		/*
 		 * Some architectures need to do book-keeping after
 		 * a ptrace attach.
 		 */
-		if (!ret) {
+		if (!ret)
 			arch_ptrace_attach(child);
-			five_ptrace(request, child);
-		}
 		goto out_put_task_struct;
 	}
 
@@ -1278,6 +1277,7 @@ COMPAT_SYSCALL_DEFINE4(ptrace, compat_long_t, request, compat_long_t, pid,
 	long ret;
 
 	if (request == PTRACE_TRACEME) {
+		five_ptrace(current, request);
 		ret = ptrace_traceme();
 		goto out;
 	}
@@ -1287,6 +1287,8 @@ COMPAT_SYSCALL_DEFINE4(ptrace, compat_long_t, request, compat_long_t, pid,
 		ret = PTR_ERR(child);
 		goto out;
 	}
+
+	five_ptrace(child, request);
 
 	if (request == PTRACE_ATTACH || request == PTRACE_SEIZE) {
 		ret = ptrace_attach(child, request, addr, data);

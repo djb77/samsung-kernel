@@ -247,6 +247,21 @@
 
 #define TSMUX_HEX_DBG_CTRL			(TSMUX_HEX_BASE_ADDR + 0xC00)
 
+uint32_t tsmux_get_hw_version(struct tsmux_device *tsmux_dev)
+{
+	uint32_t version = 0;
+
+	if (tsmux_dev == NULL)
+		return 0;
+
+	TSMUX_WRITEL(0xE1, TSMUX_DBG_SEL_ADDR);
+	udelay(10);
+	version = TSMUX_READL(TSMUX_DBG_INFO_ADDR);
+	print_tsmux(TSMUX_DBG_SFR, "hw version: 0x%.8x\n", version);
+
+	return version;
+}
+
 void tsmux_print_dbg_info(struct tsmux_device *tsmux_dev,
 	u32 dbg_sel_reg)
 {
@@ -521,7 +536,7 @@ void tsmux_set_pes_hdr(struct tsmux_device *tsmux_dev,
 }
 
 void tsmux_set_ts_hdr(struct tsmux_device *tsmux_dev,
-	struct tsmux_ts_hdr *ts_hdr, int continuity_counter)
+	struct tsmux_ts_hdr *ts_hdr)
 {
 	u32 ts_hdr_reg;
 
@@ -560,9 +575,9 @@ void tsmux_set_ts_hdr(struct tsmux_device *tsmux_dev,
 
 	ts_hdr_reg &= ~(TSMUX_TSP_HDR_CONT_CNT_MASK);
 	ts_hdr_reg |= TSMUX_TSP_HDR_CONT_CNT_MASK &
-		(continuity_counter << TSMUX_TSP_HDR_CONT_CNT_SHIFT);
+		(ts_hdr->continuity_counter << TSMUX_TSP_HDR_CONT_CNT_SHIFT);
 	print_tsmux(TSMUX_SFR, "TSP_HDR_CONTINUITY_COUNTER %d\n",
-		continuity_counter);
+		ts_hdr->continuity_counter);
 
 	TSMUX_WRITEL(ts_hdr_reg, TSMUX_TSP_HDR_ADDR);
 	print_tsmux(TSMUX_SFR, "ts_hdr_reg 0x%x\n", ts_hdr_reg);
@@ -647,13 +662,38 @@ void tsmux_set_swp_ctrl(struct tsmux_device *tsmux_dev,
 }
 
 #include <linux/smc.h>
+void tsmux_clear_hex_ctrl(void)
+{
+	int ret;
+
+	print_tsmux(TSMUX_SFR, "%s++\n", __func__);
+#ifndef ASB_WORK
+	ret = exynos_smc(0x82004014, 1, 0, 0);
+	if (ret)
+		print_tsmux(TSMUX_ERR, "hex sfr clear is failed\n");
+#else
+	ret = exynos_smc(0x82004007, TSMUX_HEX_M2M_CTRL, 0, 0);
+	if (ret)
+		print_tsmux(TSMUX_ERR, "smc failed\n");
+
+	ret = exynos_smc(0x82004007, TSMUX_HEX_OTF_CTRL, 0, 0);
+	if (ret)
+		print_tsmux(TSMUX_ERR, "smc failed\n");
+#endif
+	print_tsmux(TSMUX_SFR, "%s--\n", __func__);
+}
+
 void tsmux_set_hex_ctrl(struct tsmux_context *ctx,
 	struct tsmux_hex_ctrl *hex_ctrl)
 {
 	int ret;
 
-	if (hex_ctrl->m2m_enable == 0 && hex_ctrl->otf_enable == 0)
+	print_tsmux(TSMUX_SFR, "%s++\n", __func__);
+
+	if (hex_ctrl->m2m_enable == 0 && hex_ctrl->otf_enable == 0) {
+		print_tsmux(TSMUX_SFR, "%s--\n", __func__);
 		return;
+	}
 
 #ifndef ASB_WORK
 	if (ctx->set_hex_info) {
@@ -732,6 +772,8 @@ void tsmux_set_hex_ctrl(struct tsmux_context *ctx,
 	print_tsmux(TSMUX_SFR, "TSMUX_HEX_DBG_CTRL_BYPASS %d\n",
 		hex_ctrl->dbg_ctrl_bypass);
 #endif
+
+	print_tsmux(TSMUX_SFR, "%s--\n", __func__);
 }
 
 void tsmux_set_src_addr(struct tsmux_device *tsmux_dev,

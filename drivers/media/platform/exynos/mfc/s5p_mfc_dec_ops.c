@@ -817,17 +817,7 @@ static int s5p_mfc_dec_get_buf_ctrls_val_nal_q_dec(struct s5p_mfc_ctx *ctx,
 			value = pOutStr->MasteringDisplayColourVolumeSei1;
 			break;
 		case V4L2_CID_MPEG_VIDEO_FULL_RANGE_FLAG:
-			if (IS_VP9_DEC(ctx)) {
-				buf_ctrl->val = dec->color_range;
-				buf_ctrl->has_new = 1;
-				continue;
-			}
 		case V4L2_CID_MPEG_VIDEO_COLOUR_PRIMARIES:
-			if (IS_VP9_DEC(ctx)) {
-				buf_ctrl->val = dec->color_space;
-				buf_ctrl->has_new = 1;
-				continue;
-			}
 		case V4L2_CID_MPEG_VIDEO_FORMAT:
 		case V4L2_CID_MPEG_VIDEO_TRANSFER_CHARACTERISTICS:
 		case V4L2_CID_MPEG_VIDEO_MATRIX_COEFFICIENTS:
@@ -854,6 +844,13 @@ static int s5p_mfc_dec_get_buf_ctrls_val_nal_q_dec(struct s5p_mfc_ctx *ctx,
 
 		buf_ctrl->val = value;
 		buf_ctrl->has_new = 1;
+
+		if (IS_VP9_DEC(ctx)) {
+			if (buf_ctrl->id == V4L2_CID_MPEG_VIDEO_FULL_RANGE_FLAG)
+				buf_ctrl->val = dec->color_range;
+			else if (buf_ctrl->id == V4L2_CID_MPEG_VIDEO_COLOUR_PRIMARIES)
+				buf_ctrl->val = dec->color_space;
+		}
 
 		mfc_debug(3, "NAL Q: dec_get_buf_ctrls, ctrl id: 0x%x, val: %d\n",
 				buf_ctrl->id, buf_ctrl->val);

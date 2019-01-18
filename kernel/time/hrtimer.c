@@ -1660,6 +1660,9 @@ int hrtimers_prepare_cpu(unsigned int cpu)
 
 	cpu_base->cpu = cpu;
 	hrtimer_init_hres(cpu_base);
+
+	restore_pcpu_tick(cpu);
+
 	return 0;
 }
 
@@ -1701,6 +1704,7 @@ int hrtimers_dead_cpu(unsigned int scpu)
 	int i;
 
 	BUG_ON(cpu_online(scpu));
+	save_pcpu_tick(scpu);
 	tick_cancel_sched_timer(scpu);
 
 	local_irq_disable();

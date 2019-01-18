@@ -280,7 +280,7 @@ static int fimc_is_ischain_3aa_tag(struct fimc_is_subdev *subdev,
 			goto p_err;
 		}
 
-		scenario_id = fimc_is_dvfs_sel_static(device);
+		scenario_id = device->resourcemgr->dvfs_ctrl.static_ctrl->cur_scenario_id;
 
 		if (scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_120FPS && scenario_id != FIMC_IS_SN_VIDEO_HIGH_SPEED_240FPS) {
 			msrinfo("in_crop[%d, %d, %d, %d]\n", device, subdev, frame,

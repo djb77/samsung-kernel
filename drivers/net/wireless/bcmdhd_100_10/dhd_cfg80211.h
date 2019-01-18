@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_cfg80211.h 659395 2016-09-14 03:09:14Z $
+ * $Id: dhd_cfg80211.h 762142 2018-05-11 03:34:30Z $
  */
 
 #ifndef __DHD_CFG80211__

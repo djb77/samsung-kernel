@@ -26,13 +26,13 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmpcie.h 739442 2018-01-08 17:45:01Z $
+ * $Id: bcmpcie.h 755866 2018-04-05 05:07:41Z $
  */
 
 #ifndef	_bcmpcie_h_
 #define	_bcmpcie_h_
 
-#include <bcmutils.h>
+#include <typedefs.h>
 
 #define ADDR_64(x)			(x.addr)
 #define HIGH_ADDR_32(x)     ((uint32) (((sh_addr_t) x).high_addr))
@@ -453,6 +453,11 @@ typedef struct {
 #define D2H_DEV_EXT_TRAP_DATA			0x20000000
 #define D2H_DEV_TRAP_IN_TRAP			0x40000000
 #define D2H_DEV_TRAP_DUE_TO_BT			0x01000000
+/* Indicates trap due to HMAP violation */
+#define D2H_DEV_TRAP_DUE_TO_HMAP		0x02000000
+/* Indicates whether HMAP violation was Write */
+#define D2H_DEV_TRAP_HMAP_WRITE			0x04000000
+
 #define D2HMB_DS_HOST_SLEEP_ACK         D2H_DEV_D3_ACK
 #define D2HMB_DS_DEVICE_SLEEP_ENTER_REQ D2H_DEV_DS_ENTER_REQ
 #define D2HMB_DS_DEVICE_SLEEP_EXIT      D2H_DEV_DS_EXIT_NOTE

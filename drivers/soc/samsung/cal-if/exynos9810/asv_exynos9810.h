@@ -196,6 +196,8 @@ int asv_table_init(void)
 	for (i = 0; i < ID_INFO_ADDR_CNT; i++)
 		*(p_table + i) = (unsigned int)regs[i];
 
+	id_tbl.ids_bigcpu = id_tbl.ids_bigcpu << 1;
+
 	pr_info("asv_table_version : %d\n", asv_tbl.asv_table_version);
 	pr_info("  littlecpu grp : %d\n", asv_tbl.littlecpu_asv_group);
 	pr_info("  bigcpu grp : %d\n", asv_tbl.bigcpu_asv_group);

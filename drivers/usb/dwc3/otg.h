@@ -23,7 +23,7 @@
 #include <linux/wakelock.h>
 #include <linux/usb/otg-fsm.h>
 
-extern int dp_use_informed;
+extern int dp_use_informed, ldo_off_delayed;
 
 struct dwc3_ext_otg_ops {
 	int	(*setup)(struct device *dev, struct otg_fsm *fsm);
@@ -59,6 +59,10 @@ struct dwc3_otg {
 	struct regulator	*vbus_reg;
 	int			*ldo_num;
 	int			ldos;
+	int			ldo_manual_control;
+	struct regulator	*ldo12;
+	struct regulator	*ldo13;
+	struct regulator	*ldo14;
 
 	struct dwc3_ext_otg_ops *ext_otg_ops;
 };

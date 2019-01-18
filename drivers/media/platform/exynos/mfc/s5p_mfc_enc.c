@@ -355,8 +355,6 @@ static int vidioc_s_fmt_vid_cap_mplane(struct file *file, void *priv,
 		return -ENOMEM;
 	}
 
-	s5p_mfc_change_state(ctx, MFCINST_INIT);
-
 	ctx->capture_state = QUEUE_FREE;
 
 	if (FW_HAS_ROI_CONTROL(dev)) {
@@ -367,7 +365,6 @@ static int vidioc_s_fmt_vid_cap_mplane(struct file *file, void *priv,
 			return -ENOMEM;
 		}
 	}
-	MFC_TRACE_CTX_HWLOCK("**ENC s_fmt\n");
 
 	ret = s5p_mfc_get_hwlock_ctx(ctx);
 	if (ret < 0) {
@@ -377,7 +374,9 @@ static int vidioc_s_fmt_vid_cap_mplane(struct file *file, void *priv,
 		return -EBUSY;
 	}
 
+	s5p_mfc_change_state(ctx, MFCINST_INIT);
 	s5p_mfc_set_bit(ctx->num, &dev->work_bits);
+
 	ret = s5p_mfc_just_run(dev, ctx->num);
 	if (ret) {
 		mfc_err_ctx("Failed to run MFC.\n");
@@ -1585,6 +1584,7 @@ static int mfc_enc_set_param(struct s5p_mfc_ctx *ctx, struct v4l2_control *ctrl)
 		p->ratio_intra = ctrl->value;
 		break;
 	case V4L2_CID_MPEG_VIDEO_FULL_RANGE_FLAG:
+		p->check_color_range = 1;
 		p->color_range = ctrl->value;
 		break;
 	case V4L2_CID_MPEG_VIDEO_COLOUR_PRIMARIES:

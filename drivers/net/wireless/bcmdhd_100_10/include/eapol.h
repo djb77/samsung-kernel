@@ -28,7 +28,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: eapol.h 716595 2017-08-18 21:43:55Z $
+ * $Id: eapol.h 758863 2018-04-21 00:29:12Z $
  */
 
 #ifndef _eapol_h_
@@ -115,11 +115,11 @@ typedef BWL_PRE_PACKED_STRUCT struct {
 #define EAPOL_WPA_KEY_IV_LEN		16
 #define EAPOL_WPA_KEY_RSC_LEN		8
 #define EAPOL_WPA_KEY_ID_LEN		8
-#define EAPOL_WPA_KEY_MIC_LEN		16
+#define EAPOL_WPA_KEY_MIC_LEN		16 /* deprecated */
 #define EAPOL_WPA_KEY_DATA_LEN		(EAPOL_WPA_MAX_KEY_SIZE + EAPOL_AKW_BLOCK_LEN)
 #define EAPOL_WPA_MAX_KEY_SIZE		32
 
-/* WPA EAPOL-Key */
+/* WPA EAPOL-Key : deprecated */
 typedef BWL_PRE_PACKED_STRUCT struct {
 	unsigned char type;		/* Key Descriptor Type */
 	unsigned short key_info;	/* Key Information (unaligned) */
@@ -134,10 +134,34 @@ typedef BWL_PRE_PACKED_STRUCT struct {
 	unsigned char data[EAPOL_WPA_KEY_DATA_LEN];	/* Key data */
 } BWL_POST_PACKED_STRUCT eapol_wpa_key_header_t;
 
-#define EAPOL_WPA_KEY_LEN 		95
+/* WPA EAPOL-Key : new structure to consider dynamic MIC length */
+typedef BWL_PRE_PACKED_STRUCT struct {
+	unsigned char type;             /* Key Descriptor Type */
+	unsigned short key_info;        /* Key Information (unaligned) */
+	unsigned short key_len;         /* Key Length (unaligned) */
+	unsigned char replay[EAPOL_WPA_KEY_REPLAY_LEN]; /* Replay Counter */
+	unsigned char nonce[EAPOL_WPA_KEY_NONCE_LEN];   /* Nonce */
+	unsigned char iv[EAPOL_WPA_KEY_IV_LEN];         /* Key IV */
+	unsigned char rsc[EAPOL_WPA_KEY_RSC_LEN];       /* Key RSC */
+	unsigned char id[EAPOL_WPA_KEY_ID_LEN];         /* WPA:Key ID, 802.11i/WPA2: Reserved */
+} BWL_POST_PACKED_STRUCT eapol_wpa_key_header_v2_t;
+
+#define EAPOL_WPA_KEY_LEN		95 /* deprecated */
+#define EAPOL_WPA_KEY_DATA_LEN_SIZE	2
+
+#define EAPOL_WPA_KEY_HDR_SIZE(mic_len) (sizeof(eapol_wpa_key_header_v2_t) \
+	+ mic_len + EAPOL_WPA_KEY_DATA_LEN_SIZE)
+
+/* WPA EAPOL-Key header macros to reach out mic/data_len/data field */
+#define EAPOL_WPA_KEY_HDR_MIC_PTR(pos) ((uint8 *)pos + sizeof(eapol_wpa_key_header_v2_t))
+#define EAPOL_WPA_KEY_HDR_DATA_LEN_PTR(pos, mic_len) \
+	((uint8 *)pos + sizeof(eapol_wpa_key_header_v2_t) + mic_len)
+#define EAPOL_WPA_KEY_HDR_DATA_PTR(pos, mic_len) \
+	((uint8 *)pos + EAPOL_WPA_KEY_HDR_SIZE(mic_len))
 
 /* WPA/802.11i/WPA2 KEY KEY_INFO bits */
 #define WPA_KEY_DESC_OSEN	0x0
+#define WPA_KEY_DESC_V0		0x0
 #define WPA_KEY_DESC_V1		0x01
 #define WPA_KEY_DESC_V2		0x02
 #define WPA_KEY_DESC_V3		0x03

@@ -46,7 +46,10 @@ enum {
 #ifdef CONFIG_SEC_FACTORY
 #define CONFIG_SUPPORT_PANEL_SWAP
 #define CONFIG_SUPPORT_XTALK_MODE
+#define CONFIG_SUPPORT_ISC_DEFECT
+#define CONFIG_SELFMASK_FACTORY
 #endif
+
 #define CONFIG_SUPPORT_MST
 #define CONFIG_SUPPORT_GRAYSPOT_TEST
 
@@ -164,6 +167,9 @@ enum {
 	CMD_TYPE_TX_PKT_END = DSI_PKT_TYPE_PPS,
 	CMD_TYPE_RD_PKT_START,
 	SPI_PKT_TYPE_RD = CMD_TYPE_RD_PKT_START,
+#ifdef CONFIG_SUPPORT_DDI_FLASH
+	DSI_PKT_TYPE_RD_POC,
+#endif
 	DSI_PKT_TYPE_RD,
 	CMD_TYPE_RX_PKT_END = DSI_PKT_TYPE_RD,
 	CMD_TYPE_RES,
@@ -266,7 +272,7 @@ struct rdinfo {
 	u32 addr;
 	u32 offset;
 	u32 len;
-	u8 data[128];
+	u8 *data;
 };
 
 struct res_update_info {
@@ -401,6 +407,7 @@ struct maptbl {
 	int sz_copy;
 	u8 *arr;
 	void *pdata;
+	bool initialized;
 	struct maptbl_ops ops;
 };
 
@@ -524,12 +531,16 @@ u32 maptbl_index(struct maptbl *tbl, int layer, int row, int col);
 int maptbl_init(struct maptbl *tbl);
 int maptbl_getidx(struct maptbl *tbl);
 void maptbl_copy(struct maptbl *tbl, u8 *dst);
+void maptbl_memcpy(struct maptbl *dst, struct maptbl *src);
 u8 *maptbl_getptr(struct maptbl *tbl);
 
 enum PANEL_SEQ {
 	PANEL_INIT_SEQ,
 	PANEL_EXIT_SEQ,
 	PANEL_RES_INIT_SEQ,
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+	PANEL_DIM_FLASH_RES_INIT_SEQ,
+#endif
 	PANEL_MAP_INIT_SEQ,
 	PANEL_DISPLAY_ON_SEQ,
 	PANEL_DISPLAY_OFF_SEQ,
@@ -549,6 +560,9 @@ enum PANEL_SEQ {
 #endif
 	PANEL_MCD_ON_SEQ,
 	PANEL_MCD_OFF_SEQ,
+	PANEL_MCD_RS_ON_SEQ,
+	PANEL_MCD_RS_OFF_SEQ,
+	PANEL_MCD_RS_READ_SEQ,
 #ifdef CONFIG_ACTIVE_CLOCK
 	PANEL_ACTIVE_CLK_IMG_SEQ,
 	PANEL_ACTIVE_CLK_CTRL_SEQ,
@@ -562,6 +576,8 @@ enum PANEL_SEQ {
 	PANEL_GCT_ENTER_SEQ,
 	PANEL_GCT_VDDM_SEQ,
 	PANEL_GCT_IMG_UPDATE_SEQ,
+	PANEL_GCT_IMG_0_UPDATE_SEQ,
+	PANEL_GCT_IMG_1_UPDATE_SEQ,
 	PANEL_GCT_EXIT_SEQ,
 #endif
 #ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
@@ -570,6 +586,9 @@ enum PANEL_SEQ {
 #endif
 #ifdef CONFIG_SUPPORT_TDMB_TUNE
 	PANEL_TDMB_TUNE_SEQ,
+#endif
+#ifdef CONFIG_SUPPORT_ISC_DEFECT
+	PANEL_CHECK_ISC_DEFECT_SEQ,
 #endif
 	PANEL_DUMP_SEQ,
 	PANEL_DUMMY_SEQ,
@@ -622,6 +641,9 @@ struct common_panel_info {
 #endif
 #ifdef CONFIG_EXTEND_LIVE_CLOCK
 	struct aod_tune *aod_tune;
+#endif
+#ifdef CONFIG_SUPPORT_DDI_FLASH
+	struct panel_poc_data *poc_data;
 #endif
 };
 
@@ -702,6 +724,20 @@ enum {
 };
 #endif
 
+enum {
+	MCD_RS_1_RIGHT,
+	MCD_RS_1_LEFT,
+	MCD_RS_2_RIGHT,
+	MCD_RS_2_LEFT,
+	MAX_MCD_RS,
+};
+
+enum {
+	DIM_TYPE_AID_DIMMING,
+	DIM_TYPE_DIM_FLASH,
+	MAX_DIM_TYPE,
+};
+
 #define MAX_PANEL (32)
 #define MAX_PANEL_LUT (128)
 
@@ -734,6 +770,9 @@ struct panel_properties {
 	u32 lpm_opr;
 	u32 cur_lpm_opr;
 	u32 mcd_on;
+	u32 mcd_resistance;
+	int mcd_rs_range[MAX_MCD_RS][2];
+	int mcd_rs_flash_range[MAX_MCD_RS][2];
 #ifdef CONFIG_SUPPORT_MST
 	u32 mst_on;
 #endif
@@ -743,7 +782,7 @@ struct panel_properties {
 #ifdef CONFIG_SUPPORT_XTALK_MODE
 	u32 xtalk_mode;
 #endif
-#ifdef CONFIG_SUPPORT_POC_FLASH
+#ifdef CONFIG_SUPPORT_DDI_FLASH
 	u32 poc_op;
 #endif
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
@@ -762,16 +801,24 @@ struct panel_properties {
 #endif
 	u32 key[MAX_CMD_LEVEL];
 	u32 irc_mode;
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+	bool dim_flash_on;
+	u32 dim_flash_state;	/* success or fail */
+	u32 cur_dim_type;	/* AID DIMMING or DIM FLASH */
+#endif
 };
 
 struct panel_info {
 	const char *ldi_name;
-	unsigned char id[3];
+	unsigned char id[PANEL_ID_LEN];
+	unsigned char date[PANEL_DATE_LEN];
+	unsigned char coordinate[PANEL_COORD_LEN];
 	struct panel_properties props;
 
 	/* platform dependent data - ex> exynos : dsim_device */
 	void *pdata;
 	void *dim_info[MAX_PANEL_BL_SUBDEV];
+	void *dim_flash_info[MAX_PANEL_BL_SUBDEV];
 	struct maptbl *maptbl;
 	int nr_maptbl;
 	struct seqinfo *seqtbl;
@@ -796,6 +843,7 @@ struct panel_info {
 			 PN_CONCAT(_name, show), PN_CONCAT(_name, store))
 
 void print_data(char *data, int size);
+void print_maptbl(struct maptbl *tbl);
 int register_common_panel(struct common_panel_info *info);
 struct common_panel_info *find_panel(struct panel_device *panel, u32 id);
 void print_panel_lut(struct panel_lut_info *lut_info);
@@ -806,15 +854,21 @@ struct pktinfo *find_packet_suffix(struct seqinfo *seqtbl, char *name);
 struct maptbl *find_panel_maptbl_by_index(struct panel_info *panel, int index);
 struct maptbl *find_panel_maptbl_by_name(struct panel_info *panel_data, char *name);
 struct panel_dimming_info *find_panel_dimming(struct panel_info *panel_data, char *name);
+int excute_seqtbl_nolock(struct panel_device *panel, struct seqinfo *seqtbl, int index);
 int panel_do_seqtbl(struct panel_device *panel, struct seqinfo *seqtbl);
 int panel_do_seqtbl_by_index_nolock(struct panel_device *panel, int index);
 int panel_do_seqtbl_by_index(struct panel_device *panel, int index);
 struct resinfo *find_panel_resource(struct panel_info *panel, char *name);
+bool panel_resource_initialized(struct panel_info *panel_data, char *name);
 int rescpy(u8 *dst, struct resinfo *res, u32 offset, u32 len);
 int rescpy_by_name(struct panel_info *panel, u8 *dst, char *name, u32 offset, u32 len);
+int resource_clear(struct resinfo *res);
+int resource_clear_by_name(struct panel_info *panel_data, char *name);
 int resource_copy(u8 *dst, struct resinfo *res);
-int resource_copy_by_name(struct panel_info *panel, u8 *dst, char *name);
+int resource_copy_by_name(struct panel_info *panel_data, u8 *dst, char *name);
+int resource_copy_n_clear_by_name(struct panel_info *panel_data, u8 *dst, char *name);
 int get_resource_size_by_name(struct panel_info *panel_data, char *name);
+int get_panel_resource_size(struct resinfo *res);
 int panel_resource_update(struct panel_device *panel, struct resinfo *res);
 int panel_resource_update_by_name(struct panel_device *panel, char *name);
 int panel_dumpinfo_update(struct panel_device *panel, struct dumpinfo *info);

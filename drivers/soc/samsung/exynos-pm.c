@@ -34,6 +34,7 @@
  */
 #define EXYNOS_PMU_WAKEUP_STAT		0x0600
 #define EXYNOS_PMU_EINT_WAKEUP_MASK	0x060C
+#define EXYNOS_PMU_EINT_WAKEUP_MASK2	0x061C
 #define EXYNOS9810_FLEXPMU_INFORM       0x0880
 
 #define BOOT_CPU			0
@@ -86,10 +87,12 @@ static void exynos_show_wakeup_reason_eint(void)
 	long unsigned int ext_int_pend;
 	u64 eint_wakeup_mask;
 	bool found = 0;
-	unsigned int val;
+	unsigned int val0 = 0, val1 = 0;
 
-	exynos_pmu_read(EXYNOS_PMU_EINT_WAKEUP_MASK, &val);
-	eint_wakeup_mask = val;
+	exynos_pmu_read(EXYNOS_PMU_EINT_WAKEUP_MASK, &val0);
+	exynos_pmu_read(EXYNOS_PMU_EINT_WAKEUP_MASK2, &val1);
+	eint_wakeup_mask = val1;
+	eint_wakeup_mask = ((eint_wakeup_mask << 32) | val0);
 
 	for (i = 0, size = 8; i < pm_info->num_eint; i += size) {
 		ext_int_pend =

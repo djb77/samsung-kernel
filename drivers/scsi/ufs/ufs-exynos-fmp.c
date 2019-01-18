@@ -224,7 +224,7 @@ static int exynos_ufs_fmp_file_cfg(struct scsi_cmnd *cmd,
 	if (!page || PageAnon(page))
 		goto bypass_out;
 
-	if (!page->mapping || !bio || !virt_addr_valid(bio))
+	if (!page->mapping || !virt_addr_valid(page->mapping) || !bio || !virt_addr_valid(bio))
 		goto bypass_out;
 
 	ci = &page->mapping->fmp_ci;

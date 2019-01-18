@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
- /* usb notify layer v3.1 */
+ /* usb notify layer v3.2 */
 
 #define pr_fmt(fmt) "usb_notify: " fmt
 
@@ -337,11 +337,14 @@ static int set_hw_param(struct usb_device *dev)
 		else if (bInterfaceClass == USB_CLASS_MASS_STORAGE) {
 			inc_hw_param(o_notify, USB_HOST_CLASS_STORAGE_COUNT);
 			if (speed == USB_SPEED_SUPER)
-				inc_hw_param(o_notify, USB_HOST_STORAGE_SUPER_COUNT);
+				inc_hw_param(o_notify,
+					USB_HOST_STORAGE_SUPER_COUNT);
 			else if (speed == USB_SPEED_HIGH)
-				inc_hw_param(o_notify, USB_HOST_STORAGE_HIGH_COUNT);
+				inc_hw_param(o_notify,
+					USB_HOST_STORAGE_HIGH_COUNT);
 			else if (speed == USB_SPEED_FULL)
-				inc_hw_param(o_notify, USB_HOST_STORAGE_FULL_COUNT);
+				inc_hw_param(o_notify,
+					USB_HOST_STORAGE_FULL_COUNT);
 		} else if (bInterfaceClass == USB_CLASS_HUB)
 			inc_hw_param(o_notify, USB_HOST_CLASS_HUB_COUNT);
 		else if (bInterfaceClass == USB_CLASS_CDC_DATA)

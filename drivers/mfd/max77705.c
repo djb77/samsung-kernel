@@ -676,6 +676,23 @@ retry:
 out:
 	if (chg_mode_changed) {
 		vcell = max77705_fuelgauge_read_vcell(max77705);
+		/* Auto skip mode */
+		max77705_update_reg(max77705->charger,
+			MAX77705_CHG_REG_CNFG_12, 0x0, 0x1);
+		pr_info("%s: -set Auto skip mode\n", __func__);
+
+		max77705_update_reg(max77705->charger,
+			MAX77705_CHG_REG_CNFG_12, 0x0, 0x20);
+		pr_info("%s: -disable CHGINSEL\n", __func__);
+
+		max77705_update_reg(max77705->charger,
+			MAX77705_CHG_REG_CNFG_00, 0x4, 0x0F);
+		pr_info("%s: -set chg_mode(0x4)\n", __func__);
+
+		max77705_update_reg(max77705->charger,
+			MAX77705_CHG_REG_CNFG_12, 0x20, 0x20);
+		pr_info("%s: -enable CHGINSEL\n", __func__);
+
 		max77705_update_reg(max77705->charger,
 			MAX77705_CHG_REG_CNFG_00, chg_cnfg_00, 0x0F);
 		pr_info("%s: -recover chg_mode(0x%x), vcell(%dmv)\n",
@@ -685,11 +702,6 @@ out:
 		max77705_update_reg(max77705->charger,
 			MAX77705_CHG_REG_CNFG_08, 0x02, 0x3);
 		pr_info("%s: -set Switching Frequency 1.5MHz\n", __func__);
-
-		/* Auto skip mode */
-		max77705_update_reg(max77705->charger,
-			MAX77705_CHG_REG_CNFG_12, 0x0, 0x1);
-		pr_info("%s: -set Auto skip mode\n", __func__);
 	}
 
 	if (wpc_en_changed) {

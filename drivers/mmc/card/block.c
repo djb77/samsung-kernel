@@ -49,7 +49,7 @@
 #include "block.h"
 
 #ifdef CONFIG_MMC_SUPPORT_STLOG
-#include <linux/stlog.h>
+#include <linux/fslog.h>
 #else
 #define ST_LOG(fmt, ...)
 #endif
@@ -904,6 +904,9 @@ static int mmc_blk_ioctl_cmd(struct block_device *bdev,
 	if ((!capable(CAP_SYS_RAWIO)) || (bdev != bdev->bd_contains))
 		return -EPERM;
 
+	if (!ic_ptr && !icmd)
+		return -EINVAL;
+
 	if (!ic_ptr && icmd)
 		srpmb = true;
 
@@ -1212,6 +1215,9 @@ static void mmc_card_error_logging(struct mmc_card *card, struct mmc_blk_request
 	int ret = 0;
 	bool noti = false;
 
+	if (!brq)
+		return;
+
 	err_log = card->err_log;
 
 	if (status & STATUS_MASK || brq->stop.resp[0] & STATUS_MASK) {
@@ -1239,8 +1245,6 @@ static void mmc_card_error_logging(struct mmc_card *card, struct mmc_blk_request
 		}
 	}
 
-	if (!brq)
-		return;
 	/*
 	 * Make Notification about SD card Errors
 	 *
@@ -1445,8 +1449,14 @@ static int card_busy_detect(struct mmc_card *card, unsigned int timeout_ms,
 			pr_err("%s: command error reported, status = %#x\n",
 					req->rq_disk->disk_name, status);
 
-			if (!(status & R1_WP_VIOLATION) && brq)
+			if (mmc_card_sd(card))
 				brq->data.error = -EIO;
+			else {
+				if (!(status & R1_WP_VIOLATION) && brq)
+					brq->data.error = -EIO;
+			}
+
+			mmc_card_error_logging(card, brq, status);
 
 			if ((R1_CURRENT_STATE(status) == R1_STATE_RCV) ||
 					(R1_CURRENT_STATE(status) == R1_STATE_DATA)) {
@@ -1687,6 +1697,7 @@ static int mmc_blk_cmd_recovery(struct mmc_card *card, struct request *req,
 
 		if (stop_status & R1_CARD_ECC_FAILED)
 			*ecc_err = 1;
+		mmc_card_error_logging(card, brq, stop_status);
 	}
 
 	/* Check for set block count errors */

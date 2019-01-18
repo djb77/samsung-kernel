@@ -1656,7 +1656,6 @@ u8 DREAM_A3_DA_POC_ON[] = { 0xEB, 0xFF, 0x52, 0x00, 0xFF };
 #endif
 
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
-static u8 DREAM_A3_DA_GRAM_IMG_PATTERN[S6E3HA6_GRAM_IMG_SIZE] = { 0, };
 static u8 DREAM_A3_DA_VDDM_PARA[] = { 0xB0, 0x09 };
 static u8 DREAM_A3_DA_VDDM_ORIG[] = { 0xF4, 0x00 };
 static u8 DREAM_A3_DA_VDDM_VOLT[] = { 0xF4, 0x00 };
@@ -1763,9 +1762,9 @@ static DEFINE_VARIABLE_PACKET(dream_a3_da_vddm_volt, DSI_PKT_TYPE_WR, DREAM_A3_D
 static DEFINE_STATIC_PACKET(dream_a3_da_vddm_update_enable, DSI_PKT_TYPE_WR, DREAM_A3_DA_VDDM_UPDATE_ENABLE, 0);
 static DEFINE_STATIC_PACKET(dream_a3_da_vddm_update_disable, DSI_PKT_TYPE_WR, DREAM_A3_DA_VDDM_UPDATE_DISABLE, 0);
 static DEFINE_PKTUI(dream_a3_da_gram_img_pattern_0, &dream_a3_da_maptbl[GRAM_IMG_0_MAPTBL], 0);
-static DEFINE_VARIABLE_PACKET(dream_a3_da_gram_img_pattern_0, DSI_PKT_TYPE_WR_MEM, DREAM_A3_DA_GRAM_IMG_PATTERN, 0);
+static DEFINE_VARIABLE_PACKET(dream_a3_da_gram_img_pattern_0, DSI_PKT_TYPE_WR_MEM, S6E3HA6_GRAM_IMG, 0);
 static DEFINE_PKTUI(dream_a3_da_gram_img_pattern_1, &dream_a3_da_maptbl[GRAM_IMG_1_MAPTBL], 0);
-static DEFINE_VARIABLE_PACKET(dream_a3_da_gram_img_pattern_1, DSI_PKT_TYPE_WR_MEM, DREAM_A3_DA_GRAM_IMG_PATTERN, 0);
+static DEFINE_VARIABLE_PACKET(dream_a3_da_gram_img_pattern_1, DSI_PKT_TYPE_WR_MEM, S6E3HA6_GRAM_IMG, 0);
 #endif
 
 static DEFINE_PKTUI(dream_a3_da_gamma, &dream_a3_da_maptbl[GAMMA_MAPTBL], 1);
@@ -2213,12 +2212,6 @@ static void *dream_a3_da_gct_exit_cmdtbl[] = {
 	&DLYINFO(dream_a3_da_wait_vddm_update),
 	&KEYINFO(dream_a3_da_level3_key_disable),
 	&KEYINFO(dream_a3_da_level2_key_disable),
-
-	&KEYINFO(dream_a3_da_level1_key_enable),
-	&PKTINFO(dream_a3_da_sw_reset),
-	&DLYINFO(dream_a3_da_wait_120msec),
-	&KEYINFO(dream_a3_da_level1_key_disable),
-	&SEQINFO(dream_a3_da_seqtbl[PANEL_INIT_SEQ]),
 };
 #endif
 

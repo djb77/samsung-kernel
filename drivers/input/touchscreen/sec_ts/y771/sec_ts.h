@@ -74,14 +74,17 @@
 #undef USER_OPEN_DWORK
 #define USE_PRESSURE_SENSOR
 #define MINORITY_REPORT
-#define TCLM_CONCEPT
 
-#include <linux/input/sec_tclm.h>
+#include <linux/input/sec_tclm_v2.h>
+#ifdef CONFIG_INPUT_TOUCHSCREEN_TCLMV2
+#define TCLM_CONCEPT
+#endif
 
 #if defined(USE_RESET_DURING_POWER_ON) || defined(USE_POR_AFTER_I2C_RETRY) || defined(USE_RESET_EXIT_LPM)
 #define USE_POWER_RESET_WORK
 #endif
 
+#define TOUCH_PRINT_INFO_DWORK_TIME	30000	/* 30s */
 #define TOUCH_RESET_DWORK_TIME		10
 #define BRUSH_Z_DATA		63	/* for ArtCanvas */
 
@@ -142,20 +145,21 @@
 
 #define SEC_TS_SKIPTSP_DUTY		100
 
-#define SEC_TS_NVM_OFFSET_FAC_RESULT		0
-#define SEC_TS_NVM_OFFSET_CAL_COUNT		1
-#define SEC_TS_NVM_OFFSET_DISASSEMBLE_COUNT	2
-#define SEC_TS_NVM_OFFSET_TUNE_VERSION		3
-#define SEC_TS_NVM_OFFSET_TUNE_VERSION_LENGTH	2
+#define SEC_TS_NVM_OFFSET_FAC_RESULT			0
+#define SEC_TS_NVM_OFFSET_DISASSEMBLE_COUNT		2
 
 /* TCLM_CONCEPT */
+#define SEC_TS_NVM_OFFSET_CAL_COUNT			1
+#define SEC_TS_NVM_OFFSET_TUNE_VERSION			3
+#define SEC_TS_NVM_OFFSET_TUNE_VERSION_LENGTH		2
+
 #define SEC_TS_NVM_OFFSET_CAL_POSITION			5
 #define SEC_TS_NVM_OFFSET_HISTORY_QUEUE_COUNT		6
 #define SEC_TS_NVM_OFFSET_HISTORY_QUEUE_LASTP		7
 #define SEC_TS_NVM_OFFSET_HISTORY_QUEUE_ZERO		8
 #define SEC_TS_NVM_OFFSET_HISTORY_QUEUE_SIZE		20
-/*#define SEC_TS_NVM_OFFSET_LENGTH*/
-/*(SEC_TS_NVM_OFFSET_HISTORY_QUEUE_ZERO + SEC_TS_NVM_OFFSET_HISTORY_QUEUE_SIZE + 1)*/
+
+#define SEC_TS_NVM_OFFSET_LENGTH        (SEC_TS_NVM_OFFSET_HISTORY_QUEUE_ZERO + SEC_TS_NVM_OFFSET_HISTORY_QUEUE_SIZE + 1)
 
 /* Presseure */
 #define SEC_TS_NVM_OFFSET_PRESSURE_BASE_CAL_COUNT	35
@@ -181,7 +185,7 @@
 #define SEC_TS_NVM_LAST_BLOCK_OFFSET			SEC_TS_NVM_OFFSET_PRESSURE_RAWDATA
 #define SEC_TS_NVM_LAST_BLOCK_SIZE			SEC_TS_NVM_SIZE_PRESSURE_CAL_BLOCK
 
-#define SEC_TS_NVM_OFFSET_LENGTH		(SEC_TS_NVM_LAST_BLOCK_OFFSET + SEC_TS_NVM_LAST_BLOCK_SIZE + 1)
+#define SEC_TS_NVM_TOTAL_OFFSET_LENGTH		(SEC_TS_NVM_LAST_BLOCK_OFFSET + SEC_TS_NVM_LAST_BLOCK_SIZE + 1)
 #define SEC_TS_TCLM_PRESSURE_FLAG		(SEC_TS_NVM_OFFSET_LENGTH + 1)
 
 #define PRESSURE_CHANNEL_NUM			3
@@ -225,12 +229,13 @@
 #define SEC_TS_READ_TOUCH_RAWDATA		0x72
 #define SEC_TS_READ_TOUCH_SELF_RAWDATA		0x73
 #define SEC_TS_CMD_FACTORY_LEVEL		0x74
-#define SEC_TS_GET_CM_OFFSET_DATA		0x75
+#define SEC_TS_GET_FACTORY_DATA			0x75
 #define SEC_TS_CMD_SET_GET_PRESSURE		0x76
 #define SEC_TS_CMD_SENSITIVITY_MODE		0x77
 #define SEC_TS_READ_SENSITIVITY_VALUE		0x78
 #define SEC_TS_GET_FORCE_CFOFFSET_DATA		0x79
 #define SEC_TS_GET_FORCE_PRESSURE_DATA		0x7A
+#define SEC_TS_SET_FACTORY_DATA_TYPE		0x7D
 #define SEC_TS_READ_SELFTEST_RESULT		0x80
 #define SEC_TS_CMD_CALIBRATION_AMBIENT		0x81
 #define SEC_TS_CMD_P2P_TEST			0x82
@@ -238,18 +243,24 @@
 #define SEC_TS_CMD_NVM				0x85
 #define SEC_TS_CMD_STATEMANAGE_ON		0x8E
 #define SEC_TS_CMD_CALIBRATION_OFFSET_SDC	0x8F
-#define SEC_TS_CMD_START_LOWPOWER_TEST		0x9B
+//#define SEC_TS_CMD_START_LOWPOWER_TEST		0x9B
+#define SEC_TS_CMD_LPM_AOD_OFF_ON		0x9B
+
+#define SEC_TS_CMD_LPM_AOD_OFF		0x00	/* off at close */
+#define SEC_TS_CMD_LPM_AOD_ON_OFF	0x01	/* on->off in aod */
+#define SEC_TS_CMD_LPM_AOD_ON		0x02	/* on at close */
 
 /* SEC_TS SPONGE OPCODE COMMAND */
 #define SEC_TS_CMD_SPONGE_GET_INFO			0x90
 #define SEC_TS_CMD_SPONGE_WRITE_PARAM			0x91
 #define SEC_TS_CMD_SPONGE_READ_PARAM			0x92
 #define SEC_TS_CMD_SPONGE_NOTIFY_PACKET			0x93
-#define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_DATA		0x56
-#define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_LEVEL		0x5E
-#define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_THD_HIGH	0x84
-#define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_THD_LOW	0x86
-#define SEC_TS_CMD_SPONGE_LP_DUMP			0x01F0
+#define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_DATA		0x0E
+#define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_LEVEL		0x01
+#define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_THD_HIGH	0x0A
+#define SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_THD_LOW	0x0C
+#define SEC_TS_CMD_SPONGE_OFFSET_UTC			0x10
+#define SEC_TS_CMD_SPONGE_LP_DUMP			0xF0
 
 #define SEC_TS_CMD_STATUS_EVENT_TYPE	0xA0
 #define SEC_TS_READ_FW_INFO		0xA2
@@ -269,6 +280,7 @@
 #define SEC_TS_READ_FORCE_RECAL_COUNT	0xB0
 #define SEC_TS_READ_FORCE_SIG_MAX_VAL	0xB1
 #define SEC_TS_CMD_SET_GET_FACTORY_MODE	0xB2
+#define SEC_TS_CMD_SET_GET_FORCE_SENSOR_VERSION	0xBE
 
 /* SEC_TS FLASH COMMAND */
 #define SEC_TS_CMD_FLASH_READ_ADDR	0xD0
@@ -282,7 +294,7 @@
 #define SEC_TS_READ_BL_UPDATE_STATUS	0xDB
 #define SEC_TS_CMD_SET_POWER_MODE	0xE4
 #define SEC_TS_CMD_EDGE_DEADZONE	0xE5
-#define SEC_TS_CMD_SET_DEX_MODE		0xE7
+#define SEC_TS_CMD_SET_MONITOR_NOISE_MODE	0xE7
 #define SEC_TS_CMD_CALIBRATION_PRESSURE		0xE9
 #define SEC_TS_CMD_SET_USER_PRESSURE		0xEB
 #define SEC_TS_CMD_SET_TEMPERATURE_COMP_MODE	0xEC
@@ -336,6 +348,7 @@
 #define SEC_TS_GESTURE_CODE_SPAY		0x00
 #define SEC_TS_GESTURE_CODE_DOUBLE_TAP		0x01
 #define SEC_TS_GESTURE_CODE_FORCE		0x02
+#define SEC_TS_GESTURE_CODE_SINGLE_TAP		0x04
 
 /* SEC_TS_GESTURE_ID*/
 #define SEC_TS_EVENT_PRESSURE_TOUCHED		0x00
@@ -348,11 +361,14 @@
 /* SEC_TS_VENDOR_INFO : Vendor acknowledge event */
 #define SEC_TS_VENDOR_ACK_OFFSET_CAL_DONE		0x40
 #define SEC_TS_VENDOR_ACK_SELF_TEST_DONE		0x41
-#define SEC_TS_VENDOR_ACK_CMR_TEST_DONE			0x42
-#define SEC_TS_VENDOR_ACK_CSR_TEST_DONE			0x43
-#define SEC_TS_VENDOR_ACK_CFR_TEST_DONE			0x44
+#define SEC_TS_VENDOR_ACK_CMR_TEST_DONE			0x42	/* mutual */
+#define SEC_TS_VENDOR_ACK_CSR_TX_TEST_DONE		0x43	/* self_tx */
+#define SEC_TS_VENDOR_ACK_CSR_RX_TEST_DONE		0x44	/* self_rx */
+#define SEC_TS_VENDOR_ACK_CFR_TEST_DONE			0x45	/* force key */
+#define SEC_TS_VENDOR_ACK_CMR_KEY_TEST_DONE		0x46	/* mutual_key */
 
 #define SEC_TS_VENDOR_ACK_LOWPOWER_SELF_TEST_DONE	0x58
+#define SEC_TS_VENDOR_STATE_CHANGED				0x61
 #define SEC_TS_VENDOR_ACK_NOISE_STATUS_NOTI		0x64
 
 /* SEC_TS_STATUS_EVENT_USER_INPUT */
@@ -369,11 +385,15 @@
 /* SEC_TS_DEBUG : Print event contents */
 #define SEC_TS_DEBUG_PRINT_ALLEVENT	0x01
 #define SEC_TS_DEBUG_PRINT_ONEEVENT	0x02
-#define SEC_TS_DEBUG_PRINT_I2C_CMD	0x04
+#define SEC_TS_DEBUG_PRINT_I2C_READ_CMD		0x04
+#define SEC_TS_DEBUG_PRINT_I2C_WRITE_CMD	0x08
 #define SEC_TS_DEBUG_SEND_UEVENT	0x80
 
 /* SEC_OFFSET_SIGNUTRE */
 #define SEC_OFFSET_SIGNATURE		0x59525446
+#define SEC_CM2_SIGNATURE			0x324D5446
+#define SEC_CM3_SIGNATURE			0x334D5446
+#define SEC_FAIL_HIST_SIGNATURE		0x53484646
 
 #define SEC_TS_BIT_SETFUNC_TOUCH		(1 << 0)
 #define SEC_TS_BIT_SETFUNC_MUTUAL		(1 << 0)
@@ -403,6 +423,12 @@
 #define SEC_TS_CMD_EDGE_AREA		0xAB
 #define SEC_TS_CMD_DEAD_ZONE		0xAC
 #define SEC_TS_CMD_LANDSCAPE_MODE	0xAD
+
+
+/* SPEN mode */
+#define SPEN_DISABLE_MODE	0x00
+#define SPEN_ENABLE_MODE	0x01
+#define SPEN_NOISE_MODE		0x02
 
 enum grip_write_mode {
 	G_NONE				= 0,
@@ -450,6 +476,12 @@ enum switch_system_mode {
 	TO_FLASH_MODE			= 3,
 };
 
+enum external_noise_mode {
+	EXT_NOISE_MODE_NONE		= 0,
+	EXT_NOISE_MODE_MONITOR		= 1,	/* for dex mode */
+	EXT_NOISE_MODE_MAX,			/* add new mode above this line */
+};
+
 enum {
 	TYPE_RAW_DATA			= 0,	/* Total - Offset : delta data */
 	TYPE_SIGNAL_DATA		= 1,	/* Signal - Filtering & Normalization */
@@ -470,7 +502,7 @@ typedef enum {
 	SPONGE_EVENT_TYPE_SPAY			= 0x04,
 	SPONGE_EVENT_TYPE_PRESSURE_TOUCHED = 0x05,
 	SPONGE_EVENT_TYPE_PRESSURE_RELEASED	= 0x06,
-	SPONGE_EVENT_TYPE_AOD			= 0x08,
+	SPONGE_EVENT_TYPE_SINGLE_TAP		= 0x08,
 	SPONGE_EVENT_TYPE_AOD_PRESS		= 0x09,
 	SPONGE_EVENT_TYPE_AOD_LONGPRESS		= 0x0A,
 	SPONGE_EVENT_TYPE_AOD_DOUBLETAB		= 0x0B,
@@ -479,6 +511,14 @@ typedef enum {
 	SPONGE_EVENT_TYPE_AOD_HOMEKEY_RELEASE_NO_HAPTIC	= 0x0E
 } SPONGE_EVENT_TYPE;
 
+/*
+ * support_feature
+ * bit value should be made a promise with InputFramework.
+ */
+#define INPUT_FEATURE_ENABLE_SETTINGS_AOT	(1 << 0) /* Double tap wakeup settings */
+#define INPUT_FEATURE_ENABLE_PRESSURE		(1 << 1) /* homekey pressure */
+#define INPUT_FEATURE_ENABLE_SYNC_RR120		(1 << 2) /* sync reportrate 120hz */
+
 #define CMD_RESULT_WORD_LEN		10
 
 #define SEC_TS_I2C_RETRY_CNT		3
@@ -486,10 +526,11 @@ typedef enum {
 
 #define SEC_TS_MODE_SPONGE_SPAY			(1 << 1)
 #define SEC_TS_MODE_SPONGE_AOD			(1 << 2)
+#define SEC_TS_MODE_SPONGE_SINGLE_TAP		(1 << 3)
 #define SEC_TS_MODE_SPONGE_FORCE_KEY	(1 << 6)
 
 #define SEC_TS_MODE_LOWPOWER_FLAG			(SEC_TS_MODE_SPONGE_SPAY | SEC_TS_MODE_SPONGE_AOD \
-											| SEC_TS_MODE_SPONGE_FORCE_KEY)
+							| SEC_TS_MODE_SPONGE_SINGLE_TAP | SEC_TS_MODE_SPONGE_FORCE_KEY)
 
 enum sec_ts_cover_id {
 	SEC_TS_FLIP_WALLET = 0,
@@ -573,6 +614,16 @@ struct sec_ts_test_result {
 	};
 };
 
+/* 56 byte */
+struct sec_ts_selftest_fail_hist {
+	u32 tsp_signature;
+	u32 tsp_fw_version;
+	u16 fail_cnt;
+	u16 selftest_exec_parm;
+	u32 test_result;
+	u8 fail_data[40];
+} __attribute__ ((packed));
+
 /* 8 byte */
 struct sec_ts_gesture_status {
 	u8 eid:2;
@@ -627,6 +678,8 @@ struct sec_ts_coordinate {
 	u8 action;
 	u16 x;
 	u16 y;
+	u16 p_x;
+	u16 p_y;
 	u8 z;
 	u8 hover_flag;
 	u8 glove_flag;
@@ -657,17 +710,12 @@ struct sec_ts_data {
 	struct sec_ts_plat_data *plat_data;
 	struct sec_ts_coordinate coord[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
 
-	struct timeval time_pressed[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
-	struct timeval time_released[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
-	long time_longest;
-
 	u8 lowpower_mode;
 	s8 pressure_caller_id;
-	u8 dex_mode;
-	char *dex_name;
 	u8 brush_mode;
 	u8 touchable_area;
 	u8 pressure_setting_mode;
+	u8 external_noise_mode;
 	volatile u8 touch_noise_status;
 	volatile bool input_closed;
 	long prox_power_off;
@@ -693,8 +741,13 @@ struct sec_ts_data {
 	struct mutex modechange;
 
 	int nv;
+	int disassemble_count;
 
 	struct delayed_work work_read_info;
+	struct delayed_work work_print_info;
+	u32	print_info_cnt_open;
+	u32	print_info_cnt_release;
+	u16	print_info_currnet_mode;
 #ifdef USE_POWER_RESET_WORK
 	struct delayed_work reset_work;
 	volatile bool reset_is_on_going;
@@ -723,11 +776,17 @@ struct sec_ts_data {
 
 	int tspid_val;
 	int tspicid_val;
+	u8 force_sensor_version;
+	u8 evt_info;
 
 	bool use_sponge;
 	unsigned int scrub_id;
 	unsigned int scrub_x;
 	unsigned int scrub_y;
+
+#ifdef CONFIG_EPEN_WACOM_W9018
+	unsigned int spen_mode_val;
+#endif
 
 	u8 grip_edgehandler_direction;
 	int grip_edgehandler_start_y;
@@ -744,6 +803,7 @@ struct sec_ts_data {
 	u8 tsp_dump_lock;
 
 	struct sec_tclm_data *tdata;
+	bool is_cal_done;
 
 	volatile int wet_mode;
 	bool factory_level;
@@ -762,9 +822,6 @@ struct sec_ts_data {
 	unsigned int all_force_count;
 	unsigned int all_aod_tap_count;
 	unsigned int all_spay_count;
-	unsigned int max_z_value;
-	unsigned int min_z_value;
-	unsigned int sum_z_value;
 	unsigned char pressure_cal_base;
 	unsigned char pressure_cal_delta;
 	int max_ambient;
@@ -773,6 +830,9 @@ struct sec_ts_data {
 	int min_ambient;
 	int min_ambient_channel_tx;
 	int min_ambient_channel_rx;
+	int mode_change_failed_count;
+	int irq_recovery_count;
+	int ic_reset_count;
 
 	/* average value for each channel */
 	short ambient_tx[TOUCH_TX_CHANNEL_NUM];
@@ -781,6 +841,23 @@ struct sec_ts_data {
 	/* max - min value for each channel */
 	short ambient_tx_delta[TOUCH_TX_CHANNEL_NUM];
 	short ambient_rx_delta[TOUCH_RX_CHANNEL_NUM];
+
+	/* for factory - factory_cmd_result_all() */
+	short cm_raw_set_p2p_min;			//CM_RAW_SET_P2P
+	short cm_raw_set_p2p_max;			//CM_RAW_SET_P2P
+	short cm_raw_set_p2p_diff;		//CM_RAW_SET_P2P_DIFF
+
+	short self_raw_set_p2p_x_min;		//SELF_RAW_SET_P2P_X
+	short self_raw_set_p2p_x_max;		//SELF_RAW_SET_P2P_X
+	short self_raw_set_p2p_y_min;		//SELF_RAW_SET_P2P_Y
+	short self_raw_set_p2p_y_max;		//SELF_RAW_SET_P2P_Y
+	short self_raw_set_p2p_x_diff;	//SELF_RAW_SET_P2P_X_DIFF
+	short self_raw_set_p2p_y_diff;	//SELF_RAW_SET_P2P_Y_DIFF
+
+	short cm_raw_key_p2p_min;			//CM_RAW_KEY_P2P
+	short cm_raw_key_p2p_max;			//CM_RAW_KEY_P2P
+	short cm_raw_key_p2p_diff;		//CM_RAW_KEY_P2P_DIFF
+	short cm_raw_key_p2p_diff_data[2][3];	/* key : max support key is 3 */
 
 	u32	defect_probability;
 #ifdef MINORITY_REPORT
@@ -791,6 +868,15 @@ struct sec_ts_data {
 	u8	item_wet;
 #endif
 
+	u16 cm2_outgoing_data[1000];
+	u16 cm3_outgoing_data[1000];
+
+	int irq_gpio_status;
+	int irq_depth;
+	int irq_count;
+	int irq_reset;
+	int irq_unhandled;
+
 #ifdef USE_PRESSURE_SENSOR
 	short pressure_left;
 	short pressure_center;
@@ -799,6 +885,7 @@ struct sec_ts_data {
 #endif
 	short pressure_data[TYPE_RAWDATA_MAX][PRESSURE_CHANNEL_NUM];
 	int debug_flag;
+	int fix_active_mode;
 
 	int (*sec_ts_i2c_write)(struct sec_ts_data *ts, u8 reg, u8 *data, int len);
 	int (*sec_ts_i2c_read)(struct sec_ts_data *ts, u8 reg, u8 *data, int len);
@@ -810,12 +897,17 @@ struct sec_ts_data {
 struct sec_ts_plat_data {
 	int max_x;
 	int max_y;
+	int dispay_x;
+	int dispay_y;
 	unsigned irq_gpio;
 	int irq_type;
 	int i2c_burstmax;
 	int always_lpmode;
 	int bringup;
 	int mis_cal_check;
+	u32	area_indicator;
+	u32	area_navigation;
+	u32	area_edge;
 
 	const char *firmware_name;
 	const char *model_name;
@@ -832,6 +924,7 @@ struct sec_ts_plat_data {
 	u8 img_version_of_bin[4];
 
 	const char *support_pressure;
+	bool sync_reportrate_120;
 
 	struct pinctrl *pinctrl;
 
@@ -840,11 +933,17 @@ struct sec_ts_plat_data {
 	int tsp_icid;
 	int tsp_id;
 	int tsp_vsync;
+	int force_sensor_version_gpio;
 
 	bool regulator_boot_on;
 	bool support_mt_pressure;
 	bool support_dex;
 	bool support_sidegesture;
+	int item_version;
+	unsigned int hw_rev;
+	unsigned int support_hw_rev; /* using for prev panel */
+	int tclm_levels[4];
+	int afe_bases[4];
 };
 
 typedef struct {
@@ -873,10 +972,12 @@ typedef struct {
 	u32 reserved;
 } fw_chunk;
 
+void sec_ts_print_info(struct sec_ts_data *ts);
 int sec_ts_power(void *data, bool on);
 int sec_ts_stop_device(struct sec_ts_data *ts);
 int sec_ts_start_device(struct sec_ts_data *ts);
 int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode);
+int sec_ts_set_external_noise_mode(struct sec_ts_data *ts, u8 mode);
 int sec_ts_firmware_update_on_probe(struct sec_ts_data *ts, bool force_update);
 int sec_ts_firmware_update_on_hidden_menu(struct sec_ts_data *ts, int update_type);
 int sec_ts_glove_mode_enables(struct sec_ts_data *ts, int mode);
@@ -891,6 +992,7 @@ int sec_ts_release_tmode(struct sec_ts_data *ts);
 int get_tsp_nvm_data(struct sec_ts_data *ts, u8 offset);
 int get_tsp_nvm_data_by_size(struct sec_ts_data *ts, u8 offset, int length, u8 *data);
 void set_tsp_nvm_data_clear(struct sec_ts_data *ts, u8 offset);
+void sec_tclm_parse_dt(struct i2c_client *client, struct sec_tclm_data *tdata);
 int sec_ts_set_custom_library(struct sec_ts_data *ts);
 #ifdef SEC_TS_SUPPORT_SPONGELIB
 int sec_ts_check_custom_library(struct sec_ts_data *ts);
@@ -900,19 +1002,21 @@ void sec_ts_locked_release_all_finger(struct sec_ts_data *ts);
 void sec_ts_fn_remove(struct sec_ts_data *ts);
 void sec_ts_delay(unsigned int ms);
 int sec_ts_read_information(struct sec_ts_data *ts);
+int sec_ts_read_evt_info(struct sec_ts_data *ts);
 #ifdef MINORITY_REPORT
 void minority_report_calculate_rawdata(struct sec_ts_data *ts);
 void minority_report_calculate_ito(struct sec_ts_data *ts);
 void minority_report_sync_latest_value(struct sec_ts_data *ts);
 #endif
 #ifdef TCLM_CONCEPT
-void sec_ts_tclm_set_nvm_data(struct sec_ts_data *ts, u8 reg, u8 data);
-bool sec_ts_tclm_get_nvm_all(struct sec_ts_data *ts);
 int sec_tclm_data_read(struct i2c_client *client, int address);
-void sec_tclm_data_write(struct i2c_client *client, int address, int data);
+int sec_tclm_data_write(struct i2c_client *client, int address);
 int sec_tclm_execute_force_calibration(struct i2c_client *client, int cal_mode);
 #endif
+
+int set_tsp_nvm_data_by_size(struct sec_ts_data *ts, u8 reg, int size, u8 *data);
 void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read);
+
 int read_pressure_data(struct sec_ts_data *ts, u8 type, short *value);
 void sec_ts_reinit(struct sec_ts_data *ts);
 
@@ -936,7 +1040,7 @@ extern int get_lcd_attached(char *mode);
 extern int get_lcd_info(char *arg);
 #endif
 
-#if defined(CONFIG_MOTOR_DRV_MAX77865) || defined(CONFIG_SS_VIBRATOR)
+#if defined(CONFIG_MOTOR_DRV_MAX77705) || defined(CONFIG_MOTOR_DRV_MAX77865) || defined(CONFIG_SS_VIBRATOR)
 extern int haptic_homekey_press(void);
 extern int haptic_homekey_release(void);
 #else
@@ -963,5 +1067,11 @@ extern int tui_force_close(uint32_t arg);
 
 void sec_ts_ioctl_init(struct sec_ts_data *ts);
 void sec_ts_ioctl_remove(struct sec_ts_data *ts);
+
+int sec_ts_check_firmware_version(struct sec_ts_data *ts, const u8 *fw_info);
+
+#ifdef CONFIG_INPUT_WACOM
+extern void epen_disable_mode(int mode);
+#endif
 
 #endif

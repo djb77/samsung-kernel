@@ -18,7 +18,7 @@
 #ifndef __FIVE_CERT_H__
 #define __FIVE_CERT_H__
 
-#include "lv.h"
+#include "five_lv.h"
 
 #define FIVE_MAX_DIGEST_SIZE 64
 #define FIVE_MAX_CERTIFICATE_SIZE 4096

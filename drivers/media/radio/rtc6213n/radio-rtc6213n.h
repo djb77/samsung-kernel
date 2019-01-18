@@ -210,6 +210,7 @@ struct rtc6213n_device {
 	struct i2c_client *client;
 	bool vol_db;
 	int rx_vol[VOLUME_NUM];
+	unsigned char blend_level;
 
 	int fm_lna_gpio;
 };

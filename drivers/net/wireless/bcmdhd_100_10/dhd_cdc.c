@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_cdc.c 692135 2017-03-26 17:19:39Z $
+ * $Id: dhd_cdc.c 752794 2018-03-19 04:00:31Z $
  *
  * BDC is like CDC, except it includes a header for data packets to convey
  * packet priority over the bus, and flags (e.g. to indicate checksum status
@@ -70,6 +70,13 @@ typedef struct dhd_prot {
 	cdc_ioctl_t msg;
 	unsigned char buf[WLC_IOCTL_MAXLEN + ROUND_UP_MARGIN];
 } dhd_prot_t;
+
+uint16
+dhd_prot_get_ioctl_trans_id(dhd_pub_t *dhdp)
+{
+	/* SDIO does not have ioctl_trans_id yet, so return -1 */
+	return -1;
+}
 
 static int
 dhdcdc_msg(dhd_pub_t *dhd)

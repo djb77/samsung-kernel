@@ -19,8 +19,10 @@ void init_shared_buffer(struct shared_buffer *bufs, int buffer_count)
 	int i = 0;
 
 	bufs->buffer_count = buffer_count;
-	for (i = 0; i < bufs->buffer_count; i++)
+	for (i = 0; i < bufs->buffer_count; i++) {
 		bufs->captured_timestamp_us[i] = 0;
+		bufs->buf_status[i] = SHARED_BUF_INIT;
+	}
 }
 
 int get_capturing_buf_idx(struct shared_buffer *bufs, int *buf_idx)

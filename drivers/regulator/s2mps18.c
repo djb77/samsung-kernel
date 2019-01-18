@@ -38,6 +38,16 @@
 #include <linux/sec_sysfs.h>
 #endif /* CONFIG_SEC_PM */
 
+#ifdef CONFIG_SEC_PM_BIGDATA
+#include <linux/jiffies.h>
+#include <linux/workqueue.h>
+#include <linux/sec_hqm_device.h>
+#endif
+
+#ifdef CONFIG_SEC_PM
+#define STATUS1_ACOKB	BIT(2)
+#endif /* CONFIG_SEC_PM */
+
 static struct s2mps18_info *static_info;
 static struct regulator_desc regulators[S2MPS18_REGULATOR_MAX];
 
@@ -56,11 +66,17 @@ static u8 s2mps18_offsrc;
 #endif /* CONFIG_SEC_PM_DEBUG */
 
 #ifdef CONFIG_SEC_PM
-static int th120C_count;
-static int th140C_count;
-
 static struct device *ap_pmic_dev;
 #endif /* CONFIG_SEC_PM */
+
+static int th120C_count;
+static int th140C_count;
+#define NUM_OCP_IRQS 15
+static int buck_ocp_irqs[NUM_OCP_IRQS];
+static int buck_ocp_cnt[NUM_OCP_IRQS];
+#ifdef CONFIG_SEC_PM_BIGDATA
+static int hqm_bocp_cnt[NUM_OCP_IRQS];
+#endif
 
 struct s2mps18_info {
 	struct regulator_dev *rdev[S2MPS18_REGULATOR_MAX];
@@ -72,11 +88,11 @@ struct s2mps18_info {
 	struct i2c_client *i2c;
 	struct i2c_client *debug_i2c;
 	u8 adc_en_val;
-	int b2_ocp_irq;
-	int b3_ocp_irq;
 	int th120C_irq;
-#ifdef CONFIG_SEC_PM
 	int th140C_irq;
+#ifdef CONFIG_SEC_PM_BIGDATA
+	struct delayed_work hqm_pmtp_work;
+	struct delayed_work hqm_bocp_work;
 #endif
 };
 
@@ -811,66 +827,95 @@ void get_s2mps18_i2c(struct i2c_client **i2c)
 }
 #endif
 
-static irqreturn_t s2mps18_b2_ocp_irq(int irq, void *data)
+#ifdef CONFIG_SEC_PM_BIGDATA
+void send_hqm_pmtp_work(struct work_struct *work)
 {
-	struct s2mps18_info *s2mps18 = data;
-	mutex_lock(&s2mps18->lock);
-	pr_info("%s:irq(%d)\n", __func__, irq);
-	mutex_unlock(&s2mps18->lock);
-
-#ifdef CONFIG_SEC_PM_DEBUG
-	pr_info("BUCK2 OCP: BIG: %u kHz, LITTLE: %u kHz\n", cpufreq_get(4),
-			cpufreq_get(0));
-#endif /* CONFIG_SEC_PM_DEBUG */
-
-	return IRQ_HANDLED;
+	hqm_device_info hqm_info;
+	char feature[HQM_FEATURE_LEN] ="PMTP";
+	 
+	memcpy(hqm_info.feature, feature, HQM_FEATURE_LEN);
+	send_uevent_via_hqm_device(hqm_info);
 }
 
-static irqreturn_t s2mps18_b3_ocp_irq(int irq, void *data)
+void send_hqm_bocp_work(struct work_struct *work)
 {
-	struct s2mps18_info *s2mps18 = data;
-	mutex_lock(&s2mps18->lock);
-	pr_info("%s:irq(%d)\n", __func__, irq);
-	mutex_unlock(&s2mps18->lock);
+	hqm_device_info hqm_info;
+	char feature[HQM_FEATURE_LEN] ="BOCP";
 
-#ifdef CONFIG_SEC_PM_DEBUG
-	pr_info("BUCK3 OCP: BIG: %u kHz, LITTLE: %u kHz\n", cpufreq_get(4),
-			cpufreq_get(0));
-#endif /* CONFIG_SEC_PM_DEBUG */
-
-	return IRQ_HANDLED;
+	memcpy(hqm_info.feature, feature, HQM_FEATURE_LEN);
+	send_uevent_via_hqm_device(hqm_info);
 }
+#endif
 
 static irqreturn_t s2mps18_th120C_irq(int irq, void *data)
 {
 	struct s2mps18_info *s2mps18 = data;
 
 	mutex_lock(&s2mps18->lock);
-	pr_info("%s: PMIC thermal 120C irq(%d)\n", __func__, irq);
-#ifndef CONFIG_SEC_PM
-	panic("PMIC thermal 120C Interrupt occur !!\n");
-#endif
+	th120C_count++;
+	pr_info("%s: PMIC thermal 120C irq(%d), count: (%d)\n", __func__, irq,
+		th120C_count);
 	mutex_unlock(&s2mps18->lock);
 
-#ifdef CONFIG_SEC_PM
-	th120C_count++;
+#ifdef CONFIG_SEC_PM_BIGDATA
+	cancel_delayed_work(&s2mps18->hqm_pmtp_work);
+	schedule_delayed_work(&s2mps18->hqm_pmtp_work, 5 * HZ);
 #endif
 	return IRQ_HANDLED;
 }
-
-#ifdef CONFIG_SEC_PM
 static irqreturn_t s2mps18_th140C_irq(int irq, void *data)
 {
 	struct s2mps18_info *s2mps18 = data;
 
 	mutex_lock(&s2mps18->lock);
-	pr_info("%s: PMIC thermal 140C irq(%d)\n", __func__, irq);
+	th140C_count++;
+	pr_info("%s: PMIC thermal 140C irq(%d), count: (%d)\n", __func__, irq,
+		th140C_count);
 	mutex_unlock(&s2mps18->lock);
 
-	th140C_count++;
+#ifdef CONFIG_SEC_PM_BIGDATA
+	cancel_delayed_work(&s2mps18->hqm_pmtp_work);
+	schedule_delayed_work(&s2mps18->hqm_pmtp_work, 5 * HZ);
+#endif
+	return IRQ_HANDLED;
+}
+static irqreturn_t s2mps18_buck_ocp_irq(int irq, void *data)
+{
+	struct s2mps18_info *s2mps18 = data;
+	struct irq_desc *desc;
+	int i;
+
+	mutex_lock(&s2mps18->lock);
+	pr_info("%s:irq(%d)\n", __func__, irq);
+	for (i = 0; i < NUM_OCP_IRQS; i++) {
+		if (buck_ocp_irqs[i] == irq) {
+			buck_ocp_cnt[i]++;
+#ifdef CONFIG_SEC_PM_BIGDATA
+			hqm_bocp_cnt[i]++;
+#endif
+			break;
+		}
+	}
+	mutex_unlock(&s2mps18->lock);
+	desc = irq_to_desc(irq);
+	if (desc && desc->action && desc->action->name)
+		pr_info("BUCK OCP IRQ %d, %s, count: (%d)\n", irq, desc->action->name,
+			buck_ocp_cnt[i]);
+
+#ifdef CONFIG_SEC_PM_DEBUG
+	pr_info("BUCK OCP%d: BIG: %u kHz, LITTLE: %u kHz\n",
+			irq - buck_ocp_irqs[0] + 1, cpufreq_get(4),
+			cpufreq_get(0));
+#endif /* CONFIG_SEC_PM_DEBUG */
+
+#ifdef CONFIG_SEC_PM_BIGDATA
+	cancel_delayed_work(&s2mps18->hqm_bocp_work);
+	schedule_delayed_work(&s2mps18->hqm_bocp_work, 5 * HZ);
+#endif
 	return IRQ_HANDLED;
 }
 
+#ifdef CONFIG_SEC_PM
 static ssize_t show_ap_pmic_th120C_count(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -921,14 +966,141 @@ static ssize_t store_ap_pmic_th140C_count(struct device *dev,
 	return count;
 }
 
+static ssize_t show_ap_pmic_buck_ocp_count(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int i, buf_offset = 0;
+	struct irq_desc *desc;
+
+	for (i = 0; i < NUM_OCP_IRQS; i++) {
+		if (buck_ocp_irqs[i]) {
+			desc = irq_to_desc(buck_ocp_irqs[i]);
+			if (desc && desc->action && desc->action->name)
+				buf_offset += sprintf(buf + buf_offset, "%d %s: %d\n",
+						buck_ocp_irqs[i], desc->action->name,
+						buck_ocp_cnt[i]);
+			else
+				buf_offset += sprintf(buf + buf_offset, "%d : %d\n",
+						buck_ocp_irqs[i], buck_ocp_cnt[i]);
+		}
+	}
+
+	return buf_offset;
+}
+
+#ifdef CONFIG_SEC_PM_BIGDATA
+static ssize_t hqm_bocp_count_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int i, buf_offset = 0;
+
+	for (i = 0; i < NUM_OCP_IRQS; i++) {
+		if (buck_ocp_irqs[i]) {
+			buf_offset += sprintf(buf + buf_offset, "\"B%d\":\"%d\",",
+					i+1, hqm_bocp_cnt[i]);
+			hqm_bocp_cnt[i] = 0;
+		}
+	}
+	if(buf_offset > 0)
+		buf[--buf_offset] = '\0';
+
+	return buf_offset;
+}
+#endif
+
+static ssize_t pmic_id_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	int pmic_id = static_info->iodev->pmic_rev;
+
+	return sprintf(buf, "0x%02X\n", pmic_id);
+}
+
+static ssize_t chg_det_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	int ret, chg_det;
+	u8 val;
+
+	ret = s2mps18_read_reg(static_info->i2c, S2MPS18_PMIC_REG_STATUS1, &val);
+	if(ret)
+		chg_det = -1;
+	else
+		chg_det = !(val & STATUS1_ACOKB);
+
+	pr_info("%s: ap pmic chg det: %d\n", __func__, chg_det);
+
+	return sprintf(buf, "%d\n", chg_det);
+}
+
+static ssize_t show_manual_reset(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret;
+	bool enabled;
+	u8 val;
+
+	ret = s2mps18_read_reg(static_info->i2c, S2MPS18_PMIC_REG_CTRL1, &val);
+	if (ret)
+		return ret;
+
+	enabled = !!(val & (1 << 4));
+
+	pr_info("%s: %s[0x%02X]\n", __func__, enabled ? "enabled" :  "disabled",
+			val);
+
+	return sprintf(buf, "%s\n", enabled ? "enabled" :  "disabled");
+}
+
+static ssize_t store_manual_reset(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	bool enable;
+	u8 val;
+
+	ret = strtobool(buf, &enable);
+	if (ret)
+		return ret;
+
+	ret = s2mps18_read_reg(static_info->i2c, S2MPS18_PMIC_REG_CTRL1, &val);
+	if (ret)
+		return ret;
+
+	val &= ~(1 << 4);
+	val |= enable << 4;
+
+	ret = s2mps18_write_reg(static_info->i2c, S2MPS18_PMIC_REG_CTRL1, val);
+	if (ret)
+		return ret;
+
+	pr_info("%s: %d [0x%02X]\n", __func__, enable, val);
+
+	return count;
+}
+
 static DEVICE_ATTR(th120C_count, 0664, show_ap_pmic_th120C_count,
 		store_ap_pmic_th120C_count);
 static DEVICE_ATTR(th140C_count, 0664, show_ap_pmic_th140C_count,
 		store_ap_pmic_th140C_count);
+static DEVICE_ATTR(buck_ocp_count, 0444, show_ap_pmic_buck_ocp_count, NULL);
+#ifdef CONFIG_SEC_PM_BIGDATA
+static DEVICE_ATTR_RO(hqm_bocp_count);
+#endif
+static DEVICE_ATTR_RO(pmic_id);
+static DEVICE_ATTR_RO(chg_det);
+static DEVICE_ATTR(manual_reset, 0664, show_manual_reset, store_manual_reset);
 
 static struct attribute *ap_pmic_attributes[] = {
 	&dev_attr_th120C_count.attr,
 	&dev_attr_th140C_count.attr,
+	&dev_attr_buck_ocp_count.attr,
+#ifdef CONFIG_SEC_PM_BIGDATA
+	&dev_attr_hqm_bocp_count.attr,
+#endif
+	&dev_attr_pmic_id.attr,
+	&dev_attr_chg_det.attr,
+	&dev_attr_manual_reset.attr,
 	NULL
 };
 
@@ -936,6 +1108,8 @@ static const struct attribute_group ap_pmic_attr_group = {
 	.attrs = ap_pmic_attributes,
 };
 #endif /* CONFIG_SEC_PM */
+
+static char buck_ocp_irqname[NUM_OCP_IRQS][32];
 
 static int s2mps18_pmic_probe(struct platform_device *pdev)
 {
@@ -945,6 +1119,7 @@ static int s2mps18_pmic_probe(struct platform_device *pdev)
 	struct s2mps18_info *s2mps18;
 	int irq_base;
 	int i, ret, val = 0;
+	int buck_ocp_irq;
 
 	if (iodev->dev->of_node) {
 		ret = s2mps18_pmic_dt_parse_pdata(iodev, pdata);
@@ -971,12 +1146,9 @@ static int s2mps18_pmic_probe(struct platform_device *pdev)
 	s2mps18->iodev = iodev;
 	s2mps18->i2c = iodev->pmic;
 	s2mps18->debug_i2c = iodev->debug_i2c;
-	s2mps18->b2_ocp_irq = irq_base + S2MPS18_PMIC_IRQ_OCPB2_INT5;
-	s2mps18->b3_ocp_irq = irq_base + S2MPS18_PMIC_IRQ_OCPB3_INT5;
 	s2mps18->th120C_irq = irq_base + S2MPS18_PMIC_IRQ_120C_INT3;
-#ifdef CONFIG_SEC_PM
 	s2mps18->th140C_irq = irq_base + S2MPS18_PMIC_IRQ_140C_INT3;
-#endif
+	buck_ocp_irq = irq_base + S2MPS18_PMIC_IRQ_OCPB1_INT5;
 
 	mutex_init(&s2mps18->lock);
 
@@ -1110,27 +1282,12 @@ static int s2mps18_pmic_probe(struct platform_device *pdev)
 //	s2mps18_write_reg(s2mps18->i2c, S2MPS18_PMIC_REG_PWREN_SEL1, 0xff);
 	s2mps18_write_reg(s2mps18->i2c, S2MPS18_PMIC_REG_PWREN_SEL2, 0xff);
 
-	ret = devm_request_threaded_irq(&pdev->dev, s2mps18->b2_ocp_irq, NULL,
-			s2mps18_b2_ocp_irq, 0, "B2-OCP-irq", s2mps18);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to request B2 OCP IRQ: %d: %d\n",
-			s2mps18->b2_ocp_irq, ret);
-	}
-	ret = devm_request_threaded_irq(&pdev->dev, s2mps18->b3_ocp_irq, NULL,
-			s2mps18_b3_ocp_irq, 0, "B3-OCP-irq", s2mps18);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to request B3 OCP IRQ: %d: %d\n",
-			s2mps18->b3_ocp_irq, ret);
-	}
-
 	ret = devm_request_threaded_irq(&pdev->dev, s2mps18->th120C_irq, NULL,
 			s2mps18_th120C_irq, 0, "th120C-irq", s2mps18);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "Failed to request th120C IRQ: %d: %d\n",
 			s2mps18->th120C_irq, ret);
 	}
-
-#ifdef CONFIG_SEC_PM
 	ret = devm_request_threaded_irq(&pdev->dev, s2mps18->th140C_irq, NULL,
 			s2mps18_th140C_irq, 0, "th140C-irq", s2mps18);
 	if (ret < 0) {
@@ -1138,6 +1295,22 @@ static int s2mps18_pmic_probe(struct platform_device *pdev)
 			s2mps18->th140C_irq, ret);
 	}
 
+	for (i = 0; i < NUM_OCP_IRQS; i++) {
+		sprintf(buck_ocp_irqname[i], "B%d-OCP-irq", i + 1);
+
+		pr_info("Request %s interrupt\n", buck_ocp_irqname[i]);
+
+		ret = devm_request_threaded_irq(&pdev->dev, buck_ocp_irq + i,
+				NULL, s2mps18_buck_ocp_irq, 0,
+				buck_ocp_irqname[i], s2mps18);
+		if (ret < 0)
+			dev_err(&pdev->dev, "Failed to request BUCK OCP: %d: %d\n",
+					i + 1, ret);
+
+		buck_ocp_irqs[i] = buck_ocp_irq + i;
+	}
+
+#ifdef CONFIG_SEC_PM
 	ap_pmic_dev = sec_device_create(NULL, "ap_pmic");
 
 	ret = sysfs_create_group(&ap_pmic_dev->kobj, &ap_pmic_attr_group);
@@ -1157,6 +1330,10 @@ static int s2mps18_pmic_probe(struct platform_device *pdev)
 	if (iodev->adc_mode > 0)
 		s2mps18_powermeter_init(iodev);
 
+#ifdef CONFIG_SEC_PM_BIGDATA
+	INIT_DELAYED_WORK(&s2mps18->hqm_pmtp_work, send_hqm_pmtp_work);
+	INIT_DELAYED_WORK(&s2mps18->hqm_bocp_work, send_hqm_bocp_work);
+#endif
 	return 0;
 err:
 	for (i = 0; i < S2MPS18_REGULATOR_MAX; i++)
@@ -1180,6 +1357,11 @@ static int s2mps18_pmic_remove(struct platform_device *pdev)
 		regulator_unregister(s2mps18->rdev[i]);
 
 	s2mps18_powermeter_deinit(s2mps18->iodev);
+
+#ifdef CONFIG_SEC_PM_BIGDATA
+	cancel_delayed_work(&s2mps18->hqm_pmtp_work);
+	cancel_delayed_work(&s2mps18->hqm_bocp_work);
+#endif	
 	return 0;
 }
 

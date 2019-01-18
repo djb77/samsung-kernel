@@ -979,6 +979,13 @@ config HID_OVR
 	Support for OVR devices.
 	Say Y here if you have a OVR device.
 
+config HID_TVR
+	tristate "TVR device support"
+	depends on USB_HID
+	---help---
+	Support for TVR devices.
+	Say Y here if you have a TVR device.	
+
 config HID_MADCATZ
 	tristate "Madcatz wireless game controller support"
 	depends on (USB_HID || HID)

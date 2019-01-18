@@ -86,6 +86,34 @@ void print_data(char *data, int size)
 	pr_info("%s", buf);
 }
 
+void print_maptbl(struct maptbl *tbl)
+{
+	char strbuf[100];
+	char *space[3] = {"", "\t", "\t\t"};
+	int layer, row, col, len;
+	int depth = 0;
+
+	pr_info("MAPTBL %s (%d layer, %d row, %d col)\n",
+			tbl->name, tbl->nlayer, tbl->nrow, tbl->ncol);
+	for_each_layer(tbl, layer) {
+		for_each_row(tbl, row) {
+			depth++;
+			len = snprintf(strbuf, sizeof(strbuf),
+					"%s[%3d] : ", space[depth], row);
+			for_each_col(tbl, col) {
+				len += snprintf(strbuf + len,
+						max((int)sizeof(strbuf) - len, 0), "%02X ",
+						tbl->arr[sizeof_layer(tbl) * layer +
+						sizeof_row(tbl) * row + col]);
+			}
+			pr_info("%s\n", strbuf);
+			depth--;
+		}
+		pr_info("\n");
+	}
+}
+
+
 static int nr_panel;
 static struct common_panel_info *panel_list[MAX_PANEL];
 int register_common_panel(struct common_panel_info *info)
@@ -235,7 +263,7 @@ struct seqinfo *find_index_seqtbl(struct panel_info *panel_data, u32 index)
 
 	tbl = &panel_data->seqtbl[index];
 	if (tbl != NULL)
-		panel_dbg("%s, found %s panel seqtbl\n", __func__, tbl->name);
+		pr_debug("%s, found %s panel seqtbl\n", __func__, tbl->name);
 
 	return tbl;
 
@@ -368,16 +396,29 @@ u32 maptbl_index(struct maptbl *tbl, int layer, int row, int col)
 
 int maptbl_init(struct maptbl *tbl)
 {
-	if (tbl && tbl->ops.init)
-		return tbl->ops.init(tbl);
+	int ret;
+
+	if (!tbl || !tbl->ops.init)
+		return -EINVAL;
+
+	ret = tbl->ops.init(tbl);
+	if (ret < 0) {
+		pr_err("%s failed to init maptbl(%s)\n",
+				__func__, tbl->name);
+		return ret;
+	}
+
+	tbl->initialized = true;
 	return 0;
 }
 
 int maptbl_getidx(struct maptbl *tbl)
 {
-	if (tbl && tbl->ops.getidx)
-		return tbl->ops.getidx(tbl);
-	return -EINVAL;
+	if (!tbl || !tbl->initialized ||
+			!tbl->ops.getidx)
+		return -EINVAL;
+
+	return tbl->ops.getidx(tbl);
 }
 
 u8 *maptbl_getptr(struct maptbl *tbl)
@@ -397,8 +438,25 @@ u8 *maptbl_getptr(struct maptbl *tbl)
 
 void maptbl_copy(struct maptbl *tbl, u8 *dst)
 {
-	if (tbl && dst && tbl->ops.copy)
-		tbl->ops.copy(tbl, dst);
+	if (!tbl || !tbl->initialized ||
+			!dst || !tbl->ops.copy)
+		return;
+
+	tbl->ops.copy(tbl, dst);
+}
+
+void maptbl_memcpy(struct maptbl *dst, struct maptbl *src)
+{
+	if (!dst || !src || dst->nlayer != src->nlayer ||
+		dst->nrow != src->nrow || dst->ncol != src->ncol) {
+		pr_err("%s failed to copy from:%s to:%s size:%d\n",
+				__func__, (!src || !src->name ) ? "" : src->name,
+				(!dst || !dst->name ) ? "" : dst->name,
+				(!dst) ? 0 : sizeof_maptbl(dst));
+		return;
+	}
+
+	memcpy(dst->arr, src->arr, sizeof_maptbl(dst));
 }
 
 struct maptbl *maptbl_find(struct panel_info *panel, char *name)
@@ -462,6 +520,13 @@ void panel_update_packet_data(struct panel_device *panel, struct pktinfo *info)
 					__func__, pktui[i].offset, pktui[i].maptbl);
 			return;
 		}
+
+		if (!maptbl->initialized) {
+			pr_info("%s init maptbl(%s) +\n", __func__, maptbl->name);
+			maptbl_init(maptbl);
+			pr_info("%s init maptbl(%s) -\n", __func__, maptbl->name);
+		}
+
 		if (unlikely(offset + maptbl->sz_copy > info->dlen)) {
 			pr_err("%s, out of range (offset %d, sz_copy %d, dlen %d)\n",
 					__func__, offset, maptbl->sz_copy, info->dlen);
@@ -567,7 +632,7 @@ static int panel_dsi_write_mem(struct panel_device *panel,
 		}
 		len += tx_size;
 		remained -= tx_size;
-		pr_info("%s tx_size %d len %d, remained %d\n",
+		pr_debug("%s tx_size %d len %d, remained %d\n",
 				__func__, tx_size, len, remained);
 	} while (remained > 0);
 
@@ -950,7 +1015,7 @@ int panel_do_seqtbl(struct panel_device *panel, struct seqinfo *seqtbl)
 	return 0;
 }
 
-int panel_do_seqtbl_by_index_nolock(struct panel_device *panel, int index)
+int excute_seqtbl_nolock(struct panel_device *panel, struct seqinfo *seqtbl, int index)
 {
 	int ret;
 	struct seqinfo *tbl;
@@ -963,28 +1028,17 @@ int panel_do_seqtbl_by_index_nolock(struct panel_device *panel, int index)
 		return -EINVAL;
 	}
 
-	if (!IS_PANEL_ACTIVE(panel)) {
-		return 0;
+	if (seqtbl == NULL) {
+		panel_err("ERR:PANEL:%s:seqtbl is null\n", __func__);
+		return -EINVAL;
 	}
+
+	if (!IS_PANEL_ACTIVE(panel))
+		return -EIO;
 
 	panel_data = &panel->panel_data;
-	tbl = panel_data->seqtbl;
+	tbl = seqtbl;
 	ktime_get_ts(&cur_ts);
-
-	ktime_get_ts(&last_ts);
-
-	if (unlikely(index < 0 || index >= MAX_PANEL_SEQ)) {
-		panel_err("%s, invalid paramter (panel %p, index %d)\n",
-				__func__, panel, index);
-		ret = -EINVAL;
-		goto do_exit;
-	}
-
-	delta_ts = timespec_sub(last_ts, cur_ts);
-	elapsed_usec = timespec_to_ns(&delta_ts) / 1000;
-	if (elapsed_usec > 34000)
-		pr_debug("seq:%s warn:elapsed %lld.%03lld msec to acquire lock\n",
-				tbl[index].name, elapsed_usec / 1000, elapsed_usec % 1000);
 
 	if (panel_data->props.key[CMD_LEVEL_1] != 0 ||
 			panel_data->props.key[CMD_LEVEL_2] != 0 ||
@@ -1011,7 +1065,6 @@ int panel_do_seqtbl_by_index_nolock(struct panel_device *panel, int index)
 	}
 
 do_exit:
-
 	if (panel_data->props.key[CMD_LEVEL_1] != 0 ||
 			panel_data->props.key[CMD_LEVEL_2] != 0 ||
 			panel_data->props.key[CMD_LEVEL_3] != 0) {
@@ -1037,6 +1090,27 @@ do_exit:
 	return 0;
 }
 
+int panel_do_seqtbl_by_index_nolock(struct panel_device *panel, int index)
+{
+	if (panel == NULL) {
+		panel_err("ERR:PANEL:%s:invalid panel\n", __func__);
+		return -EINVAL;
+	}
+
+	if (panel->panel_data.seqtbl == NULL) {
+		panel_err("ERR:PANEL:%s:invalid seqtbl\n", __func__);
+		return -EINVAL;
+	}
+
+	if (unlikely(index < 0 || index >= MAX_PANEL_SEQ)) {
+		panel_err("%s, invalid paramter (panel %p, index %d)\n",
+				__func__, panel, index);
+		return -EINVAL;
+	}
+
+	return excute_seqtbl_nolock(panel, panel->panel_data.seqtbl, index);
+}
+
 int panel_do_seqtbl_by_index(struct panel_device *panel, int index)
 {
 	int ret;
@@ -1059,6 +1133,18 @@ struct resinfo *find_panel_resource(struct panel_info *panel_data, char *name)
 		if (!strcmp(name, panel_data->restbl[i].name))
 			return &panel_data->restbl[i];
 	return NULL;
+}
+
+bool panel_resource_initialized(struct panel_info *panel_data, char *name)
+{
+	struct resinfo *res = find_panel_resource(panel_data, name);
+	if (unlikely(!res)) {
+		panel_err("%s, %s not found in resource\n",
+				__func__, name);
+		return false;
+	}
+
+	return res->state == RES_INITIALIZED;
 }
 
 int rescpy(u8 *dst, struct resinfo *res, u32 offset, u32 len)
@@ -1104,7 +1190,7 @@ int rescpy_by_name(struct panel_info *panel_data, u8 *dst, char *name, u32 offse
 	return 0;
 }
 
-static int get_panel_resource_size(struct resinfo *res)
+int get_panel_resource_size(struct resinfo *res)
 {
 	if (unlikely(!res)) {
 		pr_warn("%s, invalid parameter\n", __func__);
@@ -1112,6 +1198,34 @@ static int get_panel_resource_size(struct resinfo *res)
 	}
 
 	return res->dlen;
+}
+
+int resource_clear(struct resinfo *res)
+{
+	if (!res)
+		return -EINVAL;
+
+	res->state = RES_UNINITIALIZED;
+	return 0;
+}
+
+int resource_clear_by_name(struct panel_info *panel_data, char *name)
+{
+	struct resinfo *res;
+
+	if (unlikely(!panel_data || !name)) {
+		pr_warn("%s, invalid parameter\n", __func__);
+		return -EINVAL;
+	}
+
+	res = find_panel_resource(panel_data, name);
+	if (unlikely(!res)) {
+		pr_warn("%s, %s not found in resource\n",
+				__func__, name);
+		return -EINVAL;
+	}
+
+	return resource_clear(res);
 }
 
 int resource_copy(u8 *dst, struct resinfo *res)
@@ -1151,6 +1265,34 @@ int resource_copy_by_name(struct panel_info *panel_data, u8 *dst, char *name)
 		return -EINVAL;
 	}
 	return rescpy(dst, res, 0, res->dlen);
+}
+
+int resource_copy_n_clear_by_name(struct panel_info *panel_data, u8 *dst, char *name)
+{
+	struct resinfo *res;
+	int ret;
+
+	if (unlikely(!panel_data || !dst || !name)) {
+		pr_warn("%s, invalid parameter\n", __func__);
+		return -EINVAL;
+	}
+
+	res = find_panel_resource(panel_data, name);
+	if (unlikely(!res)) {
+		pr_warn("%s, %s not found in resource\n",
+				__func__, name);
+		return -EINVAL;
+	}
+
+	if (res->state == RES_UNINITIALIZED) {
+		pr_warn("%s, %s not initialized\n",
+				__func__, res->name);
+		return -EINVAL;
+	}
+	ret = rescpy(dst, res, 0, res->dlen);
+	resource_clear(res);
+
+	return ret;
 }
 
 int get_resource_size_by_name(struct panel_info *panel_data, char *name)
@@ -1242,7 +1384,6 @@ int read_panel_id(struct panel_device *panel, u8 *buf)
 	}
 
 	mutex_lock(&panel->op_lock);
-	panel_set_key(panel, 3, true);
 	len = panel_rx_nbytes(panel, DSI_PKT_TYPE_RD, buf, PANEL_ID_REG, 0, 3);
 	if (len != 3) {
 		pr_err("%s, failed to read id\n", __func__);
@@ -1251,7 +1392,6 @@ int read_panel_id(struct panel_device *panel, u8 *buf)
 	}
 
 read_err:
-	panel_set_key(panel, 3, false);
 	mutex_unlock(&panel->op_lock);
 	return ret;
 }
@@ -1275,8 +1415,19 @@ int panel_rdinfo_update(struct panel_device *panel, struct rdinfo *rdi)
 		pr_err("%s, invalid parameter\n", __func__);
 		return -EINVAL;
 	}
-	ret = panel_rx_nbytes(panel, rdi->type, rdi->data, rdi->addr, rdi->offset, rdi->len);
 
+	if (rdi->data)
+		kfree(rdi->data);
+	rdi->data = kzalloc(sizeof(u8) * rdi->len, GFP_KERNEL);
+
+#ifdef CONFIG_SUPPORT_DDI_FLASH
+	if (rdi->type == DSI_PKT_TYPE_RD_POC)
+		ret = copy_poc_partition(&panel->poc_dev, rdi->data, rdi->addr, rdi->offset, rdi->len);
+	else
+		ret = panel_rx_nbytes(panel, rdi->type, rdi->data, rdi->addr, rdi->offset, rdi->len);
+#else
+	ret = panel_rx_nbytes(panel, rdi->type, rdi->data, rdi->addr, rdi->offset, rdi->len);
+#endif
 	if (unlikely(ret != rdi->len)) {
 		pr_err("%s, read failed\n", __func__);
 		return -EIO;
@@ -1333,9 +1484,11 @@ void print_panel_resource(struct panel_device *panel)
 				panel_data->restbl[i].name, panel_data->restbl[i].dlen,
 				(panel_data->restbl[i].state == RES_UNINITIALIZED ?
 				 "UNINITIALIZED" : "INITIALIZED"));
+#ifdef DEBUG_PANEL
 		if (panel_data->restbl[i].state == RES_INITIALIZED)
 			print_data(panel_data->restbl[i].data,
 					panel_data->restbl[i].dlen);
+#endif
 	}
 }
 
@@ -1440,9 +1593,12 @@ int check_panel_active(struct panel_device *panel, const char *caller)
 
 	state = &panel->state;
 	dsi_state = panel_dsi_get_state(panel);
-
+#ifdef CONFIG_SUPPORT_DOZE
 	if (dsi_state == DSIM_STATE_OFF ||
 		dsi_state == DSIM_STATE_DOZE_SUSPEND) {
+#else
+	if (dsi_state == DSIM_STATE_OFF) {
+#endif
 		panel_err("PANEL:WARN:%s:dsim %s\n",
 				caller, (dsi_state == DSIM_STATE_OFF) ?
 				"off" : "doze_suspend");

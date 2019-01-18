@@ -22,7 +22,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: typedefs.h 672943 2016-11-30 08:54:06Z $
+ * $Id: typedefs.h 742663 2018-01-23 06:57:52Z $
  */
 
 #ifndef _TYPEDEFS_H_

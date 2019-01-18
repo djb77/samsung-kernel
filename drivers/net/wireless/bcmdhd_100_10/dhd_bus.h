@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_bus.h 767115 2018-06-12 14:12:28Z $
+ * $Id: dhd_bus.h 784307 2018-10-11 13:10:28Z $
  */
 
 #ifndef _dhd_bus_h_
@@ -175,6 +175,9 @@ enum {
 	TOTAL_LFRAG_PACKET_CNT,
 	MAX_HOST_RXBUFS,
 	HOST_API_VERSION,
+#ifdef D2H_MINIDUMP
+	DNGL_TO_HOST_TRAP_ADDR_LEN,
+#endif /* D2H_MINIDUMP */
 	DNGL_TO_HOST_TRAP_ADDR
 };
 
@@ -205,6 +208,7 @@ extern void dhd_bus_flow_ring_flush_response(struct dhd_bus *bus, uint16 flowid,
 extern uint32 dhd_bus_max_h2d_queues(struct dhd_bus *bus);
 extern int dhd_bus_schedule_queue(struct dhd_bus *bus, uint16 flow_id, bool txs);
 extern void dhd_bus_set_linkdown(dhd_pub_t *dhdp, bool val);
+extern int dhd_bus_get_linkdown(dhd_pub_t *dhdp);
 
 #ifdef IDLE_TX_FLOW_MGMT
 extern void dhd_bus_flow_ring_resume_response(struct dhd_bus *bus, uint16 flowid, int32 status);
@@ -224,6 +228,7 @@ extern int dhdpcie_get_pcieirq(struct dhd_bus *bus, unsigned int *irq);
 extern struct device * dhd_bus_to_dev(struct dhd_bus *bus);
 
 extern void dhdpcie_cto_init(struct dhd_bus *bus, bool enable);
+extern void dhdpcie_ssreset_dis_enum_rst(struct dhd_bus *bus);
 
 #ifdef DHD_FW_COREDUMP
 extern struct dhd_bus *g_dhd_bus;
@@ -289,14 +294,43 @@ void dhdsdio_reset_bt_use_count(struct dhd_bus *bus);
 #endif /* BT_OVER_SDIO */
 
 int dhd_bus_perform_flr(struct dhd_bus *bus, bool force_fail);
+extern bool dhd_bus_get_flr_force_fail(struct dhd_bus *bus);
 
 #ifdef BCMPCIE
 extern void dhdpcie_advertise_bus_cleanup(dhd_pub_t  *dhdp);
 extern void dhd_msgbuf_iovar_timeout_dump(dhd_pub_t *dhd);
 #endif /* BCMPCIE */
 
+#ifdef D2H_MINIDUMP
+#ifndef DHD_FW_COREDUMP
+/* Minidump depends on DHD_FW_COREDUMP to dump minidup
+ * This dependency is intentional to avoid multiple work queue
+ * to dump the SOCRAM, minidum ..etc.
+ */
+#error "Minidump doesnot work as DHD_FW_COREDUMP is not defined"
+#endif /* DHD_FW_COREDUMP */
+#ifdef BCM_BUZZZ
+/*
+ * In pciedev_shared_t buzz_dbg_ptr and device_trap_debug_buffer_len
+ * are overloaded. So when BCM_BUZZZ is defined MINIDUMP should not be defined or
+ * vice versa.
+ */
+#error "Minidump doesnot work as BCM_BUZZZ is defined"
+#endif /* BCM_BUZZZ */
+extern bool dhd_bus_is_minidump_enabled(dhd_pub_t  *dhdp);
+dhd_dma_buf_t* dhd_prot_get_minidump_buf(dhd_pub_t *dhd);
+#endif /* D2H_MINIDUMP */
+
+extern bool dhd_bus_force_bt_quiesce_enabled(struct dhd_bus *bus);
+
+#ifdef DHD_SSSR_DUMP
+extern int dhd_bus_sssr_dump(dhd_pub_t *dhd);
+#endif /* DHD_SSSR_DUMP */
+#ifdef PCIE_FULL_DONGLE
+extern int dhdpcie_set_dma_ring_indices(dhd_pub_t *dhd, int32 int_val);
+#endif /* PCIE_FULL_DONGLE */
+
 #ifdef DHD_USE_BP_RESET
 extern int dhd_bus_perform_bp_reset(struct dhd_bus *bus);
 #endif /* DHD_USE_BP_RESET */
-
 #endif /* _dhd_bus_h_ */

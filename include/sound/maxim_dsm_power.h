@@ -78,7 +78,13 @@ struct maxim_dsm_power {
 	uint32_t platform_type;
 };
 
+struct maxim_dsm_ppr_init_values {
+	int target_temp[MAXDSM_CHANNEL];
+	int exit_temp[MAXDSM_CHANNEL];
+};
+
 void maxdsm_power_ppr_control(int state);
 void maxdsm_power_control(int state);
+int maxdsm_update_ppr_info(uint32_t *ppr_info);
 
 #endif /* __SOUND_MAXIM_DSM_POWER_H__ */

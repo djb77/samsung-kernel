@@ -62,7 +62,7 @@ config SEC_FACTORY
 	bool "SAMSUNG Factory build option"
 	depends on SEC_EXT && SEC_DEBUG
 	default n
-	select SEC_PANIC_PCIE_ERR	
+	select SEC_PANIC_PCIE_ERR
 	help
 	  Include some codes for Factory binary.
 	  This option is enabled by Factory build option.
@@ -95,6 +95,12 @@ config SAMSUNG_PRODUCT_SHIP
 	bool "set up for product shipping"
 	depends on SEC_EXT
 	default n
+
+config SEC_HQM_DEVICE
+	bool "Samsung sec hqm device"
+	default n
+	help
+	  Samsung hqm device feature
 
 comment "Samsung TN Logging Options"
 config SEC_AVC_LOG
@@ -142,6 +148,24 @@ config SEC_DEBUG_PPMPU
 	  This option enables the kernel to print out ppmpu information when
 	  kernel oops. El3 monitor supports smc calls for this option.
 
+config SEC_DEBUG_BRANCH_VERIFIER
+	bool "Warning a invalid branch from backtrace"
+	depends on SEC_DEBUG && SEC_DEBUG_AUTO_SUMMARY
+	default n
+	help
+	  This option enables the kernel to check whether branches from
+	  dump_backtrace() are valid. Then it will print a warning if a wrong jump
+	  is detected.
+
+config SEC_DEBUG_INDIRECT_BRANCH_VERIFIER
+	bool "Warning a invalid branch for blr"
+	depends on SEC_DEBUG_BRANCH_VERIFIER
+	depends on RKP_CFP_JOPP
+	default n
+	help
+	  This option enables the branch verifier to check branches including
+	  indirect branches like blr. It also needs a compiler modified.
+
 config SEC_BOOTSTAT
 	bool "Enable TN Bootstat logging"
 	depends on SEC_EXT
@@ -162,6 +186,13 @@ config SEC_PM_DEBUG
 	help
 	  This option enables Samsung Mobile Power management debug support.
 	  Intended for test and debug only.
+
+config SEC_PM_BIGDATA
+	bool "Enable Samsung Mobile Power management big data support"
+	default y
+	depends on SEC_PM
+	help
+	  This option enables Samsung Mobile Power management big data support.
 
 comment "Samsung TN NAD Options"
 config SEC_NAD
@@ -226,3 +257,41 @@ config SEC_HEAVY_TASK_CPU
 	default n
 	help
 	  This option enables heavy cpu core counting.
+
+comment "Samsung ubsan debug feature"
+config SEC_DEBUG_UBSAN
+	bool "Enable ubsan debug feature"
+	default n
+	help
+	  This option enables ubsan debug feature.
+
+comment "Samsung kasan debug feature"
+config SEC_DEBUG_KASAN
+	bool "Enable kasan debug feature"
+	default n
+	help
+	  This option enables kasan debug feature.
+
+config SEC_DEBUG_SUPPORT_FORCE_UPLOAD
+	bool "Support force upload mode"
+	default n
+	help
+	  This option supports force upload mode.
+
+comment "Samsung TN option for VTS test"
+config SEC_VTS_TEST
+	bool "VTS TEST"
+	default n
+	help
+	  This option notices this binary for VTS test.
+
+choice
+	prompt "Version of GAF structure"
+	depends on SEC_DEBUG
+	default SEC_DEBUG_GAF_V4
+
+	config SEC_DEBUG_GAF_V4
+		bool "Use GAF structure version 4"
+		help
+		  Default option for FIVE-enabled kernel
+endchoice

@@ -73,13 +73,18 @@ static int max77705_motor_boost_control(void *data, int control)
 static int max77705_haptic_i2c(void *data, bool en)
 {
 	struct max77705_haptic_drvdata *drvdata = (struct max77705_haptic_drvdata *)data;
+	int ret = 0;
 
-	return max77705_update_reg(drvdata->i2c,
+	ret = max77705_update_reg(drvdata->i2c,
 			MAX77705_PMIC_REG_MCONFIG,
 			en ? 0xff : 0x0, MOTOR_LRA | MOTOR_EN);
+	if (ret)
+		pr_err("i2c LRA and EN update error %d\n", ret);
+
+	return ret;
 }
 
-static void max77705_haptic_init_reg(struct max77705_haptic_drvdata *drvdata)
+static void max77705_haptic_init_reg(struct max77705_haptic_drvdata *drvdata, bool init_en)
 {
 	int ret;
 
@@ -88,10 +93,12 @@ static void max77705_haptic_init_reg(struct max77705_haptic_drvdata *drvdata)
 	if (ret)
 		pr_err("i2c REG_BIASEN update error %d\n", ret);
 
-	ret = max77705_update_reg(drvdata->i2c,
-		MAX77705_PMIC_REG_MCONFIG, 0x0, MOTOR_EN);
-	if (ret)
-		pr_err("i2c MOTOR_EN update error %d\n", ret);
+	if (init_en) {
+		ret = max77705_update_reg(drvdata->i2c,
+			MAX77705_PMIC_REG_MCONFIG, 0x0, MOTOR_EN);
+		if (ret)
+			pr_err("i2c MOTOR_EN update error %d\n", ret);
+	}
 
 	ret = max77705_update_reg(drvdata->i2c,
 		MAX77705_PMIC_REG_MCONFIG, 0xff, MOTOR_LRA);
@@ -301,7 +308,7 @@ static int max77705_haptic_probe(struct platform_device *pdev)
 		goto err_pwm_request;
 	} else
 		pwm_config(drvdata->pwm, pdata->period >> 1, pdata->period);
-	max77705_haptic_init_reg(drvdata);
+	max77705_haptic_init_reg(drvdata, true);
 	max77705_motor_boost_control(drvdata, BOOST_ON);
 	sec_haptic_register(shdata);
 
@@ -348,7 +355,7 @@ static int max77705_haptic_resume(struct platform_device *pdev)
 	struct max77705_haptic_drvdata *drvdata
 		= platform_get_drvdata(pdev);
 
-	max77705_haptic_init_reg(drvdata);
+	max77705_haptic_init_reg(drvdata, false);
 	max77705_motor_boost_control(drvdata, BOOST_ON);
 	return 0;
 }

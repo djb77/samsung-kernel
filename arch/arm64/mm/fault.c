@@ -368,7 +368,7 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 		mm_flags |= FAULT_FLAG_WRITE;
 	}
 
-	if (addr < USER_DS && is_permission_fault(esr, regs)) {
+	if (addr < TASK_SIZE && is_permission_fault(esr, regs)) {
 #ifdef CONFIG_SEC_DEBUG_AUTO_SUMMARY
 		/* regs->orig_addr_limit may be 0 if we entered from EL0 */
 		if (regs->orig_addr_limit == KERNEL_DS) {

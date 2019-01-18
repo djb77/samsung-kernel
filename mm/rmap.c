@@ -1460,6 +1460,10 @@ void page_remove_rmap(struct page *page, bool compound)
 	 */
 }
 
+#ifdef CONFIG_RKP_DMAP_PROT
+extern void dmap_prot(u64 addr,u64 order,u64 val);
+#endif
+
 struct rmap_private {
 	enum ttu_flags flags;
 	int lazyfreed;
@@ -1523,7 +1527,9 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 			goto out_unmap;
 		}
   	}
-
+#ifdef CONFIG_RKP_DMAP_PROT
+	dmap_prot((u64)page_to_phys(page),(u64)compound_order(page),0);
+#endif
 	/* Nuke the page table entry. */
 	flush_cache_page(vma, address, page_to_pfn(page));
 	if (should_defer_flush(mm, flags)) {
@@ -1554,6 +1560,9 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 		} else {
 			dec_mm_counter(mm, mm_counter(page));
 		}
+#ifdef CONFIG_RKP_DMAP_PROT
+		dmap_prot((u64)pte_val(swp_entry_to_pte(make_hwpoison_entry(page))),0,0);
+#endif
 		set_pte_at(mm, address, pte,
 			   swp_entry_to_pte(make_hwpoison_entry(page)));
 	} else if (pte_unused(pteval)) {
@@ -1575,6 +1584,9 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 		swp_pte = swp_entry_to_pte(entry);
 		if (pte_soft_dirty(pteval))
 			swp_pte = pte_swp_mksoft_dirty(swp_pte);
+#ifdef CONFIG_RKP_DMAP_PROT
+		dmap_prot((u64)pte_val(swp_pte),0,0);
+#endif
 		set_pte_at(mm, address, pte, swp_pte);
 	} else if (PageAnon(page)) {
 		swp_entry_t entry = { .val = page_private(page) };
@@ -1593,6 +1605,9 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 		}
 
 		if (swap_duplicate(entry) < 0) {
+#ifdef CONFIG_RKP_DMAP_PROT
+			dmap_prot((u64)pte_val(pteval),0,0);
+#endif
 			set_pte_at(mm, address, pte, pteval);
 			ret = SWAP_FAIL;
 			goto out_unmap;
@@ -1608,6 +1623,9 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 		swp_pte = swp_entry_to_pte(entry);
 		if (pte_soft_dirty(pteval))
 			swp_pte = pte_swp_mksoft_dirty(swp_pte);
+#ifdef CONFIG_RKP_DMAP_PROT
+		dmap_prot((u64)pte_val(swp_pte),0,0);
+#endif
 		set_pte_at(mm, address, pte, swp_pte);
 	} else
 		dec_mm_counter(mm, mm_counter_file(page));

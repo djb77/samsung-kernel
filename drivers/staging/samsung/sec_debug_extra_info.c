@@ -19,6 +19,7 @@
 #include <linux/seq_file.h>
 #include <asm/stacktrace.h>
 #include <asm/esr.h>
+#include <asm/cacheflush.h>
 
 #include <soc/samsung/exynos-pmu.h>
 #include <linux/sec_ext.h>
@@ -26,7 +27,7 @@
 #define SZ_96	0x00000060
 #define SZ_960	0x000003c0
 
-#define EXTRA_VERSION	"RA30"
+#define EXTRA_VERSION	"RE25"
 /******************************************************************************
  * sec_debug_extra_info details
  *
@@ -56,6 +57,7 @@ struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 		{"BUS",		"", SZ_128},
 		{"DPM",		"", SZ_32},
 		{"SMP",		"", SZ_8},
+		{"RSTCNT",	"", SZ_8},
 		{"ETC",		"", SZ_256},
 		{"ESR",		"", SZ_64},
 		{"MER",		"", SZ_16},
@@ -88,6 +90,8 @@ struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 		{"PINT2",	"", SZ_8},
 		{"PINT5",	"", SZ_8},
 		{"PINT6",	"", SZ_8},
+		{"PSTS1",	"", SZ_8},
+		{"PSTS2",	"", SZ_8},
 		{"RVD1",	"", SZ_256},
 		{"RVD2",	"", SZ_256},
 		{"RVD3",	"", SZ_256},
@@ -103,6 +107,18 @@ struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 		{"CPU5",	"", SZ_256},
 		{"CPU6",	"", SZ_256},
 		{"CPU7",	"", SZ_256},
+		{"FRQL0",	"", SZ_8},
+		{"FRQL1",	"", SZ_8},
+		{"FRQL2",	"", SZ_8},
+		{"FRQB0",	"", SZ_8},
+		{"FRQB1",	"", SZ_8},
+		{"FRQB2",	"", SZ_8},
+		{"FRQM0",	"", SZ_8},
+		{"FRQM1",	"", SZ_8},
+		{"FRQM2",	"", SZ_8},
+		{"FRQI0",	"", SZ_8},
+		{"FRQI1",	"", SZ_8},
+		{"FRQI2",	"", SZ_8},
 
 		/* core lockup information */
 		{"MID",		"", SZ_32},
@@ -121,7 +137,9 @@ const char *ftype_items[MAX_EXTRA_INFO_KEY_LEN] = {
 	"PAGE",
 	"AUF",
 	"EUF",
-	"AUOF"
+	"AUOF",
+	"BUG",
+	"PANIC",
 };
 
 struct sec_debug_panic_extra_info *sec_debug_extra_info;
@@ -149,17 +167,23 @@ early_param("androidboot.dram_info", sec_hw_param_get_dram_info);
  * This function simply initialize each filed of sec_debug_panic_extra_info.
  ******************************************************************************/
 
-void sec_debug_init_extra_info(struct sec_debug_shared_info *sec_debug_info)
+void sec_debug_init_extra_info(struct sec_debug_shared_info *sec_debug_info, int magic_status)
 {
 	if (sec_debug_info) {
+		pr_crit("%s: magic: %d\n", __func__, magic_status);
 		sec_debug_extra_info = &sec_debug_info->sec_debug_extra_info;
-		sec_debug_extra_info_backup = &sec_debug_info->sec_debug_extra_info_backup;
-		sec_debug_extra_info_pmudbg = &sec_debug_info->sec_debug_extra_info_pmudbg;
 
-		if (reset_reason == RR_K || reset_reason == RR_D || 
-			reset_reason == RR_P || reset_reason == RR_S) {
-			memcpy(sec_debug_extra_info_backup, sec_debug_extra_info,
-			       sizeof(struct sec_debug_panic_extra_info));
+		if (magic_status) {
+			pr_crit("%s: init for backup and pmudbg\n", __func__);
+			sec_debug_extra_info_backup = &sec_debug_info->sec_debug_extra_info_backup;
+			sec_debug_extra_info_pmudbg = &sec_debug_info->sec_debug_extra_info_pmudbg;
+
+			if (reset_reason == RR_K ||
+				reset_reason == RR_D || 
+				reset_reason == RR_P ||
+				reset_reason == RR_S)
+				memcpy(sec_debug_extra_info_backup, sec_debug_extra_info,
+						sizeof(struct sec_debug_panic_extra_info));
 		}
 
 		memcpy(sec_debug_extra_info, &sec_debug_extra_info_init,
@@ -210,6 +234,7 @@ void sec_debug_set_extra_info(enum sec_debug_extra_buf_type type,
 void sec_debug_store_extra_info(int start, int end)
 {
 	int i;
+	int maxlen = MAX_EXTRA_INFO_KEY_LEN + MAX_EXTRA_INFO_VAL_LEN + 10;
 	char *ptr = (char *)SEC_DEBUG_EXTRA_INFO_VA;
 
 	/* initialize extra info output buffer */
@@ -218,16 +243,16 @@ void sec_debug_store_extra_info(int start, int end)
 	if (!sec_debug_extra_info_backup)
 		return;
 
-	ptr += sprintf(ptr, "\"%s\":\"%s\"", sec_debug_extra_info_backup->item[start].key,
+	ptr += snprintf(ptr, maxlen, "\"%s\":\"%s\"", sec_debug_extra_info_backup->item[start].key,
 		sec_debug_extra_info_backup->item[start].val);
 
 	for (i = start + 1; i < end; i++) {
-		if (ptr + strlen(sec_debug_extra_info_backup->item[i].key) +
-				strlen(sec_debug_extra_info_backup->item[i].val) +
+		if (ptr + strnlen(sec_debug_extra_info_backup->item[i].key, MAX_EXTRA_INFO_KEY_LEN) +
+			strnlen(sec_debug_extra_info_backup->item[i].val, MAX_EXTRA_INFO_VAL_LEN) +
 				MAX_EXTRA_INFO_HDR_LEN > (char *)SEC_DEBUG_EXTRA_INFO_VA + SZ_1K)
 			break;
 
-		ptr += sprintf(ptr, ",\"%s\":\"%s\"",
+		ptr += snprintf(ptr, maxlen, ",\"%s\":\"%s\"",
 			sec_debug_extra_info_backup->item[i].key,
 			sec_debug_extra_info_backup->item[i].val);
 	}
@@ -276,6 +301,7 @@ void sec_debug_store_extra_info_M(void)
 void sec_debug_store_extra_info_F(void)
 {
 	int i;
+	int maxlen = MAX_EXTRA_INFO_KEY_LEN + MAX_EXTRA_INFO_VAL_LEN + 10;
 	char *ptr = (char *)SEC_DEBUG_EXTRA_INFO_VA;
 
 	/* initialize extra info output buffer */
@@ -284,12 +310,15 @@ void sec_debug_store_extra_info_F(void)
 	if (!sec_debug_extra_info_pmudbg)
 		return;
 
-	ptr += sprintf(ptr, "\"FID\":\"%s\"", sec_debug_extra_info_backup->item[INFO_AID].val);
+	ptr += snprintf(ptr, maxlen, "\"FID\":\"%s\"",
+				sec_debug_extra_info_backup->item[INFO_AID].val);
+
 	if (!strcmp(sec_debug_extra_info_pmudbg->item[0].key, "START")) {
 		for (i = 0; i < PMUDBG_MAX; i++) {
 			if (!strcmp(sec_debug_extra_info_pmudbg->item[i].key, "END"))
 				break;
-			ptr += sprintf(ptr, ",\"%s\":\"%s\"",
+
+			ptr += snprintf(ptr, maxlen, ",\"%s\":\"%s\"",
 				sec_debug_extra_info_pmudbg->item[i].key,
 				sec_debug_extra_info_pmudbg->item[i].val);
 		}
@@ -425,7 +454,9 @@ void sec_debug_set_extra_info_backtrace(struct pt_regs *regs)
 		if (offset)
 			offset += sprintf((char *)sec_debug_extra_info->item[INFO_STACK].val + offset, ":");
 
-		sprintf((char *)sec_debug_extra_info->item[INFO_STACK].val + offset, "%s", buf);
+		snprintf((char *)sec_debug_extra_info->item[INFO_STACK].val + offset,
+				MAX_EXTRA_INFO_VAL_LEN - offset, "%s", buf);
+
 		offset += sym_name_len;
 	}
 }
@@ -475,9 +506,23 @@ void sec_debug_set_extra_info_backtrace_cpu(struct pt_regs *regs, int cpu)
 		if (offset)
 			offset += sprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset, ":");
 
-		sprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset, "%s", buf);
+		snprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset,
+				MAX_EXTRA_INFO_VAL_LEN - offset, "%s", buf);
 		offset += sym_name_len;
+
+		break;
 	}
+
+	if(regs) {
+		snprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset,
+				MAX_EXTRA_INFO_VAL_LEN - offset, ":%08x/%08x/%08x/%08x/%08x/%08x/%08x/%08x,",
+				(unsigned int)regs->regs[0], (unsigned int)regs->regs[1],
+				(unsigned int)regs->regs[2], (unsigned int)regs->regs[3],
+				(unsigned int)regs->regs[4], (unsigned int)regs->regs[5],
+				(unsigned int)regs->regs[6], (unsigned int)regs->regs[7]);
+	}
+
+	flush_cache_all();
 }
 
 /******************************************************************************
@@ -592,6 +637,33 @@ void sec_debug_set_extra_info_batt(int cap, int volt, int temp, int curr)
 {
 	sec_debug_clear_extra_info(INFO_BATT);
 	sec_debug_set_extra_info(INFO_BATT, "%03d/%04d/%04d/%06d", cap, volt, temp, curr);
+}
+
+/******************************************************************************
+ * sec_debug_set_extra_info_rvd1
+ ******************************************************************************/
+
+void sec_debug_set_extra_info_rvd1(char *str)
+{
+	sec_debug_set_extra_info(INFO_RVD1, "%s", str);
+}
+
+/******************************************************************************
+ * sec_debug_set_extra_info_rvd2
+ ******************************************************************************/
+
+void sec_debug_set_extra_info_rvd2(char *str)
+{
+	sec_debug_set_extra_info(INFO_RVD2, "%s", str);
+}
+
+/******************************************************************************
+ * sec_debug_set_extra_info_rvd3
+ ******************************************************************************/
+
+void sec_debug_set_extra_info_rvd3(char *str)
+{
+	sec_debug_set_extra_info(INFO_RVD3, "%s", str);
 }
 
 void sec_debug_finish_extra_info(void)

@@ -650,11 +650,11 @@ struct t_input_booster *t_input_boosters[] = {
 };
 
 #define MAX_T_INPUT_BOOSTER(ref, _PARAM_) { \
-		int i = 0; \
+		size_t i = 0; \
 		int max = INPUT_BOOSTER_NULL; \
 		for (i = 0; i < sizeof(t_input_boosters)/sizeof(struct t_input_booster *); i++) { \
 			if (t_input_boosters[i]->level >= 0 && t_input_boosters[i]->level < (int)(sizeof(t_input_boosters[i]->param)/sizeof(struct t_input_booster_param))) { \
-				pr_booster("[Input Booster3] %s booster type : %d    level : %d    value : %d\n", #_PARAM_, i, t_input_boosters[i]->level, t_input_boosters[i]->param[t_input_boosters[i]->level]._PARAM_); \
+				pr_booster("[Input Booster3] %s booster type : %lu    level : %d    value : %d\n", #_PARAM_, i, t_input_boosters[i]->level, t_input_boosters[i]->param[t_input_boosters[i]->level]._PARAM_); \
 				if (max < (int)(t_input_boosters[i]->param[t_input_boosters[i]->level]._PARAM_)) { \
 					max = (int)(t_input_boosters[i]->param[t_input_boosters[i]->level]._PARAM_); \
 				} \

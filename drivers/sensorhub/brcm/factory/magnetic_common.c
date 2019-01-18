@@ -22,8 +22,16 @@
 #define CHIP_ID_YAS		"YAS539"
 
 #define VENDOR_AKM			"AKM"
+#if defined(CONFIG_SENSORS_SSP_AK09918)
+#define CHIP_ID_AKM			"AK09918C"
+#else
 #define CHIP_ID_AKM			"AK09916C"
+#endif
 
+#if defined(CONFIG_SENSORS_SSP_CROWN)
+#define GM_AKM_DATA_SPEC_Z_MIN	-9000
+#define GM_AKM_DATA_SPEC_Z_MAX	9000
+#endif
 #define GM_AKM_DATA_SPEC_MIN	-6500
 #define GM_AKM_DATA_SPEC_MAX	6500
 
@@ -63,8 +71,14 @@ static int check_data_spec(struct ssp_data *data, int sensortype)
 		|| (data->buf[sensortype].x < data_spec_min)
 		|| (data->buf[sensortype].y > data_spec_max)
 		|| (data->buf[sensortype].y < data_spec_min)
-		|| (data->buf[sensortype].z > data_spec_max)
-		|| (data->buf[sensortype].z < data_spec_min))
+#if defined(CONFIG_SENSORS_SSP_CROWN)		
+                || (data->buf[sensortype].z > GM_AKM_DATA_SPEC_Z_MAX)
+		|| (data->buf[sensortype].z < GM_AKM_DATA_SPEC_Z_MIN)
+#else
+                || (data->buf[sensortype].z > data_spec_max)
+		|| (data->buf[sensortype].z < data_spec_min)
+#endif
+		)
 		return FAIL;
 	else
 		return SUCCESS;
@@ -145,12 +159,12 @@ static ssize_t magnetic_get_selftest_akm(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	s8 iResult[4] = {-1, -1, -1, -1};
-	char bufSelftset[22] = {0, };
+	char bufSelftest[28] = {0, };
 	char bufAdc[4] = {0, };
 	s16 iSF_X = 0, iSF_Y = 0, iSF_Z = 0;
 	s16 iADC_X = 0, iADC_Y = 0, iADC_Z = 0;
 	s32 dMsDelay = 20;
-	int ret = 0, iSpecOutRetries = 0;
+	int ret = 0, iSpecOutRetries = 0, i = 0;
 	struct ssp_data *data = dev_get_drvdata(dev);
 	struct ssp_msg *msg;
 
@@ -170,9 +184,9 @@ static ssize_t magnetic_get_selftest_akm(struct device *dev,
 Retry_selftest:
 	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
 	msg->cmd = GEOMAGNETIC_FACTORY;
-	msg->length = 22;
+	msg->length = 28;
 	msg->options = AP2HUB_READ;
-	msg->buffer = bufSelftset;
+	msg->buffer = bufSelftest;
 	msg->free_buffer = 0;
 
 	ret = ssp_spi_sync(data, msg, 1000);
@@ -183,12 +197,12 @@ Retry_selftest:
 	}
 
 	/* read 6bytes data registers */
-	iSF_X = (s16)((bufSelftset[13] << 8) + bufSelftset[14]);
-	iSF_Y = (s16)((bufSelftset[15] << 8) + bufSelftset[16]);
-	iSF_Z = (s16)((bufSelftset[17] << 8) + bufSelftset[18]);
+	iSF_X = (s16)((bufSelftest[13] << 8) + bufSelftest[14]);
+	iSF_Y = (s16)((bufSelftest[15] << 8) + bufSelftest[16]);
+	iSF_Z = (s16)((bufSelftest[17] << 8) + bufSelftest[18]);
 
 	/* DAC (store Cntl Register value to check power down) */
-	iResult[2] = bufSelftset[21];
+	iResult[2] = bufSelftest[21];
 
 	iSF_X = (s16)(((iSF_X * data->uFuseRomData[0]) >> 7) + iSF_X);
 	iSF_Y = (s16)(((iSF_Y * data->uFuseRomData[1]) >> 7) + iSF_Y);
@@ -228,6 +242,14 @@ Retry_selftest:
 		goto Retry_selftest;
 	}
 
+	for(i = 0; i < 3; i++) {
+		if(bufSelftest[22 + (i * 2)] == 1 && bufSelftest[23 + (i * 2)] == 0)
+			continue;
+		iResult[1] = -1;
+		pr_info("[SSP] continuos selftest fail #%d:%d #%d:%d", 
+				22 + (i * 2), bufSelftest[22 + (i * 2)],
+				23 + (i * 2), bufSelftest[23 + (i * 2)]);
+	}
 	iSpecOutRetries = 10;
 
 	/* ADC */

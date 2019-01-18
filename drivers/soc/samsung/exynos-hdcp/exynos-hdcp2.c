@@ -42,6 +42,7 @@ static long hdcp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	int rval;
 
 	switch (cmd) {
+#if defined(CONFIG_HDCP2_IIA_ENABLE)
 	case (uint32_t)HDCP_IOC_SESSION_OPEN:
 	{
 		struct hdcp_sess_info ss_info;
@@ -152,8 +153,6 @@ static long hdcp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	case (uint32_t)HDCP_IOC_LINK_ENC:
 	{
 		/* todo: link close */
-
-#if defined(CONFIG_HDCP2_IIA_ENABLE)
 		struct hdcp_enc_info enc_info;
 		size_t packet_len = 0;
 		uint8_t pes_priv[HDCP_PRIVATE_DATA_LEN];
@@ -215,7 +214,6 @@ static long hdcp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			hdcp_err("hdcp_encrypt copy to user fail (0x%08x)\n", rval);
 			return HDCP_ERROR_COPY_TO_USER_FAILED;
 		}
-#endif
 		break;
 	}
 	case (uint32_t)HDCP_IOC_STREAM_MANAGE:
@@ -241,6 +239,7 @@ static long hdcp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		break;
 	}
+#endif
 #if defined(CONFIG_HDCP2_EMULATION_MODE)
 	case (uint32_t)HDCP_IOC_EMUL_DPLINK_TX:
 	{

@@ -94,6 +94,22 @@ static int get_mic_adc(void)
 	return adc;
 }
 
+#ifdef CONFIG_EXTCON_PTT
+static int get_ptt_state(void)
+{
+	struct snd_soc_codec *codec = madera_codec;
+	struct madera *madera = dev_get_drvdata(codec->dev->parent);
+	struct madera_extcon *info = madera->extcon_info;
+	int ptt_state;
+
+	ptt_state = info->ptt_state;
+
+	dev_info(codec->dev, "%s: %d\n", __func__, ptt_state);
+
+	return ptt_state;
+}
+#endif
+
 void register_madera_jack_cb(struct snd_soc_codec *codec)
 {
 	madera_codec = codec;
@@ -102,5 +118,8 @@ void register_madera_jack_cb(struct snd_soc_codec *codec)
 	audio_register_jack_state_cb(get_jack_status);
 	audio_register_key_state_cb(get_key_status);
 	audio_register_mic_adc_cb(get_mic_adc);
+#ifdef CONFIG_EXTCON_PTT
+	audio_register_ptt_state_cb(get_ptt_state);
+#endif
 }
 EXPORT_SYMBOL_GPL(register_madera_jack_cb);

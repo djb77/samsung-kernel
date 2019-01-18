@@ -184,6 +184,16 @@ static inline pmd_t pmd_mkcont(pmd_t pmd)
 	return __pmd(pmd_val(pmd) | PMD_SECT_CONT);
 }
 
+#ifdef CONFIG_TIMA_LKMAUTH
+#ifdef CONFIG_TIMA_LKMAUTH_CODE_PROT
+static inline pte_t pte_mknexec(pte_t pte)
+{
+	pte_val(pte) |= PTE_PXN;
+	return pte;
+}
+#endif
+#endif
+
 static inline void set_pte(pte_t *ptep, pte_t pte)
 {
 #ifdef CONFIG_UH_RKP
@@ -199,14 +209,11 @@ static inline void set_pte(pte_t *ptep, pte_t pte)
 		:
 		: "r" (ptep), "r" (pte)
 		: "x1", "x2", "memory");
-		if (pte_valid_not_user(pte)) {
-			dsb(ishst);
-			isb();
-		}
 	}
 #else
 	*ptep = pte;
 
+#endif
 	/*
 	 * Only if the new pte is valid and kernel, otherwise TLB maintenance
 	 * or update_mmu_cache() have the necessary barriers.
@@ -215,7 +222,6 @@ static inline void set_pte(pte_t *ptep, pte_t pte)
 		dsb(ishst);
 		isb();
 	}
-#endif
 }
 
 struct mm_struct;

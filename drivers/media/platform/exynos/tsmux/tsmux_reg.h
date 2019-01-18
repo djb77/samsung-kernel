@@ -16,7 +16,7 @@
 
 #include "tsmux_dev.h"
 
-//#define ASB_WORK
+uint32_t tsmux_get_hw_version(struct tsmux_device *tsmux_dev);
 
 void tsmux_print_dbg_info_all(struct tsmux_device *tsmux_dev);
 
@@ -32,13 +32,15 @@ void tsmux_set_pes_hdr(struct tsmux_device *tsmux_dev,
 	struct tsmux_pes_hdr *pes_hdr);
 
 void tsmux_set_ts_hdr(struct tsmux_device *tsmux_dev,
-	struct tsmux_ts_hdr *ts_hdr, int continuity_count);
+	struct tsmux_ts_hdr *ts_hdr);
 
 void tsmux_set_rtp_hdr(struct tsmux_device *tsmux_dev,
 	struct tsmux_rtp_hdr *rtp_hdr);
 
 void tsmux_set_swp_ctrl(struct tsmux_device *tsmux_dev,
 	struct tsmux_swp_ctrl *swp_ctrl);
+
+void tsmux_clear_hex_ctrl(void);
 
 void tsmux_set_hex_ctrl(struct tsmux_context *ctx,
 	struct tsmux_hex_ctrl *hex_ctrl);

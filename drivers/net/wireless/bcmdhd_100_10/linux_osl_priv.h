@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linux_osl_priv.h 737887 2017-12-23 12:15:26Z $
+ * $Id: linux_osl_priv.h 782801 2018-10-01 15:16:38Z $
  */
 
 #ifndef _LINUX_OSL_PRIV_H_
@@ -174,6 +174,10 @@ struct osl_info {
 #ifdef USE_DMA_LOCK
 	spinlock_t dma_lock;
 #endif /* USE_DMA_LOCK */
+#ifdef DHD_MAP_LOGGING
+	void *dhd_map_log;
+	void *dhd_unmap_log;
+#endif /* DHD_MAP_LOGGING */
 };
 
 #endif /* _LINUX_OSL_PRIV_H_ */

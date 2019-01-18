@@ -197,8 +197,13 @@ static void get_light_sensordata(char *pchRcvDataFrame, int *iDataIdx,
 	struct sensor_value *sensorsdata)
 {
 #ifdef CONFIG_SENSORS_SSP_LIGHT_REPORT_LUX
+#ifdef CONFIG_SENSORS_SSP_LIGHT_MAX_GAIN_2BYTE
+	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 19);
+	*iDataIdx += 19;
+#else
 	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 18);
 	*iDataIdx += 18;
+#endif
 #else
 	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 10);
 	*iDataIdx += 10;
@@ -209,8 +214,13 @@ static void get_light_sensordata(char *pchRcvDataFrame, int *iDataIdx,
 static void get_light_ir_sensordata(char *pchRcvDataFrame, int *iDataIdx,
 	struct sensor_value *sensorsdata)
 {
+#ifdef CONFIG_SENSORS_SSP_LIGHT_MAX_GAIN_2BYTE
+	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 13);
+	*iDataIdx += 13;
+#else
 	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 12);
 	*iDataIdx += 12;
+#endif
 }
 #endif
 
@@ -224,8 +234,13 @@ static void get_light_cct_sensordata(char *pchRcvDataFrame, int *iDataIdx,
 	struct sensor_value *sensorsdata)
 {
 #ifdef CONFIG_SENSORS_SSP_LIGHT_REPORT_LUX
+#ifdef CONFIG_SENSORS_SSP_LIGHT_MAX_GAIN_2BYTE
+	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 19);
+	*iDataIdx += 19;
+#else
 	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 18);
 	*iDataIdx += 18;
+#endif
 #else
 	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 10);
 	*iDataIdx += 10;
@@ -334,6 +349,12 @@ static void get_tilt_sensordata(char *pchRcvDataFrame, int *iDataIdx,
 }
 
 static void get_pickup_sensordata(char *pchRcvDataFrame, int *iDataIdx,
+	struct sensor_value *sensorsdata)
+{
+	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 1);
+	*iDataIdx += 1;
+}
+static void get_wakeup_motion_sensordata(char *pchRcvDataFrame, int *iDataIdx,
 	struct sensor_value *sensorsdata)
 {
 	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 1);
@@ -868,6 +889,8 @@ void initialize_function_pointer(struct ssp_data *data)
 	data->get_sensor_data[PICKUP_GESTURE] = get_pickup_sensordata;
 	data->get_sensor_data[THERMISTOR_SENSOR] = get_thermistor_sensordata;
 	data->get_sensor_data[ACCEL_UNCALIB_SENSOR] = get_ucal_accel_sensordata;
+	data->get_sensor_data[WAKE_UP_MOTION] = get_wakeup_motion_sensordata;
+
 	data->get_sensor_data[BULK_SENSOR] = NULL;
 	data->get_sensor_data[GPS_SENSOR] = NULL;
 
@@ -913,6 +936,7 @@ void initialize_function_pointer(struct ssp_data *data)
 	data->report_sensor_data[LIGHT_CCT_SENSOR] = report_light_cct_data;
 	data->report_sensor_data[THERMISTOR_SENSOR] = report_thermistor_data;
 	data->report_sensor_data[ACCEL_UNCALIB_SENSOR] = report_uncalib_accel_data;
+	data->report_sensor_data[WAKE_UP_MOTION] = report_wakeup_motion_data;
 
 	data->ssp_big_task[BIG_TYPE_DUMP] = ssp_dump_task;
 	data->ssp_big_task[BIG_TYPE_READ_LIB] = ssp_read_big_library_task;

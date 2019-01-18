@@ -269,7 +269,38 @@ void log_decon_bigdata(struct decon_device *decon)
 	sec_debug_set_extra_info_decon(bug_err_num);
 #endif
 }
-#endif
+
+#ifdef CONFIG_DISPLAY_USE_INFO
+static int decon_dpui_notifier_callback(struct notifier_block *self,
+				 unsigned long event, void *data)
+{
+	struct decon_device *decon;
+	struct dpui_info *dpui = data;
+	int i, recovery_cnt = 0, value;
+	static int prev_recovery_cnt;
+
+	if (dpui == NULL) {
+		panel_err("%s: dpui is null\n", __func__);
+		return 0;
+	}
+
+	decon = container_of(self, struct decon_device, dpui_notif);
+
+	for (i = 0; i < MAX_DPP_SUBDEV; i++) {
+		value = 0;
+		v4l2_subdev_call(decon->dpp_sd[i], core, ioctl,
+				DPP_GET_RECOVERY_CNT, &value);
+		recovery_cnt += value;
+	}
+
+	inc_dpui_u32_field(DPUI_KEY_EXY_SWRCV,
+			max(0, recovery_cnt - prev_recovery_cnt));
+	prev_recovery_cnt = recovery_cnt;
+
+	return 0;
+}
+#endif /* CONFIG_DISPLAY_USE_INFO */
+#endif /* CONFIG_LOGGING_BIGDATA_BUG */
 
 /* ---------- CHECK FUNCTIONS ----------- */
 static void decon_win_conig_to_regs_param
@@ -351,6 +382,28 @@ void decon_dpp_stop(struct decon_device *decon, bool do_reset)
 			clear_bit(i, &decon->dpp_err_stat);
 		}
 	}
+}
+
+static void decon_free_unused_buf(struct decon_device *decon,
+		struct decon_reg_data *regs, int win, int plane)
+{
+	struct decon_dma_buf_data *dma = &regs->dma_buf_data[win][plane];
+
+	decon_info("%s, win[%d]plane[%d]\n", __func__, win, plane);
+
+	if (dma->attachment && dma->dma_addr)
+		ion_iovmm_unmap(dma->attachment, dma->dma_addr);
+	if (dma->attachment && dma->sg_table)
+		dma_buf_unmap_attachment(dma->attachment,
+				dma->sg_table, DMA_TO_DEVICE);
+	if (dma->dma_buf && dma->attachment)
+		dma_buf_detach(dma->dma_buf, dma->attachment);
+	if (dma->dma_buf)
+		dma_buf_put(dma->dma_buf);
+	if (decon->ion_client && dma->ion_handle)
+		ion_free(decon->ion_client, dma->ion_handle);
+
+	memset(dma, 0, sizeof(struct decon_dma_buf_data));
 }
 
 static void decon_free_dma_buf(struct decon_device *decon,
@@ -1170,7 +1223,7 @@ static int decon_find_biggest_block_rect(struct decon_device *decon,
 			continue;
 
 		/* If top window has plane alpha, blocking mode not appliable */
-		if ((config->plane_alpha < 255) && (config->plane_alpha > 0))
+		if ((config->plane_alpha < 255) && (config->plane_alpha >= 0))
 			continue;
 
 		if (is_decon_opaque_format(config->format)) {
@@ -1351,9 +1404,9 @@ static int decon_import_buffer(struct decon_device *decon, int idx,
 		struct decon_reg_data *regs)
 {
 #if defined(CONFIG_ION_EXYNOS)
-	struct ion_handle *handle;
-	struct dma_buf *buf;
-	struct decon_dma_buf_data dma_buf_data[MAX_PLANE_CNT];
+	struct ion_handle *handle = NULL;
+	struct dma_buf *buf = NULL;
+	struct decon_dma_buf_data *dma_buf_data = NULL;
 	struct displayport_device *displayport;
 	struct dsim_device *dsim;
 	struct device *dev;
@@ -1367,7 +1420,11 @@ static int decon_import_buffer(struct decon_device *decon, int idx,
 	regs->plane_cnt[idx] =
 		dpu_get_plane_cnt(config->format, config->dpp_parm.hdr_std);
 
+	memset(&regs->dma_buf_data[idx], 0,
+			sizeof(struct decon_dma_buf_data) * MAX_PLANE_CNT);
+
 	for (i = 0; i < regs->plane_cnt[idx]; ++i) {
+		dma_buf_data = &regs->dma_buf_data[idx][i];
 		handle = ion_import_dma_buf_fd(decon->ion_client,
 				config->fd_idma[i]);
 		if (IS_ERR(handle)) {
@@ -1380,7 +1437,7 @@ static int decon_import_buffer(struct decon_device *decon, int idx,
 		if (IS_ERR_OR_NULL(buf)) {
 			decon_err("failed to get dma_buf:%ld\n", PTR_ERR(buf));
 			ret = PTR_ERR(buf);
-			goto fail_buf;
+			goto fail;
 		}
 		if (decon->dt.out_type == DECON_OUT_DP) {
 			displayport = v4l2_get_subdevdata(decon->out_sd[0]);
@@ -1389,27 +1446,20 @@ static int decon_import_buffer(struct decon_device *decon, int idx,
 			dsim = v4l2_get_subdevdata(decon->out_sd[0]);
 			dev = dsim->dev;
 		}
-		buf_size = decon_map_ion_handle(decon, dev, &dma_buf_data[i],
+		buf_size = decon_map_ion_handle(decon, dev, dma_buf_data,
 				handle, buf, idx);
 		if (!buf_size) {
 			decon_err("failed to map buffer\n");
 			ret = -ENOMEM;
-			goto fail_map;
+			goto fail;
 		}
 
-		regs->dma_buf_data[idx][i] = dma_buf_data[i];
 		/* DVA is passed to DPP parameters structure */
-		config->dpp_parm.addr[i] = dma_buf_data[i].dma_addr;
+		config->dpp_parm.addr[i] = dma_buf_data->dma_addr;
 	}
 
 	decon_dbg("%s -\n", __func__);
 
-	return ret;
-
-fail_map:
-	dma_buf_put(buf);
-fail_buf:
-	ion_free(decon->ion_client, handle);
 fail:
 	return ret;
 #else
@@ -1470,7 +1520,7 @@ static int decon_set_win_buffer(struct decon_device *decon,
 		struct decon_win_config *config,
 		struct decon_reg_data *regs, int idx)
 {
-	int ret, i;
+	int ret;
 	u32 alpha_length;
 	struct sync_file *fence = NULL;
 	u32 config_size = 0;
@@ -1492,7 +1542,7 @@ static int decon_set_win_buffer(struct decon_device *decon,
 		if (!fence) {
 			decon_err("failed to import fence fd\n");
 			ret = -EINVAL;
-			goto err_fdget;
+			goto err;
 		}
 		decon_dbg("acq_fence(%d), fence(%p)\n", config->acq_fence, fence);
 	}
@@ -1527,7 +1577,7 @@ static int decon_set_win_buffer(struct decon_device *decon,
 		decon_err("alloc buf size is less than required size ([w%d] alloc=%x : cfg=%x)\n",
 				idx, alloc_size, config_size);
 		ret = -EINVAL;
-		goto err_fdget;
+		goto err;
 	}
 
 	alpha_length = dpu_get_alpha_len(config->format);
@@ -1536,10 +1586,6 @@ static int decon_set_win_buffer(struct decon_device *decon,
 				&regs->win_regs[idx], config->idma_type, idx);
 
 	return 0;
-
-err_fdget:
-	for (i = 0; i < regs->plane_cnt[idx]; ++i)
-		decon_free_dma_buf(decon, &regs->dma_buf_data[idx][i]);
 err:
 	return ret;
 }
@@ -2196,8 +2242,8 @@ end:
 int decon_update_last_regs(struct decon_device *decon,
 		struct decon_reg_data *regs)
 {
-	struct decon_mode_info psr;
 	int ret = 0;
+	struct decon_mode_info psr;
 
 	decon_exit_hiber(decon);
 
@@ -2251,7 +2297,7 @@ end:
 	decon->bts.ops->bts_update_bw(decon, regs, 1);
 
 	decon_dpp_stop(decon, false);
-
+ 
 	return ret;
 }
 
@@ -2468,7 +2514,7 @@ static int decon_set_win_config(struct decon_device *decon,
 	int num_of_window = 0;
 	struct decon_reg_data *regs;
 	struct sync_file *sync_file;
-	int ret = 0;
+	int i, j, ret = 0;
 	decon_dbg("%s +\n", __func__);
 
 	mutex_lock(&decon->lock);
@@ -2563,8 +2609,13 @@ err_prepare:
 		fput(sync_file->file);
 		put_unused_fd(win_data->retire_fence);
 	}
-	kfree(regs);
 	win_data->retire_fence = -1;
+
+	for (i = 0; i < decon->dt.max_win; i++)
+		for (j = 0; j < regs->plane_cnt[i]; ++j)
+			decon_free_unused_buf(decon, regs, i, j);
+
+	kfree(regs);
 err:
 	mutex_unlock(&decon->lock);
 	return ret;
@@ -3825,6 +3876,9 @@ static int decon_probe(struct platform_device *pdev)
 	spin_lock_init(&decon->slock);
 	init_waitqueue_head(&decon->vsync.wait);
 	init_waitqueue_head(&decon->wait_vstatus);
+#if defined(CONFIG_EXYNOS_HIBERNATION_THREAD)
+	init_waitqueue_head(&decon->hiber.wait);
+#endif
 #if defined(CONFIG_EXYNOS_COMMON_PANEL)
 	init_waitqueue_head(&decon->fsync.wait);
 	mutex_init(&decon->fsync.lock);
@@ -3916,6 +3970,15 @@ static int decon_probe(struct platform_device *pdev)
 	out_sd_ioremap();
 #endif
 
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+#ifdef CONFIG_DISPLAY_USE_INFO
+	decon->dpui_notif.notifier_call = decon_dpui_notifier_callback;
+	ret = dpui_logging_register(&decon->dpui_notif, DPUI_TYPE_CTRL);
+	if (ret)
+		panel_err("ERR:PANEL:%s:failed to register dpui notifier callback\n", __func__);
+#endif
+#endif /* CONFIG_LOGGING_BIGDATA_BUG */
+
 #if defined(CONFIG_EXYNOS_COMMON_PANEL)
 	decon_set_bypass(decon, false);
 #endif
@@ -3972,6 +4035,8 @@ static int decon_remove(struct platform_device *pdev)
 		decon_release_windows(decon->win[i]);
 
 	debugfs_remove_recursive(decon->d.debug_root);
+	if (decon->d.event_log)
+		kfree(decon->d.event_log);
 
 	decon_info("remove sucessful\n");
 	return 0;

@@ -808,36 +808,50 @@ void fimc_is_scaler_set_poly_scaler_enable(void __iomem *base_addr, u32 hw_id, u
 		break;
 	}
 
+	/*
+	 * The path select sequence of poly scaler is very important.
+	 * The path should be set before enabling poly scaler.
+	 */
 	switch (output_id) {
 	case MCSC_OUTPUT0:
-		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC0_CTRL], &mcsc_fields[MCSC_F_SC0_ENABLE], enable);
-		if (enable)
+		if (enable) {
 			fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC0_CTRL],
 				&mcsc_fields[MCSC_F_SC0_INPUT_SEL], input_source);
+		}
+		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC0_CTRL],
+				&mcsc_fields[MCSC_F_SC0_ENABLE], enable);
 		break;
 	case MCSC_OUTPUT1:
-		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC1_CTRL], &mcsc_fields[MCSC_F_SC1_ENABLE], enable);
-		if (enable)
+		if (enable) {
 			fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC1_CTRL],
 				&mcsc_fields[MCSC_F_SC1_INPUT_SEL], input_source);
+		}
+		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC1_CTRL],
+				&mcsc_fields[MCSC_F_SC1_ENABLE], enable);
 		break;
 	case MCSC_OUTPUT2:
-		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC2_CTRL], &mcsc_fields[MCSC_F_SC2_ENABLE], enable);
-		if (enable)
+		if (enable) {
 			fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC2_CTRL],
 				&mcsc_fields[MCSC_F_SC2_INPUT_SEL], input_source);
+		}
+		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC2_CTRL],
+				&mcsc_fields[MCSC_F_SC2_ENABLE], enable);
 		break;
 	case MCSC_OUTPUT3:
-		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC3_CTRL], &mcsc_fields[MCSC_F_SC3_ENABLE], enable);
-		if (enable)
+		if (enable) {
 			fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC3_CTRL],
 				&mcsc_fields[MCSC_F_SC3_INPUT_SEL], input_source);
+		}
+		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC3_CTRL],
+				&mcsc_fields[MCSC_F_SC3_ENABLE], enable);
 		break;
 	case MCSC_OUTPUT4:
-		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC4_CTRL], &mcsc_fields[MCSC_F_SC4_ENABLE], enable);
-		if (enable)
+		if (enable) {
 			fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC4_CTRL],
 				&mcsc_fields[MCSC_F_SC4_INPUT_SEL], input_source);
+		}
+		fimc_is_hw_set_field(base_addr, &mcsc_regs[MCSC_R_SC4_CTRL],
+				&mcsc_fields[MCSC_F_SC4_ENABLE], enable);
 		break;
 	default:
 		break;
@@ -1406,13 +1420,13 @@ void fimc_is_scaler_set_poly_scaler_coef(void __iomem *base_addr,
 	} else if (hratio > RATIO_X6_8 && hratio <= RATIO_X5_8) {
 		h_coef = adjust_coef == true ? MCSC_COEFF_x7_8 : MCSC_COEFF_x5_8;
 	} else if (hratio > RATIO_X5_8 && hratio <= RATIO_X4_8) {
-		h_coef = MCSC_COEFF_x4_8;
+		h_coef = adjust_coef == true ? MCSC_COEFF_x7_8 : MCSC_COEFF_x4_8;
 	} else if (hratio > RATIO_X4_8 && hratio <= RATIO_X3_8) {
-		h_coef = MCSC_COEFF_x3_8;
+		h_coef = adjust_coef == true ? MCSC_COEFF_x7_8 : MCSC_COEFF_x3_8;
 	} else if (hratio > RATIO_X3_8 && hratio <= RATIO_X2_8) {
-		h_coef = MCSC_COEFF_x2_8;
+		h_coef = adjust_coef == true ? MCSC_COEFF_x2_8 : MCSC_COEFF_x2_8;
 	} else {
-		h_coef = MCSC_COEFF_x2_8;
+		h_coef = adjust_coef == true ? MCSC_COEFF_x2_8 : MCSC_COEFF_x2_8;
 	}
 
 	/* adjust V coef */
@@ -1427,13 +1441,13 @@ void fimc_is_scaler_set_poly_scaler_coef(void __iomem *base_addr,
 	} else if (vratio > RATIO_X6_8 && vratio <= RATIO_X5_8) {
 		v_coef = adjust_coef == true ? MCSC_COEFF_x7_8 : MCSC_COEFF_x5_8;
 	} else if (vratio > RATIO_X5_8 && vratio <= RATIO_X4_8) {
-		v_coef = MCSC_COEFF_x4_8;
+		v_coef = adjust_coef == true ? MCSC_COEFF_x7_8 : MCSC_COEFF_x4_8;
 	} else if (vratio > RATIO_X4_8 && vratio <= RATIO_X3_8) {
-		v_coef = MCSC_COEFF_x3_8;
+		v_coef = adjust_coef == true ? MCSC_COEFF_x7_8 : MCSC_COEFF_x3_8;
 	} else if (vratio > RATIO_X3_8 && vratio <= RATIO_X2_8) {
-		v_coef = MCSC_COEFF_x2_8;
+		v_coef = adjust_coef == true ? MCSC_COEFF_x2_8 : MCSC_COEFF_x2_8;
 	} else {
-		v_coef = MCSC_COEFF_x2_8;
+		v_coef = adjust_coef == true ? MCSC_COEFF_x2_8 : MCSC_COEFF_x2_8;
 	}
 
 	fimc_is_scaler_set_h_init_phase_offset(base_addr, output_id, h_phase_offset);
