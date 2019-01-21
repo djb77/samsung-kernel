@@ -69,6 +69,9 @@ enum qseecom_qceos_cmd_id {
 	QSEOS_TEE_OPEN_SESSION_WHITELIST = 0x1D,
 	QSEOS_TEE_INVOKE_COMMAND_WHITELIST = 0x1E,
 	QSEOS_LISTENER_DATA_RSP_COMMAND_WHITELIST = 0x1F,
+#ifdef CONFIG_QSEECOM_DEBUG
+	QSEOS_GET_TZHEAP_STATUS_COMMAND = 0x31,
+#endif
 	QSEOS_FSM_LTEOTA_REQ_CMD = 0x109,
 	QSEOS_FSM_LTEOTA_REQ_RSP_CMD = 0x110,
 	QSEOS_FSM_IKE_REQ_CMD = 0x203,
@@ -120,6 +123,12 @@ __packed struct qseecom_check_app_ireq {
 	uint32_t qsee_cmd_id;
 	char     app_name[MAX_APP_NAME_SIZE];
 };
+
+#ifdef CONFIG_QSEECOM_DEBUG
+__packed struct qseecom_get_tzheap_status_ireq {
+	uint32_t qsee_cmd_id;
+};
+#endif
 
 __packed struct qseecom_load_app_ireq {
 	uint32_t qsee_cmd_id;
@@ -473,6 +482,14 @@ __packed struct qseecom_continue_blocked_request_ireq {
 #define TZ_OS_APP_LOOKUP_ID_PARAM_ID \
 	TZ_SYSCALL_CREATE_PARAM_ID_2( \
 	TZ_SYSCALL_PARAM_TYPE_BUF_RW, TZ_SYSCALL_PARAM_TYPE_VAL)
+
+#ifdef CONFIG_QSEECOM_DEBUG
+#define TZ_OS_APP_GET_TZHEAP_STATUS_ID \
+	TZ_SYSCALL_CREATE_SMC_ID(TZ_OWNER_QSEE_OS, TZ_SVC_APP_MGR, 0x31)
+
+#define TZ_OS_APP_GET_TZHEAP_STATUS_ID_PARAM_ID \
+	TZ_SYSCALL_CREATE_PARAM_ID_0
+#endif
 
 #define TZ_OS_APP_GET_STATE_ID \
 	TZ_SYSCALL_CREATE_SMC_ID(TZ_OWNER_QSEE_OS, TZ_SVC_APP_MGR, 0x04)

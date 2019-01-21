@@ -557,6 +557,12 @@ config QSEECOM
           Manager (SCM) interface. It exposes APIs for both userspace and
           kernel clients.
 
+config QSEECOM_DEBUG
+        bool "QTI Secure Execution Communicator driver debug"
+	default	n
+        help
+          QTI Secure Execution Communicator driver debug
+
 config HDCP_QSEECOM
 	tristate "QTI High-Bandwidth Digital Content Protection Module"
 	help

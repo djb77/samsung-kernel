@@ -551,7 +551,6 @@ int afe_get_port_type(u16 port_id)
 		break;
 
 	default:
-		WARN_ON(1);
 		pr_err("%s: Invalid port id = 0x%x\n",
 			__func__, port_id);
 		ret = -EINVAL;
