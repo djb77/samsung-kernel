@@ -260,9 +260,6 @@ unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
 	unsigned long populate;
 
 	ret = security_mmap_file(file, prot, flag);
-	if (IS_ERR_VALUE(ret)) {
-		pr_err("coremm: %s,%d: addr %lx len %lx prot %lx flag %lx ret %lx\n", __func__, __LINE__, addr, len, prot, flag, ret);
-	}
 	if (!ret) {
 		down_write(&mm->mmap_sem);
 		ret = do_mmap_pgoff(file, addr, len, prot, flag, pgoff,

@@ -2063,7 +2063,8 @@ static int msm_routing_lsm_func_get(struct snd_kcontrol *kcontrol,
 			break;
 
 	if (i-- == ARRAY_SIZE(lsm_port_text)) {
-		WARN(1, "Invalid id name %s\n", kcontrol->id.name);
+		pr_warn("%s: Invalid id name %s\n", __func__,
+			kcontrol->id.name);
 		return -EINVAL;
 	}
 
@@ -2097,7 +2098,7 @@ static int msm_routing_lsm_func_get(struct snd_kcontrol *kcontrol,
 		ucontrol->value.integer.value[0] = MADSWAUDIO;
 	break;
 	default:
-		WARN(1, "Unknown\n");
+		pr_warn("%s: Unknown\n", __func__);
 		return -EINVAL;
 	}
 	return 0;
@@ -2117,7 +2118,8 @@ static int msm_routing_lsm_func_put(struct snd_kcontrol *kcontrol,
 			break;
 
 	if (i-- == ARRAY_SIZE(lsm_port_text)) {
-		WARN(1, "Invalid id name %s\n", kcontrol->id.name);
+		pr_warn("%s: Invalid id name %s\n", __func__,
+			kcontrol->id.name);
 		return -EINVAL;
 	}
 
@@ -2139,7 +2141,7 @@ static int msm_routing_lsm_func_put(struct snd_kcontrol *kcontrol,
 		mad_type = MAD_SW_AUDIO;
 		break;
 	default:
-		WARN(1, "Unknown\n");
+		pr_warn("%s: Unknown\n", __func__);
 		return -EINVAL;
 	}
 
