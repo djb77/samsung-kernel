@@ -1,5 +1,5 @@
 #
-# Copyright (C) 1999-2017, Broadcom Corporation
+# Copyright (C) 1999-2018, Broadcom Corporation
 # 
 #      Unless you and Broadcom execute a separate written software license
 # agreement governing use of this software, this software is licensed to you
@@ -1131,6 +1131,7 @@ endif
   DHDCFLAGS += -UCUSTOM_MAX_KSO_ATTEMPTS
   DHDCFLAGS += -DCUSTOM_MAX_KSO_ATTEMPTS=512
   DHDCFLAGS += -DAPSTA_DISABLE_FOR_SOFTAP
+  DHDCFLAGS += -DDISCARD_UDPNETBIOS_FLTR
 ifeq ($(CONFIG_GALILEO),y)
   DHDCFLAGS += -USUPPORT_P2P_GO_PS
   DHDCFLAGS += -UP2P_LISTEN_OFFLOADING
@@ -1155,7 +1156,6 @@ else ifeq ($(CONFIG_SOLIS),y)
   DHDCFLAGS += -UCONFIG_HAS_WAKELOCK
   DHDCFLAGS += -UDHD_TRACE_WAKE_LOCK
   DHDCFLAGS += -DDHD_USE_CLMINFO_PARSER
-  DHDCFLAGS += -DDISCARD_UDPNETBIOS
   DHDCFLAGS += -DENABLE_WAKEUP_PKT_DUMP
 endif
   # Remove common feature for 43012

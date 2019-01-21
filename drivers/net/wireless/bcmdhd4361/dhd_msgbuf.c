@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_msgbuf.c 733632 2017-11-29 08:46:58Z $
+ * $Id: dhd_msgbuf.c 765490 2018-06-04 04:52:12Z $
  */
 
 
@@ -8410,45 +8410,50 @@ dhd_prot_ringupd_dump(dhd_pub_t *dhd, struct bcmstrbuf *b)
 {
 	uint32 *ptr;
 	uint32 value;
-	uint32 i;
-	uint32 max_h2d_queues = dhd_bus_max_h2d_queues(dhd->bus);
 
-	OSL_CACHE_INV((void *)dhd->prot->d2h_dma_indx_wr_buf.va,
-		dhd->prot->d2h_dma_indx_wr_buf.len);
+	if (dhd->prot->d2h_dma_indx_wr_buf.va) {
+		uint32 i;
+		uint32 max_h2d_queues = dhd_bus_max_h2d_queues(dhd->bus);
 
-	ptr = (uint32 *)(dhd->prot->d2h_dma_indx_wr_buf.va);
+		OSL_CACHE_INV((void *)dhd->prot->d2h_dma_indx_wr_buf.va,
+			dhd->prot->d2h_dma_indx_wr_buf.len);
 
-	bcm_bprintf(b, "\n max_tx_queues %d\n", max_h2d_queues);
+		ptr = (uint32 *)(dhd->prot->d2h_dma_indx_wr_buf.va);
 
-	bcm_bprintf(b, "\nRPTR block H2D common rings, 0x%04x\n", ptr);
-	value = ltoh32(*ptr);
-	bcm_bprintf(b, "\tH2D CTRL: value 0x%04x\n", value);
-	ptr++;
-	value = ltoh32(*ptr);
-	bcm_bprintf(b, "\tH2D RXPOST: value 0x%04x\n", value);
+		bcm_bprintf(b, "\n max_tx_queues %d\n", max_h2d_queues);
 
-	ptr++;
-	bcm_bprintf(b, "RPTR block Flow rings , 0x%04x\n", ptr);
-	for (i = BCMPCIE_H2D_COMMON_MSGRINGS; i < max_h2d_queues; i++) {
+		bcm_bprintf(b, "\nRPTR block H2D common rings, 0x%04x\n", ptr);
 		value = ltoh32(*ptr);
-		bcm_bprintf(b, "\tflowring ID %d: value 0x%04x\n", i, value);
+		bcm_bprintf(b, "\tH2D CTRL: value 0x%04x\n", value);
 		ptr++;
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tH2D RXPOST: value 0x%04x\n", value);
+
+		ptr++;
+		bcm_bprintf(b, "RPTR block Flow rings , 0x%04x\n", ptr);
+		for (i = BCMPCIE_H2D_COMMON_MSGRINGS; i < max_h2d_queues; i++) {
+			value = ltoh32(*ptr);
+			bcm_bprintf(b, "\tflowring ID %d: value 0x%04x\n", i, value);
+			ptr++;
+		}
 	}
 
-	OSL_CACHE_INV((void *)dhd->prot->h2d_dma_indx_rd_buf.va,
-		dhd->prot->h2d_dma_indx_rd_buf.len);
+	if (dhd->prot->h2d_dma_indx_rd_buf.va) {
+		OSL_CACHE_INV((void *)dhd->prot->h2d_dma_indx_rd_buf.va,
+			dhd->prot->h2d_dma_indx_rd_buf.len);
 
-	ptr = (uint32 *)(dhd->prot->h2d_dma_indx_rd_buf.va);
+		ptr = (uint32 *)(dhd->prot->h2d_dma_indx_rd_buf.va);
 
-	bcm_bprintf(b, "\nWPTR block D2H common rings, 0x%04x\n", ptr);
-	value = ltoh32(*ptr);
-	bcm_bprintf(b, "\tD2H CTRLCPLT: value 0x%04x\n", value);
-	ptr++;
-	value = ltoh32(*ptr);
-	bcm_bprintf(b, "\tD2H TXCPLT: value 0x%04x\n", value);
-	ptr++;
-	value = ltoh32(*ptr);
-	bcm_bprintf(b, "\tD2H RXCPLT: value 0x%04x\n", value);
+		bcm_bprintf(b, "\nWPTR block D2H common rings, 0x%04x\n", ptr);
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tD2H CTRLCPLT: value 0x%04x\n", value);
+		ptr++;
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tD2H TXCPLT: value 0x%04x\n", value);
+		ptr++;
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tD2H RXCPLT: value 0x%04x\n", value);
+	}
 
 	return 0;
 }

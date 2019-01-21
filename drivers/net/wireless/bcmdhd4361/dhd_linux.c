@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 763128 2018-05-17 08:38:35Z $
+ * $Id: dhd_linux.c 764459 2018-05-25 10:35:52Z $
  */
 
 #include <typedefs.h>
@@ -11552,11 +11552,11 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 			"109 1 6 ETH_H:14 0xFFFFFF 0x0001AF";
 
 		dhd->pktfilter_count = 10;
-#ifdef DISCARD_UDPNETBIOS
+#ifdef DISCARD_UDPNETBIOS_FLTR
 		/* Immediately pkt filter TYPE 6 Dicard Broadcast IP packet */
 		dhd->pktfilter[DHD_UDPNETBIOS_DROP_FILTER_NUM] = DISCARD_UDPNETBIOS;
 		dhd->pktfilter_count++;
-#endif /* DISCARD_UDPNETBIOS */
+#endif /* DISCARD_UDPNETBIOS_FLTR */
 	}
 
 #ifdef GAN_LITE_NAT_KEEPALIVE_FILTER

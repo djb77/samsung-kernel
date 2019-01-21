@@ -1,5 +1,14 @@
-BCM4361 DHD 1.77.70 for Android Great/Dream/Hero & BCM4345X & BCM4343X Project
+BCM4361 DHD 1.77.71 for Android Great/Dream/Hero & BCM4345X & BCM4343X Project
 (Notes: 1.77.x is twigged off from 1.579.235.9)
+
+DHD 1.77.71 - 2018.06.15
+Security Patch
+ - CS5219404(By Choi Hyeonu) SI-12070: Fixed vulnerability issue due to NULL pointer dereference
+
+Others
+ - CS4857485(By HeeBae Park) Fixed compile error
+ - Fixed Coverity issues - Added NULL check condition
+
 
 DHD 1.77.70 - 2018.05.25
 Major Issue
@@ -22,11 +31,11 @@ Others
  - CS4679906(By Yoon Jae Ho) Added to check MFP condition when enabling MFP
  - CS4865776(By Kim Tae-Yong) Decided FW/NVRAM/BLOB base location by referring PLATFORM_VERSION and ANDROID_VERSION together
  - CS4944817(By Kim MinSoo) Disabled DHD TCP ACK Suppress for Great KOR project
+ - CS4961402 (By SungBin Min)Added error logs and changed the return value in ISR
  - CS4998218(By Park Hee Bae) Added a few features in Solis(Tizen) for Galileo(Tizen)
  - CS4998218(By Park Hee Bae) Added limited bigdata logging feature for Galileo(Tizen)
  - CS5077680(By Yoon Jung Min) Fixed mishandling PCIe IRQ at host
  - (CS4865666 By Ja Heon Gu) Fixed BT Music Chopping/NAPI Download  performance issue by enabling DHD_TX_LBP/DHD_LB_IRQSET feature
- - Added error logs and changed the return value in ISR
  - Added invalid flowid check routine
  - Dropped tx packet if it is larger than MAX_MTU_SZ(1600 bytes)
  - Enhanced STA/SoftAP concurrent mode support

@@ -465,12 +465,22 @@ static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *batter
 			*charging_current = 900;
 		}
 	} else if (battery->siop_level < 100) {
-		/* decrease the charging current according to siop level */
-		*charging_current = *charging_current * battery->siop_level / 100;
+		int max_charging_current;
 
-		/* do forced set charging current */
-		if (*charging_current > 0 && *charging_current < usb_charging_current)
-			*charging_current = usb_charging_current;
+		if (is_wireless_type(battery->cable_type)) {
+			/* decrease the charging current according to siop level */
+			*charging_current = *charging_current * battery->siop_level / 100;
+
+			/* do forced set charging current */
+			if (*charging_current > 0 && *charging_current < usb_charging_current)
+				*charging_current = usb_charging_current;
+		} else {
+			max_charging_current = 1800; /* 1 step(70) */
+
+			/* do forced set charging current */
+			if (*charging_current > max_charging_current)
+				*charging_current = max_charging_current;
+		}
 
 		if (is_nv_wireless_type(battery->cable_type)) {
 			if (*input_current > battery->pdata->siop_wireless_input_limit_current)
@@ -486,26 +496,18 @@ static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *batter
 			if (is_hv_wire_12v_type(battery->cable_type)) {
 				if (*input_current > battery->pdata->siop_hv_12v_input_limit_current)
 					*input_current = battery->pdata->siop_hv_12v_input_limit_current;
-				if (*charging_current > battery->pdata->siop_hv_12v_charging_limit_current)
-					*charging_current = battery->pdata->siop_hv_12v_charging_limit_current;
 			} else {
 				if (*input_current > battery->pdata->siop_hv_input_limit_current)
 					*input_current = battery->pdata->siop_hv_input_limit_current;
-				if (*charging_current > battery->pdata->siop_hv_charging_limit_current)
-					*charging_current = battery->pdata->siop_hv_charging_limit_current;
 			}
 #if defined(CONFIG_CCIC_NOTIFIER)
 		} else if (battery->cable_type == SEC_BATTERY_CABLE_PDIC) {
 			if (*input_current > (6000 / battery->input_voltage))
 				*input_current = 6000 / battery->input_voltage;
-			if (*charging_current > battery->pdata->siop_charging_limit_current)
-				*charging_current = battery->pdata->siop_charging_limit_current;
 #endif
 		} else {
 			if (*input_current > battery->pdata->siop_input_limit_current)
 				*input_current = battery->pdata->siop_input_limit_current;
-			if (*charging_current > battery->pdata->siop_charging_limit_current)
-				*charging_current = battery->pdata->siop_charging_limit_current;
 		}
 	}
 
