@@ -15,6 +15,9 @@
  * Copyright (C) 2016 Samsung Electronics, Inc.
  */
 
+#include <linux/module.h>
+#include <linux/slab.h>
+#include "five_crypto.h"
 #include "five_cert.h"
 
 int five_cert_body_alloc(struct five_cert_header *header,

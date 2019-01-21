@@ -336,9 +336,10 @@
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
 
+#define KEY_HOT			252    /* Intelligence Key */
 #define KEY_WAKEUP_UNLOCK	253	/* Wake-up to recent view, ex: AOP */
 #define KEY_RECENT   		254
-#define KEY_WINK			0x2bf    /* Intelligence Key */
+
 
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
@@ -651,7 +652,8 @@
  * e.g. teletext or data broadcast application (MHEG, MHP, HbbTV, etc.)
  */
 #define KEY_DATA			0x277
-
+#define KEY_EMERGENCY			0x2a0
+#define KEY_INT_CANCEL		0x2be	/* for touch event skip */
 #define KEY_WINK			0x2bf	/* Intelligence Key */
 
 #define BTN_TRIGGER_HAPPY		0x2c0

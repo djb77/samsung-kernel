@@ -41,6 +41,8 @@ enum max77705_adc {
 	MAX77705_UIADC_619K		= 0x06,
 	MAX77705_UIADC_OPEN		= 0x07,
 
+	MAX77705_UIADC_POGO_DOCK_9V	= 0xfc,
+	MAX77705_UIADC_POGO_DOCK	= 0xfd,
 	MAX77705_UIADC_DONTCARE		= 0xfe, /* ADC don't care for MHL */
 	MAX77705_UIADC_ERROR		= 0xff, /* ADC value read error */
 };
@@ -169,6 +171,10 @@ struct max77705_muic_data {
 	/* Fake vbus flag */
 	int				fake_chgtyp;
 
+#if defined(CONFIG_MUIC_HV_SUPPORT_POGO_DOCK)
+	/* Pogo dock gpio */
+	int				dock_int_ap;
+#endif
 #if defined(CONFIG_USB_EXTERNAL_NOTIFY)
 	/* USB Notifier */
 	struct notifier_block		usb_nb;

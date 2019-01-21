@@ -461,7 +461,7 @@ static ssize_t maxdsm_power_ppr_env_temp_store(struct device *dev,
 					   struct device_attribute *attr,
 					   const char *buf, size_t size)
 {
-	if (kstrtou32(buf, 0, &g_mdp->values_ppr[MAXDSM_LEFT].env_temp))
+	if (kstrtos32(buf, 0, &g_mdp->values_ppr[MAXDSM_LEFT].env_temp))
 		dev_err(dev, "%s: Failed converting from str to u32.\n",
 			__func__);
 	return size;
@@ -480,7 +480,7 @@ static ssize_t maxdsm_power_ppr_env_temp_r_store(struct device *dev,
 					   struct device_attribute *attr,
 					   const char *buf, size_t size)
 {
-	if (kstrtou32(buf, 0, &g_mdp->values_ppr[MAXDSM_RIGHT].env_temp))
+	if (kstrtos32(buf, 0, &g_mdp->values_ppr[MAXDSM_RIGHT].env_temp))
 		dev_err(dev, "%s: Failed converting from str to u32.\n",
 			__func__);
 	return size;

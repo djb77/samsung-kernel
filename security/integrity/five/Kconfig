@@ -80,7 +80,7 @@ config FIVE_TRUSTED_KEYRING
 
 config FIVE_PA_FEATURE
 	bool "Process authenticator"
-	depends on FIVE
+	depends on FIVE && !PROCA
 	default y
 	help
 	   Enable Process Authenticator related code

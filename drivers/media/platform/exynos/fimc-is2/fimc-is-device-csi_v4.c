@@ -58,6 +58,18 @@ static inline void csi_frame_start_inline(struct fimc_is_device_csi *csi)
 	atomic_inc(&csi->vvalid);
 	{
 		u32 vsync_cnt = atomic_read(&csi->fcount);
+		struct fimc_is_device_sensor *sensor;
+		u32 hashkey;
+
+		sensor = v4l2_get_subdev_hostdata(*csi->subdev);
+		if (!sensor) {
+			err("sensor is NULL");
+			BUG();
+		}
+
+		hashkey = vsync_cnt % FIMC_IS_TIMESTAMP_HASH_KEY;
+		sensor->timestamp[hashkey] = fimc_is_get_timestamp();
+		sensor->timestampboot[hashkey] = fimc_is_get_timestamp_boot();
 
 		v4l2_subdev_notify(*csi->subdev, CSI_NOTIFY_VSYNC, &vsync_cnt);
 	}

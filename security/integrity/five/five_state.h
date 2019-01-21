@@ -19,10 +19,7 @@
 
 #include "five.h"
 
-bool five_state_proceed(struct integrity_iint_cache *iint,
-			struct task_integrity *integrity,
-			enum five_hooks fn,
-			enum task_integrity_value *new_tint,
-			const char **msg);
+int five_state_proceed(struct task_integrity *integrity,
+			struct file_verification_result *result);
 
 #endif // __LINUX_FIVE_STATE_MACHINE_H

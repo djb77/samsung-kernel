@@ -363,8 +363,24 @@ struct fimc_is_hardware {
 	bool				video_mode;
 };
 
-void framemgr_e_barrier_common(struct fimc_is_framemgr *this, u32 index, ulong flag);
-void framemgr_x_barrier_common(struct fimc_is_framemgr *this, u32 index, ulong flag);
+#define framemgr_e_barrier_common(this, index, flag)		\
+	do {							\
+		if (in_interrupt()) {				\
+			framemgr_e_barrier(this, index);	\
+		} else {						\
+			framemgr_e_barrier_irqs(this, index, flag);	\
+		}							\
+	} while (0)
+
+#define framemgr_x_barrier_common(this, index, flag)		\
+	do {							\
+		if (in_interrupt()) {				\
+			framemgr_x_barrier(this, index);	\
+		} else {						\
+			framemgr_x_barrier_irqr(this, index, flag);	\
+		}							\
+	} while (0)
+
 u32 get_hw_id_from_group(u32 group_id);
 void fimc_is_hardware_flush_frame(struct fimc_is_hw_ip *hw_ip,
 	enum fimc_is_hw_frame_state state,

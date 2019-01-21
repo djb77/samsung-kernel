@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_cfg80211.c 762142 2018-05-11 03:34:30Z $
+ * $Id: dhd_cfg80211.c 784256 2018-10-11 10:30:36Z $
  */
 
 #include <linux/vmalloc.h>
@@ -126,6 +126,15 @@ s32 dhd_cfg80211_clean_p2p_info(struct bcm_cfg80211 *cfg)
 	return 0;
 }
 
+#ifdef WL_STATIC_IF
+int32
+wl_cfg80211_update_iflist_info(struct bcm_cfg80211 *cfg, struct net_device *ndev,
+	int ifidx, uint8 *addr, int bssidx, char *name, int if_state)
+{
+	return dhd_update_iflist_info(cfg->pub, ndev, ifidx, addr, bssidx, name, if_state);
+}
+#endif /* WL_STATIC_IF */
+
 struct net_device* wl_cfg80211_allocate_if(struct bcm_cfg80211 *cfg, int ifidx, const char *name,
 	uint8 *mac, uint8 bssidx, const char *dngl_name)
 {
@@ -142,6 +151,11 @@ int wl_cfg80211_remove_if(struct bcm_cfg80211 *cfg,
 	int ifidx, struct net_device* ndev, bool rtnl_lock_reqd)
 {
 	return dhd_remove_if(cfg->pub, ifidx, rtnl_lock_reqd);
+}
+
+void wl_cfg80211_cleanup_if(struct net_device *net)
+{
+	dhd_cleanup_if(net);
 }
 
 struct net_device * dhd_cfg80211_netdev_free(struct net_device *ndev)

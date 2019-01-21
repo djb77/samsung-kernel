@@ -82,6 +82,7 @@
 #define USE_POWER_RESET_WORK
 #endif
 
+#define TOUCH_PRINT_INFO_DWORK_TIME	30000	/* 30s */
 #define TOUCH_RESET_DWORK_TIME		10
 #define BRUSH_Z_DATA		63	/* for ArtCanvas */
 
@@ -283,6 +284,7 @@
 #define SEC_TS_CMD_SET_POWER_MODE	0xE4
 #define SEC_TS_CMD_EDGE_DEADZONE	0xE5
 #define SEC_TS_CMD_SET_DEX_MODE		0xE7
+#define SEC_TS_CMD_SET_MONITOR_NOISE_MODE	0xE7
 #define SEC_TS_CMD_CALIBRATION_PRESSURE		0xE9
 #define SEC_TS_CMD_SET_USER_PRESSURE		0xEB
 #define SEC_TS_CMD_SET_TEMPERATURE_COMP_MODE	0xEC
@@ -336,6 +338,7 @@
 #define SEC_TS_GESTURE_CODE_SPAY		0x00
 #define SEC_TS_GESTURE_CODE_DOUBLE_TAP		0x01
 #define SEC_TS_GESTURE_CODE_FORCE		0x02
+#define SEC_TS_GESTURE_CODE_SINGLE_TAP		0x04
 
 /* SEC_TS_GESTURE_ID*/
 #define SEC_TS_EVENT_PRESSURE_TOUCHED		0x00
@@ -353,6 +356,7 @@
 #define SEC_TS_VENDOR_ACK_CFR_TEST_DONE			0x44
 
 #define SEC_TS_VENDOR_ACK_LOWPOWER_SELF_TEST_DONE	0x58
+#define SEC_TS_VENDOR_STATE_CHANGED			0x61
 #define SEC_TS_VENDOR_ACK_NOISE_STATUS_NOTI		0x64
 
 /* SEC_TS_STATUS_EVENT_USER_INPUT */
@@ -450,6 +454,12 @@ enum switch_system_mode {
 	TO_FLASH_MODE			= 3,
 };
 
+enum external_noise_mode {
+	EXT_NOISE_MODE_NONE		= 0,
+	EXT_NOISE_MODE_MONITOR		= 1,	/* for dex mode */
+	EXT_NOISE_MODE_MAX,			/* add new mode above this line */
+};
+
 enum {
 	TYPE_RAW_DATA			= 0,	/* Total - Offset : delta data */
 	TYPE_SIGNAL_DATA		= 1,	/* Signal - Filtering & Normalization */
@@ -470,7 +480,7 @@ typedef enum {
 	SPONGE_EVENT_TYPE_SPAY			= 0x04,
 	SPONGE_EVENT_TYPE_PRESSURE_TOUCHED = 0x05,
 	SPONGE_EVENT_TYPE_PRESSURE_RELEASED	= 0x06,
-	SPONGE_EVENT_TYPE_AOD			= 0x08,
+	SPONGE_EVENT_TYPE_SINGLE_TAP		= 0x08,
 	SPONGE_EVENT_TYPE_AOD_PRESS		= 0x09,
 	SPONGE_EVENT_TYPE_AOD_LONGPRESS		= 0x0A,
 	SPONGE_EVENT_TYPE_AOD_DOUBLETAB		= 0x0B,
@@ -479,6 +489,14 @@ typedef enum {
 	SPONGE_EVENT_TYPE_AOD_HOMEKEY_RELEASE_NO_HAPTIC	= 0x0E
 } SPONGE_EVENT_TYPE;
 
+/*
+ * support_feature
+ * bit value should be made a promise with InputFramework.
+ */
+#define INPUT_FEATURE_ENABLE_SETTINGS_AOT	(1 << 0) /* Double tap wakeup settings */
+#define INPUT_FEATURE_ENABLE_PRESSURE		(1 << 1) /* homekey pressure */
+#define INPUT_FEATURE_ENABLE_SYNC_RR120		(1 << 2) /* sync reportrate 120hz */
+
 #define CMD_RESULT_WORD_LEN		10
 
 #define SEC_TS_I2C_RETRY_CNT		3
@@ -486,10 +504,11 @@ typedef enum {
 
 #define SEC_TS_MODE_SPONGE_SPAY			(1 << 1)
 #define SEC_TS_MODE_SPONGE_AOD			(1 << 2)
+#define SEC_TS_MODE_SPONGE_SINGLE_TAP		(1 << 3)
 #define SEC_TS_MODE_SPONGE_FORCE_KEY	(1 << 6)
 
 #define SEC_TS_MODE_LOWPOWER_FLAG			(SEC_TS_MODE_SPONGE_SPAY | SEC_TS_MODE_SPONGE_AOD \
-											| SEC_TS_MODE_SPONGE_FORCE_KEY)
+							| SEC_TS_MODE_SPONGE_SINGLE_TAP | SEC_TS_MODE_SPONGE_FORCE_KEY)
 
 enum sec_ts_cover_id {
 	SEC_TS_FLIP_WALLET = 0,
@@ -627,6 +646,8 @@ struct sec_ts_coordinate {
 	u8 action;
 	u16 x;
 	u16 y;
+	u16 p_x;
+	u16 p_y;
 	u8 z;
 	u8 hover_flag;
 	u8 glove_flag;
@@ -664,6 +685,7 @@ struct sec_ts_data {
 	u8 lowpower_mode;
 	s8 pressure_caller_id;
 	u8 dex_mode;
+	u8 external_noise_mode;
 	char *dex_name;
 	u8 brush_mode;
 	u8 touchable_area;
@@ -695,6 +717,10 @@ struct sec_ts_data {
 	int nv;
 
 	struct delayed_work work_read_info;
+	struct delayed_work work_print_info;
+	u32 print_info_cnt_open;
+	u32 print_info_cnt_release;
+	u16 print_info_currnet_mode;
 #ifdef USE_POWER_RESET_WORK
 	struct delayed_work reset_work;
 	volatile bool reset_is_on_going;
@@ -824,6 +850,9 @@ struct sec_ts_plat_data {
 	int always_lpmode;
 	int bringup;
 	int mis_cal_check;
+	u32 area_indicator;
+	u32 area_navigation;
+	u32 area_edge;
 
 	const char *firmware_name;
 	const char *model_name;
@@ -840,6 +869,7 @@ struct sec_ts_plat_data {
 	u8 img_version_of_bin[4];
 
 	const char *support_pressure;
+	bool sync_reportrate_120;
 
 	struct pinctrl *pinctrl;
 
@@ -886,6 +916,7 @@ int sec_ts_power(void *data, bool on);
 int sec_ts_stop_device(struct sec_ts_data *ts);
 int sec_ts_start_device(struct sec_ts_data *ts);
 int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode);
+int sec_ts_set_external_noise_mode(struct sec_ts_data *ts, u8 mode);
 int sec_ts_firmware_update_on_probe(struct sec_ts_data *ts, bool force_update);
 int sec_ts_firmware_update_on_hidden_menu(struct sec_ts_data *ts, int update_type);
 int sec_ts_glove_mode_enables(struct sec_ts_data *ts, int mode);

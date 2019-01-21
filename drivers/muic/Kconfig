@@ -128,3 +128,10 @@ config HICCUP_CHARGER
 		If you say yes here you will get support for
 		for the hiccup charger feature.
 
+config MUIC_HV_SUPPORT_POGO_DOCK
+	bool "MUIC_HV_SUPPORT_POGO_DOCK"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the AFC pogo dock.
+

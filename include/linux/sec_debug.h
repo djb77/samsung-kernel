@@ -292,6 +292,8 @@ enum sec_debug_extra_fault_type {
 	ACCESS_USER_FAULT,          /* 7 */
 	EXE_USER_FAULT,             /* 8 */
 	ACCESS_USER_OUTSIDE_FAULT,  /* 9 */
+	BUG_FAULT,                  /* 10 */
+	PANIC_FAULT,
 	FAULT_MAX,
 };
 
@@ -324,6 +326,7 @@ struct sec_debug_ksyms {
 	} sect;
 	uint64_t relative_base;
 	uint64_t offsets_pa;
+	uint64_t kimage_voffset;
 };
 
 struct sec_debug_shared_info {
@@ -353,7 +356,7 @@ extern void sec_debug_set_kallsyms_info(struct sec_debug_ksyms *ksyms, int magic
 extern struct exynos_chipid_info exynos_soc_info;
 extern unsigned int get_smpl_warn_number(void);
 
-extern void sec_debug_init_extra_info(struct sec_debug_shared_info *);
+extern void sec_debug_init_extra_info(struct sec_debug_shared_info *, int magic_status);
 extern void sec_debug_finish_extra_info(void);
 extern void sec_debug_store_extra_info(int start, int end);
 extern void sec_debug_store_extra_info_A(void);
@@ -382,10 +385,13 @@ extern void sec_debug_set_extra_info_batt(int cap, int volt, int temp, int curr)
 extern void sec_debug_set_extra_info_ufs_error(char *str);
 extern void sec_debug_set_extra_info_zswap(char *str);
 extern void sec_debug_set_extra_info_mfc_error(char *str);
+extern void sec_debug_set_extra_info_rvd1(char *str);
+extern void sec_debug_set_extra_info_rvd2(char *str);
+extern void sec_debug_set_extra_info_rvd3(char *str);
 
 #else
 
-#define sec_debug_init_extra_info(a)	do { } while (0)
+#define sec_debug_init_extra_info(a, b)	do { } while (0)
 #define sec_debug_finish_extra_info()	do { } while (0)
 #define sec_debug_store_extra_info(a, b)	do { } while (0)
 #define sec_debug_store_extra_info_A()		do { } while (0)

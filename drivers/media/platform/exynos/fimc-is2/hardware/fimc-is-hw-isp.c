@@ -417,7 +417,7 @@ config:
 			   This is because DDK calculates the position of the cropped image
 			   from the 3AA size. */
 			fimc_is_hw_3aa_update_param(hw_ip,
-				region, param_set->taa_param,
+				&region->parameter, param_set->taa_param,
 				lindex, hindex, frame->instance);
 		}
 	}

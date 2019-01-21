@@ -304,6 +304,11 @@ static ssize_t intensity_store(struct device *dev,
 
 	pr_info("%s %d\n", __func__, intensity);
 
+	if ((intensity < 0) || (intensity > MAX_INTENSITY)) {
+		pr_err("[VIB]: %s out of range\n", __func__);
+		return -EINVAL;
+	}
+
 	ddata->intensity = intensity;
 
 	return count;
@@ -331,6 +336,11 @@ static ssize_t force_touch_intensity_store(struct device *dev,
 	}
 
 	pr_info("%s %d\n", __func__, intensity);
+
+	if ((intensity < 0) || (intensity > MAX_INTENSITY)) {
+		pr_err("[VIB]: %s out of range\n", __func__);
+		return -EINVAL;
+	}
 
 	ddata->force_touch_intensity = intensity;
 

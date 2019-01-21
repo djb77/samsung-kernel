@@ -717,8 +717,8 @@ struct s5p_mfc_dev {
 
 	atomic_t trace_ref;
 	struct _mfc_trace *mfc_trace;
-	atomic_t trace_ref_hwlock;
-	struct _mfc_trace *mfc_trace_hwlock;
+	atomic_t trace_ref_longterm;
+	struct _mfc_trace *mfc_trace_longterm;
 	bool continue_clock_on;
 
 	bool shutdown;
@@ -1183,6 +1183,7 @@ struct s5p_mfc_dec {
 	unsigned char frame_cnt;
 
 	unsigned int num_of_tile_over_4;
+	unsigned int super64_bframe;
 
 	unsigned int color_range;
 	unsigned int color_space;

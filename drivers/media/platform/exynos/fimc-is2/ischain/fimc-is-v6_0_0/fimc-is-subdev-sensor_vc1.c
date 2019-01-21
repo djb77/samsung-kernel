@@ -64,6 +64,15 @@ static int fimc_is_sensor_vc1_tag(struct fimc_is_subdev *subdev,
 			mswarn("%d frame is drop", device, subdev, ldr_frame->fcount);
 			node->request = 0;
 		}
+		if (!test_bit(FIMC_IS_SUBDEV_RUN, &subdev->state)) {
+			set_bit(FIMC_IS_SUBDEV_RUN, &subdev->state);
+			mdbg_pframe(" on\n", device, subdev, ldr_frame);
+		}
+	} else {
+		if (test_bit(FIMC_IS_SUBDEV_RUN, &subdev->state)) {
+			clear_bit(FIMC_IS_SUBDEV_RUN, &subdev->state);
+			mdbg_pframe(" off\n", device, subdev, ldr_frame);
+		}
 	}
 
 p_err:

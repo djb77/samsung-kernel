@@ -15,9 +15,6 @@
 #include <linux/slab.h>
 #include <linux/regulator/s2dos05.h>
 #include <linux/platform_device.h>
-#ifdef CONFIG_SEC_PM
-#include <linux/sec_sysfs.h>
-#endif /* CONFIG_SEC_PM */
 
 #define CURRENT_METER	1
 #define POWER_METER	2
@@ -28,9 +25,6 @@
 struct adc_info *adc_meter1;
 struct device *s2dos05_adc_dev;
 struct class *s2dos05_adc_class;
-#ifdef CONFIG_SEC_PM
-static struct device *sec_disp_pmic_dev;
-#endif /* CONFIG_SEC_PM */
 
 struct adc_info {
 	struct i2c_client *i2c;
@@ -549,24 +543,21 @@ void s2dos05_powermeter_init(struct s2dos05_dev *s2dos05)
 	if (ret)
 		goto remove_adc_ctrl1;
 
-	sec_disp_pmic_dev = sec_device_create(NULL, "disp_pmic");
-	if (unlikely(IS_ERR(sec_disp_pmic_dev))) {
-		pr_err("%s: Failed to create disp_pmic device\n", __func__);
-		goto remove_adc_validity;
+	if (!IS_ERR_OR_NULL(sec_disp_pmic_dev)) {
+		ret = sysfs_create_link(&sec_disp_pmic_dev->kobj,
+				&s2dos05_adc_dev->kobj, "power_meter");
+		if (ret) {
+			pr_err("%s: fail to create link for power_meter\n",
+					__func__);
+			goto remove_adc_validity;
+		}
 	}
-
-	ret = sysfs_create_link(&sec_disp_pmic_dev->kobj, &s2dos05_adc_dev->kobj, "power_meter");
-	if (ret)
-		goto remove_sec_disp_pmic_dev;
-
 #endif /* CONFIG_SEC_PM */
 
 	pr_info("%s: s2dos05 power meter init end\n", __func__);
 	return;
 
 #ifdef CONFIG_SEC_PM
-remove_sec_disp_pmic_dev:
-	sec_device_destroy(sec_disp_pmic_dev->devt);
 remove_adc_validity:
 	device_remove_file(s2dos05_adc_dev, &dev_attr_adc_validity);
 remove_adc_ctrl1:
@@ -619,7 +610,6 @@ void s2dos05_powermeter_deinit(struct s2dos05_dev *s2dos05)
 	device_remove_file(s2dos05_adc_dev, &dev_attr_adc_ctrl1);
 #ifdef CONFIG_SEC_PM
 	device_remove_file(s2dos05_adc_dev, &dev_attr_adc_validity);
-	sec_device_destroy(sec_disp_pmic_dev->devt);
 #endif /* CONFIG_SEC_PM */
 
 	/* ADC turned off */

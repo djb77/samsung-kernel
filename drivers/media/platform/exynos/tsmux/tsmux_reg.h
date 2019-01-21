@@ -16,7 +16,7 @@
 
 #include "tsmux_dev.h"
 
-//#define ASB_WORK
+uint32_t tsmux_get_hw_version(struct tsmux_device *tsmux_dev);
 
 void tsmux_print_dbg_info_all(struct tsmux_device *tsmux_dev);
 

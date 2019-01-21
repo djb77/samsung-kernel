@@ -122,6 +122,7 @@ struct g2d_context {
 
 	struct pm_qos_request req;
 	struct list_head qos_node;
+	struct mutex	lock_context;
 	u64	r_bw;
 	u64	w_bw;
 };

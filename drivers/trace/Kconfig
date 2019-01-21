@@ -44,7 +44,7 @@ config EXYNOS_SNAPSHOT_IRQ_DISABLED
 
 config EXYNOS_SNAPSHOT_SPINLOCK
 	bool "Enable debugging of spinlock event by kevent(EXPERIMENTAL)"
-	depends on EXYNOS_SNAPSHOT && DEBUG_SPINLOCK && !EXYNOS_SNAPSHOT_MINIMIZED_MODE
+	depends on EXYNOS_SNAPSHOT && !EXYNOS_SNAPSHOT_MINIMIZED_MODE
 	default y
 
 config EXYNOS_SNAPSHOT_CLK
@@ -90,6 +90,11 @@ config EXYNOS_SNAPSHOT_ACPM
 config EXYNOS_SNAPSHOT_THERMAL
 	bool "Enable debugging of thermal driver"
 	depends on EXYNOS_SNAPSHOT && !EXYNOS_SNAPSHOT_MINIMIZED_MODE && EXYNOS_THERMAL
+	default y
+
+config EXYNOS_SNAPSHOT_UART
+	bool "Enable debugging of uart driver"
+	depends on EXYNOS_SNAPSHOT && !EXYNOS_SNAPSHOT_MINIMIZED_MODE
 	default y
 
 config EXYNOS_SNAPSHOT_I2C

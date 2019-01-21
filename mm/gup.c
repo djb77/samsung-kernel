@@ -495,10 +495,8 @@ static int faultin_page(struct task_struct *tsk, struct vm_area_struct *vma,
 	int ret;
 
 	/* mlock all present pages, but do not fault in new pages */
-	if ((*flags & (FOLL_POPULATE | FOLL_MLOCK)) == FOLL_MLOCK) {
-		pr_err("coremm:%s:%d:\n", __func__, __LINE__);
+	if ((*flags & (FOLL_POPULATE | FOLL_MLOCK)) == FOLL_MLOCK)
 		return -ENOENT;
-	}
 	if (*flags & FOLL_WRITE)
 		fault_flags |= FAULT_FLAG_WRITE;
 	if (*flags & FOLL_REMOTE)
@@ -514,7 +512,6 @@ static int faultin_page(struct task_struct *tsk, struct vm_area_struct *vma,
 
 	ret = handle_mm_fault(vma, address, fault_flags);
 	if (ret & VM_FAULT_ERROR) {
-		pr_err("coremm:%s:%d: ret %d addr %lx\n", __func__, __LINE__, ret, address);
 		if (ret & VM_FAULT_OOM)
 			return -ENOMEM;
 		if (ret & (VM_FAULT_HWPOISON | VM_FAULT_HWPOISON_LARGE))
@@ -532,7 +529,6 @@ static int faultin_page(struct task_struct *tsk, struct vm_area_struct *vma,
 	}
 
 	if (ret & VM_FAULT_RETRY) {
-		pr_err("coremm:%s:%d: ret %d addr %lx\n", __func__, __LINE__, ret, address);
 		if (nonblocking)
 			*nonblocking = 0;
 		return -EBUSY;
@@ -690,22 +686,14 @@ static long __get_user_pages(struct task_struct *tsk, struct mm_struct *mm,
 				ret = get_gate_page(mm, start & PAGE_MASK,
 						gup_flags, &vma,
 						pages ? &pages[i] : NULL);
-				if (ret) {
-					pr_err("coremm:%s:%d: ret %d i %ld\n", __func__, __LINE__, ret, i);
+				if (ret)
 					return i ? : ret;
-				}
 				page_mask = 0;
 				goto next_page;
 			}
 
-			if (!vma || check_vma_flags(vma, gup_flags)) {
-				pr_err("coremm:%s:%d: vma %p i %ld\n", __func__, __LINE__, vma, i);
-				if (vma)
-					pr_err("coremm:%s:%d: vma s %lx e %lx f %lx i %ld\n",
-							__func__, __LINE__,
-							vma->vm_start, vma->vm_end, vma->vm_flags, i);
+			if (!vma || check_vma_flags(vma, gup_flags))
 				return i ? : -EFAULT;
-			}
 			if (is_vm_hugetlb_page(vma)) {
 				i = follow_hugetlb_page(mm, vma, pages, vmas,
 						&start, &nr_pages, i,
@@ -718,18 +706,14 @@ retry:
 		 * If we have a pending SIGKILL, don't keep faulting pages and
 		 * potentially allocating memory.
 		 */
-		if (unlikely(fatal_signal_pending(current))) {
-			pr_err("coremm:%s:%d: i %ld\n", __func__, __LINE__, i);
+		if (unlikely(fatal_signal_pending(current)))
 			return i ? i : -ERESTARTSYS;
-		}
 		cond_resched();
 		page = follow_page_mask(vma, start, foll_flags, &page_mask);
 		if (!page) {
 			int ret;
 			ret = faultin_page(tsk, vma, start, &foll_flags,
 					nonblocking);
-			if (ret)
-				pr_err("coremm:%s:%d: ret %d i %ld\n", __func__, __LINE__, ret, i);
 			switch (ret) {
 			case 0:
 				goto retry;
@@ -750,9 +734,6 @@ retry:
 			 */
 			goto next_page;
 		} else if (IS_ERR(page)) {
-			if (!(foll_flags & FOLL_DUMP)) {
-				pr_err("coremm:%s:%d: page %p i %ld\n", __func__, __LINE__, page, i);
-			}
 			return i ? i : PTR_ERR(page);
 		}
 		if (pages) {
@@ -949,7 +930,6 @@ static __always_inline long __get_user_pages_locked(struct task_struct *tsk,
 			BUG_ON(ret > 1);
 			if (!pages_done)
 				pages_done = ret;
-			pr_err("coremm:%s:%d: ret %ld\n", __func__, __LINE__, ret);
 			break;
 		}
 		nr_pages--;

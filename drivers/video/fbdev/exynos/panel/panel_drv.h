@@ -46,8 +46,6 @@
 
 extern int panel_log_level;
 
-#define CONFIG_DISP_PMIC_SSD
-
 void clear_disp_det_pend(struct panel_device *panel);
 
 #define panel_err(fmt, ...)							\

@@ -191,11 +191,14 @@ static int hard_reset_hook(struct notifier_block *nb,
 	else
 		hard_reset_key_unset(code);
 
-	if (hard_reset_key_all_pressed())
+	if (hard_reset_key_all_pressed()) {
 		hrtimer_start(&hard_reset_hook_timer,
-			      hold_time, HRTIMER_MODE_REL);
-	else
-		hrtimer_cancel(&hard_reset_hook_timer);
+			      hold_time, HRTIMER_MODE_REL);		
+		pr_info("%s : hrtimer_start\n", __func__);
+	}
+	else {
+		hrtimer_try_to_cancel(&hard_reset_hook_timer);
+	}
 
 	return NOTIFY_OK;
 }

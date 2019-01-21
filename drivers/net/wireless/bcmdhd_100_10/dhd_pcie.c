@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.c 774405 2018-07-31 07:49:56Z $
+ * $Id: dhd_pcie.c 795932 2018-12-20 10:27:35Z $
  */
 
 /* include files */
@@ -746,20 +746,28 @@ dhdpcie_bus_intstatus(dhd_bus_t *bus)
 
 		/* this is a PCIE core register..not a config register... */
 		intmask = si_corereg(bus->sih, bus->sih->buscoreidx, bus->pcie_mailbox_mask, 0, 0);
-		intstatus &= intmask;
 		/* Is device removed. intstatus & intmask read 0xffffffff */
-		if (intstatus == (uint32)-1) {
+		if (intstatus == (uint32)-1 || intmask == (uint32)-1) {
 			DHD_ERROR(("%s: Device is removed or Link is down.\n", __FUNCTION__));
+			DHD_ERROR(("%s: INTSTAT : 0x%x INTMASK : 0x%x.\n",
+			    __FUNCTION__, intstatus, intmask));
 			bus->is_linkdown = TRUE;
 			dhd_pcie_debug_info_dump(bus->dhd);
 #ifdef CUSTOMER_HW4_DEBUG
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
+#ifdef SUPPORT_LINKDOWN_RECOVERY
+#ifdef CONFIG_ARCH_MSM
+			bus->no_cfg_restore = 1;
+#endif /* CONFIG_ARCH_MSM */
+#endif /* SUPPORT_LINKDOWN_RECOVERY */
 			bus->dhd->hang_reason = HANG_REASON_PCIE_LINK_DOWN;
 			dhd_os_send_hang_message(bus->dhd);
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27) && OEM_ANDROID */
 #endif /* CUSTOMER_HW4_DEBUG */
 			return intstatus;
 		}
+
+		intstatus &= intmask;
 
 		/*
 		 * The fourth argument to si_corereg is the "mask" fields of the register to update
@@ -1106,10 +1114,21 @@ dhd_bus_aspm_enable(dhd_bus_t *bus, bool enable)
 void
 dhdpcie_dongle_reset(dhd_bus_t *bus)
 {
+#ifndef DHD_USE_BP_RESET
+	uint32 wd_en = 0;
+#endif /* !DHD_USE_BP_RESET */
+
+	/* if the pcie link is down, watchdog reset
+	 * should not be done, as it may hang
+	 */
+	if (bus->is_linkdown) {
+		return;
+	}
+
 #ifdef DHD_USE_BP_RESET
 	dhd_bus_perform_bp_reset(bus);
 #else
-	uint32 wd_en = (bus->sih->buscorerev == 66) ? WD_SSRESET_PCIE_F0_EN :
+	wd_en = (bus->sih->buscorerev == 66) ? WD_SSRESET_PCIE_F0_EN :
 		(WD_SSRESET_PCIE_F0_EN | WD_SSRESET_PCIE_ALL_FN_EN);
 	pcie_watchdog_reset(bus->osh, bus->sih, WD_ENABLE_MASK, wd_en);
 #endif /* DHD_USE_BP_RESET */
@@ -1602,6 +1621,11 @@ dhdpcie_bus_release_dongle(dhd_bus_t *bus, osl_t *osh, bool dongle_isolation, bo
 		return;
 	}
 
+	if (bus->is_linkdown) {
+		DHD_ERROR(("%s : Skip release dongle due to linkdown \n", __FUNCTION__));
+		return;
+	}
+
 	if (bus->sih) {
 
 		if (!dongle_isolation &&
@@ -1688,7 +1712,6 @@ dhdpcie_bus_release_malloc(dhd_bus_t *bus, osl_t *osh)
 /** Stop bus module: clear pending frames, disable data flow */
 void dhd_bus_stop(struct dhd_bus *bus, bool enforce_mutex)
 {
-	uint32 status;
 	unsigned long flags, flags_bus;
 
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
@@ -1715,8 +1738,11 @@ void dhd_bus_stop(struct dhd_bus *bus, bool enforce_mutex)
 	dhdpcie_bus_intr_disable(bus);
 	DHD_BUS_UNLOCK(bus->bus_lock, flags_bus);
 
-	status =  dhdpcie_bus_cfg_read_dword(bus, PCIIntstatus, 4);
-	dhdpcie_bus_cfg_write_dword(bus, PCIIntstatus, 4, status);
+	if (!bus->is_linkdown) {
+		uint32 status;
+		status = dhdpcie_bus_cfg_read_dword(bus, PCIIntstatus, 4);
+		dhdpcie_bus_cfg_write_dword(bus, PCIIntstatus, 4, status);
+	}
 
 	if (!dhd_download_fw_on_driverload) {
 		dhd_dpc_kill(bus->dhd);
@@ -1914,12 +1940,11 @@ static int concate_revision_bcm4359(dhd_bus_t *bus, char *fw_path, char *nv_path
 #define DEFAULT_CIDINFO_FOR_A1		"r01a_e30a_a1"
 #define DEFAULT_CIDINFO_FOR_B0		"r01i_e32_b0"
 #define MAX_VID_LEN					8
-#define MAX_VNAME_LEN				30
-#define CIS_TUPLE_HDR_LEN			2
+#define CIS_TUPLE_HDR_LEN		2
 #define CIS_TUPLE_START_ADDRESS		0x18011110
 #define CIS_TUPLE_END_ADDRESS		0x18011167
-#define CIS_TUPLE_MAX_COUNT			(CIS_TUPLE_END_ADDRESS - CIS_TUPLE_START_ADDRESS\
-	+ 1) / sizeof(uint32)
+#define CIS_TUPLE_MAX_COUNT            (uint32)((CIS_TUPLE_END_ADDRESS - CIS_TUPLE_START_ADDRESS\
+						+ 1) / sizeof(uint32))
 #define CIS_TUPLE_TAG_START			0x80
 #define CIS_TUPLE_TAG_VENDOR		0x81
 #define CIS_TUPLE_TAG_BOARDTYPE		0x1b
@@ -3246,7 +3271,7 @@ dhdpcie_mem_dump(dhd_bus_t *bus)
 	/* Read mem content */
 	DHD_TRACE_HW4(("Dump dongle memory\n"));
 	databuf = buf;
-	while (size)
+	while (size > 0)
 	{
 		read_size = MIN(MEMBLOCK, size);
 		if ((ret = dhdpcie_bus_membytes(bus, FALSE, start, databuf, read_size)))
@@ -3722,32 +3747,57 @@ dhd_bus_rx_frame(struct dhd_bus *bus, void* pkt, int ifidx, uint pkt_count)
 void
 dhdpcie_bus_wtcm8(dhd_bus_t *bus, ulong offset, uint8 data)
 {
-	W_REG(bus->dhd->osh, (volatile uint8 *)(bus->tcm + offset), data);
+	if (bus->is_linkdown) {
+		DHD_LOG_MEM(("%s: PCIe link was down\n", __FUNCTION__));
+		return;
+	} else {
+		W_REG(bus->dhd->osh, (volatile uint8 *)(bus->tcm + offset), data);
+	}
 }
 
 uint8
 dhdpcie_bus_rtcm8(dhd_bus_t *bus, ulong offset)
 {
 	volatile uint8 data;
-	data = R_REG(bus->dhd->osh, (volatile uint8 *)(bus->tcm + offset));
+	if (bus->is_linkdown) {
+		DHD_LOG_MEM(("%s: PCIe link was down\n", __FUNCTION__));
+		data = (uint8)-1;
+	} else {
+		data = R_REG(bus->dhd->osh, (volatile uint8 *)(bus->tcm + offset));
+	}
 	return data;
 }
 
 void
 dhdpcie_bus_wtcm32(dhd_bus_t *bus, ulong offset, uint32 data)
 {
-	W_REG(bus->dhd->osh, (volatile uint32 *)(bus->tcm + offset), data);
+	if (bus->is_linkdown) {
+		DHD_LOG_MEM(("%s: PCIe link was down\n", __FUNCTION__));
+		return;
+	} else {
+		W_REG(bus->dhd->osh, (volatile uint32 *)(bus->tcm + offset), data);
+	}
 }
 void
 dhdpcie_bus_wtcm16(dhd_bus_t *bus, ulong offset, uint16 data)
 {
-	W_REG(bus->dhd->osh, (volatile uint16 *)(bus->tcm + offset), data);
+	if (bus->is_linkdown) {
+		DHD_LOG_MEM(("%s: PCIe link was down\n", __FUNCTION__));
+		return;
+	} else {
+		W_REG(bus->dhd->osh, (volatile uint16 *)(bus->tcm + offset), data);
+	}
 }
 #ifdef DHD_SUPPORT_64BIT
 void
 dhdpcie_bus_wtcm64(dhd_bus_t *bus, ulong offset, uint64 data)
 {
-	W_REG(bus->dhd->osh, (volatile uint64 *)(bus->tcm + offset), data);
+	if (bus->is_linkdown) {
+		DHD_LOG_MEM(("%s: PCIe link was down\n", __FUNCTION__));
+		return;
+	} else {
+		W_REG(bus->dhd->osh, (volatile uint64 *)(bus->tcm + offset), data);
+	}
 }
 #endif /* DHD_SUPPORT_64BIT */
 
@@ -3755,7 +3805,12 @@ uint16
 dhdpcie_bus_rtcm16(dhd_bus_t *bus, ulong offset)
 {
 	volatile uint16 data;
-	data = R_REG(bus->dhd->osh, (volatile uint16 *)(bus->tcm + offset));
+	if (bus->is_linkdown) {
+		DHD_LOG_MEM(("%s: PCIe link was down\n", __FUNCTION__));
+		data = (uint16)-1;
+	} else {
+		data = R_REG(bus->dhd->osh, (volatile uint16 *)(bus->tcm + offset));
+	}
 	return data;
 }
 
@@ -3763,7 +3818,12 @@ uint32
 dhdpcie_bus_rtcm32(dhd_bus_t *bus, ulong offset)
 {
 	volatile uint32 data;
-	data = R_REG(bus->dhd->osh, (volatile uint32 *)(bus->tcm + offset));
+	if (bus->is_linkdown) {
+		DHD_LOG_MEM(("%s: PCIe link was down\n", __FUNCTION__));
+		data = (uint32)-1;
+	} else {
+		data = R_REG(bus->dhd->osh, (volatile uint32 *)(bus->tcm + offset));
+	}
 	return data;
 }
 
@@ -3772,7 +3832,12 @@ uint64
 dhdpcie_bus_rtcm64(dhd_bus_t *bus, ulong offset)
 {
 	volatile uint64 data;
-	data = R_REG(bus->dhd->osh, (volatile uint64 *)(bus->tcm + offset));
+	if (bus->is_linkdown) {
+		DHD_LOG_MEM(("%s: PCIe link was down\n", __FUNCTION__));
+		data = (uint64)-1;
+	} else {
+		data = R_REG(bus->dhd->osh, (volatile uint64 *)(bus->tcm + offset));
+	}
 	return data;
 }
 #endif /* DHD_SUPPORT_64BIT */
@@ -5769,7 +5834,8 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 			/* resume all interface network queue. */
 			dhd_bus_start_queue(bus);
 			DHD_GENERAL_UNLOCK(bus->dhd, flags);
-			if (!bus->dhd->dongle_trap_occured) {
+			if (!bus->dhd->dongle_trap_occured &&
+				!bus->is_linkdown) {
 				uint32 intstatus = 0;
 
 				/* Check if PCIe bus status is valid */
@@ -6792,6 +6858,13 @@ dhd_bus_ringbell(struct dhd_bus *bus, uint32 value)
 			__FUNCTION__, bus->bus_low_power_state));
 		return;
 	}
+
+	/* Skip in the case of link down */
+	if (bus->is_linkdown) {
+		DHD_ERROR(("%s: PCIe link was down\n", __FUNCTION__));
+		return;
+	}
+
 	if ((bus->sih->buscorerev == 2) || (bus->sih->buscorerev == 6) ||
 		(bus->sih->buscorerev == 4)) {
 		si_corereg(bus->sih, bus->sih->buscoreidx, bus->pcie_mailbox_int,
@@ -6826,6 +6899,13 @@ dhd_bus_ringbell_2(struct dhd_bus *bus, uint32 value, bool devwake)
 			__FUNCTION__, bus->bus_low_power_state));
 		return;
 	}
+
+	/* Skip in the case of link down */
+	if (bus->is_linkdown) {
+		DHD_ERROR(("%s: PCIe link was down\n", __FUNCTION__));
+		return;
+	}
+
 	DHD_INFO(("writing a door bell 2 to the device\n"));
 	if (DAR_PWRREQ(bus)) {
 		dhd_bus_pcie_pwr_req(bus);
@@ -6841,6 +6921,12 @@ dhdpcie_bus_ringbell_fast(struct dhd_bus *bus, uint32 value)
 	if (bus->bus_low_power_state != DHD_BUS_NO_LOW_POWER_STATE) {
 		DHD_ERROR(("%s: trying to ring the doorbell after D3 inform %d\n",
 			__FUNCTION__, bus->bus_low_power_state));
+		return;
+	}
+
+	/* Skip in the case of link down */
+	if (bus->is_linkdown) {
+		DHD_ERROR(("%s: PCIe link was down\n", __FUNCTION__));
 		return;
 	}
 
@@ -6860,6 +6946,12 @@ dhdpcie_bus_ringbell_2_fast(struct dhd_bus *bus, uint32 value, bool devwake)
 		return;
 	}
 
+	/* Skip in the case of link down */
+	if (bus->is_linkdown) {
+		DHD_ERROR(("%s: PCIe link was down\n", __FUNCTION__));
+		return;
+	}
+
 	if (DAR_PWRREQ(bus)) {
 		dhd_bus_pcie_pwr_req(bus);
 	}
@@ -6876,6 +6968,13 @@ dhd_bus_ringbell_oldpcie(struct dhd_bus *bus, uint32 value)
 			__FUNCTION__, bus->bus_low_power_state));
 		return;
 	}
+
+	/* Skip in the case of link down */
+	if (bus->is_linkdown) {
+		DHD_ERROR(("%s: PCIe link was down\n", __FUNCTION__));
+		return;
+	}
+
 	w = (R_REG(bus->pcie_mb_intr_osh, bus->pcie_mb_intr_addr) & ~PCIE_INTB) | PCIE_INTB;
 	W_REG(bus->pcie_mb_intr_osh, bus->pcie_mb_intr_addr, w);
 }
@@ -7435,6 +7534,17 @@ dhdpcie_readshared(dhd_bus_t *bus)
 	while (((addr == 0) || (addr == bus->nvram_csm)) && !dhd_timeout_expired(&tmo)) {
 		/* Read last word in memory to determine address of pciedev_shared structure */
 		addr = LTOH32(dhdpcie_bus_rtcm32(bus, shaddr));
+	}
+
+	if (addr == (uint32)-1) {
+		DHD_ERROR(("%s: PCIe link might be down\n", __FUNCTION__));
+#ifdef SUPPORT_LINKDOWN_RECOVERY
+#ifdef CONFIG_ARCH_MSM
+		bus->no_cfg_restore = 1;
+#endif /* CONFIG_ARCH_MSM */
+#endif /* SUPPORT_LINKDOWN_RECOVERY */
+		bus->is_linkdown = 1;
+		return BCME_ERROR;
 	}
 
 	if ((addr == 0) || (addr == bus->nvram_csm) || (addr < bus->dongle_ram_base) ||
@@ -8400,6 +8510,13 @@ dhd_bus_flow_ring_delete_response(dhd_bus_t *bus, uint16 flowid, uint32 status)
 		    __FUNCTION__, status));
 		return;
 	}
+
+	if (flow_ring_node->status != FLOW_RING_STATUS_DELETE_PENDING) {
+		DHD_ERROR(("%s: invalid state flowid = %d, status = %d\n",
+			__FUNCTION__, flowid, flow_ring_node->status));
+		return;
+	}
+
 	/* Call Flow clean up */
 	dhd_bus_clean_flow_ring(bus, flow_ring_node);
 
@@ -8499,6 +8616,12 @@ void
 dhd_bus_set_linkdown(dhd_pub_t *dhdp, bool val)
 {
 	dhdp->bus->is_linkdown = val;
+}
+
+int
+dhd_bus_get_linkdown(dhd_pub_t *dhdp)
+{
+	return dhdp->bus->is_linkdown;
 }
 
 #ifdef IDLE_TX_FLOW_MGMT
@@ -9185,6 +9308,9 @@ dhdpcie_get_etd_preserve_logs(dhd_pub_t *dhd,
 	hdr = (hnd_ext_trap_hdr_t *)ext_trap_data;
 	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_LOG_DATA);
 	if (tlv) {
+		uint32 baseaddr = 0;
+		uint32 endaddr = dhd->bus->dongle_ram_base + dhd->bus->ramsize - 4;
+
 		etd_evtlog = (eventlog_trapdata_info_t *)tlv->data;
 		DHD_ERROR(("%s: etd_evtlog tlv found, num_elements=%x; "
 			"seq_num=%x; log_arr_addr=%x\n", __FUNCTION__,
@@ -9200,6 +9326,16 @@ dhdpcie_get_etd_preserve_logs(dhd_pub_t *dhd,
 			DHD_ERROR(("%s: out of memory !\n",	__FUNCTION__));
 			return;
 		}
+
+		/* boundary check */
+		baseaddr = etd_evtlog->log_arr_addr;
+		if ((baseaddr < dhd->bus->dongle_ram_base) ||
+			((baseaddr + arr_size) > endaddr)) {
+			DHD_ERROR(("%s: Error reading invalid address\n",
+				__FUNCTION__));
+			goto err;
+		}
+
 		/* read the eventlog_trap_buf_info_t array from dongle memory */
 		err = dhdpcie_bus_membytes(dhd->bus, FALSE,
 				(ulong)(etd_evtlog->log_arr_addr),
@@ -9216,6 +9352,14 @@ dhdpcie_get_etd_preserve_logs(dhd_pub_t *dhd,
 		seqnum = ntoh32(etd_evtlog->seq_num);
 		memset(dhd->concise_dbg_buf, 0, CONCISE_DUMP_BUFLEN);
 		for (i = 0; i < (etd_evtlog->num_elements); ++i) {
+			/* boundary check */
+			baseaddr = evtlog_buf_arr[i].buf_addr;
+			if ((baseaddr < dhd->bus->dongle_ram_base) ||
+				((baseaddr + evtlog_buf_arr[i].len) > endaddr)) {
+				DHD_ERROR(("%s: Error reading invalid address\n",
+					__FUNCTION__));
+				goto err;
+			}
 			/* read each individual event log buf from dongle memory */
 			err = dhdpcie_bus_membytes(dhd->bus, FALSE,
 					((ulong)evtlog_buf_arr[i].buf_addr),

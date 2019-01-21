@@ -157,7 +157,7 @@ static int exynos_pcie_set_l1ss(int enable, struct pcie_port *pp, int id)
 		return -EINVAL;
 	}
 
-	dev_dbg(pp->dev, "%s: START (state = 0x%x, id = 0x%x, enable = %d)\n",
+	dev_info(pp->dev, "%s: START (state = 0x%x, id = 0x%x, enable = %d)\n",
 			__func__, exynos_pcie->l1ss_ctrl_id_state, id, enable);
 	spin_lock_irqsave(&exynos_pcie->conf_lock, flags);
 	if (exynos_pcie->state != STATE_LINK_UP || exynos_pcie->atu_ok == 0) {
@@ -219,7 +219,7 @@ static int exynos_pcie_set_l1ss(int enable, struct pcie_port *pp, int id)
 		}
 	}
 	spin_unlock_irqrestore(&exynos_pcie->conf_lock, flags);
-	dev_dbg(pp->dev, "%s: END (state = 0x%x, id = 0x%x, enable = %d)\n",
+	dev_info(pp->dev, "%s: END (state = 0x%x, id = 0x%x, enable = %d)\n",
 			__func__, exynos_pcie->l1ss_ctrl_id_state, id, enable);
 	return 0;
 }

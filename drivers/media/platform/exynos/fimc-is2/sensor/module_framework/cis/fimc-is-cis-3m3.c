@@ -218,7 +218,7 @@ int sensor_3m3_cis_check_rev(struct v4l2_subdev *subdev)
 		ret = -EINVAL;
 		return ret;
 	}
-	
+
 	memset(cis->cis_data, 0, sizeof(cis_shared_data));
 	cis->rev_flag = false;
 
@@ -332,9 +332,6 @@ int sensor_3m3_cis_log_status(struct v4l2_subdev *subdev)
 	pr_err("[SEN:DUMP] frame_count(%x)\n", data8);
 	fimc_is_sensor_read8(client, 0x0100, &data8);
 	pr_err("[SEN:DUMP] mode_select(%x)\n", data8);
-
-	sensor_cis_dump_registers(subdev, sensor_3m3_setfiles[0], sensor_3m3_setfile_sizes[0]);
-
 	pr_err("[SEN:DUMP] *******************************\n");
 
 p_err:

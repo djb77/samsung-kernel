@@ -82,8 +82,7 @@ static void five_audit_msg(struct task_struct *task, struct file *file,
 	}
 
 	audit_log_format(ab, " pid=%d", task_pid_nr(tsk));
-	audit_log_format(ab, " gpid=%d",
-			task_pid_nr(tsk->group_leader));
+	audit_log_format(ab, " tgid=%d", task_tgid_nr(tsk));
 	audit_log_task_context(ab);
 	audit_log_format(ab, " op=");
 	audit_log_string(ab, op);

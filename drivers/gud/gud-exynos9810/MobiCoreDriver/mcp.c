@@ -49,7 +49,6 @@
 
 /* respond timeout for MCP notification, in secs */
 #define MCP_TIMEOUT		10
-/* ExySp */
 #define MCP_RETRIES		2
 #define MCP_NF_QUEUE_SZ		8
 
@@ -274,8 +273,7 @@ static inline int wait_mcp_notification(void)
 	}
 
 	/* TEE halted or dead: dump status and SMC log */
-	/* ExySp */
-//	mark_mcp_dead();
+	//mark_mcp_dead();
 	nq_dump_status();
 	panic("tbase halt");
 
@@ -329,7 +327,7 @@ static int mcp_cmd(union mcp_message *cmd,
 	memcpy(msg, cmd, sizeof(*msg));
 
 	/* Poke TEE */
-	ret = mcp_notify(&l_ctx.mcp_session, cmd_id);
+	ret = mcp_notify(&l_ctx.mcp_session);
 	if (ret)
 		goto out;
 
@@ -661,14 +659,14 @@ static int mcp_close(void)
 	return mcp_cmd(&cmd, 0, NULL, NULL);
 }
 
-int mcp_notify(struct mcp_session *session, u32 payload)
+int mcp_notify(struct mcp_session *session)
 {
 	if (session->sid == SID_MCP)
 		mc_dev_devel("notify MCP");
 	else
 		mc_dev_devel("notify session %x", session->sid);
 
-	return nq_session_notify(&session->nq_session, session->sid, payload);
+	return nq_session_notify(&session->nq_session, session->sid, 0);
 }
 
 static inline void session_notif_handler(struct mcp_session *session, u32 id,

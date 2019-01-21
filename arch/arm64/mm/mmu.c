@@ -254,9 +254,6 @@ static void alloc_init_pmd(pud_t *pud, unsigned long addr, unsigned long end,
 		next = pmd_addr_end(addr, end);
 		/* try section mapping first */
 		if (((addr | next | phys) & ~SECTION_MASK) == 0 &&
-#ifdef CONFIG_UH_RKP
-			phys != (__pa(swapper_pg_dir) & SECTION_MASK) &&
-#endif
 		      allow_block_mappings) {
 			pmd_t old_pmd =*pmd;
 			pmd_set_huge(pmd, phys, prot);
@@ -480,9 +477,13 @@ static void __init __map_memblock(pgd_t *pgd, phys_addr_t start, phys_addr_t end
 	 * region accessible to subsystems such as hibernate, but
 	 * protects it from inadvertent modification or execution.
 	 */
-	__create_pgd_mapping(pgd, kernel_start, __phys_to_virt(kernel_start),
-			     kernel_end - kernel_start, PAGE_KERNEL_RO,
-			     early_pgtable_alloc, !debug_pagealloc_enabled());
+	// __create_pgd_mapping(pgd, kernel_start, __phys_to_virt(kernel_start),
+	// 		     kernel_end - kernel_start, PAGE_KERNEL_RO,
+	// 		     early_pgtable_alloc, !debug_pagealloc_enabled());
+	__create_pgd_mapping(pgd, __pa(_text), __phys_to_virt(__pa(_text)), (_etext - _text),
+		PAGE_KERNEL_RO, early_pgtable_alloc, !debug_pagealloc_enabled());
+	__create_pgd_mapping(pgd, __pa(__start_rodata), __phys_to_virt(__pa(__start_rodata)),
+		(__init_begin - __start_rodata), PAGE_KERNEL_RO, early_pgtable_alloc, !debug_pagealloc_enabled());
 }
 
 static void __init map_mem(pgd_t *pgd)
@@ -544,16 +545,33 @@ static void __init map_kernel_segment(pgd_t *pgd, void *va_start, void *va_end,
 	vma->flags	= VM_MAP;
 	vma->caller	= __builtin_return_address(0);
 
-#ifdef CONFIG_UH_RKP
-	if(va_start == _text){
-		vma->addr	= (void *)((unsigned long)va_start & PMD_MASK);
-		vma->phys_addr	= (phys_addr_t)((unsigned long)pa_start & PMD_MASK);
-		vma->size	= size + (unsigned long)va_start - (unsigned long)vma->addr;
-	}
-#endif
 
 	vm_area_add_early(vma);
 }
+
+#ifdef CONFIG_UH_RKP
+static void __init map_kernel_text_segment(pgd_t *pgd, void *va_start, void *va_end,
+				      pgprot_t prot, struct vm_struct *vma)
+{
+	phys_addr_t pa_start = __pa(va_start);
+	unsigned long size = va_end - va_start;
+
+	BUG_ON(!PAGE_ALIGNED(pa_start));
+	BUG_ON(!PAGE_ALIGNED(size));
+
+	__create_pgd_mapping(pgd, pa_start, (unsigned long)va_start, size, prot,
+			     rkp_ro_alloc_phys, !debug_pagealloc_enabled());
+
+	vma->addr	= (void *)((unsigned long)va_start & PMD_MASK);
+	vma->phys_addr	= (phys_addr_t)((unsigned long)pa_start & PMD_MASK);
+	vma->size	= size + (unsigned long)va_start - (unsigned long)vma->addr;
+	vma->flags	= VM_MAP;
+	vma->caller	= __builtin_return_address(0);
+
+	vm_area_add_early(vma);
+}
+#endif
+
 
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 static int __init map_entry_trampoline(void)
@@ -593,7 +611,11 @@ static void __init map_kernel(pgd_t *pgd)
 {
 	static struct vm_struct vmlinux_text, vmlinux_rodata, vmlinux_init, vmlinux_data;
 
+#ifdef CONFIG_UH_RKP
+	map_kernel_text_segment(pgd, _text, _etext, PAGE_KERNEL_EXEC, &vmlinux_text);
+#else
 	map_kernel_segment(pgd, _text, _etext, PAGE_KERNEL_EXEC, &vmlinux_text);
+#endif
 	map_kernel_segment(pgd, __start_rodata, __init_begin, PAGE_KERNEL, &vmlinux_rodata);
 	map_kernel_segment(pgd, __init_begin, __init_end, PAGE_KERNEL_EXEC,
 			   &vmlinux_init);
@@ -631,12 +653,18 @@ static void __init map_kernel(pgd_t *pgd)
  */
 void __init paging_init(void)
 {
-	phys_addr_t pgd_phys = early_pgtable_alloc();
-	pgd_t *pgd = pgd_set_fixmap(pgd_phys);
+	phys_addr_t pgd_phys;
+	pgd_t *pgd;
+#ifdef CONFIG_UH_RKP
+	phys_addr_t pa;
+	void *va;
+#endif
+	set_memsize_kernel_type(MEMSIZE_KERNEL_PAGING);
+	pgd_phys = early_pgtable_alloc();
+	pgd = pgd_set_fixmap(pgd_phys);
 
 #ifdef CONFIG_UH_RKP
-	phys_addr_t pa = RKP_ROBUF_START;
-	void *va;
+	pa = RKP_ROBUF_START;
 
 	for (; pa < (RKP_ROBUF_START + RKP_ROBUF_SIZE); pa += PAGE_SIZE) {
 		va = pte_set_fixmap(pa);
@@ -670,8 +698,11 @@ void __init paging_init(void)
 	 * We only reuse the PGD from the swapper_pg_dir, not the pud + pmd
 	 * allocated with it.
 	 */
+#ifndef CONFIG_UH_RKP
 	memblock_free(__pa(swapper_pg_dir) + PAGE_SIZE,
 		      SWAPPER_DIR_SIZE - PAGE_SIZE);
+#endif
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 }
 
 /*

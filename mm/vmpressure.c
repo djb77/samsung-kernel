@@ -101,10 +101,6 @@ static const char * const vmpressure_str_levels[] = {
 
 static enum vmpressure_levels vmpressure_level(unsigned long pressure)
 {
-	trace_printk("tracing_mark_write: C|99|MP Level|%d\n", 
-		(pressure >= vmpressure_level_critical ? VMPRESSURE_CRITICAL : 
-		(pressure >= vmpressure_level_med ? VMPRESSURE_MEDIUM : VMPRESSURE_LOW)));
-
 	if (pressure >= vmpressure_level_critical)
 		return VMPRESSURE_CRITICAL;
 	else if (pressure >= vmpressure_level_med)
@@ -137,11 +133,6 @@ static enum vmpressure_levels vmpressure_calc_level(unsigned long scanned,
 
 	vmpr->pressure = pressure;
 out:
-	trace_printk("tracing_mark_write: C|99|vMP|%d\n", (int)pressure);
-	trace_printk("tracing_mark_write: C|99|vMP|0\n");
-	trace_printk("tracing_mark_write: C|%d|vMP|%d\n", current->tgid,
-													(int)pressure);
-	trace_printk("tracing_mark_write: C|%d|vMP|0\n", current->tgid);
 	pr_debug("%s: %3lu  (s: %lu  r: %lu)\n", __func__, pressure,
 		 scanned, reclaimed);
 

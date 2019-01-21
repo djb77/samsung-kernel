@@ -1384,7 +1384,6 @@ int read_panel_id(struct panel_device *panel, u8 *buf)
 	}
 
 	mutex_lock(&panel->op_lock);
-	panel_set_key(panel, 3, true);
 	len = panel_rx_nbytes(panel, DSI_PKT_TYPE_RD, buf, PANEL_ID_REG, 0, 3);
 	if (len != 3) {
 		pr_err("%s, failed to read id\n", __func__);
@@ -1393,7 +1392,6 @@ int read_panel_id(struct panel_device *panel, u8 *buf)
 	}
 
 read_err:
-	panel_set_key(panel, 3, false);
 	mutex_unlock(&panel->op_lock);
 	return ret;
 }
@@ -1595,9 +1593,12 @@ int check_panel_active(struct panel_device *panel, const char *caller)
 
 	state = &panel->state;
 	dsi_state = panel_dsi_get_state(panel);
-
+#ifdef CONFIG_SUPPORT_DOZE
 	if (dsi_state == DSIM_STATE_OFF ||
 		dsi_state == DSIM_STATE_DOZE_SUSPEND) {
+#else
+	if (dsi_state == DSIM_STATE_OFF) {
+#endif
 		panel_err("PANEL:WARN:%s:dsim %s\n",
 				caller, (dsi_state == DSIM_STATE_OFF) ?
 				"off" : "doze_suspend");

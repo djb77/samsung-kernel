@@ -681,12 +681,23 @@ void dpp_reg_set_csc_config(u32 id, u32 type)
 	csc_std = (type >> CSC_STANDARD_SHIFT) & 0x3F;
 	csc_rng = (type >> CSC_RANGE_SHIFT) & 0x7;
 
+	if (csc_std == CSC_STANDARD_UNSPECIFIED) {
+		dpp_dbg("unspecified CSC type! -> BT_601\n");
+		csc_std = CSC_BT_601;
+	}
+
+	if (csc_rng == CSC_RANGE_UNSPECIFIED) {
+		dpp_dbg("unspecified CSC range! -> LIMIT\n");
+		csc_rng = CSC_RANGE_LIMITED;
+	}
+
 	if (csc_std <= CSC_DCI_P3)
 		coef_mode = CSC_COEF_HARDWIRED;
 	else
 		coef_mode = CSC_COEF_CUSTOMIZED;
 
 	dpp_reg_set_csc_type(id, csc_std, csc_rng, coef_mode);
+
 	if (coef_mode != CSC_COEF_HARDWIRED)
 		dpp_reg_set_csc_coef(id, csc_std, csc_rng);
 

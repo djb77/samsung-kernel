@@ -295,6 +295,8 @@
 		io-channel-names = "adc-temp", "adc-chg-temp", "adc-in-bat", "adc-wpc-temp", "adc-usb-temp";
 		#io-channel-cells = <5>;
 		io-channel-ranges;
+
+		battery,revise_temp_value;
 	};
 
 	max77705-charger {
@@ -458,7 +460,8 @@
  *  30	TIMEOUT,
  *  31	SMART_OTG,
  *  32	SMART_NOTG,
- *  33	CABLE_MAX,
+ *  33	WIRELESS_TX,
+ *  34	CABLE_MAX,
 */
 	cable-info {
 		default_input_current = <1800>;
@@ -492,9 +495,9 @@
 		       charging_current = <2150>;
 		};
 		current_group_6 {
-			cable_number = <10 12 14 15 27>;
+			cable_number = <10 12 14 15 27 33>;
 			input_current = <820>;
-			charging_current = <1500>;
+			charging_current = <1600>;
 		};
 		current_group_7 {
 			cable_number = <13>;

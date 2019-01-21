@@ -353,16 +353,19 @@ static int pub_crypto_request_get_msg(pub_crypto_request_t *req, char **msg)
 
 static u32 pub_crypto_get_unique_id(pub_crypto_control_t *control)
 {
+	u32 local_reqctr;
+
 	spin_lock(&control->lock);
 
-	control->reqctr++;
+	++(control->reqctr);
 	/* zero is special */
 	if (control->reqctr == 0)
 		control->reqctr = 1;
+	local_reqctr = control->reqctr;
 
 	spin_unlock(&control->lock);
 
-	return control->reqctr;
+	return local_reqctr;
 }
 static void req_dump(pub_crypto_request_t *req, const char *msg)
 {

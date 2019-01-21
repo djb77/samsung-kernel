@@ -844,7 +844,8 @@ static void ipi_cpu_stop(unsigned int cpu, struct pt_regs *regs)
 
 	exynos_ss_save_context(regs);
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
-	sec_debug_set_extra_info_backtrace_cpu(regs, cpu);
+	if (!user_mode(regs))
+		sec_debug_set_extra_info_backtrace_cpu(regs, cpu);
 #endif
 	exynos_sdm_flush_secdram();
 

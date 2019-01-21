@@ -1588,6 +1588,9 @@ static inline void wb_dirty_limits(struct dirty_throttle_control *dtc)
  * If we're over `background_thresh' then the writeback threads are woken to
  * perform some writeout.
  */
+
+SIO_PATCH_VERSION(prevent_infinite_writeback, 1, 0, "");
+
 static void balance_dirty_pages(struct address_space *mapping,
 				struct bdi_writeback *wb,
 				unsigned long pages_dirtied)
@@ -1806,6 +1809,11 @@ pause:
 					  period,
 					  pause,
 					  start_time);
+
+		/* Do not sleep if the backing device is removed */
+		if (unlikely(!bdi->dev))
+			return;
+
 		/* Collecting approximate value. No lock required. */
 		bdi->last_thresh = thresh;
 		bdi->last_nr_dirty = dirty;
@@ -1839,10 +1847,6 @@ pause:
 			break;
 
 		if (fatal_signal_pending(current))
-			break;
-
-		/* Check whether a device has been ejected or not */
-		if (unlikely(!bdi->dev))
 			break;
 	}
 

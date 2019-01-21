@@ -9041,7 +9041,7 @@ static struct sched_group *find_busiest_group(struct lb_env *env)
 {
 	struct sg_lb_stats *local, *busiest;
 	struct sd_lb_stats sds;
-	bool skip_lb;
+	bool skip_lb = false;
 
 	init_sd_lb_stats(&sds);
 
@@ -9051,11 +9051,15 @@ static struct sched_group *find_busiest_group(struct lb_env *env)
 	 */
 	update_sd_lb_stats(env, &sds);
 
-	if (sched_feat(EXYNOS_HMP))
-		skip_lb = !ehmp_trigger_lb(env->src_cpu, env->dst_cpu);
-	else
-		skip_lb = energy_aware() && !env->dst_rq->rd->overutilized;
+	if (sched_feat(EXYNOS_HMP)) {
+		if (sds.busiest) {
+			int src_cpu = cpumask_first(sched_group_cpus(sds.busiest));
 
+			skip_lb = !ehmp_trigger_lb(src_cpu, env->dst_cpu);
+		}
+	} else {
+		skip_lb = energy_aware() && !env->dst_rq->rd->overutilized;
+	}
 	if (skip_lb)
 		goto out_balanced;
 

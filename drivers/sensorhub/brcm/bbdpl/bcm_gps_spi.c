@@ -96,7 +96,7 @@ void bcm_ssi_check_mem_corruption(struct bcm_spi_priv *priv)
     {
         if ( priv->chk_mem_frame_1[i] != pattern_ch || priv->chk_mem_frame_2[i] != pattern_ch || priv->chk_mem_frame_3[i] != pattern_ch )
         {
-            pr_err("[SSPBBD]: Memory corruption. [%d] chk_mem_frame_1[%p]=0x%02X, chk_mem_frame_2[%p]=0x%02X, chk_mem_frame_3[%p]=0x%02X\n",
+            pr_err("[SSPBBD]: Memory corruption. [%d] chk_mem_frame_1[%pK]=0x%02X, chk_mem_frame_2[%pK]=0x%02X, chk_mem_frame_3[%pK]=0x%02X\n",
                 i,
                 priv->chk_mem_frame_1, priv->chk_mem_frame_1[i],
                 priv->chk_mem_frame_2, priv->chk_mem_frame_2[i],
@@ -1214,7 +1214,7 @@ static int bcm_spi_probe(struct spi_device *spi)
 	priv->tx_buf = kmalloc(sizeof(struct bcm_ssi_tx_frame), GFP_KERNEL);
 	priv->rx_buf = kmalloc(sizeof(struct bcm_ssi_rx_frame), GFP_KERNEL);
 	if (!priv->tx_buf || !priv->rx_buf) {
-		pr_err("[SSPBBD]: Failed to allocate xfer buffer. tx_buf=%p, rx_buf=%p\n",
+		pr_err("[SSPBBD]: Failed to allocate xfer buffer. tx_buf=%pK, rx_buf=%pK\n",
 				priv->tx_buf, priv->rx_buf);
 		goto free_mem;
 	}
@@ -1224,10 +1224,11 @@ static int bcm_spi_probe(struct spi_device *spi)
     priv->chk_mem_frame_2 = kmalloc(CONFIG_MEM_CORRUPT_CHECK, GFP_KERNEL);
     priv->chk_mem_frame_3 = kmalloc(CONFIG_MEM_CORRUPT_CHECK, GFP_KERNEL);
 	if (!priv->chk_mem_frame_1 || !priv->chk_mem_frame_2 || !priv->chk_mem_frame_3) {
-		pr_err("[SSPBBD]: Failed to allocate xfer buffer. chk_mem_frame_1=%p, chk_mem_frame_2=%p, chk_mem_frame_3=%p\n",
+		pr_err("[SSPBBD]: Failed to allocate xfer buffer. chk_mem_frame_1=%pK, chk_mem_frame_2=%pK, chk_mem_frame_3=%pK\n",
 				priv->chk_mem_frame_1, priv->chk_mem_frame_2, priv->chk_mem_frame_3);
 		goto free_mem;
 	}
+	bcm_ssi_clear_mem_corruption(priv);
 #endif    
 
 	priv->serial_wq = alloc_workqueue("bcm477x_wq", WQ_HIGHPRI|WQ_UNBOUND|WQ_MEM_RECLAIM, 1);
@@ -1245,7 +1246,7 @@ static int bcm_spi_probe(struct spi_device *spi)
 
 	disable_irq(spi->irq);
 
-	pr_notice("[SSPBBD]: Probe OK. ssp-host-req=%d, irq=%d, priv=0x%p\n", host_req, spi->irq, priv);
+	pr_notice("[SSPBBD]: Probe OK. ssp-host-req=%d, irq=%d, priv=0x%pK\n", host_req, spi->irq, priv);
 
 	/* Register misc device */
 	priv->misc.minor = MISC_DYNAMIC_MINOR;

@@ -332,16 +332,27 @@ static int max77705_fg_read_qh_vfsoc(struct max77705_fuelgauge_data *fuelgauge)
 static int max77705_fg_read_qh(struct max77705_fuelgauge_data *fuelgauge)
 {
 	u8 data[2];
-	int ret;
+	u32 temp, sign;
+	s32 qh;
 
 	if (max77705_bulk_read(fuelgauge->i2c, QH_REG, 2, data) < 0) {
-		pr_err("%s: Failed to read QH_REG\n", __func__);
+		pr_err("%s: Failed to read QH value\n", __func__);
 		return -1;
 	}
 
-	ret = (data[1] << 8) + data[0];
+	temp = ((data[1] << 8) | data[0]) & 0xFFFF;
+	if (temp & (0x1 << 15)) {
+		sign = NEGATIVE;
+		temp = (~temp & 0xFFFF) + 1;
+	} else
+		sign = POSITIVE;
 
-	return ret * fuelgauge->fg_resistor / 2;
+	qh = temp * 1000 * fuelgauge->fg_resistor / 2;
+
+	if (sign)
+		qh *= -1;
+
+	return qh;
 }
 
 /* soc should be 0.1% unit */
@@ -1015,16 +1026,17 @@ int max77705_get_fuelgauge_value(struct max77705_fuelgauge_data *fuelgauge,
 static void max77705_fg_periodic_read_power(
 	struct max77705_fuelgauge_data *fuelgauge)
 {
-	int isys, isys_avg, vsys, iin, vbyp;
+	int isys, isys_avg, vsys, iin, vbyp, qh;
 
 	isys = max77705_get_fuelgauge_value(fuelgauge, FG_ISYS);
 	isys_avg = max77705_get_fuelgauge_value(fuelgauge, FG_ISYS_AVG);
 	vsys = max77705_get_fuelgauge_value(fuelgauge, FG_VSYS);
 	iin = max77705_get_fuelgauge_value(fuelgauge, FG_IIN);
 	vbyp = max77705_get_fuelgauge_value(fuelgauge, FG_VBYP);
+	qh = max77705_get_fuelgauge_value(fuelgauge, FG_QH);
 
-	pr_info("[FG power] ISYS(%dmA),ISYSAVG(%dmA),VSYS(%dmV),IIN(%dmA),VBYP(%dmV)\n",
-		isys, isys_avg, vsys, iin, vbyp);
+	pr_info("[FG power] ISYS(%dmA),ISYSAVG(%dmA),VSYS(%dmV),IIN(%dmA),VBYP(%dmV),QH(%duah)\n",
+		isys, isys_avg, vsys, iin, vbyp, qh);
 }
 
 static void max77705_fg_read_power_log(
@@ -2026,6 +2038,10 @@ static int max77705_fg_get_property(struct power_supply *psy,
 								SEC_BATTERY_CURRENT_MA);
 				break;
 			}
+			break;
+		case POWER_SUPPLY_EXT_PROP_JIG_GPIO:
+			val->intval = gpio_get_value(fuelgauge->pdata->jig_gpio);
+			pr_info("%s: jig gpio = %d \n", __func__, val->intval);
 			break;
 		default:
 			return -EINVAL;

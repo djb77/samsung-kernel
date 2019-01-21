@@ -172,6 +172,8 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(batt_temp_test),
 #endif
 	SEC_BATTERY_ATTR(batt_current_event),
+	SEC_BATTERY_ATTR(cc_info),
+	SEC_BATTERY_ATTR(batt_jig_gpio),
 };
 
 
@@ -372,10 +374,12 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		}
 		break;
 	case BATT_VF_ADC:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+			battery->check_adc_value);
 		break;
 	case BATT_SLATE_MODE:
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
-			battery->slate_mode);
+			is_slate_mode(battery));
 		break;
 
 	case BATT_LP_CHARGING:
@@ -983,8 +987,11 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 
 			sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
 					cisd_data_str[CISD_DATA_RESET_ALG], pcisd->data[CISD_DATA_RESET_ALG]);
-			for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX; j++)
+			for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX; j++) {
+				if (battery->pdata->ignore_cisd_index[j / 32] & (0x1 << (j % 32)))
+					continue;
 				sprintf(temp_buf+strlen(temp_buf), ",\"%s\":\"%d\"", cisd_data_str[j], pcisd->data[j]);
+			}
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
 		}
 		break;
@@ -997,9 +1004,12 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 			sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
 				cisd_data_str_d[CISD_DATA_FULL_COUNT_PER_DAY-CISD_DATA_MAX],
 				pcisd->data[CISD_DATA_FULL_COUNT_PER_DAY]);
-			for (j = CISD_DATA_FULL_COUNT_PER_DAY + 1; j < CISD_DATA_MAX_PER_DAY; j++)
+			for (j = CISD_DATA_FULL_COUNT_PER_DAY + 1; j < CISD_DATA_MAX_PER_DAY; j++) {
+				if (battery->pdata->ignore_cisd_index_d[(j - CISD_DATA_FULL_COUNT_PER_DAY) / 32] & (0x1 << ((j - CISD_DATA_FULL_COUNT_PER_DAY) % 32)))
+					continue;
 				sprintf(temp_buf+strlen(temp_buf), ",\"%s\":\"%d\"",
-				cisd_data_str_d[j-CISD_DATA_MAX], pcisd->data[j]);
+					cisd_data_str_d[j-CISD_DATA_MAX], pcisd->data[j]);
+			}
 
 			/* Clear Daily Data */
 			for (j = CISD_DATA_FULL_COUNT_PER_DAY; j < CISD_DATA_MAX_PER_DAY; j++)
@@ -1113,6 +1123,29 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 			battery->current_event);
 		break;
+	case CC_INFO:
+		{
+			union power_supply_propval cc_val;
+	
+			cc_val.intval = SEC_BATTERY_CAPACITY_QH;
+			psy_do_property(battery->pdata->fuelgauge_name, get,
+				POWER_SUPPLY_PROP_ENERGY_NOW, cc_val);
+	
+			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+					cc_val.intval);
+		}
+		break;
+	case BATT_JIG_GPIO:
+ 		value.intval = 0;
+		psy_do_property(battery->pdata->fuelgauge_name, get,
+			POWER_SUPPLY_EXT_PROP_JIG_GPIO, value);
+		if(value.intval < 0) {
+			value.intval = -1;
+			pr_info("%s: dose not surpport JIG GPIO PIN READN \n", __func__);
+		}
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+			value.intval);
+		break;
 	default:
 		i = -EINVAL;
 		break;
@@ -1138,7 +1171,7 @@ ssize_t sec_bat_store_attrs(
 	switch (offset) {
 	case BATT_RESET_SOC:
 		/* Do NOT reset fuel gauge in charging mode */
-		if ((battery->cable_type == SEC_BATTERY_CABLE_NONE) ||
+		if (is_nocharge_type(battery->cable_type) ||
 			battery->is_jig_on) {
 			sec_bat_set_misc_event(battery, BATT_MISC_EVENT_BATT_RESET_SOC, 0);
 
@@ -1218,17 +1251,15 @@ ssize_t sec_bat_store_attrs(
 		break;
 	case BATT_SLATE_MODE:
 		if (sscanf(buf, "%10d\n", &x) == 1) {
-			if (x == battery->slate_mode) {
+			if (x == is_slate_mode(battery)) {
 				dev_info(battery->dev,
 					 "%s : skip same slate mode : %d\n", __func__, x);
 				return count;
 			} else if (x == 1) {
-				battery->slate_mode = true;
 				sec_bat_set_current_event(battery, SEC_BAT_CURRENT_EVENT_SLATE, SEC_BAT_CURRENT_EVENT_SLATE);
 				dev_info(battery->dev,
 					"%s: enable slate mode : %d\n", __func__, x);
 			} else if (x == 0) {
-				battery->slate_mode = false;
 				sec_bat_set_current_event(battery, 0, SEC_BAT_CURRENT_EVENT_SLATE);
 				dev_info(battery->dev,
 					"%s: disable slate mode : %d\n", __func__, x);
@@ -1682,15 +1713,15 @@ ssize_t sec_bat_store_attrs(
 					"%s: HMT_TA_CHARGE(%d)\n", __func__, x);
 
 			/* do not charge off without cable type, since wdt could be expired */
-			if (x && (battery->cable_type != SEC_BATTERY_CABLE_NONE)
-				&& (battery->cable_type != SEC_BATTERY_CABLE_OTG)) {
+			if (x) {
 				sec_bat_set_current_event(battery, 0, SEC_BAT_CURRENT_EVENT_CHARGE_DISABLE);
 				/* No charging when FULL & NONE */
-				if (!((battery->status == POWER_SUPPLY_STATUS_FULL) &&
-					(battery->charging_mode == SEC_BATTERY_CHARGING_NONE))) {
+				if(!is_nocharge_type(battery->cable_type) &&
+					(battery->status != POWER_SUPPLY_STATUS_FULL) &&
+					(battery->status != POWER_SUPPLY_STATUS_NOT_CHARGING)) {
 					sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING);
 				}
-			} else if (!x) {
+			} else if (!x && !is_nocharge_type(battery->cable_type)) {
 				sec_bat_set_current_event(battery, SEC_BAT_CURRENT_EVENT_CHARGE_DISABLE,
 						SEC_BAT_CURRENT_EVENT_CHARGE_DISABLE);
 				sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING_OFF);
@@ -2154,8 +2185,13 @@ ssize_t sec_bat_store_attrs(
 
 				pr_info("%s: %s\n", __func__, buf);
 				for (i = CISD_DATA_RESET_ALG; i < CISD_DATA_MAX_PER_DAY; i++) {
-					sscanf(p, "%10d%n", &pcisd->data[i], &x);
-					p += (size_t)x;
+					if (sscanf(p, "%10d%n", &pcisd->data[i], &x) > 0)
+						p += (size_t)x;
+					else {
+						pr_info("%s: NO DATA (cisd_data)\n", __func__);
+						temp_data[CISD_DATA_RESET_ALG] = -1;
+						break;
+					}
 				}
 
 				pr_info("%s: %s cisd data\n", __func__,
@@ -2363,6 +2399,10 @@ ssize_t sec_bat_store_attrs(
 #endif
 	case BATT_CURRENT_EVENT:
 		break;
+	case CC_INFO:
+		break;
+	case BATT_JIG_GPIO:
+		break;		
 	default:
 		ret = -EINVAL;
 		break;

@@ -112,6 +112,9 @@ struct madera_extcon {
 	struct wakeup_source detection_wake_lock;
 
 	struct madera_micd_bias micd_bias;
+#ifdef CONFIG_EXTCON_PTT
+	int ptt_state; /* PTT haedset state for Samsung */
+#endif
 };
 
 enum madera_accdet_mode {

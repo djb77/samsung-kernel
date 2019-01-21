@@ -446,6 +446,7 @@ static void shm_free_reserved_mem(unsigned long addr, unsigned size)
 	struct page *page;
 
 	pr_err("Release cplog reserved memory\n");
+	free_memsize_reserved(addr, size);
 	for (i = 0; i < (size >> PAGE_SHIFT); i++) {
 		page = phys_to_page(addr);
 		addr += PAGE_SIZE;
@@ -565,7 +566,7 @@ static int shm_probe(struct platform_device *pdev)
 	dev_err(dev, "%s: shmem driver init\n", __func__);
 
 	cp_mem_base = shm_request_region(pdata.p_addr, PAGE_SIZE);
-	dev_info(dev, "cp_mem_base: 0x%lx, 0x%p\n", pdata.p_addr, cp_mem_base);
+	dev_info(dev, "cp_mem_base: 0x%lx, 0x%pK\n", pdata.p_addr, cp_mem_base);
 	/* 0x200: TOC, 0xa0: cp memory map offset */
 	memcpy(&cp_mem_map, cp_mem_base + 0x200 + 0xa0, sizeof(struct cp_reserved_map_table));
 

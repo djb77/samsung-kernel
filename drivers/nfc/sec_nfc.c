@@ -246,7 +246,7 @@ static ssize_t sec_nfc_write(struct file *file, const char __user *buf,
 						struct sec_nfc_info, miscdev);
 	int ret = 0;
 
-	NFC_LOG_DBG("write() info: %p, count %d\n", info, (u32)count);
+	NFC_LOG_DBG("write() count %d\n", (u32)count);
 
 #ifdef FEATURE_SEC_NFC_TEST
 	if (on_nfc_test)
@@ -388,7 +388,7 @@ int sec_nfc_i2c_probe(struct i2c_client *client)
 	struct sec_nfc_platform_data *pdata = info->pdata;
 	int ret;
 
-	NFC_LOG_INFO("probe() start: %p\n", info);
+	NFC_LOG_INFO("probe() start\n");
 
 	info->i2c_info.buflen = SEC_NFC_MAX_BUFFER_SIZE;
 	info->i2c_info.buf = kzalloc(SEC_NFC_MAX_BUFFER_SIZE, GFP_KERNEL);
@@ -429,7 +429,7 @@ int sec_nfc_i2c_probe(struct i2c_client *client)
 		}
 	}
 
-	NFC_LOG_INFO("probe() success: %p\n", info);
+	NFC_LOG_INFO("probe() success\n");
 	return 0;
 
 err_irq_req:
@@ -549,7 +549,7 @@ static long sec_nfc_ioctl(struct file *file, unsigned int cmd,
 	unsigned int new = (unsigned int)arg;
 	int ret = 0;
 
-	NFC_LOG_DBG("info: %p, cmd: 0x%x\n", info, cmd);
+	NFC_LOG_DBG("cmd: 0x%x\n", cmd);
 
 	mutex_lock(&info->mutex);
 
@@ -973,7 +973,7 @@ static int __sec_nfc_probe(struct device *dev)
 			NFC_LOG_ERR("NFC: failed to create attr_test\n");
 	}
 #endif
-	NFC_LOG_INFO("probe() success info: %p, pdata %p\n", info, pdata);
+	NFC_LOG_INFO("probe() success\n");
 
 	return 0;
 

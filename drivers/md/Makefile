@@ -1,9 +1,11 @@
 #
 # Makefile for the kernel software RAID and LVM drivers.
 #
+ifeq ($(SEC_DMVERITY),true)
 ifeq ($(SEC_BUILD_CONF_DMV_ALTA),true)
 	EXTRA_CFLAGS += -DDMV_ALTA=true
 	EXTRA_CFLAGS += -DDMV_ALTA_PROF=true
+endif
 endif
 
 dm-mod-y	+= dm.o dm-table.o dm-target.o dm-linear.o dm-stripe.o \

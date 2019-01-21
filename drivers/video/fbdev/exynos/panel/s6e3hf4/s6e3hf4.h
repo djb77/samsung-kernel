@@ -300,73 +300,73 @@ enum {
 	DUMP_SELF_DIAG,
 };
 
-void s6e3hf4_show_rddpm(struct dumpinfo *info);
-void s6e3hf4_show_rddsm(struct dumpinfo *info);
-void s6e3hf4_show_err(struct dumpinfo *info);
-void s6e3hf4_show_err_fg(struct dumpinfo *info);
-void s6e3hf4_show_dsi_err(struct dumpinfo *info);
-void s6e3hf4_show_self_diag(struct dumpinfo *info);
+void show_rddpm(struct dumpinfo *info);
+void show_rddsm(struct dumpinfo *info);
+void show_err(struct dumpinfo *info);
+void show_err_fg(struct dumpinfo *info);
+void show_dsi_err(struct dumpinfo *info);
+void show_self_diag(struct dumpinfo *info);
 
 static struct dumpinfo s6e3hf4_dmptbl[] = {
-	[DUMP_RDDPM] = DUMPINFO_INIT(rddpm, &s6e3hf4_restbl[RES_RDDPM], s6e3hf4_show_rddpm),
-	[DUMP_RDDSM] = DUMPINFO_INIT(rddsm, &s6e3hf4_restbl[RES_RDDSM], s6e3hf4_show_rddsm),
-	[DUMP_ERR] = DUMPINFO_INIT(err, &s6e3hf4_restbl[RES_ERR], s6e3hf4_show_err),
-	[DUMP_ERR_FG] = DUMPINFO_INIT(err_fg, &s6e3hf4_restbl[RES_ERR_FG], s6e3hf4_show_err_fg),
-	[DUMP_DSI_ERR] = DUMPINFO_INIT(dsi_err, &s6e3hf4_restbl[RES_DSI_ERR], s6e3hf4_show_dsi_err),
-	[DUMP_SELF_DIAG] = DUMPINFO_INIT(self_diag, &s6e3hf4_restbl[RES_SELF_DIAG], s6e3hf4_show_self_diag),
+	[DUMP_RDDPM] = DUMPINFO_INIT(rddpm, &s6e3hf4_restbl[RES_RDDPM], show_rddpm),
+	[DUMP_RDDSM] = DUMPINFO_INIT(rddsm, &s6e3hf4_restbl[RES_RDDSM], show_rddsm),
+	[DUMP_ERR] = DUMPINFO_INIT(err, &s6e3hf4_restbl[RES_ERR], show_err),
+	[DUMP_ERR_FG] = DUMPINFO_INIT(err_fg, &s6e3hf4_restbl[RES_ERR_FG], show_err_fg),
+	[DUMP_DSI_ERR] = DUMPINFO_INIT(dsi_err, &s6e3hf4_restbl[RES_DSI_ERR], show_dsi_err),
+	[DUMP_SELF_DIAG] = DUMPINFO_INIT(self_diag, &s6e3hf4_restbl[RES_SELF_DIAG], show_self_diag),
 };
 
-int s6e3hf4_init_common_table(struct maptbl *);
-int s6e3hf4_getidx_common_maptbl(struct maptbl *);
-int s6e3hf4_init_gamma_table(struct maptbl *);
-int s6e3hf4_getidx_dimming_maptbl(struct maptbl *);
-int s6e3hf4_getidx_brt_tbl(struct maptbl *tbl);
-int s6e3hf4_getidx_aor_table(struct maptbl *tbl);
-int s6e3hf4_getidx_irc_table(struct maptbl *tbl);
-int s6e3hf4_getidx_mps_table(struct maptbl *);
-int s6e3hf4_getidx_elvss_temp_table(struct maptbl *);
+int init_common_table(struct maptbl *);
+int getidx_common_maptbl(struct maptbl *);
+int init_gamma_table(struct maptbl *);
+int getidx_dimming_maptbl(struct maptbl *);
+int getidx_brt_tbl(struct maptbl *tbl);
+int getidx_aor_table(struct maptbl *tbl);
+int getidx_irc_table(struct maptbl *tbl);
+int getidx_mps_table(struct maptbl *);
+int getidx_elvss_temp_table(struct maptbl *);
 #ifdef CONFIG_SUPPORT_XTALK_MODE
-int s6e3hf4_getidx_vgh_table(struct maptbl *);
+int getidx_vgh_table(struct maptbl *);
 #endif
-int s6e3hf4_getidx_vint_table(struct maptbl *);
-int s6e3hf4_getidx_hbm_onoff_table(struct maptbl *);
-int s6e3hf4_getidx_acl_onoff_table(struct maptbl *);
-int s6e3hf4_getidx_acl_opr_table(struct maptbl *);
-int s6e3hf4_getidx_dsc_table(struct maptbl *);
-int s6e3hf4_getidx_resolution_table(struct maptbl *);
-int s6e3hf4_getidx_lpm_table(struct maptbl *);
-void s6e3hf4_copy_common_maptbl(struct maptbl *, u8 *);
-void s6e3hf4_copy_elvss_temp_maptbl(struct maptbl *, u8 *);
-void s6e3hf4_copy_tset_maptbl(struct maptbl *, u8 *);
-void s6e3hf4_copy_copr_maptbl(struct maptbl *, u8 *);
+int getidx_vint_table(struct maptbl *);
+int getidx_hbm_onoff_table(struct maptbl *);
+int getidx_acl_onoff_table(struct maptbl *);
+int getidx_acl_opr_table(struct maptbl *);
+int getidx_dsc_table(struct maptbl *);
+int getidx_resolution_table(struct maptbl *);
+int getidx_lpm_table(struct maptbl *);
+void copy_common_maptbl(struct maptbl *, u8 *);
+void copy_elvss_temp_maptbl(struct maptbl *, u8 *);
+void copy_tset_maptbl(struct maptbl *, u8 *);
+void copy_copr_maptbl(struct maptbl *, u8 *);
 #ifdef CONFIG_ACTIVE_CLOCK
-void s6e3hf4_copy_self_clk_update_maptbl(struct maptbl *tbl, u8 *dst);
-void s6e3hf4_copy_self_clk_maptbl(struct maptbl *, u8 *);
-void s6e3hf4_copy_self_drawer(struct maptbl *tbl, u8 *dst);
+void copy_self_clk_update_maptbl(struct maptbl *tbl, u8 *dst);
+void copy_self_clk_maptbl(struct maptbl *, u8 *);
+void copy_self_drawer(struct maptbl *tbl, u8 *dst);
 #endif
 #ifdef CONFIG_SUPPORT_HMD
-int s6e3hf4_init_hmd_gamma_table(struct maptbl *);
-int s6e3hf4_getidx_hmd_dimming_mtptbl(struct maptbl *);
+int init_hmd_gamma_table(struct maptbl *);
+int getidx_hmd_dimming_mtptbl(struct maptbl *);
 #endif /* CONFIG_SUPPORT_HMD */
 #ifdef CONFIG_EXYNOS_DECON_MDNIE_LITE
-int s6e3hf4_init_color_blind_table(struct maptbl *tbl);
-int s6e3hf4_getidx_mdnie_scenario_maptbl(struct maptbl *tbl);
-int s6e3hf4_getidx_mdnie_hmd_maptbl(struct maptbl *tbl);
-int s6e3hf4_getidx_mdnie_hdr_maptbl(struct maptbl *tbl);
-int s6e3hf4_getidx_mdnie_trans_mode_maptbl(struct maptbl *tbl);
-int s6e3hf4_init_mdnie_night_mode_table(struct maptbl *tbl);
-int s6e3hf4_getidx_mdnie_night_mode_maptbl(struct maptbl *tbl);
-int s6e3hf4_init_color_coordinate_table(struct maptbl *);
-int s6e3hf4_init_sensor_rgb_table(struct maptbl *tbl);
-int s6e3hf4_getidx_adjust_ldu_maptbl(struct maptbl *tbl);
-int s6e3hf4_getidx_color_coordinate_maptbl(struct maptbl *tbl);
-void s6e3hf4_copy_color_coordinate_maptbl(struct maptbl *tbl, u8 *dst);
-void s6e3hf4_copy_scr_white_maptbl(struct maptbl *tbl, u8 *dst);
-int s6e3hf4_getidx_trans_maptbl(struct pkt_update_info *pktui);
-int s6e3hf4_getidx_mdnie_0_maptbl(struct pkt_update_info *pktui);
-int s6e3hf4_getidx_mdnie_1_maptbl(struct pkt_update_info *pktui);
-int s6e3hf4_getidx_mdnie_2_maptbl(struct pkt_update_info *pktui);
-int s6e3hf4_getidx_mdnie_scr_white_maptbl(struct pkt_update_info *pktui);
-void s6e3hf4_update_current_scr_white(struct maptbl *tbl, u8 *dst);
+int init_color_blind_table(struct maptbl *tbl);
+int getidx_mdnie_scenario_maptbl(struct maptbl *tbl);
+int getidx_mdnie_hmd_maptbl(struct maptbl *tbl);
+int getidx_mdnie_hdr_maptbl(struct maptbl *tbl);
+int getidx_mdnie_trans_mode_maptbl(struct maptbl *tbl);
+int init_mdnie_night_mode_table(struct maptbl *tbl);
+int getidx_mdnie_night_mode_maptbl(struct maptbl *tbl);
+int init_color_coordinate_table(struct maptbl *);
+int init_sensor_rgb_table(struct maptbl *tbl);
+int getidx_adjust_ldu_maptbl(struct maptbl *tbl);
+int getidx_color_coordinate_maptbl(struct maptbl *tbl);
+void copy_color_coordinate_maptbl(struct maptbl *tbl, u8 *dst);
+void copy_scr_white_maptbl(struct maptbl *tbl, u8 *dst);
+int getidx_trans_maptbl(struct pkt_update_info *pktui);
+int getidx_mdnie_0_maptbl(struct pkt_update_info *pktui);
+int getidx_mdnie_1_maptbl(struct pkt_update_info *pktui);
+int getidx_mdnie_2_maptbl(struct pkt_update_info *pktui);
+int getidx_mdnie_scr_white_maptbl(struct pkt_update_info *pktui);
+void update_current_scr_white(struct maptbl *tbl, u8 *dst);
 #endif /* CONFIG_EXYNOS_DECON_MDNIE_LITE */
 #endif /* __S6E3HF4_H__ */

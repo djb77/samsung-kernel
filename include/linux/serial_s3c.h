@@ -46,6 +46,7 @@
 #define USI_OPTION		(0xC8)
 
 #define USI_RESET			(0<<0)
+#define USI_SET_RESET          (1<<0)
 #define USI_HWACG_CLKREQ_ON		(1<<1)
 #define USI_HWACG_CLKSTOP_ON		(1<<2)
 

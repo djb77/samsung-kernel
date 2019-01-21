@@ -40,6 +40,8 @@
 #endif
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 #include <linux/usb/class-dual-role.h>
+#elif defined(CONFIG_TYPEC)
+#include <linux/usb/typec.h>
 #endif
 #include "../battery_v2/include/sec_charging_common.h"
 
@@ -388,14 +390,17 @@ void max77705_notify_rp_current_level(struct max77705_usbc_platform_data *usbc_d
 	unsigned int rp_currentlvl;
 
 	switch (usbc_data->cc_data->ccistat) {
-	case 1:
+	case CCI_500mA:
 		rp_currentlvl = RP_CURRENT_LEVEL_DEFAULT;
 		break;
-	case 2:
+	case CCI_1_5A:
 		rp_currentlvl = RP_CURRENT_LEVEL2;
 		break;
-	case 3:
+	case CCI_3_0A:
 		rp_currentlvl = RP_CURRENT_LEVEL3;
+		break;
+	case CCI_SHORT:
+		rp_currentlvl = RP_CURRENT_ABNORMAL;
 		break;
 	default:
 		rp_currentlvl = RP_CURRENT_LEVEL_NONE;
@@ -461,6 +466,8 @@ static void max77705_pd_check_pdmsg(struct max77705_usbc_platform_data *usbc_dat
 		 * calling max77705_check_pdo() has been moved to max77705_psrdy_irq()
 		 * for specific PD charger issue
 		 */
+		if (usbc_data->dr_swap_cnt < INT_MAX)
+			usbc_data->dr_swap_cnt++;
 		break;
 	case PD_PR_Swap_Request_Received:
 		msg_maxim("PR_SWAP received.");
@@ -631,6 +638,9 @@ static void max77705_pd_rid(struct max77705_usbc_platform_data *usbc_data, u8 fc
 			|| pd_data->device == DEV_FCT_523K || pd_data->device == DEV_FCT_619K) {
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 			usbc_data->power_role = DUAL_ROLE_PROP_PR_NONE;
+#elif defined(CONFIG_TYPEC)
+			usbc_data->typec_power_role = TYPEC_SINK;
+
 #endif
 			/* usb or otg */
 			max77705_ccic_event_work(usbc_data,
@@ -660,8 +670,32 @@ static irqreturn_t max77705_pdmsg_irq(int irq, void *data)
 static irqreturn_t max77705_psrdy_irq(int irq, void *data)
 {
 	struct max77705_usbc_platform_data *usbc_data = data;
-
+	u8 psrdy_received = 0;
+#if defined(CONFIG_TYPEC)
+	enum typec_pwr_opmode mode = TYPEC_PWR_MODE_USB;
+#endif
 	msg_maxim("IN");
+	max77705_read_reg(usbc_data->muic, REG_PD_STATUS1, &usbc_data->pd_status1);
+	psrdy_received = (usbc_data->pd_status1 & BIT_PD_PSRDY)
+			>> FFS(BIT_PD_PSRDY);
+
+	if (psrdy_received && !usbc_data->pd_support
+			&& usbc_data->pd_data->cc_status != CC_NO_CONN)
+		usbc_data->pd_support = true;
+#if defined(CONFIG_TYPEC)
+	if (usbc_data->typec_try_state_change == TRY_ROLE_SWAP_PR &&
+		usbc_data->pd_support) {
+		/* Role change try and new mode detected */
+		msg_maxim("typec_reverse_completion");
+		usbc_data->typec_try_state_change = TRY_ROLE_SWAP_NONE;
+		complete(&usbc_data->typec_reverse_completion);
+	}
+	mode = max77705_get_pd_support(usbc_data);
+	typec_set_pwr_opmode(usbc_data->port, mode);
+#endif
+	msg_maxim("psrdy_received=%d, usbc_data->pd_support=%d, cc_status=%d",
+		psrdy_received, usbc_data->pd_support, usbc_data->pd_data->cc_status);
+
 	if (usbc_data->pd_data->cc_status == CC_SNK) {
 		max77705_check_pdo(usbc_data);
 		usbc_data->pd_data->psrdy_received = true;
@@ -701,6 +735,15 @@ static void max77705_datarole_irq_handler(void *data, int irq)
 				if (pd_data->previous_dr != 0xFF)
 					msg_maxim("%s detach previous usb connection\n", __func__);
 				max77705_notify_dr_status(usbc_data, 1);
+#if defined(CONFIG_TYPEC) 
+				if (usbc_data->typec_try_state_change == TRY_ROLE_SWAP_DR ||
+					usbc_data->typec_try_state_change == TRY_ROLE_SWAP_TYPE) {
+					/* Role change try and new mode detected */
+					msg_maxim("typec_reverse_completion");
+					usbc_data->typec_try_state_change = TRY_ROLE_SWAP_NONE;
+					complete(&usbc_data->typec_reverse_completion);
+				}
+#endif 
 			}
 			msg_maxim(" UFP");
 			break;
@@ -713,6 +756,15 @@ static void max77705_datarole_irq_handler(void *data, int irq)
 					msg_maxim("%s detach previous usb connection\n", __func__);
 
 				max77705_notify_dr_status(usbc_data, 1);
+#if defined(CONFIG_TYPEC) 
+				if (usbc_data->typec_try_state_change == TRY_ROLE_SWAP_DR ||
+					usbc_data->typec_try_state_change == TRY_ROLE_SWAP_TYPE) {
+					/* Role change try and new mode detected */
+					msg_maxim("typec_reverse_completion");
+					usbc_data->typec_try_state_change = TRY_ROLE_SWAP_NONE;
+					complete(&usbc_data->typec_reverse_completion);
+				}
+#endif 
 				if (usbc_data->cc_data->current_pr == SNK && !(usbc_data->is_first_booting)) {
 					max77705_vdm_process_set_identity_req(usbc_data);
 					msg_maxim("SEND THE IDENTITY REQUEST FROM DFP HANDLER");

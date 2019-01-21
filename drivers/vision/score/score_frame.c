@@ -470,6 +470,9 @@ int score_frame_trans_any_to_complete(struct score_frame *frame, int result)
 
 	score_enter();
 	if (frame->state != SCORE_FRAME_STATE_COMPLETE) {
+		score_warn("Frame(%d, %u-%u, %u) is completed by force(%d)\n",
+				frame->state, frame->sctx->id, frame->frame_id,
+				frame->kernel_id, result);
 		ret = __score_frame_destroy_state(framemgr, frame);
 		__score_frame_set_complete(framemgr, frame, result);
 	}
@@ -717,8 +720,24 @@ static void __score_frame_destroy(struct score_frame_manager *framemgr,
 	unsigned long flags;
 
 	score_enter();
+	spin_lock_irqsave(&framemgr->slock, flags);
+	score_frame_trans_any_to_complete(frame, -ENOSTR);
+	spin_unlock_irqrestore(&framemgr->slock, flags);
+
 	if (frame->work.func)
 		kthread_flush_work(&frame->work);
+
+	if (frame->buffer_count) {
+		struct score_mmu_buffer *buf, *tbuf;
+
+		list_for_each_entry_safe(buf, tbuf, &frame->buffer_list,
+				frame_list) {
+			score_frame_remove_buffer(frame, buf);
+			if (buf->mirror)
+				score_mmu_unmap_buffer(frame->sctx->mmu_ctx,
+						buf);
+		}
+	}
 
 	spin_lock_irqsave(&framemgr->slock, flags);
 	__score_frame_destroy_state(framemgr, frame);

@@ -160,6 +160,9 @@ struct tsmux_rtp_ts_info {
 	int32_t rtp_seq_number;
 	int32_t rtp_seq_override;
 
+	int32_t ts_pat_cc;
+	int32_t ts_pmt_cc;
+
 	int32_t ts_video_cc;
 	int32_t ts_audio_cc;
 };
@@ -188,6 +191,6 @@ struct tsmux_rtp_ts_info {
 #define TSMUX_IOCTL_SET_RTP_TS_INFO		\
 	_IOW('A', 0x20, struct tsmux_rtp_ts_info)
 #define TSMUX_IOCTL_GET_RTP_TS_INFO		\
-	_IOW('A', 0x21, struct tsmux_rtp_ts_info)
+	_IOR('A', 0x21, struct tsmux_rtp_ts_info)
 
 #endif /* TSMUX_H */

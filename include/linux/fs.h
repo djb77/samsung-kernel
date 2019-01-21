@@ -932,7 +932,7 @@ struct file {
 #endif /* #ifdef CONFIG_EPOLL */
 	struct address_space	*f_mapping;
 
-#ifdef CONFIG_FIVE_PA_FEATURE
+#if defined(CONFIG_FIVE_PA_FEATURE) || defined(CONFIG_PROCA)
 	void *f_signature;
 #endif
 } __attribute__((aligned(4)));	/* lest something weird decides that 2 is OK */

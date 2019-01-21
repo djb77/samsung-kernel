@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linux_osl.c 752950 2018-03-19 18:28:06Z $
+ * $Id: linux_osl.c 795952 2018-12-20 11:39:02Z $
  */
 
 #define LINUX_PORT
@@ -97,7 +97,11 @@ static void osl_sec_dma_free_consistent(osl_t *osh, void *va, uint size, dmaaddr
 
 /* PCMCIA attribute space access macros */
 
+#ifdef CUSTOMER_HW4_DEBUG
+uint32 g_assert_type = 1; /* By Default not cause Kernel Panic */
+#else
 uint32 g_assert_type = 0; /* By Default Kernel Panic */
+#endif /* CUSTOMER_HW4_DEBUG */
 
 module_param(g_assert_type, int, 0);
 #ifdef	BCM_SECURE_DMA
@@ -115,9 +119,13 @@ static int secdma_found = 0;
 #endif /* BCM_SECURE_DMA */
 
 #ifdef USE_DMA_LOCK
-#define DMA_LOCK(osh)		spin_lock_bh(&(osh)->dma_lock)
-#define DMA_UNLOCK(osh)		spin_unlock_bh(&(osh)->dma_lock)
-#define DMA_LOCK_INIT(osh)	spin_lock_init(&(osh)->dma_lock)
+static void osl_dma_lock(osl_t *osh);
+static void osl_dma_unlock(osl_t *osh);
+static void osl_dma_lock_init(osl_t *osh);
+
+#define DMA_LOCK(osh)		osl_dma_lock(osh)
+#define DMA_UNLOCK(osh)		osl_dma_unlock(osh)
+#define DMA_LOCK_INIT(osh)	osl_dma_lock_init(osh);
 #else
 #define DMA_LOCK(osh)		do { /* noop */ } while(0)
 #define DMA_UNLOCK(osh)		do { /* noop */ } while(0)
@@ -209,26 +217,92 @@ uint lmtest = FALSE;
 #ifdef DHD_MAP_LOGGING
 #define DHD_MAP_LOG_SIZE 2048
 
+typedef struct dhd_map_item {
+	dmaaddr_t pa;		/* DMA address (physical) */
+	uint64 ts_nsec;		/* timestamp: nsec */
+	uint32 size;		/* mapping size */
+	uint8 rsvd[4];		/* reserved for future use */
+} dhd_map_item_t;
+
 typedef struct dhd_map_record {
-	dma_addr_t addr;
-	uint64	time;
+	uint32 items;		/* number of total items */
+	uint32 idx;		/* current index of metadata */
+	dhd_map_item_t map[0];	/* metadata storage */
 } dhd_map_log_t;
 
-dhd_map_log_t *dhd_map_log = NULL, *dhd_unmap_log = NULL;
-uint32 map_idx = 0, unmap_idx = 0;
-
 void
-osl_dma_map_dump(void)
+osl_dma_map_dump(osl_t *osh)
 {
-	printk("%s: map_idx=%d unmap_idx=%d current time=%llu\n",
-		__FUNCTION__, map_idx, unmap_idx, OSL_SYSUPTIME_US());
-	if (dhd_map_log && dhd_unmap_log) {
-		printk("%s: dhd_map_log(pa)=%llx size=%d, dma_unmap_log(pa)=%llx size=%d\n",
-			__FUNCTION__, (uint64)__virt_to_phys((ulong)dhd_map_log),
-			(uint32)(sizeof(dhd_map_log_t) * DHD_MAP_LOG_SIZE),
-			(uint64)__virt_to_phys((ulong)dhd_unmap_log),
-			(uint32)(sizeof(dhd_map_log_t) * DHD_MAP_LOG_SIZE));
+	dhd_map_log_t *map_log, *unmap_log;
+	uint64 ts_sec, ts_usec;
+
+	map_log = (dhd_map_log_t *)(osh->dhd_map_log);
+	unmap_log = (dhd_map_log_t *)(osh->dhd_unmap_log);
+	osl_get_localtime(&ts_sec, &ts_usec);
+
+	if (map_log && unmap_log) {
+		printk("%s: map_idx=%d unmap_idx=%d "
+			"current time=[%5lu.%06lu]\n", __FUNCTION__,
+			map_log->idx, unmap_log->idx, (unsigned long)ts_sec,
+			(unsigned long)ts_usec);
+		printk("%s: dhd_map_log(pa)=0x%llx size=%d,"
+			" dma_unmap_log(pa)=0x%llx size=%d\n", __FUNCTION__,
+			(uint64)__virt_to_phys((ulong)(map_log->map)),
+			(uint32)(sizeof(dhd_map_item_t) * map_log->items),
+			(uint64)__virt_to_phys((ulong)(unmap_log->map)),
+			(uint32)(sizeof(dhd_map_item_t) * unmap_log->items));
 	}
+}
+
+static void *
+osl_dma_map_log_init(uint32 item_len)
+{
+	dhd_map_log_t *map_log;
+	gfp_t flags;
+	uint32 alloc_size = sizeof(dhd_map_log_t) +
+		(item_len * sizeof(dhd_map_item_t));
+
+	flags = CAN_SLEEP() ? GFP_KERNEL : GFP_ATOMIC;
+	map_log = (dhd_map_log_t *)kmalloc(alloc_size, flags);
+	if (map_log) {
+		memset(map_log, 0, alloc_size);
+		map_log->items = item_len;
+		map_log->idx = 0;
+	}
+
+	return (void *)map_log;
+}
+
+static void
+osl_dma_map_log_deinit(osl_t *osh)
+{
+	if (osh->dhd_map_log) {
+		kfree(osh->dhd_map_log);
+		osh->dhd_map_log = NULL;
+	}
+
+	if (osh->dhd_unmap_log) {
+		kfree(osh->dhd_unmap_log);
+		osh->dhd_unmap_log = NULL;
+	}
+}
+
+static void
+osl_dma_map_logging(osl_t *osh, void *handle, dmaaddr_t pa, uint32 len)
+{
+	dhd_map_log_t *log = (dhd_map_log_t *)handle;
+	uint32 idx;
+
+	if (log == NULL) {
+		printk("%s: log is NULL\n", __FUNCTION__);
+		return;
+	}
+
+	idx = log->idx;
+	log->map[idx].ts_nsec = osl_localtime_ns();
+	log->map[idx].pa = pa;
+	log->map[idx].size = len;
+	log->idx = (idx + 1) % log->items;
 }
 #endif /* DHD_MAP_LOGGING */
 
@@ -408,13 +482,14 @@ osl_attach(void *pdev, uint bustype, bool pkttag)
 	DMA_LOCK_INIT(osh);
 
 #ifdef DHD_MAP_LOGGING
-	dhd_map_log = kmalloc(sizeof(dhd_map_log_t) * DHD_MAP_LOG_SIZE, flags);
-	if (dhd_map_log) {
-		memset(dhd_map_log, 0, sizeof(dhd_map_log_t) * DHD_MAP_LOG_SIZE);
+	osh->dhd_map_log = osl_dma_map_log_init(DHD_MAP_LOG_SIZE);
+	if (osh->dhd_map_log == NULL) {
+		printk("%s: Failed to alloc dhd_map_log\n", __FUNCTION__);
 	}
-	dhd_unmap_log = kmalloc(sizeof(dhd_map_log_t) * DHD_MAP_LOG_SIZE, flags);
-	if (dhd_unmap_log) {
-		memset(dhd_unmap_log, 0, sizeof(dhd_map_log_t) * DHD_MAP_LOG_SIZE);
+
+	osh->dhd_unmap_log = osl_dma_map_log_init(DHD_MAP_LOG_SIZE);
+	if (osh->dhd_unmap_log == NULL) {
+		printk("%s: Failed to alloc dhd_unmap_log\n", __FUNCTION__);
 	}
 #endif /* DHD_MAP_LOGGING */
 
@@ -463,12 +538,8 @@ osl_detach(osl_t *osh)
 	bcm_object_trace_deinit();
 
 #ifdef DHD_MAP_LOGGING
-	if (dhd_map_log) {
-		kfree(dhd_map_log);
-	}
-	if (dhd_unmap_log) {
-		kfree(dhd_unmap_log);
-	}
+	osl_dma_map_log_deinit(osh->dhd_map_log);
+	osl_dma_map_log_deinit(osh->dhd_unmap_log);
 #endif /* DHD_MAP_LOGGING */
 
 	ASSERT(osh->magic == OS_HANDLE_MAGIC);
@@ -961,15 +1032,6 @@ osl_dma_map(osl_t *osh, void *va, uint size, int direction, void *p, hnddma_seg_
 	map_addr = pci_map_single(osh->pdev, va, size, dir);
 #endif	/* ! STB_SOC_WIFI */
 
-#ifdef DHD_MAP_LOGGING
-	if (dhd_map_log) {
-		dhd_map_log[map_idx].addr = map_addr;
-		dhd_map_log[map_idx].time = OSL_SYSUPTIME_US();
-		map_idx++;
-		map_idx = map_idx % DHD_MAP_LOG_SIZE;
-	}
-#endif /* DHD_MAP_LOGGING */
-
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
 	ret = pci_dma_mapping_error(osh->pdev, map_addr);
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 5))
@@ -985,6 +1047,10 @@ osl_dma_map(osl_t *osh, void *va, uint size, int direction, void *p, hnddma_seg_
 		PHYSADDRLOSET(ret_addr, map_addr & 0xffffffff);
 		PHYSADDRHISET(ret_addr, (map_addr >> 32) & 0xffffffff);
 	}
+
+#ifdef DHD_MAP_LOGGING
+	osl_dma_map_logging(osh, osh->dhd_map_log, ret_addr, size);
+#endif /* DHD_MAP_LOGGING */
 
 	DMA_UNLOCK(osh);
 
@@ -1005,17 +1071,12 @@ osl_dma_unmap(osl_t *osh, dmaaddr_t pa, uint size, int direction)
 
 	dir = (direction == DMA_TX)? PCI_DMA_TODEVICE: PCI_DMA_FROMDEVICE;
 
-#ifdef BCMDMA64OSL
-	PHYSADDRTOULONG(pa, paddr);
 #ifdef DHD_MAP_LOGGING
-	if (dhd_unmap_log) {
-		dhd_unmap_log[unmap_idx].addr = paddr;
-		dhd_unmap_log[unmap_idx].time = OSL_SYSUPTIME_US();
-		unmap_idx++;
-		unmap_idx = unmap_idx % DHD_MAP_LOG_SIZE;
-	}
+	osl_dma_map_logging(osh, osh->dhd_unmap_log, pa, size);
 #endif /* DHD_MAP_LOGGING */
 
+#ifdef BCMDMA64OSL
+	PHYSADDRTOULONG(pa, paddr);
 	pci_unmap_single(osh->pdev, paddr, size, dir);
 #else /* BCMDMA64OSL */
 
@@ -1033,19 +1094,11 @@ osl_dma_unmap(osl_t *osh, dmaaddr_t pa, uint size, int direction)
 	dma_unmap_single(osh->pdev, (uintptr)pa, size, dir);
 #endif /* (__LINUX_ARM_ARCH__ == 8) */
 #else /* STB_SOC_WIFI */
-#ifdef DHD_MAP_LOGGING
-	if (dhd_unmap_log) {
-		dhd_unmap_log[unmap_idx].addr = pa;
-		dhd_unmap_log[unmap_idx].time = OSL_SYSUPTIME_US();
-		unmap_idx++;
-		unmap_idx = unmap_idx % DHD_MAP_LOG_SIZE;
-	}
-#endif /* DHD_MAP_LOGGING */
-
 	pci_unmap_single(osh->pdev, (uint32)pa, size, dir);
 #endif /* STB_SOC_WIFI */
 
 #endif /* BCMDMA64OSL */
+
 	DMA_UNLOCK(osh);
 }
 
@@ -1138,6 +1191,32 @@ osl_sysuptime_us(void)
 	/* tv_usec content is fraction of a second */
 	usec = (uint64)tv.tv_sec * 1000000ul + tv.tv_usec;
 	return usec;
+}
+
+uint64
+osl_localtime_ns(void)
+{
+	uint64 ts_nsec = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
+	ts_nsec = local_clock();
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36) */
+
+	return ts_nsec;
+}
+
+void
+osl_get_localtime(uint64 *sec, uint64 *usec)
+{
+	uint64 ts_nsec = 0;
+	unsigned long rem_nsec = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
+	ts_nsec = local_clock();
+	rem_nsec = do_div(ts_nsec, NSEC_PER_SEC);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36) */
+	*sec = (uint64)ts_nsec;
+	*usec = (uint64)(rem_nsec / MSEC_PER_SEC);
 }
 
 /*
@@ -1893,3 +1972,34 @@ osl_timer_del(osl_t *osh, osl_timer_t *t)
 	}
 	return (TRUE);
 }
+
+#ifdef USE_DMA_LOCK
+static void
+osl_dma_lock(osl_t *osh)
+{
+	if (likely(in_irq() || irqs_disabled())) {
+		spin_lock(&osh->dma_lock);
+	} else {
+		spin_lock_bh(&osh->dma_lock);
+		osh->dma_lock_bh = TRUE;
+	}
+}
+
+static void
+osl_dma_unlock(osl_t *osh)
+{
+	if (unlikely(osh->dma_lock_bh)) {
+		osh->dma_lock_bh = FALSE;
+		spin_unlock_bh(&osh->dma_lock);
+	} else {
+		spin_unlock(&osh->dma_lock);
+	}
+}
+
+static void
+osl_dma_lock_init(osl_t *osh)
+{
+	spin_lock_init(&osh->dma_lock);
+	osh->dma_lock_bh = FALSE;
+}
+#endif /* USE_DMA_LOCK */

@@ -284,6 +284,7 @@ static int fimc_is_hw_3aa_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame
 	struct taa_param *param;
 	u32 lindex, hindex;
 	bool frame_done = false;
+	struct is_param_region *param_region;
 
 	FIMC_BUG(!hw_ip);
 	FIMC_BUG(!frame);
@@ -311,6 +312,7 @@ static int fimc_is_hw_3aa_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame
 
 	param = &region->parameter.taa;
 
+	param_region = (struct is_param_region *)frame->shot->ctl.vendor_entry.parameter;
 	if (frame->type == SHOT_TYPE_INTERNAL) {
 		/* OTF INPUT case */
 		param_set->dma_output_before_bds.cmd  = DMA_OUTPUT_COMMAND_DISABLE;
@@ -339,11 +341,12 @@ static int fimc_is_hw_3aa_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame
 			hindex |= HIGHBIT_OF(PARAM_3AA_OTF_OUTPUT);
 			hindex |= HIGHBIT_OF(PARAM_3AA_VDMA4_OUTPUT);
 			hindex |= HIGHBIT_OF(PARAM_3AA_VDMA2_OUTPUT);
+			param_region = &region->parameter;
 		}
 	}
 
 	fimc_is_hw_3aa_update_param(hw_ip,
-		region, param_set,
+		param_region, param_set,
 		lindex, hindex, frame->instance);
 
 	/* DMA settings */
@@ -462,7 +465,7 @@ static int fimc_is_hw_3aa_set_param(struct fimc_is_hw_ip *hw_ip, struct is_regio
 	hw_ip->lindex[instance] = lindex;
 	hw_ip->hindex[instance] = hindex;
 
-	fimc_is_hw_3aa_update_param(hw_ip, region, param_set, lindex, hindex, instance);
+	fimc_is_hw_3aa_update_param(hw_ip, &region->parameter, param_set, lindex, hindex, instance);
 
 	ret = fimc_is_lib_isp_set_param(hw_ip, &hw_3aa->lib[instance], param_set);
 	if (ret)
@@ -471,19 +474,19 @@ static int fimc_is_hw_3aa_set_param(struct fimc_is_hw_ip *hw_ip, struct is_regio
 	return ret;
 }
 
-void fimc_is_hw_3aa_update_param(struct fimc_is_hw_ip *hw_ip, struct is_region *region,
+void fimc_is_hw_3aa_update_param(struct fimc_is_hw_ip *hw_ip, struct is_param_region *param_region,
 	struct taa_param_set *param_set, u32 lindex, u32 hindex, u32 instance)
 {
 	struct taa_param *param;
 
-	FIMC_BUG_VOID(!region);
+	FIMC_BUG_VOID(!param_region);
 	FIMC_BUG_VOID(!param_set);
 
-	param = &region->parameter.taa;
+	param = &param_region->taa;
 	param_set->instance_id = instance;
 
 	if (lindex & LOWBIT_OF(PARAM_SENSOR_CONFIG)) {
-		memcpy(&param_set->sensor_config, &region->parameter.sensor.config,
+		memcpy(&param_set->sensor_config, &param_region->sensor.config,
 			sizeof(struct param_sensor_config));
 	}
 

@@ -517,9 +517,8 @@ int abox_vdma_register(struct device *dev, int id, int stream,
 	if (info->dev && rtd->iova)
 		return -EEXIST;
 
-	dev_info(dev, "%s(%d, %s, %d, %p, %pa, %u)\n", __func__,
-			id, pcm_hardware->name, stream, area, &addr,
-			pcm_hardware->buffer_bytes_max);
+	dev_info(dev, "%s(%d, %s, %d, %u)\n", __func__, id, pcm_hardware->name,
+			stream, pcm_hardware->buffer_bytes_max);
 
 	info->id = id;
 	strncpy(info->name, pcm_hardware->name, sizeof(info->name) - 1);

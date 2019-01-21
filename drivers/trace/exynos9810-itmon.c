@@ -1317,8 +1317,10 @@ static void itmon_route_tracedata(struct itmon_dev *itmon)
 		pr_auto(ASL3, "--------------------------------------------------------------------------\n");
 
 	for (trans_type = 0; trans_type < TRANS_TYPE_NUM; trans_type++) {
-		itmon_post_handler_to_notifier(itmon, trans_type);
-		itmon_post_handler_by_master(itmon, trans_type);
+		if (!pdata->crash_in_progress) {
+			itmon_post_handler_to_notifier(itmon, trans_type);
+			itmon_post_handler_by_master(itmon, trans_type);
+		}
 	}
 }
 

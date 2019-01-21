@@ -18,6 +18,7 @@
  * We must use bootloader settings first.
 *************************************************************************/
 
+#define SZ_32K				0x00008000
 #define SZ_64K				0x00010000
 #define SZ_1M				0x00100000
 
@@ -29,7 +30,7 @@
 #define ESS_LOG_S2D_SIZE		(0)
 #define ESS_LOG_CACHEDUMP_SIZE		(10 * SZ_1M)
 #define ESS_LOG_ETM_SIZE		(1 * SZ_1M)
-#define ESS_LOG_PSTORE_SIZE		(2 * SZ_1M)
+#define ESS_LOG_PSTORE_SIZE		SZ_32K
 #define ESS_LOG_KEVENTS_SIZE		(8 * SZ_1M)
 
 #define ESS_HEADER_OFFSET		0

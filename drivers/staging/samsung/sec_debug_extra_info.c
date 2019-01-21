@@ -19,6 +19,7 @@
 #include <linux/seq_file.h>
 #include <asm/stacktrace.h>
 #include <asm/esr.h>
+#include <asm/cacheflush.h>
 
 #include <soc/samsung/exynos-pmu.h>
 #include <linux/sec_ext.h>
@@ -136,7 +137,9 @@ const char *ftype_items[MAX_EXTRA_INFO_KEY_LEN] = {
 	"PAGE",
 	"AUF",
 	"EUF",
-	"AUOF"
+	"AUOF",
+	"BUG",
+	"PANIC",
 };
 
 struct sec_debug_panic_extra_info *sec_debug_extra_info;
@@ -164,17 +167,23 @@ early_param("androidboot.dram_info", sec_hw_param_get_dram_info);
  * This function simply initialize each filed of sec_debug_panic_extra_info.
  ******************************************************************************/
 
-void sec_debug_init_extra_info(struct sec_debug_shared_info *sec_debug_info)
+void sec_debug_init_extra_info(struct sec_debug_shared_info *sec_debug_info, int magic_status)
 {
 	if (sec_debug_info) {
+		pr_crit("%s: magic: %d\n", __func__, magic_status);
 		sec_debug_extra_info = &sec_debug_info->sec_debug_extra_info;
-		sec_debug_extra_info_backup = &sec_debug_info->sec_debug_extra_info_backup;
-		sec_debug_extra_info_pmudbg = &sec_debug_info->sec_debug_extra_info_pmudbg;
 
-		if (reset_reason == RR_K || reset_reason == RR_D || 
-			reset_reason == RR_P || reset_reason == RR_S) {
-			memcpy(sec_debug_extra_info_backup, sec_debug_extra_info,
-			       sizeof(struct sec_debug_panic_extra_info));
+		if (magic_status) {
+			pr_crit("%s: init for backup and pmudbg\n", __func__);
+			sec_debug_extra_info_backup = &sec_debug_info->sec_debug_extra_info_backup;
+			sec_debug_extra_info_pmudbg = &sec_debug_info->sec_debug_extra_info_pmudbg;
+
+			if (reset_reason == RR_K ||
+				reset_reason == RR_D || 
+				reset_reason == RR_P ||
+				reset_reason == RR_S)
+				memcpy(sec_debug_extra_info_backup, sec_debug_extra_info,
+						sizeof(struct sec_debug_panic_extra_info));
 		}
 
 		memcpy(sec_debug_extra_info, &sec_debug_extra_info_init,
@@ -446,7 +455,7 @@ void sec_debug_set_extra_info_backtrace(struct pt_regs *regs)
 			offset += sprintf((char *)sec_debug_extra_info->item[INFO_STACK].val + offset, ":");
 
 		snprintf((char *)sec_debug_extra_info->item[INFO_STACK].val + offset,
-				MAX_EXTRA_INFO_VAL_LEN, "%s", buf);
+				MAX_EXTRA_INFO_VAL_LEN - offset, "%s", buf);
 
 		offset += sym_name_len;
 	}
@@ -498,9 +507,22 @@ void sec_debug_set_extra_info_backtrace_cpu(struct pt_regs *regs, int cpu)
 			offset += sprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset, ":");
 
 		snprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset,
-				MAX_EXTRA_INFO_VAL_LEN, "%s", buf);
+				MAX_EXTRA_INFO_VAL_LEN - offset, "%s", buf);
 		offset += sym_name_len;
+
+		break;
 	}
+
+	if(regs) {
+		snprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset,
+				MAX_EXTRA_INFO_VAL_LEN - offset, ":%08x/%08x/%08x/%08x/%08x/%08x/%08x/%08x,",
+				(unsigned int)regs->regs[0], (unsigned int)regs->regs[1],
+				(unsigned int)regs->regs[2], (unsigned int)regs->regs[3],
+				(unsigned int)regs->regs[4], (unsigned int)regs->regs[5],
+				(unsigned int)regs->regs[6], (unsigned int)regs->regs[7]);
+	}
+
+	flush_cache_all();
 }
 
 /******************************************************************************
@@ -615,6 +637,33 @@ void sec_debug_set_extra_info_batt(int cap, int volt, int temp, int curr)
 {
 	sec_debug_clear_extra_info(INFO_BATT);
 	sec_debug_set_extra_info(INFO_BATT, "%03d/%04d/%04d/%06d", cap, volt, temp, curr);
+}
+
+/******************************************************************************
+ * sec_debug_set_extra_info_rvd1
+ ******************************************************************************/
+
+void sec_debug_set_extra_info_rvd1(char *str)
+{
+	sec_debug_set_extra_info(INFO_RVD1, "%s", str);
+}
+
+/******************************************************************************
+ * sec_debug_set_extra_info_rvd2
+ ******************************************************************************/
+
+void sec_debug_set_extra_info_rvd2(char *str)
+{
+	sec_debug_set_extra_info(INFO_RVD2, "%s", str);
+}
+
+/******************************************************************************
+ * sec_debug_set_extra_info_rvd3
+ ******************************************************************************/
+
+void sec_debug_set_extra_info_rvd3(char *str)
+{
+	sec_debug_set_extra_info(INFO_RVD3, "%s", str);
 }
 
 void sec_debug_finish_extra_info(void)

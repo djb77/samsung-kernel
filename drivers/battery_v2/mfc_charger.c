@@ -2693,7 +2693,7 @@ static void mfc_wpc_isr_work(struct work_struct *work)
 					charger->pdata->cable_type == MFC_PAD_PREPARE_HV ||
 					charger->pdata->cable_type == MFC_PAD_WPC_STAND_HV ||
 					charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV) {
-					pr_err("%s: Is is already HV wireless cable. No need to set again\n", __func__);
+					pr_err("%s: It is already HV wireless cable. No need to set again\n", __func__);
 					wake_unlock(&charger->wpc_wake_lock);
 					return;
 				}
@@ -2735,6 +2735,12 @@ static void mfc_wpc_isr_work(struct work_struct *work)
 				charger->pdata->cable_type = MFC_PAD_WPC_PACK_TA;
 				value.intval = SEC_WIRELESS_PAD_WPC_PACK_TA;
 				psy_do_property("wireless", set, POWER_SUPPLY_PROP_ONLINE, value);
+				break;
+			case TX_ID_UNO_TX:
+			case TX_ID_UNO_TX_B0 ... TX_ID_UNO_TX_MAX:
+				charger->pdata->cable_type = MFC_PAD_TX;
+				value.intval = SEC_WIRELESS_PAD_TX;
+				pr_info("%s: TX by UNO\n", __func__);
 				break;
 			default:
 				pr_info("%s: unsupport : 0x%x", __func__, val_data);
@@ -3377,6 +3383,10 @@ static int mfc_charger_probe(
 			goto err_parse_dt;
 	} else {
 		pdata = client->dev.platform_data;
+		if (!pdata) {
+			dev_err(&client->dev, "Failed to get platform data\n");
+			return -ENOMEM;
+		}
 	}
 
 	charger = kzalloc(sizeof(*charger), GFP_KERNEL);
@@ -3587,7 +3597,7 @@ static void mfc_charger_shutdown(struct i2c_client *client)
 
 	cancel_delayed_work(&charger->wpc_vout_mode_work);
 
-	if (charger->pdata->is_charging) {
+	if (gpio_get_value(charger->pdata->wpc_det)) {
 		pr_info("%s: forced 5V Vout\n", __func__);
 		mfc_set_vrect_adjust(charger, MFC_HEADROOM_1);
 		mfc_set_vout(charger, MFC_VOUT_5V);

@@ -301,6 +301,7 @@ static bool mtv319_scan_ch(struct ensemble_info_type *e_info
 #endif
 			if ((parser_status == 1) || (parser_status == 2))
 				ret = __get_ensemble_info(e_info, (freq));
+			DPRINTK("%s : parser_status : %d\n", __func__, parser_status);
 		} else {
 			DPRINTK("%s : Scan fail : %ld : %d\n", __func__, freq, scan_result);
 			ret = false;

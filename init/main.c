@@ -229,13 +229,21 @@ static bool __init obsolete_checksetup(char *line)
 			} else if (!p->setup_func) {
 				pr_warn("Parameter %s is obsolete, ignored\n",
 					p->str);
-				return true;
-			} else if (p->setup_func(line + n))
-				return true;
+				had_early_param = true;
+				goto fail;
+			} else {
+				set_memsize_reserved_name(p->str);
+				if (p->setup_func(line + n)) {
+					had_early_param = true;
+					goto fail;
+				}
+			}
 		}
 		p++;
 	} while (p < __setup_end);
 
+fail:
+	unset_memsize_reserved_name();
 	return had_early_param;
 }
 
@@ -471,6 +479,7 @@ static int __init do_early_param(char *param, char *val,
 		    (strcmp(param, "console") == 0 &&
 		     strcmp(p->str, "earlycon") == 0)
 		) {
+			set_memsize_reserved_name(p->str);
 			if (p->setup_func(val) != 0)
 				pr_warn("Malformed early option '%s'\n", param);
 		}
@@ -485,6 +494,7 @@ static int __init do_early_param(char *param, char *val,
 	}
 #endif
 
+	unset_memsize_reserved_name();
 	return 0;
 }
 
@@ -524,6 +534,7 @@ void __init __weak thread_stack_cache_init(void)
  */
 static void __init mm_init(void)
 {
+	set_memsize_kernel_type(MEMSIZE_KERNEL_MM_INIT);
 	/*
 	 * page_ext requires contiguous pages,
 	 * bigger than MAX_ORDER unless SPARSEMEM.
@@ -538,6 +549,7 @@ static void __init mm_init(void)
 #ifdef CONFIG_PTRACK_DEBUG
 	ptrack_init();
 #endif
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 }
 
 #ifdef CONFIG_UH_RKP
@@ -564,8 +576,20 @@ static void __init rkp_init(void)
 	init.rkp_pgt_bitmap = (u64)__pa(rkp_pgt_bitmap);
 	init.rkp_dbl_bitmap = (u64)__pa(rkp_map_bitmap);
 	init.rkp_bitmap_size = RKP_PGT_BITMAP_LEN;
-	init.no_fimc_verify = 1;
+#ifdef CONFIG_RKP_KDP
+	init.rkp_prot_page_size = (u64)__rkp_end_prot_page - (u64)__rkp_start_prot_page;
+#else
+	init.rkp_prot_page_size = 0;
+#endif
+#ifdef CONFIG_UH_RKP_FIMC_TYPE
+	init.fimc_type = 1;
+#else
+	init.fimc_type = 0;
+#endif
 	init.fimc_phys_addr = 0;
+
+	init.tramp_pgd = (u64)__pa(tramp_pg_dir);
+	init.tramp_valias = (u64)TRAMP_VALIAS;
 
 	for (p = vmlist; p; p = p->next) {
 		if (p->addr == (void *)FIMC_LIB_START_VA) {
@@ -632,6 +656,7 @@ asmlinkage __visible void __init start_kernel(void)
 	char *command_line;
 	char *after_dashes;
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 	set_task_stack_end_magic(&init_task);
 	smp_setup_processor_id();
 	debug_objects_early_init();
@@ -798,10 +823,6 @@ asmlinkage __visible void __init start_kernel(void)
 	buffer_init();
 	key_init();
 	security_init();
-#ifdef CONFIG_RKP_KDP
-	if (rkp_cred_enable) 
-		uh_call(UH_APP_RKP, 0x51, (u64)__rkp_ro_start, 0, 0, 0);
-#endif /*CONFIG_RKP_KDP*/
 	dbg_late_init();
 	vfs_caches_init();
 	signals_init();
@@ -826,6 +847,7 @@ asmlinkage __visible void __init start_kernel(void)
 
 	ftrace_init();
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_STOP);
 	/* Do the rest non-__init'ed, we're now alive */
 	rest_init();
 }
@@ -1171,6 +1193,7 @@ static int __ref kernel_init(void *unused)
 
 	panic("No working init found.  Try passing init= option to kernel. "
 	      "See Linux Documentation/init.txt for guidance.");
+	return 0;
 }
 
 static noinline void __init kernel_init_freeable(void)

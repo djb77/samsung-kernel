@@ -68,6 +68,7 @@ static int connect_panel = PANEL_CONNECT;
 #ifdef CONFIG_SUPPORT_PANEL_SWAP
 int panel_reprobe(struct panel_device *panel);
 #endif
+static int panel_display_off(struct panel_device *panel);
 
 #ifdef CONFIG_SUPPORT_DOZE
 #define CONFIG_SET_1p5_ALPM
@@ -187,7 +188,6 @@ int __panel_seq_display_on(struct panel_device *panel)
 	if (unlikely(ret < 0)) {
 		panel_err("PANEL:ERR:%s, failed to write init seqtbl\n", __func__);
 	}
-
 	return ret;
 }
 
@@ -200,7 +200,6 @@ int __panel_seq_display_off(struct panel_device *panel)
 	if (unlikely(ret < 0)) {
 		panel_err("PANEL:ERR:%s, failed to write init seqtbl\n", __func__);
 	}
-
 	return ret;
 }
 
@@ -350,6 +349,10 @@ static int __panel_seq_exit_alpm(struct panel_device *panel)
 		panel_err("PANEL:ERR:%s:failed to exit_lpm ops\n", __func__);
 #endif
 
+#ifdef CONFIG_DONT_SUPPORT_SEAMLESS_AOD
+	panel_display_off(panel);
+#endif
+
 	mutex_lock(&panel_bl->lock);
 	mutex_lock(&panel->op_lock);
 #ifdef CONFIG_SET_1p5_ALPM
@@ -393,6 +396,10 @@ static void __delay_normal_alpm(struct panel_device *panel)
 		goto exit_delay;
 
 	delaycmd = (struct delayinfo *)seqtbl->cmdtbl[0];
+	if(delaycmd == NULL) {
+		panel_info("PANEL:INFO:%s: no delay\n", __func__);
+		goto exit_delay;
+	}
 	if (delaycmd->type != CMD_TYPE_DELAY) {
 		panel_err("PANEL:ERR:%s:can't find value\n", __func__);
 		goto exit_delay;
@@ -412,15 +419,13 @@ exit_delay:
 	return;
 }
 
-
-
 static int __panel_seq_set_alpm(struct panel_device *panel)
 {
 	int ret = 0;
-	int volt = 0;
 	struct panel_bl_device *panel_bl = &panel->panel_bl;
 #ifdef CONFIG_SET_1p5_ALPM
 	struct panel_pad *pad = &panel->pad;
+	int volt = 0;
 #endif
 #ifdef CONFIG_DISP_PMIC_SSD
 	struct regulator *elvss = regulator_get(NULL, "elvss");
@@ -438,6 +443,10 @@ static int __panel_seq_set_alpm(struct panel_device *panel)
 	}
 #endif
 	__delay_normal_alpm(panel);
+
+#ifdef CONFIG_DONT_SUPPORT_SEAMLESS_AOD
+	panel_display_off(panel);
+#endif
 
 	mutex_lock(&panel_bl->lock);
 	mutex_lock(&panel->op_lock);
@@ -757,7 +766,7 @@ int panel_update_dim_type(struct panel_device *panel, u32 dim_type)
 	int ret;
 
 	if (dim_type == DIM_TYPE_DIM_FLASH) {
-		ret = set_panel_poc(&panel->poc_dev, POC_OP_DIM_READ);
+		ret = set_panel_poc(&panel->poc_dev, POC_OP_DIM_READ, NULL);
 		if (unlikely(ret)) {
 			pr_err("%s, failed to read gamma flash(ret %d)\n",
 					__func__, ret);
@@ -797,7 +806,7 @@ int panel_update_dim_type(struct panel_device *panel, u32 dim_type)
 				state = GAMMA_FLASH_ERROR_CHECKSUM_MISMATCH;
 		}
 
-		ret = set_panel_poc(&panel->poc_dev, POC_OP_MTP_READ);
+		ret = set_panel_poc(&panel->poc_dev, POC_OP_MTP_READ, NULL);
 		if (unlikely(ret)) {
 			pr_err("%s, failed to read mtp flash(ret %d)\n",
 					__func__, ret);
@@ -1057,24 +1066,6 @@ int panel_probe(struct panel_device *panel)
 	}
 #endif /* CONFIG_SUPPORT_DDI_FLASH */
 
-#ifdef CONFIG_SUPPORT_DIM_FLASH
-	mutex_lock(&panel->panel_bl.lock);
-	mutex_lock(&panel->op_lock);
-	for (i = 0; i < MAX_PANEL_BL_SUBDEV; i++) {
-		if (panel_data->panel_dim_info[i]->dim_flash_on) {
-			panel_data->props.dim_flash_on = true;
-			pr_info("%s dim_flash : on\n", __func__);
-			break;
-		}
-	}
-	mutex_unlock(&panel->op_lock);
-	mutex_unlock(&panel->panel_bl.lock);
-
-	if (panel_data->props.dim_flash_on)
-		queue_delayed_work(panel->dim_flash_work.wq,
-				&panel->dim_flash_work.dwork, msecs_to_jiffies(500));
-#endif /* CONFIG_SUPPORT_DIM_FLASH */
-
 	ret = panel_maptbl_init(panel);
 	if (unlikely(ret)) {
 		pr_err("%s, failed to resource init\n", __func__);
@@ -1116,6 +1107,24 @@ int panel_probe(struct panel_device *panel)
 		return -ENODEV;
 	}
 #endif
+
+#ifdef CONFIG_SUPPORT_DIM_FLASH
+	mutex_lock(&panel->panel_bl.lock);
+	mutex_lock(&panel->op_lock);
+	for (i = 0; i < MAX_PANEL_BL_SUBDEV; i++) {
+		if (panel_data->panel_dim_info[i]->dim_flash_on) {
+			panel_data->props.dim_flash_on = true;
+			pr_info("%s dim_flash : on\n", __func__);
+			break;
+		}
+	}
+	mutex_unlock(&panel->op_lock);
+	mutex_unlock(&panel->panel_bl.lock);
+
+	if (panel_data->props.dim_flash_on)
+		queue_delayed_work(panel->dim_flash_work.wq,
+				&panel->dim_flash_work.dwork, msecs_to_jiffies(500));
+#endif /* CONFIG_SUPPORT_DIM_FLASH */
 
 	return 0;
 }

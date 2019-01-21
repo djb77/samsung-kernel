@@ -687,7 +687,7 @@ static ssize_t accessibility_store(struct device *dev,
 		return ret;
 	}
 
-	if (value >= ACCESSIBILITY_MAX) {
+	if (value < 0 || value >= ACCESSIBILITY_MAX) {
 		pr_warn("%s, unknown accessibility %d\n", __func__, value);
 		return -EINVAL;
 	}

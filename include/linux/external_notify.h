@@ -38,6 +38,7 @@ enum external_notify_cmd {
 	EXTERNAL_NOTIFY_MDMBLOCK_PRE,
 	EXTERNAL_NOTIFY_MDMBLOCK_POST,
 	EXTERNAL_NOTIFY_POWERROLE,
+	EXTERNAL_NOTIFY_DEVICEADD,
 };
 
 /* external notifier call sequence,
@@ -46,6 +47,7 @@ enum external_notify_device {
 	EXTERNAL_NOTIFY_DEV_MUIC,
 	EXTERNAL_NOTIFY_DEV_CHARGER,
 	EXTERNAL_NOTIFY_DEV_PDIC,
+	EXTERNAL_NOTIFY_DEV_MANAGER,
 };
 
 enum external_notify_condev {

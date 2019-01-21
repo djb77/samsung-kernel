@@ -1623,11 +1623,12 @@ static int ufshcd_map_sg(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	cmd = lrbp->cmd;
 
 #if defined(CONFIG_UFS_DATA_LOG)
-	if (cmd->request){
+	if (cmd->request && hba->host->ufs_sys_log_en){
 		/*condition of data log*/
 		/*read request of system area for debugging dm verity issue*/
-		if ( rq_data_dir(cmd->request) == READ &&
-			cmd->request->__sector >= 68736 && cmd->request->__sector <= 1297535) {
+		if (rq_data_dir(cmd->request) == READ &&
+			cmd->request->__sector >= hba->host->ufs_system_start &&
+			cmd->request->__sector < hba->host->ufs_system_end) {
 
 			for (id = 0; id < UFS_DATA_LOG_MAX; id++){
 				dump_index = atomic_inc_return(&hba->log_count) & (UFS_DATA_LOG_MAX - 1);
@@ -4634,6 +4635,7 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba, int reason,
 #if defined(CONFIG_UFS_DATA_LOG_MAGIC_CODE)
 	struct scatterlist *sg;
 	int sg_segments;
+	unsigned long magicword_rb = 0;
 #endif
 	int i = 0;
 	int cpu = raw_smp_processor_id();
@@ -4654,10 +4656,11 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba, int reason,
 			result = ufshcd_transfer_rsp_status(hba, lrbp);
 
 #if defined(CONFIG_UFS_DATA_LOG)
-		if (cmd->request){
-			/*condition of data log*/
-			if (rq_data_dir(cmd->request) == READ&&
-				cmd->request->__sector >= 68736 && cmd->request->__sector <= 1297535) {
+			if (cmd->request && hba->host->ufs_sys_log_en){
+				/*condition of data log*/
+				if (rq_data_dir(cmd->request) == READ &&
+						cmd->request->__sector >= hba->host->ufs_system_start &&
+						cmd->request->__sector < hba->host->ufs_system_end) {
 					dump_index = queuing_req[cmd->request->tag];
 					queuing_req[cmd->request->tag] = 0;
 					ufs_data_log[dump_index].end_time = cpu_clock(cpu);
@@ -4675,6 +4678,11 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba, int reason,
 						
 						ufs_data_log[dump_index].virt_addr = sg_virt(sg);
 						memcpy(&ufs_data_log[dump_index].datbuf, sg_virt(sg), UFS_DATA_BUF_SIZE);
+						memcpy(&magicword_rb, sg_virt(sg), UFS_DATA_BUF_SIZE);
+						if (magicword_rb == 0x1F5E3A7069245CBE) {
+							printk(KERN_ALERT "tag%d:sg[%d]:%p: page_link=%lx, offset=%d, length=%d\n",
+								index, i, sg, sg->page_link, sg->offset, sg->length);
+						}
 					}
 #endif
 				}

@@ -440,7 +440,8 @@ void set_cisd_pad_data(struct sec_battery_info *battery, const char* buf)
 
 	if (!pad_index) {
 		for (i = WC_DATA_INDEX + 1; i < WC_DATA_MAX; i++) {
-			sscanf(buf, "%10d%n", &pad_count, &x);
+			if (sscanf(buf, "%10d%n", &pad_count, &x) <= 0)
+				break;
 			buf += (size_t)x;
 
 			if (pad_count > 0) {
@@ -455,8 +456,8 @@ void set_cisd_pad_data(struct sec_battery_info *battery, const char* buf)
 			}
 		}
 	} else {
-		sscanf(buf + 1, "%10d%n", &pad_total_count, &x);
-		if (pad_total_count >= MAX_PAD_ID)
+		if ((sscanf(buf + 1, "%10d%n", &pad_total_count, &x) <= 0) ||
+			(pad_total_count >= MAX_PAD_ID))
 			return;
 		buf += (size_t)(x + 1);
 

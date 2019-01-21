@@ -216,6 +216,9 @@ static bool dsim_fifo_empty_needed(struct dsim_device *dsim, unsigned int data_i
 					|| data0 == MIPI_DCS_SET_DISPLAY_ON
 					|| data0 == MIPI_DCS_ENTER_SLEEP_MODE
 					|| data0 == MIPI_DCS_EXIT_SLEEP_MODE))
+			/* for poc write */
+			|| data0 == 0xC1
+			|| data0 == 0xC0
 			|| data0 == MIPI_DCS_SET_COLUMN_ADDRESS
 			|| data0 == MIPI_DCS_SET_PAGE_ADDRESS) {
 		dsim_dbg("%s: id:%d, data=%ld\n", __func__, data_id, data0);

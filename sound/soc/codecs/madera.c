@@ -5004,7 +5004,7 @@ static int madera_set_force_bypass(struct snd_soc_codec *codec, bool set_bypass)
 	const struct regulation_constraints *constraints;
 	unsigned int i, bypass = 0;
 	unsigned int num_micbiases;
-	bool sync = false, bypass_allowed;
+	bool sync = false, bypass_enabled;
 
 	if (!micsupp_bypass)
 		return -ENODEV;
@@ -5060,19 +5060,18 @@ static int madera_set_force_bypass(struct snd_soc_codec *codec, bool set_bypass)
 		else
 			constraints = NULL;
 
-		bypass_allowed = !constraints ||
+		/*
+		 * Bypass is permanently enabled if we have
+		 * REGULATOR_CHANGE_BYPASS set
+		 */
+		bypass_enabled = !constraints ||
 			constraints->valid_ops_mask & REGULATOR_CHANGE_BYPASS;
 
-		if (!bypass_allowed)
-			continue;
-
 		/*
-		 * Entering bypass allowed if regulator supports bypass.
-		 * Leaving allowed only if there are no constraints or max_uV!=0
-		 * so that regulator can be configured permanently in bypass by
-		 * constraints that allow bypass but don't set a max_uV.
+		 * Always enter bypass, but leaving bypass is allowed only if
+		 * bypass is normally disabled.
 		 */
-		if (set_bypass || !constraints || constraints->max_uV)
+		if (set_bypass || !bypass_enabled)
 			regmap_update_bits(madera->regmap,
 					   MADERA_MIC_BIAS_CTRL_1 + i,
 					   MADERA_MICB1_BYPASS,

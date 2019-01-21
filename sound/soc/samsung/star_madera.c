@@ -17,15 +17,18 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/clk.h>
+#include <linux/clk-provider.h>
 #include <linux/wakelock.h>
 
 #include <soc/samsung/exynos-pmu.h>
 #include <sound/samsung/abox.h>
 #include <sound/samsung/vts.h>
+#include <sound/samsung/sec_audio_debug.h>
 
 #include <linux/mfd/madera/core.h>
 #include <linux/extcon/extcon-madera.h>
 #include "../codecs/madera.h"
+#include "abox/abox.h"
 
 #include "jack_madera_sysfs_cb.h"
 
@@ -46,6 +49,11 @@
 
 #define GPIO_AUXPDM_MASK_1 0x0fff
 #define GPIO_AUXPDM_MASK_2 0xf000
+
+#define CPCALL_RDMA_ID 4
+#define CPCALL_WDMA_ID 2
+#define CPCALL_RDMA_DAI_ID			4
+#define CPCALL_WDMA_DAI_ID			10
 
 /* Used for debugging and test automation */
 static u32 voice_trigger_count;
@@ -70,6 +78,8 @@ struct madera_drvdata {
 	struct clk_conf dspclk;
 	struct clk_conf outclk;
 
+	struct notifier_block panic_nb;
+
 	struct notifier_block nb;
 	unsigned int hp_impedance_step;
 	bool hiz_val;
@@ -80,6 +90,7 @@ struct madera_drvdata {
 
 	int fm_mute_switch;
 	int abox_vss_state;
+	int pcm_state;
 };
 
 struct gain_table {
@@ -109,18 +120,47 @@ static struct snd_soc_card star_madera;
 
 static struct clk *xclkout;
 
+static int star_madera_panic_cb(struct notifier_block *nb,
+					unsigned long event, void *data)
+{
+/*
+	abox_debug_string_update();
+*/
+	return NOTIFY_OK;
+}
+
 static int star_rdma_madera_hw_params(struct snd_pcm_substream *substream,
 				      struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_card *card = rtd->card;
 	struct madera_drvdata *drvdata = card->drvdata;
+	struct snd_soc_dai_link *dai_link = rtd->dai_link;
 	int ret = 0;
 
-	dev_info(drvdata->dev, "%s: %s-%d %dch, %dHz, %dbytes, %dbit\n",
+	drvdata->pcm_state |= (1 << dai_link->id);
+
+	dev_info(drvdata->dev, "%s: %s-%d %dch, %dHz, %dbytes, %dbit, pcm 0x%04x\n",
 			__func__, rtd->dai_link->name, substream->stream,
 			params_channels(params), params_rate(params),
-			params_buffer_bytes(params), params_width(params));
+			params_buffer_bytes(params), params_width(params), drvdata->pcm_state);
+
+	return ret;
+}
+
+static int star_rdma_madera_hw_free(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct madera_drvdata *drvdata = card->drvdata;
+	struct snd_soc_dai_link *dai_link = rtd->dai_link;
+	int ret = 0;
+
+	drvdata->pcm_state &= (~(1 << dai_link->id));
+
+	dev_info(drvdata->dev, "%s: %s-%d, pcm 0x%04x\n",
+			__func__, rtd->dai_link->name, substream->stream, drvdata->pcm_state);
+
 
 	return ret;
 }
@@ -149,7 +189,7 @@ static void star_rdma_madera_shutdown(struct snd_pcm_substream *substream)
 	codec = rtd->codec_dai->codec;
 
 	dev_info(drvdata->dev, "%s: codec_dai: %s\n",
-			__func__ , codec_dai->name);
+			__func__, codec_dai->name);
 	dev_info(drvdata->dev, "%s-%d playback: %d, capture: %d, active: %d\n",
 			rtd->dai_link->name, substream->stream,
 			codec_dai->playback_active, codec_dai->capture_active,
@@ -158,6 +198,7 @@ static void star_rdma_madera_shutdown(struct snd_pcm_substream *substream)
 
 static const struct snd_soc_ops rdma_ops = {
 	.hw_params = star_rdma_madera_hw_params,
+	.hw_free = star_rdma_madera_hw_free,
 	.prepare = star_rdma_madera_prepare,
 	.shutdown = star_rdma_madera_shutdown,
 };
@@ -168,12 +209,31 @@ static int star_wdma_madera_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_card *card = rtd->card;
 	struct madera_drvdata *drvdata = card->drvdata;
+	struct snd_soc_dai_link *dai_link = rtd->dai_link;
 	int ret = 0;
 
-	dev_info(drvdata->dev, "%s: %s-%d %dch, %dHz, %dbytes, %dbit\n",
+	drvdata->pcm_state |= (1 << dai_link->id);
+
+	dev_info(drvdata->dev, "%s: %s-%d %dch, %dHz, %dbytes, %dbit, pcm 0x%04x\n",
 			__func__, rtd->dai_link->name, substream->stream,
 			params_channels(params), params_rate(params),
-			params_buffer_bytes(params), params_width(params));
+			params_buffer_bytes(params), params_width(params), drvdata->pcm_state);
+
+	return ret;
+}
+
+static int star_wdma_madera_hw_free(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct madera_drvdata *drvdata = card->drvdata;
+	struct snd_soc_dai_link *dai_link = rtd->dai_link;
+	int ret = 0;
+
+	drvdata->pcm_state &= (~(1 << dai_link->id));
+
+	dev_info(drvdata->dev, "%s: %s-%d, pcm 0x%04x\n",
+			__func__, rtd->dai_link->name, substream->stream, drvdata->pcm_state);
 
 	return ret;
 }
@@ -202,7 +262,7 @@ static void star_wdma_madera_shutdown(struct snd_pcm_substream *substream)
 	codec = rtd->codec_dai->codec;
 
 	dev_info(drvdata->dev, "%s: codec_dai: %s\n",
-			__func__ , codec_dai->name);
+			__func__, codec_dai->name);
 	dev_info(drvdata->dev, "%s-%d playback: %d, capture: %d, active: %d\n",
 			rtd->dai_link->name, substream->stream,
 			codec_dai->playback_active, codec_dai->capture_active,
@@ -211,6 +271,7 @@ static void star_wdma_madera_shutdown(struct snd_pcm_substream *substream)
 
 static const struct snd_soc_ops wdma_ops = {
 	.hw_params = star_wdma_madera_hw_params,
+	.hw_free = star_wdma_madera_hw_free,
 	.prepare = star_wdma_madera_prepare,
 	.shutdown = star_wdma_madera_shutdown,
 };
@@ -555,6 +616,27 @@ static int madera_notify(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+void star_update_impedance_table(struct device_node *np)
+{
+	struct snd_soc_card *card = &star_madera;
+	int len = ARRAY_SIZE(imp_table.hp_gain_table);
+	u32 data[len * 3];
+	int i, ret = -1;
+
+	ret = of_property_read_u32_array(np, "imp_table", data,
+							(len * 3));
+
+	if (!ret) {
+		dev_info(card->dev, "%s: data from DT\n", __func__);
+
+		for (i = 0; i < len; i++) {
+			imp_table.hp_gain_table[i].min = data[i * 3];
+			imp_table.hp_gain_table[i].max = data[(i * 3) + 1];
+			imp_table.hp_gain_table[i].gain = data[(i * 3) + 2];
+		}
+	}
+}
+
 static int madera_put_impedance_volsw(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *ucontrol)
 {
@@ -688,7 +770,9 @@ static int set_fll2_switch(struct snd_kcontrol *kcontrol,
 			dev_err(card->dev, "%s: Failed to start ASYNCCLK FLL REF: %d\n",
 					__func__, ret);
 	} else {
-		clk_disable(xclkout);
+		if (__clk_get_enable_count(xclkout)) {
+			clk_disable(xclkout);
+		}
 
 		/* asyncclk id : 2, asyncclk source 5, asyncclk rate 98304000 */
 		ret = snd_soc_codec_set_sysclk(codec, drvdata->asyncclk.id,
@@ -956,6 +1040,11 @@ static int star_late_probe(struct snd_soc_card *card)
 				"madera-sound");
 	drvdata->wake_lock_switch = 0;
 
+	drvdata->panic_nb.notifier_call = star_madera_panic_cb;
+
+	atomic_notifier_chain_register(&panic_notifier_list,
+				&drvdata->panic_nb);
+
 	return 0;
 }
 
@@ -972,6 +1061,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &rdma_ops,
 		.dpcm_playback = 1,
+		.id = 0,
 	},
 	{
 		.name = "RDMA1",
@@ -985,6 +1075,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &rdma_ops,
 		.dpcm_playback = 1,
+		.id = 1,
 	},
 	{
 		.name = "RDMA2",
@@ -998,6 +1089,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &rdma_ops,
 		.dpcm_playback = 1,
+		.id = 2,
 	},
 	{
 		.name = "RDMA3",
@@ -1011,6 +1103,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &rdma_ops,
 		.dpcm_playback = 1,
+		.id = 3,
 	},
 	{
 		.name = "RDMA4",
@@ -1024,6 +1117,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &rdma_ops,
 		.dpcm_playback = 1,
+		.id = 4,
 	},
 	{
 		.name = "RDMA5",
@@ -1037,6 +1131,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &rdma_ops,
 		.dpcm_playback = 1,
+		.id = 5,
 	},
 	{
 		.name = "RDMA6",
@@ -1050,6 +1145,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &rdma_ops,
 		.dpcm_playback = 1,
+		.id = 6,
 	},
 	{
 		.name = "RDMA7",
@@ -1063,6 +1159,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &rdma_ops,
 		.dpcm_playback = 1,
+		.id = 7,
 	},
 	{
 		.name = "WDMA0",
@@ -1076,6 +1173,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &wdma_ops,
 		.dpcm_capture = 1,
+		.id = 8,
 	},
 	{
 		.name = "WDMA1",
@@ -1089,6 +1187,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &wdma_ops,
 		.dpcm_capture = 1,
+		.id = 9,
 	},
 	{
 		.name = "WDMA2",
@@ -1102,6 +1201,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &wdma_ops,
 		.dpcm_capture = 1,
+		.id = 10,
 	},
 	{
 		.name = "WDMA3",
@@ -1115,6 +1215,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &wdma_ops,
 		.dpcm_capture = 1,
+		.id = 11,
 	},
 	{
 		.name = "WDMA4",
@@ -1128,6 +1229,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST_PRE, SND_SOC_DPCM_TRIGGER_PRE_POST},
 		.ops = &wdma_ops,
 		.dpcm_capture = 1,
+		.id = 12,
 	},
 	{
 		.name = "VTS-Trigger",
@@ -1513,7 +1615,9 @@ int abox_vss_state_put(struct snd_kcontrol *kcontrol,
 {
 	struct madera_drvdata *drvdata = &star_drvdata;
 	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
+	struct abox_data *data = abox_get_abox_data();
 	const unsigned int item = ucontrol->value.enumerated.item[0];
+	int rd_state = 0, wr_state = 0;
 
 	if (item >= e->items) {
 		dev_err(drvdata->dev, "%s item %d overflow\n", __func__, item);
@@ -1525,7 +1629,33 @@ int abox_vss_state_put(struct snd_kcontrol *kcontrol,
 
 	/* Make Call BUG_ON if ABOX vss delivers the stuck state */
 	if (!strcmp(abox_vss_state_enum_texts[item], "ABOX STUCK")) {
-		BUG_ON(1);
+		if (data->audio_mode != MODE_IN_CALL) {
+			dev_info(drvdata->dev, "%s: audio_mode is not call %d\n",
+					__func__, data->audio_mode);
+			return -EPERM;
+		}
+
+		rd_state = is_abox_rdma_enabled(CPCALL_RDMA_ID);
+		wr_state = is_abox_wdma_enabled(CPCALL_WDMA_ID);
+
+		dev_info(drvdata->dev, "%s: Abox RDMA[%d](%d), WDMA[%d](%d), audio_mode=%d, pcm_state=%X\n",
+						__func__, CPCALL_RDMA_ID, rd_state,	CPCALL_WDMA_ID, wr_state,
+						data->audio_mode, drvdata->pcm_state);
+
+		if ((data->audio_mode == MODE_IN_CALL) &&
+			((drvdata->pcm_state >> CPCALL_RDMA_DAI_ID)&0x1) &&
+			((drvdata->pcm_state >> CPCALL_WDMA_DAI_ID)&0x1)) {
+			dev_info(drvdata->dev, "%s: Abox Normal\n", __func__);
+
+			return -EAGAIN;
+		} else {
+			abox_debug_string_update();
+#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
+			return -EPERM;
+#else
+			BUG_ON(1);
+#endif
+		}
 	}
 
 	return 0;
@@ -1729,6 +1859,8 @@ static int star_audio_probe(struct platform_device *pdev)
 	ret = read_clk_conf(np, "cirrus,outclk", &drvdata->outclk);
 	if (ret)
 		dev_info(card->dev, "Failed to parse outclk: %d\n", ret);
+
+	star_update_impedance_table(np);
 
 	for_each_child_of_node(np, dai) {
 		if (!star_dai[nlink].name)

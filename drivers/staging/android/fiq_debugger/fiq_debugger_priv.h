@@ -16,8 +16,12 @@
 #ifndef _FIQ_DEBUGGER_PRIV_H_
 #define _FIQ_DEBUGGER_PRIV_H_
 
+#ifndef CONFIG_THREAD_INFO_IN_TASK
 #define THREAD_INFO(sp) ((struct thread_info *) \
 		((unsigned long)(sp) & ~(THREAD_SIZE - 1)))
+#else
+#define THREAD_INFO(tsk) ((struct thread_info *)(tsk))
+#endif
 
 struct fiq_debugger_output {
 	void (*printf)(struct fiq_debugger_output *output, const char *fmt, ...);

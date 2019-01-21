@@ -35,6 +35,7 @@
 #include <linux/fscrypto.h>
 #include <linux/falloc.h>
 #include <linux/percpu-rwsem.h>
+#include <linux/android_aid.h>
 #ifdef __KERNEL__
 #include <linux/compat.h>
 #endif
@@ -1534,6 +1535,14 @@ struct ext4_sb_info {
 	/* Barrier between changing inodes' journal flags and writepages ops. */
 	struct percpu_rw_semaphore s_journal_flag_rwsem;
 
+	/* To gather information of fragmentation */
+	unsigned int s_sec_part_best_extents;
+	unsigned int s_sec_part_current_extents;
+	unsigned int s_sec_part_score;
+	unsigned int s_sec_defrag_writes_kb;
+	unsigned int s_sec_num_apps;
+	unsigned int s_sec_capacity_apps_kb;
+
 	/* Encryption support */
 #ifdef CONFIG_EXT4_FS_ENCRYPTION
 	u8 key_prefix[EXT4_KEY_DESC_PREFIX_SIZE];
@@ -1559,11 +1568,6 @@ static inline struct timespec ext4_current_time(struct inode *inode)
 static inline int ext4_valid_inum(struct super_block *sb, unsigned long ino)
 {
 	return ino == EXT4_ROOT_INO ||
-		ino == EXT4_USR_QUOTA_INO ||
-		ino == EXT4_GRP_QUOTA_INO ||
-		ino == EXT4_BOOT_LOADER_INO ||
-		ino == EXT4_JOURNAL_INO ||
-		ino == EXT4_RESIZE_INO ||
 		(ino >= EXT4_FIRST_INO(sb) &&
 		 ino <= le32_to_cpu(EXT4_SB(sb)->s_es->s_inodes_count));
 }
@@ -3304,6 +3308,30 @@ static inline bool ext4_aligned_io(struct inode *inode, loff_t off, loff_t len)
 	int blksize = 1 << inode->i_blkbits;
 
 	return IS_ALIGNED(off, blksize) && IS_ALIGNED(len, blksize);
+}
+
+static inline bool ext4_android_claim_sec_r_blocks(unsigned int flags) {
+	if (flags & EXT4_MB_USE_EXTRA_ROOT_BLOCKS)
+		return true;
+
+#if ANDROID_VERSION < 90000
+	if (in_group_p(AID_USE_SEC_RESERVED))
+		return true;
+#endif
+
+	return false;
+}
+
+static inline bool ext4_android_claim_r_blocks(struct ext4_sb_info *sbi) {
+#if ANDROID_VERSION < 90000
+	if (in_group_p(AID_USE_ROOT_RESERVED))
+		return true;
+#else
+	/* for P upgrade without factory reset */
+	if (in_group_p(AID_RESERVED_DISK))
+		return true;
+#endif
+	return false;
 }
 
 #endif	/* __KERNEL__ */

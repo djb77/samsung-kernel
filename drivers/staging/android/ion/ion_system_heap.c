@@ -393,7 +393,7 @@ void show_ion_system_heap_size(struct seq_file *s)
 	}
 
 	heap = &system_heap->heap;
-	system_byte = (unsigned int)atomic_long_read(&heap->total_allocated);
+	system_byte = (unsigned long)atomic_long_read(&heap->total_allocated);
 	if (s)
 		seq_printf(s, "SystemHeap:     %8lu kB\n", system_byte >> 10);
 	else

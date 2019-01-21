@@ -20,6 +20,7 @@
 #include <media/v4l2-dv-timings.h>
 #include <uapi/linux/v4l2-dv-timings.h>
 #include <linux/phy/phy.h>
+#include <linux/pm_qos.h>
 #if defined(CONFIG_EXTCON)
 #include <linux/extcon.h>
 #endif
@@ -37,6 +38,10 @@
 #include "hdr_metadata.h"
 
 #define FEATURE_SUPPORT_SPD_INFOFRAME
+
+#define FEATURE_SUPPORT_DISPLAYID
+
+#define DISPLAYID_EXT 0x70
 
 extern int displayport_log_level;
 
@@ -186,6 +191,8 @@ struct fb_vendor {
 #define LINK_RATE_1_62Gbps 0x06
 #define LINK_RATE_2_7Gbps 0x0A
 #define LINK_RATE_5_4Gbps 0x14
+
+#define UHD_60HZ_PIXEL_CLOCK 500000000
 
 #define DPCD_ADD_MAX_LANE_COUNT 0x00002
 #define MAX_LANE_COUNT (0x1F << 0)
@@ -414,6 +421,7 @@ typedef enum {
 	V720X480P60,
 	V720X576P50,
 	V1280X720P50,
+	V1280X720P60EXT,
 	V1280X720P60,
 	V1280X800P60RB,
 	V1366X768P60,
@@ -424,20 +432,30 @@ typedef enum {
 	V1600X900P59,
 	V1600X900P60RB,
 	V1920X1080P50,
+	V1920X1080P60EXT,
 	V1920X1080P59,
 	V1920X1080P60,
+	V1920X1200P60RB,
+	V1920X1200P60,
+	V2560X1080P60,
 	V2048X1536P60,
 	V1920X1440P60,
+	V2560X1440P60EXT,
 	V2560X1440P59,
 	V1440x2560P60,
 	V1440x2560P75,
 	V2560X1440P60,
+	V2560X1600P60,
+	V3440X1440P50,
+	V3440X1440P60,
+/*	V3440X1440P100,*/
 	V3840X2160P24,
 	V3840X2160P25,
 	V3840X2160P30,
 	V4096X2160P24,
 	V4096X2160P25,
 	V4096X2160P30,
+	V3840X2160P60EXT,
 	V3840X2160P59RB,
 	V3840X2160P50,
 	V3840X2160P60,
@@ -544,6 +562,7 @@ struct displayport_device {
 	enum displayport_state state;
 	struct device *dev;
 	struct displayport_resources res;
+	struct pm_qos_request fsys0_qos;
 
 	unsigned int data_lane;
 	u32 data_lane_cnt;
@@ -584,6 +603,7 @@ struct displayport_device {
 	struct notifier_block dp_typec_nb;
 	ccic_notifier_dp_pinconf_t ccic_notify_dp_conf;
 	int notifier_registered;
+	bool dp_not_support;
 	bool ccic_link_conf;
 	bool ccic_hpd;
 #endif
@@ -614,6 +634,7 @@ struct displayport_device {
 	enum dex_state dex_state;
 	u8 dex_ver[2];
 	enum dex_support_type dex_adapter_type;
+	videoformat dex_video_pick;
 
 	enum drm_state drm_start_state;
 	enum drm_state drm_smc_state;
@@ -685,6 +706,14 @@ struct displayport_debug_param {
 #define SPEAKER_DATA_BLOCK 4
 #define SVD_VIC_MASK 0x7F
 
+enum video_ratio_t {
+	RATIO_16_9 = 0,
+	RATIO_16_10,
+	RATIO_21_9,
+	RATIO_4_3,
+	RATIO_ETC = 99,
+};
+
 struct displayport_supported_preset {
 	videoformat video_format;
 	struct v4l2_dv_timings dv_timings;
@@ -692,9 +721,11 @@ struct displayport_supported_preset {
 	u32 v_sync_pol;
 	u32 h_sync_pol;
 	u8 vic;
+	enum video_ratio_t ratio;
 	char *name;
 	enum dex_support_type dex_support;
 	bool pro_audio_support;
+	u8 displayid_timing;
 	bool edid_support_match;
 };
 
@@ -717,6 +748,14 @@ struct displayport_supported_preset {
 	.type = V4L2_DV_BT_656_1120, \
 	V4L2_INIT_BT_TIMINGS(2560, 1440, 0, V4L2_DV_HSYNC_POS_POL, \
 		241500000, 48, 32, 80, 3, 5, 33, 0, 0, 0, \
+		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
+}
+
+#define V4L2_DV_BT_CVT_2560X1600P60_ADDED { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(2560, 1600, 0, \
+		V4L2_DV_HSYNC_POS_POL | V4L2_DV_VSYNC_POS_POL, \
+		268500000, 48, 32, 80, 3, 9, 37, 0, 0, 0, \
 		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
 }
 
@@ -756,6 +795,35 @@ struct displayport_supported_preset {
 		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
 }
 
+#define V4L2_DV_BT_CVT_3440X1440P50_ADDED { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(3440, 1440, 0, V4L2_DV_HSYNC_POS_POL, \
+		265250000, 48, 32, 80, 3, 10, 21, 0, 0, 0, \
+		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
+}
+
+#define V4L2_DV_BT_CVT_3440X1440P60_ADDED { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(3440, 1440, 0, V4L2_DV_HSYNC_POS_POL, \
+		319750000, 48, 32, 80, 3, 10, 28, 0, 0, 0, \
+		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
+}
+/*
+#define V4L2_DV_BT_CVT_3440X1440P100_ADDED { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(3440, 1440, 0, V4L2_DV_HSYNC_POS_POL, \
+		543500000, 48, 32, 80, 3, 10, 57, 0, 0, 0, \
+		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
+}
+*/
+#define V4L2_DV_BT_CVT_2560x1080P60_ADDED { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(2560, 1080, 0, \
+		V4L2_DV_HSYNC_POS_POL | V4L2_DV_VSYNC_POS_POL, \
+		198000000, 248, 44, 148, 4, 5, 11, 0, 0, 0, \
+		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
+}
+
 #define V4L2_DV_BT_CVT_640x10P60_ADDED { \
 	.type = V4L2_DV_BT_656_1120, \
 	V4L2_INIT_BT_TIMINGS(640, 10, 0, V4L2_DV_HSYNC_POS_POL, \
@@ -763,6 +831,25 @@ struct displayport_supported_preset {
 		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
 }
 
+#define DISPLAYID_720P_EXT { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(1280, 720, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) \
+}
+
+#define DISPLAYID_1080P_EXT { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(1920, 1080, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) \
+}
+
+#define DISPLAYID_1440P_EXT { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(2560, 1440, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) \
+}
+
+#define DISPLAYID_2160P_EXT { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(3840, 2160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) \
+}
 extern const int supported_videos_pre_cnt;
 extern struct displayport_supported_preset supported_videos[];
 

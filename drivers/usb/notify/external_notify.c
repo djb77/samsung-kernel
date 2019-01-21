@@ -49,6 +49,8 @@ static const char *cmd_string(unsigned long cmd)
 		return "mdm_block_post";
 	case EXTERNAL_NOTIFY_POWERROLE:
 		return "power_role_notify";
+	case EXTERNAL_NOTIFY_DEVICEADD:
+		return "host_mode_device_added";
 	default:
 		return "undefined";
 	}

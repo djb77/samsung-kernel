@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linux_osl.h 749612 2018-03-01 08:51:26Z $
+ * $Id: linux_osl.h 782801 2018-10-01 15:16:38Z $
  */
 
 #ifndef _linux_osl_h_
@@ -51,7 +51,7 @@ extern int osl_static_mem_deinit(osl_t *osh, void *adapter);
 extern void osl_set_bus_handle(osl_t *osh, void *bus_handle);
 extern void* osl_get_bus_handle(osl_t *osh);
 #ifdef DHD_MAP_LOGGING
-extern void osl_dma_map_dump(void);
+extern void osl_dma_map_dump(osl_t *osh);
 #endif /* DHD_MAP_LOGGING */
 
 /* Global ASSERT type */
@@ -336,6 +336,10 @@ extern uint64 osl_sysuptime_us(void);
 #define OSL_SYSUPTIME()		((uint32)jiffies * (1000 / HZ))
 #error "OSL_SYSUPTIME_US() may need to be defined"
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 4, 29) */
+extern void osl_get_localtime(uint64 *sec, uint64 *usec);
+extern uint64 osl_localtime_ns(void);
+#define OSL_LOCALTIME_NS()	osl_localtime_ns()
+#define OSL_GET_LOCALTIME(sec, usec)	osl_get_localtime((sec), (usec))
 #define	printf(fmt, args...)	printk(fmt , ## args)
 #include <linux/kernel.h>	/* for vsn/printf's */
 #include <linux/string.h>	/* for mem*, str* */

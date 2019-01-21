@@ -37,6 +37,7 @@ const char * const poc_op[] = {
 	[POC_OP_CANCEL] = "POC_OP_CANCEL",
 	[POC_OP_CHECKSUM] = "POC_OP_CHECKSUM",
 	[POC_OP_CHECKPOC] = "POC_OP_CHECKPOC",
+	[POC_OP_SECTOR_ERASE] = "POC_OP_SECTOR_ERASE",
 	[POC_OP_BACKUP] = "POC_OP_BACKUP",
 	[POC_OP_IMG_WRITE] = "POC_OP_IMG_WRITE",
 	[POC_OP_IMG_READ] = "POC_OP_IMG_READ",
@@ -84,12 +85,23 @@ int panel_do_poc_seqtbl_by_index(struct panel_poc_device *poc_dev, int index)
 	return ret;
 }
 
-int poc_erase(struct panel_device *panel)
+int poc_erase(struct panel_device *panel, int addr, int len)
 {
 	struct panel_poc_device *poc_dev = &panel->poc_dev;
-	int ret, i;
+	struct panel_poc_info *poc_info = &poc_dev->poc_info;
+	int ret, i, count;
 
-	pr_info("%s poc erease +++\n", __func__);
+	pr_info("%s poc erase +++, 0x%x, %d\n", __func__, addr, len);
+
+	if (addr % POC_PAGE > 0) {
+		pr_err("%s, failed to start erase. invalid addr\n", __func__);
+		return -EINVAL;
+	}
+
+	if (len < 0 || addr + len > POC_IMG_SIZE) {
+		pr_err("%s, failed to start erase. range exceeded\n", __func__);
+		return -EINVAL;
+	}
 
 	mutex_lock(&panel->op_lock);
 	ret = panel_do_poc_seqtbl_by_index_nolock(poc_dev, POC_ERASE_ENTER_SEQ);
@@ -98,19 +110,25 @@ int poc_erase(struct panel_device *panel)
 		goto out_poc_erase;
 	}
 
-	ret = panel_do_poc_seqtbl_by_index_nolock(poc_dev, POC_ERASE_SEQ);
-	if (unlikely(ret < 0)) {
-		pr_err("%s, failed to poc-erase-seq\n", __func__);
-		goto out_poc_erase;
-	}
-	for (i = 0; i < ERASE_WAIT_COUNT; i++) {
-		msleep(100);
+	count = len / POC_PAGE;
+	if (len % POC_PAGE)
+		count += 1;
+	
+	for (i = 0; i < count; i++) {
+		poc_info->waddr = addr + i * POC_PAGE;
+		ret = panel_do_poc_seqtbl_by_index_nolock(poc_dev, POC_ERASE_SEQ);
+		if (unlikely(ret < 0)) {
+			pr_err("%s, failed to poc-erase-seq 0x%x\n", __func__, i * POC_PAGE + addr);
+			goto out_poc_erase;
+		}
+		if (i % 4 == 0)
+			pr_info("%s erased addr %06X\n", __func__, i * POC_PAGE + addr);
+		
 		if (atomic_read(&poc_dev->cancel)) {
-			pr_err("%s, stopped by user at erase\n", __func__);
+			pr_err("%s, stopped by user at erase 0x%x\n", __func__, i * POC_PAGE);
 			goto cancel_poc_erase;
 		}
 	}
-
 	ret = panel_do_poc_seqtbl_by_index_nolock(poc_dev, POC_ERASE_EXIT_SEQ);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to poc-erase-exit-seq\n", __func__);
@@ -118,7 +136,7 @@ int poc_erase(struct panel_device *panel)
 	}
 
 	mutex_unlock(&panel->op_lock);
-	pr_info("%s poc erease ---\n", __func__);
+	pr_info("%s poc erase ---\n", __func__);
 	return 0;
 
 cancel_poc_erase:
@@ -368,7 +386,7 @@ static int poc_get_poc_ctrl(struct panel_device *panel)
 	return 0;
 }
 
-static int poc_data_backup(struct panel_device *panel, u8 *buf, int size)
+static int poc_data_backup(struct panel_device *panel, u8 *buf, int size, char *filename)
 {
 	struct file *fp;
 	mm_segment_t old_fs;
@@ -378,7 +396,7 @@ static int poc_data_backup(struct panel_device *panel, u8 *buf, int size)
 
 	pr_info("%s size %d\n", __func__, size);
 
-	fp = filp_open(POC_DATA_PATH, O_CREAT | O_TRUNC | O_WRONLY | O_SYNC, 0660);
+	fp = filp_open(filename, O_CREAT | O_TRUNC | O_WRONLY | O_SYNC, 0660);
 	if (IS_ERR(fp)) {
 		pr_err("%s, fail to open log file\n", __func__);
 		goto open_err;
@@ -568,13 +586,14 @@ int get_poc_partition_size(struct panel_poc_device *poc_dev, int index)
 	return poc_dev->partition[index].size;
 }
 
-int set_panel_poc(struct panel_poc_device *poc_dev, u32 cmd)
+int set_panel_poc(struct panel_poc_device *poc_dev, u32 cmd, const char *cmd_ext)
 {
 	struct panel_poc_info *poc_info = &poc_dev->poc_info;
 	struct panel_device *panel = to_panel_device(poc_dev);
 	int ret = 0;
 	struct timespec cur_ts, last_ts, delta_ts;
 	s64 elapsed_msec;
+	int addr = -1, len = -1;
 
 	if (cmd >= MAX_POC_OP) {
 		panel_err("%s invalid poc_op %d\n", __func__, cmd);
@@ -586,12 +605,6 @@ int set_panel_poc(struct panel_poc_device *poc_dev, u32 cmd)
 
 	switch (cmd) {
 	case POC_OP_ERASE:
-		ret = poc_erase(panel);
-		if (unlikely(ret < 0)) {
-			pr_err("%s, failed to write poc-erase-seq\n", __func__);
-			return ret;
-		}
-		poc_info->erased = true;
 		break;
 	case POC_OP_WRITE:
 		ret = poc_write_data(panel, &poc_info->wbuf[poc_info->wpos],
@@ -628,10 +641,33 @@ int set_panel_poc(struct panel_poc_device *poc_dev, u32 cmd)
 			return ret;
 		}
 		break;
+	case POC_OP_SECTOR_ERASE:
+		ret = sscanf(cmd_ext, "%*d %d %d", &addr, &len);
+		if (unlikely(ret < 2)) {
+			pr_err("%s, failed to get poc erase params\n", __func__);
+			return -EINVAL;
+		}
+		if (unlikely(addr < 0) || unlikely(len < 0)) {
+			pr_err("%s, invalid poc erase params\n", __func__);
+			return -EINVAL;
+		}
+		ret = poc_erase(panel, addr, len);
+		if (unlikely(ret < 0)) {
+			pr_err("%s, failed to write poc-erase-seq\n", __func__);
+			return ret;
+		}
+		poc_info->erased = true;
+		break;
 	case POC_OP_IMG_READ:
 		ret = read_poc_partition(poc_dev, POC_IMG_PARTITION);
 		if (unlikely(ret < 0)) {
 			pr_err("%s, failed to read img partition\n", __func__);
+			return ret;
+		}
+		
+		ret = poc_data_backup(panel, poc_rd_img + POC_IMG_ADDR, POC_IMG_SIZE, POC_IMG_PATH);
+		if (unlikely(ret < 0)) {
+			pr_err("%s, failed to backup poc img\n", __func__);
 			return ret;
 		}
 		break;
@@ -673,7 +709,7 @@ int set_panel_poc(struct panel_poc_device *poc_dev, u32 cmd)
 
 		ret = poc_data_backup(panel,
 				poc_rd_img + poc_dev->partition[POC_DIM_PARTITION].addr,
-				poc_dev->partition[POC_DIM_PARTITION].size);
+				poc_dev->partition[POC_DIM_PARTITION].size, POC_DATA_PATH);
 		if (unlikely(ret < 0)) {
 			pr_err("%s, failed to backup gamma flash\n", __func__);
 			return ret;
@@ -723,7 +759,7 @@ static long panel_poc_ioctl(struct file *file, unsigned int cmd,
 		}
 		break;
 	case IOC_GET_POC_CHKSUM:
-		ret = set_panel_poc(poc_dev, POC_OP_CHECKSUM);
+		ret = set_panel_poc(poc_dev, POC_OP_CHECKSUM, NULL);
 		if (ret) {
 			panel_err("%s error set_panel_poc\n", __func__);
 			ret = -EFAULT;
@@ -736,7 +772,7 @@ static long panel_poc_ioctl(struct file *file, unsigned int cmd,
 		}
 		break;
 	case IOC_GET_POC_CSDATA:
-		ret = set_panel_poc(poc_dev, POC_OP_CHECKSUM);
+		ret = set_panel_poc(poc_dev, POC_OP_CHECKSUM, NULL);
 		if (ret) {
 			panel_err("%s error set_panel_poc\n", __func__);
 			ret = -EFAULT;
@@ -756,7 +792,7 @@ static long panel_poc_ioctl(struct file *file, unsigned int cmd,
 		}
 		break;
 	case IOC_GET_POC_FLASHED:
-		ret = set_panel_poc(poc_dev, POC_OP_CHECKPOC);
+		ret = set_panel_poc(poc_dev, POC_OP_CHECKPOC, NULL);
 		if (ret) {
 			panel_err("%s error set_panel_poc\n", __func__);
 			ret = -EFAULT;
@@ -769,7 +805,7 @@ static long panel_poc_ioctl(struct file *file, unsigned int cmd,
 		}
 		break;
 	case IOC_SET_POC_ERASE:
-		ret = set_panel_poc(poc_dev, POC_OP_ERASE);
+		ret = set_panel_poc(poc_dev, POC_OP_ERASE, NULL);
 		if (ret) {
 			panel_err("%s error set_panel_poc\n", __func__);
 			ret = -EFAULT;
@@ -890,7 +926,7 @@ static ssize_t panel_poc_read(struct file *file, char __user *buf, size_t count,
 	}
 	poc_info->rsize = (u32)count;
 
-	res = set_panel_poc(poc_dev, POC_OP_READ);
+	res = set_panel_poc(poc_dev, POC_OP_READ, NULL);
 	if (res < 0)
 		goto err_read;
 
@@ -937,7 +973,7 @@ static ssize_t panel_poc_write(struct file *file, const char __user *buf,
 
 	mutex_lock(&panel->io_lock);
 	if (*ppos == 0) {
-		res = set_panel_poc(poc_dev, POC_OP_ERASE);
+		res = set_panel_poc(poc_dev, POC_OP_ERASE, NULL);
 		if (res)
 			goto err_write;
 	}
@@ -958,7 +994,7 @@ static ssize_t panel_poc_write(struct file *file, const char __user *buf,
 
 	panel_info("%s write %ld bytes (count %ld)\n", __func__, res, count);
 
-	res = set_panel_poc(poc_dev, POC_OP_WRITE);
+	res = set_panel_poc(poc_dev, POC_OP_WRITE, NULL);
 	if (res < 0)
 		goto err_write;
 	mutex_unlock(&panel->io_lock);
@@ -1408,3 +1444,23 @@ void copy_poc_rd_addr_maptbl(struct maptbl *tbl, u8 *dst)
 	dst[1] = (poc_info->raddr & 0x00FF00) >> 8;
 	dst[2] = (poc_info->raddr & 0x0000FF);
 }
+
+void copy_poc_er_addr_maptbl(struct maptbl *tbl, u8 *dst)
+{
+	struct panel_poc_device *poc_dev;
+	struct panel_poc_info *poc_info;
+
+	if (!tbl || !dst)
+		return;
+
+	poc_dev = (struct panel_poc_device *)tbl->pdata;
+	if (unlikely(!poc_dev))
+		return;
+
+	poc_info = &poc_dev->poc_info;
+
+	dst[0] = (poc_info->waddr & 0xFF0000) >> 16;
+	dst[1] = (poc_info->waddr & 0x00FF00) >> 8;
+	dst[2] = (poc_info->waddr & 0x0000FF);
+}
+

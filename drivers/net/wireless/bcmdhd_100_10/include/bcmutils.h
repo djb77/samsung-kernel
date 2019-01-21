@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmutils.h 753163 2018-03-20 17:18:49Z $
+ * $Id: bcmutils.h 784503 2018-10-12 06:07:30Z $
  */
 
 #ifndef	_bcmutils_h_
@@ -578,7 +578,7 @@ int bcmstrnicmp(const char* s1, const char* s2, int cnt);
 #define SIZE_OF(type, field) sizeof(((type *)0)->field)
 
 #ifndef ARRAYSIZE
-#define ARRAYSIZE(a)		(sizeof(a) / sizeof(a[0]))
+#define ARRAYSIZE(a)		(uint32)(sizeof(a) / sizeof(a[0]))
 #endif // endif
 
 #ifndef ARRAYLAST /* returns pointer to last array element */
@@ -717,17 +717,17 @@ DECLARE_MAP_API(8, 2, 3, 3U, 0x00FF) /* setbit8() and getbit8() */
 							(ea).octet[5]
 #if !defined(SIMPLE_MAC_PRINT)
 #define MACDBG "%02x:%02x:%02x:%02x:%02x:%02x"
-#define MAC2STRDBG(ea) (ea)[0], (ea)[1], (ea)[2], (ea)[3], (ea)[4], (ea)[5]
+#define MAC2STRDBG(ea) CONST_ETHERP_TO_MACF(ea)
 #else
 #define MACDBG				"%02x:xx:xx:xx:x%x:%02x"
-#define MAC2STRDBG(ea) (ea)[0], ((ea)[4] & 0xf), (ea)[5]
+#define MAC2STRDBG(ea) ((uint8*)(ea))[0], (((uint8*)(ea))[4] & 0xf), ((uint8*)(ea))[5]
 #endif /* SIMPLE_MAC_PRINT */
 
 #define MACOUIDBG "%02x:%x:%02x"
-#define MACOUI2STRDBG(ea) (ea)[0], (ea)[1] & 0xf, (ea)[2]
+#define MACOUI2STRDBG(ea) ((uint8*)(ea))[0], ((uint8*)(ea))[1] & 0xf, ((uint8*)(ea))[2]
 
 #define MACOUI "%02x:%02x:%02x"
-#define MACOUI2STR(ea) (ea)[0], (ea)[1], (ea)[2]
+#define MACOUI2STR(ea) ((uint8*)(ea))[0], ((uint8*)(ea))[1], ((uint8*)(ea))[2]
 
 /* bcm_format_flags() bit description structure */
 typedef struct bcm_bit_desc {

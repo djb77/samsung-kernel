@@ -22,7 +22,6 @@
 #include <linux/bitops.h>
 #include <linux/blkdev.h>
 #include <asm/byteorder.h>
-#include <linux/android_aid.h>
 
 #include "ext4.h"
 #include "ext4_jbd2.h"
@@ -746,15 +745,17 @@ static inline int ext4_has_free_inodes(struct ext4_sb_info *sbi)
 			sbi->s_r_inodes_count * 2))
 		return 1;
 
+#if ANDROID_VERSION < 90000
 	if (percpu_counter_read_positive(&sbi->s_freeinodes_counter) >
 			sbi->s_r_inodes_count &&
 			in_group_p(AID_USE_SEC_RESERVED))
 		return 1;
+#endif
 
 	/* Hm, nope.  Are (enough) root reserved inodes available? */
 	if (uid_eq(sbi->s_resuid, current_fsuid()) ||
 	    (!gid_eq(sbi->s_resgid, GLOBAL_ROOT_GID) && in_group_p(sbi->s_resgid)) ||
-	    capable(CAP_SYS_RESOURCE) || in_group_p(AID_USE_ROOT_RESERVED))
+	    capable(CAP_SYS_RESOURCE) || ext4_android_claim_r_blocks(sbi))
 		return 1;
 	return 0;
 }

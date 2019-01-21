@@ -683,8 +683,16 @@ static void mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 		}
 	}
 
-	if (s5p_mfc_get_num_of_tile() >= 4)
+	/* Detection for QoS weight */
+	if (!dec->num_of_tile_over_4 && s5p_mfc_get_num_of_tile() >= 4) {
 		dec->num_of_tile_over_4 = 1;
+		s5p_mfc_qos_on(ctx);
+	}
+	if (!dec->super64_bframe && IS_SUPER64_BFRAME(ctx, s5p_mfc_get_lcu_size(),
+				s5p_mfc_get_dec_frame_type())) {
+		dec->super64_bframe = 1;
+		s5p_mfc_qos_on(ctx);
+	}
 
 	switch (dst_frame_status) {
 	case S5P_FIMV_DEC_STATUS_DECODING_DISPLAY:

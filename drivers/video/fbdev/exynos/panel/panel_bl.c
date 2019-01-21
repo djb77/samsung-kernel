@@ -43,7 +43,7 @@ static void print_tbl(int *tbl, int sz) {
 static int max_brt_tbl(struct brightness_table *brt_tbl)
 {
 	if (unlikely(!brt_tbl || !brt_tbl->brt || !brt_tbl->sz_brt)) {
-		pr_err("%s, invalid parameter\n", __func__);
+		pr_err("%s, invalid parameter %d\n", __func__, brt_tbl->sz_brt);
 		return -EINVAL;
 	}
 
@@ -222,7 +222,7 @@ static int search_brt_to_step_tbl(struct brightness_table *brt_tbl, int brightne
 int get_subdev_actual_brightness_index(struct panel_bl_device *panel_bl,
 		int id, int brightness)
 {
-	int index, brt_user;
+	int index;
 	struct panel_bl_sub_dev *subdev;
 
 	if (unlikely(!panel_bl)) {
@@ -242,34 +242,42 @@ int get_subdev_actual_brightness_index(struct panel_bl_device *panel_bl,
 
 	subdev = &panel_bl->subdev[id];
 
-	brt_user = BRT_TBL_INDEX(brightness);
-	if (brt_user >= subdev->sz_brt_cache_tbl) {
+#if defined(CONFIG_PANEL_BL_USE_BRT_CACHE)
+	if (brightness >= subdev->sz_brt_cache_tbl) {
 		pr_err("%s, bl-%d exceeded brt_cache_tbl size %d\n",
-				__func__, id, brt_user);
+				__func__, id, brightness);
 		return -EINVAL;
 	}
 
-	if (subdev->brt_cache_tbl[brt_user] == -1) {
+	if (subdev->brt_cache_tbl[brightness] == -1) {
 		index = search_brt_tbl(&subdev->brt_tbl, brightness);
 		if (index < 0) {
 			pr_err("%s, bl-%d failed to search %d, ret %d\n",
 					__func__, id, brightness, index);
 			return index;
 		}
-		subdev->brt_cache_tbl[brt_user] = index;
+		subdev->brt_cache_tbl[brightness] = index;
 #ifdef DEBUG_PAC
 		pr_info("%s, bl-%d brightness %d, brt_cache_tbl[%d] = %d\n",
-				__func__, id, brightness, brt_user,
-				subdev->brt_cache_tbl[brt_user]);
+				__func__, id, brightness, brightness,
+				subdev->brt_cache_tbl[brightness]);
 #endif
 	} else {
-		index = subdev->brt_cache_tbl[brt_user];
+		index = subdev->brt_cache_tbl[brightness];
 #ifdef DEBUG_PAC
 		pr_info("%s, bl-%d brightness %d, brt_cache_tbl[%d] = %d\n",
-				__func__, id, brightness, brt_user,
-				subdev->brt_cache_tbl[brt_user]);
+				__func__, id, brightness, brightness,
+				subdev->brt_cache_tbl[brightness]);
 #endif
 	}
+#else
+	index = search_brt_tbl(&subdev->brt_tbl, brightness);
+	if (index < 0) {
+		pr_err("%s, bl-%d failed to search %d, ret %d\n",
+				__func__, id, brightness, index);
+		return index;
+	}
+#endif
 
 	if (index > subdev->brt_tbl.sz_brt - 1)
 		index = subdev->brt_tbl.sz_brt - 1;
@@ -778,13 +786,13 @@ static int panel_set_brightness(struct backlight_device *bd)
 #ifdef CONFIG_SUPPORT_AOD_BL
 	panel_bl->subdev[PANEL_BL_SUBDEV_TYPE_AOD].brightness = brightness;
 #endif
-
+#ifdef CONFIG_SUPPORT_HMD
 	if (id == PANEL_BL_SUBDEV_TYPE_HMD) {
 		pr_info("%s keep plat_br:%d\n", __func__, brightness);
 		ret = -EINVAL;
 		goto exit_set;
 	}
-
+#endif
 	ret = panel_bl_set_brightness(panel_bl, id, 1);
 	if (ret) {
 		pr_err("%s, failed to set_brightness (ret %d)\n",
@@ -805,7 +813,10 @@ static const struct backlight_ops panel_backlight_ops = {
 
 int panel_bl_probe(struct panel_device *panel)
 {
-	int id, size, ret = 0;
+#if defined(CONFIG_PANEL_BL_USE_BRT_CACHE)
+	int id, size;
+#endif
+	int ret = 0;
 	struct panel_bl_device *panel_bl = &panel->panel_bl;
 
 	mutex_lock(&panel_bl->lock);
@@ -825,11 +836,12 @@ int panel_bl_probe(struct panel_device *panel)
 	panel_bl->props.acl_pwrsave = ACL_PWRSAVE_OFF;
 	panel_bl->props.acl_opr = ACL_OPR_OFF;
 
+#if defined(CONFIG_PANEL_BL_USE_BRT_CACHE)
 	for (id = 0; id < MAX_PANEL_BL_SUBDEV; id++) {
-		size = BRT_USER(get_subdev_max_brightness(panel_bl, id)) + 1;
+		size = get_subdev_max_brightness(panel_bl, id) + 1;
 		if (size <= 0) {
-			pr_warn("%s invalid brightness table (size %d)\n",
-					__func__, size);
+			pr_warn("%s %d invalid brightness table (size %d)\n",
+					__func__, id, size);
 			panel_bl->subdev[id].sz_brt_cache_tbl = -1;
 			continue;
 		}
@@ -845,6 +857,7 @@ int panel_bl_probe(struct panel_device *panel)
 		memset(panel_bl->subdev[id].brt_cache_tbl, 0xFF, size * sizeof(int));
 		panel_bl->subdev[id].sz_brt_cache_tbl = size;
 	}
+#endif
 	pr_info("%s done\n", __func__);
 
 err:

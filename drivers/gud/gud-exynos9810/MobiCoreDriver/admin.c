@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2018 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -75,6 +75,18 @@ static struct mc_admin_driver_request {
 	bool lock_channel_during_freeze;/* Is freezing ongoing ? */
 } g_request;
 
+#if KERNEL_VERSION(3, 13, 0) <= LINUX_VERSION_CODE
+static inline void reinit_completion_local(struct completion *x)
+{
+	reinit_completion(x);
+}
+#else
+static inline void reinit_completion_local(struct completion *x)
+{
+	INIT_COMPLETION(*x);
+}
+#endif
+
 /* The mutex around the channel communication has to be wrapped in order
  * to handle this use case :
  * client 1 calls request_send()
@@ -148,7 +160,7 @@ static struct tee_object *tee_object_alloc(bool is_sp_trustlet, size_t length)
 	}
 
 	/* Check size for overflow */
-	if (size < length) {
+	if (size < length || size > OBJECT_LENGTH_MAX) {
 		mc_dev_err("cannot allocate object of size %zu", length);
 		return NULL;
 	}
@@ -602,6 +614,13 @@ struct tee_object *tee_object_read(u32 spid, uintptr_t address, size_t length)
 		return ERR_PTR(-EFAULT);
 	}
 
+	/* Check header */
+	if ((thdr.intro.magic != MC_SERVICE_HEADER_MAGIC_BE) &&
+	    (thdr.intro.magic != MC_SERVICE_HEADER_MAGIC_LE)) {
+		mc_dev_err("header: invalid magic");
+		return ERR_PTR(-EINVAL);
+	}
+
 	/* Allocate memory */
 	obj = tee_object_alloc(thdr.service_type == SERVICE_TYPE_SP_TRUSTLET,
 			       length);
@@ -883,6 +902,7 @@ static long admin_ioctl(struct file *file, unsigned int cmd,
 		}
 
 		/* Block until a request is available */
+		server_state_change(READY);
 		ret = wait_for_completion_interruptible(
 						&g_request.client_complete);
 		if (ret)
@@ -1049,8 +1069,9 @@ static int admin_open(struct inode *inode, struct file *file)
 		return admin_ctx.last_start_ret;
 	}
 
+	reinit_completion_local(&g_request.client_complete);
+	reinit_completion_local(&g_request.server_complete);
 	/* Requests from driver to daemon */
-	server_state_change(READY);
 	mc_dev_info("daemon connection open, TGID %d", admin_ctx.admin_tgid);
 	return 0;
 }

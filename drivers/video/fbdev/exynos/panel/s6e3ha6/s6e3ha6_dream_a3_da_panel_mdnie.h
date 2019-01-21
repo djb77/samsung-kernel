@@ -1756,7 +1756,8 @@ static unsigned char dream_a3_da_night_mode_table[MAX_NIGHT_LEVEL][S6E3HA6_NIGHT
 	{ 0x00, 0xff, 0xde, 0x00, 0xa5, 0x00, 0xff, 0x00, 0x00, 0xde, 0xa5, 0x00, 0xff, 0x00, 0xde, 0x00, 0x00, 0xa5, 0xff, 0x00, 0xde, 0x00, 0xa5, 0x00 }, /* 3700K */
 	{ 0x00, 0xff, 0xd8, 0x00, 0x93, 0x00, 0xff, 0x00, 0x00, 0xd8, 0x93, 0x00, 0xff, 0x00, 0xd8, 0x00, 0x00, 0x93, 0xff, 0x00, 0xd8, 0x00, 0x93, 0x00 }, /* 3300K */
 	{ 0x00, 0xff, 0xcf, 0x00, 0x7f, 0x00, 0xff, 0x00, 0x00, 0xcf, 0x7f, 0x00, 0xff, 0x00, 0xcf, 0x00, 0x00, 0x7f, 0xff, 0x00, 0xcf, 0x00, 0x7f, 0x00 }, /* 2900K */
-	{ 0x00, 0xff, 0xc3, 0x00, 0x6a, 0x00, 0xff, 0x00, 0x00, 0xc3, 0x6a, 0x00, 0xff, 0x00, 0xc3, 0x00, 0x00, 0x6a, 0xff, 0x00, 0xc3, 0x00, 0x6a, 0x00 }  /* 2500K */
+	{ 0x00, 0xff, 0xc3, 0x00, 0x6a, 0x00, 0xff, 0x00, 0x00, 0xc3, 0x6a, 0x00, 0xff, 0x00, 0xc3, 0x00, 0x00, 0x6a, 0xff, 0x00, 0xc3, 0x00, 0x6a, 0x00 }, /* 2500K */
+	{ 0x00, 0xff, 0xfd, 0x00, 0xf8, 0x00, 0xff, 0x00, 0x00, 0xfd, 0xf8, 0x00, 0xff, 0x00, 0xfd, 0x00, 0x00, 0xf8, 0xff, 0x00, 0xfd, 0x00, 0xf8, 0x00 }  /* 7000K-Game_Mode */
 };
 
 static unsigned char dream_a3_da_trans_mode_table[][1] = {
@@ -1932,9 +1933,9 @@ struct maptbl dream_a3_da_mdnie_maptbl[MAX_MDNIE_MAPTBL][NR_S6E3HA6_MDNIE_REG] =
 		DEFINE_MAPTBL("color_blind_0", (u8 *)dream_a3_da_mdnie_color_blind_table + S6E3HA6_MDNIE_0_OFS, 1, 1, S6E3HA6_MDNIE_LEN, S6E3HA6_MDNIE_0_LEN,
 				init_color_blind_table, getidx_common_maptbl, copy_common_maptbl),
 		DEFINE_MAPTBL("color_blind_1", (u8 *)dream_a3_da_mdnie_color_blind_table + S6E3HA6_MDNIE_1_OFS, 1, 1, S6E3HA6_MDNIE_LEN, S6E3HA6_MDNIE_1_LEN,
-				init_color_blind_table, getidx_common_maptbl, copy_common_maptbl),
+				init_common_table, getidx_common_maptbl, copy_common_maptbl),
 		DEFINE_MAPTBL("color_blind_2", (u8 *)dream_a3_da_mdnie_color_blind_table + S6E3HA6_MDNIE_2_OFS, 1, 1, S6E3HA6_MDNIE_LEN, S6E3HA6_MDNIE_2_LEN,
-				init_color_blind_table, getidx_common_maptbl, copy_common_maptbl),
+				init_common_table, getidx_common_maptbl, copy_common_maptbl),
 	},
 
 	[MDNIE_SCREEN_CURTAIN_MAPTBL] = {
@@ -1968,9 +1969,9 @@ struct maptbl dream_a3_da_mdnie_maptbl[MAX_MDNIE_MAPTBL][NR_S6E3HA6_MDNIE_REG] =
 		DEFINE_MAPTBL("color_blind_hbm_0", (u8 *)dream_a3_da_mdnie_color_blind_hbm_table + S6E3HA6_MDNIE_0_OFS, 1, 1, S6E3HA6_MDNIE_LEN, S6E3HA6_MDNIE_0_LEN,
 				init_color_blind_table, getidx_common_maptbl, copy_common_maptbl),
 		DEFINE_MAPTBL("color_blind_hbm_1", (u8 *)dream_a3_da_mdnie_color_blind_hbm_table + S6E3HA6_MDNIE_1_OFS, 1, 1, S6E3HA6_MDNIE_LEN, S6E3HA6_MDNIE_1_LEN,
-				init_color_blind_table, getidx_common_maptbl, copy_common_maptbl),
+				init_common_table, getidx_common_maptbl, copy_common_maptbl),
 		DEFINE_MAPTBL("color_blind_hbm_2", (u8 *)dream_a3_da_mdnie_color_blind_hbm_table + S6E3HA6_MDNIE_2_OFS, 1, 1, S6E3HA6_MDNIE_LEN, S6E3HA6_MDNIE_2_LEN,
-				init_color_blind_table, getidx_common_maptbl, copy_common_maptbl),
+				init_common_table, getidx_common_maptbl, copy_common_maptbl),
 	},
 	/* BYPASS */
 	[MDNIE_BYPASS_MAPTBL] = {

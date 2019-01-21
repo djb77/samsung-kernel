@@ -87,6 +87,7 @@ void sec_debug_set_kallsyms_info(struct sec_debug_ksyms *ksyms, int magic)
 	ksyms->kallsyms_all = all_var;
 
 	ksyms->magic = magic;
+	ksyms->kimage_voffset = kimage_voffset;
 }
 #endif
 

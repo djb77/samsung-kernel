@@ -18,6 +18,8 @@
 
 #include "aod_drv_ioctl.h"
 
+#define SUPPORT_NORMAL_SELFMOVE
+
 enum AOD_SEQ {
 	SELF_MASK_IMG_SEQ = 0,
 	SELF_MASK_ENA_SEQ,
@@ -36,6 +38,10 @@ enum AOD_SEQ {
 	ENTER_AOD_SEQ,
 	EXIT_AOD_SEQ,
 	SET_TIME_SEQ,
+#ifdef SUPPORT_NORMAL_SELFMOVE
+	ENABLE_SELFMOVE_SEQ,
+	DISABLE_SELFMOVE_SEQ,
+#endif
 	MAX_AOD_SEQ,
 };
 
@@ -51,6 +57,9 @@ enum AOD_MAPTBL {
 	SELF_MOVE_MAPTBL,
 	SELF_MOVE_POS_MAPTBL,
 	SEFL_MOVE_RESET_MAPTBL,
+#ifdef SUPPORT_NORMAL_SELFMOVE
+	SELFMOVE_PATTERN_MAPTBL,
+#endif
 	MAX_AOD_MAPTBL,
 };
 
@@ -94,6 +103,9 @@ struct aod_ioctl_props {
 	int debug_rotate;
 
 	int first_clk_update;
+#ifdef SUPPORT_NORMAL_SELFMOVE
+	int selfmove_pattern;
+#endif
 };
 
 struct aod_dev_info {

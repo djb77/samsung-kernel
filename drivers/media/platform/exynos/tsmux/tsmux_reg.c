@@ -247,6 +247,21 @@
 
 #define TSMUX_HEX_DBG_CTRL			(TSMUX_HEX_BASE_ADDR + 0xC00)
 
+uint32_t tsmux_get_hw_version(struct tsmux_device *tsmux_dev)
+{
+	uint32_t version = 0;
+
+	if (tsmux_dev == NULL)
+		return 0;
+
+	TSMUX_WRITEL(0xE1, TSMUX_DBG_SEL_ADDR);
+	udelay(10);
+	version = TSMUX_READL(TSMUX_DBG_INFO_ADDR);
+	print_tsmux(TSMUX_DBG_SFR, "hw version: 0x%.8x\n", version);
+
+	return version;
+}
+
 void tsmux_print_dbg_info(struct tsmux_device *tsmux_dev,
 	u32 dbg_sel_reg)
 {

@@ -20,7 +20,11 @@ struct panel_info;
 struct panel_device;
 
 #undef DEBUG_PAC
+#undef CONFIG_PANEL_BL_USE_BRT_CACHE
+
+#ifndef CONFIG_EXYNOS_DECON_LCD_S6E3HF4
 #define CONFIG_LCD_EXTEND_HBM
+#endif
 
 #ifdef CONFIG_PANEL_BACKLIGHT_PAC_3_0
 #define BRT_SCALE	(100)
@@ -115,7 +119,9 @@ enum panel_bl_hw_type {
 
 enum panel_bl_subdev_type {
 	PANEL_BL_SUBDEV_TYPE_DISP,
+#ifdef CONFIG_SUPPORT_HMD
 	PANEL_BL_SUBDEV_TYPE_HMD,
+#endif
 #ifdef CONFIG_SUPPORT_AOD_BL
 	PANEL_BL_SUBDEV_TYPE_AOD,
 #endif
@@ -140,8 +146,10 @@ struct panel_bl_sub_dev {
 	enum panel_bl_subdev_type subdev_type;
 	struct brightness_table brt_tbl;
 	int brightness;
+#if defined(CONFIG_PANEL_BL_USE_BRT_CACHE)
 	int *brt_cache_tbl;
 	int sz_brt_cache_tbl;
+#endif
 };
 
 struct panel_bl_device {

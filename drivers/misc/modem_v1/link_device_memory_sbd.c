@@ -173,7 +173,7 @@ static int setup_sbd_rb(struct sbd_link_device *sl, struct sbd_ring_buffer *rb,
 	for (i = 0; i < rb->len; i++)
 		rb->buff[i] = rb->buff_rgn + (i * rb->buff_size);
 
-	mif_err("RB[%d:%d][%s] buff_rgn {addr:0x%p offset:%d size:%lu}\n",
+	mif_err("RB[%d:%d][%s] buff_rgn {addr:0x%pK offset:%d size:%lu}\n",
 		rb->id, rb->ch, udl_str(dir), rb->buff_rgn,
 		calc_offset(rb->buff_rgn, sl->shmem), alloc_size);
 
@@ -212,7 +212,7 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	size_t size;
 
 #if 1
-	mif_err("SHMEM {base:0x%p size:%d}\n",
+	mif_err("SHMEM {base:0x%pK size:%d}\n",
 		sl->shmem, sl->shmem_size);
 #endif
 
@@ -223,15 +223,15 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	sl->g_desc = (struct sbd_global_desc *)desc_alloc(sl, size);
 
 #if 1
-	mif_err("G_DESC_OFFSET = %d(0x%p)\n",
+	mif_err("G_DESC_OFFSET = %d(0x%pK)\n",
 		calc_offset(sl->g_desc, sl->shmem),
 		sl->g_desc);
 
-	mif_err("RB_CH_OFFSET = %d (0x%p)\n",
+	mif_err("RB_CH_OFFSET = %d (0x%pK)\n",
 		calc_offset(sl->g_desc->rb_ch, sl->shmem),
 		sl->g_desc->rb_ch);
 
-	mif_err("RBD_PAIR_OFFSET = %d (0x%p)\n",
+	mif_err("RBD_PAIR_OFFSET = %d (0x%pK)\n",
 		calc_offset(sl->g_desc->rb_desc, sl->shmem),
 		sl->g_desc->rb_desc);
 #endif
@@ -239,7 +239,7 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	size = sizeof(u16) * ULDL * RDWR * sl->num_channels;
 	sl->rbps = (u16 *)desc_alloc(sl, size);
 #if 1
-	mif_err("RBP_SET_OFFSET = %d (0x%p)\n",
+	mif_err("RBP_SET_OFFSET = %d (0x%pK)\n",
 		calc_offset(sl->rbps, sl->shmem), sl->rbps);
 #endif
 
@@ -325,7 +325,7 @@ static u8* data_offset_to_buffer(u64 offset, struct sbd_ring_buffer *rb)
 		buf_offset = offset - NET_HEADROOM;
 		buf = v_zmb + (buf_offset - sl->shmem_size);
 		if (!(buf >= v_zmb && buf < (v_zmb + zmb_size))) {
-			mif_err("invalid buf (1st pool) : %p\n", buf);
+			mif_err("invalid buf (1st pool) : %pK\n", buf);
 			return NULL;
 		}
 	} else {
@@ -359,7 +359,7 @@ static u8* unused_data_offset_to_buffer(u64 offset, struct sbd_ring_buffer *rb)
 		buf_offset = offset - NET_HEADROOM;
 		buf = v_zmb + (buf_offset - sl->shmem_size);
 		if (!(buf >= v_zmb && buf < (v_zmb + zmb_size))) {
-			mif_err("invalid buf (1st pool) : %p\n", buf);
+			mif_err("invalid buf (1st pool) : %pK\n", buf);
 			return NULL;
 		}
 	} else {
@@ -657,7 +657,7 @@ static int smapper_init(struct zerocopy_adaptor *zdptr)
 	u32 addr_v_offset = calc_offset(sm_buf, sl->shmem);
 
 	mif_info("+++\n");
-	mif_info("sbd id:%d ch id:%d addr:0x%p offset:%d\n",
+	mif_info("sbd id:%d ch id:%d addr:0x%pK offset:%d\n",
 		rb->id, rb->ch, rb->buff_rgn, addr_v_offset);
 
 	/* get resources */

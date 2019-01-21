@@ -345,6 +345,7 @@ struct wacom_i2c {
 	bool is_open_test;
 	bool samplerate_state;
 	u8 ble_mode;
+	bool probing_done;
 #ifdef CONFIG_SEC_FACTORY
 	volatile bool fac_garage_mode;
 	u32 garage_gain0;

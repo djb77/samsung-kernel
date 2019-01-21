@@ -849,13 +849,9 @@ static void fimc_is_sensor_dtp(unsigned long data)
 
 	FIMC_BUG_VOID(!device);
 
-	if (device->dtp_del_flag) {
-		del_timer(&device->dtp_timer);
-		device->dtp_del_flag = false;
-	}
-
 	/* Don't need to dtp check */
-	if (!device->force_stop && !device->dtp_check)
+	if ((!device->force_stop && !device->dtp_check) ||
+		!test_bit(FIMC_IS_SENSOR_FRONT_START, &device->state))
 		return;
 
 	err("forcely reset due to 0x%08lx", device->force_stop);
@@ -1047,7 +1043,6 @@ static int fimc_is_sensor_notify_by_fstr(struct fimc_is_device_sensor *device, v
 	int ret = 0;
 	struct fimc_is_framemgr *framemgr;
 	struct fimc_is_frame *frame;
-	u32 hashkey;
 	struct fimc_is_device_csi *csi;
 	struct fimc_is_subdev *dma_subdev;
 	struct v4l2_control ctrl;
@@ -1063,10 +1058,6 @@ static int fimc_is_sensor_notify_by_fstr(struct fimc_is_device_sensor *device, v
 		if (device->instant_cnt == 0)
 			wake_up(&device->instant_wait);
 	}
-
-	hashkey = device->fcount % FIMC_IS_TIMESTAMP_HASH_KEY;
-	device->timestamp[hashkey] = fimc_is_get_timestamp();
-	device->timestampboot[hashkey] = fimc_is_get_timestamp_boot();
 
 #ifdef MEASURE_TIME
 #ifdef MONITOR_TIME
@@ -1387,7 +1378,6 @@ static void fimc_is_sensor_instanton(struct work_struct *data)
 #ifdef ENABLE_DTP
 	if (device->dtp_check) {
 		mod_timer(&device->dtp_timer, jiffies +  msecs_to_jiffies(300));
-		device->dtp_del_flag = true;
 		info("DTP checking...\n");
 	}
 #endif
@@ -1492,7 +1482,6 @@ static int __init fimc_is_sensor_probe(struct platform_device *pdev)
 	device->pdata = pdata;
 	device->groupmgr = &core->groupmgr;
 	device->devicemgr = &core->devicemgr;
-	device->dtp_del_flag = false;
 
 	platform_set_drvdata(pdev, device);
 	init_waitqueue_head(&device->instant_wait);

@@ -18,8 +18,8 @@
 #include <linux/device.h>	/* dev_* macros */
 #include <linux/slab.h>		/* gfp_t */
 #include <linux/fs.h>		/* struct inode and struct file */
-#include <linux/version.h>
 #include <linux/mutex.h>
+#include <linux/version.h>
 
 #define MC_VERSION(major, minor) \
 		((((major) & 0x0000ffff) << 16) | ((minor) & 0x0000ffff))
@@ -84,7 +84,7 @@ extern struct mc_device_ctx g_ctx;
 
 /* Debug stuff */
 struct kasnprintf_buf {
-	struct mutex mutex;     /* Protect buf/size/off access */
+	struct mutex mutex;	/* Protect buf/size/off access */
 	gfp_t gfp;
 	void *buf;
 	int size;

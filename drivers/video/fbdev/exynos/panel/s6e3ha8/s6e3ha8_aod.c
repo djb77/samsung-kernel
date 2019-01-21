@@ -387,3 +387,76 @@ void copy_self_move_reset(struct maptbl *tbl, u8 *dst)
 	panel_info("AOD:INFO:%s: %x:%x:%x:%x:%x\n",
 		__func__, dst[0], dst[1], dst[2], dst[3], dst[4]);
 }
+
+#ifdef SUPPORT_NORMAL_SELFMOVE
+
+int getidx_self_pattern(struct maptbl *tbl)
+{
+	int row = 0;
+	struct aod_dev_info *aod = tbl->pdata;
+	struct aod_ioctl_props *props = &aod->props;
+
+	switch (props->selfmove_pattern) {
+	case 1:
+	case 3:
+		panel_info("AOD:INFO:%s:pattern : %d -> %d\n", __func__, 
+			props->selfmove_pattern, props->selfmove_pattern - 1);
+		row = 0;
+		break;
+	case 2:
+	case 4:
+		panel_info("AOD:INFO:%s:pattern : %d -> %d\n", __func__, 
+			props->selfmove_pattern, props->selfmove_pattern - 1);
+		row = 1;
+		break;
+	default:
+		panel_info("AOD:INFO:%s:invalid pattern:%d\n",
+			__func__, props->selfmove_pattern);
+		row = 0;
+		break;
+	}
+
+	return maptbl_index(tbl, 0, row, 0);
+}
+
+#if 0
+void copy_selfmove_enable(struct maptbl *tbl, u8 *dst)
+{
+	struct aod_dev_info *aod = tbl->pdata;
+	struct aod_ioctl_props *props = &aod->props;
+
+	dst[8] = (char)props->selfmove_interval;
+
+	panel_info("AOD:INFO:%s: %x:%x:%x:%x:%x:%x:%x:%x:(%x)\n",
+		__func__, dst[0], dst[1], dst[2], dst[3], dst[4],
+		dst[5], dst[6], dst[7], dst[8]);
+}
+#endif
+
+void copy_selfmove_pattern(struct maptbl *tbl, u8 *dst)
+{
+	int idx;
+
+	if (!tbl || !dst) {
+		pr_err("%s, invalid parameter (tbl %p, dst %p\n",
+				__func__, tbl, dst);
+		return;
+	}
+
+	idx = maptbl_getidx(tbl);
+	if (idx < 0) {
+		pr_err("%s, failed to getidx %d\n", __func__, idx);
+		return;
+	}
+	memcpy(dst, &(tbl->arr)[idx], sizeof(u8) * tbl->sz_copy);
+
+#ifdef FAST_TIMER
+	dst[7] = 0x22;
+#endif
+
+	panel_info("AOD:INFO:%s: \n%x:%x:%x:%x:%x:%x:%x:(%x):%x\n",
+		__func__, dst[0], dst[1], dst[2], dst[3], dst[4],
+		dst[5], dst[6], dst[7], dst[8]);
+}
+
+#endif

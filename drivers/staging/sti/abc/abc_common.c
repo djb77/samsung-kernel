@@ -48,7 +48,7 @@ static int parse_gpu_data(struct device *dev,
 		return -EINVAL;
 	}
 
-	cgpu->buffer.abc_element = kzalloc(sizeof(cgpu->buffer.abc_element[0]) * cgpu->threshold_cnt + 1, GFP_KERNEL);
+	cgpu->buffer.abc_element = kzalloc(sizeof(cgpu->buffer.abc_element[0]) * (cgpu->threshold_cnt + 1), GFP_KERNEL);
 
 	if (!cgpu->buffer.abc_element)
 		return -ENOMEM;
@@ -81,7 +81,7 @@ static int parse_aicl_data(struct device *dev,
 	}
 
 	caicl->buffer.abc_element = kzalloc(sizeof(caicl->buffer.abc_element[0]) *
-					    caicl->threshold_cnt + 1, GFP_KERNEL);
+					    (caicl->threshold_cnt + 1), GFP_KERNEL);
 
 	if (!caicl->buffer.abc_element)
 		return -ENOMEM;

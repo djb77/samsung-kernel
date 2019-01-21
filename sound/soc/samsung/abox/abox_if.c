@@ -35,7 +35,7 @@ static int abox_if_startup(struct snd_pcm_substream *substream,
 			(substream->stream == SNDRV_PCM_STREAM_CAPTURE) ?
 			'C' : 'P');
 
-	abox_request_cpu_gear(dev, abox_data, dai, abox_data->cpu_gear_min);
+	abox_request_cpu_gear_dai(dev, abox_data, dai, abox_data->cpu_gear_min);
 	ret = clk_enable(data->clk_bclk);
 	if (ret < 0) {
 		dev_err(dev, "Failed to enable bclk: %d\n", ret);
@@ -69,7 +69,7 @@ static void abox_if_shutdown(struct snd_pcm_substream *substream,
 
 	clk_disable(data->clk_bclk_gate);
 	clk_disable(data->clk_bclk);
-	abox_request_cpu_gear(dev, abox_data, dai, ABOX_CPU_GEAR_MIN);
+	abox_request_cpu_gear_dai(dev, abox_data, dai, ABOX_CPU_GEAR_MIN);
 }
 
 static int abox_if_hw_free(struct snd_pcm_substream *substream,

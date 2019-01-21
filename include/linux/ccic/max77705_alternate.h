@@ -424,6 +424,7 @@ enum VDM_MSG_IRQ_State {
 #define UVDM_PROTOCOL_ID		0xA028
 #define DEXPAD_PRODUCT_ID		0xA029
 #define MPA_PRODUCT_ID			0x2122
+#define FRIENDS_PRODUCT_ID		0xB002
 /* Samsung UVDM structure */
 #define SEC_UVDM_SHORT_DATA		0x0
 #define SEC_UVDM_LONG_DATA		0x1

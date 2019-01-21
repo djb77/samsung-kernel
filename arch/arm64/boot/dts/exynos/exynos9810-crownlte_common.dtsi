@@ -1304,7 +1304,7 @@
 			maxim,sysclk = <12288000>;
 			maxim,vmon_slot = <0>;
 			maxim,platform_info = <2 0x0 0x0 0x0 0x0 52>;
-			maxim,ppr_param_info = <3900 3700 3800 3600>;
+			maxim,ppr_param_info = <3900 3900 3800 3800>;
 			maxim,boost_step = <
 				0x0F 0x0F 0x0F 0x0F
 				0x0F 0x0F 0x0F 0x0F
@@ -2571,7 +2571,7 @@
 			net_boost,table= <
 				100 0 0 1053000 0 845000 0 0 0 0
 				150 0 0 1248000 0 1014000 0 0 0 0
-				200 12610000 0 1690000 0 1794000 0 0 0 0
+				200 1261000 0 1690000 0 1794000 0 0 0 0
 				>;
 		};
 		boot_device@2 {

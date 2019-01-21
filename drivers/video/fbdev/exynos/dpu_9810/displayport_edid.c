@@ -12,6 +12,10 @@
 #include <linux/fb.h>
 #include "displayport.h"
 
+#ifdef FEATURE_SUPPORT_DISPLAYID
+#include <drm/drm_displayid.h>
+#endif
+
 #define EDID_SEGMENT_ADDR	(0x60 >> 1)
 #define EDID_ADDR		(0xA0 >> 1)
 #define EDID_SEGMENT_IGNORE	(2)
@@ -599,6 +603,7 @@ void edid_check_detail_timing_desc1(struct fb_monspecs *specs, int modedb_len, u
 	}
 
 	supported_videos[VDUMMYTIMING].dex_support = supported_videos[i].dex_support;
+	supported_videos[VDUMMYTIMING].ratio = supported_videos[i].ratio;
 
 	displayport->best_video = VDUMMYTIMING;
 	supported_videos[VDUMMYTIMING].dv_timings.bt.width = mode->xres;
@@ -626,6 +631,184 @@ void edid_check_detail_timing_desc1(struct fb_monspecs *specs, int modedb_len, u
 	displayport_info("EDID: %s edid_support_match = %d\n", supported_videos[VDUMMYTIMING].name,
 			supported_videos[VDUMMYTIMING].edid_support_match);
 }
+
+#ifdef FEATURE_SUPPORT_DISPLAYID
+static void edid_mode_displayid_detailed(struct displayid_detailed_timings_1 *timings)
+{
+	int i;
+	struct displayport_device *displayport = get_displayport_drvdata();
+	unsigned pixel_clock = (timings->pixel_clock[0] |
+				(timings->pixel_clock[1] << 8) |
+				(timings->pixel_clock[2] << 16));
+	unsigned hactive = (timings->hactive[0] | timings->hactive[1] << 8) + 1;
+	unsigned hblank = (timings->hblank[0] | timings->hblank[1] << 8) + 1;
+	unsigned hsync = (timings->hsync[0] | (timings->hsync[1] & 0x7f) << 8) + 1;
+	unsigned hsync_width = (timings->hsw[0] | timings->hsw[1] << 8) + 1;
+	unsigned vactive = (timings->vactive[0] | timings->vactive[1] << 8) + 1;
+	unsigned vblank = (timings->vblank[0] | timings->vblank[1] << 8) + 1;
+	unsigned vsync = (timings->vsync[0] | (timings->vsync[1] & 0x7f) << 8) + 1;
+	unsigned vsync_width = (timings->vsw[0] | timings->vsw[1] << 8) + 1;
+	bool hsync_positive = (timings->hsync[1] >> 7) & 0x1;
+	bool vsync_positive = (timings->vsync[1] >> 7) & 0x1;
+	unsigned htotal = hactive + hblank;
+	unsigned vtotal = vactive + vblank;
+	unsigned fps = div_u64(((u64)pixel_clock * 10000), (htotal * vtotal));
+
+	displayport_info("DisplayID %d(%d) %d %d %d %d %d %d %d %d %d %d\n",
+			pixel_clock * 10,
+			fps,
+			hactive,
+			hsync,
+			hsync_width,
+			hblank,
+			vactive,
+			vsync,
+			vsync_width,
+			vblank,
+			hsync_positive,
+			vsync_positive);
+
+	for (i = 0; i < supported_videos_pre_cnt; i++) {
+		if (supported_videos[i].displayid_timing == DISPLAYID_EXT &&
+				(fps == supported_videos[i].fps ||
+				 fps == supported_videos[i].fps - 1) &&
+				hactive == supported_videos[i].dv_timings.bt.width &&
+				vactive == supported_videos[i].dv_timings.bt.height) {
+			displayport_info("found matched displayid timing %d\n", i);
+			break;
+		}
+	}
+
+	if (i < supported_videos_pre_cnt) {
+		supported_videos[i].dex_support = supported_videos[i].dex_support;
+		supported_videos[i].ratio = supported_videos[i].ratio;
+
+		if (i > displayport->best_video)
+			displayport->best_video = i;
+
+		supported_videos[i].dv_timings.bt.width = hactive;
+		supported_videos[i].dv_timings.bt.height = vactive;
+		supported_videos[i].dv_timings.bt.interlaced = false;
+		supported_videos[i].dv_timings.bt.pixelclock = pixel_clock * 10000;
+		supported_videos[i].dv_timings.bt.hfrontporch = hblank / 2;
+		supported_videos[i].dv_timings.bt.hsync = hsync;
+		supported_videos[i].dv_timings.bt.hbackporch = hblank - (hblank / 2);
+		supported_videos[i].dv_timings.bt.vfrontporch = vblank / 2;
+		supported_videos[i].dv_timings.bt.vsync = vsync;
+		supported_videos[i].dv_timings.bt.vbackporch = vblank - (vblank / 2);
+		supported_videos[i].fps = fps;
+		supported_videos[i].v_sync_pol = vsync_positive ? SYNC_POSITIVE : SYNC_NEGATIVE;
+		supported_videos[i].h_sync_pol = hsync_positive ? SYNC_POSITIVE : SYNC_NEGATIVE;
+		supported_videos[i].edid_support_match = true;
+	}
+}
+
+static int edid_add_displayid_detailed_1_modes(struct displayid_block *block)
+{
+	struct displayid_detailed_timing_block *det = (struct displayid_detailed_timing_block *)block;
+	int i;
+	int num_timings;
+	int num_modes = 0;
+	/* blocks must be multiple of 20 bytes length */
+	if (block->num_bytes % 20)
+		return 0;
+
+	num_timings = block->num_bytes / 20;
+	for (i = 0; i < num_timings; i++) {
+		struct displayid_detailed_timings_1 *timings = &det->timings[i];
+
+		edid_mode_displayid_detailed(timings);
+		/* add to support list */
+		num_modes++;
+	}
+	return num_modes;
+}
+
+static int edid_validate_displayid(u8 *displayid, int length, int idx)
+{
+	int i;
+	u8 csum = 0;
+	struct displayid_hdr *base;
+
+	base = (struct displayid_hdr *)&displayid[idx];
+
+	displayport_info("DisplayId rev 0x%x, len %d, %d %d\n",
+			base->rev, base->bytes, base->prod_id, base->ext_count);
+
+	if (base->bytes + 5 > length - idx)
+		return -EINVAL;
+	for (i = idx; i <= base->bytes + 5; i++) {
+		csum += displayid[i];
+	}
+	if (csum) {
+		displayport_info("DisplayID checksum invalid, remainder is %d\n", csum);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static u8 *edid_find_displayid_extension(u8 *edid, int blk_cnt)
+{
+	u8 *edid_ext = NULL;
+	int i;
+
+	if (blk_cnt < 1)
+		return NULL;
+
+	for (i = 0; i < blk_cnt; i++) {
+		edid_ext = edid + EDID_BLOCK_SIZE * (i + 1);
+		if (edid_ext[0] == DISPLAYID_EXT)
+			break;
+	}
+
+	if (i == blk_cnt)
+		return NULL;
+
+	return edid_ext;
+}
+
+static int edid_add_displayid_detailed_modes(u8 *edid)
+{
+	u8 *displayid;
+	int ret;
+	int idx = 1;
+	int length = EDID_BLOCK_SIZE;
+	struct displayid_block *block;
+	int num_modes = 0;
+	int blk_cnt = 0;
+
+	if (!edid)
+		return 0;
+
+	blk_cnt = edid[EDID_EXTENSION_FLAG];
+	if (blk_cnt > 2)
+		blk_cnt = 2;
+
+	displayid = edid_find_displayid_extension(edid, blk_cnt);
+	if (!displayid)
+		return 0;
+
+	ret = edid_validate_displayid(displayid, length, idx);
+	if (ret)
+		return 0;
+
+	idx += sizeof(struct displayid_hdr);
+	while (block = (struct displayid_block *)&displayid[idx],
+	       idx + sizeof(struct displayid_block) <= length &&
+	       idx + sizeof(struct displayid_block) + block->num_bytes <= length &&
+	       block->num_bytes > 0) {
+		idx += block->num_bytes + sizeof(struct displayid_block);
+		switch (block->tag) {
+		case DATA_BLOCK_TYPE_1_DETAILED_TIMING:
+			num_modes += edid_add_displayid_detailed_1_modes(block);
+			break;
+		}
+	}
+
+	return num_modes;	
+}
+#endif
 
 int edid_update(struct displayport_device *hdev)
 {
@@ -751,6 +934,10 @@ int edid_update(struct displayport_device *hdev)
 			edid_misc, audio_channels, audio_sample_rates, audio_bit_rates);
 
 out:
+#ifdef FEATURE_SUPPORT_DISPLAYID
+	edid_add_displayid_detailed_modes(edid);
+#endif
+
 	edid_check_detail_timing_desc1(&specs, modedb_len, edid);
 
 	/* No supported preset found, use default */

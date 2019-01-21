@@ -877,7 +877,7 @@ static void max77705_check_slow_charging(struct max77705_charger_data *charger,
 {
 	/* under 400mA considered as slow charging concept for VZW */
 	if (input_current <= SLOW_CHARGING_CURRENT_STANDARD &&
-	    charger->cable_type != SEC_BATTERY_CABLE_NONE) {
+	    !is_nocharge_type(charger->cable_type)) {
 		union power_supply_propval value;
 
 		charger->slow_charging = true;
@@ -1338,7 +1338,7 @@ static int max77705_chg_set_property(struct power_supply *psy,
 #endif
 		if (!max77705_get_autoibus(charger))
 			max77705_set_fw_noautoibus(MAX77705_AUTOIBUS_AT_OFF);
-		if (charger->cable_type == SEC_BATTERY_CABLE_NONE) {
+		if (is_nocharge_type(charger->cable_type)) {
 			charger->wc_pre_current = WC_CURRENT_START;
 			wake_unlock(&charger->wpc_wake_lock);
 			cancel_delayed_work(&charger->wpc_work);
@@ -1386,7 +1386,7 @@ static int max77705_chg_set_property(struct power_supply *psy,
 			else
 				max77705_set_input_current(charger, input_current);
 
-			if (charger->cable_type == SEC_BATTERY_CABLE_NONE)
+			if (is_nocharge_type(charger->cable_type))
 				max77705_set_wireless_input_current(charger, input_current);
 			charger->input_current = input_current;
 		}
@@ -1880,7 +1880,7 @@ static void max77705_aicl_isr_work(struct work_struct *work)
 	u8 aicl_state = 0;
 	union power_supply_propval value;
 
-	if (!charger->irq_aicl_enabled || charger->cable_type == SEC_BATTERY_CABLE_NONE) {
+	if (!charger->irq_aicl_enabled || is_nocharge_type(charger->cable_type)) {
 		pr_info("%s : skip\n", __func__);
 		charger->prev_aicl_mode = aicl_mode = false;
 		wake_unlock(&charger->aicl_wake_lock);

@@ -543,6 +543,7 @@ int32_t iva_mcu_boot_file(struct iva_dev_data *iva,
 	if (!S_ISREG(mcu_st.mode)) {
 		dev_err(dev, "%s() file(%s) is not regular. mode(0x%x)\n",
 				__func__, mcu_file, mcu_st.mode);
+		ret = -EINVAL;
 		goto err_mcu_file;
 	}
 
@@ -550,6 +551,7 @@ int32_t iva_mcu_boot_file(struct iva_dev_data *iva,
 	if (mcu_size == 0 || mcu_size > VMCU_MEM_SIZE) {
 		dev_err(dev, "%s() file size(0x%x) is larger that expected %d\n",
 				__func__, mcu_size, VMCU_MEM_SIZE);
+		ret = -EFBIG;
 		goto err_mcu_file;
 	}
 
@@ -558,7 +560,6 @@ int32_t iva_mcu_boot_file(struct iva_dev_data *iva,
 		dev_dbg(dev, "%s() regard the same as previous(%s, 0x%x)\n",
 				__func__, mcu_file, mcu_size);
 		goto skip_read;
-
 	}
 
 	ret = iva_mcu_map_boot_mem(iva, mcu_bin);

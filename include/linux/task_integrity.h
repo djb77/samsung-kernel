@@ -21,6 +21,7 @@
 #include <linux/spinlock.h>
 #include <linux/sched.h>
 #include <linux/list.h>
+#include <linux/dcache.h>
 
 struct linux_binprm;
 struct task_integrity;
@@ -70,18 +71,38 @@ struct processing_event_list {
 	enum five_event event;
 	struct task_struct *task;
 	struct file *file;
-	struct task_integrity *saved_integrity;
 	int function;
 	struct list_head list;
 };
 
+enum task_integrity_reset_cause {
+	CAUSE_UNKNOWN,
+	CAUSE_MISMATCH_LABEL,
+	CAUSE_BAD_FS,
+	CAUSE_NO_CERT,
+	CAUSE_INVALID_HASH_LENGTH,
+	CAUSE_INVALID_HEADER,
+	CAUSE_CALC_HASH_FAILED,
+	CAUSE_INVALID_LABEL_DATA,
+	CAUSE_INVALID_SIGNATURE_DATA,
+	CAUSE_INVALID_HASH,
+	CAUSE_INVALID_CALC_CERT_HASH,
+	CAUSE_INVALID_UPDATE_LABEL,
+	CAUSE_INVALID_SIGNATURE,
+	CAUSE_UKNOWN_FIVE_DATA,
+	CAUSE_MAX,
+};
+
 struct task_integrity {
 	enum task_integrity_value user_value;
-	atomic_t value;
+	enum task_integrity_value value;
 	atomic_t usage_count;
-	spinlock_t lock;
+	spinlock_t value_lock;
+	spinlock_t list_lock;
 	struct integrity_label *label;
 	struct processing_event_list events;
+	enum task_integrity_reset_cause reset_cause;
+	struct file *reset_file;
 };
 
 #ifdef CONFIG_FIVE
@@ -103,34 +124,18 @@ static inline void task_integrity_put(struct task_integrity *intg)
 		task_integrity_free(intg);
 }
 
-static inline int __atomic_set_unless(atomic_t *v, int a, int u)
+static inline void __task_integrity_set(struct task_integrity *intg,
+					enum task_integrity_value value)
 {
-	int c, old;
-
-	c = atomic_read(v);
-	while (c != u && (old = atomic_cmpxchg((v), c, a)) != c)
-		c = old;
-	return c;
-}
-
-static inline void task_integrity_set_unless(struct task_integrity *intg,
-					enum task_integrity_value value,
-					enum task_integrity_value unless)
-{
-	__atomic_set_unless(&intg->value, value, unless);
+	intg->value = value;
 }
 
 static inline void task_integrity_set(struct task_integrity *intg,
 					enum task_integrity_value value)
 {
-	atomic_set(&intg->value, value);
-}
-
-static inline void task_integrity_cmpxchg(struct task_integrity *intg,
-		enum task_integrity_value old,
-		enum task_integrity_value new)
-{
-	atomic_cmpxchg(&intg->value, old, new);
+	spin_lock(&intg->value_lock);
+	intg->value = value;
+	spin_unlock(&intg->value_lock);
 }
 
 static inline void task_integrity_reset(struct task_integrity *intg)
@@ -143,35 +148,50 @@ extern void task_integrity_delayed_reset(struct task_struct *task);
 static inline enum task_integrity_value task_integrity_read(
 						struct task_integrity *intg)
 {
-	return atomic_read(&intg->value);
+	enum task_integrity_value value;
+
+	spin_lock(&intg->value_lock);
+	value = intg->value;
+	spin_unlock(&intg->value_lock);
+
+	return value;
+}
+
+/**
+ * task_integrity_allow_sign - check whether application is allowed to sign
+ * @intg: pointer to the corresponding integrity struct (Should not be NULL)
+ *
+ * On success return true.
+ */
+static inline bool task_integrity_allow_sign(struct task_integrity *intg)
+{
+	enum task_integrity_value tint =
+					task_integrity_read(intg);
+	if (tint == INTEGRITY_PRELOAD_ALLOW_SIGN
+			|| tint == INTEGRITY_MIXED_ALLOW_SIGN
+			|| tint == INTEGRITY_DMVERITY_ALLOW_SIGN) {
+		return true;
+	}
+
+	return false;
 }
 
 static inline enum task_integrity_value task_integrity_user_read(
 						struct task_integrity *intg)
 {
-	enum task_integrity_value intg_user;
-
-	spin_lock(&intg->lock);
-	intg_user = intg->user_value;
-	spin_unlock(&intg->lock);
-
-	return intg_user;
+	return intg->user_value;
 }
 
 static inline void task_integrity_user_set(struct task_integrity *intg,
 					   enum task_integrity_value value)
 {
-	spin_lock(&intg->lock);
 	intg->user_value = value;
-	spin_unlock(&intg->lock);
 }
 
 static inline void task_integrity_reset_both(struct task_integrity *intg)
 {
-	spin_lock(&intg->lock);
 	task_integrity_reset(intg);
 	intg->user_value = INTEGRITY_NONE;
-	spin_unlock(&intg->lock);
 }
 
 extern int task_integrity_copy(struct task_integrity *from,
@@ -179,6 +199,7 @@ extern int task_integrity_copy(struct task_integrity *from,
 extern int five_bprm_check(struct linux_binprm *bprm);
 extern void five_file_free(struct file *file);
 extern int five_file_mmap(struct file *file, unsigned long prot);
+extern int five_file_verify(struct task_struct *task, struct file *file);
 extern void five_task_free(struct task_struct *task);
 
 extern void five_inode_post_setattr(struct task_struct *tsk,
@@ -194,11 +215,10 @@ extern int five_fcntl_verify_sync(struct file *file);
 extern int five_fork(struct task_struct *task, struct task_struct *child_task);
 extern int five_ptrace(struct task_struct *task, long request);
 extern int five_process_vm_rw(struct task_struct *task, int write);
-
-#ifdef CONFIG_FIVE_PA_FEATURE
-extern int fivepa_fcntl_setxattr(struct file *file, void __user *lv_xattr);
-#endif /* CONFIG_FIVE_PA_FEATURE */
-
+extern char const * const tint_reset_cause_to_string(
+	enum task_integrity_reset_cause cause);
+extern void task_integrity_set_reset_reason(struct task_integrity *intg,
+	enum task_integrity_reset_cause cause, struct file *file);
 #else
 static inline struct task_integrity *task_integrity_alloc(void)
 {
@@ -215,18 +235,6 @@ static inline void task_integrity_clear(struct task_integrity *tint)
 
 static inline void task_integrity_set(struct task_integrity *intg,
 						enum task_integrity_value value)
-{
-}
-
-static inline void task_integrity_set_unless(struct task_integrity *intg,
-					enum task_integrity_value value,
-					enum task_integrity_value unless)
-{
-}
-
-static inline void task_integrity_cmpxchg(struct task_integrity *intg,
-		enum task_integrity_value old,
-		enum task_integrity_value new)
 {
 }
 
@@ -277,6 +285,11 @@ static inline void five_file_free(struct file *file)
 }
 
 static inline int five_file_mmap(struct file *file, unsigned long prot)
+{
+	return 0;
+}
+
+static inline int five_file_verify(struct task_struct *task, struct file *file)
 {
 	return 0;
 }
@@ -340,6 +353,17 @@ static inline int task_integrity_copy(struct task_integrity *from,
 				struct task_integrity *to)
 {
 	return 0;
+}
+
+static inline char const * const tint_reset_cause_to_string(
+	enum task_integrity_reset_cause cause)
+{
+	return NULL;
+}
+
+static inline void task_integrity_set_reset_reason(struct task_integrity *intg,
+	enum task_integrity_reset_cause cause, struct file *file)
+{
 }
 #endif
 

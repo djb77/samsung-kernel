@@ -318,7 +318,7 @@ static int build_dyn_power_table(struct gpufreq_cooling_device *gpufreq_device,
 		 * Do the multiplication with MHz and millivolt so as
 		 * to not overflow.
 		 */
-		power = (u64)capacitance * freq * voltage_mv * voltage_mv;
+		power = (u64)capacitance * (freq / 1000) * voltage_mv * voltage_mv;
 		do_div(power, 1000000000);
 
 		power_table[i].frequency = (unsigned int)freq;
@@ -568,7 +568,6 @@ static int gpufreq_apply_cooling(struct gpufreq_cooling_device *gpufreq_device,
 		return -EINVAL;
 	}
 
-	gpu_cooling_freq = gpu_cooling_freq / 1000;
 	blocking_notifier_call_chain(&gpu_notifier, GPU_THROTTLING, &gpu_cooling_freq);
 
 	return 0;
@@ -746,7 +745,7 @@ static int gpufreq_state2power(struct thermal_cooling_device *cdev,
 	int ret;
 	struct gpufreq_cooling_device *gpufreq_device = cdev->devdata;
 
-	freq = gpu_freq_table[state].frequency / 1000;
+	freq = gpu_freq_table[state].frequency;
 	if (!freq)
 		return -EINVAL;
 
@@ -798,7 +797,7 @@ static int gpufreq_power2state(struct thermal_cooling_device *cdev,
 	dyn_power = dyn_power > 0 ? dyn_power : 0;
 	target_freq = gpu_power_to_freq(gpufreq_device, dyn_power);
 
-	*state = gpufreq_cooling_get_level(0, target_freq * 1000);
+	*state = gpufreq_cooling_get_level(0, target_freq);
 	if (*state == THERMAL_CSTATE_INVALID) {
 		pr_warn("Failed to convert %dKHz for gpu into a cdev state\n",
 				     target_freq);
@@ -1066,7 +1065,7 @@ static int gpu_cooling_table_init(void)
 
 		gpu_freq_table[count].flags = 0;
 		gpu_freq_table[count].driver_data = count;
-		gpu_freq_table[count].frequency = (unsigned int)freq * 1000;
+		gpu_freq_table[count].frequency = (unsigned int)freq;
 
 		pr_info("[GPU cooling] index : %d, frequency : %d\n",
 			gpu_freq_table[count].driver_data, gpu_freq_table[count].frequency);

@@ -25,10 +25,19 @@
 #define PROTOCOL_COMMAND_READF  0xFF03
 #define PROTOCOL_COMMAND_WRITEF 0xFF04
 
-#define PROTOCOL_MAX_PARAM_DATA_LEN (12 * 4096)
+/*
+ * Size of command buffer in Linux kernel for the case of kinibi must be less
+ * than 32 KBytes (8 pages):
+ *  | struct ProcolCmd | struct PersObjectCmd |
+ *  | 20544 bytes      | 4180 bytes           | = 24724 bytes (7 pages)
+ *
+ * The size of persistent object data should be comparable to the size of one
+ * command parameter.
+ */
+#define PROTOCOL_MAX_PARAM_DATA_LEN    (4096 + 1024)
 #define PARAMS_NUM 4
 
-#define MAX_PERSISTENT_OBJECT_SIZE 65536
+#define MAX_PERSISTENT_OBJECT_DATA_LEN 4096
 #define MAX_PERSISTENT_OBJECT_ID_LEN 64
 
 /*
@@ -70,7 +79,7 @@ typedef struct PersObjectCmdStruct {
 	uint32_t data_len;
 	uint32_t id_len;
 	uint8_t  id[MAX_PERSISTENT_OBJECT_ID_LEN];
-	uint8_t  data[MAX_PERSISTENT_OBJECT_SIZE];
+	uint8_t  data[MAX_PERSISTENT_OBJECT_DATA_LEN];
 	uint64_t teec_oper;
 } IW_STRUCTURE PersObjectCmd;
 

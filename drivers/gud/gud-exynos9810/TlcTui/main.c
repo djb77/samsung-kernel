@@ -83,69 +83,67 @@ static long tui_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 			ret = -EFAULT;
 		break;
 
-	case TUI_IO_WAITCMD:{
-			struct tlc_tui_command_t tui_cmd = { 0 };
+	case TUI_IO_WAITCMD: {
+		struct tlc_tui_command_t tui_cmd = {0};
 
-			pr_info("TUI_IO_WAITCMD\n");
+		pr_info("TUI_IO_WAITCMD\n");
 
-			ret = tlc_wait_cmd(&tui_cmd);
-			if (ret) {
-				pr_debug
-				    ("ERROR %s:%d tlc_wait_cmd returned (0x%08X)\n",
-				     __func__, __LINE__, ret);
-				return ret;
-			}
-
-			/* Write command id to user */
-			pr_debug("IOCTL: sending command %d to user.\n",
-				 tui_cmd.id);
-
-			if (copy_to_user
-			    (uarg, &tui_cmd, sizeof(struct tlc_tui_command_t)))
-				ret = -EFAULT;
-			else
-				ret = 0;
-
-			break;
+		ret = tlc_wait_cmd(&tui_cmd);
+		if (ret) {
+			pr_debug("ERROR %s:%d tlc_wait_cmd returned (0x%08X)\n",
+				 __func__, __LINE__, ret);
+			return ret;
 		}
 
-	case TUI_IO_ACK:{
-			struct tlc_tui_response_t rsp_id;
+		/* Write command id to user */
+		pr_debug("IOCTL: sending command %d to user.\n", tui_cmd.id);
 
-			pr_info("TUI_IO_ACK\n");
+		if (copy_to_user(uarg, &tui_cmd, sizeof(
+						struct tlc_tui_command_t)))
+			ret = -EFAULT;
+		else
+			ret = 0;
 
-			/* Read user response */
-			if (copy_from_user(&rsp_id, uarg, sizeof(rsp_id)))
-				ret = -EFAULT;
-			else
-				ret = 0;
+		break;
+	}
 
-			pr_debug("IOCTL: User completed command %d.\n",
-				 rsp_id.id);
-			ret = tlc_ack_cmd(&rsp_id);
-			if (ret)
-				return ret;
-			break;
+	case TUI_IO_ACK: {
+		struct tlc_tui_response_t rsp_id;
+
+		pr_info("TUI_IO_ACK\n");
+
+		/* Read user response */
+		if (copy_from_user(&rsp_id, uarg, sizeof(rsp_id)))
+			ret = -EFAULT;
+		else
+			ret = 0;
+
+		pr_debug("IOCTL: User completed command %d.\n", rsp_id.id);
+		ret = tlc_ack_cmd(&rsp_id);
+		if (ret)
+			return ret;
+		break;
+	}
+
+	case TUI_IO_INIT_DRIVER: {
+		pr_info("TUI_IO_INIT_DRIVER\n");
+
+		ret = tlc_init_driver();
+		if (ret) {
+			pr_debug("ERROR %s:%d tlc_init_driver returned (0x%08X)\n",
+				 __func__, __LINE__, ret);
+			return ret;
 		}
+		break;
+	}
 
-	case TUI_IO_INIT_DRIVER:{
-			pr_info("TUI_IO_INIT_DRIVER\n");
+	//case TUI_IO_DISPLAY_NOTIFY:{
+	case TUI_IO_SET_RESOLUTION:{
+			struct tlc_tui_resolution_t response;
+			//pr_info("TUI_IO_DISPLAY_NOTIFY\n");
+			pr_info("TUI_IO_RESOLUTION\n");
 
-			ret = tlc_init_driver();
-			if (ret) {
-				pr_debug
-				    ("ERROR %s:%d tlc_init_driver returned (0x%08X)\n",
-				     __func__, __LINE__, ret);
-				return ret;
-			}
-			break;
-		}
-
-	case TUI_IO_DISPLAY_NOTIFY:{
-			struct tlc_tui_display_t response;
-			pr_info("TUI_IO_DISPLAY_NOTIFY\n");
-
-			/* Read user response */
+			// Read user response
 			if (copy_from_user(&response, uarg, sizeof(response)))
 				ret = -EFAULT;
 			else

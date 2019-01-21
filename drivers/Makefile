@@ -189,6 +189,10 @@ obj-$(CONFIG_FPGA)		+= fpga/
 # Sensorhub driver
 obj-$(CONFIG_SENSORS_SSP)	+= sensorhub/
 
+# HRM sensor driver
+obj-$(CONFIG_SENSORS_HRMSENSOR)	+= optics/
+obj-$(CONFIG_SENSORS_MAX86915)	+= optics/
+
 # Gps driver
 obj-$(CONFIG_GPS_BCMxxxxx)	+= gps/
 
@@ -217,3 +221,11 @@ obj-$(CONFIG_SENSORS_FINGERPRINT)       += fingerprint/
 
 # uH
 obj-$(CONFIG_UH)		+= uh/
+
+#MPSD driver
+obj-$(CONFIG_MPSD)	+= mpsd/
+
+#$(info kpermon_CURDIR="$(shell pwd)")
+ifeq (exist, $(shell [ -e ../../system/core/liblog/include/log/perflog.h ] && echo exist))
+	obj-y				+= kperfmon/
+endif

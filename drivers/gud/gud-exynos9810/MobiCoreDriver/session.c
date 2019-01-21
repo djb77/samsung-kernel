@@ -599,9 +599,7 @@ int session_notify_swd(struct tee_session *session)
 		return -EINVAL;
 	}
 
-	session->nq_session.notif_count++;
-	return mcp_notify(&session->mcp_session,
-			  session->nq_session.notif_count);
+	return mcp_notify(&session->mcp_session);
 }
 
 /*

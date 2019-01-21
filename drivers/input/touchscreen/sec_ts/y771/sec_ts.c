@@ -1253,17 +1253,18 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 						input_info(true, &ts->client->dev,
-								"[P] tID:%d x:%d y:%d z:%d major:%d minor:%d p:%s tc:%d type:%X noise:%x,%d\n",
-								t_id, ts->coord[t_id].x,
-								ts->coord[t_id].y, ts->coord[t_id].z,
+								"[P] tID:%d.%d x:%d y:%d z:%d major:%d minor:%d p:%s tc:%d type:%X noise:%x,%d\n",
+								t_id, (ts->input_dev->mt->trkid - 1) & TRKID_MAX,
+								ts->coord[t_id].x, ts->coord[t_id].y, ts->coord[t_id].z,
 								ts->coord[t_id].major, ts->coord[t_id].minor,
 								location, ts->touch_count,
 								ts->coord[t_id].ttype,
 								ts->touch_noise_status, ts->external_noise_mode);
 #else
 						input_info(true, &ts->client->dev,
-								"[P] tID:%d z:%d major:%d minor:%d p:%s tc:%d type:%X noise:%x,%d\n",
-								t_id, ts->coord[t_id].z, ts->coord[t_id].major,
+								"[P] tID:%d.%d z:%d major:%d minor:%d p:%s tc:%d type:%X noise:%x,%d\n",
+								t_id, (ts->input_dev->mt->trkid - 1) & TRKID_MAX,
+								ts->coord[t_id].z, ts->coord[t_id].major,
 								ts->coord[t_id].minor, location, ts->touch_count,
 								ts->coord[t_id].ttype,
 								ts->touch_noise_status, ts->external_noise_mode);
@@ -1364,6 +1365,21 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 #endif
 				input_report_key(ts->input_dev, KEY_BLACK_UI_GESTURE, 1);
 				ts->all_aod_tap_count++;
+				break;
+			case SEC_TS_GESTURE_CODE_SINGLE_TAP:
+				ts->scrub_id = SPONGE_EVENT_TYPE_SINGLE_TAP;
+				ts->scrub_x = (p_gesture_status->gesture_data_1 << 4)
+							| (p_gesture_status->gesture_data_3 >> 4);
+				ts->scrub_y = (p_gesture_status->gesture_data_2 << 4)
+							| (p_gesture_status->gesture_data_3 & 0x0F);
+			
+#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
+				input_info(true, &ts->client->dev, "%s: SINGLE TAP: %d\n", __func__, ts->scrub_id);
+#else
+				input_info(true, &ts->client->dev, "%s: SINGLE TAP: %d, %d, %d\n",
+						__func__, ts->scrub_id, ts->scrub_x, ts->scrub_y);
+#endif
+				input_report_key(ts->input_dev, KEY_BLACK_UI_GESTURE, 1);
 				break;
 			case SEC_TS_GESTURE_CODE_FORCE:
 				if (ts->power_status == SEC_TS_STATE_POWER_ON) {
@@ -1846,6 +1862,8 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	if (of_property_read_string(np, "pressure-sensor", &pdata->support_pressure) < 0)
 		input_err(true, dev, "%s: Failed to get pressure-sensor property\n", __func__);
 
+	pdata->sync_reportrate_120 = of_property_read_bool(np, "sync-reportrate-120");
+
 	pdata->force_sensor_version_gpio = of_get_named_gpio(np, "sec,force_sensor_ch_gpio", 0);
 	if (gpio_is_valid(pdata->force_sensor_version_gpio)) {
 		input_info(true, dev, "%s: force_sensor_version : %d\n", __func__, gpio_get_value(pdata->force_sensor_version_gpio));
@@ -2128,6 +2146,7 @@ static void sec_ts_set_input_prop(struct sec_ts_data *ts, struct input_dev *dev,
 	set_bit(BTN_TOUCH, dev->keybit);
 	set_bit(BTN_TOOL_FINGER, dev->keybit);
 	set_bit(KEY_BLACK_UI_GESTURE, dev->keybit);
+	set_bit(KEY_INT_CANCEL, dev->keybit);
 #ifdef SEC_TS_SUPPORT_TOUCH_KEY
 	if (ts->plat_data->support_mskey) {
 		int i;
@@ -3292,6 +3311,13 @@ int sec_ts_stop_device(struct sec_ts_data *ts)
 
 	ts->power_status = SEC_TS_STATE_POWER_OFF;
 
+	if (ts->prox_power_off) {
+		input_report_key(ts->input_dev, KEY_INT_CANCEL, 1);
+		input_sync(ts->input_dev);
+		input_report_key(ts->input_dev, KEY_INT_CANCEL, 0);
+		input_sync(ts->input_dev);
+	}
+
 	sec_ts_locked_release_all_finger(ts);
 
 	ts->plat_data->power(ts, false);
@@ -3361,6 +3387,18 @@ int sec_ts_start_device(struct sec_ts_data *ts)
 		goto err;
 	}
 
+#ifdef CONFIG_EPEN_WACOM_W9018
+	/* spen mode for note models */
+	if (ts->spen_mode_val != 0) {
+		input_info(true, &ts->client->dev, "%s: spen_mode: 0x%X\n", __func__, ts->spen_mode_val);
+
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_SPENMODE, (u8 *)&ts->spen_mode_val, 1);
+		if (ret < 0) {
+			input_err(true, &ts->client->dev, "%s: Failed to send spen mode", __func__);
+		}
+	}
+#endif
+
 	if (ts->use_sponge) {
 		ret = sec_ts_set_custom_library(ts);
 		if (ret < 0)
@@ -3401,6 +3439,13 @@ int sec_ts_start_device(struct sec_ts_data *ts)
 					"%s: failed to set force sensor version\n", __func__);
 			goto err;
 		}
+	}
+
+	if (ts->charger_mode != SEC_TS_BIT_CHARGER_MODE_NO) {
+		ret = sec_ts_i2c_write(ts, SET_TS_CMD_SET_CHARGER_MODE, &ts->charger_mode, 1);
+		if (ret < 0)
+			input_err(true, &ts->client->dev, "%s: Failed to send command(0x%x)",
+					__func__, SET_TS_CMD_SET_CHARGER_MODE);
 	}
 
 err:

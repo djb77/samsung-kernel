@@ -28,6 +28,17 @@
 #include "pnode.h"
 #include "internal.h"
 
+#ifdef CONFIG_RKP_NS_PROT
+#define KDP_MOUNT_SYSTEM "/system"
+#define KDP_MOUNT_SYSTEM_LEN strlen(KDP_MOUNT_SYSTEM)
+
+#define KDP_MOUNT_ODM "/odm"
+#define KDP_MOUNT_ODM_LEN strlen(KDP_MOUNT_ODM)
+
+#define KDP_MOUNT_VENDOR "/vendor"
+#define KDP_MOUNT_VENDOR_LEN strlen(KDP_MOUNT_VENDOR)
+#endif /*CONFIG_RKP_NS_PROT */
+
 /* Maximum number of mounts in a mount namespace */
 unsigned int sysctl_mount_max __read_mostly = 100000;
 
@@ -62,7 +73,7 @@ static DEFINE_IDA(mnt_group_ida);
 static DEFINE_SPINLOCK(mnt_id_lock);
 #ifdef CONFIG_RKP_NS_PROT
 static DEFINE_SPINLOCK(mnt_vfsmnt_lock);
-#endif
+#endif /*CONFIG_RKP_NS_PROT */
 static int mnt_id_start = 0;
 static int mnt_group_start = 1;
 
@@ -70,10 +81,23 @@ static struct hlist_head *mount_hashtable __read_mostly;
 static struct hlist_head *mountpoint_hashtable __read_mostly;
 static struct kmem_cache *mnt_cache __read_mostly;
 #ifdef CONFIG_RKP_NS_PROT
-struct super_block *sys_sb = NULL;
-struct super_block *rootfs_sb = NULL;
+RKP_RO_AREA struct super_block *sys_sb = NULL;
+RKP_RO_AREA struct super_block *odm_sb = NULL;
+RKP_RO_AREA struct super_block *vendor_sb = NULL;
+RKP_RO_AREA struct super_block *rootfs_sb = NULL;
 static struct kmem_cache *vfsmnt_cache __read_mostly;
-#endif
+/* Populate all superblocks required for NS Protection */
+
+enum kdp_sb {
+	KDP_SB_ROOTFS = 0,
+	KDP_SB_ODM,
+	KDP_SB_SYS,
+	KDP_SB_VENDOR,
+	KDP_SB_MAX
+};
+
+
+#endif /*CONFIG_RKP_NS_PROT */
 
 static DECLARE_RWSEM(namespace_sem);
 
@@ -2863,6 +2887,34 @@ unlock:
 	return err;
 }
 
+#ifdef CONFIG_RKP_NS_PROT
+
+static void rkp_populate_sb(const char __user *dir_name,struct vfsmount *mnt) 
+{
+	char *mount_point = NULL;
+
+	if (!dir_name || !mnt)
+		return;
+
+	mount_point = copy_mount_string(dir_name);
+	if (IS_ERR(mount_point)) {
+		printk(KERN_WARNING" NS Protection: empty string copy failed %s\n",mount_point);
+		return;
+	}
+
+	if (!odm_sb &&
+		!strncmp(mount_point,KDP_MOUNT_ODM,KDP_MOUNT_ODM_LEN)) {
+		uh_call(UH_APP_RKP, (0x56), (u64)&odm_sb, (u64)mnt, KDP_SB_ODM, 0);
+	} else if (!sys_sb &&
+		!strncmp(mount_point,KDP_MOUNT_SYSTEM,KDP_MOUNT_SYSTEM_LEN)) {
+		uh_call(UH_APP_RKP, (0x56), (u64)&sys_sb, (u64)mnt, KDP_SB_SYS, 0);
+	} else if (!vendor_sb &&
+		!strncmp(mount_point,KDP_MOUNT_VENDOR,KDP_MOUNT_VENDOR_LEN)) {
+		uh_call(UH_APP_RKP, (0x56), (u64)&vendor_sb, (u64)mnt, KDP_SB_VENDOR, 0);
+	}
+	kfree(mount_point);
+}
+#endif /*CONFIG_RKP_NS_PROT*/
 static bool mount_too_revealing(struct vfsmount *mnt, int *new_mnt_flags);
 
 /*
@@ -2906,15 +2958,8 @@ static int do_new_mount(struct path *path, const char *fstype, int flags,
 	if (err)
 		mntput(mnt);
 #ifdef CONFIG_RKP_NS_PROT
-	if(!sys_sb) 
-	{
-		char *mount_point;
-		mount_point = copy_mount_string(dir_name);
-		if(!strcmp(mount_point,"/system")) {
-			uh_call(UH_APP_RKP,(0x56),(u64)&sys_sb,(u64)mnt,0,0);
-		}
-		kfree(mount_point);
-	}
+	if(!sys_sb || !odm_sb || !vendor_sb) 
+		rkp_populate_sb(dir_name,mnt);
 #endif
 
 	return err;
@@ -3662,7 +3707,7 @@ static void __init init_mount_tree(void)
 		panic("Can't create rootfs");
 #ifdef CONFIG_RKP_NS_PROT
 	if(!rootfs_sb) {
-		uh_call(UH_APP_RKP,(0x56),(u64)&rootfs_sb,(u64)mnt,0,0);
+		uh_call(UH_APP_RKP, (0x56), (u64)&rootfs_sb, (u64)mnt, KDP_SB_ROOTFS, 0);
 	}
 #endif
 	ns = create_mnt_ns(mnt);

@@ -1783,7 +1783,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		/* START_OF_KNOX_NPA */
 		/* function to handle open flows with incoming udp packets */
 		if (check_ncm_flag()) {
-			if ( (skb) && (skb->dev) && (sk) && (sk->sk_protocol == IPPROTO_UDP) ) {
+			if ( (sk) && (sk->sk_protocol == IPPROTO_UDP) ) {
 				ct = nf_ct_get(skb, &ctinfo);
 				if ( (ct) && (!atomic_read(&ct->startFlow)) ) {
 					atomic_set(&ct->startFlow, 1);
@@ -1837,7 +1837,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		/* START_OF_KNOX_NPA */
 		/* function to handle open flows with incoming udp packets */
 		if (check_ncm_flag()) {
-			if ( (skb) && (skb->dev) && (sk) && (sk->sk_protocol == IPPROTO_UDP) ) {
+			if ( (sk) && (sk->sk_protocol == IPPROTO_UDP) ) {
 				ct = nf_ct_get(skb, &ctinfo);
 				if ( (ct) && (!atomic_read(&ct->startFlow)) ) {
 					atomic_set(&ct->startFlow, 1);

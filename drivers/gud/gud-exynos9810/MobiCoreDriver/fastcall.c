@@ -37,6 +37,10 @@
 #include "clock.h"	/* mc_clock_enable, mc_clock_disable */
 #include "fastcall.h"
 
+#if KERNEL_VERSION(3, 15, 0) > LINUX_VERSION_CODE
+#define MIN_NICE	-20
+#endif
+
 /* ExySp: Lock for core switch processing */
 #ifdef CONFIG_SECURE_OS_BOOSTER_API
 struct mutex core_switch_lock;
@@ -292,8 +296,8 @@ static int mc_cpu_offline(int cpu)
 	/* Chose the first online CPU and switch! */
 	for_each_online_cpu(i) {
 		if (cpu != i) {
-			mc_dev_devel("CPU %d is dying, switching to %d\n",
-				     cpu, i);
+			mc_dev_info("CPU %d is dying, switching to %d",
+				    cpu, i);
 			return mc_switch_core(i);
 		}
 
@@ -355,11 +359,10 @@ static cpumask_t mc_exec_core_switch(union mc_fc_generic *mc_fc_generic)
 	mc_fc_generic->as_in.param[0] = cpu_id[mc_fc_generic->as_in.param[0]];
 
 	if (_smc(mc_fc_generic) != 0 || mc_fc_generic->as_out.ret != 0) {
-		/* ExySp: print info */
-		mc_dev_info("CoreSwap failed %d -> %d (cpu %d still active)",
-			     raw_smp_processor_id(),
-			     mc_fc_generic->as_in.param[0],
-			     raw_smp_processor_id());
+		mc_dev_err("CoreSwap failed %d -> %d (cpu %d still active)",
+			   raw_smp_processor_id(),
+			   new_cpu,
+			   raw_smp_processor_id());
 	} else {
 		active_cpu = new_cpu;
 		/* ExySp: print info */
@@ -676,15 +679,13 @@ int mc_fc_mem_trace(phys_addr_t buffer, u32 size)
 	return convert_fc_ret(mc_fc_generic.as_out.ret);
 }
 
-int mc_fc_nsiq(u32 sid, u32 payload)
+int mc_fc_nsiq(void)
 {
 	union mc_fc_generic fc;
 	int ret;
 
 	memset(&fc, 0, sizeof(fc));
 	fc.as_in.cmd = MC_SMC_N_SIQ;
-	fc.as_in.param[1] = sid;
-	fc.as_in.param[2] = payload;
 	mc_fastcall(&fc);
 	ret = convert_fc_ret(fc.as_out.ret);
 	if (ret)
@@ -693,14 +694,13 @@ int mc_fc_nsiq(u32 sid, u32 payload)
 	return ret;
 }
 
-int mc_fc_yield(u32 timeslice)
+int mc_fc_yield(void)
 {
 	union mc_fc_generic fc;
 	int ret;
 
 	memset(&fc, 0, sizeof(fc));
 	fc.as_in.cmd = MC_SMC_N_YIELD;
-	fc.as_in.param[1] = timeslice;
 	mc_fastcall(&fc);
 	ret = convert_fc_ret(fc.as_out.ret);
 	if (ret)

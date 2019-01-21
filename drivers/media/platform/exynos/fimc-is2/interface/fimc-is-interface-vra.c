@@ -1004,7 +1004,7 @@ int fimc_is_lib_vra_frame_work_final(struct fimc_is_lib_vra *lib_vra)
 		return ret;
 	}
 
-	if (lib_vra->task_vra.task != NULL) {
+	if (!IS_ERR_OR_NULL(lib_vra->task_vra.task)) {
 		ret = kthread_stop(lib_vra->task_vra.task);
 		if (ret)
 			err_lib("kthread_stop fail (%d)", ret);

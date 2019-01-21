@@ -547,7 +547,7 @@ void wacom_i2c_set_survey_mode(struct wacom_i2c *wac_i2c, int mode)
 	}
 
 	if (mode)
-		msleep(300);
+		msleep(35);
 
 	wac_i2c->reset_flag = false;
 	wac_i2c->function_result &= ~EPEN_EVENT_SURVEY;
@@ -2030,11 +2030,16 @@ static int wacom_i2c_input_open(struct input_dev *dev)
 		   dev->name);
 
 #ifdef CONFIG_SEC_FACTORY
-	if (wac_i2c->epen_blocked){
+	if (wac_i2c->epen_blocked) {
 		input_err(true, &wac_i2c->client->dev, "%s : FAC epen_blocked SKIP!!\n", __func__);
 		return ret;
 	}
 #endif
+
+	if (!wac_i2c->probing_done) {
+		input_err(true, &wac_i2c->client->dev, "%s : not finished probing\n", __func__);
+		return ret;
+	}
 
 	wacom_wakeup_sequence(wac_i2c);
 
@@ -2045,15 +2050,20 @@ static void wacom_i2c_input_close(struct input_dev *dev)
 {
 	struct wacom_i2c *wac_i2c = input_get_drvdata(dev);
 
+	input_info(true, &wac_i2c->client->dev, "%s(%s)\n", __func__,
+		  dev->name);
+
 #ifdef CONFIG_SEC_FACTORY
-	if (wac_i2c->epen_blocked){
+	if (wac_i2c->epen_blocked) {
 		input_err(true, &wac_i2c->client->dev, "%s : FAC epen_blocked SKIP!!\n", __func__);
 		return;
 	}
 #endif
 
-	input_info(true, &wac_i2c->client->dev, "%s(%s)\n", __func__,
-		  dev->name);
+	if (!wac_i2c->probing_done) {
+		input_err(true, &wac_i2c->client->dev, "%s : not finished probing\n", __func__);
+		return;
+	}
 
 	wacom_sleep_sequence(wac_i2c);
 }
@@ -2554,6 +2564,7 @@ int wacom_fw_update(struct wacom_i2c *wac_i2c, u8 fw_update_way, bool bforced)
 		} else if (fw_ver_ic > wac_i2c->fw_ver_file) {
 			input_info(true, &client->dev,
 				   "dont need to update fw\n");
+			wac_i2c->probing_done = true;
 			goto out_update_fw;
 		}
 
@@ -2639,6 +2650,8 @@ end_fw_update:
 	if (ret)
 		input_err(true, &client->dev, "open test check failed\n");
 #endif
+
+	wac_i2c->probing_done = true;
 
 	wake_unlock(&wac_i2c->fw_wakelock);
 

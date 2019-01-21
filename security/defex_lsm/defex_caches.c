@@ -20,8 +20,9 @@ void defex_file_cache_init(void)
 {
 	int i;
 	struct defex_file_cache_entry *current_entry;
+	unsigned long flags;
 
-	spin_lock(&defex_caches_lock);
+	spin_lock_irqsave(&defex_caches_lock, flags);
 	for (i = 0; i < FILE_CACHE_SIZE; i++) {
 		current_entry = &file_cache.entry[i];
 		current_entry->next_entry = i + 1;
@@ -35,21 +36,22 @@ void defex_file_cache_init(void)
 
 	file_cache.entry[file_cache.first_entry].prev_entry = file_cache.last_entry;
 	file_cache.entry[file_cache.last_entry].next_entry = file_cache.first_entry;
-	spin_unlock(&defex_caches_lock);
+	spin_unlock_irqrestore(&defex_caches_lock, flags);
 }
 
 void defex_file_cache_add(int pid, struct file *file_addr)
 {
 	struct defex_file_cache_entry *current_entry;
+	struct file *old_file_addr;
+	unsigned long flags;
 
-	spin_lock(&defex_caches_lock);
+	spin_lock_irqsave(&defex_caches_lock, flags);
 
 	current_entry = &file_cache.entry[file_cache.last_entry];
 
 	current_entry->pid = pid;
 
-	if (current_entry->file_addr)
-		fput(current_entry->file_addr);
+	old_file_addr = current_entry->file_addr;
 
 	current_entry->file_addr = file_addr;
 	current_entry->next_entry = file_cache.first_entry;
@@ -57,26 +59,35 @@ void defex_file_cache_add(int pid, struct file *file_addr)
 	file_cache.first_entry = file_cache.last_entry;
 	file_cache.last_entry = current_entry->prev_entry;
 
-	spin_unlock(&defex_caches_lock);
+	spin_unlock_irqrestore(&defex_caches_lock, flags);
+	if (old_file_addr) {
+		fput(old_file_addr);
+	}
 }
 
 void defex_file_cache_update(struct file *file_addr)
 {
 	struct defex_file_cache_entry *current_entry;
+	struct file *old_file_addr;
+	unsigned long flags;
 
-	spin_lock(&defex_caches_lock);
+	spin_lock_irqsave(&defex_caches_lock, flags);
 	current_entry = &file_cache.entry[file_cache.first_entry];
-	fput(current_entry->file_addr);
+	old_file_addr = current_entry->file_addr;
 	current_entry->file_addr = file_addr;
-	spin_unlock(&defex_caches_lock);
+	spin_unlock_irqrestore(&defex_caches_lock, flags);
+	if (old_file_addr)
+		fput(old_file_addr);
 }
 
 void defex_file_cache_delete(int pid)
 {
 	int current_index, cache_found = 0;
 	struct defex_file_cache_entry *current_entry;
+	struct file *old_file_addr = NULL;
+	unsigned long flags;
 
-	spin_lock(&defex_caches_lock);
+	spin_lock_irqsave(&defex_caches_lock, flags);
 
 	current_index = file_cache.first_entry;
 	do {
@@ -110,13 +121,14 @@ void defex_file_cache_delete(int pid)
 	} while (current_index != file_cache.first_entry);
 
 	if (cache_found) {
-		fput(current_entry->file_addr);
+		old_file_addr = current_entry->file_addr;
 		current_entry->pid = -1;
 		current_entry->file_addr = NULL;
 	}
 
-	spin_unlock(&defex_caches_lock);
-
+	spin_unlock_irqrestore(&defex_caches_lock, flags);
+	if (old_file_addr)
+		fput(old_file_addr);
 	return;
 }
 
@@ -124,8 +136,9 @@ struct file *defex_file_cache_find(int pid)
 {
 	int current_index, cache_found = 0;
 	struct defex_file_cache_entry *current_entry;
+	unsigned long flags;
 
-	spin_lock(&defex_caches_lock);
+	spin_lock_irqsave(&defex_caches_lock, flags);
 
 	current_index = file_cache.first_entry;
 	do {
@@ -158,7 +171,7 @@ struct file *defex_file_cache_find(int pid)
 		current_index = current_entry->next_entry;
 	} while (current_index != file_cache.first_entry);
 
-	spin_unlock(&defex_caches_lock);
+	spin_unlock_irqrestore(&defex_caches_lock, flags);
 
 	return (!cache_found)?NULL:current_entry->file_addr;
 }

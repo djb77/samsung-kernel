@@ -10,6 +10,9 @@
 #define __DEFEX_RULES_H
 
 #define STATIC_RULES_MAX_STR 32
+#ifdef DEFEX_INTEGRITY_ENABLE
+#define INTEGRITY_LENGTH 32
+#endif /* DEFEX_INTEGRITY_ENABLE */
 
 #define GET_ITEM_OFFSET(item_ptr)	(((char*)item_ptr) - ((char*)defex_packed_rules))
 #define GET_ITEM_PTR(offset)		((struct rule_item_struct *)(((char*)defex_packed_rules) + (offset)))
@@ -33,6 +36,9 @@ struct rule_item_struct {
 	unsigned short int next_level;
 	unsigned short int feature_type;
 	unsigned char size;
+#ifdef DEFEX_INTEGRITY_ENABLE
+	unsigned char integrity[INTEGRITY_LENGTH];
+#endif /* DEFEX_INTEGRITY_ENABLE */
 	char name[0];
 } __attribute__((packed));
 

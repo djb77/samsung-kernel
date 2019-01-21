@@ -19,7 +19,7 @@
 
 #include "panel.h"
 
-#define POC_IMG_SIZE	(532816)
+#define POC_IMG_SIZE	(536706)
 #define POC_IMG_ADDR	(0x000000)
 #define POC_PAGE		(4096)
 #define POC_TEST_PATTERN_SIZE	(4096)
@@ -44,14 +44,6 @@
 #define BIT_RATE_DIV_2	(0)
 #define BIT_RATE_DIV_4	(1)
 #define BIT_RATE_DIV_32	(4)
-
-#if defined(CONFIG_POC_DREAM)
-#define ERASE_WAIT_COUNT	(180)
-#elif defined(CONFIG_POC_DREAM2)
-#define ERASE_WAIT_COUNT	(41)
-#else
-#define ERASE_WAIT_COUNT	(180)
-#endif
 
 #define PARTITION_NOT_EXIST	(0)
 #define PARTITION_EXISTS	(1)
@@ -101,6 +93,7 @@ enum {
 	POC_OP_CANCEL = 4,
 	POC_OP_CHECKSUM = 5,
 	POC_OP_CHECKPOC = 6,
+	POC_OP_SECTOR_ERASE = 7,
 	POC_OP_IMG_READ = 10,
 	POC_OP_IMG_WRITE = 11,
 	POC_OP_DIM_READ = 12,
@@ -263,7 +256,7 @@ struct panel_poc_data {
 #define IOC_SET_POC_TEST	_IOR('A', 112, __u32)		/* POC FLASH TEST - ERASE/WRITE/READ/COMPARE */
 
 extern int panel_poc_probe(struct panel_device *panel, struct panel_poc_data *poc_data);
-extern int set_panel_poc(struct panel_poc_device *poc_dev, u32 cmd);
+extern int set_panel_poc(struct panel_poc_device *poc_dev, u32 cmd, const char *cmd_ext);
 extern int read_poc_partition(struct panel_poc_device *poc_dev, int index);
 extern int get_poc_partition_size(struct panel_poc_device *poc_dev, int index);
 extern int copy_poc_partition(struct panel_poc_device *poc_dev, u8 *dst,
@@ -273,4 +266,7 @@ extern int check_poc_partition_exists(struct panel_poc_device *poc_dev, int inde
 extern void copy_poc_wr_addr_maptbl(struct maptbl *tbl, u8 *dst);
 extern void copy_poc_wr_data_maptbl(struct maptbl *tbl, u8 *dst);
 extern void copy_poc_rd_addr_maptbl(struct maptbl *tbl, u8 *dst);
+
+extern void copy_poc_er_addr_maptbl(struct maptbl *tbl, u8 *dst);
+
 #endif /* __PANEL_POC_H__ */

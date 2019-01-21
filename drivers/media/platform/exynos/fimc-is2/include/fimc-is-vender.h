@@ -52,7 +52,7 @@ enum {
 };
 
 #ifdef USE_CAMERA_HW_BIG_DATA
-#define CAM_HW_ERR_CNT_FILE_PATH "/data/camera/camera_hw_err_cnt.dat"
+#define CAM_HW_ERR_CNT_FILE_PATH "/data/vendor/camera/camera_hw_err_cnt.dat"
 
 struct cam_hw_param {
 	u32 i2c_sensor_err_cnt;

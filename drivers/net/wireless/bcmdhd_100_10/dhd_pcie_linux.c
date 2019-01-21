@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie_linux.c 776907 2018-08-16 06:05:35Z $
+ * $Id: dhd_pcie_linux.c 784292 2018-10-11 11:34:26Z $
  */
 
 /* include files */
@@ -1607,7 +1607,7 @@ int dhdpcie_init(struct pci_dev *pdev)
 
 		/* Attach to the OS network interface */
 		DHD_TRACE(("%s(): Calling dhd_register_if() \n", __FUNCTION__));
-		if (dhd_register_if(bus->dhd, 0, TRUE)) {
+		if (dhd_attach_net(bus->dhd, TRUE)) {
 			DHD_ERROR(("%s(): ERROR.. dhd_register_if() failed\n", __FUNCTION__));
 			break;
 		}

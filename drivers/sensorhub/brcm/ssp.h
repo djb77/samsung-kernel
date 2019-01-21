@@ -534,6 +534,7 @@ struct sensor_value {
 		u32 step_diff;
 		u8 tilt_detector;
 		u8 pickup_gesture;
+		u8 wakeup_motion;
 		u8 scontext_buf[SCONTEXT_DATA_SIZE];
 		struct {
 			u8 proximity_pocket_detect;
@@ -1096,6 +1097,7 @@ void report_pickup_data(struct ssp_data *data, struct sensor_value *pickup_data)
 void report_scontext_data(struct ssp_data *data, struct sensor_value *scontextbuf);
 void report_thermistor_data(struct ssp_data *data, struct sensor_value *thermistor_data);
 void report_uncalib_accel_data(struct ssp_data *data, struct sensor_value *acceldata);
+void report_wakeup_motion_data(struct ssp_data *data,struct sensor_value *wakeup_motion_data);
 
 unsigned int get_module_rev(struct ssp_data *data);
 void reset_mcu(struct ssp_data *data);

@@ -23,12 +23,23 @@ enum __RKP_CMD_ID {
 	RKP_ROPP_RELOAD,
 	/* and KDT cmds */
 	RKP_NOSHIP,
+#ifdef CONFIG_RKP_TEST
+	CMD_ID_TEST_GET_PAR = 0x81,
+	CMD_ID_TEST_GET_RO = 0x83,
+	CMD_ID_TEST_GET_VA_XN,
+	CMD_ID_TEST_GET_VMM_INFO,
+#endif
 	RKP_MAX
 };
 
 #define RKP_PREFIX  UL(0x83800000)
 
+#ifdef CONFIG_RKP_TEST
+#define RKP_INIT_MAGIC		0x5afe0002
+#else
 #define RKP_INIT_MAGIC		0x5afe0001
+#endif
+
 #define RKP_VMM_BUFFER		0x600000
 #define RKP_RO_BUFFER		UL(0x800000)
 
@@ -39,14 +50,15 @@ enum __RKP_CMD_ID {
 #ifdef CONFIG_UH_RKP_8G
 #define RKP_EXTRA_MEM_START	(0xAF600000)
 #define RKP_PGT_BITMAP_LEN	(0x40000)
+#define RKP_ROBUF_SIZE		(14ULL << 20)
 #else
 #define RKP_EXTRA_MEM_START	(0xAF800000)
 #define RKP_PGT_BITMAP_LEN	(0x30000)
+#define RKP_ROBUF_SIZE		(12ULL << 20)
 #endif
 
 #define RKP_EXTRA_MEM_SIZE	(0x600000)
 #define RKP_ROBUF_START		(0xB0800000)
-#define RKP_ROBUF_SIZE		(14ULL << 20)
 
 #define RKP_REGION_START	(RKP_EXTRA_MEM_START)
 #define RKP_REGION_SIZE		(RKP_REGION_START - RKP_ROBUF_START + RKP_ROBUF_SIZE)
@@ -63,6 +75,8 @@ extern int boot_mode_security;
 
 extern u8 rkp_pgt_bitmap[];
 extern u8 rkp_map_bitmap[];
+extern u8 __rkp_start_prot_page[];
+extern u8 __rkp_end_prot_page[];
 
 typedef struct rkp_init rkp_init_t;
 extern u8 rkp_started;
@@ -80,7 +94,8 @@ struct rkp_init { //copy from uh (app/rkp/rkp.h)
          u64 rkp_pgt_bitmap;
          u64 rkp_dbl_bitmap;
          u32 rkp_bitmap_size;
-         u32 no_fimc_verify;
+         u32 rkp_prot_page_size;
+         u32 fimc_type;
 	 u64 fimc_phys_addr;
          u64 _text;
          u64 _etext;
@@ -90,6 +105,8 @@ struct rkp_init { //copy from uh (app/rkp/rkp.h)
          u64 _srodata;
          u64 _erodata;
          u32 large_memory;
+         u64 tramp_pgd;
+         u64 tramp_valias;
 };
 
 #ifdef CONFIG_RKP_KDP

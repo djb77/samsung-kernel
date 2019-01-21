@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.c 753334 2018-03-21 05:23:11Z $
+ * $Id: wl_cfgvendor.c 791700 2018-11-30 08:27:58Z $
  */
 
 /*
@@ -318,6 +318,8 @@ wl_cfgvendor_set_country(struct wiphy *wiphy,
 	int err = BCME_ERROR, rem, type;
 	char country_code[WLC_CNTRY_BUF_SZ] = {0};
 	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct net_device *primary_ndev = bcmcfg_to_prmry_ndev(cfg);
 
 	nla_for_each_attr(iter, data, len, rem) {
 		type = nla_type(iter);
@@ -332,7 +334,8 @@ wl_cfgvendor_set_country(struct wiphy *wiphy,
 		}
 	}
 
-	err = wldev_set_country(wdev->netdev, country_code, true, true, -1);
+	/* country code is unique for dongle..hence using primary interface. */
+	err = wldev_set_country(primary_ndev, country_code, true, true, -1);
 	if (err < 0) {
 		WL_ERR(("Set country failed ret:%d\n", err));
 	}
@@ -2279,17 +2282,23 @@ wl_cfgvendor_priv_string_handler(struct wiphy *wiphy,
 		return OSL_ERROR(BCME_DONGLE_DOWN);
 	}
 
+	if (nlioc->offset != sizeof(struct bcm_nlmsg_hdr) ||
+		len <= sizeof(struct bcm_nlmsg_hdr)) {
+		WL_ERR(("invalid offset %d\n", nlioc->offset));
+		return BCME_BADARG;
+	}
 	len -= sizeof(struct bcm_nlmsg_hdr);
 	ret_len = nlioc->len;
 	if (ret_len > 0 || len > 0) {
-		if (len > DHD_IOCTL_MAXLEN) {
+		if (len >= DHD_IOCTL_MAXLEN) {
 			WL_ERR(("oversize input buffer %d\n", len));
-			len = DHD_IOCTL_MAXLEN;
+			len = DHD_IOCTL_MAXLEN - 1;
 		}
-		if (ret_len > DHD_IOCTL_MAXLEN) {
+		if (ret_len >= DHD_IOCTL_MAXLEN) {
 			WL_ERR(("oversize return buffer %d\n", ret_len));
-			ret_len = DHD_IOCTL_MAXLEN;
+			ret_len = DHD_IOCTL_MAXLEN - 1;
 		}
+
 		payload = max(ret_len, len) + 1;
 		buf = vzalloc(payload);
 		if (!buf) {
@@ -2344,12 +2353,13 @@ wl_cfgvendor_priv_string_handler(struct wiphy *wiphy,
 
 struct net_device *
 wl_cfgvendor_get_ndev(struct bcm_cfg80211 *cfg, struct wireless_dev *wdev,
-	const void *data, unsigned long int *out_addr)
+	const char *data, unsigned long int *out_addr)
 {
 	char *pos, *pos1;
 	char ifname[IFNAMSIZ + 1] = {0};
 	struct net_info *iter, *next;
 	struct net_device *ndev = NULL;
+	u32 ifname_len;
 	*out_addr = (unsigned long int) data; /* point to command str by default */
 
 	/* check whether ifname=<ifname> is provided in the command */
@@ -2361,7 +2371,12 @@ wl_cfgvendor_get_ndev(struct bcm_cfg80211 *cfg, struct wireless_dev *wdev,
 			WL_ERR(("command format error \n"));
 			return NULL;
 		}
-		memcpy(ifname, pos, (pos1 - pos));
+
+		ifname_len = pos1 - pos;
+		if (memcpy(ifname, pos, ifname_len) != BCME_OK) {
+			WL_ERR(("Failed to copy data. len: %d\n", ifname_len));
+			return NULL;
+		}
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-qual"
@@ -2398,6 +2413,10 @@ wl_cfgvendor_get_ndev(struct bcm_cfg80211 *cfg, struct wireless_dev *wdev,
  * string.
  */
 #define WL_DRIVER_PRIV_CMD_LEN 512
+
+#ifdef BCM_PRIV_CMD_SUPPORT
+/* strlen("ifname=") + IFNAMESIZE + strlen(" ") + '\0' */
+#define ANDROID_PRIV_CMD_IF_PREFIX_LEN	(7 + IFNAMSIZ + 2)
 static int
 wl_cfgvendor_priv_bcm_handler(struct wiphy *wiphy,
 	struct wireless_dev *wdev, const void  *data, int len)
@@ -2431,62 +2450,105 @@ wl_cfgvendor_priv_bcm_handler(struct wiphy *wiphy,
 			goto exit;
 		}
 
+#if defined(WL_ANDROID_PRIV_CMD_OVER_NL80211)
 		if (type == BRCM_ATTR_DRIVER_CMD) {
-			if (cmd_len >= WL_DRIVER_PRIV_CMD_LEN) {
-				WL_ERR(("Unexpected command length. Ignore the command\n"));
+			if ((cmd_len >= WL_DRIVER_PRIV_CMD_LEN) ||
+				(cmd_len < ANDROID_PRIV_CMD_IF_PREFIX_LEN)) {
+				WL_ERR(("Unexpected command length (%u). Ignore the command\n",
+					cmd_len));
 				err = -EINVAL;
 				goto exit;
 			}
-			net = wl_cfgvendor_get_ndev(cfg, wdev, cmd, &cmd_out);
-			if (!cmd_out || !net) {
-				err = -ENODEV;
-				goto exit;
-			}
-			cmd = (char *)cmd_out;
-			reply_buf = (char *)MALLOCZ(cfg->osh, reply_len);
-			if (!reply_buf) {
-				WL_ERR(("memory alloc failed for %u \n", cmd_len));
+
+			/* check whether there is any ifname prefix provided */
+			if (memcpy(cmd_prefix, cmd, ANDROID_PRIV_CMD_IF_PREFIX_LEN) != BCME_OK) {
+				WL_ERR(("memcpy failed for cmd buffer. len:%d\n", cmd_len));
 				err = -ENOMEM;
 				goto exit;
 			}
-			memcpy(reply_buf, cmd, cmd_len);
-			WL_DBG(("vendor_command: %s len: %u \n", cmd, cmd_len));
-			bytes_written = wl_handle_private_cmd(net, reply_buf, reply_len);
+
+			net = wl_cfgvendor_get_ndev(cfg, wdev, cmd_prefix, &cmd_out);
+			if (!cmd_out || !net) {
+				WL_ERR(("ndev not found\n"));
+				err = -ENODEV;
+				goto exit;
+			}
+
+			/* find offset of the command */
+			current_pos = (char *)cmd_out;
+			cmd_offset = current_pos - cmd_prefix;
+
+			if (!current_pos || (cmd_offset) > ANDROID_PRIV_CMD_IF_PREFIX_LEN) {
+				WL_ERR(("Invalid len cmd_offset: %u \n", cmd_offset));
+				err = -EINVAL;
+				goto exit;
+			}
+
+			/* Private command data in expected to be in str format. To ensure that
+			 * the data is null terminated, copy to a local buffer before use
+			 */
+			cmd_buf = (char *)MALLOCZ(cfg->osh, cmd_buf_len);
+			if (!cmd_buf) {
+				WL_ERR(("memory alloc failed for %u \n", cmd_buf_len));
+				err = -ENOMEM;
+				goto exit;
+			}
+
+			/* Point to the start of command */
+			if (memcpy(cmd_buf, (const void *)(cmd + cmd_offset),
+				(cmd_len - cmd_offset - 1)) != BCME_OK) {
+				WL_ERR(("memcpy failed for cmd buffer. len:%d\n", cmd_len));
+				err = -ENOMEM;
+				goto exit;
+			}
+			cmd_buf[WL_DRIVER_PRIV_CMD_LEN - 1] = '\0';
+
+			WL_DBG(("vendor_command: %s len: %u \n", cmd_buf, cmd_buf_len));
+			bytes_written = wl_handle_private_cmd(net, cmd_buf, cmd_buf_len);
 			WL_DBG(("bytes_written: %d \n", bytes_written));
 			if (bytes_written == 0) {
-				snprintf(reply_buf, reply_len, "%s", "OK");
+				snprintf(cmd_buf, cmd_buf_len, "%s", "OK");
 				data_len = strlen("OK");
 			} else if (bytes_written > 0) {
-				data_len = bytes_written > reply_len ?
-					reply_len : bytes_written;
+				if (bytes_written >= (cmd_buf_len - 1)) {
+					/* Not expected */
+					ASSERT(0);
+					err = -EINVAL;
+					goto exit;
+				}
+				data_len = bytes_written;
 			} else {
 				/* -ve return value. Propagate the error back */
 				err = bytes_written;
 				goto exit;
 			}
-			break;
-		}
-	}
-
-	if ((data_len > 0) && reply_buf) {
-		err =  wl_cfgvendor_send_cmd_reply(wiphy, reply_buf, data_len+1);
-		if (unlikely(err))
+			if ((data_len > 0) && (data_len < (cmd_buf_len - 1)) && cmd_buf) {
+				err =  wl_cfgvendor_send_cmd_reply(wiphy, cmd_buf, data_len+1);
+				if (unlikely(err)) {
 			WL_ERR(("Vendor Command reply failed ret:%d \n", err));
-		else
+				} else {
 			WL_DBG(("Vendor Command reply sent successfully!\n"));
+				}
 	} else {
 		/* No data to be sent back as reply */
-		WL_ERR(("Vendor_cmd: No reply expected. data_len:%u reply_buf %p \n",
-			data_len, reply_buf));
+				WL_ERR(("Vendor_cmd: No reply expected. data_len:%u cmd_buf %p \n",
+					data_len, cmd_buf));
+			}
+			break;
+		}
+#endif /* WL_ANDROID_PRIV_CMD_OVER_NL80211 && OEM_ANDROID */
 	}
 
 exit:
-	if (reply_buf) {
-		MFREE(cfg->osh, reply_buf, reply_len);
+#if defined(WL_ANDROID_PRIV_CMD_OVER_NL80211)
+	if (cmd_buf) {
+		MFREE(cfg->osh, cmd_buf, cmd_buf_len);
 	}
+#endif /* WL_ANDROID_PRIV_CMD_OVER_NL80211 && OEM_ANDROID */
 	net_os_wake_unlock(ndev);
 	return err;
 }
+#endif /* BCM_PRIV_CMD_SUPPORT */
 
 #ifdef WL_NAN
 static const char *nan_attr_to_str(u16 cmd)
@@ -6495,6 +6557,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wl_cfgvendor_priv_string_handler
 	},
+#ifdef BCM_PRIV_CMD_SUPPORT
 	{
 		{
 			.vendor_id = OUI_BRCM,
@@ -6503,6 +6566,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wl_cfgvendor_priv_bcm_handler
 	},
+#endif /* BCM_PRIV_CMD_SUPPORT */
 #ifdef GSCAN_SUPPORT
 	{
 		{

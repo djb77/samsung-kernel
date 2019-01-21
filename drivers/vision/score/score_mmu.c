@@ -36,7 +36,6 @@ enum score_mmu_buffer_state {
 	BUF_STATE_END
 };
 
-#if defined(CONFIG_EXYNOS_SCORE_FPGA)
 static void __score_mmu_context_del_list_dmabuf(struct score_mmu_context *ctx,
 		struct score_mmu_buffer *kbuf)
 {
@@ -62,10 +61,10 @@ static void __score_mmu_context_unmap_dmabuf(struct score_mmu_context *ctx,
 		struct score_mmu_buffer *kbuf)
 {
 	score_enter();
-	if (!kbuf->mirror) {
+	if (!kbuf->mirror)
 		__score_mmu_context_del_list_dmabuf(ctx, kbuf);
-		dma_buf_put(kbuf->dbuf);
-	}
+
+	dma_buf_put(kbuf->dbuf);
 	score_leave();
 }
 
@@ -84,7 +83,8 @@ static void __score_mmu_context_unmap_buffer(struct score_mmu_context *ctx,
 	}
 	score_leave();
 }
-#else
+
+#if defined(CONFIG_EXYNOS_SCORE)
 static void __score_mmu_context_freelist_add_dmabuf(
 		struct score_mmu_context *ctx,
 		struct score_mmu_buffer *kbuf)
@@ -92,9 +92,6 @@ static void __score_mmu_context_freelist_add_dmabuf(
 	struct score_mmu *mmu;
 
 	score_enter();
-	if (kbuf->mirror)
-		return;
-
 	mmu = ctx->mmu;
 	spin_lock(&ctx->dbuf_slock);
 	if (list_empty(&kbuf->list)) {
@@ -127,7 +124,6 @@ static void __score_mmu_context_freelist_add(struct score_mmu_context *ctx,
 	}
 	score_leave();
 }
-
 #endif
 
 void score_mmu_unmap_buffer(struct score_mmu_context *ctx,
@@ -138,7 +134,12 @@ void score_mmu_unmap_buffer(struct score_mmu_context *ctx,
 	__score_mmu_context_unmap_buffer(ctx, kbuf);
 	kfree(kbuf);
 #else
-	__score_mmu_context_freelist_add(ctx, kbuf);
+	if (kbuf->mirror) {
+		__score_mmu_context_unmap_buffer(ctx, kbuf);
+		kfree(kbuf);
+	} else {
+		__score_mmu_context_freelist_add(ctx, kbuf);
+	}
 #endif
 	score_leave();
 }
@@ -155,9 +156,6 @@ static int __score_mmu_copy_dmabuf(struct score_mmu_buffer *cur_buf,
 			udelay(10);
 			continue;
 		}
-		cur_buf->dbuf = list_buf->dbuf;
-		cur_buf->attachment = list_buf->attachment;
-		cur_buf->sgt = list_buf->sgt;
 		cur_buf->dvaddr = list_buf->dvaddr;
 		break;
 	}
@@ -199,7 +197,6 @@ static int __score_mmu_context_add_list_dmabuf(struct score_mmu_context *ctx,
 	if (!ctx->dbuf_count) {
 		list_add_tail(&kbuf->list, &ctx->dbuf_list);
 		ctx->dbuf_count++;
-		kbuf->mirror = false;
 		ret = BUF_STATE_NEW;
 		goto p_end;
 	}
@@ -208,7 +205,6 @@ static int __score_mmu_context_add_list_dmabuf(struct score_mmu_context *ctx,
 		if (kbuf->dbuf > list_buf->dbuf) {
 			list_add_tail(&kbuf->list, &list_buf->list);
 			ctx->dbuf_count++;
-			kbuf->mirror = false;
 			ret = BUF_STATE_NEW;
 			goto p_end;
 		} else if (kbuf->dbuf == list_buf->dbuf) {
@@ -218,7 +214,6 @@ static int __score_mmu_context_add_list_dmabuf(struct score_mmu_context *ctx,
 			} else {
 				list_replace_init(&list_buf->list,
 						&kbuf->list);
-				kbuf->mirror = false;
 				score_mmu_freelist_add(mmu, list_buf);
 				ret = BUF_STATE_REPLACE;
 			}
@@ -234,7 +229,6 @@ static int __score_mmu_context_add_list_dmabuf(struct score_mmu_context *ctx,
 
 	list_add_tail(&kbuf->list, &ctx->dbuf_list);
 	ctx->dbuf_count++;
-	kbuf->mirror = false;
 	ret = BUF_STATE_NEW;
 p_end:
 	spin_unlock(&ctx->dbuf_slock);
@@ -242,7 +236,6 @@ p_end:
 	if (ret == BUF_STATE_NEW) {
 		ret = mmu->mmu_ops->map_dmabuf(mmu, kbuf);
 	} else if (ret == BUF_STATE_REGISTERED) {
-		dma_buf_put(kbuf->dbuf);
 		ret = __score_mmu_copy_dmabuf(kbuf, list_buf);
 	} else if (ret == BUF_STATE_REPLACE) {
 		ret = mmu->mmu_ops->map_dmabuf(mmu, kbuf);
@@ -414,6 +407,7 @@ void *score_mmu_map_buffer(struct score_mmu_context *ctx,
 	kbuf->size = buf->memory_size;
 	kbuf->m.mem_info = buf->m.mem_info;
 	kbuf->offset = buf->addr_offset;
+	kbuf->mirror = false;
 
 	ret = __score_mmu_context_map_buffer(ctx, kbuf);
 	if (ret)

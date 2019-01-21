@@ -22,6 +22,7 @@
 #include <linux/pagemap.h>
 #include <linux/device.h>
 #include <linux/version.h>
+#include <linux/dma-buf.h>
 
 #include "public/mc_user.h"
 
@@ -54,6 +55,9 @@
 #define MMU_EXT_AP2		BIT(9)
 #define MMU_EXT_TEX(x)		((x) << 6)	/* v5 */
 #define MMU_EXT_SHARED_32	BIT(10)		/* ARMv6 and higher */
+
+/* ION */
+#define MMU_ION_BUF     BIT(24) /* Trustonic Specific flag to detect ION mem */
 
 /*
  * MobiCore specific page tables for world shared memory.
@@ -129,6 +133,23 @@ static inline long gup_local(struct mm_struct *mm, uintptr_t start,
 }
 #endif
 
+static inline long gup_local_repeat(struct mm_struct *mm, uintptr_t start,
+				    unsigned long nr_pages, int write,
+				    struct page **pages)
+{
+	int retries = 10;
+	long ret = 0;
+
+	while (retries--) {
+		ret = gup_local(mm, start, nr_pages, write, pages);
+
+		if (-EBUSY != ret)
+			break;
+	}
+
+	return ret;
+}
+
 /*
  * Fake L1 MMU table.
  */
@@ -165,6 +186,10 @@ struct tee_mmu {
 	bool		user;		/* Pages are from user space */
 	int		pages_created;	/* Leak check */
 	int		pages_locked;	/* Leak check */
+	/* ION case only */
+	struct dma_buf	*dma_buf;
+	struct dma_buf_attachment *attach;
+	struct sg_table *sgt;
 };
 
 /*
@@ -180,7 +205,21 @@ static u64 pte_flags_64 = MMU_BUFFERABLE | MMU_CACHEABLE | MMU_EXT_NG |
 			  MMU_EXT_XN | MMU_EXT_AF | MMU_AP_RW_ALL |
 			  MMU_NS | MMU_TYPE_PAGE;
 
+static u64 pte_flags_64_dma = MMU_EXT_NG |
+#ifdef CONFIG_SMP
+			  MMU_EXT_SHARED_64 |
+#endif /* CONFIG_SMP */
+			  MMU_EXT_XN | MMU_EXT_AF | MMU_AP_RW_ALL |
+			  MMU_NS | MMU_TYPE_PAGE;
+
 static u32 pte_flags_32 = MMU_BUFFERABLE | MMU_CACHEABLE | MMU_EXT_NG |
+#ifdef CONFIG_SMP
+			  MMU_EXT_SHARED_32 | MMU_EXT_TEX(1) |
+#endif /* CONFIG_SMP */
+			  MMU_EXT_AP1 | MMU_EXT_AP0 |
+			  MMU_TYPE_SMALL | MMU_TYPE_EXT;
+
+static u32 pte_flags_32_dma = MMU_EXT_NG |
 #ifdef CONFIG_SMP
 			  MMU_EXT_SHARED_32 | MMU_EXT_TEX(1) |
 #endif /* CONFIG_SMP */
@@ -192,9 +231,19 @@ static inline u32 get_pte_flags_32(bool is_writable)
 	return is_writable ? pte_flags_32 : pte_flags_32 | MMU_EXT_AP2;
 }
 
+static inline u32 get_pte_flags_32_dma(bool is_writable)
+{
+	return is_writable ? pte_flags_32_dma : pte_flags_32_dma | MMU_EXT_AP2;
+}
+
 static inline u64 get_pte_flags_64(bool is_writable)
 {
 	return is_writable ? pte_flags_64 : pte_flags_64 | MMU_AP2_RO;
+}
+
+static inline u64 get_pte_flags_64_dma(bool is_writable)
+{
+	return is_writable ? pte_flags_64_dma : pte_flags_64_dma | MMU_AP2_RO;
 }
 
 static uintptr_t mmu_table_pointer(const struct tee_mmu *mmu)
@@ -213,6 +262,15 @@ static uintptr_t mmu_table_pointer(const struct tee_mmu *mmu)
 static void mmu_release(struct tee_mmu *mmu)
 {
 	size_t t;
+
+#ifdef CONFIG_DMA_SHARED_BUFFER
+	if (mmu->dma_buf) {
+		dma_buf_unmap_attachment(mmu->attach, mmu->sgt,
+					 DMA_BIDIRECTIONAL);
+		dma_buf_detach(mmu->dma_buf, mmu->attach);
+		dma_buf_put(mmu->dma_buf);
+	}
+#endif
 
 	/* Release all locked user space pages */
 	for (t = 0; t < mmu->l2_tables_nr; t++) {
@@ -282,6 +340,35 @@ static void mmu_release(struct tee_mmu *mmu)
 	atomic_dec(&g_ctx.c_mmus);
 }
 
+static bool mmu_get_dma_buffer(struct tee_mmu *mmu, int va)
+{
+#ifdef CONFIG_DMA_SHARED_BUFFER
+	struct dma_buf *buf;
+
+	buf = dma_buf_get(va);
+	if (IS_ERR(buf))
+		return false;
+
+	mmu->dma_buf = buf;
+	mmu->attach = dma_buf_attach(mmu->dma_buf, g_ctx.mcd);
+	if (IS_ERR(mmu->attach))
+		goto err_attach;
+
+	mmu->sgt = dma_buf_map_attachment(mmu->attach, DMA_BIDIRECTIONAL);
+	if (IS_ERR(mmu->sgt))
+		goto err_map;
+
+	return true;
+
+err_map:
+	dma_buf_detach(mmu->dma_buf, mmu->attach);
+
+err_attach:
+	dma_buf_put(mmu->dma_buf);
+#endif
+	return false;
+}
+
 /*
  * Allocate MMU table and map buffer into it.
  * That is, create respective table entries.
@@ -300,8 +387,15 @@ struct tee_mmu *tee_mmu_create(struct mm_struct *mm,
 	int		ret = 0;
 	int		write = (buf->flags & MC_IO_MAP_OUTPUT) != 0;
 
+#ifndef CONFIG_DMA_SHARED_BUFFER
+	if (buf->flags & MMU_ION_BUF) {
+		mc_dev_err("ION buffers not supported by kernel");
+		return ERR_PTR(-EINVAL);
+	}
+#endif
+
 	/* Check input arguments */
-	if (!buf->va)
+	if (!(buf->flags & MMU_ION_BUF) && !buf->va)
 		return ERR_PTR(-EINVAL);
 
 	/* Allocate the struct */
@@ -314,8 +408,23 @@ struct tee_mmu *tee_mmu_create(struct mm_struct *mm,
 
 	/* Check that we have enough space to map data */
 	mmu->length = buf->len;
-	mmu->offset = (u32)(buf->va & ~PAGE_MASK);
-	total_pages_nr = PAGE_ALIGN(mmu->offset + buf->len) / PAGE_SIZE;
+	if (buf->flags & MMU_ION_BUF) {
+		/* Buffer is ION -
+		 * va is the client's dma_buf fd, which should be converted
+		 * to a struct sg_table * directly.
+		 */
+		if (!mmu_get_dma_buffer(mmu, buf->va)) {
+			mc_dev_err("mmu_get_dma_buffer failed");
+			ret = -EINVAL;
+			goto end;
+		}
+
+		mmu->offset = (u32)(mmu->sgt->sgl->offset & ~PAGE_MASK);
+	} else {
+		mmu->offset = (u32)((uintptr_t)data & ~PAGE_MASK);
+	}
+
+	total_pages_nr = PAGE_ALIGN(mmu->offset + mmu->length) / PAGE_SIZE;
 	if (g_ctx.f_mem_ext)
 		l1_entries_max = L1_ENTRIES_MAX;
 	else
@@ -407,17 +516,29 @@ struct tee_mmu *tee_mmu_create(struct mm_struct *mm,
 		}
 
 		/* Get pages */
-		if (mm) {
+		if (mmu->dma_buf) {
+			/* Buffer is ION */
+			struct sg_mapping_iter miter;
+
+			page_ptr = &pages[0];
+			sg_miter_start(&miter, mmu->sgt->sgl,
+				       mmu->sgt->nents,
+				       SG_MITER_FROM_SG);
+			while (sg_miter_next(&miter))
+				*page_ptr++ = miter.page;
+
+			sg_miter_stop(&miter);
+		} else if (mm) {
 			long gup_ret;
 
 			/* Buffer was allocated in user space */
 			down_read(&mm->mmap_sem);
-			gup_ret = gup_local(mm, (uintptr_t)reader,
-					    pages_nr, 1, pages);
+			gup_ret = gup_local_repeat(mm, (uintptr_t)reader,
+						   pages_nr, 1, pages);
 			if ((gup_ret == -EFAULT) && !write) {
-				gup_ret = gup_local(mm, (uintptr_t)reader,
-						    pages_nr, 0, pages);
-				pr_err("coremm:%s:%d: ret %ld\n", __func__, __LINE__, gup_ret);
+				gup_ret = gup_local_repeat(mm,
+							   (uintptr_t)reader,
+							   pages_nr, 0, pages);
 			}
 			up_read(&mm->mmap_sem);
 			if (gup_ret < 0) {
@@ -429,9 +550,8 @@ struct tee_mmu *tee_mmu_create(struct mm_struct *mm,
 
 			/* check if we could lock all pages. */
 			if (gup_ret != pages_nr) {
-				/* ExySp */
-				mc_dev_err("failed to get user pages: @%p, gup_ret(%ld), pages_nr(%lu)",
-					reader, gup_ret, pages_nr);
+				mc_dev_err("failed to get user pages: %ld",
+					   gup_ret);
 				release_pages(pages, gup_ret, 0);
 				ret = -EINVAL;
 				goto end;
@@ -479,9 +599,11 @@ struct tee_mmu *tee_mmu_create(struct mm_struct *mm,
 			u64 *pte = &mmu->l2_tables[chunk].ptes_64[0];
 
 			for (i = 0; i < pages_nr; i++, page_ptr++, pte++) {
-				unsigned long phys = page_to_phys(*page_ptr);
-				*pte = phys;
-				*pte |= get_pte_flags_64(write);
+				*pte = page_to_phys(*page_ptr);
+				if (mmu->dma_buf)
+					*pte |= get_pte_flags_64_dma(write);
+				else
+					*pte |= get_pte_flags_64(write);
 			}
 		} else {
 			u32 *pte = &mmu->l2_tables[chunk].ptes_32[0];
@@ -497,7 +619,10 @@ struct tee_mmu *tee_mmu_create(struct mm_struct *mm,
 				}
 #endif
 				*pte = (u32)phys;
-				*pte |= get_pte_flags_32(write);
+				if (mmu->dma_buf)
+					*pte |= get_pte_flags_32_dma(write);
+				else
+					*pte |= get_pte_flags_32(write);
 			}
 		}
 	}

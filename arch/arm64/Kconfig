@@ -83,7 +83,7 @@ config ARM64
 	select HAVE_FUNCTION_GRAPH_TRACER
 	select HAVE_GCC_PLUGINS
 	select HAVE_GENERIC_DMA_COHERENT
-#	select HAVE_HW_BREAKPOINT if PERF_EVENTS
+	select HAVE_HW_BREAKPOINT if PERF_EVENTS
 	select HAVE_IRQ_TIME_ACCOUNTING
 	select HAVE_MEMBLOCK
 	select HAVE_MEMBLOCK_NODE_MAP if NUMA
@@ -1260,9 +1260,17 @@ config UH_INFORM
 	  This config has the information of RKP,JOPP,ROPP,KDP,DMV.
 	  It informs that the above feature are whether active or inactive.
 
+config UH_RKP_FIMC_TYPE
+	bool "Select FIMC type"
+	depends on UH_RKP
+	default n
+	help
+	  it protects a kernel text and etc.
+
 config RKP_KDP
 	bool "Protection for cred structure"
 	depends on UH_RKP
+	depends on !SEC_VTS_TEST
 	default n
 	help
 	  Prevents unauthorized cred modification.
@@ -1280,6 +1288,20 @@ config RKP_DMAP_PROT
 	default n
 	help
 	  Prevents unauthorized mapping for page table.
+
+config RKP_TEST
+	bool "Enables rkp test"
+	depends on UH_RKP && !SAMSUNG_PRODUCT_SHIP
+	default n
+	help
+	  it enables rkp test.
+
+config KDP_TEST
+	bool "Enable KDP test"
+	depends on RKP_KDP && RKP_NS_PROT && !SAMSUNG_PRODUCT_SHIP
+	default n
+	help
+	  enable KDP test.
 
 config BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES
 	string "Default dtb names"

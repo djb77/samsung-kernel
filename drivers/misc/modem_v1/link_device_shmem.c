@@ -1578,14 +1578,14 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 	int ret;
 
 	if (unlikely(!cp_online(mc))) {
-		mif_err_limited("ERR! CP not online!, skb:%p\n", skb);
+		mif_err_limited("ERR! CP not online!, skb:%pK\n", skb);
 		dev_kfree_skb_any(skb);
 		return;
 	}
 
 	priv = skbpriv(skb);
 	if (unlikely(!priv)) {
-		mif_err("%s: ERR! No PRIV in skb@%p\n", ld->name, skb);
+		mif_err("%s: ERR! No PRIV in skb@%pK\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
 		shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 			"ERR! No PRIV in pass_skb_to_net()");
@@ -1594,7 +1594,7 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 
 	iod = priv->iod;
 	if (unlikely(!iod)) {
-		mif_err("%s: ERR! No IOD in skb@%p\n", ld->name, skb);
+		mif_err("%s: ERR! No IOD in skb@%pK\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
 		shmem_forced_cp_crash(mld, CRASH_REASON_MIF_RX_BAD_DATA,
 			"ERR! No IOD in pass_skb_to_net()");
@@ -3349,7 +3349,7 @@ static ssize_t rx_napi_list_show(struct device *dev,
 
 	count += sprintf(&buf[count], "[%s`s napi_list]\n", netdev_name(netdev));
 	list_for_each_entry(n, &netdev->napi_list, dev_list)
-		count += sprintf(&buf[count], "state: %s(%ld), weight: %d, poll: 0x%p\n",
+		count += sprintf(&buf[count], "state: %s(%ld), weight: %d, poll: 0x%pK\n",
 				test_bit(NAPI_STATE_SCHED, &n->state) ? "NAPI_STATE_SCHED" : "NAPI_STATE_COMPLETE",
 				n->state, n->weight, (void *)n->poll);
 	return count;
@@ -3651,7 +3651,7 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 		mif_err("Failed to vmap boot_region\n");
 		goto error;
 	}
-	mif_err("boot_base=%p, boot_size=%lu\n",
+	mif_err("boot_base=%pK, boot_size=%lu\n",
 		mld->boot_base, (unsigned long)mld->boot_size);
 
 	/**
@@ -3663,7 +3663,7 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 		mif_err("Failed to vmap ipc_region\n");
 		goto error;
 	}
-	mif_err("ipc_base=%p, ipc_size=%lu\n",
+	mif_err("ipc_base=%pK, ipc_size=%lu\n",
 		mld->base, (unsigned long)mld->size);
 
 	/**
@@ -3674,7 +3674,7 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 		mif_err("Failed to vmap vss_region\n");
 		goto error;
 	}
-	mif_err("vss_base=%p\n", mld->vss_base);
+	mif_err("vss_base=%pK\n", mld->vss_base);
 
 	/**
 	 * Initialize memory maps for ACPM (physical map -> logical map)
@@ -3685,14 +3685,14 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 		mif_err("Failed to vmap acpm_region\n");
 		goto error;
 	}
-	mif_err("acpm_base=%p acpm_size:0x%X\n", mld->acpm_base,
+	mif_err("acpm_base=%pK acpm_size:0x%X\n", mld->acpm_base,
 			mld->acpm_size);
 
 	/**
 	 * Initialize memory maps for Zero Memory Copy
 	 */
 	shm_get_zmb_region();
-	mif_err("zmb_base=%p zmb_size:0x%X\n", shm_get_zmb_region(),
+	mif_err("zmb_base=%pK zmb_size:0x%X\n", shm_get_zmb_region(),
 			shm_get_zmb_size());
 
 	remap_4mb_map_to_ipc_dev(mld);

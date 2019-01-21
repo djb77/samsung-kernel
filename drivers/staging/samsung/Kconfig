@@ -278,6 +278,13 @@ config SEC_DEBUG_SUPPORT_FORCE_UPLOAD
 	help
 	  This option supports force upload mode.
 
+comment "Samsung TN option for VTS test"
+config SEC_VTS_TEST
+	bool "VTS TEST"
+	default n
+	help
+	  This option notices this binary for VTS test.
+
 choice
 	prompt "Version of GAF structure"
 	depends on SEC_DEBUG

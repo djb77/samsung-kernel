@@ -727,12 +727,13 @@ int htoi(char input)
 		return 0;
 }
 
-int checkInputtedRegisterString(const char *string, char *CheckString[4])
+int checkInputtedRegisterString(const char *string, int *result)
 {
 	int ret = 0;
 	int index = 0;
 	char *Dupstring = NULL;
 	char *pDupstring = NULL;
+	char *CheckString[5] = {0, };
 
 	pDupstring = Dupstring = kstrdup(string, GFP_KERNEL);
 
@@ -764,10 +765,11 @@ int checkInputtedRegisterString(const char *string, char *CheckString[4])
 			ret = index;
 			break;
 		default:
+			pr_info("[SSP] %s invalid cmd size", __func__);
 			ret = false;
 			goto exit;
 		}
-		CheckString[index++][0] = tmp;
+		result[index++] = tmp;
 	}
 	kfree(pDupstring);
 return ret;
@@ -804,7 +806,7 @@ static ssize_t register_rw_store(struct device *dev,
 		struct ssp_data *data = dev_get_drvdata(dev);
 		struct ssp_msg *msg;
 		int index = 0, iRet = 0;
-		char *CheckString[4] = {0, };
+		int CheckString[4] = {0, };
 		char sendBuff[5] = {0, };
 
 		msg = kzalloc(sizeof(*msg), GFP_KERNEL);
@@ -828,7 +830,10 @@ static ssize_t register_rw_store(struct device *dev,
 		msg->free_buffer = 0;
 
 		for (index = 0; index <= iRet; index++)
-			msg->data |= (u32)(CheckString[index][0] << (24 - 8*index));
+		{
+			msg->data |= (u32)(CheckString[index] << (24 - 8*index));
+			pr_info("SSP %s %d: %d", __func__, index, CheckString[index]);
+		}
 
 		iRet = ssp_spi_sync(data, msg, 2000);
 
@@ -842,27 +847,67 @@ static DEVICE_ATTR(register_rw, 0664,
 	register_rw_show, register_rw_store);
 
 #endif //CONFIG_SSP_REGISTER_RW
-
-static ssize_t reset_info_show(struct device *dev,
+char resetString[1024] = {0, };
+static ssize_t bcm_minidump_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct ssp_data *data  = dev_get_drvdata(dev);
 	int ret = 0;
-	int totalLen = 0;
+	int totalLen = 0, index = 0;
+        const char token = ';';
 
 	totalLen = (int)strlen(data->resetInfo)
 		+ (data->IsGpsWorking ? (int)strlen("GPS ON ") : (int)strlen("GPS OFF "));
 
-	if ((int)strlen(data->resetInfo))
-		ret = snprintf(buf, totalLen + 1, "%s%s",
-			(data->IsGpsWorking ? "GPS ON " : "GPS OFF "), data->resetInfo);
-	else
+	if ((int)strlen(data->resetInfo)) {
+                memset(resetString, 0, ARRAY_SIZE(resetString));
+                for(index = 0; index < (int)strlen(data->resetInfo); index++) {
+                        if(data->resetInfo[index] == token)
+                            break;
+                        resetString[index] = data->resetInfo[index];
+                }
+                ret = snprintf(buf, totalLen + 1, "%s%s",
+                        (data->IsGpsWorking ? "GPS ON " : "GPS OFF "), data->resetInfo);
+
+        } else
 		ret =  snprintf(buf, totalLen + 1, "%s", (data->IsGpsWorking ? "GPS ON " : "GPS OFF "));
 
 	memset(data->resetInfo, 0, ARRAY_SIZE(data->resetInfo));
 
 	return ret;
 }
+
+static ssize_t reset_info_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ssp_data *data  = dev_get_drvdata(dev);
+	int ret = 0;
+	int totalLen = 0, index = 0;
+        const char token = ';';
+        
+	totalLen = (int)strlen(data->resetInfo)
+		+ (data->IsGpsWorking ? (int)strlen("GPS ON ") : (int)strlen("GPS OFF "));
+
+	if ((int)strlen(data->resetInfo)) {
+                for(index = 0; index < (int)strlen(data->resetInfo); index++) {
+                        if(data->resetInfo[index] == token)
+                            break;
+                        resetString[index] = data->resetInfo[index];
+                }
+        } else
+		ret =  snprintf(buf, totalLen + 1, "%s", (data->IsGpsWorking ? "GPS ON " : "GPS OFF "));
+
+        if((int)strlen(resetString)) {
+                totalLen = (int)strlen(resetString)
+		    + (data->IsGpsWorking ? (int)strlen("GPS ON ") : (int)strlen("GPS OFF "));
+        	ret = snprintf(buf, totalLen + 1, "%s%s",
+			(data->IsGpsWorking ? "GPS ON " : "GPS OFF "), resetString);
+        }
+        
+        memset(resetString, 0, ARRAY_SIZE(resetString));
+	return ret;
+}
+
 static DEVICE_ATTR(mcu_rev, 0444, mcu_revision_show, NULL);
 static DEVICE_ATTR(mcu_name, 0444, mcu_model_name_show, NULL);
 static DEVICE_ATTR(mcu_reset, 0444, mcu_reset_show, NULL);
@@ -885,8 +930,8 @@ static DEVICE_ATTR(data_injection_enable, 0664,
 static DEVICE_ATTR(ssp_control, 0220, NULL, set_ssp_control);
 static DEVICE_ATTR(sensor_dump, 0664,
 	sensor_dump_show, sensor_dump_store);
-static DEVICE_ATTR(bcm_minidump, 0440, reset_info_show, NULL);
-
+static DEVICE_ATTR(bcm_minidump, 0440, bcm_minidump_show, NULL);
+static DEVICE_ATTR(reset_info, 0440, reset_info_show, NULL);
 static DEVICE_ATTR(sensor_state, 0444, show_sensor_state, NULL);
 static DEVICE_ATTR(mcu_power, 0664, show_mcu_power, set_mcu_power);
 
@@ -912,6 +957,7 @@ static struct device_attribute *mcu_attrs[] = {
 	&dev_attr_thermistor_channel_0,
 	&dev_attr_thermistor_channel_1,
 	&dev_attr_bcm_minidump,
+	&dev_attr_reset_info,
 	NULL,
 };
 

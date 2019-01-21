@@ -161,6 +161,8 @@
 #define s5p_mfc_get_num_of_tile()		((MFC_READL(S5P_FIMV_D_DECODED_STATUS)		\
 						>> S5P_FIMV_DEC_STATUS_NUM_OF_TILE_SHIFT)	\
 						& S5P_FIMV_DEC_STATUS_NUM_OF_TILE_MASK)
+#define s5p_mfc_get_lcu_size()			(MFC_READL(S5P_FIMV_D_HEVC_INFO)		\
+						& S5P_FIMV_D_HEVC_INFO_LCU_SIZE_MASK)
 
 
 /* nal queue information */

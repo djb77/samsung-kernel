@@ -64,12 +64,13 @@ void exynos_init_entity_util_avg(struct sched_entity *se)
 	struct sched_avg *sa = &se->avg;
 	int cpu = cpu_of(cfs_rq->rq);
 	unsigned long cap_org = capacity_orig_of(cpu);
-	long cap = (long)(cap_org - cfs_rq->avg.util_avg) / 2;
+	long cap = (long)(cap_org - cfs_rq->avg.util_avg);
 
 	if (cap > 0) {
 		if (cfs_rq->avg.util_avg != 0) {
 			sa->util_avg  = cfs_rq->avg.util_avg * se->load.weight;
 			sa->util_avg /= (cfs_rq->avg.load_avg + 1);
+			sa->util_avg = sa->util_avg << 1;
 
 			if (sa->util_avg > cap)
 				sa->util_avg = cap;
@@ -1085,6 +1086,47 @@ next_entity:
 
 	return heaviest_task;
 }
+static struct task_struct *
+ontime_pick_vip_task(struct sched_entity *se, int src_cpu, int dst_cpu)
+{
+	struct task_struct *vip_task = NULL;
+	struct task_struct *p;
+	unsigned int max_util_avg = 0;
+	int task_count = 0;
+
+	if (!lbt_overutilized(src_cpu, dst_cpu) || cpu_rq(src_cpu)->nr_running <= 1)
+		return NULL;
+
+	if (src_cpu == dst_cpu)
+		return NULL;
+
+	p = task_of(se);
+	if (cpumask_test_cpu(dst_cpu, tsk_cpus_allowed(p))) {
+		vip_task = p;
+		max_util_avg = ontime_load_avg(p);
+	}
+
+	se = __pick_first_entity(se->cfs_rq);
+	while (se && task_count < TASK_TRACK_COUNT) {
+		/* Skip non-task entity */
+		if (entity_is_cfs_rq(se))
+			goto next_entity;
+
+		p = task_of(se);
+
+		if (ontime_load_avg(p) > max_util_avg &&
+		    cpumask_test_cpu(dst_cpu, tsk_cpus_allowed(p))) {
+			vip_task = p;
+			max_util_avg = ontime_load_avg(p);
+		}
+
+next_entity:
+		se = __pick_next_entity(se);
+		task_count++;
+	}
+
+	return vip_task;
+}
 
 void ontime_new_entity_load(struct task_struct *parent, struct sched_entity *se)
 {
@@ -1251,7 +1293,7 @@ void ontime_migration(void)
 
 	do {
 		dst_sg = src_sg->next;
-		for_each_cpu_and(cpu, sched_group_cpus(src_sg), cpu_active_mask) {
+		for_each_cpu(cpu, cpu_active_mask) {
 			unsigned long flags;
 			struct rq *rq;
 			struct sched_entity *se;
@@ -1308,11 +1350,19 @@ void ontime_migration(void)
 			 * Pick task to be migrated. Return NULL if there is no
 			 * heavy task in rq.
 			 */
-			p = ontime_pick_heavy_task(se, sched_group_cpus(dst_sg),
-							&boost_migration);
-			if (!p) {
-				raw_spin_unlock_irqrestore(&rq->lock, flags);
-				continue;
+			if (!cpumask_test_cpu(cpu, cpu_coregroup_mask(maxcap_cpu))) {
+				p = ontime_pick_heavy_task(se, sched_group_cpus(dst_sg),
+						&boost_migration);
+				if (!p) {
+					raw_spin_unlock_irqrestore(&rq->lock, flags);
+					continue;
+				}
+			} else {
+				p = ontime_pick_vip_task(se, cpu, dst_cpu);
+				if (!p) {
+					raw_spin_unlock_irqrestore(&rq->lock, flags);
+					continue;
+				}
 			}
 
 			ontime_flag(p) = ONTIME_MIGRATING;

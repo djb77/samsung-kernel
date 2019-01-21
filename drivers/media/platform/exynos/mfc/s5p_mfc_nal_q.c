@@ -38,11 +38,6 @@ int s5p_mfc_nal_q_check_enable(struct s5p_mfc_dev *dev)
 
 	mfc_debug_enter();
 
-	if (!dev) {
-		mfc_err_dev("no mfc device to run\n");
-		return -EINVAL;
-	}
-
 	if (nal_q_disable)
 		return 0;
 
@@ -225,38 +220,30 @@ static nal_queue_out_handle* mfc_nal_q_create_out_q(struct s5p_mfc_dev *dev,
 	return nal_q_out_handle;
 }
 
-static int mfc_nal_q_destroy_in_q(struct s5p_mfc_dev *dev,
+static void mfc_nal_q_destroy_in_q(struct s5p_mfc_dev *dev,
 			nal_queue_in_handle *nal_q_in_handle)
 {
 	mfc_debug_enter();
 
-	if (!nal_q_in_handle)
-		return -EINVAL;
-
-	s5p_mfc_mem_ion_free(dev, &nal_q_in_handle->in_buf);
-	if (nal_q_in_handle)
+	if (nal_q_in_handle) {
+		s5p_mfc_mem_ion_free(dev, &nal_q_in_handle->in_buf);
 		kfree(nal_q_in_handle);
+	}
 
 	mfc_debug_leave();
-
-	return 0;
 }
 
-static int mfc_nal_q_destroy_out_q(struct s5p_mfc_dev *dev,
+static void mfc_nal_q_destroy_out_q(struct s5p_mfc_dev *dev,
 			nal_queue_out_handle *nal_q_out_handle)
 {
 	mfc_debug_enter();
 
-	if (!nal_q_out_handle)
-		return -EINVAL;
-
-	s5p_mfc_mem_ion_free(dev, &nal_q_out_handle->out_buf);
-	if (nal_q_out_handle)
+	if (nal_q_out_handle) {
+		s5p_mfc_mem_ion_free(dev, &nal_q_out_handle->out_buf);
 		kfree(nal_q_out_handle);
+	}
 
 	mfc_debug_leave();
-
-	return 0;
 }
 
 /*
@@ -305,40 +292,20 @@ nal_queue_handle *s5p_mfc_nal_q_create(struct s5p_mfc_dev *dev)
 	return nal_q_handle;
 }
 
-int s5p_mfc_nal_q_destroy(struct s5p_mfc_dev *dev, nal_queue_handle *nal_q_handle)
+void s5p_mfc_nal_q_destroy(struct s5p_mfc_dev *dev, nal_queue_handle *nal_q_handle)
 {
-	int ret = 0;
-
 	mfc_debug_enter();
 
-	if (!dev) {
-		mfc_err_dev("NAL Q: no mfc device to run\n");
-		return -EINVAL;
-	}
+	if (nal_q_handle->nal_q_out_handle)
+		mfc_nal_q_destroy_out_q(dev, nal_q_handle->nal_q_out_handle);
 
-	if (!nal_q_handle) {
-		mfc_err_dev("there isn't nal_q_handle\n");
-		return -EINVAL;
-	}
-
-	ret = mfc_nal_q_destroy_out_q(dev, nal_q_handle->nal_q_out_handle);
-	if (ret) {
-		mfc_err_dev("failed nal_q_out_handle destroy\n");
-		return ret;
-	}
-
-	ret = mfc_nal_q_destroy_in_q(dev, nal_q_handle->nal_q_in_handle);
-	if (ret) {
-		mfc_err_dev("failed nal_q_in_handle destroy\n");
-		return ret;
-	}
+	if (nal_q_handle->nal_q_in_handle)
+		mfc_nal_q_destroy_in_q(dev, nal_q_handle->nal_q_in_handle);
 
 	kfree(nal_q_handle);
 	dev->nal_q_handle = NULL;
 
 	mfc_debug_leave();
-
-	return ret;
 }
 
 void s5p_mfc_nal_q_init(struct s5p_mfc_dev *dev, nal_queue_handle *nal_q_handle)
@@ -872,7 +839,7 @@ static void mfc_nal_q_handle_stream(struct s5p_mfc_ctx *ctx, EncoderOutputStr *p
 	if (slice_type >= 0) {
 		if (ctx->state == MFCINST_RUNNING_NO_OUTPUT ||
 			ctx->state == MFCINST_RUNNING_BUF_FULL)
-			ctx->state = MFCINST_RUNNING;
+			s5p_mfc_change_state(ctx, MFCINST_RUNNING);
 
 		mfc_nal_q_get_enc_frame_buffer(ctx, &enc_addr[0],
 					raw->num_planes, pOutStr);
@@ -910,7 +877,7 @@ static void mfc_nal_q_handle_stream(struct s5p_mfc_ctx *ctx, EncoderOutputStr *p
 		/* slice_type = 4 && strm_size = 0, skipped enable
 		   should be considered */
 		if ((slice_type == -1) && (strm_size == 0)) {
-			ctx->state = MFCINST_RUNNING_NO_OUTPUT;
+			s5p_mfc_change_state(ctx, MFCINST_RUNNING_NO_OUTPUT);
 
 			dst_mb = s5p_mfc_get_move_buf(&ctx->buf_queue_lock,
 				&ctx->dst_buf_queue, &ctx->dst_buf_nal_queue, MFC_BUF_RESET_USED, MFC_QUEUE_ADD_TOP);
@@ -1402,6 +1369,20 @@ void mfc_nal_q_handle_frame(struct s5p_mfc_ctx *ctx, DecoderOutputStr *pOutStr)
 		s5p_mfc_is_queue_count_same(&ctx->buf_queue_lock, &ctx->dst_buf_nal_queue, 0)) {
 		mfc_err_dev("NAL Q: Queue count is zero for src/dst\n");
 		goto leave_handle_frame;
+	}
+
+	/* Detection for QoS weight */
+	if (!dec->num_of_tile_over_4 && (((pOutStr->DisplayStatus
+				>> S5P_FIMV_DEC_STATUS_NUM_OF_TILE_SHIFT)
+				& S5P_FIMV_DEC_STATUS_NUM_OF_TILE_MASK) >= 4)) {
+		dec->num_of_tile_over_4 = 1;
+		s5p_mfc_qos_on(ctx);
+	}
+	if (!dec->super64_bframe && IS_SUPER64_BFRAME(ctx,
+				(pOutStr->HevcInfo & S5P_FIMV_D_HEVC_INFO_LCU_SIZE_MASK),
+				(pOutStr->DecodedFrameType & S5P_FIMV_DECODED_FRAME_MASK))) {
+		dec->super64_bframe = 1;
+		s5p_mfc_qos_on(ctx);
 	}
 
 	switch (dst_frame_status) {

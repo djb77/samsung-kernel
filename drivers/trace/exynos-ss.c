@@ -490,6 +490,7 @@ static int __init exynos_ss_reserved_mem_setup(struct reserved_mem *remem)
 	ess_desc.vm.phys_addr = remem->base;
 	ess_desc.vm.addr = (void *)(ESS_FIXED_VIRT_BASE);
 	ess_desc.vm.size = remem->size;
+	ess_desc.vm.flags = VM_NO_GUARD;
 
 	vm_area_add_early(&ess_desc.vm);
 

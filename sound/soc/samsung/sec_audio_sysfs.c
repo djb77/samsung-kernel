@@ -155,11 +155,46 @@ static ssize_t audio_mic_adc_show(struct device *dev,
 static DEVICE_ATTR(mic_adc, 0664,
 			audio_mic_adc_show, NULL);
 
+#ifdef CONFIG_EXTCON_PTT
+int audio_register_ptt_state_cb(int (*ptt_state) (void))
+{
+	if (audio_data->get_ptt_state) {
+		dev_err(audio_data->jack_dev,
+				"%s: Already registered\n", __func__);
+		return -EEXIST;
+	}
+
+	audio_data->get_ptt_state = ptt_state;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(audio_register_ptt_state_cb);
+
+static ssize_t audio_ptt_state_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int report = 0;
+
+	if (audio_data->get_ptt_state)
+		report = audio_data->get_ptt_state();
+	else
+		dev_info(dev, "%s: No callback registered\n", __func__);
+
+	return snprintf(buf, 16, "%d\n", report);
+}
+
+static DEVICE_ATTR(ptt_state, 0664,
+			audio_ptt_state_show, NULL);
+#endif
+
 static struct attribute *sec_audio_jack_attr[] = {
 	&dev_attr_select_jack.attr,
 	&dev_attr_state.attr,
 	&dev_attr_key_state.attr,
 	&dev_attr_mic_adc.attr,
+#ifdef CONFIG_EXTCON_PTT
+	&dev_attr_ptt_state.attr,
+#endif
 	NULL,
 };
 

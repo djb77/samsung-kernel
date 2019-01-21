@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0
 dtb-y += exynos9810-crownlte_eur_open_17.dtb
 dtb-y += exynos9810-crownlte_eur_open_18.dtb
 dtb-y += exynos9810-crownlte_eur_open_19.dtb

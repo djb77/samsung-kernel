@@ -14,6 +14,7 @@
 
 #include <linux/pm_wakeup.h>
 #include <sound/samsung/abox.h>
+#include <media/videobuf2-ion.h>
 
 #define ABOX_MASK(name) (GENMASK(ABOX_##name##_H, ABOX_##name##_L))
 #define ABOX_MASK_ARG(name, x) (GENMASK(ABOX_##name##_H(x), ABOX_##name##_L(x)))
@@ -277,7 +278,7 @@
 #define ABOX_RDMA_BUF_END		(0x0C)
 #define ABOX_RDMA_BUF_OFFSET		(0x10)
 #define ABOX_RDMA_STR_POINT		(0x14)
-#define ABOX_RDMA_VOL_FACTOR		(0x18)
+#define ABOX_RDMA_VOL_FACTOR(x)	ABOX_IDX_ARG(RDMA, 0x18, x)
 #define ABOX_RDMA_VOL_CHANGE		(0x1C)
 #ifdef CONFIG_SOC_EXYNOS8895
 #define ABOX_RDMA_STATUS		(0x20)
@@ -299,6 +300,10 @@
 #define ABOX_RDMA_RBUF_CNT_L		(0)
 #define ABOX_RDMA_RBUF_CNT_H		(12)
 #define ABOX_RDMA_RBUF_CNT_MASK		(ABOX_MASK(RDMA_RBUF_CNT))
+/* ABOX_RDMA_VOL_FACTOR */
+#define ABOX_RDMA_VOL_FACTOR_H		(23)
+#define ABOX_RDMA_VOL_FACTOR_L		(0)
+#define ABOX_RDMA_VOL_FACTOR_MASK	(ABOX_MASK(RDMA_VOL_FACTOR))
 
 /* WDMA */
 #define ABOX_WDMA_BASE			(0x2000)
@@ -378,6 +383,7 @@
 #define ABOX_CPU_GEAR_BOOT		(0xB00D)
 #define ABOX_CPU_GEAR_MAX		(1)
 #define ABOX_CPU_GEAR_MIN		(12)
+#define ABOX_CPU_GEAR_DAI		0xDA100000
 
 #define ABOX_DMA_TIMEOUT_NS		(40000000)
 
@@ -494,7 +500,7 @@ struct abox_irq_action {
 };
 
 struct abox_qos_request {
-	const void *id;
+	unsigned int id;
 	unsigned int value;
 };
 
@@ -637,8 +643,10 @@ struct abox_data {
 	struct mutex ima_lock;
 	struct work_struct boot_done_work;
 	struct delayed_work tickle_work;
+	unsigned long long audio_mode_time;
 	enum audio_mode audio_mode;
 	enum sound_type sound_type;
+	struct ion_client *client;
 };
 
 struct abox_compr_data {
@@ -690,6 +698,11 @@ enum abox_platform_type {
 	PLATFORM_REALTIME,
 	PLATFORM_VI_SENSING,
 	PLATFORM_SYNC,
+};
+
+enum abox_buffer_type {
+	BUFFER_TYPE_DMA,
+	BUFFER_TYPE_ION,
 };
 
 enum abox_rate {
@@ -773,7 +786,27 @@ static inline int abox_ipcid_to_stream(enum IPC_ID ipcid)
 		return -EINVAL;
 }
 
+struct abox_ion_buf {
+	size_t size;
+	void *kva;
+
+	struct dma_buf *dma_buf;
+	struct dma_buf_attachment *attachment;
+	enum dma_data_direction direction;
+	int fd;
+
+	struct ion_client *client;
+	unsigned long alignment;
+	long flags;
+	struct ion_handle *handle;
+	struct vb2_ion_cookie cookie;
+	int iommu_active_cnt;
+
+	void *priv;
+};
+
 struct abox_platform_data {
+	struct platform_device *pdev;
 	void __iomem *sfr_base;
 	void __iomem *mailbox_base;
 	unsigned int id;
@@ -788,6 +821,11 @@ struct abox_platform_data {
 	bool ack_enabled;
 	struct abox_compr_data compr_data;
 	struct regmap *mailbox;
+	struct snd_dma_buffer dmab;
+	struct abox_ion_buf ion_buf;
+	struct snd_hwdep *hwdep;
+	bool mmap_fd_state;
+	enum abox_buffer_type buf_type;
 };
 
 /**
@@ -822,7 +860,7 @@ extern void *abox_addr_to_kernel_addr(struct abox_data *data,
  * @return	true if it is idle or not has been requested, false on otherwise
  */
 extern bool abox_cpu_gear_idle(struct device *dev, struct abox_data *data,
-		void *id);
+		unsigned int id);
 
 /**
  * Request abox cpu clock level
@@ -833,7 +871,7 @@ extern bool abox_cpu_gear_idle(struct device *dev, struct abox_data *data,
  * @return	error code if any
  */
 extern int abox_request_cpu_gear(struct device *dev, struct abox_data *data,
-		const void *id, unsigned int gear);
+		unsigned int id, unsigned int gear);
 
 /**
  * Wait for pending cpu gear change
@@ -850,7 +888,23 @@ extern void abox_cpu_gear_barrier(struct abox_data *data);
  * @return	error code if any
  */
 extern int abox_request_cpu_gear_sync(struct device *dev,
-		struct abox_data *data, const void *id, unsigned int gear);
+		struct abox_data *data, unsigned int id, unsigned int gear);
+
+/**
+ * Request abox cpu clock level with DAI
+ * @param[in]	dev		pointer to struct dev which invokes this API
+ * @param[in]	data		pointer to abox_data structure
+ * @param[in]	dai		DAI which is used as unique handle
+ * @param[in]	gear		gear level (cpu clock = aud pll rate / gear)
+ * @return	error code if any
+ */
+static inline int abox_request_cpu_gear_dai(struct device *dev,
+		struct abox_data *data,
+		struct snd_soc_dai *dai, unsigned int gear)
+{
+	return abox_request_cpu_gear(dev, data, ABOX_CPU_GEAR_DAI | dai->id,
+			gear);
+}
 
 /**
  * Clear abox cpu clock requests
@@ -869,7 +923,23 @@ extern void abox_clear_cpu_gear_requests(struct device *dev,
  * @return	error code if any
  */
 extern int abox_request_lit_freq(struct device *dev, struct abox_data *data,
-		void *id, unsigned int freq);
+		unsigned int id, unsigned int freq);
+
+/**
+ * Request LITTLE cluster clock level with DAI
+ * @param[in]	dev		pointer to struct dev which invokes this API
+ * @param[in]	data		pointer to abox_data structure
+ * @param[in]	dai		DAI which is used as unique handle
+ * @param[in]	freq		frequency in kHz
+ * @return	error code if any
+ */
+static inline int abox_request_lit_freq_dai(struct device *dev,
+		struct abox_data *data,
+		struct snd_soc_dai *dai, unsigned int freq)
+{
+	return abox_request_lit_freq(dev, data, ABOX_CPU_GEAR_DAI | dai->id,
+			freq);
+}
 
 /**
  * Request big cluster clock level
@@ -880,7 +950,23 @@ extern int abox_request_lit_freq(struct device *dev, struct abox_data *data,
  * @return	error code if any
  */
 extern int abox_request_big_freq(struct device *dev, struct abox_data *data,
-		void *id, unsigned int freq);
+		unsigned int id, unsigned int freq);
+
+/**
+ * Request big cluster clock level with DAI
+ * @param[in]	dev		pointer to struct dev which invokes this API
+ * @param[in]	data		pointer to abox_data structure
+ * @param[in]	dai		DAI which is used as unique handle
+ * @param[in]	freq		frequency in kHz
+ * @return	error code if any
+ */
+static inline int abox_request_big_freq_dai(struct device *dev,
+		struct abox_data *data,
+		struct snd_soc_dai *dai, unsigned int freq)
+{
+	return abox_request_big_freq(dev, data, ABOX_CPU_GEAR_DAI | dai->id,
+			freq);
+}
 
 /**
  * Request hmp boost
@@ -891,7 +977,23 @@ extern int abox_request_big_freq(struct device *dev, struct abox_data *data,
  * @return	error code if any
  */
 extern int abox_request_hmp_boost(struct device *dev, struct abox_data *data,
-		void *id, unsigned int on);
+		unsigned int id, unsigned int on);
+
+/**
+ * Request hmp boost with DAI
+ * @param[in]	dev		pointer to struct dev which invokes this API
+ * @param[in]	data		pointer to abox_data structure
+ * @param[in]	dai		DAI which is used as unique handle
+ * @param[in]	on		1 on boost, 0 on otherwise.
+ * @return	error code if any
+ */
+static inline int abox_request_hmp_boost_dai(struct device *dev,
+		struct abox_data *data,
+		struct snd_soc_dai *dai, unsigned int on)
+{
+	return abox_request_hmp_boost(dev, data, ABOX_CPU_GEAR_DAI | dai->id,
+			on);
+}
 
 /**
  * Request INT clock level
@@ -902,7 +1004,7 @@ extern int abox_request_hmp_boost(struct device *dev, struct abox_data *data,
  * @return	error code if any
  */
 extern int abox_request_int_freq(struct device *dev, struct abox_data *data,
-		void *id, unsigned int int_freq);
+		unsigned int id, unsigned int int_freq);
 
 /**
  * Register uaif or dsif to abox

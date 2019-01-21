@@ -45,6 +45,7 @@ void nfc_logger_print(const char *fmt, ...)
 	char buf[MAX_STR_LEN + 16];
 	u64 time;
 	unsigned long nsec;
+	volatile unsigned int curpos;
 
 	if (!is_nfc_logger_init)
 		return;
@@ -62,11 +63,12 @@ void nfc_logger_print(const char *fmt, ...)
 	len += vsnprintf(buf + len, MAX_STR_LEN, fmt, args);
 	va_end(args);
 
-	if (g_curpos + len >= BUF_SIZE) {
-		g_curpos = 0;
+	curpos = g_curpos; 
+	if (curpos + len >= BUF_SIZE) { 
+		g_curpos = curpos = 0; 
 		is_buf_full = 1;
 	}
-	memcpy(log_buf + g_curpos, buf, len);
+	memcpy(log_buf + curpos, buf, len);
 	g_curpos += len;
 }
 
@@ -107,11 +109,12 @@ static ssize_t nfc_logger_read(struct file *file, char __user *buf, size_t len, 
 	loff_t pos = *offset;
 	ssize_t count;
 	size_t size;
+	volatile unsigned int curpos = g_curpos;
 
-	if (is_buf_full)
+	if (is_buf_full || BUF_SIZE <= curpos)
 		size = BUF_SIZE;
 	else
-		size = (size_t)g_curpos;
+		size = (size_t)curpos;
 
 	if (pos >= size)
 		return 0;

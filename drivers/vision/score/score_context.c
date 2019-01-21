@@ -37,7 +37,7 @@ static void __score_context_frame_flush(struct score_context *sctx,
 		list_for_each_entry_safe(buf, tbuf, &frame->buffer_list,
 				frame_list) {
 			score_frame_remove_buffer(frame, buf);
-			if (unmap)
+			if (buf->mirror || unmap)
 				score_mmu_unmap_buffer(mmu_ctx, buf);
 		}
 	}

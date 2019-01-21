@@ -323,7 +323,7 @@ void abox_log_register_buffer_work_func(struct work_struct *work)
 	abox_log_buffer_info_new.id = 0;
 	abox_log_buffer_info_new.log_buffer = NULL;
 
-	dev_info(dev, "%s(%p, %d, %p)\n", __func__, dev, id, buffer);
+	dev_info(dev, "%s(%d)\n", __func__, id);
 
 	info = vmalloc(sizeof(*info));
 	mutex_init(&info->lock);
@@ -350,7 +350,7 @@ int abox_log_register_buffer(struct device *dev, int id,
 {
 	struct abox_log_buffer_info *info;
 
-	dev_dbg(dev, "%s(%d, %p)\n", __func__, id, buffer);
+	dev_dbg(dev, "%s(%d)\n", __func__, id);
 
 	if (abox_log_buffer_info_new.dev != NULL ||
 			abox_log_buffer_info_new.id > 0 ||

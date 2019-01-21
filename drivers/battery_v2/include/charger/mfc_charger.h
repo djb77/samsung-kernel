@@ -290,6 +290,11 @@ enum {
 #define TX_ID_BATT_PACK_TA			0x41
 #define TX_ID_DREAM_STAND			0x31
 #define TX_ID_DREAM_DOWN			0x14
+#define TX_ID_UNO_TX				0x72
+#define TX_ID_UNO_TX_B0				0x80
+#define TX_ID_UNO_TX_B1				0x81
+#define TX_ID_UNO_TX_B2				0x82
+#define TX_ID_UNO_TX_MAX			0x9F
 
 #define TX_CHG_ERR_OTP			0x12
 #define TX_CHG_ERR_OCP			0x13

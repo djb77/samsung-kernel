@@ -37,6 +37,11 @@ config PANEL_AID_DIMMING
 	tristate "Support AID Dimming"
 	default y
 
+config DISP_PMIC_SSD
+	depends on EXYNOS_DECON_LCD
+	tristate "Support DISP PMIC SSD"
+	default n
+
 config PANEL_AID_DIMMING_DEBUG
 	depends on PANEL_AID_DIMMING
 	depends on !SAMSUNG_PRODUCT_SHIP
@@ -46,7 +51,6 @@ config PANEL_AID_DIMMING_DEBUG
 config SUPPORT_DSU
 	tristate "Support DSU(Multi Resolution)"
 	depends on EXYNOS_DECON_LCD
-	depends on ANDROID_MAJOR_VERSION != "p"
 	default n
 
 config SUPPORT_HMD
@@ -62,6 +66,11 @@ config EXTEND_LIVE_CLOCK
 config SUPPORT_AOD_BL
 	depends on EXYNOS_DECON_LCD && SUPPORT_DOZE
 	tristate "Support AOD(Active On Display) BL(BackLight) Driver"
+	default n
+
+config DONT_SUPPORT_SEAMLESS_AOD
+	depends on EXYNOS_DECON_LCD && SUPPORT_DOZE
+	tristate "Don't Support Seamless AOD"
 	default n
 
 config EXYNOS_DECON_LCD_S6E3HF3

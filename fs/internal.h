@@ -54,6 +54,7 @@ extern void __init chrdev_init(void);
  * dlog_hook.c
  */
 void dlog_hook(struct dentry *, struct inode *, struct path *);
+void dlog_hook_rmdir(struct dentry *, struct path *);
 #endif
 
 /*

@@ -54,7 +54,7 @@
 int displayport_log_level = 6;
 static u8 max_lane_cnt;
 static u8 max_link_rate;
-static u64 reduced_resolution;
+static int reduced_resolution;
 struct displayport_debug_param g_displayport_debug_param;
 int auth_done = HDCP_2_2_NOT_AUTH;
 
@@ -87,6 +87,7 @@ static int displayport_remove(struct platform_device *pdev)
 {
 	struct displayport_device *displayport = platform_get_drvdata(pdev);
 
+	pm_qos_remove_request(&displayport->fsys0_qos);
 	pm_runtime_disable(&pdev->dev);
 	switch_dev_unregister(&switch_secdp_msg);
 #if defined(CONFIG_EXTCON)
@@ -153,7 +154,7 @@ static int displayport_get_min_link_rate(u8 rx_link_rate, u8 lane_cnt)
 
 	max_pclk = displayport_find_edid_max_pixelclock();
 	for (i = 0; i < 2; i++) {
-		if ((u64)lane_cnt * pc1lane[i] >= max_pclk)
+		if ((u64)lane_cnt * pc1lane[i] * 8 / 10 >= max_pclk)
 			break;
 	}
 
@@ -234,6 +235,13 @@ static int displayport_full_link_training(void)
 	if (g_displayport_debug_param.param_used) {
 		link_rate = g_displayport_debug_param.link_rate;
 		lane_cnt = g_displayport_debug_param.lane_cnt;
+	}
+	if (link_rate == LINK_RATE_5_4Gbps) {
+		if (pm_qos_request_active(&displayport->fsys0_qos)) {
+			pm_qos_update_request(&displayport->fsys0_qos, 0);
+			displayport_info("displayport->fsys0_qos 336000Mhz\n");
+		} else
+			displayport_err("displayport->fsys0_qos setting error\n");
 	}
 
 	displayport_reg_dpcd_read(DPCD_ADD_TRAINING_AUX_RD_INTERVAL, 1, val);
@@ -424,6 +432,12 @@ Check_Link_rate:
 	displayport_info("Check_Link_rate\n");
 
 	if (link_rate == LINK_RATE_5_4Gbps) {
+		if (pm_qos_request_active(&displayport->fsys0_qos)) {
+			pm_qos_update_request(&displayport->fsys0_qos, 0);
+			displayport_info("displayport->fsys0_qos release\n");
+		} else
+			displayport_err("displayport->fsys0_qos release error\n");
+
 		link_rate = LINK_RATE_2_7Gbps;
 		goto Reduce_Link_Rate_Retry;
 	} else if (link_rate == LINK_RATE_2_7Gbps) {
@@ -937,6 +951,40 @@ static int displayport_link_status_read(void)
 	return 0;
 }
 
+static void displayport_find_proper_ratio_video_for_dex(struct displayport_device *displayport)
+{
+	enum video_ratio_t best_ratio = supported_videos[displayport->best_video].ratio;
+	int i = displayport->best_video;
+	displayport->dex_video_pick = 0;
+	if (!displayport->dex_setting)
+		return;
+	if (best_ratio == RATIO_16_9 ||
+			best_ratio == RATIO_16_10 ||
+			best_ratio == RATIO_21_9) {
+		displayport_dbg("dex support ratio\n");
+	} else {
+		displayport_info("not dex support ratio\n");
+		return;
+	}
+	/* for test */
+	if (reduced_resolution) {
+		i = reduced_resolution;
+	}
+	/* find same ratio timing from best timing */
+	for (;i >= V1600X900P59; i--) {
+		if (supported_videos[i].edid_support_match &&
+				supported_videos[i].dex_support &&
+				supported_videos[i].ratio == best_ratio) {
+			displayport->dex_video_pick = i;
+			displayport_info("found dex support ratio: %s %d/%d\n",
+					supported_videos[i].name, i, best_ratio);
+			break;
+		}
+	}
+	if (!displayport->dex_video_pick)
+		displayport_info("not found dex support ratio\n");
+}
+
 static int displayport_link_training(void)
 {
 	u8 val;
@@ -957,6 +1005,8 @@ static int displayport_link_training(void)
 		secdp_bigdata_inc_error_cnt(ERR_EDID);
 #endif
 	}
+
+	displayport_find_proper_ratio_video_for_dex(displayport);
 
 	displayport_reg_dpcd_read(DPCD_ADD_MAX_DOWNSPREAD, 1, &val);
 	displayport_dbg("DPCD_ADD_MAX_DOWNSPREAD = %x\n", val);
@@ -1118,6 +1168,12 @@ void displayport_hpd_changed(int state)
 				displayport_disable(displayport);
 			}
 		}
+		if (pm_qos_request_active(&displayport->fsys0_qos)) {
+			pm_qos_update_request(&displayport->fsys0_qos, 0);
+			displayport_info("displayport->fsys0_qos release in hpd 0\n");
+		} else
+			displayport_err("displayport->fsys0_qos release error\n");
+
 		pm_relax(displayport->dev);
 		displayport->hdcp_ver = 0;
 	}
@@ -1216,13 +1272,14 @@ static int displayport_check_dpcd_lane_status(u8 lane0_1_status,
 		return -EINVAL;
 	}
 
+	/* if link status update bit is not set, return */
+	if (!(lane_align_status & LINK_STATUS_UPDATE))
+		return 0;
+
+	displayport_err("%s() link_status_update bit is set\n", __func__);
+
 	if ((lane_align_status & INTERLANE_ALIGN_DONE) != INTERLANE_ALIGN_DONE) {
 		displayport_err("%s() interlane align error\n", __func__);
-		return -EINVAL;
-	}
-
-	if ((lane_align_status & LINK_STATUS_UPDATE) == LINK_STATUS_UPDATE) {
-		displayport_err("%s() link status update req\n", __func__);
 		return -EINVAL;
 	}
 
@@ -2524,6 +2581,11 @@ static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
 	}
 
 	if (displayport->dex_setting) {
+		if (displayport->dex_video_pick &&
+				timings->index > displayport->dex_video_pick) {
+			displayport_info("dex proper ratio video pick %d\n", displayport->dex_video_pick);
+			return -E2BIG;
+		}
 		if (supported_videos[timings->index].dex_support == DEX_NOT_SUPPORT) {
 			displayport_dbg("not supported video_format : %s in dex mode\n",
 					supported_videos[timings->index].name);
@@ -2551,9 +2613,8 @@ static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
 		return -E2BIG;
 	}
 
-	if (reduced_resolution && reduced_resolution <
-			supported_videos[timings->index].dv_timings.bt.pixelclock) {
-		displayport_info("reduced_resolution: %llu, idx: %d\n",
+	if (reduced_resolution && reduced_resolution < timings->index) {
+		displayport_info("reduced_resolution: %d, idx: %d\n",
 				reduced_resolution, timings->index);
 		return -E2BIG;
 	}
@@ -2973,6 +3034,9 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 static void displayport_notifier_register_work(struct work_struct *work)
 {
 	struct displayport_device *displayport = get_displayport_drvdata();
+
+	if (displayport->dp_not_support)
+		return;
 
 	if (!displayport->notifier_registered) {
 		displayport->notifier_registered = 1;
@@ -3694,7 +3758,7 @@ static ssize_t displayport_reduced_resolution_show(struct class *class,
 {
 	int ret = 0;
 
-	ret = scnprintf(buf, PAGE_SIZE, "%llu\n", reduced_resolution);
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n", reduced_resolution);
 
 	return ret;
 }
@@ -3710,21 +3774,8 @@ static ssize_t displayport_reduced_resolution_store(struct class *dev,
 
 	if (val[1] < 0 || val[1] >= supported_videos_pre_cnt || val[0] < 1)
 		reduced_resolution = 0;
-	else {
-		switch (val[1]) {
-		case 1:
-			reduced_resolution = PIXELCLK_2160P30HZ;
-			break;
-		case 2:
-			reduced_resolution = PIXELCLK_1080P60HZ;
-			break;
-		case 3:
-			reduced_resolution = PIXELCLK_1080P30HZ;
-			break;
-		default:
-			reduced_resolution = 0;
-		};
-	}
+	else
+		reduced_resolution = val[1];
 
 	return size;
 }
@@ -3753,6 +3804,9 @@ static ssize_t displayport_dex_store(struct class *dev,
 	int dex_run;
 	int need_reconnect = 0;
 
+	if (displayport->dp_not_support)
+		return size;
+
 	get_options(buf, 2, val);
 
 	displayport->dex_setting = (val[1] & 0xF0) >> 4;
@@ -3780,22 +3834,20 @@ static ssize_t displayport_dex_store(struct class *dev,
 	if (displayport->dex_setting) {
 		/* if current resolution is dex supported, then do not reconnect */
 		if (supported_videos[displayport->cur_video].dex_support != DEX_NOT_SUPPORT &&
-			supported_videos[displayport->cur_video].dex_support <= displayport->dex_adapter_type)
+			supported_videos[displayport->cur_video].dex_support <= displayport->dex_adapter_type) {
+			displayport_info("current video support dex %d\n", displayport->cur_video);
 			need_reconnect = 0;
+		}
 	} else {
 		/* if current resolution is best, then do not reconnect */
-		if (displayport->cur_video == displayport->best_video)
+		if (displayport->cur_video == displayport->best_video) {
+			displayport_info("current video is best %d\n", displayport->cur_video);
 			need_reconnect = 0;
+		}
 	}
 
 	displayport->dex_state = dex_run;
 
-#ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
-	if (displayport->dex_state == DEX_ON)
-		secdp_bigdata_save_item(BD_DP_MODE, "DEX");
-	else if (displayport->dex_state == DEX_OFF)
-		secdp_bigdata_save_item(BD_DP_MODE, "MIRROR");
-#endif
 	/* reconnect if setting was mirroring(0) and dex is running(1), */
 	if (displayport->hpd_current_state && need_reconnect) {
 		displayport_info("reconnecting to %s mode\n", dex_run ? "dex":"mirroring");
@@ -3992,6 +4044,11 @@ static int displayport_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&displayport->hdcp22_work, displayport_hdcp22_run);
 	INIT_DELAYED_WORK(&displayport->hdcp13_integrity_check_work, displayport_hdcp13_integrity_check_work);
 
+	/* Check Displayport support or not */
+	if (of_get_property(dev->of_node, "dp,displayport_not_support", NULL) != NULL) {
+		displayport_info("displayport does not support\n");
+		displayport->dp_not_support = true;
+	}
 #if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
 	INIT_DELAYED_WORK(&displayport->notifier_register_work,
 			displayport_notifier_register_work);
@@ -4065,7 +4122,7 @@ static int displayport_probe(struct platform_device *pdev)
 		dev_err(displayport->dev, "failed to init wakeup device\n");
 		return -EINVAL;
 	}
-
+	pm_qos_add_request(&displayport->fsys0_qos, PM_QOS_FSYS0_THROUGHPUT, 0);
 	dp_class = class_create(THIS_MODULE, "dp_sec");
 	if (IS_ERR(dp_class))
 		displayport_err("failed to creat dp_class\n");

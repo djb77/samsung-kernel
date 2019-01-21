@@ -1216,7 +1216,7 @@ struct mif_buff_mng *init_mif_buff_mng(unsigned char *buffer_start,
 		return NULL;
 	}
 
-	mif_info("Init mif_buffer management - buffer:%p, size:%u, cell_size:%u\n",
+	mif_info("Init mif_buffer management - buffer:%pK, size:%u, cell_size:%u\n",
 		buffer_start, buffer_size, cell_size);
 
 	bm = kzalloc(sizeof(struct mif_buff_mng), GFP_KERNEL);
@@ -1241,7 +1241,7 @@ struct mif_buff_mng *init_mif_buff_mng(unsigned char *buffer_start,
 		return NULL;
 	}
 
-	mif_info("cell_count:%u, map_size:%u, map_size_byte:%lu  buff_map:%p\n"
+	mif_info("cell_count:%u, map_size:%u, map_size_byte:%lu  buff_map:%pK\n"
 		, bm->cell_count, bm->buffer_map_size,
 		(sizeof(unsigned int) * bm->buffer_map_size), bm->buffer_map);
 
@@ -1359,7 +1359,7 @@ void *alloc_mif_buff(struct mif_buff_mng *bm)
 
 #ifdef MIF_BUFF_DEBUG
 	mif_info("location:%d cell_size:%u\n", location, bm->cell_size);
-	mif_info("buffer_allocated:%p\n", buff_allocated);
+	mif_info("buffer_allocated:%pK\n", buff_allocated);
 	mif_info("used/free: %u/%u\n", get_mif_buff_used_count(bm),
 			get_mif_buff_free_count(bm));
 #endif
@@ -1383,7 +1383,7 @@ int free_mif_buff(struct mif_buff_mng *bm, void *buffer)
 	addr_diff = (unsigned int)(uc_buffer - bm->buffer_start);
 
 	if (addr_diff > bm->buffer_size) {
-		mif_err("ERR Buffer:%p is not my pool one.\n", uc_buffer);
+		mif_err("ERR Buffer:%pK is not my pool one.\n", uc_buffer);
 		return -1;
 	}
 
@@ -1392,12 +1392,12 @@ int free_mif_buff(struct mif_buff_mng *bm, void *buffer)
 	j = location % MIF_BITS_FOR_MAP_CELL;
 
 #ifdef MIF_BUFF_DEBUG
-	mif_info("uc_buff:%p diff:%u\n", uc_buffer, addr_diff);
+	mif_info("uc_buff:%pK diff:%u\n", uc_buffer, addr_diff);
 	mif_info("location:%d i:%d j:%d\n", location, i, j);
 #endif
 
 	if ((bm->buffer_map[i] & (MIF_64BIT_FIRST_BIT >> j)) == 0) {
-		mif_err("ERR Buffer:%p is allready freed\n", uc_buffer);
+		mif_err("ERR Buffer:%pK is allready freed\n", uc_buffer);
 		return -1;
 	}
 

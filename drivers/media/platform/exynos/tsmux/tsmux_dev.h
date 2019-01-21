@@ -41,6 +41,7 @@ struct tsmux_buffer_info {
 	struct dma_buf *dmabuf;
 	struct dma_buf_attachment *dmabuf_att;
 	dma_addr_t dma_addr;
+	void *vaddr;
 	enum otf_buf_state buf_state;
 };
 
@@ -48,6 +49,7 @@ struct tsmux_device {
 	struct miscdevice misc_dev;
 	struct device *dev;
 
+	uint32_t hw_version;
 	void __iomem *regs_base;
 	struct resource *tsmux_mem;
 	struct clk *tsmux_clock;
@@ -77,6 +79,9 @@ struct tsmux_context {
 
 	int es_size;
 	bool set_hex_info;
+
+	bool otf_psi_enabled[TSMUX_OUT_BUF_CNT];
+	bool otf_job_queued;
 
 	wait_queue_head_t m2m_wait_queue;
 	wait_queue_head_t otf_wait_queue;

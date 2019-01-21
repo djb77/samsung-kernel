@@ -14,6 +14,7 @@
 #include <linux/ctype.h>
 #include <linux/lcd.h>
 
+
 #include "panel.h"
 #include "panel_drv.h"
 #include "panel_bl.h"
@@ -727,7 +728,7 @@ static ssize_t mcd_resistance_store(struct device *dev,
 					panel_data->props.mcd_rs_range[i][1]);
 
 #ifdef CONFIG_SUPPORT_DDI_FLASH
-		ret = set_panel_poc(&panel->poc_dev, POC_OP_MCD_READ);
+		ret = set_panel_poc(&panel->poc_dev, POC_OP_MCD_READ, NULL);
 		if (unlikely(ret)) {
 			pr_err("%s, failed to read mcd(ret %d)\n",
 					__func__, ret);
@@ -1153,13 +1154,13 @@ static ssize_t poc_show(struct device *dev,
 	poc_dev = &panel->poc_dev;
 	poc_info = &poc_dev->poc_info;
 
-	ret = set_panel_poc(poc_dev, POC_OP_CHECKPOC);
+	ret = set_panel_poc(poc_dev, POC_OP_CHECKPOC, NULL);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to chkpoc (ret %d)\n", __func__, ret);
 		return ret;
 	}
 
-	ret = set_panel_poc(poc_dev, POC_OP_CHECKSUM);
+	ret = set_panel_poc(poc_dev, POC_OP_CHECKSUM, NULL);
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to chksum (ret %d)\n", __func__, ret);
 		return ret;
@@ -1192,10 +1193,12 @@ static ssize_t poc_store(struct device *dev,
 	poc_dev = &panel->poc_dev;
 	poc_info = &poc_dev->poc_info;
 
-	rc = kstrtouint(buf, (unsigned int)0, &value);
-	if (rc < 0)
-		return rc;
 
+	rc = sscanf(buf, "%d", &value);
+	if (rc < 1) {
+		pr_err("%s poc_op required\n", __func__);
+		return -EINVAL;
+	}
 	if (!IS_VALID_POC_OP(value)) {
 		pr_warn("%s invalid poc_op %d\n", __func__, value);
 		return -EINVAL;
@@ -1210,7 +1213,7 @@ static ssize_t poc_store(struct device *dev,
 		atomic_set(&poc_dev->cancel, 1);
 	} else {
 		mutex_lock(&panel->io_lock);
-		ret = set_panel_poc(poc_dev, value);
+		ret = set_panel_poc(poc_dev, value, buf);
 		if (unlikely(ret < 0)) {
 			pr_err("%s, failed to poc_op %d(ret %d)\n", __func__, value, ret);
 			mutex_unlock(&panel->io_lock);
@@ -1227,6 +1230,51 @@ static ssize_t poc_store(struct device *dev,
 			__func__, panel_data->props.poc_op);
 
 	return size;
+}
+
+static ssize_t poc_mca_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct panel_device *panel = dev_get_drvdata(dev);
+	int ret;
+	u8 chksum_data[256];
+	int i, len;
+
+	if (panel == NULL) {
+		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!IS_PANEL_ACTIVE(panel)) {
+		panel_err("%s:panel is not active\n", __func__);
+		return -EAGAIN;
+	}
+
+	panel_set_key(panel, 2, true);
+	ret = panel_resource_update_by_name(panel, "poc_mca_chksum");
+	if (unlikely(ret < 0)) {
+		pr_err("%s, failed to update poc_mca_chksum res (ret %d)\n",
+				__func__, ret);
+		return ret;
+	}
+	panel_set_key(panel, 2, false);
+	
+	ret = resource_copy_by_name(&panel->panel_data, chksum_data, "poc_mca_chksum");
+	if (unlikely(ret < 0)) {
+		pr_err("%s, failed to copy poc_mca_chksum res (ret %d)\n",
+				__func__, ret);
+		return ret;
+	}
+
+	len = get_resource_size_by_name(&panel->panel_data, "poc_mca_chksum");
+	buf[0] = '\0';
+	for (i = 0; i < len; i++) {
+		snprintf(buf, PAGE_SIZE, "%s%02X ", buf, chksum_data[i]);
+	}
+	
+	dev_info(dev, "%s poc_mca_checksum: %s\n", __func__, buf);
+
+	return strlen(buf);
 }
 #endif
 
@@ -1611,7 +1659,7 @@ static int set_alpm_mode(struct panel_device *panel, int mode)
 static ssize_t alpm_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {
-	int value, rc, ret;
+	int value, rc;
 	struct panel_device *panel = dev_get_drvdata(dev);
 	struct panel_info *panel_data = &panel->panel_data;
 
@@ -1626,15 +1674,17 @@ static ssize_t alpm_store(struct device *dev,
 
 #ifdef CONFIG_SUPPORT_DOZE
 	if (set_alpm_mode(panel, value)) {
-		panel_err("PANEL:ERR:%s:failed to set alpm (value %d, ret %d)\n",
-				__func__, value, ret);
+		panel_err("PANEL:ERR:%s:failed to set alpm (value %d)\n",
+				__func__, value);
 		goto exit_store;
 	}
 #endif
 	panel_info("PANEL:INFO:%s:value %d, alpm_mode %d\n",
 			__func__, value, panel_data->props.alpm_mode);
 
+#ifdef CONFIG_SUPPORT_DOZE
 exit_store:
+#endif
 	mutex_unlock(&panel->io_lock);
 	return size;
 }
@@ -1810,20 +1860,29 @@ static void show_brt_param(struct panel_info *panel_data, int id, int type)
 		if (!strncmp(brt_res_names[ires], "elvss_t", 8))
 			for (itemp = 0; itemp < ARRAY_SIZE(temperatures); itemp++)
 				len += snprintf(buf + len, SZ_1K - len, ",%selvss(T:%d)",
+#ifdef CONFIG_SUPPORT_HMD
 						(id == PANEL_BL_SUBDEV_TYPE_HMD) ? "hmd_" : "",
+#else
+						"",
+#endif
 						temperatures[itemp]);
 		else
 			for (num = 0; num < size; num++)
 				len += snprintf(buf + len, SZ_1K - len, ",%s%s_%d",
+#ifdef CONFIG_SUPPORT_HMD
 						(id == PANEL_BL_SUBDEV_TYPE_HMD) ? "hmd_" : "",
+#else
+						"",
+#endif
 						brt_res_names[ires], num);
 	}
 
 	mutex_lock(&panel_bl->lock);
 	mutex_lock(&panel->op_lock);
+#ifdef CONFIG_SUPPORT_HMD
 	if (id == PANEL_BL_SUBDEV_TYPE_HMD)
 		panel_do_seqtbl_by_index_nolock(panel, PANEL_HMD_ON_SEQ);
-
+#endif
 	for (i = 0; i < sz_tbl; i++) {
 		panel_bl->bd->props.brightness = tbl[i];
 		subdev->brightness = tbl[i];
@@ -1889,12 +1948,12 @@ static void show_brt_param(struct panel_info *panel_data, int id, int type)
 		if (ret < 0)
 			break;
 	}
-
+#ifdef CONFIG_SUPPORT_HMD
 	if (id == PANEL_BL_SUBDEV_TYPE_HMD) {
 		panel_do_seqtbl_by_index_nolock(panel, PANEL_HMD_OFF_SEQ);
 		panel_bl_set_brightness(panel_bl, PANEL_BL_SUBDEV_TYPE_DISP, 1);
 	}
-
+#endif
 	mutex_unlock(&panel->op_lock);
 	mutex_unlock(&panel_bl->lock);
 
@@ -2006,7 +2065,11 @@ static void show_aid_log(struct panel_info *panel_data, int id)
 	subdev = &panel_bl->subdev[id];
 
 	pr_info("[====================== [%s] ======================]\n",
+#ifdef CONFIG_SUPPORT_HMD
 			(id == PANEL_BL_SUBDEV_TYPE_HMD ? "HMD" : "DISP"));
+#else
+			"DISP");
+#endif
 	dim_info = panel_data->dim_info[id];
 	if (!dim_info) {
 		panel_warn("%s bl-%d dim_info is null\n", __func__, id);
@@ -2020,9 +2083,11 @@ static void show_aid_log(struct panel_info *panel_data, int id)
 	/* TODO : 0 means GAMMA_MAPTBL.
 	 * To use commonly in panel driver some maptbl index should be same
 	 */
+#ifdef CONFIG_SUPPORT_HMD
 	if (id == PANEL_BL_SUBDEV_TYPE_HMD)
 		tbl = find_panel_maptbl_by_name(panel_data, "hmd_gamma_table");
 	else
+#endif
 		tbl = find_panel_maptbl_by_name(panel_data, "gamma_table");
 
 	if (tbl) {
@@ -2038,16 +2103,18 @@ static void show_aid_log(struct panel_info *panel_data, int id)
 			}
 		}
 	}
-
+#ifdef CONFIG_SUPPORT_HMD
 	if (id == PANEL_BL_SUBDEV_TYPE_HMD) {
 		aor_tbl = find_panel_maptbl_by_name(panel_data, "hmd_aor_table");
 	} else {
+#endif
 		aor_tbl = find_panel_maptbl_by_name(panel_data, "aor_table");
 		vint_tbl = find_panel_maptbl_by_name(panel_data, "vint_table");
 		elvss_tbl = find_panel_maptbl_by_name(panel_data, "elvss_table");
 		irc_tbl = find_panel_maptbl_by_name(panel_data, "irc_table");
+#ifdef CONFIG_SUPPORT_HMD
 	}
-
+#endif
 	panel_info("\n[BRIGHTNESS, %s %s %s %s table]\n",
 			aor_tbl ? "AOR" : "", vint_tbl ? "VINT" : "",
 			elvss_tbl ? "ELVSS" : "", irc_tbl ? "IRC" : "");
@@ -2774,7 +2841,64 @@ static ssize_t self_mask_store(struct device *dev,
 }
 
 #endif
+#ifdef SUPPORT_NORMAL_SELFMOVE
 
+static ssize_t self_move_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct aod_dev_info *aod;
+	struct aod_ioctl_props *props;
+	struct panel_device *panel = dev_get_drvdata(dev);
+
+	if (panel == NULL) {
+		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+	aod = &panel->aod;
+	props = &aod->props;
+
+	snprintf(buf, PAGE_SIZE, "%d\n", props->selfmove_pattern);
+
+	return strlen(buf);
+}
+
+static ssize_t self_move_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret;
+	int pattern;
+	struct aod_dev_info *aod;
+	struct aod_ioctl_props *props;
+	struct panel_device *panel = dev_get_drvdata(dev);
+
+	if (panel == NULL) {
+		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
+		return -EINVAL;
+	}
+	aod = &panel->aod;
+	props = &aod->props;
+	if ((aod == NULL) || (props == NULL)) {
+		panel_err("PANEL:ERR:%s:aod is null\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = kstrtoint(buf, 0, &pattern);
+
+	if (ret < 0)
+		return ret;
+
+	panel_info("%s: pattern : %d\n", __func__, pattern);
+
+	props->selfmove_pattern = pattern;
+
+	if (pattern == 0)
+		panel_do_aod_seqtbl_by_index(aod, DISABLE_SELFMOVE_SEQ);
+	else
+		panel_do_aod_seqtbl_by_index(aod, ENABLE_SELFMOVE_SEQ);
+
+	return size;
+}
+#endif
 
 #ifdef CONFIG_SUPPORT_ISC_DEFECT
 static ssize_t isc_defect_show(struct device *dev,
@@ -2836,6 +2960,7 @@ struct device_attribute panel_attrs[] = {
 #endif
 #ifdef CONFIG_SUPPORT_POC_FLASH
 	__PANEL_ATTR_RW(poc, 0660),
+	__PANEL_ATTR_RO(poc_mca, 0440),
 #endif
 #ifdef CONFIG_SUPPORT_DIM_FLASH
 	__PANEL_ATTR_RW(gamma_flash, 0660),
@@ -2893,6 +3018,9 @@ struct device_attribute panel_attrs[] = {
 	__PANEL_ATTR_RW(poc_onoff, 0664),
 #ifdef CONFIG_EXTEND_LIVE_CLOCK
 	__PANEL_ATTR_RW(self_mask, 0664),
+#endif
+#ifdef SUPPORT_NORMAL_SELFMOVE
+	__PANEL_ATTR_RW(self_move, 0664),
 #endif
 #ifdef CONFIG_SUPPORT_ISC_DEFECT
 	__PANEL_ATTR_RW(isc_defect, 0664),

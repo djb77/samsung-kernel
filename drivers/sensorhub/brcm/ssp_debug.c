@@ -463,6 +463,10 @@ static void print_sensordata(struct ssp_data *data, unsigned int uSensor)
 			data->buf[uSensor].offset_z,
 			get_msdelay(data->adDelayBuf[uSensor]));
 		break;
+	case WAKE_UP_MOTION:
+		ssp_dbg("[SSP] %u : %d (%ums)\n", uSensor,
+			data->buf[uSensor].wakeup_motion,
+			get_msdelay(data->adDelayBuf[uSensor]));
 	case BULK_SENSOR:
 	case GPS_SENSOR:
 		break;
@@ -482,8 +486,9 @@ bool check_wait_event(struct ssp_data *data)
 	int check_sensors[2] = {ACCELEROMETER_SENSOR, LIGHT_SENSOR};
 	int i, sensor;
 	bool res = false;
+	int arrSize = (ANDROID_VERSION < 90000 ? 2 : 1);
 
-	for (i = 0 ; i < 2 ; i++) {
+	for (i = 0 ; i < arrSize ; i++) { // because light sensor does not check anymore
 		sensor = check_sensors[i];
 		//the sensor is registered
 		if ((atomic64_read(&data->aSensorEnable) & (1 << sensor) && !(data->IsGyroselftest))

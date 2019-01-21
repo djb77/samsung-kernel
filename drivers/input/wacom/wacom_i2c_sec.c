@@ -630,8 +630,13 @@ static ssize_t epen_aod_lcd_onoff_status_store(struct device *dev,
 	if (!(wac_i2c->function_set & EPEN_SETMODE_AOP_OPTION_AOD) || wac_i2c->screen_on)
 		goto out;
 
-	if (wac_i2c->survey_mode == EPEN_SURVEY_MODE_GARAGE_AOP)
+	if (wac_i2c->survey_mode == EPEN_SURVEY_MODE_GARAGE_AOP) {
+		if ((wac_i2c->function_set & EPEN_SETMODE_AOP_OPTION_AOD_LCD_ON)
+				== EPEN_SETMODE_AOP_OPTION_AOD_LCD_OFF) {
+			forced_release_fullscan(wac_i2c);
+		}
 		wacom_i2c_set_survey_mode(wac_i2c, wac_i2c->survey_mode);
+	}
 
 out:
 	input_info(true, &client->dev, "%s: screen %s, survey mode:0x%x, set:0x%x\n",

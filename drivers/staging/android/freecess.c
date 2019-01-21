@@ -348,7 +348,7 @@ static int freecess_window_stat_show(struct seq_file *m, void *v)
 		spin_lock_irqsave(&stat->lock, flags);
 		tmp_freecess_info.mod_reportstat[i].data = stat->data;
 		spin_unlock_irqrestore(&stat->lock, flags);
-		memcpy(tmp_freecess_info.mod_reportstat[i].name, stat->name, 32);
+		strncpy(tmp_freecess_info.mod_reportstat[i].name, stat->name, 32);
 	}
 
 	seq_printf(m, "freecess window stat show\n");
@@ -448,7 +448,7 @@ static int freecess_modstat_show(struct seq_file *m, void *v)
 		spin_lock_irqsave(&stat->lock, flags);
 		tmp_freecess_info.mod_reportstat[i].data = stat->data;
 		spin_unlock_irqrestore(&stat->lock, flags);
-		memcpy(tmp_freecess_info.mod_reportstat[i].name, stat->name, 32);
+		strncpy(tmp_freecess_info.mod_reportstat[i].name, stat->name, 32);
 	}
 
 	seq_printf(m, "freecess mod stat show\n");
@@ -499,7 +499,7 @@ static void freecess_runinfo_init(struct freecess_info_s *f)
 		stat->data.report_suc_from_windowstart = 0;
 		stat->data.report_fail_from_windowstart = 0;
 		stat->data.runtime_from_windowstart = 0;
-		memcpy(f->mod_reportstat[i].name, mod_name[i], 31);
+		strncpy(f->mod_reportstat[i].name, mod_name[i], 32);
 	}
 
 }

@@ -134,6 +134,12 @@ static int g2d_prepare_buffer(struct g2d_device *g2d_dev,
 
 	BUG_ON(!fmt);
 
+	if (data->num_buffers == 0) {
+		dev_err(dev, "Invalid number of buffer %u for %s\n",
+			data->num_buffers, fmt->name);
+		return -EINVAL;
+	}
+
 	if ((data->num_buffers > 1) && (data->num_buffers != fmt->num_planes)) {
 		/* NV12 8+2 in two buffers is valid */
 		if ((fmt->num_planes != 4) || (data->num_buffers != 2)) {
@@ -541,6 +547,7 @@ static int g2d_get_source(struct g2d_device *g2d_dev, struct g2d_task *task,
 
 	layer->flags = data->flags;
 	layer->buffer_type = data->buffer_type;
+	layer->fence = NULL;
 
 	if (!G2D_BUFTYPE_VALID(layer->buffer_type)) {
 		dev_err(dev, "%s: invalid buffer type %u specified\n",

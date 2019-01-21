@@ -22,10 +22,12 @@
 #include <linux/iommu.h>
 #include <linux/delay.h>
 #include <linux/memblock.h>
+#include <sound/hwdep.h>
 
 #include <sound/soc.h>
 #include <sound/pcm_params.h>
 #include <sound/tlv.h>
+#include <sound/sounddev_abox.h>
 
 #include "../../../../drivers/iommu/exynos-iommu.h"
 #include <sound/samsung/abox.h>
@@ -33,6 +35,7 @@
 #include "abox_gic.h"
 #include "abox_dbg.h"
 #include "abox_vss.h"
+#include "abox_mmapfd.h"
 #include "abox.h"
 
 #define COMPR_USE_COPY
@@ -469,8 +472,8 @@ static int abox_rdma_compr_set_param(struct platform_device *pdev,
 	int id = platform_data->id;
 	int ret;
 
-	dev_info(dev, "%s[%d] buffer: %p(%llu)\n", __func__, id,
-			runtime->buffer, runtime->buffer_size);
+	dev_info(dev, "%s[%d] buffer: %llu\n", __func__, id,
+			runtime->buffer_size);
 
 #ifdef COMPR_USE_FIXED_MEMORY
 	/* free memory allocated by ALSA */
@@ -580,7 +583,8 @@ static int abox_rdma_compr_open(struct snd_compr_stream *stream)
 
 	pm_runtime_get_sync(dev);
 	abox_request_dram_on(platform_data->pdev_abox, dev, true);
-	abox_request_cpu_gear(dev, abox_data, dev, abox_data->cpu_gear_min);
+	abox_request_cpu_gear_dai(dev, abox_data, rtd->cpu_dai,
+			abox_data->cpu_gear_min);
 
 	return 0;
 }
@@ -645,7 +649,8 @@ static int abox_rdma_compr_free(struct snd_compr_stream *stream)
 #endif
 }
 #endif
-	abox_request_cpu_gear(dev, abox_data, dev, ABOX_CPU_GEAR_MIN);
+	abox_request_cpu_gear_dai(dev, abox_data, rtd->cpu_dai,
+			ABOX_CPU_GEAR_MIN);
 	abox_request_dram_on(platform_data->pdev_abox, dev, false);
 	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put(dev);
@@ -1307,30 +1312,41 @@ static int abox_rdma_hw_params(struct snd_pcm_substream *substream,
 	struct abox_data *abox_data = data->abox_data;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	int id = data->id;
-	unsigned int lit_freq, big_freq, hmp_boost;
+	size_t buffer_bytes = PAGE_ALIGN(params_buffer_bytes(params));
+	unsigned int lit, big, hmp;
 	int ret;
 	ABOX_IPC_MSG msg;
 	struct IPC_PCMTASK_MSG *pcmtask_msg = &msg.msg.pcmtask;
 
 	dev_dbg(dev, "%s[%d]\n", __func__, id);
 
-	ret = snd_pcm_lib_malloc_pages(substream, params_buffer_bytes(params));
-	if (ret < 0) {
-		dev_err(dev, "Memory allocation failed (size:%u)\n",
-				params_buffer_bytes(params));
-		return ret;
-	}
+	if (data->buf_type == BUFFER_TYPE_DMA) {
+		ret = snd_pcm_lib_malloc_pages(substream, params_buffer_bytes(params));
+		if (ret < 0) {
+			dev_err(dev, "Memory allocation failed (size:%u)\n",
+					params_buffer_bytes(params));
+			return ret;
+		}
 
-	pcmtask_msg->channel_id = id;
 #ifndef USE_FIXED_MEMORY
-	ret = iommu_map(data->abox_data->iommu_domain, IOVA_RDMA_BUFFER(id),
-			runtime->dma_addr, round_up(runtime->dma_bytes,
-			PAGE_SIZE), 0);
-	if (ret < 0) {
-		dev_err(dev, "dma buffer iommu map failed\n");
-		return ret;
-	}
+		ret = iommu_map(data->abox_data->iommu_domain, IOVA_RDMA_BUFFER(id),
+				runtime->dma_addr, round_up(runtime->dma_bytes,
+				PAGE_SIZE), 0);
+		if (ret < 0) {
+			dev_err(dev, "dma buffer iommu map failed\n");
+			return ret;
+		}
 #endif
+	} else if (data->buf_type == BUFFER_TYPE_ION) {
+		dev_info(dev, "ion_buffer %s bytes(%ld) size(%ld)\n",
+				__func__,
+				buffer_bytes, data->ion_buf.size);
+		data->dmab.bytes = buffer_bytes;
+		snd_pcm_set_runtime_buffer(substream, &data->dmab);
+	} else {
+		dev_err(dev, "buf_type is not defined\n");
+	}
+	pcmtask_msg->channel_id = id;
 	msg.ipcid = IPC_PCMPLAYBACK;
 	msg.task_id = pcmtask_msg->channel_id = id;
 
@@ -1351,23 +1367,21 @@ static int abox_rdma_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 
 	if (params_rate(params) > 48000)
-		abox_request_cpu_gear(dev, abox_data, dev,
+		abox_request_cpu_gear_dai(dev, abox_data, rtd->cpu_dai,
 				abox_data->cpu_gear_min - 1);
 
-	lit_freq = data->pm_qos_lit[abox_get_rate_type(params_rate(params))];
-	big_freq = data->pm_qos_big[abox_get_rate_type(params_rate(params))];
-	hmp_boost = data->pm_qos_hmp[abox_get_rate_type(params_rate(params))];
-	abox_request_lit_freq(dev, data->abox_data, dev, lit_freq);
-	abox_request_big_freq(dev, data->abox_data, dev, big_freq);
-	abox_request_hmp_boost(dev, data->abox_data, dev, hmp_boost);
+	lit = data->pm_qos_lit[abox_get_rate_type(params_rate(params))];
+	big = data->pm_qos_big[abox_get_rate_type(params_rate(params))];
+	hmp = data->pm_qos_hmp[abox_get_rate_type(params_rate(params))];
+	abox_request_lit_freq_dai(dev, data->abox_data, rtd->cpu_dai, lit);
+	abox_request_big_freq_dai(dev, data->abox_data, rtd->cpu_dai, big);
+	abox_request_hmp_boost_dai(dev, data->abox_data, rtd->cpu_dai, hmp);
 
-	dev_info(dev, "%s:DmaAddr=%pad Total=%zu PrdSz=%u(%u) #Prds=%u dma_area=%p rate=%u, width=%d, channels=%u\n",
-			snd_pcm_stream_str(substream), &runtime->dma_addr,
-			runtime->dma_bytes, params_period_size(params),
-			params_period_bytes(params), params_periods(params),
-			runtime->dma_area, params_rate(params),
-			snd_pcm_format_width(params_format(params)),
-			params_channels(params));
+	dev_info(dev, "%s:Total=%zu PrdSz=%u(%u) #Prds=%u rate=%u, width=%d, channels=%u\n",
+			snd_pcm_stream_str(substream), runtime->dma_bytes,
+			params_period_size(params), params_period_bytes(params),
+			params_periods(params), params_rate(params),
+			params_width(params), params_channels(params));
 
 	return 0;
 }
@@ -1389,15 +1403,19 @@ static int abox_rdma_hw_free(struct snd_pcm_substream *substream)
 	msg.task_id = pcmtask_msg->channel_id = id;
 	abox_rdma_request_ipc(data, &msg, 0, 0);
 #ifndef USE_FIXED_MEMORY
-	iommu_unmap(data->abox_data->iommu_domain, IOVA_RDMA_BUFFER(id),
-			round_up(substream->runtime->dma_bytes, PAGE_SIZE));
-	exynos_sysmmu_tlb_invalidate(data->abox_data->iommu_domain,
-			(dma_addr_t)IOVA_RDMA_BUFFER(id),
-			round_up(substream->runtime->dma_bytes, PAGE_SIZE));
+	if (data->buf_type == BUFFER_TYPE_DMA) {
+		iommu_unmap(data->abox_data->iommu_domain, IOVA_RDMA_BUFFER(id),
+					round_up(substream->runtime->dma_bytes,
+					PAGE_SIZE));
+		exynos_sysmmu_tlb_invalidate(data->abox_data->iommu_domain,
+					(dma_addr_t)IOVA_RDMA_BUFFER(id),
+					round_up(substream->runtime->dma_bytes,
+					PAGE_SIZE));
+	}
 #endif
-	abox_request_lit_freq(dev, data->abox_data, dev, 0);
-	abox_request_big_freq(dev, data->abox_data, dev, 0);
-	abox_request_hmp_boost(dev, data->abox_data, dev, 0);
+	abox_request_lit_freq_dai(dev, data->abox_data, rtd->cpu_dai, 0);
+	abox_request_big_freq_dai(dev, data->abox_data, rtd->cpu_dai, 0);
+	abox_request_hmp_boost_dai(dev, data->abox_data, rtd->cpu_dai, 0);
 
 	switch (data->type) {
 	default:
@@ -1408,7 +1426,14 @@ static int abox_rdma_hw_free(struct snd_pcm_substream *substream)
 	/* Delay between RDMA and UAIF stop to flush FIFO in UAIF */
 	usleep_range(600, 1200);
 
-	return snd_pcm_lib_free_pages(substream);
+	if (data->buf_type == BUFFER_TYPE_DMA) {
+		return snd_pcm_lib_free_pages(substream);
+	} else if (data->buf_type == BUFFER_TYPE_ION) {
+		snd_pcm_set_runtime_buffer(substream, NULL);
+		return 0;
+	}
+
+	return 0;
 }
 
 static int abox_rdma_prepare(struct snd_pcm_substream *substream)
@@ -1564,10 +1589,9 @@ static int abox_rdma_open(struct snd_pcm_substream *substream)
 	dev_dbg(dev, "%s[%d]\n", __func__, id);
 
 	if (data->type == PLATFORM_CALL) {
-		if (abox_cpu_gear_idle(dev, abox_data,
-				(void *)ABOX_CPU_GEAR_CALL_VSS))
+		if (abox_cpu_gear_idle(dev, abox_data, ABOX_CPU_GEAR_CALL_VSS))
 			abox_request_cpu_gear_sync(dev, abox_data,
-					(void *)ABOX_CPU_GEAR_CALL_KERNEL,
+					ABOX_CPU_GEAR_CALL_KERNEL,
 					ABOX_CPU_GEAR_MAX);
 		ret = abox_request_l2c_sync(dev, data->abox_data, dev, true);
 		if (ret < 0)
@@ -1576,7 +1600,8 @@ static int abox_rdma_open(struct snd_pcm_substream *substream)
 		if (ret < 0)
 			dev_warn(dev, "call notify failed: %d\n", ret);
 	}
-	abox_request_cpu_gear(dev, abox_data, dev, abox_data->cpu_gear_min);
+	abox_request_cpu_gear_dai(dev, abox_data, rtd->cpu_dai,
+			abox_data->cpu_gear_min);
 
 	snd_soc_set_runtime_hwparams(substream, &abox_rdma_hardware);
 
@@ -1611,10 +1636,10 @@ static int abox_rdma_close(struct snd_pcm_substream *substream)
 	msg.task_id = pcmtask_msg->channel_id = id;
 	ret = abox_rdma_request_ipc(data, &msg, 0, 1);
 
-	abox_request_cpu_gear(dev, abox_data, dev, ABOX_CPU_GEAR_MIN);
+	abox_request_cpu_gear_dai(dev, abox_data, rtd->cpu_dai,
+			ABOX_CPU_GEAR_MIN);
 	if (data->type == PLATFORM_CALL) {
-		abox_request_cpu_gear(dev, abox_data,
-				(void *)ABOX_CPU_GEAR_CALL_KERNEL,
+		abox_request_cpu_gear(dev, abox_data, ABOX_CPU_GEAR_CALL_KERNEL,
 				ABOX_CPU_GEAR_MIN);
 		ret = abox_request_l2c(dev, data->abox_data, dev, false);
 		if (ret < 0)
@@ -1642,7 +1667,7 @@ static int abox_rdma_mmap(struct snd_pcm_substream *substream,
 	/* Increased cpu gear for sound camp.
 	 * Only sound camp uses mmap now.
 	 */
-	abox_request_cpu_gear(dev, data->abox_data, dev,
+	abox_request_cpu_gear_dai(dev, data->abox_data, rtd->cpu_dai,
 			data->abox_data->cpu_gear_min - 1);
 
 	return dma_mmap_writecombine(dev, vma,
@@ -1691,6 +1716,43 @@ static struct snd_pcm_ops abox_rdma_ops = {
 	.ack		= abox_rdma_ack,
 };
 
+static int abox_rdma_fio_ioctl(struct snd_hwdep *hw, struct file *file,
+		unsigned int cmd, unsigned long _arg);
+
+#ifdef CONFIG_COMPAT
+static int abox_rdma_fio_compat_ioctl(struct snd_hwdep *hw,
+		struct file *file,
+		unsigned int cmd, unsigned long _arg);
+#endif
+
+static int abox_pcm_add_hwdep_dev(struct snd_soc_pcm_runtime *runtime,
+		struct abox_platform_data *data)
+{
+	struct snd_hwdep *hwdep;
+	int rc;
+	char id[] = "ABOX_MMAP_FD_NN";
+
+	snprintf(id, sizeof(id), "ABOX_MMAP_FD_%d", SNDRV_PCM_STREAM_PLAYBACK);
+	pr_debug("%s: pcm dev %d\n", __func__, runtime->pcm->device);
+	rc = snd_hwdep_new(runtime->card->snd_card,
+			   &id[0],
+			   0 + runtime->pcm->device,
+			   &hwdep);
+	if (!hwdep || rc < 0) {
+		pr_err("%s: hwdep intf failed to create %s - hwdep\n", __func__,
+		       id);
+		return rc;
+	}
+
+	hwdep->iface = 0;
+	hwdep->private_data = data;
+	hwdep->ops.ioctl = abox_rdma_fio_ioctl;
+	hwdep->ops.ioctl_compat = abox_rdma_fio_compat_ioctl;
+	data->hwdep = hwdep;
+
+	return 0;
+}
+
 static int abox_rdma_new(struct snd_soc_pcm_runtime *runtime)
 {
 	struct snd_pcm *pcm = runtime->pcm;
@@ -1704,31 +1766,52 @@ static int abox_rdma_new(struct snd_soc_pcm_runtime *runtime)
 	size_t buffer_bytes;
 	int ret;
 
-	switch (data->type) {
-	case PLATFORM_NORMAL:
-		buffer_bytes = BUFFER_BYTES_MAX;
-		break;
-	default:
-		buffer_bytes = BUFFER_BYTES_MAX >> 2;
-		break;
-	}
+	if (data->buf_type == BUFFER_TYPE_ION) {
+		buffer_bytes = BUFFER_ION_BYTES_MAX;
+		data->ion_buf.fd = -2;
+		ret = abox_ion_alloc(data,
+				&data->ion_buf,
+				IOVA_RDMA_BUFFER(id),
+				buffer_bytes,
+				0);
+		if (ret < 0)
+			return ret;
 
-	ret = snd_pcm_lib_preallocate_pages(substream, SNDRV_DMA_TYPE_DEV,
-			runtime->cpu_dai->dev, buffer_bytes, buffer_bytes);
-	if (ret < 0)
-		return ret;
+		/* update buffer infomation using ion allocated buffer  */
+		data->dmab.area = data->ion_buf.kva;
+		data->dmab.addr = data->ion_buf.cookie.ioaddr;
+
+		ret = abox_pcm_add_hwdep_dev(runtime, data);
+		if (ret < 0) {
+			dev_err(dev, "snd_hwdep_new() failed: %d\n", ret);
+			return ret;
+		}
+	} else {
+		switch (data->type) {
+		case PLATFORM_NORMAL:
+			buffer_bytes = BUFFER_BYTES_MAX;
+			break;
+		default:
+			buffer_bytes = BUFFER_BYTES_MAX >> 2;
+			break;
+		}
+
+		ret = snd_pcm_lib_preallocate_pages(substream, SNDRV_DMA_TYPE_DEV,
+				runtime->cpu_dai->dev, buffer_bytes, buffer_bytes);
+		if (ret < 0)
+			return ret;
 
 #ifdef USE_FIXED_MEMORY
-	iommu_map(iommu_domain, IOVA_RDMA_BUFFER(id),
-			substream->dma_buffer.addr, BUFFER_BYTES_MAX, 0);
+		iommu_map(iommu_domain, IOVA_RDMA_BUFFER(id),
+				substream->dma_buffer.addr, BUFFER_BYTES_MAX, 0);
 #endif
+	}
 
 	return ret;
 }
 
 static void abox_rdma_free(struct snd_pcm *pcm)
 {
-#ifdef USE_FIXED_MEMORY
 	struct snd_pcm_str *stream = &pcm->streams[SNDRV_PCM_STREAM_PLAYBACK];
 	struct snd_pcm_substream *substream = stream->substream;
 	struct snd_soc_pcm_runtime *runtime = substream->private_data;
@@ -1738,9 +1821,23 @@ static void abox_rdma_free(struct snd_pcm *pcm)
 	struct iommu_domain *iommu_domain = data->abox_data->iommu_domain;
 	int id = data->id;
 
-	iommu_unmap(iommu_domain, IOVA_RDMA_BUFFER(id), BUFFER_BYTES_MAX);
+	int ret = 0;
+
+	if (data->buf_type == BUFFER_TYPE_ION) {
+		ret = abox_ion_free(data);
+		if (ret < 0)
+			dev_err(dev, "abox_ion_free() failed (%d)\n", ret);
+
+		if (data->hwdep) {
+			snd_device_free(runtime->card->snd_card, data->hwdep);
+			data->hwdep = NULL;
+		}
+	} else {
+#ifdef USE_FIXED_MEMORY
+		iommu_unmap(iommu_domain, IOVA_RDMA_BUFFER(id), BUFFER_BYTES_MAX);
 #endif
-	snd_pcm_lib_preallocate_free_for_all(pcm);
+		snd_pcm_lib_preallocate_free_for_all(pcm);
+	}
 }
 
 static int abox_rdma_probe(struct snd_soc_platform *platform)
@@ -1832,6 +1929,56 @@ static int abox_rdma_runtime_resume(struct device *dev)
 	return 0;
 }
 
+static int abox_rdma_fio_common_ioctl(struct snd_hwdep *hw, struct file *filp,
+		unsigned int cmd, unsigned long __user *_arg)
+{
+	struct abox_platform_data *data = hw->private_data;
+	struct device *dev = &data->pdev->dev;
+	struct snd_pcm_mmap_fd mmap_fd;
+
+	int ret = 0;
+	unsigned long arg;
+
+	if (!data || (((cmd >> 8) & 0xff) != 'U'))
+		return -ENOTTY;
+
+	if (get_user(arg, _arg))
+		return -EFAULT;
+
+	dev_dbg(dev, "%s: ioctl(0x%x)\n", __func__, cmd);
+
+	switch (cmd) {
+	case SNDRV_PCM_IOCTL_MMAP_DATA_FD:
+		ret = abox_mmap_fd(data, &mmap_fd);
+		if (ret < 0)
+			dev_err(dev, "%s MMAP_FD failed: %d\n", __func__, ret);
+
+		if (copy_to_user(_arg, &mmap_fd, sizeof(mmap_fd)))
+			return -EFAULT;
+		break;
+	default:
+		dev_err(dev, "unknown ioctl = 0x%x\n", cmd);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int abox_rdma_fio_ioctl(struct snd_hwdep *hw, struct file *file,
+		unsigned int cmd, unsigned long _arg)
+{
+	return abox_rdma_fio_common_ioctl(hw, file,
+			cmd, (unsigned long __user *)_arg);
+}
+
+#ifdef CONFIG_COMPAT
+static int abox_rdma_fio_compat_ioctl(struct snd_hwdep *hw,
+		struct file *file,
+		unsigned int cmd, unsigned long _arg)
+{
+	return abox_rdma_fio_common_ioctl(hw, file, cmd, compat_ptr(_arg));
+}
+#endif /* CONFIG_COMPAT */
 static int samsung_abox_rdma_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1845,6 +1992,7 @@ static int samsung_abox_rdma_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	platform_set_drvdata(pdev, data);
+	data->pdev = pdev;
 
 	data->sfr_base = devm_not_request_and_map(pdev, "sfr", 0, NULL, NULL);
 	if (IS_ERR(data->sfr_base))
@@ -1890,6 +2038,16 @@ static int samsung_abox_rdma_probe(struct platform_device *pdev)
 	else
 		data->type = PLATFORM_NORMAL;
 
+	ret = of_property_read_string(np, "buffer_type", &type);
+	if (ret < 0)
+		type = "";
+	if (!strncmp(type, "ion", sizeof("ion")))
+		data->buf_type = BUFFER_TYPE_ION;
+	else if (!strncmp(type, "dma", sizeof("dma")))
+		data->buf_type = BUFFER_TYPE_DMA;
+	else
+		data->buf_type = BUFFER_TYPE_DMA;
+
 	ret = of_property_read_u32_array(np, "pm_qos_lit", data->pm_qos_lit,
 			ARRAY_SIZE(data->pm_qos_lit));
 	if (ret < 0)
@@ -1926,7 +2084,13 @@ static int samsung_abox_rdma_probe(struct platform_device *pdev)
 	}
 	pm_runtime_enable(dev);
 
-	return snd_soc_register_platform(&pdev->dev, &abox_rdma);
+	ret = snd_soc_register_platform(&pdev->dev, &abox_rdma);
+	if (ret < 0)
+		return ret;
+
+	data->hwdep = NULL;
+
+	return 0;
 }
 
 static int samsung_abox_rdma_remove(struct platform_device *pdev)

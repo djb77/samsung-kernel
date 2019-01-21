@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgp2p.c 759207 2018-04-24 10:10:22Z $
+ * $Id: wl_cfgp2p.c 783638 2018-10-08 02:24:49Z $
  *
  */
 #include <typedefs.h>
@@ -1629,7 +1629,7 @@ wl_cfgp2p_tx_action_frame(struct bcm_cfg80211 *cfg, struct net_device *dev,
 {
 	s32 ret = BCME_OK;
 	s32 evt_ret = BCME_OK;
-	s32 timeout = 0;
+	long timeout = 0;
 	wl_eventmsg_buf_t buf;
 
 	CFGP2P_DBG(("\n"));

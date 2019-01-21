@@ -269,7 +269,7 @@ int sensor_3h1_cis_init(struct v4l2_subdev *subdev)
 	cis->cis_data->cur_width = SENSOR_3H1_MAX_WIDTH;
 	cis->cis_data->cur_height = SENSOR_3H1_MAX_HEIGHT;
 	cis->cis_data->low_expo_start = 33000;
-	cis->need_mode_change = false;
+	cis->need_mode_change = true;
 #ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
 	cis->mipi_clock_index_cur = CAM_MIPI_NOT_INITIALIZED;
 	cis->mipi_clock_index_new = CAM_MIPI_NOT_INITIALIZED;
@@ -339,8 +339,6 @@ int sensor_3h1_cis_log_status(struct v4l2_subdev *subdev)
 	pr_err("[SEN:DUMP] frame_count(%x)\n", data8);
 	fimc_is_sensor_read8(client, 0x0100, &data8);
 	pr_err("[SEN:DUMP] mode_select(%x)\n", data8);
-
-	sensor_cis_dump_registers(subdev, sensor_3h1_setfiles[0], sensor_3h1_setfile_sizes[0]);
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
 
 	pr_err("[SEN:DUMP] *******************************\n");

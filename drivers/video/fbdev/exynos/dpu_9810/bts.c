@@ -321,7 +321,7 @@ void dpu_bts_update_bw(struct decon_device *decon, struct decon_reg_data *regs,
 			bts_update_bw(decon->bts.type, bw);
 
 		if ((displayport->state == DISPLAYPORT_STATE_ON)
-			&& (pixelclock >= 533000000)) /* 4K DP case */
+			&& (pixelclock >= UHD_60HZ_PIXEL_CLOCK)) /* 4K DP case */
 			return;
 
 		if (decon->bts.max_disp_freq <= decon->bts.prev_max_disp_freq)
@@ -335,7 +335,7 @@ void dpu_bts_update_bw(struct decon_device *decon, struct decon_reg_data *regs,
 			bts_update_bw(decon->bts.type, bw);
 
 		if ((displayport->state == DISPLAYPORT_STATE_ON)
-			&& (pixelclock >= 533000000)) /* 4K DP case */
+			&& (pixelclock >= UHD_60HZ_PIXEL_CLOCK)) /* 4K DP case */
 			return;
 
 		if (decon->bts.max_disp_freq > decon->bts.prev_max_disp_freq)
@@ -361,7 +361,7 @@ void dpu_bts_acquire_bw(struct decon_device *decon)
 	if (decon->dt.out_type != DECON_OUT_DP)
 		return;
 
-	if (pixelclock >= 533000000) {
+	if (pixelclock >= UHD_60HZ_PIXEL_CLOCK) {
 		if (pm_qos_request_active(&decon->bts.mif_qos))
 			pm_qos_update_request(&decon->bts.mif_qos, 1794 * 1000);
 		else

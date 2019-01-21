@@ -9,6 +9,9 @@
 #include <asm/barrier.h>
 #include <linux/compiler.h>
 #include <linux/const.h>
+#ifdef CONFIG_SECURITY_DSMS
+#include <linux/dsms.h>
+#endif
 #include <linux/file.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -19,6 +22,9 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/stddef.h>
+#ifdef CONFIG_SECURITY_DSMS
+#include <linux/string.h>
+#endif
 #include <linux/syscalls.h>
 #include <linux/unistd.h>
 #include <linux/version.h>
@@ -28,6 +34,64 @@
 #include "include/defex_config.h"
 #include "include/defex_internal.h"
 #include "include/defex_rules.h"
+
+#ifdef CONFIG_SECURITY_DSMS
+
+#	define PED_VIOLATION "DFX1"
+#	define SAFEPLACE_VIOLATION "DFX2"
+#	define INTEGRITY_VIOLATION "DFX3"
+#	define MESSAGE_BUFFER_SIZE 200
+#	define STORED_CREDS_SIZE 100
+
+static void defex_report_violation(const char *violation, uint64_t counter,
+	int syscall, struct task_struct *p, struct file *f, uid_t stored_uid, uid_t stored_fsuid, uid_t stored_egid)
+{
+	int usermode_result;
+	char message[MESSAGE_BUFFER_SIZE + 1];
+
+	const uid_t uid = uid_get_value(p->cred->uid);
+	const uid_t euid = uid_get_value(p->cred->euid);
+	const uid_t fsuid = uid_get_value(p->cred->fsuid);
+	const uid_t egid = uid_get_value(p->cred->egid);
+	const char *process_name = p->comm;
+	const char *program_path = defex_get_filename(p);
+	const pid_t pid = p->pid, tgid = p->tgid;
+	
+	char *file_path = NULL, *buff = NULL;
+	const struct path *dpath = NULL;
+
+	char stored_creds[STORED_CREDS_SIZE + 1];
+
+	if (f != NULL) {
+		buff = kzalloc(PATH_MAX, GFP_KERNEL);
+		if (buff != NULL) {
+			dpath = &(f->f_path);
+			file_path = d_path(dpath, buff, PATH_MAX);
+		}
+	}
+	else {
+		snprintf(stored_creds, sizeof(stored_creds), "[euid=%ld fsuid=%ld egid=%ld]", (long)stored_uid, (long)stored_fsuid, (long)stored_egid);
+		stored_creds[sizeof(stored_creds) - 1] = 0;
+	}
+
+	snprintf(message, sizeof(message), "sc=%d tsk=%s (%s) pid=%u tgid=%u uid=%ld euid=%ld fsuid=%ld egid=%ld%s%s",
+		syscall, process_name, (program_path ? program_path : ""), pid, tgid, (long)uid, (long)euid, (long)fsuid, (long)egid,
+		(file_path ? " file=" : " stored "), (file_path ? file_path : stored_creds));
+	message[sizeof(message) - 1] = 0;
+
+#ifdef DEFEX_DEBUG_ENABLE
+	printk(KERN_ERR "DEFEX Violation : feature=%s value=%ld, detail=[%s]",
+		violation, (long)counter, message);
+#endif /* DEFEX_DEBUG_ENABLE */
+	usermode_result = dsms_send_message(violation, message, counter);
+#ifdef DEFEX_DEBUG_ENABLE
+	printk(KERN_ERR "DEFEX Result : %d\n", usermode_result);
+#endif /* DEFEX_DEBUG_ENABLE */
+
+	kfree(program_path);
+	kfree(buff);
+}
+#endif /* CONFIG_SECURITY_DSMS */
 
 #ifdef DEFEX_SAFEPLACE_ENABLE
 static long kill_process(struct task_struct *p)
@@ -86,7 +150,7 @@ char *defex_get_filename(struct task_struct *p)
 {
 	struct file *exe_file = NULL;
 	const struct path *dpath = NULL;
-	char *path = NULL, *buf = NULL;
+	char *path = NULL, *buff = NULL;
 	char *filename = NULL;
 
 	exe_file = defex_get_source_file(p);
@@ -95,20 +159,21 @@ char *defex_get_filename(struct task_struct *p)
 
 	dpath = &exe_file->f_path;
 
-	buf = kzalloc(PATH_MAX, GFP_ATOMIC);
-	if (buf)
-		path = d_path(dpath, buf, PATH_MAX);
+	buff = kzalloc(PATH_MAX, GFP_ATOMIC);
+	if (buff)
+		path = d_path(dpath, buff, PATH_MAX);
 
 #ifndef DEFEX_CACHES_ENABLE
 	fput(exe_file);
 #endif /* DEFEX_CACHES_ENABLE */
+
 out_filename:
 	if (IS_ERR(path) || !path)
 		filename = kstrdup("<unknown filename>", GFP_ATOMIC);
 	else
 		filename = kstrdup(path, GFP_ATOMIC);
 
-	kfree(buf);
+	kfree(buff);
 	return filename;
 }
 
@@ -127,7 +192,7 @@ static int task_defex_is_secured(struct task_struct *p)
 	if (!dpath->dentry || !dpath->dentry->d_inode)
 		goto out_secured;
 
-	is_secured = !rules_lookup(dpath, feature_ped_exception);
+	is_secured = !rules_lookup(dpath, feature_ped_exception, exe_file);
 
 out_secured:
 #ifndef DEFEX_CACHES_ENABLE
@@ -164,7 +229,11 @@ static int at_same_group_gid(unsigned int gid1, unsigned int gid2)
 }
 
 /* Cred. violation feature decision function */
+#ifndef CONFIG_SECURITY_DSMS
 static int task_defex_check_creds(struct task_struct *p)
+#else
+static int task_defex_check_creds(struct task_struct *p, int syscall)
+#endif /* CONFIG_SECURITY_DSMS */
 {
 	char *path = NULL;
 	int check_deeper, case_num;
@@ -261,9 +330,13 @@ out:
 show_violation:
 	path = defex_get_filename(p);
 	pr_crit("defex[%d]: credential violation [task=%s, filename=%s, uid=%d]\n",
-		case_num, p->comm, path, cur_uid);
+		case_num, p->comm, (path ? path : ""), cur_uid);
 	pr_crit("defex[%d]: stored [euid=%d fsuid=%d egid=%d] uid=%d euid=%d fsuid=%d egid=%d\n",
 		case_num, uid, fsuid, egid, cur_uid, cur_euid, cur_fsuid, cur_egid);
+
+#ifdef CONFIG_SECURITY_DSMS
+	defex_report_violation(PED_VIOLATION, 0, syscall, p, NULL, uid, fsuid, egid);
+#endif /* CONFIG_SECURITY_DSMS */
 
 exit:
 	kfree(path);
@@ -276,7 +349,7 @@ exit:
 static int task_defex_safeplace(struct task_struct *p, struct file *f)
 {
 	static const char def[] = "";
-	int ret = 0, is_violation = 0;
+	int ret = DEFEX_ALLOW, is_violation = 0;
 	char *proc_file, *new_file = (char *)def, *buff;
 	const struct path *dpath = NULL;
 
@@ -290,7 +363,11 @@ static int task_defex_safeplace(struct task_struct *p, struct file *f)
 	if (!dpath->dentry || !dpath->dentry->d_inode)
 		goto out;
 
-	is_violation = !rules_lookup(dpath, feature_safeplace_path);
+	is_violation = rules_lookup(dpath, feature_safeplace_path, f);
+#ifdef DEFEX_INTEGRITY_ENABLE
+	if (is_violation != DEFEX_INTEGRITY_FAIL)
+#endif /* DEFEX_INTEGRITY_ENABLE */
+		is_violation = !is_violation;
 
 	if (is_violation) {
 		ret = -DEFEX_DENY;
@@ -298,8 +375,30 @@ static int task_defex_safeplace(struct task_struct *p, struct file *f)
 		buff = kzalloc(PATH_MAX, GFP_ATOMIC);
 		if (buff)
 			new_file = d_path(dpath, buff, PATH_MAX);
-		pr_crit("defex: safeplace violation [task=%s (%s), child=%s, uid=%d]\n",
-			p->comm, proc_file, new_file, uid_get_value(p->cred->uid));
+
+#ifdef DEFEX_INTEGRITY_ENABLE
+		if (is_violation == DEFEX_INTEGRITY_FAIL) {
+			pr_crit("defex: integrity violation [task=%s (%s), child=%s, uid=%d]\n",
+				p->comm, (proc_file ? proc_file : ""), new_file, uid_get_value(p->cred->uid));
+#ifdef CONFIG_SECURITY_DSMS
+			defex_report_violation(INTEGRITY_VIOLATION, 0, __DEFEX_execve, p, f, 0, 0, 0);
+#endif /* CONFIG_SECURITY_DSMS */
+
+			/*  Temporary make permissive mode for tereble
+			 *  system image is changed as google's and defex might not work
+			 */
+			ret = DEFEX_ALLOW;
+		}
+		else
+#endif /* DEFEX_INTEGRITY_ENABLE */
+		{
+			pr_crit("defex: safeplace violation [task=%s (%s), child=%s, uid=%d]\n",
+				p->comm, (proc_file ? proc_file : ""), new_file, uid_get_value(p->cred->uid));
+#ifdef CONFIG_SECURITY_DSMS
+			defex_report_violation(SAFEPLACE_VIOLATION, 0, __DEFEX_execve, p, f, 0, 0, 0);
+#endif /* CONFIG_SECURITY_DSMS */
+		}
+
 		kfree(proc_file);
 		kfree(buff);
 	}
@@ -330,7 +429,11 @@ int task_defex_enforce(struct task_struct *p, struct file *f, int syscall)
 #ifdef DEFEX_PED_ENABLE
 	/* Credential escalation feature */
 	if (feature_flag & FEATURE_CHECK_CREDS)	{
+#ifndef CONFIG_SECURITY_DSMS
 		ret = task_defex_check_creds(p);
+#else
+		ret = task_defex_check_creds(p, syscall);
+#endif /* CONFIG_SECURITY_DSMS */
 		if (ret) {
 			if (!(feature_flag & FEATURE_CHECK_CREDS_SOFT)) {
 				kill_process_group(p, p->tgid, p->pid);
@@ -369,3 +472,4 @@ int task_defex_zero_creds(struct task_struct *tsk)
 
 	return 0;
 }
+

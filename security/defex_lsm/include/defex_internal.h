@@ -18,7 +18,7 @@
 #include <linux/defex.h>
 #include "defex_config.h"
 
-#define DEFEX_MAJOR_VERSION			1
+#define DEFEX_MAJOR_VERSION			2
 #define DEFEX_MINOR_VERSION			0
 #define DEFEX_REVISION				"rel"
 
@@ -61,6 +61,12 @@
 #define DEFEX_ATTR_IMMUTABLE			(1 << 12) /* reserved for future use */
 #define DEFEX_ATTR_IMMUTABLE_WR			(1 << 13) /* reserved for future use */
 #define DEFEX_ATTR_FIVE_EXP			(1 << 14) /* reserved for future use */
+
+/* -------------------------------------------------------------------------- */
+/* Integrity feature */
+/* -------------------------------------------------------------------------- */
+
+#define DEFEX_INTEGRITY_FAIL				(1 << 1)
 
 /* -------------------------------------------------------------------------- */
 /* Hash tables */
@@ -148,7 +154,7 @@ ssize_t safeplace_status_store(struct defex_safeplace *safeplace_obj,
 /* -------------------------------------------------------------------------- */
 
 char *defex_get_filename(struct task_struct *p);
-int rules_lookup(const struct path *dpath, int attribute);
+int rules_lookup(const struct path *dpath, int attribute, struct file *f);
 
 /* -------------------------------------------------------------------------- */
 /* Defex init API */

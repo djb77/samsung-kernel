@@ -954,7 +954,7 @@ static int maxdsm_write_wrapper(unsigned int reg,
 		maxdsm_regmap_read(reg, &ret);
 		break;
 	case PLATFORM_TYPE_B:
-		if (reg > maxdsm.param_size)
+		if (reg > (maxdsm.param_size - 1))
 			pr_err("%s: Unknown parameter index. %d\n",
 					__func__, reg);
 		else {
@@ -966,7 +966,7 @@ static int maxdsm_write_wrapper(unsigned int reg,
 		}
 		break;
 	case PLATFORM_TYPE_C:
-		if (reg > maxdsm.param_size)
+		if (reg > (maxdsm.param_size - 1))
 			pr_err("%s: Unknown parameter index. %d\n",
 					__func__, reg);
 		else {

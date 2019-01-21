@@ -1149,7 +1149,7 @@ int do_send_sig_info(int sig, struct siginfo *info, struct task_struct *p,
 	int ret = -ESRCH;
 
 #ifdef CONFIG_SAMSUNG_FREECESS
-	if ((sig == SIGKILL || sig == SIGTERM || sig == SIGABRT)) 
+	if ((sig == SIGKILL || sig == SIGTERM || sig == SIGABRT || sig == SIGQUIT)) 
 		sig_report(current, p);
 	
 #endif

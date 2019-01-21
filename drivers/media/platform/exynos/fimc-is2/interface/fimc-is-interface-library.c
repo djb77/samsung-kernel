@@ -2227,24 +2227,15 @@ int fimc_is_load_ddk_bin(int loadType)
 			bin_type,
 			was_loaded_by(&bin) ? "built-in" : "user-provided");
 		if (bin.size <= DDK_LIB_SIZE) {
+#ifdef CONFIG_UH_RKP
+			uh_call(UH_APP_RKP, RKP_FIMC_VERIFY, 0, 0, 1, 0);
+#endif
 			memcpy((void *)lib_addr, bin.data, bin.size);
 			__flush_dcache_area((void *)lib_addr, bin.size);
 #ifdef CONFIG_UH_RKP
-			if (!(gPtr_lib_support.binary_code_load_flg & BINARY_LOAD_DDK_DONE)) {
-				flush_cache_all();
-				uh_call(UH_APP_RKP, RKP_FIMC_VERIFY,
-						(u64)page_to_phys(vmalloc_to_page((void *)lib_addr)),
-						(u64)bin.size, 1, 0);
-				/*
-						(u64)bin.size, 1, 0, (u64)virt_to_phys(&rkp_result));
-				if (rkp_result != RKP_FIMC_SUCCESS) {
-					gPtr_lib_support.binary_load_fatal = rkp_result;
-					err_lib("DDK verification failed %x", rkp_result);
-					ret = -EBADF;
-					goto fail;
-				}
-				*/
-			}
+			uh_call(UH_APP_RKP, RKP_FIMC_VERIFY,
+				(u64)page_to_phys(vmalloc_to_page((void *)lib_addr)),
+				(u64)bin.size, 1, 0);
 #endif
 		} else {
 			err_lib("DDK bin size is bigger than memory area. %d[%d]",
@@ -2428,23 +2419,15 @@ int fimc_is_load_rta_bin(int loadType)
 		info_lib("binary info[RTA] - type: C/D, from: %s\n",
 			was_loaded_by(&bin) ? "built-in" : "user-provided");
 		if (bin.size <= RTA_LIB_SIZE) {
+#ifdef CONFIG_UH_RKP
+			uh_call(UH_APP_RKP, RKP_FIMC_VERIFY, 0, 0, 2, 0);
+#endif
 			memcpy((void *)lib_rta, bin.data, bin.size);
 			__flush_dcache_area((void *)lib_rta, bin.size);
 #ifdef CONFIG_UH_RKP
-			if (!(gPtr_lib_support.binary_code_load_flg & BINARY_LOAD_RTA_DONE)) {
-				flush_cache_all();
-				uh_call(UH_APP_RKP, RKP_FIMC_VERIFY,
-					(u64)page_to_phys(vmalloc_to_page((void *)lib_rta)),
-					(u64)bin.size, 2, RTA_CODE_AREA_SIZE);
-				/*
-					(u64)bin.size, 2, RTA_CODE_AREA_SIZE, (u64)virt_to_phys(&rkp_result));
-				if (rkp_result != RKP_FIMC_SUCCESS) {
-					gPtr_lib_support.binary_load_fatal |= (rkp_result << 8);
-					ret = -EBADF;
-					goto fail;
-				}
-				*/
-			}
+			uh_call(UH_APP_RKP, RKP_FIMC_VERIFY,
+				(u64)page_to_phys(vmalloc_to_page((void *)lib_rta)),
+				(u64)bin.size, 2, RTA_CODE_AREA_SIZE);
 #endif
 		} else {
 			err_lib("RTA bin size is bigger than memory area. %d[%d]",

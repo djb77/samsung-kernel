@@ -48,6 +48,10 @@ static struct seqinfo s6e3ha8_crown_aod_seqtbl[MAX_AOD_SEQ] = {
 	[ICON_GRID_ON_SEQ] = SEQINFO_INIT("icon_grid_on", s6e3ha8_aod_icon_grid_on_cmdtbl),
 	[ICON_GRID_OFF_SEQ] = SEQINFO_INIT("icon_grid_off", s6e3ha8_aod_icon_grid_off_cmdtbl),
 	[SET_TIME_SEQ] = SEQINFO_INIT("SET_TIME", s6e3ha8_aod_set_time_cmdtbl),
+#ifdef SUPPORT_NORMAL_SELFMOVE
+	[ENABLE_SELFMOVE_SEQ] = SEQINFO_INIT("enable_self_move", s6e3ha8_enable_selfmove),
+	[DISABLE_SELFMOVE_SEQ] = SEQINFO_INIT("disable_self", s6e3ha8_disable_selfmove),
+#endif
 };
 
 static struct aod_tune s6e3ha8_crown_aod = {

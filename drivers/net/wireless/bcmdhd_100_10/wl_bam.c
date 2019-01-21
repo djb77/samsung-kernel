@@ -24,34 +24,41 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_bam.c 765688 2018-06-05 03:02:31Z $
+ * $Id: wl_bam.c 795942 2018-12-20 10:51:23Z $
  */
 #include <bcmiov.h>
 #include <linux/time.h>
 #include <linux/list_sort.h>
-
 #include <wl_cfg80211.h>
-
 #include <wlioctl.h>
 #include <wldev_common.h>
-
 #include <wl_bam.h>
 
-typedef struct wl_bad_ap_info {
-	struct	ether_addr bssid;
-	struct	tm tm;
-	uint32	status;
-	uint32	reason;
-	uint32	connect_count;
-} wl_bad_ap_info_t;
+static int
+wl_bad_ap_mngr_add_entry(wl_bad_ap_mngr_t *bad_ap_mngr, wl_bad_ap_info_t *bad_ap_info)
+{
+	unsigned long flags;
+	wl_bad_ap_info_entry_t *entry;
 
-typedef struct wl_bad_ap_info_entry {
-	wl_bad_ap_info_t bad_ap;
-	struct list_head list;
-} wl_bad_ap_info_entry_t;
+	entry = MALLOCZ(bad_ap_mngr->osh, sizeof(*entry));
+	if (entry == NULL) {
+		WL_ERR(("%s: allocation for list failed\n", __FUNCTION__));
+		return BCME_NOMEM;
+	}
 
+	memcpy(&entry->bad_ap, bad_ap_info, sizeof(entry->bad_ap));
+	INIT_LIST_HEAD(&entry->list);
+	spin_lock_irqsave(&bad_ap_mngr->lock, flags);
+	list_add_tail(&entry->list, &bad_ap_mngr->list);
+	spin_unlock_irqrestore(&bad_ap_mngr->lock, flags);
+
+	bad_ap_mngr->num++;
+
+	return BCME_OK;
+}
+
+#if !defined(DHD_ADPS_BAM_EXPORT)
 #define WL_BAD_AP_INFO_FILE_PATH	WL_BAM_FILE_PATH".bad_ap_list.info"
-#define WL_BAD_AP_MAX_ENTRY_NUM		20u
 #define WL_BAD_AP_MAX_BUF_SIZE		1024u
 
 /* Bad AP information data format
@@ -66,51 +73,6 @@ typedef struct wl_bad_ap_info_entry {
 #define WL_BAD_AP_INFO_FMT \
 	"%02x:%02x:%02x:%02x:%02x:%02x,%04ld-%02d-%02d %02d:%02d:%02d,%u,%u,%u\n"
 #define WL_BAD_AP_INFO_FMT_ITEM_CNT	15u
-
-static wl_bad_ap_info_entry_t*
-wl_bad_ap_mngr_find(struct bcm_cfg80211 *cfg, const struct ether_addr *bssid)
-{
-	wl_bad_ap_info_entry_t *entry;
-	unsigned long flags;
-
-#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-qual"
-#endif // endif
-	spin_lock_irqsave(&cfg->bad_ap_mngr.lock, flags);
-	list_for_each_entry(entry, &cfg->bad_ap_mngr.list, list) {
-		if (!memcmp(&entry->bad_ap.bssid.octet, bssid->octet, ETHER_ADDR_LEN)) {
-			spin_unlock_irqrestore(&cfg->bad_ap_mngr.lock, flags);
-			return entry;
-		}
-	}
-	spin_unlock_irqrestore(&cfg->bad_ap_mngr.lock, flags);
-#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif // endif
-	return NULL;
-}
-
-static int
-wl_bad_ap_mngr_add(struct bcm_cfg80211 *cfg, wl_bad_ap_info_t *bad_ap_info)
-{
-	unsigned long flags;
-	wl_bad_ap_info_entry_t *entry;
-
-	entry = MALLOCZ(cfg->osh, sizeof(*entry));
-	if (entry == NULL) {
-		WL_ERR(("%s: allocation for list failed\n", __FUNCTION__));
-		return BCME_NOMEM;
-	}
-
-	memcpy(&entry->bad_ap, bad_ap_info, sizeof(entry->bad_ap));
-	INIT_LIST_HEAD(&entry->list);
-	spin_lock_irqsave(&cfg->bad_ap_mngr.lock, flags);
-	list_add_tail(&entry->list, &cfg->bad_ap_mngr.list);
-	spin_unlock_irqrestore(&cfg->bad_ap_mngr.lock, flags);
-
-	return BCME_OK;
-}
 
 static inline void
 wl_bad_ap_mngr_tm2ts(struct timespec *ts, const struct tm tm)
@@ -217,7 +179,7 @@ wl_bad_ap_mngr_fparse(struct bcm_cfg80211 *cfg, struct file *fp)
 		bad_ap.tm.tm_year -= 1900;
 		bad_ap.tm.tm_mon -= 1;
 
-		ret = wl_bad_ap_mngr_add(cfg, &bad_ap);
+		ret = wl_bad_ap_mngr_add(&cfg->bad_ap_mngr, &bad_ap);
 		if (ret < 0) {
 			WL_ERR(("%s: bad ap add failed\n", __FUNCTION__));
 			goto fail;
@@ -230,7 +192,6 @@ wl_bad_ap_mngr_fparse(struct bcm_cfg80211 *cfg, struct file *fp)
 			goto fail;
 		}
 
-		cfg->bad_ap_mngr.num++;
 		if (cfg->bad_ap_mngr.num >= WL_BAD_AP_MAX_ENTRY_NUM) {
 			break;
 		}
@@ -361,6 +322,72 @@ fail:
 
 	return ret;
 }
+#else
+extern wl_bad_ap_mngr_t *g_bad_ap_mngr;
+#endif	/* DHD_ADPS_BAM_EXPORT */
+
+wl_bad_ap_info_entry_t*
+wl_bad_ap_mngr_find(wl_bad_ap_mngr_t *bad_ap_mngr, const struct ether_addr *bssid)
+{
+	wl_bad_ap_info_entry_t *entry;
+	unsigned long flags;
+
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif // endif
+	spin_lock_irqsave(&bad_ap_mngr->lock, flags);
+	list_for_each_entry(entry, &bad_ap_mngr->list, list) {
+		if (!memcmp(&entry->bad_ap.bssid.octet, bssid->octet, ETHER_ADDR_LEN)) {
+			spin_unlock_irqrestore(&bad_ap_mngr->lock, flags);
+			return entry;
+		}
+	}
+	spin_unlock_irqrestore(&bad_ap_mngr->lock, flags);
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif // endif
+	return NULL;
+}
+
+int
+wl_bad_ap_mngr_add(wl_bad_ap_mngr_t *bad_ap_mngr, wl_bad_ap_info_t *bad_ap_info)
+{
+	int ret;
+	wl_bad_ap_info_entry_t *entry;
+	unsigned long flags;
+
+	BCM_REFERENCE(entry);
+	BCM_REFERENCE(flags);
+
+#if !defined(DHD_ADPS_BAM_EXPORT)
+	ret = wl_bad_ap_mngr_add_entry(bad_ap_mngr, bad_ap_info);
+#else
+	if (bad_ap_mngr->num == WL_BAD_AP_MAX_ENTRY_NUM) {
+		/* Remove the oldest entry if entry list is full */
+		spin_lock_irqsave(&bad_ap_mngr->lock, flags);
+		list_del(bad_ap_mngr->list.next);
+		bad_ap_mngr->num--;
+		spin_unlock_irqrestore(&bad_ap_mngr->lock, flags);
+	}
+
+	/* delete duplicated entry to update it at tail to keep the odrer */
+	entry = wl_bad_ap_mngr_find(bad_ap_mngr, &bad_ap_info->bssid);
+	if (entry != NULL) {
+		spin_lock_irqsave(&bad_ap_mngr->lock, flags);
+		list_del(&entry->list);
+		bad_ap_mngr->num--;
+		spin_unlock_irqrestore(&bad_ap_mngr->lock, flags);
+	}
+
+	ret = wl_bad_ap_mngr_add_entry(bad_ap_mngr, bad_ap_info);
+	if (ret < 0) {
+		WL_ERR(("%s - fail to add bad ap data(%d)\n", __FUNCTION__, ret));
+		return ret;
+	}
+#endif	/* DHD_ADPS_BAM_EXPORT */
+	return ret;
+}
 
 void
 wl_bad_ap_mngr_deinit(struct bcm_cfg80211 *cfg)
@@ -384,30 +411,40 @@ wl_bad_ap_mngr_deinit(struct bcm_cfg80211 *cfg)
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif // endif
-
+#if !defined(DHD_ADPS_BAM_EXPORT)
 	mutex_destroy(&cfg->bad_ap_mngr.fs_lock);
+#endif	/* !DHD_ADPS_BAM_EXPORT */
 }
 
 void
 wl_bad_ap_mngr_init(struct bcm_cfg80211 *cfg)
 {
+	cfg->bad_ap_mngr.osh = cfg->osh;
 	cfg->bad_ap_mngr.num = 0;
 
 	spin_lock_init(&cfg->bad_ap_mngr.lock);
-	mutex_init(&cfg->bad_ap_mngr.fs_lock);
-
 	INIT_LIST_HEAD(&cfg->bad_ap_mngr.list);
+
+#if !defined(DHD_ADPS_BAM_EXPORT)
+	mutex_init(&cfg->bad_ap_mngr.fs_lock);
+#else
+	g_bad_ap_mngr = &cfg->bad_ap_mngr;
+#endif	/* !DHD_ADPS_BAM_EXPORT */
 }
 
 static int
 wl_event_adps_bad_ap_mngr(struct bcm_cfg80211 *cfg, void *data)
 {
+	int ret = BCME_OK;
+
 	wl_event_adps_t *event_data = (wl_event_adps_t *)data;
 	wl_event_adps_bad_ap_t *bad_ap_data;
+
 	wl_bad_ap_info_entry_t *entry;
 	wl_bad_ap_info_t temp;
-
+#if !defined(DHD_ADPS_BAM_EXPORT)
 	struct timespec ts;
+#endif	/* !DHD_ADPS_BAM_EXPORT */
 
 	if (event_data->version != WL_EVENT_ADPS_VER_1) {
 		return BCME_VERSION;
@@ -417,15 +454,18 @@ wl_event_adps_bad_ap_mngr(struct bcm_cfg80211 *cfg, void *data)
 		return BCME_ERROR;
 	}
 
+	BCM_REFERENCE(ret);
+	BCM_REFERENCE(entry);
 	bad_ap_data = (wl_event_adps_bad_ap_t *)event_data->data;
 
+#if !defined(DHD_ADPS_BAM_EXPORT)
 	/* Update Bad AP list */
 	if (list_empty(&cfg->bad_ap_mngr.list)) {
 		wl_bad_ap_mngr_fread(cfg, WL_BAD_AP_INFO_FILE_PATH);
 	}
 
 	getnstimeofday(&ts);
-	entry = wl_bad_ap_mngr_find(cfg, &bad_ap_data->ea);
+	entry = wl_bad_ap_mngr_find(&cfg->bad_ap_mngr, &bad_ap_data->ea);
 	if (entry != NULL) {
 		time_to_tm((ts.tv_sec - (sys_tz.tz_minuteswest * 60)), 0, &entry->bad_ap.tm);
 		entry->bad_ap.status = bad_ap_data->status;
@@ -440,8 +480,7 @@ wl_event_adps_bad_ap_mngr(struct bcm_cfg80211 *cfg, void *data)
 		memcpy(temp.bssid.octet, &bad_ap_data->ea.octet, ETHER_ADDR_LEN);
 
 		if (cfg->bad_ap_mngr.num < WL_BAD_AP_MAX_ENTRY_NUM) {
-			wl_bad_ap_mngr_add(cfg, &temp);
-			cfg->bad_ap_mngr.num++;
+			wl_bad_ap_mngr_add(&cfg->bad_ap_mngr, &temp);
 		}
 		else {
 			wl_bad_ap_mngr_update(cfg, &temp);
@@ -449,8 +488,12 @@ wl_event_adps_bad_ap_mngr(struct bcm_cfg80211 *cfg, void *data)
 	}
 
 	wl_bad_ap_mngr_fwrite(cfg, WL_BAD_AP_INFO_FILE_PATH);
+#else
+	memcpy(temp.bssid.octet, &bad_ap_data->ea.octet, ETHER_ADDR_LEN);
+	ret = wl_bad_ap_mngr_add(&cfg->bad_ap_mngr, &temp);
+#endif	/* !DHD_ADPS_BAM_EXPORT */
 
-	return BCME_OK;
+	return ret;
 }
 
 /*
@@ -558,15 +601,15 @@ exit:
 bool
 wl_adps_bad_ap_check(struct bcm_cfg80211 *cfg, const struct ether_addr *bssid)
 {
+#if !defined(DHD_ADPS_BAM_EXPORT)
 	/* Update Bad AP list */
 	if (list_empty(&cfg->bad_ap_mngr.list)) {
 		wl_bad_ap_mngr_fread(cfg, WL_BAD_AP_INFO_FILE_PATH);
 	}
+#endif	/* DHD_ADPS_BAM_EXPORT */
 
-	if (wl_bad_ap_mngr_find(cfg, bssid) != NULL) {
-		wl_bad_ap_mngr_fwrite(cfg, WL_BAD_AP_INFO_FILE_PATH);
+	if (wl_bad_ap_mngr_find(&cfg->bad_ap_mngr, bssid) != NULL)
 		return TRUE;
-	}
 
 	return FALSE;
 }

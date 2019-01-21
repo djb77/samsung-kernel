@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2018 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -51,6 +51,8 @@ struct tee_client {
 	struct mutex		sessions_lock;	/* sessions list + closing */
 	/* Client lock for quick WSMs and operations changes */
 	struct mutex		quick_lock;
+	/* Client lock for CWSMs release functions */
+	struct mutex		cwsm_release_lock;
 	/* List of WSMs for a client */
 	struct list_head	cwsms;
 	/* List of GP operation for a client */
@@ -391,14 +393,18 @@ void client_get(struct tee_client *client)
 
 void client_put_cwsm_sva(struct tee_client *client, u32 sva)
 {
-	struct cwsm *cwsm = cwsm_find_by_sva(client, sva);
+	struct cwsm *cwsm;
 
+	mutex_lock(&client->cwsm_release_lock);
+	cwsm = cwsm_find_by_sva(client, sva);
 	if (!cwsm)
-		return;
+		goto end;
 
-	/* Release reference taken by cwsm_find */
+	/* Release reference taken by cwsm_find_by_sva */
 	cwsm_put(cwsm);
 	cwsm_put(cwsm);
+end:
+	mutex_unlock(&client->cwsm_release_lock);
 }
 
 /*
@@ -426,6 +432,7 @@ struct tee_client *client_create(bool is_from_kernel)
 	mutex_init(&client->sessions_lock);
 	INIT_LIST_HEAD(&client->list);
 	mutex_init(&client->quick_lock);
+	mutex_init(&client->cwsm_release_lock);
 	INIT_LIST_HEAD(&client->cwsms);
 	INIT_LIST_HEAD(&client->operations);
 	/* Add client to list of clients */
@@ -453,11 +460,14 @@ static void client_release(struct kref *kref)
 	atomic_dec(&g_ctx.c_clients);
 }
 
-void client_put(struct tee_client *client)
+int client_put(struct tee_client *client)
 {
+	int ret;
+
 	mutex_lock(&client_ctx.closing_clients_lock);
-	kref_put(&client->kref, client_release);
+	ret = kref_put(&client->kref, client_release);
 	mutex_unlock(&client_ctx.closing_clients_lock);
+	return ret;
 }
 
 /*
@@ -1016,15 +1026,22 @@ int client_gp_register_shared_mem(struct tee_client *client,
 int client_gp_release_shared_mem(struct tee_client *client,
 				 const struct gp_shared_memory *memref)
 {
-	struct cwsm *cwsm = cwsm_find(client, memref);
+	struct cwsm *cwsm;
+	int ret = 0;
 
-	if (!cwsm)
-		return -ENOENT;
+	mutex_lock(&client->cwsm_release_lock);
+	cwsm = cwsm_find(client, memref);
+	if (!cwsm) {
+		ret = -ENOENT;
+		goto end;
+	}
 
 	/* Release reference taken by cwsm_find */
 	cwsm_put(cwsm);
 	cwsm_put(cwsm);
-	return 0;
+end:
+	mutex_unlock(&client->cwsm_release_lock);
+	return ret;
 }
 
 /*
@@ -1293,6 +1310,11 @@ static struct cbuf *cbuf_get_by_addr(struct tee_client *client, uintptr_t addr)
 /*
  * Remove a cbuf object from client, and mark it for freeing.
  * Freeing will happen once all current references are released.
+ *
+ * Note: this function could be subject to the same race condition as
+ * client_gp_release_shared_mem() and client_put_cwsm_sva(), but it is trusted
+ * as it can only be called by kernel drivers. So no lock around
+ * cbuf_get_by_addr() and the two tee_cbuf_put().
  */
 int client_cbuf_free(struct tee_client *client, uintptr_t addr)
 {
@@ -1303,7 +1325,7 @@ int client_cbuf_free(struct tee_client *client, uintptr_t addr)
 		return -EINVAL;
 	}
 
-	/* Two references to put: the caller's and the one we just took */
+	/* Release reference taken by cbuf_get_by_addr */
 	cbuf_put(cbuf);
 	mutex_lock(&client->cbufs_lock);
 	cbuf->api_freed = true;

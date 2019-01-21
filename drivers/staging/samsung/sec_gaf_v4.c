@@ -227,7 +227,9 @@ static struct GAForensicINFO {
 #endif
 #ifdef CONFIG_FIVE
 	.task_struct_integrity = offsetof(struct task_struct, integrity),
+#if defined(CONFIG_FIVE_PA_FEATURE) || defined(CONFIG_PROCA)
 	.file_struct_f_signature = offsetof(struct file, f_signature),
+#endif
 #endif
 	.mount_struct_mnt_mountpoint = offsetof(struct mount, mnt_mountpoint),
 #ifdef CONFIG_RKP_NS_PROT

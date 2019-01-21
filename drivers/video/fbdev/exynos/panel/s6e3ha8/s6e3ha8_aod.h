@@ -16,7 +16,6 @@
 #include "../panel.h"
 #include "../aod/aod_drv.h"
 
-
 #define SI_ICON_ENABLE		0x01
 #define SG_GRID_ENABLE		0x10
 
@@ -150,6 +149,12 @@ void copy_analog_clock_ctrl(struct maptbl *tbl, u8 *dst);
 void copy_digital_clock_ctrl(struct maptbl *tbl, u8 *dst);
 int getidx_self_mode_pos(struct maptbl *tbl);
 void copy_self_move_reset(struct maptbl *tbl, u8 *dst);
+
+#ifdef SUPPORT_NORMAL_SELFMOVE
+int getidx_self_pattern(struct maptbl *tbl);
+//void copy_selfmove_enable(struct maptbl *tbl, u8 *dst);
+void copy_selfmove_pattern(struct maptbl *tbl, u8 *dst);
+#endif
 
 #endif
 

@@ -9,6 +9,9 @@ struct sec_audio_sysfs_data {
 	int (*get_key_state)(void);
 	int (*set_jack_state)(int);
 	int (*get_mic_adc)(void);
+#ifdef CONFIG_EXTCON_PTT
+	int (*get_ptt_state)(void);
+#endif
 	int (*get_water_state)(void);
 	int (*get_codec_id_state)(void);
 };
@@ -18,6 +21,9 @@ int audio_register_jack_select_cb(int (*set_jack) (int));
 int audio_register_jack_state_cb(int (*jack_status) (void));
 int audio_register_key_state_cb(int (*key_state) (void));
 int audio_register_mic_adc_cb(int (*mic_adc) (void));
+#ifdef CONFIG_EXTCON_PTT
+int audio_register_ptt_state_cb(int (*ptt_state) (void));
+#endif
 int audio_register_codec_id_state_cb(int (*codec_id_state) (void));
 #else
 inline int audio_register_jack_select_cb(int (*set_jack) (int))
@@ -39,6 +45,13 @@ inline int audio_register_mic_adc_cb(int (*mic_adc) (void))
 {
 	return -EACCES;
 }
+
+#ifdef CONFIG_EXTCON_PTT
+inline int audio_register_ptt_state_cb(int (*ptt_state) (void))
+{
+	return -EACCES;
+}
+#endif
 
 inline int audio_register_codec_id_state_cb(int (*codec_id_state) (void))
 {

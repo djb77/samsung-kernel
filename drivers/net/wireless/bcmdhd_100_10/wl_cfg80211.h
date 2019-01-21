@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 777330 2018-08-20 09:08:38Z $
+ * $Id: wl_cfg80211.h 791278 2018-11-29 01:05:18Z $
  */
 
 /**
@@ -796,7 +796,7 @@ typedef struct wl_if_event_info {
 #ifdef SUPPORT_AP_RADIO_PWRSAVE
 typedef struct ap_rps_info {
 	bool enable;
-	bool sta_assoc_check;
+	int sta_assoc_check;
 	int pps;
 	int quiet_time;
 	int level;
@@ -930,6 +930,10 @@ typedef struct wl_wps_session {
 	u8 peer_mac[ETHER_ADDR_LEN];
 } wl_wps_session_t;
 #endif /* WL_WPS_SYNC */
+
+#ifndef WL_STATIC_IFNAME_PREFIX
+#define WL_STATIC_IFNAME_PREFIX "wlan%d"
+#endif /* WL_STATIC_IFNAME */
 
 /* private data of cfg80211 interface */
 struct bcm_cfg80211 {
@@ -1160,7 +1164,25 @@ struct bcm_cfg80211 {
 #ifdef WL_BAM
 	wl_bad_ap_mngr_t bad_ap_mngr;
 #endif  /* WL_BAM */
+	struct net_device *static_ndev;
+	uint8 static_ndev_state;
 };
+
+#define WL_STATIC_IFIDX	(DHD_MAX_IFS + DHD_MAX_STATIC_IFS - 1)
+enum static_ndev_states {
+	NDEV_STATE_NONE,
+	NDEV_STATE_OS_IF_CREATED,
+	NDEV_STATE_FW_IF_CREATED,
+	NDEV_STATE_FW_IF_FAILED,
+	NDEV_STATE_FW_IF_DELETED
+};
+#define IS_CFG80211_STATIC_IF(cfg, ndev) \
+	((cfg && (cfg->static_ndev == ndev)) ? true : false)
+#define IS_CFG80211_STATIC_IF_ACTIVE(cfg) \
+	((cfg && cfg->static_ndev && \
+	(cfg->static_ndev_state & NDEV_STATE_FW_IF_CREATED)) ? true : false)
+#define IS_CFG80211_STATIC_IF_NAME(cfg, name) \
+	((cfg && !strcmp(cfg->static_ndev->name, name)))
 
 s32 wl_iftype_to_mode(wl_iftype_t iftype);
 
@@ -1776,9 +1798,13 @@ void wl_cfg80211_set_bcmcfg(struct bcm_cfg80211 *cfg);
 extern s32 wl_cfg80211_clear_mgmt_vndr_ies(struct bcm_cfg80211 *cfg);
 extern s32 wl_cfg80211_clear_per_bss_ies(struct bcm_cfg80211 *cfg, struct wireless_dev *wdev);
 extern void wl_cfg80211_clear_p2p_disc_ies(struct bcm_cfg80211 *cfg);
-
+#ifdef WL_STATIC_IF
+extern int32 wl_cfg80211_update_iflist_info(struct bcm_cfg80211 *cfg, struct net_device *ndev,
+	int ifidx, uint8 *addr, int bssidx, char *name, int if_state);
+#endif /* WL_STATIC_IF */
 extern s32 wl_cfg80211_up(struct net_device *net);
 extern s32 wl_cfg80211_down(struct net_device *net);
+extern void wl_cfg80211_sta_ifdown(struct net_device *net);
 extern s32 wl_cfg80211_notify_ifadd(struct net_device * dev, int ifidx, char *name, uint8 *mac,
 	uint8 bssidx, uint8 role);
 extern s32 wl_cfg80211_notify_ifdel(struct net_device * dev, int ifidx, char *name, uint8 *mac,
@@ -1791,9 +1817,12 @@ extern int wl_cfg80211_register_if(struct bcm_cfg80211 *cfg,
 	int ifidx, struct net_device* ndev, bool rtnl_lock_reqd);
 extern int wl_cfg80211_remove_if(struct bcm_cfg80211 *cfg,
 	int ifidx, struct net_device* ndev, bool rtnl_lock_reqd);
+extern void wl_cfg80211_cleanup_if(struct net_device *dev);
 extern int wl_cfg80211_scan_stop(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev);
 extern void wl_cfg80211_scan_abort(struct bcm_cfg80211 *cfg);
 extern bool wl_cfg80211_is_concurrent_mode(struct net_device * dev);
+extern void wl_cfg80211_disassoc(struct net_device *ndev);
+extern void wl_cfg80211_del_all_sta(struct net_device *ndev, uint32 reason);
 extern void* wl_cfg80211_get_dhdp(struct net_device * dev);
 extern bool wl_cfg80211_is_p2p_active(struct net_device * dev);
 extern bool wl_cfg80211_is_roam_offload(struct net_device * dev);
@@ -2004,10 +2033,16 @@ extern void wl_cfg80211_del_p2p_wdev(struct net_device *dev);
 extern int wl_cfg80211_set_spect(struct net_device *dev, int spect);
 extern int wl_cfg80211_get_sta_channel(struct bcm_cfg80211 *cfg);
 #endif /* WL_SUPPORT_AUTO_CHANNEL */
+#ifdef WL_CFG80211_SYNC_GON
+#define WL_DRV_STATUS_SENDING_AF_FRM_EXT(cfg) \
+	(wl_get_drv_status_all(cfg, SENDING_ACT_FRM) || \
+		wl_get_drv_status_all(cfg, WAITING_NEXT_ACT_FRM_LISTEN))
+#else
+#define WL_DRV_STATUS_SENDING_AF_FRM_EXT(cfg) wl_get_drv_status_all(cfg, SENDING_ACT_FRM)
+#endif /* WL_CFG80211_SYNC_GON */
 
 #ifdef P2P_LISTEN_OFFLOADING
-extern s32 wl_cfg80211_p2plo_listen_start(struct net_device *dev, u8 *buf, int len);
-extern s32 wl_cfg80211_p2plo_listen_stop(struct net_device *dev);
+extern s32 wl_cfg80211_p2plo_deinit(struct bcm_cfg80211 *cfg);
 #endif /* P2P_LISTEN_OFFLOADING */
 
 #define RETURN_EIO_IF_NOT_UP(wlpriv)                        \
@@ -2055,6 +2090,16 @@ struct wireless_dev * wl_cfg80211_add_if(struct bcm_cfg80211 *cfg, struct net_de
 	wl_iftype_t wl_iftype, const char *name, u8 *mac);
 extern s32 wl_cfg80211_del_if(struct bcm_cfg80211 *cfg, struct net_device *primary_ndev,
 	struct wireless_dev *wdev, char *name);
+#ifdef WL_STATIC_IF
+extern struct net_device *wl_cfg80211_register_static_if(struct bcm_cfg80211 *cfg,
+	u16 iftype, char *ifname);
+extern void wl_cfg80211_unregister_static_if(struct bcm_cfg80211 * cfg);
+extern s32 wl_cfg80211_static_if_open(struct net_device *net);
+extern s32 wl_cfg80211_static_if_close(struct net_device *net);
+extern struct net_device * wl_cfg80211_post_static_ifcreate(struct bcm_cfg80211 *cfg,
+	wl_if_event_info *event, u8 *addr, s32 iface_type);
+extern s32 wl_cfg80211_post_static_ifdel(struct bcm_cfg80211 *cfg, struct net_device *ndev);
+#endif  /* WL_STATIC_IF */
 extern struct wireless_dev *wl_cfg80211_get_wdev_from_ifname(struct bcm_cfg80211 *cfg,
 	const char *name);
 struct net_device* wl_get_netdev_by_name(struct bcm_cfg80211 *cfg, char *ifname);
@@ -2066,6 +2111,9 @@ extern s32 wl_cfg80211_check_for_nan_support(struct bcm_cfg80211 *cfg);
 extern int wl_cfg80211_deinit_p2p_discovery(struct bcm_cfg80211 * cfg);
 extern int wl_cfg80211_set_frameburst(struct bcm_cfg80211 *cfg, bool enable);
 extern int wl_cfg80211_determine_p2p_rsdb_mode(struct bcm_cfg80211 *cfg);
+extern s32 cfg80211_to_wl_iftype(uint16 type, uint16 *role, uint16 *mode);
+extern s32 wl_cfg80211_net_attach(struct net_device *primary_ndev);
+extern uint8 wl_cfg80211_get_bus_state(struct bcm_cfg80211 *cfg);
 #ifdef WL_WPS_SYNC
 void wl_handle_wps_states(struct net_device *ndev, u8 *dump_data, u16 len, bool direction);
 #endif /* WL_WPS_SYNC */

@@ -306,6 +306,9 @@ DHDCFLAGS += -DANDROID_PLATFORM_VERSION=$(MAJOR_VERSION)
 endif
 endif
 
+# TCP SYNC flood attack block
+DHDCFLAGS += -DDHDTCPSYNC_FLOOD_BLK -DTCP_SYNC_FLOOD_LIMIT=50
+
 ##############################
 # Android Platform Definition
 ##############################
@@ -392,6 +395,12 @@ ifneq ($(CONFIG_BCM4375),)
 # Customer ocl disabe
  DHDCFLAGS += -DCUSTOM_SET_OCLOFF
 
+ DHDCFLAGS += -DWL_STATIC_IF
+ DHDCFLAGS += -DWL_STATIC_IFNAME_PREFIX="\"swlan0\""
+
+#Iface force dev close
+DHDCFLAGS += -DIFACE_HANG_FORCE_DEV_CLOSE
+
 # tput enhancement for PCIE
 ifeq ($(BUS_IFACE_PCIE),y)
   DHDCFLAGS += -DCUSTOM_TCPACK_SUPP_RATIO=15
@@ -412,6 +421,7 @@ ifeq ($(CONFIG_SOC_EXYNOS9810),y)
   DHDCFLAGS := $(filter-out -DDHDTCPACK_SUPPRESS,$(DHDCFLAGS))
   DHDCFLAGS += -DUSE_DMA_LOCK
   DHDCFLAGS += -DDHD_MAP_LOGGING
+  DHDCFLAGS += -DDHD_MAP_PKTID_LOGGING
 endif
 
 # New Features
@@ -424,7 +434,6 @@ endif
   DHDCFLAGS += -DDHD_ENABLE_LPC
   DHDCFLAGS += -DWLAIBSS -DWLAIBSS_PS
 #  DHDCFLAGS += -DWLADPS
-#  DHDCFLAGS += -DADPS_MODE_FROM_FILE
 #  DHDCFLAGS += -DWLADPS_SEAK_AP_WAR
   DHDCFLAGS += -DWLADPS_PRIVATE_CMD
   DHDCFLAGS += -DWL_BAM
@@ -558,6 +567,11 @@ ifneq ($(CONFIG_BCM4361),)
  DHDCFLAGS += -DCUSTOM_BLOCK_DEAUTH_AT_EAP_FAILURE
 # Customer ocl disabe
  DHDCFLAGS += -DCUSTOM_SET_OCLOFF
+ DHDCFLAGS += -DWL_STATIC_IF
+ DHDCFLAGS += -DWL_STATIC_IFNAME_PREFIX="\"swlan0\""
+
+#Iface force dev close
+DHDCFLAGS += -DIFACE_HANG_FORCE_DEV_CLOSE
 
 # tput enhancement for PCIE
 ifeq ($(BUS_IFACE_PCIE),y)
@@ -579,6 +593,7 @@ ifeq ($(CONFIG_SOC_EXYNOS9810),y)
   DHDCFLAGS := $(filter-out -DDHDTCPACK_SUPPRESS,$(DHDCFLAGS))
   DHDCFLAGS += -DUSE_DMA_LOCK
   DHDCFLAGS += -DDHD_MAP_LOGGING
+  DHDCFLAGS += -DDHD_MAP_PKTID_LOGGING
 endif
 
 # New Features
@@ -814,7 +829,6 @@ ifeq ($(BUS_IFACE_SDIO),y)
   DHDCFLAGS += -DDHDTCPACK_SUPPRESS
   DHDCFLAGS += -DPROP_TXSTATUS_VSDB
 endif
-
 # tput enhancement for PCIE
 ifeq ($(BUS_IFACE_PCIE),y)
   DHDCFLAGS += -DCUSTOM_AMPDU_BA_WSIZE=64 -DCUSTOM_IBSS_AMPDU_BA_WSIZE=16
@@ -1308,6 +1322,7 @@ DHDCFLAGS := $(filter-out -DWL_VENDOR_EXT_SUPPORT,$(DHDCFLAGS))
 DHDCFLAGS := $(filter-out -DGSCAN_SUPPORT,$(DHDCFLAGS))
 DHDCFLAGS := $(filter-out -DRTT_SUPPORT,$(DHDCFLAGS))
 DHDCFLAGS := $(filter-out -DDHD_LB_IRQSET,$(DHDCFLAGS))
+DHDCFLAGS := $(filter-out -DSET_PCIE_IRQ_CPU_CORE,$(DHDCFLAGS))
 DHD_ANDROID_OFILES := $(filter-out wl_cfgvendor.o,$(DHD_ANDROID_OFILES))
 DHD_ANDROID_OFILES := $(filter-out dhd_rtt.o,$(DHD_ANDROID_OFILES))
 endif
@@ -1336,7 +1351,7 @@ DHDOFILES := dhd_pno.o dhd_common.o dhd_ip.o dhd_custom_gpio.o dhd_custom_sec.o 
 	wl_android.o wl_cfg80211.o wl_cfgp2p.o wl_cfg_btcoex.o wldev_common.o \
 	wl_linux_mon.o wl_roam.o dhd_linux_platdev.o dhd_linux_wq.o wl_cfg_btcoex.o \
 	hnd_pktq.o hnd_pktpool.o dhd_custom_cis.o dhd_debug.o dhd_debug_linux.o dhd_mschdbg.o \
-	dhd_dbg_ring.o
+	dhd_dbg_ring.o dhd_linux_exportfs.o
 
 ifeq ($(BUS_IFACE_SDIO),y)
 DHDOFILES += bcmsdh.o bcmsdh_linux.o bcmsdh_sdmmc.o bcmsdh_sdmmc_linux.o

@@ -77,7 +77,7 @@ static int __init sec_hw_param_get_hw_rev(char *arg)
 	return 0;
 }
 
-early_param("androidboot.hw_rev", sec_hw_param_get_hw_rev);
+early_param("androidboot.revision", sec_hw_param_get_hw_rev);
 
 static int __init sec_hw_param_check_chip_id(char *arg)
 {

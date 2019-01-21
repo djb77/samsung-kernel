@@ -17,6 +17,11 @@ enum __UH_APP_ID {
 	UH_APP_RKP 	= UH_APPID(APP_RKP),
 };
 
+struct test_case_struct {
+	int (* fn)(void); //test case func
+	char * describe;
+};
+
 /* For uH Memory */
 #define UH_NUM_MEM		0x00
 

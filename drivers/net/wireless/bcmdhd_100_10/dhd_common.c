@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_common.c 767101 2018-06-12 13:06:08Z $
+ * $Id: dhd_common.c 784307 2018-10-11 13:10:28Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -412,11 +412,13 @@ dhd_query_bus_erros(dhd_pub_t *dhdp)
 	}
 #endif /* PCIE_FULL_DONGLE */
 
-#ifdef DHD_PCIE_RUNTIMEPM
-	if (ret) {
-		DHD_DISABLE_RUNTIME_PM(dhdp);
+#ifdef BCMPCIE
+	if (dhd_bus_get_linkdown(dhdp)) {
+		DHD_ERROR_RLMT(("%s : PCIE Link down occurred, cannot proceed\n",
+			__FUNCTION__));
+		ret = TRUE;
 	}
-#endif /* DHD_PCIE_RUNTIMEPM */
+#endif /* BCMPCIE */
 
 	return ret;
 }
@@ -6465,7 +6467,7 @@ copy_hang_info_ioctl_timeout(dhd_pub_t *dhd, int ifidx, wl_ioctl_t *ioc)
 	int *cnt;
 	char *dest;
 	int bytes_written;
-	const uint32 *ioc_buf;
+	uint32 ioc_dwlen = 0;
 
 	if (!dhd || !dhd->hang_info) {
 		DHD_ERROR(("%s dhd=%p hang_info=%p\n",
@@ -6493,7 +6495,10 @@ copy_hang_info_ioctl_timeout(dhd_pub_t *dhd, int ifidx, wl_ioctl_t *ioc)
 
 	clear_debug_dump_time(dhd->debug_dump_time_hang_str);
 
-	ioc_buf = (const uint32 *)ioc->buf;
+	/* Access ioc->buf only if the ioc->len is more than 4 bytes */
+	ioc_dwlen = (uint32)(ioc->len / sizeof(uint32));
+	if (ioc_dwlen > 0) {
+		const uint32 *ioc_buf = (const uint32 *)ioc->buf;
 
 	remain_len = VENDOR_SEND_HANG_EXT_INFO_LEN - bytes_written;
 	bytes_written += scnprintf(&dest[bytes_written], remain_len,
@@ -6503,11 +6508,12 @@ copy_hang_info_ioctl_timeout(dhd_pub_t *dhd, int ifidx, wl_ioctl_t *ioc)
 		return;
 	}
 
-	for (i = 1; i < (uint32)(ioc->len / sizeof(uint32)) && *cnt <= HANG_FIELD_CNT_MAX;
+		for (i = 1; i < ioc_dwlen && *cnt <= HANG_FIELD_CNT_MAX;
 			i++, (*cnt)++) {
 		remain_len = VENDOR_SEND_HANG_EXT_INFO_LEN - bytes_written;
 		bytes_written += scnprintf(&dest[bytes_written], remain_len, "%c%08x",
 				HANG_RAW_DEL, *(uint32 *)(ioc_buf++));
+	}
 	}
 
 	DHD_INFO(("%s hang info len: %d data: %s\n",

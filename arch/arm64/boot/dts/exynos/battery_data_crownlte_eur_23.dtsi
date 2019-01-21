@@ -37,11 +37,6 @@
 			input_current = <1650>;
 			charging_current = <2850>;
 		};
-		current_group_6 {
-			cable_number = <10 12 14 15 27>;
-			input_current = <900>;
-			charging_current = <1600>;
-		};
 		current_group_10 {
 			cable_number = <11 16 28>;
 			input_current = <750>;

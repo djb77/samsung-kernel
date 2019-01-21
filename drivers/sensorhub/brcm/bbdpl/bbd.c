@@ -130,9 +130,19 @@ static struct bbd_device bbd;
  */
 static unsigned char bbd_patch[] = {
 #if defined(CONFIG_SENSORS_SSP_STAR)
-#include "bbd_patch_file_star.h"
+#if ANDROID_VERSION < 90000
+#include "o_os/bbd_patch_file_star.h"
+#else
+#include "p_os/bbd_patch_file_star.h"
+#endif
 #elif defined(CONFIG_SENSORS_SSP_CROWN)
-#include "bbd_patch_file_crown.h"
+#if ANDROID_VERSION < 90000
+#include "o_os/bbd_patch_file_crown.h"
+#else
+#include "p_os/bbd_patch_file_crown.h"
+#endif
+#elif defined(CONFIG_SENSORS_SSP_HAECHI)
+#include "bbd_patch_file_haechi.h"
 #endif
 };
 

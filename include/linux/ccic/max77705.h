@@ -253,6 +253,13 @@ enum {
 	RFU,
 };
 
+enum {
+	NOT_IN_UFP_MODE = 0,
+	CCI_500mA,
+	CCI_1_5A,
+	CCI_3_0A,
+	CCI_SHORT,
+};
 
 /*
  * All type of Interrupts

@@ -629,13 +629,46 @@ void sec_debug_EMFILE_error_proc(unsigned long files_addr)
 /* leave the following definithion of module param call here for the compatibility with other models */
 module_param_call(force_error, sec_debug_force_error, NULL, NULL, 0644);
 
+static int sec_debug_check_magic(struct sec_debug_shared_info *sdi)
+{
+	if (sdi->magic[0] != SEC_DEBUG_SHARED_MAGIC0) {
+		pr_crit("%s: wrong magic 0: %x|%x\n",
+				__func__, sdi->magic[0], SEC_DEBUG_SHARED_MAGIC0);
+		return 0;
+	}
+
+	if (sdi->magic[1] != SEC_DEBUG_SHARED_MAGIC1) {
+		pr_crit("%s: wrong magic 1: %x|%x\n",
+				__func__, sdi->magic[1], SEC_DEBUG_SHARED_MAGIC1);
+		return 0;
+	}
+
+	if (sdi->magic[2] != SEC_DEBUG_SHARED_MAGIC2) {
+		pr_crit("%s: wrong magic 2: %x|%x\n",
+				__func__, sdi->magic[2], SEC_DEBUG_SHARED_MAGIC2);
+		return 0;
+	}
+
+	if (sdi->magic[3] != SEC_DEBUG_SHARED_MAGIC3) {
+		pr_crit("%s: wrong magic 3: %x|%x\n",
+				__func__, sdi->magic[3], SEC_DEBUG_SHARED_MAGIC3);
+		return 0;
+	}
+
+	return 1;
+}
+
 static struct sec_debug_shared_info *sec_debug_info;
 
 static void sec_debug_init_base_buffer(unsigned long base, unsigned long size)
 {
+	int magic_status = 0;
+
 	sec_debug_info = (struct sec_debug_shared_info *)phys_to_virt(base);
 
 	if (sec_debug_info) {
+		if (sec_debug_check_magic(sec_debug_info))
+			magic_status = 1;
 
 		sec_debug_info->magic[0] = SEC_DEBUG_SHARED_MAGIC0;
 		sec_debug_info->magic[1] = SEC_DEBUG_SHARED_MAGIC1;
@@ -645,7 +678,7 @@ static void sec_debug_init_base_buffer(unsigned long base, unsigned long size)
 		sec_debug_set_kallsyms_info(&(sec_debug_info->ksyms), SEC_DEBUG_SHARED_MAGIC1);
 
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
-		sec_debug_init_extra_info(sec_debug_info);
+		sec_debug_init_extra_info(sec_debug_info, magic_status);
 #endif
 
 	}

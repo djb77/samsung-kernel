@@ -2291,10 +2291,10 @@ static int max98512_probe(struct snd_soc_codec *codec)
 			       0x76);
 	max98512_wrapper_write(max98512, MAX98512L,
 			       MAX98512_R0070_BROWNOUT_LVL1_CUR_LIMIT,
-			       0x16);
+			       max98512->current_limit_left);
 	max98512_wrapper_write(max98512, MAX98512R,
 			       MAX98512_R0070_BROWNOUT_LVL1_CUR_LIMIT,
-			       0x3E);
+			       max98512->current_limit_right);
 	max98512_wrapper_write(max98512, MAX98512B,
 			       MAX98512_R0071_BROWNOUT_LVL1_AMP1_CTRL1,
 			       0x06);
@@ -2306,10 +2306,10 @@ static int max98512_probe(struct snd_soc_codec *codec)
 			       0x00);
 	max98512_wrapper_write(max98512, MAX98512L,
 			       MAX98512_R0074_BROWNOUT_LVL2_CUR_LIMIT,
-			       0x16);
+			       max98512->current_limit_left);
 	max98512_wrapper_write(max98512, MAX98512R,
 			       MAX98512_R0074_BROWNOUT_LVL2_CUR_LIMIT,
-			       0x3E);
+			       max98512->current_limit_right);
 	max98512_wrapper_write(max98512, MAX98512B,
 			       MAX98512_R0075_BROWNOUT_LVL2_AMP1_CTRL1,
 			       0x09);
@@ -2321,10 +2321,10 @@ static int max98512_probe(struct snd_soc_codec *codec)
 			       0x00);
 	max98512_wrapper_write(max98512, MAX98512L,
 			       MAX98512_R0078_BROWNOUT_LVL3_CUR_LIMIT,
-			       0x16);
+			       max98512->current_limit_left);
 	max98512_wrapper_write(max98512, MAX98512R,
 			       MAX98512_R0078_BROWNOUT_LVL3_CUR_LIMIT,
-			       0x3E);
+			       max98512->current_limit_right);
 	max98512_wrapper_write(max98512, MAX98512B,
 			       MAX98512_R0079_BROWNOUT_LVL3_AMP1_CTRL1,
 			       0x0C);
@@ -2611,6 +2611,21 @@ static int max98512_i2c_probe(struct i2c_client *i2c,
 			dev_warn(&i2c->dev, "set digital_gain-rcv by default.\n");
 			max98512->digital_gain_rcv = 0x34; /* -3db */
 		}
+
+		if (of_property_read_u32(i2c->dev.of_node,
+					 "maxim,current-limit-left",
+					 &max98512->current_limit_left)) {
+			dev_warn(&i2c->dev, "set current_limit_left by default.\n");
+			max98512->current_limit_left = 0x16;
+		}
+
+		if (of_property_read_u32(i2c->dev.of_node,
+					 "maxim,current-limit-right",
+					 &max98512->current_limit_right)) {
+			dev_warn(&i2c->dev, "set current_limit_right by default.\n");
+			max98512->current_limit_right = 0x3E;
+		}
+
 
 		if (of_property_read_u32(i2c->dev.of_node,
 					 "maxim,sysclk", &max98512->sysclk)) {

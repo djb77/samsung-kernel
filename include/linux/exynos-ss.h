@@ -92,6 +92,13 @@ extern void exynos_ss_hrtimer(void *timer, s64 *now, void *fn, int en);
 #define exynos_ss_hrtimer(a, b, c, d)	do { } while (0)
 #endif
 
+#ifdef CONFIG_EXYNOS_SNAPSHOT_UART
+struct s3c24xx_uart_port;
+extern void exynos_ss_uart(struct s3c24xx_uart_port *ourport, int flag, int en);
+#else
+#define exynos_ss_uart(a,b,c)		do { } while(0)
+#endif
+
 #ifdef CONFIG_EXYNOS_SNAPSHOT_I2C
 struct i2c_adapter;
 struct i2c_msg;
