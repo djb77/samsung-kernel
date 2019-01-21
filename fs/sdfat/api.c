@@ -328,7 +328,7 @@ s32 fsapi_write_inode(struct inode *inode, DIR_ENTRY_T *info, int sync)
 EXPORT_SYMBOL(fsapi_write_inode);
 
 /* return the cluster number in the given cluster offset */
-s32 fsapi_map_clus(struct inode *inode, s32 clu_offset, u32 *clu, int dest)
+s32 fsapi_map_clus(struct inode *inode, u32 clu_offset, u32 *clu, int dest)
 {
 	s32 err;
 	struct super_block *sb = inode->i_sb;
@@ -477,6 +477,13 @@ void fsapi_invalidate_extent(struct inode *inode)
 	extent_cache_inval_inode(inode);
 }
 EXPORT_SYMBOL(fsapi_invalidate_extent);
+
+/* check device is ejected */
+s32 fsapi_check_bdi_valid(struct super_block *sb)
+{
+	return fscore_check_bdi_valid(sb);
+}
+EXPORT_SYMBOL(fsapi_check_bdi_valid);
 
 
 

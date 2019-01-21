@@ -351,6 +351,66 @@ static ssize_t ccic_store_firmware_update(struct device *dev,
 }
 static DEVICE_ATTR(fw_update, 0220, NULL, ccic_store_firmware_update);
 
+static ssize_t ccic_store_sink_pdo_update(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+	uint32_t data = 0;
+	uint16_t REG_ADD;
+	uint8_t MSG_BUF[32] = {0,};
+	SINK_VAR_SUPPLY_Typedef *pSINK_MSG;
+	MSG_HEADER_Typedef *pMSG_HEADER;
+	uint32_t * MSG_DATA;
+	uint8_t cnt;
+
+	if (!usbpd_data) {
+		pr_err("usbpd_data is NULL\n");
+		return -ENODEV;
+	}
+
+	sscanf(buf, "%x\n", &data);
+	if (data == 0)
+		data = 0x8F019032; // 5V~12V, 500mA
+	pr_info("%s data=0x%x\n", __func__, data);
+
+	/* update Sink PDO */
+	REG_ADD = REG_TX_SINK_CAPA_MSG;
+	s2mm005_read_byte(usbpd_data->i2c, REG_ADD, MSG_BUF, 32);
+
+	MSG_DATA = (uint32_t *)&MSG_BUF[0];
+	pr_err("--- Read Data on TX_SNK_CAPA_MSG(0x220)\n");
+	for(cnt = 0; cnt < 8; cnt++) {
+		pr_err("   0x%08X\n", MSG_DATA[cnt]);
+	}
+
+	pMSG_HEADER = (MSG_HEADER_Typedef *)&MSG_BUF[0];
+	pMSG_HEADER->BITS.Number_of_obj += 1;
+	pSINK_MSG = (SINK_VAR_SUPPLY_Typedef *)&MSG_BUF[8];
+	pSINK_MSG->DATA = data;
+	pr_err("--- Write DATA\n");
+	for (cnt = 0; cnt < 8; cnt++) {
+		pr_err("   0x%08X\n", MSG_DATA[cnt]);
+	}
+
+	s2mm005_write_byte(usbpd_data->i2c, REG_ADD, &MSG_BUF[0], 32);
+
+	for (cnt = 0; cnt < 32; cnt++) {
+		MSG_BUF[cnt] = 0;
+	}
+
+	for (cnt = 0; cnt < 8; cnt++) {
+		pr_err("   0x%08X\n", MSG_DATA[cnt]);
+	}
+	s2mm005_read_byte(usbpd_data->i2c, REG_ADD, MSG_BUF, 32);
+
+	pr_err("--- Read 2 new Data on TX_SNK_CAPA_MSG(0x220)\n");
+	for(cnt = 0; cnt < 8; cnt++) {
+		pr_err("   0x%08X\n", MSG_DATA[cnt]);
+	}
+	
+	return size;
+}
+static DEVICE_ATTR(sink_pdo_update, 0220, NULL, ccic_store_sink_pdo_update);
 
 static ssize_t ccic_set_gpio(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
@@ -588,7 +648,85 @@ static ssize_t ccic_acc_device_version_show(struct device *dev,
 	return sprintf(buf, "%04x\n", usbpd_data->Device_Version);
 }
 static DEVICE_ATTR(acc_device_version, 0444, ccic_acc_device_version_show,NULL);
-#endif
+
+static ssize_t ccic_usbpd_ids_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+	int retval = 0;
+
+	if (!usbpd_data) {
+		pr_err("%s usbpd_data is null!!\n", __func__);
+		return -ENODEV;
+	}
+	retval = sprintf(buf, "%04x:%04x\n",
+		le16_to_cpu(usbpd_data->Vendor_ID),
+		le16_to_cpu(usbpd_data->Product_ID));
+	pr_info("usb: %s : %s",
+		__func__, buf);
+
+	return retval;
+}
+static DEVICE_ATTR(usbpd_ids, 0444, ccic_usbpd_ids_show, NULL);
+
+static ssize_t ccic_usbpd_type_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+	int retval = 0;
+
+	if (!usbpd_data) {
+		pr_err("%s usbpd_data is null!!\n", __func__);
+		return -ENODEV;
+	}
+	retval = sprintf(buf, "%d\n", usbpd_data->acc_type);
+	pr_info("usb: %s : %d",
+		__func__, usbpd_data->acc_type);
+
+	return retval;
+}
+static DEVICE_ATTR(usbpd_type, 0444, ccic_usbpd_type_show, NULL);
+
+#elif !defined(CONFIG_CCIC_ALTERNATE_MODE) && defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
+static ssize_t ccic_send_attention_message(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+	int cmd = 0;
+
+    if (!usbpd_data) {
+        pr_err("usbpd_data is NULL\n");
+        return -ENODEV;
+    }
+
+	sscanf(buf, "%d", &cmd);
+	pr_info("%s cmd=%d\n", __func__, cmd);
+
+	send_attention_message(usbpd_data, cmd);
+
+	return size;
+}
+static DEVICE_ATTR(attention, 0220, NULL, ccic_send_attention_message);
+static ssize_t ccic_send_role_swap_message(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+	int cmd = 0;
+
+    if (!usbpd_data) {
+        pr_err("usbpd_data is NULL\n");
+        return -ENODEV;
+    }
+
+	sscanf(buf, "%d", &cmd);
+	pr_info("%s cmd=%d\n", __func__, cmd);
+
+	send_role_swap_message(usbpd_data, cmd);
+
+	return size;
+}
+static DEVICE_ATTR(role_swap, 0220, NULL, ccic_send_role_swap_message);
+#endif /* CONFIG_CCIC_ALTERNATE_MODE */
 
 static struct attribute *ccic_attributes[] = {
 	&dev_attr_cur_version.attr,
@@ -602,6 +740,7 @@ static struct attribute *ccic_attributes[] = {
 #endif
 	&dev_attr_fw_update.attr,
 	&dev_attr_fw_update_status.attr,
+	&dev_attr_sink_pdo_update.attr,
 	&dev_attr_control_gpio.attr,
 	&dev_attr_water.attr,
 #if defined(CONFIG_CCIC_ALTERNATE_MODE)
@@ -611,8 +750,13 @@ static struct attribute *ccic_attributes[] = {
 	&dev_attr_samsung_uvdm.attr,
 	&dev_attr_attention.attr,
 	&dev_attr_role_swap.attr,
-	&dev_attr_acc_device_version.attr,	
-#endif
+	&dev_attr_acc_device_version.attr,
+	&dev_attr_usbpd_ids.attr,
+	&dev_attr_usbpd_type.attr,
+#elif !defined(CONFIG_CCIC_ALTERNATE_MODE) && defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
+	&dev_attr_attention.attr,
+	&dev_attr_role_swap.attr,
+#endif /* CONFIG_CCIC_ALTERNATE_MODE */
 	NULL
 };
 

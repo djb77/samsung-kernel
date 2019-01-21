@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -26,7 +26,7 @@
 #include "main.h"
 #include "client.h"
 
-enum mc_result convert(int err)
+static enum mc_result convert(int err)
 {
 	switch (-err) {
 	case 0:
@@ -70,7 +70,7 @@ enum mc_result convert(int err)
 	case ERESTARTSYS:
 		return MC_DRV_ERR_INTERRUPTED_BY_SIGNAL;
 	default:
-		mc_dev_devel("error is %d\n", err);
+		mc_dev_devel("error is %d", err);
 		return MC_DRV_ERR_UNKNOWN;
 	}
 }
@@ -119,10 +119,10 @@ enum mc_result mc_open_device(u32 device_id)
 
 	if (client) {
 		open_count++;
-		mc_dev_devel("Successfully opened the device\n");
+		mc_dev_devel("Successfully opened the device");
 	} else {
 		mc_result = MC_DRV_ERR_INVALID_DEVICE_FILE;
-		mc_dev_devel("Could not open device\n");
+		mc_dev_devel("Could not open device");
 	}
 
 	mutex_unlock(&dev_mutex);
@@ -187,7 +187,7 @@ enum mc_result mc_open_session(struct mc_session_handle *session,
 	/* Call core api */
 	ret = convert(client_open_session(client, &session->session_id, uuid,
 					  (uintptr_t)tci, len, false,
-					  &identity));
+					  &identity, -1));
 	clientlib_client_put();
 	return ret;
 }
@@ -212,7 +212,7 @@ enum mc_result mc_open_trustlet(struct mc_session_handle *session, u32 spid,
 	/* Call core api */
 	ret = convert(client_open_trustlet(client, &session->session_id, spid,
 					   (uintptr_t)trustlet, trustlet_len,
-					   (uintptr_t)tci, len));
+					   (uintptr_t)tci, len, -1));
 	clientlib_client_put();
 	return ret;
 }
@@ -276,8 +276,13 @@ enum mc_result mc_wait_notification(struct mc_session_handle *session,
 		return MC_DRV_ERR_DAEMON_DEVICE_NOT_OPEN;
 
 	/* Call core api */
-	ret = convert(client_waitnotif_session(client, session->session_id,
-					       timeout, false));
+	do {
+		ret = convert(client_waitnotif_session(client,
+						       session->session_id,
+						       timeout, false));
+	} while ((MC_INFINITE_TIMEOUT == timeout) &&
+		 (MC_DRV_ERR_INTERRUPTED_BY_SIGNAL == ret));
+
 	clientlib_client_put();
 	return ret;
 }
@@ -358,7 +363,7 @@ enum mc_result mc_map(struct mc_session_handle *session, void *address,
 		bufs[i].va = 0;
 
 	ret = convert(client_map_session_wsms(client, session->session_id,
-					      bufs));
+					      bufs, -1));
 	if (ret == MC_DRV_OK) {
 		map_info->secure_virt_addr = bufs[0].sva;
 		map_info->secure_virt_len = bufs[0].len;

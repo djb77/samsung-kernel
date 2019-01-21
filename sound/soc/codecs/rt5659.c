@@ -1644,12 +1644,11 @@ unsigned int rt5659_imp_detect(struct snd_soc_codec *codec)
 		RT5659_L_MUTE | RT5659_R_MUTE, RT5659_L_MUTE | RT5659_R_MUTE);
 	snd_soc_write(codec, RT5659_AD_DA_MIXER, 0xc0c0);
 	snd_soc_write(codec, RT5659_STO_DAC_MIXER, 0x2aaa);
-	snd_soc_write(codec, RT5659_ASRC_1, 0);
-	snd_soc_write(codec, RT5659_ASRC_2, 0);
+	snd_soc_update_bits(codec, RT5659_ASRC_2, 0x7000, 0);
 	snd_soc_write(codec, RT5659_HP_LOGIC_CTRL_1, 0x2700);
 	snd_soc_write(codec, RT5659_HP_LOGIC_CTRL_2, 0x0001);
 	snd_soc_write(codec, RT5659_DEPOP_1, 0);
-	snd_soc_update_bits(codec, RT5659_PWR_DIG_1, 0x0c80, 0);
+	snd_soc_update_bits(codec, RT5659_PWR_DIG_1, 0x0c00, 0);
 
 	snd_soc_write(codec, RT5659_CLK_DET, 0x0010);
 	if (!(snd_soc_read(codec, RT5659_CLK_DET) & 0x2000)) {
@@ -1657,6 +1656,7 @@ unsigned int rt5659_imp_detect(struct snd_soc_codec *codec)
 		snd_soc_write(codec, RT5659_PLL_CTRL_1, 0x0f00);
 		snd_soc_write(codec, RT5659_PLL_CTRL_2, 0x5000);
 		snd_soc_write(codec, RT5659_MICBIAS_2, 0x0280);
+		snd_soc_update_bits(codec, RT5659_ADDA_CLK_1, 0x7000, 0);
 	}
 	snd_soc_write(codec, RT5659_CLK_DET, 0);
 
@@ -1666,20 +1666,18 @@ unsigned int rt5659_imp_detect(struct snd_soc_codec *codec)
 	snd_soc_write(codec, RT5659_STO_NG2_CTRL_1, 0x0ec0);
 	snd_soc_write(codec, RT5659_HP_CHARGE_PUMP_1, 0x0c16);
 	snd_soc_write(codec, RT5659_CAL_REC, 0x0505);
-	snd_soc_update_bits(codec, RT5659_PWR_ANLG_1, 0xf200, 0xa200);
+	snd_soc_update_bits(codec, RT5659_PWR_ANLG_1, 0xa200, 0xa200);
 	snd_soc_update_bits(codec, RT5659_PWR_DIG_1, 0x0080, 0x0080);
 	snd_soc_write(codec, RT5659_DEPOP_1, 0x0009);
 	snd_soc_update_bits(codec, RT5659_PWR_DIG_1, 0x0c00, 0x0c00);
 	snd_soc_write(codec, RT5659_HP_CHARGE_PUMP_1, 0x0e1e);
 	snd_soc_update_bits(codec, RT5659_PWR_DIG_2, 0x4400, 0x4400);
 	snd_soc_update_bits(codec, RT5659_PWR_ANLG_3, 0x01c0, 0x01c0);
-	snd_soc_update_bits(codec, RT5659_ADDA_CLK_1, 0x7000, 0);
 	snd_soc_update_bits(codec, RT5659_DEPOP_1, 0x0010, 0x0010);
 	snd_soc_write(codec, RT5659_SINE_GEN_CTRL_2, 0x8000);
 	snd_soc_write(codec, RT5659_CALIB_ADC_CTRL, 0x3c05);
 	snd_soc_write(codec, RT5659_HP_IMP_SENS_CTRL_1, 0x004d);
 	snd_soc_write(codec, RT5659_HP_CALIB_CTRL_7, 0);
-	snd_soc_write(codec, RT5659_IRQ_CTRL_3, 0x0004);
 
 	for (j = 0; j < 3; j++) {
 		usleep_range(20000,20000);
@@ -1693,7 +1691,7 @@ unsigned int rt5659_imp_detect(struct snd_soc_codec *codec)
 		for (i = 0; i < 30; i++) {
 			usleep_range(20000,20000);
 
-			if (snd_soc_read(codec, RT5659_INT_ST_1) & 0x2) {
+			if (!(snd_soc_read(codec, RT5659_HP_IMP_SENS_CTRL_1) & 0x8000)) {
 				rt5659->impedance_value =
 					snd_soc_read(codec, RT5659_HP_IMP_SENS_CTRL_3) & 0x3ff;
 				break;
@@ -1703,7 +1701,6 @@ unsigned int rt5659_imp_detect(struct snd_soc_codec *codec)
 				break;
 		}
 
-		snd_soc_write(codec, RT5659_INT_ST_1, 0x0);
 		snd_soc_write(codec, RT5659_HP_IMP_SENS_CTRL_1, 0x004d);
 
 		if (rt5659->impedance_value != 0x3ff)

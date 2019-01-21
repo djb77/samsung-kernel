@@ -10,6 +10,7 @@ enum {
 	FLASH_WRITE5,
 	FLASH_WRITE6,
 	FLASH_WRITE7,
+	FLASH_WRITE8,
 	FLASH_WRITE_BUILTIN,
 	FLASH_WRITE_UMS,
 	FLASH_MODE_EXIT,
@@ -39,11 +40,15 @@ enum {
 	PRODUCT_NUM_DREAM = 0x01,
 	PRODUCT_NUM_GTA2S = 0x05,
 	PRODUCT_NUM_GREAT = 0x0A,
+	PRODUCT_NUM_GTA2XL = 0x0D, /* Actually prodcut num of tablet models is 0x0D */
+	PRODUCT_NUM_GTA2XL_NFM = 0x0F, /* HW fix for new factory mode */
+	PRODUCT_NUM_GTA2XL_OFM = 0x10, /* old factory mode */
 };
 
 struct s2mm005_version {
 	u8 main[3];
 	u8 boot;
+	u8 ver2[4];
 };
 
 struct s2mm005_fw {

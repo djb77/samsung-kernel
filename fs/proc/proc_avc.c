@@ -33,7 +33,7 @@ int __init sec_avc_log_init(void)
 	unsigned size = SZ_256K;
 	unsigned *sec_avc_log_mag;
 
-	sec_avc_log_size = size + 8;
+	sec_avc_log_size = size;
 	sec_avc_log_mag = kzalloc(sec_avc_log_size, GFP_NOWAIT);
 
 #ifdef __aarch64__
@@ -45,7 +45,6 @@ int __init sec_avc_log_init(void)
 #endif
 	sec_avc_log_ptr = sec_avc_log_mag + 4;
 	sec_avc_log_buf = (char *)(sec_avc_log_mag + 8);
-	sec_avc_log_size = size;
 
 	if (*sec_avc_log_mag != LOG_MAGIC) {
 		pr_info("%s: no old log found\n", __func__);
@@ -76,7 +75,7 @@ void sec_avc_log(char *fmt, ...)
 	idx = *sec_avc_log_ptr;
 	size = strlen(buf);
 
-	if (idx + size > sec_avc_log_size - 1) {
+	if (idx + (size * 2) > sec_avc_log_size - 1) {
 		len = scnprintf(&sec_avc_log_buf[0], size + 1, "%s\n", buf);
 		*sec_avc_log_ptr = len;
 	} else {

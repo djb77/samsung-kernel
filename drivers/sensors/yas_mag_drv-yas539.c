@@ -20,6 +20,11 @@
 
 #include "yas.h"
 
+#ifdef TAG
+#undef TAG
+#define TAG "[MAG]"
+#endif
+
 #if YAS_MAG_DRIVER == YAS_MAG_DRIVER_YAS539
 
 #define YAS539_REG_DIDR			(0x80)

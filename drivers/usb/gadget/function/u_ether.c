@@ -71,6 +71,11 @@ module_param(min_cpu_freq, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(min_cpu_freq,
 	"to set minimum cpu frquency to when ethernet ifc is active");
 
+static unsigned int skb_timestamp_enable;
+module_param(skb_timestamp_enable, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(skb_timestamp_enable,
+	"to enable timestamping for TX and RX packets");
+
 /* this refers to max number sgs per transfer
  * which includes headers/data packets
  */
@@ -699,6 +704,8 @@ process_frame:
 		dev->net->stats.rx_packets++;
 		dev->net->stats.rx_bytes += skb->len;
 
+		if (skb_timestamp_enable)
+			skb->tstamp = ktime_get();
 		status = netif_rx_ni(skb);
 	}
 	set_wake_up_idle(false);
@@ -1090,13 +1097,14 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 	int			extra_alloc = 0;
 	int			retval;
 	struct usb_request	*req = NULL;
-	struct sk_buff		*new_skb;
+	struct sk_buff		*new_skb, *clone = NULL;
 	unsigned long		flags;
 	struct usb_ep		*in = NULL;
 	u16			cdc_filter = 0;
 	bool			multi_pkt_xfer = false;
 	u32			fixed_in_len;
 	bool			is_fixed;
+	struct skb_shared_hwtstamps hwtstamps;
 
 	spin_lock_irqsave(&dev->lock, flags);
 	if (dev->port_usb) {
@@ -1308,6 +1316,16 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 		spin_unlock_irqrestore(&dev->req_lock, flags);
 	} else {
 		req->no_interrupt = 0;
+	}
+
+	if (skb_timestamp_enable) {
+		skb->tstamp = ktime_get();
+		clone = skb_clone_sk(skb);
+		if (clone) {
+			memset(&hwtstamps, 0,
+					sizeof(struct skb_shared_hwtstamps));
+			skb_complete_tx_timestamp(clone, &hwtstamps);
+		}
 	}
 
 	retval = usb_ep_queue(in, req, GFP_ATOMIC);
@@ -1791,8 +1809,8 @@ struct eth_dev *gether_setup_name(struct usb_gadget *g,
 		free_netdev(net);
 		dev = ERR_PTR(status);
 	} else {
-		INFO(dev, "MAC %pKM\n", net->dev_addr);
-		INFO(dev, "HOST MAC %pKM\n", dev->host_mac);
+		INFO(dev, "MAC %pM\n", net->dev_addr);
+		INFO(dev, "HOST MAC %pM\n", dev->host_mac);
 
 		/*
 		 * two kinds of host-initiated state changes:
@@ -1873,7 +1891,7 @@ int gether_register_netdev(struct net_device *net)
 		dev_dbg(&g->dev, "register_netdev failed, %d\n", status);
 		return status;
 	} else {
-		INFO(dev, "HOST MAC %pKM\n", dev->host_mac);
+		INFO(dev, "HOST MAC %pM\n", dev->host_mac);
 
 		/* two kinds of host-initiated state changes:
 		 *  - iff DATA transfer is active, carrier is "on"
@@ -1889,7 +1907,7 @@ int gether_register_netdev(struct net_device *net)
 	if (status)
 		pr_warn("cannot set self ethernet address: %d\n", status);
 	else
-		INFO(dev, "MAC %pKM\n", dev->dev_mac);
+		INFO(dev, "MAC %pM\n", dev->dev_mac);
 
 	return status;
 }
@@ -1957,7 +1975,7 @@ int gether_get_host_addr_cdc(struct net_device *net, char *host_addr, int len)
 		return -EINVAL;
 
 	dev = netdev_priv(net);
-	snprintf(host_addr, len, "%pKm", dev->host_mac);
+	snprintf(host_addr, len, "%pm", dev->host_mac);
 
 	return strlen(host_addr);
 }

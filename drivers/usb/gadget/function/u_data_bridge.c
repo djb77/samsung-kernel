@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2013-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2013-2017, The Linux Foundation. All rights reserved.
  * Linux Foundation chooses to take subject only to the GPLv2 license terms,
  * and distributes only under these terms.
  *
@@ -633,6 +633,9 @@ static int gbridge_port_tiocmget(struct gbridge_port *port)
 
 	if (gser->serial_state & TIOCM_RI)
 		result |= TIOCM_RI;
+
+	if (gser->serial_state & TIOCM_DSR)
+		result |= TIOCM_DSR;
 fail:
 	spin_unlock_irqrestore(&port->port_lock, flags);
 	return result;
@@ -682,6 +685,10 @@ static int gbridge_port_tiocmset(struct gbridge_port *port,
 			status = gser->send_carrier_detect(gser, 0);
 		}
 	}
+	if (set & TIOCM_DSR)
+		gser->serial_state |= TIOCM_DSR;
+	if (clear & TIOCM_DSR)
+		gser->serial_state &= ~TIOCM_DSR;
 fail:
 	spin_unlock_irqrestore(&port->port_lock, flags);
 	return status;
@@ -755,6 +762,18 @@ static void gbridge_notify_modem(void *gptr, u8 portno, int ctrl_bits)
 	port->cbits_to_modem = temp;
 	port->cbits_updated = true;
 	spin_unlock_irqrestore(&port->port_lock, flags);
+	/* if DTR is high, update latest modem info to laptop */
+	if (port->cbits_to_modem & TIOCM_DTR) {
+		unsigned int result;
+		unsigned cbits_to_laptop;
+
+		result = gbridge_port_tiocmget(port);
+		cbits_to_laptop = convert_uart_sigs_to_acm(result);
+		if (gser->send_modem_ctrl_bits)
+			gser->send_modem_ctrl_bits(
+					port->port_usb, cbits_to_laptop);
+	}
+
 	wake_up(&port->read_wq);
 }
 
@@ -888,7 +907,7 @@ static void gbridge_debugfs_init(void) {}
 int gbridge_setup(void *gptr, u8 no_ports)
 {
 	pr_debug("gptr:%pK, no_bridge_ports:%d\n", gptr, no_ports);
-	if (no_ports >= num_of_instance) {
+	if (no_ports > num_of_instance) {
 		pr_err("More ports are requested\n");
 		return -EINVAL;
 	}
@@ -974,6 +993,7 @@ void gbridge_disconnect(void *gptr, u8 portno)
 
 	spin_lock_irqsave(&port->port_lock, flags);
 	port->is_connected = false;
+	gser->notify_modem = NULL;
 	port->port_usb = NULL;
 	port->nbytes_from_host = port->nbytes_to_host = 0;
 	port->nbytes_to_port_bridge = 0;

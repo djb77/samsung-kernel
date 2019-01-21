@@ -268,10 +268,10 @@ static int read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl,
 		}
 		}
 #else
-			CDBG("%s %d \n", __func__, __LINE__);
+			pr_err("%s %d \n", __func__, __LINE__);
 			rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_read_seq(
 						&(e_ctrl->i2c_client), emap[j].mem.addr, memptr, emap[j].mem.valid_size);
-			CDBG("%s %d \n", __func__, __LINE__);
+			pr_err("%s %d \n", __func__, __LINE__);
 
 			if (rc < 0) {
 				pr_err("%s: read failed\n", __func__);
@@ -347,7 +347,7 @@ static int msm_eeprom_parse_memory_map(struct device_node *of,
 		rc = of_property_read_u32_array(of, property,
 			(uint32_t *) &map[i].saddr.addr, 1);
 		if (rc < 0)
-			CDBG("%s: saddr not needed - block %d\n", __func__, i);
+			pr_err("%s: saddr not needed - block %d\n", __func__, i);
 
 		snprintf(property, PROPERTY_MAXSIZE, "qcom,poll%d", i);
 		rc = of_property_read_u32_array(of, property,
@@ -433,8 +433,8 @@ static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 			e_ctrl->i2c_client.client->addr =
 				eeprom_map->slave_addr >> 1;
 		}
-		CDBG("Slave Addr: 0x%X\n", eeprom_map->slave_addr);
-		CDBG("Memory map Size: %d",
+		pr_err("Slave Addr: 0x%X\n", eeprom_map->slave_addr);
+		pr_err("Memory map Size: %d",
 			eeprom_map->memory_map_size);
 		for (i = 0; i < eeprom_map->memory_map_size; i++) {
 			switch (eeprom_map->mem_settings[i].i2c_operation) {
@@ -681,7 +681,7 @@ static int eeprom_config_read_cal_data(struct msm_eeprom_ctrl_t *e_ctrl,
 	/* check range */
 	if (cdata->cfg.read_data.num_bytes >
 		e_ctrl->cal_data.num_data || cdata->cfg.read_data.addr>e_ctrl->cal_data.num_data) {
-		CDBG("%s: Invalid size or addr. exp %u, req %u, addr %x\n", __func__,
+		pr_err("%s: Invalid size or addr. exp %u, req %u, addr %x\n", __func__,
 			e_ctrl->cal_data.num_data,
 			cdata->cfg.read_data.num_bytes,cdata->cfg.read_data.addr);
 		return -EINVAL;
@@ -774,8 +774,8 @@ static int msm_eeprom_get_subdev_id(struct msm_eeprom_ctrl_t *e_ctrl,
 		return -EINVAL;
 	}
 	*subdev_id = e_ctrl->subdev_id;
-	CDBG("subdev_id %d\n", *subdev_id);
-	CDBG("%s X\n", __func__);
+	pr_err("subdev_id %d\n", *subdev_id);
+	pr_err("%s X\n", __func__);
 	return 0;
 }
 
@@ -784,8 +784,8 @@ static long msm_eeprom_subdev_ioctl(struct v4l2_subdev *sd,
 {
 	struct msm_eeprom_ctrl_t *e_ctrl = v4l2_get_subdevdata(sd);
 	void __user *argp = (void __user *)arg;
-	CDBG("%s E\n", __func__);
-	CDBG("%s:%d a_ctrl %pK argp %pK\n", __func__, __LINE__, e_ctrl, argp);
+	pr_err("%s E\n", __func__);
+	pr_err("%s:%d a_ctrl %pK argp %pK\n", __func__, __LINE__, e_ctrl, argp);
 	switch (cmd) {
 	case VIDIOC_MSM_SENSOR_GET_SUBDEV_ID:
 		return msm_eeprom_get_subdev_id(e_ctrl, argp);
@@ -961,7 +961,7 @@ static int msm_eeprom_i2c_probe(struct i2c_client *client,
 
 	rc = msm_eeprom_cmm_dts(e_ctrl->eboard_info, of_node);
 	if (rc < 0)
-		CDBG("%s MM data miss:%d\n", __func__, __LINE__);
+		pr_err("%s MM data miss:%d\n", __func__, __LINE__);
 
 	rc = msm_eeprom_get_dt_data(e_ctrl);
 	if (rc)
@@ -1245,12 +1245,12 @@ static int msm_eeprom_cmm_dts(struct msm_eeprom_board_info *eb_info,
 	rc = of_property_read_u32(of_node, "qcom,cmm-data-offset",
 		&cmm_data->cmm_offset);
 	if (rc < 0)
-		CDBG("No MM offset data\n");
+		pr_err("No MM offset data\n");
 
 	rc = of_property_read_u32(of_node, "qcom,cmm-data-size",
 		&cmm_data->cmm_size);
 	if (rc < 0)
-		CDBG("No MM size data\n");
+		pr_err("No MM size data\n");
 
 	CDBG("cmm_support: cmm_compr %d, cmm_offset %d, cmm_size %d\n",
 		cmm_data->cmm_compression,
@@ -1319,7 +1319,7 @@ static int msm_eeprom_spi_setup(struct spi_device *spi)
 
 	rc = msm_eeprom_cmm_dts(e_ctrl->eboard_info, spi->dev.of_node);
 	if (rc < 0)
-		CDBG("%s MM data miss:%d\n", __func__, __LINE__);
+		pr_err("%s MM data miss:%d\n", __func__, __LINE__);
 
 	power_info = &eb_info->power_info;
 
@@ -1347,7 +1347,7 @@ static int msm_eeprom_spi_setup(struct spi_device *spi)
 		rc = msm_eeprom_parse_memory_map(spi->dev.of_node,
 			&e_ctrl->cal_data);
 		if (rc < 0)
-			CDBG("%s: no cal memory map\n", __func__);
+			pr_err("%s: no cal memory map\n", __func__);
 
 		/* power up eeprom for reading */
 		rc = msm_camera_power_up(power_info, e_ctrl->eeprom_device_type,
@@ -1360,7 +1360,7 @@ static int msm_eeprom_spi_setup(struct spi_device *spi)
 		/* check eeprom id */
 		rc = msm_eeprom_match_id(e_ctrl);
 		if (rc < 0) {
-			CDBG("%s: eeprom not matching %d\n", __func__, rc);
+			pr_err("%s: eeprom not matching %d\n", __func__, rc);
 			goto power_down;
 		}
 		/* read eeprom */
@@ -1508,6 +1508,9 @@ static int eeprom_config_read_cal_data32(struct msm_eeprom_ctrl_t *e_ctrl,
 	cdata.cfgtype = cdata32->cfgtype;
 	cdata.is_supported = cdata32->is_supported;
 	cdata.cfg.read_data.num_bytes = cdata32->cfg.read_data.num_bytes;
+	pr_err("%s: size. exp %u, req %u\n", __func__, 
+		e_ctrl->cal_data.num_data, 
+		cdata.cfg.read_data.num_bytes);
 	cdata.cfg.read_data.addr = cdata32->cfg.read_data.addr;
 	/* check range */
 	if (cdata.cfg.read_data.num_bytes >

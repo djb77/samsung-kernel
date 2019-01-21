@@ -659,7 +659,6 @@ enum msm_sensor_init_cfg_type_t {
 	CFG_SINIT_PROBE,
 	CFG_SINIT_PROBE_DONE,
 	CFG_SINIT_PROBE_WAIT_DONE,
-	CFG_SINIT_HWB,
 };
 
 struct sensor_init_cfg_data {
@@ -837,7 +836,7 @@ struct msm_flash_cfg_data_t32 {
 		compat_uptr_t flash_init_info;
 		compat_uptr_t settings;
 	} cfg;
-    enum flash_position_t flash_position;
+	enum flash_position_t flash_position;
 };
 
 #define VIDIOC_MSM_ACTUATOR_CFG32 \

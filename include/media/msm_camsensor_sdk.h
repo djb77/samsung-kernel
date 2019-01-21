@@ -119,7 +119,6 @@ enum msm_sensor_power_seq_gpio_t {
 
 enum msm_camera_vreg_name_t {
 	CAM_VDIG,
-	CAM_VT_VDIG,
 	CAM_VIO,
 	CAM_VANA,
 	CAM_VT_VANA,

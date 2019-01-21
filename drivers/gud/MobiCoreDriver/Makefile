@@ -1,5 +1,5 @@
 #
-# Makefile for the <t-base core driver
+# Makefile for the Kinibi core driver
 #
 
 GUD_ROOT_FOLDER := drivers/gud/
@@ -13,13 +13,16 @@ mcDrvModule-y := \
 	clientlib.o \
 	clock.o \
 	fastcall.o \
+	iwp.o \
 	logging.o \
 	main.o \
 	mcp.o \
 	mmu.o \
+	nq.o \
 	pm.o \
 	scheduler.o \
 	session.o \
+	teeclientapi.o \
 	user.o
 
 # Release mode by default

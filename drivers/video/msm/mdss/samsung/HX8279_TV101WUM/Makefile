@@ -4,4 +4,4 @@
 #
 
 obj-y  += ss_dsi_panel_HX8279_TV101WUM.o
-obj-$(CONFIG_BLIC_ISL98608)	+= isl98608-backlight.o
+obj-$(CONFIG_PANEL_POWER_ISL98608)	+= isl98608-panel_power.o

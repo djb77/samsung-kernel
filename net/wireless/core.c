@@ -419,6 +419,9 @@ struct wiphy *wiphy_new(const struct cfg80211_ops *ops, int sizeof_priv)
 
 	rdev->wiphy.max_num_csa_counters = 1;
 
+	rdev->wiphy.max_sched_scan_plans = 1;
+	rdev->wiphy.max_sched_scan_plan_interval = U32_MAX;
+
 	return &rdev->wiphy;
 }
 EXPORT_SYMBOL(wiphy_new);
@@ -543,6 +546,13 @@ int wiphy_register(struct wiphy *wiphy)
 	if (WARN_ON(wiphy->max_acl_mac_addrs &&
 		    (!(wiphy->flags & WIPHY_FLAG_HAVE_AP_SME) ||
 		     !rdev->ops->set_mac_acl)))
+		return -EINVAL;
+
+	/* assure only valid behaviours are flagged by driver
+	 * hence subtract 2 as bit 0 is invalid.
+	 */
+	if (WARN_ON(wiphy->bss_select_support &&
+		    (wiphy->bss_select_support & ~(BIT(__NL80211_BSS_SELECT_ATTR_AFTER_LAST) - 2))))
 		return -EINVAL;
 
 	if (wiphy->addresses)

@@ -1,36 +1,35 @@
-/*****************************************************************************
-	Copyright(c) 2013 FCI Inc. All Rights Reserved
-
-	File name : bbm.h
-
-	Description : API header file of dmb baseband module
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-
-	History :
-	----------------------------------------------------------------------
-	20130422 v1.1.0
-	20130613 v1.2.0
-	20130704 v1.2.1
-	20130710 v1.3.1
-	20130716 v1.4.1
-	20130806 v1.5.1
-	20130926 v1.6.1
-	20131125 v1.7.1
-	20131202 v1.8.1
-*******************************************************************************/
+/*
+ *	Copyright(c) 2013 FCI Inc. All Rights Reserved
+ *
+ *	File name : bbm.h
+ *
+ *	Description : API header file of dmb baseband module
+ *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *	History :
+ *	----------------------------------------------------------------------
+ *	20130422 v1.1.0
+ *	20130613 v1.2.0
+ *	20130704 v1.2.1
+ *	20130710 v1.3.1
+ *	20130716 v1.4.1
+ *	20130806 v1.5.1
+ *	20130926 v1.6.1
+ *	20131125 v1.7.1
+ *	20131202 v1.8.1
+ */
 
 #ifndef __BBM_H__
 #define __BBM_H__

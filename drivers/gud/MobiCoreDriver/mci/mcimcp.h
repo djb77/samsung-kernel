@@ -20,9 +20,6 @@
 /** Indicates a response */
 #define FLAG_RESPONSE		BIT(31)
 
-/** Maximum number of buffers that can be mapped at once */
-#define MCP_MAP_MAX_BUF		4
-
 /** MobiCore Return Code Defines.
  * List of the possible MobiCore return codes.
  */
@@ -91,6 +88,10 @@ enum mcp_result {
 	MC_MCP_RET_ERR_SERVICE_LOCKED                   = 30,
 	/**< Service was forcefully killed (due to an administrative command) */
 	MC_MCP_RET_ERR_SERVICE_KILLED                   = 31,
+	/**< Service version is lower than the one installed. */
+	MC_MCP_RET_ERR_DOWNGRADE_NOT_AUTHORIZED         = 32,
+	/**< Filesystem not yet ready. */
+	MC_MCP_RET_ERR_SYSTEM_NOT_READY                 = 33,
 	/** The command is unknown */
 	MC_MCP_RET_ERR_UNKNOWN_COMMAND                  = 50,
 	/** The command data is invalid */
@@ -123,10 +124,6 @@ enum cmd_id {
 	MC_MCP_CMD_LOAD_TOKEN		= 0x0B,
 	/** Check that TA can be loaded */
 	MC_MCP_CMD_CHECK_LOAD_TA	= 0x0C,
-	/** Map multiple WSMs to session */
-	MC_MCP_CMD_MULTIMAP		= 0x0D,
-	/** Unmap multiple WSMs to session */
-	MC_MCP_CMD_MULTIUNMAP		= 0x0E,
 };
 
 /*
@@ -146,14 +143,23 @@ enum cmd_id {
 /*
  * Initialisation values flags
  */
-#define MC_IV_FLAG_IRQ		BIT(0)	/* Set if IRQ is present */
-#define MC_IV_FLAG_TIME		BIT(1)	/* Set if GP TIME is supported */
+/* Set if IRQ is present */
+#define MC_IV_FLAG_IRQ		BIT(0)
+/* Set if GP TIME is supported */
+#define MC_IV_FLAG_TIME		BIT(1)
+/* Set if GP client uses interworld session */
+#define MC_IV_FLAG_IWP		BIT(2)
 
 struct init_values {
 	u32	flags;
 	u32	irq;
 	u32	time_ofs;
 	u32	time_len;
+	/* interworld session buffer offset in MCI */
+	u32	iws_buf_ofs;
+	/* interworld session buffer size */
+	u32	iws_buf_size;
+	u8      padding[8];
 };
 
 /** Command header.
@@ -335,7 +341,7 @@ struct cmd_map {
 	u32		ofs_buffer;	/** Offset to the payload */
 	u64		adr_buffer;	/** Physical address of the MMU */
 	u32		len_buffer;	/** Length of the buffer */
-	u8		unused[4];	/** Padding to be 64-bit aligned */
+	u32		flags;		/** Attributes (read/write) */
 };
 
 #define MCP_MAP_MAX         0x100000    /** Maximum length for MCP map */
@@ -391,77 +397,9 @@ struct rsp_load_token {
 	struct rsp_header rsp_header;	/** Response header */
 };
 
-/** @defgroup MCPMULTIMAP MULTIMAP
- * Map up to MCP_MAP_MAX_BUF portions of memory to a session.
- * The MULTIMAP command provides MCP_MAP_MAX_BUF blocks of memory to the context
- * of a service.
- * The memory then becomes world-shared memory (WSM).
- * The only allowed memory type here is WSM_L2.
- */
-
-/** NWd physical buffer description
- *
- * Note: Information is coming from NWd kernel. So it should not be trusted
- * more than NWd kernel is trusted.
- */
-struct buffer_map {
-	u64		adr_buffer;	/**< Physical address */
-	u32		ofs_buffer;	/**< Offset of buffer */
-	u32		len_buffer;	/**< Length of buffer */
-	u32		wsm_type;	/**< Type of address */
-	u8		unused[4];	/** Padding to be 64-bit aligned */
-};
-
-/** MultiMap Command */
-struct cmd_multimap {
-	struct cmd_header cmd_header;	/** Command header */
-	u32		session_id;	/** Session ID */
-	struct buffer_map bufs[MC_MAP_MAX]; /** NWd buffer info */
-};
-
-/** Multimap Command Response */
-struct rsp_multimap {
-	struct rsp_header rsp_header;	/** Response header */
-	/** Virtual address the WSM is mapped to, may include an offset! */
-	u64		secure_va[MC_MAP_MAX];
-};
-
-/** @defgroup MCPMULTIUNMAP MULTIUNMAP
- * Unmap up to MCP_MAP_MAX_BUF portions of world-shared memory from a session.
- * The MULTIUNMAP command is used to unmap MCP_MAP_MAX_BUF previously mapped
- * blocks of world shared memory from the context of a session.
- *
- * Attention: The memory blocks will be immediately unmapped from the specified
- * session. If the service is still accessing the memory, the service will
- * trigger a segmentation fault.
- */
-
-/** NWd mapped buffer description
- *
- * Note: Information is coming from NWd kernel. So it should not be trusted more
- * than NWd kernel is trusted.
- */
-struct buffer_unmap {
-	u64		secure_va;	/**< Secure virtual address */
-	u32		len_buffer;	/**< Length of buffer */
-	u8		unused[4];	/** Padding to be 64-bit aligned */
-};
-
-/** Multiunmap Command */
-struct cmd_multiunmap {
-	struct cmd_header cmd_header;	/** Command header */
-	u32		session_id;	/** Session ID */
-	struct buffer_unmap bufs[MC_MAP_MAX]; /** NWd buffer info */
-};
-
-/** Multiunmap Command Response */
-struct rsp_multiunmap {
-	struct rsp_header rsp_header;	/** Response header */
-};
-
 /** Structure of the MCP buffer */
 union mcp_message {
-	struct init_values	init_values;	/** Intialisation values */
+	struct init_values	init_values;	/** Initialisation values */
 	struct cmd_header	cmd_header;	/** Command header */
 	struct rsp_header	rsp_header;
 	struct cmd_open		cmd_open;	/** Load and open service */
@@ -482,10 +420,6 @@ union mcp_message {
 	struct rsp_load_token	rsp_load_token;
 	struct cmd_check_load	cmd_check_load;	/** TA load check */
 	struct rsp_check_load	rsp_check_load;
-	struct cmd_multimap	cmd_multimap;	/** Map multiple WSMs */
-	struct rsp_multimap	rsp_multimap;
-	struct cmd_multiunmap	cmd_multiunmap;	/** Map multiple WSMs */
-	struct rsp_multiunmap	rsp_multiunmap;
 };
 
 /** Minimum MCP buffer length (in bytes) */

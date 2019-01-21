@@ -101,14 +101,23 @@ SoCs:
 - MSM8953
   compatible = "qcom,msm8953"
 
+- SDM450
+  compatible = "qcom,sdm450"
+
+- SDA450
+  compatible = "qcom,sda450"
+
 - MSM8937
   compatible = "qcom,msm8937"
 
 - MDM9640
   compatible = "qcom,mdm9640"
 
-- MDMCALIFORNIUM
-  compatible = "qcom,mdmcalifornium"
+- MDM9650
+  compatible = "qcom,mdm9650"
+
+- SDX20
+  compatible = "qcom,sdx20"
 
 - VPIPA
   compatible = "qcom,msmvpipa"
@@ -154,7 +163,11 @@ Generic board variants:
 - RUMI device:
   compatible = "qcom,rumi"
 
+- IPC device:
+  compatible = "qcom,ipc"
 
+- TTP device:
+  compatible = "qcom,ttp"
 
 Boards (SoC type + board variant):
 
@@ -186,6 +199,7 @@ compatible = "qcom,apq8017-cdp"
 compatible = "qcom,apq8017-mtp"
 compatible = "qcom,apq8053-cdp"
 compatible = "qcom,apq8053-mtp"
+compatible = "qcom,apq8053-ipc"
 compatible = "qcom,mdm9630-cdp"
 compatible = "qcom,mdm9630-mtp"
 compatible = "qcom,mdm9630-sim"
@@ -289,8 +303,15 @@ compatible = "qcom,msm8953-rumi"
 compatible = "qcom,msm8953-sim"
 compatible = "qcom,msm8953-cdp"
 compatible = "qcom,msm8953-mtp"
+compatible = "qcom,msm8953-ipc"
 compatible = "qcom,msm8953-qrd"
 compatible = "qcom,msm8953-qrd-sku3"
+compatible = "qcom,sdm450-cdp"
+compatible = "qcom,sdm450-mtp"
+compatible = "qcom,sdm450-qrd"
+compatible = "qcom,sda450-cdp"
+compatible = "qcom,sda450-mtp"
+compatible = "qcom,sda450-qrd"
 compatible = "qcom,mdm9640-cdp"
 compatible = "qcom,mdm9640-mtp"
 compatible = "qcom,mdm9640-rumi"
@@ -299,9 +320,13 @@ compatible = "qcom,msmvpipa-sim"
 compatible = "qcom,mdm9607-rumi"
 compatible = "qcom,mdm9607-cdp"
 compatible = "qcom,mdm9607-mtp"
-compatible = "qcom,mdmcalifornium-rumi"
-compatible = "qcom,mdmcalifornium-sim"
-compatible = "qcom,mdmcalifornium-cdp"
-compatible = "qcom,mdmcalifornium-mtp"
+compatible = "qcom,mdm9607-ttp"
+compatible = "qcom,mdm9650-rumi"
+compatible = "qcom,mdm9650-sim"
+compatible = "qcom,mdm9650-cdp"
+compatible = "qcom,mdm9650-mtp"
+compatible = "qcom,mdm9650-ttp"
+compatible = "qcom,sdx20-mtp"
+compatible = "qcom,sdx20-cdp"
 compatible = "qcom,apq8009-cdp"
 compatible = "qcom,apq8009-mtp"

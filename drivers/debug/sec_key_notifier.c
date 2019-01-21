@@ -54,7 +54,7 @@ static void sec_kn_event(struct input_handle *handle, unsigned int event_type,
 
 	spin_lock(&sec_kn_event_lock);
 
-	if (event_type != EV_KEY || (event_code != KEY_ENDCALL && event_code > KEY_RECENT))
+	if (event_type != EV_KEY || (event_code != KEY_ENDCALL && event_code != KEY_WINK && event_code > KEY_RECENT))
 		goto out;
 
 	rc = atomic_notifier_call_chain(&sec_kn_notifier_list, 0, &param);

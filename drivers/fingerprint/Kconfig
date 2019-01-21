@@ -1,4 +1,4 @@
-#
+
 # Sensor  drivers configuration
 #
 menuconfig SENSORS_FINGERPRINT
@@ -33,12 +33,6 @@ config SENSORS_ET320
 	help
 	  If you say yes here you get support for Egistec's
 	  fingerprint sensor ET320.
-config SENSORS_ET510
-	tristate "ET510 fingerprint sensor supprot"
-	default n
-	help
-	  If you say yes here you get support for Egistec's
-	  fingerprint sensor ET510.
 config SENSORS_ET5XX
 	tristate "ET5XX fingerprint sensor supprot"
 	default n

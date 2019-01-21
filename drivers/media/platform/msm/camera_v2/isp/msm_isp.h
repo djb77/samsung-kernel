@@ -65,6 +65,7 @@
 #define MAX_VFE 2
 #define MAX_RECOVERY_THRESHOLD  10
 
+
 struct vfe_device;
 struct msm_vfe_axi_stream;
 struct msm_vfe_stats_stream;
@@ -735,14 +736,14 @@ struct vfe_device {
 
 	/* irq info */
 	uint32_t ignore_irq;
-	
-	/* last received irq */  
-	uint32_t irq_status0; 
-	uint32_t irq_status1; 
-	uint32_t ping_pong_status; 
-	
-	/* before halt irq info */ 
-	uint32_t at_halt_irq0_mask; 
+
+	/* last received irq */
+	uint32_t irq_status0;
+	uint32_t irq_status1;
+	uint32_t ping_pong_status;
+
+	/* before halt irq info */
+	uint32_t at_halt_irq0_mask;
 	uint32_t at_halt_irq1_mask;
 };
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -70,11 +70,12 @@ struct iw_oem_data_rsp
     tANI_U8           oemDataRsp[OEM_DATA_RSP_SIZE];
 };
 
-#if defined (SEC_READ_MACADDR) || defined (SEC_CONFIG_PSM) || defined (SEC_CONFIG_GRIP_POWER)
+#if defined(SEC_READ_MACADDR) || defined(SEC_CONFIG_PSM) || defined(SEC_CONFIG_GRIP_POWER)
 #define MAX_RETRY					5
 #endif
 
 int oem_activate_service(void *pAdapter);
+void oem_deactivate_service(void);
 
 int iw_get_oem_data_cap(struct net_device *dev, struct iw_request_info *info,
                         union iwreq_data *wrqu, char *extra);

@@ -30,6 +30,10 @@
 #include <linux/sec_debug.h>
 #include <linux/sec_debug_summary.h>
 
+#ifdef CONFIG_USER_RESET_DEBUG
+#include <linux/user_reset/sec_debug_user_reset.h>
+#endif
+
 struct sec_debug_summary *secdbg_summary;
 struct sec_debug_summary_data_apss *secdbg_apss;
 extern phys_addr_t secdbg_paddr;
@@ -65,6 +69,9 @@ char cpu_state[CONFIG_NR_CPUS][VAR_NAME_MAX];
 
 int sec_debug_save_die_info(const char *str, struct pt_regs *regs)
 {
+#ifdef CONFIG_USER_RESET_DEBUG
+	_kern_ex_info_t *p_ex_info;
+#endif
 	if (!secdbg_apss)
 		return -ENOMEM;
 	snprintf(secdbg_apss->excp.pc_sym, sizeof(secdbg_apss->excp.pc_sym),
@@ -73,25 +80,29 @@ int sec_debug_save_die_info(const char *str, struct pt_regs *regs)
 		"%pS", (void *)regs->ARM_PT_REG_LR);
 
 #ifdef CONFIG_USER_RESET_DEBUG
+	sec_debug_store_extc_idx(false);
+
 	if (sec_debug_reset_ex_info) {
-		if (!sec_debug_reset_ex_info->tsk) {
+		p_ex_info = &sec_debug_reset_ex_info->kern_ex_info.info;
+		if (p_ex_info->cpu == -1) {
 			int slen;
 			char *msg;
 
-			sec_debug_reset_ex_info->ktime = local_clock();
-			snprintf(sec_debug_reset_ex_info->pc,
-				sizeof(sec_debug_reset_ex_info->pc), "%pS", (void *)regs->ARM_PT_REG_PC);
-			snprintf(sec_debug_reset_ex_info->lr,
-				sizeof(sec_debug_reset_ex_info->lr), "%pS", (void *)regs->ARM_PT_REG_LR);
-			slen = snprintf(sec_debug_reset_ex_info->panic_buf,
-				sizeof(sec_debug_reset_ex_info->panic_buf), "%s", str);
+			p_ex_info->cpu = smp_processor_id();
+			snprintf(p_ex_info->task_name,
+				sizeof(p_ex_info->task_name), "%s", current->comm);
+			p_ex_info->ktime = local_clock();
+			snprintf(p_ex_info->pc,
+				sizeof(p_ex_info->pc), "%pS", (void *)regs->ARM_PT_REG_PC);
+			snprintf(p_ex_info->lr,
+				sizeof(p_ex_info->lr), "%pS", (void *)regs->ARM_PT_REG_LR);
+			slen = snprintf(p_ex_info->panic_buf,
+				sizeof(p_ex_info->panic_buf), "%s", str);
 
-			msg = sec_debug_reset_ex_info->panic_buf;
+			msg = p_ex_info->panic_buf;
 
 			if ((slen >= 1) && (msg[slen-1] == '\n'))
 				msg[slen-1] = 0;
-
-			sec_debug_reset_ex_info->tsk = current;
 		}
 	}
 #endif
@@ -101,6 +112,9 @@ int sec_debug_save_die_info(const char *str, struct pt_regs *regs)
 
 int sec_debug_save_panic_info(const char *str, unsigned long caller)
 {
+#ifdef CONFIG_USER_RESET_DEBUG
+	_kern_ex_info_t *p_ex_info;
+#endif
 	if (!secdbg_apss)
 		return -ENOMEM;
 	snprintf(secdbg_apss->excp.panic_caller,
@@ -110,24 +124,31 @@ int sec_debug_save_panic_info(const char *str, unsigned long caller)
 	snprintf(secdbg_apss->excp.thread,
 		sizeof(secdbg_apss->excp.thread), "%s:%d", current->comm,
 		task_pid_nr(current));
+
 #ifdef CONFIG_USER_RESET_DEBUG
+	sec_debug_store_extc_idx(false);
+
 	if (sec_debug_reset_ex_info) {
-		if (!sec_debug_reset_ex_info->tsk) {
+		p_ex_info = &sec_debug_reset_ex_info->kern_ex_info.info;
+		if (p_ex_info->cpu == -1) {
 			int slen;
 			char *msg;
 
-			sec_debug_reset_ex_info->ktime = local_clock();
-			snprintf(sec_debug_reset_ex_info->lr,
-				sizeof(sec_debug_reset_ex_info->lr), "%pS", (void *)caller);
-			slen = snprintf(sec_debug_reset_ex_info->panic_buf,
-				sizeof(sec_debug_reset_ex_info->panic_buf), "%s", str);
+			p_ex_info->cpu = smp_processor_id();
+			snprintf(p_ex_info->task_name,
+				sizeof(p_ex_info->task_name), "%s", current->comm);
+			p_ex_info->ktime = local_clock();
+			snprintf(p_ex_info->pc,
+				sizeof(p_ex_info->pc), "%pS", (void *)(caller-0x4));
+			snprintf(p_ex_info->lr,
+				sizeof(p_ex_info->lr), "%pS", (void *)caller);
+			slen = snprintf(p_ex_info->panic_buf,
+				sizeof(p_ex_info->panic_buf), "%s", str);
 
-			msg = sec_debug_reset_ex_info->panic_buf;
+			msg = p_ex_info->panic_buf;
 
 			if ((slen >= 1) && (msg[slen-1] == '\n'))
 				msg[slen-1] = 0;
-
-			sec_debug_reset_ex_info->tsk = current;
 		}
 	}
 #endif

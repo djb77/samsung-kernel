@@ -24,6 +24,10 @@
 
 #define FG_DRIVER_VER "0.0.0.1"
 
+#if defined(CONFIG_BATTERY_AGE_FORECAST)
+#define ENABLE_BATT_LONG_LIFE 1
+#endif
+
 /*To differentiate two battery Packs: SDI & ATL*/
 enum {
 	SDI_BATTERY_TYPE = 0,
@@ -87,6 +91,17 @@ struct sec_fg_info {
 	int battery_typ;		/*SDI_BATTERY_TYPE or ATL_BATTERY_TYPE*/
 	int batt_id_adc_check;
 	int battery_table[3][16];
+#ifdef ENABLE_BATT_LONG_LIFE
+#ifdef CONFIG_BATTERY_AGE_FORECAST_DETACHABLE
+	int v_max_table[3];
+	int q_max_table[3];
+#else
+	int v_max_table[5];
+	int q_max_table[5];
+#endif
+	int v_max_now;
+	int q_max_now;
+#endif
 	int rce_value[3];
 	int dtcd_value;
 	int rs_value[4]; /*rs mix_factor max min*/
@@ -157,6 +172,10 @@ struct sec_fuelgauge_info {
 
 	unsigned int capacity_old;	/* only for atomic calculation */
 	unsigned int capacity_max;	/* only for dynamic calculation */
+
+#if defined(CONFIG_BATTERY_AGE_FORECAST)
+	unsigned int chg_float_voltage; /* BATTERY_AGE_FORECAST */
+#endif
 
 	bool initial_update_of_soc;
 	struct mutex fg_lock;

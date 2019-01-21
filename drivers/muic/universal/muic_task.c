@@ -273,7 +273,100 @@ static int muic_irq_handler_afc(muic_data_t *pmuic, int irq)
 }
 #endif
 
-#if (defined(CONFIG_MUIC_UNIVERSAL_MULTI_SUPPORT) || !defined(CONFIG_MUIC_UNIVERSAL_SM5705))
+#if defined(CONFIG_MUIC_UNIVERSAL_SM5708)
+static int sm5708_muic_irq_handler(muic_data_t *pmuic, int irq)
+{
+	struct i2c_client *i2c = pmuic->i2c;
+	int intr1, intr2, intr3;
+
+	pr_info("%s:%s irq(%d)\n", pmuic->chip_name, __func__, irq);
+
+	/* read and clear interrupt status bits */
+	intr1 = muic_i2c_read_byte(i2c, MUIC_REG_INT1);
+	intr2 = muic_i2c_read_byte(i2c, MUIC_REG_INT2);
+	intr3 = muic_i2c_read_byte(i2c, MUIC_REG_INT3);
+
+	if ((intr1 < 0) || (intr2 < 0)) {
+		pr_err("%s: err read interrupt status [1:0x%x, 2:0x%x]\n",
+				__func__, intr1, intr2);
+		return INT_REQ_DISCARD;
+	}
+
+	if (intr1 & MUIC_INT_ATTACH_MASK) {
+		int intr_tmp;
+
+		intr_tmp = muic_i2c_read_byte(i2c, MUIC_REG_INT1);
+		if (intr_tmp & 0x2) {
+			pr_info("%s:%s attach/detach interrupt occurred\n",
+				pmuic->chip_name, __func__);
+			intr1 &= 0xFE;
+		}
+		intr1 |= intr_tmp;
+	}
+
+	//if (intr1 & MUIC_INT_DETACH_MASK) {
+	//
+	//}
+
+	pr_info("%s:%s intr[1:0x%x, 2:0x%x, 3:0x%x]\n", pmuic->chip_name, __func__,
+			intr1, intr2, intr3);
+
+	/* check for muic reset and recover for every interrupt occurred */
+	if ((intr1 == 0) && (intr2 == 0) && (intr3 == 0) && (irq != -1)) {
+		int ctrl;
+
+		ctrl = muic_i2c_read_byte(i2c, MUIC_REG_CTRL);
+		if (ctrl == 0x1F) {
+			/* CONTROL register is reset to 1F */
+			muic_print_reg_log();
+			muic_print_reg_dump(pmuic);
+			pr_err("%s: err muic could have been reseted. Initialize!!\n",
+				__func__);
+			muic_reg_init(pmuic);
+			muic_print_reg_dump(pmuic);
+
+			/* MUIC Interrupt On */
+			set_int_mask(pmuic, false);
+		}
+
+		if ((intr1 & MUIC_INT_ATTACH_MASK) == 0)
+			return INT_REQ_DISCARD;
+	}
+
+	// scan fail check
+	if ((intr1 == 0x01) && (intr2 == 0x00) && (intr3 == 0x00)) {
+		int val1, val2, val3, adc, vbvolt;
+
+		val1   = muic_i2c_read_byte(i2c, 0x0A);   //REG_DEVT1
+		val2   = muic_i2c_read_byte(i2c, 0x0B);   //REG_DEVT2
+		val3   = muic_i2c_read_byte(i2c, 0x0C);   //REG_DEVT3
+		adc    = muic_i2c_read_byte(i2c, 0x09);   //REG_ADC
+		vbvolt = muic_i2c_read_byte(i2c, 0x15);   //REG_RSVDID1
+
+		if ((val1 == 0x00) && (val2 == 0x00) && (val3 == 0x00) && (adc == 0x1F) && (vbvolt == 0x00)) {
+			pr_info("%s:Scan Fail :  MUIC reset\n", __func__);
+			//MUIC Reset
+			muic_i2c_write_byte(i2c, 0x22, 0x01);
+
+			muic_reg_init(pmuic);
+			muic_print_reg_dump(pmuic);
+
+			/* MUIC Interrupt On */
+			set_int_mask(pmuic, false);
+
+			return INT_REQ_DISCARD;
+		}
+	}
+
+	pmuic->intr.intr1 = intr1;
+	pmuic->intr.intr2 = intr2;
+	pmuic->intr.intr3 = intr3;
+
+	return INT_REQ_DONE;
+}
+#endif
+
+#if (defined(CONFIG_MUIC_UNIVERSAL_MULTI_SUPPORT) || !(defined(CONFIG_MUIC_UNIVERSAL_SM5705) || defined(CONFIG_MUIC_UNIVERSAL_SM5708)))
 static int muic_irq_handler(muic_data_t *pmuic, int irq)
 {
 	struct i2c_client *i2c = pmuic->i2c;
@@ -370,7 +463,7 @@ static int muic_irq_handler(muic_data_t *pmuic, int irq)
 		val3   = muic_i2c_read_byte(i2c,0x15);   //REG_DEVT3
 		adc    = muic_i2c_read_byte(i2c,0x07);   //REG_ADC
         
-		if ( (val1==0x00) && (val2==0x00) && (val3==0x00) && (adc=0x1F) )
+		if ( (val1==0x00) && (val2==0x00) && (val3==0x00) && (adc=0x1F) && (pmuic->muic_reset_count < 1) )
 		{
 			pr_info("%s:Scan Fail :  MUIC reset \n", __func__);
 			//MUIC Reset
@@ -381,6 +474,9 @@ static int muic_irq_handler(muic_data_t *pmuic, int irq)
 
 			/* MUIC Interrupt On */
 			set_int_mask(pmuic, false);
+
+			pmuic->muic_reset_count++;
+			pr_info("%s:%s muic_reset_count = %d \n", MUIC_DEV_NAME, __func__, pmuic->muic_reset_count);
 
 			return INT_REQ_DISCARD;
 		}
@@ -462,6 +558,9 @@ static irqreturn_t muic_irq_thread(int irq, void *data)
 #elif defined(CONFIG_MUIC_UNIVERSAL_SM5705_AFC)
         if (muic_irq_handler_afc(pmuic, irq) & INT_REQ_DONE)
              	muic_detect_dev(pmuic);
+#elif defined(CONFIG_MUIC_UNIVERSAL_SM5708)
+	if (sm5708_muic_irq_handler(pmuic, irq) & INT_REQ_DONE)
+		muic_detect_dev(pmuic);
 #else
 		if (muic_irq_handler(pmuic, irq) & INT_REQ_DONE)
 			muic_detect_dev(pmuic);
@@ -675,7 +774,7 @@ static int muic_probe(struct i2c_client *i2c,
 	}
 
 	if (pmuic->pdata->init_gpio_cb) {
-		ret = pmuic->pdata->init_gpio_cb();
+		ret = pmuic->pdata->init_gpio_cb(get_switch_sel());
 		if (ret) {
 			pr_err("%s: failed to init gpio(%d)\n", __func__, ret);
 		goto fail_init_gpio;
@@ -684,6 +783,7 @@ static int muic_probe(struct i2c_client *i2c,
 
 	if (pmuic->pdata->init_switch_dev_cb)
 		pmuic->pdata->init_switch_dev_cb();
+
 
 #if !defined(CONFIG_SEC_FACTORY)
 	if (!(get_switch_sel() & SWITCH_SEL_RUSTPROOF_MASK)) {
@@ -761,6 +861,9 @@ static int muic_probe(struct i2c_client *i2c,
 #elif defined(CONFIG_MUIC_UNIVERSAL_SM5705_AFC)
 	    muic_init_afc_state(pmuic);
 #endif
+
+	pmuic->muic_reset_count = 0;
+	
 	/* initial cable detection */
 	INIT_DELAYED_WORK(&pmuic->init_work, muic_init_detect);
 	schedule_delayed_work(&pmuic->init_work, msecs_to_jiffies(300));

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -117,7 +117,9 @@ void diag_notify_md_client(uint8_t peripheral, int data)
 	if (driver->logging_mode != DIAG_MEMORY_DEVICE_MODE)
 		return;
 
+	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "%s:%d: waiting on md_session_lock\n", __func__, __LINE__);
 	mutex_lock(&driver->md_session_lock);
+	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "%s:%d: acquired md_session_lock\n", __func__, __LINE__);
 	memset(&info, 0, sizeof(struct siginfo));
 	info.si_code = SI_QUEUE;
 	info.si_int = (PERIPHERAL_MASK(peripheral) | data);
@@ -142,6 +144,7 @@ void diag_notify_md_client(uint8_t peripheral, int data)
 				peripheral, info.si_int, stat);
 	}
 	mutex_unlock(&driver->md_session_lock);
+	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "%s:%d: released md_session_lock\n", __func__, __LINE__);
 }
 
 static void process_pd_status(uint8_t *buf, uint32_t len,
@@ -348,15 +351,17 @@ static void process_incoming_feature_mask(uint8_t *buf, uint32_t len,
 	feature_mask_len = header->feature_mask_len;
 
 	if (feature_mask_len == 0) {
-		pr_debug("diag: In %s, received invalid feature mask from peripheral %d\n",
+		DIAG_LOG(DIAG_DEBUG_PERIPHERALS,"diag: In %s, received invalid feature mask from peripheral %d\n",
 			 __func__, peripheral);
 		return;
 	}
 
 	if (feature_mask_len > FEATURE_MASK_LEN) {
-		pr_alert("diag: Receiving feature mask length more than Apps support\n");
+		DIAG_LOG(DIAG_DEBUG_PERIPHERALS,"diag: Receiving feature mask length more than Apps support\n");
 		feature_mask_len = FEATURE_MASK_LEN;
 	}
+
+	diag_cmd_remove_reg_by_proc(peripheral);
 
 	driver->feature[peripheral].rcvd_feature_mask = 1;
 
@@ -508,7 +513,9 @@ static void process_ssid_range_report(uint8_t *buf, uint32_t len,
 	/* Don't account for pkt_id and length */
 	read_len += header_len - (2 * sizeof(uint32_t));
 
+	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "%s:%d: waiting on msg_mask_lock\n", __func__, __LINE__);
 	mutex_lock(&driver->msg_mask_lock);
+	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "%s:%d: acquired msg_mask_lock\n", __func__, __LINE__);
 	driver->max_ssid_count[peripheral] = header->count;
 	for (i = 0; i < header->count && read_len < len; i++) {
 		ssid_range = (struct diag_ssid_range_t *)ptr;
@@ -553,6 +560,7 @@ static void process_ssid_range_report(uint8_t *buf, uint32_t len,
 		driver->msg_mask_tbl_count += 1;
 	}
 	mutex_unlock(&driver->msg_mask_lock);
+	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "%s:%d: released msg_mask_lock\n", __func__, __LINE__);
 }
 
 static void diag_build_time_mask_update(uint8_t *buf,
@@ -577,7 +585,9 @@ static void diag_build_time_mask_update(uint8_t *buf,
 		       __func__, range->ssid_first, range->ssid_last);
 		return;
 	}
+	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "%s:%d: waiting on msg_mask_lock\n", __func__, __LINE__);
 	mutex_lock(&driver->msg_mask_lock);
+	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "%s:%d: acquired msg_mask_lock\n", __func__, __LINE__);
 	build_mask = (struct diag_msg_mask_t *)(driver->build_time_mask->ptr);
 	num_items = range->ssid_last - range->ssid_first + 1;
 
@@ -618,6 +628,7 @@ static void diag_build_time_mask_update(uint8_t *buf,
 	driver->bt_msg_mask_tbl_count += 1;
 end:
 	mutex_unlock(&driver->msg_mask_lock);
+	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "%s:%d: released msg_mask_lock\n", __func__, __LINE__);
 	return;
 }
 
@@ -654,8 +665,8 @@ static void process_build_mask_report(uint8_t *buf, uint32_t len,
 void diag_cntl_process_read_data(struct diagfwd_info *p_info, void *buf,
 				 int len)
 {
-	int read_len = 0;
-	int header_len = sizeof(struct diag_ctrl_pkt_header_t);
+	uint32_t read_len = 0;
+	uint32_t header_len = sizeof(struct diag_ctrl_pkt_header_t);
 	uint8_t *ptr = buf;
 	struct diag_ctrl_pkt_header_t *ctrl_pkt = NULL;
 
@@ -663,13 +674,14 @@ void diag_cntl_process_read_data(struct diagfwd_info *p_info, void *buf,
 		return;
 
 	if (reg_dirty & PERIPHERAL_MASK(p_info->peripheral)) {
-		pr_err_ratelimited("diag: dropping command registration from peripheral %d\n",
+		DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "diag: dropping command registration from peripheral %d\n",
 		       p_info->peripheral);
 		return;
 	}
 
 	while (read_len + header_len < len) {
 		ctrl_pkt = (struct diag_ctrl_pkt_header_t *)ptr;
+		DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "ctrl_pkt->pkt_id = %d\n", ctrl_pkt->pkt_id);
 		switch (ctrl_pkt->pkt_id) {
 		case DIAG_CTRL_MSG_REG:
 			process_command_registration(ptr, ctrl_pkt->len,
@@ -704,7 +716,7 @@ void diag_cntl_process_read_data(struct diagfwd_info *p_info, void *buf,
 						p_info->peripheral);
 			break;
 		default:
-			pr_debug("diag: Control packet %d not supported\n",
+			DIAG_LOG(DIAG_DEBUG_PERIPHERALS,"diag: Control packet %d not supported\n",
 				 ctrl_pkt->pkt_id);
 		}
 		ptr += header_len + ctrl_pkt->len;

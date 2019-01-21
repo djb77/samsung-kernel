@@ -127,7 +127,7 @@
 }
 
 #elif defined(CONFIG_ARCH_MSM) //______________________________________________________________________________
-
+static struct pm_qos_request lpm_bias_pm_qos_request;
 #ifdef USE_HMP_BOOST
 #define set_hmp(enable)	 { \
 	if(enable != current_hmp_boost) { \
@@ -153,19 +153,34 @@ int set_freq_limit(unsigned long id, unsigned int freq)
 
 #ifdef CONFIG_DEBUG_BUS_VOTER
 #define SET_BOOSTER  { \
+	int value = 0;\
 	pr_debug("[Input Booster2] %s      set_freq_limit : %d, msm_bus_floor_vote : %d\n", glGage, _this->param[_this->index].cpu_freq, _this->param[_this->index].bimc_freq); \
 	set_hmp(_this->param[_this->index].hmp_boost); \
 	set_freq_limit(DVFS_TOUCH_ID, _this->param[_this->index].cpu_freq);  \
 	msm_bus_floor_vote("bimc", _this->param[_this->index].bimc_freq * 1000);  \
+	 \
+	MAX_T_INPUT_BOOSTER(value, lpm_bias);  \
+	if (value == INPUT_BOOSTER_NULL) { \
+		value = 0; \
+	} \
+	pm_qos_update_request(&lpm_bias_pm_qos_request, value);\
 }
 #define REMOVE_BOOSTER  { \
+	int value = 0;\
 	pr_debug("[Input Booster2] %s      set_freq_limit : %d, msm_bus_floor_vote : %d\n", glGage, -1, 0); \
 	set_hmp(0); \
 	set_freq_limit(DVFS_TOUCH_ID, -1);  \
 	msm_bus_floor_vote("bimc", 0);  \
+	 \
+	MAX_T_INPUT_BOOSTER(value, lpm_bias);  \
+	if (value == INPUT_BOOSTER_NULL) { \
+		value = 0; \
+	} \
+	pm_qos_update_request(&lpm_bias_pm_qos_request, value);\
 }
 #else
 #define SET_BOOSTER  { \
+	int value = 0;\
 	int freq = -1;\
 	_this->level++; \
 	if(_this->param[_this->level].hmp_boost != 0){ \
@@ -176,8 +191,15 @@ int set_freq_limit(unsigned long id, unsigned int freq)
 	MAX_T_INPUT_BOOSTER(freq, cpu_freq); \
 	pr_debug("[Input Booster2] %s      set_freq_limit : %d\n", glGage, freq); \
 	set_freq_limit(DVFS_TOUCH_ID, freq);  \
+	 \
+	MAX_T_INPUT_BOOSTER(value, lpm_bias);  \
+	if (value == INPUT_BOOSTER_NULL) { \
+		value = 0; \
+	} \
+	pm_qos_update_request(&lpm_bias_pm_qos_request, value);\
 }
 #define REMOVE_BOOSTER  { \
+	int value = 0;\
 	int freq = -1;\
 	if(_this->level >= 0){ \
 		set_hmp(-((int)_this->param[_this->level].hmp_boost)); \
@@ -186,6 +208,12 @@ int set_freq_limit(unsigned long id, unsigned int freq)
 	MAX_T_INPUT_BOOSTER(freq, cpu_freq); \
 	pr_debug("[Input Booster2] %s      set_freq_limit : %d\n", glGage, freq); \
 	set_freq_limit(DVFS_TOUCH_ID, freq);  \
+	 \
+	MAX_T_INPUT_BOOSTER(value, lpm_bias);  \
+	if (value == INPUT_BOOSTER_NULL) { \
+		value = 0; \
+	} \
+	pm_qos_update_request(&lpm_bias_pm_qos_request, value);\
 }
 #endif
 #define PROPERTY_BOOSTER(_device_param_, _dt_param_, _time_)  { \
@@ -193,17 +221,20 @@ int set_freq_limit(unsigned long id, unsigned int freq)
 	_device_param_.bimc_freq = _dt_param_.bimc_freq; \
 	_device_param_.time = _dt_param_._time_; \
 	_device_param_.hmp_boost = _dt_param_.hmp_boost; \
+	_device_param_.lpm_bias = _dt_param_.lpm_bias; \
 }
 #define SYSFS_DEFINE(_A_, _B_) \
 	_A_ cpu_freq _B_ ; \
 	_A_ bimc_freq _B_ ; \
 	_A_ hmp_boost _B_ ; \
+	_A_ lpm_bias _B_ ; \
 	_A_ head_time _B_ ; \
 	_A_ tail_time _B_ ; 
 #define SYSFS_COPY_TO_FROM(_A_, _B_) { \
 	_A_ cpu_freq = (*cpu_freq == (unsigned int)(-1)) ? _B_ cpu_freq : *cpu_freq; \
 	_A_ bimc_freq = (*bimc_freq == (unsigned int)(-1)) ? _B_ bimc_freq : *bimc_freq; \
 	_A_ hmp_boost = (*hmp_boost == (unsigned int)(-1)) ? _B_ hmp_boost : *hmp_boost; \
+	_A_ lpm_bias = (*lpm_bias == (unsigned int)(-1)) ? _B_ lpm_bias : *lpm_bias; \
 	_A_ head_time = (*head_time == (unsigned int)(-1)) ? _B_ head_time : *head_time; \
 	_A_ tail_time = (*tail_time == (unsigned int)(-1)) ? _B_ tail_time : *tail_time; \
 }
@@ -211,6 +242,7 @@ int set_freq_limit(unsigned long id, unsigned int freq)
 	cpu_freq = _A_ cpu_freq; \
 	bimc_freq = _A_ bimc_freq; \
 	hmp_boost = _A_ hmp_boost; \
+	lpm_bias = _A_ lpm_bias; \
 	head_time = _A_ head_time; \
 	tail_time = _A_ tail_time; \
 }
@@ -218,6 +250,7 @@ int set_freq_limit(unsigned long id, unsigned int freq)
 	err |= of_property_read_u32_index(cnp, "input_booster,cpu_freqs", i, &dt_infor->param_tables[i].cpu_freq); \
 	err |= of_property_read_u32_index(cnp, "input_booster,bimc_freqs", i, &dt_infor->param_tables[i].bimc_freq); \
 	err |= of_property_read_u32_index(cnp, "input_booster,hmp_boost", i, &temp); dt_infor->param_tables[i].hmp_boost = (u8)temp; \
+	err |= of_property_read_u32_index(cnp, "input_booster,lpm_bias", i, &temp); dt_infor->param_tables[i].lpm_bias = (u8)temp; \
 	err |= of_property_read_u32_index(cnp, "input_booster,head_times", i, &temp); dt_infor->param_tables[i].head_time = (u16)temp; \
 	err |= of_property_read_u32_index(cnp, "input_booster,tail_times", i, &temp); dt_infor->param_tables[i].tail_time = (u16)temp; \
 }
@@ -456,7 +489,7 @@ static void input_booster_##_DEVICE_##_set_booster_work_func(struct work_struct 
 			return  count; \
 		} \
 		if (len != _COUNT_) { \
-			pr_debug("### Keep this format : [level cpu_freq kfc_freq mif_freq int_freq hmp_boost] (Ex: 1 1600000 0 1500000 667000 333000 1###\n"); \
+			pr_debug("### Keep this format : [level cpu_freq kfc_freq mif_freq int_freq hmp_boost lpm_bias] (Ex: 1 1600000 0 1500000 667000 333000 1 5###\n"); \
 			pr_debug("### Keep this format : [level head_time tail_time phase_time] (Ex: 1 130 500 50 ###\n"); \
 			pr_debug("### Keep this format : [type value] (Ex: 2 1 ###\n"); \
 			return count; \
@@ -527,6 +560,7 @@ struct t_input_booster_param {
 	u32 bimc_freq;
 
 	u8 hmp_boost;
+	u8 lpm_bias;
 	u16 time;
 #endif //______________________________________________________________________________
 };
@@ -571,6 +605,7 @@ struct t_input_booster_device_tree_param {
 	u32     int_freq;
 #elif defined(CONFIG_ARCH_MSM) //______________________________________________________________________________
 	u8      hmp_boost;
+	u8      lpm_bias;
 
 	u16 	head_time;
 	u16 	tail_time;
@@ -625,11 +660,11 @@ SYSFS_DEVICE(freq, (buf, "%d %u %u %u %u %u\n", level, cpu_freq, kfc_freq, mif_f
 SYSFS_DEVICE(time, (buf, "%d %u %u %u\n", level, head_time, tail_time, phase_time), 4)
 #elif defined(CONFIG_ARCH_MSM) //______________________________________________________________________________
 SYSFS_CLASS(debug_level, (buf, "%u\n", debug_level), 1)
-SYSFS_CLASS(head, (buf, "%u %u %u %u\n", head_time, cpu_freq, bimc_freq, hmp_boost), 4)
-SYSFS_CLASS(tail, (buf, "%u %u %u %u\n", tail_time, cpu_freq, bimc_freq, hmp_boost), 4)
+SYSFS_CLASS(head, (buf, "%u %u %u %u %u\n", head_time, cpu_freq, bimc_freq, hmp_boost, lpm_bias), 5)
+SYSFS_CLASS(tail, (buf, "%u %u %u %u %u\n", tail_time, cpu_freq, bimc_freq, hmp_boost, lpm_bias), 5)
 SYSFS_CLASS(level, (buf, "%d\n", level), 1)
 SYSFS_DEVICE(level, (buf, "%d\n", level), 1)
-SYSFS_DEVICE(freq, (buf, "%d %u %u %u\n", level, cpu_freq, bimc_freq, hmp_boost), 4)
+SYSFS_DEVICE(freq, (buf, "%d %u %u %u %u\n", level, cpu_freq, bimc_freq, hmp_boost, lpm_bias), 5)
 SYSFS_DEVICE(time, (buf, "%d %u %u\n", level, head_time, tail_time), 3)
 #endif //______________________________________________________________________________
 static ssize_t input_booster_sysfs_device_store_control(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { 

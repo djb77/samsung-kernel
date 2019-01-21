@@ -15,6 +15,15 @@
 #include <linux/integrity.h>
 #include <crypto/sha.h>
 #include <linux/key.h>
+#include <crypto/hash_info.h>
+
+enum five_file_integrity {
+	FIVE_FILE_UNKNOWN,
+	FIVE_FILE_FAIL,
+	FIVE_FILE_RSA,
+	FIVE_FILE_DMVERITY,
+	FIVE_FILE_HMAC
+};
 
 /* iint action cache flags */
 #define IMA_MEASURE		0x00000001
@@ -49,6 +58,10 @@
 #define IMA_MODULE_APPRAISED	0x00008000
 #define IMA_FIRMWARE_APPRAISE	0x00010000
 #define IMA_FIRMWARE_APPRAISED	0x00020000
+
+#define FIVE_DMVERITY_PROTECTED	0x00040000
+#define FIVE_TRUSTED_FILE	0x00080000
+
 #define IMA_APPRAISE_SUBMASK	(IMA_FILE_APPRAISE | IMA_MMAP_APPRAISE | \
 				 IMA_BPRM_APPRAISE | IMA_MODULE_APPRAISE | \
 				 IMA_FIRMWARE_APPRAISE)
@@ -113,6 +126,11 @@ struct integrity_iint_cache {
 	enum integrity_status ima_firmware_status:4;
 	enum integrity_status evm_status:4;
 	struct ima_digest_data *ima_hash;
+#ifdef CONFIG_FIVE
+	unsigned long five_flags;
+	enum five_file_integrity five_status;
+	struct integrity_label *five_label;
+#endif
 };
 
 /* rbtree tree calls to lookup, insert, delete
@@ -123,7 +141,8 @@ struct integrity_iint_cache *integrity_iint_find(struct inode *inode);
 #define INTEGRITY_KEYRING_EVM		0
 #define INTEGRITY_KEYRING_MODULE	1
 #define INTEGRITY_KEYRING_IMA		2
-#define INTEGRITY_KEYRING_MAX		3
+#define INTEGRITY_KEYRING_FIVE		3
+#define INTEGRITY_KEYRING_MAX		4
 
 #ifdef CONFIG_INTEGRITY_SIGNATURE
 
@@ -131,6 +150,8 @@ int integrity_digsig_verify(const unsigned int id, const char *sig, int siglen,
 			    const char *digest, int digestlen);
 
 int integrity_init_keyring(const unsigned int id);
+int __init integrity_load_x509_from_mem(const unsigned int id,
+					const char *data, size_t size);
 #else
 
 static inline int integrity_digsig_verify(const unsigned int id,

@@ -271,6 +271,8 @@ static int input_get_disposition(struct input_dev *dev,
 	case EV_SYN:
 		switch (code) {
 		case SYN_CONFIG:
+		case SYN_TIME_SEC:
+		case SYN_TIME_NSEC:
 			disposition = INPUT_PASS_TO_ALL;
 			break;
 
@@ -502,7 +504,7 @@ void input_booster(struct input_dev *dev)
 {
 	int i, j, DetectedCategory = false, iTouchID = -1, iTouchSlot = -1/*,lcdoffcounter = 0*/;
 
-	for(i=0;i<input_count;i++) {
+	for (i = 0; i < input_count && i < MAX_EVENTS; i++) {
 		if (DetectedCategory) {
 			break;
 		} else if (input_events[i].type == EV_KEY) {
@@ -781,6 +783,7 @@ void input_booster_init()
 		INIT_SYSFS_DEVICE(pen)
 		INIT_SYSFS_DEVICE(hover)
 	}
+	pm_qos_add_request(&lpm_bias_pm_qos_request, PM_QOS_HIST_BIAS, PM_QOS_DEFAULT_VALUE);
 }
 #endif  // Input Booster -
 
@@ -805,6 +808,7 @@ void input_event(struct input_dev *dev,
 		 unsigned int type, unsigned int code, int value)
 {
 	unsigned long flags;
+	int idx;
 
 	if (is_event_supported(type, dev->evbit, EV_MAX)) {
 
@@ -818,14 +822,17 @@ void input_event(struct input_dev *dev,
 				pr_debug("[Input Booster1] ==============================================\n");
 				input_booster(dev);
 				input_count=0;
-			} else {
+			} else if (input_count < MAX_EVENTS) {
 				pr_debug("[Input Booster1] type = %x, code = %x, value =%x\n", type, code, value);
-				input_events[input_count].type = type;
-				input_events[input_count].code = code;
-				input_events[input_count].value = value;
-				if(input_count < MAX_EVENTS) {
-					input_count++;
+				idx = input_count;
+				input_events[idx].type = type;
+				input_events[idx].code = code;
+				input_events[idx].value = value;
+				if (idx < MAX_EVENTS) {
+					input_count = idx + 1 ;
 				}
+			} else {
+				pr_debug("[Input Booster1] type = %x, code = %x, value =%x   Booster Event Exceeded\n", type, code, value);
 			}
 		}
 #endif  // Input Booster -
@@ -1072,6 +1079,8 @@ static int input_enable_device(struct input_dev *dev)
 	retval = mutex_lock_interruptible(&dev->mutex);
 	if (retval)
 		return retval;
+	if (!dev->disabled)
+		goto out;
 	if (!dev->disabled)
 		goto out;
 	if (dev->users_private && dev->open) {
@@ -2934,6 +2943,7 @@ static int __init input_init(void)
 static void __exit input_exit(void)
 {
 	input_proc_exit();
+	pm_qos_remove_request(&lpm_bias_pm_qos_request);
 	unregister_chrdev_region(MKDEV(INPUT_MAJOR, 0),
 				 INPUT_MAX_CHAR_DEVICES);
 	class_unregister(&input_class);

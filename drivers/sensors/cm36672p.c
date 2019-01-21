@@ -37,6 +37,11 @@
 #include <linux/sensor/sensors_core.h>
 #include "cm36672p.h"
 
+#ifdef TAG
+#undef TAG
+#define TAG "[PROX]"
+#endif
+
 #undef PROXIMITY_FOR_TEST	/* for HW to tune up */
 
 #define MODULE_NAME      "proximity_sensor"

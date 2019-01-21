@@ -24,24 +24,24 @@
 #define IST30XX_IUM_PAGE_SIZE       (0x80)
 
 // EEPROM register
-#define rISP_BASE			        (0x40006000)
-#define rISP_ACCESS_MODE		    IST30XX_DA_ADDR(rISP_BASE | 0x00)
-#define rISP_ADDRESS			    IST30XX_DA_ADDR(rISP_BASE | 0x04)
-#define rISP_DIN				    IST30XX_DA_ADDR(rISP_BASE | 0x08)
-#define rISP_DOUT				    IST30XX_DA_ADDR(rISP_BASE | 0x0C)
-#define rISP_ISP_EN				    IST30XX_DA_ADDR(rISP_BASE | 0x10)
-#define rISP_AUTO_READ_CTRL		    IST30XX_DA_ADDR(rISP_BASE | 0x14)
-#define rISP_CRC				    IST30XX_DA_ADDR(rISP_BASE | 0x18)
-#define rISP_COMPARE_MODE		    IST30XX_DA_ADDR(rISP_BASE | 0x1C)
-#define rISP_OP_CTRL			    IST30XX_DA_ADDR(rISP_BASE | 0x20)
-#define rISP_PAGE_MODE			    IST30XX_DA_ADDR(rISP_BASE | 0x38)
-#define rISP_STATUS				    IST30XX_DA_ADDR(rISP_BASE | 0x80)
+#define rISP_BASE                   (0x40006000)
+#define rISP_ACCESS_MODE            IST30XX_DA_ADDR(rISP_BASE | 0x00)
+#define rISP_ADDRESS                IST30XX_DA_ADDR(rISP_BASE | 0x04)
+#define rISP_DIN                    IST30XX_DA_ADDR(rISP_BASE | 0x08)
+#define rISP_DOUT                   IST30XX_DA_ADDR(rISP_BASE | 0x0C)
+#define rISP_ISP_EN                 IST30XX_DA_ADDR(rISP_BASE | 0x10)
+#define rISP_AUTO_READ_CTRL         IST30XX_DA_ADDR(rISP_BASE | 0x14)
+#define rISP_CRC                    IST30XX_DA_ADDR(rISP_BASE | 0x18)
+#define rISP_COMPARE_MODE           IST30XX_DA_ADDR(rISP_BASE | 0x1C)
+#define rISP_OP_CTRL                IST30XX_DA_ADDR(rISP_BASE | 0x20)
+#define rISP_PAGE_MODE              IST30XX_DA_ADDR(rISP_BASE | 0x38)
+#define rISP_STATUS                 IST30XX_DA_ADDR(rISP_BASE | 0x80)
 
 // DMA
-#define rDMA_BASE				    (0x4000A000)
-#define rDMA1_CTL				    IST30XX_DA_ADDR(rDMA_BASE | 0x010)
-#define rDMA1_SRCADDR			    IST30XX_DA_ADDR(rDMA_BASE | 0x014)
-#define rDMA1_DSTADDR			    IST30XX_DA_ADDR(rDMA_BASE | 0x018)
+#define rDMA_BASE                   (0x4000A000)
+#define rDMA1_CTL                   IST30XX_DA_ADDR(rDMA_BASE | 0x010)
+#define rDMA1_SRCADDR               IST30XX_DA_ADDR(rDMA_BASE | 0x014)
+#define rDMA1_DSTADDR               IST30XX_DA_ADDR(rDMA_BASE | 0x018)
 
 // I2C
 #define rI2C_CTRL                   IST30XX_DA_ADDR(0x30000000)
@@ -80,6 +80,7 @@ u32 ist30xx_parse_ver(struct ist30xx_data *data, int flag, const u8 *buf);
 int ist30xx_fw_update(struct ist30xx_data *data, const u8 *buf, int size);
 int ist30xx_fw_recovery(struct ist30xx_data *data);
 int ist30xx_auto_bin_update(struct ist30xx_data *data);
+int ist30xx_calib_wait(struct ist30xx_data *data);
 int ist30xx_calibrate(struct ist30xx_data *data, int wait_cnt);
 int ist30xx_init_update_sysfs(struct ist30xx_data *data);
 

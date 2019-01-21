@@ -25,7 +25,7 @@ struct stk3013_platform_data {
 	int int_pin;
 	uint32_t transmittance;
 	uint32_t int_flags;
-	
+	int vled_ldo;  /* gpio pin to control power */
 	uint32_t regulator_divided; /* 1: vdd & vled share the same power supply, 0: vdd & vled uses difference power supply */
 };
 #endif

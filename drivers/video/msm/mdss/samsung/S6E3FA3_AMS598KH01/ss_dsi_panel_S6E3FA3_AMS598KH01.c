@@ -892,6 +892,7 @@ static void mdnie_init(struct samsung_display_driver_data *vdd)
 		mdnie_data[0].RGB_SENSOR_MDNIE_SCR = DSI0_RGB_SENSOR_MDNIE_2;
 
 		mdnie_data[0].mdnie_tune_value = mdnie_tune_value_dsi0;
+		mdnie_data[0].light_notification_tune_value = light_notification_tune_value;
 
 		/* Update MDNIE data related with size, offset or index */
 		mdnie_data[0].bypass_mdnie_size = ARRAY_SIZE(DSI0_BYPASS_MDNIE);
@@ -906,6 +907,12 @@ static void mdnie_init(struct samsung_display_driver_data *vdd)
 		mdnie_data[0].adjust_ldu_table = adjust_ldu_data;
 		mdnie_data[0].max_adjust_ldu = 6;
 		mdnie_data[0].scr_step_index = MDNIE_STEP2_INDEX;
+		mdnie_data[0].white_default_r = 0xff;
+		mdnie_data[0].white_default_g = 0xff;
+		mdnie_data[0].white_default_b = 0xff;
+		mdnie_data[0].white_balanced_r = 0;
+		mdnie_data[0].white_balanced_g = 0;
+		mdnie_data[0].white_balanced_b = 0;
 
 	}
 }

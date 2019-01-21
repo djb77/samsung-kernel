@@ -35,9 +35,14 @@
 #include <linux/uaccess.h>
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
-
 #include <linux/sensor/sensors_core.h>
+#include <linux/pinctrl/consumer.h>
 #include "stk3013.h"
+
+#ifdef TAG
+#undef TAG
+#define TAG "[PROX]"
+#endif
 
 #define DRIVER_VERSION  "3.10.0_ps_only_20150508"
 
@@ -207,6 +212,7 @@ static int check_calibration_offset(struct stk3013_data *ps_data);
 static int stk3013_validate_n_handle(struct i2c_client *client);
 #endif
 static int stk3013_regulator_onoff(struct device *dev, bool onoff);
+static int stk3013_vled_onoff(struct device *dev, bool onoff);
 static int32_t stk3013_init_all_setting(struct i2c_client *client,
 				struct stk3013_platform_data *plat_data);
 
@@ -639,6 +645,8 @@ static int32_t stk3013_enable_ps(struct device *dev,
 
 	if (enable) {
 		/*stk3013_regulator_onoff(dev, ON);*/
+		if (ps_data->pdata->vled_ldo)
+			stk3013_vled_onoff(dev, ON);
 		msleep(20);
 		ret = stk3013_init_all_setting(ps_data->client,
 							ps_data->pdata);
@@ -701,6 +709,8 @@ static int32_t stk3013_enable_ps(struct device *dev,
 		}
 	} else {
 		disable_irq(ps_data->irq);
+		if (ps_data->pdata->vled_ldo)
+			stk3013_vled_onoff(dev, OFF);
 		/*stk3013_regulator_onoff(dev, OFF);*/
 		ps_data->ps_enabled = false;
 	}
@@ -1148,7 +1158,7 @@ static DEVICE_ATTR(prox_offset_pass, S_IRUGO, proximity_calibration_pass_show,
 #endif
 static DEVICE_ATTR(prox_avg, S_IRUGO | S_IWUSR | S_IWGRP,
 	proximity_avg_show, proximity_avg_store);
-static DEVICE_ATTR(prox_trim, S_IRUSR | S_IRGRP,
+static DEVICE_ATTR(prox_trim, S_IRUGO,
 	proximity_trim_show, NULL);
 static DEVICE_ATTR(thresh_high, S_IRUGO | S_IWUSR | S_IWGRP,
 	proximity_thresh_high_show, proximity_thresh_high_store);
@@ -1156,8 +1166,8 @@ static DEVICE_ATTR(thresh_low, S_IRUGO | S_IWUSR | S_IWGRP,
 	proximity_thresh_low_show, proximity_thresh_low_store);
 static DEVICE_ATTR(state, S_IRUGO, proximity_state_show, NULL);
 static DEVICE_ATTR(raw_data, S_IRUGO, proximity_state_show, NULL);
-static DEVICE_ATTR(vendor, S_IRUSR | S_IRGRP, stk3013_vendor_show, NULL);
-static DEVICE_ATTR(name, S_IRUSR | S_IRGRP, stk3013_name_show, NULL);
+static DEVICE_ATTR(vendor, S_IRUGO, stk3013_vendor_show, NULL);
+static DEVICE_ATTR(name, S_IRUGO, stk3013_name_show, NULL);
 
 static struct device_attribute *prox_sensor_attrs[] = {
 #ifdef PROXIMITY_CALIBRATION
@@ -1201,7 +1211,7 @@ static ssize_t proximity_enable_store(struct device *dev,
 		en = 0;
 	else {
 		SENSOR_ERR("invalid value %d\n", *buf);
-		return -EINVAL;
+		return size;
 	}
 	SENSOR_INFO("Enable PS : %d\n", en);
 	mutex_lock(&ps_data->io_lock);
@@ -1524,23 +1534,36 @@ static int stk3013_regulator_onoff(struct device *dev, bool onoff)
 	return 0;
 }
 
+static int stk3013_vled_onoff(struct device *dev, bool onoff)
+{
+	struct stk3013_data *ps_data = dev_get_drvdata(dev);
+
+	SENSOR_INFO("stk3013_vled_onoff %s\n", (onoff) ? "on" : "off");
+
+	/* ldo control */
+	if (ps_data->pdata->vled_ldo)
+		gpio_set_value(ps_data->pdata->vled_ldo, onoff);	
+	return 0;
+}
+
 static int stk3013_parse_dt(struct device *dev,
 			struct stk3013_platform_data *pdata)
 {
 	int rc;
 	struct device_node *np = dev->of_node;
+	struct pinctrl *p;
+	enum of_gpio_flags flags;
 	u32 temp_val;
 
 	if (!pdata)
 		return -ENOMEM;
 
 	rc = of_property_read_u32(np, "stk,regulator_divided", &temp_val);
-	if (!rc) {
+	if (!rc)
 		pdata->regulator_divided = temp_val;
-	} else {
-	/* set regulator to default: vdd and vled use the same regulator*/
+	else	/* set regulator to default: vdd and vled use the same regulator*/
 		pdata->regulator_divided = 1;
-	}
+
 	SENSOR_INFO("regulator_divided: %d", pdata->regulator_divided);
 
 	pdata->int_pin = of_get_named_gpio_flags(np, "stk,irq-gpio", 0,
@@ -1573,15 +1596,7 @@ static int stk3013_parse_dt(struct device *dev,
 		dev_err(dev, "Unable to read psctrl-reg\n");
 		return rc;
 	}
-/*
-	rc = of_property_read_u32(np, "stk,alsctrl-reg", &temp_val);
-	if (!rc)
-		pdata->alsctrl_reg = (u8)temp_val;
-	else {
-		dev_err(dev, "Unable to read alsctrl-reg\n");
-		return rc;
-	}
-*/
+
 	rc = of_property_read_u32(np, "stk,ledctrl-reg", &temp_val);
 	if (!rc)
 		pdata->ledctrl_reg = (u8)temp_val;
@@ -1653,6 +1668,24 @@ static int stk3013_parse_dt(struct device *dev,
 		dev_err(dev, "Unable to read ps-default-offset\n");
 		return rc;
 	}
+
+	pdata->vled_ldo = of_get_named_gpio_flags(np, "stk,vled_ldo", 0, &flags);
+	if (pdata->vled_ldo < 0) {
+		SENSOR_ERR("fail to get vled_ldo\n");
+		pdata->vled_ldo = 0;
+	} else {
+		rc = gpio_request(pdata->vled_ldo, "prox_vled_en");
+		if (rc < 0) {
+			SENSOR_ERR("gpio %d request failed (%d)\n",
+				pdata->vled_ldo, rc);
+			return rc;
+		}
+		gpio_direction_output(pdata->vled_ldo, 0);
+	}
+
+	p = pinctrl_get_select_default(dev);
+	if (IS_ERR(p))
+		SENSOR_INFO("failed pinctrl_get\n");
 
 	return 0;
 }
@@ -1772,7 +1805,9 @@ static int stk3013_probe(struct i2c_client *client,
 	ps_data->pdata = plat_data;
 
 	stk3013_regulator_onoff(&client->dev, ON);
-
+	if (ps_data->pdata->vled_ldo)
+		stk3013_vled_onoff(&client->dev, ON);
+	
 	stk3013_set_wq(ps_data);
 	ret = stk3013_init_all_setting(client, plat_data);
 	if (ret < 0)
@@ -1839,6 +1874,9 @@ static int stk3013_probe(struct i2c_client *client,
 	}
 
 	/*stk3013_regulator_onoff(&client->dev, OFF);*/
+	if (ps_data->pdata->vled_ldo)
+		stk3013_vled_onoff(&client->dev, OFF);
+
 	SENSOR_INFO("success\n");
 	return 0;
 	/*device_init_wakeup(&client->dev, false);*/
@@ -1859,6 +1897,10 @@ err_input_alloc_device:
 err_init_all_setting:
 	destroy_workqueue(ps_data->stk_wq);
 	/*stk3013_regulator_onoff(&client->dev, OFF);*/
+	if (ps_data->pdata->vled_ldo) {
+		stk3013_vled_onoff(&client->dev, OFF);
+		gpio_free(ps_data->pdata->vled_ldo);
+	}
 err_als_input_allocate:
 	wake_lock_destroy(&ps_data->ps_wakelock);
 	mutex_destroy(&ps_data->io_lock);

@@ -34,8 +34,12 @@
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
 #include "cm36686.h"
-
 #include <linux/sensor/sensors_core.h>
+
+#ifdef TAG
+#undef TAG
+#define TAG "[PROX]"
+#endif
 
 /* For debugging */
 #define	cm36686_DEBUG
@@ -198,6 +202,7 @@ int cm36686_i2c_write_word(struct cm36686_data *cm36686, u8 command,
 		err = i2c_smbus_write_word_data(client, command, val);
 		if (err >= 0)
 			return 0;
+		usleep_range(2000,2100);
 	}
 	pr_err("%s, i2c transfer error(%d)\n", __func__, err);
 	return err;
@@ -1198,31 +1203,36 @@ static int prox_regulator_onoff(struct device *dev, bool onoff)
 {
 	struct regulator *vdd;
 	int ret = 0;
+	int voltage = 0;
 
 	pr_info("[SENSOR] %s %s\n", __func__, (onoff) ? "on" : "off");
 
-	vdd = devm_regulator_get(dev, "reg_vdd");
+	vdd = devm_regulator_get(dev, "cm36686,reg_vdd");
 	if (IS_ERR(vdd)) {
 		pr_err("%s: cannot get vdd\n", __func__);
 		ret = -ENOMEM;
 		goto err_vdd;
-	} else if (!regulator_get_voltage(vdd)) {
-		ret = regulator_set_voltage(vdd, 2850000, 2850000);
+	} else {
+		voltage = regulator_get_voltage(vdd);
+		pr_info("[SENSOR] %s, voltage %d", __func__, voltage);
+		/* Set voltage in dtsi */
 	}
 
 	if (onoff) {
+		if (regulator_is_enabled(vdd)) {
+			SENSOR_INFO("Regulator already enabled\n");
+        }
 		ret = regulator_enable(vdd);
 		if (ret)
 			pr_err("%s: Failed to enable vdd.\n", __func__);
-		msleep(10);
 	} else {
 		ret = regulator_disable(vdd);
 		if (ret)
 			pr_err("%s: Failed to enable vdd.\n", __func__);
-		msleep(10);
 	}
 
-	devm_regulator_put(vdd);
+	usleep_range(20000, 21000);
+
 err_vdd:
 	return ret;
 }

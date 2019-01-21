@@ -98,6 +98,8 @@ struct fts_i2c_platform_data {
 #endif
 	unsigned gpio_scl;
 	unsigned gpio_sda;
+
+	u32 bringup;
 };
 
 #define SEC_TSP_FACTORY_TEST

@@ -20,6 +20,7 @@
 
 #define ABOV_TK_NAME "abov-touchkey-ft1804"
 #define ABOV_ID 0x40
+#define MAX_KEY_NUM	        4
 
 extern int get_lcd_attached(char *);
 

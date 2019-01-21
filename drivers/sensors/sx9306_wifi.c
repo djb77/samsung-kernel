@@ -38,6 +38,11 @@
 #include <linux/muic/muic_notifier.h>
 #endif
 
+#ifdef TAG
+#undef TAG
+#define TAG "[GRIP_WIFI]"
+#endif
+
 #define VENDOR_NAME              "SEMTECH"
 #define MODEL_NAME               "SX9306_WIFI"
 #define MODULE_NAME              "grip_sensor_wifi"
@@ -1014,7 +1019,7 @@ static int sx9306_wifi_ccic_handle_notification(struct notifier_block *nb,
 static int sx9306_wifi_muic_notifier(struct notifier_block *nb,
 				unsigned long action, void *data)
 {
-	struct sx9306_p *pdata = container_of(nb, struct sx9306_p, muic_nb);
+	struct sx9306_p *pdata = container_of(nb, struct sx9306_p, cpuidle_muic_nb);
 	muic_attached_dev_t attached_dev = *(muic_attached_dev_t *)data;
 	
 	switch (attached_dev) {
@@ -1065,7 +1070,7 @@ static void sx9306_wifi_init_work_func(struct work_struct *work)
 				sx9306_wifi_ccic_handle_notification,
 				MANAGER_NOTIFY_CCIC_USB);
 #elif defined(CONFIG_MUIC_NOTIFIER)
-	muic_notifier_register(&data->muic_nb, sx9306_wifi_muic_notifier,
+	muic_notifier_register(&data->cpuidle_muic_nb, sx9306_wifi_muic_notifier,
 				MUIC_NOTIFY_DEV_CPUIDLE);
 #endif
 	sx9306_wifi_set_debug_work(data, ON);

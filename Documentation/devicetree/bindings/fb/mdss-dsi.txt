@@ -46,6 +46,7 @@ Optional properties:
 					-- qcom,supply-max-voltage: maximum voltage level (uV)
 					-- qcom,supply-enable-load: load drawn (uA) from enabled supply
 					-- qcom,supply-disable-load: load drawn (uA) from disabled supply
+					-- qcom,supply-ulp-load: load drawn (uA) from supply in ultra-low power mode
 					-- qcom,supply-pre-on-sleep: time to sleep (ms) before turning on
 					-- qcom,supply-post-on-sleep: time to sleep (ms) after turning on
 					-- qcom,supply-pre-off-sleep: time to sleep (ms) before turning off
@@ -107,6 +108,8 @@ Optional properties:
 - qcom,platform-bklight-en-gpio:	Specifies the gpio used to enable display back-light
 - qcom,platform-mode-gpio:		Select video/command mode of panel through gpio when it supports
 					both modes.
+- qcom,platform-intf-mux-gpio:		Select dsi/external(hdmi) interface through gpio when it supports
+					either dsi or external interface.
 - pinctrl-names:			List of names to assign mdss pin states defined in pinctrl device node
 					Refer to pinctrl-bindings.txt
 - pinctrl-<0..n>:			Lists phandles each pointing to the pin configuration node within a pin
@@ -162,6 +165,7 @@ Example:
 				qcom,supply-max-voltage = <0>;
 				qcom,supply-enable-load = <0>;
 				qcom,supply-disable-load = <0>;
+				qcom,supply-ulp-load = <0>;
 				qcom,supply-pre-on-sleep = <0>;
 				qcom,supply-post-on-sleep = <0>;
 				qcom,supply-pre-off-sleep = <0>;
@@ -180,6 +184,7 @@ Example:
 				qcom,supply-max-voltage = <1800000>;
 				qcom,supply-enable-load = <100000>;
 				qcom,supply-disable-load = <100>;
+				qcom,supply-ulp-load = <100>;
 				qcom,supply-pre-on-sleep = <0>;
 				qcom,supply-post-on-sleep = <20>;
 				qcom,supply-pre-off-sleep = <0>;
@@ -198,6 +203,7 @@ Example:
 				qcom,supply-max-voltage = <1200000>;
 				qcom,supply-enable-load = <100000>;
 				qcom,supply-disable-load = <100>;
+				qcom,supply-ulp-load = <1000>;
 				qcom,supply-pre-on-sleep = <0>;
 				qcom,supply-post-on-sleep = <20>;
 				qcom,supply-pre-off-sleep = <0>;
@@ -246,6 +252,7 @@ Example:
 			qcom,platform-enable-gpio = <&msmgpio 58 1>;
 			qcom,platform-bklight-en-gpio = <&msmgpio 86 0>;
 			qcom,platform-mode-gpio = <&msmgpio 7 0>;
+			qcom,platform-intf-mux-gpio = <&tlmm 115 0>;
 			qcom,dsi-irq-line;
 			qcom,lane-map = "lane_map_3012";
 			qcom,display-id = "primary";

@@ -70,26 +70,7 @@ int msm_camera_fill_vreg_params(struct camera_vreg_t *cam_vreg,
 			if (j == num_vreg)
 				power_setting[i].seq_val = INVALID_VREG;
 			break;
-		case CAM_VT_VDIG:
-			for (j = 0; j < num_vreg; j++) {
-				if (!strcmp(cam_vreg[j].reg_name, "cam_vt_vdig")) {
-					pr_err("%s:%d i %d j %d cam_vt_vdig\n",
-						__func__, __LINE__, i, j);
-					power_setting[i].seq_val = j;
-					if (VALIDATE_VOLTAGE(
-						cam_vreg[j].min_voltage,
-						cam_vreg[j].max_voltage,
-						power_setting[i].config_val)) {
-						cam_vreg[j].min_voltage =
-						cam_vreg[j].max_voltage =
-						power_setting[i].config_val;
-					}
-					break;
-				}
-			}
-			if (j == num_vreg)
-				power_setting[i].seq_val = INVALID_VREG;
-			break;	
+
 		case CAM_VIO:
 			for (j = 0; j < num_vreg; j++) {
 				if (!strcmp(cam_vreg[j].reg_name, "cam_vio")) {

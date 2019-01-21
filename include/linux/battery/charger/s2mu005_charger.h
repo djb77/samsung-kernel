@@ -15,6 +15,7 @@
 #define S2MU005_CHARGER_H
 #include <linux/mfd/samsung/s2mu005.h>
 #include <linux/mfd/samsung/s2mu005-private.h>
+#include <linux/battery/sec_charging_common.h>
 
 #define MASK(width, shift)      (((0x1 << (width)) - 1) << shift)
 
@@ -217,5 +218,16 @@ enum {
 struct charger_info {
 	int dummy;
 };
+
+typedef struct s2mu005_charger_platform_data {
+	sec_charging_current_t *charging_current;
+	int chg_float_voltage;
+	char *charger_name;
+	bool chg_eoc_dualpath;
+	uint32_t is_1MHz_switching:1;
+	bool always_enable;
+	/* 2nd full check */
+	 sec_battery_full_charged_t full_check_type_2nd;
+} s2mu005_charger_platform_data_t;
 
 #endif /*S2MU005_CHARGER_H*/

@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Author: Brian Swetland <swetland@google.com>
- * Copyright (c) 2009-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2018, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -285,6 +285,7 @@ enum usb_id_state {
 		for improving data performance.
  * @bool enable_sdp_typec_current_limit: Indicates whether type-c current for
 		sdp charger to be limited.
+ * @usbeth_reset_gpio: Gpio used for external usb-to-eth reset.
  */
 struct msm_otg_platform_data {
 	int *phy_init_seq;
@@ -321,12 +322,14 @@ struct msm_otg_platform_data {
 	bool enable_phy_id_pullup;
 	int usb_id_gpio;
 	int hub_reset_gpio;
+	int usbeth_reset_gpio;
 	int switch_sel_gpio;
 	bool phy_dvdd_always_on;
 	bool emulation;
 	bool enable_streaming;
 	bool enable_axi_prefetch;
 	bool enable_sdp_typec_current_limit;
+	bool vbus_low_as_hostmode;
 };
 
 /* phy related flags */
@@ -336,6 +339,10 @@ struct msm_otg_platform_data {
 #define PHY_CHARGER_CONNECTED		BIT(3)
 #define PHY_VBUS_VALID_OVERRIDE		BIT(4)
 #define DEVICE_IN_SS_MODE		BIT(5)
+#define PHY_LANE_A			BIT(6)
+#define PHY_LANE_B			BIT(7)
+#define PHY_HSFS_MODE			BIT(8)
+#define PHY_LS_MODE			BIT(9)
 
 #define USB_NUM_BUS_CLOCKS      3
 
@@ -516,6 +523,7 @@ struct msm_otg {
 #define PHY_REGULATORS_LPM	BIT(4)
 	int reset_counter;
 	struct power_supply usb_psy;
+	enum power_supply_type usb_supply_type;
 	unsigned int online;
 	unsigned int host_mode;
 	unsigned int voltage_max;

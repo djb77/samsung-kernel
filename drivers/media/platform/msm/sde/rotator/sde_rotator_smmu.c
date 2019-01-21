@@ -27,6 +27,7 @@
 #include <linux/msm_dma_iommu_mapping.h>
 #include <linux/qcom_iommu.h>
 #include <asm/dma-iommu.h>
+#include <linux/delay.h>
 
 #include "soc/qcom/secure_buffer.h"
 #include "sde_rotator_base.h"
@@ -292,6 +293,9 @@ int sde_smmu_map_dma_buf(struct dma_buf *dma_buf,
 {
 	int rc;
 	struct sde_smmu_client *sde_smmu = sde_smmu_get_cb(domain);
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	int retry_cnt;
+#endif
 
 	if (!sde_smmu) {
 		SDEROT_ERR("not able to get smmu context\n");
@@ -300,8 +304,26 @@ int sde_smmu_map_dma_buf(struct dma_buf *dma_buf,
 
 	rc = msm_dma_map_sg_lazy(sde_smmu->dev, table->sgl, table->nents, dir,
 		dma_buf);
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	if (!in_interrupt()) {
+		if (rc != table->nents) {
+			for (retry_cnt = 0; retry_cnt < 62 ; retry_cnt++) {
+				/* To wait free page by memory reclaim*/
+				msleep(16);
+
+				SDEROT_ERR("dma map sg failed : retry (%d)\n", retry_cnt);
+				rc = msm_dma_map_sg_lazy(sde_smmu->dev, table->sgl, table->nents, dir,
+					dma_buf);
+
+				if (rc == table->nents)
+					break;
+			}
+		}
+	}
+#endif
+
 	if (rc != table->nents) {
-		SDEROT_ERR("dma map sg failed\n");
+		SDEROT_ERR("dma map sg failed(%d)\n", rc);
 		return -ENOMEM;
 	}
 

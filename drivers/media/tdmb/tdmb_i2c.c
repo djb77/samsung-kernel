@@ -1,21 +1,21 @@
 /*
-*
-* drivers/media/tdmb/tdmb_i2c.c
-*
-* tdmb driver
-*
-* Copyright (C) (2011, Samsung Electronics)
-*
-* This program is free software; you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation version 2.
-*
-* This program is distributed "as is" WITHOUT ANY WARRANTY of any
-* kind, whether express or implied; without even the implied warranty
-* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-*/
+ *
+ * drivers/media/tdmb/tdmb_i2c.c
+ *
+ * tdmb driver
+ *
+ * Copyright (C) (2011, Samsung Electronics)
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation version 2.
+ *
+ * This program is distributed "as is" WITHOUT ANY WARRANTY of any
+ * kind, whether express or implied; without even the implied warranty
+ * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
 
 #include <linux/module.h>
 #include <linux/i2c.h>
@@ -27,16 +27,14 @@
 struct i2c_client *i2c_dmb;
 static int tdmb_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
-	struct tdmb_i2c_dev *tdmb_dev;
+	struct tdmb_i2c_dev *tdmb_dev = NULL;
 
 	i2c_dmb = client;
 	DPRINTK("tdmbi2c_probe() i2c_dmb : 0x%p\n", i2c_dmb);
 
-	tdmb_dev = (struct tdmb_i2c_dev *)kzalloc(sizeof(*tdmb_dev), GFP_KERNEL);
-	if (!tdmb_dev) {
-		pr_err("[%s::%d]failed to alloc memory\n", __func__, __LINE__);
+	tdmb_dev = kzalloc(sizeof(*tdmb_dev), GFP_KERNEL);
+	if (!tdmb_dev)
 		return -ENOMEM;
-	}
 
 	tdmb_dev->client = client;
 

@@ -695,7 +695,7 @@ int ist30xx_get_cmcs_buf(struct ist30xx_data *data, const char *mode,
     }
 
     if (success == false) {
-        tsp_info("item(%s) dosen't exist!\n", mode);
+        tsp_info("item(%s) doesn't exist!\n", mode);
         return ret;
     }
 
@@ -785,6 +785,8 @@ int_end:
 
     tsp_warn("INT test fail\n");
 
+    return -EPERM;
+
 hvdd_end:
     if ((data->status.cmcs & CMCS_MSG_MASK) == HVDD_MSG_VALID)
         if (!(data->status.cmcs & 0x1))
@@ -808,6 +810,7 @@ int ist30xx_item_test(struct ist30xx_data *data, CMCS_ITEM items,
                 tsp_info("%s test not ready!!\n", mode);
                 return ret;
             }
+
             tsp_info("%s test!!\n", mode);
 
             ist30xx_enable_irq(data);
@@ -823,7 +826,7 @@ int ist30xx_item_test(struct ist30xx_data *data, CMCS_ITEM items,
                 tsp_info("fail to read %s data\n", mode);
                 return ret;
             }
-            
+
             tsp_info("read %s data\n", mode);
         }
     }
@@ -2058,19 +2061,19 @@ int ist30xx_init_cmcs_sysfs(struct ist30xx_data *data)
     if (data->dt_data->fw_bin) {
         ret = request_firmware(&cmcs_bin, data->dt_data->cmcs_path,
                 &data->client->dev);
-		if (ret) {
-			tsp_err("%s: do not loading cmcs image: %d\n", __func__, ret);
-			return -1;
-		}
+        if (ret) {
+            tsp_err("%s: do not loading cmcs image: %d\n", __func__, ret);
+            return -1;
+        }
 
-		ts_cmcs_bin_size = cmcs_bin->size;
-		ts_cmcs_bin = kzalloc(cmcs_bin->size, GFP_KERNEL);
-		if (ts_cmcs_bin)
-			memcpy(ts_cmcs_bin, cmcs_bin->data, cmcs_bin->size);
-		else
-			tsp_err("Failed to allocation cmcs mem\n");
+        ts_cmcs_bin_size = cmcs_bin->size;
+        ts_cmcs_bin = kzalloc(cmcs_bin->size, GFP_KERNEL);
+        if (ts_cmcs_bin)
+            memcpy(ts_cmcs_bin, cmcs_bin->data, cmcs_bin->size);
+        else
+            tsp_err("Failed to allocation cmcs mem\n");
 
-		release_firmware(cmcs_bin);
+        release_firmware(cmcs_bin);
 
         if (!ts_cmcs_bin)
             return -ENOMEM;

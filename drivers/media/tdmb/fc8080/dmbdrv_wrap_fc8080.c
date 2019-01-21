@@ -1,28 +1,27 @@
 /*
-*	Copyright(c) 2008 SEC Corp. All Rights Reserved
-*
-*	File name : DMBDrv_wrap_FC8080.c
-*
-*	Description : fc8080 tuner control driver
-*	This program is free software; you can redistribute it and/or modify
-*	it under the terms of the GNU General Public License as published by
-*	the Free Software Foundation; either version 2 of the License, or
-*	(at your option) any later version.
-*
-*	This program is distributed in the hope that it will be useful,
-*	but WITHOUT ANY WARRANTY; without even the implied warranty of
-*	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-*	GNU General Public License for more details.
-*
-*	You should have received a copy of the GNU General Public License
-*	along with this program; if not, write to the Free Software
-*	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-*
-*	History :
-*	----------------------------------------------------------------------
-*	2009/01/19	changsul.park		initial
-*	2009/09/23	jason			porting QSC6270
-*/
+ *	Copyright(c) 2008 SEC Corp. All Rights Reserved
+ *
+ *	File name : DMBDrv_wrap_FC8080.c
+ *
+ *	Description : fc8080 tuner control driver
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *	History :
+ *	----------------------------------------------------------------------
+ *	2009/01/19	changsul.park		initial
+ *	2009/09/23	jason			porting QSC6270
+ */
 
 #include "dmbdrv_wrap_fc8080.h"
 #include "fci_types.h"
@@ -86,7 +85,7 @@ static int viterbi_rt_ber_read(unsigned int *ber)
 	else
 		*ber = 3000;
 
-	print_log(NULL, "BER : %d \n", *ber);
+	print_log(NULL, "BER : %d\n", *ber);
 	return BBM_OK;
 }
 
@@ -131,7 +130,7 @@ void dmb_drv_isr(u8 *data, u32 length)
 	fc8080_demux(data, length);
 }
 #else
-void dmb_drv_isr()
+void dmb_drv_isr(void)
 {
 	bbm_com_isr(NULL);
 }
@@ -170,6 +169,7 @@ unsigned char dmb_drv_init(unsigned long param
 
 #ifdef CONFIG_TDMB_XTAL_FREQ
 	main_xtal_freq = xtal_freq;
+	DPRINTK("%s : main_xtal_freq: %u\n", __func__, main_xtal_freq);
 #endif
 
 #if defined(CONFIG_TDMB_TSIF_SLSI) || defined(CONFIG_TDMB_TSIF_QC)
@@ -260,7 +260,7 @@ void dmb_drv_get_fic(void)
 
 			fic_decoder_put((struct fic *)&buf[0]
 				, FIC_BUF_LENGTH / 2);
-			print_log(NULL, "fic_decoder_put 0x%x \n", buf[0]);
+			print_log(NULL, "fic_decoder_put 0x%x\n", buf[0]);
 
 		}
 		ms_wait(50);
@@ -301,41 +301,21 @@ unsigned char dmb_drv_scan_ch(unsigned long frequency)
 
 	esb = fic_decoder_get_ensemble_info(0);
 	if (esb->flag != 99) {
-		print_log(NULL, "ESB ERROR \n");
+		print_log(NULL, "ESB ERROR\n");
 		fic_decoder_subchannel_info_clean();
 		return TDMB_FAIL;
 	}
 
 	if (strnlen(esb->label, sizeof(esb->label)) <= 0) {
 		fic_decoder_subchannel_info_clean();
-		print_log(NULL, "label ERROR \n");
+		print_log(NULL, "label ERROR\n");
 		return TDMB_FAIL;
 	}
 
 	return TDMB_SUCCESS;
 }
 
-int dmb_drv_byte_write(u16 addr, u8 data)
-{
-	return bbm_com_byte_write(NULL, addr, data);
-}
-
-int dmb_drv_byte_read(u16 addr, u8* data)
-{
-	return bbm_com_byte_read(NULL, addr, data);
-}
-
-int dmb_drv_word_write(u16 addr, u16 data)
-{
-	return bbm_com_word_write(NULL, addr, data);
-}
-
-int dmb_drv_word_read(u16 addr, u16* data)
-{
-	return bbm_com_word_read(NULL, addr, data);
-}
-
-int dmb_drv_get_dmb_sub_ch_cnt()
+int dmb_drv_get_dmb_sub_ch_cnt(void)
 {
 	int i, n;
 
@@ -345,6 +325,7 @@ int dmb_drv_get_dmb_sub_ch_cnt()
 	n = 0;
 	for (i = 0; i < MAX_SVC_NUM; i++) {
 		struct service_info_t *svc_info;
+
 		svc_info = fic_decoder_get_service_info_list(i);
 
 		if ((svc_info->flag & 0x07) == 0x07) {
@@ -357,7 +338,7 @@ int dmb_drv_get_dmb_sub_ch_cnt()
 	return n;
 }
 
-int dmb_drv_get_dab_sub_ch_cnt()
+int dmb_drv_get_dab_sub_ch_cnt(void)
 {
 	int i, n;
 
@@ -367,6 +348,7 @@ int dmb_drv_get_dab_sub_ch_cnt()
 	n = 0;
 	for (i = 0; i < MAX_SVC_NUM; i++) {
 		struct service_info_t *svc_info;
+
 		svc_info = fic_decoder_get_service_info_list(i);
 
 		if ((svc_info->flag & 0x07) == 0x07) {
@@ -389,6 +371,7 @@ int dmb_drv_get_dat_sub_ch_cnt(void)
 	n = 0;
 	for (i = 0; i < MAX_SVC_NUM; i++) {
 		struct service_info_t *svc_info;
+
 		svc_info = fic_decoder_get_service_info_list(i);
 
 		if ((svc_info->flag & 0x07) == 0x07) {
@@ -427,6 +410,7 @@ char *dmb_drv_get_sub_ch_dmb_label(int subchannel_count)
 	n = 0;
 	for (i = 0; i < MAX_SVC_NUM; i++) {
 		struct service_info_t *svc_info;
+
 		svc_info = fic_decoder_get_service_info_list(i);
 
 		if ((svc_info->flag & 0x07) == 0x07) {
@@ -455,6 +439,7 @@ char *dmb_drv_get_sub_ch_dab_label(int subchannel_count)
 	n = 0;
 	for (i = 0; i < MAX_SVC_NUM; i++) {
 		struct service_info_t *svc_info;
+
 		svc_info = fic_decoder_get_service_info_list(i);
 
 		if ((svc_info->flag & 0x07) == 0x07) {
@@ -483,6 +468,7 @@ char *dmb_drv_get_sub_ch_dat_label(int subchannel_count)
 	n = 0;
 	for (i = 0; i < MAX_SVC_NUM; i++) {
 		struct service_info_t *svc_info;
+
 		svc_info = fic_decoder_get_service_info_list(i);
 
 		if ((svc_info->flag & 0x07) == 0x07) {
@@ -531,25 +517,21 @@ struct sub_channel_info_type *dmb_drv_get_fic_dmb(int subchannel_count)
 						= svc_info->sid;
 					dmb_subchannel_info.scids
 						= svc_info->scids;
-
+					dmb_subchannel_info.ucCAFlag
+						= svc_info->ca_flag;
 					num_of_user_appl =
 						svc_info->num_of_user_appl;
 					dmb_subchannel_info.num_of_user_appl
 						= num_of_user_appl;
 					for (j = 0; j < num_of_user_appl; j++) {
-						dmb_subchannel_info.
-							user_appl_type[j]
+						dmb_subchannel_info.user_appl_type[j]
 						= svc_info->user_appl_type[j];
-						dmb_subchannel_info.
-							user_appl_length[j]
+						dmb_subchannel_info.user_appl_length[j]
 						= svc_info->user_appl_length[j];
 						memcpy(
-						&dmb_subchannel_info.
-						user_appl_data[j][0]
-						, &svc_info->
-							user_appl_data[j][0]
-						, dmb_subchannel_info.
-						user_appl_length[j]);
+						&dmb_subchannel_info.user_appl_data[j][0]
+						, &svc_info->user_appl_data[j][0]
+						, dmb_subchannel_info.user_appl_length[j]);
 					}
 
 					esb = fic_decoder_get_ensemble_info(0);
@@ -601,13 +583,15 @@ struct sub_channel_info_type *dmb_drv_get_fic_dab(int subchannel_count)
 						svc_info->sid;
 					dab_subchannel_info.scids =
 						svc_info->scids;
+					dab_subchannel_info.ucCAFlag =
+						svc_info->ca_flag;
 
 					esb = fic_decoder_get_ensemble_info(0);
 					if (esb->flag == 99)
-						dmb_subchannel_info.uiEnsembleID
+						dab_subchannel_info.uiEnsembleID
 						= esb->eid;
 					else
-						dmb_subchannel_info.uiEnsembleID
+						dab_subchannel_info.uiEnsembleID
 						= 0;
 					dab_subchannel_info.ecc	= esb->ecc;
 
@@ -653,25 +637,22 @@ struct sub_channel_info_type *dmb_drv_get_fic_dat(int subchannel_count)
 						svc_info->sid;
 					dat_subchannel_info.scids =
 						svc_info->scids;
+					dat_subchannel_info.ucCAFlag
+						= svc_info->ca_flag;
 
 					num_of_user_appl =
 						svc_info->num_of_user_appl;
 					dat_subchannel_info.num_of_user_appl
 						= num_of_user_appl;
 					for (j = 0; j < num_of_user_appl; j++) {
-						dat_subchannel_info.
-							user_appl_type[j]
+						dat_subchannel_info.user_appl_type[j]
 						= svc_info->user_appl_type[j];
-						dat_subchannel_info.
-							user_appl_length[j]
+						dat_subchannel_info.user_appl_length[j]
 						= svc_info->user_appl_length[j];
 						memcpy(
-						&dat_subchannel_info.
-						user_appl_data[j][0]
-						, &svc_info->
-							user_appl_data[j][0]
-						, dat_subchannel_info.
-						user_appl_length[j]);
+						&dat_subchannel_info.user_appl_data[j][0]
+						, &svc_info->user_appl_data[j][0]
+						, dat_subchannel_info.user_appl_length[j]);
 					}
 
 					esb = fic_decoder_get_ensemble_info(0);
@@ -714,7 +695,7 @@ void dmb_drv_check_overrun(u8 reset)
 			bbm_com_word_write(NULL, BBM_BUF_ENABLE, temp);
 		}
 
-		DPRINTK("fc8080 Overrun occured\n");
+		DPRINTK("fc8080 Overrun occurred\n");
 	}
 
 }
@@ -811,7 +792,7 @@ unsigned long frequency
 	return TDMB_SUCCESS;
 }
 
-unsigned short dmb_drv_get_ber()
+unsigned short dmb_drv_get_ber(void)
 {
 	return saved_ber;
 }
@@ -845,7 +826,7 @@ unsigned char dmb_drv_get_ant(void)
 	return level;
 }
 
-signed short dmb_drv_get_rssi()
+signed short dmb_drv_get_rssi(void)
 {
 	s32 rssi;
 

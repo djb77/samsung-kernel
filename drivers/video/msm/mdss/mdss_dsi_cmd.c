@@ -779,8 +779,8 @@ int mdss_dsi_cmdlist_put(struct mdss_dsi_ctrl_pdata *ctrl,
 
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	if (req->flags & CMD_REQ_BROADCAST) {
-	   ctrl->cmd_sync_wait_broadcast = true;
-	   ctrl->cmd_sync_wait_trigger = true;
+		ctrl->cmd_sync_wait_broadcast = true;
+		ctrl->cmd_sync_wait_trigger = true;
 	}
 #endif
 
@@ -804,4 +804,3 @@ int mdss_dsi_cmdlist_put(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	return ret;
 }
-

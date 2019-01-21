@@ -29,6 +29,7 @@
 struct msm_vib {
 	struct hrtimer vib_timer;
 	struct timed_output_dev timed_dev;
+	struct device *dev;
 	struct work_struct work;
 	struct workqueue_struct *queue;
 	int state;
@@ -121,14 +122,30 @@ static void vibe_set_intensity(int intensity)
 static void set_vibrator(struct msm_vib *vib, int enable)
 {
 	int ret;
+	struct pinctrl *vib_pinctrl;
 
 	if (vib->motor_pwm) {
 		vibe_set_intensity(enable);
 		gpio_set_value(vib->motor_pwm, enable);
 	}
 
-	if (!vib->vdd_type)
-		gpio_set_value(vib->motor_en, enable);
+	if (!vib->vdd_type) {
+		if (enable) {
+			vib_pinctrl = devm_pinctrl_get_select(vib->dev, "tlmm_motor_active");
+			if (IS_ERR(vib_pinctrl)) {
+				pr_debug("Target does not use pinctrl\n");
+				gpio_set_value(vib->motor_en, enable);
+				vib_pinctrl = NULL;
+			}
+		} else {
+			vib_pinctrl = devm_pinctrl_get_select(vib->dev, "tlmm_motor_suspend");
+			if (IS_ERR(vib_pinctrl)) {
+				pr_debug("Target does not use pinctrl\n");
+				gpio_set_value(vib->motor_en, enable);
+				vib_pinctrl = NULL;
+			}
+		}
+	}
 	else {
 		if (enable) {
 			if (!regulator_is_enabled(vib->vdd)) {
@@ -291,7 +308,6 @@ static DEVICE_ATTR(dc_pmic, S_IWUSR | S_IRUGO | S_IWGRP, show_dc_pmic, NULL);
 static int msm_vibrator_probe(struct platform_device *pdev)
 {
 	struct msm_vib *vib;
-	struct device *dev = &pdev->dev;
 	struct pinctrl *vib_pinctrl;
 #ifdef CONFIG_DC_MOTOR_PMIC
 	struct device *vib_dev;
@@ -303,6 +319,8 @@ static int msm_vibrator_probe(struct platform_device *pdev)
 		pr_err("%s : Failed to allocate memory\n", __func__);
 		return -ENOMEM;
 	}
+
+        vib->dev = &pdev->dev;
 
 	rc = of_property_read_u32(pdev->dev.of_node, "motor-vdd_type", &vib->vdd_type);
 	if (!vib->vdd_type)
@@ -331,6 +349,8 @@ static int msm_vibrator_probe(struct platform_device *pdev)
 					__func__, __LINE__);
 			return -EINVAL;
 		}
+		gpio_direction_output(vib->motor_en, 0);
+
 		if (gpio_request(vib->motor_en, "motor_en")) {
 			pr_err("%s:%d, request not specified\n",
 					__func__, __LINE__);
@@ -347,7 +367,7 @@ static int msm_vibrator_probe(struct platform_device *pdev)
 	}
 
 	if (vib->motor_en || vib->motor_pwm) {
-		vib_pinctrl = devm_pinctrl_get_select(dev, "tlmm_motor_active");
+		vib_pinctrl = devm_pinctrl_get_select(vib->dev, "tlmm_motor_suspend");
 		if (IS_ERR(vib_pinctrl)) {
 			if (PTR_ERR(vib_pinctrl) == -EPROBE_DEFER)
 				return -EPROBE_DEFER;

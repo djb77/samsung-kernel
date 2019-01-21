@@ -82,6 +82,8 @@ static void check_poison_mem(struct page *page,
 	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 16, 1, start,
 			end - start + 1, 1);
 	dump_stack();
+
+	BUG();
 }
 
 static void unpoison_page(struct page *page)

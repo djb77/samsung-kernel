@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -89,6 +89,8 @@
 		qcom,mdss-has-decimation;
 		qcom,mdss-has-non-scalar-rgb;
 		qcom,mdss-has-rotator-downscale;
+		qcom,mdss-rot-downscale-min = <2>;
+		qcom,mdss-rot-downscale-max = <16>;
 		qcom,mdss-idle-power-collapse-enabled;
 		qcom,mdss-rot-block-size = <64>;
 		qcom,mdss-ppb-off = <0x00000330>;
@@ -304,8 +306,6 @@
 			qcom,mdss-mdp = <&mdss_mdp>;
 			vdd-supply = <&pm8953_l17>;
 			vddio-supply = <&pm8953_l6>;
-			lab-supply = <&lab_regulator>;
-			ibb-supply = <&ibb_regulator>;
 
 			clocks = <&clock_gcc_mdss clk_gcc_mdss_byte0_clk>,
 				<&clock_gcc_mdss clk_gcc_mdss_pclk0_clk>,
@@ -353,8 +353,6 @@
 			qcom,mdss-mdp = <&mdss_mdp>;
 			vdd-supply = <&pm8953_l17>;
 			vddio-supply = <&pm8953_l6>;
-			lab-supply = <&lab_regulator>;
-			ibb-supply = <&ibb_regulator>;
 
 			clocks = <&clock_gcc_mdss clk_gcc_mdss_byte1_clk>,
 				<&clock_gcc_mdss clk_gcc_mdss_pclk1_clk>,

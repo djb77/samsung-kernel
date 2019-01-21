@@ -180,10 +180,8 @@ static int32_t msm_sensor_fill_eeprom_subdevid_by_name(
 
 	eeprom_name_len = strlen(s_ctrl->sensordata->eeprom_name);
 	if (eeprom_name_len >= MAX_SENSOR_NAME)
-	{
-	        pr_err("%s  eeprom_name_len %d \n", __func__, eeprom_name_len);
 		return -EINVAL;
-	}
+
 	sensor_info = s_ctrl->sensordata->sensor_info;
 	eeprom_subdev_id = &sensor_info->subdev_id[SUB_MODULE_EEPROM];
 	/*
@@ -877,9 +875,6 @@ CSID_TG:
 	s_ctrl->sensordata->eeprom_name = slave_info->eeprom_name;
 	s_ctrl->sensordata->actuator_name = slave_info->actuator_name;
 	s_ctrl->sensordata->ois_name = slave_info->ois_name;
-
-	pr_err("%s Ois Name %s\n", __func__, s_ctrl->sensordata->ois_name);
-	pr_err("%s eeprom_name %s\n", __func__, s_ctrl->sensordata->eeprom_name);
 	/*
 	 * Update eeporm subdevice Id by input eeprom name
 	 */

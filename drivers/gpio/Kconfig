@@ -50,6 +50,7 @@ config GPIO_DEVRES
 config OF_GPIO
 	def_bool y
 	depends on OF
+	depends on HAS_IOMEM
 
 config GPIO_ACPI
 	def_bool y
@@ -718,6 +719,12 @@ config GPIO_ADNP
 	  enough to represent all pins, but the driver will assume a
 	  register layout for 64 pins (8 registers).
 
+config GPIO_PCAL6416A
+	bool "PCAL6416A GPIO expander"
+	depends on I2C
+	help
+	  GPIO driver for PCAL6416A I2C-based GPIO expander.
+
 comment "PCI GPIO expanders:"
 
 config GPIO_CS5535
@@ -930,5 +937,12 @@ config GPIO_VIPERBOARD
           See viperboard API specification and Nano
           River Tech's viperboard.h for detailed meaning
           of the module parameters.
+
+config SEC_CONNECTOR_DETECTOR
+	tristate "Setting Samsung Connector Detector feature"
+	help
+	  To detect connection of connector, set this feature.
+	  This feature should be enabled for factory mode.
+
 
 endif

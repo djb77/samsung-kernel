@@ -28,6 +28,9 @@
 #include <linux/ccic/ccic_alternate.h>
 #endif
 #include <linux/usb_notify.h>
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
+#include <linux/vbus_notifier.h>
+#endif
 
 #if !defined(CONFIG_SEC_MSM8917_PROJECT)
 extern unsigned int lpcharge;
@@ -215,7 +218,7 @@ static int ccic_set_dual_role(struct dual_role_phy_instance *dual_role,
 	int mode;
 	int timeout = 0;
 	int ret = 0;
-	
+
 	if (!usbpd_data) {
 		pr_err("%s : usbpd_data is null \n", __func__);
 		return -EINVAL;
@@ -285,6 +288,7 @@ static int ccic_set_dual_role(struct dual_role_phy_instance *dual_role,
 		s2mm005_rprd_mode_change(usbpd_data, mode);
 		enable_irq(usbpd_data->irq);
 		ret = -EIO;
+		ccic_event_work(usbpd_data, CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_ROLE_SWAP_FAIL, 0, 0, 0);
 	} else {
 		pr_err("%s: reverse success, one more check\n", __func__);
 		schedule_delayed_work(&usbpd_data->role_swap_work, msecs_to_jiffies(DUAL_ROLE_SET_MODE_WAIT_MS));
@@ -427,14 +431,14 @@ void process_cc_water(void * data, LP_STATE_Type *Lp_DATA)
 
 #if defined(CONFIG_BATTERY_SAMSUNG)
 #if !defined(CONFIG_SEC_MSM8917_PROJECT)
-	if (lpcharge && usbpd_data->booting_run_dry_support) {
+		if (lpcharge){
 #else
-	if (poweroff_charging && usbpd_data->booting_run_dry_support) {
+		if(poweroff_charging){
 #endif
-		dev_info(&i2c->dev, "%s: BOOTING_RUN_DRY=%d\n", __func__,
-			Lp_DATA->BITS.BOOTING_RUN_DRY);
-		usbpd_data->booting_run_dry  = Lp_DATA->BITS.BOOTING_RUN_DRY;
-	}
+			dev_info(&i2c->dev, "%s: BOOTING_RUN_DRY=%d\n", __func__,
+				Lp_DATA->BITS.BOOTING_RUN_DRY);
+			usbpd_data->booting_run_dry  = Lp_DATA->BITS.BOOTING_RUN_DRY;
+		}
 #endif
 
 #if defined(CONFIG_SEC_FACTORY)
@@ -512,7 +516,10 @@ void process_cc_attach(void * data, u8 *plug_attach_done)
 			Func_DATA.BYTES.PD_State);
 
 		CC_DIR = Func_DATA.BYTES.RSP_BYTE1;
-
+#if defined(CONFIG_USB_HW_PARAM)
+		if (!usbpd_data->pd_state && Func_DATA.BYTES.PD_State && Func_DATA.BITS.VBUS_CC_Short)
+					inc_hw_param(o_notify, USB_CCIC_VBUS_CC_SHORT_COUNT);
+#endif
 		usbpd_data->pd_state = Func_DATA.BYTES.PD_State;
 		usbpd_data->func_state = Func_DATA.DATA;
 
@@ -525,8 +532,12 @@ void process_cc_attach(void * data, u8 *plug_attach_done)
 				/* AUTO LPM Enable */
 				s2mm005_manual_LPM(usbpd_data, 6);
 			}
-
 			set_enable_alternate_mode(ALTERNATE_MODE_START);
+		}
+
+		if (usbpd_data->pd_state == State_PE_SRC_Wait_New_Capabilities && Lp_DATA.BITS.Sleep_Cable_Detect) {
+			s2mm005_manual_LPM(usbpd_data, 0x0D);
+			return;
 		}
 	}
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
@@ -537,7 +548,20 @@ void process_cc_attach(void * data, u8 *plug_attach_done)
 	{
 		*plug_attach_done = 1;
 		usbpd_data->plug_rprd_sel = 1;
+
 		if (usbpd_data->is_dr_swap || usbpd_data->is_pr_swap) {
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
+			// This W/A codes for Tab A2 XL with MPA2+Charger connection.
+			if(usbpd_data->s2mm005_fw_product_id == 0x0F 
+				&& (usbpd_data->func_state & (0x1 << 25) && usbpd_data->func_state & (0x1 << 26))
+				&& usbpd_data->pd_state == State_PE_SRC_Send_Capabilities
+				&& !is_blocked(o_notify, NOTIFY_BLOCK_TYPE_HOST))
+			{
+				dev_info(&i2c->dev, "%s - DFP/SRC Send_Cap : vbus on\n",	__func__);
+				vbus_turn_on_ctrl(1);
+				s2mm005_set_vbus_status(STATUS_VBUS_HIGH, State_PE_SRC_Send_Capabilities);
+			}
+#endif
 			dev_info(&i2c->dev, "%s - ignore all pd_state by %s\n",	__func__,(usbpd_data->is_dr_swap ? "dr_swap" : "pr_swap"));
 			return;
 		}
@@ -576,8 +600,12 @@ void process_cc_attach(void * data, u8 *plug_attach_done)
 				send_otg_notify(o_notify, NOTIFY_EVENT_POWER_SOURCE, 1);
 #endif
 				/* add to turn on external 5V */
-				if (!is_blocked(o_notify, NOTIFY_BLOCK_TYPE_HOST))
+				if (!is_blocked(o_notify, NOTIFY_BLOCK_TYPE_HOST)) {
 					vbus_turn_on_ctrl(1);
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
+					s2mm005_set_vbus_status(STATUS_VBUS_HIGH, State_PE_SRC_Send_Capabilities);
+#endif 
+				}
 				else
 					s2mm005_set_upsm_mode();
 				
@@ -622,10 +650,20 @@ void process_cc_attach(void * data, u8 *plug_attach_done)
 				usbpd_data->is_host = HOST_OFF;
 				msleep(300);
 			}
-			/* muic */
-			ccic_event_work(usbpd_data,
-				CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_ATTACH,
-				1/*attach*/, 0/*rprd*/, Func_DATA.BITS.VBUS_CC_Short? Rp_Abnormal:Func_DATA.BITS.RP_CurrentLvl);
+
+			if (Lp_DATA.BITS.PDSTATE29_SBU_DONE) {
+				dev_info(&i2c->dev, "%s SBU check done\n", __func__);
+				ccic_event_work(usbpd_data,
+					CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_ATTACH,
+					1/*attach*/, 0/*rprd*/,
+					(Func_DATA.BITS.VBUS_CC_Short || Func_DATA.BITS.VBUS_SBU_Short) ? Rp_Abnormal:Func_DATA.BITS.RP_CurrentLvl);
+			} else {
+				/* muic */
+				ccic_event_work(usbpd_data,
+					CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_ATTACH,
+					1/*attach*/, 0/*rprd*/, Rp_Sbu_check);
+			}
+
 			if (usbpd_data->is_client == CLIENT_OFF && usbpd_data->is_host == HOST_OFF) {
 				/* usb */
 				usbpd_data->is_client = CLIENT_ON;
@@ -638,12 +676,18 @@ void process_cc_attach(void * data, u8 *plug_attach_done)
 			}
 			break;
 		case State_PE_PRS_SRC_SNK_Transition_to_off:			
-			dev_info(&i2c->dev, "%s State_PE_PRS_SRC_SNK_Transition_to_off! \n", __func__);			
+			dev_info(&i2c->dev, "%s State_PE_PRS_SRC_SNK_Transition_to_off! \n", __func__);
 			vbus_turn_on_ctrl(0);
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
+			s2mm005_set_vbus_status(STATUS_VBUS_LOW, State_PE_PRS_SRC_SNK_Transition_to_off);
+#endif 
 			break;
 		case State_PE_PRS_SNK_SRC_Source_on:
 			dev_info(&i2c->dev, "%s State_PE_PRS_SNK_SRC_Source_on! \n", __func__);			
 			vbus_turn_on_ctrl(1);
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
+			s2mm005_set_vbus_status(STATUS_VBUS_HIGH, State_PE_PRS_SNK_SRC_Source_on);
+#endif 
 			break;
 		default :
 			break;
@@ -773,6 +817,18 @@ void process_cc_get_int_status(void *data, uint32_t *pPRT_MSG, MSG_IRQ_STATUS_Ty
 	SSM_MSG_IRQ_State.DATA = pPRT_MSG[6];
 	AP_REQ_GET_State.DATA = pPRT_MSG[7];
 
+#if defined(CONFIG_SEC_FACTORY) && !defined(CONFIG_SEC_MSM8917_PROJECT)
+	if((AP_REQ_GET_State.BYTES[0] >> 5) > 0) {
+		dev_info(&i2c->dev, "FAC: Repeat_State:%d, Repeat_RID:%d, RID0:%d\n",
+			AP_REQ_GET_State.BITS.FAC_Abnormal_Repeat_State,
+			AP_REQ_GET_State.BITS.FAC_Abnormal_Repeat_RID,
+			AP_REQ_GET_State.BITS.FAC_Abnormal_RID0);
+		ccic_event_work(usbpd_data,
+			CCIC_NOTIFY_DEV_CCIC, CCIC_NOTIFY_ID_FAC,
+			AP_REQ_GET_State.BYTES[0] >> 5, 0, 0); // b5~b7
+	}
+#endif
+
 	IrqPrint = 1;
 	for(cnt=0;cnt<32;cnt++)
 	{
@@ -822,6 +878,8 @@ void process_cc_get_int_status(void *data, uint32_t *pPRT_MSG, MSG_IRQ_STATUS_Ty
 	if(SSM_MSG_IRQ_State.BITS.Ssm_Flag_Unstructured_Data)
 		receive_unstructured_vdm_message(usbpd_data, &SSM_MSG_IRQ_State);
 	if(!AP_REQ_GET_State.BITS.Alt_Mode_By_I2C)
+		set_enable_alternate_mode(ALTERNATE_MODE_RESET);
+	if(!AP_REQ_GET_State.BITS.DPM_START_ON)
 		set_enable_alternate_mode(ALTERNATE_MODE_RESET);
 #endif
 }

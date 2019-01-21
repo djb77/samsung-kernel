@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -326,6 +326,7 @@ struct ipa_test_mhi_context {
 	struct ipa_mem_buffer out_buffer;
 	u32 prod_hdl;
 	u32 cons_hdl;
+	u32 test_prod_hdl;
 };
 
 static struct ipa_test_mhi_context *test_mhi_ctx;
@@ -462,14 +463,14 @@ static int ipa_test_mhi_alloc_mmio_space(void)
 	 * In test register carries the pointer of
 	 *  virtual address for the buffer of channel context array
 	 */
-	p_mmio->crcbap = (u32)ch_ctx_array->base;
+	p_mmio->crcbap = (unsigned long)ch_ctx_array->base;
 
 	/**
 	 * Register is not accessed by HWP.
 	 * In test register carries the pointer of
 	 *  virtual address for the buffer of channel context array
 	 */
-	p_mmio->crdb = (u32)ev_ctx_array->base;
+	p_mmio->crdb = (unsigned long)ev_ctx_array->base;
 
 	/* test is running only on device. no need to translate addresses */
 	p_mmio->mhiaddr.mhicrtlbase = 0x04;
@@ -569,8 +570,10 @@ static int ipa_mhi_test_config_channel_context(
 
 	p_mmio = (struct ipa_mhi_mmio_register_set *)mmio->base;
 	p_channels =
-		(struct ipa_mhi_channel_context_array *)((u32)p_mmio->crcbap);
-	p_events = (struct ipa_mhi_event_context_array *)((u32)p_mmio->crdb);
+		(struct ipa_mhi_channel_context_array *)
+		((unsigned long)p_mmio->crcbap);
+	p_events = (struct ipa_mhi_event_context_array *)
+		((unsigned long)p_mmio->crdb);
 
 	IPA_UT_DBG("p_mmio: %pK p_channels: %pK p_events: %pK\n",
 		p_mmio, p_channels, p_events);
@@ -772,6 +775,7 @@ fail_destroy_out_ch_ctx:
 static int ipa_test_mhi_suite_setup(void **ppriv)
 {
 	int rc = 0;
+	struct ipa_sys_connect_params sys_in;
 
 	IPA_UT_DBG("Start Setup\n");
 
@@ -813,9 +817,22 @@ static int ipa_test_mhi_suite_setup(void **ppriv)
 		goto fail_free_mmio_spc;
 	}
 
+	/* connect PROD pipe for remote wakeup */
+	memset(&sys_in, 0, sizeof(struct ipa_sys_connect_params));
+	sys_in.client = IPA_CLIENT_TEST_PROD;
+	sys_in.desc_fifo_sz = IPA_SYS_DESC_FIFO_SZ;
+	sys_in.ipa_ep_cfg.mode.mode = IPA_DMA;
+	sys_in.ipa_ep_cfg.mode.dst = IPA_CLIENT_MHI_CONS;
+	if (ipa_setup_sys_pipe(&sys_in, &test_mhi_ctx->test_prod_hdl)) {
+		IPA_UT_ERR("setup sys pipe failed.\n");
+		goto fail_destroy_data_structures;
+	}
+
 	*ppriv = test_mhi_ctx;
 	return 0;
 
+fail_destroy_data_structures:
+	ipa_mhi_test_destroy_data_structures();
 fail_free_mmio_spc:
 	ipa_test_mhi_free_mmio_space();
 fail_iounmap:
@@ -836,6 +853,7 @@ static int ipa_test_mhi_suite_teardown(void *priv)
 	if (!test_mhi_ctx)
 		return  0;
 
+	ipa_teardown_sys_pipe(test_mhi_ctx->test_prod_hdl);
 	ipa_mhi_test_destroy_data_structures();
 	ipa_test_mhi_free_mmio_space();
 	iounmap(test_mhi_ctx->gsi_mmio);
@@ -850,7 +868,7 @@ static int ipa_test_mhi_suite_teardown(void *priv)
  *
  * To be run during tests
  * 1. MHI init (Ready state)
- * 2. Conditional MHO start and connect (M0 state)
+ * 2. Conditional MHI start and connect (M0 state)
  */
 static int ipa_mhi_test_initialize_driver(bool skip_start_and_conn)
 {
@@ -861,7 +879,6 @@ static int ipa_mhi_test_initialize_driver(bool skip_start_and_conn)
 	struct ipa_mhi_connect_params cons_params;
 	struct ipa_mhi_mmio_register_set *p_mmio;
 	struct ipa_mhi_channel_context_array *p_ch_ctx_array;
-	bool is_dma;
 	u64 phys_addr;
 
 	IPA_UT_LOG("Entry\n");
@@ -892,29 +909,6 @@ static int ipa_mhi_test_initialize_driver(bool skip_start_and_conn)
 		IPA_UT_LOG("timeout waiting for READY event");
 		IPA_UT_TEST_FAIL_REPORT("failed waiting for state ready");
 		return -ETIME;
-	}
-
-	if (ipa_mhi_is_using_dma(&is_dma)) {
-		IPA_UT_LOG("is_dma checkign failed. Is MHI loaded?\n");
-		IPA_UT_TEST_FAIL_REPORT("failed checking using dma");
-		return -EPERM;
-	}
-
-	if (is_dma) {
-		IPA_UT_LOG("init ipa_dma\n");
-		rc = ipa_dma_init();
-		if (rc && rc != -EFAULT) {
-			IPA_UT_LOG("ipa_dma_init failed, %d\n", rc);
-			IPA_UT_TEST_FAIL_REPORT("failed init dma");
-			return rc;
-		}
-		IPA_UT_LOG("enable ipa_dma\n");
-		rc = ipa_dma_enable();
-		if (rc && rc != -EPERM) {
-			IPA_UT_LOG("ipa_dma_enable failed, %d\n", rc);
-			IPA_UT_TEST_FAIL_REPORT("failed enable dma");
-			return rc;
-		}
 	}
 
 	if (!skip_start_and_conn) {
@@ -1314,8 +1308,9 @@ static int ipa_mhi_test_q_transfer_re(struct ipa_mem_buffer *mmio,
 
 	p_mmio = (struct ipa_mhi_mmio_register_set *)mmio->base;
 	p_channels = (struct ipa_mhi_channel_context_array *)
-		((u32)p_mmio->crcbap);
-	p_events = (struct ipa_mhi_event_context_array *)((u32)p_mmio->crdb);
+		((unsigned long)p_mmio->crcbap);
+	p_events = (struct ipa_mhi_event_context_array *)
+		((unsigned long)p_mmio->crdb);
 
 	if (ieob)
 		num_of_ed_to_queue = buf_array_size;
@@ -1361,9 +1356,9 @@ static int ipa_mhi_test_q_transfer_re(struct ipa_mem_buffer *mmio,
 		(u32)p_events[event_ring_index].rbase + next_wp_ofst;
 
 	/* write value to event ring doorbell */
-	IPA_UT_LOG("DB to event 0x%llx -> 0x%x\n",
+	IPA_UT_LOG("DB to event 0x%llx: base %pa ofst 0x%x\n",
 		p_events[event_ring_index].wp,
-		gsi_ctx->per.phys_addr + GSI_EE_n_EV_CH_k_DOORBELL_0_OFFS(
+		&(gsi_ctx->per.phys_addr), GSI_EE_n_EV_CH_k_DOORBELL_0_OFFS(
 			event_ring_index + IPA_MHI_GSI_ER_START, 0));
 	iowrite32(p_events[event_ring_index].wp,
 		test_mhi_ctx->gsi_mmio +
@@ -1378,7 +1373,8 @@ static int ipa_mhi_test_q_transfer_re(struct ipa_mem_buffer *mmio,
 			p_channels[channel_idx].rbase);
 		(void)rp_ofst;
 		curr_re = (struct ipa_mhi_transfer_ring_element *)
-			((u32)xfer_ring_bufs[channel_idx].base + wp_ofst);
+			((unsigned long)xfer_ring_bufs[channel_idx].base +
+			wp_ofst);
 		if (p_channels[channel_idx].rlen & 0xFFFFFFFF00000000) {
 			IPA_UT_LOG("invalid ch rlen %llu\n",
 				p_channels[channel_idx].rlen);
@@ -1404,11 +1400,12 @@ static int ipa_mhi_test_q_transfer_re(struct ipa_mem_buffer *mmio,
 			/* last buffer */
 			curr_re->word_C.bits.chain = 0;
 			if (trigger_db) {
-				IPA_UT_LOG("DB to channel 0x%llx -> 0x%x\n",
-					p_channels[channel_idx].wp,
-					gsi_ctx->per.phys_addr +
-					GSI_EE_n_GSI_CH_k_DOORBELL_0_OFFS(
-					channel_idx, 0));
+				IPA_UT_LOG(
+					"DB to channel 0x%llx: base %pa ofst 0x%x\n"
+					, p_channels[channel_idx].wp
+					, &(gsi_ctx->per.phys_addr)
+					, GSI_EE_n_GSI_CH_k_DOORBELL_0_OFFS(
+						channel_idx, 0));
 				iowrite32(p_channels[channel_idx].wp,
 					test_mhi_ctx->gsi_mmio +
 					GSI_EE_n_GSI_CH_k_DOORBELL_0_OFFS(
@@ -1524,7 +1521,7 @@ static int ipa_mhi_test_suspend(bool force, bool should_success)
 	}
 
 	if (!should_success && rc != -EAGAIN) {
-		IPA_UT_LOG("ipa_mhi_suspenddid not return -EAGAIN fail %d\n",
+		IPA_UT_LOG("ipa_mhi_suspend did not return -EAGAIN fail %d\n",
 			rc);
 		IPA_UT_TEST_FAIL_REPORT("suspend succeeded unexpectedly");
 		return -EFAULT;
@@ -1806,7 +1803,7 @@ static int ipa_mhi_test_create_aggr_open_frame(void)
 		memset(test_mhi_ctx->out_buffer.base + i, i & 0xFF, 1);
 	}
 
-	rc = ipa_tx_dp(IPA_CLIENT_MHI_CONS, skb, NULL);
+	rc = ipa_tx_dp(IPA_CLIENT_TEST_PROD, skb, NULL);
 	if (rc) {
 		IPA_UT_LOG("ipa_tx_dp failed %d\n", rc);
 		IPA_UT_TEST_FAIL_REPORT("ipa tx dp fail");
@@ -1977,7 +1974,7 @@ static int ipa_mhi_test_suspend_host_wakeup(void)
 		memset(test_mhi_ctx->out_buffer.base + i, i & 0xFF, 1);
 	}
 
-	rc = ipa_tx_dp(IPA_CLIENT_MHI_CONS, skb, NULL);
+	rc = ipa_tx_dp(IPA_CLIENT_TEST_PROD, skb, NULL);
 	if (rc) {
 		IPA_UT_LOG("ipa_tx_dp failed %d\n", rc);
 		IPA_UT_TEST_FAIL_REPORT("ipa tx dp fail");

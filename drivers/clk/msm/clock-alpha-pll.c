@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -55,6 +55,7 @@
 #define FABIA_L_REG(pll)		(*pll->base + pll->offset + 0x4)
 #define FABIA_FRAC_REG(pll)		(*pll->base + pll->offset + 0x38)
 #define FABIA_PLL_OPMODE(pll)		(*pll->base + pll->offset + 0x2c)
+#define FABIA_FRAC_OFF(pll)		(*pll->base + pll->fabia_frac_offset)
 
 #define FABIA_PLL_STANDBY	0x0
 #define FABIA_PLL_RUN		0x1
@@ -805,8 +806,15 @@ static enum handoff alpha_pll_handoff(struct clk *c)
 	update_vco_tbl(pll);
 
 	if (!is_locked(pll)) {
-		if (c->rate && alpha_pll_set_rate(c, c->rate))
-			WARN(1, "%s: Failed to configure rate\n", c->dbg_name);
+		if (pll->slew) {
+			if (c->rate && dyna_alpha_pll_set_rate(c, c->rate))
+				WARN(1, "%s: Failed to configure rate\n",
+					c->dbg_name);
+		} else {
+			if (c->rate && alpha_pll_set_rate(c, c->rate))
+				WARN(1, "%s: Failed to configure rate\n",
+					c->dbg_name);
+		}
 		__init_alpha_pll(c);
 		return HANDOFF_DISABLED_CLK;
 	} else if (pll->fsm_en_mask && !is_fsm_mode(MODE_REG(pll))) {
@@ -970,7 +978,10 @@ static int fabia_alpha_pll_set_rate(struct clk *c, unsigned long rate)
 	spin_lock_irqsave(&c->lock, flags);
 	/* Set the new L value */
 	writel_relaxed(l_val, FABIA_L_REG(pll));
-	writel_relaxed(a_val, FABIA_FRAC_REG(pll));
+	if (pll->fabia_frac_offset)
+		writel_relaxed(a_val, FABIA_FRAC_OFF(pll));
+	else
+		writel_relaxed(a_val, FABIA_FRAC_REG(pll));
 
 	alpha_pll_dynamic_update(pll);
 
@@ -1048,7 +1059,11 @@ static enum handoff fabia_alpha_pll_handoff(struct clk *c)
 	}
 
 	l_val = readl_relaxed(FABIA_L_REG(pll));
-	a_val = readl_relaxed(FABIA_FRAC_REG(pll));
+
+	if (pll->fabia_frac_offset)
+		a_val = readl_relaxed(FABIA_FRAC_OFF(pll));
+	else
+		a_val = readl_relaxed(FABIA_FRAC_REG(pll));
 
 	c->rate = compute_rate(pll, l_val, a_val);
 

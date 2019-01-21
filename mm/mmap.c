@@ -947,7 +947,7 @@ again:			remove_next = 1 + (end > next->vm_end);
 		else if (next)
 			vma_gap_update(next);
 		else
-			WARN_ON(mm->highest_vm_end != vm_end_gap(vma));
+			VM_WARN_ON(mm->highest_vm_end != vm_end_gap(vma));
 	}
 	if (insert && file)
 		uprobe_mmap(insert);
@@ -1358,8 +1358,10 @@ unsigned long do_mmap_pgoff(struct file *file, unsigned long addr,
 			mm->def_flags | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 
 	if (flags & MAP_LOCKED)
-		if (!can_do_mlock())
+		if (!can_do_mlock()) {
+			pr_err("coremm: %s,%d: addr %lx len %lx prot %lx flag %lx\n", __func__, __LINE__, addr, len, prot, flags);
 			return -EPERM;
+		}
 
 	if (mlock_future_check(mm, vm_flags, len))
 		return -EAGAIN;
@@ -1394,8 +1396,10 @@ unsigned long do_mmap_pgoff(struct file *file, unsigned long addr,
 			if (!(file->f_mode & FMODE_READ))
 				return -EACCES;
 			if (file->f_path.mnt->mnt_flags & MNT_NOEXEC) {
-				if (vm_flags & VM_EXEC)
+				if (vm_flags & VM_EXEC) {
+					pr_err("coremm: %s,%d: addr %lx len %lx prot %lx flag %lx\n", __func__, __LINE__, addr, len, prot, flags);
 					return -EPERM;
+				}
 				vm_flags &= ~VM_MAYEXEC;
 			}
 
@@ -1449,6 +1453,9 @@ unsigned long do_mmap_pgoff(struct file *file, unsigned long addr,
 	    ((vm_flags & VM_LOCKED) ||
 	     (flags & (MAP_POPULATE | MAP_NONBLOCK)) == MAP_POPULATE))
 		*populate = len;
+	if (IS_ERR_VALUE(addr)) {
+		pr_err("coremm: %s,%d: addr %lx len %lx prot %lx flag %lx\n", __func__, __LINE__, addr, len, prot, flags);
+	}
 	return addr;
 }
 
@@ -1499,6 +1506,9 @@ out_fput:
 	if (file)
 		fput(file);
 out:
+	if (IS_ERR_VALUE(retval)) {
+		pr_err("coremm: %s,%d: addr %lx len %lx prot %lx flag %lx\n", __func__, __LINE__, addr, len, prot, flags);
+	}
 	return retval;
 }
 
@@ -2112,8 +2122,10 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 	if (file && file->f_op->get_unmapped_area)
 		get_area = file->f_op->get_unmapped_area;
 	addr = get_area(file, addr, len, pgoff, flags);
-	if (IS_ERR_VALUE(addr))
+	if (IS_ERR_VALUE(addr)) {
+		pr_err("coremm: %s,%d: addr %lx len %lx flags %lx error %lx\n", __func__, __LINE__, addr, len, flags, error);
 		return addr;
+	}
 
 	if (addr > TASK_SIZE - len)
 		return -ENOMEM;
@@ -2122,6 +2134,9 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 
 	addr = arch_rebalance_pgtables(addr, len);
 	error = security_mmap_addr(addr);
+	if (error) {
+		pr_err("coremm: %s,%d: addr %lx len %lx flags %lx error %lx\n", __func__, __LINE__, addr, len, flags, error);
+	}
 	return error ? error : addr;
 }
 
@@ -2191,7 +2206,7 @@ find_vma_prev(struct mm_struct *mm, unsigned long addr,
  * grow-up and grow-down cases.
  */
 static int acct_stack_growth(struct vm_area_struct *vma,
-			    unsigned long size, unsigned long grow)
+			     unsigned long size, unsigned long grow)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	struct rlimit *rlim = current->signal->rlim;
@@ -2250,20 +2265,23 @@ int expand_upwards(struct vm_area_struct *vma, unsigned long address)
 	if (!(vma->vm_flags & VM_GROWSUP))
 		return -EFAULT;
 
-	/* Guard against wrapping around to address 0. */
+	/* Guard against exceeding limits of the address space. */
 	address &= PAGE_MASK;
-	address += PAGE_SIZE;
-	if (!address)
+	if (address >= (TASK_SIZE & PAGE_MASK))
 		return -ENOMEM;
+	address += PAGE_SIZE;
 
 	/* Enforce stack_guard_gap */
 	gap_addr = address + stack_guard_gap;
-	if (gap_addr < address)
-		return -ENOMEM;
+
+	/* Guard against overflow */
+	if (gap_addr < address || gap_addr > TASK_SIZE)
+		gap_addr = TASK_SIZE;
+
 	next = vma->vm_next;
 	if (next && next->vm_start < gap_addr) {
 		if (!(next->vm_flags & VM_GROWSUP))
-		return -ENOMEM;
+			return -ENOMEM;
 		/* Check that both stack segments have the same anon_vma? */
 	}
 
@@ -2328,7 +2346,7 @@ int expand_downwards(struct vm_area_struct *vma,
 				   unsigned long address)
 {
 	struct vm_area_struct *prev;
-	unsigned long gap_addr;	
+	unsigned long gap_addr;
 	int error;
 
 	address &= PAGE_MASK;
@@ -2708,6 +2726,7 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len)
 
 	return 0;
 }
+EXPORT_SYMBOL(do_munmap);
 
 int vm_munmap(unsigned long start, size_t len)
 {

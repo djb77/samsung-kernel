@@ -88,6 +88,12 @@ struct sec_fg_info {
         int battery_typ;        /*SDI_BATTERY_TYPE or ATL_BATTERY_TYPE*/
         int batt_id_adc_check;
 	int battery_table[3][16];
+#if defined(CONFIG_BATTERY_AGE_FORECAST)
+	int v_max_table[5];
+	int q_max_table[5];
+	int v_max_now;
+	int q_max_now;
+#endif
 	int rce_value[3];
 	int dtcd_value;
 	int rs_value[5]; /*rs p_mix_factor n_mix_factor max min*/
@@ -202,6 +208,9 @@ struct sec_fuelgauge_info {
 
 	unsigned int capacity_old;	/* only for atomic calculation */
 	unsigned int capacity_max;	/* only for dynamic calculation */
+#if defined(CONFIG_BATTERY_AGE_FORECAST)
+	unsigned int chg_full_soc; /* BATTERY_AGE_FORECAST */
+#endif
 
 	bool initial_update_of_soc;
 	struct mutex fg_lock;

@@ -23,9 +23,9 @@
 #include <linux/pm.h>
 #include <soc/qcom/smsm.h>
 #include <linux/sec_smem.h>
-#ifdef CONFIG_SEC_AP_HEALTH
-#include <linux/notifier.h>
-#include <linux/sec_param.h>
+
+#ifdef CONFIG_SUPPORT_DEBUG_PARTITION
+#include <linux/user_reset/sec_debug_partition.h>
 #endif
 
 #ifdef CONFIG_SEC_DEBUG_APPS_CLK_LOGGING
@@ -37,7 +37,7 @@ extern void* clk_osm_get_log_addr(void);
 #define SUSPEND	0x1
 #define RESUME	0x0
 
-#ifdef CONFIG_SEC_AP_HEALTH
+#ifdef CONFIG_SUPPORT_DEBUG_PARTITION
 #define MAX_DDR_VENDOR 16
 
 static ap_health_t *p_health;
@@ -140,7 +140,7 @@ uint8_t get_ddr_wr_fineCDC(uint32_t ch, uint32_t cs, uint32_t dq)
 	return vendor1->ddr_training.wr_dqdqs.fine_cdc[ch][cs][dq];
 }
 EXPORT_SYMBOL(get_ddr_wr_fineCDC);
-#endif /* CONFIG_SEC_AP_HEALTH */
+#endif /* CONFIG_SUPPORT_DEBUG_PARTITION */
 
 static int sec_smem_suspend(struct device *dev)
 {
@@ -215,30 +215,26 @@ struct platform_driver sec_smem_driver = {
 	},
 };
 
-#ifdef CONFIG_SEC_AP_HEALTH
-static int sec_smem_notifier_callback(
+#ifdef CONFIG_SUPPORT_DEBUG_PARTITION
+static int sec_smem_dbg_part_notifier_callback(
 	struct notifier_block *nfb, unsigned long action, void *data)
 {
-	unsigned size = 0;
 	sec_smem_id_vendor1_v4_t *vendor1 = NULL;
+	unsigned size = 0;
 
 	switch (action) {
-		case SEC_PARAM_DRV_INIT_DONE:
+		case DBG_PART_DRV_INIT_DONE :
 			p_health = ap_health_data_read();
 
-			if (p_health) {
-
-				vendor1 = smem_get_entry(SMEM_ID_VENDOR1, &size,
-						0, SMEM_ANY_HOST_FLAG);
-
-				if (!vendor1) {
-					pr_err("%s size(%zu, %u): SMEM_ID_VENDOR1 get entry error\n", __func__,
+			vendor1 = smem_get_entry(SMEM_ID_VENDOR1, &size,
+					0, SMEM_ANY_HOST_FLAG);
+			if (!vendor1) {
+				pr_err("%s size(%zu, %u): SMEM_ID_VENDOR1 get entry error\n", __func__,
 						sizeof(sec_smem_id_vendor1_v4_t), size);
-					return NOTIFY_DONE;
-				}
-
-				vendor1->ap_health = (void *)virt_to_phys(p_health); 
+				return NOTIFY_DONE;
 			}
+
+			vendor1->ap_health = (void *)virt_to_phys(p_health); 
 			break;
 		default:
 			return NOTIFY_DONE;
@@ -247,10 +243,10 @@ static int sec_smem_notifier_callback(
 	return NOTIFY_OK;
 }
 
-static struct notifier_block sec_smem_notifier = {
-	.notifier_call = sec_smem_notifier_callback,
+static struct notifier_block sec_smem_dbg_part_notifier = {
+	.notifier_call = sec_smem_dbg_part_notifier_callback,
 };
-#endif /* CONFIG_SEC_AP_HEALTH */
+#endif
 
 static int __init sec_smem_init(void)
 {
@@ -260,8 +256,8 @@ static int __init sec_smem_init(void)
 	if (err)
 		pr_err("%s: Failed to register platform driver: %d \n", __func__, err);
 
-#ifdef CONFIG_SEC_AP_HEALTH
-	sec_param_notifier_register(&sec_smem_notifier);
+#ifdef CONFIG_SUPPORT_DEBUG_PARTITION
+	dbg_partition_notifier_register(&sec_smem_dbg_part_notifier);
 #endif
 
 	return 0;

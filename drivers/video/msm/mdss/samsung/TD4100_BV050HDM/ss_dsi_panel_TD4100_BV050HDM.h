@@ -36,6 +36,6 @@ Copyright (C) 2012, Samsung Electronics. All rights reserved.
 #include "../ss_regulator_common.h"
 
 #define TD4100_BV050HDM_SUPPORT_PANEL_COUNT 1
-#define LCD_DEFAUL_BL_LEVEL 125
+#define LCD_DEFAUL_BL_LEVEL 139
 
 #endif

@@ -50,10 +50,12 @@ extern int sm5705_fled_flash_on_set_current(unsigned char index, int32_t flash_c
 #endif
 
 #ifdef CONFIG_LEDS_S2MU005
+#include <linux/leds-s2mu005.h>
 extern int ss_rear_flash_led_flash_on(void);
-extern int ss_rear_flash_led_torch_on(void);
-extern int ss_rear_flash_led_turn_off(void);
-extern int ss_rear_torch_set_flashlight(bool isFlashlight);
+extern int ss_flash_led_torch_on(ext_pmic_flash_ctrl_t *flash_ctrl);
+extern int ss_flash_led_turn_off(ext_pmic_flash_ctrl_t *flash_ctrl);
+extern int ss_torch_set_flashlight(ext_pmic_flash_ctrl_t *flash_ctrl, bool isFlashlight);
+extern ext_pmic_flash_ctrl_t *s2mu005_fled_get_info_by_name(char *name);
 #endif
 
 static int32_t msm_led_trigger_get_subdev_id(struct msm_led_flash_ctrl_t *fctrl,
@@ -81,7 +83,7 @@ static int32_t msm_led_trigger_config(struct msm_led_flash_ctrl_t *fctrl,
 {
 	int rc = 0;
 	struct msm_camera_led_cfg_t *cfg = (struct msm_camera_led_cfg_t *)data;
-
+	ext_pmic_flash_ctrl_t *fled_info = s2mu005_fled_get_info_by_name(NULL);
 	if (!fctrl) {
 		pr_err("[%s:%d]failed\n", __func__, __LINE__);
 		return -EINVAL;
@@ -91,22 +93,22 @@ static int32_t msm_led_trigger_config(struct msm_led_flash_ctrl_t *fctrl,
 	switch (cfg->cfgtype) {
 		case MSM_CAMERA_LED_OFF:
 			CDBG("MSM_CAMERA_LED_OFF");
-			ss_rear_flash_led_turn_off();
+			ss_flash_led_turn_off(fled_info);
 		break;
 		case MSM_CAMERA_LED_LOW:
-			ss_rear_torch_set_flashlight(false);
-			ss_rear_flash_led_torch_on();
+			ss_torch_set_flashlight(fled_info, false);
+			ss_flash_led_torch_on(fled_info);
 		break;
 		case MSM_CAMERA_LED_TORCH:
-			ss_rear_torch_set_flashlight(true);
-			ss_rear_flash_led_torch_on();
+			ss_torch_set_flashlight(fled_info, true);
+			ss_flash_led_torch_on(fled_info);
 		break;
 		case MSM_CAMERA_LED_HIGH:
 			ss_rear_flash_led_flash_on();
 		break;
 		case MSM_CAMERA_LED_INIT:
 		case MSM_CAMERA_LED_RELEASE:
-			ss_rear_flash_led_turn_off();
+			ss_flash_led_turn_off(fled_info);
 		break;
 		default:
 		break;

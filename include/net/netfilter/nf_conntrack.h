@@ -27,6 +27,11 @@
 
 #include <net/netfilter/nf_conntrack_tuple.h>
 
+/* START_OF_KNOX_NPA */
+#define PROCESS_NAME_LEN_NAP	128
+#define DOMAIN_NAME_LEN_NAP	255
+/* END_OF_KNOX_NPA */
+
 #define SIP_LIST_ELEMENTS	2
 
 struct sip_length {
@@ -142,6 +147,34 @@ struct nf_conn {
 
 	/* Storage reserved for other modules, must be the last member */
 	union nf_conntrack_proto proto;
+
+	/* START_OF_KNOX_NPA */
+	/* The number of application layer bytes sent by the socket */
+	__u64   knox_sent;
+	/* The number of application layer bytes recieved by the socket */
+	__u64   knox_recv;
+	/* The uid which created the socket */
+	uid_t   knox_uid;
+	/* The pid under which the socket was created */
+	pid_t   knox_pid;
+	/* The parent user id under which the socket was created */
+	uid_t   knox_puid;
+	/* The epoch time at which the socket was opened */
+	__u64   open_time;
+	/* The name of the process which created the socket */
+	char process_name[PROCESS_NAME_LEN_NAP];
+	/* The name of the parent process which created the socket */
+	char parent_process_name[PROCESS_NAME_LEN_NAP];
+	/*  The Domain name associated with the ip address of the socket. The size needs to be in sync with the userspace implementation */
+	char domain_name[DOMAIN_NAME_LEN_NAP];
+	/* The parent process id under which the socket was created */
+	pid_t   knox_ppid;
+	/* The interface used by the flow to transmit packet */
+	char interface_name[IFNAMSIZ];
+	/* Atomic variable indicating start of flow */
+	atomic_t startFlow;
+	/* END_OF_KNOX_NPA */
+
 };
 
 static inline struct nf_conn *
@@ -317,6 +350,8 @@ int nf_conntrack_set_hashsize(const char *val, struct kernel_param *kp);
 extern unsigned int nf_conntrack_htable_size;
 extern unsigned int nf_conntrack_max;
 extern unsigned int nf_conntrack_hash_rnd;
+extern unsigned int nf_conntrack_pkt_threshold;
+
 void init_nf_conntrack_hash_rnd(void);
 
 void nf_conntrack_tmpl_insert(struct net *net, struct nf_conn *tmpl);

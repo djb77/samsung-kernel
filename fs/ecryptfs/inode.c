@@ -40,7 +40,6 @@
 #include <sdp/fs_request.h>
 #include "ecryptfs_sdp_chamber.h"
 #include "ecryptfs_dek.h"
-#include "../sdcardfs/sdcardfs.h"
 #endif
 
 #ifdef CONFIG_DLP
@@ -49,31 +48,30 @@
 /* Do not directly use this function. Use ECRYPTFS_OVERRIDE_CRED() instead. */
 const struct cred * ecryptfs_override_fsids(uid_t fsuid, gid_t fsgid)
 {
-	struct cred * cred; 
-	const struct cred * old_cred; 
+	struct cred *cred;
+	const struct cred *old_cred;
 
-	cred = prepare_creds(); 
-	if (!cred) 
-		return NULL; 
+	cred = prepare_creds();
+	if (!cred)
+		return NULL;
 
 	cred->fsuid = make_kuid(current_user_ns(), fsuid);
 	cred->fsgid = make_kgid(current_user_ns(), fsgid);
 
-	old_cred = override_creds(cred); 
+	old_cred = override_creds(cred);
 
-	return old_cred; 
+	return old_cred;
 }
 
 /* Do not directly use this function, use REVERT_CRED() instead. */
 void ecryptfs_revert_fsids(const struct cred * old_cred)
 {
-	const struct cred * cur_cred; 
+	const struct cred *cur_cred;
 
-	cur_cred = current->cred; 
-	revert_creds(old_cred); 
-	put_cred(cur_cred); 
+	cur_cred = current->cred;
+	revert_creds(old_cred);
+	put_cred(cur_cred);
 }
-#ifndef CONFIG_SDP
 static struct dentry *lock_parent(struct dentry *dentry)
 {
 	struct dentry *dir;
@@ -88,7 +86,6 @@ static void unlock_dir(struct dentry *dir)
 	mutex_unlock(&dir->d_inode->i_mutex);
 	dput(dir);
 }
-#endif
 
 static int ecryptfs_inode_test(struct inode *inode, void *lower_inode)
 {
@@ -176,8 +173,6 @@ static int ecryptfs_interpose(struct dentry *lower_dentry,
 	if (IS_ERR(inode))
 		return PTR_ERR(inode);
 	d_instantiate(dentry, inode);
-	if(d_unhashed(dentry))
-		d_rehash(dentry);
 
 #ifdef CONFIG_SDP
 	if(S_ISDIR(inode->i_mode) && dentry) {
@@ -455,8 +450,6 @@ ecryptfs_create(struct inode *directory_inode, struct dentry *ecryptfs_dentry,
 					crypt_stat);
 
 	d_instantiate(ecryptfs_dentry, ecryptfs_inode);
-	if(d_unhashed(ecryptfs_dentry))
-		d_rehash(ecryptfs_dentry);
 out:
 	return rc;
 }
@@ -522,6 +515,8 @@ static int ecryptfs_lookup_interpose(struct dentry *dentry,
 	dentry_info->lower_path.dentry = lower_dentry;
 
 	if (!lower_dentry->d_inode) {
+		/* We want to add because we couldn't find in lower */
+		d_add(dentry, NULL);
 		return 0;
 	}
 	inode = __ecryptfs_get_inode(lower_inode, dir_inode->i_sb);
@@ -635,68 +630,10 @@ static struct dentry *ecryptfs_lookup(struct inode *ecryptfs_dir_inode,
 		goto out;
 	}
 	mutex_lock(&lower_dir_dentry->d_inode->i_mutex);
-#ifdef CONFIG_SDP
-	if(!strncmp(lower_dir_dentry->d_sb->s_type->name, "sdcardfs", 8)) {
-		struct sdcardfs_dentry_info *dinfo = SDCARDFS_D(lower_dir_dentry);
-		struct dentry *parent = dget_parent(lower_dir_dentry);
-		struct sdcardfs_dentry_info *parent_info = SDCARDFS_D(parent);
-
-		dinfo->under_knox = 1;
-		dinfo->userid = -1;
-
-		if(IS_UNDER_ROOT(ecryptfs_dentry)) {
-			parent_info->permission = PERMISSION_PRE_ROOT;
-			if(mount_crypt_stat->userid >= 100 && mount_crypt_stat->userid <= 200) {
-				parent_info->userid = mount_crypt_stat->userid;
-
-				/* Assume masked off by default. */
-				if (!strcasecmp(ecryptfs_dentry->d_name.name, "Android")) {
-					/* App-specific directories inside; let anyone traverse */
-					dinfo->permission = PERMISSION_ROOT;
-				}	
-			}
-			else {
-				int len = strlen(ecryptfs_dentry->d_name.name);
-				int i, numeric = 1;
-
-				for(i=0 ; i < len ; i++)
-					if(!isdigit(ecryptfs_dentry->d_name.name[i])) { numeric = 0; break; }
-				if(numeric) {
-					dinfo->userid = simple_strtoul(ecryptfs_dentry->d_name.name, NULL, 10);
-				}
-			} 
-		}
-		else {
-			struct sdcardfs_sb_info *sbi = SDCARDFS_SB(lower_dir_dentry->d_sb);
-			
-			/* Derive custom permissions based on parent and current node */
-			switch (parent_info->permission) {
-				case PERMISSION_ROOT:
-					if (!strcasecmp(ecryptfs_dentry->d_name.name, "data") || !strcasecmp(ecryptfs_dentry->d_name.name, "obb") || !strcasecmp(ecryptfs_dentry->d_name.name, "media")) {
-						/* App-specific directories inside; let anyone traverse */
-						dinfo->permission = PERMISSION_ANDROID;
-					} 
-					break;
-               			case PERMISSION_ANDROID:
-					dinfo->permission = PERMISSION_UNDER_ANDROID;
-               				dinfo->appid = get_appid(sbi->pkgl_id, ecryptfs_dentry->d_name.name);
-					break;
-			}
-		}
-		dput(parent);
-	}
-#endif
-
 	lower_dentry = lookup_one_len(encrypted_and_encoded_name,
 				      lower_dir_dentry,
 				      encrypted_and_encoded_name_size);
-#ifdef CONFIG_SDP
-	if(!strncmp(lower_dir_dentry->d_sb->s_type->name, "sdcardfs", 8)) {
-		struct sdcardfs_dentry_info *dinfo = SDCARDFS_D(lower_dir_dentry);
-		dinfo->under_knox = 0;
-		dinfo->userid = -1;
-	}
-#endif
+
 	mutex_unlock(&lower_dir_dentry->d_inode->i_mutex);
 	if (IS_ERR(lower_dentry)) {
 		rc = PTR_ERR(lower_dentry);
@@ -801,23 +738,6 @@ static int ecryptfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode
 	lower_dentry = ecryptfs_dentry_to_lower(dentry);
 	lower_dir_dentry = lock_parent(lower_dentry);
 
-#ifdef CONFIG_SDP
-	if(!strncmp(lower_dir_dentry->d_sb->s_type->name, "sdcardfs", 8)) {
-		struct sdcardfs_dentry_info *dinfo = SDCARDFS_D(lower_dir_dentry);
-		int len = strlen(dentry->d_name.name);
-		int i, numeric = 1;
-
-		dinfo->under_knox = 1;
-		dinfo->userid = -1;
-		if(IS_UNDER_ROOT(dentry)) {
-			for(i=0 ; i < len ; i++)
-				if(!isdigit(dentry->d_name.name[i])) { numeric = 0; break; }
-			if(numeric) {
-				dinfo->userid = simple_strtoul(dentry->d_name.name, NULL, 10);
-			}
-		}
-	}
-#endif
 
 	rc = vfs_mkdir(lower_dir_dentry->d_inode, lower_dentry, mode);
 	if (rc || !lower_dentry->d_inode)
@@ -829,13 +749,6 @@ static int ecryptfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode
 	fsstack_copy_inode_size(dir, lower_dir_dentry->d_inode);
 	set_nlink(dir, lower_dir_dentry->d_inode->i_nlink);
 out:
-#ifdef CONFIG_SDP
-	if(!strncmp(lower_dir_dentry->d_sb->s_type->name, "sdcardfs", 8)) {
-		struct sdcardfs_dentry_info *dinfo = SDCARDFS_D(lower_dir_dentry);
-		dinfo->under_knox = 0;
-		dinfo->userid = -1;
-	}
-#endif
 	unlock_dir(lower_dir_dentry);
 	if (!dentry->d_inode)
 		d_drop(dentry);

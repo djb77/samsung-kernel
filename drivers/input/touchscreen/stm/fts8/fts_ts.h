@@ -232,6 +232,12 @@
 #define PAT_MAX_EXT 			0xF5
 #endif
 
+enum fts_factory_mode {
+	FTS_NOT_FACTORY_MODE = 0,
+	FTS_FACTORY_PRETEST_UNIT_MODE,
+	FTS_FACTORY_PRETEST_ASSY_MODE,
+};
+
 #ifdef FTS_SUPPORT_TOUCH_KEY
 /* TSP Key Feature*/
 #define KEY_PRESS       1
@@ -619,6 +625,7 @@ struct fts_ts_info {
 
 	unsigned char cal_count;		/* calibration count   		- pat_control */
 	unsigned short tune_fix_ver;	/* calibration version which f/w based on  - pat_control */
+	int factory_mode;
 	bool external_factory;
 	bool set_protection_disable;
 

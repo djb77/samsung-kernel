@@ -11,12 +11,6 @@ menuconfig INPUT_TOUCHSCREEN
 
 if INPUT_TOUCHSCREEN
 
-source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
-source "drivers/input/touchscreen/synaptics_dsx_2.6/Kconfig"
-source "drivers/input/touchscreen/imagis_30xxc/Kconfig"
-source "drivers/input/touchscreen/imagis_30xxh/Kconfig"
-source "drivers/input/touchscreen/zinitix/Kconfig"
-
 config OF_TOUCHSCREEN
 	#def_tristate INPUT
 	depends on INPUT && OF
@@ -1134,11 +1128,13 @@ config TOUCHSCREEN_DUMP_MODE
 	  Say Y here if you need to get raw data.
 
 	  If unsure, say N.
-
-source "drivers/input/touchscreen/gt9xx/Kconfig"
-source "drivers/input/touchscreen/melfas/Kconfig"
-source "drivers/input/touchscreen/himax/Kconfig"
+source "drivers/input/touchscreen/imagis_30xxh/Kconfig"
+source "drivers/input/touchscreen/sec_ts/Kconfig"
+source "drivers/input/touchscreen/sec_incell_ts/Kconfig"
+source "drivers/input/touchscreen/imagis_30xxh/Kconfig"
 source "drivers/input/touchscreen/stm/fts7/Kconfig"
 source "drivers/input/touchscreen/stm/fts8/Kconfig"
+source "drivers/input/touchscreen/stm/fts1ba90a/Kconfig"
+source "drivers/input/touchscreen/zinitix/Kconfig"
 source "drivers/input/touchscreen/synaptics_incell/Kconfig"
 endif

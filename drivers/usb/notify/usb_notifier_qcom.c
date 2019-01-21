@@ -26,15 +26,21 @@
 #if defined(CONFIG_VBUS_NOTIFIER)
 #include <linux/vbus_notifier.h>
 #endif
-#ifdef CONFIG_BATTERY_SAMSUNG_V2
+#if defined(CONFIG_BATTERY_SAMSUNG_V2)
 #include "../../battery_v2/include/sec_charging_common.h"
+#elif defined(CONFIG_BATTERY_SAMSUNG_V2_LEGACY)
+#include "../../battery_v2_legacy/include/sec_charging_common.h"
 #else
 #include <linux/battery/sec_charging_common.h>
 #endif
 #if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
 #include <linux/usb/manager/usb_typec_manager_notifier.h>
 #endif
-
+#if defined(CONFIG_CCIC_ALTERNATE_MODE) && defined(CONFIG_USB_DWC3)
+extern int dwc_msm_vbus_event(bool enable);
+extern int dwc_msm_id_event(bool enable);
+extern void dwc3_max_speed_setting(int speed);
+#endif
 #ifdef CONFIG_USB_DWC3
 #define PSY_NAME	"dwc-usb"
 #else
@@ -126,6 +132,9 @@ static int ccic_usb_handle_notification(struct notifier_block *nb,
 	switch (usb_status.drp){
 		case USB_STATUS_NOTIFY_ATTACH_DFP:
 			pr_info("%s: Turn On Host(DFP), max speed restrict = %d\n", __func__, usb_status.sub3);	
+#if defined(CONFIG_CCIC_ALTERNATE_MODE) && defined(CONFIG_USB_DWC3)
+			dwc3_max_speed_setting(usb_status.sub3);
+#endif
 #if defined(CONFIG_MUIC_SM570X_SWITCH_CONTROL_GPIO)
 /* set USB_ID pin high to let MUIC doesn't do BC1.2 charging when OTG connected*/
 			muic_GPIO_control(1);
@@ -135,6 +144,9 @@ static int ccic_usb_handle_notification(struct notifier_block *nb,
 			break;
 		case USB_STATUS_NOTIFY_ATTACH_UFP:
 			pr_info("%s: Turn On Device(UFP)\n", __func__);
+#if defined(CONFIG_CCIC_ALTERNATE_MODE) && defined(CONFIG_USB_DWC3)
+			dwc3_max_speed_setting(usb_status.sub3);
+#endif
 			send_otg_notify(o_notify, NOTIFY_EVENT_VBUS, 1);
 			if(is_blocked(o_notify, NOTIFY_BLOCK_TYPE_CLIENT))
 				return -EPERM;
@@ -334,6 +346,9 @@ static int otg_accessory_power(bool enable)
 
 static int qcom_set_peripheral(bool enable)
 {
+#if defined(CONFIG_CCIC_ALTERNATE_MODE) && defined(CONFIG_USB_DWC3)
+	dwc_msm_vbus_event(enable);
+#else
 	struct power_supply *psy;
 
 	psy = power_supply_get_by_name(PSY_NAME);
@@ -345,12 +360,15 @@ static int qcom_set_peripheral(bool enable)
 
     if(!enable)
         set_ncm_ready(false);
-
+#endif
 	return 0;
 }
 
 static int qcom_set_host(bool enable)
 {
+#if defined(CONFIG_CCIC_ALTERNATE_MODE) && defined(CONFIG_USB_DWC3)
+	dwc_msm_id_event(enable);
+#else
 	struct power_supply *psy;
 
 	psy = power_supply_get_by_name(PSY_NAME);
@@ -359,7 +377,7 @@ static int qcom_set_host(bool enable)
 		power_supply_set_usb_otg(psy, enable);
 	else
 		pr_err("usb: %s power supply is null!\n", PSY_NAME);
-
+#endif
 	return 0;
 }
 
@@ -376,10 +394,17 @@ static int set_online(int event, int state)
 		return -1;
 	}
 
+#ifdef CONFIG_BATTERY_SAMSUNG_V2
+	if (state)
+		value.intval = SEC_BATTERY_CABLE_SMART_OTG;
+	else
+		value.intval = SEC_BATTERY_CABLE_SMART_NOTG;
+#else
 	if (state)
 		value.intval = POWER_SUPPLY_TYPE_SMART_OTG;
 	else
 		value.intval = POWER_SUPPLY_TYPE_SMART_NOTG;
+#endif
 
 	psy->set_property(psy, POWER_SUPPLY_PROP_ONLINE, &value);
 	return 0;
@@ -415,7 +440,7 @@ static int usb_blocked_chg_control(int set)
 		val.intval = USB_CURRENT_UNCONFIGURED;
 
 	psy_do_property("battery", set,
-#ifdef CONFIG_BATTERY_SAMSUNG_V2
+#if defined(CONFIG_BATTERY_SAMSUNG_V2) || defined(CONFIG_BATTERY_SAMSUNG_V2_LEGACY)
 		POWER_SUPPLY_EXT_PROP_USB_CONFIGURE, val);
 #else
 		POWER_SUPPLY_PROP_USB_CONFIGURE, val);
@@ -433,17 +458,17 @@ static struct otg_notify sec_otg_notify = {
 	.is_wakelock = 1,
 	.unsupport_host = 0,
 	.disable_control = 1,
-	.auto_drive_vbus = NOTIFY_OP_PRE,
 	.device_check_sec = 3,
 #if !defined(CONFIG_CCIC_NOTIFIER)
 	.auto_drive_vbus = NOTIFY_OP_PRE,
-#else
-	.auto_drive_vbus = 1,
 #endif
 #ifdef CONFIG_USB_CHARGING_EVENT
 	.set_chg_current = usb_blocked_chg_control,
 #endif
 	.set_battcall = set_online,
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+	.sec_whitelist_enable = 0,
+#endif
 };
 
 static int usb_notifier_probe(struct platform_device *pdev)

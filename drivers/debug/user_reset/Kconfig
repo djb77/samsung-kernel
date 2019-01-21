@@ -1,0 +1,23 @@
+# When adding new entries keep the list in alphabetical order
+
+config USER_RESET_DEBUG
+	bool "reset reason debug feature in user version"
+	default n
+	help
+	  This option provides reset history log in user version.
+	  This option enable proc/reset_reason support
+	  
+config SUPPORT_DEBUG_PARTITION
+	bool "reset reason & BigData store debug partition feature"
+	depends on USER_RESET_DEBUG
+	default n
+	help
+	  This option should be check project pit table. 
+
+config USER_RESET_DEBUG_TEST
+	bool "reset reason debug test feature in eng version"
+	depends on USER_RESET_DEBUG
+	default n
+	help
+	  This option enable for test in eng version(KP, DP, TP, WP)
+

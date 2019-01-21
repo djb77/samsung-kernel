@@ -44,7 +44,8 @@
 tANI_U8 limScanHashFunction(tSirMacAddr);
 void    limInitHashTable(tpAniSirGlobal);
 eHalStatus    
-   limLookupNaddHashEntry(tpAniSirGlobal, tLimScanResultNode *, tANI_U8, tANI_U8);
+   limLookupNaddHashEntry(tpAniSirGlobal, tLimScanResultNode *,
+                                   tANI_U8, tANI_U8, bool);
 void    limDeleteHashEntry(tLimScanResultNode *);
 void    limDeleteCachedScanResults(tpAniSirGlobal);
 void    limRestorePreScanState(tpAniSirGlobal);

@@ -195,6 +195,7 @@ struct msm_dai_q6_tdm_dai_data {
 	u32 rate;
 	u32 channels;
 	u32 bitwidth;
+	u32 num_group_ports;
 	struct afe_clk_set clk_set; /* hold LPASS clock config. */
 	union afe_port_group_config group_cfg; /* hold tdm group config */
 	struct afe_tdm_port_config port_cfg; /* hold tdm config */
@@ -238,8 +239,8 @@ static const char *const tdm_header_type[] = {
 };
 
 static const struct soc_enum tdm_config_enum[] = {
-	SOC_ENUM_SINGLE_EXT(2, tdm_data_format),
-	SOC_ENUM_SINGLE_EXT(3, tdm_header_type),
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(tdm_data_format), tdm_data_format),
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(tdm_header_type), tdm_header_type),
 };
 
 static DEFINE_MUTEX(tdm_mutex);
@@ -266,6 +267,8 @@ static struct afe_param_id_group_device_tdm_cfg tdm_group_cfg = {
 	32,
 	0xFF,
 };
+
+static u32 num_tdm_group_ports[IDX_GROUP_TDM_MAX];
 
 static struct afe_clk_set tdm_clk_set = {
 	AFE_API_VERSION_CLOCK_SET,
@@ -2035,6 +2038,25 @@ static struct snd_soc_dai_driver msm_dai_q6_afe_tx_dai[] = {
 	},
 };
 
+static struct snd_soc_dai_driver msm_dai_q6_afe_lb_tx_dai[] = {
+	{
+		.capture = {
+			.stream_name = "AFE Loopback Capture",
+			.aif_name = "AFE_LOOPBACK_TX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min =     8000,
+			.rate_max =	48000,
+		},
+		.id = AFE_LOOPBACK_TX,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
+};
+
 static struct snd_soc_dai_driver msm_dai_q6_bt_sco_rx_dai = {
 	.playback = {
 		.stream_name = "Internal BT-SCO Playback",
@@ -3161,7 +3183,7 @@ static int msm_dai_q6_mi2s_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	dev_get_drvdata(dai->dev);
 
 	if (test_bit(STATUS_PORT_STARTED,
-#ifdef CONFIG_SND_SOC_MSM8X16_RT5659    
+#if defined(CONFIG_SND_SOC_MSM8X16_RT5659) || defined(CONFIG_SND_SOC_MSM8X16_RT5665)
 		mi2s_dai_data->rx_dai.mi2s_dai_data.status_mask) &&
 #else /* CONFIG_SND_SOC_MSM8X16_RT5659 */
 		mi2s_dai_data->rx_dai.mi2s_dai_data.status_mask) ||
@@ -3750,6 +3772,12 @@ register_slim_capture:
 			pr_err("%s: Device not found stream name %s\n",
 				__func__, stream_name);
 		break;
+	case AFE_LOOPBACK_TX:
+		rc = snd_soc_register_component(&pdev->dev,
+						&msm_dai_q6_component,
+						&msm_dai_q6_afe_lb_tx_dai[0],
+						1);
+		break;
 	case INT_BT_SCO_RX:
 		rc = snd_soc_register_component(&pdev->dev, &msm_dai_q6_component,
 		&msm_dai_q6_bt_sco_rx_dai, 1);
@@ -4015,7 +4043,6 @@ static struct platform_driver msm_dai_q6_spdif_driver = {
 static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 {
 	int rc = 0;
-	u32 num_ports = 0;
 	const uint32_t *port_id_array = NULL;
 	uint32_t array_length = 0;
 	int i = 0;
@@ -4036,20 +4063,29 @@ static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "%s: dev_name: %s group_id: 0x%x\n",
 		__func__, dev_name(&pdev->dev), tdm_group_cfg.group_id);
 
+	group_idx = msm_dai_q6_get_group_idx(tdm_group_cfg.group_id);
+	if (group_idx < 0) {
+		dev_err(&pdev->dev, "%s: group id 0x%x not supported\n",
+			__func__, tdm_group_cfg.group_id);
+		rc = -EINVAL;
+		goto rtn;
+	}
+
 	rc = of_property_read_u32(pdev->dev.of_node,
 		"qcom,msm-cpudai-tdm-group-num-ports",
-		&num_ports);
+		&num_tdm_group_ports[group_idx]);
 	if (rc) {
 		dev_err(&pdev->dev, "%s: Group Num Ports from DT file %s\n",
 			__func__, "qcom,msm-cpudai-tdm-group-num-ports");
 		goto rtn;
 	}
 	dev_dbg(&pdev->dev, "%s: Group Num Ports from DT file 0x%x\n",
-		__func__, num_ports);
+		__func__, num_tdm_group_ports[group_idx]);
 
-	if (num_ports > AFE_GROUP_DEVICE_NUM_PORTS) {
+	if (num_tdm_group_ports[group_idx] > AFE_GROUP_DEVICE_NUM_PORTS) {
 		dev_err(&pdev->dev, "%s Group Num Ports %d greater than Max %d\n",
-			__func__, num_ports, AFE_GROUP_DEVICE_NUM_PORTS);
+			__func__, num_tdm_group_ports[group_idx],
+			AFE_GROUP_DEVICE_NUM_PORTS);
 		rc = -EINVAL;
 		goto rtn;
 	}
@@ -4063,18 +4099,20 @@ static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 		rc = -EINVAL;
 		goto rtn;
 	}
-	if (array_length != sizeof(uint32_t) * num_ports) {
+	if (array_length != sizeof(uint32_t) * num_tdm_group_ports[group_idx]) {
 		dev_err(&pdev->dev, "%s array_length is %d, expected is %zd\n",
-			__func__, array_length, sizeof(uint32_t) * num_ports);
+			__func__, array_length,
+			sizeof(uint32_t) * num_tdm_group_ports[group_idx]);
 		rc = -EINVAL;
 		goto rtn;
 	}
 
-	for (i = 0; i < num_ports; i++)
+	for (i = 0; i < num_tdm_group_ports[group_idx]; i++)
 		tdm_group_cfg.port_id[i] =
 			(u16)be32_to_cpu(port_id_array[i]);
 	/* Unused index should be filled with 0 or AFE_PORT_INVALID */
-	for (i = num_ports; i < AFE_GROUP_DEVICE_NUM_PORTS; i++)
+	for (i = num_tdm_group_ports[group_idx];
+			i < AFE_GROUP_DEVICE_NUM_PORTS; i++)
 		tdm_group_cfg.port_id[i] =
 			AFE_PORT_INVALID;
 
@@ -4090,14 +4128,17 @@ static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: Clk Rate from DT file %d\n",
 		__func__, tdm_clk_set.clk_freq_in_hz);
 
-	/* other initializations within device group */
-	group_idx = msm_dai_q6_get_group_idx(tdm_group_cfg.group_id);
-	if (group_idx < 0) {
-		dev_err(&pdev->dev, "%s: group id 0x%x not supported\n",
-			__func__, tdm_group_cfg.group_id);
-		rc = -EINVAL;
-		goto rtn;
+	rc = of_property_read_u16(pdev->dev.of_node,
+		"qcom,msm-cpudai-tdm-clk-attribute",
+		&tdm_clk_set.clk_attri);
+	if (rc) {
+		dev_dbg(&pdev->dev, "%s: No Clk attribute in DT file %s\n",
+			__func__, "qcom,msm-cpudai-tdm-clk-attribute");
 	}
+	dev_dbg(&pdev->dev, "%s: Clk Attribute from DT file %d\n",
+		__func__, tdm_clk_set.clk_attri);
+
+	/* other initializations within device group */
 	atomic_set(&tdm_group_ref[group_idx], 0);
 
 	/* probe child node info */
@@ -5078,6 +5119,12 @@ static int msm_dai_q6_tdm_set_tdm_slot(struct snd_soc_dai *dai,
 
 	/* HW only supports 16 and 8 slots configuration */
 	switch (slots) {
+	case 2:
+		cap_mask = 0x3; 
+		break;
+	case 4:
+		cap_mask = 0xF;
+		break;
 	case 8:
 		cap_mask = 0xFF;
 		break;
@@ -5352,6 +5399,23 @@ static int msm_dai_q6_tdm_hw_params(struct snd_pcm_substream *substream,
 	tdm_group->num_channels = tdm_group->nslots_per_frame;
 	tdm_group->sample_rate = dai_data->rate;
 
+	/* re-check slot mask */
+	if (tdm->nslots_per_frame != tdm->num_channels)
+	{
+		switch (tdm->num_channels) {
+		case 2:
+			tdm->slot_mask = 0x3;
+			break;
+		case 4:
+			tdm->slot_mask = 0xF;
+			break;
+		default :
+			dev_err(dai->dev, "%s: invalid param channels %d\n",
+				__func__, tdm->num_channels);
+			return -EINVAL;
+		}
+	}
+
 	pr_debug("%s: TDM GROUP:\n"
 		"num_channels=%d sample_rate=%d bit_width=%d\n"
 		"nslots_per_frame=%d slot_width=%d slot_mask=0x%x\n",
@@ -5501,17 +5565,19 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 					__func__, dai->id);
 				goto rtn;
 			}
-			rc = afe_port_group_enable(group_id,
-				&dai_data->group_cfg, true);
-			if (IS_ERR_VALUE(rc)) {
-				dev_err(dai->dev, "%s: fail to enable AFE group 0x%x\n",
-					__func__, group_id);
-				goto rtn;
+			if (dai_data->num_group_ports > 1) {
+				rc = afe_port_group_enable(group_id,
+					&dai_data->group_cfg, true);
+				if (IS_ERR_VALUE(rc)) {
+					dev_err(dai->dev, "%s: fail to enable AFE group 0x%x\n",
+						__func__, group_id);
+					goto rtn;
+				}
 			}
 		}
 
 		rc = afe_tdm_port_start(dai->id, &dai_data->port_cfg,
-			dai_data->rate);
+			dai_data->rate, dai_data->num_group_ports);
 		if (IS_ERR_VALUE(rc)) {
 			if (atomic_read(group_ref) == 0) {
 				afe_port_group_enable(group_id,
@@ -6765,6 +6831,7 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	int rc = 0;
 	u32 tdm_dev_id = 0;
 	int port_idx = 0;
+	int group_idx = 0;
 
 	/* retrieve device/afe id */
 	rc = of_property_read_u32(pdev->dev.of_node,
@@ -6786,6 +6853,14 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "%s: dev_name: %s dev_id: 0x%x\n",
 		__func__, dev_name(&pdev->dev), tdm_dev_id);
+
+	group_idx = msm_dai_q6_get_group_idx(tdm_dev_id);
+	if (group_idx < 0) {
+		dev_err(&pdev->dev, "%s: group id 0x%x not supported\n",
+			__func__, tdm_group_cfg.group_id);
+		rc = -EINVAL;
+		goto rtn;
+	}
 
 	dai_data = kzalloc(sizeof(struct msm_dai_q6_tdm_dai_data),
 				GFP_KERNEL);
@@ -6938,6 +7013,8 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	dai_data->clk_set = tdm_clk_set;
 	/* copy static group cfg per parent node */
 	dai_data->group_cfg.tdm_cfg = tdm_group_cfg;
+	/* copy static num group ports per parent node */
+	dai_data->num_group_ports = num_tdm_group_ports[group_idx];
 
 	dev_set_drvdata(&pdev->dev, dai_data);
 

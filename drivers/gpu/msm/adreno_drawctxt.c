@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -213,10 +213,12 @@ static int adreno_drawctxt_wait_rb(struct adreno_device *adreno_dev,
 	BUG_ON(!mutex_is_locked(&device->mutex));
 
 	/*
-	 * If the context is invalid then return immediately - we may end up
-	 * waiting for a timestamp that will never come
+	 * If the context is invalid (OR) not submitted commands to GPU
+	 * then return immediately - we may end up waiting for a timestamp
+	 * that will never come
 	 */
-	if (kgsl_context_invalid(context))
+	if (kgsl_context_invalid(context) ||
+			!test_bit(KGSL_CONTEXT_PRIV_SUBMITTED, &context->priv))
 		goto done;
 
 	trace_adreno_drawctxt_wait_start(drawctxt->rb->id, context->id,
@@ -295,6 +297,7 @@ void adreno_drawctxt_invalidate(struct kgsl_device *device,
 	/* Give the bad news to everybody waiting around */
 	wake_up_all(&drawctxt->waiting);
 	wake_up_all(&drawctxt->wq);
+	wake_up_all(&drawctxt->timeout);
 }
 
 /*
@@ -340,6 +343,7 @@ adreno_drawctxt_create(struct kgsl_device_private *dev_priv,
 		KGSL_CONTEXT_PER_CONTEXT_TS |
 		KGSL_CONTEXT_USER_GENERATED_TS |
 		KGSL_CONTEXT_NO_FAULT_TOLERANCE |
+		KGSL_CONTEXT_INVALIDATE_ON_FAULT |
 		KGSL_CONTEXT_CTX_SWITCH |
 		KGSL_CONTEXT_PRIORITY_MASK |
 		KGSL_CONTEXT_TYPE_MASK |
@@ -386,6 +390,7 @@ adreno_drawctxt_create(struct kgsl_device_private *dev_priv,
 	spin_lock_init(&drawctxt->lock);
 	init_waitqueue_head(&drawctxt->wq);
 	init_waitqueue_head(&drawctxt->waiting);
+	init_waitqueue_head(&drawctxt->timeout);
 
 	/* Set the context priority */
 	_set_context_priority(drawctxt);
@@ -498,14 +503,33 @@ void adreno_drawctxt_detach(struct kgsl_context *context)
 		drawctxt->internal_timestamp, 30 * 1000);
 
 	/*
-	 * If the wait for global fails due to timeout then nothing after this
-	 * point is likely to work very well - BUG_ON() so we can take advantage
-	 * of the debug tools to figure out what the h - e - double hockey
-	 * sticks happened. If EAGAIN error is returned then recovery will kick
-	 * in and there will be no more commands in the RB pipe from this
-	 * context which is waht we are waiting for, so ignore -EAGAIN error
+	 * If the wait for global fails due to timeout then mark it as
+	 * context detach timeout fault and schedule dispatcher to kick
+	 * in GPU recovery. For a ADRENO_CTX_DETATCH_TIMEOUT_FAULT we clear
+	 * the policy and invalidate the context. If EAGAIN error is returned
+	 * then recovery will kick in and there will be no more commands in the
+	 * RB pipe from this context which is what we are waiting for, so ignore
+	 * -EAGAIN error.
 	 */
-	BUG_ON(ret && ret != -EAGAIN);
+	if (ret && ret != -EAGAIN) {
+		KGSL_DRV_ERR(device,
+				"Wait for global ctx=%d ts=%d type=%d error=%d\n",
+				drawctxt->base.id, drawctxt->internal_timestamp,
+				drawctxt->type, ret);
+
+		adreno_set_gpu_fault(adreno_dev,
+				ADRENO_CTX_DETATCH_TIMEOUT_FAULT);
+		mutex_unlock(&device->mutex);
+
+		/* Schedule dispatcher to kick in recovery */
+		adreno_dispatcher_schedule(device);
+
+		/* Wait for context to be invalidated and release context */
+		ret = wait_event_interruptible_timeout(drawctxt->timeout,
+					kgsl_context_invalid(&drawctxt->base),
+					msecs_to_jiffies(5000));
+		return;
+	}
 
 	kgsl_sharedmem_writel(device, &device->memstore,
 			KGSL_MEMSTORE_OFFSET(context->id, soptimestamp),

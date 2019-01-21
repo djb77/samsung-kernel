@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1000,9 +1000,10 @@ static enum handoff branch_clk_handoff(struct clk *c)
 		return HANDOFF_DISABLED_CLK;
 
 	if (!(cbcr_regval & CBCR_BRANCH_ENABLE_BIT)) {
-		WARN(!branch->check_enable_bit,
-			"%s clock is enabled in HW even though ENABLE_BIT is not set\n",
-			c->dbg_name);
+		if (!branch->check_enable_bit) {
+			pr_warn("%s clock is enabled in HW", c->dbg_name);
+			pr_warn("even though ENABLE_BIT is not set\n");
+		}
 		return HANDOFF_DISABLED_CLK;
 	}
 
@@ -2334,6 +2335,9 @@ static void *cbc_dt_parser(struct device *dev, struct device_node *np)
 
 	/* Optional property */
 	of_property_read_u32(np, "qcom,bcr-offset", &branch_clk->bcr_reg);
+
+	of_property_read_u32(np, "qcom,halt-check",
+					(u32 *)&branch_clk->halt_check);
 
 	branch_clk->has_sibling = of_property_read_bool(np,
 							"qcom,has-sibling");

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -232,6 +232,13 @@ struct mdss_scaler_block {
 	u32 *dest_scaler_off;
 	u32 *dest_scaler_lut_off;
 	struct mdss_mdp_qseed3_lut_tbl lut_tbl;
+
+	/*
+	 * Lock is mainly to serialize access to LUT.
+	 * LUT values come asynchronously from userspace
+	 * via ioctl.
+	 */
+	struct mutex scaler_lock;
 };
 
 struct mdss_data_type;
@@ -249,7 +256,7 @@ struct mdss_smmu_ops {
 	void (*smmu_unmap_dma_buf)(struct sg_table *table, int domain,
 			int dir, struct dma_buf *dma_buf);
 	int (*smmu_dma_alloc_coherent)(struct device *dev, size_t size,
-			dma_addr_t *phys, dma_addr_t *iova, void *cpu_addr,
+			dma_addr_t *phys, dma_addr_t *iova, void **cpu_addr,
 			gfp_t gfp, int domain);
 	void (*smmu_dma_free_coherent)(struct device *dev, size_t size,
 			void *cpu_addr, dma_addr_t phys, dma_addr_t iova,
@@ -265,6 +272,8 @@ struct mdss_smmu_ops {
 	void (*smmu_dsi_unmap_buffer)(dma_addr_t dma_addr, int domain,
 			unsigned long size, int dir);
 	void (*smmu_deinit)(struct mdss_data_type *mdata);
+	struct sg_table * (*smmu_sg_table_clone)(struct sg_table *orig_table,
+			gfp_t gfp_mask, bool padding);
 };
 
 struct mdss_data_type {
@@ -278,6 +287,7 @@ struct mdss_data_type {
 	bool en_svs_high;
 	u32 max_mdp_clk_rate;
 	struct mdss_util_intf *mdss_util;
+	struct mdss_panel_data *pdata;
 
 	struct platform_device *pdev;
 	struct dss_io_data mdss_io;
@@ -385,6 +395,8 @@ struct mdss_data_type {
 	u32 *vbif_rt_qos;
 	u32 *vbif_nrt_qos;
 	u32 npriority_lvl;
+	u32 rot_dwnscale_min;
+	u32 rot_dwnscale_max;
 
 	struct mult_factor ab_factor;
 	struct mult_factor ib_factor;
@@ -506,6 +518,9 @@ struct mdss_data_type {
 	u32 bcolor1;
 	u32 bcolor2;
 	struct mdss_scaler_block *scaler_off;
+
+	u32 splash_intf_sel;
+	u32 splash_split_disp;
 };
 
 extern struct mdss_data_type *mdss_res;

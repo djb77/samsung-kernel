@@ -4,3 +4,4 @@ config MSM_MDSS_PLL
 	It provides support for DSI, eDP and HDMI interface pll programming on MDSS
 	hardware. It also handles the pll specific resources and turn them on/off when
 	mdss pll client tries to enable/disable pll clocks.
+

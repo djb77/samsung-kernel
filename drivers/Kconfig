@@ -142,8 +142,6 @@ source "drivers/staging/Kconfig"
 
 source "drivers/platform/Kconfig"
 
-source "drivers/soc/Kconfig"
-
 source "drivers/clk/Kconfig"
 
 source "drivers/hwspinlock/Kconfig"
@@ -182,6 +180,8 @@ source "drivers/battery/Kconfig"
 
 source "drivers/battery_v2/Kconfig"
 
+source "drivers/battery_v2_legacy/Kconfig"
+
 source "drivers/reset/Kconfig"
 
 source "drivers/fmc/Kconfig"
@@ -206,8 +206,6 @@ source "drivers/fingerprint/Kconfig"
 
 source "drivers/bif/Kconfig"
 
-source "drivers/gud/Kconfig"
-
 source "drivers/muic/Kconfig"
 
 source "drivers/motor/Kconfig"
@@ -217,4 +215,11 @@ source "drivers/muic/universal/Kconfig"
 source "drivers/nfc/Kconfig"
 
 source "drivers/ccic/Kconfig"
+
+source "drivers/gud/Kconfig"
+
+source "drivers/five/Kconfig"
+
+source "drivers/debug/Kconfig"
+
 endmenu

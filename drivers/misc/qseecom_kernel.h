@@ -19,7 +19,7 @@
 #define QSEECOM_ALIGN_MASK	(QSEECOM_ALIGN_SIZE - 1)
 #define QSEECOM_ALIGN(x)	\
 	((x + QSEECOM_ALIGN_MASK) & (~QSEECOM_ALIGN_MASK))
-#define QSEECOM_SBUFF_SIZE 0x1000
+
 /*
  * struct qseecom_handle -
  *      Handle to the qseecom device for kernel clients

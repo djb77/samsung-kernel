@@ -1,28 +1,27 @@
-/*****************************************************************************
-	Copyright(c) 2013 FCI Inc. All Rights Reserved
-
-	File name : tuner.c
-
-	Description : tuner control driver source file
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-
-
-	History :
-	----------------------------------------------------------------------
-*******************************************************************************/
+/*
+ *	Copyright(c) 2013 FCI Inc. All Rights Reserved
+ *
+ *	File name : tuner.c
+ *
+ *	Description : tuner control driver source file
+ *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ *	History :
+ *	----------------------------------------------------------------------
+ */
 
 #include <linux/kernel.h>
 #include "fci_types.h"
@@ -59,9 +58,9 @@
 
 struct tuner_i2c_driver {
 	s32 (*init)(HANDLE handle, s32 speed, s32 slaveaddr);
-	s32 (*read)(HANDLE handle, u8 chip, u8 addr , u8 addr_len, u8 *data,
+	s32 (*read)(HANDLE handle, u8 chip, u8 addr, u8 addr_len, u8 *data,
 			u8 len);
-	s32 (*write)(HANDLE handle, u8 chip, u8 addr , u8 addr_len, u8 *data,
+	s32 (*write)(HANDLE handle, u8 chip, u8 addr, u8 addr_len, u8 *data,
 			u8 len);
 	s32 (*deinit)(HANDLE handle);
 };
@@ -90,7 +89,7 @@ static struct tuner_driver fc8080_tuner = {
 static struct tuner_i2c_driver *tuner_ctrl = &fcihpi;
 static struct tuner_driver *tuner = &fc8080_tuner;
 static enum band_type tuner_band = BAND3_TYPE;
-u8 tuner_addr = 0x00;
+u8 tuner_addr;
 
 s32 tuner_ctrl_select(HANDLE handle, enum i2c_type type)
 {
@@ -132,7 +131,7 @@ s32 tuner_set_freq(HANDLE handle, u32 freq)
 	u16 buf_en = 0;
 #endif
 	if (tuner == NULL) {
-		printk(KERN_DEBUG "TDMB : TUNER NULL ERROR\n");
+		pr_info("TDMB : TUNER NULL ERROR\n");
 		return BBM_NOK;
 	}
 
@@ -143,7 +142,7 @@ s32 tuner_set_freq(HANDLE handle, u32 freq)
 
 	res = tuner->set_freq(handle, tuner_band, freq);
 	if (res != BBM_OK) {
-		printk(KERN_DEBUG "TDMB : TUNER res ERROR\n");
+		pr_info("TDMB : TUNER res ERROR\n");
 		return BBM_NOK;
 	}
 

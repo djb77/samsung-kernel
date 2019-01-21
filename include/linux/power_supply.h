@@ -21,7 +21,7 @@
 
 /*
  * All voltages, currents, charges, energies, time and temperatures in uV,
- * A, Ah, Wh, seconds and tenths of degree Celsius unless otherwise
+ * ��A, ��Ah, ��Wh, seconds and tenths of degree Celsius unless otherwise
  * stated. It's driver's job to convert its raw values to units in which
  * this class operates.
  */
@@ -61,6 +61,7 @@ enum {
 	POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE,
 	POWER_SUPPLY_HEALTH_WARM,
 	POWER_SUPPLY_HEALTH_COOL,
+	POWER_SUPPLY_HEALTH_HOT,
 	POWER_SUPPLY_HEALTH_UNDERVOLTAGE,
 	POWER_SUPPLY_HEALTH_OVERHEATLIMIT,
 	POWER_SUPPLY_HEALTH_MAX,
@@ -103,6 +104,19 @@ enum {
 	POWER_SUPPLY_DP_DM_DPF_DMF = 8,
 	POWER_SUPPLY_DP_DM_DPR_DMR = 9,
 	POWER_SUPPLY_DP_DM_HVDCP3_SUPPORTED = 10,
+};
+
+enum {
+	POWER_SUPPLY_PARALLEL_NONE,
+	POWER_SUPPLY_PARALLEL_USBIN_USBIN,
+	POWER_SUPPLY_PARALLEL_MID_MID,
+};
+
+enum {
+	POWER_SUPPLY_PL_NONE,
+	POWER_SUPPLY_PL_USBIN_USBIN,
+	POWER_SUPPLY_PL_USBIN_USBIN_EXT,
+	POWER_SUPPLY_PL_USBMID_USBMID,
 };
 
 enum power_supply_property {
@@ -185,11 +199,15 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_READ_SLAVE_REG,
 	POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
+	POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED,
+	POWER_SUPPLY_PROP_STEP_CHARGING_STEP,
+	POWER_SUPPLY_PROP_PIN_ENABLED,
 	POWER_SUPPLY_PROP_INPUT_SUSPEND,
 	POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_TRIM,
-	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,/* 80 */
+	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
+	POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED,
 	POWER_SUPPLY_PROP_VCHG_LOOP_DBC_BYPASS,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER_SHADOW,
 	POWER_SUPPLY_PROP_HI_POWER,
@@ -204,6 +222,8 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_FLASH_CURRENT_MAX,
 	POWER_SUPPLY_PROP_UPDATE_NOW,
 	POWER_SUPPLY_PROP_ESR_COUNT,
+	POWER_SUPPLY_PROP_BUCK_FREQ,
+	POWER_SUPPLY_PROP_BOOST_CURRENT,
 	POWER_SUPPLY_PROP_SAFETY_TIMER_ENABLE,
 	POWER_SUPPLY_PROP_CHARGE_DONE,
 	POWER_SUPPLY_PROP_ALLOW_DETECTION,
@@ -212,17 +232,44 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_FORCE_TLIM,
 	POWER_SUPPLY_PROP_DP_DM,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CHARGE_QNOVO_ENABLE,
+	POWER_SUPPLY_PROP_CURRENT_QNOVO,
+	POWER_SUPPLY_PROP_VOLTAGE_QNOVO,
 	POWER_SUPPLY_PROP_RERUN_AICL,
 	POWER_SUPPLY_PROP_CYCLE_COUNT_ID,
 	POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED,
 	POWER_SUPPLY_PROP_RESTRICTED_CHARGING,
 	POWER_SUPPLY_PROP_ALLOW_HVDCP3,
 	POWER_SUPPLY_PROP_MAX_PULSE_ALLOWED,
+	POWER_SUPPLY_PROP_ENABLE_AICL,
 	POWER_SUPPLY_PROP_SOC_REPORTING_READY,
 	POWER_SUPPLY_PROP_IGNORE_FALSE_NEGATIVE_ISENSE,
 	POWER_SUPPLY_PROP_ENABLE_JEITA_DETECTION,
 	POWER_SUPPLY_PROP_BATTERY_INFO,
 	POWER_SUPPLY_PROP_BATTERY_INFO_ID,
+	POWER_SUPPLY_PROP_TYPEC_CC_ORIENTATION, /* 0: N/C, 1: CC1, 2: CC2 */
+	POWER_SUPPLY_PROP_TYPEC_MODE,
+	POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
+	POWER_SUPPLY_PROP_PD_ALLOWED,
+	POWER_SUPPLY_PROP_PD_ACTIVE,
+	POWER_SUPPLY_PROP_PD_IN_HARD_RESET,
+	POWER_SUPPLY_PROP_PD_CURRENT_MAX,
+	POWER_SUPPLY_PROP_PD_USB_SUSPEND_SUPPORTED,
+	POWER_SUPPLY_PROP_CHARGER_TEMP,
+	POWER_SUPPLY_PROP_CHARGER_TEMP_MAX,
+	POWER_SUPPLY_PROP_PARALLEL_DISABLE,
+	POWER_SUPPLY_PROP_PE_START,
+	POWER_SUPPLY_PROP_SET_SHIP_MODE,
+	POWER_SUPPLY_PROP_DEBUG_BATTERY,
+	POWER_SUPPLY_PROP_FCC_DELTA,
+	POWER_SUPPLY_PROP_ICL_REDUCTION,
+	POWER_SUPPLY_PROP_PARALLEL_MODE,
+	POWER_SUPPLY_PROP_CTM_CURRENT_MAX,
+	POWER_SUPPLY_PROP_DIE_HEALTH,
+	POWER_SUPPLY_PROP_CONNECTOR_HEALTH,
+	POWER_SUPPLY_PROP_HW_CURRENT_MAX,
+	POWER_SUPPLY_PROP_REAL_TYPE,
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_PROP_CHARGE_COUNTER_EXT,
 	POWER_SUPPLY_PROP_MANUFACTURER,
@@ -238,6 +285,34 @@ enum power_supply_property {
 	POWER_SUPPLY_EXT_PROP_MAX = POWER_SUPPLY_PROP_MAX + 256,
 };
 
+#if defined(CONFIG_BATTERY_SAMSUNG_V2)
+enum power_supply_type {
+	POWER_SUPPLY_TYPE_UNKNOWN = 0,
+	POWER_SUPPLY_TYPE_BATTERY,		/* 1 */
+	POWER_SUPPLY_TYPE_UPS,			/* 2 */
+	POWER_SUPPLY_TYPE_MAINS,		/* 3 */
+	POWER_SUPPLY_TYPE_USB,			/* Standard Downstream Port (4) */
+	POWER_SUPPLY_TYPE_USB_DCP,		/* Dedicated Charging Port (5) */
+	POWER_SUPPLY_TYPE_USB_CDP,		/* Charging Downstream Port (6) */
+	POWER_SUPPLY_TYPE_USB_ACA,		/* Accessory Charger Adapters (7) */
+	POWER_SUPPLY_TYPE_USB_HVDCP,	/* Efficient High Voltage DCP (8) */
+	POWER_SUPPLY_TYPE_USB_HVDCP_3,	/* Efficient High Voltage DCP 3(9) */
+	POWER_SUPPLY_TYPE_USB_PD,		/* Power Delivery (10) */
+	POWER_SUPPLY_TYPE_WIRELESS,		/* Wireless (11) */
+	POWER_SUPPLY_TYPE_USB_FLOAT,	/* Floating charger */
+	POWER_SUPPLY_TYPE_BMS,			/* Battery Monitor System (12) */
+	POWER_SUPPLY_TYPE_PARALLEL,		/* Parallel (13) */
+	POWER_SUPPLY_TYPE_MAIN,			/* Main (14) */
+	POWER_SUPPLY_TYPE_WIPOWER,		/* Wipower (15) */
+	POWER_SUPPLY_TYPE_TYPEC,		/* Type-C (16) */
+	POWER_SUPPLY_TYPE_UFP,			/* Type-C UFP (17) */
+	POWER_SUPPLY_TYPE_DFP,			/* TYpe-C DFP (18) */
+	POWER_SUPPLY_TYPE_POWER_SHARING,/* power sharing cable(19) */
+	POWER_SUPPLY_TYPE_OTG,			/* OTG (20) */
+	POWER_SUPPLY_TYPE_POGO,			/* POGO (21) */
+	POWER_SUPPLY_TYPE_MAX,
+};
+#else
 enum power_supply_type {
 	POWER_SUPPLY_TYPE_UNKNOWN = 0,
 	POWER_SUPPLY_TYPE_BATTERY,			/* 1 */
@@ -291,8 +366,34 @@ enum power_supply_type {
 	POWER_SUPPLY_TYPE_DFP,		/* TYpe-C DFP (49) */
 	POWER_SUPPLY_TYPE_MAX,
 };
+#endif
 
 #define POWER_SUPPLY_TYPE_HV_WIRELESS_ETX	100
+
+/* Indicates USB Type-C CC connection status */
+enum power_supply_typec_mode {
+	POWER_SUPPLY_TYPEC_NONE,
+
+	/* Acting as source */
+	POWER_SUPPLY_TYPEC_SINK,			/* Rd only */
+	POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE,		/* Rd/Ra */
+	POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY,	/* Rd/Rd */
+	POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER,		/* Ra/Ra */
+	POWER_SUPPLY_TYPEC_POWERED_CABLE_ONLY,		/* Ra only */
+
+	/* Acting as sink */
+	POWER_SUPPLY_TYPEC_SOURCE_DEFAULT,		/* Rp default */
+	POWER_SUPPLY_TYPEC_SOURCE_MEDIUM,		/* Rp 1.5A */
+	POWER_SUPPLY_TYPEC_SOURCE_HIGH,			/* Rp 3A */
+	POWER_SUPPLY_TYPEC_NON_COMPLIANT,
+};
+
+enum power_supply_typec_power_role {
+	POWER_SUPPLY_TYPEC_PR_NONE,	/* CC lines in high-Z */
+	POWER_SUPPLY_TYPEC_PR_DUAL,
+	POWER_SUPPLY_TYPEC_PR_SINK,
+	POWER_SUPPLY_TYPEC_PR_SOURCE,
+};
 
 enum power_supply_notifier_events {
 	PSY_EVENT_PROP_CHANGED,
@@ -320,6 +421,12 @@ struct power_supply {
 	size_t num_supplies;
 	struct device_node *of_node;
 
+	/*
+	 * Functions for drivers implementing power supply class.
+	 * These shouldn't be called directly by other drivers for accessing
+	 * this power supply. Instead use power_supply_*() functions (for
+	 * example power_supply_get_property()).
+	 */
 	int (*get_property)(struct power_supply *psy,
 			    enum power_supply_property psp,
 			    union power_supply_propval *val);
@@ -340,11 +447,15 @@ struct power_supply {
 	/* For APM emulation, think legacy userspace. */
 	int use_for_apm;
 
+	/* Driver private data */
+	void *drv_data;
+
 	/* private */
 	struct device *dev;
 	struct work_struct changed_work;
 	spinlock_t changed_lock;
 	bool changed;
+	atomic_t use_cnt;
 #ifdef CONFIG_THERMAL
 	struct thermal_zone_device *tzd;
 	struct thermal_cooling_device *tcd;
@@ -405,6 +516,15 @@ extern int power_supply_is_system_supplied(void);
 static inline int power_supply_is_system_supplied(void) { return -ENOSYS; }
 #endif
 
+extern int power_supply_get_property(struct power_supply *psy,
+			    enum power_supply_property psp,
+			    union power_supply_propval *val);
+extern int power_supply_set_property(struct power_supply *psy,
+			    enum power_supply_property psp,
+			    const union power_supply_propval *val);
+extern int power_supply_property_is_writeable(struct power_supply *psy,
+					enum power_supply_property psp);
+extern void power_supply_external_power_changed(struct power_supply *psy);
 extern int power_supply_register(struct device *parent,
 				 struct power_supply *psy);
 extern int power_supply_register_no_ws(struct device *parent,
@@ -431,6 +551,7 @@ extern int power_supply_set_dp_dm(struct power_supply *psy,
 							int value);
 extern int power_supply_is_system_supplied(void);
 extern int power_supply_set_scope(struct power_supply *psy, int scope);
+extern void *power_supply_get_drvdata(struct power_supply *psy);
 /* For APM emulation, think legacy userspace. */
 extern struct class *power_supply_class;
 

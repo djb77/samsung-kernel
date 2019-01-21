@@ -23,6 +23,7 @@
 		#global-interrupts = <1>;
 		interrupts = <0 199 0>, <0 225 0>, <0 232 0>,
 				<0 233 0>, <0 234 0>;
+		qcom,deferred-regulator-disable-delay = <80>;
 		qcom,register-save;
 		qcom,skip-init;
 		qcom,dynamic;
@@ -40,6 +41,7 @@
 		compatible = "qcom,msm-smmu-v2", "qcom,msm-mmu-500";
 		#address-cells = <1>;
 		#size-cells = <1>;
+		#iommu-cells = <1>;
 		ranges;
 		reg = <0x1e00000 0x40000>;
 		reg-names = "iommu_base";

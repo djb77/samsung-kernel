@@ -133,10 +133,10 @@ int ist30xx_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs,
     int trans_size, max_size = 0;
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-	if (TRUSTEDUI_MODE_INPUT_SECURED & trustedui_get_current_mode()) {
-		tsp_err("%s TSP no accessible from Linux, TUI is enabled!\n", __func__);
-		return -EIO;
-	}
+    if (TRUSTEDUI_MODE_INPUT_SECURED & trustedui_get_current_mode()) {
+        tsp_err("%s TSP no accessible from Linux, TUI is enabled!\n", __func__);
+        return -EIO;
+    }
 #endif
 
     if (msg_num == WRITE_CMD_MSG_LEN)
@@ -208,14 +208,19 @@ int ist30xx_read_buf(struct i2c_client *client, u32 cmd, u32 *buf, u16 len)
         },
     };
 
+    mutex_lock(&data->i2c_lock);
+
     ret = ist30xx_i2c_transfer(client->adapter, msg, READ_CMD_MSG_LEN, NULL);
     if (unlikely(ret != READ_CMD_MSG_LEN)){
         data->comm_err_count++;
+        mutex_unlock(&data->i2c_lock);
         return -EIO;
     }
 
     for (i = 0; i < len; i++)
         buf[i] = cpu_to_be32(buf[i]);
+
+    mutex_unlock(&data->i2c_lock);
 
     return 0;
 }
@@ -245,12 +250,17 @@ int ist30xx_write_buf(struct i2c_client *client, u32 cmd, u32 *buf, u16 len)
     msg.len = len * IST30XX_DATA_LEN;
     msg.buf = msg_buf;
 
+    mutex_lock(&data->i2c_lock);
+
     ret = ist30xx_i2c_transfer(client->adapter, &msg, WRITE_CMD_MSG_LEN,
                    cmd_buf);
     if (unlikely(ret != WRITE_CMD_MSG_LEN)){
         data->comm_err_count++;
+        mutex_unlock(&data->i2c_lock);
         return -EIO;
     }
+
+    mutex_unlock(&data->i2c_lock);
 
     return 0;
 }
@@ -283,13 +293,18 @@ int ist30xx_read_reg(struct i2c_client *client, u32 reg, u32 *buf)
     }
 #endif
 
+    mutex_lock(&data->i2c_lock);
+
     ret = i2c_transfer(client->adapter, msg, READ_CMD_MSG_LEN);
     if (ret != READ_CMD_MSG_LEN) {
         data->comm_err_count++;
+        mutex_unlock(&data->i2c_lock);
         tsp_err("%s: i2c failed (%d), cmd: %x\n", __func__, ret, reg);
         return -EIO;
     }
     *buf = cpu_to_be32(*buf);
+
+    mutex_unlock(&data->i2c_lock);
 
     return 0;
 }
@@ -334,16 +349,20 @@ int ist30xx_write_cmd(struct ist30xx_data *data, u32 cmd, u32 val)
     }
 #endif
 
+    mutex_lock(&data->i2c_lock);
+
     ret = i2c_transfer(data->client->adapter, &msg, WRITE_CMD_MSG_LEN);
     if (ret != WRITE_CMD_MSG_LEN) {
         data->comm_err_count++;
+        mutex_unlock(&data->i2c_lock);
         tsp_err("%s: i2c failed (%d), cmd: %x(%x)\n", __func__, ret, cmd, val);
         return -EIO;
     }
 
-    if ((data->initialized || (data->status.update != 1)) && 
-            !data->ignore_delay)
+    if (data->initialized && (data->status.update != 1) && !data->ignore_delay)
         ist30xx_delay(40);
+
+    mutex_unlock(&data->i2c_lock);
 
     return 0;
 }
@@ -426,8 +445,6 @@ int ts_power_enable(struct ist30xx_data *data, int en)
             return PTR_ERR(regulator_avdd);
         }
         
-        tsp_info("%s %s\n", __func__, (en) ? "on" : "off");
-        
         if (en) {
             ret = regulator_enable(regulator_avdd);
             if (ret) {
@@ -448,6 +465,7 @@ int ts_power_enable(struct ist30xx_data *data, int en)
 int ist30xx_power_on(struct ist30xx_data *data, bool download)
 {
     int ret = 0;
+
     if (data->status.power != 1) {
         tsp_info("%s()\n", __func__);
         /* VDD enable */

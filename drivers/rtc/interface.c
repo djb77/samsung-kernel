@@ -431,9 +431,6 @@ EXPORT_SYMBOL_GPL(rtc_initialize_alarm);
 int rtc_set_bootalarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 {
     int err;
-/*	err = mutex_lock_interruptible(&rtc->ops_lock); */
-/*	if (err) */
-/*		return err; */
 
 	if (!rtc->ops) {
 		dev_err(&rtc->dev, "ops not exist\n");
@@ -443,7 +440,7 @@ int rtc_set_bootalarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 		err = -EINVAL;
 	} else
 		err = rtc->ops->set_bootalarm(rtc->dev.parent, alarm);
-/*	mutex_unlock(&rtc->ops_lock); */
+
 	return err;
 }
 EXPORT_SYMBOL_GPL(rtc_set_bootalarm);
@@ -451,9 +448,6 @@ EXPORT_SYMBOL_GPL(rtc_set_bootalarm);
 int rtc_get_bootalarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 {
     int err;
-/*	err = mutex_lock_interruptible(&rtc->ops_lock); */
-/*	if (err) */
-/*		return err; */
 
 	if (!rtc->ops) {
 		dev_err(&rtc->dev, "ops not exist\n");
@@ -463,7 +457,7 @@ int rtc_get_bootalarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 		err = -EINVAL;
 	} else
 		err = rtc->ops->read_bootalarm(rtc->dev.parent, alarm);
-/*	mutex_unlock(&rtc->ops_lock); */
+
 	return err;
 }
 EXPORT_SYMBOL_GPL(rtc_get_bootalarm);

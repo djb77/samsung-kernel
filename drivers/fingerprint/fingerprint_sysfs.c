@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Samsung Electronics. All rights reserved.
+ * Copyright (C) 2017 Samsung Electronics. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -9,23 +9,13 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
  */
 
- /*
+/*
  *  fingerprint sysfs class
  */
 
-#include <linux/module.h>
-#include <linux/types.h>
-#include <linux/init.h>
-#include <linux/device.h>
-#include <linux/fs.h>
-#include <linux/err.h>
+#include "fingerprint_sysfs.h"
 
 struct class *fingerprint_class;
 EXPORT_SYMBOL_GPL(fingerprint_class);
@@ -33,15 +23,14 @@ EXPORT_SYMBOL_GPL(fingerprint_class);
 /*
  * Create sysfs interface
  */
-static void set_fingerprint_attr(struct device *dev,
+void set_fingerprint_attr(struct device *dev,
 	struct device_attribute *attributes[])
 {
 	int i;
 
 	for (i = 0; attributes[i] != NULL; i++)
 		if ((device_create_file(dev, attributes[i])) < 0)
-			pr_err("%s: fail device_create_file"\
-				"(dev, attributes[%d])\n", __func__, i);
+			pr_err("%s: fail device_create_file (dev, attributes[%d])\n", __func__, i);
 }
 
 int fingerprint_register(struct device *dev, void *drvdata,
@@ -59,8 +48,7 @@ int fingerprint_register(struct device *dev, void *drvdata,
 
 	if (IS_ERR(dev)) {
 		ret = PTR_ERR(dev);
-		pr_err("%s: device_create failed!"\
-			"[%d]\n", __func__, ret);
+		pr_err("%s: device_create failed! [%d]\n", __func__, ret);
 		return ret;
 	}
 
@@ -95,14 +83,8 @@ static int __init fingerprint_class_init(void)
 	fingerprint_class = class_create(THIS_MODULE, "fingerprint");
 
 	if (IS_ERR(fingerprint_class)) {
-#if 0
-		/* To do fix: build error */
-		pr_err("%s, create fingerprint_class is failed.(err=%ld)\n",
-			__func__, IS_ERR(fingerprint_class));
-#else
 		pr_err("%s, create fingerprint_class is failed.\n",
 			__func__);
-#endif
 		return PTR_ERR(fingerprint_class);
 	}
 

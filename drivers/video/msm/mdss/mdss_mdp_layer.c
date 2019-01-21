@@ -725,14 +725,14 @@ static struct sync_fence *__create_fence(struct msm_fb_data_type *mfd,
 		pr_err("fb%d ctl power on failed\n", mfd->index);
 		return ERR_PTR(-EPERM);
 	}
-
+#if 0
 	if (fence_type == MDSS_MDP_RETIRE_FENCE)
 		snprintf(fence_name, sizeof(fence_name), "fb%d_retire",
 			mfd->index);
 	else
 		snprintf(fence_name, sizeof(fence_name), "fb%d_release",
 			mfd->index);
-
+#endif
 	if ((fence_type == MDSS_MDP_RETIRE_FENCE) &&
 		(mfd->panel.type == MIPI_CMD_PANEL)) {
 		if (mdp5_data->vsync_timeline) {
@@ -740,12 +740,14 @@ static struct sync_fence *__create_fence(struct msm_fb_data_type *mfd,
 				mdp5_data->retire_cnt++;
 			sync_fence = mdss_fb_sync_get_fence(
 				mdp5_data->vsync_timeline, fence_name, value);
+			MDSS_XLOG(value, mdp5_data->vsync_timeline->value,mdp5_data->retire_cnt,0x11);
 		} else {
 			return ERR_PTR(-EPERM);
 		}
 	} else {
 		sync_fence = mdss_fb_sync_get_fence(sync_pt_data->timeline,
 			fence_name, value);
+		 MDSS_XLOG(value,sync_pt_data->timeline->value,sync_pt_data->commit_cnt,0x33);
 	}
 
 	if (IS_ERR_OR_NULL(sync_fence)) {
@@ -1979,6 +1981,43 @@ end:
 }
 
 /*
+ * __parse_frc_info() - parse frc info from userspace
+ * @mdp5_data: mdss data per FB device
+ * @input_frc: frc info from user space
+ *
+ * This function fills the FRC info of current device which will be used
+ * during following kickoff.
+ */
+static void __parse_frc_info(struct mdss_overlay_private *mdp5_data,
+	struct mdp_frc_info *input_frc)
+{
+	struct mdss_mdp_ctl *ctl = mdp5_data->ctl;
+	struct mdss_mdp_frc_fsm *frc_fsm = mdp5_data->frc_fsm;
+
+	if (input_frc->flags & MDP_VIDEO_FRC_ENABLE) {
+		struct mdss_mdp_frc_info *frc_info = &frc_fsm->frc_info;
+
+		if (!frc_fsm->enable) {
+			/* init frc_fsm when first entry */
+			mdss_mdp_frc_fsm_init_state(frc_fsm);
+			/* keep vsync on when FRC is enabled */
+			ctl->ops.add_vsync_handler(ctl,
+					&ctl->frc_vsync_handler);
+		}
+
+		frc_info->cur_frc.frame_cnt = input_frc->frame_cnt;
+		frc_info->cur_frc.timestamp = input_frc->timestamp;
+	} else if (frc_fsm->enable) {
+		/* remove vsync handler when FRC is disabled */
+		ctl->ops.remove_vsync_handler(ctl, &ctl->frc_vsync_handler);
+	}
+
+	frc_fsm->enable = input_frc->flags & MDP_VIDEO_FRC_ENABLE;
+
+	pr_debug("frc_enable=%d\n", frc_fsm->enable);
+}
+
+/*
  * mdss_mdp_layer_pre_commit() - pre commit validation for input layers
  * @mfd:	Framebuffer data structure for display
  * @commit:	Commit version-1 structure for display
@@ -2082,6 +2121,9 @@ int mdss_mdp_layer_pre_commit(struct msm_fb_data_type *mfd,
 		goto map_err;
 	}
 
+	if (commit->frc_info)
+		__parse_frc_info(mdp5_data, commit->frc_info);
+
 	ret = __handle_buffer_fences(mfd, commit, layer_list);
 
 map_err:
@@ -2159,10 +2201,10 @@ int mdss_mdp_layer_pre_commit_wfd(struct msm_fb_data_type *mfd,
 		output_layer = commit->output_layer;
 
 		if (output_layer->buffer.plane_count > MAX_PLANES) {
-       		  pr_err("Output buffer plane_count exceeds MAX_PLANES limit:%d\n",
-              		 output_layer->buffer.plane_count);
-         	  return -EINVAL;
-      		}
+			pr_err("Output buffer plane_count exceeds MAX_PLANES limit:%d\n",
+					output_layer->buffer.plane_count);
+			return -EINVAL;
+		}
 
 		data = mdss_mdp_wfd_add_data(wfd, output_layer);
 		if (IS_ERR_OR_NULL(data))
@@ -2249,11 +2291,14 @@ int mdss_mdp_layer_atomic_validate_wfd(struct msm_fb_data_type *mfd,
 		goto validate_failed;
 	}
 
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
 	rc = mdss_mdp_wfd_setup(wfd, output_layer);
 	if (rc) {
 		pr_err("fail to prepare wfd = %d\n", rc);
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 		goto validate_failed;
 	}
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 
 	rc = mdss_mdp_layer_atomic_validate(mfd, file, commit);
 	if (rc) {

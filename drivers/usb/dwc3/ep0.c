@@ -224,6 +224,8 @@ int dwc3_gadget_ep0_queue(struct usb_ep *ep, struct usb_request *request,
 	unsigned long			flags;
 
 	int				ret;
+	enum dwc3_link_state		link_state;
+	u32				reg;
 
 	spin_lock_irqsave(&dwc->lock, flags);
 	if (!dep->endpoint.desc) {
@@ -238,6 +240,18 @@ int dwc3_gadget_ep0_queue(struct usb_ep *ep, struct usb_request *request,
 	if (!list_empty(&dep->request_list)) {
 		ret = -EBUSY;
 		goto out;
+	}
+
+	/* if link stats is in L1 initiate  remote wakeup before queuing req */
+	if (dwc->speed != DWC3_DSTS_SUPERSPEED) {
+		link_state = dwc3_get_link_state(dwc);
+		/* in HS this link state is same as L1 */
+		if (link_state == DWC3_LINK_STATE_U2) {
+			dwc->l1_remote_wakeup_cnt++;
+			reg = dwc3_readl(dwc->regs, DWC3_DCTL);
+			reg |= DWC3_DCTL_ULSTCHNG_RECOVERY;
+			dwc3_writel(dwc->regs, DWC3_DCTL, reg);
+		}
 	}
 
 	dwc3_trace(trace_dwc3_ep0,
@@ -572,10 +586,10 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 {
 	enum usb_device_state state = dwc->gadget.state;
 	u32 cfg;
-	int ret;
+	int ret, num;
 	u32 reg;
+	struct dwc3_ep	*dep;
 
-	dwc->start_config_issued = false;
 	cfg = le16_to_cpu(ctrl->wValue);
 
 	switch (state) {
@@ -584,6 +598,32 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 		break;
 
 	case USB_STATE_ADDRESS:
+		/*
+		 * If tx-fifo-resize flag is not set for the controller, then
+		 * do not clear existing allocated TXFIFO since we do not
+		 * allocate it again in dwc3_gadget_resize_tx_fifos
+		 */
+		if (dwc->needs_fifo_resize) {
+			/* Read ep0IN related TXFIFO size */
+			dwc->last_fifo_depth = (dwc3_readl(dwc->regs,
+						DWC3_GTXFIFOSIZ(0)) & 0xFFFF);
+			/* Clear existing TXFIFO for all IN eps except ep0 */
+			for (num = 0; num < dwc->num_in_eps; num++) {
+				dep = dwc->eps[(num << 1) | 1];
+				if (num) {
+					dwc3_writel(dwc->regs,
+						DWC3_GTXFIFOSIZ(num), 0);
+					dep->fifo_depth = 0;
+				} else {
+					dep->fifo_depth = dwc->last_fifo_depth;
+				}
+
+				dev_dbg(dwc->dev, "%s(): %s fifo_depth:%x\n",
+					__func__, dep->name, dep->fifo_depth);
+				dbg_event(0xFF, "fifo_reset", dep->number);
+			}
+		}
+
 		ret = dwc3_ep0_delegate_req(dwc, ctrl);
 		/* if the cfg matches and the cfg is non zero */
 		if (cfg && (!ret || (ret == USB_GADGET_DELAYED_STATUS))) {
@@ -608,9 +648,6 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 							DWC3_DCTL_ACCEPTU2ENA);
 				dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 			}
-
-			dwc->resize_fifos = true;
-			dwc3_trace(trace_dwc3_ep0, "resize FIFOs flag SET");
 		}
 		break;
 
@@ -628,27 +665,10 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 static int dwc3_ep0_set_interface(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 {
-	u32 alt_setting;
-	enum usb_device_state state = dwc->gadget.state;
 	int ret;
-
-	alt_setting = le16_to_cpu(ctrl->wValue);
 
 	ret = dwc3_ep0_delegate_req(dwc, ctrl);
 
-	switch (state) {
-
-	case USB_STATE_CONFIGURED:
-		/* if the alt_setting matches and the alt_setting is non zero */
-		if (alt_setting && (!ret || (ret == USB_GADGET_DELAYED_STATUS))) {
-			dwc->resize_fifos = true;
-			dev_dbg(dwc->dev, "resize fifos flag SET\n");
-		}
-		break;
-
-	default:
-		dev_err(dwc->dev, "default case\n");
-	}
 	return ret;
 }
 #endif
@@ -780,7 +800,7 @@ static int dwc3_ep0_std_request(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 		dwc3_trace(trace_dwc3_ep0, "USB_REQ_SET_CONFIGURATION\n");
 #ifdef CONFIG_USB_CHARGING_EVENT
 		if(dwc->gadget.speed == USB_SPEED_SUPER)
-			dwc->vbus_current = USB_CURRENT_SUPER_SPEED; 
+			dwc->vbus_current = USB_CURRENT_SUPER_SPEED;
 		else
 			dwc->vbus_current= USB_CURRENT_HIGH_SPEED;
 		schedule_work(&dwc->set_vbus_current_work);
@@ -1072,11 +1092,6 @@ static int dwc3_ep0_start_control_status(struct dwc3_ep *dep)
 static void __dwc3_ep0_do_control_status(struct dwc3 *dwc, struct dwc3_ep *dep)
 {
 	int ret;
-	if (dwc->resize_fifos) {
-		dwc3_trace(trace_dwc3_ep0, "Resizing FIFOs");
-		dwc3_gadget_resize_tx_fifos(dwc);
-		dwc->resize_fifos = 0;
-	}
 
 	ret = dwc3_ep0_start_control_status(dep);
 	if (WARN_ON_ONCE(ret))

@@ -44,12 +44,19 @@ static int __init rtc_hctosys(void)
 		goto err_read;
 
 	}
-
+#if defined(CONFIG_ARCH_SDM450)
 	/*
-	 * Force update rtc year time to 2016
+	 * Force update rtc year time to 2018
 	 * (The release year of device)
 	 */
-	tm.tm_year = 110;
+	tm.tm_year = 118;
+#else
+	/*
+	 * Force update rtc year time to 2017
+	 * (The release year of device)
+	 */
+	tm.tm_year = 117;
+#endif
 
 	err = rtc_valid_tm(&tm);
 	if (err) {

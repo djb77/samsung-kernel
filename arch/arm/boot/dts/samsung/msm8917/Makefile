@@ -16,6 +16,12 @@ ifeq ($(CONFIG_SEC_ELITELTE_PROJECT),y)
         endif
 endif
 
+ifeq ($(CONFIG_SEC_ELITEXLTE_PROJECT),y)
+        ifeq ($(CONFIG_MACH_ELITEXLTE_CHN_OPEN),y)
+                dtb-y += msm8917-sec-elitexlte-chn-r00.dtb
+        endif
+endif
+
 ifeq ($(CONFIG_SEC_J3LLTE_PROJECT),y)
         ifeq ($(CONFIG_MACH_J3LLTE_USA_SPR),y)
                 dtb-y += msm8917-sec-j3llte-usa-spr-r00.dtb
@@ -64,6 +70,45 @@ ifeq ($(CONFIG_SEC_J2Y18LTE_PROJECT),y)
         endif
 endif
 
+ifeq ($(CONFIG_SEC_J5Y18LTE_PROJECT),y)
+        ifeq ($(CONFIG_MACH_J5Y18LTE_SWA_OPEN),y)
+                dtb-y += msm8917-sec-j5y18lte-swa-open-r00.dtb
+                dtb-y += msm8917-sec-j5y18lte-swa-open-r01.dtb
+        endif
+endif
+
+ifeq ($(CONFIG_SEC_J6PRIMELTE_PROJECT),y)
+        ifeq ($(CONFIG_MACH_J6PRIMELTE_SWA_OPEN),y)
+                dtb-y += msm8917-sec-j6primelte-swa-open-r00.dtb
+                dtb-y += msm8917-sec-j6primelte-swa-open-r01.dtb
+                dtb-y += msm8917-sec-j6primelte-swa-open-r02.dtb
+                dtb-y += msm8917-sec-j6primelte-swa-open-r03.dtb
+                dtb-y += msm8917-sec-j6primelte-swa-open-r04.dtb
+                dtb-y += msm8917-sec-j6primelte-swa-open-r05.dtb
+                dtb-y += msm8917-sec-j6primelte-swa-open-r06.dtb
+        endif
+endif
+
+ifeq ($(CONFIG_SEC_J4PRIMELTE_PROJECT),y)
+        ifeq ($(CONFIG_MACH_J4PRIMELTE_SEA_OPEN),y)
+                dtb-y += msm8917-sec-j4primelte-sea-open-r00.dtb
+                dtb-y += msm8917-sec-j4primelte-sea-open-r01.dtb
+                dtb-y += msm8917-sec-j4primelte-sea-open-r02.dtb
+				dtb-y += msm8917-sec-j4primelte-sea-open-r03.dtb
+				dtb-y += msm8917-sec-j4primelte-sea-open-r04.dtb
+				dtb-y += msm8917-sec-j4primelte-sea-open-r06.dtb
+        endif
+endif
+
+ifeq ($(CONFIG_SEC_J4CORELTE_PROJECT),y)
+        ifeq ($(CONFIG_MACH_J4CORELTE_MEA_OPEN),y)
+                dtb-y += msm8917-sec-j4corelte-mea-open-r00.dtb
+                dtb-y += msm8917-sec-j4corelte-mea-open-r03.dtb
+				dtb-y += msm8917-sec-j4corelte-mea-open-r04.dtb
+				dtb-y += msm8917-sec-j4corelte-mea-open-r05.dtb
+        endif
+endif
+
 dtb-$(CONFIG_SEC_GTA2SLTE_PROJECT) += msm8917-sec-gta2slte-r00.dtb \
 					msm8917-sec-gta2slte-r01.dtb \
 					msm8917-sec-gta2slte-r02.dtb \
@@ -99,11 +144,61 @@ ifeq ($(filter y,$(CONFIG_MACH_GTA2SWIFI_CHN_OPEN)),y)
                 msm8917-sec-gta2swifi-chn-open-r05.dtb
 endif
 
+dtb-$(CONFIG_SEC_GTESY18LTE_PROJECT) += msm8917-sec-gtesy18lte-r00.dtb \
+					msm8917-sec-gtesy18lte-r01.dtb \
+					msm8917-sec-gtesy18lte-r03.dtb
+
+ifeq ($(CONFIG_SEC_GTASLITELTE_PROJECT),y)
+		ifeq ($(CONFIG_MACH_GTASLITELTE_CAN_SINGLE),y)
+				dtb-y += msm8917-sec-gtaslitelte-can-single-r00.dtb
+				dtb-y += msm8917-sec-gtaslitelte-can-single-r01.dtb
+				dtb-y += msm8917-sec-gtaslitelte-can-single-r03.dtb
+		endif
+		
+		ifeq ($(CONFIG_MACH_GTASLITELTE_USA_VZW),y)
+				dtb-y += msm8917-sec-gtaslitelte-usa-vzw-r00.dtb
+				dtb-y += msm8917-sec-gtaslitelte-usa-vzw-r01.dtb
+				dtb-y += msm8917-sec-gtaslitelte-usa-vzw-r03.dtb
+		endif
+		
+		ifeq ($(CONFIG_MACH_GTASLITELTE_USA_SPR),y)
+				dtb-y += msm8917-sec-gtaslitelte-usa-spr-r00.dtb
+				dtb-y += msm8917-sec-gtaslitelte-usa-spr-r01.dtb
+				dtb-y += msm8917-sec-gtaslitelte-usa-spr-r03.dtb
+		endif
+		
+		ifeq ($(CONFIG_MACH_GTASLITELTE_USA_TMO),y)
+				dtb-y += msm8917-sec-gtaslitelte-usa-tmo-r00.dtb
+				dtb-y += msm8917-sec-gtaslitelte-usa-tmo-r01.dtb
+				dtb-y += msm8917-sec-gtaslitelte-usa-tmo-r03.dtb
+		endif
+		
+		ifeq ($(CONFIG_MACH_GTASLITELTE_USA_ATT),y)
+				dtb-y += msm8917-sec-gtaslitelte-usa-att-r00.dtb
+				dtb-y += msm8917-sec-gtaslitelte-usa-att-r01.dtb
+				dtb-y += msm8917-sec-gtaslitelte-usa-att-r03.dtb
+		endif
+		
+		ifeq ($(CONFIG_MACH_GTASLITELTE_USA_USC),y)
+				dtb-y += msm8917-sec-gtaslitelte-usa-usc-r00.dtb
+				dtb-y += msm8917-sec-gtaslitelte-usa-usc-r01.dtb
+				dtb-y += msm8917-sec-gtaslitelte-usa-usc-r03.dtb
+		endif
+endif
+
 ifeq ($(CONFIG_SEC_ON5XLLTE_PROJECT),y)
         ifeq ($(CONFIG_MACH_ON5XLLTE_CHN_OPEN),y)
                 dtb-y += msm8917-sec-on5xllte-chn-r00.dtb
                 dtb-y += msm8917-sec-on5xllte-chn-r01.dtb
                 dtb-y += msm8917-sec-on5xllte-chn-r02.dtb
+                dtb-y += msm8917-sec-on5xllte-chn-r03.dtb
+        endif
+
+        ifeq ($(CONFIG_MACH_ON5XFLTE_CHN_OPEN),y)
+                dtb-y += msm8917-sec-on5xflte-chn-r00.dtb
+                dtb-y += msm8917-sec-on5xflte-chn-r01.dtb
+                dtb-y += msm8917-sec-on5xflte-chn-r02.dtb
+		dtb-y += msm8917-sec-on5xflte-chn-r03.dtb
         endif
 endif
 
@@ -119,6 +214,11 @@ ifeq ($(CONFIG_SEC_J3Y17QLTE_PROJECT),y)
         endif
 endif
 
+ifeq ($(CONFIG_SEC_J2ESSLTE_PROJECT),y)
+        ifeq ($(CONFIG_MACH_J2ESSLTE_SWA_INS),y)
+                dtb-y += msm8917-sec-j2esslte-swa-ins-r00.dtb
+        endif
+endif
 
 echo '*** Warning: Samsung $@ Device Tree MSM8917.'
 DTB_NAMES := $(subst $\",,$(CONFIG_BUILD_ARM_APPENDED_DTB_IMAGE_NAMES))

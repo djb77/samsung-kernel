@@ -28,10 +28,17 @@ DEFINE_MSM_MUTEX(msm_actuator_mutex);
 #else
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 #endif
+#define CONFIG_J2Y18_ACTUATOR
 
+#if defined(CONFIG_J2Y18_ACTUATOR)
+#define PARK_LENS_LONG_STEP 50
+#define PARK_LENS_MID_STEP 40
+#define PARK_LENS_SMALL_STEP 34
+#else
 #define PARK_LENS_LONG_STEP 7
 #define PARK_LENS_MID_STEP 5
 #define PARK_LENS_SMALL_STEP 3
+#endif
 #define MAX_QVALUE 4096
 
 static struct v4l2_file_operations msm_actuator_v4l2_subdev_fops;
@@ -59,6 +66,11 @@ static int32_t msm_actuator_piezo_set_default_focus(
 	struct msm_camera_i2c_reg_setting reg_setting;
 	CDBG("Enter\n");
 
+	if (a_ctrl->i2c_reg_tbl == NULL) {
+		pr_err("failed. i2c reg tabl is NULL");
+		return -EFAULT;
+	}
+	
 	if (a_ctrl->curr_step_pos != 0) {
 		a_ctrl->i2c_tbl_index = 0;
 		a_ctrl->func_tbl->actuator_parse_i2c_params(a_ctrl,
@@ -530,6 +542,10 @@ static int32_t msm_actuator_piezo_move_focus(
 			num_steps);
 		return -EFAULT;
 	}
+	if (a_ctrl->i2c_reg_tbl == NULL) {
+		pr_err("failed. i2c reg tabl is NULL");
+		return -EFAULT;
+	}
         if (dest_step_position > a_ctrl->total_steps) {
             pr_err("Step pos greater than total steps = %d\n",
                     dest_step_position);
@@ -584,6 +600,10 @@ static int32_t msm_actuator_move_focus(
 	}
 	if ((dir > MOVE_FAR) || (dir < MOVE_NEAR)) {
 		pr_err("Invalid direction = %d\n", dir);
+		return -EFAULT;
+	}
+	if (a_ctrl->i2c_reg_tbl == NULL) {
+		pr_err("failed. i2c reg tabl is NULL");
 		return -EFAULT;
 	}
 	if (dest_step_pos > a_ctrl->total_steps) {
@@ -793,6 +813,9 @@ static int32_t msm_actuator_park_lens(struct msm_actuator_ctrl_t *a_ctrl)
 {
 	int32_t rc = 0;
 	uint16_t next_lens_pos = 0;
+#if defined(CONFIG_J2Y18_ACTUATOR)
+	struct msm_camera_i2c_reg_array i2c_tbl;
+#endif
 	struct msm_camera_i2c_reg_setting reg_setting;
 
 	a_ctrl->i2c_tbl_index = 0;
@@ -809,26 +832,83 @@ static int32_t msm_actuator_park_lens(struct msm_actuator_ctrl_t *a_ctrl)
 
 	if (a_ctrl->park_lens.max_step > a_ctrl->max_code_size)
 		a_ctrl->park_lens.max_step = a_ctrl->max_code_size;
+#if defined(CONFIG_J2Y18_ACTUATOR)
 
+	pr_err("%s CONFIG_J2Y18_ACTUATOR %d\n",
+				__func__, __LINE__);
+	pr_err("%s:%d testing Anil .\n",
+			__func__, __LINE__);
+	i2c_tbl.reg_addr = 0x07;
+	i2c_tbl.reg_data = 0x00;
+	i2c_tbl.delay = a_ctrl->park_lens.damping_delay;
+	a_ctrl->i2c_tbl_index++;
+
+	reg_setting.reg_setting = &i2c_tbl;
+	reg_setting.size = a_ctrl->i2c_tbl_index;
+	reg_setting.data_type = 1;
+	rc = a_ctrl->i2c_client.
+		i2c_func_tbl->i2c_write_table_w_microdelay(
+		&a_ctrl->i2c_client, &reg_setting);
+	if (rc < 0) {
+		pr_err("i2c write error:%d\n", rc);
+		return rc;
+	}
+	a_ctrl->i2c_tbl_index = 0;
+#endif
 	next_lens_pos = a_ctrl->step_position_table[a_ctrl->curr_step_pos];
 	while (next_lens_pos) {
 		/* conditions which help to reduce park lens time */
 		if (next_lens_pos > (a_ctrl->park_lens.max_step *
 			PARK_LENS_LONG_STEP)) {
+#if defined(CONFIG_J2Y18_ACTUATOR)
+			pr_err("%s CONFIG_J2Y18_ACTUATOR 1 %d\n",
+				__func__, __LINE__);
+			next_lens_pos = next_lens_pos -
+				(a_ctrl->park_lens.max_step *
+				8);
+#else
+			pr_err("%s None CONFIG_J2Y18_ACTUATOR %d\n",
+				__func__, __LINE__);
 			next_lens_pos = next_lens_pos -
 				(a_ctrl->park_lens.max_step *
 				PARK_LENS_LONG_STEP);
+#endif
 		} else if (next_lens_pos > (a_ctrl->park_lens.max_step *
 			PARK_LENS_MID_STEP)) {
+#if defined(CONFIG_J2Y18_ACTUATOR)
+			pr_err("%s CONFIG_J2Y18_ACTUATOR %d\n",
+				__func__, __LINE__);
+
+			next_lens_pos = next_lens_pos -
+				(a_ctrl->park_lens.max_step *
+				4);
+#else
+			pr_err("%s None CONFIG_J2Y18_ACTUATOR %d\n",
+				__func__, __LINE__);
 			next_lens_pos = next_lens_pos -
 				(a_ctrl->park_lens.max_step *
 				PARK_LENS_MID_STEP);
+#endif
 		} else if (next_lens_pos > (a_ctrl->park_lens.max_step *
 			PARK_LENS_SMALL_STEP)) {
+#if defined(CONFIG_J2Y18_ACTUATOR)
+			pr_err("%s CONFIG_J2Y18_ACTUATOR %d\n",
+				__func__, __LINE__);
+			next_lens_pos = next_lens_pos -
+				(a_ctrl->park_lens.max_step *
+				2);
+#else
+			pr_err("%s None CONFIG_J2Y18_ACTUATOR %d\n",
+				__func__, __LINE__);
 			next_lens_pos = next_lens_pos -
 				(a_ctrl->park_lens.max_step *
 				PARK_LENS_SMALL_STEP);
+#endif
 		} else {
+#if defined(CONFIG_J2Y18_ACTUATOR)
+		if (next_lens_pos < 120)
+			break;
+#endif
 			next_lens_pos = (next_lens_pos >
 				a_ctrl->park_lens.max_step) ?
 				(next_lens_pos - a_ctrl->park_lens.
@@ -1220,7 +1300,7 @@ static int32_t msm_actuator_set_param(struct msm_actuator_ctrl_t *a_ctrl,
 
 	a_ctrl->region_size = set_info->af_tuning_params.region_size;
 	a_ctrl->pwd_step = set_info->af_tuning_params.pwd_step;
-	a_ctrl->total_steps = set_info->af_tuning_params.total_steps;
+	
 
 	if (copy_from_user(&a_ctrl->region_params,
 		(void *)set_info->af_tuning_params.region_params,
@@ -1264,7 +1344,8 @@ static int32_t msm_actuator_set_param(struct msm_actuator_ctrl_t *a_ctrl,
 		pr_err("kmalloc fail\n");
 		return -ENOMEM;
 	}
-
+	a_ctrl->total_steps = set_info->af_tuning_params.total_steps;
+	
 	if (copy_from_user(&a_ctrl->reg_tbl,
 		(void *)set_info->actuator_params.reg_tbl_params,
 		a_ctrl->reg_tbl_size *

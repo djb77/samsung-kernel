@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2016 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -27,14 +27,14 @@ static struct pm_context {
 static int bl_switcher_notifier_handler(struct notifier_block *this,
 					unsigned long event, void *ptr)
 {
-	unsigned int mpidr, cpu, cluster;
+	unsigned int mpidr, cpu;
 	int ret = 0;
 
 	asm volatile ("mrc\tp15, 0, %0, c0, c0, 5" : "=r" (mpidr));
 	cpu = mpidr & 0x3;
-	cluster = (mpidr >> 8) & 0xf;
-	mc_dev_devel("%s switching!!, cpu: %u, Out=%u\n",
-		     event == SWITCH_ENTER ? "Before" : "After", cpu, cluster);
+	mc_dev_devel("%s switching!!, cpu: %u, Out=%u",
+		     event == SWITCH_ENTER ? "Before" : "After", cpu,
+		     (mpidr >> 8) & 0xf);
 
 	if (cpu != 0)
 		return 0;
@@ -47,10 +47,10 @@ static int bl_switcher_notifier_handler(struct notifier_block *this,
 		ret = mc_scheduler_resume();
 		break;
 	default:
-		mc_dev_devel("MobiCore: Unknown switch event!\n");
+		mc_dev_devel("MobiCore: Unknown switch event!");
 	}
 
-	return 0;
+	return ret;
 }
 
 int mc_pm_start(void)

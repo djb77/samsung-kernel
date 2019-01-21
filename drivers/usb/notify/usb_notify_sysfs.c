@@ -57,6 +57,10 @@ usb_hw_param_print[USB_CCIC_HW_PARAM_MAX][MAX_HWPARAM_STRING] = {
 	{"CC_DEX"},
 	{"CC_WTIME"},
 	{"CC_WVBUS"},
+	{"CC_WVTIME"},
+	{"CC_CSHORT"},
+	{"M_AFCERR"},
+	{"M_DCDTMO"},
 	{"CC_VER"},
 };
 #endif
@@ -308,6 +312,9 @@ static ssize_t usb_hw_param_show(struct device *dev,
 	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_COUNT);
 	if (p_param)
 		*p_param += get_waterChg_count();
+	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_TIME_DURATION);
+	if (p_param)
+		*p_param += get_wVbus_duration();
 	p_param = get_hw_param(n, USB_CCIC_VERSION);
 	if (p_param)
 		*p_param = show_ccic_version();
@@ -402,6 +409,9 @@ static ssize_t hw_param_show(struct device *dev,
 	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_COUNT);
 	if (p_param)
 		*p_param += get_waterChg_count();
+	p_param = get_hw_param(n, USB_CCIC_WATER_VBUS_TIME_DURATION);
+	if (p_param)
+		*p_param += get_wVbus_duration();
 	p_param = get_hw_param(n, USB_CCIC_VERSION);
 	if (p_param)
 		*p_param = show_ccic_version();
@@ -473,6 +483,145 @@ error:
 	return ret;
 }
 #endif
+
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+char interface_class_name[USB_CLASS_VENDOR_SPEC][4] = {
+	{"PER"},
+	{"AUD"},
+	{"COM"},
+	{"HID"},
+	{"PHY"},
+	{"STI"},
+	{"PRI"},
+	{"MAS"},
+	{"HUB"},
+	{"CDC"},
+	{"CSC"},
+	{"CON"},
+	{"VID"},
+	{"WIR"},
+	{"MIS"},
+	{"APP"},
+	{"VEN"}
+};
+
+void init_usb_whitelist_array(int *whitelist_array)
+{
+	int i;
+
+	for (i = 1; i <= MAX_CLASS_TYPE_NUM; i++)
+		whitelist_array[i] = 0;
+}
+
+int set_usb_whitelist_array(const char *buf, int *whitelist_array)
+{
+	int valid_class_count = 0;
+	char *ptr = NULL;
+	int i;
+	char *source;
+
+	source = (char *)buf;
+	while ((ptr = strsep(&source, ":")) != NULL) {
+		pr_info("%s token = %c%c%c!\n", __func__,
+			ptr[0], ptr[1], ptr[2]);
+		for (i = 1; i <= USB_CLASS_VENDOR_SPEC; i++) {
+			if (!strncmp(ptr, interface_class_name[i-1], 3))
+				whitelist_array[i] = 1;
+		}
+	}
+
+	for (i = 1; i <= U_CLASS_VENDOR_SPEC; i++) {
+		if (whitelist_array[i])
+			valid_class_count++;
+	}
+	pr_info("%s : valid_class_count = %d!\n", __func__, valid_class_count);
+	return valid_class_count;
+}
+
+static ssize_t whitelist_for_mdm_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct usb_notify_dev *udev = (struct usb_notify_dev *)
+		dev_get_drvdata(dev);
+
+	if (udev == NULL) {
+		pr_err("udev is NULL\n");
+		return -EINVAL;
+	}
+
+	pr_info("%s : read whitelist_classes %s\n",
+		__func__, udev->whitelist_str);
+	return sprintf(buf, "%s\n", udev->whitelist_str);
+}
+
+static ssize_t whitelist_for_mdm_store(
+		struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct usb_notify_dev *udev = (struct usb_notify_dev *)
+		dev_get_drvdata(dev);
+	char *disable;
+	int sret;
+	size_t ret = -ENOMEM;
+	int mdm_disable;
+	int valid_whilelist_count;
+
+	if (udev == NULL) {
+		pr_err("udev is NULL\n");
+		ret = -EINVAL;
+		goto error;
+	}
+
+	if (size > MAX_WHITELIST_STR_LEN) {
+		pr_err("%s size(%zu) is too long.\n", __func__, size);
+		goto error;
+	}
+
+	disable = kzalloc(size+1, GFP_KERNEL);
+	if (!disable)
+		goto error;
+
+	sret = sscanf(buf, "%s", disable);
+	if (sret != 1)
+		goto error1;
+	pr_info("%s : buf=%s\n", __func__, disable);
+
+	init_usb_whitelist_array(udev->whitelist_array_for_mdm);
+	/* To active displayport, hub class must be enabled */
+	if (!strncmp(buf, "ABL", 3)) {
+		udev->whitelist_array_for_mdm[USB_CLASS_HUB] = 1;
+		mdm_disable = NOTIFY_MDM_TYPE_ON;
+	} else if (!strncmp(buf, "OFF", 3))
+		mdm_disable = NOTIFY_MDM_TYPE_OFF;
+	else {
+		valid_whilelist_count =	set_usb_whitelist_array
+			(buf, udev->whitelist_array_for_mdm);
+		if (valid_whilelist_count > 0) {
+			udev->whitelist_array_for_mdm[USB_CLASS_HUB] = 1;
+			mdm_disable = NOTIFY_MDM_TYPE_ON;
+		} else
+			mdm_disable = NOTIFY_MDM_TYPE_OFF;
+	}
+
+	strncpy(udev->whitelist_str,
+		disable, sizeof(udev->whitelist_str)-1);
+
+	if (udev->set_mdm) {
+		udev->set_mdm(udev, mdm_disable);
+		ret = size;
+	} else {
+		pr_err("set_mdm func is NULL\n");
+		ret = -EINVAL;
+	}
+error1:
+	kfree(disable);
+error:
+	return ret;
+}
+
+static DEVICE_ATTR(whitelist_for_mdm, 0664,
+	whitelist_for_mdm_show, whitelist_for_mdm_store);
+#endif
 static DEVICE_ATTR(disable, 0664, disable_show, disable_store);
 static DEVICE_ATTR(support, 0444, support_show, NULL);
 static DEVICE_ATTR(otg_speed, 0444, otg_speed_show, NULL);
@@ -488,6 +637,9 @@ static struct attribute *usb_notify_attrs[] = {
 #if defined(CONFIG_USB_HW_PARAM)
 	&dev_attr_usb_hw_param.attr,
 	&dev_attr_hw_param.attr,
+#endif
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+	&dev_attr_whitelist_for_mdm.attr,
 #endif
 	NULL,
 };

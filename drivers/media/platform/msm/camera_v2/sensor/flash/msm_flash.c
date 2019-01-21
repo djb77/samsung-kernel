@@ -825,7 +825,7 @@ static int32_t msm_flash_config(struct msm_flash_ctrl_t *flash_ctrl,
 				ktd2692_flash_on(1);
 				CDBG("Ktd2692 led turn on:CFG_FLASH_TORCH\n");
 #endif
-				rc = 0;			
+				rc = 0;
 			}
 		}
 		break;
@@ -930,7 +930,7 @@ static int32_t msm_ext_flash_low(
 	ext_pmic_flash_ctrl_t led_ctrl;
 
 	memset(&led_ctrl, 0, sizeof(ext_pmic_flash_ctrl_t));
-	if (flash_ctrl->ext_pmic_func_tbl.ext_pmic_torch_on)
+	if (flash_ctrl->ext_pmic_func_tbl.ext_pmic_pre_flash_on)
 	{
 		led_ctrl.index = 0;
 
@@ -1010,7 +1010,12 @@ static int32_t msm_ext_flash_torch(
 	memset(&led_ctrl, 0, sizeof(ext_pmic_flash_ctrl_t));
 	if (flash_ctrl->ext_pmic_func_tbl.ext_pmic_torch_on)
 	{
+		led_ctrl.index = 0;
 		rc = flash_ctrl->ext_pmic_func_tbl.ext_pmic_torch_on(&led_ctrl);
+#if defined(CONFIG_DUAL_LEDS_FLASH)
+		led_ctrl.index = 1;
+		rc = flash_ctrl->ext_pmic_func_tbl.ext_pmic_torch_on(&led_ctrl);
+#endif
 	}
 
 	CDBG("Exit %s\n", __func__);
@@ -1402,8 +1407,7 @@ static long msm_flash_subdev_do_ioctl(
 		flash_data.flash_current[i] = u32->flash_current[i];
 		flash_data.flash_duration[i] = u32->flash_duration[i];
 	}
-    flash_data.flash_position = u32->flash_position;
-
+	flash_data.flash_position = u32->flash_position;
 	switch (cmd) {
 	case VIDIOC_MSM_FLASH_CFG32:
 		cmd = VIDIOC_MSM_FLASH_CFG;
@@ -1438,6 +1442,9 @@ static long msm_flash_subdev_do_ioctl(
 			break;
 		}
 		break;
+	case VIDIOC_MSM_FLASH_CFG: 
+		pr_err("invalid cmd 0x%x received\n", cmd); 
+		return -EINVAL;
 	default:
 		return msm_flash_subdev_ioctl(sd, cmd, arg);
 	}

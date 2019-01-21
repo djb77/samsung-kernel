@@ -489,22 +489,6 @@ const struct snd_soc_dapm_widget rt5659_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Sub Mic", NULL),
 };
 
-const struct snd_soc_dapm_route rt5659_dapm_routes[] = {
-	{ "HP", NULL, "HPOL" },
-	{ "HP", NULL, "HPOR" },
-	{ "RCV", NULL, "MONOOUT" },
-	{ "SPK", NULL, "SPOL" },
-	{ "SPK", NULL, "SPOR" },
-	{ "IN1P", NULL, "Headset Mic" },
-	{ "IN1N", NULL, "Headset Mic" },
-	{ "IN3P", NULL, "MICBIAS3" },
-	{ "IN3P", NULL, "Sub Mic" },
-	{ "IN3N", NULL, "Sub Mic" },
-	{ "IN4P", NULL, "MICBIAS2" },
-	{ "IN4P", NULL, "Main Mic" },
-	{ "IN4N", NULL, "Main Mic" },
-};
-
 static int msm_rt5659_aif1_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
 			     struct snd_pcm_hw_params *params)
 {
@@ -2946,13 +2930,17 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.cpu_dai_name	= "MultiMedia17",
 		.platform_name	= "msm-pcm-dsp.1",
 		.dynamic = 1,
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE |
+			ASYNC_DPCM_SND_SOC_HW_PARAMS,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 				SND_SOC_DPCM_TRIGGER_POST},
 		.ignore_suspend = 1,
 		/* this dainlink has playback support */
 		.ignore_pmdown_time = 1,
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA17,
 	},
 #endif

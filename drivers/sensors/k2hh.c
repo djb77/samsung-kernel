@@ -27,8 +27,12 @@
 #include <linux/of_gpio.h>
 #include <linux/wakelock.h>
 #include <linux/regulator/consumer.h>
-
 #include <linux/sensor/sensors_core.h>
+
+#ifdef TAG
+#undef TAG
+#define TAG "[ACCEL]"
+#endif
 
 #define I2C_M_WR                      0 /* for i2c Write */
 #define I2c_M_RD                      1 /* for i2c Read */

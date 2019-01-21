@@ -1,36 +1,35 @@
-/*****************************************************************************
-	Copyright(c) 2013 FCI Inc. All Rights Reserved
-
-	File name : fc8080_tun.c
-
-	Description : fc8080 tuner driver source file
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-
-
-	History :
-	----------------------------------------------------------------------
-	20130409 v0p4
-	20130412 v0p5
-	20130415 v0p6
-	20130509 v1p0
-	20130520 v1p1
-	20130524 v1p2
-	20130524 v1p3
-	20131125 v1p4
-*******************************************************************************/
+/*
+ *	Copyright(c) 2013 FCI Inc. All Rights Reserved
+ *
+ *	File name : fc8080_tun.c
+ *
+ *	Description : fc8080 tuner driver source file
+ *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ *	History :
+ *	----------------------------------------------------------------------
+ *	20130409 v0p4
+ *	20130412 v0p5
+ *	20130415 v0p6
+ *	20130509 v1p0
+ *	20130520 v1p1
+ *	20130524 v1p2
+ *	20130524 v1p3
+ *	20131125 v1p4
+ */
 
 #include "fci_types.h"
 #include "fci_oal.h"
@@ -58,14 +57,16 @@ static s32 fc8080_read(HANDLE handle, u8 addr, u8 *data)
 	return res;
 }
 
-/*static s32 fc8080_bb_write(HANDLE handle, u16 addr, u8 data)
-{
-	s32 res;
-
-	res = bbm_write(handle, addr, data);
-
-	return res;
-}*/
+/*
+ *static s32 fc8080_bb_write(HANDLE handle, u16 addr, u8 data)
+ *{
+ *	s32 res;
+ *
+ *	res = bbm_write(handle, addr, data);
+ *
+ *	return res;
+ *}
+ */
 
 static s32 fc8080_bb_read(HANDLE handle, u16 addr, u8 *data)
 {
@@ -153,7 +154,7 @@ s32 fc8080_tuner_init(HANDLE handle, u32 band)
 
 	rfagc_pd1_avg = (u8) n_rfagc_pd1_avg;
 
-	fc8080_write(handle, 0x7f , rfagc_pd1_avg);
+	fc8080_write(handle, 0x7f, rfagc_pd1_avg);
 
 	rfagc_pd2[0] = 0;
 	rfagc_pd2[1] = 0;
@@ -166,7 +167,7 @@ s32 fc8080_tuner_init(HANDLE handle, u32 band)
 	rfagc_pd2_min = 255;
 
 	for (i = 0; i < 6; i++) {
-		fc8080_read(handle, 0xd6 , &rfagc_pd2[i]);
+		fc8080_read(handle, 0xd6, &rfagc_pd2[i]);
 
 		if (rfagc_pd2[i] >= rfagc_pd2_max)
 			rfagc_pd2_max = rfagc_pd2[i];
@@ -293,7 +294,7 @@ s32 fc8080_set_freq(HANDLE handle, u32 band, u32 freq)
 	lo_mode = 0;
 	f_vco = freq * div_ratio;
 
-	if (2800000 < f_vco) {
+	if (f_vco > 2800000) {
 		div_ratio = 12;
 		lo_mode = 1;
 		f_vco = freq * div_ratio;
@@ -348,7 +349,7 @@ s32 fc8080_get_rssi(HANDLE handle, s32 *rssi)
 	s32 res = BBM_OK;
 	s32 pga = 0;
 
-	u8 lna, rfvga, filter, preamp_pga, a1, ext_lna , a2 , a3, k, crntmode1,
+	u8 lna, rfvga, filter, preamp_pga, a1, ext_lna, a2, a3, k, crntmode1,
 		crntmode0;
 	u8 temp = 0;
 
@@ -364,7 +365,7 @@ s32 fc8080_get_rssi(HANDLE handle, s32 *rssi)
 
 	res = fc8080_bb_read(handle, 0x014e, &preamp_pga);
 
-	if (127 < preamp_pga)
+	if (preamp_pga > 127)
 		pga = -1 * ((256 - preamp_pga) + 1);
 	else if (preamp_pga <= 127)
 		pga = preamp_pga;

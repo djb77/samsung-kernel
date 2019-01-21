@@ -402,7 +402,7 @@ static ssize_t dwc3_mode_write(struct file *file,
 	struct dwc3		*dwc = s->private;
 	unsigned long		flags;
 	u32			mode = 0;
-	char			buf[32];
+	char buf[32] = {0};
 
 	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
 		return -EFAULT;
@@ -482,7 +482,7 @@ static ssize_t dwc3_testmode_write(struct file *file,
 	struct dwc3		*dwc = s->private;
 	unsigned long		flags;
 	u32			testmode = 0;
-	char			buf[32];
+	char			buf[32] = {0};
 
 	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
 		return -EFAULT;
@@ -589,7 +589,7 @@ static ssize_t dwc3_link_state_write(struct file *file,
 	struct dwc3		*dwc = s->private;
 	unsigned long		flags;
 	enum dwc3_link_state	state = 0;
-	char			buf[32];
+	char			buf[32] = {0};
 
 	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
 		return -EFAULT;
@@ -630,13 +630,11 @@ static ssize_t dwc3_store_ep_num(struct file *file, const char __user *ubuf,
 {
 	struct seq_file		*s = file->private_data;
 	struct dwc3		*dwc = s->private;
-	char			kbuf[10];
+	char			kbuf[10] = {0};
 	unsigned int		num, dir, temp;
 	unsigned long		flags;
 
-	memset(kbuf, 0, 10);
-
-	if (copy_from_user(kbuf, ubuf, count > 10 ? 10 : count))
+	if (copy_from_user(kbuf, ubuf, min_t(size_t, sizeof(kbuf) - 1, count)))
 		return -EFAULT;
 
 	if (sscanf(kbuf, "%u %u", &num, &dir) != 2)
@@ -897,21 +895,30 @@ void dwc3_dbg_print_reg(struct dwc3 *dwc, const char *name, int reg)
 static ssize_t dwc3_store_int_events(struct file *file,
 			const char __user *ubuf, size_t count, loff_t *ppos)
 {
-	int clear_stats, i;
+	int i, ret;
 	unsigned long flags;
 	struct seq_file *s = file->private_data;
 	struct dwc3 *dwc = s->private;
 	struct dwc3_ep *dep;
 	struct timespec ts;
+	u8 clear_stats;
 
 	if (ubuf == NULL) {
 		pr_err("[%s] EINVAL\n", __func__);
-		goto done;
+		ret = -EINVAL;
+		return ret;
 	}
 
-	if (sscanf(ubuf, "%u", &clear_stats) != 1 || clear_stats != 0) {
+	ret = kstrtou8_from_user(ubuf, count, 0, &clear_stats);
+	if (ret < 0) {
+		pr_err("can't get enter value.\n");
+		return ret;
+	}
+
+	if (clear_stats != 0) {
 		pr_err("Wrong value. To clear stats, enter value as 0.\n");
-		goto done;
+		ret = -EINVAL;
+		return ret;
 	}
 
 	spin_lock_irqsave(&dwc->lock, flags);
@@ -928,7 +935,6 @@ static ssize_t dwc3_store_int_events(struct file *file,
 
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
-done:
 	return count;
 }
 
@@ -1043,8 +1049,11 @@ static int dwc3_gadget_int_events_show(struct seq_file *s, void *unused)
 		seq_printf(s, "%d\t", dwc->bh_completion_time[i]);
 	seq_putc(s, '\n');
 
-	seq_printf(s, "t_pwr evt irq : %lld\t",
+	seq_printf(s, "t_pwr evt irq : %lld\n",
 			ktime_to_us(dwc->t_pwr_evt_irq));
+
+	seq_printf(s, "l1_remote_wakeup_cnt : %lu\n",
+		dwc->l1_remote_wakeup_cnt);
 
 	spin_unlock_irqrestore(&dwc->lock, flags);
 	return 0;

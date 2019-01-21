@@ -47,16 +47,23 @@ enum {
 	ON = 1
 };
 
+#define MAG_LOG_TIME                15 /* 15 sec */
+
 struct yas_state {
 	struct mutex lock;
 	struct mutex enable_lock;
 	struct yas_mag_driver mag;
 	struct i2c_client *client;
-	struct delayed_work work;
+	ktime_t delay;
+	struct work_struct mag_work;
+	struct workqueue_struct *wq;
+	struct hrtimer mag_timer;
+	int time_count;
 	struct device *yas_device;
 	struct input_dev *input;
 	int poll_delay;
 	int enable;
+	int reset_flag;
 #if defined(CONFIG_SENSORS_YAS_RESET_DEFENCE_CODE)
 	int reset_state;
 #endif
@@ -162,12 +169,14 @@ static ssize_t yas_enable_store(struct device *dev,
 		if (pre_enable == OFF) {
 			data->mag.set_enable(1);
 			data->enable = ON;
-			schedule_delayed_work(&data->work, 0);
+			hrtimer_start(&data->mag_timer, data->delay,
+							HRTIMER_MODE_REL);
 		}
 	} else {
 		if (pre_enable == ON) {
+			hrtimer_cancel(&data->mag_timer);
+			cancel_work_sync(&data->mag_work);
 			data->mag.set_enable(0);
-			cancel_delayed_work_sync(&data->work);
 			data->enable = OFF;
 		}
 	}
@@ -181,7 +190,7 @@ static ssize_t yas_delay_show(struct device *dev,
 {
 	struct yas_state *data = dev_get_drvdata(dev);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", data->poll_delay);
+	return snprintf(buf, 16, "%lld\n", ktime_to_ns(data->delay));
 }
 
 static ssize_t yas_delay_store(struct device *dev,
@@ -203,6 +212,7 @@ static ssize_t yas_delay_store(struct device *dev,
 
 #if defined(CONFIG_SENSORS_YAS_RESET_DEFENCE_CODE)
 	if (data->reset_state) {
+		data->delay = ns_to_ktime(delay);
 		data->poll_delay = delay / NSEC_PER_MSEC;
 		data->mag.set_delay(data->poll_delay);
 		return size;
@@ -210,6 +220,7 @@ static ssize_t yas_delay_store(struct device *dev,
 #endif
 
 	mutex_lock(&data->enable_lock);
+	data->delay = ns_to_ktime(delay);
 	data->poll_delay = delay / NSEC_PER_MSEC;
 	data->mag.set_delay(data->poll_delay);
 	mutex_unlock(&data->enable_lock);
@@ -250,12 +261,12 @@ static ssize_t yas_self_test_show(struct device *dev,
 	struct yas_state *data = dev_get_drvdata(dev);
 	struct yas_self_test_result r;
 	s8 err[7] = { 0, };
-	int ret;
 
 	mutex_lock(&data->lock);
-	ret = data->mag.ext(YAS537_SELF_TEST, &r);
+	data->mag.ext(YAS537_SELF_TEST, &r);
 
 	mutex_unlock(&data->lock);
+	data->reset_flag = 1;
 
 	if (unlikely(r.id != 0x7))
 		err[0] = -1;
@@ -321,8 +332,10 @@ static ssize_t yas_power_reset_show(struct device *dev,
 	data->reset_state = ON;
 	mutex_lock(&data->enable_lock);
 	SENSOR_INFO("Start!\n");
-	if (data->enable)
-		cancel_delayed_work_sync(&data->work);
+	if (data->enable) {
+		hrtimer_cancel(&data->mag_timer);
+		cancel_work_sync(&data->mag_work);
+	}
 
 	mutex_unlock(&data->enable_lock);
 	SENSOR_INFO("Done!\n");
@@ -353,8 +366,8 @@ static ssize_t yas_sw_reset_show(struct device *dev,
 		SENSOR_INFO("Magnetic enable\n");
 		data->mag.set_enable(1);
 		data->mag.set_delay(data->poll_delay);
-		schedule_delayed_work(&data->work,
-			msecs_to_jiffies(data->poll_delay));
+		hrtimer_start(&data->mag_timer, data->delay,
+						HRTIMER);
 	} else
 		data->mag.set_enable(0);
 
@@ -383,11 +396,24 @@ static struct device_attribute *mag_sensor_attrs[] = {
 	NULL
 };
 
+static enum hrtimer_restart yas_timer_func(struct hrtimer *timer)
+{
+	struct yas_state *data = container_of(timer,
+					struct yas_state, mag_timer);
+
+	if (!work_pending(&data->mag_work))
+		queue_work(data->wq, &data->mag_work);
+
+	hrtimer_forward_now(&data->mag_timer, data->delay);
+
+	return HRTIMER_RESTART;
+}
+
 static void yas_work_func(struct work_struct *work)
 {
 	struct yas_data mag[1];
-	struct yas_state *data = container_of((struct delayed_work *)work,
-			struct yas_state, work);
+	struct yas_state *data = container_of(work,
+			struct yas_state, mag_work);
 	struct timespec ts = ktime_to_timespec(ktime_get_boottime());
 	u64 timestamp = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 	int ret, i, time_hi, time_lo;
@@ -396,10 +422,8 @@ static void yas_work_func(struct work_struct *work)
 
 	ret = data->mag.measure(mag, 1);
 	if (ret <= 0) {
-		schedule_delayed_work(&data->work,
-			msecs_to_jiffies(data->poll_delay));
 		mutex_unlock(&data->lock);
-		return;
+		goto exit;
 	}
 
 	for (i = 0; i < 3; i++)
@@ -412,11 +436,24 @@ static void yas_work_func(struct work_struct *work)
 	input_report_rel(data->input, REL_X, data->compass_data[0]);
 	input_report_rel(data->input, REL_Y, data->compass_data[1]);
 	input_report_rel(data->input, REL_Z, data->compass_data[2]);
+	if (data->reset_flag) {
+		SENSOR_INFO("Magnetic cal reset!\n");
+		input_report_rel(data->input, REL_RZ, data->reset_flag);
+		data->reset_flag = 0;
+	}
 	input_report_rel(data->input, REL_RX, time_hi);
 	input_report_rel(data->input, REL_RY, time_lo);
 	input_sync(data->input);
 
-	schedule_delayed_work(&data->work, msecs_to_jiffies(data->poll_delay));
+exit:
+	if ((ktime_to_ns(data->delay) * data->time_count)
+			>= ((int64_t)MAG_LOG_TIME * NSEC_PER_SEC)) {
+		SENSOR_INFO("x = %d, y = %d, z = %d\n",
+				data->compass_data[0], data->compass_data[1], data->compass_data[2]);
+		data->time_count = 0;
+	} else {
+		data->time_count++;
+	}
 }
 
 static int yas_input_init(struct yas_state *data)
@@ -436,6 +473,7 @@ static int yas_input_init(struct yas_state *data)
 	input_set_capability(dev, EV_REL, REL_Z);
 	input_set_capability(dev, EV_REL, REL_RX);
 	input_set_capability(dev, EV_REL, REL_RY);
+	input_set_capability(dev, EV_REL, REL_RZ);
 	input_set_drvdata(dev, data);
 
 	ret = input_register_device(dev);
@@ -522,7 +560,19 @@ static int yas_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	data->mag.callback.usleep = yas_usleep;
 	data->mag.callback.current_time = yas_current_time;
 
-	INIT_DELAYED_WORK(&data->work, yas_work_func);
+	/* workqueue init */
+	hrtimer_init(&data->mag_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	data->delay = ns_to_ktime(YAS_DEFAULT_SENSOR_DELAY);
+	data->mag_timer.function = yas_timer_func;
+
+	data->wq = create_singlethread_workqueue("mag_wq");
+	if (!data->wq) {
+		ret = -ENOMEM;
+		SENSOR_ERR("could not create accel workqueue\n");
+		goto err_ret;
+	}
+
+	INIT_WORK(&data->mag_work, yas_work_func);
 	data->enable = OFF;
 #if defined(CONFIG_SENSORS_YAS_RESET_DEFENCE_CODE)
 	data->reset_state = OFF;
@@ -587,7 +637,6 @@ err_unregister:
 	sysfs_remove_group(&data->input->dev.kobj, &yas_attribute_group);
 	input_unregister_device(data->input);
 err_input_init:
-	cancel_delayed_work_sync(&data->work);
 	i2c_set_clientdata(i2c, NULL);
 	mutex_destroy(&data->enable_lock);
 	mutex_destroy(&data->lock);
@@ -600,8 +649,41 @@ err_ret:
 
 static int yas_remove(struct i2c_client *i2c)
 {
-	SENSOR_INFO("\n");
+	struct yas_state *data = (struct yas_state *)i2c_get_clientdata(i2c);
+
+	if (data->enable) {
+		/* destroy workqueue */
+		hrtimer_cancel(&data->mag_timer);
+		cancel_work_sync(&data->mag_work);
+		data->mag.term();
+		/* sysfs destroy */
+		sensors_unregister(data->yas_device, mag_sensor_attrs);
+		sysfs_remove_group(&data->input->dev.kobj,
+				&yas_attribute_group);
+		/* lock destroy */
+		mutex_destroy(&data->enable_lock);
+		mutex_destroy(&data->lock);
+
+		sensors_remove_symlink(&data->input->dev.kobj,
+			data->input->name);
+		input_unregister_device(data->input);
+
+		kfree(data);
+		this_client = NULL;
+	}
 	return 0;
+}
+
+static void yas_shutdown(struct i2c_client *i2c)
+{
+	struct yas_state *data = (struct yas_state *)i2c_get_clientdata(i2c);
+
+	SENSOR_INFO("is called.\n");
+	if (data->enable) {
+		hrtimer_cancel(&data->mag_timer);
+		cancel_work_sync(&data->mag_work);
+		data->mag.set_enable(0);
+	}
 }
 
 static int yas_suspend(struct device *dev)
@@ -609,7 +691,8 @@ static int yas_suspend(struct device *dev)
 	struct yas_state *data = dev_get_drvdata(dev);
 
 	if (data->enable) {
-		cancel_delayed_work_sync(&data->work);
+		hrtimer_cancel(&data->mag_timer);
+		cancel_work_sync(&data->mag_work);
 		data->mag.set_enable(0);
 	}
 	return 0;
@@ -621,7 +704,8 @@ static int yas_resume(struct device *dev)
 
 	if (data->enable) {
 		data->mag.set_enable(1);
-		schedule_delayed_work(&data->work, 0);
+		hrtimer_start(&data->mag_timer, data->delay,
+						HRTIMER_MODE_REL);
 	}
 	return 0;
 }
@@ -651,6 +735,7 @@ static struct i2c_driver yas_driver = {
 	},
 	.probe		= yas_probe,
 	.remove		= yas_remove,
+	.shutdown   = yas_shutdown,
 	.id_table	= yas_id,
 };
 module_i2c_driver(yas_driver);

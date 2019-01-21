@@ -33,7 +33,7 @@
  * backend will operate @ .6fps in certain usecases
  * like Long exposure usecase and isp needs max of 2 frames
  * to stop the hardware which will be around 3 seconds*/
-#define MSM_POST_EVT_TIMEOUT 6500
+#define MSM_POST_EVT_TIMEOUT 30000
 #define MSM_POST_EVT_NOTIMEOUT 0xFFFFFFFF
 #define MSM_CAMERA_STREAM_CNT_BITS  32
 

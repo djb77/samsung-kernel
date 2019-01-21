@@ -1,36 +1,35 @@
-/*****************************************************************************
-	Copyright(c) 2009 FCI Inc. All Rights Reserved
-
-	File name : ficdecoder.c
-
-	Description : fic parser
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-
-	History :
-	----------------------------------------------------------------------
-*******************************************************************************/
+/*
+ *	Copyright(c) 2009 FCI Inc. All Rights Reserved
+ *
+ *	File name : ficdecoder.c
+ *
+ *	Description : fic parser
+ *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *	History :
+ *	----------------------------------------------------------------------
+ */
 #include <linux/string.h>
 #include <linux/delay.h>
 
 #include "ficdecoder.h"
 #include "fci_oal.h"
 
-#define MSB(X) 				(((X) >> 8) & 0Xff)
-#define LSB(X)  			((X) & 0Xff)
-#define BYTESWAP(X) 			((LSB(X)<<8) | MSB(X))
+#define MSB(X)				(((X) >> 8) & 0Xff)
+#define LSB(X)			((X) & 0Xff)
+#define BYTESWAP(X)			((LSB(X)<<8) | MSB(X))
 
 struct esbinfo_t ensemble_info[MAX_ESB_NUM];
 struct service_info_t service_info[MAX_SVC_NUM];
@@ -309,9 +308,9 @@ static unsigned short crc16(unsigned char *fibBuffer, int len)
 	unsigned int crc_tmp = 0x0;
 	int crc_buf[16];
 	int crc_coff[16] = {		/* CRC16 CCITT REVERSED */
-		0, 0, 0, 0, 	/* 0x0 */
-		1, 0, 0, 0, 	/* 0x8 */
-		0, 0, 0, 1, 	/* 0x1 */
+		0, 0, 0, 0,		/* 0x0 */
+		1, 0, 0, 0,		/* 0x8 */
+		0, 0, 0, 1,		/* 0x1 */
 		0, 0, 0, 1		/* 0x1 */
 	};
 
@@ -344,16 +343,15 @@ int fic_crc_ctrl = 1;		/* fic crc check enable */
 
 int fic_decoder(struct fic *pfic, u16 length)
 {
-	struct fib 	*pfib;
-	int 	result = 0;
-	int	i;
-	u16	bufferCnt;
+	struct fib *pfib;
+	int result = 0;
+	int i;
+	u16 bufferCnt;
 
 	bufferCnt = length;
 
 	if (bufferCnt % 32) {
-		/* print_log(NULL
-			, "FIC BUFFER LENGTH ERROR %d\n", bufferCnt); */
+		/* print_log(NULL, "FIC BUFFER LENGTH ERROR %d\n", bufferCnt); */
 		return 1;
 	}
 
@@ -402,16 +400,16 @@ int fib_decoder(struct fib *pfib)
 		case 1:
 			result = fig1_decoder(pFig);		/* SI */
 			/*
-			if (result)
-				print_log(NULL, "SI Error [%x]\n", result);
-			*/
+			 *if (result)
+			 *	print_log(NULL, "SI Error [%x]\n", result);
+			 */
 			break;
 
 		default:
 			/*
-			print_log(NULL, "FIG 0x%X Length : 0x%X 0x%X\n"
-			, type, length, fib_ptr);
-			*/
+			 *print_log(NULL, "FIG 0x%X Length : 0x%X 0x%X\n"
+			 *, type, length, fib_ptr);
+			 */
 			result = 1;
 			break;
 		}
@@ -434,9 +432,9 @@ static int fig0_decoder(struct fig *pFig)
 	length = pFig->head & 0x1f;
 	cn = (pFig->data[0] & 0x80) >> 7;
 	if ((bbm_recfg_flag == 1) && (cn == 0))
-			return 0;
+		return 0;
 	/* if (cn)
-		print_log(NULL, "N");
+	 *	print_log(NULL, "N");
 	 */
 	extension = pFig->data[0] & 0x1F;
 	pd = (pFig->data[0] & 0x20) >> 5;
@@ -453,8 +451,8 @@ static int fig0_decoder(struct fig *pFig)
 		break;
 	case 4:		/* Service component with CA */
 		/*
-		result = fig0_ext4_decoder(&pFig->data[1], length);
-		*/
+		 *result = fig0_ext4_decoder(&pFig->data[1], length);
+		 */
 		break;
 	case 9:		/* Country LTO and International table */
 		result = fig0_ext9_decoder(&pFig->data[1], length);
@@ -484,15 +482,15 @@ static int fig0_decoder(struct fig *pFig)
 		break;
 	case 19:	/* Announcements switching */
 		/*
-		print_log(NULL, "FIG 0x%X/0x%X Length : 0x%X\n"
-		, 0, extension, length);
-		*/
+		 *print_log(NULL, "FIG 0x%X/0x%X Length : 0x%X\n"
+		 *, 0, extension, length);
+		 */
 		break;
 	default:
 		/*
-		print_log(NULL, "FIG 0x%X/0x%X Length : 0x%X\n"
-		, 0, extension, length);
-		*/
+		 *print_log(NULL, "FIG 0x%X/0x%X Length : 0x%X\n"
+		 *, 0, extension, length);
+		 */
 		result = 1;
 		break;
 	}
@@ -526,9 +524,9 @@ static int fig1_decoder(struct fig *pFig)
 		break;
 	default:
 		/*
-		print_log(NULL, "FIG 0x%X/0x%X Length : 0x%X\n"
-		, 1, extension, length);
-		*/
+		 *print_log(NULL, "FIG 0x%X/0x%X Length : 0x%X\n"
+		 *, 1, extension, length);
+		 */
 		result = 1;
 		break;
 	}
@@ -546,12 +544,12 @@ int dummy_decoder(u8 *fibBuffer, int figLength)
  */
 int fig0_ext1_decoder(u8 cn, u8 *fibBuffer, int figLength)
 {
-	u8	sta;
-	int 	result = 0;
-	int	readcnt = 0;
+	u8 sta;
+	int result = 0;
+	int readcnt = 0;
 
-	u8 	subchannel_id;
-	struct subch_info_t	*sub_ch_info;
+	u8 subchannel_id;
+	struct subch_info_t *sub_ch_info;
 
 	while (figLength-1 > readcnt) {
 		sta = fibBuffer[readcnt++];
@@ -565,7 +563,7 @@ int fig0_ext1_decoder(u8 cn, u8 *fibBuffer, int figLength)
 		}
 
 		sub_ch_info->flag = 99;
-		sub_ch_info->mode = 0; 		/* T-DMB */
+		sub_ch_info->mode = 0;		/* T-DMB */
 		sub_ch_info->subchannel_id = subchannel_id;
 
 		sub_ch_info->start_address = (sta & 0x3) << 8;
@@ -588,9 +586,9 @@ int fig0_ext1_decoder(u8 cn, u8 *fibBuffer, int figLength)
 			break;
 		default:
 			/*
-			print_log(NULL, "Unknown Form Type %d\n"
-			, sub_ch_info->form_type);
-			*/
+			 *print_log(NULL, "Unknown Form Type %d\n"
+			 *, sub_ch_info->form_type);
+			 */
 			result = 1;
 			break;
 		}
@@ -611,14 +609,14 @@ static int fig0_ext2_decoder(u8 *fibBuffer, int figLength, int pd)
 {
 	struct service_info_t *svc_info;
 	struct subch_info_t	*sub_ch_info;
-	u8	sta;
-	int 	result = 0;
-	int	readcnt = 0;
-	u32	sid = 0xffffffff;
-	int  	nscps;
-	u32	temp;
-	int 	tmid;
-	int	i;
+	u8 sta;
+	int result = 0;
+	int readcnt = 0;
+	u32 sid = 0xffffffff;
+	int nscps;
+	u32 temp;
+	int tmid;
+	int i;
 
 	while (figLength-1 > readcnt) {
 		temp = 0;
@@ -676,15 +674,16 @@ static int fig0_ext2_decoder(u8 *fibBuffer, int figLength, int pd)
 				if ((sta & 0x02) == 0x02) {	/* Primary */
 					svc_info->sub_channel_id
 						= (sta >> 2) & 0x3F;
+					svc_info->ca_flag = sta & 0x01;
 					svc_info->tmid = tmid;
 				}
 				sub_ch_info =
 				get_subchannel_info(svc_info->sub_channel_id);
 				if (sub_ch_info == NULL) {
 					/*
-					print_log(NULL
-					, "get_subchannel_info Error ...\n");
-					*/
+					 *print_log(NULL
+					 *, "get_subchannel_info Error ...\n");
+					 */
 					return 1;
 				}
 				sub_ch_info->sid = svc_info->sid;
@@ -696,15 +695,16 @@ static int fig0_ext2_decoder(u8 *fibBuffer, int figLength, int pd)
 				if ((sta & 0x02) == 0x02) {	/* Primary */
 					svc_info->sub_channel_id
 						= (sta >> 2) & 0x3F;
+					svc_info->ca_flag = sta & 0x01;
 					svc_info->tmid = tmid;
 				}
 				sub_ch_info =
 				get_subchannel_info(svc_info->sub_channel_id);
 				if (sub_ch_info == NULL) {
 					/*
-					print_log(NULL
-					, "get_subchannel_info Error ...\n");
-					*/
+					 *print_log(NULL
+					 *, "get_subchannel_info Error ...\n");
+					 */
 					return 1;
 				}
 				sub_ch_info->sid = svc_info->sid;
@@ -716,22 +716,24 @@ static int fig0_ext2_decoder(u8 *fibBuffer, int figLength, int pd)
 				if ((sta & 0x02) == 0x02) {	/*  Primary */
 					svc_info->fidc_id = (sta & 0xFC) >> 2;
 					svc_info->tmid = tmid;
+					svc_info->ca_flag = sta & 0x01;
 				}
 				svc_info->flag |= 0x04;
 				break;
 			case 3:		/* MSC packet data */
 				svc_info->scid = (sta & 0x3F) << 6;
 				sta = fibBuffer[readcnt++];
-				if ((sta & 0x02) == 0x02) { 	/*  Primary */
+				if ((sta & 0x02) == 0x02) {		/*  Primary */
 					svc_info->scid |= (sta & 0xFC) >> 2;
 					svc_info->tmid = tmid;
+					svc_info->ca_flag = sta & 0x01;
 				}
 				/*  by iproda */
 				svc_info->flag |= 0x04;
 				break;
 			default:
-				/* print_log(NULL
-					, "Unkown tmid [%X]\n", tmid); */
+				/* print_log(NULL*/
+				/*	, "Unknown tmid [%X]\n", tmid); */
 				result = 1;
 				break;
 			}
@@ -743,15 +745,15 @@ static int fig0_ext2_decoder(u8 *fibBuffer, int figLength, int pd)
 
 int fig0_ext3_decoder(u8 *fibBuffer, int figLength)
 {
-	u8	sta;
-	int 	result = 0;
-	int	readcnt = 0;
-	u16	scid;
+	u8 sta;
+	int result = 0;
+	int readcnt = 0;
+	u16 scid;
 	int i;
 
-	struct scInfo_t	*pScInfo;
-	struct service_info_t 	*svc_info;
-	struct subch_info_t 	*sub_ch_info;
+	struct scInfo_t *pScInfo;
+	struct service_info_t *svc_info;
+	struct subch_info_t *sub_ch_info;
 
 	while (figLength-1 > readcnt) {
 		scid = 0;
@@ -795,9 +797,9 @@ int fig0_ext3_decoder(u8 *fibBuffer, int figLength)
 				get_subchannel_info(pScInfo->sub_channel_id);
 				if (sub_ch_info == NULL) {
 					/*
-					print_log(NULL
-					, "get_subchannel_info Error ...\n");
-					*/
+					 *print_log(NULL
+					 *, "get_subchannel_info Error ...\n");
+					 */
 					return 1;
 				}
 
@@ -811,24 +813,25 @@ int fig0_ext3_decoder(u8 *fibBuffer, int figLength)
 	return result;
 }
 
-/*int fig0_ext4_decoder(u8 *fibBuffer, int figLength) {
-	int result = 0;
-	int readcnt = 0;
-	int Mf, sub_channel_id, CAOrg;
-
-	while (figLength - 1 > readcnt) {
-		Mf      = (fibBuffer[readcnt] & 0x40) >> 6;
-		sub_channel_id = (fibBuffer[readcnt] & 0x3f);
-		CAOrg   =
-		(fibBuffer[readcnt + 1] << 8) + fibBuffer[readcnt + 2];
-		readcnt += 3;
-		//print_log(NULL, "CA MF: %d, SubChiD: %d, CAOrg: %d\n"
-		, Mf, sub_channel_id, CAOrg);
-	}
-
-	return result;
-}*/
-
+/*
+ *int fig0_ext4_decoder(u8 *fibBuffer, int figLength) {
+ *	int result = 0;
+ *	int readcnt = 0;
+ *	int Mf, sub_channel_id, CAOrg;
+ *
+ *	while (figLength - 1 > readcnt) {
+ *		Mf      = (fibBuffer[readcnt] & 0x40) >> 6;
+ *		sub_channel_id = (fibBuffer[readcnt] & 0x3f);
+ *		CAOrg   =
+ *		(fibBuffer[readcnt + 1] << 8) + fibBuffer[readcnt + 2];
+ *		readcnt += 3;
+ *		//print_log(NULL, "CA MF: %d, SubChiD: %d, CAOrg: %d\n"
+ *		, Mf, sub_channel_id, CAOrg);
+ *	}
+ *
+ *	return result;
+ *}
+ */
 /*
  *  FIG 0/9 Country, LTO and international table
  */
@@ -877,9 +880,9 @@ int fig0_ext10_decoder(u8 *fibBuffer, int figLength)
 	}
 
 	/*
-	print_log(NULL, " %d:%d:%d.%d\n"
-	, hour+9, minutes, seconds, milliseconds);
-	*/
+	 *print_log(NULL, " %d:%d:%d.%d\n"
+	 *, hour+9, minutes, seconds, milliseconds);
+	 */
 
 	return result;
 }
@@ -993,9 +996,9 @@ int fig0_ext14_decoder(u8 *fibBuffer, int figLength)
 		fec_scheme = (fibBuffer[readcnt] & 0x03);
 		readcnt++;
 		/*
-		print_log(NULL, "SubChID: %d, FEC Scheme: %d\n"
-		, subch, fec_scheme);
-		*/
+		 *print_log(NULL, "SubChID: %d, FEC Scheme: %d\n"
+		 *, subch, fec_scheme);
+		 */
 		sub_ch_info = get_subchannel_info(subch);
 		if (sub_ch_info)
 			sub_ch_info->fec_schem = fec_scheme;
@@ -1004,16 +1007,13 @@ int fig0_ext14_decoder(u8 *fibBuffer, int figLength)
 	return result;
 }
 
- /*
- * TMMB kjju TODO
- */
 int fig0_ext15_decoder(u8 *fibBuffer, int figLength, int pd)
 {
-	u8	sta;
-	int 	result = 0;
-	int	readcnt = 0;
+	u8 sta;
+	int result = 0;
+	int readcnt = 0;
 	u8 subchannel_id;
-	struct subch_info_t 	*sub_ch_info;
+	struct subch_info_t *sub_ch_info;
 
 	while (figLength-1 > readcnt) {
 		sta = fibBuffer[readcnt++];
@@ -1028,7 +1028,7 @@ int fig0_ext15_decoder(u8 *fibBuffer, int figLength, int pd)
 		}
 
 		sub_ch_info->flag = 99;
-		sub_ch_info->mode = 1; 		/* T-MMB */
+		sub_ch_info->mode = 1;		/* T-MMB */
 		sub_ch_info->subchannel_id = subchannel_id;
 		sub_ch_info->start_address = (sta & 0x3) << 8;
 
@@ -1062,12 +1062,12 @@ int fig0_ext15_decoder(u8 *fibBuffer, int figLength, int pd)
 int fig0_ext18_decoder(u8 *fibBuffer, int figLength)
 {
 	u8	sta;
-	int 	result = 0;
+	int	result = 0;
 	int	readcnt = 0;
 	u16	sid;
 	/* u8	CId; */
-	u16  	AsuFlag;
-	int  	nocs;
+	u16	AsuFlag;
+	int	nocs;
 	int	i;
 
 	while (figLength-1 > readcnt) {
@@ -1100,9 +1100,9 @@ int fig0_ext18_decoder(u8 *fibBuffer, int figLength)
 
 static int fig1_ext0_decoder(u8 *fibBuffer, int figLength)
 {
-	int 	result = 0;
+	int	result = 0;
 	int	readcnt = 0;
-	int  	i;
+	int	i;
 
 	u16 eid;
 	u16 flag;
@@ -1122,9 +1122,9 @@ static int fig1_ext0_decoder(u8 *fibBuffer, int figLength)
 	ensemble_info[0].flag = 99;
 	ensemble_info[0].eid  = eid;
 	/*
-	print_log(DMB_FIC_INFO"FIG 1/0 label [%x][%s]\n"
-	, eid, ensemble_info[0].label);
-	*/
+	 *print_log(DMB_FIC_INFO"FIG 1/0 label [%x][%s]\n"
+	 *, eid, ensemble_info[0].label);
+	 */
 
 	for (i = 16-1; i >= 0; i--) {
 		if (ensemble_info[0].label[i] == 0x20)
@@ -1144,10 +1144,10 @@ static int fig1_ext0_decoder(u8 *fibBuffer, int figLength)
 static int fig1_ext1_decoder(u8 *fibBuffer, int figLength)
 {
 	struct service_info_t *svc_info;
-	u32	temp;
-	int 	result = 0;
-	int	readcnt = 0;
-	int 	i;
+	u32 temp;
+	int result = 0;
+	int readcnt = 0;
+	int i;
 
 	u16 sid;
 
@@ -1193,16 +1193,16 @@ static int fig1_ext1_decoder(u8 *fibBuffer, int figLength)
 static int fig1_ext4_decoder(u8 *fibBuffer, int figLength)
 {
 	struct scInfo_t  *pScInfo;
-	u8	sta;
-	u8	pd;
-	u32	temp;
-	int 	result = 0;
-	int	readcnt = 0;
-	int 	i;
+	u8 sta;
+	u8 pd;
+	u32 temp;
+	int result = 0;
+	int readcnt = 0;
+	int i;
 
-	u16 	scid;
-	/* u32		sid; */
-	u16 	flag;
+	u16 scid;
+	/* u32 sid; */
+	u16 flag;
 
 	sta = fibBuffer[readcnt++];
 
@@ -1260,10 +1260,10 @@ static int fig1_ext4_decoder(u8 *fibBuffer, int figLength)
 static int fig1_ext5_decoder(u8 *fibBuffer, int figLength)
 {
 	struct service_info_t *svc_info;
-	u32	temp;
-	int 	result = 0;
-	int	readcnt = 0;
-	int 	i;
+	u32 temp;
+	int result = 0;
+	int readcnt = 0;
+	int i;
 
 	u32 sid;
 	u16 flag;
@@ -1326,12 +1326,12 @@ void subchannel_org_prn(int subchannel_id)
 	if (sub_ch_info->flag == 99) {
 		subchannel_org_to_didp(sub_ch_info, &didp);
 		/*
-		if (sub_ch_info->service_channel_id & 0x40)
-			print_log(NULL, "service_channel_id = 0x%X, "
-			, sub_ch_info->service_channel_id & 0x3F);
-		else
-			print_log(NULL, "service_channel_id = NOTUSE, ");
-		*/
+		 *if (sub_ch_info->service_channel_id & 0x40)
+		 *	print_log(NULL, "service_channel_id = 0x%X, "
+		 *	, sub_ch_info->service_channel_id & 0x3F);
+		 *else
+		 *	print_log(NULL, "service_channel_id = NOTUSE, ");
+		 */
 		switch (sub_ch_info->re_config)  {
 		case 0:
 			/* print_log(NULL, "re_config = INIT\n"); */
@@ -1368,8 +1368,6 @@ void subchannel_org_clean(void)
 
 	for (i = 0; i < MAX_SC_NUM; i++)
 		sc_info[i].scid = 0xffff;
-
-	return;
 }
 
 int bitrate_to_index(u16 bitrate)
@@ -1433,9 +1431,9 @@ int GetN(struct subch_info_t *sub_ch_info, int *n)
 			break;
 		default:
 			/*
-			print_log(NULL, "Unknown Protection Level %d\n"
-			, sub_ch_info->protect_level);
-			*/
+			 *print_log(NULL, "Unknown Protection Level %d\n"
+			 *, sub_ch_info->protect_level);
+			 */
 			result = 1;
 			break;
 		}
@@ -1456,16 +1454,16 @@ int GetN(struct subch_info_t *sub_ch_info, int *n)
 			break;
 		default:
 			/*
-			print_log(NULL, "Unknown Protection Level %d\n"
-			, sub_ch_info->protect_level);
-			*/
+			 *print_log(NULL, "Unknown Protection Level %d\n"
+			 *, sub_ch_info->protect_level);
+			 */
 			result = 1;
 			break;
 		}
 		break;
 	default:
-		/* print_log(NULL, "Unknown Option %d\n"
-					, sub_ch_info->option); */
+		/* print_log(NULL, "Unknown Option %d\n"*/
+		/*			, sub_ch_info->option); */
 		result = 1;
 		break;
 	}
@@ -1478,8 +1476,8 @@ int subchannel_org_to_didp(
 {
 	int index, bitrate, level;
 	int result = 0, n = 0;
-	u16	subch_size = 0;
-	u16	dataRate;
+	u16 subch_size = 0;
+	u16 dataRate;
 	u8  intv_depth = 0;
 
 	if (sub_ch_info->flag != 99)
@@ -1489,7 +1487,7 @@ int subchannel_org_to_didp(
 	case 0:		/* T-DMB */
 		pdidp->mode = sub_ch_info->mode;
 		switch (sub_ch_info->form_type) {
-		case 0: 	/* short form  UEP */
+		case 0:	/* short form  UEP */
 			pdidp->subchannel_id = sub_ch_info->subchannel_id;
 			pdidp->start_address = sub_ch_info->start_address;
 			pdidp->form_type = sub_ch_info->form_type;

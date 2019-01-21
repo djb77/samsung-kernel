@@ -179,12 +179,6 @@ config SEC_DEBUG_APPS_CLK_LOGGING
 	help
 	  Enable apps clk logging.
 
-config SEC_AP_HEALTH
-	bool "Enable ap health info logging for bigdata"
-	default n
-	help
-	  Enable ap health info logging for bigdata.
-
 config SEC_MONITOR_BATTERY_REMOVAL
 	bool "Enable monitering whether normal power sequence or not"
 	default n
@@ -197,21 +191,7 @@ config SEC_SSR_DEBUG_LEVEL_CHK
 	help
 	  To check the authentication of peripheral image.
 
-config USER_RESET_DEBUG
-	bool "reset reason debug feature in user version"
-	default n
-	help
-	  This option provides reset history log in user version.
-	  This option enable proc/reset_reason support
-
 endif
-
-config USER_RESET_DEBUG_TEST
-	bool "reset reason debug test feature in eng version"
-	depends on USER_RESET_DEBUG
-	default n
-	help
-	  This option enable for test in eng version(KP, DP, TP, WP)
 
 config SKU_THEME
         bool "Enable SKU THEME"

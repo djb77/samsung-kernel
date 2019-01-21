@@ -205,6 +205,7 @@ static void removed_region_fixup(struct removed_region *dma_mem, int index)
 	/* return remaining area to system */
 	fixup_size = (dma_mem->nr_pages - index) * PAGE_SIZE;
 	free_bootmem_late(dma_mem->base + index * PAGE_SIZE, fixup_size);
+	free_memsize_reserved(dma_mem->base + index * PAGE_SIZE, fixup_size);
 
 	/*
 	 * release freed resource region so as to show up under iomem resource

@@ -243,7 +243,7 @@ int regmap_com_to(muic_data_t *pmuic, int port)
 
 		_REGMAP_TRACE(pdesc, 'w', ret, uattr, port);
 
-#if (defined(CONFIG_MUIC_UNIVERSAL_SM5705) || defined(CONFIG_MUIC_UNIVERSAL_SM5703)) && defined(CONFIG_MUIC_SUPPORT_CCIC)		
+#if (defined(CONFIG_MUIC_UNIVERSAL_SM5705) || defined(CONFIG_MUIC_UNIVERSAL_SM5708) || defined(CONFIG_MUIC_UNIVERSAL_SM5703)) && defined(CONFIG_MUIC_SUPPORT_CCIC)
 		if (vpops->set_switch)
 			vpops->set_switch(pmuic->regmapdesc, SWMODE_MANUAL);
 #endif
@@ -346,11 +346,11 @@ static int muic_update_regmapdata(struct regmap_desc *pdesc, int size)
 	for (i = 0; i < pdesc->size; i++, preg++) {
 #ifndef CONFIG_MUIC_UNIVERSAL_MULTI_SUPPORT 
 		if (!preg->name
-  #if defined (CONFIG_MUIC_UNIVERSAL_SM5705)
+#if (defined(CONFIG_MUIC_UNIVERSAL_SM5705) || defined(CONFIG_MUIC_UNIVERSAL_SM5708))
 				|| !strcmp(preg->name,"INT1") //Do not read int reg because of AFC_ATTACH int.
 				|| !strcmp(preg->name,"INT2")
 				|| !strcmp(preg->name,"INT3_AFC")
-  #endif
+#endif
 #else
 	if (pmuic->is_afc_support == true)
 		if (!preg->name || !strcmp(preg->name,"INT1") //Do not read int reg because of AFC_ATTACH int.
@@ -428,6 +428,10 @@ extern void muic_register_sm5703_regmap_desc(struct regmap_desc **pdesc);
 extern void muic_register_sm5705_regmap_desc(struct regmap_desc **pdesc);
 #endif
 
+#if defined(CONFIG_MUIC_UNIVERSAL_SM5708)
+extern void muic_register_sm5708_regmap_desc(struct regmap_desc **pdesc);
+#endif
+
 #if defined(CONFIG_MUIC_UNIVERSAL_S2MM001)
 extern void muic_register_s2mm001_regmap_desc(struct regmap_desc **pdesc);
 #endif
@@ -446,6 +450,9 @@ static struct vendor_regmap vendor_regmap_tbl[] = {
 #endif
 #if defined(CONFIG_MUIC_UNIVERSAL_SM5705)
 	{"sm,sm5705", muic_register_sm5705_regmap_desc},
+#endif
+#if defined(CONFIG_MUIC_UNIVERSAL_SM5708)
+	{"sm,sm5708", muic_register_sm5708_regmap_desc},
 #endif
 #if defined(CONFIG_MUIC_UNIVERSAL_S2MM001)
 	{"lsi,s2mm001", muic_register_s2mm001_regmap_desc},

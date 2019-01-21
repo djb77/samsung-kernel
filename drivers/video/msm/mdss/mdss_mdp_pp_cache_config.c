@@ -863,7 +863,7 @@ static int pp_igc_lut_cache_params_pipe_v1_7(struct mdp_igc_lut_data *config,
 	if (copy_from_user(&v17_usr_config,
 				(void __user *) config->cfg_payload,
 				sizeof(v17_usr_config))) {
-		pr_err("failed to copy igc usr config\n");
+		pr_err("failed to copy igc config\n");
 		return -EFAULT;
 	}
 

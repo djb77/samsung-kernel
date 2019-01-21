@@ -30,10 +30,6 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 
-#include <linux/battery/sec_charging_common.h>
-//#include <linux/battery/charger/s2mu005_charger.h>
-//#include <linux/battery/fuelgauge/s2mu005_fuelgauge.h>
-
 #define MFD_DEV_NAME "s2mu005"
 #define M2SH(m) ((m) & 0x0F ? ((m) & 0x03 ? ((m) & 0x01 ? 0 : 1) : ((m) & 0x04 ? 2 : 3)) : \
 		((m) & 0x30 ? ((m) & 0x10 ? 4 : 5) : ((m) & 0x40 ? 6 : 7)))
@@ -58,25 +54,11 @@ struct s2mu005_regulator_data {
 	struct device_node *reg_node;
 };
 
-typedef struct s2mu005_charger_platform_data {
-	sec_charging_current_t *charging_current;
-	int chg_float_voltage;
-	char *charger_name;
-	bool chg_eoc_dualpath;
-	uint32_t is_1MHz_switching:1;
-	bool always_enable;
-	/* 2nd full check */
-	 sec_battery_full_charged_t full_check_type_2nd;
-} s2mu005_charger_platform_data_t;
-
 struct s2mu005_platform_data {
 	/* IRQ */
 	int irq_base;
 	int irq_gpio;
 	bool wakeup;
-#if defined(CONFIG_CHARGER_S2MU005)
-	s2mu005_charger_platform_data_t *pdata;
-#endif
 
 	int num_regulators;
 	struct s2mu005_regulator_data *regulators;

@@ -81,7 +81,7 @@ static struct glink_apps_rpm_data *glink_data;
 #define DEFAULT_BUFFER_SIZE 256
 #define DEBUG_PRINT_BUFFER_SIZE 512
 #define MAX_SLEEP_BUFFER 128
-#define GFP_FLAG(noirq) (noirq ? GFP_ATOMIC : GFP_NOFS)
+#define GFP_FLAG(noirq) (noirq ? GFP_ATOMIC : GFP_NOIO)
 #define INV_RSC "resource does not exist"
 #define ERR "err\0"
 #define MAX_ERR_BUFFER_SIZE 128
@@ -1281,7 +1281,9 @@ static int msm_rpm_send_data(struct msm_rpm_request *cdata,
 		return ret;
 	}
 
-	msm_rpm_add_wait_list(cdata->msg_hdr.msg_id, noack);
+	ret = msm_rpm_add_wait_list(cdata->msg_hdr.msg_id, noack);
+	if (ret)
+		return ret;
 
 	ret = msm_rpm_send_buffer(&cdata->buf[0], msg_size, noirq);
 

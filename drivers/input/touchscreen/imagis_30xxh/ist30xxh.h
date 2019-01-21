@@ -57,32 +57,28 @@
 #ifdef IST30XX_USE_KEY
 #define IST30XX_KEY_CODES           { KEY_RECENT, KEY_BACK }
 #endif
-/* PAT MODE */
-#define PAT_CONTROL
-#ifdef PAT_CONTROL
+/* TCLM CONCEPT */
+#define TCLM_CONCEPT
+#ifdef TCLM_CONCEPT
 /*------------------------------
     <<< apply to server >>>
     0x00 : no action
     0x01 : clear nv
-    0x02 : pat magic
+    0x02 : lock down
     0x03 : rfu
 
     <<< use for temp bin >>>
-    0x05 : forced clear nv & f/w update before pat magic, eventhough same f/w
+    0x05 : everytime
     0x06 : rfu
 -------------------------------*/
-#define PAT_CONTROL_NONE            (0x00)
-#define PAT_CONTROL_CLEAR_NV        (0x01)
-#define PAT_CONTROL_PAT_MAGIC       (0x02)
-#define PAT_CONTROL_FORCE_UPDATE    (0x05)
-#define PAT_CONTROL_FORCE_CMD       (0x06)    //run_force_calibration
+#define TCLM_LEVEL_NONE             (0x00)
+#define TCLM_LEVEL_CLEAR_NV         (0x01)
+#define TCLM_LEVEL_LOCKDOWN         (0x02)
+#define TCLM_LEVEL_EVERYTIME        (0x05)
 
-#define PAT_MAX_LCIA                (0x80)
-#define PAT_MAX_MAGIC               (0xF5)
-#define PAT_MAGIC_NUMBER            (0x83)
-/*addr*/
-#define PAT_TSP_TEST_DATA           (0x00)
-#define PAT_CAL_COUNT_FIX_VERSION   (0x01)
+#define IST30XX_NVM_TSP_TEST_DATA				0
+#define IST30XX_NVM_OFFSET_CAL_COUNT			1
+#define IST30XX_NVM_OFFSET_TUNE_VERSION			2
 
 /* ----------------------------------------
  * write 0xE4 [ 11 | 10 | 01 | 00 ]
@@ -104,6 +100,34 @@
  *};
  * ----------------------------------------
  */
+
+/*TCLM CONCEPT */
+#define IST30XX_NVM_OFFSET_CAL_POSITON				3
+#define IST30XX_NVM_OFFSET_HISTORY_QUEUE_COUNT		4
+#define IST30XX_NVM_OFFSET_HISTORY_QUEUE_LASTP		5
+#define IST30XX_NVM_OFFSET_HISTORY_QUEUE_ZERO		6
+#define IST30XX_NVM_OFFSET_HISTORY_QUEUE_SIZE		6 /* QUEUE SIZE 6 */
+
+enum tclm_root {
+	CALPOSITION_NONE			= 0,
+	CALPOSITION_INITIAL			= 1,
+	CALPOSITION_FACTORY			= 2,
+	CALPOSITION_OUTSIDE			= 3,
+	CALPOSITION_LCIA			= 4,
+	CALPOSITION_SVCCENTER		= 5,
+	CALPOSITION_ABNORMAL		= 6,
+	CALPOSITION_FIRMUP			= 7,
+	CALPOSITION_SPECOUT			= 8,
+	CALPOSITION_TUNEUP			= 9,
+	CALPOSITION_EVERYTIME		= 10,
+	CALPOSITION_TESTMODE		= 11,
+	CALPOSITION_UNDEFINE		= 12,
+	CALPOSITION_MAX				= 16,
+};
+
+#define CAL_HISTORY_QUEUE_MAX			10
+#define CAL_HISTORY_QUEUE_SHORT_DISPLAY		3
+
 struct ts_test_result {
     union {
         struct {
@@ -121,7 +145,15 @@ struct ts_test_result {
 #define TEST_OCTA_NONE              (0)
 #define TEST_OCTA_FAIL              (1)
 #define TEST_OCTA_PASS              (2)
+
+struct sec_cal_position {
+	const char * f_name;
+	const char s_name;
+};
+
+#define CAL_POS_CMD(full_name, short_name)		.f_name = full_name, .s_name = short_name
 #endif
+
 /* IST30XX FUNCTION SET */
 
 #define IST30XXH_DEFAULT_CHIP_ID    (0x038D)
@@ -137,6 +169,9 @@ struct ts_test_result {
 #define IST30XX_MAX_SELF_NODE_NUM   (38)
 #endif
 
+#define IST30XX_TX_CHANNEL_NUM      (20) /* reserved for other models  */
+#define IST30XX_RX_CHANNEL_NUM      (40) /* reserved for other models  */
+
 #define IST30XX_MAX_FINGERS         (10)
 #define IST30XX_MAX_KEYS            (5)
 #define IST30XX_MAX_MAJOR           (15)
@@ -151,12 +186,14 @@ struct ts_test_result {
 #define IST30XX_EXCEPT_MASK         (0xFFFFFF00)
 #define IST30XX_EXCEPT_VALUE        (0xE11CE900)
 #define IST30XX_MAX_EXCEPT_SIZE     (2)
+#define IST30XX_EXCEPT_INTEGRITY    (0xE11CE901)
 #define IST30XX_LPM_VALUE           (0x193030DE)
 
 /* Calibration */
 #define CALIB_MSG_MASK              (0xF0000FFF)
 #define CALIB_MSG_VALID             (0x80000CAB)
 #define CALIB_WAIT_TIME             (50)        /* unit : 100msec */
+#define CALIB_MAX_I2C_FAIL_CNT      (10)
 #define CALIB_TO_GAP(n)             ((n >> 16) & 0xFFF)
 #define CALIB_TO_STATUS(n)          ((n >> 12) & 0xF)
 #define CALIB_TO_OS_VALUE(n)        ((n >> 12) & 0xFFFF)
@@ -177,6 +214,7 @@ struct ts_test_result {
 
 /* retry count */
 #define IST30XX_MAX_RETRY_CNT       (3)
+#define IST30XX_MAX_CAL_REF_CNT     (3)
 
 /* Log message */
 #define DEV_ERR                     (1)
@@ -215,7 +253,7 @@ struct ts_test_result {
 
 /* I2C transaction size */
 #define I2C_MAX_WRITE_SIZE          (256) /* bytes */
-#define I2C_MAX_READ_SIZE           (128) /* bytes */
+#define I2C_MAX_READ_SIZE           (256) /* bytes */
 
 /* I2C access mode */
 #define IST30XX_DIRECT_ACCESS       (1 << 31)
@@ -272,6 +310,13 @@ struct ts_test_result {
 #define PRESSED_FINGER(s, id)       ((s & (1 << id)) ? true : false)
 #define PRESSED_KEY(s, id)          ((s & (1 << (16 + id))) ? true : false)
 
+/* mode */
+typedef enum {
+    TOUCH_MODE = 0,
+    LPM_MODE,
+} SYSTEM_STATUS;
+
+#define IST30XX_SELF_CDC_OFFSET     (0xD90)
 #define IST30XX_MAX_CMD_SIZE        (0x20)
 #define IST30XX_CMD_ADDR(n)         (n * 4)
 #define IST30XX_CMD_VALUE(n)        (n / 4)
@@ -285,7 +330,11 @@ enum ist30xx_read_commands {
     eHCOM_GET_FW_MODE       = IST30XX_CMD_ADDR(0x06),
     eHCOM_GET_CAL_RESULT    = IST30XX_CMD_ADDR(0x07),
     eHCOM_GET_SLF_CAL_RESULT= IST30XX_CMD_ADDR(0x08),
+    eHCOM_GET_FW_INTEGRITY  = IST30XX_CMD_ADDR(0x09),
 
+    eHCOM_GET_SELF_CDC_BASE = IST30XX_CMD_ADDR(0x0B),
+
+    eHCOM_GET_REC_INFO_BASE = IST30XX_CMD_ADDR(0x0D),
     eHCOM_GET_DBG_INFO_BASE = IST30XX_CMD_ADDR(0x0E),
 
     eHCOM_GET_LCD_INFO      = IST30XX_CMD_ADDR(0x10),
@@ -368,9 +417,6 @@ typedef union {
 struct ist30xx_status {
     int power;
     int update;
-#ifdef PAT_CONTROL
-    int update_keystring;
-#endif
     int update_result;
     int calib;
     u32 calib_msg[IST30XX_MAX_CALIB_SIZE];
@@ -379,6 +425,7 @@ struct ist30xx_status {
     u32 cmcs;
     bool event_mode;
     bool noise_mode;
+    int sys_mode;
 };
 
 struct ist30xx_version {
@@ -524,8 +571,13 @@ struct ist30xx_dt_data {
     char cmcs_path[FIRMWARE_PATH_LENGTH];
 #endif
     int octa_hw;
-#ifdef PAT_CONTROL
-    int pat_function;
+    u32 x_max;
+    u32 y_max;
+    u32 area_indicator;
+    u32 area_navigation;
+    u32 area_edge;
+#ifdef TCLM_CONCEPT
+    int tclm_level;
     int afe_base;
 #endif
 #ifdef IST30XX_USE_KEY
@@ -535,6 +587,7 @@ struct ist30xx_dt_data {
 
 struct ist30xx_data {
     struct mutex lock;
+    struct mutex i2c_lock;
     struct mutex aod_lock;
     struct i2c_client *client;
     struct input_dev *input_dev;
@@ -561,7 +614,14 @@ struct ist30xx_data {
 #ifdef IST30XX_USE_KEY
     bool tkey_pressed[IST30XX_MAX_KEYS];
 #endif
+#ifdef CONFIG_TOUCHSCREEN_DUMP_MODE
+    struct delayed_work ghost_check;
+    u8 tsp_dump_lock;
+#endif
     u32 cdc_addr;
+    u32 self_cdc_addr;
+    u32 rec_addr;
+    u32 rec_size;
     u32 sec_info_addr;
     u32 zvalue_addr;
     u32 algorithm_addr;
@@ -576,6 +636,9 @@ struct ist30xx_data {
     int report_rate;
     int idle_rate;
     bool suspend;
+#ifdef USE_OPEN_CLOSE
+    bool probe_done;
+#endif
     bool spay;
     bool aod;
     gesture_reg g_reg;
@@ -596,10 +659,9 @@ struct ist30xx_data {
     u32 intr_debug3_addr;
     u32 intr_debug3_size;
     u32 rec_mode;
-    struct CH_NUM rec_start_ch;
-    struct CH_NUM rec_stop_ch;
     int rec_delay;
     char *rec_file_name;
+    u32 recording_scancnt;
     u32 debugging_mode;
     u32 debugging_addr;
     u8 debugging_size;
@@ -627,7 +689,16 @@ struct ist30xx_data {
 #ifdef CONFIG_VBUS_NOTIFIER
     struct notifier_block vbus_nb;
 #endif
-#ifdef PAT_CONTROL
+#ifdef TCLM_CONCEPT
+	u8 cal_position;
+	u8 root_of_calibration;
+	struct sec_cal_position *tclm_string;
+	u8 cal_pos_hist_queue[2 * CAL_HISTORY_QUEUE_MAX];
+	u8 cal_pos_hist_last3[2 * CAL_HISTORY_QUEUE_SHORT_DISPLAY + 1];
+	u8 cal_pos_hist_cnt;
+	u8 cal_pos_hist_lastp;
+	bool external_factory;
+	struct delayed_work work_tclm_initialize;
     u8 cal_count;
     u16 tune_fix_ver;
     struct ts_test_result test_result;
@@ -639,6 +710,17 @@ struct ist30xx_data {
     unsigned int wet_count;
     unsigned int dive_count;
     unsigned int comm_err_count;
+    unsigned int checksum_result;
+    unsigned int all_finger_count;
+
+    long time_longest;
+    struct timeval time_pressed[IST30XX_MAX_FINGERS];
+    struct timeval time_released[IST30XX_MAX_FINGERS];
+
+    u16 pressed_x[IST30XX_MAX_FINGERS];
+    u16 pressed_y[IST30XX_MAX_FINGERS];
+    u16 released_x[IST30XX_MAX_FINGERS];
+    u16 released_y[IST30XX_MAX_FINGERS];
 
     unsigned int scrub_id;
     unsigned int scrub_x;
@@ -646,11 +728,11 @@ struct ist30xx_data {
 };
 
 typedef enum {
-    SPONGE_EVENT_TYPE_SPAY			= 0x04,
-    SPONGE_EVENT_TYPE_AOD			= 0x08,
-    SPONGE_EVENT_TYPE_AOD_PRESS		= 0x09,
-    SPONGE_EVENT_TYPE_AOD_LONGPRESS	= 0x0A,
-	SPONGE_EVENT_TYPE_AOD_DOUBLETAB	= 0x0B,
+    SPONGE_EVENT_TYPE_SPAY = 0x04,
+    SPONGE_EVENT_TYPE_AOD = 0x08,
+    SPONGE_EVENT_TYPE_AOD_PRESS = 0x09,
+    SPONGE_EVENT_TYPE_AOD_LONGPRESS = 0x0A,
+    SPONGE_EVENT_TYPE_AOD_DOUBLETAB = 0x0B,
 } SPONGE_EVENT_TYPE;
 
 extern int ist30xx_log_level;
@@ -673,10 +755,10 @@ int ist30xx_read_cmd(struct ist30xx_data *data, u32 cmd, u32 *buf);
 int ist30xx_write_cmd(struct ist30xx_data *data, u32 cmd, u32 val);
 int ist30xx_read_buf(struct i2c_client *client, u32 cmd, u32 *buf, u16 len);
 int ist30xx_write_buf(struct i2c_client *client, u32 cmd, u32 *buf, u16 len);
-int ist30xx_burst_read(struct i2c_client *client, u32 addr,
-        u32 *buf32, u16 len, bool bit_en);
-int ist30xx_burst_write(struct i2c_client *client, u32 addr,
-        u32 *buf32, u16 len);
+int ist30xx_burst_read(struct i2c_client *client, u32 addr, u32 *buf32, u16 len,
+        bool bit_en);
+int ist30xx_burst_write(struct i2c_client *client, u32 addr, u32 *buf32,
+        u16 len);
 
 int ist30xx_cmd_gesture(struct ist30xx_data *data, u16 value);
 int ist30xx_cmd_start_scan(struct ist30xx_data *data);
@@ -692,6 +774,9 @@ int ist30xx_reset(struct ist30xx_data *data, bool download);
 
 int ist30xx_init_system(struct ist30xx_data *data);
 
+int ist30xx_execute_force_calibration(struct ist30xx_data *data);
+void ist30xx_display_dump_log(struct ist30xx_data *data);
+
 #ifdef SEC_FACTORY_MODE
 extern struct class *sec_class;
 extern int sec_touch_sysfs(struct ist30xx_data *data);
@@ -700,9 +785,17 @@ extern void sec_fac_cmd_remove(struct ist30xx_data *data);
 extern void sec_touch_sysfs_remove(struct ist30xx_data *data);
 #endif
 
-#ifdef PAT_CONTROL
-int ist30xx_write_sec_info(struct ist30xx_data *data, u8 idx, u32 *buf32,int len);
-int ist30xx_read_sec_info(struct ist30xx_data *data, u8 idx, u32 *buf32, int len);
+#ifdef TCLM_CONCEPT
+int ist30xx_write_sec_info(struct ist30xx_data *data, u8 idx, u32 *buf32,
+        int len);
+int ist30xx_read_sec_info(struct ist30xx_data *data, u8 idx, u32 *buf32,
+        int len);
+void ist30xx_tclm_position_history(struct ist30xx_data *data);
+void ist30xx_tclm_debug_info(struct ist30xx_data *data);
+void ist30xx_tclm_root_of_cal(struct ist30xx_data *data, int pos);
+bool ist30xx_tclm_check_condition_valid(struct ist30xx_data *data);
+bool ist30xx_execute_tclm_package(struct ist30xx_data *data, int factory_mode);
+bool ist30xx_tclm_get_nvm_all(struct ist30xx_data *data, bool add_flag);
 #endif
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI

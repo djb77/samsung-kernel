@@ -36,6 +36,11 @@
 #include <linux/muic/muic_notifier.h>
 #endif
 
+#ifdef TAG
+#undef TAG
+#define TAG "[GRIP]"
+#endif
+
 #define VENDOR_NAME              "SEMTECH"
 #define MODEL_NAME               "SX9310"
 #define MODULE_NAME              "grip_sensor"

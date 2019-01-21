@@ -9,11 +9,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
  */
 
 #ifndef _ET5XX_LINUX_DIRVER_H_
@@ -21,8 +16,8 @@
 
 #include <linux/module.h>
 #include <linux/spi/spi.h>
-#ifdef ENABLE_SENSORS_FPRINT_SECURE
 #include <linux/wakelock.h>
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
 #include <linux/clk.h>
 #include <linux/pm_runtime.h>
 #include <linux/spi/spidev.h>
@@ -50,7 +45,7 @@
 #define CHIP_ID						"ET5XX"
 
 /* assigned */
-#define ET5XX_MAJOR					153
+#define ET5XX_MAJOR					152
 /* ... up to 256 */
 #define N_SPI_MINORS					32
 
@@ -99,15 +94,20 @@
 #define FP_NVM_WRITEEX					0x43
 
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
-#define FP_DIABLE_SPI_CLOCK				0x10
+#define FP_DISABLE_SPI_CLOCK			0x10
 #define FP_CPU_SPEEDUP					0x11
 #define FP_SET_SENSOR_TYPE				0x14
 /* Do not use ioctl number 0x15 */
 #define FP_SET_LOCKSCREEN				0x16
-#define FP_SET_WAKE_UP_SIGNAL				0x17
+#define FP_SET_WAKE_UP_SIGNAL			0x17
 #endif
-#define FP_POWER_CONTROL_ET5XX				0x18
-#define FP_IOCTL_RESERVED_01				0x19
+#define FP_POWER_CONTROL_ET5XX			0x18
+#define FP_SENSOR_ORIENT				0x19
+#define FP_SPI_VALUE					0x1a
+#define FP_IOCTL_RESERVED_01				0x1b
+#define FP_IOCTL_RESERVED_02				0x1c
+
+
 
 /* trigger signal initial routine */
 #define INT_TRIGGER_INIT				0xa4
@@ -161,13 +161,12 @@ struct etspi_data {
 
 	/* buffer is NULL unless this device is open (users > 0) */
 	struct mutex buf_lock;
-	unsigned users;
+	unsigned int users;
 	u8 *buf;/* tx buffer for sensor register read/write */
-	unsigned bufsiz; /* MAX size of tx and rx buffer */
+	unsigned int bufsiz; /* MAX size of tx and rx buffer */
 	unsigned int drdyPin;	/* DRDY GPIO pin number */
 	unsigned int sleepPin;	/* Sleep GPIO pin number */
 	unsigned int ldo_pin;	/* Ldo GPIO pin number */
-	unsigned int buckenPin;	/* buckbooster ic enable pin number */
 	unsigned int min_cpufreq_limit;
 	unsigned int spi_cs;	/* spi cs pin <temporary gpio setting> */
 
@@ -181,17 +180,20 @@ struct etspi_data {
 	struct workqueue_struct *wq_dbg;
 	struct timer_list dbg_timer;
 	int sensortype;
+	u32 spi_value;
 	struct device *fp_device;
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
 	bool enabled_clk;
 	bool isGpio_cfgDone;
 	struct wake_lock fp_spi_lock;
 #endif
+	struct wake_lock fp_signal_lock;
 	bool tz_mode;
 	int detect_period;
 	int detect_threshold;
 	bool finger_on;
 	const char *chipid;
+	unsigned int orient;
 	struct pinctrl *p;
 	struct pinctrl_state *pins_sleep;
 	struct pinctrl_state *pins_idle;
@@ -228,9 +230,4 @@ int etspi_io_vdm_read(struct etspi_data *etspi,
 int etspi_io_vdm_write(struct etspi_data *etspi,
 		struct egis_ioc_transfer *ioc);
 int etspi_io_get_frame(struct etspi_data *etspi, u8 *frame, u32 size);
-
-extern int fingerprint_register(struct device *dev, void *drvdata,
-	struct device_attribute *attributes[], char *name);
-extern void fingerprint_unregister(struct device *dev,
-	struct device_attribute *attributes[]);
 #endif

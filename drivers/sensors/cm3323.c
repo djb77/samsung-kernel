@@ -24,8 +24,12 @@
 #include <linux/delay.h>
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
-
 #include <linux/sensor/sensors_core.h>
+
+#ifdef TAG
+#undef TAG
+#define TAG "[PROX]"
+#endif
 
 #define MODULE_NAME         "light_sensor"
 

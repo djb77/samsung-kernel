@@ -177,14 +177,13 @@ void ecryptfs_put_lower_file(struct inode *inode)
 				get_events()->is_hw_crypt_cb())
 			clear_cache_needed = true;
 
+		filemap_write_and_wait(inode->i_mapping);
 		if (clear_cache_needed) {
 			ret = vfs_fsync(inode_info->lower_file, false);
 
 			if (ret)
 				pr_err("failed to sync file ret = %d.\n", ret);
 		}
-
-		filemap_write_and_wait(inode->i_mapping);
 #ifdef CONFIG_SDP
 		if (inode_info->crypt_stat.flags & ECRYPTFS_DEK_IS_SENSITIVE) {
 			ecryptfs_mm_do_sdp_cleanup(inode);

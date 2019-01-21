@@ -230,7 +230,11 @@ typedef struct _muic_data_t {
     int sm570x_switch_gpio;
 #endif
 
+	int muic_reset_count;
 	struct mutex lock;
+#if defined(CONFIG_MUIC_UNIVERSAL_SM5708)
+	struct delayed_work	vdp_src_en_work;
+#endif
 }muic_data_t;
 
 extern struct device *switch_device;

@@ -23,7 +23,7 @@
 		qcom,mdss-dsi-panel-height = <1920>;
 		qcom,mdss-dsi-bpp = <24>;
 		qcom,mdss-dsi-panel-destination = "display_1";
-		qcom,mdss-dsi-panel-timings-8996 = [
+		qcom,mdss-dsi-panel-timings-phy-v2 = [
 			25 1f 09 0a 06 03 04 a0
 			25 1f 09 0a 06 03 04 a0
 			25 1f 09 0a 06 03 04 a0
@@ -233,7 +233,7 @@
  *
  * ************************************************************************************************************************************
  */
- 		samsung,panel-vendor = "BOE";
+		samsung,panel-vendor = "BOE";
 		samsung,tft-common-support;
 		samsung,enter_hbm_lux = <20000>;
 		samsung,support_mdnie_lite;
@@ -397,4 +397,3 @@
 		>;
 	};
 };
-

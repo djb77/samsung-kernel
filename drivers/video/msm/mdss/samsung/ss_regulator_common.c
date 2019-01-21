@@ -139,6 +139,8 @@ ss_regulator_platform {
 #define RST_SEQ_LEN	10
 #define MAX_RDATA_LDO	10
 
+int blconf_done;
+
 enum {
 	REGTYPE_PANEL_RESET = 0, /* display reset sequence */
 	REGTYPE_BL_CONFIG, /* BLIC initial configure data via I2c */
@@ -312,26 +314,25 @@ static int blconf_enable(struct regulator_dev *rdev)
 	}
 	mutex_unlock(&pmic->mtx);
 
-	/* 
+	/*
 		To execute wake-up sequence under i2c-fail,
 		we return only 0.
 	*/
 
+	blconf_done = 1;
 	return 0;
 }
 
 static int blconf_disable(struct regulator_dev *rdev)
 {
+	blconf_done = 0;
 	return 0;
 }
 
 
 static int blconf_is_enabled(struct regulator_dev *rdev)
 {
-	/* Regulator core always recognize that it is disabled,
-	 * so it always skip to disable and not to skip to enable.
-	 */
-	return 0;
+	return blconf_done;
 }
 
 static struct regulator_ops blconf_ops = {
@@ -516,6 +517,9 @@ static int parse_gpioreg(struct device *dev, struct device_node *np,
 	if (!r_gpioreg)
 		return -ENOMEM;
 
+	if (!rdata->initdata)
+		return -ENOMEM;
+
 	r_gpioreg->enable_gpio = of_get_named_gpio(np, "gpio", 0);
 
 	enable_high = of_property_read_bool(np, "enable-active-high");
@@ -578,7 +582,7 @@ static struct ssreg_pdata *ssreg_parse_dt(struct device *dev)
 		else if (rdata->reg_type == REGTYPE_GPIO_REGULATOR)
 			ret = parse_gpioreg(dev, reg_np, rdata);
 		else
-			dev_err(dev, "wrong reg_type(%d)\n", rdata->reg_type);
+			dev_err(dev, "wrong reg_type\n");
 
 		if (ret)
 			return ERR_PTR(ret);

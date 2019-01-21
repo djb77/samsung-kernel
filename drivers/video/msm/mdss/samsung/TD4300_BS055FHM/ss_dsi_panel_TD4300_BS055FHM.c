@@ -245,6 +245,7 @@ static void mdnie_init(struct samsung_display_driver_data *vdd)
 		mdnie_data[0].EBOOK_AUTO_MDNIE = DSI0_EBOOK_MDNIE;
 		mdnie_data[0].EMAIL_AUTO_MDNIE = DSI0_UI_MDNIE;
 		mdnie_data[0].mdnie_tune_value = mdnie_tune_value_dsi0;
+		mdnie_data[0].light_notification_tune_value = light_notification_tune_value;
 
 		/* Update MDNIE data related with size, offset or index */
 		mdnie_data[0].bypass_mdnie_size = ARRAY_SIZE(DSI0_UI_MDNIE);
@@ -256,6 +257,12 @@ static void mdnie_init(struct samsung_display_driver_data *vdd)
 		mdnie_data[0].address_scr_white[ADDRESS_SCR_WHITE_BLUE_OFFSET] = 0;
 		mdnie_data[0].rgb_sensor_mdnie_1_size = 0;
 		mdnie_data[0].rgb_sensor_mdnie_2_size = 0;
+		mdnie_data[0].white_default_r = 0xff;
+		mdnie_data[0].white_default_g = 0xff;
+		mdnie_data[0].white_default_b = 0xff;
+		mdnie_data[0].white_balanced_r = 0;
+		mdnie_data[0].white_balanced_g = 0;
+		mdnie_data[0].white_balanced_b = 0;
 	}
 }
 

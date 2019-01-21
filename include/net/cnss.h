@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,6 +16,7 @@
 #include <linux/skbuff.h>
 #include <linux/pci.h>
 #include <linux/mmc/sdio_func.h>
+#include <linux/interrupt.h>
 
 #ifdef CONFIG_CNSS
 #define MAX_FIRMWARE_SIZE (1 * 1024 * 1024)
@@ -28,6 +29,12 @@ enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_LOW,
 	CNSS_BUS_WIDTH_MEDIUM,
 	CNSS_BUS_WIDTH_HIGH
+};
+
+enum cnss_cc_src {
+	CNSS_SOURCE_CORE,
+	CNSS_SOURCE_11D,
+	CNSS_SOURCE_USER
 };
 
 /* FW image files */
@@ -56,6 +63,7 @@ struct cnss_wlan_driver {
 	int  (*suspend)(struct pci_dev *pdev, pm_message_t state);
 	int  (*resume)(struct pci_dev *pdev);
 	void (*modem_status)(struct pci_dev *, int state);
+	void (*update_status)(struct pci_dev *pdev, uint32_t status);
 	struct cnss_wlan_runtime_ops *runtime_ops;
 	const struct pci_device_id *id_table;
 };
@@ -109,6 +117,7 @@ enum cnss_runtime_request {
 	CNSS_PM_RUNTIME_PUT_NOIDLE,
 	CNSS_PM_REQUEST_RESUME,
 	CNSS_PM_RUNTIME_PUT_AUTO,
+	CNSS_PM_GET_NORESUME,
 };
 
 extern int cnss_get_fw_image(struct image_desc_info *image_desc_info);
@@ -160,10 +169,6 @@ extern void cnss_set_driver_status(enum cnss_driver_status driver_status);
 static inline int wcnss_pre_alloc_reset(void) { return 0; }
 #endif
 
-#if !defined(CONFIG_WCNSS_MEM_PRE_ALLOC) || !defined(CONFIG_SLUB_DEBUG)
-static inline void wcnss_prealloc_check_memory_leak(void) {}
-#endif
-
 extern int msm_pcie_enumerate(u32 rc_idx);
 extern int cnss_auto_suspend(void);
 extern int cnss_auto_resume(void);
@@ -173,6 +178,8 @@ extern int cnss_is_auto_suspend_allowed(const char *caller_func);
 
 extern int cnss_pm_runtime_request(struct device *dev, enum
 		cnss_runtime_request request);
+extern void cnss_set_cc_source(enum cnss_cc_src cc_source);
+extern enum cnss_cc_src cnss_get_cc_source(void);
 #endif
 
 extern void cnss_pm_wake_lock_init(struct wakeup_source *ws, const char *name);
@@ -250,4 +257,10 @@ extern u8 *cnss_common_get_wlan_mac_address(struct device *dev, uint32_t *num);
 extern int cnss_power_up(struct device *dev);
 extern int cnss_power_down(struct device *dev);
 extern int cnss_sdio_configure_spdt(bool state);
+
+extern int cnss_common_register_tsf_captured_handler(struct device *dev,
+						     irq_handler_t handler,
+						     void *ctx);
+extern int cnss_common_unregister_tsf_captured_handler(struct device *dev,
+						       void *ctx);
 #endif /* _NET_CNSS_H_ */

@@ -1,8 +1,8 @@
 /*
  *  driver/misc/sec_mux_sel.c
- *  Samsung Mobile Mux Sel Driver
+ *  Samsung Mux Selection Driver
  *
- *  Copyright (C) 2015 Samsung Electronics
+ *  Copyright (C) 2017 Samsung Electronics
  *
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,6 +27,21 @@ int BATT_THM_MUX_SEL_NUM;
 int CHG_THM_MUX_SEL_NUM;
 int AP_THM_MUX_SEL_NUM;
 int WPC_THM_MUX_SEL_NUM;
+int SLAVE_CHG_THM_MUX_SEL_NUM;
+int BLKT_THM_MUX_SEL_NUM;
+
+/*
+* below data tree description has to be defined in dtsi file 
+* mux_sel {
+* 	compatible = "samsung,sec-mux-sel";
+*	mux_sel,mux_sel_1_en = <1>; // enable to use
+*	mux_sel,mux_sel_1 = <&tlmm 7 0x0>; // gpio number of mux_sel
+*	mux_sel,mux_sel_1_type = <16>; // BATT_THM_MUX_SEL | AP_THM_MUX_SEL, two thermistor outputs 
+*	mux_sel,mux_sel_1_mpp = <4>; // MPP_4, the number of MPP
+*	mux_sel,mux_sel_1_low = <2>; // SEC_MUX_SEL_BATT_THM, selection of mux_sel_1_en low
+*	mux_sel,mux_sel_1_high = <4>; // SEC_MUX_SEL_AP_THM, selection of mux_sel_1_en high
+};
+*/
 
 /*
 * int mux_sel : name of mux_sel
@@ -39,7 +54,7 @@ void sec_mpp_mux_control(int mux_sel_n, int adc_type, int mutex_on)
 {
 	int mux_sel_level = 0;
 	
-	//pr_info("%s mux_sel_n = %d,  adc_type = %d, mutex_on = %d \n", __func__, mux_sel_n, adc_type , mutex_on);
+	pr_debug("%s mux_sel_n = %d,  adc_type = %d, mutex_on = %d \n", __func__, mux_sel_n, adc_type, mutex_on);
 
 	if(mux_sel_n == 0) {
 		pr_err("%s this mux sel number dose not exist \n" , __func__);
@@ -57,7 +72,6 @@ void sec_mpp_mux_control(int mux_sel_n, int adc_type, int mutex_on)
 		switch(mux_sel_n) {
 			case SEC_MUX_SEL_1:
 				if(mux_sel->pdata->mux_sel_1_en) {
-
 					if(adc_type == mux_sel->pdata->mux_sel_1_low)
 						mux_sel_level = 0;
 					else if(adc_type == mux_sel->pdata->mux_sel_1_high)
@@ -72,7 +86,6 @@ void sec_mpp_mux_control(int mux_sel_n, int adc_type, int mutex_on)
 				break;
 			case SEC_MUX_SEL_2:
 				if(mux_sel->pdata->mux_sel_2_en) {
-
 					if(adc_type == mux_sel->pdata->mux_sel_2_low)
 						mux_sel_level = 0;
 					else if(adc_type == mux_sel->pdata->mux_sel_2_high)
@@ -87,7 +100,6 @@ void sec_mpp_mux_control(int mux_sel_n, int adc_type, int mutex_on)
 				break;
 			case SEC_MUX_SEL_3:
 				if(mux_sel->pdata->mux_sel_3_en) {
-
 					if(adc_type == mux_sel->pdata->mux_sel_3_low)
 						mux_sel_level = 0;
 					else if(adc_type == mux_sel->pdata->mux_sel_3_high)
@@ -106,7 +118,7 @@ void sec_mpp_mux_control(int mux_sel_n, int adc_type, int mutex_on)
 				break;				
 		}
 	} else {
-		//pr_info("%s: MPP mux_sel : %d, ml : %d\n", __func__, mux_sel_level, mutex_on);
+		pr_debug("%s: MPP mux_sel : %d, ml : %d\n", __func__, mux_sel_level, mutex_on);
 		mutex_unlock(&mux_sel->mpp_share_mutex);
 	}
 }
@@ -241,6 +253,8 @@ static void sec_mux_sel_get_info(void)
 	CHG_THM_MUX_SEL_NUM = 0;
 	AP_THM_MUX_SEL_NUM = 0;
 	WPC_THM_MUX_SEL_NUM = 0;
+	SLAVE_CHG_THM_MUX_SEL_NUM = 0;
+	BLKT_THM_MUX_SEL_NUM = 0;
 
 	pr_info("%s mux_sel_1_type = %d, mux_sel_2_type = %d \n", __func__, mux_sel->pdata->mux_sel_1_type, mux_sel->pdata->mux_sel_2_type);
 
@@ -250,18 +264,22 @@ static void sec_mux_sel_get_info(void)
 			pr_err("failed to request GPIO %u\n", mux_sel->pdata->mux_sel_1);
 		}
 
-		if(mux_sel->pdata->mux_sel_1_type & EAR_ADC_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_1_type & EAR_ADC_MUX_SEL)
 			EAR_ADC_MUX_SEL_NUM = SEC_MUX_SEL_1;
-		if(mux_sel->pdata->mux_sel_1_type & BATT_ID_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_1_type & BATT_ID_MUX_SEL)
 			BATT_ID_MUX_SEL_NUM = SEC_MUX_SEL_1;
-		if(mux_sel->pdata->mux_sel_1_type & BATT_THM_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_1_type & BATT_THM_MUX_SEL)
 			BATT_THM_MUX_SEL_NUM = SEC_MUX_SEL_1;
-		if(mux_sel->pdata->mux_sel_1_type & CHG_THM_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_1_type & CHG_THM_MUX_SEL)
 			CHG_THM_MUX_SEL_NUM = SEC_MUX_SEL_1;
-		if(mux_sel->pdata->mux_sel_1_type & AP_THM_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_1_type & SLAVE_CHG_THM_MUX_SEL)
+			SLAVE_CHG_THM_MUX_SEL_NUM = SEC_MUX_SEL_1;
+		if (mux_sel->pdata->mux_sel_1_type & AP_THM_MUX_SEL)
 			AP_THM_MUX_SEL_NUM = SEC_MUX_SEL_1;
-		if(mux_sel->pdata->mux_sel_1_type & WPC_THM_MUX_SEL)
-			WPC_THM_MUX_SEL_NUM = SEC_MUX_SEL_1;		
+		if (mux_sel->pdata->mux_sel_1_type & WPC_THM_MUX_SEL)
+			WPC_THM_MUX_SEL_NUM = SEC_MUX_SEL_1;
+		if (mux_sel->pdata->mux_sel_1_type & BLKT_THM_MUX_SEL)
+			BLKT_THM_MUX_SEL_NUM = SEC_MUX_SEL_1;
 	}
 
 	if (mux_sel->pdata->mux_sel_2_en) {
@@ -270,18 +288,22 @@ static void sec_mux_sel_get_info(void)
 			pr_err("failed to request GPIO %u\n", mux_sel->pdata->mux_sel_2);
 		}
 
-		if(mux_sel->pdata->mux_sel_2_type & EAR_ADC_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_2_type & EAR_ADC_MUX_SEL)
 			EAR_ADC_MUX_SEL_NUM = SEC_MUX_SEL_2;
-		if(mux_sel->pdata->mux_sel_2_type & BATT_ID_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_2_type & BATT_ID_MUX_SEL)
 			BATT_ID_MUX_SEL_NUM = SEC_MUX_SEL_2;
-		if(mux_sel->pdata->mux_sel_2_type & BATT_THM_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_2_type & BATT_THM_MUX_SEL)
 			BATT_THM_MUX_SEL_NUM = SEC_MUX_SEL_2;
-		if(mux_sel->pdata->mux_sel_2_type & CHG_THM_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_2_type & CHG_THM_MUX_SEL)
 			CHG_THM_MUX_SEL_NUM = SEC_MUX_SEL_2;
-		if(mux_sel->pdata->mux_sel_2_type & AP_THM_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_2_type & SLAVE_CHG_THM_MUX_SEL)
+			SLAVE_CHG_THM_MUX_SEL_NUM = SEC_MUX_SEL_2;
+		if (mux_sel->pdata->mux_sel_2_type & AP_THM_MUX_SEL)
 			AP_THM_MUX_SEL_NUM = SEC_MUX_SEL_2;
-		if(mux_sel->pdata->mux_sel_2_type & WPC_THM_MUX_SEL)
-			WPC_THM_MUX_SEL_NUM = SEC_MUX_SEL_2;		
+		if (mux_sel->pdata->mux_sel_2_type & WPC_THM_MUX_SEL)
+			WPC_THM_MUX_SEL_NUM = SEC_MUX_SEL_2;
+		if (mux_sel->pdata->mux_sel_2_type & BLKT_THM_MUX_SEL)
+			BLKT_THM_MUX_SEL_NUM = SEC_MUX_SEL_2;	
 	}
 
 	if (mux_sel->pdata->mux_sel_3_en) {
@@ -290,28 +312,35 @@ static void sec_mux_sel_get_info(void)
 			pr_err("failed to request GPIO %u\n", mux_sel->pdata->mux_sel_3);
 		}
 
-		if(mux_sel->pdata->mux_sel_3_type & EAR_ADC_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_3_type & EAR_ADC_MUX_SEL)
 			EAR_ADC_MUX_SEL_NUM = SEC_MUX_SEL_3;
-		if(mux_sel->pdata->mux_sel_3_type & BATT_ID_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_3_type & BATT_ID_MUX_SEL)
 			BATT_ID_MUX_SEL_NUM = SEC_MUX_SEL_3;
-		if(mux_sel->pdata->mux_sel_3_type & BATT_THM_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_3_type & BATT_THM_MUX_SEL)
 			BATT_THM_MUX_SEL_NUM = SEC_MUX_SEL_3;
-		if(mux_sel->pdata->mux_sel_3_type & CHG_THM_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_3_type & CHG_THM_MUX_SEL)
 			CHG_THM_MUX_SEL_NUM = SEC_MUX_SEL_3;
-		if(mux_sel->pdata->mux_sel_3_type & AP_THM_MUX_SEL)
+		if (mux_sel->pdata->mux_sel_3_type & SLAVE_CHG_THM_MUX_SEL)
+			SLAVE_CHG_THM_MUX_SEL_NUM = SEC_MUX_SEL_3;
+		if (mux_sel->pdata->mux_sel_3_type & AP_THM_MUX_SEL)
 			AP_THM_MUX_SEL_NUM = SEC_MUX_SEL_3;
-		if(mux_sel->pdata->mux_sel_3_type & WPC_THM_MUX_SEL)
-			WPC_THM_MUX_SEL_NUM = SEC_MUX_SEL_3;		
+		if (mux_sel->pdata->mux_sel_3_type & WPC_THM_MUX_SEL)
+			WPC_THM_MUX_SEL_NUM = SEC_MUX_SEL_3;
+		if (mux_sel->pdata->mux_sel_3_type & BLKT_THM_MUX_SEL)
+			BLKT_THM_MUX_SEL_NUM = SEC_MUX_SEL_3;	
 	}
 	
-	pr_info("%s EAR SEL NUM = %d, BATT SEL NUM = %d, BATT SEL NUM = %d, CHG SEL NUM = %d, AP SEL NUM = %d, WPC SEL NUM = %d\n", 
+	pr_info("%s EAR SEL NUM = %d, BATT ID SEL NUM = %d, BATT SEL NUM = %d, CHG SEL NUM = %d, "
+		"AP SEL NUM = %d, WPC SEL NUM = %d, SLAVE CHG SEL NUM = %d, BLKT CHG SEL NUM = %d\n",
 	__func__,
 	EAR_ADC_MUX_SEL_NUM, 
 	BATT_ID_MUX_SEL_NUM,
 	BATT_THM_MUX_SEL_NUM,
 	CHG_THM_MUX_SEL_NUM,
 	AP_THM_MUX_SEL_NUM,
-	WPC_THM_MUX_SEL_NUM);
+	WPC_THM_MUX_SEL_NUM,
+	SLAVE_CHG_THM_MUX_SEL_NUM,
+	BLKT_THM_MUX_SEL_NUM);
 }
 
 static int sec_mux_sel_probe(struct platform_device *pdev)

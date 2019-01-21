@@ -300,11 +300,11 @@ static int mdss_mdp_wfd_import_data(struct device *device,
 	if (wfd_data->layer.flags & MDP_LAYER_SECURE_SESSION)
 		flags = MDP_SECURE_OVERLAY_SESSION;
 
-        if (buffer->plane_count > MAX_PLANES) {
-           pr_err("buffer plane_count exceeds MAX_PLANES limit:%d",
-                 buffer->plane_count);
-           return -EINVAL;
-        }
+	if (buffer->plane_count > MAX_PLANES) {
+		pr_err("buffer plane_count exceeds MAX_PLANES limit:%d",
+				buffer->plane_count);
+		return -EINVAL;
+	}
 
 	memset(planes, 0, sizeof(planes));
 

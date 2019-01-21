@@ -775,7 +775,9 @@ out:
 
 // [ SEC_SELINUX_PORTING_COMMON
 #ifdef CONFIG_ALWAYS_ENFORCE
+#if !defined(CONFIG_RKP_KDP)
 	selinux_enforcing = 1;
+#endif
 #endif
 // ] SEC_SELINUX_PORTING_COMMON
 	if (!selinux_enforcing)
@@ -1541,7 +1543,9 @@ out:
 
 // [ SEC_SELINUX_PORTING_COMMON
 #ifdef CONFIG_ALWAYS_ENFORCE
+#if !defined(CONFIG_RKP_KDP)
 	selinux_enforcing = 1;
+#endif
 #endif
 // ] SEC_SELINUX_PORTING_COMMON
 	if (!selinux_enforcing)
@@ -2479,9 +2483,9 @@ out:
  * The caller must acquire the policy_rwlock before calling this function.
  */
 static inline int __security_genfs_sid(const char *fstype,
-				       char *path,
-				       u16 orig_sclass,
-				       u32 *sid)
+					   char *path,
+					   u16 orig_sclass,
+					   u32 *sid)
 {
 	int len;
 	u16 sclass;
@@ -2502,24 +2506,30 @@ static inline int __security_genfs_sid(const char *fstype,
 	}
 
 	rc = -ENOENT;
-	if (!genfs || cmp)
+	if (!genfs || cmp){
+		printk(KERN_ERR "SELinux: %s: genfs || cmp\n", __func__);
 		goto out;
+	}
 
 	for (c = genfs->head; c; c = c->next) {
 		len = strlen(c->u.name);
 		if ((!c->v.sclass || sclass == c->v.sclass) &&
-		    (strncmp(c->u.name, path, len) == 0))
+			(strncmp(c->u.name, path, len) == 0))
 			break;
 	}
 
 	rc = -ENOENT;
-	if (!c)
+	if (!c) {
+		printk(KERN_ERR "SELinux: %s empty ocontext c \n", __func__);
 		goto out;
+	}
 
 	if (!c->sid[0]) {
 		rc = sidtab_context_to_sid(&sidtab, &c->context[0], &c->sid[0]);
-		if (rc)
+		if (rc) {
+			printk(KERN_ERR "SELinux: %s: sid\n", __func__);
 			goto out;
+		}
 	}
 
 	*sid = c->sid[0];
@@ -2584,15 +2594,15 @@ int security_fs_use(struct super_block *sb)
 		}
 		sbsec->sid = c->sid[0];
 	} else {
-		rc = __security_genfs_sid(fstype, "/", SECCLASS_DIR,
-					  &sbsec->sid);
-		if (rc) {
-			sbsec->behavior = SECURITY_FS_USE_NONE;
-			rc = 0;
-		} else {
-			sbsec->behavior = SECURITY_FS_USE_GENFS;
+			rc = __security_genfs_sid(fstype, "/", SECCLASS_DIR,
+						  &sbsec->sid);
+			if (rc) {
+				sbsec->behavior = SECURITY_FS_USE_NONE;
+				rc = 0;
+			} else {
+				sbsec->behavior = SECURITY_FS_USE_GENFS;
+			}
 		}
-	}
 
 out:
 	read_unlock(&policy_rwlock);

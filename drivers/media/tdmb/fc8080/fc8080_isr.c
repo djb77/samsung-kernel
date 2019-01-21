@@ -1,28 +1,27 @@
-/*****************************************************************************
-	Copyright(c) 2013 FCI Inc. All Rights Reserved
-
-	File name : fc8080_isr.c
-
-	Description : fc8080 interrupt service routine source file
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-
-
-	History :
-	----------------------------------------------------------------------
-*******************************************************************************/
+/*
+ *	Copyright(c) 2013 FCI Inc. All Rights Reserved
+ *
+ *	File name : fc8080_isr.c
+ *
+ *	Description : fc8080 interrupt service routine source file
+ *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ *	History :
+ *	----------------------------------------------------------------------
+ */
 #include <linux/kernel.h>
 #include <linux/cache.h>
 #include "fci_types.h"
@@ -46,6 +45,7 @@ static void fc8080_data(HANDLE handle, u16 status)
 {
 	u16 size;
 	s32 i;
+
 	if (status & 0x0100) {
 		bbm_word_read(handle, BBM_BUF_FIC_THR, &size);
 		size++;
@@ -93,7 +93,7 @@ void fc8080_isr(HANDLE handle)
 		bbm_word_write(handle, BBM_BUF_STATUS, buf_int_status);
 		fc8080_data(handle, buf_int_status);
 
-		if(buf_ovr_status) {
+		if (buf_ovr_status) {
 			bbm_word_write(handle, BBM_BUF_OVERRUN, buf_ovr_status);
 			bbm_word_write(handle, BBM_BUF_OVERRUN, 0);
 			DPRINTK("[FC8080] Overrun clear\n");
@@ -104,7 +104,7 @@ void fc8080_isr(HANDLE handle)
 		if (buf_ovr_status) {
 			bbm_word_write(handle, BBM_BUF_OVERRUN, buf_ovr_status);
 			bbm_word_write(handle, BBM_BUF_OVERRUN, 0);
-			DPRINTK("[FC8080] Overrun occurred : 0x%x \n"
+			DPRINTK("[FC8080] Overrun occurred : 0x%x\n"
 				, buf_ovr_status);
 			fc8080_data(handle, buf_ovr_status);
 		}

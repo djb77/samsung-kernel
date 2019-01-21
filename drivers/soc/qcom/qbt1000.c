@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -60,6 +60,7 @@ enum sensor_connection_types {
  * user space will provide new value upon tz app load
  */
 static uint32_t g_app_buf_size = SZ_256K;
+static char const *const FP_APP_NAME = "fingerpr";
 
 struct qbt1000_drvdata {
 	struct class	*qbt1000_class;
@@ -108,15 +109,16 @@ static int get_cmd_rsp_buffers(struct qseecom_handle *hdl,
 	uint32_t *rsp_len)
 {
 	/* 64 bytes alignment for QSEECOM */
-	*cmd_len = ALIGN(*cmd_len, 64);
-	*rsp_len = ALIGN(*rsp_len, 64);
+	uint64_t aligned_cmd_len = ALIGN((uint64_t)*cmd_len, 64);
+	uint64_t aligned_rsp_len = ALIGN((uint64_t)*rsp_len, 64);
 
-	if (((uint64_t)*rsp_len + (uint64_t)*cmd_len)
-	  > (uint64_t)g_app_buf_size)
+	if ((aligned_rsp_len + aligned_cmd_len) > (uint64_t)g_app_buf_size)
 		return -ENOMEM;
 
 	*cmd = hdl->sbuf;
+	*cmd_len = aligned_cmd_len;
 	*rsp = hdl->sbuf + *cmd_len;
+	*rsp_len = aligned_rsp_len;
 
 	return 0;
 }
@@ -753,13 +755,14 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	void __user *priv_arg = (void __user *)arg;
 	struct qbt1000_drvdata *drvdata;
 
+	drvdata = file->private_data;
+
 	if (IS_ERR(priv_arg)) {
 		dev_err(drvdata->dev, "%s: invalid user space pointer %lu\n",
 			__func__, arg);
 		return -EINVAL;
 	}
 
-	drvdata = file->private_data;
 	pm_runtime_get_sync(drvdata->dev);
 	mutex_lock(&drvdata->mutex);
 	if (((drvdata->sensor_conn_type == SPI) && (!drvdata->clock_state)) ||
@@ -792,6 +795,13 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			goto end;
 		}
 
+		if (strcmp(app.name, FP_APP_NAME)) {
+			dev_err(drvdata->dev, "%s: Invalid app name\n",
+				__func__);
+			rc = -EINVAL;
+			goto end;
+		}
+
 		if (drvdata->app_handle) {
 			dev_err(drvdata->dev, "%s: LOAD app already loaded, unloading first\n",
 				__func__);
@@ -803,14 +813,16 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			}
 		}
 
+		app.name[MAX_NAME_SIZE - 1] = '\0';
+
 		/* start the TZ app */
 		rc = qseecom_start_app(&drvdata->app_handle,
 				app.name, app.size);
 		if (rc == 0) {
 			g_app_buf_size = app.size;
 		} else {
-			dev_err(drvdata->dev, "%s: App %s failed to load\n",
-				__func__, app.name);
+			dev_err(drvdata->dev, "%s: Fingerprint Trusted App failed to load\n",
+				__func__);
 			goto end;
 		}
 

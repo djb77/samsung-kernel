@@ -139,6 +139,7 @@ fw-shipped-$(CONFIG_YAM) += yam/1200.bin yam/9600.bin
 # Input Device
 fw-shipped-$(CONFIG_TOUCHSCREEN_MELFAS_MMS449)		+= tsp_melfas/mms449_c7.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_FTS7) 		+= tsp_stm/stm_gtaxlqlte.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS1BA90A) 	+= tsp_stm/fts1ba90a_gta2xl.fw
 fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_18XX) += abov/abov_tk_1804_c7.fw
 fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_16XX) += abov/abov_tk_1604_c7.fw
 ifdef CONFIG_SEC_ON7XLTE_CHN
@@ -157,9 +158,31 @@ fw-shipped-$(CONFIG_KEYBOARD_MELFAS_MHS204) += tk_melfas/mhs204_on5xllte.fw
 endif
 ifdef CONFIG_SEC_J2Y18LTE_PROJECT
 fw-shipped-$(CONFIG_TOUCHSCREEN_IST30XXH) += tsp_imagis/ist3038h_j2y18.fw  \
-					tsp_imagis/ist3038h_j2y18_cmcs.bin
+					tsp_imagis/ist3038h_j2y18_cmcs.bin  \
+					tsp_imagis/ist3038h_j2y18_octa.fw \
+					tsp_imagis/ist3038h_j2y18_octa_cmcs.bin
 fw-shipped-$(CONFIG_TOUCHSCREEN_ZINITIX_BT431) += tsp_zinitix/bt431_j23g.fw					
-fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_T316) += abov/a96t316au_j2y18.fw					
+fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_T316) += abov/a96t316au_j2y18.fw
+fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_T316) += abov/a96t316au_j2y18ver02.fw
+endif
+ifdef CONFIG_SEC_J8PLTE_PROJECT
+fw-shipped-$(CONFIG_SENSORS_A96T3X6) 		+= abov/a96t326_j8plte.fw \
+											   abov/a96t346_j8plte.fw
+endif
+ifdef CONFIG_SEC_A6PLTE_PROJECT
+fw-shipped-$(CONFIG_SENSORS_A96T3X6) 		+= abov/a96t326_j8plte.fw \
+											   abov/a96t346_j8plte.fw
+endif
+ifdef CONFIG_SEC_GTESY18LTE_PROJECT
+fw-shipped-$(CONFIG_TOUCHSCREEN_ZINITIX_ZT75XX_TCLM) += tsp_zinitix/zt7548_gtes.fw tsp_zinitix/zt7548_gtes_rev00.fw
+endif
+ifdef CONFIG_SEC_GTASLITELTE_PROJECT
+fw-shipped-$(CONFIG_SENSORS_A96T3X6) 		+= abov/a96t326_gtesy18lte.fw abov/a96t326_gtesy18lte_hw_rev00.fw
+fw-shipped-$(CONFIG_SENSORS_A96T3X6_WIFI) 	+= abov/a96t326_gtesy18wifi.fw abov/a96t326_gtesy18wifi_hw_rev00.fw
+fw-shipped-$(CONFIG_SENSORS_A96T3X6_SUB) 	+= abov/a96t326_gtesy18sub.fw abov/a96t326_gtesy18sub_hw_rev00.fw
+endif
+ifdef CONFIG_SEC_GTASLITELTE_PROJECT
+fw-shipped-$(CONFIG_TOUCHSCREEN_ZINITIX_ZT75XX_TCLM) += tsp_zinitix/zt7548_gtaslite.fw tsp_zinitix/zt7548_gtaslite_rev00.fw
 endif
 ifdef CONFIG_SEC_J3POPLTE_PROJECT
 fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_INCELL) += tsp_synaptics/td4100_j3pop.fw \
@@ -192,6 +215,52 @@ ifdef CONFIG_SEC_J7POPLTE_USA_USC
 fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_INCELL) += tsp_synaptics/td4100_j7pop.fw \
 							tsp_synaptics/td4100_j7pop_recovery.fw
 fw-shipped-$(CONFIG_KEYBOARD_TC3XXK) += tk_coreriver/tc305k_j7pop.fw
+endif
+
+ifdef CONFIG_SEC_J8PLTE_PROJECT
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS) += tsp_sec/y661_j8plus.fw
+endif
+
+ifdef CONFIG_SEC_A6PLTE_PROJECT
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS) += tsp_sec/y661_a6plus.fw
+endif
+
+ifdef CONFIG_SEC_J5Y18LTE_PROJECT
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_INCELL_TS) += tsp_sec/s6d7at01a01_j5y18lte.fw tsp_sec/s6d7at01a01_j5y18lte_hd.fw
+endif
+
+ifdef CONFIG_SEC_J6PRIMELTE_PROJECT
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_INCELL_TS) += tsp_sec/s6d7at01a01_j5y18lte.fw tsp_sec/s6d7at01a01_j5y18lte_hd.fw
+endif
+
+ifdef CONFIG_SEC_J4PRIMELTE_PROJECT
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_INCELL_TS) += tsp_sec/s6d7at01a01_j4prime.fw
+endif
+
+ifdef CONFIG_SEC_J4CORELTE_PROJECT
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_INCELL_TS) += tsp_sec/s6d7at01a01_j4core.fw tsp_sec/s6d7at01a01_j4core_hd.fw
+endif
+
+ifdef CONFIG_SEC_J6PLTE_PROJECT
+fw-shipped-$(CONFIG_TOUCHSCREEN_ZINITIX_ZT75XX_TCLM) += tsp_zinitix/zt7548_j8.fw
+endif
+
+ifdef CONFIG_SEC_J2GOLTE_PROJECT
+fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_T316) += abov/a96t316au_j2y18.fw \
+							abov/a96t316au_j2y18ver02.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_IST30XXH) += tsp_imagis/ist3038h_j2y18.fw  \
+					tsp_imagis/ist3038h_j2y18_cmcs.bin  \
+					tsp_imagis/ist3038h_j2y18_octa.fw \
+					tsp_imagis/ist3038h_j2y18_octa_cmcs.bin
+endif
+
+ifeq ($(CONFIG_ARCH_MSM8917),y)
+fw-shipped-$(CONFIG_FIVE_TEE_DRIVER) += msm8917/five.b00 msm8917/five.b01 msm8917/five.b02 \
+					msm8917/five.b03 msm8917/five.b04 msm8917/five.b05 \
+					msm8917/five.b06 msm8917/five.mdt
+else
+fw-shipped-$(CONFIG_FIVE_TEE_DRIVER) += five.b00 five.b01 five.b02 five.b03 \
+				  five.b04 five.b05 five.b06 five.mdt
 endif
 
 fw-shipped-all := $(fw-shipped-y) $(fw-shipped-m) $(fw-shipped-)

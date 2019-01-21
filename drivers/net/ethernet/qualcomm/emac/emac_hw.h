@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -108,7 +108,8 @@ bool emac_hw_read_tx_tstamp(struct emac_hw *hw, struct emac_hwtxtstamp *ts);
 #define DMAR_DLY_CNT_DEF                15
 #define DMAW_DLY_CNT_DEF                4
 
-#define MDIO_CLK_25_4                   0
+#define MDIO_CLK_25_8                   3
+#define MDIO_CLK_25_10                  4
 #define MDIO_CLK_25_28                  7
 
 #define RXQ0_RSS_HSTYP_IPV6_TCP_EN      0x20
@@ -147,6 +148,7 @@ bool emac_hw_read_tx_tstamp(struct emac_hw *hw, struct emac_hwtxtstamp *ts);
 #define HIBERNATE_EN                    0x8000
 
 /* MII_INT_ENABLE/MII_INT_STATUS */
-#define LINK_SUCCESS_INTERRUPT		0x400
-#define LINK_SUCCESS_BX			0x80
+#define LINK_SUCCESS_INTERRUPT			BIT(10)
+#define LINK_SUCCESS_BX			BIT(7)
+#define WOL_INT				BIT(0)
 #endif /*_EMAC_HW_H_*/

@@ -349,7 +349,7 @@ int ist30xx_read_touch_node(struct ist30xx_data *data, u8 flag,
         goto err_read_node;
 
 
-    addr = IST30XX_DA_ADDR((data->cdc_addr + 0xD90));
+    addr = IST30XX_DA_ADDR(data->self_cdc_addr);
     tsp_info("SFL addr: %x, size: %d\n", addr, node->self_len);
     ret = ist30xx_burst_read(data->client, addr, tmp_self_cdcbuf,
             node->self_len, true);
@@ -694,7 +694,7 @@ ssize_t ist30xx_cp_show(struct device *dev, struct device_attribute *attr,
     ret = ist30xx_read_cp_node(data, &tsp->node, false, false);
     if (unlikely(ret)) {
         mutex_unlock(&data->lock);
-		tsp_err("frame read fail\n");
+        tsp_err("frame read fail\n");
         return sprintf(buf, "FAIL\n");
     }
     mutex_unlock(&data->lock);
@@ -722,7 +722,7 @@ ssize_t ist30xx_cp_ium_show(struct device *dev, struct device_attribute *attr,
     ret = ist30xx_read_cp_node(data, &tsp->node, true, false);
     if (unlikely(ret)) {
         mutex_unlock(&data->lock);
-		tsp_err("frame read fail\n");
+        tsp_err("frame read fail\n");
         return sprintf(buf, "FAIL\n");
     }
     mutex_unlock(&data->lock);
@@ -806,10 +806,10 @@ ssize_t ist30xx_frame_cdcbase(struct device *dev, struct device_attribute *attr,
         tmp_cdcbuf++;
     }
 
-    for(i = 0; i < IST30XX_MAX_NODE_NUM; i++) {
-	    count += snprintf(msg, msg_len, "%08x ", 0);
+    for (i = 0; i < IST30XX_MAX_NODE_NUM; i++) {
+        count += snprintf(msg, msg_len, "%08x ", 0);
         strncat(buf8, msg, msg_len);
-	}
+    }
 
     count += snprintf(msg, msg_len, "\n");
     strncat(buf8, msg, msg_len);
@@ -850,7 +850,6 @@ ssize_t ist30xx_refresh_show(struct device *dev, struct device_attribute *attr,
 
     return sprintf(buf, "OK\n");
 }
-
 
 /* sysfs: /sys/class/touch/node/read_nocp */
 ssize_t ist30xx_nocp_show(struct device *dev, struct device_attribute *attr,
@@ -1003,7 +1002,13 @@ ssize_t ist30xx_calib_show(struct device *dev, struct device_attribute *attr,
     ist30xx_disable_irq(data);
 
     ist30xx_reset(data, false);
-    ist30xx_calibrate(data, 1);
+#ifdef TCLM_CONCEPT
+	ist30xx_tclm_root_of_cal(data, CALPOSITION_TESTMODE);
+	ist30xx_execute_tclm_package(data, 0);
+	ist30xx_tclm_root_of_cal(data, CALPOSITION_NONE);
+#else
+	ist30xx_execute_force_calibration(data);
+#endif
 
     mutex_unlock(&data->lock);
     ist30xx_start(data);
@@ -1067,8 +1072,6 @@ ssize_t ist30xx_power_on_show(struct device *dev, struct device_attribute *attr,
     ist30xx_start(data);
     ist30xx_enable_irq(data);
     mutex_unlock(&data->lock);
-
-    ist30xx_start(data);
 
     return 0;
 }
@@ -1202,11 +1205,6 @@ ssize_t ist30xx_spay_store(struct device *dev, struct device_attribute *attr,
 
     sscanf(buf, "%d", &enable);
 
-    if (data->suspend) {
-        tsp_err("%s(), error currently suspend\n", __func__);
-        return size;
-    }
-
     tsp_info("spay enable : %s\n", enable ? "enable" : "disable");
 
     data->spay = enable ? true : false;
@@ -1230,11 +1228,6 @@ ssize_t ist30xx_aod_store(struct device *dev, struct device_attribute *attr,
     struct ist30xx_data *data = dev_get_drvdata(dev);
 
     sscanf(buf, "%d", &enable);
-
-    if (data->suspend) {
-        tsp_err("%s(), error currently suspend\n", __func__);
-        return size;
-    }
 
     tsp_info("aod enable : %s\n", enable ? "enable" : "disable");
 
@@ -1522,12 +1515,10 @@ ssize_t tunes_regcmd_store(struct device *dev, struct device_attribute *attr,
                const char *buf, size_t size)
 {
     int ret = -1;
-    u32 *buf32;
     struct ist30xx_data *data = dev_get_drvdata(dev);
 
     memcpy(&ist30xx_tunes, buf, sizeof(ist30xx_tunes));
     buf += sizeof(ist30xx_tunes);
-    buf32 = (u32 *)buf;
 
     tunes_cmd_done = false;
 
@@ -1948,7 +1939,7 @@ int ist30xx_put_frame(struct ist30xx_data *data, u32 ms, u32 *touch, u32 *frame,
     if (unlikely(!buf32)) {
         tsp_err("failed to allocate %s %d\n", __func__, __LINE__);
         return 0;
-    }	
+    }
 
     /* Header & Time */
     ms &= 0x0000FFFF;
@@ -2148,6 +2139,8 @@ void ist30xx_recording_init(struct ist30xx_data *data)
     pRecordBuf->RingBufInIdx = 0;
     pRecordBuf->RingBufOutIdx = 0;
 
+    data->recording_scancnt = 0;
+
     recording_initialize = true;
 }
 
@@ -2237,34 +2230,16 @@ ssize_t ist30xx_rec_mode_store(struct device *dev,
 {
     int count;
     int mode;
-    int start_ch_rx;
-    int stop_ch_rx;
-    int start_ch_tx;
-    int stop_ch_tx;
-    int delay;
+    int delay = 0;
     char header[128];
     mm_segment_t old_fs = { 0 };
     struct file *fp = NULL;
     struct ist30xx_data *data = dev_get_drvdata(dev);
     TSP_INFO *tsp = &data->tsp_info;
 
-    start_ch_rx = 0;
-    stop_ch_rx = tsp->ch_num.rx - 1;
-    start_ch_tx = 0;
-    stop_ch_tx = tsp->ch_num.tx - 1;
-    delay = 0;
-
     snprintf(data->rec_file_name, 128, "/sdcard/%s", IST30XX_REC_FILENAME);
 
-    sscanf(buf, "%d %d %d %d %d %d", &mode, &delay, &start_ch_rx,
-            &stop_ch_rx, &start_ch_tx, &stop_ch_tx);
-
-    if ((start_ch_rx > stop_ch_rx) || (start_ch_tx > stop_ch_tx) ||
-            (stop_ch_rx >= tsp->ch_num.rx) || (stop_ch_tx >= tsp->ch_num.tx)) {
-        tsp_err("input data error(%d, %d, %d, %d)\n", start_ch_rx, stop_ch_rx,
-                start_ch_tx, stop_ch_tx);
-        return size;
-    }
+    sscanf(buf, "%d %d", &mode, &delay);
 
     old_fs = get_fs();
     set_fs(get_ds());
@@ -2277,8 +2252,8 @@ ssize_t ist30xx_rec_mode_store(struct device *dev,
             goto err_file_open;
         }
 
-        count = snprintf(header, 128, "2 2 %d %d %d\n", tsp->node.self_len,
-                tsp->ch_num.tx, tsp->ch_num.rx);
+        count = snprintf(header, 128, "2 2 %d %d %d %d\n", tsp->node.self_len,
+                tsp->ch_num.tx, tsp->ch_num.rx, data->rec_size);
 
         fp->f_op->write(fp, header, count, &fp->f_pos);
         fput(fp);
@@ -2289,13 +2264,6 @@ ssize_t ist30xx_rec_mode_store(struct device *dev,
     data->rec_mode = mode;
     tsp_info("rec mode: %s\n", mode ? "start" : "stop");
     if (mode) {
-        data->rec_start_ch.rx = start_ch_rx;
-        data->rec_stop_ch.rx = stop_ch_rx;
-        data->rec_start_ch.tx = start_ch_tx;
-        data->rec_stop_ch.tx = stop_ch_tx;
-        tsp_info("rec channel: %d, %d, %d, %d\n", data->rec_start_ch.rx,
-                data->rec_stop_ch.rx, data->rec_start_ch.tx,
-                data->rec_stop_ch.tx);
         data->rec_delay = delay;
         tsp_info("rec delay: %dms\n", data->rec_delay);
     }
@@ -2331,20 +2299,11 @@ ssize_t ist30xx_rec_mode_show(struct device *dev, struct device_attribute *attr,
               char *buf)
 {
     int count;
-    int start_ch_rx;
-    int stop_ch_rx;
-    int start_ch_tx;
-    int stop_ch_tx;
     char header[128];
     mm_segment_t old_fs = { 0 };
     struct file *fp = NULL;
     struct ist30xx_data *data = dev_get_drvdata(dev);
     TSP_INFO *tsp = &data->tsp_info;
-
-    start_ch_rx = 0;
-    stop_ch_rx = tsp->ch_num.rx - 1;
-    start_ch_tx = 0;
-    stop_ch_tx = tsp->ch_num.tx - 1;
 
     old_fs = get_fs();
     set_fs(get_ds());
@@ -2360,8 +2319,8 @@ ssize_t ist30xx_rec_mode_show(struct device *dev, struct device_attribute *attr,
             goto err_file_open;
         }
 
-        count = snprintf(header, 128, "2 2 %d %d %d\n", tsp->node.self_len,
-                tsp->ch_num.tx, tsp->ch_num.rx);
+        count = snprintf(header, 128, "2 2 %d %d %d %d\n", tsp->node.self_len,
+                tsp->ch_num.tx, tsp->ch_num.rx, data->rec_size);
 
         fp->f_op->write(fp, header, count, &fp->f_pos);
         fput(fp);
@@ -2373,13 +2332,6 @@ ssize_t ist30xx_rec_mode_show(struct device *dev, struct device_attribute *attr,
 
     tsp_info("rec mode: %s\n", data->rec_mode ? "start" : "stop");
     if (data->rec_mode) {
-        data->rec_start_ch.rx = start_ch_rx;
-        data->rec_stop_ch.rx = stop_ch_rx;
-        data->rec_start_ch.tx = start_ch_tx;
-        data->rec_stop_ch.tx = stop_ch_tx;
-        tsp_info("rec channel: %d, %d, %d, %d\n", data->rec_start_ch.rx,
-                data->rec_stop_ch.rx, data->rec_start_ch.tx,
-                data->rec_stop_ch.tx);
         tsp_info("rec delay: %dms\n", data->rec_delay);
     }
 

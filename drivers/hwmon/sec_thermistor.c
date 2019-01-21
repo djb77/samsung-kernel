@@ -52,17 +52,25 @@ struct sec_therm_info {
 #ifdef CONFIG_OF
 enum sec_thermistor_type {
 	TYPE_SEC_THREM_AP,	/* Close to AP */
+	TYPE_SEC_THREM_PA,	/* Close to PA */
+	TYPE_SEC_THREM_BK,	/* Close to BLANKET */
 	NR_TYPE_SEC_TERM
 };
 
 static const struct platform_device_id sec_thermistor_id[] = {
 	{ "sec-ap-thermistor", TYPE_SEC_THREM_AP },
+	{ "sec-pa-thermistor", TYPE_SEC_THREM_PA },
+	{ "sec-bk-thermistor", TYPE_SEC_THREM_BK },
 	{ },
 };
 
 static const struct of_device_id sec_therm_match[] = {
 	{ .compatible = "samsung,sec-ap-thermistor",
 		.data = &sec_thermistor_id[TYPE_SEC_THREM_AP] },
+	{ .compatible = "samsung,sec-pa-thermistor",
+		.data = &sec_thermistor_id[TYPE_SEC_THREM_PA] },
+	{ .compatible = "samsung,sec-bk-thermistor",
+		.data = &sec_thermistor_id[TYPE_SEC_THREM_BK] },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, sec_therm_match);
@@ -137,13 +145,21 @@ static int sec_therm_get_adc_data(struct sec_therm_info *info)
 
 	for (i = 0; i < ADC_SAMPLING_CNT; i++) {
 #if defined(CONFIG_SEC_MPP_SHARE)
-	if(use_mux_sel)
-		sec_mpp_mux_control(AP_THM_MUX_SEL_NUM, SEC_MUX_SEL_AP_THM, 1);
+	if(use_mux_sel) {
+		if (!strcmp(info->name, "sec-ap-thermistor"))
+			sec_mpp_mux_control(AP_THM_MUX_SEL_NUM, SEC_MUX_SEL_AP_THM, 1);
+		else
+			sec_mpp_mux_control(BLKT_THM_MUX_SEL_NUM, SEC_MUX_SEL_BLKT_THM, 1);
+	}
 #endif
 		rc = qpnp_vadc_read(therm_vadc_dev, adc_ch, &result);
 #if defined(CONFIG_SEC_MPP_SHARE)
-	if(use_mux_sel)
-		sec_mpp_mux_control(AP_THM_MUX_SEL_NUM, SEC_MUX_SEL_AP_THM, 0);
+	if(use_mux_sel) {
+		if (!strcmp(info->name, "sec-ap-thermistor"))
+			sec_mpp_mux_control(AP_THM_MUX_SEL_NUM, SEC_MUX_SEL_AP_THM, 0);
+		else
+			sec_mpp_mux_control(BLKT_THM_MUX_SEL_NUM, SEC_MUX_SEL_BLKT_THM, 0);
+	}
 #endif
 
 		if (rc) {
@@ -333,13 +349,15 @@ static int sec_therm_probe(struct platform_device *pdev)
 
 	switch (pdev_id->driver_data) {
 	case TYPE_SEC_THREM_AP:
+	case TYPE_SEC_THREM_PA:
+	case TYPE_SEC_THREM_BK:
 		/* Allow only a single device instance for each device type */
 		if (sec_therm_single_inst[pdev_id->driver_data])
 			return -EPERM;
 		else
 			sec_therm_single_inst[pdev_id->driver_data] = true;
 
-		info->dev = sec_device_create(0, info, "sec-thermistor");
+		info->dev = sec_device_create(0, info, pdev_id->name);
 		if (IS_ERR(info->dev)) {
 			dev_err(&pdev->dev, "%s: fail to create sec_dev\n",
 					__func__);

@@ -47,6 +47,10 @@
 #include <linux/sched.h>
 #include <linux/sec_debug.h>
 
+#ifdef CONFIG_USER_RESET_DEBUG
+#include <linux/user_reset/sec_debug_user_reset.h>
+#endif
+
 extern const struct bug_entry __start___bug_table[], __stop___bug_table[];
 
 static inline unsigned long bug_addr(const struct bug_entry *bug)
@@ -155,11 +159,6 @@ enum bug_trap_type report_bug(unsigned long bugaddr, struct pt_regs *regs)
 		warning = (bug->flags & BUGFLAG_WARNING) != 0;
 	}
 
-#ifdef CONFIG_USER_RESET_DEBUG
-	if (file)
-		sec_debug_store_bug_string("%s %u", file, line);
-#endif
-
 	if (warning) {
 		/* this is a WARN_ON rather than BUG/BUG_ON */
 		pr_warn("------------[ cut here ]------------\n");
@@ -177,6 +176,17 @@ enum bug_trap_type report_bug(unsigned long bugaddr, struct pt_regs *regs)
 		add_taint(BUG_GET_TAINT(bug), LOCKDEP_STILL_OK);
 		return BUG_TRAP_TYPE_WARN;
 	}
+
+#ifdef CONFIG_USER_RESET_DEBUG
+	if (file) {
+		char *new_file;
+		new_file = strstr(file, "kernel");
+		if (new_file == NULL)
+			sec_debug_store_bug_string("%s %u", file, line);
+		else
+			sec_debug_store_bug_string("%s %u", new_file, line);
+	}
+#endif
 
 	printk(KERN_DEFAULT "------------[ cut here ]------------\n");
 

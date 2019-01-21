@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
 *
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -42,6 +42,8 @@ struct param_outband {
 #define ADM_MATRIX_ID_AUDIO_TX              1
 
 #define ADM_MATRIX_ID_COMPRESSED_AUDIO_RX   2
+
+#define ADM_MATRIX_ID_LISTEN_TX             4
 /* Enumeration for an audio Tx matrix ID.*/
 #define ADM_MATRIX_ID_AUDIOX              1
 
@@ -944,6 +946,8 @@ struct adm_cmd_connect_afe_port_v5 {
 #define RT_PROXY_PORT_001_RX	0x2000
 #define RT_PROXY_PORT_001_TX	0x2001
 
+#define AFE_LOOPBACK_TX		0x6001
+
 #define AFE_PORT_INVALID 0xFFFF
 #define SLIMBUS_INVALID AFE_PORT_INVALID
 
@@ -1034,6 +1038,7 @@ struct adm_cmd_connect_afe_port_v5 {
 #define AFE_PORT_ID_TERTIARY_MI2S_TX        0x1005
 #define AFE_PORT_ID_QUATERNARY_MI2S_RX      0x1006
 #define AFE_PORT_ID_QUATERNARY_MI2S_TX      0x1007
+#define MI2S_PORT_LAST AFE_PORT_ID_QUATERNARY_MI2S_TX
 #define AUDIO_PORT_ID_I2S_RX				0x1008
 #define AFE_PORT_ID_DIGITAL_MIC_TX          0x1009
 #define AFE_PORT_ID_PRIMARY_PCM_RX          0x100A
@@ -3303,6 +3308,10 @@ struct asm_alac_cfg {
 	u32 channel_layout_tag;
 };
 
+struct asm_g711_dec_cfg {
+	u32 sample_rate;
+};
+
 struct asm_vorbis_cfg {
 	u32 bit_stream_fmt;
 };
@@ -3665,6 +3674,9 @@ struct asm_multi_channel_pcm_enc_cfg_v2 {
 /* Enumeration for the raw AAC format. */
 #define ASM_MEDIA_FMT_AAC_FORMAT_FLAG_RAW    3
 
+/* Enumeration for the AAC LATM format. */
+#define ASM_MEDIA_FMT_AAC_FORMAT_FLAG_LATM   4
+
 #define ASM_MEDIA_FMT_AAC_AOT_LC             2
 #define ASM_MEDIA_FMT_AAC_AOT_SBR            5
 #define ASM_MEDIA_FMT_AAC_AOT_PS             29
@@ -3885,6 +3897,12 @@ struct asm_alac_fmt_blk_v2 {
 	u32 sample_rate;
 	u32 channel_layout_tag;
 
+} __packed;
+
+struct asm_g711_dec_fmt_blk_v2 {
+	struct apr_hdr hdr;
+	struct asm_data_cmd_media_fmt_update_v2 fmtblk;
+	u32 sample_rate;
 } __packed;
 
 struct asm_ape_fmt_blk_v2 {
@@ -4304,15 +4322,15 @@ struct asm_amrwbplus_fmt_blk_v2 {
 
 } __packed;
 
-#define ASM_MEDIA_FMT_AC3			0x00010DEE
-#define ASM_MEDIA_FMT_EAC3			0x00010DEF
+#define ASM_MEDIA_FMT_AC3                    0x00010DEE
+#define ASM_MEDIA_FMT_EAC3                   0x00010DEF
 #define ASM_MEDIA_FMT_DTS                    0x00010D88
 #define ASM_MEDIA_FMT_MP2                    0x00010DE9
 #define ASM_MEDIA_FMT_FLAC                   0x00010C16
 #define ASM_MEDIA_FMT_ALAC                   0x00012F31
 #define ASM_MEDIA_FMT_VORBIS                 0x00010C15
 #define ASM_MEDIA_FMT_APE                    0x00012F32
-
+#define ASM_MEDIA_FMT_APTX                   0x000131FF
 
 /* Media format ID for adaptive transform acoustic coding. This
  * ID is used by the #ASM_STREAM_CMD_OPEN_WRITE_COMPRESSED command
@@ -8321,6 +8339,99 @@ struct asm_dts_eagle_param_get {
 	struct asm_stream_cmd_get_pp_params_v2 param;
 } __packed;
 
+/* Opcode to set BT address and license for aptx decoder */
+#define APTX_DECODER_BT_ADDRESS 0x00013201
+#define APTX_CLASSIC_DEC_LICENSE_ID 0x00013202
+
+struct aptx_dec_bt_addr_cfg {
+	uint32_t lap;
+	uint32_t uap;
+	uint32_t nap;
+} __packed;
+
+struct aptx_dec_bt_dev_addr {
+	struct apr_hdr hdr;
+	struct asm_stream_cmd_set_encdec_param encdec;
+	struct aptx_dec_bt_addr_cfg bt_addr_cfg;
+} __packed;
+
+struct asm_aptx_dec_fmt_blk_v2 {
+	struct apr_hdr hdr;
+	struct asm_data_cmd_media_fmt_update_v2 fmtblk;
+	u32     sample_rate;
+/* Number of samples per second.
+ * Supported values: 44100 and 48000 Hz
+ */
+} __packed;
+
+/* Q6Core Specific */
+#define AVCS_CMD_GET_FWK_VERSION                (0x0001292C)
+#define AVCS_CMDRSP_GET_FWK_VERSION             (0x0001292D)
+
+#define AVCS_SERVICE_ID_ALL                     (0xFFFFFFFF)
+#define AVCS_SERVICE_ID_AFE                     (0x4)
+
+struct avcs_get_fwk_version {
+	/*
+	 * Indicates the major version of the AVS build.
+	 * This value is incremented on chipset family boundaries.
+	 */
+	uint32_t build_major_version;
+
+	/*
+	 * Minor version of the AVS build.
+	 * This value represents the mainline to which the AVS build belongs.
+	 */
+	uint32_t build_minor_version;
+
+	/* Indicates the AVS branch version to which the image belongs. */
+	uint32_t build_branch_version;
+
+	/* Indicates the AVS sub-branch or customer product line information. */
+	uint32_t build_subbranch_version;
+
+	/* Number of supported AVS services in the current build. */
+	uint32_t num_services;
+};
+
+struct avs_svc_api_info {
+	/*
+	 * APRV2 service IDs for the individual static services.
+	 *
+	 *	 @values
+	 *	 - APRV2_IDS_SERVICE_ID_ADSP_CORE_V
+	 *	 - APRV2_IDS_SERVICE_ID_ADSP_AFE_V
+	 *	 - APRV2_IDS_SERVICE_ID_ADSP_ASM_V
+	 *	 - APRV2_IDS_SERVICE_ID_ADSP_ADM_V
+	 *	 - APRV2_IDS_SERVICE_ID_ADSP_MVM_V
+	 *	 - APRV2_IDS_SERVICE_ID_ADSP_CVS_V
+	 *	 - APRV2_IDS_SERVICE_ID_ADSP_CVP_V
+	 *	 - APRV2_IDS_SERVICE_ID_ADSP_LSM_V
+	 */
+	uint32_t service_id;
+
+	/*
+	 * Indicates the API version of the service.
+	 *
+	 * Each new API update that warrants a change on the HLOS side triggers
+	 * an increment in the version.
+	 */
+	uint32_t api_version;
+
+	/*
+	 * Indicates the API increments on a sub-branch (not on the mainline).
+	 *
+	 * API branch version numbers can increment independently on different
+	 * sub-branches.
+	 */
+	uint32_t api_branch_version;
+};
+
+struct avcs_fwk_ver_info {
+	struct avcs_get_fwk_version avcs_build;
+	struct avs_svc_api_info services[0];
+};
+
 /* LSM Specific */
 #define VW_FEAT_DIM					(39)
 
@@ -8348,6 +8459,7 @@ struct asm_dts_eagle_param_get {
 #define LSM_SESSION_EVENT_DETECTION_STATUS_V2		(0x00012B01)
 #define LSM_DATA_EVENT_READ_DONE			(0x00012B02)
 #define LSM_DATA_EVENT_STATUS				(0x00012B03)
+#define LSM_SESSION_EVENT_DETECTION_STATUS_V3		(0x00012B04)
 
 #define LSM_MODULE_ID_VOICE_WAKEUP			(0x00012C00)
 #define LSM_PARAM_ID_ENDPOINT_DETECT_THRESHOLD		(0x00012C01)
@@ -8360,6 +8472,12 @@ struct asm_dts_eagle_param_get {
 #define LSM_PARAM_ID_LAB_ENABLE				(0x00012C09)
 #define LSM_PARAM_ID_LAB_CONFIG				(0x00012C0A)
 #define LSM_MODULE_ID_FRAMEWORK				(0x00012C0E)
+#define LSM_PARAM_ID_SWMAD_CFG				(0x00012C18)
+#define LSM_PARAM_ID_SWMAD_MODEL			(0x00012C19)
+#define LSM_PARAM_ID_SWMAD_ENABLE			(0x00012C1A)
+#define LSM_PARAM_ID_POLLING_ENABLE			(0x00012C1B)
+#define LSM_PARAM_ID_MEDIA_FMT				(0x00012C1E)
+#define LSM_PARAM_ID_FWK_MODE_CONFIG			(0x00012C27)
 
 /* HW MAD specific */
 #define AFE_MODULE_HW_MAD				(0x00010230)
@@ -9538,6 +9656,7 @@ enum {
 	LEGACY_PCM = 0,
 	COMPRESSED_PASSTHROUGH,
 	COMPRESSED_PASSTHROUGH_CONVERT,
+	LISTEN,
 };
 
 #define AUDPROC_MODULE_ID_COMPRESSED_MUTE                0x00010770
@@ -9609,4 +9728,26 @@ struct adm_param_fluence_sourcetracking_t {
 #define AUDPROC_PARAM_ID_AUDIOSPHERE_DESIGN_MULTICHANNEL_INPUT   0x0001091D
 
 #define AUDPROC_PARAM_ID_AUDIOSPHERE_OPERATING_INPUT_MEDIA_INFO  0x0001091E
+
+#define AUDPROC_MODULE_ID_VOICE_TX_SECNS   0x10027059
+#define AUDPROC_PARAM_IDX_SEC_PRIMARY_MIC_CH 0x10014444
+
+struct admx_sec_primary_mic_ch {
+	uint16_t version;
+	/*version number*/
+
+	uint16_t reserved;
+
+	uint16_t sec_primary_mic_ch;
+	/*<primary channel number.*/
+
+	uint16_t reserved1;
+} __packed;
+
+
+struct adm_set_sec_primary_ch_params {
+	struct adm_cmd_set_pp_params_v5 params;
+	struct adm_param_data_v5 data;
+	struct admx_sec_primary_mic_ch sec_primary_mic_ch_data;
+} __packed;
 #endif /*_APR_AUDIO_V2_H_ */

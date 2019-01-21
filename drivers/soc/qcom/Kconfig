@@ -9,6 +9,8 @@ config QCOM_GSBI
           functions for connecting the underlying serial UART, SPI, and I2C
           devices to the output pins.
 
+source "drivers/soc/qcom/hab/Kconfig"
+
 if ARCH_MSM
 
 config CP_ACCESS64
@@ -418,6 +420,15 @@ config MSM_SMEM
 	  processors in the System on a Chip (SoC) which allows basic
 	  inter-processor communication.
 
+config QPNP_PBS
+	tristate "PBS trigger support for QPNP PMIC"
+	depends on MSM_SPMI
+	help
+	  This driver supports configuring software PBS trigger event through PBS
+	  RAM on Qualcomm Technologies, Inc. QPNP PMICs. This module provides
+	  the APIs to the client drivers that wants to send the PBS trigger
+	  event to the PBS RAM.
+
 config MSM_SMD
 	depends on MSM_SMEM
 	bool "MSM Shared Memory Driver (SMD)"
@@ -478,6 +489,17 @@ config MSM_GLINK_SMEM_NATIVE_XPRT
 	  transport to only connecting with entities internal to the
 	  System-on-Chip.
 
+config MSM_GLINK_BGCOM_XPRT
+	depends on MSM_GLINK
+	depends on MSM_BGCOM
+	tristate "Generic Link (G-Link) BGCOM Transport"
+	help
+	  G-Link BGCOM Transport is a Transport plug-in developed over BGCOM.
+	  This transport plug-in performs marshaling of G-Link
+	  commands & data to the appropriate BGCOM format and
+	  allows for G-Link communication with remote subsystems that are
+	  external to the System-on-Chip.
+
 config MSM_SPCOM
 	depends on MSM_GLINK
 	bool "Secure Processor Communication over GLINK"
@@ -510,6 +532,15 @@ config MSM_SMP2P
 	  memory and interrupts. A client can open multiple
 	  32-bit values by specifying a unique string and
 	  remote processor ID.
+
+config MSM_BGCOM_INTERFACE
+	bool "Driver support for Blackghost Communication"
+	depends on MSM_BGCOM
+	help
+	 Create a bg_com_dev device node for user space communication.
+	 Single user space client can open device node for communication
+	 from hardware. Hardware will provide access to read
+	 registers and read/write AHB memory in the device.
 
 config MSM_SMP2P_TEST
 	bool "SMSM Point-to-Point Test"
@@ -610,6 +641,16 @@ config MSM_IPC_ROUTER_GLINK_XPRT
 	  this layer registers a transport with IPC Router and enable
 	  message exchange.
 
+config MSM_IPC_ROUTER_MHI_XPRT
+	depends on MSM_MHI
+	depends on IPC_ROUTER
+	bool "MSM MHI XPRT Layer"
+	help
+	  MHI Transport Layer that enables off-chip communication of
+	  IPC Router. When the MHI endpoint becomes available, this layer
+	  registers the transport with IPC Router and enable message
+	  exchange.
+
 config MSM_SYSTEM_HEALTH_MONITOR
 	bool "System Health Monitor"
 	depends on MSM_QMI_INTERFACE && MSM_SUBSYSTEM_RESTART
@@ -678,6 +719,15 @@ config MSM_PIL_SSR_GENERIC
 	  or a fatal error. Subsystems include LPASS, Venus, VPU, WCNSS and
 	  BCSS.
 
+config MSM_PIL_SSR_BG
+        tristate "MSM Subsystem Blackghost(BG) Support"
+        depends on MSM_PIL && MSM_SUBSYSTEM_RESTART
+        help
+	  Support for booting and shutting down Blackghost(BG) SOC which is
+	  an external SOC. This driver communicates with Blackghost(BG) SOC
+	  via pair of IPC GPIOs for inward and outward signals between MSM
+	  and Blackghost(BG) SOC.
+
 config MSM_PIL_MSS_QDSP6V5
 	tristate "MSS QDSP6v5 (Hexagon) Boot Support"
 	depends on MSM_PIL && MSM_SUBSYSTEM_RESTART
@@ -711,6 +761,7 @@ config MSM_SECURE_BUFFER
 
 config ICNSS
 	tristate "Platform driver for Q6 integrated connectivity"
+	select CNSS_UTILS
 	---help---
 	  This module adds support for Q6 integrated WLAN connectivity
 	  subsystem. This module is responsible for communicating WLAN on/off
@@ -776,13 +827,6 @@ config MSM_QBT1000
 	  This driver is used to enable clocks and marshal buffers for trusted
 	  applications running in the trusted execution environment.
 
-config MSM_PACMAN
-	tristate "Enable the Peripheral Access Control Manager (PACMan)"
-	help
-	  Add support for the Peripheral Access Control Manager (PACMan). This
-	  driver allows reconfiguration of the Bus Access Manager Low Speed
-	  peripheral (BLSP) ownership.
-
 config MSM_KERNEL_PROTECT
 	bool "Protect kernel text by removing write permissions"
         depends on !FUNCTION_TRACER
@@ -817,6 +861,14 @@ config MSM_KERNEL_PROTECT_TEST
           read-only.  This test is FATAL whether it passes or fails!
           Success is signaled by a stage-2 fault.
 
+config MSM_BGCOM
+	bool "Provide APIs to communicate with Blackghost chipset"
+	help
+		BGCOM is a thin layer above SPI. It is used whithin a SoC for
+		communication between G-Link/bg_com_dev and BG processor over SPI.
+		This handle the interrupts raised by BG and notify the G-link with
+		interrupt event and event data.
+
 config MSM_REMOTEQDSS
 	bool "Allow debug tools to enable events on other processors"
 	depends on MSM_SCM && DEBUG_FS
@@ -831,6 +883,23 @@ config QCOM_SMCINVOKE
 	help
 	  Enable SMCInvoke driver which supports capability based secure
 	  communication between QSEE and HLOS.
+
+config QCOM_EARLY_RANDOM
+	bool "Initialize random pool very early"
+	help
+	  The standard random pool may not initialize until late in the boot
+	  process which means that any calls to get random numbers before then
+	  may not be truly random. Select this option to make an early call
+	  to get some random data to put in the pool. If unsure, say N.
+
+config WCD_DSP_GLINK
+	tristate "WCD DSP GLINK Driver"
+	depends on MSM_GLINK
+	default y if SND_SOC_WCD934X=y
+	help
+	   This option enables driver which provides communication interface
+	   between MSM and WCD DSP over glink transport protocol. This driver
+	   provides read and write interface via char device.
 
 source "drivers/soc/qcom/memshare/Kconfig"
 

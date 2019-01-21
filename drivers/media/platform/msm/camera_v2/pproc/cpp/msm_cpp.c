@@ -2423,7 +2423,6 @@ static int msm_cpp_cfg(struct cpp_device *cpp_dev,
 	uint32_t i = 0;
 	uint32_t num_buff = sizeof(k_frame_info.output_buffer_info) /
 				sizeof(struct msm_cpp_buffer_info_t);
-
 	if (copy_from_user(&k_frame_info,
 			(void __user *)ioctl_ptr->ioctl_ptr,
 			sizeof(k_frame_info)))

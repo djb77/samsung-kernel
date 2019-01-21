@@ -19,4 +19,5 @@ obj-$(CONFIG_MUIC_UNIVERSAL_SM5703)	+= muic_regmap_sm5703.o
 obj-$(CONFIG_MUIC_UNIVERSAL_SM5705)	+= muic_regmap_sm5705.o
 obj-$(CONFIG_MUIC_UNIVERSAL_SM5705_AFC)	+= muic_afc.o
 obj-$(CONFIG_MUIC_UNIVERSAL_SM5504)	+= muic_regmap_sm5504.o
+obj-$(CONFIG_MUIC_UNIVERSAL_SM5708)	+= muic_regmap_sm5708.o
 

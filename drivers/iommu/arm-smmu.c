@@ -54,6 +54,10 @@
 
 #include "io-pgtable.h"
 
+#ifdef CONFIG_USER_RESET_DEBUG
+#include <linux/user_reset/sec_debug_user_reset.h>
+#endif
+
 /* Maximum number of stream IDs assigned to a single device */
 #define MAX_MASTER_STREAMIDS		45
 
@@ -407,6 +411,7 @@ struct arm_smmu_device {
 	char				*bus_client_name;
 
 	enum tz_smmu_device_id		sec_id;
+	int				regulator_defer;
 };
 
 struct arm_smmu_cfg {
@@ -487,6 +492,19 @@ static struct arm_smmu_option_prop arm_smmu_options[] = {
 	{ 0, NULL},
 };
 
+struct arm_iommus_node {
+	struct device_node *master;
+	struct list_head	list;
+	struct list_head	iommuspec_list;
+};
+
+struct arm_iommus_spec {
+	struct of_phandle_args iommu_spec;
+	struct list_head	list;
+};
+
+static LIST_HEAD(iommus_nodes);
+
 static int arm_smmu_enable_clocks_atomic(struct arm_smmu_device *smmu);
 static void arm_smmu_disable_clocks_atomic(struct arm_smmu_device *smmu);
 static void arm_smmu_prepare_pgtable(void *addr, void *cookie);
@@ -510,6 +528,8 @@ static bool arm_smmu_is_master_side_secure(struct arm_smmu_domain *smmu_domain);
 static bool arm_smmu_is_static_cb(struct arm_smmu_device *smmu);
 static bool arm_smmu_is_slave_side_secure(struct arm_smmu_domain *smmu_domain);
 static bool arm_smmu_has_secure_vmid(struct arm_smmu_domain *smmu_domain);
+
+static int arm_smmu_enable_s1_translations(struct arm_smmu_domain *smmu_domain);
 
 static void parse_driver_options(struct arm_smmu_device *smmu)
 {
@@ -640,39 +660,40 @@ static int register_smmu_master(struct arm_smmu_device *smmu,
 	return insert_smmu_master(smmu, master);
 }
 
-static int arm_smmu_parse_iommus_properties(struct arm_smmu_device *smmu,
-					int *num_masters)
+static int arm_smmu_parse_iommus_properties(struct arm_smmu_device *smmu)
 {
-	struct of_phandle_args iommuspec;
-	struct device_node *master;
+	struct arm_iommus_node *node, *nex;
 
-	*num_masters = 0;
-
-	for_each_node_with_property(master, "iommus") {
-		int arg_ind = 0;
-		struct iommus_entry *entry, *n;
+	list_for_each_entry_safe(node, nex, &iommus_nodes, list) {
+		struct iommus_entry *entry, *next;
+		struct arm_iommus_spec *iommuspec_node, *n;
 		LIST_HEAD(iommus);
+		int node_found = 0;
 
-		while (!of_parse_phandle_with_args(
-				master, "iommus", "#iommu-cells",
-				arg_ind, &iommuspec)) {
-			if (iommuspec.np != smmu->dev->of_node) {
-				arg_ind++;
+		list_for_each_entry_safe(iommuspec_node, n,
+				&node->iommuspec_list, list) {
+			if (iommuspec_node->iommu_spec.np != smmu->dev->of_node)
 				continue;
-			}
+
+			/*
+			 * Since each master node will have iommu spec(s) of the
+			 * same device, we can delete this master node after
+			 * the devices are registered.
+			 */
+			node_found = 1;
 
 			list_for_each_entry(entry, &iommus, list)
-				if (entry->node == master)
+				if (entry->node == node->master)
 					break;
 			if (&entry->list == &iommus) {
 				entry = devm_kzalloc(smmu->dev, sizeof(*entry),
 						GFP_KERNEL);
 				if (!entry)
 					return -ENOMEM;
-				entry->node = master;
+				entry->node = node->master;
 				list_add(&entry->list, &iommus);
 			}
-			switch (iommuspec.args_count) {
+			switch (iommuspec_node->iommu_spec.args_count) {
 			case 0:
 				/*
 				 * For pci-e devices the SIDs are provided
@@ -682,24 +703,28 @@ static int arm_smmu_parse_iommus_properties(struct arm_smmu_device *smmu,
 			case 1:
 				entry->num_sids++;
 				entry->streamids[entry->num_sids - 1]
-					= iommuspec.args[0];
+					= iommuspec_node->iommu_spec.args[0];
 				break;
 			default:
 				BUG();
 			}
-			arg_ind++;
+			list_del(&iommuspec_node->list);
+			kfree(iommuspec_node);
 		}
 
-		list_for_each_entry_safe(entry, n, &iommus, list) {
+		list_for_each_entry_safe(entry, next, &iommus, list) {
 			int rc = register_smmu_master(smmu, entry);
-			if (rc) {
+
+			if (rc)
 				dev_err(smmu->dev, "Couldn't register %s\n",
-					entry->node->name);
-			} else {
-				(*num_masters)++;
-			}
+						entry->node->name);
 			list_del(&entry->list);
 			devm_kfree(smmu->dev, entry);
+		}
+
+		if (node_found) {
+			list_del(&node->list);
+			kfree(node);
 		}
 	}
 
@@ -781,11 +806,19 @@ static int arm_smmu_unrequest_bus(struct arm_smmu_device *smmu)
 
 static int arm_smmu_disable_regulators(struct arm_smmu_device *smmu)
 {
+	int ret = 0;
+
 	arm_smmu_unprepare_clocks(smmu);
 	arm_smmu_unrequest_bus(smmu);
-	if (!smmu->gdsc)
-		return 0;
-	return regulator_disable(smmu->gdsc);
+
+	if (smmu->gdsc) {
+		ret = regulator_disable_deferred(smmu->gdsc,
+						 smmu->regulator_defer);
+		WARN(ret, "%s: Regulator disable failed\n",
+			dev_name(smmu->dev));
+	}
+
+	return ret;
 }
 
 static int arm_smmu_enable_regulators(struct arm_smmu_device *smmu)
@@ -1079,6 +1112,7 @@ static void arm_smmu_secure_pool_destroy(struct arm_smmu_domain *smmu_domain)
 	list_for_each_entry_safe(it, i, &smmu_domain->secure_pool_list, list) {
 		arm_smmu_unprepare_pgtable(smmu_domain, it->addr, it->size);
 		/* pages will be freed later (after being unassigned) */
+		list_del(&it->list);
 		kfree(it);
 	}
 }
@@ -1196,6 +1230,11 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 				      DEFAULT_RATELIMIT_INTERVAL,
 				      DEFAULT_RATELIMIT_BURST);
 
+
+#ifdef CONFIG_USER_RESET_DEBUG
+	ex_info_smmu_t sec_dbg_smmu; 
+#endif
+
 	mutex_lock(&smmu_domain->init_mutex);
 	smmu = smmu_domain->smmu;
 	if (!smmu) {
@@ -1224,6 +1263,14 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 	if (fatal_asf && (fsr & FSR_ASF)) {
 		dev_err(smmu->dev,
 			"Took an address size fault.  Refusing to recover.\n");
+#ifdef CONFIG_USER_RESET_DEBUG
+		snprintf(sec_dbg_smmu.dev_name, sizeof(sec_dbg_smmu.dev_name),
+				"%s", dev_name(smmu->dev));
+		sec_dbg_smmu.fsr = fsr;
+
+		sec_debug_save_smmu_info(&sec_dbg_smmu);
+#endif
+
 		BUG();
 	}
 
@@ -1292,6 +1339,21 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 		if (!non_fatal_fault) {
 			dev_err(smmu->dev,
 				"Unhandled context faults are fatal on this domain. Going down now...\n");
+
+#ifdef CONFIG_USER_RESET_DEBUG
+			snprintf(sec_dbg_smmu.dev_name, sizeof(sec_dbg_smmu.dev_name),
+					"%s", dev_name(smmu->dev));
+			sec_dbg_smmu.fsr = fsr;
+			sec_dbg_smmu.fsynr = fsynr;
+			sec_dbg_smmu.iova = iova;
+			sec_dbg_smmu.cbndx = cfg->cbndx;
+			sec_dbg_smmu.phys_soft = phys_soft;
+			sec_dbg_smmu.phys_atos = phys_atos;
+			sec_dbg_smmu.sid = frsynra & 0xffff;
+
+			sec_debug_save_smmu_info(&sec_dbg_smmu);
+#endif
+
 			BUG();
 		}
 	}
@@ -1486,7 +1548,8 @@ static void arm_smmu_init_context_bank(struct arm_smmu_domain *smmu_domain,
 	/* SCTLR */
 	reg = SCTLR_CFCFG | SCTLR_CFIE | SCTLR_CFRE | SCTLR_EAE_SBOP;
 
-	if (!(smmu_domain->attributes & (1 << DOMAIN_ATTR_S1_BYPASS)) ||
+	if ((!(smmu_domain->attributes & (1 << DOMAIN_ATTR_S1_BYPASS)) &&
+	     !(smmu_domain->attributes & (1 << DOMAIN_ATTR_EARLY_MAP))) ||
 								!stage1)
 		reg |= SCTLR_M;
 	if (stage1)
@@ -1739,9 +1802,19 @@ static void arm_smmu_destroy_domain_context(struct iommu_domain *domain)
 	cb_base = ARM_SMMU_CB_BASE(smmu) + ARM_SMMU_CB(smmu, cfg->cbndx);
 	writel_relaxed(0, cb_base + ARM_SMMU_CB_SCTLR);
 
-	arm_smmu_tlb_inv_context(smmu_domain);
-
 	arm_smmu_disable_clocks(smmu_domain->smmu);
+
+	if (smmu_domain->pgtbl_ops) {
+		free_io_pgtable_ops(smmu_domain->pgtbl_ops);
+		/* unassign any freed page table memory */
+		if (arm_smmu_is_master_side_secure(smmu_domain)) {
+			arm_smmu_secure_domain_lock(smmu_domain);
+			arm_smmu_secure_pool_destroy(smmu_domain);
+			arm_smmu_unassign_table(smmu_domain);
+			arm_smmu_secure_domain_unlock(smmu_domain);
+		}
+		smmu_domain->pgtbl_ops = NULL;
+	}
 
 free_irqs:
 	if (cfg->irptndx != INVALID_IRPTNDX) {
@@ -2908,6 +2981,11 @@ static int arm_smmu_domain_get_attr(struct iommu_domain *domain,
 		ret = 0;
 		break;
 	}
+	case DOMAIN_ATTR_EARLY_MAP:
+		*((int *)data) = !!(smmu_domain->attributes
+				    & (1 << DOMAIN_ATTR_EARLY_MAP));
+		ret = 0;
+		break;
 	default:
 		ret = -ENODEV;
 		break;
@@ -3036,6 +3114,24 @@ static int arm_smmu_domain_set_attr(struct iommu_domain *domain,
 			smmu_domain->attributes |= 1 << DOMAIN_ATTR_FAST;
 		ret = 0;
 		break;
+	case DOMAIN_ATTR_EARLY_MAP: {
+		int early_map = *((int *)data);
+
+		ret = 0;
+		if (early_map) {
+			smmu_domain->attributes |=
+						1 << DOMAIN_ATTR_EARLY_MAP;
+		} else {
+			if (smmu_domain->smmu)
+				ret = arm_smmu_enable_s1_translations(
+								smmu_domain);
+
+			if (!ret)
+				smmu_domain->attributes &=
+					~(1 << DOMAIN_ATTR_EARLY_MAP);
+		}
+		break;
+	}
 	default:
 		ret = -ENODEV;
 		break;
@@ -3043,6 +3139,28 @@ static int arm_smmu_domain_set_attr(struct iommu_domain *domain,
 
 out_unlock:
 	mutex_unlock(&smmu_domain->init_mutex);
+	return ret;
+}
+
+
+static int arm_smmu_enable_s1_translations(struct arm_smmu_domain *smmu_domain)
+{
+	struct arm_smmu_cfg *cfg = &smmu_domain->cfg;
+	struct arm_smmu_device *smmu = smmu_domain->smmu;
+	void __iomem *cb_base;
+	u32 reg;
+	int ret;
+
+	cb_base = ARM_SMMU_CB_BASE(smmu) + ARM_SMMU_CB(smmu, cfg->cbndx);
+	ret = arm_smmu_enable_clocks(smmu);
+	if (ret)
+		return ret;
+
+	reg = readl_relaxed(cb_base + ARM_SMMU_CB_SCTLR);
+	reg |= SCTLR_M;
+
+	writel_relaxed(reg, cb_base + ARM_SMMU_CB_SCTLR);
+	arm_smmu_disable_clocks(smmu);
 	return ret;
 }
 
@@ -3242,6 +3360,12 @@ static int arm_smmu_init_regulators(struct arm_smmu_device *smmu)
 
 	if (!of_get_property(dev->of_node, "vdd-supply", NULL))
 		return 0;
+
+	if (!of_property_read_u32(dev->of_node,
+				  "qcom,deferred-regulator-disable-delay",
+				  &(smmu->regulator_defer)))
+		dev_info(dev, "regulator defer delay %d\n",
+			smmu->regulator_defer);
 
 	smmu->gdsc = devm_regulator_get(dev, "vdd");
 	if (IS_ERR(smmu->gdsc))
@@ -3548,7 +3672,7 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
 	struct arm_smmu_device *smmu;
 	struct device *dev = &pdev->dev;
 	struct rb_node *node;
-	int num_irqs, i, err, num_masters;
+	int num_irqs, i, err;
 
 	smmu = devm_kzalloc(dev, sizeof(*smmu), GFP_KERNEL);
 	if (!smmu) {
@@ -3609,32 +3733,33 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
 	}
 
 	i = 0;
-	smmu->masters = RB_ROOT;
-	err = arm_smmu_parse_iommus_properties(smmu, &num_masters);
-	if (err)
-		goto out_put_masters;
-
-	dev_dbg(dev, "registered %d master devices\n", num_masters);
 
 	err = arm_smmu_parse_impl_def_registers(smmu);
 	if (err)
-		goto out_put_masters;
+		goto out;
 
 	err = arm_smmu_init_regulators(smmu);
 	if (err)
-		goto out_put_masters;
+		goto out;
 
 	err = arm_smmu_init_clocks(smmu);
 	if (err)
-		goto out_put_masters;
+		goto out;
 
 	err = arm_smmu_init_bus_scaling(pdev, smmu);
 	if (err)
-		goto out_put_masters;
+		goto out;
 
 	parse_driver_options(smmu);
 
 	err = arm_smmu_enable_clocks(smmu);
+	if (err)
+		goto out;
+
+	/* No probe deferral occurred! Proceed with iommu property parsing. */
+
+	smmu->masters = RB_ROOT;
+	err = arm_smmu_parse_iommus_properties(smmu);
 	if (err)
 		goto out_put_masters;
 
@@ -3691,7 +3816,7 @@ out_put_masters:
 			= container_of(node, struct arm_smmu_master, node);
 		of_node_put(master->of_node);
 	}
-
+out:
 	return err;
 }
 
@@ -3742,6 +3867,58 @@ static int arm_smmu_device_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static void arm_smmu_free_master_nodes(void)
+{
+	struct arm_iommus_node *node, *nex;
+	struct arm_iommus_spec *entry, *n;
+
+	list_for_each_entry_safe(node, nex, &iommus_nodes, list) {
+		list_for_each_entry_safe(entry, n,
+				&node->iommuspec_list, list) {
+			list_del(&entry->list);
+			kfree(entry);
+		}
+		list_del(&node->list);
+		kfree(node);
+	}
+}
+
+static int arm_smmu_get_master_nodes(void)
+{
+	struct arm_iommus_node *node;
+	struct device_node *master;
+	struct of_phandle_args iommuspec;
+	struct arm_iommus_spec *entry;
+
+	for_each_node_with_property(master, "iommus") {
+		int arg_ind = 0;
+
+		node = kzalloc(sizeof(*node), GFP_KERNEL);
+		if (!node)
+			goto release_memory;
+		node->master = master;
+		list_add(&node->list, &iommus_nodes);
+
+		INIT_LIST_HEAD(&node->iommuspec_list);
+
+		while (!of_parse_phandle_with_args(master, "iommus",
+				"#iommu-cells", arg_ind, &iommuspec)) {
+			entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+			if (!entry)
+				goto release_memory;
+			entry->iommu_spec = iommuspec;
+			list_add(&entry->list, &node->iommuspec_list);
+			arg_ind++;
+		}
+	}
+
+	return 0;
+
+release_memory:
+	arm_smmu_free_master_nodes();
+	return -ENOMEM;
+}
+
 static struct platform_driver arm_smmu_driver = {
 	.driver	= {
 		.owner		= THIS_MODULE,
@@ -3768,9 +3945,15 @@ static int __init arm_smmu_init(void)
 
 	of_node_put(np);
 
-	ret = platform_driver_register(&arm_smmu_driver);
+	ret = arm_smmu_get_master_nodes();
 	if (ret)
 		return ret;
+
+	ret = platform_driver_register(&arm_smmu_driver);
+	if (ret) {
+		arm_smmu_free_master_nodes();
+		return ret;
+	}
 
 	/* Oh, for a proper bus abstraction */
 	if (!iommu_present(&platform_bus_type))

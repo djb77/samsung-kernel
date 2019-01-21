@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -53,6 +53,8 @@
 #define FORMAT_G711_ALAW_FS 0x001a
 #define FORMAT_G711_MLAW_FS 0x001b
 #define FORMAT_DTS          0x001c
+#define FORMAT_DSD          0x001d
+#define FORMAT_APTX         0x001e
 
 #define ENCDEC_SBCBITRATE   0x0001
 #define ENCDEC_IMMEDIATE_DECODE 0x0002
@@ -72,6 +74,11 @@
 
 /* bit 4 represents META enable of encoded data buffer */
 #define BUFFER_META_ENABLE	0x0010
+
+/* bit 5 represents timestamp */
+/* bit 5 - 0 -- ASM_DATA_EVENT_READ_DONE will have relative time-stamp*/
+/* bit 5 - 1 -- ASM_DATA_EVENT_READ_DONE will have absolute time-stamp*/
+#define ABSOLUTE_TIMESTAMP_ENABLE  0x0020
 
 /* Enable Sample_Rate/Channel_Mode notification event from Decoder */
 #define SR_CM_NOTIFY_ENABLE	0x0004
@@ -156,6 +163,7 @@ struct audio_aio_read_param {
 	phys_addr_t   paddr;
 	uint32_t      len;
 	uint32_t      uid;
+	uint32_t      flags;/*meta data flags*/
 };
 
 struct audio_port_data {
@@ -246,6 +254,9 @@ int q6asm_open_read_v2(struct audio_client *ac, uint32_t format,
 
 int q6asm_open_read_v3(struct audio_client *ac, uint32_t format,
 		       uint16_t bits_per_sample);
+
+int q6asm_open_read_v4(struct audio_client *ac, uint32_t format,
+			uint16_t bits_per_sample);
 
 int q6asm_open_write(struct audio_client *ac, uint32_t format
 		/*, uint16_t bits_per_sample*/);
@@ -340,6 +351,8 @@ int q6asm_stream_cmd_nowait(struct audio_client *ac, int cmd,
 
 void *q6asm_is_cpu_buf_avail(int dir, struct audio_client *ac,
 				uint32_t *size, uint32_t *idx);
+
+int q6asm_cpu_buf_release(int dir, struct audio_client *ac);
 
 void *q6asm_is_cpu_buf_avail_nolock(int dir, struct audio_client *ac,
 					uint32_t *size, uint32_t *idx);
@@ -472,11 +485,17 @@ int q6asm_stream_media_format_block_flac(struct audio_client *ac,
 int q6asm_media_format_block_alac(struct audio_client *ac,
 			struct asm_alac_cfg *cfg, int stream_id);
 
+int q6asm_media_format_block_g711(struct audio_client *ac,
+			struct asm_g711_dec_cfg *cfg, int stream_id);
+
 int q6asm_stream_media_format_block_vorbis(struct audio_client *ac,
 			struct asm_vorbis_cfg *cfg, int stream_id);
 
 int q6asm_media_format_block_ape(struct audio_client *ac,
 			struct asm_ape_cfg *cfg, int stream_id);
+
+int q6asm_stream_media_format_block_aptx_dec(struct audio_client *ac,
+						uint32_t sr, int stream_id);
 
 int q6asm_ds1_set_endp_params(struct audio_client *ac,
 				int param_id, int param_value);
@@ -499,6 +518,10 @@ int q6asm_dts_eagle_set(struct audio_client *ac, int param_id, uint32_t size,
 			void *data, struct param_outband *po, int m_id);
 int q6asm_dts_eagle_get(struct audio_client *ac, int param_id, uint32_t size,
 			void *data, struct param_outband *po, int m_id);
+
+/* Send aptx decoder BT address */
+int q6asm_set_aptx_dec_bt_addr(struct audio_client *ac,
+				struct aptx_dec_bt_addr_cfg *cfg);
 
 /* Set SoftPause Params */
 int q6asm_set_softpause(struct audio_client *ac,

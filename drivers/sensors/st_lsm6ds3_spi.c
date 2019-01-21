@@ -13,6 +13,8 @@
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <linux/iio/iio.h>
+#include <linux/delay.h>
+
 
 #include "st_lsm6ds3.h"
 
@@ -21,7 +23,7 @@
 static int st_lsm6ds3_spi_read(struct st_lsm6ds3_transfer_buffer *tb,
 			struct device *dev, u8 reg_addr, int len, u8 *data)
 {
-	int err;
+	int err, retry = 3;
 
 	struct spi_transfer xfers[] = {
 		{
@@ -40,8 +42,18 @@ static int st_lsm6ds3_spi_read(struct st_lsm6ds3_transfer_buffer *tb,
 	tb->tx_buf[0] = reg_addr | ST_SENSORS_SPI_READ;
 
 	err = spi_sync_transfer(to_spi_device(dev), xfers, ARRAY_SIZE(xfers));
-	if (err)
-		goto acc_spi_read_error;
+	if (err) {
+		SENSOR_INFO("err=%d\n",err);
+		// Add workaround for delay in SPI wakeup
+		while(err == -EINPROGRESS && retry) {	
+			usleep_range(15000, 16000);
+			err = spi_sync_transfer(to_spi_device(dev), xfers, ARRAY_SIZE(xfers));
+			retry--;
+		}
+
+		if(err)
+			goto acc_spi_read_error;
+	}
 
 	memcpy(data, tb->rx_buf, len*sizeof(u8));
 	mutex_unlock(&tb->buf_lock);

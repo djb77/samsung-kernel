@@ -30,6 +30,11 @@
 #include <linux/sensor/sensors_core.h>
 #include "sx9306_sub_reg.h"
 
+#ifdef TAG
+#undef TAG
+#define TAG "[GRIP_SUB]"
+#endif
+
 #if defined(CONFIG_CCIC_NOTIFIER) && defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
 #include <linux/ccic/ccic_notifier.h>
 #include <linux/usb/manager/usb_typec_manager_notifier.h>
@@ -1029,7 +1034,7 @@ static int sx9306_sub_ccic_handle_notification(struct notifier_block *nb,
 static int sx9306_sub_muic_notifier(struct notifier_block *nb,
 				unsigned long action, void *data)
 {
-	struct sx9306_p *pdata = container_of(nb, struct sx9306_p, muic_nb);
+	struct sx9306_p *pdata = container_of(nb, struct sx9306_p, cpuidle_muic_nb);
 	muic_attached_dev_t attached_dev = *(muic_attached_dev_t *)data;
 
 	switch (attached_dev) {
@@ -1081,7 +1086,7 @@ static void sx9306_sub_init_work_func(struct work_struct *work)
 				sx9306_sub_ccic_handle_notification,
 				MANAGER_NOTIFY_CCIC_USB);
 #elif defined(CONFIG_MUIC_NOTIFIER)
-	muic_notifier_register(&data->muic_nb, sx9306_sub_muic_notifier,
+	muic_notifier_register(&data->cpuidle_muic_nb, sx9306_sub_muic_notifier,
 				MUIC_NOTIFY_DEV_CPUIDLE);
 #endif
 	sx9306_sub_set_debug_work(data, ON);

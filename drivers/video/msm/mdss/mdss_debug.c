@@ -38,7 +38,8 @@
 #define PANEL_TX_MAX_BUF 256
 #define PANEL_CMD_MIN_TX_COUNT 2
 #define PANEL_DATA_NODE_LEN 80
-
+/* MDP3 HW Version */
+#define MDP_CORE_HW_VERSION 0x03050306
 static DEFINE_MUTEX(mdss_debug_lock);
 
 static char panel_reg[2] = {DEFAULT_READ_PANEL_POWER_MODE_REG, 0x00};
@@ -143,8 +144,10 @@ static ssize_t panel_debug_base_reg_write(struct file *file,
 	char *bufp;
 
 	struct mdss_data_type *mdata = mdss_res;
-	struct mdss_mdp_ctl *ctl;
-	struct mdss_dsi_ctrl_pdata *ctrl_pdata;
+	struct mdss_mdp_ctl *ctl = mdata->ctl_off + 0;
+	struct mdss_panel_data *panel_data = NULL;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+
 	struct dsi_cmd_desc dsi_write_cmd = {
 		{0/*data type*/, 1, 0, 0, 0, 0/* len */}, reg};
 	struct dcs_cmd_req cmdreq;
@@ -158,6 +161,15 @@ static ssize_t panel_debug_base_reg_write(struct file *file,
 
 	if (copy_from_user(buf, user_buf, count))
 		return -EFAULT;
+
+	if ((mdata->mdp_rev <= MDSS_MDP_HW_REV_105) ||
+			(mdata->mdp_rev == MDP_CORE_HW_VERSION))
+		panel_data = mdss_res->pdata;
+	else
+		panel_data = ctl->panel_data;
+
+	ctrl_pdata = container_of(panel_data,
+		struct mdss_dsi_ctrl_pdata, panel_data);
 
 	buf[count] = 0;	/* end of string */
 
@@ -244,8 +256,11 @@ static ssize_t panel_debug_base_reg_read(struct file *file,
 		mdata->debug_inf.debug_enable_clock(1);
 
 	panel_reg[0] = dbg->off;
-	mdss_dsi_panel_cmd_read(ctrl_pdata, panel_reg[0], panel_reg[1],
-				NULL, rx_buf, dbg->cnt);
+	if ((mdata->mdp_rev <= MDSS_MDP_HW_REV_105) ||
+			(mdata->mdp_rev == MDP_CORE_HW_VERSION))
+		panel_data = mdss_res->pdata;
+	else
+		panel_data = ctl->panel_data;
 
 	len = snprintf(panel_reg_buf, reg_buf_len, "0x%02zx: ", dbg->off);
 	if (len < 0)
@@ -408,6 +423,9 @@ static ssize_t mdss_debug_base_offset_write(struct file *file,
 
 	buf[count] = 0;	/* end of string */
 
+	if (off % sizeof(u32))
+		return -EINVAL;
+
 	sscanf(buf, "%5x %x", &off, &cnt);
 
 	if (off > dbg->max_offset)
@@ -482,6 +500,9 @@ static ssize_t mdss_debug_base_reg_write(struct file *file,
 	if (cnt < 2)
 		return -EFAULT;
 
+	if (off % sizeof(u32))
+		return -EFAULT;
+
 	if (off >= dbg->max_offset)
 		return -EFAULT;
 
@@ -531,6 +552,9 @@ static ssize_t mdss_debug_base_reg_read(struct file *file,
 			mutex_unlock(&mdss_debug_lock);
 			return -ENOMEM;
 		}
+
+		if (dbg->off % sizeof(u32))
+			return -EFAULT;
 
 		ptr = dbg->base + dbg->off;
 		tot = 0;
@@ -1200,6 +1224,9 @@ int mdss_debugfs_init(struct mdss_data_type *mdata)
 	mdss_debugfs_perf_init(mdd, mdata);
 
 	if (mdss_create_xlog_debug(mdd))
+		goto err;
+
+	if (mdss_create_frc_debug(mdd))
 		goto err;
 
 	mdata->debug_inf.debug_data = mdd;

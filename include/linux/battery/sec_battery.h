@@ -55,7 +55,10 @@
 #define SIOP_EVENT_NONE 	0x0000
 #define SIOP_EVENT_WPC_CALL 	0x0001
 
-#if defined(CONFIG_CHARGING_VZWCONCEPT)
+#if defined(CONFIG_SEC_FACTORY)
+#define STORE_MODE_CHARGING_MAX 80
+#define STORE_MODE_CHARGING_MIN 70
+#elif defined(CONFIG_CHARGING_VZWCONCEPT)
 #define STORE_MODE_CHARGING_MAX 35
 #define STORE_MODE_CHARGING_MIN 30
 #else
@@ -118,6 +121,8 @@ struct sec_battery_info {
 #if defined(CONFIG_VBUS_NOTIFIER)
 	struct notifier_block vbus_nb;
 #endif
+	bool safety_timer_set;
+	bool lcd_status;
 
 	int status;
 	int health;
@@ -268,6 +273,7 @@ struct sec_battery_info {
 	struct mutex iolock;
 	int wired_input_current;
 	int wireless_input_current;
+	int input_current;
 	int charging_current;
 	int topoff_current;
 	unsigned int current_event;
@@ -332,7 +338,7 @@ struct sec_battery_info {
 	bool complete_timetofull;
 	struct delayed_work timetofull_work;
 #endif
-#if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
+#if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER) || defined(CONFIG_ENABLE_100MA_CHARGING_BEFORE_USB_CONFIGURED)
 	struct delayed_work slowcharging_work;
 #endif
 #if defined(CONFIG_BATTERY_AGE_FORECAST)
@@ -344,6 +350,11 @@ struct sec_battery_info {
 	int step_charging_step;
 #endif
 	bool input_current_step_up;
+
+	bool stop_timer;
+	unsigned long prev_safety_time;
+	unsigned long expired_time;
+	unsigned long cal_safety_time;
 
 	struct mutex misclock;
 	struct mutex current_eventlock;
@@ -467,6 +478,7 @@ enum {
 #if defined(CONFIG_SW_SELF_DISCHARGING)
 	BATT_SW_SELF_DISCHARGING,
 #endif
+	SAFETY_TIMER_SET,
 	CHECK_SLAVE_CHG,
 	BATT_INBAT_WIRELESS_CS100,
 	HMT_TA_CONNECTED,
@@ -476,6 +488,9 @@ enum {
 	FG_FULL_VOLTAGE,
 	FG_FULLCAPNOM,
 	BATTERY_CYCLE,
+#if defined(CONFIG_BATTERY_AGE_FORECAST_DETACHABLE)
+	BATT_AFTER_MANUFACTURED,
+#endif
 #endif
 	BATT_WPC_TEMP,
 	BATT_WPC_TEMP_ADC,

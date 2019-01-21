@@ -1426,11 +1426,8 @@ static void dapm_seq_run(struct snd_soc_card *card,
 								       cur_subseq);
 			}
 
-			if (cur_dapm && w->dapm != cur_dapm) {
-				dev_info(w->dapm->dev, "dapm_seq_run: widget name=%s\n",
-					w->name);
+			if (cur_dapm && w->dapm != cur_dapm)
 				soc_dapm_async_complete(cur_dapm);
-			}
 
 			INIT_LIST_HEAD(&pending);
 			cur_sort = -1;

@@ -77,6 +77,7 @@ static void run_delta_read(void *device_data);
 static void get_delta(void *device_data);
 static void get_pat_information(void *device_data);
 static void set_external_factory(void *device_data);
+static void set_factory_mode(void *device_data);
 #ifdef FTS_SUPPORT_HOVER
 static void run_abscap_read(void *device_data);
 static void run_absdelta_read(void *device_data);
@@ -185,6 +186,7 @@ struct sec_cmd ft_commands[] = {
 	{SEC_CMD("get_delta", get_delta),},
 	{SEC_CMD("get_pat_information", get_pat_information),},
 	{SEC_CMD("set_external_factory", set_external_factory),},
+	{SEC_CMD("set_factory_mode", set_factory_mode),},
 #ifdef FTS_SUPPORT_HOVER
 	{SEC_CMD("run_abscap_read" , run_abscap_read),},
 	{SEC_CMD("run_absdelta_read", run_absdelta_read),},
@@ -1637,6 +1639,36 @@ static void set_external_factory(void *device_data)
 	input_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
 }
 
+static void set_factory_mode(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct fts_ts_info *info = container_of(sec, struct fts_ts_info, sec);
+	char buff[SEC_CMD_STR_LEN] = { 0 };
+
+	sec_cmd_set_default_result(sec);
+
+	info->factory_mode = sec->cmd_param[0];
+	switch (info->factory_mode) {
+	case FTS_NOT_FACTORY_MODE:
+		input_info(true, &info->client->dev, "%s: Not Factory Mode\n", __func__);
+		break;
+	case FTS_FACTORY_PRETEST_UNIT_MODE:
+		input_info(true, &info->client->dev, "%s: Pretest Unit Mode\n", __func__);
+		break;
+	case FTS_FACTORY_PRETEST_ASSY_MODE:
+		input_info(true, &info->client->dev, "%s: Pretest Assy Mode\n", __func__);
+		break;
+	default:
+		info->factory_mode = 0;
+		input_info(true, &info->client->dev, "%s: Not Defined Mode\n", __func__);
+		break;
+	}
+	snprintf(buff, sizeof(buff), "OK");
+
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+}
+
 #ifdef FTS_SUPPORT_HOVER
 void fts_read_self_frame(struct fts_ts_info *info, unsigned short oAddr)
 {
@@ -2347,8 +2379,11 @@ static void run_cx_data_read(void *device_data)
 		regAdd[2] = addr & 0xFF;
 		fts_read_reg(info, regAdd, 3, &ReadData[j][0], rx_num + 1);
 		for (i = 0; i < rx_num; i++) {
-			if ((strncmp(info->board->project_name, "TabA2S", 6) == 0) && (j == 0))
+			if ((strncmp(info->board->project_name, "TabA2S", 6) == 0) && (j == 0)) {
 				ReadData[j][i + 1] -= 3;
+				if (info->factory_mode == FTS_FACTORY_PRETEST_ASSY_MODE && i == 0)
+					ReadData[j][i + 1] -= 3;
+			}
 			snprintf(pTmp, sizeof(pTmp), "%3d", ReadData[j][i + 1]);
 			strncat(pStr, pTmp, 4 * rx_num);
 		}

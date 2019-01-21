@@ -486,7 +486,7 @@ bool is_muic_usb_path_cp_usb(void)
 	return false;
 }
 
-static int muic_init_gpio_cb(void)
+static int muic_init_gpio_cb(int switch_sel)
 {
 	struct muic_platform_data *pdata = &muic_pdata;
 	const char *usb_mode;

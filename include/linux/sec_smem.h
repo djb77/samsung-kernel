@@ -99,4 +99,7 @@ typedef struct {
 	ddr_train_t ddr_training;
 } sec_smem_id_vendor1_v4_t;
 
+
+extern char* get_ddr_vendor_name(void);
+
 #endif /* _SEC_SMEM_H_ */

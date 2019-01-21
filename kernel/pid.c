@@ -570,10 +570,12 @@ void __init pidhash_init(void)
 {
 	unsigned int i, pidhash_size;
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_PIDHASH);
 	pid_hash = alloc_large_system_hash("PID", sizeof(*pid_hash), 0, 18,
 					   HASH_EARLY | HASH_SMALL,
 					   &pidhash_shift, NULL,
 					   0, 4096);
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 	pidhash_size = 1U << pidhash_shift;
 
 	for (i = 0; i < pidhash_size; i++)

@@ -34,6 +34,9 @@
 #define WLAN_CFG_FILE              "wlan/prima/WCNSS_cfg.dat"
 #define WLAN_FW_FILE               ""
 #define WLAN_NV_FILE               "wlan/prima/WCNSS_qcom_wlan_nv.bin"
+#ifdef SEC_WLAN_USE_OLD_NV
+#define WLAN_NV_FILE_OLD           "wlan/prima/WCNSS_qcom_wlan_nv_old.bin"
+#endif
 #define WLAN_DICT_FILE             "wlan/prima/WCNSS_wlan_dictionary.dat"
 #define WLAN_COUNTRY_INFO_FILE     "wlan/prima/WCNSS_wlan_country_info.dat"
 #define WLAN_HO_CFG_FILE           "wlan/prima/WCNSS_wlan_ho_config"

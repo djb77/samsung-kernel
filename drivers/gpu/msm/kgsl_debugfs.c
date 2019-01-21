@@ -151,6 +151,15 @@ static int print_mem_entry(void *data, void *ptr)
 		kgsl_get_egl_counts(entry, &egl_surface_count,
 						&egl_image_count);
 
+#if defined(CONFIG_DISPLAY_SAMSUNG) && !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+	seq_printf(s, "%p %p %16llu %5d %9s %10s %16s %5d %16llu %6d %6d",
+			(uint64_t *)(uintptr_t) m->gpuaddr,
+			(unsigned long *) m->useraddr,
+			m->size, entry->id, flags,
+			memtype_str(usermem_type),
+			usage, (m->sgt ? m->sgt->nents : 0), m->mapsize,
+			egl_surface_count, egl_image_count);
+#else
 	seq_printf(s, "%pK %pK %16llu %5d %9s %10s %16s %5d %16llu %6d %6d",
 			(uint64_t *)(uintptr_t) m->gpuaddr,
 			(unsigned long *) m->useraddr,
@@ -158,6 +167,7 @@ static int print_mem_entry(void *data, void *ptr)
 			memtype_str(usermem_type),
 			usage, (m->sgt ? m->sgt->nents : 0), m->mapsize,
 			egl_surface_count, egl_image_count);
+#endif
 
 	if (entry->metadata[0] != 0)
 		seq_printf(s, " %s", entry->metadata);

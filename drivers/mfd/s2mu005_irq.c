@@ -199,6 +199,8 @@ static irqreturn_t s2mu005_irq_thread(int irq, void *data)
 			handle_nested_irq(s2mu005->irq_base + i);
 	}
 
+	pr_info("%s: s2mu005_irq_thread successfully returned\n", __func__);
+
 	return IRQ_HANDLED;
 }
 

@@ -23,6 +23,9 @@
 #include <linux/ccic/s2mm005_fw.h>
 #include <linux/usb_notify.h>
 #include <linux/ccic/ccic_sysfs.h>
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
+#include <linux/vbus_notifier.h>
+#endif
 
 extern unsigned int system_rev;
 
@@ -61,6 +64,9 @@ void s2mm005_manual_LPM(struct s2mm005_data *usbpd_data, int cmd);
 void s2mm005_control_option_command(struct s2mm005_data *usbpd_data, int cmd);
 int s2mm005_fw_ver_check(void * data);
 void s2mm005_set_cabletype_as_TA(void);
+int ccic_misc_init(void);
+void ccic_misc_exit(void);
+void s2mm005_set_vbus_status(int type, int pd_state);
 ////////////////////////////////////////////////////////////////////////////////
 //status machine of s2mm005 ccic
 ////////////////////////////////////////////////////////////////////////////////
@@ -575,6 +581,71 @@ void s2mm005_set_cabletype_as_TA(void)
 
 	pr_info("%s : set_cabletype_as_TA! \n", __func__);
 }
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
+void s2mm005_set_vbus_status(int type, int pd_state)
+{
+	struct s2mm005_data *usbpd_data;
+	u8 W_DATA[2] = {0,};
+	u8 R_DATA[4] = {0,};
+	int ret;
+
+	if(!ccic_device)
+		return;
+	usbpd_data = dev_get_drvdata(ccic_device);
+	if(!usbpd_data)
+		return;
+	
+	if(usbpd_data->s2mm005_fw_product_id != PRODUCT_NUM_GTA2XL_NFM) {
+		// This function only work with CCIC FW product id GTA2XL_NFM(New Factory Mode, 0x0F)
+		return;
+	}
+
+	pr_info("%s - vbus:%s power:%s facing:%s pd_state:%d\n", __func__, 
+				type == STATUS_VBUS_HIGH ? "HIGH" : "LOW",
+				usbpd_data->func_state & (0x1 << 25) ? "SRC" : "SNK", 
+				usbpd_data->func_state & (0x1 << 26) ? "DFP" : "UFP", 
+				pd_state);
+
+	switch(type) {
+	case STATUS_VBUS_HIGH:
+		if(usbpd_data->func_state & (0x1 << 25)	
+			&& usbpd_data->func_state & (0x1 << 26)) // source and dfp
+		{
+			W_DATA[0] = 0x3;
+			W_DATA[1] = 0x43; //SEL_DPM_VBUS_ON
+			s2mm005_write_byte(usbpd_data->i2c, REG_I2C_SLV_CMD, &W_DATA[0], 2);
+			pr_info("%s: send I2C vbus status: VBUS ON\n", __func__);
+		}
+		break;
+	case STATUS_VBUS_LOW:
+		// This code wrote only attach charge with accessory(MPA2)
+		// It has PD state State_PE_PRS_SRC_SNK_Transition_to_off.
+		if(!(usbpd_data->func_state & (0x1 << 25))
+			&& pd_state == State_PE_PRS_SRC_SNK_Transition_to_off) // already transition_to_off and sink
+		{
+			W_DATA[0] = 0x3;
+			W_DATA[1] = 0x44; //SEL_DPM_VBUS_OFF
+			s2mm005_write_byte(usbpd_data->i2c, REG_I2C_SLV_CMD, &W_DATA[0], 2);
+			pr_info("%s: send I2C vbus status: VBUS OFF\n", __func__);
+		}
+		break;
+	default:
+		break;
+	}
+	
+	if(W_DATA[0] == 0x3) { //if it write 
+		udelay(10);
+		
+		ret = s2mm005_read_byte(usbpd_data->i2c, 0x6C, R_DATA, 4);
+		if (ret < 0) {
+			dev_err(&usbpd_data->i2c->dev, "%s: has i2c error.\n", __func__);
+			return;
+		}
+		pr_info("%s: read: %X %X %X %X\n", __func__, R_DATA[0], R_DATA[2], R_DATA[2], R_DATA[3]);
+	}
+}
+#endif
+
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 void s2mm005_rprd_mode_change(struct s2mm005_data *usbpd_data, u8 mode)
 {
@@ -712,21 +783,18 @@ static int of_s2mm005_usbpd_dt(struct device *dev,
 #if defined(CONFIG_SEC_GTA2SLTE_PROJECT)||defined(CONFIG_SEC_GTA2SWIFI_PROJECT)
 		usbpd_data->s2mm005_fw_product_id = 0x05;
 #else
-		usbpd_data->s2mm005_fw_product_id = 0x00;
+		usbpd_data->s2mm005_fw_product_id = PRODUCT_NUM_GTA2XL_NFM;
 #endif
-	}
-	if(of_property_read_u32(np, "usbpd,booting_run_dry_support", &usbpd_data->booting_run_dry_support)) {
-		usbpd_data->booting_run_dry_support = 0;
 	}
 
 	usbpd_data->hw_rev = system_rev;
 
 	dev_err(dev, "hw_rev:%02d usbpd_irq = %d s2mm005_om = %d\n"
-		"s2mm005_sda = %d, s2mm005_scl = %d, fw_product_id=0x%02X, booting_dryS=%d\n",
+		"s2mm005_sda = %d, s2mm005_scl = %d, fw_product_id=0x%02X\n",
 		usbpd_data->hw_rev,
 		usbpd_data->irq_gpio, usbpd_data->s2mm005_om,
 		usbpd_data->s2mm005_sda, usbpd_data->s2mm005_scl,
-		usbpd_data->s2mm005_fw_product_id, usbpd_data->booting_run_dry_support);
+		usbpd_data->s2mm005_fw_product_id);
 
 	return 0;
 }
@@ -752,11 +820,26 @@ static int pdic_handle_usb_external_notifier_notification(struct notifier_block 
 		}
 		break;
 	case EXTERNAL_NOTIFY_HOSTBLOCK_POST:
-		if(enable) {
-		} else {
+		if (enable)
+			;
+		else
 			set_enable_alternate_mode(ALTERNATE_MODE_START);
+		break;
+	case EXTERNAL_NOTIFY_MDMBLOCK_PRE:
+		if (enable) {
+			if (usbpd_data->dp_is_connect)
+				dp_detach(usbpd_data);
+		} else {
+			if (usbpd_data->dp_is_connect)
+				dp_detach(usbpd_data);
 		}
-		break;		
+		break;
+	case EXTERNAL_NOTIFY_MDMBLOCK_POST:
+		if (enable)
+			;
+		else
+			;
+		break;
 	default:
 		break;
 	}
@@ -797,7 +880,9 @@ static int s2mm005_usbpd_probe(struct i2c_client *i2c,
 	u8 check[8] = {0,};
 	uint16_t REG_ADD;
 	uint8_t MSG_BUF[32] = {0,};
-	SINK_VAR_SUPPLY_Typedef *pSINK_MSG;
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
+	SINK_VAR_SUPPLY_Typedef *pSINK_VAR_MSG;
+#endif
 	MSG_HEADER_Typedef *pMSG_HEADER;
 #if defined(CONFIG_SEC_FACTORY)
 	LP_STATE_Type Lp_DATA;
@@ -894,28 +979,36 @@ static int s2mm005_usbpd_probe(struct i2c_client *i2c,
 		msleep(1000);
 		ret = s2mm005_read_byte(i2c, REG_ADD, MSG_BUF, 32);
 		if (ret < 0) {
+#if defined(CONFIG_SEC_MSM8917_PROJECT)
 			vbus_turn_on_ctrl(1);
 			msleep(500);
 			vbus_turn_on_ctrl(0);
 			pr_err("%s I2C Fail - VBUS boost turn on/off\n", __func__);
 			ret = s2mm005_read_byte(i2c, REG_ADD, MSG_BUF, 32);
 			if (ret < 0) {
-				/* to check wrong ccic chipsets, It will be removed after PRA */
-				panic("Intentional Panic - ccic i2c error\n");
-				//dev_err(&i2c->dev, "%s has i2c read error.\n", __func__);
-				//goto err_init_irq;
+#endif
+			/* to check wrong ccic chipsets, It will be removed after PRA */
+			panic("Intentional Panic - ccic i2c error\n");
+//			dev_err(&i2c->dev, "%s has i2c read error.\n", __func__);
+//			goto err_init_irq;
+#if defined(CONFIG_SEC_MSM8917_PROJECT)
 			}
+#endif
 		}
 	}
 
 	s2mm005_get_chip_hwversion(usbpd_data, &hwver);
 	pr_err("%s CHIP HWversion %2x %2x %2x %2x\n", __func__,
 	       hwver.main[2] , hwver.main[1], hwver.main[0], hwver.boot);
+	pr_err("%s CHIP HWversion2 %2x %2x %2x %2x \n", __func__,
+	       hwver.ver2[3],hwver.ver2[2] ,hwver.ver2[1],hwver.ver2[0]);
 
 
 	s2mm005_get_chip_swversion(usbpd_data, &chip_swver);
 	pr_err("%s CHIP SWversion %2x %2x %2x %2x\n", __func__,
 	       chip_swver.main[2] , chip_swver.main[1], chip_swver.main[0], chip_swver.boot);
+	pr_err("%s CHIP SWversion2 %2x %2x %2x %2x\n", __func__,
+	       chip_swver.ver2[3],chip_swver.ver2[2] , chip_swver.ver2[1], chip_swver.ver2[0]);
 
 	s2mm005_get_fw_version(usbpd_data->s2mm005_fw_product_id,
 		&fw_swver, chip_swver.boot, usbpd_data->hw_rev);
@@ -933,6 +1026,8 @@ static int s2mm005_usbpd_probe(struct i2c_client *i2c,
 	
 	usbpd_data->fac_booting_dry_check  = Lp_DATA.BITS.BOOTING_RUN_DRY;
 #endif
+
+#if defined(CONFIG_SEC_MSM8917_PROJECT)
 #ifdef CONFIG_SEC_FACTORY
 	if (chip_swver.main[0] != fw_swver.main[0])
 #else
@@ -949,10 +1044,37 @@ static int s2mm005_usbpd_probe(struct i2c_client *i2c,
 				s2mm005_flash_fw(usbpd_data, FLASH_WRITE7);
 		}		
 	}
-
+#else
+	if (chip_swver.boot == 0x8) {
+#ifdef CONFIG_SEC_FACTORY
+			if ((chip_swver.main[0] != fw_swver.main[0]) /* main version */
+				|| (chip_swver.main[1] != fw_swver.main[1]) /* sub version */
+				|| (chip_swver.main[2] != fw_swver.main[2]))  /* product id */ {
+				if (s2mm005_flash_fw(usbpd_data, chip_swver.boot) < 0) {
+					pr_err("%s: s2mm005_flash_fw 1st fail, try again \n", __func__);
+					if (s2mm005_flash_fw(usbpd_data, chip_swver.boot) < 0) {
+						pr_err("%s: s2mm005_flash_fw 2st fail, panic \n", __func__);
+						panic("infinite write fail!\n");
+					}
+				}
+			}
+#else
+			if ((chip_swver.main[0] < fw_swver.main[0])
+				|| ((chip_swver.main[0] == fw_swver.main[0]) && (chip_swver.main[1] < fw_swver.main[1]))
+				|| (chip_swver.main[2] != fw_swver.main[2]))
+				s2mm005_flash_fw(usbpd_data, chip_swver.boot);
+			else if ((((chip_swver.main[2] == 0xff) && (chip_swver.main[1] == 0xa5))	//Factory Code
+			      || chip_swver.main[2] == 0x00)	    //Old Version
+				 && fw_swver.main[2] != 0x00)
+				s2mm005_flash_fw(usbpd_data, chip_swver.boot);
+#endif
+	}
+#endif
 	s2mm005_get_chip_swversion(usbpd_data, &chip_swver);
 	pr_err("%s CHIP SWversion %2x %2x %2x %2x\n", __func__,
 	       chip_swver.main[2] , chip_swver.main[1], chip_swver.main[0], chip_swver.boot);
+	pr_err("%s CHIP SWversion2 %2x %2x %2x %2x \n", __func__,
+			chip_swver.ver2[3],chip_swver.ver2[2] ,chip_swver.ver2[1],chip_swver.ver2[0]);
 	store_ccic_version(&hwver.main[0], &chip_swver.main[0], &chip_swver.boot);
 
 	usbpd_data->firm_ver[0] = chip_swver.main[2];
@@ -968,16 +1090,21 @@ static int s2mm005_usbpd_probe(struct i2c_client *i2c,
 	}
 
 	pMSG_HEADER = (MSG_HEADER_Typedef *)&MSG_BUF[0];
-	pMSG_HEADER->BITS.Number_of_obj += 1;
-	pSINK_MSG = (SINK_VAR_SUPPLY_Typedef *)&MSG_BUF[8];
-	pSINK_MSG->DATA = 0x8F019032; // 5V~12V, 500mA
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
+	pMSG_HEADER->BITS.Number_of_obj -= 1;
+	pSINK_VAR_MSG = (SINK_VAR_SUPPLY_Typedef *)&MSG_BUF[12];
+	pSINK_VAR_MSG->DATA = 0x8B4190C8; /* 5~9V, 2A */
+#endif
 
 	dev_info(&i2c->dev, "--- Write DATA\n\r");
 	for (cnt = 0; cnt < 8; cnt++) {
 		dev_info(&i2c->dev, "   0x%08X\n\r", MSG_DATA[cnt]);
 	}
 
+	/* default value is written by CCIC FW. If you need others, overwrite it.*/
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
 	s2mm005_write_byte(i2c, REG_ADD, &MSG_BUF[0], 32);
+#endif
 
 	for (cnt = 0; cnt < 32; cnt++) {
 		MSG_BUF[cnt] = 0;
@@ -1023,6 +1150,9 @@ static int s2mm005_usbpd_probe(struct i2c_client *i2c,
 	usbpd_data->desc = desc;
 
 	init_completion(&usbpd_data->reverse_completion);
+	init_completion(&usbpd_data->uvdm_out_wait);
+	init_completion(&usbpd_data->uvdm_longpacket_in_wait);
+
 	usbpd_data->power_role = DUAL_ROLE_PROP_PR_NONE;
 	send_otg_notify(o_notify, NOTIFY_EVENT_POWER_SOURCE, 0);
 	INIT_DELAYED_WORK(&usbpd_data->role_swap_work, role_swap_check);
@@ -1043,6 +1173,11 @@ static int s2mm005_usbpd_probe(struct i2c_client *i2c,
 	INIT_DELAYED_WORK(&usbpd_data->acc_detach_work, acc_detach_check);
 	init_waitqueue_head(&usbpd_data->host_turn_on_wait_q);
 	set_host_turn_on_event(0);	
+	ret = ccic_misc_init();
+	if (ret) {
+		dev_err(&i2c->dev, "ccic misc register is failed, error %d\n", ret);
+		goto err_init_irq;
+	}
 #endif
 
 #if TEMP_CODE
@@ -1070,7 +1205,7 @@ static int s2mm005_usbpd_probe(struct i2c_client *i2c,
 #else
 		if(poweroff_charging)
 #endif
-			W_CHG_INFO[2] = 0x1; // lpcharge or poweroff_charging
+			W_CHG_INFO[2] = 0x1; // lpcharge
 		else
 			W_CHG_INFO[2] = 0x0; // normal
 
@@ -1089,7 +1224,7 @@ static int s2mm005_usbpd_probe(struct i2c_client *i2c,
 	} else {
 		pr_info("%s : external notifier register done!\n",__func__);
 	}
-	
+
 #if TEMP_CODE
 	printk("%s : current_irq_status = %d\n",__func__, gpio_get_value(usbpd_data->irq_gpio));
 #if 0 // implement hard reset codes. 
@@ -1144,7 +1279,7 @@ static int s2mm005_usbpd_remove(struct i2c_client *i2c)
 	}
 
 	wake_lock_destroy(&usbpd_data->wlock);
-
+	ccic_misc_exit();
 	return 0;
 }
 

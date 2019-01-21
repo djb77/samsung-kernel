@@ -44,6 +44,11 @@
 #include "tmd37xx.h"
 #endif
 
+#ifdef TAG
+#undef TAG
+#define TAG "[PROX]"
+#endif
+
 /* Note about power vs enable/disable:
  *  The chip has two functions, proximity and ambient light sensing.
  *  There is no separate power enablement to the two functions (unlike

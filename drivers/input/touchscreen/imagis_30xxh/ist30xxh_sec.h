@@ -42,4 +42,4 @@ struct sec_factory {
     bool cmd_is_running;
 };
 
-#endif  // __IST30XXC_SEC_H__
+#endif  // __IST30XXH_SEC_H__

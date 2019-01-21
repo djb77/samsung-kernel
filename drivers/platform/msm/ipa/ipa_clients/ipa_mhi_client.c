@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, 2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015, 2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -182,6 +182,12 @@ static int ipa_mhi_read_write_host(enum ipa_mhi_dma_dir dir, void *dev_addr,
 			return -ENOMEM;
 		}
 
+		res = ipa_dma_enable();
+		if (res) {
+			IPA_MHI_ERR("failed to enable IPA DMA rc=%d\n", res);
+			goto fail_dma_enable;
+		}
+
 		if (dir == IPA_MHI_DMA_FROM_HOST) {
 			res = ipa_dma_sync_memcpy(mem.phys_base, host_addr,
 				size);
@@ -203,8 +209,7 @@ static int ipa_mhi_read_write_host(enum ipa_mhi_dma_dir dir, void *dev_addr,
 				goto fail_memcopy;
 			}
 		}
-		dma_free_coherent(pdev, mem.size, mem.base,
-			mem.phys_base);
+		goto dma_succeed;
 	} else {
 		void *host_ptr;
 
@@ -227,9 +232,14 @@ static int ipa_mhi_read_write_host(enum ipa_mhi_dma_dir dir, void *dev_addr,
 	IPA_MHI_FUNC_EXIT();
 	return 0;
 
+dma_succeed:
+	IPA_MHI_FUNC_EXIT();
+	res = 0;
 fail_memcopy:
-	dma_free_coherent(ipa_get_dma_dev(), mem.size, mem.base,
-			mem.phys_base);
+	if (ipa_dma_disable())
+		IPA_MHI_ERR("failed to disable IPA DMA\n");
+fail_dma_enable:
+	dma_free_coherent(pdev, mem.size, mem.base, mem.phys_base);
 	return res;
 }
 
@@ -1059,6 +1069,7 @@ static void ipa_mhi_gsi_ev_err_cb(struct gsi_evt_err_notify *notify)
 		IPA_MHI_ERR("Unexpected err evt: %d\n", notify->evt_id);
 	}
 	IPA_MHI_ERR("err_desc=0x%x\n", notify->err_desc);
+	ipa_assert();
 }
 
 static void ipa_mhi_gsi_ch_err_cb(struct gsi_chan_err_notify *notify)
@@ -1090,6 +1101,7 @@ static void ipa_mhi_gsi_ch_err_cb(struct gsi_chan_err_notify *notify)
 		IPA_MHI_ERR("Unexpected err evt: %d\n", notify->evt_id);
 	}
 	IPA_MHI_ERR("err_desc=0x%x\n", notify->err_desc);
+	ipa_assert();
 }
 
 
@@ -2044,6 +2056,8 @@ static int ipa_mhi_suspend_dl(bool force)
 	if (ipa_get_transport_type() == IPA_TRANSPORT_TYPE_GSI)
 		ipa_mhi_update_host_ch_state(true);
 
+	return 0;
+
 fail_stop_event_update_dl_channel:
 		ipa_mhi_resume_channels(true,
 				ipa_mhi_client_ctx->dl_channels);
@@ -2404,6 +2418,7 @@ void ipa_mhi_destroy(void)
 		goto fail;
 	}
 
+	ipa_dma_destroy();
 	ipa_mhi_debugfs_destroy();
 	destroy_workqueue(ipa_mhi_client_ctx->wq);
 	kfree(ipa_mhi_client_ctx);
@@ -2435,6 +2450,7 @@ int ipa_mhi_init(struct ipa_mhi_init_params *params)
 	int res;
 	struct ipa_rm_create_params mhi_prod_params;
 	struct ipa_rm_create_params mhi_cons_params;
+	struct ipa_rm_perf_profile profile;
 
 	IPA_MHI_FUNC_ENTRY();
 
@@ -2495,6 +2511,12 @@ int ipa_mhi_init(struct ipa_mhi_init_params *params)
 		goto fail_create_wq;
 	}
 
+	res = ipa_dma_init();
+	if (res) {
+		IPA_MHI_ERR("failed to init ipa dma %d\n", res);
+		goto fail_dma_init;
+	}
+
 	/* Create PROD in IPA RM */
 	memset(&mhi_prod_params, 0, sizeof(mhi_prod_params));
 	mhi_prod_params.name = IPA_RM_RESOURCE_MHI_PROD;
@@ -2504,6 +2526,14 @@ int ipa_mhi_init(struct ipa_mhi_init_params *params)
 	if (res) {
 		IPA_MHI_ERR("fail to create IPA_RM_RESOURCE_MHI_PROD\n");
 		goto fail_create_rm_prod;
+	}
+
+	memset(&profile, 0, sizeof(profile));
+	profile.max_supported_bandwidth_mbps = 1000;
+	res = ipa_rm_set_perf_profile(IPA_RM_RESOURCE_MHI_PROD, &profile);
+	if (res) {
+		IPA_MHI_ERR("fail to set profile to MHI_PROD\n");
+		goto fail_perf_rm_prod;
 	}
 
 	/* Create CONS in IPA RM */
@@ -2518,6 +2548,14 @@ int ipa_mhi_init(struct ipa_mhi_init_params *params)
 		goto fail_create_rm_cons;
 	}
 
+	memset(&profile, 0, sizeof(profile));
+	profile.max_supported_bandwidth_mbps = 1000;
+	res = ipa_rm_set_perf_profile(IPA_RM_RESOURCE_MHI_CONS, &profile);
+	if (res) {
+		IPA_MHI_ERR("fail to set profile to MHI_CONS\n");
+		goto fail_perf_rm_cons;
+	}
+
 	/* Initialize uC interface */
 	ipa_uc_mhi_init(ipa_mhi_uc_ready_cb,
 		ipa_mhi_uc_wakeup_request_cb);
@@ -2530,9 +2568,14 @@ int ipa_mhi_init(struct ipa_mhi_init_params *params)
 	IPA_MHI_FUNC_EXIT();
 	return 0;
 
+fail_perf_rm_cons:
+	ipa_rm_delete_resource(IPA_RM_RESOURCE_MHI_CONS);
 fail_create_rm_cons:
+fail_perf_rm_prod:
 	ipa_rm_delete_resource(IPA_RM_RESOURCE_MHI_PROD);
 fail_create_rm_prod:
+	ipa_dma_destroy();
+fail_dma_init:
 	destroy_workqueue(ipa_mhi_client_ctx->wq);
 fail_create_wq:
 	kfree(ipa_mhi_client_ctx);

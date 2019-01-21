@@ -32,15 +32,14 @@
 #include <linux/platform_device.h>
 #include <linux/workqueue.h>
 #include <linux/slab.h>
-#include <linux/of.h>
-#include <linux/of_gpio.h>
-#include <linux/gpio.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/radio-iris.h>
 #include <asm/unaligned.h>
-#include <linux/regulator/consumer.h>
+#include <linux/of.h>
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
 
 static unsigned int rds_buf = 100;
 static int oda_agt;
@@ -131,7 +130,6 @@ struct iris_device {
 	struct hci_fm_spur_data spur_data;
 	unsigned char is_station_valid;
 	struct hci_fm_blend_table blend_tbl;
-	struct regulator *lna_vdd;
 	int lna_gpio;
 	char is_rds_grp_3A_enabled;
 	char is_ert_enabled;
@@ -3572,7 +3570,7 @@ static int iris_vidioc_g_ctrl(struct file *file, void *priv,
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RDSGROUP_PROC:
 	case V4L2_CID_PRIVATE_IRIS_PSALL:
-		ctrl->value = (radio->g_rds_grp_proc_ps << RDS_CONFIG_OFFSET);
+		ctrl->value = radio->g_rds_grp_proc_ps;
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RDSD_BUF:
 		ctrl->value = radio->rds_grp.rds_buf_size;
@@ -3822,6 +3820,7 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 	struct hci_fm_set_cal_req_proc proc_cal_req;
 	struct hci_fm_set_spur_table_req spur_tbl_req;
 	char *spur_data;
+	char tmp_buf[2];
 
 	struct iris_device *radio = video_get_drvdata(video_devdata(file));
 	char *data = NULL;
@@ -3958,9 +3957,18 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 	case V4L2_CID_PRIVATE_IRIS_SET_SPURTABLE:
 		memset(&spur_tbl_req, 0, sizeof(spur_tbl_req));
 		data = (ctrl->controls[0]).string;
-		bytes_to_copy = (ctrl->controls[0]).size;
-		spur_tbl_req.mode = data[0];
-		spur_tbl_req.no_of_freqs_entries = data[1];
+		if (copy_from_user(&bytes_to_copy, &((ctrl->controls[0]).size),
+					sizeof(bytes_to_copy))) {
+			retval = -EFAULT;
+			goto END;
+		}
+		if (copy_from_user(&tmp_buf[0], &data[0],
+					sizeof(tmp_buf))) {
+			retval = -EFAULT;
+			goto END;
+		}
+		spur_tbl_req.mode = tmp_buf[0];
+		spur_tbl_req.no_of_freqs_entries = tmp_buf[1];
 
 		if (((spur_tbl_req.no_of_freqs_entries * SPUR_DATA_LEN) !=
 					bytes_to_copy - 2) ||
@@ -4493,8 +4501,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RDSGROUP_PROC:
 		saved_val = radio->g_rds_grp_proc_ps;
-		rds_grps_proc = radio->g_rds_grp_proc_ps | ctrl->value;
-		radio->g_rds_grp_proc_ps = (rds_grps_proc >> RDS_CONFIG_OFFSET);
+		radio->g_rds_grp_proc_ps |= ctrl->value;
 		retval = hci_fm_rds_grps_process(
 				&radio->g_rds_grp_proc_ps,
 				radio->fm_hdev);
@@ -4508,7 +4515,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		break;
 	case V4L2_CID_PRIVATE_IRIS_PSALL:
 		saved_val = radio->g_rds_grp_proc_ps;
-		rds_grps_proc = (ctrl->value << RDS_CONFIG_OFFSET);
+		rds_grps_proc = (ctrl->value << RDS_PS_SIMPLE_OFFSET);
 		radio->g_rds_grp_proc_ps |= rds_grps_proc;
 		retval = hci_fm_rds_grps_process(
 				&radio->g_rds_grp_proc_ps,
@@ -5416,19 +5423,11 @@ static int iris_vidioc_s_frequency(struct file *file, void *priv,
 static int iris_fops_open(struct file *file)
 {
 	struct iris_device *radio = video_get_drvdata(video_devdata(file));
-	int retval = 0;
 
 	FMDBG("Enter %s ", __func__);
 
-	if(!IS_ERR(radio->lna_vdd)) {
-		retval = regulator_enable(radio->lna_vdd);
-		if(retval)
-			FMDERR("failed to enable lna vdd %d\n", retval);
-	}
-
-	if (gpio_is_valid(radio->lna_gpio)) {
+	if (gpio_is_valid(radio->lna_gpio))
 		gpio_set_value(radio->lna_gpio, 1);
-	}
 
 	return 0;
 }
@@ -5479,15 +5478,9 @@ END:
 	if (retval < 0)
 		FMDERR("Err on disable FM %d\n", retval);
 
-	if (gpio_is_valid(radio->lna_gpio)) {
-		gpio_set_value(radio->lna_gpio, 0);
-	}
 
-	if(!IS_ERR(radio->lna_vdd)) {
-		retval = regulator_disable(radio->lna_vdd);
-		if(retval)
-			FMDERR("failed to disable lna vdd %d\n", retval);
-	}
+	if (gpio_is_valid(radio->lna_gpio))
+		gpio_set_value(radio->lna_gpio, 0);
 
 	FMDBG("ret %d", retval);
 	return retval;
@@ -5608,7 +5601,7 @@ static int initialise_recv(struct iris_device *radio)
 		return retval;
 	}
 
-	radio->stereo_mode.stereo_mode = CTRL_OFF;
+	radio->stereo_mode.stereo_mode = CTRL_ON;
 	radio->stereo_mode.sig_blend = sig_blend;
 	radio->stereo_mode.intf_blend = CTRL_ON;
 	radio->stereo_mode.most_switch = CTRL_ON;
@@ -5748,11 +5741,6 @@ static int iris_probe(struct platform_device *pdev)
 		gpio_direction_output(radio->lna_gpio, 0);
 	}
 
-	radio->lna_vdd = devm_regulator_get(&pdev->dev, "lna,vdd");
-	if (IS_ERR(radio->lna_vdd)) {
-		FMDERR(": it doesn`t use pm ldo for LNA");
-	}
-
 	radio->videodev = video_device_alloc();
 	if (!radio->videodev) {
 		FMDERR(": Could not allocate V4L device\n");
@@ -5847,10 +5835,6 @@ static int iris_remove(struct platform_device *pdev)
 
 	for (i = 0; i < IRIS_BUF_MAX; i++)
 		kfifo_free(&radio->data_buf[i]);
-
-	if (!IS_ERR(radio->lna_vdd)) {
-		devm_regulator_put(radio->lna_vdd);
-	}
 
 	kfree(radio);
 

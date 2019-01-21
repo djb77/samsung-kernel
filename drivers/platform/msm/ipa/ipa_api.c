@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,7 +26,8 @@
 #define IPA_API_DISPATCH_RETURN(api, p...) \
 	do { \
 		if (!ipa_api_ctrl) { \
-			pr_err("IPA HW is not supported on this target\n"); \
+			pr_err("%s:%d IPA HW is not supported\n", \
+				__func__, __LINE__); \
 			ret = -EPERM; \
 		} \
 		else { \
@@ -44,7 +45,8 @@
 #define IPA_API_DISPATCH(api, p...) \
 	do { \
 		if (!ipa_api_ctrl) \
-			pr_err("IPA HW is not supported on this target\n"); \
+			pr_err("%s:%d IPA HW is not supported\n", \
+				__func__, __LINE__); \
 		else { \
 			if (ipa_api_ctrl->api) { \
 				ipa_api_ctrl->api(p); \
@@ -59,7 +61,8 @@
 #define IPA_API_DISPATCH_RETURN_PTR(api, p...) \
 	do { \
 		if (!ipa_api_ctrl) { \
-			pr_err("IPA HW is not supported on this target\n"); \
+			pr_err("%s:%d IPA HW is not supported\n", \
+				__func__, __LINE__); \
 			ret = NULL; \
 		} \
 		else { \
@@ -77,7 +80,8 @@
 #define IPA_API_DISPATCH_RETURN_BOOL(api, p...) \
 	do { \
 		if (!ipa_api_ctrl) { \
-			pr_err("IPA HW is not supported on this target\n"); \
+			pr_err("%s:%d IPA HW is not supported\n", \
+				__func__, __LINE__); \
 			ret = false; \
 		} \
 		else { \
@@ -109,7 +113,8 @@ const char *ipa_clients_strings[IPA_CLIENT_MAX] = {
 	__stringify(IPA_CLIENT_A5_WLAN_AMPDU_PROD),
 	__stringify(IPA_CLIENT_A2_EMBEDDED_PROD),
 	__stringify(IPA_CLIENT_A2_TETHERED_PROD),
-	__stringify(IPA_CLIENT_APPS_LAN_WAN_PROD),
+	__stringify(IPA_CLIENT_APPS_LAN_PROD),
+	__stringify(IPA_CLIENT_APPS_WAN_PROD),
 	__stringify(IPA_CLIENT_APPS_CMD_PROD),
 	__stringify(IPA_CLIENT_ODU_PROD),
 	__stringify(IPA_CLIENT_MHI_PROD),
@@ -121,6 +126,7 @@ const char *ipa_clients_strings[IPA_CLIENT_MAX] = {
 	__stringify(IPA_CLIENT_Q6_DECOMP_PROD),
 	__stringify(IPA_CLIENT_Q6_DECOMP2_PROD),
 	__stringify(IPA_CLIENT_UC_USB_PROD),
+	__stringify(IPA_CLIENT_ETHERNET_PROD),
 
 	/* Below PROD client type is only for test purpose */
 	__stringify(IPA_CLIENT_TEST_PROD),
@@ -159,12 +165,14 @@ const char *ipa_clients_strings[IPA_CLIENT_MAX] = {
 	__stringify(IPA_CLIENT_Q6_DECOMP_CONS),
 	__stringify(IPA_CLIENT_Q6_DECOMP2_CONS),
 	__stringify(IPA_CLIENT_Q6_LTE_WIFI_AGGR_CONS),
+	__stringify(IPA_CLIENT_ETHERNET_CONS),
 	/* Below CONS client type is only for test purpose */
 	__stringify(IPA_CLIENT_TEST_CONS),
 	__stringify(IPA_CLIENT_TEST1_CONS),
 	__stringify(IPA_CLIENT_TEST2_CONS),
 	__stringify(IPA_CLIENT_TEST3_CONS),
 	__stringify(IPA_CLIENT_TEST4_CONS),
+	__stringify(IPA_CLIENT_DUMMY_CONS),
 };
 
 
@@ -2388,15 +2396,15 @@ EXPORT_SYMBOL(ipa_create_wdi_mapping);
 
 /**
  * ipa_get_gsi_ep_info() - provide gsi ep information
- * @ipa_ep_idx: IPA endpoint index
+ * @client: IPA client type
  *
  * Return value: pointer to ipa_gsi_ep_info
  */
-struct ipa_gsi_ep_config *ipa_get_gsi_ep_info(int ipa_ep_idx)
+const struct ipa_gsi_ep_config *ipa_get_gsi_ep_info(enum ipa_client_type client)
 {
 	if (!ipa_api_ctrl || !ipa_api_ctrl->ipa_get_gsi_ep_info)
 		return NULL;
-	return ipa_api_ctrl->ipa_get_gsi_ep_info(ipa_ep_idx);
+	return ipa_api_ctrl->ipa_get_gsi_ep_info(client);
 }
 EXPORT_SYMBOL(ipa_get_gsi_ep_info);
 
@@ -2414,6 +2422,21 @@ int ipa_stop_gsi_channel(u32 clnt_hdl)
 	return ret;
 }
 EXPORT_SYMBOL(ipa_stop_gsi_channel);
+
+/**
+ * ipa_start_gsi_channel()- Startsa GSI channel in IPA
+ *
+ * Return value: 0 on success, negative otherwise
+ */
+int ipa_start_gsi_channel(u32 clnt_hdl)
+{
+	int ret;
+
+	IPA_API_DISPATCH_RETURN(ipa_start_gsi_channel, clnt_hdl);
+
+	return ret;
+}
+EXPORT_SYMBOL(ipa_start_gsi_channel);
 
 /**
  * ipa_get_version_string() - Get string representation of IPA version
@@ -2449,6 +2472,12 @@ const char *ipa_get_version_string(enum ipa_hw_type ver)
 		break;
 	case IPA_HW_v3_1:
 		str = "3.1";
+		break;
+	case IPA_HW_v3_5:
+		str = "3.5";
+		break;
+	case IPA_HW_v3_5_1:
+		str = "3.5.1";
 		break;
 	default:
 		str = "Invalid version";
@@ -2508,6 +2537,8 @@ static int ipa_generic_plat_drv_probe(struct platform_device *pdev_p)
 		break;
 	case IPA_HW_v3_0:
 	case IPA_HW_v3_1:
+	case IPA_HW_v3_5:
+	case IPA_HW_v3_5_1:
 		result = ipa3_plat_drv_probe(pdev_p, ipa_api_ctrl,
 			ipa_plat_drv_match);
 		break;
@@ -2742,6 +2773,104 @@ int ipa_tear_down_uc_offload_pipes(int ipa_ep_idx_ul,
 
 	IPA_API_DISPATCH_RETURN(ipa_tear_down_uc_offload_pipes, ipa_ep_idx_ul,
 		ipa_ep_idx_dl);
+
+	return ret;
+}
+
+/**
+ * ipa_tz_unlock_reg() - Allow AP access to memory regions controlled by TZ
+ */
+int ipa_tz_unlock_reg(struct ipa_tz_unlock_reg_info *reg_info, u16 num_regs)
+{
+	int ret;
+
+	IPA_API_DISPATCH_RETURN(ipa_tz_unlock_reg, reg_info, num_regs);
+
+	return ret;
+}
+
+/**
+ * ipa_get_pdev() - return a pointer to IPA dev struct
+ *
+ * Return value: a pointer to IPA dev struct
+ *
+ */
+struct device *ipa_get_pdev(void)
+{
+	struct device *ret;
+
+	IPA_API_DISPATCH_RETURN_PTR(ipa_get_pdev);
+
+	return ret;
+}
+EXPORT_SYMBOL(ipa_get_pdev);
+
+int ipa_ntn_uc_reg_rdyCB(void (*ipauc_ready_cb)(void *user_data),
+			      void *user_data)
+{
+	int ret;
+
+	IPA_API_DISPATCH_RETURN(ipa_ntn_uc_reg_rdyCB,
+				ipauc_ready_cb, user_data);
+
+	return ret;
+}
+EXPORT_SYMBOL(ipa_ntn_uc_reg_rdyCB);
+
+void ipa_ntn_uc_dereg_rdyCB(void)
+{
+	IPA_API_DISPATCH(ipa_ntn_uc_dereg_rdyCB);
+}
+EXPORT_SYMBOL(ipa_ntn_uc_dereg_rdyCB);
+
+/**
+ * ipa_conn_wdi3_pipes() - connect wdi3 pipes
+ */
+int ipa_conn_wdi3_pipes(struct ipa_wdi3_conn_in_params *in,
+	struct ipa_wdi3_conn_out_params *out)
+{
+	int ret;
+
+	IPA_API_DISPATCH_RETURN(ipa_conn_wdi3_pipes, in, out);
+
+	return ret;
+}
+
+/**
+ * ipa_disconn_wdi3_pipes() - disconnect wdi3 pipes
+ */
+int ipa_disconn_wdi3_pipes(int ipa_ep_idx_tx, int ipa_ep_idx_rx)
+{
+	int ret;
+
+	IPA_API_DISPATCH_RETURN(ipa_disconn_wdi3_pipes, ipa_ep_idx_tx,
+		ipa_ep_idx_rx);
+
+	return ret;
+}
+
+/**
+ * ipa_enable_wdi3_pipes() - enable wdi3 pipes
+ */
+int ipa_enable_wdi3_pipes(int ipa_ep_idx_tx, int ipa_ep_idx_rx)
+{
+	int ret;
+
+	IPA_API_DISPATCH_RETURN(ipa_enable_wdi3_pipes, ipa_ep_idx_tx,
+		ipa_ep_idx_rx);
+
+	return ret;
+}
+
+/**
+ * ipa_disable_wdi3_pipes() - disable wdi3 pipes
+ */
+int ipa_disable_wdi3_pipes(int ipa_ep_idx_tx, int ipa_ep_idx_rx)
+{
+	int ret;
+
+	IPA_API_DISPATCH_RETURN(ipa_disable_wdi3_pipes, ipa_ep_idx_tx,
+		ipa_ep_idx_rx);
 
 	return ret;
 }

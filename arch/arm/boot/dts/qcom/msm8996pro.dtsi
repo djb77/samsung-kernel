@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,7 +22,7 @@
 	qcom,msm-id = <305 0x10000>;
 
 	chosen {
-		bootargs = "sched_enable_hmp=1 sched_enable_power_aware=1 app_setting.use_32bit_app_setting_pro=1";
+		bootargs = "sched_enable_hmp=1 sched_enable_power_aware=1 app_setting.use_32bit_app_setting_pro=1 kpti=1";
 	};
 };
 
@@ -1333,6 +1333,10 @@
 		qcom,poll-ms = <50>;
 		qcom,limit-temp = <80>;
 		qcom,core-limit-temp = <90>;
+		msm_thermal_freq: qcom,vdd-apps-rstr {
+			qcom,max-freq-level = <1209600>;
+			qcom,levels = <1056000 1516800 1516800>;
+		};
 		qcom,vdd-gfx-rstr{
 			qcom,levels = <6 8 9>; /* Nominal, Turbo, Turbo_L1 */
 		};

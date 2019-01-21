@@ -10,8 +10,6 @@
  */
 
 #include <linux/input/sec_cmd.h>
-#include <linux/sec_class.h>
-#include <linux/input.h>
 
 #if defined USE_SEC_CMD_QUEUE
 static void sec_cmd_store_function(struct sec_cmd_data *data);
@@ -26,7 +24,7 @@ void sec_cmd_set_cmd_exit(struct sec_cmd_data *data)
 #ifdef USE_SEC_CMD_QUEUE
 	mutex_lock(&data->fifo_lock);
 	if (kfifo_len(&data->cmd_queue)) {
-		input_info(true, data->fac_dev, "%s sec_cmd %s: do next cmd, left cmd[%d]\n", __func__,
+		pr_info("%s %s: do next cmd, left cmd[%d]\n", SECLOG, __func__,
 			(int)(kfifo_len(&data->cmd_queue) / sizeof(struct command)));
 		mutex_unlock(&data->fifo_lock);
 
@@ -36,7 +34,7 @@ void sec_cmd_set_cmd_exit(struct sec_cmd_data *data)
 		mutex_unlock(&data->cmd_lock);
 
 		data->cmd_state = SEC_CMD_STATUS_RUNNING;
-		sec_cmd_store_function(data);
+		schedule_work(&data->cmd_work.work);
 
 	} else {
 		mutex_unlock(&data->fifo_lock);
@@ -44,16 +42,51 @@ void sec_cmd_set_cmd_exit(struct sec_cmd_data *data)
 #endif
 }
 
+#if defined USE_SEC_CMD_QUEUE
+static void cmd_exit_work(struct work_struct *work)
+{
+	struct sec_cmd_data *data = container_of(work, struct sec_cmd_data, cmd_work.work);
+
+	sec_cmd_store_function(data);
+}
+#endif
+
 void sec_cmd_set_default_result(struct sec_cmd_data *data)
 {
 	char delim = ':';
-	memset(data->cmd_result, 0x00, SEC_CMD_RESULT_STR_LEN);
-	memcpy(data->cmd_result, data->cmd, SEC_CMD_RESULT_STR_LEN);
+	memset(data->cmd_result, 0x00, SEC_CMD_RESULT_STR_LEN_EXPAND);
+	memcpy(data->cmd_result, data->cmd, SEC_CMD_STR_LEN);
 	strncat(data->cmd_result, &delim, 1);
+}
+
+void sec_cmd_set_cmd_result_all(struct sec_cmd_data *data, char *buff, int len, char *item)
+{
+	char delim1 = ' ';
+	char delim2 = ':';
+	size_t cmd_result_len;
+
+	cmd_result_len = strlen(data->cmd_result_all) + len + 2 + strlen(item);
+
+	if (cmd_result_len >= (unsigned int)SEC_CMD_RESULT_STR_LEN) {
+		pr_err("%s %s: cmd length is over (%d)!!", SECLOG, __func__, (int)cmd_result_len);
+		return;
+	}
+
+	data->item_count++;
+	strncat(data->cmd_result_all, &delim1, 1);
+	strncat(data->cmd_result_all, item, strlen(item));
+	strncat(data->cmd_result_all, &delim2, 1);
+	strncat(data->cmd_result_all, buff, len);
 }
 
 void sec_cmd_set_cmd_result(struct sec_cmd_data *data, char *buff, int len)
 {
+	if (strlen(buff) >= (unsigned int)SEC_CMD_RESULT_STR_LEN_EXPAND) {
+		pr_err("%s %s: cmd length is over (%d)!!", SECLOG, __func__, (int)strlen(buff));
+		strncat(data->cmd_result, "NG", 2);
+		return;
+	}
+
 	strncat(data->cmd_result, buff, len);
 }
 
@@ -71,16 +104,24 @@ static ssize_t sec_cmd_store(struct device *dev,
 	int param_cnt = 0;
 
 	if (!data) {
-		input_err(true, dev, "%s: No platform data found\n", __func__);
+		pr_err("%s %s: No platform data found\n", SECLOG, __func__);
 		return -EINVAL;
 	}
 
 	if (strlen(buf) >= SEC_CMD_STR_LEN) {
-		input_err(true, dev, "%s: cmd length is over (%s,%d)!!\n", __func__, buf, (int)strlen(buf));
+		pr_err("%s %s: cmd length(strlen(buf)) is over (%d,%s)!!\n",
+				SECLOG, __func__, (int)strlen(buf), buf);
 		return -EINVAL;
 	}
+
+	if (count >= (unsigned int)SEC_CMD_STR_LEN) {
+		pr_err("%s %s: cmd length(count) is over (%d,%s)!!\n",
+				SECLOG, __func__, (unsigned int)count, buf);
+		return -EINVAL;
+	}
+
 	if (data->cmd_is_running == true) {
-		input_err(true, dev, "%s: other cmd is running.\n", __func__);
+		pr_err("%s %s: other cmd is running.\n", SECLOG, __func__);
 		return -EBUSY;
 	}
 
@@ -88,21 +129,25 @@ static ssize_t sec_cmd_store(struct device *dev,
 	mutex_lock(&data->cmd_lock);
 	data->cmd_is_running = true;
 	mutex_unlock(&data->cmd_lock);
+
 	data->cmd_state = SEC_CMD_STATUS_RUNNING;
 	for (i = 0; i < ARRAY_SIZE(data->cmd_param); i++)
 		data->cmd_param[i] = 0;
+
 	len = (int)count;
 	if (*(buf + len - 1) == '\n')
 		len--;
+
 	memset(data->cmd, 0x00, ARRAY_SIZE(data->cmd));
 	memcpy(data->cmd, buf, len);
+
 	cur = strchr(buf, (int)delim);
 	if (cur)
 		memcpy(buff, buf, cur - buf);
-
 	else
 		memcpy(buff, buf, len);
-	input_info(true, dev, "%s: COMMAND = %s\n", __func__, buff);
+
+	pr_debug("%s %s: COMMAND = %s\n", SECLOG, __func__, buff);
 
 	/* find command */
 	list_for_each_entry(sec_cmd_ptr, &data->cmd_list_head, list) {
@@ -142,13 +187,17 @@ static ssize_t sec_cmd_store(struct device *dev,
 		} while ((cur - buf <= len) && (param_cnt < SEC_CMD_PARAM_NUM));
 	}
 
-	pr_info("%s %s: cmd = %s", SECLOG, __func__, sec_cmd_ptr->cmd_name);
-	for (i = 0; i < param_cnt; i++) {
-		if (i == 0)
-			pr_cont(" param =");
-		pr_cont(" %d", data->cmd_param[i]);
+	if (cmd_found) {
+		pr_info("%s %s: cmd = %s", SECLOG, __func__, sec_cmd_ptr->cmd_name);
+		for (i = 0; i < param_cnt; i++) {
+			if (i == 0)
+				pr_cont(" param =");
+			pr_cont(" %d", data->cmd_param[i]);
+		}
+		pr_cont("\n");
+	} else {
+		pr_info("%s %s: cmd = %s(%s)\n", SECLOG, __func__, buff, sec_cmd_ptr->cmd_name);
 	}
-	pr_cont("\n");
 
 	sec_cmd_ptr->cmd_func(data);
 
@@ -176,13 +225,16 @@ static void sec_cmd_store_function(struct sec_cmd_data *data)
 		return;
 	}
 
-//	info->cmd_state = CMD_STATUS_RUNNING;
-
 	mutex_lock(&data->fifo_lock);
 	if (kfifo_len(&data->cmd_queue)) {
 		ret = kfifo_out(&data->cmd_queue, &cmd, sizeof(struct command));
+		if (!ret) {
+			pr_err("%s %s: kfifo_out failed, it seems empty, ret=%d\n", SECLOG, __func__, ret);
+			mutex_unlock(&data->fifo_lock);
+			return;
+		}
 	} else {
-		input_err(true, data->fac_dev, "%s: left cmd is nothing\n", __func__);
+		pr_err("%s %s: left cmd is nothing\n", SECLOG, __func__);
 		mutex_unlock(&data->fifo_lock);
 		return;
 	}
@@ -191,20 +243,23 @@ static void sec_cmd_store_function(struct sec_cmd_data *data)
 	buf = cmd.cmd;
 	count = strlen(buf);
 
-	for (i = 0; i < ARRAY_SIZE(data->cmd_param); i++)
+	for (i = 0; i < (int)ARRAY_SIZE(data->cmd_param); i++)
 		data->cmd_param[i] = 0;
+
 	len = (int)count;
 	if (*(buf + len - 1) == '\n')
 		len--;
+
 	memset(data->cmd, 0x00, ARRAY_SIZE(data->cmd));
 	memcpy(data->cmd, buf, len);
+
 	cur = strchr(buf, (int)delim);
 	if (cur)
 		memcpy(buff, buf, cur - buf);
-
 	else
 		memcpy(buff, buf, len);
-	input_info(true, data->fac_dev, "%s: COMMAND : %s\n", __func__, buff);
+
+	pr_debug("%s %s: COMMAND : %s\n", SECLOG, __func__, buff);
 
 	/* find command */
 	list_for_each_entry(sec_cmd_ptr, &data->cmd_list_head, list) {
@@ -244,13 +299,17 @@ static void sec_cmd_store_function(struct sec_cmd_data *data)
 		} while ((cur - buf <= len) && (param_cnt < SEC_CMD_PARAM_NUM));
 	}
 
-	pr_info("%s %s: cmd = %s", SECLOG, __func__, sec_cmd_ptr->cmd_name);
-	for (i = 0; i < param_cnt; i++) {
-		if (i == 0)
-			pr_cont(" param =");
-		pr_cont(" %d", data->cmd_param[i]);
+	if (cmd_found) {
+		pr_info("%s %s: cmd = %s", SECLOG, __func__, sec_cmd_ptr->cmd_name);
+		for (i = 0; i < param_cnt; i++) {
+			if (i == 0)
+				pr_cont(" param =");
+			pr_cont(" %d", data->cmd_param[i]);
+		}
+		pr_cont("\n");
+	} else {
+		pr_info("%s %s: cmd = %s(%s)\n", SECLOG, __func__, buff, sec_cmd_ptr->cmd_name);
 	}
-	pr_cont("\n");
 
 	sec_cmd_ptr->cmd_func(data);
 
@@ -264,14 +323,22 @@ static ssize_t sec_cmd_store(struct device *dev, struct device_attribute *devatt
 	int queue_size;
 
 	if (!data) {
-		input_err(true, dev, "%s: No platform data found\n", __func__);
+		pr_err("%s %s: No platform data found\n", SECLOG, __func__);
 		return -EINVAL;
 	}
 
 	if (strlen(buf) >= SEC_CMD_STR_LEN) {
-		input_err(true, dev, "%s: cmd length is over (%s,%d)!!\n", __func__, buf, (int)strlen(buf));
+		pr_err("%s %s: cmd length(strlen(buf)) is over (%d,%s)!!\n",
+				SECLOG, __func__, (int)strlen(buf), buf);
 		return -EINVAL;
 	}
+
+	if (count >= (unsigned int)SEC_CMD_STR_LEN) {
+		pr_err("%s %s: cmd length(count) is over (%d,%s)!!\n",
+				SECLOG, __func__, (unsigned int)count, buf);
+		return -EINVAL;
+	}
+
 	strncpy(cmd.cmd, buf, count);
 
 	mutex_lock(&data->fifo_lock);
@@ -279,12 +346,12 @@ static ssize_t sec_cmd_store(struct device *dev, struct device_attribute *devatt
 
 	if (kfifo_avail(&data->cmd_queue) && (queue_size < SEC_CMD_MAX_QUEUE)) {
 		kfifo_in(&data->cmd_queue, &cmd, sizeof(struct command));
-		input_info(true, dev, "%s: push cmd: %s\n", __func__, cmd.cmd);
+		pr_info("%s %s: push cmd: %s\n", SECLOG, __func__, cmd.cmd);
 	} else {
-		input_err(true, dev, "%s: cmd_queue is full!!\n", __func__);
+		pr_err("%s %s: cmd_queue is full!!\n", SECLOG, __func__);
 
 		kfifo_reset(&data->cmd_queue);
-		input_err(true, dev, "%s : cmd_queue is reset!!\n", __func__);
+		pr_err("%s %s: cmd_queue is reset!!\n", SECLOG, __func__);
 		mutex_unlock(&data->fifo_lock);
 
 		mutex_lock(&data->cmd_lock);
@@ -295,8 +362,8 @@ static ssize_t sec_cmd_store(struct device *dev, struct device_attribute *devatt
 	}
 
 	if (data->cmd_is_running == true) {
-		input_err(true, dev, "%s: other cmd is running. Wait until previous cmd is done[%d]\n",
-			__func__, (int)(kfifo_len(&data->cmd_queue) / sizeof(struct command)));
+		pr_err("%s %s: other cmd is running. Wait until previous cmd is done[%d]\n",
+			SECLOG, __func__, (int)(kfifo_len(&data->cmd_queue) / sizeof(struct command)));
 		mutex_unlock(&data->fifo_lock);
 		return -EBUSY;
 	}
@@ -321,7 +388,7 @@ static ssize_t sec_cmd_show_status(struct device *dev,
 	char buff[16] = { 0 };
 
 	if (!data) {
-		input_err(true, dev, "%s: No platform data found\n", __func__);
+		pr_err("%s %s: No platform data found\n", SECLOG, __func__);
 		return -EINVAL;
 	}
 
@@ -340,7 +407,38 @@ static ssize_t sec_cmd_show_status(struct device *dev,
 	else if (data->cmd_state == SEC_CMD_STATUS_NOT_APPLICABLE)
 		snprintf(buff, sizeof(buff), "NOT_APPLICABLE");
 
-	input_dbg(true, dev, "%s: %d, %s\n", __func__, data->cmd_state, buff);
+	pr_debug("%s %s: %d, %s\n", SECLOG, __func__, data->cmd_state, buff);
+
+	return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
+}
+
+static ssize_t sec_cmd_show_status_all(struct device *dev,
+				 struct device_attribute *devattr, char *buf)
+{
+	struct sec_cmd_data *data = dev_get_drvdata(dev);
+	char buff[16] = { 0 };
+
+	if (!data) {
+		pr_err("%s %s: No platform data found\n", SECLOG, __func__);
+		return -EINVAL;
+	}
+
+	if (data->cmd_all_factory_state == SEC_CMD_STATUS_WAITING)
+		snprintf(buff, sizeof(buff), "WAITING");
+
+	else if (data->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
+		snprintf(buff, sizeof(buff), "RUNNING");
+
+	else if (data->cmd_all_factory_state == SEC_CMD_STATUS_OK)
+		snprintf(buff, sizeof(buff), "OK");
+
+	else if (data->cmd_all_factory_state == SEC_CMD_STATUS_FAIL)
+		snprintf(buff, sizeof(buff), "FAIL");
+
+	else if (data->cmd_all_factory_state == SEC_CMD_STATUS_NOT_APPLICABLE)
+		snprintf(buff, sizeof(buff), "NOT_APPLICABLE");
+
+	pr_debug("%s %s: %d, %s\n", SECLOG, __func__, data->cmd_all_factory_state, buff);
 
 	return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
 }
@@ -352,15 +450,56 @@ static ssize_t sec_cmd_show_result(struct device *dev,
 	int size;
 
 	if (!data) {
-		input_err(true, dev, "%s: No platform data found\n", __func__);
+		pr_err("%s %s: No platform data found\n", SECLOG, __func__);
 		return -EINVAL;
 	}
 
 	data->cmd_state = SEC_CMD_STATUS_WAITING;
-	input_info(true, dev, "%s: %s\n", __func__, data->cmd_result);
+
 	size = snprintf(buf, SEC_CMD_RESULT_STR_LEN, "%s\n", data->cmd_result);
+	pr_info("%s %s: %s\n", SECLOG, __func__, buf);
 
 	sec_cmd_set_cmd_exit(data);
+
+	return size;
+}
+
+static ssize_t sec_cmd_show_result_expand(struct device *dev,
+				 struct device_attribute *devattr, char *buf)
+{
+	struct sec_cmd_data *data = dev_get_drvdata(dev);
+	int size;
+
+	if (!data) {
+		pr_err("%s %s: No platform data found\n", SECLOG, __func__);
+		return -EINVAL;
+	}
+
+	size = snprintf(buf, SEC_CMD_RESULT_STR_LEN, "%s\n", data->cmd_result + SEC_CMD_RESULT_STR_LEN - 1);
+	pr_info("%s %s: %s\n", SECLOG, __func__, buf);
+
+	return size;
+}
+
+static ssize_t sec_cmd_show_result_all(struct device *dev,
+				 struct device_attribute *devattr, char *buf)
+{
+	struct sec_cmd_data *data = dev_get_drvdata(dev);
+	int size;
+
+	if (!data) {
+		pr_err("%s %s: No platform data found\n", SECLOG, __func__);
+		return -EINVAL;
+	}
+
+	data->cmd_state = SEC_CMD_STATUS_WAITING;
+	pr_info("%s %s: %d, %s\n", SECLOG, __func__, data->item_count, data->cmd_result_all);
+	size = snprintf(buf, SEC_CMD_RESULT_STR_LEN, "%d%s\n", data->item_count, data->cmd_result_all);
+
+	sec_cmd_set_cmd_exit(data);
+
+	data->item_count = 0;
+	memset(data->cmd_result_all, 0x00, SEC_CMD_RESULT_STR_LEN);
 
 	return size;
 }
@@ -378,24 +517,28 @@ static ssize_t sec_cmd_list_show(struct device *dev,
 	list_for_each_entry(sec_cmd_ptr, &data->cmd_list_head, list) {
 		if (strncmp(sec_cmd_ptr->cmd_name, "not_support_cmd", 15)) {
 			snprintf(buffer_name, SEC_CMD_STR_LEN, "%s\n", sec_cmd_ptr->cmd_name);
-			strcat(buffer, buffer_name);
+			strncat(buffer, buffer_name, SEC_CMD_STR_LEN);
 		}
 	}
 
-	input_info(true, dev, "%s: length : %u / %d\n", __func__,
-		(unsigned int)strlen(buffer), data->cmd_buffer_size);
 	return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buffer);
 }
 
-static DEVICE_ATTR(cmd, S_IWUSR | S_IWGRP, NULL, sec_cmd_store);
-static DEVICE_ATTR(cmd_status, S_IRUGO, sec_cmd_show_status, NULL);
-static DEVICE_ATTR(cmd_result, S_IRUGO, sec_cmd_show_result, NULL);
-static DEVICE_ATTR(cmd_list, S_IRUGO, sec_cmd_list_show, NULL);
+static DEVICE_ATTR(cmd, 0220, NULL, sec_cmd_store);
+static DEVICE_ATTR(cmd_status, 0444, sec_cmd_show_status, NULL);
+static DEVICE_ATTR(cmd_status_all, 0444, sec_cmd_show_status_all, NULL);
+static DEVICE_ATTR(cmd_result, 0444, sec_cmd_show_result, NULL);
+static DEVICE_ATTR(cmd_result_expand, 0444, sec_cmd_show_result_expand, NULL);
+static DEVICE_ATTR(cmd_result_all, 0444, sec_cmd_show_result_all, NULL);
+static DEVICE_ATTR(cmd_list, 0444, sec_cmd_list_show, NULL);
 
 static struct attribute *sec_fac_attrs[] = {
 	&dev_attr_cmd.attr,
 	&dev_attr_cmd_status.attr,
+	&dev_attr_cmd_status_all.attr,
 	&dev_attr_cmd_result.attr,
+	&dev_attr_cmd_result_expand.attr,
+	&dev_attr_cmd_result_all.attr,
 	&dev_attr_cmd_list.attr,
 	NULL,
 };
@@ -403,6 +546,7 @@ static struct attribute *sec_fac_attrs[] = {
 static struct attribute_group sec_fac_attr_group = {
 	.attrs = sec_fac_attrs,
 };
+
 
 int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 			int len, int devt)
@@ -420,10 +564,14 @@ int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 	}
 
 	mutex_init(&data->cmd_lock);
-	/* check lock   */
+
 	mutex_lock(&data->cmd_lock);
 	data->cmd_is_running = false;
 	mutex_unlock(&data->cmd_lock);
+
+	data->cmd_result = kzalloc(SEC_CMD_RESULT_STR_LEN_EXPAND, GFP_KERNEL);
+	if (!data->cmd_result)
+		goto err_alloc_cmd_result;
 
 #ifdef USE_SEC_CMD_QUEUE
 	if (kfifo_alloc(&data->cmd_queue,
@@ -432,6 +580,8 @@ int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 		goto err_alloc_queue;
 	}
 	mutex_init(&data->fifo_lock);
+
+	INIT_DELAYED_WORK(&data->cmd_work, cmd_exit_work);
 #endif
 
 	if (devt == SEC_CLASS_DEVT_TSP) {
@@ -448,7 +598,14 @@ int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 		goto err_get_dev_name;
 	}
 
+#ifdef CONFIG_SEC_SYSFS
+	data->fac_dev = sec_device_create(data, dev_name);
+#elif defined(CONFIG_DRV_SAMSUNG)
 	data->fac_dev = sec_device_create(devt, data, dev_name);
+#else
+	data->fac_dev = device_create(sec_class, NULL, devt, data, dev_name);
+#endif
+
 	if (IS_ERR(data->fac_dev)) {
 		pr_err("%s %s: failed to create device for the sysfs\n", SECLOG, __func__);
 		goto err_sysfs_device;
@@ -458,15 +615,18 @@ int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 
 	ret = sysfs_create_group(&data->fac_dev->kobj, &sec_fac_attr_group);
 	if (ret < 0) {
-		input_err(true, data->fac_dev, "%s: failed to create sysfs group\n", __func__);
+		pr_err("%s %s: failed to create sysfs group\n", SECLOG, __func__);
 		goto err_sysfs_group;
 	}
 
 	return 0;
 
-//	sysfs_remove_group(&data->fac_dev->kobj, &sec_fac_attr_group);
 err_sysfs_group:
-	sec_device_destroy(devt);
+#ifdef CONFIG_SEC_SYSFS
+	sec_device_destroy(data->fac_dev->devt);
+#else
+//	device_destroy(sec_class, devt);
+#endif
 err_sysfs_device:
 err_get_dev_name:
 #ifdef USE_SEC_CMD_QUEUE
@@ -474,6 +634,8 @@ err_get_dev_name:
 	kfifo_free(&data->cmd_queue);
 err_alloc_queue:
 #endif
+	kfree(data->cmd_result);
+err_alloc_cmd_result:
 	mutex_destroy(&data->cmd_lock);
 	list_del(&data->cmd_list_head);
 	return -ENODEV;
@@ -485,20 +647,32 @@ void sec_cmd_exit(struct sec_cmd_data *data, int devt)
 	struct command cmd = {{0}};
 	int ret;
 #endif
-	input_info(true, data->fac_dev, "%s", __func__);
+
+	pr_info("%s %s", SECLOG, __func__);
 	sysfs_remove_group(&data->fac_dev->kobj, &sec_fac_attr_group);
 	dev_set_drvdata(data->fac_dev, NULL);
-	sec_device_destroy(devt);
+#ifdef CONFIG_SEC_SYSFS
+	sec_device_destroy(data->fac_dev->devt);
+#else
+//	device_destroy(sec_class, devt);
+#endif
 #ifdef USE_SEC_CMD_QUEUE
 	mutex_lock(&data->fifo_lock);
 	while (kfifo_len(&data->cmd_queue)) {
 		ret = kfifo_out(&data->cmd_queue, &cmd, sizeof(struct command));
-		input_info(true, data->fac_dev, "%s: remove pending commands: %s", __func__, cmd.cmd);
+		if (!ret) {
+			pr_err("%s %s: kfifo_out failed, it seems empty, ret=%d\n", SECLOG, __func__, ret);
+		}
+		pr_info("%s %s: remove pending commands: %s", SECLOG, __func__, cmd.cmd);
 	}
 	mutex_unlock(&data->fifo_lock);
 	mutex_destroy(&data->fifo_lock);
 	kfifo_free(&data->cmd_queue);
+
+	cancel_delayed_work_sync(&data->cmd_work);
+	flush_delayed_work(&data->cmd_work);
 #endif
+	kfree(data->cmd_result);
 	mutex_destroy(&data->cmd_lock);
 	list_del(&data->cmd_list_head);
 }

@@ -2055,7 +2055,7 @@ irqreturn_t msm_isp_process_irq(int irq_num, void *data)
  
 	vfe_dev->irq_status0 = irq_status0; 
 	vfe_dev->irq_status1 = irq_status1; 
-	vfe_dev->ping_pong_status = ping_pong_status; 
+	vfe_dev->ping_pong_status = ping_pong_status;
 
 	vfe_dev->hw_info->vfe_ops.core_ops.
 		get_error_mask(&error_mask0, &error_mask1);
@@ -2292,7 +2292,7 @@ int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	long rc = 0;
 	int wm;
 	struct vfe_device *vfe_dev = v4l2_get_subdevdata(sd);
-	ISP_DBG("%s E open_cnt %u\n", __func__, vfe_dev->vfe_open_cnt);
+	pr_err("%s E open_cnt %u\n", __func__, vfe_dev->vfe_open_cnt);
 	mutex_lock(&vfe_dev->realtime_mutex);
 	mutex_lock(&vfe_dev->core_mutex);
 
@@ -2405,7 +2405,6 @@ int msm_isp_start_error_recovery(struct vfe_device *vfe_dev)
 		pr_err("overflow_state is already OVERFLOW_DETECTED VFE%d!\n", vfe_dev->pdev->id);
 		return 0;
 	}
-
 	if (vfe_dev->reset_pending == 1) {
 		pr_err("%s:%d failed: recovery during reset\n",
 			__func__, __LINE__);
@@ -2440,7 +2439,7 @@ int msm_isp_start_error_recovery(struct vfe_device *vfe_dev)
 		
 		other_vfe_dev = vfe_dev->common_data->dual_vfe_res->vfe_dev[other_vfe_id];
 		other_vfe_dev->axi_data.recovery_count = vfe_dev->axi_data.recovery_count;
-		if (other_vfe_dev->vfe_base) {
+		if (other_vfe_dev->vfe_base && vfe_dev->vfe_base) {
 			other_vfe_dev->hw_info->vfe_ops.core_ops.get_irq_mask(other_vfe_dev,
 				&other_vfe_dev->error_info.overflow_recover_irq_mask0,
 				&other_vfe_dev->error_info.overflow_recover_irq_mask1);

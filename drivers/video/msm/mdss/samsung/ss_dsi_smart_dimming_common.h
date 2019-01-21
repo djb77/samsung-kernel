@@ -23,10 +23,6 @@ Copyright (C) 2012, Samsung Electronics. All rights reserved.
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  *
 */
 #ifndef _SAMSUNG_DSI_SMART_DIMMING_H_
@@ -44,6 +40,7 @@ struct smartdim_conf {
 	int *lux_tab;
 	int lux_tabsize;
 	unsigned int man_id;
+	char panel_revision;
 
 	/* HBM interpolation */
 	char *hbm_payload;

@@ -41,7 +41,11 @@
 #include <linux/usb/class-dual-role.h>
 #endif
 
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
+#define AVAILABLE_VOLTAGE 9000
+#else
 #define AVAILABLE_VOLTAGE 12000
+#endif
 #define UNIT_FOR_VOLTAGE 50
 #define UNIT_FOR_CURRENT 10
 
@@ -195,7 +199,7 @@ typedef union
                     IS_DFP:1,
                     RP_CurrentLvl:2,
                     VBUS_CC_Short:1,
-                    RSP_BYTE3:1,
+                    VBUS_SBU_Short:1,
                     RESET:1;
 	}BITS;
 } FUNC_STATE_Type;
@@ -213,13 +217,18 @@ typedef union
                     RUN_DRY:1,
                     removing_charge_by_sbu_low:1,
                     BOOTING_RUN_DRY:1,
-                    RSP_BYTE:24;
+                    Sleep_Cable_Detect:1, //b8
+                    PDSTATE29_SBU_DONE:1, //b9
+                    SET_VCONN_ON:1, //b10
+                    ACC_DETECION:1, //b11
+                    RSP_BYTE:20;		 //b12 ~ b31	
 	} BITS;
 } LP_STATE_Type;
 
 typedef union
 {
 	uint32_t        DATA;
+	uint8_t         BYTE[4];
     struct {
         uint32_t    Flash_State:8,
                     Reserved:24;
@@ -387,7 +396,7 @@ typedef union
                     SBU2_CNT:8,                     // b16 - b23
                     SBU_LOW_CNT:4,                  // b24 - b27
                     Alt_Mode_By_I2C:2,              // b28 - b29
-                    AP_Req_Reserved_H:1,            // b30
+                    DPM_START_ON:1,                 // b30
                     Func_Abnormal_State:1;          // b31
   } BITS;
 } AP_REQ_GET_STATUS_Type;
@@ -794,7 +803,7 @@ typedef enum
 
 typedef enum
 {
-	Rp_None = 0,
+	Rp_Sbu_check = 0,
 	Rp_56K = 1,	/* 80uA */
 	Rp_22K = 2,	/* 180uA */
 	Rp_10K = 3,	/* 330uA */
@@ -838,7 +847,6 @@ struct s2mm005_data {
 	int water_det;
 	int run_dry;
 	int booting_run_dry;
-	int booting_run_dry_support;
 #if defined(CONFIG_SEC_FACTORY)
 	int fac_booting_dry_check;
 #endif
@@ -874,6 +882,10 @@ struct s2mm005_data {
 	int host_turn_on_event;
 	int host_turn_on_wait_time;
 	int is_samsung_accessory_enter_mode;
+	int is_in_first_sec_uvdm_req;
+	int is_in_sec_uvdm_out;
+	struct completion uvdm_out_wait;
+	struct completion uvdm_longpacket_in_wait;
 #endif
 	int manual_lpm_mode;
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)

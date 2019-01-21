@@ -21,7 +21,7 @@
 #include <linux/pm_runtime.h>
 
 #ifdef CONFIG_BLOCK_SUPPORT_STLOG
-#include <linux/stlog.h>
+#include <linux/fslog.h>
 #else
 #define ST_LOG(fmt,...)
 #endif
@@ -1001,6 +1001,70 @@ static ssize_t disk_discard_alignment_show(struct device *dev,
 	return sprintf(buf, "%d\n", queue_discard_alignment(disk->queue));
 }
 
+#undef DISCARD
+
+#define DISCARD	(WRITE + 1)
+#define DIFF_IOs(n, o, i) ( \
+	((n)->ios[(i)] >= (o)->ios[(i)]) ? \
+	((n)->ios[(i)] - (o)->ios[(i)]) : \
+	((n)->sectors[(i)] + (0 - (o)->sectors[(i)])))
+#define DIFF_KBs(n, o, i) ( \
+	((n)->sectors[(i)] >= (o)->sectors[(i)]) ? \
+	((n)->sectors[(i)] - (o)->sectors[(i)]) / 2 : \
+	((n)->sectors[(i)] + (0 - (o)->sectors[(i)])) / 2)
+
+static ssize_t disk_ios_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	/* disk->accios is set to all zero in alloc_disk_node */
+	struct gendisk *disk = dev_to_disk(dev);
+	struct hd_struct *hd = dev_to_part(dev);
+	struct accumulated_stats *old = &(disk->accios);
+	struct accumulated_stats new;
+	long hours;
+	int cpu;
+	int ret;
+
+	cpu = part_stat_lock();
+	part_round_stats(cpu, hd);
+	part_stat_unlock();
+
+	new.ios[READ] = part_stat_read(hd, ios[READ]);
+	new.ios[WRITE] = part_stat_read(hd, ios[WRITE]);
+	new.ios[DISCARD] = part_stat_read(hd, discard_ios);
+	new.sectors[READ] = part_stat_read(hd, sectors[READ]);
+	new.sectors[WRITE] = part_stat_read(hd, sectors[WRITE]);
+	new.sectors[DISCARD] = part_stat_read(hd, discard_sectors);
+
+	get_monotonic_boottime(&(new.uptime));
+	hours = (new.uptime.tv_sec - old->uptime.tv_sec) / 60; /* to minutes */
+	hours = (hours + 30) / 60 ; /* round up to hours */
+
+	ret = sprintf(buf, "\"ReadC\":\"%lu\",\"ReadKB\":\"%lu\","
+			   "\"WriteC\":\"%lu\",\"WriteKB\":\"%lu\","
+			   "\"DiscardC\":\"%lu\",\"DiscardKB\":\"%lu\","
+			   "\"Hours\":\"%ld\"\n",
+			   DIFF_IOs(&new, old, READ),
+			   DIFF_KBs(&new, old, READ),
+			   DIFF_IOs(&new, old, WRITE),
+			   DIFF_KBs(&new, old, WRITE),
+			   DIFF_IOs(&new, old, DISCARD),
+			   DIFF_KBs(&new, old, DISCARD),
+			   hours);
+
+	disk->accios.ios[READ] = new.ios[READ];
+	disk->accios.ios[WRITE] = new.ios[WRITE];
+	disk->accios.ios[DISCARD] = new.ios[DISCARD];
+	disk->accios.sectors[READ] = new.sectors[READ];
+	disk->accios.sectors[WRITE] = new.sectors[WRITE];
+	disk->accios.sectors[DISCARD] = new.sectors[DISCARD];
+	disk->accios.uptime = new.uptime;
+
+	return ret;
+}
+#undef DISCARD
+
 static DEVICE_ATTR(range, S_IRUGO, disk_range_show, NULL);
 static DEVICE_ATTR(ext_range, S_IRUGO, disk_ext_range_show, NULL);
 static DEVICE_ATTR(removable, S_IRUGO, disk_removable_show, NULL);
@@ -1012,6 +1076,7 @@ static DEVICE_ATTR(discard_alignment, S_IRUGO, disk_discard_alignment_show,
 static DEVICE_ATTR(capability, S_IRUGO, disk_capability_show, NULL);
 static DEVICE_ATTR(stat, S_IRUGO, part_stat_show, NULL);
 static DEVICE_ATTR(inflight, S_IRUGO, part_inflight_show, NULL);
+static DEVICE_ATTR(diskios, 0600, disk_ios_show, NULL);
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 static struct device_attribute dev_attr_fail =
 	__ATTR(make-it-fail, S_IRUGO|S_IWUSR, part_fail_show, part_fail_store);
@@ -1033,6 +1098,7 @@ static struct attribute *disk_attrs[] = {
 	&dev_attr_capability.attr,
 	&dev_attr_stat.attr,
 	&dev_attr_inflight.attr,
+	&dev_attr_diskios.attr,
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 	&dev_attr_fail.attr,
 #endif
@@ -1255,8 +1321,107 @@ static const struct file_operations proc_diskstats_operations = {
 	.release	= seq_release,
 };
 
+#define PG2KB(x) ((unsigned long)((x) << (PAGE_SHIFT - 10)))
+static int iostats_show(struct seq_file *seqf, void *v)
+{
+	struct gendisk *gp = v;
+	struct disk_part_iter piter;
+	struct hd_struct *hd;
+	char buf[BDEVNAME_SIZE];
+	int cpu;
+	u64 uptime;
+	unsigned long thresh = 0;
+	unsigned long bg_thresh = 0;
+	struct backing_dev_info *bdi;
+	unsigned int nread, nwrite;
+
+	unsigned long uptime_s;
+	unsigned long uptime_ms;
+	unsigned long flight_tmp;
+
+	/* Enhanced diskstats for IOD V 2.2 */
+	global_dirty_limits(&bg_thresh, &thresh);
+
+	disk_part_iter_init(&piter, gp, DISK_PITER_INCL_EMPTY_PART0);
+	while ((hd = disk_part_iter_next(&piter))) {
+		cpu = part_stat_lock();
+		part_round_stats(cpu, hd);
+		part_stat_unlock();
+		uptime = ktime_to_ns(ktime_get());
+		do_div(uptime,1000000);
+		uptime_s = uptime;
+		uptime_ms = do_div(uptime_s,1000);
+		flight_tmp = (unsigned long) gp->queue->in_flight_time;
+		do_div(flight_tmp, USEC_PER_MSEC);
+
+		bdi = &gp->queue->backing_dev_info;
+		nread = part_in_flight_read(hd);
+		nwrite = part_in_flight_write(hd);
+		seq_printf(seqf, "%4d %7d %s %lu %lu %lu %u "
+			   "%lu %lu %lu %u %u %u %u "
+			   /* added */
+			   "%lu %lu %lu %lu "
+			   "%u %lu %lu %lu %lu %u "
+			   "%lu.%03lu\n",
+			   MAJOR(part_devt(hd)), MINOR(part_devt(hd)),
+			   disk_name(gp, hd->partno, buf),
+			   part_stat_read(hd, ios[READ]),
+			   part_stat_read(hd, merges[READ]),
+			   part_stat_read(hd, sectors[READ]),
+			   jiffies_to_msecs(part_stat_read(hd, ticks[READ])),
+
+			   part_stat_read(hd, ios[WRITE]),
+			   part_stat_read(hd, merges[WRITE]),
+			   part_stat_read(hd, sectors[WRITE]),
+			   jiffies_to_msecs(part_stat_read(hd, ticks[WRITE])),
+			   /*part_in_flight(hd),*/
+			   nread + nwrite,
+			   jiffies_to_msecs(part_stat_read(hd, io_ticks)),
+			   jiffies_to_msecs(part_stat_read(hd, time_in_queue)),
+			   /* followings are added */
+			   part_stat_read(hd, discard_ios),
+			   part_stat_read(hd, discard_sectors),
+			   part_stat_read(hd, flush_ios),
+			   gp->queue->flush_ios,
+
+			   nread,
+			   flight_tmp,
+			   PG2KB(thresh),
+			   PG2KB(bdi->last_thresh),
+			   PG2KB(bdi->last_nr_dirty),
+			   jiffies_to_msecs(bdi->paused_total),
+
+			   uptime_s,
+			   uptime_ms
+			);
+	}
+	disk_part_iter_exit(&piter);
+
+	return 0;
+}
+
+static const struct seq_operations iostats_op = {
+	.start	= disk_seqf_start,
+	.next	= disk_seqf_next,
+	.stop	= disk_seqf_stop,
+	.show	= iostats_show
+};
+
+static int iostats_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &iostats_op);
+}
+
+static const struct file_operations proc_iostats_operations = {
+	.open		= iostats_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= seq_release,
+};
+
 static int __init proc_genhd_init(void)
 {
+	proc_create("iostats", 0, NULL, &proc_iostats_operations);
 	proc_create("diskstats", 0, NULL, &proc_diskstats_operations);
 	proc_create("partitions", 0, NULL, &proc_partitions_operations);
 	return 0;

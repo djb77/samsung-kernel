@@ -126,14 +126,11 @@ static int mmc_cmdq_thread(void *d)
 
 		ret = mq->cmdq_issue_fn(mq, mq->cmdq_req_peeked);
 		/*
-		 * Don't requeue if issue_fn fails, just bug on.
-		 * We don't expect failure here and there is no recovery other
-		 * than fixing the actual issue if there is any.
+		 * Don't requeue if issue_fn fails.
+		 * Recovery will be come by completion softirq
 		 * Also we end the request if there is a partition switch error,
 		 * so we should not requeue the request here.
 		 */
-		if (ret)
-			BUG_ON(1);
 	} /* loop */
 
 	return 0;
@@ -156,7 +153,8 @@ static int mmc_queue_thread(void *d)
 		spin_lock_irq(q->queue_lock);
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (mq->mqrq_prev->req &&
-				(mq->card && (mq->card->type == MMC_TYPE_SD)))
+				(mq->card && (mq->card->type == MMC_TYPE_SD) &&
+				mq->card->host->pm_progress))
 			req = NULL;
 		else
 			req = blk_fetch_request(q);
@@ -664,7 +662,7 @@ int mmc_cmdq_init(struct mmc_queue *mq, struct mmc_card *card)
 	init_completion(&mq->cmdq_pending_req_done);
 
 	blk_queue_rq_timed_out(mq->queue, mmc_cmdq_rq_timed_out);
-	blk_queue_rq_timeout(mq->queue, 120 * HZ);
+	blk_queue_rq_timeout(mq->queue, 30 * HZ);
 	card->cmdq_init = true;
 
 	goto out;
@@ -768,13 +766,11 @@ int mmc_queue_suspend(struct mmc_queue *mq, int wait)
 			spin_unlock_irqrestore(q->queue_lock, flags);
 			rc = -EBUSY;
 		} else if (wait) {
-			printk("%s: mq->flags: %ld, q->queue_flags: %lu,\
-					q->in_flight (%d, %d)\n",
+			struct request *req;
+			printk("%s: mq->flags: %ld, q->queue_flags: 0x%lx, \
+					q->in_flight (%d, %d) \n",
 					mmc_hostname(mq->card->host), mq->flags,
 					q->queue_flags, q->in_flight[0], q->in_flight[1]);
-			/*
-			 * wait is set only when mmc_blk_shutdown calls this,
-			 */
 			mutex_lock(&q->sysfs_lock);
 			queue_flag_set_unlocked(QUEUE_FLAG_DYING, q);
 

@@ -17,7 +17,6 @@
 #include "q6audio_common.h"
 #include "audio_utils_aio.h"
 #include <sound/msm-audio-effects-q6-v2.h>
-#include <sound/msm-dts-eagle.h>
 
 #define MAX_CHANNELS_SUPPORTED		8
 #define WAIT_TIMEDOUT_DURATION_SECS	1
@@ -53,31 +52,11 @@ static void audio_effects_init_pp(struct audio_client *ac)
 		pr_err("%s: audio client null to init pp\n", __func__);
 		return;
 	}
-	switch (ac->topology) {
-	case ASM_STREAM_POSTPROC_TOPO_ID_HPX_MASTER:
-
-		ret = q6asm_set_softvolume_v2(ac, &softvol,
-					      SOFT_VOLUME_INSTANCE_1);
-		if (ret < 0)
-			pr_err("%s: Send SoftVolume1 Param failed ret=%d\n",
-				__func__, ret);
-		ret = q6asm_set_softvolume_v2(ac, &softvol,
-					      SOFT_VOLUME_INSTANCE_2);
-		if (ret < 0)
-			pr_err("%s: Send SoftVolume2 Param failed ret=%d\n",
-				 __func__, ret);
-
-		msm_dts_eagle_init_master_module(ac);
-
-		break;
-	default:
-		ret = q6asm_set_softvolume_v2(ac, &softvol,
-					      SOFT_VOLUME_INSTANCE_1);
-		if (ret < 0)
-			pr_err("%s: Send SoftVolume Param failed ret=%d\n",
-				__func__, ret);
-		break;
-	}
+	ret = q6asm_set_softvolume_v2(ac, &softvol,
+				      SOFT_VOLUME_INSTANCE_1);
+	if (ret < 0)
+		pr_err("%s: Send SoftVolume Param failed ret=%d\n",
+			__func__, ret);
 }
 
 static void audio_effects_deinit_pp(struct audio_client *ac)
@@ -85,13 +64,6 @@ static void audio_effects_deinit_pp(struct audio_client *ac)
 	if (!ac) {
 		pr_err("%s: audio client null to deinit pp\n", __func__);
 		return;
-	}
-	switch (ac->topology) {
-	case ASM_STREAM_POSTPROC_TOPO_ID_HPX_MASTER:
-		msm_dts_eagle_deinit_master_module(ac);
-		break;
-	default:
-		break;
 	}
 }
 
@@ -189,7 +161,6 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 			pr_err("%s: Read buffer Allocation failed rc = %d\n",
 				__func__, rc);
 			rc = -ENOMEM;
-			mutex_unlock(&effects->lock);
 			goto readbuf_fail;
 		}
 		atomic_set(&effects->out_count, effects->config.output.num_buf);
@@ -204,7 +175,6 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 		if (rc < 0) {
 			pr_err("%s: pcm read block config failed\n", __func__);
 			rc = -EINVAL;
-			mutex_unlock(&effects->lock);
 			goto cfg_fail;
 		}
 		pr_debug("%s: dec: sample_rate: %d, num_channels: %d, bit_width: %d\n",
@@ -219,7 +189,6 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 			pr_err("%s: pcm write format block config failed\n",
 				__func__);
 			rc = -EINVAL;
-			mutex_unlock(&effects->lock);
 			goto cfg_fail;
 		}
 
@@ -353,6 +322,7 @@ ioctl_fail:
 readbuf_fail:
 	q6asm_audio_client_buf_free_contiguous(IN,
 					effects->ac);
+	mutex_unlock(&effects->lock);
 	return rc;
 cfg_fail:
 	q6asm_audio_client_buf_free_contiguous(IN,
@@ -360,6 +330,7 @@ cfg_fail:
 	q6asm_audio_client_buf_free_contiguous(OUT,
 					effects->ac);
 	effects->buf_alloc = 0;
+	mutex_unlock(&effects->lock);
 	return rc;
 }
 
@@ -427,33 +398,6 @@ static long audio_effects_set_pp_param(struct q6audio_effects *effects,
 			msm_audio_effects_volume_handler_v2(effects->ac,
 			      &(effects->audio_effects.topo_switch_vol),
 			      (long *)&values[1], SOFT_VOLUME_INSTANCE_2);
-		break;
-	case DTS_EAGLE_MODULE_ENABLE:
-		pr_debug("%s: DTS_EAGLE_MODULE_ENABLE\n", __func__);
-		if (msm_audio_effects_is_effmodule_supp_in_top(
-			effects_module, effects->ac->topology)) {
-			/*
-			 * HPX->OFF: first disable HPX and then
-			 * enable SA+
-			 * HPX->ON: first disable SA+ and then
-			 * enable HPX
-			 */
-			bool hpx_state = (bool)values[1];
-			if (hpx_state)
-				msm_audio_effects_enable_extn(effects->ac,
-					&(effects->audio_effects),
-					false);
-			msm_dts_eagle_enable_asm(effects->ac,
-				hpx_state,
-				AUDPROC_MODULE_ID_DTS_HPX_PREMIX);
-			msm_dts_eagle_enable_asm(effects->ac,
-				hpx_state,
-				AUDPROC_MODULE_ID_DTS_HPX_POSTMIX);
-			if (!hpx_state)
-				msm_audio_effects_enable_extn(effects->ac,
-					&(effects->audio_effects),
-					true);
-		}
 		break;
 	default:
 		pr_err("%s: Invalid effects config module\n", __func__);

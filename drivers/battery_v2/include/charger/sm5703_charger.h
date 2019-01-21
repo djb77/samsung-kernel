@@ -133,7 +133,89 @@ enum {
 
 extern bool sec_bat_get_slate_mode(void);
 
-extern sec_battery_platform_data_t sec_battery_pdata;
+#define ENABLE_AICL 1
+
+#define EN_NOBAT_IRQ	0
+#define EN_DONE_IRQ	1
+#define EN_TOPOFF_IRQ	1
+#define EN_CHGON_IRQ	0
+#define EN_AICL_IRQ	1
+#define EN_OTGFAIL_IRQ	1
+
+#define MINVAL(a, b) ((a <= b) ? a : b)
+
+#ifndef EN_TEST_READ
+#define EN_TEST_READ 1
+#endif
+
+#define ENABLE 1
+#define DISABLE 0
+
+static int sm5703_reg_map[] = {
+	SM5703_INTMSK1,
+	SM5703_INTMSK2,
+	SM5703_INTMSK3,
+	SM5703_INTMSK4,
+	SM5703_STATUS1,
+	SM5703_STATUS2,
+	SM5703_STATUS3,
+	SM5703_STATUS4,
+	SM5703_CNTL,
+	SM5703_VBUSCNTL,
+	SM5703_CHGCNTL1,
+	SM5703_CHGCNTL2,
+	SM5703_CHGCNTL3,
+	SM5703_CHGCNTL4,
+	SM5703_CHGCNTL5,
+	SM5703_CHGCNTL6,
+	SM5703_OTGCURRENTCNTL,
+	SM5703_Q3LIMITCNTL,
+	SM5703_STATUS5,
+};
+
+typedef struct sm5703_charger_data {
+	struct device *dev;
+	struct i2c_client	*i2c;
+	sm5703_mfd_chip_t	*sm5703;
+	struct power_supply	psy_chg;
+	struct power_supply	psy_otg;
+
+	sm5703_charger_platform_data_t *pdata;
+
+	struct wake_lock aicl_wake_lock;
+	struct delayed_work aicl_work;
+	int input_current;
+	int charging_current;
+	int topoff_current;
+	int cable_type;
+	bool aicl_state;
+	bool is_charging;
+	int charge_mode;
+	struct mutex io_lock;
+	/* register programming */
+	int reg_addr;
+	int reg_data;
+	int nchgen;
+
+	bool ovp;
+	bool is_mdock;
+	struct workqueue_struct *wq;
+	int status;
+#ifdef CONFIG_FLED_SM5703
+	struct sm_fled_info *fled_info;
+#endif
+} sm5703_charger_data_t;
+
+enum {
+	SM5703_AICL_4300MV = 0,
+	SM5703_AICL_4400MV,
+	SM5703_AICL_4500MV,
+	SM5703_AICL_4600MV,
+	SM5703_AICL_4700MV,
+	SM5703_AICL_4800MV,
+	SM5703_AICL_4900MV,
+};
+
 extern int poweroff_charging;
 
 #endif /*SM5703_CHARGER_H*/

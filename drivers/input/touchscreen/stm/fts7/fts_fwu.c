@@ -1,4 +1,3 @@
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -44,14 +43,14 @@ static int fts_fw_wait_for_flash_ready(struct fts_ts_info *info)
 	regAdd = FTS_CMD_READ_FLASH_STAT;
 
 	while (info->fts_read_reg
-		(info, &regAdd, 1, (unsigned char *)buf, 1)) {
+			(info, &regAdd, 1, (unsigned char *)buf, 1)) {
 		if ((buf[0] & 0x01) == 0)
 			break;
 
 		if (retry++ > FTS_RETRY_COUNT * 10) {
 			input_err(true, info->dev,
-				 "%s: Time Over\n",
-				 __func__);
+					"%s: Time Over\n",
+					__func__);
 			return -FTS_ERROR_TIMEOUT;
 		}
 		msleep(20);
@@ -77,31 +76,29 @@ bool get_PureAutotune_status(struct fts_ts_info *info)
 	regAdd[2] = 0x58;
 
 	if (info->stm_format_ver == STM_FORMAT_VER6)
-	{
 		regAdd[2] = 0x4E;
-	}
 
 	/*
-	regAdd[0] = 0xb3;
-	regAdd[1] = 0x00;
-	regAdd[2] = 0x01;
-	info->fts_write_reg(info, regAdd, 3);
-	fts_delay(1);
+	   regAdd[0] = 0xb3;
+	   regAdd[1] = 0x00;
+	   regAdd[2] = 0x01;
+	   info->fts_write_reg(info, regAdd, 3);
+	   fts_delay(1);
 
-	regAdd[0] = 0xb1;
-	regAdd[1] = 0xFF;
-	regAdd[2] = 0xE0;
-	*/
+	   regAdd[0] = 0xb1;
+	   regAdd[1] = 0xFF;
+	   regAdd[2] = 0xE0;
+	 */
 
 	rc = info->fts_read_reg(info, regAdd, 3, buf, 4);
-	if (!rc)
-	{
-		input_info(true, info->dev, "%s: PureAutotune Information Read Fail!! [Data : %2X%2X]\n", __func__, buf[0 + DOFFSET], buf[1 + DOFFSET]);
-	}
-	else
-	{
-		if((buf[0 + DOFFSET] == 0xA5) && (buf[1 + DOFFSET] == 0x96)) retVal = 1;
-		input_info(true, info->dev, "%s: PureAutotune Information !! [Data : %2X%2X]\n", __func__, buf[0 + DOFFSET], buf[1 + DOFFSET]);
+	if (!rc) {
+		input_info(true, info->dev, "%s: PureAutotune Information Read Fail!! [Data : %2X%2X]\n",
+				__func__, buf[0 + DOFFSET], buf[1 + DOFFSET]);
+	} else {
+		if ((buf[0 + DOFFSET] == 0xA5) && (buf[1 + DOFFSET] == 0x96))
+			retVal = 1;
+		input_info(true, info->dev, "%s: PureAutotune Information !! [Data : %2X%2X]\n",
+				__func__, buf[0 + DOFFSET], buf[1 + DOFFSET]);
 	}
 	return retVal;
 }
@@ -123,23 +120,22 @@ static bool get_AFE_status(struct fts_ts_info *info)
 	regAdd[2] = 0x5A;
 
 	if (info->stm_format_ver == STM_FORMAT_VER6)
-	{
 		regAdd[2] = 0x52;
-	}
 
 	rc = info->fts_read_reg(info, regAdd, 3, buf, 4);
-	if (!rc)
-	{
-		input_info(true, info->dev, "%s: Read Fail - Final AFE [Data : %2X] AFE Ver [Data : %2X] \n", __func__, buf[0 + DOFFSET], buf[1 + DOFFSET]);
+	if (!rc) {
+		input_info(true, info->dev, "%s: Read Fail - Final AFE [Data : %2X] AFE Ver [Data : %2X] \n",
+				__func__, buf[0 + DOFFSET], buf[1 + DOFFSET]);
 		return rc;
 	}
 
-	if( buf[0 + DOFFSET] )
+	if (buf[0 + DOFFSET])
 		retVal = true;
-	input_info(true, info->dev, "%s: Final AFE [Data : %2X] AFE Ver [Data : %2X] \n", __func__, buf[0 + DOFFSET], buf[1 + DOFFSET]);
+	input_info(true, info->dev, "%s: Final AFE [Data : %2X] AFE Ver [Data : %2X] \n",
+			__func__, buf[0 + DOFFSET], buf[1 + DOFFSET]);
 	return retVal;
 }
-#endif 
+#endif
 
 #define	FW_IMAGE_SIZE_D1	64 * 1024
 #define	FW_IMAGE_SIZE_D2	128 * 1024
@@ -158,23 +154,18 @@ int FTS_Check_DMA_Done(struct fts_ts_info *info)
 	int cnt = 0;
 
 	cnt = 0;
-	do
-	{
-		info->fts_read_reg(info, &regAdd[0], 2, (unsigned char*)val, 1);
+	do {
+		info->fts_read_reg(info, &regAdd[0], 2, (unsigned char *)val, 1);
 
-		if ( (val[0] & 0x80) != 0x80)
-		{
+		if ((val[0] & 0x80) != 0x80)
 			break;
-		}
 
 		msleep(50);
 		timeout--;
-	}while(timeout != 0);
+	} while (timeout != 0);
 
 	if (timeout == 0)
-	{
 		return -1;
-	}
 
 	return 0;
 }
@@ -189,15 +180,15 @@ static int fts_fw_burn(struct fts_ts_info *info, unsigned char *fw_data)
 	bool needPartialDownload = false;
 	needPartialDownload = get_PureAutotune_status(info);
 
-    if (needPartialDownload){
+	if (needPartialDownload) {
 		/* Reset FTS */
 		info->fts_systemreset(info);
-	    /* wait for ready event */
-	    info->fts_wait_for_ready(info);
-    }
+		/* wait for ready event */
+		info->fts_wait_for_ready(info);
+	}
 #endif
 	/* Check busy Flash */
-	if (fts_fw_wait_for_flash_ready(info)<0)
+	if (fts_fw_wait_for_flash_ready(info) < 0)
 		return -1;
 
 	/* FTS_CMD_UNLOCK_FLASH */
@@ -209,14 +200,13 @@ static int fts_fw_burn(struct fts_ts_info *info, unsigned char *fw_data)
 	msleep(500);
 
 	/* Copy to PRAM */
-	if (info->digital_rev == FTS_DIGITAL_REV_2)
-	{
+	if (info->digital_rev == FTS_DIGITAL_REV_2) {
 		fsize = FW_IMAGE_SIZE_D2 + sizeof(struct fts64_header);
 #ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD
 		if (needPartialDownload)
 			fsize = fsize - FW_CX_AREA_SIZE;
 #endif
-	}	
+	}
 
 	input_info(true, info->dev, "%s: Copy to PRAM [Size : %d]\n", __func__, fsize);
 
@@ -225,9 +215,9 @@ static int fts_fw_burn(struct fts_ts_info *info, unsigned char *fw_data)
 		regAdd[1] = ((section * WRITE_CHUNK_SIZE) >> 8) & 0xff;
 		regAdd[2] = (section * WRITE_CHUNK_SIZE) & 0xff;
 		memcpy(&regAdd[3],
-			&fw_data[section * WRITE_CHUNK_SIZE +
+				&fw_data[section * WRITE_CHUNK_SIZE +
 				sizeof(struct fts64_header)],
-			WRITE_CHUNK_SIZE);
+				WRITE_CHUNK_SIZE);
 
 		info->fts_write_reg(info, &regAdd[0], WRITE_CHUNK_SIZE + 3);
 	}
@@ -240,7 +230,7 @@ static int fts_fw_burn(struct fts_ts_info *info, unsigned char *fw_data)
 	msleep(100);
 
 	/* Check busy Flash */
-	if (fts_fw_wait_for_flash_ready(info)<0)
+	if (fts_fw_wait_for_flash_ready(info) < 0)
 		return -1;
 
 	/* Burn Program Flash */
@@ -249,7 +239,7 @@ static int fts_fw_burn(struct fts_ts_info *info, unsigned char *fw_data)
 	msleep(100);
 
 	/* Check busy Flash */
-	if (fts_fw_wait_for_flash_ready(info)<0)
+	if (fts_fw_wait_for_flash_ready(info) < 0)
 		return -1;
 
 	/* Reset FTS */
@@ -264,16 +254,16 @@ static int fts_fw_burn_stm7(struct fts_ts_info *info, unsigned char *fw_data)
 	int rc;
 	const unsigned long int FTS_TOTAL_SIZE = (256 * 1024);	// Total 256kB
 	const unsigned long int DRAM_LEN = (64 * 1024);	// 64KB
-	const unsigned int CODE_ADDR_START 	= 0x0000;
+	const unsigned int CODE_ADDR_START	= 0x0000;
 	const unsigned int WRITE_CHUNK_SIZE_D3 = 32;
 
 	unsigned long int	size = 0;
-	unsigned long int 	i;
+	unsigned long int	i;
 	unsigned long int	j;
 	unsigned long int	k;
 	unsigned long int	dataLen;
-	unsigned int 		len = 0;
-	unsigned int 		writeAddr = 0;
+	unsigned int		len = 0;
+	unsigned int		writeAddr = 0;
 	unsigned char	buf[WRITE_CHUNK_SIZE_D3 + 3];
 	unsigned char	regAdd[8] = {0};
 	int cnt;
@@ -304,20 +294,18 @@ static int fts_fw_burn_stm7(struct fts_ts_info *info, unsigned char *fw_data)
 	regAdd[0] = 0xFA;		regAdd[1] = 0x72;		regAdd[2] = 0x02;
 	info->fts_write_reg(info, &regAdd[0], 3);
 
-    //========================== Write to FLASH ==========================
+	//========================== Write to FLASH ==========================
 
 	i = 0;
 	k = 0;
 	size = FTS_TOTAL_SIZE;
 
 
-	while(i < size)
-	{
+	while (i < size) {
 		j = 0;
 		dataLen = size - i;
 
-		while ((j < DRAM_LEN) && (j < dataLen))		//DRAM_LEN = 64*1024
-		{
+		while ((j < DRAM_LEN) && (j < dataLen)) { //DRAM_LEN = 64*1024
 			writeAddr = j & 0xFFFF;
 
 			cnt = 0;
@@ -335,14 +323,14 @@ static int fts_fw_burn_stm7(struct fts_ts_info *info, unsigned char *fw_data)
 		}
 		input_info(true, info->dev, "%s: Write to Flash - Total %ld bytes\n", __func__, i);
 
-		 //===================configure flash DMA=====================
-		len = j / 4 - 1; 	// 64*1024 / 4 - 1
+		//===================configure flash DMA=====================
+		len = j / 4 - 1;	// 64*1024 / 4 - 1
 
 		buf[0] = 0xFA;
 		buf[1] = 0x06;
 		buf[2] = 0x00;
 		buf[3] = 0x00;
-		buf[4] = (CODE_ADDR_START +( (k * DRAM_LEN) >> 2)) & 0xFF;			// k * 64 * 1024 / 4
+		buf[4] = (CODE_ADDR_START + ((k * DRAM_LEN) >> 2)) & 0xFF;			// k * 64 * 1024 / 4
 		buf[5] = (CODE_ADDR_START + ((k * DRAM_LEN) >> (2+8))) & 0xFF;		// k * 64 * 1024 / 4 / 256
 		buf[6] = (len >> 0) & 0xFF;    //DMA length in word
 		buf[7] = (len >> 8) & 0xFF;    //DMA length in word
@@ -359,9 +347,7 @@ static int fts_fw_burn_stm7(struct fts_ts_info *info, unsigned char *fw_data)
 
 		rc = FTS_Check_DMA_Done(info);
 		if (rc < 0)
-		{
 			return rc;
-		}
 		k++;
 	}
 
@@ -369,7 +355,7 @@ static int fts_fw_burn_stm7(struct fts_ts_info *info, unsigned char *fw_data)
 	//==================== System reset ====================
 	//System Reset ==> F7 52 34
 	regAdd[0] = 0xF7;		regAdd[1] = 0x52;		regAdd[2] = 0x34;
-	info->fts_write_reg(info, &regAdd[0],3);
+	info->fts_write_reg(info, &regAdd[0], 3);
 
 	return 0;
 }
@@ -382,12 +368,9 @@ static int fts_get_system_status(struct fts_ts_info *info, unsigned char *val1, 
 	unsigned char data[FTS_EVENT_SIZE];
 	int retry = 0;
 
-	if (info->digital_rev == FTS_DIGITAL_REV_2)
-	{
+	if (info->digital_rev == FTS_DIGITAL_REV_2) {
 		regAdd2[1] = 0x1f;
-	}
-	else if (info->digital_rev == FTS_DIGITAL_REV_3)
-	{
+	} else if (info->digital_rev == FTS_DIGITAL_REV_3) {
 		// Mutual Tune Version - Config area
 		regAdd1[1] = 0x07;
 		regAdd1[2] = 0x31;
@@ -404,29 +387,28 @@ static int fts_get_system_status(struct fts_ts_info *info, unsigned char *val1, 
 	regAdd1[0] = READ_ONE_EVENT;
 
 	while (info->fts_read_reg(info, &regAdd1[0], 1, (unsigned char *)data,
-				   FTS_EVENT_SIZE)) {
+				FTS_EVENT_SIZE)) {
 		if ((data[0] == 0x12) && (data[1] == regAdd1[1])
-			&& (data[2] == regAdd1[2])) {
+				&& (data[2] == regAdd1[2])) {
 			rc = 0;
 			*val1 = data[3];
 			input_info(true, info->dev,
-				"%s: System Status 1 : 0x%02x\n",
-			__func__, data[3]);
-		}
-		else if ((data[0] == 0x12) && (data[1] == regAdd2[1])
-			&& (data[2] == regAdd2[2])) {
+					"%s: System Status 1 : 0x%02x\n",
+					__func__, data[3]);
+		} else if ((data[0] == 0x12) && (data[1] == regAdd2[1])
+				&& (data[2] == regAdd2[2])) {
 			rc = 0;
 			*val2 = data[3];
 			input_info(true, info->dev,
-				"%s: System Status 2 : 0x%02x\n",
-			__func__, data[3]);
+					"%s: System Status 2 : 0x%02x\n",
+					__func__, data[3]);
 			break;
 		}
 
 		if (retry++ > FTS_RETRY_COUNT) {
 			rc = -1;
 			input_err(true, info->dev,
-				"%s: Time Over\n", __func__);
+					"%s: Time Over\n", __func__);
 			break;
 		}
 	}
@@ -444,33 +426,28 @@ int fts_fw_wait_for_event(struct fts_ts_info *info, unsigned char eid)
 
 	regAdd = READ_ONE_EVENT;
 	rc = -1;
-	if (info->stm_format_ver == STM_FORMAT_VER6)	{
-		while (info->fts_read_reg
-		       (info, &regAdd, 1, (unsigned char *)data, FTS_EVENT_SIZE)) {
+	if (info->stm_format_ver == STM_FORMAT_VER6) {
+		while (info->fts_read_reg(info, &regAdd, 1, (unsigned char *)data, FTS_EVENT_SIZE)) {
 			if (data[0] == EVENTID_STATUS_EVENT || data[0] == EVENTID_ERROR) {
 				if ((data[0] == EVENTID_STATUS_EVENT) && (data[1] == eid)) {
 					rc = 0;
 					break;
-				}
-				else
-				{
-					input_info(true, info->dev, "%s: %2X,%2X,%2X,%2X \n", __func__, data[0],data[1],data[2],data[3]);
+				} else {
+					input_info(true, info->dev, "%s: %2X,%2X,%2X,%2X \n",
+							__func__, data[0], data[1], data[2], data[3]);
 				}
 			}
 			if (retry++ > FTS_RETRY_COUNT * 15) {
 				rc = -1;
-				input_info(true, info->dev, "%s: Time Over ( %2X,%2X,%2X,%2X )\n", __func__, data[0],data[1],data[2],data[3]);
+				input_info(true, info->dev, "%s: Time Over (%2X,%2X,%2X,%2X)\n",
+						__func__, data[0], data[1], data[2], data[3]);
 				break;
 			}
 			msleep(20);
 		}
-	}
-	else
-	{
-		while (info->fts_read_reg
-		       (info, &regAdd, 1, (unsigned char *)data, FTS_EVENT_SIZE)) {
-			if ((data[0] == EVENTID_STATUS_EVENT) &&
-				(data[1] == eid)) {
+	} else {
+		while (info->fts_read_reg(info, &regAdd, 1, (unsigned char *)data, FTS_EVENT_SIZE)) {
+			if ((data[0] == EVENTID_STATUS_EVENT) && (data[1] == eid)) {
 				rc = 0;
 				break;
 			}
@@ -498,21 +475,20 @@ int fts_fw_wait_for_event_D3(struct fts_ts_info *info, unsigned char eid0, unsig
 
 	regAdd = READ_ONE_EVENT;
 	rc = -1;
-	while (info->fts_read_reg
-	       (info, &regAdd, 1, (unsigned char *)data, FTS_EVENT_SIZE)) {
+	while (info->fts_read_reg(info, &regAdd, 1, (unsigned char *)data, FTS_EVENT_SIZE)) {
 		if (data[0] == EVENTID_STATUS_EVENT || data[0] == EVENTID_ERROR) {
 			if ((data[0] == EVENTID_STATUS_EVENT) && (data[1] == eid0) && (data[2] == eid1)) {
-			rc = 0;
-			break;
-		}
-			else
-			{
-				input_info(true, info->dev, "%s: %2X,%2X,%2X,%2X \n", __func__, data[0],data[1],data[2],data[3]);
+				rc = 0;
+				break;
+			} else {
+				input_info(true, info->dev, "%s: %2X,%2X,%2X,%2X \n",
+						__func__, data[0], data[1], data[2], data[3]);
 			}
 		}
 		if (retry++ > FTS_RETRY_COUNT * 15) {
 			rc = -1;
-			input_info(true, info->dev, "%s: Time Over ( %2X,%2X,%2X,%2X )\n", __func__, data[0],data[1],data[2],data[3]);
+			input_info(true, info->dev, "%s: Time Over (%2X,%2X,%2X,%2X)\n",
+					__func__, data[0], data[1], data[2], data[3]);
 			break;
 		}
 		msleep(20);
@@ -537,15 +513,15 @@ int fts_fw_wait_for_specific_event(struct fts_ts_info *info, unsigned char eid0,
 			if ((data[0] == eid0) && (data[1] == eid1) && (data[2] == eid2)) {
 				rc = 0;
 				break;
-			}
-			else
-			{
-				input_info(true, info->dev, "%s: %2X,%2X,%2X,%2X \n", __func__, data[0],data[1],data[2],data[3]);
+			} else {
+				input_info(true, info->dev, "%s: %2X,%2X,%2X,%2X \n",
+						__func__, data[0], data[1], data[2], data[3]);
 			}
 		}
 		if (retry++ > FTS_RETRY_COUNT * 15) {
 			rc = -1;
-			input_info(true, info->dev, "%s: Time Over ( %2X,%2X,%2X,%2X )\n", __func__, data[0],data[1],data[2],data[3]);
+			input_info(true, info->dev, "%s: Time Over (%2X,%2X,%2X,%2X)\n",
+					__func__, data[0], data[1], data[2], data[3]);
 			break;
 		}
 		msleep(20);
@@ -564,51 +540,49 @@ void fts_execute_autotune(struct fts_ts_info *info)
 	bool NoNeedAutoTune = false; // default for factory
 	bFinalAFE = get_AFE_status(info);
 
-	#if !defined (CONFIG_SEC_FACTORY)
-	 NoNeedAutoTune = get_PureAutotune_status(info);  // Check flag and decide cx_tune
-	#endif
+#if !defined (CONFIG_SEC_FACTORY)
+	NoNeedAutoTune = get_PureAutotune_status(info);  // Check flag and decide cx_tune
+#endif
 
-	input_info(true, info->dev, "%s: AFE(%d), NoNeedAutoTune(%d)\n", __func__,bFinalAFE, NoNeedAutoTune);
+	input_info(true, info->dev, "%s: AFE(%d), NoNeedAutoTune(%d)\n", __func__, bFinalAFE, NoNeedAutoTune);
 
-    if ((!NoNeedAutoTune) || (info->o_afe_ver!=info->afe_ver)){
+	if ((!NoNeedAutoTune) || (info->o_afe_ver != info->afe_ver)) {
 #endif
 		info->fts_command(info, CX_TUNNING);
 		msleep(300);
-		if( info->stm_ver == STM_VER7)
-		{
+		if (info->stm_ver == STM_VER7) {
 			fts_fw_wait_for_event_D3(info, STATUS_EVENT_MUTUAL_AUTOTUNE_DONE, 0x00);
 			info->fts_command(info, SELF_AUTO_TUNE);
 			msleep(300);
 			fts_fw_wait_for_event_D3(info, STATUS_EVENT_SELF_AUTOTUNE_DONE_D3, 0x00);
 
-			#ifdef FTS_SUPPORT_WATER_MODE
-				fts_fw_wait_for_event (info, STATUS_EVENT_WATER_SELF_AUTOTUNE_DONE);
-				fts_fw_wait_for_event(info, STATUS_EVENT_SELF_AUTOTUNE_DONE);
-			#endif
-		}else
-		{
+#ifdef FTS_SUPPORT_WATER_MODE
+			fts_fw_wait_for_event (info, STATUS_EVENT_WATER_SELF_AUTOTUNE_DONE);
+			fts_fw_wait_for_event(info, STATUS_EVENT_SELF_AUTOTUNE_DONE);
+#endif
+		} else {
 			fts_fw_wait_for_event(info, STATUS_EVENT_MUTUAL_AUTOTUNE_DONE);
-			#ifdef FTS_SUPPORT_WATER_MODE
-				fts_fw_wait_for_event (info, STATUS_EVENT_WATER_SELF_AUTOTUNE_DONE);
+#ifdef FTS_SUPPORT_WATER_MODE
+			fts_fw_wait_for_event (info, STATUS_EVENT_WATER_SELF_AUTOTUNE_DONE);
+			fts_fw_wait_for_event(info, STATUS_EVENT_SELF_AUTOTUNE_DONE);
+#endif
+#ifdef FTS_SUPPORT_SELF_MODE
+			info->fts_command(info, SELF_AUTO_TUNE);
+			msleep(300);
+			if (info->stm_format_ver == STM_FORMAT_VER6)
+				fts_fw_wait_for_event(info, STATUS_EVENT_SELF_AUTOTUNE_DONE_D3);
+			else
 				fts_fw_wait_for_event(info, STATUS_EVENT_SELF_AUTOTUNE_DONE);
-			#endif
-			#ifdef FTS_SUPPORT_SELF_MODE
-				info->fts_command(info, SELF_AUTO_TUNE);
-				msleep(300);
-				if (info->stm_format_ver == STM_FORMAT_VER6)
-					fts_fw_wait_for_event(info, STATUS_EVENT_SELF_AUTOTUNE_DONE_D3);
-				else
-					fts_fw_wait_for_event(info, STATUS_EVENT_SELF_AUTOTUNE_DONE);
-			#endif
+#endif
 		}
 
 		NeedSaveTune = true;
 #ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD
-    }
+	}
 
 	if (bFinalAFE) {
 #ifdef CONFIG_SEC_FACTORY
-		input_info(true, info->dev, "%s: AFE_status(%d) write ( C1 0E )\n", __func__,bFinalAFE);
+		input_info(true, info->dev, "%s: AFE_status(%d) write (C1 0E)\n", __func__, bFinalAFE);
 		regData[0] = 0xC1;
 		regData[1] = 0x0E;
 		ret = info->fts_write_reg(info, regData, 2);//write C1 0E
@@ -616,12 +590,11 @@ void fts_execute_autotune(struct fts_ts_info *info)
 			input_info(true, info->dev, "%s: Flash Back up PureAutotune Fail(Set)\n", __func__);
 
 		msleep(20);
-		if(info->stm_format_ver != STM_FORMAT_VER6)
+		if (info->stm_format_ver != STM_FORMAT_VER6)
 			fts_fw_wait_for_event(info, STATUS_EVENT_PURE_AUTOTUNE_FLAG_WRITE_FINISH);
 #else
-		if (NoNeedAutoTune && (info->o_afe_ver!=info->afe_ver))
-		{
-			input_info(true, info->dev, "%s: AFE_status(%d) write ( C2 0E )\n", __func__,bFinalAFE);
+		if (NoNeedAutoTune && (info->o_afe_ver != info->afe_ver)) {
+			input_info(true, info->dev, "%s: AFE_status(%d) write (C2 0E)\n", __func__, bFinalAFE);
 			regData[0] = 0xC2;
 			regData[1] = 0x0E;
 			ret = info->fts_write_reg(info, regData, 2);//Write C2 0E
@@ -629,22 +602,22 @@ void fts_execute_autotune(struct fts_ts_info *info)
 				input_info(true, info->dev, "%s: Flash Back up PureAutotune Fail(Clear)\n", __func__);
 
 			msleep(20);
-			if(info->stm_format_ver != STM_FORMAT_VER6)
+			if (info->stm_format_ver != STM_FORMAT_VER6)
 				fts_fw_wait_for_event(info, STATUS_EVENT_PURE_AUTOTUNE_FLAG_ERASE_FINISH);
 
 			NeedSaveTune = true;
 		}
 #endif
 	} else {
-		input_info(true, info->dev, "%s: AFE_status(%d) write ( C2 0E )\n", __func__,bFinalAFE);
-	    regData[0] = 0xC2;
+		input_info(true, info->dev, "%s: AFE_status(%d) write (C2 0E)\n", __func__, bFinalAFE);
+		regData[0] = 0xC2;
 		regData[1] = 0x0E;
 		ret = info->fts_write_reg(info, regData, 2);//Write C2 0E
 		if (ret < 0)
 			input_info(true, info->dev, "%s: Flash Back up PureAutotune Fail(Clear)\n", __func__);
 
 		msleep(20);
-		if(info->stm_format_ver != STM_FORMAT_VER6)
+		if (info->stm_format_ver != STM_FORMAT_VER6)
 			fts_fw_wait_for_event(info, STATUS_EVENT_PURE_AUTOTUNE_FLAG_ERASE_FINISH);
 
 		NeedSaveTune = true;
@@ -655,12 +628,11 @@ void fts_execute_autotune(struct fts_ts_info *info)
 		info->fts_command(info, FTS_CMD_SAVE_CX_TUNING);
 		msleep(230);
 		fts_fw_wait_for_event(info,
-				      STATUS_EVENT_FLASH_WRITE_CXTUNE_VALUE);
+				STATUS_EVENT_FLASH_WRITE_CXTUNE_VALUE);
 	}
 
 	// CHECK LATER
-	if( info->stm_ver == STM_VER7)
-	{
+	if (info->stm_ver == STM_VER7) {
 		info->fts_command(info, FTS_CMD_SAVE_FWCONFIG);
 		msleep(230);
 		fts_fw_wait_for_event(info, STATUS_EVENT_FLASH_WRITE_CONFIG);
@@ -680,38 +652,31 @@ void fts_fw_init(struct fts_ts_info *info)
 {
 	input_info(true, info->dev, "%s \n", __func__);
 
-	if( info->stm_ver != STM_VER7)
-	{
-		if (info->stm_format_ver != STM_FORMAT_VER6)
-		{
+	if (info->stm_ver != STM_VER7) {
+		if (info->stm_format_ver != STM_FORMAT_VER6) {
 			info->fts_command(info, SLEEPOUT);
 			msleep(50);
 		}
 
-		if (info->digital_rev == FTS_DIGITAL_REV_2)
-		{
+		if (info->digital_rev == FTS_DIGITAL_REV_2) {
 			info->fts_command(info, FTS_CMD_TRIM_LOW_POWER_OSCILLATOR);
 			msleep(300);
-			if( info->stm_ver != STM_VER5)
-			{
+			if (info->stm_ver != STM_VER5) {
 				info->fts_command(info, FTS_CMD_SAVE_CX_TUNING);
 				msleep(230);
 				fts_fw_wait_for_event(info, STATUS_EVENT_FLASH_WRITE_CXTUNE_VALUE);
 			}
 		}
-	}
-	else if  (info->stm_ver == STM_VER7)
-	{
+	} else if  (info->stm_ver == STM_VER7) {
 		info->fts_command(info, FTS_CMD_TRIM_LOW_POWER_OSCILLATOR);
 		msleep(200);
 	}
 
 	/* skip autotune by partial download */
-//#ifndef FTS_SUPPORT_PARTIAL_DOWNLOAD
+	//#ifndef FTS_SUPPORT_PARTIAL_DOWNLOAD
 	fts_execute_autotune(info);
-//#endif
-	if (info->stm_format_ver != STM_FORMAT_VER6)
-	{
+	//#endif
+	if (info->stm_format_ver != STM_FORMAT_VER6) {
 		info->fts_command(info, SLEEPOUT);
 		msleep(50);
 	}
@@ -721,13 +686,9 @@ void fts_fw_init(struct fts_ts_info *info)
 	fts_fw_wait_for_event(info, STATUS_EVENT_WATER_SELF_DONE);
 #else
 	if (info->stm_format_ver == STM_FORMAT_VER6)
-	{
 		fts_fw_wait_for_event (info, STATUS_EVENT_FORCE_CAL_DONE_D3);
-	}
 	else
-	{
 		fts_fw_wait_for_event (info, STATUS_EVENT_FORCE_CAL_DONE);
-	}
 #endif
 
 #ifdef FTS_SUPPORT_TOUCH_KEY
@@ -750,28 +711,28 @@ const int fts_fw_updater(struct fts_ts_info *info, unsigned char *fw_data)
 
 	if (!fw_data) {
 		input_err(true, info->dev, "%s: Firmware data is NULL\n",
-			__func__);
+				__func__);
 		return -ENODEV;
 	}
 
 	header = (struct fts64_header *)fw_data;
 	fw_main_version = (header->released_ver[0] << 8) +
-							(header->released_ver[1]);
+		(header->released_ver[1]);
 
 	input_info(true, info->dev,
-		  "Starting firmware update : 0x%04X\n",
-		  fw_main_version);
+			"Starting firmware update : 0x%04X\n",
+			fw_main_version);
 
 	retry = 0;
 	while (1) {
 #ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD
 		info->o_afe_ver = info->afe_ver;
 #endif
-		
-		if(info->stm_ver == STM_VER7){
+
+		if (info->stm_ver == STM_VER7)
 			retval = fts_fw_burn_stm7(info, fw_data);
-		}
-		else retval = fts_fw_burn(info, fw_data);
+		else
+			retval = fts_fw_burn(info, fw_data);
 
 		if (retval >= 0) {
 			info->fts_wait_for_ready(info);
@@ -783,8 +744,8 @@ const int fts_fw_updater(struct fts_ts_info *info, unsigned char *fw_data)
 
 			if (fw_main_version == info->fw_main_version_of_ic) {
 				input_info(true, info->dev,
-					  "%s: Success Firmware update\n",
-					  __func__);
+						"%s: Success Firmware update\n",
+						__func__);
 				fts_fw_init(info);
 				retval = 0;
 				break;
@@ -793,7 +754,7 @@ const int fts_fw_updater(struct fts_ts_info *info, unsigned char *fw_data)
 
 		if (retry++ > 3) {
 			input_err(true, info->dev, "%s: Fail Firmware update\n",
-				 __func__);
+					__func__);
 			retval = -1;
 			break;
 		}
@@ -835,26 +796,27 @@ static bool fts_skip_firmware_update(struct fts_ts_info *info, unsigned char *fw
 	if (strncmp(info->board->project_name, "TB", 2) == 0) {
 		if (config_id != CONFIG_ID_D2_TB) {
 			input_info(true, info->dev, "%s: Skip update because config ID(%0x2X) is mismatched.\n",
-				__func__,config_id);
+					__func__, config_id);
 			// return true; // tempory blocking to update f/w for TB, it will be remove later.. Xtopher
 		}
 
 		if ((num_rx != info->board->SenseChannelLength)
-			|| (num_tx != info->board->ForceChannelLength)) {
+				|| (num_tx != info->board->ForceChannelLength)) {
 			input_info(true, info->dev,
-				"%s: Skip update because revision is mismatched. rx[%d] tx[%d]\n",
-				__func__, num_rx, num_tx);
+					"%s: Skip update because revision is mismatched. rx[%d] tx[%d]\n",
+					__func__, num_rx, num_tx);
 			//return true;  // tempory blocking to update f/w for TB, it will be remove later.. Xtopher
 		}
 	} else if (strncmp(info->board->project_name, "TR", 2) == 0) {
 		if (config_id != CONFIG_ID_D2_TR) {
 			input_info(true, info->dev,
-				"%s: Skip update because config ID is mismatched. config_id[%d]\n",
-				__func__, config_id);
+					"%s: Skip update because config ID is mismatched. config_id[%d]\n",
+					__func__, config_id);
 			return true;
 		}
-	} else
+	} else {
 		goto out;
+	}
 
 out:
 	return false;
@@ -873,14 +835,19 @@ int fts_fw_update_on_probe(struct fts_ts_info *info)
 	fts_check_custom_library(info);
 #endif
 
-	if (info->board->firmware_name){
-		input_info(true, info->dev,"%s:firmware name exgist in dts\n", __func__);
+	if (info->board->firmware_name) {
+		input_info(true, info->dev, "%s:firmware name exgist in dts\n", __func__);
 		info->firmware_name = info->board->firmware_name;
+	}
+
+	if (info->board->bringup == 1) {
+		input_err(true, info->dev, "%s: skip fw loading for bringup\n", __func__);
+		return 0;
 	}
 
 	snprintf(fw_path, FTS_MAX_FW_PATH, "%s", info->firmware_name);
 	input_info(true, info->dev, "%s: Load firmware : %s, Digital_rev : %d\n", __func__,
-		fw_path, info->digital_rev);
+			fw_path, info->digital_rev);
 
 	if (!info->firmware_name) {
 		input_info(true, info->dev, "%s: firmawer name is NULL, return\n", __func__);
@@ -890,24 +857,24 @@ int fts_fw_update_on_probe(struct fts_ts_info *info)
 	retval = request_firmware(&fw_entry, fw_path, info->dev);
 	if (retval) {
 		input_err(true, info->dev,
-			"%s: Firmware image %s not available\n", __func__,
-			fw_path);
+				"%s: Firmware image %s not available\n", __func__,
+				fw_path);
 		goto update_on_probe_done;
 	}
 
 	if ((info->digital_rev == FTS_DIGITAL_REV_1) &&
-		fw_entry->size != (FW_IMAGE_SIZE_D1 + sizeof(struct fts64_header))) {
+			fw_entry->size != (FW_IMAGE_SIZE_D1 + sizeof(struct fts64_header))) {
 		input_err(true, info->dev,
-			"%s: Firmware image %s not available for FTS D1\n", __func__,
-			fw_path);
+				"%s: Firmware image %s not available for FTS D1\n", __func__,
+				fw_path);
 		goto update_on_probe_done;
 	}
 
 	if ((info->digital_rev == FTS_DIGITAL_REV_2) &&
-		fw_entry->size != (FW_IMAGE_SIZE_D2 + sizeof(struct fts64_header))) {
+			fw_entry->size != (FW_IMAGE_SIZE_D2 + sizeof(struct fts64_header))) {
 		input_err(true, info->dev,
-			"%s: Firmware image %s not available for FTS D2\n", __func__,
-			fw_path);
+				"%s: Firmware image %s not available for FTS D2\n", __func__,
+				fw_path);
 		goto update_on_probe_done;
 	}
 
@@ -916,7 +883,7 @@ int fts_fw_update_on_probe(struct fts_ts_info *info)
 
 	info->fw_version_of_bin = (fw_data[5] << 8) + fw_data[4];
 	info->fw_main_version_of_bin = (header->released_ver[0] << 8) +
-					(header->released_ver[1]);
+		(header->released_ver[1]);
 	if (info->digital_rev == FTS_DIGITAL_REV_1)
 		info->config_version_of_bin = (fw_data[CONFIG_OFFSET_BIN_D1] << 8) + fw_data[CONFIG_OFFSET_BIN_D1 - 1];
 	else if (info->digital_rev == FTS_DIGITAL_REV_2)
@@ -925,19 +892,20 @@ int fts_fw_update_on_probe(struct fts_ts_info *info)
 		info->config_version_of_bin = (fw_data[CONFIG_OFFSET_BIN_D3] << 8) + fw_data[CONFIG_OFFSET_BIN_D3 - 1];
 
 	input_info(true, info->dev,
-		"Bin Firmware Version : 0x%04X, Bin Config Version : 0x%04X, Bin Main Version : 0x%04X\n",
-		info->fw_version_of_bin,
-		info->config_version_of_bin,
-		info->fw_main_version_of_bin);
+			"Bin Firmware Version : 0x%04X, Bin Config Version : 0x%04X, Bin Main Version : 0x%04X\n",
+			info->fw_version_of_bin,
+			info->config_version_of_bin,
+			info->fw_main_version_of_bin);
 
-	/*
-	 * skip firmware update @ bringup flag is enabled in device tree.
-	 */
+	if (info->board->bringup == 2) {
+		input_err(true, info->dev, "%s: skip fw update for bringup\n", __func__);
+		goto update_on_probe_done;
+	}
 
 	/* check core + config + main */
 	if ((info->fw_main_version_of_ic < info->fw_main_version_of_bin)
-		|| (info->config_version_of_ic < info->config_version_of_bin)
-		|| (info->fw_version_of_ic < info->fw_version_of_bin))
+			|| (info->config_version_of_ic < info->config_version_of_bin)
+			|| (info->fw_version_of_ic < info->fw_version_of_bin))
 		retval = fts_fw_updater(info, fw_data);
 	else
 		retval = FTS_NOT_ERROR;
@@ -958,7 +926,7 @@ update_on_probe_done:
 EXPORT_SYMBOL(fts_fw_update_on_probe);
 
 static int fts_load_fw_from_kernel(struct fts_ts_info *info,
-				 const char *fw_path)
+		const char *fw_path)
 {
 	int retval;
 	const struct firmware *fw_entry = NULL;
@@ -966,19 +934,19 @@ static int fts_load_fw_from_kernel(struct fts_ts_info *info,
 
 	if (!fw_path) {
 		input_err(true, info->dev, "%s: Firmware name is not defined\n",
-			__func__);
+				__func__);
 		return -EINVAL;
 	}
 
 	input_info(true, info->dev, "%s: Load firmware : %s\n", __func__,
-		 fw_path);
+			fw_path);
 
 	retval = request_firmware(&fw_entry, fw_path, info->dev);
 
 	if (retval) {
 		input_err(true, info->dev,
-			"%s: Firmware image %s not available\n", __func__,
-			fw_path);
+				"%s: Firmware image %s not available\n", __func__,
+				fw_path);
 		goto done;
 	}
 
@@ -998,13 +966,13 @@ static int fts_load_fw_from_kernel(struct fts_ts_info *info,
 	retval = fts_fw_updater(info, fw_data);
 	if (retval)
 		input_err(true, info->dev, "%s: failed update firmware\n",
-			__func__);
+				__func__);
 
 	if (info->irq)
 		enable_irq(info->irq);
 	else
 		hrtimer_start(&info->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
- done:
+done:
 	if (fw_entry)
 		release_firmware(fw_entry);
 
@@ -1024,7 +992,7 @@ static int fts_load_fw_from_ums(struct fts_ts_info *info)
 	fp = filp_open(FTS_DEFAULT_UMS_FW, O_RDONLY, S_IRUSR);
 	if (IS_ERR(fp)) {
 		input_err(true, info->dev, "%s: failed to open %s.\n", __func__,
-			FTS_DEFAULT_UMS_FW);
+				FTS_DEFAULT_UMS_FW);
 		error = -ENOENT;
 		goto open_err;
 	}
@@ -1036,16 +1004,16 @@ static int fts_load_fw_from_ums(struct fts_ts_info *info)
 		const struct fts64_header *header;
 		fw_data = kzalloc(fw_size, GFP_KERNEL);
 		nread = vfs_read(fp, (char __user *)fw_data,
-				 fw_size, &fp->f_pos);
+				fw_size, &fp->f_pos);
 
 		input_info(true, info->dev,
-			 "%s: start, file path %s, size %ld Bytes\n",
-			 __func__, FTS_DEFAULT_UMS_FW, fw_size);
+				"%s: start, file path %s, size %ld Bytes\n",
+				__func__, FTS_DEFAULT_UMS_FW, fw_size);
 
 		if (nread != fw_size) {
 			input_err(true, info->dev,
-				"%s: failed to read firmware file, nread %ld Bytes\n",
-				__func__, nread);
+					"%s: failed to read firmware file, nread %ld Bytes\n",
+					__func__, nread);
 			error = -EIO;
 		} else {
 			if (fts_skip_firmware_update(info, fw_data))
@@ -1062,11 +1030,11 @@ static int fts_load_fw_from_ums(struct fts_ts_info *info)
 				info->fts_wait_for_ready(info);
 
 				input_info(true, info->dev,
-					"[UMS] Firmware Version : 0x%04X "
-					"[UMS] Main Version : 0x%04X\n",
-					(fw_data[5] << 8)+fw_data[4],
-					(header->released_ver[0] << 8) +
-							(header->released_ver[1]));
+						"[UMS] Firmware Version : 0x%04X "
+						"[UMS] Main Version : 0x%04X\n",
+						(fw_data[5] << 8)+fw_data[4],
+						(header->released_ver[0] << 8) +
+						(header->released_ver[1]));
 
 				error = fts_fw_updater(info, fw_data);
 
@@ -1074,19 +1042,19 @@ static int fts_load_fw_from_ums(struct fts_ts_info *info)
 					enable_irq(info->irq);
 				else
 					hrtimer_start(&info->timer,
-						  ktime_set(1, 0),
-						  HRTIMER_MODE_REL);
+							ktime_set(1, 0),
+							HRTIMER_MODE_REL);
 			} else {
 				error = -1;
 				input_err(true, info->dev,
-					 "%s: File type is not match with FTS64 file. [%8x]\n",
-					 __func__, header->signature);
+						"%s: File type is not match with FTS64 file. [%8x]\n",
+						__func__, header->signature);
 			}
 		}
 
 		if (error < 0)
 			input_err(true, info->dev, "%s: failed update firmware\n",
-				__func__);
+					__func__);
 
 done:
 		kfree(fw_data);
@@ -1094,7 +1062,7 @@ done:
 
 	filp_close(fp, NULL);
 
- open_err:
+open_err:
 	set_fs(old_fs);
 	return error;
 }
@@ -1109,36 +1077,36 @@ static int fts_load_fw_from_ffu(struct fts_ts_info *info)
 
 	if (!fw_path) {
 		input_err(true, info->dev, "%s: Firmware name is not defined\n",
-			__func__);
+				__func__);
 		return -EINVAL;
 	}
 
 	input_info(true, info->dev, "%s: Load firmware : %s\n", __func__,
-		 fw_path);
+			fw_path);
 
 	retval = request_firmware(&fw_entry, fw_path, info->dev);
 
 	if (retval) {
 		input_err(true, info->dev,
-			"%s: Firmware image %s not available\n", __func__,
-			fw_path);
+				"%s: Firmware image %s not available\n", __func__,
+				fw_path);
 		goto done;
 	}
 
 	if ((info->digital_rev == FTS_DIGITAL_REV_2) &&
-		(fw_entry->size != (FW_IMAGE_SIZE_D2 + sizeof(struct fts64_header) + SIGNEDKEY_SIZE))) {
+			(fw_entry->size != (FW_IMAGE_SIZE_D2 + sizeof(struct fts64_header) + SIGNEDKEY_SIZE))) {
 		input_err(true, info->dev,
-			"%s: Unsigned firmware %s is not available, %ld\n", __func__,
-			fw_path, fw_entry->size);
+				"%s: Unsigned firmware %s is not available, %ld\n", __func__,
+				fw_path, fw_entry->size);
 		retval = -EPERM;
 		goto done;
 	}
 
 	if ((info->digital_rev == FTS_DIGITAL_REV_3) &&
-		(fw_entry->size != (FW_IMAGE_SIZE_D3 + sizeof(struct fts64_header) + SIGNEDKEY_SIZE))) {
+			(fw_entry->size != (FW_IMAGE_SIZE_D3 + sizeof(struct fts64_header) + SIGNEDKEY_SIZE))) {
 		input_err(true, info->dev,
-			"%s: Unsigned firmware %s is not available, %ld\n", __func__,
-			fw_path, fw_entry->size);
+				"%s: Unsigned firmware %s is not available, %ld\n", __func__,
+				fw_path, fw_entry->size);
 		retval = -EPERM;
 		goto done;
 	}
@@ -1148,7 +1116,7 @@ static int fts_load_fw_from_ffu(struct fts_ts_info *info)
 
 	info->fw_version_of_bin = (fw_data[5] << 8)+fw_data[4];
 	info->fw_main_version_of_bin = (header->released_ver[0] << 8) +
-								(header->released_ver[1]);
+		(header->released_ver[1]);
 	if (info->digital_rev == FTS_DIGITAL_REV_1)
 		info->config_version_of_bin = (fw_data[CONFIG_OFFSET_BIN_D1] << 8) + fw_data[CONFIG_OFFSET_BIN_D1 - 1];
 	else if (info->digital_rev == FTS_DIGITAL_REV_2)
@@ -1157,12 +1125,12 @@ static int fts_load_fw_from_ffu(struct fts_ts_info *info)
 		info->config_version_of_bin = (fw_data[CONFIG_OFFSET_BIN_D3] << 8) + fw_data[CONFIG_OFFSET_BIN_D3 - 1];
 
 	input_info(true, info->dev,
-					"FFU Firmware Version : 0x%04X "
-					"FFU Config Version : 0x%04X "
-					"FFU Main Version : 0x%04X\n",
-					info->fw_version_of_bin,
-					info->config_version_of_bin,
-					info->fw_main_version_of_bin);
+			"FFU Firmware Version : 0x%04X "
+			"FFU Config Version : 0x%04X "
+			"FFU Main Version : 0x%04X\n",
+			info->fw_version_of_bin,
+			info->config_version_of_bin,
+			info->fw_main_version_of_bin);
 
 	/* TODO : if you need to check firmware version between IC and Binary,
 	 * add it this position.
@@ -1179,13 +1147,13 @@ static int fts_load_fw_from_ffu(struct fts_ts_info *info)
 	retval = fts_fw_updater(info, fw_data);
 	if (retval)
 		input_err(true, info->dev, "%s: failed update firmware\n",
-			__func__);
+				__func__);
 
 	if (info->irq)
 		enable_irq(info->irq);
 	else
 		hrtimer_start(&info->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
- done:
+done:
 	if (fw_entry)
 		release_firmware(fw_entry);
 
@@ -1219,11 +1187,10 @@ int fts_fw_update_on_hidden_menu(struct fts_ts_info *info, int update_type)
 
 	default:
 		input_err(true, info->dev, "%s: Not support command[%d]\n",
-			__func__, update_type);
+				__func__, update_type);
 		break;
 	}
 
 	return retval;
 }
 EXPORT_SYMBOL(fts_fw_update_on_hidden_menu);
-

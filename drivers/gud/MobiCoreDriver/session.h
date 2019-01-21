@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2016 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -18,34 +18,62 @@
 #include <linux/list.h>
 
 #include "mcp.h"
+#include "iwp.h"
+#include "nq.h"
 
 struct tee_object;
 struct tee_mmu;
 struct mc_ioctl_buffer;
 
+struct tee_wsm {
+	/* Buffer NWd address (uva or kva, used only for lookup) */
+	uintptr_t		va;
+	/* Buffer length */
+	u32			len;
+	/* Buffer flags */
+	u32			flags;
+	/* Buffer SWd address */
+	u32			sva;
+	union {
+		/* MMU table */
+		struct tee_mmu		*mmu;
+		/* Index of re-used buffer (temporary) */
+		int			index;
+	};
+	/* Pointer to associated cbuf, if relevant */
+	struct cbuf		*cbuf;
+	/* State of this WSM */
+	bool			in_use;
+};
+
 struct tee_session {
-	/* Session closing lock, so two calls cannot be made simultaneously */
-	struct mutex		close_lock;
-	/* Asynchronous session close (GP) requires a callback to unblock */
-	struct completion	close_completion;
-	/* MCP session descriptor (MUST BE FIRST) */
-	struct mcp_session	mcp_session;
+	/* Session descriptor */
+	union {
+		struct nq_session	nq_session;
+		struct mcp_session	mcp_session;
+		struct iwp_session	iwp_session;
+	};
 	/* Owner */
 	struct tee_client	*client;
 	/* Number of references kept to this object */
 	struct kref		kref;
+	/* WSM for the TCI */
+	struct tee_wsm		tci;
 	/* The list entry to attach to session list of owner */
 	struct list_head	list;
 	/* Session WSMs lock */
 	struct mutex		wsms_lock;
-	/* List of WSMs for a session */
-	struct list_head	wsms;
+	/* WSMs for a session */
+	struct tee_wsm		wsms[MC_MAP_MAX];
+	/* Pointers to WSMs in LRU order (0 is oldest) */
+	struct tee_wsm		*wsms_lru[MC_MAP_MAX];
 };
 
 struct tee_session *session_create(struct tee_client *client, bool is_gp,
-				   struct mc_identity *identity);
+				   struct mc_identity *identity, int client_fd);
 int session_open(struct tee_session *session, const struct tee_object *obj,
-		 const struct tee_mmu *obj_mmu, uintptr_t tci, size_t len);
+		 const struct tee_mmu *obj_mmu, uintptr_t tci, size_t len,
+		 int client_fd);
 int session_close(struct tee_session *session);
 static inline void session_get(struct tee_session *session)
 {
@@ -54,14 +82,26 @@ static inline void session_get(struct tee_session *session)
 
 int session_put(struct tee_session *session);
 int session_kill(struct tee_session *session);
-int session_wsms_add(struct tee_session *session,
-		     struct mc_ioctl_buffer *bufs);
-int session_wsms_remove(struct tee_session *session,
-			const struct mc_ioctl_buffer *bufs);
+int session_map(struct tee_session *session, struct mc_ioctl_buffer *bufs,
+		int client_fd);
+int session_unmap(struct tee_session *session,
+		  const struct mc_ioctl_buffer *bufs);
 s32 session_exitcode(struct tee_session *session);
 int session_notify_swd(struct tee_session *session);
 int session_waitnotif(struct tee_session *session, s32 timeout,
 		      bool silent_expiry);
+
+int session_gp_open_session(struct tee_session *session,
+			    const struct tee_object *obj,
+			    const struct tee_mmu *obj_mmu,
+			    struct gp_operation *operation,
+			    struct gp_return *gp_ret,
+			    int client_fd);
+int session_gp_invoke_command(struct tee_session *session, u32 command_id,
+			      struct gp_operation *operation,
+			      struct gp_return *gp_ret, int client_fd);
+int session_gp_request_cancellation(u32 slot);
+
 int session_debug_structs(struct kasnprintf_buf *buf,
 			  struct tee_session *session, bool is_closing);
 

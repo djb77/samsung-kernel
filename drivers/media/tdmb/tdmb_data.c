@@ -1,21 +1,21 @@
 /*
-*
-* drivers/media/tdmb/tdmb_data.c
-*
-* tdmb driver
-*
-* Copyright (C) (2011, Samsung Electronics)
-*
-* This program is free software; you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation version 2.
-*
-* This program is distributed "as is" WITHOUT ANY WARRANTY of any
-* kind, whether express or implied; without even the implied warranty
-* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-*/
+ *
+ * drivers/media/tdmb/tdmb_data.c
+ *
+ * tdmb driver
+ *
+ * Copyright (C) (2011, Samsung Electronics)
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation version 2.
+ *
+ * This program is distributed "as is" WITHOUT ANY WARRANTY of any
+ * kind, whether express or implied; without even the implied warranty
+ * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
 
 #include <linux/kernel.h>
 #include <linux/fs.h>
@@ -75,6 +75,7 @@ irqreturn_t tdmb_irq_handler(int irq, void *dev_id)
 {
 	if (tdmb_workqueue) {
 		int ret = 0;
+
 		ret = queue_work(tdmb_workqueue, &tdmb_work);
 		if (ret == 0)
 			DPRINTK("failed in queue_work\n");
@@ -83,23 +84,22 @@ irqreturn_t tdmb_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-bool tdmb_create_databuffer(unsigned long int_size)
+bool tdmb_create_databuffer(int int_size)
 {
 	ts_buff_size = int_size * 2;
 
 	msc_buff = vmalloc(MSC_BUF_SIZE);
 	ts_buff = vmalloc(ts_buff_size);
 
-	if (msc_buff && ts_buff) {
+	if (msc_buff && ts_buff)
 		return true;
-	} else {
-		if (msc_buff)
-			vfree(msc_buff);
-		if (ts_buff)
-			vfree(ts_buff);
 
-		return false;
-	}
+	if (msc_buff)
+		vfree(msc_buff);
+	if (ts_buff)
+		vfree(ts_buff);
+
+	return false;
 }
 
 void tdmb_destroy_databuffer(void)
@@ -159,6 +159,7 @@ static int __add_to_ringbuffer(unsigned char *data, unsigned long data_size)
 		DPRINTK("Error - size too large\n");
 	} else {
 		unsigned int dist;
+
 		if (head >= tail)
 			dist = head-tail;
 		else
@@ -183,6 +184,7 @@ static int __add_to_ringbuffer(unsigned char *data, unsigned long data_size)
 					head = 0;
 			} else {
 				unsigned int temp_size;
+
 				temp_size = tdmb_ts_size-head;
 				temp_size = (temp_size/DMB_TS_SIZE)*DMB_TS_SIZE;
 
@@ -218,11 +220,13 @@ static int __add_ts_data(unsigned char *data, unsigned long data_size)
 {
 	if (first_packet) {
 		int j = 0;
+
 		DPRINTK("! first sync Size = %ld !\n", data_size);
 
 		for (j = 0; j < data_size; j++) {
 			if (data[j] == 0x47) {
 				int maxi;
+
 				DPRINTK("!!!!! first sync j = %d !!!!!\n", j);
 				maxi = (data_size - j) / TS_PACKET_SIZE;
 				ts_buff_pos = (data_size - j) % TS_PACKET_SIZE;
@@ -329,6 +333,7 @@ __add_msc_data(unsigned char *data, unsigned long data_size, int sub_ch_id)
 
 	if (first_packet) {
 		int j;
+
 		for (j = 0; j < data_size-4; j++) {
 			if (data[j] == 0xFF && ((data[j+1]>>4) == 0xF)) {
 				mp2_len = __get_mp2_len(&data[j]);
@@ -345,6 +350,7 @@ __add_msc_data(unsigned char *data, unsigned long data_size, int sub_ch_id)
 		}
 	} else {
 		int remainbyte = 0;
+
 		if (mp2_len <= 0 || mp2_len > MSC_BUF_SIZE) {
 			msc_buff_pos = 0;
 			first_packet = 1;
@@ -365,6 +371,7 @@ __add_msc_data(unsigned char *data, unsigned long data_size, int sub_ch_id)
 
 		if (msc_buff_pos == mp2_len) {
 			int readpos = 0;
+
 			while (msc_buff_pos > readpos) {
 				if (first) {
 					pOutAddr[0] = 0xDF;
@@ -433,9 +440,10 @@ __add_msc_data(unsigned char *data, unsigned long data_size, int sub_ch_id)
 bool tdmb_store_data(unsigned char *data, unsigned long len)
 {
 	unsigned long subch_id = tdmb_get_chinfo();
+	bool ret;
 
 	if (subch_id == 0) {
-		return false;
+		ret = false;
 	} else {
 		subch_id = subch_id % 1000;
 
@@ -444,15 +452,16 @@ bool tdmb_store_data(unsigned char *data, unsigned long len)
 		} else {
 			unsigned long i;
 			unsigned long maxi;
+
 			maxi = len/TS_PACKET_SIZE;
 			for (i = 0 ; i < maxi ; i++) {
 				__add_msc_data(data, TS_PACKET_SIZE, subch_id);
 				data += TS_PACKET_SIZE;
 			}
 			if (len - maxi * TS_PACKET_SIZE)
-				__add_msc_data(data,\
-					 len - maxi * TS_PACKET_SIZE, subch_id);
+				__add_msc_data(data, len - maxi * TS_PACKET_SIZE, subch_id);
 		}
-		return true;
+		ret = true;
 	}
+	return ret;
 }

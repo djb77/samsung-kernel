@@ -602,7 +602,6 @@ static ssize_t rear_camera_hw_param_store(struct device *dev,
 	return size;
 }
 
-#if defined(CONFIG_GET_FRONT_MODULE_ID)
 static ssize_t front_camera_hw_param_show(struct device *dev,
 					 struct device_attribute *attr, char *buf)
 {
@@ -635,28 +634,6 @@ static ssize_t front_camera_hw_param_show(struct device *dev,
 
 	return rc;
 }
-
-#else
-static ssize_t front_camera_hw_param_show(struct device *dev,
-					 struct device_attribute *attr, char *buf)
-{
-	ssize_t rc = 0;
-	//int16_t moduelid_chk = 0;
-	struct cam_hw_param *ec_param = NULL;
-	msm_is_sec_get_front_hw_param(&ec_param);
-
-	if(ec_param != NULL) {
-		rc = sprintf(buf, "\"I2CF_AF\":\"%d\",\"I2CF_COM\":\"%d\",\"I2CF_OIS\":\"%d\","
-							"\"I2CF_SEN\":\"%d\",\"MIPIF_COM\":\"%d\",\"MIPIF_SEN\":\"%d\"\n",
-							ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_ois_err_cnt,
-							ec_param->i2c_sensor_err_cnt, ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
-	}
-
-	return rc;
-}
-
-#endif
-
 
 static ssize_t front_camera_hw_param_store(struct device *dev,
 					  struct device_attribute *attr, const char *buf, size_t size)

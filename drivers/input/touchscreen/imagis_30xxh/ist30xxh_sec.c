@@ -20,6 +20,7 @@
 #include <linux/input.h>
 #include <linux/stat.h>
 #include <linux/err.h>
+#include <linux/vmalloc.h>
 #include "ist30xxh.h"
 #include "ist30xxh_update.h"
 #include "ist30xxh_misc.h"
@@ -210,6 +211,7 @@ static void get_chip_id(void *dev_data)
     dev_info(&data->client->dev, "%s: %s(%d)\n", __func__,
             buf, strnlen(buf, sizeof(buf)));
 }
+
 #include <linux/uaccess.h>
 #define MAX_FW_PATH 255
 const u8 fbuf[IST30XX_ROM_TOTAL_SIZE + sizeof(struct ist30xx_tags)];
@@ -225,9 +227,7 @@ static void fw_update(void *dev_data)
     struct sec_factory *sec = (struct sec_factory *)&data->sec;
 
     set_default_result(sec);
-#ifdef PAT_CONTROL
-    data->status.update_keystring = 1;
-#endif
+
     tsp_info("%s(), %d\n", __func__, sec->cmd_param[0]);
 
     switch (sec->cmd_param[0]) {
@@ -279,7 +279,18 @@ static void fw_update(void *dev_data)
             break;
         }
 
-        mutex_lock(&data->lock);
+#ifdef TCLM_CONCEPT
+		ret = ist30xx_tclm_get_nvm_all(data, true);
+		if (unlikely(!ret)) {
+			tsp_warn("%s(), failed to read tclm_get_nvm_all\n", __func__);
+			sec->cmd_state = CMD_STATE_FAIL;
+			break;
+		}
+#endif		
+		mutex_lock(&data->lock);
+#ifdef TCLM_CONCEPT
+		ist30xx_tclm_root_of_cal(data, CALPOSITION_TESTMODE);
+#endif
         ret = ist30xx_fw_update(data, fbuf, fsize);
         if (ret) {
             sec->cmd_state = CMD_STATE_FAIL;
@@ -287,7 +298,10 @@ static void fw_update(void *dev_data)
             break;
         }
         ist30xx_print_info(data);
-        ist30xx_calibrate(data, 1);
+#ifdef TCLM_CONCEPT
+		ist30xx_execute_tclm_package(data, 0);
+		ist30xx_tclm_root_of_cal(data, CALPOSITION_NONE);
+#endif
         mutex_unlock(&data->lock);
         ist30xx_start(data);
         break;
@@ -302,9 +316,6 @@ static void fw_update(void *dev_data)
     else
         snprintf(buf, sizeof(buf), "%s", "NG");
 
-#ifdef PAT_CONTROL
-    data->status.update_keystring = 0;
-#endif
     set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
 }
 
@@ -342,32 +353,56 @@ static void get_config_ver(void *dev_data)
 }
 static void get_checksum_data(void *dev_data)
 {
+    int ret = 0;
     char buf[16] = {0};
+    u32 integrity = 0;
     u32 chksum = 0;
     struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
     struct sec_factory *sec = (struct sec_factory *)&data->sec;
 
     set_default_result(sec);
 
-    if (data->status.power == 1)
-        chksum = ist30xx_get_fw_chksum(data);
+    if (data->status.power != 1) {
+		tsp_err("%s(), error TSP power off \n", __func__);
+		snprintf(buf, sizeof(buf), "%s", "TSP turned off");
+		goto err;
+	}
+	
+    ist30xx_reset(data, false);
 
-	if (chksum == 0) {
-        tsp_info("%s(), Failed get the checksum data \n", __func__);
+    ret = ist30xx_read_cmd(data, eHCOM_GET_FW_INTEGRITY, &integrity);
+    
+    if (unlikely(ret) || integrity != IST30XX_EXCEPT_INTEGRITY ) {
+		ist30xx_start(data);
+        tsp_err("%s(), Failed get the fw integrity \n", __func__);
+		snprintf(buf, sizeof(buf), "%s", "NG");
+        goto err;
+    } 
+	
+	ist30xx_start(data);
+	
+	chksum = ist30xx_get_fw_chksum(data);
+	
+	if(chksum == 0){
+        tsp_err("%s(), Failed get the checksum data \n", __func__);
         snprintf(buf, sizeof(buf), "%s", "NG");
-        set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
-        sec->cmd_state = CMD_STATE_FAIL;
-        return;
-    }
-
+        goto err;
+	}
+	
     snprintf(buf, sizeof(buf), "0x%08X", chksum);
-
     tsp_info("%s(), %s\n", __func__, buf);
-
+	
     set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
     sec->cmd_state = CMD_STATE_OK;
     dev_info(&data->client->dev, "%s: %s(%d)\n", __func__,
-            buf, strnlen(buf, sizeof(buf)));
+    buf, strnlen(buf, sizeof(buf)));
+    return;
+	
+err:
+    set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
+    sec->cmd_state = CMD_STATE_FAIL;
+	dev_info(&data->client->dev, "%s: %s(%d)\n", __func__,
+    buf, strnlen(buf, sizeof(buf)));
 }
 
 static void get_fw_ver_ic(void *dev_data)
@@ -444,12 +479,7 @@ static void spay_enable(void *dev_data)
     set_default_result(sec);
 
     tsp_info("%s(), %d\n", __func__, sec->cmd_param[0]);
-/*
-    if (data->suspend) {
-        tsp_err("%s(), error currently suspend\n", __func__);
-        goto err;
-    }
-*/
+
     switch (sec->cmd_param[0]) {
     case 0:
         sec->cmd_state = CMD_STATE_OK;
@@ -474,7 +504,6 @@ static void spay_enable(void *dev_data)
         data->g_reg.b.setting &= ~IST30XX_GETURE_SET_SPAY;
     }
 
-/*err:*/
     if (sec->cmd_state == CMD_STATE_OK)
         snprintf(buf, sizeof(buf), "%s", "OK");
     else
@@ -500,12 +529,7 @@ static void aod_enable(void *dev_data)
     set_default_result(sec);
 
     tsp_info("%s(), %d\n", __func__, sec->cmd_param[0]);
-/*
-    if (data->suspend) {
-        tsp_err("%s(), error currently suspend\n", __func__);
-        goto err;
-    }
-*/
+
     switch (sec->cmd_param[0]) {
     case 0:
         sec->cmd_state = CMD_STATE_OK;
@@ -530,7 +554,6 @@ static void aod_enable(void *dev_data)
         data->g_reg.b.setting &= ~IST30XX_GETURE_SET_AOD;
     }
 
-/*err:*/
     if (sec->cmd_state == CMD_STATE_OK)
         snprintf(buf, sizeof(buf), "%s", "OK");
     else
@@ -587,7 +610,7 @@ static void set_aod_rect(void *dev_data)
             goto err;
         }
         ret = ist30xx_write_cmd(data, IST30XX_HIB_CMD,
-            (eHCOM_NOTIRY_G_REGMAP << 16) | IST30XX_ENABLE);
+                (eHCOM_NOTIRY_G_REGMAP << 16) | IST30XX_ENABLE);
         if (ret) {
             tsp_err("%s(), fail to write notify packet.\n", __func__);
             goto err;
@@ -817,9 +840,15 @@ static u16 cal_self_cp_value[IST30XX_MAX_SELF_NODE_NUM];
 static u16 miscal_cp_value[IST30XX_MAX_NODE_NUM];
 static u16 miscal_self_cp_value[IST30XX_MAX_SELF_NODE_NUM];
 static u16 miscal_maxgap_value[IST30XX_MAX_NODE_NUM];
-#ifdef IST30XX_USE_SELF
 static u16 miscal_self_maxgap_value[IST30XX_MAX_SELF_NODE_NUM];
-#endif
+static int max_gap, max_gap_tx, max_gap_rx;
+static int min_gap, min_gap_tx, min_gap_rx;
+static int avg_gap_channel_tx[IST30XX_TX_CHANNEL_NUM];
+static int avg_gap_channel_rx[IST30XX_RX_CHANNEL_NUM];
+static int max_gap_channel_tx[IST30XX_TX_CHANNEL_NUM];
+static int max_gap_channel_rx[IST30XX_RX_CHANNEL_NUM];
+static int min_gap_channel_tx[IST30XX_TX_CHANNEL_NUM];
+static int min_gap_channel_rx[IST30XX_RX_CHANNEL_NUM];
 void get_cp_array(void *dev_data)
 {
     int i, ret;
@@ -872,7 +901,6 @@ void get_cp_array(void *dev_data)
     kfree(buf);
 }
 
-#ifdef IST30XX_USE_SELF
 void get_self_cp_array(void *dev_data)
 {
     int i, ret;
@@ -924,7 +952,6 @@ void get_self_cp_array(void *dev_data)
     dev_info(&data->client->dev, "%s: %s(%d)\n", __func__, buf, count);
     kfree(buf);
 }
-#endif
 
 extern int calib_ms_delay;
 int ist30xx_miscalib_wait(struct ist30xx_data *data)
@@ -945,12 +972,9 @@ int ist30xx_miscalib_wait(struct ist30xx_data *data)
                     CALIB_TO_STATUS(data->status.miscalib_msg[1]),
                     CALIB_TO_GAP(data->status.miscalib_msg[1]),
                     data->status.miscalib_msg[1]);
-#ifdef IST30XX_USE_SELF
+
             if ((CALIB_TO_STATUS(data->status.miscalib_msg[0]) == 0) &&
                     (CALIB_TO_STATUS(data->status.miscalib_msg[1]) == 0))
-#else
-            if (CALIB_TO_STATUS(data->status.miscalib_msg[1]) == 0)
-#endif
                 return 0;  // Calibrate success
             else
                 return -EAGAIN;
@@ -964,6 +988,7 @@ int ist30xx_miscalib_wait(struct ist30xx_data *data)
 int ist30xx_miscalibrate(struct ist30xx_data *data, int wait_cnt)
 {
     int ret = -ENOEXEC;
+    int i2c_fail_cnt = CALIB_MAX_I2C_FAIL_CNT;
 
     tsp_info("*** Miscalibrate %ds ***\n", calib_ms_delay / 10);
 
@@ -972,8 +997,11 @@ int ist30xx_miscalibrate(struct ist30xx_data *data, int wait_cnt)
 
     while (1) {
         ret = ist30xx_cmd_miscalibrate(data);
-        if (unlikely(ret))
+        if (unlikely(ret)) {
+            if (--i2c_fail_cnt == 0)
+			    goto err_miscal_i2c;
             continue;
+        }
 
         ist30xx_enable_irq(data);
         ret = ist30xx_miscalib_wait(data);
@@ -981,6 +1009,9 @@ int ist30xx_miscalibrate(struct ist30xx_data *data, int wait_cnt)
             break;
 
         ist30xx_disable_irq(data);
+
+err_miscal_i2c:
+        i2c_fail_cnt = CALIB_MAX_I2C_FAIL_CNT;
 
         if (--wait_cnt == 0)
             break;
@@ -1058,12 +1089,12 @@ void run_miscalibration(void *dev_data)
     ist30xx_start(data);
     ist30xx_enable_irq(data);
     mutex_unlock(&data->lock);
-    if (ret) {        
+    if (ret) {
         sec->cmd_state = CMD_STATE_FAIL;
         tsp_warn("%s(), miscal cp read fail!\n", __func__);
         mis_cal_data = 0xF4;
         goto cmd_result;
-    }   
+    }
 
     ist30xx_parse_cp_node(data, &tsp->node, false);
 
@@ -1074,7 +1105,7 @@ void run_miscalibration(void *dev_data)
         tsp_warn("%s(), miscal parse fail!\n", __func__);
         mis_cal_data = 0xF5;
         goto cmd_result;
-    }    
+    }
 
     val = cal_cp_value[0] - miscal_cp_value[0];
     if (val < 0)
@@ -1090,7 +1121,7 @@ void run_miscalibration(void *dev_data)
         tsp_verb(" [%d] |%d - %d| = %d\n", i, cal_cp_value[i],
                 miscal_cp_value[i], miscal_maxgap_value[i]);
     }
-#ifdef IST30XX_USE_SELF
+
     tsp_verb("Miscal SLF\n");
     for (i = 0; i < tsp->ch_num.rx + tsp->ch_num.tx; i++) {
         val = cal_self_cp_value[i] - miscal_self_cp_value[i];
@@ -1100,7 +1131,7 @@ void run_miscalibration(void *dev_data)
         tsp_verb(" [%d] |%d - %d| = %d\n", i, cal_self_cp_value[i],
                 miscal_self_cp_value[i], miscal_self_maxgap_value[i]);
     }
-#endif
+
 cmd_result:
     if (max_val > SEC_MISCAL_SPEC) {
         sec->cmd_state = CMD_STATE_FAIL;
@@ -1139,6 +1170,224 @@ void get_miscalibration_value(void *dev_data)
             sec->cmd_param[0], sec->cmd_param[1], buf);
     dev_info(&data->client->dev, "%s: %s(%d)\n", __func__, buf,
             strnlen(buf, sizeof(buf)));
+}
+
+int run_miscal_booting_dump(struct ist30xx_data *data)
+{
+    int ret;
+    TSP_INFO *tsp = &data->tsp_info;
+
+    mutex_lock(&data->lock);
+    ret = ist30xx_read_cp_node(data, &tsp->node, true, true);
+    if (ret) {
+        mutex_unlock(&data->lock);
+        input_raw_info(true, &data->client->dev, "%s:, tsp cp read fail!\n", __func__);
+        return ret;
+    }
+
+    ist30xx_parse_cp_node(data, &tsp->node, true);
+
+    ret = parse_cp_node(data, &tsp->node, cal_cp_value, cal_self_cp_value,
+            TSP_CDC_ALL, true);
+    if (ret) {
+        mutex_unlock(&data->lock);
+        input_raw_info(true, &data->client->dev, "%s: tsp cp parse fail!\n", __func__);
+        return ret;
+    }
+
+    ist30xx_reset(data, false);
+    ret = ist30xx_miscalibrate(data, 1);
+    if (ret) {
+        ist30xx_disable_irq(data);
+        ist30xx_reset(data, false);
+        ist30xx_start(data);
+        ist30xx_enable_irq(data);
+        mutex_unlock(&data->lock);
+        input_raw_info(true, &data->client->dev, "%s: miscalibration fail!\n", __func__);
+        return ret;
+    }
+
+    ret = ist30xx_read_cp_node(data, &tsp->node, false, true);
+    ist30xx_disable_irq(data);
+    ist30xx_reset(data, false);
+    ist30xx_start(data);
+    ist30xx_enable_irq(data);
+    mutex_unlock(&data->lock);
+    if (ret) {
+        input_raw_info(true, &data->client->dev, "%s: miscal cp read fail!\n", __func__);
+        return ret;
+    }
+
+    ist30xx_parse_cp_node(data, &tsp->node, false);
+
+    ret = parse_cp_node(data, &tsp->node, miscal_cp_value, miscal_self_cp_value,
+            TSP_CDC_ALL, false);
+    if (ret) {
+        input_raw_info(true, &data->client->dev, "%s: miscal parse fail!\n", __func__);
+        return ret;
+    }
+
+    return 0;
+}
+
+static void saving_node_for_bigdata (int value, int rx, int tx)
+{
+    if (max_gap < value) {
+        max_gap = value;
+        max_gap_tx = tx;
+        max_gap_rx = rx;
+    } 
+    if (min_gap > value) {
+        min_gap = value;
+        min_gap_tx = tx;
+        min_gap_rx = rx;
+    }
+
+    avg_gap_channel_tx[tx] += value;
+    avg_gap_channel_rx[rx] += value;
+
+    if (max_gap_channel_tx[tx] < value)
+        max_gap_channel_tx[tx] = value;
+    if (min_gap_channel_tx[tx] > value)
+        min_gap_channel_tx[tx] = value;
+
+    if (max_gap_channel_rx[rx] < value)
+        max_gap_channel_rx[rx] = value;
+    if (min_gap_channel_rx[rx] > value)
+        min_gap_channel_rx[rx] = value;
+}
+
+void dump_cp_log(struct ist30xx_data *data, u8 flag)
+{
+    int i, j;
+    int val = 0;
+    int max_val = 0;
+    int min_val = 0;
+    const int msg_len = 128;
+    char msg[msg_len];
+    char *buf = NULL;
+    TSP_INFO *tsp = &data->tsp_info;
+
+    buf = kzalloc(2048, GFP_KERNEL);
+    if (buf == NULL)
+        return;
+    buf[0] = '\0';
+
+    max_gap = -300;
+    min_gap = 300;
+
+    for (i = 0; i < tsp->ch_num.tx; i++) {
+        avg_gap_channel_tx[i] = 0;
+        max_gap_channel_tx[i] = -300;
+        min_gap_channel_tx[i] = 300;
+    }
+
+    for (i = 0; i < tsp->ch_num.rx; i++) {
+        avg_gap_channel_rx[i] = 0;
+        max_gap_channel_rx[i] = -300;
+        min_gap_channel_rx[i] = 300;
+    }
+
+    if (tsp->dir.swap_xy) {
+        for (i = 0; i < tsp->ch_num.rx; i++) {
+            if (i == 0) {
+                snprintf(msg, msg_len, "     TX");
+                strncat(buf, msg, msg_len);
+                for (j = 0; j < tsp->ch_num.tx; j++) {
+                    snprintf(msg, msg_len, "%4d ", j);
+                    strncat(buf, msg, msg_len);
+                }
+                snprintf(msg, msg_len, "\n\n");
+                strncat(buf, msg, msg_len);
+                input_raw_info(true, &data->client->dev, "%s", buf);
+                buf[0] = '\0';
+            }
+            for (j = 0; j < tsp->ch_num.tx; j++) {
+                if (j == 0) {
+                    snprintf(msg, msg_len, "Rx%02d | ", i);
+                    strncat(buf, msg, msg_len);
+                }
+                if (flag)
+                    val = cal_cp_value[j * tsp->ch_num.rx + i];
+                else {
+                    val = miscal_cp_value[j * tsp->ch_num.rx + i]
+                        - cal_cp_value[j * tsp->ch_num.rx + i];
+                    saving_node_for_bigdata(val, i, j);
+                }
+                snprintf(msg, msg_len, "%4d ", val);
+                strncat(buf, msg, msg_len);
+            }
+            snprintf(msg, msg_len, "\n");
+            strncat(buf, msg, msg_len);
+            input_raw_info(true, &data->client->dev, "%s", buf);
+            buf[0] = '\0';
+        }
+    } else {
+        for (i = 0; i < tsp->ch_num.tx; i++) {
+            if (i == 0) {
+                snprintf(msg, msg_len, "     RX");
+                strncat(buf, msg, msg_len);
+                for (j = 0; j < tsp->ch_num.rx; j++) {
+                    snprintf(msg, msg_len, "%4d ", j);
+                    strncat(buf, msg, msg_len);
+                }
+                snprintf(msg, msg_len, "\n\n");
+                strncat(buf, msg, msg_len);
+                input_raw_info(true, &data->client->dev, "%s", buf);
+                buf[0] = '\0';
+            }
+            for (j = 0; j < tsp->ch_num.rx; j++){
+                if (j == 0) {
+                    snprintf(msg, msg_len, "Tx%02d | ", i);
+                    strncat(buf, msg, msg_len);
+                }
+                if (flag)
+                    val = cal_cp_value[i * tsp->ch_num.rx + j];
+                else {
+                    val = miscal_cp_value[i * tsp->ch_num.rx + j]
+                        - cal_cp_value[i * tsp->ch_num.rx + j];
+                    saving_node_for_bigdata(val, j, i);
+                }
+                snprintf(msg, msg_len, "%4d ", val);
+                strncat(buf, msg, msg_len);
+            }
+            snprintf(msg, msg_len, "\n");
+            strncat(buf, msg, msg_len);
+            input_raw_info(true, &data->client->dev, "%s", buf);
+            buf[0] = '\0';
+        }
+    }
+    /*for max/min cal_cp_value and gap cp-value after executing miscal*/
+    if (flag) {
+        min_val = cal_cp_value[0];
+        max_val = cal_cp_value[0];
+        for (i = 1; i < tsp->ch_num.rx * tsp->ch_num.tx; i++) {
+            val = cal_cp_value[i];
+            min_val = min(min_val, val);
+            max_val = max(max_val, val);
+        }
+        input_raw_info(true, &data->client->dev, "### cal_cp_value: Max/Min %d,%d ###\n", max_val, min_val);
+    } else {
+        input_raw_info(true, &data->client->dev, "### DIFF between miscal and cal cp-value: Max/Min %d,%d ###\n",
+            max_gap, min_gap);
+    }
+}
+
+void ist30xx_display_dump_log(struct ist30xx_data *data)
+{
+    int ret;
+    input_raw_info(true, &data->client->dev, "*** TSP Dump CP Value ***\n");
+    ret = run_miscal_booting_dump(data);
+    if (ret) {
+        input_raw_info(true, &data->client->dev, "TSP Dump CP Value FAILED\n");
+        return;
+    }
+    /*cal_cp_value*/
+    input_raw_info(true, &data->client->dev, "----- cal_cp_value -----:\n");
+    dump_cp_log(data, 1);
+    /*miscal_cp_value*/
+    input_raw_info(true, &data->client->dev, "----- gap of cp value after runing miscalibration -----\n");
+    dump_cp_log(data, 0);
 }
 
 static u16 node_value[IST30XX_MAX_NODE_NUM];
@@ -1197,7 +1446,6 @@ void get_cdc_array(void *dev_data)
     kfree(buf);
 }
 
-#ifdef IST30XX_USE_SELF
 void get_self_cdc_array(void *dev_data)
 {
     int i, ret;
@@ -1250,7 +1498,6 @@ void get_self_cdc_array(void *dev_data)
     dev_info(&data->client->dev, "%s: %s(%d)\n", __func__, buf, count);
     kfree(buf);
 }
-#endif
 
 void run_cdc_read(void *dev_data)
 {
@@ -1296,7 +1543,6 @@ void run_cdc_read(void *dev_data)
             strnlen(buf, sizeof(buf)));
 }
 
-#ifdef IST30XX_USE_SELF
 void run_self_cdc_read(void *dev_data)
 {
     int i;
@@ -1340,7 +1586,6 @@ void run_self_cdc_read(void *dev_data)
     dev_info(&data->client->dev, "%s: %s(%d)\n", __func__, buf,
             strnlen(buf, sizeof(buf)));
 }
-#endif
 
 void run_cdc_read_key(void *dev_data)
 {
@@ -1404,7 +1649,6 @@ void get_cdc_value(void *dev_data)
             strnlen(buf, sizeof(buf)));
 }
 
-#ifdef IST30XX_USE_SELF
 void get_self_cdc_value(void *dev_data)
 {
     char buf[16] = { 0 };
@@ -1477,7 +1721,6 @@ void get_tx_self_cdc_value(void *dev_data)
     dev_info(&data->client->dev, "%s: %s(%d)\n", __func__, buf,
             strnlen(buf, sizeof(buf)));
 }
-#endif
 
 void get_cdc_all_data(void *dev_data)
 {
@@ -1532,7 +1775,6 @@ out_cdc_all_data:
     sec->cmd_state = CMD_STATE_FAIL;
 }
 
-#ifdef IST30XX_USE_SELF
 void get_self_cdc_all_data(void *dev_data)
 {
     int i;
@@ -1585,13 +1827,15 @@ err_read_data:
 out_cdc_all_data:
     sec->cmd_state = CMD_STATE_FAIL;
 }
-#endif
 
 #ifdef IST30XX_USE_CMCS
 extern u8 *ts_cmcs_bin;
 extern u32 ts_cmcs_bin_size;
 extern CMCS_BIN_INFO *ts_cmcs;
 extern CMCS_BUF *ts_cmcs_buf;
+extern int cmcs_ready;
+static int tx_cm_gap_value[IST30XX_MAX_NODE_NUM];
+static int rx_cm_gap_value[IST30XX_MAX_NODE_NUM];
 int get_read_all_data(struct ist30xx_data *data, u8 flag)
 {
     int ii;
@@ -1611,7 +1855,7 @@ int get_read_all_data(struct ist30xx_data *data, u8 flag)
 
     ret = ist30xx_get_cmcs_info(ts_cmcs_bin, ts_cmcs_bin_size);
     if (unlikely(ret)) {
-        tsp_err("%s: tsp get cmcs infomation fail!\n", __func__);
+        tsp_err("%s: tsp get cmcs information fail!\n", __func__);
         goto cm_err_out;
     }
 
@@ -1792,7 +2036,9 @@ void run_cm_test(void *dev_data)
     int i, j;
     int ret = 0;
     char buf[16] = { 0 };
-    int type, idx;
+	int idx, next_idx;
+	int last_col;
+    int type;
     int min_val, max_val;
     int avg_cnt;
     int avg_sum, avg_val;
@@ -1825,6 +2071,27 @@ void run_cm_test(void *dev_data)
         return;
     }
     mutex_unlock(&data->lock);
+
+    for (i = 0; i < tsp->ch_num.tx - 1; i++) {
+	    for (j = 0; j < tsp->ch_num.rx; j++) {
+		   	idx = i * tsp ->ch_num.rx + j;
+		    next_idx = idx + tsp->ch_num.rx;
+    		tx_cm_gap_value[idx] = DIV_ROUND_CLOSEST(100 * (s16)abs(ts_cmcs_buf->cm[idx] - ts_cmcs_buf->cm[next_idx]),
+	    							ts_cmcs_buf->cm[idx]);
+        }
+	}
+    /*rx gap = abs(x-y)/x * 100   with x=Rx0,Tx0, y=Rx1,Tx0, ...*/
+    last_col = tsp->ch_num.rx - 1;
+    for (i = 0; i < tsp->ch_num.tx; i++) {
+        for (j = 0; j < tsp->ch_num.rx; j++) {
+            idx = i * tsp ->ch_num.rx + j;
+            if ((idx % tsp->ch_num.rx) == last_col)
+                continue;
+            next_idx = idx + 1;
+            rx_cm_gap_value[idx] = DIV_ROUND_CLOSEST(100 * (s16)abs(ts_cmcs_buf->cm[idx] - ts_cmcs_buf->cm[next_idx]),
+                                    ts_cmcs_buf->cm[idx]);
+        }
+    }
 
     avg_cnt = 0;
     avg_sum = 0;
@@ -1936,6 +2203,100 @@ void get_cm_value(void *dev_data)
             strnlen(buf, sizeof(buf)));
 }
 
+void get_cm_maxgap_value(void *dev_data)
+{
+	int i, j;
+	int idx;
+	int last_col;
+	int max_cm_gap_tx = 0;
+	int max_cm_gap_rx = 0;
+	char buf[16] = { 0 };
+
+    struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
+    struct sec_factory *sec = (struct sec_factory *)&data->sec;
+    TSP_INFO *tsp = &data->tsp_info;
+
+    set_default_result(sec);
+
+   	for (i = 0; i < tsp->ch_num.tx - 1; i++) {
+        for (j = 0; j < tsp->ch_num.rx; j++) {
+            idx = i * tsp ->ch_num.rx + j;
+            max_cm_gap_tx = max(max_cm_gap_tx, tx_cm_gap_value[idx]);
+        }
+    }
+
+    last_col = tsp->ch_num.rx - 1;
+    for (i = 0; i < tsp->ch_num.tx; i++) {
+        for (j = 0; j < tsp->ch_num.rx; j++) {
+            idx = i * tsp ->ch_num.rx + j;
+            if ((idx % tsp->ch_num.rx) == last_col)
+                continue;
+            max_cm_gap_rx = max(max_cm_gap_rx, rx_cm_gap_value[idx]);
+        }
+    }
+
+    snprintf(buf, sizeof(buf), "%d,%d", max_cm_gap_tx, max_cm_gap_rx);
+    sec->cmd_state = CMD_STATE_OK;
+    set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
+    tsp_info("%s(): %s\n", __func__, buf);
+    dev_info(&data->client->dev, "%s: %s(%d)\n", __func__, buf,
+        strnlen(buf, sizeof(buf)));
+}
+
+void get_tx_cm_gap_value(void *dev_data)
+{
+    int idx = 0;
+    char buf[16] = { 0 };
+    struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
+    struct sec_factory *sec = (struct sec_factory *)&data->sec;
+    TSP_INFO *tsp = &data->tsp_info;
+
+    set_default_result(sec);
+
+    idx = check_tsp_channel(data, tsp->ch_num.rx, tsp->ch_num.tx);
+    if (idx < 0) { 
+    /*Parameter parsing fail*/
+        snprintf(buf, sizeof(buf), "%s", "NG");
+        sec->cmd_state = CMD_STATE_FAIL;
+    } else {
+        snprintf(buf, sizeof(buf), "%d", tx_cm_gap_value[idx]);
+        sec->cmd_state = CMD_STATE_OK;
+    }
+
+    set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
+    tsp_info("%s(), [%d][%d]: %s\n", __func__,
+            sec->cmd_param[0], sec->cmd_param[1], buf);
+    dev_info(&data->client->dev, "%s: %s(%d)\n", __func__, buf,
+            strnlen(buf, sizeof(buf)));
+}
+
+void get_rx_cm_gap_value(void *dev_data)
+{
+    int idx = 0;
+    char buf[16] = { 0 };
+    struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
+    struct sec_factory *sec = (struct sec_factory *)&data->sec;
+    TSP_INFO *tsp = &data->tsp_info;
+
+    set_default_result(sec);
+
+    idx = check_tsp_channel(data, tsp->ch_num.rx, tsp->ch_num.tx);
+    if (idx < 0) { 
+    /*Parameter parsing fail*/
+        snprintf(buf, sizeof(buf), "%s", "NG");
+        sec->cmd_state = CMD_STATE_FAIL;
+    } else {
+        snprintf(buf, sizeof(buf), "%d", rx_cm_gap_value[idx]);
+        sec->cmd_state = CMD_STATE_OK;
+    }
+
+    set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
+    tsp_info("%s(), [%d][%d]: %s\n", __func__,
+            sec->cmd_param[0], sec->cmd_param[1], buf);
+    dev_info(&data->client->dev, "%s: %s(%d)\n", __func__, buf,
+            strnlen(buf, sizeof(buf)));
+}
+
 void run_cmjit_test(void *dev_data)
 {
     int i, j;
@@ -1943,7 +2304,6 @@ void run_cmjit_test(void *dev_data)
     char buf[16] = { 0 };
     int type, idx;
     int min_val, max_val;
-
     struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
     struct sec_factory *sec = (struct sec_factory *)&data->sec;
     TSP_INFO *tsp = &data->tsp_info;
@@ -2000,7 +2360,6 @@ void get_cmjit_value(void *dev_data)
 {
     int idx = 0;
     char buf[16] = { 0 };
-
     struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
     struct sec_factory *sec = (struct sec_factory *)&data->sec;
     TSP_INFO *tsp = &data->tsp_info;
@@ -2207,19 +2566,71 @@ void get_cs_array(void *dev_data)
 }
 #endif
 
-void run_force_calibration(void *dev_data)
+int ist30xx_execute_force_calibration(struct ist30xx_data *data)
 {
-    int ret = 0;
-    char buf[16] = { 0 };
-#ifdef PAT_CONTROL
-    u16 pdata_pat_function;
-#endif
+	int ret = -ENOEXEC;
+	int wait_cnt = 1;
+	tsp_info("*** Calibrate %ds ***\n", calib_ms_delay / 10);
+
+	data->status.calib = 1;
+	ist30xx_disable_irq(data);
+	while (1) {
+		ret = ist30xx_cmd_calibrate(data);
+		if (unlikely(ret))
+			continue;
+
+		ist30xx_enable_irq(data);
+		ret = ist30xx_calib_wait(data);
+		if (likely(!ret))
+			break;
+
+		ist30xx_disable_irq(data);
+
+		if (--wait_cnt == 0)
+			break;
+
+		ist30xx_reset(data, false);
+	}
+
+	ist30xx_disable_irq(data);
+	ist30xx_reset(data, false);
+	data->status.calib = 0;
+	ist30xx_enable_irq(data);
+
+/*return when cal is failed*/
+	if (ret)
+		return ret;
+
+	return ret;
+}
+
+static void set_external_factory(void *dev_data)
+{
+	char buff[22] = { 0 };
     struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
     struct sec_factory *sec = (struct sec_factory *)&data->sec;
 
     set_default_result(sec);
 
-    if(data->touch_pressed_num != 0){
+	data->external_factory = true;
+	snprintf(buff, sizeof(buff), "OK");
+	
+    sec->cmd_state = CMD_STATE_OK;
+    set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	input_info(true, &data->client->dev, "%s: %s\n", __func__, buff);
+}
+
+void run_force_calibration(void *dev_data)
+{
+    int ret = 0;
+    char buf[16] = { 0 };
+
+    struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
+    struct sec_factory *sec = (struct sec_factory *)&data->sec;
+
+    set_default_result(sec);
+
+    if (data->touch_pressed_num != 0) {
         tsp_info("%s: return (finger cnt %d)\n", __func__, data->touch_pressed_num);
         sec->cmd_state = CMD_STATE_FAIL;
         snprintf(buf, sizeof(buf), "%s", "NG");
@@ -2230,18 +2641,20 @@ void run_force_calibration(void *dev_data)
     mutex_lock(&data->lock);
     ist30xx_reset(data, false);
 
-#ifdef PAT_CONTROL
-    tsp_info("%s: pat_func=%d afe_base=%04X cal_count=%X tune_fix_ver=%04X\n",
-            __func__, data->dt_data->pat_function, data->dt_data->afe_base,
-            data->cal_count, data->tune_fix_ver);
-    pdata_pat_function = data->dt_data->pat_function;
-    data->dt_data->pat_function = PAT_CONTROL_FORCE_CMD;
+#ifdef TCLM_CONCEPT
+	ret = ist30xx_tclm_get_nvm_all(data, true);
+	if (unlikely(!ret)) {
+		tsp_warn("%s(), failed to read tclm_get_nvm_all\n", __func__);
+	}
+
+	tsp_info
+	    ("%s: tclm_level=%d afe_base=%04X cal_count=%X tune_fix_ver=%04X\n",
+	     __func__, data->dt_data->tclm_level, data->dt_data->afe_base,
+	     data->cal_count, data->tune_fix_ver);
 #endif
 
-    ret = ist30xx_calibrate(data, 1);
-#ifdef PAT_CONTROL
-    data->dt_data->pat_function = pdata_pat_function;
-#endif
+    ret = ist30xx_execute_force_calibration(data);
+
     if (ret) {
         mutex_unlock(&data->lock);
         sec->cmd_state = CMD_STATE_FAIL;
@@ -2250,6 +2663,45 @@ void run_force_calibration(void *dev_data)
         tsp_warn("%s(), tsp calibration fail!\n", __func__);
         return;
     }
+#ifdef TCLM_CONCEPT
+		/* devide tclm case */
+		switch(sec->cmd_param[0]) {
+		case 0:
+        case 'F':
+        case 'f':
+			if (data->external_factory == true)	/* outside of factory line.*/
+				ist30xx_tclm_root_of_cal(data, CALPOSITION_OUTSIDE);
+			else
+				ist30xx_tclm_root_of_cal(data, CALPOSITION_FACTORY);
+			break;
+
+		case 'L':
+		case 'l':
+				ist30xx_tclm_root_of_cal(data, CALPOSITION_LCIA);
+			break;
+
+		case 'C':
+		case 'c':
+			    ist30xx_tclm_root_of_cal(data, CALPOSITION_SVCCENTER);
+			break;
+
+		case 'O':
+		case 'o':
+			    ist30xx_tclm_root_of_cal(data, CALPOSITION_OUTSIDE);
+			break;
+
+		default:			
+			    ist30xx_tclm_root_of_cal(data, CALPOSITION_ABNORMAL);
+		}
+	
+		data->external_factory = false;
+
+		input_info(true, &data->client->dev, "%s: param, %d, %c, %d\n", __func__,
+			sec->cmd_param[0], sec->cmd_param[0], data->root_of_calibration);
+
+		ist30xx_execute_tclm_package(data, 1);
+		ist30xx_tclm_root_of_cal(data, CALPOSITION_NONE);
+#endif
     mutex_unlock(&data->lock);
 
     snprintf(buf, sizeof(buf), "%s", "OK");
@@ -2270,7 +2722,7 @@ void get_force_calibration(void *dev_data)
     struct sec_factory *sec = (struct sec_factory *)&data->sec;
 
     set_default_result(sec);
-#ifdef IST30XX_USE_SELF
+
     ret = ist30xx_read_cmd(data, eHCOM_GET_SLF_CAL_RESULT, &calib_msg);
     if (unlikely(ret)) {
         mutex_lock(&data->lock);
@@ -2287,7 +2739,7 @@ void get_force_calibration(void *dev_data)
         snprintf(buf, sizeof(buf), "%s", "NG");
         goto err;
     }
-#endif
+
     ret = ist30xx_read_cmd(data, eHCOM_GET_CAL_RESULT, &calib_msg);
     if (unlikely(ret)) {
         mutex_lock(&data->lock);
@@ -2300,8 +2752,8 @@ void get_force_calibration(void *dev_data)
     }
 
     if (((calib_msg & CALIB_MSG_MASK) == CALIB_MSG_VALID) &&
-        (CALIB_TO_STATUS(calib_msg) == 0)) {
-      	sec->cmd_state = CMD_STATE_OK;
+            (CALIB_TO_STATUS(calib_msg) == 0)) {
+        sec->cmd_state = CMD_STATE_OK;
         snprintf(buf, sizeof(buf), "%s", "OK");
     } else {
         snprintf(buf, sizeof(buf), "%s", "NG");
@@ -2314,13 +2766,114 @@ err:
             __func__, buf, strnlen(buf, sizeof(buf)));
 }
 
-#ifdef PAT_CONTROL
+#ifdef TCLM_CONCEPT
+
+bool ist30xx_tclm_get_nvm_all(struct ist30xx_data *data, bool add_flag)
+{
+	u32 buff;
+	int ret;
+	int len = 1;
+	int i = 0;
+	
+	input_info(true, &data->client->dev, "TCLM initialize\n");
+
+	if (ist30xx_intr_wait(data, 30) < 0) {
+		tsp_err("%s : intr wait fail", __func__);
+		return false;
+	}
+
+	ret = ist30xx_read_sec_info(data, IST30XX_NVM_TSP_TEST_DATA, &buff, len);
+	if (unlikely(ret)) {
+		tsp_err("sec info read fail\n");
+		return false;
+	}
+
+	data->test_result.data[0] = buff & 0xff;
+
+	input_info(true, &data->client->dev, 
+	    "%s : test_result=%x, status.update=%d initialized=%d\n",
+	     __func__, data->test_result.data[0], data->status.update, data->initialized);
+	
+	if (add_flag) {
+		ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_CAL_COUNT, &buff, len);
+		if (unlikely(ret)) {
+			tsp_err("sec info read fail\n");
+			return false;
+		}
+
+		data->cal_count = buff & 0xff;
+		input_info(true, &data->client->dev, "%s : cal_count : %02X\n", __func__, data->cal_count);
+	}
+
+	ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_CAL_POSITON, &buff, len);
+	if (unlikely(ret)) {
+		tsp_err("sec info read fail\n");
+		return false;
+	}
+	data->cal_position = buff & 0xff;
+
+	if (add_flag) {	
+		ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_TUNE_VERSION, &buff, len);
+		if (unlikely(ret)) {
+			tsp_err("sec info read fail\n");
+			return false;
+		}
+		data->tune_fix_ver = buff;
+		input_info(true, &data->client->dev, "%s : tune_fix_ver : %04X\n", __func__, data->tune_fix_ver);
+	}
+
+	ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_HISTORY_QUEUE_COUNT, &buff, len);
+	if (unlikely(ret)) {
+		tsp_err("sec info read fail\n");
+		return false;
+	}
+	data->cal_pos_hist_cnt = buff & 0xff;
+
+	ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_HISTORY_QUEUE_LASTP, &buff, len);
+	if (unlikely(ret)) {
+		tsp_err("sec info read fail\n");
+		return false;
+	}
+	data->cal_pos_hist_lastp = buff & 0xff;
+	input_info(true, &data->client->dev, "%s: cal_pos_hist_cnt:%02X, lastp:%02X\n", __func__,\
+		data->cal_pos_hist_cnt, data->cal_pos_hist_lastp);
+
+	if (data->cal_count == 0xFF || data->cal_position >= CALPOSITION_MAX) {
+		data->cal_count = 0;
+		data->cal_position = 0;
+		data->tune_fix_ver = 0;
+		data->cal_pos_hist_cnt = 0;
+		data->cal_pos_hist_lastp = 0;
+		return false;
+	}
+	
+	if(!add_flag) {
+		if ((data->cal_pos_hist_cnt > 0) && (data->cal_pos_hist_cnt <= CAL_HISTORY_QUEUE_MAX) && (data->cal_pos_hist_lastp < CAL_HISTORY_QUEUE_MAX)) {
+			for(i = 0; i < data->cal_pos_hist_cnt; i++) {
+				ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_HISTORY_QUEUE_ZERO + i, &buff, len);
+				if (unlikely(ret)) {
+					input_err(true, &data->client->dev, "%s: history sec_info read failed, %d\n", __func__, buff);
+					data->cal_pos_hist_cnt = 0;	/* error case */
+					return false;
+				}
+
+				data->cal_pos_hist_queue[2 * i] = buff & 0xff;/* cal position*/
+				data->cal_pos_hist_queue[2 *i + 1] = (buff & 0xff0000) >> 16; /* cal_count */
+			}
+			ist30xx_tclm_position_history(data);
+			
+		}
+	}
+	return true;
+}
+
+
 void get_pat_information(void *dev_data)
 {
-    char buf[16] = { 0 };
+    char buf[50] = { 0 };
     u32 *buf32;
     int ret;
-    int len = 1;	//1~32
+    int len = 1; //1~32
     struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
     struct sec_factory *sec = (struct sec_factory *)&data->sec;
 
@@ -2332,28 +2885,36 @@ void get_pat_information(void *dev_data)
     }
 
     buf32 = kzalloc(len * sizeof(u32), GFP_KERNEL);
-	if (unlikely(!buf32)) {
+    if (unlikely(!buf32)) {
         tsp_err("failed to allocate %s\n", __func__);
         return;
     }
-    ret = ist30xx_read_sec_info(data, PAT_CAL_COUNT_FIX_VERSION, buf32, len);
-    if (unlikely(ret)) {
-        tsp_err("sec info read fail\n");
-        kfree(buf32);
-        return;
-    }
+	ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_CAL_COUNT, buf32, len);
+	if (unlikely(ret)) {
+		tsp_err("sec info read fail\n");
+		return;
+	}
+	data->cal_count = buf32[0] & 0xff;
 
-    tsp_info("%s : [%2d]:%08X\n", __func__, len, buf32[0]);
+	ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_TUNE_VERSION, buf32, len);
+	if (unlikely(ret)) {
+		tsp_err("sec info read fail\n");
+		return;
+	}
 
-    data->cal_count = ((buf32[0] & 0xff0000)>>16);
-    data->tune_fix_ver = buf32[0] & 0xFFff;
+	data->tune_fix_ver = buf32[0] & 0xffff;
+	ist30xx_tclm_position_history(data);
+	tsp_info("%s : C%02XT%04X.%4s%s%s\n", __func__, data->cal_count,
+		 data->tune_fix_ver, data->tclm_string[data->cal_position].f_name,
+				 (data->dt_data->tclm_level== TCLM_LEVEL_LOCKDOWN)?".L":" ", 
+				 data->cal_pos_hist_last3);
 
-    tsp_info("%s : P%02XT%04X", __func__, data->cal_count, data->tune_fix_ver);
+	snprintf(buf, sizeof(buf), "C%02XT%04X.%4s%s%s", data->cal_count,
+		 data->tune_fix_ver, data->tclm_string[data->cal_position].f_name,
+				 (data->dt_data->tclm_level== TCLM_LEVEL_LOCKDOWN)?".L":" ",
+				 data->cal_pos_hist_last3);
 
-    snprintf(buf, sizeof(buf), "P%02XT%04X", data->cal_count,
-            data->tune_fix_ver);
-
-    kfree(buf32);
+kfree(buf32);
 
     sec->cmd_state = CMD_STATE_OK;
     set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
@@ -2389,7 +2950,7 @@ static void get_tsp_test_result(void *dev_data)
         return;
     }
 
-    ret = ist30xx_read_sec_info(data, PAT_TSP_TEST_DATA, buf32, len);
+    ret = ist30xx_read_sec_info(data, IST30XX_NVM_TSP_TEST_DATA, buf32, len);
     if (unlikely(ret)) {
         tsp_err("sec info read fail\n");
         kfree(buf32);
@@ -2445,7 +3006,7 @@ static void set_tsp_test_result(void *dev_data)
         return;
     }
 
-    ret = ist30xx_read_sec_info(data, PAT_TSP_TEST_DATA, buf32, len);
+    ret = ist30xx_read_sec_info(data, IST30XX_NVM_TSP_TEST_DATA, buf32, len);
     if (unlikely(ret)) {
         tsp_err("sec info read fail\n");
         kfree(buf32);
@@ -2484,7 +3045,7 @@ static void set_tsp_test_result(void *dev_data)
             data->test_result.assy_count);
 
     temp = data->test_result.data[0];
-    ist30xx_write_sec_info(data, PAT_TSP_TEST_DATA, &temp, 1);
+    ist30xx_write_sec_info(data, IST30XX_NVM_TSP_TEST_DATA, &temp, 1);
 
     snprintf(buf, sizeof(buf), "OK");
 
@@ -2492,6 +3053,275 @@ static void set_tsp_test_result(void *dev_data)
     set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
     dev_info(&data->client->dev, "%s: %s(%d)\n",
             __func__, buf, strnlen(buf, sizeof(buf)));
+}
+
+void ist30xx_tclm_position_history(struct ist30xx_data *data)
+{
+	int i;
+	int now_lastp = data->cal_pos_hist_lastp;
+	u8 temp_calposition;
+	u8 temp_calcount;
+	char buffer[21];
+
+	if (data->cal_pos_hist_cnt > CAL_HISTORY_QUEUE_MAX || data->cal_pos_hist_lastp >= CAL_HISTORY_QUEUE_MAX) {
+		input_err(true, &data->client->dev, "%s: not initial case, count:%X, p:%X\n", __func__, \
+			data->cal_pos_hist_cnt, data->cal_pos_hist_lastp);
+		return;
+	}
+
+	input_info(true, &data->client->dev, "%s: [Now] %4s%d\n", __func__, \
+		data->tclm_string[data->cal_position].f_name, data->cal_count);
+	
+	for (i = 0; i < data->cal_pos_hist_cnt; i++) {
+		temp_calposition = data->cal_pos_hist_queue[2 * now_lastp];
+		temp_calcount = data->cal_pos_hist_queue[2 * now_lastp + 1];
+
+		buffer[2 * i] = data->tclm_string[temp_calposition].s_name;
+		buffer[2 * i + 1] = (char)temp_calcount + '0';
+
+		if(i < CAL_HISTORY_QUEUE_SHORT_DISPLAY) {
+			data->cal_pos_hist_last3[2 * i] = buffer[2 * i];
+			data->cal_pos_hist_last3[2 * i + 1] = buffer[2 * i + 1];
+		}
+
+		if (now_lastp <= 0)
+			now_lastp = CAL_HISTORY_QUEUE_MAX - 1;
+		else 
+			now_lastp--;
+	}
+
+	/* end  */
+	buffer[2 * i] = 0;
+
+	if (i < CAL_HISTORY_QUEUE_SHORT_DISPLAY)
+		data->cal_pos_hist_last3[2 * i] = 0;
+	else
+		data->cal_pos_hist_last3[6] = 0;
+
+
+	
+	input_info(true, &data->client->dev, "%s: [Old] %s\n", __func__, buffer);
+
+}
+
+void ist30xx_tclm_debug_info(struct ist30xx_data *data)
+{
+	ist30xx_tclm_position_history(data);
+	
+}
+
+void ist30xx_tclm_root_of_cal(struct ist30xx_data *data, int pos)
+{
+	data->root_of_calibration = pos;
+	tsp_info("%s: root - %d(%4s)\n", __func__, \
+		pos, data->tclm_string[pos].f_name);
+}
+
+bool ist30xx_tclm_check_condition_valid(struct ist30xx_data *data){
+
+	tsp_info("%s: CHECK CONDITION, tclm_level:%02X, position:%d(%4s)\n", __func__, 
+		data->dt_data->tclm_level, data->cal_position, data->tclm_string[data->cal_position].f_name);
+
+	/* enter case */
+	switch (data->dt_data->tclm_level) {
+	case TCLM_LEVEL_LOCKDOWN :
+		if ((data->root_of_calibration == CALPOSITION_TUNEUP) \
+			|| (data->root_of_calibration == CALPOSITION_INITIAL)) {
+			return true;
+		} else if (!((data->cal_position == CALPOSITION_LCIA) \
+			|| (data->cal_position == CALPOSITION_SVCCENTER)) \
+			&& (data->root_of_calibration == CALPOSITION_TESTMODE)) {
+			return true;
+		}
+		break;
+
+	case TCLM_LEVEL_CLEAR_NV :
+		return true;
+
+	case TCLM_LEVEL_EVERYTIME :
+		return true;
+
+	case TCLM_LEVEL_NONE :
+		if ((data->root_of_calibration == CALPOSITION_TESTMODE) \
+			|| (data->root_of_calibration == CALPOSITION_INITIAL))
+			return true;
+		else 
+			return false;
+	}
+
+	return false;
+}
+
+bool ist30xx_execute_tclm_package(struct ist30xx_data *data, int factory_mode) {
+	int ret;
+	u32 buff;
+	int len = 1;
+
+	tsp_err("%s: tclm_level:%02X, position:%d(%4s), factory:%d\n",\
+		__func__, data->dt_data->tclm_level, \
+		data->cal_position, data->tclm_string[data->cal_position].f_name, factory_mode);
+
+	/* if is run_for_calibration, don't check cal condition */
+	if (!factory_mode){
+
+		/*check cal condition */
+		ret = ist30xx_tclm_check_condition_valid(data);
+		if (ret){
+			tsp_err("%s: RUN OFFSET CALIBRATION,%d \n", __func__, ret);
+		} else {
+			tsp_err("%s: fail tclm condition,%d, root:%d\n", \
+				__func__, ret, data->root_of_calibration);
+			return false;
+		}
+
+		/* execute force cal */
+		ret = ist30xx_execute_force_calibration(data);
+		if (ret < 0) {
+			tsp_err("%s: fail to write OFFSET CAL SEC!\n", __func__);
+			return false;
+		}
+	}
+
+	
+	if (ist30xx_intr_wait(data, 30) < 0) {
+		tsp_err("%s : intr wait fail", __func__);
+		return false;
+	}
+	/* first read cal_count and cal_position */
+	ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_CAL_COUNT, &buff, len);
+	if (unlikely(ret)) {
+		tsp_err("sec info read fail\n");
+		return false;
+	}
+	data->cal_count = buff & 0xff;
+
+	ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_CAL_POSITON, &buff, len);
+	if (unlikely(ret)) {
+		tsp_err("sec info read fail\n");
+		return false;
+	}
+	data->cal_position = buff & 0xff;
+
+	if ((data->cal_count < 1) || (data->cal_count >= 0xFF)) {
+		/* all nvm clear */ 
+		data->cal_count = 0;
+		data->cal_pos_hist_cnt = 0;
+		data->cal_pos_hist_lastp = 0;
+		
+		/* save history queue */
+		buff = 0;
+		ret = ist30xx_write_sec_info(data, IST30XX_NVM_OFFSET_HISTORY_QUEUE_COUNT, &buff, len);
+		if (unlikely(ret)) {
+			tsp_err("sec info write fail\n");
+			return false;
+		}
+		ret = ist30xx_write_sec_info(data, IST30XX_NVM_OFFSET_HISTORY_QUEUE_LASTP, &buff, len);
+		if (unlikely(ret)) {
+			tsp_err("sec info write fail\n");
+			return false;
+		}
+	} else if (data->root_of_calibration != data->cal_position) {
+		/* current data of cal count,position save cal history queue */
+
+		/* first read history_cnt, history_lastp */
+		ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_HISTORY_QUEUE_COUNT, &buff, len);
+		if (unlikely(ret)) {
+			tsp_err("sec info read fail\n");
+			return false;
+		}
+		
+		data->cal_pos_hist_cnt = buff & 0xff;
+		
+		ret = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_HISTORY_QUEUE_LASTP, &buff, len);
+		if (unlikely(ret)) {
+			tsp_err("sec info read fail\n");
+			return false;
+		}
+		data->cal_pos_hist_lastp = buff & 0xff;
+
+		if (data->cal_pos_hist_cnt > CAL_HISTORY_QUEUE_MAX || data->cal_pos_hist_lastp >= CAL_HISTORY_QUEUE_MAX) {
+			/* queue nvm clear case */
+			data->cal_pos_hist_cnt = 0;
+			data->cal_pos_hist_lastp = 0;
+		}
+
+		/*calculate queue lastpointer */
+		if (data->cal_pos_hist_cnt == 0)
+			data->cal_pos_hist_lastp = 0;
+		else if (data->cal_pos_hist_lastp >= CAL_HISTORY_QUEUE_MAX - 1)
+			data->cal_pos_hist_lastp = 0;
+		else 
+			data->cal_pos_hist_lastp++;
+
+		/*calculate queue count */
+		if (data->cal_pos_hist_cnt >= CAL_HISTORY_QUEUE_MAX)
+			data->cal_pos_hist_cnt = CAL_HISTORY_QUEUE_MAX;
+		else
+			data->cal_pos_hist_cnt++;
+
+		/* save history queue */
+		buff = data->cal_pos_hist_cnt & 0xff;
+		ret = ist30xx_write_sec_info(data, IST30XX_NVM_OFFSET_HISTORY_QUEUE_COUNT, &buff, len);
+		if (unlikely(ret)) {
+			tsp_err("sec info write fail\n");
+			return false;
+		}
+
+		buff = data->cal_pos_hist_lastp & 0xff;
+		ret = ist30xx_write_sec_info(data, IST30XX_NVM_OFFSET_HISTORY_QUEUE_LASTP, &buff, len);
+		if (unlikely(ret)) {
+			tsp_err("sec info write fail\n");
+			return false;
+		}
+		
+		buff =((data->cal_count & 0xff) << 16) | (data->cal_position & 0xffff);
+		ret = ist30xx_write_sec_info(data, IST30XX_NVM_OFFSET_HISTORY_QUEUE_ZERO + data->cal_pos_hist_lastp, &buff, len);
+		if (unlikely(ret)) {
+			tsp_err("sec info write fail\n");
+			return false;
+		}
+	
+
+		data->cal_pos_hist_queue[data->cal_pos_hist_lastp * 2 ] = data->cal_position;
+		data->cal_pos_hist_queue[data->cal_pos_hist_lastp * 2 + 1] = data->cal_count;		
+
+		data->cal_count = 0;
+	}
+
+
+	if (data->cal_count == 0) {
+		/* saving cal position */
+		buff = data->root_of_calibration & 0xff;
+		ret = ist30xx_write_sec_info(data, IST30XX_NVM_OFFSET_CAL_POSITON, &buff, len);
+		if (unlikely(ret)) {
+			tsp_err("sec info write fail\n");
+			return false;
+		}
+		
+		data->cal_position = buff;
+	}
+
+	data->cal_count++;
+	/* saving cal_count */
+	buff = data->cal_count & 0xff;
+	ret = ist30xx_write_sec_info(data, IST30XX_NVM_OFFSET_CAL_COUNT, &buff, len);
+	if (unlikely(ret)) {
+		tsp_err("sec info write fail\n");
+		return false;
+	}
+
+	/* about tune version */
+	data->tune_fix_ver = ist30xx_get_fw_ver(data);
+	buff = data->tune_fix_ver;
+	ret = ist30xx_write_sec_info(data, IST30XX_NVM_OFFSET_TUNE_VERSION, &buff, len);
+	if (unlikely(ret)) {
+		tsp_err("sec info write fail\n");
+		return false;
+	}
+	
+	ist30xx_tclm_position_history(data);
+
+	return true;
 }
 
 #ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
@@ -2524,7 +3354,7 @@ void ist30xx_read_sec_info_all(void *dev_data)
 
     for (i = (len - 1); i > 0; i -= 4) {
         tsp_info("%s : [%2d]:%08X %08X %08X %08X\n", __func__, i,
-                buf32[i], buf32[i-1], buf32[i-2], buf32[i-3]);
+                buf32[i], buf32[i - 1], buf32[i - 2], buf32[i - 3]);
     }
 
     kfree(buf32);
@@ -2547,7 +3377,7 @@ void ist30xx_read_sec_info_all(void *dev_data)
 static void check_ic_mode(void *dev_data)
 {
     int ret = 0;
-    char buf[16] = {0};
+    char buf[16] = { 0 };
     u32 status = 0;
     u8 mode = TOUCH_STATUS_NORMAL_MODE;
     struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
@@ -2591,7 +3421,7 @@ static void check_ic_mode(void *dev_data)
 static void get_wet_mode(void *dev_data)
 {
     int ret = 0;
-    char buf[16] = {0};
+    char buf[16] = { 0 };
     u32 status = 0;
     u8 mode = TOUCH_STATUS_NORMAL_MODE;
     struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
@@ -2630,6 +3460,47 @@ static void get_wet_mode(void *dev_data)
             buf, strnlen(buf, sizeof(buf)));
 }
 
+static void run_fw_integrity(void *dev_data)
+{
+    int ret = 0;
+    char buf[16] = {0};
+    u32 integrity = 0;
+    int result = 0;
+    struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
+    struct sec_factory *sec = (struct sec_factory *)&data->sec;
+
+    set_default_result(sec);
+
+    if (data->status.power == 1) {
+        ist30xx_reset(data, false);
+
+        ret = ist30xx_read_cmd(data, eHCOM_GET_FW_INTEGRITY, &integrity);
+        if (unlikely(ret)) {
+            tsp_err("%s(), Failed get the fw integrity \n", __func__);
+            sec->cmd_state = CMD_STATE_FAIL;
+        } else {
+            if (integrity == IST30XX_EXCEPT_INTEGRITY)
+                result = 1;
+            sec->cmd_state = CMD_STATE_OK;
+        }
+
+        ist30xx_start(data);
+    } else {
+        sec->cmd_state = CMD_STATE_FAIL;
+        tsp_err("%s(), error currently power off \n", __func__);
+    }
+
+    if (sec->cmd_state == CMD_STATE_OK)
+        snprintf(buf, sizeof(buf), "%d", result);
+    else
+        snprintf(buf, sizeof(buf), "%s", "NG");
+
+    tsp_info("%s(), %s\n", __func__, buf);
+    set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
+    dev_info(&data->client->dev, "%s: %s(%d)\n", __func__,
+            buf, strnlen(buf, sizeof(buf)));
+}
+
 /* sysfs: /sys/class/sec/tsp/close_tsp_test */
 static ssize_t show_close_tsp_test(struct device *dev,
         struct device_attribute *attr, char *buf)
@@ -2641,6 +3512,7 @@ static ssize_t show_close_tsp_test(struct device *dev,
 static ssize_t store_cmd(struct device *dev, struct device_attribute
         *devattr, const char *buf, size_t count)
 {
+    int ret;
     char *cur, *start, *end;
     char msg[SEC_CMD_STR_LEN] = { 0 };
     int len, i;
@@ -2648,7 +3520,6 @@ static ssize_t store_cmd(struct device *dev, struct device_attribute
     char delim = ',';
     bool cmd_found = false;
     int param_cnt = 0;
-    int ret;
     struct ist30xx_data *data = dev_get_drvdata(dev);
     struct sec_factory *sec = (struct sec_factory *)&data->sec;
     struct i2c_client *client = data->client;
@@ -2660,7 +3531,14 @@ static ssize_t store_cmd(struct device *dev, struct device_attribute
     }
 
     if (strlen(buf) >= SEC_CMD_STR_LEN) {
-        tsp_err("%s: cmd length is over (%s,%d)!!\n", __func__, buf, (int)strlen(buf));
+        tsp_err("%s: cmd length is over (%s,%d)!!\n", __func__, buf,
+                (int)strlen(buf));
+        goto err_out;
+    }
+
+    if (count >= (unsigned int)SEC_CMD_STR_LEN) {
+        tsp_err("%s: cmd length(count) is over (%d,%s)!!\n",
+                __func__, (unsigned int)count, buf);
         goto err_out;
     }
 
@@ -2711,8 +3589,7 @@ static ssize_t store_cmd(struct device *dev, struct device_attribute
                 end = cur;
                 memcpy(msg, start, end - start);
                 *(msg + strlen(msg)) = '\0';
-                ret = kstrtoint(msg, 10, \
-                        sec->cmd_param + param_cnt);
+                ret = kstrtoint(msg, 10, sec->cmd_param + param_cnt);
                 start = cur + 1;
                 memset(msg, 0, ARRAY_SIZE(msg));
                 param_cnt++;
@@ -2848,32 +3725,22 @@ struct tsp_cmd tsp_cmds[] = {
     { TSP_CMD("set_aod_rect", set_aod_rect), },
     { TSP_CMD("get_aod_rect", get_aod_rect), },
     { TSP_CMD("get_cp_array", get_cp_array), },
-#ifdef IST30XX_USE_SELF
     { TSP_CMD("get_self_cp_array", get_self_cp_array), },
-#endif
     { TSP_CMD("run_reference_read", run_cdc_read), },
     { TSP_CMD("get_reference", get_cdc_value), },
-#ifdef IST30XX_USE_SELF
     { TSP_CMD("run_self_reference_read", run_self_cdc_read), },
     { TSP_CMD("get_self_reference", get_self_cdc_value), },
     { TSP_CMD("get_rx_self_reference", get_rx_self_cdc_value), },
     { TSP_CMD("get_tx_self_reference", get_tx_self_cdc_value), },
-#endif
     { TSP_CMD("run_reference_read_key", run_cdc_read_key), },
     { TSP_CMD("run_cdc_read", run_cdc_read), },
-#ifdef IST30XX_USE_SELF
     { TSP_CMD("run_self_cdc_read", run_self_cdc_read), },
-#endif
     { TSP_CMD("run_cdc_read_key", run_cdc_read_key), },
     { TSP_CMD("get_cdc_value", get_cdc_value), },
     { TSP_CMD("get_cdc_all_data", get_cdc_all_data), },
-#ifdef IST30XX_USE_SELF
     { TSP_CMD("get_self_cdc_all_data", get_self_cdc_all_data), },
-#endif
     { TSP_CMD("get_cdc_array", get_cdc_array), },
-#ifdef IST30XX_USE_SELF
     { TSP_CMD("get_self_cdc_array", get_self_cdc_array), },
-#endif
 #ifdef IST30XX_USE_CMCS
     { TSP_CMD("get_cm_all_data", get_cm_all_data), },
     { TSP_CMD("get_slope0_all_data", get_slope0_all_data), },
@@ -2882,6 +3749,9 @@ struct tsp_cmd tsp_cmds[] = {
     { TSP_CMD("run_hvdd_test", run_hvdd_test), },
     { TSP_CMD("run_cm_test", run_cm_test), },
     { TSP_CMD("get_cm_value", get_cm_value), },
+    { TSP_CMD("get_cm_maxgap_value", get_cm_maxgap_value),},
+    { TSP_CMD("get_tx_cm_gap_value", get_tx_cm_gap_value),},
+    { TSP_CMD("get_rx_cm_gap_value", get_rx_cm_gap_value),},
     { TSP_CMD("run_cm_test_key", run_cm_test_key), },
     { TSP_CMD("run_jitter_read", run_cmjit_test), },
     { TSP_CMD("get_jitter", get_cmjit_value), },
@@ -2894,11 +3764,12 @@ struct tsp_cmd tsp_cmds[] = {
     { TSP_CMD("get_cs1_array", get_cs_array), },
 #endif
     { TSP_CMD("get_config_ver", get_config_ver), },
+	{ TSP_CMD("set_external_factory", set_external_factory),},
     { TSP_CMD("run_force_calibration", run_force_calibration), },
     { TSP_CMD("get_force_calibration", get_force_calibration), },
     { TSP_CMD("run_mis_cal_read", run_miscalibration), },
     { TSP_CMD("get_mis_cal", get_miscalibration_value), },
-#ifdef PAT_CONTROL
+#ifdef TCLM_CONCEPT
     { TSP_CMD("get_pat_information", get_pat_information),},
     { TSP_CMD("get_tsp_test_result", get_tsp_test_result),},
     { TSP_CMD("set_tsp_test_result", set_tsp_test_result),},
@@ -2908,6 +3779,8 @@ struct tsp_cmd tsp_cmds[] = {
 #endif
     { TSP_CMD("check_ic_mode", check_ic_mode),},
     { TSP_CMD("get_wet_mode", get_wet_mode),},
+    { TSP_CMD("run_fw_integrity", run_fw_integrity),},
+    { TSP_CMD("get_fw_integrity", get_checksum_data),},
     { TSP_CMD("not_support_cmd", not_support_cmd), },
 };
 
@@ -2956,90 +3829,289 @@ err_alloc:
 }
 
 static ssize_t scrub_position_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+        struct device_attribute *attr, char *buf)
 {
-	struct ist30xx_data *data = dev_get_drvdata(dev);
-	char buff[256] = { 0 };
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+    char buff[256] = { 0 };
 
-	tsp_info("%s: scrub_id: %d, X:%d, Y:%d \n", __func__,
-				data->scrub_id, data->scrub_x, data->scrub_y);
+    tsp_info("%s: scrub_id: %d, X:%d, Y:%d \n", __func__, data->scrub_id,
+            data->scrub_x, data->scrub_y);
 
-	snprintf(buff, sizeof(buff), "%d %d %d", data->scrub_id, data->scrub_x, data->scrub_y);
+    snprintf(buff, sizeof(buff), "%d %d %d", data->scrub_id, data->scrub_x,
+            data->scrub_y);
 
-	data->scrub_id = 0;
-	return snprintf(buf, PAGE_SIZE, "%s", buff);
+    data->scrub_id = 0;
+
+    return snprintf(buf, PAGE_SIZE, "%s", buff);
 }
 
-static ssize_t read_ito_check_show(struct device *dev, struct device_attribute
-        *devattr, char *buf)
+static ssize_t read_ito_check_show(struct device *dev,
+        struct device_attribute *devattr, char *buf)
 {
-	struct ist30xx_data *data = dev_get_drvdata(dev);
+    struct ist30xx_data *data = dev_get_drvdata(dev);
 
-	tsp_info("%s: %02X%02X%02X%02X\n", __func__,
-				data->ito_test[0], data->ito_test[1],
-				data->ito_test[2], data->ito_test[3]);
+    tsp_info("%s: %02X%02X%02X%02X\n", __func__, data->ito_test[0],
+            data->ito_test[1], data->ito_test[2], data->ito_test[3]);
 
-	return snprintf(buf, PAGE_SIZE, "%02X%02X%02X%02X",
-					data->ito_test[0], data->ito_test[1],
-					data->ito_test[2], data->ito_test[3]);
+    return snprintf(buf, PAGE_SIZE, "%02X%02X%02X%02X", data->ito_test[0],
+            data->ito_test[1], data->ito_test[2], data->ito_test[3]);
 }
 
-static ssize_t read_raw_check_show(struct device *dev, struct device_attribute
-        *devattr, char *buf)
+static ssize_t read_raw_check_show(struct device *dev,
+        struct device_attribute *devattr, char *buf)
 {
-	tsp_info("%s\n", __func__);
-	return snprintf(buf, PAGE_SIZE, "OK");
+    tsp_info("%s\n", __func__);
+    return snprintf(buf, PAGE_SIZE, "OK");
 }
 
-static ssize_t read_multi_count_show(struct device *dev, struct device_attribute
-        *devattr, char *buf)
+static ssize_t read_multi_count_show(struct device *dev,
+        struct device_attribute *devattr, char *buf)
 {
-	struct ist30xx_data *data = dev_get_drvdata(dev);
-	char buffer[256]= { 0 };
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+    char buffer[256]= { 0 };
 
-	tsp_info("%s: %d\n", __func__, data->multi_count);
-	snprintf(buffer, sizeof(buffer), "%d", data->multi_count);
-	data->multi_count = 0;
+    tsp_info("%s: %d\n", __func__, data->multi_count);
+    snprintf(buffer, sizeof(buffer), "%d", data->multi_count);
+    data->multi_count = 0;
 
-	return snprintf(buf, PAGE_SIZE, "%s\n", buffer);
+    return snprintf(buf, PAGE_SIZE, "%s\n", buffer);
 }
 
-static ssize_t read_wet_mode_show(struct device *dev, struct device_attribute
-        *devattr, char *buf)
+static ssize_t clear_multi_count_store(struct device *dev, struct device_attribute
+        *devattr, const char *buf, size_t count)
 {
-	struct ist30xx_data *data = dev_get_drvdata(dev);
-	char buffer[256]= { 0 };
+    struct ist30xx_data *data = dev_get_drvdata(dev);
 
-	tsp_info("%s: %d\n", __func__, data->wet_count);
-	snprintf(buffer, sizeof(buffer), "%d", data->wet_count);
-	data->wet_count = 0;
+    data->multi_count = 0;
 
-	return snprintf(buf, PAGE_SIZE, "%s\n", buffer);
+    tsp_info("%s: clear\n", __func__);
+    return count;
 }
 
-static ssize_t read_comm_err_count_show(struct device *dev, struct device_attribute
-        *devattr, char *buf)
+static ssize_t read_wet_mode_show(struct device *dev,
+        struct device_attribute *devattr, char *buf)
 {
-	struct ist30xx_data *data = dev_get_drvdata(dev);
-	char buffer[256]= { 0 };
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+    char buffer[256]= { 0 };
 
-	tsp_info("%s: %d\n", __func__, data->comm_err_count);
-	snprintf(buffer, sizeof(buffer), "%d", data->comm_err_count);
-	data->comm_err_count = 0;
+    tsp_info("%s: %d\n", __func__, data->wet_count);
+    snprintf(buffer, sizeof(buffer), "%d", data->wet_count);
+    data->wet_count = 0;
 
-	return snprintf(buf, PAGE_SIZE, "%s\n", buffer);
+    return snprintf(buf, PAGE_SIZE, "%s\n", buffer);
+}
+
+static ssize_t clear_wet_mode_store(struct device *dev, struct device_attribute
+        *devattr, const char *buf, size_t count)
+{
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+
+    data->wet_count = 0;
+
+    tsp_info("%s: clear\n", __func__);
+    return count;
+}
+
+static ssize_t read_comm_err_count_show(struct device *dev,
+        struct device_attribute *devattr, char *buf)
+{
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+    char buffer[256]= { 0 };
+
+    tsp_info("%s: %d\n", __func__, data->comm_err_count);
+    snprintf(buffer, sizeof(buffer), "%d", data->comm_err_count);
+    data->comm_err_count = 0;
+
+    return snprintf(buf, PAGE_SIZE, "%s\n", buffer);
+}
+
+static ssize_t clear_comm_err_count_store(struct device *dev, struct device_attribute
+        *devattr, const char *buf, size_t count)
+{
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+
+    data->comm_err_count = 0;
+
+    tsp_info("%s: clear\n", __func__);
+    return count;
 }
 
 static ssize_t read_module_id_show(struct device *dev, struct device_attribute
         *devattr, char *buf)
 {
-	struct ist30xx_data *data = dev_get_drvdata(dev);
+    struct ist30xx_data *data = dev_get_drvdata(dev);
 
-	tsp_info("%s\n", __func__);
+    tsp_info("%s\n", __func__);
 
-	return snprintf(buf, PAGE_SIZE, "IM%04X%02X%02X%02X",
-		(data->fw.cur.fw_ver & 0xffff), data->test_result.data[0],
-		data->cal_count, (data->tune_fix_ver & 0xff));
+#ifdef TCLM_CONCEPT
+    return snprintf(buf, PAGE_SIZE, "IM%04X%02X%02X%02X%4s%02X",
+            (data->fw.cur.fw_ver & 0xffff), data->test_result.data[0],
+            data->cal_count, (data->tune_fix_ver & 0xff),
+			data->tclm_string[data->cal_position].f_name, data->cal_position);
+#else
+    return snprintf(buf, PAGE_SIZE, "IM%04X%02X%02X%02X",
+            (data->fw.cur.fw_ver & 0xffff), data->test_result.data[0],
+            data->cal_count, (data->tune_fix_ver & 0xff));
+#endif
+}
+
+static ssize_t read_checksum_show(struct device *dev, struct device_attribute
+        *devattr, char *buf)
+{
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+
+    tsp_info("%s: %d\n", __func__, data->checksum_result);
+
+    return snprintf(buf, PAGE_SIZE, "%d", data->checksum_result);
+}
+
+static ssize_t clear_checksum_store(struct device *dev, struct device_attribute
+        *devattr, const char *buf, size_t count)
+{
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+
+    data->checksum_result = 0;
+    tsp_info("%s: clear\n", __func__);
+
+    return count;
+}
+
+static ssize_t read_holding_time_show(struct device *dev, struct device_attribute
+        *devattr, char *buf)
+{
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+
+    tsp_info("%s: %ld\n", __func__, data->time_longest);
+
+    return snprintf(buf, PAGE_SIZE, "%ld", data->time_longest);
+}
+
+static ssize_t clear_holding_time_store(struct device *dev, struct device_attribute
+        *devattr, const char *buf, size_t count)
+{
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+
+    data->time_longest = 0;
+
+    tsp_info("%s: clear\n", __func__);
+
+    return count;
+}
+
+static ssize_t read_all_touch_count_show(struct device *dev, struct device_attribute
+        *devattr, char *buf)
+{
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+
+    tsp_info("%s: touch:%d\n", __func__, data->all_finger_count);
+
+    return snprintf(buf, PAGE_SIZE, "\"TTCN\":\"%d\"", data->all_finger_count);
+}
+
+static ssize_t clear_all_touch_count_store(struct device *dev, struct device_attribute
+        *devattr, const char *buf, size_t count)
+{
+    tsp_info("%s: clear\n", __func__);
+
+    return count;
+}
+
+static ssize_t read_vendor_show(struct device *dev, struct device_attribute
+        *devattr, char *buf)
+{
+    return snprintf(buf, PAGE_SIZE, "%s", TSP_CHIP_VENDOR);
+}
+
+static ssize_t read_ambient_info_show(struct device *dev, struct device_attribute
+        *devattr, char *buf)
+{
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+
+    input_info(true, &data->client->dev, "%s: max %d(%d,%d), min: %d(%d,%d)\n", __func__,
+        max_gap, max_gap_tx, max_gap_rx,
+        min_gap, min_gap_tx, min_gap_rx);
+
+    return snprintf(buf, PAGE_SIZE,
+        "\"TAMB_MAX\":\"%d\",\"TAMB_MAX_TX\":\"%d\",\"TAMB_MAX_RX\":\"%d\","
+        "\"TAMB_MIN\":\"%d\",\"TAMB_MIN_TX\":\"%d\",\"TAMB_MIN_RX\":\"%d\"",
+        max_gap, max_gap_tx, max_gap_rx,
+        min_gap, min_gap_tx, min_gap_rx);
+}
+
+static ssize_t read_ambient_channel_info_show(struct device *dev, struct device_attribute
+        *devattr, char *buf)
+{
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+    TSP_INFO *tsp = &data->tsp_info;
+    char *buffer;
+    int ret;
+    int i;
+    char temp[30];
+
+    buffer = vmalloc((tsp->ch_num.tx + tsp->ch_num.rx) * 25);
+    if (!buffer)
+        return -ENOMEM;
+
+    memset(buffer, 0x00, (tsp->ch_num.tx + tsp->ch_num.rx) * 25);
+
+    for (i = 0; i < tsp->ch_num.tx; i++) {
+        snprintf(temp, sizeof(temp), "\"TAMB_TX%02d\":\"%d\",",
+                i, avg_gap_channel_tx[i] / tsp->ch_num.rx);
+        strncat(buffer, temp, sizeof(temp));
+    }
+
+    for (i = 0; i < tsp->ch_num.rx; i++) {
+        snprintf(temp, sizeof(temp), "\"TAMB_RX%02d\":\"%d\"",
+                i, avg_gap_channel_rx[i] / tsp->ch_num.tx);
+        strncat(buffer, temp, sizeof(temp));
+        if (i  != (tsp->ch_num.rx - 1))
+            strncat(buffer, ",", 2);
+    }
+
+    ret = snprintf(buf, (tsp->ch_num.tx + tsp->ch_num.rx) * 25, buffer);
+
+    input_info(true, &data->client->dev, "%s: %s\n", __func__, buffer);
+    vfree(buffer);
+
+    return ret;
+}
+
+static ssize_t read_ambient_channel_delta_show(struct device *dev, struct device_attribute
+        *devattr, char *buf)
+{
+    struct ist30xx_data *data = dev_get_drvdata(dev);
+    TSP_INFO *tsp = &data->tsp_info;
+    char *buffer;
+    int ret;
+    int i;
+    char temp[30];
+
+    buffer = vmalloc((tsp->ch_num.tx + tsp->ch_num.rx) * 25);
+    if (!buffer)
+        return -ENOMEM;
+
+    memset(buffer, 0x00, (tsp->ch_num.tx + tsp->ch_num.rx) * 25);
+
+    for (i = 0; i < tsp->ch_num.tx; i++) {
+        snprintf(temp, sizeof(temp), "\"TCDT%02d\":\"%d\",",
+                i, max_gap_channel_tx[i] - min_gap_channel_tx[i]);
+        strncat(buffer, temp, sizeof(temp));
+    }
+
+    for (i = 0; i < tsp->ch_num.rx; i++) {
+        snprintf(temp, sizeof(temp), "\"TCDR%02d\":\"%d\"",
+                i, max_gap_channel_rx[i] - min_gap_channel_rx[i]);
+        strncat(buffer, temp, sizeof(temp));
+        if (i  != (tsp->ch_num.rx - 1))
+            strncat(buffer, ",", 2);
+    }
+
+    ret = snprintf(buf, (tsp->ch_num.tx + tsp->ch_num.rx) * 25, buffer);
+
+    input_info(true, &data->client->dev, "%s: %s\n", __func__, buffer);
+    vfree(buffer);
+
+    return ret;
 }
 
 /* sysfs - tsp */
@@ -3052,10 +4124,17 @@ static DEVICE_ATTR(scrub_pos, S_IRUGO, scrub_position_show, NULL);
 
 static DEVICE_ATTR(ito_check, S_IRUGO, read_ito_check_show, NULL);
 static DEVICE_ATTR(raw_check, S_IRUGO, read_raw_check_show, NULL);
-static DEVICE_ATTR(multi_count, S_IRUGO, read_multi_count_show, NULL);
-static DEVICE_ATTR(wet_mode, S_IRUGO, read_wet_mode_show, NULL);
-static DEVICE_ATTR(comm_err_count, S_IRUGO, read_comm_err_count_show, NULL);
+static DEVICE_ATTR(multi_count, S_IRUGO | S_IWUSR | S_IWGRP, read_multi_count_show, clear_multi_count_store);
+static DEVICE_ATTR(wet_mode, S_IRUGO | S_IWUSR | S_IWGRP, read_wet_mode_show, clear_wet_mode_store);
+static DEVICE_ATTR(comm_err_count, S_IRUGO | S_IWUSR | S_IWGRP, read_comm_err_count_show, clear_comm_err_count_store);
 static DEVICE_ATTR(module_id, S_IRUGO, read_module_id_show, NULL);
+static DEVICE_ATTR(checksum, S_IRUGO | S_IWUSR | S_IWGRP, read_checksum_show, clear_checksum_store);
+static DEVICE_ATTR(holding_time, S_IRUGO | S_IWUSR | S_IWGRP, read_holding_time_show, clear_holding_time_store);
+static DEVICE_ATTR(all_touch_count, S_IRUGO | S_IWUSR | S_IWGRP, read_all_touch_count_show, clear_all_touch_count_store);
+static DEVICE_ATTR(vendor, S_IRUGO, read_vendor_show, NULL);
+static DEVICE_ATTR(read_ambient_info, 0444, read_ambient_info_show, NULL);
+static DEVICE_ATTR(read_ambient_channel_info, 0444, read_ambient_channel_info_show, NULL);
+static DEVICE_ATTR(read_ambient_channel_delta, 0444, read_ambient_channel_delta_show, NULL);
 
 static struct attribute *sec_touch_facotry_attributes[] = {
     &dev_attr_close_tsp_test.attr,
@@ -3070,6 +4149,13 @@ static struct attribute *sec_touch_facotry_attributes[] = {
     &dev_attr_wet_mode.attr,
     &dev_attr_comm_err_count.attr,
     &dev_attr_module_id.attr,
+    &dev_attr_checksum.attr,
+    &dev_attr_holding_time.attr,
+    &dev_attr_all_touch_count.attr,
+    &dev_attr_vendor.attr,
+    &dev_attr_read_ambient_info.attr,
+    &dev_attr_read_ambient_channel_info.attr,
+    &dev_attr_read_ambient_channel_delta.attr,
     NULL,
 };
 
@@ -3098,7 +4184,6 @@ static struct attribute_group sec_tkey_attr_group = {
     .attrs = sec_tkey_attributes,
 };
 #endif /* IST30XX_USE_KEY */
-
 
 int sec_touch_sysfs(struct ist30xx_data *data)
 {

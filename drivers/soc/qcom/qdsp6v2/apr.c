@@ -276,6 +276,7 @@ int apr_send_pkt(void *handle, uint32_t *buf)
 	uint16_t dest_id;
 	uint16_t client_id;
 	uint16_t w_len;
+	int rc;
 	unsigned long flags;
 
 	if (!handle || !buf) {
@@ -317,14 +318,23 @@ int apr_send_pkt(void *handle, uint32_t *buf)
 	APR_PKT_INFO("Tx: dest_svc[%d], opcode[0x%X], size[%d]",
 			hdr->dest_svc, hdr->opcode, hdr->pkt_size);
 
-	w_len = apr_tal_write(clnt->handle, buf,
+	rc = apr_tal_write(clnt->handle, buf,
 			(struct apr_pkt_priv *)&svc->pkt_owner,
 			hdr->pkt_size);
-	if (w_len != hdr->pkt_size)
-		pr_err("Unable to write APR pkt successfully: %d\n", w_len);
+	if (rc >= 0) {
+		w_len = rc;
+		if (w_len != hdr->pkt_size) {
+			pr_err("%s: Unable to write whole APR pkt successfully: %d\n",
+			       __func__, rc);
+			rc = -EINVAL;
+		}
+	} else {
+		pr_err("%s: Write APR pkt failed with error %d\n",
+			__func__, rc);
+	}
 	spin_unlock_irqrestore(&svc->w_lock, flags);
 
-	return w_len;
+	return rc;
 }
 
 int apr_pkt_config(void *handle, struct apr_pkt_cfg *cfg)
@@ -449,19 +459,19 @@ struct apr_svc *apr_register(char *dest, char *svc_name, apr_fn svc_fn,
 			mutex_unlock(&svc->m_lock);
 			return NULL;
 		}
-		if (!svc->port_cnt && !svc->svc_cnt)
+		if (!svc->svc_cnt)
 			clnt->svc_cnt++;
 		svc->port_cnt++;
 		svc->port_fn[temp_port] = svc_fn;
 		svc->port_priv[temp_port] = priv;
+		svc->svc_cnt++;
 	} else {
 		if (!svc->fn) {
-			if (!svc->port_cnt && !svc->svc_cnt)
+			if (!svc->svc_cnt)
 				clnt->svc_cnt++;
 			svc->fn = svc_fn;
-			if (svc->port_cnt)
-				svc->svc_cnt++;
 			svc->priv = priv;
+			svc->svc_cnt++;
 		}
 	}
 
@@ -598,7 +608,8 @@ void apr_cb_func(void *buf, int len, void *priv)
 
 	temp_port = ((data.dest_port >> 8) * 8) + (data.dest_port & 0xFF);
 	pr_debug("port = %d t_port = %d\n", data.src_port, temp_port);
-	if (c_svc->port_cnt && c_svc->port_fn[temp_port])
+	if (((temp_port >= 0) && (temp_port < APR_MAX_PORTS))
+		&& (c_svc->port_cnt && c_svc->port_fn[temp_port]))
 		c_svc->port_fn[temp_port](&data,  c_svc->port_priv[temp_port]);
 	else if (c_svc->fn)
 		c_svc->fn(&data, c_svc->priv);
@@ -663,29 +674,27 @@ int apr_deregister(void *handle)
 	if (!handle)
 		return -EINVAL;
 
-	mutex_lock(&svc->m_lock);
+	if (!svc->svc_cnt) {
+		pr_err("%s: svc already deregistered. svc = %pK\n",
+			__func__, svc);
+		return -EINVAL;
+	}
+
 	dest_id = svc->dest_id;
 	client_id = svc->client_id;
 	clnt = &client[dest_id][client_id];
 
-	if (svc->port_cnt > 0 || svc->svc_cnt > 0) {
+	if (svc->svc_cnt > 0) {
 		if (svc->port_cnt)
 			svc->port_cnt--;
-		else if (svc->svc_cnt)
-			svc->svc_cnt--;
-		if (!svc->port_cnt && !svc->svc_cnt) {
+		svc->svc_cnt--;
+		if (!svc->svc_cnt) {
 			client[dest_id][client_id].svc_cnt--;
-			svc->need_reset = 0x0;
-		}
-	} else if (client[dest_id][client_id].svc_cnt > 0) {
-		client[dest_id][client_id].svc_cnt--;
-		if (!client[dest_id][client_id].svc_cnt) {
-			svc->need_reset = 0x0;
 			pr_debug("%s: service is reset %pK\n", __func__, svc);
 		}
 	}
 
-	if (!svc->port_cnt && !svc->svc_cnt) {
+	if (!svc->svc_cnt) {
 		svc->priv = NULL;
 		svc->id = 0;
 		svc->fn = NULL;
@@ -738,6 +747,7 @@ void dispatch_event(unsigned long code, uint16_t proc)
 	uint16_t clnt;
 	int i, j;
 
+	memset(&data, 0, sizeof(data));
 	data.opcode = RESET_EVENTS;
 	data.reset_event = code;
 

@@ -1,5 +1,5 @@
 /* Copyright (c) 2013-2014, 2016, The Linux Foundation. All rights reserved.
- *
+ * Copyright (c) 2017, The Linux Foundation. All rights reserved.
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
@@ -34,11 +34,13 @@ static void mdp3_vsync_intr_handler(int type, void *arg)
 {
 	struct mdp3_dma *dma = (struct mdp3_dma *)arg;
 	struct mdp3_notification vsync_client;
+	struct mdp3_notification retire_client;
 	unsigned int wait_for_next_vs;
 
 	pr_debug("mdp3_vsync_intr_handler\n");
 	spin_lock(&dma->dma_lock);
 	vsync_client = dma->vsync_client;
+	retire_client = dma->retire_client;
 	wait_for_next_vs = !dma->vsync_status;
 	dma->vsync_status = 0;
 	if (wait_for_next_vs)
@@ -50,6 +52,9 @@ static void mdp3_vsync_intr_handler(int type, void *arg)
 		if (wait_for_next_vs)
 			mdp3_irq_disable_nosync(type);
 	}
+
+	if (retire_client.handler)
+		retire_client.handler(retire_client.arg);
 }
 
 static void mdp3_dma_done_intr_handler(int type, void *arg)
@@ -85,6 +90,7 @@ static void mdp3_hist_done_intr_handler(int type, void *arg)
 		dma->histo_state = MDP3_DMA_HISTO_STATE_READY;
 		complete(&dma->histo_comp);
 		spin_unlock(&dma->histo_lock);
+		mdp3_hist_intr_notify(dma);
 	}
 	if (isr & MDP3_DMA_P_HIST_INTR_RESET_DONE_BIT) {
 		spin_lock(&dma->histo_lock);
@@ -153,6 +159,12 @@ void mdp3_dma_callback_disable(struct mdp3_dma *dma, int type)
 			irq_bit = MDP3_INTR_SYNC_PRIMARY_LINE;
 			irq_bit += dma->dma_sel;
 			mdp3_irq_disable(irq_bit);
+			/*
+			 * Clear read pointer interrupt before disabling clocks.
+			 * Else pending ISR handling will result in NOC error
+			 * since the clock will be disable after this point.
+			 */
+			mdp3_clear_irq(irq_bit);
 		}
 
 		if (type & MDP3_DMA_CALLBACK_TYPE_DMA_DONE) {
@@ -721,7 +733,6 @@ retry_dma_done:
 retry_vsync:
 		rc = wait_for_completion_timeout(&dma->vsync_comp,
 			KOFF_TIMEOUT);
-		pr_err("%s VID DMA Buff Addr %pK\n", __func__, buf);
 		if (rc <= 0 && --retry_count) {
 			int vsync = MDP3_REG_READ(MDP3_REG_INTR_STATUS) &
 					(1 << MDP3_INTR_LCDC_START_OF_FRAME);

@@ -13,12 +13,12 @@
 #define MAX_RETRY					5
 
 v_MACADDR_t sec_mac_addrs[VOS_MAX_CONCURRENCY_PERSONA];
-static int sec_mac_loaded = 0;
+static int sec_mac_loaded;
 
 static int wlan_hdd_read_mac_addr(unsigned char *mac);
 
 #if 1
-unsigned char* wlan_hdd_sec_get_mac_addr(int i)
+unsigned char *wlan_hdd_sec_get_mac_addr(int i)
 {
 	if (!sec_mac_loaded) {
 		// station mac
@@ -62,7 +62,7 @@ static int wlan_hdd_read_mac_addr(unsigned char *mac)
 
 	for (i = 0; i < MAX_RETRY; ++i) {
 		fp = filp_open(filepath, O_RDONLY, 0);
-		if (IS_ERR(fp) || create_random_mac ==1) {
+		if (IS_ERR(fp) || create_random_mac == 1) {
 			/* File Doesn't Exist. Create and write mac addr.*/
 			fp = filp_open(filepath, O_RDWR | O_CREAT, 0660);
 			if (IS_ERR(fp)) {
@@ -83,7 +83,7 @@ static int wlan_hdd_read_mac_addr(unsigned char *mac)
 			get_random_bytes(randommac, 3);
 
 			sprintf(macbuffer, "%02X:%02X:%02X:%02X:%02X:%02X\n",
-						0x00, 0x12, 0x34, randommac[0], randommac[1], randommac[2]);
+					0x00, 0x12, 0x34, randommac[0], randommac[1], randommac[2]);
 			//SEC_LOG("[WIFI] The randomly generated MAC ID: %s", macbuffer);
 
 			if (fp->f_mode & FMODE_WRITE) {
@@ -115,9 +115,9 @@ static int wlan_hdd_read_mac_addr(unsigned char *mac)
 
 	if (ret) {
 		sscanf(buf, "%02X:%02X:%02X:%02X:%02X:%02X",
-			   (unsigned int *)&(mac[0]), (unsigned int *)&(mac[1]),
-			   (unsigned int *)&(mac[2]), (unsigned int *)&(mac[3]),
-			   (unsigned int *)&(mac[4]), (unsigned int *)&(mac[5]));
+				(unsigned int *)&(mac[0]), (unsigned int *)&(mac[1]),
+				(unsigned int *)&(mac[2]), (unsigned int *)&(mac[3]),
+				(unsigned int *)&(mac[4]), (unsigned int *)&(mac[5]));
 		return 0;	// success
 	}
 
@@ -143,12 +143,11 @@ unsigned int wlan_hdd_sec_get_psm(unsigned int original_value)
 		fp = filp_open(filepath, O_RDONLY, 0);
 		if (!IS_ERR(fp)) {
 			//kernel_read(fp, fp->f_pos, &value, 1);
-			kernel_read(fp, 0, (char*)&value, 1);
+			kernel_read(fp, 0, (char *)&value, 1);
 			SEC_LOG("[WIFI] PSM: [%u]\n", value);
 			if (value == '0')
 				original_value = value - '0';
 			break;
-
 		}
 	}
 	if (fp && !IS_ERR(fp))
@@ -168,30 +167,29 @@ unsigned int wlan_hdd_sec_get_psm(unsigned int original_value)
 
 int wlan_hdd_sec_write_version_file(char *riva_version)
 {
-   int ret = 0;
-   struct file *fp = NULL;
-   char strbuffer[50]   = {0};
-   mm_segment_t oldfs   = {0};
+	int ret = 0;
+	struct file *fp = NULL;
+	char strbuffer[50]   = {0};
+	mm_segment_t oldfs   = {0};
 
-   oldfs = get_fs();
-   set_fs(get_ds());
+	oldfs = get_fs();
+	set_fs(get_ds());
 
-   fp = filp_open(SEC_VERSION_FILEPATH, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR|S_IWUSR);
-   if (IS_ERR(fp)) {
-       SEC_LOG("%s: can't create file : %s",__func__,SEC_VERSION_FILEPATH);
-   }
-   else {
-       if (fp->f_mode & FMODE_WRITE) {
-           snprintf(strbuffer,sizeof(strbuffer),"v%s %s\n", QWLAN_VERSIONSTR, riva_version);
-           if ( vfs_write(fp, strbuffer, strlen(strbuffer), &fp->f_pos) < 0)
-               SEC_LOG("%s: can't write file : %s",__func__,SEC_VERSION_FILEPATH);
-           else 
-               ret = 1;
-       }
-   }
-   if (fp && (!IS_ERR(fp)))
-       filp_close(fp, NULL);
-   set_fs(oldfs);
-   return ret;
+	fp = filp_open(SEC_VERSION_FILEPATH, O_RDWR | O_CREAT | O_TRUNC, 0600);
+	if (IS_ERR(fp))
+		SEC_LOG("%s: can't create file : %s", __func__, SEC_VERSION_FILEPATH);
+	else {
+		if (fp->f_mode & FMODE_WRITE) {
+			snprintf(strbuffer, sizeof(strbuffer), "v%s %s\n", QWLAN_VERSIONSTR, riva_version);
+			if (vfs_write(fp, strbuffer, strlen(strbuffer), &fp->f_pos) < 0)
+				SEC_LOG("%s: can't write file : %s", __func__, SEC_VERSION_FILEPATH);
+			else
+				ret = 1;
+		}
+	}
+	if (fp && (!IS_ERR(fp)))
+		filp_close(fp, NULL);
+	set_fs(oldfs);
+	return ret;
 }
 #endif /* SEC_WRITE_VERSION_IN_FILE */

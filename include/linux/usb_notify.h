@@ -18,6 +18,9 @@
 #if defined(CONFIG_USB_HW_PARAM)
 #include <linux/usb_hw_param.h>
 #endif
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+#include <linux/usb.h>
+#endif
 
 enum otg_notify_events {
 	NOTIFY_EVENT_NONE,
@@ -36,6 +39,9 @@ enum otg_notify_events {
 	NOTIFY_EVENT_ALL_DISABLE,
 	NOTIFY_EVENT_HOST_DISABLE,
 	NOTIFY_EVENT_CLIENT_DISABLE,
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+	NOTIFY_EVENT_MDM_ON_OFF,
+#endif
 	NOTIFY_EVENT_OVERCURRENT,
 	NOTIFY_EVENT_SMSC_OVC,
 	NOTIFY_EVENT_SMTD_EXT_CURRENT,
@@ -78,6 +84,13 @@ enum otg_notify_block_type {
 	NOTIFY_BLOCK_TYPE_CLIENT = (1 << 1),
 	NOTIFY_BLOCK_TYPE_ALL = (1 << 0 | 1 << 1),
 };
+
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+enum otg_notify_mdm_type {
+	NOTIFY_MDM_TYPE_OFF,
+	NOTIFY_MDM_TYPE_ON,
+};
+#endif
 
 enum otg_notify_gpio {
 	NOTIFY_VBUS,
@@ -132,6 +145,9 @@ struct otg_notify {
 	void (*set_ldo_onoff)(void *, unsigned int);
 	void *o_data;
 	void *u_notify;
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+	int sec_whitelist_enable;
+#endif
 };
 
 struct otg_booster {
@@ -165,6 +181,9 @@ extern int inc_hw_param(struct otg_notify *n,
 extern int inc_hw_param_host(struct host_notify_dev *dev,
 					enum usb_hw_param index);
 #endif
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+extern int usb_check_whitelist_for_mdm(struct usb_device *dev);
+#endif
 #else
 static inline const char *event_string(enum otg_notify_events event)
 			{return NULL; }
@@ -194,6 +213,10 @@ static int inc_hw_param(struct otg_notify *n,
 			enum usb_hw_param index) {return 0; }
 static int inc_hw_param_host(struct host_notify_dev *dev,
 			enum usb_hw_param index) {return 0; }
+#endif
+#if defined(CONFIG_USB_OTG_WHITELIST_FOR_MDM)
+static inline int usb_check_whitelist_for_mdm(struct usb_device *dev)
+			{return 0; }
 #endif
 #endif
 #endif /* __LINUX_USB_NOTIFY_H__ */

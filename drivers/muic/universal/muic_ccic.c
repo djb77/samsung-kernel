@@ -538,7 +538,7 @@ static int muic_handle_ccic_ATTACH(muic_data_t *pmuic, CC_NOTI_ATTACH_TYPEDEF *p
 			mdev_com_to(pmuic, MUIC_PATH_USB_AP);
 
 #if defined(CONFIG_MUIC_UNIVERSAL_SM5703)
-			is_UPSM = is_blocked(o_notify, NOTIFY_BLOCK_TYPE_ALL);
+			is_UPSM = is_blocked(o_notify, NOTIFY_BLOCK_TYPE_ALL) || is_blocked(o_notify, NOTIFY_BLOCK_TYPE_HOST);
 			if (is_UPSM) {
 				pr_info("%s: is_UPSM (%d)\n", __func__, is_UPSM);
 				return 0;

@@ -22,7 +22,6 @@
 #include <linux/export.h>
 #include <linux/seq_file.h>
 #include <linux/knox_kap.h>
-#include <linux/security/lksecapp_interface.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h> 

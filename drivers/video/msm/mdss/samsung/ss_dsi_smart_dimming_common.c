@@ -2,10 +2,10 @@
  * =================================================================
  *
  *
- *	Description:  samsung display common file
+ *Description:  samsung display common file
  *
- *	Author: jb09.kim
- *	Company:  Samsung Electronics
+ *Author: jb09.kim
+ *Company:  Samsung Electronics
  *
  * ================================================================
  */
@@ -23,10 +23,6 @@ Copyright (C) 2012, Samsung Electronics. All rights reserved.
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  *
 */
 

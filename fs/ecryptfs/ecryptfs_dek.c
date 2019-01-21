@@ -203,6 +203,8 @@ int parse_dek_packet(char *data,
 	int rc = 0;
 	char temp_comm[PKG_NAME_SIZE]; //test
 	int temp_euid;
+	int sdp_dek_type;
+	int sdp_dek_len;
 
 	if (crypt_stat->file_version == 0)
 		return -EPERM;
@@ -234,14 +236,19 @@ int parse_dek_packet(char *data,
 	        crypt_stat->engine_id = crypt_stat->mount_crypt_stat->userid;
 	    }
 
-		crypt_stat->sdp_dek.type = get_unaligned_be32(data + *packet_size);
-		(*packet_size) += 4;
-		if(crypt_stat->sdp_dek.type < 0 || crypt_stat->sdp_dek.type > 6)
+		sdp_dek_type = get_unaligned_be32(data + *packet_size);
+		if(sdp_dek_type < 0 || sdp_dek_type > 6)
 			return -EINVAL;
-		crypt_stat->sdp_dek.len = get_unaligned_be32(data + *packet_size);
+		crypt_stat->sdp_dek.type = sdp_dek_type;
 		(*packet_size) += 4;
-		if(crypt_stat->sdp_dek.len <= 0 || crypt_stat->sdp_dek.len > DEK_MAXLEN)
+		
+		sdp_dek_len = get_unaligned_be32(data + *packet_size);
+		if(sdp_dek_len <= 0 || sdp_dek_len > DEK_MAXLEN)
 			return -EFAULT;
+		crypt_stat->sdp_dek.len = sdp_dek_len;
+		(*packet_size) += 4;
+		
+		
 		memcpy(crypt_stat->sdp_dek.buf, &data[*packet_size], crypt_stat->sdp_dek.len);
 		(*packet_size) += crypt_stat->sdp_dek.len;
 	}
@@ -566,21 +573,14 @@ out:
 }
 
 long ecryptfs_do_sdp_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
-	char filename[NAME_MAX+1] = {0};
 	void __user *ubuf = (void __user *)arg;
 	struct dentry *ecryptfs_dentry = file->f_path.dentry;
 	struct inode *inode = ecryptfs_dentry->d_inode;
 	struct ecryptfs_crypt_stat *crypt_stat =
 			&ecryptfs_inode_to_private(inode)->crypt_stat;
-	struct dentry *fp_dentry =
-			ecryptfs_inode_to_private(inode)->lower_file->f_dentry;
-    struct ecryptfs_mount_crypt_stat *mount_crypt_stat  =
-            &ecryptfs_superblock_to_private(inode->i_sb)->mount_crypt_stat;
-    int rc;
-
-	if (fp_dentry->d_name.len <= NAME_MAX)
-			memcpy(filename, fp_dentry->d_name.name,
-					fp_dentry->d_name.len + 1);
+	struct ecryptfs_mount_crypt_stat *mount_crypt_stat  =
+			&ecryptfs_superblock_to_private(inode->i_sb)->mount_crypt_stat;
+	int rc;
 
 	DEK_LOGD("%s(%s)\n", __func__, ecryptfs_dentry->d_name.name);
 

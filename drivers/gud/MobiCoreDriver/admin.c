@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -25,16 +25,7 @@
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/delay.h>
-#include "platform.h"		/* MC_NO_UIDGIT_H */
-#ifndef MC_NO_UIDGIT_H
-#include <linux/uidgid.h>
-#else /* !MC_NO_UIDGIT_H */
-#define kuid_t uid_t
-static inline uid_t __kuid_val(kuid_t uid)
-{
-	return uid;
-}
-#endif /* MC_NO_UIDGIT_H */
+#include <linux/freezer.h>
 
 #include "public/mc_user.h"
 #include "public/mc_admin.h"
@@ -44,18 +35,13 @@ static inline uid_t __kuid_val(kuid_t uid)
 #include "main.h"
 #include "mmu.h"	/* For load_check and load_token */
 #include "mcp.h"
+#include "nq.h"
 #include "client.h"
 #include "admin.h"
 
-struct service {
-	pid_t tgid;
-	struct file *file;
-	u32 role;
-};
-
 static struct admin_ctx {
-	struct mutex services_mutex;	/* Lock for services below */
-	struct service services[2];
+	struct mutex admin_tgid_mutex;  /* Lock for admin_tgid below */
+	pid_t admin_tgid;
 	int (*tee_start_cb)(void);
 	void (*tee_stop_cb)(void);
 	int last_start_ret;
@@ -86,7 +72,67 @@ static struct mc_admin_driver_request {
 	struct completion server_complete;
 	void *buffer;			/* Reception buffer (pre-allocated) */
 	size_t size;			/* Size of the reception buffer */
+	bool lock_channel_during_freeze;/* Is freezing ongoing ? */
 } g_request;
+
+/* The mutex around the channel communication has to be wrapped in order
+ * to handle this use case :
+ * client 1 calls request_send()
+ *	    wait on wait_for_completion_interruptible (with channel mutex taken)
+ * client 2 calls request_send()
+ *	    waits on mutex_lock(channel mutex)
+ * kernel starts freezing tasks (suspend or reboot ongoing)
+ * if we do nothing, then the freezing will be aborted because client 1
+ * and 2 have to enter the refrigerator by themselves.
+ * Note : mutex cannot be held during freezing, so client 1 has release it
+ * => step 1 : client 1 sets a bool that says that the channel is still in use
+ * => step 2 : client 1 release the lock and enter the refrigerator
+ * => now any client trying to use the channel will face the bool preventing
+ * to use the channel. They also have to enter the refrigerator.
+ *
+ * These 3 functions handle this
+ */
+static void check_freezing_ongoing(void)
+{
+	/* We don't want to let the channel be used. Let everyone know
+	 * that we're using it
+	 */
+	g_request.lock_channel_during_freeze = 1;
+	/* Now we can safely release the lock */
+	mutex_unlock(&g_request.mutex);
+	/* Let's try to freeze */
+	try_to_freeze();
+	/* Either freezing happened or was canceled.
+	 * In both cases, reclaim the lock
+	 */
+	mutex_lock(&g_request.mutex);
+	g_request.lock_channel_during_freeze = 0;
+}
+
+static void channel_lock(void)
+{
+	while (1) {
+		mutex_lock(&g_request.mutex);
+		/* We took the lock, but is there any freezing ongoing? */
+		if (g_request.lock_channel_during_freeze == 0)
+			break;
+
+		/* yes, so let's freeze */
+		mutex_unlock(&g_request.mutex);
+		try_to_freeze();
+		/* Either freezing succeeded or was canceled.
+		 * In both case, try again to get the lock.
+		 * Give some CPU time to let the contender
+		 * finish his channel operation
+		 */
+		msleep(500);
+	};
+}
+
+static void channel_unlock(void)
+{
+	mutex_unlock(&g_request.mutex);
+}
 
 static struct tee_object *tee_object_alloc(bool is_sp_trustlet, size_t length)
 {
@@ -126,6 +172,8 @@ void tee_object_free(struct tee_object *robj)
 static inline void client_state_change(enum client_state state)
 {
 	mutex_lock(&g_request.states_mutex);
+	mc_dev_devel("client state changes from %d to %d",
+		     g_request.client_state, state);
 	g_request.client_state = state;
 	mutex_unlock(&g_request.states_mutex);
 }
@@ -143,6 +191,8 @@ static inline bool client_state_is(enum client_state state)
 static inline void server_state_change(enum server_state state)
 {
 	mutex_lock(&g_request.states_mutex);
+	mc_dev_devel("server state changes from %d to %d",
+		     g_request.server_state, state);
 	g_request.server_state = state;
 	mutex_unlock(&g_request.states_mutex);
 }
@@ -178,12 +228,12 @@ static int request_send(u32 command, const struct mc_uuid_t *uuid, bool is_gp,
 	if (g_request.server_state != READY) {
 		mutex_unlock(&g_request.states_mutex);
 		if (g_request.server_state != NOT_CONNECTED) {
-			mc_dev_err("invalid daemon state %d\n",
+			mc_dev_err("invalid daemon state %d",
 				   g_request.server_state);
 			ret = -EPROTO;
 			goto end;
 		} else {
-			mc_dev_err("daemon not connected\n");
+			mc_dev_err("daemon not connected");
 			ret = -EHOSTUNREACH;
 			goto end;
 		}
@@ -191,6 +241,10 @@ static int request_send(u32 command, const struct mc_uuid_t *uuid, bool is_gp,
 
 	memset(&g_request.request, 0, sizeof(g_request.request));
 	memset(&g_request.response, 0, sizeof(g_request.response));
+	/*
+	 * Do not update the request ID until it is dealt with, in case the
+	 * daemon arrives later.
+	 */
 	g_request.request.request_id = g_request.request_id;
 	g_request.request.command = command;
 	if (uuid)
@@ -205,9 +259,22 @@ static int request_send(u32 command, const struct mc_uuid_t *uuid, bool is_gp,
 
 	/* Send request */
 	complete(&g_request.client_complete);
+	mc_dev_devel("request sent");
 
-	/* Wait for header (could be interruptible, but then needs more work) */
-	wait_for_completion(&g_request.server_complete);
+	/* Wait for header */
+	do {
+		ret = wait_for_completion_interruptible(
+						&g_request.server_complete);
+		if (!ret)
+			break;
+		/* we may have to freeze now */
+		check_freezing_ongoing();
+		/* freezing happened or was canceled,
+		 * let's sleep and try again
+		 */
+		msleep(500);
+	} while (1);
+	mc_dev_devel("response received");
 
 	/* Server should be waiting with some data for us */
 	mutex_lock(&g_request.states_mutex);
@@ -227,7 +294,7 @@ static int request_send(u32 command, const struct mc_uuid_t *uuid, bool is_gp,
 		break;
 	case REQUEST_RECEIVED:
 		/* Should not happen as complete means the state changed */
-		mc_dev_err("daemon is in a bad state: %d\n",
+		mc_dev_err("daemon is in a bad state: %d",
 			   g_request.server_state);
 		ret = -EPIPE;
 		break;
@@ -239,6 +306,7 @@ end:
 	if (ret)
 		request_cancel();
 
+	mc_dev_devel("request_send ret=%d", ret);
 	return ret;
 }
 
@@ -257,7 +325,7 @@ static int request_receive(void *address, u32 size)
 		    (g_request.server_state == DATA_SENT);
 	mutex_unlock(&g_request.states_mutex);
 	if (!server_ok) {
-		mc_dev_err("expected server state %d or %d, not %d\n",
+		mc_dev_err("expected server state %d or %d, not %d",
 			   RESPONSE_SENT, DATA_SENT, g_request.server_state);
 		request_cancel();
 		return -EPIPE;
@@ -271,8 +339,21 @@ static int request_receive(void *address, u32 size)
 	/* Unlock write of data */
 	complete(&g_request.client_complete);
 
-	/* Wait for data (far too late to be interruptible) */
-	wait_for_completion(&g_request.server_complete);
+	/* Wait for data */
+	do {
+		int ret = 0;
+
+		ret = wait_for_completion_interruptible(
+					     &g_request.server_complete);
+		if (!ret)
+			break;
+		/* We may have to freeze now */
+		check_freezing_ongoing();
+		/* freezing happened or was canceled,
+		 * let's sleep and try again
+		 */
+		msleep(500);
+	} while (1);
 
 	/* Reset reception buffer */
 	g_request.buffer = NULL;
@@ -301,17 +382,17 @@ static int admin_get_root_container(void *address)
 	int ret = 0;
 
 	/* Lock communication channel */
-	mutex_lock(&g_request.mutex);
+	channel_lock();
 
 	/* Send request and wait for header */
-	ret = request_send(MC_DRV_GET_ROOT_CONTAINER, 0, 0, 0);
+	ret = request_send(MC_DRV_GET_ROOT_CONTAINER, NULL, 0, 0);
 	if (ret)
 		goto end;
 
 	/* Check length against max */
 	if (g_request.response.length >= MAX_SO_CONT_SIZE) {
 		request_cancel();
-		mc_dev_err("response length exceeds maximum\n");
+		mc_dev_err("response length exceeds maximum");
 		ret = EREMOTEIO;
 		goto end;
 	}
@@ -322,7 +403,7 @@ static int admin_get_root_container(void *address)
 		ret = g_request.response.length;
 
 end:
-	mutex_unlock(&g_request.mutex);
+	channel_unlock();
 	return ret;
 }
 
@@ -331,17 +412,17 @@ static int admin_get_sp_container(void *address, u32 spid)
 	int ret = 0;
 
 	/* Lock communication channel */
-	mutex_lock(&g_request.mutex);
+	channel_lock();
 
 	/* Send request and wait for header */
-	ret = request_send(MC_DRV_GET_SP_CONTAINER, 0, 0, spid);
+	ret = request_send(MC_DRV_GET_SP_CONTAINER, NULL, 0, spid);
 	if (ret)
 		goto end;
 
 	/* Check length against max */
 	if (g_request.response.length >= MAX_SO_CONT_SIZE) {
 		request_cancel();
-		mc_dev_err("response length exceeds maximum\n");
+		mc_dev_err("response length exceeds maximum");
 		ret = EREMOTEIO;
 		goto end;
 	}
@@ -352,7 +433,7 @@ static int admin_get_sp_container(void *address, u32 spid)
 		ret = g_request.response.length;
 
 end:
-	mutex_unlock(&g_request.mutex);
+	channel_unlock();
 	return ret;
 }
 
@@ -362,7 +443,7 @@ static int admin_get_trustlet_container(void *address,
 	int ret = 0;
 
 	/* Lock communication channel */
-	mutex_lock(&g_request.mutex);
+	channel_lock();
 
 	/* Send request and wait for header */
 	ret = request_send(MC_DRV_GET_TRUSTLET_CONTAINER, uuid, 0, spid);
@@ -372,7 +453,7 @@ static int admin_get_trustlet_container(void *address,
 	/* Check length against max */
 	if (g_request.response.length >= MAX_SO_CONT_SIZE) {
 		request_cancel();
-		mc_dev_err("response length exceeds maximum\n");
+		mc_dev_err("response length exceeds maximum");
 		ret = EREMOTEIO;
 		goto end;
 	}
@@ -383,7 +464,7 @@ static int admin_get_trustlet_container(void *address,
 		ret = g_request.response.length;
 
 end:
-	mutex_unlock(&g_request.mutex);
+	channel_unlock();
 	return ret;
 }
 
@@ -395,7 +476,7 @@ static struct tee_object *admin_get_trustlet(const struct mc_uuid_t *uuid,
 	int ret = 0;
 
 	/* Lock communication channel */
-	mutex_lock(&g_request.mutex);
+	channel_lock();
 
 	/* Send request and wait for header */
 	ret = request_send(MC_DRV_GET_TRUSTLET, uuid, is_gp, 0);
@@ -416,7 +497,7 @@ static struct tee_object *admin_get_trustlet(const struct mc_uuid_t *uuid,
 	*spid = g_request.response.spid;
 
 end:
-	mutex_unlock(&g_request.mutex);
+	channel_unlock();
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -428,7 +509,7 @@ static void mc_admin_sendcrashdump(void)
 	int ret = 0;
 
 	/* Lock communication channel */
-	mutex_lock(&g_request.mutex);
+	channel_lock();
 
 	/* Send request and wait for header */
 	ret = request_send(MC_DRV_SIGNAL_CRASH, NULL, false, 0);
@@ -439,7 +520,7 @@ static void mc_admin_sendcrashdump(void)
 	request_cancel();
 
 end:
-	mutex_unlock(&g_request.mutex);
+	channel_unlock();
 }
 
 static int tee_object_make(u32 spid, struct tee_object *obj)
@@ -484,6 +565,20 @@ err:
 	return ret;
 }
 
+struct tee_object *tee_object_copy(uintptr_t address, size_t length)
+{
+	struct tee_object *obj;
+
+	/* Allocate memory */
+	obj = tee_object_alloc(false, length);
+	if (!obj)
+		return ERR_PTR(-ENOMEM);
+
+	/* Copy trustlet */
+	memcpy(obj->data, (void *)address, length);
+	return obj;
+}
+
 struct tee_object *tee_object_read(u32 spid, uintptr_t address, size_t length)
 {
 	char __user *addr = (char __user *)address;
@@ -494,13 +589,13 @@ struct tee_object *tee_object_read(u32 spid, uintptr_t address, size_t length)
 
 	/* Check length */
 	if (length < sizeof(thdr)) {
-		mc_dev_err("buffer shorter than header size\n");
+		mc_dev_err("buffer shorter than header size");
 		return ERR_PTR(-EFAULT);
 	}
 
 	/* Read header */
 	if (copy_from_user(&thdr, addr, sizeof(thdr))) {
-		mc_dev_err("header: copy_from_user failed\n");
+		mc_dev_err("header: copy_from_user failed");
 		return ERR_PTR(-EFAULT);
 	}
 
@@ -516,7 +611,7 @@ struct tee_object *tee_object_read(u32 spid, uintptr_t address, size_t length)
 	/* Copy the rest of the data */
 	data += sizeof(thdr);
 	if (copy_from_user(data, &addr[sizeof(thdr)], length - sizeof(thdr))) {
-		mc_dev_err("data: copy_from_user failed\n");
+		mc_dev_err("data: copy_from_user failed");
 		vfree(obj);
 		return ERR_PTR(-EFAULT);
 	}
@@ -607,7 +702,7 @@ static inline int load_driver(struct tee_client *client,
 
 	/* Open session */
 	ret = client_add_session(client, obj, dci, dci_len, &sid, false,
-				 &identity);
+				 &identity, -1);
 	if (!ret)
 		mc_dev_devel("driver loaded with sid %x", sid);
 
@@ -625,10 +720,13 @@ static inline int load_token(struct mc_admin_load_info *token)
 {
 	struct tee_mmu *mmu;
 	struct mcp_buffer_map map;
+	struct mc_ioctl_buffer buf;
 	int ret;
 
-	mmu = tee_mmu_create(current, (void *)(uintptr_t)token->address,
-			     token->length);
+	buf.va = (uintptr_t)token->address;
+	buf.len = token->length;
+	buf.flags = MC_IO_MAP_INPUT;
+	mmu = tee_mmu_create(current->mm, &buf);
 	if (IS_ERR(mmu))
 		return PTR_ERR(mmu);
 
@@ -643,13 +741,17 @@ static inline int load_check(struct mc_admin_load_info *info)
 	struct tee_object *obj;
 	struct tee_mmu *mmu;
 	struct mcp_buffer_map map;
+	struct mc_ioctl_buffer buf;
 	int ret;
 
 	obj = tee_object_read(info->spid, info->address, info->length);
 	if (IS_ERR(obj))
 		return PTR_ERR(obj);
 
-	mmu = tee_mmu_create(NULL, obj->data, obj->length);
+	buf.va = (uintptr_t)obj->data;
+	buf.len = obj->length;
+	buf.flags = MC_IO_MAP_INPUT;
+	mmu = tee_mmu_create(NULL, &buf);
 	if (IS_ERR(mmu))
 		return PTR_ERR(mmu);
 
@@ -666,7 +768,7 @@ static ssize_t admin_write(struct file *file, const char __user *user,
 
 	/* No offset allowed [yet] */
 	if (*off) {
-		mc_dev_err("offset not supported\n");
+		mc_dev_err("offset not supported");
 		g_request.response.error_no = EPIPE;
 		ret = -ECOMM;
 		goto err;
@@ -675,7 +777,7 @@ static ssize_t admin_write(struct file *file, const char __user *user,
 	if (server_state_is(REQUEST_RECEIVED)) {
 		/* Check client state */
 		if (!client_state_is(REQUEST_SENT)) {
-			mc_dev_err("expected client state %d, not %d\n",
+			mc_dev_err("expected client state %d, not %d",
 				   REQUEST_SENT, g_request.client_state);
 			g_request.response.error_no = EPIPE;
 			ret = -EPIPE;
@@ -685,7 +787,7 @@ static ssize_t admin_write(struct file *file, const char __user *user,
 		/* Receive response header */
 		if (copy_from_user(&g_request.response, user,
 				   sizeof(g_request.response))) {
-			mc_dev_err("failed to get response from daemon\n");
+			mc_dev_err("failed to get response from daemon");
 			g_request.response.error_no = EPIPE;
 			ret = -ECOMM;
 			goto err;
@@ -694,7 +796,7 @@ static ssize_t admin_write(struct file *file, const char __user *user,
 		/* Check request ID */
 		if (g_request.request.request_id !=
 						g_request.response.request_id) {
-			mc_dev_err("expected id %d, not %d\n",
+			mc_dev_err("expected id %d, not %d",
 				   g_request.request.request_id,
 				   g_request.response.request_id);
 			g_request.response.error_no = EPIPE;
@@ -726,7 +828,7 @@ static ssize_t admin_write(struct file *file, const char __user *user,
 
 		/* Check client state */
 		if (!client_state_is(BUFFERS_READY)) {
-			mc_dev_err("expected client state %d, not %d\n",
+			mc_dev_err("expected client state %d, not %d",
 				   BUFFERS_READY, g_request.client_state);
 			g_request.response.error_no = EPIPE;
 			ret = -EPIPE;
@@ -739,7 +841,7 @@ static ssize_t admin_write(struct file *file, const char __user *user,
 
 		ret = copy_from_user(g_request.buffer, user, len);
 		if (ret) {
-			mc_dev_err("failed to get data from daemon\n");
+			mc_dev_err("failed to get data from daemon");
 			g_request.response.error_no = EPIPE;
 			ret = -ECOMM;
 			goto err;
@@ -760,78 +862,22 @@ end:
 	return ret;
 }
 
-int is_authenticator_pid(pid_t pid)
-{
-	struct service *service = NULL;
-	struct task_struct *task;
-	int ret = 0;
-
-	/* Find out if we have an authenticator, and what its TGID is */
-	mutex_lock(&admin_ctx.services_mutex);
-	if (admin_ctx.services[0].role == TEE_ROLE_AUTHENTICATOR)
-		service = &admin_ctx.services[0];
-	else if (admin_ctx.services[1].role == TEE_ROLE_AUTHENTICATOR)
-		service = &admin_ctx.services[1];
-
-	/* Now compare (under locks to avoid a race-based attack) */
-	if (!service) {
-		mc_dev_err("No authenticator connected\n");
-		return -ENOTCONN;
-	}
-
-	/* Get TGID for given PID */
-	rcu_read_lock();
-	task = pid_task(find_vpid(pid), PIDTYPE_PID);
-	if (!task) {
-		mc_dev_err("No task for PID %d\n", pid);
-		ret = -EINVAL;
-	} else if (task->tgid != service->tgid) {
-		mc_dev_err("PID %d is not an authenticator\n", pid);
-		ret = -EPERM;
-	}
-	rcu_read_unlock();
-	mutex_unlock(&admin_ctx.services_mutex);
-	return ret;
-}
-
 static long admin_ioctl(struct file *file, unsigned int cmd,
 			unsigned long arg)
 {
 	void __user *uarg = (void __user *)arg;
 	int ret = -EINVAL;
 
-	mc_dev_devel("%u from %s\n", _IOC_NR(cmd), current->comm);
+	mc_dev_devel("%u from %s", _IOC_NR(cmd), current->comm);
 
 	switch (cmd) {
 	case MC_ADMIN_IO_GET_DRIVER_REQUEST: {
-		struct service *service = NULL;
-
-		/* Service is identified using its struct file pointer */
-		mutex_lock(&admin_ctx.services_mutex);
-		if (file == admin_ctx.services[0].file) {
-			if (admin_ctx.services[0].role == TEE_ROLE_LISTENER)
-				service = &admin_ctx.services[0];
-		} else {
-			if (admin_ctx.services[1].role == TEE_ROLE_LISTENER)
-				service = &admin_ctx.services[1];
+		/* Update TGID as it may change (when becoming a daemon) */
+		if (admin_ctx.admin_tgid != current->tgid) {
+			admin_ctx.admin_tgid = current->tgid;
+			mc_dev_info("daemon PID changed to %d",
+				    admin_ctx.admin_tgid);
 		}
-
-		if (service) {
-			/* Update TGID as it changes upon becoming a daemon */
-			if (service->tgid != current->tgid) {
-				mc_dev_info("admin TGID changed %d -> %d\n",
-					    service->tgid, current->tgid);
-				service->tgid = current->tgid;
-			}
-			ret = 0;
-		} else {
-			mc_dev_err("admin TGID %d is not a listener\n",
-				   current->tgid);
-			ret = -EPERM;
-		}
-		mutex_unlock(&admin_ctx.services_mutex);
-		if (ret)
-			break;
 
 		/* Block until a request is available */
 		ret = wait_for_completion_interruptible(
@@ -842,7 +888,7 @@ static long admin_ioctl(struct file *file, unsigned int cmd,
 
 		/* Check client state */
 		if (!client_state_is(REQUEST_SENT)) {
-			mc_dev_err("expected client state %d, not %d\n",
+			mc_dev_err("expected client state %d, not %d",
 				   REQUEST_SENT, g_request.client_state);
 			g_request.response.error_no = EPIPE;
 			complete(&g_request.server_complete);
@@ -921,52 +967,6 @@ static long admin_ioctl(struct file *file, unsigned int cmd,
 		ret = load_check(&info);
 		break;
 	}
-	case MC_ADMIN_IO_REQUEST_ROLE: {
-		struct service *service;
-		u32 role, other_role;
-
-		ret = 0;
-		if (copy_from_user(&role, uarg, sizeof(role))) {
-			ret = -EFAULT;
-			break;
-		}
-
-		if ((role != TEE_ROLE_LISTENER) &&
-		    (role != TEE_ROLE_AUTHENTICATOR)) {
-			ret = -EINVAL;
-			break;
-		}
-
-		mutex_lock(&admin_ctx.services_mutex);
-		if (file == admin_ctx.services[0].file) {
-			service = &admin_ctx.services[0];
-			other_role = admin_ctx.services[1].role;
-		} else {
-			service = &admin_ctx.services[1];
-			other_role = admin_ctx.services[0].role;
-		}
-
-		if ((service->role != TEE_ROLE_NONE) || (role == other_role))
-			ret = -EBUSY;
-
-		if (!ret) {
-			service->role = role;
-			mc_dev_devel("TGID %d has taken role %d\n",
-				     current->tgid, service->role);
-		} else {
-			mc_dev_err("TGID %d failed to take role %d: ret %d\n",
-				   current->tgid, role, ret);
-		}
-
-		if (service->role == TEE_ROLE_LISTENER) {
-			/* Any value will do */
-			g_request.request_id = 42;
-			server_state_change(READY);
-		}
-
-		mutex_unlock(&admin_ctx.services_mutex);
-		break;
-	}
 	default:
 		ret = -ENOIOCTLCMD;
 	}
@@ -985,36 +985,25 @@ static long admin_ioctl(struct file *file, unsigned int cmd,
  */
 static int admin_release(struct inode *inode, struct file *file)
 {
-	struct service *service;
-
 	/* Close client if any */
 	if (file->private_data)
 		client_close((struct tee_client *)file->private_data);
 
-	/* Service is identified using its struct file pointer */
-	mutex_lock(&admin_ctx.services_mutex);
-	if (file == admin_ctx.services[0].file)
-		service = &admin_ctx.services[0];
-	else
-		service = &admin_ctx.services[1];
-	mutex_unlock(&admin_ctx.services_mutex);
-
-	if (service->role == TEE_ROLE_LISTENER) {
-		/* Requests from driver to daemon */
-		mutex_lock(&g_request.states_mutex);
-		g_request.server_state = NOT_CONNECTED;
-		/* A non-zero command indicates that a thread is waiting */
-		if (g_request.client_state != IDLE) {
-			g_request.response.error_no = ESHUTDOWN;
-			complete(&g_request.server_complete);
-		}
-		mutex_unlock(&g_request.states_mutex);
+	/* Requests from driver to daemon */
+	mutex_lock(&g_request.states_mutex);
+	mc_dev_devel("server state changes from %d to %d",
+		     g_request.server_state, NOT_CONNECTED);
+	g_request.server_state = NOT_CONNECTED;
+	/* A non-zero command indicates that a thread is waiting */
+	if (g_request.client_state != IDLE) {
+		g_request.response.error_no = ESHUTDOWN;
+		complete(&g_request.server_complete);
 	}
+	mutex_unlock(&g_request.states_mutex);
+	mc_dev_info("daemon connection closed, TGID %d",
+		    admin_ctx.admin_tgid);
+	admin_ctx.admin_tgid = 0;
 
-	mc_dev_info("admin connection closed, TGID %d\n", service->tgid);
-	mutex_lock(&admin_ctx.services_mutex);
-	memset(service, 0, sizeof(*service));
-	mutex_unlock(&admin_ctx.services_mutex);
 	/*
 	 * ret is quite irrelevant here as most apps don't care about the
 	 * return value from close() and it's quite difficult to recover
@@ -1024,52 +1013,42 @@ static int admin_release(struct inode *inode, struct file *file)
 
 static int admin_open(struct inode *inode, struct file *file)
 {
-	struct service *service = NULL;
 	int ret = 0;
 
-	/* Only two connections allowed to admin interface */
-	mutex_lock(&admin_ctx.services_mutex);
-	if (!admin_ctx.services[0].tgid) {
-		service = &admin_ctx.services[0];
-		mc_dev_devel("admin connection #0, TGID %d\n", current->tgid);
-	} else if (!admin_ctx.services[1].tgid) {
-		service = &admin_ctx.services[1];
-		mc_dev_devel("admin connection #1, TGID %d\n", current->tgid);
-	} else {
-		mc_dev_err("both admin connections already open\n");
+	/* Only one connection allowed to admin interface */
+	mutex_lock(&admin_ctx.admin_tgid_mutex);
+	if (admin_ctx.admin_tgid) {
+		mc_dev_err("daemon connection already open, PID %d",
+			   admin_ctx.admin_tgid);
 		ret = -EBUSY;
+	} else {
+		admin_ctx.admin_tgid = current->tgid;
 	}
-
-	if (service) {
-		service->tgid = current->tgid;
-		service->file = file;
-	}
-	mutex_unlock(&admin_ctx.services_mutex);
+	mutex_unlock(&admin_ctx.admin_tgid_mutex);
 	if (ret)
 		return ret;
 
 	/* Setup the usual variables */
-	mc_dev_devel("accept %s as TEE admin\n", current->comm);
+	mc_dev_devel("accept %s as daemon", current->comm);
 
 	/*
 	 * daemon is connected so now we can safely suppose
 	 * the secure world is loaded too
 	 */
-	mutex_lock(&admin_ctx.services_mutex);
 	if (admin_ctx.last_start_ret > 0)
 		admin_ctx.last_start_ret = admin_ctx.tee_start_cb();
 
 	/* Failed to start the TEE, either now or before */
 	if (admin_ctx.last_start_ret) {
-		memset(service, 0, sizeof(*service));
-		ret = admin_ctx.last_start_ret;
+		mutex_lock(&admin_ctx.admin_tgid_mutex);
+		admin_ctx.admin_tgid = 0;
+		mutex_unlock(&admin_ctx.admin_tgid_mutex);
+		return admin_ctx.last_start_ret;
 	}
-	mutex_unlock(&admin_ctx.services_mutex);
-	if (ret)
-		return ret;
 
 	/* Requests from driver to daemon */
-	mc_dev_info("admin connection open, TGID %d\n", service->tgid);
+	server_state_change(READY);
+	mc_dev_info("daemon connection open, TGID %d", admin_ctx.admin_tgid);
 	return 0;
 }
 
@@ -1088,13 +1067,14 @@ static const struct file_operations mc_admin_fops = {
 int mc_admin_init(struct cdev *cdev, int (*tee_start_cb)(void),
 		  void (*tee_stop_cb)(void))
 {
-	mutex_init(&admin_ctx.services_mutex);
+	mutex_init(&admin_ctx.admin_tgid_mutex);
 	/* Requests from driver to daemon */
 	mutex_init(&g_request.mutex);
 	mutex_init(&g_request.states_mutex);
+	g_request.request_id = 42;
 	init_completion(&g_request.client_complete);
 	init_completion(&g_request.server_complete);
-	mcp_register_crashhandler(mc_admin_sendcrashdump);
+	nq_register_crash_handler(mc_admin_sendcrashdump);
 	/* Create char device */
 	cdev_init(cdev, &mc_admin_fops);
 	/* Register the call back for starting the secure world */

@@ -24,9 +24,8 @@
 #define __SM5705_H__
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
-#include <linux/battery/sec_charging_common.h> 
+#include "../../../../drivers/battery_v2/include/sec_charging_common.h"
 #include <linux/leds-sm5705.h>
-//#include <linux/battery/charger/sm5705_charger.h>
  
 #define MFD_DEV_NAME "sm5705"
 

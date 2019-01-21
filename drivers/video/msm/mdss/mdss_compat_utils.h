@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,6 +14,15 @@
 
 #ifndef MDSS_COMPAT_UTILS_H
 #define MDSS_COMPAT_UTILS_H
+
+/*
+ * To allow proper structure padding for 64bit/32bit target
+ */
+#ifdef __LP64
+#define MDP_LAYER_COMMIT_V1_PAD 2
+#else
+#define MDP_LAYER_COMMIT_V1_PAD 3
+#endif
 
 struct mdp_buf_sync32 {
 	u32		flags;
@@ -295,7 +304,18 @@ struct mdp_qseed_cfg_data32 {
 	uint32_t block;
 	struct mdp_qseed_cfg32 qseed_data;
 };
-
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+struct mdp_dither_cfg_data32 {
+	uint32_t version;
+	uint32_t block;
+	uint32_t flags;
+	uint32_t mode;
+	uint32_t g_y_depth;
+	uint32_t r_cr_depth;
+	uint32_t b_cb_depth;
+	compat_caddr_t cfg_payload;
+};
+#else
 struct mdp_dither_cfg_data32 {
 	uint32_t block;
 	uint32_t flags;
@@ -303,7 +323,7 @@ struct mdp_dither_cfg_data32 {
 	uint32_t r_cr_depth;
 	uint32_t b_cb_depth;
 };
-
+#endif
 struct mdp_gamut_data_v1_7_32 {
 	uint32_t mode;
 	uint32_t tbl_size[MDP_GAMUT_TABLE_NUM_V1_7];
@@ -362,6 +382,9 @@ struct mdss_ad_init32 {
 	uint8_t logo_h;
 	uint32_t alpha;
 	uint32_t alpha_base;
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	uint32_t al_thresh;
+#endif
 	uint32_t bl_lin_len;
 	uint32_t bl_att_len;
 	compat_caddr_t bl_lin;
@@ -498,7 +521,8 @@ struct mdp_input_layer32 {
 	uint16_t		z_order;
 	uint32_t		transp_mask;
 	uint32_t		bg_color;
-	enum mdss_mdp_blend_op		blend_op;
+	enum mdss_mdp_blend_op	blend_op;
+	enum mdp_color_space    color_space;
 	struct mdp_rect		src_rect;
 	struct mdp_rect		dst_rect;
 	compat_caddr_t		scale;
@@ -512,7 +536,8 @@ struct mdp_output_layer32 {
 	uint32_t			flags;
 	uint32_t			writeback_ndx;
 	struct mdp_layer_buffer		buffer;
-	uint32_t			reserved[6];
+	enum mdp_color_space            color_space;
+	uint32_t			reserved[5];
 };
 struct mdp_layer_commit_v1_32 {
 	uint32_t		flags;
@@ -523,7 +548,10 @@ struct mdp_layer_commit_v1_32 {
 	uint32_t		input_layer_cnt;
 	compat_caddr_t		output_layer;
 	int			retire_fence;
-	uint32_t		reserved[6];
+	compat_caddr_t		dest_scaler;
+	uint32_t                dest_scaler_cnt;
+	compat_caddr_t		frc_info;
+	uint32_t		reserved[MDP_LAYER_COMMIT_V1_PAD];
 };
 
 struct mdp_layer_commit32 {

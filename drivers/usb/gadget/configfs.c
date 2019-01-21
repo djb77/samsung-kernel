@@ -1514,7 +1514,7 @@ static void android_work(struct work_struct *data)
 					KOBJ_CHANGE, connected);
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
 		store_usblog_notify(NOTIFY_USBSTATE, connected[0], NULL);
-#endif	
+#endif
 		pr_info("%s: sent uevent %s\n", __func__, connected[0]);
 		uevent_sent = true;
 	}
@@ -1524,7 +1524,7 @@ static void android_work(struct work_struct *data)
 					KOBJ_CHANGE, configured);
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
 		store_usblog_notify(NOTIFY_USBSTATE, configured[0], NULL);
-#endif	
+#endif
 		pr_info("%s: sent uevent %s\n", __func__, configured[0]);
 		uevent_sent = true;
 	}

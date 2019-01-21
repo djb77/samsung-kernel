@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -38,11 +38,13 @@ struct pil_priv;
  * @shutdown_fail: Set if PIL op for shutting down subsystem fails.
  * @modem_ssr: true if modem is restarting, false if booting for first time.
  * @subsys_vmid: memprot id for the subsystem.
+ * @clear_fw_region: Clear fw region on failure in loading.
  */
 struct pil_desc {
 	const char *name;
 	const char *fw_name;
 	struct device *dev;
+	struct subsys_device *subsys_dev;
 	const struct pil_reset_ops *ops;
 	struct module *owner;
 	unsigned long proxy_timeout;
@@ -57,6 +59,7 @@ struct pil_desc {
 	bool shutdown_fail;
 	bool modem_ssr;
 	u32 subsys_vmid;
+	bool clear_fw_region;
 };
 
 /**
@@ -85,7 +88,7 @@ struct pil_image_info {
  */
 struct pil_reset_ops {
 	int (*init_image)(struct pil_desc *pil, const u8 *metadata,
-			  size_t size);
+			  size_t size,  phys_addr_t addr, size_t sz);
 	int (*mem_setup)(struct pil_desc *pil, phys_addr_t addr, size_t size);
 	int (*verify_blob)(struct pil_desc *pil, phys_addr_t phy_addr,
 			   size_t size);

@@ -28,6 +28,10 @@
 #include "q6voice.h"
 #include <sound/adsp_err.h>
 
+#ifdef CONFIG_SEC_SND_ADAPTATION
+#include <sound/sec_adaptation.h>
+#endif /* CONFIG_SEC_SND_ADAPTATION */
+
 #define TIMEOUT_MS 300
 
 
@@ -48,6 +52,7 @@ struct cvd_version_table cvd_version_table_mapping[CVD_INT_VERSION_MAX] = {
 		{CVD_VERSION_0_0, CVD_INT_VERSION_0_0},
 		{CVD_VERSION_2_1, CVD_INT_VERSION_2_1},
 		{CVD_VERSION_2_2, CVD_INT_VERSION_2_2},
+		{CVD_VERSION_2_3, CVD_INT_VERSION_2_3},
 };
 
 static struct common_data common;
@@ -156,6 +161,13 @@ void voc_set_loopback_enable(int mode)
 		loopback_mode);
 }
 #endif /* CONFIG_SEC_VOC_SOLUTION */
+
+#ifdef CONFIG_SEC_SND_ADAPTATION
+struct common_data *voice_get_common_data(void)
+{
+	return &common;
+}
+#endif /* CONFIG_SEC_SND_ADAPTATION */
 
 static void voice_itr_init(struct voice_session_itr *itr,
 			   u32 session_id)
@@ -5934,6 +5946,8 @@ int voc_end_voice_call(uint32_t session_id)
 			}
 			loopback_prev_mode = 0;
 		}
+#elif defined(CONFIG_SEC_SND_ADAPTATION)
+		voice_sec_loopback_end_cmd(session_id);
 #endif /* CONFIG_SEC_VOC_SOLUTION */
 		pr_debug("%s: VOC_STATE: %d\n", __func__, v->voc_state);
 
@@ -6281,6 +6295,8 @@ int voc_start_voice_call(uint32_t session_id)
 					__func__);
 			}
 		}
+#elif defined(CONFIG_SEC_SND_ADAPTATION)
+		voice_sec_loopback_start_cmd(session_id);
 #endif /* CONFIG_SEC_VOC_SOLUTION */
 		v->voc_state = VOC_RUN;
 	} else {

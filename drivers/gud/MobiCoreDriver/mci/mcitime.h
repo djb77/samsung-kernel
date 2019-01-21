@@ -17,11 +17,14 @@
 
 /*
  * Trustonic TEE RICH OS Time:
- * Seconds and nanoseconds since Jan 1, 1970, UTC
+ * -seconds and nanoseconds since Jan 1, 1970, UTC
+ * -monotonic counter
  */
 struct mcp_time {
-	u64	seconds;
-	u64	nsec;
+	u64	wall_clock_seconds;
+	u64	wall_clock_nsec;
+	u64	monotonic_seconds;
+	u64	monotonic_nsec;
 };
 
 #endif /* MCITIME_H_ */

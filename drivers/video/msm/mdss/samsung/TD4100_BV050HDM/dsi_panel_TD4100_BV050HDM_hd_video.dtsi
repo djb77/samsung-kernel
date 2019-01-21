@@ -24,11 +24,10 @@
 		qcom,mdss-dsi-bpp = <24>;
 		qcom,mdss-dsi-panel-destination = "display_1";
 		qcom,mdss-dsi-panel-timings = [DA 34 24 00 64 68 28 38 2A 03 04 00];
-		//qcom,mdss-dsi-panel-timings-8996 = ;
 		qcom,mdss-dsi-on-command = [
 			/* Initializing Sequence(1)*/
-			39 00 00 00 00 00 02 B0 04	 	/* MCS enable */
-			39 00 00 00 00 00 04 B3 10 00 06 	/* Interface setting */
+			39 00 00 00 00 00 02 B0 04		/* MCS enable */
+			39 00 00 00 00 00 04 B3 10 00 06	/* Interface setting */
 			39 00 00 00 00 00 08 B6 33 53 80 00 00 07 86	/* DSI control */
 			39 00 00 00 00 00 07 BA 07 87 3A 0A 2D 88	/* Backlight control 3, Movie mode 40% */
 			/* Sunlight readablility enhancement */
@@ -70,6 +69,7 @@
 			39 00 00 00 00 00 02 51 00
 			39 00 00 00 00 00 02 53 0C
 			39 00 00 00 00 00 02 55 00
+			39 00 00 00 00 00 02 5E 30
 			39 01 00 00 00 00 02 35 00
 
 			/* Display on Sequence(4) */
@@ -111,7 +111,7 @@
 		qcom,mdss-dsi-h-front-porch = <254>;
 		qcom,mdss-dsi-h-pulse-width = <165>;
 
-		qcom,mdss-dsi-h-sync-skew = <0>;		
+		qcom,mdss-dsi-h-sync-skew = <0>;
 		qcom,mdss-dsi-h-left-border = <0>;
 		qcom,mdss-dsi-h-right-border = <0>;
 		qcom,mdss-dsi-v-top-border = <0>;
@@ -236,7 +236,7 @@
  *
  * ************************************************************************************************************************************
  */
- 		samsung,panel-vendor = "BOE";
+		samsung,panel-vendor = "BOE";
 		samsung,tft-common-support;
 		samsung,enter_hbm_lux = <20000>;
 		samsung,support_mdnie_lite;

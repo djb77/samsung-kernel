@@ -24,7 +24,6 @@
 		qcom,mdss-dsi-bpp = <24>;
 		qcom,mdss-dsi-panel-destination = "display_1";
 		qcom,mdss-dsi-panel-timings = [C5 2C 1E 00 5A 5C 24 30 25 03 04 00];
-		//qcom,mdss-dsi-panel-timings-8996 = ;
 		qcom,mdss-dsi-on-command = [
 			/* Initializing Sequence(1)*/
 			39 00 00 00 00 00 02 B0 04
@@ -232,7 +231,7 @@
  *
  * ************************************************************************************************************************************
  */
- 		samsung,panel-vendor = "BOE";
+		samsung,panel-vendor = "BOE";
 		samsung,tft-common-support;
 		samsung,enter_hbm_lux = <20000>;
 		samsung,support_mdnie_lite;

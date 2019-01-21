@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -955,7 +955,7 @@ static wpt_status dxeDescAllocAndLink
       }
       memset((wpt_uint8 *)currentDesc, 0, sizeof(WLANDXE_DescType));
       HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_INFO_LOW,
-               "Allocated Descriptor VA %p, PA %p", currentDesc, physAddressAlloc);
+               "Allocated Descriptor VA %pK, PA %pK", currentDesc, physAddressAlloc);
 
       currentCtrlBlk->linkedDesc        = currentDesc;
       currentCtrlBlk->linkedDescPhyAddr = physAddress;
@@ -3445,6 +3445,12 @@ static wpt_status dxeTXPushFrame
          //HDXE_ASSERT(0);
       }
 
+      if(wpalIsArpPkt(palPacket))
+      {
+         HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_ERROR,
+                  "%s :ARP packet", __func__);
+      }
+
       /* Everything is ready
        * Trigger to start DMA */
       status = wpalWriteRegister(channelEntry->channelRegister.chDXECtrlRegAddr,
@@ -3695,6 +3701,14 @@ static wpt_status dxeTXCompFrame
             }
             return status;
          }
+
+         if(wpalIsArpPkt(currentCtrlBlk->xfrFrame))
+         {
+             HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_ERROR,
+                      "%s :ARP packet DMA-ed ", __func__);
+             wpalUpdateTXArpFWdeliveredStats();
+         }
+
          hostCtxt->txCompCB(hostCtxt->clientCtxt,
                             currentCtrlBlk->xfrFrame,
                             eWLAN_PAL_STATUS_SUCCESS);

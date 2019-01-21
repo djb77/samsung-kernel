@@ -344,6 +344,29 @@ EXPORT_SYMBOL(microusb_get_usb310_count);
 #endif
 #endif
 
+#ifndef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+static int usb_enum_state;
+void set_usb_enumeration_state(int state)
+{
+	if(usb_enum_state != state) {
+		usb_enum_state = state;
+#ifdef CONFIG_USB_NOTIFY_LAYER
+		if(usb_enum_state == 0x310)
+			usb310_count++;
+		else if(usb_enum_state == 0x210)
+			usb210_count++;
+#endif
+	}
+}
+EXPORT_SYMBOL(set_usb_enumeration_state);
+
+bool get_usb_enumeration_state(void)
+{
+	return usb_enum_state? 1: 0;
+}
+EXPORT_SYMBOL(get_usb_enumeration_state);
+#endif
+
 #ifdef CONFIG_USB_DUN_SUPPORT
 extern int modem_misc_register(void);
 #endif
@@ -492,22 +515,13 @@ static void android_work(struct work_struct *data)
 		next_state = USB_CONFIGURED;
 	} else if (dev->connected != dev->sw_connected) {
 		uevent_envp = dev->connected ? connected : disconnected;
-#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 		if (dev->connected) {
 			if (dev->cdev && (dev->cdev->desc.bcdUSB == 0x310)) {
-#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
-				set_usb_enumeration_state(0x310);	// Super-Speed	
+				set_usb_enumeration_state(0x310);	// Super-Speed
 			} else {
 				set_usb_enumeration_state(0x210);	// High-Speed
-#else
-				dev->usb310_count++;				// Super-Speed	
-			} else {
-				dev->usb210_count++;				// High-Speed
-#endif
 			}
 		}
-#endif
-
 		next_state = dev->connected ? USB_CONNECTED : USB_DISCONNECTED;
 		if (dev->connected && strncmp(dev->pm_qos, "low", 3))
 			pm_qos_vote = 1;
@@ -547,6 +561,12 @@ static void android_work(struct work_struct *data)
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
 			store_usblog_notify(NOTIFY_USBSTATE, (void *)uevent_envp[0], NULL);
 #endif
+
+#ifndef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+	if(uevent_envp == disconnected)
+		usb_enum_state = 0;
+#endif
+
 #ifndef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 			msleep(20);
 #endif
@@ -1145,6 +1165,32 @@ static struct android_usb_function rmnet_function = {
 };
 
 #ifndef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+static char gps_transport[MAX_XPORT_STR_LEN];
+
+static ssize_t gps_transport_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", gps_transport);
+}
+
+static ssize_t gps_transport_store(
+		struct device *device, struct device_attribute *attr,
+		const char *buff, size_t size)
+{
+	strlcpy(gps_transport, buff, sizeof(gps_transport));
+
+	return size;
+}
+
+static struct device_attribute dev_attr_gps_transport =
+					__ATTR(transport, S_IRUGO | S_IWUSR,
+							gps_transport_show,
+							gps_transport_store);
+
+static struct device_attribute *gps_function_attrbitutes[] = {
+					&dev_attr_gps_transport,
+					NULL };
+
 static void gps_function_cleanup(struct android_usb_function *f)
 {
 	gps_cleanup();
@@ -1155,10 +1201,13 @@ static int gps_function_bind_config(struct android_usb_function *f,
 {
 	int err;
 	static int gps_initialized;
+	char buf[MAX_XPORT_STR_LEN], *b;
 
 	if (!gps_initialized) {
+		strlcpy(buf, gps_transport, sizeof(buf));
+		b = strim(buf);
 		gps_initialized = 1;
-		err = gps_init_port();
+		err = gps_init_port(b);
 		if (err) {
 			pr_err("gps: Cannot init gps port");
 			return err;
@@ -1183,6 +1232,7 @@ static struct android_usb_function gps_function = {
 	.name		= "gps",
 	.cleanup	= gps_function_cleanup,
 	.bind_config	= gps_function_bind_config,
+	.attributes	= gps_function_attrbitutes,
 };
 #endif
 
@@ -3008,11 +3058,8 @@ static ssize_t mass_storage_inquiry_show(struct device *dev,
 {
 	struct android_usb_function *f = dev_get_drvdata(dev);
 	struct mass_storage_function_config *config = f->config;
-	struct fsg_opts *fsg_opts;
 
-	fsg_opts = fsg_opts_from_func_inst(config->f_ms_inst);
-
-	return snprintf(buf, PAGE_SIZE, "%s\n", fsg_opts->common->inquiry_string);
+	return snprintf(buf, PAGE_SIZE, "%s\n", config->inquiry_string);
 }
 
 static ssize_t mass_storage_inquiry_store(struct device *dev,
@@ -3020,14 +3067,11 @@ static ssize_t mass_storage_inquiry_store(struct device *dev,
 {
 	struct android_usb_function *f = dev_get_drvdata(dev);
 	struct mass_storage_function_config *config = f->config;
-	struct fsg_opts *fsg_opts;
 
-	fsg_opts = fsg_opts_from_func_inst(config->f_ms_inst);
-
-	if (size >= sizeof(fsg_opts->common->inquiry_string))
+	if (size >= sizeof(config->inquiry_string))
 		return -EINVAL;
 
-	if (sscanf(buf, "%28s", fsg_opts->common->inquiry_string) != 1)
+	if (sscanf(buf, "%28s", config->inquiry_string) != 1)
 		return -EINVAL;
 
 	return size;

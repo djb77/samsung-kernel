@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -878,6 +878,20 @@ static struct clk_freq_tbl ftbl_gcc_blsp1_2_qup1_4_spi_apps_clk[] = {
 	F_END
 };
 
+static struct clk_freq_tbl ftbl_gcc_blsp1_2_qup1_4_spi_apps_clk_8917[] = {
+	F( 960000,	xo,	10,	1,	2),
+	F( 4000000, gpll0, 10, 1, 20),
+	F( 4800000,	xo,	4,	0,	0),
+	F( 9600000,	xo,	2,	0,	0),
+	F( 12500000, gpll0, 16, 1, 4),
+	F( 16000000,	gpll0,	10,	1,	5),
+	F( 19200000,	xo,	1,	0,	0),
+	F( 25000000,	gpll0,	16,	1,	2),
+	F( 40000000,	gpll0,	10,	1,	2),
+	F( 50000000,	gpll0,	16,	0,	0),
+	F_END
+};
+
 static struct rcg_clk blsp1_qup1_spi_apps_clk_src = {
 	.cmd_rcgr_reg =  BLSP1_QUP1_SPI_APPS_CMD_RCGR,
 	.set_rate = set_rate_mnd,
@@ -1301,7 +1315,7 @@ static struct rcg_clk jpeg0_clk_src = {
 static struct clk_freq_tbl ftbl_gcc_camss_mclk0_2_clk[] = {
 	F( 19200000,	xo,	1,	0,	0),
 	F( 24000000,	gpll6,	1,	1,	45),
-	F( 66670000,	gpll0,	12,	0,	0),
+	F( 24000000,	gpll0,	12,	0,	0),
 	F_END
 };
 
@@ -4428,6 +4442,21 @@ static int msm_gcc_probe(struct platform_device *pdev)
 		vdd_hf_pll.cur_level = VDD_HF_PLL_NUM_8917;
 		get_speed_bin(pdev, &speed_bin);
 		override_for_8917(speed_bin);
+
+		if (compat_bin2) {
+			blsp1_qup2_spi_apps_clk_src.freq_tbl =
+				ftbl_gcc_blsp1_2_qup1_4_spi_apps_clk_8917;
+			blsp1_qup3_spi_apps_clk_src.freq_tbl =
+				ftbl_gcc_blsp1_2_qup1_4_spi_apps_clk_8917;
+			blsp1_qup4_spi_apps_clk_src.freq_tbl =
+				ftbl_gcc_blsp1_2_qup1_4_spi_apps_clk_8917;
+			blsp2_qup1_spi_apps_clk_src.freq_tbl =
+				ftbl_gcc_blsp1_2_qup1_4_spi_apps_clk_8917;
+			blsp2_qup2_spi_apps_clk_src.freq_tbl =
+				ftbl_gcc_blsp1_2_qup1_4_spi_apps_clk_8917;
+			blsp2_qup3_spi_apps_clk_src.freq_tbl =
+				ftbl_gcc_blsp1_2_qup1_4_spi_apps_clk_8917;
+		}
 	} else {
 		gpll0_clk_src.c.parent = &gpll0_clk_src_8952.c;
 		gpll0_ao_clk_src.c.parent = &gpll0_ao_clk_src_8952.c;

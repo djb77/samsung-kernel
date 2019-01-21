@@ -162,7 +162,7 @@ enum s2mu005_fled_mode {
 };
 
 #define S2MU005_FLASH_BRIGHTNESS(mA) mA<=400?(((mA-25)/25) & 0x1f):(((((mA-400)/50)+0x0F)) & 0x1f)
-#define S2MU005_TORCH_BRIGHTNESS(mA) (((mA - 25) /25) & 0x0f)
+#define S2MU005_TORCH_BRIGHTNESS(mA) mA>400?(0x0f):(mA<25?(0x00):(((mA-25)/25) & 0x0f))
 
 struct s2mu005_led {
 	const char *name;
@@ -193,5 +193,7 @@ int msm_fled_torch_on_s2mu005(ext_pmic_flash_ctrl_t *flash_ctrl);
 int msm_fled_flash_on_s2mu005(ext_pmic_flash_ctrl_t *flash_ctrl);
 int msm_fled_pre_flash_on_s2mu005(ext_pmic_flash_ctrl_t *flash_ctrl);
 int msm_fled_flash_on_set_current_s2mu005(ext_pmic_flash_ctrl_t *flash_ctrl);
-
+#ifdef CONFIG_SEC_ON5XLLTE_PROJECT
+ext_pmic_flash_ctrl_t *s2mu005_fled_get_info_by_name(char *name);
+#endif
 #endif

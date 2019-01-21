@@ -22,6 +22,10 @@
 #include <linux/of.h>
 #include <linux/clk.h>
 
+#ifdef CONFIG_USER_RESET_DEBUG
+#include <linux/user_reset/sec_debug_user_reset.h>
+#endif
+
 #define MODULE_NAME "gladiator-v2_error_reporting"
 
 /* Register Offsets */
@@ -582,6 +586,11 @@ static irqreturn_t msm_gladiator_isr(int irq, void *dev_id)
 
 	struct msm_gladiator_data *msm_gld_data = dev_id;
 
+#ifdef CONFIG_USER_RESET_DEBUG
+	static unsigned int gld_err_cnt[2] = {0,};
+	char buf[96] = {0,};
+#endif
+
 	/* Check validity */
 	bool gld_err_valid = readl_relaxed(msm_gld_data->gladiator_virt_base +
 			GLADIATOR_ERRVLD);
@@ -600,6 +609,11 @@ static irqreturn_t msm_gladiator_isr(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 	pr_alert("GLADIATOR ERROR DETECTED\n");
+
+#ifdef CONFIG_USER_RESET_DEBUG
+//	update_gladiator_err_count(gld_err_valid,obsrv_err_valid);
+#endif
+
 	if (gld_err_valid) {
 		pr_alert("GLADIATOR error log register data:\n");
 		for (err_log = ERR_LOG0; err_log <= ERR_LOG8; err_log++) {
@@ -629,6 +643,17 @@ static irqreturn_t msm_gladiator_isr(int irq, void *dev_id)
 			decode_obs_errlog(err_reg, err_log);
 		}
 	}
+
+#ifdef CONFIG_USER_RESET_DEBUG
+	if (gld_err_valid)
+		gld_err_cnt[0]++;
+	if (obsrv_err_valid)
+		gld_err_cnt[1]++;
+
+	snprintf((char *)buf, 96, "gld_err[%d] obsrv_err[%d]", gld_err_cnt[0], gld_err_cnt[1]);
+	sec_debug_store_additional_dbg(DBG_0_GLAD_ERR, 0, "%s", buf);
+#endif
+
 	/* Clear IRQ */
 	clear_gladiator_error(msm_gld_data->gladiator_virt_base);
 	if (enable_panic_on_error)

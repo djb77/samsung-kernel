@@ -80,7 +80,7 @@
 #define DEV_TYPE3_AV_WITH_VBUS		(0x1 << 4)
 #define DEV_TYPE3_NO_STD_CHG		(0x1 << 2)
 #define DEV_TYPE3_MHL			(0x1 << 0)
-#if defined(CONFIG_MUIC_UNIVERSAL_SM5705)
+#if defined(CONFIG_MUIC_UNIVERSAL_SM5705) || defined(CONFIG_MUIC_UNIVERSAL_SM5708)
 #define DEV_TYPE3_LO_TA			(0x1 << 5)
 #define DEV_TYPE3_CHG_TYPE	(DEV_TYPE3_U200_CHG | DEV_TYPE3_NO_STD_CHG | \
 				DEV_TYPE3_LO_TA)
@@ -191,6 +191,10 @@ static struct vps_cfg cfg_UNDEFINED_CHARGING = {
 	.name = "Undefined Charging",
 	.attr = MATTR(VCOM_OPEN, VB_HIGH) | MATTR_SUPP,
 };
+static struct vps_cfg cfg_TIMEOUT_OPEN = {
+	.name = "DCD Timeout",
+	.attr = MATTR(VCOM_OPEN, VB_HIGH) | MATTR_SUPP,
+};
 
 static struct vps_tbl_data vps_table[] = {
 	[MDEV(OTG)]			= {0x00, "GND",	&cfg_OTG,},
@@ -226,6 +230,7 @@ static struct vps_tbl_data vps_table[] = {
 #endif	
 	[MDEV(CDP)]			= {0x1f, "OPEN",	&cfg_CDP,},
 	[MDEV(UNDEFINED_CHARGING)]	= {0xfe, "UNDEFINED",	&cfg_UNDEFINED_CHARGING,},
+	[MDEV(TIMEOUT_OPEN)]		= {0x1f, "OPEN",	&cfg_TIMEOUT_OPEN,},
 	[ATTACHED_DEV_NUM]		= {0x00, "NUM", NULL,},
 };
 
@@ -674,7 +679,7 @@ static int resolve_dedicated_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, 
 #if defined(CONFIG_MUIC_SUPPORT_CCIC)
 			new_dev = ATTACHED_DEV_USB_MUIC;
 #else			
-			new_dev = ATTACHED_DEV_UNOFFICIAL_ID_USB_MUIC;
+			new_dev =  ATTACHED_DEV_TIMEOUT_OPEN_MUIC;
 #endif			
 			pr_info("%s : TYPE3 DCD_OUT_TIMEOUT DETECTED\n", MUIC_DEV_NAME);
 		} else 
@@ -835,7 +840,7 @@ static int resolve_dedicated_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, 
  * When UPSM mode, It should not VBUS_FET reset.
  */
 #if defined(CONFIG_MUIC_UNIVERSAL_SM5703)
-			is_UPSM = is_blocked(o_notify, NOTIFY_BLOCK_TYPE_ALL);
+			is_UPSM = is_blocked(o_notify, NOTIFY_BLOCK_TYPE_ALL) || is_blocked(o_notify, NOTIFY_BLOCK_TYPE_HOST);
 			if (muic_get_current_legacy_dev(pmuic) == ATTACHED_DEV_OTG_MUIC) {
 				pr_info("%s : OTG DETECTED (%d)\n", __func__, is_UPSM);
 				if (!is_UPSM) {

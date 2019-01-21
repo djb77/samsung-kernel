@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -525,7 +525,7 @@ WLANTL_BaSessionAdd
       pClientSTA->atlBAReorderInfo[ucTid].reorderBuffer =
                                             &(pTLCb->reorderBufferPool[idx]);
       pTLCb->reorderBufferPool[idx].isAvailable = VOS_FALSE;
-      TLLOG4(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO_LOW,"%dth buffer available, buffer PTR 0x%p",
+      TLLOG4(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO_LOW,"%dth buffer available, buffer PTR 0x%pK",
                   idx,
                   pClientSTA->atlBAReorderInfo[ucTid].reorderBuffer
                   ));
@@ -1096,7 +1096,7 @@ VOS_STATUS WLANTL_MSDUReorder
    v_U16_t              reorderTime;
    if((NULL == pTLCb) || (*vosDataBuff == NULL))
    {
-      TLLOGE(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,"Invalid ARG pTLCb 0x%p, vosDataBuff 0x%p",
+      TLLOGE(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,"Invalid ARG pTLCb 0x%pK, vosDataBuff 0x%pK",
                   pTLCb, *vosDataBuff));
       return VOS_STATUS_E_INVAL;
    }
@@ -1165,6 +1165,9 @@ VOS_STATUS WLANTL_MSDUReorder
                  TLLOG1(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO,
                           "(QCUR_FWDBUF) dropping old frame, SN=%d LastSN=%d",
                           CSN, currentReorderInfo->LastSN));
+                 if (vos_is_arp_pkt((*vosDataBuff)->pSkb, true))
+                    vos_update_arp_rx_drop_reorder();
+
                  status = vos_pkt_return_packet(*vosDataBuff);
                  if (!VOS_IS_STATUS_SUCCESS(status))
                  {
@@ -1728,7 +1731,7 @@ VOS_STATUS WLANTL_QueueCurrent
 {
    VOS_STATUS  status = VOS_STATUS_SUCCESS;
 
-   TLLOG4(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO_LOW,"vos Packet has to be Qed 0x%p",
+   TLLOG4(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO_LOW,"vos Packet has to be Qed 0x%pK",
                *vosDataBuff));
    if(NULL != pwBaReorder->reorderBuffer->arrayBuffer[ucSlotIndex])
    {
@@ -1812,7 +1815,7 @@ VOS_STATUS WLANTL_ChainFrontPkts
       fwdIndex = pwBaReorder->ucCIndex + pwBaReorder->winSize;
    }
 
-   TLLOG4(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO_LOW,"Current Index %d, FWD Index %d, reorderBuffer 0x%p",
+   TLLOG4(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO_LOW,"Current Index %d, FWD Index %d, reorderBuffer 0x%pK",
                pwBaReorder->ucCIndex % pwBaReorder->winSize,
                fwdIndex % pwBaReorder->winSize,
                pwBaReorder->reorderBuffer));

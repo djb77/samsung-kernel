@@ -1,4 +1,5 @@
-/* Copyright (c) 2010-2012, 2014-2015, 2017 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2012, 2014-2015, 2017 The Linux Foundation. All rights
+ * reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -300,7 +301,7 @@ static ssize_t client_data_read(struct file *file, char __user *buf,
 	}
 
 	if (!found) {
-	   rt_mutex_unlock(&msm_bus_dbg_cllist_lock);
+		rt_mutex_unlock(&msm_bus_dbg_cllist_lock);
 		return 0;
 	}
 
@@ -372,7 +373,6 @@ int msm_bus_dbg_rec_transaction(const struct msm_bus_client_handle *pdata,
 		return -ENOENT;
 	}
 
-
 	if (cldata->file == NULL) {
 		if (pdata->name == NULL) {
 			MSM_BUS_DBG("Client doesn't have a name\n");
@@ -407,7 +407,6 @@ int msm_bus_dbg_rec_transaction(const struct msm_bus_client_handle *pdata,
 	i += scnprintf(buf + i, MAX_BUFF_SIZE - i, "\n");
 	cldata->size = i;
 	rt_mutex_unlock(&msm_bus_dbg_cllist_lock);
-	
 	trace_bus_update_request((int)ts.tv_sec, (int)ts.tv_nsec,
 		pdata->name, pdata->mas, pdata->slv, ab, ib);
 
@@ -486,7 +485,6 @@ static int msm_bus_dbg_fill_cl_buffer(const struct msm_bus_scale_pdata *pdata,
 		return -ENOENT;
 	}
 
-
 	if (cldata->file == NULL) {
 		if (pdata->name == NULL) {
 			rt_mutex_unlock(&msm_bus_dbg_cllist_lock);
@@ -538,6 +536,7 @@ static int msm_bus_dbg_fill_cl_buffer(const struct msm_bus_scale_pdata *pdata,
 	cldata->index = index;
 	cldata->size = i;
 	rt_mutex_unlock(&msm_bus_dbg_cllist_lock);
+
 	return i;
 }
 
@@ -606,6 +605,7 @@ static ssize_t  msm_bus_dbg_update_request_write(struct file *file,
 	if (found)
 		msm_bus_scale_client_update_request(clid, index);
 	
+
 out:
 	kfree(buf);
 	return res;
@@ -631,7 +631,7 @@ static ssize_t fabric_data_read(struct file *file, char __user *buf,
 			break;
 		}
 	}
-	if (!found){
+	if (!found) {
 		mutex_unlock(&msm_bus_dbg_fablist_lock);
 		return -ENOENT;
 	}
@@ -723,7 +723,7 @@ static int msm_bus_dbg_fill_fab_buffer(const char *fabname,
 			break;
 		}
 	}
-	if (!found){
+	if (!found) {
 		mutex_unlock(&msm_bus_dbg_fablist_lock);
 		return -ENOENT;
 	}
@@ -776,6 +776,7 @@ static ssize_t msm_bus_dbg_dump_clients_read(struct file *file,
 		"\nDumping curent client votes to trace log\n");
 	if (*ppos)
 		goto exit_dump_clients_read;
+
 	rt_mutex_lock(&msm_bus_dbg_cllist_lock);
 	list_for_each_entry(cldata, &cl_list, list) {
 		if (IS_ERR_OR_NULL(cldata->pdata))
@@ -968,12 +969,14 @@ static void __exit msm_bus_dbg_teardown(void)
 	struct msm_bus_cldata *cldata = NULL, *cldata_temp;
 
 	debugfs_remove_recursive(dir);
+
 	rt_mutex_lock(&msm_bus_dbg_cllist_lock);
 	list_for_each_entry_safe(cldata, cldata_temp, &cl_list, list) {
 		list_del(&cldata->list);
 		kfree(cldata);
 	}
 	rt_mutex_unlock(&msm_bus_dbg_cllist_lock);
+
 	mutex_lock(&msm_bus_dbg_fablist_lock);
 	list_for_each_entry_safe(fablist, fablist_temp, &fabdata_list, list) {
 		list_del(&fablist->list);

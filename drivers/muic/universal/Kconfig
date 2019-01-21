@@ -56,6 +56,13 @@ config MUIC_SM570X_SWITCH_CONTROL_GPIO
 	help
 	  It's a work around for SM5705/SM5703 HW bug in USB Type C model.
 
+config MUIC_UNIVERSAL_SM5708
+	bool "SM5708 MUIC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the SM5708 MUIC chip.
+
 config MUIC_UNIVERSAL_SM5504
   bool "SM5504 MUIC"
 	depends on USE_MUIC
@@ -92,6 +99,13 @@ config MUIC_HV
 	default n
 	help
 	 If you say yes here you will get support for the AFC.
+
+config MUIC_SUPPORT_LANHUB
+	bool "Lanhub support for UNIVERSAL MUIC"
+	depends on MUIC_UNIVERSAL
+	default n
+	help
+	 If you say yes here you will get support for the lanhub.
 	 
 config MUIC_SLAVE_MODE_CONTROL_VBUS
 	bool "MUIC Control VBUS Switch"

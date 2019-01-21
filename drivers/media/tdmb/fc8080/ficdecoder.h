@@ -1,28 +1,27 @@
-/*****************************************************************************
-	Copyright(c) 2009 FCI Inc. All Rights Reserved
-
-	File name : ficdecoder.h
-
-	Description : fic parser
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-
-
-	History :
-	----------------------------------------------------------------------
-*******************************************************************************/
+/*
+ *	Copyright(c) 2009 FCI Inc. All Rights Reserved
+ *
+ *	File name : ficdecoder.h
+ *
+ *	Description : fic parser
+ *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ *	History :
+ *	----------------------------------------------------------------------
+ */
 #ifndef __ficdecodera_h__
 #define __ficdecodera_h__
 
@@ -32,13 +31,13 @@
 #define MAX_SVC_NUM	128
 #define MAX_SC_NUM	128
 #define MAX_SUBCH_NUM	64
-#define MAX_DIDP_NUM 	8
+#define MAX_DIDP_NUM	8
 
 #define MAX_USER_APPL_NUM       15
 #define MAX_USER_APPL_DATA_SIZE 24
 
 struct fig {
-	u8 	head;
+	u8	head;
 	u8	data[29];
 };
 
@@ -48,8 +47,8 @@ struct fib {
 };
 
 struct fic {
-	/* Fib 	fib[12]; */
-	struct fib 	fib[32];
+	/*Fib	fib[12]; */
+	struct fib fib[32];
 };
 
 struct figdata {
@@ -74,6 +73,7 @@ struct service_info_t {
 	u8	addrType;		/* PD */
 	u8	tmid;
 	u8	sub_channel_id;
+	u8	ca_flag;
 	u8	nscps;
 	u8	label[32];
 
@@ -98,13 +98,13 @@ struct scInfo_t {
 
 struct subch_info_t {
 	u8	flag;
-	u8 	subchannel_id;
+	u8	subchannel_id;
 	u16	start_address;
 	u8	form_type;
-	u8 	table_index;
+	u8	table_index;
 	u8	table_switch;
-	u8 	option;
-	u8 	protect_level;
+	u8	option;
+	u8	protect_level;
 	u16	subch_size;
 	u32	sid;
 	u8	service_channel_id;
@@ -154,10 +154,10 @@ struct didp_info_t {
 	extern "C" {
 #endif
 
-extern struct esbinfo_t   	ensemble_info[MAX_ESB_NUM];
-extern struct service_info_t 	service_info[MAX_SVC_NUM];
-extern struct subch_info_t 	subchannel_info[MAX_SUBCH_NUM];
-extern struct didp_info_t 	didpInfo[MAX_DIDP_NUM];
+extern struct esbinfo_t ensemble_info[MAX_ESB_NUM];
+extern struct service_info_t service_info[MAX_SVC_NUM];
+extern struct subch_info_t subchannel_info[MAX_SUBCH_NUM];
+extern struct didp_info_t didpInfo[MAX_DIDP_NUM];
 
 
 extern int fic_decoder(struct fic *pfic, u16 length);

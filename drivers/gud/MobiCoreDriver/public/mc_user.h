@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -15,32 +15,42 @@
 #ifndef _MC_USER_H_
 #define _MC_USER_H_
 
-#define MCDRVMODULEAPI_VERSION_MAJOR 3
-#define MCDRVMODULEAPI_VERSION_MINOR 1
+#define MCDRVMODULEAPI_VERSION_MAJOR 6
+#define MCDRVMODULEAPI_VERSION_MINOR 3
 
 #include <linux/types.h>
 
-#define MC_USER_DEVNODE		"mobicore-user"
+#ifndef __KERNEL__
+#define BIT(n)				(1 << (n))
+#endif /* __KERNEL__ */
+
+#define MC_USER_DEVNODE			"mobicore-user"
 
 /** Maximum length of MobiCore product ID string. */
-#define MC_PRODUCT_ID_LEN	64
+#define MC_PRODUCT_ID_LEN		64
+
+/** Flags for session */
+#define MC_IO_SESSION_REMOTE_BUFFERS	BIT(0)
+#define MC_IO_SESSION_NO_MULTIMAP	BIT(1)
 
 /** Number of buffers that can be mapped at once */
-#define MC_MAP_MAX		4
+#define MC_MAP_MAX			4
 
-/** Max length for buffers */
-#define BUFFER_LENGTH_MAX	0x100000
+/* Max length for buffers */
+#define BUFFER_LENGTH_MAX		0x100000
 
-/** Flags for buffers to map (aligned on GP) */
-#define MC_IO_MAP_INPUT		0x1
-#define MC_IO_MAP_OUTPUT	0x2
-#define MC_IO_MAP_INPUT_OUTPUT	(MC_IO_MAP_INPUT | MC_IO_MAP_OUTPUT)
+/* Flags for buffers to map (aligned on GP) */
+#define MC_IO_MAP_INPUT			BIT(0)
+#define MC_IO_MAP_OUTPUT		BIT(1)
+#define MC_IO_MAP_INPUT_OUTPUT		(MC_IO_MAP_INPUT | MC_IO_MAP_OUTPUT)
+/** Extra flags for buffers to map (proprietary) */
+#define MC_IO_MAP_PERSISTENT		BIT(20)
 
 /*
  * Universally Unique Identifier (UUID) according to ISO/IEC 11578.
  */
 struct mc_uuid_t {
-	__u8		value[16];	/* Value of the UUID. */
+	__u8		value[16];	/* Value of the UUID */
 };
 
 /*
@@ -68,7 +78,6 @@ struct mc_identity {
 			uid_t	ruid;
 		} uid;
 	};
-	pid_t			pid;		/* Client, when using proxy */
 };
 
 /*
@@ -81,6 +90,7 @@ struct mc_ioctl_open_session {
 	__u64		tci;		/* tci buffer pointer */
 	__u32		tcilen;		/* tci length */
 	struct mc_identity identity;	/* GP TA identity */
+	__s32		client_fd;	/* client, when using proxy */
 };
 
 /*
@@ -93,6 +103,7 @@ struct mc_ioctl_open_trustlet {
 	__u32		tlen;		/* binary length  */
 	__u64		tci;		/* tci buffer pointer */
 	__u32		tcilen;		/* tci length */
+	__s32		client_fd;	/* client, when using proxy */
 };
 
 /*
@@ -127,7 +138,8 @@ struct mc_ioctl_buffer {
  */
 struct mc_ioctl_map {
 	__u32		sid;		/* session id */
-	struct mc_ioctl_buffer bufs[MC_MAP_MAX]; /* buffers info */
+	__s32		client_fd;	/* client, when using proxy */
+	struct mc_ioctl_buffer buf;	/* buffers info */
 };
 
 /*
@@ -142,19 +154,117 @@ struct mc_ioctl_geterr {
  * Global MobiCore Version Information.
  */
 struct mc_version_info {
-	char product_id[MC_PRODUCT_ID_LEN]; /** Product ID string */
-	__u32 version_mci;		/** Mobicore Control Interface */
-	__u32 version_so;		/** Secure Objects */
-	__u32 version_mclf;		/** MobiCore Load Format */
-	__u32 version_container;	/** MobiCore Container Format */
-	__u32 version_mc_config;	/** MobiCore Config. Block Format */
-	__u32 version_tl_api;		/** MobiCore Trustlet API */
-	__u32 version_dr_api;		/** MobiCore Driver API */
-	__u32 version_nwd;		/** This Driver */
+	char product_id[MC_PRODUCT_ID_LEN]; /* Product ID string */
+	__u32	version_mci;		/* Mobicore Control Interface */
+	__u32	version_so;		/* Secure Objects */
+	__u32	version_mclf;		/* MobiCore Load Format */
+	__u32	version_container;	/* MobiCore Container Format */
+	__u32	version_mc_config;	/* MobiCore Config. Block Format */
+	__u32	version_tl_api;		/* MobiCore Trustlet API */
+	__u32	version_dr_api;		/* MobiCore Driver API */
+	__u32	version_nwd;		/* This Driver */
 };
 
-struct mc_authenticator_check {
-	pid_t		pid;
+/*
+ * GP TA operation structure.
+ */
+struct gp_value {
+	__u32			a;
+	__u32			b;
+};
+
+struct gp_temp_memref {
+	__u64			buffer;
+	__u64			size;
+};
+
+struct gp_shared_memory {
+	__u64			buffer;
+	__u64			size;
+	__u32			flags;
+};
+
+struct gp_regd_memref {
+	struct gp_shared_memory	parent;
+	__u64			size;
+	__u64			offset;
+};
+
+union gp_param {
+	struct gp_temp_memref	tmpref;
+	struct gp_regd_memref	memref;
+	struct gp_value		value;
+};
+
+struct gp_operation {
+	__u32			started;
+	__u32			param_types;
+	union gp_param		params[4];
+};
+
+struct gp_return {
+	__u32			origin;
+	__u32			value;
+};
+
+/*
+ * Data exchange structure of the MC_IO_GP_INITIALIZE_CONTEXT ioctl command.
+ */
+struct mc_ioctl_gp_initialize_context {
+	struct gp_return	ret;		/* return origin/value (out) */
+};
+
+/*
+ * Data exchange structure of the MC_IO_GP_REGISTER_SHARED_MEM ioctl command.
+ */
+struct mc_ioctl_gp_register_shared_mem {
+	struct gp_shared_memory	memref;
+	struct gp_return	ret;		/* return origin/value (out) */
+	__s32			client_fd;	/* client, when using proxy */
+};
+
+/*
+ * Data exchange structure of the MC_IO_GP_RELEASE_SHARED_MEM ioctl command.
+ */
+struct mc_ioctl_gp_release_shared_mem {
+	struct gp_shared_memory	memref;
+};
+
+/*
+ * Data exchange structure of the MC_IO_GP_OPEN_SESSION ioctl command.
+ */
+struct mc_ioctl_gp_open_session {
+	struct mc_uuid_t	uuid;		/* trustlet uuid */
+	struct mc_identity	identity;	/* GP TA identity */
+	struct gp_operation	operation;	/* set of parameters */
+	struct gp_return	ret;		/* return origin/value (out) */
+	__u32			session_id;	/* session id (out) */
+	__s32			client_fd;	/* client, when using proxy */
+};
+
+/*
+ * Data exchange structure of the MC_IO_GP_CLOSE_SESSION ioctl command.
+ */
+struct mc_ioctl_gp_close_session {
+	__u32			session_id;	/* session id */
+};
+
+/*
+ * Data exchange structure of the MC_IO_GP_INVOKE_COMMAND ioctl command.
+ */
+struct mc_ioctl_gp_invoke_command {
+	struct gp_operation	operation;	/* set of parameters */
+	__u32			session_id;	/* session id */
+	__u32			command_id;	/* ID of the command */
+	struct gp_return	ret;		/* return origin/value (out) */
+	__s32			client_fd;	/* client, when using proxy */
+};
+
+/*
+ * Data exchange structure of the MC_IO_GP_CANCEL ioctl command.
+ */
+struct mc_ioctl_gp_request_cancellation {
+	struct gp_operation	operation;	/* set of parameters */
 };
 
 /*
@@ -186,7 +296,19 @@ struct mc_authenticator_check {
 	_IO(MC_IOC_MAGIC, 8)
 #define MC_IO_VERSION \
 	_IOR(MC_IOC_MAGIC, 9, struct mc_version_info)
-#define MC_IO_AUTHENTICATOR_CHECK \
-	_IOW(MC_IOC_MAGIC, 10, struct mc_authenticator_check)
+#define MC_IO_GP_INITIALIZE_CONTEXT \
+	_IOW(MC_IOC_MAGIC, 20, struct mc_ioctl_gp_initialize_context)
+#define MC_IO_GP_REGISTER_SHARED_MEM \
+	_IOWR(MC_IOC_MAGIC, 21, struct mc_ioctl_gp_register_shared_mem)
+#define MC_IO_GP_RELEASE_SHARED_MEM \
+	_IOW(MC_IOC_MAGIC, 23, struct mc_ioctl_gp_release_shared_mem)
+#define MC_IO_GP_OPEN_SESSION \
+	_IOWR(MC_IOC_MAGIC, 24, struct mc_ioctl_gp_open_session)
+#define MC_IO_GP_CLOSE_SESSION \
+	_IOW(MC_IOC_MAGIC, 25, struct mc_ioctl_gp_close_session)
+#define MC_IO_GP_INVOKE_COMMAND \
+	_IOWR(MC_IOC_MAGIC, 26, struct mc_ioctl_gp_invoke_command)
+#define MC_IO_GP_REQUEST_CANCELLATION \
+	_IOW(MC_IOC_MAGIC, 27, struct mc_ioctl_gp_request_cancellation)
 
 #endif /* _MC_USER_H_ */

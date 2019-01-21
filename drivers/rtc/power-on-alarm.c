@@ -28,10 +28,14 @@
 
 #define ANDROID_ALARM_BASE_CMD(cmd)         (cmd & ~(_IOC(0, 0, 0xf0, 0)))
 #define ANDROID_ALARM_SET_ALARM_BOOT	    _IOW('a', 7, struct timespec)
+#ifdef CONFIG_COMPAT
+#define ANDROID_ALARM_SET_ALARM_BOOT_COMPAT	_IOW('a', 7, \
+							struct compat_timespec)
+#endif
 
 static long power_on_alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	int rv;
+	int rv = 0;
 	char bootalarm_data[14];
 
 	switch (ANDROID_ALARM_BASE_CMD(cmd)) {
@@ -44,8 +48,29 @@ static long power_on_alarm_ioctl(struct file *file, unsigned int cmd, unsigned l
 		break;
 	}
 
-	return 0;
+	return rv;
 }
+
+#ifdef CONFIG_COMPAT
+static long power_alarm_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	int rv = 0;
+	char bootalarm_data[14];
+
+	switch (ANDROID_ALARM_BASE_CMD(cmd)) {
+	case ANDROID_ALARM_SET_ALARM_BOOT_COMPAT:
+		if (copy_from_user(bootalarm_data, (void __user *)arg, 14)) {
+			rv = -EFAULT;
+			printk("hzm copy fail\n");
+			return rv;
+		}
+		//printk("power_alarm_compat_ioctl\n");
+		rv = alarm_set_alarm(bootalarm_data);
+		break;
+	}
+	return rv;
+}
+#endif
 
 static int power_on_alarm_open(struct inode *inode, struct file *file)
 {
@@ -63,6 +88,9 @@ static const struct file_operations power_on_alarm_fops = {
 	.unlocked_ioctl = power_on_alarm_ioctl,
 	.open = power_on_alarm_open,
 	.release = power_on_alarm_release,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = power_alarm_compat_ioctl,
+#endif
 };
 
 static struct miscdevice power_on_alarm_device = {

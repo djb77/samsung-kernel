@@ -10,7 +10,7 @@
 #include <asm/uaccess.h>
 
 #ifdef CONFIG_BLOCK_SUPPORT_STLOG
-#include <linux/stlog.h>
+#include <linux/fslog.h>
 #else
 #define ST_LOG(fmt,...)
 #endif

@@ -17,8 +17,10 @@
 #define _CI13XXX_h_
 
 #ifdef CONFIG_USB_CHARGING_EVENT
-#ifdef CONFIG_BATTERY_SAMSUNG_V2
+#if defined(CONFIG_BATTERY_SAMSUNG_V2)
 #include "../../battery_v2/include/sec_charging_common.h"
+#elif defined(CONFIG_BATTERY_SAMSUNG_V2_LEGACY)
+#include "../../battery_v2_legacy/include/sec_charging_common.h"
 #else
 #include <linux/battery/sec_charging_common.h>
 #endif

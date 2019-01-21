@@ -1,21 +1,21 @@
 /*
-*
-* drivers/media/tdmb/tdmb_port_mtv319.c
-*
-* tdmb driver
-*
-* Copyright (C) (2013, Samsung Electronics)
-*
-* This program is free software; you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation version 2.
-*
-* This program is distributed "as is" WITHOUT ANY WARRANTY of any
-* kind, whether express or implied; without even the implied warranty
-* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-*/
+ *
+ * drivers/media/tdmb/tdmb_port_mtv319.c
+ *
+ * tdmb driver
+ *
+ * Copyright (C) (2013, Samsung Electronics)
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation version 2.
+ *
+ * This program is distributed "as is" WITHOUT ANY WARRANTY of any
+ * kind, whether express or implied; without even the implied warranty
+ * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
 
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -105,7 +105,7 @@ static bool __get_ensemble_info(struct ensemble_info_type *e_info
 
 static void mtv319_power_off(void)
 {
-	DPRINTK("mtv319_power_off\n");
+	DPRINTK("%s\n", __func__);
 
 	if (mtv319_pwr_on) {
 		mtv319_on_air = false;
@@ -124,26 +124,23 @@ static void mtv319_power_off(void)
 
 static bool mtv319_power_on(int param)
 {
-	DPRINTK("mtv319_power_on\n");
+	DPRINTK("%s\n", __func__);
 
-	if (mtv319_pwr_on) {
+	if (mtv319_pwr_on)
 		return true;
-	} else {
-		tdmb_control_gpio(true);
+	tdmb_control_gpio(true);
 
-		RTV_GUARD_INIT;
+	RTV_GUARD_INIT;
 
-		if (rtvTDMB_Initialize(tdmb_get_if_handle()) != RTV_SUCCESS) {
-			tdmb_control_gpio(false);
-			return false;
-		} else {
-#if !defined(CONFIG_TDMB_TSIF_SLSI) && !defined(CONFIG_TDMB_TSIF_QC)
-			tdmb_control_irq(true);
-#endif
-			mtv319_pwr_on = true;
-			return true;
-		}
+	if (rtvTDMB_Initialize(tdmb_get_if_handle()) != RTV_SUCCESS) {
+		tdmb_control_gpio(false);
+		return false;
 	}
+#if !defined(CONFIG_TDMB_TSIF_SLSI) && !defined(CONFIG_TDMB_TSIF_QC)
+	tdmb_control_irq(true);
+#endif
+	mtv319_pwr_on = true;
+	return true;
 }
 
 static void mtv319_get_dm(struct tdmb_dm *info)
@@ -170,12 +167,14 @@ static int rtv_fic_dec_timeout;
 static void dmb_drv_fic_cb(u8 *data, u32 length)
 {
 	int fic_size;
+
 	if (rtv_fic_dec_result == RTV_FIC_RET_DONE)
 		return;
 
 	fic_size = mtv319_assemble_fic(fic_buf, data, length);
 	if (fic_size >= 96) {
 		enum E_RTV_FIC_DEC_RET_TYPE dc;
+
 		dc = rtvFICDEC_Decode(fic_buf, fic_size);
 		rtv_fic_dec_result = dc;
 	}
@@ -188,12 +187,11 @@ static void dmb_drv_fic_cb(u8 *data, u32 length)
 
 static void dmb_drv_msc_cb(u8 *data, u32 length)
 {
-/*	DPRINTK("%s : 0x%x 0x%x 0x%x 0x%x \n", __func__, data[0], data[1], data[3], data[4]); */
+/*	DPRINTK("%s : 0x%x 0x%x 0x%x 0x%x\n", __func__, data[0], data[1], data[3], data[4]); */
 	tdmb_store_data(data, length);
 }
 #endif
-static bool mtv319_set_ch(unsigned long freq
-						, unsigned char subchid
+static bool mtv319_set_ch(unsigned long freq, unsigned char subchid
 						, bool factory_test)
 {
 	bool ret = false;
@@ -224,9 +222,9 @@ static bool mtv319_set_ch(unsigned long freq
 		|| ch_ret == RTV_ALREADY_OPENED_SUBCHANNEL_ID) {
 			mtv319_on_air = true;
 			ret = TRUE;
-			DPRINTK("mtv319_set_ch Success\n");
+			DPRINTK("%s Success\n", __func__);
 		} else {
-			DPRINTK("mtv319_set_ch Fail (%d)\n", ch_ret);
+			DPRINTK("%s Fail (%d)\n", __func__, ch_ret);
 		}
 	}
 
@@ -252,11 +250,12 @@ static bool mtv319_scan_ch(struct ensemble_info_type *e_info
 		if (rtvTDMB_ScanFrequency(freq/1000) == RTV_SUCCESS) {
 #if defined(TDMB_FIC_USE_TSIF)
 			unsigned int lock_s;
-			while(rtv_fic_dec_result == RTV_FIC_RET_GOING \
+
+			while (rtv_fic_dec_result == RTV_FIC_RET_GOING
 					&& rtv_fic_dec_timeout > 0) {
 				lock_s = tdmb_GetOfdmLockStatus();
 				if (!(lock_s & RTV_TDMB_OFDM_LOCK_MASK)) {
-					DPRINTK("##lock_s(0x%02X)\n",lock_s);
+					DPRINTK("##lock_s(0x%02X)\n", lock_s);
 					break;
 				}
 				RTV_DELAY_MS(FIC_WAIT_TIME);
@@ -274,6 +273,7 @@ static bool mtv319_scan_ch(struct ensemble_info_type *e_info
 
 			for (i = 0; i < 30; i++) {
 				int ret_size;
+
 				ret_size = rtvTDMB_ReadFIC(fic_buf);
 				if (ret_size > 0) {
 					dc = rtvFICDEC_Decode(fic_buf, 384);
@@ -284,9 +284,8 @@ static bool mtv319_scan_ch(struct ensemble_info_type *e_info
 						ret = true;
 
 					break; /* Stop */
-				} else {
-					DPRINTK("mtv319_scan_ch READ Fail\n");
 				}
+				DPRINTK("%s READ Fail\n", __func__);
 			}
 
 			rtvTDMB_CloseFIC();
@@ -347,7 +346,7 @@ exit_read_mem:
 }
 #endif
 
-static unsigned long mtv319_int_size(void)
+static int mtv319_int_size(void)
 {
 	return MTV319_INTERRUPT_SIZE;
 }
@@ -368,10 +367,6 @@ static struct tdmb_drv_func raontech_mtv319_drv_func = {
 	.pull_data = mtv319_pull_data,
 #endif
 	.get_int_size = mtv319_int_size,
-	.byte_write = null,
-	.byte_read = null,
-	.word_write = null,
-	.word_read = null,
 };
 
 struct tdmb_drv_func *mtv319_drv_func(void)

@@ -33,7 +33,7 @@ struct sec_param_data {
 #else
 	unsigned int reserved0;
 #endif
-	unsigned int reserved1[3]; /* for CONFIG_RTC_PWRON */
+	unsigned int reserved1[3]; /* CONFIG_RTC_AUTO_PWRON */
 #ifdef CONFIG_SEC_MONITOR_BATTERY_REMOVAL
 	unsigned int normal_poweroff;
 #else
@@ -69,7 +69,14 @@ struct sec_param_data {
 	char param_carrierid[4]; //only use 3digits, 1 for null
 	char param_sales[4]; //only use 3digits, 1 for null
 	char param_lcd_resolution[8]; // Variable LCD resolution
+        unsigned int UserPartitionFlashed;
 	char prototype_serial[16];
+	unsigned int apigpiotest;
+	char apigpiotestresult[256];
+	char reboot_recovery_cause[256];
+#if defined (CONFIG_KEEP_JIG_LOW)
+	unsigned int keep_jig_low;
+#endif
 };
 
 struct sec_param_data_s {
@@ -108,16 +115,20 @@ enum sec_param_index {
 #endif
 	param_index_cp_reserved_mem,
 #ifdef CONFIG_USER_RESET_DEBUG
-	param_index_reset_ex_info,
-#endif
-#ifdef CONFIG_SEC_AP_HEALTH
-	param_index_ap_health,
+	param_index_last_reset_reason,
 #endif
 #ifdef CONFIG_SEC_NAD
 	param_index_qnad,
 	param_index_qnad_ddr_result,
 #endif	
+        param_index_UserPartitionFlash,
 	param_index_prototype_serial,
+	param_index_apigpiotest,
+	param_index_apigpiotestresult,
+	param_index_reboot_recovery_cause,
+#if defined (CONFIG_KEEP_JIG_LOW)
+	param_index_keep_jig_low,
+#endif
 	param_index_max_sec_param_data,
 };
 
@@ -126,10 +137,7 @@ extern bool sec_set_param(enum sec_param_index index, void *value);
 
 #define SEC_PARAM_FILE_OFFSET	(param_file_size - 0x100000)
 
-#ifdef CONFIG_USER_RESET_DEBUG
-#define SECTOR_UNIT_SIZE (4096) /* UFS */
-#define SEC_PARAM_EX_INFO_OFFSET (param_file_size - SECTOR_UNIT_SIZE)
-#endif
+#define SEC_PARAM_LAST_RESET_REASON		(param_file_size - 4096)
 
 #ifdef CONFIG_SEC_NAD
 #define SEC_PARAM_NAD_OFFSET			(8*1024*1024)
@@ -137,92 +145,4 @@ extern bool sec_set_param(enum sec_param_index index, void *value);
 #define SEC_PARAM_NAD_DDR_RESULT_OFFSET		(SEC_PARAM_NAD_OFFSET + SEC_PARAM_NAD_SIZE) /* 8MB + 8KB */
 #endif
 
-#ifdef CONFIG_SEC_AP_HEALTH
-#define SEC_DEBUG_AP_HEALTH_OFFSET 		(param_file_size - (3 * SECTOR_UNIT_SIZE))
-#define SEC_DEBUG_AP_HEALTH_SIZE		(sizeof(ap_health_t))
-
-#define AP_HEALTH_MAGIC 0x48544C4145485041
-#define AP_HEALTH_VER 1
-#define MAX_PCIE_NUM 1
-#define MAX_CLUSTER_NUM 2
-#define MAX_VREG_CNT 2
-#define CPU_NUM_PER_CLUSTER 4
-
-typedef struct {
-	uint64_t magic;
-	uint32_t size;
-	uint16_t version;
-	uint16_t need_write;
-} ap_health_header_t;
-
-typedef struct {
-	uint32_t cpu_throttle_cnt[NR_CPUS];
-	uint32_t cpu_hotplug_cnt[NR_CPUS];
-	uint32_t ktm_reset_cnt;
-	uint32_t gcc_t0_reset_cnt;
-	uint32_t gcc_t1_reset_cnt;
-} therm_health_t;
-
-typedef struct {
-	uint32_t gld_err_cnt;
-	uint32_t obsrv_err_cnt;
-} cache_health_t;
-
-typedef struct {
-	uint32_t phy_init_fail_cnt;
-	uint32_t link_down_cnt;
-	uint32_t link_up_fail_cnt;
-	uint32_t link_up_fail_ltssm;
-} pcie_health_t;
-
-typedef struct {
-	uint32_t np;
-	uint32_t rp;
-	uint32_t mp;
-	uint32_t kp;
-	uint32_t dp;
-	uint32_t wp;
-	uint32_t tp;
-	uint32_t sp;
-	uint32_t pp;
-} reset_reason_t;
-
-typedef struct {
-	uint32_t cpu_KHz;
-	uint16_t apc_mV;
-	uint16_t l2_mV;
-} apps_dcvs_t;
-
-typedef struct {
-	uint32_t ddr_KHz;
-	uint16_t mV[MAX_VREG_CNT];
-} rpm_dcvs_t;
-
-typedef struct {
-	apps_dcvs_t apps[MAX_CLUSTER_NUM];
-	rpm_dcvs_t rpm;
-} dcvs_info_t;
-
-typedef struct {
-	ap_health_header_t header;
-	uint32_t last_rst_reason;
-	dcvs_info_t last_dcvs;
-	therm_health_t thermal;
-	cache_health_t cache;
-	pcie_health_t pcie[MAX_PCIE_NUM];
-	reset_reason_t daily_rr;
-	therm_health_t daily_thermal;
-	cache_health_t daily_cache;
-	pcie_health_t daily_pcie[MAX_PCIE_NUM];
-} ap_health_t;
-
-ap_health_t* ap_health_data_read(void);
-int ap_health_data_write(ap_health_t *data);
-int sec_param_notifier_register(struct notifier_block *nb);
-
-enum sec_param_drv_status_t {
-	SEC_PARAM_DRV_INIT_DONE,
-	SEC_PARAM_DRV_INIT_EXIT,
-};
-#endif /* CONFIG_SEC_AP_HEALTH */
 #endif /* _SEC_PARAM_H_ */

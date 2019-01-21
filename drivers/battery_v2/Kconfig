@@ -60,6 +60,11 @@ config MULTI_CHARGING
 	help
 	 Say Y to include support for multi charger ICs
 
+config MULTI_PORT_CHARGING
+	bool "support for multi port charging"
+	help
+	 Say Y to include support for multi port charging
+
 config STEP_CHARGING
 	bool "support for step charging"
 	help
@@ -72,16 +77,16 @@ config UPDATE_BATTERY_DATA
 	help
 	 Say Y to include support for step charging
 
-config SAMSUNG_BATTERY_ENG_TEST
-	tristate "set test mode in eng build"
+config AFC_CURR_CONTROL_BY_TEMP
+	tristate "fast charging current control by temp"
 	default n
 	depends on BATTERY_SAMSUNG
 	help
-	 Say Y to set test mode in eng build
+	 Say Y to set afc current control by temp
 
-config BATTERY_CISD
-	bool "support for cisd"
-	help
+ config BATTERY_CISD
+	 bool "support for cisd"
+	 help
 	 Say Y to include support for cisd
 	 cisd means cell internal short detection
 
@@ -309,12 +314,27 @@ config FUELGAUGE_S2MU003
 	 Say Y to include support
 	 for S.LSI S2MU003 fuel gauge driver.
 
+config FUELGAUGE_S2MU004
+	tristate "S2MU004 fuel gauge driver"
+	default n
+	help
+	 Say y to include support for s.lsi s2mu004 fuel gauge driver.
+
+config FUELGAUGE_S2MU005
+	tristate "S2MU005 fuel gauge driver"
+	default n
+	depends on BATTERY_SAMSUNG
+	help
+	 Say Y to include support
+	 for S.LSI S2MU005 fuel gauge driver.
+
 config PREVENT_SOC_JUMP
 	tristate "prevent soc jump at full-charged"
 	default n
 	depends on BATTERY_SAMSUNG
 	help
 		Say Y to prevent soc jump
+
 config FUELGAUGE_SM5705
 	tristate "Siliconmitus SM5705 Fuel Gauge"
 	default n
@@ -322,6 +342,15 @@ config FUELGAUGE_SM5705
 	help
 	  SM5705 is fuel-gauge systems for lithium-ion (Li+) batteries
 	  in handheld and portable equipment. The SM5705 is configured
+	  to operate with a single lithium cell
+
+config FUELGAUGE_SM5708
+	tristate "Siliconmitus SM5708 Fuel Gauge"
+	default n
+	depends on I2C
+	help
+	  SM5708 is fuel-gauge systems for lithium-ion (Li+) batteries
+	  in handheld and portable equipment. The SM5708 is configured
 	  to operate with a single lithium cell
 
 # Charger
@@ -544,6 +573,49 @@ config CHARGER_SM5703
 	 This driver source code implemented
 	 all functions for SM5703 charger.
 
+config CHARGER_S2MU004
+	tristate "S2MU004 charger support"
+	help
+	 Say Y here to enable support for the S2MU004 charger.
+	 S2MU004 includes pmic, led, haptic, flash.
+	 You have to define MFD_S2MU004
+
+config CHARGER_S2MU005
+	tristate "S2MU005 charger support"
+	depends on (MFD_S2MU005) && I2C
+	help
+	 Say Y here to enable support for the S2MU005 charger
+	 S2MU005 includes pmic, led driver.
+	 You have to define MFD_S2MU005
+
+config S2MU005_CHARGER_BUCK_OFF
+	bool "Charger BUCK off in S2MU005 charger"
+	default n
+	depends on CHARGER_S2MU005
+	help
+	 Say Y to disable use of buck on mode in S2MU005 IFPMIC.
+	 When JIG_UART_ON cable 619K connect and disconnect again
+	 charging current shows 450mA but cable type shows none.
+	 Turn off the buck as well when cable connected is JIG_UART_ON.
+
+config S2MU005_DISABLE_BUCK_MODE
+	bool "DISABLE buck on mode in S2MU005 charger"
+	default n
+	depends on CHARGER_S2MU005
+	help
+	 Say Y to disable use of buck on mode in S2MU005 IFPMIC.
+	 When BUCK ON only mode is used it can have side-effects such as LCD flicker because of VSYS overshoot.
+	 If model has to be compliant with BC1.2 spec we need to use this feature.
+	 Enable feature based on model requirements.
+
+config S2MU005_INNER_BATTERY
+	tristate "S2MU005 inner battery type"
+	depends on (MFD_S2MU005) && I2C
+	help
+	  Say Y here to enable support marking project using S2MU005
+	  which use internal battery type
+	  You have to define MFD_S2MU005
+
 config CHARGER_SM5720
         tristate "SM5720 battery charger support"
         depends on MFD_SM5720 && I2C
@@ -574,12 +646,17 @@ config WIRELESS_CHARGER_HIGH_VOLTAGE
 	  Say Y here to enable support for the wireless charger charger
 	  driver.
 
-config CHARGER_SM5705
+config CHARGER_SM5708
 	tristate "SM5705 battery charger support"
 	depends on BATTERY_SAMSUNG
 	help
 	  Say Y here to enable support for the SM5705 charger
 
+config CHARGER_SM5708
+	tristate "SM5708 battery charger support"
+	depends on BATTERY_SAMSUNG
+	help
+	  Say Y here to enable support for the SM5708 charger
 
 config CS100_JPNCONCEPT
 	tristate "cs100 command support"
@@ -601,12 +678,26 @@ config WIRELESS_CHARGER_P9220
 	  Say Y here to enable support for the p9220 charger
 	  p9220 wireless charger driver.
 
+config WIRELESS_CHARGER_S2MIW03
+	tristate "s2miw03 wireless battery charger support"
+	depends on BATTERY_SAMSUNG && I2C
+	help
+	  Say Y here to enable support for the S2MIW03 charger
+	  S2MIW03 wireless charger driver.
+
+config WIRELESS_CHARGER_MFC
+	tristate "MFC IC charger support"
+	depends on BATTERY_SAMSUNG && I2C
+	help
+	  Say Y here to enable support for the MFC IC
+	  MFC wireless charger driver.
+
 config WIRELESS_FIRMWARE_UPDATE
 	tristate "p9220 battery charger support"
-	depends on WIRELESS_CHARGER_P9220
+	depends on BATTERY_SAMSUNG
 	help
-	  Say Y here to enable support for the p9220 charger firmware update
-	  p9220 wireless charger IC firmware update.
+	  Say Y here to enable support for the wireless charger firmware update
+	  wireless charger IC firmware update.
 
 config AFC_CHARGER_MODE
 	bool "afc charging support in sec battery driver"
@@ -697,11 +788,18 @@ config BATTERY_AGE_FORECAST
 	help
 	  Say Y to use calc time to full function.
 
-config DISABLE_WATER_CONCEPT
-	tristate "disalbe water concpet"
+config ENG_BATTERY_CONCEPT
+       bool "enable temp block"
+       default n
+       help
+	 Say Y to enable CONFIG_ENG_BATTERY_CONCEPT
+
+config QH_ALGORITHM
+	bool "enable QH algorithm"
 	default n
 	help
-	  Say Y to use disable water concpet
+		Say Y to enable CONFIG_QH_ALGORITHM to measure leakges of the battery
+		using raw coulomb count generated by the device
 
 config BATTERY_NOTIFIER
 	bool "battery notifier"
@@ -709,17 +807,17 @@ config BATTERY_NOTIFIER
 	help
 	  Say Y to enable battery notifier
 
-config CHANGE_VBUS_VOLTAGE
-	bool "enable change vbus voltage"
+config LIMIT_CHARGING_DURING_CALL
+	bool "limit charging during call"
 	default n
 	help
-	  Say Y to enable CONFIG_CHANGE_VBUS_VOLTAGE
+	  Say Y to limit charging during call
 
-config DISABLE_SAFETY_TIMER
-	bool "disable safety timer"
+config USE_IFPMIC_NTC_PIN_FOR_BLKT
+	bool "read blanket temperature from FG IC if BLKT THM is connected to IFPMIC NTC Pin"
 	default n
 	help
-	  Say Y to enable CONFIG_DISABLE_SAFETY_TIMER
+	  Say Y to BLKT temperature read from IFPMIC NTC pin
 
 config ENABLE_100MA_CHARGING_BEFORE_USB_CONFIGURED
 	bool "enable 100mA before usb configured"
@@ -732,3 +830,9 @@ config TABLET_MODEL_CONCEPT
 	default n
 	help
 	  Say Y to enable tablet model concept
+
+config NEW_FACTORY_MODE
+	bool "new factory mode"
+	default n
+	help
+	  Say Y to support new factory mode

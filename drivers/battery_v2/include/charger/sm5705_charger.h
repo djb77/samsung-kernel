@@ -24,24 +24,14 @@
 #include <linux/regulator/machine.h>
 #include "include/sec_charging_common.h"
 
-
-
-
 /* CONFIG: Kernel Feature & Target System configuration */
 //#define SM5705_SUPPORT_AICL_CONTROL       - New A series dosen't support, It's MUST be disabled
 #define SM5705_SUPPORT_OTG_CONTROL        //- New A series dosen't support, It's MUST be disabled
 
-/* SM5705 Charger - RESET condition configuaration */
-//#define SM5705_I2C_RESET_ACTIVATE
-//#define SM5705_MANUAL_RESET_ACTIVATE
-//#define SM5705_MANUAL_RESET_TIMER                   SM5705_MANUAL_RESET_TIME_7s
-//#define SM5705_WATCHDOG_RESET_ACTIVATE
-//#define SM5705_WATCHDOG_RESET_TIMER                   SM5705_WATCHDOG_RESET_TIME_120s
-//#define SM5705_SW_SOFT_START      /* default used HW soft-start */
-
 enum {
 	CHIP_ID = 0,
 	CHARGER_OP_MODE=1,
+	DATA,
 };
 ssize_t sm5705_chg_show_attrs(struct device *dev,
 				struct device_attribute *attr, char *buf);
@@ -54,6 +44,79 @@ ssize_t sm5705_chg_store_attrs(struct device *dev,
 	.show = sm5705_chg_show_attrs,			    \
 	.store = sm5705_chg_store_attrs,			\
 }
+
+enum {
+	SM5705_CHG_SRC_VBUS = 0x0,
+	SM5705_CHG_SRC_WPC,
+	SM5705_CHG_SRC_MAX,
+};
+
+enum {
+	SM5705_CHG_OTG_CURRENT_0_5A     = 0x0,
+	SM5705_CHG_OTG_CURRENT_0_7A,
+	SM5705_CHG_OTG_CURRENT_0_9A,
+	SM5705_CHG_OTG_CURRENT_1_5A,
+};
+
+enum {
+	SM5705_CHG_BST_IQ3LIMIT_2_0A    = 0x0,
+	SM5705_CHG_BST_IQ3LIMIT_2_8A,
+	SM5705_CHG_BST_IQ3LIMIT_3_5A,
+	SM5705_CHG_BST_IQ3LIMIT_4_0A,
+};
+
+/* Interrupt status Index & Offset */
+enum {
+	SM5705_INT_STATUS1 = 0x0,
+	SM5705_INT_STATUS2,
+	SM5705_INT_STATUS3,
+	SM5705_INT_STATUS4,
+	SM5705_INT_MAX,
+};
+
+enum {
+	SM5705_INT_STATUS1_VBUSPOK          = 0x0,
+	SM5705_INT_STATUS1_VBUSUVLO,
+	SM5705_INT_STATUS1_VBUSOVP,
+	SM5705_INT_STATUS1_VBUSLIMIT,
+	SM5705_INT_STATUS1_WPCINPOK,
+	SM5705_INT_STATUS1_WPCINUVLO,
+	SM5705_INT_STATUS1_WPCINOVP,
+	SM5705_INT_STATUS1_WPCINLIMIT,
+};
+
+enum {
+	SM5705_INT_STATUS2_AICL             = 0x0,
+	SM5705_INT_STATUS2_BATOVP,
+	SM5705_INT_STATUS2_NOBAT,
+	SM5705_INT_STATUS2_CHGON,
+	SM5705_INT_STATUS2_Q4FULLON,
+	SM5705_INT_STATUS2_TOPOFF,
+	SM5705_INT_STATUS2_DONE,
+	SM5705_INT_STATUS2_WDTMROFF,
+};
+
+enum {
+	SM5705_INT_STATUS3_THEMREG          = 0x0,
+	SM5705_INT_STATUS3_THEMSHDN,
+	SM5705_INT_STATUS3_OTGFAIL,
+	SM5705_INT_STATUS3_DISLIMIT,
+	SM5705_INT_STATUS3_PRETMROFF,
+	SM5705_INT_STATUS3_FASTTMROFF,
+	SM5705_INT_STATUS3_LOWBATT,
+	SM5705_INT_STATUS3_nEQ4,
+};
+
+enum {
+	SM5705_INT_STATUS4_FLED1SHORT       = 0x0,
+	SM5705_INT_STATUS4_FLED1OPEN,
+	SM5705_INT_STATUS4_FLED2SHORT,
+	SM5705_INT_STATUS4_FLED2OPEN,
+	SM5705_INT_STATUS4_BOOSTPOK_NG,
+	SM5705_INT_STATUS4_BOOSTPOL,
+	SM5705_INT_STATUS4_ABSTMR1OFF,
+	SM5705_INT_STATUS4_SBPS,
+};
 
 enum {
     SM5705_MANUAL_RESET_TIME_7s = 0x1,
@@ -82,30 +145,16 @@ enum {
     SM5705_BUCK_BOOST_FREQ_1_8MHz   = 0x3,
 };
 
-/* for SIOP - default values */
-#define SIOP_INPUT_LIMIT_CURRENT                1200
-#define SIOP_CHARGING_LIMIT_CURRENT             1000
-#define SIOP_HV_INPUT_LIMIT_CURRENT             1200
-#define SIOP_HV_CHARGING_LIMIT_CURRENT          1000
-#define SIOP_WIRELESS_INPUT_LIMIT_CURRENT       700
-#define SIOP_WIRELESS_CHARGING_LIMIT_CURRENT    600
-#define SIOP_HV_WIRELESS_INPUT_LIMIT_CURRENT	500
-#define SIOP_HV_WIRELESS_CHARGING_LIMIT_CURRENT	1000
-#define STORE_MODE_INPUT_CURRENT		500
-
 /* for VZW support */
-#define SLOW_CHARGING_CURRENT_STANDARD		400
+#define SLOW_CHARGING_CURRENT_STANDARD	400
 
 /* SM5705 Charger - AICL reduce current configuration */
-#define REDUCE_CURRENT_STEP			100
+#define REDUCE_CURRENT_STEP				100
 #define MINIMUM_INPUT_CURRENT			300
-#define AICL_VALID_CHECK_DELAY_TIME             10
+#define AICL_VALID_CHECK_DELAY_TIME		10
 
 #define SM5705_EN_DISCHG_FORCE_MASK		0x02
-#define SM5705_SBPS_MASK			0x07
-
-#define INPUT_CURRENT_TA		                1000
-#define INPUT_CURRENT_WPC		                500
+#define SM5705_SBPS_MASK				0x07
 
 struct sm5705_charger_data {
 	struct device *dev;
@@ -114,7 +163,6 @@ struct sm5705_charger_data {
 
 	struct power_supply	psy_chg;
 	struct power_supply	psy_otg;
-	int status;
 
 	/* for IRQ-service handling */
 	int irq_aicl;
@@ -129,8 +177,6 @@ struct sm5705_charger_data {
 
 	struct workqueue_struct *wqueue;
 	struct delayed_work wpc_work;
-	struct delayed_work wc_afc_work;
-	struct delayed_work afc_work;
 	struct delayed_work aicl_work;
 	struct delayed_work topoff_work;
 	// temp for rev2 SW WA
@@ -145,20 +191,17 @@ struct sm5705_charger_data {
 	struct wake_lock aicl_wake_lock;
 
 	/* for charging operation handling */
+	int status;
+	int charge_mode;
 	unsigned int is_charging;
 	unsigned int cable_type;
-	unsigned int charging_current_max;
+	unsigned int input_current;
 	unsigned int charging_current;
 	int	irq_wpcin_state;
-	int	siop_level;
 	bool topoff_pending;
 	// temp for rev2 SW WA
 	bool is_rev2_wa_done;
-
-	bool afc_detect;
-	bool wc_afc_detect;
-	bool is_mdock;
-	bool store_mode;
+	bool slow_late_chg_mode;
 };
 
 extern int sm5705_call_fg_device_id(void);

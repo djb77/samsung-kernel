@@ -46,52 +46,6 @@ Copyright (C) 2012, Samsung Electronics. All rights reserved.
 #define MDNIE_STEP1_INDEX 0
 #define MDNIE_STEP2_INDEX 1
 
-static char mcs_lock[] = {
-	0xB0, 0x03
-};
-
-static char mcs_unlock[] = {
-	0xB0, 0x04
-};
-
-static char DSI0_CABC_OFF[] ={
-	0x55,
-	0x00,
-};
-
-static char DSI0_CABC_ON[] ={
-	0x55,
-	0x03,
-};
-
-static char DSI0_CE_SLOPE_LONG[] ={
-	0xCE,
-	0x7d,
-	0x40,
-	0x48,
-	0x56,
-	0x67,
-	0x78,
-	0x88,
-	0x98,
-	0xA7,
-	0xB5,
-	0xC3,
-	0xD1,
-	0xDE,
-	0xE9,
-	0xF2,
-	0xFA,
-	0xFF,
-	0x04,
-	0x00,
-	0x04,/**/
-	0x04,
-	0x45,
-	0x00,
-	0x00,
-};
-
 static char DSI0_UI_MDNIE_1[] ={
 	0xC7,
 	0x01,
@@ -198,6 +152,11 @@ static char DSI0_UI_MDNIE_2[] ={
 	0x00,
 	0x00,
 	0xFC,
+	0x00,
+};
+
+static char DSI0_UI_MDNIE_3[] ={
+	0x55,
 	0x00,
 };
 
@@ -310,6 +269,11 @@ static char DSI0_HBM_CE_MDNIE_2[] ={
 	0x00,
 };
 
+static char DSI0_HBM_CE_MDNIE_3[] ={
+	0x55,
+	0x00,
+};
+
 static char DSI0_VIDEO_MDNIE_1[] ={
 	0xC7,
 	0x00,
@@ -417,6 +381,11 @@ static char DSI0_VIDEO_MDNIE_2[] = {
 	0x00,
 	0xFC,
 	0x00,
+};
+
+static char DSI0_VIDEO_MDNIE_3[] ={
+	0x55,
+	0x03,
 };
 
 static char DSI0_CAMERA_MDNIE_1[] ={
@@ -528,6 +497,11 @@ static char DSI0_CAMERA_MDNIE_2[] ={
 	0x00,
 };
 
+static char DSI0_CAMERA_MDNIE_3[] ={
+	0x55,
+	0x03,
+};
+
 static char DSI0_EBOOK_MDNIE_1[] = {
 	0xC7,
 	0x01,
@@ -634,6 +608,11 @@ static char DSI0_EBOOK_MDNIE_2[] = {
 	0x00,
 	0x00,
 	0x65,
+	0x00,
+};
+
+static char DSI0_EBOOK_MDNIE_3[] ={
+	0x55,
 	0x00,
 };
 
@@ -746,6 +725,11 @@ static char DSI0_GAME_LOW_MDNIE_2[] ={
 	0x00,
 };
 
+static char DSI0_GAME_LOW_MDNIE_3[] ={
+	0x55,
+	0x03,
+};
+
 static char DSI0_GAME_MID_MDNIE_1[] ={
 	0xC7,
 	0x01,
@@ -853,6 +837,11 @@ static char DSI0_GAME_MID_MDNIE_2[] ={
 	0x00,
 	0xFC,
 	0x00,
+};
+
+static char DSI0_GAME_MID_MDNIE_3[] ={
+	0x55,
+	0x03,
 };
 
 static char DSI0_GAME_HIGH_MDNIE_1[] ={
@@ -964,66 +953,55 @@ static char DSI0_GAME_HIGH_MDNIE_2[] ={
 	0x00,
 };
 
+static char DSI0_GAME_HIGH_MDNIE_3[] ={
+	0x55,
+	0x03,
+};
+
 static struct dsi_cmd_desc DSI0_CAMERA_MDNIE[] = {
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(mcs_unlock)}, mcs_unlock},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_CAMERA_MDNIE_1)}, DSI0_CAMERA_MDNIE_1},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_CAMERA_MDNIE_2)}, DSI0_CAMERA_MDNIE_2},
-	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_CE_SLOPE_LONG)}, DSI0_CE_SLOPE_LONG},
-	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_CABC_ON)}, DSI0_CABC_ON},
-	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(mcs_lock)}, mcs_lock},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_CAMERA_MDNIE_1)}, DSI0_CAMERA_MDNIE_1},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_CAMERA_MDNIE_2)}, DSI0_CAMERA_MDNIE_2},
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_CAMERA_MDNIE_3)}, DSI0_CAMERA_MDNIE_3},
 };
 static struct dsi_cmd_desc DSI0_EBOOK_MDNIE[] = {
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(mcs_unlock)}, mcs_unlock},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_EBOOK_MDNIE_1)}, DSI0_EBOOK_MDNIE_1},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_EBOOK_MDNIE_2)}, DSI0_EBOOK_MDNIE_2},
-	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_CABC_OFF)}, DSI0_CABC_OFF},
-	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(mcs_lock)}, mcs_lock},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_EBOOK_MDNIE_1)}, DSI0_EBOOK_MDNIE_1},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_EBOOK_MDNIE_2)}, DSI0_EBOOK_MDNIE_2},
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_EBOOK_MDNIE_3)}, DSI0_EBOOK_MDNIE_3},
 };
 static struct dsi_cmd_desc DSI0_HBM_CE_MDNIE[] = {
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(mcs_unlock)}, mcs_unlock},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_HBM_CE_MDNIE_1)}, DSI0_HBM_CE_MDNIE_1},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_HBM_CE_MDNIE_2)}, DSI0_HBM_CE_MDNIE_2},
-	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_CABC_OFF)}, DSI0_CABC_OFF},
-	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(mcs_lock)}, mcs_lock},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_HBM_CE_MDNIE_1)}, DSI0_HBM_CE_MDNIE_1},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_HBM_CE_MDNIE_2)}, DSI0_HBM_CE_MDNIE_2},
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_HBM_CE_MDNIE_3)}, DSI0_HBM_CE_MDNIE_3},
+};
+static struct dsi_cmd_desc DSI0_LIGHT_NOTIFICATION_MDNIE[] = {
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_UI_MDNIE_1)}, DSI0_UI_MDNIE_1},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_UI_MDNIE_2)}, DSI0_UI_MDNIE_2},
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_UI_MDNIE_3)}, DSI0_UI_MDNIE_3},
 };
 static struct dsi_cmd_desc DSI0_UI_MDNIE[] = {
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(mcs_unlock)}, mcs_unlock},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_UI_MDNIE_1)}, DSI0_UI_MDNIE_1},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_UI_MDNIE_2)}, DSI0_UI_MDNIE_2},
-	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_CABC_OFF)}, DSI0_CABC_OFF},
-	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(mcs_lock)}, mcs_lock},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_UI_MDNIE_1)}, DSI0_UI_MDNIE_1},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_UI_MDNIE_2)}, DSI0_UI_MDNIE_2},
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_UI_MDNIE_3)}, DSI0_UI_MDNIE_3},
 };
 static struct dsi_cmd_desc DSI0_VIDEO_MDNIE[] = {
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(mcs_unlock)}, mcs_unlock},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_VIDEO_MDNIE_1)}, DSI0_VIDEO_MDNIE_1},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_VIDEO_MDNIE_2)}, DSI0_VIDEO_MDNIE_2},
-	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_CE_SLOPE_LONG)}, DSI0_CE_SLOPE_LONG},
-	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_CABC_ON)}, DSI0_CABC_ON},
-	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(mcs_lock)}, mcs_lock},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_VIDEO_MDNIE_1)}, DSI0_VIDEO_MDNIE_1},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_VIDEO_MDNIE_2)}, DSI0_VIDEO_MDNIE_2},
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_VIDEO_MDNIE_3)}, DSI0_VIDEO_MDNIE_3},
 };
 static struct dsi_cmd_desc DSI0_GAME_LOW_MDNIE[] = {
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(mcs_unlock)}, mcs_unlock},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_LOW_MDNIE_1)}, DSI0_GAME_LOW_MDNIE_1},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_LOW_MDNIE_2)}, DSI0_GAME_LOW_MDNIE_2},
-	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_CE_SLOPE_LONG)}, DSI0_CE_SLOPE_LONG},
-	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_CABC_ON)}, DSI0_CABC_ON},
-	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(mcs_lock)}, mcs_lock},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_LOW_MDNIE_1)}, DSI0_GAME_LOW_MDNIE_1},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_LOW_MDNIE_2)}, DSI0_GAME_LOW_MDNIE_2},
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_GAME_LOW_MDNIE_3)}, DSI0_GAME_LOW_MDNIE_3},
 };
 static struct dsi_cmd_desc DSI0_GAME_MID_MDNIE[] = {
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(mcs_unlock)}, mcs_unlock},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_MID_MDNIE_1)}, DSI0_GAME_MID_MDNIE_1},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_MID_MDNIE_2)}, DSI0_GAME_MID_MDNIE_2},
-	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_CE_SLOPE_LONG)}, DSI0_CE_SLOPE_LONG},
-	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_CABC_ON)}, DSI0_CABC_ON},
-	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(mcs_lock)}, mcs_lock},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_MID_MDNIE_1)}, DSI0_GAME_MID_MDNIE_1},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_MID_MDNIE_2)}, DSI0_GAME_MID_MDNIE_2},
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_GAME_MID_MDNIE_3)}, DSI0_GAME_MID_MDNIE_3},
 };
 static struct dsi_cmd_desc DSI0_GAME_HIGH_MDNIE[] = {
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(mcs_unlock)}, mcs_unlock},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_HIGH_MDNIE_1)}, DSI0_GAME_HIGH_MDNIE_1},
-	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_HIGH_MDNIE_2)}, DSI0_GAME_HIGH_MDNIE_2},
-	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_CE_SLOPE_LONG)}, DSI0_CE_SLOPE_LONG},
-	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_CABC_ON)}, DSI0_CABC_ON},
-	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(mcs_lock)}, mcs_lock},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_HIGH_MDNIE_1)}, DSI0_GAME_HIGH_MDNIE_1},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_GAME_HIGH_MDNIE_2)}, DSI0_GAME_HIGH_MDNIE_2},
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_GAME_HIGH_MDNIE_3)}, DSI0_GAME_HIGH_MDNIE_3},
 };
 
 static struct dsi_cmd_desc *mdnie_tune_value_dsi0[MAX_APP_MODE][MAX_MODE][MAX_OUTDOOR_MODE] = {
@@ -1170,6 +1148,11 @@ static struct dsi_cmd_desc *mdnie_tune_value_dsi0[MAX_APP_MODE][MAX_MODE][MAX_OU
 			{DSI0_UI_MDNIE,	NULL},
 			{DSI0_EBOOK_MDNIE,	NULL},
 		},
+};
+
+static struct dsi_cmd_desc *light_notification_tune_value[LIGHT_NOTIFICATION_MAX] = {
+	NULL,
+	DSI0_LIGHT_NOTIFICATION_MDNIE,
 };
 
 #define DSI0_RGB_SENSOR_MDNIE_1_SIZE ARRAY_SIZE(DSI0_UI_MDNIE_1)

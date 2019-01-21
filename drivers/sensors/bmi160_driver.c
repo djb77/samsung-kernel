@@ -28,6 +28,11 @@
 #include <linux/wakelock.h>
 #include <linux/sensor/sensors_core.h>
 
+#ifdef TAG
+#undef TAG
+#define TAG "[ACCEL]"
+#endif
+
 #define VENDOR_NAME                   "BOSCH"
 #define MODEL_NAME                    "BMI168"
 #define ACC_MODULE_NAME                   "accelerometer_sensor"

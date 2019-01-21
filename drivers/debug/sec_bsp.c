@@ -42,6 +42,7 @@ uint32_t bootloader_display;
 uint32_t bootloader_load_kernel;
 
 static bool console_enabled;
+static unsigned int __is_boot_recovery;
 
 static const char *boot_prefix[16] = {
 	BOOT_EVT_PREFIX_LK,
@@ -146,6 +147,25 @@ static struct boot_event boot_events[] = {
 			"setupDataCall", 0},
 	{0, EVT_INVALID, NULL, 0},
 };
+
+static int __init boot_recovery(char *str)
+{
+	int temp = 0;
+
+	if (get_option(&str, &temp)) {
+		__is_boot_recovery = temp;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+early_param("androidboot.boot_recovery", boot_recovery);
+
+unsigned int is_boot_recovery(void)
+{
+	return __is_boot_recovery;
+}
+EXPORT_SYMBOL(is_boot_recovery);
 
 static int sec_boot_stat_proc_show(struct seq_file *m, void *v)
 {

@@ -1688,7 +1688,7 @@ static VOS_STATUS wlan_ftm_send_response(hdd_context_t *pHddCtx){
    if( ptt_sock_send_msg_to_app(&pHddCtx->ftm.wnl->wmsg, 0,
                    ANI_NL_MSG_PUMAC, pHddCtx->ftm.wnl->nlh.nlmsg_pid, 0) < 0) {
 
-       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, ("Ptt Socket error sending message to the app!!"));
+       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, ("Ptt Socket error sending message to the app!!"));
        return VOS_STATUS_E_FAILURE;
    }
    return VOS_STATUS_SUCCESS;
@@ -4783,9 +4783,9 @@ static VOS_STATUS wlan_ftm_priv_get_mac_address(hdd_adapter_t *pAdapter,char *bu
        {
             vos_nv_readMacAddress(macAddr);
 
-	 /*Samsung Specific code , Use MACRO to print MAC ADDR*/
+	/*Samsung Specific code , Use MACRO to print MAC ADDR*/
          ret = snprintf(buf, WE_FTM_MAX_STR_LEN,
-                             MAC_ADDRESS_STR, 
+						MAC_ADDRESS_STR,
                         MAC_ADDR_ARRAY(macAddr));
          if( ret < 0 || ret >= WE_FTM_MAX_STR_LEN )
          {
@@ -4795,10 +4795,10 @@ static VOS_STATUS wlan_ftm_priv_get_mac_address(hdd_adapter_t *pAdapter,char *bu
    }
    else
    {
-	 /*Samsung Specific code , Use MACRO to print MAC ADDR*/
+	/*Samsung Specific code , Use MACRO to print MAC ADDR*/
          /*Return Hard coded mac address*/
       ret = snprintf(buf, WE_FTM_MAX_STR_LEN,
-                            MAC_ADDRESS_STR, 
+					MAC_ADDRESS_STR,
                      MAC_ADDR_ARRAY(macAddr));
 
       if( ret < 0 || ret >= WE_FTM_MAX_STR_LEN )
@@ -5494,7 +5494,7 @@ VOS_STATUS wlan_write_to_efs (v_U8_t *pData, v_U16_t data_len)
        if( ptt_sock_send_msg_to_app(wmsg, 0,
                       ANI_NL_MSG_PUMAC, pHddCtx->ptt_pid, 0) < 0) {
 
-           VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, ("Ptt Socket error sending message to the app!!"));
+           VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, ("Ptt Socket error sending message to the app!!"));
            vos_mem_free((v_VOID_t*)wmsg);
            return VOS_STATUS_E_FAILURE;
        }
@@ -5503,7 +5503,7 @@ VOS_STATUS wlan_write_to_efs (v_U8_t *pData, v_U16_t data_len)
     if( ptt_sock_send_msg_to_app(wmsg, 0,
                     ANI_NL_MSG_PUMAC, pHddCtx->ftm.wnl->nlh.nlmsg_pid, 0) < 0) {
 
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, ("Ptt Socket error sending message to the app!!"));
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, ("Ptt Socket error sending message to the app!!"));
         vos_mem_free((v_VOID_t*)wmsg);
         return VOS_STATUS_E_FAILURE;
     }

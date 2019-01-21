@@ -1,28 +1,27 @@
-/*****************************************************************************
-	Copyright(c) 2013 FCI Inc. All Rights Reserved
-
-	File name : fc8080_demux.c
-
-	Description : fc8080 TSIF demux source file
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-
-
-	History :
-	----------------------------------------------------------------------
-*******************************************************************************/
+/*
+ *	Copyright(c) 2013 FCI Inc. All Rights Reserved
+ *
+ *	File name : fc8080_demux.c
+ *
+ *	Description : fc8080 TSIF demux source file
+ *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ *	History :
+ *	----------------------------------------------------------------------
+ */
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include "fci_types.h"
@@ -232,7 +231,7 @@ static int gether_non_video(u8 *data)
 	}
 
 	if ((header.ind == PKT_IND_END) || (header.ind == PKT_IND_START &&
-						184 >= header.length)) {
+						header.length <= 184)) {
 		if (msc_callback)
 			(*msc_callback)(msc_user_data, subch,
 					&non_video_frame_info[buf_id].buffer[0],

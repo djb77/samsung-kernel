@@ -25,10 +25,14 @@
 #include <linux/uaccess.h>
 #include <asm/unaligned.h>
 #include <linux/input.h>
-
 #include "st_lsm6ds3.h"
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
+
+#ifdef TAG
+#undef TAG
+#define TAG "[ACCEL]"
+#endif
 
 #define MS_TO_NS(msec)				((msec) * 1000 * 1000)
 

@@ -278,11 +278,15 @@ phys_addr_t __init arm_memblock_steal(phys_addr_t size, phys_addr_t align)
 void __init arm_memblock_init(const struct machine_desc *mdesc)
 {
 	/* Register the kernel text, kernel data and initrd with memblock. */
+	set_memsize_kernel_type(MEMSIZE_KERNEL_KERNEL);
 #ifdef CONFIG_XIP_KERNEL
 	memblock_reserve(__pa(_sdata), _end - _sdata);
 #else
 	memblock_reserve(__pa(_stext), _end - _stext);
 #endif
+	set_memsize_kernel_type(MEMSIZE_KERNEL_STOP);
+	record_memsize_reserved("initmem", __pa(__init_begin),
+				__init_end - __init_begin, false, false);
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* FDT scan will populate initrd_start */
 	if (initrd_start && !phys_initrd_size) {
@@ -303,7 +307,13 @@ void __init arm_memblock_init(const struct machine_desc *mdesc)
 		phys_initrd_start = phys_initrd_size = 0;
 	}
 	if (phys_initrd_size) {
+		phys_addr_t start_down, end_up;
+
 		memblock_reserve(phys_initrd_start, phys_initrd_size);
+		start_down = phys_initrd_start & PAGE_MASK;
+		end_up = PAGE_ALIGN(phys_initrd_start + phys_initrd_size);
+		record_memsize_reserved("initrd", start_down, end_up - start_down,
+					false, false);
 
 		/* Now convert initrd to virtual addresses */
 		initrd_start = __phys_to_virt(phys_initrd_start);
@@ -311,12 +321,14 @@ void __init arm_memblock_init(const struct machine_desc *mdesc)
 	}
 #endif
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 	arm_mm_memblock_reserve();
 
 	/* reserve any platform specific memblock areas */
 	if (mdesc->reserve)
 		mdesc->reserve();
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_STOP);
 	early_init_fdt_scan_reserved_mem();
 
 	/*
@@ -324,6 +336,7 @@ void __init arm_memblock_init(const struct machine_desc *mdesc)
 	 * must come from DMA area inside low memory
 	 */
 	dma_contiguous_reserve(arm_dma_limit);
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 
 	arm_memblock_steal_permitted = false;
 	memblock_dump_all();
@@ -415,6 +428,7 @@ static void __init free_unused_memmap(void)
 	unsigned long start, prev_end = 0;
 	struct memblock_region *reg;
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_PAGING);
 	/*
 	 * This relies on each bank being in address order.
 	 * The banks are sorted previously in bootmem_init().
@@ -458,6 +472,7 @@ static void __init free_unused_memmap(void)
 		free_memmap(prev_end,
 			    ALIGN(prev_end, PAGES_PER_SECTION));
 #endif
+	set_memsize_kernel_type(MEMSIZE_KERNEL_MM_INIT);
 }
 
 #ifdef CONFIG_HIGHMEM

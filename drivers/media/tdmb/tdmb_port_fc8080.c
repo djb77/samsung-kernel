@@ -1,21 +1,21 @@
 /*
-*
-* drivers/media/tdmb/tdmb_port_fc8080.c
-*
-* tdmb driver
-*
-* Copyright (C) (2011, Samsung Electronics)
-*
-* This program is free software; you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation version 2.
-*
-* This program is distributed "as is" WITHOUT ANY WARRANTY of any
-* kind, whether express or implied; without even the implied warranty
-* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-*/
+ *
+ * drivers/media/tdmb/tdmb_port_fc8080.c
+ *
+ * tdmb driver
+ *
+ * Copyright (C) (2011, Samsung Electronics)
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation version 2.
+ *
+ * This program is distributed "as is" WITHOUT ANY WARRANTY of any
+ * kind, whether express or implied; without even the implied warranty
+ * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
 
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -95,6 +95,7 @@ static bool __get_ensemble_info(struct ensemble_info_type *e_info
 
 		for (i = 0; i < 2; i++) {
 			int cnt;
+
 			cnt = (i == 0)
 				? dmb_drv_get_dmb_sub_ch_cnt()
 				: dmb_drv_get_dab_sub_ch_cnt();
@@ -116,10 +117,18 @@ static bool __get_ensemble_info(struct ensemble_info_type *e_info
 					= fci_sub_info->ucServiceType;
 				e_info->sub_ch[sub_i].svc_id
 					= fci_sub_info->ulServiceID;
+
+				e_info->sub_ch[sub_i].ca_flags
+					= fci_sub_info->ucCAFlag;
+
 				e_info->sub_ch[sub_i].scids
 					= fci_sub_info->scids;
 				e_info->sub_ch[sub_i].ecc
 					= fci_sub_info->ecc;
+
+				if (fci_sub_info->ucCAFlag)
+					DPRINTK("%s: sub_channel_id(%d) ca_flag detected\n",
+					__func__, sub_i);
 				if (i == 0)
 					memcpy(
 						e_info->sub_ch[sub_i].svc_label,
@@ -136,9 +145,8 @@ static bool __get_ensemble_info(struct ensemble_info_type *e_info
 		__print_ensemble_info(e_info);
 #endif
 		return true;
-	} else {
-		return false;
 	}
+	return false;
 }
 
 static void fc8080_power_off(void)
@@ -161,27 +169,28 @@ static void fc8080_power_off(void)
 
 static bool fc8080_power_on(int param)
 {
-	DPRINTK("%s\n", __func__);
+	DPRINTK("%s, param(%d)\n", __func__, param);
 
-	if (fc8080_pwr_on) {
+	if (fc8080_pwr_on)
 		return true;
-	} else {
-		tdmb_control_gpio(true);
-		if (dmb_drv_init(tdmb_get_if_handle()
+
+	tdmb_control_gpio(true);
+
+	if (dmb_drv_init(tdmb_get_if_handle()
 #ifdef CONFIG_TDMB_XTAL_FREQ
-		,param
+		, param
 #endif
-		) == TDMB_FAIL) {
-			tdmb_control_gpio(false);
-			return false;
-		} else {
-#if !defined(CONFIG_TDMB_TSIF_SLSI) && !defined(CONFIG_TDMB_TSIF_QC)
-			tdmb_control_irq(true);
-#endif
-			fc8080_pwr_on = true;
-			return true;
-		}
+	) == TDMB_FAIL) {
+		tdmb_control_gpio(false);
+		return false;
 	}
+
+#if !defined(CONFIG_TDMB_TSIF_SLSI) && !defined(CONFIG_TDMB_TSIF_QC)
+	tdmb_control_irq(true);
+#endif
+
+	fc8080_pwr_on = true;
+	return true;
 }
 static void fc8080_get_dm(struct tdmb_dm *info)
 {
@@ -211,7 +220,7 @@ static bool fc8080_set_ch(unsigned long freq,
 		svc_type_temp  = 0x18;
 	}
 
-	DPRINTK("fc8080_set_ch freq:%ld, sub_ch_id:%d, svc_type:%d\n",
+	DPRINTK("%s freq:%ld, sub_ch_id:%d, svc_type:%d\n", __func__,
 			freq_temp, sub_ch_id_temp, svc_type_temp);
 
 	fc8080_on_air = false;
@@ -222,93 +231,45 @@ static bool fc8080_set_ch(unsigned long freq,
 #endif
 
 	if (factory_test) {
-		if (dmb_drv_set_ch_factory(freq_temp, sub_ch_id_temp, \
-				svc_type_temp) == 1) {
+		if (dmb_drv_set_ch_factory(freq_temp, sub_ch_id_temp, svc_type_temp) == 1) {
 			DPRINTK("dmb_drv_set_ch_factory Success\n");
 			fc8080_on_air = true;
 			return true;
-		} else {
-			DPRINTK("dmb_drv_set_ch_factory Fail\n");
-			return false;
 		}
-	} else {
-		if (dmb_drv_set_ch(freq_temp, sub_ch_id_temp, \
-				svc_type_temp) == 1) {
-			DPRINTK("dmb_drv_set_ch Success\n");
-			fc8080_on_air = true;
-			return true;
-		} else {
-			DPRINTK("dmb_drv_set_ch Fail\n");
-			return false;
-		}
+		DPRINTK("dmb_drv_set_ch_factory Fail\n");
+		return false;
+
 	}
+	if (dmb_drv_set_ch(freq_temp, sub_ch_id_temp, svc_type_temp) == 1) {
+		DPRINTK("dmb_drv_set_ch Success\n");
+		fc8080_on_air = true;
+		return true;
+	}
+	DPRINTK("dmb_drv_set_ch Fail\n");
+	return false;
 }
 
 static bool fc8080_scan_ch(struct ensemble_info_type *e_info
 							, unsigned long freq)
 {
 	bool ret = false;
+
 	if (fc8080_pwr_on == false || e_info == NULL)
 		return ret;
-	else {
+
 #if defined(CONFIG_TDMB_TSIF_SLSI) || defined(CONFIG_TDMB_TSIF_QC)
-		tdmb_tsi_stop();
-		if (tdmb_tsi_start(dmb_drv_isr, FIC_PACKET_COUNT) != 0)
+	tdmb_tsi_stop();
+	if (tdmb_tsi_start(dmb_drv_isr, FIC_PACKET_COUNT) != 0)
 		return false;
 #endif
-		if (dmb_drv_scan_ch((freq / 1000)) == TDMB_SUCCESS)
-			ret = __get_ensemble_info(e_info, freq);
+	if (dmb_drv_scan_ch((freq / 1000)) == TDMB_SUCCESS)
+		ret = __get_ensemble_info(e_info, freq);
 	else
-			ret = false;
-		return ret;
-	}
+		ret = false;
+	return ret;
 }
 
-static int fc8080_byte_write(u16 addr, u8 data)
-{
-	pr_debug("%s %d fc8080_pwr_on(%d), addr(0x%x), data(0x%x)\n",
-		__func__, __LINE__, fc8080_pwr_on, addr, data);
-	
-	if (fc8080_pwr_on == false)
-		return -1;
-
-	return dmb_drv_byte_write(addr, data);
-}
-
-static int fc8080_byte_read(u16 addr, u8* data)
-{
-	pr_debug("%s %d fc8080_pwr_on(%d), addr(0x%x)\n",
-		__func__, __LINE__, fc8080_pwr_on, addr);
-	
-	if (fc8080_pwr_on == false)
-		return -1;
-
-	return dmb_drv_byte_read(addr, data);
-}	
-
-static int fc8080_word_write(u16 addr, u16 data)
-{
-	pr_debug("%s %d fc8080_pwr_on(%d), addr(0x%x), data(0x%x)\n",
-		__func__, __LINE__, fc8080_pwr_on, addr, data);
-	
-	if (fc8080_pwr_on == false)
-		return -1;
-
-	return dmb_drv_word_write(addr, data);
-}
-
-static int fc8080_word_read(u16 addr, u16* data)
-{
-	pr_debug("%s %d fc8080_pwr_on(%d), addr(0x%x)\n",
-		__func__, __LINE__, fc8080_pwr_on, addr);
-	
-	if (fc8080_pwr_on == false)
-		return -1;
-
-	return dmb_drv_word_read(addr, data);
-}
-
-static unsigned long fc8080_int_size(void)
+static int fc8080_int_size(void)
 {
 #if defined(CONFIG_TDMB_TSIF_SLSI) || defined(CONFIG_TDMB_TSIF_QC)
 	return 188*16;
@@ -327,10 +288,6 @@ static struct tdmb_drv_func fci_fc8080_drv_func = {
 	.pull_data = dmb_drv_isr,
 #endif
 	.get_int_size = fc8080_int_size,
-	.byte_write = fc8080_byte_write,
-	.byte_read = fc8080_byte_read,
-	.word_write = fc8080_word_write,
-	.word_read = fc8080_word_read,
 };
 
 struct tdmb_drv_func *fc8080_drv_func(void)

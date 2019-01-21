@@ -19,11 +19,11 @@ config TRUSTONIC_TEE_LPAE
 config TRUSTONIC_TEE_DEBUG
     bool "Trustonic TEE driver debug mode"
     depends on TRUSTONIC_TEE
-    default n
+    default y
     ---help---
       Enable the debug mode in the Trustonic TEE Driver.
 
-config TRUSTONIC_TRUSTED_UI
+config TRUSTONIC_TRUSTED_UI_QC
     tristate "Trustonic Trusted UI"
     depends on TRUSTONIC_TEE
     ---help---
@@ -31,6 +31,6 @@ config TRUSTONIC_TRUSTED_UI
 
 config TRUSTONIC_TRUSTED_UI_FB_BLANK
     bool "Trustonic Trusted UI with fb_blank"
-    depends on TRUSTONIC_TRUSTED_UI
+    depends on TRUSTONIC_TRUSTED_UI_QC
     ---help---
     Blank the framebuffer before starting a TUI session

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,6 +22,9 @@
 #include "mdss_dsi.h"
 #include "mdss_edp.h"
 #include "mdss_dsi_phy.h"
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+#include "samsung/ss_dsi_panel_common.h"
+#endif
 
 #define MDSS_DSI_DSIPHY_REGULATOR_CTRL_0	0x00
 #define MDSS_DSI_DSIPHY_REGULATOR_CTRL_1	0x04
@@ -443,7 +446,7 @@ int mdss_dsi_phy_pll_reset_status(struct mdss_dsi_ctrl_pdata *ctrl)
 	return rc;
 }
 
-void mdss_dsi_phy_sw_reset(struct mdss_dsi_ctrl_pdata *ctrl)
+static void mdss_dsi_phy_sw_reset_sub(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	struct mdss_dsi_ctrl_pdata *sctrl = NULL;
 	struct dsi_shared_data *sdata;
@@ -500,7 +503,39 @@ void mdss_dsi_phy_sw_reset(struct mdss_dsi_ctrl_pdata *ctrl)
 
 	}
 	mutex_unlock(&sdata->phy_reg_lock);
+}
 
+void mdss_dsi_phy_sw_reset(struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	struct mdss_dsi_ctrl_pdata *sctrl = NULL;
+	struct dsi_shared_data *sdata;
+
+	if (ctrl == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return;
+	}
+
+	sdata = ctrl->shared_data;
+
+	/*
+	 * When operating in split display mode, make sure that the PHY reset
+	 * is only done from the clock master. This will ensure that the PLL is
+	 * off when PHY reset is called.
+	 */
+	if (mdss_dsi_is_ctrl_clk_slave(ctrl))
+		return;
+
+	mdss_dsi_phy_sw_reset_sub(ctrl);
+
+	if (mdss_dsi_is_ctrl_clk_master(ctrl)) {
+		sctrl = mdss_dsi_get_ctrl_clk_slave();
+		if (sctrl)
+			mdss_dsi_phy_sw_reset_sub(sctrl);
+		else
+			pr_warn("%s: unable to get slave ctrl\n", __func__);
+	}
+
+	/* All other quirks go here */
 	if ((sdata->hw_rev == MDSS_DSI_HW_REV_103) &&
 		!mdss_dsi_is_hw_config_dual(sdata) &&
 		mdss_dsi_is_right_ctrl(ctrl)) {
@@ -899,8 +934,11 @@ static void mdss_dsi_8996_phy_power_off(
 {
 	int ln;
 	void __iomem *base;
+	u32 data;
 
-	MIPI_OUTP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0, 0x7f);
+	/* Turn off PLL power */
+	data = MIPI_INP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0);
+	MIPI_OUTP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0, data & ~BIT(7));
 
 	/* 4 lanes + clk lane configuration */
 	for (ln = 0; ln < 5; ln++) {
@@ -956,6 +994,7 @@ static void mdss_dsi_8996_phy_power_on(
 	void __iomem *base;
 	struct mdss_dsi_phy_ctrl *pd;
 	char *ip;
+	u32 data;
 
 	pd = &(((ctrl->panel_data).panel_info.mipi).dsi_phy_db);
 
@@ -975,6 +1014,10 @@ static void mdss_dsi_8996_phy_power_on(
 	}
 
 	mdss_dsi_8996_phy_regulator_enable(ctrl);
+
+	/* Turn on PLL power */
+	data = MIPI_INP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0);
+	MIPI_OUTP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0, data | BIT(7));
 }
 
 static void mdss_dsi_phy_power_on(
@@ -995,6 +1038,13 @@ static void mdss_dsi_8996_phy_config(struct mdss_dsi_ctrl_pdata *ctrl)
 	int j, off, ln, cnt, ln_off;
 	char *ip;
 	void __iomem *base;
+	u32 data;
+	struct mdss_panel_info *pinfo;
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	struct samsung_display_driver_data *vdd;
+
+	vdd = (struct samsung_display_driver_data *)ctrl->panel_data.panel_private;
+#endif
 
 	pd = &(((ctrl->panel_data).panel_info.mipi).dsi_phy_db);
 
@@ -1039,7 +1089,14 @@ static void mdss_dsi_8996_phy_config(struct mdss_dsi_ctrl_pdata *ctrl)
 		}
 
 		/* test str */
-		MIPI_OUTP(base + 0x14, 0x0088);	/* fixed */
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+		if(vdd->dsiphy_drive_str)
+			MIPI_OUTP(base + 0x14, vdd->dsiphy_drive_str);
+		else
+			MIPI_OUTP(base + 0x14, 0x0088);	/* fixed */
+#else
+		MIPI_OUTP(base + 0x14, 0x0088); /* fixed */
+#endif
 
 		/* phy timing, 8 * 5 */
 		cnt = 8;
@@ -1078,6 +1135,13 @@ static void mdss_dsi_8996_phy_config(struct mdss_dsi_ctrl_pdata *ctrl)
 			mdss_dsi_8996_pll_source_standalone(ctrl);
 	}
 
+	pinfo = &ctrl->panel_data.panel_info;
+	if (!(pinfo->allow_phy_power_off) && (pinfo->type == MIPI_CMD_PANEL)) {
+		data = MIPI_INP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0);
+		MIPI_OUTP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0, data | 0x7f);
+	} else {
+		MIPI_OUTP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0, 0x7f);
+	}
 	wmb(); /* make sure registers committed */
 }
 
@@ -1193,10 +1257,34 @@ void mdss_dsi_phy_disable(struct mdss_dsi_ctrl_pdata *ctrl)
 	wmb();
 }
 
-void mdss_dsi_phy_init(struct mdss_dsi_ctrl_pdata *ctrl)
+static void mdss_dsi_phy_init_sub(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	mdss_dsi_phy_regulator_ctrl(ctrl, true);
 	mdss_dsi_phy_ctrl(ctrl, true);
+}
+
+void mdss_dsi_phy_init(struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	struct mdss_dsi_ctrl_pdata *sctrl = NULL;
+
+	/*
+	 * When operating in split display mode, make sure that both the PHY
+	 * blocks are initialized together prior to the PLL being enabled. This
+	 * is achieved by calling the phy_init function for the clk_slave from
+	 * the clock_master.
+	 */
+	if (mdss_dsi_is_ctrl_clk_slave(ctrl))
+		return;
+
+	mdss_dsi_phy_init_sub(ctrl);
+
+	if (mdss_dsi_is_ctrl_clk_master(ctrl)) {
+		sctrl = mdss_dsi_get_ctrl_clk_slave();
+		if (sctrl)
+			mdss_dsi_phy_init_sub(sctrl);
+		else
+			pr_warn("%s: unable to get slave ctrl\n", __func__);
+	}
 }
 
 void mdss_dsi_core_clk_deinit(struct device *dev, struct dsi_shared_data *sdata)
@@ -1770,6 +1858,7 @@ static int mdss_dsi_ulps_config(struct mdss_dsi_ctrl_pdata *ctrl,
 			pr_err("%s: ULPS entry req failed for ctrl%d. Lane status=0x%08x\n",
 				__func__, ctrl->ndx, lane_status);
 			ret = -EINVAL;
+			MDSS_XLOG_TOUT_HANDLER("dsi0_ctrl", "dsi0_phy", "panic");
 			goto error;
 		}
 
@@ -1796,8 +1885,10 @@ static int mdss_dsi_ulps_config(struct mdss_dsi_ctrl_pdata *ctrl,
 		 * to be in stop state.
 		 */
 		MIPI_OUTP(ctrl->ctrl_base + 0x0AC, active_lanes << 16);
+		wmb(); /* ensure lanes are put to stop state */
 
 		MIPI_OUTP(ctrl->ctrl_base + 0x0AC, 0x0);
+		wmb(); /* ensure lanes are in proper state */
 
 		/*
 		 * Wait for a short duration before enabling
@@ -2233,10 +2324,10 @@ int mdss_dsi_post_clkoff_cb(void *priv,
 		return -EINVAL;
 	}
 
+	pdata = &ctrl->panel_data;
 	if ((clk_type & MDSS_DSI_CORE_CLK) &&
 	    (curr_state == MDSS_DSI_CLK_OFF)) {
 		sdata = ctrl->shared_data;
-		pdata = &ctrl->panel_data;
 
 		for (i = DSI_MAX_PM - 1; i >= DSI_CORE_PM; i--) {
 			if ((ctrl->ctrl_state & CTRL_STATE_DSI_ACTIVE) &&
@@ -2254,6 +2345,16 @@ int mdss_dsi_post_clkoff_cb(void *priv,
 				ctrl->core_power = false;
 			}
 		}
+
+		/*
+		 * temp workaround until framework issues pertaining to LP2
+		 * power state transitions are fixed. For now, we internally
+		 * transition to LP2 state whenever core power is turned off
+		 * in LP1 state
+		 */
+		if (mdss_dsi_is_panel_on_lp(pdata))
+			mdss_dsi_panel_power_ctrl(pdata,
+				MDSS_PANEL_POWER_LP2);
 	}
 	return rc;
 }
@@ -2273,10 +2374,10 @@ int mdss_dsi_pre_clkon_cb(void *priv,
 		return -EINVAL;
 	}
 
+	pdata = &ctrl->panel_data;
 	if ((clk_type & MDSS_DSI_CORE_CLK) && (new_state == MDSS_DSI_CLK_ON) &&
 	    (ctrl->core_power == false)) {
 		sdata = ctrl->shared_data;
-		pdata = &ctrl->panel_data;
 		/*
 		 * Enable DSI core power
 		 * 1.> PANEL_PM are controlled as part of
@@ -2304,8 +2405,15 @@ int mdss_dsi_pre_clkon_cb(void *priv,
 			}
 
 		}
+		/*
+		 * temp workaround until framework issues pertaining to LP2
+		 * power state transitions are fixed. For now, if we intend to
+		 * send a frame update when in LP1, we have to explicitly exit
+		 * LP2 state here
+		 */
+		if (mdss_dsi_is_panel_on_ulp(pdata))
+			mdss_dsi_panel_power_ctrl(pdata, MDSS_PANEL_POWER_LP1);
 	}
-
 	/* Disable dynamic clock gating*/
 	if (ctrl->mdss_util->dyn_clk_gating_ctrl)
 		ctrl->mdss_util->dyn_clk_gating_ctrl(0);

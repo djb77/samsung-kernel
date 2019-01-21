@@ -22,6 +22,11 @@
 #endif
 #include "power.h"
 
+#ifdef CONFIG_CPU_FREQ_LIMIT_SCHEDBOOST
+#include <linux/sched.h>
+static int sched_boost_active = 0;
+#endif
+
 DEFINE_MUTEX(pm_mutex);
 
 #ifdef CONFIG_PM_SLEEP
@@ -42,11 +47,18 @@ int unregister_pm_notifier(struct notifier_block *nb)
 }
 EXPORT_SYMBOL_GPL(unregister_pm_notifier);
 
-int pm_notifier_call_chain(unsigned long val)
+int __pm_notifier_call_chain(unsigned long val, int nr_to_call, int *nr_calls)
 {
-	int ret = blocking_notifier_call_chain(&pm_chain_head, val, NULL);
+	int ret;
+
+	ret = __blocking_notifier_call_chain(&pm_chain_head, val, NULL,
+						nr_to_call, nr_calls);
 
 	return notifier_to_errno(ret);
+}
+int pm_notifier_call_chain(unsigned long val)
+{
+	return __pm_notifier_call_chain(val, -1, NULL);
 }
 
 /* If set, devices may be suspended and resumed asynchronously. */
@@ -612,6 +624,21 @@ static ssize_t cpufreq_min_limit_store(struct kobject *kobj,
 	}
 
 	if (val != -1) {
+#ifdef CONFIG_CPU_FREQ_LIMIT_SCHEDBOOST
+		if (!sched_boost_active) {
+			sched_boost_active = 1;
+			sched_set_boost(1);
+		}
+	}
+	else {
+		if (sched_boost_active) {
+			sched_boost_active = 0;
+			sched_set_boost(0);
+		}
+	}
+
+	if (val != -1) {
+#endif
 		cpufreq_min_hd = cpufreq_limit_min_freq(val, "user lock(min)");
 		if (IS_ERR(cpufreq_min_hd)) {
 			pr_err("%s: fail to get the handle\n", __func__);

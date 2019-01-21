@@ -46,17 +46,6 @@ struct sec_param_data_s sched_sec_param_data;
 
 static unsigned int param_file_size;
 
-#ifdef CONFIG_SEC_AP_HEALTH
-static int driver_initialized;
-static struct delayed_work sec_param_notify_work;
-static struct workqueue_struct *sec_param_wq;
-static struct delayed_work ap_health_work;
-static ap_health_t ap_health_data;
-static int ap_health_initialized;
-static int in_panic;
-static DEFINE_MUTEX(ap_health_work_lock);
-#endif /* CONFIG_SEC_AP_HEALTH */
-
 static char param_name[MAX_PARAM_BUFFER];
 static __init int get_param_name(char *str)
 {
@@ -148,80 +137,17 @@ openfail_retry:
 	pr_info("%s - end, will retry.\n", __func__);
 }
 
-#ifdef CONFIG_SEC_AP_HEALTH
-static void ap_health_work_write_fn(struct work_struct *work)
-{
-	struct file *filp;
-	mm_segment_t fs;
-	int ret = true;
-	unsigned long delay = 5 * HZ;
-
-	pr_info("%s - start.\n", __func__);
-	if (!mutex_trylock(&ap_health_work_lock)) {
-		pr_err("%s - already locked.\n", __func__);
-		delay = 2 * HZ;
-		goto occupied_retry;
-	}
-
-	if (param_name[0] == '\0') {
-		pr_err("sec_param: failed to find cmdline\n");
-		return;
-	}
-
-	fs = get_fs();
-	set_fs(get_ds());
-
-	filp = filp_open(param_name, (O_RDWR | O_SYNC), 0);
-
-	if (IS_ERR(filp)) {
-		pr_err("%s: filp_open failed. (%ld)\n",
-				__func__, PTR_ERR(filp));
-		goto openfail_retry;
-	}
-
-	ret = filp->f_op->llseek(filp, SEC_DEBUG_AP_HEALTH_OFFSET, SEEK_SET);
-	if (unlikely(ret < 0)) {
-		pr_err("%s FAIL LLSEEK\n", __func__);
-		goto seekfail_retry;
-	}
-
-	filp->f_op->write(filp, (char __user *)&ap_health_data,
-			SEC_DEBUG_AP_HEALTH_SIZE, &filp->f_pos);
-
-	if (--ap_health_data.header.need_write) {
-		goto remained;
-	}
-
-	filp_close(filp, NULL);
-	set_fs(fs);
-
-	mutex_unlock(&ap_health_work_lock);
-	pr_info("%s - end.\n", __func__);
-	return;
-
-remained:
-seekfail_retry:
-	filp_close(filp, NULL);
-openfail_retry:
-	set_fs(fs);
-	mutex_unlock(&ap_health_work_lock);
-occupied_retry:
-	queue_delayed_work(sec_param_wq, &ap_health_work, delay);
-	pr_info("%s - end, will retry, wr(%u).\n", __func__,
-		ap_health_data.header.need_write);
-}
-#endif /* CONFIG_SEC_AP_HEALTH */
-
 bool sec_open_param(void)
 {
 	pr_info("%s start\n", __func__);
 
-	if (param_data != NULL)
-		return true;
+	if (!param_data)
+		param_data = kmalloc(sizeof(struct sec_param_data), GFP_KERNEL);
 
-	mutex_lock(&sec_param_mutex);
-
-	param_data = kmalloc(sizeof(struct sec_param_data), GFP_KERNEL);
+	if (unlikely(!param_data)) {
+		pr_err("failed to alloc for param_data\n");
+		return false;
+	}
 
 	sched_sec_param_data.value = param_data;
 	sched_sec_param_data.offset = SEC_PARAM_FILE_OFFSET;
@@ -230,8 +156,6 @@ bool sec_open_param(void)
 
 	schedule_delayed_work(&sched_sec_param_data.sec_param_work, 0);
 	wait_for_completion(&sched_sec_param_data.work);
-
-	mutex_unlock(&sec_param_mutex);
 
 	pr_info("%s end\n", __func__);
 
@@ -242,8 +166,6 @@ bool sec_write_param(void)
 {
 	pr_info("%s start\n", __func__);
 
-	mutex_lock(&sec_param_mutex);
-
 	sched_sec_param_data.value = param_data;
 	sched_sec_param_data.offset = SEC_PARAM_FILE_OFFSET;
 	sched_sec_param_data.size = sizeof(struct sec_param_data);
@@ -251,8 +173,6 @@ bool sec_write_param(void)
 
 	schedule_delayed_work(&sched_sec_param_data.sec_param_work, 0);
 	wait_for_completion(&sched_sec_param_data.work);
-
-	mutex_unlock(&sec_param_mutex);
 
 	pr_info("%s end\n", __func__);
 
@@ -263,9 +183,11 @@ bool sec_get_param(enum sec_param_index index, void *value)
 {
 	int ret;
 
+	mutex_lock(&sec_param_mutex);
+
 	ret = sec_open_param();
 	if (!ret)
-		return ret;
+		goto out;
 
 	switch (index) {
 	case param_index_debuglevel:
@@ -322,54 +244,69 @@ bool sec_get_param(enum sec_param_index index, void *value)
 				sizeof(unsigned int));
 		break;
 #ifdef CONFIG_USER_RESET_DEBUG
-	case param_index_reset_ex_info:
-		mutex_lock(&sec_param_mutex);
+	case param_index_last_reset_reason:
 		sched_sec_param_data.value = value;
-		sched_sec_param_data.offset = SEC_PARAM_EX_INFO_OFFSET;
-		sched_sec_param_data.size = SEC_DEBUG_EX_INFO_SIZE;
+		sched_sec_param_data.offset = SEC_PARAM_LAST_RESET_REASON;
+		sched_sec_param_data.size = sizeof(uint32_t);
 		sched_sec_param_data.direction = PARAM_RD;
 		schedule_delayed_work(&sched_sec_param_data.sec_param_work, 0);
 		wait_for_completion(&sched_sec_param_data.work);
-		mutex_unlock(&sec_param_mutex);
 		break;
 #endif
 #ifdef CONFIG_SEC_NAD
 	case param_index_qnad:
-		mutex_lock(&sec_param_mutex);
 		sched_sec_param_data.value=value;
 		sched_sec_param_data.offset=SEC_PARAM_NAD_OFFSET;
 		sched_sec_param_data.size=sizeof(struct param_qnad);
 		sched_sec_param_data.direction=PARAM_RD;
 		schedule_delayed_work(&sched_sec_param_data.sec_param_work, 0);
 		wait_for_completion(&sched_sec_param_data.work);
-		mutex_unlock(&sec_param_mutex);
 		break;
 	case param_index_qnad_ddr_result:
-		mutex_lock(&sec_param_mutex);
 		sched_sec_param_data.value=value;
 		sched_sec_param_data.offset=SEC_PARAM_NAD_DDR_RESULT_OFFSET;
 		sched_sec_param_data.size=sizeof(struct param_qnad_ddr_result);
 		sched_sec_param_data.direction=PARAM_RD;
 		schedule_delayed_work(&sched_sec_param_data.sec_param_work, 0);
 		wait_for_completion(&sched_sec_param_data.work);
-		mutex_unlock(&sec_param_mutex);
+		break;
+#endif
+	case param_index_apigpiotest:
+		memcpy(value, &(param_data->apigpiotest),
+			sizeof(param_data->apigpiotest));
+		break;
+	case param_index_apigpiotestresult:
+		memcpy(value, param_data->apigpiotestresult,
+			sizeof(param_data->apigpiotestresult));
+		break;
+	case param_index_reboot_recovery_cause:
+		memcpy(value, param_data->reboot_recovery_cause,
+				sizeof(param_data->reboot_recovery_cause));
+		break;
+#if defined (CONFIG_KEEP_JIG_LOW)
+	case param_index_keep_jig_low:
+		memcpy(value, &(param_data->keep_jig_low), sizeof(unsigned int));
 		break;
 #endif
 	default:
-		return false;
+		ret = false;
 	}
 
-	return true;
+out:
+	mutex_unlock(&sec_param_mutex);
+	return ret;
 }
 EXPORT_SYMBOL(sec_get_param);
 
 bool sec_set_param(enum sec_param_index index, void *value)
 {
-	int ret;
+	bool ret;
+
+	mutex_lock(&sec_param_mutex);
 
 	ret = sec_open_param();
 	if (!ret)
-		return ret;
+		goto out;
 
 	switch (index) {
 	case param_index_debuglevel:
@@ -427,140 +364,63 @@ bool sec_set_param(enum sec_param_index index, void *value)
 				value, sizeof(unsigned int));
 		break;
 #ifdef CONFIG_USER_RESET_DEBUG
-	case param_index_reset_ex_info:
-		/* do nothing */
+	case param_index_last_reset_reason:
+		sched_sec_param_data.value=(uint32_t *)value;
+		sched_sec_param_data.offset=SEC_PARAM_LAST_RESET_REASON;
+		sched_sec_param_data.size=sizeof(uint32_t);
+		sched_sec_param_data.direction=PARAM_WR;
+		schedule_delayed_work(&sched_sec_param_data.sec_param_work, 0);
+		wait_for_completion(&sched_sec_param_data.work);
 		break;
 #endif
-#ifdef CONFIG_SEC_AP_HEALTH
-	case param_index_ap_health:
-		/* do nothing */
-		break;
-#endif /* CONFIG_SEC_AP_HEALTH */
 #ifdef CONFIG_SEC_NAD
 	case param_index_qnad:
-		mutex_lock(&sec_param_mutex);
 		sched_sec_param_data.value=(struct param_qnad *)value;
 		sched_sec_param_data.offset=SEC_PARAM_NAD_OFFSET;
 		sched_sec_param_data.size=sizeof(struct param_qnad);
 		sched_sec_param_data.direction=PARAM_WR;
 		schedule_delayed_work(&sched_sec_param_data.sec_param_work, 0);
 		wait_for_completion(&sched_sec_param_data.work);
-		mutex_unlock(&sec_param_mutex);
 		break;
 	case param_index_qnad_ddr_result:
-		mutex_lock(&sec_param_mutex);
 		sched_sec_param_data.value=(struct param_qnad_ddr_result *)value;
 		sched_sec_param_data.offset=SEC_PARAM_NAD_DDR_RESULT_OFFSET;
 		sched_sec_param_data.size=sizeof(struct param_qnad_ddr_result);
 		sched_sec_param_data.direction=PARAM_WR;
 		schedule_delayed_work(&sched_sec_param_data.sec_param_work, 0);
 		wait_for_completion(&sched_sec_param_data.work);
-		mutex_unlock(&sec_param_mutex);
 		break;
 #endif
+	case param_index_apigpiotest:
+		memcpy(&(param_data->apigpiotest),
+				value, sizeof(param_data->apigpiotest));
+		break;
+	case param_index_apigpiotestresult:
+		memcpy(&(param_data->apigpiotestresult),
+				value, sizeof(param_data->apigpiotestresult));
+		break;
+	case param_index_reboot_recovery_cause:
+		memcpy(param_data->reboot_recovery_cause,
+				value, sizeof(param_data->reboot_recovery_cause));
+	break;
+#if defined (CONFIG_KEEP_JIG_LOW)
+	case param_index_keep_jig_low:
+		memcpy(&(param_data->keep_jig_low),
+				value, sizeof(unsigned int));
+	break;
+#endif
 	default:
-		return false;
+		ret = false;
+		goto out;
 	}
 
 	ret = sec_write_param();
 
+out:
+	mutex_unlock(&sec_param_mutex);
 	return ret;
 }
 EXPORT_SYMBOL(sec_set_param);
-
-#ifdef CONFIG_SEC_AP_HEALTH
-ap_health_t* ap_health_data_read(void)
-{
-	if (!driver_initialized)
-		return NULL;
-
-	if (ap_health_initialized)
-		return &ap_health_data;
-	else
-		return NULL;
-}
-
-EXPORT_SYMBOL(ap_health_data_read);
-
-int ap_health_data_write(ap_health_t *data)
-{
-	if (!driver_initialized || !data || !ap_health_initialized)
-		return -1;
-
-	data->header.need_write++;
-
-	if (!in_panic) {
-		queue_delayed_work(sec_param_wq, &ap_health_work, 0);
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL(ap_health_data_write);
-
-
-static BLOCKING_NOTIFIER_HEAD(sec_param_notifier_list);
-
-int sec_param_notifier_register(struct notifier_block *nb)
-{
-	return blocking_notifier_chain_register(&sec_param_notifier_list, nb);
-}
-EXPORT_SYMBOL(sec_param_notifier_register);
-
-static void sec_param_do_notify(struct work_struct *work)
-{
-	pr_info("%s: start\n", __func__);
-
-	mutex_lock(&sec_param_mutex);
-	sched_sec_param_data.value = &ap_health_data;
-	sched_sec_param_data.offset = SEC_DEBUG_AP_HEALTH_OFFSET;
-	sched_sec_param_data.size = SEC_DEBUG_AP_HEALTH_SIZE;
-	sched_sec_param_data.direction = PARAM_RD;
-	schedule_delayed_work(&sched_sec_param_data.sec_param_work, 0);
-	wait_for_completion(&sched_sec_param_data.work);
-
-	if (ap_health_data.header.magic != AP_HEALTH_MAGIC ||
-		ap_health_data.header.version != AP_HEALTH_VER ||
-		ap_health_data.header.size != SEC_DEBUG_AP_HEALTH_SIZE) {
-		pr_err("%s: ap_health_data magic(0x%016llx, 0x%016llx) ver(%u, %u) size(%u, %zu)\n",
-			__func__, ap_health_data.header.magic, (long long unsigned)AP_HEALTH_MAGIC,
-			ap_health_data.header.version, AP_HEALTH_VER,
-			ap_health_data.header.size, SEC_DEBUG_AP_HEALTH_SIZE);
-
-		memset((void *)&ap_health_data, 0, SEC_DEBUG_AP_HEALTH_SIZE);
-
-		ap_health_data.header.magic = AP_HEALTH_MAGIC;
-		ap_health_data.header.version = AP_HEALTH_VER;
-		ap_health_data.header.size = SEC_DEBUG_AP_HEALTH_SIZE;
-
-		sched_sec_param_data.value = &ap_health_data;
-		sched_sec_param_data.offset = SEC_DEBUG_AP_HEALTH_OFFSET;
-		sched_sec_param_data.size = SEC_DEBUG_AP_HEALTH_SIZE;
-		sched_sec_param_data.direction = PARAM_WR;
-
-		schedule_delayed_work(&sched_sec_param_data.sec_param_work, 0);
-		wait_for_completion(&sched_sec_param_data.work);
-	}
-	mutex_unlock(&sec_param_mutex);
-
-	ap_health_initialized=1;
-
-	blocking_notifier_call_chain(&sec_param_notifier_list, SEC_PARAM_DRV_INIT_DONE, NULL);
-
-	pr_info("%s: end\n", __func__);
-	return;
-}
-
-static int sec_param_panic_prepare(struct notifier_block *nb,
-		unsigned long event, void *data)
-{
-	in_panic = 1;
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block sec_param_panic_notifier_block = {
-	.notifier_call = sec_param_panic_prepare,
-};
-#endif /* CONFIG_SEC_AP_HEALTH */
 
 static int __init sec_param_work_init(void)
 {
@@ -574,20 +434,6 @@ static int __init sec_param_work_init(void)
 	init_completion(&sched_sec_param_data.work);
 	INIT_DELAYED_WORK(&sched_sec_param_data.sec_param_work, param_sec_operation);
 
-#ifdef CONFIG_SEC_AP_HEALTH
-	INIT_DELAYED_WORK(&sec_param_notify_work, sec_param_do_notify);
-	INIT_DELAYED_WORK(&ap_health_work, ap_health_work_write_fn);
-
-	sec_param_wq = create_singlethread_workqueue("ap_health_writer");
-	if (!sec_param_wq) {
-		pr_err("%s: fail to create sec_param_wq!\n", __func__);
-		return -EFAULT; 
-	}
-	atomic_notifier_chain_register(&panic_notifier_list, &sec_param_panic_notifier_block);
-	
-	driver_initialized = 1;
-	schedule_delayed_work(&sec_param_notify_work, 2 * HZ);
-#endif /* CONFIG_SEC_AP_HEALTH */
 	pr_info("%s: end\n", __func__);
 
 	return 0;
@@ -595,13 +441,7 @@ static int __init sec_param_work_init(void)
 
 static void __exit sec_param_work_exit(void)
 {
-#ifdef CONFIG_SEC_AP_HEALTH
-	driver_initialized = 0;
-#endif
 	cancel_delayed_work_sync(&sched_sec_param_data.sec_param_work);
-#ifdef CONFIG_SEC_AP_HEALTH
-	cancel_delayed_work_sync(&sec_param_notify_work);
-#endif
 	pr_info("%s: exit\n", __func__);
 }
 

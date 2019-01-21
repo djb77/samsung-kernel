@@ -129,11 +129,7 @@
 /*! Gyroscope calibration enable (0:Disable, 1: Enable) */
 #define YAS_GYRO_CALIB_ENABLE			(1)
 /*! Magnetic filter enable (0:Disable, 1: Enable) */
-#if defined(CONFIG_SENSORS_YAS539_DEFAULT_MATRIX)
-	#define YAS_MAG_FILTER_ENABLE		(0)
-#else
 #define YAS_MAG_FILTER_ENABLE			(1)
-#endif
 /*! Fusion with gyroscope enable (0:Disable, 1: Enable) */
 #define YAS_AMG_FUSION_ENABLE			(1)
 /*! Quaternion (gyroscope) enable (0:Disable, 1: Enable) */

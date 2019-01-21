@@ -9,11 +9,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
  */
 
 #include <linux/kernel.h>
@@ -46,7 +41,8 @@ int etspi_io_burst_write_register(struct etspi_data *etspi,
 	memset(etspi->buf, 0, ioc->len + 1);
 	*etspi->buf = OP_REG_W_C;
 	if (copy_from_user(etspi->buf + 1,
-		(const u8 __user *) (uintptr_t) ioc->tx_buf, ioc->len)) {
+			(const u8 __user *) (uintptr_t) ioc->tx_buf,
+			ioc->len)) {
 		pr_err("%s buffer copy_from_user fail\n", __func__);
 		status = -EFAULT;
 		goto end;
@@ -61,7 +57,6 @@ int etspi_io_burst_write_register(struct etspi_data *etspi,
 		pr_err("%s error status = %d\n", __func__, status);
 		goto end;
 	}
-
 end:
 	return status;
 #endif
@@ -104,7 +99,6 @@ int etspi_io_burst_write_register_backward(struct etspi_data *etspi,
 		pr_err("%s error status = %d\n", __func__, status);
 		goto end;
 	}
-
 end:
 	return status;
 #endif
@@ -156,7 +150,6 @@ int etspi_io_burst_read_register(struct etspi_data *etspi,
 		pr_err("%s buffer copy_to_user fail status\n", __func__);
 		goto end;
 	}
-
 end:
 	return status;
 #endif
@@ -182,17 +175,16 @@ int etspi_io_burst_read_register_backward(struct etspi_data *etspi,
 		goto end;
 	}
 
-
 	memset(etspi->buf, 0, xfer.len);
 	*etspi->buf = OP_REG_R_C_BW;
 	if (copy_from_user(etspi->buf + 1,
-		(const u8 __user *) (uintptr_t)ioc->tx_buf, 1)) {
+			(const u8 __user *) (uintptr_t)ioc->tx_buf, 1)) {
 		pr_err("%s buffer copy_from_user fail\n", __func__);
 		status = -EFAULT;
 		goto end;
 	}
 	pr_debug("%s tx_buf = %p op = %x reg = %x, len = %d\n", __func__,
-		ioc->tx_buf, *etspi->buf, *(etspi->buf + 1), xfer.len);
+			ioc->tx_buf, *etspi->buf, *(etspi->buf + 1), xfer.len);
 	spi_message_init(&m);
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);
@@ -204,19 +196,18 @@ int etspi_io_burst_read_register_backward(struct etspi_data *etspi,
 	}
 
 	if (copy_to_user((u8 __user *) (uintptr_t)ioc->rx_buf, etspi->buf + 2,
-		ioc->len)) {
+			ioc->len)) {
 		status = -EFAULT;
 		pr_err("%s buffer copy_to_user fail status\n", __func__);
 		goto end;
 	}
-
 end:
 	return status;
 #endif
 }
 
-int etspi_io_read_registerex(struct etspi_data *etspi,
-	u8 *addr, u8 *buf, u32 len)
+int etspi_io_read_registerex(struct etspi_data *etspi, u8 *addr, u8 *buf,
+		u32 len)
 {
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
 	return 0;
@@ -239,21 +230,20 @@ int etspi_io_read_registerex(struct etspi_data *etspi,
 	*etspi->buf = OP_REG_R;
 
 	if (copy_from_user(etspi->buf + 1, (const u8 __user *) (uintptr_t) addr
-		, 1)) {
+			, 1)) {
 		pr_err("%s buffer copy_from_user fail\n", __func__);
 		status = -EFAULT;
 		goto end;
 	}
 
 	pr_debug("%s addr = %p op = %x reg = %x len = %d tx = %p, rx = %p",
-		__func__, addr, etspi->buf[0], etspi->buf[1],
-		len, xfer.tx_buf, xfer.rx_buf);
+			__func__, addr, etspi->buf[0], etspi->buf[1], len,
+			xfer.tx_buf, xfer.rx_buf);
 	spi_message_init(&m);
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);
 	if (status < 0) {
-		pr_err("%s read data error status = %d\n"
-				, __func__, status);
+		pr_err("%s read data error status = %d\n", __func__, status);
 		goto end;
 	}
 
@@ -278,9 +268,9 @@ int etspi_io_read_register(struct etspi_data *etspi, u8 *addr, u8 *buf)
 	struct spi_message m;
 	int read_len = 1;
 
-	u8 tx[] = { OP_REG_R, 0x00, 0x00 };
+	u8 tx[] = {OP_REG_R, 0x00, 0x00};
 	u8 val, addrval;
-	u8 rx[] = { 0xFF, 0x00, 0x00 };
+	u8 rx[] = {0xFF, 0x00, 0x00};
 
 	struct spi_transfer xfer = {
 		.tx_buf = tx,
@@ -301,15 +291,14 @@ int etspi_io_read_register(struct etspi_data *etspi, u8 *addr, u8 *buf)
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);
 	if (status < 0) {
-		pr_err("%s read data error status = %d\n"
-				, __func__, status);
+		pr_err("%s read data error status = %d\n", __func__, status);
 		return status;
 	}
 
 	val = rx[2];
 
-	pr_debug("%s len = %d addr = %p val = %x\n",
-		__func__, read_len, addr, val);
+	pr_debug("%s len = %d addr = %p val = %x\n", __func__,
+			read_len, addr, val);
 
 	if (copy_to_user((u8 __user *) (uintptr_t) buf, &val, read_len)) {
 		pr_err("%s buffer copy_to_user fail status\n", __func__);
@@ -331,7 +320,7 @@ int etspi_io_write_register(struct etspi_data *etspi, u8 *buf)
 	int write_len = 2;
 	struct spi_message m;
 
-	u8 tx[] = { OP_REG_W, 0x00, 0x00 };
+	u8 tx[] = {OP_REG_W, 0x00, 0x00};
 	u8 val[3];
 
 	struct spi_transfer xfer = {
@@ -339,15 +328,15 @@ int etspi_io_write_register(struct etspi_data *etspi, u8 *buf)
 		.len = 3,
 	};
 
-	if (copy_from_user(val, (const u8 __user *) (uintptr_t) buf
-		, write_len)) {
+	if (copy_from_user(val, (const u8 __user *) (uintptr_t) buf,
+			write_len)) {
 		pr_err("%s buffer copy_from_user fail\n", __func__);
 		status = -EFAULT;
 		return status;
 	}
 
-	pr_debug("%s write_len = %d addr = %x data = %x\n",
-		__func__, write_len, val[0], val[1]);
+	pr_debug("%s write_len = %d addr = %x data = %x\n", __func__,
+			write_len, val[0], val[1]);
 
 	tx[1] = val[0];
 	tx[2] = val[1];
@@ -356,8 +345,7 @@ int etspi_io_write_register(struct etspi_data *etspi, u8 *buf)
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);
 	if (status < 0) {
-		pr_err("%s read data error status = %d\n",
-				__func__, status);
+		pr_err("%s read data error status = %d\n", __func__, status);
 		return status;
 	}
 
@@ -389,8 +377,7 @@ int etspi_write_register(struct etspi_data *etspi, u8 addr, u8 buf)
 		DEBUG_PRINT("%s address = %x result = %x %x\n"
 					__func__, addr, result[1], result[2]);
 	} else {
-		pr_err("%s read data error status = %d\n"
-				, __func__, status);
+		pr_err("%s read data error status = %d\n", __func__, status);
 	}
 
 	return status;
@@ -422,8 +409,7 @@ int etspi_read_register(struct etspi_data *etspi, u8 addr, u8 *buf)
 		DEBUG_PRINT("%s address = %x result = %x %x\n"
 					__func__, addr, result[1], result[2]);
 	} else {
-		pr_err("%s read data error status = %d\n"
-				, __func__, status);
+		pr_err("%s read data error status = %d\n", __func__, status);
 	}
 
 	return status;
@@ -450,12 +436,10 @@ int etspi_io_nvm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);
 
-	if (status == 0) {
+	if (status == 0)
 		DEBUG_PRINT("%s nvm enabled\n", __func__);
-	} else {
-		pr_err("%s nvm enable error status = %d\n"
-				, __func__, status);
-	}
+	else
+		pr_err("%s nvm enable error status = %d\n", __func__, status);
 
 	usleep_range(10, 50);
 
@@ -475,18 +459,18 @@ int etspi_io_nvm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 	/* transfer to nvm physical address*/
 	etspi->buf[1] = ((addr % 2) ? (addr - 1) : addr) / 2;
 	/* thansfer to nvm physical length */
-	xfer.len = ((ioc->len % 2) ?
-		ioc->len + 1 : ((addr % 2) ? ioc->len + 2 : ioc->len)) + 3;
+	xfer.len = ((ioc->len % 2) ? ioc->len + 1 :
+			(addr % 2 ? ioc->len + 2 : ioc->len)) + 3;
 	if (xfer.len >= LARGE_SPI_TRANSFER_BUFFER) {
 		if ((xfer.len) % DIVISION_OF_IMAGE != 0)
-			xfer.len = xfer.len +
-				(DIVISION_OF_IMAGE -
+			xfer.len = xfer.len + (DIVISION_OF_IMAGE -
 					(xfer.len % DIVISION_OF_IMAGE));
 	}
 	xfer.tx_buf = xfer.rx_buf = etspi->buf;
 
 	pr_debug("%s nvm read addr(%d) len(%d) xfer.rx_buf(%p), etspi->buf(%p)\n",
-		__func__, etspi->buf[1], xfer.len, xfer.rx_buf, etspi->buf);
+			__func__, etspi->buf[1],
+			xfer.len, xfer.rx_buf, etspi->buf);
 	spi_message_init(&m);
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);
@@ -495,8 +479,8 @@ int etspi_io_nvm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 		return status;
 	}
 
-	if (copy_to_user((u8 __user *) (uintptr_t) ioc->rx_buf, xfer.rx_buf
-			+ 3, ioc->len)) {
+	if (copy_to_user((u8 __user *) (uintptr_t) ioc->rx_buf, xfer.rx_buf + 3
+			, ioc->len)) {
 		pr_err("%s buffer copy_to_user fail status\n", __func__);
 		status = -EFAULT;
 		return status;
@@ -506,17 +490,16 @@ int etspi_io_nvm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 #endif
 }
 
-
 int etspi_io_nvm_write(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 {
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
 	return 0;
 #else
-	int status, i, j, len/* physical nvm lengh */;
+	int status, i, j, len/* physical nvm length */;
 	struct spi_message m;
-	u8 *bufw = NULL,
-			buf[MAX_NVM_LEN + 1] = {OP_NVM_WE, 0x00},
-			addr/* nvm physical addr */;
+	u8 *bufw = NULL;
+	u8 buf[MAX_NVM_LEN + 1] = {OP_NVM_WE, 0x00};
+	u8 addr/* nvm physical addr */;
 
 	struct spi_transfer xfer = {
 		.tx_buf = buf,
@@ -528,19 +511,17 @@ int etspi_io_nvm_write(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);
 
-	if (status == 0) {
+	if (status == 0)
 		DEBUG_PRINT("%s nvm enabled\n", __func__);
-	} else {
-		pr_err("%s nvm enable error status = %d\n"
-				, __func__, status);
-	}
+	else
+		pr_err("%s nvm enable error status = %d\n", __func__, status);
 
 	usleep_range(10, 50);
 
-	pr_debug("%s buf(%p) tx_buf(%p) len(%d)\n",
-		__func__, buf, ioc->tx_buf, ioc->len);
-	if (copy_from_user(buf, (const u8 __user *) (uintptr_t) ioc->tx_buf
-		, ioc->len)) {
+	pr_debug("%s buf(%p) tx_buf(%p) len(%d)\n", __func__, buf,
+			ioc->tx_buf, ioc->len);
+	if (copy_from_user(buf, (const u8 __user *) (uintptr_t) ioc->tx_buf,
+			ioc->len)) {
 		pr_err("%s buffer copy_from_user fail\n", __func__);
 		status = -EFAULT;
 		return status;
@@ -555,23 +536,21 @@ int etspi_io_nvm_write(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 		return -EINVAL;
 	}
 
-
 	bufw = kmalloc(NVM_WRITE_LENGTH, GFP_KERNEL);
-	/*TODO: need to dynamic assign nvm lengh*/
+	/*TODO: need to dynamic assign nvm length*/
 	if (bufw == NULL) {
 		status = -ENOMEM;
 		pr_err("%s bufw kmalloc error\n", __func__);
 		return status;
-	} else {
-		xfer.tx_buf = xfer.rx_buf = bufw;
-		xfer.len = NVM_WRITE_LENGTH;
 	}
+	xfer.tx_buf = xfer.rx_buf = bufw;
+	xfer.len = NVM_WRITE_LENGTH;
 
 	len = (ioc->len - 1) / 2;
 	pr_debug("%s nvm write addr(%d) len(%d) xfer.tx_buf(%p), etspi->buf(%p)\n",
 			__func__, buf[0], len, xfer.tx_buf, etspi->buf);
-	/* transfer to nvm physical length */
-	for (i = 0, addr = buf[0] / 2; i < len; i++) {
+	for (i = 0, addr = buf[0] / 2/* thansfer to nvm physical length */;
+			i < len; i++) {
 		bufw[0] = OP_NVM_ON_W;
 		bufw[1] = addr++;
 		bufw[2] = buf[i * 2 + 1];
@@ -579,7 +558,8 @@ int etspi_io_nvm_write(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 		memset(bufw + 4, 1, NVM_WRITE_LENGTH - 4);
 
 		pr_debug("%s write transaction (%d): %x %x %x %x\n",
-			__func__, i, bufw[0], bufw[1], bufw[2], bufw[3]);
+				__func__, i,
+				bufw[0], bufw[1], bufw[2], bufw[3]);
 		spi_message_init(&m);
 		spi_message_add_tail(&xfer, &m);
 		status = spi_sync(etspi->spi, &m);
@@ -590,21 +570,19 @@ int etspi_io_nvm_write(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 		for (j = 0; j < NVM_WRITE_LENGTH - 4; j++) {
 			if (bufw[4 + j] == 0) {
 				pr_debug("%s nvm write ready(%d)\n",
-					__func__, j);
+						__func__, j);
 				break;
 			}
 			if (j == NVM_WRITE_LENGTH - 5) {
 				pr_err("%s nvm write fail(timeout)\n",
-					__func__);
+						__func__);
 				status = -EIO;
 				goto end;
 			}
 		}
 	}
-
 end:
-	if (bufw)
-		kfree(bufw);
+	kfree(bufw);
 	return status;
 #endif
 }
@@ -617,8 +595,7 @@ int etspi_nvm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 	int status;
 	struct spi_message m;
 
-	u8 addr,/* nvm logical address */
-		buf[] = {OP_NVM_RE, 0x00};
+	u8 addr/* nvm logical address */, buf[] = {OP_NVM_RE, 0x00};
 
 	struct spi_transfer xfer = {
 		.tx_buf = buf,
@@ -630,12 +607,10 @@ int etspi_nvm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);
 
-	if (status == 0) {
+	if (status == 0)
 		DEBUG_PRINT("%s nvm enabled\n", __func__);
-	} else {
-		pr_err("%s nvm enable error status = %d\n"
-				, __func__, status);
-	}
+	else
+		pr_err("%s nvm enable error status = %d\n", __func__, status);
 
 	usleep_range(10, 50);
 
@@ -650,17 +625,18 @@ int etspi_nvm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 	/* transfer to nvm physical address*/
 	etspi->buf[1] = ((addr % 2) ? (addr - 1) : addr) / 2;
 	/* thansfer to nvm physical length */
-	xfer.len = ((ioc->len % 2) ?
-		ioc->len + 1 : ((addr % 2) ? ioc->len + 2 : ioc->len)) + 3;
+	xfer.len = ((ioc->len % 2) ? ioc->len + 1 :
+			(addr % 2 ? ioc->len + 2 : ioc->len)) + 3;
 	if (xfer.len >= LARGE_SPI_TRANSFER_BUFFER) {
 		if ((xfer.len) % DIVISION_OF_IMAGE != 0)
 			xfer.len = xfer.len + (DIVISION_OF_IMAGE -
-				(xfer.len % DIVISION_OF_IMAGE));
+					(xfer.len % DIVISION_OF_IMAGE));
 	}
 	xfer.tx_buf = xfer.rx_buf = etspi->buf;
 
 	pr_debug("%s nvm read addr(%d) len(%d) xfer.rx_buf(%p), etspi->buf(%p)\n",
-		__func__, etspi->buf[1], xfer.len, xfer.rx_buf, etspi->buf);
+			__func__, etspi->buf[1],
+			xfer.len, xfer.rx_buf, etspi->buf);
 	spi_message_init(&m);
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);
@@ -669,8 +645,8 @@ int etspi_nvm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 		return status;
 	}
 
-	if (memcpy((u8 __user *) (uintptr_t) ioc->rx_buf,
-			xfer.rx_buf + 3, ioc->len)) {
+	if (memcpy((u8 __user *) (uintptr_t) ioc->rx_buf, xfer.rx_buf + 3,
+			ioc->len)) {
 		pr_err("%s buffer copy_to_user fail status\n", __func__);
 		status = -EFAULT;
 		return status;
@@ -680,18 +656,17 @@ int etspi_nvm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 #endif
 }
 int etspi_io_nvm_writeex(struct etspi_data *etspi,
-	struct egis_ioc_transfer *ioc)
+		struct egis_ioc_transfer *ioc)
 {
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
 	return 0;
 #else
-	/*len : physical nvm lengh */
-	int status, i, j, len, wlen;
+	int status, i, j, len/* physical nvm length */, wlen;
 	struct spi_message m;
-	u8 *bufw = NULL, bufr[MAX_NVM_LEN + 3],
-		buf[MAX_NVM_LEN + 3] = {OP_NVM_WE, 0x00};
-	/*addr : nvm physical addr */
-	u8 addr, *tmp = NULL;
+	u8 *bufw = NULL;
+	u8 bufr[MAX_NVM_LEN + 3];
+	u8 buf[MAX_NVM_LEN + 3] = {OP_NVM_WE, 0x00};
+	u8 addr/* nvm physical addr */, *tmp = NULL;
 	struct egis_ioc_transfer r;
 
 	struct spi_transfer xfer = {
@@ -700,8 +675,8 @@ int etspi_io_nvm_writeex(struct etspi_data *etspi,
 		.len = 2,
 	};
 
-	pr_debug("%s buf(%p) tx_buf(%p) len(%d)\n",
-		__func__, buf, ioc->tx_buf, ioc->len);
+	pr_debug("%s buf(%p) tx_buf(%p) len(%d)\n", __func__,
+			buf, ioc->tx_buf, ioc->len);
 	if (copy_from_user(buf, (const u8 __user *) (uintptr_t) ioc->tx_buf
 		, ioc->len)) {
 		pr_err("%s buffer copy_from_user fail\n", __func__);
@@ -740,12 +715,10 @@ int etspi_io_nvm_writeex(struct etspi_data *etspi,
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);
 
-	if (status == 0) {
+	if (status == 0)
 		DEBUG_PRINT("%s nvm enabled\n", __func__);
-	} else {
-		pr_err("%s nvm enable error status = %d\n"
-				, __func__, status);
-	}
+	else
+		pr_err("%s nvm enable error status = %d\n", __func__, status);
 
 	usleep_range(10, 50);
 
@@ -758,10 +731,9 @@ int etspi_io_nvm_writeex(struct etspi_data *etspi,
 		status = -ENOMEM;
 		pr_err("%s bufw kmalloc error\n", __func__);
 		return status;
-	} else {
-		xfer.tx_buf = xfer.rx_buf = bufw;
-		xfer.len = wlen;
 	}
+	xfer.tx_buf = xfer.rx_buf = bufw;
+	xfer.len = wlen;
 
 	if ((buf[0] % 2) || ((ioc->len - 3) % 2)) {
 		memcpy(buf, bufr, r.len);
@@ -769,7 +741,7 @@ int etspi_io_nvm_writeex(struct etspi_data *etspi,
 	}
 	len = (ioc->len - 3) / 2;
 	pr_debug("%s nvm write addr(%d) len(%d) xfer.tx_buf(%p), etspi->buf(%p), wlen(%d)\n",
-			__func__, buf[0], len, xfer.tx_buf, etspi->buf, wlen);
+			 __func__, buf[0], len, xfer.tx_buf, etspi->buf, wlen);
 	for (i = 0, addr = buf[0] / 2/* thansfer to nvm physical length */;
 			i < len; i++) {
 		bufw[0] = OP_NVM_ON_W;
@@ -779,7 +751,8 @@ int etspi_io_nvm_writeex(struct etspi_data *etspi,
 		memset(bufw + 4, 1, wlen - 4);
 
 		pr_debug("%s write transaction (%d): %x %x %x %x\n",
-			__func__, i, bufw[0], bufw[1], bufw[2], bufw[3]);
+				__func__, i,
+				bufw[0], bufw[1], bufw[2], bufw[3]);
 		spi_message_init(&m);
 		spi_message_add_tail(&xfer, &m);
 		status = spi_sync(etspi->spi, &m);
@@ -790,21 +763,19 @@ int etspi_io_nvm_writeex(struct etspi_data *etspi,
 		for (j = 0; j < wlen - 4; j++) {
 			if (bufw[4 + j] == 0) {
 				pr_debug("%s nvm write ready(%d)\n",
-					__func__, j);
+						__func__, j);
 				break;
 			}
 			if (j == wlen - 5) {
 				pr_err("%s nvm write fail(timeout)\n",
-					__func__);
+						__func__);
 				status = -EIO;
 				goto end;
 			}
 		}
 	}
-
 end:
-	if (bufw)
-		kfree(bufw);
+	kfree(bufw);
 	return status;
 #endif
 }
@@ -829,12 +800,10 @@ int etspi_io_nvm_off(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 	spi_message_add_tail(&xfer, &m);
 	status = spi_sync(etspi->spi, &m);
 
-	if (status == 0) {
+	if (status == 0)
 		DEBUG_PRINT("%s nvm disabled\n", __func__);
-	} else {
-		pr_err("%s nvm disable error status = %d\n"
-				, __func__, status);
-	}
+	else
+		pr_err("%s nvm disable error status = %d\n", __func__, status);
 
 	return status;
 #endif
@@ -857,7 +826,7 @@ int etspi_io_vdm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 	if (xfer.len >= LARGE_SPI_TRANSFER_BUFFER) {
 		if ((xfer.len) % DIVISION_OF_IMAGE != 0)
 			xfer.len = xfer.len + (DIVISION_OF_IMAGE -
-				(xfer.len % DIVISION_OF_IMAGE));
+					(xfer.len % DIVISION_OF_IMAGE));
 	}
 
 	buf = kzalloc(xfer.len, GFP_KERNEL);
@@ -869,7 +838,7 @@ int etspi_io_vdm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 	buf[0] = OP_VDM_R;
 
 	pr_debug("%s len = %d, xfer.len = %d, buf = %p, rx_buf = %p\n",
-		__func__, ioc->len, xfer.len, buf, ioc->rx_buf);
+			__func__, ioc->len, xfer.len, buf, ioc->rx_buf);
 
 	spi_message_init(&m);
 	spi_message_add_tail(&xfer, &m);
@@ -879,14 +848,13 @@ int etspi_io_vdm_read(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 		goto end;
 	}
 
-	if (copy_to_user((u8 __user *) (uintptr_t) ioc->rx_buf,
-			buf + 1, ioc->len)) {
-		pr_err("buffer copy_to_user fail status\n");
+	if (copy_to_user((u8 __user *) (uintptr_t) ioc->rx_buf, buf + 1,
+			ioc->len)) {
+		pr_err("%s buffer copy_to_user fail status\n", __func__);
 		status = -EFAULT;
 	}
 end:
-	if (buf)
-		kfree(buf);
+	kfree(buf);
 	return status;
 #endif
 }
@@ -906,19 +874,18 @@ int etspi_io_vdm_write(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 		.len = ioc->len + 1,
 	};
 
-
 	if (xfer.len >= LARGE_SPI_TRANSFER_BUFFER) {
 		if ((xfer.len) % DIVISION_OF_IMAGE != 0)
 			xfer.len = xfer.len + (DIVISION_OF_IMAGE -
-				(xfer.len % DIVISION_OF_IMAGE));
+					(xfer.len % DIVISION_OF_IMAGE));
 	}
 
 	buf = kzalloc(xfer.len, GFP_KERNEL);
 	if (buf == NULL)
 		return -ENOMEM;
 
-	if (copy_from_user((u8 __user *) (uintptr_t) buf + 1,
-			ioc->tx_buf, ioc->len)) {
+	if (copy_from_user((u8 __user *) (uintptr_t) buf + 1, ioc->tx_buf,
+			ioc->len)) {
 		pr_err("buffer copy_from_user fail status\n");
 		status = -EFAULT;
 		goto end;
@@ -928,7 +895,7 @@ int etspi_io_vdm_write(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 	buf[0] = OP_VDM_W;
 
 	pr_debug("%s len = %d, xfer.len = %d, buf = %p, tx_buf = %p\n",
-		__func__, ioc->len, xfer.len, buf, ioc->tx_buf);
+			 __func__, ioc->len, xfer.len, buf, ioc->tx_buf);
 
 	spi_message_init(&m);
 	spi_message_add_tail(&xfer, &m);
@@ -936,10 +903,8 @@ int etspi_io_vdm_write(struct etspi_data *etspi, struct egis_ioc_transfer *ioc)
 
 	if (status < 0)
 		pr_err("%s read data error status = %d\n", __func__, status);
-
 end:
-	if (buf)
-		kfree(buf);
+	kfree(buf);
 	return status;
 #endif
 }
@@ -962,7 +927,7 @@ int etspi_io_get_frame(struct etspi_data *etspi, u8 *fr, u32 size)
 	if (xfer.len >= LARGE_SPI_TRANSFER_BUFFER) {
 		if ((xfer.len) % DIVISION_OF_IMAGE != 0)
 			xfer.len = xfer.len + (DIVISION_OF_IMAGE -
-				(xfer.len % DIVISION_OF_IMAGE));
+					(xfer.len % DIVISION_OF_IMAGE));
 	}
 
 	buf = kzalloc(xfer.len, GFP_KERNEL);
@@ -985,13 +950,11 @@ int etspi_io_get_frame(struct etspi_data *etspi, u8 *fr, u32 size)
 	}
 
 	if (copy_to_user((u8 __user *) (uintptr_t) fr, buf + 1, size)) {
-		pr_err("buffer copy_to_user fail status\n");
+		pr_err("%s buffer copy_to_user fail status\n", __func__);
 		status = -EFAULT;
 	}
 end:
-	if (buf)
-		kfree(buf);
+	kfree(buf);
 	return status;
 #endif
 }
-

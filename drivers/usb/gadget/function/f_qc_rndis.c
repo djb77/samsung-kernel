@@ -6,7 +6,7 @@
  * Copyright (C) 2008 Nokia Corporation
  * Copyright (C) 2009 Samsung Electronics
  *			Author: Michal Nazarewicz (mina86@mina86.com)
- * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2
@@ -606,6 +606,12 @@ static void rndis_qc_command_complete(struct usb_ep *ep,
 	int				status;
 	rndis_init_msg_type		*buf;
 	u32		ul_max_xfer_size, dl_max_xfer_size;
+
+	if (req->status != 0) {
+		pr_err("%s: RNDIS command completion error %d\n",
+				__func__, req->status);
+		return;
+	}
 
 	spin_lock(&rndis_lock);
 	rndis = _rndis_qc;

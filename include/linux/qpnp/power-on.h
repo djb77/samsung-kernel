@@ -59,6 +59,9 @@ enum pon_restart_reason {
 	PON_RESTART_REASON_DMVERITY_CORRUPTED	= 0x04,
 	PON_RESTART_REASON_DMVERITY_ENFORCE	= 0x05,
 	PON_RESTART_REASON_KEYS_CLEAR		= 0x06,
+
+	PON_RESTART_REASON_MBS_MEM_RESERVE_ON	= 0x12,
+	PON_RESTART_REASON_MBS_MEM_RESERVE_OFF	= 0x13,
 /* CONFIG_SEC_BSP */
 	PON_RESTART_REASON_NORMALBOOT		= 0x14,
 	PON_RESTART_REASON_DOWNLOAD		= 0x15,
@@ -97,6 +100,10 @@ enum pon_restart_reason {
 	PON_RESTART_REASON_MAX			= 0x40
 };
 
+#ifdef CONFIG_SEC_PM
+int qpnp_pon_check_chg_det(void);
+#endif
+
 #ifdef CONFIG_QPNP_POWER_ON
 int qpnp_pon_system_pwr_off(enum pon_power_off_type type);
 int qpnp_pon_is_warm_reset(void);
@@ -133,6 +140,8 @@ static inline bool qpnp_pon_check_hard_reset_stored(void)
 #if defined(CONFIG_SEC_PM)
 int get_pkey_press(void);
 int get_vdkey_press(void);
+int vdkey_pressed_count(int clear);
+int pkey_pressed_count(int clear);
 #endif
 
 #endif

@@ -23,6 +23,7 @@
 
 #include <asm/sections.h>
 #include <asm/uaccess.h>
+#include <asm/cacheflush.h>
 
 /*
  * mutex protecting text section modification (dynamic code patching).
@@ -42,8 +43,17 @@ u32 __initdata __visible main_extable_sort_needed = 1;
 void __init sort_main_extable(void)
 {
 	if (main_extable_sort_needed && __stop___ex_table > __start___ex_table) {
+#ifdef CONFIG_KERNEL_TEXT_RDONLY
+		unsigned long start = PFN_DOWN((unsigned long)__start___ex_table);
+		unsigned long end = PFN_UP((unsigned long)__stop___ex_table);
+		set_memory_rw(start << PAGE_SHIFT, (end - start));
+#endif
 		pr_notice("Sorting __ex_table...\n");
 		sort_extable(__start___ex_table, __stop___ex_table);
+
+#ifdef CONFIG_KERNEL_TEXT_RDONLY
+		set_kernel_text_ro();
+#endif
 	}
 }
 
@@ -66,7 +76,7 @@ static inline int init_kernel_text(unsigned long addr)
 	return 0;
 }
 
-int core_kernel_text(unsigned long addr)
+int notrace core_kernel_text(unsigned long addr)
 {
 	if (addr >= (unsigned long)_stext &&
 	    addr < (unsigned long)_etext)

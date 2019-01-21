@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -66,6 +66,7 @@ static int proxy_timeout_ms = -1;
 module_param(proxy_timeout_ms, int, S_IRUGO | S_IWUSR);
 
 static bool disable_timeouts;
+static const char firmware_error_msg[] = "firmware_error\n";
 /**
  * struct pil_mdt - Representation of <name>.mdt file in memory
  * @hdr: ELF32 header
@@ -171,7 +172,11 @@ int pil_do_ramdump(struct pil_desc *desc, void *ramdump_dev)
 	ret = do_elf_ramdump(ramdump_dev, ramdump_segs, count);
 	kfree(ramdump_segs);
 
-	if (!ret && desc->subsys_vmid > 0)
+	if (ret)
+		pil_err(desc, "%s: Ramdump collection failed for subsys %s rc:%d\n",
+				__func__, desc->name, ret);
+
+	if (desc->subsys_vmid > 0)
 		ret = pil_assign_mem_to_subsys(desc, priv->region_start,
 				(priv->region_end - priv->region_start));
 
@@ -461,6 +466,8 @@ static int pil_alloc_region(struct pil_priv *priv, phys_addr_t min_addr,
 	if (region == NULL) {
 		pil_err(priv->desc, "Failed to allocate relocatable region of size %zx\n",
 					size);
+		priv->region_start = 0;
+		priv->region_end = 0;
 		return -ENOMEM;
 	}
 
@@ -579,6 +586,13 @@ static int pil_init_mmap(struct pil_desc *desc, const struct pil_mdt *mdt)
 	return pil_init_entry_addr(priv, mdt);
 }
 
+struct pil_map_fw_info {
+	void *region;
+	struct dma_attrs attrs;
+	phys_addr_t base_addr;
+	struct device *dev;
+};
+
 static void pil_release_mmap(struct pil_desc *desc)
 {
 	struct pil_priv *priv = desc->priv;
@@ -597,14 +611,36 @@ static void pil_release_mmap(struct pil_desc *desc)
 	}
 }
 
-#define IOMAP_SIZE SZ_1M
+static void pil_clear_segment(struct pil_desc *desc)
+{
+	struct pil_priv *priv = desc->priv;
+	u8 __iomem *buf;
 
-struct pil_map_fw_info {
-	void *region;
-	struct dma_attrs attrs;
-	phys_addr_t base_addr;
-	struct device *dev;
-};
+	struct pil_map_fw_info map_fw_info = {
+		.attrs = desc->attrs,
+		.region = priv->region,
+		.base_addr = priv->region_start,
+		.dev = desc->dev,
+	};
+
+	void *map_data = desc->map_data ? desc->map_data : &map_fw_info;
+
+	/* Clear memory so that unauthorized ELF code is not left behind */
+	buf = desc->map_fw_mem(priv->region_start, (priv->region_end -
+					priv->region_start), map_data);
+
+	if (!buf) {
+		pil_err(desc, "Failed to map memory\n");
+		return;
+	}
+
+	pil_memset_io(buf, 0, (priv->region_end - priv->region_start));
+	desc->unmap_fw_mem(buf, (priv->region_end - priv->region_start),
+								map_data);
+
+}
+
+#define IOMAP_SIZE SZ_1M
 
 static void *map_fw_mem(phys_addr_t paddr, size_t size, void *data)
 {
@@ -644,12 +680,14 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 		if (ret < 0) {
 			pil_err(desc, "Failed to locate blob %s or blob is too big.\n",
 				fw_name);
+			subsys_set_error(desc->subsys_dev, firmware_error_msg);
 			return ret;
 		}
 
 		if (ret != seg->filesz) {
 			pil_err(desc, "Blob size %u doesn't match %lu\n",
 					ret, seg->filesz);
+			subsys_set_error(desc->subsys_dev, firmware_error_msg);
 			return -EPERM;
 		}
 		ret = 0;
@@ -678,8 +716,10 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 
 	if (desc->ops->verify_blob) {
 		ret = desc->ops->verify_blob(desc, seg->paddr, seg->sz);
-		if (ret)
+		if (ret) {
 			pil_err(desc, "Blob%u failed verification\n", num);
+			subsys_set_error(desc->subsys_dev, firmware_error_msg);
+		}
 	}
 
 	return ret;
@@ -760,6 +800,7 @@ int pil_boot(struct pil_desc *desc)
 
 	if (fw->size < sizeof(*ehdr)) {
 		pil_err(desc, "Not big enough to be an elf header\n");
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		ret = -EIO;
 		goto release_fw;
 	}
@@ -769,18 +810,21 @@ int pil_boot(struct pil_desc *desc)
 
 	if (memcmp(ehdr->e_ident, ELFMAG, SELFMAG)) {
 		pil_err(desc, "Not an elf header\n");
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		ret = -EIO;
 		goto release_fw;
 	}
 
 	if (ehdr->e_phnum == 0) {
 		pil_err(desc, "No loadable segments\n");
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		ret = -EIO;
 		goto release_fw;
 	}
 	if (sizeof(struct elf32_phdr) * ehdr->e_phnum +
 	    sizeof(struct elf32_hdr) > fw->size) {
 		pil_err(desc, "Program headers not within mdt\n");
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		ret = -EIO;
 		goto release_fw;
 	}
@@ -797,9 +841,12 @@ int pil_boot(struct pil_desc *desc)
 	}
 
 	if (desc->ops->init_image)
-		ret = desc->ops->init_image(desc, fw->data, fw->size);
+		ret = desc->ops->init_image(desc, fw->data, fw->size,
+			priv->region_start,
+			priv->region_end - priv->region_start);
 	if (ret) {
 		pil_err(desc, "Invalid firmware metadata\n");
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		goto err_boot;
 	}
 
@@ -812,17 +859,6 @@ int pil_boot(struct pil_desc *desc)
 	}
 
 	if (desc->subsys_vmid > 0) {
-		/* In case of modem ssr, we need to assign memory back to linux.
-		 * This is not true after cold boot since linux already owns it.
-		 * Also for secure boot devices, modem memory has to be released
-		 * after MBA is booted. */
-		if (desc->modem_ssr) {
-			ret = pil_assign_mem_to_linux(desc, priv->region_start,
-				(priv->region_end - priv->region_start));
-			if (ret)
-				pil_err(desc, "Failed to assign to linux, ret- %d\n",
-								ret);
-		}
 		ret = pil_assign_mem_to_subsys_and_linux(desc,
 				priv->region_start,
 				(priv->region_end - priv->region_start));
@@ -855,6 +891,7 @@ int pil_boot(struct pil_desc *desc)
 	ret = desc->ops->auth_and_reset(desc);
 	if (ret) {
 		pil_err(desc, "Failed to bring out of reset\n");
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		goto err_auth_and_reset;
 	}
 	pil_info(desc, "Brought out of reset\n");
@@ -885,6 +922,8 @@ out:
 						priv->region_start),
 					VMID_HLOS);
 			}
+			if (desc->clear_fw_region && priv->region_start)
+				pil_clear_segment(desc);
 			dma_free_attrs(desc->dev, priv->region_size,
 					priv->region, priv->region_start,
 					&desc->attrs);

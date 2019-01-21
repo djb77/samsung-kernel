@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2016 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -36,22 +36,26 @@ int mc_clock_init(void)
 	int ret = 0;
 #ifdef MC_CLOCK_CORESRC_DEFAULTRATE
 	int core_src_rate = MC_CLOCK_CORESRC_DEFAULTRATE;
-
+#ifdef MC_CRYPTO_CLOCK_CORESRC_PROPNAME
+	u32 of_core_src_rate = MC_CLOCK_CORESRC_DEFAULTRATE;
+#endif
 	/* Get core clk src */
 	clk_ctx.mc_ce_core_src_clk = clk_get(g_ctx.mcd, "core_clk_src");
 	if (IS_ERR(clk_ctx.mc_ce_core_src_clk)) {
 		ret = PTR_ERR(clk_ctx.mc_ce_core_src_clk);
-		mc_dev_err("cannot get core src clock: %d\n", ret);
+		mc_dev_err("cannot get core src clock: %d", ret);
 		goto error;
 	}
 
 #ifdef MC_CRYPTO_CLOCK_CORESRC_PROPNAME
 	if (of_property_read_u32(g_ctx.mcd->of_node,
 				 MC_CRYPTO_CLOCK_CORESRC_PROPNAME,
-				 &core_src_rate)) {
+				 &of_core_src_rate)) {
 		core_src_rate = MC_CLOCK_CORESRC_DEFAULTRATE;
-		mc_dev_err("cannot get ce clock frequency from DT, use %d\n",
+		mc_dev_err("cannot get ce clock frequency from DT, use %d",
 			   core_src_rate);
+	} else {
+		core_src_rate = of_core_src_rate;
 	}
 #endif /* MC_CRYPTO_CLOCK_CORESRC_PROPNAME */
 
@@ -59,7 +63,7 @@ int mc_clock_init(void)
 	if (ret) {
 		clk_put(clk_ctx.mc_ce_core_src_clk);
 		clk_ctx.mc_ce_core_src_clk = NULL;
-		mc_dev_err("cannot set core clock src rate: %d\n", ret);
+		mc_dev_err("cannot set core clock src rate: %d", ret);
 		ret = -EIO;
 		goto error;
 	}
@@ -69,7 +73,7 @@ int mc_clock_init(void)
 	clk_ctx.mc_ce_core_clk = clk_get(g_ctx.mcd, "core_clk");
 	if (IS_ERR(clk_ctx.mc_ce_core_clk)) {
 		ret = PTR_ERR(clk_ctx.mc_ce_core_clk);
-		mc_dev_err("cannot get core clock: %d\n", ret);
+		mc_dev_err("cannot get core clock: %d", ret);
 		goto error;
 	}
 	/* Get Interface clk */
@@ -77,7 +81,7 @@ int mc_clock_init(void)
 	if (IS_ERR(clk_ctx.mc_ce_iface_clk)) {
 		clk_put(clk_ctx.mc_ce_core_clk);
 		ret = PTR_ERR(clk_ctx.mc_ce_iface_clk);
-		mc_dev_err("cannot get iface clock: %d\n", ret);
+		mc_dev_err("cannot get iface clock: %d", ret);
 		goto error;
 	}
 	/* Get AXI clk */
@@ -86,7 +90,7 @@ int mc_clock_init(void)
 		clk_put(clk_ctx.mc_ce_iface_clk);
 		clk_put(clk_ctx.mc_ce_core_clk);
 		ret = PTR_ERR(clk_ctx.mc_ce_bus_clk);
-		mc_dev_err("cannot get AXI bus clock: %d\n", ret);
+		mc_dev_err("cannot get AXI bus clock: %d", ret);
 		goto error;
 	}
 	return ret;
@@ -120,19 +124,19 @@ int mc_clock_enable(void)
 
 	rc = clk_prepare_enable(clk_ctx.mc_ce_core_clk);
 	if (rc) {
-		mc_dev_err("cannot enable core clock\n");
+		mc_dev_err("cannot enable core clock");
 		goto err_core;
 	}
 
 	rc = clk_prepare_enable(clk_ctx.mc_ce_iface_clk);
 	if (rc) {
-		mc_dev_err("cannot enable interface clock\n");
+		mc_dev_err("cannot enable interface clock");
 		goto err_iface;
 	}
 
 	rc = clk_prepare_enable(clk_ctx.mc_ce_bus_clk);
 	if (rc) {
-		mc_dev_err("cannot enable bus clock\n");
+		mc_dev_err("cannot enable bus clock");
 		goto err_bus;
 	}
 

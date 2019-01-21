@@ -446,6 +446,14 @@ config LEDS_TCA6507
 	  LED driver chips accessed via the I2C bus.
 	  Driver support brightness control and hardware-assisted blinking.
 
+config LEDS_TLC591XX
+	tristate "LED driver for TLC59108 and TLC59116 controllers"
+	depends on LEDS_CLASS && I2C
+	select REGMAP_I2C
+	help
+	  This option enables support for Texas Instruments TLC59108
+	  and TLC59116 LED controllers.
+
 config LEDS_MAX8997
 	tristate "LED support for MAX8997 PMIC"
 	depends on LEDS_CLASS && MFD_MAX8997
@@ -571,9 +579,26 @@ config LEDS_SM5705_RGB
 	  SM5705 is a fully programmable, constant current
 	  three channel LED driver with flexible control interface.
 
+config LEDS_SM5708
+	tristate "LED support for SM5708 Flashlight"
+	depends on I2C && MFD_SM5708
+	help
+	  This option enables support for on-chip LED driver on
+	  Silicon-mitus SM5708 includes Torch, Flash.
+
+config LEDS_SM5708_RGB
+	tristate "LED driver for SM5708 LED"
+	  help
+	  This option enables support for RGB LED driver
+	  accessed via the I2C bus.
+	  SM5708 is a fully programmable, constant current
+	  three channel LED driver with flexible control interface.
+
 config DUAL_LEDS_FLASH
 	tristate "Dual leds flash driver for main camera"
 	help
+	  This is obsolute. Alternatives are:
+	  FRONT_LED_FLASH, FRONT_DUAL_LED_FLASH & REAR_DUAL_LED_FLASH
 	  A driver for dual LEDs flash
 	  This option enables support for the dual LEDs on the SM5705.
 
@@ -581,6 +606,21 @@ config LEDS_SEPARATE_PREFLASH
 	tristate "Seperate preflash current for main camera"
 	help
 	  Option for seperate preflash current on SM5705.
+
+config REAR_DUAL_LED_FLASH
+	tristate "support for dual rear led flash"
+	help
+	  Enables sysfs node for dual rear led flash support.
+
+config FRONT_DUAL_LED_FLASH
+	tristate "support for dual front led flash"
+	help
+	  Enables sysfs node for dual front led flash support.
+
+config FRONT_LED_FLASH
+	tristate "support for front led flash"
+	help
+	  Enables sysfs node for front led flash support.
 
 config LEDS_S2MU005
 	tristate "S2MU005 flash LED driver"
@@ -608,6 +648,11 @@ config FRONT_FLASH
 	---help---
 		ONLY for Front FLASH Model using.
 		Front LED for LM3632 or KTD2692 Rear LED SM5703.
+
+config LEDS_KTD2692_FOR_FRONT
+	bool "KTD2692 LED FOR FRONT LED FLASH"
+	help
+	  ONLY for Model using KTD2692 LED for Front LED Flash.
 
 config ACTIVE_FLASH
 	tristate "set Active Flash attribute"

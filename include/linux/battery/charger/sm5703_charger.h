@@ -115,6 +115,17 @@ enum {
 #define SM5703_FREQSEL_1P5MHZ           0x2
 #define SM5703_FREQSEL_1P8MHZ           0x3
 
+#define SM5703_DISLIMIT_MASK            0x07
+#define SM5703_DISLIMIT_SHIFT           0x00
+
+#define SM5703_DISLIMIT_2A              0x1
+#define SM5703_DISLIMIT_2P5A            0x2
+#define SM5703_DISLIMIT_3A              0x3
+#define SM5703_DISLIMIT_3P5A            0x4
+#define SM5703_DISLIMIT_4A              0x5
+#define SM5703_DISLIMIT_4P5A            0x6
+#define SM5703_DISLIMIT_5A              0x7
+
 #define SM5703_BST_IQ3LIMIT_0P7X        0x0
 #define SM5703_BST_IQ3LIMIT_1X          0x1
 #define SM5703_BST_IQ3LIMIT_MASK            0x80
@@ -124,6 +135,10 @@ enum {
 #define MINIMUM_INPUT_CURRENT			300
 #define SLOW_CHARGING_CURRENT_STANDARD	400
 
+#define ENABLE 1
+#define DISABLE 0
+
+extern bool sec_bat_get_slate_mode(void);
 extern sec_battery_platform_data_t sec_battery_pdata;
 extern int poweroff_charging;
 

@@ -41,7 +41,8 @@ int ist30xx_isp_read_burst(struct i2c_client *client, u32 addr, u32 *buf32,
     u16 remain_len = len;
 
     for (i = 0; i < len; i += max_len) {
-        if (remain_len < max_len) max_len = remain_len;
+        if (remain_len < max_len)
+            max_len = remain_len;
         ret = ist30xx_read_buf(client, addr, buf32, max_len);
         if (unlikely(ret)) {
             tsp_err("Burst fail, addr: %x\n", __func__, addr);
@@ -64,7 +65,8 @@ int ist30xx_isp_write_burst(struct i2c_client *client, u32 addr, u32 *buf32,
     u16 remain_len = len;
 
     for (i = 0; i < len; i += max_len) {
-        if (remain_len < max_len) max_len = remain_len;
+        if (remain_len < max_len)
+            max_len = remain_len;
         ret = ist30xx_write_buf(client, addr, buf32, max_len);
         if (unlikely(ret)) {
             tsp_err("Burst fail, addr: %x\n", addr);
@@ -573,6 +575,7 @@ int ist30xx_isp_read_ium(struct ist30xx_data *data, u32 addr, u32 *buf32,
     return ret;
 }
 
+#ifdef TCLM_CONCEPT
 int ist30xx_write_sec_info(struct ist30xx_data *data, u8 idx, u32 *buf32,
         int len)
 {
@@ -585,8 +588,6 @@ int ist30xx_write_sec_info(struct ist30xx_data *data, u8 idx, u32 *buf32,
             (eHCOM_FW_HOLD << 16) | (IST30XX_ENABLE & 0xFFFF));
     if (ret)
         goto err_write_sec_info;
-
-    ist30xx_delay(40);
 
     for (i = 0; i < len; i++) {
         ret = ist30xx_write_buf(data->client,
@@ -632,8 +633,6 @@ int ist30xx_read_sec_info(struct ist30xx_data *data, u8 idx, u32 *buf32,
     if (ret)
         goto err_read_sec_info;
 
-    ist30xx_delay(40);
-
     for (i = 0; i < len; i++) {
         ret = ist30xx_write_cmd(data, IST30XX_HIB_CMD,
                 (eHCOM_SET_SEC_INFO_R_IDX << 16) | ((idx + i) & 0xFFFF));
@@ -664,6 +663,7 @@ err_read_sec_info:
 
     return ret;
 }
+#endif
 
 int ist30xx_ium_read(struct ist30xx_data *data, u32 *buf32)
 {
@@ -774,12 +774,9 @@ int ist30xx_calib_wait(struct ist30xx_data *data)
                     CALIB_TO_STATUS(data->status.calib_msg[1]),
                     CALIB_TO_GAP(data->status.calib_msg[1]),
                     data->status.calib_msg[1]);
-#ifdef IST30XX_USE_SELF
+
             if ((CALIB_TO_STATUS(data->status.calib_msg[0]) == 0) &&
                     (CALIB_TO_STATUS(data->status.calib_msg[1]) == 0))
-#else
-            if (CALIB_TO_STATUS(data->status.calib_msg[1]) == 0)
-#endif
                 return 0;
             else
                 return -EAGAIN;
@@ -788,193 +785,6 @@ int ist30xx_calib_wait(struct ist30xx_data *data)
     tsp_warn("Calibration time out\n");
 
     return -EPERM;
-}
-
-int ist30xx_calibrate(struct ist30xx_data *data, int wait_cnt)
-{
-    int ret = -ENOEXEC;
-#ifdef PAT_CONTROL
-    u32 *buf32;
-    u32 temp = 0;
-    int len = 1;    //1~32
-
-    /* get pat data */
-    if (ist30xx_intr_wait(data, 30) < 0){
-        tsp_info("%s : intr wait fail", __func__);
-            return ret;
-    }
-
-    buf32 = kzalloc(len * sizeof(u32), GFP_KERNEL);
-    if (unlikely(!buf32)) {
-        tsp_err("failed to allocate %s\n", __func__);
-        return ret;
-    }
-
-    ret = ist30xx_read_sec_info(data, PAT_TSP_TEST_DATA, buf32, len);
-    if (unlikely(ret)) {
-        tsp_err("sec info read fail\n");
-        kfree(buf32);
-        return ret;
-    }
-
-    data->test_result.data[0] = buf32[0] & 0xff;
-    kfree(buf32);
-
-    tsp_info("%s : test_result=%x, status.update=%d update_keystring=%d initialized=%d\n", __func__,
-            data->test_result.data[0], data->status.update, data->status.update_keystring, data->initialized);
-
-    buf32 = kzalloc(len * sizeof(u32), GFP_KERNEL);
-    if (unlikely(!buf32)) {
-        tsp_err("failed to allocate %s\n", __func__);
-        return ret;
-    }
-    ret = ist30xx_read_sec_info(data, PAT_CAL_COUNT_FIX_VERSION, buf32, len);
-    if (unlikely(ret)) {
-        tsp_err("sec info read fail\n");
-        kfree(buf32);
-        return ret;
-    }
-
-    data->cal_count = ((buf32[0] & 0xffff0000)>>16);
-    data->tune_fix_ver = buf32[0] & 0xffff;
-    kfree(buf32);
-
-    tsp_info("%s: pat_func=%d afe_base=%04X cal_count=%X tune_fix_ver=%04X\n",
-            __func__, data->dt_data->pat_function, data->dt_data->afe_base,
-            data->cal_count, data->tune_fix_ver);
-
-    if (data->cal_count == 0xff) {
-        data->cal_count = 0;
-        tsp_info("%s: initialize nv as default value & excute autotune \n",
-                __func__);
-        goto start_calibration;
-    }
-
-    /* do not excute calibration check */
-
-    /* pat_function(0) */
-    if ((data->dt_data->pat_function == PAT_CONTROL_NONE) &&
-            (data->cal_count != 0)) {
-        tsp_info("%s: skip\n", __func__);
-        return 0;
-    }
-    /* pat_function(1) */
-    if ((data->dt_data->pat_function == PAT_CONTROL_CLEAR_NV) &&
-            (!data->initialized)) {
-        if (data->status.update == 0) {
-            //ist30xx_check_auto_update : need not update
-            tsp_info("%s : ist30xx_check_auto_update skip\n", __func__);
-            return 0;
-        }
-    }
-    /* pat_function(2) */
-    if ((data->dt_data->pat_function == PAT_CONTROL_PAT_MAGIC) &&
-            (!data->initialized)) {
-		if(data->status.update == 0){	//ist30xx_check_auto_update : need not update
-				tsp_info("%s : ist30xx_check_auto_update skip\n", __func__);
-				return 0;
-		}
-
-        if (data->dt_data->afe_base > data->tune_fix_ver)
-            data->cal_count = 0;
-
-        if (data->cal_count > 0) {
-            tsp_info("%s: probe skip (initialized=%d)\n", __func__,
-                    data->initialized);
-            return 0;
-        }
-    } else if ((data->dt_data->pat_function == PAT_CONTROL_PAT_MAGIC) &&
-            (data->status.update_keystring == 1) && (data->initialized)) {
-        if ((data->cal_count > 0) && (data->cal_count <= PAT_MAX_LCIA)) {
-            tsp_info("%s: upgrade skip\n", __func__);
-            return 0;
-        }
-    }
-start_calibration:
-#endif
-
-    tsp_info("*** Calibrate %ds ***\n", calib_ms_delay / 10);
-
-    data->status.calib = 1;
-    ist30xx_disable_irq(data);
-    while (1) {
-        ret = ist30xx_cmd_calibrate(data);
-        if (unlikely(ret))
-            continue;
-
-        ist30xx_enable_irq(data);
-        ret = ist30xx_calib_wait(data);
-        if (likely(!ret))
-            break;
-
-        ist30xx_disable_irq(data);
-
-        if (--wait_cnt == 0)
-            break;
-
-        ist30xx_reset(data, false);
-    }
-
-    ist30xx_disable_irq(data);
-    ist30xx_reset(data, false);
-    data->status.calib = 0;
-    ist30xx_enable_irq(data);
-
-#ifdef PAT_CONTROL
-    if (ret)
-        return ret;
-
-    /* cal_count */
-    if  (!data->initialized)    {
-        if (data->dt_data->pat_function == PAT_CONTROL_CLEAR_NV) {
-            /* pat_function(1) */
-            data->cal_count = 0;
-        } else if (data->dt_data->pat_function == PAT_CONTROL_PAT_MAGIC) {
-            /* pat_function(2)) */
-            data->cal_count = PAT_MAGIC_NUMBER;
-        } else if (data->dt_data->pat_function == PAT_CONTROL_FORCE_UPDATE) {
-            /* pat_function(5)) */
-            data->cal_count = PAT_MAGIC_NUMBER;
-        }
-    } else {
-        if (data->dt_data->pat_function == PAT_CONTROL_NONE) {
-            /* pat_function(0) */
-        } else if (data->dt_data->pat_function == PAT_CONTROL_CLEAR_NV) {
-            /* pat_function(1) */
-            data->cal_count = 0;
-        } else if (data->dt_data->pat_function == PAT_CONTROL_PAT_MAGIC) {
-            /* pat_function(2) */
-            if((data->status.update_keystring == 1)){
-                if(data->cal_count == 0)
-                    data->cal_count = PAT_MAGIC_NUMBER;
-                else
-                    data->cal_count += 1;
-            }
-        } else if (data->dt_data->pat_function == PAT_CONTROL_FORCE_CMD) {
-            /* pat_function(6)) */
-            if (data->cal_count >= PAT_MAGIC_NUMBER)
-                data->cal_count = 0;
-
-            data->cal_count += 1;
-            if (data->cal_count > PAT_MAX_LCIA)
-                data->cal_count = PAT_MAX_LCIA;
-        } else {
-            data->cal_count += 1;
-        }
-
-        if (data->cal_count > PAT_MAX_MAGIC)
-            data->cal_count = PAT_MAX_MAGIC;
-    }
-
-    temp = ((data->cal_count & 0xff)<<16) | (data->fw.cur.fw_ver & 0xffff);
-    data->tune_fix_ver = data->fw.cur.fw_ver & 0xffff;
-
-    ist30xx_write_sec_info(data, PAT_CAL_COUNT_FIX_VERSION, &temp, 1);
-    tsp_info("%s: pat_function=%d pat_data=%08X\n", __func__,
-            data->dt_data->pat_function, temp);
-#endif
-
-    return ret;
 }
 
 int ist30xx_parse_tags(struct ist30xx_data *data, const u8 *buf, const u32 size)
@@ -1063,6 +873,7 @@ int ist30xx_tsp_update_info(struct ist30xx_data *data)
     u32 tkey_info0, tkey_info1, tkey_info2;
     u32 finger_info, baseline, threshold;
     u32 debugging_info;
+    u32 recording_info;
     TSP_INFO *tsp = &data->tsp_info;
     TKEY_INFO *tkey = &data->tkey_info;
 
@@ -1117,13 +928,21 @@ int ist30xx_tsp_update_info(struct ist30xx_data *data)
     baseline = info[IST30XX_CMD_VALUE(eHCOM_GET_BASELINE)];
     threshold = info[IST30XX_CMD_VALUE(eHCOM_GET_TOUCH_TH)];
     debugging_info = info[IST30XX_CMD_VALUE(eHCOM_GET_DBG_INFO_BASE)];
+    recording_info = info[IST30XX_CMD_VALUE(eHCOM_GET_REC_INFO_BASE)];
+    data->self_cdc_addr = info[IST30XX_CMD_VALUE(eHCOM_GET_SELF_CDC_BASE)];
     data->cdc_addr = info[IST30XX_CMD_VALUE(eHCOM_GET_CDC_BASE)];
     data->sec_info_addr = info[IST30XX_CMD_VALUE(eHCOM_GET_SEC_INFO_BASE)];
     data->zvalue_addr = info[IST30XX_CMD_VALUE(eHCOM_GET_ZVALUE_BASE)];
     data->algorithm_addr = info[IST30XX_CMD_VALUE(eHCOM_GET_ALGO_BASE)];
 
-    data->debugging_addr = debugging_info & 0x00FFFFFF;
+    data->debugging_addr = debugging_info & 0xFFFFFF;
     data->debugging_size = (debugging_info >> 24) & 0xFF;
+
+    data->rec_addr = recording_info & 0xFFFF;
+    data->rec_size = (recording_info >> 16) & 0xFFFF;
+
+    if (data->self_cdc_addr == 0)
+        data->self_cdc_addr = data->cdc_addr + IST30XX_SELF_CDC_OFFSET;
 
     tsp->ch_num.rx = (tsp_ch >> 16) & 0xFFFF;
     tsp->ch_num.tx = tsp_ch & 0xFFFF;
@@ -1286,12 +1105,25 @@ int ist30xx_fw_recovery(struct ist30xx_data *data)
     data->fw.bin.fw_ver = ist30xx_parse_ver(data, FLAG_FW, fw);
     data->fw.bin.test_ver = ist30xx_parse_ver(data, FLAG_TEST, fw);
     data->fw.bin.core_ver = ist30xx_parse_ver(data, FLAG_CORE, fw);
-
+#ifdef TCLM_CONCEPT
+    ret = ist30xx_tclm_get_nvm_all(data, true);
+    if (unlikely(!ret)) {
+        tsp_info("TCLM_CONCEPT get_nvm_all failed\n");
+        ret = -EIO;
+        return ret;
+    }
+#endif
     mutex_lock(&data->lock);
+#ifdef TCLM_CONCEPT
+	ist30xx_tclm_root_of_cal(data, CALPOSITION_TESTMODE);
+#endif
     ret = ist30xx_fw_update(data, fw, fw_size);
     if (ret == 0) {
         ist30xx_print_info(data);
-        ist30xx_calibrate(data, 1);
+#ifdef TCLM_CONCEPT
+	ist30xx_execute_tclm_package(data, 0);
+	ist30xx_tclm_root_of_cal(data, CALPOSITION_TESTMODE);
+#endif
     }
     mutex_unlock(&data->lock);
 
@@ -1328,7 +1160,7 @@ int ist30xx_check_auto_update(struct ist30xx_data *data)
 
     ist30xx_write_cmd(data, IST30XX_HIB_CMD,
             (eHCOM_FW_HOLD << 16) | (IST30XX_ENABLE & 0xFFFF));
-    ist30xx_delay(20);
+    ist30xx_delay(40);
 
     ret = ist30xx_get_tsp_info(data);
     if (unlikely(ret))
@@ -1357,6 +1189,7 @@ int ist30xx_check_auto_update(struct ist30xx_data *data)
             if (unlikely((ret) || (chksum != fw->chksum))) {
                 tsp_warn("Checksum error, IC: %x, Bin: %x (ret: %d)\n",
                      chksum, fw->chksum, ret);
+                data->checksum_result = 1;
                 goto fw_check_end;
             }
         }
@@ -1384,20 +1217,24 @@ int ist30xx_auto_bin_update(struct ist30xx_data *data)
     int retry = IST30XX_MAX_RETRY_CNT;
     const struct firmware *firmware = NULL;
     struct ist30xx_fw *fw = &data->fw;
-
+    int restore_cal = 0;
+    int skip_firmup = 0;
+    int rc = 0;
+    int len = 1;
+    u32 buff;
     if (data->dt_data->fw_bin) {
         ret = request_firmware(&firmware, data->dt_data->fw_path,
                 &data->client->dev);
         if (ret) {
             tsp_err("do not request firmware: %d\n", ret);
-            return 0;
+            return false;
         }
 
         fw->buf = (u8 *)kmalloc((int)firmware->size, GFP_KERNEL);
         if (unlikely(!fw->buf)) {
             release_firmware(firmware);
             tsp_err("Error allocating memory for firmware.\n");
-            return -ENOMEM;
+            return false;
         }
 
         memcpy(fw->buf, firmware->data, (int)firmware->size);
@@ -1426,45 +1263,99 @@ int ist30xx_auto_bin_update(struct ist30xx_data *data)
 
     mutex_lock(&data->lock);
     ret = ist30xx_check_auto_update(data);
-#ifdef PAT_CONTROL
-    if (data->dt_data->pat_function == PAT_CONTROL_FORCE_UPDATE)
-        ret = -1;    //force update
-#endif
     mutex_unlock(&data->lock);
+	
+/* ret < 0 force update */
+    rc = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_CAL_COUNT, &buff, len);
+    if (unlikely(rc)) {
+        tsp_err("sec info read fail\n");
+        data->cal_count = 0;
+    }
+    data->cal_count = buff & 0xff;
+    tsp_info("%s : cal_count : %02X\n", __func__, data->cal_count);
+
+    rc = ist30xx_read_sec_info(data, IST30XX_NVM_OFFSET_TUNE_VERSION, &buff, len);
+    if (unlikely(rc)) {
+        tsp_err("sec info read fail\n");
+        data->tune_fix_ver = 0;
+    }
+    data->tune_fix_ver = buff;
+    tsp_info("%s : tune_fix_ver : %04X\n", __func__, data->tune_fix_ver);
 
     if (likely(ret >= 0)) {
-#ifdef PAT_CONTROL
-        goto calibrate;
-#else
-        return ret;
+        skip_firmup = 1;
+    }
+#ifdef TCLM_CONCEPT
+    /* don't firmup case */
+    else {
+        if ((data->dt_data->afe_base > data->tune_fix_ver) && (data->dt_data->tclm_level > TCLM_LEVEL_CLEAR_NV)) {
+        /* tune version up case */
+            ist30xx_tclm_root_of_cal(data, CALPOSITION_TUNEUP);
+            restore_cal = 1;
+        } else if (data->dt_data->tclm_level== TCLM_LEVEL_CLEAR_NV) {
+        /* firmup case */
+            ist30xx_tclm_root_of_cal(data, CALPOSITION_FIRMUP);
+            restore_cal = 1;
+        }
+    }
+
+    /* always check case */
+    if (restore_cal == 0){
+        if ((data->cal_count == 0) || (data->cal_count == 0xFF)) {
+            tsp_err("%s: Calcount is abnormal,%02X \n", __func__, data->cal_count);
+             /* nvm uninitialed case */
+            ist30xx_tclm_root_of_cal(data, CALPOSITION_INITIAL);
+            restore_cal = 1;
+        } else if (data->dt_data->tclm_level == TCLM_LEVEL_EVERYTIME) {
+            /* everytime case */
+            ist30xx_tclm_root_of_cal(data, CALPOSITION_EVERYTIME);
+            restore_cal = 1;
+        }
+    }
 #endif
-    }
 
-    tsp_info("Update version. fw(main, test, core): %x(%x, %x, %x) -> "
-            "%x(%x, %x, %x)\n", fw->cur.fw_ver, fw->cur.main_ver,
-            fw->cur.test_ver, fw->cur.core_ver, fw->bin.fw_ver,
-            fw->bin.main_ver, fw->bin.test_ver, fw->bin.core_ver);
-
+    tsp_info("Update version. fw(main, test, core): %x(%x, %x, %x)-> "
+        "%x(%x, %x, %x) skip_firmware : %d restore_cal %d \n", fw->cur.fw_ver, fw->cur.main_ver,
+        fw->cur.test_ver, fw->cur.core_ver, fw->bin.fw_ver,
+        fw->bin.main_ver, fw->bin.test_ver, fw->bin.core_ver, skip_firmup, restore_cal);
     mutex_lock(&data->lock);
-    while (retry--) {
-        ret = ist30xx_fw_update(data, fw->buf, fw->buf_size);
-        if (unlikely(!ret))
-            break;
-    }
-    mutex_unlock(&data->lock);
-
-    if (unlikely(ret))
+    if ((skip_firmup == 1) && (restore_cal == 0)) {
+        mutex_unlock(&data->lock);
+        ret = true;
         goto end_update;
-
-#ifdef PAT_CONTROL
-calibrate:
-#endif
-    mutex_lock(&data->lock);
-    ist30xx_calibrate(data, IST30XX_MAX_RETRY_CNT);
+    } else {
+        while (retry--) {
+            ret = ist30xx_fw_update(data, fw->buf, fw->buf_size);
+            if (unlikely(!ret))
+                break;
+        }
+    }
     mutex_unlock(&data->lock);
+    if (unlikely(ret)) {
+        goto end_update;
+    }
 
+#ifdef TCLM_CONCEPT
+    if (restore_cal == 0) {
+        ist30xx_tclm_root_of_cal(data, CALPOSITION_NONE);
+        ret = true;
+        goto end_update;
+    } else {
+        ret = ist30xx_execute_tclm_package(data, 0);
+        if (ret) {
+            tsp_info("calibrate successed\n");
+            //ist30xx_tclm_get_nvm_all(data, true);
+            ist30xx_tclm_root_of_cal(data, CALPOSITION_NONE);
+            goto end_update;
+        } else {
+            tsp_info("calibrate failed\n");
+            goto end_update;
+        }
+    }
+#else
+    ist30xx_execute_force_calibration(data);
+#endif
 end_update:
-
     return ret;
 }
 #endif
@@ -1575,11 +1466,16 @@ ssize_t ist30xx_fw_store(struct device *dev, struct device_attribute *attr,
     }
 
     mutex_lock(&data->lock);
+#ifdef TCLM_CONCEPT
+    ist30xx_tclm_root_of_cal(data, CALPOSITION_TESTMODE);
+#endif
     ret = ist30xx_fw_update(data, fw, fw_size);
     if (ret == 0) {
         ist30xx_print_info(data);
-        if (calib)
-            ist30xx_calibrate(data, 1);
+#ifdef TCLM_CONCEPT
+        ist30xx_execute_tclm_package(data, 0);
+        ist30xx_tclm_root_of_cal(data, CALPOSITION_NONE);
+#endif
     }
     mutex_unlock(&data->lock);
 
@@ -1613,8 +1509,7 @@ ssize_t ist30xx_fw_sdcard_show(struct device *dev,
     old_fs = get_fs();
     set_fs(get_ds());
 
-    snprintf(fw_path, MAX_FILE_PATH, "/sdcard/%s",
-         IST30XX_FW_NAME);
+    snprintf(fw_path, MAX_FILE_PATH, "/sdcard/%s", IST30XX_FW_NAME);
     fp = filp_open(fw_path, O_RDONLY, 0);
     if (IS_ERR(fp)) {
         data->status.update_result = 1;

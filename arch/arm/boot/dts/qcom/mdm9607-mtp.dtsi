@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,6 +29,15 @@
 };
 
 &soc {
+	qcom,ntn_hsic {
+		compatible = "qcom,ntn-hsic";
+		vdd-ntn-hsic-supply = <&mdm9607_l11>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ntn_rst_gpio_default>;
+		ntn-rst-gpio = <&tlmm_pinmux 30 1>;
+		ntn-phy-id = <7>;
+	};
+
 };
 
 &blsp1_uart5 {
@@ -43,6 +52,18 @@
 
 &spi_1 {
 	status = "ok";
+
+	can-controller@0 {
+		compatible = "fsl,k61";
+		spi-max-frequency = <4800000>;
+		reg = <0>;
+		interrupt-parent = <&tlmm_pinmux>;
+		interrupts = <25 0>;
+		reset-gpio = <&tlmm_pinmux 11 0x1>;
+		pinctrl-names = "active", "sleep";
+		pinctrl-0 = <&can_rst_on>;
+		pinctrl-1 = <&can_rst_off>;
+	};
 };
 
 &blsp1_uart3 {

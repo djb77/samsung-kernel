@@ -97,19 +97,45 @@ static int mdss_panel_off_post(struct mdss_dsi_ctrl_pdata *ctrl)
 	return true;
 }
 
-static int mdss_panel_revision(struct mdss_dsi_ctrl_pdata *ctrl)
+static char mdss_panel_revision(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	struct samsung_display_driver_data *vdd = check_valid_ctrl(ctrl);
+	int ndx = display_ndx_check(vdd->ctrl_dsi[DSI_CTRL_0]);
 
 	if (IS_ERR_OR_NULL(vdd)) {
 		pr_err("%s: Invalid data ctrl : 0x%zx vdd : 0x%zx", __func__, (size_t)ctrl, (size_t)vdd);
 		return false;
 	}
 
-	vdd->panel_revision = 0;
+	if (vdd->manufacture_id_dsi[ndx] == PBA_ID)
+		mdss_panel_attach_set(ctrl, false);
+	else
+		mdss_panel_attach_set(ctrl, true);
 
-	return true;
+	vdd->aid_subdivision_enable = true;
+
+	switch (mdss_panel_rev_get(ctrl)) {
+	case 0x00:
+		vdd->panel_revision = 'A';
+		break;
+	case 0x01:
+		vdd->panel_revision = 'A';
+		break;
+	default:
+		vdd->panel_revision = 'A';
+		LCD_ERR("Invalid panel_rev(default rev : %c)\n",
+				vdd->panel_revision);
+		break;
+	}
+
+	vdd->panel_revision -= 'A';
+
+	LCD_INFO_ONCE("panel_revision = %c %d \n",
+					vdd->panel_revision + 'A', vdd->panel_revision);
+
+	return (vdd->panel_revision + 'A');
 }
+
 
 static struct dsi_panel_cmds * mdss_brightness_tft_pwm(struct mdss_dsi_ctrl_pdata *ctrl, int *level_key)
 {
@@ -119,13 +145,11 @@ static struct dsi_panel_cmds * mdss_brightness_tft_pwm(struct mdss_dsi_ctrl_pdat
 		pr_err("%s: Invalid data ctrl : 0x%zx vdd : 0x%zx", __func__, (size_t)ctrl, (size_t)vdd);
 		return NULL;
 	}
-	vdd->candela_level = get_candela_value(vdd, ctrl->ndx);
 
-	vdd->dtsi_data[ctrl->ndx].tft_pwm_tx_cmds[vdd->panel_revision].cmds[1].payload[1] = vdd->candela_level;
+	get_panel_tx_cmds(ctrl, TX_TFT_PWM)->cmds[1].payload[1] = vdd->candela_level;
+	*level_key = LEVEL1_KEY;
 
-	*level_key = PANEL_LEVE1_KEY;
-
-	return &vdd->dtsi_data[ctrl->ndx].tft_pwm_tx_cmds[vdd->panel_revision];
+	return get_panel_tx_cmds(ctrl, TX_TFT_PWM);
 }
 
 static void mdss_panel_init(struct samsung_display_driver_data *vdd)
@@ -163,9 +187,14 @@ static void mdss_panel_init(struct samsung_display_driver_data *vdd)
 	vdd->panel_func.samsung_brightness_elvss_temperature2 = NULL;
 	vdd->panel_func.samsung_brightness_vint = NULL;
 	vdd->panel_func.samsung_brightness_gamma = NULL;
-	vdd->brightness[0].brightness_packet_tx_cmds_dsi.link_state = DSI_HS_MODE;
+/*	vdd->brightness[0].brightness_packet_tx_cmds_dsi.link_state = DSI_HS_MODE;*/
+
+	vdd->panel_func.samsung_panel_power_ic_control = isl98608_panel_power;
 
 	mdss_panel_attach_set(vdd->ctrl_dsi[DISPLAY_1], true);
+
+	/* Initialize the panel before first commit on bootup */
+	vdd->init_panel_before_commit = true;
 }
 
 static int __init samsung_panel_init(void)

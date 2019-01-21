@@ -411,3 +411,9 @@ endif   # if NET
 # Used by archs to tell that they support BPF_JIT
 config HAVE_BPF_JIT
 	bool
+
+# Network Pacemaker
+config NETPM
+	bool "Network Pacemaker"
+	---help---
+	This feature implements Network Pacemaker (NETPM)

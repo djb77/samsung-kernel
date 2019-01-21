@@ -558,9 +558,9 @@ void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev,
 		spin_lock_irqsave(&stream_info->lock, flags);
 
 		if (BURST_STREAM == stream_info->stream_type) {
-			if (0 == stream_info->runtime_num_burst_capture || 
-				(stream_info->runtime_num_burst_capture == 1 && 
-				stream_info->activated_framedrop_period == 1)) 
+			if (0 == stream_info->runtime_num_burst_capture ||
+				(stream_info->runtime_num_burst_capture == 1 &&
+				stream_info->activated_framedrop_period == 1))
 				stream_info->current_framedrop_period =
 					MSM_VFE_STREAM_STOP_PERIOD;
 		}
@@ -1417,7 +1417,7 @@ void msm_isp_halt_send_error(struct vfe_device *vfe_dev, uint32_t event)
 	struct msm_isp_event_data error_event;
 	struct msm_vfe_axi_halt_cmd halt_cmd;
 	if (atomic_read(&vfe_dev->error_info.overflow_state) != NO_OVERFLOW) 
-		return; 
+		return;
 	if (ISP_EVENT_PING_PONG_MISMATCH == event &&
 		vfe_dev->axi_data.recovery_count < MAX_RECOVERY_THRESHOLD) {
 		pr_err("%s:pingpong mismatch from vfe%d, core%d,recovery_count %d\n",
@@ -1451,7 +1451,6 @@ void msm_isp_halt_send_error(struct vfe_device *vfe_dev, uint32_t event)
 
 	error_event.frame_id =
 		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id;
-
 	if (vfe_dev->is_split) {
 		uint32_t other_vfe_id;
 		struct vfe_device *other_vfe_dev;
@@ -1464,7 +1463,6 @@ void msm_isp_halt_send_error(struct vfe_device *vfe_dev, uint32_t event)
 		for (i = 0; i < VFE_AXI_SRC_MAX; i++)
 			other_vfe_dev->axi_data.stream_info[i].state = INACTIVE;
 	}
-
 	msm_isp_send_event(vfe_dev, event, &error_event);
 }
 
@@ -2327,9 +2325,9 @@ int msm_isp_axi_restart(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_stream *stream_info;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	uint32_t wm_reload_mask = 0x0;
-	uint32_t irq_mask0, irq_mask1; 
+	uint32_t irq_mask0, irq_mask1;
 	unsigned long flags;
-	
+
 	pr_err("%s AXI restarting VFE%d\n", __func__,vfe_dev->pdev->id);
 
 	vfe_dev->buf_mgr->frameId_mismatch_recovery = 0;

@@ -139,6 +139,7 @@ typedef struct _manager_data_t
 	bool usb_enable_state;
 	int pd_con_state;
 	int water_det;
+	int wVbus_det;
 	int is_UFPS;
         void *pd;
 	int cur_rid;
@@ -152,9 +153,14 @@ typedef struct _manager_data_t
 	int usb210_count;
 	int usb310_count;
 	int waterChg_count;
+	int water_cable_type;
+
 	unsigned long waterDet_duration;
 	unsigned long waterDet_time;
 	unsigned long dryDet_time;
+	unsigned long wVbus_duration;
+	unsigned long wVbusHigh_time;
+	unsigned long wVbusLow_time;
 }manager_data_t;
 
 

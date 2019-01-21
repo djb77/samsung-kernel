@@ -1,28 +1,27 @@
-/*****************************************************************************
-	Copyright(c) 2013 FCI Inc. All Rights Reserved
-
-	File name : fc8080_i2c.c
-
-	Description : i2c interface source file
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-
-
-	History :
-	----------------------------------------------------------------------
-*******************************************************************************/
+/*
+ *	Copyright(c) 2013 FCI Inc. All Rights Reserved
+ *
+ *	File name : fc8080_i2c.c
+ *
+ *	Description : i2c interface source file
+ *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ *	History :
+ *	----------------------------------------------------------------------
+ */
 #include <linux/module.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
@@ -102,8 +101,8 @@ static s32 i2c_dataread(HANDLE handle, u8 chip, u16 addr, u8 *data, u16 length)
 s32 fc8080_i2c_init(HANDLE handle, unsigned long param)
 {
 	static unsigned long fc8080_i2c_temp;
-	fc8080_i2c_temp = param;
 
+	fc8080_i2c_temp = param;
 	fc8080_i2c = (struct i2c_client *)fc8080_i2c_temp;
 	DPRINTK("%s : 0x%p\n", __func__, fc8080_i2c);
 

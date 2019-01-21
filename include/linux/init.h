@@ -135,6 +135,8 @@
 typedef int (*initcall_t)(void);
 typedef void (*exitcall_t)(void);
 
+extern int ddr_start_type;
+
 extern initcall_t __con_initcall_start[], __con_initcall_end[];
 extern initcall_t __security_initcall_start[], __security_initcall_end[];
 
@@ -152,6 +154,10 @@ void setup_arch(char **);
 void prepare_namespace(void);
 void __init load_default_modules(void);
 int __init init_rootfs(void);
+
+#ifdef CONFIG_DEBUG_RODATA
+void mark_rodata_ro(void);
+#endif
 
 extern void (*late_time_init)(void);
 

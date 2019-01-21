@@ -1083,6 +1083,122 @@ static char DSI0_COLOR_BLIND_MDNIE_CMDS[] ={
 0x04, //cc r1
 0x00,
 };
+static char DSI0_LIGHT_NOTIFICATION_CMDS[] ={
+//start
+0xE6,
+0x5A, //password 5A
+0x00, //mask 000
+0x00, //data_width
+0x32, //scr_roi 1 scr algo_roi 1 algo 00 1 0 00 1 0
+0x00, //roi_ctrl
+0x00, //roi1 y end
+0x00,
+0x00, //roi1 y start
+0x00,
+0x00, //roi1 x end
+0x00,
+0x00, //roi1 x start
+0x00,
+0x00, //roi0 y end
+0x00,
+0x00, //roi0 y start
+0x00,
+0x00, //roi0 x end
+0x00,
+0x00, //roi0 x start
+0x00,
+0x00, //scr Kb
+0xFF, //scr Wb
+0x00, //scr Kg
+0xFF, //scr Wg
+0x00, //scr Kr
+0xFF, //scr Wr
+0xFF, //scr Bb
+0x00, //scr Yb
+0x00, //scr Bg
+0xFF, //scr Yg
+0x00, //scr Br
+0xFF, //scr Yr
+0x00, //scr Gb
+0xFF, //scr Mb
+0xFF, //scr Gg
+0x00, //scr Mg
+0x00, //scr Gr
+0xFF, //scr Mr
+0x00, //scr Rb
+0xFF, //scr Cb
+0x00, //scr Rg
+0xFF, //scr Cg
+0xFF, //scr Rr
+0x00, //scr Cr
+0x00, //sharpen_set cc_en gamma_en 00 0 0
+0xff, //curve24 a
+0x00, //curve24 b
+0x20, //curve23 a
+0x00, //curve23 b
+0x20, //curve22 a
+0x00, //curve22 b
+0x20, //curve21 a
+0x00, //curve21 b
+0x20, //curve20 a
+0x00, //curve20 b
+0x20, //curve19 a
+0x00, //curve19 b
+0x20, //curve18 a
+0x00, //curve18 b
+0x20, //curve17 a
+0x00, //curve17 b
+0x20, //curve16 a
+0x00, //curve16 b
+0x20, //curve15 a
+0x00, //curve15 b
+0x20, //curve14 a
+0x00, //curve14 b
+0x20, //curve13 a
+0x00, //curve13 b
+0x20, //curve12 a
+0x00, //curve12 b
+0x20, //curve11 a
+0x00, //curve11 b
+0x20, //curve10 a
+0x00, //curve10 b
+0x20, //curve 9 a
+0x00, //curve 9 b
+0x20, //curve 8 a
+0x00, //curve 8 b
+0x20, //curve 7 a
+0x00, //curve 7 b
+0x20, //curve 6 a
+0x00, //curve 6 b
+0x20, //curve 5 a
+0x00, //curve 5 b
+0x20, //curve 4 a
+0x00, //curve 4 b
+0x20, //curve 3 a
+0x00, //curve 3 b
+0x20, //curve 2 a
+0x00, //curve 2 b
+0x20, //curve 1 a
+0x00, //curve 1 b
+0x04, //cc b3
+0x00,
+0x00, //cc b2
+0x00,
+0x00, //cc b1
+0x00,
+0x00, //cc g3
+0x00,
+0x04, //cc g2
+0x00,
+0x00, //cc g1
+0x00,
+0x00, //cc r3
+0x00,
+0x00, //cc r2
+0x00,
+0x04, //cc r1
+0x00,
+};
 static char DSI0_GRAYSCALE_NEGATIVE_MDNIE_CMDS[] ={
 //start
 0xE6,
@@ -1907,6 +2023,9 @@ static struct dsi_cmd_desc DSI0_GRAYSCALE_NEGATIVE_MDNIE[] = {
 static struct dsi_cmd_desc DSI0_COLOR_BLIND_MDNIE[] = {
 	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_COLOR_BLIND_MDNIE_CMDS)}, DSI0_COLOR_BLIND_MDNIE_CMDS},
 };
+static struct dsi_cmd_desc DSI0_LIGHT_NOTIFICATION_MDNIE[] = {
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_LIGHT_NOTIFICATION_CMDS)}, DSI0_LIGHT_NOTIFICATION_CMDS},
+};
 ///////////////////////////////////////////////////////////////////////////////////
 
 static struct dsi_cmd_desc DSI0_UI_MDNIE[] = {
@@ -2056,4 +2175,8 @@ static struct dsi_cmd_desc *mdnie_tune_value_dsi0[MAX_APP_MODE][MAX_MODE][MAX_OU
 		},
 };
 
+static struct dsi_cmd_desc *light_notification_tune_value[LIGHT_NOTIFICATION_MAX] = {
+	NULL,
+	DSI0_LIGHT_NOTIFICATION_MDNIE,
+};
 #endif /*_DSI_MDNIE_LITE_DATA_WVGA_SC7798D_H_*/

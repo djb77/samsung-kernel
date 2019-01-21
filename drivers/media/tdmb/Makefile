@@ -3,7 +3,7 @@
 #
 
 ccflags-y += -Idrivers/media/tdmb
-ccflags-y += -v
+#ccflags-y += -v
 
 obj-$(CONFIG_TDMB) += tdmb.o tdmb_data.o
 
@@ -23,3 +23,4 @@ obj-$(CONFIG_TDMB_TSIF_SLSI) += tdmb_tsi_slsi.o
 obj-$(CONFIG_TDMB_TSIF_QC) += tdmb_tsi_qc.o
 
 obj-$(CONFIG_TDMB_DEBUG) += tdmb_debug.o
+obj-$(CONFIG_TDMB_NOTIFIER)	+= tdmb_notifier.o

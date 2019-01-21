@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
- * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -937,7 +937,7 @@ extern char last_resume_kernel_reason[];
 extern int last_resume_kernel_reason_len;
 #endif
 
-static void msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
+bool msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 {
 	struct gpio_chip *gc = irq_desc_get_handler_data(desc);
 	const struct msm_pingroup *g;
@@ -950,11 +950,11 @@ static void msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 	int handled = 0;
 	u32 val;
 	int i;
+	bool ret;
 
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	struct irq_desc *descriptor;
 #endif
-
 	chained_irq_enter(chip, desc);
 
 	/*
@@ -989,19 +989,21 @@ static void msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 #endif
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 			descriptor = irq_to_desc(irq_pin);
-			if (!IS_ERR_OR_NULL(descriptor))
+			if (!IS_ERR_OR_NULL(descriptor)) {
 				mdss_samsung_resume_event(descriptor->irq_data.irq);
+			}
 #endif
-			generic_handle_irq(irq_pin);
-			handled++;
+			handled += generic_handle_irq(irq_pin);
 		}
 	}
 
+	ret = (handled != 0);
 	/* No interrupts were flagged */
 	if (handled == 0)
-		handle_bad_irq(irq, desc);
+		ret = handle_bad_irq(irq, desc);
 
 	chained_irq_exit(chip, desc);
+	return ret;
 }
 
 /*

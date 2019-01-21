@@ -225,7 +225,7 @@ static long tzic_ioctl(struct file *file, unsigned cmd,
 			ret=copy_from_user( &param, (void *)arg, sizeof(param) );
 			if (ret != 0) {
 				LOG(KERN_INFO "[oemflag]copy_from_user failed, ret = 0x%08x\n", ret);
-				goto return_new_from;
+				return ret;
 			}
 
 			p1 = param.name;
@@ -247,7 +247,7 @@ static long tzic_ioctl(struct file *file, unsigned cmd,
 			param.value = p2;
 			param.func_cmd = p3;
 
-			goto return_new_to;
+			ret = copy_to_user((void *)arg, &param, sizeof(param));
 		break;
 #endif /* CONFIG_TZDEV */
 
@@ -323,6 +323,7 @@ static long tzic_ioctl(struct file *file, unsigned cmd,
 				ret = get_tamper_fuse_cmd_new(param.name);
 				LOG(KERN_INFO "[oemflag]tamper_fuse before = %x\n", ret);
 				LOG(KERN_INFO "[oemflag]ioctl set_fuse\n");
+#ifdef SAMSUNG_PRODUCT_SHIP
 				//Qualcomm DRM oemflag only support HLOS_IMG_TAMPER_FUSE
 				if (param.name == OEMFLAG_TZ_DRM) {
 					mutex_lock(&tzic_mutex);
@@ -331,6 +332,7 @@ static long tzic_ioctl(struct file *file, unsigned cmd,
 					if (ret)
 						LOG(KERN_INFO "[oemflag]failed tzic_set_fuse_cmd: %d\n", ret);
 				}
+#endif				
 				mutex_lock(&tzic_mutex);
 				ret = set_tamper_fuse_cmd_new(param.name);
 				mutex_unlock(&tzic_mutex);
@@ -359,6 +361,7 @@ static long tzic_ioctl(struct file *file, unsigned cmd,
 					ret = get_tamper_fuse_cmd_new(param.name);
 					LOG(KERN_INFO "[oemflag]tamper_fuse before = %x\n", ret);
 					LOG(KERN_INFO "[oemflag]ioctl set_fuse\n");
+#ifdef SAMSUNG_PRODUCT_SHIP
 					//Qualcomm DRM oemflag only support HLOS_IMG_TAMPER_FUSE
 					if (param.name == OEMFLAG_TZ_DRM) {
 						mutex_lock(&tzic_mutex);
@@ -367,6 +370,7 @@ static long tzic_ioctl(struct file *file, unsigned cmd,
 						if (ret)
 							LOG(KERN_INFO "[oemflag]failed tzic_set_fuse_cmd: %d\n", ret);
 					}
+#endif
 					mutex_lock(&tzic_mutex);
 					ret = set_tamper_fuse_cmd_new(param.name);
 					mutex_unlock(&tzic_mutex);

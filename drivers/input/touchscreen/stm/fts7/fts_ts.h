@@ -28,7 +28,7 @@
 
 /*
 #define FTS_SUPPORT_STRINGLIB
-*/
+ */
 #define FIRMWARE_IC					"fts_ic"
 
 #define FTS_MAX_FW_PATH	64
@@ -51,7 +51,7 @@
 /*  stm5
 #define FTS_ID0							0x39
 #define FTS_ID1							0x80
-*/
+ */
 #define FTS_ID2							0x6C
 
 #define FTS_DIGITAL_REV_1	0x01
@@ -118,7 +118,7 @@
 #ifdef FTS_SUPPORT_PARTIAL_DOWNLOAD
 #define STATUS_EVENT_PURE_AUTOTUNE_FLAG_WRITE_FINISH	0x10
 #define STATUS_EVENT_PURE_AUTOTUNE_FLAG_ERASE_FINISH	0x11
-#endif 
+#endif
 #define STATUS_EVENT_MUTUAL_CAL_FRAME_CHECK	0xC1
 #define STATUS_EVENT_SELF_CAL_FRAME_CHECK	0xC2
 #define STATUS_EVENT_CHARGER_CONNECTED	0xCC
@@ -260,7 +260,7 @@
 
 #define S6E3HF2_ZERO	0x000000
 #define S6E3HA3_NOBLE	0x000040
-#define S6E3HA3_ZEN 	0x000080
+#define S6E3HA3_ZEN	0x000080
 
 #define SMARTCOVER_COVER	// for  Various Cover
 #ifdef SMARTCOVER_COVER
@@ -480,8 +480,8 @@ struct fts_ts_info {
 	unsigned char afe_ver;
 #endif
 
-	int (*stop_device) (struct fts_ts_info * info);
-	int (*start_device) (struct fts_ts_info * info);
+	int (*stop_device) (struct fts_ts_info *info);
+	int (*start_device) (struct fts_ts_info *info);
 
 	int (*fts_write_reg)(struct fts_ts_info *info, unsigned char *reg, unsigned short num_com);
 	int (*fts_read_reg)(struct fts_ts_info *info, unsigned char *reg, int cnum, unsigned char *buf, int num);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2007-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,7 @@
 #include <linux/dma-buf.h>
 #include <linux/of_platform.h>
 #include <linux/msm_dma_iommu_mapping.h>
+#include <linux/delay.h>
 
 #include <linux/qcom_iommu.h>
 #include <asm/dma-iommu.h>
@@ -174,7 +175,6 @@ static int mdss_smmu_attach_v2(struct mdss_data_type *mdata)
 	struct mdss_smmu_client *mdss_smmu;
 	int i, rc = 0;
 
-	mutex_lock(&mdp_iommu_lock);
 	for (i = 0; i < MDSS_IOMMU_MAX_DOMAIN; i++) {
 		if (!mdss_smmu_is_valid_domain_type(mdata, i))
 			continue;
@@ -206,11 +206,9 @@ static int mdss_smmu_attach_v2(struct mdss_data_type *mdata)
 			}
 		} else {
 			pr_err("iommu device not attached for domain[%d]\n", i);
-			mutex_unlock(&mdp_iommu_lock);
 			return -ENODEV;
 		}
 	}
-	mutex_unlock(&mdp_iommu_lock);
 
 	return 0;
 
@@ -223,7 +221,6 @@ err:
 			mdss_smmu->domain_attached = false;
 		}
 	}
-	mutex_unlock(&mdp_iommu_lock);
 
 	return rc;
 }
@@ -239,7 +236,6 @@ static int mdss_smmu_detach_v2(struct mdss_data_type *mdata)
 	struct mdss_smmu_client *mdss_smmu;
 	int i;
 
-	mutex_lock(&mdp_iommu_lock);
 	for (i = 0; i < MDSS_IOMMU_MAX_DOMAIN; i++) {
 		if (!mdss_smmu_is_valid_domain_type(mdata, i))
 			continue;
@@ -248,7 +244,6 @@ static int mdss_smmu_detach_v2(struct mdss_data_type *mdata)
 		if (mdss_smmu && mdss_smmu->dev && !mdss_smmu->handoff_pending)
 			mdss_smmu_enable_power(mdss_smmu, false);
 	}
-	mutex_unlock(&mdp_iommu_lock);
 
 	return 0;
 }
@@ -289,6 +284,10 @@ static int mdss_smmu_map_dma_buf_v2(struct dma_buf *dma_buf,
 {
 	int rc;
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	int retry_cnt;
+#endif
+
 	if (!mdss_smmu) {
 		pr_err("not able to get smmu context\n");
 		return -EINVAL;
@@ -296,8 +295,26 @@ static int mdss_smmu_map_dma_buf_v2(struct dma_buf *dma_buf,
 	ATRACE_BEGIN("map_buffer");
 	rc = msm_dma_map_sg_lazy(mdss_smmu->dev, table->sgl, table->nents, dir,
 		dma_buf);
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	if (!in_interrupt()) {
+		if (rc != table->nents) {
+			for (retry_cnt = 0; retry_cnt < 62 ; retry_cnt++) {
+				/* To wait free page by memory reclaim*/
+				msleep(16);
+
+				pr_err("dma map sg failed : retry (%d)\n", retry_cnt);
+				rc = msm_dma_map_sg_lazy(mdss_smmu->dev, table->sgl, table->nents, dir,
+					dma_buf);
+
+				if (rc == table->nents)
+					break;
+			}
+		}
+	}
+#endif
+
 	if (rc != table->nents) {
-		pr_err("dma map sg failed\n");
+		pr_err("dma map sg failed(%d)\n", rc);
 		return -ENOMEM;
 	}
 	ATRACE_END("map_buffer");
@@ -329,7 +346,7 @@ static void mdss_smmu_unmap_dma_buf_v2(struct sg_table *table, int domain,
  * bank device
  */
 static int mdss_smmu_dma_alloc_coherent_v2(struct device *dev, size_t size,
-		dma_addr_t *phys, dma_addr_t *iova, void *cpu_addr,
+		dma_addr_t *phys, dma_addr_t *iova, void **cpu_addr,
 		gfp_t gfp, int domain)
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
@@ -338,8 +355,8 @@ static int mdss_smmu_dma_alloc_coherent_v2(struct device *dev, size_t size,
 		return -EINVAL;
 	}
 
-	cpu_addr = dma_alloc_coherent(mdss_smmu->dev, size, iova, gfp);
-	if (!cpu_addr) {
+	*cpu_addr = dma_alloc_coherent(mdss_smmu->dev, size, iova, gfp);
+	if (!*cpu_addr) {
 		pr_err("dma alloc coherent failed!\n");
 		return -ENOMEM;
 	}
@@ -486,6 +503,134 @@ static void mdss_smmu_deinit_v2(struct mdss_data_type *mdata)
 	}
 }
 
+/*
+ * sg_clone -	Duplicate an existing chained sgl
+ * @orig_sgl:	Original sg list to be duplicated
+ * @len:	Total length of sg while taking chaining into account
+ * @gfp_mask:	GFP allocation mask
+ * @padding:	specifies if padding is required
+ *
+ * Description:
+ *   Clone a chained sgl. This cloned copy may be modified in some ways while
+ *   keeping the original sgl in tact. Also allow the cloned copy to have
+ *   a smaller length than the original which may reduce the sgl total
+ *   sg entries and also allows cloned copy to have one extra sg  entry on
+ *   either sides of sgl.
+ *
+ * Returns:
+ *   Pointer to new kmalloced sg list, ERR_PTR() on error
+ *
+ */
+static struct scatterlist *sg_clone(struct scatterlist *orig_sgl, u64 len,
+				gfp_t gfp_mask, bool padding)
+{
+	int nents;
+	bool last_entry;
+	struct scatterlist *sgl, *head;
+
+	nents = sg_nents(orig_sgl);
+	if (nents < 0)
+		return ERR_PTR(-EINVAL);
+	if (padding)
+		nents += 2;
+
+	head = kmalloc_array(nents, sizeof(struct scatterlist), gfp_mask);
+	if (!head)
+		return ERR_PTR(-ENOMEM);
+
+	sgl = head;
+
+	sg_init_table(sgl, nents);
+
+	if (padding) {
+		*sgl = *orig_sgl;
+		if (sg_is_chain(orig_sgl)) {
+			orig_sgl = sg_next(orig_sgl);
+			*sgl = *orig_sgl;
+		}
+		sgl->page_link &= (unsigned long)(~0x03);
+		sgl = sg_next(sgl);
+	}
+
+	for (; sgl; orig_sgl = sg_next(orig_sgl), sgl = sg_next(sgl)) {
+
+		last_entry = sg_is_last(sgl);
+
+		/*
+		 * * If page_link is pointing to a chained sgl then set
+		 * the sg entry in the cloned list to the next sg entry
+		 * in the original sg list as chaining is already taken
+		 * care.
+		 */
+
+		if (sg_is_chain(orig_sgl))
+			orig_sgl = sg_next(orig_sgl);
+
+		if (padding)
+			last_entry = sg_is_last(orig_sgl);
+
+		*sgl = *orig_sgl;
+		sgl->page_link &= (unsigned long)(~0x03);
+
+		if (last_entry) {
+			if (padding) {
+				len -= sg_dma_len(sgl);
+				sgl = sg_next(sgl);
+				*sgl = *orig_sgl;
+			}
+			sg_dma_len(sgl) = len ? len : SZ_4K;
+			/* Set bit 1 to indicate end of sgl */
+			sgl->page_link |= 0x02;
+		} else {
+			len -= sg_dma_len(sgl);
+		}
+	}
+
+	return head;
+}
+
+/*
+ * sg_table_clone - Duplicate an existing sg_table including chained sgl
+ * @orig_table:     Original sg_table to be duplicated
+ * @len:            Total length of sg while taking chaining into account
+ * @gfp_mask:       GFP allocation mask
+ * @padding:	    specifies if padding is required
+ *
+ * Description:
+ *   Clone a sg_table along with chained sgl. This cloned copy may be
+ *   modified in some ways while keeping the original table and sgl in tact.
+ *   Also allow the cloned sgl copy to have a smaller length than the original
+ *   which may reduce the sgl total sg entries.
+ *
+ * Returns:
+ *   Pointer to new kmalloced sg_table, ERR_PTR() on error
+ *
+ */
+static struct sg_table *sg_table_clone(struct sg_table *orig_table,
+				gfp_t gfp_mask, bool padding)
+{
+	struct sg_table *table;
+	struct scatterlist *sg = orig_table->sgl;
+	u64 len = 0;
+
+	for (len = 0; sg; sg = sg_next(sg))
+		len += sg->length;
+
+	table = kmalloc(sizeof(struct sg_table), gfp_mask);
+	if (!table)
+		return ERR_PTR(-ENOMEM);
+
+	table->sgl = sg_clone(orig_table->sgl, len, gfp_mask, padding);
+	if (IS_ERR(table->sgl)) {
+		kfree(table);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	table->nents = table->orig_nents = sg_nents(table->sgl);
+
+	return table;
+}
+
 static void mdss_smmu_ops_init(struct mdss_data_type *mdata)
 {
 	mdata->smmu_ops.smmu_attach = mdss_smmu_attach_v2;
@@ -507,6 +652,7 @@ static void mdss_smmu_ops_init(struct mdss_data_type *mdata)
 	mdata->smmu_ops.smmu_dsi_unmap_buffer =
 				mdss_smmu_dsi_unmap_buffer_v2;
 	mdata->smmu_ops.smmu_deinit = mdss_smmu_deinit_v2;
+	mdata->smmu_ops.smmu_sg_table_clone = sg_table_clone;
 }
 
 /*

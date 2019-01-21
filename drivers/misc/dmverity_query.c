@@ -7,7 +7,7 @@
 #include <linux/mm.h>
 #include <linux/types.h>
 #include <linux/highmem.h>
-#include <linux/security/lksecapp_interface.h>
+#include <linux/knox_kap.h>
 #include "qseecom_kernel.h"
 
 static int verity_lksecapp_call(void)
@@ -52,6 +52,8 @@ err_ret:
 
 #define DRIVER_DESC   "Read whether odin flash succeeded"
 
+
+#if 0
 ssize_t	dmverity_read(struct file *filep, char __user *buf, size_t size, loff_t *offset)
 {
 	uint32_t	odin_flag;
@@ -72,9 +74,27 @@ ssize_t	dmverity_read(struct file *filep, char __user *buf, size_t size, loff_t 
 	} else
 		return (int)sizeof(uint32_t);
 }
+#endif
+
+static int dmverity_read(struct seq_file *m, void *v){
+	int odin_flag = 0;
+	unsigned char ret_buffer[10];
+	odin_flag = verity_lksecapp_call();
+
+	memset(ret_buffer, 0, sizeof(ret_buffer));
+	snprintf(ret_buffer, sizeof(ret_buffer), "%08x\n", odin_flag);
+	seq_write(m, ret_buffer, sizeof(ret_buffer));
+	printk(KERN_INFO"dmverity: odin_flag: %x\n", odin_flag);
+	return 0;
+}
+static int dmverity_open(struct inode *inode, struct file *filep){
+	return single_open(filep, dmverity_read, NULL);
+}
 
 static const struct file_operations dmverity_proc_fops = {
-	.read		= dmverity_read,
+	.open       = dmverity_open,
+	.read	    = seq_read,
+	
 };
 
 /**
@@ -96,7 +116,7 @@ static int __init dmverity_odin_flag_read_init(void)
 		printk(KERN_INFO"dmverity_odin_flag_read_init:: not enabling in non-recovery mode\n");
 		goto error_return;
 	}
-	return 0;
+  return 0;
 
 error_return:
 	return -1;

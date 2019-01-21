@@ -36,5 +36,6 @@ Copyright (C) 2012, Samsung Electronics. All rights reserved.
 #include "../ss_regulator_common.h"
 
 #define S6D7AA0X11_TV080WXM_SUPPORT_PANEL_COUNT 1
+#define LCD_DEFAUL_BL_LEVEL 145
 
 #endif

@@ -426,6 +426,72 @@ static int msm_vidc_load_capability_version_table(
 	return 0;
 }
 
+static void clock_override(struct platform_device *pdev,
+	struct msm_vidc_platform_resources *platform_res,
+	struct allowed_clock_rates_table *clk_table)
+{
+	struct resource *res;
+	void __iomem *base;
+	u32 config_efuse, bin;
+	u32 venus_uplift_freq;
+	u32 is_speed_bin = 7;
+	int rc = 0;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+			"efuse");
+	if (!res) {
+		dprintk(VIDC_DBG,
+			"Failed to get resource efuse\n");
+		return;
+	}
+
+	rc = of_property_read_u32(pdev->dev.of_node, "qcom,venus-uplift-freq",
+			&venus_uplift_freq);
+	if (rc) {
+		dprintk(VIDC_DBG,
+			"Failed to determine venus-uplift-freq: %d\n", rc);
+		return;
+	}
+
+	if (!of_find_property(pdev->dev.of_node,
+		"qcom,speedbin-version", NULL)) {
+		dprintk(VIDC_DBG, "qcom,speedbin-version not found\n");
+		return;
+	}
+
+	rc = msm_vidc_load_u32_table(pdev, pdev->dev.of_node,
+		"qcom,speedbin-version",
+		sizeof(*platform_res->pf_speedbin_tbl),
+		(u32 **)&platform_res->pf_speedbin_tbl,
+		NULL);
+	if (rc) {
+		dprintk(VIDC_ERR,
+			"%s: failed to read speedbin version table\n",
+			__func__);
+		return;
+	}
+
+	base = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+	if (!base) {
+		dev_warn(&pdev->dev,
+			"Unable to ioremap efuse reg address. Defaulting to 0.\n");
+		return;
+	}
+
+	config_efuse = readl_relaxed(base);
+	devm_iounmap(&pdev->dev, base);
+
+	bin = (config_efuse >> platform_res->pf_speedbin_tbl->version_shift) &
+		platform_res->pf_speedbin_tbl->version_mask;
+
+	if (bin == is_speed_bin) {
+		dprintk(VIDC_DBG,
+			"Venus speed binning available overwriting %d to %d\n",
+			clk_table[0].clock_rate, venus_uplift_freq);
+		clk_table[0].clock_rate = venus_uplift_freq;
+	}
+}
+
 static int msm_vidc_load_allowed_clocks_table(
 		struct msm_vidc_platform_resources *res)
 {
@@ -448,6 +514,8 @@ static int msm_vidc_load_allowed_clocks_table(
 			"%s: failed to read allowed clocks table\n", __func__);
 		return rc;
 	}
+	if (res->allowed_clks_tbl_size)
+		clock_override(pdev, res, res->allowed_clks_tbl);
 
 	return 0;
 }
@@ -1116,6 +1184,13 @@ int read_platform_resources_from_dt(
 		goto err_load_max_hw_load;
 	}
 
+	rc = of_property_read_u32(pdev->dev.of_node, "qcom,power-conf",
+			&res->power_conf);
+	if (rc) {
+		dprintk(VIDC_DBG,
+			"Failed to read power configuration: %d\n", rc);
+	}
+
 	rc = msm_vidc_populate_legacy_context_bank(res);
 	if (rc) {
 		dprintk(VIDC_ERR,
@@ -1288,7 +1363,7 @@ int msm_vidc_smmu_fault_handler(struct iommu_domain *domain,
 		port = is_decode ? OUTPUT_PORT : CAPTURE_PORT;
 		dprintk(VIDC_ERR,
 			"%s session, Codec type: %s HxW: %d x %d fps: %d bitrate: %d bit-depth: %s\n",
-			is_decode ? "Decode" : "Encode", inst->fmts[port]->name,
+			is_decode ? "Decode" : "Encode", inst->fmts[port].name,
 			inst->prop.height[port], inst->prop.width[port],
 			inst->prop.fps, inst->prop.bitrate,
 			!inst->bit_depth ? "8" : "10");

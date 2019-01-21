@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -135,8 +135,9 @@
 
 	restart@4ab000 {
 		compatible = "qcom,pshold";
-		reg = <0x4ab000 0x4>;
-		reg-names = "pshold-base";
+		reg = <0x4ab000 0x4>,
+			<0x193d100 0x4>;
+		reg-names = "pshold-base", "tcsr-boot-misc-detect";
 	};
 
 	timer@b020000 {
@@ -301,8 +302,8 @@
 				"int_link_down", "int_bridge_flush_n";
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&pcie0_clkreq_default
-			     &pcie0_perst_default &pcie0_wake_default>;
+		pinctrl-0 = <&pcie_ep0_clkreq_default
+			     &pcie_ep0_perst_default &pcie_ep0_wake_default>;
 
 		perst-gpio = <&tlmm_pinmux 65 0>;
 		wake-gpio = <&tlmm_pinmux 61 0>;
@@ -325,7 +326,7 @@
 				"pcie_0_aux_clk", "pcie_0_ldo",
 				"pcie_0_phy_reset";
 		max-clock-frequency-hz = <125000000>, <0>,
-					<0>, <0>, <1000000>, <0>, <0>;
+					<0>, <0>, <1010000>, <0>, <0>;
 
 		qcom,msm-bus,name = "pcie-ep";
 		qcom,msm-bus,num-cases = <2>;
@@ -336,6 +337,78 @@
 
 		qcom,pcie-link-speed = <2>;
 		qcom,pcie-phy-ver = <3>;
+		qcom,phy-status-reg = <0x728>;
+		qcom,dbi-base-reg = <0x168>;
+		qcom,slv-space-reg = <0x16c>;
+		qcom,pcie-perst-enum;
+
+		qcom,phy-init = <0x604 0x01 0x0 0x1
+					0x000 0x1e 0x0 0x1
+					0x034 0x11 0x0 0x1
+					0x038 0x3f 0x0 0x1
+					0x03c 0x00 0x0 0x1
+					0x024 0x3f 0x0 0x1
+					0x010 0x0f 0x0 0x1
+					0x04c 0x90 0x0 0x1
+					0x0e8 0x77 0x0 0x1
+					0x0f0 0x15 0x0 0x1
+					0x268 0x03 0x0 0x1
+					0x4a8 0xff 0x0 0x1
+					0x4b0 0xff 0x0 0x1
+					0x4b4 0x00 0x0 0x1
+					0x4f8 0x40 0x0 0x1
+					0x500 0x70 0x0 0x1
+					0x688 0xc8 0x0 0x1
+					0x650 0xa3 0x0 0x1
+					0x654 0x1b 0x0 0x1
+					0x004 0xe1 0x0 0x1
+					0x050 0x07 0x0 0x1
+					0x00c 0x3f 0x0 0x1
+					0x014 0x46 0x0 0x1
+					0x094 0x05 0x0 0x1
+					0x09c 0x03 0x0 0x1
+					0x0ac 0x99 0x0 0x1
+					0x400 0xf5 0x0 0x1
+					0x408 0x2c 0x0 0x1
+					0x0e0 0x24 0x0 0x1
+					0x4ac 0x07 0x0 0x1
+					0x4bc 0x1e 0x0 0x1
+					0x4f0 0x67 0x0 0x1
+					0x4f4 0x80 0x0 0x1
+					0x504 0x0c 0x0 0x1
+					0x68c 0x80 0x0 0x1
+					0x64c 0x4d 0x0 0x1
+					0x0e0 0x20 0x0 0x1
+					0x034 0x3f 0x0 0x1
+					0x038 0x34 0x0 0x1
+					0x00c 0x0f 0x0 0x1
+					0x400 0xf4 0x0 0x1
+					0x4ac 0x1f 0x0 0x1
+					0x500 0x90 0x0 0x1
+					0x504 0x06 0x0 0x1
+					0x114 0x09 0x0 0x1
+					0x41c 0x49 0x0 0x1
+					0x414 0x09 0x0 0x1
+					0x418 0x04 0x0 0x1
+					0x600 0x00 0x0 0x1
+					0x608 0x03 0x0 0x1>;
+	};
+
+	mhi_dev@87000 {
+		compatible = "qcom,msm-mhi-dev";
+		reg = <0x87000 0x1000>,
+			<0x7962000 0x1>,
+			<0x7962080 0x1>;
+			reg-names = "mhi_mmio_base", "ipa_uc_mbox_crdb",
+				"ipa_uc_mbox_erdb";
+			interrupts = <0 50 0>;
+			interrupt-names = "mhi-device-inta";
+			qcom,mhi-ifc-id = <0x030117cb>;
+			qcom,mhi-ep-msi = <0>;
+			qcom,mhi-version = <0x1000000>;
+			qcom,mhi-local-pa-base = <0x40000000>;
+			qcom,mhi-config-iatu;
+			qcom,use-ipa-software-channel;
 	};
 
 	ipa_hw: qcom,ipa@07900000 {
@@ -357,13 +430,14 @@
 		clock-names = "core_clk";
 		clocks = <&clock_gcc clk_ipa_clk>;
 		qcom,msm-bus,name = "ipa";
-		qcom,msm-bus,num-cases = <3>;
+		qcom,msm-bus,num-cases = <4>;
 		qcom,msm-bus,num-paths = <2>;
 		qcom,msm-bus,vectors-KBps =
 		<90 512 0 0>, <90 585 0 0>,         /* No vote */
 		<90 512 80000 640000>, <90 585 80000 640000>,    /* SVS */
-		<90 512 206000 960000>, <90 585 206000 960000>;    /* PERF */
-		qcom,bus-vector-names = "MIN", "SVS", "PERF";
+		<90 512 206000 960000>, <90 585 206000 960000>,    /* NOMINAL */
+		<90 512 206000 3600000>, <90 585 206000 3600000>;    /* TURBO */
+		qcom,bus-vector-names = "MIN", "SVS", "NOMINAL", "TURBO";
 	};
 
 	qcom,rmnet-ipa {
@@ -531,8 +605,8 @@
 					0x038 0x12 0x00
 					0x03c 0x0f 0x00
 					0x024 0x01 0x00
-					0x00c 0x0f 0x00
-					0x010 0x0f 0x00
+					0x00c 0x00 0x00
+					0x010 0x00 0x00
 					0x014 0x46 0x00
 					0x400 0xf4 0x00
 					0x408 0x2c 0x00
@@ -579,7 +653,7 @@
 		qcom,l1ss-supported;
 		qcom,aux-clk-sync;
 
-		qcom,ep-wakeirq;
+		qcom,boot-option = <0x1>;
 
 		linux,pci-domain = <0>;
 
@@ -871,12 +945,15 @@
 
 		qcom,msm-bus,name = "msm-cnss";
 		qcom,msm-bus,num-cases = <4>;
-		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,num-paths = <2>;
 		qcom,msm-bus,vectors-KBps =
-			<45 512 0 0>,			/* No vote */
-			<45 512 42252 655360>,		/* Upto 200 Mbps */
-			<45 512 98572 655360>,		/* Upto 400 Mbps */
-			<45 512 211212 1146880>;	/* Upto 800 Mbps */
+			<45 512 0 0>, <1 512 0 0>,
+			/* Upto 200 Mbps */
+			<45 512 41421 655360>, <1 512 41421 655360>,
+			/* Upto 400 Mbps */
+			<45 512 98572 655360>, <1 512 98572 1600000>,
+			/* Upto 800 Mbps */
+			<45 512 207108 1146880>, <1 512 207108 3124992>;
 	};
 
 	qcom,msm-thermal {
@@ -1059,10 +1136,11 @@
 		qcom,usb-dbm = <&dbm_1p5>;
 
 		qcom,msm-bus,name = "usb3";
-		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-cases = <3>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps =
 					<61 512 0 0>,
+					<61 512 0 640000>,
 					<61 512 0 640000>;
 		qcom,lpm-to-suspend-delay-ms = <2000>;
 
@@ -1246,7 +1324,7 @@
 		reg-names = "qmp_phy_base",
 			    "vls_clamp_reg";
 		vdd-supply = <&pmd9635_l4>;
-		vdda18-supply = <&pmd9635_l8>;
+		core-supply = <&pmd9635_l8>;
 		qcom,vdd-voltage-level = <0 1000000 1000000>;
 		qcom,vbus-valid-override;
 		qcom,override-pll-calibration;

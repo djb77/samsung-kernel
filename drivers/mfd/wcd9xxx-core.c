@@ -805,7 +805,7 @@ static int __wcd9xxx_slim_write_repeat(struct wcd9xxx *wcd9xxx,
 }
 
 /*
- * wcd9xxx_slim_write_repeat: Write the same register with multiple values
+ * wcd9xxx_bus_write_repeat: Write the same register with multiple values
  * @wcd9xxx: handle to wcd core
  * @reg: register to be written
  * @bytes: number of bytes to be written to reg
@@ -813,7 +813,7 @@ static int __wcd9xxx_slim_write_repeat(struct wcd9xxx *wcd9xxx,
  * This API will write reg with bytes from src in a single slimbus
  * transaction. All values from 1 to 16 are supported by this API.
  */
-int wcd9xxx_slim_write_repeat(struct wcd9xxx *wcd9xxx, unsigned short reg,
+int wcd9xxx_bus_write_repeat(struct wcd9xxx *wcd9xxx, unsigned short reg,
 			      int bytes, void *src)
 {
 	int ret = 0;
@@ -824,11 +824,21 @@ int wcd9xxx_slim_write_repeat(struct wcd9xxx *wcd9xxx, unsigned short reg,
 		if (ret)
 			goto err;
 
-		ret = __wcd9xxx_slim_write_repeat(wcd9xxx, reg, bytes, src);
-		if (ret < 0)
-			dev_err(wcd9xxx->dev,
-				"%s: Codec repeat write failed (%d)\n",
-				__func__, ret);
+		if (wcd9xxx_get_intf_type() == WCD9XXX_INTERFACE_TYPE_I2C) {
+			ret = wcd9xxx->write_dev(wcd9xxx, reg, bytes, src,
+						false);
+			if (ret < 0)
+				dev_err(wcd9xxx->dev,
+					"%s: Codec repeat write failed (%d)\n",
+					__func__, ret);
+		} else {
+			ret = __wcd9xxx_slim_write_repeat(wcd9xxx, reg, bytes,
+							src);
+			if (ret < 0)
+				dev_err(wcd9xxx->dev,
+					"%s: Codec repeat write failed (%d)\n",
+					__func__, ret);
+		}
 	} else {
 		ret = __wcd9xxx_slim_write_repeat(wcd9xxx, reg, bytes, src);
 	}
@@ -836,7 +846,7 @@ err:
 	mutex_unlock(&wcd9xxx->io_lock);
 	return ret;
 }
-EXPORT_SYMBOL(wcd9xxx_slim_write_repeat);
+EXPORT_SYMBOL(wcd9xxx_bus_write_repeat);
 
 /*
  * wcd9xxx_slim_reserve_bw: API to reserve the slimbus bandwidth
@@ -2088,6 +2098,7 @@ static int wcd9xxx_i2c_write_device(struct wcd9xxx *wcd9xxx, u16 reg, u8 *value,
 	u8 reg_addr = 0;
 	u8 data[bytes + 1];
 	struct wcd9xxx_i2c *wcd9xxx_i2c;
+	int i;
 
 	wcd9xxx_i2c = wcd9xxx_i2c_get_device_info(wcd9xxx, reg);
 	if (wcd9xxx_i2c == NULL || wcd9xxx_i2c->client == NULL) {
@@ -2100,7 +2111,8 @@ static int wcd9xxx_i2c_write_device(struct wcd9xxx *wcd9xxx, u16 reg, u8 *value,
 	msg->len = bytes + 1;
 	msg->flags = 0;
 	data[0] = reg;
-	data[1] = *value;
+	for (i = 0; i < bytes; i++)
+		data[i + 1] = value[i];
 	msg->buf = data;
 	ret = i2c_transfer(wcd9xxx_i2c->client->adapter,
 			   wcd9xxx_i2c->xfer_msg, 1);
@@ -2691,6 +2703,7 @@ static struct wcd9xxx_pdata *wcd9xxx_populate_dt_pdata(struct device *dev)
 	u32 mad_dmic_sample_rate = 0;
 	u32 ecpp_dmic_sample_rate = 0;
 	u32 dmic_clk_drive;
+	u32 mic_unmute_delay = 0;
 	const char *static_prop_name = "qcom,cdc-static-supplies";
 	const char *ond_prop_name = "qcom,cdc-on-demand-supplies";
 	const char *cp_supplies_name = "qcom,cdc-cp-supplies";
@@ -2843,6 +2856,16 @@ static struct wcd9xxx_pdata *wcd9xxx_populate_dt_pdata(struct device *dev)
 			dmic_clk_drive);
 	else
 		pdata->dmic_clk_drv = dmic_clk_drive;
+
+	ret = of_property_read_u32(dev->of_node,
+				"qcom,cdc-mic-unmute-delay",
+				&mic_unmute_delay);
+	if (ret) {
+		dev_err(dev, "Looking up %s property in node %s failed",
+			"qcom,cdc-mic-unmute-delay",
+			dev->of_node->full_name);
+	}
+	pdata->mic_unmute_delay = mic_unmute_delay;
 
 	ret = of_property_read_string(dev->of_node,
 				"qcom,cdc-variant",
@@ -3107,19 +3130,19 @@ static int wcd9xxx_slim_probe(struct slim_device *slim)
 		("wcd9xxx_core", 0);
 	if (!IS_ERR(debugfs_wcd9xxx_dent)) {
 		debugfs_peek = debugfs_create_file("slimslave_peek",
-		S_IFREG | S_IRUGO, debugfs_wcd9xxx_dent,
+		S_IFREG | S_IRUSR, debugfs_wcd9xxx_dent,
 		(void *) "slimslave_peek", &codec_debug_ops);
 
 		debugfs_poke = debugfs_create_file("slimslave_poke",
-		S_IFREG | S_IRUGO, debugfs_wcd9xxx_dent,
+		S_IFREG | S_IRUSR, debugfs_wcd9xxx_dent,
 		(void *) "slimslave_poke", &codec_debug_ops);
 
 		debugfs_power_state = debugfs_create_file("power_state",
-		S_IFREG | S_IRUGO, debugfs_wcd9xxx_dent,
+		S_IFREG | S_IRUSR, debugfs_wcd9xxx_dent,
 		(void *) "power_state", &codec_debug_ops);
 
 		debugfs_reg_dump = debugfs_create_file("slimslave_reg_dump",
-		S_IFREG | S_IRUGO, debugfs_wcd9xxx_dent,
+		S_IFREG | S_IRUSR, debugfs_wcd9xxx_dent,
 		(void *) "slimslave_reg_dump", &codec_debug_ops);
 	}
 #endif

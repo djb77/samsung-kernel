@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1774,6 +1774,22 @@ static void msm8x16_wcd_dt_parse_reg_info(struct snd_soc_codec *codec)
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_ANALOG_MBHC_DET_CTL_2, 0x01, 0x01);
 	}
+
+	/*
+	* 0x144, bit[1]: ANALOG_MICB_2_EN
+	* disabling pull down register (default enabled)
+	*/
+	if (of_find_property(codec->dev->of_node,
+		"qcom,micb2_pull_down_disable", NULL))
+		snd_soc_update_bits(codec,
+			MSM8X16_WCD_A_ANALOG_MICB_2_EN, 0x20, 0x00);
+
+	if (of_find_property(codec->dev->of_node,
+		"qcom,cdc_a_tx_1_2_atest_ctl_2", NULL))
+		msm8x16_wcd_priv->cdc_a_tx_1_2_atest_ctl_2 = true;
+	else
+		msm8x16_wcd_priv->cdc_a_tx_1_2_atest_ctl_2 = false;
+
 }
 
 static struct msm8x16_wcd_pdata *msm8x16_wcd_populate_dt_pdata(
@@ -3636,9 +3652,15 @@ static int msm8x16_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 		} else if (!strnstr(w->name, external2_text, strlen(w->name)) &&
 					strnstr(w->name, external_text,
 						strlen(w->name))) {
-			snd_soc_update_bits(codec,
+			if (msm8x16_wcd->cdc_a_tx_1_2_atest_ctl_2) {
+				snd_soc_update_bits(codec,
+					MSM8X16_WCD_A_ANALOG_TX_1_2_ATEST_CTL_2,
+					0x03, 0x03);
+			} else {
+				snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_ANALOG_TX_1_2_ATEST_CTL_2,
 					0x02, 0x02);
+			}
 		}
 		if (!strnstr(w->name, external_text, strlen(w->name)))
 			snd_soc_update_bits(codec,
@@ -3676,6 +3698,11 @@ static int msm8x16_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 					snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_ANALOG_TX_1_2_ATEST_CTL_2,
 					0x01, 0x01);
+
+				if (msm8x16_wcd->cdc_a_tx_1_2_atest_ctl_2)
+					snd_soc_update_bits(codec,
+						MSM8X16_WCD_A_ANALOG_TX_1_2_ATEST_CTL_2,
+						0x03, 0x02);
 			}
 #else
 			msm8x16_notifier_call(codec,
@@ -4010,21 +4037,38 @@ static int msm8x16_wcd_codec_config_compander(struct snd_soc_codec *codec,
 					int interp_n, int event)
 {
 	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
+	int comp_ch_bits_set = 0x03;
 
 	dev_dbg(codec->dev, "%s: event %d shift %d, enabled %d\n",
 		__func__, event, interp_n,
 		msm8x16_wcd->comp_enabled[interp_n]);
 
-	/* compander is not enabled */
-	if (!msm8x16_wcd->comp_enabled[interp_n])
+	/* compander is invalid */
+	if (msm8x16_wcd->comp_enabled[interp_n] != COMPANDER_1 &&
+		msm8x16_wcd->comp_enabled[interp_n]) {
+		dev_dbg(codec->dev, "%s: Invalid compander %d\n", __func__,
+			msm8x16_wcd->comp_enabled[interp_n]);
 		return 0;
+	}
 
-	switch (msm8x16_wcd->comp_enabled[interp_n]) {
-	case COMPANDER_1:
-		if (SND_SOC_DAPM_EVENT_ON(event)) {
+	/* compander is not enabled */
+	if (!msm8x16_wcd->comp_enabled[interp_n]) {
+		if (interp_n < MSM8X16_WCD_RX3)
+			if (get_codec_version(msm8x16_wcd) >= DIANGU)
+				snd_soc_update_bits(codec,
+					MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
+					0x08, 0x00);
+		return 0;
+	}
+
+	if (SND_SOC_DAPM_EVENT_ON(event)) {
+		if (get_codec_version(msm8x16_wcd) >= DIANGU)
+			snd_soc_update_bits(codec,
+					MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
+					0x08, 0x08);
 			/* Enable Compander Clock */
 			snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_CDC_COMP0_B2_CTL, 0x0F, 0x09);
+				MSM8X16_WCD_A_CDC_COMP0_B2_CTL, 0x0F, 0x0D);
 			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_CDC_CLK_RX_B2_CTL, 0x01, 0x01);
 			snd_soc_update_bits(codec,
@@ -4039,31 +4083,27 @@ static int msm8x16_wcd_codec_config_compander(struct snd_soc_codec *codec,
 			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_CDC_COMP0_B3_CTL, 0xFF, 0x28);
 			snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_CDC_COMP0_B2_CTL, 0xF0, 0xB0);
+				MSM8X16_WCD_A_CDC_COMP0_B2_CTL, 0xF0, 0xF0);
 
 			/* Enable Compander GPIO */
 			if (msm8x16_wcd->codec_hph_comp_gpio)
 				msm8x16_wcd->codec_hph_comp_gpio(1);
-		} else if (SND_SOC_DAPM_EVENT_OFF(event)) {
-			/* Disable Compander GPIO */
-			if (msm8x16_wcd->codec_hph_comp_gpio)
-				msm8x16_wcd->codec_hph_comp_gpio(0);
-
+	} else if (SND_SOC_DAPM_EVENT_OFF(event)) {
+	/* Disable Compander GPIO */
+		if (msm8x16_wcd->codec_hph_comp_gpio)
+			msm8x16_wcd->codec_hph_comp_gpio(0);
+		snd_soc_update_bits(codec,
+			MSM8X16_WCD_A_CDC_COMP0_B1_CTL,
+			1 << interp_n, 0);
+		comp_ch_bits_set = snd_soc_read(codec,
+					MSM8X16_WCD_A_CDC_COMP0_B1_CTL);
+		if ((comp_ch_bits_set & 0x03) == 0x00) {
 			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_CDC_COMP0_B2_CTL, 0x0F, 0x05);
 			snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_CDC_COMP0_B1_CTL,
-				1 << interp_n, 0);
-			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_CDC_CLK_RX_B2_CTL, 0x01, 0x00);
 		}
-		break;
-	default:
-		dev_dbg(codec->dev, "%s: Invalid compander %d\n", __func__,
-				msm8x16_wcd->comp_enabled[interp_n]);
-		break;
 	};
-
 	return 0;
 }
 
@@ -4204,11 +4244,6 @@ void wcd_imped_config(struct snd_soc_codec *codec,
 			 __func__);
 		return;
 	}
-	if (value >= wcd_imped_val[ARRAY_SIZE(wcd_imped_val) - 1]) {
-		pr_err("%s, invalid imped, greater than 48 Ohm\n = %d\n",
-			__func__, value);
-		return;
-	}
 
 	codec_version = get_codec_version(msm8x16_wcd);
 
@@ -4219,9 +4254,9 @@ void wcd_imped_config(struct snd_soc_codec *codec,
 		case CONGA:
 			/*
 			 * For 32Ohm load and higher loads, Set 0x19E
-			 * bit 5 to 1 (POS_6_DB_DI). For loads lower
+			 * bit 5 to 1 (POS_0_DB_DI). For loads lower
 			 * than 32Ohm (such as 16Ohm load), Set 0x19E
-			 * bit 5 to 0 (POS_1P5_DB_DI)
+			 * bit 5 to 0 (POS_M4P5_DB_DI)
 			 */
 			if (value >= 32)
 				snd_soc_update_bits(codec,
@@ -5615,7 +5650,7 @@ static struct regulator *wcd8x16_wcd_codec_find_regulator(
 			return msm8x16->supplies[i].consumer;
 	}
 
-	dev_err(msm8x16->dev, "Error: regulator not found:%s\n"
+	dev_dbg(msm8x16->dev, "Error: regulator not found:%s\n"
 				, name);
 	return NULL;
 }
@@ -5626,13 +5661,20 @@ static int msm8x16_wcd_device_down(struct snd_soc_codec *codec)
 	struct msm8x16_wcd_priv *msm8x16_wcd_priv =
 		snd_soc_codec_get_drvdata(codec);
 	int i;
+	unsigned int tx_1_en;
+	unsigned int tx_2_en;
 
 	pdata = snd_soc_card_get_drvdata(codec->component.card);
 	dev_dbg(codec->dev, "%s: device down!\n", __func__);
+
+	tx_1_en = msm8x16_wcd_read(codec, MSM8X16_WCD_A_ANALOG_TX_1_EN);
+	tx_2_en = msm8x16_wcd_read(codec, MSM8X16_WCD_A_ANALOG_TX_2_EN);
+	tx_1_en = tx_1_en & 0x7f;
+	tx_2_en = tx_2_en & 0x7f;
 	msm8x16_wcd_write(codec,
-		MSM8X16_WCD_A_ANALOG_TX_1_EN, 0x3);
+		MSM8X16_WCD_A_ANALOG_TX_1_EN, tx_1_en);
 	msm8x16_wcd_write(codec,
-		MSM8X16_WCD_A_ANALOG_TX_2_EN, 0x3);
+		MSM8X16_WCD_A_ANALOG_TX_2_EN, tx_2_en);
 	if (msm8x16_wcd_priv->boost_option == BOOST_ON_FOREVER) {
 		if ((snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_SPKR_DRV_CTL)
 			& 0x80) == 0) {
@@ -5889,11 +5931,9 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 	struct msm8x16_wcd_priv *msm8x16_wcd_priv;
 	struct msm8x16_wcd *msm8x16_wcd;
 	struct msm8x16_wcd_pdata *pdata;
-#ifdef CONFIG_SND_SOC_WCD_MBHC
 	int i, ret;
-#else
-	int i;
-#endif /* CONFIG_SND_SOC_WCD_MBHC */
+	const char *subsys_name = NULL;
+
 	dev_dbg(codec->dev, "%s()\n", __func__);
 
 	msm8x16_wcd_priv = kzalloc(sizeof(struct msm8x16_wcd_priv), GFP_KERNEL);
@@ -6029,9 +6069,19 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 	/* Set initial cap mode */
 	msm8x16_wcd_configure_cap(codec, false, false);
 	registered_codec = codec;
-	adsp_state_notifier =
-	    subsys_notif_register_notifier("adsp",
-					   &adsp_state_notifier_block);
+	ret = of_property_read_string(codec->dev->of_node,
+				"qcom,subsys-name",
+				&subsys_name);
+	if (ret) {
+		dev_dbg(codec->dev, "missing subsys-name entry in dt node\n");
+		adsp_state_notifier =
+			subsys_notif_register_notifier("adsp",
+			&adsp_state_notifier_block);
+	} else {
+		adsp_state_notifier =
+			subsys_notif_register_notifier(subsys_name,
+			&adsp_state_notifier_block);
+	}
 	if (!adsp_state_notifier) {
 		dev_err(codec->dev, "Failed to register adsp state notifier\n");
 		iounmap(msm8x16_wcd->dig_base);

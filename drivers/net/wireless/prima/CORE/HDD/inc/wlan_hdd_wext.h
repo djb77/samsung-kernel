@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -467,11 +467,10 @@ void* wlan_hdd_change_country_code_callback(void *pAdapter);
 int hdd_setBand(struct net_device *dev, u8 ui_band);
 int hdd_setBand_helper(struct net_device *dev, const char *command);
 VOS_STATUS wlan_hdd_get_frame_logs(hdd_adapter_t *pAdapter, v_U8_t flag);
-int wlan_hdd_set_proximity(int set_value);
+int wlan_hdd_set_proximity(int set_value, tHalHandle hal);
 #ifdef SEC_CONFIG_GRIP_POWER
 int hdd_setGripPwr(struct net_device *dev, u8 set_value);
 int hdd_setGripPwr_helper(struct net_device *dev, const char *command);
 #endif /* SEC_CONFIG_GRIP_POWER */
-
 #endif // __WEXT_IW_H__
 

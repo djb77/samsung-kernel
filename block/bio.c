@@ -568,6 +568,7 @@ void __bio_clone_fast(struct bio *bio, struct bio *bio_src)
 #ifdef CONFIG_JOURNAL_DATA_TAG
 	bio->bi_flags |= bio_src->bi_flags & BIO_JOURNAL_TAG_MASK;
 #endif
+	bio->bi_flags |= bio_src->bi_flags & 1UL << BIO_BYPASS;
 	bio->bi_rw = bio_src->bi_rw;
 	bio->bi_iter = bio_src->bi_iter;
 	bio->bi_io_vec = bio_src->bi_io_vec;
@@ -657,6 +658,7 @@ struct bio *bio_clone_bioset(struct bio *bio_src, gfp_t gfp_mask,
 #ifdef CONFIG_JOURNAL_DATA_TAG
 	bio->bi_flags |= bio_src->bi_flags & BIO_JOURNAL_TAG_MASK;
 #endif
+	bio->bi_flags |= bio_src->bi_flags & 1UL << BIO_BYPASS;
 
 	if (bio->bi_rw & REQ_DISCARD)
 		goto integrity_clone;
@@ -1831,8 +1833,9 @@ EXPORT_SYMBOL(bio_endio_nodec);
  * Allocates and returns a new bio which represents @sectors from the start of
  * @bio, and updates @bio to represent the remaining sectors.
  *
- * The newly allocated bio will point to @bio's bi_io_vec; it is the caller's
- * responsibility to ensure that @bio is not freed before the split.
+ * Unless this is a discard request the newly allocated bio will point
+ * to @bio's bi_io_vec; it is the caller's responsibility to ensure that
+ * @bio is not freed before the split.
  */
 struct bio *bio_split(struct bio *bio, int sectors,
 		      gfp_t gfp, struct bio_set *bs)
@@ -1842,7 +1845,15 @@ struct bio *bio_split(struct bio *bio, int sectors,
 	BUG_ON(sectors <= 0);
 	BUG_ON(sectors >= bio_sectors(bio));
 
-	split = bio_clone_fast(bio, gfp, bs);
+	/*
+	 * Discards need a mutable bio_vec to accommodate the payload
+	 * required by the DSM TRIM and UNMAP commands.
+	 */
+	if (bio->bi_rw & REQ_DISCARD)
+		split = bio_clone_bioset(bio, gfp, bs);
+	else
+		split = bio_clone_fast(bio, gfp, bs);
+
 	if (!split)
 		return NULL;
 

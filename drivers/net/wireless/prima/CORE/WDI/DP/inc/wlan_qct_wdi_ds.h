@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013, 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -53,11 +53,12 @@ typedef struct
    wpt_uint32 txFlags;
    wpt_uint8 ac;
    wpt_uint8 isEapol:1; //0 - not eapol 1 - eapol
-   wpt_uint8 isWai:1;   //WAPI 0 - not WAI 1 WAI 
+   wpt_uint8 isWai:1;   //WAPI 0 - not WAI 1 WAI
+   wpt_uint8 isArp:1;   //0 - not ARP 1 - ARP
    wpt_uint8 fdisableFrmXlt:1;   //0 - Let ADU do FT. 1 - bypass ADU FT
    wpt_uint8 qosEnabled:1; //0 - non-Qos 1 - Qos
    wpt_uint8 fenableWDS:1; //0 - not WDS 1 WDS
-   wpt_uint8 reserved1:3;
+   wpt_uint8 reserved1:2;
    wpt_uint8 typeSubtype;
    wpt_uint8 fUP;
    wpt_uint8 fSTAMACAddress[6];
@@ -174,6 +175,7 @@ typedef struct
    wpt_uint32 extscanBuffer;
 #endif
    wpt_uint32 loggingData;
+   wpt_uint32 indType;
 } WDI_DS_RxMetaInfoType;
 
 typedef struct sPktMetaInfo
@@ -197,6 +199,48 @@ typedef struct
    wpt_boolean done;
    wpt_uint16 reasonCode;
 } WDI_DS_LoggingSessionType;
+
+
+/*----------------------------------------------------------------------------
+ *   WDI_AddStaParams
+ *     -------------------------------------------------------------------------*/
+typedef struct
+{
+    wpt_uint8    ucSTAIdx;
+    wpt_uint8    ucWmmEnabled;
+    wpt_uint8    ucHTCapable;
+
+    /* MAC Address of STA */
+    wpt_macAddr staMacAddr;
+
+    /*MAC Address of the BSS*/
+    wpt_macAddr  macBSSID;
+
+    /* Field to indicate if this is sta entry for itself STA adding entry for itself
+     * or remote (AP adding STA after successful association.
+     * This may or may not be required in production driver.
+     * 0 - Self, 1 other/remote, 2 - bssid
+     */
+    wpt_uint8   ucStaType;
+
+
+    /*DPU Information*/
+    wpt_uint8   dpuIndex;                      // DPU table index
+    wpt_uint8   dpuSig;                        // DPU signature
+    wpt_uint8   bcastDpuIndex;
+    wpt_uint8   bcastDpuSignature;
+    wpt_uint8   bcastMgmtDpuIndex;
+    wpt_uint8   bcastMgmtDpuSignature;
+
+
+    /*RMF enabled/disabled*/
+    wpt_uint8   ucRmfEnabled;
+
+    /* Index into the BSS Session table */
+    wpt_uint8   ucBSSIdx;
+
+}WDI_AddStaParams;
+
 
 WPT_STATIC WPT_INLINE WDI_DS_RxMetaInfoType* WDI_DS_ExtractRxMetaData (wpt_packet *pFrame)
 {
@@ -316,6 +360,59 @@ wpt_uint32 WDI_DS_GetReservedResCountPerSTA(void *pContext,
  *
  */
 WDI_Status WDI_DS_AddSTAMemPool(void *pContext, wpt_uint8 staIndex);
+/**
+ @brief WDI_STATableFindStaidByAddr - Given a station mac address, search
+ for the corresponding station index from the Station Table.
+
+ @param  pWDICtx:   Context pointer
+staAddr:  station address
+pucStaId: output station id
+
+@see
+@return Result of the function call
+*/
+WDI_Status
+WDI_STATableFindStaidByAddr
+(
+ void*  pWDICtx,
+ wpt_macAddr            staAddr,
+ wpt_uint8*             pucStaId
+ );
+
+/**
+ *  @brief WDI_STATableAddSta - Function to Add Station
+ *
+ *
+ *  @param  pWDICtx:     pointer to the WLAN DAL context
+ *  pwdiParam:   station parameters
+ *
+ *  @see
+ *  @return Result of the function call
+ *                 */
+WDI_Status
+WDI_STATableAddSta
+(
+ void*  pWDICtx,
+ WDI_AddStaParams*      pwdiParam
+ );
+
+
+/**
+ * @brief WDI_STATableDelSta - Function to Delete a Station
+ *
+ *
+ * @param  pWDICtx:         pointer to the WLAN DAL context
+ *         ucSTAIdx:        station to be deleted
+ *
+ * @see
+ * @return Result of the function call
+ */
+WDI_Status
+WDI_STATableDelSta
+(
+ void*  pWDICtx,
+ wpt_uint8              ucSTAIdx
+ );
 
 /* DAL Remove STA from memPool
  * Parameters:

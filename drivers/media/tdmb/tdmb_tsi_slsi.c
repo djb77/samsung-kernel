@@ -193,10 +193,10 @@ enum data_byte_order	{
 	LSB2MSB
 };
 struct tsi_pkt {
-  struct list_head list;
-  dma_addr_t addr;
-  void *buf;
-  u32 len;
+	struct list_head list;
+	dma_addr_t addr;
+	void *buf;
+	u32 len;
 };
 
 struct exynos5_tsi_conf	{
@@ -229,7 +229,7 @@ struct tsi_dev {
 
 struct tsi_dev *tsi_priv;
 static struct platform_device *exynos5_tsi_dev;
-static void (*tsi_data_callback)(u8 *data, u32 length) = NULL;
+void (*tsi_data_callback)(u8 *data, u32 length) = NULL;
 
 static void tdmb_tsi_pull_data(struct work_struct *work);
 static struct workqueue_struct *tdmb_tsi_workqueue;
@@ -243,10 +243,10 @@ static void list_debug(struct list_head *head, const char *str)
 	int i;
 	struct tsi_pkt *pkt;
 	/* DPRINTK("DEBUGGING FREE LIST\n"); */
-    i = 1;
+	i = 1;
 	list_for_each_entry(pkt, head, list)	{
-		/* DPRINTK("%s node %d node_addr %p physical add %x virt add %p size %d\n",
-					str, i, pkt, pkt->addr, pkt->buf, pkt->len); */
+		/* DPRINTK("%s node %d node_addr %p physical add %x virt add %p size %d\n",*/
+		/*			str, i, pkt, pkt->addr, pkt->buf, pkt->len); */
 		i++;
 	}
 	DPRINTK("%s: %s %d\n", __func__, str, i - 1);
@@ -270,20 +270,22 @@ static void exynos5_tsi_set_gpio(struct tsi_dev *tsi, bool on)
 static void exynos5_tsi_reset(struct tsi_dev *tsi)
 {
 	u32 tscon;
+
 	tscon = readl((tsi->tsi_base + EXYNOS5_TS_CON));
 	tscon |= EXYNOS5_TSI_SWRESET;
 	writel(tscon, (tsi->tsi_base + EXYNOS5_TS_CON));
 }
 /*
-static void exynos5_tsi_set_timeout(u32 count, struct tsi_dev *tsi)
-{
-	writel(count, (tsi->tsi_base + EXYNOS5_TS_CNT));
-}
-*/
+ *static void exynos5_tsi_set_timeout(u32 count, struct tsi_dev *tsi)
+ *{
+ *	writel(count, (tsi->tsi_base + EXYNOS5_TS_CNT));
+ *}
+ */
 static struct tsi_pkt *tsi_get_pkt(struct tsi_dev *tsi, struct list_head *head)
 {
 	unsigned long flags;
 	struct tsi_pkt *pkt;
+
 	spin_lock_irqsave(&tsi->tsi_lock, flags);
 
 	if (list_empty(head))	{
@@ -305,6 +307,7 @@ static void exynos5_tsi_set_dest_addr(dma_addr_t addr, void __iomem *reg)
 static void exynos5_tsi_set_sync_mode(u8 mode, void __iomem *reg)
 {
 	u32 val = 0;
+
 	val |= (0xff & mode);
 	writel(val, reg);
 }
@@ -312,6 +315,7 @@ static void exynos5_tsi_set_sync_mode(u8 mode, void __iomem *reg)
 static void exynos5_tsi_set_clock(u8 enable, void __iomem *reg)
 {
 	u32 val = 0;
+
 	if (enable)
 		val |= 0x1;
 	writel(val, reg);
@@ -414,9 +418,9 @@ static int tsi_setup_bufs(struct tsi_dev *dev, struct list_head *head, int packe
 	for (i = 0; i < num_buf; i++)	{
 		pkt = kmalloc(sizeof(struct tsi_pkt), GFP_KERNEL);
 		if (!pkt)
-			return list_empty(head) ? -ENOMEM : 0 ;
-		/*	Address should be byte-aligned
-			Commented by sjinu, 2009_03_18	*/
+			return list_empty(head) ? -ENOMEM : 0;
+		/*	Address should be byte-aligned	*/
+		/*	Commented by sjinu, 2009_03_18	*/
 		pkt->addr = ((u32)tsi_phy + i*buf_size);
 		pkt->buf = (void *)(u8 *)((u32)tsi_virt + i*buf_size);
 		pkt->len = buf_size;
@@ -468,7 +472,7 @@ static int exynos5_tsi_start(struct tsi_dev *tsi, void (*callback)(u8 *data, u32
 	pm_qos_add_request(&mif_handle, PM_QOS_BUS_THROUGHPUT, 413000);
 
 	exynos5_tsi_set_gpio(tsi, true);
-	if(exynos5_tsi_clk_enable(tsi)) {
+	if (exynos5_tsi_clk_enable(tsi)) {
 		DPRINTK("%s: clk_prepare_enable failed\n", __func__);
 		ret = -ENOMEM;
 		goto err_gpio;
@@ -496,13 +500,13 @@ static int exynos5_tsi_start(struct tsi_dev *tsi, void (*callback)(u8 *data, u32
 	pkt_size = pkt->len;
 	tsi_data_callback = callback;
 	DPRINTK("%s: pkt_size %d\n", __func__, pkt_size);
-	/*	when set the TS BUF SIZE to the EXYNOS5_TS_SIZE,
-	if you want get a 10-block TS from TSIF,
-	you should set the value of EXYNOS5_TS_SIZE as 47*10(not 188*10)
-	This register get a value of word-multiple values.
-	So, pkt_size which is counted to BYTES must be divided by 4
-	Commented by sjinu, 2009_03_18
-	*/
+	/*when set the TS BUF SIZE to the EXYNOS5_TS_SIZE,
+	 *if you want get a 10-block TS from TSIF,
+	 *you should set the value of EXYNOS5_TS_SIZE as 47*10(not 188*10)
+	 *This register get a value of word-multiple values.
+	 *So, pkt_size which is counted to BYTES must be divided by 4
+	 *Commented by sjinu, 2009_03_18
+	 */
 	writel(pkt_size>>2, (tsi->tsi_base + EXYNOS5_TS_SIZE));
 	exynos5_tsi_set_dest_addr(pkt->addr, tsi->tsi_base + EXYNOS5_TS_BASE);
 	spin_lock_irqsave(&tsi->tsi_lock, flags);
@@ -550,14 +554,14 @@ int tdmb_tsi_start(void (*callback)(u8 *data, u32 length), int packet_cnt)
 {
 	if (exynos5_tsi_dev) {
 		struct tsi_dev *tsi = platform_get_drvdata(exynos5_tsi_dev);
+
 		DPRINTK("%s: packet_cnt %d run %d\n", __func__, packet_cnt, tsi->running);
 		if (tsi->running)
 			return 0;
 		return exynos5_tsi_start(tsi, callback, packet_cnt);
-	} else {
-		DPRINTK("%s: exynos5_tsi_dev is null\n", __func__);
-		return -1;
 	}
+	DPRINTK("%s: exynos5_tsi_dev is null\n", __func__);
+	return -1;
 }
 EXPORT_SYMBOL_GPL(tdmb_tsi_start);
 
@@ -581,14 +585,14 @@ int tdmb_tsi_stop(void)
 {
 	if (exynos5_tsi_dev) {
 		struct tsi_dev *tsi = platform_get_drvdata(exynos5_tsi_dev);
+
 		DPRINTK("%s: run %d\n", __func__, tsi->running);
 		if (!tsi->running)
 			return 0;
 		return exynos5_tsi_stop(tsi);
-	} else {
-		DPRINTK("%s: exynos5_tsi_dev is null\n", __func__);
-		return -1;
 	}
+	DPRINTK("%s: exynos5_tsi_dev is null\n", __func__);
+	return -1;
 }
 EXPORT_SYMBOL_GPL(tdmb_tsi_stop);
 
@@ -601,7 +605,7 @@ static void tdmb_tsi_pull_data(struct work_struct *work)
 		unsigned long flags;
 
 		if (!tsi->running)
-			return ;
+			return;
 
 #ifdef CONFIG_TSI_LIST_DEBUG
 		list_debug(&tsi->free_list, "free_list");
@@ -631,8 +635,8 @@ static irqreturn_t exynos5_tsi_irq(int irq, void *dev_id)
 
 	if (intpnd & EXYNOS5_TSI_OUT_BUF_FULL) {
 		struct tsi_pkt *pkt;
-		/* deque the pcket from partial list to full list
-			incase the free list is empty, stop the tsi.. */
+		/* deque the pcket from partial list to full list*/
+		/*	incase the free list is empty, stop the tsi.. */
 
 		pkt = tsi_get_pkt(tsi, &tsi->partial_list);
 		/* this situation should not come.. stop_tsi */
@@ -654,19 +658,21 @@ static irqreturn_t exynos5_tsi_irq(int irq, void *dev_id)
 		}
 		list_move_tail(&pkt->list, &tsi->partial_list);
 		/*	namkh, request from Abraham
-			If there arise a buffer-full interrupt,
-			a new ts buffer address should be set.
-
-			Commented by sjinu, 2009_03_18	*/
+		 *	If there arise a buffer-full interrupt,
+		 *	a new ts buffer address should be set.
+		 *
+		 *	Commented by sjinu, 2009_03_18
+		 */
 		exynos5_tsi_set_dest_addr(pkt->addr, tsi->tsi_base + EXYNOS5_TS_BASE);
 		if (tdmb_tsi_workqueue) {
 			int ret;
+
 			ret = queue_work(tdmb_tsi_workqueue, &tdmb_tsi_work);
 			if (ret == 0)
 				DPRINTK("failed in queue_work\n");
 		}
 	} else
-		DPRINTK("exynos5_tsi_irq 0x%x\n", intpnd);
+		DPRINTK("%s 0x%x\n", __func__, intpnd);
 
 	return IRQ_HANDLED;
 }
@@ -691,9 +697,10 @@ static int tdmb_tsi_probe(struct platform_device *pdev)
 		kfree(tsi_priv);
 		return -ENOMEM;
 	}
-	/* Initialise the dafault conf parameters..
+	/* Initialise the default conf parameters..
 	 * this should be obtained from the platform data and ioctl
-	 * move this to platform later */
+	 * move this to platform later
+	 */
 
 	conf->flt_mode    = OFF;
 	conf->pid_flt_mode = BYPASS;
@@ -701,11 +708,11 @@ static int tdmb_tsi_probe(struct platform_device *pdev)
 	conf->sync_detect = EXYNOS5_TSI_SYNC_DET_MODE_TS_SYNC8;/* EXYNOS5_TSI_SYNC_DET_MODE_TS_SYNC_BYTE */
 
 	/*
-	 to avoid making interrupt during getting the TS from TS buffer,
-	 we use the burst-length as 8 beat.
-	 This burst-length may be changed next time.
-	 Commented by sjinu, 2009_03_18
-	*/
+	 *to avoid making interrupt during getting the TS from TS buffer,
+	 *we use the burst-length as 8 beat.
+	 *This burst-length may be changed next time.
+	 *Commented by sjinu, 2009_03_18
+	 */
 	conf->burst_len = 2;
 	conf->byte_swap = 1;	/* little endian */
 	conf->pad_pattern = 0;	/* this might vary from bd to bd */
@@ -769,7 +776,7 @@ static int tdmb_tsi_probe(struct platform_device *pdev)
 		goto err_pinctrl;
 
 	tsi_priv->tsi_on = pinctrl_lookup_state(tsi_priv->tdmb_tsi_pinctrl, "tdmb_tsi_on");
-	if(IS_ERR(tsi_priv->tsi_on)) {
+	if (IS_ERR(tsi_priv->tsi_on)) {
 		ret = -EINVAL;
 		DPRINTK("%s : could not get pins tsi_on state (%li)\n",
 			__func__, PTR_ERR(tsi_priv->tsi_on));
@@ -777,7 +784,7 @@ static int tdmb_tsi_probe(struct platform_device *pdev)
 	}
 
 	tsi_priv->tsi_off = pinctrl_lookup_state(tsi_priv->tdmb_tsi_pinctrl, "tdmb_tsi_off");
-	if(IS_ERR(tsi_priv->tsi_off)) {
+	if (IS_ERR(tsi_priv->tsi_off)) {
 		ret = -EINVAL;
 		DPRINTK("%s : could not get pins tsi_off state (%li)\n",
 			__func__, PTR_ERR(tsi_priv->tsi_off));
@@ -806,6 +813,7 @@ err_res:
 static int tdmb_tsi_remove(struct platform_device *dev)
 {
 	struct tsi_dev *tsi = platform_get_drvdata((struct platform_device *)dev);
+
 	if (tsi->running)
 		exynos5_tsi_stop(tsi);
 

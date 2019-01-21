@@ -751,6 +751,7 @@ static char DSI0_COLOR_BLIND_MDNIE_1[] ={
 	0x00, //data_width mask 00 0000
 	0x30, //ascr algo lce 10 10 10
 };
+
 static char DSI0_COLOR_BLIND_MDNIE_2[] ={
 	0xEC,
 	0x98, //lce_on gain 0 00 0000
@@ -907,6 +908,173 @@ static char DSI0_COLOR_BLIND_MDNIE_2[] ={
 	0x00, //ascr_Kg
 	0xff, //ascr_Wb
 	0x00, //ascr_Kb
+	//end
+};
+
+static char DSI0_LIGHT_NOTIFICATION_MDNIE_1[] ={
+	//start
+	0xEB,
+	0x01, //mdnie_en
+	0x00, //data_width mask 00 0000
+	0x30, //ascr algo lce 10 10 10
+};
+
+static char DSI0_LIGHT_NOTIFICATION_MDNIE_2[] ={
+	0xEC,
+	0x98, //lce_on gain 0 00 0000
+	0x24, //lce_color_gain 00 0000
+	0x00, //lce_scene_trans 0000
+	0xb3, //lce_illum_gain
+	0x01, //lce_ref_offset 9
+	0x0e,
+	0x01, //lce_ref_gain 9
+	0x00,
+	0x66, //lce_block_size h v 000 000
+	0x17, //lce_black reduct_slope 0 0000
+	0x03, //lce_dark_th 000
+	0x96, //lce_min_ref_offset
+	0x00, //nr fa de cs gamma 0 0000
+	0xff, //nr_mask_th
+	0x00, //de_gain 10
+	0x00,
+	0x07, //de_maxplus 11
+	0xff,
+	0x07, //de_maxminus 11
+	0xff,
+	0x14, //fa_edge_th
+	0x00, //fa_step_p 10
+	0x0a,
+	0x00, //fa_step_n 10
+	0x32,
+	0x01, //fa_max_de_gain 10
+	0xf4,
+	0x0b, //fa_pcl_ppi 14
+	0x8a,
+	0x20, //fa_os_cnt_10_co
+	0x2d, //fa_os_cnt_20_co
+	0x6e, //fa_skin_cr
+	0x99, //fa_skin_cb
+	0x1b, //fa_dist_left
+	0x17, //fa_dist_right
+	0x14, //fa_dist_down
+	0x1e, //fa_dist_up
+	0x02, //fa_div_dist_left
+	0x5f,
+	0x02, //fa_div_dist_right
+	0xc8,
+	0x03, //fa_div_dist_down
+	0x33,
+	0x02, //fa_div_dist_up
+	0x22,
+	0x10, //fa_px_min_weight
+	0x10, //fa_fr_min_weight
+	0x07, //fa_skin_zone_w
+	0x07, //fa_skin_zone_h
+	0x01, //cs_gain 10
+	0x00,
+	0x00, //curve_1_b
+	0x20, //curve_1_a
+	0x00, //curve_2_b
+	0x20, //curve_2_a
+	0x00, //curve_3_b
+	0x20, //curve_3_a
+	0x00, //curve_4_b
+	0x20, //curve_4_a
+	0x00, //curve_5_b
+	0x20, //curve_5_a
+	0x00, //curve_6_b
+	0x20, //curve_6_a
+	0x00, //curve_7_b
+	0x20, //curve_7_a
+	0x00, //curve_8_b
+	0x20, //curve_8_a
+	0x00, //curve_9_b
+	0x20, //curve_9_a
+	0x00, //curve10_b
+	0x20, //curve10_a
+	0x00, //curve11_b
+	0x20, //curve11_a
+	0x00, //curve12_b
+	0x20, //curve12_a
+	0x00, //curve13_b
+	0x20, //curve13_a
+	0x00, //curve14_b
+	0x20, //curve14_a
+	0x00, //curve15_b
+	0x20, //curve15_a
+	0x00, //curve16_b
+	0x20, //curve16_a
+	0x00, //curve17_b
+	0x20, //curve17_a
+	0x00, //curve18_b
+	0x20, //curve18_a
+	0x00, //curve19_b
+	0x20, //curve19_a
+	0x00, //curve20_b
+	0x20, //curve20_a
+	0x00, //curve21_b
+	0x20, //curve21_a
+	0x00, //curve22_b
+	0x20, //curve22_a
+	0x00, //curve23_b
+	0x20, //curve23_a
+	0x00, //curve24_b
+	0xFF, //curve24_a
+	0x00, //linear_on ascr_skin_on strength 0 0 00000
+	0x67, //ascr_skin_cb
+	0xa9, //ascr_skin_cr
+	0x0c, //ascr_dist_up
+	0x0c, //ascr_dist_down
+	0x0c, //ascr_dist_right
+	0x0c, //ascr_dist_left
+	0x00, //ascr_div_up 20
+	0xaa,
+	0xab,
+	0x00, //ascr_div_down
+	0xaa,
+	0xab,
+	0x00, //ascr_div_right
+	0xaa,
+	0xab,
+	0x00, //ascr_div_left
+	0xaa,
+	0xab,
+	0xd5, //ascr_skin_Rr
+	0x2c, //ascr_skin_Rg
+	0x2a, //ascr_skin_Rb
+	0xff, //ascr_skin_Yr
+	0xf5, //ascr_skin_Yg
+	0x63, //ascr_skin_Yb
+	0xfe, //ascr_skin_Mr
+	0x4a, //ascr_skin_Mg
+	0xff, //ascr_skin_Mb
+	0xff, //ascr_skin_Wr
+	0xf9, //ascr_skin_Wg
+	0xf8, //ascr_skin_Wb
+	0x66, //ascr_Cr
+	0xff, //ascr_Rr
+	0xf9, //ascr_Cg
+	0x60, //ascr_Rg
+	0xac, //ascr_Cb
+	0x13, //ascr_Rb
+	0xff, //ascr_Mr
+	0x66, //ascr_Gr
+	0x60, //ascr_Mg
+	0xf9, //ascr_Gg
+	0xac, //ascr_Mb
+	0x13, //ascr_Gb
+	0xff, //ascr_Yr
+	0x66, //ascr_Br
+	0xf9, //ascr_Yg
+	0x60, //ascr_Bg
+	0x13, //ascr_Yb
+	0xac, //ascr_Bb
+	0xff, //ascr_Wr
+	0x66, //ascr_Kr
+	0xf9, //ascr_Wg
+	0x60, //ascr_Kg
+	0xac, //ascr_Wb
+	0x13, //ascr_Kb
 	//end
 };
 
@@ -8619,6 +8787,13 @@ static struct dsi_cmd_desc DSI0_HBM_CE_MDNIE[] = {
 	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(level_1_key_off)}, level_1_key_off},
 };
 
+static struct dsi_cmd_desc DSI0_LIGHT_NOTIFICATION_MDNIE[] = {
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(level_1_key_on)}, level_1_key_on},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_LIGHT_NOTIFICATION_MDNIE_1)}, DSI0_LIGHT_NOTIFICATION_MDNIE_1},
+	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_LIGHT_NOTIFICATION_MDNIE_2)}, DSI0_LIGHT_NOTIFICATION_MDNIE_2},
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(level_1_key_off)}, level_1_key_off},
+};
+
 static struct dsi_cmd_desc DSI0_HBM_CE_TEXT_MDNIE[] = {
 	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(level_1_key_on)}, level_1_key_on},
 	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(DSI0_HBM_CE_TEXT_MDNIE_1)}, DSI0_HBM_CE_TEXT_MDNIE_1},
@@ -9053,6 +9228,11 @@ static struct dsi_cmd_desc *mdnie_tune_value_dsi0[MAX_APP_MODE][MAX_MODE][MAX_OU
 			{DSI0_UI_AUTO_MDNIE,	NULL},
 			{DSI0_EBOOK_AUTO_MDNIE,	NULL},
 		},
+};
+
+static struct dsi_cmd_desc *light_notification_tune_value[LIGHT_NOTIFICATION_MAX] = {
+	NULL,
+	DSI0_LIGHT_NOTIFICATION_MDNIE,
 };
 
 #define DSI0_RGB_SENSOR_MDNIE_1_SIZE ARRAY_SIZE(DSI0_RGB_SENSOR_MDNIE_1)

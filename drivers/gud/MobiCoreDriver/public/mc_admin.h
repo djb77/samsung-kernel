@@ -23,13 +23,6 @@ extern "C" {
 
 #define MC_ADMIN_DEVNODE "mobicore"
 
-/* Roles */
-enum {
-	TEE_ROLE_NONE,
-	TEE_ROLE_LISTENER,
-	TEE_ROLE_AUTHENTICATOR,
-};
-
 /* Driver/daemon commands */
 enum {
 	/* Command 0 is reserved */
@@ -82,8 +75,6 @@ struct mc_admin_load_info {
 	_IOW(MC_IOC_MAGIC, 3, struct mc_admin_load_info)
 #define MC_ADMIN_IO_LOAD_CHECK \
 	_IOW(MC_IOC_MAGIC, 4, struct mc_admin_load_info)
-#define MC_ADMIN_IO_REQUEST_ROLE \
-	_IOW(MC_IOC_MAGIC, 5, __u32)
 
 #ifdef __cplusplus
 }

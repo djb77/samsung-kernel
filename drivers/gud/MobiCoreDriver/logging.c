@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -67,32 +67,29 @@ static struct logging_ctx {
 	};
 	bool	buffer_is_shared;	/* Log buffer cannot be freed */
 	u32	tail;			/* MobiCore log read position */
-	u32	line_len;		/* Log Line buffer current length */
 	int	thread_err;
 	u16	prev_source;		/* Previous Log source */
-	char	line[LOG_LINE_SIZE];	/* Log Line buffer */
+	char	line[LOG_LINE_SIZE + 1];/* Log Line buffer */
+	u32	line_len;		/* Log Line buffer current length */
 	u32	enabled;		/* Log can be disabled via debugfs */
 	bool	dead;
 } log_ctx;
 
 static inline void log_eol(u16 source)
 {
-	if (!strnlen(log_ctx.line, LOG_LINE_SIZE)) {
-		/* In case a TA tries to print a 0x0 */
-		log_ctx.line_len = 0;
+	if (!log_ctx.line_len)
 		return;
-	}
 
 	if (log_ctx.prev_source)
-		/* MobiCore Userspace */
+		/* TEE user-space */
 		dev_info(g_ctx.mcd, "%03x|%s\n", log_ctx.prev_source,
 			 log_ctx.line);
 	else
-		/* MobiCore kernel */
-		dev_info(g_ctx.mcd, "%s\n", log_ctx.line);
+		/* TEE kernel */
+		dev_info(g_ctx.mcd, "mtk|%s\n", log_ctx.line);
 
+	log_ctx.line[0] = '\0';
 	log_ctx.line_len = 0;
-	log_ctx.line[0] = 0;
 }
 
 /*
@@ -101,12 +98,15 @@ static inline void log_eol(u16 source)
  */
 static inline void log_char(char ch, u16 source)
 {
+	if (ch == '\0')
+		return;
+
 	if (ch == '\n' || ch == '\r') {
 		log_eol(source);
 		return;
 	}
 
-	if ((log_ctx.line_len >= (LOG_LINE_SIZE - 1)) ||
+	if ((log_ctx.line_len >= LOG_LINE_SIZE) ||
 	    (source != log_ctx.prev_source))
 		log_eol(source);
 
@@ -169,7 +169,7 @@ static void log_worker(struct work_struct *work)
 	mutex_lock(&local_mutex);
 	while (log_ctx.trace_buf->head != log_ctx.tail) {
 		if (log_ctx.trace_buf->version != MC_LOG_VERSION) {
-			mc_dev_err("Bad log data v%d (exp. v%d), stop\n",
+			mc_dev_err("Bad log data v%d (exp. v%d), stop",
 				   log_ctx.trace_buf->version, MC_LOG_VERSION);
 			log_ctx.dead = true;
 			break;
@@ -202,12 +202,12 @@ int mc_logging_start(void)
 				  BIT(LOG_BUF_ORDER) * PAGE_SIZE);
 
 	if (ret) {
-		mc_dev_err("shared traces setup failed\n");
+		mc_dev_err("shared traces setup failed");
 		return ret;
 	}
 
 	log_ctx.buffer_is_shared = true;
-	mc_dev_devel("fc_log version %u\n", log_ctx.trace_buf->version);
+	mc_dev_devel("fc_log version %u", log_ctx.trace_buf->version);
 	mc_logging_run();
 	return 0;
 }
@@ -252,5 +252,5 @@ void mc_logging_exit(void)
 	if (!log_ctx.buffer_is_shared)
 		free_pages(log_ctx.trace_page, LOG_BUF_ORDER);
 	else
-		mc_dev_err("log buffer unregister not supported\n");
+		mc_dev_err("log buffer unregister not supported");
 }

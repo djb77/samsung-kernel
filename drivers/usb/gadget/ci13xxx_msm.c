@@ -385,7 +385,7 @@ int ci13xxx_set_vbus_current(int state)
 	}
 
 	pval.intval = state;
-#ifdef CONFIG_BATTERY_SAMSUNG_V2
+#if defined(CONFIG_BATTERY_SAMSUNG_V2) || defined(CONFIG_BATTERY_SAMSUNG_V2_LEGACY)
 	psy->set_property(psy, POWER_SUPPLY_EXT_PROP_USB_CONFIGURE, &pval);
 #else
 	psy->set_property(psy, POWER_SUPPLY_PROP_USB_CONFIGURE, &pval);

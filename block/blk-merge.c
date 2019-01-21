@@ -671,6 +671,8 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 			&& !(rq->cmd_flags & REQ_META))
 		return false;
 #endif
+	if (bio_flagged(bio, BIO_BYPASS) && !(rq->cmd_flags & REQ_BYPASS))
+		return false;
 
 	if (q->queue_flags & (1 << QUEUE_FLAG_SG_GAPS)) {
 		struct bio_vec *bprev;

@@ -991,12 +991,12 @@ static int ncm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 		if (alt == 0) {
 #endif
-		if (ncm->port.in_ep->driver_data) {
-			DBG(cdev, "reset ncm\n");
-			ncm->netdev = NULL;
-			gether_disconnect(&ncm->port);
-			ncm_reset_values(ncm);
-		}
+			if (ncm->port.in_ep->driver_data) {
+				DBG(cdev, "reset ncm\n");
+				ncm->netdev = NULL;
+				gether_disconnect(&ncm->port);
+				ncm_reset_values(ncm);
+			}
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 		}
 #endif

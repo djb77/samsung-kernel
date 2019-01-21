@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Samsung Electronics, Inc.
+ * Copyright (C) 2017 Samsung Electronics, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -69,14 +69,18 @@ enum sec_mux_sel_type {
 	SEC_MUX_SEL_CHG_THM,
 	SEC_MUX_SEL_AP_THM,
 	SEC_MUX_SEL_WPC_THM,
+	SEC_MUX_SEL_SLAVE_CHG_THM,
+	SEC_MUX_SEL_BLKT_THM, //7
 };
 
-#define EAR_ADC_MUX_SEL 	1
-#define BATT_ID_MUX_SEL		2
-#define BATT_THM_MUX_SEL	4
-#define CHG_THM_MUX_SEL		8
-#define AP_THM_MUX_SEL		16
-#define WPC_THM_MUX_SEL		32
+#define EAR_ADC_MUX_SEL 	0x01
+#define BATT_ID_MUX_SEL		0x02
+#define BATT_THM_MUX_SEL	0x04
+#define CHG_THM_MUX_SEL		0x08
+#define AP_THM_MUX_SEL		0x10
+#define WPC_THM_MUX_SEL		0x20
+#define SLAVE_CHG_THM_MUX_SEL	0x40
+#define BLKT_THM_MUX_SEL	0x80
 
 void sec_mpp_mux_control(int mux_sel, int adc_type, int mutex_on);
 
@@ -86,5 +90,7 @@ extern int BATT_THM_MUX_SEL_NUM;
 extern int CHG_THM_MUX_SEL_NUM;
 extern int AP_THM_MUX_SEL_NUM;
 extern int WPC_THM_MUX_SEL_NUM;
+extern int SLAVE_CHG_THM_MUX_SEL_NUM;
+extern int BLKT_THM_MUX_SEL_NUM;
 #endif
 #endif

@@ -2,7 +2,7 @@
  * drivers/serial/msm_serial.c - driver for msm7k serial device and console
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -1130,6 +1130,7 @@ static void handle_rx(struct uart_port *port, unsigned int misr)
 	unsigned int vid;
 	unsigned int sr;
 	int count = 0;
+	int copied = 0;
 	struct msm_hsl_port *msm_hsl_port = UART_TO_MSM(port);
 #ifdef CONFIG_SEC_BSP
 	int debug_count = 0;
@@ -1196,14 +1197,13 @@ static void handle_rx(struct uart_port *port, unsigned int misr)
 
 		/* TODO: handle sysrq */
 		/* if (!uart_handle_sysrq_char(port, c)) */
-		tty_insert_flip_string(tty->port, (char *) &c,
+		copied = tty_insert_flip_string(tty->port, (char *) &c,
 				       (count > 4) ? 4 : count);
-
 #ifdef CONFIG_SEC_BSP
 		sec_debug_hsl_insert_data(port, DIR_RX, (char *)&c, (count > 4) ? 4 : count);
 #endif
 
-		count -= 4;
+		count -= copied;
 	}
 
 	tty_flip_buffer_push(tty->port);

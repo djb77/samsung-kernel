@@ -22,7 +22,6 @@
 #include <linux/ktime.h>
 #include <linux/rtc.h>
 
-#define MANAGER_WATER_EVENT_ENABLE
 #define DEBUG
 #define SET_MANAGER_NOTIFIER_BLOCK(nb, fn, dev) do {	\
 		(nb)->notifier_call = (fn);		\
@@ -39,18 +38,20 @@ typedef enum
 	MUIC_NOTIFIER
 }notifier_register;
 
+#if defined(CONFIG_HICCUP_CHARGER)
+extern unsigned int lpcharge;
+#endif
+
 static int manager_notifier_init_done = 0;
 static int confirm_manager_notifier_register = 0;
 static int manager_notifier_init(void);
 
 struct device *manager_device;
 manager_data_t typec_manager;
-#ifdef MANAGER_WATER_EVENT_ENABLE
-static DECLARE_COMPLETION(ccic_attach_done);
-#endif
 void set_usb_enumeration_state(int state);
 static void cable_type_check_work(bool state, int time);
-void calc_water_duration_time(void);
+void calc_duration_time(unsigned long sTime, unsigned long eTime, unsigned long *dTime);
+void wVbus_time_update(int mode);
 void water_dry_time_update(int mode);
 
 static int manager_notifier_notify(void *data)
@@ -62,7 +63,7 @@ static int manager_notifier_notify(void *data)
 		"sub1:%02x sub2:%02x sub3:%02x\n", __func__,
 		(manager_noti.src<9)? CCIC_NOTI_DEST_Print[manager_noti.src]:"Unknown",
 		(manager_noti.dest<9)? CCIC_NOTI_DEST_Print[manager_noti.dest]:"Unknown",
-		(manager_noti.id<13)? CCIC_NOTI_ID_Print[manager_noti.id]:"Unknown",
+		(manager_noti.id<15)? CCIC_NOTI_ID_Print[manager_noti.id]:"Unknown",
 		manager_noti.sub1, manager_noti.sub2, manager_noti.sub3);	
 
 	if (manager_noti.dest == CCIC_NOTIFY_DEV_DP) {
@@ -81,6 +82,21 @@ static int manager_notifier_notify(void *data)
 		typec_manager.ccic_drp_state = ((CC_NOTI_USB_STATUS_TYPEDEF *)&manager_noti)->drp;
 		if (typec_manager.ccic_drp_state == USB_STATUS_NOTIFY_DETACH)
 			set_usb_enumeration_state(0);
+	}
+
+	if (manager_noti.dest == CCIC_NOTIFY_DEV_BATTERY
+#if defined(CONFIG_HICCUP_CHARGER)
+		&& manager_noti.sub3 == typec_manager.water_cable_type) {
+#else
+		&& manager_noti.sub3 == ATTACHED_DEV_UNDEFINED_RANGE_MUIC) {
+#endif
+		if (manager_noti.sub1 != typec_manager.wVbus_det) {
+			typec_manager.wVbus_det = manager_noti.sub1;
+			typec_manager.waterChg_count += manager_noti.sub1;
+			wVbus_time_update(typec_manager.wVbus_det);
+		} else {
+			return 0;
+		}
 	}
 
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
@@ -181,15 +197,38 @@ EXPORT_SYMBOL(get_waterChg_count);
 unsigned long get_waterDet_duration(void)
 {
 	unsigned long ret;
+	struct timeval time;
 
-	if (typec_manager.water_det) 
-		calc_water_duration_time();
+	if (typec_manager.water_det) {
+		do_gettimeofday(&time);
+		calc_duration_time(typec_manager.waterDet_time,
+			time.tv_sec, &typec_manager.waterDet_duration);
+		typec_manager.waterDet_time = time.tv_sec;
+	}
 
 	ret = typec_manager.waterDet_duration/60;  /* min */
-	typec_manager.waterDet_duration = 0;
+	typec_manager.waterDet_duration -= ret*60;
 	return ret;
 }
 EXPORT_SYMBOL(get_waterDet_duration);
+
+unsigned long get_wVbus_duration(void)
+{
+	unsigned long ret;
+	struct timeval time;
+
+	if (typec_manager.wVbus_det) {
+		do_gettimeofday(&time);	/* time.tv_sec */
+		calc_duration_time(typec_manager.wVbusHigh_time,
+			time.tv_sec, &typec_manager.wVbus_duration);
+		typec_manager.wVbusHigh_time = time.tv_sec;
+	}
+
+	ret = typec_manager.wVbus_duration;  /* sec */
+	typec_manager.wVbus_duration = 0;
+	return ret;
+}
+EXPORT_SYMBOL(get_wVbus_duration);
 
 void set_usb_enable_state(void)
 {
@@ -202,26 +241,19 @@ void set_usb_enable_state(void)
 }
 EXPORT_SYMBOL(set_usb_enable_state);
 
-void calc_water_duration_time(void)
+void calc_duration_time(unsigned long sTime, unsigned long eTime, unsigned long *dTime)
 {
-	struct timeval time;
-	int calcWtime;
+	unsigned long calcDtime;
 
-	if (typec_manager.water_det) {
-		do_gettimeofday(&time);
-		calcWtime = time.tv_sec - typec_manager.waterDet_time;
-		typec_manager.waterDet_time = time.tv_sec;
-	} else {
-		calcWtime = typec_manager.dryDet_time - typec_manager.waterDet_time;
-	}
+	calcDtime = eTime - sTime;
 
-	/* check for exception case. ex> 1year */
-	if ((calcWtime < 0) || (calcWtime > 31536000)) calcWtime = 0;
+	/* check for exception case. */
+	if (calcDtime > 86400)
+		calcDtime = 0;
 
-	typec_manager.waterDet_duration += calcWtime;
-	pr_info(" WDT @ %lu \n", typec_manager.waterDet_duration);
+	*dTime += calcDtime;
+//	pr_info(" T @ %lu \n", *dTime);
 }
-
 
 static void cable_type_check(struct work_struct *work)
 {
@@ -325,7 +357,8 @@ void water_dry_time_update(int mode)
 	do_gettimeofday(&time);
 	if (rtc_update_check) {
 		rtc_update_check = 0;
-		rtc_time_to_tm(time.tv_sec, &det_time); //Do not use Greenwich
+		rtc_time_to_tm(time.tv_sec, &det_time);
+		pr_info("%s: year=%d\n", __func__,  det_time.tm_year);
 		if (det_time.tm_year == 70) { /* (1970-01-01 00:00:00) */
 			schedule_delayed_work(&typec_manager.rtctime_update_work, msecs_to_jiffies(5000));
 		}
@@ -337,7 +370,9 @@ void water_dry_time_update(int mode)
 	} else {
 		/* DRY */
 		typec_manager.dryDet_time = time.tv_sec;
-		calc_water_duration_time();
+		calc_duration_time(typec_manager.waterDet_time,
+			typec_manager.dryDet_time, &typec_manager.waterDet_duration);
+//		pr_info("%s: T @ %lu \n", __func__,  typec_manager.waterDet_duration);
 	}
 }
 
@@ -351,14 +386,41 @@ static void water_det_rtc_time_update(struct work_struct *work)
 	rtc_time_to_tm(time.tv_sec, &rtctime);
 	if ((rtctime.tm_year == 70) && (max_retry<5)) {
 		/* (1970-01-01 00:00:00) */
+		if (typec_manager.wVbus_det) {
+			calc_duration_time(typec_manager.wVbusHigh_time,
+				time.tv_sec, &typec_manager.wVbus_duration);
+			typec_manager.wVbusHigh_time = time.tv_sec;
+		}
 		max_retry++;
 		schedule_delayed_work(&typec_manager.rtctime_update_work, msecs_to_jiffies(5000));
 	} else {
 		if (typec_manager.water_det) {
 			typec_manager.waterDet_time = time.tv_sec;
 			typec_manager.waterDet_duration += max_retry*5;
+			if (typec_manager.wVbus_det) {
+				typec_manager.wVbusHigh_time = time.tv_sec;
+				typec_manager.wVbus_duration += 5;
+			}
 		}
-	}	
+	}
+}
+
+void wVbus_time_update(int mode)
+{
+	struct timeval time;
+
+	do_gettimeofday(&time);
+
+	if (mode) {
+		/* WVBUS HIGH */
+		typec_manager.wVbusHigh_time = time.tv_sec;
+	} else {
+		/* WVBUS LOW */
+		typec_manager.wVbusLow_time = time.tv_sec;
+		calc_duration_time(typec_manager.wVbusHigh_time,
+			typec_manager.wVbusLow_time, &typec_manager.wVbus_duration);
+//		pr_info("%s: T @ %lu \n", __func__,  typec_manager.wVbus_duration);
+	}
 }
 
 #if defined(CONFIG_VBUS_NOTIFIER)
@@ -400,8 +462,11 @@ static void muic_fake_event_work(struct work_struct *work)
 
 	if( typec_manager.ccic_rid_state == RID_523K ||  typec_manager.ccic_rid_state == RID_619K
 		|| typec_manager.ccic_drp_state == USB_STATUS_NOTIFY_ATTACH_DFP
-		|| typec_manager.muic_action == MUIC_NOTIFY_CMD_DETACH
 		|| typec_manager.vbus_state == STATUS_VBUS_HIGH) {
+		return;
+	} else if (typec_manager.muic_action == MUIC_NOTIFY_CMD_DETACH) {
+		typec_manager.muic_attach_state_without_ccic = 1;
+		schedule_delayed_work(&typec_manager.muic_noti_work, msecs_to_jiffies(0));
 		return;
 	}
 
@@ -422,15 +487,13 @@ static int manager_handle_ccic_notification(struct notifier_block *nb,
 {
 	MANAGER_NOTI_TYPEDEF noti = *(MANAGER_NOTI_TYPEDEF *)data;
 	CC_NOTI_ATTACH_TYPEDEF bat_noti;
-#ifdef MANAGER_WATER_EVENT_ENABLE
 	CC_NOTI_ATTACH_TYPEDEF muic_noti;
-#endif
 	int ret = 0;
 
 	pr_info("usb: [M] %s: src:%s dest:%s id:%s attach/rid:%d\n", __func__,
 		(noti.src<9)? CCIC_NOTI_DEST_Print[noti.src]:"unknown",
 		(noti.dest<9)? CCIC_NOTI_DEST_Print[noti.dest]:"unknown",
-		(noti.id<13)? CCIC_NOTI_ID_Print[noti.id]:"unknown",
+		(noti.id<15)? CCIC_NOTI_ID_Print[noti.id]:"unknown",
 		noti.sub1);
 
 #if defined(CONFIG_VBUS_NOTIFIER)
@@ -459,9 +522,6 @@ static int manager_handle_ccic_notification(struct notifier_block *nb,
 				if(typec_manager.ccic_attach_state == CCIC_NOTIFY_ATTACH){
 					pr_info("usb: [M] %s: CCIC_NOTIFY_ATTACH\n", __func__);
 					typec_manager.water_det = 0;
-#ifdef MANAGER_WATER_EVENT_ENABLE
-					complete(&ccic_attach_done);
-#endif
 					typec_manager.pd_con_state = 0;
 				} else { /* CCIC_NOTIFY_DETACH */
 					pr_info("usb: [M] %s: CCIC_NOTIFY_DETACH (pd=%d, cable_type=%d)\n", __func__,
@@ -493,11 +553,9 @@ static int manager_handle_ccic_notification(struct notifier_block *nb,
 		break;
 	case CCIC_NOTIFY_ID_WATER:
 		if (((CC_NOTI_ATTACH_TYPEDEF *)&noti)->attach) {
-#ifdef MANAGER_WATER_EVENT_ENABLE
 			if(!typec_manager.water_det) {
 					typec_manager.water_det = 1;
 					typec_manager.water_count++;
-					complete(&ccic_attach_done);
 
 					muic_noti.src = CCIC_NOTIFY_DEV_CCIC;
 					muic_noti.dest = CCIC_NOTIFY_DEV_MUIC;
@@ -511,39 +569,52 @@ static int manager_handle_ccic_notification(struct notifier_block *nb,
 					/*update water time */
 					water_dry_time_update((int)((CC_NOTI_ATTACH_TYPEDEF *)&noti)->attach);
 
+#if defined(CONFIG_HICCUP_CHARGER)
+					if (noti.sub1 
+						&& (noti.dest == CCIC_NOTIFY_DEV_BATTERY)
+						&& (typec_manager.vbus_state == STATUS_VBUS_HIGH)
+						)
+					{
+						noti.sub3 = typec_manager.water_cable_type;
+					} else if (!noti.sub1 && typec_manager.wVbus_det) {
+						noti.dest = CCIC_NOTIFY_DEV_BATTERY;
+						noti.sub3 = typec_manager.water_cable_type;
+#else
 					if (typec_manager.muic_action == MUIC_NOTIFY_CMD_ATTACH) {
 						noti.sub3 = ATTACHED_DEV_UNDEFINED_RANGE_MUIC; /* cable_type */
+#endif
 					} else {
 						/* If the cable is not connected, skip the battery event. */
 						return 0;
 					}
 			} else {
 				/* Ignore duplicate events */
+				pr_info("usb: [M] %s: Ignore duplicate events\n", __func__);
 				return 0;
 			}
-#else
-			if(!typec_manager.water_det) {
-				typec_manager.water_det = 1;
-				if (typec_manager.muic_action == MUIC_NOTIFY_CMD_ATTACH) {
-					bat_noti.src = CCIC_NOTIFY_DEV_CCIC;
-					bat_noti.dest = CCIC_NOTIFY_DEV_BATTERY;
-					bat_noti.id = CCIC_NOTIFY_ID_ATTACH;
-					bat_noti.attach = CCIC_NOTIFY_DETACH;
-					bat_noti.rprd = 0;
-					bat_noti.cable_type = typec_manager.muic_cable_type;
-					bat_noti.pd = NULL;
-					manager_notifier_notify(&bat_noti);
-				}
-			}
-			return 0;
-#endif
 		} else {
 			typec_manager.water_det = 0;
 			typec_manager.dry_count++;
 
 			/* update run_dry time */
 			water_dry_time_update((int)((CC_NOTI_ATTACH_TYPEDEF *)&noti)->attach);
-			return 0;
+
+			if (typec_manager.wVbus_det) {
+				noti.sub3 = ATTACHED_DEV_UNDEFINED_RANGE_MUIC;
+			} else {
+				pr_info("usb: [M] %s: DRY detected case\n", __func__);
+
+				muic_noti.src = CCIC_NOTIFY_DEV_CCIC;
+				muic_noti.dest = CCIC_NOTIFY_DEV_MUIC;
+				muic_noti.id = CCIC_NOTIFY_ID_DRY;
+				muic_noti.attach = CCIC_NOTIFY_DETACH;
+				muic_noti.rprd = 0;
+				muic_noti.cable_type = 0;
+				muic_noti.pd = NULL;
+				manager_notifier_notify(&muic_noti);
+
+				return 0;
+			}
 		}
 		break;
 	default:
@@ -576,10 +647,14 @@ static int manager_handle_muic_notification(struct notifier_block *nb,
 	}
 	pr_info("usb: [M] %s:attach:%d, ccic_drp_state=%d, ccic_rid_state:%d\n", __func__,
 		noti.attach, typec_manager.ccic_drp_state, typec_manager.ccic_rid_state);
-	
+#if defined(CONFIG_CCIC_ALTERNATE_MODE)
 	if (noti.attach && typec_manager.ccic_drp_state == USB_STATUS_NOTIFY_DETACH
 		&& (typec_manager.ccic_rid_state != RID_523K && typec_manager.ccic_rid_state != RID_619K)
 		&& !get_diplayport_status()) {
+#else
+	if (noti.attach && typec_manager.ccic_drp_state == USB_STATUS_NOTIFY_DETACH
+		&& (typec_manager.ccic_rid_state != RID_523K && typec_manager.ccic_rid_state != RID_619K)) {
+#endif
 		typec_manager.muic_attach_state_without_ccic = 1;
 	}
 
@@ -672,9 +747,7 @@ static int manager_handle_vbus_notification(struct notifier_block *nb,
 				unsigned long action, void *data)
 {
 	vbus_status_t vbus_type = *(vbus_status_t *)data;
-#ifdef MANAGER_WATER_EVENT_ENABLE
 	CC_NOTI_ATTACH_TYPEDEF bat_noti;
-#endif
 
 	pr_info("usb: [M] %s: cmd=%lu, vbus_type=%s, WATER DET=%d ATTACH=%s (%d)\n", __func__,
 		action, vbus_type == STATUS_VBUS_HIGH ? "HIGH" : "LOW", typec_manager.water_det,
@@ -682,43 +755,42 @@ static int manager_handle_vbus_notification(struct notifier_block *nb,
 		typec_manager.muic_attach_state_without_ccic);
 
 	typec_manager.vbus_state = vbus_type;
-
-#ifdef MANAGER_WATER_EVENT_ENABLE
-	init_completion(&ccic_attach_done);
-	if ((typec_manager.water_det == 1) && (vbus_type == STATUS_VBUS_HIGH) )
-		wait_for_completion_timeout(&ccic_attach_done,
-					    msecs_to_jiffies(2000));
+#if defined(CONFIG_SEC_GTA2XLLTE_PROJECT) || defined(CONFIG_SEC_GTA2XLWIFI_PROJECT)
+	s2mm005_set_vbus_status(typec_manager.vbus_state, 0);
 #endif
 
 	switch (vbus_type) {
 	case STATUS_VBUS_HIGH:
-#ifdef MANAGER_WATER_EVENT_ENABLE
 		if (typec_manager.water_det) {
-			typec_manager.waterChg_count++;
 			bat_noti.src = CCIC_NOTIFY_DEV_CCIC;
 			bat_noti.dest = CCIC_NOTIFY_DEV_BATTERY;
 			bat_noti.id = CCIC_NOTIFY_ID_WATER;
 			bat_noti.attach = CCIC_NOTIFY_ATTACH;
 			bat_noti.rprd = 0;
+#if defined(CONFIG_HICCUP_CHARGER)
+			bat_noti.cable_type = typec_manager.water_cable_type;
+#else
 			bat_noti.cable_type = ATTACHED_DEV_UNDEFINED_RANGE_MUIC;
+#endif
 			bat_noti.pd = NULL;
 			manager_notifier_notify(&bat_noti);
 		}
-#endif
 		break;
 	case STATUS_VBUS_LOW:
-#ifdef MANAGER_WATER_EVENT_ENABLE
 		if (typec_manager.water_det) {
 			bat_noti.src = CCIC_NOTIFY_DEV_CCIC;
 			bat_noti.dest = CCIC_NOTIFY_DEV_BATTERY;
 			bat_noti.id = CCIC_NOTIFY_ID_ATTACH;
 			bat_noti.attach = CCIC_NOTIFY_DETACH;
 			bat_noti.rprd = 0;
+#if defined(CONFIG_HICCUP_CHARGER)
+			bat_noti.cable_type = typec_manager.water_cable_type;
+#else
 			bat_noti.cable_type = ATTACHED_DEV_UNDEFINED_RANGE_MUIC;
+#endif
 			bat_noti.pd = NULL;
 			manager_notifier_notify(&bat_noti);
 		}
-#endif
 		handle_muic_fake_event(EVENT_LOAD);
 		break;
 	default:
@@ -734,7 +806,9 @@ int manager_notifier_register(struct notifier_block *nb, notifier_fn_t notifier,
 {
 	int ret = 0;
 	MANAGER_NOTI_TYPEDEF m_noti;
+#if defined(CONFIG_CCIC_ALTERNATE_MODE)
 	static int alternate_mode_start_wait = 0;
+#endif
 
 	if(!manager_notifier_init_done)
 		manager_notifier_init();
@@ -772,7 +846,11 @@ int manager_notifier_register(struct notifier_block *nb, notifier_fn_t notifier,
 		m_noti.pd = typec_manager.pd;
 		if(typec_manager.water_det && m_noti.sub1) {
 			m_noti.id = CCIC_NOTIFY_ID_WATER;
+#if defined(CONFIG_HICCUP_CHARGER)
+			m_noti.sub3 = typec_manager.water_cable_type;
+#else
 			m_noti.sub3 = ATTACHED_DEV_UNDEFINED_RANGE_MUIC;
+#endif
 		} else {
 			m_noti.id = CCIC_NOTIFY_ID_ATTACH;
 			if(typec_manager.pd_con_state) {
@@ -827,11 +905,12 @@ int manager_notifier_register(struct notifier_block *nb, notifier_fn_t notifier,
 			CCIC_NOTI_USB_STATUS_Print[m_noti.sub2]);
 		nb->notifier_call(nb, m_noti.id, &(m_noti));
 		alternate_mode_start_wait |= 0x1;
-		if(alternate_mode_start_wait == 0x11) {
+		if(alternate_mode_start_wait == 0x1) { /* Because sdm450 don't support DP */
 			pr_info("usb: [M] %s USB & DP driver is registered! Alternate mode Start!\n", __func__);
 			set_enable_alternate_mode(ALTERNATE_MODE_READY | ALTERNATE_MODE_START);
 		}
 	} else if(listener == MANAGER_NOTIFY_CCIC_DP) {
+#if defined(CONFIG_CCIC_DP_COMMUNICATION)
 		m_noti.src = CCIC_NOTIFY_DEV_MANAGER;
 		m_noti.dest = CCIC_NOTIFY_DEV_DP;
 		m_noti.sub2 = 0;
@@ -856,7 +935,8 @@ int manager_notifier_register(struct notifier_block *nb, notifier_fn_t notifier,
 			pr_info("usb: [M] %s USB & DP driver is registered! Alternate mode Start!\n", __func__);
 			set_enable_alternate_mode(ALTERNATE_MODE_READY | ALTERNATE_MODE_START);
 		}
-	}		
+#endif
+	}
 	return ret;
 }
 
@@ -959,12 +1039,14 @@ static int manager_notifier_init(void)
 	typec_manager.muic_data_refresh = 0;
 	typec_manager.usb_enum_state = 0;
 	typec_manager.water_det = 0;
+	typec_manager.wVbus_det = 0;
 	typec_manager.water_count =0;
 	typec_manager.dry_count = 0;
 	typec_manager.usb210_count = 0;
 	typec_manager.usb310_count = 0;
 	typec_manager.waterChg_count = 0;
 	typec_manager.waterDet_duration = 0;
+	typec_manager.wVbus_duration = 0;
 	typec_manager.muic_attach_state_without_ccic = 0;
 #if defined(CONFIG_VBUS_NOTIFIER)
 	typec_manager.muic_fake_event_wq_processing = 0;
@@ -973,6 +1055,14 @@ static int manager_notifier_init(void)
 	typec_manager.is_UFPS = 0;
 	typec_manager.ccic_rid_state = RID_UNDEFINED;
 	typec_manager.pd = NULL;
+
+#if IS_ENABLED(CONFIG_HICCUP_CHARGER)
+		typec_manager.water_cable_type = lpcharge ?
+			ATTACHED_DEV_UNDEFINED_RANGE_MUIC :
+			ATTACHED_DEV_HICCUP_MUIC;
+#else
+		typec_manager.water_cable_type = ATTACHED_DEV_UNDEFINED_RANGE_MUIC;
+#endif
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&(typec_manager.manager_ccic_notifier));
 	BLOCKING_INIT_NOTIFIER_HEAD(&(typec_manager.manager_muic_notifier));
@@ -988,8 +1078,9 @@ static int manager_notifier_init(void)
 
 	INIT_DELAYED_WORK(&typec_manager.rtctime_update_work,
 		water_det_rtc_time_update);
-
+#if defined(CONFIG_CCIC_ALTERNATE_MODE)
 	set_enable_alternate_mode(ALTERNATE_MODE_NOT_READY);
+#endif
 #if defined(CONFIG_VBUS_NOTIFIER)
 	INIT_DELAYED_WORK(&typec_manager.vbus_noti_work,
 		muic_fake_event_work);

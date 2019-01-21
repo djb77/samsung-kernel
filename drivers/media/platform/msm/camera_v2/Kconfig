@@ -260,18 +260,6 @@ config MSM_FD
 	 ---help---
 	    Enables support for the MSM FD face detection engine.
 
-config CAMERA_SYSFS_V2
-	bool "CAMERA SYS"
-	depends on MSMB_CAMERA
-	---help---
-		CAMERA SYS.
-
-config USE_CAMERA_HW_BIG_DATA
-	bool "CAMERA HW SYS"
-	depends on MSMB_CAMERA
-	---help---
-		CAMERA HW SYS.
-
 config MSM_JPEGDMA
 	tristate "Qualcomm Technologies Inc. MSM Jpeg dma"
         depends on MSMB_CAMERA
@@ -308,11 +296,6 @@ config LEDS_KTD2692
 	  help
 	  A driver for KTD2692 flash LED
 	  This option enables support for the LEDs on the KTD2692.
-
-config LEDS_KTD2692_FOR_FRONT
-	tristate " Front LED driver for KTD2692 LED"
-	  help
-	  This option enables support for Front LED with KTD2692.
 
 config FRONT_FLASH
 	bool "Rear LED and Front LED both USING"

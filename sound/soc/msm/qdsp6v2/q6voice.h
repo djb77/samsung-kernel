@@ -42,12 +42,14 @@
 #define CVD_VERSION_0_0                      "0.0"
 #define CVD_VERSION_2_1                      "2.1"
 #define CVD_VERSION_2_2                      "2.2"
+#define CVD_VERSION_2_3                      "2.3"
 
 #define CVD_INT_VERSION_DEFAULT              0
 #define CVD_INT_VERSION_0_0                  1
 #define CVD_INT_VERSION_2_1                  2
 #define CVD_INT_VERSION_2_2                  3
-#define CVD_INT_VERSION_LAST                 CVD_INT_VERSION_2_2
+#define CVD_INT_VERSION_2_3                  4
+#define CVD_INT_VERSION_LAST                 CVD_INT_VERSION_2_3
 #define CVD_INT_VERSION_MAX                  (CVD_INT_VERSION_LAST + 1)
 
 struct cvd_version_table {
@@ -1882,6 +1884,8 @@ int voice_sec_set_nbmode(short enable);
 int voice_sec_set_dha_data(short mode, short select, short *parameters);
 int voc_get_loopback_enable(void);
 void voc_set_loopback_enable(int loopback_enable);
-#endif /* CONFIG_SEC_VOC_SOLUTION*/
+#elif defined(CONFIG_SEC_SND_ADAPTATION)
+struct common_data *voice_get_common_data(void);
+#endif
 
 #endif

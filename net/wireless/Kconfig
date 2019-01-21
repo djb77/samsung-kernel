@@ -182,6 +182,10 @@ config CFG80211_WEXT
 	  Enable this option if you need old userspace for wireless
 	  extensions with cfg80211-based drivers.
 
+config DBTXT_VARIATION
+	int "use the db.txt_variation"
+	default 0
+
 config LIB80211
 	tristate
 	default n

@@ -64,7 +64,7 @@ struct sec_fg_info {
 
 	/* battery info */
 	int soc;
-
+#if !defined(CONFIG_BATTERY_AGE_FORECAST)
 	/* copy from platform data /
 	 * DTS or update by shell script */
 	int battery_table1[88];
@@ -74,12 +74,26 @@ struct sec_fg_info {
 	int soc_arr_evt2[22];
 	int ocv_arr_evt2[22];
 	int batcap[4];
-
+#endif
 	/* miscellaneous */
 	unsigned long fullcap_check_interval;
 	int full_check_flag;
 	bool is_first_check;
 };
+
+#if defined(CONFIG_BATTERY_AGE_FORECAST)
+struct fg_age_data_info {
+        int battery_table3[88]; // evt2
+        int battery_table4[22]; // evt2
+        int batcap[4];
+        int accum[2];
+	int soc_arr_val[22];
+        int ocv_arr_val[22];
+};
+
+#define	fg_age_data_info_t \
+	struct fg_age_data_info
+#endif
 
 struct s2mu005_platform_data {
 	int capacity_max;
@@ -89,6 +103,7 @@ struct s2mu005_platform_data {
 	int fuel_alert_soc;
 	int fullsocthr;
 	int fg_irq;
+	int fg_log_enable;
 
 	char *fuelgauge_name;
 
@@ -116,6 +131,12 @@ struct s2mu005_fuelgauge_data {
 	 * (ex. dummy_fuelgauge.c)
 	 */
 	struct sec_fg_info      info;
+#if defined(CONFIG_BATTERY_AGE_FORECAST)
+	fg_age_data_info_t*	age_data_info;
+	int fg_num_age_step;
+	int fg_age_step;
+	int age_reset_status;
+#endif
 	bool is_fuel_alerted;
 	struct wake_lock fuel_alert_wake_lock;
 
@@ -124,6 +145,7 @@ struct s2mu005_fuelgauge_data {
 	unsigned int standard_capacity;
 
 	bool initial_update_of_soc;
+	bool sleep_initial_update_of_soc;
 	struct mutex fg_lock;
 	struct delayed_work isr_work;
 

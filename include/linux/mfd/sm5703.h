@@ -36,8 +36,10 @@
 #include <linux/workqueue.h>
 #include <linux/slab.h>
 
-#ifdef CONFIG_BATTERY_SAMSUNG_V2
+#if defined(CONFIG_BATTERY_SAMSUNG_V2)
 #include "../../../drivers/battery_v2/include/sec_charging_common.h"
+#elif defined(CONFIG_BATTERY_SAMSUNG_V2_LEGACY)
+#include "../../../drivers/battery_v2_legacy/include/sec_charging_common.h"
 #else
 #include <linux/battery/sec_charging_common.h>
 #endif
@@ -83,7 +85,6 @@ typedef union sm5703_irq_status {
 typedef struct sm5703_regulator_platform_data {
 	struct regulator_init_data *regulator[SM5703_MAX_REGULATOR];
 } sm5703_regulator_platform_data_t;
-
 
 struct sm5703_fled_platform_data;
 

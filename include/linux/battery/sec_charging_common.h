@@ -38,6 +38,7 @@
 
 enum power_supply_ext_property {
 	POWER_SUPPLY_EXT_PROP_AICL_CURRENT = POWER_SUPPLY_PROP_MAX,
+	POWER_SUPPLY_EXT_PROP_UPDATE_BATTERY_DATA,
 };
 
 enum sec_battery_usb_conf {
@@ -585,8 +586,11 @@ struct sec_battery_platform_data {
 	/* battery swelling */
 	int swelling_high_temp_block;
 	int swelling_high_temp_recov;
-	int swelling_low_temp_block;
-	int swelling_low_temp_recov;
+	int swelling_low_temp_block_1st;
+	int swelling_low_temp_recov_1st;
+	int swelling_low_temp_block_2nd;
+	int swelling_low_temp_recov_2nd;
+	int swelling_low_temp_2step_mode;
 	int swelling_full_check_current_2nd;
 	unsigned int swelling_low_temp_current;
 	unsigned int swelling_low_temp_topoff;
@@ -841,6 +845,10 @@ struct sec_battery_platform_data {
 	unsigned int cisd_cap_limit;
 	int full_chg_current_margin;
 #endif
+
+	unsigned int expired_time;
+	unsigned int recharging_expired_time;
+	int standard_curr;
 
 	/* ADC setting */
 	unsigned int adc_check_count;

@@ -195,6 +195,11 @@ struct abov_tk_info {
 	bool glovemode;
 	bool keyboard_mode;
 	bool flip_mode;
+	
+	unsigned int key_num;
+	bool irq_checked;
+	int irq_key_count[MAX_KEY_NUM];
+	
 #ifdef LED_TWINKLE_BOOTING
 	struct delayed_work led_twinkle_work;
 	bool led_twinkle_check;
@@ -994,6 +999,14 @@ static irqreturn_t abov_tk_interrupt(int irq, void *dev_id)
 		int back_data = (buf >> 2) & 0x03;
 		u8 menu_press = !(menu_data % 2);
 		u8 back_press = !(back_data % 2);
+
+		if(info->irq_checked){
+			if(menu_data==2)
+			info->irq_key_count[0]++;
+		    else if(back_data==2)
+			info->irq_key_count[1]++;	
+		}
+
 #ifdef CONFIG_TOUCHKEY_GRIP
 		grip_data = (buf >> 4) & 0x03;
 		grip_press = !(grip_data % 2);
@@ -2541,6 +2554,53 @@ out:
 	return count;
 }
 
+static ssize_t touchkey_irq_count_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct abov_tk_info *info = dev_get_drvdata(dev);
+	struct i2c_client *client = info->client;
+	int homekey = 0;
+	input_info(true, &client->dev, "%s - Recent : %d, Home : %d, Back : %d \n", __func__, info->irq_key_count[0], homekey, info->irq_key_count[1]);
+
+	return sprintf(buf, "%d,%d,%d\n", info->irq_key_count[0], homekey, info->irq_key_count[1]);
+}
+
+static ssize_t touchkey_irq_count_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct abov_tk_info *info = dev_get_drvdata(dev);
+	struct i2c_client *client = info->client;
+
+	u8 onoff = 0;
+	int i;
+
+	if (buf[0] == 48) {
+		onoff = 0;
+	} else if (buf[0] == 49) {
+		onoff = 1;
+	} else {
+		input_err(true,&client->dev, "%s [ERROR] Unknown value [%c]\n", __func__, buf[0]);
+		goto exit;
+	}
+	
+	if (onoff == 0) {
+		info->irq_checked= 0;
+	} else if (onoff == 1) {
+		info->irq_checked= 1;
+		for(i=0; i < MAX_KEY_NUM; i++)
+			info->irq_key_count[i] = 0;
+	} else {
+		input_err(true, &client->dev, "%s - unknown value %d\n", __func__, onoff);
+		goto error;
+	}
+
+exit:
+	input_info(true,&client->dev, "%s - %d [DONE]\n", __func__,onoff);
+	return count;
+
+error:
+	input_err(true,&client->dev, "%s - %d [ERROR]\n", __func__,onoff);
+	return count;	
+}
+
 #ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 static ssize_t touchkey_light_version_read(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -2816,7 +2876,9 @@ static DEVICE_ATTR(glove_mode, S_IRUGO | S_IWUSR | S_IWGRP,
 static DEVICE_ATTR(keyboard_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
 			keyboard_cover_mode_enable);
 static DEVICE_ATTR(flip_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
-		   flip_cover_mode_enable);
+		    flip_cover_mode_enable);
+static DEVICE_ATTR(touchkey_irq_count, S_IRUGO | S_IWUSR | S_IWGRP, 
+            touchkey_irq_count_show, touchkey_irq_count_store);
 #ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 static DEVICE_ATTR(touchkey_light_version, S_IRUGO, touchkey_light_version_read, NULL);
 static DEVICE_ATTR(touchkey_light_update, S_IWUSR | S_IWGRP, NULL, touchkey_light_update);
@@ -2858,6 +2920,7 @@ static struct attribute *sec_touchkey_attributes[] = {
 	&dev_attr_glove_mode.attr,
 	&dev_attr_keyboard_mode.attr,
 	&dev_attr_flip_mode.attr,
+	&dev_attr_touchkey_irq_count.attr,
 #ifdef CONFIG_TOUCHKEY_LIGHT_EFS
 	&dev_attr_touchkey_light_version.attr,
 	&dev_attr_touchkey_light_update.attr,
@@ -3240,6 +3303,7 @@ static int abov_parse_dt(struct device *dev,
 	}
 
 	ret = of_property_read_string(np, "abov,fw_path", (const char **)&pdata->fw_path);
+
 	if (ret) {
 		input_err(true, dev, "touchkey:failed to read fw_path %d\n", ret);
 		pdata->fw_path = TK_FW_PATH_BIN;
@@ -3482,10 +3546,8 @@ static int abov_tk_probe(struct i2c_client *client,
 	set_bit(KEY_RECENT, input_dev->keybit);
 	set_bit(KEY_BACK, input_dev->keybit);
 	set_bit(KEY_CP_GRIP, input_dev->keybit);
-#ifdef CONFIG_TOUCHKEY_LED	
 	set_bit(EV_LED, input_dev->evbit);
 	set_bit(LED_MISC, input_dev->ledbit);
-#endif /* CONFIG_TOUCHKEY_LED */	
 	input_set_drvdata(input_dev, info);
 
 	ret = input_register_device(input_dev);

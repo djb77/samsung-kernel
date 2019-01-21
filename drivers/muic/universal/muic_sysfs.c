@@ -29,6 +29,7 @@
 #include <linux/delay.h>
 #include <linux/host_notify.h>
 #include <linux/string.h>
+#include <linux/power_supply.h>
 
 #include <linux/muic/muic.h>
 
@@ -72,6 +73,25 @@ static ssize_t muic_show_uart_en(struct device *dev,
 	return sprintf(buf, "0\n");
 }
 
+static void sec_battery_set_uart_en(int enable)
+{
+	struct power_supply *psy;
+
+	psy = power_supply_get_by_name("battery");
+	if (!psy) {
+		pr_err("%s: Fail to get battery psy \n", __func__);
+	} else {
+		union power_supply_propval value;		
+		int ret;
+
+		value.intval = enable;
+		ret = psy->set_property(psy, POWER_SUPPLY_PROP_SCOPE, &value);
+		if (ret < 0) {
+			pr_err("%s: Fail to set property(%d)\n", __func__, ret);
+		}
+	}
+}
+
 static ssize_t muic_set_uart_en(struct device *dev,
 						struct device_attribute *attr,
 						const char *buf, size_t count)
@@ -80,8 +100,10 @@ static ssize_t muic_set_uart_en(struct device *dev,
 
 	if (!strncmp(buf, "1", 1)) {
 		pmuic->is_rustproof = false;
+		sec_battery_set_uart_en(1);
 	} else if (!strncmp(buf, "0", 1)) {
 		pmuic->is_rustproof = true;
+		sec_battery_set_uart_en(0);
 	} else {
 		pr_warn("%s:%s invalid value\n", MUIC_DEV_NAME, __func__);
 	}

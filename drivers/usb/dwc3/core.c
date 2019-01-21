@@ -97,6 +97,9 @@ static int dwc3_init_usb_phys(struct dwc3 *dwc)
 {
 	int		ret;
 
+	pr_err("%s: dwc->maximum_speed %d\n",
+				__func__, dwc->maximum_speed);
+	
 	/* Bring up PHYs */
 	ret = usb_phy_init(dwc->usb2_phy);
 	if (ret) {
@@ -137,6 +140,7 @@ static int dwc3_init_usb_phys(struct dwc3 *dwc)
 static int dwc3_core_reset(struct dwc3 *dwc)
 {
 	int		ret;
+	u32	reg;
 
 	/* Reset PHYs */
 	usb_phy_reset(dwc->usb2_phy);
@@ -149,6 +153,10 @@ static int dwc3_core_reset(struct dwc3 *dwc)
 				__func__, ret);
 		return ret;
 	}
+
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(0));
+	reg &= ~DWC3_GUSB3PIPECTL_DELAYP1TRANS;
+	dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(0), reg);
 
 	dwc3_notify_event(dwc, DWC3_CONTROLLER_RESET_EVENT, 0);
 
@@ -698,6 +706,7 @@ static void dwc3_core_exit_mode(struct dwc3 *dwc)
 void dwc3_post_host_reset_core_init(struct dwc3 *dwc)
 {
 	dwc3_core_init(dwc);
+	dwc3_event_buffers_setup(dwc);
 	dwc3_gadget_restart(dwc);
 	dwc3_notify_event(dwc, DWC3_CONTROLLER_POST_INITIALIZATION_EVENT, 0);
 }
@@ -777,6 +786,7 @@ static int dwc3_probe(struct platform_device *pdev)
 	u8			lpm_nyet_threshold;
 	u8			hird_threshold;
 	u32			num_evt_buffs;
+	u32			core_id;
 	int			irq;
 
 	int			ret;
@@ -889,6 +899,11 @@ static int dwc3_probe(struct platform_device *pdev)
 			"snps,num-gsi-evt-buffs", &num_evt_buffs);
 		if (!ret)
 			dwc->num_gsi_event_buffers = num_evt_buffs;
+
+		ret = of_property_read_u32(node,
+				"qcom,usb-core-id", &core_id);
+		if (!ret)
+			dwc->core_id = core_id;
 
 		if (dwc->enable_bus_suspend) {
 			pm_runtime_set_autosuspend_delay(dev, 500);

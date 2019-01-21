@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,6 +23,10 @@
 	compatible = "qcom,apq8009-mtp", "qcom,apq8009", "qcom,mtp";
 	qcom,msm-id = <265 2>, <245 2>;
 	qcom,board-id= <8 0xB>;
+};
+
+&audio_codec_mtp {
+	status = "disabled";
 };
 
 &soc {
@@ -55,6 +59,26 @@
 		compatible = "qcom,smd-ts";
 		ts-channel-name = "vsync_ts_diff";
 		ts-channel-type = <0>; /* SMD_APPS_MODEM */
+	};
+
+	cnss_sdio: qcom,cnss_sdio {
+		compatible = "qcom,cnss_sdio";
+		subsys-name = "AR6320";
+
+		/**
+		 * There is no vdd-wlan on board and this is not for DSRC.
+		 * IO and XTAL share the same vreg.
+		 */
+		vdd-wlan-io-supply = <&pm8916_l5>;
+		qcom,wlan-ramdump-dynamic = <0x200000>;
+		qcom,msm-bus,name = "msm-cnss";
+		qcom,msm-bus,num-cases = <4>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+			<79 512 0 0>,             /* No vote */
+			<79 512 6250 200000>,     /* 50 Mbps */
+			<79 512 25000 200000>,    /* 200 Mbps */
+			<79 512 2048000 4096000>; /* MAX */
 	};
 };
 
@@ -114,3 +138,22 @@
 	qcom,nonremovable;
 	status = "ok";
 };
+
+&mdss_fb0 {
+	status = "disabled";
+	/delete-node/ qcom,cont-splash-memory;
+};
+
+&mdss_mdp {
+	status = "disabled";
+};
+
+&mdss_dsi0_pll {
+	status = "disabled";
+};
+
+&mdss_dsi0 {
+	status = "disabled";
+};
+
+/delete-node/ &cont_splash_mem;

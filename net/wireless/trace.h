@@ -1188,6 +1188,24 @@ TRACE_EVENT(rdev_connect,
 		  __entry->wpa_versions, __entry->flags, MAC_PR_ARG(prev_bssid))
 );
 
+TRACE_EVENT(rdev_update_connect_params,
+	TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
+		 struct cfg80211_connect_params *sme, u32 changed),
+	TP_ARGS(wiphy, netdev, sme, changed),
+	TP_STRUCT__entry(
+		WIPHY_ENTRY
+		NETDEV_ENTRY
+		__field(u32, changed)
+	),
+	TP_fast_assign(
+		WIPHY_ASSIGN;
+		NETDEV_ASSIGN;
+		__entry->changed = changed;
+	),
+	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", parameters changed: %u",
+		  WIPHY_PR_ARG, NETDEV_PR_ARG,  __entry->changed)
+);
+
 TRACE_EVENT(rdev_set_cqm_rssi_config,
 	TP_PROTO(struct wiphy *wiphy,
 		 struct net_device *netdev, s32 rssi_thold,
@@ -2537,30 +2555,30 @@ TRACE_EVENT(cfg80211_get_bss,
 		  __entry->privacy)
 );
 
-TRACE_EVENT(cfg80211_inform_bss_width_frame,
-	TP_PROTO(struct wiphy *wiphy, struct ieee80211_channel *channel,
-		 enum nl80211_bss_scan_width scan_width,
-		 struct ieee80211_mgmt *mgmt, size_t len,
-		 s32 signal),
-	TP_ARGS(wiphy, channel, scan_width, mgmt, len, signal),
+TRACE_EVENT(cfg80211_inform_bss_frame,
+	TP_PROTO(struct wiphy *wiphy, struct cfg80211_inform_bss *data,
+		 struct ieee80211_mgmt *mgmt, size_t len),
+	TP_ARGS(wiphy, data, mgmt, len),
 	TP_STRUCT__entry(
 		WIPHY_ENTRY
 		CHAN_ENTRY
 		__field(enum nl80211_bss_scan_width, scan_width)
 		__dynamic_array(u8, mgmt, len)
 		__field(s32, signal)
+		__field(u64, ts_boottime)
 	),
 	TP_fast_assign(
 		WIPHY_ASSIGN;
-		CHAN_ASSIGN(channel);
-		__entry->scan_width = scan_width;
+		CHAN_ASSIGN(data->chan);
+		__entry->scan_width = data->scan_width;
 		if (mgmt)
 			memcpy(__get_dynamic_array(mgmt), mgmt, len);
-		__entry->signal = signal;
+		__entry->signal = data->signal;
+		__entry->ts_boottime = data->boottime_ns;
 	),
-	TP_printk(WIPHY_PR_FMT ", " CHAN_PR_FMT "(scan_width: %d) signal: %d",
+	TP_printk(WIPHY_PR_FMT ", " CHAN_PR_FMT "(scan_width: %d) signal: %d, tsb:%llu",
 		  WIPHY_PR_ARG, CHAN_PR_ARG, __entry->scan_width,
-		  __entry->signal)
+		  __entry->signal, (unsigned long long)__entry->ts_boottime)
 );
 
 DECLARE_EVENT_CLASS(cfg80211_bss_evt,

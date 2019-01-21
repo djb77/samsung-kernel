@@ -1,21 +1,21 @@
 /*
-*
-* drivers/media/tdmb/tdmb_ebi.c
-*
-* tdmb driver
-*
-* Copyright (C) (2011, Samsung Electronics)
-*
-* This program is free software; you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation version 2.
-*
-* This program is distributed "as is" WITHOUT ANY WARRANTY of any
-* kind, whether express or implied; without even the implied warranty
-* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-*/
+ *
+ * drivers/media/tdmb/tdmb_ebi.c
+ *
+ * tdmb driver
+ *
+ * Copyright (C) (2011, Samsung Electronics)
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation version 2.
+ *
+ * This program is distributed "as is" WITHOUT ANY WARRANTY of any
+ * kind, whether express or implied; without even the implied warranty
+ * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
 
 #include <linux/io.h>
 #include <linux/of_gpio.h>
@@ -44,10 +44,10 @@ enum sromc_bank_attr {
 
 /* SROMC bank configuration */
 struct sromc_bank_cfg {
-	unsigned csn;		/* CSn #			*/
-	unsigned attr;		/* SROMC bank attributes	*/
-	unsigned size;		/* Size of a memory		*/
-	unsigned addr;		/* Start address (physical)	*/
+	unsigned int csn;		/* CSn #			*/
+	unsigned int attr;		/* SROMC bank attributes	*/
+	unsigned int size;		/* Size of a memory		*/
+	unsigned int addr;		/* Start address (physical)	*/
 };
 
 /* SROMC bank access timing configuration */
@@ -187,12 +187,12 @@ static int tdmb_ebi_init(struct platform_device *pdev)
 	struct sromc_timing_cfg *tm_cfg;
 
 	if (sromc_enable(pdev) < 0) {
-		printk(KERN_DEBUG "tdmb_dev_init sromc_enable fail\n");
+		DPRINTK("tdmb_dev_init sromc_enable fail\n");
 		return -1;
 	}
 
 	if (sromc_config_demux_gpio(pdev) < 0) {
-		printk(KERN_DEBUG "tdmb_dev_init sromc_config_demux_gpio fail\n");
+		DPRINTK("tdmb_dev_init sromc_config_demux_gpio fail\n");
 		return -1;
 	}
 
@@ -237,7 +237,7 @@ fail:
 
 static int tdmb_sromc_remove(struct platform_device *pdev)
 {
-	DPRINTK("tdmb_sromc_remove!\n");
+	DPRINTK("%s!\n", __func__);
 	return 0;
 }
 

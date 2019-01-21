@@ -12,18 +12,38 @@
 #include "include/sec_battery.h"
 #include "include/sec_cisd.h"
 
+#if defined(CONFIG_SEC_ABC)
+#include <linux/sti/abc_common.h>
+#endif
+
+const char *cisd_data_str[] = {
+	"RESET_ALG", "ALG_INDEX", "FULL_CNT", "CAP_MAX", "CAP_MIN", "RECHARGING_CNT", "VALERT_CNT",
+	"BATT_CYCLE", "WIRE_CNT", "WIRELESS_CNT", "HIGH_SWELLING_CNT", "LOW_SWELLING_CNT",
+	"SWELLING_CHARGING", "SWELLING_FULL_CNT", "SWELLING_RECOVERY_CNT", "AICL_CNT", "BATT_THM_MAX",
+	"BATT_THM_MIN", "CHG_THM_MAX", "CHG_THM_MIN", "WPC_THM_MAX", "WPC_THM_MIN", "USB_THM_MAX", "USB_THM_MIN",
+	"CHG_BATT_THM_MAX", "CHG_BATT_THM_MIN", "CHG_CHG_THM_MAX", "CHG_CHG_THM_MIN", "CHG_WPC_THM_MAX",
+	"CHG_WPC_THM_MIN", "CHG_USB_THM_MAX", "CHG_USB_THM_MIN", "USB_OVERHEAT_CHARGING", "UNSAFETY_VOLT",
+	"UNSAFETY_TEMP", "SAFETY_TIMER", "VSYS_OVP", "VBAT_OVP", "AFC_FAIL", "BUCK_OFF", "WATER_DET", "DROP_SENSOR"
+};
+const char *cisd_data_str_d[] = {
+	"FULL_CNT_D", "CAP_MAX_D", "CAP_MIN_D", "RECHARGING_CNT_D", "VALERT_CNT_D", "WIRE_CNT_D", "WIRELESS_CNT_D",
+	"HIGH_SWELLING_CNT_D", "LOW_SWELLING_CNT_D", "SWELLING_CHARGING_D", "SWELLING_FULL_CNT_D",
+	"SWELLING_RECOVERY_CNT_D", "AICL_CNT_D", "BATT_THM_MAX_D", "BATT_THM_MIN_D", "CHG_THM_MAX_D",
+	"CHG_THM_MIN_D", "WPC_THM_MAX_D", "WPC_THM_MIN_D", "USB_THM_MAX_D", "USB_THM_MIN_D",
+	"CHG_BATT_THM_MAX_D", "CHG_BATT_THM_MIN_D", "CHG_CHG_THM_MAX_D", "CHG_CHG_THM_MIN_D",
+	"CHG_WPC_THM_MAX_D", "CHG_WPC_THM_MIN_D", "CHG_USB_THM_MAX_D", "CHG_USB_THM_MIN_D",
+	"USB_OVERHEAT_CHARGING_D", "UNSAFETY_VOLT_D", "UNSAFETY_TEMP_D", "SAFETY_TIMER_D", "VSYS_OVP_D",
+	"VBAT_OVP_D", "AFC_FAIL_D", "BUCK_OFF_D", "WATER_DET_D", "DROP_SENSOR_D"
+};
+
 bool sec_bat_cisd_check(struct sec_battery_info *battery)
 {
-	union power_supply_propval incur_val, chgcur_val, capcurr_val, vbat_val;
+	union power_supply_propval incur_val = {0, };
+	union power_supply_propval chgcur_val = {0, };
+	union power_supply_propval capcurr_val = {0, };
+	//union power_supply_propval vbat_val = {0, };
 	struct cisd *pcisd = &battery->cisd;
-	struct timespec now_ts;
 	bool ret = false;
-	static int prev_fullcap_rep;
-#if defined(CONFIG_QH_ALGORITHM)
-	union power_supply_propval qh_val, vfsoc_val, fullcap_nom_val;
-	struct timeval cur_time = {0, 0};
-	struct tm cur_date;
-#endif
 
 	if (battery->factory_mode || battery->is_jig_on || battery->skip_cisd) {
 		dev_dbg(battery->dev, "%s: No need to check in factory mode\n",
@@ -33,133 +53,8 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 
 	if ((battery->status == POWER_SUPPLY_STATUS_CHARGING) ||
 		(battery->status == POWER_SUPPLY_STATUS_FULL)) {
-		/* charging */
-#if defined(CONFIG_QH_ALGORITHM)
-		do_gettimeofday(&cur_time);
 
-		qh_val.intval = SEC_BATTERY_CAPACITY_QH;
-		psy_do_property(battery->pdata->fuelgauge_name, get,
-				POWER_SUPPLY_PROP_ENERGY_NOW, qh_val);
-		pcisd->qh_value_now =  qh_val.intval;
-
-		vfsoc_val.intval = SEC_BATTERY_CAPACITY_VFSOC;
-		psy_do_property(battery->pdata->fuelgauge_name, get,
-				POWER_SUPPLY_PROP_ENERGY_NOW, vfsoc_val);
-		pcisd->qh_vfsoc_now = vfsoc_val.intval;
-
-		pr_info("%s: QH_VALUE_NOW(0~65535): %d, QH_VFSOC_NOW(0.001%%): %d\n", __func__,
-				pcisd->qh_value_now, pcisd->qh_vfsoc_now);			   
-
-		if (!pcisd->prev_qh_value &&
-				battery->current_now > battery->pdata->cisd_qh_current_low_thr &&
-				battery->current_avg > battery->pdata->cisd_qh_current_low_thr &&
-				battery->current_now <= battery->pdata->cisd_qh_current_high_thr &&
-				battery->current_avg <= battery->pdata->cisd_qh_current_high_thr &&
-				vfsoc_val.intval >= battery->pdata->cisd_qh_vfsoc_thr) {
-			pr_info("%s: Set reference QH value\n", __func__);
-
-			pcisd->prev_qh_value = qh_val.intval;
-			pcisd->prev_qh_vfsoc = vfsoc_val.intval;
-			pcisd->prev_time = cur_time.tv_sec;
-			battery->qh_start = true;
-
-			time_to_tm(cur_time.tv_sec, 0, &cur_date);
-			pr_info("%s: Start time = %ldY %dM %dD %dH %dM %dS, QH value : %d, VFSOC : %d\n",
-					__func__,
-					cur_date.tm_year + 1900, cur_date.tm_mon + 1,
-					cur_date.tm_mday, cur_date.tm_hour,
-					cur_date.tm_min, cur_date.tm_sec, pcisd->prev_qh_value, pcisd->prev_qh_vfsoc);
-		} else if (pcisd->prev_qh_value && !battery->qh_start &&
-				(cur_time.tv_sec - pcisd->prev_time >= battery->cisd.qh_valid_time) &&
-				battery->current_now > battery->pdata->cisd_qh_current_low_thr &&
-				battery->current_avg > battery->pdata->cisd_qh_current_low_thr &&
-				battery->current_now <= battery->pdata->cisd_qh_current_high_thr &&
-				battery->current_avg <= battery->pdata->cisd_qh_current_high_thr &&
-				vfsoc_val.intval >= battery->pdata->cisd_qh_vfsoc_thr) {
-			int value, delta;
-
-			qh_val.intval = SEC_BATTERY_CAPACITY_QH;
-			psy_do_property(battery->pdata->fuelgauge_name, get,
-					POWER_SUPPLY_PROP_ENERGY_NOW, qh_val);
-
-			fullcap_nom_val.intval = SEC_BATTERY_CAPACITY_AGEDCELL;
-			psy_do_property(battery->pdata->fuelgauge_name, get,
-					POWER_SUPPLY_PROP_ENERGY_NOW, fullcap_nom_val);
-
-			delta = qh_val.intval - pcisd->prev_qh_value;
-
-			value = (((delta * 1000) -
-						(vfsoc_val.intval - pcisd->prev_qh_vfsoc) * fullcap_nom_val.intval / 100) / 1000) * 3600 /
-				(cur_time.tv_sec - pcisd->prev_time);
-			pcisd->data[CISD_DATA_CAP_PER_TIME] = (pcisd->data[CISD_DATA_CAP_PER_TIME] > value) ?
-								pcisd->data[CISD_DATA_CAP_PER_TIME] : value;
-
-			pr_info("%s: Full To Full QH check Prev QH : %d, Current QH : %d, Delta : %d, Prev time : %ld, Cur time : %ld, Fullcap_Nom : %d, Leakage : %d\n",
-					__func__, pcisd->prev_qh_value, qh_val.intval, delta, pcisd->prev_time, cur_time.tv_sec, fullcap_nom_val.intval, value);
-
-			pcisd->prev_qh_value = qh_val.intval;
-			pcisd->prev_qh_vfsoc = vfsoc_val.intval;
-			pcisd->prev_time = cur_time.tv_sec;
-			battery->qh_start = true;
-
-			time_to_tm(cur_time.tv_sec, 0, &cur_date);
-			pr_info("%s: Ref time = %ldy %dm %dd %dh %dm %ds, QH value : %d, VFSOC : %d\n",
-					__func__,
-					cur_date.tm_year + 1900, cur_date.tm_mon + 1,
-					cur_date.tm_mday, cur_date.tm_hour,
-					cur_date.tm_min, cur_date.tm_sec, pcisd->prev_qh_value, pcisd->prev_qh_vfsoc);
-		}
-		pr_info("%s: [DEBUG] Prev QH : %d, Current QH : %d, Prev time : %ld, Cur time : %ld\n",
-			__func__, pcisd->prev_qh_value, qh_val.intval, pcisd->prev_time, cur_time.tv_sec);
 #if 0
-			/* Long Full QH check */
-		} else if (battery->qh_start && (cur_time.tv_sec - pcisd->prev_time >= 10800) &&
-				((battery->cable_type == POWER_SUPPLY_TYPE_BATTERY && battery->current_now < 0) ||
-				 vfsoc_val.intval < 100000)) {
-			int value, delta;
-			union power_supply_propval fullcap_nom_val, qh_val;
-
-			battery->qh_start = false;
-
-			qh_val.intval = SEC_BATTERY_CAPACITY_QH;
-			psy_do_property(battery->pdata->fuelgauge_name, get,
-					POWER_SUPPLY_PROP_ENERGY_NOW, qh_val);
-
-			fullcap_nom_val.intval = SEC_BATTERY_CAPACITY_AGEDCELL;
-			psy_do_property(battery->pdata->fuelgauge_name, get,
-					POWER_SUPPLY_PROP_ENERGY_NOW, fullcap_nom_val);
-
-			time_to_tm(cur_time.tv_sec, 0, &cur_date);
-			pr_info("%s: End time = %ldY %dM %dD %dH %dM %dS, QH value : %d, VFSOC : %d\n",
-					__func__,
-					cur_date.tm_year + 1900, cur_date.tm_mon + 1,
-					cur_date.tm_mday, cur_date.tm_hour,
-					cur_date.tm_min, cur_date.tm_sec, pcisd->prev_qh_value, pcisd->prev_qh_vfsoc);
-
-			if (qh_val.intval & 0x8000) {
-				pcisd->data[CISD_DATA_LEAKAGE_F] = qh_val.intval;
-				qh_val.intval = qh_val.intval - 0xFFFF;
-			}
-
-			if (pcisd->prev_qh_value & 0x8000) {
-				pcisd->data[CISD_DATA_LEAKAGE_G] = pcisd->prev_qh_value;
-				pcisd->prev_qh_value = pcisd->prev_qh_value - 0xFFFF;
-			}
-
-			delta = qh_val.intval - pcisd->prev_qh_value;
-
-			value = (((delta * 1000) -
-						(vfsoc_val.intval - pcisd->prev_qh_vfsoc) * fullcap_nom_val.intval / 100) / 1000) * 3600 /
-				(cur_time.tv_sec - pcisd->prev_time);
-
-			pr_info("%s: Long Full QH check Prev QH : %d, Current QH : %d, Delta : %d, Prev VFSOC : %d, Cur VFSOC : %d"
-					" Prev time : %ld, Cur time : %ld, Fullcap_Nom : %d, Leakage : %d\n",
-					__func__, pcisd->prev_qh_value, qh_val.intval, delta, pcisd->prev_qh_vfsoc, vfsoc_val.intval,
-					pcisd->prev_time, cur_time.tv_sec, fullcap_nom_val.intval, value);
-		}
-#endif
-#endif /* CONFIG_QH_ALGORITHM */
-
 		/* check abnormal vbat */
 		pcisd->ab_vbat_check_count = battery->voltage_now > pcisd->max_voltage_thr ?
 				pcisd->ab_vbat_check_count + 1 : 0;
@@ -171,10 +66,11 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 			vbat_val.intval = true;
 			psy_do_property("battery", set, POWER_SUPPLY_EXT_PROP_VBAT_OVP,
 					vbat_val);			
-			pcisd->data[CISD_DATA_OVER_VOLTAGE]++;
+			pcisd->data[CISD_DATA_VBAT_OVP]++;
+			pcisd->data[CISD_DATA_VBAT_OVP_PER_DAY]++;
 			pcisd->state |= CISD_STATE_OVER_VOLTAGE;
 		}
-
+#endif
 		/* get actual input current */
 		psy_do_property(battery->pdata->charger_name, get,
 			POWER_SUPPLY_PROP_CURRENT_AVG, incur_val);
@@ -183,135 +79,59 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 		psy_do_property(battery->pdata->charger_name, get,
 			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT, chgcur_val);
 
+		if (battery->temperature > pcisd->data[CISD_DATA_CHG_BATT_TEMP_MAX])
+			pcisd->data[CISD_DATA_CHG_BATT_TEMP_MAX] = battery->temperature;
+		if (battery->temperature < pcisd->data[CISD_DATA_CHG_BATT_TEMP_MIN])
+			pcisd->data[CISD_DATA_CHG_BATT_TEMP_MIN] = battery->temperature;
+
+		if (battery->chg_temp > pcisd->data[CISD_DATA_CHG_CHG_TEMP_MAX])
+			pcisd->data[CISD_DATA_CHG_CHG_TEMP_MAX] = battery->chg_temp;
+		if (battery->chg_temp < pcisd->data[CISD_DATA_CHG_CHG_TEMP_MIN])
+			pcisd->data[CISD_DATA_CHG_CHG_TEMP_MIN] = battery->chg_temp;
+
+		if (battery->wpc_temp > pcisd->data[CISD_DATA_CHG_WPC_TEMP_MAX])
+			pcisd->data[CISD_DATA_CHG_WPC_TEMP_MAX] = battery->wpc_temp;
+		if (battery->wpc_temp < pcisd->data[CISD_DATA_CHG_WPC_TEMP_MIN])
+			pcisd->data[CISD_DATA_CHG_WPC_TEMP_MIN] = battery->wpc_temp;
+
+		if (battery->usb_temp > pcisd->data[CISD_DATA_CHG_USB_TEMP_MAX])
+			pcisd->data[CISD_DATA_CHG_USB_TEMP_MAX] = battery->usb_temp;
+		if (battery->usb_temp < pcisd->data[CISD_DATA_CHG_USB_TEMP_MIN])
+			pcisd->data[CISD_DATA_CHG_USB_TEMP_MIN] = battery->usb_temp;
+
+		if (battery->temperature > pcisd->data[CISD_DATA_CHG_BATT_TEMP_MAX_PER_DAY])
+			pcisd->data[CISD_DATA_CHG_BATT_TEMP_MAX_PER_DAY] = battery->temperature;
+		if (battery->temperature < pcisd->data[CISD_DATA_BATT_TEMP_MIN_PER_DAY])
+			pcisd->data[CISD_DATA_BATT_TEMP_MIN_PER_DAY] = battery->temperature;
+
+		if (battery->chg_temp > pcisd->data[CISD_DATA_CHG_CHG_TEMP_MAX_PER_DAY])
+			pcisd->data[CISD_DATA_CHG_CHG_TEMP_MAX_PER_DAY] = battery->chg_temp;
+		if (battery->chg_temp < pcisd->data[CISD_DATA_CHG_CHG_TEMP_MIN_PER_DAY])
+			pcisd->data[CISD_DATA_CHG_CHG_TEMP_MIN_PER_DAY] = battery->chg_temp;
+
+		if (battery->wpc_temp > pcisd->data[CISD_DATA_CHG_WPC_TEMP_MAX_PER_DAY])
+			pcisd->data[CISD_DATA_CHG_WPC_TEMP_MAX_PER_DAY] = battery->wpc_temp;
+		if (battery->wpc_temp < pcisd->data[CISD_DATA_CHG_WPC_TEMP_MIN_PER_DAY])
+			pcisd->data[CISD_DATA_CHG_WPC_TEMP_MIN_PER_DAY] = battery->wpc_temp;
+
+		if (battery->usb_temp > pcisd->data[CISD_DATA_CHG_USB_TEMP_MAX_PER_DAY])
+			pcisd->data[CISD_DATA_CHG_USB_TEMP_MAX_PER_DAY] = battery->usb_temp;
+		if (battery->usb_temp < pcisd->data[CISD_DATA_CHG_USB_TEMP_MIN_PER_DAY])
+			pcisd->data[CISD_DATA_CHG_USB_TEMP_MIN_PER_DAY] = battery->usb_temp;
+
+		if (battery->usb_temp > 800 && !battery->usb_overheat_check) {
+			battery->cisd.data[CISD_DATA_USB_OVERHEAT_CHARGING]++;
+			battery->cisd.data[CISD_DATA_USB_OVERHEAT_CHARGING_PER_DAY]++;
+			battery->usb_overheat_check = true;
+		}
+
 		dev_info(battery->dev, "%s: [CISD] iavg: %d, incur: %d, chgcur: %d,\n"
-			"cc_T: %ld, lcd_off_T: %ld, passed_T: %ld, full_T: %ld, chg_end_T: %ld, cisd: 0x%x\n",__func__,
+			"cc_T: %ld, lcd_off_T: %ld, passed_T: %ld, full_T: %ld, chg_end_T: %ld, cisd: 0x%x\n", __func__,
 			battery->current_avg, incur_val.intval, chgcur_val.intval,
 			pcisd->cc_start_time, pcisd->lcd_off_start_time, battery->charging_passed_time,
 			battery->charging_fullcharged_time, pcisd->charging_end_time, pcisd->state);
-
-#if 0
-		if (is_cisd_check_type(battery->cable_type) && incur_val.intval > pcisd->current_max_thres &&
-			chgcur_val.intval > pcisd->charging_current_thres && battery->current_now > battery->pdata->full_chg_current_margin &&
-			battery->siop_level == 100 && battery->charging_mode == SEC_BATTERY_CHARGING_1ST) {
-			/* Not entered to Full after latest lcd off charging even though 270 min passed */
-			if (pcisd->lcd_off_start_time <= 0) {
-				pcisd->lcd_off_start_time = battery->charging_passed_time;
-			}
-
-			/* Not entered to Full with charging current greater than latest 1000mA even though 60 min passed */
-			if (battery->current_avg < pcisd->current_avg_thres && pcisd->cc_start_time <= 0) {
-				pcisd->cc_start_time = battery->charging_passed_time;
-			} else if (battery->current_avg >= 1000 && pcisd->cc_start_time) {
-				pcisd->state &= ~CISD_STATE_LEAK_B;
-				pcisd->cc_start_time = 0;
-			}
-		} else {
-			pcisd->state &= ~CISD_STATE_LEAK_A;
-			pcisd->state &= ~CISD_STATE_LEAK_B;
-			pcisd->cc_start_time = 0;
-			pcisd->lcd_off_start_time = 0;
-		}
-
-		if (is_cisd_check_type(battery->cable_type) && battery->siop_level == 100 &&
-			battery->current_now > battery->pdata->full_chg_current_margin && battery->charging_mode == SEC_BATTERY_CHARGING_2ND) {
-			if (pcisd->full_start_time <= 0) {
-				pcisd->full_start_time = battery->charging_passed_time;
-			}
-		} else {
-			pcisd->state &= ~CISD_STATE_LEAK_C;
-			pcisd->full_start_time = 0;
-		}
-
-		if (is_cisd_check_type(battery->cable_type) && battery->siop_level == 100 &&
-			battery->current_now >= battery->pdata->full_chg_current_margin && ((battery->status == POWER_SUPPLY_STATUS_FULL &&
-		    battery->charging_mode == SEC_BATTERY_CHARGING_NONE) || battery->is_recharging)) {
-			now_ts = ktime_to_timespec(ktime_get_boottime());
-			dev_info(battery->dev, "%s: cisd - leakage D Test(now time = %ld)\n", __func__, ((unsigned long)now_ts.tv_sec));
-			if (pcisd->charging_end_time <= 0)
-				pcisd->charging_end_time = now_ts.tv_sec;
-		} else {
-			pcisd->state &= ~CISD_STATE_LEAK_D;
-			pcisd->recharge_count = 0;
-			pcisd->charging_end_time = 0;
-		}
-#endif
-
-		if (battery->siop_level != 100 ||
-			battery->current_now < battery->pdata->full_chg_current_margin || (battery->status != POWER_SUPPLY_STATUS_FULL)) {
-			pcisd->state &= ~(CISD_STATE_LEAK_E|CISD_STATE_LEAK_F|CISD_STATE_LEAK_G);
-			dev_info(battery->dev, "%s: cisd - clear EFG\n", __func__);
-			pcisd->recharge_count_2 = 0;
-			pcisd->charging_end_time_2 = 0;
-		}
-
-		now_ts = ktime_to_timespec(ktime_get_boottime());
-#if 0
-		/* check cisd leak case */
-		if ((!(pcisd->state & CISD_STATE_LEAK_A) && !(pcisd->state & CISD_STATE_LEAK_B)) &&
-			pcisd->lcd_off_start_time &&
-			battery->charging_passed_time - pcisd->lcd_off_start_time > pcisd->lcd_off_delay_time) {
-			pcisd->state |= CISD_STATE_LEAK_A;
-			pcisd->data[CISD_DATA_LEAKAGE_A]++;
-		} else if (!(pcisd->state & CISD_STATE_LEAK_B) && pcisd->cc_start_time &&
-			battery->charging_passed_time - pcisd->cc_start_time > pcisd->cc_delay_time) {
-			pcisd->state |= CISD_STATE_LEAK_B;
-			pcisd->data[CISD_DATA_LEAKAGE_B]++;
-		} else if (!(pcisd->state & CISD_STATE_LEAK_C) && pcisd->full_start_time &&
-			battery->charging_passed_time - pcisd->full_start_time > pcisd->full_delay_time) {
-			pcisd->state |= CISD_STATE_LEAK_C;
-			pcisd->data[CISD_DATA_LEAKAGE_C]++;
-		} else if (!(pcisd->state & CISD_STATE_LEAK_D) && pcisd->recharge_count >= pcisd->recharge_count_thres) {
-			dev_info(battery->dev, "%s: cisd - leakage D Test(now time = %ld)\n", __func__, ((unsigned long)now_ts.tv_sec));
-			if ((unsigned long)now_ts.tv_sec - pcisd->charging_end_time <= pcisd->recharge_delay_time) {
-				pcisd->state |= CISD_STATE_LEAK_D;
-				pcisd->data[CISD_DATA_LEAKAGE_D]++;
-			}
-		}
-#endif
-
-#if !defined(CONFIG_QH_ALGORITHM)
-		if (!(pcisd->state & (CISD_STATE_LEAK_E|CISD_STATE_LEAK_F|CISD_STATE_LEAK_G))
-			&& pcisd->charging_end_time_2 > 0 && pcisd->recharge_count_2 > 0) {
-			if ((unsigned long)now_ts.tv_sec - pcisd->charging_end_time_2 <= pcisd->leakage_e_time) {
-				dev_info(battery->dev, "%s: cisd - leakage E Test(now time = %ld)\n", __func__, ((unsigned long)now_ts.tv_sec));
-				pcisd->state |= CISD_STATE_LEAK_E;
-				pcisd->data[CISD_DATA_LEAKAGE_E]++;
-				pcisd->recharge_count_2 = 0;
-				pcisd->charging_end_time_2 = 0;
-			} else if ((unsigned long)now_ts.tv_sec - pcisd->charging_end_time_2 <= pcisd->leakage_f_time) {
-				dev_info(battery->dev, "%s: cisd - leakage F Test(now time = %ld)\n", __func__, ((unsigned long)now_ts.tv_sec));
-				pcisd->state |= CISD_STATE_LEAK_F;
-				pcisd->data[CISD_DATA_LEAKAGE_F]++;
-				pcisd->recharge_count_2 = 0;
-				pcisd->charging_end_time_2 = 0;
-			} else if ((unsigned long)now_ts.tv_sec - pcisd->charging_end_time_2 <= pcisd->leakage_g_time) {
-				dev_info(battery->dev, "%s: cisd - leakage G Test(now time = %ld)\n", __func__, ((unsigned long)now_ts.tv_sec));
-				pcisd->state |= CISD_STATE_LEAK_G;
-				pcisd->data[CISD_DATA_LEAKAGE_G]++;
-				pcisd->recharge_count_2 = 0;
-				pcisd->charging_end_time_2 = 0;
-			}
-		}
-#endif
-
-		dev_info(battery->dev, "%s: [CISD] iavg: %d, incur: %d, chgcur: %d,\n"
-			"cc_T: %ld, lcd_off_T: %ld, passed_T: %ld, full_T: %ld, chg_end_T: %ld, recnt: %d, cisd: 0x%x\n",__func__,
-			battery->current_avg, incur_val.intval, chgcur_val.intval,
-			pcisd->cc_start_time, pcisd->lcd_off_start_time, battery->charging_passed_time,
-			battery->charging_fullcharged_time, pcisd->charging_end_time, pcisd->recharge_count, pcisd->state);
-
-		pcisd->state &= ~CISD_STATE_CAP_OVERFLOW;
-
-		capcurr_val.intval = SEC_BATTERY_CAPACITY_CURRENT;
-		psy_do_property(battery->pdata->fuelgauge_name, get,
-			POWER_SUPPLY_PROP_ENERGY_NOW, capcurr_val);
-
-		if (capcurr_val.intval >= pcisd->capacity_now && capcurr_val.intval > pcisd->overflow_cap_thr &&
-			pcisd->overflow_start_time <= 0) {
-			now_ts = ktime_to_timespec(ktime_get_boottime());
-			pcisd->overflow_start_time = now_ts.tv_sec;
-		}
 	} else  {
+#if 0	
 		/* discharging */
 		if (battery->status == POWER_SUPPLY_STATUS_NOT_CHARGING) {
 			/* check abnormal vbat */
@@ -320,74 +140,71 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 
 			if ((pcisd->ab_vbat_check_count >= pcisd->ab_vbat_max_count) &&
 				!(pcisd->state & CISD_STATE_OVER_VOLTAGE)) {
-				pcisd->data[CISD_DATA_OVER_VOLTAGE]++;
+				pcisd->data[CISD_DATA_VBAT_OVP]++;
+				pcisd->data[CISD_DATA_VBAT_OVP_PER_DAY]++;
 				pcisd->state |= CISD_STATE_OVER_VOLTAGE;
 			}
 		}
-
-		pcisd->state &= ~(CISD_STATE_LEAK_A|CISD_STATE_LEAK_B|CISD_STATE_LEAK_C|CISD_STATE_LEAK_D|CISD_STATE_LEAK_E|CISD_STATE_LEAK_F|CISD_STATE_LEAK_G);
-
-		now_ts = ktime_to_timespec(ktime_get_boottime());
+#endif
 		capcurr_val.intval = SEC_BATTERY_CAPACITY_FULL;
 		psy_do_property(battery->pdata->fuelgauge_name, get,
 			POWER_SUPPLY_PROP_ENERGY_NOW, capcurr_val);
-
-		if (!(pcisd->state & CISD_STATE_CAP_OVERFLOW) &&
-			(capcurr_val.intval != prev_fullcap_rep)) {
-			if (capcurr_val.intval > pcisd->err_cap_high_thr) {
-				pcisd->state |= CISD_STATE_CAP_OVERFLOW;
-				pcisd->data[CISD_DATA_ERRCAP_HIGH] += 1;
-				prev_fullcap_rep = capcurr_val.intval;
-			} else if (capcurr_val.intval > pcisd->err_cap_low_thr) {
-				pcisd->state |= CISD_STATE_CAP_OVERFLOW;
-				pcisd->data[CISD_DATA_ERRCAP_LOW] += 1;
-				prev_fullcap_rep = capcurr_val.intval;
-			}
+		if (capcurr_val.intval == -1) {
+			dev_info(battery->dev, "%s: [CISD] FG I2C fail. skip cisd check \n", __func__);
+			return ret;
 		}
-
-#if defined(CONFIG_QH_ALGORITHM)
-		vfsoc_val.intval = SEC_BATTERY_CAPACITY_VFSOC;
-		psy_do_property(battery->pdata->fuelgauge_name, get,
-				POWER_SUPPLY_PROP_ENERGY_NOW, vfsoc_val);
-		if (vfsoc_val.intval < battery->pdata->cisd_qh_vfsoc_thr)
-			battery->qh_start = false;
-#else
-		if (pcisd->overflow_start_time > 0 && capcurr_val.intval > pcisd->overflow_cap_thr) {
-			if ((capcurr_val.intval - pcisd->overflow_cap_thr) * 3600 /
-				(now_ts.tv_sec - pcisd->overflow_start_time) > pcisd->data[CISD_DATA_CAP_PER_TIME])
-				pcisd->data[CISD_DATA_CAP_PER_TIME] = (capcurr_val.intval - pcisd->overflow_cap_thr) * 3600 /
-					(now_ts.tv_sec - pcisd->overflow_start_time);
-		}
-#endif
-
-		pcisd->data[CISD_DATA_CAP_ONCE] = capcurr_val.intval > pcisd->data[CISD_DATA_CAP_ONCE] ?
-			capcurr_val.intval : pcisd->data[CISD_DATA_CAP_ONCE];
-		pcisd->capacity_now = capcurr_val.intval;
-		pcisd->overflow_cap_thr = capcurr_val.intval > battery->pdata->cisd_cap_limit ? capcurr_val.intval : battery->pdata->cisd_cap_limit;
-		pcisd->overflow_start_time = 0;
 
 		if (capcurr_val.intval > pcisd->data[CISD_DATA_CAP_MAX])
 			pcisd->data[CISD_DATA_CAP_MAX] = capcurr_val.intval;
 		if (capcurr_val.intval < pcisd->data[CISD_DATA_CAP_MIN])
 			pcisd->data[CISD_DATA_CAP_MIN] = capcurr_val.intval;
+
+		if (capcurr_val.intval > pcisd->data[CISD_DATA_CAP_MAX_PER_DAY])
+			pcisd->data[CISD_DATA_CAP_MAX_PER_DAY] = capcurr_val.intval;
+		if (capcurr_val.intval < pcisd->data[CISD_DATA_CAP_MIN_PER_DAY])
+			pcisd->data[CISD_DATA_CAP_MIN_PER_DAY] = capcurr_val.intval;
 	}
 
-	pr_info("cisd - stt:%d, cp:%d/%d, cpmm:%d/%d/%d, dcpt:%d, ovc:%d, rct:%d\n",
-		pcisd->state, pcisd->curr_cap_max, pcisd->err_cap_max_thrs, pcisd->data[CISD_DATA_CAP_MIN],
-		pcisd->capacity_now, pcisd->data[CISD_DATA_CAP_MAX], pcisd->data[CISD_DATA_CAP_PER_TIME],
-		pcisd->data[CISD_DATA_OVER_VOLTAGE], pcisd->data[CISD_DATA_RECHARGING_TIME]);
+	if (battery->temperature > pcisd->data[CISD_DATA_BATT_TEMP_MAX])
+		pcisd->data[CISD_DATA_BATT_TEMP_MAX] = battery->temperature;
+	if (battery->temperature < battery->cisd.data[CISD_DATA_BATT_TEMP_MIN])
+		pcisd->data[CISD_DATA_BATT_TEMP_MIN] = battery->temperature;
 
+	if (battery->chg_temp > pcisd->data[CISD_DATA_CHG_TEMP_MAX])
+		pcisd->data[CISD_DATA_CHG_TEMP_MAX] = battery->chg_temp;
+	if (battery->chg_temp < pcisd->data[CISD_DATA_CHG_TEMP_MIN])
+		pcisd->data[CISD_DATA_CHG_TEMP_MIN] = battery->chg_temp;
 
-	pr_info("cisd_debug: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n",
-		pcisd->data[CISD_DATA_FULL_COUNT], pcisd->data[CISD_DATA_CAP_MAX],
-		pcisd->data[CISD_DATA_CAP_MIN], pcisd->data[CISD_DATA_CAP_ONCE],
-		pcisd->data[CISD_DATA_LEAKAGE_A], pcisd->data[CISD_DATA_LEAKAGE_B],
-		pcisd->data[CISD_DATA_LEAKAGE_C], pcisd->data[CISD_DATA_LEAKAGE_D],
-		pcisd->data[CISD_DATA_CAP_PER_TIME], pcisd->data[CISD_DATA_ERRCAP_LOW],
-		pcisd->data[CISD_DATA_ERRCAP_HIGH], pcisd->data[CISD_DATA_OVER_VOLTAGE],
-		pcisd->data[CISD_DATA_LEAKAGE_E], pcisd->data[CISD_DATA_LEAKAGE_F],
-		pcisd->data[CISD_DATA_LEAKAGE_G], pcisd->data[CISD_DATA_RECHARGING_TIME],
-		pcisd->data[CISD_DATA_VALERT_COUNT], pcisd->cisd_alg_index);
+	if (battery->wpc_temp > pcisd->data[CISD_DATA_WPC_TEMP_MAX])
+		pcisd->data[CISD_DATA_WPC_TEMP_MAX] = battery->wpc_temp;
+	if (battery->wpc_temp < battery->cisd.data[CISD_DATA_WPC_TEMP_MIN])
+		pcisd->data[CISD_DATA_WPC_TEMP_MIN] = battery->wpc_temp;
+
+	if (battery->usb_temp > pcisd->data[CISD_DATA_USB_TEMP_MAX])
+		pcisd->data[CISD_DATA_USB_TEMP_MAX] = battery->usb_temp;
+	if (battery->usb_temp < pcisd->data[CISD_DATA_USB_TEMP_MIN])
+		pcisd->data[CISD_DATA_USB_TEMP_MIN] = battery->usb_temp;
+
+	if (battery->temperature > pcisd->data[CISD_DATA_BATT_TEMP_MAX_PER_DAY])
+		pcisd->data[CISD_DATA_BATT_TEMP_MAX_PER_DAY] = battery->temperature;
+	if (battery->temperature < pcisd->data[CISD_DATA_BATT_TEMP_MIN_PER_DAY])
+		pcisd->data[CISD_DATA_BATT_TEMP_MIN_PER_DAY] = battery->temperature;
+
+	if (battery->chg_temp > pcisd->data[CISD_DATA_CHG_TEMP_MAX_PER_DAY])
+		pcisd->data[CISD_DATA_CHG_TEMP_MAX_PER_DAY] = battery->chg_temp;
+	if (battery->chg_temp < pcisd->data[CISD_DATA_CHG_TEMP_MIN_PER_DAY])
+		pcisd->data[CISD_DATA_CHG_TEMP_MIN_PER_DAY] = battery->chg_temp;
+
+	if (battery->wpc_temp > pcisd->data[CISD_DATA_WPC_TEMP_MAX_PER_DAY])
+		pcisd->data[CISD_DATA_WPC_TEMP_MAX_PER_DAY] = battery->wpc_temp;
+	if (battery->wpc_temp < pcisd->data[CISD_DATA_WPC_TEMP_MIN_PER_DAY])
+		pcisd->data[CISD_DATA_WPC_TEMP_MIN_PER_DAY] = battery->wpc_temp;
+
+	if (battery->usb_temp > pcisd->data[CISD_DATA_USB_TEMP_MAX_PER_DAY])
+		pcisd->data[CISD_DATA_USB_TEMP_MAX_PER_DAY] = battery->usb_temp;
+	if (battery->usb_temp < pcisd->data[CISD_DATA_USB_TEMP_MIN_PER_DAY])
+		pcisd->data[CISD_DATA_USB_TEMP_MIN_PER_DAY] = battery->usb_temp;
+
 	return ret;
 }
 
@@ -420,42 +237,238 @@ void sec_battery_cisd_init(struct sec_battery_info *battery)
 	battery->cisd.recharge_count = 0;
 	battery->cisd.recharge_count_2 = 0;
 	battery->cisd.recharge_count_thres = 2;
-	battery->cisd.leakage_e_time = 3600;
-	battery->cisd.leakage_f_time = 7200;
-	battery->cisd.leakage_g_time = 14400;
+	battery->cisd.leakage_e_time = 3600; /* 60 min */
+	battery->cisd.leakage_f_time = 7200; /* 120 min */
+	battery->cisd.leakage_g_time = 14400; /* 240 min */
 	battery->cisd.current_max_thres = 1600;
 	battery->cisd.charging_current_thres = 1000;
 	battery->cisd.current_avg_thres = 1000;
 
+	battery->cisd.data[CISD_DATA_ALG_INDEX] = battery->pdata->cisd_alg_index;
 	battery->cisd.data[CISD_DATA_FULL_COUNT] = 1;
-	battery->cisd.data[CISD_DATA_CAP_MIN] = 0xFFFF;
-	battery->cisd.data[CISD_DATA_RECHARGING_TIME] = 0x7FFFFFFF;
-	battery->cisd.data[CISD_DATA_CAP_ONCE] = 0;
-	battery->cisd.data[CISD_DATA_CAP_PER_TIME] = 0;
 	battery->cisd.data[CISD_DATA_BATT_TEMP_MAX] = -300;
 	battery->cisd.data[CISD_DATA_CHG_TEMP_MAX] = -300;
 	battery->cisd.data[CISD_DATA_WPC_TEMP_MAX] = -300;
 	battery->cisd.data[CISD_DATA_BATT_TEMP_MIN] = 1000;
 	battery->cisd.data[CISD_DATA_CHG_TEMP_MIN] = 1000;
 	battery->cisd.data[CISD_DATA_WPC_TEMP_MIN] = 1000;
-#if defined(CONFIG_QH_ALGORITHM)
-	battery->cisd.qh_valid_time = 3600; /* 60 min */
-	battery->cisd.prev_qh_value = 0;
-	battery->cisd.prev_qh_vfsoc = 0;
-	battery->cisd.prev_time = 0;
-	battery->cisd.qh_value_now = 0;
-	battery->cisd.qh_vfsoc_now = 0;
-	battery->qh_start = false;
-#endif
+	battery->cisd.data[CISD_DATA_CAP_MIN] = 0xFFFF;
+
+	battery->cisd.data[CISD_DATA_FULL_COUNT_PER_DAY] = 1;
+	battery->cisd.data[CISD_DATA_BATT_TEMP_MAX_PER_DAY] = -300;
+	battery->cisd.data[CISD_DATA_CHG_TEMP_MAX_PER_DAY] = -300;
+	battery->cisd.data[CISD_DATA_WPC_TEMP_MAX_PER_DAY] = -300;
+	battery->cisd.data[CISD_DATA_BATT_TEMP_MIN_PER_DAY] = 1000;
+	battery->cisd.data[CISD_DATA_CHG_TEMP_MIN_PER_DAY] = 1000;
+	battery->cisd.data[CISD_DATA_WPC_TEMP_MIN_PER_DAY] = 1000;
+	battery->cisd.data[CISD_DATA_CAP_MIN] = 0xFFFF;
+
+	battery->cisd.data[CISD_DATA_CHG_BATT_TEMP_MAX_PER_DAY] = -300;
+	battery->cisd.data[CISD_DATA_CHG_CHG_TEMP_MAX_PER_DAY] = -300;
+	battery->cisd.data[CISD_DATA_CHG_WPC_TEMP_MAX_PER_DAY] = -300;
+	battery->cisd.data[CISD_DATA_CHG_BATT_TEMP_MIN_PER_DAY] = 1000;
+	battery->cisd.data[CISD_DATA_CHG_CHG_TEMP_MIN_PER_DAY] = 1000;
+	battery->cisd.data[CISD_DATA_CHG_WPC_TEMP_MIN_PER_DAY] = 1000;
 
 	battery->cisd.capacity_now = capfull_val.intval;
-	battery->cisd.overflow_cap_thr = capfull_val.intval > battery->pdata->cisd_cap_limit ? capfull_val.intval : battery->pdata->cisd_cap_limit;
+	battery->cisd.overflow_cap_thr = capfull_val.intval > battery->pdata->cisd_cap_limit ?
+		capfull_val.intval : battery->pdata->cisd_cap_limit;
 
-	battery->cisd.ab_vbat_max_count = 1; /* should be 1 */
+	battery->cisd.ab_vbat_max_count = 2; /* should be 1 */
 	battery->cisd.ab_vbat_check_count = 0;
 	battery->cisd.max_voltage_thr = battery->pdata->max_voltage_thr;
 	battery->cisd.cisd_alg_index = 6;
 	pr_info("%s: cisd.err_cap_high_thr:%d, cisd.err_cap_low_thr:%d, cisd.overflow_cap_thr:%d\n", __func__,
 		battery->cisd.err_cap_high_thr, battery->cisd.err_cap_low_thr, battery->cisd.overflow_cap_thr);
+
+	/* initialize pad data */
+	mutex_init(&battery->cisd.padlock);
+	init_cisd_pad_data(&battery->cisd);
+}
+
+static struct pad_data* create_pad_data(unsigned int pad_id, unsigned int pad_count)
+{
+	struct pad_data* temp_data;
+
+	temp_data = kzalloc(sizeof(struct pad_data), GFP_KERNEL);
+	if (temp_data == NULL)
+		return NULL;
+
+	temp_data->id = pad_id;
+	temp_data->count = pad_count;
+	temp_data->prev = temp_data->next = NULL;
+
+	return temp_data;
+}
+
+static struct pad_data* find_pad_data_by_id(struct cisd* cisd, unsigned int pad_id)
+{
+	struct pad_data* temp_data = cisd->pad_array->next;
+
+	if (cisd->pad_count <= 0 || temp_data == NULL)
+		return NULL;
+
+	while ((temp_data->id != pad_id) &&
+		((temp_data = temp_data->next) != NULL));
+
+	return temp_data;
+}
+
+static void add_pad_data(struct cisd* cisd, unsigned int pad_id, unsigned int pad_count)
+{
+	struct pad_data* temp_data = cisd->pad_array->next;
+	struct pad_data* pad_data;
+
+	if (pad_id == 0 || pad_id >= MAX_PAD_ID)
+		return;
+
+	pad_data = create_pad_data(pad_id, pad_count);
+	if (pad_data == NULL)
+		return;
+
+	pr_info("%s: id(0x%x), count(%d)\n", __func__, pad_id, pad_count);
+	while (temp_data) {
+		if (temp_data->id > pad_id) {
+			temp_data->prev->next = pad_data;
+			pad_data->prev = temp_data->prev;
+			pad_data->next = temp_data;
+			temp_data->prev = pad_data;
+			cisd->pad_count++;
+			return;
+		}
+		temp_data = temp_data->next;
+	}
+
+	pr_info("%s: failed to add pad_data(%d, %d)\n",
+		__func__, pad_id, pad_count);
+	kfree(pad_data);
+}
+
+void init_cisd_pad_data(struct cisd* cisd)
+{
+	struct pad_data* temp_data = cisd->pad_array;
+
+	mutex_lock(&cisd->padlock);
+	while (temp_data) {
+		struct pad_data* next_data = temp_data->next;
+
+		kfree(temp_data);
+		temp_data = next_data;
+	}
+
+	/* create dummy data */
+	cisd->pad_count = 0;
+	cisd->pad_array = create_pad_data(0, 0);
+	if (cisd->pad_array == NULL)
+		return;
+	temp_data = create_pad_data(MAX_PAD_ID, 0);
+	if (temp_data == NULL) {
+		kfree(cisd->pad_array);
+		return;
+	}
+	cisd->pad_array->next = temp_data;
+	temp_data->prev = cisd->pad_array;
+	mutex_unlock(&cisd->padlock);
+}
+
+void count_cisd_pad_data(struct cisd* cisd, unsigned int pad_id)
+{
+	struct pad_data* pad_data;
+
+	mutex_lock(&cisd->padlock);
+	if ((pad_data = find_pad_data_by_id(cisd, pad_id)) != NULL)
+		pad_data->count++;
+	else
+		add_pad_data(cisd, pad_id, 1);
+	mutex_unlock(&cisd->padlock);
+}
+
+static unsigned int convert_wc_index_to_pad_id(unsigned int wc_index)
+{
+	switch (wc_index) {
+	case WC_SNGL_NOBLE:
+		return WC_PAD_ID_SNGL_NOBLE;
+	case WC_SNGL_VEHICLE:
+		return WC_PAD_ID_SNGL_VEHICLE;
+	case WC_SNGL_MINI:
+		return WC_PAD_ID_SNGL_MINI;
+	case WC_SNGL_ZERO:
+		return WC_PAD_ID_SNGL_ZERO;
+	case WC_SNGL_DREAM:
+		return WC_PAD_ID_SNGL_DREAM;
+	case WC_STAND_HERO:
+		return WC_PAD_ID_STAND_HERO;
+	case WC_STAND_DREAM:
+		return WC_PAD_ID_STAND_DREAM;
+	case WC_EXT_PACK:
+		return WC_PAD_ID_EXT_BATT_PACK;
+	case WC_EXT_PACK_TA:
+		return WC_PAD_ID_EXT_BATT_PACK_TA;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+void set_cisd_pad_data(struct sec_battery_info *battery, const char* buf)
+{
+	struct cisd* pcisd = &battery->cisd;
+	unsigned int pad_index, pad_total_count, pad_id, pad_count;
+	struct pad_data* pad_data;
+	int i, x;
+
+	pr_info("%s: %s\n", __func__, buf);
+	if (sscanf(buf, "%10d%n", &pad_index, &x) <= 0) {
+		pr_info("%s: failed to read pad index\n", __func__);
+		return;
+	}
+	buf += (size_t)x;
+	pr_info("%s: stored pad_index(%d)\n", __func__, pad_index);
+
+	if (pcisd->pad_count > 0)
+		init_cisd_pad_data(pcisd);
+
+	if (!pad_index) {
+		for (i = WC_DATA_INDEX + 1; i < WC_DATA_MAX; i++) {
+			if (sscanf(buf, "%10d%n", &pad_count, &x) <= 0)
+				break;
+			buf += (size_t)x;
+
+			if (pad_count > 0) {
+				pad_id = convert_wc_index_to_pad_id(i);
+
+				mutex_lock(&pcisd->padlock);
+				if ((pad_data = find_pad_data_by_id(pcisd, pad_id)) != NULL)
+					pad_data->count = pad_count;
+				else
+					add_pad_data(pcisd, pad_id, pad_count);
+				mutex_unlock(&pcisd->padlock);
+			}
+		}
+	} else {
+		if ((sscanf(buf + 1, "%10d%n", &pad_total_count, &x) <= 0) ||
+			(pad_total_count >= MAX_PAD_ID))
+			return;
+		buf += (size_t)(x + 1);
+
+		pr_info("%s: add pad data(count: %d)\n", __func__, pad_total_count);
+		for (i = 0; i < pad_total_count; i++) {
+			if (sscanf(buf, " 0x%02x:%10d%n", &pad_id, &pad_count, &x) != 2) {
+				pr_info("%s: failed to read pad data(0x%x, %d, %d)!!!re-init pad data\n",
+					__func__, pad_id, pad_count, x);
+				init_cisd_pad_data(pcisd);
+				break;
+			}
+			buf += (size_t)x;
+
+			mutex_lock(&pcisd->padlock);
+			if ((pad_data = find_pad_data_by_id(pcisd, pad_id)) != NULL)
+				pad_data->count = pad_count;
+			else
+				add_pad_data(pcisd, pad_id, pad_count);
+			mutex_unlock(&pcisd->padlock);
+		}
+	}
 }
 

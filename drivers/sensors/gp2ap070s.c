@@ -40,6 +40,11 @@
 #include <linux/sensor/sensors_core.h>
 #include "gp2ap070s.h"
 
+#ifdef TAG
+#undef TAG
+#define TAG "[PROX]"
+#endif
+
 #define I2C_M_WR        0 /* for i2c Write */
 
 #define DEFAULT_HIGH_THD 150

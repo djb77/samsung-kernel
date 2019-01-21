@@ -993,6 +993,13 @@ static struct dsi_cmd_desc DSI0_UI_MDNIE[] = {
 	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_CABC_OFF)}, DSI0_CABC_OFF},
 	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(mcs_lock)}, mcs_lock},
 };
+static struct dsi_cmd_desc DSI0_LIGHT_NOTIFICATION_MDNIE[] = {
+	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(mcs_unlock)}, mcs_unlock},
+	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_UI_MDNIE_1)}, DSI0_UI_MDNIE_1},
+	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_UI_MDNIE_2)}, DSI0_UI_MDNIE_2},
+	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(DSI0_CABC_OFF)}, DSI0_CABC_OFF},
+	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(mcs_lock)}, mcs_lock},
+};
 static struct dsi_cmd_desc DSI0_VIDEO_MDNIE[] = {
 	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(mcs_unlock)}, mcs_unlock},
 	{{DTYPE_GEN_LWRITE, 0, 0, 0, 0, sizeof(DSI0_VIDEO_MDNIE_1)}, DSI0_VIDEO_MDNIE_1},
@@ -1170,6 +1177,11 @@ static struct dsi_cmd_desc *mdnie_tune_value_dsi0[MAX_APP_MODE][MAX_MODE][MAX_OU
 			{DSI0_UI_MDNIE,	NULL},
 			{DSI0_EBOOK_MDNIE,	NULL},
 		},
+};
+
+static struct dsi_cmd_desc *light_notification_tune_value[LIGHT_NOTIFICATION_MAX] = {
+	NULL,
+	DSI0_LIGHT_NOTIFICATION_MDNIE,
 };
 
 #define DSI0_RGB_SENSOR_MDNIE_1_SIZE ARRAY_SIZE(DSI0_UI_MDNIE_1)

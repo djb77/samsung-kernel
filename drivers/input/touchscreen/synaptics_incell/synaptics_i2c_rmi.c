@@ -628,54 +628,27 @@ static void synaptics_rmi4_i2c_check_addr(struct synaptics_rmi4_data *rmi4_data)
 	return;
 }
 
-static int synaptics_rmi4_i2c_read(struct synaptics_rmi4_data *rmi4_data,
-		unsigned short addr, unsigned char *data, unsigned short length)
+static int synaptics_rmi4_i2c_set_page(struct synaptics_rmi4_data *rmi4_data,
+		unsigned short addr)
 {
-	int retval;
+	int retval = 0;
 	unsigned char retry;
-	unsigned char buf;
-	unsigned char buf_page[PAGE_SELECT_LEN];
+	unsigned char buf[PAGE_SELECT_LEN];
 	unsigned char page;
+	struct i2c_msg msg[1];
 
-	struct i2c_msg msg[] = {
-		{
-			.addr = rmi4_data->i2c_client->addr,
-			.flags = 0,
-			.len = PAGE_SELECT_LEN,
-			.buf = buf_page,
-		},
-		{
-			.addr = rmi4_data->i2c_client->addr,
-			.flags = 0,
-			.len = 1,
-			.buf = &buf,
-		},
-		{
-			.addr = rmi4_data->i2c_client->addr,
-			.flags = I2C_M_RD,
-			.len = length,
-			.buf = data,
-		},
-	};
+	msg[0].addr = rmi4_data->i2c_client->addr,
+	msg[0].flags = 0;
+	msg[0].len = PAGE_SELECT_LEN;
+	msg[0].buf = buf;
 
 	page = ((addr >> 8) & MASK_8BIT);
-	buf_page[0] = MASK_8BIT;
-	buf_page[1] = page;
-
-	buf = addr & MASK_8BIT;
-
-	mutex_lock(&(rmi4_data->rmi4_io_ctrl_mutex));
-
-	if (rmi4_data->touch_stopped) {
-		input_err(true, &rmi4_data->i2c_client->dev, "%s: Sensor stopped\n",
-				__func__);
-		retval = 0;
-		goto exit;
-	}
+	buf[0] = MASK_8BIT;
+	buf[1] = page;
 
 	for (retry = 0; retry < SYN_I2C_RETRY_TIMES; retry++) {
-		if (i2c_transfer(rmi4_data->i2c_client->adapter, msg, 3) == 3) {
-			retval = length;
+		if (i2c_transfer(rmi4_data->i2c_client->adapter, msg, 1) == 1) {
+			retval = PAGE_SELECT_LEN;
 			break;
 		} else
 			rmi4_data->comm_err_count++;
@@ -687,8 +660,6 @@ static int synaptics_rmi4_i2c_read(struct synaptics_rmi4_data *rmi4_data,
 		if (retry == SYN_I2C_RETRY_TIMES / 2) {
 			synaptics_rmi4_i2c_check_addr(rmi4_data);
 			msg[0].addr = rmi4_data->i2c_client->addr;
-			msg[1].addr = rmi4_data->i2c_client->addr;
-			msg[2].addr = rmi4_data->i2c_client->addr;
 		}
 	}
 
@@ -697,10 +668,122 @@ static int synaptics_rmi4_i2c_read(struct synaptics_rmi4_data *rmi4_data,
 				"%s: I2C read over retry limit\n",
 				__func__);
 		retval = -EIO;
-		if (rmi4_data->tsp_probe)
-			schedule_delayed_work(&rmi4_data->incell_reset_work, msecs_to_jiffies(5));
 	}
 
+	return retval;
+}
+
+static int synaptics_rmi4_i2c_read(struct synaptics_rmi4_data *rmi4_data,
+		unsigned short addr, unsigned char *data, unsigned short length)
+{
+	int retval;
+	unsigned char retry;
+	unsigned char buf;
+#ifdef I2C_BURST_LIMIT
+	unsigned char ii;
+	unsigned char rd_msgs = ((length - 1) / I2C_BURST_LIMIT) + 1;
+#else
+	unsigned char rd_msgs = 1;
+#endif
+	unsigned char index = 0;
+	unsigned char xfer_msgs;
+	unsigned char remaining_msgs;
+	unsigned short data_offset = 0;
+	unsigned short remaining_length = length;
+	struct i2c_msg msg[rd_msgs + 1];
+
+#if defined(CONFIG_SECURE_TOUCH)
+	if (atomic_read(&rmi4_data->st_enabled)) {
+		input_err(true, &rmi4_data->i2c_client->dev,
+				"%s: secure enabled\n", __func__);
+		return 0;
+	}
+#endif
+
+	mutex_lock(&(rmi4_data->rmi4_io_ctrl_mutex));
+
+	retval = synaptics_rmi4_i2c_set_page(rmi4_data, addr);
+	if (retval != PAGE_SELECT_LEN) {
+		retval = -EIO;
+		goto exit;
+	}
+
+	msg[0].addr = rmi4_data->i2c_client->addr;
+	msg[0].flags = 0;
+	msg[0].len = 1;
+	msg[0].buf = &buf;
+
+#ifdef I2C_BURST_LIMIT
+	for (ii = 0; ii < (rd_msgs - 1); ii++) {
+		msg[ii + 1].addr = rmi4_data->i2c_client->addr;
+		msg[ii + 1].flags = I2C_M_RD;
+		msg[ii + 1].len = I2C_BURST_LIMIT;
+		msg[ii + 1].buf = &data[data_offset];
+		data_offset += I2C_BURST_LIMIT;
+		remaining_length -= I2C_BURST_LIMIT;
+	}
+#endif
+
+	msg[rd_msgs].addr = rmi4_data->i2c_client->addr;
+	msg[rd_msgs].flags = I2C_M_RD;
+	msg[rd_msgs].len = remaining_length;
+	msg[rd_msgs].buf = &data[data_offset];
+
+	buf = addr & MASK_8BIT;
+
+	if (rmi4_data->touch_stopped) {
+		input_err(true, &rmi4_data->i2c_client->dev, "%s: Sensor stopped\n",
+				__func__);
+		retval = 0;
+		goto exit;
+	}
+
+	remaining_msgs = rd_msgs + 1;
+
+	while (remaining_msgs) {
+#ifdef XFER_MSGS_LIMIT
+		if (remaining_msgs > XFER_MSGS_LIMIT)
+			xfer_msgs = XFER_MSGS_LIMIT;
+		else
+			xfer_msgs = remaining_msgs;
+#else
+		xfer_msgs = remaining_msgs;
+#endif
+
+		for (retry = 0; retry < SYN_I2C_RETRY_TIMES; retry++) {
+			retval = i2c_transfer(rmi4_data->i2c_client->adapter, &msg[index], xfer_msgs);
+			if(retval == xfer_msgs)
+				break;
+			else
+				rmi4_data->comm_err_count++;
+
+			input_err(true, &rmi4_data->i2c_client->dev, "%s: I2C retry %d\n",
+					__func__, retry + 1);
+			msleep(20);
+
+			if (retry == SYN_I2C_RETRY_TIMES / 2) {
+				synaptics_rmi4_i2c_check_addr(rmi4_data);
+				msg[0].addr = rmi4_data->i2c_client->addr;
+#ifdef I2C_BURST_LIMIT
+				for (ii = 0; ii < (rd_msgs - 1); ii++)
+					msg[ii + 1].addr = rmi4_data->i2c_client->addr;;
+#endif
+				msg[rd_msgs].addr = rmi4_data->i2c_client->addr;;
+			}
+		}
+
+		if (retry == SYN_I2C_RETRY_TIMES) {
+			input_err(true, &rmi4_data->i2c_client->dev,
+					"%s: I2C read over retry limit\n",
+					__func__);
+			retval = -EIO;
+			goto exit;
+		}
+		remaining_msgs -= xfer_msgs;
+		index += xfer_msgs;
+	}
+
+	retval = length;
 exit:
 	mutex_unlock(&(rmi4_data->rmi4_io_ctrl_mutex));
 
@@ -789,8 +872,6 @@ static int synaptics_rmi4_i2c_write(struct synaptics_rmi4_data *rmi4_data,
 				"%s: I2C write over retry limit\n",
 				__func__);
 		retval = -EIO;
-		if (rmi4_data->tsp_probe)
-			schedule_delayed_work(&rmi4_data->incell_reset_work, msecs_to_jiffies(5));
 	}
 
 exit:
@@ -3703,8 +3784,10 @@ static int synaptics_rmi4_init_exp_fn(struct synaptics_rmi4_data *rmi4_data)
 				input_err(true, &rmi4_data->i2c_client->dev,
 						"%s: Failed to init exp [%d] fn\n",
 						__func__, exp_fhandler->fn_type);
+				goto error_exit;
+			} else {
+				exp_fhandler->initialized = true;
 			}
-			exp_fhandler->initialized = true;
 
 			input_dbg(false, &rmi4_data->i2c_client->dev, "%s: run [%d]'s init function\n",
 						__func__, exp_fhandler->fn_type);
@@ -4559,7 +4642,7 @@ static int synaptics_rmi4_start_device(struct synaptics_rmi4_data *rmi4_data)
 		input_err(true, &rmi4_data->i2c_client->dev,
 				"%s: Failed to issue reset command, error = %d\n",
 				__func__, retval);
-		goto enable_irq;
+		goto out;
 	}
 
 	msleep(rmi4_data->board->reset_delay_ms);
@@ -4585,10 +4668,6 @@ static int synaptics_rmi4_start_device(struct synaptics_rmi4_data *rmi4_data)
 		change_report_rate(rmi4_data, rmi4_data->tsp_change_report_rate);
 	}
 #endif
-
-#ifdef CONFIG_SEC_FACTORY
-enable_irq:
-#endif	//CONFIG_SEC_FACTORY
 	enable_irq(rmi4_data->i2c_client->irq);
 
 	input_info(true, &rmi4_data->i2c_client->dev, "%s\n", __func__);

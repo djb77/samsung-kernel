@@ -5,7 +5,6 @@ config SND_SOC_MSM_HOSTLESS_PCM
 
 config SND_SOC_MSM_QDSP6V2_INTF
 	bool "SoC Q6 audio driver for APQ8084"
-	depends on MSM_QDSP6_APRV2
 	help
 	 To add support for SoC audio on APQ8084.
 	 This will enable all the platform specific
@@ -200,11 +199,32 @@ config SND_SOC_MSM8X16_RT5659
 	 This will enable sound soc drivers which
 	 interfaces with DSP, also it will enable
 	 the machine drivers and the corresponding
-	 DAI-links.	 
+	 DAI-links.
 
-config SND_SOC_MDMCALIFORNIUM
-        tristate "SoC Machine driver for MDMCALIFORNIUM boards"
-        depends on ARCH_MDMCALIFORNIUM
+config SND_SOC_MSM8X16_RT5665
+	tristate "SoC Machine driver for MSM8X16 RT5665 boards"
+	depends on ARCH_MSMTITANIUM || ARCH_MSM8916 || ARCH_MSM8937 || ARCH_MSM8953
+	select SND_SOC_QDSP6V2
+	select SND_SOC_MSM_STUB
+	select SND_SOC_MSM_HOSTLESS_PCM
+	select SND_DYNAMIC_MINORS
+	select MSM_QDSP6_APRV2
+	select MSM_QDSP6V2_CODECS
+	select SND_SOC_MSM8X16_WCD
+	select SND_SOC_RT5665
+	select AUDIO_EXT_CLK
+	select MFD_CORE
+	select QTI_PP
+	help
+	 To add support for SoC audio on MSM8X16 with RT5665 codec.
+	 This will enable sound soc drivers which
+	 interfaces with DSP, also it will enable
+	 the machine drivers and the corresponding
+	 DAI-links.
+
+config SND_SOC_MDM9650
+        tristate "SoC Machine driver for MDM9650 or SDX20 boards"
+        depends on ARCH_MDM9650 || ARCH_SDX20
         select SND_SOC_QDSP6V2
         select SND_SOC_MSM_STUB
         select SND_SOC_MSM_HOSTLESS_PCM
@@ -213,9 +233,10 @@ config SND_SOC_MDMCALIFORNIUM
         select MSM_QDSP6V2_CODECS
         select SND_SOC_WCD9335
         select SND_SOC_WSA881X
+        select SND_SOC_TLV320AIC3X
         select SND_HWDEP
         help
-         To add support for SoC audio on MDMCALIFORNIUM.
+         To add support for SoC audio on MDM9650 or SDX20.
          This will enable sound soc drivers which
          interfaces with DSP, also it will enable
          the machine driver and the corresponding
@@ -251,7 +272,11 @@ config SND_SOC_MSM8909
 	select MSM_QDSP6V2_CODECS
 	select SND_SOC_MSM8X16_WCD
 	select SND_SOC_WSA881X_ANALOG
+	select SND_SOC_WSA881X
+	select SND_SOC_WCD9335
+        select SND_SOC_CPE
 	select SND_HWDEP
+	select QTI_PP
 	help
 	 To add support for SoC audio on MSM8909 boards.
 	 This will enable sound soc drivers which
@@ -312,5 +337,29 @@ config SND_EXT_MIC_BIAS
 	default n
 	help
 		To add support for external mic bias
+
+config SEC_SND_ADAPTATION
+	tristate "Samsung ADSP Adaptation"
+	default n
+	help
+		To add support for Samsung ADSP solution
+
+config SND_SOC_TDM_INTF
+	tristate "TDM interface support"
+	default n
+	help
+		To add support for TDM interface
+
+config SEC_SND_TFA98XX
+	tristate "NXP amp support"
+	default n
+	help
+		To add support for NXP amp
+
+config SEC_SND_DEBUG
+	tristate "Debug code for Samsung Audio"
+	default n
+	help
+		Debug code for Samsung Audio
 
 endmenu

@@ -22,6 +22,7 @@
 #include <linux/pid_namespace.h>
 #include <linux/user_namespace.h>
 #include <linux/shmem_fs.h>
+#include <linux/task_integrity.h>
 
 #include <asm/poll.h>
 #include <asm/siginfo.h>
@@ -330,6 +331,23 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 	case F_GETPIPE_SZ:
 		err = pipe_fcntl(filp, cmd, arg);
 		break;
+#ifdef CONFIG_FIVE
+	case F_FIVE_SIGN:
+		err = five_fcntl_sign(filp,
+				(struct integrity_label __user *)arg);
+		break;
+	case F_FIVE_VERIFY_ASYNC:
+		err = five_fcntl_verify_async(filp);
+		break;
+	case F_FIVE_VERIFY_SYNC:
+		err = five_fcntl_verify_sync(filp);
+		break;
+#ifdef CONFIG_FIVE_PA_FEATURE
+	case F_FIVE_PA_SETXATTR:
+		err = fivepa_fcntl_setxattr(filp, (void __user *)arg);
+		break;
+#endif
+#endif
 	case F_ADD_SEALS:
 	case F_GET_SEALS:
 		err = shmem_fcntl(filp, cmd, arg);

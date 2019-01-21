@@ -236,7 +236,7 @@ struct spcom_device {
 	int channel_count;
 
 	/* private */
-	struct mutex cmd_lock;
+	struct mutex lock;
 
 	/* Link state */
 	struct completion link_state_changed;
@@ -1697,8 +1697,6 @@ static int spcom_handle_write(struct spcom_channel *ch,
 	swap_id = htonl(cmd->cmd_id);
 	memcpy(cmd_name, &swap_id, sizeof(int));
 
-	mutex_lock(&spcom_dev->cmd_lock);
-
 	pr_debug("cmd_id [0x%x] cmd_name [%s].\n", cmd_id, cmd_name);
 
 	switch (cmd_id) {
@@ -1722,10 +1720,8 @@ static int spcom_handle_write(struct spcom_channel *ch,
 		break;
 	default:
 		pr_err("Invalid Command Id [0x%x].\n", (int) cmd->cmd_id);
-		ret = -EINVAL;
+		return -EINVAL;
 	}
-
-	mutex_unlock(&spcom_dev->cmd_lock);
 
 	return ret;
 }
@@ -2394,7 +2390,7 @@ static int spcom_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	spcom_dev = dev;
-	mutex_init(&spcom_dev->cmd_lock);
+	mutex_init(&dev->lock);
 	init_completion(&dev->link_state_changed);
 	spcom_dev->link_state = GLINK_LINK_STATE_DOWN;
 

@@ -410,6 +410,7 @@ static const unsigned int qdsd_data3_pins[] = { 154 };
 enum msm8953_functions {
 	msm_mux_gpio,
 	msm_mux_blsp_spi1,
+	msm_mux_gcc_gp0_clk_a,
 	msm_mux_smb_int,
 	msm_mux_adsp_ext,
 	msm_mux_prng_rosc,
@@ -871,6 +872,9 @@ static const char * const dac_calib7_groups[] = {
 static const char * const accel_int_groups[] = {
 	"gpio42",
 };
+static const char * const gcc_gp0_clk_a_groups[] = {
+	"gpio33",
+};
 static const char * const gcc_gp1_clk_a_groups[] = {
 	"gpio42",
 };
@@ -1245,6 +1249,7 @@ static const char * const tsens_max_groups[] = {
 static const struct msm_function msm8953_functions[] = {
 	FUNCTION(gpio),
 	FUNCTION(blsp_spi1),
+	FUNCTION(gcc_gp0_clk_a),
 	FUNCTION(smb_int),
 	FUNCTION(adsp_ext),
 	FUNCTION(prng_rosc),
@@ -1502,7 +1507,7 @@ static const struct msm_pingroup msm8953_groups[] = {
 		 NA, NA),
 	PINGROUP(31, cci_i2c, NA, NA, NA, qdss_tracedata_a, NA, NA, NA, NA),
 	PINGROUP(32, cci_i2c, NA, NA, NA, qdss_tracedata_a, NA, NA, NA, NA),
-	PINGROUP(33, cci_timer0, NA, NA, NA, NA, qdss_tracedata_a, NA, NA, NA),
+	PINGROUP(33, cci_timer0, gcc_gp0_clk_a, NA, NA, NA, qdss_tracedata_a, NA, NA, NA),
 	PINGROUP(34, cci_timer1, NA, NA, NA, NA, qdss_tracedata_a, NA, NA, NA),
 	PINGROUP(35, cci_timer2, blsp1_spi, pwr_nav_enabled_a, NA, NA, NA,
 		 qdss_tracedata_a, NA, NA),

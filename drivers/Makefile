@@ -157,8 +157,12 @@ obj-$(CONFIG_HYPERV)		+= hv/
 obj-$(CONFIG_PM_DEVFREQ)	+= devfreq/
 ifeq ($(CONFIG_BATTERY_SAMSUNG_V2), y)
 	obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery_v2/
+else 
+ifeq ($(CONFIG_BATTERY_SAMSUNG_V2_LEGACY), y)
+	obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery_v2_legacy/
 else
 	obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery/
+endif
 endif
 obj-$(CONFIG_EXTCON)		+= extcon/
 obj-$(CONFIG_MEMORY)		+= memory/
@@ -176,8 +180,7 @@ obj-$(CONFIG_ESOC)		+= esoc/
 
 obj-$(CONFIG_BIF)		+= bif/
 
-obj-$(CONFIG_SENSORS)           += sensors/
-obj-$(CONFIG_SENSORS_SSC)	+= sensors/
+obj-$(CONFIG_SENSORS_CORE)	+= sensors/
 
 # <t-base drivers
 obj-$(CONFIG_TRUSTONIC_TEE)	+= gud/
@@ -200,3 +203,6 @@ endif
 
 # CCIC
 obj-y += ccic/
+
+# FIVE TEE driver
+obj-$(CONFIG_FIVE_TEE_DRIVER)	+= five/

@@ -28,12 +28,14 @@ extern uint32_t bootloader_end;
 extern uint32_t bootloader_display;
 extern uint32_t bootloader_load_kernel;
 
+extern unsigned int is_boot_recovery(void);
 extern unsigned int get_boot_stat_time(void);
 extern unsigned int get_boot_stat_freq(void);
 extern void sec_boot_stat_add(const char * c);
 extern void sec_bsp_enable_console(void);
 extern bool sec_bsp_is_console_enabled(void);
 #else /* CONFIG_SEC_BSP */
+#define is_boot_recovery()      (0)
 #define get_boot_stat_time()
 #define get_boot_stat_freq()
 #define sec_boot_stat_add(c)

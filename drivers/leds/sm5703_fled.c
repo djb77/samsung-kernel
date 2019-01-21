@@ -120,7 +120,7 @@ static ssize_t flash_show(struct device *dev,
 #if defined(CONFIG_SEC_GTA2SLTE_PROJECT)||defined(CONFIG_SEC_GTA2SWIFI_PROJECT)
 static int torchlevel[] = {1, 3, 3, 6, 8, 10, 11, 13, 14, 17};
 #elif defined(CONFIG_SEC_J2Y18LTE_PROJECT)
-static int torchlevel[] = {1, 2, 3, 4, 5, 6, 7, 8, 8, 9};
+static int torchlevel[] = {1, 3, 3, 5, 5, 9, 9, 9, 12, 12};
 #elif defined(CONFIG_SEC_J3POPLTE_PROJECT)||defined(CONFIG_SEC_J3Y17QLTE_PROJECT)
 static int torchlevel[] = {1, 3, 5, 5, 7, 9, 10, 11, 12, 14};
 #else //default
@@ -296,6 +296,9 @@ EXPORT_SYMBOL(sm5703_fled_led_off);
 int msm_fled_led_off_sm5703(ext_pmic_flash_ctrl_t *flash_ctrl)
 {
 	sm_fled_info_t *fled_info = sm_fled_get_info_by_name(NULL);
+
+	IS_FLASH_VALID(fled_info);
+
 	sm5703_fled_set_movie_current_sel(fled_info, 0);
 	return sm5703_fled_led_off(fled_info);
 }
@@ -325,6 +328,8 @@ EXPORT_SYMBOL(sm5703_fled_torch_on);
 int msm_fled_torch_on_sm5703(ext_pmic_flash_ctrl_t *flash_ctrl)
 {
 	sm_fled_info_t *fled_info = sm_fled_get_info_by_name(NULL);
+	IS_FLASH_VALID(fled_info);
+
 	return sm5703_fled_torch_on(fled_info);
 }
 EXPORT_SYMBOL(msm_fled_torch_on_sm5703);
@@ -355,6 +360,8 @@ int msm_fled_flash_on_sm5703(ext_pmic_flash_ctrl_t *flash_ctrl)
 {
 	sm_fled_info_t *fled_info = sm_fled_get_info_by_name(NULL);
 	sm5703_fled_info_t *info = (sm5703_fled_info_t *)fled_info;
+
+	IS_FLASH_VALID(info);
 	
 	SM5703_FLED_INFO("%s, actual_current = %d\n",__FUNCTION__, info->pdata->fled_flash_current);
 	sm5703_fled_set_flash_current_sel(fled_info,info->pdata->fled_flash_current);
@@ -367,6 +374,8 @@ int msm_fled_pre_flash_on_sm5703(ext_pmic_flash_ctrl_t *flash_ctrl)
 	sm_fled_info_t *fled_info = sm_fled_get_info_by_name(NULL);
 	sm5703_fled_info_t *info = (sm5703_fled_info_t *)fled_info; 
 	unsigned int actual_current = 0;
+
+	IS_FLASH_VALID(info);
 
 	if (flash_ctrl->flash_current_mA > 0)
 		actual_current = SM5703_MOVIE_CURRENT(flash_ctrl->flash_current_mA);
@@ -384,6 +393,8 @@ int msm_fled_flash_on_set_current_sm5703(ext_pmic_flash_ctrl_t *flash_ctrl)
 	sm_fled_info_t *fled_info = sm_fled_get_info_by_name(NULL);
 	sm5703_fled_info_t *info = (sm5703_fled_info_t *)fled_info; 
 	unsigned int actual_current = 0;
+
+	IS_FLASH_VALID(info);
 
 	if (flash_ctrl->flash_current_mA > 0)
 		actual_current = SM5703_FLASH_CURRENT(flash_ctrl->flash_current_mA);

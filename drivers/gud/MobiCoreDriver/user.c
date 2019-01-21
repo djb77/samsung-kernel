@@ -17,11 +17,11 @@
 #include <linux/device.h>
 #include <linux/export.h>
 #include <linux/fs.h>
+#include <linux/mm_types.h>	/* struct vm_area_struct */
 
 #include "public/mc_user.h"
 
 #include "main.h"
-#include "admin.h"	/* is_authenticator_pid */
 #include "user.h"
 #include "client.h"
 #include "mcp.h"	/* mcp_get_version */
@@ -47,7 +47,7 @@ static int user_open(struct inode *inode, struct file *file)
 	struct tee_client *client;
 
 	/* Create client */
-	mc_dev_devel("from %s (%d)\n", current->comm, current->pid);
+	mc_dev_devel("from %s (%d)", current->comm, current->pid);
 	client = client_create(false);
 	if (!client)
 		return -ENOMEM;
@@ -69,8 +69,8 @@ static int user_release(struct inode *inode, struct file *file)
 	struct tee_client *client = get_client(file);
 
 	/* Close client */
-	mc_dev_devel("from %s (%d)\n", current->comm, current->pid);
-	if (WARN(!client, "No client data available"))
+	mc_dev_devel("from %s (%d)", current->comm, current->pid);
+	if (!client)
 		return -EPROTO;
 
 	/* Detach client from user file */
@@ -114,9 +114,9 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 	int __user *uarg = (int __user *)arg;
 	int ret = -EINVAL;
 
-	mc_dev_devel("%u from %s\n", _IOC_NR(id), current->comm);
+	mc_dev_devel("%u from %s", _IOC_NR(id), current->comm);
 
-	if (WARN(!client, "No client data available"))
+	if (!client)
 		return -EPROTO;
 
 	if (ioctl_check_pointer(id, uarg))
@@ -142,7 +142,7 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 		ret = client_open_session(client, &session.sid, &session.uuid,
 					  session.tci, session.tcilen,
 					  session.is_gp_uuid,
-					  &session.identity);
+					  &session.identity, session.client_fd);
 		if (ret)
 			break;
 
@@ -161,10 +161,10 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 			break;
 		}
 
-		/* Call internal api */
 		ret = client_open_trustlet(client, &trustlet.sid, trustlet.spid,
 					   trustlet.buffer, trustlet.tlen,
-					   trustlet.tci, trustlet.tcilen);
+					   trustlet.tci, trustlet.tcilen,
+					   trustlet.client_fd);
 		if (ret)
 			break;
 
@@ -206,14 +206,15 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 			break;
 		}
 
-		ret = client_map_session_wsms(client, map.sid, map.bufs);
+		ret = client_map_session_wsms(client, map.sid, &map.buf,
+					      map.client_fd);
 		if (ret)
 			break;
 
 		/* Fill in return struct */
 		if (copy_to_user(uarg, &map, sizeof(map))) {
 			ret = -EFAULT;
-			client_unmap_session_wsms(client, map.sid, map.bufs);
+			client_unmap_session_wsms(client, map.sid, &map.buf);
 			break;
 		}
 		break;
@@ -226,11 +227,12 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 			break;
 		}
 
-		ret = client_unmap_session_wsms(client, map.sid, map.bufs);
+		ret = client_unmap_session_wsms(client, map.sid, &map.buf);
 		break;
 	}
 	case MC_IO_ERR: {
-		struct mc_ioctl_geterr *uerr = (struct mc_ioctl_geterr *)uarg;
+		struct mc_ioctl_geterr __user *uerr =
+			(struct mc_ioctl_geterr __user *)uarg;
 		u32 sid;
 		s32 exit_code;
 
@@ -263,18 +265,118 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 
 		break;
 	}
-	case MC_IO_AUTHENTICATOR_CHECK: {
-		struct mc_authenticator_check info;
+	case MC_IO_GP_INITIALIZE_CONTEXT: {
+		struct mc_ioctl_gp_initialize_context context;
 
-		if (copy_from_user(&info, uarg, sizeof(info))) {
+		if (copy_from_user(&context, uarg, sizeof(context))) {
 			ret = -EFAULT;
 			break;
 		}
-		ret = is_authenticator_pid(info.pid);
+
+		ret = client_gp_initialize_context(client, &context.ret);
+
+		if (copy_to_user(uarg, &context, sizeof(context))) {
+			ret = -EFAULT;
+			break;
+		}
+		break;
+	}
+	case MC_IO_GP_REGISTER_SHARED_MEM: {
+		struct mc_ioctl_gp_register_shared_mem shared_mem;
+
+		if (copy_from_user(&shared_mem, uarg, sizeof(shared_mem))) {
+			ret = -EFAULT;
+			break;
+		}
+
+		ret = client_gp_register_shared_mem(client,
+						    &shared_mem.memref,
+						    &shared_mem.ret,
+						    shared_mem.client_fd);
+
+		if (copy_to_user(uarg, &shared_mem, sizeof(shared_mem))) {
+			ret = -EFAULT;
+			break;
+		}
+		break;
+	}
+	case MC_IO_GP_RELEASE_SHARED_MEM: {
+		struct mc_ioctl_gp_release_shared_mem shared_mem;
+
+		if (copy_from_user(&shared_mem, uarg, sizeof(shared_mem))) {
+			ret = -EFAULT;
+			break;
+		}
+
+		ret = client_gp_release_shared_mem(client, &shared_mem.memref);
+		break;
+	}
+	case MC_IO_GP_OPEN_SESSION: {
+		struct mc_ioctl_gp_open_session session;
+
+		if (copy_from_user(&session, uarg, sizeof(session))) {
+			ret = -EFAULT;
+			break;
+		}
+
+		ret = client_gp_open_session(client, &session.session_id,
+					     &session.uuid, &session.operation,
+					     &session.identity,
+					     &session.ret,
+					     session.client_fd);
+
+		if (copy_to_user(uarg, &session, sizeof(session))) {
+			ret = -EFAULT;
+			break;
+		}
+		break;
+	}
+	case MC_IO_GP_CLOSE_SESSION: {
+		struct mc_ioctl_gp_close_session session;
+
+		if (copy_from_user(&session, uarg, sizeof(session))) {
+			ret = -EFAULT;
+			break;
+		}
+
+		ret = client_gp_close_session(client, session.session_id);
+		break;
+	}
+	case MC_IO_GP_INVOKE_COMMAND: {
+		struct mc_ioctl_gp_invoke_command command;
+
+		if (copy_from_user(&command, uarg, sizeof(command))) {
+			ret = -EFAULT;
+			break;
+		}
+
+		ret = client_gp_invoke_command(client, command.session_id,
+					       command.command_id,
+					       &command.operation,
+					       &command.ret,
+					       command.client_fd);
+
+		if (copy_to_user(uarg, &command, sizeof(command))) {
+			ret = -EFAULT;
+			break;
+		}
+		break;
+	}
+	case MC_IO_GP_REQUEST_CANCELLATION: {
+		struct mc_ioctl_gp_request_cancellation cancel;
+
+		if (copy_from_user(&cancel, uarg, sizeof(cancel))) {
+			ret = -EFAULT;
+			break;
+		}
+
+		client_gp_request_cancellation(client,
+					       cancel.operation.started);
+		ret = 0;
 		break;
 	}
 	default:
-		mc_dev_err("unsupported command no %d\n", id);
+		mc_dev_err("unsupported command no %d", id);
 		ret = -ENOIOCTLCMD;
 	}
 

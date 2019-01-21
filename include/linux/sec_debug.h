@@ -34,6 +34,46 @@
 #include <asm/cacheflush.h>
 #include <asm/io.h>
 
+enum sec_debug_upload_cause_t {
+	UPLOAD_CAUSE_INIT = 0xCAFEBABE,
+	UPLOAD_CAUSE_KERNEL_PANIC = 0x000000C8,
+	UPLOAD_CAUSE_POWER_LONG_PRESS = 0x00000085,
+	UPLOAD_CAUSE_FORCED_UPLOAD = 0x00000022,
+	UPLOAD_CAUSE_USER_FORCED_UPLOAD = 0x00009890,
+	UPLOAD_CAUSE_CP_ERROR_FATAL = 0x000000CC,
+	UPLOAD_CAUSE_MDM_ERROR_FATAL = 0x000000EE,
+	UPLOAD_CAUSE_USER_FAULT = 0x0000002F,
+	UPLOAD_CAUSE_HSIC_DISCONNECTED = 0x000000DD,
+	UPLOAD_CAUSE_MODEM_RST_ERR = 0x000000FC,
+	UPLOAD_CAUSE_RIVA_RST_ERR = 0x000000FB,
+	UPLOAD_CAUSE_LPASS_RST_ERR = 0x000000FA,
+	UPLOAD_CAUSE_DSPS_RST_ERR = 0x000000FD,
+	UPLOAD_CAUSE_PERIPHERAL_ERR = 0x000000FF,
+	UPLOAD_CAUSE_NON_SECURE_WDOG_BARK = 0x00000DBA,
+	UPLOAD_CAUSE_NON_SECURE_WDOG_BITE = 0x00000DBE,
+	UPLOAD_CAUSE_POWER_THERMAL_RESET = 0x00000075,
+	UPLOAD_CAUSE_SECURE_WDOG_BITE = 0x00005DBE,
+	UPLOAD_CAUSE_BUS_HANG = 0x000000B5,
+#if defined(CONFIG_SEC_NAD)
+	UPLOAD_CAUSE_NAD_CRYPTO = 0x00000ACF,
+	UPLOAD_CAUSE_NAD_ICACHE = 0x00000ACA,
+	UPLOAD_CAUSE_NAD_CACHECOHERENCY = 0x00000ACC,
+	UPLOAD_CAUSE_NAD_SUSPEND = 0x00000A3E,
+	UPLOAD_CAUSE_NAD_VDDMIN = 0x00000ADD,
+	UPLOAD_CAUSE_NAD_QMESADDR = 0x00000A29,
+	UPLOAD_CAUSE_NAD_QMESACACHE = 0x00000AED,
+	UPLOAD_CAUSE_NAD_PMIC = 0x00000AB8,
+	UPLOAD_CAUSE_NAD_UFS = 0x00000AF5,
+	UPLOAD_CAUSE_NAD_SDCARD = 0x00000A7C,
+	UPLOAD_CAUSE_NAD_DDRTEST_FAIL = 0x00000A33,
+	UPLOAD_CAUSE_NAD_FAIL = 0x00000A65,
+	UPLOAD_CAUSE_DDR_TEST =	0x00000A30,
+	UPLOAD_CAUSE_DDR_TEST_FOR_MAIN = 0x00000A35,
+	UPLOAD_CAUSE_DDR_TEST_FOR_SSLT = 0x00000A3A,
+	UPLOAD_CAUSE_DDR_TEST_FOR_SMD = 0x00000A3F,
+#endif
+};
+
 enum sec_restart_reason_t {
 	RESTART_REASON_NORMAL = 0x0,
 	RESTART_REASON_BOOTLOADER = 0x77665500,
@@ -107,14 +147,6 @@ extern void sec_debug_set_thermal_upload(void);
 /* from 'msm-poweroff.c' */
 extern void set_dload_mode(int on);
 
-#ifdef CONFIG_SEC_LOG_LAST_KMSG
-extern void sec_set_reset_extra_info(char *last_kmsg_buffer,
-			unsigned last_kmsg_size);
-#else /* CONFIG_SEC_LOG_LAST_KMSG */
-static inline void sec_set_reset_extra_info(char *last_kmsg_buffer,
-			unsigned last_kmsg_size) {}
-#endif /* CONFIG_SEC_LOG_LAST_KMSG */
-
 #else /* CONFIG_SEC_DEBUG */
 static inline void sec_debug_save_context(void) {}
 static inline void sec_debug_prepare_for_wdog_bark_reset(void) {}
@@ -142,7 +174,7 @@ static inline u32 sec_debug_get_rr(void) { return 0; }
 static inline void sec_debug_print_model(
 		struct seq_file *m, const char *cpu_name) {}
 
-static void sec_debug_update_dload_mode(const int restart_mode,
+static inline void sec_debug_update_dload_mode(const int restart_mode,
 		const int in_panic) {}
 static inline void sec_debug_update_restart_reason(const char *cmd,
 		const int in_panic) {}
@@ -468,15 +500,6 @@ extern void emerg_pet_watchdog(void);
 extern void *kfree_hook(void *p, void *caller);
 #endif
 
-#ifdef CONFIG_USER_RESET_DEBUG
-
-#ifdef CONFIG_USER_RESET_DEBUG_TEST
-extern void force_thermal_reset(void);
-extern void force_watchdog_bark(void);
-#endif
-
-#define SEC_DEBUG_EX_INFO_SIZE	(0x400)
-
 typedef enum {
 	USER_UPLOAD_CAUSE_MIN = 1,
 	USER_UPLOAD_CAUSE_SMPL = USER_UPLOAD_CAUSE_MIN,	/* RESET_REASON_SMPL */
@@ -492,50 +515,6 @@ typedef enum {
 	USER_UPLOAD_CAUSE_UNKNOWN,		/* RESET_REASON_UNKNOWN */
 	USER_UPLOAD_CAUSE_MAX = USER_UPLOAD_CAUSE_UNKNOWN,
 } user_upload_cause_t;
-
-enum extra_info_dbg_type {
-	DBG_0_L2_ERR = 0,
-	DBG_1_RESERVED,
-	DBG_2_RESERVED,
-	DBG_3_RESERVED,
-	DBG_4_RESERVED,
-	DBG_5_RESERVED,
-	DBG_MAX,
-};
-
-struct sec_debug_reset_ex_info {
-	u64 ktime;
-	struct task_struct *tsk;
-	char bug_buf[64];
-	char panic_buf[64];
-	u64 fault_addr[6];
-	char pc[64];
-	char lr[64];
-	char dbg0[96];
-	char backtrace[600];
-}; /* size SEC_DEBUG_EX_INFO_SIZE */
-
-extern struct sec_debug_reset_ex_info *sec_debug_reset_ex_info;
-extern int sec_debug_get_cp_crash_log(char *str);
-extern void _sec_debug_store_backtrace(unsigned long where);
-extern void sec_debug_store_bug_string(const char *fmt, ...);
-extern void sec_debug_store_additional_dbg(enum extra_info_dbg_type type, unsigned int value, const char *fmt, ...);
-
-static inline void sec_debug_store_pte(unsigned long addr, int idx)
-{
-	if (sec_debug_reset_ex_info) {
-		if(idx == 0)
-			memset(sec_debug_reset_ex_info->fault_addr, 0,
-				sizeof(sec_debug_reset_ex_info->fault_addr));
-
-		sec_debug_reset_ex_info->fault_addr[idx] = addr;
-	}
-}
-#else /* CONFIG_USER_RESET_DEBUG */
-static inline void sec_debug_store_pte(unsigned long addr, int idx)
-{
-}
-#endif /* CONFIG_USER_RESET_DEBUG */
 
 #ifdef CONFIG_TOUCHSCREEN_DUMP_MODE
 struct tsp_dump_callbacks {
