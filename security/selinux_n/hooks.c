@@ -106,8 +106,9 @@ unsigned int cmp_ns_integrity(void)
 	return 0;
 }
 #endif
+
 #ifdef CONFIG_RKP_KDP
-#include<linux/rkp_entry.h>
+#include <linux/rkp.h>
 
 RKP_RO_AREA struct task_security_struct init_sec;
 extern struct kmem_cache *tsec_jar;

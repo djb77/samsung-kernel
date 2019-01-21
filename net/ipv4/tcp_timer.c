@@ -35,6 +35,39 @@ int sysctl_tcp_retries2 __read_mostly = TCP_RETR2;
 int sysctl_tcp_orphan_retries __read_mostly;
 int sysctl_tcp_thin_linear_timeouts __read_mostly;
 
+static void set_tcp_default(void)
+{
+	sysctl_tcp_delack_seg = TCP_DELACK_SEG;
+}
+
+/*sysctl handler for tcp_ack realted master control */
+int tcp_proc_delayed_ack_control(struct ctl_table *table, int write,
+				 void __user *buffer, size_t *length,
+				 loff_t *ppos)
+{
+	int ret = proc_dointvec_minmax(table, write, buffer, length, ppos);
+
+	/* The ret value will be 0 if the input validation is successful
+	 * and the values are written to sysctl table. If not, the stack
+	 * will continue to work with currently configured values
+	 */
+	return ret;
+}
+
+/*sysctl handler for tcp_ack realted master control */
+int tcp_use_userconfig_sysctl_handler(struct ctl_table *table, int write,
+				      void __user *buffer, size_t *length,
+				      loff_t *ppos)
+{
+	int ret = proc_dointvec_minmax(table, write, buffer, length, ppos);
+
+	if (write && ret == 0) {
+		if (!sysctl_tcp_use_userconfig)
+			set_tcp_default();
+	}
+	return ret;
+}
+
 #ifndef CONFIG_MPTCP
 static 
 #endif
@@ -249,7 +282,8 @@ void tcp_delack_timer_handler(struct sock *sk)
 
 	sk_mem_reclaim_partial(sk);
 
-	if (sk->sk_state == TCP_CLOSE || !(icsk->icsk_ack.pending & ICSK_ACK_TIMER))
+	if (((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_LISTEN)) ||
+	    !(icsk->icsk_ack.pending & ICSK_ACK_TIMER))
 		goto out;
 
 	if (time_after(icsk->icsk_ack.timeout, jiffies)) {
@@ -549,7 +583,8 @@ void tcp_write_timer_handler(struct sock *sk)
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	int event;
 
-	if (sk->sk_state == TCP_CLOSE || !icsk->icsk_pending)
+	if (((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_LISTEN)) ||
+	    !icsk->icsk_pending)
 		goto out;
 
 	if (time_after(icsk->icsk_timeout, jiffies)) {
@@ -706,7 +741,8 @@ static void tcp_keepalive_timer (unsigned long data)
 		goto death;
 	}
 
-	if (!sock_flag(sk, SOCK_KEEPOPEN) || sk->sk_state == TCP_CLOSE)
+	if (!sock_flag(sk, SOCK_KEEPOPEN) ||
+	    ((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_SYN_SENT)))
 		goto out;
 
 	elapsed = keepalive_time_when(tp);

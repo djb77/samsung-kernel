@@ -483,7 +483,7 @@ static void exynos_pcie_setup_rc(struct pcie_port *pp)
 	exynos_pcie_wr_own_conf(pp, PCIE_AUX_CLK_FREQ_OFF, 4, PCIE_AUX_CLK_FREQ_26MHZ);
 
 	/* set duration of L1.2 & L1.2.Entry */
-	exynos_pcie_wr_own_conf(pp, PCIE_L1_SUBSTATES_OFF, 4, 0xD2);
+	exynos_pcie_wr_own_conf(pp, PCIE_L1_SUBSTATES_OFF, 4, PCIE_L1_SUB_VAL);
 
 	/* clear power management control and status register */
 	exynos_pcie_wr_own_conf(pp, pm_cap_off + PCI_PM_CTRL, 4, 0x0);
@@ -1531,9 +1531,11 @@ void exynos_pcie_config_l1ss(struct pcie_port *pp)
 		exynos_pcie_wr_own_conf(pp, PCIE_LINK_L1SS_CONTROL, 4, val);
 		exynos_pcie_wr_own_conf(pp, PCIE_LINK_L1SS_CONTROL2, 4,
 				PORT_LINK_TPOWERON_130US);
+		/*
 		val = PORT_LINK_L1SS_T_PCLKACK | PORT_LINK_L1SS_T_L1_2 |
 			PORT_LINK_L1SS_T_POWER_OFF;
-		exynos_pcie_wr_own_conf(pp, PCIE_LINK_L1SS_OFF, 4, val);
+		*/
+		exynos_pcie_wr_own_conf(pp, PCIE_L1_SUBSTATES_OFF, 4, PCIE_L1_SUB_VAL);
 
 		exynos_pcie_rd_own_conf(pp, exp_cap_off + PCI_EXP_LNKCTL, 4, &val);
 		val &= ~PCI_EXP_LNKCTL_ASPMC;

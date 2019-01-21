@@ -217,7 +217,6 @@ struct exynos_pcie {
 #define PORT_LINK_L1SS_ENABLE		(0xf << 0)
 #define PORT_LINK_TPOWERON_130US	(0x69 << 0)
 #define PORT_LINK_TPOWERON_3100US	(0xfa << 0)
-#define PCIE_LINK_L1SS_OFF		0xb44
 #define PORT_LINK_L1SS_T_PCLKACK	(0x3 << 6)
 #define PORT_LINK_L1SS_T_L1_2		(0x4 << 2)
 #define PORT_LINK_L1SS_T_POWER_OFF	(0x2 << 0)
@@ -231,6 +230,7 @@ struct exynos_pcie {
 #define PCIE_AUX_CLK_FREQ_24MHZ		0x18
 #define PCIE_AUX_CLK_FREQ_26MHZ		0x1A
 #define PCIE_L1_SUBSTATES_OFF		0xB44
+#define PCIE_L1_SUB_VAL			0xEA
 
 #define PCIE_LINK_WIDTH_SPEED_CONTROL	0x80C
 #define PORT_LOGIC_SPEED_CHANGE		(0x1 << 17)

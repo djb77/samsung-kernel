@@ -1,0 +1,82 @@
+/*
+ * SAMSUNG Hero Type C S2MM005 CCIC Device Tree Source
+ *
+ * Copyright (c) 2015 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+/ {
+	pinctrl@164B0000 {
+		usbpd_irq: usbpd-irq {
+			samsung,pins = "gpa1-7";
+			samsung,pin-function = <0xf>;
+			samsung,pin-pud = <3>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
+	pinctrl@11050000 {
+		om_high: om_high {
+			samsung,pins = "gpi1-6";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <3>;
+			samsung,pin-val = <1>;
+			samsung,pin-drv = <3>;
+		};
+		
+		om_input: om_input {
+			samsung,pins = "gpi1-6";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <1>;
+			samsung,pin-drv = <3>;
+		};
+	};
+
+
+	pinctrl@10980000 {
+		hard_reset: scl_sda_low {
+			samsung,pins = "gpe4-7", "gpe4-6";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-val = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+	
+
+	hsi2c@10950000 {
+		status = "okay";
+		pinctrl-names = "default","hard_reset","om_high","om_input";
+		pinctrl-0 = <&hsi2c30_bus>;
+		pinctrl-1 = <&hard_reset>;
+		pinctrl-2 = <&om_high>;
+		pinctrl-3 = <&om_input>;
+		clock-frequency = <100000>;
+/*
+		samsung,hs-mode;
+		clock-frequency = <3000000>;
+*/
+		usbpd-s2mm005@33 {
+			compatible = "sec-s2mm005,i2c";
+			reg = <0x33>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&usbpd_irq>;
+			interrupt-parent = <&gpa1>;
+			usbpd,usbpd_int = <&gpa1 7 0>;
+			usbpd,s2mm005_om = <&gpi1 6 0>;
+			usbpd,s2mm005_sda = <&gpe4 6 1>;
+			usbpd,s2mm005_scl = <&gpe4 7 1>;
+		};
+	};
+
+	usb@10C00000 {
+		dwc3 {
+			maximum-speed = "super-speed";
+		};
+	};
+};
+

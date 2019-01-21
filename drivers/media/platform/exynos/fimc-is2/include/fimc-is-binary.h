@@ -77,7 +77,7 @@
 #define DEBUGCTL_OFFSET			(DEBUG_REGION_OFFSET + DEBUG_REGION_SIZE)
 #else /* #ifdef ENABLE_IS_CORE */
 /* static reserved memory for libraries */
-#define LIB_OFFSET		(VMALLOC_START + 0xF6000000)
+#define LIB_OFFSET		(VMALLOC_START + 0xF6000000 - 0x8000000)
 #define LIB_START		(LIB_OFFSET + 0x04000000)
 
 #define VRA_LIB_ADDR		(LIB_START)

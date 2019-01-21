@@ -49,6 +49,10 @@
 #include "sched.h"
 #include "tune.h"
 
+#ifdef CONFIG_SCHED_HMP
+LIST_HEAD(hmp_domains);
+#endif
+
 /*
  * Targeted preemption latency for CPU-bound tasks:
  * (default: 6ms * (1 + ilog(ncpus)), units: nanoseconds)
@@ -2489,7 +2493,7 @@ static const u32 runnable_avg_yN_sum[] = {
  * Approximate:
  *   val * y^n,    where y^32 ~= 0.5 (~1 scheduling period)
  */
-static __always_inline u64 decay_load(u64 val, u64 n)
+u64 decay_load(u64 val, u64 n)
 {
 	unsigned int local_n;
 
@@ -2524,7 +2528,7 @@ static __always_inline u64 decay_load(u64 val, u64 n)
  * We can compute this reasonably efficiently by combining:
  *   y^PERIOD = 1/2 with precomputed \Sum 1024*y^n {for  n <PERIOD}
  */
-static u32 __compute_runnable_contrib(u64 n)
+u32 __compute_runnable_contrib(u64 n)
 {
 	u32 contrib = 0;
 
@@ -3051,6 +3055,52 @@ static inline void update_tg_load_avg(struct cfs_rq *cfs_rq, int force)
 	}
 }
 
+/*
+ * Called within set_task_rq() right before setting a task's cpu. The
+ * caller only guarantees p->pi_lock is held; no other assumptions,
+ * including the state of rq->lock, should be made.
+ */
+void set_task_rq_fair(struct sched_entity *se,
+		      struct cfs_rq *prev, struct cfs_rq *next)
+{
+	if (!sched_feat(ATTACH_AGE_LOAD))
+		return;
+
+	/*
+	 * We are supposed to update the task to "current" time, then its up to
+	 * date and ready to go to new CPU/cfs_rq. But we have difficulty in
+	 * getting what current time is, so simply throw away the out-of-date
+	 * time. This will result in the wakee task is less decayed, but giving
+	 * the wakee more load sounds not bad.
+	 */
+	if (se->avg.last_update_time && prev) {
+		u64 p_last_update_time;
+		u64 n_last_update_time;
+
+#ifndef CONFIG_64BIT
+		u64 p_last_update_time_copy;
+		u64 n_last_update_time_copy;
+
+		do {
+			p_last_update_time_copy = prev->load_last_update_time_copy;
+			n_last_update_time_copy = next->load_last_update_time_copy;
+
+			smp_rmb();
+
+			p_last_update_time = prev->avg.last_update_time;
+			n_last_update_time = next->avg.last_update_time;
+
+		} while (p_last_update_time != p_last_update_time_copy ||
+			 n_last_update_time != n_last_update_time_copy);
+#else
+		p_last_update_time = prev->avg.last_update_time;
+		n_last_update_time = next->avg.last_update_time;
+#endif
+		__update_load_avg(p_last_update_time, cpu_of(rq_of(prev)),
+				  &se->avg, 0, 0, NULL);
+		se->avg.last_update_time = n_last_update_time;
+	}
+}
 #else /* CONFIG_FAIR_GROUP_SCHED */
 static inline void update_tg_load_avg(struct cfs_rq *cfs_rq, int force) {}
 #endif /* CONFIG_FAIR_GROUP_SCHED */
@@ -3286,7 +3336,7 @@ dequeue_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se)
  * Task first catches up with cfs_rq, and then subtract
  * itself from the cfs_rq (task must be off the queue now).
  */
-void remove_entity_load_avg(struct sched_entity *se)
+static void remove_entity_load_avg(struct sched_entity *se)
 {
 	struct cfs_rq *cfs_rq = cfs_rq_of(se);
 	u64 last_update_time;
@@ -4946,10 +4996,12 @@ static unsigned long capacity_of(int cpu)
 	return cpu_rq(cpu)->cpu_capacity;
 }
 
+#ifndef CONFIG_SCHED_USE_FLUID_RT
 static unsigned long capacity_orig_of(int cpu)
 {
 	return cpu_rq(cpu)->cpu_capacity_orig;
 }
+#endif
 
 static unsigned long cpu_avg_load_per_task(int cpu)
 {
@@ -6621,7 +6673,7 @@ static int hmp_is_family_in_fastest_domain(struct task_struct *p)
 
 #endif /* CONFIG_SCHED_HMP */
 
-
+#ifndef CONFIG_SCHED_USE_FLUID_RT
 /*
  * cpu_util returns the amount of capacity of a CPU that is used by CFS
  * tasks. The unit of the return value must be the one of capacity so we can
@@ -6655,7 +6707,7 @@ static int cpu_util(int cpu)
 
 	return (util >= capacity) ? capacity : util;
 }
-
+#endif
 /*
  * select_task_rq_fair: Select target runqueue for the waking task in domains
  * that have the 'sd_flag' flag set. In practice, this is SD_BALANCE_WAKE,
@@ -7801,6 +7853,7 @@ static void update_blocked_averages(int cpu)
 		if (update_cfs_rq_load_avg(cfs_rq_clock_task(cfs_rq), cfs_rq, true))
 			update_tg_load_avg(cfs_rq, 0);
 	}
+
 	raw_spin_unlock_irqrestore(&rq->lock, flags);
 }
 
@@ -7965,23 +8018,9 @@ static inline int get_sd_load_idx(struct sched_domain *sd,
 static unsigned long scale_rt_capacity(int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
-	u64 total, used, age_stamp, avg;
-	s64 delta;
+	u64 used;
 
-	/*
-	 * Since we're reading these variables without serialization make sure
-	 * we read them once before doing sanity checks on them.
-	 */
-	age_stamp = READ_ONCE(rq->age_stamp);
-	avg = READ_ONCE(rq->rt_avg);
-	delta = __rq_clock_broken(rq) - age_stamp;
-
-	if (unlikely(delta < 0))
-		delta = 0;
-
-	total = sched_avg_period() + delta;
-
-	used = div_u64(avg, total);
+	used = rq->rt.avg.util_avg;
 
 	if (likely(used < SCHED_CAPACITY_SCALE))
 		return SCHED_CAPACITY_SCALE - used;
@@ -10548,13 +10587,29 @@ static void attach_task_cfs_rq(struct task_struct *p)
 		se->vruntime += cfs_rq->min_vruntime;
 }
 
+#ifdef CONFIG_SMP
+void copy_sched_avg(struct sched_avg *from, struct sched_avg *to, unsigned int ratio)
+{
+	to->last_update_time = from->last_update_time;
+	to->util_avg = (from->util_avg * ratio) / 100;
+	to->util_sum = (from->util_sum * ratio) / 100;
+	to->load_avg = (from->load_avg * ratio) / 100;
+	to->load_sum = (from->load_sum * ratio) / 100;
+}
+#else
+void copy_sched_avg(struct sched_avg *from, struct sched_avg *to, unsigned int ratio) { }
+#endif
+
 static void switched_from_fair(struct rq *rq, struct task_struct *p)
 {
 	detach_task_cfs_rq(p);
 }
 
+extern unsigned int sched_switch_to_fair_load_ratio;
+
 static void switched_to_fair(struct rq *rq, struct task_struct *p)
 {
+	copy_sched_avg(&p->rt.avg, &p->se.avg, sched_switch_to_fair_load_ratio);
 	attach_task_cfs_rq(p);
 
 	if (task_on_rq_queued(p)) {
@@ -11318,6 +11373,5 @@ static int __init hmp_tbsoftlanding_init(void)
 }
 late_initcall(hmp_tbsoftlanding_init);
 #endif	/* CONFIG_SCHED_HMP_TASK_BASED_SOFTLANDING */
-
 
 

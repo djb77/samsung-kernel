@@ -96,7 +96,7 @@ config CM_OFFSET
 config SEC_EVENT_LOG
 	bool "Enable Event log parser"
 	depends on SEC_EXT
-	default y
+	default n
 
 config SEC_BOOTSTAT
 	bool "Enable TN Bootstat logging"

@@ -27,10 +27,9 @@
 #include <linux/init.h>
 #include <asm/io.h>
 
-
+#include <linux/rkp.h>
 #include <linux/vmm.h>
 #include "ld.h"
-
 
 #define VMM_32BIT_SMC_CALL_MAGIC 0x82000400
 #define VMM_64BIT_SMC_CALL_MAGIC 0xC2000400
@@ -40,77 +39,111 @@
 #define VMM_MODE_AARCH32 0
 #define VMM_MODE_AARCH64 1
 
-
-char * __initdata vmm;
-size_t __initdata vmm_size;
+struct vmm_elf_info {
+	void *base, *text_head, *bss; //VA only
+	size_t size, text_head_size, bss_size;
+};
 
 extern char _svmm;
 extern char _evmm;
 extern char _vmm_disable;
 
+char * __initdata vmm;
+size_t __initdata vmm_size;
+
 int __init vmm_disable(void)
 {
-	_vmm_goto_EL2(VMM_64BIT_SMC_CALL_MAGIC, (void *)virt_to_phys(&_vmm_disable), VMM_STACK_OFFSET, VMM_MODE_AARCH64, NULL, 0);
+	_vmm_goto_EL2(VMM_64BIT_SMC_CALL_MAGIC, (void *)virt_to_phys(&_vmm_disable), 
+			VMM_STACK_OFFSET, VMM_MODE_AARCH64, NULL, 0);
 
-	printk(KERN_ALERT "%s\n", __FUNCTION__);
-
+	RKP_LOGA("%s\n", __FUNCTION__);
 	return 0;
 }
 
-static int __init vmm_entry(void *head_text_base)
+int __init vmm_entry(struct vmm_elf_info *vei)
 {
-	typedef int (*_main_)(void);
+	/*
+	 * 1. get entry point pa. (.text.head section)
+	 * 2. ask el3 to bring us there.
+	 */
 
 	int status;
-	_main_ entry_point;
-
-	printk(KERN_ALERT "%s\n", __FUNCTION__);
-
-	entry_point = (_main_)head_text_base;
-
-	printk(KERN_ALERT "vmm entry point: %p\n", entry_point);
-
-	vmm = (char *)virt_to_phys(vmm);
+	void *entry = (void *)virt_to_phys(vei->text_head);
 
 	flush_cache_all();
 
-	status = _vmm_goto_EL2(VMM_64BIT_SMC_CALL_MAGIC, entry_point, VMM_STACK_OFFSET, VMM_MODE_AARCH64, vmm, vmm_size);
+	/* santiy check */
+	RKP_LOGA("entry point=%p\n", entry);
+	status = _vmm_goto_EL2(VMM_64BIT_SMC_CALL_MAGIC, entry, 
+				VMM_STACK_OFFSET, VMM_MODE_AARCH64,
+				(void *)RKP_VMM_START, RKP_VMM_SIZE);
 
-	printk(KERN_ALERT "vmm(%p, 0x%x): %x\n", vmm, (int)vmm_size, status);
-
+	RKP_LOGA("status=%d\n", status);
 	return 0;
 }
 
 int __init vmm_init(void)
 {
-	size_t bss_size = 0,head_text_size = 0;
-	u64 bss_base = 0,head_text_base = 0;
-	void *base;
+	/*
+	 * 1. copy vmm.elf from kimage to reserved area.
+	 * 2. wipe out vmm.elf on kimage. 
+	 * 3. get .bss and .text.head section.
+	 * 4. zero out .bss on coped vmm.elf
+	 * 5. call vmm_entry
+	 */
 
-	printk(KERN_ALERT "VMM-%s\n", __FUNCTION__);
+	int ret = 0;
+	struct vmm_elf_info vmm_reserved = {
+		.base = (void *)phys_to_virt(RKP_VMM_START),
+		.size = RKP_VMM_SIZE
+	};
+	struct vmm_elf_info vmm_kimage = {
+		.base = &_svmm,
+		.size = (size_t)(&_evmm - &_svmm)
+	};
 
-	if(smp_processor_id() != 0) { return 0; }
+	/* copy elf to reserved area and terminate one on kimage */
+	BUG_ON(vmm_kimage.size > vmm_reserved.size);
+	memcpy(vmm_reserved.base, vmm_kimage.base, vmm_kimage.size);
+	memset(vmm_kimage.base, 0, vmm_kimage.size);
 
-	printk(KERN_ALERT "bin 0x%p, 0x%x\n", &_svmm, (int)(&_evmm - &_svmm));
-	memcpy((void *)phys_to_virt(VMM_RUNTIME_BASE),  &_svmm, (size_t)(&_evmm - &_svmm));
+	/* get .bss and .text.head info*/
+	if (ld_get_sect(vmm_reserved.base, ".bss", &vmm_reserved.bss, &vmm_reserved.bss_size)) {
+		RKP_LOGA("Can't fine .bss section from vmm_reserved.base=%p\n", 
+								vmm_reserved.base);
+		return -1;
+	}
 
-	vmm = (void *)phys_to_virt(VMM_RUNTIME_BASE);
-	vmm_size = VMM_RUNTIME_SIZE;
+	if (ld_get_sect(vmm_reserved.base, ".text.head", 
+			&vmm_reserved.text_head, &vmm_reserved.text_head_size)) {
+		RKP_LOGA("Can't find .text.head section from vmm_reserved.base=%p\n", 
+								vmm_reserved.base);
+		return -1;
+	}
 
-	if(ld_get_sect(vmm, ".bss", &base, &bss_size)) { return -1; }
-	printk(KERN_ALERT "BSS base = 0x%p, 0x%x\n", base, (int)bss_size);
-	bss_base  = (u64)VMM_RUNTIME_BASE+(u64)virt_to_phys(base);
-	
-	if(ld_get_sect(vmm, ".text.head", &base, &head_text_size)) { return -1; }
-	printk(KERN_ALERT "Head Text base = 0x%p, 0x%x\n", base, (int)head_text_size);
-	head_text_base  = (u64)VMM_RUNTIME_BASE+(u64)virt_to_phys(base);	
-	
+	/* zero out bss */
+	memset(vmm_reserved.bss, 0, vmm_reserved.bss_size);
 
-	memset((void *)phys_to_virt(bss_base), 0, (size_t)bss_size);
-	//Now vmm will be freed by free_initmem, no need to zero out
-	//memset(&_svmm, 0, (size_t)(&_evmm - &_svmm));
-
-	vmm_entry((void *)head_text_base);
+	/* sanity check */
+	RKP_LOGA("vmm_reserved\n"
+			"  .base=%p .size=%lu\n"
+			"  .bss=%p .bss_size=%lu\n"
+			"  .text_head=%p .text_head_size=%lu\n",
+			vmm_reserved.base,
+			vmm_reserved.size,
+			vmm_reserved.bss,
+			vmm_reserved.bss_size,
+			vmm_reserved.text_head,
+			vmm_reserved.text_head_size);
+	RKP_LOGA("vmm_kimage\n"
+			".base=%p  .size=%lu\n", 
+			vmm_kimage.base, vmm_kimage.size);
+	RKP_LOGA("vmm_start=%x, vmm_size=%lu\n", RKP_VMM_START, RKP_VMM_SIZE);
+				
+	/* jump */
+	ret = vmm_entry(&vmm_reserved);
+	BUG_ON(ret != 0);
 
 	return 0;
 }
+EXPORT_SYMBOL(vmm_init);

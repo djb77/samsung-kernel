@@ -28,7 +28,7 @@
 #include <linux/proc_fs.h>
 #include <linux/vmalloc.h>
 #ifdef CONFIG_RKP
-#include <linux/vmm.h>
+#include <linux/rkp.h>
 #endif //CONFIG_RKP
 
 #include "ld.h"
@@ -229,7 +229,10 @@ int __init ld_get_size(void *binary, size_t *size)
 			}
 		}
 	}
-   	*size = *size - VMM_RUNTIME_BASE;
+
+#ifdef CONFIG_RKP
+   	*size = *size - RKP_VMM_START;
+#endif
 	return 0;
 }
 
@@ -259,7 +262,7 @@ int __init ld_get_sect(void *binary, char *name, void **section, size_t *size)
 		if(ld_get_string(strtab, shdr[i].sh_name, &tmp)) { return -1; }
 
 		if(strcmp(name, tmp) == 0) {
-			*section = (void *)((unsigned long)binary + (unsigned long)shdr[i].sh_offset - (unsigned long)VMM_RUNTIME_BASE);
+			*section = (void *)((unsigned long)binary + (unsigned long)shdr[i].sh_offset);
 			*size = shdr[i].sh_size;
 			return 0;
 		}

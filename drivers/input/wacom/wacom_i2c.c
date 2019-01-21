@@ -697,14 +697,14 @@ void wacom_get_garage_data(struct wacom_i2c *wac_i2c)
 }
 #endif
 
-bool wacom_get_aop_data(struct wacom_i2c *wac_i2c, char *data)
+bool wacom_get_status_data(struct wacom_i2c *wac_i2c, char *data)
 {
 	struct i2c_client *client = wac_i2c->client;
 	int retval;
 	int retry = 5;
 	bool ret = false;
 
-	input_info(true, &wac_i2c->client->dev, "%s: get aop irq\n", __func__);
+	input_info(true, &wac_i2c->client->dev, "%s\n", __func__);
 
 	while (retry--) {
 		retval =
@@ -712,13 +712,21 @@ bool wacom_get_aop_data(struct wacom_i2c *wac_i2c, char *data)
 				   WACOM_I2C_MODE_NORMAL);
 		if (retval < 0) {
 			input_err(true, &client->dev,
-				  "%s: failed to read aop event, %d\n",
+				  "%s: failed to read status data, %d\n",
 				  __func__, retval);
 		}
 
-		/* AOP event   BB BB=Button+Hover, DD DD=Double Tab gesture */
-		if (((data[10] == AOP_BUTTON_HOVER) && (data[11] == AOP_BUTTON_HOVER)) ||
-				((data[10] == AOP_DOUBLE_TAB) && (data[11] == AOP_DOUBLE_TAB))) {
+		if (data[10] != data[11]) {
+			input_err(true, &client->dev,
+				  "%s: invalid status data\n", __func__);
+			break;
+		}
+
+		/* AOP status   : BB BB = Button+Hover, DD DD = Double Tab gesture
+		 * Noise status : 11 11 = High noise, 22 22 = Low noise
+		 */
+		if ((data[10] == AOP_BUTTON_HOVER) || (data[10] == AOP_DOUBLE_TAB) ||
+		    (data[10] == WACOM_NOISE_HIGH) || (data[10] == WACOM_NOISE_LOW)) {
 			ret = true;
 			break;
 		}
@@ -1621,11 +1629,11 @@ static irqreturn_t wacom_interrupt(int irq, void *dev_id)
 			}
 		}
 
-		if (wac_i2c->function_set & EPEN_SETMODE_AOP) {
-			ret = wacom_get_aop_data(wac_i2c, data);
-			if (!ret)
-				return IRQ_HANDLED;
+		ret = wacom_get_status_data(wac_i2c, data);
+		if (!ret)
+			return IRQ_HANDLED;
 
+		if (wac_i2c->function_set & EPEN_SETMODE_AOP) {
 			if (data[10] == AOP_BUTTON_HOVER) {
 				if (wac_i2c->function_set & EPEN_SETMODE_AOP_OPTION_SCREENOFFMEMO) {
 					input_info(true, &wac_i2c->client->dev,
@@ -1725,12 +1733,23 @@ static irqreturn_t wacom_interrupt(int irq, void *dev_id)
 						   "AOP Double Tab detected but skip report, aod disabled\n");
 				}
 			} else {
-				input_info(true, &wac_i2c->client->dev,
-					   "unknown irq event of aop\n");
+				input_info(true, &wac_i2c->client->dev, "unknown AOP status\n");
 			}
 		} else {
 			input_info(true, &wac_i2c->client->dev,
 				   "AOP Disabled \n");
+		}
+
+		if (data[0] == 0x0F) {
+			if (data[10] == WACOM_NOISE_HIGH) {
+				input_err(true, &wac_i2c->client->dev, "11 11 high-noise mode\n");
+				wac_i2c->wacom_noise_state = WACOM_NOISE_HIGH;
+				/* wac_i2c->tsp_noise_mode = set_spen_mode(EPEN_HIGH_NOISE_MODE); */
+			} else if (data[10] == WACOM_NOISE_LOW) {
+				input_err(true, &wac_i2c->client->dev, "22 22 low-noise mode\n");
+				wac_i2c->wacom_noise_state = WACOM_NOISE_LOW;
+				/* wac_i2c->tsp_noise_mode = set_spen_mode(EPEN_GLOBAL_SCAN_MODE); */
+			}
 		}
 
 		return IRQ_HANDLED;

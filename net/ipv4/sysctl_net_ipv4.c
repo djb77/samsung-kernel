@@ -42,6 +42,10 @@ static int tcp_syn_retries_min = 1;
 static int tcp_syn_retries_max = MAX_TCP_SYNCNT;
 static int ip_ping_group_range_min[] = { 0, 0 };
 static int ip_ping_group_range_max[] = { GID_T_MAX, GID_T_MAX };
+static int tcp_delack_seg_min = TCP_DELACK_MIN;
+static int tcp_delack_seg_max = 60;
+static int tcp_use_userconfig_min;
+static int tcp_use_userconfig_max = 1;
 
 /* Update system visible IP port range */
 static void set_local_port_range(struct net *net, int range[2])
@@ -97,11 +101,11 @@ static void inet_get_ping_group_range_table(struct ctl_table *table, kgid_t *low
 		container_of(table->data, struct net, ipv4.ping_group_range.range);
 	unsigned int seq;
 	do {
-		seq = read_seqbegin(&net->ipv4.ip_local_ports.lock);
+		seq = read_seqbegin(&net->ipv4.ping_group_range.lock);
 
 		*low = data[0];
 		*high = data[1];
-	} while (read_seqretry(&net->ipv4.ip_local_ports.lock, seq));
+	} while (read_seqretry(&net->ipv4.ping_group_range.lock, seq));
 }
 
 /* Update system visible IP port range */
@@ -110,10 +114,10 @@ static void set_ping_group_range(struct ctl_table *table, kgid_t low, kgid_t hig
 	kgid_t *data = table->data;
 	struct net *net =
 		container_of(table->data, struct net, ipv4.ping_group_range.range);
-	write_seqlock(&net->ipv4.ip_local_ports.lock);
+	write_seqlock(&net->ipv4.ping_group_range.lock);
 	data[0] = low;
 	data[1] = high;
-	write_sequnlock(&net->ipv4.ip_local_ports.lock);
+	write_sequnlock(&net->ipv4.ping_group_range.lock);
 }
 
 /* Validate changes from /proc interface. */
@@ -899,6 +903,24 @@ static struct ctl_table ipv4_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= &one
+	},
+	{
+		.procname	= "tcp_delack_seg",
+		.data		= &sysctl_tcp_delack_seg,
+		.maxlen		= sizeof(sysctl_tcp_delack_seg),
+		.mode		= 0644,
+		.proc_handler	= tcp_proc_delayed_ack_control,
+		.extra1		= &tcp_delack_seg_min,
+		.extra2		= &tcp_delack_seg_max,
+	},
+	{
+		.procname       = "tcp_use_userconfig",
+		.data           = &sysctl_tcp_use_userconfig,
+		.maxlen         = sizeof(sysctl_tcp_use_userconfig),
+		.mode           = 0644,
+		.proc_handler   = tcp_use_userconfig_sysctl_handler,
+		.extra1		= &tcp_use_userconfig_min,
+		.extra2		= &tcp_use_userconfig_max,
 	},
 	{ }
 };

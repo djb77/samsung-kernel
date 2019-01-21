@@ -1,0 +1,472 @@
+/*
+ * SAMSUNG UNIVERSAL8890 board device tree source
+ *
+ * Copyright (c) 2013 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+/ {
+	sec_mmiotrace {
+		status = "ok";
+		compatible = "sec_mmiotrace";
+
+		mmiotrace@1 {
+			mmiotrace,addr = <0x10010000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_PERIS";
+		};
+
+		mmiotrace@2 {
+			mmiotrace,addr = <0x10020000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_PERIS";
+		};
+
+		mmiotrace@3 {
+			mmiotrace,addr = <0x10080000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "TMU_CPUCL0";
+		};
+
+		mmiotrace@4 {
+			mmiotrace,addr = <0x10084000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "TMU_G3D";
+		};
+
+		mmiotrace@5 {
+			mmiotrace,addr = <0x10400000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_PERIC0";
+		};
+
+		mmiotrace@6 {
+			mmiotrace,addr = <0x10410000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_PERIC0";
+		};
+
+		mmiotrace@7 {
+			mmiotrace,addr = <0x10800000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_PERIC1";
+		};
+
+		mmiotrace@8 {
+			mmiotrace,addr = <0x10810000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_PERIC1";
+		};
+
+		mmiotrace@9 {
+			mmiotrace,addr = <0x11000000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_FSYS0";
+		};
+
+		mmiotrace@10 {
+			mmiotrace,addr = <0x11010000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_FSYS0";
+		};
+
+		mmiotrace@11 {
+			mmiotrace,addr = <0x11400000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_FSYS1";
+		};
+
+		mmiotrace@12 {
+			mmiotrace,addr = <0x11410000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_FSYS1";
+		};
+
+		mmiotrace@13 {
+			mmiotrace,addr = <0x12800000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_DPU0";
+		};
+
+		mmiotrace@14 {
+			mmiotrace,addr = <0x12810000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_DPU0";
+		};
+
+		mmiotrace@15 {
+			mmiotrace,addr = <0x12A00000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_DPU1";
+		};
+
+		mmiotrace@16 {
+			mmiotrace,addr = <0x12A10000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_DPU1";
+		};
+
+		mmiotrace@17 {
+			mmiotrace,addr = <0x12C00000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_CAM";
+		};
+
+		mmiotrace@18 {
+			mmiotrace,addr = <0x12C10000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_CAM";
+		};
+
+		mmiotrace@19 {
+			mmiotrace,addr = <0x12E00000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_DCAM";
+		};
+
+		mmiotrace@20 {
+			mmiotrace,addr = <0x12E10000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_DCAM";
+		};
+
+		mmiotrace@21 {
+			mmiotrace,addr = <0x13000000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_ISPLP";
+		};
+
+		mmiotrace@22 {
+			mmiotrace,addr = <0x13010000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_ISPLP";
+		};
+
+		mmiotrace@23 {
+			mmiotrace,addr = <0x13100000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_ISPHQ";
+		};
+
+		mmiotrace@24 {
+			mmiotrace,addr = <0x13110000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_ISPHQ";
+		};
+
+		mmiotrace@25 {
+			mmiotrace,addr = <0x13200000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_VPU";
+		};
+
+		mmiotrace@26 {
+			mmiotrace,addr = <0x13210000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_VPU";
+		};
+
+		mmiotrace@27 {
+			mmiotrace,addr = <0x13400000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_DSP";
+		};
+
+		mmiotrace@28 {
+			mmiotrace,addr = <0x13410000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_DSP";
+		};
+
+		mmiotrace@29 {
+			mmiotrace,addr = <0x13500000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_IVA";
+		};
+
+		mmiotrace@30 {
+			mmiotrace,addr = <0x13510000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_IVA";
+		};
+
+		mmiotrace@31 {
+			mmiotrace,addr = <0x13800000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_G3D";
+		};
+
+		mmiotrace@32 {
+			mmiotrace,addr = <0x13810000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_G3D";
+		};
+
+		mmiotrace@33 {
+			mmiotrace,addr = <0x13A00000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_G2D";
+		};
+
+		mmiotrace@34 {
+			mmiotrace,addr = <0x13A10000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_G2D";
+		};
+
+		mmiotrace@35 {
+			mmiotrace,addr = <0x13C00000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_MFC";
+		};
+
+		mmiotrace@36 {
+			mmiotrace,addr = <0x13C10000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_MFC";
+		};
+
+		mmiotrace@37 {
+			mmiotrace,addr = <0x13E00000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_ABOX";
+		};
+
+		mmiotrace@38 {
+			mmiotrace,addr = <0x13E10000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_ABOX";
+		};
+
+		mmiotrace@39 {
+			mmiotrace,addr = <0x14000000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_VTS";
+		};
+
+		mmiotrace@40 {
+			mmiotrace,addr = <0x14200000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_SRDZ";
+		};
+
+		mmiotrace@41 {
+			mmiotrace,addr = <0x14210000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_SRDZ";
+		};
+
+		mmiotrace@42 {
+			mmiotrace,addr = <0x15800000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_CORE";
+		};
+
+		mmiotrace@43 {
+			mmiotrace,addr = <0x15810000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_CORE";
+		};
+
+		mmiotrace@44 {
+			mmiotrace,addr = <0x15A00000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_BUSC";
+		};
+
+		mmiotrace@45 {
+			mmiotrace,addr = <0x15A10000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_BUSC";
+		};
+
+		mmiotrace@46 {
+			mmiotrace,addr = <0x15A80000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_CMU";
+		};
+
+		mmiotrace@47 {
+			mmiotrace,addr = <0x15C00000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_BUS1";
+		};
+
+		mmiotrace@48 {
+			mmiotrace,addr = <0x15C10000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_BUS1";
+		};
+
+		mmiotrace@49 {
+			mmiotrace,addr = <0x15E00000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_IMEM";
+		};
+
+		mmiotrace@50 {
+			mmiotrace,addr = <0x15E10000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_IMEM";
+		};
+
+		mmiotrace@51 {
+			mmiotrace,addr = <0x16100000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_MIF1";
+		};
+
+		mmiotrace@52 {
+			mmiotrace,addr = <0x16110000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_MIF1";
+		};
+
+		mmiotrace@53 {
+			mmiotrace,addr = <0x16200000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_MIF2";
+		};
+
+		mmiotrace@54 {
+			mmiotrace,addr = <0x16210000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_MIF2";
+		};
+
+		mmiotrace@55 {
+			mmiotrace,addr = <0x16300000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_MIF3";
+		};
+
+		mmiotrace@56 {
+			mmiotrace,addr = <0x16310000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_MIF3";
+		};
+
+		mmiotrace@57 {
+			mmiotrace,addr = <0x16400000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_ARM";
+		};
+
+		mmiotrace@58 {
+			mmiotrace,addr = <0x16470000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_HANDSHAKE";
+		};
+
+		mmiotrace@59 {
+			mmiotrace,addr = <0x16480000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_ALIVE";
+		};
+
+		mmiotrace@60 {
+			mmiotrace,addr = <0x16800000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_CPUCL0";
+		};
+
+		mmiotrace@61 {
+			mmiotrace,addr = <0x16810000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_CPUCL0";
+		};
+
+		mmiotrace@62 {
+			mmiotrace,addr = <0x16900000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_CPUCL1";
+		};
+
+		mmiotrace@63 {
+			mmiotrace,addr = <0x16910000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_CPUCL1";
+		};
+
+		mmiotrace@64 {
+			mmiotrace,addr = <0x17C00000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "CMU_DBG";
+		};
+
+		mmiotrace@65 {
+			mmiotrace,addr = <0x17C10000>;
+			mmiotrace,size = <0x1000>;
+			mmiotrace,type = "rw";
+			mmiotrace,name = "PMU_DBG";
+		};
+	};
+};

@@ -1,5 +1,134 @@
-BCM4361 DHD 1.77.59 for Android Great/Dream & BCM4345X & BCM4343X Project
+BCM4361 DHD 1.77.70 for Android Great/Dream/Hero & BCM4345X & BCM4343X Project
 (Notes: 1.77.x is twigged off from 1.579.235.9)
+
+DHD 1.77.70 - 2018.05.25
+Major Issue
+ - CS4449537(By Huang Junming) Fixed the packet delay with TPLINK AP on Tencent site
+     * Issue summary
+       While running the Game application using TPLINK AP,  packet delay is detected at the Game server side
+     * Analysis / Root cause
+       According to Air sniffer log, AP couldn't receive 802.11 Ack or Block Ack frame which DUT sent on the noisy environment
+       If TPLINK lost AMPDU these frames, AP holds frames which already received during 1 second
+     * Solution
+       Increase LRL(Long Retry Limit) from 6 to 12 to increase the opportunity to receive frame on AP side
+
+Kernel Panic
+ - CS4854788(By Jeong Min Cheol) Moved the debug info prints to avoid the Kernel panic due to watchdog bark
+
+Others
+ - CS4227562(By SungBin Min) Supported a list of bad APs handling PS mode improperly
+ - CS4284701(By Park Hee Bae) Added Galileo(Tizen) Code
+ - CS4596042(By Kwak Hogil) Changed EXCESS_PM_WAKE_EVENT interval time on suspend mode
+ - CS4679906(By Yoon Jae Ho) Added to check MFP condition when enabling MFP
+ - CS4865776(By Kim Tae-Yong) Decided FW/NVRAM/BLOB base location by referring PLATFORM_VERSION and ANDROID_VERSION together
+ - CS4944817(By Kim MinSoo) Disabled DHD TCP ACK Suppress for Great KOR project
+ - CS4998218(By Park Hee Bae) Added a few features in Solis(Tizen) for Galileo(Tizen)
+ - CS4998218(By Park Hee Bae) Added limited bigdata logging feature for Galileo(Tizen)
+ - CS5077680(By Yoon Jung Min) Fixed mishandling PCIe IRQ at host
+ - (CS4865666 By Ja Heon Gu) Fixed BT Music Chopping/NAPI Download  performance issue by enabling DHD_TX_LBP/DHD_LB_IRQSET feature
+ - Added error logs and changed the return value in ISR
+ - Added invalid flowid check routine
+ - Dropped tx packet if it is larger than MAX_MTU_SZ(1600 bytes)
+ - Enhanced STA/SoftAP concurrent mode support
+ - Fixed Coverity issues - Added return value check
+ - Supported CFG80211 API - cfg80211_scan_done() with Linux kernel higher than 4.8.0
+
+
+DHD 1.77.69 - 2018.04.13
+Security Patch
+ - CS4511968(By Hogil Kwak) Fixed out of bound read of GET_ADPS private command reported by KASAN
+ - CS4789072(By Kim Gwang Min) Fixed out of bounds read access issues
+
+Others
+ - CS4045271(By Hogil Kwak) Added SET_ADPS log message
+ - CS4725359(By Junsu Choi) Disabled android PNO feature
+ - CS4757515(By Jeong Min Cheol) Disabled CAC at initial state on BCM4359 device
+ - CS4779893(By Anh Tran Tuan) Fixed to get proper link statistic value on VTS test
+ - CS4789317(By Van Son Nguyen) Fixed HANG recovery issue due to reason code
+ - CS4807325(By Min SungBin) Replaced country code to XZ ccode if ccode is an undefined country
+ - CS4807862(By Van Son Nguyen) TPUT enhancement and dongle dump enable for J6 project
+ - CS4842583(By Seo Jung Kuk Seo) Fixed SoftAP turn on failure due to invalid channel configuration
+ - Supported SSSR dump for BCM4359C0 project
+
+
+DHD 1.77.67 - 2018.03.23
+New Feature
+ - CS4714586(By kwon Jaecheol) Increased the number of maximum STA association to 10 in case of STA/SoftAP concurrent mode
+
+Others
+ - CS4688655(By Lee SoonHo) Added to disable vhtmode after set country code
+ - CS4696802(By Ahn Byunghun) Added UDP port 137 packet filter for Tizen
+ - CS4713830(By Choi Jongmin) Added to execute memdump when performing private command 'DEBUG_DUMP' on SDIO bus interface
+
+
+DHD 1.77.65 - 2018.03.16
+Others
+ - CS4384009(By bang haejung) Fixed wrong configurations at MIRACAST
+ - CS4456720(By Cho Seong Ji) Added MAX_CNTL_TX_TIMEOUT in memdump condition if TX control timeout
+ - CS4539141(By Cho Seong Ji) Added additional string ('_plus') at nvram file name for 4359C0 (B90S module/GraceR projects)
+ - CS4596042(By Kwak Hogil) Changed EXCESS_PM_WAKE_EVENT interval time on suspend mode
+ - CS4611122(By Kim Gwang Min) CS4617024(By Cho Seong Ji) Added CLM multiple/single regrev blob checking logic
+ - CS4678265(By Anh Tran Tuan) Fixed Single Nvram define on BCM4343X for Android O-OS
+
+
+DHD 1.77.64 - 2018.03.05
+New Feature
+ - CS2472363(By Seo Jung Kuk Seo) Supported STA+SoftAP concurrent mode for non-RSDB chip(BCM43456)
+   SoftAP and STA interfaces simultaneously using single firmware in the Single Channel Concurrency (same channel operation)
+   (It should be sync up with FW version BIS5718B120RC8_REL_7_84_9)
+
+Security Patch
+ - CVE-2017-13292 V2018010201 Fixed buffer overflow in wl_get_assoc_ies() during assoc_info iovar results handling
+
+Others
+ - CS4429886(By Junsu Choi) Fixed to get proper VTS feature capabilities
+ - CS4474435(By Cho Seong Ji) Fixed AP scan results corrupted issue by wrong IE channel information in beacon
+ - CS4523209(By Jeong Min Cheol) Added VENDOR path ahead CLM blob path
+ - CS4539141(By Cho Seong Ji) Added function which conditionally add vendor name string (murata/wisol) at nvram file name for 4359C0 (B90S module)
+ - CS4593020(By Jeong Min Cheol) Moved memdump path to common feature list in Makefile
+ - Added Single Nvram define on BCM4343X for Android O-OS
+
+
+DHD 1.77.63 - 2018.02.02
+Security Patch
+ - CS4417295(By Jeong Min Cheol) Fixed for wl/cfg driver vulnerability by buffer overflow
+
+Others
+ - CS2864574(By Kim Tae-Yong) Fixed PCIE LINK DOWN issue by changing PCIE RC API
+ - CS3420505(By Huang Junming) Fixed wrong nvram loading issue from W2018 project
+ - CS3846389(By Kwak Hogil) Limit the number of dump files that DHD can store to local file system
+ - CS4324680(By Cho Seong Ji) Changed API from dev_alloc_skb(GFP_ATOMIC) to __dev_alloc_skb(GFP_KERNEL) in dhd_init_wlan_mem()
+ - CS4392874(By Gu Ja Heon) IRQ Affinity set to Big core and blocking CPU migration to Big Core
+ - Update correct STA channel for the Auto channel selection in case of STA/SoftAP concurrent mode
+
+Merged 1.363.59 to 1.77 for BCM4359C0 Projects only
+ - CS1914112(By Jeong Min Cheol) Added WIFI HANG operation when happen "scan timeout"
+ - CS2350019 Added Kernel log for RSDB mode switch status
+ - Added a firmware and nvram path (_plus) for Samsung GraceR project
+ - Added CLMINFO_PARSER feature
+   (For GraceR project, It should be sync up with FW DIN975T155RC47_REL_9_96_8 or higher version.
+    The FW file path should add "_blob" at the end of filename extension. ex)bcmdhd_sta.bin_c0_plus_blob )
+ - Added exception handling for LOGTRACE feature
+ - Added KEEP_KR_REGREV feature for replacing the regrev via NVRAM when Country code is KR
+ - Added private command for set CAC
+ - Modify virtual interface creation routines
+ - Replaced the ccode/regrev in translate_custom_table
+   (It should be sync up FW version with DIN975T155RC47_REL_9_96_3 or higher version for HERO project)
+ - Synced Makefile/Kconfig
+
+
+DHD 1.77.61 - 2018.01.24
+Others
+ - CS4094253(Byunghun Ahn) Fixed to support SR on 43569
+ - CS4115086(By Kwak Hogil) Added android private command to change pkt logging size
+ - CS4129114(By Choi Junsu) Added Single Nvram define on BCM43456 when Android O-OS
+ - CS4233933(By Kwak Hogil) Print mask and pattern values for pktlog filter separately
+ - CS4261039(By Min SungBin) Fixed to use proper locally_generated value on cfg80211_disconnect() when upper layer request disconnection
+ - CS4307298(By Jeong Min Cheol) Added to miss merged for WLAN_5GDISABLE in Kconfig
+ - CS4318264(By Anh Tran Tuan) Added to miss merged for WLAN_VHTDISABLE in Kconfig
+ - Changed debug log level in ISR routine which caused throughput regression on reference platform
+ - Changed MAC OUI format for Bigdata
+
 
 DHD 1.77.59 - 2017.12.22
 Others

@@ -187,10 +187,17 @@ void cpu_hotplug_disable(void)
 }
 EXPORT_SYMBOL_GPL(cpu_hotplug_disable);
 
+static void __cpu_hotplug_enable(void)
+{
+	if (WARN_ONCE(!cpu_hotplug_disabled, "Unbalanced cpu hotplug enable\n"))
+		return;
+	cpu_hotplug_disabled--;
+}
+
 void cpu_hotplug_enable(void)
 {
 	cpu_maps_update_begin();
-	WARN_ON(--cpu_hotplug_disabled < 0);
+	__cpu_hotplug_enable();
 	cpu_maps_update_done();
 }
 EXPORT_SYMBOL_GPL(cpu_hotplug_enable);
@@ -227,6 +234,9 @@ static int cpu_notify(unsigned long val, void *v)
 	return __cpu_notify(val, v, -1, NULL);
 }
 
+EXPORT_SYMBOL(register_cpu_notifier);
+EXPORT_SYMBOL(__register_cpu_notifier);
+
 int register_cpus_notifier(struct notifier_block *nb)
 {
 	int ret;
@@ -253,13 +263,10 @@ static int cpus_notify(unsigned long val, void *v)
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
-
 static void cpu_notify_nofail(unsigned long val, void *v)
 {
 	BUG_ON(cpu_notify(val, v));
 }
-EXPORT_SYMBOL(register_cpu_notifier);
-EXPORT_SYMBOL(__register_cpu_notifier);
 
 void unregister_cpu_notifier(struct notifier_block *nb)
 {
@@ -816,10 +823,11 @@ void __weak arch_enable_nonboot_cpus_end(void)
 void enable_nonboot_cpus(void)
 {
 	int cpu, error;
+	struct device *cpu_device;
 
 	/* Allow everyone to use the CPU hotplug again */
 	cpu_maps_update_begin();
-	WARN_ON(--cpu_hotplug_disabled < 0);
+	__cpu_hotplug_enable();
 	if (cpumask_empty(frozen_cpus))
 		goto out;
 
@@ -833,6 +841,12 @@ void enable_nonboot_cpus(void)
 		trace_suspend_resume(TPS("CPU_ON"), cpu, false);
 		if (!error) {
 			pr_info("CPU%d is up\n", cpu);
+			cpu_device = get_cpu_device(cpu);
+			if (!cpu_device)
+				pr_err("%s: failed to get cpu%d device\n",
+				       __func__, cpu);
+			else
+				kobject_uevent(&cpu_device->kobj, KOBJ_ONLINE);
 			continue;
 		}
 		pr_warn("Error taking CPU%d up: %d\n", cpu, error);

@@ -37,6 +37,7 @@ void percpu_free_rwsem(struct percpu_rw_semaphore *sem)
 	free_percpu(sem->read_count);
 	sem->read_count = NULL; /* catch use after free bugs */
 }
+EXPORT_SYMBOL_GPL(percpu_free_rwsem);
 
 int __percpu_down_read(struct percpu_rw_semaphore *sem, int try)
 {
@@ -143,7 +144,6 @@ void percpu_down_write(struct percpu_rw_semaphore *sem)
 	rcu_sync_enter(&sem->rss);
 
 	down_write(&sem->rw_sem);
-
 
 	/*
 	 * Notify new readers to block; up until now, and thus throughout the

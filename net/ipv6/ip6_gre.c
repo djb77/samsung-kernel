@@ -55,6 +55,7 @@
 #include <net/ip6_fib.h>
 #include <net/ip6_route.h>
 #include <net/ip6_tunnel.h>
+#include <net/gre.h>
 
 
 static bool log_ecn_error = true;
@@ -367,7 +368,7 @@ static void ip6gre_tunnel_uninit(struct net_device *dev)
 
 
 static void ip6gre_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
-					  u8 type, u8 code, int offset, __be32 info)
+		       u8 type, u8 code, int offset, __be32 info)
 {
 	const struct gre_base_hdr *greh;
 	const struct ipv6hdr *ipv6h;
@@ -397,7 +398,7 @@ static void ip6gre_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 	key = key_off ? *(__be32 *)(skb->data + key_off) : 0;
 
 	t = ip6gre_tunnel_lookup(skb->dev, &ipv6h->daddr, &ipv6h->saddr,
-				key, greh->protocol);
+				 key, greh->protocol);
 	if (!t)
 		return;
 
@@ -408,13 +409,16 @@ static void ip6gre_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 	case ICMPV6_DEST_UNREACH:
 		net_dbg_ratelimited("%s: Path to destination invalid or inactive!\n",
 				    t->parms.name);
-		break;
+		if (code != ICMPV6_PORT_UNREACH)
+			break;
+		return;
 	case ICMPV6_TIME_EXCEED:
 		if (code == ICMPV6_EXC_HOPLIMIT) {
 			net_dbg_ratelimited("%s: Too small hop limit or routing loop in tunnel!\n",
 					    t->parms.name);
+			break;
 		}
-		break;
+		return;
 	case ICMPV6_PARAMPROB:
 		teli = 0;
 		if (code == ICMPV6_HDR_FIELD)
@@ -430,13 +434,13 @@ static void ip6gre_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 			net_dbg_ratelimited("%s: Recipient unable to parse tunneled packet!\n",
 					    t->parms.name);
 		}
-		break;
+		return;
 	case ICMPV6_PKT_TOOBIG:
 		mtu = be32_to_cpu(info) - offset;
 		if (mtu < IPV6_MIN_MTU)
 			mtu = IPV6_MIN_MTU;
 		t->dev->mtu = mtu;
-		break;
+		return;
 	}
 
 	if (time_before(jiffies, t->err_time + IP6TUNNEL_ERR_TIMEO))
@@ -892,7 +896,6 @@ static int ip6gre_xmit_other(struct sk_buff *skb, struct net_device *dev)
 		encap_limit = t->parms.encap_limit;
 
 	memcpy(&fl6, &t->fl.u.ip6, sizeof(fl6));
-	fl6.flowi6_proto = skb->protocol;
 
 	err = ip6gre_xmit2(skb, dev, 0, &fl6, encap_limit, &mtu);
 
@@ -1177,24 +1180,25 @@ static int ip6gre_tunnel_change_mtu(struct net_device *dev, int new_mtu)
 }
 
 static int ip6gre_header(struct sk_buff *skb, struct net_device *dev,
-			unsigned short type,
-			const void *daddr, const void *saddr, unsigned int len)
+			 unsigned short type, const void *daddr,
+			 const void *saddr, unsigned int len)
 {
 	struct ip6_tnl *t = netdev_priv(dev);
-	struct ipv6hdr *ipv6h = (struct ipv6hdr *)skb_push(skb, t->hlen);
-	__be16 *p = (__be16 *)(ipv6h+1);
+	struct ipv6hdr *ipv6h;
+	__be16 *p;
 
-	ip6_flow_hdr(ipv6h, 0,
-		     ip6_make_flowlabel(dev_net(dev), skb,
-					t->fl.u.ip6.flowlabel, true,
-					&t->fl.u.ip6));
+	ipv6h = (struct ipv6hdr *)skb_push(skb, t->hlen + sizeof(*ipv6h));
+	ip6_flow_hdr(ipv6h, 0, ip6_make_flowlabel(dev_net(dev), skb,
+						  t->fl.u.ip6.flowlabel,
+						  true, &t->fl.u.ip6));
 	ipv6h->hop_limit = t->parms.hop_limit;
 	ipv6h->nexthdr = NEXTHDR_GRE;
 	ipv6h->saddr = t->parms.laddr;
 	ipv6h->daddr = t->parms.raddr;
 
-	p[0]		= t->parms.o_flags;
-	p[1]		= htons(type);
+	p = (__be16 *)(ipv6h + 1);
+	p[0] = t->parms.o_flags;
+	p[1] = htons(type);
 
 	/*
 	 *	Set the source hardware address.
