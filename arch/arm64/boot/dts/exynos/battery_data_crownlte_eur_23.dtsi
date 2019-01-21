@@ -1,0 +1,47 @@
+/*
+ * SAMSUNG UNIVERSAL5433 board device tree source
+ *
+ * Copyright (c) 2013 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+#include "battery_data_crownlte_common.dtsi"
+
+/ {
+	battery {
+		battery,swelling_low_temp_current = <950>;	/* 0.3C */
+		battery,swelling_high_temp_current = <1400>;	/* 0.45C */
+		battery,swelling_wc_high_temp_current = <950>;	/* 0.3C */
+		battery,swelling_wc_low_temp_current = <950>;	/* 0.3C */
+
+		battery,max_charging_current = <2850>;
+		battery,battery_full_capacity = <4000>;
+
+		battery,standard_curr = <2850>;
+		battery,expired_time = <10800>;
+		battery,recharging_expired_time = <5400>;
+	};
+        
+	max77705-fuelgauge {
+		fuelgauge,v_empty = <0xA7E2>; /* Empty: 3350mV, Recover: 3480mV */
+		fuelgauge,capacity = <0x0EA9>;
+	};
+
+	cable-info {
+		current_group_4 {
+			cable_number = <6 7 8>;
+			input_current = <1650>;
+			charging_current = <2850>;
+		};
+		current_group_10 {
+			cable_number = <11 16 28>;
+			input_current = <750>;
+			charging_current = <1600>;
+		};
+
+	};
+};
