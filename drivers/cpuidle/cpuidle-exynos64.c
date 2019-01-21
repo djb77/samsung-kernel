@@ -88,7 +88,7 @@ module_param_named(log_en, log_en, uint, 0644);
  * IDLE_C1 : WFI(Wait For Interrupt) low-power state
  * IDLE_C2 : Local CPU power gating
  */
-enum idle_state {
+enum idle_states {
 	IDLE_C1 = 0,
 	IDLE_C2,
 	IDLE_STATE_MAX,

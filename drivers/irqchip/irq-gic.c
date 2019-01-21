@@ -314,7 +314,10 @@ static int gic_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 		bit = 0;
 		if (!cpumask_and(&temp_mask, mask_val, cpu_online_mask))
 			goto err_out;
-
+#ifdef CONFIG_SCHED_HMP
+		if (!cpumask_and(&temp_mask, &temp_mask, cpu_coregroup_mask(0)))
+			goto err_out;
+#endif
 		for_each_cpu(cpu, &temp_mask) {
 			if (cpu >= NR_GIC_CPU_IF || cpu >= nr_cpu_ids)
 				goto err_out;

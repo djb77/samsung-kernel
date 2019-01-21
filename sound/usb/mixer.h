@@ -22,7 +22,7 @@ struct usb_mixer_interface {
 	struct urb *rc_urb;
 	struct usb_ctrlrequest *rc_setup_packet;
 	u8 rc_buffer[6];
-		
+
 	bool disconnected;
 };
 
@@ -66,6 +66,7 @@ struct usb_mixer_elem_info {
 	int cached;
 	int cache_val[MAX_CHANNELS];
 	u8 initialized;
+	u8 min_mute;
 	void *private_data;
 };
 

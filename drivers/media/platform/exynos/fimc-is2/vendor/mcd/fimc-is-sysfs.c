@@ -1986,13 +1986,13 @@ static ssize_t camera_ois_selftest_show(struct device *dev,
 		}
 
 		if (raw_data_x < 0 && raw_data_y < 0) {
-			return sprintf(buf, "%d,-%lld.%03lld,-%lld.%03lld\n", result_total, abs(raw_data_x /1000), abs(raw_data_x % 1000),
+			return sprintf(buf, "%d,-%ld.%03ld,-%ld.%03ld\n", result_total, abs(raw_data_x /1000), abs(raw_data_x % 1000),
 				abs(raw_data_y /1000), abs(raw_data_y % 1000));
 		} else if (raw_data_x < 0) {
-			return sprintf(buf, "%d,-%lld.%03lld,%ld.%03ld\n", result_total, abs(raw_data_x /1000), abs(raw_data_x % 1000),
+			return sprintf(buf, "%d,-%ld.%03ld,%ld.%03ld\n", result_total, abs(raw_data_x /1000), abs(raw_data_x % 1000),
 				raw_data_y /1000, raw_data_y % 1000);
 		} else if (raw_data_y < 0) {
-			return sprintf(buf, "%d,%ld.%03ld,-%lld.%03lld\n", result_total, raw_data_x /1000, raw_data_x % 1000,
+			return sprintf(buf, "%d,%ld.%03ld,-%ld.%03ld\n", result_total, raw_data_x /1000, raw_data_x % 1000,
 				abs(raw_data_y /1000), abs(raw_data_y % 1000));
 		} else {
 			return sprintf(buf, "%d,%ld.%03ld,%ld.%03ld\n", result_total, raw_data_x /1000, raw_data_x % 1000,
@@ -2014,13 +2014,13 @@ static ssize_t camera_ois_rawdata_show(struct device *dev,
 		fimc_is_ois_get_offset_data(sysfs_core, &raw_data_x, &raw_data_y);
 
 		if (raw_data_x < 0 && raw_data_y < 0) {
-			return sprintf(buf, "-%lld.%03lld,-%lld.%03lld\n", abs(raw_data_x /1000), abs(raw_data_x % 1000),
+			return sprintf(buf, "-%ld.%03ld,-%ld.%03ld\n", abs(raw_data_x /1000), abs(raw_data_x % 1000),
 				abs(raw_data_y /1000), abs(raw_data_y % 1000));
 		} else if (raw_data_x < 0) {
-			return sprintf(buf, "-%lld.%03lld,%ld.%03ld\n", abs(raw_data_x /1000), abs(raw_data_x % 1000),
+			return sprintf(buf, "-%ld.%03ld,%ld.%03ld\n", abs(raw_data_x /1000), abs(raw_data_x % 1000),
 				raw_data_y /1000, raw_data_y % 1000);
 		} else if (raw_data_y < 0) {
-			return sprintf(buf, "%ld.%03ld,-%lld.%03lld\n", raw_data_x /1000, raw_data_x % 1000,
+			return sprintf(buf, "%ld.%03ld,-%ld.%03ld\n", raw_data_x /1000, raw_data_x % 1000,
 				abs(raw_data_y /1000), abs(raw_data_y % 1000));
 		} else {
 			return sprintf(buf, "%ld.%03ld,%ld.%03ld\n", raw_data_x /1000, raw_data_x % 1000,

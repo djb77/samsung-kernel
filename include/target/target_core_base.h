@@ -139,6 +139,7 @@ enum se_cmd_flags_table {
 	SCF_COMPARE_AND_WRITE_POST	= 0x00100000,
 	SCF_PASSTHROUGH_PROT_SG_TO_MEM_NOALLOC = 0x00200000,
 	SCF_ACK_KREF			= 0x00400000,
+	SCF_TASK_ATTR_SET		= 0x01000000,
 };
 
 /* struct se_dev_entry->lun_flags and struct se_lun->lun_access */
@@ -179,6 +180,7 @@ enum tcm_sense_reason_table {
 	TCM_LOGICAL_BLOCK_GUARD_CHECK_FAILED	= R(0x15),
 	TCM_LOGICAL_BLOCK_APP_TAG_CHECK_FAILED	= R(0x16),
 	TCM_LOGICAL_BLOCK_REF_TAG_CHECK_FAILED	= R(0x17),
+	TCM_COPY_TARGET_DEVICE_NOT_REACHABLE	= R(0x18),
 #undef R
 };
 
@@ -197,6 +199,7 @@ enum tcm_tmreq_table {
 	TMR_LUN_RESET		= 5,
 	TMR_TARGET_WARM_RESET	= 6,
 	TMR_TARGET_COLD_RESET	= 7,
+	TMR_UNKNOWN		= 0xff,
 };
 
 /* fabric independent task management response values */
@@ -296,7 +299,7 @@ struct t10_alua_tg_pt_gp {
 	struct list_head tg_pt_gp_lun_list;
 	struct se_lun *tg_pt_gp_alua_lun;
 	struct se_node_acl *tg_pt_gp_alua_nacl;
-	struct delayed_work tg_pt_gp_transition_work;
+	struct work_struct tg_pt_gp_transition_work;
 	struct completion *tg_pt_gp_transition_complete;
 };
 
@@ -542,6 +545,7 @@ struct se_node_acl {
 	/* Used to signal demo mode created ACL, disabled by default */
 	bool			dynamic_node_acl;
 	bool			acl_stop:1;
+	bool			dynamic_stop;
 	u32			queue_depth;
 	u32			acl_index;
 	enum target_prot_type	saved_prot_type;
@@ -711,6 +715,7 @@ struct se_lun {
 #define SE_LUN_LINK_MAGIC			0xffff7771
 	u32			lun_link_magic;
 	u32			lun_access;
+	bool			lun_shutdown;
 	u32			lun_index;
 
 	/* RELATIVE TARGET PORT IDENTIFER */
@@ -737,6 +742,7 @@ struct se_lun {
 	struct config_group	lun_group;
 	struct se_port_stat_grps port_stat_grps;
 	struct completion	lun_ref_comp;
+	struct completion	lun_shutdown_comp;
 	struct percpu_ref	lun_ref;
 	struct list_head	lun_dev_link;
 	struct hlist_node	link;

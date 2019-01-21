@@ -35,6 +35,7 @@
 #include <asm/traps.h>
 #include <asm/cputype.h>
 #include <asm/system_misc.h>
+#include <asm/uaccess.h>
 
 #ifdef CONFIG_SEC_KWATCHER
 #include <linux/sec_kwatcher.h>

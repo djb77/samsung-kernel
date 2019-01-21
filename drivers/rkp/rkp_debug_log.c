@@ -3,7 +3,7 @@
 #include <linux/init.h>
 #include <linux/proc_fs.h>
 #include <linux/highmem.h>
-#include <linux/rkp_entry.h>
+#include <linux/rkp.h>
 
 ssize_t	rkp_log_read(struct file *filep, char __user *buf, size_t size, loff_t *offset)
 {
@@ -40,20 +40,11 @@ static int __init rkp_log_init(void)
 
 	entry = proc_create("rkp_log", 0644, NULL, &rkp_proc_fops);
 	if (!entry) {
-		pr_err("rkp_log: Error creating proc entry\n");
+		RKP_LOGE("Error creating proc entry\n");
 		return -ENOMEM;
 	}
 
-	pr_info("rkp_log : create rkp nodes in /proc\n");
-/* It is for low-end model
- * exynos8895 has KONX_KAP configuration but never set boot_mode_security.
- */
-#if 0
-#ifdef CONFIG_KNOX_KAP
-	if (boot_mode_security)
-#endif
-		rkp_reserve_mem();
-#endif
+	RKP_LOGI("create rkp nodes in /proc\n");
 	return 0;
 }
 

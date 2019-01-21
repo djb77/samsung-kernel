@@ -26,8 +26,8 @@
 #include "fimc-is-companion.h"
 #include "fimc-is-device-sensor-peri.h"
 
-#if defined(CONFIG_RKP)
-#include <linux/rkp_entry.h>
+#ifdef CONFIG_RKP
+#include <linux/rkp.h>
 #endif
 
 struct fimc_is_lib_support gPtr_lib_support;
@@ -2137,7 +2137,7 @@ int fimc_is_load_ddk_bin(int loadType)
 			memcpy((void *)lib_addr, bin.data, bin.size);
 			__flush_dcache_area((void *)lib_addr, bin.size);
 #if defined(CONFIG_RKP)
-			//if (!(gPtr_lib_support.binary_code_load_flg & BINARY_LOAD_DDK_DONE)) {
+			if (!(gPtr_lib_support.binary_code_load_flg & BINARY_LOAD_DDK_DONE)) {
 				flush_cache_all();
 				rkp_call(RKP_FIMC_VERIFY,
 						(u64)page_to_phys(vmalloc_to_page((void *)lib_addr)),
@@ -2148,7 +2148,7 @@ int fimc_is_load_ddk_bin(int loadType)
 					ret = -EBADF;
 					goto fail;
 				}
-			//}
+			}
 #endif
 		} else {
 			err_lib("DDK bin size is bigger than memory area. %d[%d]", (unsigned int)bin.size, (unsigned int)DDK_LIB_SIZE);
@@ -2322,7 +2322,7 @@ int fimc_is_load_rta_bin(int loadType)
 			memcpy((void *)lib_rta, bin.data, bin.size);
 			__flush_dcache_area((void *)lib_rta, bin.size);
 #if defined(CONFIG_RKP)
-			//if (!(gPtr_lib_support.binary_code_load_flg & BINARY_LOAD_RTA_DONE)) {
+			if (!(gPtr_lib_support.binary_code_load_flg & BINARY_LOAD_RTA_DONE)) {
 				flush_cache_all();
 				rkp_call(RKP_FIMC_VERIFY,
 					(u64)page_to_phys(vmalloc_to_page((void *)lib_rta)),
@@ -2332,7 +2332,7 @@ int fimc_is_load_rta_bin(int loadType)
 					ret = -EBADF;
 					goto fail;
 				}
-			//}
+			}
 #endif
 		} else {
 			err_lib("RTA bin size is bigger than memory area. %d[%d]", (unsigned int)bin.size, (unsigned int)RTA_LIB_SIZE);

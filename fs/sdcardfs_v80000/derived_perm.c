@@ -76,7 +76,6 @@ void get_derived_permission_new(struct dentry *parent, struct dentry *dentry,
 	struct qstr q_knox = QSTR_LITERAL("knox");
 	struct qstr q_shared = QSTR_LITERAL("shared");
 
-
 	/* By default, each inode inherits from its parent.
 	 * the properties are maintained on its private fields
 	 * because the inode attributes will be modified with that of

@@ -19,11 +19,13 @@
 #include <asm/cacheflush.h>
 #include <soc/samsung/exynos-pd.h>
 #include <linux/suspend.h>
+#include <linux/vmalloc.h>
 
 #include <soc/samsung/cal-if.h>
 #include <soc/samsung/bcm.h>
 #include <linux/memblock.h>
 #include <asm/map.h>
+#include <asm/tlbflush.h>
 
 #define BCM_BDGGEN
 #ifdef BCM_BDGGEN
@@ -34,7 +36,7 @@
 
 #define BCM_MAX_DATA		(4 * 1024 * 1024 / sizeof(struct output_data))
 #define MAX_STR			4 * 1024
-#define BCM_SIZE			SZ_64K
+#define BCM_SIZE		(SZ_64K)
 #define NUM_CLK_MAX		8
 #define FILE_STR		32
 
@@ -76,6 +78,7 @@ static struct os_system_func {
 	int (*print)(const char *, ...);
 } os_func;
 
+static struct vm_struct bcm_early_vm;
 static DEFINE_SPINLOCK(bcm_lock);
 static char input_file[FILE_STR] = "/data/bcm.bin";
 
@@ -403,6 +406,51 @@ static void pd_exit(void)
 	}
 }
 
+struct page_change_data {
+	pgprot_t set_mask;
+	pgprot_t clear_mask;
+};
+
+static int bcm_change_page_range(pte_t *ptep, pgtable_t token, unsigned long addr,
+			void *data)
+{
+	struct page_change_data *cdata = data;
+	pte_t pte = *ptep;
+
+	pte = clear_pte_bit(pte, cdata->clear_mask);
+	pte = set_pte_bit(pte, cdata->set_mask);
+
+	set_pte(ptep, pte);
+	return 0;
+}
+
+static int bcm_change_memory_common(unsigned long addr, int numpages,
+				pgprot_t set_mask, pgprot_t clear_mask)
+{
+	unsigned long start = addr;
+	unsigned long size = PAGE_SIZE*numpages;
+	unsigned long end = start + size;
+	int ret;
+	struct page_change_data data;
+
+	if (!PAGE_ALIGNED(addr)) {
+		start &= PAGE_MASK;
+		end = start + size;
+		WARN_ON_ONCE(1);
+	}
+
+	if (!numpages)
+		return 0;
+
+	data.set_mask = set_mask;
+	data.clear_mask = clear_mask;
+
+	ret = apply_to_page_range(&init_mm, start, size, bcm_change_page_range,
+					&data);
+
+	flush_tlb_kernel_range(start, end);
+	return ret;
+}
 static ssize_t store_load_bcm_fw(struct device *dev,
 					struct device_attribute *attr,
 					const char *buf, size_t count)
@@ -444,6 +492,10 @@ static ssize_t store_load_bcm_fw(struct device *dev,
 			       sizeof(struct output_data) * BCM_MAX_DATA);
 		}
 
+		bcm_change_memory_common((unsigned long)bcm_early_vm.addr,
+					 BCM_SIZE,
+					 __pgprot(0),
+					 __pgprot(PTE_PXN));
 		/* load binary */
 		ret = load_bcm_bin(NULL);
 		if (!ret)
@@ -621,6 +673,21 @@ static int exynos_bcm_notify_panic(struct notifier_block *nb,
 static int bcm_probe(struct platform_device *pdev)
 {
 	int ret;
+	int page_size, i;
+	struct page *page;
+	struct page **pages;
+
+	page_size = bcm_early_vm.size / PAGE_SIZE;
+	pages = kzalloc(sizeof(struct page*) * page_size, GFP_KERNEL);
+	page = phys_to_page(bcm_early_vm.phys_addr);
+	for (i = 0; i < page_size; i++)
+		pages[i] = page++;
+	ret = map_vm_area(&bcm_early_vm, PAGE_KERNEL, pages);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to mapping between virt and phys for firmware");
+		return -ENOMEM;
+	}
+	kfree(pages);
 
 	ret = sysfs_create_group(&pdev->dev.kobj, &bcm_attr_group);
 	if (ret) {
@@ -696,17 +763,13 @@ static struct platform_device bcm_device = {
 
 static int __init bcm_setup(char *str)
 {
-	struct map_desc fd_table;
-	phys_addr_t fd_phys_addr;
 	if (kstrtoul(str, 0, (unsigned long *)&fd_virt_addr))
 		goto out;
-	fd_phys_addr = memblock_alloc(BCM_SIZE, SZ_4K);
-	fd_table.virtual = (ulong)fd_virt_addr;
-	fd_table.pfn = __phys_to_pfn(fd_phys_addr);
-	fd_table.length = BCM_SIZE;
-	fd_table.type = MT_MEMORY;
+	bcm_early_vm.phys_addr = memblock_alloc(BCM_SIZE, SZ_4K);
+	bcm_early_vm.addr = (void *)fd_virt_addr;
+	bcm_early_vm.size = BCM_SIZE + PAGE_SIZE;
 
-	iotable_init_exec(&fd_table, 1);
+	vm_area_add_early(&bcm_early_vm);
 	return 0;
 out:
 	return -1;

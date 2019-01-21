@@ -314,11 +314,11 @@ static int exynos_rgt_probe(struct platform_device *pdev)
 			rgt_info[rgt_idx].reg_dir =
 				debugfs_create_dir(rgt_name, exynos_rgt_root);
 			rgt_info[rgt_idx].f_get =
-				debugfs_create_file("get", 0444, rgt_info[rgt_idx].reg_dir, NULL, &rgt_info[rgt_idx].get_fops);
+				debugfs_create_file("get", 0400, rgt_info[rgt_idx].reg_dir, NULL, &rgt_info[rgt_idx].get_fops);
 			rgt_info[rgt_idx].f_ena =
-				debugfs_create_file("enable", 0644, rgt_info[rgt_idx].reg_dir, NULL, &rgt_info[rgt_idx].ena_fops);
+				debugfs_create_file("enable", 0600, rgt_info[rgt_idx].reg_dir, NULL, &rgt_info[rgt_idx].ena_fops);
 			rgt_info[rgt_idx].f_volt =
-				debugfs_create_file("voltage", 0644, rgt_info[rgt_idx].reg_dir, NULL, &rgt_info[rgt_idx].volt_fops);
+				debugfs_create_file("voltage", 0600, rgt_info[rgt_idx].reg_dir, NULL, &rgt_info[rgt_idx].volt_fops);
 
 			rgt_idx++;
 		}

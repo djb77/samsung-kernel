@@ -1654,7 +1654,7 @@ static void __decon_update_regs(struct decon_device *decon, struct decon_reg_dat
 {
 	int err_cnt = 0;
 	unsigned short i, j;
-	unsigned int fps;
+	unsigned int fps = 60;
 	struct decon_mode_info psr;
 	unsigned long timeout_val = 20;
 

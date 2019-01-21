@@ -100,7 +100,7 @@ void edid_check_set_i2c_capabilities(void)
 			val[0] = I2C_1Kbps;
 		else
 			val[0] = I2C_400Kbps;
-	
+
 		displayport_reg_dpcd_write(DPCD_ADD_I2C_SPEED_CONTROL_STATUS, 1, val);
 		displayport_dbg("DPCD_ADD_I2C_SPEED_CONTROL_STATUS = 0x%x\n", val[0]);
 	}

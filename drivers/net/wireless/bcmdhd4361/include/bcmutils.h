@@ -1,7 +1,7 @@
 /*
  * Misc useful os-independent macros and functions.
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmutils.h 735359 2017-12-08 10:56:04Z $
+ * $Id: bcmutils.h 738164 2017-12-27 08:38:59Z $
  */
 
 #ifndef	_bcmutils_h_
@@ -657,6 +657,9 @@ DECLARE_MAP_API(8, 2, 3, 3U, 0x00FF) /* setbit8() and getbit8() */
 
 #define MACOUIDBG "%02x:%x:%02x"
 #define MACOUI2STRDBG(ea) (ea)[0], (ea)[1] & 0xf, (ea)[2]
+
+#define MACOUI "%02x:%02x:%02x"
+#define MACOUI2STR(ea) (ea)[0], (ea)[1], (ea)[2]
 
 /* bcm_format_flags() bit description structure */
 typedef struct bcm_bit_desc {

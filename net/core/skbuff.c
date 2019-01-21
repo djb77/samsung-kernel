@@ -2958,24 +2958,6 @@ int skb_append_pagefrags(struct sk_buff *skb, struct page *page,
 EXPORT_SYMBOL_GPL(skb_append_pagefrags);
 
 /**
- *	skb_push_rcsum - push skb and update receive checksum
- *	@skb: buffer to update
- *	@len: length of data pulled
- *
- *	This function performs an skb_push on the packet and updates
- *	the CHECKSUM_COMPLETE checksum.  It should be used on
- *	receive path processing instead of skb_push unless you know
- *	that the checksum difference is zero (e.g., a valid IP header)
- *	or you are setting ip_summed to CHECKSUM_NONE.
- */
-static unsigned char *skb_push_rcsum(struct sk_buff *skb, unsigned len)
-{
-	skb_push(skb, len);
-	skb_postpush_rcsum(skb, skb->data, len);
-	return skb->data;
-}
-
-/**
  *	skb_pull_rcsum - pull skb and update receive checksum
  *	@skb: buffer to update
  *	@len: length of data pulled
@@ -3704,15 +3686,20 @@ void skb_complete_tx_timestamp(struct sk_buff *skb,
 	struct sock *sk = skb->sk;
 
 	if (!skb_may_tx_timestamp(sk, false))
+		goto err;
+
+	/* Take a reference to prevent skb_orphan() from freeing the socket,
+	 * but only if the socket refcount is not zero.
+	 */
+	if (likely(atomic_inc_not_zero(&sk->sk_refcnt))) {
+		*skb_hwtstamps(skb) = *hwtstamps;
+		__skb_complete_tx_timestamp(skb, sk, SCM_TSTAMP_SND);
+		sock_put(sk);
 		return;
+	}
 
-	/* take a reference to prevent skb_orphan() from freeing the socket */
-	sock_hold(sk);
-
-	*skb_hwtstamps(skb) = *hwtstamps;
-	__skb_complete_tx_timestamp(skb, sk, SCM_TSTAMP_SND);
-
-	sock_put(sk);
+err:
+	kfree_skb(skb);
 }
 EXPORT_SYMBOL_GPL(skb_complete_tx_timestamp);
 
@@ -3763,7 +3750,7 @@ void skb_complete_wifi_ack(struct sk_buff *skb, bool acked)
 {
 	struct sock *sk = skb->sk;
 	struct sock_exterr_skb *serr;
-	int err;
+	int err = 1;
 
 	skb->wifi_acked_valid = 1;
 	skb->wifi_acked = acked;
@@ -3773,14 +3760,15 @@ void skb_complete_wifi_ack(struct sk_buff *skb, bool acked)
 	serr->ee.ee_errno = ENOMSG;
 	serr->ee.ee_origin = SO_EE_ORIGIN_TXSTATUS;
 
-	/* take a reference to prevent skb_orphan() from freeing the socket */
-	sock_hold(sk);
-
-	err = sock_queue_err_skb(sk, skb);
+	/* Take a reference to prevent skb_orphan() from freeing the socket,
+	 * but only if the socket refcount is not zero.
+	 */
+	if (likely(atomic_inc_not_zero(&sk->sk_refcnt))) {
+		err = sock_queue_err_skb(sk, skb);
+		sock_put(sk);
+	}
 	if (err)
 		kfree_skb(skb);
-
-	sock_put(sk);
 }
 EXPORT_SYMBOL_GPL(skb_complete_wifi_ack);
 
@@ -4255,6 +4243,7 @@ void skb_scrub_packet(struct sk_buff *skb, bool xnet)
 	if (!xnet)
 		return;
 
+	ipvs_reset(skb);
 	skb_orphan(skb);
 	skb->mark = 0;
 }

@@ -95,7 +95,13 @@ static atomic_t zswap_zero_pages = ATOMIC_INIT(0);
 
 /* Enable/disable zswap (disabled by default) */
 static bool zswap_enabled = 1;
-module_param_named(enabled, zswap_enabled, bool, 0644);
+static int zswap_enabled_param_set(const char *,
+				   const struct kernel_param *);
+static struct kernel_param_ops zswap_enabled_param_ops = {
+	.set =		zswap_enabled_param_set,
+	.get =		param_get_bool,
+};
+module_param_cb(enabled, &zswap_enabled_param_ops, &zswap_enabled, 0644);
 
 /* Crypto compressor to use */
 #define ZSWAP_COMPRESSOR_DEFAULT "lzo"
@@ -232,6 +238,9 @@ static atomic_t zswap_pools_count = ATOMIC_INIT(0);
 
 /* used by param callback function */
 static bool zswap_init_started;
+
+/* fatal error during init */
+static bool zswap_init_failed;
 
 /*********************************
 * helpers and fwd declarations
@@ -924,6 +933,11 @@ static int __zswap_param_set(const char *val, const struct kernel_param *kp,
 	char *s = strstrip((char *)val);
 	int ret;
 
+	if (zswap_init_failed) {
+		pr_err("can't set param, initialization failed\n");
+		return -ENODEV;
+	}
+
 	/* no change required */
 	if (!strcmp(s, *(char **)kp->arg))
 		return 0;
@@ -1001,6 +1015,17 @@ static int zswap_zpool_param_set(const char *val,
 				 const struct kernel_param *kp)
 {
 	return __zswap_param_set(val, kp, NULL, zswap_compressor);
+}
+
+static int zswap_enabled_param_set(const char *val,
+				   const struct kernel_param *kp)
+{
+	if (zswap_init_failed) {
+		pr_err("can't enable, initialization failed\n");
+		return -ENODEV;
+	}
+
+	return param_set_bool(val, kp);
 }
 
 /*********************************
@@ -1748,6 +1773,9 @@ handlecachefail:
 #endif
 	zswap_entry_cache_destroy();
 cache_fail:
+	/* if built-in, we aren't unloaded on failure; don't allow use */
+	zswap_init_failed = true;
+	zswap_enabled = false;
 	return -ENOMEM;
 }
 /* must be late so crypto has time to come up */

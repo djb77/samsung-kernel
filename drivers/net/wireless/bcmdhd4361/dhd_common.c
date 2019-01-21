@@ -1,7 +1,7 @@
 /*
  * Broadcom Dongle Host Driver (DHD), common DHD core.
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_common.c 736294 2017-12-14 10:37:03Z $
+ * $Id: dhd_common.c 763050 2018-05-17 04:42:47Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -104,6 +104,10 @@
 #include <nvram_4364.h>
 #endif
 
+#ifdef DHD_SSSR_DUMP
+#include <bcmdevs.h>
+#endif /* DHD_SSSR_DUMP */
+
 
 extern int is_wlc_event_frame(void *pktdata, uint pktlen, uint16 exp_usr_subtype,
 	bcm_event_msg_u_t *out_event);
@@ -182,6 +186,10 @@ static void dngl_host_event_process(dhd_pub_t *dhdp, bcm_dngl_event_t *event,
 static int dngl_host_event(dhd_pub_t *dhdp, void *pktdata, bcm_dngl_event_msg_t *dngl_event,
 	size_t pktlen);
 #endif /* DNGL_EVENT_SUPPORT */
+
+#ifdef WL_CFGVENDOR_SEND_HANG_EVENT
+static void copy_hang_info_ioctl_timeout(dhd_pub_t *dhd, int ifidx, wl_ioctl_t *ioc);
+#endif /* WL_CFGVENDOR_SEND_HANG_EVENT */
 
 #define MAX_CHUNK_LEN 1408 /* 8 * 8 * 22 */
 
@@ -427,6 +435,7 @@ dhd_query_bus_erros(dhd_pub_t *dhdp)
 int
 dhd_sssr_mempool_init(dhd_pub_t *dhd)
 {
+	DHD_TRACE(("%s: ENTER\n", __FUNCTION__));
 	dhd->sssr_mempool = (uint8 *) MALLOCZ(dhd->osh, DHD_SSSR_MEMPOOL_SIZE);
 	if (dhd->sssr_mempool == NULL) {
 		DHD_ERROR(("%s: MALLOC of sssr_mempool failed\n",
@@ -439,29 +448,159 @@ dhd_sssr_mempool_init(dhd_pub_t *dhd)
 void
 dhd_sssr_mempool_deinit(dhd_pub_t *dhd)
 {
+	DHD_TRACE(("%s: ENTER\n", __FUNCTION__));
 	if (dhd->sssr_mempool) {
 		MFREE(dhd->osh, dhd->sssr_mempool, DHD_SSSR_MEMPOOL_SIZE);
 		dhd->sssr_mempool = NULL;
 	}
 }
 
+void
+dhd_dump_sssr_reg_info(dhd_pub_t *dhd)
+{
+	int i;
+
+	DHD_ERROR(("PMU regs\n"));
+	DHD_ERROR(("pmuintmask0=0x%x pmuintmask1=0x%x resreqtimer=0x%x "
+		"macresreqtimer=0x%x macresreqtimer1=0x%x\n",
+		dhd->sssr_reg_info.pmu_regs.base_regs.pmuintmask0,
+		dhd->sssr_reg_info.pmu_regs.base_regs.pmuintmask1,
+		dhd->sssr_reg_info.pmu_regs.base_regs.resreqtimer,
+		dhd->sssr_reg_info.pmu_regs.base_regs.macresreqtimer,
+		dhd->sssr_reg_info.pmu_regs.base_regs.macresreqtimer1));
+	DHD_ERROR(("chipcommon_regs\n"));
+	DHD_ERROR(("intmask=0x%x powerctrl=0x%x clockcontrolstatus=0x%x "
+		"powerctrl_mask=0x%x\n",
+		dhd->sssr_reg_info.chipcommon_regs.base_regs.intmask,
+		dhd->sssr_reg_info.chipcommon_regs.base_regs.powerctrl,
+		dhd->sssr_reg_info.chipcommon_regs.base_regs.clockcontrolstatus,
+		dhd->sssr_reg_info.chipcommon_regs.base_regs.powerctrl_mask));
+	DHD_ERROR(("ARM regs\n"));
+	DHD_ERROR(("clockcontrolstatus=0x%x clockcontrolstatus_val=0x%x"
+		" resetctrl=0x%x itopoobb=0x%x\n",
+		dhd->sssr_reg_info.arm_regs.base_regs.clockcontrolstatus,
+		dhd->sssr_reg_info.arm_regs.base_regs.clockcontrolstatus_val,
+		dhd->sssr_reg_info.arm_regs.wrapper_regs.resetctrl,
+		dhd->sssr_reg_info.arm_regs.wrapper_regs.itopoobb));
+	DHD_ERROR(("PCIe regs\n"));
+	DHD_ERROR(("ltrstate=0x%x clockcontrolstatus=0x%x"
+		" clockcontrolstatus_val=0x%x itopoobb=0x%x\n",
+		dhd->sssr_reg_info.pcie_regs.base_regs.ltrstate,
+		dhd->sssr_reg_info.pcie_regs.base_regs.clockcontrolstatus,
+		dhd->sssr_reg_info.pcie_regs.base_regs.clockcontrolstatus_val,
+		dhd->sssr_reg_info.pcie_regs.wrapper_regs.itopoobb));
+	DHD_ERROR(("VASIP regs\n"));
+	DHD_ERROR(("ioctrl=0x%x vasip_sr_addr=0x%x vasip_sr_size=0x%x\n",
+		dhd->sssr_reg_info.vasip_regs.wrapper_regs.ioctrl,
+		dhd->sssr_reg_info.vasip_regs.vasip_sr_addr,
+		dhd->sssr_reg_info.vasip_regs.vasip_sr_size));
+
+	for (i = 0; i < MAX_NUM_D11CORES; i++) {
+		DHD_ERROR(("MAC[%d] regs\n", i));
+		DHD_ERROR(("xmtaddress=0x%x xmtdata=0x%x clockcontrolstatus=0x%x"
+			" clockcontrolstatus_val=0x%x\n",
+			dhd->sssr_reg_info.mac_regs[i].base_regs.xmtaddress,
+			dhd->sssr_reg_info.mac_regs[i].base_regs.xmtdata,
+			dhd->sssr_reg_info.mac_regs[i].base_regs.clockcontrolstatus,
+			dhd->sssr_reg_info.mac_regs[i].base_regs.clockcontrolstatus_val));
+		DHD_ERROR(("resetctrl=0x%x itopoobb=0x%x ioctrl=0x%x "
+			"ioctrl_resetseq_val=0x%x 0x%x 0x%x 0x%x 0x%x\n",
+			dhd->sssr_reg_info.mac_regs[i].wrapper_regs.resetctrl,
+			dhd->sssr_reg_info.mac_regs[i].wrapper_regs.itopoobb,
+			dhd->sssr_reg_info.mac_regs[i].wrapper_regs.ioctrl,
+			dhd->sssr_reg_info.mac_regs[i].wrapper_regs.ioctrl_resetseq_val[0],
+			dhd->sssr_reg_info.mac_regs[i].wrapper_regs.ioctrl_resetseq_val[1],
+			dhd->sssr_reg_info.mac_regs[i].wrapper_regs.ioctrl_resetseq_val[2],
+			dhd->sssr_reg_info.mac_regs[i].wrapper_regs.ioctrl_resetseq_val[3],
+			dhd->sssr_reg_info.mac_regs[i].wrapper_regs.ioctrl_resetseq_val[4]));
+		DHD_ERROR(("SR size=0x%x\n", dhd->sssr_reg_info.mac_regs[i].sr_size));
+	}
+
+	prhex("reginfo", (char *)&dhd->sssr_reg_info, sizeof(dhd->sssr_reg_info));
+}
+
+int
+dhd_get_sssr_reg_info_bcm4359(dhd_pub_t *dhd)
+{
+	dhd->sssr_reg_info.version = SSSR_REG_INFO_VER;
+	dhd->sssr_reg_info.length = sizeof(sssr_reg_info_t);
+
+	/* PMU regs */
+	dhd->sssr_reg_info.pmu_regs.base_regs.pmuintmask0 = 0x18000700;
+	dhd->sssr_reg_info.pmu_regs.base_regs.pmuintmask1 = 0x18000704;
+	dhd->sssr_reg_info.pmu_regs.base_regs.resreqtimer = 0x18000644;
+	dhd->sssr_reg_info.pmu_regs.base_regs.macresreqtimer = 0x18000688;
+	dhd->sssr_reg_info.pmu_regs.base_regs.macresreqtimer1 = 0x180006f0;
+
+	/* chipcommon regs */
+	dhd->sssr_reg_info.chipcommon_regs.base_regs.intmask = 0x18000024;
+	dhd->sssr_reg_info.chipcommon_regs.base_regs.powerctrl = 0x180001e8;
+	dhd->sssr_reg_info.chipcommon_regs.base_regs.clockcontrolstatus = 0x180001e0;
+	dhd->sssr_reg_info.chipcommon_regs.base_regs.powerctrl_mask = 0xf00;
+
+	/* ARM regs */
+	dhd->sssr_reg_info.arm_regs.base_regs.clockcontrolstatus = 0x180021e0;
+	dhd->sssr_reg_info.arm_regs.base_regs.clockcontrolstatus_val = 0x20;
+	dhd->sssr_reg_info.arm_regs.wrapper_regs.resetctrl = 0x18102800;
+	dhd->sssr_reg_info.arm_regs.wrapper_regs.itopoobb = 0x18102f34;
+
+	/* PCIe regs */
+	dhd->sssr_reg_info.pcie_regs.base_regs.ltrstate = 0x180031a0;
+	dhd->sssr_reg_info.pcie_regs.base_regs.clockcontrolstatus = 0x180031e0;
+	dhd->sssr_reg_info.pcie_regs.base_regs.clockcontrolstatus_val = 0x0;
+	dhd->sssr_reg_info.pcie_regs.wrapper_regs.itopoobb = 0x18103f34;
+
+	/* MAC regs */
+	dhd->sssr_reg_info.mac_regs[0].base_regs.xmtdata = 0x18001134;
+	dhd->sssr_reg_info.mac_regs[0].base_regs.xmtaddress = 0x18001130;
+	dhd->sssr_reg_info.mac_regs[0].base_regs.clockcontrolstatus = 0x180011e0;
+	dhd->sssr_reg_info.mac_regs[0].base_regs.clockcontrolstatus_val = 0x20;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.resetctrl = 0x18101800;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.itopoobb = 0x18101f34;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl = 0x18101408;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl_resetseq_val[0] = 0xc7;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl_resetseq_val[1] = 0x15f;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl_resetseq_val[2] = 0x151;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl_resetseq_val[3] = 0x155;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl_resetseq_val[4] = 0xc5;
+	dhd->sssr_reg_info.mac_regs[0].sr_size = 0x40000;
+
+	return BCME_OK;
+}
+
 int
 dhd_get_sssr_reg_info(dhd_pub_t *dhd)
 {
 	int ret = BCME_ERROR;
+	uint16 chipid, chiprev;
 
 	DHD_ERROR(("%s: get sssr_reg_info\n", __FUNCTION__));
+
+	chipid = dhd_get_chipid(dhd);
+	chiprev = dhd_bus_chiprev_id(dhd);
+
 	/* get sssr_reg_info from firmware */
 	memset((void *)&dhd->sssr_reg_info, 0, sizeof(dhd->sssr_reg_info));
+
+	if ((chipid == BCM4355_CHIP_ID || chipid == BCM4359_CHIP_ID) &&
+		chiprev == 9) {
+		/* Get SSSR reg info with alternative way for 4359C0/43596A0 */
+		ret = dhd_get_sssr_reg_info_bcm4359(dhd);
+	} else {
 	if (bcm_mkiovar("sssr_reg_info", 0, 0, (char *)&dhd->sssr_reg_info,
 		sizeof(dhd->sssr_reg_info))) {
 		if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_GET_VAR, &dhd->sssr_reg_info,
 			sizeof(dhd->sssr_reg_info), FALSE, 0)) < 0) {
-			DHD_ERROR(("%s: dhd_wl_ioctl_cmd failed (error=%d)\n", __FUNCTION__, ret));
+				DHD_ERROR(("%s: dhd_wl_ioctl_cmd failed (error=%d)\n",
+					__FUNCTION__, ret));
 		}
 	} else {
 			DHD_ERROR(("%s: bcm_mkiovar failed\n", __FUNCTION__));
 	}
+	}
+
+	/* Dump the information */
+	dhd_dump_sssr_reg_info(dhd);
 
 	return ret;
 }
@@ -544,6 +683,8 @@ dhd_sssr_dump_init(dhd_pub_t *dhd)
 
 			dhd->sssr_d11_after[i] = (uint32 *)(dhd->sssr_mempool + mempool_used);
 			mempool_used += dhd->sssr_reg_info.mac_regs[i].sr_size;
+		} else {
+			DHD_ERROR(("%s: SR size for core[%d] is 0\n", __FUNCTION__, i));
 		}
 	}
 
@@ -558,7 +699,6 @@ dhd_sssr_dump_init(dhd_pub_t *dhd)
 	dhd->sssr_inited = TRUE;
 
 	return BCME_OK;
-
 }
 
 void
@@ -663,6 +803,8 @@ dhd_dump(dhd_pub_t *dhdp, char *buf, int buflen)
 	            dhdp->rx_readahead_cnt, dhdp->tx_realloc);
 	bcm_bprintf(strbuf, "tx_pktgetfail %lu rx_pktgetfail %lu\n",
 	            dhdp->tx_pktgetfail, dhdp->rx_pktgetfail);
+	bcm_bprintf(strbuf, "tx_big_packets %lu\n",
+	            dhdp->tx_big_packets);
 	bcm_bprintf(strbuf, "\n");
 
 #ifdef DMAMAP_STATS
@@ -870,6 +1012,11 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifidx, wl_ioctl_t *ioc, void *buf, int len)
 			dhd_iov_li_print(&dhd_pub->dump_iovlist_head);
 		}
 #endif /* DUMP_IOCTL_IOV_LIST */
+#ifdef WL_CFGVENDOR_SEND_HANG_EVENT
+		if (ret == -ETIMEDOUT) {
+			copy_hang_info_ioctl_timeout(dhd_pub, ifidx, ioc);
+		}
+#endif /* WL_CFGVENDOR_SEND_HANG_EVENT */
 #ifdef DHD_LOG_DUMP
 		if (ioc->cmd == WLC_GET_VAR || ioc->cmd == WLC_SET_VAR) {
 			lval = 0;
@@ -892,8 +1039,14 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifidx, wl_ioctl_t *ioc, void *buf, int len)
 				ioc->cmd, msg, lval, ioc->len, ioc->set));
 		} else {
 			slen = ioc->len;
-			if (buf != NULL) {
+			if (buf != NULL && slen != 0) {
+				if (slen >= 4) {
 				val = *(int*)buf;
+				} else if (slen >= 2) {
+					val = *(short*)buf;
+				} else {
+					val = *(char*)buf;
+				}
 				/* Do not dump for WLC_GET_MAGIC and WLC_GET_VERSION */
 				if (ioc->cmd != WLC_GET_MAGIC && ioc->cmd != WLC_GET_VERSION)
 					DHD_ERROR_MEM(("WLC_IOCTL: cmd: %d, val: %d, len: %d, "
@@ -1233,6 +1386,7 @@ dhd_doiovar(dhd_pub_t *dhd_pub, const bcm_iovar_t *vi, uint32 actionid, const ch
 		dhd_pub->rx_readahead_cnt = 0;
 		dhd_pub->tx_realloc = 0;
 		dhd_pub->wd_dpc_sched = 0;
+		dhd_pub->tx_big_packets = 0;
 		memset(&dhd_pub->dstats, 0, sizeof(dhd_pub->dstats));
 		dhd_bus_clearcounts(dhd_pub);
 #ifdef PROP_TXSTATUS
@@ -2198,6 +2352,58 @@ unlock_exit:
 	return bcmerror;
 }
 
+#if defined(SHOW_EVENTS) && defined(SUPPORT_EVT_SDB_LOG)
+#define SDB_ENABLE_AP	0x01
+#define SDB_ENABLE_P2P	0x02
+#define SDB_IS_AP(i)	(i & SDB_ENABLE_AP)
+#define SDB_IS_P2P(i)	(i & SDB_ENABLE_P2P)
+
+#define WLC_RSDB_MODE_AUTO_MASK 0x80
+#define WLC_RSDB_EXTRACT_MODE(val) ((int8)((val) & (~(WLC_RSDB_MODE_AUTO_MASK))))
+
+static void
+wl_event_sdb_transition_print(void *event_data, const char *event_name)
+{
+	wl_event_sdb_trans_t *rdata;
+	wl_event_sdb_data_t *value;
+	char *sta_mode = "";
+	int i;
+	char chanbuf[CHANSPEC_STR_LEN];
+	rdata = (wl_event_sdb_trans_t *)event_data;
+
+	if (!rdata) {
+		DHD_ERROR(("%s: event_data is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	if (rdata->version != WL_EVENT_SDB_TRANSITION_VER) {
+		DHD_ERROR(("%s: invalid Version(%d)\n",
+			__FUNCTION__, rdata->version));
+		return;
+	}
+
+	if (rdata->rsdb_mode & WLC_RSDB_MODE_AUTO_MASK) {
+		DHD_ERROR((" RSDB Mode : Auto, "));
+	}
+	DHD_ERROR(("Current RSDB Mode : %d\n", WLC_RSDB_EXTRACT_MODE(rdata->rsdb_mode)));
+
+	for (i = 0; i < rdata->enable_bsscfg; i++) {
+		value = &rdata->values[i];
+
+		if (SDB_IS_P2P(value->is_iftype)) {
+			sta_mode = SDB_IS_AP(value->is_iftype) ? "P2P_GO" : "P2P_GC";
+		} else {
+			sta_mode = SDB_IS_AP(value->is_iftype) ? "SoftAP" : "Station";
+		}
+
+		wf_chspec_ntoa_ex(value->chanspec, chanbuf);
+		DHD_ERROR((" wlc%d <%s> \"%s\", %s(0x%04x)\n",
+			value->wlunit, sta_mode,
+			value->ssidbuf, chanbuf, value->chanspec));
+	}
+}
+#endif /* SHOW_EVENTS && SUPPORT_EVT_SDB_LOG */
+
 #ifdef SHOW_EVENTS
 static void
 wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
@@ -2458,6 +2664,14 @@ wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
 		break;
 	}
 #endif /* SHOW_LOGTRACE */
+
+#ifdef SUPPORT_EVT_SDB_LOG
+	case WLC_E_SDB_TRANSITION:
+		DHD_EVENT(("MACEVENT: %s, status %d, reason %d\n",
+			event_name, (int)status, (int)reason));
+		wl_event_sdb_transition_print(event_data, event_name);
+		break;
+#endif /* SUPPORT_EVT_SDB_LOG */
 
 	default:
 		DHD_EVENT(("MACEVENT: %s %d, MAC %s, status %d, reason %d, auth %d\n",
@@ -3944,6 +4158,7 @@ dhd_iscan_issue_request(void * dhdp, wl_iscan_params_t *pParams, uint32 size)
 	char iovar[] = "iscan";
 	uint32 allocSize = 0;
 	wl_ioctl_t ioctl;
+	int len;
 
 	if (pParams) {
 		allocSize = (size + strlen(iovar) + 1);
@@ -3961,7 +4176,11 @@ dhd_iscan_issue_request(void * dhdp, wl_iscan_params_t *pParams, uint32 size)
 			goto cleanUp;
 			}
 		ioctl.cmd = WLC_SET_VAR;
-		bcm_mkiovar(iovar, (char *)pParams, size, buf, allocSize);
+		len = bcm_mkiovar(iovar, (char *)pParams, size, buf, allocSize);
+		if (len == 0) {
+			rc = BCME_BUFTOOSHORT;
+			goto cleanUp;
+		}
 		rc = dhd_wl_ioctl(dhd, 0, &ioctl, buf, allocSize);
 	}
 
@@ -3984,6 +4203,7 @@ dhd_iscan_get_partial_result(void *dhdp, uint *scan_count)
 	dhd_pub_t *dhd = dhd_bus_pub(dhdp);
 	int rc;
 	wl_ioctl_t ioctl;
+	int len;
 
 	DHD_ISCAN(("%s: Enter\n", __FUNCTION__));
 
@@ -4007,8 +4227,15 @@ dhd_iscan_get_partial_result(void *dhdp, uint *scan_count)
 
 	memset(&list, 0, sizeof(list));
 	list.results.buflen = htod32(WLC_IW_ISCAN_MAXLEN);
-	bcm_mkiovar("iscanresults", (char *)&list, WL_ISCAN_RESULTS_FIXED_SIZE,
+	len = bcm_mkiovar("iscanresults", (char *)&list, WL_ISCAN_RESULTS_FIXED_SIZE,
 		iscan_cur->iscan_buf, WLC_IW_ISCAN_MAXLEN);
+	if (len == 0) {
+		dhd_iscan_free_buf(dhdp, 0);
+		dhd_iscan_request(dhdp, WL_SCAN_ACTION_ABORT);
+		dhd_ind_scan_confirm(dhdp, FALSE);
+		status = BCME_BUFTOOSHORT;
+		goto fail;
+	}
 	ioctl.cmd = WLC_GET_VAR;
 	ioctl.set = FALSE;
 	rc = dhd_wl_ioctl(dhd, 0, &ioctl, iscan_cur->iscan_buf, WLC_IW_ISCAN_MAXLEN);
@@ -4771,7 +4998,14 @@ dhd_check_current_clm_data(dhd_pub_t *dhd)
 	wl_country_t *cspec;
 	int err = BCME_OK;
 
-	bcm_mkiovar("country", NULL, 0, iovbuf, sizeof(iovbuf));
+	memset(iovbuf, 0, sizeof(iovbuf));
+	err = bcm_mkiovar("country", NULL, 0, iovbuf, sizeof(iovbuf));
+	if (err == 0) {
+		err = BCME_BUFTOOSHORT;
+		DHD_ERROR(("%s: bcm_mkiovar failed.", __FUNCTION__));
+		return err;
+	}
+
 	err = dhd_wl_ioctl_cmd(dhd, WLC_GET_VAR, iovbuf, sizeof(iovbuf), FALSE, 0);
 	if (err) {
 		DHD_ERROR(("%s: country code get failed\n", __FUNCTION__));
@@ -4858,7 +5092,12 @@ dhd_apply_default_clm(dhd_pub_t *dhd, char *clm_path)
 		if (err) {
 			DHD_ERROR(("%s: CLM download failed err=%d\n", __FUNCTION__, err));
 			/* Retrieve clmload_status and print */
-			bcm_mkiovar("clmload_status", NULL, 0, iovbuf, sizeof(iovbuf));
+			memset(iovbuf, 0, sizeof(iovbuf));
+			len = bcm_mkiovar("clmload_status", NULL, 0, iovbuf, sizeof(iovbuf));
+			if (len == 0) {
+				err = BCME_BUFTOOSHORT;
+				goto exit;
+			}
 			err = dhd_wl_ioctl_cmd(dhd, WLC_GET_VAR, iovbuf, sizeof(iovbuf), FALSE, 0);
 			if (err) {
 				DHD_ERROR(("%s: clmload_status get failed err=%d \n",
@@ -4877,6 +5116,10 @@ dhd_apply_default_clm(dhd_pub_t *dhd, char *clm_path)
 		}
 	} else {
 		DHD_INFO(("Skipping the clm download. len:%d memblk:%p \n", len, imgbuf));
+#ifdef DHD_USE_CLMINFO_PARSER
+		err = BCME_ERROR;
+		goto exit;
+#endif /* DHD_USE_CLMINFO_PARSER */
 	}
 
 	/* Verify country code */
@@ -4896,12 +5139,272 @@ exit:
 	return err;
 }
 
+#ifdef DHD_USE_CLMINFO_PARSER
+#ifdef CUSTOMER_HW4
+#ifdef PLATFORM_SLP
+#define CLMINFO_PATH PLATFORM_PATH".clminfo"
+#else
+#define CLMINFO_PATH VENDOR_PATH"/etc/wifi/.clminfo"
+#endif /* PLATFORM_SLP */
+#else
+#define CLMINFO_PATH "/installmedia/.clminfo"
+#endif /* CUSTOMER_HW4 */
+
+extern struct cntry_locales_custom translate_custom_table[NUM_OF_COUNTRYS];
+
+unsigned int
+process_clarification_vars(char *varbuf, unsigned int varbuf_size)
+{
+	char *dp;
+	bool findNewline;
+	int column;
+	unsigned int buf_len, len;
+
+	dp = varbuf;
+
+	findNewline = FALSE;
+	column = 0;
+
+	for (len = 0; len < varbuf_size; len++) {
+		if ((varbuf[len] == '\r') || (varbuf[len] == ' ')) {
+			continue;
+		}
+		if (findNewline && varbuf[len] != '\n') {
+			continue;
+		}
+		findNewline = FALSE;
+		if (varbuf[len] == '#') {
+			findNewline = TRUE;
+			continue;
+		}
+		if (varbuf[len] == '\n') {
+			if (column == 0) {
+				continue;
+			}
+			column = 0;
+			continue;
+		}
+		*dp++ = varbuf[len];
+		column++;
+	}
+	buf_len = (unsigned int)(dp - varbuf);
+
+	while (dp < varbuf + len) {
+		*dp++ = 0;
+	}
+
+	return buf_len;
+}
+
+int
+dhd_get_clminfo(dhd_pub_t *dhd, char *clm_path)
+{
+	int bcmerror = BCME_OK;
+	char *clminfo_path = CLMINFO_PATH;
+
+	char *memblock = NULL;
+	char *bufp;
+	uint len = MAX_CLMINFO_BUF_SIZE;
+	uint str_ln;
+	char *tokenp = NULL;
+	int cnt = 0;
+	char *temp_buf = NULL;
+	char tokdelim;
+	int parse_step = 0;
+
+	char *clm_blob_vendor_path = VENDOR_PATH;
+	char *clm_blob_path = NULL;
+	int clm_blob_path_len = 0;
+
+	/* Clears clm_path and translate_custom_table */
+	memset(clm_path, 0, MOD_PARAM_PATHLEN);
+	memset(translate_custom_table, 0, sizeof(translate_custom_table));
+
+	/*
+	 * Read clm info from the .clminfo file
+	 * 1st line : CLM blob file path
+	 * 2nd ~ end of line: Country locales table
+	 */
+	if (dhd_get_download_buffer(dhd, clminfo_path, CLMINFO, &memblock, &len) != 0) {
+		DHD_ERROR(("%s: Cannot open .clminfo file\n", __FUNCTION__));
+		bcmerror = BCME_ERROR;
+		dhd->is_clm_mult_regrev = FALSE;
+		goto out;
+	}
+
+	dhd->is_clm_mult_regrev = TRUE;
+
+	if ((len > 0) && (len < MAX_CLMINFO_BUF_SIZE) && memblock) {
+		/* Found clminfo file. Parsing the file */
+		DHD_INFO(("clminfo file parsing from %s \n", clminfo_path));
+
+		bufp = (char *) memblock;
+		bufp[len] = 0;
+
+		/* clean up the file */
+		len = process_clarification_vars(bufp, len);
+
+		tokenp = bcmstrtok(&bufp, "=", &tokdelim);
+		/* reduce the len of bufp by token byte(1) and ptr length */
+		len -= (strlen(tokenp) + 1);
+
+		if (strncmp(tokenp, "clm_path", 8) != 0) {
+			DHD_ERROR(("%s: Cannot found clm_path\n", __FUNCTION__));
+			bcmerror = BCME_ERROR;
+			goto out;
+		}
+		temp_buf = bcmstrtok(&bufp, ";", &tokdelim);
+		str_ln = strlen(temp_buf);
+		/* read clm_path */
+		strncpy(clm_path, temp_buf, str_ln);
+		len -= (strlen(clm_path) + 1);
+
+		clm_blob_path_len = strlen(clm_path);
+		clm_blob_path = (char *)MALLOCZ(dhd->osh, clm_blob_path_len);
+		if (clm_blob_path == NULL) {
+			bcmerror = BCME_NOMEM;
+			DHD_ERROR(("%s: Failed to allocate memory!\n", __FUNCTION__));
+			goto out;
+		}
+		memset(clm_blob_path, 0, clm_blob_path_len);
+		strncpy(clm_blob_path, clm_path, strlen(clm_path));
+
+		/* Concannate VENDOR_PATH + CLM_PATH */
+		memset(clm_path, 0, MOD_PARAM_PATHLEN);
+		snprintf(clm_path, (int)strlen(clm_blob_vendor_path) + clm_blob_path_len + 1,
+			"%s%s", clm_blob_vendor_path, clm_blob_path);
+		clm_path[strlen(clm_path)] = '\0';
+
+		DHD_INFO(("%s: Found clm_path %s\n", __FUNCTION__, clm_path));
+
+		if (len <= 0) {
+			DHD_ERROR(("%s: Length is invalid\n", __FUNCTION__));
+			bcmerror = BCME_ERROR;
+			goto out;
+		}
+
+		/* reserved relocale map[0] to XZ/11 */
+		memcpy(translate_custom_table[cnt].custom_locale, "XZ", strlen("XZ"));
+		translate_custom_table[cnt].custom_locale_rev = 11;
+		DHD_INFO(("%s: Relocale map - iso_aabrev %s custom locale %s "
+			"custom locale rev %d\n",
+			__FUNCTION__,
+			translate_custom_table[cnt].iso_abbrev,
+			translate_custom_table[cnt].custom_locale,
+			translate_custom_table[cnt].custom_locale_rev));
+
+		cnt++;
+
+		/* start parsing relocale map */
+		do {
+
+			if ((bufp[0] == 0) && (len > 0)) {
+				DHD_ERROR(("%s: First byte is NULL character\n", __FUNCTION__));
+				bcmerror = BCME_ERROR;
+				goto out;
+			}
+			if ((bufp[0] == '=') || (bufp[0] == '/') || (bufp[0] == ';')) {
+				DHD_ERROR(("%s: Data is invalid\n", __FUNCTION__));
+				bcmerror = BCME_ERROR;
+				goto out;
+			}
+
+			/* parsing relocale data */
+			tokenp = bcmstrtok(&bufp, "=/;", &tokdelim);
+			len -= (strlen(tokenp) + 1);
+
+			if ((parse_step == 0) && (tokdelim == '=')) {
+				memcpy(translate_custom_table[cnt].iso_abbrev,
+						tokenp, strlen(tokenp));
+				parse_step++;
+			} else if ((parse_step == 1) && (tokdelim == '/')) {
+				memcpy(translate_custom_table[cnt].custom_locale,
+						tokenp, strlen(tokenp));
+				parse_step++;
+			} else if ((parse_step == 2) && (tokdelim == ';')) {
+				char *str, *endptr = NULL;
+				int locale_rev;
+
+				str = tokenp;
+				locale_rev = (int)strtoul(str, &endptr, 0);
+				if (*endptr != 0) {
+					bcmerror = BCME_ERROR;
+					goto out;
+				}
+
+				translate_custom_table[cnt].custom_locale_rev = locale_rev;
+
+				DHD_INFO(("%s: Relocale map - iso_aabrev %s"
+					" custom locale %s custom locale rev %d\n",
+					__FUNCTION__,
+					translate_custom_table[cnt].iso_abbrev,
+					translate_custom_table[cnt].custom_locale,
+					translate_custom_table[cnt].custom_locale_rev));
+
+				parse_step = 0;
+				cnt++;
+			} else {
+				DHD_ERROR(("%s: CLM info data format is invalid\n", __FUNCTION__));
+				bcmerror = BCME_ERROR;
+				goto out;
+			}
+
+		} while (len > 0);
+	}
+out:
+	if (clm_blob_path) {
+		MFREE(dhd->osh, clm_blob_path, clm_blob_path_len);
+	}
+	if (memblock) {
+		dhd_free_download_buffer(dhd, memblock, MAX_CLMINFO_BUF_SIZE);
+	}
+	if (bcmerror != BCME_OK) {
+		DHD_ERROR(("%s: .clminfo parsing fail!!\n", __FUNCTION__));
+	}
+
+	return bcmerror;
+}
+#endif /* DHD_USE_CLMINFO_PARSER */
+
 void dhd_free_download_buffer(dhd_pub_t	*dhd, void *buffer, int length)
 {
 #ifdef CACHE_FW_IMAGES
 	return;
 #endif
 	MFREE(dhd->osh, buffer, length);
+}
+
+/* Parse EAPOL 4 way handshake messages */
+int
+dhd_check_eapol_4way_message(char *dump_data)
+{
+	unsigned char type;
+	int pair, ack, mic, kerr, req, sec, install;
+	unsigned short us_tmp;
+	type = dump_data[18];
+	if (type == 2) {
+		us_tmp = (dump_data[19] << 8) | dump_data[20];
+		pair = 0 != (us_tmp & 0x08);
+		ack = 0  != (us_tmp & 0x80);
+		mic = 0  != (us_tmp & 0x100);
+		kerr = 0 != (us_tmp & 0x400);
+		req = 0  != (us_tmp & 0x800);
+		sec = 0  != (us_tmp & 0x200);
+		install = 0 != (us_tmp & 0x40);
+		if (!sec && !mic && ack && !install && pair && !kerr && !req) {
+			return EAPOL_4WAY_M1;
+		} else if (pair && !install && !ack && mic && !sec && !kerr && !req) {
+			return EAPOL_4WAY_M2;
+		} else if (pair && ack && mic && sec && !kerr && !req) {
+			return EAPOL_4WAY_M3;
+		} else if (pair && !install && !ack && mic && sec && !req && !kerr) {
+			return EAPOL_4WAY_M4;
+		} else {
+			return 0;
+		}
+	}
+
+	return 0;
 }
 
 #if defined(DHD_8021X_DUMP)
@@ -4913,8 +5416,6 @@ void
 dhd_dump_eapol_4way_message(char *ifname, char *dump_data, bool direction)
 {
 	unsigned char type;
-	int pair, ack, mic, kerr, req, sec, install;
-	unsigned short us_tmp;
 
 	type = dump_data[15];
 	if (type == 0) {
@@ -4952,24 +5453,20 @@ dhd_dump_eapol_4way_message(char *ifname, char *dump_data, bool direction)
 				dump_data[14], dump_data[15], dump_data[30]));
 		}
 	} else if (type == 3 && dump_data[18] == 2) {
-		us_tmp = (dump_data[19] << 8) | dump_data[20];
-		pair =  0 != (us_tmp & 0x08);
-		ack = 0  != (us_tmp & 0x80);
-		mic = 0  != (us_tmp & 0x100);
-		kerr =  0 != (us_tmp & 0x400);
-		req = 0  != (us_tmp & 0x800);
-		sec = 0  != (us_tmp & 0x200);
-		install  = 0 != (us_tmp & 0x40);
-
-		if (!sec && !mic && ack && !install && pair && !kerr && !req) {
+		switch (dhd_check_eapol_4way_message(dump_data)) {
+		case EAPOL_4WAY_M1:
 			EAP_PRINT("EAPOL Packet, 4-way handshake, M1");
-		} else if (pair && !install && !ack && mic && !sec && !kerr && !req) {
+			break;
+		case EAPOL_4WAY_M2:
 			EAP_PRINT("EAPOL Packet, 4-way handshake, M2");
-		} else if (pair && ack && mic && sec && !kerr && !req) {
+			break;
+		case EAPOL_4WAY_M3:
 			EAP_PRINT("EAPOL Packet, 4-way handshake, M3");
-		} else if (pair && !install && !ack && mic && sec && !req && !kerr) {
+			break;
+		case EAPOL_4WAY_M4:
 			EAP_PRINT("EAPOL Packet, 4-way handshake, M4");
-		} else {
+			break;
+		default:
 			DHD_ERROR(("ETHER_TYPE_802_1X[%s] [%s]: ver %d, type %d, replay %d\n",
 				ifname, direction ? "TX" : "RX",
 				dump_data[14], dump_data[15], dump_data[30]));
@@ -5585,7 +6082,7 @@ dhd_parse_logstrs_file(osl_t *osh, char *raw_fmts, int logstrs_size,
 	uint32 *lognums = NULL;
 	char *logstrs = NULL;
 	int ram_index = 0;
-	char **fmts;
+	char **fmts = NULL;
 	int num_fmts = 0;
 	int32 i = 0;
 
@@ -5653,6 +6150,11 @@ dhd_parse_logstrs_file(osl_t *osh, char *raw_fmts, int logstrs_size,
 				lognums = (uint32 *) raw_fmts;
 				logstrs = (char *)	&raw_fmts[num_fmts << 2];
 			}
+	}
+
+	if (event_log->fmts != NULL) {
+		DHD_ERROR(("fmts was not released\n"));
+		return BCME_ERROR;
 	}
 	fmts = MALLOC(osh, num_fmts  * sizeof(char *));
 	if (fmts == NULL) {
@@ -5971,3 +6473,62 @@ dhd_iov_li_delete(dhd_pub_t *dhd, dll_t *list_head)
 	}
 }
 #endif /* DUMP_IOCTL_IOV_LIST */
+
+#ifdef WL_CFGVENDOR_SEND_HANG_EVENT
+static void
+copy_hang_info_ioctl_timeout(dhd_pub_t *dhd, int ifidx, wl_ioctl_t *ioc)
+{
+	int remain_len;
+	int i;
+	int *cnt;
+	char *dest;
+	int bytes_written;
+	const uint32 *ioc_buf;
+
+	if (!dhd || !dhd->hang_info) {
+		DHD_ERROR(("%s dhd=%p hang_info=%p\n",
+			__FUNCTION__, dhd, (dhd ? dhd->hang_info : NULL)));
+		return;
+	}
+
+	cnt = &dhd->hang_info_cnt;
+	dest = dhd->hang_info;
+
+	memset(dest, 0, VENDOR_SEND_HANG_EXT_INFO_LEN);
+	(*cnt) = 0;
+
+	bytes_written = 0;
+	remain_len = VENDOR_SEND_HANG_EXT_INFO_LEN - bytes_written;
+
+	get_debug_dump_time(dhd->debug_dump_time_hang_str);
+	/* copy_debug_dump_time(dhd->debug_dump_time_str, dhd->debug_dump_time_hang_str); */
+
+	bytes_written += scnprintf(&dest[bytes_written], remain_len, "%d %d %s %d %d %d %d %d %d ",
+			HANG_REASON_IOCTL_RESP_TIMEOUT, VENDOR_SEND_HANG_EXT_INFO_VER,
+			dhd->debug_dump_time_hang_str,
+			ifidx, ioc->cmd, ioc->len, ioc->set, ioc->used, ioc->needed);
+	(*cnt) = HANG_FIELD_IOCTL_RESP_TIMEOUT_CNT;
+
+	clear_debug_dump_time(dhd->debug_dump_time_hang_str);
+
+	ioc_buf = (const uint32 *)ioc->buf;
+
+	remain_len = VENDOR_SEND_HANG_EXT_INFO_LEN - bytes_written;
+	bytes_written += scnprintf(&dest[bytes_written], remain_len,
+			"%08x", *(uint32 *)(ioc_buf++));
+	(*cnt)++;
+	if ((*cnt) >= HANG_FIELD_CNT_MAX) {
+		return;
+	}
+
+	for (i = 1; i < (uint32)(ioc->len / sizeof(uint32)) && *cnt <= HANG_FIELD_CNT_MAX;
+			i++, (*cnt)++) {
+		remain_len = VENDOR_SEND_HANG_EXT_INFO_LEN - bytes_written;
+		bytes_written += scnprintf(&dest[bytes_written], remain_len, "%c%08x",
+				HANG_RAW_DEL, *(uint32 *)(ioc_buf++));
+	}
+
+	DHD_INFO(("%s hang info len: %d data: %s\n",
+		__FUNCTION__, (int)strlen(dhd->hang_info), dhd->hang_info));
+}
+#endif /* WL_CFGVENDOR_SEND_HANG_EVENT */

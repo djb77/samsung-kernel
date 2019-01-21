@@ -1,0 +1,79 @@
+ /* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/{
+	pinctrl@104D0000 {
+		tdmb_pwr_on: tdmb-pwr-on {
+			samsung,pins = "gpd0-4";
+			samsung,pin-function = <1>; /* OUTPUT */
+			samsung,pin-pud = <0>;	/* PULL NONE */
+		};
+		tdmb_pwr_off: tdmb-pwr-off {
+			samsung,pins = "gpd0-4";
+			samsung,pin-function = <1>; /* OUTPUT */
+			samsung,pin-pud = <0>;	/* PULL NONE */
+			samsung,pin-drv = <0>;
+		};
+	};
+
+	pinctrl@164B0000 {
+		tdmb_irq_on: tdmb-irq-on {
+			samsung,pins = "gpa1-1";
+			samsung,pin-function = <0xf>; /* EXT_INT71[1] */
+			samsung,pin-pud = <0>;	/* PULL NONE */
+		};
+		tdmb_irq_off: tdmb-irq-off {
+			samsung,pins = "gpa1-1";
+			samsung,pin-function = <0>; /* INPUT */
+			samsung,pin-pud = <1>;	/* PULL DOWN */
+		};
+	};
+
+	spi_9: spi@108A0000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		num-cs = <1>;
+
+		dma-mode;
+		dmas = <&pdma0 19 0
+			&pdma0 18 0>;
+		dma-names = "tx", "rx";
+
+		status = "ok";
+
+		pinctrl-names = "default", "idle";
+		pinctrl-0 = <&spi9_bus &spi9_cs>;
+		pinctrl-1 = <&spi9_idle>;
+
+		tdmb-spi@0 {
+			compatible = "tdmb_spi_comp";
+			reg = <0>;
+			spi-max-frequency = <9600000>;
+			controller-data {
+				cs-gpio = <&gpe2 2 0>;
+				samsung,spi-feedback-delay = <0>;
+			};
+		};
+	};
+
+	tdmb_data {
+		compatible = "samsung,tdmb";
+		pinctrl-names = "tdmb_on", "tdmb_off";
+		pinctrl-0 = <&tdmb_pwr_on &tdmb_irq_on>;
+		pinctrl-1 = <&tdmb_pwr_off &tdmb_irq_off>;
+		tdmb_pwr_en = <&gpd0 4 0>;
+		tdmb_irq = <&gpa1 1 0>;
+		tdmb_use_irq;
+		tdmb_xtal_freq = <24000>;
+	};
+
+};

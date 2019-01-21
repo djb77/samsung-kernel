@@ -115,6 +115,11 @@ void show_page_inode(struct page *page)
 	if (!mapping)
 		return;
 
+	if (unlikely(PageSwapCache(page))) {
+		pr_info("page is swapcache\n");
+		return;
+	}
+
 	inode = mapping->host;
 
 	spin_lock(&inode->i_lock);

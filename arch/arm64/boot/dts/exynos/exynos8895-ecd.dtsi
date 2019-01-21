@@ -1,0 +1,83 @@
+/*
+ * SAMSUNG EXYNOS8895 ECD device tree source
+ *
+ * Copyright (c) 2016 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * SAMSUNG EXYNOS8895 ECD device nodes are listed in this file.
+ * EXYNOS8895 based board files can include this file and provide
+ * values for board specfic bindings.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+/ {
+	serial_0: uart@10430000 {
+		status = "disabled";
+	};
+
+	/* UART_DBG */
+	exynos_console_debugger {
+		compatible = "samsung,exynos_console_debugger";
+		reg = <0x0 0x10430000 0x100>;
+		interrupts = <0 385 0>;
+		interrupt-names = "uart_irq";
+		pinctrl-names = "default";
+		pinctrl-0 = <&uart0_bus>;
+		uart_port = <0>;
+		/* <sfr_base_address sfr_size> */
+		sfr_reg = <0x10000000 0x10000000>;
+		status = "ok";
+	};
+
+	debugger@16000000 {
+		compatible = "exynos,debugger";
+		reg = <0x0 0x17006000 0x100>;
+		#address-cells = <1>;
+		sj-status-bit = <4>;
+		gic-icpend-reg = <0x10201280 0x100>;
+		cpus {
+			cl0-0@164100000 {
+				dbg-reg = <0x17410000 0x1000>;
+				cti-reg = <0x17420000 0x1000>;
+				interrupts = <0 44 0>;
+			};
+			cl0-1@165100000 {
+				dbg-reg = <0x17510000 0x1000>;
+				cti-reg = <0x17520000 0x1000>;
+				interrupts = <0 45 0>;
+			};
+			cl0-2@166100000 {
+				dbg-reg = <0x17610000 0x1000>;
+				cti-reg = <0x17620000 0x1000>;
+				interrupts = <0 46 0>;
+			};
+			cl0-3@167100000 {
+				dbg-reg = <0x17710000 0x1000>;
+				cti-reg = <0x17720000 0x1000>;
+				interrupts = <0 47 0>;
+			};
+			cl1-0@168100000 {
+				dbg-reg = <0x17810000 0x1000>;
+				cti-reg = <0x17820000 0x1000>;
+				interrupts = <0 28 0>;
+			};
+			cl1-1@169100000 {
+				dbg-reg = <0x17910000 0x1000>;
+				cti-reg = <0x17920000 0x1000>;
+				interrupts = <0 29 0>;
+			};
+			cl1-2@16a100000 {
+				dbg-reg = <0x17a10000 0x1000>;
+				cti-reg = <0x17a20000 0x1000>;
+				interrupts = <0 30 0>;
+			};
+			cl1-3@16b100000 {
+				dbg-reg = <0x17b10000 0x1000>;
+				cti-reg = <0x17b20000 0x1000>;
+				interrupts = <0 31 0>;
+			};
+		};
+	};
+};
