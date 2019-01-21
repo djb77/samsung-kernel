@@ -1,0 +1,45 @@
+#
+# Imagis IST30XXC Touchscreen driver
+#
+
+config TOUCHSCREEN_IST30XXC
+  tristate "IST30XXC I2C Touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have the Imagis IST30XXC I2C touchscreen
+	  connected to your system.
+
+config TOUCHSCREEN_IST3026C
+  tristate "IST3026C I2C Touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have the Imagis IST3026C I2C touchscreen
+	  connected to your system.
+
+config TOUCHSCREEN_IST3032C
+  tristate "IST3032C I2C Touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have the Imagis IST3032C I2C touchscreen
+	  connected to your system.
+
+config TOUCHSCREEN_IST3038C
+  tristate "IST3038C I2C Touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have the Imagis IST3038C I2C touchscreen
+	  connected to your system.
+
+config TOUCHSCREEN_IST3044C
+  tristate "IST3044C I2C Touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have the Imagis IST3044C I2C touchscreen
+	  connected to your system.
+
+config TOUCHSCREEN_IST3048C
+  tristate "IST3048C I2C Touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have the Imagis IST3048C I2C touchscreen
+	  connected to your system.

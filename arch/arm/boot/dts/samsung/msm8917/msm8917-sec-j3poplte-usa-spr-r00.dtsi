@@ -1,0 +1,460 @@
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "msm8917-sec-lte-common.dtsi"
+#include "msm8917-pinctrl-sec-j3poplte-usa-spr-r00.dtsi"
+#include "msm8917-camera-sensor-cdp-j3poplte-r00.dtsi"
+
+#include "msm8917-sec-j3pop-battery-common.dtsi"
+#include "msm8917-j3poplte-sm5703.dtsi"
+
+&pm8937_vadc {
+	chan@11 {
+		label = "mpp2_div1";
+		reg = <0x11>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "absolute";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <5>;
+		qcom,fast-avg-setup = <0>;
+	};
+};
+
+&pm8937_mpps {
+	mpp@a100 {
+		reg = <0xa100 0x100>;
+		qcom,pin-num = <2>;
+		qcom,mode = <4>; /* AIN input */
+		qcom,invert = <0>;
+		qcom,output-type = <0>; /* CMOS */
+		qcom,ain-route = <1>; /* AMUX 6 */
+		qcom,master-en = <0>;
+		qcom,src-sel = <0>; /* Function constant */
+		qcom,vin-sel = <3>;
+		status = "okay";
+	};
+};
+
+&soc {
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_vol_key_active &gpio_home_key_active>;
+		pinctrl-1 = <&gpio_vol_key_suspend &gpio_home_key_suspend>;
+
+		home_key {
+			label = "home_key";
+			gpios = <&tlmm 128 0x1>;
+			linux,input-type = <1>;
+			linux,code = <KEY_HOMEPAGE>;
+			debounce-interval = <15>;
+		};
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&tlmm 127 0x1>;
+			linux,input-type = <1>;
+			linux,code = <KEY_VOLUMEUP>;
+			debounce-interval = <15>;
+		};
+	};
+
+	i2c_7: i2c@7 {
+		cell-index = <7>;
+		compatible = "i2c-gpio";
+		gpios = <&tlmm 87 0 /* sda */
+			&tlmm 88 0 /* scl */
+			>;
+		i2c-gpio,delay-us = <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		tc350@20{
+			compatible = "coreriver,tc3xxk";
+			reg = <0x20>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <48 0>;
+			pinctrl-names = "default", "touchkey_active", "touchkey_suspend";
+			pinctrl-0 = <&tkey_i2c_active &tkey_int_active>;
+			pinctrl-1 = <&tkey_i2c_active &tkey_int_active>;
+			pinctrl-2 = <&tkey_i2c_suspend &tkey_int_suspend>;
+			coreriver,fw_name = "tk_coreriver/tc350k_j3pop.fw";
+			coreriver,sda-gpio = <&tlmm 87 0>;
+			coreriver,scl-gpio = <&tlmm 88 0>;
+			coreriver,irq-gpio = <&tlmm 48 0>;
+			coreriver,tkey_en-gpio = <&tlmm 92 0>;
+			coreriver,sensing_ch_num = <0x4>;
+			coreriver,tsk_ic_num = <0x1>; /* tc300k : 0x00, tc350k : 0x01 */
+			coreriver,use_bitmap = <1>;
+		};
+	};
+
+	/delete-node/ i2c@8;
+
+	i2c_12: i2c@12 {
+		muic-sm5703@25 {
+			status = "okay";
+			compatible = "muic-universal";
+			reg = <0x25>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <28 0>;
+			muic-universal,irq-gpio = <&tlmm 28 0x00>;
+			sm5703,wakeup;
+			muic-universal,chip_name = "sm,sm5703";
+			muic-universal,afc-support = <0>;
+			pinctrl-names = "muic_i2c_pins_default",
+				"muic_i2c_pins_active",
+				"muic_i2c_pins_suspend";
+			pinctrl-0 = <&sm5703_i2c_default &sm5703_interrupt_default>;
+			pinctrl-1 = <&sm5703_i2c_active &sm5703_interrupt_default>;
+			pinctrl-2 = <&sm5703_i2c_suspend &sm5703_interrupt_default>;
+		};
+
+		sm5703-mfd@49 {
+			pinctrl-0 = <&sm5703_mfd_interrupt_default &sm5703_mfd_mrstb_default &sm5703_chg_en_default>;
+		};
+	};
+
+	i2c_3: i2c@78b7000 { /* BLSP1 QUP3 */
+		status = "ok";
+
+		synaptics_dsx@4b {
+			compatible = "synaptics,dsx";
+			reg = <0x4b>;
+			pinctrl-names = "default", "on_state", "off_state";
+			pinctrl-0 = <&tsp_int_active>;
+			pinctrl-1 = <&tsp_int_active>;
+			pinctrl-2 = <&tsp_int_suspend>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <65 0>;
+			synaptics,irq_gpio = <&tlmm 65 0>;
+			synaptics,irq_type = <8200>;
+			synaptics,max_coords = <720 1280>;
+			synaptics,num_lines = <29 16>;
+			synaptics,project_name = "J3pop", "G327";
+			synaptics,ub-i2c-addr = <0x2c>;
+			synaptics,reset-delay-ms = <150>;
+			synaptics,firmware_name = "tsp_synaptics/td4100_j3pop.fw";
+			synaptics,firmware_name_bl = "tsp_synaptics/td4100_j3pop_recovery.fw";
+		};
+	};
+
+	i2c_4: i2c@78b8000 { /* BLSP1 QUP4 */
+		status = "ok";
+
+		k2hh-i2c@1D {
+			compatible = "k2hh-i2c";
+			reg = <0x1D>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&acc_int_active>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <42 0 0>;
+			k2hh,irq_gpio = <&tlmm 42 0>;
+			k2hh,vio-supply = <&pm8917_l5>;
+			k2hh,axis_map_x = <0>;
+			k2hh,axis_map_y = <1>;
+			k2hh,axis_map_z = <2>;
+			k2hh,negate_x = <1>;
+			k2hh,negate_y = <1>;
+			k2hh,negate_z = <1>;
+			k2hh,poll_interval = <100>;
+			k2hh,min_interval = <2>;
+		};
+
+		cm36672p@60 {
+			compatible = "cm36672p";
+			reg = <0x60>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&prox_int_active>;
+			interrupt-parent =  <&tlmm>;
+			interrupts = <43 0 0>;
+			cm36672p,irq_gpio = <&tlmm 43 0>;
+			cm36672p,vdd = <&pm8917_l17>;
+			cm36672p,vio = <&pm8917_l5>;
+			cm36672p,default_hi_thd = <17>;
+			cm36672p,default_low_thd = <11>;
+			cm36672p,cancel_hi_thd = <10>;
+			cm36672p,cancel_low_thd = <7>;
+			cm36652p,default_trim = <0>;
+			cm36672p,ps_duty = <2>;
+			cm36672p,ps_pers = <2>;
+			cm36672p,ps_it = <5>;
+			cm36672p,led_current = <5>;
+			cm36672p,ps_smart_pers = <1>;
+		};
+	};
+
+	i2c_22: i2c@22 {
+		cell-index = <22>;
+		compatible = "i2c-gpio";
+		gpios = <&tlmm 21 0 /* sda */
+			&tlmm 20 0 /* scl */
+			>;
+		i2c-gpio,delay-us = <2>;
+
+		isl98611_backlight@29 {
+			compatible = "isl98611,backlight-control";
+			reg = <0x29>;
+			isl98611_en_gpio = <&tlmm 94 0x00>;
+			isl98611_enp_gpio = <&tlmm 89 0x00>;
+			isl98611_enn_gpio = <&tlmm 90 0x00>;
+
+			blic_init_data = [
+			/* address		data */
+				01			00
+				02			BF
+				03			02
+				04			14
+				05			14
+				06			F4
+				10			FF
+				11			07
+				12			BF
+				13			87
+				14			FD
+				16			F5
+				17			8D
+			];
+		};
+	};
+
+	hbtp {
+		compatible = "qcom,hbtp-input";
+		vcc_ana-supply = <&pm8917_l10>;
+		vcc_dig-supply = <&pm8917_l5>;
+		qcom,afe-load = <50000>;
+		qcom,afe-vtg-min = <2850000>;
+		qcom,afe-vtg-max = <2850000>;
+		qcom,dig-load = <15000>;
+		qcom,dig-vtg-min = <1800000>;
+		qcom,dig-vtg-max = <1800000>;
+	};
+
+	hall {
+		status = "okay";
+		compatible = "hall";
+		interrupt-parent = <&tlmm>;
+		interrupts = <97 0>;
+		pinctrl-names = "hall_gpio_default", "hall_gpio_sleep";
+                pinctrl-0 = <&hall_int_default>;
+                pinctrl-1 = <&hall_int_sleep>;
+		hall,gpio_flip_cover = <&tlmm 97 0>;
+	};
+	sec_smem@0 {
+		compatible = "samsung,sec-smem";
+		status = "okay";
+	};
+
+	msm_vibrator {
+		compatible = "vibrator";
+		motor-vdd_type = <1>; /* 0: gpio, 1: pmic */
+		vibr_vdd-supply = <&motor_regulator>;
+	};
+
+	usb_noti: usb-notifier {
+		compatible = "samsung,usb-notifier";
+		qcom,disable_control_en = <1>;
+		qcom,unsupport_host_en = <0>;
+	};
+
+	det_zones: det_zones {
+		#list-det-cells = <4>;
+	};
+
+	but_zones: but_zones {
+		#list-but-cells = <3>;
+	};
+
+	earjack {
+		compatible = "sec_jack";
+		detect-gpio = <&tlmm 61 0x0>;
+		key-gpio = <&tlmm 93 0x0>;
+		det-dbtime = <100>;
+		key-dbtime = <30>;
+
+		det-zones-list = <&det_zones 0 10000 10 2>,
+				 <&det_zones 950 10000 10 2>,
+				 <&det_zones 951 10000 10 1>,
+				 <&det_zones 9999 10000 10 1>;
+		but-zones-list = <&but_zones 226 0 310>, /* KEY_MEDIA:226 */
+				 <&but_zones 582 311 350>, /* KEY_VOICECOMMAND:582 */
+				 <&but_zones 115 351 470>, /* KEY_VOLUMEUP:115 */
+				 <&but_zones 114 471 999>; /* KEY_VOLUMEDOWN:114 */
+
+		pinctrl-names = "earjack_gpio_active",
+				"earjack_gpio_suspend";
+		pinctrl-0 = <&earjack_det_act &earjack_switch_act>;
+		pinctrl-1 = <&earjack_det_sus &earjack_switch_sus>;
+	};
+
+	sound {
+		qcom,mpp-standalone-mode;
+		qcom,mpp-channel-scaling = <2 1 1>;
+		qcom,earjack-adc = <&pm8937_mpps 2 0>;
+		qcom,earjack-read-vadc = <&pm8937_vadc>;
+		qcom,audio-routing =
+			"RX_BIAS", "MCLK",
+			"SPK_RX_BIAS", "MCLK",
+			"INT_LDO_H", "MCLK",
+			"MIC BIAS External", "Handset Mic",
+			"MIC BIAS External", "Secondary Mic",
+			"AMIC1", "MIC BIAS External",
+			"AMIC2", "Headset Mic",
+			"AMIC3", "MIC BIAS External";
+	};
+};
+
+/*
+&flash_led {
+	compatible = "qcom,qpnp-flash-led";
+	reg = <0xd300 0x100>;
+	pinctrl-names = "flash_led_enable","flash_led_disable";
+	pinctrl-0 = <&rear_flash_led_enable>;
+	pinctrl-1 = <&rear_flash_led_disable>;
+	qcom,follow-otst2-rb-disabled;
+};
+
+&pmi_haptic{
+	qcom,actuator-type = "lra";
+	qcom,wave-play-rate-us = <4165>;
+	qcom,lra-auto-res-mode="qwd";
+	qcom,lra-high-z="opt1";
+	qcom,lra-res-cal-period = <0>;
+};
+*/
+
+&blsp1_uart2 {
+	status = "ok";
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&uart_console_active>;
+	pinctrl-1 = <&uart_console_sleep>;
+};
+
+&sdhc_1 {
+	/* device core power supply */
+	vdd-supply = <&pm8917_l8>;
+	qcom,vdd-always-on;
+	qcom,vdd-lpm-sup;
+	qcom,vdd-voltage-level = <2900000 2900000>;
+	qcom,vdd-current-level = <200 570000>;
+
+	/* device communication power supply */
+	vdd-io-supply = <&pm8917_l5>;
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-lpm-sup;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <200 325000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on &sdc1_rclk_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off &sdc1_rclk_off>;
+
+	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000 192000000
+								384000000>;
+	qcom,nonremovable;
+	qcom,bus-speed-mode = "HS400_1p8v", "HS200_1p8v", "DDR_1p8v";
+
+	status = "ok";
+};
+
+&sdhc_2 {
+	/* device core power supply */
+	vdd-supply = <&pm8917_l11>;
+	qcom,vdd-voltage-level = <2950000 2950000>;
+	qcom,vdd-current-level = <15000 800000>;
+
+	/* device communication power supply */
+	vdd-io-supply = <&pm8917_l12>;
+	qcom,vdd-io-voltage-level = <1800000 2950000>;
+	qcom,vdd-io-current-level = <200 22000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+
+	#address-cells = <0>;
+	interrupt-parent = <&sdhc_2>;
+	interrupts = <0 1 2>;
+	#interrupt-cells = <1>;
+	interrupt-map-mask = <0xffffffff>;
+	interrupt-map = <0 &intc 0 125 0
+		1 &intc 0 221 0
+		2 &tlmm 67 0>;
+
+	interrupt-names = "hc_irq", "pwr_irq", "status_irq";
+	cd-gpios = <&tlmm 67 0x1>;
+
+	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000
+								200000000>;
+	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
+
+	status = "ok";
+};
+
+/* PM8937 GPIO configuration */
+&pm8937_gpios {
+	gpio@c100 {
+		qcom,mode = <0>;
+		qcom,vin-sel = <3>;
+		qcom,dtest-sel = <1>;
+		status = "okay";
+	};
+	gpio@c400 { /* GPIO 5 */
+		/* NFC_CLK_REQ */
+		qcom,mode = <0>; /* QPNP_PIN_MODE_DIG_IN */
+		qcom,pull = <5>; /* QPNP_PIN_PULL_NONE */
+		qcom,vin-sel = <2>; /* QPNP_PIN_VIN2 */
+		qcom,src-sel = <0>; /* QPNP_PIN_SEL_FUNC_0 */
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+	/* GPIO 8 */
+	gpio@c700 {
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
+};
+
+#include "../../samsung/msm8917/msm8917-mdss-panels.dtsi"
+#include "../../../../../../drivers/video/msm/mdss/samsung/TD4100_C5001H3F/dsi_panel_TD4100_C5001H3F_hd_video.dtsi"
+#include "../../../../../../drivers/video/msm/mdss/samsung/PBA_BOOTING_HD/dsi_panel_PBA_BOOTING_hd_video.dtsi"
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi {
+	hw-config = "single_dsi";
+};
+
+&ss_dsi_panel_TD4100_C5001H3F_HD {
+	samsung,panel-extra-power-gpio1 =<&tlmm 95 0>; /*1.8V VDD1*/
+	samsung,panel-extra-power-gpio2 =<&tlmm 91 0>; /*TSP ENABLE*/
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&ss_dsi_panel_TD4100_C5001H3F_HD>;
+
+	/* IN_CELL panel control LCD & TSP power at the same time */
+	qcom,platform-reset-gpio = <&tlmm 60 0>;
+
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_blic_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_blic_suspend>;
+};
+

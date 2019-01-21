@@ -1,0 +1,16 @@
+#
+# Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_HIMAX_I2C
+        tristate "HIMAX 83100 incell serious i2c touchscreen"
+		depends on I2C
+		help
+		This enables support for HIMAX 83100 over I2C based touchscreens.
+
+config TOUCHSCREEN_HIMAX_DEBUG
+        tristate "HIMAX debug function"
+		depends on TOUCHSCREEN_HIMAX_I2C
+		help
+		This enables support for HIMAX debug function.
+

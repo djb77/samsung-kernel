@@ -1,0 +1,161 @@
+/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/ {
+	aliases {
+		spi8 = &spi_8;
+	};
+};
+
+&soc {
+	tlmm_pinmux: pinctrl@1000000 {
+		spi8 {
+			spi8_default: spi8_default {
+				/* active state */
+				mux {
+					/* MOSI, MISO, CLK */
+					pins = "gpio96", "gpio97", "gpio99";
+					function = "blsp_spi8";
+				};
+
+				config {
+					pins = "gpio96", "gpio97", "gpio99";
+					drive-strength = <12>; /* 12 MA */
+					bias-disable = <0>; /* No PULL */
+				};
+			};
+
+			spi8_sleep: spi8_sleep {
+				/* suspended state */
+				mux {
+					/* MOSI, MISO, CLK */
+					pins = "gpio96", "gpio97", "gpio99";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio96", "gpio97", "gpio99";
+					drive-strength = <2>; /* 2 MA */
+					bias-pull-down; /* PULL Down */
+				};
+			};
+
+			spi8_cs0_active: spi8_cs0_active {
+				/* CS */
+				mux {
+					pins = "gpio98";
+					function = "blsp_spi8";
+				};
+
+				config {
+					pins = "gpio98";
+					drive-strength = <2>;
+					bias-disable = <0>;
+				};
+			};
+
+			spi8_cs0_sleep: spi8_cs0_sleep {
+				/* CS */
+				mux {
+					pins = "gpio98";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio98";
+					drive-strength = <2>;
+					bias-disable = <0>;
+				};
+			};
+		};
+
+		tdmb_gpio_pinctrl {
+			qcom,num-grp-pins = <2>;
+			qcom,pin-func = <0>;
+			label = "tdmb_gpio";
+			tdmb_gpio_on: tdmb_gpio_on {
+				mux {
+					pins = "gpio64", "gpio72";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio64", "gpio72";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+			tdmb_gpio_off: tdmb_gpio_off {
+				mux {
+					pins = "gpio64", "gpio72";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio64", "gpio72";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+	};
+	spi_8: spi@7af8000 {  /* BLSP2 QUP4 */
+		compatible = "qcom,spi-qup-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "spi_physical", "spi_bam_physical";
+		reg = <0x7af8000 0x600>,
+			<0x7ac4000 0x1f000>;
+		interrupt-names = "spi_irq", "spi_bam_irq";
+		interrupts = <0 302 0>, <0 239 0>;
+		spi-max-frequency = <19200000>;
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+			 <&clock_gcc clk_gcc_blsp2_qup4_spi_apps_clk>;
+		clock-names = "iface_clk", "core_clk";
+		pinctrl-names = "spi_default", "spi_sleep";
+		pinctrl-0 = <&spi8_default &spi8_cs0_active>;
+		pinctrl-1 = <&spi8_sleep &spi8_cs0_sleep>;
+
+		qcom,gpio-mosi = <&tlmm 96 0x00>;
+		qcom,gpio-miso = <&tlmm 97 0x00>;
+		qcom,gpio-cs0  = <&tlmm 98 0x00>;
+		qcom,gpio-clk  = <&tlmm 99 0x00>;
+
+		qcom,infinite-mode = <0>;
+		qcom,use-bam;
+		qcom,use-pinctrl;
+		qcom,ver-reg-exists;
+		qcom,bam-consumer-pipe-index = <10>;
+		qcom,bam-producer-pipe-index = <11>;
+		qcom,master-id = <84>;
+		qcom,rt-priority;
+		
+		status = "ok";
+
+		tdmb-spi@0 {
+			compatible = "tdmb_spi_comp";
+			reg = <0>;
+			spi-max-frequency = <9600000>;
+		};
+	};
+
+	tdmb_data {
+		compatible = "samsung,tdmb";
+		pinctrl-names = "tdmb_on", "tdmb_off", "tdmb_gpio_init";
+		pinctrl-0 = <&tdmb_gpio_on>;
+		pinctrl-1 = <&tdmb_gpio_off>;
+		pinctrl-2 = <&tdmb_gpio_off &spi8_sleep &spi8_cs0_sleep>;
+		tdmb_pwr_en = <&tlmm 64 0x00>;
+		tdmb_irq = <&tlmm 72 0x00>;
+		tdmb_use_irq;
+		tdmb_xtal_freq = <24000>;
+	};
+
+};

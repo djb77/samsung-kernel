@@ -1,0 +1,55 @@
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "../../qcom/msm8917.dtsi"
+#include "msm8917-sec-elitelte-chn-r02.dtsi"
+
+/ {
+	model = "Samsung ELITELTE CHN PROJECT Rev02";
+	compatible = "qcom,msm8917-mtp", "qcom,msm8917", "qcom,mtp";
+	qcom,board-id= <8 2>;
+	qcom,pmic-id = <0x10019 0x020037 0x0 0x0>;
+};
+
+&soc{
+	sec_thermistor {
+		compatible = "samsung,sec-ap-thermistor";
+		qcom,therm-vadc = <&pm8937_vadc>;
+		status = "okay";
+		adc_channel = <19>;
+		adc_array = <25529 26599 26705 27028 27320 27746 28245 28390
+                                              28477 28491 28632 28865 28997 29103 29211 29310
+                                              29478 29660 29877 30025 30198 30312 30492 30656
+                                              30825 31002 31200 31392 31520 32004 32120 32224
+                                              32682 32870 33012 33128 33200 33610 33942 33979
+                                              34152 34333 34520 34792 34984 35459 35961 36092
+                                              36200 36382 36683 37007 37225 37420 37615 37799
+                                              37964 38179 38310 38520 38699 38881 39100 39210
+                                              39314 39379 39658 39810 39963 40137 40199 40277
+                                              40399 40460 40662 40742 40857 41017 41089 41157
+                                              41253 41317 41417 41517 41597 41677 41763 42053
+                                              42305>;
+  
+		temp_array = <900 850 800 750 700 650 600 590 580 570
+			560 550 540 530 520 510 500 490 480 470
+			460 450 440 430 420 410 400 390 380 370
+			360 350 340 330 320 310 300 290 280 270
+			260 250 240 230 220 210 200 190 180 170
+			160 150 140 130 120 110 100 90 80 70
+			60 50 40 30 20 10 0 (-10) (-20) (-30)
+			(-40) (-50) (-60) (-70) (-80) (-90) (-100) (-110) (-120) (-130)
+			(-140) (-150) (-160) (-170) (-180) (-190) (-200) (-250) (-300)>;
+	};
+};

@@ -1,0 +1,532 @@
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "msm8917-sec-lte-common.dtsi"
+#include "msm8917-pinctrl-sec-j1y17lte-eur-open-r01.dtsi"
+#include "msm8917-camera-sensor-cdp-j1y17lte-r00.dtsi"
+
+#include "msm8917-sec-j1y17lte-battery-common.dtsi"
+#include "msm8917-j1y17lte-sm5703.dtsi"
+
+#define GPIOF_DIR_OUT   (0 << 0)
+#define GPIOF_INIT_HIGH (1 << 1)
+#define GPIOF_OUT_INIT_HIGH     (GPIOF_DIR_OUT | GPIOF_INIT_HIGH)
+
+#define REGTYPE_PANEL_RESET	0 /* control display reset */
+#define REGTYPE_BL_CONFIG	1 /* BLIC initial configuration via I2c */
+#define REGTYPE_GPIO_REGULATOR	2 /* GPIO regulator */
+/ {
+
+	reserved-memory {
+		/delete-node/ secure_region@0;
+		secure_mem: secure_region@0 {
+			compatible = "shared-dma-pool";
+			reusable;
+			alignment = <0 0x400000>;
+			size = <0 0x7000000>;
+		};		
+	};
+
+	aliases {
+		/delete-property/ i2c4;
+		i2c6 = &i2c_6;
+	};
+};
+
+&pm8937_vadc {
+	chan@11 {
+		label = "mpp2_div1";
+		reg = <0x11>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "absolute";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <5>;
+		qcom,fast-avg-setup = <0>;
+	};
+};
+
+&pm8937_mpps {
+	mpp@a100 {
+		reg = <0xa100 0x100>;
+		qcom,pin-num = <2>;
+		qcom,mode = <4>; /* AIN input */
+		qcom,invert = <1>; /* Enable MPP */
+		qcom,ain-route = <1>; /* AMUX 6 */
+		qcom,master-en = <1>;
+		qcom,src-sel = <0>; /* Function constant */
+		qcom,vin-sel = <3>;
+		status = "okay";
+	};
+	mpp@a300 {
+		qcom,vin-sel = <3>;
+		status = "okay";
+	};
+};
+
+&soc {
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_vol_key_active &gpio_home_key_active>;
+		pinctrl-1 = <&gpio_vol_key_suspend &gpio_home_key_suspend>;
+
+		home_key {
+			label = "home_key";
+			gpios = <&tlmm 128 0x1>;
+			linux,input-type = <1>;
+			linux,code = <KEY_HOMEPAGE>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&tlmm 127 0x1>;
+			linux,input-type = <1>;
+			linux,code = <KEY_VOLUMEUP>;
+			debounce-interval = <15>;
+		};
+	};
+
+	i2c_3: i2c@78b7000 { /* BLSP1 QUP3 */
+		status = "ok";
+
+		touchscreen@50 {
+			compatible = "imagis,ist30xx-ts";
+			reg = <0x50>;
+			pinctrl-names = "on_state", "off_state";
+			pinctrl-0 = <&tsp_vdd_active &tsp_int_active >;
+			pinctrl-1 = <&tsp_vdd_sleep &tsp_int_suspend>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <65 0>;
+			imagis,irq-gpio = <&tlmm 65 0>;
+			imagis,power-gpioen; /* imagis,power-gpioen - enable by GPIO, imagis,power-ldoen -> enable by ldo */
+			imagis,power-gpio = <&tlmm 91 0>;
+			imagis,fw-bin = <1>;
+			imagis,octa-hw = <0>;
+			imagis,ic-version = "ist3038h";
+			imagis,project-name = "j1";
+			imagis,pat_function = <1>;
+			imagis,afe_base = <0x0000>;
+		};
+	};
+
+	i2c_6: i2c@7af6000 { /* BLSP2 QUP2 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x7af6000 0x600>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 300 0>;
+		qcom,clk-freq-out = <400000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp2_qup2_i2c_apps_clk>;
+
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_6_active>;
+		pinctrl-1 = <&i2c_6_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,master-id = <84>;
+		dmas = <&dma_blsp2 6 64 0x20000020 0x20>,
+			<&dma_blsp2 7 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+		status = "ok";
+
+		k2hh-i2c@1D {
+			compatible = "k2hh-i2c";
+			reg = <0x1D>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&acc_int_active>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <42 0 0>;
+			k2hh,irq_gpio = <&tlmm 42 0>;
+			k2hh,vio-supply = <&pm8917_l6>;
+			k2hh,axis_map_x = <0>;
+			k2hh,axis_map_y = <1>;
+			k2hh,axis_map_z = <2>;
+			k2hh,negate_x = <0>;
+			k2hh,negate_y = <0>;
+			k2hh,negate_z = <1>;
+			k2hh,poll_interval = <100>;
+			k2hh,min_interval = <2>;
+		};
+
+		stk3013@48 {
+			compatible = "stk,stk3013";
+			reg = <0x48>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&prox_int_active>;
+			interrupt-parent =  <&tlmm>;
+			interrupts = <43 0 0>;
+			stk,vdd-supply = <&proximity_vdd>;
+			stk,vled-supply = <&pm8917_l17>;
+			stk,vio-supply = <&pm8917_l6>;
+			stk,regulator_divided = <0>;
+			stk,irq-gpio = <&tlmm 43 0>;
+			stk,state-reg = <0x2d>;
+			stk,psctrl-reg = <0x71>;
+			stk,alsctrl-reg = <0x2A>;
+			stk,ledctrl-reg = <0xBF>;
+			stk,wait-reg = <0x03>;
+			stk,ps-thd-h = <20>;
+			stk,ps-thd-l = <13>;
+			stk,ps-cancel-thd-h = <10>;
+			stk,ps-cancel-thd-l = <7>;
+			stk,ps-cal-skip-adc = <10>;
+			stk,ps-cal-fail-adc = <23>;
+			stk,ps-default-offset = <3>;
+			stk,transmittance = <500>;
+		};
+	};
+
+	hbtp {
+		compatible = "qcom,hbtp-input";
+		vcc_ana-supply = <&pm8917_l10>;
+		vcc_dig-supply = <&pm8917_l5>;
+		qcom,afe-load = <50000>;
+		qcom,afe-vtg-min = <2850000>;
+		qcom,afe-vtg-max = <2850000>;
+		qcom,dig-load = <15000>;
+		qcom,dig-vtg-min = <1800000>;
+		qcom,dig-vtg-max = <1800000>;
+	};
+
+	sec_smem@0 {
+		compatible = "samsung,sec-smem";
+		status = "okay";
+	};
+
+	msm_vibrator {
+		compatible = "vibrator";
+		motor-vdd_type = <1>; /* 0: gpio, 1: pmic */
+		vibr_vdd-supply = <&motor_regulator>;
+	};
+
+	usb_noti: usb-notifier {
+		compatible = "samsung,usb-notifier";
+		qcom,disable_control_en = <1>;
+		qcom,unsupport_host_en = <0>;
+	};
+
+	det_zones: det_zones {
+		#list-det-cells = <4>;
+	};
+
+	but_zones: but_zones {
+		#list-but-cells = <3>;
+	};
+
+	earjack {
+		compatible = "sec_jack";
+		detect-gpio = <&tlmm 61 0x0>;
+		key-gpio = <&tlmm 93 0x0>;
+		det-dbtime = <100>;
+		key-dbtime = <30>;
+
+		det-zones-list = <&det_zones 0 10000 10 2>,
+				 <&det_zones 950 10000 10 2>,
+				 <&det_zones 951 10000 10 1>,
+				 <&det_zones 2000 10000 10 1>;
+		but-zones-list = <&but_zones 226 0 297>, /* KEY_MEDIA:226 */
+				 <&but_zones 582 298 340>, /* KEY_VOICECOMMAND:582 */
+				 <&but_zones 115 341 450>, /* KEY_VOLUMEUP:115 */
+				 <&but_zones 114 451 1000>; /* KEY_VOLUMEDOWN:114 */
+
+		pinctrl-names = "earjack_gpio_active",
+				"earjack_gpio_suspend";
+		pinctrl-0 = <&earjack_det_act &earjack_switch_act>;
+		pinctrl-1 = <&earjack_det_sus &earjack_switch_sus>;
+	};
+
+	sound {
+		qcom,mpp-standalone-mode;
+	 	qcom,mpp-channel-scaling = <2 1 1>;
+		qcom,earjack-read-vadc = <&pm8937_vadc>;
+		
+		qcom,audio-routing =
+			"RX_BIAS", "MCLK",
+			"SPK_RX_BIAS", "MCLK",
+			"INT_LDO_H", "MCLK",
+			"MIC BIAS External", "Handset Mic",
+			"MIC BIAS External", "Secondary Mic",
+			"AMIC1", "MIC BIAS External",
+			"AMIC2", "Headset Mic",
+			"AMIC3", "MIC BIAS External";
+	};
+	
+	leds_ktd2692 {
+		compatible = "ktd2692";
+		flash-en-gpio= <&tlmm 40 0x0>;
+		status = "okay";
+		pinctrl-names ="front_fled_default","front_fled_sleep";
+		pinctrl-0 = <&front_flash_active>;
+		pinctrl-1 = <&front_flash_sleep>;
+	};	
+};
+
+&pm8937_cajon_dig {
+	qcom,cdc-micbias-cfilt-mv = <2800000>;
+	qcom,cfilt_gnd_ref; /* 0x142, bit[1]:0 */
+	qcom,tx2n_int_pullup_en; /* 0x143, bit[3]:1 */
+	qcom,ext_pullup_imp;  /* 0x143, bit[4]:0 */
+	qcom,tx1n_cfilt_ref_sel; /* 0x145, bit[0]:0 */
+};
+
+/*
+&flash_led {
+	compatible = "qcom,qpnp-flash-led";
+	reg = <0xd300 0x100>;
+	pinctrl-names = "flash_led_enable","flash_led_disable";
+	pinctrl-0 = <&rear_flash_led_enable>;
+	pinctrl-1 = <&rear_flash_led_disable>;
+	qcom,follow-otst2-rb-disabled;
+};
+
+&pmi_haptic{
+	qcom,actuator-type = "lra";
+	qcom,wave-play-rate-us = <4165>;
+	qcom,lra-auto-res-mode="qwd";
+	qcom,lra-high-z="opt1";
+	qcom,lra-res-cal-period = <0>;
+};
+*/
+
+&blsp1_uart2 {
+	status = "ok";
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&uart_console_active>;
+	pinctrl-1 = <&uart_console_sleep>;
+};
+
+&sdhc_1 {
+	/* device core power supply */
+	vdd-supply = <&pm8917_l8>;
+	qcom,vdd-always-on;
+	qcom,vdd-lpm-sup;
+	qcom,vdd-voltage-level = <2900000 2900000>;
+	qcom,vdd-current-level = <200 570000>;
+
+	/* device communication power supply */
+	vdd-io-supply = <&pm8917_l5>;
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-lpm-sup;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <200 325000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on &sdc1_rclk_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off &sdc1_rclk_off>;
+
+	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000 192000000
+								384000000>;
+	qcom,nonremovable;
+	qcom,bus-speed-mode = "HS400_1p8v", "HS200_1p8v", "DDR_1p8v";
+
+	status = "ok";
+};
+
+&sdhc_2 {
+	/* device core power supply */
+	vdd-supply = <&pm8917_l11>;
+	qcom,vdd-voltage-level = <2950000 2950000>;
+	qcom,vdd-current-level = <15000 800000>;
+
+	/* device communication power supply */
+	vdd-io-supply = <&pm8917_l12>;
+	qcom,vdd-io-voltage-level = <1800000 2950000>;
+	qcom,vdd-io-current-level = <200 22000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+
+	#address-cells = <0>;
+	interrupt-parent = <&sdhc_2>;
+	interrupts = <0 1 2>;
+	#interrupt-cells = <1>;
+	interrupt-map-mask = <0xffffffff>;
+	interrupt-map = <0 &intc 0 125 0
+		1 &intc 0 221 0
+		2 &tlmm 67 0>;
+
+	interrupt-names = "hc_irq", "pwr_irq", "status_irq";
+	cd-gpios = <&tlmm 67 0x1>;
+
+	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000
+								177770000>;
+	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
+
+	status = "ok";
+};
+
+/* PM8937 GPIO configuration */
+&pm8937_gpios {
+	gpio@c000 {
+		qcom,master-en = <0>;
+		status = "okay";
+	};
+	gpio@c100 {
+		qcom,master-en = <0>;
+		status = "okay";
+	};
+	gpio@c300 {
+		qcom,master-en = <0>;
+		status = "okay";
+	};
+	gpio@c400 {
+		qcom,master-en = <0>;
+		status = "okay";
+	};
+	gpio@c500 {
+		qcom,master-en = <0>;
+		status = "okay";
+	};
+	gpio@c600 {
+		qcom,master-en = <0>;
+		status = "okay";
+	};
+	gpio@c700 {
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,master-en = <1>;
+		qcom,vin-sel = <3>;
+		status = "okay";
+	};
+};
+
+#include "../../samsung/msm8917/msm8917-mdss-panels.dtsi"
+#include "../../../../../../drivers/video/msm/mdss/samsung/S6D78A0_BV050SQM/dsi_panel_S6D78A0_BV050SQM_qhd_video.dtsi"
+#include "../../../../../../drivers/video/msm/mdss/samsung/PBA_BOOTING_HD/dsi_panel_PBA_BOOTING_hd_video.dtsi"
+
+&cont_splash_mem { 
+	reg = <0x0 0xA8000000 0x0 0x300000>; /* > 540*960*3 = 1.5M  */ 
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi {
+	hw-config = "single_dsi";
+};
+
+/* Unnecessary values for fixed reuglator,
+ * but required by mdss_dsi_get_dt_vreg_data().
+ */
+#define DEFAULT_FIXED_VAL	0
+
+&soc {
+	// If you don't have I2C interface to BLIC or you just want to use
+	// only panel reset regulator, use ss_regulator_platform platform driver.
+	ss_regulator_platform {
+		compatible = "ss-regulator-platform-common";
+
+		fake_regulators {
+			// control panel reset sequence
+			ssreg_panelrst: ssreg_panelrst {
+				regulator-name = "ssreg-panelrst";
+				regulator-type = <REGTYPE_PANEL_RESET>;
+
+				// panel reset sequence: <level0 delay0>, <level1 delay1>, ...
+				panel-rst-seq = <1 20>, <0 20>, <1 20>;
+				rst-gpio = <&tlmm 60 GPIOF_OUT_INIT_HIGH>;
+			};
+			/* VDD_LCD_3P0 */
+			fixed_reg_lcd: fixed_reg_lcd {
+				regulator-type = <REGTYPE_GPIO_REGULATOR>;
+				status = "okay";
+				regulator-name = "fixed_reg_gpio64";
+				gpio = <&tlmm 64 GPIOF_OUT_INIT_HIGH>; /* LCD_VIO_EN */
+				enable-active-high;
+				regulator-boot-on;
+			};
+		};
+	};
+};
+
+&ss_dsi_panel_S6D78A0_BV050SQM_QHD {
+	qcom,panel-supply-entries {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* VDD_LCD_3P0 */
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vddlcd";
+			qcom,supply-min-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-max-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-enable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-disable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-post-on-sleep = <0>;
+		};
+	};
+
+	/* qcom,panel-supply-entries are called before setting LP11,
+	 * But some panels requires to enable display power or reset panel
+	 * after setting LP11.
+	 * Regulators in qcom,panel-supply-entries-lp11 will be called in order,
+	 * after setting LP11.
+	 */
+	qcom,panel-supply-entries-lp11 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "panelrst";
+			qcom,supply-min-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-max-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-enable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-disable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-post-on-sleep = <150>;
+		};
+	};
+	
+	qcom,panel-supply-entries-lp11-off {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "panelrst";
+			qcom,supply-min-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-max-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-enable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-disable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-post-off-sleep = <1>;
+		};
+	};
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&ss_dsi_panel_S6D78A0_BV050SQM_QHD>;
+
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_lcd_active &mdss_lcd_reset_active>;
+	pinctrl-1 = <&mdss_lcd_suspend &mdss_lcd_reset_suspend>;
+
+	/* use fixed regulator instead of samsung,panel-extra-power-gpio or
+	 * qcom,platform-enable-gpio.
+	 */
+	vddlcd-supply = <&fixed_reg_lcd>;
+
+	/* use rst-gpio in ssreg_panelrst instead of qcom,platform-reset-gpio */
+	panelrst-supply = <&ssreg_panelrst>;
+};
+

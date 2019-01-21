@@ -1,0 +1,177 @@
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/{
+	aliases {
+		spi7 = &spi_7;
+	};
+};
+
+&soc {
+	tlmm: pinctrl@1000000 {
+
+		spi7 {
+			spi_7_active: spi_7_active {
+				mux {
+					pins = "gpio85", "gpio86", "gpio87", "gpio88";
+					function = "blsp_spi7";
+				};
+
+				config {
+					pins = "gpio85", "gpio86", "gpio87", "gpio88";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+
+			spi_7_sleep: spi_7_sleep {
+				mux {
+					pins = "gpio85", "gpio86", "gpio87", "gpio88";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio85", "gpio86", "gpio87", "gpio88";
+					drive-strength = <2>;
+					bias-pull-down;
+					input-enable;
+				};
+			};
+		};
+
+		etspi_drdypin {
+			etspi_drdypin_active: etspi_drdypin_active {
+				mux {
+					pins = "gpio97";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio97";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+			etspi_drdypin_suspend: etspi_drdypin_suspend {
+				mux {
+					pins = "gpio97";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio97";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+
+		etspi_ldopin {
+			etspi_ldopin: etspi_ldopin {
+				mux {
+					pins = "gpio91";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio91";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+
+		etspi_sleeppin {
+			etspi_sleeppin: etspi_sleeppin {
+				mux {
+					pins = "gpio66";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio66";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+
+		etspi_vendorPin {
+			etspi_vendorPin: etspi_vendorPin {
+				mux {
+					pins = "gpio68";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio68";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+
+		etspi_buckenPin {
+			etspi_buckenPin: etspi_buckenPin {
+				mux {
+					pins = "gpio96";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio96";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+	};
+
+	spi_7: spi@7af7000 { /* BLSP2 QUP3 */
+		status = "ok";
+		compatible = "qcom,spi-qup-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "spi_physical", "spi_bam_physical";
+		reg = <0x7af7000 0x1000>, <0x7ac4000 0x1f000>;
+		interrupt-names = "spi_irq", "spi_bam_irq";
+		interrupts = <0 301 0>, <0 239 0>;
+
+		spi-max-frequency = <19200000>;
+		qcom,master-id = <84>;
+
+		qcom,ver-reg-exists;
+		qcom,use-pinctrl;
+		qcom,use-bam;
+		qcom,bam-consumer-pipe-index = <8>;
+		qcom,bam-producer-pipe-index = <9>;
+		pinctrl-names = "spi_default", "spi_sleep";
+		pinctrl-0 = <&spi_7_active>;
+		pinctrl-1 = <&spi_7_sleep>;
+
+		clock-names = "iface_clk", "core_clk";
+
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+			 <&clock_gcc clk_gcc_blsp2_qup3_spi_apps_clk>;
+
+		etspi-spi@0 {
+			compatible = "etspi,et510";
+			reg = <0>;
+			spi-max-frequency = <16000000>;
+			etspi-sleepPin = <&tlmm 66 0x00>;
+			etspi-drdyPin = <&tlmm 97 0x01>;
+			etspi-ldoPin = <&tlmm 91 0x00>;
+			etspi-vendorPin = <&tlmm 68 0x00>;
+			etspi-buckenPin = <&tlmm 96 0x00>;
+			etspi-min_cpufreq_limit = <2016000>;
+
+			pinctrl-names = "default", "sleep", "idle";
+			pinctrl-0 = <&etspi_drdypin_suspend &etspi_ldopin &etspi_sleeppin &etspi_vendorPin &etspi_buckenPin>;
+			pinctrl-1 = <&etspi_drdypin_suspend>;
+			pinctrl-2 = <&etspi_drdypin_active>;
+		};
+	};
+};

@@ -1,0 +1,27 @@
+#
+# Zinitix Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_ZINITIX_BT532
+	bool "ZINITIX BT532 touchscreen driver"
+	depends on I2C
+	default n
+	help
+	  Say Y here if you have a ZINITIX BT532 touchscreen.
+	  If unsure, say N.
+	  
+config TOUCHSCREEN_ZINITIX_BT431
+	bool "ZINITIX BT431 touchscreen driver"
+	depends on I2C
+	default n
+	help
+	  Say Y here if you have a ZINITIX BT431/BT532 touchscreen.
+	  If unsure, say N.
+
+config TOUCHSCREEN_ZINITIX_ZT75XX
+	bool "ZINITIX ZT75XX touchscreen driver"
+	depends on I2C
+	default n
+	help
+	  Say Y here if you have a ZINITIX ZT75XX touchscreen.
+	  If unsure, say N.

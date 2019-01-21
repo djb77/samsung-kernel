@@ -1,0 +1,36 @@
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "../../qcom/msm8917.dtsi"
+#include "msm8917-sec-j1y17lte-eur-open-r00.dtsi"
+
+/ {
+	model = "Samsung J1Y17LTE EUR OPEN PROJECT Rev00";
+	compatible = "qcom,msm8917-mtp", "qcom,msm8917", "qcom,mtp";
+	qcom,board-id= <8 0>;
+	qcom,pmic-id = <0x10019 0x020037 0x0 0x0>;
+};
+
+&soc{
+	sec_thermistor {
+		compatible = "samsung,sec-ap-thermistor";
+		qcom,therm-vadc = <&pm8937_vadc>;
+		status = "okay";
+		adc_channel = <19>;
+		adc_array = <25834 26173 26517 26661 27054 27621 28127 28547 29301 30138 30770 31688 32618 33789 34726 35654 36614 37635 38466 39372 40031 40670 40999>;
+  
+		temp_array = <900 850 800 750 700 650 600 550 500 450 400 350 300 250 200 150 100 50 0 (-50) (-100) (-150) (-200)>;
+	};
+};

@@ -1,0 +1,60 @@
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "../../qcom/msm8917.dtsi"
+#include "msm8917-sec-j3poplte-usa-spr-r03.dtsi"
+
+/ {
+	model = "Samsung J3POPLTE USA SPR PROJECT Rev03";
+	compatible = "qcom,msm8917-mtp", "qcom,msm8917", "qcom,mtp";
+	qcom,board-id= <8 3>;
+	qcom,pmic-id = <0x10019 0x020037 0x0 0x0>;
+};
+
+&soc{
+	sec_thermistor {
+		compatible = "samsung,sec-ap-thermistor";
+		qcom,therm-vadc = <&pm8937_vadc>;
+		status = "okay";
+		adc_channel = <19>;
+		adc_array = <25844 25885 25927 25968 26010 26052 26115 26178
+                                              26241 26304 26368 26408 26449 26489 26530 26570
+                                              26633 26696 26758 26821 26884 26942 27001 27059
+                                              27118 27176 27261 27346 27430 27515 27600 27708
+                                              27815 27923 28031 28139 28253 28367 28481 28595
+                                              28709 28847 28986 29125 29264 29403 29573 29743
+                                              29914 30084 30254 30408 30563 30717 30871 31026
+                                              31237 31449 31661 31873 32085 32284 32483 32682
+                                              32881 33081 33279 33477 33675 33873 34071 34271
+                                              34471 34671 34871 35071 35330 35589 35848 36107
+                                              36367 36535 36703 36871 37039 37207 37415 37623
+                                              37831 38038 38246 38506 38767 39028 39289 39550
+                                              39614 39679 39743 39808 39872 39998 40123 40249
+                                              40375 40501 40603 40706 40809 40912 41015>;
+  
+		temp_array = <900 890 880 870 860 850 840 830 820 810
+			800 790 780 770 760 750 740 730 720 710
+			700 690 680 670 660 650 640 630 620 610
+			600 590 580 570 560 550 540 530 520 510
+			500 490 480 470 460 450 440 430 420 410
+			400 390 380 370 360 350 340 330 320 310
+			300 290 280 270 260 250 240 230 220 210
+			200 190 180 170 160 150 140 130 120 110
+			100 90 80 70 60 50 40 30 20 10
+			0 (-10) (-20) (-30) (-40) (-50) (-60) (-70) (-80) (-90)
+			(-100) (-110) (-120) (-130) (-140) (-150) (-160) (-170) (-180) (-190)
+			(-200)>;
+	};
+};

@@ -1,0 +1,24 @@
+#
+# Imagis IST30XXH Touchscreen driver
+#
+
+config TOUCHSCREEN_IST30XXH
+  tristate "IST30XXH I2C Touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have the Imagis IST30XXH I2C touchscreen
+	  connected to your system.
+
+config TOUCHSCREEN_IST3038H
+  tristate "IST3038H I2C Touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have the Imagis IST3038H I2C touchscreen
+	  connected to your system.
+
+config TOUCHSCREEN_IMAGIS_LPM_NO_RESET
+  tristate "TOUCHSCREEN IMAGIS LPM NO RESET"
+	depends on I2C
+	help
+	  Say Y here if you use
+	  LPM No Reset Sequence.

@@ -1,0 +1,167 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	i2c_8: i2c@8 {
+		cell-index = <8>;
+		compatible = "i2c-gpio";
+		gpios = <&tlmm 98 0 /* sda */
+			&tlmm 99 0	/* scl */
+			>;
+		i2c-gpio,delay-us = <2>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		sm5703-mfd@49 {
+			compatible = "siliconmitus,sm5703mfd";
+			reg = <0x49>;
+			interrupt-parent = <&tlmm>;
+			sm5703,irq-gpio = <&tlmm 61 0x00>;
+			sm5703,mrstb-gpio = <&tlmm 87 0x00>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&sm5703_i2c_default &sm5703_rst_default &charger_int_active>;
+
+			sm5703_charger {
+				compatible = "siliconmitus,sm5703-charger";
+				chg_autostop = <1>;
+				chg_autoset = <1>;
+				chg_aiclen = <1>;
+				chg_aiclth = <4300>;
+				fg_vol_val = <4350>;
+				fg_soc_val = <95>;
+				fg_curr_avr_val = <150>;
+			};
+
+			sm5703_usbldo1 {
+				compatible = "siliconmitus,sm5703-usbldo1";
+				regulator-name = "USBLDO1"; /* change name by yourself */
+				regulator-min-microvolt = <4800000>;
+				regulator-max-microvolt = <4800000>; /* max == min then apply_uV = 1 */
+				/* regulator-microvolt-offset = < >; optional*/
+				/* regulator-boot-on; optional, exist = enabled */
+				regulator-always-on;
+				/* regulator-ramp-delay = <100>; optional*/
+			};
+
+			sm5703_usbldo2 {
+				compatible = "siliconmitus,sm5703-usbldo2";
+				regulator-name = "USBLDO2"; /* change name by yourself */
+				regulator-min-microvolt = <4800000>;
+				regulator-max-microvolt = <4800000>; /* max == min then apply_uV = 1 */
+				/* regulator-microvolt-offset = < >; optional*/
+				/* regulator-boot-on; optional, exist = enabled */
+				/* regulator-always-on; optional, exist = enabled */
+				/* regulator-ramp-delay = <100>; optional*/
+			};
+
+			sm5703_l1: sm5703_ldo1 {
+				compatible = "siliconmitus,sm5703-ldo1";
+				regulator-name = "LDOOUT1"; /* change name by yourself */
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2800000>; /* max == min then apply_uV = 1 */
+				/* regulator-microvolt-offset = < >; optional*/
+				/* regulator-boot-on; optional, exist = enabled */
+				/* regulator-always-on; optional, exist = enabled */
+				/* regulator-ramp-delay = <100>; optional*/
+			};
+
+			sm5703_l2: sm5703_ldo2 {
+				compatible = "siliconmitus,sm5703-ldo2";
+				regulator-name = "LDOOUT2"; /* change name by yourself */
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>; /* max == min then apply_uV = 1 */
+				/* regulator-microvolt-offset = < >; optional*/
+				/* regulator-boot-on; optional, exist = enabled */
+				/* regulator-always-on; optional, exist = enabled */
+				/* regulator-ramp-delay = <100>; optional*/
+			};
+
+			sm5703_l3: sm5703_ldo3 {
+				compatible = "siliconmitus,sm5703-ldo3";
+				regulator-name = "LDOOUT3"; /* change name by yourself */
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2800000>; /* max == min then apply_uV = 1 */
+				/* regulator-microvolt-offset = < >; optional*/
+				/* regulator-boot-on; optional, exist = enabled */
+				/* regulator-always-on; optional, exist = enabled */
+				/* regulator-ramp-delay = <100>; optional*/
+			};
+
+			sm5703_buck {
+				compatible = "siliconmitus,sm5703-buck";
+				regulator-name = "BUCKOUT"; /* change name by yourself */
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>; /* max == min then apply_uV = 1 */
+				/* regulator-microvolt-offset = < >; optional*/
+				/* regulator-boot-on; optional, exist = enabled */
+				/* regulator-always-on; optional, exist = enabled */
+				/* regulator-ramp-delay = <100>; optional*/
+
+			};
+		};
+
+		sm5703_fled {
+			compatible = "siliconmitus,sm5703-fled";
+			enable = <1 1>;
+			id = <0>;
+			flash-mode-current-mA = <1000>;
+			preflash-mode-current-mA = <140>;
+			torch-mode-current-mA = <70>;
+			used-gpio-control = <1>;
+			sm5703,led1-gpio  = <&tlmm 34 0x00>;
+			sm5703,led2-gpio  = <&tlmm 36 0x00>;
+			pinctrl-names = "fled_default","fled_sleep";
+			pinctrl-0 = <&cam_flash_active>;
+			pinctrl-1 = <&cam_flash_sleep>;
+		};
+
+		muic-sm5703@25 {
+			status = "okay";
+			compatible = "muic-universal";
+			reg = <0x25>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <63 0>;
+			muic-universal,irq-gpio = <&tlmm 63 0x0>;
+			sm5703,wakeup;
+			muic-universal,chip_name = "sm,sm5703";
+			pinctrl-names = "muic_i2c_pins_default";
+			pinctrl-0 = <&sm5703_interrupt_default>;
+		};
+		
+	};
+
+	i2c@11 {
+		cell-index = <11>;
+		compatible = "i2c-gpio";
+		gpios = <&tlmm 39 0	/* sda */
+			&tlmm 38 0	/* scl */
+			>;
+		i2c-gpio,delay-us = <2>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		sm5703-fuelgauge@71{
+			compatible = "sm5703-fuelgauge,i2c";
+			reg = <0x71>;
+			interrupt-parent = <&tlmm>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&fg_i2c_active &fuel_int_active>;
+			fuelgauge,irqf = "IRQF_TRIGGER_FALLING + IRQF_ONESHOT + IRQF_NO_SUSPEND";
+			fuelgauge,fuel_int = <&tlmm 62 0x1>;
+			fuelgauge,fuel_alert_soc = <1>;
+			fuelgauge,capacity_max = <1000>;
+			fuelgauge,capacity_max_margin = <70>;
+			fuelgauge,capacity_min = <0>;
+			fuelgauge,capacity_calculation_type = <0x1F>;
+		};
+	};
+};

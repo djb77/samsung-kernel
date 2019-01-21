@@ -1,0 +1,132 @@
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/{
+	aliases {
+		spi4 = &spi_4;
+	};
+};
+
+&soc {
+	tlmm: pinctrl@1000000 {
+		etspi_drdypin {
+			etspi_drdypin_active: etspi_drdypin_active {
+				mux {
+					pins = "gpio25";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio25";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+			etspi_drdypin_suspend: etspi_drdypin_suspend {
+				mux {
+					pins = "gpio25";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio25";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+
+		etspi_ldopin {
+			etspi_ldopin: etspi_ldopin {
+				mux {
+					pins = "gpio89";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio89";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+
+		etspi_sleeppin {
+			etspi_sleeppin: etspi_sleeppin {
+				mux {
+					pins = "gpio140";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio140";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+
+		etspi_vendorPin {
+			etspi_vendorPin: etspi_vendorPin {
+				mux {
+					pins = "gpio130";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio130";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+	};
+
+	spi_4: spi@78b8000 { /* BLSP1 QUP4 */
+		status = "ok";
+		compatible = "qcom,spi-qup-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "spi_physical", "spi_bam_physical";
+		reg = <0x78b8000 0x1000>, <0x7884000 0x2b000>;
+		interrupt-names = "spi_irq", "spi_bam_irq";
+		interrupts = <0 98 0>, <0 238 0>;
+
+		spi-max-frequency = <19200000>;
+		qcom,master-id = <86>;
+
+		qcom,ver-reg-exists;
+		qcom,use-pinctrl;
+		qcom,use-bam;
+		qcom,bam-consumer-pipe-index = <10>;
+		qcom,bam-producer-pipe-index = <11>;
+		pinctrl-names = "spi_default", "spi_sleep";
+		pinctrl-0 = <&spi_4_active>;
+		pinctrl-1 = <&spi_4_sleep>;
+
+		clock-names = "iface_clk", "core_clk";
+
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			 <&clock_gcc clk_gcc_blsp1_qup4_spi_apps_clk>;
+
+		etspi-spi@0 {
+			compatible = "etspi,et510";
+			reg = <0>;
+			spi-max-frequency = <16000000>;
+			etspi-sleepPin = <&tlmm 140 0x00>;
+			etspi-drdyPin = <&tlmm 25 0x01>;
+			etspi-ldoPin = <&tlmm 89 0x00>;
+			etspi-vendorPin = <&tlmm 130 0x00>;
+			etspi-min_cpufreq_limit = <2016000>;
+
+			pinctrl-names = "default", "sleep", "idle";
+			pinctrl-0 = <&etspi_drdypin_suspend &etspi_ldopin &etspi_sleeppin &etspi_vendorPin>;
+			pinctrl-1 = <&etspi_drdypin_suspend>;
+			pinctrl-2 = <&etspi_drdypin_active>;
+		};
+	};
+};

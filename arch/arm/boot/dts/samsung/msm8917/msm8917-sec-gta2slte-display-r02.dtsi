@@ -1,0 +1,122 @@
+#include "../../samsung/msm8917/msm8917-mdss-panels.dtsi"
+#include "../../../../../../drivers/video/msm/mdss/samsung/S6D7AA0X11_TV080WXM/dsi_panel_S6D7AA0X11_TV080WXM_wxga_video.dtsi"
+#include "../../../../../../drivers/video/msm/mdss/samsung/PBA_BOOTING_HD/dsi_panel_PBA_BOOTING_hd_video.dtsi"
+
+#define GPIOF_DIR_OUT   (0 << 0)
+#define GPIOF_INIT_HIGH (1 << 1)
+#define GPIOF_OUT_INIT_HIGH     (GPIOF_DIR_OUT | GPIOF_INIT_HIGH)
+
+#define REGTYPE_PANEL_RESET	0 /* control display reset */
+#define REGTYPE_BL_CONFIG	1 /* BLIC initial configuration via I2c */
+#define REGTYPE_GPIO_REGULATOR	2 /* GPIO regulator */
+
+&cont_splash_mem { 
+	reg = <0x0 0xA8000000 0x0 0x300000>; /*720*1280*3=2.63M =>3M*/ 
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi {
+	hw-config = "single_dsi";
+};
+
+/* Unnecessary values for fixed reuglator,
+ * but required by mdss_dsi_get_dt_vreg_data().
+ */
+#define DEFAULT_FIXED_VAL	0
+
+&soc {
+	msmgpio8_vreg: msmgpio8_vreg {
+		compatible = "regulator-fixed";
+		status = "okay";
+		regulator-name = "msmgpio8_vreg";
+		gpio = <&tlmm 8 GPIOF_OUT_INIT_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+	 };
+
+	msmgpio87_vreg: msmgpio87_vreg {
+		compatible = "regulator-fixed";
+		status = "okay";
+		regulator-name = "msmgpio87_vreg";
+		gpio = <&tlmm 87 GPIOF_OUT_INIT_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+	 };
+};
+
+&ss_dsi_panel_S6D7AA0X11_TV080WXM_WXGA {
+	qcom,esd-check-enabled;
+	qcom,mdss-dsi-panel-status-check-mode="reg_read_irq";
+	qcom,mdss-dsi-panel-status-irq-trigger1 ="falling";
+	qcom,mdss-dsi-panel-status-value = <1>;
+
+	samsung,esd-irq-gpio1 = <&tlmm 90 0>;
+
+	/* IN_CELL panel control LCD & TSP power at the same time */
+
+	/* Qcomm display power table
+	 * These regulators will be calledi in order, before LP11.
+	 */
+	qcom,panel-supply-entries {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* VDD_LCD_1P8 */
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vddlcd";
+			qcom,supply-min-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-max-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-enable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-disable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-post-on-sleep = <0>;
+			qcom,supply-pre-off-sleep = <5>;
+		};
+
+		qcom,panel-supply-entry@1 {
+			reg = <1>;
+			qcom,supply-name = "vddlcd2";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+			qcom,supply-post-on-sleep = <0>;
+			qcom,supply-pre-off-sleep = <5>;
+		};
+
+
+		qcom,panel-supply-entry@2 {
+			reg = <2>;
+			qcom,supply-name = "vsp";
+			qcom,supply-min-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-max-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-enable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-disable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-post-on-sleep = <30>;
+			qcom,supply-pre-off-sleep = <2>;
+		};
+	};
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&ss_dsi_panel_S6D7AA0X11_TV080WXM_WXGA>;
+
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_blic_active &mdss_esd_active>;
+	pinctrl-1 = <&mdss_blic_suspend &mdss_esd_suspend>;
+
+	vddlcd-supply = <&msmgpio8_vreg>;
+	vddlcd2-supply = <&pm8917_l15>;
+
+	vsp-supply = <&msmgpio87_vreg>;
+	/*vsn-supply = <&fixed_reg_vsn>;*/
+
+	qcom,platform-reset-gpio = <&tlmm 60 GPIOF_OUT_INIT_HIGH>;
+};
+
+&ss_dsi_panel_PBA_BOOTING_HD {
+	samsung,panel-vendor = "BOE";
+};

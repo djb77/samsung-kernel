@@ -1,0 +1,131 @@
+#define GPIOF_DIR_OUT   (0 << 0)
+#define GPIOF_INIT_HIGH (1 << 1)
+#define GPIOF_OUT_INIT_HIGH     (GPIOF_DIR_OUT | GPIOF_INIT_HIGH)
+
+#define REGTYPE_PANEL_RESET	0 /* control display reset */
+#define REGTYPE_BL_CONFIG	1 /* BLIC initial configuration via I2c */
+#define REGTYPE_GPIO_REGULATOR	2 /* GPIO regulator */
+
+#include "../../samsung/msm8917/msm8917-mdss-panels.dtsi"
+#include "../../../../../../drivers/video/msm/mdss/samsung/S6D78A0_BV050SQM/dsi_panel_S6D78A0_BV050SQM_qhd_video.dtsi"
+#include "../../../../../../drivers/video/msm/mdss/samsung/PBA_BOOTING_HD/dsi_panel_PBA_BOOTING_hd_video.dtsi"
+
+&cont_splash_mem { 
+	reg = <0x0 0xA8000000 0x0 0x300000>; /* > 540*960*3 = 1.5M  */ 
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi {
+	hw-config = "single_dsi";
+};
+
+/* Unnecessary values for fixed reuglator,
+ * but required by mdss_dsi_get_dt_vreg_data().
+ */
+#define DEFAULT_FIXED_VAL	0
+
+&soc {
+	// If you don't have I2C interface to BLIC or you just want to use
+	// only panel reset regulator, use ss_regulator_platform platform driver.
+	ss_regulator_platform {
+		compatible = "ss-regulator-platform-common";
+
+		fake_regulators {
+			// control panel reset sequence
+			ssreg_panelrst: ssreg_panelrst {
+				regulator-name = "ssreg-panelrst";
+				regulator-type = <REGTYPE_PANEL_RESET>;
+
+				// panel reset sequence: <level0 delay0>, <level1 delay1>, ...
+				panel-rst-seq = <1 20>, <0 20>, <1 20>;
+				rst-gpio = <&tlmm 60 GPIOF_OUT_INIT_HIGH>;
+			};
+			/* VDD_LCD_3P0 */
+			fixed_reg_lcd: fixed_reg_lcd {
+				regulator-type = <REGTYPE_GPIO_REGULATOR>;
+				status = "okay";
+				regulator-name = "fixed_reg_gpio64";
+				gpio = <&tlmm 64 GPIOF_OUT_INIT_HIGH>; /* LCD_VIO_EN */
+				enable-active-high;
+				regulator-boot-on;
+			};
+		};
+	};
+};
+
+&ss_dsi_panel_S6D78A0_BV050SQM_QHD {
+	qcom,panel-supply-entries {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* VDD_LCD_3P0 */
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vddlcd";
+			qcom,supply-min-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-max-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-enable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-disable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-post-on-sleep = <0>;
+		};
+	};
+
+	/* qcom,panel-supply-entries are called before setting LP11,
+	 * But some panels requires to enable display power or reset panel
+	 * after setting LP11.
+	 * Regulators in qcom,panel-supply-entries-lp11 will be called in order,
+	 * after setting LP11.
+	 */
+	qcom,panel-supply-entries-lp11 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "panelrst";
+			qcom,supply-min-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-max-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-enable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-disable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-post-on-sleep = <150>;
+		};
+	};
+	
+	qcom,panel-supply-entries-lp11-off {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "panelrst";
+			qcom,supply-min-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-max-voltage = <DEFAULT_FIXED_VAL>;
+			qcom,supply-enable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-disable-load = <DEFAULT_FIXED_VAL>;
+			qcom,supply-post-off-sleep = <1>;
+		};
+	};
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&ss_dsi_panel_S6D78A0_BV050SQM_QHD>;
+
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_lcd_active &mdss_lcd_reset_active>;
+	pinctrl-1 = <&mdss_lcd_suspend &mdss_lcd_reset_suspend>;
+
+	/* use fixed regulator instead of samsung,panel-extra-power-gpio or
+	 * qcom,platform-enable-gpio.
+	 */
+	vddlcd-supply = <&fixed_reg_lcd>;
+
+	/* use rst-gpio in ssreg_panelrst instead of qcom,platform-reset-gpio */
+	panelrst-supply = <&ssreg_panelrst>;
+};
+
+&ss_dsi_panel_PBA_BOOTING_HD {
+	samsung,panel-vendor = "BOE";
+};

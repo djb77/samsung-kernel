@@ -1,0 +1,23 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include "msm8953-sec-gtaxlqlte_usa_spr-battery-common.dtsi"
+/ {
+	mux_sel {
+		compatible = "samsung,sec-mux-sel";
+		mux_sel,mux_sel_1_en;
+		mux_sel,mux_sel_1 = <&pm8953_gpios 6 0x00>;
+		mux_sel,mux_sel_1_type = <20>; /* AP_THM_MUX_SEL | BATT_THM_MUX_SEL */
+		mux_sel,mux_sel_1_mpp = <2>; /* SEC_MPP2_MUX_SEL */
+		mux_sel,mux_sel_1_low = <4>; /* SEC_MUX_SEL_AP_THM */
+		mux_sel,mux_sel_1_high = <2>; /* SEC_MUX_SEL_BATT_THM */
+	};
+};

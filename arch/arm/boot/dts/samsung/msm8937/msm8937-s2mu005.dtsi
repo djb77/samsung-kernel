@@ -1,0 +1,108 @@
+/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	i2c_13: i2c@13 {
+		cell-index = <13>;
+		compatible = "i2c-gpio";
+		gpios = <&tlmm 98 0 /* sda */
+			&tlmm 99 0 /* scl */
+			>;
+		i2c-gpio,delay-us = <2>;
+		pinctrl-names = "s2mu005_i2c_pins_default",
+						"s2mu005_i2c_pins_active",
+						"s2mu005_i2c_pins_suspend";
+		pinctrl-0 = <&s2mu005_i2c_default>;
+		pinctrl-1 = <&s2mu005_i2c_active>;
+		pinctrl-2 = <&s2mu005_i2c_suspend>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		s2mu005@3d {
+			status = "okay";
+			compatible = "samsung,s2mu005mfd";
+			reg = <0x3d>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <35 0>;
+			s2mu005,irq-gpio = <&tlmm 35 0x00>;
+			s2mu005,wakeup;
+			pinctrl-names = "s2mu005_interrupt_pins_default",
+							"s2mu005_interrupt_pins_active",
+							"s2mu005_interrupt_pins_suspend";
+			pinctrl-0 = <&s2mu005_interrupt_default>;
+			pinctrl-1 = <&s2mu005_interrupt_active>;
+			pinctrl-2 = <&s2mu005_interrupt_suspend>;
+
+			muic {
+				status = "okay";
+				muic,uart_addr = "139c0000.pinctrl";
+				muic,uart_rxd = "gpb1-0";
+				muic,uart_txd = "gpb1-1";
+			};
+		};
+		s2mu005_fled {
+			compatible = "samsung,s2mu005-fled";
+			enable = <1 1>;
+			rear_flash_current = <1000>;
+			rear_preflash_current = <170>;
+			rear_movie_current = <170>;
+			front_torch_current = <50>;
+			factory_current = <1000>;
+			s2mu005,torch-gpio = <&tlmm 34 0x00>;
+			s2mu005,flash-gpio = <&tlmm 33 0x00>;
+			pinctrl-names = "fled_default","fled_sleep";
+			pinctrl-0 = <&cam_flash_active>;
+			pinctrl-1 = <&cam_flash_sleep>;
+			S2MU005_FLASH_LED{
+				id = <0>;
+				ledname = "S2MU005_FLASH_LED";
+				brightness = <1000>;
+				timeout = <15>;/*reg value:0xF*/
+				max_brightness = <1200>;
+			};
+			S2MU005_TORCH_LED{
+				id = <1>;
+				ledname = "S2MU005_TORCH_LED";
+				brightness = <50>;
+				timeout = <15>;/*reg value:0xF*/
+				max_brightness = <400>;
+			};
+		};
+	};
+};
+
+/ {
+	muic {
+		status = "okay";
+		muic,support-list = "+OTG:GND",
+					"-MHL:1K",
+					"-VZW Accessory:28.7K",
+					"-VZW Incompatible:34K",
+					"-Smartdock:40.2K",
+					"-HMT:49.9K",
+					"-Audiodock:64.9K",
+					"-USB LANHUB:80.07K",
+					"+Charging Cable:102K",
+					"-Universal Multimedia dock:121K",
+					"+Jig USB Off:255K",
+					"+Jig USB On:301K",
+					"+Deskdock:365K",
+					"+TYPE2 Charger:442K",
+					"+Jig UART Off:523K",
+					"+Jig UART On:619K",
+					"+TA:OPEN",
+					"+USB:OPEN",
+					"+CDP:OPEN",
+					"+Undefined Charging:XXX";
+	};
+};
+
