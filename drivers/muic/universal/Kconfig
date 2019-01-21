@@ -1,0 +1,115 @@
+#
+# MUIC devices
+#
+
+comment "MUIC configs"
+
+config MUIC_UNIVERSAL
+  bool "UNIVERSAL MUIC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for various MUIC chips.
+
+config MUIC_UNIVERSAL_SM5703
+  bool "SM5703 MUIC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the SM5703 MUIC chip.
+
+config MUIC_UNIVERSAL_SM5705
+	bool "SM5705 MUIC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the SM5705 MUIC chip.
+
+config MUIC_UNIVERSAL_SM5705_AFC
+	bool "SM5705 MUIC AFC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the SM5705 MUIC
+	  AFC feature.
+
+config MUIC_SM5705_AFC_18W_TA_SUPPORT
+	bool "SM5705 AFC 18W TA SUPPORT"
+	depends on MUIC_UNIVERSAL_SM5705_AFC
+	default n
+	help
+	  If you say yes here you will get support for the SM5705 MUIC
+	  AFC 18W TA feature.
+
+config MUIC_UNIVERSAL_MULTI_SUPPORT
+	bool "SM5703 & SM5705 MUIC MULTI SUPPORT"
+	depends on MUIC_UNIVERSAL_SM5703 && MUIC_UNIVERSAL_SM5705
+	default n
+	help
+	  If you say yes here you will get support for the multiple support for
+	  both SM5703 and SM5705 MUIC depending on HW versions.
+
+config MUIC_SM570X_SWITCH_CONTROL_GPIO
+	bool "SM570X TYPE C SUPPORT"
+	depends on (MUIC_UNIVERSAL_SM5705 || MUIC_UNIVERSAL_SM5703) && MUIC_SUPPORT_CCIC
+	default n
+	help
+	  It's a work around for SM5705/SM5703 HW bug in USB Type C model.
+
+config MUIC_UNIVERSAL_SM5708
+	bool "SM5708 MUIC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the SM5708 MUIC chip.
+
+config MUIC_UNIVERSAL_SM5504
+  bool "SM5504 MUIC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the SM5504 MUIC chip.
+
+config MUIC_PINCTRL
+  bool "MUIC PINCTRL"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the Pinctrl in MUIC driver.
+
+config MUIC_SUPPORT_RUSTPROOF
+	bool "MUIC Disable UART"
+	depends on !SEC_FACTORY
+	default n
+	help
+	 This option will disable the UART to prevent the rusting of the
+	 IF Connector in the case of Kmini Devices.
+
+config SM5705_SUPPORT_GAMEPAD
+	bool "GAMEPAD Support for SM5705 MUIC"
+	depends on MUIC_UNIVERSAL_SM5705
+	default n
+	help
+	 This option will provide GAMEPAD support to SM5705 MUIC based
+	 devices.
+
+config MUIC_HV
+	bool "MUIC_HV"
+	depends on MUIC_UNIVERSAL
+	default n
+	help
+	 If you say yes here you will get support for the AFC.
+
+config MUIC_SUPPORT_LANHUB
+	bool "Lanhub support for UNIVERSAL MUIC"
+	depends on MUIC_UNIVERSAL
+	default n
+	help
+	 If you say yes here you will get support for the lanhub.
+	 
+config MUIC_SLAVE_MODE_CONTROL_VBUS
+	bool "MUIC Control VBUS Switch"
+	depends on USE_MUIC
+	default n
+	help
+	 This option will manually control the VBUS in slave mode.

@@ -1,0 +1,199 @@
+/*
+ * leds-s2mu005.h - Flash-led driver for Samsung S2MU005
+ *
+ * Copyright (C) 2016 Samsung Electronics
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ */
+#ifndef __LEDS_S2MU005_H__
+#define __LEDS_S2MU005_H__
+
+#include <linux/leds/msm_ext_pmic_flash.h>
+
+#define __MANGLE_NAME(_f_) _f_##_s2mu005
+
+#ifdef CONFIG_MUIC_NOTIFIER
+#include <linux/muic/muic.h>
+#include <linux/muic/muic_notifier.h>
+#endif /* CONFIG_MUIC_NOTIFIER */
+
+#define S2MU005_EN_CHANNEL_SHARE_MASK 0x80
+#define S2MU005_BOOST_VOUT_FLASH_MASK 0x1F
+
+#define S2MU005_TIMEOUT_MAX 0xF
+
+#define S2MU005_FLASH_IOUT_MASK 0x1F
+#define S2MU005_TORCH_IOUT_MASK 0x0F
+
+#define S2MU005_FLASH_ON_I2C 0xC0
+#define S2MU005_TORCH_ON_I2C 0x30
+
+#define S2MU005_FLASH_ON_GPIO 0x40
+#define S2MU005_TORCH_ON_GPIO 0x20
+
+#define S2MU005_FRONT_FLASH_ON_GPIO 0x04
+#define S2MU005_FRONT_TORCH_ON_GPIO 0x02
+
+#define S2MU005_FLASH_ENABLE_MASK 0xC0
+#define S2MU005_TORCH_ENABLE_MASK 0x30
+
+#define S2MU005_FLASH_TORCH_OFF 0x00
+#define S2MU005_FLASH_BOOST_EN_MASK 0x40
+
+#define S2MU005_CH1_TORCH_ON_I2C 0x30
+#define S2MU005_CH2_TORCH_ON_I2C 0x03
+
+#define S2MU005_CH1_TORCH_ENABLE_MASK 0x30
+#define S2MU005_CH2_TORCH_ENABLE_MASK 0x03
+
+#define S2MU005_CH1_FLASH_TORCH_OFF_MASK 0xF0
+#define S2MU005_CH2_FLASH_TORCH_OFF_MASK 0x0F
+
+
+
+enum s2mu005_led_id {
+	S2MU005_OFF,
+	S2MU005_FLASH_LED = 0,
+	S2MU005_TORCH_LED,
+	S2MU005_LED_MAX,
+};
+
+enum s2mu005_flash_current {
+	S2MU005_FLASH_OUT_I_25MA,
+	S2MU005_FLASH_OUT_I_50MA,
+	S2MU005_FLASH_OUT_I_75MA,
+	S2MU005_FLASH_OUT_I_100MA,
+	S2MU005_FLASH_OUT_I_125MA,
+	S2MU005_FLASH_OUT_I_150MA,
+	S2MU005_FLASH_OUT_I_175MA,
+	S2MU005_FLASH_OUT_I_200MA,
+	S2MU005_FLASH_OUT_I_225MA,
+	S2MU005_FLASH_OUT_I_250MA,
+	S2MU005_FLASH_OUT_I_275MA,
+	S2MU005_FLASH_OUT_I_300MA,
+	S2MU005_FLASH_OUT_I_325MA,
+	S2MU005_FLASH_OUT_I_350MA,
+	S2MU005_FLASH_OUT_I_375MA,
+	S2MU005_FLASH_OUT_I_400MA,
+	S2MU005_FLASH_OUT_I_450MA,
+	S2MU005_FLASH_OUT_I_500MA,
+	S2MU005_FLASH_OUT_I_550MA,
+	S2MU005_FLASH_OUT_I_600MA,
+	S2MU005_FLASH_OUT_I_650MA,
+	S2MU005_FLASH_OUT_I_700MA,
+	S2MU005_FLASH_OUT_I_755MA,
+	S2MU005_FLASH_OUT_I_800MA,
+	S2MU005_FLASH_OUT_I_850MA,
+	S2MU005_FLASH_OUT_I_900MA,
+	S2MU005_FLASH_OUT_I_950MA,
+	S2MU005_FLASH_OUT_I_1000MA,
+	S2MU005_FLASH_OUT_I_1050MA,
+	S2MU005_FLASH_OUT_I_1100MA,
+	S2MU005_FLASH_OUT_I_1150MA,
+	S2MU005_FLASH_OUT_I_1200MA,
+};
+
+enum s2mu005_torch_current {
+	S2MU005_TORCH_OUT_I_25MA,
+	S2MU005_TORCH_OUT_I_50MA,
+	S2MU005_TORCH_OUT_I_75MA,
+	S2MU005_TORCH_OUT_I_100MA,
+	S2MU005_TORCH_OUT_I_125MA,
+	S2MU005_TORCH_OUT_I_150MA,
+	S2MU005_TORCH_OUT_I_175MA,
+	S2MU005_TORCH_OUT_I_200MA,
+	S2MU005_TORCH_OUT_I_225MA,
+	S2MU005_TORCH_OUT_I_250MA,
+	S2MU005_TORCH_OUT_I_275MA,
+	S2MU005_TORCH_OUT_I_300MA,
+	S2MU005_TORCH_OUT_I_325MA,
+	S2MU005_TORCH_OUT_I_350MA,
+	S2MU005_TORCH_OUT_I_375MA,
+	S2MU005_TORCH_OUT_I_400MA
+};
+
+enum s2mu005_flash_timeout {
+	S2MU005_FLASH_TIMEOUT_62MS,
+	S2MU005_FLASH_TIMEOUT_124MS,
+	S2MU005_FLASH_TIMEOUT_186MS,
+	S2MU005_FLASH_TIMEOUT_248MS,
+	S2MU005_FLASH_TIMEOUT_310MS,
+	S2MU005_FLASH_TIMEOUT_372MS,
+	S2MU005_FLASH_TIMEOUT_434MS,
+	S2MU005_FLASH_TIMEOUT_496MS,
+	S2MU005_FLASH_TIMEOUT_558MS,
+	S2MU005_FLASH_TIMEOUT_620MS,
+	S2MU005_FLASH_TIMEOUT_682MS,
+	S2MU005_FLASH_TIMEOUT_744MS,
+	S2MU005_FLASH_TIMEOUT_806MS,
+	S2MU005_FLASH_TIMEOUT_868MS,
+	S2MU005_FLASH_TIMEOUT_930MS,
+	S2MU005_FLASH_TIMEOUT_992MS,
+};
+
+
+enum s2mu005_torch_timeout {
+	S2MU005_TORCH_TIMEOUT_262MS,
+	S2MU005_TORCH_TIMEOUT_524MS,
+	S2MU005_TORCH_TIMEOUT_768MS,
+	S2MU005_TORCH_TIMEOUT_1048MS,
+	S2MU005_TORCH_TIMEOUT_1572MS,
+	S2MU005_TORCH_TIMEOUT_2096MS,
+	S2MU005_TORCH_TIMEOUT_2620MS,
+	S2MU005_TORCH_TIMEOUT_3144MS,
+	S2MU005_TORCH_TIMEOUT_4192MS,
+	S2MU005_TORCH_TIMEOUT_5242MS,
+	S2MU005_TORCH_TIMEOUT_6291MS,
+	S2MU005_TORCH_TIMEOUT_7340MS,
+	S2MU005_TORCH_TIMEOUT_9437MS,
+	S2MU005_TORCH_TIMEOUT_11534MS,
+	S2MU005_TORCH_TIMEOUT_13631MS,
+	S2MU005_TORCH_TIMEOUT_15728MS,
+};
+
+enum s2mu005_fled_mode {
+	S2MU005_FLED_MODE_OFF = 0,
+	S2MU005_FLED_MODE_PREFLASH,
+	S2MU005_FLED_MODE_FLASH,
+	S2MU005_FLED_MODE_MOVIE,
+};
+
+#define S2MU005_FLASH_BRIGHTNESS(mA) mA<=400?(((mA-25)/25) & 0x1f):(((((mA-400)/50)+0x0F)) & 0x1f)
+#define S2MU005_TORCH_BRIGHTNESS(mA) mA>400?(0x0f):(mA<25?(0x00):(((mA-25)/25) & 0x0f))
+
+struct s2mu005_led {
+	const char *name;
+	int id;
+	int brightness;
+	int timeout;
+	int max_brightness;
+};
+
+struct s2mu005_fled_platform_data {
+	int num_leds;
+	struct s2mu005_led leds[S2MU005_LED_MAX];
+	int torch_pin;
+	int flash_pin;
+	unsigned int flash_brightness;
+	unsigned int preflash_brightness;
+	unsigned int movie_brightness;
+	unsigned int torch_brightness;
+	unsigned int factory_brightness;
+	struct pinctrl *fled_pinctrl;
+	struct pinctrl_state *gpio_state_active;
+	struct pinctrl_state *gpio_state_suspend;
+};
+
+// For msm_flash
+int msm_fled_led_off_s2mu005(ext_pmic_flash_ctrl_t *flash_ctrl);
+int msm_fled_torch_on_s2mu005(ext_pmic_flash_ctrl_t *flash_ctrl);
+int msm_fled_flash_on_s2mu005(ext_pmic_flash_ctrl_t *flash_ctrl);
+int msm_fled_pre_flash_on_s2mu005(ext_pmic_flash_ctrl_t *flash_ctrl);
+int msm_fled_flash_on_set_current_s2mu005(ext_pmic_flash_ctrl_t *flash_ctrl);
+#ifdef CONFIG_SEC_ON5XLLTE_PROJECT
+ext_pmic_flash_ctrl_t *s2mu005_fled_get_info_by_name(char *name);
+#endif
+#endif

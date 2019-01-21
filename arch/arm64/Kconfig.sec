@@ -1,0 +1,206 @@
+config SEC_A6PLTE_PROJECT
+	depends on ARCH_SDM450
+	default n
+	bool "Samsung A6-Plus LTE Project"
+	help
+	  Support for Samsung A6-Plus LTE Project
+
+config MACH_A6PLTE_EUR_OPEN
+	depends on SEC_A6PLTE_PROJECT
+	default n
+	bool "Samsung A6-Plus LTE EUR OPEN"
+	help
+	  Support for Samsung A6-Plus LTE EUR OPEN device.
+
+config MACH_A6PLTE_SEA_OPEN
+	depends on SEC_A6PLTE_PROJECT
+	default n
+	bool "Samsung A6-Plus LTE SEA OPEN"
+	help
+	  Support for Samsung A6-Plus LTE SEA OPEN device.
+
+config MACH_A6PLTE_LTN_OPEN
+        depends on SEC_A6PLTE_PROJECT
+        default n
+        bool "Samsung A6-Plus LTE LTN OPEN"
+        help
+          Support for Samsung A6-Plus LTE LTN OPEN device.
+
+config MACH_A6PLTE_CIS_SER
+	depends on SEC_A6PLTE_PROJECT
+	default n
+	bool "Samsung A6-Plus LTE CIS SER"
+	help
+	  Support for Samsung A6-Plus LTE CIS SER device.
+
+config MACH_A6PLTE_CHN_OPEN
+	depends on SEC_A6PLTE_PROJECT
+	default n
+	bool "Samsung A6-Plus LTE CHN OPEN"
+	help
+	  Support for Samsung A6-Plus LTE CHN OPEN device.
+
+config MACH_A6PLTE_KOR_KTT
+	depends on SEC_A6PLTE_PROJECT
+	default n
+	bool "Samsung A6-Plus LTE KOR KTT"
+	help
+	  Support for Samsung A6-Plus LTE KOR KTT device.
+
+config SEC_GTAXLQLTE_USA_SPR
+	bool "Enable Support for Samsung GTAXLQ LTE USA SPR device."
+	depends on ARCH_MSM8953
+	help
+	  This enables support for Samsung GTAXLQ LTE USA SPR device.
+
+config SEC_J7POPLTE_USA_VZW
+	bool "Enable Support for Samsung J7POP LTE USA VZW device."
+	depends on ARCH_MSM8953
+	help
+	  This enables support for Samsung J7POP LTE USA VZW device.
+	  
+config SEC_J7POPLTE_USA_SPR
+	bool "Enable Support for Samsung J7POP LTE USA SPR device."
+	depends on ARCH_MSM8953
+	help
+	  This enables support for Samsung J7POP LTE USA SPR device.
+	  
+config SEC_J7POPLTE_USA_USC
+	bool "Enable Support for Samsung J7POP LTE USA USC device."
+	depends on ARCH_MSM8953
+	help
+	  This enables support for Samsung J7POP LTE USA USC device.
+
+config SEC_J8PLTE_PROJECT
+	depends on ARCH_SDM450
+	default n
+	bool "Samsung J8-Plus LTE Project"
+	help
+	  Support for Samsung J8-Plus LTE Project
+
+config MACH_J8PLTE_CIS_SER
+	depends on SEC_J8PLTE_PROJECT
+	default n
+	bool "Samsung J8-Plus LTE CIS SER"
+	help
+	  Support for Samsung J8-Plus LTE CIS SER device.
+
+
+config MACH_J8PLTE_EUR_OPEN
+	depends on SEC_J8PLTE_PROJECT
+	default n
+	bool "Samsung J8-Plus LTE EUR OPEN"
+	help
+	  Support for Samsung J8-Plus LTE EUR OPEN device.
+
+config MACH_J8PLTE_SEA_OPEN
+	depends on SEC_J8PLTE_PROJECT
+	default n
+	bool "Samsung J8-Plus LTE SEA OPEN"
+	help
+	  Support for Samsung J8-Plus LTE SEA OPEN device.
+	  
+config MACH_J8PLTE_CHN_OPEN
+	depends on SEC_J8PLTE_PROJECT
+	default n
+	bool "Samsung J8-Plus LTE CHN OPEN"
+	help
+	  Support for Samsung J8-Plus LTE CHN OPEN device.
+
+config MACH_J8PLTE_KOR_KTT
+	depends on SEC_J8PLTE_PROJECT
+	default n
+	bool "Samsung J8-Plus LTE KOR KTT"
+	help
+	  Support for Samsung J8-Plus LTE KOR KTT device.
+
+config MACH_J8PLTE_LTN_OPEN
+        depends on SEC_J8PLTE_PROJECT
+        default n
+        bool "Samsung J8-Plus LTE LTN OPEN"
+        help
+          Support for Samsung J8-Plus LTE LTN OPEN device.
+
+config SEC_GTA2XLLTE_PROJECT
+	depends on ARCH_SDM450
+	default n
+	bool "Samsung Tab A2 XL LTE Project"
+	help
+	  Support for Samsung Tab A2 XL LTE Project
+
+config MACH_GTA2XLLTE_CHN_OPEN
+	depends on SEC_GTA2XLLTE_PROJECT
+	default n
+	bool "Samsung Tab A2 XL LTE CHN OPEN"
+	help
+	  Support for Samsung Tab A2 XL LTE CHN OPEN device.
+
+config MACH_GTA2XLLTE_EUR_OPEN
+	depends on SEC_GTA2XLLTE_PROJECT
+	default n
+	bool "Samsung Tab A2 XL LTE EUR OPEN"
+	help
+	  Support for Samsung Tab A2 XL LTE EUR OPEN device.
+
+config MACH_GTA2XLLTE_USA_SPR
+	depends on SEC_GTA2XLLTE_PROJECT
+	default n
+	bool "Samsung Tab A2 XL LTE USA SPR"
+	help
+	  Support for Samsung Tab A2 XL LTE USA SPR device.
+
+config MACH_GTA2XLLTE_USA_VZW
+	depends on SEC_GTA2XLLTE_PROJECT
+	default n
+	bool "Samsung Tab A2 XL LTE USA VZW"
+	help
+	  Support for Samsung Tab A2 XL LTE USA VZW device.
+	  
+config MACH_GTA2XLLTE_MEA_OPEN
+	depends on SEC_GTA2XLLTE_PROJECT
+	default n
+	bool "Samsung Tab A2 XL LTE MEA OPEN"
+	help
+	  Support for Samsung Tab A2 XL LTE MEA OPEN device.
+	  
+config MACH_GTA2XLLTE_MEA_TUR
+	depends on SEC_GTA2XLLTE_PROJECT
+	default n
+	bool "Samsung Tab A2 XL LTE MEA TUR"
+	help
+  	  Support for Samsung Tab A2 XL LTE MEA TUR device.
+
+config MACH_GTA2XLLTE_KOR_OPEN
+	depends on SEC_GTA2XLLTE_PROJECT
+	default n
+	bool "Samsung Tab A2 XL LTE KOR OPEN"
+	help
+	  Support for Samsung Tab A2 XL LTE KOR OPEN device.
+	  
+config MACH_GTA2XLLTE_CAN_SINGLE
+	depends on SEC_GTA2XLLTE_PROJECT
+	default n
+	bool "Samsung Tab A2 XL LTE CAN SINGLE"
+	help
+	  Support for Samsung Tab A2 XL LTE CAN SINGLE device.
+	
+config SEC_GTA2XLWIFI_PROJECT
+        depends on ARCH_SDM450
+        default n
+        bool "Samsung Tab A2 XL WIFI Project"
+        help
+          Support for Samsung Tab A2 XL WIFI Project
+
+config MACH_GTA2XLWIFI_EUR_OPEN
+        depends on SEC_GTA2XLWIFI_PROJECT
+        default n
+        bool "Samsung Tab A2 XL WIFI EUR OPEN"
+        help
+          Support for Samsung Tab A2 XL WIFI EUR OPEN device.
+
+config MACH_J6PLTE_CIS_SER
+	depends on SEC_J6PLTE_PROJECT
+	default n
+	bool "Samsung J6-Plus LTE CIS SER"
+	help
+	  Support for Samsung J6-Plus LTE CIS SER device.

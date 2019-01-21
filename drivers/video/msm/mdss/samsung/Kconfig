@@ -1,0 +1,224 @@
+config SAMSUNG_DEBUG_DISPLAY
+    bool "Add Samsung Debugging code"
+    default n
+
+config FB_MSM_MDSS_SAMSUNG
+	depends on FB_MSM_MDSS
+	bool "mdss config for samsung product"
+	default n
+	---help---
+	Mdss config signature for samsung product
+
+config DISPLAY_USE_INFO
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "Support display use info logging"
+	default n
+
+config SAMSUNG_12_8MHZ_ESC_CLOCK
+    bool "12.8Mhz esc clock"
+    default n
+#
+#	PANEL UNIQUE FEATURE
+#
+config DUAL_PANEL
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "dual paneloperation"
+	default n
+	---help---
+	dual panel operation support
+
+config PARTIAL_UPDATE
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "partial update operation"
+	default n
+	---help---
+	partial update operation support
+
+config CABC_FUNCTION
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "DDI cabc operation"
+	default n
+	---help---
+	DDI cabc operation support
+
+config SUPPORT_POC_FLASH
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "SUPPORT POC FLASH"
+	default n
+	---help---
+	SUPPORT_POC_FLASH FOR DREAM2 ONLY
+
+config SUPPORT_POC_2_0
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "SUPPORT POC_2_0"
+	default n
+	---help---
+	POC_2_0 SUPPORT
+
+config POC_33_COMPENSATION
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "POC 33 DEVICE COMPENSATION TO 64"
+	default n
+	---help---
+	POC 33 DEVICE COMPENSATION TO 64
+
+#
+#	HOW TO MAKE DEF-CONFIG NAME FOR PANEL
+#
+#	PANEL_DDI-model_PANEL-model_RESOLUTION
+#	PANEL_S6E3FA2    _AMS510CV01_FHD
+#	PANEL_S6E3FA2_AMS510CV01_FHD
+#
+config PANEL_HX8279_TV101WUM_WUXGA
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "HIMAX HX8279 LDI"
+	default n
+	---help---
+	HIMAX HX8279
+
+config PANEL_HX8279_TV101WUM_1_WUXGA
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "HIMAX HX8279 LDI For T587P"
+	default n
+	---help---
+	HIMAX HX8279 T587P
+
+config PANEL_S6E3FA3_AMS598NJ01_FHD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "LSI S6E3FA3 LDI"
+	default n
+	---help---
+	LSI S6E3FA3 LDI 1080_1920 C10P
+
+config PANEL_S6E3FA3_AMS559NK01_FHD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "LSI S6E3FA3 LDI"
+	default n
+	---help---
+	LSI S6E3FA3 LDI 1080_1920
+
+config PANEL_S6E3FA7_AMS559NK01_FHD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "LSI S6E3FA7 LDI"
+	default n
+	---help---
+	LSI S6E3FA7 LDI 1080_2220
+
+config PANEL_S6E3FA7_AMS604NL01_FHD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "LSI S6E3FA7 LDI"
+	default n
+	---help---
+	LSI S6E3FA7 LDI 1080_2220
+
+config BLIC_ISL98608
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "BLIC ISL98608"
+	default n
+	---help---
+	BLIC ISL98608
+
+config PANEL_POWER_ISL98608
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "PANEL_POWER ISL98608"
+	default n
+	---help---
+	PANEL_POWER ISL98608
+
+config PANEL_S6D7AA0X11_TV080WXM_WXGA
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "PANEL_S6D7AA0X11_TV080WXM_WXGA"
+	default n
+	---help---
+	S6D7AA0X11_TV080WXM
+
+config PANEL_EA8061S_AMS498QV01_QHD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "EA8061s Magna 5.0inch OCTA"
+	default n
+	---help---
+	LSI EA8061s OCTA 540_960_5 J2 2018
+
+config PANEL_TD4100_BV050HDM_HD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "SYNAPTICS TD4100 LDI"
+	default n
+	---help---
+	SYNAPTICS TD4100 LDI 720_1280 J3-POP
+
+config PANEL_S6E8AA5X01_AMS561RA01_HD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "PANEL_S6E8AA5X01_AMS561RA01_HD"
+	default n
+	---help---
+	LSI S6E8AA5X01 LDI 720_1480 HD+ J6P
+
+config PANEL_S6D7AT0_BS055HDM_HD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "S6D7AT0 LDI"
+	default n
+	---help---
+	S6D7AT0 LDI 720_1280 J5-2018 Temp
+
+config PANEL_EA8061S_AMS498QV01_QHD
+    depends on FB_MSM_MDSS_SAMSUNG
+    bool "EA8061s Magna 5.0inch OCTA"
+    default n
+    ---help---
+    LSI EA8061s OCTA 540_960_5 Android Go
+
+config PANEL_TD4100_5_5_HD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "SYNAPTICS TD4100 LDI"
+	default n
+	---help---
+	SYNAPTICS TD4100 LDI 720_1280 IN_CELL
+
+config PANEL_S6D7AT0B01_PM6003XB1_HDP
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "SAMSUNG S6D7AT0B01 LDI"
+	default n
+	---help---
+	SAMSUNG S6D7AT0B01 LDI 720_1480 IN_CELL
+
+config PANEL_S6D7AT0B01_BS060WKM_HDP
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "SAMSUNG S6D7AT0B01 LDI"
+	default n
+	---help---
+	SAMSUNG S6D7AT0B01 LDI 720_1480 IN_CELL
+
+config BLIC_ISL98611
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "BLIC ISL98611"
+	default n
+	---help---
+	BLIC ISL98611
+
+config BLIC_LM3632A
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "BLIC LM3632A"
+	default n
+	---help---
+	BLIC LM3632A
+	
+config PANEL_HX83100A_C5001H3F_HD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "HIMAX HX83100A LDI"
+	default n
+	---help---
+	HIMAX HX83100A LDI 720_1280 IN_CELL
+
+config PANEL_TD4100_BS050HDM_HD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "SYNAPTICS TD4100 LDI"
+	default n
+	---help---
+	SYNAPTICS TD4100 LDI 720_1280 IN_CELL
+	
+config PANEL_TD4100_C5001H3F_HD
+	depends on FB_MSM_MDSS_SAMSUNG
+	bool "SYNAPTICS TD4100 LDI"
+	default n
+	---help---
+	SYNAPTICS TD4100 LDI 720_1280 IN_CELL

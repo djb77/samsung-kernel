@@ -1,0 +1,354 @@
+#
+# MUIC devices
+#
+
+comment "MUIC configs"
+
+config USE_MUIC
+	bool "Using MUIC device driver"
+	depends on I2C
+	default n
+	help
+	  If you say yes here you will get support for
+	  the MUIC device driver.
+
+config MUIC_VZW_ACC
+	bool "Using Verizon Acc type"
+	depends on USE_MUIC
+	default n
+	help
+		If you say yes here you will get support for
+		for the Verizon Acc type cable.
+
+config MUIC_INCOMPATIBLE_VZW
+	bool "Using Verizon incomatible type"
+	depends on USE_MUIC
+	default n
+	help
+		If you say yes here you will get support for
+		for the Verizon incomatible type cable.
+
+config USE_SAFEOUT
+	bool "Using SAFEOUT device driver"
+	depends on I2C
+	default n
+	help
+	  If you say yes here you will get support for
+	  the SAFEOUT device driver.
+
+config MUIC_NOTIFIER
+	bool "MUIC notifier support"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for
+	  the MUIC attached device status change notification.
+	  
+config MUIC_SUPPORT_EARJACK
+	bool "MUIC earjack support"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for
+	  the EARJACK device.
+
+config SAMSUNG_MUIC
+	bool "Using samsung MUIC chip driver"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the MUIC chip.
+
+config MUIC_ADCMODE_SWITCH_WA
+	bool "Using MUIC chip ADC Mode change W/A"
+	depends on USE_MUIC
+	default n
+	help
+	  This feature is for MUIC chip's ADC Mode change
+	  chip bug Workaround.
+
+config MUIC_RUSTPROOF_ON_USER
+	bool "Using MUIC chip Rustproof function ON for User binary"
+	depends on USE_MUIC
+	default n
+	help
+	  This feature is for MUIC chip's Rustproof function.
+
+config MUIC_FSA9480
+	tristate "FSA9480 USB Switch"
+	depends on I2C
+	help
+	  The FSA9480 is a USB port accessory detector and switch.
+	  The FSA9480 is fully controlled using I2C and enables USB data,
+	  stereo and mono audio, video, microphone and UART data to use
+	  a common connector port.
+
+config MUIC_MAX77804
+	bool "Using MAX77804 MUIC"
+	depends on MFD_MAX77804 && USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for
+	  for the MAX77804 MUIC chip.
+
+config MUIC_MAX77804K
+	bool "Using MAX77804K MUIC"
+	depends on MFD_MAX77804K && USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for
+	  for the MAX77804K MUIC chip.
+
+config MUIC_MAX77828
+	bool "Using MAX77828 MUIC"
+	depends on MFD_MAX77828 && USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for
+	  for the MAX77828 MUIC chip.
+
+config MUIC_MAX77843
+	bool "Using MAX77843 MUIC"
+	depends on MFD_MAX77843 && USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for
+	  for the MAX77843 MUIC chip.
+
+config S2MU005_SUPPORT_BC1P2_CERTI
+	bool "S2MU005 Support BC 1.2 Certification"
+	depends on USE_MUIC && MUIC_S2MU005
+	default n
+	help
+	 Support for the BC 1.2 Certification.
+	 This driver provides common support for accessing the device,
+	 additional drivers must be enabled in order to use the functionality
+
+config HV_MUIC_MAX77843_AFC
+	bool "Using MAX77843 AFC MUIC"
+	depends on MUIC_MAX77843
+	default n
+	help
+	  If you say yes here you will get support for the MAX77843 AFC MUIC.
+
+config MUIC_MAX77843_IGNORE_ADCERR_WA
+	bool "Using MAX77843 MUIC ignore ADCERR WA"
+	depends on MUIC_MAX77843
+	default n
+	help
+	  If you say yes here you will get support for the MAX77843 MUIC RESET WA.
+
+config MUIC_MAX77843_RESET_WA
+	bool "Using MAX77843 MUIC RESET WA"
+	depends on MUIC_MAX77843
+	default n
+	help
+	  If you say yes here you will get support for the MAX77843 MUIC RESET WA.
+
+config MUIC_MAX77833
+        bool "Using MAX77833 MUIC"
+        depends on MFD_MAX77833 && USE_MUIC
+        default n
+        help
+          If you say yes here you will get support for
+          for the MAX77833 MUIC chip.
+
+config HV_MUIC_MAX77833_AFC
+        bool "Using MAX77833 AFC MUIC"
+        depends on MUIC_MAX77833
+        default n
+        help
+          If you say yes here you will get support for the MAX77833 AFC MUIC.
+
+config MUIC_MAX77833_IGNORE_ADCERR_WA
+        bool "Using MAX77833 MUIC ignore ADCERR WA"
+        depends on MUIC_MAX77833
+        default n
+        help
+          If you say yes here you will get support for the MAX77833 MUIC RESET WA.
+
+config MUIC_MAX77833_RESET_WA
+        bool "Using MAX77833 MUIC RESET WA"
+        depends on MUIC_MAX77833
+        default n
+        help
+          If you say yes here you will get support for the MAX77833 MUIC RESET WA.
+
+config MUIC_MAX77888
+	bool "Using MAX77888 MUIC"
+	depends on MFD_MAX77888 && USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for
+	  for the MAX77888 MUIC chip.
+
+config MUIC_S2MM001
+	bool "Using S2MM001 MUIC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for
+	  for the S2MM001 MUIC chip.
+
+config MUIC_S2MU005
+	bool "Using S2MU005 MUIC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for
+	  for the S2MU005 MUIC chip.
+	 
+config KEEP_JIG_LOW
+	bool "Using KEEP JIG LOW"
+	depends on MUIC_S2MU005
+	default n
+	help
+	  If you say yes here you will get support for
+	  keep jig signal low always for S22MU005 MUIC chip.
+
+config MUIC_SM5705
+	bool "SM5705 MUIC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the SM5705 MUIC chip.
+
+config MUIC_SM5705_AFC
+        bool "SM5705 AFC MUIC"
+        depends on MUIC_SM5705
+        default n
+        help
+          If you say yes here you will get support for the SM5705 AFC MUIC.
+
+config SWITCH_DUAL_MODEM
+        bool "SWITCH DUAL MODEM"
+        default n
+        help
+          If you using separated chip AP and CP, Set Y.
+
+config UART3
+        bool "UART3"
+        default n
+        help
+          If you say yes, you can use xo shutdown
+config MUIC_SUPPORT_CCIC
+	bool "MUIC supports CCIC chip interface"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the CCIC chip.
+
+config MUIC_SUPPORT_RUSTPROOF
+	bool "MUIC Disable UART"
+	depends on !SEC_FACTORY
+	default n
+	help
+	 This option will disable the UART to prevent the rusting of the
+	 IF Connector in the case of Kmini Devices.
+
+config MUIC_S2MU005_INNER_BATTERY
+	bool "Setting inner battery W/A of S2MU005 MUIC driver"
+	depends on USE_MUIC && MFD_S2MU005 && MUIC_S2MU005
+	default n
+	help
+	  If you say yes here you will get support for
+	  the INNER BATTERY for S2MU005 MUIC.
+	  if device is inner battery type then please
+	  say 'Y' here
+	  
+config MUIC_S2MU004
+	bool "Using S2MU004 MUIC"
+	depends on USE_MUIC && MFD_S2MU004
+	default n
+	help
+	  If you say yes here you will get support for the S2MU004 MUIC chip.
+
+config MUIC_S2MU004_SUPPORT_BC1P2_CERTI
+	bool "Using S2MU004 MUIC BC1P2_CERTI"
+	depends on USE_MUIC && MFD_S2MU004
+	default n
+	help
+	  If you say yes here you will get support for the S2MU004 BC1P2_CERTI.
+
+ config HV_MUIC_S2MU004_AFC
+     bool "Using S2MU004 MUIC AFC"
+     depends on MUIC_S2MU004
+     default n
+     help
+       If you say yes here you will get support for the AFC.
+
+config MUIC_S2MU004_ENABLE_AUTOSW
+	bool "Using S2MU004 ENABLE AUTOSW"
+	depends on MUIC_S2MU004
+	default n
+	help
+	  If you say yes here you will get support for the AUTO switch path.
+
+config MUIC_S2MU005_JIGB_CONTROL
+	bool "Using S2MU005 MUIC JIGB CONTROL"
+	depends on USE_MUIC && MUIC_S2MU005
+	default n
+	help
+	  If you say yes here you will get support for
+	  for the S2MU005 MUIC chip JIGB CONTROL feature.
+
+config MUIC_S2MU005_ENABLE_AUTOSW
+	bool "Using S2MU005 MUIC ENABLE AUTOSW"
+	depends on USE_MUIC && MUIC_S2MU005
+	default n
+	help
+	  If you say yes here you will get support for
+	  for the S2MU005 MUIC chip ENABLE AUTOSW feature.
+	  
+config MUIC_S2MU005_DISCHARGING_WA
+	bool "Using S2MU005 MUIC DISCHARGING WORKAROUND"
+	depends on USE_MUIC && MUIC_S2MU005
+	default n
+	help
+		If you say yes here you will get support for
+		for the S2MU005 MUIC chip DISCHARGING WA feature.
+
+config MUIC_S2MU005_WATER_WA_DISABLE
+	bool "Using S2MU005 MUIC WATER WA DISABLE"
+	depends on USE_MUIC && MUIC_S2MU005
+	default n
+	help
+		If you say yes here you will get support for
+		for the S2MU005 MUIC chip WATER WA DISABLE feature.
+
+config MUIC_S2MU004_NON_USB_C_TYPE
+	bool "Using S2MU004 NON USB C TYPE"
+	depends on MUIC_S2MU004
+	default n
+	help
+	  If you say yes here you will get support for the NON TYPE C.
+
+config MUIC_HV
+	bool "MUIC_HV"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the AFC.
+
+config HICCUP_CHARGER
+	bool "Using HICCUP charger"
+	depends on USE_MUIC && !SEC_FACTORY
+	default n
+	help
+		If you say yes here you will get support for
+		for the hiccup charger feature.
+
+config MUIC_KEYBOARD
+	bool "MUIC_KEYBOARD"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for muic keyboard.
+
+config GPIO_UART_SEL
+	bool "GPIO_UART_SEL"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for gpio setting for uart_sel.
+

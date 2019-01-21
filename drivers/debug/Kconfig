@@ -1,0 +1,21 @@
+# When adding new entries keep the list in alphabetical order
+
+choice
+	prompt "Version of GAF structure"
+	depends on SEC_DEBUG
+	default SEC_DEBUG_GAF_V4 if FIVE
+	default SEC_DEBUG_GAF_V3
+
+	config SEC_DEBUG_GAF_V3
+		bool "Use GAF structure version 3"
+		help
+		  Default option for FIVE-disabled kernel
+
+	config SEC_DEBUG_GAF_V4
+		bool "Use GAF structure version 4"
+		help
+		  Default option for FIVE-enabled kernel
+endchoice
+
+source "drivers/debug/user_reset/Kconfig"
+

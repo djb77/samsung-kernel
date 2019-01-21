@@ -1,0 +1,785 @@
+if ARCH_MSM
+menu "MSM SoC Type"
+config ARCH_MDM9640
+	bool "MDM9640"
+	select ARM_GIC
+	select CPU_V7
+	select REGULATOR
+	select REGULATOR_RPM_SMD
+	select HAVE_ARM_ARCH_TIMER
+	select MSM_RPM_SMD
+	select MSM_SPM
+	select MSM_PM if PM
+	select MEMORY_HOLE_CARVEOUT
+	select QMI_ENCDEC
+	select MSM_CORTEX_A7
+	select PINCTRL
+	select PINCTRL_MSM_TLMM
+	select USE_PINCTRL_IRQ
+	select PCI
+	select MSM_IRQ
+	select MSM_JTAG_MM if CORESIGHT_ETM
+	select MSM_CLK_CONTROLLER_V2
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_DEVBW
+	select MSM_RPM_LOG
+	select MSM_RPM_STATS_LOG
+	select ARM_HAS_SG_CHAIN
+
+config ARCH_MDM9607
+       bool "MDM9607"
+       select ARM_GIC
+       select CPU_V7
+       select REGULATOR
+       select REGULATOR_RPM_SMD
+       select HAVE_ARM_ARCH_TIMER
+       select MSM_RPM_SMD
+       select MEMORY_HOLE_CARVEOUT
+       select MSM_CORTEX_A7
+       select PINCTRL
+       select PINCTRL_MSM_TLMM
+       select USE_PINCTRL_IRQ
+       select MSM_IRQ
+       select MSM_PM if PM
+       select PM_DEVFREQ
+       select MSM_DEVFREQ_DEVBW
+       select MSM_BIMC_BWMON
+       select DEVFREQ_GOV_MSM_BW_HWMON
+       select ARM_HAS_SG_CHAIN
+
+config ARCH_MDM9650
+	bool "MDM9650"
+	select ARM_GIC
+	select CPU_V7
+	select REGULATOR
+	select REGULATOR_RPM_SMD
+	select HAVE_ARM_ARCH_TIMER
+	select MSM_RPM_SMD
+	select MSM_SPM
+	select MSM_PM if PM
+	select QMI_ENCDEC
+	select MSM_CORTEX_A7
+	select PINCTRL
+	select PINCTRL_MSM_TLMM
+	select USE_PINCTRL_IRQ
+	select PCI
+	select MSM_IRQ
+	select MSM_JTAG_MM if CORESIGHT_ETM
+	select MSM_CLK_CONTROLLER_V2
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_DEVBW
+	select DEVFREQ_SIMPLE_DEV
+	select MSM_RPM_LOG
+	select MSM_RPM_STATS_LOG
+
+config ARCH_SDX20
+	bool "SDX20"
+	select ARM_GIC
+	select CPU_V7
+	select REGULATOR
+	select REGULATOR_RPM_SMD
+	select HAVE_ARM_ARCH_TIMER
+	select MSM_RPM_SMD
+	select MSM_SPM
+	select MSM_PM if PM
+	select QMI_ENCDEC
+	select MSM_CORTEX_A7
+	select PINCTRL
+	select PINCTRL_MSM_TLMM
+	select USE_PINCTRL_IRQ
+	select PCI
+	select MSM_IRQ
+	select MSM_JTAG_MM if CORESIGHT_ETM
+	select MSM_CLK_CONTROLLER_V2
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_DEVBW
+	select DEVFREQ_SIMPLE_DEV
+	select MSM_RPM_LOG
+	select MSM_RPM_STATS_LOG
+
+config ARCH_MSM8916
+	bool "MSM8916"
+	select MSM_CORTEX_A53
+	select ARCH_MSM_CORTEXMP
+	select CPU_V7
+	select HAVE_SMP
+	select ARM_GIC
+	select MSM_IRQ
+	select SPARSE_IRQ
+	select MULTI_IRQ_HANDLER
+	select HAVE_ARM_ARCH_TIMER
+	select MAY_HAVE_SPARSE_IRQ
+	select PINCTRL
+	select PINCTRL_MSM_TLMM
+	select USE_PINCTRL_IRQ
+	select MSM_PM if PM
+	select QMI_ENCDEC
+	select CPU_FREQ
+	select CPU_FREQ_MSM
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_DEVBW
+	select DEVFREQ_SIMPLE_DEV
+	select DEVFREQ_GOV_MSM_BW_HWMON
+	select MSM_BIMC_BWMON
+	select MSM_QDSP6V2_CODECS
+	select MSM_AUDIO_QDSP6V2 if SND_SOC
+	select ARM_HAS_SG_CHAIN
+	select MSM_RPM_SMD
+	select MSM_JTAGV8 if CORESIGHT_ETMV4
+	select ARCH_WANT_KMAP_ATOMIC_FLUSH
+
+config ARCH_MSM8937
+	bool "MSM8937"
+	select MSM_CORTEX_A53
+	select ARCH_MSM_CORTEXMP
+	select CPU_V7
+	select HAVE_SMP
+	select ARM_GIC
+	select MSM_IRQ
+	select SPARSE_IRQ
+	select MULTI_IRQ_HANDLER
+	select HAVE_ARM_ARCH_TIMER
+	select MAY_HAVE_SPARSE_IRQ
+	select PINCTRL
+	select PINCTRL_MSM_TLMM
+	select USE_PINCTRL_IRQ
+	select MSM_PM if PM
+	select QMI_ENCDEC
+	select CPU_FREQ
+	select CPU_FREQ_MSM
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_DEVBW
+	select DEVFREQ_SIMPLE_DEV
+	select DEVFREQ_GOV_MSM_BW_HWMON
+	select MSM_BIMC_BWMON
+	select MSM_QDSP6V2_CODECS
+	select MSM_AUDIO_QDSP6V2 if SND_SOC
+	select ARM_HAS_SG_CHAIN
+	select MSM_JTAGV8 if CORESIGHT_ETMV4
+	select ARCH_WANT_KMAP_ATOMIC_FLUSH
+
+config ARCH_MSM8917
+	bool "MSM8917"
+	select MSM_CORTEX_A53
+	select ARCH_MSM_CORTEXMP
+	select CPU_V7
+	select HAVE_SMP
+	select ARM_GIC
+	select MSM_IRQ
+	select SPARSE_IRQ
+	select MULTI_IRQ_HANDLER
+	select HAVE_ARM_ARCH_TIMER
+	select MAY_HAVE_SPARSE_IRQ
+	select PINCTRL
+	select PINCTRL_MSM_TLMM
+	select USE_PINCTRL_IRQ
+	select MSM_PM if PM
+	select QMI_ENCDEC
+	select CPU_FREQ
+	select CPU_FREQ_MSM
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_DEVBW
+	select DEVFREQ_SIMPLE_DEV
+	select DEVFREQ_GOV_MSM_BW_HWMON
+	select MSM_BIMC_BWMON
+	select MSM_QDSP6V2_CODECS
+	select MSM_AUDIO_QDSP6V2 if SND_SOC
+	select ARM_HAS_SG_CHAIN
+	select MSM_RPM_SMD
+	select MSM_JTAGV8 if CORESIGHT_ETMV4
+	select ARCH_WANT_KMAP_ATOMIC_FLUSH
+
+config ARCH_MSM8920
+	bool "MSM8920"
+	select MSM_CORTEX_A53
+	select ARCH_MSM_CORTEXMP
+	select CPU_V7
+	select HAVE_SMP
+	select ARM_GIC
+	select MSM_IRQ
+	select SPARSE_IRQ
+	select MULTI_IRQ_HANDLER
+	select HAVE_ARM_ARCH_TIMER
+	select MAY_HAVE_SPARSE_IRQ
+	select PINCTRL
+	select PINCTRL_MSM_TLMM
+	select USE_PINCTRL_IRQ
+	select MSM_PM if PM
+	select QMI_ENCDEC
+	select CPU_FREQ
+	select CPU_FREQ_MSM
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_DEVBW
+	select DEVFREQ_SIMPLE_DEV
+	select DEVFREQ_GOV_MSM_BW_HWMON
+	select MSM_BIMC_BWMON
+	select MSM_QDSP6V2_CODECS
+	select MSM_AUDIO_QDSP6V2 if SND_SOC
+	select ARM_HAS_SG_CHAIN
+	select MSM_RPM_SMD
+	select MSM_JTAGV8 if CORESIGHT_ETMV4
+	select ARCH_WANT_KMAP_ATOMIC_FLUSH
+
+config ARCH_MSM8940
+	bool "MSM8940"
+	select MSM_CORTEX_A53
+	select ARCH_MSM_CORTEXMP
+	select CPU_V7
+	select HAVE_SMP
+	select ARM_GIC
+	select MSM_IRQ
+	select SPARSE_IRQ
+	select MULTI_IRQ_HANDLER
+	select HAVE_ARM_ARCH_TIMER
+	select MAY_HAVE_SPARSE_IRQ
+	select PINCTRL
+	select PINCTRL_MSM_TLMM
+	select USE_PINCTRL_IRQ
+	select MSM_PM if PM
+	select QMI_ENCDEC
+	select CPU_FREQ
+	select CPU_FREQ_MSM
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_DEVBW
+	select DEVFREQ_SIMPLE_DEV
+	select DEVFREQ_GOV_MSM_BW_HWMON
+	select MSM_BIMC_BWMON
+	select MSM_QDSP6V2_CODECS
+	select MSM_AUDIO_QDSP6V2 if SND_SOC
+	select ARM_HAS_SG_CHAIN
+	select MSM_JTAGV8 if CORESIGHT_ETMV4
+
+config ARCH_MSM8953
+	bool "MSM8953"
+	select MSM_CORTEX_A53
+	select ARCH_MSM_CORTEXMP
+	select CPU_V7
+	select HAVE_SMP
+	select ARM_GIC
+	select MSM_IRQ
+	select SPARSE_IRQ
+	select MULTI_IRQ_HANDLER
+	select HAVE_ARM_ARCH_TIMER
+	select MAY_HAVE_SPARSE_IRQ
+	select PINCTRL
+	select PINCTRL_MSM_TLMM
+	select USE_PINCTRL_IRQ
+	select MSM_PM if PM
+	select QMI_ENCDEC
+	select CPU_FREQ
+	select CPU_FREQ_MSM
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_DEVBW
+	select DEVFREQ_SIMPLE_DEV
+	select DEVFREQ_GOV_MSM_BW_HWMON
+	select MSM_BIMC_BWMON
+	select MSM_QDSP6V2_CODECS
+	select MSM_AUDIO_QDSP6V2 if SND_SOC
+	select ARM_HAS_SG_CHAIN
+	select MSM_RPM_SMD
+	select MSM_JTAGV8 if CORESIGHT_ETMV4
+	select ARCH_WANT_KMAP_ATOMIC_FLUSH
+	select ARCH_MSM8953_SOC_SETTINGS
+
+config ARCH_SDM450
+	bool "SDM450"
+	select MSM_CORTEX_A53
+	select ARCH_MSM_CORTEXMP
+	select CPU_V7
+	select HAVE_SMP
+	select ARM_GIC
+	select MSM_IRQ
+	select SPARSE_IRQ
+	select MULTI_IRQ_HANDLER
+	select HAVE_ARM_ARCH_TIMER
+	select MAY_HAVE_SPARSE_IRQ
+	select PINCTRL
+	select PINCTRL_MSM_TLMM
+	select USE_PINCTRL_IRQ
+	select MSM_PM if PM
+	select QMI_ENCDEC
+	select CPU_FREQ
+	select CPU_FREQ_MSM
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_DEVBW
+	select DEVFREQ_SIMPLE_DEV
+	select DEVFREQ_GOV_MSM_BW_HWMON
+	select MSM_BIMC_BWMON
+	select MSM_QDSP6V2_CODECS
+	select MSM_AUDIO_QDSP6V2 if SND_SOC
+	select ARM_HAS_SG_CHAIN
+	select MSM_RPM_SMD
+	select MSM_JTAGV8 if CORESIGHT_ETMV4
+	select ARCH_WANT_KMAP_ATOMIC_FLUSH
+	select ARCH_MSM8953_SOC_SETTINGS
+
+config ARCH_MSM8909
+	bool "MSM8909"
+	select ARCH_MSM_CORTEXMP
+	select ARM_GIC
+	select MULTI_IRQ_HANDLER
+	select HAVE_SMP
+	select CPU_V7
+	select HAVE_ARM_ARCH_TIMER
+	select MAY_HAVE_SPARSE_IRQ
+	select SPARSE_IRQ
+	select PINCTRL
+	select PINCTRL_MSM_TLMM
+	select USE_PINCTRL_IRQ
+	select MSM_PM if PM
+	select MSM_RPM_SMD
+	select MSM_RPM_STATS_LOG
+	select MSM_RPM_LOG
+	select MSM_CORTEX_A7
+	select MSM_IRQ
+	select ARM_TICKET_LOCKS
+	select ARM_HAS_SG_CHAIN
+	select CPU_FREQ
+	select CPU_FREQ_MSM
+	select PM_DEVFREQ
+	select PM_OPP
+	select MSM_DEVFREQ_DEVBW
+	select DEVFREQ_SIMPLE_DEV
+	select DEVFREQ_GOV_MSM_BW_HWMON
+	select MSM_BIMC_BWMON
+	select ARCH_WANT_KMAP_ATOMIC_FLUSH
+
+config SEC_MSM8953_PROJECT
+  	depends on ARCH_MSM8953
+        default n
+        bool "Samsung MSM8953 Project"
+        help
+        Support for Samsung MSM8953 Project
+
+config SEC_MSM8937_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung MSM8937 Project"
+        help
+        Support for Samsung MSM8937 Project
+
+config SEC_MSM8917_PROJECT
+  	depends on ARCH_MSM8917
+        default n
+        bool "Samsung MSM8917 Project"
+        help
+        Support for Samsung MSM8917 Project
+
+config 3G_DDR_SUPPORT
+      default n
+      bool "3GB DDR RAM support"
+      help
+       Support for 3GB DDR RAM
+
+config SEC_ON5QLTE_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung ON5QLTE Project"
+        help
+        Support for Samsung ON5QLTE Project
+
+config MACH_ON5QLTE_CHN_OPEN
+        depends on SEC_ON5QLTE_PROJECT
+        default n
+        bool "Samsung ON5QLTE Chn Open"
+        help
+        Support for Samsung ON5QLTE Chn Open device.
+
+config SEC_J3Y17QLTE_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung J3Y17QLTE Project"
+        help
+        Support for Samsung J3Y17QLTE Project
+
+config MACH_J3Y17QLTE_CHN_CMCC
+        depends on SEC_J3Y17QLTE_PROJECT
+        default n
+        bool "Samsung J3Y17QLTE CHN CMCC"
+        help
+        Support for Samsung J3Y17QLTE CHN CMCC device.
+
+config MACH_J3Y17QLTE_SWA_OPEN
+        depends on SEC_J3Y17QLTE_PROJECT
+        default n
+        bool "Samsung J3Y17QLTE SWA OPEN"
+        help
+        Support for Samsung J3Y17QLTE SWA OPEN device.
+
+config SEC_ELITELTE_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung ELITELTE Project"
+        help
+        Support for Samsung ELITELTE Project
+
+config MACH_ELITELTE_CHN_OPEN
+        depends on SEC_ELITELTE_PROJECT
+        default n
+        bool "Samsung ELITELTE Chn Open"
+        help
+        Support for Samsung ELITELTE Chn Open device.
+
+config SEC_ELITEXLTE_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung ELITEXLTE Project"
+        help
+        Support for Samsung ELITEXLTE Project
+
+config MACH_ELITEXLTE_CHN_OPEN
+        depends on SEC_ELITEXLTE_PROJECT
+        default n
+        bool "Samsung ELITEXLTE Chn Open"
+        help
+        Support for Samsung ELITEXLTE Chn Open device.
+
+config SEC_J3LLTE_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung J3LLTE Project"
+        help
+        Support for Samsung J3LLTE Project
+
+config MACH_J3LLTE_USA_SPR
+        depends on SEC_J3LLTE_PROJECT
+        default n
+        bool "Samsung J3LLTE USA Sprint"
+        help
+        Support for Samsung J3LLTE USA Sprint device.
+
+config SEC_J3POPLTE_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung J3POPLTE Project"
+        help
+        Support for Samsung J3POPLTE Project
+
+config MACH_J3POPLTE_USA_SPR
+        depends on SEC_J3POPLTE_PROJECT
+        default n
+        bool "Samsung J3POPLTE USA Sprint"
+        help
+        Support for Samsung J3POPLTE USA Sprint device.
+
+config MACH_J3POPLTE_USA_USC
+        depends on SEC_J3POPLTE_PROJECT
+        default n
+        bool "Samsung J3POPLTE USA USC"
+        help
+        Support for Samsung J3POPLTE USA USC device.
+
+config MACH_J3POPLTE_USA_VZW
+        depends on SEC_J3POPLTE_PROJECT
+        default n
+        bool "Samsung J3POPLTE USA VZW"
+        help
+        Support for Samsung J3POPLTE USA VZW device.
+
+config MACH_J3POPLTE_USA_ACG
+        depends on SEC_J3POPLTE_PROJECT
+        default n
+        bool "Samsung J3POPLTE USA ACG"
+        help
+        Support for Samsung J3POPLTE USA ACG device.
+
+config MACH_J3POPLTE_USA_LRA
+        depends on SEC_J3POPLTE_PROJECT
+        default n
+        bool "Samsung J3POPLTE USA LRA"
+        help
+        Support for Samsung J3POPLTE USA LRA device.
+
+config SEC_J1Y17LTE_PROJECT
+        depends on ARCH_MSM8937
+        default n
+        bool "Samsung J1Y17LTE Project"
+        help
+        Support for Samsung J1Y17LTE Project
+
+config MACH_J1Y17LTE_EUR_OPEN
+        depends on SEC_J1Y17LTE_PROJECT
+        default n
+        bool "Samsung J1Y17LTE EUR OPEN"
+        help
+        Support for Samsung J1Y17LTE EUR OPEN device.
+		
+config SEC_J2Y18LTE_PROJECT
+        depends on ARCH_MSM8937
+        default n
+        bool "Samsung J2Y18LTE Project"
+        help
+        Support for Samsung J2Y18LTE Project
+
+config MACH_J2Y18LTE_MEA_OPEN
+        depends on SEC_J2Y18LTE_PROJECT
+        default n
+        bool "Samsung J2Y18LTE MEA OPEN"
+        help
+        Support for Samsung J2Y18LTE MEA OPEN device.
+		
+config SEC_J5Y18LTE_PROJECT
+        depends on ARCH_MSM8937
+        default n
+        bool "Samsung J5Y18LTE Project"
+        help
+        Support for Samsung J5Y18LTE Project
+
+config MACH_J5Y18LTE_SWA_OPEN
+        depends on SEC_J5Y18LTE_PROJECT
+        default n
+        bool "Samsung J5Y18LTE SWA OPEN"
+        help
+        Support for Samsung J5Y18LTE SWA OPEN device.
+		
+config SEC_J6PRIMELTE_PROJECT
+        depends on ARCH_MSM8937
+        default n
+        bool "Samsung J6PRIMELTE Project"
+        help
+        Support for Samsung J6PRIMELTE Project
+
+config MACH_J6PRIMELTE_SWA_OPEN
+        depends on SEC_J6PRIMELTE_PROJECT
+        default n
+        bool "Samsung J6PRIMELTE SWA OPEN"
+        help
+        Support for Samsung J6PRIMELTE SWA OPEN device.
+
+config SEC_J4PRIMELTE_PROJECT
+        depends on ARCH_MSM8937
+        default n
+        bool "Samsung J4PRIMELTE Project"
+        help
+        Support for Samsung J4PRIMELTE Project
+
+config MACH_J4PRIMELTE_SEA_OPEN
+        depends on SEC_J4PRIMELTE_PROJECT
+        default n
+        bool "Samsung J4PRIMELTE SEA OPEN"
+        help
+        Support for Samsung J4PRIMELTE SEA OPEN device.
+		
+config SEC_J4CORELTE_PROJECT
+        depends on ARCH_MSM8937
+        default n
+        bool "Samsung J4CORELTE Project"
+        help
+        Support for Samsung J4CORELTE Project
+
+config MACH_J4CORELTE_MEA_OPEN
+        depends on SEC_J4CORELTE_PROJECT
+        default n
+        bool "Samsung J4CORELTE MEA OPEN"
+        help
+        Support for Samsung J4CORELTE MEA OPEN device.
+		
+config SEC_GTA2SLTE_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung GTA2SLTE Project"
+        help
+        Support for Samsung GTA2SLTE Project
+
+config MACH_GTA2SLTE_EUR_OPEN
+        depends on SEC_GTA2SLTE_PROJECT
+        default n
+        bool "Samsung GTA2SLTE EUR OPEN"
+        help
+        Support for Samsung GTA2SLTE EUR OPEN device.
+
+config MACH_GTA2SLTE_SEA_OPEN
+        depends on SEC_GTA2SLTE_PROJECT
+        default n
+        bool "Samsung GTA2SLTE SEA OPEN"
+        help
+        Support for Samsung GTA2SLTE SEA OPEN device.
+		
+config MACH_GTA2SLTE_CIS_SER
+        depends on SEC_GTA2SLTE_PROJECT
+        default n
+        bool "Samsung GTA2SLTE CIS SER"
+        help
+        Support for Samsung GTA2SLTE CIS SER device.
+		
+config MACH_GTA2SLTE_SWA_OPEN
+        depends on SEC_GTA2SLTE_PROJECT
+        default n
+        bool "Samsung GTA2SLTE SWA OPEN"
+        help
+        Support for Samsung GTA2SLTE SWA OPEN device.
+
+config MACH_GTA2SLTE_USA_ATT
+        depends on SEC_GTA2SLTE_PROJECT
+        default n
+        bool "Samsung GTA2SLTE USA ATT"
+        help
+        Support for Samsung GTA2SLTE USA ATT device.
+
+config MACH_GTA2SLTE_CHN_OPEN
+        depends on SEC_GTA2SLTE_PROJECT
+        default n
+        bool "Samsung GTA2SLTE CHN OPEN"
+        help
+        Support for Samsung GTA2SLTE CHN OPEN device.
+
+config MACH_GTA2SLTE_KOR_SKT
+        depends on SEC_GTA2SLTE_PROJECT
+        default n
+        bool "Samsung GTA2SLTE KOR SKT"
+        help
+        Support for Samsung GTA2SLTE KOR SKT device.
+
+config MACH_GTA2SLTE_KOR_KTT
+        depends on SEC_GTA2SLTE_PROJECT
+        default n
+        bool "Samsung GTA2SLTE KOR KTT"
+        help
+        Support for Samsung GTA2SLTE KOR KTT device.
+
+config MACH_GTA2SLTE_KOR_LGT
+        depends on SEC_GTA2SLTE_PROJECT
+        default n
+        bool "Samsung GTA2SLTE KOR LGT"
+        help
+        Support for Samsung GTA2SLTE KOR LGT device.
+
+config MACH_GTA2SLTE_CHN_ZH
+        depends on SEC_GTA2SLTE_PROJECT
+        default n
+        bool "Samsung GTA2SLTE CHN HK"
+        help
+        Support for Samsung GTA2SLTE CHN HK device.
+
+config SEC_GTA2SWIFI_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung GTA2SWIFI Project"
+        help
+        Support for Samsung GTA2SWIFI Project
+
+config MACH_GTA2SWIFI_SEA_OPEN
+        depends on SEC_GTA2SWIFI_PROJECT
+        default n
+        bool "Samsung GTA2SWIFI SEA OPEN"
+        help
+        Support for Samsung GTA2SWIFI SEA OPEN device.
+
+config MACH_GTA2SWIFI_CHN_OPEN
+        depends on SEC_GTA2SWIFI_PROJECT
+        default n
+        bool "Samsung GTA2SWIFI CHN OPEN"
+        help
+        Support for Samsung GTA2SWIFI CHN OPEN device.
+
+config SEC_GTESY18LTE_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung GTESY18LTE Project"
+        help
+        Support for Samsung GTESY18LTE Project
+
+config MACH_GTESY18LTE_USA_VZW
+        depends on SEC_GTESY18LTE_PROJECT
+        default n
+        bool "Samsung GTESY18LTE USA VZW"
+        help
+        Support for Samsung GTESY18LTE USA VZW device.
+		
+config SEC_GTASLITELTE_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung GTASLITELTE Project"
+        help
+        Support for Samsung GTASLITELTE Project
+
+config MACH_GTASLITELTE_CAN_SINGLE
+        depends on SEC_GTASLITELTE_PROJECT
+        default n
+        bool "Samsung GTASLITELTE CAN SINGLE"
+        help
+        Support for Samsung GTASLITELTE CAN SINGLE device.
+
+config MACH_GTASLITELTE_USA_USC
+        depends on SEC_GTASLITELTE_PROJECT
+        default n
+        bool "Samsung GTASLITELTE USA USC"
+        help
+        Support for Samsung GTASLITELTE USA USC device.
+
+config MACH_GTASLITELTE_USA_VZW
+        depends on SEC_GTASLITELTE_PROJECT
+        default n
+        bool "Samsung GTASLITELTE USA VZW"
+        help
+        Support for Samsung GTASLITELTE USA VZW device.
+		
+config MACH_GTASLITELTE_USA_TMO
+        depends on SEC_GTASLITELTE_PROJECT
+        default n
+        bool "Samsung GTASLITELTE USA TMO"
+        help
+        Support for Samsung GTASLITELTE USA TMO device.
+		
+config MACH_GTASLITELTE_USA_ATT
+        depends on SEC_GTASLITELTE_PROJECT
+        default n
+        bool "Samsung GTASLITELTE USA ATT"
+        help
+        Support for Samsung GTASLITELTE USA ATT device.
+
+		
+config MACH_GTASLITELTE_USA_SPR
+        depends on SEC_GTASLITELTE_PROJECT
+        default n
+        bool "Samsung GTASLITELTE USA SPR"
+        help
+        Support for Samsung GTASLITELTE USA SPR device.
+
+config SEC_ON5XLLTE_PROJECT
+  	depends on ARCH_MSM8937
+        default n
+        bool "Samsung ON5XLLTE Project"
+        help
+        Support for Samsung ON5XLLTE Project
+
+config MACH_ON5XLLTE_CHN_OPEN
+        depends on SEC_ON5XLLTE_PROJECT
+        default n
+        bool "Samsung ON5XLLTE Chn Open"
+        help
+        Support for Samsung ON5XLLTE Chn Open device.
+
+config MACH_ON5XFLTE_CHN_OPEN
+        depends on SEC_ON5XLLTE_PROJECT
+        default n
+        bool "Samsung ON5XFLTE Chn Open"
+        help
+        Support for Samsung ON5XFLTE Chn Open device.
+
+config SEC_MSM895332LTE_CHN
+	bool "Enable Support for Samsung MSM8953(32bit) LTE CHN device."
+	depends on ARCH_MSM8953
+	help
+	  This enables support for Samsung MSM8953(32bit) LTE CHN device.
+
+endmenu
+endif
+
+config SEC_FACTORY
+	bool "when it comes to sec factory mode"
+	default n
+	help
+	  It will support a sec factory mode
+
+config SAMSUNG_PRODUCT_SHIP
+        bool "set up for product shipping"
+        default n
+
+config RTC_AUTO_PWRON
+        bool "RTC Auto Power on PMICs"
+        depends on ARCH_MSM8953
+        default n
+        help
+          Support for the auto power on alarm on the PMIC.
+          Say Y if you want to enable this feature.

@@ -1,0 +1,13 @@
+config SEC_J2ESSLTE_PROJECT
+		depends on ARCH_MSM8937
+		default n
+		bool "Samsung J2ESSLTE Project"
+		help
+		Support for Samsung J2ESSLTE Project.
+
+config MACH_J2ESSLTE_SWA_INS
+		depends on SEC_J2ESSLTE_PROJECT
+		default n
+		bool "Samsung J2ESSLTE SWA INS"
+		help
+		Support for Samsung J2ESSLTE SWA INS device.

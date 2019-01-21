@@ -1,0 +1,146 @@
+#
+# Near Field Communication (NFC) devices
+#
+
+config SAMSUNG_NFC
+	bool "Samsung NFC driver"
+	default n
+	help
+	  Say Y here if you want to build support for NFC (Near field
+	  communication) devices.
+	  To compile this support as a module, choose M here: the module will
+	  be called nfc.
+
+config SEC_NFC
+        bool "Samsung NFC driver"
+        default n
+        help
+          SAMSUNG NFC Driver.
+          This driver provides support for SAMSUNG NFC products.
+          You should select your NFC product and interface.
+
+          Say Y here to compile support for SAMSUNG NFC driver into the
+          kernel.
+
+config ESE_P3
+        bool "Oberthur ese driver"
+		depends on SPI
+		default n
+		help
+		  Oberthur Driver.
+		  This driver provides support for LSI NXP combined ESE products.
+		  You should select your NFC product and interface.
+
+config ESE_SECURE
+        bool "Secured eSE driver"
+        default n
+        help
+          Secured eSE SPI Driver.
+
+config ESE_SPI_GPIO_START
+        int "Qcom ese start num"
+        default 0
+        help
+          eSE SPI Driver.
+
+config ESE_SPI_GPIO_END
+        int "Qcom ese end num"
+        default 0
+        help
+          eSE SPI Driver.
+
+config ESE_SECURE_SPI_PORT
+        int "Qcom ese bus num"
+        default 0
+        help
+          eSE SPI Driver.
+
+config NFC_PN547 
+	bool "NXP PN547 Controller"
+	default n
+	help
+	  NXP PN547 Near Field Communication controller support.
+	  This option enables device driver support for the NFC.
+	  It is used by many services. NFC is fully controlled using I2C
+	  to communicate the AP chip.
+
+config NFC_PN547_ESE_SUPPORT 
+	bool "NXP eSE Controller"
+	default n
+	help
+	  NXP PN547 Near Field Communication controller support.
+	  This option enables device driver support for the NFC.
+	  It is used by many services. NFC is fully controlled using I2C
+	  to communicate the AP chip.
+
+config NFC_PM_BBCLK2 
+	bool "NXP clock Controller"
+	default n
+	help
+	  NXP PN547 Near Field Communication controller support.
+	  This option enables device driver support for the NFC.
+	  It is used by many services. NFC is fully controlled using I2C
+	  to communicate the AP chip.
+
+config NFC_WILINK
+	tristate "Texas Instruments NFC WiLink driver"
+	depends on TI_ST && NFC_NCI
+	help
+	  This enables the NFC driver for Texas Instrument's BT/FM/GPS/NFC
+	  combo devices. This makes use of shared transport line discipline
+	  core driver to communicate with the NFC core of the combo chip.
+
+	  Say Y here to compile support for Texas Instrument's NFC WiLink driver
+	  into the kernel or say M to compile it as module.
+
+config NFC_TRF7970A
+	tristate "Texas Instruments TRF7970a NFC driver"
+	depends on SPI && NFC_DIGITAL
+	help
+	  This option enables the NFC driver for Texas Instruments' TRF7970a
+	  device. Such device supports 5 different protocols: ISO14443A,
+	  ISO14443B, FeLiCa, ISO15693 and ISO18000-3.
+
+	  Say Y here to compile support for TRF7970a into the kernel or
+	  say M  to compile it as a module. The module will be called
+	  trf7970a.ko.
+
+config NFC_MEI_PHY
+	tristate "MEI bus NFC device support"
+	depends on INTEL_MEI && NFC_HCI
+	help
+	  This adds support to use an mei bus nfc device. Select this if you
+	  will use an HCI NFC driver for an NFC chip connected behind an
+	  Intel's Management Engine chip.
+
+	  If unsure, say N.
+
+config NFC_SIM
+	tristate "NFC hardware simulator driver"
+	help
+	  This driver declares two virtual NFC devices supporting NFC-DEP
+	  protocol. An LLCP connection can be established between them and
+	  all packets sent from one device is sent back to the other, acting as
+	  loopback devices.
+
+	  If unsure, say N.
+
+config NFC_PORT100
+	tristate "Sony NFC Port-100 Series USB device support"
+	depends on USB
+	depends on NFC_DIGITAL
+	help
+	  This adds support for Sony Port-100 chip based USB devices such as the
+	  RC-S380 dongle.
+
+	  If unsure, say N.
+
+config NFC_NQ
+	tristate "Qualcomm NCI based NFC Controller Driver for NQx"
+	depends on I2C
+	help
+	  This enables the NFC driver for NQx based devices.
+	  This is for i2c connected version. NCI protocol logic
+	  resides in the usermode and it has no other NFC dependencies.
+
+source "drivers/nfc/nfc_logger/Kconfig"

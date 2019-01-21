@@ -1,0 +1,6 @@
+#
+# Contact: m.beladiya <m.beladiya@samsung.com> for more info
+#
+
+# KASLR
+CONFIG_RELOCATABLE_KERNEL=y

@@ -1,0 +1,11 @@
+#
+# Zinitix Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_ZINITIX_ZT75XX_TCLM
+	bool "ZINITIX ZT75XX touchscreen driver"
+	depends on I2C
+	default n
+	help
+	  Say Y here if you have a ZINITIX ZT75XX touchscreen.
+	  If unsure, say N.

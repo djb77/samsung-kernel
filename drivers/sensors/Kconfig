@@ -1,0 +1,391 @@
+config SENSORS_SSC
+	bool "Enable Sensors Driver Support for SSC"
+	help
+	  Add support for sensors SSC driver.
+	  This driver is used for exercising sensors use case,
+	  time syncing with ADSP clock.
+
+config SENSORS_CORE
+    bool "Sensors Class Support"
+    help
+      This option enables the sensor sysfs class in /sys/class/sensors.
+      You'll need this to do anything useful with sensorss. If unsure, say N.
+
+config SENSORS_K2HH
+	depends on I2C
+	tristate "SENSORS_K2HH"
+	default n
+	help
+	  Say Y here if you use SENSORS_K2HH.
+	  This option enables accelerometer sensors using
+	  STMicroelectronic K2HH device driver.
+
+config SENSORS_K2HH_VDD
+	depends on SENSORS_K2HH
+	tristate "SENSORS_K2HH_VDD"
+	default n
+	help
+	  Say Y here if you use SENSORS_K2HH.
+	  This option enables accelerometer sensors using
+	  STMicroelectronic K2HH device driver with VDD control.
+
+config SENSORS_LIS2DS
+	tristate "STMicroelectronics LIS2DS/LIS2DS12 sensors"
+	depends on (I2C || SPI) && SYSFS
+	help
+	   This driver support the STMicroelectronics LIS2DS/LIS2DS12 sensors.
+	   It is a accelerometer device.
+	   To compile this driver as a module, choose M here. The module
+	   will be called lis2ds.
+
+config SENSORS_LIS2DS_I2C
+	tristate "STMicroelectronics LIS2DS/LIS2DS12 sensors"
+	depends on (I2C || SPI) && SYSFS
+	help
+	   This driver support the STMicroelectronics LIS2DS/LIS2DS12 sensors.
+	   It is a accelerometer device.
+	   To compile this driver as a module, choose M here. The module
+	   will be called lis2ds.\
+
+config SENSORS_STK3013
+	depends on I2C
+	tristate "STK3013 driver"
+	default n
+	help
+	   This option enables proximity sensors using STK3013 driver.
+
+config SENSORS_GP2AP070S
+	depends on I2C
+	tristate "GP2AP070S driver"
+	default n
+	help
+	  This option enables proximity sensor using GP2AP070S driver.
+
+config SENSORS_CM3323
+	depends on I2C
+	tristate "CM3323 driver"
+	default n
+	help
+	  This option enables RGB sensors using Capella CM3323 device driver.
+
+config SENSORS_CM36655
+	depends on I2C
+	tristate "CM36655 driver"
+	default n
+	help
+	  This option enables proximity & light sensors using CM36655 driver.
+
+config SENSOR_CM36655_VIO
+	depends on I2C
+	tristate "CM36655 vio controlled"
+	default n
+	help
+	  This option controll vio.
+
+config SENSORS_CM36655_LEDA_EN_GPIO
+	depends on I2C
+	tristate "CM36655 leda_en controlled by GPIO"
+	default n
+	help
+	  This option enables leda_en controlled by GPIO using CM36655 driver.
+
+config SENSORS_CM36657
+	depends on I2C
+	tristate "CM36657 driver"
+	default n
+	help
+	  This option enables proximity & light sensor using CM36657 driver.
+
+config SENSORS_CM36658
+	depends on I2C
+	tristate "CM36658 driver"
+	default n
+	help
+	  This option enables proximity & light sensor using CM36658 driver.
+
+config SENSORS_CM36686
+	depends on I2C
+	tristate "CM36686 driver"
+	default n
+	help
+	  This option enables proximity & light sensors using CM36686 driver.
+
+config SENSORS_STK3328
+	depends on I2C
+	tristate "STK3328 driver"
+	default n
+	help
+	  This option enables proximity & light sensors using STK3328 driver.
+
+config SENSORS_CM36686_LEDA_EN_GPIO
+	depends on I2C
+	tristate "CM36686 leda_en controlled by GPIO"
+	default n
+	help
+	  This option enables leda_en controlled by GPIO using CM36686 driver.
+
+config SENSORS_CM36672P
+	depends on I2C
+	tristate "CM36672P driver"
+	default n
+	help
+	  This option enables proximity sensor using CM36672P driver.
+
+config SENSORS_YAS537
+	tristate "YAS537 Sensor Driver"
+	depends on I2C
+	default n
+	help
+	  If you say yes here you get support for YAMAHA
+	  YAS537 Geomagnitor Sensor.
+
+config SENSORS_AK09911C
+	tristate "AK09911C compass support"
+	default n
+	depends on I2C
+	help
+	  If you say yes here you get support for Asahi Kasei's
+	  orientation sensor AK09911C.
+
+config SENSORS_AK09916C
+	tristate "AK09916C compass support"
+	default n
+	depends on I2C
+	help
+	  If you say yes here you get support for Asahi Kasei's
+	  orientation sensor AK09916C.
+
+config SENSORS_SW_RESET
+	tristate "SENSOR SW RESET support"
+	default n
+	depends on I2C
+	help
+	  If you say yes here you get support for SENSOR SW RESET.
+	  
+config SENSORS_TMD3700
+	depends on I2C
+	tristate "TMD3700 driver"
+	default n
+	help
+	   This option enables proximity & light sensors using TMD3700 driver.
+
+config SENSORS_TMD3700_RESET_DEFENCE_CODE
+	depends on I2C
+	tristate "TMD3700 defence code for reset"
+	default n
+	help
+	  This option enables defence code for reset of VDD.
+
+config SENSORS_SX9310
+	depends on I2C
+	tristate "SX9310 driver"
+	default n
+	help
+	  Say Y here if you use sx9310.
+	  This option enables grip sensors using
+	  SemTech sx9310 device driver.
+
+	  Say N here if you do not use sx9310.
+
+config SENSORS_YAS539
+	tristate "YAS539 Sensor Driver"
+	depends on I2C
+	default n
+	help
+	  If you say yes here you get support for YAMAHA
+	  YAS539 Geomagnitor Sensor.
+
+config SENSORS_YAS_RESET_DEFENCE_CODE
+	depends on I2C
+	tristate "YAS defence code by reset"
+	default n
+	help
+	  This option enables defence code by reset using yas driver.
+
+config SENSORS_YAS539_DEFAULT_MATRIX
+	depends on SENSORS_YAS539
+	tristate "The default conpensation matrix for YAS539 softiron"
+	default n
+	help
+	  This option is enables the default matrix for YAS539.
+
+config SENSORS_SX9306
+	depends on I2C
+	tristate "SX9306 driver"
+	default n
+	help
+	 This option enables grip sensors using SemTech sx9306 device driver.
+
+config SENSORS_SX9306_SUB
+	depends on I2C
+	tristate "SX9306 sub driver"
+	default n
+	help
+	 This option enables grip sensors using SemTech sx9306 sub device driver.
+
+config SENSORS_SX9306_WIFI
+	depends on I2C
+	tristate "SX9306 wifi driver"
+	default n
+	help
+	  Say Y here if you use sx9306_wifi.
+	  This option enables wifi grip sensors using
+	  SemTech sx9306_wifi device driver.
+	  Say N here if you do not use sx9306_wifi.
+
+config SENSORS_GRIP_CHK_HALLIC
+	depends on I2C
+	tristate "grip sensor check to hallic"
+	default n
+	help
+	 This option enables grip sensors checking hall ic status.
+
+config SENSORS_SX9320
+	depends on I2C
+	tristate "SX9320 driver"
+	default n
+	help
+	  Say Y here if you use sx9320.
+	  This option enables grip sensors using
+	  SemTech sx9320 device driver.
+	  Say N here if you do not use sx9320.
+
+config SENSORS_SX9320_SUB
+	depends on I2C
+	tristate "SX9320 sub driver"
+	default n
+	help
+	  Say Y here if you use sx9320 sub.
+	  This option enables grip sensors using
+	  SemTech sx9320 sub device driver.
+	  Say N here if you do not use sx9320 sub.
+
+config SENSORS_SX9320_WIFI
+	depends on I2C
+	tristate "SX9320 wifi driver"
+	default n
+	help
+	  Say Y here if you use sx9320 wifi.
+	  This option enables grip sensors using
+	  SemTech sx9320 wifi device driver.
+	  Say N here if you do not use sx9320 wifi.
+
+config SENSORS_BMI160
+	tristate "BMI160 Sensor Support"
+		depends on I2C || SPI_MASTER
+			help
+				 If you say yes here, you get support for Bosch Sensortec's
+					 sensor driver of BMI160.
+
+config SENSORS_BMI160_I2C
+	tristate "support I2C bus communication"
+	depends on SENSORS_BMI160 && I2C
+	help
+	 If you say yes here, you get support Bosch Sensortec's BMI160 sensor hooked to an I2C bus.
+
+config SENSORS_BMI160_SPI
+tristate "support SPI bus communication"
+depends on SENSORS_BMI160 && SPI_MASTER
+	help
+	 If you say yes here, you get support Bosch Sensortec's BMI160 sensor hooked to an SPI bus.
+
+config BMI160_MAG_INTERFACE_SUPPORT
+tristate "BMI160 Sensor mag interface support"
+depends on SENSORS_BMI160
+	help
+	 If you say yes here, you get support for Bosch Sensortec's
+	 sensor driver of BMI160 with mag sensor support.
+
+config SENSORS_BMI160_ENABLE_INT1
+tristate "BMI160 sensor interrupt INT1 support"
+depends on SENSORS_BMI160
+	help
+	 If you say yes here, you get INT1 support for Bosch Sensortec
+	 sensors BMI160.
+
+config SENSORS_BMI160_ENABLE_INT2
+tristate "BMI160 sensor interrupt INT2 support"
+depends on SENSORS_BMI160
+	help
+	 If you say yes here, you get INT2 support for Bosch Sensortec
+	 sensors BMI160.
+
+config ST_LSM6DS3
+	tristate "STMicroelectronics LSM6DS3 sensor"
+	depends on (I2C || SPI) && SYSFS
+	help
+	  This driver supports the STMicroelectronics LSM6DS3 sensor.
+	  It is a gyroscope/accelerometer combo device.
+	  This driver can be built as a module. The module will be called
+	  st-lsm6ds3.
+
+config ST_LSM6DS3_I2C
+	tristate "STMicroelectronics LSM6DS3 sensor"
+	depends on (I2C || SPI) && SYSFS
+	help
+	  This driver supports the STMicroelectronics LSM6DS3 sensor.
+	  It is a gyroscope/accelerometer combo device.
+	  This driver can be built as a module. The module will be called
+	  st-lsm6ds3.
+
+config ST_LSM6DS3_SPI
+	tristate "STMicroelectronics LSM6DS3 sensor"
+	depends on (I2C || SPI) && SYSFS
+	help
+	  This driver supports the STMicroelectronics LSM6DS3 sensor.
+	  It is a gyroscope/accelerometer combo device.
+	  This driver can be built as a module. The module will be called
+	  st-lsm6ds3.
+
+config SENSORS_LSM6DSL
+	tristate "STMicroelectronics LSM6DSL sensor"
+	depends on (I2C || SPI) && SYSFS
+	default n
+	help
+	   This driver support the STMicroelectronics LSM6DSL sensor.
+	   To compile this driver as a module, choose M here. The module
+	   will be called lsm6dsl.
+
+config SENSORS_LSM6DSL_I2C
+	tristate "STMicroelectronics LSM6DSL sensor"
+	depends on (I2C || SPI) && SYSFS
+	default n
+	help
+	   This config define sensor communication type is I2C.
+
+config SENSORS_LSM6DSL_SPI
+	tristate "STMicroelectronics LSM6DSL sensor"
+	depends on (I2C || SPI) && SYSFS
+	default n
+	help
+	   This config define sensor communication type is SPI.
+
+config SENSORS_A96T3X6
+	depends on I2C
+	tristate "A96T3X6 driver for grip"
+	default n
+	help
+	  Say Y here if you use A96T3X6 for grip.
+	  This option enables grip sensors using
+	  Above A96T3X6 device driver for grip.
+	  Say N here if you do not use A96T3X6 for grip.
+
+config SENSORS_A96T3X6_WIFI
+	depends on I2C
+	tristate "A96T3X6 driver for grip"
+	default n
+	help
+	  Say Y here if you use A96T3X6 for grip.
+	  This option enables grip sensors using
+	  Above A96T3X6 device driver for grip.
+	  Say N here if you do not use A96T3X6 for grip.
+
+config SENSORS_A96T3X6_SUB
+	depends on I2C
+	tristate "A96T3X6 driver for grip"
+	default n
+	help
+	  Say Y here if you use A96T3X6 for grip.
+	  This option enables grip sensors using
+	  Above A96T3X6 device driver for grip.
+	  Say N here if you do not use A96T3X6 for grip.

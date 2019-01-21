@@ -1,0 +1,17 @@
+config MSM_VIBRATOR
+	tristate "MSM_VIBRATOR"
+	default n
+	help
+	  Say Y to enable MSM_VIBRATOR support
+
+config DC_MOTOR_PMIC
+	tristate "DC_MOTOR_PMIC"
+	default n
+	help
+	  Say Y to enable MOTOR DC drive by PMIC support
+
+menuconfig SM5703_VIBRATOR
+        tristate "SM5703_VIBRATOR"
+        default n
+        help
+          Say Y to enable SM5703_VIBRATOR support.
