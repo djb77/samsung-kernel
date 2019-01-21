@@ -462,22 +462,9 @@ __mmap_switched:
 	ldp	x11, x12, [x9], #24
 	ldr	x13, [x9, #-8]
 	cmp	w12, #R_AARCH64_RELATIVE
-	b.ne	1f
+	b.ne	0b
 	add	x13, x13, x23			// relocate
 	str	x13, [x11, x23]
-	b	0b
-
-1:	cmp	w12, #R_AARCH64_ABS64
-	b.ne	0b
-	add	x12, x12, x12, lsl #1		// symtab offset: 24x top word
-	add	x12, x8, x12, lsr #(32 - 3)	// ... shifted into bottom word
-	ldrsh	w14, [x12, #6]			// Elf64_Sym::st_shndx
-	ldr	x15, [x12, #8]			// Elf64_Sym::st_value
-	cmp	w14, #-0xf			// SHN_ABS (0xfff1) ?
-	add	x14, x15, x23			// relocate
-	csel	x15, x14, x15, ne
-	add	x15, x13, x15
-	str	x15, [x11, x23]
 	b	0b
 
 2:	adr_l	x8, kimage_vaddr		// make relocated kimage_vaddr
