@@ -4538,6 +4538,9 @@ static ssize_t tuning_store(struct device *dev,
 {
 	char *pt;
 
+	if (buf == NULL || strchr(buf, '.') || strchr(buf, '/'))
+		return size;
+
 	memset(tuning_file, 0, sizeof(tuning_file));
 	snprintf(tuning_file, MAX_FILE_NAME, "%s%s", TUNING_FILE_PATH, buf);
 

@@ -139,6 +139,7 @@ source security/yama/Kconfig
 
 source security/integrity/Kconfig
 source security/tz_iccc/Kconfig
+source security/knox_test/Kconfig
 
 choice
 	prompt "Default security module"

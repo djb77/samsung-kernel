@@ -2923,7 +2923,7 @@ eHalStatus csrScanFlushSelectiveResult(tpAniSirGlobal pMac, v_BOOL_t flushP2P)
  *
  *
  *NOTE:
- *
+ * @bool fcc_constraint    Flag to tell if fcc constraint is set or not
  * @param  channelId      channel number
  * @param  pChannelList   Pointer to channel list
  * @param  numChannels    Number of channel in channel list
@@ -2931,10 +2931,14 @@ eHalStatus csrScanFlushSelectiveResult(tpAniSirGlobal pMac, v_BOOL_t flushP2P)
  * @return Status
  */
 
-eHalStatus csrCheck11dChannel(tANI_U8 channelId, tANI_U8 *pChannelList, tANI_U32 numChannels)
+eHalStatus csrCheck11dChannel(bool fcc_constraint, tANI_U8 channelId,
+                          tANI_U8 *pChannelList, tANI_U32 numChannels)
 {
     eHalStatus status = eHAL_STATUS_FAILURE;
     tANI_U8 i = 0;
+    if (fcc_constraint && (
+        channelId == 12 || channelId == 13))
+    return status;
 
     for (i = 0; i < numChannels; i++)
     {
@@ -2989,9 +2993,11 @@ eHalStatus csrScanFilterResults(tpAniSirGlobal pMac)
         pBssDesc = GET_BASE_ADDR( pEntry, tCsrScanResult, Link );
         pTempEntry = csrLLNext( &pMac->scan.scanResultList, pEntry,
                                                             LL_ACCESS_LOCK );
-        if(csrCheck11dChannel(pBssDesc->Result.BssDescriptor.channelId,
+        if (csrCheck11dChannel(pMac->scan.fcc_constraint,
+                              pBssDesc->Result.BssDescriptor.channelId,
                               pMac->roam.validChannelList, len))
         {
+           smsLog(pMac, LOGE, "Removing entry for channel %d", pBssDesc->Result.BssDescriptor.channelId);
             /* Remove Scan result which does not have 11d channel */
             if( csrLLRemoveEntry( &pMac->scan.scanResultList, pEntry,
                                                               LL_ACCESS_LOCK ))
@@ -3008,9 +3014,11 @@ eHalStatus csrScanFilterResults(tpAniSirGlobal pMac)
         pBssDesc = GET_BASE_ADDR( pEntry, tCsrScanResult, Link );
         pTempEntry = csrLLNext( &pMac->scan.tempScanResults, pEntry,
                                                             LL_ACCESS_LOCK );
-        if(csrCheck11dChannel(pBssDesc->Result.BssDescriptor.channelId,
+        if (csrCheck11dChannel(pMac->scan.fcc_constraint,
+                              pBssDesc->Result.BssDescriptor.channelId,
                               pMac->roam.validChannelList, len))
         {
+           smsLog(pMac, LOGE, "Removing temp entry for channel %d", pBssDesc->Result.BssDescriptor.channelId);
             /* Remove Scan result which does not have 11d channel */
             if( csrLLRemoveEntry( &pMac->scan.tempScanResults, pEntry,
                         LL_ACCESS_LOCK ))
@@ -5607,7 +5615,6 @@ static tANI_BOOLEAN csrScanProcessScanResults( tpAniSirGlobal pMac, tSmeCmd *pCo
     tANI_U32 cbParsed;
     tSirBssDescription *pSirBssDescription;
     tANI_U32 cbBssDesc;
-    eHalStatus status;
     tANI_U32 cbScanResult = GET_FIELD_OFFSET( tSirSmeScanRsp, bssDescription ) 
                             + sizeof(tSirBssDescription);    //We need at least one CB
 
@@ -5750,11 +5757,8 @@ static tANI_BOOLEAN csrScanProcessScanResults( tpAniSirGlobal pMac, tSmeCmd *pCo
      * Update channel list should be sent to fw once scan is done
      */
     if (pMac->scan.defer_update_channel_list) {
-        status = csrUpdateChannelList(pMac);
-        if (eHAL_STATUS_SUCCESS != status)
-            smsLog(pMac, LOGE,
-                   FL( "failed to update the supported channel list"));
-            pMac->scan.defer_update_channel_list = false;
+        csrUpdateFCCChannelList(pMac);
+	pMac->scan.defer_update_channel_list = false;
     }
 
 #ifdef WLAN_AP_STA_CONCURRENCY

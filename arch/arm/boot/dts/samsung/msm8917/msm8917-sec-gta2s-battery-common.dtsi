@@ -109,7 +109,7 @@
 		battery,charging_reset_time = <0>;
 
 		battery,standard_curr = <1883>;
-		battery,expired_time = <16380>;
+		battery,expired_time = <17400>;
 		battery,recharging_expired_time = <5400>;
 
 		battery,chg_float_voltage = <4300>;

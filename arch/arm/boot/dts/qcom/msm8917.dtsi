@@ -1486,7 +1486,7 @@
 		compatible = "qcom,bam_dmux";
 		reg = <0x4044000 0x19000>;
 		interrupts = <GIC_SPI 162 IRQ_TYPE_EDGE_RISING>;
-		qcom,rx-ring-size = <32>;
+		qcom,rx-ring-size = <64>;
 		qcom,max-rx-mtu = <4096>;
 		qcom,fast-shutdown;
 		qcom,no-cpu-affinity;

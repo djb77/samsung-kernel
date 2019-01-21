@@ -530,7 +530,11 @@ static int32_t msm_actuator_piezo_move_focus(
 			num_steps);
 		return -EFAULT;
 	}
-
+        if (dest_step_position > a_ctrl->total_steps) {
+            pr_err("Step pos greater than total steps = %d\n",
+                    dest_step_position);
+            return -EFAULT;
+        }
 	a_ctrl->i2c_tbl_index = 0;
 	a_ctrl->func_tbl->actuator_parse_i2c_params(a_ctrl,
 		(num_steps *

@@ -32,7 +32,6 @@
 #include "cam_hw_ops.h"
 #include <media/msmb_generic_buf_mgr.h>
 
-
 static struct v4l2_device *msm_v4l2_dev;
 static struct list_head    ordered_sd_list;
 
@@ -56,7 +55,7 @@ spinlock_t msm_pid_lock;
 #define msm_dequeue(queue, type, member) ({				\
 	unsigned long flags;					\
 	struct msm_queue_head *__q = (queue);			\
-	type *node = 0;				\
+	type *node = NULL;				\
 	spin_lock_irqsave(&__q->lock, flags);			\
 	if (!list_empty(&__q->list)) {				\
 		__q->len--;					\
@@ -141,7 +140,7 @@ typedef int (*msm_queue_find_func)(void *d1, void *d2);
 #define msm_queue_find(queue, type, member, func, data) ({\
 	unsigned long flags;					\
 	struct msm_queue_head *__q = (queue);			\
-	type *node = 0; \
+	type *node = NULL; \
 	typeof(node) __ret = NULL; \
 	msm_queue_find_func __f = (func); \
 	spin_lock_irqsave(&__q->lock, flags);			\
@@ -270,23 +269,48 @@ void msm_delete_stream(unsigned int session_id, unsigned int stream_id)
 {
 	struct msm_session *session = NULL;
 	struct msm_stream  *stream = NULL;
-	unsigned long flags;
+	unsigned long flags, wl_flags;
+	int try_count = 0;
 
 	session = msm_queue_find(msm_session_q, struct msm_session,
 		list, __msm_queue_find_session, &session_id);
+
 	if (!session)
 		return;
 
-	stream = msm_queue_find(&session->stream_q, struct msm_stream,
-		list, __msm_queue_find_stream, &stream_id);
-	if (!stream)
-		return;
-	spin_lock_irqsave(&(session->stream_q.lock), flags);
-	list_del_init(&stream->list);
-	session->stream_q.len--;
-	kfree(stream);
-	stream = NULL;
-	spin_unlock_irqrestore(&(session->stream_q.lock), flags);
+	while (1) {
+
+		if (try_count > 5) {
+			pr_err("%s : not able to delete stream %d\n",
+				__func__, __LINE__);
+			break;
+		}
+
+		write_lock_irqsave(&session->stream_rwlock, wl_flags);
+		try_count++;
+		stream = msm_queue_find(&session->stream_q, struct msm_stream,
+			list, __msm_queue_find_stream, &stream_id);
+
+		if (!stream) {
+			write_unlock_irqrestore(&session->stream_rwlock, wl_flags);
+			return;
+		}
+
+		if (msm_vb2_get_stream_state(stream) != 1) {
+			write_unlock_irqrestore(&session->stream_rwlock, wl_flags);
+			continue;
+		}
+
+		spin_lock_irqsave(&(session->stream_q.lock), flags);
+		list_del_init(&stream->list);
+		session->stream_q.len--;
+		kfree(stream);
+		stream = NULL;
+		spin_unlock_irqrestore(&(session->stream_q.lock), flags);
+		write_unlock_irqrestore(&session->stream_rwlock, wl_flags);
+		break;
+	}
+
 }
 EXPORT_SYMBOL(msm_delete_stream);
 
@@ -353,6 +377,11 @@ static void msm_add_sd_in_position(struct msm_sd_subdev *msm_subdev,
 	struct msm_sd_subdev *temp_sd;
 
 	list_for_each_entry(temp_sd, sd_list, list) {
+		if (temp_sd == msm_subdev) {
+			pr_err("%s :Fail to add the same sd %d\n",
+				__func__, __LINE__);
+			return;
+		}
 		if (msm_subdev->close_seq < temp_sd->close_seq) {
 			list_add_tail(&msm_subdev->list, &temp_sd->list);
 			return;
@@ -436,6 +465,7 @@ int msm_create_session(unsigned int session_id, struct video_device *vdev)
 	mutex_init(&session->lock);
 	mutex_init(&session->lock_q);
 	mutex_init(&session->close_lock);
+	rwlock_init(&session->stream_rwlock);
 	return 0;
 }
 EXPORT_SYMBOL(msm_create_session);
@@ -681,6 +711,16 @@ static long msm_private_ioctl(struct file *file, void *fh,
 	unsigned long spin_flags = 0;
 	struct msm_sd_subdev *msm_sd;
 
+        switch (cmd) {
+	case MSM_CAM_V4L2_IOCTL_NOTIFY:
+	case MSM_CAM_V4L2_IOCTL_CMD_ACK:
+        case MSM_CAM_V4L2_IOCTL_NOTIFY_DEBUG:
+	case MSM_CAM_V4L2_IOCTL_NOTIFY_ERROR:
+		break;
+	default:
+		return -ENOTTY;
+	}
+ 
 	session_id = event_data->session_id;
 	stream_id = event_data->stream_id;
 
@@ -1018,16 +1058,24 @@ static struct v4l2_file_operations msm_fops = {
 #endif
 };
 
-struct msm_stream *msm_get_stream(unsigned int session_id,
-	unsigned int stream_id)
+struct msm_session *msm_get_session(unsigned int session_id)
 {
 	struct msm_session *session;
-	struct msm_stream *stream;
 
 	session = msm_queue_find(msm_session_q, struct msm_session,
 		list, __msm_queue_find_session, &session_id);
 	if (!session)
 		return ERR_PTR(-EINVAL);
+
+	return session;
+}
+EXPORT_SYMBOL(msm_get_session);
+
+
+struct msm_stream *msm_get_stream(struct msm_session *session,
+	unsigned int stream_id)
+{
+	struct msm_stream *stream;
 
 	stream = msm_queue_find(&session->stream_q, struct msm_stream,
 		list, __msm_queue_find_stream, &stream_id);
@@ -1085,6 +1133,32 @@ struct msm_stream *msm_get_stream_from_vb2q(struct vb2_queue *q)
 }
 EXPORT_SYMBOL(msm_get_stream_from_vb2q);
 
+struct msm_session *msm_get_session_from_vb2q(struct vb2_queue *q)
+{
+	struct msm_session *session;
+	struct msm_stream *stream;
+	unsigned long flags1;
+	unsigned long flags2;
+
+	spin_lock_irqsave(&msm_session_q->lock, flags1);
+	list_for_each_entry(session, &(msm_session_q->list), list) {
+		spin_lock_irqsave(&(session->stream_q.lock), flags2);
+		list_for_each_entry(
+			stream, &(session->stream_q.list), list) {
+			if (stream->vb2_q == q) {
+				spin_unlock_irqrestore
+					(&(session->stream_q.lock), flags2);
+				spin_unlock_irqrestore
+					(&msm_session_q->lock, flags1);
+				return session;
+			}
+		}
+		spin_unlock_irqrestore(&(session->stream_q.lock), flags2);
+	}
+	spin_unlock_irqrestore(&msm_session_q->lock, flags1);
+	return NULL;
+}
+EXPORT_SYMBOL(msm_get_session_from_vb2q);
 static void msm_sd_notify(struct v4l2_subdev *sd,
 	unsigned int notification, void *arg)
 {

@@ -40,3 +40,6 @@ obj-$(CONFIG_SDP) += sdp/built-in.o
 
 #TIMA ICCC
 obj-$(CONFIG_TZ_ICCC)     += tz_iccc/
+
+#KNOX TEST
+obj-$(CONFIG_KNOX_TEST)     += knox_test/

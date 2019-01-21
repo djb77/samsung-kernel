@@ -3966,6 +3966,9 @@ static void sec_bat_misc_event_work(struct work_struct *work)
 	battery->prev_misc_event = battery->misc_event;
 	wake_unlock(&battery->misc_event_wake_lock);
 
+	if(xor_misc_event & BATT_MISC_EVENT_TIMEOUT_OPEN_TYPE) 
+        	return;
+
 	wake_lock(&battery->monitor_wake_lock);
 	queue_delayed_work(battery->monitor_wqueue, &battery->monitor_work, 0);
 }

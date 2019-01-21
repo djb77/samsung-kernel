@@ -1,0 +1,12 @@
+#
+# knx_test configuration
+#
+menu "KNOX_TEST"
+
+config KNOX_TEST
+    bool "KNOX_TEST"
+	default n
+	---help---
+	A kernel module to test knox system related modules
+
+endmenu

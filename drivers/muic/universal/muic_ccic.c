@@ -91,9 +91,6 @@ static struct mdev_rid_desc_t mdev_rid_tbl[] = {
 muic_data_t *gpmuic;
 int muic_GPIO_control(int gpio);
 
-#if defined(CONFIG_SEC_FACTORY)
-static int muic_get_switch_gpio_value(void);
-#endif
 #endif
 
 /*
@@ -730,13 +727,7 @@ static int muic_handle_ccic_notification(struct notifier_block *nb,
 		(int)action, pnoti->src, pnoti->dest, pnoti->id, pnoti->sub1, pnoti->sub2, pnoti->sub3);
 
 #if defined(CONFIG_SEC_FACTORY)
-	if ((pmuic->vps.s.adc != ADC_OPEN) 
-#if defined(CONFIG_MUIC_SM570X_SWITCH_CONTROL_GPIO)
-		// MUIC_SWITCH_CONTROL_GPIO high -> ADC_UART_CABLE (150k), there is some delay
-		// So check MUIC_SWITCH_CONTROL_GPIO instead of MUIC ADC 150k checking
-		&& (muic_get_switch_gpio_value() != 1)
-#endif
-	){
+	if ((pmuic->vps.s.adc != ADC_OPEN) && (pmuic->vps.s.adc != ADC_UART_CABLE)) {
 		pr_info("%s: Ignore CCIC event in PBA array(0x%x)\n",
 				__func__, pmuic->vps.s.adc);
 		return NOTIFY_DONE;
@@ -912,25 +903,4 @@ int muic_GPIO_control(int gpio)
 }
 EXPORT_SYMBOL(muic_GPIO_control);
 
-#if defined(CONFIG_SEC_FACTORY)
-static int muic_get_switch_gpio_value(void)
-{
-	int sm570x_switch_val;
-	int ret;
-    
-	ret = gpio_request(gpmuic->sm570x_switch_gpio, "SM570X_SWITCH_GPIO");
-	if (ret) {
-		pr_err("%s: failed to gpio_request SM570X_SWITCH_GPIO\n", __func__);
-		return 0;
-	}
-
-	sm570x_switch_val = gpio_get_value(gpmuic->sm570x_switch_gpio);
-	gpio_free(gpmuic->sm570x_switch_gpio);
-
-	pr_info("%s: SM570X_SWITCH_GPIO(%d)=%c\n", __func__, gpmuic->sm570x_switch_gpio,
-			(sm570x_switch_val == 0 ? 'L' : 'H'));
-
-	return sm570x_switch_val;
-}
-#endif
 #endif

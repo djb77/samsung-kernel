@@ -466,6 +466,13 @@ config MACH_GTA2SLTE_SEA_OPEN
         help
         Support for Samsung GTA2SLTE SEA OPEN device.
 		
+config MACH_GTA2SLTE_CIS_SER
+        depends on SEC_GTA2SLTE_PROJECT
+        default n
+        bool "Samsung GTA2SLTE CIS SER"
+        help
+        Support for Samsung GTA2SLTE CIS SER device.
+		
 config MACH_GTA2SLTE_SWA_OPEN
         depends on SEC_GTA2SLTE_PROJECT
         default n

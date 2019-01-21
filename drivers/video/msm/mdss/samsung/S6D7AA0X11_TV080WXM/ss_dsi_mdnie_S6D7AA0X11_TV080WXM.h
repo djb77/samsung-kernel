@@ -650,24 +650,24 @@ static unsigned char GRAYSCALE_NEGATIVE_1[] ={
 
 static unsigned char GRAYSCALE_NEGATIVE_2[] ={
 0xE9,
-0x4c, //scr Cr Yb
-0xb3, //scr Rr Bb
-0x4c, //scr Cg Yg
-0xb3, //scr Rg Bg
-0x4c, //scr Cb Yr
-0xb3, //scr Rb Br
-0x96, //scr Mr Mb
-0x69, //scr Gr Gb
-0x96, //scr Mg Mg
-0x69, //scr Gg Gg
-0x96, //scr Mb Mr
-0x69, //scr Gb Gr
-0x1d, //scr Yr Cb
-0xe2, //scr Br Rb
-0x1d, //scr Yg Cg
-0xe2, //scr Bg Rg
-0x1d, //scr Yb Cr
-0xe2, //scr Bb Rr
+0xb3, //scr Cr Yb
+0x4c, //scr Rr Bb
+0xb3, //scr Cg Yg
+0x4c, //scr Rg Bg
+0xb3, //scr Cb Yr
+0x4c, //scr Rb Br
+0x69, //scr Mr Mb
+0x96, //scr Gr Gb
+0x69, //scr Mg Mg
+0x96, //scr Gg Gg
+0x69, //scr Mb Mr
+0x96, //scr Gb Gr
+0xe2, //scr Yr Cb
+0x1d, //scr Br Rb
+0xe2, //scr Yg Cg
+0x1d, //scr Bg Rg
+0xe2, //scr Yb Cr
+0x1d, //scr Bb Rr
 0x00, //scr Wr Wb
 0xff, //scr Kr Kb
 0x00, //scr Wg Wg
