@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_common.c 763050 2018-05-17 04:42:47Z $
+ * $Id: dhd_common.c 764462 2018-05-25 10:58:17Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -933,10 +933,14 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifidx, wl_ioctl_t *ioc, void *buf, int len)
 		if (ioc->cmd == WLC_GET_VAR) {
 			dbus_config_t config;
 			config.general_param = 0;
-			if (!strcmp(buf, "wowl_activate")) {
-				config.general_param = 2; /* 1 (TRUE) after decreased by 1 */
-			} else if (!strcmp(buf, "wowl_clear")) {
-				config.general_param = 1; /* 0 (FALSE) after decreased by 1 */
+			if (buf) {
+				if (!strcmp(buf, "wowl_activate")) {
+					 /* 1 (TRUE) after decreased by 1 */
+					config.general_param = 2;
+				} else if (!strcmp(buf, "wowl_clear")) {
+					 /* 0 (FALSE) after decreased by 1 */
+					config.general_param = 1;
+				}
 			}
 			if (config.general_param) {
 				config.config_id = DBUS_CONFIG_ID_KEEPIF_ON_DEVRESET;
@@ -953,7 +957,7 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifidx, wl_ioctl_t *ioc, void *buf, int len)
 		char *msg, tmp[64];
 
 		/* WLC_GET_VAR */
-		if (ioc->cmd == WLC_GET_VAR) {
+		if (ioc->cmd == WLC_GET_VAR && buf) {
 			min_len = MIN(sizeof(tmp) - 1, strlen(buf));
 			memset(tmp, 0, sizeof(tmp));
 			bcopy(buf, tmp, min_len);
@@ -998,7 +1002,9 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifidx, wl_ioctl_t *ioc, void *buf, int len)
 				DHD_ERROR(("iovar dump list item allocation Failed\n"));
 			} else {
 				iov_li->cmd = ioc->cmd;
-				bcopy((char *)buf, iov_li->buff, strlen((char *)buf)+1);
+				if (buf) {
+					bcopy((char *)buf, iov_li->buff, strlen((char *)buf)+1);
+				}
 				dhd_iov_li_append(dhd_pub, &dhd_pub->dump_iovlist_head,
 					&iov_li->list);
 			}
@@ -1018,7 +1024,8 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifidx, wl_ioctl_t *ioc, void *buf, int len)
 		}
 #endif /* WL_CFGVENDOR_SEND_HANG_EVENT */
 #ifdef DHD_LOG_DUMP
-		if (ioc->cmd == WLC_GET_VAR || ioc->cmd == WLC_SET_VAR) {
+		if ((ioc->cmd == WLC_GET_VAR || ioc->cmd == WLC_SET_VAR) &&
+				buf != NULL) {
 			lval = 0;
 			slen = strlen(buf) + 1;
 			msg = (char*)buf;
@@ -1076,7 +1083,8 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifidx, wl_ioctl_t *ioc, void *buf, int len)
 		dhd_os_proto_unblock(dhd_pub);
 
 		if (ret < 0) {
-			if (ioc->cmd == WLC_GET_VAR || ioc->cmd == WLC_SET_VAR) {
+			if ((ioc->cmd == WLC_GET_VAR || ioc->cmd == WLC_SET_VAR) &&
+					buf != NULL) {
 				if (ret == BCME_UNSUPPORTED || ret == BCME_NOTASSOCIATED) {
 					DHD_ERROR(("%s: %s: %s, %s\n",
 						__FUNCTION__, ioc->cmd == WLC_GET_VAR ?
