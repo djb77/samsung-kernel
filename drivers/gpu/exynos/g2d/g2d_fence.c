@@ -207,6 +207,37 @@ err_fd:
 	return ERR_PTR(ret);
 }
 
+static void g2d_check_valid_fence(struct fence *fence, s32 fence_fd)
+{
+	struct file *file;
+	struct sync_file *sync_file;
+
+	if (fence->magic_bit == 0xFECEFECE)
+		return;
+	/*
+	 * Caution:
+	 * This file of fence_fd doesn't have problem because this file's
+	 * fops is sync_file_fops, and we get reference for that. However
+	 * this fence of sync_file might be corrupted or released because
+	 * magic_bit is not 0xFECEFECE that is initialized on fence_init.
+	 *
+	 * Print information to find fence owner.
+	 */
+	file = fget(fence_fd);
+	sync_file = file->private_data;
+
+	pr_err("%s : sync_file@%p : ref %d name %s\n", __func__,
+	       sync_file, atomic_read(&sync_file->kref.refcount),
+	       sync_file->name);
+	pr_err("%s : fence@%p : ref %d lock %p context %lu\n", __func__,
+	       fence, atomic_read(&fence->refcount.refcount),
+	       fence->lock, (unsigned long)fence->context);
+	pr_err(" timestamp %ld status %d magic_bit %#x\n",
+	       (long)fence->timestamp.tv64, fence->status, fence->magic_bit);
+
+	fput(file);
+}
+
 struct fence *g2d_get_acquire_fence(struct g2d_device *g2d_dev,
 				    struct g2d_layer *layer, s32 fence_fd)
 {
@@ -219,6 +250,8 @@ struct fence *g2d_get_acquire_fence(struct g2d_device *g2d_dev,
 	fence = sync_file_get_fence(fence_fd);
 	if (!fence)
 		return ERR_PTR(-EINVAL);
+
+	g2d_check_valid_fence(fence, fence_fd);
 
 	kref_get(&layer->task->starter);
 
