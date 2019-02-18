@@ -70,6 +70,7 @@ struct fence_cb;
  * been completed, or never called at all.
  */
 struct fence {
+	int magic_bit;
 	struct kref refcount;
 	const struct fence_ops *ops;
 	struct rcu_head rcu;

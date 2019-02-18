@@ -37,6 +37,9 @@
  * Exported from dhd bus module (dhd_usb, dhd_sdio)
  */
 
+/* global variable for the bus */
+extern struct dhd_bus *g_dhd_bus;
+
 /* Indicate (dis)interest in finding dongles. */
 extern int dhd_bus_register(void);
 extern void dhd_bus_unregister(void);
@@ -231,7 +234,6 @@ extern void dhdpcie_cto_init(struct dhd_bus *bus, bool enable);
 extern void dhdpcie_ssreset_dis_enum_rst(struct dhd_bus *bus);
 
 #ifdef DHD_FW_COREDUMP
-extern struct dhd_bus *g_dhd_bus;
 extern int dhd_dongle_mem_dump(void);
 #endif /* DHD_FW_COREDUMP */
 
@@ -264,9 +266,11 @@ extern int dhd_get_idletime(dhd_pub_t *dhd);
 #ifdef BCMPCIE
 extern void dhd_bus_dump_console_buffer(struct dhd_bus *bus);
 extern void dhd_bus_intr_count_dump(dhd_pub_t *dhdp);
+extern bool dhd_bus_check_driver_up(void);
 #else
 #define dhd_bus_dump_console_buffer(x)
 static INLINE void dhd_bus_intr_count_dump(dhd_pub_t *dhdp) { UNUSED_PARAMETER(dhdp); }
+static INLINE bool dhd_bus_check_driver_up(void) { return FALSE; }
 #endif /* BCMPCIE */
 
 #if defined(BCMPCIE) && defined(DHD_LOG_DUMP)

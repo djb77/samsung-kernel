@@ -6179,6 +6179,11 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		}
 	}
 
+	if (sme->bssid) {
+		wl_update_prof(cfg, dev, NULL, sme->bssid, WL_PROF_LATEST_BSSID);
+	} else {
+		wl_update_prof(cfg, dev, NULL, &ether_bcast, WL_PROF_LATEST_BSSID);
+	}
 	/* 'connect' request received */
 	wl_set_drv_status(cfg, CONNECTING, dev);
 	/* clear nested connect bit on proceeding for connection */
@@ -6601,8 +6606,51 @@ wl_cfg80211_disconnect(struct wiphy *wiphy, struct net_device *dev,
 		}
 #endif /* WPS_SYNC */
 		wl_cfg80211_wait_for_disconnection(cfg, dev);
+		if (wl_get_drv_status(cfg, DISCONNECTING, dev)) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0))
+			CFG80211_CONNECT_BSS(dev,
+				NULL,	
+				NULL,
+				NULL,
+				0,
+				NULL,
+				0,
+				WLAN_STATUS_UNSPECIFIED_FAILURE,
+				GFP_KERNEL);
+#else
+			cfg80211_connect_result(dev,
+				NULL,
+				NULL,
+				0,
+				NULL,
+				0,
+				WLAN_STATUS_UNSPECIFIED_FAILURE,
+				GFP_KERNEL);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0) */
+			wl_clr_drv_status(cfg, DISCONNECTING, dev);
+		}
 	} else {
 		WL_INFORM_MEM(("act is false\n"));
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0))
+		CFG80211_CONNECT_BSS(dev,
+			NULL,	
+			NULL,
+			NULL,
+			0,
+			NULL,
+			0,
+			WLAN_STATUS_UNSPECIFIED_FAILURE,
+			GFP_KERNEL);
+#else
+		cfg80211_connect_result(dev,
+			NULL,
+			NULL,
+			0,
+			NULL,
+			0,
+			WLAN_STATUS_UNSPECIFIED_FAILURE,
+			GFP_KERNEL);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0) */
 	}
 #ifdef CUSTOM_SET_CPUCORE
 	/* set default cpucore */
@@ -13742,7 +13790,7 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 				 * command issued from the wl_cfg80211_connect context. Ignore
 				 * the event to avoid pre-empting the current connection
 				 */
-				WL_DBG(("Nested connection case. Drop event. \n"));
+				WL_INFORM_MEM(("Nested connection case. Drop event. \n"));
 				wl_clr_drv_status(cfg, NESTED_CONNECT, ndev);
 				wl_clr_drv_status(cfg, DISCONNECTING, ndev);
 				/* Not in 'CONNECTED' state, clear it */
@@ -13949,20 +13997,26 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 #endif /* DHD_ENABLE_BIGDATA_LOGGING */
 			/* Dump FW preserve buffer content */
 			wl_flush_fw_log_buffer(ndev, FW_LOGSET_MASK_ALL);
-
-			if (wl_get_drv_status(cfg, DISCONNECTING, ndev) &&
-				wl_get_drv_status(cfg, CONNECTING, ndev)) {
-				wl_clr_drv_status(cfg, DISCONNECTING, ndev);
-				wl_clr_drv_status(cfg, CONNECTING, ndev);
-				wl_cfg80211_scan_abort(cfg);
-				DHD_ENABLE_RUNTIME_PM((dhd_pub_t *)cfg->pub);
-				return err;
-			}
+			
 			/* Clean up any pending scan request */
 			wl_cfg80211_cancel_scan(cfg);
-
-			if (wl_get_drv_status(cfg, CONNECTING, ndev))
+			
+			if (wl_get_drv_status(cfg, CONNECTING, ndev)) {
+				if (!wl_get_drv_status(cfg, DISCONNECTING, ndev)) {
+					WL_INFORM_MEM(("wl dissassoc\n"));
+					err = wldev_ioctl_set(ndev, WLC_DISASSOC, NULL, 0);
+					if (err < 0) {
+						WL_ERR(("WLC_DISASSOC error %d\n", err));
+						err = 0;
+					}
+				} else {
+					WL_DBG(("connect fail. clear disconnecting bit\n"));
+					wl_clr_drv_status(cfg, DISCONNECTING, ndev);
+				}
 				wl_bss_connect_done(cfg, ndev, e, data, false);
+				wl_clr_drv_status(cfg, CONNECTING, ndev);
+				WL_INFORM_MEM(("connect fail reported\n"));
+			}
 		} else {
 			WL_DBG(("%s nothing\n", __FUNCTION__));
 		}
@@ -19170,9 +19224,53 @@ _Pragma("GCC diagnostic ignored \"-Wcast-qual\"")
 		if (iter->ndev == NULL)
 			continue;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0))
+		WL_INFORM_MEM(("wl_cfg80211_down. connection state bit status: [%u:%u:%u:%u]\n",
+			wl_get_drv_status(cfg, CONNECTING, ndev),
+			wl_get_drv_status(cfg, CONNECTED, ndev),
+			wl_get_drv_status(cfg, DISCONNECTING, ndev),
+			wl_get_drv_status(cfg, NESTED_CONNECT, ndev)));
+			
 		if ((iter->ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_STATION) &&
 			wl_get_drv_status(cfg, CONNECTED, iter->ndev)) {
 			CFG80211_DISCONNECTED(iter->ndev, 0, NULL, 0, false, GFP_KERNEL);
+		}
+		
+		if ((iter->ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_STATION) &&
+				wl_get_drv_status(cfg, CONNECTING, iter->ndev)) {
+
+			struct wiphy *wiphy = bcmcfg_to_wiphy(cfg);
+			struct wireless_dev *wdev = ndev->ieee80211_ptr;
+			u8 *latest_bssid = wl_read_prof(cfg, ndev, WL_PROF_LATEST_BSSID);
+			struct cfg80211_bss *bss = CFG80211_GET_BSS(wiphy, NULL, latest_bssid,
+					wdev->ssid, wdev->ssid_len);
+
+			prhex("bssid:", (uchar *)latest_bssid, ETHER_ADDR_LEN);
+			prhex("ssid:", (uchar *)wdev->ssid, wdev->ssid_len);
+
+			if (!bss) {
+				WL_DBG(("null bss\n"));
+			}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0))
+			CFG80211_CONNECT_BSS(ndev,
+					NULL,	
+					NULL,
+					NULL,
+					0,
+					NULL,
+					0,
+					WLAN_STATUS_UNSPECIFIED_FAILURE,
+					GFP_KERNEL);
+#else
+			cfg80211_connect_result(ndev,
+					latest_bssid,
+					NULL,
+					0,
+					NULL,
+					0,
+					WLAN_STATUS_UNSPECIFIED_FAILURE,
+					GFP_KERNEL);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0) */
 		}
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)) */
 		wl_clr_drv_status(cfg, READY, iter->ndev);
@@ -19462,6 +19560,9 @@ static void *wl_read_prof(struct bcm_cfg80211 *cfg, struct net_device *ndev, s32
 	case WL_PROF_CHAN:
 		rptr = &profile->channel;
 		break;
+	case WL_PROF_LATEST_BSSID:
+		rptr = profile->latest_bssid;
+		break;
 	}
 	spin_unlock_irqrestore(&cfg->cfgdrv_lock, flags);
 	if (!rptr)
@@ -19509,6 +19610,13 @@ wl_update_prof(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		break;
 	case WL_PROF_CHAN:
 		profile->channel = *(const u32*)data;
+		break;
+	case WL_PROF_LATEST_BSSID:
+		if (data) {
+			memcpy(profile->latest_bssid, data, ETHER_ADDR_LEN);
+		} else {
+			memset(profile->latest_bssid, 0, ETHER_ADDR_LEN);
+		}
 		break;
 	default:
 		err = -EOPNOTSUPP;

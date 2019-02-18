@@ -942,7 +942,7 @@ static int ion_debug_client_show(struct seq_file *s, void *unused)
 
 	mutex_lock(&debugfs_mutex);
 	if (!is_client_alive(client)) {
-		seq_printf(s, "ion_client 0x%p dead, can't dump its buffers\n",
+		seq_printf(s, "ion_client 0x%pK dead, can't dump its buffers\n",
 			   client);
 		mutex_unlock(&debugfs_mutex);
 		return 0;
@@ -2135,21 +2135,21 @@ static void ion_debug_event_show_one(struct seq_file *s,
 	case ION_EVENT_TYPE_ALLOC:
 		{
 		struct ion_event_alloc *data = &log->data.alloc;
-		seq_printf(s, "%8s  %p  %18s  %11zd  ", "alloc",
+		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "alloc",
 				data->id, data->heap->name, data->size);
 		break;
 		}
 	case ION_EVENT_TYPE_FREE:
 		{
 		struct ion_event_free *data = &log->data.free;
-		seq_printf(s, "%8s  %p  %18s  %11zd  ", "free",
+		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "free",
 				data->id, data->heap->name, data->size);
 		break;
 		}
 	case ION_EVENT_TYPE_MMAP:
 		{
 		struct ion_event_mmap *data = &log->data.mmap;
-		seq_printf(s, "%8s  %p  %18s  %11zd  ", "mmap",
+		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "mmap",
 				data->id, data->heap->name, data->size);
 		break;
 		}
@@ -2164,7 +2164,7 @@ static void ion_debug_event_show_one(struct seq_file *s,
 	case ION_EVENT_TYPE_CLEAR:
 		{
 		struct ion_event_clear *data = &log->data.clear;
-		seq_printf(s, "%8s  %p  %18s  %11zd  ", "clear",
+		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "clear",
 				data->id, data->heap->name, data->size);
 		break;
 		}
