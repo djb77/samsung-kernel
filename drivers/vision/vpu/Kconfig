@@ -1,0 +1,15 @@
+menuconfig EXYNOS_VPU
+        bool "Exynos VPU(Vision Processing Unit) driver"
+        select EXYNOS_VPU_PLATFORM
+        select EXYNOS_VPU_INTERFACE
+        select EXYNOS_VPU_ALLOCATOR
+        help
+          This is a vision processing unit
+
+if EXYNOS_VPU
+
+source "drivers/vision/vpu/platform/Kconfig"
+source "drivers/vision/vpu/interface/Kconfig"
+source "drivers/vision/vpu/resource/Kconfig"
+
+endif

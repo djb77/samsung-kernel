@@ -1,0 +1,62 @@
+/*
+ * SAMSUNG EXYNOS8895 SoC device tree source
+ *
+ * Copyright (c) 2015 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * SAMSUNG EXYNOS8890 SoC device nodes are listed in this file.
+ * EXYNOS8890 based board files can include this file and provide
+ * values for board specfic bindings.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/ {
+	exynos-snapshot {
+		/* refer from drivers/soc/samsung/cal-if/exynos8895/pmucal_local_exynos8895.h */
+		#define PD_ABOX		(0)
+		#define PD_CAM		(1)
+		#define PD_DBG		(2)
+		#define PD_DCAM		(3)
+		#define PD_DPU0		(4)
+		#define PD_DPU1		(5)
+		#define PD_G2D		(6)
+		#define PD_G3D		(7)
+		#define PD_ISPHQ	(8)
+		#define PD_ISPLP	(9)
+		#define PD_MFC		(10)
+		#define PD_SRDZ		(11)
+		#define PD_VPU		(12)
+		#define PD_VTS		(13)
+
+		compatible = "samsung,exynos-snapshot";
+		dump-info@0x0 {
+			sfr-dump-list = "sfr-dump-cmu-peris", "sfr-dump-cmu-abox", "sfr-dump-dram";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			sfr-dump-cmu-peris {
+				reg = <0x10010100 0x4000>;
+				addr = <0x10010100 0x10010104 0x10010108 0xFFFFFFFF>;
+			};
+
+			sfr-dump-cmu-abox {
+				reg = <0x103e0000 0x4000>;
+				addr = <0x103e0100 0x103e0104 0x103e0108 0xFFFFFFFF>;
+				/* input avaiable array. (ex: cal-pd-id = <PD_DPU0 PD_DPU1>;) */
+				cal-pd-id = <PD_ABOX>;
+			};
+
+			sfr-dump-dram {
+				reg = <0x16509000 0x1000>;
+				addr = <0x16509b08 0x16509b0c 0x16509b00 0x16509b20
+					0x16509b24 0x16509b28 0x16509b2c 0x16509b00
+					0x16509b04 0x16509b80 0x16509b84 0x16509b88
+					0x16509b8c 0x16509b90 0x16509b94 0x16509b98
+					0x16509b9c 0xFFFFFFFF>;
+			};
+
+		};
+	};
+};

@@ -1,0 +1,65 @@
+config EXYNOS_DECON_LCD
+	depends on EXYNOS_DECON_8895
+	bool "Select LCD panel driver"
+
+config EXYNOS_DECON_MDNIE_LITE
+	depends on EXYNOS_DECON_LCD
+	tristate "Support MDNIE LITE"
+	default n
+
+config EXYNOS_DECON_LCD_SYSFS
+	depends on EXYNOS_DECON_LCD
+	tristate "Support LCD SYSFS"
+	default y
+
+config EXYNOS_DECON_LCD_SPI
+	depends on EXYNOS_DECON_LCD
+	tristate "Support LCD SPI"
+	default n
+
+config EXYNOS_DECON_LCD_COPR
+	depends on EXYNOS_DECON_LCD
+	tristate "Support COPR"
+	default n
+
+config EXYNOS_DECON_LCD_TUNING
+	depends on EXYNOS_DECON_LCD
+	tristate "Support LCD TUNING"
+	default n
+
+config PANEL_AID_DIMMING
+	depends on EXYNOS_DECON_LCD
+	tristate "Support AID Dimming"
+	default n
+
+config EXYNOS_DECON_LCD_S6E3HA2
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSIM
+	tristate "S6E3HA2 AMOLED LCD driver"
+config EXYNOS_DECON_LCD_S6E3HF3
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSIM
+	tristate "S6E3HA3 AMOLED LCD DRIVER"
+	default n
+
+config EXYNOS_DECON_LCD_S6E3HF4
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSIM
+	tristate "S6E3HF4 AMOLED WQHD LCD driver(1440 x 2560)"
+	default n
+
+config EXYNOS_DECON_LCD_S6E3HA6
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSIM
+	tristate "S6E3HA6 AMOLED LCD DRIVER"
+
+config ACTIVE_CLOCK
+	depends on EXYNOS_DECON_LCD && EXYNOS_DECON_LCD_S6E3HA6
+	tristate "Support DDI Active Clock Feature"
+	default n
+
+config PANEL_BACKLIGHT_PAC_3_0
+	depends on EXYNOS_DECON_LCD
+	tristate "Support baclight PAC 3.0"
+	default n
+
+config DISPLAY_USE_INFO
+	depends on EXYNOS_DECON_LCD
+	tristate "Support display use info logging"
+	default n
