@@ -37,7 +37,6 @@
 #endif
 
 /* -------------------------------------------------------------------------- */
-
 static int dwc3_otg_statemachine(struct otg_fsm *fsm)
 {
 	struct usb_otg *otg = fsm->otg;

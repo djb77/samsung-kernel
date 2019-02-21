@@ -1,14 +1,14 @@
 /*
  * Linux roam cache
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -24,11 +24,9 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_roam.c 731718 2017-11-14 08:10:43Z $
+ * $Id: wl_roam.c 729257 2017-10-31 05:37:07Z $
  */
 
-
-#ifdef ROAM_CHANNEL_CACHE
 #include <typedefs.h>
 #include <osl.h>
 #include <bcmwifi_channels.h>
@@ -36,9 +34,10 @@
 #include <bcmutils.h>
 #ifdef WL_CFG80211
 #include <wl_cfg80211.h>
-#endif
+#endif // endif
 #include <wldev_common.h>
 
+#ifdef ESCAN_CHANNEL_CACHE
 #define MAX_ROAM_CACHE		200
 #define MAX_SSID_BUFSIZE	36
 
@@ -55,10 +54,12 @@ static int n_roam_cache = 0;
 static int roam_band = WLC_BAND_AUTO;
 static roam_channel_cache roam_cache[MAX_ROAM_CACHE];
 static uint band2G, band5G, band_bw;
+
 #ifdef WES_SUPPORT
 static int roamscan_mode = ROAMSCAN_MODE_NORMAL;
 #endif /* WES_SUPPORT */
 
+#ifdef ROAM_CHANNEL_CACHE
 int init_roam_cache(struct bcm_cfg80211 *cfg, int ioctl_ver)
 {
 	int err;
@@ -98,6 +99,7 @@ int init_roam_cache(struct bcm_cfg80211 *cfg, int ioctl_ver)
 
 	return 0;
 }
+#endif /* ROAM_CHANNEL_CACHE */
 
 #ifdef WES_SUPPORT
 int get_roamscan_mode(struct net_device *dev, int *mode)
@@ -182,6 +184,7 @@ int set_roamscan_channel_list(struct net_device *dev,
 }
 #endif /* WES_SUPPORT */
 
+#ifdef ESCAN_CHANNEL_CACHE
 void set_roam_band(int band)
 {
 	roam_band = band;
@@ -318,8 +321,9 @@ int get_roam_channel_list(int target_chan,
 
 	return n;
 }
+#endif /* ESCAN_CHANNEL_CACHE */
 
-
+#ifdef ROAM_CHANNEL_CACHE
 void print_roam_cache(struct bcm_cfg80211 *cfg)
 {
 	int i;
@@ -499,3 +503,4 @@ void wl_update_roamscan_cache_by_band(struct net_device *dev, int band)
 	}
 }
 #endif /* ROAM_CHANNEL_CACHE */
+#endif /* ESCAN_CHANNEL_CACHE */

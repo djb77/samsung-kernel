@@ -91,6 +91,13 @@ struct fimc_is_cis {
 #endif
 	u32				ae_exposure;
 	u32				ae_deltaev;
+
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+    /* settins for initial AE */
+	bool			use_initial_ae;
+	ae_setting		init_ae_setting;
+	ae_setting		last_ae_setting;
+#endif
 };
 
 struct fimc_is_actuator_data {

@@ -920,7 +920,7 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 
 	priv = skbpriv(skb);
 	if (unlikely(!priv)) {
-		mif_err("%s: ERR! No PRIV in skb@%p\n", ld->name, skb);
+		mif_err("%s: ERR! No PRIV in skb@%pK\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
 		mem_forced_cp_crash(mld);
 		return;
@@ -928,7 +928,7 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 
 	iod = priv->iod;
 	if (unlikely(!iod)) {
-		mif_err("%s: ERR! No IOD in skb@%p\n", ld->name, skb);
+		mif_err("%s: ERR! No IOD in skb@%pK\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
 		mem_forced_cp_crash(mld);
 		return;
@@ -1651,7 +1651,7 @@ int mem_register_boot_rgn(struct mem_link_device *mld, phys_addr_t start,
 	if (!pages)
 		return -ENOMEM;
 
-	mif_err("%s: BOOT_RGN start:%pa size:%zu\n", ld->name, &start, size);
+	mif_err("%s: BOOT_RGN start:%pK size:%zu\n", ld->name, &start, size);
 
 	mld->boot_start = start;
 	mld->boot_size = size;
@@ -1685,7 +1685,7 @@ int mem_setup_boot_map(struct mem_link_device *mld)
 
 	mld->boot_base = (char __iomem *)base;
 
-	mif_err("%s: BOOT_RGN phys_addr:%pa virt_addr:%p size:%zu\n",
+	mif_err("%s: BOOT_RGN phys_addr:%pK virt_addr:%pK size:%zu\n",
 		ld->name, &start, base, size);
 
 	return 0;
@@ -1785,7 +1785,7 @@ int mem_register_ipc_rgn(struct mem_link_device *mld, phys_addr_t start,
 	if (!pages)
 		return -ENOMEM;
 
-	mif_err("%s: IPC_RGN start:%pa size:%zu\n", ld->name, &start, size);
+	mif_err("%s: IPC_RGN start:%pK size:%zu\n", ld->name, &start, size);
 
 	mld->start = start;
 	mld->size = size;

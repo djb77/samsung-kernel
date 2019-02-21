@@ -32,25 +32,29 @@ static int audio_test_br;
 
 /* displayport_supported_presets[] is to be arranged in the order of pixel clock */
 struct displayport_supported_preset displayport_supported_presets[] = {
-	{V4L2_DV_BT_DMT_640X480P60,      640, 480,  60, FB_VMODE_NONINTERLACED,   1, "640x480p@60", true},
-	{V4L2_DV_BT_CEA_720X480P59_94,	 720, 480,  59, FB_VMODE_NONINTERLACED,   2, "720x480p@60", true},
-	{V4L2_DV_BT_CEA_720X576P50,      720, 576,  50, FB_VMODE_NONINTERLACED,  17, "720x576p@50", true},
-	{V4L2_DV_BT_DMT_1280X800P60_RB,	    1280,  800, 60, FB_VMODE_NONINTERLACED,   0, "1280x800p@60_RB", true},
-	{V4L2_DV_BT_CEA_1280X720P50,	    1280,  720, 50, FB_VMODE_NONINTERLACED,  19, "1280x720p@50", true},
-	{V4L2_DV_BT_CEA_1280X720P60,	    1280,  720, 60, FB_VMODE_NONINTERLACED,   4, "1280x720p@60", true},
-	{V4L2_DV_BT_DMT_1280X1024P60,	    1280, 1024, 60,	FB_VMODE_NONINTERLACED,   0, "1280x1024p@60", true},
-	{V4L2_DV_BT_CVT_1600X900P59_98_ADDED, 1600, 900, 59, FB_VMODE_NONINTERLACED,  0, "1600x900p@59_98", true},
-	{V4L2_DV_BT_DMT_1600X900P60_RB,		 1600,  900, 60, FB_VMODE_NONINTERLACED,  0, "1600x900p@60", true},
-	{V4L2_DV_BT_CEA_1920X1080P24,	    1920, 1080, 24, FB_VMODE_NONINTERLACED,  32, "1920x1080p@24", true},
-	{V4L2_DV_BT_CEA_1920X1080P25,	    1920, 1080, 25, FB_VMODE_NONINTERLACED,  33, "1920x1080p@25", true},
-	{V4L2_DV_BT_CEA_1920X1080P30,	    1920, 1080, 30, FB_VMODE_NONINTERLACED,  34, "1920x1080p@30", true},
-	{V4L2_DV_BT_CVT_1920X1080P59_ADDED, 1920, 1080, 59, FB_VMODE_NONINTERLACED,   0, "1920x1080p@59", true},
-	{V4L2_DV_BT_CEA_1920X1080P50,	    1920, 1080, 50, FB_VMODE_NONINTERLACED,  31, "1920x1080p@50", true},
-	{V4L2_DV_BT_CEA_1920X1080P60,	    1920, 1080, 60, FB_VMODE_NONINTERLACED,  16, "1920x1080p@60", true},
-	{V4L2_DV_BT_CVT_2048X1536P60_ADDED, 2048, 1536, 60, FB_VMODE_NONINTERLACED,   0, "2048x1536p@60", true},
-	{V4L2_DV_BT_DMT_1920X1440P60,	    1920, 1440, 60, FB_VMODE_NONINTERLACED,   0, "1920x1440p@60", true},
-	{V4L2_DV_BT_CVT_2560X1440P59_ADDED, 2560, 1440, 59, FB_VMODE_NONINTERLACED,   0, "2560x1440p@59", true},
-	{V4L2_DV_BT_CVT_2560X1440P60_ADDED, 2560, 1440, 60, FB_VMODE_NONINTERLACED,   0, "2560x1440p@60", true},
+	{V4L2_DV_BT_DMT_640X480P60,      640, 480,  60, FB_VMODE_NONINTERLACED,   1, "640x480p@60", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CEA_720X480P59_94,	 720, 480,  59, FB_VMODE_NONINTERLACED,   2, "720x480p@60", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CEA_720X576P50,      720, 576,  50, FB_VMODE_NONINTERLACED,  17, "720x576p@50", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_DMT_1280X800P60_RB,	    1280,  800, 60, FB_VMODE_NONINTERLACED,   0, "1280x800p@60_RB", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CEA_1280X720P50,	    1280,  720, 50, FB_VMODE_NONINTERLACED,  19, "1280x720p@50", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CEA_1280X720P60,	    1280,  720, 60, FB_VMODE_NONINTERLACED,   4, "1280x720p@60", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_DMT_1366X768P60,	    1366,  768, 60, FB_VMODE_NONINTERLACED,   0, "1366x768p@60", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_DMT_1280X1024P60,	    1280, 1024, 60, FB_VMODE_NONINTERLACED,   0, "1280x1024p@60", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CVT_1600X900P59_98_ADDED, 1600, 900, 59, FB_VMODE_NONINTERLACED,  0, "1600x900p@59_98", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_DMT_1600X900P60_RB,		 1600,  900, 60, FB_VMODE_NONINTERLACED,  0, "1600x900p@60", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CEA_1920X1080P24,	    1920, 1080, 24, FB_VMODE_NONINTERLACED,  32, "1920x1080p@24", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CEA_1920X1080P25,	    1920, 1080, 25, FB_VMODE_NONINTERLACED,  33, "1920x1080p@25", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CEA_1920X1080P30,	    1920, 1080, 30, FB_VMODE_NONINTERLACED,  34, "1920x1080p@30", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CEA_1920X1080P50,	    1920, 1080, 50, FB_VMODE_NONINTERLACED,  31, "1920x1080p@50", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CVT_1920X1080P59_ADDED, 1920, 1080, 59, FB_VMODE_NONINTERLACED,   0, "1920x1080p@59", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CVT_1920X1080P59_ADDED_2, 1920, 1080, 59, FB_VMODE_NONINTERLACED,   0, "1920x1080p@59_2", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CEA_1920X1080P60,	    1920, 1080, 60, FB_VMODE_NONINTERLACED,  16, "1920x1080p@60", DEX_FHD_SUPPORT},
+	{V4L2_DV_BT_CVT_2048X1536P60_ADDED, 2048, 1536, 60, FB_VMODE_NONINTERLACED,   0, "2048x1536p@60"},
+	{V4L2_DV_BT_DMT_1920X1440P60,	    1920, 1440, 60, FB_VMODE_NONINTERLACED,   0, "1920x1440p@60"},
+	{V4L2_DV_BT_CVT_1440X2560P60_ADDED, 1440, 2560, 60, FB_VMODE_NONINTERLACED,   0, "1440x2560p@60"},
+	{V4L2_DV_BT_CVT_2560X1440P59_ADDED, 2560, 1440, 59, FB_VMODE_NONINTERLACED,   0, "2560x1440p@59", DEX_WQHD_SUPPORT},
+	{V4L2_DV_BT_CVT_2560X1440P60_ADDED, 2560, 1440, 60, FB_VMODE_NONINTERLACED,   0, "2560x1440p@60", DEX_WQHD_SUPPORT},
+	{V4L2_DV_BT_CVT_1440X2560P75_ADDED, 1440, 2560, 75, FB_VMODE_NONINTERLACED,   0, "1440x2560p@75"},
 	{V4L2_DV_BT_CEA_3840X2160P24,	    3840, 2160, 24, FB_VMODE_NONINTERLACED,  93, "3840x2160p@24"},
 	{V4L2_DV_BT_CEA_3840X2160P25,	    3840, 2160, 25, FB_VMODE_NONINTERLACED,  94, "3840x2160p@25"},
 	{V4L2_DV_BT_CEA_3840X2160P30,	    3840, 2160, 30, FB_VMODE_NONINTERLACED,  95, "3840x2160p@30"},
@@ -64,11 +68,11 @@ struct displayport_supported_preset displayport_supported_presets[] = {
 	{V4L2_DV_BT_CEA_4096X2160P60,	4096, 2160, 60, FB_VMODE_NONINTERLACED, 102, "4096x2160p@60"},
 };
 
-static struct fb_videomode ud_mode_h14b_vsdb[] = {
-	{"3840x2160p@30", 30, 3840, 2160, 297000000, 0, 0, 0, 0, 0, 0, 0, FB_VMODE_NONINTERLACED, 0},
-	{"3840x2160p@25", 25, 3840, 2160, 297000000, 0, 0, 0, 0, 0, 0, 0, FB_VMODE_NONINTERLACED, 0},
-	{"3840x2160p@24", 24, 3840, 2160, 297000000, 0, 0, 0, 0, 0, 0, 0, FB_VMODE_NONINTERLACED, 0},
-	{"4096x2160p@24", 24, 4096, 2160, 297000000, 0, 0, 0, 0, 0, 0, 0, FB_VMODE_NONINTERLACED, 0},
+videoformat ud_mode_h14b_vsdb[] = {
+	v3840x2160p_30Hz,
+	v3840x2160p_25Hz,
+	v3840x2160p_24Hz,
+	v4096x2160p_24Hz
 };
 
 const int displayport_pre_cnt = ARRAY_SIZE(displayport_supported_presets);
@@ -106,11 +110,28 @@ void edid_check_set_i2c_capabilities(void)
 	}
 }
 
+static int edid_checksum(u8 *data, int block)
+{
+	int i;
+	u8 sum = 0, all_null = 0;
+
+	for (i = 0; i < EDID_BLOCK_SIZE; i++) {
+		sum += data[i];
+		all_null |= data[i];
+	}
+
+	if (sum || all_null == 0x0) {
+		displayport_err("checksum error block = %d sum = %02x\n", block, sum);
+		return -EPROTO;
+	}
+
+	return 0;
+}
+
 static int edid_read_block(struct displayport_device *hdev, int block, u8 *buf, size_t len)
 {
-	int ret, i;
+	int ret;
 	u8 offset = EDID_OFFSET(block);
-	int sum = 0;
 
 	if (len < EDID_BLOCK_SIZE)
 		return -EINVAL;
@@ -120,18 +141,9 @@ static int edid_read_block(struct displayport_device *hdev, int block, u8 *buf, 
 	if (ret)
 		return ret;
 
-	for (i = 0; i < EDID_BLOCK_SIZE; i++)
-		sum += buf[i];
-
 	print_hex_dump(KERN_INFO, "EDID = ", DUMP_PREFIX_OFFSET, 16, 1,
 					buf, 128, false);
 	dp_print_hex_dump(buf, "EDID : ", 128);
-
-	sum%=0x100;	//Checksum. Sum of all 128 bytes should equal 0 (mod 256).
-	if (sum) {
-		displayport_err("%s: checksum error block = %d sum = %02x\n", __func__, block, sum);
-		return -EPROTO;
-	}
 
 	return 0;
 }
@@ -144,6 +156,10 @@ int edid_read(struct displayport_device *hdev, u8 **data)
 	int block_cnt, ret;
 
 	ret = edid_read_block(hdev, 0, block0, sizeof(block0));
+	if (ret)
+		return ret;
+
+	ret = edid_checksum(block0, block);
 	if (ret)
 		return ret;
 
@@ -161,9 +177,12 @@ int edid_read(struct displayport_device *hdev, u8 **data)
 			edid + block * EDID_BLOCK_SIZE,
 			EDID_BLOCK_SIZE);
 
-		if (ret) {
-			kfree(edid);
-			return ret;
+		/* check error, extension tag and checksum */
+		if (ret || *(edid + (block * EDID_BLOCK_SIZE)) != 0x02 ||
+				edid_checksum(edid + (block * EDID_BLOCK_SIZE), block)) {
+			displayport_info("block_cnt:%d/%d, ret: %d\n", block, block_cnt, ret);
+			*data = edid;
+			return block;
 		}
 	}
 
@@ -217,23 +236,27 @@ static bool edid_find_preset(const struct fb_videomode *mode, bool first)
 		mode->left_margin, mode->right_margin, mode->upper_margin, mode->lower_margin);
 
 	for (i = 0; i < displayport_pre_cnt; i++) {
+		if (displayport_supported_presets[i].edid_support_match == true)
+			continue;
+
 		if ((mode->refresh == displayport_supported_presets[i].refresh ||
-			mode->refresh == displayport_supported_presets[i].refresh - 1) &&
-			mode->xres == displayport_supported_presets[i].xres &&
-			mode->yres == displayport_supported_presets[i].yres &&
-			mode->vmode == displayport_supported_presets[i].vmode &&
-			mode->left_margin == displayport_supported_presets[i].dv_timings.bt.hbackporch &&
-			mode->right_margin == displayport_supported_presets[i].dv_timings.bt.hfrontporch &&
-			mode->upper_margin == displayport_supported_presets[i].dv_timings.bt.vbackporch &&
-			mode->lower_margin == displayport_supported_presets[i].dv_timings.bt.vfrontporch) {
-			if (displayport_supported_presets[i].edid_support_match == false) {
-				displayport_info("EDID: found %s\n", displayport_supported_presets[i].name);
-				displayport_supported_presets[i].edid_support_match = true;
-				preferred_preset = displayport_supported_presets[i].dv_timings;
-				first = false;
-				if (displayport->best_video < i)
-					displayport->best_video = i;
-			}
+					mode->refresh == displayport_supported_presets[i].refresh - 1) &&
+				mode->xres == displayport_supported_presets[i].xres &&
+				mode->yres == displayport_supported_presets[i].yres &&
+				mode->vmode == displayport_supported_presets[i].vmode &&
+				mode->left_margin == displayport_supported_presets[i].dv_timings.bt.hbackporch &&
+				mode->right_margin == displayport_supported_presets[i].dv_timings.bt.hfrontporch &&
+				mode->upper_margin == displayport_supported_presets[i].dv_timings.bt.vbackporch &&
+				mode->lower_margin == displayport_supported_presets[i].dv_timings.bt.vfrontporch) {
+			displayport_info("EDID: found %s\n", displayport_supported_presets[i].name);
+			displayport_supported_presets[i].edid_support_match = true;
+			preferred_preset = displayport_supported_presets[i].dv_timings;
+			first = false;
+
+			if (displayport->best_video < i)
+				displayport->best_video = i;
+
+			break;
 		}
 	}
 
@@ -403,6 +426,27 @@ static int edid_parse_audio_video_db(unsigned char *edid, struct fb_audio *sad)
 	return 0;
 }
 
+int static edid_dv_timing_to_fb_video(videoformat video, struct fb_videomode *fb)
+{
+	struct displayport_supported_preset pre = displayport_supported_presets[video];
+
+	fb->name = pre.name;
+	fb->refresh = pre.refresh;
+	fb->xres = pre.dv_timings.bt.width;
+	fb->yres = pre.dv_timings.bt.height;
+	fb->pixclock = pre.dv_timings.bt.pixelclock;
+	fb->left_margin = pre.dv_timings.bt.hbackporch;
+	fb->right_margin = pre.dv_timings.bt.hfrontporch;
+	fb->upper_margin = pre.dv_timings.bt.vbackporch;
+	fb->lower_margin = pre.dv_timings.bt.vfrontporch;
+	fb->hsync_len = pre.dv_timings.bt.hsync;
+	fb->vsync_len = pre.dv_timings.bt.vsync;
+	fb->sync = 0;
+	fb->vmode = pre.vmode;
+
+	return 0;
+}
+
 void edid_extension_update(struct fb_vendor *vsdb)
 {
 	int udmode_idx, vic_idx;
@@ -417,8 +461,12 @@ void edid_extension_update(struct fb_vendor *vsdb)
 
 			displayport_dbg("EDID: udmode_idx = %d\n", udmode_idx);
 
-			if (udmode_idx >= 0)
-				edid_find_preset(&ud_mode_h14b_vsdb[udmode_idx], false);
+			if (udmode_idx >= 0) {
+				struct fb_videomode fb;
+
+				edid_dv_timing_to_fb_video(ud_mode_h14b_vsdb[udmode_idx], &fb);
+				edid_find_preset(&fb, false);
+			}
 		}
 	}
 }

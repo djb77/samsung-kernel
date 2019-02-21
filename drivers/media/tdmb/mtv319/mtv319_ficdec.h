@@ -34,7 +34,8 @@ extern "C"{
 enum E_RTV_FIC_DEC_RET_TYPE {
 	RTV_FIC_RET_GOING = 0,
 	RTV_FIC_RET_DONE,
-	RTV_FIC_RET_CRC_ERR
+	RTV_FIC_RET_CRC_ERR,
+	RTV_FIC_RET_SEMI_DONE
 };
 
 void rtvFICDEC_GetEnsembleInfo(struct ensemble_info_type *ensble,

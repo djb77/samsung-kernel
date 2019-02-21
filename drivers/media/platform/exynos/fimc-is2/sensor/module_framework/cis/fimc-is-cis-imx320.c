@@ -1940,6 +1940,9 @@ static struct fimc_is_cis_ops cis_ops_imx320 = {
 	.cis_compensate_gain_for_extremely_br = sensor_cis_compensate_gain_for_extremely_br,
 	.cis_wait_streamoff = sensor_cis_wait_streamoff,
 	.cis_data_calculation = sensor_imx320_cis_data_calc,
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	.cis_set_initial_exposure = sensor_cis_set_initial_exposure,
+#endif
 };
 
 int cis_imx320_probe(struct i2c_client *client,
@@ -2045,7 +2048,11 @@ int cis_imx320_probe(struct i2c_client *client,
                 
                 cis->use_dgain = true;
 		cis->hdr_ctrl_by_again = false;
-
+                
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+		cis->use_initial_ae = of_property_read_bool(dnode, "use_initial_ae");
+		probe_info("%s use initial_ae(%d)\n", __func__, cis->use_initial_ae);
+#endif
 		v4l2_set_subdevdata(subdev_cis, cis);
 		v4l2_set_subdev_hostdata(subdev_cis, device);
 		snprintf(subdev_cis->name, V4L2_SUBDEV_NAME_SIZE, "cis-subdev.%d", cis->id);

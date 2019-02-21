@@ -1923,6 +1923,23 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 #endif
 				info->all_aod_tap_count++;
 				break;
+			case FTS_STRING_EVENT_SINGLETAP:
+				string_addr = FTS_CMD_STRING_ACCESS + 10;
+				fts_read_from_string(info, &string_addr, string_data, sizeof(string_data));
+
+				input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
+				info->scrub_id = SPECIAL_EVENT_TYPE_SINGLETAP;
+				info->scrub_x = (string_data[1] & 0xFF) << 8 | (string_data[0] & 0xFF);
+				info->scrub_y = (string_data[3] & 0xFF) << 8 | (string_data[2] & 0xFF);
+
+#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
+				input_info(true, &info->client->dev, "%s: SINGLE_TAP[%d]\n", __func__, info->scrub_id);
+#else
+				input_info(true, &info->client->dev, "%s: SINGLE_TAP[%d %d %d]\n", __func__,
+						info->scrub_id, info->scrub_x, info->scrub_y);
+#endif
+				info->all_aod_tap_count++;
+				break;
 			case FTS_STRING_EVENT_SPAY:
 				input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
 				info->scrub_id = SPECIAL_EVENT_TYPE_SPAY;

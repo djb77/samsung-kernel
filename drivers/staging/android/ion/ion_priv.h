@@ -247,6 +247,9 @@ struct ion_heap {
 	struct task_struct *task;
 
 	int (*debug_show)(struct ion_heap *heap, struct seq_file *, void *);
+	atomic_long_t total_allocated;
+	atomic_long_t total_allocated_peak;
+	atomic_long_t total_handles;
 };
 
 /**
@@ -409,6 +412,12 @@ void ion_system_heap_destroy(struct ion_heap *);
 struct ion_heap *ion_system_contig_heap_create(struct ion_platform_heap *);
 void ion_system_contig_heap_destroy(struct ion_heap *);
 
+#ifdef CONFIG_ION_RBIN_HEAP
+struct ion_heap *ion_rbin_heap_create(struct ion_platform_heap *);
+void ion_rbin_heap_destroy(struct ion_heap *);
+bool is_ion_rbin_page(struct page *);
+#endif
+
 struct ion_heap *ion_carveout_heap_create(struct ion_platform_heap *);
 void ion_carveout_heap_destroy(struct ion_heap *);
 
@@ -491,9 +500,11 @@ struct ion_page_pool {
 struct ion_page_pool *ion_page_pool_create(gfp_t gfp_mask, unsigned int order);
 void ion_page_pool_destroy(struct ion_page_pool *);
 void *ion_page_pool_alloc_pages(struct ion_page_pool *pool);
+struct page *ion_page_pool_remove(struct ion_page_pool *pool, bool high);
 struct page *ion_page_pool_alloc(struct ion_page_pool *);
 void ion_page_pool_free(struct ion_page_pool *, struct page *);
 void ion_page_pool_free_immediate(struct ion_page_pool *, struct page *);
+int ion_page_pool_total(struct ion_page_pool *pool, bool high);
 
 #ifdef CONFIG_ION_POOL_CACHE_POLICY
 static inline void ion_page_pool_alloc_set_cache_policy

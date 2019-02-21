@@ -241,6 +241,7 @@ int ccic_notifier_notify(CC_NOTI_TYPEDEF *p_noti, void *pd, int pdic_attach)
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->dest,
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->id,
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->attach);
+		break;
 	default:
 		pr_info("%s: src:%01x dest:%01x id:%02x "
 			"sub1:%d sub2:%02x sub3:%02x\n", __func__,

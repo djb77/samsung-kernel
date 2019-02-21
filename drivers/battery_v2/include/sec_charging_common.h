@@ -50,6 +50,7 @@ enum power_supply_ext_property {
 	POWER_SUPPLY_EXT_PROP_WIRELESS_TX_CMD,
 	POWER_SUPPLY_EXT_PROP_WIRELESS_TX_VAL,
 	POWER_SUPPLY_EXT_PROP_WIRELESS_TX_ID,
+	POWER_SUPPLY_EXT_PROP_WIRELESS_TX_CHG_ERR,
 	POWER_SUPPLY_EXT_PROP_AICL_CURRENT,
 	POWER_SUPPLY_EXT_PROP_CHECK_MULTI_CHARGE,
 	POWER_SUPPLY_EXT_PROP_CHIP_ID,
@@ -63,6 +64,7 @@ enum power_supply_ext_property {
 	POWER_SUPPLY_EXT_PROP_SURGE,
 	POWER_SUPPLY_EXT_PROP_SUB_PBA_TEMP_REC,
 	POWER_SUPPLY_EXT_PROP_HV_DISABLE,
+	POWER_SUPPLY_EXT_PROP_WC_CONTROL,
 };
 
 enum sec_battery_usb_conf {
@@ -577,7 +579,7 @@ struct sec_charging_current {
 
 #if defined(CONFIG_BATTERY_AGE_FORECAST)
 struct sec_age_data {
-	unsigned int cycle;
+	int cycle;
 	unsigned int float_voltage;
 	unsigned int recharge_condition_vcell;
 	unsigned int full_condition_vcell;
@@ -722,7 +724,7 @@ struct sec_battery_platform_data {
 	 */
 	sec_bat_adc_table_data_t *temp_adc_table;
 	sec_bat_adc_table_data_t *temp_amb_adc_table;
-	sec_bat_adc_table_data_t *usb_temp_adc_table;	
+	sec_bat_adc_table_data_t *usb_temp_adc_table;
 	sec_bat_adc_table_data_t *chg_temp_adc_table;
 	sec_bat_adc_table_data_t *wpc_temp_adc_table;
 	sec_bat_adc_table_data_t *slave_chg_temp_adc_table;
@@ -730,7 +732,7 @@ struct sec_battery_platform_data {
 
 	unsigned int temp_adc_table_size;
 	unsigned int temp_amb_adc_table_size;
-	unsigned int usb_temp_adc_table_size;	
+	unsigned int usb_temp_adc_table_size;
 	unsigned int chg_temp_adc_table_size;
 	unsigned int wpc_temp_adc_table_size;
 	unsigned int slave_chg_temp_adc_table_size;
@@ -739,7 +741,7 @@ struct sec_battery_platform_data {
 	sec_battery_temp_check_t temp_check_type;
 	unsigned int temp_check_count;
 	unsigned int usb_temp_check;
-	unsigned int usb_thermal_source; /* To confirm the usb temperature */		
+	unsigned int usb_thermal_source; /* To confirm the usb temperature */
 	unsigned int chg_temp_check; /* Control the charging current depending on the chg_thm */
 	unsigned int chg_thermal_source; /* To confirm the charger temperature */
 	unsigned int wpc_temp_check;
@@ -777,6 +779,7 @@ struct sec_battery_platform_data {
 	unsigned int chg_charging_limit_current;
 	unsigned int chg_input_limit_current;
 	unsigned int wpc_temp_control_source;
+	unsigned int wpc_temp_lcd_on_control_source;
 	int wpc_high_temp;
 	int wpc_high_temp_recovery;
 	unsigned int wpc_charging_limit_current;
@@ -851,6 +854,7 @@ struct sec_battery_platform_data {
 	/* wireless charger */
 	char *wireless_charger_name;
 	int wireless_cc_cv;
+	int set_cv_vout_in_low_capacity;
 	int wpc_det;
 	int wpc_en;
 
@@ -1020,14 +1024,15 @@ static inline struct power_supply *get_power_supply_by_name(char *name)
 }
 
 #define psy_do_property(name, function, property, value) \
-{	\
+({	\
 	struct power_supply *psy;	\
-	int ret;	\
+	int ret = 0;	\
 	psy = get_power_supply_by_name((name));	\
 	if (!psy) {	\
 		pr_err("%s: Fail to "#function" psy (%s)\n",	\
 			__func__, (name));	\
 		value.intval = 0;	\
+		ret = -ENOENT;	\
 	} else {	\
 		if (psy->desc->function##_property != NULL) { \
 			ret = psy->desc->function##_property(psy, (property), &(value)); \
@@ -1036,10 +1041,13 @@ static inline struct power_supply *get_power_supply_by_name(char *name)
 						__func__, name, (property), ret);	\
 				value.intval = 0;	\
 			}	\
+		} else {	\
+			ret = -ENOSYS;	\
 		}	\
 		power_supply_put(psy);		\
 	}					\
-}
+	ret;	\
+})
 
 #define get_battery_data(driver)	\
 	(((struct battery_data_t *)(driver)->pdata->battery_data)	\

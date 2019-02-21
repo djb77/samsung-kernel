@@ -1604,9 +1604,9 @@ int sipc5_init_io_device(struct io_device *iod)
 #if defined(CONFIG_LINK_DEVICE_PCI)
 jump_reg:
 #endif
-		mif_debug("iod 0x%p\n", iod);
+		mif_debug("iod 0x%pK\n", iod);
 		vnet = netdev_priv(iod->ndev);
-		mif_debug("vnet 0x%p\n", vnet);
+		mif_debug("vnet 0x%pK\n", vnet);
 		vnet->iod = iod;
 
 		break;

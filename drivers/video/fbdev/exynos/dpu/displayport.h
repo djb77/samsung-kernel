@@ -398,6 +398,7 @@ typedef enum {
 	PIXEL_CLOCK_33_750,
 	PIXEL_CLOCK_71_000,
 	PIXEL_CLOCK_74_250,
+	PIXEL_CLOCK_85_500,
 	PIXEL_CLOCK_97_750,
 	PIXEL_CLOCK_108_000,
 	PIXEL_CLOCK_138_500,
@@ -405,6 +406,8 @@ typedef enum {
 	PIXEL_CLOCK_209_500,
 	PIXEL_CLOCK_234_000,
 	PIXEL_CLOCK_241_500,
+	PIXEL_CLOCK_246_500,
+	PIXEL_CLOCK_293_000,
 	PIXEL_CLOCK_297_000,
 	PIXEL_CLOCK_312_000,
 	PIXEL_CLOCK_533_000,
@@ -425,18 +428,22 @@ typedef enum {
 	v1280x720p_50Hz,
 	v1280x720p_60Hz,
 	v1280x800p_RB_60Hz,
+	v1366x768p_60Hz,
 	v1280x1024p_60Hz,
 	v1600x900p_59_98Hz,
 	v1600x900p_60Hz,
 	v1920x1080p_24Hz,
 	v1920x1080p_25Hz,
 	v1920x1080p_30Hz,
-	v1920x1080p_59Hz,
 	v1920x1080p_50Hz,
+	v1920x1080p_59Hz,
+	v1920x1080p_59Hz_2,
 	v1920x1080p_60Hz,
 	v2048x1536p_60Hz,
 	v1920x1440p_60Hz,
+	v1440x2560p_60Hz,
 	v2560x1440p_59Hz,
+	v1440x2560p_75Hz,
 	v2560x1440p_60Hz,
 	v3840x2160p_24Hz,
 	v3840x2160p_25Hz,
@@ -536,6 +543,19 @@ enum hotplug_state{
 	HPD_IRQ,
 };
 
+enum dex_state {
+	DEX_OFF,
+	DEX_ON,
+	DEX_RECONNECTING,
+};
+
+enum dex_support_type {
+	DEX_NOT_SUPPORT = 0,
+	DEX_FHD_SUPPORT,
+	DEX_WQHD_SUPPORT,
+	DEX_UHD_SUPPORT
+};
+
 struct displayport_device {
 	enum displayport_state state;
 	struct device *dev;
@@ -593,12 +613,14 @@ struct displayport_device {
 	u8 bist_used;
 	enum test_pattern bist_type;
 	enum displayport_dynamic_range_type dyn_range;
+
 	uint64_t ven_id;
 	uint64_t prod_id;
-	int dex_state;
+	enum dex_state dex_state;
 	videoformat best_video;
 	int dex_setting;
 	u8 dex_ver[2];
+	enum dex_support_type dex_adapter_type;
 	u8  edid_manufacturer[4];
 	u32 edid_product;
 	u32 edid_serial;
@@ -622,9 +644,6 @@ extern videoformat g_displayport_videoformat;
 #define HDMI_PRODUCT_ID			0xA025
 #define MPA_PRODUCT_ID			0x2122
 
-#define DEX_OFF 0
-#define DEX_ON 1
-#define DEX_RECONNECTING 2
 bool check_dex_support(struct displayport_device *displayport);
 
 /* EDID functions */
@@ -666,7 +685,7 @@ struct displayport_supported_preset {
 	u32 vmode;
 	u8 vic;
 	char *name;
-	bool dex_support;
+	enum dex_support_type dex_support;
 	bool edid_support_match;
 };
 
@@ -706,12 +725,34 @@ struct displayport_supported_preset {
 		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
 }
 
+#define V4L2_DV_BT_CVT_1920X1080P59_ADDED_2 { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(1920, 1080, 0, \
+		V4L2_DV_HSYNC_POS_POL | V4L2_DV_VSYNC_POS_POL, \
+		138500000, 48, 32, 80, 3, 5, 23, 0, 0, 0, \
+		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
+}
+
 #define V4L2_DV_BT_CVT_1600X900P59_98_ADDED { \
 	.type = V4L2_DV_BT_656_1120, \
 	V4L2_INIT_BT_TIMINGS(1600, 900, 0, \
 		V4L2_DV_HSYNC_POS_POL | V4L2_DV_VSYNC_POS_POL, \
 		97750000, 48, 32, 80, 3, 5, 18, 0, 0, 0, \
 		V4L2_DV_BT_STD_DMT, V4L2_DV_FL_REDUCED_BLANKING) \
+}
+
+#define V4L2_DV_BT_CVT_1440X2560P75_ADDED { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(1440, 2560, 0, V4L2_DV_HSYNC_POS_POL, \
+		293030000, 32, 8, 32, 6, 2, 16, 0, 0, 0, \
+		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
+}
+
+#define V4L2_DV_BT_CVT_1440X2560P60_ADDED { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(1440, 2560, 0, V4L2_DV_HSYNC_POS_POL, \
+		246510000, 32, 10, 108, 6, 2, 16, 0, 0, 0, \
+		V4L2_DV_BT_STD_DMT | V4L2_DV_BT_STD_CVT, 0) \
 }
 
 extern const int displayport_pre_cnt;

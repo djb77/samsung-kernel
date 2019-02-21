@@ -846,6 +846,7 @@ typedef enum dpu_event_type {
 	DPU_EVT_DSIM_RESUME,
 	DPU_EVT_ENTER_ULPS,
 	DPU_EVT_EXIT_ULPS,
+	DPU_EVT_DSIM_ENABLE,
 
 	DPU_EVT_LINECNT_ZERO,
 
@@ -879,6 +880,7 @@ struct disp_log_fence {
 struct disp_log_pm {
 	u32 pm_status;		/* ACTIVE(1) or SUSPENDED(0) */
 	ktime_t elapsed;	/* End time - Start time */
+	u32 pmu_info[3];	/* PMU DPU_STATUS0/1, M4S4_MOD */
 };
 
 /* Related with S3CFB_WIN_CONFIG */

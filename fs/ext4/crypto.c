@@ -478,7 +478,8 @@ errout:
 bool ext4_valid_contents_enc_mode(uint32_t mode)
 {
 #ifdef CONFIG_FMP_EXT4CRYPT_FS
-	return (mode == EXT4_ENCRYPTION_MODE_AES_256_XTS) || (mode == FMP_ENCRYPTION_MODE_AES_256_XTS);
+	return (mode == EXT4_ENCRYPTION_MODE_AES_256_XTS) || (mode == FMP_ENCRYPTION_MODE_AES_256_XTS) ||
+		      (mode == EXT4_ENCRYPTION_MODE_PRIVATE);
 #else
 	return (mode == EXT4_ENCRYPTION_MODE_AES_256_XTS);
 #endif

@@ -447,6 +447,11 @@ static void print_sensordata(struct ssp_data *data, unsigned int uSensor)
 			data->buf[uSensor].offset_z,
 			get_msdelay(data->adDelayBuf[uSensor]));
 		break;
+	case WAKE_UP_MOTION:
+		ssp_dbg("[SSP] %u : %d (%ums)\n", uSensor,
+			data->buf[uSensor].wakeup_event,
+			get_msdelay(data->adDelayBuf[uSensor]));
+        break;
 #endif
 	case BULK_SENSOR:
 	case GPS_SENSOR:

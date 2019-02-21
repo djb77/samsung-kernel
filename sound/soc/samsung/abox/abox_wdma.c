@@ -128,7 +128,7 @@ static int abox_wdma_hw_params(struct snd_pcm_substream *substream,
 	abox_request_ipc(dev_abox, msg.ipcid, &msg, sizeof(msg), 0, 1);
 
 	if (params_rate(params) > 48000)
-		abox_request_cpu_gear(dev, data->abox_data, dev, 2);
+		abox_request_cpu_gear_dai(dev, data->abox_data, rtd->cpu_dai, 2);
 
 	dev_info(dev, "%s:Total=%zu PrdSz=%u(%u) #Prds=%u rate=%u, width=%d, channels=%u\n",
 			snd_pcm_stream_str(substream), runtime->dma_bytes,
@@ -323,13 +323,13 @@ static int abox_wdma_open(struct snd_pcm_substream *substream)
 
 	if (data->type == PLATFORM_CALL) {
 		abox_request_cpu_gear_sync(dev, data->abox_data,
-				(void *)ABOX_CPU_GEAR_CALL_KERNEL, 1);
+				ABOX_CPU_GEAR_CALL_KERNEL, 1);
 		result = abox_request_l2c_sync(dev, data->abox_data, dev, true);
 		if (IS_ERR_VALUE(result))
 			return result;
 	}
 	pm_runtime_get_sync(rtd->codec->dev);
-	abox_request_cpu_gear(dev, data->abox_data, dev, 3);
+	abox_request_cpu_gear_dai(dev, data->abox_data, rtd->cpu_dai, 3);
 
 	snd_soc_set_runtime_hwparams(substream, &abox_wdma_hardware);
 
@@ -378,11 +378,11 @@ static int abox_wdma_close(struct snd_pcm_substream *substream)
 		break;
 	}
 
-	abox_request_cpu_gear(dev, data->abox_data, dev, 12);
+	abox_request_cpu_gear_dai(dev, data->abox_data, rtd->cpu_dai, 12);
 	pm_runtime_put(rtd->codec->dev);
 	if (data->type == PLATFORM_CALL) {
 		abox_request_cpu_gear_sync(dev, data->abox_data,
-				(void *)ABOX_CPU_GEAR_CALL_KERNEL,
+				ABOX_CPU_GEAR_CALL_KERNEL,
 				ABOX_CPU_GEAR_LOWER_LIMIT);
 		result = abox_request_l2c(dev, data->abox_data, dev, false);
 		if (IS_ERR_VALUE(result))
@@ -407,7 +407,7 @@ static int abox_wdma_mmap(struct snd_pcm_substream *substream,
 	/* Increased cpu gear for sound camp.
 	 * Only sound camp uses mmap now.
 	 */
-	abox_request_cpu_gear(dev, data->abox_data, dev, 2);
+	abox_request_cpu_gear_dai(dev, data->abox_data, rtd->cpu_dai, 2);
 
 	return dma_mmap_writecombine(dev, vma,
 			runtime->dma_area,

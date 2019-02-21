@@ -90,6 +90,7 @@ static void spay_enable(void *device_data);
 static void set_aod_rect(void *device_data);
 static void get_aod_rect(void *device_data);
 static void aod_enable(void *device_data);
+static void singletap_enable(void *device_data);
 static void set_grip_data(void *device_data);
 static void dex_enable(void *device_data);
 static void brush_enable(void *device_data);
@@ -183,6 +184,7 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("set_aod_rect", set_aod_rect),},
 	{SEC_CMD("get_aod_rect", get_aod_rect),},
 	{SEC_CMD("aod_enable", aod_enable),},
+	{SEC_CMD("singletap_enable", singletap_enable),},
 	{SEC_CMD("set_grip_data", set_grip_data),},
 	{SEC_CMD("dex_enable", dex_enable),},
 	{SEC_CMD("brush_enable", brush_enable),},
@@ -744,6 +746,28 @@ static ssize_t get_force_recal_count(struct device *dev,
 	return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", recal_count);
 }
 
+static ssize_t read_support_feature(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	u32 feature = 0;
+
+	if (ts->plat_data->support_pressure)
+		feature |= INPUT_FEATURE_ENABLE_PRESSURE;
+
+	if (ts->plat_data->sync_reportrate_120)
+		feature |= INPUT_FEATURE_ENABLE_SYNC_RR120;
+
+	input_info(true, &ts->client->dev, "%s: %d%s%s%s\n",
+			__func__, feature,
+			feature & INPUT_FEATURE_ENABLE_SETTINGS_AOT ? " aot" : "",
+			feature & INPUT_FEATURE_ENABLE_PRESSURE ? " pressure" : "",
+			feature & INPUT_FEATURE_ENABLE_SYNC_RR120 ? " RR120hz" : "");
+
+	return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", feature);
+}
+
 static DEVICE_ATTR(ito_check, S_IRUGO, read_ito_check_show, NULL);
 static DEVICE_ATTR(raw_check, S_IRUGO, read_raw_check_show, NULL);
 static DEVICE_ATTR(multi_count, S_IRUGO | S_IWUSR | S_IWGRP, read_multi_count_show, clear_multi_count_store);
@@ -761,6 +785,7 @@ static DEVICE_ATTR(pressure_raw_check, S_IRUGO, read_pressure_raw_check_show, NU
 static DEVICE_ATTR(read_ambient_info, S_IRUGO, read_ambient_info_show, NULL);
 static DEVICE_ATTR(get_lp_dump, S_IRUGO, get_lp_dump, NULL);
 static DEVICE_ATTR(force_recal_count, S_IRUGO, get_force_recal_count, NULL);
+static DEVICE_ATTR(support_feature, 0444, read_support_feature, NULL);
 
 static struct attribute *cmd_attributes[] = {
 	&dev_attr_scrub_pos.attr,
@@ -781,6 +806,7 @@ static struct attribute *cmd_attributes[] = {
 	&dev_attr_read_ambient_info.attr,
 	&dev_attr_get_lp_dump.attr,
 	&dev_attr_force_recal_count.attr,
+	&dev_attr_support_feature.attr,
 	NULL,
 };
 
@@ -5217,6 +5243,39 @@ static void aod_enable(void *device_data)
 
 	if (ts->use_sponge)
 		sec_ts_set_custom_library(ts);
+
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec_cmd_set_cmd_exit(sec);
+	return;
+
+NG:
+	snprintf(buff, sizeof(buff), "%s", "NG");
+	sec->cmd_state = SEC_CMD_STATUS_FAIL;
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec_cmd_set_cmd_exit(sec);
+}
+static void singletap_enable(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	char buff[SEC_CMD_STR_LEN] = { 0 };
+
+	sec_cmd_set_default_result(sec);
+
+	if (!ts->use_sponge || sec->cmd_param[0] < 0 || sec->cmd_param[0] > 1)
+		goto NG;
+
+	if (sec->cmd_param[0])
+		ts->lowpower_mode |= SEC_TS_MODE_SPONGE_SINGLE_TAP;
+	else
+		ts->lowpower_mode &= ~SEC_TS_MODE_SPONGE_SINGLE_TAP;
+
+	input_info(true, &ts->client->dev, "%s: %s, %02X\n",
+			__func__, sec->cmd_param[0] ? "on" : "off", ts->lowpower_mode);
+
+	sec_ts_set_custom_library(ts);
 
 	snprintf(buff, sizeof(buff), "%s", "OK");
 	sec->cmd_state = SEC_CMD_STATUS_OK;

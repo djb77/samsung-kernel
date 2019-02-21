@@ -66,8 +66,12 @@ extern int dual_role_set_prop(struct dual_role_phy_instance *dual_role,
 			      const unsigned int *val);
 extern int dual_role_is_writeable(struct dual_role_phy_instance *drp,
 				  enum dual_role_property prop);
-extern void dp_detach(void *data);
+#elif defined(CONFIG_TYPEC)
+void typec_role_swap_check(struct work_struct *wk);
+int s2mm005_port_type_set(const struct typec_capability *cap, enum typec_port_type port_type);
+int s2mm005_get_pd_support(struct s2mm005_data *usbpd_data);
 #endif
+extern void dp_detach(void *data);
 ////////////////////////////////////////////////////////////////////////////////
 // external functions in ccic_alternate.c
 ////////////////////////////////////////////////////////////////////////////////

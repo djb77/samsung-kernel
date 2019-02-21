@@ -398,8 +398,13 @@ static ssize_t epen_saving_mode_store(struct device *dev,
 		return count;
 	}
 
-	if (!(wac_i2c->function_result & EPEN_EVENT_PEN_OUT))
+	if (!(wac_i2c->function_result & EPEN_EVENT_PEN_OUT)) {
 		wacom_select_survey_mode(wac_i2c, wac_i2c->screen_on);
+
+		if (wac_i2c->battery_saving_mode) {
+			/* wac_i2c->tsp_noise_mode = set_spen_mode(EPEN_GLOBAL_SCAN_MODE); */
+		}
+	}
 
 	return count;
 }
@@ -578,9 +583,24 @@ void epen_disable_mode(int mode)
 {
 	struct wacom_i2c *wac_i2c = wacom_get_drv_data(NULL);
 	struct i2c_client *client = wac_i2c->client;
+	static int depth;
 
-	input_info(true, &client->dev, "%s: %d\n", __func__, mode);
+	if (mode) {
+		if (!depth++)
+			goto out;
+	} else {
+		if (!(--depth))
+			goto out;
 
+		if (depth < 0)
+			depth = 0;
+	}
+
+	input_info(true, &client->dev, "%s: %d(%d)!\n", __func__, mode, depth);
+
+	return;
+
+out:
 	wac_i2c->epen_blocked = mode;
 
 	if (!wac_i2c->power_enable && wac_i2c->epen_blocked) {
@@ -590,6 +610,8 @@ void epen_disable_mode(int mode)
 	}
 
 	wacom_select_survey_mode(wac_i2c, wac_i2c->screen_on);
+
+	input_info(true, &client->dev, "%s: %d(%d)!\n", __func__, mode, depth);
 }
 EXPORT_SYMBOL(epen_disable_mode);
 
@@ -862,7 +884,7 @@ static ssize_t epen_fac_garage_mode_show(struct device *dev,
 	input_info(true, &client->dev, "%s: garage mode %s\n", __func__,
 		   wac_i2c->fac_garage_mode ? "IN" : "OUT");
 
-	return snprintf(buf, PAGE_SIZE, "garage mode %s\n",
+	return snprintf(buf, PAGE_SIZE, "garage mode %s",
 			wac_i2c->fac_garage_mode ? "IN" : "OUT");
 }
 
@@ -872,13 +894,17 @@ static ssize_t epen_fac_garage_rawdata_show(struct device *dev,
 {
 	struct wacom_i2c *wac_i2c = dev_get_drvdata(dev);
 	struct i2c_client *client = wac_i2c->client;
+	char data[10] = { 0, };
 	int ret;
 	u8 cmd;
 
 	if (!wac_i2c->fac_garage_mode) {
 		input_err(true, &client->dev, "not in factory garage mode\n");
-		goto out;
+		return snprintf(buf, PAGE_SIZE, "NG");
 	}
+
+	wacom_enable_irq(wac_i2c, false);
+	wacom_enable_pdct_irq(wac_i2c, false);
 
 	cmd = COM_REQUESTGARAGEDATA;
 	ret = wacom_i2c_send(wac_i2c, &cmd, 1, WACOM_I2C_MODE_NORMAL);
@@ -893,16 +919,43 @@ static ssize_t epen_fac_garage_rawdata_show(struct device *dev,
 
 	msleep(30);
 
+	ret = wacom_i2c_recv(wac_i2c, data, 10, WACOM_I2C_MODE_NORMAL);
+	if (ret < 0) {
+		input_err(true, &client->dev,
+			  "failed to read garage raw data, %d\n", ret);
+
+		wac_i2c->garage_freq0 = wac_i2c->garage_freq1 = 0;
+		wac_i2c->garage_gain0 = wac_i2c->garage_gain1 = 0;
+
+		goto out;
+	}
+
+	wacom_enable_irq(wac_i2c, true);
+	wacom_enable_pdct_irq(wac_i2c, true);
+
+	input_info(true, &client->dev, "%x %x %x %x %x %x %x %x %x %x\n",
+		   data[0], data[1], data[2], data[3], data[4], data[5],
+		   data[6], data[7], data[8], data[9]);
+
+	wac_i2c->garage_gain0 = data[4];
+	wac_i2c->garage_freq0 = ((u16)data[5] << 8) + data[6];
+
+	wac_i2c->garage_gain1 = data[7];
+	wac_i2c->garage_freq1 = ((u16)data[8] << 8) + data[9];
+
 	input_info(true, &client->dev, "%s: %d, %d, %d, %d\n", __func__,
 		   wac_i2c->garage_gain0, wac_i2c->garage_freq0,
 		   wac_i2c->garage_gain1, wac_i2c->garage_freq1);
 
-	return snprintf(buf, PAGE_SIZE, "%d,%d,%d,%d\n", wac_i2c->garage_gain0,
+	return snprintf(buf, PAGE_SIZE, "%d,%d,%d,%d", wac_i2c->garage_gain0,
 			wac_i2c->garage_freq0, wac_i2c->garage_gain1,
 			wac_i2c->garage_freq1);
 
 out:
-	return snprintf(buf, PAGE_SIZE, "NG\n");
+	wacom_enable_irq(wac_i2c, true);
+	wacom_enable_pdct_irq(wac_i2c, true);
+
+	return snprintf(buf, PAGE_SIZE, "NG");
 }
 #endif
 

@@ -356,3 +356,27 @@ int sensor_cis_wait_streamoff(struct v4l2_subdev *subdev)
 p_err:
 	return ret;
 }
+
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+int sensor_cis_set_initial_exposure(struct v4l2_subdev *subdev)
+{
+	struct fimc_is_cis *cis;
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+	if (unlikely(!cis)) {
+		err("cis is NULL");
+		return -EINVAL;
+	}
+
+	if (cis->use_initial_ae) {
+		cis->init_ae_setting = cis->last_ae_setting;
+
+		dbg_sensor(1, "[MOD:D:%d] %s short(exp:%d/again:%d/dgain:%d), long(exp:%d/again:%d/dgain:%d)\n",
+				cis->id, __func__, cis->init_ae_setting.exposure, cis->init_ae_setting.analog_gain,
+				cis->init_ae_setting.digital_gain, cis->init_ae_setting.long_exposure,
+				cis->init_ae_setting.long_analog_gain, cis->init_ae_setting.long_digital_gain);
+	}
+
+	return 0;
+}
+#endif

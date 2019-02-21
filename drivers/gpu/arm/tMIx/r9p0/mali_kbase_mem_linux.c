@@ -996,6 +996,7 @@ static struct kbase_va_region *kbase_mem_from_user_buffer(
 	user_buf->address = address;
 	user_buf->nr_pages = *va_pages;
 	user_buf->mm = current->mm;
+	atomic_inc(&current->mm->mm_count);
 	user_buf->pages = kmalloc_array(*va_pages, sizeof(struct page *),
 			GFP_KERNEL);
 
@@ -1032,8 +1033,6 @@ static struct kbase_va_region *kbase_mem_from_user_buffer(
 
 	if (faulted_pages != *va_pages)
 		goto fault_mismatch;
-
-	atomic_inc(&current->mm->mm_count);
 
 	reg->gpu_alloc->nents = 0;
 	reg->extent = 0;
@@ -1081,7 +1080,6 @@ fault_mismatch:
 		for (i = 0; i < faulted_pages; i++)
 			put_page(pages[i]);
 	}
-	kfree(user_buf->pages);
 no_page_array:
 invalid_flags:
 	kbase_mem_phy_alloc_put(reg->cpu_alloc);

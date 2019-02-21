@@ -62,9 +62,17 @@
 #define dbg_fls_itf(fmt, args...) \
 	dbg_sen_itf(fmt, ##args)
 
+/* static memory size for DDK/RTA backup data */
+#define STATIC_DATA_SIZE	100
+
 enum DIFF_BET_SEN_ISP { /* Set to 0: 3AA 3frame delay, 1: 3AA 4frame delay, 3: M2M */
 	DIFF_OTF_DELAY	= 0,
 	DIFF_M2M_DELAY	= 3
+};
+
+enum {
+	ITF_CTRL_ID_DDK = 0,
+	ITF_CTRL_ID_RTA = 1,
 };
 
 /* DEVICE SENSOR INTERFACE */
@@ -390,6 +398,9 @@ struct fimc_is_cis_ops {
 #ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
 	int (*cis_update_settle_info)(struct v4l2_subdev *subdev);
 	int (*cis_update_mipi_index_info)(struct v4l2_subdev *subdev, u32 rat, u32 channel);
+#endif
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	int (*cis_set_initial_exposure)(struct v4l2_subdev *subdev);
 #endif
 };
 
@@ -765,6 +776,16 @@ struct fimc_is_cis_interface_ops {
 	/* Set sensor 3a mode - OTF/M2M */
 	int (*set_sensor_3a_mode)(struct fimc_is_sensor_interface *itf,
 					u32 mode);
+
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	int (*get_initial_exposure_gain_of_sensor)(struct fimc_is_sensor_interface *itf,
+			u32 *long_expo,
+			u32 *long_again,
+			u32 *long_dgain,
+			u32 *short_expo,
+			u32 *short_again,
+			u32 *short_dgain);
+#endif
 };
 
 struct fimc_is_cis_ext_interface_ops {
@@ -786,7 +807,8 @@ struct fimc_is_cis_ext_interface_ops {
 struct fimc_is_cis_ext2_interface_ops {
 	int (*set_long_term_expo_mode)(struct fimc_is_sensor_interface *itf,
 				struct fimc_is_long_term_expo_mode *long_term_expo_mode);
-	void *reserved[20];
+	int (*get_static_mem)(int ctrl_id, void **mem, int *size);
+	void *reserved[19];
 };
 
 struct fimc_is_cis_event_ops {

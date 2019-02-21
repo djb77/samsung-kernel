@@ -111,7 +111,7 @@ int save_cplog_dump(struct link_device *ld, struct io_device *iod,
 
 	if (!shm_get_cplog_flag()) {
 		mif_err("cplog is not on. Skip cplog dump\n");
-		return 0;
+		return -EPERM;
 	}
 
 	cplog_base = shm_get_cplog_region();

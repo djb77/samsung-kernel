@@ -2,14 +2,14 @@
  * Process CIS information from OTP for customer platform
  * (Handle the MAC address and module information)
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -17,7 +17,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_cis.c 767508 2018-06-14 01:45:04Z $
+ * $Id: dhd_custom_cis.c 796867 2018-12-27 08:10:21Z $
  */
 
 #include <typedefs.h>
@@ -47,32 +47,23 @@
 #ifdef DHD_USE_CISINFO
 
 /* File Location to keep each information */
-#define MACINFO	PLATFORM_PATH".mac.info"
-#define CIDINFO	PLATFORM_PATH".cid.info"
-#define	REVINFO	PLATFORM_PATH".rev"
-#ifdef PLATFORM_SLP
-#define MACINFO_EFS "/csa/.mac.info"
-#else
+#define MACINFO "/data/.mac.info"
 #define MACINFO_EFS "/efs/wifi/.mac.info"
-#endif /* PLATFORM_SLP */
+#define CIDINFO PLATFORM_PATH".cid.info"
+#define CIDINFO_DATA "/data/.cid.info"
 
 /* Definitions for MAC address */
 #define MAC_BUF_SIZE 20
-#define MAC_INPUT_FORMAT	"%02X:%02X:%02X:%02X:%02X:%02X"
-#define MAC_OUTPUT_FORMAT	"%02X:%02X:%02X:%02X:%02X:%02X\n"
+#define MAC_CUSTOM_FORMAT	"%02X:%02X:%02X:%02X:%02X:%02X"
 
 /* Definitions for CIS information */
-#ifdef BCM4330_CHIP
-#define CIS_BUF_SIZE            128
-#elif defined(BCM4334_CHIP)
-#define CIS_BUF_SIZE            256
-#elif defined(BCM4359_CHIP)
+#if defined(BCM4359_CHIP)
 #define CIS_BUF_SIZE            1280
 #elif defined(BCM4361_CHIP)
 #define CIS_BUF_SIZE            1280
 #else
 #define CIS_BUF_SIZE            512
-#endif /* BCM4330_CHIP */
+#endif /* BCM4359_CHIP */
 
 #define CIS_TUPLE_TAG_START		0x80
 #define CIS_TUPLE_TAG_VENDOR		0x81
@@ -281,13 +272,14 @@ dhd_create_random_mac(char *buf, unsigned int buf_len)
 	memset(random_mac, 0, sizeof(random_mac));
 	get_random_bytes(random_mac, 3);
 
-	snprintf(buf, buf_len, MAC_OUTPUT_FORMAT, 0x00, 0x12, 0x34,
+	snprintf(buf, buf_len, MAC_CUSTOM_FORMAT, 0x00, 0x12, 0x34,
 		(uint32)random_mac[0], (uint32)random_mac[1], (uint32)random_mac[2]);
 
 	DHD_ERROR(("%s: The Random Generated MAC ID: %s\n",
 		__FUNCTION__, random_mac));
 }
 
+#ifndef DHD_MAC_ADDR_EXPORT
 int
 dhd_set_macaddr_from_file(dhd_pub_t *dhdp)
 {
@@ -309,14 +301,10 @@ dhd_set_macaddr_from_file(dhd_pub_t *dhdp)
 		return BCME_ERROR;
 	}
 
-	if (!filepath_efs) {
-		filepath_efs = MACINFO;
-	}
-
 	memset(mac_buf, 0, sizeof(mac_buf));
 
 	/* Read MAC address from the specified file */
-	ret = dhd_read_file(filepath_efs, mac_buf, sizeof(mac_buf));
+	ret = dhd_read_file(filepath_efs, mac_buf, sizeof(mac_buf) - 1);
 
 	/* Check if the file does not exist or contains invalid data */
 	if (ret || (!ret && strstr(mac_buf, invalid_mac))) {
@@ -324,7 +312,7 @@ dhd_set_macaddr_from_file(dhd_pub_t *dhdp)
 		dhd_create_random_mac(mac_buf, sizeof(mac_buf));
 
 		/* Write random MAC address to the file */
-		if (dhd_write_file(filepath_efs, mac_buf, sizeof(mac_buf)) < 0) {
+		if (dhd_write_file(filepath_efs, mac_buf, strlen(mac_buf)) < 0) {
 			DHD_ERROR(("%s: MAC address [%s] Failed to write into File:"
 				" %s\n", __FUNCTION__, mac_buf, filepath_efs));
 			return BCME_ERROR;
@@ -335,7 +323,7 @@ dhd_set_macaddr_from_file(dhd_pub_t *dhdp)
 	}
 #ifdef PLATFORM_SLP
 	/* Write random MAC address for framework */
-	if (dhd_write_file(filepath_mac, mac_buf, sizeof(mac_buf)) < 0) {
+	if (dhd_write_file(filepath_mac, mac_buf, strlen(mac_buf)) < 0) {
 		DHD_ERROR(("%s: MAC address [%s] Failed to write into File:"
 			" %s\n", __FUNCTION__, mac_buf, filepath_mac));
 	} else {
@@ -347,7 +335,7 @@ dhd_set_macaddr_from_file(dhd_pub_t *dhdp)
 	mac_buf[sizeof(mac_buf) - 1] = '\0';
 
 	/* Write the MAC address to the Dongle */
-	sscanf(mac_buf, MAC_INPUT_FORMAT,
+	sscanf(mac_buf, MAC_CUSTOM_FORMAT,
 		(uint32 *)&(mac->octet[0]), (uint32 *)&(mac->octet[1]),
 		(uint32 *)&(mac->octet[2]), (uint32 *)&(mac->octet[3]),
 		(uint32 *)&(mac->octet[4]), (uint32 *)&(mac->octet[5]));
@@ -360,6 +348,45 @@ dhd_set_macaddr_from_file(dhd_pub_t *dhdp)
 
 	return 0;
 }
+#else
+int
+dhd_set_macaddr_from_file(dhd_pub_t *dhdp)
+{
+	char mac_buf[MAC_BUF_SIZE];
+
+	struct dhd_info *dhd;
+	struct ether_addr *mac;
+
+	if (dhdp) {
+		dhd = dhdp->info;
+		mac = &dhdp->mac;
+	} else {
+		DHD_ERROR(("%s: dhd is NULL\n", __FUNCTION__));
+		return BCME_ERROR;
+	}
+
+	memset(mac_buf, 0, sizeof(mac_buf));
+	if (ETHER_ISNULLADDR(&sysfs_mac_addr)) {
+		/* Generate a new random MAC address */
+		dhd_create_random_mac(mac_buf, sizeof(mac_buf));
+		if (!bcm_ether_atoe(mac_buf, &sysfs_mac_addr)) {
+			DHD_ERROR(("%s : mac parsing err\n", __FUNCTION__));
+			return BCME_ERROR;
+		}
+	}
+
+	/* Write the MAC address to the Dongle */
+	memcpy(mac, &sysfs_mac_addr, sizeof(sysfs_mac_addr));
+
+	if (_dhd_set_mac_address(dhd, 0, mac) == 0) {
+		DHD_INFO(("%s: MAC Address is overwritten\n", __FUNCTION__));
+	} else {
+		DHD_ERROR(("%s: _dhd_set_mac_address() failed\n", __FUNCTION__));
+	}
+
+	return 0;
+}
+#endif /* !DHD_MAC_ADDR_EXPORT */
 #endif /* READ_MACADDR */
 
 #ifdef GET_MAC_FROM_OTP
@@ -387,6 +414,9 @@ dhd_set_default_macaddr(dhd_pub_t *dhdp)
 
 	/* Update the default MAC address */
 	memcpy(mac, iovbuf, ETHER_ADDR_LEN);
+#ifdef DHD_MAC_ADDR_EXPORT
+	memcpy(&sysfs_mac_addr, mac, sizeof(sysfs_mac_addr));
+#endif /* DHD_MAC_ADDR_EXPORT */
 
 	return 0;
 }
@@ -417,7 +447,9 @@ dhd_verify_macaddr(dhd_pub_t *dhdp, struct list_head *head)
 int
 dhd_check_module_mac(dhd_pub_t *dhdp)
 {
+#ifndef DHD_MAC_ADDR_EXPORT
 	char *filepath_efs = MACINFO_EFS;
+#endif /* !DHD_MAC_ADDR_EXPORT */
 	unsigned char otp_mac_buf[MAC_BUF_SIZE];
 	struct ether_addr *mac;
 	struct dhd_info *dhd;
@@ -436,16 +468,13 @@ dhd_check_module_mac(dhd_pub_t *dhdp)
 	mac = &dhdp->mac;
 	memset(otp_mac_buf, 0, sizeof(otp_mac_buf));
 
-	if (!filepath_efs) {
-		filepath_efs = MACINFO;
-	}
-
 	if (!g_have_cis_dump) {
+#ifndef DHD_MAC_ADDR_EXPORT
 		char eabuf[ETHER_ADDR_STR_LEN];
 		DHD_INFO(("%s: Couldn't read CIS information\n", __FUNCTION__));
 
 		/* Read the MAC address from the specified file */
-		if (dhd_read_file(filepath_efs, otp_mac_buf, sizeof(otp_mac_buf)) < 0) {
+		if (dhd_read_file(filepath_efs, otp_mac_buf, sizeof(otp_mac_buf) - 1) < 0) {
 			DHD_ERROR(("%s: Couldn't read the file, "
 				"use the default MAC Address\n", __FUNCTION__));
 			if (dhd_set_default_macaddr(dhdp) < 0) {
@@ -461,6 +490,21 @@ dhd_check_module_mac(dhd_pub_t *dhdp)
 				}
 			}
 		}
+#else
+		DHD_INFO(("%s: Couldn't read CIS information\n", __FUNCTION__));
+
+		/* Read the MAC address from the specified file */
+		if (ETHER_ISNULLADDR(&sysfs_mac_addr)) {
+			DHD_ERROR(("%s: Couldn't read the file, "
+				"use the default MAC Address\n", __FUNCTION__));
+			if (dhd_set_default_macaddr(dhdp) < 0) {
+				return BCME_BADARG;
+			}
+		} else {
+			/* sysfs mac addr is confirmed with valid format in set_mac_addr */
+			memcpy(mac, &sysfs_mac_addr, sizeof(sysfs_mac_addr));
+		}
+#endif /* !DHD_MAC_ADDR_EXPORT */
 	} else {
 		struct list_head mac_list;
 		unsigned char tuple_len = 0;
@@ -489,7 +533,7 @@ dhd_check_module_mac(dhd_pub_t *dhdp)
 		/* Find the MAC address */
 		if (idx > 0) {
 			/* update MAC address */
-			snprintf(otp_mac_buf, sizeof(otp_mac_buf), MAC_OUTPUT_FORMAT,
+			snprintf(otp_mac_buf, sizeof(otp_mac_buf), MAC_CUSTOM_FORMAT,
 				(uint32)g_cis_buf[idx], (uint32)g_cis_buf[idx + 1],
 				(uint32)g_cis_buf[idx + 2], (uint32)g_cis_buf[idx + 3],
 				(uint32)g_cis_buf[idx + 4], (uint32)g_cis_buf[idx + 5]);
@@ -501,7 +545,7 @@ dhd_check_module_mac(dhd_pub_t *dhdp)
 				dhd_free_tuple_entry(dhdp, &mac_list);
 				return BCME_BADARG;
 			}
-			snprintf(otp_mac_buf, sizeof(otp_mac_buf), MAC_OUTPUT_FORMAT,
+			snprintf(otp_mac_buf, sizeof(otp_mac_buf), MAC_CUSTOM_FORMAT,
 				(uint32)mac->octet[0], (uint32)mac->octet[1],
 				(uint32)mac->octet[2], (uint32)mac->octet[3],
 				(uint32)mac->octet[4], (uint32)mac->octet[5]);
@@ -511,7 +555,21 @@ dhd_check_module_mac(dhd_pub_t *dhdp)
 		}
 
 		dhd_free_tuple_entry(dhdp, &mac_list);
-		dhd_write_file(filepath_efs, otp_mac_buf, sizeof(otp_mac_buf));
+#ifndef DHD_MAC_ADDR_EXPORT
+		dhd_write_file(filepath_efs, otp_mac_buf, strlen(otp_mac_buf));
+#else
+		/* Export otp_mac_buf to the sys/mac_addr */
+		if (!bcm_ether_atoe(otp_mac_buf, &sysfs_mac_addr)) {
+			DHD_ERROR(("%s : mac parsing err\n", __FUNCTION__));
+			if (dhd_set_default_macaddr(dhdp) < 0) {
+				return BCME_BADARG;
+			}
+		} else {
+			DHD_INFO(("%s : set mac address properly\n", __FUNCTION__));
+			/* set otp mac to sysfs */
+			memcpy(mac, &sysfs_mac_addr, sizeof(sysfs_mac_addr));
+		}
+#endif /* !DHD_MAC_ADDR_EXPORT */
 	}
 
 	if (_dhd_set_mac_address(dhd, 0, mac) == 0) {
@@ -524,6 +582,7 @@ dhd_check_module_mac(dhd_pub_t *dhdp)
 }
 #endif /* GET_MAC_FROM_OTP */
 
+#ifndef DHD_MAC_ADDR_EXPORT
 #ifdef WRITE_MACADDR
 int
 dhd_write_macaddr(struct ether_addr *mac)
@@ -535,7 +594,7 @@ dhd_write_macaddr(struct ether_addr *mac)
 	int retry_cnt = 0;
 
 	memset(mac_buf, 0, sizeof(mac_buf));
-	snprintf(mac_buf, sizeof(mac_buf), MAC_OUTPUT_FORMAT,
+	snprintf(mac_buf, sizeof(mac_buf), MAC_CUSTOM_FORMAT,
 		(uint32)mac->octet[0], (uint32)mac->octet[1],
 		(uint32)mac->octet[2], (uint32)mac->octet[3],
 		(uint32)mac->octet[4], (uint32)mac->octet[5]);
@@ -543,7 +602,7 @@ dhd_write_macaddr(struct ether_addr *mac)
 	if (filepath_data) {
 		for (retry_cnt = 0; retry_cnt < 3; retry_cnt++) {
 			/* Write MAC information into /data/.mac.info */
-			ret = dhd_write_file_and_check(filepath_data, mac_buf, sizeof(mac_buf));
+			ret = dhd_write_file_and_check(filepath_data, mac_buf, strlen(mac_buf));
 			if (!ret) {
 				break;
 			}
@@ -561,7 +620,7 @@ dhd_write_macaddr(struct ether_addr *mac)
 	if (filepath_efs) {
 		for (retry_cnt = 0; retry_cnt < 3; retry_cnt++) {
 			/* Write MAC information into /efs/wifi/.mac.info */
-			ret = dhd_write_file_and_check(filepath_efs, mac_buf, sizeof(mac_buf));
+			ret = dhd_write_file_and_check(filepath_efs, mac_buf, strlen(mac_buf));
 			if (!ret) {
 				break;
 			}
@@ -579,11 +638,11 @@ dhd_write_macaddr(struct ether_addr *mac)
 	return ret;
 }
 #endif /* WRITE_MACADDR */
+#endif /* !DHD_MAC_ADDR_EXPORT */
 
 #ifdef USE_CID_CHECK
 /* Definitions for module information */
 #define MAX_VID_LEN		8
-#define MAX_VNAME_LEN		30
 
 #ifdef	SUPPORT_MULTIPLE_BOARDTYPE
 #define MAX_BNAME_LEN		6
@@ -614,8 +673,6 @@ board_info_t murata_board_info[] = {
 	{ 0, { 0x00, }, { "" } }   /* Default: Not specified yet */
 };
 #endif /* BCM4361_CHIP */
-#else
-#define MAX_BNAME_LEN		0
 #endif /* SUPPORT_MULTIPLE_BOARDTYPE */
 
 typedef struct {
@@ -624,20 +681,7 @@ typedef struct {
 	char cid_info[MAX_VNAME_LEN];
 } vid_info_t;
 
-#if defined(BCM4330_CHIP)
-vid_info_t vid_info[] = {
-	{ 6, { 0x00, 0x20, 0xc7, 0x00, 0x00, }, { "murata" } },
-	{ 2, { 0x99, }, { "semcove" } },
-	{ 0, { 0x00, }, { "samsung" } }
-};
-#elif defined(BCM4334_CHIP)
-vid_info_t vid_info[] = {
-	{ 6, { 0x00, 0x00, 0x00, 0x33, 0x33, }, { "semco" } },
-	{ 6, { 0x00, 0x00, 0x00, 0xfb, 0x50, }, { "semcosh" } },
-	{ 6, { 0x00, 0x20, 0xc7, 0x00, 0x00, }, { "murata" } },
-	{ 0, { 0x00, }, { "murata" } }
-};
-#elif defined(BCM4335_CHIP)
+#if defined(BCM4335_CHIP)
 vid_info_t vid_info[] = {
 	{ 3, { 0x33, 0x66, }, { "semcosh" } },		/* B0 Sharp 5G-FEM */
 	{ 3, { 0x33, 0x33, }, { "semco" } },		/* B0 Skyworks 5G-FEM and A0 chip */
@@ -731,6 +775,8 @@ vid_info_t vid_info[] = {
 	{ 3, { 0x71, 0x33, }, { "semco_sky_r01h_e32_b0" } },
 	{ 3, { 0x81, 0x33, }, { "semco_sem_r01i_e32_b0" } },
 	{ 3, { 0x82, 0x33, }, { "semco_sem_r02j_e32_b0" } },
+	{ 3, { 0x91, 0x33, }, { "semco_sem_r02a_e32a_b2" } },
+	{ 3, { 0xa1, 0x33, }, { "semco_sem_r02b_e32a_b2" } },
 	{ 3, { 0x12, 0x22, }, { "murata_nxp_r012_1kl_a1" } },
 	{ 3, { 0x13, 0x22, }, { "murata_mur_r013_1kl_b0" } },
 	{ 3, { 0x14, 0x22, }, { "murata_mur_r014_1kl_b0" } },
@@ -745,6 +791,12 @@ vid_info_t vid_info[] = {
 	{ 3, { 0x32, 0x22, }, { "murata_mur_r032_1kl_b0" } },
 	{ 3, { 0x33, 0x22, }, { "murata_mur_r033_1kl_b0" } },
 	{ 3, { 0x34, 0x22, }, { "murata_mur_r034_1kl_b0" } },
+	{ 3, { 0x50, 0x22, }, { "murata_mur_r020_1qw_b2" } },
+	{ 3, { 0x51, 0x22, }, { "murata_mur_r021_1qw_b2" } },
+	{ 3, { 0x52, 0x22, }, { "murata_mur_r022_1qw_b2" } },
+	{ 3, { 0x61, 0x22, }, { "murata_mur_r031_1qw_b2" } },
+	{ 3, { 0x62, 0x22, }, { "murata_mur_r032_1qw_b2" } },
+	{ 3, { 0x71, 0x22, }, { "murata_mur_r041_1qw_b2" } },
 	{ 0, { 0x00, }, { "samsung" } }           /* Default: Not specified yet */
 #endif /* SUPPORT_BCM4359_MIXED_MODULES */
 };
@@ -802,12 +854,14 @@ int
 dhd_check_module_cid(dhd_pub_t *dhdp)
 {
 	int ret = -1;
+#ifndef DHD_EXPORT_CNTL_FILE
 	const char *cidfilepath = CIDINFO;
+#endif /* DHD_EXPORT_CNTL_FILE */
 	int idx, max;
 	vid_info_t *cur_info;
 	unsigned char *tuple_start = NULL;
 	unsigned char tuple_length = 0;
-	unsigned char cid_info[MAX_VNAME_LEN + MAX_BNAME_LEN];
+	unsigned char cid_info[MAX_VNAME_LEN];
 	int found = FALSE;
 #ifdef SUPPORT_MULTIPLE_BOARDTYPE
 	board_info_t *cur_b_info = NULL;
@@ -815,16 +869,6 @@ dhd_check_module_cid(dhd_pub_t *dhdp)
 	unsigned char *btype_start;
 	unsigned char boardtype_len = 0;
 #endif /* SUPPORT_MULTIPLE_BOARDTYPE */
-#if defined(BCM4334_CHIP) || defined(BCM4335_CHIP)
-	const char *revfilepath = REVINFO;
-#ifdef BCM4334_CHIP
-	unsigned char otp_buf[CIS_BUF_SIZE];
-	cis_rw_t *cish;
-	int flag_b3;
-#else
-	char rev_str[10] = {0};
-#endif /* BCM4334_CHIP */
-#endif /* BCM4334_CHIP || BCM4335_CHIP */
 
 	/* Try reading out from CIS */
 	if (!g_have_cis_dump) {
@@ -928,55 +972,17 @@ write_cid:
 		strcpy(cid_info, cur_info->cid_info);
 
 	DHD_INFO(("%s: CIS MATCH FOUND : %s\n", __FUNCTION__, cid_info));
+#ifndef DHD_EXPORT_CNTL_FILE
 	dhd_write_file(cidfilepath, cid_info, strlen(cid_info) + 1);
-
-#ifdef BCM4334_CHIP
-	/* Try reading out from OTP to distinguish B2 or B3 */
-	memset(otp_buf, 0, sizeof(otp_buf));
-	cish = (cis_rw_t *)&otp_buf[8];
-
-	cish->source = 0;
-	cish->byteoff = 0;
-	cish->nbytes = sizeof(otp_buf);
-
-	strcpy(otp_buf, "otpdump");
-	ret = dhd_wl_ioctl_cmd(dhdp, WLC_GET_VAR, otp_buf,
-		sizeof(otp_buf), 0, 0);
-	if (ret < 0) {
-		DHD_ERROR(("%s: OTP reading failed, err=%d\n",
-			__FUNCTION__, ret));
-		return ret;
-	}
-
-	/* otp 33th character is identifier for 4334B3 */
-	otp_buf[34] = '\0';
-	flag_b3 = bcm_atoi(&otp_buf[33]);
-	if (flag_b3 & 0x1) {
-		DHD_ERROR(("%s: REV MATCH FOUND : 4334B3, %c\n",
-			__FUNCTION__, otp_buf[33]));
-		dhd_write_cid_file(revfilepath, "4334B3", 6);
-	}
-#endif /* BCM4334_CHIP */
-#ifdef BCM4335_CHIP
-	DHD_TRACE(("%s: BCM4335 Multiple Revision Check\n", __FUNCTION__));
-	if (concate_revision(dhdp->bus, rev_str, rev_str) < 0) {
-		DHD_ERROR(("%s: fail to concate revision\n", __FUNCTION__));
-		ret = -1;
-	} else {
-		if (strstr(rev_str, "_a0")) {
-			DHD_ERROR(("%s: REV MATCH FOUND : 4335A0\n", __FUNCTION__));
-			dhd_write_file(revfilepath, "BCM4335A0", 9);
-		} else {
-			DHD_ERROR(("%s: REV MATCH FOUND : 4335B0\n", __FUNCTION__));
-			dhd_write_file(revfilepath, "BCM4335B0", 9);
-		}
-	}
-#endif /* BCM4335_CHIP */
+#else
+	strlcpy(cidinfostr, cid_info, MAX_VNAME_LEN);
+#endif /* DHD_EXPORT_CNTL_FILE */
 
 	return ret;
 }
 
 #ifdef SUPPORT_MULTIPLE_MODULE_CIS
+#ifndef DHD_EXPORT_CNTL_FILE
 bool
 dhd_check_module(char *module_name)
 {
@@ -985,13 +991,20 @@ dhd_check_module(char *module_name)
 	int ret;
 
 	memset(vname, 0, sizeof(vname));
-	ret = dhd_read_file(cidfilepath, vname, sizeof(vname));
+	ret = dhd_read_file(cidfilepath, vname, sizeof(vname) - 1);
 	if (ret < 0) {
 		return FALSE;
 	}
 	DHD_INFO(("%s: This module is %s \n", __FUNCTION__, vname));
 	return strstr(vname, module_name) ? TRUE : FALSE;
 }
+#else
+bool
+dhd_check_module(char *module_name)
+{
+	return strstr(cidinfostr, module_name) ? TRUE : FALSE;
+}
+#endif /* !DHD_EXPORT_CNTL_FILE */
 
 int
 dhd_check_module_b85a(void)
@@ -1038,19 +1051,25 @@ dhd_check_module_b90(void)
 int
 dhd_check_module_bcm4361(char *module_type, int index, bool *is_murata_fem)
 {
-	int ret, i;
+	int ret = 0, i;
 	char vname[MAX_VNAME_LEN];
-	const char *cidfilepath = CIDINFO;
 	char *ptr = NULL;
+#ifndef DHD_EXPORT_CNTL_FILE
+	const char *cidfilepath = CIDINFO;
+#endif /* DHD_EXPORT_CNTL_FILE */
 
 	memset(vname, 0, sizeof(vname));
 
-	ret = dhd_read_file(cidfilepath, vname, sizeof(vname)-1);
+#ifndef DHD_EXPORT_CNTL_FILE
+	ret = dhd_read_file(cidfilepath, vname, sizeof(vname) - 1);
 	if (ret < 0) {
 		DHD_ERROR(("%s: failed to get module infomaion from .cid.info\n",
 			__FUNCTION__));
 		return ret;
 	}
+#else
+	strlcpy(vname, cidinfostr, MAX_VNAME_LEN);
+#endif /* DHD_EXPORT_CNTL_FILE */
 
 	for (i = 1, ptr = vname; i < index && ptr; i++) {
 		ptr = bcmstrstr(ptr, "_");

@@ -404,7 +404,7 @@ static inline struct io_device *link_get_iod_with_format(
 static inline struct io_device *get_iod_with_channel(
 			struct modem_shared *msd, unsigned int channel)
 {
-	mif_info("khos msd 0x%p channel %d\n", msd, channel);
+	mif_info("khos msd 0x%pK channel %d\n", msd, channel);
 	if (msd && msd->ch2iod)
 		return msd->ch2iod[channel];
 	else

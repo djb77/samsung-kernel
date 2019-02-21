@@ -248,6 +248,8 @@ extern void fmp_clear_sg(struct ufshcd_lrb *lrbp);
 
 #if defined(SEC_UFS_ERROR_COUNT)
 #include <scsi/scsi_proto.h>
+#define MAX_U8_VALUE	0xff
+
 static void SEC_ufs_operation_check(struct ufs_hba *hba, u32 command)
 {
 	struct SEC_UFS_counting *err_info = &(hba->SEC_err_info);
@@ -287,103 +289,118 @@ static void SEC_ufs_uic_error_check(struct ufs_hba *hba, bool cmd_count, bool fa
 
 		switch (uic_cmd->command & COMMAND_OPCODE_MASK) {
 		case UIC_CMD_DME_GET:
-			uic_cmd_cnt->DME_GET_err &= 0xfe;
-			uic_cmd_cnt->DME_GET_err++;
+			if (uic_cmd_cnt->DME_GET_err < MAX_U8_VALUE) 
+				uic_cmd_cnt->DME_GET_err++; 
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_SET:
-			uic_cmd_cnt->DME_SET_err &= 0xfe;
-			uic_cmd_cnt->DME_SET_err++;
+			if (uic_cmd_cnt->DME_SET_err < MAX_U8_VALUE) 
+				uic_cmd_cnt->DME_SET_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_PEER_GET:
-			uic_cmd_cnt->DME_PEER_GET_err &= 0xfe;
-			uic_cmd_cnt->DME_PEER_GET_err++;
+			if (uic_cmd_cnt->DME_PEER_GET_err < MAX_U8_VALUE) 
+				uic_cmd_cnt->DME_PEER_GET_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_PEER_SET:
-			uic_cmd_cnt->DME_PEER_SET_err &= 0xfe;
-			uic_cmd_cnt->DME_PEER_SET_err++;
+			if (uic_cmd_cnt->DME_PEER_SET_err < MAX_U8_VALUE)
+				uic_cmd_cnt->DME_PEER_SET_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_POWERON:
-			uic_cmd_cnt->DME_POWERON_err &= 0xfe;
-			uic_cmd_cnt->DME_POWERON_err++;
+			if (uic_cmd_cnt->DME_POWERON_err < MAX_U8_VALUE)
+				uic_cmd_cnt->DME_POWERON_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_POWEROFF:
-			uic_cmd_cnt->DME_POWEROFF_err &= 0xfe;
-			uic_cmd_cnt->DME_POWEROFF_err++;
+			if (uic_cmd_cnt->DME_POWEROFF_err < MAX_U8_VALUE)
+				uic_cmd_cnt->DME_POWEROFF_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_ENABLE:
-			uic_cmd_cnt->DME_ENABLE_err &= 0xfe;
-			uic_cmd_cnt->DME_ENABLE_err++;
+			if (uic_cmd_cnt->DME_ENABLE_err < MAX_U8_VALUE)
+				uic_cmd_cnt->DME_ENABLE_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_RESET:
-			uic_cmd_cnt->DME_RESET_err &= 0xfe;
-			uic_cmd_cnt->DME_RESET_err++;
+			if (uic_cmd_cnt->DME_RESET_err < MAX_U8_VALUE)
+				uic_cmd_cnt->DME_RESET_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_END_PT_RST:
-			uic_cmd_cnt->DME_END_PT_RST_err &= 0xfe;
-			uic_cmd_cnt->DME_END_PT_RST_err++;
+			if (uic_cmd_cnt->DME_END_PT_RST_err < MAX_U8_VALUE)
+				uic_cmd_cnt->DME_END_PT_RST_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_LINK_STARTUP:
-			uic_cmd_cnt->DME_LINK_STARTUP_err &= 0xfe;
-			uic_cmd_cnt->DME_LINK_STARTUP_err++;
+			if (uic_cmd_cnt->DME_LINK_STARTUP_err < MAX_U8_VALUE)
+				uic_cmd_cnt->DME_LINK_STARTUP_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_HIBER_ENTER:
-			uic_cmd_cnt->DME_HIBER_ENTER_err &= 0xfe;
-			uic_cmd_cnt->DME_HIBER_ENTER_err++;
+			if (uic_cmd_cnt->DME_HIBER_ENTER_err < MAX_U8_VALUE)
+				uic_cmd_cnt->DME_HIBER_ENTER_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_HIBER_EXIT:
-			uic_cmd_cnt->DME_HIBER_EXIT_err &= 0xfe;
-			uic_cmd_cnt->DME_HIBER_EXIT_err++;
+			if (uic_cmd_cnt->DME_HIBER_EXIT_err < MAX_U8_VALUE)
+				uic_cmd_cnt->DME_HIBER_EXIT_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		case UIC_CMD_DME_TEST_MODE:
-			uic_cmd_cnt->DME_TEST_MODE_err &= 0xfe;
-			uic_cmd_cnt->DME_TEST_MODE_err++;
+			if (uic_cmd_cnt->DME_TEST_MODE_err < MAX_U8_VALUE)
+				uic_cmd_cnt->DME_TEST_MODE_err++;
+			uic_cmd_cnt->UIC_cmd_err++;
 			break;
 		default:
 			break;
 		}
-		uic_cmd_cnt->UIC_cmd_err++;
  passed_uic_cmd_err:
 		// hba->uic_error; // uic error info
 		if (uic_error & UFSHCD_UIC_DL_PA_INIT_ERROR) {
-			uic_err_cnt->DL_PA_INIT_ERROR_cnt &= 0xfe;
-			uic_err_cnt->DL_PA_INIT_ERROR_cnt++;
+			if (uic_err_cnt->DL_PA_INIT_ERROR_cnt < MAX_U8_VALUE)
+				uic_err_cnt->DL_PA_INIT_ERROR_cnt++;
+			uic_err_cnt->UIC_err++;
 		}
- 		if (uic_error & UFSHCD_UIC_DL_ERROR) {
-			uic_err_cnt->DL_TC_REPLAY_ERROR_cnt &= 0xfe;
-			uic_err_cnt->DL_TC_REPLAY_ERROR_cnt++;
+		if (uic_error & UFSHCD_UIC_DL_ERROR) {
+			if (uic_err_cnt->DL_TC_REPLAY_ERROR_cnt < MAX_U8_VALUE) 
+				uic_err_cnt->DL_TC_REPLAY_ERROR_cnt++;
+			uic_err_cnt->UIC_err++;
 		}
 		if (uic_error & UFSHCD_UIC_NL_ERROR) {
-			uic_err_cnt->NL_ERROR_cnt &= 0xfe;
-			uic_err_cnt->NL_ERROR_cnt++;
+			if (uic_err_cnt->NL_ERROR_cnt < MAX_U8_VALUE) 
+				uic_err_cnt->NL_ERROR_cnt++;
+			uic_err_cnt->UIC_err++;
 		}
 		if (uic_error & UFSHCD_UIC_TL_ERROR) {
-			uic_err_cnt->TL_ERROR_cnt &= 0xfe;
-			uic_err_cnt->TL_ERROR_cnt++;
+			if (uic_err_cnt->TL_ERROR_cnt < MAX_U8_VALUE) 
+				uic_err_cnt->TL_ERROR_cnt++;
+			uic_err_cnt->UIC_err++;
 		}
 		if (uic_error & UFSHCD_UIC_DME_ERROR) {
-			uic_err_cnt->DME_ERROR_cnt &= 0xfe;
-			uic_err_cnt->DME_ERROR_cnt++;
+			if (uic_err_cnt->DME_ERROR_cnt < MAX_U8_VALUE) 
+				uic_err_cnt->DME_ERROR_cnt++;
+			uic_err_cnt->UIC_err++;
 		}
-		uic_err_cnt->UIC_err++;
-
 	} else if (fatal_error) {
 		struct SEC_UFS_Fatal_err_count *fatal_err_cnt = &(err_info->Fatal_err_count);
 		// hba->error;  // each bit check and count
 		if (hba->errors & DEVICE_FATAL_ERROR) {
-			fatal_err_cnt->DFE &= 0xfe;
-			fatal_err_cnt->DFE++;
+			if (fatal_err_cnt->DFE < MAX_U8_VALUE) 
+				fatal_err_cnt->DFE++;
 		}
 		if (hba->errors & CONTROLLER_FATAL_ERROR) {
-			fatal_err_cnt->CFE &= 0xfe;
-			fatal_err_cnt->CFE++;
+			if (fatal_err_cnt->CFE < MAX_U8_VALUE) 
+				fatal_err_cnt->CFE++;
 		}
 		if (hba->errors & SYSTEM_BUS_FATAL_ERROR) {
-			fatal_err_cnt->SBFE &= 0xfe;
-			fatal_err_cnt->SBFE++;
+			if (fatal_err_cnt->SBFE < MAX_U8_VALUE) 
+				fatal_err_cnt->SBFE++;
 		}
 		if (hba->errors & UIC_LINK_LOST) {
-			fatal_err_cnt->LLE &= 0xfe;
-			fatal_err_cnt->LLE++;
+			if (fatal_err_cnt->LLE < MAX_U8_VALUE) 
+				fatal_err_cnt->LLE++;
 		}
 		if (hba->errors & INT_FATAL_ERRORS)
 			fatal_err_cnt->Fatal_err++;
@@ -393,16 +410,16 @@ static void SEC_ufs_uic_error_check(struct ufs_hba *hba, bool cmd_count, bool fa
 static void SEC_ufs_utp_error_check(struct ufs_hba *hba, struct scsi_cmnd *cmd, bool utmr_request, u8 tm_cmd)
 {
 	struct SEC_UFS_counting *err_info = &(hba->SEC_err_info);
-	struct SEC_UFS_UTP_count *utp_err = &(err_info-> UTP_count);
+	struct SEC_UFS_UTP_count *utp_err = &(err_info->UTP_count);
 
 	if (utmr_request) {
 		if (tm_cmd == UFS_QUERY_TASK) {
-			utp_err->UTMR_query_task_count &= 0xfe;
-			utp_err->UTMR_query_task_count++;
+			if (utp_err->UTMR_query_task_count < MAX_U8_VALUE) 
+				utp_err->UTMR_query_task_count++;
 			utp_err->UTP_err++;
 		} else if (tm_cmd == UFS_ABORT_TASK) {
-			utp_err->UTMR_abort_task_count &= 0xfe;
-			utp_err->UTMR_abort_task_count++;
+			if (utp_err->UTMR_abort_task_count < MAX_U8_VALUE) 
+				utp_err->UTMR_abort_task_count++;
 			utp_err->UTP_err++;
 		}
 	} else {
@@ -410,24 +427,24 @@ static void SEC_ufs_utp_error_check(struct ufs_hba *hba, struct scsi_cmnd *cmd, 
 		int opcode = cmd->cmnd[0];
 
 		if (opcode == WRITE_10) {
-			utp_err->UTR_write_err &= 0xfe;
-			utp_err->UTR_write_err++;
+			if (utp_err->UTR_write_err < MAX_U8_VALUE) 
+				utp_err->UTR_write_err++;
 			utp_err->UTP_err++;
 		} else if (opcode == READ_10) {
-			utp_err->UTR_read_err &= 0xfe;
-			utp_err->UTR_read_err++;
+			if (utp_err->UTR_read_err < MAX_U8_VALUE) 
+				utp_err->UTR_read_err++;
 			utp_err->UTP_err++;
 		} else if (opcode == SYNCHRONIZE_CACHE) {
-			utp_err->UTR_sync_cache_err &= 0xfe;
-			utp_err->UTR_sync_cache_err++;
+			if (utp_err->UTR_sync_cache_err < MAX_U8_VALUE) 
+				utp_err->UTR_sync_cache_err++;
 			utp_err->UTP_err++;
 		} else if (opcode == UNMAP) {
-			utp_err->UTR_unmap_err &= 0xfe;
-			utp_err->UTR_unmap_err++;
+			if (utp_err->UTR_unmap_err < MAX_U8_VALUE) 
+				utp_err->UTR_unmap_err++;
 			utp_err->UTP_err++;
 		} else {
-			utp_err->UTR_etc_err &= 0xfe;
-			utp_err->UTR_etc_err++;
+			if (utp_err->UTR_etc_err < MAX_U8_VALUE) 
+				utp_err->UTR_etc_err++;
 			utp_err->UTP_err++;
 		}
 	}
@@ -441,42 +458,42 @@ static void SEC_ufs_query_error_check(struct ufs_hba *hba, enum dev_cmd_type cmd
 	enum query_opcode opcode = request->upiu_req.opcode;
 
 	if (cmd_type == DEV_CMD_TYPE_NOP) {
-		query_cnt->NOP_err &= 0xfe;
-		query_cnt->NOP_err++;
+		if (query_cnt->NOP_err < MAX_U8_VALUE) 
+			query_cnt->NOP_err++;
 		query_cnt->Query_err++;
 	} else {
 		switch (opcode) {
 		case UPIU_QUERY_OPCODE_READ_DESC:
-			query_cnt->R_Desc_err &= 0xfe;
-			query_cnt->R_Desc_err++;
+			if (query_cnt->R_Desc_err < MAX_U8_VALUE) 
+				query_cnt->R_Desc_err++;
 			break;
 		case UPIU_QUERY_OPCODE_WRITE_DESC:
-			query_cnt->W_Desc_err &= 0xfe;
-			query_cnt->W_Desc_err++;
+			if (query_cnt->W_Desc_err < MAX_U8_VALUE) 
+				query_cnt->W_Desc_err++;
 			break;
 		case UPIU_QUERY_OPCODE_READ_ATTR:
-			query_cnt->R_Attr_err &= 0xfe;
-			query_cnt->R_Attr_err++;
+			if (query_cnt->R_Attr_err < MAX_U8_VALUE) 
+				query_cnt->R_Attr_err++;
 			break;
 		case UPIU_QUERY_OPCODE_WRITE_ATTR:
-			query_cnt->W_Attr_err &= 0xfe;
-			query_cnt->W_Attr_err++;
+			if (query_cnt->W_Attr_err < MAX_U8_VALUE) 
+				query_cnt->W_Attr_err++;
 			break;
 		case UPIU_QUERY_OPCODE_READ_FLAG:
-			query_cnt->R_Flag_err &= 0xfe;
-			query_cnt->R_Flag_err++;
+			if (query_cnt->R_Flag_err < MAX_U8_VALUE) 
+				query_cnt->R_Flag_err++;
 			break;
 		case UPIU_QUERY_OPCODE_SET_FLAG:
-			query_cnt->Set_Flag_err &= 0xfe;
-			query_cnt->Set_Flag_err++;
+			if (query_cnt->Set_Flag_err < MAX_U8_VALUE) 
+				query_cnt->Set_Flag_err++;
 			break;
 		case UPIU_QUERY_OPCODE_CLEAR_FLAG:
-			query_cnt->Clear_Flag_err &= 0xfe;
-			query_cnt->Clear_Flag_err++;
+			if (query_cnt->Clear_Flag_err < MAX_U8_VALUE) 
+				query_cnt->Clear_Flag_err++;
 			break;
 		case UPIU_QUERY_OPCODE_TOGGLE_FLAG:
-			query_cnt->Toggle_Flag_err &= 0xfe;
-			query_cnt->Toggle_Flag_err++;
+			if (query_cnt->Toggle_Flag_err < MAX_U8_VALUE) 
+				query_cnt->Toggle_Flag_err++;
 			break;
 		default:
 			break;
@@ -1984,6 +2001,7 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 	if (err) {
 		lrbp->cmd = NULL;
 		clear_bit_unlock(tag, &hba->lrb_in_use);
+		ufshcd_release(hba);
 		goto out;
 	}
 
@@ -5115,10 +5133,10 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 
 		dev_err(hba->dev, "%s: tag:%d, cmd:0x%x, "
 				"lba:0x%08lx, sct:0x%04x, retries %d\n",
-				__func__, tag, cmd->cmnd[0], lba, sct, cmd->allowed);
+				__func__, tag, cmd->cmnd[0], lba, sct, cmd->retries);
 	} else {
 		dev_err(hba->dev, "%s: tag:%d, cmd:0x%x, retries %d\n",
-				__func__, tag, cmd->cmnd[0], cmd->allowed);
+				__func__, tag, cmd->cmnd[0], cmd->retries);
 	}
 #if defined(SEC_UFS_ERROR_COUNT)
 	SEC_ufs_utp_error_check(hba, cmd, false, 0);
@@ -5223,6 +5241,7 @@ clean:
 	spin_unlock_irqrestore(host->host_lock, flags);
 
 	clear_bit_unlock(tag, &hba->lrb_in_use);
+	ufshcd_release(hba);
 	wake_up(&hba->dev_cmd.tag_wq);
 
 out:

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2018 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -38,6 +38,9 @@
 
 /* Max length for buffers */
 #define BUFFER_LENGTH_MAX		0x100000
+
+/* Max length for objects */
+#define OBJECT_LENGTH_MAX		0x8000000
 
 /* Flags for buffers to map (aligned on GP) */
 #define MC_IO_MAP_INPUT			BIT(0)

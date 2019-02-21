@@ -160,6 +160,7 @@ static int mfc_init_dec_ctx(struct s5p_mfc_ctx *ctx)
 	dec->is_dts_mode = 0;
 	dec->tiled_buf_cnt = 0;
 	dec->err_reuse_flag = 0;
+	dec->dec_only_release_flag = 0;
 
 	dec->is_dynamic_dpb = 1;
 	dec->dynamic_used = 0;
@@ -529,8 +530,8 @@ static int s5p_mfc_open(struct file *file)
 	}
 
 	trace_mfc_node_open(ctx->num, dev->num_inst, ctx->type, ctx->is_drm);
-	mfc_info_ctx("MFC open completed [%d:%d] dev = %p, ctx = %p, version = %d\n",
-			dev->num_drm_inst, dev->num_inst, dev, ctx, MFC_DRIVER_INFO);
+	mfc_info_ctx("MFC open completed [%d:%d] version = %d\n",
+			dev->num_drm_inst, dev->num_inst, MFC_DRIVER_INFO);
 	MFC_TRACE_CTX_LT("[INFO] %s %s opened (ctx:%d, total:%d)\n", ctx->is_drm ? "DRM" : "Normal",
 			s5p_mfc_is_decoder_node(node) ? "DEC" : "ENC", ctx->num, dev->num_inst);
 	mutex_unlock(&dev->mfc_mutex);
@@ -765,8 +766,7 @@ static int s5p_mfc_release(struct file *file)
 	dev->ctx[ctx->num] = 0;
 	kfree(ctx);
 
-	mfc_info_dev("mfc driver release finished [%d:%d], dev = %p\n",
-			dev->num_drm_inst, dev->num_inst, dev);
+	mfc_info_dev("mfc driver release finished [%d:%d]\n", dev->num_drm_inst, dev->num_inst);
 
 	if (s5p_mfc_is_work_to_do(dev))
 		queue_work(dev->butler_wq, &dev->butler_work);

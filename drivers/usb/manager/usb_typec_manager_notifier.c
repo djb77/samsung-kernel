@@ -139,10 +139,10 @@ void set_usb_enumeration_state(int state)
 	if(typec_manager.usb_enum_state != state) {
 		typec_manager.usb_enum_state = state;
 
-		if(typec_manager.usb_enum_state == 0x310)
-			typec_manager.usb310_count++;
-		else if(typec_manager.usb_enum_state == 0x210)
-			typec_manager.usb210_count++;
+		if(typec_manager.usb_enum_state >= 0x300)
+			typec_manager.usb_superspeed_count++;
+		else if(typec_manager.usb_enum_state >= 0x200)
+			typec_manager.usb_highspeed_count++;
 	}
 }
 EXPORT_SYMBOL(set_usb_enumeration_state);
@@ -174,8 +174,8 @@ EXPORT_SYMBOL(get_ccic_dry_count);
 int get_usb210_count(void)
 {
 	int ret;
-	ret = typec_manager.usb210_count;
-	typec_manager.usb210_count = 0;
+	ret = typec_manager.usb_highspeed_count;
+	typec_manager.usb_highspeed_count = 0;
 	return ret;
 }
 EXPORT_SYMBOL(get_usb210_count);
@@ -183,8 +183,8 @@ EXPORT_SYMBOL(get_usb210_count);
 int get_usb310_count(void)
 {
 	int ret;
-	ret = typec_manager.usb310_count;
-	typec_manager.usb310_count = 0;
+	ret = typec_manager.usb_superspeed_count;
+	typec_manager.usb_superspeed_count = 0;
 	return ret;
 }
 EXPORT_SYMBOL(get_usb310_count);
@@ -1021,8 +1021,8 @@ static int manager_notifier_init(void)
 	typec_manager.wVbus_det = 0;
 	typec_manager.water_count =0;
 	typec_manager.dry_count = 0;
-	typec_manager.usb210_count = 0;
-	typec_manager.usb310_count = 0;
+	typec_manager.usb_highspeed_count = 0;
+	typec_manager.usb_superspeed_count = 0;
 	typec_manager.waterChg_count = 0;
 	typec_manager.waterDet_duration = 0;
 	typec_manager.wVbus_duration = 0;

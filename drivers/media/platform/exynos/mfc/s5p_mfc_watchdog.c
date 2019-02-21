@@ -54,7 +54,7 @@ static void mfc_dump_regs(struct s5p_mfc_dev *dev)
 		{ 0xD000, 0x74 },
 	};
 
-	pr_err("-----------dumping MFC registers (SFR base = %p, dev = %p)\n",
+	pr_err("-----------dumping MFC registers (SFR base = %pK, dev = %pK)\n",
 				dev->regs_base, dev);
 
 	s5p_mfc_enable_all_clocks(dev);
@@ -379,9 +379,17 @@ void s5p_mfc_dump_buffer_info(struct s5p_mfc_dev *dev, unsigned long addr)
 	ctx = dev->ctx[dev->curr_ctx];
 	if (ctx) {
 		pr_err("-----------dumping MFC buffer info (fault at: %#lx)\n", addr);
-		pr_err("common:%#llx~%#llx, instance:%#llx~%#llx, codec:%#llx~%#llx\n",
+		pr_err("Normal FW:%llx~%#llx (common ctx buf:%#llx~%#llx)\n",
+				dev->fw_buf.daddr, dev->fw_buf.daddr + dev->fw_buf.size,
 				dev->common_ctx_buf.daddr,
-				dev->common_ctx_buf.daddr + PAGE_ALIGN(0x7800),
+				dev->common_ctx_buf.daddr + PAGE_ALIGN(0x7800));
+#ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
+		pr_err("Secure FW:%llx~%#llx (common ctx buf:%#llx~%#llx)\n",
+				dev->drm_fw_buf.daddr, dev->drm_fw_buf.daddr + dev->drm_fw_buf.size,
+				dev->drm_common_ctx_buf.daddr,
+				dev->drm_common_ctx_buf.daddr + PAGE_ALIGN(0x7800));
+#endif
+		pr_err("instance buf:%#llx~%#llx, codec buf:%#llx~%#llx\n",
 				ctx->instance_ctx_buf.daddr,
 				ctx->instance_ctx_buf.daddr + ctx->instance_ctx_buf.size,
 				ctx->codec_buf.daddr,

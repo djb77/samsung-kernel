@@ -489,7 +489,8 @@ static int abox_rdma_compr_open(struct snd_compr_stream *stream)
 	data->created = false;
 
 	pm_runtime_get_sync(rtd->codec->dev);
-	abox_request_cpu_gear(dev, platform_data->abox_data, dev, 3);
+	abox_request_cpu_gear_dai(dev, platform_data->abox_data,
+			rtd->cpu_dai, 3);
 
 	return 0;
 }
@@ -557,7 +558,8 @@ static int abox_rdma_compr_free(struct snd_compr_stream *stream)
 }
 #endif
 
-	abox_request_cpu_gear(dev, platform_data->abox_data, dev, 12);
+	abox_request_cpu_gear_dai(dev, platform_data->abox_data,
+			rtd->cpu_dai, 12);
 	pm_runtime_put(rtd->codec->dev);
 
 	return ret;
@@ -1156,7 +1158,7 @@ static int abox_rdma_hw_params(struct snd_pcm_substream *substream,
 	struct abox_platform_data *data = dev_get_drvdata(dev);
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	int id = data->id;
-	unsigned int lit_freq, big_freq, hmp_boost;
+	unsigned int lit, big, hmp;
 	int result;
 	ABOX_IPC_MSG msg;
 	struct IPC_PCMTASK_MSG *pcmtask_msg = &msg.msg.pcmtask;
@@ -1197,14 +1199,15 @@ static int abox_rdma_hw_params(struct snd_pcm_substream *substream,
 	abox_rdma_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 1);
 
 	if (params_rate(params) > 48000)
-		abox_request_cpu_gear(dev, data->abox_data, dev, 2);
+		abox_request_cpu_gear_dai(dev, data->abox_data,
+				rtd->cpu_dai, 2);
 
-	lit_freq = data->pm_qos_lit[abox_get_rate_type(params_rate(params))];
-	big_freq = data->pm_qos_big[abox_get_rate_type(params_rate(params))];
-	hmp_boost = data->pm_qos_hmp[abox_get_rate_type(params_rate(params))];
-	abox_request_lit_freq(dev, data->abox_data, dev, lit_freq);
-	abox_request_big_freq(dev, data->abox_data, dev, big_freq);
-	abox_request_hmp_boost(dev, data->abox_data, dev, hmp_boost);
+	lit = data->pm_qos_lit[abox_get_rate_type(params_rate(params))];
+	big = data->pm_qos_big[abox_get_rate_type(params_rate(params))];
+	hmp = data->pm_qos_hmp[abox_get_rate_type(params_rate(params))];
+	abox_request_lit_freq_dai(dev, data->abox_data, rtd->cpu_dai, lit);
+	abox_request_big_freq_dai(dev, data->abox_data, rtd->cpu_dai, big);
+	abox_request_hmp_boost_dai(dev, data->abox_data, rtd->cpu_dai, hmp);
 
 	dev_info(dev, "%s:Total=%zu PrdSz=%u(%u) #Prds=%u rate=%u, width=%d, channels=%u\n",
 			snd_pcm_stream_str(substream), runtime->dma_bytes,
@@ -1238,9 +1241,9 @@ static int abox_rdma_hw_free(struct snd_pcm_substream *substream)
 			(dma_addr_t)IOVA_RDMA_BUFFER(id),
 			round_up(substream->runtime->dma_bytes, PAGE_SIZE));
 #endif
-	abox_request_lit_freq(dev, data->abox_data, dev, 0);
-	abox_request_big_freq(dev, data->abox_data, dev, 0);
-	abox_request_hmp_boost(dev, data->abox_data, dev, 0);
+	abox_request_lit_freq_dai(dev, data->abox_data, rtd->cpu_dai, 0);
+	abox_request_big_freq_dai(dev, data->abox_data, rtd->cpu_dai, 0);
+	abox_request_hmp_boost_dai(dev, data->abox_data, rtd->cpu_dai, 0);
 
 	return snd_pcm_lib_free_pages(substream);
 }
@@ -1389,13 +1392,13 @@ static int abox_rdma_open(struct snd_pcm_substream *substream)
 
 	if (data->type == PLATFORM_CALL) {
 		abox_request_cpu_gear_sync(dev, data->abox_data,
-				(void *)ABOX_CPU_GEAR_CALL_KERNEL, 1);
+				ABOX_CPU_GEAR_CALL_KERNEL, 1);
 		result = abox_request_l2c_sync(dev, data->abox_data, dev, true);
 		if (IS_ERR_VALUE(result))
 			return result;
 	}
 	pm_runtime_get_sync(rtd->codec->dev);
-	abox_request_cpu_gear(dev, data->abox_data, dev, 3);
+	abox_request_cpu_gear_dai(dev, data->abox_data, rtd->cpu_dai, 3);
 
 	snd_soc_set_runtime_hwparams(substream, &abox_rdma_hardware);
 
@@ -1443,11 +1446,11 @@ static int abox_rdma_close(struct snd_pcm_substream *substream)
 		break;
 	}
 
-	abox_request_cpu_gear(dev, data->abox_data, dev, 12);
+	abox_request_cpu_gear_dai(dev, data->abox_data, rtd->cpu_dai, 12);
 	pm_runtime_put(rtd->codec->dev);
 	if (data->type == PLATFORM_CALL) {
 		abox_request_cpu_gear_sync(dev, data->abox_data,
-				(void *)ABOX_CPU_GEAR_CALL_KERNEL,
+				ABOX_CPU_GEAR_CALL_KERNEL,
 				ABOX_CPU_GEAR_LOWER_LIMIT);
 		result = abox_request_l2c(dev, data->abox_data, dev, false);
 		if (IS_ERR_VALUE(result))
@@ -1472,7 +1475,7 @@ static int abox_rdma_mmap(struct snd_pcm_substream *substream,
 	/* Increased cpu gear for sound camp.
 	 * Only sound camp uses mmap now.
 	 */
-	abox_request_cpu_gear(dev, data->abox_data, dev, 2);
+	abox_request_cpu_gear_dai(dev, data->abox_data, rtd->cpu_dai, 2);
 
 	return dma_mmap_writecombine(dev, vma,
 			runtime->dma_area,

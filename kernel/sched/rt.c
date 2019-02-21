@@ -2181,8 +2181,12 @@ static inline unsigned int hmp_cpu_is_fastest(int cpu)
 {
 	struct list_head *pos;
 
-	pos = &hmp_cpu_domain(cpu)->hmp_domains;
-	return pos == hmp_domains.next;
+	if (!cpumask_test_cpu(cpu, cpu_active_mask)) {
+		return 0;
+	} else {
+		pos = &hmp_cpu_domain(cpu)->hmp_domains;
+		return pos == hmp_domains.next;
+	}
 }
 
 /* Check if cpu is in slowest hmp_domain */
@@ -2190,8 +2194,12 @@ static inline unsigned int hmp_cpu_is_slowest(int cpu)
 {
 	struct list_head *pos;
 
-	pos = &hmp_cpu_domain(cpu)->hmp_domains;
-	return list_is_last(pos, &hmp_domains);
+	if (!cpumask_test_cpu(cpu, cpu_active_mask)) {
+		return 1;
+	} else {
+		pos = &hmp_cpu_domain(cpu)->hmp_domains;
+		return list_is_last(pos, &hmp_domains);
+	}
 }
 
 
@@ -2291,6 +2299,7 @@ static int find_lowest_rq_fluid(struct task_struct *task)
 	int boost = false;
 	u64 cpu_load, min_load = ULLONG_MAX;
 	int i;
+	struct cpumask tmp_mask;
 
 	/* Make sure the mask is initialized first */
 	if (unlikely(!lowest_mask))
@@ -2302,21 +2311,28 @@ static int find_lowest_rq_fluid(struct task_struct *task)
 	if (task->rt.avg.util_avg > frt_boost_threshold)
 		boost = true;
 
-	cpupri_find(&task_rq(task)->rd->cpupri, task, lowest_mask); 
+	cpupri_find(&task_rq(task)->rd->cpupri, task, lowest_mask);
+
+	if (!cpumask_test_cpu(prev_cpu,cpu_active_mask)) {
+		prev_cpu = this_cpu;
+	}
 
 	rcu_read_lock();
 
 	if (sysctl_sched_restrict_cluster_spill) {
-		hmpd = hmp_cpu_domain(task_cpu(task));
+		hmpd = hmp_cpu_domain(prev_cpu);
 	} else {
 		hmpd = boost ? \
-			hmp_faster_domain(task_cpu(task)) : \
-			hmp_slower_domain(task_cpu(task));
+			hmp_faster_domain(prev_cpu) : \
+			hmp_slower_domain(prev_cpu);
 	}
 
+	if (!hmpd)
+		goto skip;
 
 	do {
-		hmp_cpu_mask = &hmpd->cpus;
+		cpumask_and(&tmp_mask, &hmpd->cpus, cpu_active_mask);
+		hmp_cpu_mask = &tmp_mask;
 		min_load = ULLONG_MAX;
 
 		for_each_cpu_and(i, hmp_cpu_mask, lowest_mask) {
@@ -2387,8 +2403,9 @@ static int find_lowest_rq_fluid(struct task_struct *task)
 			hmp_slower_domain(cpumask_any(hmp_cpu_mask)) : \
 			hmp_faster_domain(cpumask_any(hmp_cpu_mask));
 
-	} while (!cpumask_empty(&hmpd->cpus));
+	} while (!hmpd && !cpumask_empty(&hmpd->cpus));
 
+skip:
 	rcu_read_unlock();
 
 	return best_cpu;

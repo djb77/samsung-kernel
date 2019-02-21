@@ -265,7 +265,7 @@
 			interrupts = <6 0 0>;
 			interrupt-parent = <&gpa3>;
 			pinctrl-names = "default";
-			pinctrl-0 = <&pmic_irq &pm_wrsti &g3d_dvs>;
+			pinctrl-0 = <&pmic_irq &pm_wrsti &g3d_dvs &smpl_warn>;
 			gpios = <&gpb1 3 0>, <&gpb1 2 0x2>;
 			smpl_warn_en = <1>; /* 1 : enable , 0 : disable*/
 			/* range of smpl_warn_vth */
@@ -1673,9 +1673,9 @@
 
 	vts: vts@0x14020000 {
 		status = "okay";
-		lpsd-gain = <1>;
-		dmic-gain = <1>;
-		amic-gain = <0>;
+		lpsd-gain = <0>;
+		dmic-gain = <0>;
+		amic-gain = <4>;
 	};
 
 	pinctrl@164B0000 {
@@ -2838,6 +2838,8 @@
 		sensor_i2c_ch = <1>; /* I2C 1 */
 		sensor_i2c_addr = <0x20>;
 
+		use_initial_ae;
+
 		gpio_mclk = <&gpk0 1 0x1>;
 		gpio_reset = <&gpc0 3 0x1>; /* sensor reset */
 		gpio_prep_reset = <&gpc1 1 0x1>; /* preprocessor reset */
@@ -2885,6 +2887,8 @@
 		mclk_ch = <1>;
 		sensor_i2c_ch = <1>; /* I2C 1 */
 		sensor_i2c_addr = <0x6A>;
+		
+		use_initial_ae;
 
 		gpio_mclk = <&gpk0 1 0x1>;
 		gpio_reset = <&gpc0 3 0x1>; /* sensor reset */
@@ -2934,6 +2938,8 @@
 		sensor_i2c_ch = <1>; /* I2C 1 */
 		sensor_i2c_addr = <0x20>;
 
+		use_initial_ae;
+
 		gpio_mclk = <&gpk0 1 0x1>;
 		gpio_reset = <&gpc0 3 0x1>; /* sensor reset */
 		status = "okay";
@@ -2976,6 +2982,8 @@
 		mclk_ch = <1>;
 		sensor_i2c_ch = <1>; /* I2C 1 */
 		sensor_i2c_addr = <0x6A>;
+
+		use_initial_ae;
 
 		gpio_mclk = <&gpk0 1 0x1>;
 		gpio_reset = <&gpc0 3 0x1>; /* sensor reset */

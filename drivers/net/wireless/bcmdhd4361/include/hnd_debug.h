@@ -1,14 +1,14 @@
 /*
  * HND Run Time Environment debug info area
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: hnd_debug.h 763050 2018-05-17 04:42:47Z $
+ * $Id: hnd_debug.h 726313 2017-10-12 06:07:22Z $
  */
 
 #ifndef	_HND_DEBUG_H
@@ -40,7 +40,6 @@
 
 /* Includes only when building dongle code */
 
-
 /* We use explicit sizes here since this gets included from different
  * systems.  The sizes must be the size of the creating system
  * (currently 32 bit ARM) since this is gleaned from  dump.
@@ -48,7 +47,7 @@
 
 #ifdef FWID
 extern uint32 gFWID;
-#endif
+#endif // endif
 
 /* Define pointers for use on other systems */
 #define _HD_EVLOG_P	uint32
@@ -121,7 +120,6 @@ typedef struct             {    /* Time value with microsecond resolution    */
 	uint32 tv_usec;	/* Microseconds                              */
 } timeval_t;
 
-
 /* Linux/ARM 32 prstatus for notes section */
 typedef struct prstatus {
 	  int32 si_signo; 	/* Signal number */
@@ -164,55 +162,6 @@ typedef struct prstatus {
 #define RAMSIZE_PTR_PTR_END	0xffffffff
 #define RAMSIZE_PTR_PTR_LIST	RAMSIZE_PTR_PTR_0, \
 				RAMSIZE_PTR_PTR_END
-
-typedef struct hnd_ext_trap_hdr {
-	uint8 version;    /* Extended trap version info */
-	uint8 reserved;   /* currently unused */
-	uint16 len;       /* Length of data excluding this header */
-	uint8 data[];     /* TLV data */
-} hnd_ext_trap_hdr_t;
-
-typedef enum {
-	TAG_TRAP_NONE		 = 0,  /* None trap type */
-	TAG_TRAP_SIGNATURE       = 1,  /* Processor register dumps */
-	TAG_TRAP_STACK           = 2,  /* Processor stack dump (possible code locations) */
-	TAG_TRAP_MEMORY          = 3,  /* Memory subsystem dump */
-	TAG_TRAP_DEEPSLEEP       = 4,  /* Deep sleep health check failures */
-	TAG_TRAP_PSM_WD          = 5,  /* PSM watchdog information */
-	TAG_TRAP_PHY             = 6,  /* Phy related issues */
-	TAG_TRAP_BUS             = 7,  /* Bus level issues */
-	TAG_TRAP_MAC_SUSP        = 8,  /* Mac level suspend issues */
-	TAG_TRAP_BACKPLANE       = 9,  /* Backplane related errors */
-	/* Values 10 through 14 are in use by etd_data info iovar */
-	TAG_TRAP_PCIE_Q         = 15,  /* PCIE Queue state during memory trap */
-	TAG_TRAP_WLC_STATE      = 16,  /* WLAN state during memory trap */
-	TAG_TRAP_MAC_WAKE       = 17,  /* Mac level wake issues */
-	TAG_TRAP_PHYTXERR_THRESH = 18, /* Phy Tx Err */
-	TAG_TRAP_HC_DATA        = 19,  /* Data collected by HC module */
-	TAG_TRAP_LOG_DATA	= 20,
-	TAG_TRAP_CODE		= 21, /* The trap type */
-	TAG_TRAP_HMAP		= 22, /* HMAP violation Address and Info */
-	TAG_TRAP_LAST  /* This must be the last entry */
-} hnd_ext_tag_trap_t;
-
-typedef struct hnd_ext_trap_bp_err
-{
-	uint32 error;
-	uint32 coreid;
-	uint32 baseaddr;
-	uint32 ioctrl;
-	uint32 iostatus;
-	uint32 resetctrl;
-	uint32 resetstatus;
-	uint32 errlogctrl;
-	uint32 errlogdone;
-	uint32 errlogstatus;
-	uint32 errlogaddrlo;
-	uint32 errlogaddrhi;
-	uint32 errlogid;
-	uint32 errloguser;
-	uint32 errlogflags;
-} hnd_ext_trap_bp_err_t;
 
 #endif /* !LANGUAGE_ASSEMBLY */
 

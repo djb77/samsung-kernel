@@ -1377,27 +1377,38 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 						__func__, sponge[0], sponge[1], sponge[2]);
 
 				if (p_gesture_status->gesture_id == SEC_TS_GESTURE_CODE_SPAY ||
-						p_gesture_status->gesture_id == SEC_TS_GESTURE_CODE_DOUBLE_TAP) {
+						p_gesture_status->gesture_id == SEC_TS_GESTURE_CODE_DOUBLE_TAP ||
+						p_gesture_status->gesture_id == SEC_TS_GESTURE_CODE_SINGLE_TAP) {
 					/* will be fixed to data structure */
-					if (sponge[1] & SEC_TS_MODE_SPONGE_AOD) {
+					if (sponge[1] & (SEC_TS_MODE_SPONGE_AOD | SEC_TS_MODE_SPONGE_SINGLE_TAP)) {
 						u8 data[5] = { 0x0A, 0x00, 0x00, 0x00, 0x00 };
 
 						ret = sec_ts_read_from_sponge(ts, data, 5);
 						if (ret < 0)
 							input_err(true, &ts->client->dev, "%s: fail to read sponge data\n", __func__);
 
-						if (data[4] & SEC_TS_AOD_GESTURE_DOUBLETAB)
-							ts->scrub_id = SPONGE_EVENT_TYPE_AOD_DOUBLETAB;
-
 						ts->scrub_x = (data[1] & 0xFF) << 8 | (data[0] & 0xFF);
 						ts->scrub_y = (data[3] & 0xFF) << 8 | (data[2] & 0xFF);
+
+						if (sponge[1] & SEC_TS_MODE_SPONGE_AOD) {
+							ts->scrub_id = SPONGE_EVENT_TYPE_AOD_DOUBLETAB;
 #ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
-						input_info(true, &ts->client->dev, "%s: aod: %d\n",
+							input_info(true, &ts->client->dev, "%s: aod: %d\n",
 								__func__, ts->scrub_id);
 #else
-						input_info(true, &ts->client->dev, "%s: aod: %d, %d, %d\n",
+							input_info(true, &ts->client->dev, "%s: aod: %d, %d, %d\n",
 								__func__, ts->scrub_id, ts->scrub_x, ts->scrub_y);
 #endif
+						} else if (sponge[1] & SEC_TS_MODE_SPONGE_SINGLE_TAP) {
+							ts->scrub_id = SPONGE_EVENT_TYPE_SINGLE_TAP;
+#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
+							input_info(true, &ts->client->dev, "%s: singletap: %d\n",
+								__func__, ts->scrub_id);
+#else
+							input_info(true, &ts->client->dev, "%s: singletap: %d, %d, %d\n",
+								__func__, ts->scrub_id, ts->scrub_x, ts->scrub_y);
+#endif
+						}
 						ts->all_aod_tap_count++;
 					}
 					if (sponge[1] & SEC_TS_MODE_SPONGE_SPAY) {
@@ -1845,6 +1856,8 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	if (of_property_read_string(np, "pressure-sensor", &pdata->support_pressure) < 0) {
 		input_err(true, dev, "%s: Failed to get pressure-sensor property\n", __func__);
 	}
+
+	pdata->sync_reportrate_120 = of_property_read_bool(np, "sync-reportrate-120");
 
 	if (of_property_read_u32(np, "sec,bringup", &pdata->bringup) < 0)
 		pdata->bringup = 0;

@@ -1133,7 +1133,25 @@ static int dsim_init_enable(struct dsim_device *dsim)
 init_err:
 	return ret;
 }
+#if 0
+/*
+ * for ITMON issue
+ * [0]=dpu0_status [1]=dpu1_status [2]=phy_m4s4_mod
+ */
+static void dsim_get_pmu_info(struct dsim_device *dsim)
+{
+	int i;
+	void __iomem *pmu_regs[3];
 
+	pmu_regs[0] = ioremap(0x16484064, 0x04);
+	pmu_regs[1] = ioremap(0x16484084, 0x04);
+	pmu_regs[2] = ioremap(0x16480710, 0x04);
+	for (i = 0; i < 3; i++) {
+		dsim->pmu_info[i] = readl(pmu_regs[i]);
+		iounmap(pmu_regs[i]);
+	}
+}
+#endif
 static int dsim_enable(struct dsim_device *dsim)
 {
 	int ret = 0;
@@ -1184,11 +1202,18 @@ static int dsim_enable(struct dsim_device *dsim)
 
 	dsim_reg_sw_reset(dsim->id);
 
+	/*
+	 * for ITMON issue debugging
+	 * why here: always occurs when accessing DSIM_LINK_STATUS3
+	 */
+	dsim_get_pmu_info(dsim);
+	DPU_EVENT_LOG(DPU_EVT_DSIM_ENABLE, &dsim->sd, ktime_set(0, 0));
 	ret = dsim_reg_set_clocks(dsim->id, &dsim->clks, &dsim->lcd_info->dphy_pms, 1);
 	if (ret) {
 		dsim_err("ERR:%s:failed to set dsim clock\n", __func__);
 		goto init_end;
 	}
+
 	dsim_reg_set_lanes(dsim->id, dsim->data_lane, 1);
 	
 	/* Wait for 200us~ for Dphy stable time and slave acknowlegement */

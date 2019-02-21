@@ -1,4 +1,4 @@
-/* drivers/gud/sec-os-ctrl/secos_booster.c
+/* drivers/gud/gud-exynos8895_kinibi400/sec-os-ctrl/secos_booster.c
  *
  * Secure OS booster driver for Samsung Exynos
  *

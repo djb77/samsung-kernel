@@ -1257,6 +1257,8 @@ struct hmp_domain {
 	struct list_head hmp_domains;
 };
 
+#define HMP_BOOSTING_ENABLE 	1
+#define HMP_BOOSTING_DISABLE	0
 extern int set_hmp_boost(int enable);
 extern int set_hmp_semiboost(int enable);
 extern int set_hmp_boostpulse(int duration);

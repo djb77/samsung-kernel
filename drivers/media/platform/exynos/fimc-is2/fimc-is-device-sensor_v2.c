@@ -1407,6 +1407,12 @@ static int fimc_is_sensor_probe(struct platform_device *pdev)
 	device->groupmgr = &core->groupmgr;
 	device->devicemgr = &core->devicemgr;
 
+#ifdef ENABLE_INIT_AWB
+	memset(device->init_wb, 0, sizeof(float) * WB_GAIN_COUNT);
+	memset(device->last_wb, 0, sizeof(float) * WB_GAIN_COUNT);
+	memset(device->chk_wb, 0, sizeof(float) * WB_GAIN_COUNT);
+#endif
+
 	platform_set_drvdata(pdev, device);
 	init_waitqueue_head(&device->instant_wait);
 	INIT_WORK(&device->instant_work, fimc_is_sensor_instanton);
@@ -1603,6 +1609,11 @@ int fimc_is_sensor_open(struct fimc_is_device_sensor *device,
 	memset(&device->sensor_ctl, 0, sizeof(struct camera2_sensor_ctl));
 	memset(&device->lens_ctl, 0, sizeof(struct camera2_lens_ctl));
 	memset(&device->flash_ctl, 0, sizeof(struct camera2_flash_ctl));
+
+#ifdef ENABLE_INIT_AWB
+	/* copy last awb gain value to init awb value */
+	memcpy(device->init_wb, device->last_wb, sizeof(float) * WB_GAIN_COUNT);
+#endif
 
 	groupmgr = device->groupmgr;
 	group = &device->group_sensor;
@@ -2010,6 +2021,20 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 						device, ret, device->smc_state, FIMC_IS_SENSOR_SMC_PREPARE);
 			device->smc_state = FIMC_IS_SENSOR_SMC_PREPARE;
 		}
+	}
+#endif
+
+#ifdef ENABLE_INIT_AWB
+	switch (device->position) {
+		case SENSOR_POSITION_REAR:
+			device->init_wb_cnt = INIT_AWB_COUNT_REAR;
+			break;
+		case SENSOR_POSITION_FRONT:
+			device->init_wb_cnt = INIT_AWB_COUNT_FRONT;
+			break;
+		default:
+			device->init_wb_cnt = 0; /* not operated */
+			break;
 	}
 #endif
 

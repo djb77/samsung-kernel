@@ -149,6 +149,35 @@ INT rtvRF_SetFrequency(U32 dwChFreqKHz)
 	#define r_div		4
 #endif
 
+	switch (dwChFreqKHz) {
+	case 175280: /* 7A */
+	case 177008: /* 7B */
+	case 178736: /* 7C */
+	case 181280: /* 8A */
+	case 183008: /* 8B */
+	case 184736: /* 8C */
+	case 187280: /* 9A */
+	case 189008: /* 9B */
+	case 190736: /* 9C */
+	case 193280: /* 10A */
+	case 195008: /* 10B */
+	case 196736: /* 10C */
+	case 199280: /* 11A */
+	case 201008: /* 11B */
+	case 202736: /* 11C */
+	case 205280: /* 12A */
+	case 207008: /* 12B */
+	case 208736: /* 12C */
+	case 211280: /* 13A */
+	case 213008: /* 13B */
+	case 214736: /* 13C */
+		break;
+
+	default:
+		RTV_DBGMSG1("Invalid freqency(%u)\n", dwChFreqKHz);
+		return RTV_INVALID_FREQENCY;
+	}
+
 	nChIdx = (dwChFreqKHz - TDMB_FREQ_START__KOREA) / TDMB_FREQ_STEP__KOREA;
 	if (dwChFreqKHz >= 205280)
 		nChIdx -= 2;

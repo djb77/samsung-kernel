@@ -19,28 +19,15 @@
  */
 
 #include "sdcardfs.h"
-#include <linux/hashtable.h>
 #include <linux/syscalls.h>
 #include <linux/kthread.h>
 #include <linux/inotify.h>
 #include <linux/delay.h>
 
-#define STRING_BUF_SIZE		(512)
-
 struct hashtable_entry {
 	struct hlist_node hlist;
 	void *key;
 	unsigned int value;
-};
-
-struct packagelist_data {
-	DECLARE_HASHTABLE(package_to_appid, 8);
-	struct mutex hashtable_lock;
-	struct task_struct *thread_id;
-	char read_buf[STRING_BUF_SIZE];
-	char event_buf[STRING_BUF_SIZE];
-	char app_name_buf[STRING_BUF_SIZE];
-	char gids_buf[STRING_BUF_SIZE];
 };
 
 static struct kmem_cache *hashtable_entry_cachep;
@@ -269,6 +256,7 @@ static int packagelist_reader(void *thread_data)
 				goto interruptable_sleep;
 			}
 			active = true;
+			atomic_set(&pkgl_dat->newly_created, 1);
 		}
 
 		event_pos = 0;

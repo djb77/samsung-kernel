@@ -556,9 +556,6 @@ static struct exynos_ss_item ess_items[] = {
 #ifdef CONFIG_EXYNOS_SNAPSHOT_SFRDUMP
 	{"log_sfr",	{SZ_4M,		0, 0, false, true, true}, NULL ,NULL, 0},
 #endif
-#ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
-	{"log_pstore",	{SZ_2M,		0, 0, true, true, true}, NULL ,NULL, 0},
-#endif
 #ifdef CONFIG_EXYNOS_CORESIGHT_ETR
 	{"log_etm",	{SZ_8M,		0, 0, true, true, true}, NULL ,NULL, 0},
 #endif
@@ -568,10 +565,11 @@ static struct exynos_ss_item ess_items[] = {
 #ifdef CONFIG_EXYNOS_SNAPSHOT_HOOK_LOGGER
 	{"log_platform",{SZ_2M,		0, 0, false, true, true}, NULL ,NULL, 0},
 #endif
+#endif
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
-	{"log_pstore",	{SZ_2M,		0, 0, true, true, true}, NULL ,NULL, 0},
+	{"log_pstore",	{SZ_32K,	0, 0, true, true, true}, NULL ,NULL, 0},
 #endif
-#endif
+
 };
 
 /*
@@ -2350,6 +2348,7 @@ static int __init exynos_ss_setup(char *str)
 		ess_desc.vm.phys_addr = base;
 		ess_desc.vm.addr = (void *)(ESS_FIXED_VIRT_BASE);
 		ess_desc.vm.size = size;
+		ess_desc.vm.flags = VM_NO_GUARD;
 
 		vm_area_add_early(&ess_desc.vm);
 
@@ -3906,10 +3905,8 @@ EXPORT_SYMBOL(exynos_ss_hook_pmsg);
 
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
 static struct ramoops_platform_data ess_ramoops_data = {
-	.record_size	= SZ_512K,
-	.console_size	= SZ_512K,
-	.ftrace_size	= SZ_512K,
-	.pmsg_size	= SZ_512K,
+	.record_size	= SZ_4K,
+	.pmsg_size	= SZ_4K,
 	.dump_oops	= 1,
 };
 
@@ -3925,6 +3922,8 @@ static int __init ess_pstore_init(void)
 	if (exynos_ss_get_enable("log_pstore", true)) {
 		ess_ramoops_data.mem_size = exynos_ss_get_item_size("log_pstore");
 		ess_ramoops_data.mem_address = exynos_ss_get_item_paddr("log_pstore");
+		ess_ramoops_data.pmsg_size = ess_ramoops_data.mem_size / 2;
+		ess_ramoops_data.record_size = ess_ramoops_data.mem_size / 2;
 	}
 	return platform_device_register(&ess_ramoops);
 }

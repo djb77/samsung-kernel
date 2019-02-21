@@ -943,7 +943,7 @@ static INLINE BOOL tdmb_CheckScanStatus(INT *sucess_flag,
 }
 
 /* SCAN debuging log enable */
-/* #define DEBUG_LOG_FOR_SCAN */
+#define DEBUG_LOG_FOR_SCAN
 
 /* NOTE: When this rountine executed, all sub channel and FIC should closed */
 INT rtvTDMB_ScanFrequency(U32 dwChFreqKHz)

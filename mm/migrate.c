@@ -1319,6 +1319,16 @@ int migrate_pages(struct list_head *from, new_page_t get_new_page,
 						private, page, pass > 2, mode,
 						reason);
 
+			if ((reason == MR_CMA) && (rc != -EAGAIN) &&
+						(rc != MIGRATEPAGE_SUCCESS)) {
+				phys_addr_t pa = page_to_phys(page);
+
+				pr_err("%s failed(%d): PA%pa,mapcnt%d,cnt%d\n",
+					__func__, rc, &pa,
+					page_mapcount(page), page_count(page));
+				show_page_inode(page);
+			}
+
 			switch(rc) {
 			case -ENOMEM:
 				goto out;

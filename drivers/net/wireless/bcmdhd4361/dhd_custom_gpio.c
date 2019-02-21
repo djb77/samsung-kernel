@@ -1,14 +1,14 @@
 /*
  * Customer code to add GPIO control during WLAN start/stop
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_gpio.c 664997 2016-10-14 11:56:35Z $
+ * $Id: dhd_custom_gpio.c 717227 2017-08-23 13:51:13Z $
  */
 
 #include <typedefs.h>
@@ -36,6 +36,9 @@
 #include <dhd_linux.h>
 
 #include <wlioctl.h>
+#if defined(WL_WIRELESS_EXT)
+#include <wl_iw.h>
+#endif // endif
 
 #define WL_ERROR(x) printf x
 #define WL_TRACE(x)
@@ -86,7 +89,7 @@ int dhd_customer_oob_irq_map(void *adapter, unsigned long *irq_flags_ptr)
 	WL_ERROR(("%s: customer specific Host GPIO number is (%d)\n",
 	         __FUNCTION__, dhd_oob_gpio_num));
 
-#endif 
+#endif // endif
 
 	return (host_oob_irq);
 }
@@ -176,7 +179,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 #endif /* EXMAPLE_TABLE */
 };
 
-
 /* Customized Locale convertor
 *  input : ISO 3166-1 country abbreviation
 *  output: customized cspec
@@ -212,5 +214,7 @@ void get_customized_country_code(void *adapter, char *country_iso_code, wl_count
 	cspec->rev = translate_custom_table[0].custom_locale_rev;
 #endif /* EXMAPLE_TABLE */
 	return;
+	* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36))
+	*/
 }
 #endif /* !CUSTOMER_HW4 */

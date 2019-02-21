@@ -22,7 +22,7 @@
 #include <linux/pm_runtime.h>
 
 #ifdef CONFIG_BLOCK_SUPPORT_STLOG
-#include <linux/stlog.h>
+#include <linux/fslog.h>
 #else
 #define ST_LOG(fmt, ...)
 #endif
@@ -912,8 +912,67 @@ static const struct file_operations proc_partitions_operations = {
 	.llseek		= seq_lseek,
 	.release	= seq_release,
 };
-#endif
 
+static void *show_iodevs_start(struct seq_file *seqf, loff_t *pos)
+{
+	void *p;
+
+	p = disk_seqf_start(seqf, pos);
+	if (!IS_ERR_OR_NULL(p) && !*pos)
+		seq_printf(seqf, "%12s\t%12s\n", "name", "#blocks");
+	return p;
+}
+
+static int show_iodevs(struct seq_file *seqf, void *v)
+{
+	struct gendisk *sgp = v;
+	struct disk_part_iter piter;
+	struct hd_struct *part;
+	char buf[BDEVNAME_SIZE];
+
+	/* Don't show non-partitionable removeable devices or empty devices */
+	if (!get_capacity(sgp) || (!disk_max_parts(sgp) &&
+				(sgp->flags & GENHD_FL_REMOVABLE)))
+		return 0;
+	if (sgp->flags & GENHD_FL_SUPPRESS_PARTITION_INFO)
+		return 0;
+
+	/* show the full disk and all 500MB size or more partitions of it */
+	disk_part_iter_init(&piter, sgp, DISK_PITER_INCL_PART0);
+#define MB(x) ((x) * 1024)
+	while ((part = disk_part_iter_next(&piter))) {
+		unsigned long long size = part_nr_sects_read(part) >> 1;
+
+		if (size < MB(500))
+			continue;
+
+		seq_printf(seqf, "%12s\t%12llu\n",
+				disk_name(sgp, part->partno, buf), size);
+	}
+	disk_part_iter_exit(&piter);
+
+	return 0;
+}
+
+static const struct seq_operations iodevs_op = {
+	.start	= show_iodevs_start,
+	.next	= disk_seqf_next,
+	.stop	= disk_seqf_stop,
+	.show	= show_iodevs
+};
+
+static int iodevs_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &iodevs_op);
+}
+
+static const struct file_operations proc_iodevs_operations = {
+	.open		= iodevs_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= seq_release,
+};
+#endif
 
 static struct kobject *base_probe(dev_t devt, int *partno, void *data)
 {
@@ -1431,6 +1490,7 @@ static int __init proc_genhd_init(void)
 {
 	proc_create("iostats", 0, NULL, &proc_iostats_operations);
 	proc_create("diskstats", 0, NULL, &proc_diskstats_operations);
+	proc_create("iodevs", 0, NULL, &proc_iodevs_operations);
 	proc_create("partitions", 0, NULL, &proc_partitions_operations);
 	return 0;
 }

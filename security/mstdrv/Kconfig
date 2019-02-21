@@ -15,10 +15,28 @@ config MST_LDO
 	bool "MST LDO kernel driver"
 	default n
 	help
-	  This enables the MST LDO kernel driver.
+	This enables the MST LDO kernel driver
+
+config MST_NONSECURE
+	bool "MST before TrustZone bringup"
+	default n
+	help
+	This enables the MST operation in Normal kernel
 
 config MFC_CHARGER
 	bool "MFC IC using model"
 	default n
 	help
-	  This enables the MFC IC sysfs node
+	This enables the MFC IC sysfs node
+
+config MST_TEEGRIS
+	bool "MST running on TEEGRIS"
+	default n
+	help
+	This enables the MST TEEGRIS function
+
+config MST_LPM_CONTROL
+	bool "MST control LPM mode for performace"
+	default n
+	help
+	This enables the MST LPM control code

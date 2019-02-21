@@ -728,7 +728,8 @@ static int decon_enable(struct decon_device *decon)
 	 * DECON, DSIM and Panel are initialized as FULL size during UNBLANK
 	 */
 	DPU_FULL_RECT(&decon->win_up.prev_up_region, decon->lcd_info);
-
+	if (decon->dt.out_type == DECON_OUT_DSI)
+		decon->force_fullupdate = true;
 	if (!decon->id && !decon->eint_status) {
 		enable_irq(decon->res.irq);
 		decon->eint_status = 1;
@@ -1601,22 +1602,22 @@ int decon_set_finger_layer(struct decon_device *decon, struct decon_reg_data *re
 		return 0;
 
 	decon_info("DECON:INFO:%s:curr mask : %s, req mask : %s\n",
-		__func__, decon->cur_finger_mask ? "On" : "Off", 
+		__func__, decon->cur_finger_mask ? "On" : "Off",
 		regs->finger_layer ? "On" : "Off");
-	
-	// set panel to hbm 
+
+	// set panel to hbm
 	if ((regs->finger_layer == true) &&
 		(decon->cur_finger_mask == false)) {
 		decon_info("DECON:INFO:%s:set hbm\n", __func__);
 		hmd = 1;
 		ret = v4l2_subdev_call(decon->panel_sd, core, ioctl,
 			PANEL_IOC_SET_FINGER_SET, (void *)&hmd);
-		
+
 		decon_err("DECON:ERR:%s:failed to disp on\n",
 		__func__);
 
-		
-		// set hbm	
+
+		// set hbm
 		decon->cur_finger_mask = true;
 	}
 

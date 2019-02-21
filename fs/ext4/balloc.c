@@ -16,7 +16,6 @@
 #include <linux/fs.h>
 #include <linux/quotaops.h>
 #include <linux/buffer_head.h>
-#include <linux/android_aid.h>
 #include "ext4.h"
 #include "ext4_jbd2.h"
 #include "mballoc.h"
@@ -444,7 +443,16 @@ ext4_read_block_bitmap_nowait(struct super_block *sb, ext4_group_t block_group)
 		goto verify;
 	}
 	ext4_lock_group(sb, block_group);
-	if (desc->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT)) {
+	if (ext4_has_group_desc_csum(sb) &&
+		(desc->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT))) {
+		if (block_group == 0) {
+			ext4_unlock_group(sb, block_group);
+			unlock_buffer(bh);
+			ext4_error(sb, "Block bitmap for bg 0 marked "
+				   "uninitialized");
+			err = -EFSCORRUPTED;
+			goto out;
+		}
 		err = ext4_init_block_bitmap(sb, bh, block_group, desc);
 		set_bitmap_uptodate(bh);
 		set_buffer_uptodate(bh);
@@ -566,8 +574,7 @@ static int ext4_has_free_clusters(struct ext4_sb_info *sbi,
 	if (free_clusters >= (sec_rsv + nclusters + dirty_clusters))
 		return 1;
 
-	if (flags & EXT4_MB_USE_EXTRA_ROOT_BLOCKS ||
-			in_group_p(AID_USE_SEC_RESERVED)) {
+	if (ext4_android_claim_sec_r_blocks(flags)) {
 		if (free_clusters >= (rsv + nclusters + dirty_clusters))
 			return 1;
 	}
@@ -575,7 +582,7 @@ static int ext4_has_free_clusters(struct ext4_sb_info *sbi,
 	/* Hm, nope.  Are (enough) root reserved clusters available? */
 	if (uid_eq(sbi->s_resuid, current_fsuid()) ||
 	    (!gid_eq(sbi->s_resgid, GLOBAL_ROOT_GID) && in_group_p(sbi->s_resgid)) ||
-	    capable(CAP_SYS_RESOURCE) || in_group_p(AID_USE_ROOT_RESERVED) ||
+	    capable(CAP_SYS_RESOURCE) || ext4_android_claim_r_blocks(sbi) ||
 	    (flags & EXT4_MB_USE_ROOT_BLOCKS)) {
 
 		if (free_clusters >= (nclusters + dirty_clusters +

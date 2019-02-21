@@ -19,6 +19,7 @@
 #include <linux/clk.h>
 #include <sound/tlv.h>
 #include <linux/delay.h>
+#include <linux/wakelock.h>
 
 #include <soc/samsung/exynos-pmu.h>
 #include <sound/samsung/abox.h>
@@ -70,6 +71,7 @@ struct exynos8895_drvdata {
 	struct clk_conf outclk;
 
 	struct notifier_block nb;
+	struct wake_lock wake_lock;
 
 	unsigned int hp_impedance_step;
 	bool hiz_val;
@@ -78,6 +80,7 @@ struct exynos8895_drvdata {
 	bool ear_mic;
 	bool vts_state;
 	int micbias_mode;
+	unsigned int wake_lock_switch;
 };
 
 struct gain_table {
@@ -487,6 +490,38 @@ static int exynos8895_resume_pre(struct snd_soc_card *card)
 	return 0;
 }
 
+static int get_sound_wakelock(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct exynos8895_drvdata *drvdata = codec->component.card->drvdata;
+
+	ucontrol->value.integer.value[0] = drvdata->wake_lock_switch;
+
+	return 0;
+}
+
+static int set_sound_wakelock(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct snd_soc_card *card = codec->component.card;
+	struct exynos8895_drvdata *drvdata = codec->component.card->drvdata;
+	unsigned int val;
+
+	val = (unsigned int)ucontrol->value.integer.value[0];
+	drvdata->wake_lock_switch = val;
+
+	dev_info(card->dev, "%s: %d\n", __func__, drvdata->wake_lock_switch);
+
+	if (drvdata->wake_lock_switch)
+		wake_lock(&drvdata->wake_lock);
+	else
+		wake_unlock(&drvdata->wake_lock);
+
+	return 0;
+}
+
 static int get_auxpdm_hiz_mode(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -502,9 +537,12 @@ static int set_auxpdm_hiz_mode(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct snd_soc_card *card = codec->component.card;
 	struct exynos8895_drvdata *drvdata = codec->component.card->drvdata;
 
 	drvdata->hiz_val = ucontrol->value.integer.value[0];
+
+	dev_info(card->dev, "%s ev: %d\n", __func__, drvdata->hiz_val);
 
 	if (drvdata->hiz_val) {
 		if (drvdata->spkpdm_gpio) {
@@ -652,6 +690,9 @@ static const struct snd_kcontrol_new exynos8895_codec_controls[] = {
 
 	SOC_SINGLE_BOOL_EXT("MICBias Bypass Mode",
 			0, get_micbias_mode, set_micbias_mode),
+
+	SOC_SINGLE_BOOL_EXT("Sound Wakelock",
+			0, get_sound_wakelock, set_sound_wakelock),
 };
 
 static int exynos8895_madera_notify(struct notifier_block *nb,
@@ -807,6 +848,9 @@ static int exynos8895_late_probe(struct snd_soc_card *card)
 	snd_soc_dapm_ignore_suspend(snd_soc_codec_get_dapm(cpu),
 							"ABOX WDMA4 Capture");
 	snd_soc_dapm_sync(snd_soc_codec_get_dapm(cpu));
+
+	wake_lock_init(&drvdata->wake_lock, WAKE_LOCK_SUSPEND, "madera-sound");
+	drvdata->wake_lock_switch = 0;
 
 	drvdata->nb.notifier_call = exynos8895_madera_notify;
 	madera_register_notifier(codec, &drvdata->nb);

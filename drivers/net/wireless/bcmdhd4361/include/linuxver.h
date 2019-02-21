@@ -2,14 +2,14 @@
  * Linux-specific abstractions to gain some independence from linux kernel versions.
  * Pave over some 2.2 versus 2.4 versus 2.6 kernel differences.
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -17,7 +17,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linuxver.h 646721 2016-06-30 12:36:41Z $
+ * $Id: linuxver.h 743417 2018-01-26 12:03:30Z $
  */
 
 #ifndef _linuxver_h_
@@ -35,7 +35,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #pragma GCC diagnostic ignored "-Wunused-but-set-parameter"
-#endif
+#endif // endif
 
 #include <typedefs.h>
 #include <linux/version.h>
@@ -46,12 +46,12 @@
 #include <generated/autoconf.h>
 #else
 #include <linux/autoconf.h>
-#endif
+#endif // endif
 #endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 0)) */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
 #include <linux/kconfig.h>
-#endif
+#endif // endif
 #include <linux/module.h>
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 3, 0))
@@ -60,21 +60,21 @@
 #undef __NO_VERSION__
 #else
 #define __NO_VERSION__
-#endif
+#endif // endif
 #endif	/* LINUX_VERSION_CODE < KERNEL_VERSION(2, 3, 0) */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 5, 0)
 #define module_param(_name_, _type_, _perm_)	MODULE_PARM(_name_, "i")
 #define module_param_string(_name_, _string_, _size_, _perm_) \
 		MODULE_PARM(_string_, "c" __MODULE_STRING(_size_))
-#endif
+#endif // endif
 
 /* linux/malloc.h is deprecated, use linux/slab.h instead. */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 4, 9))
 #include <linux/malloc.h>
 #else
 #include <linux/slab.h>
-#endif
+#endif // endif
 
 #include <linux/types.h>
 #include <linux/init.h>
@@ -100,16 +100,16 @@
 #include <linux/tqueue.h>
 #ifndef work_struct
 #define work_struct tq_struct
-#endif
+#endif // endif
 #ifndef INIT_WORK
 #define INIT_WORK(_work, _func, _data) INIT_TQUEUE((_work), (_func), (_data))
-#endif
+#endif // endif
 #ifndef schedule_work
 #define schedule_work(_work) schedule_task((_work))
-#endif
+#endif // endif
 #ifndef flush_scheduled_work
 #define flush_scheduled_work() flush_scheduled_tasks()
-#endif
+#endif // endif
 #endif	/* LINUX_VERSION_CODE > KERNEL_VERSION(2, 5, 41) */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
@@ -139,7 +139,7 @@
 	(RHEL_MAJOR == 5))
 /* Exclude RHEL 5 */
 typedef void (*work_func_t)(void *work);
-#endif
+#endif // endif
 #endif	/* >= 2.6.20 */
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 0))
@@ -149,7 +149,7 @@ typedef void irqreturn_t;
 #define IRQ_NONE
 #define IRQ_HANDLED
 #define IRQ_RETVAL(x)
-#endif
+#endif // endif
 #else
 typedef irqreturn_t(*FN_ISR) (int irq, void *dev_id, struct pt_regs *ptregs);
 #endif	/* LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 0) */
@@ -161,7 +161,7 @@ typedef irqreturn_t(*FN_ISR) (int irq, void *dev_id, struct pt_regs *ptregs);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 17)
 #ifdef	CONFIG_NET_RADIO
 #define	CONFIG_WIRELESS_EXT
-#endif
+#endif // endif
 #endif	/* < 2.6.17 */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 5, 67)
@@ -179,22 +179,21 @@ typedef irqreturn_t(*FN_ISR) (int irq, void *dev_id, struct pt_regs *ptregs);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29)
 #include <net/lib80211.h>
-#endif
+#endif // endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29)
 #include <linux/ieee80211.h>
 #else
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 14)
 #include <net/ieee80211.h>
-#endif
+#endif // endif
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30) */
-
 
 #ifndef __exit
 #define __exit
-#endif
+#endif // endif
 #ifndef __devexit
 #define __devexit
-#endif
+#endif // endif
 #ifndef __devinit
 #  if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0))
 #    define __devinit	__init
@@ -205,10 +204,10 @@ typedef irqreturn_t(*FN_ISR) (int irq, void *dev_id, struct pt_regs *ptregs);
 #endif /* !__devinit */
 #ifndef __devinitdata
 #define __devinitdata
-#endif
+#endif // endif
 #ifndef __devexit_p
 #define __devexit_p(x)	x
-#endif
+#endif // endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 4, 0))
 
@@ -251,7 +250,7 @@ extern void pci_unregister_driver(struct pci_driver *drv);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 18))
 #define pci_module_init pci_register_driver
-#endif
+#endif // endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 2, 18))
 #ifdef MODULE
@@ -260,39 +259,39 @@ extern void pci_unregister_driver(struct pci_driver *drv);
 #else
 #define module_init(x)	__initcall(x);
 #define module_exit(x)	__exitcall(x);
-#endif
+#endif // endif
 #endif	/* LINUX_VERSION_CODE < KERNEL_VERSION(2, 2, 18) */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 31)
 #define WL_USE_NETDEV_OPS
 #else
 #undef WL_USE_NETDEV_OPS
-#endif
+#endif // endif
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 31)) && defined(CONFIG_RFKILL)
 #define WL_CONFIG_RFKILL
 #else
 #undef WL_CONFIG_RFKILL
-#endif
+#endif // endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 3, 48))
 #define list_for_each(pos, head) \
 	for (pos = (head)->next; pos != (head); pos = pos->next)
-#endif
+#endif // endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 3, 13))
 #define pci_resource_start(dev, bar)	((dev)->base_address[(bar)])
 #elif (LINUX_VERSION_CODE < KERNEL_VERSION(2, 3, 44))
 #define pci_resource_start(dev, bar)	((dev)->resource[(bar)].start)
-#endif
+#endif // endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 3, 23))
 #define pci_enable_device(dev) do { } while (0)
-#endif
+#endif // endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 3, 14))
 #define net_device device
-#endif
+#endif // endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 3, 42))
 
@@ -305,7 +304,7 @@ extern void pci_unregister_driver(struct pci_driver *drv);
 #ifndef PCI_DMA_TODEVICE
 #define	PCI_DMA_TODEVICE	1
 #define	PCI_DMA_FROMDEVICE	2
-#endif
+#endif // endif
 
 typedef u32 dma_addr_t;
 
@@ -444,7 +443,7 @@ static inline void tasklet_init(struct tasklet_struct *tasklet,
 #else
 #define	PCI_SAVE_STATE(a, b)	pci_save_state(a, b)
 #define	PCI_RESTORE_STATE(a, b)	pci_restore_state(a, b)
-#endif
+#endif // endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 4, 6))
 static inline int
@@ -487,7 +486,7 @@ pci_restore_state(struct pci_dev *dev, u32 *buffer)
 /* Old cp0 access macros deprecated in 2.4.19 */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 4, 19))
 #define read_c0_count() read_32bit_cp0_register(CP0_COUNT)
-#endif
+#endif // endif
 
 /* Module refcount handled internally in 2.6.x */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24))
@@ -498,46 +497,46 @@ pci_restore_state(struct pci_dev *dev, u32 *buffer)
 #else
 #define OLD_MOD_INC_USE_COUNT		do {} while (0)
 #define OLD_MOD_DEC_USE_COUNT		do {} while (0)
-#endif
+#endif // endif
 #else /* LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24) */
 #ifndef SET_MODULE_OWNER
 #define SET_MODULE_OWNER(dev)		do {} while (0)
-#endif
+#endif // endif
 #ifndef MOD_INC_USE_COUNT
 #define MOD_INC_USE_COUNT			do {} while (0)
-#endif
+#endif // endif
 #ifndef MOD_DEC_USE_COUNT
 #define MOD_DEC_USE_COUNT			do {} while (0)
-#endif
+#endif // endif
 #define OLD_MOD_INC_USE_COUNT		MOD_INC_USE_COUNT
 #define OLD_MOD_DEC_USE_COUNT		MOD_DEC_USE_COUNT
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24) */
 
 #ifndef SET_NETDEV_DEV
 #define SET_NETDEV_DEV(net, pdev)	do {} while (0)
-#endif
+#endif // endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0))
 #ifndef HAVE_FREE_NETDEV
 #define free_netdev(dev)		kfree(dev)
-#endif
+#endif // endif
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0) */
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 0))
 /* struct packet_type redefined in 2.6.x */
 #define af_packet_priv			data
-#endif
+#endif // endif
 
 /* suspend args */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 11)
 #define DRV_SUSPEND_STATE_TYPE pm_message_t
 #else
 #define DRV_SUSPEND_STATE_TYPE uint32
-#endif
+#endif // endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
 #define CHECKSUM_HW	CHECKSUM_PARTIAL
-#endif
+#endif // endif
 
 typedef struct {
 	void	*parent;  /* some external entity that the thread supposed to work for */
@@ -552,14 +551,13 @@ typedef struct {
 	int		up_cnt;
 } tsk_ctl_t;
 
-
 /* requires  tsk_ctl_t tsk  argument, the caller's priv data is passed in owner ptr */
 /* note this macro assumes there may be only one context waiting on thread's completion */
 #ifdef DHD_DEBUG
 #define DBG_THR(x) printk x
 #else
 #define DBG_THR(x)
-#endif
+#endif // endif
 
 static inline bool binary_sema_down(tsk_ctl_t *tsk)
 {
@@ -603,7 +601,7 @@ static inline bool binary_sema_up(tsk_ctl_t *tsk)
 #define SMP_RD_BARRIER_DEPENDS(x) smp_read_barrier_depends(x)
 #else
 #define SMP_RD_BARRIER_DEPENDS(x) smp_rmb(x)
-#endif
+#endif // endif
 
 #define PROC_START(thread_func, owner, tsk_ctl, flags, name) \
 { \
@@ -614,9 +612,9 @@ static inline bool binary_sema_up(tsk_ctl_t *tsk)
 	(tsk_ctl)->terminated = FALSE; \
 	(tsk_ctl)->p_task  = kthread_run(thread_func, tsk_ctl, (char*)name); \
 	if (IS_ERR((tsk_ctl)->p_task)) { \
-		(tsk_ctl)->thr_pid = DHD_PID_KT_INVALID; \
-		DBG_THR(("%s(): thread:%s:%lx failed\n", __FUNCTION__, \
-			(tsk_ctl)->proc_name, (tsk_ctl)->thr_pid)); \
+		(tsk_ctl)->thr_pid = -1; \
+		DBG_THR(("%s(): thread:%s create failed\n", __FUNCTION__, \
+			(tsk_ctl)->proc_name)); \
 	} else { \
 		(tsk_ctl)->thr_pid = (tsk_ctl)->p_task->pid; \
 		spin_lock_init(&((tsk_ctl)->spinlock)); \
@@ -661,7 +659,7 @@ if (tsk) send_sig(sig, tsk, 1); \
 { \
 	kill_proc(pid, sig, 1); \
 }
-#endif
+#endif // endif
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 31) */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
@@ -713,7 +711,7 @@ not match our unaligned address for < 2.6.24
 #define DEV_PRIV(dev)	(dev->priv)
 #else
 #define DEV_PRIV(dev)	netdev_priv(dev)
-#endif
+#endif // endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 #define WL_ISR(i, d, p)         wl_isr((i), (d))
@@ -729,14 +727,16 @@ not match our unaligned address for < 2.6.24
 #define CAN_SLEEP()	((!in_atomic() && !irqs_disabled()))
 #else
 #define CAN_SLEEP()	(FALSE)
-#endif
+#endif // endif
 
 #define KMALLOC_FLAG (CAN_SLEEP() ? GFP_KERNEL: GFP_ATOMIC)
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
 #define RANDOM32	prandom_u32
+#define RANDOM_BYTES	prandom_bytes
 #else
 #define RANDOM32	random32
+#define RANDOM_BYTES	get_random_bytes
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0) */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
@@ -762,7 +762,7 @@ not match our unaligned address for < 2.6.24
 
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)
 #pragma GCC diagnostic pop
-#endif
+#endif // endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0))
 static inline struct inode *file_inode(const struct file *f)

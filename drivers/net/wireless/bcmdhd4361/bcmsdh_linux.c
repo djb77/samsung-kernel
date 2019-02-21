@@ -1,14 +1,14 @@
 /*
  * SDIO access interface for drivers - linux specific (pci only)
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmsdh_linux.c 761914 2018-05-10 02:02:30Z $
+ * $Id: bcmsdh_linux.c 689948 2017-03-14 05:21:03Z $
  */
 
 /**
@@ -289,7 +289,7 @@ bcmsdh_unregister(void)
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 0))
 		if (bcmsdh_pci_driver.node.next == NULL)
 			return;
-#endif
+#endif // endif
 
 	bcmsdh_unregister_client_driver();
 }
@@ -338,11 +338,6 @@ void bcmsdh_oob_intr_set(bcmsdh_info_t *bcmsdh, bool enable)
 	spin_unlock_irqrestore(&bcmsdh_osinfo->oob_irq_spinlock, flags);
 }
 
-#ifdef ENABLE_WAKEUP_PKT_DUMP
-extern volatile bool dhd_mmc_suspend;
-extern volatile bool dhd_mmc_wake;
-#endif /* ENABLE_WAKEUP_PKT_DUMP */
-
 static irqreturn_t wlan_oob_irq(int irq, void *dev_id)
 {
 	bcmsdh_info_t *bcmsdh = (bcmsdh_info_t *)dev_id;
@@ -352,12 +347,6 @@ static irqreturn_t wlan_oob_irq(int irq, void *dev_id)
 	bcmsdh_oob_intr_set(bcmsdh, FALSE);
 #endif /* !BCMSPI_ANDROID */
 	bcmsdh_osinfo->oob_irq_handler(bcmsdh_osinfo->oob_irq_handler_context);
-
-#ifdef ENABLE_WAKEUP_PKT_DUMP
-	if (dhd_mmc_suspend) {
-		dhd_mmc_wake = TRUE;
-	}
-#endif /* ENABLE_WAKEUP_PKT_DUMP */
 
 	return IRQ_HANDLED;
 }
@@ -468,7 +457,7 @@ module_param(sd_delay_value, uint, 0);
 extern char dhd_sdiod_uhsi_ds_override[2];
 module_param_string(dhd_sdiod_uhsi_ds_override, dhd_sdiod_uhsi_ds_override, 2, 0);
 
-#endif
+#endif // endif
 
 #ifdef BCMSDH_MODULE
 EXPORT_SYMBOL(bcmsdh_attach);
@@ -481,7 +470,7 @@ EXPORT_SYMBOL(bcmsdh_intr_dereg);
 
 #if defined(DHD_DEBUG)
 EXPORT_SYMBOL(bcmsdh_intr_pending);
-#endif
+#endif // endif
 
 #if defined(BT_OVER_SDIO)
 EXPORT_SYMBOL(bcmsdh_btsdio_interface_init);

@@ -512,6 +512,7 @@ struct sensor_value {
 		u32 step_diff;
 		u8 tilt_detector;
 		u8 pickup_gesture;
+		u8 wakeup_event;
 		u8 scontext_buf[SCONTEXT_DATA_SIZE];
 		struct meta_data_event meta_data;
 	};
@@ -1088,6 +1089,7 @@ void report_pickup_data(struct ssp_data *data, struct sensor_value *pickup_data)
 void report_light_cct_data(struct ssp_data *data, struct sensor_value *lightdata);
 void report_scontext_data(struct ssp_data *data, struct sensor_value *scontextbuf);
 void report_uncalib_accel_data(struct ssp_data *data, struct sensor_value *acceldata);
+void report_wakeup_motion_data(struct ssp_data *data,struct sensor_value *wakeup_motion_data);
 #endif
 unsigned int get_module_rev(struct ssp_data *data);
 void reset_mcu(struct ssp_data *data);

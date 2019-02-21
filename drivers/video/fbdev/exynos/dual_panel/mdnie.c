@@ -590,7 +590,7 @@ static ssize_t scenario_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	unsigned int value;
+	unsigned int value = 0;
 	int ret;
 
 	ret = kstrtouint(buf, 0, &value);
@@ -625,7 +625,7 @@ static ssize_t accessibility_store(struct device *dev,
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
 	unsigned int s[12] = {0, };
-	unsigned int value;
+	unsigned int value = 0;
 	int i, ret;
 
 	ret = sscanf(buf, "%d %x %x %x %x %x %x %x %x %x %x %x %x",
@@ -676,7 +676,7 @@ static ssize_t bypass_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	unsigned int value;
+	unsigned int value = 0;
 	int ret;
 
 	ret = kstrtouint(buf, 0, &value);
@@ -711,7 +711,7 @@ static ssize_t lux_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	int ret, value;
+	int ret, value = 0;
 
 	ret = kstrtoint(buf, 0, &value);
 	if (ret < 0)
@@ -814,7 +814,7 @@ static ssize_t sensorRGB_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	unsigned int white_red, white_green, white_blue;
+	unsigned int white_red = 0, white_green = 0, white_blue = 0;
 	int mdnie_mode = mdnie_current_state(mdnie), ret;
 
 	ret = sscanf(buf, "%d %d %d",
@@ -855,7 +855,7 @@ static ssize_t whiteRGB_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	int wr_offset, wg_offset, wb_offset;
+	int wr_offset = 0, wg_offset = 0, wb_offset = 0;
 	int ret;
 
 	ret = sscanf(buf, "%d %d %d",
@@ -896,7 +896,7 @@ static ssize_t night_mode_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	int enable, level, ret;
+	int enable = 0, level = 0, ret;
 
 	ret = sscanf(buf, "%d %d", &enable, &level);
 
@@ -934,7 +934,7 @@ static ssize_t hdr_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	unsigned int value;
+	unsigned int value = 0;
 	int ret;
 
 	ret = kstrtouint(buf, 0, &value);
@@ -967,7 +967,7 @@ static ssize_t light_notification_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	unsigned int value;
+	unsigned int value = 0;
 	int ret;
 
 	ret = kstrtouint(buf, 0, &value);
@@ -1001,7 +1001,7 @@ static ssize_t mdnie_ldu_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	int value, ret;
+	int value = 0, ret;
 
 	ret = kstrtoint(buf, 10, &value);
 
@@ -1036,7 +1036,7 @@ static ssize_t hmt_color_temperature_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	unsigned int value;
+	unsigned int value = 0;
 	int ret;
 
 	ret = kstrtouint(buf, 0, &value);

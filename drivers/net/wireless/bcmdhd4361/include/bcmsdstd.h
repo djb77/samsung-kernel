@@ -1,14 +1,14 @@
 /*
  *  'Standard' SDIO HOST CONTROLLER driver
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmsdstd.h 514727 2014-11-12 03:02:48Z $
+ * $Id: bcmsdstd.h 663318 2016-10-04 19:02:16Z $
  */
 #ifndef	_BCM_SD_STD_H
 #define	_BCM_SD_STD_H
@@ -84,7 +84,6 @@ extern void sdstd_osfree(sdioh_info_t *sd);
 #define sdstd_os_yield(sd)	do {} while (0)
 #define RETRIES_SMALL 100
 
-
 #define USE_BLOCKMODE		0x2	/* Block mode can be single block or multi */
 #define USE_MULTIBLOCK		0x4
 
@@ -93,7 +92,6 @@ extern void sdstd_osfree(sdioh_info_t *sd);
 #define CLIENT_INTR 		0x100	/* Get rid of this! */
 
 #define HC_INTR_RETUNING	0x1000
-
 
 #ifdef BCMSDIOH_TXGLOM
 /* Total glom pkt can not exceed 64K
@@ -107,7 +105,7 @@ typedef struct glom_buf {
 	ulong dma_phys_arr[SDIOH_MAXGLOM_SIZE]; /* DMA_MAPed address of frames */
 	uint16 nbytes[SDIOH_MAXGLOM_SIZE];	/* Size of each frame */
 } glom_buf_t;
-#endif
+#endif // endif
 
 struct sdioh_info {
 	uint cfg_bar;                   	/* pci cfg address for bar */
@@ -182,7 +180,7 @@ struct sdioh_info {
 #ifdef BCMSDIOH_TXGLOM
 	glom_buf_t glom_info;		/* pkt information used for glomming */
 	uint	txglom_mode;		/* Txglom mode: 0 - copy, 1 - multi-descriptor */
-#endif
+#endif // endif
 };
 
 #define DMA_MODE_NONE	0
@@ -206,12 +204,10 @@ struct sdioh_info {
 #define CHECK_TUNING_PRE_DATA	1
 #define CHECK_TUNING_POST_DATA	2
 
-
 #ifdef DHD_DEBUG
 #define SD_DHD_DISABLE_PERIODIC_TUNING 0x01
 #define SD_DHD_ENABLE_PERIODIC_TUNING  0x00
-#endif
-
+#endif // endif
 
 /************************************************************
  * Internal interfaces: per-port references into bcmsdstd.c
@@ -233,7 +229,6 @@ extern void sdstd_intrs_off(sdioh_info_t *sd, uint16 norm, uint16 err);
 
 /* Wait for specified interrupt and error bits to be set */
 extern void sdstd_spinbits(sdioh_info_t *sd, uint16 norm, uint16 err);
-
 
 /**************************************************************
  * Internal interfaces: bcmsdstd.c references to per-port code

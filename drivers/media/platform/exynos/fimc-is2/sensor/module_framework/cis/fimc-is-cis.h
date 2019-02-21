@@ -55,4 +55,8 @@ u32 sensor_cis_do_div64(u64 num, u32 den);
 
 int sensor_cis_wait_streamoff(struct v4l2_subdev *subdev);
 
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+int sensor_cis_set_initial_exposure(struct v4l2_subdev *subdev);
+#endif
+
 #endif

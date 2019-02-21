@@ -31,6 +31,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/workqueue.h>
 
+
 #include <linux/io.h>
 #include <linux/usb/otg-fsm.h>
 
@@ -482,7 +483,6 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 	struct dwc3_exynos	*exynos;
 	struct device		*dev = &pdev->dev;
 	struct device_node	*node = dev->of_node;
-
 	int			ret;
 
 	dev_info(dev, "%s: +\n", __func__);

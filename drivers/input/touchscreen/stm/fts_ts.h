@@ -24,6 +24,14 @@
 #define TOUCH_OPEN_DWORK_TIME 10
 #endif
 
+/*
+ * support_feature
+ * bit value should be made a promise with InputFramework.
+ */
+#define INPUT_FEATURE_SUPPORT_AOT			(1 << 0) /* Double tap wakeup settings */
+#define INPUT_FEATURE_SUPPORT_PRESSURE			(1 << 1) /* homekey pressure */
+#define INPUT_FEATURE_SUPPORT_SYNC_RR120		(1 << 2) /* sync reportrate 120hz */
+
 #define FIRMWARE_IC					"fts_ic"
 #define FTS_MAX_FW_PATH					64
 #define FTS_TS_DRV_NAME					"fts_touch"
@@ -192,6 +200,7 @@
 
 #define FTS_STRING_EVENT_SPAY				(1 << 1)
 #define FTS_STRING_EVENT_AOD_TRIGGER			(1 << 2)
+#define FTS_STRING_EVENT_SINGLETAP			(1 << 3)
 #define FTS_STRING_EVENT_PRESSURE_TOUCHED		(1 << 6)
 #define FTS_STRING_EVENT_PRESSURE_RELEASED		(1 << 7)
 
@@ -204,7 +213,8 @@
 
 #define FTS_MODE_SPAY					(1 << 1)
 #define FTS_MODE_AOD					(1 << 2)
-#define FTS_MODE_PRESSURE					(1 << 6)
+#define FTS_MODE_SINGLETAP				(1 << 3)
+#define FTS_MODE_PRESSURE				(1 << 6)
 
 #define FTS_BOOT_CRC_OKAY			0
 #define FTS_BOOT_CRC_FAIL			1
@@ -392,7 +402,7 @@ enum {
 	SPECIAL_EVENT_TYPE_SPAY			= 0x04,
 	SPECIAL_EVENT_TYPE_PRESSURE_TOUCHED	= 0x05,
 	SPECIAL_EVENT_TYPE_PRESSURE_RELEASED	= 0x06,
-	SPECIAL_EVENT_TYPE_AOD			= 0x08,
+	SPECIAL_EVENT_TYPE_SINGLETAP		= 0x08,
 	SPECIAL_EVENT_TYPE_AOD_PRESS		= 0x09,
 	SPECIAL_EVENT_TYPE_AOD_LONGPRESS	= 0x0A,
 	SPECIAL_EVENT_TYPE_AOD_DOUBLETAB	= 0x0B,

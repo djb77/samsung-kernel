@@ -3,14 +3,14 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -18,12 +18,12 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_debug_linux.c 744879 2018-02-06 02:45:32Z $
+ * $Id: dhd_debug_linux.c 786516 2018-10-26 12:09:02Z $
  */
 
 #include <typedefs.h>
@@ -55,17 +55,17 @@ typedef struct dhd_dbg_os_ring_info {
 } linux_dbgring_info_t;
 
 struct log_level_table dhd_event_map[] = {
-	{1, WIFI_EVENT_DRIVER_EAPOL_FRAME_TRANSMIT_REQUESTED, 0, "DRIVER EAPOL TX REQ"},
-	{1, WIFI_EVENT_DRIVER_EAPOL_FRAME_RECEIVED, 0, "DRIVER EAPOL RX"},
-	{2, WIFI_EVENT_DRIVER_SCAN_REQUESTED, 0, "SCAN_REQUESTED"},
-	{2, WIFI_EVENT_DRIVER_SCAN_COMPLETE, 0, "SCAN COMPELETE"},
-	{3, WIFI_EVENT_DRIVER_SCAN_RESULT_FOUND, 0, "SCAN RESULT FOUND"},
-	{2, WIFI_EVENT_DRIVER_PNO_ADD, 0, "PNO ADD"},
-	{2, WIFI_EVENT_DRIVER_PNO_REMOVE, 0, "PNO REMOVE"},
-	{2, WIFI_EVENT_DRIVER_PNO_NETWORK_FOUND, 0, "PNO NETWORK FOUND"},
-	{2, WIFI_EVENT_DRIVER_PNO_SCAN_REQUESTED, 0, "PNO SCAN_REQUESTED"},
-	{1, WIFI_EVENT_DRIVER_PNO_SCAN_RESULT_FOUND, 0, "PNO SCAN RESULT FOUND"},
-	{1, WIFI_EVENT_DRIVER_PNO_SCAN_COMPLETE, 0, "PNO SCAN COMPELETE"}
+	{1, WIFI_EVENT_DRIVER_EAPOL_FRAME_TRANSMIT_REQUESTED, "DRIVER EAPOL TX REQ"},
+	{1, WIFI_EVENT_DRIVER_EAPOL_FRAME_RECEIVED, "DRIVER EAPOL RX"},
+	{2, WIFI_EVENT_DRIVER_SCAN_REQUESTED, "SCAN_REQUESTED"},
+	{2, WIFI_EVENT_DRIVER_SCAN_COMPLETE, "SCAN COMPELETE"},
+	{3, WIFI_EVENT_DRIVER_SCAN_RESULT_FOUND, "SCAN RESULT FOUND"},
+	{2, WIFI_EVENT_DRIVER_PNO_ADD, "PNO ADD"},
+	{2, WIFI_EVENT_DRIVER_PNO_REMOVE, "PNO REMOVE"},
+	{2, WIFI_EVENT_DRIVER_PNO_NETWORK_FOUND, "PNO NETWORK FOUND"},
+	{2, WIFI_EVENT_DRIVER_PNO_SCAN_REQUESTED, "PNO SCAN_REQUESTED"},
+	{1, WIFI_EVENT_DRIVER_PNO_SCAN_RESULT_FOUND, "PNO SCAN RESULT FOUND"},
+	{1, WIFI_EVENT_DRIVER_PNO_SCAN_COMPLETE, "PNO SCAN COMPELETE"}
 };
 
 static void
@@ -76,6 +76,8 @@ debug_data_send(dhd_pub_t *dhdp, int ring_id, const void *data, const uint32 len
 	dbg_ring_send_sub_t ring_sub_send;
 	ndev = dhd_linux_get_primary_netdev(dhdp);
 	if (!ndev)
+		return;
+	if (!VALID_RING(ring_id))
 		return;
 	if (ring_send_sub_cb[ring_id]) {
 		ring_sub_send = ring_send_sub_cb[ring_id];
@@ -104,12 +106,12 @@ dbg_ring_poll_worker(struct work_struct *work)
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-qual"
-#endif
+#endif // endif
 	linux_dbgring_info_t *ring_info =
 		container_of(d_work, linux_dbgring_info_t, work);
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic pop
-#endif
+#endif // endif
 	dhd_pub_t *dhdp = ring_info->dhdp;
 	int ringid = ring_info->ring_id;
 	dhd_dbg_ring_status_t ring_status;
@@ -141,7 +143,8 @@ dbg_ring_poll_worker(struct work_struct *work)
 		goto exit;
 	}
 
-	rlen = dhd_dbg_ring_pull(dhdp, ringid, buf, buflen);
+	rlen = dhd_dbg_pull_from_ring(dhdp, ringid, buf, buflen);
+
 	if (!ring->sched_pull) {
 		ring->sched_pull = TRUE;
 	}
@@ -352,7 +355,7 @@ dhd_os_push_push_ring_data(dhd_pub_t *dhdp, int ring_id, void *data, int32 data_
 		msg_hdr.flags |= DBG_RING_ENTRY_FLAGS_HAS_BINARY;
 		msg_hdr.timestamp = local_clock();
 		/* convert to ms */
-		do_div(msg_hdr.timestamp, 1000000);
+		msg_hdr.timestamp = DIV_U64_BY_U32(msg_hdr.timestamp, NSEC_PER_MSEC);
 		msg_hdr.len = data_len;
 		/* filter the event for higher log level with current log level */
 		for (i = 0; i < ARRAYSIZE(dhd_event_map); i++) {
@@ -362,7 +365,7 @@ dhd_os_push_push_ring_data(dhd_pub_t *dhdp, int ring_id, void *data, int32 data_
 			}
 		}
 	}
-	ret = dhd_dbg_ring_push(dhdp, ring_id, &msg_hdr, event_data);
+	ret = dhd_dbg_push_to_ring(dhdp, ring_id, &msg_hdr, event_data);
 	if (ret) {
 		DHD_ERROR(("%s : failed to push data into the ring (%d) with ret(%d)\n",
 			__FUNCTION__, ring_id, ret));

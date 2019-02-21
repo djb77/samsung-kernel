@@ -1349,10 +1349,11 @@ unsigned long kmem_cache_flags(unsigned long object_size,
 		!strncmp(slub_debug_slabs, name, strlen(slub_debug_slabs))))) {
 		flags |= slub_debug;
 
-		if (!strncmp(name, "zspage", strlen("zspage")) ||
+		if (name && 
+			(!strncmp(name, "zspage", strlen("zspage")) ||
 			!strncmp(name, "zs_handle", strlen("zs_handle")) ||
 			!strncmp(name, "zswap_entry", strlen("zswap_entry")) ||
-			!strncmp(name, "avtab_node", strlen("avtab_node")))
+			!strncmp(name, "avtab_node", strlen("avtab_node"))))
 			flags &= ~SLAB_STORE_USER;
 	}
 

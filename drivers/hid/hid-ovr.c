@@ -11,38 +11,11 @@
 
 #include <linux/cdev.h>
 #include <linux/poll.h>
-#include <linux/sched.h>
 #include <linux/module.h>
 #include <linux/usb.h>
 #include <linux/hidraw.h>
-#include <linux/netdevice.h>
 #include <linux/interrupt.h>
 #include "hid-ids.h"
-
-struct rpscpus_data {
-	char          netdev_name[16];
-	unsigned long netdev_name_len;
-	char          rpscpus[4];
-	unsigned long rpscpus_len;
-	char          default_rpscpus[4];
-	unsigned long default_rpscpus_len;
-};
-
-struct irq_affinity_data {
-	unsigned long irq_num;
-	char          irq_affinity[4];
-	unsigned long irq_affinity_len;
-	char          default_irq_affinity[4];
-	unsigned long default_irq_affinity_len;
-};
-
-#define OVRIOCGSERIALSIZE	_IOR('S', 0x01, int)
-#define OVRIOCGSERIAL(len)	_IOC(_IOC_READ, 			'S', 0x02, len)
-#define OVRIOCSRPSCPUS		_IOC(_IOC_WRITE|_IOC_READ,	'S', 0x03, sizeof(struct rpscpus_data))
-#define OVRIOCSIRQAFFINITY	_IOC(_IOC_WRITE|_IOC_READ,	'S', 0x04, sizeof(struct irq_affinity_data))
-
-static struct rpscpus_data ovr_rpscpu_data;
-static struct irq_affinity_data ovr_irq_affinity_data;
 
 #define USB_TRACKER_INTERFACE_PROTOCOL	0
 
@@ -57,37 +30,33 @@ static struct irq_affinity_data ovr_irq_affinity_data;
 #define OVR_MODE_RELAY			(2)
 #define OVR_MODE_RELAY_FORCELY	(3)
 
-#define OVR_VERSION 		"0000"
-#define OVR_MANUFACTURER 	"sec_hmt"
-#define OVR_PRODUCT 		"Gear VR"
-#define OVR_SERIAL 			"R323XXU0API1"
+#define OVR_VERSION			"0000"
+#define OVR_MANUFACTURER	"sec_hmt"
+#define OVR_PRODUCT			"Gear VR"
+#define OVR_SERIAL			"R323XXU0API1"
 
-static char ovr_serial[OVR_HIDRAW_MAX_SERIAL] = {0,};
-static char ovr_serial_len = 0;
 static int ovr_mode = OVR_MODE_NODEVICE;
-
 static u8 wbuf[OVR_HIDRAW_BUFFER_SIZE] = { 0,};
-
 static u8 feature_report_69[69] = { 0x0, };
-static u8 feature_report_64[64] = {						\
+static u8 feature_report_64[64] = {
 	0x0A, 0x00, 0xEA, 0x33, 0x32, 0x30, 0x57, 0x35, \
-	0x30, 0x34, 0x30, 0x48, 0x41, 0x44, 0x36, 0x0 , \
-	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , \
-	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , \
-	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , \
-	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , \
-	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , \
-	0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0 , 0x0};
+	0x30, 0x34, 0x30, 0x48, 0x41, 0x44, 0x36, 0x0, \
+	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, \
+	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, \
+	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, \
+	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, \
+	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, \
+	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
 static u8 feature_report_56[56] = { 0x0, };
 static u8 feature_report_18[18] = { 0x0, };
-static u8 feature_report_15[15] = {						\
-	0xA , 0x0 , 0x0 , 0x33, 0x32, 0x30, 0x57, 0x35, \
+static u8 feature_report_15[15] = {
+	0xA, 0x0, 0x0, 0x33, 0x32, 0x30, 0x57, 0x35, \
 	0x30, 0x34, 0x30, 0x48, 0x41, 0x44, 0x36};
 static u8 feature_report_8[8] = { 0x0, };
-static u8 feature_report_7[7] = {							\
+static u8 feature_report_7[7] = {
 	0x2, 0x0, 0x0, 0x2C, 0x1, 0xE8, 0x3};
 
-static struct kobject *virtual_dir = NULL;
+static struct kobject *virtual_dir;
 extern struct kobject *virtual_device_parent(struct device *dev);
 
 static struct class *ovr_class;
@@ -99,22 +68,17 @@ static int ovr_major;
 static struct cdev ovr_cdev;
 
 #define MONITOR_MAX 32
-static int opens = 0;
+static int opens;
 static unsigned long monitor_info[MONITOR_MAX][4] = {{0,},};
-static unsigned int isr_count = 0;
-static unsigned long last_isr = 0;
-static unsigned int ovr_minor = 0;
+static unsigned int isr_count;
+static unsigned long last_isr;
+static unsigned int ovr_minor;
 static struct workqueue_struct *ovr_wq;
 static void ovr_monitor_work(struct work_struct *work);
 static DECLARE_DELAYED_WORK(ovr_work, ovr_monitor_work);
-static void ovr_rpscpus_work_func(struct work_struct *work);
-static DECLARE_DELAYED_WORK(ovr_rpscpus_work, ovr_rpscpus_work_func);
-static void ovr_irq_affinity_work_func(struct work_struct *work);
-static DECLARE_DELAYED_WORK(ovr_irq_affinity_work, ovr_irq_affinity_work_func);
-extern int irq_select_affinity_usr(unsigned int irq, struct cpumask *mask);
 static int ovr_report_event(struct hid_device *hid, u8 *data, int len);
-static int ovr_connect(struct hid_device *hid, int mode);
-static void ovr_disconnect(struct hid_device *hid);
+int ovr_connect(struct hid_device *hid, int mode);
+void ovr_disconnect(struct hid_device *hid);
 
 static ssize_t ovr_hidraw_read(struct file *file, char __user *buffer, size_t count, loff_t *ppos)
 {
@@ -167,10 +131,10 @@ static ssize_t ovr_hidraw_read(struct file *file, char __user *buffer, size_t co
 			}
 			ret = len;
 
-			if (opens > 0)
-			{
+			if (opens > 0) {
 				int i;
-				for (i=0; i<MONITOR_MAX; i++) {
+
+				for (i = 0; i < MONITOR_MAX; i++) {
 					if (monitor_info[i][0] == (unsigned long)file) {
 						monitor_info[i][1]++;
 						monitor_info[i][2] = jiffies;
@@ -191,8 +155,10 @@ out:
 }
 
 /* The first byte is expected to be a report number.
- * This function is to be called with the minors_lock mutex held */
-static ssize_t ovr_hidraw_send_report(struct file *file, const char __user *buffer, size_t count, unsigned char report_type)
+ * This function is to be called with the minors_lock mutex held
+ */
+static ssize_t ovr_hidraw_send_report(struct file *file, const char __user *buffer,
+										size_t count, unsigned char report_type)
 {
 	unsigned int minor = iminor(file_inode(file));
 	struct hid_device *dev;
@@ -260,9 +226,10 @@ out:
 static ssize_t ovr_hidraw_write(struct file *file, const char __user *buffer, size_t count, loff_t *ppos)
 {
 	ssize_t ret = -EFAULT;
+
 	mutex_lock(&minors_lock);
 
-	if ((ovr_mode == OVR_MODE_RELAY || ovr_mode == OVR_MODE_RELAY_FORCELY) \
+	if ((ovr_mode == OVR_MODE_RELAY || ovr_mode == OVR_MODE_RELAY_FORCELY)
 		&& count >= 24 && !copy_from_user(wbuf, buffer, count)) {
 
 		isr_count++;
@@ -293,25 +260,26 @@ static void ovr_monitor_work(struct work_struct *work)
 		if (dev) {
 			buf = kmalloc(count * sizeof(__u8), GFP_KERNEL);
 			if (buf) {
-				ret = hid_hw_raw_request(dev, report_number, buf, count, report_type, HID_REQ_GET_REPORT);
+				ret = hid_hw_raw_request(dev, report_number, buf,
+										count, report_type, HID_REQ_GET_REPORT);
 				if (ret < 0) {
-					printk("OVR: hid_hw_raw_request error %d\n", ret);
+					printk(KERN_INFO "OVR: hid_hw_raw_request error %d\n", ret);
 				} else {
-					printk("OVR: timestamp(0x%2.2X%2.2X%2.2X%2.2X) sensor(0x%2.2X%2.2X%2.2X%2.2X) pui(0x%2.2X%2.2X%2.2X%2.2X) proxy(%d) mainloop(0x%2.2X) (%2.2X %2.2X %2.2X %2.2X %2.2X %2.2X)\n",
-						buf[7], buf[6], buf[5], buf[4], buf[11], buf[10], buf[9], buf[8], buf[15], buf[14], buf[13], buf[12], buf[16], buf[17], buf[18], buf[19], buf[20], buf[21], buf[22], buf[23]);
+					printk(KERN_INFO "OVR: timestamp(0x%2.2X%2.2X%2.2X%2.2X) sensor(0x%2.2X%2.2X%2.2X%2.2X) pui(0x%2.2X%2.2X%2.2X%2.2X) proxy(%d) mainloop(0x%2.2X) (%2.2X %2.2X %2.2X %2.2X %2.2X %2.2X)\n",
+						buf[7], buf[6], buf[5], buf[4], buf[11], buf[10], buf[9], buf[8], buf[15], buf[14],	buf[13], buf[12], buf[16], buf[17], buf[18], buf[19], buf[20], buf[21], buf[22], buf[23]);
 				}
 				kfree(buf);
 			} else {
-				printk("OVR: no mem for monitor report\n");
+				printk(KERN_INFO "OVR: no mem for monitor report\n");
 			}
 		}
 
-		printk("OVR: isr(%d), diff(isr):%ums\n", isr_count, jiffies_to_msecs(now-last_isr));
+		printk(KERN_INFO "OVR: isr(%d), diff(isr):%ums\n", isr_count, jiffies_to_msecs(now-last_isr));
 		isr_count = 0;
 
-		for (i=0; i<MONITOR_MAX; i++) {
+		for (i = 0; i < MONITOR_MAX; i++) {
 			if (monitor_info[i][0]) {
-				printk("OVR: 0x%x %lu(%lu), diff(read):%u secs\n", (unsigned int)monitor_info[i][0], monitor_info[i][3], monitor_info[i][1], jiffies_to_msecs(now-monitor_info[i][2])/1000);
+				printk(KERN_INFO "OVR: 0x%x %lu(%lu), diff(read):%u secs\n", (unsigned int)monitor_info[i][0], monitor_info[i][3], monitor_info[i][1], jiffies_to_msecs(now-monitor_info[i][2])/1000);
 				monitor_info[i][1] = 0;
 			}
 		}
@@ -326,7 +294,8 @@ static void ovr_monitor_work(struct work_struct *work)
  * of buffer is the report number to request, or 0x0 if the defice does not
  * use numbered reports. The report_type parameter can be HID_FEATURE_REPORT
  * or HID_INPUT_REPORT.  This function is to be called with the minors_lock
- *  mutex held. */
+ *  mutex held.
+ */
 static ssize_t ovr_hidraw_get_report(struct file *file, char __user *buffer, size_t count, unsigned char report_type)
 {
 	unsigned int minor = iminor(file_inode(file));
@@ -338,7 +307,7 @@ static ssize_t ovr_hidraw_get_report(struct file *file, char __user *buffer, siz
 	dev = ovr_hidraw_table[minor]->hid;
 	if (!dev) {
 		ret = -ENODEV;
-		goto out;		
+		goto out;
 	}
 
 	if (!dev->ll_driver->raw_request) {
@@ -415,7 +384,8 @@ static int ovr_hidraw_open(struct inode *inode, struct file *file)
 	struct hidraw_list *list;
 	int err = 0;
 
-	if (!(list = kzalloc(sizeof(struct hidraw_list), GFP_KERNEL))) {
+	list = kzalloc(sizeof(struct hidraw_list), GFP_KERNEL);
+	if (!list) {
 		err = -ENOMEM;
 		goto out;
 	}
@@ -426,7 +396,7 @@ static int ovr_hidraw_open(struct inode *inode, struct file *file)
 		goto out_unlock;
 	}
 
-	printk("OVR: open %d (%d:%s) >>>\n", minor, current->pid, current->comm);
+	printk(KERN_INFO "OVR: open %d (%d:%s) >>>\n", minor, current->pid, current->comm);
 
 	list->hidraw = ovr_hidraw_table[minor];
 	mutex_init(&list->read_mutex);
@@ -443,7 +413,7 @@ static int ovr_hidraw_open(struct inode *inode, struct file *file)
 	if (minor == ovr_minor) {
 		int i;
 
-		for (i=0; i<MONITOR_MAX; i++) {
+		for (i = 0; i < MONITOR_MAX; i++) {
 			if (monitor_info[i][0] == 0) {
 				monitor_info[i][0] = (unsigned long)file;
 				monitor_info[i][1] = 0;
@@ -454,12 +424,11 @@ static int ovr_hidraw_open(struct inode *inode, struct file *file)
 		}
 
 		opens = dev->open;
-		if (opens == 1) {
+		if (opens == 1)
 			queue_delayed_work(ovr_wq, &ovr_work, msecs_to_jiffies(2000));
-		}
 	}
 
-	printk("OVR: open(%d) err %d <<<\n", opens, err);
+	printk(KERN_INFO "OVR: open(%d) err %d <<<\n", opens, err);
 
 out_unlock:
 	mutex_unlock(&minors_lock);
@@ -476,7 +445,7 @@ static int ovr_hidraw_fasync(int fd, struct file *file, int on)
 	return fasync_helper(fd, file, on, &list->fasync);
 }
 
-static int ovr_hidraw_release(struct inode * inode, struct file * file)
+static int ovr_hidraw_release(struct inode *inode, struct file *file)
 {
 	unsigned int minor = iminor(inode);
 	struct hidraw *dev;
@@ -491,7 +460,7 @@ static int ovr_hidraw_release(struct inode * inode, struct file * file)
 		goto unlock;
 	}
 
-	printk("OVR: release %d (%d:%s) >>>\n", minor, current->pid, current->comm);
+	printk(KERN_INFO "OVR: release %d (%d:%s) >>>\n", minor, current->pid, current->comm);
 
 	spin_lock_irqsave(&list_lock, flags);
 	list_del(&list->node);
@@ -501,7 +470,7 @@ static int ovr_hidraw_release(struct inode * inode, struct file * file)
 	--dev->open;
 
 	if (minor == ovr_minor) {
-		for (i=0; i<MONITOR_MAX; i++) {
+		for (i = 0; i < MONITOR_MAX; i++) {
 			if (monitor_info[i][0] == (unsigned long)file) {
 				monitor_info[i][0] = 0;
 				break;
@@ -513,7 +482,7 @@ static int ovr_hidraw_release(struct inode * inode, struct file * file)
 
 	if (!dev->open) {
 		if (!list->hidraw->exist) {
-			printk("OVR: freed ovr_hidraw_table %d\n", minor);
+			printk(KERN_INFO "OVR: freed ovr_hidraw_table %d\n", minor);
 			kfree(list->hidraw);
 			ovr_hidraw_table[minor] = NULL;
 		}
@@ -524,7 +493,7 @@ static int ovr_hidraw_release(struct inode * inode, struct file * file)
 	kfree(list);
 	ret = 0;
 
-	printk("OVR: release(%d) <<<\n", opens);
+	printk(KERN_INFO "OVR: release(%d) <<<\n", opens);
 
 unlock:
 	mutex_unlock(&minors_lock);
@@ -539,11 +508,10 @@ static int ovr_report_event(struct hid_device *hid, u8 *data, int len)
 	int ret = 0;
 	unsigned long flags;
 
-	if (hid) {
+	if (hid)
 		dev = hid->hidovr;
-	} else {
+	else
 		dev = ovr_hidraw_table[ovr_minor];
-	}
 
 	spin_lock_irqsave(&list_lock, flags);
 	list_for_each_entry(list, &dev->list, node) {
@@ -552,7 +520,8 @@ static int ovr_report_event(struct hid_device *hid, u8 *data, int len)
 		if (new_head == list->tail)
 			continue;
 
-		if (!(list->buffer[list->head].value = kmemdup(data, len, GFP_ATOMIC))) {
+		list->buffer[list->head].value = kmemdup(data, len, GFP_ATOMIC);
+		if (!(list->buffer[list->head].value)) {
 			ret = -ENOMEM;
 			spin_unlock_irqrestore(&list_lock, flags);
 			break;
@@ -567,275 +536,6 @@ static int ovr_report_event(struct hid_device *hid, u8 *data, int len)
 	wake_up_interruptible(&dev->wait);
 
 	return ret;
-}
-
-static ssize_t get_rps_cpus(char *name, int name_size, char *buf)
-{
-	size_t len = 0;
-
-#ifdef CONFIG_RPS
-	struct net_device *dev;
-	struct netdev_rx_queue *queue = NULL;
-	struct rps_map *map;
-	cpumask_var_t mask;
-	int i;
-
-	if (name_size <= 0) {
-		return len;
-	}
-
-	dev = first_net_device(&init_net);
-	while (dev) {
-		if (!memcmp(name, dev->name, name_size)) {
-			queue = dev->_rx;
-			if (!queue) {
-				return -1;
-			}
-
-			if (!zalloc_cpumask_var(&mask, GFP_KERNEL))
-				return -ENOMEM;
-
-			rcu_read_lock();
-			map = rcu_dereference(queue->rps_map);
-			if (map)
-				for (i = 0; i < map->len; i++)
-					cpumask_set_cpu(map->cpus[i], mask);
-
-			len += cpumap_print_to_pagebuf(false, buf + len, mask);
-			if (PAGE_SIZE - len < 3) {
-				rcu_read_unlock();
-				free_cpumask_var(mask);
-				return -EINVAL;
-			}
-			rcu_read_unlock();
-			free_cpumask_var(mask);
-
-			break;
-		}
-
-		dev = next_net_device(dev);
-	}
-#endif
-
-	return len;
-}
-
-static int set_rps_cpus(char *name, int name_size, char *buf, size_t len)
-{
-	int ret = -1;
-
-#ifdef CONFIG_RPS
-	struct net_device *dev;
-	struct netdev_rx_queue *queue = NULL;
-	struct rps_map *old_map, *map;
-	cpumask_var_t mask;
-	int err, cpu, i;
-	static DEFINE_SPINLOCK(rps_map_lock);
-
-	if (name_size <= 0 || len < 1 || len > 4) {
-		return ret;
-	}
-
-	dev = first_net_device(&init_net);
-	while (dev) {
-		if (!memcmp(name, dev->name, name_size)) {
-			queue = dev->_rx;
-			if (!queue) {
-				return -1;
-			}
-
-			if (len == 0 || (len == 1 && buf[0] == '0') || (len == 2 && buf[0] == '0' && buf[1] == '0')) {
-				map = rcu_dereference_protected(queue->rps_map, 1);
-				if (map) {
-					RCU_INIT_POINTER(queue->rps_map, NULL);
-					kfree_rcu(map, rcu);
-				}
-
-				return 0;
-			}
-
-			if (!alloc_cpumask_var(&mask, GFP_KERNEL)) {
-				return -ENOMEM;
-			}
-
-			err = bitmap_parse(buf, len, cpumask_bits(mask), nr_cpumask_bits);
-			if (err) {
-				free_cpumask_var(mask);
-				return err;
-			}
-
-			map = kzalloc(max_t(unsigned int,
-				RPS_MAP_SIZE(cpumask_weight(mask)), L1_CACHE_BYTES),
-				GFP_KERNEL);
-			if (!map) {
-				free_cpumask_var(mask);
-				return -ENOMEM;
-			}
-
-			i = 0;
-			for_each_cpu(cpu, mask)
-				map->cpus[i++] = cpu;
-
-			if (i)
-				map->len = i;
-			else {
-				kfree(map);
-				map = NULL;
-				free_cpumask_var(mask);
-				return -1;
-			}
-
-			spin_lock(&rps_map_lock);
-			old_map = rcu_dereference_protected(queue->rps_map,
-				lockdep_is_held(&rps_map_lock));
-			rcu_assign_pointer(queue->rps_map, map);
-			spin_unlock(&rps_map_lock);
-
-			if (map)
-				static_key_slow_inc(&rps_needed);
-			if (old_map) {
-				kfree_rcu(old_map, rcu);
-				static_key_slow_dec(&rps_needed);
-			}
-			free_cpumask_var(mask);
-			ret = map->len;
-
-			break;
-		}
-
-		dev = next_net_device(dev);
-	}
-#endif
-
-	return ret;
-}
-
-static int write_irq_affinity(unsigned int irq, const char __user *buffer, size_t count)
-{
-	int err = -1;
-
-#ifdef CONFIG_SMP
-	cpumask_var_t new_value;
-
-	if (count < 1 || count > 4) {
-		return err;
-	}
-
-	if (!irq_can_set_affinity(irq))
-		return -EIO;
-
-	if (!alloc_cpumask_var(&new_value, GFP_KERNEL))
-		return -ENOMEM;
-
-	err = cpumask_parse_user(buffer, count, new_value);
-	if (err)
-		goto free_cpumask;
-
-	if (!cpumask_intersects(new_value, cpu_online_mask)) {
-		err = irq_select_affinity_usr(irq, new_value) ? -EINVAL : count;
-	} else {
-		irq_set_affinity(irq, new_value);
-		err = count;
-	}
-
-free_cpumask:
-	free_cpumask_var(new_value);
-#endif
-
-	return err;
-}
-
-void init_ovr_data(void) {
-
-	ovr_rpscpu_data.netdev_name[0] = 'w';
-	ovr_rpscpu_data.netdev_name[1] = 'l';
-	ovr_rpscpu_data.netdev_name[2] = 'a';
-	ovr_rpscpu_data.netdev_name[3] = 'n';
-	ovr_rpscpu_data.netdev_name[4] = '0';
-	ovr_rpscpu_data.netdev_name_len = 5;
-	ovr_rpscpu_data.rpscpus_len = 0;
-	ovr_rpscpu_data.default_rpscpus_len = 0;
-
-	ovr_irq_affinity_data.irq_num = 0;
-	ovr_irq_affinity_data.irq_affinity_len = 0;
-	ovr_irq_affinity_data.default_irq_affinity_len = 0;
-
-#if defined(CONFIG_SOC_EXYNOS7420) || defined(CONFIG_SOC_EXYNOS8890)
-	ovr_rpscpu_data.rpscpus[0] = 'f';
-	ovr_rpscpu_data.rpscpus[1] = '0';
-	ovr_rpscpu_data.rpscpus_len = 2;
-#elif defined(CONFIG_ARCH_APQ8084)
-	ovr_rpscpu_data.rpscpus[0] = 'c';
-	ovr_rpscpu_data.rpscpus_len = 1;
-
-	ovr_irq_affinity_data.irq_num = 276;
-	ovr_irq_affinity_data.irq_affinity[0] = '2';
-	ovr_irq_affinity_data.irq_affinity_len = 1;
-	ovr_irq_affinity_data.default_irq_affinity[0] = 'f';
-	ovr_irq_affinity_data.default_irq_affinity_len = 1;
-#elif defined(CONFIG_ARCH_MSM8996)
-	ovr_rpscpu_data.rpscpus[0] = 'e';
-	ovr_rpscpu_data.rpscpus_len = 1;
-#endif
-}
-
-void set_rpscpus(int bSet) {
-
-	if (bSet) {
-		if (ovr_rpscpu_data.rpscpus_len > 0) {
-
-			if (ovr_rpscpu_data.rpscpus_len < 16) {
-				ovr_rpscpu_data.netdev_name[ovr_rpscpu_data.netdev_name_len] = 0;
-				printk("OVR: rpscpus i/f : %s\n", ovr_rpscpu_data.netdev_name); 
-			}
-
-			ovr_rpscpu_data.default_rpscpus_len = 
-				get_rps_cpus(ovr_rpscpu_data.netdev_name, 
-					ovr_rpscpu_data.netdev_name_len, 
-					ovr_rpscpu_data.default_rpscpus);
-			set_rps_cpus(ovr_rpscpu_data.netdev_name, 
-				ovr_rpscpu_data.netdev_name_len, 
-				ovr_rpscpu_data.rpscpus, 
-				ovr_rpscpu_data.rpscpus_len);
-		}
-	} else {
-		if (ovr_rpscpu_data.default_rpscpus_len > 0) {
-			set_rps_cpus(ovr_rpscpu_data.netdev_name, 
-				ovr_rpscpu_data.netdev_name_len, 
-				ovr_rpscpu_data.default_rpscpus, 
-				ovr_rpscpu_data.default_rpscpus_len);
-		}
-	}
-}
-
-void set_irq_affinity(int bSet) {
-
-	if (bSet) {
-		if (ovr_irq_affinity_data.irq_affinity_len > 0) {
-
-			printk("OVR: affinity irq : %d\n", (int)ovr_irq_affinity_data.irq_num);
-
-			write_irq_affinity(ovr_irq_affinity_data.irq_num, 
-				ovr_irq_affinity_data.irq_affinity, 
-				ovr_irq_affinity_data.irq_affinity_len);
-		}
-	} else {
-		if (ovr_irq_affinity_data.default_irq_affinity_len > 0) {
-			write_irq_affinity(ovr_irq_affinity_data.irq_num, 
-				ovr_irq_affinity_data.default_irq_affinity, 
-				ovr_irq_affinity_data.default_irq_affinity_len);
-		}
-	}
-}
-
-static void ovr_rpscpus_work_func(struct work_struct *work)
-{
-	set_rpscpus(1);
-}
-
-static void ovr_irq_affinity_work_func(struct work_struct *work)
-{
-	set_irq_affinity(1);
 }
 
 static ssize_t bcdDevice_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -879,19 +579,18 @@ static ssize_t relay_on_store(struct device *dev, struct device_attribute *attr,
 	if (kstrtoul(buf, 0, &val))
 		return -EINVAL;
 
-	switch(val) {
-		case OVR_MODE_RELAY:
-			ovr_connect(NULL, OVR_MODE_RELAY);
-			break;
-		case OVR_MODE_RELAY_FORCELY:
-			ovr_connect(NULL, OVR_MODE_RELAY_FORCELY);
-			break;
-		case OVR_MODE_NODEVICE:
-			ovr_disconnect(NULL);
-			break;
-		default:
-			return -EINVAL;
-			break;
+	switch (val) {
+	case OVR_MODE_RELAY:
+		ovr_connect(NULL, OVR_MODE_RELAY);
+		break;
+	case OVR_MODE_RELAY_FORCELY:
+		ovr_connect(NULL, OVR_MODE_RELAY_FORCELY);
+		break;
+	case OVR_MODE_NODEVICE:
+		ovr_disconnect(NULL);
+		break;
+	default:
+		return -EINVAL;
 	}
 
 	return count;
@@ -908,11 +607,10 @@ static void make_ovr_node(void)
 	int ret, i;
 
 	if (virtual_dir) {
-		for (i=0; ovr_dev_attrs[i]!= NULL; i++) {
+		for (i = 0; ovr_dev_attrs[i] != NULL; i++) {
 			ret = sysfs_create_file(virtual_dir, &ovr_dev_attrs[i]->attr);
-			if (ret) {
-				printk("OVR: sysfs_create_file error %d(%d) \n", ret, i);
-			}
+			if (ret)
+				printk(KERN_INFO "OVR: sysfs_create_file error %d(%d) \n", ret, i);
 		}
 	}
 }
@@ -922,25 +620,22 @@ static void remove_ovr_node(void)
 	int i;
 
 	if (virtual_dir) {
-		for (i=0; ovr_dev_attrs[i]!= NULL; i++) {			
+		for (i = 0; ovr_dev_attrs[i] != NULL; i++)
 			sysfs_remove_file(virtual_dir, &ovr_dev_attrs[i]->attr);
-		}
 	}
 }
 
-static int ovr_connect(struct hid_device *hid, int mode)
+int ovr_connect(struct hid_device *hid, int mode)
 {
 	int minor, result, i;
 	struct hidraw *dev;
 
 	/* we accept any HID device, no matter the applications */
 
-	if (ovr_mode == OVR_MODE_RELAY && hid) {
+	if (ovr_mode == OVR_MODE_RELAY && hid)
 		ovr_disconnect(NULL);
-	}
-	else if (ovr_mode) {
+	else if (ovr_mode)
 		return -EINVAL;
-	}
 
 	dev = kzalloc(sizeof(struct hidraw), GFP_KERNEL);
 	if (!dev)
@@ -950,10 +645,9 @@ static int ovr_connect(struct hid_device *hid, int mode)
 
 	mutex_lock(&minors_lock);
 
-	for (minor = 0; minor < OVR_HIDRAW_MAX_DEVICES; minor++)
-	{
+	for (minor = 0; minor < OVR_HIDRAW_MAX_DEVICES; minor++) {
 		if (ovr_hidraw_table[minor]) {
-			printk("OVR: old ovr_hidraw_table %d\n", minor);
+			printk(KERN_INFO "OVR: old ovr_hidraw_table %d\n", minor);
 			continue;
 		}
 
@@ -962,7 +656,7 @@ static int ovr_connect(struct hid_device *hid, int mode)
 		break;
 	}
 
-	printk("OVR: connect %d %d (%d:%s) >>>\n", minor, result, current->pid, current->comm);
+	printk(KERN_INFO "OVR: connect %d %d (%d:%s) >>>\n", minor, result, current->pid, current->comm);
 
 	if (result) {
 		mutex_unlock(&minors_lock);
@@ -989,66 +683,59 @@ static int ovr_connect(struct hid_device *hid, int mode)
 	if (!hid) {
 		make_ovr_node();
 
-		if (mode == OVR_MODE_RELAY_FORCELY) {
+		if (mode == OVR_MODE_RELAY_FORCELY)
 			ovr_mode = OVR_MODE_RELAY_FORCELY;
-		} else {
+		else
 			ovr_mode = OVR_MODE_RELAY;
-		}
 	} else {
 		ovr_mode = OVR_MODE_USB;
 	}
 
-	for (i=0; i<MONITOR_MAX; i++)
+	for (i = 0; i < MONITOR_MAX; i++)
 		monitor_info[i][0] = 0;
 
 	opens = 0;
 	ovr_minor = minor;
 
-	printk("OVR: connect <<<\n");
+	printk(KERN_INFO "OVR: connect <<<\n");
 
 	mutex_unlock(&minors_lock);
 	init_waitqueue_head(&dev->wait);
 	INIT_LIST_HEAD(&dev->list);
 
-	if (hid) {
+	if (hid)
 		dev->hid = hid;
-	}
+
 	dev->minor = minor;
 
 	dev->exist = 1;
-	if (hid) {
+	if (hid)
 		hid->hidovr = dev;
-	}
-
-	init_ovr_data();
-	set_rpscpus(1);
-	set_irq_affinity(1);
 
 out:
 	return result;
 }
+EXPORT_SYMBOL_GPL(ovr_connect);
 
-static void ovr_disconnect(struct hid_device *hid)
+void ovr_disconnect(struct hid_device *hid)
 {
 	struct hidraw *hidraw;
 
-	if (ovr_mode == OVR_MODE_NODEVICE || (ovr_mode == OVR_MODE_USB && !hid)) {
+	if (ovr_mode == OVR_MODE_NODEVICE || (ovr_mode == OVR_MODE_USB && !hid))
 		return;
-	}
 
-	if (hid) {
+	if (hid)
 		hidraw = hid->hidovr;
-	} else {
+	else
 		hidraw = ovr_hidraw_table[ovr_minor];
-	}
 
 	mutex_lock(&minors_lock);
 
-	printk("OVR: disconnect %d %d (%d:%s) >>>\n", hidraw->minor, hidraw->open, current->pid, current->comm);
+	printk(KERN_INFO "OVR: disconnect %d %d (%d:%s) >>>\n",
+					hidraw->minor, hidraw->open, current->pid, current->comm);
 
-	if (!hid) {
+	if (!hid)
 		remove_ovr_node();
-	}
 
 	if (hidraw->minor == ovr_minor) {
 		opens = 0;
@@ -1062,7 +749,7 @@ static void ovr_disconnect(struct hid_device *hid)
 	if (hidraw->open) {
 		wake_up_interruptible(&hidraw->wait);
 	} else {
-		printk("OVR: freed ovr_hidraw_table %d\n", hidraw->minor);
+		printk(KERN_INFO "OVR: freed ovr_hidraw_table %d\n", hidraw->minor);
 		ovr_hidraw_table[hidraw->minor] = NULL;
 		kfree(hidraw);
 	}
@@ -1071,10 +758,8 @@ static void ovr_disconnect(struct hid_device *hid)
 	ovr_mode = OVR_MODE_NODEVICE;
 
 	mutex_unlock(&minors_lock);
-
-	set_rpscpus(0);
-	set_irq_affinity(0);
 }
+EXPORT_SYMBOL_GPL(ovr_disconnect);
 
 static long ovr_hidraw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -1082,7 +767,7 @@ static long ovr_hidraw_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	unsigned int minor = iminor(inode);
 	long ret = 0;
 	struct hidraw *dev;
-	void __user *user_arg = (void __user*) arg;
+	void __user *user_arg = (void __user *)arg;
 
 	mutex_lock(&minors_lock);
 	dev = ovr_hidraw_table[minor];
@@ -1092,196 +777,159 @@ static long ovr_hidraw_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	}
 
 	switch (cmd) {
-		case HIDIOCGRDESCSIZE:
+	case HIDIOCGRDESCSIZE:
+		if (dev->hid) {
+			if (put_user(dev->hid->rsize, (int __user *)arg))
+				ret = -EFAULT;
+		} else {
+			ret = -EFAULT;
+		}
+		break;
+
+	case HIDIOCGRDESC:
+		{
 			if (dev->hid) {
-				if (put_user(dev->hid->rsize, (int __user *)arg))
+				__u32 len;
+
+				if (get_user(len, (int __user *)arg))
+					ret = -EFAULT;
+				else if (len > HID_MAX_DESCRIPTOR_SIZE - 1)
+					ret = -EINVAL;
+				else if (copy_to_user(user_arg + offsetof(
+					struct hidraw_report_descriptor,
+					value[0]),
+					dev->hid->rdesc,
+					min(dev->hid->rsize, len)))
 					ret = -EFAULT;
 			} else {
 				ret = -EFAULT;
 			}
 			break;
+		}
+	case HIDIOCGRAWINFO:
+		{
+			struct hidraw_devinfo dinfo;
 
-		case HIDIOCGRDESC:
-			{
-				if (dev->hid) {
-					__u32 len;
+			if (dev->hid) {
+				dinfo.bustype = dev->hid->bus;
+				dinfo.vendor = dev->hid->vendor;
+				dinfo.product = dev->hid->product;
+			} else {
+				dinfo.bustype = 0;
+				dinfo.vendor = USB_VENDOR_ID_SAMSUNG_ELECTRONICS;
+				dinfo.product = USB_DEVICE_ID_SAMSUNG_GEARVR_1;
+			}
+			if (copy_to_user(user_arg, &dinfo, sizeof(dinfo)))
+				ret = -EFAULT;
+			break;
+		}
+	default:
+		{
+			struct hid_device *hid = dev->hid;
 
-					if (get_user(len, (int __user *)arg))
-						ret = -EFAULT;
-					else if (len > HID_MAX_DESCRIPTOR_SIZE - 1)
-						ret = -EINVAL;
-					else if (copy_to_user(user_arg + offsetof(
-						struct hidraw_report_descriptor,
-						value[0]),
-						dev->hid->rdesc,
-						min(dev->hid->rsize, len)))
-						ret = -EFAULT;
+			if (_IOC_TYPE(cmd) != 'H') {
+				ret = -EINVAL;
+				break;
+			}
+
+			if (_IOC_NR(cmd) == _IOC_NR(HIDIOCSFEATURE(0))) {
+				int len = _IOC_SIZE(cmd);
+
+				if (hid) {
+					ret = ovr_hidraw_send_report(file, user_arg, len, HID_FEATURE_REPORT);
+				} else {
+					switch (len) {
+					case 2:
+						ret = len;
+						feature_report_7[3] = 0x2C;
+						break;
+					case 7:
+						ret = copy_from_user((void *)feature_report_7, user_arg, len)
+											? -EFAULT : len;
+						break;
+					default:
+						ret = len;
+						break;
+					}
+				}
+				break;
+			}
+			if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGFEATURE(0))) {
+				int len = _IOC_SIZE(cmd);
+				if (hid) {
+					ret = ovr_hidraw_get_report(file, user_arg, len, HID_FEATURE_REPORT);
+				} else {
+					__u8 *buf;
+
+					switch (len) {
+					case 7:
+						buf = feature_report_7;
+						break;
+					case 8:
+						buf = feature_report_8;
+						break;
+					case 15:
+						buf = feature_report_15;
+						break;
+					case 18:
+						buf = feature_report_18;
+						break;
+					case 56:
+						buf = feature_report_56;
+						break;
+					case 64:
+						buf = feature_report_64;
+						break;
+					case 69:
+						buf = feature_report_69;
+						break;
+					default:
+						if (len <= 69) {
+							buf = feature_report_69;
+						} else {
+							ret = -EINVAL;
+							goto out;
+						}
+						break;
+					}
+
+					ret = copy_to_user(user_arg, (void *)buf, len) ? -EFAULT : len;
+				}
+				break;
+			}
+
+			/* Begin Read-only ioctls. */
+			if (_IOC_DIR(cmd) != _IOC_READ) {
+				ret = -EINVAL;
+				break;
+			}
+
+			if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGRAWNAME(0))) {
+				if (hid) {
+					int len = strlen(hid->name) + 1;
+
+					if (len > _IOC_SIZE(cmd))
+						len = _IOC_SIZE(cmd);
+					ret = copy_to_user(user_arg, hid->name, len) ? -EFAULT : len;
 				} else {
 					ret = -EFAULT;
 				}
 				break;
 			}
-		case HIDIOCGRAWINFO:
-			{
-				struct hidraw_devinfo dinfo;
 
-				if (dev->hid) {
-					dinfo.bustype = dev->hid->bus;
-					dinfo.vendor = dev->hid->vendor;
-					dinfo.product = dev->hid->product;
+			if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGRAWPHYS(0))) {
+				if (hid) {
+					int len = strlen(hid->phys) + 1;
+
+					if (len > _IOC_SIZE(cmd))
+						len = _IOC_SIZE(cmd);
+					ret = copy_to_user(user_arg, hid->phys, len) ? -EFAULT : len;
 				} else {
-					dinfo.bustype = 0;
-					dinfo.vendor = USB_VENDOR_ID_SAMSUNG_ELECTRONICS;
-					dinfo.product = USB_DEVICE_ID_SAMSUNG_GEARVR_1;
-				}
-				if (copy_to_user(user_arg, &dinfo, sizeof(dinfo)))
 					ret = -EFAULT;
+				}
 				break;
 			}
-		default:
-			{
-				struct hid_device *hid = dev->hid;
-				if (_IOC_TYPE(cmd) != 'H') {
-
-					if (_IOC_TYPE(cmd) == 'S') {
-						if (cmd == OVRIOCGSERIALSIZE) {
-							if (ovr_serial_len <= 0) 
-								ret = 0;
-							else if (put_user(ovr_serial_len, (int __user *)arg))
-								ret = -EFAULT;
-							break;
-						} else if (_IOC_NR(cmd) == _IOC_NR(OVRIOCGSERIAL(0))) {
-							__u32 len;
-							
-							if (ovr_serial_len <= 0)
-								ret = -EFAULT;								
-							else if (get_user(len, (int __user *)arg))
-								ret = -EFAULT;
-							else if (len != ovr_serial_len)
-								ret = -EINVAL;
-							else if (copy_to_user(user_arg, ovr_serial, ovr_serial_len))
-								ret = -EFAULT;
-							break;
-						} else if (cmd == OVRIOCSRPSCPUS) {
-							ret = copy_from_user(&ovr_rpscpu_data, user_arg, sizeof(struct rpscpus_data));
-							if (!ret && 
-								ovr_rpscpu_data.netdev_name_len > 0 && ovr_rpscpu_data.netdev_name_len <= 16 &&
-								ovr_rpscpu_data.rpscpus_len > 0 && ovr_rpscpu_data.rpscpus_len <= 4) {
-								queue_delayed_work(ovr_wq, &ovr_rpscpus_work, 0);
-							}
-							break;
-						} else if (cmd == OVRIOCSIRQAFFINITY) {
-							ret = copy_from_user(&ovr_irq_affinity_data, user_arg, sizeof(struct irq_affinity_data));
-							if (!ret && ovr_irq_affinity_data.irq_num > 0 && 
-								ovr_irq_affinity_data.irq_affinity_len > 0 && 
-								ovr_irq_affinity_data.irq_affinity_len <= 4 &&
-								ovr_irq_affinity_data.default_irq_affinity_len > 0 && 
-								ovr_irq_affinity_data.default_irq_affinity_len <= 4) {
-								queue_delayed_work(ovr_wq, &ovr_irq_affinity_work, 0);
-							}
-							break;
-						}
-					}
-
-					ret = -EINVAL;
-					break;
-				}
-
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCSFEATURE(0))) {
-					int len = _IOC_SIZE(cmd);
-					if (hid) {
-						ret = ovr_hidraw_send_report(file, user_arg, len, HID_FEATURE_REPORT);
-					} else {
-						switch (len) {
-							case 2:
-								ret = len;
-								feature_report_7[3] = 0x2C;
-								break;
-							case 7:
-								ret = copy_from_user((void *)feature_report_7, user_arg, len) ? -EFAULT : len;
-								break;
-							default:
-								ret = len;
-								break;
-						}
-					}
-					break;
-				}
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGFEATURE(0))) {
-					int len = _IOC_SIZE(cmd);
-					if (hid) {
-						ret = ovr_hidraw_get_report(file, user_arg, len, HID_FEATURE_REPORT);
-					} else {
-						__u8 *buf;
-						switch (len) {
-							case 7:
-								buf = feature_report_7;
-								break;
-							case 8:
-								buf = feature_report_8;
-								break;
-							case 15:
-								buf = feature_report_15;							
-								break;
-							case 18:
-								buf = feature_report_18;
-								break;
-							case 56:
-								buf = feature_report_56;
-								break;
-							case 64:
-								buf = feature_report_64;
-								break;
-							case 69:
-								buf = feature_report_69;
-								break;
-							default:
-								if (len <= 69) {
-									buf = feature_report_69;
-								} else {
-									ret = -EINVAL;
-									goto out;
-								}
-								break;
-						}
-
-						ret = copy_to_user(user_arg, (void *)buf, len) ? -EFAULT : len;						
-					}
-					break;
-				}
-
-				/* Begin Read-only ioctls. */
-				if (_IOC_DIR(cmd) != _IOC_READ) {
-					ret = -EINVAL;
-					break;
-				}
-
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGRAWNAME(0))) {
-					if (hid) {
-						int len = strlen(hid->name) + 1;
-						if (len > _IOC_SIZE(cmd))
-							len = _IOC_SIZE(cmd);
-						ret = copy_to_user(user_arg, hid->name, len) ?
-							-EFAULT : len;
-					} else {
-						ret = -EFAULT;
-					}
-					break;
-				}
-
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGRAWPHYS(0))) {
-					if (hid) {
-						int len = strlen(hid->phys) + 1;
-						if (len > _IOC_SIZE(cmd))
-							len = _IOC_SIZE(cmd);
-						ret = copy_to_user(user_arg, hid->phys, len) ?
-							-EFAULT : len;
-					} else {
-						ret = -EFAULT;
-					}
-					break;
-				}
-			}
+		}
 
 		ret = -ENOTTY;
 	}
@@ -1328,19 +976,7 @@ static int ovr_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return 0;
 	}
 
-	if (intf) {
-		struct usb_device *udev = interface_to_usbdev(intf);
-		if (udev) {
-			ovr_serial_len = strnlen(udev->serial, OVR_HIDRAW_MAX_SERIAL);
-			if (ovr_serial_len > 0) {
-				strncpy(ovr_serial, udev->serial, ovr_serial_len);
-				printk("OVR: %s(%d)\n", udev->serial, ovr_serial_len);
-			}
-		}
-	}
-
 	retval = ovr_connect(hdev, OVR_MODE_USB);
-
 	if (retval) {
 		hid_err(hdev, "ovr - Couldn't connect\n");
 		goto exit_stop;
@@ -1373,7 +1009,7 @@ static void ovr_remove(struct hid_device *hdev)
 {
 	struct usb_interface *intf = to_usb_interface(hdev->dev.parent);
 	if (intf->cur_altsetting->desc.bInterfaceProtocol
-			!= USB_TRACKER_INTERFACE_PROTOCOL) {
+			 != USB_TRACKER_INTERFACE_PROTOCOL) {
 		hid_hw_stop(hdev);
 		return;
 	}
@@ -1387,13 +1023,13 @@ static void ovr_remove(struct hid_device *hdev)
 	hid_hw_stop(hdev);
 }
 
-static int ovr_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
+int ovr_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
 {
 	int retval = 0;
 
 	struct usb_interface *intf = to_usb_interface(hdev->dev.parent);
 	if (intf->cur_altsetting->desc.bInterfaceProtocol
-			!= USB_TRACKER_INTERFACE_PROTOCOL) {
+			 != USB_TRACKER_INTERFACE_PROTOCOL) {
 		return 0;
 	}
 
@@ -1403,11 +1039,12 @@ static int ovr_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	if (hdev->hidovr) {
 		retval = ovr_report_event(hdev, data, size);
 		if (retval < 0)
-			printk("OVR: raw event err %d\n", retval);
+			printk(KERN_INFO "OVR: raw event err %d\n", retval);
 	}
 
 	return retval;
 }
+EXPORT_SYMBOL_GPL(ovr_raw_event);
 
 static const struct hid_device_id ovr_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_OVR, USB_DEVICE_ID_OVR_TRACKER) },
@@ -1415,10 +1052,6 @@ static const struct hid_device_id ovr_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_OVR, USB_DEVICE_ID_OVR_LATENCY_TESTER) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_GEARVR_1) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_GEARVR_2) },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_GEARVR_3) },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_GEARVR_4) },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_GEARVR_5) },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_GEARVR_6) },
 	{ }
 };
 
@@ -1438,19 +1071,18 @@ static int __init ovr_init(void)
 	dev_t dev_id;
 
 	ovr_class = class_create(THIS_MODULE, "ovr");
-	if (IS_ERR(ovr_class)) {
+	if (IS_ERR(ovr_class))
 		return PTR_ERR(ovr_class);
-	}
 
 	virtual_dir = virtual_device_parent(NULL);
 	if (!virtual_dir) {
-		pr_warn("ovr_init - failed virtual_device_parent\n");
+		pr_warn("%s - failed virtual_device_parent\n", __func__);
 		goto out_class;
 	}
 
 	retval = sysfs_create_file(virtual_dir, &ovr_relay_attrs[0]->attr);
 	if (retval) {
-		pr_warn("ovr_init - failed sysfs_create_file\n");
+		pr_warn("%s - failed sysfs_create_file\n", __func__);
 		kobject_put(virtual_dir);
 		virtual_dir = NULL;
 		goto out_class;
@@ -1458,14 +1090,14 @@ static int __init ovr_init(void)
 
 	retval = hid_register_driver(&ovr_driver);
 	if (retval < 0) {
-		pr_warn("ovr_init - Can't register drive.\n");
+		pr_warn("%s - Can't register drive.\n", __func__);
 		goto out_class;
 	}
 
 	retval = alloc_chrdev_region(&dev_id, OVR_FIRST_MINOR,
 			OVR_HIDRAW_MAX_DEVICES, "ovr");
 	if (retval < 0) {
-		pr_warn("ovr_init - Can't allocate chrdev region.\n");
+		pr_warn("%s - Can't allocate chrdev region.\n", __func__);
 		goto out_register;
 	}
 

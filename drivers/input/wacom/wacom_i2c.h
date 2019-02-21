@@ -5,7 +5,7 @@
 extern struct class *sec_class;
 
 #ifdef CONFIG_BATTERY_SAMSUNG
-extern int lpcharge;
+extern unsigned int lpcharge;
 #endif
 
 struct wacom_g5_platform_data {
@@ -17,6 +17,7 @@ struct wacom_g5_platform_data {
 	int x_invert;
 	int y_invert;
 	int xy_switch;
+	bool use_dt_coord;
 	u32 origin[2];
 	int max_x;
 	int max_y;

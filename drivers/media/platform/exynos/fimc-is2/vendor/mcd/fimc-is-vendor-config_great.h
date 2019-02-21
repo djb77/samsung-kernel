@@ -79,6 +79,10 @@
 //#define CAMERA_HW_BIG_DATA_FILE_IO
 #endif
 
+#if ANDROID_VERSION >= 90000 /* Over P */
+#define USE_FACE_UNLOCK_AE_AWB_INIT /* for Face Unlock */
+#endif
+
 #ifdef CONFIG_OIS_USE_RUMBA_S6
 //#define USE_OIS_SLEEP_MODE
 #endif

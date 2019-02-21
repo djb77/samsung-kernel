@@ -4,14 +4,14 @@
  * Flow rings are transmit traffic (=propagating towards antenna) related entities
  *
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -19,7 +19,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -27,9 +27,8 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_flowring.c 760460 2018-05-02 05:59:45Z $
+ * $Id: dhd_flowring.c 765580 2018-06-04 17:19:56Z $
  */
-
 
 #include <typedefs.h>
 #include <bcmutils.h>
@@ -94,6 +93,9 @@ dhd_flow_ring_node(dhd_pub_t *dhdp, uint16 flowid)
 
 	ASSERT(dhdp != (dhd_pub_t*)NULL);
 	ASSERT(flowid < dhdp->num_flow_rings);
+	if (flowid >= dhdp->num_flow_rings) {
+		return NULL;
+	}
 
 	flow_ring_node = &(((flow_ring_node_t*)(dhdp->flow_ring_table))[flowid]);
 
@@ -105,10 +107,13 @@ dhd_flow_ring_node(dhd_pub_t *dhdp, uint16 flowid)
 flow_queue_t *
 dhd_flow_queue(dhd_pub_t *dhdp, uint16 flowid)
 {
-	flow_ring_node_t * flow_ring_node;
+	flow_ring_node_t * flow_ring_node = NULL;
 
 	flow_ring_node = dhd_flow_ring_node(dhdp, flowid);
-	return &flow_ring_node->queue;
+	if (flow_ring_node)
+		return &flow_ring_node->queue;
+	else
+		return NULL;
 }
 
 /* Flow ring's queue management functions */
@@ -242,7 +247,7 @@ dhd_flow_ring_config_thresholds(dhd_pub_t *dhdp, uint16 flowid,
                      int queue_budget, int cumm_threshold, void *cumm_ctr,
                      int l2cumm_threshold, void *l2cumm_ctr)
 {
-	flow_queue_t * queue;
+	flow_queue_t * queue = NULL;
 
 	ASSERT(dhdp != (dhd_pub_t*)NULL);
 	ASSERT(queue_budget > 1);
@@ -252,16 +257,17 @@ dhd_flow_ring_config_thresholds(dhd_pub_t *dhdp, uint16 flowid,
 	ASSERT(l2cumm_ctr != (void*)NULL);
 
 	queue = dhd_flow_queue(dhdp, flowid);
+	if (queue) {
+		DHD_FLOW_QUEUE_SET_MAX(queue, queue_budget); /* Max queue length */
 
-	DHD_FLOW_QUEUE_SET_MAX(queue, queue_budget); /* Max queue length */
+		/* Set the queue's parent threshold and cummulative counter */
+		DHD_FLOW_QUEUE_SET_THRESHOLD(queue, cumm_threshold);
+		DHD_FLOW_QUEUE_SET_CLEN(queue, cumm_ctr);
 
-	/* Set the queue's parent threshold and cummulative counter */
-	DHD_FLOW_QUEUE_SET_THRESHOLD(queue, cumm_threshold);
-	DHD_FLOW_QUEUE_SET_CLEN(queue, cumm_ctr);
-
-	/* Set the queue's grandparent threshold and cummulative counter */
-	DHD_FLOW_QUEUE_SET_L2THRESHOLD(queue, l2cumm_threshold);
-	DHD_FLOW_QUEUE_SET_L2CLEN(queue, l2cumm_ctr);
+		/* Set the queue's grandparent threshold and cummulative counter */
+		DHD_FLOW_QUEUE_SET_L2THRESHOLD(queue, l2cumm_threshold);
+		DHD_FLOW_QUEUE_SET_L2CLEN(queue, l2cumm_ctr);
+	}
 }
 
 /** Initializes data structures of multiple flow rings */
@@ -349,7 +355,7 @@ dhd_flow_rings_init(dhd_pub_t *dhdp, uint32 num_flow_rings)
 	bcopy(prio2ac, dhdp->flow_prio_map, sizeof(uint8) * NUMPRIO);
 #ifdef DHD_LOSSLESS_ROAMING
 	dhdp->dequeue_prec_map = ALLPRIO;
-#endif
+#endif // endif
 	/* Now populate into dhd pub */
 	DHD_FLOWID_LOCK(lock, flags);
 	dhdp->num_flow_rings = num_flow_rings;
@@ -503,6 +509,10 @@ dhd_flowid_find(dhd_pub_t *dhdp, uint8 ifindex, uint8 prio, char *sa, char *da)
 	if_flow_lkup_t *if_flow_lkup;
 	unsigned long flags;
 
+	ASSERT(ifindex < DHD_MAX_IFS);
+	if (ifindex >= DHD_MAX_IFS)
+		return FLOWID_INVALID;
+
 	DHD_FLOWID_LOCK(dhdp->flowid_lock, flags);
 	if_flow_lkup = (if_flow_lkup_t *)dhdp->if_flow_lkup;
 
@@ -655,10 +665,15 @@ dhd_flowid_lookup(dhd_pub_t *dhdp, uint8 ifindex,
 	int ret;
 	bool is_sta_assoc;
 
-	DHD_INFO(("%s\n", __FUNCTION__));
+	DHD_TRACE(("%s\n", __FUNCTION__));
+
 	if (!dhdp->flow_ring_table) {
 		return BCME_ERROR;
 	}
+
+	ASSERT(ifindex < DHD_MAX_IFS);
+	if (ifindex >= DHD_MAX_IFS)
+		return BCME_BADARG;
 
 	flow_ring_table = (flow_ring_table_t *)dhdp->flow_ring_table;
 
@@ -674,14 +689,20 @@ dhd_flowid_lookup(dhd_pub_t *dhdp, uint8 ifindex,
 		BCM_REFERENCE(is_sta_assoc);
 #if defined(PCIE_FULL_DONGLE)
 		is_sta_assoc = dhd_sta_associated(dhdp, ifindex, (uint8 *)da);
-		DHD_ERROR(("%s: multi %x ifindex %d role %x assoc %d\n", __FUNCTION__,
+		DHD_ERROR_RLMT(("%s: multi %x ifindex %d role %x assoc %d\n", __FUNCTION__,
 			ETHER_ISMULTI(da), ifindex, if_flow_lkup[ifindex].role,
 			is_sta_assoc));
 		if (!ETHER_ISMULTI(da) &&
 		    ((if_flow_lkup[ifindex].role == WLC_E_IF_ROLE_AP) ||
+		    (FALSE) ||
+#ifdef WL_NAN
+		    (if_flow_lkup[ifindex].role == WLC_E_IF_ROLE_NAN) ||
+#endif /* WL_NAN */
 		    (if_flow_lkup[ifindex].role == WLC_E_IF_ROLE_P2P_GO)) &&
-		    (!is_sta_assoc))
+		    (!is_sta_assoc)) {
+			DHD_ERROR_RLMT(("Attempt to send pkt with out peer/scb addition\n"));
 			return BCME_ERROR;
+		}
 #endif /* (linux || LINUX) && PCIE_FULL_DONGLE */
 
 		id = dhd_flowid_alloc(dhdp, ifindex, prio, sa, da);
@@ -708,16 +729,19 @@ dhd_flowid_lookup(dhd_pub_t *dhdp, uint8 ifindex,
 		flow_ring_node->active = TRUE;
 		flow_ring_node->status = FLOW_RING_STATUS_CREATE_PENDING;
 
-#ifdef DEVICE_TX_STUCK_DETECT
-		flow_ring_node->tx_cmpl = flow_ring_node->tx_cmpl_prev = OSL_SYSUPTIME();
-		flow_ring_node->stuck_count = 0;
-#endif /* DEVICE_TX_STUCK_DETECT */
-
+#ifdef TX_STATUS_LATENCY_STATS
+		flow_ring_node->flow_info.num_tx_status = 0;
+		flow_ring_node->flow_info.cum_tx_status_latency = 0;
+#endif /* TX_STATUS_LATENCY_STATS */
 		DHD_FLOWRING_UNLOCK(flow_ring_node->lock, flags);
 
 		/* Create and inform device about the new flow */
 		if (dhd_bus_flow_ring_create_request(dhdp->bus, (void *)flow_ring_node)
 				!= BCME_OK) {
+			DHD_FLOWRING_LOCK(flow_ring_node->lock, flags);
+			flow_ring_node->status = FLOW_RING_STATUS_CLOSED;
+			flow_ring_node->active = FALSE;
+			DHD_FLOWRING_UNLOCK(flow_ring_node->lock, flags);
 			DHD_ERROR(("%s: create error %d\n", __FUNCTION__, id));
 			return BCME_ERROR;
 		}
@@ -767,6 +791,55 @@ dhd_flowid_lookup(dhd_pub_t *dhdp, uint8 ifindex,
 	} /* Flow Id found in the hash */
 } /* dhd_flowid_lookup */
 
+int
+dhd_flowid_find_by_ifidx(dhd_pub_t *dhdp, uint8 ifindex, uint16 flowid)
+{
+	int hashidx = 0;
+	bool found = FALSE;
+	flow_hash_info_t *cur;
+	if_flow_lkup_t *if_flow_lkup;
+	unsigned long flags;
+
+	if (!dhdp->flow_ring_table) {
+		DHD_ERROR(("%s : dhd->flow_ring_table is NULL\n", __FUNCTION__));
+		return BCME_ERROR;
+	}
+
+	DHD_FLOWID_LOCK(dhdp->flowid_lock, flags);
+	if_flow_lkup = (if_flow_lkup_t *)dhdp->if_flow_lkup;
+	for (hashidx = 0; hashidx < DHD_FLOWRING_HASH_SIZE; hashidx++) {
+		cur = if_flow_lkup[ifindex].fl_hash[hashidx];
+		if (cur) {
+			if (cur->flowid == flowid) {
+				found = TRUE;
+			}
+
+			while (!found && cur) {
+				if (cur->flowid == flowid) {
+					found = TRUE;
+					break;
+				}
+				cur = cur->next;
+			}
+
+			if (found) {
+				DHD_FLOWID_UNLOCK(dhdp->flowid_lock, flags);
+				return BCME_OK;
+			}
+		}
+	}
+	DHD_FLOWID_UNLOCK(dhdp->flowid_lock, flags);
+
+	return BCME_ERROR;
+}
+
+int
+dhd_flowid_debug_create(dhd_pub_t *dhdp, uint8 ifindex,
+	uint8 prio, char *sa, char *da, uint16 *flowid)
+{
+	return dhd_flowid_lookup(dhdp, ifindex, prio, sa, da, flowid);
+}
+
 /**
  * Assign existing or newly created flowid to an 802.3 packet. This flowid is later on used to
  * select the flowring to send the packet to the dongle.
@@ -776,7 +849,7 @@ dhd_flowid_update(dhd_pub_t *dhdp, uint8 ifindex, uint8 prio, void *pktbuf)
 {
 	uint8 *pktdata = (uint8 *)PKTDATA(dhdp->osh, pktbuf);
 	struct ether_header *eh = (struct ether_header *)pktdata;
-	uint16 flowid;
+	uint16 flowid = 0;
 
 	ASSERT(ifindex < DHD_MAX_IFS);
 
@@ -809,6 +882,10 @@ dhd_flowid_free(dhd_pub_t *dhdp, uint8 ifindex, uint16 flowid)
 	flow_hash_info_t *cur, *prev;
 	if_flow_lkup_t *if_flow_lkup;
 	unsigned long flags;
+
+	ASSERT(ifindex < DHD_MAX_IFS);
+	if (ifindex >= DHD_MAX_IFS)
+		return;
 
 	DHD_FLOWID_LOCK(dhdp->flowid_lock, flags);
 	if_flow_lkup = (if_flow_lkup_t *)dhdp->if_flow_lkup;
@@ -901,7 +978,7 @@ dhd_flow_rings_flush(dhd_pub_t *dhdp, uint8 ifindex)
 		return;
 	flow_ring_table = (flow_ring_table_t *)dhdp->flow_ring_table;
 
-	for (id = 0; id <= dhdp->num_flow_rings; id++) {
+	for (id = 0; id < dhdp->num_flow_rings; id++) {
 		if (flow_ring_table[id].active &&
 			(flow_ring_table[id].flow_info.ifindex == ifindex) &&
 			(flow_ring_table[id].status == FLOW_RING_STATUS_OPEN)) {
@@ -910,7 +987,6 @@ dhd_flow_rings_flush(dhd_pub_t *dhdp, uint8 ifindex)
 		}
 	}
 }
-
 
 /** Delete flow ring(s) for given peer address. Related to AP/AWDL/TDLS functionality. */
 void
@@ -954,7 +1030,7 @@ dhd_update_interface_flow_info(dhd_pub_t *dhdp, uint8 ifindex,
 	if (ifindex >= DHD_MAX_IFS)
 		return;
 
-	DHD_ERROR(("%s: ifindex %u op %u role is %u \n",
+	DHD_INFO(("%s: ifindex %u op %u role is %u \n",
 	          __FUNCTION__, ifindex, op, role));
 	if (!dhdp->flowid_allocator) {
 		DHD_ERROR(("%s: Flow ring not intited yet  \n", __FUNCTION__));
@@ -999,7 +1075,7 @@ dhd_update_interface_link_status(dhd_pub_t *dhdp, uint8 ifindex, uint8 status)
 	if (ifindex >= DHD_MAX_IFS)
 		return BCME_BADARG;
 
-	DHD_ERROR(("%s: ifindex %d status %d\n", __FUNCTION__, ifindex, status));
+	DHD_INFO(("%s: ifindex %d status %d\n", __FUNCTION__, ifindex, status));
 
 	DHD_FLOWID_LOCK(dhdp->flowid_lock, flags);
 	if_flow_lkup = (if_flow_lkup_t *)dhdp->if_flow_lkup;

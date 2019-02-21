@@ -254,11 +254,12 @@ enum {
 #define	WPC_COM_CHG_LEVEL				0x0F /* Battery level */
 
 /* MFC_TX_DATA_COM_REG (0x58) : TX Command */
-#define	WPC_TX_COM_UNKNOWN					0x00
-#define	WPC_TX_COM_TX_ID					0x01
-#define	WPC_TX_COM_AFC_SET					0x02
-#define	WPC_TX_COM_ACK						0x03
-#define	WPC_TX_COM_NAK						0x04
+#define	WPC_TX_COM_UNKNOWN		0x00
+#define	WPC_TX_COM_TX_ID		0x01
+#define	WPC_TX_COM_AFC_SET		0x02
+#define	WPC_TX_COM_ACK			0x03
+#define	WPC_TX_COM_NAK			0x04
+#define WPC_TX_COM_CHG_ERR		0x05
 
 #define TX_AFC_SET_5V			0x00
 #define TX_AFC_SET_10V			0x01
@@ -280,6 +281,11 @@ enum {
 #define TX_ID_BATT_PACK_TA			0x41
 #define TX_ID_DREAM_STAND			0x31
 #define TX_ID_DREAM_DOWN			0x14
+
+#define TX_CHG_ERR_OTP			0x12
+#define TX_CHG_ERR_OCP			0x13
+#define TX_CHG_ERR_DARKZONE		0x14
+#define TX_CHG_ERR_FOD			0x20 ... 0x27
 
 #define	WPC_COM_AFC_DEBOUNCE			0x07 /* Data Values [ 0~1000mV : 0x0000~0x03E8 ], 2 bytes*/
 
@@ -693,6 +699,7 @@ struct mfc_charger_data {
 	struct delayed_work	wpc_fw_booting_work;
 	struct delayed_work	wpc_vout_mode_work;
 	struct delayed_work	wpc_cm_fet_work;
+	struct delayed_work wpc_i2c_error_work;
 
 	u16 addr;
 	int size;
@@ -709,6 +716,8 @@ struct mfc_charger_data {
 	bool is_probed;
 	bool is_afc_tx;
 	int tx_id;
+
+	int i2c_error_count;
 };
 
 #endif /* __MFC_CHARGER_H */

@@ -165,6 +165,9 @@ static bool is_el1_instruction_abort(unsigned int esr)
 /*
  * The kernel tried to access some page that wasn't present.
  */
+
+static int kernel_fault_recovery_cnt = 0;
+
 static void __do_kernel_fault(struct mm_struct *mm, unsigned long addr,
 			      unsigned int esr, struct pt_regs *regs)
 {
@@ -176,6 +179,15 @@ static void __do_kernel_fault(struct mm_struct *mm, unsigned long addr,
 		return;
 	if (safe_fault_in_progress) {
 		exynos_ss_printkl(safe_fault_in_progress, safe_fault_in_progress);
+		return;
+	}
+
+	/*
+	 * tlb recovery process
+	 */
+	kernel_fault_recovery_cnt ++;
+	if ( (kernel_fault_recovery_cnt < TLB_RECOVERY_CNT_MAX) && (esr == 0x86000005) ) {
+		flush_tlb_all();
 		return;
 	}
 
@@ -338,6 +350,35 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 	}
 
 	if (addr < USER_DS && is_permission_fault(esr, regs)) {
+#ifdef CONFIG_SEC_DEBUG_AUTO_SUMMARY
+		/* regs->orig_addr_limit may be 0 if we entered from EL0 */
+		if (regs->orig_addr_limit == KERNEL_DS) {
+			pr_auto(ASL1, "Accessing user space memory(%lx) with fs=KERNEL_DS\n", addr);
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+			sec_debug_set_extra_info_fault(PAGE_FAULT, addr, regs);
+			sec_debug_set_extra_info_esr(esr);
+#endif
+			die("Accessing user space memory with fs=KERNEL_DS", regs, esr);
+		}
+
+		if (is_el1_instruction_abort(esr)) {
+			pr_auto(ASL1, "Attempting to execute userspace memory(%lx)\n", addr);
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+			sec_debug_set_extra_info_fault(PAGE_FAULT, addr, regs);
+			sec_debug_set_extra_info_esr(esr);
+#endif
+			die("Attempting to execute userspace memory", regs, esr);
+		}
+
+		if (!search_exception_tables(regs->pc)) {
+			pr_auto(ASL1, "Accessing user space memory(%lx) outside uaccess.h routines\n", addr);
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+			sec_debug_set_extra_info_fault(PAGE_FAULT, addr, regs);
+			sec_debug_set_extra_info_esr(esr);
+#endif
+			die("Accessing user space memory outside uaccess.h routines", regs, esr);
+		}
+#else
 		/* regs->orig_addr_limit may be 0 if we entered from EL0 */
 		if (regs->orig_addr_limit == KERNEL_DS)
 			die("Accessing user space memory with fs=KERNEL_DS", regs, esr);
@@ -347,6 +388,7 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 
 		if (!search_exception_tables(regs->pc))
 			die("Accessing user space memory outside uaccess.h routines", regs, esr);
+#endif
 	}
 
 	/*

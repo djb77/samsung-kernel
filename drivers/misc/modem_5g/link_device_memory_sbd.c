@@ -174,7 +174,7 @@ static int setup_sbd_rb(struct sbd_link_device *sl, struct sbd_ring_buffer *rb,
 		rb->buff[i] = rb->buff_rgn + (i * rb->buff_size);
 
 #if 0
-	mif_err("RB[%d:%d][%s] buff_rgn {addr:0x%p offset:%d size:%lu}\n",
+	mif_err("RB[%d:%d][%s] buff_rgn {addr:0x%pK offset:%d size:%lu}\n",
 		rb->id, rb->ch, udl_str(dir), rb->buff_rgn,
 		calc_offset(rb->buff_rgn, sl->shmem), alloc_size);
 #endif
@@ -214,7 +214,7 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	size_t size;
 
 #if 1
-	mif_err("SHMEM {base:0x%p size:%d}\n",
+	mif_err("SHMEM {base:0x%pK size:%d}\n",
 		sl->shmem, sl->shmem_size);
 #endif
 
@@ -225,15 +225,15 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	sl->g_desc = (struct sbd_global_desc *)desc_alloc(sl, size);
 
 #if 1
-	mif_err("G_DESC_OFFSET = %d(0x%p)\n",
+	mif_err("G_DESC_OFFSET = %d(0x%pK)\n",
 		calc_offset(sl->g_desc, sl->shmem),
 		sl->g_desc);
 
-	mif_err("RB_CH_OFFSET = %d (0x%p)\n",
+	mif_err("RB_CH_OFFSET = %d (0x%pK)\n",
 		calc_offset(sl->g_desc->rb_ch, sl->shmem),
 		sl->g_desc->rb_ch);
 
-	mif_err("RBD_PAIR_OFFSET = %d (0x%p)\n",
+	mif_err("RBD_PAIR_OFFSET = %d (0x%pK)\n",
 		calc_offset(sl->g_desc->rb_desc, sl->shmem),
 		sl->g_desc->rb_desc);
 #endif
@@ -241,7 +241,7 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	size = sizeof(u16) * ULDL * RDWR * sl->num_channels;
 	sl->rbps = (u16 *)desc_alloc(sl, size);
 #if 1
-	mif_err("RBP_SET_OFFSET = %d (0x%p)\n",
+	mif_err("RBP_SET_OFFSET = %d (0x%pK)\n",
 		calc_offset(sl->rbps, sl->shmem), sl->rbps);
 #endif
 
@@ -324,7 +324,7 @@ static u8 *data_offset_to_buffer(u64 offset, struct sbd_ring_buffer *rb)
 		buf_offset = offset - NET_HEADROOM;
 		buf = v_zmb + (buf_offset - sl->shmem_size);
 		if (!(buf >= v_zmb && buf < (v_zmb + zmb_size))) {
-			mif_err("invalid buf (1st pool) : %p\n", buf);
+			mif_err("invalid buf (1st pool) : %pK\n", buf);
 			return NULL;
 		}
 	} else if (offset >= (sl->shmem_size + zmb_size) &&
@@ -334,7 +334,7 @@ static u8 *data_offset_to_buffer(u64 offset, struct sbd_ring_buffer *rb)
 		buf = (u8 *)phys_to_virt(md->bufpool_2nd_base) + buf_offset;
 		if (virt_to_phys(buf) >= md->bufpool_2nd_base && virt_to_phys(buf)
 				< (md->bufpool_2nd_base + md->bufpool_2nd_size)) {
-			mif_err("invalid buf (2nd pool) : %p\n", buf);
+			mif_err("invalid buf (2nd pool) : %pK\n", buf);
 			return NULL;
 		}
 	} else {
@@ -369,7 +369,7 @@ static u8 *unused_data_offset_to_buffer(u64 offset, struct sbd_ring_buffer *rb)
 		buf_offset = offset - NET_HEADROOM;
 		buf = v_zmb + (buf_offset - sl->shmem_size);
 		if (!(buf >= v_zmb && buf < (v_zmb + zmb_size))) {
-			mif_err("invalid buf (1st pool) : %p\n", buf);
+			mif_err("invalid buf (1st pool) : %pK\n", buf);
 			return NULL;
 		}
 	} else if (offset >= (sl->shmem_size + zmb_size) &&
@@ -379,7 +379,7 @@ static u8 *unused_data_offset_to_buffer(u64 offset, struct sbd_ring_buffer *rb)
 		buf = (u8 *)phys_to_virt(md->bufpool_2nd_base) + buf_offset;
 		if (virt_to_phys(buf) >= md->bufpool_2nd_base && virt_to_phys(buf)
 				< (md->bufpool_2nd_base + md->bufpool_2nd_size)) {
-			mif_err("invalid buf (2nd pool) : %p\n", buf);
+			mif_err("invalid buf (2nd pool) : %pK\n", buf);
 			return NULL;
 		}
 	} else {

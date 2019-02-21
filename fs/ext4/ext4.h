@@ -33,6 +33,7 @@
 #include <linux/ratelimit.h>
 #include <crypto/hash.h>
 #include <linux/falloc.h>
+#include <linux/android_aid.h>
 #ifdef __KERNEL__
 #include <linux/compat.h>
 #endif
@@ -597,6 +598,7 @@ enum {
 #define FMP_ENCRYPTION_MODE_AES_256_XTS		5
 #define FMP_ENCRYPTION_MODE_AES_256_CBC		6
 #define EXT4_ENCRYPTION_MODE_AES_256_HEH	126
+#define EXT4_ENCRYPTION_MODE_PRIVATE        127 /* fmp aes-xts */
 
 #include "ext4_crypto.h"
 
@@ -1485,11 +1487,6 @@ static inline struct timespec ext4_current_time(struct inode *inode)
 static inline int ext4_valid_inum(struct super_block *sb, unsigned long ino)
 {
 	return ino == EXT4_ROOT_INO ||
-		ino == EXT4_USR_QUOTA_INO ||
-		ino == EXT4_GRP_QUOTA_INO ||
-		ino == EXT4_BOOT_LOADER_INO ||
-		ino == EXT4_JOURNAL_INO ||
-		ino == EXT4_RESIZE_INO ||
 		(ino >= EXT4_FIRST_INO(sb) &&
 		 ino <= le32_to_cpu(EXT4_SB(sb)->s_es->s_inodes_count));
 }
@@ -3284,6 +3281,30 @@ extern struct mutex ext4__aio_mutex[EXT4_WQ_HASH_SZ];
 #define EXT4_RESIZING	0
 extern int ext4_resize_begin(struct super_block *sb);
 extern void ext4_resize_end(struct super_block *sb);
+
+static inline bool ext4_android_claim_sec_r_blocks(unsigned int flags) {
+	if (flags & EXT4_MB_USE_EXTRA_ROOT_BLOCKS)
+		return true;
+
+#if ANDROID_VERSION < 90000
+	if (in_group_p(AID_USE_SEC_RESERVED))
+		return true;
+#endif
+
+	return false;
+}
+
+static inline bool ext4_android_claim_r_blocks(struct ext4_sb_info *sbi) {
+#if ANDROID_VERSION < 90000
+	if (in_group_p(AID_USE_ROOT_RESERVED))
+		return true;
+#else
+	/* for P upgrade without factory reset */
+	if (in_group_p(AID_RESERVED_DISK))
+		return true;
+#endif
+	return false;
+}
 
 #endif	/* __KERNEL__ */
 

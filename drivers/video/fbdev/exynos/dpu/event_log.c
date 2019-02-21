@@ -76,8 +76,14 @@ static inline void dpu_event_log_dsim
 	case DPU_EVT_DSIM_RESUME:
 	case DPU_EVT_ENTER_ULPS:
 	case DPU_EVT_EXIT_ULPS:
+	case DPU_EVT_DSIM_ENABLE:
 		log->data.pm.pm_status = pm_runtime_active(dsim->dev);
 		log->data.pm.elapsed = ktime_sub(ktime_get(), log->time);
+		if (type == DPU_EVT_DSIM_ENABLE) {
+			log->data.pm.pmu_info[0] = dsim->pmu_info[0];
+			log->data.pm.pmu_info[1] = dsim->pmu_info[1];
+			log->data.pm.pmu_info[2] = dsim->pmu_info[2];
+		}
 		break;
 	default:
 		/* Any remaining types will be log just time and type */
@@ -210,6 +216,7 @@ void DPU_EVENT_LOG(dpu_event_t type, struct v4l2_subdev *sd, ktime_t time)
 	case DPU_EVT_ENTER_ULPS:
 	case DPU_EVT_EXIT_ULPS:
 	case DPU_EVT_DSIM_SHUTDOWN:
+	case DPU_EVT_DSIM_ENABLE:
 		dpu_event_log_dsim(type, sd, time);
 		break;
 	case DPU_EVT_DPP_FRAMEDONE:
@@ -388,7 +395,8 @@ void DPU_EVENT_SHOW(struct seq_file *s, struct decon_device *decon)
 	ktime_t prev_ktime;
 	struct dsim_device *dsim;
 
-	dsim = get_dsim_drvdata(decon->id);
+	if (!decon->id)
+		dsim = get_dsim_drvdata(decon->id);
 
 	/* TITLE */
 	seq_printf(s, "-------------------DECON%d EVENT LOGGER ----------------------\n",
@@ -399,7 +407,9 @@ void DPU_EVENT_SHOW(struct seq_file *s, struct decon_device *decon)
 			IS_ENABLED(CONFIG_DECON_BLOCKING_MODE) ? "on" : "off");
 	seq_printf(s, "Window_Update(%s)\n",
 			IS_ENABLED(CONFIG_FB_WINDOW_UPDATE) ? "on" : "off");
-	seq_printf(s, "-- Total underrun count(%d)\n", dsim->total_underrun_cnt);
+	if (!decon->id)
+		seq_printf(s, "-- Total underrun count(%d)\n",
+				dsim->total_underrun_cnt);
 	seq_puts(s, "-------------------------------------------------------------\n");
 	seq_printf(s, "%14s  %20s  %20s\n",
 		"Time", "Event ID", "Remarks");

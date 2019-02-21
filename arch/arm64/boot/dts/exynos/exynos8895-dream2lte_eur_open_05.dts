@@ -23,7 +23,7 @@
 	model_info-chip = <8895>;
 	model_info-platform = "android";
 	model_info-subtype = "samsung";
-	model_info-hw_rev = <5>;
+	model_info-hw_rev = <3>;
 	model_info-hw_rev_end = <5>;
 	compatible = "samsung, DREAM2LTE EUR rev02", "samsung,EXYNOS8895";
 

@@ -179,7 +179,7 @@ static int __init console_setup(char *str)
 
 	return 0;
 }
-__setup("androidboot.hw_rev=", console_setup);
+__setup("androidboot.revision=", console_setup);
 
 static int ss5g_reset(struct modem_ctl *mc)
 {

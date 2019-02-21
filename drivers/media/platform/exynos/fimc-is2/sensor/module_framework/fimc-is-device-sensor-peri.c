@@ -1635,8 +1635,11 @@ int fimc_is_sensor_peri_s_stream(struct fimc_is_device_sensor *device,
 			}
 		}
 #endif
-		/* stream on sequence */
-		if (cis->need_mode_change == false) {
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+		if (cis->need_mode_change == false && cis->use_initial_ae == false) {
+#else
+			if (cis->need_mode_change == false) {
+#endif
 			/* only first time after camera on */
 #ifdef CAMERA_REAR2
 			fimc_is_sensor_setting_mode_change(sensor_peri);

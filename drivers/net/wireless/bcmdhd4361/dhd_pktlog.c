@@ -1,14 +1,14 @@
 /*
  * DHD debugability packet logging support
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pktlog.c 772708 2018-07-18 05:47:31Z $
+ * $Id: dhd_pktlog.c 793750 2018-12-11 02:12:38Z $
  */
 
 #include <typedefs.h>
@@ -34,11 +34,12 @@
 #include <dhd.h>
 #include <dhd_dbg.h>
 #include <dhd_pktlog.h>
+#include <linux/rtc.h>
 
 #ifdef DHD_PKT_LOGGING
 #ifndef strtoul
 #define strtoul(nptr, endptr, base) bcm_strtoul((nptr), (endptr), (base))
-#endif
+#endif // endif
 extern int wl_pattern_atoh(char *src, char *dst);
 extern int pattern_atoh_len(char *src, char *dst, int len);
 extern uint32 __dhd_dbg_pkt_hash(uintptr_t pkt, uint32 pktid);
@@ -63,7 +64,7 @@ dhd_os_attach_pktlog(dhd_pub_t *dhdp)
 	if (unlikely(!pktlog)) {
 		DHD_ERROR(("%s(): could not allocate memory for - "
 					"dhd_pktlog_t\n", __FUNCTION__));
-		goto fail;
+		return BCME_ERROR;
 	}
 
 	dhdp->pktlog = pktlog;
@@ -75,12 +76,6 @@ dhd_os_attach_pktlog(dhd_pub_t *dhdp)
 	DHD_ERROR(("%s(): dhd_os_attach_pktlog attach\n", __FUNCTION__));
 
 	return BCME_OK;
-fail:
-	if (pktlog) {
-		kfree(pktlog);
-	}
-
-	return BCME_ERROR;
 }
 
 int
@@ -145,15 +140,12 @@ dhd_pktlog_ring_init(dhd_pub_t *dhdp, int size)
 	ring->pktlog_minmize = FALSE;
 	ring->pktlog_len = size;
 	ring->dhdp = dhdp;
+	spin_lock_init(&ring->pktlog_ring_lock);
 
 	DHD_ERROR(("%s(): pktlog ring init success\n", __FUNCTION__));
 
 	return ring;
 fail:
-	if (ring_info) {
-		kfree(ring_info);
-	}
-
 	if (ring) {
 		kfree(ring);
 	}
@@ -197,8 +189,10 @@ dhd_pktlog_ring_deinit(dhd_pktlog_ring_t *ring)
 
 	if (ring->pktlog_ring_info) {
 		kfree(ring->pktlog_ring_info);
+		ring->pktlog_ring_info = NULL;
 	}
 	kfree(ring);
+	ring = NULL;
 
 	DHD_ERROR(("%s(): pktlog ring deinit\n", __FUNCTION__));
 
@@ -348,6 +342,7 @@ dhd_pktlog_ring_get_writebuf(dhd_pktlog_ring_t *ringbuf, void **data)
 	dhd_pktlog_ring_info_t *ring_info;
 	uint16 write_pos = 0;
 	uint16 next_write_pos = 0;
+	unsigned long flags = 0;
 
 	if  (!ringbuf || !data) {
 		DHD_PKT_LOG(("%s(): ringbuf=%p data=%p\n",
@@ -355,11 +350,15 @@ dhd_pktlog_ring_get_writebuf(dhd_pktlog_ring_t *ringbuf, void **data)
 		return BCME_ERROR;
 	}
 
+	/* PKTLOG Ring Lock */
+	spin_lock_irqsave(&ringbuf->pktlog_ring_lock, flags);
 	write_pos = ringbuf->rear;
 	next_write_pos = (ringbuf->rear + 1) % ringbuf->pktlog_len;
 	*data = ((dhd_pktlog_ring_info_t *)ringbuf->pktlog_ring_info) + write_pos;
 	if (*data == NULL) {
 		DHD_PKT_LOG(("%s(): write_pos %d data NULL\n", __FUNCTION__, write_pos));
+		/* PKTLOG Ring Unlock */
+		spin_unlock_irqrestore(&ringbuf->pktlog_ring_lock, flags);
 		return BCME_ERROR;
 	}
 
@@ -373,11 +372,17 @@ dhd_pktlog_ring_get_writebuf(dhd_pktlog_ring_t *ringbuf, void **data)
 			PKTFREE(ringbuf->dhdp->osh, ring_info->info.pkt, TRUE);
 			DHD_PKT_LOG(("%s(): ringbuf full next write %d pkt free\n",
 				__FUNCTION__, next_write_pos));
+			ring_info->info.pkt = NULL;
+		} else {
+			DHD_PKT_LOG(("%s(): invalid index : front<%u>, next_pos<%d> \n",
+				__FUNCTION__, ringbuf->front, next_write_pos));
 		}
 		ringbuf->front = (ringbuf->front + 1) % ringbuf->pktlog_len;
 	}
 
 	ringbuf->rear = next_write_pos;
+	/* PKTLOG Ring Unlock */
+	spin_unlock_irqrestore(&ringbuf->pktlog_ring_lock, flags);
 
 	DHD_PKT_LOG(("%s(): next write pos %d front %d \n",
 		__FUNCTION__, next_write_pos, ringbuf->front));
@@ -429,7 +434,7 @@ dhd_pktlog_ring_tx_pkts(dhd_pub_t *dhdp, void *pkt, uint32 pktid)
 		DHD_PKT_LOG(("%s(): write buf %p\n", __FUNCTION__, tx_pkts));
 		pkt_hash = __dhd_dbg_pkt_hash((uintptr_t)pkt, pktid);
 		ts_nsec = local_clock();
-		rem_nsec = do_div(ts_nsec, NSEC_PER_SEC);
+		rem_nsec = DIV_AND_MOD_U64_BY_U32(ts_nsec, NSEC_PER_SEC);
 
 		tx_pkts->info.pkt = PKTDUP(dhdp->osh, pkt);
 		tx_pkts->info.pkt_len = PKTLEN(dhdp->osh, pkt);
@@ -551,7 +556,7 @@ dhd_pktlog_ring_rx_pkts(dhd_pub_t *dhdp, void *pkt)
 		rx_pkts = (dhd_pktlog_ring_info_t *)data;
 		DHD_PKT_LOG(("%s(): write buf %p\n", __FUNCTION__, rx_pkts));
 		ts_nsec = local_clock();
-		rem_nsec = do_div(ts_nsec, NSEC_PER_SEC);
+		rem_nsec = DIV_AND_MOD_U64_BY_U32(ts_nsec, NSEC_PER_SEC);
 
 		rx_pkts->info.pkt = PKTDUP(dhdp->osh, pkt);
 		rx_pkts->info.pkt_len = PKTLEN(dhdp->osh, pkt);
@@ -611,10 +616,6 @@ dhd_pktlog_filter_init(int size)
 
 	return filter;
 fail:
-	if (filter_info) {
-		kfree(filter_info);
-	}
-
 	if (filter) {
 		kfree(filter);
 	}
@@ -1024,17 +1025,19 @@ dhd_pktlog_pkts_write_file(dhd_pktlog_ring_t *ringbuf, struct file *w_pcap_fp, i
 		memcpy(p, (char*)&report_ptr->info.driver_ts_sec,
 				sizeof(report_ptr->info.driver_ts_sec));
 		p += sizeof(report_ptr->info.driver_ts_sec);
-		len += sizeof(report_ptr->info.driver_ts_sec);
+		len += (uint32)sizeof(report_ptr->info.driver_ts_sec);
 
 		memcpy(p, (char*)&report_ptr->info.driver_ts_usec,
 				sizeof(report_ptr->info.driver_ts_usec));
 		p += sizeof(report_ptr->info.driver_ts_usec);
-		len += sizeof(report_ptr->info.driver_ts_usec);
+		len += (uint32)sizeof(report_ptr->info.driver_ts_usec);
 
 		if (report_ptr->info.payload_type == FRAME_TYPE_ETHERNET_II) {
-			frame_len = min(report_ptr->info.pkt_len, (size_t)MAX_FRAME_LEN_ETHERNET);
+			frame_len = (uint32)min(report_ptr->info.pkt_len,
+					(size_t)MAX_FRAME_LEN_ETHERNET);
 		} else {
-			frame_len = min(report_ptr->info.pkt_len, (size_t)MAX_FRAME_LEN_80211_MGMT);
+			frame_len = (uint32)min(report_ptr->info.pkt_len,
+					(size_t)MAX_FRAME_LEN_80211_MGMT);
 		}
 
 		bytes_user_data = sprintf(buf, "%s:%s:%02d\n", DHD_PKTLOG_FATE_INFO_FORMAT,
@@ -1044,10 +1047,10 @@ dhd_pktlog_pkts_write_file(dhd_pktlog_ring_t *ringbuf, struct file *w_pcap_fp, i
 		/* pcap pkt head has incl_len and orig_len */
 		memcpy(p, (char*)&write_frame_len, sizeof(write_frame_len));
 		p += sizeof(write_frame_len);
-		len += sizeof(write_frame_len);
+		len += (uint32)sizeof(write_frame_len);
 		memcpy(p, (char*)&write_frame_len, sizeof(write_frame_len));
 		p += sizeof(write_frame_len);
-		len += sizeof(write_frame_len);
+		len += (uint32)sizeof(write_frame_len);
 
 		memcpy(p, PKTDATA(ringbuf->dhdp->osh, report_ptr->info.pkt), frame_len);
 		if (ringbuf->pktlog_minmize) {
@@ -1110,7 +1113,6 @@ dhd_pktlog_write_file(dhd_pub_t *dhdp)
 	mm_segment_t old_fs;
 	uint32 file_mode;
 	char dump_path[128];
-	struct timeval curtime;
 	int ret = BCME_OK;
 	dhd_pktlog_ring_t *tx_pktlog_ring;
 	dhd_pktlog_ring_t *rx_pktlog_ring;
@@ -1148,12 +1150,31 @@ dhd_pktlog_write_file(dhd_pub_t *dhdp)
 	set_fs(KERNEL_DS);
 
 	memset(dump_path, 0, sizeof(dump_path));
-	do_gettimeofday(&curtime);
-	snprintf(dump_path, sizeof(dump_path), "%s_%ld.%ld.pcap",
-			DHD_PKTLOG_DUMP_PATH DHD_PKTLOG_DUMP_TYPE,
-			(unsigned long)curtime.tv_sec, (unsigned long)curtime.tv_usec);
+	get_debug_dump_time(dhdp->debug_dump_time_pktlog_str);
+	if (dhdp->memdump_type == DUMP_TYPE_BY_SYSDUMP) {
+		if (dhdp->debug_dump_subcmd == CMD_UNWANTED) {
+			snprintf(dump_path, sizeof(dump_path), "%s",
+				DHD_PKTLOG_DUMP_PATH DHD_PKTLOG_DUMP_TYPE
+				DHD_DUMP_SUBSTR_UNWANTED);
+		} else if (dhdp->debug_dump_subcmd == CMD_DISCONNECTED) {
+			snprintf(dump_path, sizeof(dump_path), "%s",
+				DHD_PKTLOG_DUMP_PATH DHD_PKTLOG_DUMP_TYPE
+				DHD_DUMP_SUBSTR_DISCONNECTED);
+		} else {
+			snprintf(dump_path, sizeof(dump_path), "%s",
+				DHD_PKTLOG_DUMP_PATH DHD_PKTLOG_DUMP_TYPE);
+		}
+	} else {
+		snprintf(dump_path, sizeof(dump_path), "%s",
+			DHD_PKTLOG_DUMP_PATH DHD_PKTLOG_DUMP_TYPE);
 
+	}
+	snprintf(dump_path, sizeof(dump_path), "%s_" "%s"
+			".pcap", dump_path,
+			dhdp->debug_dump_time_pktlog_str);
 	file_mode = O_CREAT | O_WRONLY;
+
+	clear_debug_dump_time(dhdp->debug_dump_time_pktlog_str);
 
 	DHD_ERROR(("pktlog_dump_pcap = %s\n", dump_path));
 

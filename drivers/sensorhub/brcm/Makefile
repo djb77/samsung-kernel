@@ -43,18 +43,9 @@ obj-$(CONFIG_SENSORS_SSP_IRLED)		+= factory/irled_tmd4903.o
 obj-$(CONFIG_SENSORS_SSP_SX9306)	 += factory/grip_sx9306.o
 
 obj-$(CONFIG_SENSORS_SSP_SENSORHUB)	+= ssp_sensorhub.o ssp_misc.o
-obj-$(CONFIG_SENSORS_MAX86900)		+= max86900.o
-obj-$(CONFIG_SENSORS_MAX86902)		+= max86902.o
-obj-$(CONFIG_SENSORS_MAX_NOTCHFILTER)	+= max_notchfilter/
-obj-$(CONFIG_SENSORS_ADPD142)		+= adpd142.o
-obj-$(CONFIG_SENSORS_ADPD143)		+= adpd143.o
 obj-$(CONFIG_SENSORS_SX9310)		+= sx9310.o
 obj-$(CONFIG_SENSORS_SX9320)		+= sx9320.o
 obj-$(CONFIG_SENSORS_SX9320_MULTI)	+= sx9320_multi2.o sx9320_multi3.o sx9320_multi4.o
-
-obj-$(CONFIG_SENSORS_HRM_MAX86902)	+= hrm_max86902.o
-obj-$(CONFIG_SENSORS_HRM_ADPD143)	+= hrm_adpd143.o
-obj-$(CONFIG_SENSORS_HRMSENSOR)		+= hrmsensor.o
 
 obj-$(CONFIG_SENSORS_SSP_BBD)           += ssp_bbd.o factory/mcu_bcm4774.o
 obj-$(CONFIG_SENSORS_SSP_BBD)           += bbdpl/

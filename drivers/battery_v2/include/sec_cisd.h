@@ -70,10 +70,10 @@ enum cisd_data {
 	CISD_DATA_SAFETY_TIMER_5,
 	CISD_DATA_SAFETY_TIMER_10,
 	CISD_DATA_AICL_COUNT,
-        CISD_DATA_BATT_TEMP_MAX,
-        CISD_DATA_BATT_TEMP_MIN,
-        CISD_DATA_CHG_TEMP_MAX,
-        CISD_DATA_CHG_TEMP_MIN,
+	CISD_DATA_BATT_TEMP_MAX,
+	CISD_DATA_BATT_TEMP_MIN,
+	CISD_DATA_CHG_TEMP_MAX,
+	CISD_DATA_CHG_TEMP_MIN,
 
 	CISD_DATA_WPC_TEMP_MAX,
 	CISD_DATA_WPC_TEMP_MIN,
@@ -202,8 +202,20 @@ enum {
 };
 
 extern const char *cisd_data_str[];
-extern const char *cisd_wc_data_str[];
 extern const char *cisd_data_str_d[];
+
+#define PAD_INDEX_STRING	"INDEX"
+#define PAD_INDEX_VALUE		1
+#define PAD_JSON_STRING		"PAD_0x"
+#define MAX_PAD_ID			0xFF
+
+struct pad_data {
+	unsigned int id;
+	unsigned int count;
+
+	struct pad_data* prev;
+	struct pad_data* next;
+};
 
 struct cisd {
 	unsigned int cisd_alg_index;
@@ -243,9 +255,34 @@ struct cisd {
 	unsigned int max_voltage_thr;
 
 	/* Big Data Field */
-	int data[CISD_DATA_MAX_PER_DAY];
-	int wc_data[WC_DATA_MAX];
 	int capacity_now;
+	int data[CISD_DATA_MAX_PER_DAY];
+
+	struct mutex padlock;
+	struct pad_data* pad_array;
+	unsigned int pad_count;
 };
+
+extern struct cisd *gcisd;
+static inline void set_cisd_data(int type, int value)
+{
+	if (gcisd && (type >= CISD_DATA_RESET_ALG && type < CISD_DATA_MAX_PER_DAY))
+		gcisd->data[type] = value;
+}
+static inline int get_cisd_data(int type)
+{
+	if (!gcisd || (type < CISD_DATA_RESET_ALG || type >= CISD_DATA_MAX_PER_DAY))
+		return -1;
+
+	return gcisd->data[type];
+}
+static inline void increase_cisd_count(int type)
+{
+	if (gcisd && (type >= CISD_DATA_RESET_ALG && type < CISD_DATA_MAX_PER_DAY))
+		gcisd->data[type]++;
+}
+
+void init_cisd_pad_data(struct cisd *cisd);
+void count_cisd_pad_data(struct cisd *cisd, unsigned int pad_id);
 
 #endif /* __SEC_CISD_H */

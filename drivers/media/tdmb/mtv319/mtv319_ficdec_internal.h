@@ -39,6 +39,9 @@
 #define FIC_APP_TYPE    0x10
 #define FIC_DONE        0x11
 #define FIC_CRC_ERR       0x44
+#define FIC_SEMI_DONE	0x55
+
+
 
 
 /**************************/

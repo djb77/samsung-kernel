@@ -2,7 +2,7 @@
 # Makefile for the Kinibi core driver
 #
 
-GUD_ROOT_FOLDER := drivers/gud/gud-exynos8895
+GUD_ROOT_FOLDER := drivers/gud/gud-exynos8895_kinibi400
 
 # add our modules to kernel.
 obj-$(CONFIG_TRUSTONIC_TEE) += mcDrvModule.o

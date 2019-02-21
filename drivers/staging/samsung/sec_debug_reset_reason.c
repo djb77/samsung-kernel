@@ -20,6 +20,7 @@
 #include <asm/stacktrace.h>
 
 unsigned int reset_reason = RR_N;
+extern struct sec_debug_panic_extra_info *sec_debug_extra_info_backup;
 
 static int __init sec_debug_set_reset_reason(char *arg)
 {
@@ -77,6 +78,44 @@ static int sec_debug_reset_reason_store_lastkmsg_proc_show(struct seq_file *m, v
 	return 0;
 }
 
+static int sec_debug_reset_reason_extra_show(struct seq_file *m, void *v) 
+{
+	ssize_t size = 0;
+	char buf[SZ_1K];
+
+	if (!sec_debug_extra_info_backup) {
+		pr_err("%s return \n", __func__);
+		return size;
+	}
+
+	size += snprintf((char *)(buf + size), SZ_1K - size,
+			"%s: %s  ",
+			sec_debug_extra_info_backup->item[INFO_PC].key,
+			sec_debug_extra_info_backup->item[INFO_PC].val);
+
+	size += snprintf((char *)(buf + size), SZ_1K - size,
+			"%s: %s",
+			sec_debug_extra_info_backup->item[INFO_LR].key,
+			sec_debug_extra_info_backup->item[INFO_LR].val);
+
+	size += sprintf((char *)(buf + size), "\n");
+	seq_printf(m, buf);
+
+	return 0;
+}
+
+static int sec_debug_reset_reason_extra_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, sec_debug_reset_reason_extra_show, NULL);
+}
+
+static const struct file_operations sec_debug_reset_reason_extra_proc_fops = {
+	.open = sec_debug_reset_reason_extra_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 static int sec_debug_reset_reason_store_lastkmsg_proc_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, sec_debug_reset_reason_store_lastkmsg_proc_show, NULL);
@@ -97,8 +136,11 @@ static int __init sec_debug_reset_reason_init(void)
 	if (!entry)
 		return -ENOMEM;
 
-	entry = proc_create("store_lastkmsg", S_IWUGO, NULL, &sec_debug_reset_reason_store_lastkmsg_proc_fops);
-
+	entry = proc_create("store_lastkmsg", 0222, NULL, &sec_debug_reset_reason_store_lastkmsg_proc_fops);
+	if (!entry)
+		return -ENOMEM;
+		
+	entry = proc_create("extra", 0222, NULL, &sec_debug_reset_reason_extra_proc_fops);
 	if (!entry)
 		return -ENOMEM;
 

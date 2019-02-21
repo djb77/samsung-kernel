@@ -1560,7 +1560,7 @@ static void sec_bat_aging_check(struct sec_battery_info *battery)
 	int calc_step = -1;
 	bool ret;
 
-	if (battery->pdata->num_age_step <= 0)
+	if (battery->pdata->num_age_step <= 0 || battery->batt_cycle < 0)
 		return;
 
 	if (battery->temperature < 50) {

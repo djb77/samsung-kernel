@@ -1749,7 +1749,7 @@ static int crypt_ctr_cipher(struct dm_target *ti,
 
 	if ((strcmp(chainmode, "xts") == 0) &&
 			(strcmp(cipher, "aes") == 0) &&
-			(strcmp(ivmode, "fmp") == 0)) {
+			((strcmp(ivmode, "fmp") == 0) || (strcmp(ivmode, "disk") == 0))) {
 		pr_info("%s: H/W FMP disk encryption\n", __func__);
 #if !defined(CONFIG_FMP_DM_CRYPT)
 		ti->error = "Error decoding xts-aes-fmp";

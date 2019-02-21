@@ -130,19 +130,19 @@ static unsigned char bbd_patch[] = {
 #if defined(CONFIG_SENSORS_SSP_GREAT)
 #if ANDROID_VERSION < 80000
 #include "bbd_patch_file_great.h"
-#else
+#elif ANDROID_VERSION < 90000
 #include "bbd_patch_file_great_o.h"
+#else
+#include "bbd_patch_file_great_p.h"
 #endif
 #elif defined(CONFIG_SENSORS_SSP_DREAM)
 #if ANDROID_VERSION < 80000
 #include "bbd_patch_file_dream.h"
-#else
+#elif ANDROID_VERSION < 90000
 #include "bbd_patch_file_dream_o.h"
+#else
+#include "bbd_patch_file_dream_p.h"
 #endif
-#elif defined(CONFIG_SENSORS_SSP_GRACE)
-#include "bbd_patch_file_grace.h"
-#elif defined(CONFIG_SENSORS_SSP_LUCKY)
-#include "bbd_patch_file_lucky.h"
 #elif defined(CONFIG_SENSORS_SSP_VLTE)
 #include "bbd_patch_file_valley.h"
 #elif defined(CONFIG_SENSORS_SSP_LUGE)

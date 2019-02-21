@@ -31,8 +31,10 @@ menuconfig MALI_TMIX
 choice
 	prompt "version Configuration"
 	depends on MALI_TMIX
-	default MALI_TMIX_R3P0 if DDK_VERSION_OS = "n"
-	default MALI_TMIX_R9P0 if DDK_VERSION_OS = "o"
+	default MALI_TMIX_R3P0 if ANDROID_VERSION = "70000"
+	default MALI_TMIX_R9P0 if ANDROID_VERSION = "80000"
+	default MALI_TMIX_R9P0 if ANDROID_VERSION = "80100"
+	default MALI_TMIX_R16P0 if ANDROID_VERSION >= "90000"
 	help
 	  Select the gpu support version.
 
@@ -55,6 +57,10 @@ config MALI_TMIX_R9P0
 	depends on MALI_TMIX
 	bool "mimir r9p0 driver"
 
+config MALI_TMIX_R16P0
+	depends on MALI_TMIX
+	bool "Bifrost r16p0 driver"
+
 endchoice
 
 if MALI_TMIX_R0P0
@@ -75,4 +81,8 @@ endif
 
 if MALI_TMIX_R9P0
 source "drivers/gpu/arm/tMIx/r9p0/Kconfig"
+endif
+
+if MALI_TMIX_R16P0
+source "drivers/gpu/arm/b_r16p0/Kconfig"
 endif

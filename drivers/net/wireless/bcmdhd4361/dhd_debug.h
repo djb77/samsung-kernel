@@ -3,14 +3,14 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -18,18 +18,19 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_debug.h 705824 2017-06-19 13:58:39Z $
+ * $Id: dhd_debug.h 736436 2017-12-15 05:22:20Z $
  */
 
 #ifndef _dhd_debug_h_
 #define _dhd_debug_h_
 #include <event_log.h>
 #include <bcmutils.h>
+#include <dhd_dbg_ring.h>
 
 enum {
 	DEBUG_RING_ID_INVALID	= 0,
@@ -62,17 +63,15 @@ enum {
 	DBG_RING_ENTRY_FLAGS_HAS_TIMESTAMP = (1 << (1))
 };
 
-#define DBGRING_NAME_MAX		32
 /* firmware verbose ring, ring id 1 */
 #define FW_VERBOSE_RING_NAME		"fw_verbose"
-#define FW_VERBOSE_RING_SIZE		(64 * 1024)
+#define FW_VERBOSE_RING_SIZE		(256 * 1024)
 /* firmware event ring, ring id 2 */
 #define FW_EVENT_RING_NAME		"fw_event"
 #define FW_EVENT_RING_SIZE		(64 * 1024)
 /* DHD connection event ring, ring id 3 */
 #define DHD_EVENT_RING_NAME		"dhd_event"
 #define DHD_EVENT_RING_SIZE		(64 * 1024)
-
 /* NAN event ring, ring id 4 */
 #define NAN_EVENT_RING_NAME		"nan_event"
 #define NAN_EVENT_RING_SIZE		(64 * 1024)
@@ -81,8 +80,6 @@ enum {
 
 #define TLV_LOG_NEXT(tlv) \
 	((tlv) ? ((tlv_log *)((uint8 *)tlv + TLV_LOG_SIZE(tlv))) : 0)
-
-#define DBG_RING_STATUS_SIZE (sizeof(dhd_dbg_ring_status_t))
 
 #define VALID_RING(id)	\
 	((id > DEBUG_RING_ID_INVALID) && (id < DEBUG_RING_ID_MAX))
@@ -93,13 +90,6 @@ enum {
 #else
 #define DBG_RING_ACTIVE(dhdp, ring_id) 0
 #endif /* DEBUGABILITY */
-
-#define TXACTIVESZ(r, w, d)			(((r) <= (w)) ? ((w) - (r)) : ((d) - (r) + (w)))
-#define DBG_RING_READ_AVAIL_SPACE(w, r, d)	(((w) >= (r)) ? ((w) - (r)) : ((d) - (r)))
-#define DBG_RING_WRITE_SPACE_AVAIL_CONT(r, w, d)	(((w) >= (r)) ? ((d) - (w)) : ((r) - (w)))
-#define DBG_RING_WRITE_SPACE_AVAIL(r, w, d)	(d - (TXACTIVESZ(r, w, d)))
-#define DBG_RING_CHECK_WRITE_SPACE(r, w, d)	\
-	MIN(DBG_RING_WRITE_SPACE_AVAIL(r, w, d), DBG_RING_WRITE_SPACE_AVAIL_CONT(r, w, d))
 
 enum {
 	/* driver receive association command from kernel */
@@ -297,6 +287,7 @@ typedef struct per_packet_status_entry {
 } per_packet_status_entry_t;
 
 #define PACKED_STRUCT __attribute__ ((packed))
+
 typedef struct log_conn_event {
     uint16 event;
     tlv_log *tlvs;
@@ -343,42 +334,12 @@ enum {
 	DBG_RING_ENTRY_NAN_EVENT_TYPE
 };
 
-typedef struct dhd_dbg_ring_entry {
-	uint16 len; /* payload length excluding the header */
-	uint8 flags;
-	uint8 type; /* Per ring specific */
-	uint64 timestamp; /* present if has_timestamp bit is set. */
-} PACKED_STRUCT dhd_dbg_ring_entry_t;
-
-#define DBG_RING_ENTRY_SIZE (sizeof(dhd_dbg_ring_entry_t))
-
-#define ENTRY_LENGTH(hdr) ((hdr)->len + DBG_RING_ENTRY_SIZE)
-
-#define PAYLOAD_MAX_LEN 65535
-
-typedef struct dhd_dbg_ring_status {
-	uint8 name[DBGRING_NAME_MAX];
-	uint32 flags;
-	int ring_id; /* unique integer representing the ring */
-	/* total memory size allocated for the buffer */
-	uint32 ring_buffer_byte_size;
-	uint32 verbose_level;
-	/* number of bytes that was written to the buffer by driver */
-	uint32 written_bytes;
-	/* number of bytes that was read from the buffer by user land */
-	uint32 read_bytes;
-	/* number of records that was read from the buffer by user land */
-	uint32 written_records;
-} dhd_dbg_ring_status_t;
-
 struct log_level_table {
 	int log_level;
 	uint16 tag;
-	uint8 sets;
 	char *desc;
 };
 
-#ifdef DEBUGABILITY
 #define DBG_EVENT_LOG(dhdp, connect_state)					\
 {										\
 	do {									\
@@ -388,14 +349,9 @@ struct log_level_table {
 				&state, sizeof(state));				\
 	} while (0);								\
 }
-#else
-#define DBG_EVENT_LOG(dhdp, connect_state)
-#endif /* DEBUGABILITY */
-
 
 #define MD5_PREFIX_LEN				4
 #define MAX_FATE_LOG_LEN			32
-
 #define MAX_FRAME_LEN_ETHERNET		1518
 #define MAX_FRAME_LEN_80211_MGMT	2352 /* 802.11-2012 Fig. 8-34 */
 
@@ -415,8 +371,8 @@ typedef enum {
 	 */
 	TX_PKT_FATE_FW_DROP_INVALID,
 
-	/* Dropped by firmware due to lack of buffer space. */
-	TX_PKT_FATE_FW_DROP_NOBUFS,
+	/* Dropped by firmware due to lifetime expiration. */
+	TX_PKT_FATE_FW_DROP_EXPTIME,
 
 	/*
 	 * Dropped by firmware for any other reason. Includes
@@ -439,6 +395,9 @@ typedef enum {
 
 	/*  Dropped by driver for any other reason. */
 	TX_PKT_FATE_DRV_DROP_OTHER,
+
+	/* Packet free by firmware. */
+	TX_PKT_FATE_FW_PKT_FREE,
 
 	} wifi_tx_packet_fate;
 
@@ -581,7 +540,6 @@ typedef struct compat_wifi_frame_info {
 	} frame_content;
 } compat_wifi_frame_info_t;
 
-
 typedef struct compat_wifi_tx_report {
 	char md5_prefix[MD5_PREFIX_LEN];
 	wifi_tx_packet_fate fate;
@@ -593,7 +551,6 @@ typedef struct compat_wifi_rx_report {
 	wifi_rx_packet_fate fate;
 	compat_wifi_frame_info_t frame_inf;
 } compat_wifi_rx_report_t;
-
 
 /*
  * Packet logging - internal data
@@ -673,38 +630,6 @@ typedef struct dhd_dbg_pkt_mon
 	dbg_mon_rx_pkts_t rx_pkt_mon;
 } dhd_dbg_pkt_mon_t;
 
-enum dbg_ring_state {
-	RING_STOP       = 0,    /* ring is not initialized */
-	RING_ACTIVE,    /* ring is live and logging */
-	RING_SUSPEND    /* ring is initialized but not logging */
-};
-
-struct ring_statistics {
-	/* number of bytes that was written to the buffer by driver */
-	uint32 written_bytes;
-	/* number of bytes that was read from the buffer by user land */
-	uint32 read_bytes;
-	/* number of records that was written to the buffer by driver */
-	uint32 written_records;
-};
-
-typedef struct dhd_dbg_ring {
-	int     id;             /* ring id */
-	uint8   name[DBGRING_NAME_MAX]; /* name string */
-	uint32  ring_size;      /* numbers of item in ring */
-	uint32  wp;             /* write pointer */
-	uint32  rp;             /* read pointer */
-	uint32  log_level; /* log_level */
-	uint32  threshold; /* threshold bytes */
-	void *  ring_buf;       /* pointer of actually ring buffer */
-	void *  lock;           /* spin lock for ring access */
-	struct ring_statistics stat; /* statistics */
-	enum dbg_ring_state state;      /* ring state enum */
-	bool tail_padded;		/* writer does not have enough space */
-	uint32 rem_len;		/* number of bytes from wp_pad to end */
-	bool sched_pull;	/* schedule reader immediately */
-} dhd_dbg_ring_t;
-
 typedef struct dhd_dbg {
 	dhd_dbg_ring_t dbg_rings[DEBUG_RING_ID_MAX];
 	void *private;          /* os private_data */
@@ -765,12 +690,12 @@ typedef struct dhd_dbg {
 #ifdef DUMP_IOCTL_IOV_LIST
 typedef struct dhd_iov_li {
 	dll_t list;
-	uint32 cmd;
-	char buff[100];
+	uint32 cmd; /* command number */
+	char buff[100]; /* command name */
 } dhd_iov_li_t;
+#endif /* DUMP_IOCTL_IOV_LIST */
 
 #define IOV_LIST_MAX_LEN 5
-#endif /* DUMP_IOCTL_IOV_LIST */
 
 #ifdef DHD_DEBUG
 typedef struct {
@@ -784,23 +709,28 @@ typedef struct {
 /* dhd_dbg functions */
 extern void dhd_dbg_trace_evnt_handler(dhd_pub_t *dhdp, void *event_data,
 		void *raw_event_ptr, uint datalen);
+void dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
+	void *raw_event_ptr, uint datalen, bool msgtrace_hdr_present,
+	uint32 msgtrace_seqnum);
+
 extern int dhd_dbg_attach(dhd_pub_t *dhdp, dbg_pullreq_t os_pullreq,
 	dbg_urgent_noti_t os_urgent_notifier, void *os_priv);
 extern void dhd_dbg_detach(dhd_pub_t *dhdp);
 extern int dhd_dbg_start(dhd_pub_t *dhdp, bool start);
 extern int dhd_dbg_set_configuration(dhd_pub_t *dhdp, int ring_id,
 		int log_level, int flags, uint32 threshold);
-extern int dhd_dbg_get_ring_status(dhd_pub_t *dhdp, int ring_id,
-		dhd_dbg_ring_status_t *dbg_ring_status);
-extern int dhd_dbg_ring_push(dhd_pub_t *dhdp, int ring_id, dhd_dbg_ring_entry_t *hdr, void *data);
-extern int dhd_dbg_ring_pull(dhd_pub_t *dhdp, int ring_id, void *data, uint32 buf_len);
-extern int dhd_dbg_ring_pull_single(dhd_pub_t *dhdp, int ring_id, void *data, uint32 buf_len,
-		bool strip_header);
 extern int dhd_dbg_find_ring_id(dhd_pub_t *dhdp, char *ring_name);
 extern void *dhd_dbg_get_priv(dhd_pub_t *dhdp);
 extern int dhd_dbg_send_urgent_evt(dhd_pub_t *dhdp, const void *data, const uint32 len);
 extern void dhd_dbg_verboselog_printf(dhd_pub_t *dhdp, event_log_hdr_t *hdr,
-	void *raw_event_ptr, uint32 *log_ptr);
+	void *raw_event_ptr, uint32 *log_ptr, uint32 logset, uint16 block);
+int dhd_dbg_pull_from_ring(dhd_pub_t *dhdp, int ring_id, void *data, uint32 buf_len);
+int dhd_dbg_pull_single_from_ring(dhd_pub_t *dhdp, int ring_id, void *data, uint32 buf_len,
+	bool strip_header);
+int dhd_dbg_push_to_ring(dhd_pub_t *dhdp, int ring_id, dhd_dbg_ring_entry_t *hdr,
+		void *data);
+int dhd_dbg_get_ring_status(dhd_pub_t *dhdp, int ring_id,
+		dhd_dbg_ring_status_t *dbg_ring_status);
 
 #ifdef DBG_PKT_MON
 extern int dhd_dbg_attach_pkt_monitor(dhd_pub_t *dhdp,
@@ -819,6 +749,9 @@ extern int dhd_dbg_monitor_get_rx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 		uint16 req_count, uint16 *resp_count);
 extern int dhd_dbg_detach_pkt_monitor(dhd_pub_t *dhdp);
 #endif /* DBG_PKT_MON */
+
+extern bool dhd_dbg_process_tx_status(dhd_pub_t *dhdp, void *pkt,
+		uint32 pktid, uint16 status);
 
 /* os wrapper function */
 extern int dhd_os_dbg_attach(dhd_pub_t *dhdp);

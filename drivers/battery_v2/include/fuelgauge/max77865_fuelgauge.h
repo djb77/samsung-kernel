@@ -103,6 +103,8 @@ struct battery_data_t {
 	u32 sw_v_empty_recover_vol;
 	u32 QResidual20;
 	u32 QResidual30;
+	u32 filtercfg;
+	u32 filtercfg_low_temp;
 	u32 TempCo;
 	u32 Capacity;
 	u8	*type_str;

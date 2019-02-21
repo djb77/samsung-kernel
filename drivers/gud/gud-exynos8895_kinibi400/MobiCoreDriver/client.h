@@ -24,7 +24,7 @@ struct tee_client;
 /* Client */
 struct tee_client *client_create(bool is_from_kernel);
 void client_get(struct tee_client *client);
-void client_put(struct tee_client *client);
+int client_put(struct tee_client *client);
 bool client_has_sessions(struct tee_client *client);
 void client_close(struct tee_client *client);
 

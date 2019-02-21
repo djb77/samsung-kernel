@@ -131,7 +131,7 @@ static int displayport_get_min_link_rate(u8 rx_link_rate, u8 lane_cnt)
 
 	max_pclk = displayport_find_edid_max_pixelclock();
 	for (i = 0; i < 2; i++) {
-		if ((u64)lane_cnt * pc1lane[i] >= max_pclk)
+		if ((u64)lane_cnt * pc1lane[i] * 9 / 10 >= max_pclk)
 			break;
 	}
 
@@ -172,6 +172,7 @@ static int displayport_full_link_training(void)
 	u8 pre_emphasis_lane[MAX_LANE_CNT];
 	u8 max_reach_value[MAX_LANE_CNT];
 	int training_retry_no, eq_training_retry_no, i;
+	int need_retraining, training_retry_no2;
 	u8 val[DPCD_BUF_SIZE] = {0,};
 	u8 eq_val[DPCD_BUF_SIZE] = {0,};
 	u8 lane_cr_done;
@@ -212,7 +213,7 @@ static int displayport_full_link_training(void)
 	training_aux_rd_interval = val[0];
 
 Reduce_Link_Rate_Retry:
-	displayport_info("Reduce_Link_Rate_Retry\n");
+	displayport_info("Reduce_Link_Rate_Retry(0x%X)\n", link_rate);
 
 	for (i = 0; i < 4; i++) {
 		pre_emphasis[i] = 0;
@@ -220,6 +221,7 @@ Reduce_Link_Rate_Retry:
 	}
 
 	training_retry_no = 0;
+	training_retry_no2 = 0;
 
 	displayport_reg_phy_reset(1);
 
@@ -304,8 +306,23 @@ Voltage_Swing_Retry:
 		return -EINVAL;
 	}
 
-	if (!(drive_current[0] == 3 && drive_current[1] == 3
-				&& drive_current[2] == 3 && drive_current[3] == 3)) {
+	need_retraining = 0;
+	switch(lane_cnt) {
+	case 4:
+		if (drive_current[2] != 3 || drive_current[3] != 3)
+			need_retraining = 1;
+	case 2:
+		if (drive_current[1] != 3)
+			need_retraining = 1;
+	case 1:
+		if (drive_current[0] != 3)
+			need_retraining = 1;
+		break;
+	default:
+		displayport_err("lane_cnt(%d) not valid\n", lane_cnt);
+		return -EINVAL;
+	}
+	if (need_retraining) {
 		displayport_reg_dpcd_read_burst(DPCD_ADD_ADJUST_REQUEST_LANE0_1, 2, val);
 		voltage_swing_lane[0] = (val[0] & VOLTAGE_SWING_LANE0);
 		pre_emphasis_lane[0] = (val[0] & PRE_EMPHASIS_LANE0) >> 2;
@@ -317,6 +334,13 @@ Voltage_Swing_Retry:
 		voltage_swing_lane[3] = (val[1] & VOLTAGE_SWING_LANE3) >> 4;
 		pre_emphasis_lane[3] = (val[1] & PRE_EMPHASIS_LANE3) >> 6;
 
+		displayport_info("check voltage swing(%d): val(%d,%d) %d/%d, %d/%d, %d/%d, %d/%d\n",
+				training_retry_no, val[0], val[1],
+				drive_current[0], voltage_swing_lane[0],
+				drive_current[1], voltage_swing_lane[1],
+				drive_current[2], voltage_swing_lane[2],
+				drive_current[3], voltage_swing_lane[3]);
+
 		if (drive_current[0] == voltage_swing_lane[0] &&
 				drive_current[1] == voltage_swing_lane[1] &&
 				drive_current[2] == voltage_swing_lane[2] &&
@@ -325,8 +349,13 @@ Voltage_Swing_Retry:
 				goto Check_Link_rate;
 			else
 				training_retry_no++;
-		} else
-			training_retry_no = 1;
+		} else {
+			training_retry_no = 0;
+			if (training_retry_no2++ >= 16) {
+				displayport_err("too many voltage swing retries\n");
+				goto Check_Link_rate;
+			}				
+		}
 
 		for (i = 0; i < 4; i++) {
 			drive_current[i] = voltage_swing_lane[i];
@@ -1002,6 +1031,7 @@ HPD_FAIL:
 	if (wake_lock_active(&displayport->dp_wake_lock))
 			wake_unlock(&displayport->dp_wake_lock);
 	displayport->hpd_current_state = 0;
+	displayport->dex_state = DEX_OFF;
 	displayport->hpd_state = HPD_UNPLUG;
 	mutex_unlock(&displayport->hpd_lock);
 
@@ -2053,17 +2083,32 @@ static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
 		return -E2BIG;
 	}
 
-	if (displayport->dex_setting && !displayport_supported_presets[timings->index].dex_support) {
-		displayport_info("not supported video_format : %s in dex mode\n",
+	if (!displayport_supported_presets[timings->index].edid_support_match) {
+		displayport_dbg("not supported video_format : %s\n",
 				displayport_supported_presets[timings->index].name);
 		return -EINVAL;
+	}
+
+	if (displayport->dex_setting) {
+		if (displayport_supported_presets[timings->index].dex_support == DEX_NOT_SUPPORT) {
+			displayport_dbg("not supported video_format : %s in dex mode\n",
+					displayport_supported_presets[timings->index].name);
+			return -EINVAL;
+		}
+		if (displayport_supported_presets[timings->index].dex_support > displayport->dex_adapter_type) {
+			displayport_info("%s not supported, adapter:%d, resolution:%d in dex mode\n",
+					displayport_supported_presets[timings->index].name,
+					displayport->dex_adapter_type,
+					displayport_supported_presets[timings->index].dex_support);
+			return -EINVAL;
+		}
 	}
 
 	/* reduce the timing by lane count and link rate */
 	if (displayport_check_bandwidth(displayport_supported_presets[timings->index].dv_timings.bt.pixelclock)) {
 		displayport_info("Over the bandwidth for lane:%d, rate:0x%x\n",
 				max_lane_cnt, max_link_rate);
-		return -E2BIG;
+		return -EINVAL;
 	}
 
 	if (reduced_resolution && reduced_resolution <
@@ -2072,13 +2117,9 @@ static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
 		return -E2BIG;
 	}
 
-	if (displayport_supported_presets[timings->index].edid_support_match) {
-		displayport_info("matched %d(%s)\n", timings->index,
-				displayport_supported_presets[timings->index].name);
-		timings->timings = displayport_supported_presets[timings->index].dv_timings;
-	} else {
-		return -EINVAL;
-	}
+	displayport_info("matched %d(%s)\n", timings->index,
+			displayport_supported_presets[timings->index].name);
+	timings->timings = displayport_supported_presets[timings->index].dv_timings;
 
 	return 0;
 }
@@ -2300,17 +2341,29 @@ static void displayport_aux_sel(struct displayport_device *displayport)
 	}
 }
 
-bool check_dex_support(struct displayport_device *displayport)
+static void displayport_check_adapter_type(struct displayport_device *displayport)
 {
-	if (displayport->ven_id == SAMSUNG_VENDOR_ID
-			&& displayport->prod_id == DEXDOCK_PRODUCT_ID)
-		return true;
+	displayport->dex_adapter_type = DEX_FHD_SUPPORT;
 
-#ifdef CONFIG_DISPLAYPORT_ENG
-	return true;
-#else
-	return false;
-#endif
+	if (displayport->ven_id != 0x04e8)
+		return;
+
+	switch(displayport->prod_id) {
+	case 0xa029: /* PAD */
+	case 0xa020: /* Station */
+	case 0xa02a:
+	case 0xa02b:
+	case 0xa02c:
+	case 0xa02d:
+	case 0xa02e:
+	case 0xa02f:
+	case 0xa030:
+	case 0xa031:
+	case 0xa032:
+	case 0xa033:
+		displayport->dex_adapter_type = DEX_WQHD_SUPPORT;
+		break;
+	};
 }
 
 #if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
@@ -2333,9 +2386,10 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 
 	switch (usb_typec_info.id) {
 	case CCIC_NOTIFY_ID_DP_CONNECT:
-		displayport_info("CCIC_NOTIFY_ID_DP_CONNECT, %x\n", usb_typec_info.sub1);
 		switch (usb_typec_info.sub1) {
 		case CCIC_NOTIFY_DETACH:
+			dp_logger_set_max_count(100);
+			displayport_info("CCIC_NOTIFY_ID_DP_CONNECT, %x\n", usb_typec_info.sub1);
 			displayport->dex_state = DEX_OFF;
 			displayport->dex_ver[0] = 0;
 			displayport->dex_ver[1] = 0;
@@ -2349,17 +2403,18 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 #endif
 			break;
 		case CCIC_NOTIFY_ATTACH:
+			dp_logger_set_max_count(100);
 			displayport->ven_id = usb_typec_info.sub2;
 			displayport->prod_id = usb_typec_info.sub3;
+			displayport_info("CCIC_NOTIFY_ID_DP_CONNECT VID:0x%llX, PID:0x%llX\n",
+				displayport->ven_id, displayport->prod_id);
+			displayport_check_adapter_type(displayport);
 
-			dp_logger_set_max_count(150);
 #ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
 			secdp_bigdata_connection();
 			secdp_bigdata_save_item(BD_ADT_VID, displayport->ven_id);
 			secdp_bigdata_save_item(BD_ADT_PID, displayport->prod_id);
 #endif
-			if(check_dex_support(displayport))
-				displayport_info("Dex mode supported product connected\n");
 
 			displayport_aux_onoff(displayport, 1);
 			break;
@@ -2427,6 +2482,7 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 				return 0;
 			} else {
 				displayport->ccic_hpd = true;
+				dp_logger_set_max_count(300);
 				if(displayport->ccic_link_conf) {
 					msleep(10);
 					displayport_hpd_changed(1);
@@ -3051,24 +3107,22 @@ static ssize_t displayport_dex_store(struct class *dev,
 			displayport->dex_state != DEX_RECONNECTING)
 		need_reconnect = 1;
 
-	/* if current resolution is dex supported, then do not reconnect */
-	if (displayport_supported_presets[g_displayport_videoformat].dex_support &&
-			displayport->dex_setting)
-		need_reconnect = 0;
-
-	/* if current resolution is best, then do not reconnect */
-	if (!displayport->dex_setting && g_displayport_videoformat == displayport->best_video)
-		need_reconnect = 0;
-
+	if (displayport->dex_setting) {
+		/* if current resolution is dex supported, then do not reconnect */
+		if (displayport_supported_presets[g_displayport_videoformat].dex_support != DEX_NOT_SUPPORT &&
+			displayport_supported_presets[g_displayport_videoformat].dex_support <= displayport->dex_adapter_type) {
+			displayport_info("current video support dex %d\n", g_displayport_videoformat);
+			need_reconnect = 0;
+		}
+	} else {
+		/* if current resolution is best, then do not reconnect */
+		if (g_displayport_videoformat == displayport->best_video) {
+			displayport_info("current video is best %d\n", g_displayport_videoformat);
+			need_reconnect = 0;
+		}
+	}
 
 	displayport->dex_state = dex_run;
-
-#ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
-		if (displayport->dex_state == DEX_ON)
-			secdp_bigdata_save_item(BD_DP_MODE, "DEX");
-		else if (displayport->dex_state == DEX_OFF)
-			secdp_bigdata_save_item(BD_DP_MODE, "MIRROR");
-#endif
 
 	/* reconnect if setting was mirroring(0) and dex is running(1), */
 	if (displayport->hpd_current_state && need_reconnect) {

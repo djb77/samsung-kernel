@@ -1037,6 +1037,9 @@ static void isolate_freepages(struct compact_control *cc)
 		if (!isolation_suitable(cc, page))
 			continue;
 
+		if (is_migrate_rbin_page(page))
+			continue;
+
 		/* Found a block suitable for isolating free pages from. */
 		isolate_freepages_block(cc, &isolate_start_pfn, block_end_pfn,
 					freelist, false);
@@ -1181,6 +1184,8 @@ static isolate_migrate_t isolate_migratepages(struct zone *zone,
 		if (!isolation_suitable(cc, page))
 			continue;
 
+		if (is_migrate_rbin_page(page))
+			continue;
 		/*
 		 * For async compaction, also only scan in MOVABLE blocks.
 		 * Async compaction is optimistic to see if the minimum amount

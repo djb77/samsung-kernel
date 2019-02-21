@@ -328,7 +328,6 @@ void gpu_update_status(void *dev, char *str, u32 val)
 {
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
-	int i;
 
 	kbdev = (struct kbase_device *)dev;
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
@@ -380,8 +379,7 @@ void gpu_update_status(void *dev, char *str, u32 val)
 	else if (strcmp(str, "reset_count") == 0)
 		platform->gpu_exception_count[GPU_RESET]++;
 
-	for (i = GPU_JOB_CONFIG_FAULT; i < GPU_EXCEPTION_LIST_END; i++)
-		platform->fault_count += platform->gpu_exception_count[i];
+	platform->fault_count++;
 }
 
 #define KBASE_MMU_PAGE_ENTRIES	512

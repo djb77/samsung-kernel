@@ -347,6 +347,11 @@ struct ion_heap *ion_heap_create(struct ion_platform_heap *heap_data)
 	case ION_HEAP_TYPE_SYSTEM:
 		heap = ion_system_heap_create(heap_data);
 		break;
+#ifdef CONFIG_ION_RBIN_HEAP
+	case ION_HEAP_TYPE_RBIN:
+		heap = ion_rbin_heap_create(heap_data);
+		break;
+#endif
 	case ION_HEAP_TYPE_CARVEOUT:
 		heap = ion_carveout_heap_create(heap_data);
 		break;
@@ -391,6 +396,11 @@ void ion_heap_destroy(struct ion_heap *heap)
 	case ION_HEAP_TYPE_SYSTEM:
 		ion_system_heap_destroy(heap);
 		break;
+#ifdef CONFIG_ION_RBIN_HEAP
+	case ION_HEAP_TYPE_RBIN:
+		ion_rbin_heap_destroy(heap);
+		break;
+#endif
 	case ION_HEAP_TYPE_CARVEOUT:
 		ion_carveout_heap_destroy(heap);
 		break;

@@ -2,14 +2,14 @@
  *  BCMSDH interface glue
  *  implement bcmsdh API for SDIOH driver
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -17,7 +17,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmsdh.c 671319 2016-11-21 14:27:29Z $
+ * $Id: bcmsdh.c 727623 2017-10-21 01:00:32Z $
  */
 
 /**
@@ -64,7 +64,6 @@ static dhd_hang_notification process_dhd_hang_notification = NULL;
 static dhd_hang_state_t g_dhd_hang_state = NO_HANG_STATE;
 #endif /* defined (BT_OVER_SDIO) */
 
-
 #if defined(OOB_INTR_ONLY) && defined(HW_OOB)
 extern int
 sdioh_enable_hw_oob_intr(void *sdioh, bool enable);
@@ -74,7 +73,7 @@ bcmsdh_enable_hw_oob_intr(bcmsdh_info_t *sdh, bool enable)
 {
 	sdioh_enable_hw_oob_intr(sdh->sdioh, enable);
 }
-#endif
+#endif // endif
 
 #if defined(BT_OVER_SDIO)
 void bcmsdh_btsdio_process_hang_state(dhd_hang_state_t new_state)
@@ -97,6 +96,7 @@ void bcmsdh_btsdio_process_hang_state(dhd_hang_state_t new_state)
 			if (HANG_RECOVERY_STATE == new_state ||
 				NO_HANG_STATE == new_state)
 				state_change = true;
+
 		break;
 
 		case HANG_RECOVERY_STATE:
@@ -173,12 +173,12 @@ bcmsdh_attach(osl_t *osh, void *sdioh, ulong *regsva)
 	bcmsdh->sdioh = sdioh;
 	bcmsdh->osh = osh;
 	bcmsdh->init_success = TRUE;
-	*regsva = SI_ENUM_BASE;
+	*regsva = si_enum_base(0);
 
 	bcmsdh_force_sbwad_calc(bcmsdh, FALSE);
 
 	/* Report the BAR, to fix if needed */
-	bcmsdh->sbwad = SI_ENUM_BASE;
+	bcmsdh->sbwad = si_enum_base(0);
 
 	/* save the handler locally */
 	l_bcmsdh = bcmsdh;
@@ -202,7 +202,7 @@ bcmsdh_detach(osl_t *osh, void *sdh)
 
 int
 bcmsdh_iovar_op(void *sdh, const char *name,
-                void *params, int plen, void *arg, int len, bool set)
+                void *params, uint plen, void *arg, uint len, bool set)
 {
 	bcmsdh_info_t *bcmsdh = (bcmsdh_info_t *)sdh;
 	return sdioh_iovar_op(bcmsdh->sdioh, name, params, plen, arg, len, set);
@@ -300,8 +300,7 @@ bcmsdh_intr_pending(void *sdh)
 	ASSERT(sdh);
 	return sdioh_interrupt_pending(bcmsdh->sdioh);
 }
-#endif
-
+#endif // endif
 
 int
 bcmsdh_devremove_reg(void *sdh, bcmsdh_cb_fn_t fn, void *argh)
@@ -327,7 +326,7 @@ bcmsdh_cfg_read(void *sdh, uint fnc_num, uint32 addr, int *err)
 	SDIOH_API_RC status;
 #ifdef SDIOH_API_ACCESS_RETRY_LIMIT
 	int32 retry = 0;
-#endif
+#endif // endif
 	uint8 data = 0;
 
 	if (!bcmsdh)
@@ -339,11 +338,11 @@ bcmsdh_cfg_read(void *sdh, uint fnc_num, uint32 addr, int *err)
 	do {
 		if (retry)	/* wait for 1 ms till bus get settled down */
 			OSL_DELAY(1000);
-#endif
+#endif // endif
 	status = sdioh_cfg_read(bcmsdh->sdioh, fnc_num, addr, (uint8 *)&data);
 #ifdef SDIOH_API_ACCESS_RETRY_LIMIT
 	} while (!SDIOH_API_SUCCESS(status) && (retry++ < SDIOH_API_ACCESS_RETRY_LIMIT));
-#endif
+#endif // endif
 	if (err)
 		*err = (SDIOH_API_SUCCESS(status) ? 0 : BCME_SDIO_ERROR);
 
@@ -360,7 +359,7 @@ bcmsdh_cfg_write(void *sdh, uint fnc_num, uint32 addr, uint8 data, int *err)
 	SDIOH_API_RC status;
 #ifdef SDIOH_API_ACCESS_RETRY_LIMIT
 	int32 retry = 0;
-#endif
+#endif // endif
 
 	if (!bcmsdh)
 		bcmsdh = l_bcmsdh;
@@ -371,11 +370,11 @@ bcmsdh_cfg_write(void *sdh, uint fnc_num, uint32 addr, uint8 data, int *err)
 	do {
 		if (retry)	/* wait for 1 ms till bus get settled down */
 			OSL_DELAY(1000);
-#endif
+#endif // endif
 	status = sdioh_cfg_write(bcmsdh->sdioh, fnc_num, addr, (uint8 *)&data);
 #ifdef SDIOH_API_ACCESS_RETRY_LIMIT
 	} while (!SDIOH_API_SUCCESS(status) && (retry++ < SDIOH_API_ACCESS_RETRY_LIMIT));
-#endif
+#endif // endif
 	if (err)
 		*err = SDIOH_API_SUCCESS(status) ? 0 : BCME_SDIO_ERROR;
 
@@ -428,7 +427,6 @@ bcmsdh_cfg_write_word(void *sdh, uint fnc_num, uint32 addr, uint32 data, int *er
 	             addr, data));
 }
 
-
 int
 bcmsdh_cis_read(void *sdh, uint func, uint8 *cis, uint length)
 {
@@ -467,7 +465,6 @@ bcmsdh_cis_read(void *sdh, uint func, uint8 *cis, uint length)
 
 	return (SDIOH_API_SUCCESS(status) ? 0 : BCME_ERROR);
 }
-
 
 int
 bcmsdhsdio_set_sbaddr_window(void *sdh, uint32 address, bool force_set)
@@ -816,7 +813,7 @@ bcmsdh_sleep(void *sdh, bool enab)
 	return sdioh_sleep(sd, enab);
 #else
 	return BCME_UNSUPPORTED;
-#endif
+#endif // endif
 }
 
 int

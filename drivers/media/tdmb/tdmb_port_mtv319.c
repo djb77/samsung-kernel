@@ -252,11 +252,12 @@ static bool mtv319_scan_ch(struct ensemble_info_type *e_info
 		if (rtvTDMB_ScanFrequency(freq/1000) == RTV_SUCCESS) {
 #if defined(TDMB_FIC_USE_TSIF)
 			unsigned int lock_s;
-			while(rtv_fic_dec_result == RTV_FIC_RET_GOING \
+
+			while (rtv_fic_dec_result == RTV_FIC_RET_GOING
 					&& rtv_fic_dec_timeout > 0) {
 				lock_s = tdmb_GetOfdmLockStatus();
 				if (!(lock_s & RTV_TDMB_OFDM_LOCK_MASK)) {
-					DPRINTK("##lock_s(0x%02X)\n",lock_s);
+					DPRINTK("##lock_s(0x%02X)\n", lock_s);
 					break;
 				}
 				RTV_DELAY_MS(FIC_WAIT_TIME);
@@ -269,21 +270,28 @@ static bool mtv319_scan_ch(struct ensemble_info_type *e_info
 #else
 			enum E_RTV_FIC_DEC_RET_TYPE dc;
 			unsigned int i;
+			int parser_status = 0;
 
 			rtvFICDEC_Init(); /* FIC parser Init */
 
 			for (i = 0; i < 30; i++) {
 				int ret_size;
+
 				ret_size = rtvTDMB_ReadFIC(fic_buf);
 				if (ret_size > 0) {
 					dc = rtvFICDEC_Decode(fic_buf, 384);
 					if (dc == RTV_FIC_RET_GOING)
 						continue;
 
-					if (dc == RTV_FIC_RET_DONE)
-						ret = true;
+					if (dc == RTV_FIC_RET_DONE) {
+						parser_status = 1;
+						break; /* Stop */
+					}
 
-					break; /* Stop */
+					if (dc == RTV_FIC_RET_SEMI_DONE) {
+						parser_status = 2;
+						continue;
+					}
 				} else {
 					DPRINTK("mtv319_scan_ch READ Fail\n");
 				}
@@ -291,8 +299,9 @@ static bool mtv319_scan_ch(struct ensemble_info_type *e_info
 
 			rtvTDMB_CloseFIC();
 #endif
-			if (ret == true)
+			if ((parser_status == 1) || (parser_status == 2))
 				ret = __get_ensemble_info(e_info, (freq));
+			DPRINTK("%s : parser_status : %d\n", __func__, parser_status);
 		} else {
 			DPRINTK("%s : Scan fail : %ld\n", __func__, freq);
 			ret = false;

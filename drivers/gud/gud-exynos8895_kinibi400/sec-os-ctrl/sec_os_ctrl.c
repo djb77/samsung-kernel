@@ -1,4 +1,4 @@
-/* drivers/gud/sec-os-ctrl/sec_os_ctrl.c
+/* drivers/gud/gud-exynos8895_kinibi400/sec-os-ctrl/sec_os_ctrl.c
  *
  * Secure OS control driver for Samsung Exynos
  *

@@ -11,5 +11,4 @@ obj-$(CONFIG_SENSORS_SSP_AK8963C)	+= ssp_ak8963c.o
 obj-$(CONFIG_SENSORS_SSP_SENSORHUB)	+= ssp_sensorhub.o
 
 obj-$(CONFIG_SENSORS_SSP_C12SD)		+= ssp_c12sd.o
-obj-$(CONFIG_SENSORS_MAX86900)		+= max86900.o
 obj-$(CONFIG_SENSORS_SSP_FACTORY)	+= factory/

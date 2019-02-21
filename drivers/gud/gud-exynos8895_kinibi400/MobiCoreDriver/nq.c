@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2018 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -110,15 +110,6 @@ static inline void notif_queue_push(u32 session_id, u32 payload)
 	 * We want a ARM dsb() / ARM64 dsb(sy) here
 	 */
 	rmb();
-}
-
-void nq_retrieve_last(u32 *session_id, u32 *payload)
-{
-	struct notification_queue_header *hdr = &l_ctx.nq.tx->hdr;
-	u32 i = (hdr->write_cnt - 1) % hdr->queue_size;
-
-	*session_id = l_ctx.nq.tx->notification[i].session_id;
-	*payload = l_ctx.nq.tx->notification[i].payload;
 }
 
 static inline bool nq_notifications_flush_nolock(void)
@@ -251,26 +242,26 @@ static int irq_bh_worker(void *arg)
 				rx->hdr.read_cnt % rx->hdr.queue_size];
 
 			/*
-			* Ensure read_cnt writing happens after buffer read
-			* We want a ARM dmb() / ARM64 dmb(sy) here
-			*/
+			 * Ensure read_cnt writing happens after buffer read
+			 * We want a ARM dmb() / ARM64 dmb(sy) here
+			 */
 			smp_mb();
 			rx->hdr.read_cnt++;
 			/*
-			* Ensure read_cnt writing finishes before reader
-			* We want a ARM dsb() / ARM64 dsb(sy) here
-			*/
+			 * Ensure read_cnt writing finishes before reader
+			 * We want a ARM dsb() / ARM64 dsb(sy) here
+			 */
 			rmb();
 			nq_notif_handler(nf.session_id, nf.payload);
 		}
 
 		/*
-		* Finished processing notifications. It does not matter whether
-		* there actually were any notification or not.  S-SIQs can also
-		* be triggered by an SWd driver which was waiting for a FIQ.
-		* In this case the S-SIQ tells NWd that SWd is no longer idle
-		* an will need scheduling again.
-		*/
+		 * Finished processing notifications. It does not matter whether
+		 * there actually were any notification or not.  S-SIQs can also
+		 * be triggered by an SWd driver which was waiting for a FIQ.
+		 * In this case the S-SIQ tells NWd that SWd is no longer idle
+		 * an will need scheduling again.
+		 */
 		if (l_ctx.scheduler_cb)
 			l_ctx.scheduler_cb(MC_NQ_NSIQ);
 	}
@@ -293,7 +284,6 @@ void nq_session_init(struct nq_session *session, bool is_gp)
 	session->state = NQ_NOTIF_IDLE;
 	session->cpu_clk = 0;
 	session->is_gp = is_gp;
-	session->notif_count = 0;
 }
 
 bool nq_session_is_gp(const struct nq_session *session)
@@ -604,7 +594,7 @@ int nq_start(void)
 		MAX_IW_SESSION * sizeof(struct interworld_session);
 
 	/* First empty N-SIQ to setup of the MCI structure */
-	ret = mc_fc_nsiq(0, 0);
+	ret = mc_fc_nsiq();
 	if (ret)
 		return ret;
 
@@ -625,7 +615,7 @@ int nq_start(void)
 			/* Switch to the TEE to give it more CPU time. */
 			ret = EAGAIN;
 			for (timeslot = 0; timeslot < 10; timeslot++) {
-				int tmp_ret = mc_fc_yield(timeslot);
+				int tmp_ret = mc_fc_yield();
 
 				if (tmp_ret)
 					return tmp_ret;

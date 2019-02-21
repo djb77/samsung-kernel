@@ -406,6 +406,7 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	struct sg_table *table;
 	struct scatterlist *sg;
 	int i, ret;
+	long nr_alloc_cur, nr_alloc_peak;
 
 	buffer = kzalloc(sizeof(struct ion_buffer), GFP_KERNEL);
 	if (!buffer)
@@ -482,6 +483,10 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	mutex_lock(&dev->buffer_lock);
 	ion_buffer_add(dev, buffer);
 	mutex_unlock(&dev->buffer_lock);
+	nr_alloc_cur = atomic_long_add_return(len, &heap->total_allocated);
+	nr_alloc_peak = atomic_long_read(&heap->total_allocated_peak);
+	if (nr_alloc_cur > nr_alloc_peak)
+		atomic_long_set(&heap->total_allocated_peak, nr_alloc_cur);
 	return buffer;
 
 err:
@@ -511,6 +516,7 @@ void ion_buffer_destroy(struct ion_buffer *buffer)
 		kfree(iovm_map);
 	}
 
+	atomic_long_sub(buffer->size, &buffer->heap->total_allocated);
 	buffer->heap->ops->unmap_dma(buffer->heap, buffer);
 	buffer->heap->ops->free(buffer);
 	vfree(buffer->pages);
@@ -551,6 +557,9 @@ static int ion_buffer_put(struct ion_buffer *buffer)
 static void ion_buffer_add_to_handle(struct ion_buffer *buffer)
 {
 	mutex_lock(&buffer->lock);
+	if (buffer->handle_count == 0)
+		atomic_long_add(buffer->size, &buffer->heap->total_handles);
+
 	buffer->handle_count++;
 	mutex_unlock(&buffer->lock);
 }
@@ -575,6 +584,7 @@ static void ion_buffer_remove_from_handle(struct ion_buffer *buffer)
 		task = current->group_leader;
 		get_task_comm(buffer->task_comm, task);
 		buffer->pid = task_pid_nr(task);
+		atomic_long_sub(buffer->size, &buffer->heap->total_handles);
 	}
 	mutex_unlock(&buffer->lock);
 }
@@ -2148,6 +2158,8 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 	seq_printf(s, "%16s %16zu\n", "total orphaned",
 		   total_orphaned_size);
 	seq_printf(s, "%16s %16zu\n", "total ", total_size);
+	seq_printf(s, "%16.s %16lu\n", "peak allocated",
+		   atomic_long_read(&heap->total_allocated_peak));
 	if (heap->flags & ION_HEAP_FLAG_DEFER_FREE)
 		seq_printf(s, "%16s %16zu\n", "deferred free",
 				heap->free_list_size);
@@ -2409,21 +2421,21 @@ static void ion_debug_event_show_one(struct seq_file *s,
 	case ION_EVENT_TYPE_ALLOC:
 		{
 		struct ion_event_alloc *data = &log->data.alloc;
-		seq_printf(s, "%8s  %p  %18s  %11zd  ", "alloc",
+		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "alloc",
 				data->id, data->heap->name, data->size);
 		break;
 		}
 	case ION_EVENT_TYPE_FREE:
 		{
 		struct ion_event_free *data = &log->data.free;
-		seq_printf(s, "%8s  %p  %18s  %11zd  ", "free",
+		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "free",
 				data->id, data->heap->name, data->size);
 		break;
 		}
 	case ION_EVENT_TYPE_MMAP:
 		{
 		struct ion_event_mmap *data = &log->data.mmap;
-		seq_printf(s, "%8s  %p  %18s  %11zd  ", "mmap",
+		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "mmap",
 				data->id, data->heap->name, data->size);
 		break;
 		}
@@ -2438,7 +2450,7 @@ static void ion_debug_event_show_one(struct seq_file *s,
 	case ION_EVENT_TYPE_CLEAR:
 		{
 		struct ion_event_clear *data = &log->data.clear;
-		seq_printf(s, "%8s  %p  %18s  %11zd  ", "clear",
+		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "clear",
 				data->id, data->heap->name, data->size);
 		break;
 		}

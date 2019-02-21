@@ -1,14 +1,14 @@
 /*
  * Platform Dependent file for Qualcomm MSM/APQ
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,14 +16,14 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_msm.c 772722 2018-07-18 06:22:03Z $
+ * $Id: dhd_custom_msm.c 758779 2018-04-20 10:26:22Z $
  *
  */
 
@@ -52,15 +52,7 @@ extern void *dhd_wlan_mem_prealloc(int section, unsigned long size);
 
 #define WIFI_TURNON_DELAY       200
 static int wlan_reg_on = -1;
-#ifdef CONFIG_BCM4359
-#ifdef CONFIG_ARCH_SDM845
 #define DHD_DT_COMPAT_ENTRY		"android,bcmdhd_wlan"
-#else
-#define DHD_DT_COMPAT_ENTRY		"samsung,bcmdhd_wlan"
-#endif /* CONFIG_ARCH_SDM845 */
-#else
-#define DHD_DT_COMPAT_ENTRY		"android,bcmdhd_wlan"
-#endif /* CONFIG_BCM4359 */
 #define WIFI_WL_REG_ON_PROPNAME		"wlan-en-gpio"
 
 #if defined(CONFIG_ARCH_MSM8996) || defined(CONFIG_ARCH_MSM8998) || \
@@ -120,7 +112,7 @@ dhd_wifi_init_gpio(void)
 	printk(KERN_INFO "%s: gpio_wlan_host_wake : %d\n", __FUNCTION__, wlan_host_wake_up);
 
 	if (gpio_request_one(wlan_host_wake_up, GPIOF_IN, "WLAN_HOST_WAKE")) {
-		printk(KERN_ERR "%s: Failed to request gpio %d for WLAN_HOST_WAKE\n",
+		printk(KERN_ERR "%s: Faiiled to request gpio %d for WLAN_HOST_WAKE\n",
 			__FUNCTION__, wlan_host_wake_up);
 			return -ENODEV;
 	} else {
@@ -133,10 +125,10 @@ dhd_wifi_init_gpio(void)
 	wlan_host_wake_irq = gpio_to_irq(wlan_host_wake_up);
 #endif /* CONFIG_BCMDHD_OOB_HOST_WAKE */
 
-#if defined(CONFIG_BCM4359) || defined(CONFIG_BCM4361)
+#if defined(CONFIG_BCM4359) || defined(CONFIG_BCM4361) || defined(CONFIG_BCM4375)
 	printk(KERN_INFO "%s: Call msm_pcie_enumerate\n", __FUNCTION__);
 	msm_pcie_enumerate(MSM_PCIE_CH_NUM);
-#endif /* CONFIG_BCM4359 || CONFIG_BCM4361 */
+#endif /* CONFIG_BCM4359 || CONFIG_BCM4361 || CONFIG_BCM4375 */
 
 	return 0;
 }

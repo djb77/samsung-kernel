@@ -19,7 +19,7 @@
 
 #define CRC_RETRY_COUNT         40
 
-#define FIMC_IS_ISP_CV	"/data/camera/ISP_CV"
+#define FIMC_IS_ISP_CV	"/data/vendor/camera/ISP_CV"
 #define USE_SPI
 
 #ifdef CONFIG_COMPANION_C3_USE

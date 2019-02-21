@@ -282,6 +282,11 @@ static int __panel_seq_exit_alpm(struct panel_device *panel)
 	int volt;
 	struct panel_pad *pad = &panel->pad;
 #endif
+#ifdef CONFIG_ACTIVE_CLOCK
+	struct act_clock_dev *act_dev = &panel->act_clk_dev;
+	struct act_clk_info *act_info = &act_dev->act_info;
+#endif
+
 	panel_info("PANEL:INFO:%s:was called\n", __func__);
 #ifdef CONFIG_SET_1p5_ALPM
 	volt = regulator_get_voltage(pad->regulator[REGULATOR_1p6V]);
@@ -299,6 +304,15 @@ static int __panel_seq_exit_alpm(struct panel_device *panel)
 		panel_err("PANEL:ERR:%s, failed to write init seqtbl\n",
 			__func__);
 	}
+
+#ifdef CONFIG_ACTIVE_CLOCK
+	if ((act_info != NULL) && (act_info->en)) {
+		panel_info("PANEL:INFO:%s:act_info %d -> disable\n",
+			__func__, act_info->en);
+		act_info->en = 0;
+	}
+#endif
+
 	backlight_update_status(bd);
 	return ret;
 }

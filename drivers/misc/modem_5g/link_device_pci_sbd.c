@@ -118,7 +118,7 @@ static enum hrtimer_restart sbd_test_timer_func(struct hrtimer *timer)
 				rb->dma_desc[*rb->wp].ext_lo_addr,
 				rb->dma_desc[*rb->wp].size);
 
-		mif_err("<KTG> sbd UL intr(%p) test(1) - [intr wp:0x%x] [intr rp:0x%x]\n",
+		mif_err("<KTG> sbd UL intr(%pK) test(1) - [intr wp:0x%x] [intr rp:0x%x]\n",
 			rb->sbd_intr,
 			rb->sbd_intr->wp_intr,
 			rb->sbd_intr->rp_intr);
@@ -126,7 +126,7 @@ static enum hrtimer_restart sbd_test_timer_func(struct hrtimer *timer)
 		*rb->wp += 1;
 		rb->sbd_intr->wp_intr = 1;
 
-		mif_err("<KTG> sbd UL intr(%p) test(2) - [intr wp:0x%x] [intr rp:0x%x]\n",
+		mif_err("<KTG> sbd UL intr(%pK) test(2) - [intr wp:0x%x] [intr rp:0x%x]\n",
 			rb->sbd_intr,
 			rb->sbd_intr->wp_intr,
 			rb->sbd_intr->rp_intr);
@@ -279,7 +279,7 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	size_t size;
 
 #ifdef DEBUG_KTG
-	mif_err("SHMEM {base:0x%p size:%d}\n",
+	mif_err("SHMEM {base:0x%pK size:%d}\n",
 		sl->shmem, sl->shmem_size);
 #endif
 
@@ -290,16 +290,16 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	sl->g_desc = (struct sbd_global_desc *)desc_alloc(sl, size);
 
 #ifdef DEBUG_KTG
-	mif_err("G_DESC_OFFSET = %d(0x%p)\n",
+	mif_err("G_DESC_OFFSET = %d(0x%pK)\n",
 		calc_offset(sl->g_desc, sl->shmem),
 		sl->g_desc);
 
-	mif_err("RB_CH_OFFSET = %d(size:%d) (0x%p)\n",
+	mif_err("RB_CH_OFFSET = %d(size:%d) (0x%pK)\n",
 		calc_offset(sl->g_desc->rb_ch, sl->shmem),
 		calc_offset(sl->g_desc->rb_ch, sl->g_desc),
 		sl->g_desc->rb_ch);
 
-	mif_err("RBD_PAIR_OFFSET = %d(size:%d) (0x%p)\n",
+	mif_err("RBD_PAIR_OFFSET = %d(size:%d) (0x%pK)\n",
 		calc_offset(sl->g_desc->rb_desc, sl->shmem),
 		calc_offset(sl->g_desc->rb_desc, sl->g_desc->rb_ch),
 		sl->g_desc->rb_desc);
@@ -319,7 +319,7 @@ static void setup_desc_rgn(struct sbd_link_device *sl)
 	sl->local_wp[DL] = sl->local_rbps + sl->num_channels * 3;
 
 #ifdef DEBUG_KTG
-	mif_err("RBPS_OFFSET = %d(addr:%p)\n", calc_offset(sl->rbps, sl->shmem), sl->rbps);
+	mif_err("RBPS_OFFSET = %d(addr:%pK)\n", calc_offset(sl->rbps, sl->shmem), sl->rbps);
 #endif
 
 	/*
@@ -494,7 +494,7 @@ static int setup_sbd_dma(struct sbd_link_device *sl, struct sbd_ring_buffer *rb,
 	}
 
 #ifdef DEBUG_KTG
-	mif_err("<KTG> rb[%s]->dma_desc base addr:%p (rb_len:%d)\n",
+	mif_err("<KTG> rb[%s]->dma_desc base addr:%pK (rb_len:%d)\n",
 			(dir == DL) ? "DL" : "UL", rb->dma_desc, link_attr->rb_len[dir]);
 #endif
 
@@ -560,7 +560,7 @@ static int setup_sbd_dma(struct sbd_link_device *sl, struct sbd_ring_buffer *rb,
 					rb->dma_desc[i].ext_lo_addr,
 					dma_addr,
 					rb->dma_desc[i].size);
-				mif_err("<KTG> [%d] skb:%p, va_buffer:%p\n", i, skb, rb->dma_buffer[i].va_buffer);
+				mif_err("<KTG> [%d] skb:%pK, va_buffer:%pK\n", i, skb, rb->dma_buffer[i].va_buffer);
 			}
 #endif
 		}
@@ -620,7 +620,7 @@ static int setup_sbd_rb(struct sbd_link_device *sl, struct sbd_ring_buffer *rb,
 	rb->local_wp = &sl->local_wp[rb->dir][rb->id];
 
 #ifdef DEBUG_KTG
-	mif_err("rb[%s] ch:%d rb->rp:%p, rb->wp:%p, local rp:%p, local wp:%p\n",
+	mif_err("rb[%s] ch:%d rb->rp:%pK, rb->wp:%pK, local rp:%pK, local wp:%pK\n",
 		(dir == DL) ? "DL" : "UL",
 		rb->ch,
 		rb->rp,
@@ -795,12 +795,12 @@ static void init_ipc_device(struct sbd_link_device *sl, u16 id,
 	rb = &ipc_dev->rb[UL];
 	spin_lock_init(&rb->lock);
 	skb_queue_head_init(&rb->skb_q);
-	mif_err("<KTG> RB skb init RB dir:%d, rb ch:%d, rb id:%d(priv:%p)\n", UL, ch, id, &rb->skb_q);
+	mif_err("<KTG> RB skb init RB dir:%d, rb ch:%d, rb id:%d(priv:%pK)\n", UL, ch, id, &rb->skb_q);
 
 	rb = &ipc_dev->rb[DL];
 	spin_lock_init(&rb->lock);
 	skb_queue_head_init(&rb->skb_q);
-	mif_err("<KTG> RB skb init RB dir:%d, rb ch:%d, rb id:%d(priv:%p)\n", DL, ch, id, &rb->skb_q);
+	mif_err("<KTG> RB skb init RB dir:%d, rb ch:%d, rb id:%d(priv:%pK)\n", DL, ch, id, &rb->skb_q);
 }
 
 /**
@@ -1232,7 +1232,7 @@ struct sk_buff *pci_sbd_pio_rx(struct sbd_ring_buffer *rb)
 	}
 
 	if (skb != rb->dma_buffer[out].va_buffer) {
-		mif_err("ERR! skb is not matched!([%d]-skb:%p, va_buffer:%p)",
+		mif_err("ERR! skb is not matched!([%d]-skb:%pK, va_buffer:%pK)",
 			out, skb, rb->dma_buffer[out].va_buffer);
 
 		trace_mif_err("ERR! skb is not matched", out, __func__);
@@ -1271,7 +1271,7 @@ struct sk_buff *pci_sbd_pio_rx(struct sbd_ring_buffer *rb)
 #if 0
 	} else {
 		/*
-		mif_err("<KTG> rb[id:%d, ch:%d] rp-%d(local:%d), wp-%d = rx sipc:[0x%x] [0x%x] [0x%x%x] {skb:%p, vf:%p}\n",
+		mif_err("<KTG> rb[id:%d, ch:%d] rp-%d(local:%d), wp-%d = rx sipc:[0x%x] [0x%x] [0x%x%x] {skb:%pK, vf:%pK}\n",
 			rb->id, rb->ch, *rb->rp, *rb->local_rp, *rb->wp,
 			skb->data[0], skb->data[1],
 			skb->data[2], skb->data[3],

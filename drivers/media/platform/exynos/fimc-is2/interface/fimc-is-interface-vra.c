@@ -776,7 +776,7 @@ int fimc_is_lib_vra_stop_instance(struct fimc_is_lib_vra *lib_vra, u32 instance)
 		return -EINVAL;
 	}
 
-	if (instance > VRA_TOTAL_SENSORS) {
+	if (instance >= VRA_TOTAL_SENSORS) {
 		err_lib("invalid instance");
 		return -EINVAL;
 	}

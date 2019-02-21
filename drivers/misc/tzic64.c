@@ -217,7 +217,6 @@ static long tzic_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		LOG(KERN_INFO "[oemflag]changing core failed!\n");
 		return -1;
 	}
-	LOG(KERN_INFO "[oemflag]CPU 0\n");
 	switch(cmd){
 #ifdef CONFIG_TZDEV
 		case IOCTL_IRS_CMD:
@@ -349,15 +348,12 @@ static long tzic_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 
  return_default:
 	gotoAllCpu();
-	LOG(KERN_INFO "[oemflag]ALL CPU (default)\n");
 	return 0;
  return_new_from:
 	gotoAllCpu();
-	LOG(KERN_INFO "[oemflag]ALL CPU (new_from)\n");
 	return copy_from_user( &param, (void *)arg, sizeof(param) );
  return_new_to:
 	gotoAllCpu();
-	LOG(KERN_INFO "[oemflag]ALL CPU (new_to)\n");
 	return copy_to_user( (void *)arg, &param, sizeof(param) );
 }
 
@@ -425,15 +421,9 @@ static int gotoCpu0(void)
 	int ret = 0;
 	struct cpumask mask = CPU_MASK_CPU0;
 
-	LOG(KERN_INFO "System has %d CPU's, we are on CPU #%d\n"
-	    "\tBinding this process to CPU #0.\n"
-	    "\tactive mask is %lx, setting it to mask=%lx\n",
-	    nr_cpu_ids,
-	    raw_smp_processor_id(), cpu_active_mask->bits[0], mask.bits[0]);
 	ret = set_cpus_allowed_ptr(current, &mask);
 	if (0 != ret)
 		LOG(KERN_INFO "set_cpus_allowed_ptr=%d.\n", ret);
-	LOG(KERN_INFO "And now we are on CPU #%d\n", raw_smp_processor_id());
 
 	return ret;
 }
@@ -443,15 +433,9 @@ static int gotoAllCpu(void)
 	int ret = 0;
 	struct cpumask mask = CPU_MASK_ALL;
 
-	LOG(KERN_INFO "System has %d CPU's, we are on CPU #%d\n"
-	    "\tBinding this process to CPU #0.\n"
-	    "\tactive mask is %lx, setting it to mask=%lx\n",
-	    nr_cpu_ids,
-	    raw_smp_processor_id(), cpu_active_mask->bits[0], mask.bits[0]);
 	ret = set_cpus_allowed_ptr(current, &mask);
 	if (0 != ret)
 		LOG(KERN_INFO "set_cpus_allowed_ptr=%d.\n", ret);
-	LOG(KERN_INFO "And now we are on CPU #%d\n", raw_smp_processor_id());
 
 	return ret;
 }

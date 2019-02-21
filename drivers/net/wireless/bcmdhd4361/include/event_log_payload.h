@@ -4,14 +4,14 @@
  * This file describes the payloads of event log entries that are data buffers
  * rather than formatted string entries. The contents are generally XTLVs.
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -19,7 +19,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: event_log_payload.h 700076 2017-05-17 14:42:22Z $
+ * $Id: event_log_payload.h 738285 2017-12-28 01:28:18Z $
  */
 
 #ifndef _EVENT_LOG_PAYLOAD_H_
@@ -124,7 +124,6 @@ typedef struct scb_subq_summary {
 #define SCBDATA_APPS_F_OFF_PEND         0x00000100
 #define SCBDATA_APPS_F_OFF_BLOCKED      0x00000200
 #define SCBDATA_APPS_F_OFF_IN_PROG      0x00000400
-
 
 /**
  * Summary for tx datapath AMPDU SCB cubby
@@ -281,47 +280,60 @@ typedef struct wl_chansw_event_log_record {
 	int32 dwell_time;
 } wl_chansw_event_log_record_t;
 
+typedef struct wl_chansw_event_log_record_v2 {
+	uint32 time;			/* Time in us */
+	uint32 old_chanspec;		/* Old channel spec */
+	uint32 new_chanspec;		/* New channel spec */
+	uint32 chansw_reason;		/* Reason for channel change */
+	int32 dwell_time;
+	uint32 core;
+	int32 phychanswtime;		/* channel switch time */
+} wl_chansw_event_log_record_v2_t;
+
 /* Sub-block type for EVENT_LOG_TAG_AMPDU_DUMP */
-#define WL_AMPDU_STATS_TYPE_RXMCSx1	0	/* RX MCS rate (Nss = 1) */
-#define WL_AMPDU_STATS_TYPE_RXMCSx2	1
-#define WL_AMPDU_STATS_TYPE_RXMCSx3	2
-#define WL_AMPDU_STATS_TYPE_RXMCSx4	3
-#define WL_AMPDU_STATS_TYPE_RXVHTx1	4	/* RX VHT rate (Nss = 1) */
-#define WL_AMPDU_STATS_TYPE_RXVHTx2	5
-#define WL_AMPDU_STATS_TYPE_RXVHTx3	6
-#define WL_AMPDU_STATS_TYPE_RXVHTx4	7
-#define WL_AMPDU_STATS_TYPE_TXMCSx1	8	/* TX MCS rate (Nss = 1) */
-#define WL_AMPDU_STATS_TYPE_TXMCSx2	9
-#define WL_AMPDU_STATS_TYPE_TXMCSx3	10
-#define WL_AMPDU_STATS_TYPE_TXMCSx4	11
-#define WL_AMPDU_STATS_TYPE_TXVHTx1	12	/* TX VHT rate (Nss = 1) */
-#define WL_AMPDU_STATS_TYPE_TXVHTx2	13
-#define WL_AMPDU_STATS_TYPE_TXVHTx3	14
-#define WL_AMPDU_STATS_TYPE_TXVHTx4	15
-#define WL_AMPDU_STATS_TYPE_RXMCSSGI	16	/* RX SGI usage (for all MCS rates) */
-#define WL_AMPDU_STATS_TYPE_TXMCSSGI	17	/* TX SGI usage (for all MCS rates) */
-#define WL_AMPDU_STATS_TYPE_RXVHTSGI	18	/* RX SGI usage (for all VHT rates) */
-#define WL_AMPDU_STATS_TYPE_TXVHTSGI	19	/* TX SGI usage (for all VHT rates) */
-#define WL_AMPDU_STATS_TYPE_RXMCSPER	20	/* RX PER (for all MCS rates) */
-#define WL_AMPDU_STATS_TYPE_TXMCSPER	21	/* TX PER (for all MCS rates) */
-#define WL_AMPDU_STATS_TYPE_RXVHTPER	22	/* RX PER (for all VHT rates) */
-#define WL_AMPDU_STATS_TYPE_TXVHTPER	23	/* TX PER (for all VHT rates) */
-#define WL_AMPDU_STATS_TYPE_RXDENS	24	/* RX AMPDU density */
-#define WL_AMPDU_STATS_TYPE_TXDENS	25	/* TX AMPDU density */
-#define WL_AMPDU_STATS_TYPE_RXMCSOK	26	/* RX all MCS rates */
-#define WL_AMPDU_STATS_TYPE_RXVHTOK	27	/* RX all VHT rates */
-#define WL_AMPDU_STATS_TYPE_TXMCSALL	28	/* TX all MCS rates */
-#define WL_AMPDU_STATS_TYPE_TXVHTALL	29	/* TX all VHT rates */
-#define WL_AMPDU_STATS_TYPE_TXMCSOK	30	/* TX all MCS rates */
-#define WL_AMPDU_STATS_TYPE_TXVHTOK	31	/* TX all VHT rates */
-
-#define WL_AMPDU_STATS_MAX_CNTS		64
-
+typedef enum {
+	WL_AMPDU_STATS_TYPE_RXMCSx1 = 0,	/* RX MCS rate (Nss = 1) */
+	WL_AMPDU_STATS_TYPE_RXMCSx2 = 1,
+	WL_AMPDU_STATS_TYPE_RXMCSx3 = 2,
+	WL_AMPDU_STATS_TYPE_RXMCSx4 = 3,
+	WL_AMPDU_STATS_TYPE_RXVHTx1 = 4, /* RX VHT rate (Nss = 1) */
+	WL_AMPDU_STATS_TYPE_RXVHTx2 = 5,
+	WL_AMPDU_STATS_TYPE_RXVHTx3 = 6,
+	WL_AMPDU_STATS_TYPE_RXVHTx4 = 7,
+	WL_AMPDU_STATS_TYPE_TXMCSx1 = 8, /* TX MCS rate (Nss = 1) */
+	WL_AMPDU_STATS_TYPE_TXMCSx2 = 9,
+	WL_AMPDU_STATS_TYPE_TXMCSx3 = 10,
+	WL_AMPDU_STATS_TYPE_TXMCSx4 = 11,
+	WL_AMPDU_STATS_TYPE_TXVHTx1 = 12,	/* TX VHT rate (Nss = 1) */
+	WL_AMPDU_STATS_TYPE_TXVHTx2 = 13,
+	WL_AMPDU_STATS_TYPE_TXVHTx3 = 14,
+	WL_AMPDU_STATS_TYPE_TXVHTx4 = 15,
+	WL_AMPDU_STATS_TYPE_RXMCSSGI = 16,	/* RX SGI usage (for all MCS rates) */
+	WL_AMPDU_STATS_TYPE_TXMCSSGI = 17,	/* TX SGI usage (for all MCS rates) */
+	WL_AMPDU_STATS_TYPE_RXVHTSGI = 18,	/* RX SGI usage (for all VHT rates) */
+	WL_AMPDU_STATS_TYPE_TXVHTSGI = 19,	/* TX SGI usage (for all VHT rates) */
+	WL_AMPDU_STATS_TYPE_RXMCSPER = 20,	/* RX PER (for all MCS rates) */
+	WL_AMPDU_STATS_TYPE_TXMCSPER = 21,	/* TX PER (for all MCS rates) */
+	WL_AMPDU_STATS_TYPE_RXVHTPER = 22,	/* RX PER (for all VHT rates) */
+	WL_AMPDU_STATS_TYPE_TXVHTPER = 23,	/* TX PER (for all VHT rates) */
+	WL_AMPDU_STATS_TYPE_RXDENS = 24,	/* RX AMPDU density */
+	WL_AMPDU_STATS_TYPE_TXDENS = 25,	/* TX AMPDU density */
+	WL_AMPDU_STATS_TYPE_RXMCSOK = 26,	/* RX all MCS rates */
+	WL_AMPDU_STATS_TYPE_RXVHTOK = 27,	/* RX all VHT rates */
+	WL_AMPDU_STATS_TYPE_TXMCSALL = 28,	/* TX all MCS rates */
+	WL_AMPDU_STATS_TYPE_TXVHTALL = 29,	/* TX all VHT rates */
+	WL_AMPDU_STATS_TYPE_TXMCSOK = 30,	/* TX all MCS rates */
+	WL_AMPDU_STATS_TYPE_TXVHTOK = 31,	/* TX all VHT rates */
+	WL_AMPDU_STATS_MAX_CNTS = 64
+} wl_ampdu_stat_enum_t;
 typedef struct {
 	uint16	type;		/* AMPDU statistics sub-type */
 	uint16	len;		/* Number of 32-bit counters */
 	uint32	counters[WL_AMPDU_STATS_MAX_CNTS];
 } wl_ampdu_stats_generic_t;
+
+typedef wl_ampdu_stats_generic_t wl_ampdu_stats_rx_t;
+typedef wl_ampdu_stats_generic_t wl_ampdu_stats_tx_t;
 
 typedef struct {
 	uint16	type;		/* AMPDU statistics sub-type */

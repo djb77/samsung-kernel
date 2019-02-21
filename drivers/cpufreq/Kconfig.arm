@@ -264,3 +264,12 @@ config ARM_EXYNOS_ACME
 	  ACME supported SoC must use the exynos CAL framework.
 
 	  If in doubt, say N.
+
+config ARM_EXYNOS_UFC
+	bool "SAMSUNG EXYNOS UFC(User Frequency Control) driver"
+	depends on ARM_EXYNOS_ACME
+	  help
+	  This adds the User CPU Frequency Control driver for every exynos chipset.
+	  Exynos UFC suppored SoC must use the exynos ACME driver.
+
+	  If in doubt, say N.

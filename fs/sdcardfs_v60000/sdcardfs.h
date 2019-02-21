@@ -43,10 +43,8 @@
 #include <linux/security.h>
 #include <linux/string.h>
 #include <linux/ratelimit.h>
+#include <linux/hashtable.h>
 #include "multiuser.h"
-
-/* the file system magic number */
-#define SDCARDFS_SUPER_MAGIC	0xb550ca10
 
 /* the file system name */
 #define SDCARDFS_NAME "sdcardfs"
@@ -429,6 +427,17 @@ static inline void sdcardfs_put_real_lower(const struct dentry *dent,
 }
 
 /* for packagelist.c */
+#define STRING_BUF_SIZE		(512)
+struct packagelist_data {
+	DECLARE_HASHTABLE(package_to_appid,8);
+	struct mutex hashtable_lock;
+	struct task_struct *thread_id;
+	char read_buf[STRING_BUF_SIZE];
+	char event_buf[STRING_BUF_SIZE];
+	char app_name_buf[STRING_BUF_SIZE];
+	char gids_buf[STRING_BUF_SIZE];
+	atomic_t newly_created;
+};
 extern appid_t get_appid(void *pkgl_id, const char *app_name);
 extern int check_caller_access_to_name(struct inode *parent_node, const char *name);
 extern int open_flags_to_access_mode(int open_flags);

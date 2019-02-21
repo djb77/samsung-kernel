@@ -261,28 +261,28 @@ static void uart_copy_to_local_buf(int dir, struct uart_local_buf *local_buf,
 	time = cpu_clock(cpu);
 	rem_nsec = do_div(time, NSEC_PER_SEC);
 
-	if (local_buf->index + (len * 2 + 30) >= local_buf->size)
+	if (local_buf->index + (len * 3 + 30) >= local_buf->size)
 		local_buf->index = 0;
 
-	local_buf->index += snprintf(local_buf->buffer + local_buf->index,
+	local_buf->index += scnprintf(local_buf->buffer + local_buf->index,
 			local_buf->size - local_buf->index,
 			"[%5lu.%06lu] ",
 			(unsigned long)time, rem_nsec / NSEC_PER_USEC);
 
 	if (dir == 1)
-		local_buf->index += snprintf(local_buf->buffer + local_buf->index,
+		local_buf->index += scnprintf(local_buf->buffer + local_buf->index,
 				local_buf->size - local_buf->index, "[RX] ");
 	else
-		local_buf->index += snprintf(local_buf->buffer + local_buf->index,
+		local_buf->index += scnprintf(local_buf->buffer + local_buf->index,
 				local_buf->size - local_buf->index, "[TX] ");
 
 	for (i = 0; i < len; i++) {
-		local_buf->index += snprintf(local_buf->buffer + local_buf->index,
+		local_buf->index += scnprintf(local_buf->buffer + local_buf->index,
 				local_buf->size - local_buf->index,
 				"%02X ", trace_buf[i]);
 	}
 
-	local_buf->index += snprintf(local_buf->buffer + local_buf->index,
+	local_buf->index += scnprintf(local_buf->buffer + local_buf->index,
 			local_buf->size - local_buf->index, "\n");
 }
 
@@ -476,6 +476,8 @@ s3c24xx_serial_rx_chars(int irq, void *dev_id)
 	unsigned long flags;
 	int fifocnt = 0;
 	int max_count = 64;
+	unsigned char insert_buf[256] = {0, };
+	unsigned int insert_cnt = 0;
 	unsigned char trace_buf[256] = {0, };
 	int trace_cnt = 0;
 
@@ -490,8 +492,10 @@ s3c24xx_serial_rx_chars(int irq, void *dev_id)
 		if (fifocnt == 0) {
 			ufstat = rd_regl(port, S3C2410_UFSTAT);
 			fifocnt = s3c24xx_serial_rx_fifocnt(ourport, ufstat);
-			if (fifocnt == 0)
+			if (fifocnt == 0) {
+				wr_regl(port, S3C64XX_UINTP, S3C64XX_UINTM_RXD_MSK);
 				break;
+			}
 		}
 		fifocnt--;
 
@@ -566,11 +570,9 @@ s3c24xx_serial_rx_chars(int irq, void *dev_id)
 		if (uart_handle_sysrq_char(port, ch))
 			goto ignore_char;
 
+		insert_buf[insert_cnt++] = ch;
 		if (ourport->uart_logging)
 			trace_buf[trace_cnt++] = ch;
-
-		uart_insert_char(port, uerstat, S3C2410_UERSTAT_OVERRUN,
-				 ch, flag);
 
  ignore_char:
 		continue;
@@ -580,7 +582,9 @@ s3c24xx_serial_rx_chars(int irq, void *dev_id)
 		uart_copy_to_local_buf(1, &ourport->uart_local_buf, trace_buf, trace_cnt);
 
 	spin_unlock_irqrestore(&port->lock, flags);
+	tty_insert_flip_string(&port->state->port, insert_buf, insert_cnt);
 	tty_flip_buffer_push(&port->state->port);
+	flush_workqueue(system_unbound_wq);
 
  out:
 	return IRQ_HANDLED;
@@ -604,7 +608,6 @@ static irqreturn_t s3c24xx_serial_tx_chars(int irq, void *id)
 			trace_buf[trace_cnt++] = port->x_char;
 		port->icount.tx++;
 		port->x_char = 0;
-
 		goto out;
 	}
 
@@ -633,17 +636,19 @@ static irqreturn_t s3c24xx_serial_tx_chars(int irq, void *id)
 	}
 
 	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS) {
-		spin_unlock(&port->lock);
+		spin_unlock_irqrestore(&port->lock, flags);
 		uart_write_wakeup(port);
-		spin_lock(&port->lock);
+		spin_lock_irqsave(&port->lock, flags);
 	}
 
 	if (uart_circ_empty(xmit))
 		s3c24xx_serial_stop_tx(port);
 
  out:
+	wr_regl(port, S3C64XX_UINTP, S3C64XX_UINTM_TXD_MSK);
 	if (ourport->uart_logging && trace_cnt)
 		uart_copy_to_local_buf(0, &ourport->uart_local_buf, trace_buf, trace_cnt);
+
 	spin_unlock_irqrestore(&port->lock, flags);
 	return IRQ_HANDLED;
 }
@@ -673,7 +678,6 @@ static irqreturn_t s3c64xx_serial_handle_irq(int irq, void *id)
 {
 	struct s3c24xx_uart_port *ourport = id;
 	struct uart_port *port = &ourport->port;
-	unsigned int pend = rd_regl(port, S3C64XX_UINTP);
 	irqreturn_t ret = IRQ_HANDLED;
 
 #ifdef CONFIG_PM_DEVFREQ
@@ -683,14 +687,12 @@ static irqreturn_t s3c64xx_serial_handle_irq(int irq, void *id)
 						msecs_to_jiffies(100));
 #endif
 
-	if (pend & S3C64XX_UINTM_RXD_MSK) {
+	if (rd_regl(port, S3C64XX_UINTP) & S3C64XX_UINTM_RXD_MSK)
 		ret = s3c24xx_serial_rx_chars(irq, id);
-		wr_regl(port, S3C64XX_UINTP, S3C64XX_UINTM_RXD_MSK);
-	}
-	if (pend & S3C64XX_UINTM_TXD_MSK) {
+
+	if (rd_regl(port, S3C64XX_UINTP) & S3C64XX_UINTM_TXD_MSK)
 		ret = s3c24xx_serial_tx_chars(irq, id);
-		wr_regl(port, S3C64XX_UINTP, S3C64XX_UINTM_TXD_MSK);
-	}
+
 	return ret;
 }
 
@@ -1144,6 +1146,9 @@ static void s3c24xx_serial_set_termios(struct uart_port *port,
 	wr_regl(port, S3C2410_ULCON, ulcon);
 	wr_regl(port, S3C2410_UBRDIV, quot);
 
+	if (ourport->info->has_divslot)
+		wr_regl(port, S3C2443_DIVSLOT, udivslot);
+
 	umcon = rd_regl(port, S3C2410_UMCON);
 	if (termios->c_cflag & CRTSCTS) {
 		umcon |= S3C2410_UMCOM_AFC;
@@ -1153,9 +1158,6 @@ static void s3c24xx_serial_set_termios(struct uart_port *port,
 		umcon &= ~S3C2410_UMCOM_AFC;
 	}
 	wr_regl(port, S3C2410_UMCON, umcon);
-
-	if (ourport->info->has_divslot)
-		wr_regl(port, S3C2443_DIVSLOT, udivslot);
 
 	dbg("uart: ulcon = 0x%08x, ucon = 0x%08x, ufcon = 0x%08x\n",
 	    rd_regl(port, S3C2410_ULCON),
@@ -1193,6 +1195,7 @@ static void s3c24xx_serial_set_termios(struct uart_port *port,
 		port->ignore_status_mask |= RXSTAT_DUMMY_READ;
 
 	spin_unlock_irqrestore(&port->lock, flags);
+
 }
 
 static const char *s3c24xx_serial_type(struct uart_port *port)
@@ -1451,14 +1454,14 @@ static void s3c24xx_serial_resetport(struct uart_port *port,
 		ucon |= S3C2443_UCON_LOOPBACK;
 	}
 
-	wr_regl(port, S3C2410_UCON,  ucon | cfg->ucon);
-
 	/* reset both fifos */
 	wr_regl(port, S3C2410_UFCON, cfg->ufcon | S3C2410_UFCON_RESETBOTH);
 	wr_regl(port, S3C2410_UFCON, cfg->ufcon);
 
 	/* some delay is required after fifo reset */
 	udelay(1);
+
+	wr_regl(port, S3C2410_UCON,  ucon | cfg->ucon);
 }
 
 /* s3c24xx_serial_init_port
@@ -1764,6 +1767,8 @@ static int s3c24xx_serial_notifier(struct notifier_block *self,
 
 			spin_unlock_irqrestore(&port->lock, flags);
 		}
+
+		s3c24xx_serial_fifo_wait();
 		break;
 
 	case SICD_EXIT:
@@ -1832,7 +1837,6 @@ static int s3c24xx_serial_probe(struct platform_device *pdev)
 			, ourport->port.line, CONFIG_SERIAL_SAMSUNG_UARTS);
 		return -EINVAL;
 	}
-
 	ourport->drv_data = s3c24xx_get_driver_data(pdev);
 	if (!ourport->drv_data) {
 		dev_err(&pdev->dev, "could not find driver data\n");
@@ -2075,7 +2079,7 @@ static int s3c24xx_serial_suspend(struct device *dev)
 		uart_clock_enable(ourport);
 		/* disable Tx, Rx mode bit for suspend in case of HWACG */
 		ucon = rd_regl(port, S3C2410_UCON);
-		ucon &= ~(S3C2410_UCON_RXIRQMODE | S3C2410_UCON_TXIRQMODE) ;
+		ucon &= ~(S3C2410_UCON_RXIRQMODE | S3C2410_UCON_TXIRQMODE);
 		wr_regl(port, S3C2410_UCON, ucon);
 		uart_clock_disable(ourport);
 
@@ -2113,9 +2117,6 @@ static int s3c24xx_serial_resume(struct device *dev)
     		}
         }
 
-		uart_clock_enable(ourport);
-		s3c24xx_serial_resetport(port, s3c24xx_port_to_cfg(port));
-		uart_clock_disable(ourport);
 
 		uart_resume_port(&s3c24xx_uart_drv, port);
 
@@ -2138,6 +2139,7 @@ static int s3c24xx_serial_resume_noirq(struct device *dev)
 		/* restore IRQ mask */
 		if (s3c24xx_serial_has_interrupt_mask(port)) {
 			unsigned int uintm = 0xf;
+
 			if (tx_enabled(port))
 				uintm &= ~S3C64XX_UINTM_TXD_MSK;
 			if (rx_enabled(port))

@@ -3121,6 +3121,12 @@ int fimc_is_group_done(struct fimc_is_groupmgr *groupmgr,
 #else
 	child = group;
 	while(child) {
+#ifdef ENABLE_INIT_AWB
+		/* wb gain backup for initial AWB */
+		if (device->sensor && ((child == &device->group_isp) || (child->subdev[ENTRY_ISP])))
+			memcpy(device->sensor->last_wb, frame->shot->dm.color.gains,
+					sizeof(float) * WB_GAIN_COUNT);
+#endif
 		if ((child == &device->group_vra) || (child->subdev[ENTRY_VRA])) {
 #ifdef ENABLE_FD_SW
 			fimc_is_vra_trigger(device, &group->leader, frame);

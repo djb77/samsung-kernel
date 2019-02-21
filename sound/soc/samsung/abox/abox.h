@@ -334,6 +334,7 @@
 #define ABOX_CPU_GEAR_CALL		ABOX_CPU_GEAR_CALL_VSS
 #define ABOX_CPU_GEAR_BOOT		(0xB00D)
 #define ABOX_CPU_GEAR_LOWER_LIMIT	(12)
+#define ABOX_CPU_GEAR_DAI		0xDA100000
 
 #define ABOX_DMA_TIMEOUT_US		(40000)
 
@@ -474,7 +475,7 @@ struct abox_irq_action {
 };
 
 struct abox_qos_request {
-	void *id;
+	unsigned int id;
 	unsigned int value;
 };
 
@@ -593,6 +594,7 @@ struct abox_data {
 	struct mutex ima_lock;
 	struct work_struct boot_done_work;
 	struct wake_lock wake_lock;
+	unsigned long long audio_mode_time;
 	enum audio_mode audio_mode;
 };
 
@@ -730,7 +732,7 @@ extern int abox_schedule_ipc(struct device *dev, struct abox_data *data,
  * @return	true if it is idle or not has been requested, false on otherwise
  */
 extern bool abox_cpu_gear_idle(struct device *dev, struct abox_data *data,
-		void *id);
+		unsigned int id);
 
 /**
  * Request abox cpu clock level
@@ -741,7 +743,7 @@ extern bool abox_cpu_gear_idle(struct device *dev, struct abox_data *data,
  * @return	error code if any
  */
 extern int abox_request_cpu_gear(struct device *dev, struct abox_data *data,
-		void *id, unsigned int gear);
+		unsigned int id, unsigned int gear);
 
 /**
  * Request abox cpu clock level synchronously
@@ -752,7 +754,39 @@ extern int abox_request_cpu_gear(struct device *dev, struct abox_data *data,
  * @return	error code if any
  */
 extern int abox_request_cpu_gear_sync(struct device *dev,
-		struct abox_data *data, void *id, unsigned int gear);
+		struct abox_data *data, unsigned int id, unsigned int gear);
+
+/**
+ * Request abox cpu clock level with DAI
+ * @param[in]	dev		pointer to struct dev which invokes this API
+ * @param[in]	data		pointer to abox_data structure
+ * @param[in]	dai		DAI which is used as unique handle
+ * @param[in]	gear		gear level (cpu clock = aud pll rate / gear)
+ * @return	error code if any
+ */
+static inline int abox_request_cpu_gear_dai(struct device *dev,
+		struct abox_data *data, struct snd_soc_dai *dai,
+		unsigned int gear)
+{
+	return abox_request_cpu_gear(dev, data, ABOX_CPU_GEAR_DAI | dai->id,
+			gear);
+}
+
+/**
+ * Request abox cpu clock level synchronously with DAI
+ * @param[in]	dev		pointer to struct dev which invokes this API
+ * @param[in]	data		pointer to abox_data structure
+ * @param[in]	dai		DAI which is used as unique handle
+ * @param[in]	gear		gear level (cpu clock = aud pll rate / gear)
+ * @return	error code if any
+ */
+static inline int abox_request_cpu_gear_sync_dai(struct device *dev,
+		struct abox_data *data, struct snd_soc_dai *dai,
+		unsigned int gear)
+{
+	return abox_request_cpu_gear_sync(dev, data,
+			ABOX_CPU_GEAR_DAI | dai->id, gear);
+}
 
 /**
  * Request LITTLE cluster clock level
@@ -763,7 +797,23 @@ extern int abox_request_cpu_gear_sync(struct device *dev,
  * @return	error code if any
  */
 extern int abox_request_lit_freq(struct device *dev, struct abox_data *data,
-		void *id, unsigned int freq);
+		unsigned int id, unsigned int freq);
+
+/**
+ * Request LITTLE cluster clock level with DAI
+ * @param[in]	dev		pointer to struct dev which invokes this API
+ * @param[in]	data		pointer to abox_data structure
+ * @param[in]	dai		DAI which is used as unique handle
+ * @param[in]	freq		frequency in kHz
+ * @return	error code if any
+ */
+static inline int abox_request_lit_freq_dai(struct device *dev,
+		struct abox_data *data,
+		struct snd_soc_dai *dai, unsigned int freq)
+{
+	return abox_request_lit_freq(dev, data, ABOX_CPU_GEAR_DAI | dai->id,
+			freq);
+}
 
 /**
  * Request big cluster clock level
@@ -774,7 +824,23 @@ extern int abox_request_lit_freq(struct device *dev, struct abox_data *data,
  * @return	error code if any
  */
 extern int abox_request_big_freq(struct device *dev, struct abox_data *data,
-		void *id, unsigned int freq);
+		unsigned int id, unsigned int freq);
+
+/**
+ * Request big cluster clock level with DAI
+ * @param[in]	dev		pointer to struct dev which invokes this API
+ * @param[in]	data		pointer to abox_data structure
+ * @param[in]	dai		DAI which is used as unique handle
+ * @param[in]	freq		frequency in kHz
+ * @return	error code if any
+ */
+static inline int abox_request_big_freq_dai(struct device *dev,
+		struct abox_data *data,
+		struct snd_soc_dai *dai, unsigned int freq)
+{
+	return abox_request_big_freq(dev, data, ABOX_CPU_GEAR_DAI | dai->id,
+			freq);
+}
 
 /**
  * Request hmp boost
@@ -785,7 +851,23 @@ extern int abox_request_big_freq(struct device *dev, struct abox_data *data,
  * @return	error code if any
  */
 extern int abox_request_hmp_boost(struct device *dev, struct abox_data *data,
-		void *id, unsigned int on);
+		unsigned int id, unsigned int on);
+
+/**
+ * Request hmp boost with DAI
+ * @param[in]	dev		pointer to struct dev which invokes this API
+ * @param[in]	data		pointer to abox_data structure
+ * @param[in]	dai		DAI which is used as unique handle
+ * @param[in]	on		1 on boost, 0 on otherwise.
+ * @return	error code if any
+ */
+static inline int abox_request_hmp_boost_dai(struct device *dev,
+		struct abox_data *data,
+		struct snd_soc_dai *dai, unsigned int on)
+{
+	return abox_request_hmp_boost(dev, data, ABOX_CPU_GEAR_DAI | dai->id,
+			on);
+}
 
 /**
  * Try to turn off ASRC when sampling rate auto control is enabled

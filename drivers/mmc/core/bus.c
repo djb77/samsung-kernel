@@ -29,7 +29,7 @@
 #define to_mmc_driver(d)	container_of(d, struct mmc_driver, drv)
 
 #ifdef CONFIG_MMC_SUPPORT_STLOG
-#include <linux/stlog.h>
+#include <linux/fslog.h>
 #else
 #define ST_LOG(fmt,...)
 #endif

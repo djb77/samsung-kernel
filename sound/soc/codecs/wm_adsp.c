@@ -720,7 +720,7 @@ static int wm_adsp_fw_put(struct snd_kcontrol *kcontrol,
 	if (ucontrol->value.enumerated.item[0] == dsp->fw)
 		return 0;
 
-	if (ucontrol->value.enumerated.item[0] >= WM_ADSP_NUM_FW)
+	if (ucontrol->value.enumerated.item[0] >= dsp->num_firmwares)
 		return -EINVAL;
 
 	snd_soc_dapm_mutex_lock(dapm);
@@ -3013,7 +3013,7 @@ static int wm_adsp_of_parse_caps(struct wm_adsp *dsp,
 
 	len_prop /= sizeof(u32);
 
-	if (len_prop < 5 || len_prop > 5 + MAX_NUM_SAMPLE_RATES)
+	if (len_prop < 5 || len_prop > 4 + MAX_NUM_SAMPLE_RATES)
 		return -EOVERFLOW;
 
 	fw->num_caps = 1;

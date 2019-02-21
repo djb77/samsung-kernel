@@ -143,7 +143,7 @@ void insert_rmnet_iod_with_channel(struct io_device *iod, u8 type)
 		rmnet_iod.iod_pot[type].rmnet_ch2id[ch] = id;
 		rmnet_iod.iod_pot[type].rmnet[id] = iod;
 
-		mif_err("<KTG> rmnet_iod saved (ch:%d, iod:%s - addr:%p)\n", ch, iod->name, iod);
+		mif_err("<KTG> rmnet_iod saved (ch:%d, iod:%s - addr:%pK)\n", ch, iod->name, iod);
 	}
 }
 
@@ -227,9 +227,9 @@ int rmnet_iod_change_with_channel(u8 ch, u8 to)
 		vnet = netdev_priv(iod->ndev);
 #ifdef DEBUG_KTG
 		ld = get_current_link(iod);
-		mif_err("before netd name:%s (%p)\n", iod->ndev->name, iod->ndev);
+		mif_err("before netd name:%s (%pK)\n", iod->ndev->name, iod->ndev);
 		mif_err("before iod:%s, iod->ld:%s\n", iod->name, ld->name);
-		mif_err("before vnet->iod:%s (%p)\n", vnet->iod->name, vnet->iod);
+		mif_err("before vnet->iod:%s (%pK)\n", vnet->iod->name, vnet->iod);
 #endif
 
 		ndev = dev_get_by_name(iod->ndev->nd_net.net, iod->name);
@@ -249,9 +249,9 @@ int rmnet_iod_change_with_channel(u8 ch, u8 to)
 
 #ifdef DEBUG_KTG
 		ld = get_current_link(vnet->iod);
-		mif_err("after netd name:%s (%p)\n", rmnet_iod.iod_pot[to].rmnet[id]->ndev->name, rmnet_iod.iod_pot[to].rmnet[id]->ndev);
+		mif_err("after netd name:%s (%pK)\n", rmnet_iod.iod_pot[to].rmnet[id]->ndev->name, rmnet_iod.iod_pot[to].rmnet[id]->ndev);
 		mif_err("after target iod:%s, iod->ld:%s\n", rmnet_iod.iod_pot[to].rmnet[id]->name, ld->name);
-		mif_err("after vnet->iod:%s (%p)\n", vnet->iod->name, vnet->iod);
+		mif_err("after vnet->iod:%s (%pK)\n", vnet->iod->name, vnet->iod);
 #endif
 		rmnet_iod.current_link[ch] = to;
 
@@ -1447,7 +1447,7 @@ struct mif_buff_mng *init_mif_buff_mng(unsigned char *buffer_start,
 		return NULL;
 	}
 
-	mif_info("Init mif_buffer management - buffer:%p, size:%u, cell_size:%u\n",
+	mif_info("Init mif_buffer management - buffer:%pK, size:%u, cell_size:%u\n",
 		buffer_start, buffer_size, cell_size);
 
 	bm = kzalloc(sizeof(struct mif_buff_mng), GFP_KERNEL);
@@ -1472,7 +1472,7 @@ struct mif_buff_mng *init_mif_buff_mng(unsigned char *buffer_start,
 		return NULL;
 	}
 
-	mif_info("cell_count:%u, map_size:%u, map_size_byte:%lu  buff_map:%p\n"
+	mif_info("cell_count:%u, map_size:%u, map_size_byte:%lu  buff_map:%pK\n"
 		, bm->cell_count, bm->buffer_map_size,
 		(sizeof(unsigned int) * bm->buffer_map_size), bm->buffer_map);
 
@@ -1589,7 +1589,7 @@ void *alloc_mif_buff(struct mif_buff_mng *bm)
 
 #ifdef MIF_BUFF_DEBUG
 	mif_info("location:%d cell_size:%u\n", location, bm->cell_size);
-	mif_info("buffer_allocated:%p\n", buff_allocated);
+	mif_info("buffer_allocated:%pK\n", buff_allocated);
 	mif_info("used/free: %u/%u\n", get_mif_buff_used_count(bm),
 			get_mif_buff_free_count(bm));
 #endif
@@ -1613,7 +1613,7 @@ int free_mif_buff(struct mif_buff_mng *bm, void *buffer)
 	addr_diff = (unsigned int)(uc_buffer - bm->buffer_start);
 
 	if (addr_diff > bm->buffer_size) {
-		mif_err("ERR Buffer:%p is not my pool one.\n", uc_buffer);
+		mif_err("ERR Buffer:%pK is not my pool one.\n", uc_buffer);
 		return -1;
 	}
 
@@ -1622,12 +1622,12 @@ int free_mif_buff(struct mif_buff_mng *bm, void *buffer)
 	j = location % MIF_BITS_FOR_MAP_CELL;
 
 #ifdef MIF_BUFF_DEBUG
-	mif_info("uc_buff:%p diff:%u\n", uc_buffer, addr_diff);
+	mif_info("uc_buff:%pK diff:%u\n", uc_buffer, addr_diff);
 	mif_info("location:%d i:%d j:%d\n", location, i, j);
 #endif
 
 	if ((bm->buffer_map[i] & (MIF_64BIT_FIRST_BIT >> j)) == 0) {
-		mif_err("ERR Buffer:%p is allready freed\n", uc_buffer);
+		mif_err("ERR Buffer:%pK is allready freed\n", uc_buffer);
 		return -1;
 	}
 

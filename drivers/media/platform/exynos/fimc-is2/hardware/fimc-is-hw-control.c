@@ -32,28 +32,6 @@
 
 #define INTERNAL_SHOT_EXIST	(1)
 
-void framemgr_e_barrier_common(struct fimc_is_framemgr *this, u32 index, ulong flag)
-{
-	if (in_interrupt()) {
-		framemgr_e_barrier(this, index);
-	} else {
-		framemgr_e_barrier_irqs(this, index, flag);
-	}
-
-	return;
-}
-
-void framemgr_x_barrier_common(struct fimc_is_framemgr *this, u32 index, ulong flag)
-{
-	if (in_interrupt()) {
-		framemgr_x_barrier(this, index);
-	} else {
-		framemgr_x_barrier_irqr(this, index, flag);
-	}
-
-	return;
-}
-
 static int __get_free_work_irq(struct fimc_is_work_list *this,
 	struct fimc_is_work **work)
 {

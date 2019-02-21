@@ -47,6 +47,7 @@ static struct sensor_info info_table[] = {
 	SENSOR_INFO_LIGHT_CCT,
 	SENSOR_INFO_ACCEL_UNCALIBRATED,
 	SENSOR_INFO_META,
+	SENSOR_INFO_WAKE_UP_MOTION,
 };
 
 #define IIO_ST(si, rb, sb, sh)	\
@@ -378,6 +379,15 @@ void report_pickup_data(struct ssp_data *data,
 	pr_err("[SSP]: %s: %d", __func__,  pickup_data->pickup_gesture);
 }
 
+void report_wakeup_motion_data(struct ssp_data *data,
+		struct sensor_value *wakeup_motion_data)
+{
+	memcpy(&data->buf[WAKE_UP_MOTION], &wakeup_motion_data->wakeup_event, sensors_info[WAKE_UP_MOTION].get_data_len);
+	ssp_push_iio_buffer(data->indio_dev[WAKE_UP_MOTION], wakeup_motion_data->timestamp, 
+		(u8 *)(&data->buf[WAKE_UP_MOTION]), sensors_info[WAKE_UP_MOTION].report_data_len);
+	wake_lock_timeout(&data->ssp_wake_lock, 0.3*HZ);
+	pr_err("[SSP]: %s: %d", __func__,  wakeup_motion_data->wakeup_event);
+}
 void report_scontext_data(struct ssp_data *data,
 		struct sensor_value *scontextbuf)
 {

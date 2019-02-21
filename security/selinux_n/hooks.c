@@ -88,6 +88,10 @@
 #include <linux/delay.h>
 // ] SEC_SELINUX_PORTING_COMMON
 
+#ifdef CONFIG_LOD_SEC
+#include <linux/linux_on_dex.h>
+#endif
+
 #include "avc.h"
 #include "objsec.h"
 #include "netif.h"
@@ -97,6 +101,14 @@
 #include "netlabel.h"
 #include "audit.h"
 #include "avc_ss.h"
+
+#ifdef CONFIG_LOD_SEC
+#ifdef CONFIG_RKP_KDP
+#define rkp_is_lod_cred(x) ((x->type)>>3 & 1)
+#else
+#define rkp_is_lod_cred(x) (uid_is_LOD(x->uid.val) || (strcmp(current->comm, "nst") == 0 && x->uid.val == 0))
+#endif  /* CONFIG_RKP_KDP */
+#endif  /* CONFIG_LOD_SEC */
 
 #ifdef CONFIG_RKP_NS_PROT
 extern unsigned int cmp_ns_integrity(void);
@@ -863,6 +875,7 @@ static int selinux_set_mnt_opts(struct super_block *sb,
 		sbsec->flags |= SE_SBPROC | SE_SBGENFS;
 
 	if (!strcmp(sb->s_type->name, "debugfs") ||
+	    !strcmp(sb->s_type->name, "tracefs") ||
 	    !strcmp(sb->s_type->name, "sysfs") ||
 	    !strcmp(sb->s_type->name, "pstore"))
 		sbsec->flags |= SE_SBGENFS;
@@ -1721,7 +1734,7 @@ static int current_has_perm(const struct task_struct *tsk,
 
 /* Check whether a task is allowed to use a capability. */
 static int cred_has_capability(const struct cred *cred,
-			       int cap, int audit)
+			       int cap, int audit, bool initns)
 {
 	struct common_audit_data ad;
 	struct av_decision avd;
@@ -1735,10 +1748,26 @@ static int cred_has_capability(const struct cred *cred,
 
 	switch (CAP_TO_INDEX(cap)) {
 	case 0:
-		sclass = SECCLASS_CAPABILITY;
+#if defined(CONFIG_LOD_SEC)
+		if (!initns && rkp_is_lod_cred(cred)) {
+			sclass = SECCLASS_CAP_LOD;
+		} else {
+			sclass = initns ? SECCLASS_CAPABILITY : SECCLASS_CAP_USERNS;
+		}
+#else
+		sclass = initns ? SECCLASS_CAPABILITY : SECCLASS_CAP_USERNS;
+#endif
 		break;
 	case 1:
-		sclass = SECCLASS_CAPABILITY2;
+#if defined(CONFIG_LOD_SEC)
+		if (!initns && rkp_is_lod_cred(cred)) {
+			sclass = SECCLASS_CAP2_LOD;
+		} else {
+			sclass = initns ? SECCLASS_CAPABILITY2 : SECCLASS_CAP2_USERNS;
+		}
+#else
+		sclass = initns ? SECCLASS_CAPABILITY2 : SECCLASS_CAP2_USERNS;
+#endif
 		break;
 	default:
 		printk(KERN_ERR
@@ -2289,7 +2318,8 @@ static int selinux_capable(const struct cred *cred, struct user_namespace *ns,
 	if ((rc = security_integrity_current()))
 		return rc;
 #endif  /* CONFIG_RKP_KDP */
-	return cred_has_capability(cred, cap, audit);
+
+	return cred_has_capability(cred, cap, audit, ns == &init_user_ns);
 }
 
 static int selinux_quotactl(int cmds, int type, int id, struct super_block *sb)
@@ -2382,7 +2412,7 @@ static int selinux_vm_enough_memory(struct mm_struct *mm, long pages)
 #endif  /* CONFIG_RKP_KDP */
 
 	rc = cred_has_capability(current_cred(), CAP_SYS_ADMIN,
-					SECURITY_CAP_NOAUDIT);
+					SECURITY_CAP_NOAUDIT, true);
 	if (rc == 0)
 		cap_sys_admin = 1;
 
@@ -2940,14 +2970,15 @@ static int selinux_sb_kern_mount(struct super_block *sb, int flags, void *data)
 	struct common_audit_data ad;
 	int rc;
 
+#ifdef CONFIG_RKP_KDP	
+	if ((rc = security_integrity_current()))
+		return rc;
+#endif  /* CONFIG_RKP_KDP */
+
 	// [ SEC_SELINUX_PORTING_COMMON
 	if((strcmp(sb->s_type->name,"sdcardfs")) == 0)
 		mutex_lock(&selinux_sdcardfs_lock);
 
-#ifdef CONFIG_RKP_KDP	
-	if ((rc = security_integrity_current()))
-		goto out;
-#endif  /* CONFIG_RKP_KDP */
 	rc = superblock_doinit(sb, data);
 	if (rc)
 		goto out;
@@ -3571,7 +3602,7 @@ static int selinux_inode_getsecurity(const struct inode *inode, const char *name
 			    SECURITY_CAP_NOAUDIT);
 	if (!error)
 		error = cred_has_capability(current_cred(), CAP_MAC_ADMIN,
-					    SECURITY_CAP_NOAUDIT);
+					    SECURITY_CAP_NOAUDIT, true);
 	if (!error)
 		error = security_sid_to_context_force(isec->sid, &context,
 						      &size);
@@ -3783,7 +3814,7 @@ static int selinux_file_ioctl(struct file *file, unsigned int cmd,
 	case KDSKBENT:
 	case KDSKBSENT:
 		error = cred_has_capability(cred, CAP_SYS_TTY_CONFIG,
-					    SECURITY_CAP_AUDIT);
+					    SECURITY_CAP_AUDIT, true);
 		break;
 
 	/* default case assumes that the command will go

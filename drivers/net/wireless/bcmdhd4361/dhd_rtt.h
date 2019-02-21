@@ -1,14 +1,14 @@
 /*
  * Broadcom Dongle Host Driver (DHD), RTT
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -45,7 +45,7 @@
 
 #ifndef BIT
 #define BIT(x) (1 << (x))
-#endif
+#endif // endif
 
 /* DSSS, CCK and 802.11n rates in [500kbps] units */
 #define WL_MAXRATE	108	/* in 500kbps units */
@@ -126,7 +126,6 @@ enum {
 	RTT_PREAMBLE_VHT = BIT(2)
 };
 
-
 enum {
 	RTT_BW_5 = BIT(0),
 	RTT_BW_10 = BIT(1),
@@ -135,6 +134,14 @@ enum {
 	RTT_BW_80 = BIT(4),
 	RTT_BW_160 = BIT(5)
 };
+
+enum rtt_rate_bw {
+	RTT_RATE_20M,
+	RTT_RATE_40M,
+	RTT_RATE_80M,
+	RTT_RATE_160M
+};
+
 #define FTM_MAX_NUM_BURST_EXP	14
 #define HAS_11MC_CAP(cap) (cap & RTT_CAP_FTM_WAY)
 #define HAS_ONEWAY_CAP(cap) (cap & RTT_CAP_ONE_WAY)
@@ -161,6 +168,7 @@ typedef struct wifi_rate {
 
 typedef struct rtt_target_info {
 	struct ether_addr addr;
+	struct ether_addr local_addr;
 	rtt_type_t type; /* rtt_type */
 	rtt_peer_type_t peer; /* peer type */
 	wifi_channel_info_t channel; /* channel information */
@@ -228,7 +236,6 @@ typedef struct rtt_status_info {
     dhd_pub_t *dhd;
     int8 status;   /* current status for the current entry */
     int8 txchain; /* current device tx chain */
-    int8 mpc; /* indicate we change mpc mode */
     int pm; /* to save current value of pm */
     int8 pm_restore; /* flag to reset the old value of pm */
     int8 cur_idx; /* current entry to do RTT */
@@ -309,7 +316,6 @@ typedef struct rtt_capabilities {
 	uint8 bw_support;               /* bit mask indicate what BW is supported */
 } rtt_capabilities_t;
 
-
 /* RTT responder information */
 typedef struct wifi_rtt_responder {
 	wifi_channel_info channel;   /* channel of responder */
@@ -334,10 +340,8 @@ dhd_dev_rtt_unregister_noti_callback(struct net_device *dev, dhd_rtt_compl_noti_
 int
 dhd_dev_rtt_capability(struct net_device *dev, rtt_capabilities_t *capa);
 
-#ifdef WL_CFG80211
 int
 dhd_dev_rtt_avail_channel(struct net_device *dev, wifi_channel_info *channel_info);
-#endif /* WL_CFG80211 */
 
 int
 dhd_dev_rtt_enable_responder(struct net_device *dev, wifi_channel_info *channel_info);
@@ -356,7 +360,6 @@ dhd_rtt_set_cfg(dhd_pub_t *dhd, rtt_config_params_t *params);
 
 int
 dhd_rtt_stop(dhd_pub_t *dhd, struct ether_addr *mac_list, int mac_cnt);
-
 
 int
 dhd_rtt_register_noti_callback(dhd_pub_t *dhd, void *ctx, dhd_rtt_compl_noti_fn noti_fn);

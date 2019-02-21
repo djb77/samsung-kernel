@@ -267,6 +267,7 @@ struct dsim_device {
 
 	int total_underrun_cnt;
 	int version;
+	u32 pmu_info[3];
 //#ifdef CONFIG_DUMPSTATE_LOGGING
 	struct dentry *debug_root;
 	struct dentry *debug_info;

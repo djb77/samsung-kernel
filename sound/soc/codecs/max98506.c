@@ -834,7 +834,7 @@ static int max98506_volume_step_put(struct snd_kcontrol *kcontrol,
 	 * Under step 7 : Disable
 	 * Over step 7  : Enable
 	 */
-	if (sel >= MAX98506_VSTEP_MAX || sel < 0) {
+	if (sel < MAX98506_VSTEP_0 || sel >= MAX98506_VSTEP_MAX) {
 		msg_maxim("Unknown value %d", sel);
 		return -EINVAL;
 	}

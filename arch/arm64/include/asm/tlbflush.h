@@ -37,6 +37,7 @@
  * not. The macros handles invoking the asm with or without the
  * register argument as appropriate.
  */
+#define TLB_RECOVERY_CNT_MAX	50
 #define __TLBI_0(op, arg)		asm ("tlbi " #op)
 #define __TLBI_1(op, arg)		asm ("tlbi " #op ", %0" : : "r" (arg))
 #define __TLBI_N(op, arg, n, ...)	__TLBI_##n(op, arg)

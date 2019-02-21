@@ -158,6 +158,7 @@ static void mfc_qos_set(struct s5p_mfc_ctx *ctx, struct bts_bw *mfc_bw, int i)
 static inline unsigned long mfc_qos_get_weighted_mb(struct s5p_mfc_ctx *ctx,
 						unsigned long mb)
 {
+	struct s5p_mfc_dec *dec = ctx->dec_priv;
 	u32 num_planes = ctx->dst_fmt->num_planes;
 	int weight = 1000;
 	unsigned long weighted_mb;
@@ -176,10 +177,16 @@ static inline unsigned long mfc_qos_get_weighted_mb(struct s5p_mfc_ctx *ctx,
 		if (num_planes == 3) {
 			weight = 100000 / MFC_QOS_WEIGHT_3PLANE;
 		} else {
-			if (ctx->is_10bit)
-				weight = 100000 / MFC_QOS_WEIGHT_10BIT;
-			else if (ctx->is_422_10_intra)
+			if (ctx->is_10bit) {
+				if (dec && dec->super64_bframe) {
+					weight = 100000 / MFC_QOS_WEIGHT_10BIT_SUPER64_B;
+					mfc_debug(3, "QoS weight: super64 with B frame\n");
+				} else {
+					weight = 100000 / MFC_QOS_WEIGHT_10BIT;
+				}
+			} else if (ctx->is_422_10_intra) {
 				weight = 100000 / MFC_QOS_WEIGHT_422_10INTRA;
+			}
 		}
 		break;
 

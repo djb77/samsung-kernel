@@ -18,6 +18,9 @@
 #include "fimc-is-device-sensor-peri.h"
 #include "fimc-is-interface-sensor.h"
 
+static u8 rta_static_data[STATIC_DATA_SIZE];
+static u8 ddk_static_data[STATIC_DATA_SIZE];
+
 /* helper functions */
 struct fimc_is_module_enum *get_subdev_module_enum(struct fimc_is_sensor_interface *itf)
 {
@@ -815,6 +818,9 @@ int request_exposure(struct fimc_is_sensor_interface *itf,
 	int ret = 0;
 	u32 i = 0;
 	u32 end_index = 0;
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+#endif
 
 	BUG_ON(!itf);
 	BUG_ON(itf->magic != SENSOR_INTERFACE_MAGIC);
@@ -841,6 +847,20 @@ int request_exposure(struct fimc_is_sensor_interface *itf,
 			goto p_err;
 		}
 	}
+
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	/* store exposure for use initial AE */
+	sensor_peri = container_of(itf, struct fimc_is_device_sensor_peri, sensor_interface);
+	if (!sensor_peri) {
+		err("[%s] sensor_peri is NULL", __func__);
+		return -EINVAL;
+	}
+
+	if (sensor_peri->cis.use_initial_ae) {
+		sensor_peri->cis.last_ae_setting.long_exposure = long_exposure;
+		sensor_peri->cis.last_ae_setting.exposure = short_exposure;
+	}
+#endif
 
 p_err:
 	return ret;
@@ -962,7 +982,10 @@ int request_gain(struct fimc_is_sensor_interface *itf,
 	int ret = 0;
 	u32 i = 0;
 	u32 end_index = 0;
-
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+#endif
+	
 	BUG_ON(!itf);
 	BUG_ON(itf->magic != SENSOR_INTERFACE_MAGIC);
 
@@ -1002,6 +1025,22 @@ int request_gain(struct fimc_is_sensor_interface *itf,
 			goto p_err;
 		}
 	}
+
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	/* store gain for use initial AE */
+	sensor_peri = container_of(itf, struct fimc_is_device_sensor_peri, sensor_interface);
+	if (!sensor_peri) {
+		err("[%s] sensor_peri is NULL", __func__);
+		return -EINVAL;
+	}
+
+	if (sensor_peri->cis.use_initial_ae) {
+		sensor_peri->cis.last_ae_setting.long_analog_gain = long_analog_gain;
+		sensor_peri->cis.last_ae_setting.long_digital_gain = long_digital_gain;
+		sensor_peri->cis.last_ae_setting.analog_gain = short_analog_gain;
+		sensor_peri->cis.last_ae_setting.digital_gain = short_digital_gain;
+	}
+#endif
 
 p_err:
 	return ret;
@@ -1972,6 +2011,78 @@ u32 request_frame_length_line(struct fimc_is_sensor_interface *itf, u32 framelen
 	return 0;
 }
 
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+int get_initial_exposure_gain_of_sensor(struct fimc_is_sensor_interface *itf,
+		u32 *long_expo,
+		u32 *long_again,
+		u32 *long_dgain,
+		u32 *short_expo,
+		u32 *short_again,
+		u32 *short_dgain)
+{
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+	struct fimc_is_device_sensor *device = NULL;
+	struct fimc_is_module_enum *module = NULL;
+	struct v4l2_subdev *subdev_module;
+
+	if (!itf) {
+		err("[%s] fimc_is_sensor_interface is NULL", __func__);
+		return -EINVAL;
+	}
+
+	BUG_ON(itf->magic != SENSOR_INTERFACE_MAGIC);
+
+	sensor_peri = container_of(itf, struct fimc_is_device_sensor_peri, sensor_interface);
+	if (!sensor_peri) {
+		err("[%s] sensor_peri is NULL", __func__);
+		return -EINVAL;
+	}
+
+	module = sensor_peri->module;
+	if (unlikely(!module)) {
+		err("%s, module in is NULL", __func__);
+		module = NULL;
+		return -ENODEV;
+	}
+
+	subdev_module = module->subdev;
+	if (!subdev_module) {
+		err("module is not probed");
+		subdev_module = NULL;
+		return -ENODEV;
+	}
+
+	device = v4l2_get_subdev_hostdata(subdev_module);
+	if (!device) {
+		err("%s, failed to get sensor device", __func__);
+		return -ENODEV;
+	}
+
+	if (sensor_peri->cis.use_initial_ae && device->cfg->framerate < 60) {
+		*long_expo = sensor_peri->cis.init_ae_setting.long_exposure;
+		*long_again = sensor_peri->cis.init_ae_setting.long_analog_gain;
+		*long_dgain = sensor_peri->cis.init_ae_setting.long_digital_gain;
+		*short_expo = sensor_peri->cis.init_ae_setting.exposure;
+		*short_again = sensor_peri->cis.init_ae_setting.analog_gain;
+		*short_dgain = sensor_peri->cis.init_ae_setting.digital_gain;
+	} else {
+		*long_expo = 0;
+		*long_again = 0;
+		*long_dgain = 0;
+		*short_expo = 0;
+		*short_again = 0;
+		*short_dgain = 0;
+		dbg_sensor(1, "%s: called at not enabled last_ae, use default low exposure setting", __func__);
+	}
+
+	dbg_sensor(1, "%s: sensorid(%d),long(%d-%d-%d), shot(%d-%d-%d)\n", __func__,
+			sensor_peri->module->sensor_id,
+			*long_expo, *long_again, *long_dgain, *short_expo, *short_again, *short_dgain);
+
+	return 0;
+}
+#endif
+
 /* In order to change a current CIS mode when an user select the WDR (long and short exposure) mode or the normal AE mo */
 int change_cis_mode(struct fimc_is_sensor_interface *itf,
 		enum itf_cis_interface cis_mode)
@@ -2703,6 +2814,28 @@ int set_long_term_expo_mode(struct fimc_is_sensor_interface *itf,
 	return ret;
 }
 
+int get_static_mem(int ctrl_id, void **mem, int *size) {
+	int err = 0;
+
+	switch(ctrl_id) {
+	case ITF_CTRL_ID_DDK:
+		*mem = (void *)rta_static_data;
+		*size = sizeof(rta_static_data);
+		break;
+	case ITF_CTRL_ID_RTA:
+		*mem = (void *)ddk_static_data;
+		*size = sizeof(ddk_static_data);
+		break;
+	default:
+		err("invalid itf ctrl id %d", ctrl_id);
+		*mem = NULL;
+		*size = 0;
+		err = -EINVAL;
+	}
+
+	return err;
+}
+
 int get_sensor_state(struct fimc_is_sensor_interface *itf)
 {
 	struct fimc_is_device_sensor *sensor;
@@ -2876,6 +3009,9 @@ int init_sensor_interface(struct fimc_is_sensor_interface *itf)
 	itf->cis_itf_ops.get_module_id = get_module_id;
 	itf->cis_itf_ops.get_module_position = get_module_position;
 	itf->cis_itf_ops.set_sensor_3a_mode = set_sensor_3a_mode;
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	itf->cis_itf_ops.get_initial_exposure_gain_of_sensor = get_initial_exposure_gain_of_sensor;
+#endif
 	itf->cis_ext_itf_ops.change_cis_mode = change_cis_mode;
 
 	/* struct fimc_is_cis_event_ops */
@@ -2915,6 +3051,7 @@ int init_sensor_interface(struct fimc_is_sensor_interface *itf)
 	/* CIS ext2 interface */
 	/* Long Term Exposure mode(LTE mode) interface */
 	itf->cis_ext2_itf_ops.set_long_term_expo_mode = set_long_term_expo_mode;
+	itf->cis_ext2_itf_ops.get_static_mem = get_static_mem;
 	itf->cis_ext_itf_ops.set_adjust_sync = set_adjust_sync;
 	itf->cis_ext_itf_ops.request_frame_length_line = request_frame_length_line;
 	itf->cis_ext_itf_ops.request_sensitivity = request_sensitivity;

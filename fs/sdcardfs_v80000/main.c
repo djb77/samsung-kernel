@@ -32,6 +32,8 @@ enum {
 	Opt_multiuser,
 	Opt_userid,
 	Opt_reserved_mb,
+	Opt_gid_derivation,
+	Opt_default_normal,
 	Opt_err,
 };
 
@@ -43,6 +45,8 @@ static const match_table_t sdcardfs_tokens = {
 	{Opt_mask, "mask=%u"},
 	{Opt_userid, "userid=%d"},
 	{Opt_multiuser, "multiuser"},
+	{Opt_gid_derivation, "derive_gid"},
+	{Opt_default_normal, "default_normal"},
 	{Opt_reserved_mb, "reserved_mb=%u"},
 	{Opt_err, NULL}
 };
@@ -64,6 +68,9 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 	vfsopts->gid = 0;
 	/* by default, 0MB is reserved */
 	opts->reserved_mb = 0;
+	/* by default, gid derivation is off */
+	opts->gid_derivation = false;
+	opts->default_normal = false;
 
 	*debug = 0;
 
@@ -114,6 +121,12 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 			if (match_int(&args[0], &option))
 				return 0;
 			opts->reserved_mb = option;
+			break;
+		case Opt_gid_derivation:
+			opts->gid_derivation = true;
+			break;
+		case Opt_default_normal:
+			opts->default_normal = true;
 			break;
 		/* unknown option */
 		default:
@@ -168,6 +181,7 @@ int parse_options_remount(struct super_block *sb, char *options, int silent,
 				return 0;
 			vfsopts->mask = option;
 			break;
+		case Opt_default_normal:
 		case Opt_multiuser:
 		case Opt_userid:
 		case Opt_fsuid:
@@ -250,7 +264,6 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 
 	pr_info("sdcardfs: dev_name -> %s\n", dev_name);
 	pr_info("sdcardfs: options -> %s\n", (char *)raw_data);
-	pr_info("sdcardfs: mnt -> %p\n", mnt);
 
 	/* parse lower path */
 	err = kern_path(dev_name, LOOKUP_FOLLOW | LOOKUP_DIRECTORY,

@@ -255,6 +255,7 @@ int ext4_get_encryption_info(struct inode *inode)
 	crypt_info->ci_filename_mode = ctx.filenames_encryption_mode;
 #ifdef CONFIG_FMP_EXT4CRYPT_FS
 	if (ctx.filenames_encryption_mode == FMP_ENCRYPTION_MODE_AES_256_XTS ||
+			ctx.filenames_encryption_mode == EXT4_ENCRYPTION_MODE_PRIVATE ||
 			ctx.filenames_encryption_mode == FMP_ENCRYPTION_MODE_AES_256_CBC) {
 		printk(KERN_WARNING "FMP doesn't support filename encryption mode. \
 				Forcely, change it to AES_256_CTS mode\n");
@@ -281,6 +282,7 @@ int ext4_get_encryption_info(struct inode *inode)
 		break;
 #ifdef CONFIG_FMP_EXT4CRYPT_FS
 	case FMP_ENCRYPTION_MODE_AES_256_XTS:
+	case EXT4_ENCRYPTION_MODE_PRIVATE:
 		cipher_str = "xts(fmp)";
 		inode->i_mapping->private_algo_mode = FMP_XTS_ALGO_MODE;
 		break;
@@ -357,8 +359,18 @@ int ext4_get_encryption_info(struct inode *inode)
 		goto out;
 got_key:
 	memset(crypt_info->raw_key, 0, EXT4_MAX_KEY_SIZE);
+#ifdef CONFIG_FMP_EXT4CRYPT_FS
+	/* hack to support fbe on gsi */
+	if (S_ISREG(inode->i_mode) && (crypt_info->ci_data_mode == EXT4_ENCRYPTION_MODE_AES_256_XTS))
+	    goto private_crypt;
+#endif
+
 	if (mode == FMP_ENCRYPTION_MODE_AES_256_XTS ||
+			mode == EXT4_ENCRYPTION_MODE_PRIVATE ||
 			mode == FMP_ENCRYPTION_MODE_AES_256_CBC) {
+#ifdef CONFIG_FMP_EXT4CRYPT_FS
+private_crypt:
+#endif
 		crypt_info->private_enc_mode = FMP_FILE_ENC_MODE;
 		memcpy(crypt_info->raw_key, raw_key, ext4_encryption_key_size(mode));
 		memset(inode->i_mapping->key, 0, KEY_MAX_SIZE);

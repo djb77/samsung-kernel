@@ -1,14 +1,14 @@
 /*
  * Linux platform device for DHD WLAN adapter
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux_platdev.c 662397 2016-09-29 10:15:08Z $
+ * $Id: dhd_linux_platdev.c 753315 2018-03-21 04:10:12Z $
  */
 #include <typedefs.h>
 #include <linux/kernel.h>
@@ -41,7 +41,7 @@
 #include <wl_android.h>
 #if defined(CONFIG_WIFI_CONTROL_FUNC)
 #include <linux/wlan_plat.h>
-#endif
+#endif // endif
 #ifdef CONFIG_DTS
 #include<linux/regulator/consumer.h>
 #include<linux/of_gpio.h>
@@ -68,12 +68,12 @@ static bool dts_enabled = FALSE;
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#endif
+#endif // endif
 struct resource dhd_wlan_resources = {0};
 struct wifi_platform_data dhd_wlan_control = {0};
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic pop
-#endif
+#endif // endif
 #endif /* CONFIG_OF && !defined(CONFIG_ARCH_MSM) */
 #endif /* !defind(CONFIG_DTS) */
 
@@ -150,14 +150,6 @@ int wifi_platform_get_irq_number(wifi_adapter_info_t *adapter, unsigned long *ir
 int wifi_platform_set_power(wifi_adapter_info_t *adapter, bool on, unsigned long msec)
 {
 	int err = 0;
-#ifndef CONFIG_DTS
-	struct wifi_platform_data *plat_data;
-#endif
-#ifdef BT_OVER_SDIO
-	if (is_power_on == on) {
-		return -EINVAL;
-	}
-#endif /* BT_OVER_SDIO */
 #ifdef CONFIG_DTS
 	if (on) {
 		err = regulator_enable(wifi_regulator);
@@ -170,6 +162,8 @@ int wifi_platform_set_power(wifi_adapter_info_t *adapter, bool on, unsigned long
 	if (err < 0)
 		DHD_ERROR(("%s: regulator enable/disable failed", __FUNCTION__));
 #else
+	struct wifi_platform_data *plat_data;
+
 	if (!adapter || !adapter->wifi_plat_data)
 		return -EINVAL;
 	plat_data = adapter->wifi_plat_data;
@@ -290,7 +284,7 @@ static int wifi_plat_dev_drv_probe(struct platform_device *pdev)
 		adapter->intr_flags = resource->flags & IRQF_TRIGGER_MASK;
 #ifdef DHD_ISR_NO_SUSPEND
 		adapter->intr_flags |= IRQF_NO_SUSPEND;
-#endif
+#endif // endif
 	}
 
 #ifdef CONFIG_DTS
@@ -405,11 +399,11 @@ static int wifi_platdev_match(struct device *dev, void *data)
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-qual"
-#endif
+#endif // endif
 	const struct platform_device *pdev = to_platform_device(dev);
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic pop
-#endif
+#endif // endif
 
 	if (strcmp(pdev->name, name) == 0) {
 		DHD_ERROR(("found wifi platform device %s\n", name));
@@ -472,7 +466,6 @@ static int wifi_ctrlfunc_register_drv(void)
 			return err;
 		}
 	}
-
 #if !defined(CONFIG_DTS)
 	if (dts_enabled) {
 		struct resource *resource;
@@ -482,11 +475,10 @@ static int wifi_ctrlfunc_register_drv(void)
 		adapter->intr_flags = resource->flags & IRQF_TRIGGER_MASK;
 #ifdef DHD_ISR_NO_SUSPEND
 		adapter->intr_flags |= IRQF_NO_SUSPEND;
-#endif
+#endif // endif
 		wifi_plat_dev_probe_ret = dhd_wifi_platform_load();
 	}
 #endif /* !defined(CONFIG_DTS) */
-
 
 #ifdef CONFIG_DTS
 	wifi_plat_dev_probe_ret = platform_driver_register(&wifi_platform_dev_driver);
@@ -511,6 +503,7 @@ void wifi_ctrlfunc_unregister_drv(void)
 			return;
 
 	DHD_ERROR(("unregister wifi platform drivers\n"));
+
 	if (dev1)
 		platform_driver_unregister(&wifi_platform_dev_driver);
 	if (dev2)
@@ -683,7 +676,6 @@ static int dhd_wifi_platform_load_pcie(void)
 }
 #endif /* BCMPCIE  */
 
-
 void dhd_wifi_platform_unregister_drv(void)
 {
 	if (cfg_multichip)
@@ -697,7 +689,7 @@ extern int dhd_dpc_prio;
 extern uint dhd_deferred_tx;
 #if defined(BCMLXSDMMC)
 extern struct semaphore dhd_registration_sem;
-#endif 
+#endif // endif
 
 #ifdef BCMSDIO
 static int dhd_wifi_platform_load_sdio(void)
@@ -708,6 +700,7 @@ static int dhd_wifi_platform_load_sdio(void)
 
 	BCM_REFERENCE(i);
 	BCM_REFERENCE(adapter);
+
 	/* Sanity check on the module parameters
 	 * - Both watchdog and DPC as tasklets are ok
 	 * - If both watchdog and DPC are threads, TX must be deferred
@@ -718,11 +711,11 @@ static int dhd_wifi_platform_load_sdio(void)
 
 #if defined(BCMLXSDMMC)
 	sema_init(&dhd_registration_sem, 0);
-#endif
+#endif // endif
 
 	if (dhd_wifi_platdata == NULL) {
 		DHD_ERROR(("DHD wifi platform data is required for Android build\n"));
-		DHD_ERROR(("DHD registeing bus directly\n"));
+		DHD_ERROR(("DHD registering bus directly\n"));
 		/* x86 bring-up PC needs no power-up operations */
 		err = dhd_bus_register();
 		return err;
@@ -753,6 +746,7 @@ static int dhd_wifi_platform_load_sdio(void)
 			}
 			err = wifi_platform_set_power(adapter, TRUE, WIFI_TURNON_DELAY);
 			if (err) {
+				DHD_ERROR(("%s: wifi pwr on error ! \n", __FUNCTION__));
 				dhd_bus_unreg_sdio_notify();
 				/* WL_REG_ON state unknown, Power off forcely */
 				wifi_platform_set_power(adapter, FALSE, WIFI_TURNOFF_DELAY);
@@ -808,7 +802,7 @@ fail:
 		wifi_platform_set_power(adapter, FALSE, WIFI_TURNOFF_DELAY);
 		wifi_platform_bus_enumerate(adapter, FALSE);
 	}
-#endif 
+#endif // endif
 
 	return err;
 }

@@ -67,6 +67,7 @@ static irqreturn_t etspi_fingerprint_interrupt(int irq, void *dev_id)
 	etspi->finger_on = 1;
 	disable_irq_nosync(gpio_irq);
 	wake_up_interruptible(&interrupt_waitq);
+	wake_lock_timeout(&etspi->fp_signal_lock, 1 * HZ);
 	pr_info("%s FPS triggered.int_count(%d) On(%d)\n", __func__,
 		etspi->int_count, etspi->finger_on);
 	return IRQ_HANDLED;
@@ -899,6 +900,8 @@ int etspi_platformInit(struct etspi_data *etspi)
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
 	wake_lock_init(&etspi->fp_spi_lock, WAKE_LOCK_SUSPEND, "etspi_wake_lock");
 #endif
+	wake_lock_init(&etspi->fp_signal_lock,
+				WAKE_LOCK_SUSPEND, "etspi_sigwake_lock");
 
 	pr_info("%s successful status=%d\n", __func__, status);
 	return status;
@@ -935,6 +938,7 @@ void etspi_platformUninit(struct etspi_data *etspi)
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
 		wake_lock_destroy(&etspi->fp_spi_lock);
 #endif
+		wake_lock_destroy(&etspi->fp_signal_lock);
 	}
 }
 
@@ -1054,14 +1058,23 @@ static int etspi_type_check(struct etspi_data *etspi)
 	 * type check return value
 	 * ET510C : 0X00 / 0X66 / 0X00 / 0X33
 	 * ET510D : 0x03 / 0x0A / 0x05
-	 * ET516A : 0x00 / 0x10 / 0x05
+	 * ET516B : 0x01 or 0x02 / 0x10 / 0x05
+	 * ET520  : 0x03 / 0x14 / 0x05
+	 * ET523  : 0x00 / 0x17 / 0x05
 	 */
-	if ((buf1 == 0x00) && (buf2 == 0x10) && (buf3 == 0x05)) {
+	if (((buf1 == 0x01) || (buf1 == 0x02))
+		&& (buf2 == 0x10) && (buf3 == 0x05)) {
 		etspi->sensortype = SENSOR_EGIS;
-		pr_info("%s sensor type is EGIS ET516A sensor\n", __func__);
+		pr_info("%s sensor type is EGIS ET516B sensor\n", __func__);
 	} else  if ((buf1 == 0x03) && (buf2 == 0x0A) && (buf3 == 0x05)) {
 		etspi->sensortype = SENSOR_EGIS;
 		pr_info("%s sensor type is EGIS ET510D sensor\n", __func__);
+	} else  if ((buf1 == 0x03) && (buf2 == 0x14) && (buf3 == 0x05)) {
+		etspi->sensortype = SENSOR_EGIS;
+		pr_info("%s sensor type is EGIS ET520 sensor\n", __func__);
+	} else if((buf1 == 0x00) && (buf2 == 0x17) && (buf3 == 0x05)) {
+		etspi->sensortype = SENSOR_EGIS;
+		pr_info("%s sensor type is EGIS ET523 sensor\n", __func__);
 	} else {
 		if ((buf4 == 0x00) && (buf5 == 0x66)
 				&& (buf6 == 0x00) && (buf7 == 0x33)) {

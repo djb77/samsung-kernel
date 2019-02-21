@@ -57,6 +57,15 @@ config ION_EXYNOS_STAT_LOG
 	help
 	  Say Y if you need to see some stats info via debugfs
 
+config ION_RBIN_HEAP
+	bool "ION RBIN Heap"
+	default y
+	depends on ION && RBIN && ION_EXYNOS
+	help
+	  Provides ION RBIN heap which utilizes RBIN memory.
+	  While RBIN heap is similar with CMA heap, it assumes that an ION buffer
+	  can be composed of multiple free chunks.
+
 if ION_EXYNOS
 source drivers/staging/android/ion/exynos/Kconfig
 endif

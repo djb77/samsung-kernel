@@ -163,6 +163,20 @@ enum epen_virtual_event_mode {
 
 #define TABLE_SWAP_DATA			0x05
 
+/*--------------------------------------------------
+ * Set/Get S-Pen mode for TSP
+ * 1 byte input/output parameter
+ * byte[0]: S-pen mode
+ * - 0: global scan mode
+ * - 1: local scan mode
+ * - 2: high noise mode
+ * - others: Reserved for future use
+ *--------------------------------------------------
+ */
+#define EPEN_GLOBAL_SCAN_MODE		0x00
+#define EPEN_LOCAL_SCAN_MODE		0x01
+#define EPEN_HIGH_NOISE_MODE		0x02
+
 #define FW_UPDATE_RUNNING		1
 #define FW_UPDATE_PASS			2
 #define FW_UPDATE_FAIL			-1
@@ -225,6 +239,7 @@ struct wacom_i2c {
 	struct input_dev *input_dev;
 	struct input_dev *input_dev_pad;
 	struct input_dev *input_dev_pen;
+	struct input_dev *input_dev_virtual;
 	struct mutex lock;
 	struct mutex update_lock;
 	struct mutex irq_lock;
@@ -333,8 +348,6 @@ void forced_release_key(struct wacom_i2c *);
 
 void wacom_select_survey_mode(struct wacom_i2c *, bool enable);
 void wacom_i2c_set_survey_mode(struct wacom_i2c *, int mode);
-
-void wacom_set_scan_mode(struct wacom_i2c *, int mode);
 
 int wacom_open_test(struct wacom_i2c *wac_i2c);
 

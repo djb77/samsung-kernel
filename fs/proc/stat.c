@@ -12,6 +12,10 @@
 #include <linux/cputime.h>
 #include <linux/tick.h>
 
+#ifdef CONFIG_LOD_SEC
+#include <linux/linux_on_dex.h>
+#endif
+
 #ifndef arch_irq_stat_cpu
 #define arch_irq_stat_cpu(cpu) 0
 #endif
@@ -155,11 +159,19 @@ static int show_stat(struct seq_file *p, void *v)
 		seq_put_decimal_ull(p, ' ', cputime64_to_clock_t(guest_nice));
 		seq_putc(p, '\n');
 	}
+#ifdef CONFIG_LOD_SEC
+	seq_printf(p, "intr %llu", current_is_LOD() ? 0ULL : (unsigned long long)sum);
+#else
 	seq_printf(p, "intr %llu", (unsigned long long)sum);
+#endif
 
 	/* sum again ? it could be updated? */
 	for_each_irq_nr(j)
+#ifdef CONFIG_LOD_SEC
+		seq_put_decimal_ull(p, ' ', current_is_LOD() ? 0ULL : kstat_irqs_usr(j));
+#else
 		seq_put_decimal_ull(p, ' ', kstat_irqs_usr(j));
+#endif
 
 	seq_printf(p,
 		"\nctxt %llu\n"
@@ -167,7 +179,11 @@ static int show_stat(struct seq_file *p, void *v)
 		"processes %lu\n"
 		"procs_running %lu\n"
 		"procs_blocked %lu\n",
+#ifdef CONFIG_LOD_SEC
+		current_is_LOD() ? 0ULL : nr_context_switches(),
+#else
 		nr_context_switches(),
+#endif
 		(unsigned long)jif,
 		total_forks,
 		nr_running(),

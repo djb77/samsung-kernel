@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2014-2017 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -1744,7 +1744,7 @@ bool kbase_backend_soft_hard_stop_slot(struct kbase_device *kbdev,
 			katom_idx0->kctx->blocked_js[js][prio_idx0] = true;
 		} else {
 			/* katom_idx0 is on GPU */
-			if (katom_idx1 && katom_idx1->gpu_rb_state ==
+			if (katom_idx1_valid && katom_idx1->gpu_rb_state ==
 						KBASE_ATOM_GPU_RB_SUBMITTED) {
 				/* katom_idx0 and katom_idx1 are on GPU */
 

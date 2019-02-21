@@ -528,6 +528,13 @@
 			#interrupt-cells = <2>;
 		};
 
+		smpl_warn: smpl_warn {
+			samsung,pins = "gpb1-3";
+			samsung,pin-function = <15>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
 		uart0_bus: uart0-bus {
 			samsung,pins = "gpd0-7", "gpd0-6";
 			samsung,pin-function = <3>;

@@ -920,7 +920,7 @@ static int maxdsm_write_wrapper(unsigned int reg,
 		maxdsm_regmap_read(reg, &ret);
 		break;
 	case PLATFORM_TYPE_B:
-		if (reg > maxdsm.param_size)
+		if (reg > (maxdsm.param_size - 1))
 			pr_err("%s: Unknown parameter index. %d\n",
 					__func__, reg);
 		else {
@@ -932,7 +932,7 @@ static int maxdsm_write_wrapper(unsigned int reg,
 		}
 		break;
 	case PLATFORM_TYPE_C:
-		if (reg > maxdsm.param_size)
+		if (reg > (maxdsm.param_size - 1))
 			pr_err("%s: Unknown parameter index. %d\n",
 					__func__, reg);
 		else {
@@ -1600,7 +1600,7 @@ EXPORT_SYMBOL_GPL(maxdsm_is_stereo);
 int maxdsm_update_feature_en_adc(int apply)
 {
 	unsigned int val = 0;
-	unsigned int reg, reg_r, ret = 0;
+	unsigned int reg = 0, reg_r = 0, ret = 0;
 	struct param_set_data data = {
 		.name = PARAM_FEATURE_SET,
 		.addr = 0x2A006A,

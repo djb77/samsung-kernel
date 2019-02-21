@@ -1367,7 +1367,7 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 
 	priv = skbpriv(skb);
 	if (unlikely(!priv)) {
-		mif_err("%s: ERR! No PRIV in skb@%p\n", ld->name, skb);
+		mif_err("%s: ERR! No PRIV in skb@%pK\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
 		modem_pci_forced_cp_crash(mld);
 		return;
@@ -1375,7 +1375,7 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 
 	iod = priv->iod;
 	if (unlikely(!iod)) {
-		mif_err("%s: ERR! No IOD in skb@%p\n", ld->name, skb);
+		mif_err("%s: ERR! No IOD in skb@%pK\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
 		modem_pci_forced_cp_crash(mld);
 		return;
@@ -2605,7 +2605,7 @@ struct link_device *pci_create_link_device(struct platform_device *pdev)
 
 	ld->name = "link_pci";
 
-	mif_err("ld name: %s(ld addr: %p) (mld addr: %p)\n",
+	mif_err("ld name: %s(ld addr: %pK) (mld addr: %pK)\n",
 		ld->name, ld, mld);
 
 #if 1
@@ -2798,7 +2798,7 @@ static int pcie_dev_init(struct pci_dev *pdev,
 				mif_err("Could not request BAR %d region!\n", i);
 				return ret;
 			}
-			mif_info("Modem PCI BAR [%d] (%s) : start: %p, end: %p\n", i,
+			mif_info("Modem PCI BAR [%d] (%s) : start: %pK, end: %pK\n", i,
 				pdev->driver->name, mpdev_info->bar_base[i], mpdev_info->bar_end[i]);
 		}
 	}
@@ -2888,7 +2888,7 @@ static int modem_pcie_probe(struct pci_dev *pdev,
 		mif_err("Failed to vmap ipc_region\n");
 		goto error;
 	}
-	mif_err("ipc_base=%p, ipc_size=%lu\n",
+	mif_err("ipc_base=%pK, ipc_size=%lu\n",
 		mld->base, (unsigned long)mld->size);
 
 	mld->boot_base = mpdev_info->bar_base[4];
@@ -2897,7 +2897,7 @@ static int modem_pcie_probe(struct pci_dev *pdev,
 		mif_err("Failed to vmap boot_region\n");
 		goto error;
 	}
-	mif_err("boot_base=%p, boot_size=%lu\n",
+	mif_err("boot_base=%pK, boot_size=%lu\n",
 			mld->boot_base, (unsigned long)mld->boot_size);
 
 	if (ld->sbd_ipc) {
@@ -2928,7 +2928,7 @@ static int modem_pcie_probe(struct pci_dev *pdev,
 		if (err < 0)
 			goto error;
 
-		mif_err("pci(sbd_intr) base=%p, size=%lu\n", mpdev_info->bar_base[0], t_size);
+		mif_err("pci(sbd_intr) base=%pK, size=%lu\n", mpdev_info->bar_base[0], t_size);
 
 		if (mld->attrs & LINK_ATTR(LINK_ATTR_IPC_ALIGNED))
 			ld->aligned = true;

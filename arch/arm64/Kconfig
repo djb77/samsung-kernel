@@ -686,8 +686,14 @@ config TIMA_LKMAUTH
 config RKP
 	depends on !SEC_FACTORY
 	bool "Samsung KNOX realtime kernel protection"
+	select UH_RKP
 	help
 	  this enables realtime kernel protection
+
+config UH_RKP
+	bool "Enable RKP (Realtime Kernel Protection) UH feature"
+	help
+	  it protects a kernel text and etc.
 
 config RKP_DEBUG
 	depends on RKP
@@ -1161,6 +1167,10 @@ config BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES
 	help
 	  Space separated list of names of dtbs to append when
 	  building a concatenated Image.gz-dtb.
+
+config LOD_SEC
+	bool "kernel security re-enforcement for Linux On Dex, including cap re-check and seccomp report"
+	default n
 
 endmenu
 

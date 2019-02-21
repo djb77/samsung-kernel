@@ -24,7 +24,7 @@
 		fuelgauge,qrtable30 = <0x0800>;
 		fuelgauge,capacity = <0x19B0>;
 		fuelgauge,fg_resistor = <1>;
-		fuelgauge,v_empty = <0xA05F>; /* Empty: 3260mV, Recover: 3480mV */
+		fuelgauge,v_empty = <0xA55F>; /* Empty: 3300mV, Recover: 3480mV */
 		fuelgauge,jig_low_active;
 	};
 };

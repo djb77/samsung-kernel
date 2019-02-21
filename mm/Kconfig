@@ -759,3 +759,14 @@ config BALANCE_ANON_FILE_RECLAIM
 	  equally.
 	  Swapping anonymous pages out to memory can be efficient enough to justify
 	  treating anonymous and file backed pages equally.
+
+config RBIN
+	bool "RBIN memory support"
+	default n
+	depends on CMA
+	help
+	  This provides RBIN functionality in memory management.
+	  RBIN memory is similar with CMA. Only the movable allocations with
+	  __GFP_RBIN can be allocated in the RBIN memory. (In this way,
+	  we can differentiate the pages going to CMA and RBIN.) Currently,
+	  there is only one user of RBIN memory, ION RBIN heap.

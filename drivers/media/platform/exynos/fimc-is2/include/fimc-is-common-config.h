@@ -70,6 +70,15 @@
 #define ENABLE_FW_SHARE_DUMP
 #endif
 
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+/* Init AWB */
+#define ENABLE_INIT_AWB
+#define WB_GAIN_COUNT	(4)
+#define INIT_AWB_COUNT_REAR	(3)
+#define INIT_AWB_COUNT_FRONT	(7)
+#define USE_FACE_UNLOCK_AE_AWB_INIT
+#endif
+
 /* notifier for MIF throttling */
 #undef CONFIG_CPU_THERMAL_IPA
 #if defined(CONFIG_CPU_THERMAL_IPA)

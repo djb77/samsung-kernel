@@ -152,6 +152,8 @@
 						>> S5P_FIMV_D_HEVC_INFO_SHIFT)		\
 						& S5P_FIMV_D_HEVC_INFO_MAIN_422_10_INTRA_MASK)	\
 						== S5P_FIMV_D_HEVC_INFO_MAIN_422_10_INTRA_VAL)
+#define s5p_mfc_get_lcu_size()			(MFC_READL(S5P_FIMV_D_HEVC_INFO)		\
+						& S5P_FIMV_D_HEVC_INFO_LCU_SIZE_MASK)
 
 
 /* nal queue information */

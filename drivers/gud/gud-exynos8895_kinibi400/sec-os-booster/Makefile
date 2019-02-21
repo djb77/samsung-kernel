@@ -4,7 +4,7 @@
 obj-$(CONFIG_SECURE_OS_BOOSTER_API) += sec_os_booster.o
 
 # MobiCore kernel driver path
-GUD_ROOT_FOLDER := drivers/gud/gud-exynos8895
+GUD_ROOT_FOLDER := drivers/gud/gud-exynos8895_kinibi400
 
 ccflags-y += -Iinclude/soc/samsung/
 # Includes MobiCore kernel driver

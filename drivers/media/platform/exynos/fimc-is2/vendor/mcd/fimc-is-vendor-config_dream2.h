@@ -67,4 +67,8 @@
 //#define CSI_SCENARIO_SEN_REAR	(0)
 #endif
 
+#if ANDROID_VERSION >= 90000 /* Over P */
+#define USE_FACE_UNLOCK_AE_AWB_INIT /* for Face Unlock */
+#endif
+
 #endif /* FIMC_IS_VENDOR_CONFIG_DREAM2_H */

@@ -228,6 +228,8 @@ source "drivers/sensorhub/atmel/Kconfig"
 
 source "drivers/sensorhub/brcm/Kconfig"
 
+source "drivers/optics/Kconfig"
+
 source "drivers/gps/Kconfig"
 
 source "drivers/motor/Kconfig"

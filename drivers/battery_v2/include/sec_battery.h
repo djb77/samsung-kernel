@@ -109,8 +109,10 @@
 
 #define BATT_MISC_EVENT_UNDEFINED_RANGE_TYPE	0x00000001
 #define BATT_MISC_EVENT_WIRELESS_BACKPACK_TYPE	0x00000002
-#define BATT_MISC_EVENT_TIMEOUT_OPEN_TYPE	0x00000004
-#define BATT_MISC_EVENT_BATT_RESET_SOC		0x00000008
+#define BATT_MISC_EVENT_TIMEOUT_OPEN_TYPE		0x00000004
+#define BATT_MISC_EVENT_BATT_RESET_SOC			0x00000008
+#define BATT_MISC_EVENT_HICCUP_TYPE				0x00000020
+#define BATT_MISC_EVENT_WIRELESS_FOD			0x00000100
 
 #define SEC_INPUT_VOLTAGE_0V	0
 #define SEC_INPUT_VOLTAGE_5V	5
@@ -347,6 +349,7 @@ struct sec_battery_info {
 	struct delayed_work parse_mode_dt_work;
 	struct wake_lock parse_mode_dt_wake_lock;
 #endif
+	struct delayed_work init_chg_work;
 
 	char batt_type[48];
 	unsigned int full_check_cnt;
@@ -360,6 +363,7 @@ struct sec_battery_info {
 	unsigned int current_event;
 
 	/* wireless charging enable */
+	struct mutex wclock;
 	int wc_enable;
 	int wc_enable_cnt;
 	int wc_enable_cnt_value;
@@ -627,6 +631,7 @@ enum {
 	BATT_TEMP_TEST,
 #endif
 	BATT_CURRENT_EVENT,
+	CC_INFO,
 };
 
 enum {
@@ -661,6 +666,7 @@ extern int sec_battery_update_data(const char* file_path);
 #if defined(CONFIG_BATTERY_CISD)
 extern bool sec_bat_cisd_check(struct sec_battery_info *battery);
 extern void sec_battery_cisd_init(struct sec_battery_info *battery);
+extern void set_cisd_pad_data(struct sec_battery_info *battery, const char* buf);
 #endif
 #if defined(CONFIG_BATTERY_SBM_DATA)
 extern bool sec_bat_add_sbm_data(struct sec_battery_info *battery, int data_type);

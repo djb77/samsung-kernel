@@ -1,14 +1,14 @@
 /*
  * BCMSDH Function Driver for the native SDIO/MMC driver in the Linux Kernel
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Proprietary,Open:>>
  *
- * $Id: bcmsdh_sdmmc_linux.c 644124 2016-06-17 07:59:34Z $
+ * $Id: bcmsdh_sdmmc_linux.c 796833 2018-12-27 05:52:37Z $
  */
 
 #include <typedefs.h>
@@ -72,8 +72,15 @@
 #define SDIO_DEVICE_ID_BROADCOM_4324    0x4324
 #endif /* !defined(SDIO_DEVICE_ID_BROADCOM_4324) */
 #if !defined(SDIO_DEVICE_ID_BROADCOM_43239)
-#define SDIO_DEVICE_ID_BROADCOM_43239    43239
+#define SDIO_DEVICE_ID_BROADCOM_43239   43239
 #endif /* !defined(SDIO_DEVICE_ID_BROADCOM_43239) */
+#if !defined(SDIO_DEVICE_ID_BROADCOM_4345)
+#define SDIO_DEVICE_ID_BROADCOM_4345    0x4345
+#endif /* !defined(SDIO_DEVICE_ID_BROADCOM_4345) */
+
+#if !defined(SDIO_DEVICE_ID_BROADCOM_4362)
+#define SDIO_DEVICE_ID_BROADCOM_4362    0x4362
+#endif // endif
 
 extern void wl_cfg80211_set_parent_dev(void *dev);
 extern void sdioh_sdmmc_devintr_off(sdioh_info_t *sd);
@@ -116,7 +123,7 @@ static int sdioh_probe(struct sdio_func *func)
 
 #ifdef WL_CFG80211
 	wl_cfg80211_set_parent_dev(&func->dev);
-#endif
+#endif // endif
 
 	 /* allocate SDIO Host Controller state info */
 	 osh = osl_attach(&func->dev, SDIO_BUS, TRUE);
@@ -205,6 +212,7 @@ static void bcmsdh_sdmmc_remove(struct sdio_func *func)
 /* devices we support, null terminated */
 static const struct sdio_device_id bcmsdh_sdmmc_ids[] = {
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_DEFAULT) },
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_DEFAULT) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4325_SDGWB) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4325) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4329) },
@@ -213,6 +221,8 @@ static const struct sdio_device_id bcmsdh_sdmmc_ids[] = {
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4334) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4324) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_43239) },
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4345) },
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4362) },
 	{ SDIO_DEVICE_CLASS(SDIO_CLASS_NONE)		},
 	{ 0, 0, 0, 0 /* end: all zeroes */
 	},
@@ -288,6 +298,14 @@ static struct semaphore *notify_semaphore = NULL;
 static int dummy_probe(struct sdio_func *func,
                               const struct sdio_device_id *id)
 {
+	if (func)
+		sd_info(("%s: func->num=0x%x; \n", __FUNCTION__, func->num));
+	if (id) {
+		sd_info(("%s: class=0x%x; vendor=0x%x; device=0x%x\n", __FUNCTION__,
+			id->class, id->vendor, id->device));
+		if (id->vendor != SDIO_VENDOR_ID_BROADCOM)
+				return -ENODEV;
+	}
 	if (func && (func->num != 2)) {
 		return 0;
 	}

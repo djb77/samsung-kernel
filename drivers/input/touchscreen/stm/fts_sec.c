@@ -140,6 +140,7 @@ static void dead_zone_enable(void *device_data);
 static void drawing_test_enable(void *device_data);
 static void spay_enable(void *device_data);
 static void aod_enable(void *device_data);
+static void singletap_enable(void *device_data);
 static void set_aod_rect(void *device_data);
 static void get_aod_rect(void *device_data);
 static void dex_enable(void *device_data);
@@ -246,6 +247,7 @@ struct sec_cmd ft_commands[] = {
 	{SEC_CMD("drawing_test_enable", drawing_test_enable),},
 	{SEC_CMD("spay_enable", spay_enable),},
 	{SEC_CMD("aod_enable", aod_enable),},
+	{SEC_CMD("singletap_enable", singletap_enable),},
 	{SEC_CMD("set_aod_rect", set_aod_rect),},
 	{SEC_CMD("get_aod_rect", get_aod_rect),},
 	{SEC_CMD("dex_enable", dex_enable),},
@@ -684,6 +686,27 @@ static ssize_t read_ambient_channel_delta_show(struct device *dev,
 	return ret;
 }
 
+/*
+ * read_support_feature function
+ * returns the bit combination of specific feature that is supported.
+ */
+static ssize_t read_support_feature(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct fts_ts_info *info = container_of(sec, struct fts_ts_info, sec);
+	char buff[SEC_CMD_STR_LEN] = { 0 };
+	u32 feature = 0;
+
+	if (info->board->support_pressure)
+		feature |= INPUT_FEATURE_SUPPORT_PRESSURE;
+
+	snprintf(buff, sizeof(buff), "%d", feature);
+	input_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
+
+	return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
+}
+
 static ssize_t get_lp_dump(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct sec_cmd_data *sec = dev_get_drvdata(dev);
@@ -805,6 +828,7 @@ static DEVICE_ATTR(read_ambient_channel_info, 0444, read_ambient_channel_info_sh
 static DEVICE_ATTR(read_ambient_channel_delta, 0444, read_ambient_channel_delta_show, NULL);
 static DEVICE_ATTR(get_lp_dump, 0444, get_lp_dump, NULL);
 static DEVICE_ATTR(force_recal_count, 0444, get_force_recal_count, NULL);
+static DEVICE_ATTR(support_feature, 0444, read_support_feature, NULL);
 
 static struct attribute *sec_touch_facotry_attributes[] = {
 	&dev_attr_scrub_pos.attr,
@@ -825,6 +849,7 @@ static struct attribute *sec_touch_facotry_attributes[] = {
 	&dev_attr_read_ambient_channel_delta.attr,
 	&dev_attr_get_lp_dump.attr,
 	&dev_attr_force_recal_count.attr,
+	&dev_attr_support_feature.attr,
 	NULL,
 };
 
@@ -2776,7 +2801,7 @@ static void fts_read_wtr_cx_data(struct fts_ts_info *info, bool allnode)
 	unsigned char regAdd[8];
 	unsigned char *result_tx = NULL;
 	unsigned char *result_rx = NULL;
-	char temp[8];
+	char temp[9];
 	unsigned int ii;
 	unsigned int tx_num, rx_num;
         unsigned int comp_header_addr, comp_start_tx_addr, comp_start_rx_addr;
@@ -5522,6 +5547,47 @@ static void aod_enable(void *device_data)
 		info->lowpower_flag |= FTS_MODE_AOD;
 	} else {
 		info->lowpower_flag &= ~FTS_MODE_AOD;
+	}
+
+#ifdef FTS_SUPPORT_STRINGLIB
+	ret = info->fts_write_to_string(info, &addr, &info->lowpower_flag, sizeof(info->lowpower_flag));
+#endif
+	if (ret < 0) {
+		input_err(true, &info->client->dev, "%s: failed. ret: %d\n", __func__, ret);
+		snprintf(buff, sizeof(buff), "%s", "NG");
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+
+		goto out;
+	}
+
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+
+out:
+	sec->cmd_state = SEC_CMD_STATUS_WAITING;
+	sec_cmd_set_cmd_exit(sec);
+
+	input_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
+}
+
+static void singletap_enable(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct fts_ts_info *info = container_of(sec, struct fts_ts_info, sec);
+#ifdef FTS_SUPPORT_STRINGLIB
+	unsigned short addr = FTS_CMD_STRING_ACCESS;
+#endif
+	int ret = 0;
+	char buff[SEC_CMD_STR_LEN] = { 0 };
+
+	sec_cmd_set_default_result(sec);
+
+	if (sec->cmd_param[0]) {
+		info->lowpower_flag |= FTS_MODE_SINGLETAP;
+	} else {
+		info->lowpower_flag &= ~FTS_MODE_SINGLETAP;
 	}
 
 #ifdef FTS_SUPPORT_STRINGLIB

@@ -424,6 +424,7 @@ static void s5p_mfc_dec_stop_streaming(struct vb2_queue *q)
 
 		dec->dynamic_used = 0;
 		dec->err_reuse_flag = 0;
+		dec->dec_only_release_flag = 0;
 
 		s5p_mfc_cleanup_queue(&ctx->buf_queue_lock, &ctx->dst_buf_queue);
 

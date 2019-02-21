@@ -2,14 +2,14 @@
  * Fundamental types and constants relating to WFA NAN
  * (Neighbor Awareness Networking)
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -17,7 +17,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: nan.h 700076 2017-05-17 14:42:22Z $
+ * $Id: nan.h 758133 2018-04-17 19:07:15Z $
  */
 #ifndef _NAN_H_
 #define _NAN_H_
@@ -33,12 +33,11 @@
 #include <typedefs.h>
 #include <802.11.h>
 
-
 /* This marks the start of a packed structure section. */
 #include <packed_section_start.h>
 
 /* WiFi NAN OUI values */
-#define NAN_OUI			WFA_OUI     /* WiFi OUI */
+#define NAN_OUI			"\x50\x6F\x9A"     /* WFA OUI. WiFi-Alliance OUI */
 /* For oui_type field identifying the type and version of the NAN IE. */
 #define NAN_OUI_TYPE		0x13        /* Type/Version */
 #define NAN_AF_OUI_TYPE		0x18        /* Type/Version */
@@ -88,6 +87,10 @@
 #define NAN_OPERATING_CLASS_LEN  1	/* operating class field length from NAN FAM */
 #define NAN_CHANNEL_NUM_LEN      1	/* channel number field length 1 byte */
 
+/* generic nan attribute total length */
+#define NAN_ATTR_TOT_LEN(_nan_attr)	(ltoh16_ua(((const uint8 *)(_nan_attr)) + \
+	NAN_ATTR_ID_LEN) + NAN_ATTR_HDR_LEN)
+
 /* NAN slot duration / period */
 #define NAN_MIN_TU		16
 #define NAN_TU_PER_DW		512
@@ -106,9 +109,9 @@
 #define NAN_SLOT_DUR_4096TU	4096
 #define NAN_SLOT_DUR_8192TU	8192
 
-#define NAN_MAP_ID_2G   2  /* NAN Further Avail Map ID for band 2.4G */
-#define NAN_MAP_ID_5G   5  /* NAN Further Avail Map ID for band 5G */
-#define NAN_MAP_NUM_IDS 2  /* Max number of NAN Further Avail Map IDs supported */
+#define NAN_SOC_CHAN_2G		6	/* NAN 2.4G discovery channel */
+#define NAN_SOC_CHAN_5G_CH149	149	/* NAN 5G discovery channel if upper band allowed */
+#define NAN_SOC_CHAN_5G_CH44	44	/* NAN 5G discovery channel if only lower band allowed */
 
 /* size of ndc id */
 #define NAN_DATA_NDC_ID_SIZE 6
@@ -116,6 +119,17 @@
 #define NAN_AVAIL_ENTRY_LEN_RES0 7      /* Avail entry len in FAM attribute for resolution 16TU */
 #define NAN_AVAIL_ENTRY_LEN_RES1 5      /* Avail entry len in FAM attribute for resolution 32TU */
 #define NAN_AVAIL_ENTRY_LEN_RES2 4      /* Avail entry len in FAM attribute for resolution 64TU */
+
+/* map id field */
+#define NAN_MAPID_SPECIFIC_MAP_MASK	0x01 /* apply to specific map */
+#define NAN_MAPID_MAPID_MASK		0x1E
+#define NAN_MAPID_MAPID_SHIFT		1
+#define NAN_MAPID_SPECIFIC_MAP(_mapid)	((_mapid) & NAN_MAPID_SPECIFIC_MAP_MASK)
+#define NAN_MAPID_ALL_MAPS(_mapid)	(!NAN_MAPID_SPECIFIC_MAP(_mapid))
+#define NAN_MAPID_MAPID(_mapid)		(((_mapid) & NAN_MAPID_MAPID_MASK) \
+		>> NAN_MAPID_MAPID_SHIFT)
+#define NAN_MAPID_SET_SPECIFIC_MAPID(map_id)	((((map_id) << NAN_MAPID_MAPID_SHIFT) \
+		& NAN_MAPID_MAPID_MASK) | NAN_MAPID_SPECIFIC_MAP_MASK)
 
 /* Vendor-specific public action frame for NAN */
 typedef BWL_PRE_PACKED_STRUCT struct nan_pub_act_frame_s {
@@ -175,10 +189,11 @@ enum {
 	NAN_ATTR_MCAST_SCHED_OWNER_CHANGE = 38,
 	NAN_ATTR_PUBLIC_AVAILABILITY = 39,
 	NAN_ATTR_SUB_SVC_ID_LIST = 40,
+	NAN_ATTR_NDPE = 41,
 	/* change NAN_ATTR_MAX_ID to max ids + 1, excluding NAN_ATTR_VENDOR_SPECIFIC.
 	 * This is used in nan_parse.c
 	 */
-	NAN_ATTR_MAX_ID		= NAN_ATTR_SUB_SVC_ID_LIST + 1,
+	NAN_ATTR_MAX_ID		= NAN_ATTR_NDPE + 1,
 
 	NAN_ATTR_VENDOR_SPECIFIC = 221
 };
@@ -315,7 +330,8 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_avail_entry_s {
 #define NAN_VENDOR_TYPE_RTT	0
 #define NAN_VENDOR_TYPE_P2P	1
 
-/* Vendor Specific Attribute */
+/* Vendor Specific Attribute - old definition */
+/* TODO remove */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_vendor_attr_s {
 	uint8	id;			/* 0xDD */
 	uint16	len;		/* IE length */
@@ -325,6 +341,14 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_vendor_attr_s {
 } BWL_POST_PACKED_STRUCT wifi_nan_vendor_attr_t;
 
 #define NAN_VENDOR_HDR_SIZE	(OFFSETOF(wifi_nan_vendor_attr_t, attr))
+
+/* vendor specific attribute */
+typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_vndr_attr_s {
+	uint8	id;			/* 0xDD */
+	uint16	len;			/* length of following fields */
+	uint8	oui[DOT11_OUI_LEN];	/* vendor specific OUI */
+	uint8	body[];
+} BWL_POST_PACKED_STRUCT wifi_nan_vndr_attr_t;
 
 /* p2p operation attribute */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_p2p_op_attr_s {
@@ -598,7 +622,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_channel_entry_s {
 #define NAN_AVAIL_ENTRY_CTRL_USAGE_SHIFT 3
 #define NAN_AVAIL_ENTRY_CTRL_USAGE(_flags) (((_flags) & NAN_AVAIL_ENTRY_CTRL_USAGE_MASK) \
 	>> NAN_AVAIL_ENTRY_CTRL_USAGE_SHIFT)
-#define NAN_AVAIL_ENTRY_CTRL_UTIL_MASK 0x1E0
+#define NAN_AVAIL_ENTRY_CTRL_UTIL_MASK 0xE0
 #define NAN_AVAIL_ENTRY_CTRL_UTIL_SHIFT 5
 #define NAN_AVAIL_ENTRY_CTRL_UTIL(_flags) (((_flags) & NAN_AVAIL_ENTRY_CTRL_UTIL_MASK) \
 	>> NAN_AVAIL_ENTRY_CTRL_UTIL_SHIFT)
@@ -625,6 +649,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_channel_entry_s {
 	(*(uint8 *)(((wifi_nan_avail_entry_attr_t *)avail_entry)->var + 2))
 
 #define NAN_AVAIL_CHAN_LIST_HDR_LEN 1
+#define NAN_AVAIL_CHAN_LIST_TYPE_BAND		0x00
 #define NAN_AVAIL_CHAN_LIST_TYPE_CHANNEL	0x01
 #define NAN_AVAIL_CHAN_LIST_NON_CONTIG_BW	0x02
 #define NAN_AVAIL_CHAN_LIST_NUM_ENTRIES_MASK	0xF0
@@ -800,7 +825,6 @@ enum
 #define NAN_NDL_CONFIRM(_ndl)		(((_ndl)->type_status & NAN_NDL_TYPE_MASK) == \
 								NDL_ATTR_TYPE_STATUS_CONFIRM)
 
-
 #define NAN_NDL_STATUS_SHIFT	4
 #define NAN_NDL_STATUS_MASK	0xF0
 #define NAN_NDL_CONT(_ndl)	(((_ndl)->type_status & NAN_NDL_STATUS_MASK) == \
@@ -863,6 +887,15 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_dev_cap_s {
 	uint8 capabilities;	/* DFS Master, Extended key id etc */
 } BWL_POST_PACKED_STRUCT wifi_nan_dev_cap_t;
 
+/* map id related */
+
+/* all maps */
+#define NAN_DEV_CAP_ALL_MAPS_FLAG_MASK	0x1	/* nan default map control */
+#define NAN_DEV_CAP_ALL_MAPS_FLAG_SHIFT	0
+/* map id */
+#define NAN_DEV_CAP_MAPID_MASK	0x1E
+#define NAN_DEV_CAP_MAPID_SHIFT	1
+
 /* Awake DW Info field format */
 
 /* 2.4GHz DW */
@@ -900,13 +933,20 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_dev_cap_s {
 #define NAN_DEV_CAP_OP_PAGING_NDL		0x08
 
 #define NAN_DEV_CAP_OP_MODE_VHT_MASK		0x01
-#define NAN_DEV_CAP_OP_MODE_VHT8080_MASK	0x03
-#define NAN_DEV_CAP_OP_MODE_VHT160_MASK		0x05
+#define NAN_DEV_CAP_OP_MODE_VHT_SHIFT		0
+#define NAN_DEV_CAP_OP_MODE_VHT8080_MASK	0x02
+#define NAN_DEV_CAP_OP_MODE_VHT8080_SHIFT	1
+#define NAN_DEV_CAP_OP_MODE_VHT160_MASK		0x04
+#define NAN_DEV_CAP_OP_MODE_VHT160_SHIFT	2
 #define NAN_DEV_CAP_OP_MODE_PAGING_NDL_MASK	0x08
+#define NAN_DEV_CAP_OP_MODE_PAGING_NDL_SHIFT	3
 
 #define NAN_DEV_CAP_RX_ANT_SHIFT		4
 #define NAN_DEV_CAP_TX_ANT_MASK			0x0F
 #define NAN_DEV_CAP_RX_ANT_MASK			0xF0
+#define NAN_DEV_CAP_TX_ANT(_ant)		((_ant) & NAN_DEV_CAP_TX_ANT_MASK)
+#define NAN_DEV_CAP_RX_ANT(_ant)		(((_ant) & NAN_DEV_CAP_RX_ANT_MASK) \
+		>> NAN_DEV_CAP_RX_ANT_SHIFT)
 
 /* Device capabilities */
 
@@ -916,6 +956,9 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_dev_cap_s {
 /* extended iv cap */
 #define NAN_DEV_CAP_EXT_KEYID_MASK		0x02
 #define NAN_DEV_CAP_EXT_KEYID_SHIFT		1
+/* NDPE attribute support */
+#define	NAN_DEV_CAP_NDPE_ATTR_SUPPORT_MASK	0x08
+#define NAN_DEV_CAP_NDPE_ATTR_SUPPORT(_cap)	((_cap) & NAN_DEV_CAP_NDPE_ATTR_SUPPORT_MASK)
 
 /* Band IDs */
 enum {
@@ -927,6 +970,10 @@ enum {
 	NAN_BAND_ID_60G			= 5
 };
 typedef uint8 nan_band_id_t;
+
+/* NAN supported band in device capability */
+#define NAN_DEV_CAP_SUPPORTED_BANDS_2G	(1 << NAN_BAND_ID_2G)
+#define NAN_DEV_CAP_SUPPORTED_BANDS_5G	(1 << NAN_BAND_ID_5G)
 
 /*
  * Unaligned schedule attribute section 10.7.19.6 spec. ver r15
@@ -997,6 +1044,7 @@ typedef BWL_PRE_PACKED_STRUCT struct nan2_pub_act_frame_s {
 /* NAN Action Frame Subtypes */
 /* Subtype-0 is Reserved */
 #define NAN_MGMT_FRM_SUBTYPE_RESERVED		0
+#define NAN_MGMT_FRM_SUBTYPE_INVALID		0
 /* NAN Ranging Request */
 #define NAN_MGMT_FRM_SUBTYPE_RANGING_REQ	1
 /* NAN Ranging Response */
@@ -1054,9 +1102,9 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndp_qos_s {
 #define NAN_NDP_CTRL_SPEC_INFO_PRESENT		0x20
 #define NAN_NDP_CTRL_RESERVED			0xA0
 
-/* NDP Attribute */
+/* Used for both NDP Attribute and NDPE Attribute, since the structures are identical */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ndp_attr_s {
-	uint8 id;		/* 0x10 */
+	uint8 id;		/* NDP: 0x10, NDPE: 0x29 */
 	uint16 len;		/* length */
 	uint8 dialog_token;	/* dialog token */
 	uint8 type_status;	/* bits 0-3 type, 4-7 status */
@@ -1119,6 +1167,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_sched_entry_s {
 	uint8 tbmp[];		/* time bitmap - Optional */
 } BWL_POST_PACKED_STRUCT wifi_nan_sched_entry_t;
 
+#define NAN_SCHED_ENTRY_MAPID_MASK	0x0F
 #define NAN_SCHED_ENTRY_MIN_SIZE	OFFSETOF(wifi_nan_sched_entry_t, tbmp)
 #define NAN_SCHED_ENTRY_SIZE(_entry)	(NAN_SCHED_ENTRY_MIN_SIZE + (_entry)->tbmp_len)
 
@@ -1201,6 +1250,16 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_svc_desc_ext_attr_s {
 } BWL_POST_PACKED_STRUCT wifi_nan_svc_desc_ext_attr_t;
 
 #define NAN_SDE_ATTR_MIN_LEN OFFSETOF(wifi_nan_svc_desc_ext_attr_t, var)
+#define	NAN_SDE_ATTR_RANGE_LEN			4
+#define	NAN_SDE_ATTR_SUI_LEN			1
+#define	NAN_SDE_ATTR_INFO_LEN_PARAM_LEN		2
+#define	NAN_SDE_ATTR_RANGE_INGRESS_LEN		2
+#define	NAN_SDE_ATTR_RANGE_EGRESS_LEN		2
+#define NAN_SDE_ATTR_CTRL_LEN			2
+/* max length of variable length field (matching filter, service response filter,
+ * or service info) in service descriptor attribute
+ */
+#define NAN_DISC_SDA_FIELD_MAX_LEN	255
 
 /* SDEA control field bit definitions and access macros */
 #define NAN_SDE_CF_FSD_REQUIRED		(1 << 0)
@@ -1213,6 +1272,8 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_svc_desc_ext_attr_s {
 #define NAN_SDE_CF_RANGING_REQUIRED	(1 << 7)
 #define NAN_SDE_CF_RANGE_PRESENT	(1 << 8)
 #define NAN_SDE_CF_SVC_UPD_IND_PRESENT	(1 << 9)
+/* Using Reserved Bits as per Spec */
+#define NAN_SDE_CF_LIFE_CNT_PUB_RX      (1 << 15)
 #define NAN_SDE_FSD_REQUIRED(_sde)	((_sde)->control & NAN_SDE_CF_FSD_REQUIRED)
 #define NAN_SDE_FSD_GAS(_sde)		((_sde)->control & NAN_SDE_CF_FSD_GAS)
 #define NAN_SDE_DP_REQUIRED(_sde)	((_sde)->control & NAN_SDE_CF_DP_REQUIRED)
@@ -1223,6 +1284,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_svc_desc_ext_attr_s {
 #define NAN_SDE_RANGING_REQUIRED(_sde)	((_sde)->control & NAN_SDE_CF_RANGING_REQUIRED)
 #define NAN_SDE_RANGE_PRESENT(_sde)	((_sde)->control & NAN_SDE_CF_RANGE_PRESENT)
 #define NAN_SDE_SVC_UPD_IND_PRESENT(_sde)	((_sde)->control & NAN_SDE_CF_SVC_UPD_IND_PRESENT)
+#define NAN_SDE_LIFE_COUNT_FOR_PUB_RX(_sde)     (_sde & NAN_SDE_CF_LIFE_CNT_PUB_RX)
 
 /* nan2 security */
 
@@ -1444,7 +1506,6 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_mcast_sched_attr_s {
 	uint8 sched_own[ETHER_ADDR_LEN];
 	uint8 var[]; /* multicast sched entry list (schedule_entry_list) */
 } BWL_POST_PACKED_STRUCT wifi_nan_mcast_sched_attr_t;
-
 
 /* FAC Channel Entry  (section 10.7.19.1.5) */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_fac_chan_entry_s {

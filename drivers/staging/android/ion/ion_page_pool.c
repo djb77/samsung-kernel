@@ -50,8 +50,11 @@ static void ion_page_pool_free_pages(struct ion_page_pool *pool,
 static int ion_page_pool_add(struct ion_page_pool *pool, struct page *page)
 {
 #ifdef CONFIG_DEBUG_LIST
-	BUG_ON(page->lru.next != LIST_POISON1 ||
-			page->lru.prev != LIST_POISON2);
+#ifdef CONFIG_RBIN
+	if (!is_ion_rbin_page(page))
+#endif
+		BUG_ON(page->lru.next != LIST_POISON1 ||
+				page->lru.prev != LIST_POISON2);
 #endif
 	if (pool->cached)
 		ion_clear_page_clean(page);
@@ -68,7 +71,7 @@ static int ion_page_pool_add(struct ion_page_pool *pool, struct page *page)
 	return 0;
 }
 
-static struct page *ion_page_pool_remove(struct ion_page_pool *pool, bool high)
+struct page *ion_page_pool_remove(struct ion_page_pool *pool, bool high)
 {
 	struct page *page;
 
@@ -92,6 +95,9 @@ struct page *ion_page_pool_alloc(struct ion_page_pool *pool)
 
 	BUG_ON(!pool);
 
+	if (!pool->high_count && !pool->low_count)
+		goto done;
+
 	spin_lock(&pool->lock);
 	if (pool->high_count)
 		page = ion_page_pool_remove(pool, true);
@@ -99,6 +105,7 @@ struct page *ion_page_pool_alloc(struct ion_page_pool *pool)
 		page = ion_page_pool_remove(pool, false);
 	spin_unlock(&pool->lock);
 
+done:
 	return page;
 }
 
@@ -106,7 +113,12 @@ void ion_page_pool_free(struct ion_page_pool *pool, struct page *page)
 {
 	int ret;
 
-	BUG_ON(pool->order != compound_order(page));
+	/*
+	 * ION RBIN heap can utilize ion_page_pool_free() for pages which are
+	 * not compound pages. Thus, comment out the below line.
+	 *
+	 * BUG_ON(pool->order != compound_order(page));
+	 */
 
 	ret = ion_page_pool_add(pool, page);
 	if (ret)
@@ -118,7 +130,7 @@ void ion_page_pool_free_immediate(struct ion_page_pool *pool, struct page *page)
 	ion_page_pool_free_pages(pool, page);
 }
 
-static int ion_page_pool_total(struct ion_page_pool *pool, bool high)
+int ion_page_pool_total(struct ion_page_pool *pool, bool high)
 {
 	int count = pool->low_count;
 

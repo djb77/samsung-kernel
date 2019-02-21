@@ -172,6 +172,14 @@ int sensor_module_init(struct v4l2_subdev *subdev, u32 val)
 		goto p_err;
 	}
 
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	ret = CALL_CISOPS(&sensor_peri->cis, cis_set_initial_exposure, subdev_cis);
+	if (ret) {
+		err("v4l2_subdev_call(set_initial_exposure) is fail(%d)", ret);
+		goto p_err;
+	}
+#endif
+
 	subdev_flash = sensor_peri->subdev_flash;
 	if (subdev_flash != NULL) {
 		ret = v4l2_subdev_call(subdev_flash, core, init, 0);

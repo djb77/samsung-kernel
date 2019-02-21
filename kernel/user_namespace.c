@@ -107,6 +107,15 @@ int create_user_ns(struct cred *new)
 	ns->flags = parent_ns->flags;
 	mutex_unlock(&userns_state_mutex);
 
+#ifdef CONFIG_LOD_SEC
+	if (0 != (current_cred()->uid.val)){
+		ret = -EPERM;
+		printk(KERN_ERR "LOD: blocking USERNS from non-root PROC %s PID %d UID %d\n",
+			current->comm, current->pid, current_cred()->uid.val);
+		return ret;
+	}
+#endif
+
 	set_cred_user_ns(new, ns);
 
 #ifdef CONFIG_PERSISTENT_KEYRINGS

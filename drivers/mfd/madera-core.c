@@ -365,6 +365,15 @@ static int madera_runtime_resume(struct device *dev)
 		goto err;
 	}
 
+	switch (madera->type) {
+	case CS47L92:
+	case CS47L93:
+		regmap_write(madera->regmap, MADERA_CTRL_SCRATCH, 0xA5);
+		break;
+	default:
+		break;
+	}
+
 	return 0;
 
 err:
@@ -1041,6 +1050,15 @@ int madera_dev_init(struct madera *madera)
 		goto err_reset;
 
 	madera_configure_micbias(madera);
+
+	switch (madera->type) {
+	case CS47L92:
+	case CS47L93:
+		regmap_write(madera->regmap, MADERA_CTRL_SCRATCH, 0xA5);
+		break;
+	default:
+		break;
+	}
 
 	pm_runtime_set_active(madera->dev);
 	pm_runtime_enable(madera->dev);

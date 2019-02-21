@@ -1331,8 +1331,11 @@ void xhci_handle_command_timeout(struct work_struct *work)
 
 			return;
 		}
-
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+		return;
+#else
 		goto time_out_completed;
+#endif
 	}
 
 	/* host removed. Bail out */
@@ -1348,9 +1351,7 @@ void xhci_handle_command_timeout(struct work_struct *work)
 	xhci_handle_stopped_cmd_ring(xhci, xhci->current_cmd);
 
 time_out_completed:
-#ifndef CONFIG_USB_HOST_SAMSUNG_FEATURE
 	spin_unlock_irqrestore(&xhci->lock, flags);
-#endif
 	return;
 }
 

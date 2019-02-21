@@ -569,10 +569,17 @@ static void mfc_handle_reuse_buffer(struct s5p_mfc_ctx *ctx)
 	if (!released_flag)
 		return;
 
-	/* reuse not referenced buf anymore */
+	/* Reuse not referenced buf anymore */
 	for (i = 0; i < MFC_MAX_DPBS; i++)
 		if (released_flag & (1 << i))
-			s5p_mfc_move_reuse_buffer(ctx, i);
+			if (s5p_mfc_move_reuse_buffer(ctx, i))
+				released_flag &= ~(1 << i);
+
+	/* Not reused buffer should be released when there is a display frame */
+	dec->dec_only_release_flag |= released_flag;
+	for (i = 0; i < MFC_MAX_DPBS; i++)
+		if (released_flag & (1 << i))
+			clear_bit(i, &dec->available_dpb);
 }
 
 /* Handle frame decoding interrupt */
@@ -688,6 +695,13 @@ static void mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 		} else {
 			mfc_handle_frame_all_extracted(ctx);
 		}
+	}
+
+	/* Detection for QoS weight */
+	if (!dec->super64_bframe && IS_SUPER64_BFRAME(ctx, s5p_mfc_get_lcu_size(),
+				s5p_mfc_get_dec_frame_type())) {
+		dec->super64_bframe = 1;
+		s5p_mfc_qos_on(ctx);
 	}
 
 	switch (dst_frame_status) {
@@ -1083,12 +1097,12 @@ static inline void mfc_handle_error(struct s5p_mfc_ctx *ctx,
 			if (src_mb) {
 				stream_vir = src_mb->vir_addr;
 				strm_size = src_mb->vb.vb2_buf.planes[0].bytesused;
-				if (strm_size > 32)
-					strm_size = 32;
+				if (strm_size > 640)
+					strm_size = 640;
 
 				if (stream_vir && strm_size)
 					print_hex_dump(KERN_ERR, "No header: ",
-							DUMP_PREFIX_ADDRESS, strm_size, 0,
+							DUMP_PREFIX_ADDRESS, 32, 4,
 							stream_vir, strm_size, false);
 
 				vb2_buffer_done(&src_mb->vb.vb2_buf, VB2_BUF_STATE_DONE);

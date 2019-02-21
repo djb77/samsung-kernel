@@ -1,14 +1,14 @@
 /*
  * Linux cfg80211 Vendor Extension Code
  *
- * Copyright (C) 1999-2018, Broadcom Corporation
- * 
+ * Copyright (C) 1999-2019, Broadcom.
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -24,9 +24,8 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.h 763050 2018-05-17 04:42:47Z $
+ * $Id: wl_cfgvendor.h 740003 2018-01-10 10:47:17Z $
  */
-
 
 #ifndef _wl_cfgvendor_h_
 #define _wl_cfgvendor_h_
@@ -38,7 +37,6 @@
 
 #define OUI_BRCM    0x001018
 #define OUI_GOOGLE  0x001A11
-#define BRCM_VENDOR_SUBCMD_PRIV_STR	1
 #define ATTRIBUTE_U32_LEN                  (NLA_HDRLEN  + 4)
 #define VENDOR_ID_OVERHEAD                 ATTRIBUTE_U32_LEN
 #define VENDOR_SUBCMD_OVERHEAD             ATTRIBUTE_U32_LEN
@@ -79,7 +77,12 @@ enum brcm_vendor_attr {
 #define GSCAN_ATTR_SET11			110
 #define GSCAN_ATTR_SET12			120
 #define GSCAN_ATTR_SET13			130
+#define GSCAN_ATTR_SET14			140
 
+#define NAN_SVC_INFO_LEN			255
+#define NAN_SID_ENABLE_FLAG_INVALID	0xff
+#define NAN_SID_BEACON_COUNT_INVALID	0xff
+#define WL_NAN_DW_INTERVAL 512
 
 typedef enum {
 	/* don't use 0 as a valid subcommand */
@@ -112,7 +115,7 @@ typedef enum {
 
 	/* define all wifi calling related commands between 0x1600 and 0x16FF */
 	ANDROID_NL80211_SUBCMD_WIFI_OFFLOAD_RANGE_START = 0x1600,
-	ANDROID_NL80211_SUBCMD_WIFI_OFFLOAD_RANGE_END   = 0x16FF,
+	ANDROID_NL80211_SUBCMD_WIFI_OFFLOAD_RANGE_END	= 0x16FF,
 
 	/* define all NAN related commands between 0x1700 and 0x17FF */
 	ANDROID_NL80211_SUBCMD_NAN_RANGE_START = 0x1700,
@@ -153,6 +156,9 @@ enum andr_vendor_subcmd {
 	WIFI_SUBCMD_SET_RSSI_MONITOR,
 	WIFI_SUBCMD_CONFIG_ND_OFFLOAD,
 	WIFI_SUBCMD_CONFIG_TCPACK_SUP,
+	WIFI_SUBCMD_FW_ROAM_POLICY,
+	WIFI_SUBCMD_ROAM_CAPABILITY,
+
 	RTT_SUBCMD_SET_CONFIG = ANDROID_NL80211_SUBCMD_RTT_RANGE_START,
 	RTT_SUBCMD_CANCEL_CONFIG,
 	RTT_SUBCMD_GETCAPABILITY,
@@ -180,17 +186,24 @@ enum andr_vendor_subcmd {
 	WIFI_OFFLOAD_SUBCMD_START_MKEEP_ALIVE = ANDROID_NL80211_SUBCMD_WIFI_OFFLOAD_RANGE_START,
 	WIFI_OFFLOAD_SUBCMD_STOP_MKEEP_ALIVE,
 
-	NAN_WIFI_SUBCMD_ENABLE = ANDROID_NL80211_SUBCMD_NAN_RANGE_START,
-	NAN_WIFI_SUBCMD_DISABLE,
-	NAN_WIFI_SUBCMD_REQUEST_PUBLISH,
-	NAN_WIFI_SUBCMD_REQUEST_SUBSCRIBE,
-	NAN_WIFI_SUBCMD_CANCEL_PUBLISH,
-	NAN_WIFI_SUBCMD_CANCEL_SUBSCRIBE,
-	NAN_WIFI_SUBCMD_TRANSMIT,
-#ifdef NAN_DP
-	NAN_WIFI_SUBCMD_DATA_PATH_OPEN,
-	NAN_WIFI_SUBCMD_DATA_PATH_CLOSE,
-#endif /* NAN_DP */
+	NAN_WIFI_SUBCMD_ENABLE = ANDROID_NL80211_SUBCMD_NAN_RANGE_START,	 /* 0x1700 */
+	NAN_WIFI_SUBCMD_DISABLE,						 /* 0x1701 */
+	NAN_WIFI_SUBCMD_REQUEST_PUBLISH,					 /* 0x1702 */
+	NAN_WIFI_SUBCMD_REQUEST_SUBSCRIBE,					 /* 0x1703 */
+	NAN_WIFI_SUBCMD_CANCEL_PUBLISH,						 /* 0x1704 */
+	NAN_WIFI_SUBCMD_CANCEL_SUBSCRIBE,					 /* 0x1705 */
+	NAN_WIFI_SUBCMD_TRANSMIT,						 /* 0x1706 */
+	NAN_WIFI_SUBCMD_CONFIG,							 /* 0x1707 */
+	NAN_WIFI_SUBCMD_TCA,							 /* 0x1708 */
+	NAN_WIFI_SUBCMD_STATS,							 /* 0x1709 */
+	NAN_WIFI_SUBCMD_GET_CAPABILITIES,					 /* 0x170A */
+	NAN_WIFI_SUBCMD_DATA_PATH_IFACE_CREATE,					 /* 0x170B */
+	NAN_WIFI_SUBCMD_DATA_PATH_IFACE_DELETE,					 /* 0x170C */
+	NAN_WIFI_SUBCMD_DATA_PATH_REQUEST,					 /* 0x170D */
+	NAN_WIFI_SUBCMD_DATA_PATH_RESPONSE,					 /* 0x170E */
+	NAN_WIFI_SUBCMD_DATA_PATH_END,						 /* 0x170F */
+	NAN_WIFI_SUBCMD_DATA_PATH_SEC_INFO,					 /* 0x1710 */
+	NAN_WIFI_SUBCMD_VERSION_INFO,						 /* 0x1711 */
 	APF_SUBCMD_GET_CAPABILITIES = ANDROID_NL80211_SUBCMD_PKT_FILTER_RANGE_START,
 	APF_SUBCMD_SET_FILTER,
 	/* Add more sub commands here */
@@ -243,6 +256,7 @@ enum gscan_attributes {
     GSCAN_ATTRIBUTE_RSSI_HIGH,
     GSCAN_ATTRIBUTE_HOSTLIST_BSSID_ELEM,
     GSCAN_ATTRIBUTE_HOTLIST_FLUSH,
+    GSCAN_ATTRIBUTE_HOTLIST_BSSID_COUNT,
 
     /* remaining reserved for additional attributes */
     GSCAN_ATTRIBUTE_RSSI_SAMPLE_SIZE = GSCAN_ATTR_SET6,
@@ -272,7 +286,6 @@ enum gscan_attributes {
     GSCAN_ATTRIBUTE_BSSID_PREF_FLUSH,
     GSCAN_ATTRIBUTE_BSSID_PREF,
     GSCAN_ATTRIBUTE_RSSI_MODIFIER,
-
 
     /* Roam cfg */
     GSCAN_ATTRIBUTE_A_BAND_BOOST_THRESHOLD = GSCAN_ATTR_SET9,
@@ -307,6 +320,10 @@ enum gscan_attributes {
     GSCAN_ATTRIBUTE_EPNO_SAME_NETWORK_BONUS,
     GSCAN_ATTRIBUTE_EPNO_SECURE_BONUS,
     GSCAN_ATTRIBUTE_EPNO_5G_BONUS,
+
+    /* Android O Roaming features */
+    GSCAN_ATTRIBUTE_ROAM_STATE_SET = GSCAN_ATTR_SET14,
+
     GSCAN_ATTRIBUTE_MAX
 };
 
@@ -387,56 +404,50 @@ enum mkeep_alive_attributes {
 	MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR,
 	MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC
 };
-enum apf_attributes {
-	APF_ATTRIBUTE_VERSION,
-	APF_ATTRIBUTE_MAX_LEN,
-	APF_ATTRIBUTE_PROGRAM,
-	APF_ATTRIBUTE_PROGRAM_LEN
-};
 
 typedef enum wl_vendor_event {
-	BRCM_VENDOR_EVENT_UNSPEC                = 0,
-	BRCM_VENDOR_EVENT_PRIV_STR              = 1,
-	GOOGLE_GSCAN_SIGNIFICANT_EVENT          = 2,
-	GOOGLE_GSCAN_GEOFENCE_FOUND_EVENT       = 3,
-	GOOGLE_GSCAN_BATCH_SCAN_EVENT           = 4,
-	GOOGLE_SCAN_FULL_RESULTS_EVENT          = 5,
-	GOOGLE_RTT_COMPLETE_EVENT               = 6,
-	GOOGLE_SCAN_COMPLETE_EVENT              = 7,
-	GOOGLE_GSCAN_GEOFENCE_LOST_EVENT        = 8,
-	GOOGLE_SCAN_EPNO_EVENT                  = 9,
-	GOOGLE_DEBUG_RING_EVENT                 = 10,
-	GOOGLE_FW_DUMP_EVENT                    = 11,
-	GOOGLE_PNO_HOTSPOT_FOUND_EVENT          = 12,
-	GOOGLE_RSSI_MONITOR_EVENT               = 13,
-	GOOGLE_MKEEP_ALIVE_EVENT                = 14,
+	BRCM_VENDOR_EVENT_UNSPEC		= 0,
+	BRCM_VENDOR_EVENT_PRIV_STR		= 1,
+	GOOGLE_GSCAN_SIGNIFICANT_EVENT		= 2,
+	GOOGLE_GSCAN_GEOFENCE_FOUND_EVENT	= 3,
+	GOOGLE_GSCAN_BATCH_SCAN_EVENT		= 4,
+	GOOGLE_SCAN_FULL_RESULTS_EVENT		= 5,
+	GOOGLE_RTT_COMPLETE_EVENT		= 6,
+	GOOGLE_SCAN_COMPLETE_EVENT		= 7,
+	GOOGLE_GSCAN_GEOFENCE_LOST_EVENT	= 8,
+	GOOGLE_SCAN_EPNO_EVENT			= 9,
+	GOOGLE_DEBUG_RING_EVENT			= 10,
+	GOOGLE_FW_DUMP_EVENT			= 11,
+	GOOGLE_PNO_HOTSPOT_FOUND_EVENT		= 12,
+	GOOGLE_RSSI_MONITOR_EVENT		= 13,
+	GOOGLE_MKEEP_ALIVE_EVENT		= 14,
 
 	/*
 	 * BRCM specific events should be placed after
 	 * the Generic events so that enums don't mismatch
 	 * between the DHD and HAL
 	 */
-	GOOGLE_NAN_EVENT_ENABLED                = 15,
-	GOOGLE_NAN_EVENT_DISABLED               = 16,
-	GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH        = 17,
-	GOOGLE_NAN_EVENT_REPLIED                = 18,
-	GOOGLE_NAN_EVENT_PUBLISH_TERMINATED     = 19,
-	GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED   = 20,
-	GOOGLE_NAN_EVENT_DE_EVENT               = 21,
-	GOOGLE_NAN_EVENT_FOLLOWUP               = 22,
-	GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND  = 23,
-	GOOGLE_NAN_EVENT_DATA_REQUEST           = 24,
-	GOOGLE_NAN_EVENT_DATA_CONFIRMATION      = 25,
-	GOOGLE_NAN_EVENT_DATA_END               = 26,
-	GOOGLE_NAN_EVENT_BEACON                 = 27,
-	GOOGLE_NAN_EVENT_SDF                    = 28,
-	GOOGLE_NAN_EVENT_TCA                    = 29,
-	GOOGLE_NAN_EVENT_SUBSCRIBE_UNMATCH      = 30,
-	GOOGLE_NAN_EVENT_UNKNOWN,
+	GOOGLE_NAN_EVENT_ENABLED		= 15,
+	GOOGLE_NAN_EVENT_DISABLED		= 16,
+	GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH	= 17,
+	GOOGLE_NAN_EVENT_REPLIED		= 18,
+	GOOGLE_NAN_EVENT_PUBLISH_TERMINATED	= 19,
+	GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED	= 20,
+	GOOGLE_NAN_EVENT_DE_EVENT		= 21,
+	GOOGLE_NAN_EVENT_FOLLOWUP		= 22,
+	GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND	= 23,
+	GOOGLE_NAN_EVENT_DATA_REQUEST		= 24,
+	GOOGLE_NAN_EVENT_DATA_CONFIRMATION	= 25,
+	GOOGLE_NAN_EVENT_DATA_END		= 26,
+	GOOGLE_NAN_EVENT_BEACON			= 27,
+	GOOGLE_NAN_EVENT_SDF			= 28,
+	GOOGLE_NAN_EVENT_TCA			= 29,
+	GOOGLE_NAN_EVENT_SUBSCRIBE_UNMATCH	= 30,
+	GOOGLE_NAN_EVENT_UNKNOWN		= 31,
 
-	GOOGLE_ROAM_EVENT_START,
+	GOOGLE_ROAM_EVENT_START			= 32,
 
-	BRCM_VENDOR_EVENT_HANGED
+	BRCM_VENDOR_EVENT_HANGED		= 33
 } wl_vendor_event_t;
 
 enum andr_wifi_attr {
@@ -447,6 +458,12 @@ enum andr_wifi_attr {
 	ANDR_WIFI_ATTRIBUTE_COUNTRY,
 	ANDR_WIFI_ATTRIBUTE_ND_OFFLOAD_VALUE,
 	ANDR_WIFI_ATTRIBUTE_TCPACK_SUP_VALUE
+};
+enum apf_attributes {
+	APF_ATTRIBUTE_VERSION,
+	APF_ATTRIBUTE_MAX_LEN,
+	APF_ATTRIBUTE_PROGRAM,
+	APF_ATTRIBUTE_PROGRAM_LEN
 };
 
 typedef enum wl_vendor_gscan_attribute {
@@ -539,6 +556,12 @@ typedef struct wlan_driver_wake_reason_cnt_t {
 } WLAN_DRIVER_WAKE_REASON_CNT;
 #endif /* DHD_WAKE_STATUS */
 
+/* Chipset roaming capabilities */
+typedef struct wifi_roaming_capabilities {
+	u32 max_blacklist_size;
+	u32 max_whitelist_size;
+} wifi_roaming_capabilities_t;
+
 /* Capture the BRCM_VENDOR_SUBCMD_PRIV_STRINGS* here */
 #define BRCM_VENDOR_SCMD_CAPA	"cap"
 
@@ -554,6 +577,17 @@ static INLINE int wl_cfgvendor_attach(struct wiphy *wiphy,
 		dhd_pub_t *dhd) { UNUSED_PARAMETER(wiphy); UNUSED_PARAMETER(dhd); return 0; }
 static INLINE int wl_cfgvendor_detach(struct wiphy *wiphy) { UNUSED_PARAMETER(wiphy); return 0; }
 #endif /*  (LINUX_VERSION_CODE > KERNEL_VERSION(3, 13, 0)) || defined(WL_VENDOR_EXT_SUPPORT) */
+
+#if defined(WL_SUPP_EVENT) && ((LINUX_VERSION_CODE > KERNEL_VERSION(3, 13, 0)) || \
+	defined(WL_VENDOR_EXT_SUPPORT))
+extern int wl_cfgvendor_send_supp_eventstring(const char *func, const char *fmt, ...);
+#define SUPP_LOG_LEN 256
+#define PRINT_SUPP_LOG(fmt, ...) \
+	 wl_cfgvendor_send_supp_eventstring(__func__, fmt, ##__VA_ARGS__);
+#define SUPP_LOG(args)	PRINT_SUPP_LOG	args;
+#else
+#define SUPP_LOG(x)
+#endif /* WL_SUPP_EVENT && ((kernel > (3, 13, 0)) || WL_VENDOR_EXT_SUPPORT) */
 
 #ifdef CONFIG_COMPAT
 #define COMPAT_ASSIGN_VALUE(normal_structure, member, value)	\

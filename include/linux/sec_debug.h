@@ -229,7 +229,7 @@ extern unsigned long merr_symptom;
 extern struct exynos_chipid_info exynos_soc_info;
 extern unsigned int get_smpl_warn_number(void);
 
-extern void sec_debug_init_extra_info(struct sec_debug_shared_info *);
+extern void sec_debug_init_extra_info(struct sec_debug_shared_info *, int magic_status);
 extern void sec_debug_finish_extra_info(void);
 extern void sec_debug_store_extra_info(int start, int end);
 extern void sec_debug_store_extra_info_A(void);
@@ -259,7 +259,7 @@ extern void sec_debug_set_extra_info_mfc_error(char *str);
 
 #else
 
-#define sec_debug_init_extra_info(a)	do { } while (0)
+#define sec_debug_init_extra_info(a, b)	do { } while (0)
 #define sec_debug_finish_extra_info()	do { } while (0)
 #define sec_debug_store_extra_info(a, b)	do { } while (0)
 #define sec_debug_store_extra_info_A()		do { } while (0)

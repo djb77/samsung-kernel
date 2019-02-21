@@ -1176,10 +1176,10 @@ int vts_set_dmicctrl(struct platform_device *pdev, int micconf_type, bool enable
 
 		/* check whether Mic is already configure or not based on VTS
 		   option type for MIC configuration book keeping */
-		if ((!(data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER)) ||
-			!(data->mic_ready & (0x1 << VTS_MICCONF_FOR_GOOGLE))) &&
-			(micconf_type == VTS_MICCONF_FOR_TRIGGER ||
-			micconf_type == VTS_MICCONF_FOR_GOOGLE)) {
+		if ((!(data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER)) &&
+			(micconf_type == VTS_MICCONF_FOR_TRIGGER)) ||
+			(!(data->mic_ready & (0x1 << VTS_MICCONF_FOR_GOOGLE)) &&
+			 (micconf_type == VTS_MICCONF_FOR_GOOGLE))) {
 			data->micclk_init_cnt++;
 			data->mic_ready |= (0x1 << micconf_type);
 			dev_info(dev, "%s Micclk ENABLED for TRIGGER ++ %d\n",
@@ -1208,10 +1208,10 @@ int vts_set_dmicctrl(struct platform_device *pdev, int micconf_type, bool enable
 		}
 
 		/* MIC configuration book keeping */
-		if (((data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER)) ||
-			(data->mic_ready & (0x1 << VTS_MICCONF_FOR_GOOGLE))) &&
-			(micconf_type == VTS_MICCONF_FOR_TRIGGER ||
-			micconf_type == VTS_MICCONF_FOR_GOOGLE)) {
+		if (((data->mic_ready & (0x1 << VTS_MICCONF_FOR_TRIGGER)) &&
+			(micconf_type == VTS_MICCONF_FOR_TRIGGER)) ||
+			((data->mic_ready & (0x1 << VTS_MICCONF_FOR_GOOGLE)) &&
+			 (micconf_type == VTS_MICCONF_FOR_GOOGLE))) {
 			data->mic_ready &= ~(0x1 << micconf_type);
 			dev_info(dev, "%s Micclk DISABLED for TRIGGER -- %d\n",
 				 __func__, data->mic_ready);

@@ -77,6 +77,8 @@ extern "C"{
 #define RTV_SHOULD_CLOSE_SUBCHANNELS		-13
 #define RTV_SHOULD_CLOSE_FIC			-14
 #define RTV_INVALID_FIC_OPEN_STATE		-15
+#define RTV_INVALID_FREQENCY			-16
+
 
 /* Do not modify the value! */
 enum E_RTV_SERVICE_TYPE {
