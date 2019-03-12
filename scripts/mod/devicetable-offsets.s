@@ -7,7 +7,6 @@
 // -I ./arch/arm64/include/generated/uapi -I ./arch/arm64/include/generated
 // -I ./include -I ./arch/arm64/include/uapi -I ./include/uapi
 // -I ./include/generated/uapi
-// -I drivers/gud/gud-exynos9810/MobiCoreDriver/mci/
 // -iprefix /home/dpi/qb5_8814/workspace/P4_1716/android/prebuilts/gcc-cfp/gcc-ibv-jopp/aarch64-linux-android-4.9/bin/../lib/gcc/aarch64-linux-android/4.9.x/
 // -D __KERNEL__ -D ANDROID_VERSION=90909 -D ANDROID_MAJOR_VERSION=p
 // -D CC_HAVE_ASM_GOTO -D KBUILD_BASENAME="devicetable_offsets"

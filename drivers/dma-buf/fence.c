@@ -529,6 +529,7 @@ fence_init(struct fence *fence, const struct fence_ops *ops,
 	fence->context = context;
 	fence->seqno = seqno;
 	fence->flags = 0UL;
+	fence->magic_bit = 0xFECEFECE;
 
 	trace_fence_init(fence);
 }

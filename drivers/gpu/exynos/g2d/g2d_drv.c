@@ -302,6 +302,7 @@ static int g2d_release(struct inode *inode, struct file *filp)
 	}
 
 	g2d_put_performance(g2d_ctx, true);
+	flush_delayed_work(&g2d_ctx->dwork);
 
 	kfree(g2d_ctx);
 
