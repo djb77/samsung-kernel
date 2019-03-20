@@ -660,6 +660,8 @@ static int fimc_is_ssx_video_s_ctrl(struct file *file, void *priv,
 	case V4L2_CID_IS_CAPTURE_EXPOSURETIME:
 	case V4L2_CID_IS_TRANSIENT_ACTION:
 	case V4L2_CID_IS_FACTORY_APERTURE_CONTROL:
+	case V4L2_CID_IS_OPENING_HINT:
+	case V4L2_CID_IS_CLOSING_HINT:
 		ret = fimc_is_video_s_ctrl(file, vctx, ctrl);
 		if (ret) {
 			merr("fimc_is_video_s_ctrl is fail(%d)", device, ret);

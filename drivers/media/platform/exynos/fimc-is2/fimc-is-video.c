@@ -2035,6 +2035,28 @@ int fimc_is_video_s_ctrl(struct file *file,
 			break;
 		}
 		break;
+#ifdef CONFIG_VENDER_MCD
+	case V4L2_CID_IS_OPENING_HINT:
+	{
+		struct fimc_is_core *core;
+		core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
+		if (core) {
+			mvinfo("opening hint(%d)\n", device, video, ctrl->value);
+			core->vender.opening_hint = ctrl->value;
+		}
+		break;
+	}
+	case V4L2_CID_IS_CLOSING_HINT:
+	{
+		struct fimc_is_core *core;
+		core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
+		if (core) {
+			mvinfo("closing hint(%d)\n", device, video, ctrl->value);
+			core->vender.closing_hint = ctrl->value;
+		}
+		break;
+	}
+#endif
 	case VENDER_S_CTRL:
 		/* This s_ctrl is needed to skip, when the s_ctrl id was found. */
 		break;

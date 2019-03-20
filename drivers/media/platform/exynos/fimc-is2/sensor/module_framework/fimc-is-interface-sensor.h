@@ -52,7 +52,7 @@
 #define DURATION_US_TO_FPS(x)  ((x == 0) ? (0) : ((1000 * 1000) / x))
 
 /* static memory size for DDK/RTA backup data */
-#define STATIC_DATA_SIZE	100
+#define STATIC_DATA_SIZE	200
 
 enum DIFF_BET_SEN_ISP { /* Set to 0: 3AA 3frame delay, 1: 3AA 4frame delay, 3: M2M */
 	DIFF_OTF_DELAY	= 0,
@@ -745,7 +745,10 @@ struct fimc_is_cis_ext2_interface_ops {
 				u32 *max_dynamic_fps);
 	/* Get static memory address for DDK/RTA backup data */
 	int (*get_static_mem)(int ctrl_id, void **mem, int *size);
-	void *reserved[17];
+	int (*get_open_close_hint)(int* opening, int* closing);
+	int (*get_sensor_line_readOut_time)(struct fimc_is_sensor_interface *itf,
+				u32 *line_readOut_time);
+	void *reserved[15];
 };
 
 struct fimc_is_cis_event_ops {

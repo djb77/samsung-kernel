@@ -260,6 +260,9 @@ int sensor_module_deinit(struct v4l2_subdev *subdev)
 	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
 	struct fimc_is_preprocessor *preprocessor = NULL;
 	struct v4l2_subdev *subdev_preprocessor = NULL;
+#ifdef APERTURE_CLOSE_VALUE
+	struct fimc_is_core *core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
+#endif
 
 	FIMC_BUG(!subdev);
 
@@ -285,12 +288,14 @@ int sensor_module_deinit(struct v4l2_subdev *subdev)
 		flush_work(&sensor_peri->aperture->aperture_set_work);
 
 #ifdef APERTURE_CLOSE_VALUE
-		if (sensor_peri->aperture->cur_value != APERTURE_CLOSE_VALUE
-			&& sensor_peri->aperture->step == APERTURE_STEP_STATIONARY) {
-			ret = CALL_APERTUREOPS(sensor_peri->aperture, aperture_deinit,
-				sensor_peri->subdev_aperture, APERTURE_CLOSE_VALUE);
-			if (ret < 0)
-				err("[%s] aperture_deinit failed\n", __func__);
+		if (core->vender.closing_hint != IS_CLOSING_HINT_SWITCHING) {
+			if (sensor_peri->aperture->cur_value != APERTURE_CLOSE_VALUE
+				&& sensor_peri->aperture->step == APERTURE_STEP_STATIONARY) {
+				ret = CALL_APERTUREOPS(sensor_peri->aperture, aperture_deinit,
+					sensor_peri->subdev_aperture, APERTURE_CLOSE_VALUE);
+				if (ret < 0)
+					err("[%s] aperture_deinit failed\n", __func__);
+			}
 		}
 #endif
 	}

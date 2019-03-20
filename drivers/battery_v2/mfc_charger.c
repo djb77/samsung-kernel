@@ -3,7 +3,6 @@
  *  Samsung MFC IC Charger Driver
  *
  *  Copyright (C) 2016 Samsung Electronics
- *  Jungmin Lee <jmru.lee@samsung.com>
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -417,7 +416,7 @@ void mfc_fod_set(struct mfc_charger_data *charger)
 	case MFC_PAD_WPC:
 	case MFC_PAD_WPC_AFC:
 	case MFC_PAD_WPC_PACK:
-	case MFC_PAD_WPC_PACK_TA:
+	case MFC_PAD_WPC_PACK_HV:
 	case MFC_PAD_WPC_STAND:
 	case MFC_PAD_WPC_STAND_HV:
 		for (i = 0; i < MFC_NUM_FOD_REG; i++) {
@@ -453,7 +452,7 @@ void mfc_fod_set_cv(struct mfc_charger_data *charger)
 	case MFC_PAD_WPC:
 	case MFC_PAD_WPC_AFC:
 	case MFC_PAD_WPC_PACK:
-	case MFC_PAD_WPC_PACK_TA:
+	case MFC_PAD_WPC_PACK_HV:
 	case MFC_PAD_WPC_STAND:
 	case MFC_PAD_WPC_STAND_HV:
 	case MFC_PAD_NONE:
@@ -487,7 +486,7 @@ void mfc_fod_set_cs100(struct mfc_charger_data *charger)
 	case MFC_PAD_WPC:
 	case MFC_PAD_WPC_AFC:
 	case MFC_PAD_WPC_PACK:
-	case MFC_PAD_WPC_PACK_TA:
+	case MFC_PAD_WPC_PACK_HV:
 	case MFC_PAD_WPC_STAND:
 	case MFC_PAD_WPC_STAND_HV:
 	case MFC_PAD_NONE:
@@ -802,6 +801,12 @@ void mfc_send_command(struct mfc_charger_data *charger, int cmd_mode)
 			cmd = WPC_COM_TX_ID;
 			data_val[0] = 0x00; /* Value for WPC TX ID */
 		}
+		mfc_send_packet(charger, MFC_HEADER_AFC_CONF, cmd, data_val, 1);
+		break;
+	case MFC_PHM_ON:
+		pr_info("%s Enter PHM\n", __func__);
+		cmd = WPC_COM_ENTER_PHM;
+		data_val[0] = 0x01; /* Enter PHM */
 		mfc_send_packet(charger, MFC_HEADER_AFC_CONF, cmd, data_val, 1);
 		break;
 	default:
@@ -1529,6 +1534,8 @@ static void mfc_wpc_afc_vout_work(struct work_struct *work)
 		value.intval = SEC_WIRELESS_PAD_WPC_STAND_HV;
 	else if (charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV)
 		value.intval = SEC_WIRELESS_PAD_VEHICLE_HV;
+	else if (charger->pdata->cable_type == MFC_PAD_WPC_PACK_HV)
+		value.intval = SEC_WIRELESS_PAD_WPC_PACK_HV;
 	else {
 		charger->pdata->cable_type = MFC_PAD_WPC_AFC;
 		value.intval = SEC_WIRELESS_PAD_WPC_HV;
@@ -2316,6 +2323,28 @@ static int mfc_chg_set_property(struct power_supply *psy,
 				mdelay(150);
 			}
 			break;
+		case POWER_SUPPLY_EXT_PROP_CALL_EVENT:
+			if (val->intval & BATT_EXT_EVENT_CALL) {
+				charger->device_event |= BATT_EXT_EVENT_CALL;
+
+				/* call in is after wireless connection */
+				if(charger->pdata->cable_type == MFC_PAD_WPC_PACK ||
+					charger->pdata->cable_type == MFC_PAD_WPC_PACK_HV ||
+					charger->pdata->cable_type == MFC_PAD_TX) {
+					union power_supply_propval value2;
+					pr_info("%s : enter PHM \n", __func__);
+					/* notify "wireless" PHM status */
+					value2.intval = 1;
+					psy_do_property("wireless", set,
+						POWER_SUPPLY_EXT_PROP_CALL_EVENT, value2);
+					mfc_send_command(charger, MFC_PHM_ON);
+					msleep(250);
+					mfc_send_command(charger, MFC_PHM_ON);
+				}
+			} else if (val->intval == BATT_EXT_EVENT_NONE) {
+				charger->device_event &= ~BATT_EXT_EVENT_CALL;
+			}
+			break;
 		default:
 			return -ENODATA;
 		}
@@ -2504,6 +2533,7 @@ static void mfc_wpc_det_work(struct work_struct *work)
 		charger->pdata->cable_type = MFC_PAD_NONE;
 		charger->pdata->is_charging = 0;
 		charger->pdata->vout_status = MFC_VOUT_5V;
+		charger->pad_vout = PAD_VOUT_5V;
 		charger->pdata->opfq_cnt = 0;
 		charger->pdata->tx_data_cmd = 0;
 		charger->pdata->tx_data_val = 0;
@@ -2513,6 +2543,8 @@ static void mfc_wpc_det_work(struct work_struct *work)
 		charger->is_afc_tx = false;
 		charger->tx_id = 0;
 		charger->i2c_error_count = 0;
+		charger->tx_id_done = false;
+		charger->device_event = 0;
 
 		value.intval = SEC_WIRELESS_PAD_NONE;
 		psy_do_property("wireless", set,
@@ -2675,6 +2707,7 @@ static void mfc_wpc_isr_work(struct work_struct *work)
 		if (cmd_data == WPC_TX_COM_AFC_SET) {
 			switch (val_data) {
 			case TX_AFC_SET_5V:
+				pr_info("%s data = 0x%x, might be 5V irq\n", __func__, val_data);
 				charger->pad_vout = PAD_VOUT_5V;
 				break;
 			case TX_AFC_SET_10V:
@@ -2718,30 +2751,6 @@ static void mfc_wpc_isr_work(struct work_struct *work)
 			case TX_AFC_SET_20V:
 			case TX_AFC_SET_24V:
 				break;
-			case TX_ID_VEHICLE_PAD:
-				pr_info("%s: VEHICLE PAD\n", __func__);
-				charger->pdata->cable_type = MFC_PAD_WPC_VEHICLE;
-				value.intval = SEC_WIRELESS_PAD_VEHICLE;
-				psy_do_property("wireless", set, POWER_SUPPLY_PROP_ONLINE, value);
-				break;
-			case TX_ID_BATT_PACK:
-				pr_info("%s: WIRELESS BATTERY PACK\n", __func__);
-				charger->pdata->cable_type = MFC_PAD_WPC_PACK;
-				value.intval = SEC_WIRELESS_PAD_WPC_PACK;
-				psy_do_property("wireless", set, POWER_SUPPLY_PROP_ONLINE, value);
-				break;
-			case TX_ID_BATT_PACK_TA:
-				pr_info("%s: WIRELESS BATTERY PACK with TA\n", __func__);
-				charger->pdata->cable_type = MFC_PAD_WPC_PACK_TA;
-				value.intval = SEC_WIRELESS_PAD_WPC_PACK_TA;
-				psy_do_property("wireless", set, POWER_SUPPLY_PROP_ONLINE, value);
-				break;
-			case TX_ID_UNO_TX:
-			case TX_ID_UNO_TX_B0 ... TX_ID_UNO_TX_MAX:
-				charger->pdata->cable_type = MFC_PAD_TX;
-				value.intval = SEC_WIRELESS_PAD_TX;
-				pr_info("%s: TX by UNO\n", __func__);
-				break;
 			default:
 				pr_info("%s: unsupport : 0x%x", __func__, val_data);
 				break;
@@ -2749,67 +2758,101 @@ static void mfc_wpc_isr_work(struct work_struct *work)
 
 			queue_delayed_work(charger->wqueue, &charger->wpc_tx_id_work, msecs_to_jiffies(500));
 		} else if (cmd_data == WPC_TX_COM_TX_ID) {
-			switch (val_data) {
-			case TX_ID_UNKNOWN:
-			break;
-			case TX_ID_VEHICLE_PAD:
-				if (charger->pad_vout == PAD_VOUT_10V) {
-					if (charger->pdata->cable_type == MFC_PAD_PREPARE_HV) {
-						charger->pdata->cable_type = MFC_PAD_WPC_VEHICLE_HV;
-						value.intval = SEC_WIRELESS_PAD_PREPARE_HV;
+			if (!charger->tx_id_done) {
+				switch (val_data) {
+				case TX_ID_UNKNOWN:
+				break;
+				case TX_ID_VEHICLE_PAD:
+					if (charger->pad_vout == PAD_VOUT_10V) {
+						if (charger->pdata->cable_type == MFC_PAD_PREPARE_HV) {
+							charger->pdata->cable_type = MFC_PAD_WPC_VEHICLE_HV;
+							value.intval = SEC_WIRELESS_PAD_PREPARE_HV;
+						} else {
+							charger->pdata->cable_type = MFC_PAD_WPC_VEHICLE_HV;
+							value.intval = SEC_WIRELESS_PAD_VEHICLE_HV;
+						}
 					} else {
-						charger->pdata->cable_type = MFC_PAD_WPC_VEHICLE_HV;
-						value.intval = SEC_WIRELESS_PAD_VEHICLE_HV;
+						charger->pdata->cable_type = MFC_PAD_WPC_VEHICLE;
+						value.intval = SEC_WIRELESS_PAD_VEHICLE;
 					}
-				} else {
-					charger->pdata->cable_type = MFC_PAD_WPC_VEHICLE;
-					value.intval = SEC_WIRELESS_PAD_VEHICLE;
-				}
-				pr_info("%s: VEHICLE Wireless Charge PAD %s\n", __func__,
-					charger->pad_vout == PAD_VOUT_10V ? "HV" : "");
+					pr_info("%s: VEHICLE Wireless Charge PAD %s\n", __func__,
+						charger->pad_vout == PAD_VOUT_10V ? "HV" : "");
 
-				break;
-			case TX_ID_STAND_TYPE_START:
-				if (charger->pad_vout == PAD_VOUT_10V) {
-					if (charger->pdata->cable_type == MFC_PAD_PREPARE_HV) {
-						charger->pdata->cable_type = MFC_PAD_WPC_STAND_HV;
-						value.intval = SEC_WIRELESS_PAD_PREPARE_HV;
+					break;
+				case TX_ID_STAND_TYPE_START:
+					if (charger->pad_vout == PAD_VOUT_10V) {
+						if (charger->pdata->cable_type == MFC_PAD_PREPARE_HV) {
+							charger->pdata->cable_type = MFC_PAD_WPC_STAND_HV;
+							value.intval = SEC_WIRELESS_PAD_PREPARE_HV;
+						} else {
+							charger->pdata->cable_type = MFC_PAD_WPC_STAND_HV;
+							value.intval = SEC_WIRELESS_PAD_WPC_STAND_HV;
+						}
 					} else {
-						charger->pdata->cable_type = MFC_PAD_WPC_STAND_HV;
-						value.intval = SEC_WIRELESS_PAD_WPC_STAND_HV;
+						charger->pdata->cable_type = MFC_PAD_WPC_STAND;
+						value.intval = SEC_WIRELESS_PAD_WPC_STAND;
+							mfc_fod_set_hero_5v(charger);
 					}
-				} else {
-					charger->pdata->cable_type = MFC_PAD_WPC_STAND;
-					value.intval = SEC_WIRELESS_PAD_WPC_STAND;
-						mfc_fod_set_hero_5v(charger);
+					pr_info("%s: STAND Wireless Charge PAD %s\n", __func__,
+						charger->pad_vout == PAD_VOUT_10V ? "HV" : "");
+					pr_info("%s: cable_type(%d)\n", __func__, charger->pdata->cable_type);
+					break;
+				case TX_ID_BATT_PACK ... TX_ID_BATT_PACK_END:
+					if (charger->pad_vout == PAD_VOUT_10V) {
+						if (charger->pdata->cable_type == MFC_PAD_PREPARE_HV) {
+							charger->pdata->cable_type = MFC_PAD_WPC_PACK_HV;
+							value.intval = SEC_WIRELESS_PAD_PREPARE_HV;
+							pr_info("%s: WIRELESS HV BATTERY PACK (PREP) \n", __func__);
+						} else {
+							charger->pdata->cable_type = MFC_PAD_WPC_PACK_HV;
+							value.intval = SEC_WIRELESS_PAD_WPC_PACK_HV;
+							pr_info("%s: WIRELESS HV BATTERY PACK\n", __func__);
+						}
+					} else {
+						charger->pdata->cable_type = MFC_PAD_WPC_PACK;
+						value.intval = SEC_WIRELESS_PAD_WPC_PACK;
+						pr_info("%s: WIRELESS BATTERY PACK\n", __func__);
+					}
+					if (charger->device_event & BATT_EXT_EVENT_CALL) {
+						union power_supply_propval value2;
+						pr_info("%s enter PHM \n", __func__);
+						/* notify "wireless" PHM status */
+						value2.intval = 1;
+						psy_do_property("wireless", set,
+							POWER_SUPPLY_EXT_PROP_CALL_EVENT, value2);
+						mfc_send_command(charger, MFC_PHM_ON);
+						msleep(250);
+						mfc_send_command(charger, MFC_PHM_ON);
+					}
+					break;
+				case TX_ID_UNO_TX:
+				case TX_ID_UNO_TX_B0 ... TX_ID_UNO_TX_MAX:
+					charger->pdata->cable_type = MFC_PAD_TX;
+					value.intval = SEC_WIRELESS_PAD_TX;
+					pr_info("%s: TX by UNO\n", __func__);
+					if (charger->device_event & BATT_EXT_EVENT_CALL) {
+						pr_info("%s: enter PHM \n", __func__);
+						mfc_send_command(charger, MFC_PHM_ON);
+						msleep(250);
+						mfc_send_command(charger, MFC_PHM_ON);
+					}
+					break;
+				default:
+					value.intval = charger->pdata->cable_type;
+					pr_info("%s: UNDEFINED PAD : 0x%x\n", __func__, val_data);
+					break;
 				}
-				pr_info("%s: STAND Wireless Charge PAD %s\n", __func__,
-					charger->pad_vout == PAD_VOUT_10V ? "HV" : "");
-				pr_info("%s: cable_type(%d)\n", __func__, charger->pdata->cable_type);
-				break;
-			case TX_ID_BATT_PACK:
-				charger->pdata->cable_type = MFC_PAD_WPC_PACK;
-				value.intval = SEC_WIRELESS_PAD_WPC_PACK;
-				pr_info("%s: WIRELESS BATTERY PACK\n", __func__);
-				break;
-			case TX_ID_BATT_PACK_TA:
-				charger->pdata->cable_type = MFC_PAD_WPC_PACK_TA;
-				value.intval = SEC_WIRELESS_PAD_WPC_PACK_TA;
-				pr_info("%s: WIRELESS BATTERY PACK with TA\n", __func__);
-				break;
-			default:
-				value.intval = charger->pdata->cable_type;
-				pr_info("%s: UNDEFINED PAD : 0x%x\n", __func__, val_data);
-				break;
+				if (value.intval != MFC_PAD_PREPARE_HV)
+					psy_do_property("wireless", set, POWER_SUPPLY_PROP_ONLINE, value);
+
+				charger->tx_id_done = true;
+				charger->tx_id = val_data;
+				pr_info("%s: TX_ID : 0x%x\n", __func__, val_data);
+				value.intval = val_data;
+				psy_do_property("wireless", set, POWER_SUPPLY_PROP_AUTHENTIC, value);
+			} else {
+				pr_err("%s: TX ID isr is already done\n", __func__);
 			}
-
-			if (value.intval != MFC_PAD_PREPARE_HV)
-				psy_do_property("wireless", set, POWER_SUPPLY_PROP_ONLINE, value);
-
-			charger->tx_id = val_data;
-			pr_info("%s: TX_ID : 0x%x\n", __func__, val_data);
-			value.intval = val_data;
-			psy_do_property("wireless", set, POWER_SUPPLY_PROP_AUTHENTIC, value);
 		} else if (cmd_data == WPC_TX_COM_CHG_ERR) {
 			switch (val_data) {
 			case TX_CHG_ERR_OTP:
@@ -2826,6 +2869,17 @@ static void mfc_wpc_isr_work(struct work_struct *work)
 				break;
 			default:
 				pr_info("%s: Undefined Type(0x%x)\n", __func__, val_data);
+				break;
+			}
+		} else if (cmd_data == WPC_TX_COM_WPS) {
+			switch (val_data) {
+			case WPS_AICL_RESET:
+				value.intval = 1;
+				pr_info("@Tx_mode %s Rx devic AICL Reset\n", __func__);
+				psy_do_property("wireless", set, POWER_SUPPLY_PROP_CURRENT_MAX, value);
+				break;
+			default:
+				pr_info("%s : Undefined RX Power(0x%x)\n", __func__, val_data);
 				break;
 			}
 		}
@@ -3429,6 +3483,8 @@ static int mfc_charger_probe(
 	charger->vout_mode = MFC_VOUT_5V;
 	charger->is_full_status = 0;
 	charger->is_afc_tx = false;
+	charger->tx_id_done = false;
+	charger->device_event = 0;
 
 	mutex_init(&charger->io_lock);
 

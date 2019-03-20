@@ -2937,6 +2937,48 @@ int get_static_mem(int ctrl_id, void **mem, int *size) {
 	return err;
 }
 
+int get_open_close_hint(int* opening, int* closing) {
+	struct fimc_is_core *core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
+
+	*opening = IS_OPENING_HINT_NONE;
+	*closing = IS_CLOSING_HINT_NONE;
+
+#ifdef CONFIG_VENDER_MCD
+	if (core) {
+		*opening = core->vender.opening_hint;
+		*closing = core->vender.closing_hint;
+	}
+#endif
+
+	dbg_sensor(1, "[%s] opening(%d), closing(%d)\n", __func__, *opening, *closing);
+
+	return 0;
+}
+
+
+int get_sensor_line_readOut_time(struct fimc_is_sensor_interface *itf,
+			u32 *line_readOut_time)
+{
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+	cis_shared_data *cis_data = NULL;
+
+	WARN_ON(!itf);
+	WARN_ON(itf->magic != SENSOR_INTERFACE_MAGIC);
+
+	sensor_peri = container_of(itf, struct fimc_is_device_sensor_peri, sensor_interface);
+	WARN_ON(!sensor_peri);
+
+	cis_data = sensor_peri->cis.cis_data;
+	WARN_ON(!cis_data);
+
+	if (sensor_peri->cis.cis_data->cur_lownoise_mode != FIMC_IS_CIS_LNOFF)
+		*line_readOut_time = (u32)(cis_data->line_readOut_time) * 4;
+	else
+		*line_readOut_time = (u32)(cis_data->line_readOut_time);
+
+	return 0;
+}
+
 int get_sensor_state(struct fimc_is_sensor_interface *itf)
 {
 	struct fimc_is_device_sensor *sensor;
@@ -3270,7 +3312,9 @@ int init_sensor_interface(struct fimc_is_sensor_interface *itf)
 	itf->cis_ext2_itf_ops.set_long_term_expo_mode = set_long_term_expo_mode;
 	itf->cis_ext2_itf_ops.set_low_noise_mode = set_low_noise_mode;
 	itf->cis_ext2_itf_ops.get_sensor_max_dynamic_fps = get_sensor_max_dynamic_fps;
+	itf->cis_ext2_itf_ops.get_sensor_line_readOut_time = get_sensor_line_readOut_time;
 	itf->cis_ext2_itf_ops.get_static_mem = get_static_mem;
+	itf->cis_ext2_itf_ops.get_open_close_hint = get_open_close_hint;
 	itf->cis_ext_itf_ops.set_adjust_sync = set_adjust_sync;
 	itf->cis_ext_itf_ops.request_frame_length_line = request_frame_length_line;
 	itf->cis_ext_itf_ops.request_sensitivity = request_sensitivity;

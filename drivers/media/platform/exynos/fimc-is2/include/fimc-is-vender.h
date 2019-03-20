@@ -35,6 +35,8 @@ struct fimc_is_vender {
 	char request_setfile_path[SENSOR_POSITION_END][FIMC_IS_PATH_LEN];
 	void *private_data;
 	int companion_crc_error;
+	int opening_hint;
+	int closing_hint;
 };
 
 enum {

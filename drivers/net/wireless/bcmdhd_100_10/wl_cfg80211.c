@@ -13632,8 +13632,15 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 	int vndr_oui_num = 0;
 	char vndr_oui[MAX_VNDR_OUI_STR_LEN] = {0, };
 	bool loc_gen = false;
+#ifdef DHD_LOSSLESS_ROAMING
+	struct wl_security *sec;
+#endif /* DHD_LOSSLESS_ROAMING */
 
 	ndev = cfgdev_to_wlc_ndev(cfgdev, cfg);
+#ifdef DHD_LOSSLESS_ROAMING
+	sec = wl_read_prof(cfg, ndev, WL_PROF_SEC);
+#endif /* DHD_LOSSLESS_ROAMING */
+	
 	dhdp = (dhd_pub_t *)(cfg->pub);
 	BCM_REFERENCE(dhdp);
 
@@ -13721,6 +13728,7 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 				if (event == WLC_E_LINK &&
 #ifdef DHD_LOSSLESS_ROAMING
 					!cfg->roam_offload &&
+					!IS_AKM_SUITE_FT(sec) &&
 #endif /* DHD_LOSSLESS_ROAMING */
 					wl_get_drv_status(cfg, CONNECTED, ndev)) {
 					wl_bss_roaming_done(cfg, ndev, e, data);
