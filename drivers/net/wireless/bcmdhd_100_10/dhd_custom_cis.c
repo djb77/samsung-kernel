@@ -2,7 +2,7 @@
  * Process CIS information from OTP for customer platform
  * (Handle the MAC address and module information)
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_cis.c 795950 2018-12-20 11:09:00Z $
+ * $Id: dhd_custom_cis.c 796867 2018-12-27 08:10:21Z $
  */
 
 #include <typedefs.h>
@@ -983,7 +983,7 @@ write_cid:
 
 #ifdef SUPPORT_MULTIPLE_MODULE_CIS
 #ifndef DHD_EXPORT_CNTL_FILE
-static bool
+bool
 dhd_check_module(char *module_name)
 {
 	char vname[MAX_VNAME_LEN];

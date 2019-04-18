@@ -303,12 +303,15 @@ unsigned long kbase_get_unmapped_area(struct file *filp,
 	if ((PFN_DOWN(BASE_MEM_COOKIE_BASE) <= pgoff) &&
 		(PFN_DOWN(BASE_MEM_FIRST_FREE_ADDRESS) > pgoff)) {
 			int cookie = pgoff - PFN_DOWN(BASE_MEM_COOKIE_BASE);
-			struct kbase_va_region *reg =
-					kctx->pending_regions[cookie];
+			struct kbase_va_region *reg;
 
-			if (!reg)
+			/* Need to hold gpu vm lock when using reg */
+			kbase_gpu_vm_lock(kctx);
+			reg = kctx->pending_regions[cookie];
+			if (!reg) {
+				kbase_gpu_vm_unlock(kctx);
 				return -EINVAL;
-
+			}
 			if (!(reg->flags & KBASE_REG_GPU_NX)) {
 				if (cpu_va_bits > gpu_pc_bits) {
 					align_offset = 1ULL << gpu_pc_bits;
@@ -331,6 +334,7 @@ unsigned long kbase_get_unmapped_area(struct file *filp,
 			} else if (reg->flags & KBASE_REG_GPU_VA_SAME_4GB_PAGE) {
 				is_same_4gb_page = true;
 			}
+			kbase_gpu_vm_unlock(kctx);
 #ifndef CONFIG_64BIT
 	} else {
 		return current->mm->get_unmapped_area(filp, addr, len, pgoff,

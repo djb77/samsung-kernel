@@ -64,7 +64,7 @@ static bool sensor_3h1_cis_is_wdr_mode_on(cis_shared_data *cis_data)
 		|| mode == SENSOR_3H1_2640X1980_30FPS
 		|| mode == SENSOR_3H1_2640X1488_30FPS
 		|| mode == SENSOR_3H1_2640X1288_30FPS
-		|| mode == SENSOR_3H1_1984X1984_30FPS))
+		|| mode == SENSOR_3H1_1968X1968_30FPS))
 		return true;
 
 	return false;

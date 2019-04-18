@@ -1,7 +1,7 @@
 /*
  * Linux DHD Bus Module for PCIE
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie_linux.c 784292 2018-10-11 11:34:26Z $
+ * $Id: dhd_pcie_linux.c 800754 2019-01-23 08:38:54Z $
  */
 
 /* include files */
@@ -79,16 +79,6 @@
 #define PCI_CFG_RETRY 		10
 #define OS_HANDLE_MAGIC		0x1234abcd	/* Magic # to recognize osh */
 #define BCM_MEM_FILENAME_LEN 	24		/* Mem. filename length */
-
-#define OSL_PKTTAG_CLEAR(p) \
-do { \
-	struct sk_buff *s = (struct sk_buff *)(p); \
-	ASSERT(OSL_PKTTAG_SZ == 32); \
-	*(uint32 *)(&s->cb[0]) = 0; *(uint32 *)(&s->cb[4]) = 0; \
-	*(uint32 *)(&s->cb[8]) = 0; *(uint32 *)(&s->cb[12]) = 0; \
-	*(uint32 *)(&s->cb[16]) = 0; *(uint32 *)(&s->cb[20]) = 0; \
-	*(uint32 *)(&s->cb[24]) = 0; *(uint32 *)(&s->cb[28]) = 0; \
-} while (0)
 
 /* user defined data structures  */
 
@@ -355,6 +345,36 @@ static void dhdpcie_smmu_remove(struct pci_dev *pdev, void *smmu_cxt)
 	}
 }
 #endif /* USE_SMMU_ARCH_MSM */
+
+void
+dhd_bus_aer_config(dhd_bus_t *bus)
+{
+	uint32 val;
+
+	DHD_ERROR(("%s: Configure AER registers for EP\n", __FUNCTION__));
+	val = dhdpcie_ep_access_cap(bus, PCIE_ADVERRREP_CAPID,
+		PCIE_ADV_CORR_ERR_MASK_OFFSET, TRUE, FALSE, 0);
+	if (val != (uint32)-1) {
+		val &= ~CORR_ERR_AE;
+		dhdpcie_ep_access_cap(bus, PCIE_ADVERRREP_CAPID,
+			PCIE_ADV_CORR_ERR_MASK_OFFSET, TRUE, TRUE, val);
+	} else {
+		DHD_ERROR(("%s: Invalid EP's PCIE_ADV_CORR_ERR_MASK: 0x%x\n",
+			__FUNCTION__, val));
+	}
+
+	DHD_ERROR(("%s: Configure AER registers for RC\n", __FUNCTION__));
+	val = dhdpcie_rc_access_cap(bus, PCIE_ADVERRREP_CAPID,
+		PCIE_ADV_CORR_ERR_MASK_OFFSET, TRUE, FALSE, 0);
+	if (val != (uint32)-1) {
+		val &= ~CORR_ERR_AE;
+		dhdpcie_rc_access_cap(bus, PCIE_ADVERRREP_CAPID,
+			PCIE_ADV_CORR_ERR_MASK_OFFSET, TRUE, TRUE, val);
+	} else {
+		DHD_ERROR(("%s: Invalid RC's PCIE_ADV_CORR_ERR_MASK: 0x%x\n",
+			__FUNCTION__, val));
+	}
+}
 
 #ifdef DHD_PCIE_RUNTIMEPM
 static int dhdpcie_pm_suspend(struct device *dev)
@@ -841,16 +861,15 @@ dhdpcie_rc_config_read(dhd_bus_t *bus, uint offset)
  */
 
 uint32
-dhdpcie_rc_access_cap(dhd_bus_t *bus, int cap, uint offset, bool is_ext, bool is_write,
+dhdpcie_access_cap(struct pci_dev *pdev, int cap, uint offset, bool is_ext, bool is_write,
 	uint32 writeval)
 {
 	int cap_ptr = 0;
 	uint32 ret = -1;
 	uint32 readval;
 
-	if (!(bus->rc_dev)) {
-		DHD_ERROR(("%s: RC %x:%x handle is NULL\n",
-			__FUNCTION__, PCIE_RC_VENDOR_ID, PCIE_RC_DEVICE_ID));
+	if (!(pdev)) {
+		DHD_ERROR(("%s: pdev is NULL\n", __FUNCTION__));
 		return ret;
 	}
 
@@ -859,44 +878,58 @@ dhdpcie_rc_access_cap(dhd_bus_t *bus, int cap, uint offset, bool is_ext, bool is
 		/* removing max EXT_CAP_ID check as
 		 * linux kernel definition's max value is not upadted yet as per spec
 		 */
-		cap_ptr = pci_find_ext_capability(bus->rc_dev, cap);
+		cap_ptr = pci_find_ext_capability(pdev, cap);
 
 	} else {
 		/* removing max PCI_CAP_ID_MAX check as
 		 * pervious kernel versions dont have this definition
 		 */
-		cap_ptr = pci_find_capability(bus->rc_dev, cap);
+		cap_ptr = pci_find_capability(pdev, cap);
 	}
 
 	/* Return if capability with given ID not found */
 	if (cap_ptr == 0) {
-		DHD_ERROR(("%s: RC %x:%x PCI Cap(0x%02x) not supported.\n",
-			__FUNCTION__, PCIE_RC_VENDOR_ID, PCIE_RC_DEVICE_ID, cap));
+		DHD_ERROR(("%s: PCI Cap(0x%02x) not supported.\n",
+			__FUNCTION__, cap));
 		return BCME_ERROR;
 	}
 
 	if (is_write) {
-		ret = pci_write_config_dword(bus->rc_dev, (cap_ptr + offset), writeval);
-		if (ret) {
-			DHD_ERROR(("%s: pci_write_config_dword failed. cap=%d offset=%d\n",
-				__FUNCTION__, cap, offset));
-			return BCME_ERROR;
-		}
+		pci_write_config_dword(pdev, (cap_ptr + offset), writeval);
 		ret = BCME_OK;
 
 	} else {
 
-		ret = pci_read_config_dword(bus->rc_dev, (cap_ptr + offset), &readval);
-
-		if (ret) {
-			DHD_ERROR(("%s: pci_read_config_dword failed. cap=%d offset=%d\n",
-				__FUNCTION__, cap, offset));
-			return BCME_ERROR;
-		}
+		pci_read_config_dword(pdev, (cap_ptr + offset), &readval);
 		ret = readval;
 	}
 
 	return ret;
+}
+
+uint32
+dhdpcie_rc_access_cap(dhd_bus_t *bus, int cap, uint offset, bool is_ext, bool is_write,
+	uint32 writeval)
+{
+	if (!(bus->rc_dev)) {
+		DHD_ERROR(("%s: RC %x:%x handle is NULL\n",
+			__FUNCTION__, PCIE_RC_VENDOR_ID, PCIE_RC_DEVICE_ID));
+			return BCME_ERROR;
+		}
+
+	return dhdpcie_access_cap(bus->rc_dev, cap, offset, is_ext, is_write, writeval);
+}
+
+uint32
+dhdpcie_ep_access_cap(dhd_bus_t *bus, int cap, uint offset, bool is_ext, bool is_write,
+	uint32 writeval)
+{
+	if (!(bus->dev)) {
+		DHD_ERROR(("%s: EP handle is NULL\n", __FUNCTION__));
+		return BCME_ERROR;
+	}
+
+	return dhdpcie_access_cap(bus->dev, cap, offset, is_ext, is_write, writeval);
 }
 
 /* API wrapper to read Root Port link capability
@@ -1700,11 +1733,11 @@ irqreturn_t
 dhdpcie_isr(int irq, void *arg)
 {
 	dhd_bus_t *bus = (dhd_bus_t*)arg;
-	bus->isr_entry_time = OSL_SYSUPTIME_US();
+	bus->isr_entry_time = OSL_LOCALTIME_NS();
 	if (!dhdpcie_bus_isr(bus)) {
 		DHD_LOG_MEM(("%s: dhdpcie_bus_isr returns with FALSE\n", __FUNCTION__));
 	}
-	bus->isr_exit_time = OSL_SYSUPTIME_US();
+	bus->isr_exit_time = OSL_LOCALTIME_NS();
 	return IRQ_HANDLED;
 }
 
@@ -2149,7 +2182,7 @@ static irqreturn_t wlan_oob_irq(int irq, void *data)
 	DHD_TRACE(("%s: IRQ Triggered\n", __FUNCTION__));
 	bus = (dhd_bus_t *)data;
 	dhdpcie_oob_intr_set(bus, FALSE);
-	bus->last_oob_irq_time = OSL_SYSUPTIME_US();
+	bus->last_oob_irq_time = OSL_LOCALTIME_NS();
 	bus->oob_intr_count++;
 #ifdef DHD_WAKE_STATUS
 #ifdef DHD_PCIE_RUNTIMEPM

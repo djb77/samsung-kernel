@@ -6,7 +6,7 @@
  *
  * Definitions subject to change without notice.
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -29,7 +29,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wlioctl.h 759344 2018-04-25 02:29:06Z $
+ * $Id: wlioctl.h 787944 2018-11-07 13:13:27Z $
  */
 
 #ifndef _wlioctl_h_
@@ -14255,6 +14255,7 @@ typedef struct wnm_roam_trigger_cfg {
 
 /* Data structures for Interface Create/Remove  */
 
+#define WL_INTERFACE_CREATE_VER_0	0
 #define WL_INTERFACE_CREATE_VER_1	1
 #define WL_INTERFACE_CREATE_VER_2	2
 #define WL_INTERFACE_CREATE_VER_3	3
@@ -14324,6 +14325,12 @@ typedef enum wl_interface_type {
  */
 #define WL_INTERFACE_BSSID_INDEX_USE	(1 << 4)
 
+typedef struct wl_interface_create_v0 {
+	uint16	ver;			/**< version of this struct */
+	uint32  flags;			/**< flags that defines the operation */
+	struct	ether_addr   mac_addr;	/**< Optional Mac address */
+} wl_interface_create_v0_t;
+
 typedef struct wl_interface_create {
 	uint16  ver;                    /**< version of this struct */
 	uint8   pad1[2];                /**< Padding bytes */
@@ -14357,8 +14364,16 @@ typedef struct wl_interface_create_v3 {
 	uint8	data[];			/**< Optional application/Module specific data */
 } wl_interface_create_v3_t;
 
+#define WL_INTERFACE_INFO_VER_0		0
 #define WL_INTERFACE_INFO_VER_1		1
 #define WL_INTERFACE_INFO_VER_2		2
+
+typedef struct wl_interface_info_v0 {
+	uint16	ver;			/**< version of this struct */
+	struct ether_addr    mac_addr;	/**< MAC address of the interface */
+	char	ifname[BCM_MSG_IFNAME_MAX]; /**< name of interface */
+	uint8	bsscfgidx;		/**< source bsscfg index */
+} wl_interface_info_v0_t;
 
 typedef struct wl_interface_info_v1 {
 	uint16  ver;                    /**< version of this struct */

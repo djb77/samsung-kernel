@@ -1,7 +1,7 @@
 /*
  * Private header file for Linux OS Independent Layer
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linux_osl_priv.h 795952 2018-12-20 11:39:02Z $
+ * $Id: linux_osl_priv.h 794162 2018-12-12 08:18:57Z $
  */
 
 #ifndef _LINUX_OSL_PRIV_H_

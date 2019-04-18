@@ -188,7 +188,7 @@ void *kbase_phy_alloc_mapping_get(struct kbase_context *kctx,
 			kctx, gpu_addr);
 	}
 
-	if (reg == NULL || (reg->flags & KBASE_REG_FREE) != 0)
+	if (kbase_is_region_invalid_or_free(reg))
 		goto out_unlock;
 
 	kern_mapping = reg->cpu_alloc->permanent_map;
@@ -438,7 +438,7 @@ int kbase_mem_query(struct kbase_context *kctx,
 
 	/* Validate the region */
 	reg = kbase_region_tracker_find_region_base_address(kctx, gpu_addr);
-	if (!reg || (reg->flags & KBASE_REG_FREE))
+	if (kbase_is_region_invalid_or_free(reg))
 		goto out_unlock;
 
 	switch (query) {
@@ -804,7 +804,7 @@ int kbase_mem_flags_change(struct kbase_context *kctx, u64 gpu_addr, unsigned in
 
 	/* Validate the region */
 	reg = kbase_region_tracker_find_region_base_address(kctx, gpu_addr);
-	if (!reg || (reg->flags & KBASE_REG_FREE))
+	if (kbase_is_region_invalid_or_free(reg))
 		goto out_unlock;
 
 	/* Is the region being transitioning between not needed and needed? */
@@ -1290,10 +1290,8 @@ u64 kbase_mem_alias(struct kbase_context *kctx, u64 *flags, u64 stride,
 				(ai[i].handle.basep.handle >> PAGE_SHIFT) << PAGE_SHIFT);
 
 			/* validate found region */
-			if (!aliasing_reg)
-				goto bad_handle; /* Not found */
-			if (aliasing_reg->flags & KBASE_REG_FREE)
-				goto bad_handle; /* Free region */
+			if (kbase_is_region_invalid_or_free(aliasing_reg))
+				goto bad_handle; /* Not found/already free */
 			if (aliasing_reg->flags & KBASE_REG_DONT_NEED)
 				goto bad_handle; /* Ephemeral region */
 			if (!(aliasing_reg->flags & KBASE_REG_GPU_CACHED))
@@ -1590,7 +1588,7 @@ int kbase_mem_commit(struct kbase_context *kctx, u64 gpu_addr, u64 new_pages)
 
 	/* Validate the region */
 	reg = kbase_region_tracker_find_region_base_address(kctx, gpu_addr);
-	if (!reg || (reg->flags & KBASE_REG_FREE))
+	if (kbase_is_region_invalid_or_free(reg))
 		goto out_unlock;
 
 	KBASE_DEBUG_ASSERT(reg->cpu_alloc);
@@ -1728,6 +1726,7 @@ static void kbase_cpu_vm_close(struct vm_area_struct *vma)
 
 	list_del(&map->mappings_list);
 
+	kbase_va_region_alloc_put(map->kctx, map->region);
 	kbase_gpu_vm_unlock(map->kctx);
 
 	kbase_mem_phy_alloc_put(map->alloc);
@@ -1913,7 +1912,7 @@ static int kbase_cpu_mmap(struct kbase_context *kctx,
 		goto out;
 	}
 
-	map->region = reg;
+	map->region = kbase_va_region_alloc_get(kctx, reg);
 	map->free_on_close = free_on_close;
 	map->kctx = kctx;
 	map->alloc = kbase_mem_phy_alloc_get(reg->cpu_alloc);
@@ -2144,7 +2143,7 @@ int kbase_mmap(struct file *file, struct vm_area_struct *vma)
 		reg = kbase_region_tracker_find_region_enclosing_address(kctx,
 					(u64)vma->vm_pgoff << PAGE_SHIFT);
 
-		if (reg && !(reg->flags & KBASE_REG_FREE)) {
+		if (!kbase_is_region_invalid_or_free(reg)) {
 			/* will this mapping overflow the size of the region? */
 			if (nr_pages > (reg->nr_pages -
 					(vma->vm_pgoff - reg->start_pfn))) {
@@ -2344,7 +2343,7 @@ void *kbase_vmap_prot(struct kbase_context *kctx, u64 gpu_addr, size_t size,
 
 	reg = kbase_region_tracker_find_region_enclosing_address(kctx,
 			gpu_addr);
-	if (!reg || (reg->flags & KBASE_REG_FREE))
+	if (kbase_is_region_invalid_or_free(reg))
 		goto out_unlock;
 
 	/* check access permissions can be satisfied

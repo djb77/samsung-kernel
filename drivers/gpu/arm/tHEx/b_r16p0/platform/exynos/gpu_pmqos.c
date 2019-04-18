@@ -45,6 +45,8 @@ struct pm_qos_request exynos5_g3d_cpu_cluster2_min_qos;
 struct pm_qos_request exynos5_g3d_cpu_cluster0_max_qos;
 #endif
 
+extern struct kbase_device *pkbdev;
+
 #ifdef CONFIG_MALI_PM_QOS
 int gpu_pm_qos_command(struct exynos_context *platform, gpu_pmqos_state state)
 {
@@ -140,7 +142,12 @@ int gpu_pm_qos_command(struct exynos_context *platform, gpu_pmqos_state state)
 			}
 		}
 #endif
+#ifdef CONFIG_MALI_SEC_CL_BOOST
+		if (pkbdev->pm.backend.metrics.is_full_compute_util && platform->cl_boost_disable == false)
+			pm_qos_update_request(&exynos5_g3d_cpu_cluster2_max_qos, PM_QOS_CLUSTER2_FREQ_MAX_DEFAULT_VALUE);
 #endif
+#endif
+
 		break;
 	case GPU_CONTROL_PM_QOS_RESET:
 		if (!platform->is_pm_qos_init) {

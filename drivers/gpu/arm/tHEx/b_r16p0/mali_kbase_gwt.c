@@ -35,7 +35,7 @@ static inline void kbase_gpu_gwt_setup_page_permission(
 		int err = 0;
 
 		reg = rb_entry(rbnode, struct kbase_va_region, rblink);
-		if (reg->nr_pages && !(reg->flags & KBASE_REG_FREE) &&
+		if (reg->nr_pages && !kbase_is_region_invalid_or_free(reg) &&
 					(reg->flags & KBASE_REG_GPU_WR)) {
 			err = kbase_mmu_update_pages(kctx, reg->start_pfn,
 					kbase_get_gpu_phy_pages(reg),

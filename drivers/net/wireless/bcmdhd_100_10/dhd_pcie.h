@@ -1,7 +1,7 @@
 /*
  * Linux DHD Bus Module for PCIE
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.h 764059 2018-05-23 13:01:39Z $
+ * $Id: dhd_pcie.h 796673 2018-12-26 08:34:38Z $
  */
 
 #ifndef dhd_pcie_h
@@ -364,6 +364,7 @@ typedef struct dhd_bus {
 	ulong isr_intr_disable_count;
 	ulong suspend_intr_disable_count;
 	ulong dpc_return_busdown_count;
+	ulong non_ours_irq_count;
 #ifdef BCMPCIE_OOB_HOST_WAKE
 	ulong oob_intr_count;
 	ulong oob_intr_enable_count;
@@ -372,9 +373,11 @@ typedef struct dhd_bus {
 #endif /* BCMPCIE_OOB_HOST_WAKE */
 	uint64 isr_entry_time;
 	uint64 isr_exit_time;
+	uint64 dpc_sched_time;
 	uint64 dpc_entry_time;
 	uint64 dpc_exit_time;
 	uint64 resched_dpc_time;
+	uint64 last_d3_inform_time;
 	uint64 last_process_ctrlbuf_time;
 	uint64 last_process_flowring_time;
 	uint64 last_process_txcpl_time;
@@ -384,6 +387,7 @@ typedef struct dhd_bus {
 	uint64 last_suspend_end_time;
 	uint64 last_resume_start_time;
 	uint64 last_resume_end_time;
+	uint64 last_non_ours_irq_time;
 	bool  idma_enabled;
 	bool  ifrm_enabled;
 	bool  dar_enabled;
@@ -454,6 +458,8 @@ extern int dhdpcie_enable_irq(dhd_bus_t *bus);
 extern uint32 dhdpcie_rc_config_read(dhd_bus_t *bus, uint offset);
 extern uint32 dhdpcie_rc_access_cap(dhd_bus_t *bus, int cap, uint offset, bool is_ext,
 		bool is_write, uint32 writeval);
+extern uint32 dhdpcie_ep_access_cap(dhd_bus_t *bus, int cap, uint offset, bool is_ext,
+		bool is_write, uint32 writeval);
 extern uint32 dhd_debug_get_rc_linkcap(dhd_bus_t *bus);
 extern int dhdpcie_start_host_pcieclock(dhd_bus_t *bus);
 extern int dhdpcie_stop_host_pcieclock(dhd_bus_t *bus);
@@ -471,17 +477,6 @@ extern void dhdpcie_oob_intr_unregister(dhd_bus_t *bus);
 extern void dhdpcie_oob_intr_set(dhd_bus_t *bus, bool enable);
 extern int dhdpcie_get_oob_irq_num(dhd_bus_t *bus);
 #endif /* BCMPCIE_OOB_HOST_WAKE */
-
-#ifdef DHD_DISABLE_ASPM
-extern void dhd_bus_aspm_enable(dhd_bus_t *bus, bool enable);
-
-static INLINE void
-dhd_pcie_config_write(osl_t *osh, uint offset, uint size, uint val)
-{
-	OSL_DELAY(100);
-	return OSL_PCI_WRITE_CONFIG(osh, offset, size, val);
-}
-#endif /* DHD_DISABLE_ASPM */
 
 #if defined(CONFIG_ARCH_EXYNOS)
 #define SAMSUNG_PCIE_VENDOR_ID 0x144d
