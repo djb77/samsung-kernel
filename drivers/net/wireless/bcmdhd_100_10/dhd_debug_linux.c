@@ -3,7 +3,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -23,7 +23,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_debug_linux.c 730050 2017-11-03 13:06:14Z $
+ * $Id: dhd_debug_linux.c 786516 2018-10-26 12:09:02Z $
  */
 
 #include <typedefs.h>
@@ -355,7 +355,7 @@ dhd_os_push_push_ring_data(dhd_pub_t *dhdp, int ring_id, void *data, int32 data_
 		msg_hdr.flags |= DBG_RING_ENTRY_FLAGS_HAS_BINARY;
 		msg_hdr.timestamp = local_clock();
 		/* convert to ms */
-		do_div(msg_hdr.timestamp, 1000000);
+		msg_hdr.timestamp = DIV_U64_BY_U32(msg_hdr.timestamp, NSEC_PER_MSEC);
 		msg_hdr.len = data_len;
 		/* filter the event for higher log level with current log level */
 		for (i = 0; i < ARRAYSIZE(dhd_event_map); i++) {

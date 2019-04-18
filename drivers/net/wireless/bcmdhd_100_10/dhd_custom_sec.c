@@ -1,7 +1,7 @@
 /*
  * Customer HW 4 dependant file
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -48,6 +48,7 @@ extern int argos_irq_affinity_setup_label(unsigned int irq, const char *label,
 	struct cpumask *default_cpu_mask);
 #endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET */
 
+#if !defined(DHD_USE_CLMINFO_PARSER)
 const struct cntry_locales_custom translate_custom_table[] = {
 	/* default ccode/regrev */
 	{"",   "XZ", 11},	/* Universal if Country code is unknown or empty */
@@ -56,13 +57,21 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"PS", "XZ", 11},	/* Universal if Country code is PALESTINIAN TERRITORY, OCCUPIED */
 	{"TL", "XZ", 11},	/* Universal if Country code is TIMOR-LESTE (EAST TIMOR) */
 	{"MH", "XZ", 11},	/* Universal if Country code is MARSHALL ISLANDS */
+	{"SX", "XZ", 11},	/* Universal if Country code is Sint Maarten */
+	{"CC", "XZ", 11},	/* Universal if Country code is COCOS (KEELING) ISLANDS */
+	{"HM", "XZ", 11},	/* Universal if Country code is HEARD ISLAND AND MCDONALD ISLANDS */
+	{"PN", "XZ", 11},	/* Universal if Country code is PITCAIRN */
+	{"AQ", "XZ", 11},	/* Universal if Country code is ANTARCTICA */
+	{"AX", "XZ", 11},	/* Universal if Country code is ALAND ISLANDS */
+	{"BV", "XZ", 11},	/* Universal if Country code is BOUVET ISLAND */
+	{"GS", "XZ", 11},	/* Universal if Country code is
+				 * SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS
+				 */
+	{"SH", "XZ", 11},	/* Universal if Country code is SAINT HELENA */
+	{"SJ", "XZ", 11},	/* Universal if Country code is SVALBARD AND JAN MAYEN */
+	{"SS", "XZ", 11},	/* Universal if Country code is SOUTH SUDAN */
 	{"GL", "GP", 2},
 	{"AL", "AL", 2},
-#ifdef DHD_SUPPORT_GB_999
-	{"DZ", "GB", 999},
-#else
-	{"DZ", "GB", 6},
-#endif /* DHD_SUPPORT_GB_999 */
 	{"AS", "AS", 12},
 	{"AI", "AI", 1},
 	{"AF", "AD", 0},
@@ -110,7 +119,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"IE", "IE", 5},
 	{"IL", "IL", 14},
 	{"IT", "IT", 4},
-	{"JP", "JP", 45},
 	{"JO", "JO", 3},
 	{"KE", "SA", 0},
 	{"KW", "KW", 5},
@@ -124,7 +132,13 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"MO", "SG", 0},
 	{"MK", "MK", 2},
 	{"MW", "MW", 1},
-	{"MY", "MY", 3},
+#if defined(BCM4359_CHIP)
+	{"DZ", "DZ", 2},
+#elif defined(DHD_SUPPORT_GB_999)
+	{"DZ", "GB", 999},
+#else
+	{"DZ", "GB", 6},
+#endif /* BCM4359_CHIP */
 	{"MV", "MV", 3},
 	{"MT", "MT", 4},
 	{"MQ", "MQ", 2},
@@ -159,7 +173,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"LK", "LK", 1},
 	{"SE", "SE", 4},
 	{"CH", "CH", 4},
-	{"TW", "TW", 1},
 	{"TH", "TH", 5},
 	{"TT", "TT", 3},
 	{"TR", "TR", 7},
@@ -182,13 +195,26 @@ const struct cntry_locales_custom translate_custom_table[] = {
 #else
 	{"KR", "KR", 48},
 #endif // endif
+#if defined(BCM4359_CHIP)
+	{"TW", "TW", 65},
+	{"JP", "JP", 968},
+	{"RU", "RU", 986},
+	{"UA", "UA", 16},
+	{"ZA", "ZA", 19},
+	{"AM", "AM", 1},
+	{"MY", "MY", 19},
+#else
+	{"TW", "TW", 1},
+	{"JP", "JP", 45},
 	{"RU", "RU", 13},
 	{"UA", "UA", 8},
+	{"ZA", "ZA", 6},
+	{"MY", "MY", 3},
+#endif /* BCM4359_CHIP */
 	{"GT", "GT", 1},
 	{"MN", "MN", 1},
 	{"NI", "NI", 2},
 	{"UZ", "MA", 2},
-	{"ZA", "ZA", 6},
 	{"EG", "EG", 13},
 	{"TN", "TN", 1},
 	{"AO", "AD", 0},
@@ -199,10 +225,29 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"UM", "PR", 38},
 	/* Support FCC 15.407 (Part 15E) Changes, effective June 2 2014 */
 	/* US/988, Q2/993 country codes with higher power on UNII-1 5G band */
+#if defined(DHD_SUPPORT_US_949)
+	{"US", "US", 949},
+#elif defined(DHD_SUPPORT_US_945)
+	{"US", "US", 945},
+#else
 	{"US", "US", 988},
+#endif /* DHD_SUPPORT_US_949 */
+#if defined(DHD_SUPPORT_QA_6)
+	/* Support Qatar 5G band 36-64 100-144 149-165 channels
+	 * This QA/6 should be used only HERO project and
+	 * FW version should be sync up with 9.96.11 or higher version.
+	 * If Use the old FW ver before 9.96.11 in HERO project, Country QA/6 is not supported.
+	 * So when changing the country code to QA, It will be returned to fail and
+	 * still previous Country code
+	 */
+	{"QA", "QA", 6},
+#endif /* DHD_SUPPORT_QA_6 */
 	{"CU", "US", 988},
 	{"CA", "Q2", 993},
 };
+#else
+struct cntry_locales_custom translate_custom_table[NUM_OF_COUNTRYS];
+#endif /* !DHD_USE_CLMINFO_PARSER */
 
 /* Customized Locale convertor
 *  input : ISO 3166-1 country abbreviation
@@ -432,7 +477,7 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 #ifndef DHD_EXPORT_CNTL_FILE
 	ret = get_ant_val_from_file(&ant_val);
 #else
-	ant_val = antsel;
+	ant_val = (uint32)antsel;
 #endif /* !DHD_EXPORT_CNTL_FILE */
 	if (ant_val == 0) {
 #ifdef CUSTOM_SET_ANTNPM
@@ -872,24 +917,64 @@ early_param("androidboot.hw_rev", get_hw_rev);
  * HalFn_getValidChannels
  */
 const char *softap_info_items[] = {
-	"DualBandConcurrency", "5G", "maxClient", "PowerSave",
+	"DualBandConcurrency",
+#ifdef DHD_SOFTAP_DUAL_IF_INFO
+	"DualInterface",
+#endif /* DHD_SOFTAP_DUAL_IF_INFO */
+	"5G", "maxClient", "PowerSave",
 	"HalFn_setCountryCodeHal", "HalFn_getValidChannels", NULL
 };
 #if defined(BCM4361_CHIP)
 const char *softap_info_values[] = {
-	"yes", "yes", "10", "yes", "yes", "yes", NULL
+	"yes", 
+#ifdef DHD_SOFTAP_DUAL_IF_INFO
+	"yes",
+#endif /* DHD_SOFTAP_DUAL_IF_INFO */
+	"yes", "10", "yes", "yes", "yes", NULL
 };
-#elif defined(BCM43455_CHIP)
+#elif defined(BCM4359_CHIP)
 const char *softap_info_values[] = {
-	"no", "yes", "10", "no", "yes", "yes", NULL
+	"yes",
+#ifdef DHD_SOFTAP_DUAL_IF_INFO
+#ifdef CONFIG_WLAN_GRACE
+	"yes",
+#else
+	"no",
+#endif /* CONFIG_WLAN_GRACE */
+#endif /* DHD_SOFTAP_DUAL_IF_INFO */
+	"yes", "10", "yes", "yes", "yes", NULL
+};
+#elif defined(BCM43454_CHIP) || defined(BCM43455_CHIP) || defined(BCM43456_CHIP)
+const char *softap_info_values[] = {
+#ifdef WL_RESTRICTED_APSTA_SCC
+	"yes",
+#else
+	"no",
+#endif /* WL_RESTRICTED_APSTA_SCC */
+#ifdef DHD_SOFTAP_DUAL_IF_INFO
+#ifdef WL_RESTRICTED_APSTA_SCC
+	"yes",
+#else
+	"no",
+#endif /* WL_RESTRICTED_APSTA_SCC */
+#endif /* DHD_SOFTAP_DUAL_IF_INFO */
+	"yes", "10", "no", "yes", "yes", NULL
 };
 #elif defined(BCM43430_CHIP)
 const char *softap_info_values[] = {
-	"no", "no", "10", "no", "yes", "yes", NULL
+	"no",
+#ifdef DHD_SOFTAP_DUAL_IF_INFO
+	"no",
+#endif /* DHD_SOFTAP_DUAL_IF_INFO */
+	"no", "10", "no", "yes", "yes", NULL
 };
 #else
 const char *softap_info_values[] = {
-	"UNDEF", "UNDEF", "UNDEF", "UNDEF", "UNDEF", "UNDEF", NULL
+	"UNDEF",
+#ifdef DHD_SOFTAP_DUAL_IF_INFO
+	"UNDEF",
+#endif /* DHD_SOFTAP_DUAL_IF_INFO */
+	"UNDEF", "UNDEF", "UNDEF", "UNDEF", "UNDEF", NULL
 };
 #endif /* defined(BCM4361_CHIP) */
 #endif /* GEN_SOFTAP_INFO_FILE */
@@ -981,7 +1066,8 @@ dhd_force_disable_singlcore_scan(dhd_pub_t *dhd)
 	}
 }
 #endif /* FORCE_DISABLE_SINGLECORE_SCAN */
-#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET)
+#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET) && \
+	!defined(CONFIG_SOC_EXYNOS7870)
 void
 set_irq_cpucore(unsigned int irq, cpumask_var_t default_cpu_mask,
 	cpumask_var_t affinity_cpu_mask)
@@ -994,4 +1080,4 @@ set_irq_cpucore(unsigned int irq, cpumask_var_t default_cpu_mask,
 		ARGOS_P2P_TABLE_LABEL,
 		affinity_cpu_mask, default_cpu_mask);
 }
-#endif /* SET_PCIE_IRQ_CPU_CORE && !DHD_LB_IRQSET */
+#endif /* SET_PCIE_IRQ_CPU_CORE && !DHD_LB_IRQSET && !CONFIG_SOC_EXYNOS7870 */

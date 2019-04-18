@@ -1,7 +1,7 @@
 /*
  * DHD Bus Module for SDIO
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_sdio.c 784292 2018-10-11 11:34:26Z $
+ * $Id: dhd_sdio.c 796833 2018-12-27 05:52:37Z $
  */
 
 #include <typedefs.h>
@@ -902,10 +902,8 @@ dhdsdio_sr_cap(dhd_bus_t *bus)
 		(bus->sih->chip == BCM4358_CHIP_ID) ||
 		(BCM4349_CHIP(bus->sih->chip))		||
 		(bus->sih->chip == BCM4350_CHIP_ID) ||
-		(bus->sih->chip == BCM4362_CHIP_ID) ||
 		(bus->sih->chip == BCM43012_CHIP_ID) ||
-		(bus->sih->chip == BCM43014_CHIP_ID) ||
-		(bus->sih->chip == BCM43751_CHIP_ID)) {
+		(bus->sih->chip == BCM43014_CHIP_ID)) {
 		core_capext = TRUE;
 	} else {
 			core_capext = bcmsdh_reg_read(bus->sdh,
@@ -978,9 +976,7 @@ dhdsdio_sr_init(dhd_bus_t *bus)
 		CHIPID(bus->sih->chip) == BCM43018_CHIP_ID ||
 		CHIPID(bus->sih->chip) == BCM4339_CHIP_ID ||
 		CHIPID(bus->sih->chip) == BCM43012_CHIP_ID ||
-		CHIPID(bus->sih->chip) == BCM4362_CHIP_ID ||
-		CHIPID(bus->sih->chip) == BCM43014_CHIP_ID ||
-		CHIPID(bus->sih->chip) == BCM43751_CHIP_ID)
+		CHIPID(bus->sih->chip) == BCM43014_CHIP_ID)
 		dhdsdio_devcap_set(bus, SDIOD_CCCR_BRCM_CARDCAP_CMD_NODEC);
 
 	if (bus->sih->chip == BCM43012_CHIP_ID) {
@@ -7543,13 +7539,6 @@ dhdsdio_chipmatch(uint16 chipid)
 	if (chipid == BCM43014_CHIP_ID)
 		return TRUE;
 
-	if (chipid == BCM4369_CHIP_ID)
-		return TRUE;
-
-	if (BCM4378_CHIP(chipid)) {
-		return TRUE;
-	}
-
 	return FALSE;
 }
 
@@ -7944,12 +7933,6 @@ dhdsdio_probe_attach(struct dhd_bus *bus, osl_t *osh, void *sdh, void *regsva,
 				break;
 			case BCM4364_CHIP_ID:
 				bus->dongle_ram_base = CR4_4364_RAM_BASE;
-				break;
-			case BCM4369_CHIP_ID:
-				bus->dongle_ram_base = CR4_4369_RAM_BASE;
-				break;
-			case BCM4378_CHIP_GRPID:
-				bus->dongle_ram_base = CR4_4378_RAM_BASE;
 				break;
 			default:
 				bus->dongle_ram_base = 0;
@@ -9257,6 +9240,29 @@ static int concate_revision_bcm4354(dhd_bus_t *bus, char *fw_path, char *nv_path
 	return 0;
 }
 
+#ifdef SUPPORT_MULTIPLE_CHIP_4345X
+static int
+concate_revision_bcm4345x(dhd_bus_t *bus,
+	char *fw_path, char *nv_path)
+{
+	uint32 chip_id;
+	char chipver_tag[10] = "_43454";
+
+	chip_id = bus->sih->chip;
+
+	if (chip_id == BCM43454_CHIP_ID) {
+		DHD_ERROR(("----- CHIP 43454 -----\n"));
+		strcat(fw_path, chipver_tag);
+		strcat(nv_path, chipver_tag);
+	} else if (chip_id == BCM4345_CHIP_ID) {
+		DHD_ERROR(("----- CHIP 43455  -----\n"));
+	} else {
+		DHD_ERROR(("----- Unknown chip , id r=%x -----\n", chip_id));
+	}
+
+	return 0;
+}
+#else /* SUPPORT_MULTIPLE_CHIP_4345X */
 static int
 concate_revision_bcm43454(dhd_bus_t *bus, char *fw_path, char *nv_path)
 {
@@ -9289,6 +9295,41 @@ concate_revision_bcm43454(dhd_bus_t *bus, char *fw_path, char *nv_path)
 	return 0;
 }
 
+static int
+concate_revision_bcm43455(dhd_bus_t *bus, char *fw_path, char *nv_path)
+{
+	char chipver_tag[10] = {0, };
+	uint32 chip_rev = 0;
+#ifdef SUPPORT_MULTIPLE_BOARD_REV_FROM_DT
+	int base_system_rev_for_nv = 0;
+#endif /* SUPPORT_MULTIPLE_BOARD_REV_FROM_DT */
+
+	DHD_TRACE(("%s: BCM43455 Multiple Revision Check\n", __FUNCTION__));
+	if (bus->sih->chip != BCM4345_CHIP_ID) {
+		DHD_ERROR(("%s:Chip is not BCM43455!\n", __FUNCTION__));
+		return -1;
+	}
+
+	chip_rev = bus->sih->chiprev;
+	if (chip_rev == 0x9) {
+		DHD_ERROR(("----- CHIP 43456 -----\n"));
+		strcat(fw_path, "_c5");
+		strcat(nv_path, "_c5");
+	} else {
+		DHD_ERROR(("----- CHIP 43455  -----\n"));
+	}
+#ifdef SUPPORT_MULTIPLE_BOARD_REV_FROM_DT
+	base_system_rev_for_nv = dhd_get_system_rev();
+	if (base_system_rev_for_nv > 0) {
+		DHD_ERROR(("----- Board Rev  [%d]-----\n", base_system_rev_for_nv));
+		sprintf(chipver_tag, "_r%02d", base_system_rev_for_nv);
+	}
+#endif /* SUPPORT_MULTIPLE_BOARD_REV_FROM_DT */
+	strcat(nv_path, chipver_tag);
+	return 0;
+}
+#endif /* SUPPORT_MULTIPLE_CHIP_4345X */
+
 int
 concate_revision(dhd_bus_t *bus, char *fw_path, char *nv_path)
 {
@@ -9302,7 +9343,6 @@ concate_revision(dhd_bus_t *bus, char *fw_path, char *nv_path)
 	switch (bus->sih->chip) {
 	case BCM4335_CHIP_ID:
 		res = concate_revision_bcm4335(bus, fw_path, nv_path);
-
 		break;
 	case BCM4339_CHIP_ID:
 		res = concate_revision_bcm4339(bus, fw_path, nv_path);
@@ -9313,9 +9353,19 @@ concate_revision(dhd_bus_t *bus, char *fw_path, char *nv_path)
 	case BCM4354_CHIP_ID:
 		res = concate_revision_bcm4354(bus, fw_path, nv_path);
 		break;
+#ifdef SUPPORT_MULTIPLE_CHIP_4345X
+	case BCM43454_CHIP_ID:
+	case BCM4345_CHIP_ID:
+		res = concate_revision_bcm4345x(bus, fw_path, nv_path);
+		break;
+#else /* SUPPORT_MULTIPLE_CHIP_4345X */
 	case BCM43454_CHIP_ID:
 		res = concate_revision_bcm43454(bus, fw_path, nv_path);
 		break;
+	case BCM4345_CHIP_ID:
+		res = concate_revision_bcm43455(bus, fw_path, nv_path);
+		break;
+#endif /* SUPPORT_MULTIPLE_CHIP_4345X */
 
 	default:
 		DHD_ERROR(("REVISION SPECIFIC feature is not required\n"));

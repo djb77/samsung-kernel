@@ -1,7 +1,7 @@
 /*
  * Linux Packet (skb) interface
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linux_pkt.c 769679 2018-06-27 07:14:30Z $
+ * $Id: linux_pkt.c 800754 2019-01-23 08:38:54Z $
  */
 
 #include <typedefs.h>
@@ -54,21 +54,17 @@ void* wifi_platform_prealloc(void *adapter, int section, unsigned long size);
 #define OSL_PKTTAG_CLEAR(p) \
 do { \
 	struct sk_buff *s = (struct sk_buff *)(p); \
-	ASSERT(OSL_PKTTAG_SZ == 32); \
-	*(uint32 *)(&s->cb[4]) = 0; \
-	*(uint32 *)(&s->cb[8]) = 0; *(uint32 *)(&s->cb[12]) = 0; \
-	*(uint32 *)(&s->cb[16]) = 0; *(uint32 *)(&s->cb[20]) = 0; \
-	*(uint32 *)(&s->cb[24]) = 0; *(uint32 *)(&s->cb[28]) = 0; \
+	uint tagsz = sizeof(s->cb); \
+	ASSERT(OSL_PKTTAG_SZ <= tagsz); \
+	memset(s->cb + 4, 0, tagsz - 4); \
 } while (0)
 #else
 #define OSL_PKTTAG_CLEAR(p) \
 do { \
 	struct sk_buff *s = (struct sk_buff *)(p); \
-	ASSERT(OSL_PKTTAG_SZ == 32); \
-	*(uint32 *)(&s->cb[0]) = 0; *(uint32 *)(&s->cb[4]) = 0; \
-	*(uint32 *)(&s->cb[8]) = 0; *(uint32 *)(&s->cb[12]) = 0; \
-	*(uint32 *)(&s->cb[16]) = 0; *(uint32 *)(&s->cb[20]) = 0; \
-	*(uint32 *)(&s->cb[24]) = 0; *(uint32 *)(&s->cb[28]) = 0; \
+	uint tagsz = sizeof(s->cb); \
+	ASSERT(OSL_PKTTAG_SZ <= tagsz); \
+	memset(s->cb, 0, tagsz); \
 } while (0)
 #endif /* BCM_OBJECT_TRACE */
 

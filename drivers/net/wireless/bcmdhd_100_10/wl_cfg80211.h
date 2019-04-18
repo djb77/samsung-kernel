@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg80211.h 791278 2018-11-29 01:05:18Z $
+ * $Id: wl_cfg80211.h 798772 2019-01-10 08:33:03Z $
  */
 
 /**
@@ -1116,9 +1116,9 @@ struct bcm_cfg80211 {
 	u32 roam_count;
 #endif /* DHD_ENABLE_BIGDATA_LOGGING */
 	u16 ap_oper_channel;
-#if defined(SUPPORT_RANDOM_MAC_SCAN)
-	bool random_mac_enabled;
-#endif /* SUPPORT_RANDOM_MAC_SCAN */
+#if defined(DHD_RANDOM_MAC_SCAN)
+	bool random_mac_running;
+#endif /* DHD_RANDOM_MAC_SCAN */
 #ifdef DHD_LOSSLESS_ROAMING
 	struct timer_list roam_timeout;   /* Timer for catch roam timeout */
 #endif // endif
@@ -1159,6 +1159,12 @@ struct bcm_cfg80211 {
 	bool rssi_sum_report;
 	int rssi;	/* previous RSSI (backup) of get_station */
 	uint64 scan_enq_time;
+	uint64 scan_deq_time;
+	uint64 scan_hdlr_cmplt_time;
+	uint64 scan_cmplt_time;
+	uint64 wl_evt_deq_time;
+	uint64 wl_evt_hdlr_entry_time;
+	uint64 wl_evt_hdlr_exit_time;
 #ifdef WL_WPS_SYNC
 	wl_wps_session_t wps_session[WPS_MAX_SESSIONS];
 	spinlock_t wps_sync;	/* to protect wps states (and others if needed) */
@@ -1168,6 +1174,9 @@ struct bcm_cfg80211 {
 #endif  /* WL_BAM */
 	struct net_device *static_ndev;
 	uint8 static_ndev_state;
+#ifdef SUPPORT_CUSTOM_SET_CAC
+	int enable_cac;
+#endif	/* SUPPORT_CUSTOM_SET_CAC */
 };
 
 #define WL_STATIC_IFIDX	(DHD_MAX_IFS + DHD_MAX_STATIC_IFS - 1)
@@ -2065,7 +2074,7 @@ u64 wl_cfg80211_get_new_roc_id(struct bcm_cfg80211 *cfg);
 
 #if defined(SUPPORT_RANDOM_MAC_SCAN)
 int wl_cfg80211_set_random_mac(struct net_device *dev, bool enable);
-int wl_cfg80211_random_mac_enable(struct net_device *dev);
+int wl_cfg80211_random_mac_enable(struct net_device *dev, uint8 *rand_mac, uint8 *rand_mask);
 int wl_cfg80211_random_mac_disable(struct net_device *dev);
 int wl_cfg80211_scan_mac_enable(struct net_device *dev, uint8 *rand_mac, uint8 *rand_mask);
 int wl_cfg80211_scan_mac_disable(struct net_device *dev);
@@ -2085,6 +2094,14 @@ int wl_get_rssi_logging(struct net_device *dev, void *param);
 int wl_set_rssi_logging(struct net_device *dev, void *param);
 int wl_get_rssi_per_ant(struct net_device *dev, char *ifname, char *peer_mac, void *param);
 #endif /* SUPPORT_RSSI_SUM_REPORT */
+#ifdef DYNAMIC_MUMIMO_CONTROL
+void wl_set_murx_block_eapol_status(struct bcm_cfg80211 *cfg, int enable);
+bool wl_get_murx_reassoc_status(struct bcm_cfg80211 *cfg);
+void wl_set_murx_reassoc_status(struct bcm_cfg80211 *cfg, int enable);
+int wl_check_bss_support_mumimo(struct net_device *dev);
+int wl_get_murx_bfe_cap(struct net_device *dev, int *cap);
+int wl_set_murx_bfe_cap(struct net_device *dev, int val, bool reassoc_req);
+#endif /* DYNAMIC_MUMIMO_CONTROL */
 int wl_cfg80211_iface_count(struct net_device *dev);
 struct net_device* wl_get_ap_netdev(struct bcm_cfg80211 *cfg, char *ifname);
 void wl_cfg80211_cleanup_virtual_ifaces(struct bcm_cfg80211 *cfg, bool rtnl_lock_reqd);
@@ -2125,5 +2142,31 @@ void wl_handle_wps_states(struct net_device *ndev, u8 *dump_data, u16 len, bool 
 extern void wl_flush_fw_log_buffer(struct net_device *dev, uint32 logset_mask);
 #else
 #define wl_flush_fw_log_buffer(x, y)
-#endif // endif
+#endif /* DHD_LOG_DUMP */
+#ifdef DHD_USE_CHECK_DONGLE_IDLE
+int wl_check_dongle_idle(struct wiphy *wiphy);
+#else
+static inline int wl_check_dongle_idle(struct wiphy *wiphy)
+{
+	return TRUE;
+}
+#endif /* DHD_USE_CHECK_DONGLE_IDLE */
+#ifdef DHD_ABORT_SCAN_CREATE_INTERFACE
+extern int wl_abort_scan_and_check(struct bcm_cfg80211 *cfg);
+#else
+static inline int wl_abort_scan_and_check(struct bcm_cfg80211 *cfg)
+{
+	return TRUE;
+}
+#endif /* DHD_ABORT_SCAN_CREATE_INTERFACE */
+#ifdef APSTA_RESTRICTED_CHANNEL
+extern s32 wl_cfg80211_set_indoor_channels(struct net_device *ndev, char *command, int total_len);
+extern s32 wl_cfg80211_get_indoor_channels(struct net_device *ndev, char *command, int total_len);
+extern s32 wl_cfg80211_read_indoor_channels(struct net_device *ndev, void *buf, int buflen);
+extern bool wl_cfg80211_check_indoor_channels(struct net_device *ndev, int channel);
+#endif /* APSTA_RESTRICTED_CHANNEL */
+#ifdef SUPPORT_SET_CAC
+extern int wl_cfg80211_enable_cac(struct net_device *dev, int enable);
+extern void wl_cfg80211_set_cac(struct bcm_cfg80211 *cfg, int enable);
+#endif /* SUPPORT_SET_CAC */
 #endif /* _wl_cfg80211_h_ */

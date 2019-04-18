@@ -1261,7 +1261,7 @@ const u32 sensor_3h1_setfile_A_2640x1288_30fps[] = {
 	0x0216,	0x0100,	0x02,
 };
 
-const u32 sensor_3h1_setfile_A_1984x1984_30fps[] = {
+const u32 sensor_3h1_setfile_A_1968x1968_30fps[] = {
 	0xFCFC,	0x4000,	0x02,
 	0x6028,	0x2000,	0x02,
 	0x6214,	0x7971,	0x02,
@@ -1270,10 +1270,10 @@ const u32 sensor_3h1_setfile_A_1984x1984_30fps[] = {
 	0x0348,	0x0CCF,	0x02,
 	0x0346,	0x0010,	0x02,
 	0x034A,	0x099F,	0x02,
-	0x034C,	0x07C0,	0x02,
-	0x034E,	0x07C0,	0x02,
-	0x0408,	0x0280,	0x02,
-	0x040A,	0x00E8,	0x02,
+	0x034C,	0x07B0,	0x02,
+	0x034E,	0x07B0,	0x02,
+	0x0408,	0x0288,	0x02,
+	0x040A,	0x00F0,	0x02,
 	0x0342,	0x13D0,	0x02,
 	0x0340,	0x0A5C,	0x02,
 	0x0900,	0x0011,	0x02,
@@ -1340,7 +1340,7 @@ const u32 sensor_3h1_setfile_A_1984x1984_30fps[] = {
 	0x030C,	0x0003,	0x02,
 	0x030E,	0x0055,	0x02,
 	0x300A,	0x0000,	0x02,
-	0x3092,	0x0000,	0x02,
+	0x3092,	0x0001,	0x02,
 	0x31AA,	0x0001,	0x02,
 	0xB134,	0x0000,	0x02,
 	0x307C,	0x0340,	0x02,
@@ -1638,7 +1638,7 @@ const struct sensor_pll_info_compact sensor_3h1_pllinfo_A_2640x1288_30fps = {
 	0x13D0,
 };
 
-const struct sensor_pll_info_compact sensor_3h1_pllinfo_A_1984x1984_30fps = {
+const struct sensor_pll_info_compact sensor_3h1_pllinfo_A_1968x1968_30fps = {
 	EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
 	1473300000,
 	403600000,
@@ -1677,7 +1677,7 @@ static const u32 *sensor_3h1_setfiles_A[] = {
 	sensor_3h1_setfile_A_2640x1980_30fps,
 	sensor_3h1_setfile_A_2640x1488_30fps,
 	sensor_3h1_setfile_A_2640x1288_30fps,
-	sensor_3h1_setfile_A_1984x1984_30fps,
+	sensor_3h1_setfile_A_1968x1968_30fps,
 	sensor_3h1_setfile_A_1328x996_30fps,
 	sensor_3h1_setfile_A_1328x748_30fps,
 };
@@ -1697,7 +1697,7 @@ static const u32 sensor_3h1_setfile_A_sizes[] = {
 	ARRAY_SIZE(sensor_3h1_setfile_A_2640x1980_30fps),
 	ARRAY_SIZE(sensor_3h1_setfile_A_2640x1488_30fps),
 	ARRAY_SIZE(sensor_3h1_setfile_A_2640x1288_30fps),
-	ARRAY_SIZE(sensor_3h1_setfile_A_1984x1984_30fps),
+	ARRAY_SIZE(sensor_3h1_setfile_A_1968x1968_30fps),
 	ARRAY_SIZE(sensor_3h1_setfile_A_1328x996_30fps),
 	ARRAY_SIZE(sensor_3h1_setfile_A_1328x748_30fps),
 };
@@ -1717,7 +1717,7 @@ static const struct sensor_pll_info_compact *sensor_3h1_pllinfos_A[] = {
 	&sensor_3h1_pllinfo_A_2640x1980_30fps,
 	&sensor_3h1_pllinfo_A_2640x1488_30fps,
 	&sensor_3h1_pllinfo_A_2640x1288_30fps,
-	&sensor_3h1_pllinfo_A_1984x1984_30fps,
+	&sensor_3h1_pllinfo_A_1968x1968_30fps,
 	&sensor_3h1_pllinfo_A_1328x996_30fps,
 	&sensor_3h1_pllinfo_A_1328x748_30fps,
 };
@@ -2060,7 +2060,7 @@ static const struct cam_mipi_sensor_mode sensor_3h1_setfile_A_mipi_sensor_mode[]
 		sensor_3h1_setfile_A_mipi_channel_FULL, ARRAY_SIZE(sensor_3h1_setfile_A_mipi_channel_FULL),
 		sensor_3h1_setfile_A_mipi_setting_FULL, ARRAY_SIZE(sensor_3h1_setfile_A_mipi_setting_FULL)
 	},
-	{ SENSOR_3H1_1984X1984_30FPS,
+	{ SENSOR_3H1_1968X1968_30FPS,
 		sensor_3h1_setfile_A_mipi_channel_FULL, ARRAY_SIZE(sensor_3h1_setfile_A_mipi_channel_FULL),
 		sensor_3h1_setfile_A_mipi_setting_FULL, ARRAY_SIZE(sensor_3h1_setfile_A_mipi_setting_FULL)
 	},

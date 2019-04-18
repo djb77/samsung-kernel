@@ -1,7 +1,7 @@
 /*
  * Bad AP Manager for ADPS
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_bam.h 795942 2018-12-20 10:51:23Z $
+ * $Id: wl_bam.h 790523 2018-11-26 08:24:06Z $
  */
 #ifndef _WL_BAM_H_
 #define _WL_BAM_H_

@@ -3,7 +3,7 @@
  * Provides type definitions and function prototypes used to link the
  * DHD OS, bus, and protocol modules.
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_msgbuf.c 783638 2018-10-08 02:24:49Z $
+ * $Id: dhd_msgbuf.c 796673 2018-12-26 08:34:38Z $
  */
 
 #include <typedefs.h>
@@ -354,6 +354,7 @@ int h2d_max_txpost = H2DRING_TXPOST_MAX_ITEM;
 /** DHD protocol handle. Is an opaque type to other DHD software layers. */
 typedef struct dhd_prot {
 	osl_t *osh;		/* OSL handle */
+	uint16 rxbufpost_sz;
 	uint16 rxbufpost;
 	uint16 max_rxbufpost;
 	uint16 max_eventbufpost;
@@ -430,6 +431,10 @@ typedef struct dhd_prot {
 	void		*pktid_dma_map;	/* pktid map for DMA MAP */
 	void		*pktid_dma_unmap; /* pktid map for DMA UNMAP */
 #endif /* DHD_MAP_PKTID_LOGGING */
+
+	uint64		ioctl_fillup_time;	/* timestamp for ioctl fillup */
+	uint64		ioctl_ack_time;		/* timestamp for ioctl ack */
+	uint64		ioctl_cmplt_time;	/* timestamp for ioctl completion */
 
 	/* Applications/utilities can read tx and rx metadata using IOVARs */
 	uint16		rx_metadata_offset;
@@ -1178,7 +1183,7 @@ typedef void * dhd_pktid_log_handle_t; /* opaque handle to pktid log */
 
 #define	MAX_PKTID_LOG				(2048)
 #define DHD_PKTID_LOG_ITEM_SZ			(sizeof(dhd_pktid_log_item_t))
-#define DHD_PKTID_LOG_SZ(items)			((sizeof(dhd_pktid_log_t)) + \
+#define DHD_PKTID_LOG_SZ(items)			(uint32)((sizeof(dhd_pktid_log_t)) + \
 					((DHD_PKTID_LOG_ITEM_SZ) * (items)))
 
 #define DHD_PKTID_LOG_INIT(dhd, hdl)		dhd_pktid_logging_init((dhd), (hdl))
@@ -2953,8 +2958,6 @@ dhd_prot_init(dhd_pub_t *dhd)
 	/* Post to dongle host configured soft doorbells */
 	dhd_msgbuf_ring_config_d2h_soft_doorbell(dhd);
 
-	/* Post buffers for packet reception and ioctl/event responses */
-	dhd_msgbuf_rxbuf_post(dhd, FALSE); /* alloc pkt ids */
 	dhd_msgbuf_rxbuf_post_ioctlresp_bufs(dhd);
 	dhd_msgbuf_rxbuf_post_event_bufs(dhd);
 
@@ -3445,6 +3448,8 @@ int dhd_sync_with_dongle(dhd_pub_t *dhd)
 {
 	int ret = 0;
 	wlc_rev_info_t revinfo;
+	char buf[128];
+	dhd_prot_t *prot = dhd->prot;
 
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
 
@@ -3470,6 +3475,29 @@ int dhd_sync_with_dongle(dhd_pub_t *dhd)
 	}
 	DHD_ERROR(("%s: GET_REVINFO device 0x%x, vendor 0x%x, chipnum 0x%x\n", __FUNCTION__,
 		revinfo.deviceid, revinfo.vendorid, revinfo.chipnum));
+
+	/* Get the RxBuf post size */
+	memset(buf, 0, sizeof(buf));
+	bcm_mkiovar("rxbufpost_sz", NULL, 0, buf, sizeof(buf));
+	ret = dhd_wl_ioctl_cmd(dhd, WLC_GET_VAR, buf, sizeof(buf), FALSE, 0);
+	if (ret < 0) {
+		DHD_ERROR(("%s: GET RxBuf post FAILED, default to %d\n",
+			__FUNCTION__, DHD_FLOWRING_RX_BUFPOST_PKTSZ));
+		prot->rxbufpost_sz = DHD_FLOWRING_RX_BUFPOST_PKTSZ;
+	} else {
+		memcpy(&(prot->rxbufpost_sz), buf, sizeof(uint16));
+		if ((prot->rxbufpost_sz < DHD_FLOWRING_RX_BUFPOST_PKTSZ) ||
+			(prot->rxbufpost_sz > DHD_FLOWRING_RX_BUFPOST_PKTSZ_MAX)) {
+			DHD_ERROR(("%s: Invalid RxBuf post size : %d, default to %d\n",
+				__FUNCTION__, prot->rxbufpost_sz, DHD_FLOWRING_RX_BUFPOST_PKTSZ));
+			prot->rxbufpost_sz = DHD_FLOWRING_RX_BUFPOST_PKTSZ;
+		} else {
+			DHD_ERROR(("%s: RxBuf Post : %d\n", __FUNCTION__, prot->rxbufpost_sz));
+		}
+	}
+
+	/* Post buffers for packet reception */
+	dhd_msgbuf_rxbuf_post(dhd, FALSE); /* alloc pkt ids */
 
 	DHD_SSSR_DUMP_INIT(dhd);
 
@@ -3712,7 +3740,6 @@ static int BCMFASTPATH
 dhd_prot_rxbuf_post(dhd_pub_t *dhd, uint16 count, bool use_rsv_pktid)
 {
 	void *p, **pktbuf;
-	uint16 pktsz = DHD_FLOWRING_RX_BUFPOST_PKTSZ;
 	uint8 *rxbuf_post_tmp;
 	host_rxbuf_post_t *rxbuf_post;
 	void *msg_start;
@@ -3725,12 +3752,8 @@ dhd_prot_rxbuf_post(dhd_pub_t *dhd, uint16 count, bool use_rsv_pktid)
 	msgbuf_ring_t *ring = &prot->h2dring_rxp_subn;
 	void *lcl_buf;
 	uint16 lcl_buf_size;
+	uint16 pktsz = prot->rxbufpost_sz;
 
-#ifdef WL_MONITOR
-	if (dhd->monitor_enable) {
-		pktsz = DHD_MAX_MON_FLOWRING_RX_BUFPOST_PKTSZ;
-	}
-#endif /* WL_MONITOR */
 	/* allocate a local buffer to store pkt buffer va, pa and length */
 	lcl_buf_size = (sizeof(void *) + sizeof(dmaaddr_t) + sizeof(uint32)) *
 		RX_BUF_BURST;
@@ -5075,6 +5098,8 @@ dhd_prot_ioctack_process(dhd_pub_t *dhd, void *msg)
 	}
 #endif // endif
 
+	dhd->prot->ioctl_ack_time = OSL_LOCALTIME_NS();
+
 	DHD_GENERAL_LOCK(dhd, flags);
 	if ((dhd->prot->ioctl_state & MSGBUF_IOCTL_ACK_PENDING) &&
 		(dhd->prot->ioctl_state & MSGBUF_IOCTL_RESP_PENDING)) {
@@ -5130,6 +5155,8 @@ dhd_prot_ioctcmplt_process(dhd_pub_t *dhd, void *msg)
 		DHD_GENERAL_UNLOCK(dhd, flags);
 		return;
 	}
+
+	dhd->prot->ioctl_cmplt_time = OSL_LOCALTIME_NS();
 
 	/* Clear Response pending bit */
 	prot->ioctl_state &= ~MSGBUF_IOCTL_RESP_PENDING;
@@ -6356,18 +6383,25 @@ done:
 void
 dhd_msgbuf_iovar_timeout_dump(dhd_pub_t *dhd)
 {
-
 	uint32 intstatus;
 	dhd_prot_t *prot = dhd->prot;
-
 	dhd->rxcnt_timeout++;
 	dhd->rx_ctlerrs++;
 	dhd->iovar_timeout_occured = TRUE;
-	DHD_ERROR(("%s: resumed on timeout rxcnt_timeout %d ioctl_cmd %d "
-		"trans_id %d state %d busstate=%d ioctl_received=%d\n",
-		__FUNCTION__, dhd->rxcnt_timeout, prot->curr_ioctl_cmd,
-		prot->ioctl_trans_id, prot->ioctl_state,
-		dhd->busstate, prot->ioctl_received));
+	DHD_ERROR(("%s: resumed on timeout rxcnt_timeout%s %d ioctl_cmd %d "
+		"trans_id %d state %d busstate=%d ioctl_received=%d\n", __FUNCTION__,
+		dhd->is_sched_error ? " due to scheduling problem" : "",
+		dhd->rxcnt_timeout, prot->curr_ioctl_cmd, prot->ioctl_trans_id,
+		prot->ioctl_state, dhd->busstate, prot->ioctl_received));
+#if defined(DHD_KERNEL_SCHED_DEBUG) && defined(DHD_FW_COREDUMP)
+	if (dhd->is_sched_error && dhd->memdump_enabled) {
+		/* change g_assert_type to trigger Kernel panic */
+		g_assert_type = 2;
+		/* use ASSERT() to trigger panic */
+		ASSERT(0);
+	}
+#endif /* DHD_KERNEL_SCHED_DEBUG && DHD_FW_COREDUMP */
+
 	if (prot->curr_ioctl_cmd == WLC_SET_VAR ||
 			prot->curr_ioctl_cmd == WLC_GET_VAR) {
 		char iovbuf[32];
@@ -6444,6 +6478,11 @@ dhd_msgbuf_wait_ioctl_cmplt(dhd_pub_t *dhd, uint32 len, void *buf)
 #endif /* DHD_RECOVER_TIMEOUT */
 
 	if (timeleft == 0 && (!dhd_query_bus_erros(dhd))) {
+		/* check if resumed on time out related to scheduling issue */
+		dhd->is_sched_error = FALSE;
+		if (dhd->bus->isr_entry_time > prot->ioctl_fillup_time) {
+			dhd->is_sched_error = dhd_bus_query_dpc_sched_errors(dhd);
+		}
 
 		dhd_msgbuf_iovar_timeout_dump(dhd);
 
@@ -6829,6 +6868,8 @@ dhd_fillup_ioct_reqst(dhd_pub_t *dhd, uint16 len, uint cmd, void* buf, int ifidx
 	ioct_rqst->host_input_buf_addr.low = htol32(PHYSADDRLO(prot->ioctbuf.pa));
 	/* copy ioct payload */
 	ioct_buf = (void *) prot->ioctbuf.va;
+
+	prot->ioctl_fillup_time = OSL_LOCALTIME_NS();
 
 	if (buf)
 		memcpy(ioct_buf, buf, len);
@@ -8893,6 +8934,7 @@ dhd_prot_debug_info_print(dhd_pub_t *dhd)
 	msgbuf_ring_t *ring;
 	uint16 rd, wr;
 	uint32 dma_buf_len;
+	uint64 current_time;
 
 	DHD_ERROR(("\n ------- DUMPING VERSION INFORMATION ------- \r\n"));
 	DHD_ERROR(("DHD: %s\n", dhd_version));
@@ -8917,6 +8959,15 @@ dhd_prot_debug_info_print(dhd_pub_t *dhd)
 		prot->max_rxbufpost, prot->rxbufpost));
 	DHD_ERROR(("h2d_max_txpost: %d, prot->h2d_max_txpost: %d\n",
 		h2d_max_txpost, prot->h2d_max_txpost));
+
+	current_time = OSL_LOCALTIME_NS();
+	DHD_ERROR(("current_time="SEC_USEC_FMT"\n", GET_SEC_USEC(current_time)));
+	DHD_ERROR(("ioctl_fillup_time="SEC_USEC_FMT
+		" ioctl_ack_time="SEC_USEC_FMT
+		" ioctl_cmplt_time="SEC_USEC_FMT"\n",
+		GET_SEC_USEC(prot->ioctl_fillup_time),
+		GET_SEC_USEC(prot->ioctl_ack_time),
+		GET_SEC_USEC(prot->ioctl_cmplt_time)));
 
 	DHD_ERROR(("\n ------- DUMPING IOCTL RING RD WR Pointers ------- \r\n"));
 
