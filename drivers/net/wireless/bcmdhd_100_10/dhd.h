@@ -734,7 +734,7 @@ extern void copy_debug_dump_time(char *dest, char *src);
 #ifdef DHD_COMMON_DUMP_PATH
 #undef DHD_COMMON_DUMP_PATH
 #endif /* DHD_COMMON_DUMP_PATH */
-#define DHD_COMMON_DUMP_PATH	"/data/vendor/log/wifi/"
+#define DHD_COMMON_DUMP_PATH	"/data/log/wifi/"
 #endif /* ANDROID_PLATFORM_VERSION >= 9 */
 #endif /* ANDROID_PLATFORM_VERSION */
 #ifndef DHD_COMMON_DUMP_PATH

@@ -5049,6 +5049,86 @@
 		};
 	};
 
+	cpufreq-ufc {
+		/* Ctrl Type */
+		#define PM_QOS_MIN_LIMIT		0
+		#define PM_QOS_MIN_WO_BOOST_LIMIT	1
+		#define PM_QOS_MAX_LIMIT		2
+		/* Execution Mode */
+		#define	AARCH64_MODE			0
+		#define AARCH32_MODE			1
+
+		domain@0 {
+			device_type = "cpufreq-userctrl";
+			shared-cpus = "0-3";
+
+			user-default-qos = <715000>;
+		};
+
+		domain@1 {
+			device_type = "cpufreq-userctrl";
+			shared-cpus = "4-7";
+
+			user-default-qos = <962000>;
+
+			min-limit {
+				ctrl-type = <PM_QOS_MIN_LIMIT>;
+				execution-mode = <AARCH64_MODE>;
+					/* mngs	    ank */
+				table = < 2964000 1794000
+					  2860000 1794000
+					  2704000 1794000
+					  2652000 1794000
+					  2496000 1794000
+					  2314000 1794000
+					  2158000 1794000
+					  2002000 1794000
+					  1924000 1794000
+					  1794000 1794000
+					  1690000  715000
+					  1586000  715000
+					  1469000  715000
+					  1261000  715000
+					  1170000  715000
+					  1066000  715000
+					   962000  715000
+					   858000  715000
+					   741000  715000
+					   650000  715000
+					   598000  715000 >;
+			};
+
+			max-limit {
+				ctrl-type = <PM_QOS_MAX_LIMIT>;
+				execution-mode = <AARCH64_MODE>;
+					/* mngs	    ank */
+				table = < 2964000 1794000
+					  2860000 1794000
+					  2704000 1794000
+					  2652000 1794000
+					  2496000 1794000
+					  2314000 1794000
+					  2158000 1794000
+					  2002000 1794000
+					  1924000 1794000
+					  1794000 1794000
+					  1690000 1794000
+					  1586000 1794000
+					  1469000 1794000
+					  1261000 1794000
+					  1170000 1794000
+					  1066000 1794000
+					   962000 1794000
+					   858000 1794000
+					   741000 1794000
+					   650000 1794000
+					   598000 1794000 >;
+			};
+
+		};
+	};
+
+
 	cpufreq {
 		cpufreq_domain0: domain@0 {
 			device_type = "cpufreq-domain";
@@ -5062,8 +5142,6 @@
 			pm_qos-min-class = <3>;
 			pm_qos-max-class = <4>;
 
-			user-default-qos = <715000>;
-
 			#cooling-cells = <2>; /* min followed by max */
 
 			dm-constraints {
@@ -5071,8 +5149,7 @@
 					const-type = <CONSTRAINT_MIN>;
 					dm-type = <DM_MIF>;
 						/*  cpu     mif  */
-					table = < 2002000  845000
-						  1898000  845000
+					table = < 1950000  845000
 						  1794000  845000
 						  1690000  845000
 						  1456000  676000
@@ -5116,13 +5193,13 @@
 					const-type = <CONSTRAINT_MIN>;
 					dm-type = <DM_MIF>;
 						/*  cpu     mif  */
-					table = < 2964000 1794000
+					table = < 2886000 1794000
 						  2860000 1794000
 						  2704000 1794000
 						  2652000 1794000
 						  2496000 1794000
 						  2314000 1794000
-						  2158000 1794000
+						  2106000 1794000
 						  2002000 1794000
 						  1924000 1794000
 						  1794000 1794000

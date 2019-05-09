@@ -128,6 +128,8 @@ EXPORT_SYMBOL_GPL(s3c2410_serial_wake_peer);
 #define DEFAULT_PINCTRL		(0)
 struct s3c24xx_uart_port *panic_port;
 
+void s3c24xx_serial_rx_fifo_wait(void);
+
 static int exynos_s3c24xx_panic_handler(struct notifier_block *nb,
 								unsigned long l, void *p)
 {
@@ -360,6 +362,8 @@ static void s3c24xx_serial_resetport(struct uart_port *port,
 				   struct s3c2410_uartcfg *cfg);
 static void s3c24xx_serial_pm(struct uart_port *port, unsigned int level,
 			      unsigned int old);
+static void s3c24xx_print_reg_status(struct s3c24xx_uart_port *ourport);
+
 static struct uart_driver s3c24xx_uart_drv;
 
 static inline void uart_clock_enable(struct s3c24xx_uart_port *ourport)
@@ -480,9 +484,10 @@ static void s3c24xx_serial_stop_rx(struct uart_port *port)
 
 	if (rx_enabled(port)) {
 		dbg("s3c24xx_serial_stop_rx: port=%p\n", port);
-		if (s3c24xx_serial_has_interrupt_mask(port))
+		if (s3c24xx_serial_has_interrupt_mask(port)) {
 			__set_bit(S3C64XX_UINTM_RXD,
 				portaddrl(port, S3C64XX_UINTM));
+		}
 		else
 			disable_irq_nosync(ourport->rx_irq);
 		rx_enabled(port) = 0;
@@ -1681,6 +1686,46 @@ static inline struct s3c24xx_serial_drv_data *s3c24xx_get_driver_data(
 			platform_get_device_id(pdev)->driver_data;
 }
 
+
+void s3c24xx_serial_rx_fifo_wait(void)
+{
+   struct s3c24xx_uart_port *ourport;
+   struct uart_port *port;
+   unsigned int fifo_stat;
+   unsigned long wait_time;
+   unsigned int fifo_count;
+
+   fifo_count = 0;
+
+   list_for_each_entry(ourport, &drvdata_list, node) {
+       if (ourport->port.line != CONFIG_S3C_LOWLEVEL_UART_PORT)
+               continue;
+
+       port = &ourport->port;
+       fifo_stat = rd_regl(port, S3C2410_UFSTAT);
+       fifo_count = s3c24xx_serial_rx_fifocnt(ourport, fifo_stat);
+       if (fifo_count) {
+               uart_clock_enable(ourport);
+               __clear_bit(S3C64XX_UINTM_RXD, portaddrl(port, S3C64XX_UINTM));
+               uart_clock_disable(ourport);
+               rx_enabled(port) = 1;
+       }
+
+       wait_time = jiffies + HZ;
+       do {
+               port = &ourport->port;
+               fifo_stat = rd_regl(port, S3C2410_UFSTAT);
+               cpu_relax();
+       } while ( s3c24xx_serial_rx_fifocnt(ourport, fifo_stat) && time_before(jiffies, wait_time));
+
+       if (rx_enabled(port))
+               s3c24xx_serial_stop_rx(port);
+   }
+
+}
+
+EXPORT_SYMBOL_GPL(s3c24xx_serial_rx_fifo_wait);
+
 void s3c24xx_serial_fifo_wait(void)
 {
 	struct s3c24xx_uart_port *ourport;
@@ -1716,25 +1761,21 @@ static void s3c24xx_print_reg_status(struct s3c24xx_uart_port *ourport)
 		unsigned int ufstat = rd_regl(port, S3C2410_UFSTAT);
 		unsigned int umstat = rd_regl(port, S3C2410_UMSTAT);
 		unsigned int uerstat = rd_regl(port, S3C2410_UERSTAT);
+		unsigned int uintpstat = rd_regl(port, S3C64XX_UINTP);
+		unsigned int uintmstat = rd_regl(port, S3C64XX_UINTM);
 		char buf[300] = "s3c24xx_print_reg_status\n";
 		char * s = buf;
 
-		int tx_fifo_full = ufstat & S5PV210_UFSTAT_TXFULL;
-		int tx_fifo_count = s3c24xx_serial_tx_fifocnt(ourport, ufstat);
-
-		int rx_fifo_full = ufstat & S5PV210_UFSTAT_RXFULL;
-		int rx_fifo_count = s3c24xx_serial_rx_fifocnt(ourport, ufstat);
 
 		s += sprintf(s, "ucon = 0x%08x ", ucon);
 		s += sprintf(s, "ufcon = 0x%08x ", ufcon);
-		s += sprintf(s, "umcon = 0x%08x\n", umcon);
+		s += sprintf(s, "umcon = 0x%08x ", umcon);
 		s += sprintf(s, "ufstat = 0x%08x ", ufstat);
 		s += sprintf(s, "umstat = 0x%08x ", umstat);
-		s += sprintf(s, "uerstat = 0x%08x\n", uerstat);
-		s += sprintf(s, "tx_fifo_full = %d ", tx_fifo_full);
-		s += sprintf(s, "tx_fifo_count = %d\n", tx_fifo_count);
-		s += sprintf(s, "rx_fifo_full = %d ", rx_fifo_full);
-		s += sprintf(s, "rx_fifo_count = %d\n", rx_fifo_count);
+		s += sprintf(s, "uerstat = 0x%08x ", uerstat);
+		s += sprintf(s, "uintpstat = 0x%08x ", uintpstat);
+		s += sprintf(s, "uintmstat = 0x%08x\n", uintmstat);
+
 		SS_UART_LOG(2, &ourport->uart_local_buf, buf);
 }
 #endif
@@ -2200,6 +2241,9 @@ static int s3c24xx_serial_suspend(struct device *dev)
 		if (ourport->port.line == BLUETOOTH_UART_PORT_LINE)
 			change_uart_gpio(RTS_PINCTRL, ourport);
 
+		udelay(300);//dealy for sfr update	
+		s3c24xx_serial_rx_fifo_wait();
+			
 		uart_suspend_port(&s3c24xx_uart_drv, port);
 #ifdef CONFIG_SERIAL_SAMSUNG_HWACG
 		uart_clock_enable(ourport);

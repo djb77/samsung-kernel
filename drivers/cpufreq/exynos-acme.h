@@ -8,9 +8,18 @@
  * Exynos ACME(A Cpufreq that Meets Every chipset) driver implementation
  */
 
+#include "exynos-ufc.h"
+#include <soc/samsung/exynos-dm.h>
+#include <linux/pm_qos.h>
+
 struct exynos_cpufreq_dm {
 	struct list_head		list;
 	struct exynos_dm_constraint	c;
+};
+
+struct exynos_ufc {
+	struct list_head                list;
+	struct exynos_ufc_info          info;
 };
 
 struct exynos_cpufreq_domain {
@@ -65,7 +74,28 @@ struct exynos_cpufreq_domain {
 
 	/* list head of DVFS Manager constraints */
 	struct list_head		dm_list;
+
+	/* list head of User cpuFreq Ctrl (UFC) */
+	struct list_head                ufc_list;
 };
+
+/*
+ * list head of cpufreq domain
+ */
+extern struct exynos_cpufreq_domain
+		*find_domain_cpumask(const struct cpumask *mask);
+extern struct list_head *get_domain_list(void);
+extern struct exynos_cpufreq_domain *first_domain(void);
+extern struct exynos_cpufreq_domain *last_domain(void);
+extern int exynos_cpufreq_domain_count(void);
+#ifdef CONFIG_ARM_EXYNOS_UFC
+extern int ufc_domain_init(struct exynos_cpufreq_domain *domain);
+#else
+static inline int ufc_domain_init(struct exynos_cpufreq_domain *domain)
+{
+	return 0;
+}
+#endif
 
 /*
  * the time it takes on this CPU to switch between

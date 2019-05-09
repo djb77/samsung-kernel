@@ -476,7 +476,8 @@ enum wl_prof_list {
 	WL_PROF_BSSID,
 	WL_PROF_ACT,
 	WL_PROF_BEACONINT,
-	WL_PROF_DTIMPERIOD
+	WL_PROF_DTIMPERIOD,
+	WL_PROF_LATEST_BSSID
 };
 
 /* donlge escan state */
@@ -617,6 +618,7 @@ struct wl_profile {
 	u16 beacon_interval;
 	u8 dtim_period;
 	bool active;
+	u8 latest_bssid[ETHER_ADDR_LEN];
 };
 
 struct wl_wps_ie {

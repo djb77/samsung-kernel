@@ -135,6 +135,14 @@ bool gpu_check_trace_code(int code)
 	case KBASE_TRACE_CODE(LSI_PM_SUSPEND):
 	case KBASE_TRACE_CODE(LSI_SUSPEND):
 	case KBASE_TRACE_CODE(LSI_RESUME):
+	case KBASE_TRACE_CODE(LSI_GPU_RPM_RESUME_API):
+	case KBASE_TRACE_CODE(LSI_GPU_RPM_SUSPEND_API):
+	case KBASE_TRACE_CODE(LSI_SUSPEND_CALLBACK):
+	case KBASE_TRACE_CODE(KBASE_DEVICE_SUSPEND):
+	case KBASE_TRACE_CODE(KBASE_DEVICE_SUSPEND_RESTORE):
+	case KBASE_TRACE_CODE(KBASE_DEVICE_RESUME):
+	case KBASE_TRACE_CODE(KBASE_DEVICE_PM_WAIT_WQ_RUN):
+	case KBASE_TRACE_CODE(KBASE_DEVICE_PM_WAIT_WQ_QUEUE_WORK):
 	case KBASE_TRACE_CODE(LSI_TMU_VALUE):
 		level = TRACE_NOTIFIER;
 		break;
@@ -240,6 +248,7 @@ static int gpu_dvfs_update_config_data_from_dt(struct kbase_device *kbdev)
 
 	gpu_update_config_data_int(np, "gpu_debug_level", &gpu_debug_level);
 	gpu_update_config_data_int(np, "gpu_trace_level", &gpu_trace_level);
+	gpu_set_trace_level(gpu_trace_level);
 
 	gpu_update_config_data_int(np, "g3d_cmu_cal_id", &platform->g3d_cmu_cal_id);
 #ifdef CONFIG_MALI_DVFS
@@ -275,7 +284,11 @@ static int gpu_dvfs_update_config_data_from_dt(struct kbase_device *kbdev)
 
 	gpu_update_config_data_int(np, "gpu_pmqos_cpu_cluster_num", &platform->gpu_pmqos_cpu_cluster_num);
 	gpu_update_config_data_int(np, "gpu_max_clock", &platform->gpu_max_clock);
+#ifdef CONFIG_CAL_IF
+	platform->gpu_max_clock_limit = (int)cal_dfs_get_max_freq(platform->g3d_cmu_cal_id);
+#else
 	gpu_update_config_data_int(np, "gpu_max_clock_limit", &platform->gpu_max_clock_limit);
+#endif
 	gpu_update_config_data_int(np, "gpu_min_clock", &platform->gpu_min_clock);
 	gpu_update_config_data_int(np, "gpu_dvfs_bl_config_clock", &platform->gpu_dvfs_config_clock);
 	gpu_update_config_data_int(np, "gpu_default_voltage", &platform->gpu_default_vol);
@@ -331,6 +344,9 @@ static int gpu_dvfs_update_config_data_from_dt(struct kbase_device *kbdev)
 	gpu_update_config_data_string(np, "g3d_genpd_name", &of_string);
 	if (of_string)
 		strncpy(platform->g3d_genpd_name, of_string, sizeof(platform->g3d_genpd_name));
+
+	platform->gpu_dss_freq_id = 0;
+	gpu_update_config_data_int(np, "gpu_ess_id_type", &platform->gpu_dss_freq_id);
 
 	return 0;
 }
@@ -429,7 +445,7 @@ static int gpu_context_init(struct kbase_device *kbdev)
 	mutex_init(&platform->gpu_dvfs_handler_lock);
 	spin_lock_init(&platform->gpu_dvfs_spinlock);
 
-#if defined(CONFIG_SCHED_EMS) || defined(CONFIG_SCHED_EHMP)
+#if (defined(CONFIG_SCHED_EMS) || defined(CONFIG_SCHED_EHMP) || defined(CONFIG_SCHED_HMP))
 	mutex_init(&platform->gpu_sched_hmp_lock);
 	platform->ctx_need_qos = false;
 #endif

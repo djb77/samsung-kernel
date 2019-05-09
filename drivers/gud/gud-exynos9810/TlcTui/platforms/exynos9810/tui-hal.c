@@ -376,12 +376,15 @@ uint32_t hal_tui_deactivate(void)
 	disable_irq(tsp_irq_num);
 
 	pr_info("tsp_irq_num =%d\n", tsp_irq_num);
-	trustedui_set_mask(TRUSTEDUI_MODE_INPUT_SECURED);
 
 #if defined(CONFIG_TOUCHSCREEN_SEC_TS) || defined(CONFIG_TOUCHSCREEN_SEC_TS_Y771)
 	tui_delay(5);
 	trustedui_mode_on();
-	tui_delay(95);
+	tui_delay(5);
+	trustedui_set_mask(TRUSTEDUI_MODE_INPUT_SECURED);	
+	tui_delay(90);
+#else
+	trustedui_set_mask(TRUSTEDUI_MODE_INPUT_SECURED);
 #endif
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI_FB_BLANK

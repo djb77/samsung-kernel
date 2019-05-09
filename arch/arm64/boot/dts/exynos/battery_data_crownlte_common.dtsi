@@ -198,8 +198,6 @@
 
 		battery,sleep_mode_limit_current = <500>;
 		battery,wc_full_input_limit_current = <100>;
-		battery,wc_cv_current = <900>;
-		battery,wc_cv_pack_current = <630>;
 
 		battery,mix_high_temp = <420>;
 		battery,mix_high_chg_temp = <500>;
@@ -441,7 +439,7 @@
  *  11	HV_WIRELESS,
  *  12	PMA_WIRELESS,
  *  13	WIRELESS_PACK,
- *  14	WIRELESS_PACK_TA,
+ *  14	WIRELESS_HV_PACK,
  *  15	WIRELESS_STAND,
  *  16	WIRELESS_HV_STAND,
  *  17	QC20,
@@ -495,7 +493,7 @@
 		       charging_current = <2150>;
 		};
 		current_group_6 {
-			cable_number = <10 12 14 15 27 33>;
+			cable_number = <10 12 15 27 33>;
 			input_current = <820>;
 			charging_current = <1600>;
 		};
@@ -515,7 +513,7 @@
 			charging_current = <1800>;
 		};
 		current_group_10 {
-			cable_number = <11 16 28>;
+			cable_number = <11 14 16 28>;
 			input_current = <750>;
 			charging_current = <1500>;
 		};

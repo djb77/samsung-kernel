@@ -16,13 +16,17 @@
 #include "../panel.h"
 #include "../panel_poc.h"
 
-#define STAR2_EXEC_USEC	(10)
+#define STAR2_EXEC_USEC	(20)
+#define STAR2_EXEC_DATA_USEC	(2)
 #define STAR2_QD_DONE_MDELAY		(30)
 #define STAR2_RD_DONE_UDELAY		(250)
 #define STAR2_WR_DONE_UDELAY		(4000)
 #ifdef CONFIG_SUPPORT_POC_FLASH
 #define STAR2_ER_QD_DONE_MDELAY		(10)
 #define STAR2_ER_DONE_MDELAY		(400)
+#define STAR2_ER_4K_DONE_MDELAY        (400)
+#define STAR2_ER_32K_DONE_MDELAY       (800)
+#define STAR2_ER_64K_DONE_MDELAY       (1000)
 #endif
 
 #define STAR2_POC_IMG_ADDR	(0)
@@ -82,6 +86,9 @@ static u8 STAR2_POC_WR_DAT[] = { 0xC1, 0x00 };
 #ifdef CONFIG_SUPPORT_POC_FLASH
 static u8 STAR2_POC_ER_ENABLE[] = { 0xC1, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04 };
 static u8 STAR2_POC_ER_STT[] = { 0xC1, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x04 };
+static u8 STAR2_POC_ER_4K_STT[] = { 0xC1, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x04 };
+static u8 STAR2_POC_ER_32K_STT[] = { 0xC1, 0x00, 0x52, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x04 };
+static u8 STAR2_POC_ER_64K_STT[] = { 0xC1, 0x00, 0xD8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x04 };
 #endif
 
 static DEFINE_STATIC_PACKET(star2_level2_key_enable, DSI_PKT_TYPE_WR, STAR2_KEY2_ENABLE, 0);
@@ -94,6 +101,12 @@ static DEFINE_STATIC_PACKET(star2_poc_pgm_disable, DSI_PKT_TYPE_WR, STAR2_POC_PG
 static DEFINE_STATIC_PACKET(star2_poc_er_enable, DSI_PKT_TYPE_WR, STAR2_POC_ER_ENABLE, 0);
 static DEFINE_PKTUI(star2_poc_er_stt, &star2_poc_maptbl[POC_ER_ADDR_MAPTBL], 3);
 static DEFINE_VARIABLE_PACKET(star2_poc_er_stt, DSI_PKT_TYPE_WR, STAR2_POC_ER_STT, 0);
+static DEFINE_PKTUI(star2_poc_er_4k_stt, &star2_poc_maptbl[POC_ER_ADDR_MAPTBL], 3);
+static DEFINE_VARIABLE_PACKET(star2_poc_er_4k_stt, DSI_PKT_TYPE_WR, STAR2_POC_ER_4K_STT, 0);
+static DEFINE_PKTUI(star2_poc_er_32k_stt, &star2_poc_maptbl[POC_ER_ADDR_MAPTBL], 3);
+static DEFINE_VARIABLE_PACKET(star2_poc_er_32k_stt, DSI_PKT_TYPE_WR, STAR2_POC_ER_32K_STT, 0);
+static DEFINE_PKTUI(star2_poc_er_64k_stt, &star2_poc_maptbl[POC_ER_ADDR_MAPTBL], 3);
+static DEFINE_VARIABLE_PACKET(star2_poc_er_64k_stt, DSI_PKT_TYPE_WR, STAR2_POC_ER_64K_STT, 0);
 #endif
 static DEFINE_STATIC_PACKET(star2_poc_exec, DSI_PKT_TYPE_WR, STAR2_POC_EXEC, 0);
 static DEFINE_STATIC_PACKET(star2_poc_wr_enable, DSI_PKT_TYPE_WR, STAR2_POC_WR_ENABLE, 0);
@@ -108,13 +121,16 @@ static DEFINE_PKTUI(star2_poc_wr_dat, &star2_poc_maptbl[POC_WR_DATA_MAPTBL], 1);
 static DEFINE_VARIABLE_PACKET(star2_poc_wr_dat, DSI_PKT_TYPE_WR, STAR2_POC_WR_DAT, 0);
 
 static DEFINE_PANEL_UDELAY_NO_SLEEP(star2_poc_wait_exec, STAR2_EXEC_USEC);
+static DEFINE_PANEL_UDELAY_NO_SLEEP(star2_poc_wait_exec_data, STAR2_EXEC_DATA_USEC);
 static DEFINE_PANEL_UDELAY_NO_SLEEP(star2_poc_wait_rd_done, STAR2_RD_DONE_UDELAY);
 static DEFINE_PANEL_UDELAY_NO_SLEEP(star2_poc_wait_wr_done, STAR2_WR_DONE_UDELAY);
 static DEFINE_PANEL_MDELAY(star2_poc_wait_qd_status, STAR2_QD_DONE_MDELAY);
 #ifdef CONFIG_SUPPORT_POC_FLASH
 static DEFINE_PANEL_MDELAY(star2_poc_wait_er_qd_status, STAR2_ER_QD_DONE_MDELAY);
 static DEFINE_PANEL_MDELAY(star2_poc_wait_er_done, STAR2_ER_DONE_MDELAY);
-
+static DEFINE_PANEL_MDELAY(star2_poc_wait_er_4k_done, STAR2_ER_4K_DONE_MDELAY);
+static DEFINE_PANEL_MDELAY(star2_poc_wait_er_32k_done, STAR2_ER_32K_DONE_MDELAY);
+static DEFINE_PANEL_MDELAY(star2_poc_wait_er_64k_done, STAR2_ER_64K_DONE_MDELAY);
 #endif
 
 #ifdef CONFIG_SUPPORT_POC_FLASH
@@ -137,6 +153,33 @@ static void *star2_poc_erase_cmdtbl[] = {
 	&PKTINFO(star2_poc_er_stt),
 	&PKTINFO(star2_poc_exec),
 	&DLYINFO(star2_poc_wait_er_done),
+};
+
+static void *star2_poc_erase_4k_cmdtbl[] = {
+	&PKTINFO(star2_poc_er_enable),
+	&PKTINFO(star2_poc_exec),
+	&DLYINFO(star2_poc_wait_exec),
+	&PKTINFO(star2_poc_er_4k_stt),
+	&PKTINFO(star2_poc_exec),
+	&DLYINFO(star2_poc_wait_er_4k_done),
+};
+
+static void *star2_poc_erase_32k_cmdtbl[] = {
+	&PKTINFO(star2_poc_er_enable),
+	&PKTINFO(star2_poc_exec),
+	&DLYINFO(star2_poc_wait_exec),
+	&PKTINFO(star2_poc_er_32k_stt),
+	&PKTINFO(star2_poc_exec),
+	&DLYINFO(star2_poc_wait_er_32k_done),
+};
+
+static void *star2_poc_erase_64k_cmdtbl[] = {
+	&PKTINFO(star2_poc_er_enable),
+	&PKTINFO(star2_poc_exec),
+	&DLYINFO(star2_poc_wait_exec),
+	&PKTINFO(star2_poc_er_64k_stt),
+	&PKTINFO(star2_poc_exec),
+	&DLYINFO(star2_poc_wait_er_64k_done),
 };
 
 static void *star2_poc_erase_exit_cmdtbl[] = {
@@ -166,10 +209,16 @@ static void *star2_poc_wr_stt_cmdtbl[] = {
 	&PKTINFO(star2_poc_wr_stt),
 };
 
-static void *star2_poc_wr_dat_cmdtbl[] = {
+static void *star2_poc_wr_dat_stt_end_cmdtbl[] = {
 	&PKTINFO(star2_poc_wr_dat),
 	&PKTINFO(star2_poc_exec),
 	&DLYINFO(star2_poc_wait_exec),
+};
+
+static void *star2_poc_wr_dat_cmdtbl[] = {
+	&PKTINFO(star2_poc_wr_dat),
+	&PKTINFO(star2_poc_exec),
+	&DLYINFO(star2_poc_wait_exec_data),
 };
 
 static void *star2_poc_wr_end_cmdtbl[] = {
@@ -214,12 +263,16 @@ static struct seqinfo star2_poc_seqtbl[MAX_POC_SEQ] = {
 	/* poc erase */
 	[POC_ERASE_ENTER_SEQ] = SEQINFO_INIT("poc-erase-enter-seq", star2_poc_erase_enter_cmdtbl),
 	[POC_ERASE_SEQ] = SEQINFO_INIT("poc-erase-seq", star2_poc_erase_cmdtbl),
+	[POC_ERASE_4K_SEQ] = SEQINFO_INIT("poc-erase-4k-seq", star2_poc_erase_4k_cmdtbl),
+	[POC_ERASE_32K_SEQ] = SEQINFO_INIT("poc-erase-4k-seq", star2_poc_erase_32k_cmdtbl),
+	[POC_ERASE_64K_SEQ] = SEQINFO_INIT("poc-erase-32k-seq", star2_poc_erase_64k_cmdtbl),
 	[POC_ERASE_EXIT_SEQ] = SEQINFO_INIT("poc-erase-exit-seq", star2_poc_erase_exit_cmdtbl),
 #endif
 
 	/* poc write */
 	[POC_WRITE_ENTER_SEQ] = SEQINFO_INIT("poc-wr-enter-seq", star2_poc_wr_enter_cmdtbl),
 	[POC_WRITE_STT_SEQ] = SEQINFO_INIT("poc-wr-stt-seq", star2_poc_wr_stt_cmdtbl),
+	[POC_WRITE_DAT_STT_END_SEQ] = SEQINFO_INIT("poc-wr-dat-stt-end-seq", star2_poc_wr_dat_stt_end_cmdtbl),
 	[POC_WRITE_DAT_SEQ] = SEQINFO_INIT("poc-wr-dat-seq", star2_poc_wr_dat_cmdtbl),
 	[POC_WRITE_END_SEQ] = SEQINFO_INIT("poc-wr-end-seq", star2_poc_wr_end_cmdtbl),
 	[POC_WRITE_EXIT_SEQ] = SEQINFO_INIT("poc-wr-exit-seq", star2_poc_wr_exit_cmdtbl),

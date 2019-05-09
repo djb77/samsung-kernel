@@ -2904,7 +2904,7 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	if (IS_ERR(usbc_data->port))
 		pr_err("unable to register typec_register_port\n");
 	else
-		msg_maxim("success typec_register_port port=%p", usbc_data->port);
+		msg_maxim("success typec_register_port port");
 	init_completion(&usbc_data->typec_reverse_completion);
 #endif
 	usbc_data->auto_vbus_en = false;

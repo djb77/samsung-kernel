@@ -4164,12 +4164,19 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
  *
  * Return: A standard Linux error code
  */
+
 /* MALI_SEC_INTEGRATION */
 static int kbase_device_suspend(struct device *dev)
 {
 	struct kbase_device *kbdev = to_kbase_device(dev);
+	struct exynos_context *platform = NULL;
 
 	if (!kbdev)
+		return -ENODEV;
+
+	platform = (struct exynos_context *)kbdev->platform_context;
+
+	if (!platform)
 		return -ENODEV;
 
 #if defined(CONFIG_MALI_DEVFREQ) && \
@@ -4179,6 +4186,11 @@ static int kbase_device_suspend(struct device *dev)
 #endif
 
 	kbase_pm_suspend(kbdev);
+
+	/* MALI_SEC_INTEGRATION */
+	KBASE_TRACE_ADD(kbdev, KBASE_DEVICE_SUSPEND, NULL, NULL, \
+		platform->power_runtime_suspend_ret, platform->power_runtime_resume_ret);
+
 	return 0;
 }
 
@@ -4196,8 +4208,14 @@ static int kbase_device_suspend(struct device *dev)
 static int kbase_device_resume(struct device *dev)
 {
 	struct kbase_device *kbdev = to_kbase_device(dev);
+	struct exynos_context *platform = NULL;
 
 	if (!kbdev)
+		return -ENODEV;
+
+	platform = (struct exynos_context *)kbdev->platform_context;
+
+	if (!platform)
 		return -ENODEV;
 
 	kbase_pm_resume(kbdev);
@@ -4207,6 +4225,10 @@ static int kbase_device_resume(struct device *dev)
 	if (kbdev->inited_subsys & inited_devfreq)
 		devfreq_resume_device(kbdev->devfreq);
 #endif
+
+	KBASE_TRACE_ADD(kbdev, KBASE_DEVICE_RESUME, NULL, NULL, \
+		platform->power_runtime_suspend_ret, platform->power_runtime_resume_ret);
+
 	return 0;
 }
 

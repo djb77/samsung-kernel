@@ -638,14 +638,6 @@ static int __aod_ioctl_set_analog_clk(struct aod_dev_info *aod, unsigned long ar
 		goto exit_analog_ioctl;
 	}
 
-	if ((props->analog.en) && (props->self_mask_en)) {
-		ret = panel_do_aod_seqtbl_by_index(aod, SELF_MOVE_ON_SEQ);
-		if (ret) {
-			panel_info("AOD:ERR:%s:failed to seq_self_move on\n", __func__);
-			goto exit_analog_ioctl;
-		}
-	}
-
 exit_analog_ioctl:
 	return ret;
 }
@@ -683,14 +675,6 @@ static int __aod_ioctl_set_digital_clk(struct aod_dev_info *aod, unsigned long a
 	if (ret) {
 		panel_info("AOD:ERR:%s:failed to seq digital clk\n", __func__);
 		goto exit_digital_ioctl;
-	}
-
-	if ((props->digital.en) && (props->self_mask_en)) {
-		ret = panel_do_aod_seqtbl_by_index(aod, SELF_MOVE_ON_SEQ);
-		if (ret) {
-			panel_info("AOD:ERR:%s:failed to seq_self_move on\n", __func__);
-			goto exit_digital_ioctl;
-		}
 	}
 
 exit_digital_ioctl:

@@ -1297,6 +1297,9 @@ int fimc_is_resource_get(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type)
 		core->dual_info.mode = FIMC_IS_DUAL_MODE_NOTHING;
 		core->dual_info.pre_mode = FIMC_IS_DUAL_MODE_NOTHING;
 		core->dual_info.tick_count = 0;
+#ifdef CONFIG_VENDER_MCD
+		core->vender.opening_hint = IS_OPENING_HINT_NONE;
+#endif
 
 		for (i = 0; i < MAX_SENSOR_SHARED_RSC; i++) {
 			spin_lock_init(&core->shared_rsc_slock[i]);
@@ -1649,6 +1652,9 @@ int fimc_is_resource_put(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type)
 		resourcemgr->cluster1 = 0;
 #ifdef CONFIG_CMU_EWF
 		set_cmuewf(idx_ewf, 0);
+#endif
+#ifdef CONFIG_VENDER_MCD
+		core->vender.closing_hint = IS_CLOSING_HINT_NONE;
 #endif
 
 		/* clear hal version, default 1.0 */
