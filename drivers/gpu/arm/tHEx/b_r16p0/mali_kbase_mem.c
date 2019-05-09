@@ -368,7 +368,7 @@ int kbase_remove_va_region(struct kbase_va_region *reg)
 			merged_back = 1;
 			if (merged_front) {
 				/* We already merged with prev, free it */
-				kbase_free_alloced_region(reg);
+				kfree(reg);
 			}
 		}
 	}
@@ -428,7 +428,7 @@ static int kbase_insert_va_region_nolock(struct kbase_va_region *new_reg,
 	if (at_reg->start_pfn == start_pfn && at_reg->nr_pages == nr_pages) {
 		rb_replace_node(&(at_reg->rblink), &(new_reg->rblink),
 								reg_rbtree);
-		kbase_free_alloced_region(at_reg);
+		kfree(at_reg);
 	}
 	/* New region replaces the start of the old one, so insert before. */
 	else if (at_reg->start_pfn == start_pfn) {
@@ -563,12 +563,11 @@ int kbase_add_va_region_rbtree(struct kbase_device *kbdev,
 
 		tmp = find_region_enclosing_range_rbtree(rbtree, gpu_pfn,
 				nr_pages);
-		if (!tmp) {
-			dev_warn(dev, "Enclosing region not found: 0x%08llx gpu_pfn, %zu nr_pages", gpu_pfn, nr_pages);
+		if (kbase_is_region_invalid(tmp)) {
+			dev_warn(dev, "Enclosing region not found or invalid: 0x%08llx gpu_pfn, %zu nr_pages", gpu_pfn, nr_pages);
 			err = -ENOMEM;
 			goto exit;
-		}
-		if (!(tmp->flags & KBASE_REG_FREE)) {
+		} else if (!kbase_is_region_free(tmp)) {
 			dev_warn(dev, "!(tmp->flags & KBASE_REG_FREE): tmp->start_pfn=0x%llx tmp->flags=0x%lx tmp->nr_pages=0x%zx gpu_pfn=0x%llx nr_pages=0x%zx\n",
 					tmp->start_pfn, tmp->flags,
 					tmp->nr_pages, gpu_pfn, nr_pages);
@@ -645,6 +644,16 @@ static void kbase_region_tracker_erase_rbtree(struct rb_root *rbtree)
 		if (rbnode) {
 			rb_erase(rbnode, rbtree);
 			reg = rb_entry(rbnode, struct kbase_va_region, rblink);
+			WARN_ON(reg->va_refcnt != 1);
+			/* Reset the start_pfn - as the rbtree is being
+			 * destroyed and we've already erased this region, there
+			 * is no further need to attempt to remove it.
+			 * This won't affect the cleanup if the region was
+			 * being used as a sticky resource as the cleanup
+			 * related to sticky resources anyways need to be
+			 * performed before the term of region tracker.
+			 */
+			reg->start_pfn = 0;
 			kbase_free_alloced_region(reg);
 		}
 	} while (rbnode);
@@ -987,6 +996,7 @@ struct kbase_va_region *kbase_alloc_free_region(struct rb_root *rbtree,
 	if (!new_reg)
 		return NULL;
 
+	new_reg->va_refcnt = 1;
 	new_reg->cpu_alloc = NULL; /* no alloc bound yet */
 	new_reg->gpu_alloc = NULL; /* no alloc bound yet */
 	new_reg->rbtree = rbtree;
@@ -1049,6 +1059,8 @@ void kbase_free_alloced_region(struct kbase_va_region *reg)
 		if (WARN_ON(!kctx))
 			return;
 
+		if (WARN_ON(kbase_is_region_invalid(reg)))
+			return;
 
 		mutex_lock(&kctx->jit_evict_lock);
 
@@ -1097,10 +1109,12 @@ void kbase_free_alloced_region(struct kbase_va_region *reg)
 
 		kbase_mem_phy_alloc_put(reg->cpu_alloc);
 		kbase_mem_phy_alloc_put(reg->gpu_alloc);
-		/* To detect use-after-free in debug builds */
-		KBASE_DEBUG_CODE(reg->flags |= KBASE_REG_FREE);
+
+		reg->flags |= KBASE_REG_VA_FREED;
+		kbase_va_region_alloc_put(kctx, reg);
+	} else {
+		kfree(reg);
 	}
-	kfree(reg);
 }
 
 KBASE_EXPORT_TEST_API(kbase_free_alloced_region);
@@ -1244,7 +1258,6 @@ int kbase_gpu_munmap(struct kbase_context *kctx, struct kbase_va_region *reg)
 	if (err)
 		return err;
 
-	err = kbase_remove_va_region(reg);
 	return err;
 }
 
@@ -1415,8 +1428,8 @@ static int kbase_do_syncset(struct kbase_context *kctx,
 	/* find the region where the virtual address is contained */
 	reg = kbase_region_tracker_find_region_enclosing_address(kctx,
 			sset->mem_handle.basep.handle);
-	if (!reg) {
-		dev_warn(kctx->kbdev->dev, "Can't find region at VA 0x%016llX",
+	if (kbase_is_region_invalid_or_free(reg)) {
+		dev_warn(kctx->kbdev->dev, "Can't find a valid region at VA 0x%016llX",
 				sset->mem_handle.basep.handle);
 		err = -EINVAL;
 		goto out_unlock;
@@ -1610,7 +1623,7 @@ int kbase_mem_free(struct kbase_context *kctx, u64 gpu_addr)
 		/* A real GPU va */
 		/* Validate the region */
 		reg = kbase_region_tracker_find_region_base_address(kctx, gpu_addr);
-		if (!reg || (reg->flags & KBASE_REG_FREE)) {
+		if (kbase_is_region_invalid_or_free(reg)) {
 			dev_warn(kctx->kbdev->dev, "kbase_mem_free called with nonexistent gpu_addr 0x%llX",
 					gpu_addr);
 			err = -EINVAL;
@@ -3721,7 +3734,7 @@ struct kbase_ctx_ext_res_meta *kbase_sticky_resource_acquire(
 		/* Find the region */
 		reg = kbase_region_tracker_find_region_enclosing_address(
 				kctx, gpu_addr);
-		if (NULL == reg || (reg->flags & KBASE_REG_FREE))
+		if (kbase_is_region_invalid_or_free(reg))
 			goto failed;
 
 		/* Allocate the metadata object */

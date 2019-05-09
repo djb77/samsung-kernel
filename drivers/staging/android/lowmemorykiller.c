@@ -74,6 +74,7 @@ static int lowmem_direct_minfree_size;
 
 static u32 lowmem_lmkcount;
 static int lmkd_count;
+static int lmkd_cricount;
 
 static unsigned long lowmem_deathpending_timeout;
 
@@ -532,6 +533,7 @@ module_param_array_named(direct_minfree, lowmem_direct_minfree, uint,
 module_param_named(debug_level, lowmem_debug_level, uint, 0644);
 module_param_named(lmkcount, lowmem_lmkcount, uint, 0444);
 module_param_named(lmkd_count, lmkd_count, int, 0644);
+module_param_named(lmkd_cricount, lmkd_cricount, int, 0644);
 
 module_init(lowmem_init);
 module_exit(lowmem_exit);

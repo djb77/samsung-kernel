@@ -209,7 +209,7 @@ enum {
 	MFC_PAD_WPC,				/* 1 */
 	MFC_PAD_WPC_AFC,			/* 2 */
 	MFC_PAD_WPC_PACK,			/* 3 */
-	MFC_PAD_WPC_PACK_TA,		/* 4 */
+	MFC_PAD_WPC_PACK_HV,		/* 4 */
 	MFC_PAD_WPC_STAND,			/* 5 */
 	MFC_PAD_WPC_STAND_HV,		/* 6 */
 	MFC_PAD_PMA,				/* 7 */
@@ -261,6 +261,7 @@ enum {
 #define	WPC_COM_REQ_AFC_TX				0x0C /* Data Value (0x00) */
 #define	WPC_COM_COOLING_CTRL			0x0D /* Data Value ON(0x00), OFF(0xFF) */
 #define	WPC_COM_CHG_LEVEL				0x0F /* Battery level */
+#define	WPC_COM_ENTER_PHM				0x18 /* GEAR entered PHM */
 
 /* MFC_TX_DATA_COM_REG (0x58) : TX Command */
 #define	WPC_TX_COM_UNKNOWN		0x00
@@ -269,6 +270,7 @@ enum {
 #define	WPC_TX_COM_ACK			0x03
 #define	WPC_TX_COM_NAK			0x04
 #define WPC_TX_COM_CHG_ERR		0x05
+#define WPC_TX_COM_WPS			0x07
 
 #define TX_AFC_SET_5V			0x00
 #define TX_AFC_SET_10V			0x01
@@ -286,8 +288,9 @@ enum {
 #define TX_ID_MULTI_PORT_END		0x2F
 #define TX_ID_STAND_TYPE_START		0x30
 #define TX_ID_STAND_TYPE_END		0x3F
-#define TX_ID_BATT_PACK				0x40
-#define TX_ID_BATT_PACK_TA			0x41
+#define TX_ID_BATT_PACK_TA			0x41 /* 0x40 ~ 0x41 is N/C*/
+#define TX_ID_BATT_PACK				0x42
+#define TX_ID_BATT_PACK_END			0x4F /* reserved 0x40 ~ 0x4F for wireless battery pack */
 #define TX_ID_DREAM_STAND			0x31
 #define TX_ID_DREAM_DOWN			0x14
 #define TX_ID_UNO_TX				0x72
@@ -300,6 +303,9 @@ enum {
 #define TX_CHG_ERR_OCP			0x13
 #define TX_CHG_ERR_DARKZONE		0x14
 #define TX_CHG_ERR_FOD			0x20 ... 0x27
+
+/* value of WPC_TX_COM_WPS (0x07) */
+#define WPS_AICL_RESET		0x01
 
 #define	WPC_COM_AFC_DEBOUNCE			0x07 /* Data Values [ 0~1000mV : 0x0000~0x03E8 ], 2 bytes*/
 
@@ -530,6 +536,7 @@ enum {
 	MFC_FAN_CONTROL_OFF,			/* 16 */
 	MFC_REQUEST_AFC_TX,				/* 17 */
 	MFC_REQUEST_TX_ID,				/* 18 */
+	MFC_PHM_ON, 					/* 19 */
 };
 
 enum mfc_irq_source {
@@ -728,7 +735,9 @@ struct mfc_charger_data {
 	int led_cover;
 	bool is_probed;
 	bool is_afc_tx;
+	bool tx_id_done;
 	int tx_id;
+	u8 device_event;
 
 	int i2c_error_count;
 };

@@ -65,7 +65,7 @@ int kbasep_10969_workaround_clamp_coordinates(struct kbase_jd_atom *katom)
 	kbase_gpu_vm_lock(katom->kctx);
 	region = kbase_region_tracker_find_region_enclosing_address(katom->kctx,
 			katom->jc);
-	if (!region || (region->flags & KBASE_REG_FREE))
+	if (kbase_is_region_invalid_or_free(region))
 		goto out_unlock;
 
 	page_array = kbase_get_cpu_phy_pages(region);
