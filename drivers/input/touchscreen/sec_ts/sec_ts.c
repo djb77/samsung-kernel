@@ -2038,6 +2038,7 @@ static void sec_ts_set_input_prop(struct sec_ts_data *ts, struct input_dev *dev,
 	set_bit(BTN_TOUCH, dev->keybit);
 	set_bit(BTN_TOOL_FINGER, dev->keybit);
 	set_bit(KEY_BLACK_UI_GESTURE, dev->keybit);
+	set_bit(KEY_INT_CANCEL, dev->keybit);
 #ifdef SEC_TS_SUPPORT_TOUCH_KEY
 	if (ts->plat_data->support_mskey) {
 		int i;
@@ -2803,18 +2804,24 @@ static void sec_ts_input_close(struct input_dev *dev)
 
 	ts->pressure_setting_mode = 0;
 
-	if (ts->lowpower_mode) {
-		int ret;
-
-		ret = sec_ts_set_lowpowermode(ts, TO_LOWPOWER_MODE);
-		if (ts->reset_is_on_going && (ret < 0)) {
-			input_err(true, &ts->client->dev, "%s: failed to reset, ret:%d\n", __func__, ret);
-			ts->reset_is_on_going = false;
-			schedule_delayed_work(&ts->reset_work, msecs_to_jiffies(TOUCH_RESET_DWORK_TIME));
-		}
-	} else {
+	if (ts->prox_power_off) {
 		sec_ts_stop_device(ts);
+	} else {
+		if (ts->lowpower_mode) {
+			int ret;
+
+			ret = sec_ts_set_lowpowermode(ts, TO_LOWPOWER_MODE);
+			if (ts->reset_is_on_going && (ret < 0)) {
+				input_err(true, &ts->client->dev, "%s: failed to reset, ret:%d\n", __func__, ret);
+				ts->reset_is_on_going = false;
+				schedule_delayed_work(&ts->reset_work, msecs_to_jiffies(TOUCH_RESET_DWORK_TIME));
+			}
+		} else {
+			sec_ts_stop_device(ts);
+		}
 	}
+
+	ts->prox_power_off = 0;
 }
 #endif
 
@@ -2896,9 +2903,17 @@ int sec_ts_stop_device(struct sec_ts_data *ts)
 		goto out;
 	}
 
+	disable_irq(ts->client->irq);
+
 	ts->power_status = SEC_TS_STATE_POWER_OFF;
 
-	disable_irq(ts->client->irq);
+	if (ts->prox_power_off) {
+		input_report_key(ts->input_dev, KEY_INT_CANCEL, 1);
+		input_sync(ts->input_dev);
+		input_report_key(ts->input_dev, KEY_INT_CANCEL, 0);
+		input_sync(ts->input_dev);
+	}
+
 	sec_ts_locked_release_all_finger(ts);
 
 	ts->plat_data->power(ts, false);

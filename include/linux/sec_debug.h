@@ -294,6 +294,10 @@ extern void register_set_auto_comm_buf(void (*func)(int type, const char *buf, s
 extern void register_set_auto_comm_lastfreq(void (*func)(int type, int old_freq, int new_freq, u64 time));
 #endif
 
+#ifdef CONFIG_SEC_DEBUG_INIT_LOG
+extern void register_init_log_hook_func(void (*func)(const char *buf, size_t size));
+#endif
+
 #ifdef CONFIG_SEC_DEBUG_LAST_KMSG
 #define SEC_LKMSG_MAGICKEY 0x0000000a6c6c7546
 extern void sec_debug_save_last_kmsg(unsigned char *head_ptr, unsigned char *curr_ptr, size_t buf_size);

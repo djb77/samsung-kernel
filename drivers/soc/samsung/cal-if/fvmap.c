@@ -260,7 +260,7 @@ int fvmap_init(void __iomem *sram_base)
 
 	fvmap_base = map_base;
 	sram_fvmap_base = sram_base;
-	pr_info("%s:fvmap initialize %p\n", __func__, sram_base);
+	pr_info("%s:fvmap initialize %pK\n", __func__, sram_base);
 	fvmap_copy_from_sram(map_base, sram_base);
 
 	if (IS_ENABLED(CONFIG_VDD_AUTO_CAL))

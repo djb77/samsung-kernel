@@ -157,6 +157,9 @@ void gpu_destroy_context(void *ctx)
 
 	mutex_unlock(&platform->gpu_vk_boost_lock);
 #endif
+#ifdef CONFIG_MALI_SEC_CL_BOOST
+	platform->cl_boost_disable = false;
+#endif
 #endif /* MALI_SEC_PROBE_TEST */
 }
 

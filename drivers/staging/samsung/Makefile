@@ -28,6 +28,7 @@ obj-$(CONFIG_SEC_DEBUG_EXTRA_INFO)	+= sec_debug_extra_info.o
 obj-$(CONFIG_SEC_DEBUG_HW_PARAM)	+= sec_debug_hw_param.o
 obj-$(CONFIG_SEC_DEBUG_AUTO_SUMMARY)	+= sec_debug_auto_summary.o
 obj-$(CONFIG_SEC_UPLOAD)		+= sec_upload.o
+obj-$(CONFIG_SEC_DEBUG_INIT_LOG)      += sec_debug_init_log.o
 
 # Samsung TN BSP Options
 obj-$(CONFIG_SEC_PARAM)		+= sec_param.o

@@ -457,6 +457,14 @@ void register_set_auto_comm_buf(void (*func)(int type, const char *buf, size_t s
 }
 #endif
 
+#ifdef CONFIG_SEC_DEBUG_INIT_LOG
+static void (*func_hook_init_log)(const char *buf, size_t size);
+void register_init_log_hook_func(void (*func)(const char *buf, size_t size))
+{
+	func_hook_init_log = func;
+}
+#endif
+
 #ifdef CONFIG_EXYNOS_SNAPSHOT
 static size_t hook_size;
 static char hook_text[LOG_LINE_MAX + PREFIX_MAX];
@@ -598,6 +606,12 @@ static int log_store(int facility, int level,
 #ifdef CONFIG_SEC_DEBUG_AUTO_SUMMARY
 		if (msg->for_auto_summary && func_hook_auto_comm)
 			func_hook_auto_comm(msg->type_auto_summary, hook_text, hook_size);
+#endif
+
+#ifdef CONFIG_SEC_DEBUG_INIT_LOG
+		if (task_pid_nr(current) == 1 && func_hook_init_log) {
+			func_hook_init_log(hook_text, hook_size);
+		}
 #endif
 	}
 #endif

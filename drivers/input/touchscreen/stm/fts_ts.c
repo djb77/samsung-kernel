@@ -2763,6 +2763,7 @@ static void fts_set_input_prop(struct fts_ts_info *info, struct input_dev *dev, 
 	set_bit(BTN_TOOL_FINGER, dev->keybit);
 	set_bit(KEY_BLACK_UI_GESTURE, dev->keybit);
 	set_bit(KEY_HOMEPAGE, dev->keybit);
+	set_bit(KEY_INT_CANCEL, dev->keybit);
 
 #ifdef FTS_SUPPORT_TOUCH_KEY
 	if (info->board->support_mskey) {
@@ -3252,6 +3253,13 @@ static void fts_input_close(struct input_dev *dev)
 #endif
 	cancel_delayed_work(&info->reset_work);
 
+	if (info->prox_power_off) {
+		input_report_key(info->input_dev, KEY_INT_CANCEL, 1);
+		input_sync(info->input_dev);
+		input_report_key(info->input_dev, KEY_INT_CANCEL, 0);
+		input_sync(info->input_dev);
+	}
+
 #ifndef CONFIG_SEC_FACTORY
 	if (info->board->always_lpmode && info->board->support_pressure)
 		info->lowpower_flag |= FTS_MODE_PRESSURE;
@@ -3259,7 +3267,12 @@ static void fts_input_close(struct input_dev *dev)
 
 	info->pressure_setting_mode = 0;
 
-	fts_stop_device(info, info->lowpower_flag);
+	if (info->prox_power_off)
+		fts_stop_device(info, false);
+	else
+		fts_stop_device(info, info->lowpower_flag);
+
+	info->prox_power_off = 0;
 
 #ifdef FTS_SUPPORT_HOVER
 	info->retry_hover_enable_after_wakeup = 0;
