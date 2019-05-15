@@ -338,6 +338,8 @@
 
 #define KEY_WAKEUP_UNLOCK	253	/* Wake-up to recent view, ex: AOP */
 #define KEY_RECENT   254
+
+#define KEY_INT_CANCEL		0x2be	/* for touch event skip */
 #define KEY_WINK            0x2bf    /* Intelligence Key */
 
 /* Code 255 is reserved for special needs of AT keyboard driver */

@@ -456,7 +456,10 @@
  *  28	WIRELESS_HV_VEHICLE,
  *  29	PREPARE_WIRELESS_HV,
  *  30	TIMEOUT,
- *  31	CABLE_MAX,
+ *  31  SMART_OTG,
+ *  32  SMART_NOTG,
+ *  33	WIRELESS_TX,
+ *  34	CABLE_MAX,
 */
 	cable-info {
 		   default_input_current = <1800>;
@@ -470,12 +473,12 @@
 			       charging_current = <500>;
 		   };
 		   current_group_2 {
-		   	       cable_number = <2 25>;
+		   	       cable_number = <2 25 31>;
 			       input_current = <1000>;
 			       charging_current = <1000>;
 		  };
 		   current_group_3 {
-		   	       cable_number = <5>;
+		   	       cable_number = <5 32>;
 			       input_current = <1500>;
 			       charging_current = <1500>;
 		  };
@@ -490,7 +493,7 @@
 			       charging_current = <2500>;
 		  };
 		   current_group_6 {
-		   	       cable_number = <10 12 15 27>;
+		   	       cable_number = <10 12 15 27 33>;
 			       input_current = <900>;
 			       charging_current = <1400>;
 		  };

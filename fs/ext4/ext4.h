@@ -3292,14 +3292,9 @@ static inline bool ext4_android_claim_sec_r_blocks(unsigned int flags) {
 }
 
 static inline bool ext4_android_claim_r_blocks(struct ext4_sb_info *sbi) {
-#if ANDROID_VERSION < 90000
+	/* for O upgrade without factory reset */
 	if (in_group_p(AID_USE_ROOT_RESERVED))
 		return true;
-#else
-	/* for P upgrade without factory reset */
-	if (in_group_p(AID_RESERVED_DISK))
-		return true;
-#endif
 	return false;
 }
 

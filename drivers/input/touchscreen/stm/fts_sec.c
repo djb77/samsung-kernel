@@ -784,6 +784,37 @@ out:
 	return strlen(buf);
 }
 
+static ssize_t prox_power_off_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct fts_ts_info *info = container_of(sec, struct fts_ts_info, sec);
+
+	input_info(true, &info->client->dev, "%s: %d\n", __func__,
+			info->prox_power_off);
+
+	return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", info->prox_power_off);
+}
+
+static ssize_t prox_power_off_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct fts_ts_info *info = container_of(sec, struct fts_ts_info, sec);
+	int ret, data;
+
+	ret = kstrtoint(buf, 10, &data);
+	if (ret < 0)
+		return ret;
+
+	input_info(true, &info->client->dev, "%s: %d\n", __func__, data);
+
+	info->prox_power_off = data;
+
+	return count;
+}
+
 static ssize_t get_force_recal_count(struct device *dev,
 					struct device_attribute *attr, char *buf)
 {
@@ -827,6 +858,7 @@ static DEVICE_ATTR(read_ambient_info, 0444, read_ambient_info_show, NULL);
 static DEVICE_ATTR(read_ambient_channel_info, 0444, read_ambient_channel_info_show, NULL);
 static DEVICE_ATTR(read_ambient_channel_delta, 0444, read_ambient_channel_delta_show, NULL);
 static DEVICE_ATTR(get_lp_dump, 0444, get_lp_dump, NULL);
+static DEVICE_ATTR(prox_power_off, 0664, prox_power_off_show, prox_power_off_store);
 static DEVICE_ATTR(force_recal_count, 0444, get_force_recal_count, NULL);
 static DEVICE_ATTR(support_feature, 0444, read_support_feature, NULL);
 
@@ -848,6 +880,7 @@ static struct attribute *sec_touch_facotry_attributes[] = {
 	&dev_attr_read_ambient_channel_info.attr,
 	&dev_attr_read_ambient_channel_delta.attr,
 	&dev_attr_get_lp_dump.attr,
+	&dev_attr_prox_power_off.attr,
 	&dev_attr_force_recal_count.attr,
 	&dev_attr_support_feature.attr,
 	NULL,

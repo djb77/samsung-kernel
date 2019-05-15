@@ -73,6 +73,14 @@ config SEC_DEBUG_LAST_KMSG
 	depends on SEC_DEBUG
 	default y
 
+config SEC_DEBUG_INIT_LOG
+	bool "support hooking of init task log"
+	depends on SEC_DEBUG
+	default y
+	help
+	  This option enables hooking of init task log. 
+	  It can be used for debugging purpose in case of booting failure or something else.
+	
 config SEC_DEBUG_FILE_LEAK
 	bool "Panic when file leak detected"
 	depends on !SAMSUNG_PRODUCT_SHIP

@@ -27,8 +27,11 @@
 
 /* for Android O */
 #define AID_USE_SEC_RESERVED	KGIDT_INIT(4444)
+#if ANDROID_VERSION < 90000
 #define AID_USE_ROOT_RESERVED	KGIDT_INIT(5555)
+#else
 /* for Android P */
-#define AID_RESERVED_DISK	KGIDT_INIT(1065)
+#define AID_USE_ROOT_RESERVED	KGIDT_INIT(5678)
+#endif
 
 #endif
