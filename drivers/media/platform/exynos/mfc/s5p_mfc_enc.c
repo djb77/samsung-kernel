@@ -140,7 +140,7 @@ static int mfc_enc_enum_fmt(struct v4l2_fmtdesc *f, bool mplane, bool out)
 	unsigned long i;
 	int j = 0;
 
-	for (i = 0; i < ARRAY_SIZE(enc_formats); ++i) {
+	for (i = 0; i < NUM_FORMATS; ++i) {
 		if (mplane && enc_formats[i].mem_planes == 1)
 			continue;
 		else if (!mplane && enc_formats[i].mem_planes > 1)
@@ -538,8 +538,6 @@ static int vidioc_querybuf(struct file *file, void *priv,
 			mfc_err_dev("error in vb2_querybuf() for E(D)\n");
 			return ret;
 		}
-		buf->m.planes[0].m.mem_offset += DST_QUEUE_OFF_BASE;
-
 	} else if (buf->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		ret = vb2_querybuf(&ctx->vq_src, buf);
 		if (ret != 0) {

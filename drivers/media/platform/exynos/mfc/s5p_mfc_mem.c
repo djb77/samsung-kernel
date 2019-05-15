@@ -10,6 +10,8 @@
  * (at your option) any later version.
  */
 
+#include <linux/iommu.h>
+
 #include "s5p_mfc_mem.h"
 
 struct vb2_mem_ops *s5p_mfc_mem_ops(void)
@@ -119,4 +121,105 @@ int s5p_mfc_mem_cleanup_user_shared_handle(struct s5p_mfc_ctx *ctx,
 	ion_free(dev->mfc_ion_client, handle->ion_handle);
 
 	return 0;
+}
+
+void s5p_mfc_put_iovmm(struct s5p_mfc_ctx *ctx, int num_planes, int index)
+{
+	struct s5p_mfc_dec *dec = ctx->dec_priv;
+	int i;
+
+	for (i = 0; i < num_planes; i++) {
+		if (dec->assigned_addr[index][i]) {
+			mfc_debug(2, "[IOVMM] index %d buf[%d] addr: %#llx\n",
+					index, i, dec->assigned_addr[index][i]);
+			ion_iovmm_unmap(dec->assigned_attach[index][i], dec->assigned_addr[index][i]);
+		}
+		if (dec->assigned_attach[index][i])
+			dma_buf_detach(dec->assigned_dmabufs[index][i], dec->assigned_attach[index][i]);
+		if (dec->assigned_dmabufs[index][i])
+			dma_buf_put(dec->assigned_dmabufs[index][i]);
+
+		dec->assigned_addr[index][i] = 0;
+		dec->assigned_attach[index][i] = NULL;
+		dec->assigned_dmabufs[index][i] = NULL;
+	}
+
+	dec->assigned_refcnt[index]--;
+	mfc_debug(2, "[IOVMM] index %d ref %d\n", index, dec->assigned_refcnt[index]);
+}
+
+void s5p_mfc_get_iovmm(struct s5p_mfc_ctx *ctx, struct vb2_buffer *vb)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+	struct s5p_mfc_dec *dec = ctx->dec_priv;
+	int i, mem_get_count = 0;
+	int index = vb->index;
+	int ioprot = IOMMU_WRITE;
+
+	for (i = 0; i < ctx->dst_fmt->mem_planes; i++) {
+		mem_get_count++;
+
+		dec->assigned_dmabufs[index][i] = dma_buf_get(vb->planes[i].m.fd);
+		if (IS_ERR(dec->assigned_dmabufs[index][i])) {
+			mfc_err_ctx("[IOVMM] Failed to dma_buf_get (err %ld)\n",
+					PTR_ERR(dec->assigned_dmabufs[index][i]));
+			dec->assigned_dmabufs[index][i] = NULL;
+			goto err_iovmm;
+		}
+
+		dec->assigned_attach[index][i] = dma_buf_attach(dec->assigned_dmabufs[index][i], dev->device);
+		if (IS_ERR(dec->assigned_attach[index][i])) {
+			mfc_err_ctx("[IOVMM] Failed to get dma_buf_attach (err %ld)\n",
+					PTR_ERR(dec->assigned_attach[index][i]));
+			dec->assigned_attach[index][i] = NULL;
+			goto err_iovmm;
+		}
+
+		if (device_get_dma_attr(dev->device) == DEV_DMA_COHERENT)
+			ioprot |= IOMMU_CACHE;
+
+		dec->assigned_addr[index][i] = ion_iovmm_map(dec->assigned_attach[index][i],
+				0, ctx->raw_buf.plane_size[i], DMA_FROM_DEVICE, ioprot);
+		if (IS_ERR_VALUE(dec->assigned_addr[index][i])) {
+			mfc_err_ctx("[IOVMM] Failed to allocate iova (err 0x%p)\n",
+					&dec->assigned_addr[index][i]);
+			dec->assigned_addr[index][i] = 0;
+			goto err_iovmm;
+		}
+		mfc_debug(2, "[IOVMM] index %d buf[%d] addr: %#llx\n",
+				index, i, dec->assigned_addr[index][i]);
+	}
+
+	dec->assigned_refcnt[index]++;
+	mfc_debug(2, "[IOVMM] index %d ref %d\n", index, dec->assigned_refcnt[index]);
+
+	return;
+
+err_iovmm:
+	dec->assigned_refcnt[index]++;
+	s5p_mfc_put_iovmm(ctx, mem_get_count, index);
+}
+
+void s5p_mfc_cleanup_assigned_iovmm(struct s5p_mfc_ctx *ctx)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+	struct s5p_mfc_dec *dec = ctx->dec_priv;
+	int i;
+
+	mutex_lock(&dec->dpb_mutex);
+
+	for (i = 0; i < MFC_MAX_DPBS; i++) {
+		if (dec->assigned_refcnt[i] == 0) {
+			continue;
+		} else if (dec->assigned_refcnt[i] == 1) {
+			s5p_mfc_put_iovmm(ctx, ctx->dst_fmt->mem_planes, i);
+		} else {
+			mfc_err_ctx("[IOVMM] index %d invalid refcnt %d\n", i, dec->assigned_refcnt[i]);
+			MFC_TRACE_CTX("DPB[%d] %#llx invalid refcnt %d\n",
+					i, dec->assigned_addr[i][0],
+					dec->assigned_refcnt[i]);
+		}
+	}
+
+	mutex_unlock(&dec->dpb_mutex);
 }

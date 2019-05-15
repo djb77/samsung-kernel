@@ -241,8 +241,7 @@ static void mfc_save_logging_sfr(struct s5p_mfc_dev *dev)
 		/* READ PAGE FAULT at AxID 0 ~ 3: PX */
 		if ((dev->logging_data->cause & (1 << MFC_CAUSE_0READ_PAGE_FAULT)) ||
 				(dev->logging_data->cause & (1 << MFC_CAUSE_1READ_PAGE_FAULT))) {
-			if (((dev->logging_data->fault_trans_info & 0xff) >= 0) &&
-					((dev->logging_data->fault_trans_info & 0xff) <= 3)) {
+			if ((dev->logging_data->fault_trans_info & 0xff) <= 3) {
 				px_fault = true;
 				for (i = 0; i < MFC_SFR_LOGGING_COUNT_SET2; i++)
 					dev->logging_data->SFRs_set2[i] = MFC_READL(s5p_mfc_logging_sfr_set2[i]);
@@ -284,7 +283,7 @@ static void mfc_save_logging_sfr(struct s5p_mfc_dev *dev)
 	dev->logging_data->last_int_sec = dev->last_int_time.tv_sec;
 	dev->logging_data->last_int_usec = dev->last_int_time.tv_usec;
 	dev->logging_data->hwlock_dev = dev->hwlock.dev;
-	dev->logging_data->hwlock_ctx = dev->hwlock.bits;
+	dev->logging_data->hwlock_ctx = (u32)dev->hwlock.bits;
 	dev->logging_data->num_inst = dev->num_inst;
 	dev->logging_data->num_drm_inst = dev->num_drm_inst;
 	dev->logging_data->power_cnt = s5p_mfc_pm_get_pwr_ref_cnt(dev);

@@ -28,7 +28,7 @@
 /* Find selected format description */
 static struct s5p_mfc_fmt *mfc_dec_find_format(struct v4l2_format *f, unsigned int t)
 {
-	unsigned int i;
+	unsigned long i;
 
 	for (i = 0; i < NUM_FORMATS; i++) {
 		if (dec_formats[i].fourcc == f->fmt.pix_mp.pixelformat &&
@@ -41,7 +41,7 @@ static struct s5p_mfc_fmt *mfc_dec_find_format(struct v4l2_format *f, unsigned i
 
 static struct v4l2_queryctrl *mfc_dec_get_ctrl(int id)
 {
-	int i;
+	unsigned long i;
 
 	for (i = 0; i < NUM_CTRLS; ++i)
 		if (id == controls[i].id)
@@ -91,9 +91,9 @@ static int vidioc_querycap(struct file *file, void *priv,
 static int mfc_dec_enum_fmt(struct v4l2_fmtdesc *f, bool mplane, bool out)
 {
 	struct s5p_mfc_fmt *fmt;
-	int i, j = 0;
+	unsigned long i, j = 0;
 
-	for (i = 0; i < ARRAY_SIZE(dec_formats); ++i) {
+	for (i = 0; i < NUM_FORMATS; ++i) {
 		if (mplane && dec_formats[i].mem_planes == 1)
 			continue;
 		else if (!mplane && dec_formats[i].mem_planes > 1)
@@ -107,7 +107,7 @@ static int mfc_dec_enum_fmt(struct v4l2_fmtdesc *f, bool mplane, bool out)
 			break;
 		++j;
 	}
-	if (i == ARRAY_SIZE(dec_formats))
+	if (i == NUM_FORMATS)
 		return -EINVAL;
 	fmt = &dec_formats[i];
 	strlcpy(f->description, fmt->name, sizeof(f->description));

@@ -361,8 +361,8 @@ void s5p_mfc_qos_on(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_ctx *qos_ctx;
 	struct bts_bw mfc_bw, mfc_bw_ctx;
 	unsigned long hw_mb = 0, total_mb = 0;
-	unsigned int i, fw_time, sw_time, total_fps = 0;
-	int found = 0;
+	unsigned int fw_time, sw_time, total_fps = 0;
+	int i, found = 0;
 
 	list_for_each_entry(qos_ctx, &dev->qos_queue, qos_list)
 		if (qos_ctx == ctx)
@@ -412,8 +412,8 @@ void s5p_mfc_qos_off(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_ctx *qos_ctx;
 	struct bts_bw mfc_bw, mfc_bw_ctx;
 	unsigned long hw_mb = 0, total_mb = 0;
-	unsigned int i, fw_time, sw_time, total_fps = 0;
-	int found = 0;
+	unsigned int fw_time, sw_time, total_fps = 0;
+	int i, found = 0;
 
 	if (list_empty(&dev->qos_queue)) {
 		if (atomic_read(&dev->qos_req_cur) != 0) {

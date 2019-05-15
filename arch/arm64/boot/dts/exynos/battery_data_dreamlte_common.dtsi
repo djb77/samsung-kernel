@@ -256,10 +256,6 @@
 		battery,swelling_high_rechg_voltage = <4000>;
 		battery,swelling_low_rechg_voltage = <4000>;
 
-		battery,siop_event_check_type = <1>;
-		battery,siop_call_cv_current = <330>;
-		battery,siop_call_cc_current = <330>;
-
 		battery,siop_input_limit_current = <1200>;
 		battery,siop_charging_limit_current = <1000>;
 		battery,siop_hv_input_limit_current = <500>;
@@ -439,7 +435,7 @@
  *  11	HV_WIRELESS,
  *  12	PMA_WIRELESS,
  *  13	WIRELESS_PACK,
- *  14	WIRELESS_PACK_TA,
+ *  14	WIRELESS_HV_PACK,
  *  15	WIRELESS_STAND,
  *  16	WIRELESS_HV_STAND,
  *  17	QC20,
@@ -490,7 +486,7 @@
 			       charging_current = <2150>;
 		  };
 		   current_group_6 {
-		   	       cable_number = <10 12 14 15 27>;
+		   	       cable_number = <10 12 15 27>;
 			       input_current = <900>;
 			       charging_current = <1200>;
 		  };
@@ -510,7 +506,7 @@
 			       charging_current = <1800>;
 		  };
 		   current_group_10 {
-		   	       cable_number = <11 16 28>;
+		   	       cable_number = <11 14 16 28>;
 			       input_current = <650>;
 			       charging_current = <1200>;
 		  };
