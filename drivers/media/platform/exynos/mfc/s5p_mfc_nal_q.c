@@ -668,11 +668,6 @@ static int mfc_nal_q_run_in_buf_dec(struct s5p_mfc_ctx *ctx, DecoderInputStr *pI
 	pInStr->CpbBufferOffset = 0;
 	ctx->last_src_addr = buf_addr;
 
-	MFC_TRACE_CTX("Set src[%d] fd: %d, %#llx\n",
-			src_mb->vb.vb2_buf.index,
-			src_mb->vb.vb2_buf.planes[0].m.fd,
-			buf_addr);
-
 	/* dst buffer setting */
 	dst_index = dst_mb->vb.vb2_buf.index;
 	set_bit(dst_index, &dec->available_dpb);

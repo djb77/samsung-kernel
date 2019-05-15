@@ -586,7 +586,7 @@ static void mfc_check_ref_frame(spinlock_t *plock, struct s5p_mfc_buf_queue *dst
 		}
 	}
 
-	/* released and enqueued buffers (dst queue) */	
+	/* released and enqueued buffers (dst queue) */
 	if (!found) {
 		list_for_each_entry_safe(ref_mb, tmp_mb, &dst_queue->head, list) {
 			index = ref_mb->vb.vb2_buf.index;
@@ -643,9 +643,9 @@ void s5p_mfc_handle_released_info(struct s5p_mfc_ctx *ctx,
 						mfc_find_buf_index(&ctx->buf_queue_lock, &ctx->ref_buf_queue, t)) {
 					/* decoding only frame: do not update released info */
 					mfc_debug(2, "Released, but reuse(decoding only). FD[%d] = %03d\n",
-							t, dec->assigned_fd[t]);					
+							t, dec->assigned_fd[t]);
 				} else {
-					/* displayed and released frame */					
+					/* displayed and released frame */
 					mfc_debug(2, "Release FD[%d] = %03d\n",
 							t, dec->assigned_fd[t]);
 					refBuf->dpb[ncount].fd[0] = dec->assigned_fd[t];
@@ -690,12 +690,12 @@ struct s5p_mfc_buf *s5p_mfc_move_reuse_buffer(struct s5p_mfc_ctx *ctx, int relea
 			mfc_debug(2, "buffer[%d] is moved to dst queue for reuse\n", index);
 
 			spin_unlock_irqrestore(plock, flags);
-			return ref_mb;			
+			return ref_mb;
 		}
 	}
 
 	spin_unlock_irqrestore(plock, flags);
-	return NULL;	
+	return NULL;
 }
 
 void s5p_mfc_cleanup_enc_src_queue(struct s5p_mfc_ctx *ctx)
@@ -891,6 +891,7 @@ struct s5p_mfc_buf *s5p_mfc_search_move_dpb_nal_q(struct s5p_mfc_ctx *ctx, unsig
 /* Add dst buffer in dst_buf_queue */
 void s5p_mfc_store_dpb(struct s5p_mfc_ctx *ctx, struct vb2_buffer *vb)
 {
+	struct s5p_mfc_dev *dev = ctx->dev;
 	unsigned long flags;
 	struct s5p_mfc_dec *dec;
 	struct s5p_mfc_buf *mfc_buf;
@@ -921,6 +922,32 @@ void s5p_mfc_store_dpb(struct s5p_mfc_ctx *ctx, struct vb2_buffer *vb)
 	ctx->dst_buf_queue.count++;
 
 	spin_unlock_irqrestore(&ctx->buf_queue_lock, flags);
+
+	mutex_lock(&dec->dpb_mutex);
+	if (!dec->assigned_refcnt[index]) {
+		s5p_mfc_get_iovmm(ctx, vb);
+	} else {
+		if (dec->assigned_addr[index][0] != mfc_buf->planes.raw[0]) {
+			if (dec->dynamic_used & (1 << index)) {
+				mfc_err_ctx("[IOVMM] ref DPB[%d] was changed %#llx->%#llx (used: %#x)\n",
+						index, dec->assigned_addr[index][0],
+						mfc_buf->planes.raw[0], dec->dynamic_used);
+				MFC_TRACE_CTX("ref DPB[%d] %#llx->%#llx (%#x)\n",
+						index, dec->assigned_addr[index][0],
+						mfc_buf->planes.raw[0], dec->dynamic_used);
+			} else {
+				mfc_debug(2, "[IOVMM] DPB[%d] was changed %#llx->%#llx (used: %#x)\n",
+						index, dec->assigned_addr[index][0],
+						mfc_buf->planes.raw[0], dec->dynamic_used);
+				MFC_TRACE_CTX("DPB[%d] %#llx->%#llx (%#x)\n",
+						index, dec->assigned_addr[index][0],
+						mfc_buf->planes.raw[0], dec->dynamic_used);
+				s5p_mfc_put_iovmm(ctx, ctx->dst_fmt->mem_planes, index);
+				s5p_mfc_get_iovmm(ctx, vb);
+			}
+		}
+	}
+	mutex_unlock(&dec->dpb_mutex);
 }
 
 void s5p_mfc_cleanup_nal_queue(struct s5p_mfc_ctx *ctx)

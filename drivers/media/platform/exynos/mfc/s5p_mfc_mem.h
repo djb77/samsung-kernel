@@ -89,5 +89,8 @@ int s5p_mfc_mem_get_user_shared_handle(struct s5p_mfc_ctx *ctx,
 		struct mfc_user_shared_handle *handle);
 int s5p_mfc_mem_cleanup_user_shared_handle(struct s5p_mfc_ctx *ctx,
 		struct mfc_user_shared_handle *handle);
+void s5p_mfc_put_iovmm(struct s5p_mfc_ctx *ctx, int num_planes, int index);
+void s5p_mfc_get_iovmm(struct s5p_mfc_ctx *ctx, struct vb2_buffer *vb);
+void s5p_mfc_cleanup_assigned_iovmm(struct s5p_mfc_ctx *ctx);
 
 #endif /* __S5P_MFC_MEM_H */

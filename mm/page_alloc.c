@@ -1058,8 +1058,10 @@ static void __free_pages_ok(struct page *page, unsigned int order)
 
 void put_page_freelist(struct page *page)
 {
-	if (put_page_testzero(page))
+	if (put_page_testzero(page)) {
+		mem_cgroup_uncharge(page);
 		__free_pages_ok(page, 0);
+	}
 }
 EXPORT_SYMBOL(put_page_freelist);
 

@@ -37,6 +37,9 @@
 /* invalid cooling state */
 #define THERMAL_CSTATE_INVALID -1UL
 
+/* invalid cooling frequency */
+#define THERMAL_CFREQ_INVALID -1
+
 /* No upper/lower limit requirement */
 #define THERMAL_NO_LIMIT	((u32)~0)
 

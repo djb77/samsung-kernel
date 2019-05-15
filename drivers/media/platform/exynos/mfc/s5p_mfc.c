@@ -103,6 +103,8 @@ extern struct s5p_mfc_fmt dec_formats[];
 
 static void mfc_deinit_dec_ctx(struct s5p_mfc_ctx *ctx)
 {
+	s5p_mfc_cleanup_assigned_iovmm(ctx);
+
 	s5p_mfc_delete_queue(&ctx->src_buf_queue);
 	s5p_mfc_delete_queue(&ctx->dst_buf_queue);
 	s5p_mfc_delete_queue(&ctx->src_buf_nal_queue);
@@ -167,6 +169,8 @@ static int mfc_init_dec_ctx(struct s5p_mfc_ctx *ctx)
 	dec->is_dpb_full = 0;
 	s5p_mfc_cleanup_assigned_fd(ctx);
 	s5p_mfc_clear_assigned_dpb(ctx);
+	mutex_init(&dec->dpb_mutex);
+
 	dec->sh_handle.fd = -1;
 	dec->ref_info = kzalloc(
 		(sizeof(struct dec_dpb_ref_info) * MFC_MAX_DPBS), GFP_KERNEL);
@@ -917,7 +921,7 @@ int s5p_mfc_sysmmu_fault_handler(struct iommu_domain *iodmn, struct device *devi
 	} else {
 		mfc_err_dev("there isn't any fault interrupt of MFC\n");
 	}
-	dev->logging_data->fault_addr = addr;
+	dev->logging_data->fault_addr = (unsigned int)addr;
 
 	s5p_mfc_dump_buffer_info(dev, addr);
 	s5p_mfc_dump_info_and_stop_hw(dev);

@@ -73,7 +73,8 @@ int s5p_mfc_set_dec_codec_buffers(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev;
 	struct s5p_mfc_dec *dec;
-	unsigned int i, frame_size_mv;
+	unsigned int i;
+	size_t frame_size_mv;
 	dma_addr_t buf_addr1;
 	int buf_size1;
 	int align_gap;
@@ -162,7 +163,7 @@ int s5p_mfc_set_dec_codec_buffers(struct s5p_mfc_ctx *ctx)
 	MFC_WRITEL(reg, S5P_FIMV_D_INIT_BUFFER_OPTIONS);
 
 	frame_size_mv = ctx->mv_size;
-	mfc_debug(2, "Frame size: %d, %d, %d, mv: %d\n",
+	mfc_debug(2, "Frame size: %d, %d, %d, mv: %ld\n",
 			raw->plane_size[0], raw->plane_size[1],
 			raw->plane_size[2], frame_size_mv);
 
@@ -321,12 +322,6 @@ int s5p_mfc_set_dec_stream_buffer(struct s5p_mfc_ctx *ctx, struct s5p_mfc_buf *m
 	MFC_WRITEL(cpb_buf_size, S5P_FIMV_D_CPB_BUFFER_SIZE);
 	MFC_WRITEL(start_num_byte, S5P_FIMV_D_CPB_BUFFER_OFFSET);
 	ctx->last_src_addr = addr;
-
-	if (mfc_buf)
-		MFC_TRACE_CTX("Set src[%d] fd: %d, %#llx\n",
-				mfc_buf->vb.vb2_buf.index,
-				mfc_buf->vb.vb2_buf.planes[0].m.fd,
-				addr);
 
 	mfc_debug_leave();
 	return 0;

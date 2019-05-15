@@ -69,6 +69,7 @@
 #ifdef CONFIG_EXYNOS_SNAPSHOT_CRASH_KEY
 #include <linux/gpio_keys.h>
 #endif
+#include <linux/nmi.h>
 
 /*  Size domain */
 #define ESS_KEEP_HEADER_SZ		(SZ_256 * 3)
@@ -933,6 +934,11 @@ void exynos_ss_hook_hardlockup_entry(void *v_regs)
 			"      Debugging Information for Hardlockup core - CPU %d"
 			"\n--------------------------------------------------------------------------\n\n", cpu);
 
+#if defined(CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU)			\
+	&& defined(CONFIG_SEC_DEBUG)
+		update_hardlockup_type(cpu);
+#endif
+
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
 		sec_debug_set_extra_info_backtrace_cpu(v_regs, cpu);
 #endif
@@ -1498,7 +1504,6 @@ void exynos_ss_dump_one_task_info(struct task_struct *tsk, bool is_main)
 	if (tsk->state == TASK_RUNNING
 			|| tsk->state == TASK_UNINTERRUPTIBLE
 			|| tsk->mm == NULL) {
-		print_worker_info(KERN_INFO, tsk);
 		show_stack(tsk, NULL);
 		pr_info("\n");
 	}
@@ -2701,7 +2706,7 @@ void exynos_ss_task(int cpu, void *v_task)
 		ess_log->task[cpu][i].task = (struct task_struct *)v_task;
 		strncpy(ess_log->task[cpu][i].task_comm,
 			ess_log->task[cpu][i].task->comm,
-			TASK_COMM_LEN);
+			TASK_COMM_LEN - 1);
 	}
 }
 
@@ -2720,7 +2725,7 @@ void exynos_ss_work(void *worker, void *v_task, void *fn, int en)
 		ess_log->work[cpu][i].time = cpu_clock(cpu);
 		ess_log->work[cpu][i].sp = (unsigned long) current_stack_pointer;
 		ess_log->work[cpu][i].worker = (struct worker *)worker;
-		strncpy(ess_log->work[cpu][i].task_comm, task->comm, TASK_COMM_LEN);
+		strncpy(ess_log->work[cpu][i].task_comm, task->comm, TASK_COMM_LEN - 1);
 		ess_log->work[cpu][i].fn = (work_func_t)fn;
 		ess_log->work[cpu][i].en = en;
 	}
@@ -4284,4 +4289,146 @@ static int __init sec_log_late_init(void)
 }
 
 late_initcall(sec_log_late_init);
+#endif
+
+#if defined(CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU)			\
+	&& defined(CONFIG_SEC_DEBUG)
+#define for_each_generated_irq_in_snapshot(idx, i, max, base, cpu)							\
+	for (i = 0, idx = base; i < max; ++i, idx = (base - i) & (ARRAY_SIZE(ess_log->irq[0]) - 1))		\
+		if (ess_log->irq[cpu][idx].en == ESS_FLAG_IN)
+
+static inline void exynos_ss_get_busiest_irq(struct hardlockup_info *hl_info, unsigned long start_idx, int cpu)
+{
+	#define MAX_BUF 5
+	int i, j, idx, max_count = 20;
+	int buf_count = 0;
+	int max_irq_idx = 0;
+
+	struct irq_info_buf {
+		unsigned int occurrences;
+		int irq;
+		void *fn;
+		unsigned long long total_duration;
+		unsigned long long last_time;
+	};
+
+	struct irq_info_buf i_buf[MAX_BUF] = {{0,},};
+
+	for_each_generated_irq_in_snapshot(idx, i, max_count, start_idx, cpu) {
+		for (j = 0; j < buf_count; j++) {
+			if (i_buf[j].irq == ess_log->irq[cpu][idx].irq) {
+				i_buf[j].total_duration += (i_buf[j].last_time - ess_log->irq[cpu][idx].time);
+				i_buf[j].last_time = ess_log->irq[cpu][idx].time;
+				i_buf[j].occurrences++;
+				break;
+			}
+		}
+
+		if (j == buf_count && buf_count < MAX_BUF) {
+			i_buf[buf_count].irq = ess_log->irq[cpu][idx].irq;
+			i_buf[buf_count].fn = ess_log->irq[cpu][idx].fn;
+			i_buf[buf_count].occurrences = 0;
+			i_buf[buf_count].total_duration = 0;
+			i_buf[buf_count].last_time = ess_log->irq[cpu][idx].time;
+			buf_count++;
+		} else if (buf_count == MAX_BUF) {
+			pr_info("Buffer overflow. Various irqs were generated!!\n");
+		}
+	}
+
+	for (i = 1; i < buf_count; i++) {
+		if (i_buf[max_irq_idx].occurrences < i_buf[i].occurrences)
+			max_irq_idx = i;
+	}
+
+	hl_info->irq_info.irq = i_buf[max_irq_idx].irq;
+	hl_info->irq_info.fn = i_buf[max_irq_idx].fn;
+	hl_info->irq_info.avg_period = i_buf[max_irq_idx].total_duration / i_buf[max_irq_idx].occurrences;
+}
+
+void exynos_ss_get_hardlockup_info(unsigned int cpu,  void *info)
+{
+	struct hardlockup_info *hl_info = info;
+	unsigned long cpuidle_idx, irq_idx, task_idx;
+	unsigned long long cpuidle_delay_time, irq_delay_time, task_delay_time;
+	unsigned long long curr, thresh;
+
+	thresh = get_hardlockup_thresh();
+	curr = local_clock();
+
+	cpuidle_idx = atomic_read(&ess_idx.cpuidle_log_idx[cpu]) & (ARRAY_SIZE(ess_log->cpuidle[0]) - 1);
+	cpuidle_delay_time = curr - ess_log->cpuidle[cpu][cpuidle_idx].time;
+
+	if (ess_log->cpuidle[cpu][cpuidle_idx].en == ESS_FLAG_IN
+		&& cpuidle_delay_time > thresh) {
+		hl_info->delay_time = cpuidle_delay_time;
+		hl_info->cpuidle_info.mode = ess_log->cpuidle[cpu][cpuidle_idx].modes;
+		hl_info->hl_type = HL_IDLE_STUCK;
+		return;
+	}
+
+	irq_idx = atomic_read(&ess_idx.irq_log_idx[cpu]) & (ARRAY_SIZE(ess_log->irq[0]) - 1);
+	irq_delay_time = curr - ess_log->irq[cpu][irq_idx].time;
+
+	if (ess_log->irq[cpu][irq_idx].en == ESS_FLAG_IN
+		&& irq_delay_time > thresh) {
+
+		hl_info->delay_time = irq_delay_time;
+
+		if (ess_log->irq[cpu][irq_idx].irq < 0) {				// smc calls have negative irq number
+			hl_info->smc_info.cmd = ess_log->irq[cpu][irq_idx].irq;
+			hl_info->hl_type = HL_SMC_CALL_STUCK;
+			return;
+		} else {
+			hl_info->irq_info.irq = ess_log->irq[cpu][irq_idx].irq;
+			hl_info->irq_info.fn = ess_log->irq[cpu][irq_idx].fn;
+			hl_info->hl_type = HL_IRQ_STUCK;
+			return;
+		}
+	}
+
+	task_idx = atomic_read(&ess_idx.task_log_idx[cpu]) & (ARRAY_SIZE(ess_log->task[0]) - 1);
+	task_delay_time = curr - ess_log->task[cpu][task_idx].time;
+
+	if (task_delay_time > thresh) {
+		hl_info->delay_time = task_delay_time;
+		if (irq_delay_time > thresh) {
+			strncpy(hl_info->task_info.task_comm,
+				ess_log->task[cpu][task_idx].task_comm,
+				TASK_COMM_LEN - 1);
+			hl_info->hl_type = HL_TASK_STUCK;
+			return;
+		} else {
+			exynos_ss_get_busiest_irq(hl_info, irq_idx, cpu);
+			hl_info->hl_type = HL_IRQ_STORM;
+			return;
+		}
+	}
+
+	hl_info->hl_type = HL_UNKNOWN_STUCK;
+}
+
+void exynos_ss_get_softlockup_info(unsigned int cpu, void *info)
+{
+	struct softlockup_info *sl_info = info;
+	unsigned long task_idx;
+	unsigned long long task_delay_time;
+	unsigned long long curr, thresh;
+
+	thresh = get_ess_softlockup_thresh();
+	curr = local_clock();
+	task_idx = atomic_read(&ess_idx.task_log_idx[cpu]) & (ARRAY_SIZE(ess_log->task[0]) - 1);
+	task_delay_time = curr - ess_log->task[cpu][task_idx].time;
+	sl_info->delay_time = task_delay_time;
+
+	strncpy(sl_info->task_info.task_comm,
+		ess_log->task[cpu][task_idx].task_comm,
+		TASK_COMM_LEN - 1);
+	sl_info->task_info.task_comm[TASK_COMM_LEN - 1] = '\0';
+
+	if (task_delay_time > thresh)
+		sl_info->sl_type = SL_TASK_STUCK;
+	else
+		sl_info->sl_type = SL_UNKNOWN_STUCK;
+}
 #endif
