@@ -145,13 +145,13 @@ struct platform_device *exynos_smu_get_pdevice(struct device_node *node)
 
 	list_for_each_entry(smu, &smu_devices, list) {
 		if (smu->dev->of_node == node) {
-			pr_info("%s: Found smu device %p\n", __func__, smu);
+			pr_info("%s: Found smu device\n", __func__);
 			break;
 		}
 	}
 
 	smu_pdev = to_platform_device(smu->dev);
-	pr_info("%s: Matching platform device %p\n", __func__, smu_pdev);
+	pr_info("%s: Matching platform device\n", __func__);
 err:
 	return smu_pdev;
 }

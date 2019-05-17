@@ -435,7 +435,7 @@ struct crng_state primary_crng = {
  * its value (from 0->1->2).
  */
 static int crng_init = 0;
-#define crng_ready() (likely(crng_init > 0))
+#define crng_ready() (likely(crng_init > 1))
 static int crng_init_cnt = 0;
 #define CRNG_INIT_CNT_THRESH (2*CHACHA20_KEY_SIZE)
 static void _extract_crng(struct crng_state *crng,
@@ -794,6 +794,10 @@ static void crng_initialize(struct crng_state *crng)
 	crng->init_time = jiffies - CRNG_RESEED_INTERVAL - 1;
 }
 
+/*
+ * crng_fast_load() can be called by code in the interrupt service
+ * path.  So we can't afford to dilly-dally.
+ */
 static int crng_fast_load(const char *cp, size_t len)
 {
 	unsigned long flags;
@@ -801,7 +805,7 @@ static int crng_fast_load(const char *cp, size_t len)
 
 	if (!spin_trylock_irqsave(&primary_crng.lock, flags))
 		return 0;
-	if (crng_ready()) {
+	if (crng_init != 0) {
 		spin_unlock_irqrestore(&primary_crng.lock, flags);
 		return 0;
 	}
@@ -814,6 +818,51 @@ static int crng_fast_load(const char *cp, size_t len)
 		crng_init = 1;
 		wake_up_interruptible(&crng_init_wait);
 		pr_notice("random: fast init done\n");
+	}
+	spin_unlock_irqrestore(&primary_crng.lock, flags);
+	return 1;
+}
+
+/*
+ * crng_slow_load() is called by add_device_randomness, which has two
+ * attributes.  (1) We can't trust the buffer passed to it is
+ * guaranteed to be unpredictable (so it might not have any entropy at
+ * all), and (2) it doesn't have the performance constraints of
+ * crng_fast_load().
+ *
+ * So we do something more comprehensive which is guaranteed to touch
+ * all of the primary_crng's state, and which uses a LFSR with a
+ * period of 255 as part of the mixing algorithm.  Finally, we do
+ * *not* advance crng_init_cnt since buffer we may get may be something
+ * like a fixed DMI table (for example), which might very well be
+ * unique to the machine, but is otherwise unvarying.
+ */
+static int crng_slow_load(const char *cp, size_t len)
+{
+	unsigned long flags;
+	static unsigned char lfsr = 1;
+	unsigned char tmp;
+	unsigned int i, max = CHACHA20_KEY_SIZE;
+	const char *src_buf = cp;
+	char *dest_buf = (char *) &primary_crng.state[4];
+
+	if (!spin_trylock_irqsave(&primary_crng.lock, flags))
+		return 0;
+	if (crng_init != 0) {
+		spin_unlock_irqrestore(&primary_crng.lock, flags);
+		return 0;
+	}
+	if (len > max)
+		max = len;
+
+	for (i = 0; i < max ; i++) {
+		tmp = lfsr;
+		lfsr >>= 1;
+		if (tmp & 1)
+			lfsr ^= 0xE1;
+		tmp = dest_buf[i % CHACHA20_KEY_SIZE];
+		dest_buf[i % CHACHA20_KEY_SIZE] ^= src_buf[i % len] ^ lfsr;
+		lfsr += (tmp << 3) | (tmp >> 5);
 	}
 	spin_unlock_irqrestore(&primary_crng.lock, flags);
 	return 1;
@@ -873,7 +922,7 @@ static void _extract_crng(struct crng_state *crng,
 {
 	unsigned long v, flags;
 
-	if (crng_init > 1 &&
+	if (crng_ready() &&
 	    time_after(jiffies, crng->init_time + CRNG_RESEED_INTERVAL))
 		crng_reseed(crng, crng == &primary_crng ? &input_pool : NULL);
 	spin_lock_irqsave(&crng->lock, flags);
@@ -998,6 +1047,9 @@ void add_device_randomness(const void *buf, unsigned int size)
 {
 	unsigned long time = random_get_entropy() ^ jiffies;
 	unsigned long flags;
+
+	if (!crng_ready() && size)
+		crng_slow_load(buf, size);
 
 	trace_add_device_randomness(size, _RET_IP_);
 	spin_lock_irqsave(&input_pool.lock, flags);
@@ -1150,7 +1202,7 @@ void add_interrupt_randomness(int irq, int irq_flags)
 	fast_mix(fast_pool);
 	add_interrupt_bench(cycles);
 
-	if (!crng_ready()) {
+	if (unlikely(crng_init == 0)) {
 		if ((fast_pool->count >= 64) &&
 		    crng_fast_load((char *) fast_pool->pool,
 				   sizeof(fast_pool->pool))) {
@@ -1606,7 +1658,7 @@ void get_random_bytes_arch(void *buf, int nbytes)
 
 		if (!arch_get_random_long(&v))
 			break;
-		
+
 		memcpy(p, &v, chunk);
 		p += chunk;
 		nbytes -= chunk;
@@ -2145,7 +2197,7 @@ void add_hwgenerator_randomness(const char *buffer, size_t count,
 {
 	struct entropy_store *poolp = &input_pool;
 
-	if (!crng_ready()) {
+	if (unlikely(crng_init == 0)) {
 		crng_fast_load(buffer, count);
 		return;
 	}
