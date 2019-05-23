@@ -51,6 +51,10 @@ void mc_set_schedule_policy(int core);
 int __mc_switch_core(int cpu);
 #endif
 
+#if KERNEL_VERSION(3, 15, 0) > LINUX_VERSION_CODE
+#define MIN_NICE   -20
+#endif
+
 struct fastcall_work {
 #ifdef MC_FASTCALL_WORKER_THREAD
 	struct kthread_work work;
@@ -505,6 +509,8 @@ int mc_fastcall_init(void)
 		mc_dev_err("cannot create fastcall wq: %d\n", ret);
 		return ret;
 	}
+	
+	set_user_nice(fastcall_thread, MIN_NICE);
 
 	/* this thread MUST run on CPU 0 at startup */
 	set_cpus_allowed_ptr(fastcall_thread, &new_msk);

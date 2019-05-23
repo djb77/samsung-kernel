@@ -175,13 +175,13 @@ enum {
  * Power Manager number of ticks before shader cores are powered off
  */
 /* MALI_SEC_INTEGRATION */
-#define DEFAULT_PM_POWEROFF_TICK_SHADER (0) /* 400-800us */
+#define DEFAULT_PM_POWEROFF_TICK_SHADER (2) /* 400-800us */
 
 /*
  * Power Manager number of ticks before GPU is powered off
  */
 /* MALI_SEC_INTEGRATION */
-#define DEFAULT_PM_POWEROFF_TICK_GPU (0) /* 400-800us */
+#define DEFAULT_PM_POWEROFF_TICK_GPU (2) /* 400-800us */
 
 /*
  * Default scheduling tick granuality
@@ -272,7 +272,8 @@ enum {
  * Note that as this prevents kbase from powering down shader cores, this limits
  * the available power policies to coarse_demand and always_on.
  */
-#define PLATFORM_POWER_DOWN_ONLY (0)
+/* MALI_SEC_INTEGRATION */
+#define PLATFORM_POWER_DOWN_ONLY (1)
 
 /*
  * Maximum frequency (in kHz) that the GPU can be clocked. For some platforms

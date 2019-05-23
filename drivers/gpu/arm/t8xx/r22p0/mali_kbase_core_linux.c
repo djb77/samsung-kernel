@@ -3935,12 +3935,24 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 /* MALI_SEC_INTEGRATION */
 static int kbase_device_suspend_dummy(struct device *dev)
 {
-	return 0;
+	int ret = 0;
+	struct kbase_device *kbdev = to_kbase_device(dev);
+	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
+
+	if (platform)
+		ret = platform->power_runtime_suspend_ret;
+
+	KBASE_TRACE_ADD(kbdev, KBASE_DEVICE_SUSPEND_DUMMY, NULL, NULL, 0u, ret);
+
+	return ret;
 }
 
 /* MALI_SEC_INTEGRATION */
 int kbase_device_suspend(struct kbase_device *kbdev)
 {
+	int ret = 0;
+	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
+
 	if (!kbdev)
 		return -ENODEV;
 
@@ -3951,7 +3963,20 @@ int kbase_device_suspend(struct kbase_device *kbdev)
 #endif
 
 	kbase_pm_suspend(kbdev);
-	return 0;
+
+	/* MALI_SEC_INTEGRATION */
+	if (platform)
+		ret = platform->power_runtime_suspend_ret;
+
+	if (ret < 0) {
+		kbase_pm_resume(kbdev);
+		KBASE_TRACE_ADD(kbdev, KBASE_DEVICE_SUSPEND_RESTORE, NULL, NULL, \
+			platform->power_runtime_suspend_ret, platform->power_runtime_resume_ret);
+	}
+
+	KBASE_TRACE_ADD(kbdev, KBASE_DEVICE_SUSPEND, NULL, NULL, 0u, ret);
+
+	return ret;
 }
 
 /**
@@ -3967,12 +3992,24 @@ int kbase_device_suspend(struct kbase_device *kbdev)
 /* MALI_SEC_INTEGRATION */
 static int kbase_device_resume_dummy(struct device *dev)
 {
-	return 0;
+	int ret = 0;
+	struct kbase_device *kbdev = to_kbase_device(dev);
+	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
+
+	if (platform)
+		ret = platform->power_runtime_resume_ret;
+
+	KBASE_TRACE_ADD(kbdev, KBASE_DEVICE_RESUME_DUMMY, NULL, NULL, 0u, ret);
+
+	return ret;
 }
 
 /* MALI_SEC_INTEGRATION */
 int kbase_device_resume(struct kbase_device *kbdev)
 {
+	int ret = 0;
+	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
+
 	if (!kbdev)
 		return -ENODEV;
 
@@ -3983,7 +4020,13 @@ int kbase_device_resume(struct kbase_device *kbdev)
 	if (kbdev->inited_subsys & inited_devfreq)
 		devfreq_resume_device(kbdev->devfreq);
 #endif
-	return 0;
+
+	if (platform)
+		ret = platform->power_runtime_resume_ret;
+
+	KBASE_TRACE_ADD(kbdev, KBASE_DEVICE_RESUME, NULL, NULL, 0u, ret);
+
+	return ret;
 }
 
 /**

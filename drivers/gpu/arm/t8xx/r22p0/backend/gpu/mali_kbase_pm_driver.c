@@ -237,9 +237,11 @@ static void kbase_pm_invoke(struct kbase_device *kbdev,
 			}
 	}
 
-	/* MALI_SEC_INTEGRATION */
+/* MALI_SEC_INTEGRATION */
+#if PLATFORM_POWER_DOWN_ONLY
 	if (action == ACTION_PWROFF)
 		return;
+#endif
 
 	if (lo != 0)
 		kbase_reg_write(kbdev, GPU_CONTROL_REG(reg), lo, NULL);

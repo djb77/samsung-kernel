@@ -353,6 +353,8 @@ struct exynos_context {
 	bool dvs_is_enabled;
 
 	bool power_status;
+	int power_runtime_suspend_ret;
+	int power_runtime_resume_ret;
 
 	bool perf_gathering_status;
 #ifdef CONFIG_MALI_SEC_HWCNT
