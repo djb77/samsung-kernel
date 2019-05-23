@@ -517,7 +517,7 @@ static int ssp_parse_dt(struct device *dev, struct ssp_data *data)
 	else
 	{
 		if (!of_get_property(np, "ssp-mag-array", &len)) {
-			pr_info("[SSP] No static matrix at DT for YAS532!(%p)\n",
+			pr_info("[SSP] No static matrix at DT for YAS532!(%pK)\n",
 					data->static_matrix);
 			goto dt_exit;
 		}

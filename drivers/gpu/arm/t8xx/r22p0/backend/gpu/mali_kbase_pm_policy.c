@@ -291,10 +291,8 @@ int kbase_pm_policy_init(struct kbase_device *kbdev)
 {
 	struct workqueue_struct *wq;
 
-	/* MALI_SEC_INTEGRATION */
-	/* alloc_workqueue option is changed to ordered */
 	wq = alloc_workqueue("kbase_pm_do_poweroff",
-			WQ_HIGHPRI | WQ_UNBOUND | __WQ_ORDERED, 1);
+			WQ_HIGHPRI | WQ_UNBOUND, 1);
 	if (!wq)
 		return -ENOMEM;
 
@@ -306,7 +304,11 @@ int kbase_pm_policy_init(struct kbase_device *kbdev)
 	kbdev->pm.backend.gpu_poweroff_timer.function =
 			kbasep_pm_do_gpu_poweroff_callback;
 	/* MALI_SEC_INTEGRATION : using coarse_demand policy */
+#if !PLATFORM_POWER_DOWN_ONLY
 	kbdev->pm.backend.pm_current_policy = policy_list[1];
+#else
+	kbdev->pm.backend.pm_current_policy = policy_list[0];
+#endif
 	kbdev->pm.backend.pm_current_policy->init(kbdev);
 	kbdev->pm.gpu_poweroff_time =
 			HR_TIMER_DELAY_NSEC(DEFAULT_PM_GPU_POWEROFF_TICK_NS);
@@ -915,10 +917,9 @@ void kbase_pm_request_cores_sync(struct kbase_device *kbdev,
 					u64 shader_cores)
 {
 	unsigned long flags;
-/* MALI_SEC_INTEGRATION */
-/*
+
 	kbase_pm_wait_for_poweroff_complete(kbdev);
-*/
+
 	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	kbase_pm_request_cores(kbdev, tiler_required, shader_cores);
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);

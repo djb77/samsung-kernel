@@ -497,7 +497,7 @@ process_one:
 			}
 			if (msg_type == AP2HUB_READ) {
 				if (nDataLen <= 0) {
-					dprint("Waiting 2nd message...(msg=%p, length=%d)\n",
+					dprint("Waiting 2nd message...(msg=%pK, length=%d)\n",
 						msg, msg->length);
 					iRet = bbd_pull_packet(msg->buffer, msg->length,
 								BBD_PULL_TIMEOUT);

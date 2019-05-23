@@ -828,7 +828,7 @@ static int bcm_spi_probe(struct spi_device *spi)
 	priv->tx_buf = kmalloc(sizeof(struct bcm_ssi_tx_frame), GFP_KERNEL);
 	priv->rx_buf = kmalloc(sizeof(struct bcm_ssi_rx_frame), GFP_KERNEL);
 	if (!priv->tx_buf || !priv->rx_buf) {
-		pr_err("[SSPBBD]: Failed to allocate xfer buffer. tx_buf=%p, rx_buf=%p\n", 
+		pr_err("[SSPBBD]: Failed to allocate xfer buffer. tx_buf=%pK, rx_buf=%pK\n", 
 			priv->tx_buf, priv->rx_buf);
 		goto free_mem;
 	}
@@ -848,7 +848,7 @@ static int bcm_spi_probe(struct spi_device *spi)
 
 	disable_irq(spi->irq);
 
-	pr_notice("[SSPBBD]: Probe OK. ssp-host-req=%d, irq=%d, priv=0x%p\n", host_req, spi->irq, priv);
+	pr_notice("[SSPBBD]: Probe OK. ssp-host-req=%d, irq=%d, priv=0x%pK\n", host_req, spi->irq, priv);
 
 	/* Register misc device */
 	priv->misc.minor = MISC_DYNAMIC_MINOR;

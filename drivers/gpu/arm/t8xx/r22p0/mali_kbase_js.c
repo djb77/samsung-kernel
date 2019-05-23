@@ -1869,7 +1869,9 @@ void kbasep_js_suspend(struct kbase_device *kbdev)
 		 ++i, retained = retained >> 1) {
 		struct kbase_context *kctx = kbdev->as_to_kctx[i];
 
-		if (retained & 1u)
+		/* MALI_SEC_INTEGRATION
+		* Fix to prevent accessing to null-pointer kctx when it is already destroyed */
+		if (kctx && retained & 1u)
 			kbasep_js_runpool_release_ctx(kbdev, kctx);
 	}
 

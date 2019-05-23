@@ -1379,6 +1379,7 @@ struct kbase_device {
 
 	/* MALI_SEC_INTEGRATION */
 	struct kbase_vendor_callbacks *vendor_callbacks;
+	bool is_power_on;
 };
 
 /**

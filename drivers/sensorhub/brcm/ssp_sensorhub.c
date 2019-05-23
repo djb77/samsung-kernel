@@ -179,7 +179,7 @@ static ssize_t ssp_sensorhub_read(struct file *file, char __user *buf,
 
 	while (retries--) {
 		if(unlikely(!access_ok(VERIFY_WRITE, buf, event->library_length))){
-			sensorhub_err("[SSP]: fail to access user space, read library data err(%d/%d), address(%p/%p)",  length, event->library_event_number, buf, event->library_data);
+			sensorhub_err("[SSP]: fail to access user space, read library data err(%d/%d), address(%pK/%pK)",  length, event->library_event_number, buf, event->library_data);
 		}
 		ret = copy_to_user(buf, event->library_data, event->library_length);
 		if (likely(!ret))

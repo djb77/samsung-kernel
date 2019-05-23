@@ -119,7 +119,7 @@ static int gpu_update_cur_level(struct exynos_context *platform)
 		platform->step = level;
 		spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
 	} else {
-		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "%s: invalid dvfs level returned %d\n", __func__, platform->cur_clock);
+		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "%s: invalid dvfs level returned %d gpu power %d\n", __func__, platform->cur_clock, gpu_is_power_on());
 		return -1;
 	}
 	return 0;
@@ -182,7 +182,15 @@ int gpu_set_target_clk_vol(int clk, bool pending_is_allowed)
 
 	target_vol = MAX(gpu_dvfs_get_voltage(target_clk) + platform->voltage_margin, platform->cold_min_vol);
 
-	prev_clk = gpu_get_cur_clock(platform);
+#ifdef CONFIG_MALI_RT_PM
+	if (platform->exynos_pm_domain) {
+		mutex_lock(&platform->exynos_pm_domain->access_lock);
+		if (!platform->dvs_is_enabled && gpu_is_power_on())
+			prev_clk = gpu_get_cur_clock(platform);
+		mutex_unlock(&platform->exynos_pm_domain->access_lock);
+	}
+#endif
+
 
 #ifdef CONFIG_EXYNOS_CL_DVFS_G3D
 	level = gpu_dvfs_get_level(clk);
@@ -215,7 +223,7 @@ int gpu_set_target_clk_vol(int clk, bool pending_is_allowed)
 	mutex_unlock(&platform->gpu_clock_lock);
 
 	GPU_LOG(DVFS_INFO, DUMMY, 0u, 0u, "clk[%d -> %d], vol[%d (margin : %d)]\n",
-		prev_clk, gpu_get_cur_clock(platform), gpu_get_cur_voltage(platform), platform->voltage_margin);
+		prev_clk, target_clk, gpu_get_cur_voltage(platform), platform->voltage_margin);
 
 	return ret;
 }
@@ -242,7 +250,15 @@ int gpu_set_target_clk_vol_pending(int clk)
 
 	target_vol = MAX(gpu_dvfs_get_voltage(target_clk) + platform->voltage_margin, platform->cold_min_vol);
 
-	prev_clk = gpu_get_cur_clock(platform);
+#ifdef CONFIG_MALI_RT_PM
+	if (platform->exynos_pm_domain) {
+		mutex_lock(&platform->exynos_pm_domain->access_lock);
+		if (!platform->dvs_is_enabled && gpu_is_power_on())
+			prev_clk = gpu_get_cur_clock(platform);
+		mutex_unlock(&platform->exynos_pm_domain->access_lock);
+	}
+#endif
+
 #ifdef CONFIG_EXYNOS_CL_DVFS_G3D
 	level = gpu_dvfs_get_level(clk);
 #ifdef CONFIG_SOC_EXYNOS8890
@@ -264,7 +280,7 @@ int gpu_set_target_clk_vol_pending(int clk)
 #endif
 #endif
 	GPU_LOG(DVFS_INFO, DUMMY, 0u, 0u, "pending clk[%d -> %d], vol[%d (margin : %d)]\n",
-		prev_clk, gpu_get_cur_clock(platform), gpu_get_cur_voltage(platform), platform->voltage_margin);
+		prev_clk, target_clk, gpu_get_cur_voltage(platform), platform->voltage_margin);
 
 	return ret;
 }
