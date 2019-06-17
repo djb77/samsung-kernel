@@ -1995,7 +1995,9 @@ int fimc_is_vender_video_s_ctrl(struct v4l2_control *ctrl,
 			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_OIS_DYNAMIC_SHOT
 			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_EXPOSURE_DYNAMIC_SHOT
 			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_MFHDR_DYNAMIC_SHOT
-			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_LLHDR_DYNAMIC_SHOT) {
+			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_LLHDR_DYNAMIC_SHOT
+			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_SUPER_NIGHT_SHOT_HANDHELD
+			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_SUPER_NIGHT_SHOT_TRIPOD) {
 			captureCount = value & 0x0000FFFF;
 		} else {
 			captureIntent = ctrl->value;

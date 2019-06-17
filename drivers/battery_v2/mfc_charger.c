@@ -2004,6 +2004,7 @@ static void mfc_wpc_vout_mode_work(struct work_struct *work)
 #if !defined(CONFIG_SEC_FACTORY)
 	if ((charger->pdata->cable_type == MFC_PAD_WPC_AFC ||
 		charger->pdata->cable_type == MFC_PAD_WPC_STAND_HV ||
+		charger->pdata->cable_type == MFC_PAD_WPC_PACK_HV ||
 		charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV) &&
 		charger->pdata->vout_status <= MFC_VOUT_5V && charger->is_full_status) {
 		mfc_send_command(charger, MFC_AFC_CONF_5V_TX);
@@ -2057,6 +2058,7 @@ static int mfc_chg_set_property(struct power_supply *psy,
 			charger->is_full_status = 1;
 			if (charger->pdata->cable_type == MFC_PAD_WPC_AFC ||
 				charger->pdata->cable_type == MFC_PAD_WPC_STAND_HV ||
+				charger->pdata->cable_type == MFC_PAD_WPC_PACK_HV ||
 				charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV) {
 				charger->vout_mode = WIRELESS_VOUT_5V_STEP;
 				cancel_delayed_work(&charger->wpc_vout_mode_work);
@@ -2171,6 +2173,7 @@ static int mfc_chg_set_property(struct power_supply *psy,
 			charger->vout_mode = val->intval;
 			if ((charger->pdata->cable_type == MFC_PAD_WPC_AFC ||
 				charger->pdata->cable_type == MFC_PAD_WPC_STAND_HV ||
+				charger->pdata->cable_type == MFC_PAD_WPC_PACK_HV ||
 				charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV)) {
 				def_delay = 250;
 			}
@@ -2725,6 +2728,7 @@ static void mfc_wpc_isr_work(struct work_struct *work)
 				if (charger->pdata->cable_type == MFC_PAD_WPC_AFC ||
 					charger->pdata->cable_type == MFC_PAD_PREPARE_HV ||
 					charger->pdata->cable_type == MFC_PAD_WPC_STAND_HV ||
+					charger->pdata->cable_type == MFC_PAD_WPC_PACK_HV ||
 					charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV) {
 					pr_err("%s: It is already HV wireless cable. No need to set again\n", __func__);
 					wake_unlock(&charger->wpc_wake_lock);
