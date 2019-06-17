@@ -468,12 +468,15 @@ unsigned long global_boost(void)
 
 int find_second_max_cap(void)
 {
-	struct sched_domain *sd = rcu_dereference(per_cpu(sd_ea, 0));
+	struct sched_domain *sd;
 	struct sched_group *sg;
 	int max_cap = 0, second_max_cap = 0;
 
+	rcu_read_lock();
+
+	sd = rcu_dereference(per_cpu(sd_ea, 0));
 	if (!sd)
-		return 0;
+		goto unlock;
 
 	sg = sd->groups;
 	do {
@@ -486,6 +489,9 @@ int find_second_max_cap(void)
 			}
 		}
 	} while (sg = sg->next, sg != sd->groups);
+
+unlock:
+	rcu_read_unlock();
 
 	return second_max_cap;
 }
