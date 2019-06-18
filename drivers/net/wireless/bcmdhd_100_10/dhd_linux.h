@@ -1,7 +1,7 @@
 /*
  * DHD Linux header file (dhd_linux exports for cfg80211 and other components)
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.h 795937 2018-12-20 10:37:13Z $
+ * $Id: dhd_linux.h 798798 2019-01-10 10:24:21Z $
  */
 
 /* wifi platform functions for power, interrupt and pre-alloc, either
@@ -302,14 +302,19 @@ extern uint32 sec_save_softap_info(void);
 #endif /* GEN_SOFTAP_INFO_FILE */
 #endif /* CUSTOMER_HW4 */
 
-#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET)
+#ifdef DHD_SEND_HANG_PRIVCMD_ERRORS
+extern uint32 report_hang_privcmd_err;
+#endif /* DHD_SEND_HANG_PRIVCMD_ERRORS */
+
+#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET) && \
+	!defined(CONFIG_SOC_EXYNOS7870)
 extern int argos_task_affinity_setup_label(struct task_struct *p, const char *label,
 	struct cpumask * affinity_cpu_mask, struct cpumask * default_cpu_mask);
 extern struct cpumask hmp_slow_cpu_mask;
 extern struct cpumask hmp_fast_cpu_mask;
 extern void set_irq_cpucore(unsigned int irq, cpumask_var_t default_cpu_mask,
 	cpumask_var_t affinity_cpu_mask);
-#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET */
+#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET && !CONFIG_SOC_EXYNOS7870 */
 
 #if (defined(ARGOS_CPU_SCHEDULER) && defined(ARGOS_RPS_CPU_CTL)) || \
 	defined(ARGOS_NOTIFY_CB)
@@ -324,8 +329,23 @@ typedef struct {
 	int argos_rps_cpus_enabled;
 } argos_rps_ctrl;
 
+#ifdef DYNAMIC_MUMIMO_CONTROL
+typedef struct {
+	struct timer_list config_timer;
+	struct work_struct mumimo_ctrl_work;
+	struct net_device *dev;
+	int cur_murx_bfe_cap;
+} argos_mumimo_ctrl;
+#endif /* DYNAMIC_MUMIMO_CONTROL */
+
+#ifdef BCMPCIE
 #define RPS_TPUT_THRESHOLD		300
+#else
+#define RPS_TPUT_THRESHOLD			150
+#endif /* BCMPCIE */
 #define DELAY_TO_CLEAR_RPS_CPUS		300
+#define SUMIMO_TO_MUMIMO_TPUT_THRESHOLD		0
+#define MUMIMO_TO_SUMIMO_TPUT_THRESHOLD		150
 #endif /* (ARGOS_RPS_CPU_CTL && ARGOS_CPU_SCHEDULER) || ARGOS_NOTIFY_CB */
 
 #if defined(BT_OVER_SDIO)
@@ -397,6 +417,9 @@ int dhd_net_bus_put(struct net_device *dev);
 
 int dhd_enable_adps(dhd_pub_t *dhd, uint8 on);
 #endif /* WLADPS || WLADPS_PRIVATE_CMD */
+#ifdef DHD_DISABLE_VHTMODE
+extern void dhd_disable_vhtmode(dhd_pub_t *dhd);
+#endif /* DHD_DISABLE_VHTMODE */
 #ifdef DHDTCPSYNC_FLOOD_BLK
 extern void dhd_reset_tcpsync_info_by_dev(struct net_device *dev);
 #endif /* DHDTCPSYNC_FLOOD_BLK */

@@ -1,7 +1,7 @@
 /*
  * Broadcom Dongle Host Driver (DHD), common DHD core.
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_common.c 784307 2018-10-11 13:10:28Z $
+ * $Id: dhd_common.c 796845 2018-12-27 06:24:52Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -104,6 +104,10 @@
 #include <dhd_pktlog.h>
 #endif /* DHD_PKT_LOGGING */
 #endif /* DHD_LOG_DUMP */
+
+#ifdef DHD_SSSR_DUMP
+#include <bcmdevs.h>
+#endif /* DHD_SSSR_DUMP */
 
 int dhd_msg_level = DHD_ERROR_VAL | DHD_FWLOG_VAL | DHD_EVENT_VAL
 	/* For CUSTOMER_HW4 do not enable DHD_IOVAR_MEM_VAL by default */
@@ -427,6 +431,7 @@ dhd_query_bus_erros(dhd_pub_t *dhdp)
 int
 dhd_sssr_mempool_init(dhd_pub_t *dhd)
 {
+	DHD_TRACE(("%s: ENTER\n", __FUNCTION__));
 	dhd->sssr_mempool = (uint8 *) MALLOCZ(dhd->osh, DHD_SSSR_MEMPOOL_SIZE);
 	if (dhd->sssr_mempool == NULL) {
 		DHD_ERROR(("%s: MALLOC of sssr_mempool failed\n",
@@ -439,6 +444,7 @@ dhd_sssr_mempool_init(dhd_pub_t *dhd)
 void
 dhd_sssr_mempool_deinit(dhd_pub_t *dhd)
 {
+	DHD_TRACE(("%s: ENTER\n", __FUNCTION__));
 	if (dhd->sssr_mempool) {
 		MFREE(dhd->osh, dhd->sssr_mempool, DHD_SSSR_MEMPOOL_SIZE);
 		dhd->sssr_mempool = NULL;
@@ -451,21 +457,84 @@ dhd_dump_sssr_reg_info(sssr_reg_info_v1_t *sssr_reg_info)
 }
 
 int
+dhd_get_sssr_reg_info_bcm4359(dhd_pub_t *dhd)
+{
+	dhd->sssr_reg_info.version = SSSR_REG_INFO_VER;
+	dhd->sssr_reg_info.length = sizeof(sssr_reg_info_t);
+
+	/* PMU regs */
+	dhd->sssr_reg_info.pmu_regs.base_regs.pmuintmask0 = 0x18000700;
+	dhd->sssr_reg_info.pmu_regs.base_regs.pmuintmask1 = 0x18000704;
+	dhd->sssr_reg_info.pmu_regs.base_regs.resreqtimer = 0x18000644;
+	dhd->sssr_reg_info.pmu_regs.base_regs.macresreqtimer = 0x18000688;
+	dhd->sssr_reg_info.pmu_regs.base_regs.macresreqtimer1 = 0x180006f0;
+
+	/* chipcommon regs */
+	dhd->sssr_reg_info.chipcommon_regs.base_regs.intmask = 0x18000024;
+	dhd->sssr_reg_info.chipcommon_regs.base_regs.powerctrl = 0x180001e8;
+	dhd->sssr_reg_info.chipcommon_regs.base_regs.clockcontrolstatus = 0x180001e0;
+	dhd->sssr_reg_info.chipcommon_regs.base_regs.powerctrl_mask = 0xf00;
+
+	/* ARM regs */
+	dhd->sssr_reg_info.arm_regs.base_regs.clockcontrolstatus = 0x180021e0;
+	dhd->sssr_reg_info.arm_regs.base_regs.clockcontrolstatus_val = 0x20;
+	dhd->sssr_reg_info.arm_regs.wrapper_regs.resetctrl = 0x18102800;
+	dhd->sssr_reg_info.arm_regs.wrapper_regs.itopoobb = 0x18102f34;
+
+	/* PCIe regs */
+	dhd->sssr_reg_info.pcie_regs.base_regs.ltrstate = 0x180031a0;
+	dhd->sssr_reg_info.pcie_regs.base_regs.clockcontrolstatus = 0x180031e0;
+	dhd->sssr_reg_info.pcie_regs.base_regs.clockcontrolstatus_val = 0x0;
+	dhd->sssr_reg_info.pcie_regs.wrapper_regs.itopoobb = 0x18103f34;
+
+	/* MAC regs */
+	dhd->sssr_reg_info.mac_regs[0].base_regs.xmtdata = 0x18001134;
+	dhd->sssr_reg_info.mac_regs[0].base_regs.xmtaddress = 0x18001130;
+	dhd->sssr_reg_info.mac_regs[0].base_regs.clockcontrolstatus = 0x180011e0;
+	dhd->sssr_reg_info.mac_regs[0].base_regs.clockcontrolstatus_val = 0x20;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.resetctrl = 0x18101800;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.itopoobb = 0x18101f34;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl = 0x18101408;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl_resetseq_val[0] = 0xc7;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl_resetseq_val[1] = 0x15f;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl_resetseq_val[2] = 0x151;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl_resetseq_val[3] = 0x155;
+	dhd->sssr_reg_info.mac_regs[0].wrapper_regs.ioctrl_resetseq_val[4] = 0xc5;
+	dhd->sssr_reg_info.mac_regs[0].sr_size = 0x40000;
+
+	return BCME_OK;
+}
+
+int
 dhd_get_sssr_reg_info(dhd_pub_t *dhd)
 {
-	int ret;
+	int ret = BCME_OK;
+	uint16 chipid, chiprev;
+
+	chipid = dhd_get_chipid(dhd);
+	chiprev = dhd_bus_chiprev_id(dhd);
+
 	/* get sssr_reg_info from firmware */
 	memset((void *)&dhd->sssr_reg_info, 0, sizeof(dhd->sssr_reg_info));
+
+	if ((chipid == BCM4355_CHIP_ID || chipid == BCM4359_CHIP_ID) &&
+		chiprev == 9) {
+		/* Get SSSR reg info with alternative way for 4359C0/43596A0 */
+		ret = dhd_get_sssr_reg_info_bcm4359(dhd);
+	} else {
 	ret = dhd_iovar(dhd, 0, "sssr_reg_info", NULL, 0,  (char *)&dhd->sssr_reg_info,
 		sizeof(dhd->sssr_reg_info), FALSE);
 	if (ret < 0) {
 		DHD_ERROR(("%s: sssr_reg_info failed (error=%d)\n",
 			__FUNCTION__, ret));
-		return BCME_ERROR;
+		}
 	}
 
+	if (ret == BCME_OK) {
 	dhd_dump_sssr_reg_info(&dhd->sssr_reg_info);
-	return BCME_OK;
+	}
+
+	return ret;
 }
 
 uint32
@@ -546,6 +615,8 @@ dhd_sssr_dump_init(dhd_pub_t *dhd)
 
 			dhd->sssr_d11_after[i] = (uint32 *)(dhd->sssr_mempool + mempool_used);
 			mempool_used += dhd->sssr_reg_info.mac_regs[i].sr_size;
+		} else {
+			DHD_ERROR(("%s: SR size for core[%d] is 0\n", __FUNCTION__, i));
 		}
 	}
 
@@ -567,7 +638,6 @@ dhd_sssr_dump_init(dhd_pub_t *dhd)
 	dhd->sssr_inited = TRUE;
 
 	return BCME_OK;
-
 }
 
 void
@@ -2392,6 +2462,58 @@ unlock_exit:
 
 #ifdef SHOW_EVENTS
 
+#if defined(SHOW_EVENTS) && defined(SUPPORT_EVT_SDB_LOG)
+#define SDB_ENABLE_AP	0x01
+#define SDB_ENABLE_P2P	0x02
+#define SDB_IS_AP(i)	(i & SDB_ENABLE_AP)
+#define SDB_IS_P2P(i)	(i & SDB_ENABLE_P2P)
+
+#define WLC_RSDB_MODE_AUTO_MASK 0x80
+#define WLC_RSDB_EXTRACT_MODE(val) ((int8)((val) & (~(WLC_RSDB_MODE_AUTO_MASK))))
+
+static void
+wl_event_sdb_transition_print(void *event_data, const char *event_name)
+{
+	wl_event_sdb_trans_t *rdata;
+	wl_event_sdb_data_t *value;
+	char *sta_mode = "";
+	int i;
+	char chanbuf[CHANSPEC_STR_LEN];
+	rdata = (wl_event_sdb_trans_t *)event_data;
+
+	if (!rdata) {
+		DHD_ERROR(("%s: event_data is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	if (rdata->version != WL_EVENT_SDB_TRANSITION_VER) {
+		DHD_ERROR(("%s: invalid Version(%d)\n",
+			__FUNCTION__, rdata->version));
+		return;
+	}
+
+	if (rdata->rsdb_mode & WLC_RSDB_MODE_AUTO_MASK) {
+		DHD_ERROR((" RSDB Mode : Auto, "));
+	}
+	DHD_ERROR(("Current RSDB Mode : %d\n", WLC_RSDB_EXTRACT_MODE(rdata->rsdb_mode)));
+
+	for (i = 0; i < rdata->enable_bsscfg; i++) {
+		value = &rdata->values[i];
+
+		if (SDB_IS_P2P(value->is_iftype)) {
+			sta_mode = SDB_IS_AP(value->is_iftype) ? "P2P_GO" : "P2P_GC";
+		} else {
+			sta_mode = SDB_IS_AP(value->is_iftype) ? "SoftAP" : "Station";
+		}
+
+		wf_chspec_ntoa_ex(value->chanspec, chanbuf);
+		DHD_ERROR((" wlc%d <%s> \"%s\", %s(0x%04x)\n",
+			value->wlunit, sta_mode,
+			value->ssidbuf, chanbuf, value->chanspec));
+	}
+}
+#endif /* SHOW_EVENTS && SUPPORT_EVT_SDB_LOG */
+
 static void
 wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
 	void *raw_event_ptr, char *eventmask)
@@ -2734,6 +2856,15 @@ wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
 			DHD_EVENT(("MACEVENT: %s, reason:%d\n", event_name, reason));
 			break;
 		}
+#ifdef SUPPORT_EVT_SDB_LOG
+	case WLC_E_SDB_TRANSITION:
+		{
+			DHD_EVENT(("MACEVENT: %s, status %d, reason %d\n",
+				event_name, (int)status, (int)reason));
+			wl_event_sdb_transition_print(event_data, event_name);
+			break;
+		}
+#endif /* SUPPORT_EVT_SDB_LOG */
 	default:
 		DHD_INFO(("MACEVENT: %s %d, MAC %s, status %d, reason %d, auth %d\n",
 		       event_name, event_type, eabuf, (int)status, (int)reason,
@@ -5182,6 +5313,10 @@ dhd_apply_default_clm(dhd_pub_t *dhd, char *clm_path)
 		}
 	} else {
 		DHD_INFO(("Skipping the clm download. len:%d memblk:%p \n", len, memblock));
+#ifdef DHD_USE_CLMINFO_PARSER
+		err = BCME_ERROR;
+		goto exit;
+#endif /* DHD_USE_CLMINFO_PARSER */
 	}
 
 	/* Verify country code */
@@ -5201,9 +5336,268 @@ exit:
 	return err;
 }
 
+#ifdef DHD_USE_CLMINFO_PARSER
+#ifdef CUSTOMER_HW4
+#ifdef PLATFORM_SLP
+#define CLMINFO_PATH PLATFORM_PATH".clminfo"
+#else
+#define CLMINFO_PATH VENDOR_PATH"/etc/wifi/.clminfo"
+#endif /* PLATFORM_SLP */
+#else
+#define CLMINFO_PATH "/installmedia/.clminfo"
+#endif /* CUSTOMER_HW4 */
+
+extern struct cntry_locales_custom translate_custom_table[NUM_OF_COUNTRYS];
+
+unsigned int
+process_clarification_vars(char *varbuf, unsigned int varbuf_size)
+{
+	char *dp;
+	bool findNewline;
+	int column;
+	unsigned int buf_len, len;
+
+	dp = varbuf;
+
+	findNewline = FALSE;
+	column = 0;
+
+	for (len = 0; len < varbuf_size; len++) {
+		if ((varbuf[len] == '\r') || (varbuf[len] == ' ')) {
+			continue;
+		}
+		if (findNewline && varbuf[len] != '\n') {
+			continue;
+		}
+		findNewline = FALSE;
+		if (varbuf[len] == '#') {
+			findNewline = TRUE;
+			continue;
+		}
+		if (varbuf[len] == '\n') {
+			if (column == 0) {
+				continue;
+			}
+			column = 0;
+			continue;
+		}
+		*dp++ = varbuf[len];
+		column++;
+	}
+	buf_len = (unsigned int)(dp - varbuf);
+
+	while (dp < varbuf + len)
+		*dp++ = 0;
+
+	return buf_len;
+}
+
+int
+dhd_get_clminfo(dhd_pub_t *dhd, char *clm_path)
+{
+	int bcmerror = BCME_OK;
+	char *clminfo_path = CLMINFO_PATH;
+
+	char *memblock = NULL;
+	char *bufp;
+	uint len = MAX_CLMINFO_BUF_SIZE;
+	uint str_ln;
+	char *tokenp = NULL;
+	int cnt = 0;
+	char *temp_buf = NULL;
+	char tokdelim;
+	int parse_step = 0;
+
+	char *clm_blob_vendor_path = VENDOR_PATH;
+	char *clm_blob_path = NULL;
+	int clm_blob_path_len = 0;
+
+	/* Clears clm_path and translate_custom_table */
+	memset(clm_path, 0, MOD_PARAM_PATHLEN);
+	memset(translate_custom_table, 0, sizeof(translate_custom_table));
+
+	/*
+	 * Read clm info from the .clminfo file
+	 * 1st line : CLM blob file path
+	 * 2nd ~ end of line: Country locales table
+	 */
+	if (dhd_get_download_buffer(dhd, clminfo_path, CLMINFO, &memblock, &len) != 0) {
+		DHD_ERROR(("%s: Cannot open .clminfo file\n", __FUNCTION__));
+		bcmerror = BCME_ERROR;
+		dhd->is_clm_mult_regrev = FALSE;
+		goto out;
+	}
+
+	dhd->is_clm_mult_regrev = TRUE;
+
+	if ((len > 0) && (len < MAX_CLMINFO_BUF_SIZE) && memblock) {
+		/* Found clminfo file. Parsing the file */
+		DHD_INFO(("clminfo file parsing from %s \n", clminfo_path));
+
+		bufp = (char *) memblock;
+		bufp[len] = 0;
+
+		/* clean up the file */
+		len = process_clarification_vars(bufp, len);
+
+		tokenp = bcmstrtok(&bufp, "=", &tokdelim);
+		/* reduce the len of bufp by token byte(1) and ptr length */
+		len -= (strlen(tokenp) + 1);
+
+		if (strncmp(tokenp, "clm_path", 8) != 0) {
+			DHD_ERROR(("%s: Cannot found clm_path\n", __FUNCTION__));
+			bcmerror = BCME_ERROR;
+			goto out;
+		}
+		temp_buf = bcmstrtok(&bufp, ";", &tokdelim);
+		str_ln = strlen(temp_buf);
+		/* read clm_path */
+		strncpy(clm_path, temp_buf, str_ln);
+		len -= (strlen(clm_path) + 1);
+
+		clm_blob_path_len = strlen(clm_path);
+		clm_blob_path = (char *)MALLOCZ(dhd->osh, clm_blob_path_len);
+		if (clm_blob_path == NULL) {
+			bcmerror = BCME_NOMEM;
+			DHD_ERROR(("%s: Failed to allocate memory!\n", __FUNCTION__));
+			goto out;
+		}
+		memset(clm_blob_path, 0, clm_blob_path_len);
+		strncpy(clm_blob_path, clm_path, strlen(clm_path));
+
+		/* Concannate VENDOR_PATH + CLM_PATH */
+		memset(clm_path, 0, MOD_PARAM_PATHLEN);
+		snprintf(clm_path, (int)strlen(clm_blob_vendor_path) + clm_blob_path_len + 1,
+			"%s%s", clm_blob_vendor_path, clm_blob_path);
+		clm_path[strlen(clm_path)] = '\0';
+
+		DHD_INFO(("%s: Found clm_path %s\n", __FUNCTION__, clm_path));
+
+		if (len <= 0) {
+			DHD_ERROR(("%s: Length is invalid\n", __FUNCTION__));
+			bcmerror = BCME_ERROR;
+			goto out;
+		}
+
+		/* reserved relocale map[0] to XZ/11 */
+		memcpy(translate_custom_table[cnt].custom_locale, "XZ", strlen("XZ"));
+		translate_custom_table[cnt].custom_locale_rev = 11;
+		DHD_INFO(("%s: Relocale map - iso_aabrev %s custom locale %s "
+			"custom locale rev %d\n",
+			__FUNCTION__,
+			translate_custom_table[cnt].iso_abbrev,
+			translate_custom_table[cnt].custom_locale,
+			translate_custom_table[cnt].custom_locale_rev));
+
+		cnt++;
+
+		/* start parsing relocale map */
+		do {
+
+			if ((bufp[0] == 0) && (len > 0)) {
+				DHD_ERROR(("%s: First byte is NULL character\n", __FUNCTION__));
+				bcmerror = BCME_ERROR;
+				goto out;
+			}
+			if ((bufp[0] == '=') || (bufp[0] == '/') || (bufp[0] == ';')) {
+				DHD_ERROR(("%s: Data is invalid\n", __FUNCTION__));
+				bcmerror = BCME_ERROR;
+				goto out;
+			}
+
+			/* parsing relocale data */
+			tokenp = bcmstrtok(&bufp, "=/;", &tokdelim);
+			len -= (strlen(tokenp) + 1);
+
+			if ((parse_step == 0) && (tokdelim == '=')) {
+				memcpy(translate_custom_table[cnt].iso_abbrev,
+						tokenp, strlen(tokenp));
+				parse_step++;
+			} else if ((parse_step == 1) && (tokdelim == '/')) {
+				memcpy(translate_custom_table[cnt].custom_locale,
+						tokenp, strlen(tokenp));
+				parse_step++;
+			} else if ((parse_step == 2) && (tokdelim == ';')) {
+				char *str, *endptr = NULL;
+				int locale_rev;
+
+				str = tokenp;
+				locale_rev = (int)strtoul(str, &endptr, 0);
+				if (*endptr != 0) {
+					bcmerror = BCME_ERROR;
+					goto out;
+				}
+
+				translate_custom_table[cnt].custom_locale_rev = locale_rev;
+
+				DHD_INFO(("%s: Relocale map - iso_aabrev %s"
+					" custom locale %s custom locale rev %d\n",
+					__FUNCTION__,
+					translate_custom_table[cnt].iso_abbrev,
+					translate_custom_table[cnt].custom_locale,
+					translate_custom_table[cnt].custom_locale_rev));
+
+				parse_step = 0;
+				cnt++;
+			} else {
+				DHD_ERROR(("%s: CLM info data format is invalid\n", __FUNCTION__));
+				bcmerror = BCME_ERROR;
+				goto out;
+			}
+
+		} while (len > 0);
+	}
+out:
+	if (clm_blob_path) {
+		MFREE(dhd->osh, clm_blob_path, clm_blob_path_len);
+	}
+	if (memblock) {
+		dhd_free_download_buffer(dhd, memblock, MAX_CLMINFO_BUF_SIZE);
+	}
+	if (bcmerror != BCME_OK) {
+		DHD_ERROR(("%s: .clminfo parsing fail!!\n", __FUNCTION__));
+	}
+
+	return bcmerror;
+}
+#endif /* DHD_USE_CLMINFO_PARSER */
+
 void dhd_free_download_buffer(dhd_pub_t	*dhd, void *buffer, int length)
 {
 	MFREE(dhd->osh, buffer, length);
+}
+
+/* Parse EAPOL 4 way handshake messages */
+int
+dhd_check_eapol_4way_message(char *dump_data)
+{
+	unsigned char type;
+	int pair, ack, mic, kerr, req, sec, install;
+	unsigned short us_tmp;
+	type = dump_data[18];
+	if (type == 2) {
+		us_tmp = (dump_data[19] << 8) | dump_data[20];
+		pair = 0 != (us_tmp & 0x08);
+		ack = 0  != (us_tmp & 0x80);
+		mic = 0  != (us_tmp & 0x100);
+		kerr = 0 != (us_tmp & 0x400);
+		req = 0  != (us_tmp & 0x800);
+		sec = 0  != (us_tmp & 0x200);
+		install = 0 != (us_tmp & 0x40);
+		if (!sec && !mic && ack && !install && pair && !kerr && !req) {
+			return EAPOL_4WAY_M1;
+		} else if (pair && !install && !ack && mic && !sec && !kerr && !req) {
+			return EAPOL_4WAY_M2;
+		} else if (pair && ack && mic && sec && !kerr && !req) {
+			return EAPOL_4WAY_M3;
+		} else if (pair && !install && !ack && mic && sec && !req && !kerr) {
+			return EAPOL_4WAY_M4;
+		} else {
+			return 0;
+		}
+	}
+
+	return 0;
 }
 
 #if defined(DHD_8021X_DUMP)
@@ -5215,8 +5609,6 @@ void
 dhd_dump_eapol_4way_message(char *ifname, unsigned char *dump_data, bool direction)
 {
 	unsigned char type;
-	int pair, ack, mic, kerr, req, sec, install;
-	unsigned short us_tmp;
 
 	type = dump_data[15];
 	if (type == 0) {
@@ -5254,24 +5646,20 @@ dhd_dump_eapol_4way_message(char *ifname, unsigned char *dump_data, bool directi
 				dump_data[14], dump_data[15], dump_data[30]));
 		}
 	} else if (type == 3 && dump_data[18] == 2) {
-		us_tmp = (dump_data[19] << 8) | dump_data[20];
-		pair =  0 != (us_tmp & 0x08);
-		ack = 0  != (us_tmp & 0x80);
-		mic = 0  != (us_tmp & 0x100);
-		kerr =  0 != (us_tmp & 0x400);
-		req = 0  != (us_tmp & 0x800);
-		sec = 0  != (us_tmp & 0x200);
-		install  = 0 != (us_tmp & 0x40);
-
-		if (!sec && !mic && ack && !install && pair && !kerr && !req) {
+		switch (dhd_check_eapol_4way_message(dump_data)) {
+		case EAPOL_4WAY_M1:
 			EAP_PRINT("EAPOL Packet, 4-way handshake, M1");
-		} else if (pair && !install && !ack && mic && !sec && !kerr && !req) {
+			break;
+		case EAPOL_4WAY_M2:
 			EAP_PRINT("EAPOL Packet, 4-way handshake, M2");
-		} else if (pair && ack && mic && sec && !kerr && !req) {
+			break;
+		case EAPOL_4WAY_M3:
 			EAP_PRINT("EAPOL Packet, 4-way handshake, M3");
-		} else if (pair && !install && !ack && mic && sec && !req && !kerr) {
+			break;
+		case EAPOL_4WAY_M4:
 			EAP_PRINT("EAPOL Packet, 4-way handshake, M4");
-		} else {
+			break;
+		default:
 			DHD_ERROR(("ETHER_TYPE_802_1X[%s] [%s]: ver %d, type %d, replay %d\n",
 				ifname, direction ? "TX" : "RX",
 				dump_data[14], dump_data[15], dump_data[30]));

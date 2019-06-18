@@ -4,7 +4,7 @@
  * Provides type definitions and function prototypes used to link the
  * DHD OS, bus, and protocol modules.
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd.h 795949 2018-12-20 11:06:23Z $
+ * $Id: dhd.h 800554 2019-01-22 12:04:01Z $
  */
 
 /****************
@@ -265,26 +265,43 @@ enum dhd_bus_devreset_type {
 
 #define MAX_MTU_SZ (1600u)
 
-#define DIV64_U64(x, y)		div64_u64(x, y)
-#define DIV_U64(x, y)		div_u64(x, y)
-#define DO_DIV(x, y)		do_div(x, y)
+/* (u64)result = (u64)dividend / (u64)divisor */
+#define DIV_U64_BY_U64(dividend, divisor)	div64_u64(dividend, divisor)
 
-#ifndef USEC_PER_SEC
-#define USEC_PER_SEC (1000 * 1000)
-#endif /* USEC_PER_SEC */
+/* (u64)result = (u64)dividend / (u32)divisor */
+#define DIV_U64_BY_U32(dividend, divisor)	div_u64(dividend, divisor)
+
+/* Be careful while using this, as it divides dividend also
+ * (u32)remainder = (u64)dividend % (u32)divisor
+ * (u64)dividend = (u64)dividend / (u32)divisor
+ */
+#define DIV_AND_MOD_U64_BY_U32(dividend, divisor)	do_div(dividend, divisor)
+
+/* (u32)remainder = (u64)dividend % (u32)divisor */
+#define MOD_U64_BY_U32(dividend, divisor) ({				\
+	uint64 temp_dividend = (dividend);				\
+	uint32 rem = DIV_AND_MOD_U64_BY_U32(temp_dividend, (divisor));	\
+	rem;								\
+})
 
 #define SEC_USEC_FMT \
-	"%llu.%6u"
+	"%5llu.%06u"
 
+/* t: time in nano second */
 #define GET_SEC_USEC(t) \
-	DIV_U64(t, USEC_PER_SEC), (unsigned int)DO_DIV(t,  USEC_PER_SEC)
+	DIV_U64_BY_U32(t, NSEC_PER_SEC), \
+	((uint32)(MOD_U64_BY_U32(t, NSEC_PER_SEC) / (uint32)NSEC_PER_USEC))
 
 /* Download Types */
 typedef enum download_type {
 	FW,
 	NVRAM,
 	CLM_BLOB,
-	TXCAP_BLOB
+	TXCAP_BLOB,
+#if defined(DHD_USE_CLMINFO_PARSER)
+	CLMINFO,
+#endif /* DHD_USE_CLMINFO_PARSER */
+	DOWNLOAD_TYPE_LAST
 } download_type_t;
 
 /* For supporting multiple interfaces */
@@ -318,7 +335,7 @@ enum dhd_op_flags {
 #define DHD_OPMODE_SUPPORTED(dhd, opmode_flag) \
 	(dhd ? ((((dhd_pub_t *)dhd)->op_mode)  &  opmode_flag) : -1)
 #define DHD_OPMODE_STA_SOFTAP_CONCURR(dhd) \
-	(dhd ? (((dhd->op_mode) & DHD_FLAG_CONCURR_STA_HOSTAP_MODE) == \
+	(dhd ? (((((dhd_pub_t *)dhd)->op_mode) & DHD_FLAG_CONCURR_STA_HOSTAP_MODE) == \
 	DHD_FLAG_CONCURR_STA_HOSTAP_MODE) : 0)
 
 /* Max sequential TX/RX Control timeouts to set HANG event */
@@ -349,6 +366,7 @@ enum dhd_op_flags {
 #define MAX_NVRAMBUF_SIZE	(16 * 1024) /* max nvram buf size */
 #define MAX_CLM_BUF_SIZE	(48 * 1024) /* max clm blob size */
 #define MAX_TXCAP_BUF_SIZE	(16 * 1024) /* max txcap blob size */
+#define MAX_CLMINFO_BUF_SIZE    (4 * 1024) /* max clminfo buf size */
 #ifdef DHD_DEBUG
 #define DHD_JOIN_MAX_TIME_DEFAULT 10000 /* ms: Max time out for joining AP */
 #define DHD_SCAN_DEF_TIMEOUT 10000 /* ms: Max time out for scan in progress */
@@ -410,44 +428,41 @@ enum dhd_prealloc_index {
 
 enum dhd_dongledump_mode {
 	DUMP_DISABLED = 0,
-	DUMP_MEMONLY,
-	DUMP_MEMFILE,
-	DUMP_MEMFILE_BUGON,
-	DUMP_MEMFILE_MAX
+	DUMP_MEMONLY		= 1,
+	DUMP_MEMFILE		= 2,
+	DUMP_MEMFILE_BUGON	= 3,
+	DUMP_MEMFILE_MAX	= 4
 };
 
 enum dhd_dongledump_type {
 	DUMP_TYPE_RESUMED_ON_TIMEOUT = 1,
-	DUMP_TYPE_D3_ACK_TIMEOUT,
-	DUMP_TYPE_DONGLE_TRAP,
-	DUMP_TYPE_MEMORY_CORRUPTION,
-	DUMP_TYPE_PKTID_AUDIT_FAILURE,
-	DUMP_TYPE_PKTID_INVALID,
-	DUMP_TYPE_SCAN_TIMEOUT,
-	DUMP_TYPE_SCAN_BUSY,
-	DUMP_TYPE_BY_SYSDUMP,
-	DUMP_TYPE_BY_LIVELOCK,
-	DUMP_TYPE_AP_LINKUP_FAILURE,
-	DUMP_TYPE_AP_ABNORMAL_ACCESS,
-	DUMP_TYPE_CFG_VENDOR_TRIGGERED,
-	DUMP_TYPE_RESUMED_ON_TIMEOUT_TX,
-	DUMP_TYPE_RESUMED_ON_TIMEOUT_RX,
-	DUMP_TYPE_RESUMED_ON_INVALID_RING_RDWR,
-	DUMP_TYPE_TRANS_ID_MISMATCH,
-	DUMP_TYPE_IFACE_OP_FAILURE,
-#ifdef DEBUG_DNGL_INIT_FAIL
-	DUMP_TYPE_DONGLE_INIT_FAILURE,
-#endif /* DEBUG_DNGL_INIT_FAIL */
-#ifdef SUPPORT_LINKDOWN_RECOVERY
-	DUMP_TYPE_READ_SHM_FAIL,
-#endif /* SUPPORT_LINKDOWN_RECOVERY */
-	DUMP_TYPE_DONGLE_HOST_EVENT,
-	DUMP_TYPE_SMMU_FAULT,
-	DUMP_TYPE_RESUMED_UNKNOWN,
-#ifdef DHD_ERPOM
-	DUMP_TYPE_DUE_TO_BT,
-#endif /* DHD_ERPOM */
-	DUMP_TYPE_BY_USER
+	DUMP_TYPE_D3_ACK_TIMEOUT		= 2,
+	DUMP_TYPE_DONGLE_TRAP			= 3,
+	DUMP_TYPE_MEMORY_CORRUPTION		= 4,
+	DUMP_TYPE_PKTID_AUDIT_FAILURE		= 5,
+	DUMP_TYPE_PKTID_INVALID			= 6,
+	DUMP_TYPE_SCAN_TIMEOUT			= 7,
+	DUMP_TYPE_SCAN_BUSY			= 8,
+	DUMP_TYPE_BY_SYSDUMP			= 9,
+	DUMP_TYPE_BY_LIVELOCK			= 10,
+	DUMP_TYPE_AP_LINKUP_FAILURE		= 11,
+	DUMP_TYPE_AP_ABNORMAL_ACCESS		= 12,
+	DUMP_TYPE_CFG_VENDOR_TRIGGERED		= 13,
+	DUMP_TYPE_RESUMED_ON_TIMEOUT_TX		= 14,
+	DUMP_TYPE_RESUMED_ON_TIMEOUT_RX		= 15,
+	DUMP_TYPE_RESUMED_ON_INVALID_RING_RDWR	= 16,
+	DUMP_TYPE_TRANS_ID_MISMATCH		= 17,
+	DUMP_TYPE_IFACE_OP_FAILURE		= 18,
+	DUMP_TYPE_DONGLE_INIT_FAILURE		= 19,
+	DUMP_TYPE_READ_SHM_FAIL			= 20,
+	DUMP_TYPE_DONGLE_HOST_EVENT		= 21,
+	DUMP_TYPE_SMMU_FAULT			= 22,
+	DUMP_TYPE_RESUMED_UNKNOWN		= 23,
+	DUMP_TYPE_DUE_TO_BT			= 24,
+	DUMP_TYPE_LOGSET_BEYOND_RANGE		= 25,
+	DUMP_TYPE_BY_USER			= 26,
+	DUMP_TYPE_CTO_RECOVERY			= 27,
+	DUMP_TYPE_SEQUENTIAL_PRIVCMD_ERROR	= 28
 };
 
 enum dhd_hang_reason {
@@ -462,6 +477,9 @@ enum dhd_hang_reason {
 	HANG_REASON_PCIE_RC_LINK_UP_FAIL = 0x8009,
 	HANG_REASON_PCIE_PKTID_ERROR = 0x800A,
 	HANG_REASON_IFACE_ADD_FAILURE = 0x800B,
+	HANG_REASON_IOCTL_RESP_TIMEOUT_SCHED_ERROR	= 0x800C,
+	HANG_REASON_D3_ACK_TIMEOUT_SCHED_ERROR		= 0x800D,
+	HANG_REASON_SEQUENTIAL_PRIVCMD_ERROR		= 0x800E,
 	HANG_REASON_PCIE_LINK_DOWN = 0x8805,
 	HANG_REASON_INVALID_EVENT_OR_DATA = 0x8806,
 	HANG_REASON_UNKNOWN = 0x8807,
@@ -500,6 +518,13 @@ enum dhd_rsdb_scan_features {
 /* delimiter between values */
 #define HANG_KEY_DEL	' '
 #define HANG_RAW_DEL	'_'
+
+enum dhd_eapol_message_type {
+	EAPOL_4WAY_M1 = 1,
+	EAPOL_4WAY_M2,
+	EAPOL_4WAY_M3,
+	EAPOL_4WAY_M4
+};
 
 /* Packet alignment for most efficient SDIO (can change based on platform) */
 #ifndef DHD_SDALIGN
@@ -943,6 +968,7 @@ typedef struct dhd_pub {
 	bool	is_pcie_watchdog_reset;
 	bool	dongle_trap_occured;	/* flag for sending HANG event to upper layer */
 	bool	iovar_timeout_occured;	/* flag to indicate iovar resumed on timeout */
+	bool	is_sched_error;		/* flag to indicate timeout due to scheduling issue */
 #ifdef PCIE_FULL_DONGLE
 	bool	d3ack_timeout_occured;	/* flag to indicate d3ack resumed on timeout */
 #endif /* PCIE_FULL_DONGLE */
@@ -1067,10 +1093,10 @@ typedef struct dhd_pub {
 #ifdef DHD_ULP
 	void *dhd_ulp;
 #endif // endif
-#ifdef KEEP_JP_REGREV
+#if defined(KEEP_KR_REGREV) || defined(KEEP_JP_REGREV)
 	char vars_ccode[WLC_CNTRY_BUF_SZ];
 	uint vars_regrev;
-#endif /* KEEP_JP_REGREV */
+#endif /* KEEP_KR_REGREV || KEEP_JP_REGREV */
 #ifdef WLTDLS
 	uint32 tdls_mode;
 #endif // endif
@@ -1202,6 +1228,13 @@ typedef struct dhd_pub {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
 	struct mutex ndev_op_sync;
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)) */
+#ifdef DYNAMIC_MUMIMO_CONTROL
+	uint8 reassoc_mumimo_sw;
+	uint8 murx_block_eapol;
+#endif /* DYNAMIC_MUMIMO_CONTROL */
+#ifdef DHD_USE_CLMINFO_PARSER
+	bool is_clm_mult_regrev;	/* Checking for CLM single/multiple regrev */
+#endif /* DHD_USE_CLMINFO_PARSER */
 } dhd_pub_t;
 
 typedef struct {
@@ -2344,6 +2377,9 @@ extern char fw_path2[MOD_PARAM_PATHLEN];
 #ifdef WL_STATIC_IFNAME_PREFIX
 #undef WL_STATIC_IFNAME_PREFIX
 #endif /* WL_STATIC_IFNAME_PREFIX */
+#ifdef IFACE_HANG_FORCE_DEV_CLOSE
+#undef IFACE_HANG_FORCE_DEV_CLOSE
+#endif /* IFACE_HANG_FORCE_DEV_CLOSE */
 #endif /* ANDROID_PLATFORM_VERSION < 9 */
 #endif /* ANDROID_PLATFORM_VERSION */
 
@@ -2356,9 +2392,12 @@ extern char fw_path2[MOD_PARAM_PATHLEN];
 #if (ANDROID_PLATFORM_VERSION >= 9)
 #define PLATFORM_PATH	"/data/vendor/conn/"
 #define DHD_MAC_ADDR_EXPORT
+#if defined(WL_BAM)
 #define DHD_ADPS_BAM_EXPORT
+#endif	/* WL_BAM */
 #define DHD_EXPORT_CNTL_FILE
 #define DHD_SOFTAP_DUAL_IF_INFO
+#define DHD_SEND_HANG_PRIVCMD_ERRORS
 /* ANDROID P(9.0) and later, always use single nvram file */
 #ifndef DHD_USE_SINGLE_NVRAM_FILE
 #define DHD_USE_SINGLE_NVRAM_FILE
@@ -2419,6 +2458,7 @@ static INLINE int dhd_check_module_mac(dhd_pub_t *dhdp) { return 0; }
 int dhd_read_cis(dhd_pub_t *dhdp);
 void dhd_clear_cis(dhd_pub_t *dhdp);
 #if defined(SUPPORT_MULTIPLE_MODULE_CIS) && defined(USE_CID_CHECK)
+bool dhd_check_module(char *module_name);
 extern int dhd_check_module_b85a(void);
 extern int dhd_check_module_b90(void);
 #define BCM4359_MODULE_TYPE_B90B 1
@@ -2697,6 +2737,10 @@ int dhd_download_blob_cached(dhd_pub_t *dhd, char *file_path,
 
 int dhd_apply_default_txcap(dhd_pub_t *dhd, char *txcap_path);
 int dhd_apply_default_clm(dhd_pub_t *dhd, char *clm_path);
+#ifdef DHD_USE_CLMINFO_PARSER
+int dhd_get_clminfo(dhd_pub_t *dhd, char *clm_path);
+#define NUM_OF_COUNTRYS 150
+#endif /* DHD_USE_CLMINFO_PARSER */
 
 #ifdef SHOW_LOGTRACE
 int dhd_parse_logstrs_file(osl_t *osh, char *raw_fmts, int logstrs_size,
@@ -2797,6 +2841,8 @@ void dhd_get_read_buf_ptr(dhd_pub_t *dhd_pub, trace_buf_info_t *read_buf_info);
 #ifdef BCMPCIE
 extern int dhd_prot_debug_info_print(dhd_pub_t *dhd);
 extern bool dhd_bus_skip_clm(dhd_pub_t *dhdp);
+extern void dhd_pcie_dump_rc_conf_space_cap(dhd_pub_t *dhd);
+extern bool dhd_pcie_dump_int_regs(dhd_pub_t *dhd);
 #else
 #define dhd_prot_debug_info_print(x)
 static INLINE bool dhd_bus_skip_clm(dhd_pub_t *dhd_pub)
@@ -3047,4 +3093,26 @@ enum dhd_set_tid_mode {
 };
 extern void dhd_set_tid_based_on_uid(dhd_pub_t *dhdp, void *pkt);
 #endif /* SUPPORT_SET_TID */
+
+int dhd_check_eapol_4way_message(char *dump_data);
+#ifdef DYNAMIC_MUMIMO_CONTROL
+#ifdef ARGOS_CPU_SCHEDULER
+void argos_config_mumimo_reset(void);
+#endif /* ARGOS_CPU_SCHEDULER */
+#endif /* DYNAMIC_MUMIMO_CONTROL */
+
+#if defined(DHD_BLOB_EXISTENCE_CHECK) && defined(DHD_USE_CLMINFO_PARSER)
+#define CHECK_IS_BLOB(dhdp)		(dhdp)->is_blob
+#define CHECK_IS_MULT_REGREV(dhdp)	(dhdp)->is_clm_mult_regrev
+#elif defined(DHD_BLOB_EXISTENCE_CHECK) && !defined(DHD_USE_CLMINFO_PARSER)
+#define CHECK_IS_BLOB(dhdp)		(dhdp)->is_blob
+#define CHECK_IS_MULT_REGREV(dhdp)	FALSE
+#elif !defined(DHD_BLOB_EXISTENCE_CHECK) && defined(DHD_USE_CLMINFO_PARSER)
+#define CHECK_IS_BLOB(dhdp)		TRUE
+#define CHECK_IS_MULT_REGREV(dhdp)	(dhdp)->is_clm_mult_regrev
+#else /* !DHD_BLOB_EXISTENCE_CHECK && !DHD_USE_CLMINFO_PARSER */
+#define CHECK_IS_BLOB(dhdp)		FALSE
+#define CHECK_IS_MULT_REGREV(dhdp)	TRUE
+#endif /* DHD_BLOB_EXISTENCE_CHECK && DHD_USE_CLMINFO_PARSER */
+
 #endif /* _dhd_h_ */

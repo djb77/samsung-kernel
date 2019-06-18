@@ -1,7 +1,7 @@
 /*
  * Common function shared by Linux WEXT, cfg80211 and p2p drivers
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wldev_common.c 754283 2018-03-27 02:51:46Z $
+ * $Id: wldev_common.c 796833 2018-12-27 05:52:37Z $
  */
 
 #include <osl.h>
@@ -380,6 +380,12 @@ int wldev_set_band(
 {
 	int error = -1;
 
+#ifdef DHD_2G_ONLY_SUPPORT
+	if (band != WLC_BAND_2G) {
+		WLDEV_ERROR(("Enabled DHD only Band B support!! Blocked Band A!!\n"));
+		band = WLC_BAND_2G;
+	}
+#endif /* DHD_2G_ONLY_SUPPORT */
 	if ((band == WLC_BAND_AUTO) || (band == WLC_BAND_5G) || (band == WLC_BAND_2G)) {
 		error = wldev_ioctl_set(dev, WLC_SET_BAND, &band, sizeof(band));
 		if (!error)

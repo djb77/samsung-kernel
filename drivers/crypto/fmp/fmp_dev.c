@@ -383,13 +383,13 @@ struct platform_device *exynos_fmp_get_pdevice(struct device_node *node)
 
 	list_for_each_entry(fmp, &fmp_devices, list) {
 		if (fmp->dev->of_node == node) {
-			pr_info("%s: Found FMP device %p\n", __func__, fmp);
+			pr_info("%s: Found FMP device\n", __func__);
 			break;
 		}
 	}
 
 	fmp_pdev = to_platform_device(fmp->dev);
-	pr_info("%s: Matching platform device %p\n", __func__, fmp_pdev);
+	pr_info("%s: Matching platform device\n", __func__);
 out:
 	return fmp_pdev;
 }

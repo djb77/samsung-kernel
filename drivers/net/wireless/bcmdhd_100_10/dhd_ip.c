@@ -1,7 +1,7 @@
 /*
  * IP Packet Parser Module.
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_ip.c 791278 2018-11-29 01:05:18Z $
+ * $Id: dhd_ip.c 791305 2018-11-29 05:10:57Z $
  */
 #include <typedefs.h>
 #include <osl.h>

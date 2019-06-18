@@ -29,6 +29,7 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(batt_vol_adc_cal),
 	SEC_BATTERY_ATTR(batt_vol_aver),
 	SEC_BATTERY_ATTR(batt_vol_adc_aver),
+	SEC_BATTERY_ATTR(batt_voltage_now),
 	SEC_BATTERY_ATTR(batt_current_ua_now),
 	SEC_BATTERY_ATTR(batt_current_ua_avg),
 	SEC_BATTERY_ATTR(batt_filter_cfg),
@@ -235,7 +236,15 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		break;
 	case BATT_VOL_ADC_AVER:
 		break;
-
+	case BATT_VOLTAGE_NOW:
+		{
+			value.intval = 0;
+			psy_do_property(battery->pdata->fuelgauge_name, get,
+				POWER_SUPPLY_PROP_VOLTAGE_NOW, value);
+			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+			        value.intval * 1000);
+		}
+		break;
 	case BATT_CURRENT_UA_NOW:
 		{
 			value.intval = SEC_BATTERY_CURRENT_UA;
@@ -1206,6 +1215,8 @@ ssize_t sec_bat_store_attrs(
 	case BATT_VOL_AVER:
 		break;
 	case BATT_VOL_ADC_AVER:
+		break;
+	case BATT_VOLTAGE_NOW:
 		break;
 	case BATT_CURRENT_UA_NOW:
 		break;

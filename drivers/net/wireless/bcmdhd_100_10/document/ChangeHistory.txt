@@ -1,5 +1,93 @@
-BCM4361 DHD 100.13.15.4 for Android Crown Project
+DHD 100.13.28 for Android P Projects
 (Notes: 100.13.x is twigged off from 100.10.246)
+
+DHD 100.13.28 - 2019.01.25
+Others
+ - CS7111512(By LEE EONJI) Detect turn on failure in factory binary
+ - CS7299329(By Kim Yu-Kyoung) Fixed SoftAP CTS fail due to interface creation failure
+ - Blocked WLC_E_ROAM event to fix wakes-up frequently under weak signal AP
+ - Changed error results of GETSTAINFO private command to BCME_UNSUPPORTED if the BIGDATA_SOFTAP is not supported
+
+
+DHD 100.13.23 - 2019.01.18
+Kernel Panic
+ - Fixed kernel panic during mfg mode interface creation
+
+Security Patch
+ - CS7091164(By Kang Hyung Wook) SI-13561: Fixed kernel heap overflow security issue at dhdpcie_downloadvars
+ - CS7091371(By Kang Hyung Wook) SI-13584: Fixed kernel panic due to access to not allocated memory
+
+Others
+ - CS6785460(By Jeong Min Cheol) Send HANG event to the framework for the sequential private command failure
+ - CS7003600(By Kang MinHo) Support android private command for restoring roam/scan parameters
+ - CS7094302(By Yoon YeJi) Fixed connect failure caused by connection information not initialized
+ - CS7103552(By LEE EONJI) Fixed the recovery routine to fix the D3_ACK timeout issue
+ - CS7119174(By Kim Seong Hwan) Avoid HANG event indication due to sequential private command failures in case of unsupported error
+ - CS7137399(By Yoon YeJi) Fixed connect failure caused by connection information not initialized
+ - CS7141596(By Suthar Nitesh) Fixed MHS operates with STA mac address
+ - Control HANG report for consecutive Android private command failure by sysfs
+ - Increased the NUMBER_SEQUENTIAL_PRIVCMD_ERRORS from 4 to 7
+ - Taking a SOCRAM dump in the sequential private command error case
+
+
+DHD 100.13.21 - 2019.01.11
+Security Patch
+ - CS6935603(By Hong Min Whoa) SI-13638: Fixed Kernel warning message by restructuring the DMA_LOCK and DMA_UNLOCK
+ - CS7091347(By Kang Hyung Wook) SI-13585: Fixed kernel panic due to write buffer exceeds the size
+
+Others
+ - CS6650676(YeJi Yoon) Fixed mismatch connect status between framework and DHD
+ - CS6678972(By Hwang MinSik) Fixed TIS/TRP test failure and high current issue from sysfs change
+ - CS6715508(By Choi Hyeonu) Exported sysfs for ADPS bad AP list
+ - CS6744438(By Yoon Jae Ho) Fixed duplicated roaming notification to WPA supplicant during FT roaming
+ - CS6769798(By Kim Beom Jip) Fixed for GraceR/4359c0 P OS P2P connection failure issue
+ - CS6856753(By kwon Jaecheol) Added the dual interface capability filed in the SoftAP info file (.softap.info)
+ - CS6870793(By Tae-Yong Kim) Fixed prevent issues
+ - CS6871138(By Lee Gibum) Configure AER registers to debug PCIE ERROR ATTN issues
+ - CS6880409(By Sung-gi Choi) Fixed prevent issues
+ - CS6887298(By Min Whoa Hong) Fixed prevent issues
+ - CS6928243(By Sung-gi Choi) Fixed prevent issues
+ - CS6935678(By Hwang MinSik) Fixed array out of bound issue from sysfs mac address
+ - CS6984743(By Min SungBin) Print DPC schedule request timestamp for ROT issue
+ - CS6985032(By LEE EONJI) Enabled DHD_RECOVER_TIMEOUT for D3_ACK missing case on 4359C0 and 4361B0
+ - CS6993967(By Jeong Min Cheol) Added last_d3_inform_timestamp to check root cause of ROT
+ - CS7042030(By Min SungBin) Implemented the new API to sync up the status between RC and EP to avoid unwanted L1ss configuration
+ - Changed the DHD_COMMON_DUMP_PATH for non-BCM4375 Android P OS projects
+ - DHD driven random mac enable by default for 4361B0
+ - Enable frameburst for standalone 2.4GHz SoftAP on Dream and Great project
+ - Wi-Fi Sharing-Lite feature support for Android P OS
+
+
+DHD 100.13.16.3 - 2018.12.05
+Kernel Panic
+ - CS6461136(By Min SungBin) Fixed for kernel panic due to stack overflow at get_roamscan_channel_list()
+
+Others
+ - CS6302259(By Kang Hyung Wook) Supported DHD driven Random MAC feature
+ - CS6324532(By Choi Hyeonu) Port files under /data/vendor/conn to sysfs after Android P OS
+ - CS6396705(By Min SungBin) Added additional timestamp log to debug resumed on timeout issue
+ - CS6398346(By Hyeonu Choi) Fixed prevent issues
+ - CS6516071(By Choi Hyeonu) Fixed for corner case of schedule_timeout() API at dhd_timeout_expired()
+ - CS6536174(By Choi Hyeonu) CS6433018(By Choi Hyeonu) Fixed prevent issues
+ - CS6594869(By Min SungBin) Triggering Kernel panic for the scheduling problem only if the memdump mode is enabled
+ - CS6600348(By LEE EONJI) Implemented 4359c0/GraceR P OS Wi-Fi sharing feature
+ - CS6658253(By Choi Hyeonu) Fixed random mac setting issue instead of otp mac
+ - CS6678972(By Hwang MinSik) Fixed TIS/TRP test failure and high current issue from sysfs change
+ - CS6713692(By Kim MinSoo) Fixed NET_RX delay issue
+ - CS6769798(By Kim Beom Jip) Fixed for GraceR/4359c0 P OS P2P connection failure issue
+ - CS6791516(By Lee Gibum) Fixed the unexpected frameburst enable on standalone SoftAP in 2GHz
+ - CS6791556(By Hwang MinSik) Removed CR/LF character at .cid.info including sysfs
+ - CS6809444(By Hwang MinSik) Unified DHD_COMMON_DUMP_PATH for the Android P OS project of all chips
+ - Changed the timestamp value to Kernel local time to debug resumed on timeout and scan timeout issues
+ - Defer RxBuf post size based on the rxbufpost_sz iovar return value for monitor mode
+ - Disabled DHD_LB_IRQSET for Exynos8890 platform
+ - Dump AER HeaderLog registers in configuration space for PCIe debugging
+ - Dumping PCIe registers for PCIe debugging enhancement
+ - Fixed VHT features enable issue from GraceR project
+ - Fixed unexpected RSDB mode configuration for legacy RSDB chip
+ - Implemented the debug code to check if the scan timeout or resumed on timeout happens due to the DPC scheduling problem
+ - Refined TDLS initialization code
+
 
 DHD 100.13.15.4 - 2018.12.03
 Security Patch

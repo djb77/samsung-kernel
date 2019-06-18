@@ -1,7 +1,7 @@
 /*
  * Linux OS Independent Layer
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linux_osl.c 795952 2018-12-20 11:39:02Z $
+ * $Id: linux_osl.c 794162 2018-12-12 08:18:57Z $
  */
 
 #define LINUX_PORT
@@ -259,8 +259,8 @@ osl_dma_map_log_init(uint32 item_len)
 {
 	dhd_map_log_t *map_log;
 	gfp_t flags;
-	uint32 alloc_size = sizeof(dhd_map_log_t) +
-		(item_len * sizeof(dhd_map_item_t));
+	uint32 alloc_size = (uint32)(sizeof(dhd_map_log_t) +
+		(item_len * sizeof(dhd_map_item_t)));
 
 	flags = CAN_SLEEP() ? GFP_KERNEL : GFP_ATOMIC;
 	map_log = (dhd_map_log_t *)kmalloc(alloc_size, flags);
