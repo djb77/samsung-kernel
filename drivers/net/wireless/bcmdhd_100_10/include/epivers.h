@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -33,19 +33,19 @@
 
 #define	EPI_MINOR_VERSION	13
 
-#define	EPI_RC_NUMBER		15
+#define	EPI_RC_NUMBER		28
 
-#define	EPI_INCREMENTAL_NUMBER	5
+#define	EPI_INCREMENTAL_NUMBER	0
 
 #define	EPI_BUILD_NUMBER	0
 
-#define	EPI_VERSION		100, 13, 15, 5
+#define	EPI_VERSION		100, 13, 28, 0
 
-#define	EPI_VERSION_NUM		0x640d0f05
+#define	EPI_VERSION_NUM		0x640d1c00
 
-#define EPI_VERSION_DEV		100.13.15
+#define EPI_VERSION_DEV		100.13.28
 
 /* Driver Version String, ASCII, 32 chars max */
-#define	EPI_VERSION_STR		"100.13.15.5 (r)"
+#define	EPI_VERSION_STR		"100.13.28 (r)"
 
 #endif /* _epivers_h_ */

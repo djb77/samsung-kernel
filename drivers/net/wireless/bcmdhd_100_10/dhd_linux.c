@@ -2,7 +2,7 @@
  * Broadcom Dongle Host Driver (DHD), Linux-specific network interface
  * Basically selected code segments from usb-cdc.c and usb-rndis.c
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 795932 2018-12-20 10:27:35Z $
+ * $Id: dhd_linux.c 799707 2019-01-17 06:02:24Z $
  */
 
 #include <typedefs.h>
@@ -342,6 +342,12 @@ static int __dhd_apf_delete_filter(struct net_device *ndev, uint32 filter_id);
 static struct notifier_block argos_wifi; /* STA */
 static struct notifier_block argos_p2p; /* P2P */
 argos_rps_ctrl argos_rps_ctrl_data;
+#ifdef DYNAMIC_MUMIMO_CONTROL
+argos_mumimo_ctrl argos_mumimo_ctrl_data;
+#ifdef CONFIG_SPLIT_ARGOS_SET
+static struct notifier_block argos_mimo; /* STA */
+#endif /* CONFIG_SPLIT_ARGOS_SET */
+#endif /* DYNAMIC_MUMIMO_CONTROL */
 #endif /* (ARGOS_RPS_CPU_CTL && ARGOS_CPU_SCHEDULER) || ARGOS_NOTIFY_CB */
 
 #ifdef DHD_FW_COREDUMP
@@ -2465,6 +2471,9 @@ dhd_napi_schedule(void *info)
 	if (napi_schedule_prep(&dhd->rx_napi_struct)) {
 		__napi_schedule(&dhd->rx_napi_struct);
 		DHD_LB_STATS_PERCPU_ARR_INCR(dhd->napi_percpu_run_cnt);
+#ifdef WAKEUP_KSOFTIRQD_POST_NAPI_SCHEDULE
+		raise_softirq(NET_RX_SOFTIRQ);
+#endif /* WAKEUP_KSOFTIRQD_POST_NAPI_SCHEDULE */
 	}
 
 	/*
@@ -3391,14 +3400,13 @@ dhd_timeout_expired(dhd_timeout_t *tmo)
 		if (tmo->increment > tmo->tick)
 			tmo->increment = tmo->tick;
 	} else {
-		wait_queue_head_t delay_wait;
-		DECLARE_WAITQUEUE(wait, current);
-		init_waitqueue_head(&delay_wait);
-		add_wait_queue(&delay_wait, &wait);
-		set_current_state(TASK_INTERRUPTIBLE);
-		(void)schedule_timeout(1);
-		remove_wait_queue(&delay_wait, &wait);
-		set_current_state(TASK_RUNNING);
+		/*
+		 * OSL_SLEEP() is corresponding to usleep_range(). In non-atomic
+		 * context where the exact wakeup time is flexible, it would be good
+		 * to use usleep_range() instead of udelay(). It takes a few advantages
+		 * such as improving responsiveness and reducing power.
+		 */
+		OSL_SLEEP(jiffies_to_msecs(1));
 	}
 
 	return 0;
@@ -4391,6 +4399,13 @@ __dhd_sendpkt(dhd_pub_t *dhdp, int ifidx, void *pktbuf)
 	}
 
 	/* Use bus module to send data frame */
+#ifdef DYNAMIC_MUMIMO_CONTROL
+	if (dhdp->reassoc_mumimo_sw &&
+		dhd_check_eapol_4way_message(PKTDATA(dhdp->osh, pktbuf)) == EAPOL_4WAY_M4) {
+		dhdp->reassoc_mumimo_sw = 0;
+		DHD_ENABLE_RUNTIME_PM(dhdp);
+	}
+#endif /* DYNAMIC_MUMIMO_CONTROL */
 #ifdef PROP_TXSTATUS
 	{
 		if (dhd_wlfc_commit_packets(dhdp, (f_commitpkt_t)dhd_bus_txdata,
@@ -5390,7 +5405,7 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 			int delta_sec;
 			int delta_sync;
 			int sync_per_sec;
-			u64 curr_time = DIV_U64(OSL_LOCALTIME_NS(), NSEC_PER_SEC);
+			u64 curr_time = DIV_U64_BY_U32(OSL_LOCALTIME_NS(), NSEC_PER_SEC);
 			ifp->tsync_rcvd ++;
 			delta_sync = ifp->tsync_rcvd - ifp->tsyncack_txed;
 			delta_sec = curr_time - ifp->last_sync;
@@ -5452,6 +5467,15 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 			}
 		}
 #endif /* PCIE_FULL_DONGLE */
+#ifdef DYNAMIC_MUMIMO_CONTROL
+		if (dhdp->reassoc_mumimo_sw && dhdp->murx_block_eapol &&
+			dhd_check_eapol_4way_message((void *)(skb->data)) == EAPOL_4WAY_M1) {
+			DHD_ERROR(("%s: Reassoc is in progress..."
+				" drop EAPOL M1 frame\n", __FUNCTION__));
+			PKTFREE(dhdp->osh, pktbuf, FALSE);
+			continue;
+		}
+#endif /* DYNAMIC_MUMIMO_CONTROL */
 
 		/* Get the protocol, maintain skb around eth_type_trans()
 		 * The main reason for this hack is for the limitation of
@@ -6106,10 +6130,11 @@ exit:
 static int
 dhd_dpc_thread(void *data)
 {
-#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET)
+#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET) && \
+	!defined(CONFIG_SOC_EXYNOS7870)
 	int ret = 0;
 	unsigned long flags;
-#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET */
+#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET && !CONFIG_SOC_EXYNOS7870 */
 	tsk_ctl_t *tsk = (tsk_ctl_t *)data;
 	dhd_info_t *dhd = (dhd_info_t *)tsk->parent;
 
@@ -6123,7 +6148,8 @@ dhd_dpc_thread(void *data)
 		setScheduler(current, SCHED_FIFO, &param);
 	}
 
-#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET)
+#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET) && \
+	!defined(CONFIG_SOC_EXYNOS7870)
 	if (!zalloc_cpumask_var(&dhd->pub.default_cpu_mask, GFP_KERNEL)) {
 		DHD_ERROR(("dpc_thread, zalloc_cpumask_var error\n"));
 		dhd->pub.affinity_isdpc = FALSE;
@@ -6173,7 +6199,7 @@ dhd_dpc_thread(void *data)
 #ifdef CUSTOM_SET_CPUCORE
 	dhd->pub.current_dpc = current;
 #endif /* CUSTOM_SET_CPUCORE */
-#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET */
+#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET && !CONFIG_SOC_EXYNOS7870 */
 	/* Run until signal received */
 	while (1) {
 		if (!binary_sema_down(tsk)) {
@@ -6231,10 +6257,11 @@ dhd_rxf_thread(void *data)
 {
 	tsk_ctl_t *tsk = (tsk_ctl_t *)data;
 	dhd_info_t *dhd = (dhd_info_t *)tsk->parent;
-#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET)
+#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET) && \
+	!defined(CONFIG_SOC_EXYNOS7870)
 	int ret = 0;
 	unsigned long flags;
-#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET */
+#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET && CONFIG_SOC_EXYNOS7870 */
 #if defined(WAIT_DEQUEUE)
 #define RXF_WATCHDOG_TIME 250 /* BARK_TIME(1000) /  */
 	ulong watchdogTime = OSL_SYSUPTIME(); /* msec */
@@ -6251,7 +6278,8 @@ dhd_rxf_thread(void *data)
 		setScheduler(current, SCHED_FIFO, &param);
 	}
 
-#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET)
+#if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET) && \
+	!defined(CONFIG_SOC_EXYNOS7870)
 	if (!zalloc_cpumask_var(&dhd->pub.rxf_affinity_cpu_mask, GFP_KERNEL)) {
 		DHD_ERROR(("rxthread zalloc_cpumask_var error\n"));
 		dhd->pub.affinity_isrxf = FALSE;
@@ -6275,7 +6303,7 @@ dhd_rxf_thread(void *data)
 #ifdef CUSTOM_SET_CPUCORE
 	dhd->pub.current_rxf = current;
 #endif /* CUSTOM_SET_CPUCORE */
-#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET */
+#endif /* ARGOS_CPU_SCHEDULER && !DHD_LB_IRQSET && !CONFIG_SOC_EXYNOS7870 */
 	/* Run until signal received */
 	while (1) {
 		if (down_interruptible(&tsk->sema) == 0) {
@@ -6459,6 +6487,7 @@ dhd_sched_dpc(dhd_pub_t *dhdp)
 		}
 		return;
 	} else {
+		dhd_bus_set_dpc_sched_time(dhdp);
 		tasklet_schedule(&dhd->tasklet);
 	}
 }
@@ -6723,10 +6752,14 @@ static bool dhd_check_hang(struct net_device *net, dhd_pub_t *dhdp, int error)
 				dhdp->hang_reason = HANG_REASON_DONGLE_TRAP;
 #ifdef BCMPCIE
 			} else if (dhdp->d3ackcnt_timeout) {
-				dhdp->hang_reason = HANG_REASON_D3_ACK_TIMEOUT;
+				dhdp->hang_reason = dhdp->is_sched_error ?
+					HANG_REASON_D3_ACK_TIMEOUT_SCHED_ERROR :
+					HANG_REASON_D3_ACK_TIMEOUT;
 #endif /* BCMPCIE */
 			} else {
-				dhdp->hang_reason = HANG_REASON_IOCTL_RESP_TIMEOUT;
+				dhdp->hang_reason = dhdp->is_sched_error ?
+					HANG_REASON_IOCTL_RESP_TIMEOUT_SCHED_ERROR :
+					HANG_REASON_IOCTL_RESP_TIMEOUT;
 			}
 		}
 		net_os_send_hang_message(net);
@@ -9799,6 +9832,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	INIT_DELAYED_WORK(&dhd->event_log_dispatcher_work, dhd_event_logtrace_process);
 #endif /* SHOW_LOGTRACE */
 
+	DHD_INFO(("%s: sssr mempool init\n", __FUNCTION__));
 	DHD_SSSR_MEMPOOL_INIT(&dhd->pub);
 
 	(void)dhd_sysfs_init(dhd);
@@ -10129,7 +10163,7 @@ bool dhd_validate_chipid(dhd_pub_t *dhdp)
 	config_chipid = BCM43430_CHIP_ID;
 #elif defined(BCM43018_CHIP)
 	config_chipid = BCM43018_CHIP_ID;
-#elif defined(BCM43455_CHIP)
+#elif defined(BCM43455_CHIP) || defined(BCM43456_CHIP)
 	config_chipid = BCM4345_CHIP_ID;
 #elif defined(BCM43454_CHIP)
 	config_chipid = BCM43454_CHIP_ID;
@@ -10145,6 +10179,11 @@ bool dhd_validate_chipid(dhd_pub_t *dhdp)
 	return FALSE;
 #endif /* BCM4354_CHIP */
 
+#ifdef SUPPORT_MULTIPLE_CHIP_4345X
+	if (config_chipid == BCM43454_CHIP_ID || config_chipid == BCM4345_CHIP_ID) {
+		return TRUE;
+	}
+#endif /* SUPPORT_MULTIPLE_CHIP_4345X */
 #if defined(BCM4354_CHIP) && defined(SUPPORT_MULTIPLE_REVISION)
 	if (chipid == BCM4350_CHIP_ID && config_chipid == BCM4354_CHIP_ID) {
 		return TRUE;
@@ -10855,7 +10894,11 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	uint32 frameburst = CUSTOM_FRAMEBURST_SET;
 	uint wnm_bsstrans_resp = 0;
 #ifdef SUPPORT_SET_CAC
+#ifdef SUPPORT_CUSTOM_SET_CAC
+	uint32 cac = 0;
+#else
 	uint32 cac = 1;
+#endif /* SUPPORT_CUSTOM_SET_CAC */
 #endif /* SUPPORT_SET_CAC */
 
 #if defined(DHD_NON_DMA_M2M_CORRUPTION)
@@ -10963,15 +11006,15 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #ifdef DISABLE_11N_PROPRIETARY_RATES
 	uint32 ht_features = 0;
 #endif /* DISABLE_11N_PROPRIETARY_RATES */
-#ifdef CUSTOM_PSPRETEND_THR
-	uint32 pspretend_thr = CUSTOM_PSPRETEND_THR;
-#endif // endif
 #ifdef CUSTOM_EVENT_PM_WAKE
 	uint32 pm_awake_thresh = CUSTOM_EVENT_PM_WAKE;
 #endif	/* CUSTOM_EVENT_PM_WAKE */
 #ifdef DISABLE_PRUNED_SCAN
 	uint32 scan_features = 0;
 #endif /* DISABLE_PRUNED_SCAN */
+#ifdef DHD_2G_ONLY_SUPPORT
+	uint band = WLC_BAND_2G;
+#endif /* DHD_2G_ONLY_SUPPORT */
 #ifdef BCMPCIE_OOB_HOST_WAKE
 	uint32 hostwake_oob = 0;
 #endif /* BCMPCIE_OOB_HOST_WAKE */
@@ -10985,10 +11028,6 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	dhd->apf_set = FALSE;
 #endif /* APF */
 #endif /* PKT_FILTER_SUPPORT */
-#ifdef WLTDLS
-	dhd->tdls_enable = FALSE;
-	dhd_tdls_set_mode(dhd, false);
-#endif /* WLTDLS */
 	dhd->suspend_bcn_li_dtim = CUSTOM_SUSPEND_BCN_LI_DTIM;
 #ifdef ENABLE_MAX_DTIM_IN_SUSPEND
 	dhd->max_dtim_enable = TRUE;
@@ -11079,6 +11118,15 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	}
 #endif /* GET_CUSTOM_MAC_ENABLE */
 
+#ifdef DHD_USE_CLMINFO_PARSER
+	if ((ret = dhd_get_clminfo(dhd, clm_path)) < 0) {
+		if (dhd->is_clm_mult_regrev) {
+			DHD_ERROR(("%s: CLM Information load failed. Abort initialization.\n",
+				__FUNCTION__));
+			goto done;
+		}
+	}
+#endif /* DHD_USE_CLMINFO_PARSER */
 	if ((ret = dhd_apply_default_clm(dhd, clm_path)) < 0) {
 		DHD_ERROR(("%s: CLM set failed. Abort initialization.\n", __FUNCTION__));
 		goto done;
@@ -11255,6 +11303,14 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 			DHD_ERROR(("%s: country code setting failed\n", __FUNCTION__));
 	}
 
+#ifdef DHD_2G_ONLY_SUPPORT
+	DHD_ERROR(("Enabled DHD 2G only support!!\n"));
+	ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_BAND, (char *)&band, sizeof(band), TRUE, 0);
+	if (ret < 0) {
+		DHD_ERROR(("%s Set Band B failed %d\n", __FUNCTION__, ret));
+	}
+#endif /* DHD_2G_ONLY_SUPPORT */
+
 	/* Set Listen Interval */
 	ret = dhd_iovar(dhd, 0, "assoc_listen", (char *)&listen_interval, sizeof(listen_interval),
 			NULL, 0, TRUE);
@@ -11312,14 +11368,10 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #ifdef BCMCCX
 	ret = dhd_iovar(dhd, 0, "ccx_enable", (char *)&ccx, sizeof(ccx), NULL, 0, TRUE);
 #endif /* BCMCCX */
+
 #ifdef WLTDLS
-#ifdef ENABLE_TDLS_AUTO_MODE
-	/* by default TDLS on and auto mode on */
-	_dhd_tdls_enable(dhd, true, true, NULL);
-#else
-	/* by default TDLS on and auto mode off */
-	_dhd_tdls_enable(dhd, true, false, NULL);
-#endif /* ENABLE_TDLS_AUTO_MODE */
+	dhd->tdls_enable = FALSE;
+	dhd_tdls_set_mode(dhd, false);
 #endif /* WLTDLS */
 
 #ifdef DHD_ENABLE_LPC
@@ -11553,8 +11605,8 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	}
 #endif /* BCMSUP_4WAY_HANDSHAKE */
 #if defined(SUPPORT_2G_VHT) || defined(SUPPORT_5G_1024QAM_VHT)
-	ret = dhd_iovar(dhd, 0, "vht_features", (char *)&vht_features, sizeof(vht_features),
-			NULL, 0, FALSE);
+	ret = dhd_iovar(dhd, 0, "vht_features", NULL, 0,
+			(char *)&vht_features, sizeof(vht_features), FALSE);
 	if (ret < 0) {
 		DHD_ERROR(("%s vht_features get failed %d\n", __FUNCTION__, ret));
 		vht_features = 0;
@@ -11595,15 +11647,9 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 		DHD_ERROR(("%s ht_features set failed %d\n", __FUNCTION__, ret));
 	}
 #endif /* DISABLE_11N_PROPRIETARY_RATES */
-#ifdef CUSTOM_PSPRETEND_THR
-	/* Turn off MPC in AP mode */
-	ret = dhd_iovar(dhd, 0, "pspretend_threshold", (char *)&pspretend_thr,
-			sizeof(pspretend_thr), NULL, 0, TRUE);
-	if (ret < 0) {
-		DHD_ERROR(("%s pspretend_threshold for HostAPD failed  %d\n",
-			__FUNCTION__, ret));
-	}
-#endif // endif
+#ifdef DHD_DISABLE_VHTMODE
+	dhd_disable_vhtmode(dhd);
+#endif /* DHD_DISABLE_VHTMODE */
 
 	ret = dhd_iovar(dhd, 0, "buf_key_b4_m4", (char *)&buf_key_b4_m4, sizeof(buf_key_b4_m4),
 			NULL, 0, TRUE);
@@ -11671,7 +11717,9 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #endif /* PNO_SUPPORT */
 	/* enable dongle roaming event */
 #ifdef WL_CFG80211
+#if !defined(ROAM_EVT_DISABLE)
 	setbit(eventmask, WLC_E_ROAM);
+#endif /* !ROAM_EVT_DISABLE */
 	setbit(eventmask, WLC_E_BSSID);
 #endif /* WL_CFG80211 */
 #ifdef BCMCCX
@@ -11775,6 +11823,9 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #ifdef WL_NAN
 		setbit(eventmask_msg->mask, WLC_E_SLOTTED_BSS_PEER_OP);
 #endif /* WL_NAN */
+#ifdef SUPPORT_EVT_SDB_LOG
+		setbit(eventmask_msg->mask, WLC_E_SDB_TRANSITION);
+#endif /* SUPPORT_EVT_SDB_LOG */
 		/* Write updated Event mask */
 		eventmask_msg->ver = EVENTMSGS_VER;
 		eventmask_msg->command = EVENTMSGS_SET_MASK;
@@ -14190,6 +14241,9 @@ dhd_wl_host_event(dhd_info_t *dhd, int ifidx, void *pktdata, uint16 pktlen,
 	int bcmerror = 0;
 #ifdef WL_CFG80211
 	unsigned long flags = 0;
+#ifdef DYNAMIC_MUMIMO_CONTROL
+	static uint32 reassoc_err = 0;
+#endif /* DYNAMIC_MUMIMO_CONTROL */
 #endif /* WL_CFG80211 */
 	ASSERT(dhd != NULL);
 
@@ -14234,6 +14288,29 @@ dhd_wl_host_event(dhd_info_t *dhd, int ifidx, void *pktdata, uint16 pktlen,
 		}
 		spin_unlock_irqrestore(&dhd->pub.up_lock, flags);
 	}
+#ifdef DYNAMIC_MUMIMO_CONTROL
+#define REASSOC_ERROR_RETRY_LIMIT	1
+	if (dhd->pub.reassoc_mumimo_sw) {
+		uint event_type = ntoh32(event->event_type);
+		uint status = ntoh32(event->status);
+
+		if (event_type == WLC_E_REASSOC) {
+			if (status == WLC_E_STATUS_SUCCESS) {
+				reassoc_err = 0;
+			} else {
+				reassoc_err++;
+			}
+
+			if (reassoc_err > REASSOC_ERROR_RETRY_LIMIT) {
+				dhd->pub.reassoc_mumimo_sw = FALSE;
+				dhd->pub.murx_block_eapol = FALSE;
+				DHD_ENABLE_RUNTIME_PM(&dhd->pub);
+				dhd_txflowcontrol(&dhd->pub, ALL_INTERFACES, OFF);
+			}
+		}
+	}
+#undef REASSOC_ERROR_RETRY_LIMIT
+#endif /* DYNAMIC_MUMIMO_CONTROL */
 #endif /* defined(WL_CFG80211) */
 
 	return (bcmerror);
@@ -16203,10 +16280,10 @@ void dhd_get_customized_country_code(struct net_device *dev, char *country_iso_c
 	wl_country_t *cspec)
 {
 	dhd_info_t *dhd = DHD_DEV_INFO(dev);
-#if defined(DHD_BLOB_EXISTENCE_CHECK)
-	if (!dhd->pub.is_blob)
-#endif /* DHD_BLOB_EXISTENCE_CHECK */
-	{
+	dhd_pub_t *dhdp = &dhd->pub;
+
+	BCM_REFERENCE(dhdp);
+	if (!CHECK_IS_BLOB(dhdp) || CHECK_IS_MULT_REGREV(dhdp)) {
 #if defined(CUSTOM_COUNTRY_CODE)
 		get_customized_country_code(dhd->adapter, country_iso_code, cspec,
 			dhd->pub.dhd_cflags);
@@ -16214,7 +16291,7 @@ void dhd_get_customized_country_code(struct net_device *dev, char *country_iso_c
 		get_customized_country_code(dhd->adapter, country_iso_code, cspec);
 #endif /* CUSTOM_COUNTRY_CODE */
 	}
-#if defined(DHD_BLOB_EXISTENCE_CHECK) && !defined(CUSTOM_COUNTRY_CODE)
+#if !defined(CUSTOM_COUNTRY_CODE)
 	else {
 		/* Replace the ccode to XZ if ccode is undefined country */
 		if (strncmp(country_iso_code, "", WLC_CNTRY_BUF_SZ) == 0) {
@@ -16224,19 +16301,26 @@ void dhd_get_customized_country_code(struct net_device *dev, char *country_iso_c
 			DHD_ERROR(("%s: ccode change to %s\n", __FUNCTION__, country_iso_code));
 		}
 	}
-#endif /* DHD_BLOB_EXISTENCE_CHECK && !CUSTOM_COUNTRY_CODE */
+#endif /* !CUSTOM_COUNTRY_CODE */
+
+#if defined(KEEP_KR_REGREV)
+	if (strncmp(country_iso_code, "KR", 3) == 0) {
+		if (!CHECK_IS_BLOB(dhdp) || CHECK_IS_MULT_REGREV(dhdp)) {
+			if (strncmp(dhd->pub.vars_ccode, "KR", 3) == 0) {
+				cspec->rev = dhd->pub.vars_regrev;
+			}
+		}
+	}
+#endif /* KEEP_KR_REGREV */
 
 #ifdef KEEP_JP_REGREV
 	if (strncmp(country_iso_code, "JP", 3) == 0) {
-#if defined(DHD_BLOB_EXISTENCE_CHECK)
-		if (dhd->pub.is_blob) {
+		if (CHECK_IS_BLOB(dhdp) && !CHECK_IS_MULT_REGREV(dhdp)) {
 			if (strncmp(dhd->pub.vars_ccode, "J1", 3) == 0) {
 				memcpy(cspec->ccode, dhd->pub.vars_ccode,
 					sizeof(dhd->pub.vars_ccode));
 			}
-		} else
-#endif /* DHD_BLOB_EXISTENCE_CHECK */
-		{
+		} else {
 			if (strncmp(dhd->pub.vars_ccode, "JP", 3) == 0) {
 				cspec->rev = dhd->pub.vars_regrev;
 			}
@@ -16254,11 +16338,66 @@ void dhd_bus_country_set(struct net_device *dev, wl_country_t *cspec, bool notif
 
 	if (dhd && dhd->pub.up) {
 		memcpy(&dhd->pub.dhd_cspec, cspec, sizeof(wl_country_t));
+#ifdef DHD_DISABLE_VHTMODE
+		dhd_disable_vhtmode(&dhd->pub);
+#endif /* DHD_DISABLE_VHTMODE */
+
 #ifdef WL_CFG80211
 		wl_update_wiphybands(cfg, notify);
 #endif // endif
 	}
 }
+
+#ifdef DHD_DISABLE_VHTMODE
+void
+dhd_disable_vhtmode(dhd_pub_t *dhd)
+{
+	int ret = 0;
+	uint32 vhtmode = FALSE;
+	char buf[32];
+
+	/* Get vhtmode */
+	ret = dhd_iovar(dhd, 0, "vhtmode", NULL, 0, (char *)&buf, sizeof(buf), FALSE);
+	if (ret < 0) {
+		DHD_ERROR(("%s Get vhtmode Fail ret %d\n", __FUNCTION__, ret));
+		return;
+	}
+	memcpy(&vhtmode, buf, sizeof(uint32));
+	if (vhtmode == 0) {
+		DHD_ERROR(("%s Get vhtmode is 0\n", __FUNCTION__));
+		return;
+	}
+	vhtmode = FALSE;
+
+	/* Set vhtmode */
+	ret = dhd_iovar(dhd, 0, "vhtmode", (char *)&vhtmode, sizeof(vhtmode), NULL, 0, TRUE);
+	if (ret == 0) {
+		DHD_ERROR(("%s Set vhtmode Success %d\n", __FUNCTION__, vhtmode));
+	} else {
+		if (ret == BCME_NOTDOWN) {
+			uint wl_down = 1;
+			ret = dhd_wl_ioctl_cmd(dhd, WLC_DOWN,
+				(char *)&wl_down, sizeof(wl_down), TRUE, 0);
+			if (ret) {
+				DHD_ERROR(("%s WL_DOWN Fail ret %d\n", __FUNCTION__, ret));
+				return;
+			}
+
+			ret = dhd_iovar(dhd, 0, "vhtmode", (char *)&vhtmode,
+				sizeof(vhtmode), NULL, 0, TRUE);
+			DHD_ERROR(("%s Set vhtmode %d, ret %d\n", __FUNCTION__, vhtmode, ret));
+
+			ret = dhd_wl_ioctl_cmd(dhd, WLC_UP,
+				(char *)&wl_down, sizeof(wl_down), TRUE, 0);
+			if (ret) {
+				DHD_ERROR(("%s WL_UP Fail ret %d\n", __FUNCTION__, ret));
+			}
+		} else {
+			DHD_ERROR(("%s Set vhtmode 0 failed  %d\n", __FUNCTION__, ret));
+		}
+	}
+}
+#endif /* DHD_DISABLE_VHTMODE */
 
 void dhd_bus_band_set(struct net_device *dev, uint band)
 {
@@ -16587,6 +16726,15 @@ dhd_convert_memdump_type_to_str(uint32 type, char *buf, int substr_type)
 			type_str = "DUE_TO_BT";
 			break;
 #endif /* DHD_ERPOM */
+		case DUMP_TYPE_LOGSET_BEYOND_RANGE:
+			type_str = "LOGSET_BEYOND_RANGE";
+			break;
+		case DUMP_TYPE_CTO_RECOVERY:
+			type_str = "CTO_RECOVERY";
+			break;
+		case DUMP_TYPE_SEQUENTIAL_PRIVCMD_ERROR:
+			type_str = "SEQUENTIAL_PRIVCMD_ERROR";
+			break;
 		default:
 			type_str = "Unknown_type";
 			break;
@@ -18416,6 +18564,8 @@ do_dhd_log_dump(dhd_pub_t *dhdp, log_dump_type_t *type)
 	DHD_GENERAL_UNLOCK(dhdp, flags);
 
 	dhd_info = (dhd_info_t *)dhdp->info;
+	BCM_REFERENCE(dhd_info);
+
 	/* in case of trap get preserve logs from ETD */
 #if defined(BCMPCIE) && defined(DEBUGABILITY_ETD_PRSRV_LOGS)
 	if (dhdp->dongle_trap_occured &&
@@ -18425,10 +18575,12 @@ do_dhd_log_dump(dhd_pub_t *dhdp, log_dump_type_t *type)
 	}
 #endif /* BCMPCIE */
 
+#ifdef SHOW_LOGTRACE
 	/* flush the event work items to get any fw events/logs
 	 * flush_work is a blocking call
 	 */
 	flush_delayed_work(&dhd_info->event_log_dispatcher_work);
+#endif /* SHOW_LOGTRACE */
 
 #ifdef CUSTOMER_HW4_DEBUG
 	/* print last 'x' KB of preserve buffer data to kmsg console
@@ -19185,6 +19337,144 @@ static int argos_status_notifier_wifi_cb(struct notifier_block *notifier,
 	unsigned long speed, void *v);
 static int argos_status_notifier_p2p_cb(struct notifier_block *notifier,
 	unsigned long speed, void *v);
+#if defined(CONFIG_SPLIT_ARGOS_SET) && defined(DYNAMIC_MUMIMO_CONTROL)
+static int argos_status_notifier_config_mumimo_cb(struct notifier_block *notifier,
+	unsigned long speed, void *v);
+#endif /* CONFIG_SPLIT_ARGOS_SET && DYNAMIC_MUMIMO_CONTROL */
+
+#ifdef DYNAMIC_MUMIMO_CONTROL
+#define MUMIMO_CONTROL_TIMER_INTERVAL_MS	5000
+
+void
+argos_config_mumimo_timer(unsigned long data)
+{
+	argos_mumimo_ctrl *ctrl_data = (argos_mumimo_ctrl *)data;
+
+	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
+	schedule_work(&ctrl_data->mumimo_ctrl_work);
+}
+
+void
+argos_config_mumimo_handler(struct work_struct *work)
+{
+	argos_mumimo_ctrl *ctrl_data;
+	struct net_device *dev;
+	int err;
+	int new_cap;
+
+	ctrl_data = container_of(work, argos_mumimo_ctrl, mumimo_ctrl_work);
+
+	dev = ctrl_data->dev;
+
+	if (!dev) {
+		return;
+	}
+
+	new_cap = ctrl_data->cur_murx_bfe_cap;
+	err = wl_set_murx_bfe_cap(dev, new_cap, TRUE);
+	if (err) {
+		DHD_ERROR(("%s: Failed to set murx_bfe_cap to %d, err=%d\n",
+			__FUNCTION__, new_cap, err));
+	} else {
+		DHD_ERROR(("%s: Newly configured murx_bfe_cap = %d\n",
+			__FUNCTION__, new_cap));
+	}
+}
+
+void
+argos_status_notifier_config_mumimo(struct notifier_block *notifier,
+	unsigned long speed, void *v)
+{
+	struct net_device *dev;
+	int prev_murx_bfe_cap;
+	int cap;
+	dhd_info_t *dhd;
+
+	dev = argos_mumimo_ctrl_data.dev;
+	if (!dev) {
+		return;
+	}
+
+	dhd = DHD_DEV_INFO(dev);
+	if (!dhd) {
+		return;
+	}
+
+	/* Check if STA reassociate with the AP after murx configuration */
+	if (dhd->pub.reassoc_mumimo_sw) {
+		/* Cancel the MU-MIMO control timer */
+		if (timer_pending(&argos_mumimo_ctrl_data.config_timer)) {
+			del_timer_sync(&argos_mumimo_ctrl_data.config_timer);
+		}
+
+		DHD_ERROR(("%s: Reassociation is in progress...\n", __FUNCTION__));
+		return;
+	}
+
+	/* Check if current associated AP supports MU-MIMO capability
+	 * or current Tput meets the condition for MU-MIMO configuration
+	 */
+	if ((wl_check_bss_support_mumimo(dev) <= 0) ||
+		((speed < MUMIMO_TO_SUMIMO_TPUT_THRESHOLD) &&
+		(speed >= SUMIMO_TO_MUMIMO_TPUT_THRESHOLD))) {
+		return;
+	}
+
+	prev_murx_bfe_cap = argos_mumimo_ctrl_data.cur_murx_bfe_cap;
+
+	/* Check the TPut condition */
+	if (speed >= MUMIMO_TO_SUMIMO_TPUT_THRESHOLD) {
+		cap = 0;
+	} else {
+		cap = 1;
+	}
+
+	if (prev_murx_bfe_cap != cap) {
+		/* Cancel the MU-MIMO control timer */
+		if (timer_pending(&argos_mumimo_ctrl_data.config_timer)) {
+			del_timer_sync(&argos_mumimo_ctrl_data.config_timer);
+		}
+
+		/* Update the new value */
+		argos_mumimo_ctrl_data.cur_murx_bfe_cap = cap;
+
+		/* Arm the MU-MIMO control timer */
+		mod_timer(&argos_mumimo_ctrl_data.config_timer,
+			jiffies + msecs_to_jiffies(MUMIMO_CONTROL_TIMER_INTERVAL_MS));
+
+		DHD_ERROR(("%s: Arm the MU-MIMO control timer, cur_murx_bfe_cap=%d\n",
+			__FUNCTION__, cap));
+	}
+}
+
+void
+argos_config_mumimo_init(struct net_device *dev)
+{
+	init_timer(&argos_mumimo_ctrl_data.config_timer);
+	argos_mumimo_ctrl_data.config_timer.data = (unsigned long)&argos_mumimo_ctrl_data;
+	argos_mumimo_ctrl_data.config_timer.function = argos_config_mumimo_timer;
+	argos_mumimo_ctrl_data.dev = dev;
+	INIT_WORK(&argos_mumimo_ctrl_data.mumimo_ctrl_work, argos_config_mumimo_handler);
+	argos_mumimo_ctrl_data.cur_murx_bfe_cap = -1;
+}
+
+void
+argos_config_mumimo_deinit(void)
+{
+	argos_mumimo_ctrl_data.dev = NULL;
+	if (timer_pending(&argos_mumimo_ctrl_data.config_timer)) {
+		del_timer_sync(&argos_mumimo_ctrl_data.config_timer);
+	}
+
+	cancel_work_sync(&argos_mumimo_ctrl_data.mumimo_ctrl_work);
+}
+
+void
+argos_config_mumimo_reset(void)
+{
+	argos_mumimo_ctrl_data.cur_murx_bfe_cap = -1;
+}
+#endif /* DYNAMIC_MUMIMO_CONTROL */
 
 int
 argos_register_notifier_init(struct net_device *net)
@@ -19194,6 +19484,9 @@ argos_register_notifier_init(struct net_device *net)
 	DHD_INFO(("DHD: %s: \n", __FUNCTION__));
 	argos_rps_ctrl_data.wlan_primary_netdev = net;
 	argos_rps_ctrl_data.argos_rps_cpus_enabled = 0;
+#ifdef DYNAMIC_MUMIMO_CONTROL
+	argos_config_mumimo_init(net);
+#endif /* DYNAMIC_MUMIMO_CONTROL */
 
 	if (argos_wifi.notifier_call == NULL) {
 		argos_wifi.notifier_call = argos_status_notifier_wifi_cb;
@@ -19204,12 +19497,27 @@ argos_register_notifier_init(struct net_device *net)
 		}
 	}
 
+#if defined(CONFIG_SPLIT_ARGOS_SET) && defined(DYNAMIC_MUMIMO_CONTROL)
+	if (argos_mimo.notifier_call == NULL) {
+		argos_mimo.notifier_call = argos_status_notifier_config_mumimo_cb;
+		ret = sec_argos_register_notifier(&argos_mimo, ARGOS_WIFI_TABLE_FOR_MIMO_LABEL);
+		if (ret < 0) {
+			DHD_ERROR(("DHD:Failed to register WIFI for MIMO notifier, ret=%d\n", ret));
+			sec_argos_unregister_notifier(&argos_wifi, ARGOS_WIFI_TABLE_LABEL);
+			goto exit;
+		}
+	}
+#endif /* CONFIG_SPLIT_ARGOS_SET && DYNAMIC_MUMIMO_CONTROL */
+
 	if (argos_p2p.notifier_call == NULL) {
 		argos_p2p.notifier_call = argos_status_notifier_p2p_cb;
 		ret = sec_argos_register_notifier(&argos_p2p, ARGOS_P2P_TABLE_LABEL);
 		if (ret < 0) {
 			DHD_ERROR(("DHD:Failed to register P2P notifier, ret=%d\n", ret));
 			sec_argos_unregister_notifier(&argos_wifi, ARGOS_WIFI_TABLE_LABEL);
+#if defined(CONFIG_SPLIT_ARGOS_SET) && defined(DYNAMIC_MUMIMO_CONTROL)
+			sec_argos_unregister_notifier(&argos_mimo, ARGOS_WIFI_TABLE_FOR_MIMO_LABEL);
+#endif /* CONFIG_SPLIT_ARGOS_SET && DYNAMIC_MUMIMO_CONTROL */
 			goto exit;
 		}
 	}
@@ -19220,6 +19528,12 @@ exit:
 	if (argos_wifi.notifier_call) {
 		argos_wifi.notifier_call = NULL;
 	}
+
+#if defined(CONFIG_SPLIT_ARGOS_SET) && defined(DYNAMIC_MUMIMO_CONTROL)
+	if (argos_mimo.notifier_call) {
+		argos_mimo.notifier_call = NULL;
+	}
+#endif /* CONFIG_SPLIT_ARGOS_SET && DYNAMIC_MUMIMO_CONTROL */
 
 	if (argos_p2p.notifier_call) {
 		argos_p2p.notifier_call = NULL;
@@ -19237,14 +19551,26 @@ argos_register_notifier_deinit(void)
 		DHD_ERROR(("DHD: primary_net_dev is null %s: \n", __FUNCTION__));
 		return -1;
 	}
-#ifndef DHD_LB
+
+#ifdef DYNAMIC_MUMIMO_CONTROL
+	argos_config_mumimo_deinit();
+#endif /* DYNAMIC_MUMIMO_CONTROL */
+
+#if !defined(DHD_LB) && defined(ARGOS_RPS_CPU_CTL)
 	custom_rps_map_clear(argos_rps_ctrl_data.wlan_primary_netdev->_rx);
-#endif /* !DHD_LB */
+#endif /* !DHD_LB && ARGOS_RPS_CPU_CTL */
 
 	if (argos_p2p.notifier_call) {
 		sec_argos_unregister_notifier(&argos_p2p, ARGOS_P2P_TABLE_LABEL);
 		argos_p2p.notifier_call = NULL;
 	}
+
+#if defined(CONFIG_SPLIT_ARGOS_SET) && defined(DYNAMIC_MUMIMO_CONTROL)
+	if (argos_mimo.notifier_call) {
+		sec_argos_unregister_notifier(&argos_mimo, ARGOS_WIFI_TABLE_FOR_MIMO_LABEL);
+		argos_mimo.notifier_call = NULL;
+	}
+#endif /* CONFIG_SPLIT_ARGOS_SET && DYNAMIC_MUMIMO_CONTROL */
 
 	if (argos_wifi.notifier_call) {
 		sec_argos_unregister_notifier(&argos_wifi, ARGOS_WIFI_TABLE_LABEL);
@@ -19258,14 +19584,12 @@ argos_register_notifier_deinit(void)
 }
 
 int
-argos_status_notifier_wifi_cb(struct notifier_block *notifier,
+argos_status_notifier_cb(struct notifier_block *notifier,
 	unsigned long speed, void *v)
 {
 	dhd_info_t *dhd;
 	dhd_pub_t *dhdp;
-#if defined(ARGOS_NOTIFY_CB)
-	unsigned int  pcie_irq = 0;
-#endif /* ARGOS_NOTIFY_CB */
+
 	DHD_INFO(("DHD: %s: speed=%ld\n", __FUNCTION__, speed));
 
 	if (argos_rps_ctrl_data.wlan_primary_netdev == NULL) {
@@ -19287,7 +19611,7 @@ argos_status_notifier_wifi_cb(struct notifier_block *notifier,
 			/* It does not need to configre rps_cpus
 			 * if Load Balance is enabled
 			 */
-#ifndef DHD_LB
+#if !defined(DHD_LB) && defined(ARGOS_RPS_CPU_CTL)
 			int err = 0;
 
 			if (cpu_online(RPS_CPUS_WLAN_CORE_ID)) {
@@ -19306,8 +19630,8 @@ argos_status_notifier_wifi_cb(struct notifier_block *notifier,
 					"speed=%ld, error=%d\n",
 					__FUNCTION__, speed, err));
 			} else {
-#endif /* !DHD_LB */
-#if (defined(DHDTCPACK_SUPPRESS) && defined(BCMPCIE))
+#endif /* !DHD_LB && ARGOS_RPS_CPU_CTL */
+#if defined(DHDTCPACK_SUPPRESS) && defined(BCMPCIE)
 				if (dhdp->tcpack_sup_mode != TCPACK_SUP_HOLD) {
 					DHD_ERROR(("%s : set ack suppress. TCPACK_SUP_ON(%d)\n",
 						__FUNCTION__, TCPACK_SUP_HOLD));
@@ -19315,29 +19639,29 @@ argos_status_notifier_wifi_cb(struct notifier_block *notifier,
 				}
 #endif /* DHDTCPACK_SUPPRESS && BCMPCIE */
 				argos_rps_ctrl_data.argos_rps_cpus_enabled = 1;
-#ifndef DHD_LB
+#if !defined(DHD_LB) && defined(ARGOS_RPS_CPU_CTL)
 				DHD_ERROR(("DHD: %s: Set RPS_CPUs, speed=%ld\n",
 					__FUNCTION__, speed));
 			}
-#endif /* !DHD_LB */
+#endif /* !DHD_LB && ARGOS_RPS_CPU_CTL */
 		}
 	} else {
 		if (argos_rps_ctrl_data.argos_rps_cpus_enabled == 1) {
-#if (defined(DHDTCPACK_SUPPRESS) && defined(BCMPCIE))
+#if defined(DHDTCPACK_SUPPRESS) && defined(BCMPCIE)
 			if (dhdp->tcpack_sup_mode != TCPACK_SUP_OFF) {
 				DHD_ERROR(("%s : set ack suppress. TCPACK_SUP_OFF\n",
 					__FUNCTION__));
 				dhd_tcpack_suppress_set(dhdp, TCPACK_SUP_OFF);
 			}
 #endif /* DHDTCPACK_SUPPRESS && BCMPCIE */
-#ifndef DHD_LB
+#if !defined(DHD_LB) && defined(ARGOS_RPS_CPU_CTL)
 			/* It does not need to configre rps_cpus
 			 * if Load Balance is enabled
 			 */
 			custom_rps_map_clear(argos_rps_ctrl_data.wlan_primary_netdev->_rx);
 			DHD_ERROR(("DHD: %s: Clear RPS_CPUs, speed=%ld\n", __FUNCTION__, speed));
 			OSL_SLEEP(DELAY_TO_CLEAR_RPS_CPUS);
-#endif /* !DHD_LB */
+#endif /* !DHD_LB && ARGOS_RPS_CPU_CTL */
 			argos_rps_ctrl_data.argos_rps_cpus_enabled = 0;
 		}
 	}
@@ -19347,11 +19671,38 @@ exit:
 }
 
 int
+argos_status_notifier_wifi_cb(struct notifier_block *notifier,
+	unsigned long speed, void *v)
+{
+	DHD_INFO(("DHD: %s: speed=%ld\n", __FUNCTION__, speed));
+	argos_status_notifier_cb(notifier, speed, v);
+#if !defined(CONFIG_SPLIT_ARGOS_SET) && defined(DYNAMIC_MUMIMO_CONTROL)
+	argos_status_notifier_config_mumimo(notifier, speed, v);
+#endif /* !CONFIG_SPLIT_ARGOS_SET && DYNAMIC_MUMIMO_CONTROL */
+
+	return NOTIFY_OK;
+}
+
+#if defined(CONFIG_SPLIT_ARGOS_SET) && defined(DYNAMIC_MUMIMO_CONTROL)
+int
+argos_status_notifier_config_mumimo_cb(struct notifier_block *notifier,
+	unsigned long speed, void *v)
+{
+	DHD_INFO(("DHD: %s: speed=%ld\n", __FUNCTION__, speed));
+	argos_status_notifier_config_mumimo(notifier, speed, v);
+
+	return NOTIFY_OK;
+}
+#endif /* CONFIG_SPLIT_ARGOS_SET && DYNAMIC_MUMIMO_CONTROL */
+
+int
 argos_status_notifier_p2p_cb(struct notifier_block *notifier,
 	unsigned long speed, void *v)
 {
 	DHD_INFO(("DHD: %s: speed=%ld\n", __FUNCTION__, speed));
-	return argos_status_notifier_wifi_cb(notifier, speed, v);
+	argos_status_notifier_cb(notifier, speed, v);
+
+	return NOTIFY_OK;
 }
 #endif /* (ARGOS_CPU_SCHEDULER && ARGOS_RPS_CPU_CTL) || ARGOS_NOTIFY_CB */
 
@@ -19971,9 +20322,9 @@ dhd_log_dump_get_timestamp(void)
 	unsigned long rem_nsec;
 
 	ts_nsec = local_clock();
-	rem_nsec = do_div(ts_nsec, 1000000000);
+	rem_nsec = DIV_AND_MOD_U64_BY_U32(ts_nsec, NSEC_PER_SEC);
 	snprintf(buf, sizeof(buf), "%5lu.%06lu",
-		(unsigned long)ts_nsec, rem_nsec / 1000);
+		(unsigned long)ts_nsec, rem_nsec / NSEC_PER_USEC);
 
 	return buf;
 }
@@ -21613,6 +21964,7 @@ dhd_dump_file_manage_idx(dhd_dump_file_manage_t *fm_ptr, char *fname)
 
 	if (strlen(fm_ptr->elems[fm_idx].type_name) == 0) {
 		strncpy(fm_ptr->elems[fm_idx].type_name, fname, DHD_DUMP_TYPE_NAME_SIZE);
+		fm_ptr->elems[fm_idx].type_name[DHD_DUMP_TYPE_NAME_SIZE - 1] = '\0';
 		fm_ptr->elems[fm_idx].file_idx = 0;
 	}
 
@@ -21665,6 +22017,7 @@ dhd_dump_file_manage_enqueue(dhd_pub_t *dhd, char *dump_path, char *fname)
 
 	/* save dump file path */
 	strncpy(elem->file_path[fp_idx], dump_path, DHD_DUMP_FILE_PATH_SIZE);
+	elem->file_path[fp_idx][DHD_DUMP_FILE_PATH_SIZE - 1] = '\0';
 
 	/* change file index to next file index */
 	elem->file_idx = (elem->file_idx + 1) % DHD_DUMP_FILE_COUNT_MAX;
@@ -21809,7 +22162,7 @@ void dhd_reset_tcpsync_info_by_ifp(dhd_if_t *ifp)
 {
 	ifp->tsync_rcvd = 0;
 	ifp->tsyncack_txed = 0;
-	ifp->last_sync = DIV_U64(OSL_LOCALTIME_NS(), NSEC_PER_SEC);
+	ifp->last_sync = DIV_U64_BY_U32(OSL_LOCALTIME_NS(), NSEC_PER_SEC);
 }
 void dhd_reset_tcpsync_info_by_dev(struct net_device *dev)
 {
@@ -21820,7 +22173,7 @@ void dhd_reset_tcpsync_info_by_dev(struct net_device *dev)
 	if (ifp) {
 		ifp->tsync_rcvd = 0;
 		ifp->tsyncack_txed = 0;
-		ifp->last_sync = DIV_U64(OSL_LOCALTIME_NS(), NSEC_PER_SEC);
+		ifp->last_sync = DIV_U64_BY_U32(OSL_LOCALTIME_NS(), NSEC_PER_SEC);
 	}
 }
 #endif /* DHDTCPSYNC_FLOOD_BLK */

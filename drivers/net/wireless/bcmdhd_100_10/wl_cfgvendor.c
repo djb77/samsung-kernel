@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 Vendor Extension Code
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfgvendor.c 791700 2018-11-30 08:27:58Z $
+ * $Id: wl_cfgvendor.c 799206 2019-01-14 05:44:00Z $
  */
 
 /*
@@ -94,9 +94,9 @@ wl_get_kernel_timestamp(void)
 	unsigned long rem_nsec;
 
 	ts_nsec = local_clock();
-	rem_nsec = do_div(ts_nsec, 1000000000);
+	rem_nsec = DIV_AND_MOD_U64_BY_U32(ts_nsec, NSEC_PER_SEC);
 	snprintf(buf, sizeof(buf), "%5lu.%06lu",
-		(unsigned long)ts_nsec, rem_nsec / 1000);
+		(unsigned long)ts_nsec, rem_nsec / NSEC_PER_USEC);
 
 	return buf;
 }
@@ -2282,6 +2282,11 @@ wl_cfgvendor_priv_string_handler(struct wiphy *wiphy,
 		return OSL_ERROR(BCME_DONGLE_DOWN);
 	}
 
+	if (nlioc->len <= 0) {
+		WL_ERR(("invalid len %d\n", nlioc->len));
+		return BCME_BADARG;
+	}
+
 	if (nlioc->offset != sizeof(struct bcm_nlmsg_hdr) ||
 		len <= sizeof(struct bcm_nlmsg_hdr)) {
 		WL_ERR(("invalid offset %d\n", nlioc->offset));
@@ -2323,7 +2328,7 @@ wl_cfgvendor_priv_string_handler(struct wiphy *wiphy,
 	}
 	cur = buf;
 	while (ret_len > 0) {
-		msglen = nlioc->len > maxmsglen ? maxmsglen : ret_len;
+		msglen = ret_len > maxmsglen ? maxmsglen : ret_len;
 		ret_len -= msglen;
 		payload = msglen + sizeof(msglen);
 		reply = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, payload);

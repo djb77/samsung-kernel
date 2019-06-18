@@ -89,6 +89,13 @@ config BCM43241
 	  This module adds support for wireless adapters based on
 	  Broadcom 43241 chipset.
 
+config BCM43456
+	tristate "Broadcom 43456 wireless cards support"
+	depends on BROADCOM_WIFI
+	---help---
+	  This module adds support for wireless adapters based on
+	  Broadcom 43456 chipset.
+
 config BCM43455
         tristate "Broadcom 43455 wireless cards support"
         depends on BROADCOM_WIFI
@@ -132,7 +139,7 @@ config BROADCOM_WIFI_RESERVED_MEM
 
 config WIFI_BROADCOM_COB
         bool "BROADCOM WIFI COB"
-        depends on (BCM43455 || BCM4343 || BCM43454 || BCM43012)
+        depends on (BCM43456 || BCM43455 || BCM4343 || BCM43454 || BCM43012)
         ---help---
           This is a configuration for Broadcom WIFI COB Type.
 
@@ -198,6 +205,18 @@ config BCMDHD_PREALLOC_MEMDUMP
 	---help---
 	  Preallocated memory support for dongle memory dump
 
+config WLAN_HERO
+	bool "model code for hero"
+	depends on BROADCOM_WIFI
+	---help---
+	  This is configuration for USA regrev
+
+config WLAN_HERO2
+	bool "model code for hero2"
+	depends on BROADCOM_WIFI
+	---help---
+	  This is configuration for USA regrev
+
 config BCMDHD_OOB_HOST_WAKE
 	bool "Use the external WLAN_HOST_WAKE pin"
 	depends on BROADCOM_WIFI
@@ -218,9 +237,23 @@ config BCM_DETECT_CONSECUTIVE_HANG
 	---help---
 	Detecting defect module from consecutive hang event
 
+config WLAN_VHTDISABLE
+	bool "WLAN Disable 11ac"
+	depends on BCM43456
+	default n
+	---help---
+	This is a configuration to disable 11ac.
+
 config WLAN_TSQ_MULTIPLIER
 	bool "Enable TCP TSQ_MULTIPLIER"
 	depends on BROADCOM_WIFI
 	default n
 	---help---
 	This is configuration for TCP TSQ_MULTIPLIER
+
+config DHD_DRIVEN_RANDOM_MAC_SCAN
+        bool "Enable DHD driven random mac scan"
+        depends on BROADCOM_WIFI
+        default n
+        ---help---
+        This is configuration for DHD driven random mac scan

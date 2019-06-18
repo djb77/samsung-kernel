@@ -2,7 +2,7 @@
  * Misc utility routines for accessing chip-specific features
  * of the SiliconBackplane-based Broadcom chips.
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: siutils.c 764075 2018-05-23 15:04:10Z $
+ * $Id: siutils.c 791448 2018-11-29 12:07:50Z $
  */
 
 #include <bcm_cfg.h>
@@ -1716,10 +1716,11 @@ si_num_slaveports(si_t *sih, uint coreid)
 	uint idx = si_findcoreidx(sih, coreid, 0);
 	uint num = 0;
 
+	if (idx != BADIDX) {
 	if (CHIPTYPE(sih->socitype) == SOCI_AI) {
 		num = ai_num_slaveports(sih, idx);
 	}
-
+	}
 	return num;
 }
 

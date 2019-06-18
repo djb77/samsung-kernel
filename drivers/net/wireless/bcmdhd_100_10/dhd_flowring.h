@@ -6,7 +6,7 @@
  * Provides type definitions and function prototypes used to create, delete and manage flow rings at
  * high level.
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -29,7 +29,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_flowring.h 756473 2018-04-09 09:14:33Z $
+ * $Id: dhd_flowring.h 787770 2018-11-06 08:28:43Z $
  */
 
 /****************
@@ -61,10 +61,7 @@
 #define FLOW_RING_STATUS_STA_FREEING    7
 
 #define DHD_FLOWRING_RX_BUFPOST_PKTSZ	2048
-/* Maximum Mu MIMO frame size */
-#ifdef WL_MONITOR
-#define DHD_MAX_MON_FLOWRING_RX_BUFPOST_PKTSZ	4096
-#endif /* WL_MONITOR */
+#define DHD_FLOWRING_RX_BUFPOST_PKTSZ_MAX 4096
 
 #define DHD_FLOW_PRIO_AC_MAP		0
 #define DHD_FLOW_PRIO_TID_MAP		1

@@ -1,7 +1,7 @@
 /*
  * DHD debugability packet logging support
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pktlog.c 767101 2018-06-12 13:06:08Z $
+ * $Id: dhd_pktlog.c 793750 2018-12-11 02:12:38Z $
  */
 
 #include <typedefs.h>
@@ -434,7 +434,7 @@ dhd_pktlog_ring_tx_pkts(dhd_pub_t *dhdp, void *pkt, uint32 pktid)
 		DHD_PKT_LOG(("%s(): write buf %p\n", __FUNCTION__, tx_pkts));
 		pkt_hash = __dhd_dbg_pkt_hash((uintptr_t)pkt, pktid);
 		ts_nsec = local_clock();
-		rem_nsec = do_div(ts_nsec, NSEC_PER_SEC);
+		rem_nsec = DIV_AND_MOD_U64_BY_U32(ts_nsec, NSEC_PER_SEC);
 
 		tx_pkts->info.pkt = PKTDUP(dhdp->osh, pkt);
 		tx_pkts->info.pkt_len = PKTLEN(dhdp->osh, pkt);
@@ -556,7 +556,7 @@ dhd_pktlog_ring_rx_pkts(dhd_pub_t *dhdp, void *pkt)
 		rx_pkts = (dhd_pktlog_ring_info_t *)data;
 		DHD_PKT_LOG(("%s(): write buf %p\n", __FUNCTION__, rx_pkts));
 		ts_nsec = local_clock();
-		rem_nsec = do_div(ts_nsec, NSEC_PER_SEC);
+		rem_nsec = DIV_AND_MOD_U64_BY_U32(ts_nsec, NSEC_PER_SEC);
 
 		rx_pkts->info.pkt = PKTDUP(dhdp->osh, pkt);
 		rx_pkts->info.pkt_len = PKTLEN(dhdp->osh, pkt);
@@ -1025,17 +1025,19 @@ dhd_pktlog_pkts_write_file(dhd_pktlog_ring_t *ringbuf, struct file *w_pcap_fp, i
 		memcpy(p, (char*)&report_ptr->info.driver_ts_sec,
 				sizeof(report_ptr->info.driver_ts_sec));
 		p += sizeof(report_ptr->info.driver_ts_sec);
-		len += sizeof(report_ptr->info.driver_ts_sec);
+		len += (uint32)sizeof(report_ptr->info.driver_ts_sec);
 
 		memcpy(p, (char*)&report_ptr->info.driver_ts_usec,
 				sizeof(report_ptr->info.driver_ts_usec));
 		p += sizeof(report_ptr->info.driver_ts_usec);
-		len += sizeof(report_ptr->info.driver_ts_usec);
+		len += (uint32)sizeof(report_ptr->info.driver_ts_usec);
 
 		if (report_ptr->info.payload_type == FRAME_TYPE_ETHERNET_II) {
-			frame_len = min(report_ptr->info.pkt_len, (size_t)MAX_FRAME_LEN_ETHERNET);
+			frame_len = (uint32)min(report_ptr->info.pkt_len,
+					(size_t)MAX_FRAME_LEN_ETHERNET);
 		} else {
-			frame_len = min(report_ptr->info.pkt_len, (size_t)MAX_FRAME_LEN_80211_MGMT);
+			frame_len = (uint32)min(report_ptr->info.pkt_len,
+					(size_t)MAX_FRAME_LEN_80211_MGMT);
 		}
 
 		bytes_user_data = sprintf(buf, "%s:%s:%02d\n", DHD_PKTLOG_FATE_INFO_FORMAT,
@@ -1045,10 +1047,10 @@ dhd_pktlog_pkts_write_file(dhd_pktlog_ring_t *ringbuf, struct file *w_pcap_fp, i
 		/* pcap pkt head has incl_len and orig_len */
 		memcpy(p, (char*)&write_frame_len, sizeof(write_frame_len));
 		p += sizeof(write_frame_len);
-		len += sizeof(write_frame_len);
+		len += (uint32)sizeof(write_frame_len);
 		memcpy(p, (char*)&write_frame_len, sizeof(write_frame_len));
 		p += sizeof(write_frame_len);
-		len += sizeof(write_frame_len);
+		len += (uint32)sizeof(write_frame_len);
 
 		memcpy(p, PKTDATA(ringbuf->dhdp->osh, report_ptr->info.pkt), frame_len);
 		if (ringbuf->pktlog_minmize) {

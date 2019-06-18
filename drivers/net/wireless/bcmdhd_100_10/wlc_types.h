@@ -1,7 +1,7 @@
 /*
  * Forward declarations for commonly used wl driver structs
  *
- * Copyright (C) 1999-2018, Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wlc_types.h 726313 2017-10-12 06:07:22Z $
+ * $Id: wlc_types.h 796817 2018-12-27 04:47:11Z $
  */
 
 #ifndef _wlc_types_h_
@@ -522,4 +522,5 @@ typedef wl_gscan_result_v2_1_t wl_gscan_result_t;
 typedef uint8 wlc_mbsp_sel_t;
 typedef uint8 dot11_mbsp_sel_t;
 
+typedef wl_block_ch_v1_t wl_block_ch_t;
 #endif	/* _wlc_types_h_ */
