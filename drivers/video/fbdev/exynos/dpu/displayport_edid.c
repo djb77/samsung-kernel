@@ -68,11 +68,11 @@ struct displayport_supported_preset displayport_supported_presets[] = {
 	{V4L2_DV_BT_CEA_4096X2160P60,	4096, 2160, 60, FB_VMODE_NONINTERLACED, 102, "4096x2160p@60"},
 };
 
-videoformat ud_mode_h14b_vsdb[] = {
-	v3840x2160p_30Hz,
-	v3840x2160p_25Hz,
-	v3840x2160p_24Hz,
-	v4096x2160p_24Hz
+struct displayport_supported_preset ud_mode_h14b_vsdb[] = {
+	{V4L2_DV_BT_CEA_3840X2160P30,	    3840, 2160, 30, FB_VMODE_NONINTERLACED,  95, "3840x2160p@30"},
+	{V4L2_DV_BT_CEA_3840X2160P25,	    3840, 2160, 25, FB_VMODE_NONINTERLACED,  94, "3840x2160p@25"},
+	{V4L2_DV_BT_CEA_3840X2160P24,	    3840, 2160, 24, FB_VMODE_NONINTERLACED,  93, "3840x2160p@24"},
+	{V4L2_DV_BT_CEA_4096X2160P24,	    4096, 2160, 24, FB_VMODE_NONINTERLACED,  98, "4096x2160p@24"}
 };
 
 const int displayport_pre_cnt = ARRAY_SIZE(displayport_supported_presets);
@@ -426,10 +426,8 @@ static int edid_parse_audio_video_db(unsigned char *edid, struct fb_audio *sad)
 	return 0;
 }
 
-int static edid_dv_timing_to_fb_video(videoformat video, struct fb_videomode *fb)
+int static edid_dv_timing_to_fb_video(struct displayport_supported_preset pre, struct fb_videomode *fb)
 {
-	struct displayport_supported_preset pre = displayport_supported_presets[video];
-
 	fb->name = pre.name;
 	fb->refresh = pre.refresh;
 	fb->xres = pre.dv_timings.bt.width;

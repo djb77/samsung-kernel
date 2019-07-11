@@ -281,9 +281,17 @@ static void recv_handler(struct sk_buff *skb)
 	struct kfreecess_msg_data *payload = NULL;
 	struct nlmsghdr *nlh = NULL;
 	unsigned int msglen  = 0;
+	uid_t uid = 0;
 
 	if (!skb) {
 		pr_err("recv_handler %s: skb is	NULL!\n", __func__);
+		return;
+	}
+	
+	uid = (*NETLINK_CREDS(skb)).uid.val;
+	//only allow system user to communicate with Freecess kernel part.
+	if (uid != 1000) {
+		pr_err("freecess--uid: %d, permission denied\n", uid);
 		return;
 	}
 
@@ -302,10 +310,15 @@ static void recv_handler(struct sk_buff *skb)
 				pr_err("USER_HOOK_CALLBACK %s: dst_portid is %d not kernel!\n", __func__, payload->dst_portid);
 				return;
 			}
+			
+			if (!check_mod_type(payload->mod)) {
+				pr_err("USER_HOOK_CALLBACK %s: mod %d is not valid!\n", __func__, payload->mod);
+				return;
+			}
 
-			atomic_set(&bind_port[payload->mod], payload->src_portid);
 			switch (payload->type) {
 			case LOOPBACK_MSG:
+				atomic_set(&bind_port[payload->mod], payload->src_portid);
 				dump_kfreecess_msg(payload);
 				mod_sendmsg(LOOPBACK_MSG, payload->mod, NULL);
 				break;

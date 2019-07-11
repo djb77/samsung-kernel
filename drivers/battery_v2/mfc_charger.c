@@ -1541,7 +1541,7 @@ static void mfc_wpc_afc_vout_work(struct work_struct *work)
 		msleep(100);
 	}
 	charger->is_afc_tx = true;
-	pr_info("%s: is_afc_tx = %d vout read = %d \n",
+	pr_info("%s: is_afc_tx = %d vout read = %d\n",
 		__func__, charger->is_afc_tx, mfc_get_adc(charger, MFC_ADC_VOUT));
 
 	/* use all CM FETs for 10V wireless charging */
@@ -1984,6 +1984,7 @@ static void mfc_wpc_vout_mode_work(struct work_struct *work)
 #if !defined(CONFIG_SEC_FACTORY)
 	if ((charger->pdata->cable_type == MFC_PAD_WPC_AFC ||
 		charger->pdata->cable_type == MFC_PAD_WPC_STAND_HV ||
+		charger->pdata->cable_type == MFC_PAD_WPC_PACK_HV ||
 		charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV) &&
 		charger->pdata->vout_status <= MFC_VOUT_5V && charger->is_full_status) {
 		u8 data = 0x05;
@@ -2040,6 +2041,7 @@ static int mfc_chg_set_property(struct power_supply *psy,
 			charger->is_full_status = 1;
 			if (charger->pdata->cable_type == MFC_PAD_WPC_AFC ||
 				charger->pdata->cable_type == MFC_PAD_WPC_STAND_HV ||
+				charger->pdata->cable_type == MFC_PAD_WPC_PACK_HV ||
 				charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV) {
 				charger->vout_mode = WIRELESS_VOUT_5V_STEP;
 				cancel_delayed_work(&charger->wpc_vout_mode_work);
@@ -2144,6 +2146,7 @@ static int mfc_chg_set_property(struct power_supply *psy,
 			charger->vout_mode = val->intval;
 			if ((charger->pdata->cable_type == MFC_PAD_WPC_AFC ||
 				charger->pdata->cable_type == MFC_PAD_WPC_STAND_HV ||
+				charger->pdata->cable_type == MFC_PAD_WPC_PACK_HV ||
 				charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV)) {
 				def_delay = 250;
 			}
@@ -2163,7 +2166,7 @@ static int mfc_chg_set_property(struct power_supply *psy,
 					for (i = 0; i < CMD_CNT; i++) {
 						cmd = WPC_COM_AFC_SET;
 						data_val[0] = 0x2c; /* Value for WPC AFC_SET 10V */
-						pr_info("%s set 10V , cnt = %d \n", __func__, i);
+						pr_info("%s set 10V , cnt = %d\n", __func__, i);
 						mfc_send_packet(charger, MFC_HEADER_AFC_CONF, cmd, data_val, 1);
 						mfc_reg_read(charger->client, MFC_WPC_RX_DATA_COM_REG, &data_val[0]);
 						mfc_reg_read(charger->client, MFC_WPC_RX_DATA_VALUE0_REG, &data_val[0]);
@@ -2171,13 +2174,13 @@ static int mfc_chg_set_property(struct power_supply *psy,
 						msleep(100);
 					}
 					charger->is_afc_tx = true;
-					pr_info("%s: is_afc_tx = %d vout read = %d \n",
+					pr_info("%s: is_afc_tx = %d vout read = %d\n",
 						__func__, charger->is_afc_tx, mfc_get_adc(charger, MFC_ADC_VOUT));
 
 					/* use all CM FETs for 10V wireless charging */
 					mfc_reg_write(charger->client, MFC_RX_COMM_MOD_FET_REG, 0x00);
 					mfc_reg_read(charger->client, MFC_RX_COMM_MOD_FET_REG, &cmd);
-					pr_info("%s: CM FET setting(0x%x) \n", __func__, cmd);
+					pr_info("%s: CM FET setting(0x%x)\n", __func__, cmd);
 				}
 				charger->vout_mode = val->intval;
 				cancel_delayed_work(&charger->wpc_vout_mode_work);
@@ -2706,6 +2709,7 @@ static void mfc_wpc_isr_work(struct work_struct *work)
 				if (charger->pdata->cable_type == MFC_PAD_WPC_AFC ||
 					charger->pdata->cable_type == MFC_PAD_PREPARE_HV ||
 					charger->pdata->cable_type == MFC_PAD_WPC_STAND_HV ||
+					charger->pdata->cable_type == MFC_PAD_WPC_PACK_HV ||
 					charger->pdata->cable_type == MFC_PAD_WPC_VEHICLE_HV) {
 					pr_err("%s: It is already HV wireless cable. No need to set again\n", __func__);
 					wake_unlock(&charger->wpc_wake_lock);
