@@ -1687,6 +1687,11 @@ int sensor_2l3_cis_set_exposure_time(struct v4l2_subdev *subdev, struct ae_param
 
 	u16 remainder_cit = 0;
 
+	u16 cit_shifter_array[17] = {0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5};
+	u16 cit_shifter_val = 0;
+	int cit_shifter_idx = 0;
+	u8 cit_denom_array[6] = {1, 2, 4, 8, 16, 32};
+
 #ifdef DEBUG_SENSOR_TIME
 	struct timeval st, end;
 
@@ -1722,22 +1727,26 @@ int sensor_2l3_cis_set_exposure_time(struct v4l2_subdev *subdev, struct ae_param
 		case SENSOR_2L3_2016X1512_30FPS:
 		case SENSOR_2L3_2016X1134_30FPS:
 		case SENSOR_2L3_1504X1504_30FPS:
-			if (MAX(target_exposure->long_val, target_exposure->short_val) > 85000) {
-				target_exposure->long_val = target_exposure->long_val / 2;
-				target_exposure->short_val = target_exposure->short_val / 2;
-				coarse_integration_time_shifter = 0x0101;
+			if (MAX(target_exposure->long_val, target_exposure->short_val) > 80000) {
+				cit_shifter_idx = MIN(MAX(MAX(target_exposure->long_val, target_exposure->short_val) / 80000, 0), 16);
+				cit_shifter_val = MAX(cit_shifter_array[cit_shifter_idx], cis_data->frame_length_lines_shifter);
+				target_exposure->long_val = target_exposure->long_val / cit_denom_array[cit_shifter_val];
+				target_exposure->short_val = target_exposure->short_val / cit_denom_array[cit_shifter_val];
 			} else {
-				coarse_integration_time_shifter = 0x0;
+				cit_shifter_val = (u16)(cis_data->frame_length_lines_shifter);
 			}
+			coarse_integration_time_shifter = ((cit_shifter_val<<8) & 0xFF00) + (cit_shifter_val & 0x00FF);
 			break;
 		default:
-			if (MAX(target_exposure->long_val, target_exposure->short_val) > 170000) {
-				target_exposure->long_val = target_exposure->long_val / 2;
-				target_exposure->short_val = target_exposure->short_val / 2;
-				coarse_integration_time_shifter = 0x0101;
+			if (MAX(target_exposure->long_val, target_exposure->short_val) > 160000) {
+				cit_shifter_idx = MIN(MAX(MAX(target_exposure->long_val, target_exposure->short_val) / 160000, 0), 16);
+				cit_shifter_val = MAX(cit_shifter_array[cit_shifter_idx], cis_data->frame_length_lines_shifter);
+				target_exposure->long_val = target_exposure->long_val / cit_denom_array[cit_shifter_val];
+				target_exposure->short_val = target_exposure->short_val / cit_denom_array[cit_shifter_val];
 			} else {
-				coarse_integration_time_shifter = 0x0;
+				cit_shifter_val = (u16)(cis_data->frame_length_lines_shifter);
 			}
+			coarse_integration_time_shifter = ((cit_shifter_val<<8) & 0xFF00) + (cit_shifter_val & 0x00FF);
 			break;
 		}
 	}
@@ -2040,6 +2049,10 @@ int sensor_2l3_cis_set_frame_duration(struct v4l2_subdev *subdev, u32 frame_dura
 	u16 frame_length_lines = 0;
 	u8 frame_length_lines_shifter = 0;
 
+	u8 fll_shifter_array[17] = {0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5};
+	int fll_shifter_idx = 0;
+	u8 fll_denom_array[6] = {1, 2, 4, 8, 16, 32};
+
 #ifdef DEBUG_SENSOR_TIME
 	struct timeval st, end;
 
@@ -2076,17 +2089,19 @@ int sensor_2l3_cis_set_frame_duration(struct v4l2_subdev *subdev, u32 frame_dura
 		case SENSOR_2L3_2016X1512_30FPS:
 		case SENSOR_2L3_2016X1134_30FPS:
 		case SENSOR_2L3_1504X1504_30FPS:
-			if (frame_duration > 85000) {
-				frame_duration = frame_duration / 2;
-				frame_length_lines_shifter = 0x1;
+			if (frame_duration > 80000) {
+				fll_shifter_idx = MIN(MAX(frame_duration / 80000, 0), 16);
+				frame_length_lines_shifter = fll_shifter_array[fll_shifter_idx];
+				frame_duration = frame_duration / fll_denom_array[frame_length_lines_shifter];
 			} else {
 				frame_length_lines_shifter = 0x0;
 			}
 			break;
 		default:
-			if (frame_duration > 170000) {
-				frame_duration = frame_duration / 2;
-				frame_length_lines_shifter = 0x1;
+			if (frame_duration > 160000) {
+				fll_shifter_idx = MIN(MAX(frame_duration / 160000, 0), 16);
+				frame_length_lines_shifter = fll_shifter_array[fll_shifter_idx];
+				frame_duration = frame_duration / fll_denom_array[frame_length_lines_shifter];
 			} else {
 				frame_length_lines_shifter = 0x0;
 			}
@@ -2133,8 +2148,8 @@ int sensor_2l3_cis_set_frame_duration(struct v4l2_subdev *subdev, u32 frame_dura
 
 	cis_data->cur_frame_us_time = frame_duration;
 	cis_data->frame_length_lines = frame_length_lines;
-	cis_data->max_coarse_integration_time =
-	cis_data->frame_length_lines - cis_data->max_margin_coarse_integration_time;
+	cis_data->max_coarse_integration_time = cis_data->frame_length_lines - cis_data->max_margin_coarse_integration_time;
+	cis_data->frame_length_lines_shifter = frame_length_lines_shifter;
 
 #ifdef DEBUG_SENSOR_TIME
 	do_gettimeofday(&end);
