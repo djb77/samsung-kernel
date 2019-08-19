@@ -27,6 +27,6 @@
 	};
 	rkp_region: rkp_region@0xAF800000 {
 		compatible = "removed-dma-pool";
-		reg = <0x0 0xAF800000 0x1C00000>;
+		reg = <0x0 0xAF800000 0x2000000>;
 	};
 };
