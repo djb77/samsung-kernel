@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/dma-buf.h>
 #include <linux/slab.h>
+#include <linux/fdtable.h>
 
 #include <linux/dmabuf_container.h>
 #include "dmabuf_container_priv.h"
@@ -206,13 +207,16 @@ int dmabuf_container_create(void __user *arg)
 	if (copy_to_user(arg, &data, sizeof(data))) {
 		pr_err("%s: Failed to copy to user\n", __func__);
 		ret = -EFAULT;
-		goto err_fd;
+		goto err_put;
 	}
 
+	return 0;
+err_put:
+	__close_fd(current->files, data.container_fd);
 	return ret;
-
 err_fd:
 	dma_buf_put(dmabuf);
+	return ret;
 err_export:
 	dmabuf_container_put_dmabuf(bufcon);
 err_dmabuf:
