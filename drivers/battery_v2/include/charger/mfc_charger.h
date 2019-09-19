@@ -706,6 +706,7 @@ struct mfc_charger_data {
 	struct wake_lock wpc_opfq_lock;
 	struct wake_lock wpc_afc_vout_lock;
 	struct wake_lock wpc_vout_mode_lock;
+	struct wake_lock wpc_tx_id_lock;
 	struct workqueue_struct *wqueue;
 	struct work_struct	wcin_work;
 	struct delayed_work	wpc_det_work;
@@ -737,6 +738,7 @@ struct mfc_charger_data {
 	bool is_afc_tx;
 	bool tx_id_done;
 	int tx_id;
+	int tx_id_cnt;
 	u8 device_event;
 
 	int i2c_error_count;

@@ -2515,7 +2515,7 @@ static void mfc_wpc_det_work(struct work_struct *work)
 				value.intval = SEC_WIRELESS_PAD_WPC_HV;
 				psy_do_property("wireless", set,
 					POWER_SUPPLY_PROP_ONLINE, value);
-
+				wake_lock(&charger->wpc_tx_id_lock);
 				queue_delayed_work(charger->wqueue, &charger->wpc_tx_id_work, msecs_to_jiffies(500));
 			} else {
 				/* send request afc_tx */
@@ -2525,11 +2525,10 @@ static void mfc_wpc_det_work(struct work_struct *work)
 #endif
 		/* set rpp scaling factor for LED cover */
 		mfc_rpp_set(charger);
-#if 0
-		/* set request TX_ID */
-		mfc_send_command(charger, MFC_REQUEST_TX_ID);
-#endif
 
+		wake_lock(&charger->wpc_tx_id_lock);
+		/* set request TX_ID */
+		queue_delayed_work(charger->wqueue, &charger->wpc_tx_id_work, msecs_to_jiffies(2500));
 		charger->pdata->is_charging = 1;
 	} else if ((charger->wc_w_state == 1) && (wc_w_state == 0)) {
 
@@ -2546,6 +2545,7 @@ static void mfc_wpc_det_work(struct work_struct *work)
 		charger->is_afc_tx = false;
 		charger->tx_id = 0;
 		charger->i2c_error_count = 0;
+		charger->tx_id_cnt = 0;
 		charger->tx_id_done = false;
 		charger->device_event = 0;
 
@@ -2580,6 +2580,7 @@ static void mfc_wpc_det_work(struct work_struct *work)
 		cancel_delayed_work(&charger->wpc_opfq_work);
 		cancel_delayed_work(&charger->wpc_tx_id_work);
 		cancel_delayed_work(&charger->wpc_i2c_error_work);
+		wake_unlock(&charger->wpc_tx_id_lock);
 	}
 
 	pr_info("%s: w(%d to %d)\n", __func__,
@@ -2759,8 +2760,6 @@ static void mfc_wpc_isr_work(struct work_struct *work)
 				pr_info("%s: unsupport : 0x%x", __func__, val_data);
 				break;
 			}
-
-			queue_delayed_work(charger->wqueue, &charger->wpc_tx_id_work, msecs_to_jiffies(500));
 		} else if (cmd_data == WPC_TX_COM_TX_ID) {
 			if (!charger->tx_id_done) {
 				switch (val_data) {
@@ -2899,6 +2898,20 @@ static void mfc_wpc_tx_id_work(struct work_struct *work)
 	pr_info("%s\n", __func__);
 
 	mfc_send_command(charger, MFC_REQUEST_TX_ID);
+	charger->tx_id_cnt++;
+
+	if ((charger->tx_id_cnt <= 10) && !charger->tx_id) {
+		pr_info("%s: request TX ID (%d)\n", __func__, charger->tx_id_cnt);
+		queue_delayed_work(charger->wqueue, &charger->wpc_tx_id_work, msecs_to_jiffies(1500));
+		return;
+	} else {
+		if (charger->tx_id)
+			pr_info("%s: TX ID (0x%x)\n", __func__, charger->tx_id);
+		else
+			pr_info("%s: TX ID not Received\n", __func__);
+		charger->tx_id_cnt = 0;
+	}
+	wake_unlock(&charger->wpc_tx_id_lock);
 }
 
 /*
@@ -3543,6 +3556,8 @@ static int mfc_charger_probe(
 			"wpc_afc_vout_lock");
 	wake_lock_init(&charger->wpc_vout_mode_lock, WAKE_LOCK_SUSPEND,
 			"wpc_vout_mode_lock");
+	wake_lock_init(&charger->wpc_tx_id_lock, WAKE_LOCK_SUSPEND,
+			"wpc_tx_id_lock");
 
 	/* Enable interrupts after battery driver load */
 	/* wpc_det */
@@ -3559,20 +3574,13 @@ static int mfc_charger_probe(
 	}
 
 	/* wpc_irq */
-	queue_delayed_work(charger->wqueue, &charger->wpc_int_req_work, msecs_to_jiffies(100));
+	queue_delayed_work(charger->wqueue, &charger->wpc_int_req_work, msecs_to_jiffies(0));
+
 
 	wc_w_state_irq = gpio_get_value(charger->pdata->wpc_int);
 	pr_info("%s wc_w_state_irq = %d\n", __func__, wc_w_state_irq);
 	if (gpio_get_value(charger->pdata->wpc_det)) {
-		u8 irq_src[2];
 		pr_info("%s: Charger interrupt occured during lpm\n", __func__);
-
-		mfc_reg_read(charger->client, MFC_INT_A_L_REG, &irq_src[0]);
-		mfc_reg_read(charger->client, MFC_INT_A_H_REG, &irq_src[1]);
-		/* clear intterupt */
-		mfc_reg_write(charger->client, MFC_INT_A_CLEAR_L_REG, irq_src[0]); // clear int
-		mfc_reg_write(charger->client, MFC_INT_A_CLEAR_H_REG, irq_src[1]); // clear int
-		mfc_set_cmd_l_reg(charger, 0x20, MFC_CMD_CLEAR_INT_MASK); // command
 		queue_delayed_work(charger->wqueue, &charger->wpc_det_work, 0);
 		if (!wc_w_state_irq && !delayed_work_pending(&charger->wpc_isr_work))
 			queue_delayed_work(charger->wqueue, &charger->wpc_isr_work, msecs_to_jiffies(2000));
@@ -3652,6 +3660,8 @@ static int mfc_charger_resume(struct device *dev)
 static void mfc_charger_shutdown(struct i2c_client *client)
 {
 	struct mfc_charger_data *charger = i2c_get_clientdata(client);
+	int wc_w_state_irq;
+
 	is_shutdn = true;
 	pr_info("%s\n", __func__);
 
@@ -3661,6 +3671,9 @@ static void mfc_charger_shutdown(struct i2c_client *client)
 		pr_info("%s: forced 5V Vout\n", __func__);
 		mfc_set_vrect_adjust(charger, MFC_HEADROOM_1);
 		mfc_set_vout(charger, MFC_VOUT_5V);
+
+		wc_w_state_irq = gpio_get_value(charger->pdata->wpc_int);
+		pr_info("%s wc_w_state_irq = %d\n", __func__, wc_w_state_irq);
 	}
 }
 
