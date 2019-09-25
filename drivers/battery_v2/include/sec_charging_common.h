@@ -810,6 +810,7 @@ struct sec_battery_platform_data {
 	unsigned int sleep_mode_limit_current;
 	unsigned int wc_full_input_limit_current;
 	unsigned int wc_cv_current;
+	unsigned int wc_cv_tx_current;
 	unsigned int max_charging_current;
 	int mix_high_temp;
 	int mix_high_chg_temp;

@@ -98,6 +98,113 @@ static void sensor_ak737x_print_log(int step)
 	}
 }
 
+#if defined (USE_CAMERA_UPDATE_ACTUATOR_PID)
+u8 sensor_ak737x_pid6_data[][2] =
+{
+	{0x10, 0x3C},
+	{0x11, 0x37},
+	{0x12, 0x50},
+	{0x13, 0x19},
+	{0x14, 0x1E},
+	{0x15, 0x2A},
+	{0x16, 0x14},
+	{0x17, 0x62},
+	{0x18, 0xDB},
+	{0x19, 0x00},
+	{0x1A, 0x00},
+	{0x1C, 0x00},
+	{0x1D, 0x00},
+	{0x1E, 0x00},
+	{0x20, 0x00},
+	{0x21, 0x37},
+	{0x22, 0x00},
+	{0x23, 0x14},
+	{0x24, 0x00},
+	{0x25, 0x00},
+};
+
+static int sensor_ak737x_actuator_update_pid(struct v4l2_subdev *subdev, int is_write)
+{
+	int ret = 0;
+	struct fimc_is_actuator *actuator;
+	struct i2c_client *client = NULL;
+	struct fimc_is_module_enum *module;
+	u8 data8;
+	int pid_data_len;
+	int i;
+
+	WARN_ON(!subdev);
+
+	actuator = (struct fimc_is_actuator *)v4l2_get_subdevdata(subdev);
+	WARN_ON(!actuator);
+
+	if (!actuator->vendor_use_update_pid) {
+		warn("There is no 'vendor_use_update_pid' in DT");
+		return 0;
+	}
+
+	module = actuator->sensor_peri->module;
+
+	client = actuator->client;
+	if (unlikely(!client)) {
+		err("client is NULL");
+		return -EINVAL;
+	}
+
+	I2C_MUTEX_LOCK(actuator->i2c_lock);
+
+	fimc_is_sensor_addr8_read8(client, 0x10, &data8);
+
+	pr_info("%s sensor position [%d], pid=0x%x write[%d]\n", __func__, actuator->device, data8, is_write);
+
+	/* SEM module & PID4 */
+	if (data8 == 0x55) {
+		pid_data_len = (sizeof(sensor_ak737x_pid6_data) / sizeof(sensor_ak737x_pid6_data[0]));
+		pr_info("%s SEM module & PID4 detected. update pid, pid_data_len =%d\n", __func__, pid_data_len);
+
+		/* enter setting mode */
+		ret = fimc_is_sensor_addr8_write8(client, 0xAE, 0x3B);
+
+		/* PID6 Data Write */
+		for (i = 0; i < pid_data_len; i++) {
+			ret = fimc_is_sensor_addr8_write8(client, sensor_ak737x_pid6_data[i][0], sensor_ak737x_pid6_data[i][1]);
+			dbg_actuator("%s [0x%x]=[0x%x]\n", __func__, sensor_ak737x_pid6_data[i][0], sensor_ak737x_pid6_data[i][1]);
+		}
+
+		if (is_write) {
+			for (i = 0; i < 3; i++) {
+				pr_info("%s start writing pid to memory, retry[%d]\n", __func__, i);
+
+				/* PID STOMEM1 */
+				ret = fimc_is_sensor_addr8_write8(client, 0x03, 0x01);
+				msleep(90);
+
+				/* PID STOMEM2 */
+				ret = fimc_is_sensor_addr8_write8(client, 0x03, 0x02);
+				msleep(90);
+
+				/* PID STOMEM4 */
+				ret = fimc_is_sensor_addr8_write8(client, 0x03, 0x08);
+				msleep(36);
+
+				ret = fimc_is_sensor_addr8_read8(client, 0x4B, &data8);
+				if ((data8 & (1 << 2)) == 0) {
+					pr_info("%s complete writing pid to memory\n", __func__);
+					break;
+				}
+			}
+		}
+
+		/* release setting mode */
+		ret = fimc_is_sensor_addr8_write8(client, 0xAE, 0x00);
+	}
+
+	I2C_MUTEX_UNLOCK(actuator->i2c_lock);
+
+	return ret;
+}
+#endif /* USE_CAMERA_UPDATE_ACTUATOR_PID */
+
 static int sensor_ak737x_init_position(struct i2c_client *client,
 		struct fimc_is_actuator *actuator)
 {
@@ -173,6 +280,12 @@ int sensor_ak737x_actuator_init(struct v4l2_subdev *subdev, u32 val)
 		ret = -EINVAL;
 		goto p_err;
 	}
+
+#if defined (USE_CAMERA_UPDATE_ACTUATOR_PID)
+	if (actuator->vendor_use_update_pid) {
+		sensor_ak737x_actuator_update_pid(subdev, false);
+	}
+#endif
 
 	dev = &client->dev;
 	dnode = dev->of_node;
@@ -475,6 +588,7 @@ int sensor_ak737x_actuator_probe(struct i2c_client *client,
 	u32 first_pos = 0;
 	u32 first_delay = 0;
 	bool vendor_use_sleep_mode = false;
+	bool vendor_use_update_pid = false;
 	struct device *dev;
 	struct device_node *dnode;
 
@@ -493,6 +607,9 @@ int sensor_ak737x_actuator_probe(struct i2c_client *client,
 
 	if (of_property_read_bool(dnode, "vendor_use_sleep_mode"))
 		vendor_use_sleep_mode = true;
+
+	if (of_property_read_bool(dnode, "vendor_use_update_pid"))
+		vendor_use_update_pid = true;
 
 	ret = of_property_read_u32(dnode, "vendor_first_pos", &first_pos);
 	if (ret) {
@@ -545,6 +662,7 @@ int sensor_ak737x_actuator_probe(struct i2c_client *client,
 	actuator->vendor_first_pos = first_pos;
 	actuator->vendor_first_delay = first_delay;
 	actuator->vendor_use_sleep_mode = vendor_use_sleep_mode;
+	actuator->vendor_use_update_pid = vendor_use_update_pid;
 
 	device->subdev_actuator[sensor_id] = subdev_actuator;
 	device->actuator[sensor_id] = actuator;

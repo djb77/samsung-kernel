@@ -198,6 +198,8 @@
 
 		battery,sleep_mode_limit_current = <500>;
 		battery,wc_full_input_limit_current = <100>;
+		battery,wc_cv_current = <820>;
+		battery,wc_cv_tx_current = <650>;
 
 		battery,mix_high_temp = <420>;
 		battery,mix_high_chg_temp = <500>;
@@ -493,7 +495,7 @@
 		       charging_current = <2150>;
 		};
 		current_group_6 {
-			cable_number = <10 12 15 27 33>;
+			cable_number = <10 12 15 27>;
 			input_current = <820>;
 			charging_current = <1600>;
 		};
@@ -526,6 +528,11 @@
 			cable_number = <1 4>;
 			input_current = <475>;
 			charging_current = <550>;
+		};
+		current_group_13 {
+			cable_number = <33>;
+			input_current = <650>;
+			charging_current = <1600>;
 		};
 	};
 };

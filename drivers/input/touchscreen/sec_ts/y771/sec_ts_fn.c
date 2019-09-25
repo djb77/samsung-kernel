@@ -730,6 +730,7 @@ static ssize_t pressure_enable_store(struct device *dev,
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
 	int ret;
 	unsigned long value = 0;
+	char addr[3] = { 0 };
 
 	if (count > 2)
 		return -EINVAL;
@@ -761,6 +762,20 @@ static ssize_t pressure_enable_store(struct device *dev,
 	ts->pressure_caller_id = value;
 
 	sec_ts_set_custom_library(ts);
+
+	if (ts->pressure_user_level) {
+		addr[0] = SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_LEVEL;
+		addr[1] = 0x00;
+		addr[2] = ts->pressure_user_level;
+
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SPONGE_WRITE_PARAM, addr, 3);
+		if (ret < 0)
+			return -EINVAL;
+
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SPONGE_NOTIFY_PACKET, NULL, 0);
+		if (ret < 0)
+			return -EINVAL;
+	}
 
 	return count;
 }

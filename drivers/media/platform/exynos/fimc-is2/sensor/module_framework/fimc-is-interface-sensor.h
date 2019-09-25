@@ -256,6 +256,8 @@ typedef struct {
 #ifdef CAMERA_REAR2_SENSOR_SHIFT_CROP
 	u32				sensor_shifted_num;
 #endif
+
+	u32 			frame_length_lines_shifter;
 } cis_shared_data;
 
 struct v4l2_subdev;
