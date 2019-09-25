@@ -251,8 +251,15 @@ static int sec_bat_get_wireless_current(struct sec_battery_info *battery, int in
 		}
 	}
 
-	if (battery->wc_cv_mode && incurr > battery->pdata->wc_cv_current)
-		incurr = battery->pdata->wc_cv_current;
+	if (battery->wc_cv_mode) {
+		if (battery->cable_type == SEC_BATTERY_CABLE_WIRELESS_TX) {
+			if (incurr > battery->pdata->wc_cv_tx_current)
+				incurr = battery->pdata->wc_cv_tx_current;
+		} else {
+			if (incurr > battery->pdata->wc_cv_current)
+				incurr = battery->pdata->wc_cv_current;
+		}
+	}
 
 	/* 5. Full-Additional state */
 	if (battery->status == POWER_SUPPLY_STATUS_FULL && battery->charging_mode == SEC_BATTERY_CHARGING_2ND) {
@@ -6158,6 +6165,13 @@ static int sec_bat_parse_dt(struct device *dev,
 	if (ret) {
 		pr_info("%s : wc_cv_current is Empty\n", __func__);
 		pdata->wc_cv_current = 820;
+	}
+
+	ret = of_property_read_u32(np, "battery,wc_cv_tx_current",
+		&pdata->wc_cv_tx_current);
+	if (ret) {
+		pr_info("%s : wc_cv_tx_current is Empty\n", __func__);
+		pdata->wc_cv_tx_current = 650;
 	}
 
 	ret = of_property_read_u32(np, "battery,wc_hero_stand_cc_cv",

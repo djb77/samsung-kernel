@@ -4,20 +4,29 @@
 #include <linux/proc_fs.h>
 #include <linux/highmem.h>
 #include <linux/uh.h>
+#include <linux/rkp.h>
+
+extern unsigned int ro_alloc_n;
 
 ssize_t	uh_log_read(struct file *filep, char __user *buf, size_t size, loff_t *offset)
 {
-	size_t log_buf_size;
+	static size_t log_buf_size;
 	unsigned long *log_addr = 0;
 
 	if (!strcmp(filep->f_path.dentry->d_iname, "uh_log")) {
-		log_buf_size = UH_LOG_SIZE;
 		log_addr = (unsigned long *)phys_to_virt(UH_LOG_START);
 	} else
-		return -1;
+		return -EINVAL;
+
+	if (!*offset) {
+		log_buf_size = 0;
+		while(((char *)log_addr)[log_buf_size] != 0 && log_buf_size != UH_LOG_SIZE)
+			log_buf_size++;
+		pr_info("uh_log : robuffer state %x/%x\n", ro_alloc_n, (unsigned int)RO_PAGES);
+	}
 
 	if (*offset >= log_buf_size)
-		return -EINVAL;
+		return 0;
 
 	if (*offset + size > log_buf_size)
 		size = log_buf_size - *offset;
