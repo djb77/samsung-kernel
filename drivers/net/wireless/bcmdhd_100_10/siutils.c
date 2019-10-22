@@ -1717,9 +1717,9 @@ si_num_slaveports(si_t *sih, uint coreid)
 	uint num = 0;
 
 	if (idx != BADIDX) {
-	if (CHIPTYPE(sih->socitype) == SOCI_AI) {
-		num = ai_num_slaveports(sih, idx);
-	}
+		if (CHIPTYPE(sih->socitype) == SOCI_AI) {
+			num = ai_num_slaveports(sih, idx);
+		}
 	}
 	return num;
 }

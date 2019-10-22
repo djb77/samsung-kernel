@@ -914,8 +914,8 @@ dhdpcie_rc_access_cap(dhd_bus_t *bus, int cap, uint offset, bool is_ext, bool is
 	if (!(bus->rc_dev)) {
 		DHD_ERROR(("%s: RC %x:%x handle is NULL\n",
 			__FUNCTION__, PCIE_RC_VENDOR_ID, PCIE_RC_DEVICE_ID));
-			return BCME_ERROR;
-		}
+		return BCME_ERROR;
+	}
 
 	return dhdpcie_access_cap(bus->rc_dev, cap, offset, is_ext, is_write, writeval);
 }
