@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie_linux.c 797197 2018-12-29 03:31:21Z $
+ * $Id: dhd_pcie_linux.c 800754 2019-01-23 08:38:54Z $
  */
 
 /* include files */
@@ -79,16 +79,6 @@
 #define PCI_CFG_RETRY 		10
 #define OS_HANDLE_MAGIC		0x1234abcd	/* Magic # to recognize osh */
 #define BCM_MEM_FILENAME_LEN 	24		/* Mem. filename length */
-
-#define OSL_PKTTAG_CLEAR(p) \
-do { \
-	struct sk_buff *s = (struct sk_buff *)(p); \
-	ASSERT(OSL_PKTTAG_SZ == 32); \
-	*(uint32 *)(&s->cb[0]) = 0; *(uint32 *)(&s->cb[4]) = 0; \
-	*(uint32 *)(&s->cb[8]) = 0; *(uint32 *)(&s->cb[12]) = 0; \
-	*(uint32 *)(&s->cb[16]) = 0; *(uint32 *)(&s->cb[20]) = 0; \
-	*(uint32 *)(&s->cb[24]) = 0; *(uint32 *)(&s->cb[28]) = 0; \
-} while (0)
 
 /* user defined data structures  */
 

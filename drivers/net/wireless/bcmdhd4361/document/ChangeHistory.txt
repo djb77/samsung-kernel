@@ -1,5 +1,91 @@
-BCM4361 DHD 100.13.21 for Android Crown Project
+DHD 100.13.36 for Android P Projects
 (Notes: 100.13.x is twigged off from 100.10.246)
+
+DHD 100.13.36 - 2019.05.24
+New Feature
+ - CS5350346(By Jung Junyeop) Fake AP - Fixed to provide correct channel information for beacon receive result
+ - Enable to support Fake AP
+   (This patch should be sync up with FW 13.38.60(4361B0), FW 13.50.10(4361B2) or higher version)
+ - WIPS attack warning reporting
+   (This patch should be sync up with FW 13.38.60(4361B0), FW 13.50.10(4361B2) or higher version)
+
+Security Patch
+ - CS8069399(By Kang Hyung Wook) SI-13926 Fixed use-after-free in the wl_cfg80211_set_mgmt_vndr_ies function
+
+Others
+ - CS7939107(By Kim Tae-Yong) Included memdump value prints in the dump information
+ - Added missing options into the Kconfig file
+
+
+DHD 100.13.32 - 2019.04.26
+Kernel Panic
+ - CS7696936(By Min SungBin) Fix misspelling of CUSTOMER_HW4_DEBUG definition
+ - CS7706946(By Min SungBin) Fixed to avoid kernel panic due to race condition of cfg->scan_request
+
+Security Patch
+ - CS7860687(By Kang Hyung Wook) SI-12455: Fixed use-after-free write in dhd_set_monitor() function
+ - CS7949699(By Choi Hyeonu) SI-14074: Fixed Security issue, Potential stack-based buffer overflow in dhd_pktfilter_offload_set
+ - CS7956197(By Choi Hyeonu) SI-14130: Fixed the multiple NULL pointer dereference in wl_cfgvendor.c
+
+Others
+ - CS6844193(By MinSoo Kim) Changed log level of LQCM report
+ - CS7099653(By Nitesh Suthar) Enabled frameburst to enhance throughput for BCM43436 projects
+ - CS7362375(By Gu Ja Heon) Added Private command in order to receive every beacon in Suspend
+ - CS7526157(By Suthar Nitesh) Fixed DualBandConcurrency field in .softap.info
+ - CS7765577(By Park Heebae) Wifi-on time reduction by reading necessary CIS information
+ - CS7827257(By Choi Hyeonu) Fixed kernel panic caused by invalid memory access
+ - CS7834653(By Kang MinHo) Removed redundant TX error prints during suspend in SDIO
+ - CS7884436(By Beom Jip Kim) Fixed to cancel p2p listen offloading by framework scan request
+ - CS7892037(By Sun Yinghan) Fixed to support W2018/KELLY Android P OS upgrade
+
+
+DHD 100.13.31.1 - 2019.04.19
+Others
+ - CS4726130(By Min Hyun-Ki) Added User priority to AC mapping in case of various DSCP types that may not compatible with RFC8325
+ - CS6951980(By Min Hyun-Ki) Changed the UP to AC mapping of CS6 based on the RFC8325
+
+
+DHD 100.13.31 - 2019.02.15
+Others
+ - CS7241767(By LEE EONJI) Added more logs for the DPC schedule error debugging
+ - CS7299641(By Kim MinSoo) Enabled LB_TXP for MSM8998 Platform
+ - CS7323375(By kwon Jaecheol) Enabled the softap.info file support in BCM4359 platform
+ - CS7362527(By Hyeonu Choi) Cancel P2P listen offloading operation when SoftAP brings up
+ - CS7363197(By Junhak Lim) Fixed prevent issues
+ - CS7386068(By Lee Gibum) Disabled frameburst for "2.4Ghz + SoftAP" (Drame & Great projects)
+ - Fixed the scan failure when p2p listen offload is triggered
+ - Fixed to abort scan when connection/disconnection requested
+ - Prevented the bus suspend by the PCIe Runtime PM from abnormal ISR status
+
+
+DHD 100.13.28 - 2019.01.25
+Others
+ - CS7111512(By LEE EONJI) Detect turn on failure in factory binary
+ - CS7299329(By Kim Yu-Kyoung) Fixed SoftAP CTS fail due to interface creation failure
+ - Blocked WLC_E_ROAM event to fix wakes-up frequently under weak signal AP
+ - Changed error results of GETSTAINFO private command to BCME_UNSUPPORTED if the BIGDATA_SOFTAP is not supported
+
+
+DHD 100.13.23 - 2019.01.18
+Kernel Panic
+ - Fixed kernel panic during mfg mode interface creation
+
+Security Patch
+ - CS7091164(By Kang Hyung Wook) SI-13561: Fixed kernel heap overflow security issue at dhdpcie_downloadvars
+ - CS7091371(By Kang Hyung Wook) SI-13584: Fixed kernel panic due to access to not allocated memory
+
+Others
+ - CS6785460(By Jeong Min Cheol) Send HANG event to the framework for the sequential private command failure
+ - CS7003600(By Kang MinHo) Support android private command for restoring roam/scan parameters
+ - CS7094302(By Yoon YeJi) Fixed connect failure caused by connection information not initialized
+ - CS7103552(By LEE EONJI) Fixed the recovery routine to fix the D3_ACK timeout issue
+ - CS7119174(By Kim Seong Hwan) Avoid HANG event indication due to sequential private command failures in case of unsupported error
+ - CS7137399(By Yoon YeJi) Fixed connect failure caused by connection information not initialized
+ - CS7141596(By Suthar Nitesh) Fixed MHS operates with STA mac address
+ - Control HANG report for consecutive Android private command failure by sysfs
+ - Increased the NUMBER_SEQUENTIAL_PRIVCMD_ERRORS from 4 to 7
+ - Taking a SOCRAM dump in the sequential private command error case
+
 
 DHD 100.13.21 - 2019.01.11
 Security Patch

@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.h 798171 2019-01-07 09:10:40Z $
+ * $Id: dhd_linux.h 798798 2019-01-10 10:24:21Z $
  */
 
 /* wifi platform functions for power, interrupt and pre-alloc, either
@@ -301,6 +301,10 @@ extern char softapinfostr[SOFTAP_INFO_BUF_SZ];
 extern uint32 sec_save_softap_info(void);
 #endif /* GEN_SOFTAP_INFO_FILE */
 #endif /* CUSTOMER_HW4 */
+
+#ifdef DHD_SEND_HANG_PRIVCMD_ERRORS
+extern uint32 report_hang_privcmd_err;
+#endif /* DHD_SEND_HANG_PRIVCMD_ERRORS */
 
 #if defined(ARGOS_CPU_SCHEDULER) && !defined(DHD_LB_IRQSET) && \
 	!defined(CONFIG_SOC_EXYNOS7870)

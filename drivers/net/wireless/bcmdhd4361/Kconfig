@@ -19,6 +19,13 @@ config BCM4343
 	  This module adds support for wireless adapters based on
 	  Broadcom 4343 chipset.
 
+config BCM43436
+        tristate "Broadcom 43436 wireless cards support"
+        depends on BROADCOM_WIFI
+        ---help---
+          This module adds support for wireless adapters based on
+          Broadcom 43436 chipset.
+
 config BCM4334
 	tristate "Broadcom 4334 wireless cards support"
 	depends on BROADCOM_WIFI
@@ -139,7 +146,7 @@ config BROADCOM_WIFI_RESERVED_MEM
 
 config WIFI_BROADCOM_COB
         bool "BROADCOM WIFI COB"
-        depends on (BCM43456 || BCM43455 || BCM4343 || BCM43454 || BCM43012)
+        depends on (BCM43456 || BCM43455 || BCM4343 || BCM43436 || BCM43454 || BCM43012)
         ---help---
           This is a configuration for Broadcom WIFI COB Type.
 
@@ -229,6 +236,18 @@ config SPLIT_ARGOS_SET
 	depends on BROADCOM_WIFI
 	---help---
 	To support SPLIT_ARGOS_SET
+
+config WLAN_GRACE
+	bool "Model code for GRACE"
+	depends on BROADCOM_WIFI
+	---help---
+	  This is configuration for Grace feature
+
+config WLAN_GREAT
+	bool "model code for GREAT"
+	depends on BROADCOM_WIFI
+	---help---
+	  This is configuration for Great feature
 
 config BCM_DETECT_CONSECUTIVE_HANG
 	bool "Detect consecutive hang event"

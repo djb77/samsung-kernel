@@ -211,6 +211,7 @@
 		battery,sleep_mode_limit_current = <500>;
 		battery,wc_full_input_limit_current = <100>;
 		battery,wc_cv_current = <820>;
+		battery,wc_cv_tx_current = <650>;
 		battery,wc_cv_pack_current = <630>;
 		battery,wc_hero_stand_cc_cv = <70>;
 		battery,wc_hero_stand_cv_current = <600>;

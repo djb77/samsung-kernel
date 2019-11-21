@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux_exportfs.c 793750 2018-12-11 02:12:38Z $
+ * $Id: dhd_linux_exportfs.c 808910 2019-03-11 10:44:36Z $
  */
 #include <linux/kobject.h>
 #include <linux/proc_fs.h>
@@ -916,7 +916,7 @@ set_proptx(struct dhd_info *dev, const char *buf, size_t count)
 
 	proptx = onoff;
 	DHD_ERROR(("[WIFI_SEC] %s: FRAMEBURST On/Off from sysfs = %u\n",
-		__FUNCTION__, txbf));
+		__FUNCTION__, proptx));
 	return count;
 }
 
@@ -1012,6 +1012,36 @@ static struct dhd_attr dhd_attr_adps_bam =
 	__ATTR(bad_ap_list, 0660, show_adps_bam_list, store_adps_bam_list);
 #endif	/* DHD_ADPS_BAM_EXPORT && WL_BAM */
 
+#ifdef DHD_SEND_HANG_PRIVCMD_ERRORS
+uint32 report_hang_privcmd_err = 1;
+
+static ssize_t
+show_hang_privcmd_err(struct dhd_info *dev, char *buf)
+{
+	ssize_t ret = 0;
+
+	ret = scnprintf(buf, PAGE_SIZE - 1, "%u\n", report_hang_privcmd_err);
+	return ret;
+}
+
+static ssize_t
+set_hang_privcmd_err(struct dhd_info *dev, const char *buf, size_t count)
+{
+	uint32 val;
+
+	val = bcm_atoi(buf);
+	sscanf(buf, "%u", &val);
+
+	report_hang_privcmd_err = val ? 1 : 0;
+	DHD_INFO(("%s: Set report HANG for private cmd error: %d\n",
+		__FUNCTION__, report_hang_privcmd_err));
+	return count;
+}
+
+static struct dhd_attr dhd_attr_hang_privcmd_err =
+	__ATTR(hang_privcmd_err, 0660, show_hang_privcmd_err, set_hang_privcmd_err);
+#endif /* DHD_SEND_HANG_PRIVCMD_ERRORS */
+
 /* Attribute object that gets registered with "wifi" kobject tree */
 static struct attribute *control_file_attrs[] = {
 #ifdef DHD_MAC_ADDR_EXPORT
@@ -1061,6 +1091,9 @@ static struct attribute *control_file_attrs[] = {
 #ifdef DHD_ADPS_BAM_EXPORT
 	&dhd_attr_adps_bam.attr,
 #endif	/* DHD_ADPS_BAM_EXPORT */
+#ifdef DHD_SEND_HANG_PRIVCMD_ERRORS
+	&dhd_attr_hang_privcmd_err.attr,
+#endif /* DHD_SEND_HANG_PRIVCMD_ERRORS */
 	NULL
 };
 
