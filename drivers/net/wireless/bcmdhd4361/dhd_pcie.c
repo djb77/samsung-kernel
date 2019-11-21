@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_pcie.c 797197 2018-12-29 03:31:21Z $
+ * $Id: dhd_pcie.c 802450 2019-02-01 14:05:56Z $
  */
 
 /* include files */
@@ -159,12 +159,9 @@ static void dhdpcie_bus_reg_unmap(osl_t *osh, volatile char *addr, int size);
 static int dhdpcie_cc_nvmshadow(dhd_bus_t *bus, struct bcmstrbuf *b);
 static void dhdpcie_fw_trap(dhd_bus_t *bus);
 static void dhd_fillup_ring_sharedptr_info(dhd_bus_t *bus, ring_info_t *ring_info);
+static void dhdpcie_handle_mb_data(dhd_bus_t *bus);
 extern void dhd_dpc_enable(dhd_pub_t *dhdp);
 extern void dhd_dpc_kill(dhd_pub_t *dhdp);
-
-#ifdef DHD_PCIE_NATIVE_RUNTIMEPM
-static void dhdpcie_handle_mb_data(dhd_bus_t *bus);
-#endif /* DHD_PCIE_NATIVE_RUNTIMEPM */
 
 #ifdef IDLE_TX_FLOW_MGMT
 static void dhd_bus_check_idle_scan(dhd_bus_t *bus);
@@ -754,16 +751,59 @@ dhd_bus_query_dpc_sched_errors(dhd_pub_t *dhdp)
 		/* print out minimum timestamp info */
 		DHD_ERROR(("isr_entry_time="SEC_USEC_FMT
 			" isr_exit_time="SEC_USEC_FMT
-			" dpc_entry_time="SEC_USEC_FMT
-			"\ndpc_exit_time="SEC_USEC_FMT
+			" last_non_ours_irq_time="SEC_USEC_FMT
+			" \ndpc_entry_time="SEC_USEC_FMT
+			" dpc_exit_time="SEC_USEC_FMT
 			" dpc_sched_time="SEC_USEC_FMT
 			" resched_dpc_time="SEC_USEC_FMT"\n",
 			GET_SEC_USEC(bus->isr_entry_time),
 			GET_SEC_USEC(bus->isr_exit_time),
+			GET_SEC_USEC(bus->last_non_ours_irq_time),
 			GET_SEC_USEC(bus->dpc_entry_time),
 			GET_SEC_USEC(bus->dpc_exit_time),
 			GET_SEC_USEC(bus->dpc_sched_time),
 			GET_SEC_USEC(bus->resched_dpc_time)));
+		/* Added more log to debug un-scheduling from isr */
+		DHD_ERROR(("donglereset=%d, busstate=%d instatus=0x%x intr_enabled=%d \n",
+			dhdp->dongle_reset, dhdp->busstate, bus->intstatus, bus->intr_enabled));
+
+		dhd_pcie_dump_rc_conf_space_cap(dhdp);
+#ifdef EXTENDED_PCIE_DEBUG_DUMP
+	DHD_ERROR(("Pcie EP Uncorrectable Error Status Val=0x%x\n",
+		dhdpcie_ep_access_cap(bus, PCIE_EXTCAP_ID_ERR,
+		PCIE_EXTCAP_AER_UCERR_OFFSET, TRUE, FALSE, 0)));
+	DHD_ERROR(("hdrlog0(0x%x)=0x%08x hdrlog1(0x%x)=0x%08x hdrlog2(0x%x)=0x%08x "
+		"hdrlog3(0x%x)=0x%08x\n", PCI_TLP_HDR_LOG1,
+		dhd_pcie_config_read(bus->osh, PCI_TLP_HDR_LOG1, sizeof(uint32)),
+		PCI_TLP_HDR_LOG2,
+		dhd_pcie_config_read(bus->osh, PCI_TLP_HDR_LOG2, sizeof(uint32)),
+		PCI_TLP_HDR_LOG3,
+		dhd_pcie_config_read(bus->osh, PCI_TLP_HDR_LOG3, sizeof(uint32)),
+		PCI_TLP_HDR_LOG4,
+		dhd_pcie_config_read(bus->osh, PCI_TLP_HDR_LOG4, sizeof(uint32))));
+		if (bus->sih->buscorerev >= 24) {
+			DHD_ERROR(("DeviceStatusControl(0x%x)=0x%x SubsystemControl(0x%x)=0x%x "
+			"L1SSControl2(0x%x)=0x%x\n", PCIECFGREG_DEV_STATUS_CTRL,
+			dhd_pcie_config_read(bus->osh, PCIECFGREG_DEV_STATUS_CTRL,
+			sizeof(uint32)), PCIE_CFG_SUBSYSTEM_CONTROL,
+			dhd_pcie_config_read(bus->osh, PCIE_CFG_SUBSYSTEM_CONTROL,
+			sizeof(uint32)), PCIECFGREG_PML1_SUB_CTRL2,
+			dhd_pcie_config_read(bus->osh, PCIECFGREG_PML1_SUB_CTRL2,
+			sizeof(uint32))));
+
+			DHD_ERROR(("\n ------- DUMPING PCIE DAR Registers ------- \r\n"));
+			DHD_ERROR(("clkctl(0x%x)=0x%x pwrctl(0x%x)=0x%x H2D_DB0(0x%x)=0x%x\n",
+			PCIDARClkCtl(bus->sih->buscorerev),
+			si_corereg(bus->sih, bus->sih->buscoreidx,
+			PCIDARClkCtl(bus->sih->buscorerev), 0, 0),
+			PCIDARPwrCtl(bus->sih->buscorerev),
+			si_corereg(bus->sih, bus->sih->buscoreidx,
+			PCIDARPwrCtl(bus->sih->buscorerev), 0, 0),
+			PCIDARH2D_DB0(bus->sih->buscorerev),
+			si_corereg(bus->sih, bus->sih->buscoreidx,
+			PCIDARH2D_DB0(bus->sih->buscorerev), 0, 0)));
+		}
+#endif /* EXTENDED_PCIE_DEBUG_DUMP */
 	}
 
 	return sched_err;
@@ -869,7 +909,9 @@ dhdpcie_bus_isr(dhd_bus_t *bus)
 			DHD_INFO(("%s, not ready to receive interrupts\n", __FUNCTION__));
 			break;
 		}
-
+#ifdef DHD_PCIE_RUNTIMEPM
+		bus->idlecount = 0;
+#endif /* DHD_PCIE_RUNTIMEPM */
 		if (PCIECTO_ENAB(bus)) {
 			/* read pci_intstatus */
 			intstatus = dhdpcie_bus_cfg_read_dword(bus, PCI_INT_STATUS, 4);
@@ -5808,7 +5850,12 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 					__FUNCTION__, intstatus, host_irq_disabled));
 				dhd_pcie_intr_count_dump(bus->dhd);
 				dhd_print_tasklet_status(bus->dhd);
-				dhd_prot_process_ctrlbuf(bus->dhd);
+				if (bus->api.fw_rev >= PCIE_SHARED_VERSION_6 &&
+					!bus->use_mailbox) {
+					dhd_prot_process_ctrlbuf(bus->dhd);
+				} else {
+					dhdpcie_handle_mb_data(bus);
+				}
 				timeleft = dhd_os_d3ack_wait(bus->dhd, &bus->wait_for_d3_ack);
 				/* Clear Interrupts */
 				dhdpcie_bus_clear_intstatus(bus);
@@ -6567,7 +6614,7 @@ dhdpcie_downloadvars(dhd_bus_t *bus, void *arg, int len)
 		bus->dhd->vars_ccode[0] = 0;
 		bus->dhd->vars_regrev = 0;
 		if ((pos = strstr(tmpbuf, "ccode"))) {
-			sscanf(pos, "ccode=%s\n", bus->dhd->vars_ccode);
+			sscanf(pos, "ccode=%3s\n", bus->dhd->vars_ccode);
 		}
 		if ((pos = strstr(tmpbuf, "regrev"))) {
 			sscanf(pos, "regrev=%u\n", &(bus->dhd->vars_regrev));
