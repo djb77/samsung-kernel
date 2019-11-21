@@ -218,7 +218,7 @@ static int binder_update_page_range(struct binder_alloc *alloc, int allocate,
 		mm = alloc->vma_vm_mm;
 
 	if (mm) {
-		down_write(&mm->mmap_sem);
+		down_read(&mm->mmap_sem);
 		vma = alloc->vma;
 	}
 
@@ -287,7 +287,7 @@ static int binder_update_page_range(struct binder_alloc *alloc, int allocate,
 		/* vm_insert_page does not seem to increment the refcount */
 	}
 	if (mm) {
-		up_write(&mm->mmap_sem);
+		up_read(&mm->mmap_sem);
 		mmput(mm);
 	}
 	return 0;
@@ -320,7 +320,7 @@ err_page_ptr_cleared:
 	}
 err_no_vma:
 	if (mm) {
-		up_write(&mm->mmap_sem);
+		up_read(&mm->mmap_sem);
 		mmput(mm);
 	}
 	return vma ? -ENOMEM : -ESRCH;
@@ -1005,8 +1005,14 @@ void binder_alloc_init(struct binder_alloc *alloc)
 	INIT_LIST_HEAD(&alloc->buffers);
 }
 
-void binder_alloc_shrinker_init(void)
+int binder_alloc_shrinker_init(void)
 {
-	list_lru_init(&binder_alloc_lru);
-	register_shrinker(&binder_shrinker);
+	int ret = list_lru_init(&binder_alloc_lru);
+
+	if (ret == 0) {
+		ret = register_shrinker(&binder_shrinker);
+		if (ret)
+			list_lru_destroy(&binder_alloc_lru);
+	}
+	return ret;
 }
