@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Proprietary,Open:>>
  *
- * $Id: bcmsdh_sdmmc_linux.c 796833 2018-12-27 05:52:37Z $
+ * $Id: bcmsdh_sdmmc_linux.c 801673 2019-01-29 04:29:43Z $
  */
 
 #include <typedefs.h>
@@ -80,7 +80,10 @@
 
 #if !defined(SDIO_DEVICE_ID_BROADCOM_4362)
 #define SDIO_DEVICE_ID_BROADCOM_4362    0x4362
-#endif // endif
+#endif  /* !defined(SDIO_DEVICE_ID_BROADCOM_4362) */
+#if !defined(SDIO_DEVICE_ID_BROADCOM_43430)
+#define SDIO_DEVICE_ID_BROADCOM_43430	43430
+#endif /* !defined(SDIO_DEVICE_ID_BROADCOM_43430) */
 
 extern void wl_cfg80211_set_parent_dev(void *dev);
 extern void sdioh_sdmmc_devintr_off(sdioh_info_t *sd);
@@ -222,6 +225,7 @@ static const struct sdio_device_id bcmsdh_sdmmc_ids[] = {
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4324) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_43239) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4345) },
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_43430) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4362) },
 	{ SDIO_DEVICE_CLASS(SDIO_CLASS_NONE)		},
 	{ 0, 0, 0, 0 /* end: all zeroes */

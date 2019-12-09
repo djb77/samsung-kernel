@@ -27,7 +27,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd.h 800554 2019-01-22 12:04:01Z $
+ * $Id: dhd.h 815855 2019-04-22 05:16:49Z $
  */
 
 /****************
@@ -333,7 +333,7 @@ enum dhd_op_flags {
 };
 
 #define DHD_OPMODE_SUPPORTED(dhd, opmode_flag) \
-	(dhd ? ((((dhd_pub_t *)dhd)->op_mode)  &  opmode_flag) : -1)
+	(dhd ? ((((dhd_pub_t *)dhd)->op_mode) & opmode_flag) : -1)
 #define DHD_OPMODE_STA_SOFTAP_CONCURR(dhd) \
 	(dhd ? (((((dhd_pub_t *)dhd)->op_mode) & DHD_FLAG_CONCURR_STA_HOSTAP_MODE) == \
 	DHD_FLAG_CONCURR_STA_HOSTAP_MODE) : 0)
@@ -427,7 +427,7 @@ enum dhd_prealloc_index {
 };
 
 enum dhd_dongledump_mode {
-	DUMP_DISABLED = 0,
+	DUMP_DISABLED		= 0,
 	DUMP_MEMONLY		= 1,
 	DUMP_MEMFILE		= 2,
 	DUMP_MEMFILE_BUGON	= 3,
@@ -435,7 +435,7 @@ enum dhd_dongledump_mode {
 };
 
 enum dhd_dongledump_type {
-	DUMP_TYPE_RESUMED_ON_TIMEOUT = 1,
+	DUMP_TYPE_RESUMED_ON_TIMEOUT		= 1,
 	DUMP_TYPE_D3_ACK_TIMEOUT		= 2,
 	DUMP_TYPE_DONGLE_TRAP			= 3,
 	DUMP_TYPE_MEMORY_CORRUPTION		= 4,
@@ -466,24 +466,24 @@ enum dhd_dongledump_type {
 };
 
 enum dhd_hang_reason {
-	HANG_REASON_MASK = 0x8000,
-	HANG_REASON_IOCTL_RESP_TIMEOUT = 0x8001,
-	HANG_REASON_DONGLE_TRAP = 0x8002,
-	HANG_REASON_D3_ACK_TIMEOUT = 0x8003,
-	HANG_REASON_BUS_DOWN = 0x8004,
-	HANG_REASON_MSGBUF_LIVELOCK = 0x8006,
-	HANG_REASON_IFACE_DEL_FAILURE = 0x8007,
-	HANG_REASON_HT_AVAIL_ERROR = 0x8008,
-	HANG_REASON_PCIE_RC_LINK_UP_FAIL = 0x8009,
-	HANG_REASON_PCIE_PKTID_ERROR = 0x800A,
-	HANG_REASON_IFACE_ADD_FAILURE = 0x800B,
+	HANG_REASON_MASK 				= 0x8000,
+	HANG_REASON_IOCTL_RESP_TIMEOUT 			= 0x8001,
+	HANG_REASON_DONGLE_TRAP				= 0x8002,
+	HANG_REASON_D3_ACK_TIMEOUT			= 0x8003,
+	HANG_REASON_BUS_DOWN				= 0x8004,
+	HANG_REASON_MSGBUF_LIVELOCK			= 0x8006,
+	HANG_REASON_IFACE_DEL_FAILURE			= 0x8007,
+	HANG_REASON_HT_AVAIL_ERROR			= 0x8008,
+	HANG_REASON_PCIE_RC_LINK_UP_FAIL		= 0x8009,
+	HANG_REASON_PCIE_PKTID_ERROR			= 0x800A,
+	HANG_REASON_IFACE_ADD_FAILURE			= 0x800B,
 	HANG_REASON_IOCTL_RESP_TIMEOUT_SCHED_ERROR	= 0x800C,
 	HANG_REASON_D3_ACK_TIMEOUT_SCHED_ERROR		= 0x800D,
 	HANG_REASON_SEQUENTIAL_PRIVCMD_ERROR		= 0x800E,
-	HANG_REASON_PCIE_LINK_DOWN = 0x8805,
-	HANG_REASON_INVALID_EVENT_OR_DATA = 0x8806,
-	HANG_REASON_UNKNOWN = 0x8807,
-	HANG_REASON_MAX = 0x8808
+	HANG_REASON_PCIE_LINK_DOWN			= 0x8805,
+	HANG_REASON_INVALID_EVENT_OR_DATA		= 0x8806,
+	HANG_REASON_UNKNOWN				= 0x8807,
+	HANG_REASON_MAX					= 0x8808
 };
 
 #define WLC_E_DEAUTH_MAX_REASON 0x0FFF
@@ -759,7 +759,11 @@ extern void copy_debug_dump_time(char *dest, char *src);
 #ifdef DHD_COMMON_DUMP_PATH
 #undef DHD_COMMON_DUMP_PATH
 #endif /* DHD_COMMON_DUMP_PATH */
+#if defined(BCM4361_CHIP) || defined(BCM4359_CHIP) || defined(BCM43456_CHIP)
 #define DHD_COMMON_DUMP_PATH	"/data/log/wifi/"
+#else
+#define DHD_COMMON_DUMP_PATH	"/data/vendor/log/wifi/"
+#endif /* BCM4361_CHIP || BCM4359_CHIP || BCM43456_CHIP */
 #endif /* ANDROID_PLATFORM_VERSION >= 9 */
 #endif /* ANDROID_PLATFORM_VERSION */
 #ifndef DHD_COMMON_DUMP_PATH
@@ -1235,6 +1239,7 @@ typedef struct dhd_pub {
 #ifdef DHD_USE_CLMINFO_PARSER
 	bool is_clm_mult_regrev;	/* Checking for CLM single/multiple regrev */
 #endif /* DHD_USE_CLMINFO_PARSER */
+	bool disable_dtim_in_suspend;	/* Disable set bcn_li_dtim in suspend */
 } dhd_pub_t;
 
 typedef struct {
@@ -1884,6 +1889,7 @@ extern int net_os_rxfilter_add_remove(struct net_device *dev, int val, int num);
 #define MAX_PKTFLT_FIXED_PATTERN_SIZE	32
 #define MAX_PKTFLT_FIXED_BUF_SIZE	\
 	(WL_PKT_FILTER_FIXED_LEN + MAX_PKTFLT_FIXED_PATTERN_SIZE * 2)
+#define MAXPKT_ARG	16
 #endif /* PKT_FILTER_SUPPORT */
 
 #if defined(BCMPCIE)

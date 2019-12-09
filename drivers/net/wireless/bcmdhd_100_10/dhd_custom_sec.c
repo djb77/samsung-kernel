@@ -484,8 +484,8 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 		dhd->mimo_ant_set = 0;
 #endif /* CUSTOM_SET_ANTNPM */
 		return ret;
-		}
-		DHD_ERROR(("[WIFI_SEC]%s: ANT val = %d\n", __FUNCTION__, ant_val));
+	}
+	DHD_ERROR(("[WIFI_SEC]%s: ANT val = %d\n", __FUNCTION__, ant_val));
 
 	/* bt coex mode off */
 	if (dhd_get_fw_mode(dhd->info) == DHD_FLAG_MFG_MODE) {
@@ -903,8 +903,10 @@ early_param("androidboot.hw_rev", get_hw_rev);
 #ifdef GEN_SOFTAP_INFO_FILE
 #define SOFTAP_INFO_FILE_FIRST_LINE    "#.softap.info"
 /*
- * # Whether both wifi and hotspot can be turned on at the same time?
+ * # Does RSDB Wifi sharing support?
  * DualBandConcurrency
+ * # Both wifi and hotspot can be turned on at the same time?
+ * DualInterface
  * # 5Ghz band support?
  * 5G
  * # How many clients can be connected?
@@ -926,7 +928,7 @@ const char *softap_info_items[] = {
 };
 #if defined(BCM4361_CHIP)
 const char *softap_info_values[] = {
-	"yes", 
+	"yes",
 #ifdef DHD_SOFTAP_DUAL_IF_INFO
 	"yes",
 #endif /* DHD_SOFTAP_DUAL_IF_INFO */
@@ -936,21 +938,17 @@ const char *softap_info_values[] = {
 const char *softap_info_values[] = {
 	"yes",
 #ifdef DHD_SOFTAP_DUAL_IF_INFO
-#ifdef CONFIG_WLAN_GRACE
+#if defined(CONFIG_WLAN_GRACE) || defined(CONFIG_SEC_KELLYLTE_PROJECT)
 	"yes",
 #else
 	"no",
-#endif /* CONFIG_WLAN_GRACE */
+#endif /* CONFIG_WLAN_GRACE || CONFIG_SEC_KELLYLTE_PROJECT */
 #endif /* DHD_SOFTAP_DUAL_IF_INFO */
 	"yes", "10", "yes", "yes", "yes", NULL
 };
 #elif defined(BCM43454_CHIP) || defined(BCM43455_CHIP) || defined(BCM43456_CHIP)
 const char *softap_info_values[] = {
-#ifdef WL_RESTRICTED_APSTA_SCC
-	"yes",
-#else
 	"no",
-#endif /* WL_RESTRICTED_APSTA_SCC */
 #ifdef DHD_SOFTAP_DUAL_IF_INFO
 #ifdef WL_RESTRICTED_APSTA_SCC
 	"yes",

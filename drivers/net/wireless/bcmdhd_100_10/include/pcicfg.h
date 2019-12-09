@@ -137,7 +137,7 @@ typedef struct _pciconfig_cap_pcie {
 #define PCIE_ADV_CORR_ERR_MASK	0x114
 #define PCIE_ADV_CORR_ERR_MASK_OFFSET	0x14
 #define CORR_ERR_RE	(1 << 0) /* Receiver  */
-#define CORR_ERR_BT 	(1 << 6) /* Bad TLP  */
+#define CORR_ERR_BT	(1 << 6) /* Bad TLP  */
 #define CORR_ERR_BD	(1 << 7) /* Bad DLLP */
 #define CORR_ERR_RR	(1 << 8) /* REPLAY_NUM rollover */
 #define CORR_ERR_RT	(1 << 12) /* Reply timer timeout */
