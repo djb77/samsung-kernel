@@ -921,9 +921,9 @@ typedef volatile struct sbpcieregs {
 
 #define PCIControl(rev)		(REV_GE_64(rev) ? 0xC00 : 0x00)
 /* for corerev < 64 idma_en is in PCIControl regsiter */
-#define IDMAControl(rev)	(REV_GE_64(rev) ? 0x480 : 0x00)
-#define PCIMailBoxInt(rev)	(REV_GE_64(rev) ? 0xC30 : 0x48)
-#define PCIMailBoxMask(rev)	(REV_GE_64(rev) ? 0xC34 : 0x4C)
+#define IDMAControl(rev)    (REV_GE_64(rev) ? 0x480 : 0x00)
+#define PCIMailBoxInt(rev)  (REV_GE_64(rev) ? 0xC30 : 0x48)
+#define PCIMailBoxMask(rev) (REV_GE_64(rev) ? 0xC34 : 0x4C)
 #define PCIFunctionIntstatus(rev)   (REV_GE_64(rev) ? 0xC10 : 0x20)
 #define PCIFunctionIntmask(rev) (REV_GE_64(rev) ? 0xC14 : 0x24)
 #define PCIPowerIntstatus(rev)  (REV_GE_64(rev) ? 0xC18 : 0x1A4)

@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux_exportfs.c 798798 2019-01-10 10:24:21Z $
+ * $Id: dhd_linux_exportfs.c 808910 2019-03-11 10:44:36Z $
  */
 #include <linux/kobject.h>
 #include <linux/proc_fs.h>
@@ -916,7 +916,7 @@ set_proptx(struct dhd_info *dev, const char *buf, size_t count)
 
 	proptx = onoff;
 	DHD_ERROR(("[WIFI_SEC] %s: FRAMEBURST On/Off from sysfs = %u\n",
-		__FUNCTION__, txbf));
+		__FUNCTION__, proptx));
 	return count;
 }
 
