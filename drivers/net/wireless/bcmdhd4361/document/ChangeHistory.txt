@@ -1,5 +1,10 @@
-DHD 100.13.36 for Android P Projects
+DHD 100.13.36.1 for Android P Projects
 (Notes: 100.13.x is twigged off from 100.10.246)
+
+DHD 100.13.36.1 - 2019.07.31
+Security Patch
+ - CS8424803(By Choi Hyeonu) SI-14869: Moved the length check routine for the nlioc variable before accessing it in the wl_cfgvendor_priv_string_handler() function
+
 
 DHD 100.13.36 - 2019.05.24
 New Feature

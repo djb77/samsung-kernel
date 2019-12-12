@@ -25,6 +25,66 @@ static enum power_supply_property max77865_fuelgauge_props[] = {
 bool max77865_fg_fuelalert_init(struct max77865_fuelgauge_data *fuelgauge,
 				int soc);
 
+static void max77865_fg_adaptation_wa(struct max77865_fuelgauge_data *fuelgauge)
+{
+	u32 rcomp0;
+	u32 fullcapnom;
+	u32 temp;
+	u8 data[2];
+
+	/* check RCOMP0 */
+	rcomp0 = max77865_read_word(fuelgauge->i2c, RCOMP_REG);
+	if ((rcomp0 > (fuelgauge->battery_data->rcomp0 * 14 / 10)) || (rcomp0 < (fuelgauge->battery_data->rcomp0 * 7 / 10))) {
+		pr_err("%s: abnormal RCOMP0 (0x%x / 0x%x)\n", __func__, rcomp0, fuelgauge->battery_data->rcomp0);
+		goto set_default_value;
+	}
+
+	/* check TEMPCO */
+	if (max77865_bulk_read(fuelgauge->i2c, TEMPCO_REG,
+			       2, data) < 0) {
+		pr_err("%s: Failed to read TEMPCO\n", __func__);
+		return;
+	}
+				/* tempcohot = data[1]; 	tempcocold = data[0]; */
+	temp = (fuelgauge->battery_data->tempco & 0xFF00) >> 8;
+	if ((data[1] > (temp * 14 / 10)) || (data[1] < (temp * 7 / 10))) {
+		pr_err("%s: abnormal TempCoHot (0x%x / 0x%x)\n", __func__, data[1], temp);
+		goto set_default_value;
+	}
+
+	temp = fuelgauge->battery_data->tempco & 0x00FF;
+	if ((data[0] > (temp * 14 / 10)) || (data[0] < (temp * 7 / 10))) {
+		pr_err("%s: abnormal TempCoCold (0x%x / 0x%x)\n", __func__, data[0], temp);
+		goto set_default_value;
+	}
+
+	/* check FULLCAPNOM */
+	fullcapnom = max77865_read_word(fuelgauge->i2c, FULLCAP_NOM_REG);
+	temp = max77865_read_word(fuelgauge->i2c, DESIGNCAP_REG);
+	if (fullcapnom > (temp * 11 / 10)) {
+		pr_err("%s: abnormal fullcapnom (0x%x / 0x%x)\n", __func__, fullcapnom, temp);
+		goto re_calculation;
+	}
+
+	return;
+
+set_default_value:
+	pr_err("%s: enter set_default_value\n", __func__);
+	max77865_write_word(fuelgauge->i2c, RCOMP_REG, fuelgauge->battery_data->rcomp0);
+	max77865_write_word(fuelgauge->i2c, TEMPCO_REG, fuelgauge->battery_data->tempco);
+re_calculation:
+	pr_err("%s: enter re_calculation\n", __func__);
+	max77865_write_word(fuelgauge->i2c, DPACC_REG, fuelgauge->battery_data->dPacc);
+	max77865_write_word(fuelgauge->i2c, DQACC_REG, fuelgauge->battery_data->dQacc);
+	max77865_write_word(fuelgauge->i2c, FULLCAP_NOM_REG, fuelgauge->battery_data->fullcapnom);
+	temp = max77865_read_word(fuelgauge->i2c, LEARN_CFG_REG);
+	temp &= 0xFF0F;
+	max77865_write_word(fuelgauge->i2c, LEARN_CFG_REG, temp);
+	max77865_write_word(fuelgauge->i2c, CYCLES_REG, 0);
+	
+	return;
+}
+
 #if !defined(CONFIG_SEC_FACTORY)
 static void max77865_fg_periodic_read(struct max77865_fuelgauge_data *fuelgauge)
 {
@@ -63,6 +123,8 @@ static void max77865_fg_periodic_read(struct max77865_fuelgauge_data *fuelgauge)
 	}
 
 	pr_info("[FG] %s\n", str);
+
+	max77865_fg_adaptation_wa(fuelgauge);
 
 	kfree(str);
 }
@@ -2137,6 +2199,36 @@ static int max77865_fuelgauge_parse_dt(struct max77865_fuelgauge_data *fuelgauge
 					   &fuelgauge->battery_data->Capacity);
 		if (ret < 0)
 			pr_err("%s error reading capacity_calculation_type %d\n",
+					__func__, ret);
+
+		ret = of_property_read_u32(np, "fuelgauge,rcomp0",
+					   &fuelgauge->battery_data->rcomp0);
+		if (ret < 0)
+			pr_err("%s error reading rcomp0 %d\n",
+					__func__, ret);
+
+		ret = of_property_read_u32(np, "fuelgauge,tempco",
+					   &fuelgauge->battery_data->tempco);
+		if (ret < 0)
+			pr_err("%s error reading tempco %d\n",
+					__func__, ret);
+
+		ret = of_property_read_u32(np, "fuelgauge,dPacc",
+					   &fuelgauge->battery_data->dPacc);
+		if (ret < 0)
+			pr_err("%s error reading dPacc %d\n",
+					__func__, ret);
+
+		ret = of_property_read_u32(np, "fuelgauge,dQacc",
+					   &fuelgauge->battery_data->dQacc);
+		if (ret < 0)
+			pr_err("%s error reading dQacc %d\n",
+					__func__, ret);
+
+		ret = of_property_read_u32(np, "fuelgauge,fullcapnom",
+					   &fuelgauge->battery_data->fullcapnom);
+		if (ret < 0)
+			pr_err("%s error reading fullcapnom %d\n",
 					__func__, ret);
 
 		fuelgauge->auto_discharge_en = of_property_read_bool(np,

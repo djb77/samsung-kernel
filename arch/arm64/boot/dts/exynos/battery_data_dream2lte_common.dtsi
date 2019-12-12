@@ -325,6 +325,11 @@
 		fuelgauge,qrtable30 = <0x0902>;
 		fuelgauge,fg_resistor = <2>;
 		fuelgauge,capacity = <0x0DC5>;
+		fuelgauge,rcomp0 = <0x0039>;
+		fuelgauge,tempco = <0x1522>;
+		fuelgauge,dPacc = <0x3200>;
+		fuelgauge,dQacc = <0x066C>;
+		fuelgauge,fullcapnom = <0x19B0>;
 		/*fuelgauge,auto_discharge_en;*/
 		fuelgauge,discharge_temp_threshold = <600>;
 		fuelgauge,discharge_volt_threshold = <4200>;
