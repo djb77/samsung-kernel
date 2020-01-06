@@ -1,0 +1,45 @@
+config FS_ENCRYPTION
+	tristate "FS Encryption (Per-file encryption)"
+	select CRYPTO
+	select CRYPTO_AES
+	select CRYPTO_CBC
+	select CRYPTO_ECB
+	select CRYPTO_XTS
+	select CRYPTO_CTS
+	select CRYPTO_CTR
+	select KEYS
+	help
+	  Enable encryption of files and directories.  This
+	  feature is similar to ecryptfs, but it is more memory
+	  efficient since it avoids caching the encrypted and
+	  decrypted pages in the page cache.
+
+config FS_PRIVATE_ENCRYPTION
+	tristate "FS Private Encryption"
+	depends on FS_ENCRYPTION && EXYNOS_FMP
+	help
+	  Enable private encryption of ext4 files and directories.
+
+config FS_CRYPTO_SEC_EXTENSION
+	bool "FS crypto extension for Samsung Mobile"
+	default n
+	depends on FS_ENCRYPTION
+	help
+	  This option enable the cc certification logic for file based encryption.
+
+config CRYPTO_FIPS
+	bool "FIPS 200 compliance"
+	depends on (CRYPTO_ANSI_CPRNG || CRYPTO_DRBG) && !CRYPTO_MANAGER_DISABLE_TESTS
+	help
+	  This options enables the fips boot option which is
+	  required if you want to system to operate in a FIPS 200
+	  certification.  You should say no unless you know what
+	  this is.
+config FSCRYPT_SDP
+	bool "Sensitive Data Protection for Per-file-encryption"
+	depends on FS_ENCRYPTION
+	depends on SDP
+	help
+	  Enable SDP functional to fscrypto module.
+	  This feature is supporting "Data-At-Rest" for file systems using
+	  Per-file-encryption being controlled by SDP user status.

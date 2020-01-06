@@ -1,0 +1,20 @@
+menuconfig VIDEO_EXYNOS_CAMREA_POSTPROCESS_GDC
+	bool "EXYNOS CAMERA POSTPROCESS GDC Driver"
+	depends on VIDEO_EXYNOS_CAMREA_POSTPROCESS
+	default y
+	help
+		This is a representative exynos CAMERA-PP GDC device.
+
+config CAMERA_PP_GDC_V1_0_0_OBJ
+	bool "use GDC v1.0"
+	depends on VIDEO_EXYNOS_CAMREA_POSTPROCESS_GDC
+	default n
+	help
+		Use to build v1.0 driver
+
+config CAMERA_PP_GDC_V2_0_0_OBJ
+	bool "use GDC v2.0"
+	depends on VIDEO_EXYNOS_CAMREA_POSTPROCESS_GDC
+	default n
+	help
+		Use to build v2.0 driver

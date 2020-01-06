@@ -1,0 +1,211 @@
+#
+# SAMSUNG SoC drivers
+#
+menuconfig SOC_SAMSUNG
+	bool "Samsung SoC driver support" if COMPILE_TEST
+
+if SOC_SAMSUNG
+config EXYNOS_CHIPID
+	bool "Exynos Chip ID Driver Support"
+	depends on ARCH_EXYNOS
+	select SOC_BUS
+
+config EXYNOS_PMU
+	bool "Exynos Power Management Unit Driver Support"
+	depends on ARCH_EXYNOS
+	select MFD_SYSCON
+
+config ECT
+	bool "Enable Exynos Characteristic Table File"
+	default n
+	depends on ARCH_EXYNOS
+
+config ECT_DUMP
+	bool "Enable Exynos Characteristic Table File Dump sysfs"
+	default n
+	depends on ECT
+
+config EXYNOS_PD
+	bool "Exynos PM domain Support"
+	depends on ARCH_EXYNOS
+	depends on PM
+	select PM_GENERIC_DOMAINS
+
+config EXYNOS_RGT
+	bool "Exynos Regulator Debug Support"
+	depends on REGULATOR
+	depends on DEBUG_FS
+	depends on OF
+	help
+	  dummy device driver for debugging samsung PMIC
+
+config EXYNOS_BCM
+	bool "EXYNOS_BCM driver support"
+	default n
+	help
+	  Enable exynos_bcm driver support
+
+config CAL_IF
+	bool "Exynos Chip Abstraction Layer Interface"
+	help
+	  Support CMU CAL for Exynos SoC.
+
+config EXYNOS_REBOOT
+	bool "Exynos Chip Reboot Driver Support"
+	depends on ARCH_EXYNOS
+
+config CMU_EWF
+	bool "exynos early wakeup force enable"
+	depends on CAL_IF
+	default y
+	help
+	  Support CMUEWF for Exynos SoC.
+
+config EXYNOS_PM_DVS
+       bool "Enable Exynos dynamic voltage setting"
+       default n
+
+config PMUCAL
+	bool "Exynos PMU Chip Abstraction Layer"
+	depends on CAL_IF
+	default y
+	help
+	 Support PMUCAL for Exynos SoC.
+
+config FLEXPMU
+	bool "Exynos FLEXPMU"
+	depends on PMUCAL
+	default n
+	help
+	 Support PMUCAL for Exynos SoC.
+
+config EXYNOS_FLEXPMU_DBG
+	bool "Exynos FLEXPMU DBG"
+	depends on FLEXPMU
+	default y
+	help
+	 Support FLEXPMU for Exynos SoC.
+
+config CMUCAL
+	bool "Exynos CMU Chip Abstraction Layer"
+	depends on CAL_IF
+	default y
+	help
+	  Support CMUCAL for Exynos SoC.
+
+config CP_PMUCAL
+	bool "Exynos PMU(for CP) Chip Abstraction Layer"
+	depends on CAL_IF
+	help
+	  Support CP_PMUCAL for Exynos SoC.
+
+config CMUCAL_DEBUG
+	bool "CMUCAL Debug Interface"
+	depends on CMUCAL
+
+config CMUCAL_QCH_IGNORE_SUPPORT
+	bool "CMUCAL QCH IGNORE Support"
+	depends on CMUCAL
+
+config ACPM_DVFS
+	bool "Exynos ACPM DVFS manager"
+	depends on CAL_IF && CMUCAL
+	default y
+	help
+	  Support ACPM DVFS for Exynos SoC.
+
+config EXYNOS_PM_DOMAINS
+	bool "Exynos PM domains" if COMPILE_TEST
+	depends on PM_GENERIC_DOMAINS || COMPILE_TEST
+
+source "drivers/soc/samsung/acpm/Kconfig"
+
+config EXYNOS_CONTENT_PATH_PROTECTION
+	bool "Exynos Content Path Protection"
+	default y
+	help
+	  Enable content path protection of EXYNOS.
+
+config USI_V2
+	bool "Enable Universal Serial Interface version 2"
+	default n
+
+config USI
+	bool "Enable Universal Serial Interface"
+	default y
+
+config EXYNOS_HOTPLUG_GOVERNOR
+	bool "Exynos HOTPLUG Governor"
+	default n
+	depends on ARCH_EXYNOS
+	depends on CPU_FREQ
+	depends on HOTPLUG_CPU
+	help
+	  Enable HOTPLUG Governor for Exynos SoC.
+	  This module controls number of online cpu.
+
+config EXYNOS_DVFS_MANAGER
+	bool "Exynos DVFS Manager"
+	default n
+	depends on ARCH_EXYNOS
+	help
+	  Enable DVFS Manager for Exynos SoC.
+	  This module controls constraint between each DVFS domains.
+
+config EXYNOS_SDM
+	bool "Exynos Security Dump Manager Support"
+	depends on EXYNOS_SNAPSHOT
+	default y
+	help
+	  Exynos Security Dump Manager
+
+config EXYNOS_OCP
+	bool "Exynos OCP Handler"
+	depends on CPU_FREQ
+	default n
+	help
+	  Enable OCP handler for Exynos SoC.
+
+config EXYNOS_MCINFO
+	bool "Exynos memory controller information"
+	default n
+
+config MCINFO_SYSFS
+	bool "Exynos memory controller information sysfs"
+	depends on EXYNOS_MCINFO
+	default	y if SYSFS
+
+config EXYNOS_SECURE_LOG
+	bool "Exynos Secure Log"
+	default y
+	help
+	  Support Exynos Secure Log
+
+config SAMSUNG_VST_CAL
+	bool "Support NAD VST Calibration"
+	default n
+	help
+	  Support NAD VST Calibration
+
+config EXYNOS_KERNEL_PROTECTION
+	bool "Exynos Kernel Code Protection"
+	help
+	  Support Exynos Kernel Code Protection
+
+config EXYNOS_SMC_LOG_THRESHOLD
+	int "threshold of detection(microsecond)"
+	range 0 1000000
+	default 0
+
+config EXYNOS_SNAPSHOT_LOGGING_SMC_CALL
+	bool "Support logging SMC call"
+	depends on EXYNOS_SNAPSHOT
+	default y
+
+source "drivers/soc/samsung/exynos-hdcp/Kconfig"
+
+config SENSORS_FP_USI_NUMBER
+	depends on SENSORS_FINGERPRINT
+	int "Fingerprint usi gpio number"
+	default 0
+endif

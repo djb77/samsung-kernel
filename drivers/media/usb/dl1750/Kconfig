@@ -1,0 +1,5 @@
+config SEC_DL1750
+	bool "DL1750 drv"
+	default n
+	---help---
+	  Add dl1750 driver.

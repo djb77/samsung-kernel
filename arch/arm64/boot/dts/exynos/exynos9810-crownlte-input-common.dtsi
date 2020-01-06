@@ -1,0 +1,199 @@
+/*
+ * SAMSUNG EXYNOS9810 board device tree source
+ *
+ * Copyright (c) 2017 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+#include <dt-bindings/input/input.h>
+
+/ {
+	pinctrl@14050000 {
+		key_wink: key-wink {
+			samsung,pins = "gpa0-6";
+			samsung,pin-function = <0xf>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		key_vol: key-vol {
+			samsung,pins = "gpa0-3", "gpa0-4";
+			samsung,pin-function = <0xf>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		key_power: key-power {
+			samsung,pins = "gpa2-4";
+			samsung,pin-function = <0xf>;
+		};
+	};
+
+	gpio_keys {
+		status = "okay";
+		compatible = "gpio-keys";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&key_wink &key_vol &key_power>;
+		button@1 {
+			label = "gpio-keys: KEY_WINK";
+			linux,code = <KEY_WINK>;
+			gpios = <&gpa0 6 0xf>;
+			gpio-key,wakeup = <1>;
+		};
+		button@2 {
+			label = "gpio-keys: KEY_VOLUMEDOWN";
+			linux,code = <KEY_VOLUMEDOWN>;
+			gpios = <&gpa0 4 0xf>;
+		};
+		button@3 {
+			label = "gpio-keys: KEY_VOLUMEUP";
+			linux,code = <KEY_VOLUMEUP>;
+			gpios = <&gpa0 3 0xf>;
+		};
+		button@4 {
+			label = "gpio-keys: KEY_POWER";
+			linux,code = <KEY_POWER>;
+			gpios = <&gpa2 4 0xf>;
+			gpio-key,wakeup = <1>;
+		};
+	};
+
+	pinctrl@14050000 {
+		attn_irq: attn-irq {
+			samsung,pins = "gpa1-0";
+			samsung,pin-function = <0xf>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+		attn_input: attn-input {
+			samsung,pins = "gpa1-0";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <1>;
+		};
+	};
+
+	speedy@141C0000 {
+		status = "okay";
+		s2mps18mfd@00 {
+			regulators {
+				ldo35_reg: LDO35 {
+					regulator-name = "tsp_io";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-boot-on;
+					regulator-ramp-delay = <12000>;
+					regulator-initial-mode = <2>;
+				};
+
+				ldo43_reg: LDO43 {
+					regulator-name = "tsp_avdd";
+					regulator-min-microvolt = <3000000>;
+					regulator-max-microvolt = <3000000>;
+					regulator-boot-on;
+					regulator-ramp-delay = <12000>;
+					regulator-initial-mode = <3>;
+				};
+			};
+		};
+	};
+
+	hsi2c_10: hsi2c@104B0000 {
+		status = "okay";
+		samsung,reset-before-trans;
+		samsung,stop-after-trans;	/* LSI IC ONLY */
+//		samsung,no-dev-restart;		/* ONLY for LSI IC Y761 : LP & Nack */
+		touchscreen@48 {
+			compatible = "sec,sec_ts";
+			reg = <0x48>;
+			pinctrl-names = "on_state", "off_state";
+			pinctrl-0 = <&attn_irq>;
+			pinctrl-1 = <&attn_input>;
+			pressure-sensor = "Y";
+			sync-reportrate-120 = "Y";
+			sec,force_sensor_ch_gpio = <&expander_gpios 21 0>;	/* L:1ch, H:2ch */
+			sec,irq_gpio = <&gpa1 0 0>;
+			sec,irq_type = <8200>;
+			sec,max_coords = <4096 4096>;
+			sec,area-size = <133 266 341>; /* indicator: 24dp navigator:48dp edge:60px dpi=320 */
+			sec,mis_cal_check = <1>;
+			sec,regulator_dvdd = "tsp_io";
+			sec,regulator_avdd = "tsp_avdd";
+			sec,regulator_boot_on;
+			//sec,always_lpmode = <1>;
+			sec,tclm_level = <2 2 2>; /* To be supported tclm for each firmware */
+				      /* <crown crown_v2 crown_v1> */
+			sec,afe_base = <0x0302 0x0211 0x0122>; /* To be supported tclm for each firmware */
+				    /* <crown crown_v2 crown_v1> */
+			sec,project_name = "CROWN", "N960";
+			sec,firmware_name = "tsp_sec/y771_crown.fw", "tsp_sec/y771_crown_v2.fw", "tsp_sec/y771_crown_v1.fw";
+					  /* crown : 0.5T window glass, crown_v2 : 0.6T window glass, crown_v1 : using zigzag pattern */
+			sec,support_hw_rev = <0xff>; /* using for prev panel */
+			support_dex_mode;
+			sec,factory_item_version = <2>;
+		};
+	};
+
+	pinctrl@14050000 {
+		epen_int_active: epen-int-active {
+			samsung,pins = "gpa3-3","gpa3-7";
+			samsung,pin-function = <0xf>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
+	wacom_ldo_en: wacom_ldo_en {
+		compatible = "regulator-fixed";
+		regulator-name = "wacom_3.3v";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpm42 0 0>;
+		enable-active-high;
+		regulator-boot-on;
+	};
+
+	hsi2c_23: hsi2c@10910000 {
+		status = "okay";
+		samsung,reset-before-trans;
+		samsung,transfer_delay = <50>;
+		wacom@56 {
+			compatible = "wacom,w90xx";
+			reg = <0x56>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&epen_int_active>;
+			interrupts = <3 0 0>;
+			interrupt-parent = <&gpa3>;
+			vddo-supply = <&wacom_ldo_en>;
+			/* gpios */
+			wacom,irq-gpio = <&gpa3 3 1>;
+			wacom,pdct-gpio = <&gpa3 7 1>;
+			wacom,fwe-gpio = <&gpm41 0 0>;
+			wacom,irq_type = <8>;	/*IRQF_TRIGGER_LOW*/
+			/* features */
+			wacom,boot_addr = <0x09>;
+			wacom,origin = <0 0>; /* x y */
+			wacom,max_coords = <14563 7085>; /* x y */
+			wacom,max_pressure = <4095>;
+			wacom,max_x_tilt = <63>;
+			wacom,max_y_tilt = <63>;
+			wacom,max_height = <255>;
+			wacom,project_name = "CROWN", "N960";
+			wacom,invert = <1 0 1>; /* x y switch */
+			wacom,fw_path = "epen/w9018_crown.fw";
+			wacom,fw_fac_path = "epen/w9018_crown_garage.fw", "epen/w9018_crown_unit.fw";
+			wacom,ic_type = <9018>;
+			wacom,use_virtual_softkey;
+			wacom,support_aop_mode = "1"; /* S-note want to check to use aop */
+			wacom,use_garage;
+			wacom,support_dex_mode;
+			wacom,dex_rate = <10>;
+			wacom,table_swap_for_dex_station;
+		};
+	};
+};
