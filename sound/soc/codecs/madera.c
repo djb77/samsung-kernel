@@ -2572,8 +2572,10 @@ int madera_in_ev(struct snd_soc_dapm_widget *w, struct snd_kcontrol *kcontrol,
 		priv->in_pending--;
 		if (!madera->pdata.accdet[0].enabled ||
 		    madera->pdata.accdet[0].hs_mic != (w->shift ^ 1) + 1 ||
-		    !madera->hs_mic_muted)
+		    !madera->hs_mic_muted) {
+			usleep_range(1000, 2000);
 			snd_soc_update_bits(codec, reg, MADERA_IN1L_MUTE, 0);
+		}
 
 		/* If this is the last input pending then allow VU */
 		if (priv->in_pending == 0) {

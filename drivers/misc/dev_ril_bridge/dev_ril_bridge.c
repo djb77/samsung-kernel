@@ -102,6 +102,14 @@ int register_dev_ril_bridge_event_notifier(struct notifier_block *nb)
 	return raw_notifier_chain_register(&dev_ril_bridge_chain, nb);
 }
 
+int unregister_dev_ril_bridge_event_notifier(struct notifier_block *nb)
+{
+	if (!nb)
+		return -ENOENT;
+
+	return raw_notifier_chain_unregister(&dev_ril_bridge_chain, nb);
+}
+
 static int misc_open(struct inode *inode, struct file *filp)
 {
 	filp->private_data = (void *)drb_dev;
@@ -143,6 +151,10 @@ static unsigned int misc_poll(struct file *filp, struct poll_table_struct *wait)
 	if (skb_queue_empty(rxq))
 		poll_wait(filp, &drb_dev->wq, wait);
 
+	/* drb_dev was already released by shutdown logic */
+	if (!drb_dev)
+		return POLLERR;
+
 	if (!skb_queue_empty(rxq))
 		ret = POLLIN | POLLRDNORM;
 
@@ -165,7 +177,13 @@ static ssize_t misc_write(struct file *filp, const char __user *data,
 		return -EFAULT;
 	}
 
-	size = min_t(unsigned int, count, sizeof(buf) * sizeof(char));
+	if (count > sizeof(buf)) {
+		drb_err("ERR! pkt_size is bigger than buf_size(pkt:%lu, buf:%lu)\n",
+			count, sizeof(buf));
+		return -EFAULT;
+	}
+
+	size = min_t(unsigned int, (unsigned int)count, (unsigned int)sizeof(buf));
 	if (copy_from_user(buf, data, size)) {
 		drb_err("ERR! copy_from_user fail(count %lu)\n",
 			(unsigned long)count);
@@ -181,7 +199,7 @@ static ssize_t misc_write(struct file *filp, const char __user *data,
 	}
 	
 	msg.dev_id = sipc_hdr->sub_cmd;
-	msg.data_len = size - sizeof(struct sipc_fmt_hdr);
+	msg.data_len = size - (unsigned int)sizeof(struct sipc_fmt_hdr);
 	msg.data = (void *)(buf + sizeof(struct sipc_fmt_hdr));
 
 	drb_info("notifier_call: dev_id=%u data_len=%u\n", msg.dev_id, msg.data_len);
@@ -197,8 +215,9 @@ static ssize_t misc_read(struct file *filp, char *buf, size_t count,
 {
 	struct drb_dev *drb_dev = (struct drb_dev *)filp->private_data;
 	struct sk_buff_head *rxq = &drb_dev->sk_rx_q;
+	unsigned int cnt = (unsigned int)count;
 	struct sk_buff *skb;
-	unsigned int copied;
+	ssize_t copied;
 
 	if (skb_queue_empty(rxq)) {
 		long tmo = msecs_to_jiffies(100);
@@ -211,7 +230,7 @@ static ssize_t misc_read(struct file *filp, char *buf, size_t count,
 		return 0;
 	}
 
-	copied = skb->len > count ? count : skb->len;
+	copied = skb->len > cnt ? cnt : skb->len;
 
 	if (copy_to_user(buf, skb->data, copied)) {
 		drb_err("ERR! copy_to_user fail\n");
@@ -219,7 +238,7 @@ static ssize_t misc_read(struct file *filp, char *buf, size_t count,
 		return -EFAULT;
 	}
 
-	drb_info("data:%d copied:%d qlen:%d\n", skb->len, copied, rxq->qlen);
+	drb_info("data:%d copied:%ld qlen:%d\n", skb->len, copied, rxq->qlen);
 
 	if (skb->len > copied) {
 		skb_pull(skb, copied);
@@ -245,6 +264,11 @@ static int dev_ril_bridge_probe(struct platform_device *pdev)
 	int err = 0;
 
 	drb_info("+++\n");
+
+	if (drb_dev != NULL) {
+		drb_info("already probed\n");
+		return 0;
+	}
 
 	drb_dev = kzalloc(sizeof(struct drb_dev), GFP_KERNEL);
 	if (drb_dev == NULL)
@@ -274,8 +298,7 @@ out:
 
 static void dev_ril_bridge_shutdown(struct platform_device *pdev)
 {
-	misc_deregister(&drb_dev->miscdev);
-	kfree(drb_dev);
+	drb_info("\n");
 }
 
 #ifdef CONFIG_PM

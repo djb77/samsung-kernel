@@ -83,7 +83,7 @@ static int sdcardfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 
 	if (uid_eq(GLOBAL_ROOT_UID, current_fsuid()) ||
 			capable(CAP_SYS_RESOURCE) ||
-			in_group_p(AID_RESERVED_DISK))
+			in_group_p(AID_USE_ROOT_RESERVED))
 		goto out;
 
 	if (sbi->options.reserved_mb) {
@@ -152,7 +152,7 @@ static int sdcardfs_remount_fs2(struct vfsmount *mnt, struct super_block *sb,
 		pr_err("sdcardfs: remount flags 0x%x unsupported\n", *flags);
 		return -EINVAL;
 	}
-	pr_info("Remount options were %s for vfsmnt %p.\n", options, mnt);
+	pr_info("Remount options were %s.\n", options);
 	err = parse_options_remount(sb, options, *flags & MS_SILENT ? 1 : 0,
 			mnt->data);
 

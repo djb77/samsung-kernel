@@ -50,6 +50,9 @@ void rdsdebug(char *fmt, ...)
 #define RDS_FRAG_SHIFT	12
 #define RDS_FRAG_SIZE	((unsigned int)(1 << RDS_FRAG_SHIFT))
 
+/* Used to limit both RDMA and non-RDMA RDS message to 1MB */
+#define RDS_MAX_MSG_SIZE	((unsigned int)(1 << 20))
+
 #define RDS_CONG_MAP_BYTES	(65536 / 8)
 #define RDS_CONG_MAP_PAGES	(PAGE_ALIGN(RDS_CONG_MAP_BYTES) / PAGE_SIZE)
 #define RDS_CONG_MAP_PAGE_BITS	(PAGE_SIZE * 8)
@@ -436,6 +439,11 @@ struct rds_notifier {
 	uint64_t		n_user_token;
 	int			n_status;
 };
+
+/* Available as part of RDS core, so doesn't need to participate
+ * in get_preferred transport etc
+ */
+#define	RDS_TRANS_LOOP	3
 
 /**
  * struct rds_transport -  transport specific behavioural hooks

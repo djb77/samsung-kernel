@@ -248,9 +248,9 @@ static void tcf_bpf_cfg_cleanup(const struct tcf_bpf_cfg *cfg)
 	struct bpf_prog *filter = cfg->filter;
 
 	if (filter) {
-	if (cfg->is_ebpf)
+		if (cfg->is_ebpf)
 			bpf_prog_put(filter);
-	else
+		else
 			bpf_prog_destroy(filter);
 	}
 

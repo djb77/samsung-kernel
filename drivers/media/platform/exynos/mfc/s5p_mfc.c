@@ -58,6 +58,7 @@
 
 struct _mfc_trace g_mfc_trace[MFC_TRACE_COUNT_MAX];
 struct _mfc_trace g_mfc_trace_longterm[MFC_TRACE_COUNT_MAX];
+struct _mfc_trace_logging g_mfc_trace_logging[MFC_TRACE_LOG_COUNT_MAX];
 struct s5p_mfc_dev *g_mfc_dev;
 
 #ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
@@ -152,7 +153,7 @@ static int mfc_init_dec_ctx(struct s5p_mfc_ctx *ctx)
 	dec->immediate_display = 0;
 	dec->is_dts_mode = 0;
 	dec->err_reuse_flag = 0;
-	dec->dec_only_release_flag = 0;	
+	dec->dec_only_release_flag = 0;
 
 	dec->is_dynamic_dpb = 1;
 	dec->dynamic_used = 0;
@@ -1070,8 +1071,10 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 
 	atomic_set(&dev->trace_ref, 0);
 	atomic_set(&dev->trace_ref_longterm, 0);
+	atomic_set(&dev->trace_ref_log, 0);
 	dev->mfc_trace = g_mfc_trace;
 	dev->mfc_trace_longterm = g_mfc_trace_longterm;
+	dev->mfc_trace_logging = g_mfc_trace_logging;
 
 	s5p_mfc_pm_init(dev);
 	ret = mfc_register_resource(pdev, dev);
@@ -1178,6 +1181,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	atomic_set(&dev->qos_req_cur, 0);
+	mutex_init(&dev->qos_mutex);
 
 	for (i = 0; i < dev->pdata->num_qos_steps; i++) {
 		mfc_info_dev("QoS table[%d] int : %d, mif : %d\n",

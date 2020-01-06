@@ -62,3 +62,5 @@ endif
 
 endif #MEDIA_USB_SUPPORT
 endif #USB
+
+source "drivers/media/usb/dl1750/Kconfig"

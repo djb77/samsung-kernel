@@ -43,6 +43,8 @@ struct tsp_dump_callbacks dump_callbacks;
 #endif /* CONFIG_SEC_DEBUG */
 #include "exynos-ss-local.h"
 
+#include <linux/nmi.h>
+
 DEFINE_PER_CPU(struct pt_regs *, ess_core_reg);
 DEFINE_PER_CPU(struct exynos_ss_mmu_reg *, ess_mmu_reg);
 
@@ -88,6 +90,20 @@ static void exynos_ss_report_reason(unsigned int val)
 {
 	if (exynos_ss_get_enable("header"))
 		__raw_writel(val, exynos_ss_get_base_vaddr() + ESS_OFFSET_EMERGENCY_REASON);
+}
+
+int exynos_ss_get_debug_level_reg(void)
+{
+	int ret = ESS_DEBUG_LEVEL_MID;
+
+	if (exynos_ss_get_enable("header")) {
+		int val = __raw_readl(exynos_ss_get_base_vaddr() + ESS_OFFSET_DEBUG_LEVEL);
+
+		if ((val & GENMASK(31, 16)) == ESS_DEBUG_LEVEL_PREFIX)
+			ret = val & GENMASK(15, 0);
+	}
+
+	return ret;
 }
 
 void exynos_ss_scratch_reg(unsigned int val)
@@ -244,6 +260,11 @@ void exynos_ss_hook_hardlockup_entry(void *v_regs)
 		pr_emerg("\n--------------------------------------------------------------------------\n"
 			"      Debugging Information for Hardlockup core - CPU %d"
 			"\n--------------------------------------------------------------------------\n\n", cpu);
+
+#if defined(CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU)			\
+	&& defined(CONFIG_SEC_DEBUG)
+		update_hardlockup_type(cpu);
+#endif
 
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
 		sec_debug_set_extra_info_backtrace_cpu(v_regs, cpu);
@@ -425,8 +446,7 @@ int exynos_ss_post_reboot(char *cmd)
 		exynos_ss_set_core_panic_stat(ESS_SIGN_RESET, cpu);
 	}
 	exynos_ss_report_reason(ESS_SIGN_NORMAL_REBOOT);
-	if (!cmd || strcmp((char *)cmd, "ramdump"))
-		exynos_ss_scratch_reg(ESS_SIGN_RESET);
+	exynos_ss_scratch_reg(ESS_SIGN_RESET);
 
 	pr_emerg("exynos-snapshot: normal reboot done\n");
 

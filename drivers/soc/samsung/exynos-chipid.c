@@ -423,19 +423,19 @@ void sysfs_create_svc_ap(void)
 		/* try to create svc kobject */
 		data = kobject_create_and_add("svc", &devices_kset->kobj);
 		if (IS_ERR_OR_NULL(data))
-			pr_info("Existing path sys/devices/svc : 0x%p\n", data);
+			pr_info("Failed to create sys/devices/svc : %ld\n", PTR_ERR(data));
 		else
-			pr_info("Created sys/devices/svc svc : 0x%p\n", data);
+			pr_info("Created sys/devices/svc svc : 0x%pK\n", data);
 	} else {
 		data = (struct kobject *)svc_sd->priv;
-		pr_info("Found svc_sd : 0x%p svc : 0x%p\n", svc_sd, data);
+		pr_info("Found svc_sd : 0x%pK svc : 0x%pK\n", svc_sd, data);
 	}
 
 	ap = kobject_create_and_add("AP", data);
 	if (IS_ERR_OR_NULL(ap))
-		pr_info("Failed to create sys/devices/svc/AP : 0x%p\n", ap);
+		pr_info("Failed to create sys/devices/svc/AP : %ld\n", PTR_ERR(ap));
 	else
-		pr_info("Success to create sys/devices/svc/AP : 0x%p\n", ap);
+		pr_info("Success to create sys/devices/svc/AP : 0x%pK\n", ap);
 
 	if (sysfs_create_file(ap, &svc_ap_attr.attr) < 0) {
 		pr_err("failed to create sys/devices/svc/AP/SVC_AP, %s\n",

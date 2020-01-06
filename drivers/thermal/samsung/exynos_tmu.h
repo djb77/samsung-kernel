@@ -155,6 +155,7 @@ struct exynos_tmu_data {
 	u16 temp_error1, temp_error2;
 	struct thermal_zone_device *tzd;
 	unsigned int ntrip;
+	bool enabled;
 	struct thermal_cooling_device *cool_dev;
 	struct list_head node;
 	u32 sensors;

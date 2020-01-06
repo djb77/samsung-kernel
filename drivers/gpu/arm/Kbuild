@@ -39,4 +39,7 @@ ifeq ($(CONFIG_MALI_THEX),y)
 	ifeq ($(CONFIG_MALI_THEX_R16P0),y)
 		obj-y += tHEx/b_r16p0/
 	endif
+	ifeq ($(CONFIG_MALI_BIFROST_R19P0_Q),y)
+		obj-y += b_r19p0/
+	endif
 endif

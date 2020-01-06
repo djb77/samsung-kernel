@@ -429,7 +429,8 @@ struct mmc_host {
 
 #ifdef CONFIG_BLOCK
 	int			latency_hist_enabled;
-	struct io_latency_state io_lat_s;
+	struct io_latency_state io_lat_read;
+	struct io_latency_state io_lat_write;
 #endif
 
 	int (*sdcard_uevent)(struct mmc_card *card);

@@ -1353,6 +1353,11 @@ static int exynos_usbdrd_utmi_vendor_set(struct exynos_usbdrd_phy *phy_drd,
 				dev_err(phy_drd->dev, "REWA DISABLE FAIL, ret : %d \n", ret);
 				return ret;
 			}
+
+			disable_irq_nosync(phy_drd->irq_wakeup);
+			disable_irq_nosync(phy_drd->irq_conn);
+			phy_drd->is_irq_enabled = 0;
+
 			dev_info(phy_drd->dev, "REWA DISABLE Complete\n");
 		}
 	}
@@ -1584,14 +1589,6 @@ static irqreturn_t exynos_usbdrd_phy_wakeup_interrupt(int irq, void *_phydrd)
 	dev_info(phy_drd->dev, "[%s] rewa sys vaild set : %s \n",
 			__func__, (ret == 1) ? "Disable" : "Disconnect");
 
-	if (phy_drd->is_irq_enabled == 1) {
-		disable_irq_nosync(phy_drd->irq_wakeup);
-		disable_irq_nosync(phy_drd->irq_conn);
-		phy_drd->is_irq_enabled = 0;
-	} else {
-		dev_info(phy_drd->dev, "rewa irq already disabled\n");
-	}
-
 	return IRQ_HANDLED;
 }
 
@@ -1603,14 +1600,6 @@ static irqreturn_t exynos_usbdrd_phy_conn_interrupt(int irq, void *_phydrd)
 	ret = phy_exynos_usb3p1_rewa_req_sys_valid(&phy_drd->usbphy_info);
 	dev_info(phy_drd->dev, "[%s] rewa sys vaild set : %s \n",
 			__func__, (ret == 1) ? "Disable" : "Disconnect");
-
-	if (phy_drd->is_irq_enabled == 1) {
-		disable_irq_nosync(phy_drd->irq_wakeup);
-		disable_irq_nosync(phy_drd->irq_conn);
-		phy_drd->is_irq_enabled = 0;
-	} else {
-		dev_info(phy_drd->dev, "rewa irq already disabled\n");
-	}
 
 	return IRQ_HANDLED;
 }
@@ -1705,6 +1694,8 @@ static int exynos_usbdrd_phy_probe(struct platform_device *pdev)
 				phy_drd->irq_wakeup, ret);
 		return ret;
 	}
+	irq_set_irq_wake(phy_drd->irq_wakeup, 1);
+
 	phy_drd->irq_conn = platform_get_irq(pdev, 1);
 	irq_set_status_flags(phy_drd->irq_conn, IRQ_NOAUTOEN);
 	ret = devm_request_irq(dev, phy_drd->irq_conn, exynos_usbdrd_phy_conn_interrupt,
@@ -1714,6 +1705,7 @@ static int exynos_usbdrd_phy_probe(struct platform_device *pdev)
 				phy_drd->irq_conn, ret);
 		return ret;
 	}
+	irq_set_irq_wake(phy_drd->irq_conn, 1);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	phy_drd->reg_phy = devm_ioremap_resource(dev, res);

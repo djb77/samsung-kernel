@@ -369,6 +369,7 @@ static int rx_multi_pdp(struct sk_buff *skb)
 
 	skb_reset_transport_header(skb);
 	skb_reset_network_header(skb);
+	skb_reset_mac_header(skb);
 
 	if (check_gro_support(skb)) {
 		ret = napi_gro_receive(napi_get_current(), skb);

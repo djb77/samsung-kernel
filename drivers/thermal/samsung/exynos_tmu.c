@@ -369,6 +369,7 @@ static void exynos_tmu_control(struct platform_device *pdev, bool on)
 
 	mutex_lock(&data->lock);
 	data->tmu_control(pdev, on);
+	data->enabled = on;
 	mutex_unlock(&data->lock);
 }
 
@@ -643,7 +644,7 @@ static int exynos_get_temp(void *p, int *temp)
 	unsigned int i;
 #endif
 
-	if (!data || !data->tmu_read)
+	if (!data || !data->tmu_read || !data->enabled)
 		return -EINVAL;
 
 	mutex_lock(&data->lock);

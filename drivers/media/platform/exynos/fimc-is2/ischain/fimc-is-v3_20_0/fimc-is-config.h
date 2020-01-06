@@ -83,4 +83,6 @@
 #define FIMC_IS_HW_IRQ_FLAG     0
 #endif
 
+#define CHAIN_USE_VC_TASKLET	1
+
 #endif

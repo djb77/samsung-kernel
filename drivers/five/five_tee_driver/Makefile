@@ -9,7 +9,7 @@ itee_driver-objs += five_tee_driver.o \
                     $(TEEC_CLIENT_PATH)/teec_common_tbase.o \
                     $(TEEC_CLIENT_PATH)/tee_client_api.o \
                     $(PROTOCOL_PATH)/teec_param_utils.o
-ccflags-$(CONFIG_FIVE_TEE_DRIVER) += -Isecurity/integrity/five \
+ccflags-$(CONFIG_FIVE_TEE_DRIVER) += -Isecurity/samsung/five \
                                 -Idrivers/five/five_tee_driver/$(PROTOCOL_PATH) \
                                 -Idrivers/five/five_tee_driver/$(TEEC_CLIENT_PATH) \
                                 -Idrivers/five/five_tee_driver/multibuild/include/gp-api

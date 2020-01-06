@@ -914,7 +914,6 @@ static __init int init_pm_qos(struct exynos_cpufreq_domain *domain,
 			domain->pm_qos_min_class, domain->min_freq);
 	pm_qos_add_request(&domain->max_qos_req,
 			domain->pm_qos_max_class, domain->max_freq);
-
 	return 0;
 }
 

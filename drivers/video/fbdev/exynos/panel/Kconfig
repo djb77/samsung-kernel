@@ -42,6 +42,11 @@ config DISP_PMIC_SSD
 	tristate "Support DISP PMIC SSD"
 	default n
 
+config OLD_DISP_TIMING
+	depends on EXYNOS_DECON_LCD
+	tristate "Support old panel(hf4) sequence"
+	default n
+
 config PANEL_AID_DIMMING_DEBUG
 	depends on PANEL_AID_DIMMING
 	depends on !SAMSUNG_PRODUCT_SHIP
@@ -133,3 +138,9 @@ config SELF_MOVE_3PX
 	depends on EXYNOS_DECON_LCD
 	tristate "self move 3 pixel"
 	default n
+
+config NO_LCD
+	depends on EXYNOS_DECON_LCD
+	tristate "NO LCD feature"
+	default n
+

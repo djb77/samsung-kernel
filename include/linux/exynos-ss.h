@@ -50,6 +50,8 @@ extern void exynos_ss_hook_hardlockup_exit(void);
 extern void exynos_ss_dump_sfr(void);
 extern int exynos_ss_hook_pmsg(char *buffer, size_t count);
 extern void exynos_ss_save_log(int cpu, unsigned long where);
+extern int exynos_ss_get_debug_level(void);
+extern int exynos_ss_get_debug_level_reg(void);
 
 /* option */
 #ifdef CONFIG_EXYNOS_SNAPSHOT_ACPM
@@ -174,6 +176,14 @@ extern void s3c2410wdt_reset_confirm(unsigned long mtime, int index);
 #define s3c2410wdt_reset_confirm(a, b)		do { } while (0)
 #endif
 
+#ifdef CONFIG_SEC_DEBUG
+extern void exynos_ss_get_hardlockup_info(unsigned int cpu, void *info);
+extern void exynos_ss_get_softlockup_info(unsigned int cpu, void *info);
+#else
+#define exynos_ss_get_hardlockup_info(a, b)	do { } while (0)
+#define exynos_ss_get_softlockup_info(a, b)	do { } while (0)
+#endif
+
 #else
 #define exynos_ss_acpm(a, b, c)		do { } while (0)
 #define exynos_ss_task(a, b)		do { } while (0)
@@ -220,6 +230,17 @@ extern void s3c2410wdt_reset_confirm(unsigned long mtime, int index);
 #define exynos_ss_get_last_pc_paddr()	do { } while (0)
 #define exynos_ss_hook_hardlockup_entry(a) do { } while (0)
 #define exynos_ss_hook_hardlockup_exit() do { } while (0)
+#define exynos_ss_get_hardlockup_info(a, b)	do { } while (0)
+#define exynos_ss_get_softlockup_info(a, b)	do { } while (0)
+
+static int exynos_ss_get_debug_level(void)
+{
+	return 1;
+}
+static int exynos_ss_get_debug_level_reg(void)
+{
+	return 1;
+}
 
 static inline unsigned long exynos_ss_get_item_vaddr(char *name)
 {
@@ -276,4 +297,8 @@ enum esslog_freq_flag {
 	ESS_FLAG_FSYS0,
 	ESS_FLAG_END
 };
+
+#define ESS_DEBUG_LEVEL_PREFIX  (0xDB9 << 16)
+#define ESS_DEBUG_LEVEL_LOW     (0)
+#define ESS_DEBUG_LEVEL_MID     (1)
 #endif

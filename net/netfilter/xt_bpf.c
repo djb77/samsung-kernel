@@ -118,14 +118,14 @@ static void bpf_mt_destroy_v1(const struct xt_mtdtor_param *par)
 
 static struct xt_match bpf_mt_reg[] __read_mostly = {
 	{
-	.name		= "bpf",
-	.revision	= 0,
-	.family		= NFPROTO_UNSPEC,
-	.checkentry	= bpf_mt_check,
-	.match		= bpf_mt,
-	.destroy	= bpf_mt_destroy,
-	.matchsize	= sizeof(struct xt_bpf_info),
-	.me		= THIS_MODULE,
+		.name		= "bpf",
+		.revision	= 0,
+		.family		= NFPROTO_UNSPEC,
+		.checkentry	= bpf_mt_check,
+		.match		= bpf_mt,
+		.destroy	= bpf_mt_destroy,
+		.matchsize	= sizeof(struct xt_bpf_info),
+		.me		= THIS_MODULE,
 	},
 	{
 		.name		= "bpf",

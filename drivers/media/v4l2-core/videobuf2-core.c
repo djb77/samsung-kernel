@@ -340,6 +340,9 @@ static int __vb2_queue_alloc(struct vb2_queue *q, enum vb2_memory memory,
 		dprintk(1, "Failed to create timeline\n");
 		return 0;
 	}
+	/* Ensure that q->num_buffers+num_buffers is below VB2_MAX_FRAME */
+	num_buffers = min_t(unsigned int, num_buffers,
+			    VB2_MAX_FRAME - q->num_buffers);
 
 	for (buffer = 0; buffer < num_buffers; ++buffer) {
 		/* Allocate videobuf buffer structures */
@@ -923,9 +926,12 @@ void vb2_buffer_done(struct vb2_buffer *vb, enum vb2_buffer_state state)
 	dprintk(4, "done processing on buffer %d, state: %d\n",
 			vb->index, state);
 
-	/* sync buffers */
-	for (plane = 0; plane < vb->num_planes; ++plane)
-		call_void_memop(vb, finish, vb->planes[plane].mem_priv);
+	if (state != VB2_BUF_STATE_QUEUED &&
+	    state != VB2_BUF_STATE_REQUEUEING) {
+		/* sync buffers */
+		for (plane = 0; plane < vb->num_planes; ++plane)
+			call_void_memop(vb, finish, vb->planes[plane].mem_priv);
+	}
 
 	spin_lock_irqsave(&q->done_lock, flags);
 	if (state == VB2_BUF_STATE_QUEUED ||

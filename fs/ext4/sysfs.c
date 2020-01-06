@@ -515,7 +515,8 @@ void ext4_unregister_sysfs(struct super_block *sb)
 		remove_proc_entry(sb->s_id, ext4_proc_root);
 	}
 
-	if (le32_to_cpu(sbi->s_es->s_sec_magic) == EXT4_SEC_DATA_MAGIC)
+	if (le32_to_cpu(sbi->s_es->s_sec_magic) == EXT4_SEC_DATA_MAGIC ||
+			strncmp(sbi->s_es->s_volume_name, "data", 4) == 0)
 		sysfs_delete_link(&ext4_kset.kobj, &sbi->s_kobj, "userdata");
 
 	kobject_del(&sbi->s_kobj);

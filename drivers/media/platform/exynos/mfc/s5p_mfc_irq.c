@@ -1228,9 +1228,20 @@ irqreturn_t s5p_mfc_top_half_irq(int irq, void *priv)
 
 	reason = s5p_mfc_get_int_reason();
 	err = s5p_mfc_get_int_err();
+
+	dev->last_int = reason;
+	dev->last_int_time = ktime_to_timeval(ktime_get());
+
+	if ((reason == S5P_FIMV_R2H_CMD_SEQ_DONE_RET) ||
+		(reason == S5P_FIMV_R2H_CMD_INIT_BUFFERS_RET) ||
+		(reason == S5P_FIMV_R2H_CMD_FRAME_DONE_RET) ||
+		(reason == S5P_FIMV_R2H_CMD_QUEUE_DONE_RET))
+		ctx->frame_cnt++;
+
 	mfc_debug(2, "[c:%d] Int reason: %d (err: %d)\n",
 			dev->curr_ctx, reason, err);
 	MFC_TRACE_CTX("<< INT(top): %d\n", reason);
+	MFC_TRACE_LOG_CTX("I%d", reason);
 
 	return IRQ_WAKE_THREAD;
 }

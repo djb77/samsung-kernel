@@ -103,4 +103,6 @@
 #define MULTI_SHOT_KTHREAD
 /* #define ENABLE_EARLY_SHOT */
 
+#define CHAIN_USE_VC_TASKLET	1
+
 #endif

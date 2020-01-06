@@ -1121,7 +1121,7 @@ void tcp_v6_reqsk_send_ack(const struct sock *sk, struct sk_buff *skb,
 			tcp_rsk(req)->rcv_nxt,
 			req->rsk_rcv_wnd >> inet_rsk(req)->rcv_wscale,
 			tcp_time_stamp, req->ts_recent, sk->sk_bound_dev_if,
-			tcp_v6_md5_do_lookup(sk, &ipv6_hdr(skb)->daddr),
+			tcp_v6_md5_do_lookup(sk, &ipv6_hdr(skb)->saddr),
 			0, 0);
 #endif
 }
@@ -1630,6 +1630,10 @@ process:
 			reqsk_put(req);
 			goto discard_it;
 		}
+		if (tcp_checksum_complete(skb)) {
+			reqsk_put(req);
+			goto csum_error;
+		}
 		if (unlikely(sk->sk_state != TCP_LISTEN
 #ifdef CONFIG_MPTCP
 		&& !is_meta_sk(sk)
@@ -1663,8 +1667,9 @@ process:
 			}
 		}
 #endif
-
-		nsk = tcp_check_req(sk, skb, req, false);
+		nsk = NULL;
+		if (!tcp_filter(sk, skb))
+			nsk = tcp_check_req(sk, skb, req, false);
 		if (!nsk) {
 			reqsk_put(req);
 #ifdef CONFIG_MPTCP

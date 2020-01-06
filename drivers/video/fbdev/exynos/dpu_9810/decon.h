@@ -642,6 +642,14 @@ struct decon_reg_data {
 #endif
 };
 
+#ifdef CONFIG_SUPPORT_DSU
+struct decon_win_config_data_old {
+	int	retire_fence;
+	int	fd_odma;
+	struct decon_win_config config[MAX_DECON_WIN + 1];
+};
+#endif
+
 struct decon_win_config_data {
 	int	retire_fence;
 	int	fd_odma;
@@ -650,7 +658,6 @@ struct decon_win_config_data {
 #else
 	struct decon_win_config config[MAX_DECON_WIN + 1];
 #endif
-
 };
 
 enum hwc_ver {
@@ -1646,6 +1653,10 @@ void decon_reg_set_dsu(u32 id, enum decon_dsi_mode dsi_mode, struct decon_param 
 /* IOCTL commands */
 #define S3CFB_SET_VSYNC_INT		_IOW('F', 206, __u32)
 #define S3CFB_DECON_SELF_REFRESH	_IOW('F', 207, __u32)
+#ifdef CONFIG_SUPPORT_DSU
+#define S3CFB_WIN_CONFIG_OLD		_IOW('F', 209, \
+						struct decon_win_config_data_old)
+#endif
 #define S3CFB_WIN_CONFIG		_IOW('F', 209, \
 						struct decon_win_config_data)
 #define EXYNOS_DISP_INFO		_IOW('F', 260, \

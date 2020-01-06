@@ -1,6 +1,5 @@
 config FS_ENCRYPTION
 	tristate "FS Encryption (Per-file encryption)"
-	depends on BLOCK
 	select CRYPTO
 	select CRYPTO_AES
 	select CRYPTO_CBC
@@ -8,9 +7,7 @@ config FS_ENCRYPTION
 	select CRYPTO_XTS
 	select CRYPTO_CTS
 	select CRYPTO_CTR
-	select CRYPTO_SHA256
 	select KEYS
-	select ENCRYPTED_KEYS
 	help
 	  Enable encryption of files and directories.  This
 	  feature is similar to ecryptfs, but it is more memory
@@ -38,3 +35,11 @@ config CRYPTO_FIPS
 	  required if you want to system to operate in a FIPS 200
 	  certification.  You should say no unless you know what
 	  this is.
+config FSCRYPT_SDP
+	bool "Sensitive Data Protection for Per-file-encryption"
+	depends on FS_ENCRYPTION
+	depends on SDP
+	help
+	  Enable SDP functional to fscrypto module.
+	  This feature is supporting "Data-At-Rest" for file systems using
+	  Per-file-encryption being controlled by SDP user status.

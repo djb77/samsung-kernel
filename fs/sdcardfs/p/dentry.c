@@ -21,6 +21,10 @@
 #include "sdcardfs.h"
 #include "linux/ctype.h"
 
+#ifdef CONFIG_FSCRYPT_SDP
+extern
+int __fscrypt_sdp_d_delete(const struct dentry *dentry, int dek_is_locked);
+#endif
 /*
  * returns: -ERRNO if error (returned to user)
  *          0: tell VFS to invalidate dentry
@@ -185,9 +189,17 @@ static int sdcardfs_d_delete(const struct dentry *dentry)
 	unsigned long lower_fs_magic = lower_path->mnt->mnt_sb->s_magic;
 
 	if (lower_fs_magic == EXT4_SUPER_MAGIC ||
-			lower_fs_magic == F2FS_SUPER_MAGIC)
+			lower_fs_magic == F2FS_SUPER_MAGIC) {
+#ifndef CONFIG_FSCRYPT_SDP
 		return 0;
-
+#else
+		/*
+		 * Always delete sdcardfs dentries for lower SDP ones
+		 * regardless of container lock state
+		 */
+		return __fscrypt_sdp_d_delete(lower_path->dentry, 1);
+#endif
+	}
 	return 1;
 }
 

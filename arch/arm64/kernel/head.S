@@ -87,7 +87,11 @@ _head:
 	le64sym	_kernel_size_le			// Effective size of kernel image, little-endian
 	le64sym	_kernel_flags_le		// Informative flags, little-endian
 	.quad	0				// reserved
-	.quad	0				// reserved
+#ifdef CONFIG_PROCA
+	le64sym	_proca_conf_offset		// memory info for proca ta
+#else
+	.quad	0xecefecef			// Magic number for proca ta
+#endif
 	.quad	0				// reserved
 	.byte	0x41				// Magic number, "ARM\x64"
 	.byte	0x52
@@ -482,7 +486,7 @@ ENDPROC(__primary_switched)
  * end early head section, begin head code that is also used for
  * hotplug and needs to have the same protections as the text region
  */
-	.section ".idmap.text","ax"
+	.section ".idmap.text","awx"
 
 ENTRY(kimage_vaddr)
 	.quad		_text - TEXT_OFFSET
@@ -866,4 +870,3 @@ __primary_switch:
 	adrp	x0, __PHYS_OFFSET
 	br	x8
 ENDPROC(__primary_switch)
-

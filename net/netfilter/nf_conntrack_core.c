@@ -56,9 +56,9 @@
 #include <net/netfilter/nf_nat_helper.h>
 #include <net/netns/hash.h>
 
-/* START_OF_KNOX_NPA */
+// KNOX NPA - START
 #include <net/ncm.h>
-/* END_OF_KNOX_NPA */
+// KNOX NPA - END
 
 #define NF_CONNTRACK_VERSION	"0.5.0"
 
@@ -321,12 +321,13 @@ static void nf_ct_add_to_dying_list(struct nf_conn *ct)
 {
 	struct ct_pcpu *pcpu;
 
-	/* START_OF_KNOX_NPA */
+	// KNOX NPA - START
+	/* Add 'del_timer(&ct->npa_timeout)' if struct nf_conn->timeout is of type struct timer_list; */
 	/* send dying conntrack entry to collect data */
 	if ( (check_ncm_flag()) && (ct != NULL) && (atomic_read(&ct->startFlow)) ) {
 		knox_collect_conntrack_data(ct, NCM_FLOW_TYPE_CLOSE, 10);
 	}
-	/* END_OF_KNOX_NPA */
+	// KNOX NPA - END
 
 	/* add this conntrack to the (per cpu) dying list */
 	ct->cpu = smp_processor_id();
@@ -700,7 +701,7 @@ static int nf_ct_resolve_clash(struct net *net, struct sk_buff *skb,
 
 	l4proto = __nf_ct_l4proto_find(nf_ct_l3num(ct), nf_ct_protonum(ct));
 	if (l4proto->allow_clash &&
-	    !nfct_nat(ct) &&
+	    ((ct->status & IPS_NAT_DONE_MASK) == 0) &&
 	    !nf_ct_is_dying(ct) &&
 	    atomic_inc_not_zero(&ct->ct_general.use)) {
 		nf_ct_acct_merge(ct, ctinfo, (struct nf_conn *)skb->nfct);
@@ -988,7 +989,15 @@ static void gc_worker(struct work_struct *work)
 				nf_ct_gc_expired(tmp);
 				expired_count++;
 				continue;
+			// KNOX NPA - START	
+			} else if ( (tmp != NULL) && (check_ncm_flag()) && (check_intermediate_flag()) && (atomic_read(&tmp->startFlow)) && (atomic_read(&tmp->intermediateFlow)) ) {
+				s32 npa_timeout = tmp->npa_timeout - ((u32)(jiffies));
+				if (npa_timeout <= 0) {
+					tmp->npa_timeout = ((u32)(jiffies)) + (get_intermediate_timeout() * HZ);
+					knox_collect_conntrack_data(tmp, NCM_FLOW_TYPE_INTERMEDIATE, 20);
+				}
 			}
+			// KNOX NPA - END
 		}
 
 		/* could check get_nulls_value() here and restart if ct
@@ -1022,6 +1031,11 @@ static void gc_worker(struct work_struct *work)
 	ratio = scanned ? expired_count * 100 / scanned : 0;
 	if (ratio > GC_EVICT_RATIO) {
 		gc_work->next_gc_run = min_interval;
+		// KNOX NPA - START
+		if ( (check_ncm_flag()) && (check_intermediate_flag()) ) {
+			gc_work->next_gc_run = 0;
+		}
+		// KNOX NPA - END
 	} else {
 		unsigned int max = GC_MAX_SCAN_JIFFIES / GC_MAX_BUCKETS_DIV;
 
@@ -1030,11 +1044,16 @@ static void gc_worker(struct work_struct *work)
 		gc_work->next_gc_run += min_interval;
 		if (gc_work->next_gc_run > max)
 			gc_work->next_gc_run = max;
+		// KNOX NPA - START
+		if ( (check_ncm_flag()) && (check_intermediate_flag()) ) {
+			gc_work->next_gc_run = 0;
+		}
+		// KNOX NPA - END
 	}
 
 	next_run = gc_work->next_gc_run;
 	gc_work->last_bucket = i;
-	queue_delayed_work_on(0, system_long_wq, &gc_work->dwork, next_run);
+	queue_delayed_work(system_power_efficient_wq, &gc_work->dwork, next_run);
 }
 
 static void conntrack_gc_work_init(struct conntrack_gc_work *gc_work)
@@ -1052,9 +1071,9 @@ __nf_conntrack_alloc(struct net *net,
 		     gfp_t gfp, u32 hash)
 {
 	struct nf_conn *ct;
-	/* START_OF_KNOX_NPA */
+	// KNOX NPA - START
 	struct timespec open_timespec;
-	/* END_OF_KNOX_NPA */
+	// KNOX NPA - END
 
 	/* We don't want any race condition at early drop stage */
 	atomic_inc(&net->ct.count);
@@ -1077,7 +1096,8 @@ __nf_conntrack_alloc(struct net *net,
 		goto out;
 
 	spin_lock_init(&ct->lock);
-	/* START_OF_KNOX_NPA */
+
+	// KNOX NPA - START
 	/* initialize the conntrack structure members when memory is allocated */
 	if (ct != NULL) {
 		open_timespec = current_kernel_time();
@@ -1093,8 +1113,13 @@ __nf_conntrack_alloc(struct net *net,
 		ct->knox_recv = 0;
 		memset(ct->interface_name,'\0',sizeof(ct->interface_name));
 		atomic_set(&ct->startFlow, 0);
+		/* Use 'ct->npa_timeout = 0' if struct nf_conn->timeout is of type u32;
+		   Use 'setup_timer(&ct->npa_timeout, death_by_timeout_npa, (unsigned long)ct)' if struct nf_conn->timeout is of type struct timer_list; */
+		ct->npa_timeout = 0;
+		atomic_set(&ct->intermediateFlow, 0);
 	}
-	/* END_OF_KNOX_NPA */
+	// KNOX NPA - END
+
 	ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple = *orig;
 	ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode.pprev = NULL;
 	ct->tuplehash[IP_CT_DIR_REPLY].tuple = *repl;
@@ -1574,7 +1599,6 @@ get_next_corpse(struct net *net, int (*iter)(struct nf_conn *i, void *data),
 	struct nf_conntrack_tuple_hash *h;
 	struct nf_conn *ct;
 	struct hlist_nulls_node *n;
-	int cpu;
 	spinlock_t *lockp;
 
 	for (; *bucket < nf_conntrack_htable_size; (*bucket)++) {
@@ -1596,24 +1620,40 @@ get_next_corpse(struct net *net, int (*iter)(struct nf_conn *i, void *data),
 		cond_resched();
 	}
 
-	for_each_possible_cpu(cpu) {
-		struct ct_pcpu *pcpu = per_cpu_ptr(net->ct.pcpu_lists, cpu);
-
-		spin_lock_bh(&pcpu->lock);
-		hlist_nulls_for_each_entry(h, n, &pcpu->unconfirmed, hnnode) {
-			ct = nf_ct_tuplehash_to_ctrack(h);
-			if (iter(ct, data))
-				set_bit(IPS_DYING_BIT, &ct->status);
-		}
-		spin_unlock_bh(&pcpu->lock);
-		cond_resched();
-	}
 	return NULL;
 found:
 	atomic_inc(&ct->ct_general.use);
 	spin_unlock(lockp);
 	local_bh_enable();
 	return ct;
+}
+
+static void
+__nf_ct_unconfirmed_destroy(struct net *net)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		struct nf_conntrack_tuple_hash *h;
+		struct hlist_nulls_node *n;
+		struct ct_pcpu *pcpu;
+
+		pcpu = per_cpu_ptr(net->ct.pcpu_lists, cpu);
+
+		spin_lock_bh(&pcpu->lock);
+		hlist_nulls_for_each_entry(h, n, &pcpu->unconfirmed, hnnode) {
+			struct nf_conn *ct;
+
+			ct = nf_ct_tuplehash_to_ctrack(h);
+
+			/* we cannot call iter() on unconfirmed list, the
+			 * owning cpu can reallocate ct->ext at any time.
+			 */
+			set_bit(IPS_DYING_BIT, &ct->status);
+		}
+		spin_unlock_bh(&pcpu->lock);
+		cond_resched();
+	}
 }
 
 void nf_ct_iterate_cleanup(struct net *net,
@@ -1627,6 +1667,10 @@ void nf_ct_iterate_cleanup(struct net *net,
 
 	if (atomic_read(&net->ct.count) == 0)
 		return;
+
+	__nf_ct_unconfirmed_destroy(net);
+
+	synchronize_net();
 
 	while ((ct = get_next_corpse(net, iter, data, &bucket)) != NULL) {
 		/* Time to push up daises... */
@@ -1826,7 +1870,7 @@ int nf_conntrack_hash_resize(unsigned int hashsize)
 	return 0;
 }
 
-int nf_conntrack_set_hashsize(const char *val, struct kernel_param *kp)
+int nf_conntrack_set_hashsize(const char *val, const struct kernel_param *kp)
 {
 	unsigned int hashsize;
 	int rc;
@@ -1954,7 +1998,7 @@ int nf_conntrack_init_start(void)
 	nf_ct_untracked_status_or(IPS_CONFIRMED | IPS_UNTRACKED);
 
 	conntrack_gc_work_init(&conntrack_gc_work);
-	queue_delayed_work(system_long_wq, &conntrack_gc_work.dwork, HZ);
+	queue_delayed_work(system_power_efficient_wq, &conntrack_gc_work.dwork, HZ);
 
 	return 0;
 

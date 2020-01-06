@@ -28,6 +28,7 @@
 #define OP_DH_ENC 13
 #define OP_ECDH_DEC 14
 #define OP_ECDH_ENC 15
+#define OP_ECDH_REQ_SS 16
 
 #define PUB_CRYPTO_ERROR 99
 
@@ -87,4 +88,5 @@ int dh_decryptEDEK(dek_t *edek, dek_t *dek, kek_t *key);
 int dh_encryptDEK(dek_t *dek, dek_t *edek, kek_t *key);
 int ecdh_decryptEDEK(dek_t *edek, dek_t *dek, kek_t *key);
 int ecdh_encryptDEK(dek_t *dek, dek_t *edek, kek_t *key);
+int ecdh_deriveSS(dek_t *in, dek_t *out, kek_t *drv_key);
 #endif

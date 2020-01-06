@@ -67,6 +67,9 @@ lkdtm-$(CONFIG_LKDTM)		+= lkdtm_perms.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_rodata_objcopy.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_usercopy.o
 
+CFLAGS_lkdtm_rodata.o		+= $(DISABLE_LTO)
+KCOV_INSTRUMENT_lkdtm_rodata.o	:= n
+
 # Secure OS Mobicore Interface
 obj-$(CONFIG_TRUSTONIC_TEE)	+= tzic64.o
 obj-$(CONFIG_TIMA_LOG)		+= tima_debug_log.o

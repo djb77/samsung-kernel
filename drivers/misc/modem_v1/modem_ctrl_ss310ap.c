@@ -203,8 +203,44 @@ static int get_ds_detect(struct device_node *np)
 }
 #else
 static int ds_detect = 1;
-module_param(ds_detect, int, S_IRUGO | S_IWUSR | S_IWGRP);
+module_param(ds_detect, int, S_IRUGO | S_IWUSR | S_IWGRP | S_IRGRP);
 MODULE_PARM_DESC(ds_detect, "Dual SIM detect");
+
+static ssize_t ds_detect_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", ds_detect);
+}
+
+static ssize_t ds_detect_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	int ret;
+	int value;
+
+	ret = sscanf(buf, "%d", &value);
+	if (ret != 1 || value > 2 || value < 0) {
+		mif_err("invalid value:%d with %d\n", value, ret);
+		return -EINVAL;
+	}
+
+	ds_detect = value;
+	mif_info("set ds_detect: %d\n", ds_detect);
+
+	return count;
+}
+static DEVICE_ATTR_RW(ds_detect);
+
+static struct attribute *sim_attrs[] = {
+	&dev_attr_ds_detect.attr,
+	NULL,
+};
+
+static const struct attribute_group sim_group = {	\
+	.attrs = sim_attrs,				\
+	.name = "sim",
+};
 
 static int get_ds_detect(struct device_node *np)
 {
@@ -791,6 +827,10 @@ int ss310ap_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 	 */
 	mc->busmon_nfb.notifier_call = ss310ap_busmon_notifier;
 	busmon_notifier_chain_register(&mc->busmon_nfb);
+#endif
+#ifndef CONFIG_GPIO_DS_DETECT
+	if (sysfs_create_group(&pdev->dev.kobj, &sim_group))
+		mif_err("failed to create sysfs node related sim\n");
 #endif
 	mif_err("---\n");
 	return 0;

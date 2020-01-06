@@ -142,7 +142,7 @@ static void led_set(struct s2mpb02_led_data *led_data, int turn_way)
 			goto error_set_bits;
 
 		if (led_data->data->brightness == LED_OFF) {
-		if ((id == S2MPB02_FLASH_LED_1) || (id == S2MPB02_TORCH_LED_1)) {
+			if ((id == S2MPB02_FLASH_LED_1) || (id == S2MPB02_TORCH_LED_1)) {
 				reg = S2MPB02_REG_FLED_CUR1;
 			} else {
 				reg = S2MPB02_REG_FLED_CUR2;
@@ -536,8 +536,13 @@ ssize_t s2mpb02_store_2nd(struct device *dev,
 
 	if (value == 0) {
 		/* Turn off Torch */
-		global_led_datas[S2MPB02_TORCH_LED_2]->data->brightness = LED_OFF;
-		led_set(global_led_datas[S2MPB02_TORCH_LED_2], S2MPB02_LED_TURN_WAY_I2C);
+		if (!flash_config_factory) {
+			global_led_datas[S2MPB02_TORCH_LED_2]->data->brightness = LED_OFF;
+			led_set(global_led_datas[S2MPB02_TORCH_LED_2], S2MPB02_LED_TURN_WAY_I2C);
+		} else {
+			global_led_datas[S2MPB02_FLASH_LED_1]->data->brightness = LED_OFF;
+			led_set(global_led_datas[S2MPB02_FLASH_LED_1], S2MPB02_LED_TURN_WAY_I2C);
+		}
 	} else if (value == 1) {
 		/* Turn on Torch */
 		global_led_datas[S2MPB02_TORCH_LED_2]->data->brightness = S2MPB02_TORCH_OUT_I_60MA;

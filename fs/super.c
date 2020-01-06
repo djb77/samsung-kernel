@@ -519,7 +519,11 @@ retry:
 	hlist_add_head(&s->s_instances, &type->fs_supers);
 	spin_unlock(&sb_lock);
 	get_filesystem(type);
-	register_shrinker(&s->s_shrink);
+	err = register_shrinker(&s->s_shrink);
+	if (err) {
+		deactivate_locked_super(s);
+		s = ERR_PTR(err);
+	}
 	return s;
 }
 
@@ -1013,10 +1017,8 @@ struct dentry *mount_ns_option(struct file_system_type *fs_type,
 	if (IS_ERR(sb))
 		return ERR_CAST(sb);
 
-	if(sb->s_magic == PROC_SUPER_MAGIC) {
-		if (!parse_options(data, get_pid_ns(sb->s_fs_info)))
-			return ERR_PTR(EINVAL);
-	}
+	if (!parse_options(data, get_pid_ns(sb->s_fs_info)))
+		return ERR_PTR(-EINVAL);
 
 	if (!sb->s_root) {
 		int err;

@@ -87,6 +87,7 @@ enum flat_binder_object_flags {
 	 * scheduling policy from the caller (for synchronous transactions).
 	 */
 	FLAT_BINDER_FLAG_INHERIT_RT = 0x800,
+
 	/**
 	 * @FLAT_BINDER_FLAG_TXN_SECURITY_CTX: request security contexts
 	 *
@@ -262,6 +263,8 @@ struct binder_node_debug_info {
 #define BINDER_VERSION			_IOWR('b', 9, struct binder_version)
 #define BINDER_GET_NODE_DEBUG_INFO	_IOWR('b', 11, struct binder_node_debug_info)
 #define BINDER_SET_CONTEXT_MGR_EXT	_IOW('b', 13, struct flat_binder_object)
+#define BINDER_SET_SYSTEM_SERVER_PID		_IOW('b', 14, __u32)
+
 /*
  * NOTE: Two special error codes you should check for when calling
  * in to the driver are:
@@ -318,6 +321,7 @@ struct binder_transaction_data {
 		__u8	buf[8];
 	} data;
 };
+
 struct binder_transaction_data_secctx {
 	struct binder_transaction_data transaction_data;
 	binder_uintptr_t secctx;

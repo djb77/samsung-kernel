@@ -574,6 +574,7 @@ static int otg_accessory_power(bool enable)
 	return 0;
 }
 
+#if defined(CONFIG_BATTERY_SAMSUNG_V2)
 static int set_online(int event, int state)
 {
 	union power_supply_propval val;
@@ -612,6 +613,7 @@ static int set_online(int event, int state)
 
 	return 0;
 }
+#endif
 
 static int exynos_set_host(bool enable)
 {
@@ -694,8 +696,12 @@ static struct otg_notify dwc_lsi_notify = {
 #endif
 	.disable_control = 1,
 	.device_check_sec = 3,
+#if defined(CONFIG_BATTERY_SAMSUNG_V2)
 	.set_battcall = set_online,
+#endif
+#if defined(CONFIG_CCIC_NOTIFIER)
 	.set_ldo_onoff = usb_regulator_onoff,
+#endif
 #if defined(CONFIG_BATTERY_SAMSUNG_V2)
 	.set_chg_current = usb_blocked_chg_control,
 #endif

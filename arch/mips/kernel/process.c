@@ -26,6 +26,7 @@
 #include <linux/kallsyms.h>
 #include <linux/random.h>
 #include <linux/prctl.h>
+#include <linux/nmi.h>
 
 #include <asm/asm.h>
 #include <asm/bootinfo.h>
@@ -50,9 +51,7 @@
 #ifdef CONFIG_HOTPLUG_CPU
 void arch_cpu_idle_dead(void)
 {
-	/* What the heck is this check doing ? */
-	if (!cpumask_test_cpu(smp_processor_id(), &cpu_callin_map))
-		play_dead();
+	play_dead();
 }
 #endif
 
@@ -635,28 +634,42 @@ unsigned long arch_align_stack(unsigned long sp)
 	return sp & ALMASK;
 }
 
-static void arch_dump_stack(void *info)
+static DEFINE_PER_CPU(struct call_single_data, backtrace_csd);
+static struct cpumask backtrace_csd_busy;
+
+static void handle_backtrace(void *info)
 {
-	struct pt_regs *regs;
+	nmi_cpu_backtrace(get_irq_regs());
+	cpumask_clear_cpu(smp_processor_id(), &backtrace_csd_busy);
+}
 
-	regs = get_irq_regs();
+static void raise_backtrace(cpumask_t *mask)
+{
+	struct call_single_data *csd;
+	int cpu;
 
-	if (regs)
-		show_regs(regs);
+	for_each_cpu(cpu, mask) {
+		/*
+		 * If we previously sent an IPI to the target CPU & it hasn't
+		 * cleared its bit in the busy cpumask then it didn't handle
+		 * our previous IPI & it's not safe for us to reuse the
+		 * call_single_data_t.
+		 */
+		if (cpumask_test_and_set_cpu(cpu, &backtrace_csd_busy)) {
+			pr_warn("Unable to send backtrace IPI to CPU%u - perhaps it hung?\n",
+				cpu);
+			continue;
+		}
 
-	dump_stack();
+		csd = &per_cpu(backtrace_csd, cpu);
+		csd->func = handle_backtrace;
+		smp_call_function_single_async(cpu, csd);
+	}
 }
 
 void arch_trigger_cpumask_backtrace(const cpumask_t *mask, bool exclude_self)
 {
-	long this_cpu = get_cpu();
-
-	if (cpumask_test_cpu(this_cpu, mask) && !exclude_self)
-		dump_stack();
-
-	smp_call_function_many(mask, arch_dump_stack, NULL, 1);
-
-	put_cpu();
+	nmi_trigger_cpumask_backtrace(mask, exclude_self, raise_backtrace);
 }
 
 int mips_get_process_fp_mode(struct task_struct *task)
@@ -685,8 +698,24 @@ int mips_set_process_fp_mode(struct task_struct *task, unsigned int value)
 	struct task_struct *t;
 	int max_users;
 
+	/* If nothing to change, return right away, successfully.  */
+	if (value == mips_get_process_fp_mode(task))
+		return 0;
+
+	/* Only accept a mode change if 64-bit FP enabled for o32.  */
+	if (!IS_ENABLED(CONFIG_MIPS_O32_FP64_SUPPORT))
+		return -EOPNOTSUPP;
+
+	/* And only for o32 tasks.  */
+	if (IS_ENABLED(CONFIG_64BIT) && !test_thread_flag(TIF_32BIT_REGS))
+		return -EOPNOTSUPP;
+
 	/* Check the value is valid */
 	if (value & ~known_bits)
+		return -EOPNOTSUPP;
+
+	/* Setting FRE without FR is not supported.  */
+	if ((value & (PR_FP_MODE_FR | PR_FP_MODE_FRE)) == PR_FP_MODE_FRE)
 		return -EOPNOTSUPP;
 
 	/* Avoid inadvertently triggering emulation */

@@ -108,6 +108,9 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(fg_full_voltage),
 	SEC_BATTERY_ATTR(fg_fullcapnom),
 	SEC_BATTERY_ATTR(battery_cycle),
+#if defined(CONFIG_BATTERY_AGE_FORECAST_DETACHABLE)
+	SEC_BATTERY_ATTR(batt_after_manufactured),
+#endif
 #endif
 	SEC_BATTERY_ATTR(batt_wpc_temp),
 	SEC_BATTERY_ATTR(batt_wpc_temp_adc),
@@ -694,9 +697,18 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 			POWER_SUPPLY_PROP_ENERGY_NOW, value);
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
 		break;
+#if defined(CONFIG_BATTERY_AGE_FORECAST_DETACHABLE)
+	case BATT_AFTER_MANUFACTURED:
+#if defined(CONFIG_ENG_BATTERY_CONCEPT) || defined(CONFIG_SEC_FACTORY)
+	case BATTERY_CYCLE:
+#endif
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", battery->batt_cycle);
+		break;	
+#else
 	case BATTERY_CYCLE:
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", battery->batt_cycle);
 		break;
+#endif
 #endif
 	case BATT_WPC_TEMP:
 		if (battery->pdata->wpc_thermal_source) {
@@ -1064,11 +1076,9 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 
 			sprintf(temp_buf+strlen(temp_buf), "%d %d",
 				PAD_INDEX_VALUE, pcisd->pad_count);
-			while (((pad_data = pad_data->next) != NULL) &&
-					(pad_data->id < MAX_PAD_ID) &&
-					(j++ < pcisd->pad_count))
+			while ((pad_data != NULL) && ((pad_data = pad_data->next) != NULL) &&
+					(pad_data->id < MAX_PAD_ID) && (j++ < pcisd->pad_count))
 				sprintf(temp_buf+strlen(temp_buf), " 0x%02x:%d", pad_data->id, pad_data->count);
-
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
 		}
 		break;
@@ -1081,9 +1091,8 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 
 			sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
 					PAD_INDEX_STRING, PAD_INDEX_VALUE);
-			while (((pad_data = pad_data->next) != NULL) &&
-					(pad_data->id < MAX_PAD_ID) &&
-					(j++ < pcisd->pad_count))
+			while ((pad_data != NULL) && ((pad_data = pad_data->next) != NULL) &&
+					(pad_data->id < MAX_PAD_ID) && (j++ < pcisd->pad_count))
 				sprintf(temp_buf+strlen(temp_buf), ",\"%s%02x\":\"%d\"",
 					PAD_JSON_STRING, pad_data->id, pad_data->count);
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
@@ -1185,7 +1194,7 @@ ssize_t sec_bat_store_attrs(
 		/* Do NOT reset fuel gauge in charging mode */
 		if (is_nocharge_type(battery->cable_type) ||
 			battery->is_jig_on) {
-			sec_bat_set_misc_event(battery, BATT_MISC_EVENT_BATT_RESET_SOC, 0);
+			sec_bat_set_misc_event(battery, BATT_MISC_EVENT_BATT_RESET_SOC, BATT_MISC_EVENT_BATT_RESET_SOC);
 
 			value.intval =
 				SEC_FUELGAUGE_CAPACITY_TYPE_RESET;
@@ -1328,6 +1337,13 @@ ssize_t sec_bat_store_attrs(
 	case FG_CAPACITY:
 		break;
 	case FG_ASOC:
+		if (sscanf(buf, "%d\n", &x) == 1) {
+			if (x >= 0 && x <= 100) {
+				battery->batt_asoc = x;
+				sec_bat_check_battery_health(battery);
+			}
+			ret = count;
+		}
 		break;
 	case AUTH:
 		break;
@@ -1754,9 +1770,15 @@ ssize_t sec_bat_store_attrs(
 		break;
 	case FG_FULLCAPNOM:
 		break;
+#if defined(CONFIG_BATTERY_AGE_FORECAST_DETACHABLE)
+	case BATT_AFTER_MANUFACTURED:
+#else
 	case BATTERY_CYCLE:
+#endif
 		if (sscanf(buf, "%10d\n", &x) == 1) {
-			dev_info(battery->dev, "%s: BATTERY_CYCLE(%d)\n", __func__, x);
+			dev_info(battery->dev, "%s: %s(%d)\n", __func__,
+				(offset == BATTERY_CYCLE) ?
+				"BATTERY_CYCLE" : "BATTERY_CYCLE(W)", x);
 			if (x >= 0) {
 				int prev_battery_cycle = battery->batt_cycle;
 				battery->batt_cycle = x;
@@ -1766,6 +1788,7 @@ ssize_t sec_bat_store_attrs(
 				if (prev_battery_cycle < 0) {
 					sec_bat_aging_check(battery);
 				}
+				sec_bat_check_battery_health(battery);
 			}
 			ret = count;
 		}
@@ -2043,7 +2066,7 @@ ssize_t sec_bat_store_attrs(
 			if (!battery->hiccup_status &&
 				(battery->misc_event & BATT_MISC_EVENT_HICCUP_TYPE)) {
 				sec_bat_set_misc_event(battery,
-					BATT_MISC_EVENT_HICCUP_TYPE, 1);
+					0, BATT_MISC_EVENT_HICCUP_TYPE);
 			}
 		}
 		ret = count;

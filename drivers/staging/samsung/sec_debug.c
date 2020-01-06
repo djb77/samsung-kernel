@@ -626,8 +626,10 @@ void sec_debug_EMFILE_error_proc(unsigned long files_addr)
 }
 #endif /* CONFIG_SEC_DEBUG_FILE_LEAK */
 
+#if 0
 /* leave the following definithion of module param call here for the compatibility with other models */
 module_param_call(force_error, sec_debug_force_error, NULL, NULL, 0644);
+#endif
 
 static int sec_debug_check_magic(struct sec_debug_shared_info *sdi)
 {

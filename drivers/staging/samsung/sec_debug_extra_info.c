@@ -175,15 +175,17 @@ void sec_debug_init_extra_info(struct sec_debug_shared_info *sec_debug_info, int
 
 		if (magic_status) {
 			pr_crit("%s: init for backup and pmudbg\n", __func__);
-			sec_debug_extra_info_backup = &sec_debug_info->sec_debug_extra_info_backup;
-			sec_debug_extra_info_pmudbg = &sec_debug_info->sec_debug_extra_info_pmudbg;
+//			sec_debug_extra_info_backup = &sec_debug_info->sec_debug_extra_info_backup;
+//			sec_debug_extra_info_pmudbg = &sec_debug_info->sec_debug_extra_info_pmudbg;
 
-			if (reset_reason == RR_K ||
-				reset_reason == RR_D || 
-				reset_reason == RR_P ||
-				reset_reason == RR_S)
+			if (reset_reason == RR_K || reset_reason == RR_D || 
+				reset_reason == RR_P ||	reset_reason == RR_S) {
+				pr_crit("%s: KDSP : init for backup and pmudbg\n", __func__);
+				sec_debug_extra_info_backup = &sec_debug_info->sec_debug_extra_info_backup;
+				sec_debug_extra_info_pmudbg = &sec_debug_info->sec_debug_extra_info_pmudbg;
 				memcpy(sec_debug_extra_info_backup, sec_debug_extra_info,
 						sizeof(struct sec_debug_panic_extra_info));
+			}				
 		}
 
 		memcpy(sec_debug_extra_info, &sec_debug_extra_info_init,
@@ -587,7 +589,7 @@ void sec_debug_set_extra_info_zswap(char *str)
 void sec_debug_set_extra_info_mfc_error(char *str)
 {
 	sec_debug_clear_extra_info(INFO_STACK); /* erase STACK */
-	sec_debug_set_extra_info(INFO_STACK, "MFC ERROR");
+//	sec_debug_set_extra_info(INFO_STACK, "MFC ERROR");
 	sec_debug_set_extra_info(INFO_MFC, "%s", str);
 }
 

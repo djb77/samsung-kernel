@@ -49,9 +49,17 @@ ifneq (,$(filter userdebug eng, $(TARGET_BUILD_VARIANT)))
     EXTRA_CFLAGS += -DDEFEX_SYSFS_ENABLE
 endif
 
-ifeq ($(CONFIG_SEC_VTS_TEST), y)
-    EXTRA_CFLAGS += -DDEFEX_PERMISSIVE_SP
-    EXTRA_CFLAGS += -DDEFEX_PERMISSIVE_PED
+ifeq ($(SEC_BUILD_OPTION_VTS), true)
+$(warning [DEFEX] VTS true $(SEC_BUILD_OPTION_VTS))
+EXTRA_CFLAGS += -DDEFEX_PERMISSIVE_SP
+EXTRA_CFLAGS += -DDEFEX_PERMISSIVE_PED
+else
+$(warning [DEFEX] VTS false $(SEC_BUILD_OPTION_VTS))
+endif
+
+ifeq ($(CONFIG_SEC_FACTORY), y)
+EXTRA_CFLAGS += -DDEFEX_PERMISSIVE_SP
+EXTRA_CFLAGS += -DDEFEX_PERMISSIVE_PED
 endif
 
 ifneq ($(wildcard  $(srctree)/$(src)/pack_rules.c),)

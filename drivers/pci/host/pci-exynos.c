@@ -2370,6 +2370,7 @@ int exynos_pcie_poweron(int ch_num)
 		if (exynos_pcie->ip_ver == 0x981000)
 			exynos_elb_writel(exynos_pcie, 0x0, PCIE_L12ERR_CTRL);
 #endif		
+
 		exynos_pcie->state = STATE_LINK_UP;
 
 		if (!exynos_pcie->probe_ok) {

@@ -232,9 +232,10 @@ void big_reset_control(int en)
 	}
 #endif
 }
-
+#define PMU_SYSIP_DAT0		0x810
 #define INFORM_NONE		0x0
 #define INFORM_RAMDUMP		0xd
+#define INFORM_FASTBOOT		0xFC
 #define INFORM_RECOVERY		0xf
 
 #if !defined(CONFIG_SEC_REBOOT)
@@ -258,20 +259,22 @@ static void exynos_power_off(void)
 
 static void exynos_reboot(enum reboot_mode mode, const char *cmd)
 {
-	u32 restart_inform, soc_id;
+	u32 soc_id;
 
 	if (!exynos_pmu_base)
 		return;
 #ifdef CONFIG_EXYNOS_ACPM
 	exynos_acpm_reboot();
 #endif
-	restart_inform = INFORM_NONE;
+	writel(INFORM_NONE, exynos_pmu_base + PMU_SYSIP_DAT0);
 
 	if (cmd) {
 		if (!strcmp((char *)cmd, "recovery"))
-			restart_inform = INFORM_RECOVERY;
-		else if(!strcmp((char *)cmd, "ramdump"))
-			restart_inform = INFORM_RAMDUMP;
+			writel(INFORM_RECOVERY, exynos_pmu_base + PMU_SYSIP_DAT0);
+		else if(!strcmp(cmd, "ramdump"))
+			writel(INFORM_RAMDUMP, exynos_pmu_base + PMU_SYSIP_DAT0);
+		else if (!strcmp(cmd, "bootloader"))
+			writel(INFORM_FASTBOOT, exynos_pmu_base + PMU_SYSIP_DAT0);
 	}
 
 	/* Check by each SoC */

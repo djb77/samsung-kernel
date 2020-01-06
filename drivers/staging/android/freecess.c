@@ -91,12 +91,7 @@ static void dump_kfreecess_msg(struct kfreecess_msg_data *msg)
 		return;
 	}
 
-	printk(KERN_ERR "type: %d\n", msg->type);
-	printk(KERN_ERR "mode: %d\n", msg->mod);
-	printk(KERN_ERR "src_portid: %d\n", msg->src_portid);
-	printk(KERN_ERR "dest_portid: %d\n", msg->dst_portid);
-	printk(KERN_ERR "caller_pid: %d\n", msg->caller_pid);
-	printk(KERN_ERR "target_uid: %d\n", msg->target_uid);
+	printk(KERN_ERR "type: %d, mode: %d\n", msg->type, msg->mod);
 }
 
 
@@ -306,7 +301,6 @@ static void recv_handler(struct sk_buff *skb)
 		payload = (struct kfreecess_msg_data*)NLMSG_DATA(nlh);
 
 		if (msglen >= (sizeof(struct kfreecess_msg_data))) {
-			dump_kfreecess_msg(payload);
 			if (payload->src_portid < 0) {
 				pr_err("USER_HOOK_CALLBACK %s: src_portid %d is not valid!\n", __func__, payload->src_portid);
 				return;

@@ -361,6 +361,7 @@ static int __seq_aod_self_move_en(struct aod_dev_info *aod, unsigned long arg)
 
 	if (panel->state.cur_state != PANEL_STATE_ALPM) {
 		panel_info("AOD:WARN:%s:self move on ignored\n", __func__);
+		ret = -EAGAIN;
 		goto move_on_exit;
 	}
 	if (props->first_clk_update) {
@@ -394,6 +395,7 @@ static int __seq_aod_self_move_off(struct aod_dev_info *aod)
 
 	if (panel->state.cur_state != PANEL_STATE_ALPM) {
 		panel_info("AOD:WARN:%s:self move off ignored\n", __func__);
+		ret = -EAGAIN;
 		goto move_on_exit;
 	}
 
@@ -595,6 +597,7 @@ static int __aod_ioctl_set_time(struct aod_dev_info *aod, unsigned long arg)
 
 	if (panel->state.cur_state != PANEL_STATE_ALPM) {
 		panel_info("AOD:WARN:%s:set time ignored\n", __func__);
+		ret = -EAGAIN;
 		goto exit_time_ioctl;
 	}
 
@@ -629,6 +632,7 @@ static int __aod_ioctl_set_analog_clk(struct aod_dev_info *aod, unsigned long ar
 
 	if (panel->state.cur_state != PANEL_STATE_ALPM) {
 		panel_info("AOD:WARN:%s:set time ignored\n", __func__);
+		ret = -EAGAIN;
 		goto exit_analog_ioctl;
 	}
 
@@ -668,6 +672,7 @@ static int __aod_ioctl_set_digital_clk(struct aod_dev_info *aod, unsigned long a
 
 	if (panel->state.cur_state != PANEL_STATE_ALPM) {
 		panel_info("AOD:WARN:%s:set time ignored\n", __func__);
+		ret = -EAGAIN;
 		goto exit_digital_ioctl;
 	}
 

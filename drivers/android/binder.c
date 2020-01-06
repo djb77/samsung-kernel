@@ -78,6 +78,8 @@
 #include <linux/freecess.h>
 #endif
 
+int system_server_pid = 0;
+
 static HLIST_HEAD(binder_deferred_list);
 static DEFINE_MUTEX(binder_deferred_lock);
 
@@ -150,7 +152,7 @@ static DECLARE_WAIT_QUEUE_HEAD(binder_user_error_wait);
 static int binder_stop_on_user_error;
 
 static int binder_set_stop_on_user_error(const char *val,
-					 struct kernel_param *kp)
+					 const struct kernel_param *kp)
 {
 	int ret;
 
@@ -361,6 +363,7 @@ struct binder_error {
 						 (invariant after initialized)
 
  * @inherit_rt:           inherit RT scheduling policy from caller
+ * @txn_security_ctx:     require sender's security context
  *                        (invariant after initialized)
  * @async_todo:           list of async work items
  *                        (protected by @proc->inner_lock)
@@ -1372,6 +1375,7 @@ static struct binder_node *binder_init_node_ilocked(
 	node->accept_fds = !!(flags & FLAT_BINDER_FLAG_ACCEPTS_FDS);
 	node->txn_security_ctx = !!(flags & FLAT_BINDER_FLAG_TXN_SECURITY_CTX);
 	node->inherit_rt = !!(flags & FLAT_BINDER_FLAG_INHERIT_RT);
+	node->txn_security_ctx = !!(flags & FLAT_BINDER_FLAG_TXN_SECURITY_CTX);
 	spin_lock_init(&node->lock);
 	INIT_LIST_HEAD(&node->work.entry);
 	INIT_LIST_HEAD(&node->async_todo);
@@ -2372,7 +2376,7 @@ static void binder_transaction_buffer_release(struct binder_proc *proc,
 	int debug_id = buffer->debug_id;
 
 	binder_debug(BINDER_DEBUG_TRANSACTION,
-		     "%d buffer release %d, size %zd-%zd, failed at %p\n",
+		     "%d buffer release %d, size %zd-%zd, failed at %pK\n",
 		     proc->pid, buffer->debug_id,
 		     buffer->data_size, buffer->offsets_size, failed_at);
 
@@ -2751,7 +2755,7 @@ static void print_binder_proc_inner(struct binder_proc *proc)
 		p_thread = rb_entry(pn, struct binder_thread, rb_node);
 		t = p_thread->transaction_stack;
 		if (t) {
-                        spin_lock(&t->lock);
+			spin_lock(&t->lock);
 			if (t->from != p_thread && t->to_thread == p_thread) { //incoming transaction
 				buffer = t->buffer;
 				if (buffer != NULL) {
@@ -2761,18 +2765,16 @@ static void print_binder_proc_inner(struct binder_proc *proc)
 						t->to_proc ? t->to_proc->pid : 0,
 						t->to_thread ? t->to_thread->pid : 0,
 						buffer->data_size, buffer->offsets_size);
-
 				} else {
 					pr_info("[%d] from %d:%d to %d:%d\n",
 						cnt, t->from ? t->from->proc->pid : 0,
 						t->from ? t->from->pid : 0,
 						t->to_proc ? t->to_proc->pid : 0,
 						t->to_thread ? t->to_thread->pid : 0);
-
 				}
-                                cnt++;
+                cnt++;
 			}
-                        spin_unlock(&t->lock);
+            spin_unlock(&t->lock);
 		}
 	}
 	binder_inner_proc_unlock(proc);
@@ -3193,8 +3195,10 @@ static void binder_transaction(struct binder_proc *proc,
 		/* Otherwise, fall back to the default priority */
 		t->priority = target_proc->default_priority;
 	}
+
 	if (target_node && target_node->txn_security_ctx) {
 		u32 secid;
+		size_t added_size;
 
 		security_task_getsecid(proc->tsk, &secid);
 		ret = security_secid_to_secctx(secid, &secctx, &secctx_sz);
@@ -3204,9 +3208,16 @@ static void binder_transaction(struct binder_proc *proc,
 			return_error_line = __LINE__;
 			goto err_get_secctx_failed;
 		}
-		extra_buffers_size += ALIGN(secctx_sz, sizeof(u64));
+		added_size = ALIGN(secctx_sz, sizeof(u64));
+		extra_buffers_size += added_size;
+		if (extra_buffers_size < added_size) {
+			/* integer overflow of extra_buffers_size */
+			return_error = BR_FAILED_REPLY;
+			return_error_param = EINVAL;
+			return_error_line = __LINE__;
+			goto err_bad_extra_size;
+		}
 	}
-
 
 	trace_binder_transaction(reply, t, target_node);
 
@@ -3515,6 +3526,7 @@ err_copy_data_failed:
 	t->buffer->transaction = NULL;
 	binder_alloc_free_buf(&target_proc->alloc, t->buffer);
 err_binder_alloc_buf_failed:
+err_bad_extra_size:
 	if (secctx)
 		security_release_secctx(secctx, secctx_sz);
 err_get_secctx_failed:
@@ -4000,7 +4012,7 @@ static int binder_thread_write(struct binder_proc *proc,
 				}
 			}
 			binder_debug(BINDER_DEBUG_DEAD_BINDER,
-				     "%d:%d BC_DEAD_BINDER_DONE %016llx found %p\n",
+				     "%d:%d BC_DEAD_BINDER_DONE %016llx found %pK\n",
 				     proc->pid, thread->pid, (u64)cookie,
 				     death);
 			if (death == NULL) {
@@ -4388,8 +4400,9 @@ retry:
 		if (t_from) {
 			struct task_struct *sender = t_from->proc->tsk;
 
-			trd->sender_pid = task_tgid_nr_ns(sender,
-							task_active_pid_ns(current));
+			trd->sender_pid =
+				task_tgid_nr_ns(sender,
+						task_active_pid_ns(current));
 		} else {
 			trd->sender_pid = 0;
 		}
@@ -4402,13 +4415,12 @@ retry:
 		trd->data.ptr.offsets = trd->data.ptr.buffer +
 					ALIGN(t->buffer->data_size,
 					    sizeof(void *));
+
 		tr.secctx = t->security_ctx;
 		if (t->security_ctx) {
 			cmd = BR_TRANSACTION_SEC_CTX;
 			trsize = sizeof(tr);
 		}
-				
-
 		if (put_user(cmd, (uint32_t __user *)ptr)) {
 			if (t_from)
 				binder_thread_dec_tmpref(t_from);
@@ -4964,6 +4976,14 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		break;
 	}
+	case BINDER_SET_SYSTEM_SERVER_PID: {
+		if (copy_from_user(&system_server_pid, ubuf,
+				   sizeof(system_server_pid))) {
+			ret = -EINVAL;
+			goto err;
+		}
+		break;
+	}
 	default:
 		ret = -EINVAL;
 		goto err;
@@ -5376,7 +5396,7 @@ static void print_binder_transaction_ilocked(struct seq_file *m,
 	spin_lock(&t->lock);
 	to_proc = t->to_proc;
 	seq_printf(m,
-		   "%s %d: %p from %d:%d to %d:%d code %x flags %x pri %d:%d r%d",
+		   "%s %d: %pK from %d:%d to %d:%d code %x flags %x pri %d:%d r%d",
 		   prefix, t->debug_id, t,
 		   t->from ? t->from->proc->pid : 0,
 		   t->from ? t->from->pid : 0,
@@ -5401,7 +5421,7 @@ static void print_binder_transaction_ilocked(struct seq_file *m,
 	}
 	if (buffer->target_node)
 		seq_printf(m, " node %d", buffer->target_node->debug_id);
-	seq_printf(m, " size %zd:%zd data %p\n",
+	seq_printf(m, " size %zd:%zd data %pK\n",
 		   buffer->data_size, buffer->offsets_size,
 		   buffer->data);
 }

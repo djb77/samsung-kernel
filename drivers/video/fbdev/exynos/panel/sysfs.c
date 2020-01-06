@@ -125,6 +125,12 @@ static ssize_t manufacture_code_show(struct device *dev,
 	return strlen(buf);
 }
 
+static ssize_t SVC_OCTA_DDI_CHIPID_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return manufacture_code_show(dev, attr, buf);
+}
+
 static ssize_t cell_id_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -258,22 +264,50 @@ static ssize_t brightness_table_show(struct device *dev,
 {
 	struct panel_device *panel = dev_get_drvdata(dev);
 	struct panel_bl_device *panel_bl;
-	int br, len = 0;
-
+	int br, len = 0, recv_len = 0, prev_br = 0;
+	int actual_brightness = 0, prev_actual_brightness = 0;
+	char recv_buf[50] = {0, };
+	int recv_buf_len = ARRAY_SIZE(recv_buf);
+	int max_brightness = 0;
 	if (panel == NULL) {
 		panel_err("PANEL:ERR:%s:panel is null\n", __func__);
 		return -EINVAL;
 	}
+
 	panel_bl = &panel->panel_bl;
+	max_brightness = get_max_brightness(panel_bl);
 
 	mutex_lock(&panel_bl->lock);
-	for (br = 0; br <= get_max_brightness(panel_bl); br += BRT_SCALE)
-		len += snprintf(buf + len, PAGE_SIZE - len, "%5d %3d\n",
-				br, get_actual_brightness(panel_bl, br));
+	for (br = 0; br <= max_brightness; br++) {
+		actual_brightness = get_actual_brightness(panel_bl, br);
+		if (recv_len == 0) {
+			recv_len += snprintf(recv_buf, recv_buf_len, "%5d", prev_br);
+			prev_actual_brightness = actual_brightness;
+		}
+		if ((prev_actual_brightness != actual_brightness) || (br == max_brightness))  {
+			if (recv_len < recv_buf_len) {
+				recv_len += snprintf(recv_buf + recv_len, recv_buf_len - recv_len,
+					"~%5d %3d\n", prev_br, prev_actual_brightness);
+				len += snprintf(buf + len, PAGE_SIZE - len, "%s", recv_buf);
+			}
+			recv_len = 0;
+			memset(recv_buf, 0x00, sizeof(recv_buf));
+		}
+		prev_actual_brightness = actual_brightness;
+		prev_br = br;
+		if (PAGE_SIZE <= len) {
+			pr_info("%s print buffer overflow %d\n", __func__, len);
+			len = PAGE_SIZE - 1;
+			goto exit;
+		}
+	}
+	len += snprintf(buf + len, PAGE_SIZE - len, "%s", recv_buf);
+exit:
 	mutex_unlock(&panel_bl->lock);
 
 	return len;
 }
+
 
 static ssize_t adaptive_control_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -1258,7 +1292,7 @@ static ssize_t poc_mca_show(struct device *dev,
 		return ret;
 	}
 	panel_set_key(panel, 2, false);
-	
+
 	ret = resource_copy_by_name(&panel->panel_data, chksum_data, "poc_mca_chksum");
 	if (unlikely(ret < 0)) {
 		pr_err("%s, failed to copy poc_mca_chksum res (ret %d)\n",
@@ -1271,7 +1305,7 @@ static ssize_t poc_mca_show(struct device *dev,
 	for (i = 0; i < len; i++) {
 		snprintf(buf, PAGE_SIZE, "%s%02X ", buf, chksum_data[i]);
 	}
-	
+
 	dev_info(dev, "%s poc_mca_checksum: %s\n", __func__, buf);
 
 	return strlen(buf);
@@ -2952,6 +2986,7 @@ struct device_attribute panel_attrs[] = {
 	__PANEL_ATTR_RO(octa_id, 0444),
 	__PANEL_ATTR_RO(SVC_OCTA, 0444),
 	__PANEL_ATTR_RO(SVC_OCTA_CHIPID, 0444),
+	__PANEL_ATTR_RO(SVC_OCTA_DDI_CHIPID, 0444),
 #ifdef CONFIG_SUPPORT_XTALK_MODE
 	__PANEL_ATTR_RW(xtalk_mode, 0664),
 #endif
@@ -3055,12 +3090,12 @@ int panel_sysfs_probe(struct panel_device *panel)
 	if (IS_ERR_OR_NULL(svc_sd)) {
 		svc = kobject_create_and_add("svc", &devices_kset->kobj);
 		if (IS_ERR_OR_NULL(svc))
-			pr_err("failed to create /sys/devices/svc already exist svc : 0x%p\n", svc);
+			pr_err("failed to create /sys/devices/svc already exist svc : 0x%pK\n", svc);
 		else
-			pr_err("success to create /sys/devices/svc svc : 0x%p\n", svc);
+			pr_err("success to create /sys/devices/svc svc : 0x%pK\n", svc);
 	} else {
 		svc = (struct kobject*)svc_sd->priv;
-		pr_info("success to find svc_sd : 0x%p  svc : 0x%p\n", svc_sd, svc);
+		pr_info("success to find svc_sd : 0x%pK  svc : 0x%pK\n", svc_sd, svc);
 	}
 
 	if (!IS_ERR_OR_NULL(svc)) {

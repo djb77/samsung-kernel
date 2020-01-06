@@ -101,7 +101,7 @@ void ecryptfs_clean_sdp_dek(struct ecryptfs_crypt_stat *crypt_stat)
 		mutex_unlock(&crypt_stat->cs_tfm_mutex);
 	}
 
-	memset(crypt_stat->key, 0, ECRYPTFS_MAX_KEY_BYTES);
+	memzero_explicit(crypt_stat->key, ECRYPTFS_MAX_KEY_BYTES);
 	crypt_stat->flags &= ~(ECRYPTFS_KEY_SET);
 	crypt_stat->flags &= ~(ECRYPTFS_KEY_VALID);
 }
@@ -135,12 +135,12 @@ int ecryptfs_get_sdp_dek(struct ecryptfs_crypt_stat *crypt_stat)
 			}
 			if (rc < 0) {
 				DEK_LOGE("Error decypting dek; rc = [%d]\n", rc);
-				memset(&DEK, 0, sizeof(dek_t));
+				memzero_explicit(&DEK, sizeof(dek_t));
 				goto out;
 			}
 			memcpy(crypt_stat->key, DEK.buf, DEK.len);
 			crypt_stat->key_size = DEK.len;
-			memset(&DEK, 0, sizeof(dek_t));
+			memzero_explicit(&DEK, sizeof(dek_t));
 		} else {
 #if ECRYPTFS_DEK_DEBUG
 			DEK_LOGD("file is not sensitive\n");
@@ -489,7 +489,7 @@ int ecryptfs_sdp_set_sensitive(int engine_id, struct dentry *dentry)
 out:
 	if (rc)
 		crypt_stat->engine_id = id_bak;
-	memset(&DEK, 0, sizeof(dek_t));
+	memzero_explicit(&DEK, sizeof(dek_t));
 	return rc;
 }
 
@@ -577,7 +577,7 @@ int ecryptfs_sdp_convert_dek(struct dentry *dentry)
 		goto out;
 	}
 out:
-	memset(&DEK, 0, sizeof(dek_t));
+	memzero_explicit(&DEK, sizeof(dek_t));
 	return rc;
 }
 

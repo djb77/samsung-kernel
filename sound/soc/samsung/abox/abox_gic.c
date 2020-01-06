@@ -226,6 +226,10 @@ static int samsung_abox_gic_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = enable_irq_wake(data->irq);
+	if (ret < 0)
+		dev_err(dev, "Failed to enable irq wake\n");
+
 #ifndef CONFIG_PM
 	abox_gic_resume(dev);
 #endif

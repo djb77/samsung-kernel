@@ -517,6 +517,7 @@ static int samsung_abox_debug_probe(struct platform_device *pdev)
 		iommu_map(data->iommu_domain, IOVA_DUMP_BUFFER, abox_rmem->base,
 				abox_rmem->size, 0);
 	}
+	memset(data->dump_base, 0x0, abox_rmem->size);
 
 	ret = device_create_file(dev, &dev_attr_gpr);
 	bin_attr_calliope_sram.size = data->sram_size;

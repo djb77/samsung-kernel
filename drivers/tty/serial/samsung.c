@@ -169,6 +169,34 @@ static struct notifier_block exynos_s3c24xx_panic_block = {
 	.notifier_call = exynos_s3c24xx_panic_handler,
 };
 
+static void uart_sfr_dump(struct s3c24xx_uart_port *ourport)
+{
+	struct uart_port *port = &ourport->port;
+
+	dev_err(ourport->port.dev, " Register dump\n"
+		"ULCON	0x%08x	"
+		"UCON	0x%08x	"
+		"UFCON	0x%08x	\n"
+		"UMCON	0x%08x	"
+		"UTRSTAT	0x%08x	"
+		"UERSTAT	0x%08x	"
+		"UMSTAT	0x%08x	\n"
+		"UBRDIV	0x%08x	"
+		"UINTP	0x%08x	"
+		"UINTM	0x%08x	\n"
+		, readl(port->membase + S3C2410_ULCON)
+		, readl(port->membase + S3C2410_UCON)
+		, readl(port->membase + S3C2410_UFCON)
+		, readl(port->membase + S3C2410_UMCON)
+		, readl(port->membase + S3C2410_UTRSTAT)
+		, readl(port->membase + S3C2410_UERSTAT)
+		, readl(port->membase + S3C2410_UMSTAT)
+		, readl(port->membase + S3C2410_UBRDIV)
+		, readl(port->membase + S3C64XX_UINTP)
+		, readl(port->membase + S3C64XX_UINTM)
+	);
+}
+
 static void change_uart_gpio(int value, struct s3c24xx_uart_port *ourport)
 {
 	int status = 0;
@@ -603,6 +631,8 @@ s3c24xx_serial_rx_chars(int irq, void *dev_id)
 			dbg("rxerr: port ch=0x%02x, rxs=0x%08x\n",
 			    ch, uerstat);
 
+			uart_sfr_dump(ourport);
+
 			/* check for break */
 			if (uerstat & S3C2410_UERSTAT_BREAK) {
 				pr_err("[tty] uerstat & S3C2410_UERSTAT_BREAK1!\n");
@@ -986,7 +1016,7 @@ static void s3c24xx_serial_pm(struct uart_port *port, unsigned int level,
  *
 */
 
-#define MAX_CLK_NAME_LENGTH 15
+#define MAX_CLK_NAME_LENGTH 20
 
 static unsigned int s3c24xx_serial_getclk(struct s3c24xx_uart_port *ourport,
 			unsigned int req_baud, struct clk **best_clk,
@@ -1109,15 +1139,24 @@ static void s3c24xx_serial_set_termios(struct uart_port *port,
 
 	if (ourport->info->has_divslot) {
 		unsigned int div = ourport->baudclk_rate / baud;
+
+		/*
+		 * Find udivslot of the lowest error rate
+		 *
+		 * udivslot cannot be round-up to 0 because quot is fixed
+		 */
 		if((div & 15) != 15) {
 			real_baud_rd = ourport->baudclk_rate / div;
 			real_baud_ru = ourport->baudclk_rate / (div + 1);
+
 			calc_deviation_rd = baud - real_baud_rd;
 			calc_deviation_ru = baud - real_baud_ru;
+
 			if(calc_deviation_rd < 0)
 				calc_deviation_rd = -calc_deviation_rd;
 			if(calc_deviation_ru < 0)
 				calc_deviation_ru = -calc_deviation_ru;
+
 			if(calc_deviation_rd > calc_deviation_ru)
 			  div = div + 1;
 		}
@@ -1177,6 +1216,8 @@ static void s3c24xx_serial_set_termios(struct uart_port *port,
 
 	if (ourport->info->has_divslot)
 		wr_regl(port, S3C2443_DIVSLOT, udivslot);
+	port->status &= ~UPSTAT_AUTOCTS;
+
 	umcon = rd_regl(port, S3C2410_UMCON);
 	if (termios->c_cflag & CRTSCTS) {
 		umcon |= S3C2410_UMCOM_AFC;
@@ -1686,44 +1727,40 @@ static inline struct s3c24xx_serial_drv_data *s3c24xx_get_driver_data(
 			platform_get_device_id(pdev)->driver_data;
 }
 
-
 void s3c24xx_serial_rx_fifo_wait(void)
 {
-   struct s3c24xx_uart_port *ourport;
-   struct uart_port *port;
-   unsigned int fifo_stat;
-   unsigned long wait_time;
-   unsigned int fifo_count;
+	struct s3c24xx_uart_port *ourport;
+	struct uart_port *port;
+	unsigned int fifo_stat;
+	unsigned long wait_time;
+	unsigned int fifo_count;
 
-   fifo_count = 0;
+	fifo_count = 0;
 
-   list_for_each_entry(ourport, &drvdata_list, node) {
-       if (ourport->port.line != CONFIG_S3C_LOWLEVEL_UART_PORT)
-               continue;
+	list_for_each_entry(ourport, &drvdata_list, node) {
+		if (ourport->port.line != CONFIG_S3C_LOWLEVEL_UART_PORT)
+			continue;
 
-       port = &ourport->port;
-       fifo_stat = rd_regl(port, S3C2410_UFSTAT);
-       fifo_count = s3c24xx_serial_rx_fifocnt(ourport, fifo_stat);
-       if (fifo_count) {
-               uart_clock_enable(ourport);
-               __clear_bit(S3C64XX_UINTM_RXD, portaddrl(port, S3C64XX_UINTM));
-               uart_clock_disable(ourport);
-               rx_enabled(port) = 1;
-       }
+		port = &ourport->port;
+		fifo_stat = rd_regl(port, S3C2410_UFSTAT);
+		fifo_count = s3c24xx_serial_rx_fifocnt(ourport, fifo_stat);
+		if (fifo_count) {
+			uart_clock_enable(ourport);
+			__clear_bit(S3C64XX_UINTM_RXD, portaddrl(port, S3C64XX_UINTM));
+			uart_clock_disable(ourport);
+			rx_enabled(port) = 1;
+		}
+		wait_time = jiffies + HZ;
+		do {
+			port = &ourport->port;
+			fifo_stat = rd_regl(port, S3C2410_UFSTAT);
+			cpu_relax();
+		} while (s3c24xx_serial_rx_fifocnt(ourport, fifo_stat) && time_before(jiffies, wait_time));
 
-       wait_time = jiffies + HZ;
-       do {
-               port = &ourport->port;
-               fifo_stat = rd_regl(port, S3C2410_UFSTAT);
-               cpu_relax();
-       } while ( s3c24xx_serial_rx_fifocnt(ourport, fifo_stat) && time_before(jiffies, wait_time));
-
-       if (rx_enabled(port))
-               s3c24xx_serial_stop_rx(port);
-   }
-
+		if (rx_enabled(port))
+			s3c24xx_serial_stop_rx(port);
+	}
 }
-
 EXPORT_SYMBOL_GPL(s3c24xx_serial_rx_fifo_wait);
 
 void s3c24xx_serial_fifo_wait(void)
@@ -1933,7 +1970,6 @@ static int s3c24xx_serial_notifier(struct notifier_block *self,
 			umcon |= S3C2410_UMCOM_AFC;
 			wr_regl(port, S3C2410_UMCON, umcon);
 
-
 			spin_unlock_irqrestore(&port->lock, flags);
 
 			if (ourport->port.line == BLUETOOTH_UART_PORT_LINE)
@@ -1982,7 +2018,6 @@ static int s3c24xx_serial_probe(struct platform_device *pdev)
 			, ourport->port.line, CONFIG_SERIAL_SAMSUNG_UARTS);
 		return -EINVAL;
 	}
-
 	ourport->drv_data = s3c24xx_get_driver_data(pdev);
 	if (!ourport->drv_data) {
 		dev_err(&pdev->dev, "could not find driver data\n");
@@ -2241,9 +2276,9 @@ static int s3c24xx_serial_suspend(struct device *dev)
 		if (ourport->port.line == BLUETOOTH_UART_PORT_LINE)
 			change_uart_gpio(RTS_PINCTRL, ourport);
 
-		udelay(300);//dealy for sfr update	
+		udelay(300);//dealy for sfr update
 		s3c24xx_serial_rx_fifo_wait();
-			
+
 		uart_suspend_port(&s3c24xx_uart_drv, port);
 #ifdef CONFIG_SERIAL_SAMSUNG_HWACG
 		uart_clock_enable(ourport);

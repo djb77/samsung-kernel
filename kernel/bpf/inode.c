@@ -325,7 +325,7 @@ out:
 static struct bpf_prog *__get_prog_inode(struct inode *inode, enum bpf_prog_type type)
 {
 	struct bpf_prog *prog;
-	int ret = inode_permission(inode, MAY_READ | MAY_WRITE);
+	int ret = inode_permission(inode, MAY_READ);
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -335,6 +335,10 @@ static struct bpf_prog *__get_prog_inode(struct inode *inode, enum bpf_prog_type
 		return ERR_PTR(-EACCES);
 
 	prog = inode->i_private;
+
+	ret = security_bpf_prog(prog);
+	if (ret < 0)
+		return ERR_PTR(ret);
 
 	return bpf_prog_inc(prog);
 }

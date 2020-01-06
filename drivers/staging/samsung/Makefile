@@ -28,6 +28,8 @@ obj-$(CONFIG_SEC_DEBUG_RESET_REASON) += sec_debug_reset_reason.o
 obj-$(CONFIG_SEC_DEBUG_EXTRA_INFO)	+= sec_debug_extra_info.o
 obj-$(CONFIG_SEC_DEBUG_HW_PARAM)	+= sec_debug_hw_param.o
 obj-$(CONFIG_SEC_DEBUG_AUTO_SUMMARY)	+= sec_debug_auto_summary.o
+obj-$(CONFIG_SEC_DEBUG_INIT_LOG)      += sec_debug_init_log.o
+
 obj-$(CONFIG_SEC_DEBUG_LAST_KMSG)	+= sec_debug_last_kmsg.o
 obj-$(CONFIG_SEC_DEBUG_PPMPU)		+= sec_debug_ppmpu.o
 obj-$(CONFIG_SEC_DEBUG_UBSAN)	+= sec_debug_ubsan.o
@@ -37,8 +39,6 @@ obj-$(CONFIG_SEC_DEBUG_BRANCH_VERIFIER)	+=sec_debug_branch_verifier.o
 obj-$(CONFIG_ARGOS)                  += sec_argos.o
 obj-$(CONFIG_SEC_PARAM)		+= sec_param.o
 obj-$(CONFIG_SEC_BOOTSTAT)	+= sec_bootstat.o
-
-obj-$(CONFIG_SEC_DEBUG_GAF_V4)		+= sec_gaf_v4.o
 
 # Samsung sec NAD Feature
 obj-$(CONFIG_SEC_NAD)		+= sec_nad.o

@@ -42,6 +42,15 @@ config ANDROID_INTF_ALARM_DEV
 	  elapsed realtime, and a non-wakeup alarm on the monotonic clock.
 	  Also exports the alarm interface to user-space.
 
+config ANDROID_VSOC
+	tristate "Android Virtual SoC support"
+	default n
+	depends on PCI_MSI
+	---help---
+	  This option adds support for the Virtual SoC driver needed to boot
+	  a 'cuttlefish' Android image inside QEmu. The driver interacts with
+	  a QEmu ivshmem device. If built as a module, it will be called vsoc.
+
 config SAMSUNG_FREECESS
 	bool "thraw frozen process when recv sig"
 	default n
@@ -51,7 +60,6 @@ config SAMSUNG_FREECESS
 source "drivers/staging/android/ion/Kconfig"
 source "drivers/staging/android/switch/Kconfig"
 
-source "drivers/staging/android/fiq_debugger/Kconfig"
 
 endif # if ANDROID
 

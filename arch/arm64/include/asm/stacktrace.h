@@ -23,7 +23,7 @@ struct stackframe {
 	unsigned long sp;
 	unsigned long pc;
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
-	unsigned int graph;
+	int graph;
 #endif
 #ifdef CONFIG_SEC_DEBUG_BRANCH_VERIFIER
 	unsigned int pc_from_irq;

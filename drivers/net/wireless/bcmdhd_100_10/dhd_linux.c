@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_linux.c 818247 2019-05-07 04:15:13Z $
+ * $Id: dhd_linux.c 846077 2019-10-17 03:09:04Z $
  */
 
 #include <typedefs.h>
@@ -9274,11 +9274,7 @@ dhd_wlan_power_off_handler(void *handler, unsigned char reason)
 		/* save core dump to a file */
 		if (dhdp->memdump_enabled) {
 #ifdef DHD_SSSR_DUMP
-			if (dhdp->sssr_inited) {
-				dhdp->info->no_wq_sssrdump = TRUE;
-				dhd_bus_sssr_dump(dhdp);
-				dhdp->info->no_wq_sssrdump = FALSE;
-			}
+                        dhdp->collect_sssr = TRUE;
 #endif /* DHD_SSSR_DUMP */
 			dhdp->memdump_type = DUMP_TYPE_DUE_TO_BT;
 			dhd_bus_mem_dump(dhdp);
@@ -18124,6 +18120,12 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 	}
 	DHD_GENERAL_UNLOCK(dhdp, flags);
 
+#ifdef DHD_SSSR_DUMP
+	if (dhdp->sssr_inited && dhdp->collect_sssr) {
+		dhdpcie_sssr_dump(dhdp);
+	}
+	dhdp->collect_sssr = FALSE;
+#endif /* DHD_SSSR_DUMP */
 #ifdef D2H_MINIDUMP
 	/* dump minidump */
 	if (dhd_bus_is_minidump_enabled(dhdp)) {
@@ -18250,9 +18252,9 @@ dhd_d2h_minidump(dhd_pub_t *dhdp)
 #ifdef DHD_SSSR_DUMP
 
 static void
-dhd_sssr_dump(void *handle, void *event_info, u8 event)
+dhd_sssr_dump_to_file(dhd_info_t* dhdinfo)
 {
-	dhd_info_t *dhd = handle;
+        dhd_info_t *dhd = dhdinfo;
 	dhd_pub_t *dhdp;
 	int i;
 	char before_sr_dump[128];
@@ -18270,6 +18272,7 @@ dhd_sssr_dump(void *handle, void *event_info, u8 event)
 	dhdp = &dhd->pub;
 
 	DHD_GENERAL_LOCK(dhdp, flags);
+	DHD_BUS_BUSY_SET_IN_SSSRDUMP(dhdp);
 	if (DHD_BUS_CHECK_DOWN_OR_DOWN_IN_PROGRESS(dhdp)) {
 		DHD_GENERAL_UNLOCK(dhdp, flags);
 		DHD_ERROR(("%s: bus is down! can't collect sssr dump. \n", __FUNCTION__));
@@ -18334,25 +18337,18 @@ exit:
 }
 
 void
-dhd_schedule_sssr_dump(dhd_pub_t *dhdp)
+dhd_write_sssr_dump(dhd_pub_t *dhdp)
 {
-	unsigned long flags = 0;
-
-	/* bus busy bit for sssr dump will be cleared in sssr dump
-	* work item context, after sssr dump files are created
-	*/
-	DHD_GENERAL_LOCK(dhdp, flags);
-	DHD_BUS_BUSY_SET_IN_SSSRDUMP(dhdp);
-	DHD_GENERAL_UNLOCK(dhdp, flags);
-
-	if (dhdp->info->no_wq_sssrdump) {
-		dhd_sssr_dump(dhdp->info, 0, 0);
-		return;
-	}
-
-	DHD_ERROR(("%s: scheduling sssr dump.. \n", __FUNCTION__));
-	dhd_deferred_schedule_work(dhdp->info->dhd_deferred_wq, NULL,
-		DHD_WQ_WORK_SSSR_DUMP, dhd_sssr_dump, DHD_WQ_WORK_PRIORITY_HIGH);
+	/*
+	 * dhd_mem_dump -> dhd_sssr_dump -> dhd_write_sssr_dump
+	 * Without workqueue -
+	 * DUMP_TYPE_DONGLE_INIT_FAILURE/DUMP_TYPE_DUE_TO_BT/DUMP_TYPE_SMMU_FAULT
+	 * : These are called in own handler, not in the interrupt context
+	 * With workqueue - all other DUMP_TYPEs : dhd_mem_dump is called in workqueue
+	 * Thus, it doesn't neeed to dump SSSR in workqueue
+	 */
+	DHD_ERROR(("%s: writing sssr dump to file... \n", __FUNCTION__));
+	dhd_sssr_dump_to_file(dhdp->info);
 }
 #endif /* DHD_SSSR_DUMP */
 
@@ -22096,6 +22092,15 @@ dhd_debug_info_dump(void)
 	DHD_OS_WAKE_UNLOCK(dhdp);
 }
 EXPORT_SYMBOL(dhd_debug_info_dump);
+
+void
+dhd_smmu_fault_handler(uint32 axid, ulong fault_addr)
+{
+	DHD_ERROR(("%s: Trigger SMMU Fault\n", __FUNCTION__));
+	DHD_ERROR(("%s: axid:0x%x, fault_addr:0x%lx", __FUNCTION__, axid, fault_addr));
+	dhd_debug_info_dump();
+}
+EXPORT_SYMBOL(dhd_smmu_fault_handler);
 #endif /* DHD_MAP_LOGGING */
 int
 dhd_get_host_whitelist_region(void *buf, uint len)

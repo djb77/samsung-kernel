@@ -1,5 +1,6 @@
 #ifndef _LINUX_MPSD_H
 #define _LINUX_MPSD_H
+#include <linux/sched.h>
 
 #define MPSD_KMD_VERSION (1)
 
@@ -106,7 +107,7 @@ enum app_param {
  * This structure contains all the application specific kernel parameters.
  */
 struct app_params_struct {
-	char name[MAX_CHAR_BUF_SIZE];
+	char name[TASK_COMM_LEN];
 	signed long long tgid;
 	signed long long flags;
 	signed long long priority;

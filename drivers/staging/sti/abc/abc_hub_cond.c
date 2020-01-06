@@ -88,11 +88,11 @@ static irqreturn_t abc_hub_cond_interrupt_handler(int irq, void *handle)
 			 */
 			if (gpio_get_value(pinfo->pdata->cond_pdata.irq_gpio[i])) {
 				if (i == 0)
-					abc_hub_send_event("MODULE:cond@ERROR:ub");
+					abc_hub_send_event("MODULE=cond@ERROR=ub");
 				else if (i == 1)
-					abc_hub_send_event("MODULE:cond@ERROR:sub");
+					abc_hub_send_event("MODULE=cond@ERROR=sub");
 				else
-					abc_hub_send_event("MODULE:cond@ERROR:cam");
+					abc_hub_send_event("MODULE=cond@ERROR=cam");
 			}
 		}
 	}

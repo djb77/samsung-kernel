@@ -706,7 +706,7 @@ void object_err(struct kmem_cache *s, struct page *page,
 	pr_auto_disable(7);
 }
 
-static void slab_err(struct kmem_cache *s, struct page *page,
+static __printf(3, 4) void slab_err(struct kmem_cache *s, struct page *page,
 			const char *fmt, ...)
 {
 	va_list args;

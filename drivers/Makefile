@@ -104,6 +104,7 @@ obj-$(CONFIG_TC)		+= tc/
 obj-$(CONFIG_UWB)		+= uwb/
 obj-$(CONFIG_USB_PHY)		+= usb/
 obj-$(CONFIG_USB)		+= usb/
+obj-$(CONFIG_USB_SUPPORT)	+= usb/
 obj-$(CONFIG_PCI)		+= usb/
 obj-$(CONFIG_USB_GADGET)	+= usb/
 obj-$(CONFIG_OF)		+= usb/
@@ -210,8 +211,13 @@ obj-$(CONFIG_EXYNOS_BTS)	+= bts/
 # Mobicore driver
 obj-$(CONFIG_TRUSTONIC_TEE)     += gud/
 
+obj-$(CONFIG_TEE)		+= tee/
+
 # FIVE TEE driver
 obj-$(CONFIG_FIVE_TEE_DRIVER)	+= five/
+
+# ICDriver
+obj-$(CONFIG_ICD)		+= security/samsung/icdrv/
 
 # Vision driver
 obj-$(CONFIG_VISION_SUPPORT)	+= vision/
@@ -225,7 +231,4 @@ obj-$(CONFIG_UH)		+= uh/
 #MPSD driver
 obj-$(CONFIG_MPSD)	+= mpsd/
 
-#$(info kpermon_CURDIR="$(shell pwd)")
-ifeq (exist, $(shell [ -e ../../system/core/liblog/include/log/perflog.h ] && echo exist))
-	obj-y				+= kperfmon/
-endif
+obj-y				+= kperfmon/

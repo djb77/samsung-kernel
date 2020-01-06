@@ -366,23 +366,32 @@ void init_cisd_pad_data(struct cisd* cisd)
 	}
 
 	/* create dummy data */
-	cisd->pad_count = 0;
 	cisd->pad_array = create_pad_data(0, 0);
 	if (cisd->pad_array == NULL)
-		return;
+		goto err_create_dummy_data;
 	temp_data = create_pad_data(MAX_PAD_ID, 0);
 	if (temp_data == NULL) {
 		kfree(cisd->pad_array);
-		return;
+		cisd->pad_array = NULL;
+		goto err_create_dummy_data;
 	}
+	cisd->pad_count = 0;
 	cisd->pad_array->next = temp_data;
 	temp_data->prev = cisd->pad_array;
+
+err_create_dummy_data:
 	mutex_unlock(&cisd->padlock);
 }
 
 void count_cisd_pad_data(struct cisd* cisd, unsigned int pad_id)
 {
 	struct pad_data* pad_data;
+
+	if (cisd->pad_array == NULL) {
+		pr_info("%s: can't update the connected count of pad_id(0x%x) because of null\n",
+			__func__, pad_id);
+		return;
+	}
 
 	mutex_lock(&cisd->padlock);
 	if ((pad_data = find_pad_data_by_id(cisd, pad_id)) != NULL)
@@ -428,7 +437,7 @@ void set_cisd_pad_data(struct sec_battery_info *battery, const char* buf)
 	int i, x;
 
 	pr_info("%s: %s\n", __func__, buf);
-	if (sscanf(buf, "%10d%n", &pad_index, &x) <= 0) {
+	if (sscanf(buf, "%10d %n", &pad_index, &x) <= 0) {
 		pr_info("%s: failed to read pad index\n", __func__);
 		return;
 	}
@@ -438,9 +447,14 @@ void set_cisd_pad_data(struct sec_battery_info *battery, const char* buf)
 	if (pcisd->pad_count > 0)
 		init_cisd_pad_data(pcisd);
 
+	if (pcisd->pad_array == NULL) {
+		pr_info("%s: can't set the pad data because of null\n", __func__);
+		return;
+	}
+
 	if (!pad_index) {
 		for (i = WC_DATA_INDEX + 1; i < WC_DATA_MAX; i++) {
-			if (sscanf(buf, "%10d%n", &pad_count, &x) <= 0)
+			if (sscanf(buf, "%10d %n", &pad_count, &x) <= 0)
 				break;
 			buf += (size_t)x;
 
@@ -456,14 +470,14 @@ void set_cisd_pad_data(struct sec_battery_info *battery, const char* buf)
 			}
 		}
 	} else {
-		if ((sscanf(buf + 1, "%10d%n", &pad_total_count, &x) <= 0) ||
+		if ((sscanf(buf, "%10d %n", &pad_total_count, &x) <= 0) ||
 			(pad_total_count >= MAX_PAD_ID))
 			return;
-		buf += (size_t)(x + 1);
+		buf += (size_t)x;
 
 		pr_info("%s: add pad data(count: %d)\n", __func__, pad_total_count);
 		for (i = 0; i < pad_total_count; i++) {
-			if (sscanf(buf, " 0x%02x:%10d%n", &pad_id, &pad_count, &x) != 2) {
+			if (sscanf(buf, "0x%02x:%10d %n", &pad_id, &pad_count, &x) != 2) {
 				pr_info("%s: failed to read pad data(0x%x, %d, %d)!!!re-init pad data\n",
 					__func__, pad_id, pad_count, x);
 				init_cisd_pad_data(pcisd);

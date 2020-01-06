@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* START_OF_KNOX_NPA */
+// KNOX NPA - START
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -70,6 +70,10 @@ static unsigned int ncm_activated_flag = 1;
 
 static unsigned int ncm_deactivated_flag; // default = 0
 
+static unsigned int intermediate_activated_flag = 1;
+
+static unsigned int intermediate_deactivated_flag; // default = 0
+
 static unsigned int device_open_count; // default = 0
 
 static int ncm_activated_type = NCM_FLOW_TYPE_DEFAULT;
@@ -88,6 +92,10 @@ wait_queue_head_t ncm_wq;
 
 static atomic_t isNCMEnabled = ATOMIC_INIT(0);
 
+static atomic_t isIntermediateFlowEnabled = ATOMIC_INIT(0);
+
+static unsigned int intermediate_flow_timeout; // default = 0
+
 extern struct knox_socket_metadata knox_socket_metadata;
 
 DECLARE_KFIFO(knox_sock_info, struct knox_socket_metadata, FIFO_SIZE);
@@ -97,6 +105,12 @@ unsigned int check_ncm_flag(void) {
 	return atomic_read(&isNCMEnabled);
 }
 EXPORT_SYMBOL(check_ncm_flag);
+
+/* This function is used to check if ncm feature has been enabled with intermediate flow feature */
+unsigned int check_intermediate_flag(void) {
+	return atomic_read(&isIntermediateFlowEnabled);
+}
+EXPORT_SYMBOL(check_intermediate_flag);
 
 /** The funcation is used to chedk if the kfifo is active or not;
  *  If the kfifo is active, then the socket metadata would be inserted into the queue which will be read by the user-space;
@@ -219,10 +233,29 @@ static void update_ncm_flag(unsigned int ncmFlag) {
 		atomic_set(&isNCMEnabled, ncm_deactivated_flag);
 }
 
+/* The function is used to update the flag indicating whether the intermediate flow feature has been enabled or not */
+static void update_intermediate_flag(unsigned int ncmIntermediateFlag) {
+	if (ncmIntermediateFlag == intermediate_activated_flag)
+		atomic_set(&isIntermediateFlowEnabled, intermediate_activated_flag);
+	else
+		atomic_set(&isIntermediateFlowEnabled, intermediate_deactivated_flag);
+}
+
 /* The function is used to update the flag indicating start or stop flow  */
 static void update_ncm_flow_type(int ncmFlowType) {
 	ncm_activated_type = ncmFlowType;
 }
+
+/* This function is used to update the intermediate flow timeout value */
+static void update_intermediate_timeout(unsigned int timeout) {
+	intermediate_flow_timeout = timeout;
+}
+
+/* This function is used to get the intermediate flow timeout value */
+unsigned int get_intermediate_timeout(void) {
+	return intermediate_flow_timeout; 
+}
+EXPORT_SYMBOL(get_intermediate_timeout);
 
 /* IPv4 hook function to copy information from struct socket into struct nf_conn during first packet of the network flow */
 static unsigned int hook_func_ipv4_out_conntrack(void *priv, struct sk_buff *skb, const struct nf_hook_state *state) {
@@ -232,15 +265,40 @@ static unsigned int hook_func_ipv4_out_conntrack(void *priv, struct sk_buff *skb
 	struct udphdr *udp_header = NULL;
 	struct nf_conn *ct = NULL;
 	enum ip_conntrack_info ctinfo;
+	struct nf_conntrack_tuple *tuple = NULL;
+	char srcaddr[INET6_ADDRSTRLEN_NAP];
+	char dstaddr[INET6_ADDRSTRLEN_NAP];
 
-	if ( (skb) && (skb->sk) && (skb->dev) ) {
+	if ( (skb) && (skb->sk) ) {
 		if ( (skb->sk->knox_pid == INIT_PID_NAP) && (skb->sk->knox_uid == INIT_UID_NAP) && (skb->sk->sk_protocol == IPPROTO_TCP) ) {
 			return NF_ACCEPT;
 		}
 		if ( (skb->sk->sk_protocol == IPPROTO_UDP) || (skb->sk->sk_protocol == IPPROTO_TCP) || (skb->sk->sk_protocol == IPPROTO_ICMP) || (skb->sk->sk_protocol == IPPROTO_SCTP) || (skb->sk->sk_protocol == IPPROTO_ICMPV6) ) {
 			ct = nf_ct_get(skb, &ctinfo);
-			if ( (ct) && (!atomic_read(&ct->startFlow)) ) {
+			if ( (ct) && (!atomic_read(&ct->startFlow)) && (!nf_ct_is_dying(ct)) ) {
+				tuple = &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
+				if (tuple) {
+					sprintf(srcaddr,"%pI4",(void *)&tuple->src.u3.ip);
+					sprintf(dstaddr,"%pI4",(void *)&tuple->dst.u3.ip);
+					if ( isIpv4AddressEqualsNull(srcaddr, dstaddr) ) {
+						return NF_ACCEPT;	
+					}	
+				} else {
+					return NF_ACCEPT;
+				}
 				atomic_set(&ct->startFlow, 1);
+				if ( check_intermediate_flag() ) {
+					/* Use 'atomic_set(&ct->intermediateFlow, 1); ct->npa_timeout = ((u32)(jiffies)) + (get_intermediate_timeout() * HZ);' if struct nf_conn->timeout is of type u32; */
+					ct->npa_timeout = ((u32)(jiffies)) + (get_intermediate_timeout() * HZ);
+					atomic_set(&ct->intermediateFlow, 1);
+					/* Use 'unsigned long timeout = ct->timeout.expires - jiffies;
+							if ( (timeout > 0) && ((timeout/HZ) > 5) ) {
+								atomic_set(&ct->intermediateFlow, 1);
+								ct->npa_timeout.expires = (jiffies) + (get_intermediate_timeout() * HZ);
+								add_timer(&ct->npa_timeout);
+							}'
+					if struct nf_conn->timeout is of type struct timer_list; */
+				}
 				ct->knox_uid = skb->sk->knox_uid;
 				ct->knox_pid = skb->sk->knox_pid;
 				memcpy(ct->process_name,skb->sk->process_name,sizeof(ct->process_name)-1);
@@ -248,7 +306,11 @@ static unsigned int hook_func_ipv4_out_conntrack(void *priv, struct sk_buff *skb
 				ct->knox_ppid = skb->sk->knox_ppid;
 				memcpy(ct->parent_process_name,skb->sk->parent_process_name,sizeof(ct->parent_process_name)-1);
 				memcpy(ct->domain_name,skb->sk->domain_name,sizeof(ct->domain_name)-1);
-				memcpy(ct->interface_name,skb->dev->name,sizeof(ct->interface_name)-1);
+				if ( (skb->dev) ) {
+					memcpy(ct->interface_name,skb->dev->name,sizeof(ct->interface_name)-1);
+				} else {
+					sprintf(ct->interface_name,"%s","null");
+				}
 				ip_header = (struct iphdr *)skb_network_header(skb);
 				if ( (ip_header) && (ip_header->protocol == IPPROTO_UDP) ) {
 					udp_header = (struct udphdr *)skb_transport_header(skb);
@@ -282,7 +344,7 @@ static unsigned int hook_func_ipv4_out_conntrack(void *priv, struct sk_buff *skb
 					ct->knox_sent = 0;
 				}
 				knox_collect_conntrack_data(ct, NCM_FLOW_TYPE_OPEN, 1);
-			} else if (ct) {
+			} else if ( (ct) && (!nf_ct_is_dying(ct)) ) {
 				ip_header = (struct iphdr *)skb_network_header(skb);
 				if ( (ip_header) && (ip_header->protocol == IPPROTO_UDP) ) {
 					udp_header = (struct udphdr *)skb_transport_header(skb);
@@ -319,15 +381,40 @@ static unsigned int hook_func_ipv6_out_conntrack(void *priv, struct sk_buff *skb
 	struct udphdr *udp_header = NULL;
 	struct nf_conn *ct = NULL;
 	enum ip_conntrack_info ctinfo;
+	struct nf_conntrack_tuple *tuple = NULL;
+	char srcaddr[INET6_ADDRSTRLEN_NAP];
+	char dstaddr[INET6_ADDRSTRLEN_NAP];
 
-	if ( (skb) && (skb->sk) && (skb->dev) ) {
+	if ( (skb) && (skb->sk) ) {
 		if ( (skb->sk->knox_pid == INIT_PID_NAP) && (skb->sk->knox_uid == INIT_UID_NAP) && (skb->sk->sk_protocol == IPPROTO_TCP) ) {
 			return NF_ACCEPT;
 		}
 		if ( (skb->sk->sk_protocol == IPPROTO_UDP) || (skb->sk->sk_protocol == IPPROTO_TCP) || (skb->sk->sk_protocol == IPPROTO_ICMP) || (skb->sk->sk_protocol == IPPROTO_SCTP) || (skb->sk->sk_protocol == IPPROTO_ICMPV6) ) {
 			ct = nf_ct_get(skb, &ctinfo);
-			if ( (ct) && (!atomic_read(&ct->startFlow)) ) {
+			if ( (ct) && (!atomic_read(&ct->startFlow)) && (!nf_ct_is_dying(ct)) ) {
+				tuple = &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
+				if (tuple) {
+					sprintf(srcaddr,"%pI6",(void *)&tuple->src.u3.ip6);
+					sprintf(dstaddr,"%pI6",(void *)&tuple->dst.u3.ip6);
+					if ( isIpv6AddressEqualsNull(srcaddr, dstaddr) ) {
+						return NF_ACCEPT;	
+					}	
+				} else {
+					return NF_ACCEPT;
+				}
 				atomic_set(&ct->startFlow, 1);
+				if ( check_intermediate_flag() ) {
+					/* Use 'atomic_set(&ct->intermediateFlow, 1); ct->npa_timeout = ((u32)(jiffies)) + (get_intermediate_timeout() * HZ);' if struct nf_conn->timeout is of type u32; */
+					ct->npa_timeout = ((u32)(jiffies)) + (get_intermediate_timeout() * HZ);
+					atomic_set(&ct->intermediateFlow, 1);
+					/* Use 'unsigned long timeout = ct->timeout.expires - jiffies;
+							if ( (timeout > 0) && ((timeout/HZ) > 5) ) {
+								atomic_set(&ct->intermediateFlow, 1);
+								ct->npa_timeout.expires = (jiffies) + (get_intermediate_timeout() * HZ);
+								add_timer(&ct->npa_timeout);
+							}'
+					if struct nf_conn->timeout is of type struct timer_list; */
+				}
 				ct->knox_uid = skb->sk->knox_uid;
 				ct->knox_pid = skb->sk->knox_pid;
 				memcpy(ct->process_name,skb->sk->process_name,sizeof(ct->process_name)-1);
@@ -335,7 +422,11 @@ static unsigned int hook_func_ipv6_out_conntrack(void *priv, struct sk_buff *skb
 				ct->knox_ppid = skb->sk->knox_ppid;
 				memcpy(ct->parent_process_name,skb->sk->parent_process_name,sizeof(ct->parent_process_name)-1);
 				memcpy(ct->domain_name,skb->sk->domain_name,sizeof(ct->domain_name)-1);
-				memcpy(ct->interface_name,skb->dev->name,sizeof(ct->interface_name)-1);
+				if ( (skb->dev) ) {
+					memcpy(ct->interface_name,skb->dev->name,sizeof(ct->interface_name)-1);
+				} else {
+					sprintf(ct->interface_name,"%s","null");
+				}
 				ipv6_header = (struct ipv6hdr *)skb_network_header(skb);
 				if ( (ipv6_header) && (ipv6_header->nexthdr == IPPROTO_UDP) ) {
 					udp_header = (struct udphdr *)skb_transport_header(skb);
@@ -369,7 +460,7 @@ static unsigned int hook_func_ipv6_out_conntrack(void *priv, struct sk_buff *skb
 					ct->knox_sent = 0;
 				}
 				knox_collect_conntrack_data(ct, NCM_FLOW_TYPE_OPEN, 2);
-			} else if (ct) {
+			} else if ( (ct) && (!nf_ct_is_dying(ct)) ) {
 				ipv6_header = (struct ipv6hdr *)skb_network_header(skb);
 				if ( (ipv6_header) && (ipv6_header->nexthdr == IPPROTO_UDP) ) {
 					udp_header = (struct udphdr *)skb_transport_header(skb);
@@ -410,7 +501,7 @@ static unsigned int hook_func_ipv4_in_conntrack(void *priv, struct sk_buff *skb,
 		ip_header = (struct iphdr *)skb_network_header(skb);
 		if ( (ip_header) && (ip_header->protocol == IPPROTO_TCP || ip_header->protocol == IPPROTO_UDP || ip_header->protocol == IPPROTO_SCTP || ip_header->protocol == IPPROTO_ICMP || ip_header->protocol == IPPROTO_ICMPV6) ) {		
 			ct = nf_ct_get(skb, &ctinfo);
-			if (ct) {
+			if ( (ct) && (!nf_ct_is_dying(ct)) ) {
 				if (ip_header->protocol == IPPROTO_TCP) {
 					tcp_header = (struct tcphdr *)skb_transport_header(skb);
 					if (tcp_header) {
@@ -450,7 +541,7 @@ static unsigned int hook_func_ipv6_in_conntrack(void *priv, struct sk_buff *skb,
 		ipv6_header = (struct ipv6hdr *)skb_network_header(skb);
 		if ( (ipv6_header) && (ipv6_header->nexthdr == IPPROTO_TCP || ipv6_header->nexthdr == IPPROTO_UDP || ipv6_header->nexthdr == IPPROTO_SCTP || ipv6_header->nexthdr == IPPROTO_ICMP || ipv6_header->nexthdr == IPPROTO_ICMPV6) ) {
 			ct = nf_ct_get(skb, &ctinfo);
-			if (ct) {
+			if ( (ct) && (!nf_ct_is_dying(ct)) ) {
 				if (ipv6_header->nexthdr == IPPROTO_TCP) {
 					tcp_header = (struct tcphdr *)skb_transport_header(skb);
 					if (tcp_header) {
@@ -561,6 +652,9 @@ void knox_collect_conntrack_data(struct nf_conn *ct, int startStop, int where) {
 		} else if (startStop == NCM_FLOW_TYPE_CLOSE) {
 			close_timespec = current_kernel_time();
 			ksm->close_time = close_timespec.tv_sec;
+		} else if (startStop == NCM_FLOW_TYPE_INTERMEDIATE) {
+			close_timespec = current_kernel_time();
+			ksm->close_time = close_timespec.tv_sec;
 		}
 		ksm->knox_puid = ct->knox_puid;
 		ksm->knox_ppid = ct->knox_ppid;
@@ -578,10 +672,14 @@ void knox_collect_conntrack_data(struct nf_conn *ct, int startStop, int where) {
 			ksm->knox_uid_dns = ksm->knox_puid;
 		}
 		memcpy(ksm->interface_name, ct->interface_name, sizeof(ksm->interface_name)-1);
-		if (where == 10) {
-			ksm->flow_type = 2;
-		} else {
+		if (startStop == NCM_FLOW_TYPE_OPEN) {
 			ksm->flow_type = 1;
+		} else if (startStop == NCM_FLOW_TYPE_CLOSE) {
+			ksm->flow_type = 2;
+		} else if (startStop == NCM_FLOW_TYPE_INTERMEDIATE) {
+			ksm->flow_type = 3;
+		} else {
+			ksm->flow_type = 0;
 		}
 		insert_data_kfifo_kthread(ksm);
 	}
@@ -599,11 +697,6 @@ static int ncm_open(struct inode *inode, struct file *file) {
 
 	if (!is_system_server()) {
 		NCM_LOGE("ncm_open failed:Caller is a non system process with uid %u \n", (current_uid().val));
-		return -EACCES;
-	}
-
-	if (((file->f_flags & O_ACCMODE) == O_WRONLY) || ((file->f_flags & O_ACCMODE) == O_RDWR)) {
-		NCM_LOGE("ncm_open failed:Trying to open in write mode \n");
 		return -EACCES;
 	}
 
@@ -745,6 +838,25 @@ static ssize_t ncm_read(struct file *file, char __user *buf, size_t count, loff_
 	return 0;
 }
 
+static ssize_t ncm_write(struct file *file, const char __user *buf, size_t count, loff_t *off) {
+	char intermediate_string[6];
+	int ret = 0;
+	int intermediate_value = 0;
+	if (!is_system_server()) {
+		NCM_LOGE("ncm_write failed:Caller is a non system process with uid %u \n", (current_uid().val));
+		return -EACCES;
+	}
+	memset(intermediate_string,'\0',sizeof(intermediate_string));
+	ret = copy_from_user(intermediate_string,buf,sizeof(intermediate_string)-1);
+	intermediate_value = simple_strtol(intermediate_string, NULL, 10);
+	if (intermediate_value > 0) {
+		update_intermediate_timeout(intermediate_value);
+		update_intermediate_flag(intermediate_activated_flag);
+		return strlen(intermediate_string);
+	}
+	return intermediate_value;
+}
+
 /* The function closes the char device */
 static int ncm_close(struct inode *inode, struct file *file) {
 	NCM_LOGD("ncm_close is being called \n");
@@ -786,6 +898,8 @@ static long ncm_ioctl_evt(struct file *file, unsigned int cmd, unsigned long arg
 		NCM_LOGD("ncm_ioctl_evt is being NCM_ACTIVATED with the ioctl command %u \n", cmd);
 		if (check_ncm_flag())
 			return SUCCESS;
+		update_intermediate_timeout(0);
+		update_intermediate_flag(intermediate_deactivated_flag);
 		registerNetfilterHooks();
 		initialize_kfifo();
 		initialize_ncmworkqueue();
@@ -797,6 +911,8 @@ static long ncm_ioctl_evt(struct file *file, unsigned int cmd, unsigned long arg
 		NCM_LOGD("ncm_ioctl_evt is being NCM_ACTIVATED with the ioctl command %u \n", cmd);
 		if (check_ncm_flag())
 			return SUCCESS;
+		update_intermediate_timeout(0);
+		update_intermediate_flag(intermediate_deactivated_flag);
 		registerNetfilterHooks();
 		initialize_kfifo();
 		initialize_ncmworkqueue();
@@ -808,10 +924,12 @@ static long ncm_ioctl_evt(struct file *file, unsigned int cmd, unsigned long arg
 		NCM_LOGD("ncm_ioctl_evt is being NCM_DEACTIVATED with the ioctl command %u \n", cmd);
 		if (!check_ncm_flag())
 			return SUCCESS;
+		update_intermediate_flag(intermediate_deactivated_flag);
 		update_ncm_flow_type(NCM_FLOW_TYPE_DEFAULT);
 		update_ncm_flag(ncm_deactivated_flag);
 		free_kfifo();
 		unregisterNetFilterHooks();
+		update_intermediate_timeout(0);
 		break;
 	}
 	case NCM_GETVERSION: {
@@ -860,6 +978,7 @@ static const struct file_operations ncm_fops = {
 	.owner          = THIS_MODULE,
 	.open           = ncm_open,
 	.read           = ncm_read,
+	.write          = ncm_write,
 	.release        = ncm_close,
 	.unlocked_ioctl = ncm_ioctl_evt,
 	.compat_ioctl   = ncm_ioctl_evt,
@@ -894,4 +1013,4 @@ module_exit(ncm_exit)
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Network Context Metadata Module:");
 
-/* END_OF_KNOX_NPA */
+// KNOX NPA - END

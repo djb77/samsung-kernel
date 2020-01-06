@@ -609,11 +609,19 @@ struct sec_age_data {
 	unsigned int recharge_condition_vcell;
 	unsigned int full_condition_vcell;
 	unsigned int full_condition_soc;
+#if defined(CONFIG_BATTERY_AGE_FORECAST_B2B)
+	unsigned int max_charging_current;
+#endif
 };
 
 #define sec_age_data_t \
 	struct sec_age_data
 #endif
+
+typedef struct {
+	unsigned int cycle;
+	unsigned int asoc;
+} battery_health_condition;
 
 struct sec_battery_platform_data {
 	/* NO NEED TO BE CHANGED */
@@ -892,6 +900,8 @@ struct sec_battery_platform_data {
 	int age_data_length;
 	sec_age_data_t* age_data;
 #endif
+	battery_health_condition* health_condition;
+
 	int siop_input_limit_current;
 	int siop_charging_limit_current;
 	int siop_hv_input_limit_current;
@@ -904,6 +914,10 @@ struct sec_battery_platform_data {
 	int siop_hv_wireless_input_limit_current;
 	int siop_hv_wireless_charging_limit_current;
 	int wireless_otg_input_current;
+
+	/* if siop level 0, set minimum fast charging current */
+	int minimum_charging_current_by_siop_0;
+
 	int wc_hero_stand_cc_cv;
 	int wc_hero_stand_cv_current;
 	int wc_hero_stand_hv_cv_current;
@@ -966,6 +980,7 @@ struct sec_charger_platform_data {
 	int irq_gpio;
 	int chg_irq;
 	unsigned long chg_irq_attr;
+	unsigned int chg_ocp_current;
 
 	/* otg_en setting */
 	int otg_en;

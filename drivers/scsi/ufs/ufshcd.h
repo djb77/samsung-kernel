@@ -215,6 +215,17 @@ struct ufs_dev_cmd {
 	struct ufs_query query;
 };
 
+struct ufs_desc_size {
+	int dev_desc;
+	int pwr_desc;
+	int geom_desc;
+	int interc_desc;
+	int unit_desc;
+	int conf_desc;
+	int hlth_desc;
+	int str_desc;
+};
+
 /**
  * ufs_hba_variant: host specific data
  */
@@ -519,6 +530,7 @@ struct SEC_UFS_counting {
  * @clk_list_head: UFS host controller clocks list node head
  * @pwr_info: holds current power mode
  * @max_pwr_info: keeps the device max valid pwm
+ * @desc_size: descriptor sizes reported by device
  * @urgent_bkops_lvl: keeps track of urgent bkops level for device
  * @is_urgent_bkops_lvl_checked: keeps track if the urgent bkops level for
  *  device is known or not.
@@ -692,8 +704,18 @@ struct ufs_hba {
 	 * CAUTION: Enabling this might reduce overall UFS throughput.
 	 */
 #define UFSHCD_CAP_INTR_AGGR (1 << 4)
+
+	/*
+	 * This capability allows the device auto-bkops to be always enabled
+	 * except during suspend (both runtime and suspend).
+	 * Enabling this capability means that device will always be allowed
+	 * to do background operation when it's active but it might degrade
+	 * the performance of ongoing read/write operations.
+	 */
+#define UFSHCD_CAP_KEEP_AUTO_BKOPS_ENABLED_EXCEPT_SUSPEND (1 << 5)
+
 	/* Allow only hibern8 without clk gating */
-#define UFSHCD_CAP_FAKE_CLK_GATING (1 << 5)
+#define UFSHCD_CAP_FAKE_CLK_GATING (1 << 6)
 
 	struct devfreq *devfreq;
 	struct ufs_clk_scaling clk_scaling;
@@ -712,9 +734,14 @@ struct ufs_hba {
 
 	enum bkops_status urgent_bkops_lvl;
 	bool is_urgent_bkops_lvl_checked;
+
+	struct ufs_desc_size desc_size;
+
 	int latency_hist_enabled;
 	struct io_latency_state io_lat_s;
 	struct ufs_secure_log secure_log;
+	struct io_latency_state io_lat_read;
+	struct io_latency_state io_lat_write;
 
 #if defined(SEC_UFS_ERROR_COUNT)
 	struct SEC_UFS_counting SEC_err_info;
@@ -826,6 +853,11 @@ static inline void *ufshcd_get_variant(struct ufs_hba *hba)
 	BUG_ON(!hba);
 	return hba->priv;
 }
+static inline bool ufshcd_keep_autobkops_enabled_except_suspend(
+							struct ufs_hba *hba)
+{
+	return hba->caps & UFSHCD_CAP_KEEP_AUTO_BKOPS_ENABLED_EXCEPT_SUSPEND;
+}
 
 extern int ufshcd_runtime_suspend(struct ufs_hba *hba);
 extern int ufshcd_runtime_resume(struct ufs_hba *hba);
@@ -907,6 +939,10 @@ int ufshcd_query_flag(struct ufs_hba *hba, enum query_opcode opcode,
 	enum flag_idn idn, bool *flag_res);
 int ufshcd_hold(struct ufs_hba *hba, bool async);
 void ufshcd_release(struct ufs_hba *hba);
+
+int ufshcd_map_desc_id_to_length(struct ufs_hba *hba, enum desc_idn desc_id,
+	int *desc_length);
+
 u32 ufshcd_get_local_unipro_ver(struct ufs_hba *hba);
 
 /* Wrapper functions for safely calling variant operations */

@@ -476,7 +476,14 @@ config USB_CONFIGFS_F_CONN_GADGET
         depends on USB_CONFIGFS
         select USB_F_CONN_GADGET
         help
-          SydeSync
+          SideSync
+
+config USB_F_CONN_GADGET_NDOP
+    bool "Conn gadget that do not support DexLive"
+    depends on USB_CONFIGFS_F_CONN_GADGET
+	depends on ANDROID_MAJOR_VERSION >= "q"
+    help
+		Next SideSync
 
 config USB_CONFIGFS_F_ACC
 	boolean "Accessory gadget"

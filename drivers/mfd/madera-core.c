@@ -842,11 +842,18 @@ int madera_dev_init(struct madera *madera)
 		goto err_pm_runtime;
 	}
 
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+        sec_audio_bootlog(6, madera->dev, "%s: done\n", __func__);
+#endif
+
 	return 0;
 
 err_pm_runtime:
 	pm_runtime_disable(madera->dev);
 err_reset:
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+	sec_audio_bootlog(3, madera->dev, "%s: madera init failed\n", __func__);
+#endif
 	madera_enable_hard_reset(madera);
 	regulator_disable(madera->dcvdd);
 err_enable:

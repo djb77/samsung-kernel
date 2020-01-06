@@ -27,7 +27,8 @@ choice
 	depends on MALI_THEX
 	default MALI_THEX_R9P0 if ANDROID_VERSION = "80000"
 	default MALI_THEX_R12P0 if ANDROID_VERSION = "80100"
-	default MALI_THEX_R16P0 if ANDROID_VERSION >= "90000"
+	default MALI_THEX_R16P0 if ANDROID_VERSION = "90000"
+	default MALI_BIFROST_R19P0_Q if ANDROID_VERSION >= "100000"
 	help
 	  Select the gpu support version.
 
@@ -59,6 +60,10 @@ config MALI_THEX_R16P0
 	depends on MALI_THEX
 	bool "Heimdall r16p0 driver"
 
+config MALI_BIFROST_R19P0_Q
+	depends on MALI_THEX
+	bool "Bifrost r19p0 driver for Android Q"
+
 endchoice
 
 if MALI_THEX_R5P0
@@ -82,3 +87,7 @@ endif
 if MALI_THEX_R16P0
 source "drivers/gpu/arm/tHEx/b_r16p0/Kconfig"
 endif
+if MALI_BIFROST_R19P0_Q
+source "drivers/gpu/arm/b_r19p0/Kconfig"
+endif
+

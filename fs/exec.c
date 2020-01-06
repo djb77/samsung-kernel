@@ -1245,15 +1245,14 @@ killed:
 	return -EAGAIN;
 }
 
-char *get_task_comm(char *buf, struct task_struct *tsk)
+char *__get_task_comm(char *buf, size_t buf_size, struct task_struct *tsk)
 {
-	/* buf must be at least sizeof(tsk->comm) in size */
 	task_lock(tsk);
-	strncpy(buf, tsk->comm, sizeof(tsk->comm));
+	strncpy(buf, tsk->comm, buf_size);
 	task_unlock(tsk);
 	return buf;
 }
-EXPORT_SYMBOL_GPL(get_task_comm);
+EXPORT_SYMBOL_GPL(__get_task_comm);
 
 /*
  * These functions flushes out all traces of the currently running executable
@@ -1790,7 +1789,8 @@ static int rkp_restrict_fork(struct filename *path)
 {
 	struct cred *shellcred;
 
-	if(!strcmp(path->name,"/system/bin/patchoat")){
+	if (!strcmp(path->name, "/system/bin/patchoat") ||
+	    !strcmp(path->name, "/system/bin/idmap2")) {
 		return 0 ;
 	}
         /* If the Process is from Linux on Dex, 
@@ -1900,7 +1900,7 @@ static int exec_binprm(struct linux_binprm *bprm)
 		ptrace_event(PTRACE_EVENT_EXEC, old_vpid);
 		proc_exec_connector(current);
 	} else {
-		task_integrity_delayed_reset(current);
+		task_integrity_delayed_reset(current, CAUSE_EXEC, bprm->file);
 	}
 
 	return ret;

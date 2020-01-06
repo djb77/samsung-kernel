@@ -97,6 +97,8 @@ enum board_idx {
 	BCM57407_NPAR,
 	BCM57414_NPAR,
 	BCM57416_NPAR,
+	BCM57452,
+	BCM57454,
 	NETXTREME_E_VF,
 	NETXTREME_C_VF,
 };
@@ -131,6 +133,8 @@ static const struct {
 	{ "Broadcom BCM57407 NetXtreme-E Ethernet Partition" },
 	{ "Broadcom BCM57414 NetXtreme-E Ethernet Partition" },
 	{ "Broadcom BCM57416 NetXtreme-E Ethernet Partition" },
+	{ "Broadcom BCM57452 NetXtreme-E 10Gb/25Gb/40Gb/50Gb Ethernet" },
+	{ "Broadcom BCM57454 NetXtreme-E 10Gb/25Gb/40Gb/50Gb/100Gb Ethernet" },
 	{ "Broadcom NetXtreme-E Ethernet Virtual Function" },
 	{ "Broadcom NetXtreme-C Ethernet Virtual Function" },
 };
@@ -166,6 +170,8 @@ static const struct pci_device_id bnxt_pci_tbl[] = {
 	{ PCI_VDEVICE(BROADCOM, 0x16ed), .driver_data = BCM57414_NPAR },
 	{ PCI_VDEVICE(BROADCOM, 0x16ee), .driver_data = BCM57416_NPAR },
 	{ PCI_VDEVICE(BROADCOM, 0x16ef), .driver_data = BCM57416_NPAR },
+	{ PCI_VDEVICE(BROADCOM, 0x16f1), .driver_data = BCM57452 },
+	{ PCI_VDEVICE(BROADCOM, 0x1614), .driver_data = BCM57454 },
 #ifdef CONFIG_BNXT_SRIOV
 	{ PCI_VDEVICE(BROADCOM, 0x16c1), .driver_data = NETXTREME_E_VF },
 	{ PCI_VDEVICE(BROADCOM, 0x16cb), .driver_data = NETXTREME_C_VF },
@@ -1492,12 +1498,16 @@ static int bnxt_async_event_process(struct bnxt *bp,
 
 		if (BNXT_VF(bp))
 			goto async_event_process_exit;
-		if (data1 & 0x20000) {
+
+		/* print unsupported speed warning in forced speed mode only */
+		if (!(link_info->autoneg & BNXT_AUTONEG_SPEED) &&
+		    (data1 & 0x20000)) {
 			u16 fw_speed = link_info->force_link_speed;
 			u32 speed = bnxt_fw_to_ethtool_speed(fw_speed);
 
-			netdev_warn(bp->dev, "Link speed %d no longer supported\n",
-				    speed);
+			if (speed != SPEED_UNKNOWN)
+				netdev_warn(bp->dev, "Link speed %d no longer supported\n",
+					    speed);
 		}
 		set_bit(BNXT_LINK_SPEED_CHNG_SP_EVENT, &bp->sp_event);
 		/* fall thru */
@@ -2373,6 +2383,18 @@ static int bnxt_init_one_rx_ring(struct bnxt *bp, int ring_nr)
 	}
 
 	return 0;
+}
+
+static void bnxt_init_cp_rings(struct bnxt *bp)
+{
+	int i;
+
+	for (i = 0; i < bp->cp_nr_rings; i++) {
+		struct bnxt_cp_ring_info *cpr = &bp->bnapi[i]->cp_ring;
+		struct bnxt_ring_struct *ring = &cpr->cp_ring_struct;
+
+		ring->fw_ring_id = INVALID_HW_RING_ID;
+	}
 }
 
 static int bnxt_init_rx_rings(struct bnxt *bp)
@@ -3379,6 +3401,9 @@ static int bnxt_hwrm_vnic_set_tpa(struct bnxt *bp, u16 vnic_id, u32 tpa_flags)
 	struct bnxt_vnic_info *vnic = &bp->vnic_info[vnic_id];
 	struct hwrm_vnic_tpa_cfg_input req = {0};
 
+	if (vnic->fw_vnic_id == INVALID_HW_RING_ID)
+		return 0;
+
 	bnxt_hwrm_cmd_hdr_init(bp, &req, HWRM_VNIC_TPA_CFG, -1, -1);
 
 	if (tpa_flags) {
@@ -3794,6 +3819,30 @@ static int hwrm_ring_alloc_send_msg(struct bnxt *bp,
 	return rc;
 }
 
+static int bnxt_hwrm_set_async_event_cr(struct bnxt *bp, int idx)
+{
+	int rc;
+
+	if (BNXT_PF(bp)) {
+		struct hwrm_func_cfg_input req = {0};
+
+		bnxt_hwrm_cmd_hdr_init(bp, &req, HWRM_FUNC_CFG, -1, -1);
+		req.fid = cpu_to_le16(0xffff);
+		req.enables = cpu_to_le32(FUNC_CFG_REQ_ENABLES_ASYNC_EVENT_CR);
+		req.async_event_cr = cpu_to_le16(idx);
+		rc = hwrm_send_message(bp, &req, sizeof(req), HWRM_CMD_TIMEOUT);
+	} else {
+		struct hwrm_func_vf_cfg_input req = {0};
+
+		bnxt_hwrm_cmd_hdr_init(bp, &req, HWRM_FUNC_VF_CFG, -1, -1);
+		req.enables =
+			cpu_to_le32(FUNC_VF_CFG_REQ_ENABLES_ASYNC_EVENT_CR);
+		req.async_event_cr = cpu_to_le16(idx);
+		rc = hwrm_send_message(bp, &req, sizeof(req), HWRM_CMD_TIMEOUT);
+	}
+	return rc;
+}
+
 static int bnxt_hwrm_ring_alloc(struct bnxt *bp)
 {
 	int i, rc = 0;
@@ -3810,6 +3859,12 @@ static int bnxt_hwrm_ring_alloc(struct bnxt *bp)
 			goto err_out;
 		BNXT_CP_DB(cpr->cp_doorbell, cpr->cp_raw_cons);
 		bp->grp_info[i].cp_fw_ring_id = ring->fw_ring_id;
+
+		if (!i) {
+			rc = bnxt_hwrm_set_async_event_cr(bp, ring->fw_ring_id);
+			if (rc)
+				netdev_warn(bp->dev, "Failed to set async event completion ring.\n");
+		}
 	}
 
 	for (i = 0; i < bp->tx_nr_rings; i++) {
@@ -4664,6 +4719,7 @@ static int bnxt_shutdown_nic(struct bnxt *bp, bool irq_re_init)
 
 static int bnxt_init_nic(struct bnxt *bp, bool irq_re_init)
 {
+	bnxt_init_cp_rings(bp);
 	bnxt_init_rx_rings(bp);
 	bnxt_init_tx_rings(bp);
 	bnxt_init_ring_grps(bp, irq_re_init);
@@ -5096,8 +5152,9 @@ static int bnxt_hwrm_phy_qcaps(struct bnxt *bp)
 		bp->lpi_tmr_hi = le32_to_cpu(resp->valid_tx_lpi_timer_high) &
 				 PORT_PHY_QCAPS_RESP_TX_LPI_TIMER_HIGH_MASK;
 	}
-	link_info->support_auto_speeds =
-		le16_to_cpu(resp->supported_speeds_auto_mode);
+	if (resp->supported_speeds_auto_mode)
+		link_info->support_auto_speeds =
+			le16_to_cpu(resp->supported_speeds_auto_mode);
 
 hwrm_phy_qcaps_exit:
 	mutex_unlock(&bp->hwrm_cmd_lock);
@@ -5199,6 +5256,9 @@ static int bnxt_update_link(struct bnxt *bp, bool chng_link_state)
 		link_info->link_up = 0;
 	}
 	mutex_unlock(&bp->hwrm_cmd_lock);
+
+	if (!BNXT_SINGLE_PF(bp))
+		return 0;
 
 	diff = link_info->support_auto_speeds ^ link_info->advertising;
 	if ((link_info->support_auto_speeds | diff) !=

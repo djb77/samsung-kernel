@@ -115,10 +115,10 @@ bool force_trap_bad_h2d_phase = 0;
 
 int dhd_dongle_memsize;
 int dhd_dongle_ramsize;
+struct dhd_bus *g_dhd_bus = NULL;
 static int dhdpcie_checkdied(dhd_bus_t *bus, char *data, uint size);
 static int dhdpcie_bus_readconsole(dhd_bus_t *bus);
 #if defined(DHD_FW_COREDUMP)
-struct dhd_bus *g_dhd_bus = NULL;
 static int dhdpcie_mem_dump(dhd_bus_t *bus);
 #endif /* DHD_FW_COREDUMP */
 
@@ -192,7 +192,7 @@ extern void dhd_prot_set_h2d_max_txpost(dhd_pub_t *dhd, uint16 max_txpost);
 static int dhdpcie_wrt_host_whitelist_region(struct dhd_bus *bus);
 
 #ifdef DHD_SSSR_DUMP
-static int dhdpcie_sssr_dump(dhd_pub_t *dhd);
+int dhdpcie_sssr_dump(dhd_pub_t *dhd);
 #endif /* DHD_SSSR_DUMP */
 
 /* IOVar table */
@@ -638,9 +638,7 @@ int dhdpcie_bus_attach(osl_t *osh, dhd_bus_t **bus_ptr,
 
 		DHD_TRACE(("%s: EXIT SUCCESS\n",
 			__FUNCTION__));
-#ifdef DHD_FW_COREDUMP
 		g_dhd_bus = bus;
-#endif // endif
 		*bus_ptr = bus;
 		return ret;
 	} while (0);
@@ -1749,6 +1747,7 @@ dhdpcie_bus_release(dhd_bus_t *bus)
 		/* Finally free bus info */
 		MFREE(osh, bus, sizeof(dhd_bus_t));
 
+		g_dhd_bus = NULL;
 	}
 
 	DHD_TRACE(("%s: Exit\n", __FUNCTION__));
@@ -3330,9 +3329,7 @@ dhdpcie_checkdied(dhd_bus_t *bus, char *data, uint size)
 		/* save core dump or write to a file */
 		if (bus->dhd->memdump_enabled) {
 #ifdef DHD_SSSR_DUMP
-			if (bus->dhd->sssr_inited) {
-				dhdpcie_sssr_dump(bus->dhd);
-			}
+			bus->dhd->collect_sssr = TRUE;
 #endif /* DHD_SSSR_DUMP */
 			bus->dhd->memdump_type = DUMP_TYPE_DONGLE_TRAP;
 			dhdpcie_mem_dump(bus);
@@ -3507,29 +3504,6 @@ dhd_bus_mem_dump(dhd_pub_t *dhdp)
 	DHD_OS_WAKE_UNLOCK(dhdp);
 	return ret;
 }
-
-int
-dhd_dongle_mem_dump(void)
-{
-	if (!g_dhd_bus) {
-		DHD_ERROR(("%s: Bus is NULL\n", __FUNCTION__));
-		return -ENODEV;
-	}
-
-	dhd_bus_dump_console_buffer(g_dhd_bus);
-	dhd_prot_debug_info_print(g_dhd_bus->dhd);
-
-	g_dhd_bus->dhd->memdump_enabled = DUMP_MEMFILE_BUGON;
-	g_dhd_bus->dhd->memdump_type = DUMP_TYPE_AP_ABNORMAL_ACCESS;
-
-#ifdef DHD_PCIE_RUNTIMEPM
-	dhdpcie_runtime_bus_wake(g_dhd_bus->dhd, TRUE, __builtin_return_address(0));
-#endif /* DHD_PCIE_RUNTIMEPM */
-
-	dhd_bus_mem_dump(g_dhd_bus->dhd);
-	return 0;
-}
-EXPORT_SYMBOL(dhd_dongle_mem_dump);
 #endif	/* DHD_FW_COREDUMP */
 
 int
@@ -9937,7 +9911,7 @@ dhdpcie_sssr_dump_get_after_sr(dhd_pub_t *dhd)
 	return BCME_OK;
 }
 
-static int
+int
 dhdpcie_sssr_dump(dhd_pub_t *dhd)
 {
 	if (!dhd->sssr_inited) {
@@ -9975,16 +9949,11 @@ dhdpcie_sssr_dump(dhd_pub_t *dhd)
 		return BCME_ERROR;
 	}
 
-	dhd_schedule_sssr_dump(dhd);
+	dhd_write_sssr_dump(dhd);
 
 	return BCME_OK;
 }
 
-int
-dhd_bus_sssr_dump(dhd_pub_t *dhd)
-{
-	return dhdpcie_sssr_dump(dhd);
-}
 #endif /* DHD_SSSR_DUMP */
 
 #ifdef DHD_WAKE_STATUS

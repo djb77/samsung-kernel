@@ -82,6 +82,13 @@ config PROC_CHILDREN
 	  Say Y if you are running any user-space software which takes benefit from
 	  this interface. For example, rkt is such a piece of software.
 
+config PROC_UID
+	bool "Include /proc/uid/ files"
+	default y
+	depends on PROC_FS && RT_MUTEXES
+	help
+	Provides aggregated per-uid information under /proc/uid.
+
 config PROC_PARSE_OPTION_ON_MOUNT
 	bool "Parsing mount option on mount"
 	depends on PROC_FS
@@ -99,3 +106,8 @@ config PROC_STLOG
 
 config PROC_DLOG
 	bool "Enable delete logs for improving filesystem debug"
+
+config PROC_TRIGGER_SQLITE_BUG
+	bool "Trigger bug for SQLite debugging"
+	depends on PROC_FS
+	default y if !SAMSUNG_PRODUCT_SHIP && ANDROID_VERSION > "90000"

@@ -190,7 +190,7 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 #endif
 	mapping->private_data = NULL;
 	mapping->writeback_index = 0;
-#ifdef CONFIG_SDP
+#if defined(CONFIG_SDP) && !defined(CONFIG_FSCRYPT_SDP)
 	mapping->userid = 0;
 #endif
 	mapping->fmp_ci.iv = NULL;
@@ -2041,8 +2041,8 @@ void inode_init_owner(struct inode *inode, const struct inode *dir,
 		if (S_ISDIR(mode))
 			mode |= S_ISGID;
 		else if ((mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP) &&
-			!in_group_p(inode->i_gid) &&
-			!capable_wrt_inode_uidgid(dir, CAP_FSETID))
+			 !in_group_p(inode->i_gid) &&
+			 !capable_wrt_inode_uidgid(dir, CAP_FSETID))
 			mode &= ~S_ISGID;
 	} else
 		inode->i_gid = current_fsgid();

@@ -102,8 +102,6 @@ endif
 ifeq ($(filter y,$(CONFIG_ARCH_SM8150) $(CONFIG_SOC_EXYNOS8890)),y)
 	DHDCFLAGS += -DWAKEUP_KSOFTIRQD_POST_NAPI_SCHEDULE
 endif
-	# Extended HANG event with reason codes
-	DHDCFLAGS += -DDHD_USE_EXTENDED_HANG_REASON
 	# DHDCFLAGS += -DDHD_RECOVER_TIMEOUT
 	# HEAP ASLR
 	DHDCFLAGS += -DBCM_ASLR_HEAP
@@ -215,6 +213,8 @@ DHDCFLAGS += -DUNSET_FW_ROAM_WIPHY_FLAG
 DHDCFLAGS += -DCUSTOM_LONG_RETRY_LIMIT=12
 DHDCFLAGS += -DDISABLE_ANDROID_PNO
 DHDCFLAGS += -DSUPPORT_SET_TID
+# Extended HANG event with reason codes
+DHDCFLAGS += -DDHD_USE_EXTENDED_HANG_REASON
 
 # For special PNO Event keep wake lock for 10sec
 DHDCFLAGS += -DCUSTOM_PNO_EVENT_LOCK_xTIME=10
@@ -324,7 +324,7 @@ endif
 endif
 
 # TCP SYNC flood attack block
-DHDCFLAGS += -DDHDTCPSYNC_FLOOD_BLK -DTCP_SYNC_FLOOD_LIMIT=50
+DHDCFLAGS += -DDHDTCPSYNC_FLOOD_BLK -DTCP_SYNC_FLOOD_LIMIT=500
 
 ##############################
 # Android Platform Definition
@@ -592,9 +592,6 @@ ifneq ($(CONFIG_BCM4361),)
  DHDCFLAGS += -DWL_STATIC_IF
  DHDCFLAGS += -DWL_STATIC_IFNAME_PREFIX="\"swlan0\""
 
-#Iface force dev close
-DHDCFLAGS += -DIFACE_HANG_FORCE_DEV_CLOSE
-
 # tput enhancement for PCIE
 ifeq ($(BUS_IFACE_PCIE),y)
   DHDCFLAGS += -DCUSTOM_TCPACK_SUPP_RATIO=15
@@ -719,6 +716,8 @@ ifeq ($(filter y,$(CONFIG_WLAN_GREAT) $(CONFIG_SEC_GREATQLTE_PROJECT) $(CONFIG_S
   DHDCFLAGS += -DBIGDATA_SOFTAP
 # Enable DHD_DUMP_MNGR
   DHDCFLAGS += -DDHD_DUMP_MNGR
+# Iface force dev close
+  DHDCFLAGS += -DIFACE_HANG_FORCE_DEV_CLOSE
 endif
 
 # Use Legacy dump path
@@ -767,14 +766,17 @@ ifneq ($(CONFIG_BCM4359),)
   DHDCFLAGS += -DDISABLE_PM_BCNRX
   DHDCFLAGS += -DWL_STATIC_IF
   DHDCFLAGS += -DWL_STATIC_IFNAME_PREFIX="\"swlan0\""
- #Iface force dev close
-  DHDCFLAGS += -DIFACE_HANG_FORCE_DEV_CLOSE
 
 # Use Legacy dump path
 ifneq ($(USE_LEGACY_DUMP_PATH),)
   DHDCFLAGS += -DDHD_COMMON_DUMP_PATH="\"/data/media/wifi/log/\""
 else
   DHDCFLAGS += -DDHD_COMMON_DUMP_PATH="\"/data/log/wifi/\""
+endif
+
+# Expand TCP tx queue to 10 times of default size
+ifeq ($(CONFIG_WLAN_TSQ_MULTIPLIER),y)
+  DHDCFLAGS += -DTSQ_MULTIPLIER=10
 endif
 
 # tput enhancement for PCIE
@@ -1179,8 +1181,6 @@ ifneq ($(CONFIG_BCM43456),)
   DHDCFLAGS += -DAPSTA_BLOCK_ARP_DURING_DHCP
   DHDCFLAGS += -DWL_STATIC_IF
   DHDCFLAGS += -DWL_STATIC_IFNAME_PREFIX="\"swlan0\""
-# Iface force dev close
-  DHDCFLAGS += -DIFACE_HANG_FORCE_DEV_CLOSE
 endif
 endif
 endif

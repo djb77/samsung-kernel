@@ -154,10 +154,12 @@ static void mfc_qos_set(struct s5p_mfc_ctx *ctx, struct bts_bw *mfc_bw, int i)
 		mfc_qos_operate(ctx, MFC_QOS_BW, i);
 	}
 
+	mutex_lock(&dev->qos_mutex);
 	if (atomic_read(&dev->qos_req_cur) == 0)
 		mfc_qos_operate(ctx, MFC_QOS_ADD, i);
 	else if (atomic_read(&dev->qos_req_cur) != (i + 1))
 		mfc_qos_operate(ctx, MFC_QOS_UPDATE, i);
+	mutex_unlock(&dev->qos_mutex);
 }
 
 static inline unsigned long mfc_qos_get_weighted_mb(struct s5p_mfc_ctx *ctx,
@@ -458,10 +460,12 @@ void s5p_mfc_qos_off(struct s5p_mfc_ctx *ctx)
 	int start_qos_step;
 
 	if (list_empty(&dev->qos_queue)) {
+		mutex_lock(&dev->qos_mutex);
 		if (atomic_read(&dev->qos_req_cur) != 0) {
 			mfc_err_ctx("MFC request count is wrong!\n");
 			mfc_qos_operate(ctx, MFC_QOS_REMOVE, 0);
 		}
+		mutex_unlock(&dev->qos_mutex);
 		return;
 	}
 
@@ -513,10 +517,13 @@ void s5p_mfc_qos_off(struct s5p_mfc_ctx *ctx)
 	if (found)
 		list_del(&ctx->qos_list);
 
-	if (list_empty(&dev->qos_queue) || total_mb == 0)
+	if (list_empty(&dev->qos_queue) || total_mb == 0) {
+		mutex_lock(&dev->qos_mutex);
 		mfc_qos_operate(ctx, MFC_QOS_REMOVE, 0);
-	else
+		mutex_unlock(&dev->qos_mutex);
+	} else {
 		mfc_qos_set(ctx, &mfc_bw, i);
+	}
 }
 #endif
 

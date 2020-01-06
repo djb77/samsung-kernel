@@ -16,6 +16,7 @@
 #include <linux/err.h>
 #include <linux/extcon.h>
 #include <linux/gpio.h>
+#include <linux/of_gpio.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/math64.h>
@@ -35,6 +36,8 @@
 #include <linux/mfd/madera/core.h>
 #include <linux/mfd/madera/pdata.h>
 #include <linux/mfd/madera/registers.h>
+
+#define EXTCON_SEC_PTT
 
 #define MADERA_MAX_MICD_RANGE		8
 
@@ -499,6 +502,23 @@ static const struct madera_hp_tuning cs47l92_hp_tuning[] = {
 		ARRAY_SIZE(cs47l92_high_impedance_patch),
 	},
 };
+
+#ifdef EXTCON_SEC_PTT
+int ptt_micdet_adc;
+int ptt_aux_retry;
+int ptt_aux_val;
+int ptt_irq;
+int ptt_key_sw_en;
+static int set_ptt_key_sw_en(struct madera_extcon *info, int state)
+{
+	if (gpio_is_valid(ptt_key_sw_en)) {
+		gpio_direction_output(ptt_key_sw_en, state);
+		dev_info(info->dev, "%s: state = %d\n", __func__, state);
+	}
+
+	return 0;
+}
+#endif
 
 static ssize_t madera_extcon_show(struct device *dev,
 				  struct device_attribute *attr,
@@ -1311,6 +1331,9 @@ static int madera_hpdet_read(struct madera_extcon *info)
 	}
 
 	dev_info(info->dev, "HPDET read: 0x%x\n", val);
+#ifdef EXTCON_SEC_PTT
+	ptt_aux_val = val;
+#endif
 
 	if (!(val & MADERA_HP_DONE_MASK)) {
 		dev_warn(info->dev, "HPDET did not complete: %x\n", val);
@@ -1399,11 +1422,26 @@ static int madera_hpdet_read(struct madera_extcon *info)
 				hpdet_ext_res_x100 % 100);
 
 			ohms_x100 -= hpdet_ext_res_x100;
+#ifdef EXTCON_SEC_PTT
+			if (ohms_x100 >= 460100 && ohms_x100 <= 610000) {
+				dev_info(info->dev, "set PTT *** FIST ***\n");
+				info->ptt_state = 2;
+				set_ptt_key_sw_en(info, 1);
+			} else if (ohms_x100 >= 610100 && ohms_x100 <= 850000) {
+				dev_info(info->dev, "set PTT *** AMP ***\n");
+				info->ptt_state = 3;
+				set_ptt_key_sw_en(info, 1);
+			} else if (ohms_x100 >= 850100 && ohms_x100 <= 1000000 && ptt_aux_val != 0xffff) {
+				dev_info(info->dev, "set PTT *** HEADSET ***\n");
+				info->ptt_state = 1;
+				set_ptt_key_sw_en(info, 1);
+			}
+#endif
 		}
 	}
 
 done:
-	dev_dbg(info->dev, "HP impedance %d.%02d ohms\n",
+	dev_info(info->dev, "HP impedance %d.%02d ohms\n",
 		ohms_x100 / 100, ohms_x100 % 100);
 
 	return (int)ohms_x100;
@@ -1806,6 +1844,28 @@ int madera_hpdet_reading(struct madera_extcon *info, int val)
 	if (val < 0)
 		return val;
 
+#ifdef EXTCON_SEC_PTT
+	if (val >= 990100 && ptt_micdet_adc > 2147483637) {
+		if (ptt_aux_retry > 3) {
+			dev_info(info->dev, "Aux range counting is done.\n");
+			ptt_aux_retry = 0;
+			ptt_micdet_adc = 0;
+		} else {
+			dev_info(info->dev,
+				 "Aux range detected (cnt %d) with %d ohm\n",
+				 ptt_aux_retry, val);
+			msleep(500);
+			ptt_aux_retry += 1;
+			return -EAGAIN;
+		}
+	} else {
+		ptt_aux_retry = 0;
+		ptt_micdet_adc = 0;
+		dev_info(info->dev,
+			 "Aux re-checking is done %d.\n", ptt_aux_retry);
+	}
+#endif
+
 	madera_set_headphone_imp(info, val);
 
 	if (info->have_mic)
@@ -2117,10 +2177,17 @@ static int madera_micd_button_process(struct madera_extcon *info, int val)
 		for (i = 0; i < info->num_micd_ranges; i++) {
 			if (val <= info->micd_ranges[i].max) {
 				key = info->micd_ranges[i].key;
-				if (info->ptt_state) {
-					key = KEY_HOT;
-					dev_info(info->dev, "ptt key\n");
+#ifdef EXTCON_SEC_PTT
+				if (info->ptt_state != 0
+					&& key != KEY_MEDIA
+					&& key != KEY_VOLUMEUP
+					&& key != KEY_VOLUMEDOWN) {
+					dev_info(info->dev,
+						"Key %d is skipped,	PTT Headset not support\n",
+						key);
+					break;
 				}
+#endif
 				dev_dbg(info->dev, "Key %d down\n", key);
 				input_report_key(info->input, key, 1);
 				input_sync(info->input);
@@ -2139,8 +2206,6 @@ static int madera_micd_button_process(struct madera_extcon *info, int val)
 		for (i = 0; i < info->num_micd_ranges; i++)
 			input_report_key(info->input,
 					 info->micd_ranges[i].key, 0);
-
-		input_report_key(info->input, KEY_HOT, 0);
 		input_sync(info->input);
 	}
 
@@ -2206,8 +2271,6 @@ int madera_micd_mic_reading(struct madera_extcon *info, int val)
 	if (ohms > MADERA_MICROPHONE_MAX_OHM) {
 		dev_warn(info->dev, "Detected open circuit\n");
 		info->have_mic = info->pdata->micd_open_circuit_declare;
-		dev_info(info->dev, "set PTT state true\n");
-		info->ptt_state = 1;
 		goto done;
 	}
 
@@ -2321,6 +2384,71 @@ static int madera_jack_present(struct madera_extcon *info,
 		return 0;
 }
 
+#ifdef EXTCON_SEC_PTT
+static irqreturn_t samsung_pttdet(int irq, void *data)
+{
+	struct madera_extcon *info = data;
+	int debounce = 0; /* info->pdata->micd_detect_debounce_ms */
+
+	dev_info(info->dev, "pttdet IRQ\n");
+
+	if (info->pdata->jd_wake_time)
+		__pm_wakeup_event(&info->detection_wake_lock,
+				info->pdata->jd_wake_time);
+
+	cancel_delayed_work_sync(&info->pttd_detect_work);
+
+	mutex_lock(&info->lock);
+
+	/* To Do Something */
+
+	mutex_unlock(&info->lock);
+
+	/*
+	 * Defer to the workqueue to ensure serialization
+	 * and prevent race conditions if an IRQ occurs while
+	 * running the delayed work
+	 */
+	schedule_delayed_work(&info->pttd_detect_work,
+			      msecs_to_jiffies(debounce));
+
+	return IRQ_HANDLED;
+}
+
+static void samsung_pttd_handler(struct work_struct *work)
+{
+	struct madera_extcon *info = container_of(work,
+						  struct madera_extcon,
+						  pttd_detect_work.work);
+
+	dev_info(info->dev, "PTTDET IRQ\n");
+
+	mutex_lock(&info->lock);
+
+	dev_info(info->dev, "gpio state %d\n", gpio_get_value(info->ptt_ear_int));
+
+	if (!info->ptt_pressed && gpio_get_value(info->ptt_ear_int) == 0) {
+		if (info->ptt_state) {
+			/* input_report_key(info->input, KEY_HOT, 0); */
+			dev_info(info->dev, "PTT Button Down\n");
+			input_report_key(info->input, KEY_HOT, 1);
+			input_sync(info->input);
+			info->ptt_pressed = true;
+		}
+	} else if (info->ptt_pressed) {
+		input_report_key(info->input, KEY_HOT, 0);
+		dev_info(info->dev, "PTT Button Released\n");
+		input_sync(info->input);
+		info->ptt_pressed = false;
+	} else
+		dev_info(info->dev, "PTT Button abnormal state\n");
+
+	mutex_unlock(&info->lock);
+
+	return;
+}
+#endif
+
 static irqreturn_t madera_hpdet_handler(int irq, void *data)
 {
 	struct madera_extcon *info = data;
@@ -2414,6 +2542,9 @@ static void madera_micd_handler(struct work_struct *work)
 
 	if (ret >= 0) {
 		dev_dbg(info->dev, "Mic impedance %d ohms\n", ret);
+#ifdef EXTCON_SEC_PTT
+		ptt_micdet_adc = ret;
+#endif
 		ret = madera_ohm_to_hohm((unsigned int)ret);
 	}
 
@@ -2464,6 +2595,9 @@ static irqreturn_t madera_micdet(int irq, void *data)
 const struct madera_jd_state madera_hpdet_left = {
 	.mode = MADERA_ACCDET_MODE_HPL,
 	.start = madera_hpdet_start,
+#ifdef EXTCON_SEC_PTT
+	.restart = madera_hpdet_restart,
+#endif
 	.reading = madera_hpdet_reading,
 	.stop = madera_hpdet_stop,
 };
@@ -2557,8 +2691,11 @@ static irqreturn_t madera_jackdet(int irq, void *data)
 	if (info->pdata->jd_use_jd2)
 		mask |= MADERA_JD2_DB;
 
-	dev_info(info->dev, "set PTT state false\n");
+#ifdef EXTCON_SEC_PTT
+	dev_info(info->dev, "set PTT ***** OFF *****\n");
 	info->ptt_state = 0;
+	set_ptt_key_sw_en(info, 0);
+#endif
 
 	if (present) {
 		dev_dbg(info->dev, "Detected jack\n");
@@ -2606,6 +2743,9 @@ static irqreturn_t madera_jackdet(int irq, void *data)
 		for (i = 0; i < info->num_micd_ranges; i++)
 			input_report_key(info->input,
 					 info->micd_ranges[i].key, 0);
+#ifdef EXTCON_SEC_PTT
+		input_report_key(info->input, KEY_HOT, 0);
+#endif
 		input_sync(info->input);
 
 		for (i = 0; i < ARRAY_SIZE(madera_cable) - 1; i++)
@@ -3159,9 +3299,9 @@ static int madera_extcon_add_micd_levels(struct madera_extcon *info)
 		if (info->micd_ranges[i].key > 0)
 			input_set_capability(info->input, EV_KEY,
 					     info->micd_ranges[i].key);
-
+#ifdef EXTCON_SEC_PTT
 		input_set_capability(info->input, EV_KEY, KEY_HOT);
-
+#endif
 		/* Enable reporting of that range */
 		regmap_update_bits(madera->regmap,
 				   MADERA_MIC_DETECT_1_CONTROL_2,
@@ -3513,6 +3653,47 @@ static int madera_extcon_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to get HPDET IRQ: %d\n", ret);
 		goto err_micdet;
 	}
+
+#ifdef EXTCON_SEC_PTT
+	ptt_irq = of_get_named_gpio_flags(madera->dev->of_node,
+					  "samsung,ptt-irq",
+					  0, NULL);
+	ptt_key_sw_en = of_get_named_gpio_flags(madera->dev->of_node,
+						"samsung,ptt-key-sw-en",
+						0, NULL);
+	info->ptt_ear_int = ptt_irq;
+
+	if (gpio_is_valid(ptt_irq)) {
+		ret = gpio_request(ptt_irq, "ptt_irq_gpio");
+		if (ret) {
+			dev_err(&pdev->dev, "Failed to request ptt_irq (%d)",
+				ptt_irq);
+		}
+		ret = request_threaded_irq(gpio_to_irq(ptt_irq), NULL,
+					   samsung_pttdet,
+					   (IRQ_TYPE_EDGE_BOTH | IRQF_ONESHOT),
+					   "PTTDET", info);
+		if (ret)
+			dev_err(&pdev->dev, "Failed to get PTTDET IRQ: %d\n",
+				ret);
+		else {
+			ret = irq_set_irq_wake(gpio_to_irq(ptt_irq), 1);
+			if (ret)
+				dev_err(&pdev->dev,
+					"Failed to set PTTDET IRQ wake %d\n",
+					ret);
+		}
+	}
+
+	if (gpio_is_valid(ptt_key_sw_en)) {
+		ret = gpio_request(ptt_key_sw_en, "ptt_key_sw_en_gpio");
+		if (ret)
+			dev_err(&pdev->dev,
+				"Failed to request ptt_key_sw_en (%d)",
+				ptt_key_sw_en);
+	}
+	INIT_DELAYED_WORK(&info->pttd_detect_work, samsung_pttd_handler);
+#endif
 
 	if (info->pdata->jd_use_jd2) {
 		debounce_val = MADERA_JD1_DB | MADERA_JD2_DB;

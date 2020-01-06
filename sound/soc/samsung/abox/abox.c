@@ -1498,12 +1498,12 @@ static int abox_audio_mode_put_ipc(struct device *dev, enum audio_mode mode)
 	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
 
 	dev_dbg(dev, "%s(%d)\n", __func__, mode);
+
 	data->audio_mode_time = local_clock();
 
 	msg.ipcid = IPC_SYSTEM;
 	system_msg->msgtype = ABOX_SET_MODE;
 	system_msg->param1 = data->audio_mode = mode;
-
 	return abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 0);
 }
 
@@ -4446,7 +4446,6 @@ static void abox_boot_done_work_func(struct work_struct *work)
 	abox_restore_data(dev);
 	abox_request_cpu_gear(dev, data, DEFAULT_CPU_GEAR_ID,
 			ABOX_CPU_GEAR_MIN);
-	abox_request_dram_on(pdev, dev, false);
 }
 
 static void abox_boot_done(struct device *dev, unsigned int version)
@@ -4673,6 +4672,10 @@ static void abox_system_ipc_handler(struct device *dev,
 					ABOX_DBG_DUMP_FIRMWARE, type);
 			abox_dbg_dump_mem(dev, data, ABOX_DBG_DUMP_FIRMWARE,
 					type);
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+			abox_debug_string_update(system_msg->param1,
+				abox_addr_to_kernel_addr(data, system_msg->bundle.param_s32[0]));
+#endif
 			break;
 		default:
 			abox_dbg_print_gpr(dev, data);
@@ -4680,6 +4683,9 @@ static void abox_system_ipc_handler(struct device *dev,
 					type);
 			abox_dbg_dump_mem(dev, data, ABOX_DBG_DUMP_FIRMWARE,
 					type);
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+			abox_debug_string_update(system_msg->param1, NULL);
+#endif
 			break;
 		}
 		abox_failsafe_report(dev);
@@ -5603,6 +5609,7 @@ error:
 
 static int abox_disable(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
 	struct abox_data *data = dev_get_drvdata(dev);
 	enum calliope_state state = data->calliope_state;
 
@@ -5618,7 +5625,7 @@ static int abox_disable(struct device *dev)
 		abox_cpu_pm_ipc(dev, false);
 	data->calliope_state = CALLIOPE_DISABLED;
 	abox_log_drain_all(dev);
-
+	abox_request_dram_on(pdev, dev, false);
 	abox_save_register(data);
 	abox_cfg_gpio(dev, "idle");
 	abox_pad_retention(true);
@@ -5741,6 +5748,10 @@ static int abox_print_power_usage(struct device *dev, void *data)
 	if (pm_runtime_enabled(dev) && pm_runtime_active(dev)) {
 		dev_info(dev, "usage_count:%d\n",
 				atomic_read(&dev->power.usage_count));
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+		sec_audio_pmlog(6, dev, "usage_count:%d\n",
+				atomic_read(&dev->power.usage_count));
+#endif
 		device_for_each_child(dev, data, abox_print_power_usage);
 	}
 
@@ -5779,6 +5790,9 @@ static int abox_pm_notifier(struct notifier_block *nb,
 			ret = pm_runtime_suspend(dev);
 			if (ret < 0) {
 				dev_info(dev, "runtime suspend: %d\n", ret);
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+				sec_audio_pmlog(6, dev, "runtime suspend: %d\n", ret);
+#endif
 				abox_print_power_usage(dev, NULL);
 				return NOTIFY_BAD;
 			}
@@ -5807,6 +5821,13 @@ static int abox_modem_notifier(struct notifier_block *nb,
 		system_msg->msgtype = ABOX_START_VSS;
 		abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 1, 0);
 		break;
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+	case MODEM_EVENT_RESET:
+	case MODEM_EVENT_EXIT:
+	case MODEM_EVENT_WATCHDOG:
+		abox_debug_string_update(TYPE_ABOX_VSSERROR, NULL);
+		break;
+#endif
 	}
 
 	return NOTIFY_DONE;

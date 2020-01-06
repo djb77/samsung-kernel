@@ -21,6 +21,11 @@
 #include <linux/regulator/consumer.h>
 #include <sound/madera-pdata.h>
 
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+#define CHANGE_DEV_PRINT
+#include <sound/samsung/sec_audio_debug.h>
+#endif
+
 enum madera_type {
 	CS47L35 = 1,
 	CS47L85 = 2,

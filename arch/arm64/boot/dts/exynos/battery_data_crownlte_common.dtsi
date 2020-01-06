@@ -275,6 +275,13 @@
 				700 4290 4220 4190 90
 				1000 4240 4170 4140 89>;
 
+		battery,health_condition = <
+				/* CYCLE ASOC */
+				900 75	/* GOOD */
+				1200 65 /* NORMAL */
+				1500 55 /* AGED */
+				>;
+
 		battery,pre_afc_input_current = <500>; /* mA */
 		battery,prepare_ta_delay = <0>; /* msec */
 

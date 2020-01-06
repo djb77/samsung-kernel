@@ -147,7 +147,6 @@ static struct ieee80211_rate __wl_rates[] = {
 	.band			= NL80211_BAND_2GHZ,		\
 	.center_freq		= (_freq),			\
 	.hw_value		= (_channel),			\
-	.flags			= IEEE80211_CHAN_DISABLED,	\
 	.max_antenna_gain	= 0,				\
 	.max_power		= 30,				\
 }
@@ -156,7 +155,6 @@ static struct ieee80211_rate __wl_rates[] = {
 	.band			= NL80211_BAND_5GHZ,		\
 	.center_freq		= 5000 + (5 * (_channel)),	\
 	.hw_value		= (_channel),			\
-	.flags			= IEEE80211_CHAN_DISABLED,	\
 	.max_antenna_gain	= 0,				\
 	.max_power		= 30,				\
 }
@@ -2776,7 +2774,6 @@ static s32 brcmf_inform_single_bss(struct brcmf_cfg80211_info *cfg,
 				   struct brcmf_bss_info_le *bi)
 {
 	struct wiphy *wiphy = cfg_to_wiphy(cfg);
-	struct ieee80211_channel *notify_channel;
 	struct cfg80211_bss *bss;
 	struct ieee80211_supported_band *band;
 	struct brcmu_chan ch;
@@ -2786,7 +2783,7 @@ static s32 brcmf_inform_single_bss(struct brcmf_cfg80211_info *cfg,
 	u16 notify_interval;
 	u8 *notify_ie;
 	size_t notify_ielen;
-	s32 notify_signal;
+	struct cfg80211_inform_bss bss_data = {};
 
 	if (le32_to_cpu(bi->length) > WL_BSS_INFO_MAX) {
 		brcmf_err("Bss info is larger than buffer. Discarding\n");
@@ -2806,27 +2803,28 @@ static s32 brcmf_inform_single_bss(struct brcmf_cfg80211_info *cfg,
 		band = wiphy->bands[NL80211_BAND_5GHZ];
 
 	freq = ieee80211_channel_to_frequency(channel, band->band);
-	notify_channel = ieee80211_get_channel(wiphy, freq);
+	bss_data.chan = ieee80211_get_channel(wiphy, freq);
+	bss_data.scan_width = NL80211_BSS_CHAN_WIDTH_20;
+	bss_data.boottime_ns = ktime_to_ns(ktime_get_boottime());
 
 	notify_capability = le16_to_cpu(bi->capability);
 	notify_interval = le16_to_cpu(bi->beacon_period);
 	notify_ie = (u8 *)bi + le16_to_cpu(bi->ie_offset);
 	notify_ielen = le32_to_cpu(bi->ie_length);
-	notify_signal = (s16)le16_to_cpu(bi->RSSI) * 100;
+	bss_data.signal = (s16)le16_to_cpu(bi->RSSI) * 100;
 
 	brcmf_dbg(CONN, "bssid: %pM\n", bi->BSSID);
 	brcmf_dbg(CONN, "Channel: %d(%d)\n", channel, freq);
 	brcmf_dbg(CONN, "Capability: %X\n", notify_capability);
 	brcmf_dbg(CONN, "Beacon interval: %d\n", notify_interval);
-	brcmf_dbg(CONN, "Signal: %d\n", notify_signal);
+	brcmf_dbg(CONN, "Signal: %d\n", bss_data.signal);
 
-	bss = cfg80211_inform_bss(wiphy, notify_channel,
-				  CFG80211_BSS_FTYPE_UNKNOWN,
-				  (const u8 *)bi->BSSID,
-				  0, notify_capability,
-				  notify_interval, notify_ie,
-				  notify_ielen, notify_signal,
-				  GFP_KERNEL);
+	bss = cfg80211_inform_bss_data(wiphy, &bss_data,
+				       CFG80211_BSS_FTYPE_UNKNOWN,
+				       (const u8 *)bi->BSSID,
+				       0, notify_capability,
+				       notify_interval, notify_ie,
+				       notify_ielen, GFP_KERNEL);
 
 	if (!bss)
 		return -ENOMEM;
@@ -4754,9 +4752,6 @@ static int brcmf_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *ndev)
 		err = brcmf_fil_cmd_int_set(ifp, BRCMF_C_SET_AP, 0);
 		if (err < 0)
 			brcmf_err("setting AP mode failed %d\n", err);
-		err = brcmf_fil_cmd_int_set(ifp, BRCMF_C_SET_INFRA, 0);
-		if (err < 0)
-			brcmf_err("setting INFRA mode failed %d\n", err);
 		if (brcmf_feat_is_enabled(ifp, BRCMF_FEAT_MBSS))
 			brcmf_fil_iovar_int_set(ifp, "mbss", 0);
 		brcmf_fil_cmd_int_set(ifp, BRCMF_C_SET_REGULATORY,
@@ -6572,8 +6567,7 @@ static int brcmf_setup_wiphy(struct wiphy *wiphy, struct brcmf_if *ifp)
 			wiphy->bands[NL80211_BAND_5GHZ] = band;
 		}
 	}
-	err = brcmf_setup_wiphybands(wiphy);
-	return err;
+	return 0;
 }
 
 static s32 brcmf_config_dongle(struct brcmf_cfg80211_info *cfg)
@@ -6795,7 +6789,7 @@ static void brcmf_cfg80211_reg_notifier(struct wiphy *wiphy,
 	int i;
 
 	/* ignore non-ISO3166 country codes */
-	for (i = 0; i < sizeof(req->alpha2); i++)
+	for (i = 0; i < 2; i++)
 		if (req->alpha2[i] < 'A' || req->alpha2[i] > 'Z') {
 			brcmf_err("not a ISO3166 code (0x%02x 0x%02x)\n",
 				  req->alpha2[0], req->alpha2[1]);
@@ -6936,6 +6930,12 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 	if (err < 0) {
 		brcmf_err("Could not register wiphy device (%d)\n", err);
 		goto priv_out;
+	}
+
+	err = brcmf_setup_wiphybands(wiphy);
+	if (err) {
+		brcmf_err("Setting wiphy bands failed (%d)\n", err);
+		goto wiphy_unreg_out;
 	}
 
 	/* If cfg80211 didn't disable 40MHz HT CAP in wiphy_register(),

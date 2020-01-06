@@ -50,8 +50,8 @@
 pub_crypto_control_t g_pub_crypto_control;
 
 DEFINE_MUTEX(crypto_send_mutex);
-static int user_fipscryptod_pid;
-static struct sock *crypto_sock;
+static int user_fipscryptod_pid = 0;
+static struct sock* crypto_sock = NULL;
 
 static int pub_crypto_request_get_msg(pub_crypto_request_t *req, char **msg);
 static void request_send(pub_crypto_control_t *con,
@@ -161,6 +161,7 @@ static int __do_dek_crypt(pub_crypto_request_t *req, char *ret)
 	case OP_DH_DEC:
 	case OP_ECDH_ENC:
 	case OP_ECDH_DEC:
+	case OP_ECDH_REQ_SS:
 		dump(req->result.dek.buf, req->result.dek.len, "req->result.dek");
 		memcpy(ret, &(req->result.dek), sizeof(dek_t));
 		//dump(req->result.dek.buf, req->result.dek.len, "req->result.dek");
@@ -270,6 +271,7 @@ int do_dek_crypt(int opcode, dek_t *in, dek_t *out, kek_t *key)
 		case OP_DH_DEC:
 		case OP_ECDH_ENC:
 		case OP_ECDH_DEC:
+		case OP_ECDH_REQ_SS:
 			req->cipher_param.request_id = req->id;
 			req->cipher_param.opcode = req->opcode;
 			memcpy(&req->cipher_param.in, (void *) in, sizeof(dek_t));
@@ -329,6 +331,11 @@ int ecdh_decryptEDEK(dek_t *edek, dek_t *dek, kek_t *key)
 	return do_dek_crypt(OP_ECDH_DEC, edek, dek, key);
 }
 
+int ecdh_deriveSS(dek_t *in, dek_t *out, kek_t *drv_key)
+{
+	return do_dek_crypt(OP_ECDH_REQ_SS, in, out, drv_key);
+}
+
 static int pub_crypto_request_get_msg(pub_crypto_request_t *req, char **msg)
 {
 	int msg_len = -1;
@@ -340,6 +347,7 @@ static int pub_crypto_request_get_msg(pub_crypto_request_t *req, char **msg)
 	case OP_DH_ENC:
 	case OP_ECDH_DEC:
 	case OP_ECDH_ENC:
+	case OP_ECDH_REQ_SS:
 		*msg = (char *)&req->cipher_param;
 		msg_len = (int) sizeof(cipher_param_t);
 		break;

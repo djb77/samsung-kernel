@@ -331,6 +331,11 @@ static ssize_t sec_reset_auto_summary_proc_read(struct file *file, char __user *
 		return -ENOENT;
 	}
 
+	if (strncmp(auto_summary_buf, "@ Ramdump", 9)) {
+		pr_err("%s : no data in auto_comment\n", __func__);
+		return 0;
+	}
+
 	count = min(len, (size_t)(AUTO_SUMMARY_SIZE - pos));
 	if (copy_to_user(buf, auto_summary_buf + pos, count))
 		return -EFAULT;

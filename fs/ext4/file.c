@@ -373,8 +373,10 @@ static int ext4_file_open(struct inode * inode, struct file * filp)
 
 	if (ext4_encrypted_inode(inode)) {
 		ret = fscrypt_get_encryption_info(inode);
-		if (ret)
+		if (ret) {
+			printk(KERN_ERR	"%s:failed to get encryption info (%d)", __func__, ret);
 			return -EACCES;
+		}
 		if (!fscrypt_has_encryption_key(inode))
 			return -ENOKEY;
 	}
@@ -445,7 +447,7 @@ static int ext4_find_unwritten_pgoff(struct inode *inode,
 		int i, num;
 		unsigned long nr_pages;
 
-		num = min_t(pgoff_t, end - index, PAGEVEC_SIZE);
+		num = min_t(pgoff_t, end - index, PAGEVEC_SIZE - 1) + 1;
 		nr_pages = pagevec_lookup(&pvec, inode->i_mapping, index,
 					  (pgoff_t)num);
 		if (nr_pages == 0)

@@ -15,7 +15,6 @@
 
 // vvvvv DO NOT CHANGE THESE LINES! vvvvv
 struct dsms_policy_entry dsms_policy[] = {
-{ "security/defex_lsm/defex_procs.c", "defex_report_violation" },
 }; // dsms_policy
 // ^^^^^ DO NOT CHANGE THESE LINES! ^^^^^
 

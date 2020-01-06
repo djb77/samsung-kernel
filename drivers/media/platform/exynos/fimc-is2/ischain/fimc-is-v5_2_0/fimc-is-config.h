@@ -148,4 +148,7 @@
 #define NOT_SEPERATED_SYSREG
 #define QOS_INTCAM
 #define EXPANSION_DVFS_TABLE
+
+#define CHAIN_USE_VC_TASKLET	1
+
 #endif

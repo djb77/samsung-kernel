@@ -555,19 +555,11 @@ static void max77705_set_otg_limit(struct max77705_charger_data *charger, int st
 		pr_info("%s : max_freq(default)(%d)\n", __func__, step);
 		pm_qos_update_request(&ifpmic_cpu_limit_request,
 				PM_QOS_CLUSTER1_FREQ_MAX_DEFAULT_VALUE);
-		/* BAT to SYS OCP 5.6A */
-		max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_05,
-				MAX77705_B2SOVRC_5_6A << CHG_CNFG_05_REG_B2SOVRC_SHIFT,
-				CHG_CNFG_05_REG_B2SOVRC_MASK);
 	} else {
 		pr_info("%s : max_freq(%dKHz)(%d)\n", __func__,
 			charger->cpu_max_freq[step], step);
 		pm_qos_update_request(&ifpmic_cpu_limit_request,
 			charger->cpu_max_freq[step]);
-		/* BAT to SYS OCP 5.6A */
-		max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_05,
-				MAX77705_B2SOVRC_5_6A << CHG_CNFG_05_REG_B2SOVRC_SHIFT,
-				CHG_CNFG_05_REG_B2SOVRC_MASK);
 	}
 
 	charger->otg_limit_step = step;
@@ -748,6 +740,27 @@ static void max77705_set_skipmode(struct max77705_charger_data *charger, int ena
 				(MAX77705_DISABLE_SKIP << CHG_CNFG_12_REG_DISKIP_SHIFT),
 				CHG_CNFG_12_REG_DISKIP_MASK);
 	}
+}
+
+static void max77705_set_b2sovrc(struct max77705_charger_data *charger, u32 ocp_current)
+{
+	u8 reg_data = MAX77705_B2SOVRC_4_6A;
+
+	if (ocp_current == 0)
+		reg_data = MAX77705_B2SOVRC_DISABLE;
+	else
+		reg_data += (ocp_current - 4600) / 200;
+
+	max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_05,
+		(reg_data << CHG_CNFG_05_REG_B2SOVRC_SHIFT),
+		CHG_CNFG_05_REG_B2SOVRC_MASK);
+
+	max77705_read_reg(charger->i2c, MAX77705_CHG_REG_CNFG_05, &reg_data);
+	pr_info("%s : CHG_CNFG_05(0x%02x)\n", __func__, reg_data);
+	max77705_read_reg(charger->i2c, MAX77705_CHG_REG_CNFG_06, &reg_data);
+	pr_info("%s : CHG_CNFG_06(0x%02x)\n", __func__, reg_data);
+
+	return;
 }
 
 static int max77705_check_wcin_before_otg_on(struct max77705_charger_data *charger)
@@ -937,10 +950,9 @@ static void max77705_charger_initialize(struct max77705_charger_data *charger)
 			CHG_CNFG_02_OTG_ILIM_MASK);
 #endif
 
-	/* BAT to SYS OCP 5.6A */
-	max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_05,
-			MAX77705_B2SOVRC_5_6A << CHG_CNFG_05_REG_B2SOVRC_SHIFT,
-			CHG_CNFG_05_REG_B2SOVRC_MASK);
+	/* BAT to SYS OCP */
+	max77705_set_b2sovrc(charger, charger->pdata->chg_ocp_current);
+
 	/*
 	 * top off current 150mA
 	 * top off timer 30min
@@ -1508,7 +1520,7 @@ static int max77705_chg_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
 		max77705_enable_aicl_irq(charger);
 		max77705_read_reg(charger->i2c, MAX77705_CHG_REG_INT_OK, &reg);
-		if (reg & MAX77705_AICL_I)
+		if (!(reg & MAX77705_AICL_I))
 			queue_delayed_work(charger->wqueue, &charger->aicl_work,
 					   msecs_to_jiffies(AICL_WORK_DELAY));
 		break;
@@ -1896,7 +1908,7 @@ static void max77705_aicl_isr_work(struct work_struct *work)
 	check_charger_unlock_state(charger);
 	max77705_read_reg(charger->i2c, MAX77705_CHG_REG_INT_OK, &aicl_state);
 
-	if (!(aicl_state & 0x80)) {
+	if (!(aicl_state & MAX77705_AICL_I)) {
 		/* AICL mode */
 		pr_info("%s : AICL Mode : CHG_INT_OK(0x%02x), prev_aicl(%d)\n",
 			__func__, aicl_state, charger->prev_aicl_mode);
@@ -2213,6 +2225,15 @@ static int max77705_charger_parse_dt(struct max77705_charger_data *charger)
 		pr_info("%s: battery,chg_float_voltage is %d\n", __func__,
 			pdata->chg_float_voltage);
 		charger->float_voltage = pdata->chg_float_voltage;
+
+		ret = of_property_read_u32(np, "battery,chg_ocp_current",
+					   &pdata->chg_ocp_current);
+		if (ret) {
+			pr_info("%s: battery,chg_ocp_current is Empty\n", __func__);
+			pdata->chg_ocp_current = 5600; /* mA */
+		}
+		pr_info("%s: battery,chg_ocp_current is %d\n", __func__,
+			pdata->chg_ocp_current);
 
 		ret = of_property_read_string(np,
 					      "battery,wireless_charger_name",

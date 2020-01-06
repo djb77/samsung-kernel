@@ -75,6 +75,7 @@
 #include <asm/i8259.h>
 #include <asm/realmode.h>
 #include <asm/misc.h>
+#include <asm/spec-ctrl.h>
 
 /* Number of siblings per CPU package */
 int smp_num_siblings = 1;
@@ -115,24 +116,15 @@ static inline void smpboot_setup_warm_reset_vector(unsigned long start_eip)
 	spin_lock_irqsave(&rtc_lock, flags);
 	CMOS_WRITE(0xa, 0xf);
 	spin_unlock_irqrestore(&rtc_lock, flags);
-	local_flush_tlb();
-	pr_debug("1.\n");
 	*((volatile unsigned short *)phys_to_virt(TRAMPOLINE_PHYS_HIGH)) =
 							start_eip >> 4;
-	pr_debug("2.\n");
 	*((volatile unsigned short *)phys_to_virt(TRAMPOLINE_PHYS_LOW)) =
 							start_eip & 0xf;
-	pr_debug("3.\n");
 }
 
 static inline void smpboot_restore_warm_reset_vector(void)
 {
 	unsigned long flags;
-
-	/*
-	 * Install writable page 0 entry to set BIOS data area.
-	 */
-	local_flush_tlb();
 
 	/*
 	 * Paranoid:  Set warm reset code and vector here back
@@ -181,6 +173,12 @@ static void smp_callin(void)
 	smp_store_cpu_info(cpuid);
 
 	/*
+	 * The topology information must be up to date before
+	 * calibrate_delay() and notify_cpu_starting().
+	 */
+	set_cpu_sibling_map(raw_smp_processor_id());
+
+	/*
 	 * Get our bogomips.
 	 * Update loops_per_jiffy in cpu_data. Previous call to
 	 * smp_store_cpu_info() stored a value that is close but not as
@@ -190,11 +188,6 @@ static void smp_callin(void)
 	cpu_data(cpuid).loops_per_jiffy = loops_per_jiffy;
 	pr_debug("Stack at about %p\n", &cpuid);
 
-	/*
-	 * This must be done before setting cpu_online_mask
-	 * or calling notify_cpu_starting.
-	 */
-	set_cpu_sibling_map(raw_smp_processor_id());
 	wmb();
 
 	notify_cpu_starting(cpuid);
@@ -236,6 +229,8 @@ static void notrace start_secondary(void *unused)
 	 * Check TSC synchronization with the BP:
 	 */
 	check_tsc_sync_target();
+
+	speculative_store_bypass_ht_init();
 
 	/*
 	 * Lock vector_lock and initialize the vectors on this cpu
@@ -1333,6 +1328,8 @@ void __init native_smp_prepare_cpus(unsigned int max_cpus)
 	set_mtrr_aps_delayed_init();
 
 	smp_quirk_init_udelay();
+
+	speculative_store_bypass_ht_init();
 }
 
 void arch_enable_nonboot_cpus_begin(void)
@@ -1500,6 +1497,7 @@ static void remove_siblinginfo(int cpu)
 	cpumask_clear(topology_core_cpumask(cpu));
 	c->phys_proc_id = 0;
 	c->cpu_core_id = 0;
+	c->booted_cores = 0;
 	cpumask_clear_cpu(cpu, cpu_sibling_setup_mask);
 	recompute_smt_state();
 }
@@ -1599,6 +1597,8 @@ static inline void mwait_play_dead(void)
 	void *mwait_ptr;
 	int i;
 
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+		return;
 	if (!this_cpu_has(X86_FEATURE_MWAIT))
 		return;
 	if (!this_cpu_has(X86_FEATURE_CLFLUSH))

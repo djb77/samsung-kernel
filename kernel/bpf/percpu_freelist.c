@@ -99,6 +99,6 @@ struct pcpu_freelist_node *pcpu_freelist_pop(struct pcpu_freelist *s)
 		if (cpu == orig_cpu) {
 			local_irq_restore(flags);
 			return NULL;
-	}
+		}
 	}
 }

@@ -411,7 +411,7 @@ finish:
 }
 
 #ifdef CONFIG_BCMDHD_PCIE
-extern void dhd_debug_info_dump(void);
+extern void dhd_smmu_fault_handler(u32 axid, u32 fault_addr);
 #endif /* CONFIG_BCMDHD_PCIE */
 
 static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
@@ -456,7 +456,8 @@ static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
 
 #ifdef CONFIG_BCMDHD_PCIE
 	/* Kernel Panic will be triggered by dump handler */
-	dhd_debug_info_dump();
+	dhd_smmu_fault_handler(info & 0xFFFF, addr);
+	disable_irq_nosync(irq);
 #endif /* CONFIG_BCMDHD_PCIE */
 
 	atomic_notifier_call_chain(&drvdata->fault_notifiers, addr, &flags);

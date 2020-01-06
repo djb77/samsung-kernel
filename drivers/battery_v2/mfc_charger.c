@@ -1819,6 +1819,7 @@ static int mfc_chg_get_property(struct power_supply *psy,
 
 		pr_info("%s mst mode check: mst_mode = %d, reg_data = %d\n",
 				__func__, mst_mode, reg_data);
+		val->intval = 0;
 		if (reg_data == 0x4)
 			val->intval = mst_mode;
 		break;
@@ -1877,18 +1878,23 @@ static int mfc_chg_get_property(struct power_supply *psy,
 			}
 		} else if (val->intval == SEC_WIRELESS_MST_SWITCH_VERIFY) {
 			/* This is the WA codes that reduces VRECT invalid case. */
-			charger->mst_off_lock = 1;
-			gpio_direction_output(charger->pdata->mst_pwr_en, 1);
-			usleep_range(3600, 4000);
-			gpio_direction_output(charger->pdata->mst_pwr_en, 0);
-			mdelay(50);
-			charger->mst_off_lock = 0;
+			if (gpio_is_valid(charger->pdata->mst_pwr_en)) {
+				charger->mst_off_lock = 1;
+				gpio_direction_output(charger->pdata->mst_pwr_en, 1);
+				usleep_range(3600, 4000);
+				gpio_direction_output(charger->pdata->mst_pwr_en, 0);
+				mdelay(50);
+				charger->mst_off_lock = 0;
 
-			gpio_direction_output(charger->pdata->mst_pwr_en, 1);
-			msleep(charger->pdata->mst_switch_delay);
-			val->intval = mfc_get_firmware_version(charger, MFC_RX_FIRMWARE);
-			pr_info("%s: check f/w revision, mst power on (0x%x)\n", __func__, val->intval);
-			gpio_direction_output(charger->pdata->mst_pwr_en, 0);
+				gpio_direction_output(charger->pdata->mst_pwr_en, 1);
+				msleep(charger->pdata->mst_switch_delay);
+				val->intval = mfc_get_firmware_version(charger, MFC_RX_FIRMWARE);
+				pr_info("%s: check f/w revision, mst power on (0x%x)\n", __func__, val->intval);
+				gpio_direction_output(charger->pdata->mst_pwr_en, 0);
+			} else {
+				pr_info("%s: MST_SWITCH_VERIFY, invalid gpio(mst_pwr_en)\n", __func__);
+				val->intval = -1;
+			}
 		} else {
 			val->intval = -ENODATA;
 			pr_err("%s wrong mode\n", __func__);

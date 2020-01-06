@@ -17,7 +17,6 @@
 #include <linux/bitops.h>
 #include <linux/compiler.h>
 #include <linux/atomic.h>
-#include <linux/rhashtable.h>
 
 #include <linux/netfilter/nf_conntrack_tcp.h>
 #include <linux/netfilter/nf_conntrack_dccp.h>
@@ -27,11 +26,10 @@
 
 #include <net/netfilter/nf_conntrack_tuple.h>
 
-/* START_OF_KNOX_NPA */
+// KNOX NPA - START
 #define PROCESS_NAME_LEN_NAP	128
 #define DOMAIN_NAME_LEN_NAP	255
-/* END_OF_KNOX_NPA */
-
+// KNOX NPA - END
 /* per conntrack: protocol private data */
 union nf_conntrack_proto {
 	/* insert conntrack proto private data here */
@@ -106,7 +104,7 @@ struct nf_conn {
 	possible_net_t ct_net;
 
 #if IS_ENABLED(CONFIG_NF_NAT)
-	struct rhlist_head nat_bysource;
+	struct hlist_node	nat_bysource;
 #endif
 	/* all members below initialized via memset */
 	u8 __nfct_init_offset[0];
@@ -128,7 +126,8 @@ struct nf_conn {
 	/* Storage reserved for other modules, must be the last member */
 	union nf_conntrack_proto proto;
 
-	/* START_OF_KNOX_NPA */
+
+	// KNOX NPA - START
 	/* The number of application layer bytes sent by the socket */
 	__u64   knox_sent;
 	/* The number of application layer bytes recieved by the socket */
@@ -153,7 +152,12 @@ struct nf_conn {
 	char interface_name[IFNAMSIZ];
 	/* Atomic variable indicating start of flow */
 	atomic_t startFlow;
-	/* END_OF_KNOX_NPA */
+	/* The value at which this ct is considered timed-out for intermediate flows */
+	/* Use 'u32 npa_timeout' if struct nf_conn->timeout is of type u32;  Use 'struct timer_list npa_timeout' if struct nf_conn->timeout is of type struct timer_list;*/
+	u32 npa_timeout;
+	/* Atomic variable indicating end of intermediate flow */
+	atomic_t intermediateFlow;
+	// KNOX NPA - END
 
 };
 
@@ -340,7 +344,7 @@ static inline bool nf_ct_should_gc(const struct nf_conn *ct)
 
 struct kernel_param;
 
-int nf_conntrack_set_hashsize(const char *val, struct kernel_param *kp);
+int nf_conntrack_set_hashsize(const char *val, const struct kernel_param *kp);
 int nf_conntrack_hash_resize(unsigned int hashsize);
 
 extern struct hlist_nulls_head *nf_conntrack_hash;

@@ -378,6 +378,10 @@ void dump_tasks(struct mem_cgroup *memcg, const nodemask_t *nodemask)
 {
 	struct task_struct *p;
 	struct task_struct *task;
+	unsigned long cur_rss_sum;
+	unsigned long heaviest_rss_sum = 0;
+	char heaviest_comm[TASK_COMM_LEN];
+	pid_t heaviest_pid;
 #if defined(CONFIG_ZSWAP)
 	int zswap_stored_pages_temp;
 	unsigned long zswap_pool_pages_temp;
@@ -430,9 +434,19 @@ void dump_tasks(struct mem_cgroup *memcg, const nodemask_t *nodemask)
 			mm_nr_pmds(task->mm),
 			get_mm_counter(task->mm, MM_SWAPENTS),
 			task->signal->oom_score_adj, task->comm);
+		cur_rss_sum = get_mm_rss(task->mm) +
+					get_mm_counter(task->mm, MM_SWAPENTS);
+		if (cur_rss_sum > heaviest_rss_sum) {
+			heaviest_rss_sum = cur_rss_sum;
+			strncpy(heaviest_comm, task->comm, TASK_COMM_LEN);
+			heaviest_pid = task->pid;
+		}
 		task_unlock(task);
 	}
 	rcu_read_unlock();
+	if (heaviest_rss_sum)
+		pr_info("heaviest_task:%s(%d) rss_pages:%lu\n", heaviest_comm,
+			heaviest_pid, heaviest_rss_sum);
 }
 
 static BLOCKING_NOTIFIER_HEAD(oomdebug_notify_list);
@@ -463,10 +477,8 @@ static void dump_header(struct oom_control *oc, struct task_struct *p)
 	dump_stack();
 	if (oc->memcg)
 		mem_cgroup_print_oom_info(oc->memcg, p);
-	else {
-		show_mem_extra_call_notifiers();
+	else
 		show_mem(SHOW_MEM_FILTER_NODES);
-	}
 	if (sysctl_oom_dump_tasks)
 		dump_tasks(oc->memcg, oc->nodemask);
 
@@ -574,7 +586,6 @@ static bool __oom_reap_task_mm(struct task_struct *tsk, struct mm_struct *mm)
 	 */
 	set_bit(MMF_UNSTABLE, &mm->flags);
 
-	tlb_gather_mmu(&tlb, mm, 0, -1);
 	for (vma = mm->mmap ; vma; vma = vma->vm_next) {
 		if (is_vm_hugetlb_page(vma))
 			continue;
@@ -596,11 +607,13 @@ static bool __oom_reap_task_mm(struct task_struct *tsk, struct mm_struct *mm)
 		 * we do not want to block exit_mmap by keeping mm ref
 		 * count elevated without a good reason.
 		 */
-		if (vma_is_anonymous(vma) || !(vma->vm_flags & VM_SHARED))
+		if (vma_is_anonymous(vma) || !(vma->vm_flags & VM_SHARED)) {
+			tlb_gather_mmu(&tlb, mm, vma->vm_start, vma->vm_end);
 			unmap_page_range(&tlb, vma, vma->vm_start, vma->vm_end,
 					 &details);
+			tlb_finish_mmu(&tlb, vma->vm_start, vma->vm_end);
+		}
 	}
-	tlb_finish_mmu(&tlb, 0, -1);
 	pr_info("oom_reaper: reaped process %d (%s), now anon-rss:%lukB, file-rss:%lukB, shmem-rss:%lukB\n",
 			task_pid_nr(tsk), tsk->comm,
 			K(get_mm_counter(mm, MM_ANONPAGES)),

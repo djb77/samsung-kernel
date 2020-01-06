@@ -895,7 +895,7 @@ static void invalidate_reclaim_iterators(struct mem_cgroup *dead_memcg)
 	int nid;
 	int i;
 
-	while ((memcg = parent_mem_cgroup(memcg))) {
+	for (; memcg; memcg = parent_mem_cgroup(memcg)) {
 		for_each_node(nid) {
 			mz = mem_cgroup_nodeinfo(memcg, nid);
 			for (i = 0; i <= DEF_PRIORITY; i++) {
@@ -5566,7 +5566,7 @@ static void uncharge_list(struct list_head *page_list)
 		next = page->lru.next;
 
 		VM_BUG_ON_PAGE(PageLRU(page), page);
-		VM_BUG_ON_PAGE(page_count(page), page);
+		VM_BUG_ON_PAGE(!PageHWPoison(page) && page_count(page), page);
 
 		if (!page->mem_cgroup)
 			continue;

@@ -29,6 +29,11 @@
 #include <sound/maxim_dsm_power.h>
 #endif /* CONFIG_SND_SOC_MAXIM_DSM_CAL */
 
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+#define CHANGE_DEV_PRINT
+#include <sound/samsung/sec_audio_debug.h>
+#endif
+
 #define DEBUG_MAX98512
 #ifdef DEBUG_MAX98512
 #define msg_maxim(format, args...) \
@@ -2857,6 +2862,10 @@ static int max98512_i2c_probe(struct i2c_client *i2c,
 
 	msg_maxim("End. driver_data %ld", id->driver_data);
 
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+	sec_audio_bootlog(6, &i2c->dev, "%s: done\n", __func__);
+#endif
+
 	return 0;
 
 err_register_codec:
@@ -2873,6 +2882,9 @@ err_alloc_pdata:
 	devm_kfree(&i2c->dev, max98512);
 err_alloc_priv:
 	msg_maxim("Failed with %d. driver_data %ld", ret, id->driver_data);
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+	sec_audio_bootlog(3, &i2c->dev, "%s: Failed to register codec %d\n", __func__, ret);
+#endif
 
 	return ret;
 }

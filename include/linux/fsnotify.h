@@ -215,6 +215,7 @@ static inline void fsnotify_open(struct file *file)
 	struct path *path = &file->f_path;
 	struct path lower_path;
 	struct inode *inode = path->dentry->d_inode;
+
 	__u32 mask = FS_OPEN;
 
 	if (S_ISDIR(inode->i_mode))

@@ -915,6 +915,41 @@ static void xhci_disable_port_wake_on_bits(struct xhci_hcd *xhci)
 	spin_unlock_irqrestore(&xhci->lock, flags);
 }
 
+static bool xhci_pending_portevent(struct xhci_hcd *xhci)
+{
+	__le32 __iomem		**port_array;
+	int			port_index;
+	u32			status;
+	u32			portsc;
+
+	status = readl(&xhci->op_regs->status);
+	if (status & STS_EINT)
+		return true;
+	/*
+	 * Checking STS_EINT is not enough as there is a lag between a change
+	 * bit being set and the Port Status Change Event that it generated
+	 * being written to the Event Ring. See note in xhci 1.1 section 4.19.2.
+	 */
+
+	port_index = xhci->num_usb2_ports;
+	port_array = xhci->usb2_ports;
+	while (port_index--) {
+		portsc = readl(port_array[port_index]);
+		if (portsc & PORT_CHANGE_MASK ||
+		    (portsc & PORT_PLS_MASK) == XDEV_RESUME)
+			return true;
+	}
+	port_index = xhci->num_usb3_ports;
+	port_array = xhci->usb3_ports;
+	while (port_index--) {
+		portsc = readl(port_array[port_index]);
+		if (portsc & PORT_CHANGE_MASK ||
+		    (portsc & PORT_PLS_MASK) == XDEV_RESUME)
+			return true;
+	}
+	return false;
+}
+
 /*
  * Stop HC (not bus-specific)
  *
@@ -1011,7 +1046,7 @@ EXPORT_SYMBOL_GPL(xhci_suspend);
  */
 int xhci_resume(struct xhci_hcd *xhci, bool hibernated)
 {
-	u32			command, temp = 0, status;
+	u32			command, temp = 0;
 	struct usb_hcd		*hcd = xhci_to_hcd(xhci);
 	struct usb_hcd		*secondary_hcd;
 	int			retval = 0;
@@ -1133,8 +1168,7 @@ int xhci_resume(struct xhci_hcd *xhci, bool hibernated)
  done:
 	if (retval == 0) {
 		/* Resume root hubs only when have pending events. */
-		status = readl(&xhci->op_regs->status);
-		if (status & STS_EINT) {
+		if (xhci_pending_portevent(xhci)) {
 			usb_hcd_resume_root_hub(xhci->shared_hcd);
 			usb_hcd_resume_root_hub(hcd);
 		}
@@ -3655,6 +3689,9 @@ void xhci_free_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	}
 
 	spin_lock_irqsave(&xhci->lock, flags);
+
+	virt_dev->udev = NULL;
+
 	/* Don't disable the slot if the host controller is dead. */
 	state = readl(&xhci->op_regs->status);
 	if (state == 0xffffffff || (xhci->xhc_state & XHCI_STATE_DYING) ||

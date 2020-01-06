@@ -454,10 +454,15 @@ int initialize_light_colorid(struct ssp_data *data)
 	if (ret < 0)
 		pr_err("[SSP] %s - read predefined file failed : ret %d\n", __func__, ret);
 
+#if defined(CONFIG_SENSORS_SSP_HAECHI)
+	data->uProxHiThresh = DEFAULT_HIGH_THRESHOLD;
+	data->uProxLoThresh = DEFAULT_LOW_THRESHOLD;
+#else 
 	data->uProxHiThresh = thresh[0];
 	data->uProxLoThresh = thresh[1];
 	data->uProxHiThresh_detect = DEFAULT_DETECT_HIGH_THRESHOLD;
 	data->uProxLoThresh_detect = DEFAULT_DETECT_LOW_THRESHOLD;
+#endif
 
 	data->uProxAlertHiThresh = thresh_alert;
 
