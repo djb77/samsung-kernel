@@ -950,6 +950,14 @@ int phy_exynos_usb3p1_rewa_disable(struct exynos_usbphy_info *info)
 	u32 reg;
 	void __iomem *regs_base = info->regs_base;
 
+	/*
+	 * Check ReWA Already diabled
+	 * If ReWA was disabled states, disabled sequence is already done
+	 */
+	reg = readl(regs_base + EXYNOS_USBCON_REWA_ENABLE);
+	if (!(reg & REWA_ENABLE_HS_REWA_EN))
+		return 0;
+
 	/* Set Link ready to notify ReWA */
 	reg = readl(regs_base + EXYNOS_USBCON_HSREWA_CTRL);
 	reg |= HSREWA_CTRL_HS_LINK_READY;

@@ -2,7 +2,11 @@
 # Makefile for Kernel-based Virtual Machine module, HYP part
 #
 
-ccflags-y += -fno-stack-protector
+ccflags-y += -fno-stack-protector -DDISABLE_BRANCH_PROFILING
+
+ifeq ($(cc-name),clang)
+ccflags-y += -fno-jump-tables
+endif
 
 KVM=../../../../virt/kvm
 

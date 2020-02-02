@@ -24,6 +24,11 @@
 #include <linux/pm_qos.h>
 
 #include <soc/samsung/exynos-pmu.h>
+#include <linux/moduleparam.h>
+
+/* Override the default prefix for the compatibility with other models */
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX "sec_debug."
 
 typedef void (*force_error_func)(char *arg);
 
@@ -553,7 +558,19 @@ static void simulate_BAD_SCHED(char *arg)
 	}
 }
 
-int sec_debug_force_error(const char *val, struct kernel_param *kp)
+static int sec_debug_get_force_error(char *buffer, const struct kernel_param *kp)
+{
+	int i;
+	int size = 0;
+
+	for (i = 0; i < NR_FORCE_ERROR; i++)
+		size += scnprintf(buffer + size, PAGE_SIZE - size, "%s\n",
+				  force_error_vector.item[i].errname);
+
+	return size;
+}
+
+static int sec_debug_set_force_error(const char *val, const struct kernel_param *kp)
 {
 	int i;
 	char *temp;
@@ -569,4 +586,11 @@ int sec_debug_force_error(const char *val, struct kernel_param *kp)
 	}
 	return 0;
 }
-EXPORT_SYMBOL(sec_debug_force_error);
+
+static const struct kernel_param_ops sec_debug_force_error_ops = {
+	.set	= sec_debug_set_force_error,
+	.get	= sec_debug_get_force_error,
+};
+
+module_param_cb(force_error, &sec_debug_force_error_ops, NULL, 0600);
+

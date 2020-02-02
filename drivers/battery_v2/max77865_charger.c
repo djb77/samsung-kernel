@@ -1157,7 +1157,7 @@ static int max77865_chg_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
 		max77865_enable_aicl_irq(charger);
 		max77865_read_reg(charger->i2c, MAX77865_CHG_REG_INT_OK, &reg);
-		if (reg & MAX77865_AICL_I)
+		if (!(reg & MAX77865_AICL_I))
 			queue_delayed_work(charger->wqueue, &charger->aicl_work, msecs_to_jiffies(50));
 		break;
 #if defined(CONFIG_UPDATE_BATTERY_DATA)
@@ -1481,7 +1481,7 @@ static void max77865_aicl_isr_work(struct work_struct *work)
 	/* check and unlock */
 	check_charger_unlock_state(charger);
 	max77865_read_reg(charger->i2c, MAX77865_CHG_REG_INT_OK, &aicl_state);
-	while (!(aicl_state & 0x80) && charger->cable_type != SEC_BATTERY_CABLE_NONE) {
+	while (!(aicl_state & MAX77865_AICL_I) && charger->cable_type != SEC_BATTERY_CABLE_NONE) {
 		if (++aicl_cnt >= 2) {
 			reduce_input_current(charger, REDUCE_CURRENT_STEP);
 			aicl_cnt = 0;

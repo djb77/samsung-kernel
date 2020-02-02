@@ -136,4 +136,7 @@
 #endif
 
 /* #define ENABLE_DBG_EVENT_PRINT */
+
+#define CHAIN_USE_VC_TASKLET	1
+
 #endif

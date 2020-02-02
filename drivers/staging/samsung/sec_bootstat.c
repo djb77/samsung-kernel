@@ -27,6 +27,7 @@
 #include <linux/sec_sysfs.h>
 #include <linux/sec_ext.h>
 #include <clocksource/arm_arch_timer.h>
+#include <linux/slab.h>
 
 static u32 mct_start;
 
@@ -80,7 +81,22 @@ static struct boot_event boot_events[] = {
 	{"!@Boot_SVC : onDataConnectionAttached",},
 	{"!@Boot_SVC : IMSI Ready",},
 	{"!@Boot_SVC : completeConnection",},
+	{"!@Boot_DEBUG: finishUserUnlockedCompleted",},
+    {"!@Boot: setIconVisibility: ims_volte: [SHOW]",},
+    {"!@Boot_DEBUG: Launcher.onCreate()",},
+    {"!@Boot_DEBUG: Launcher.onResume()",},
+    {"!@Boot_DEBUG: Launcher.LoaderTask.run() start",},
+    {"!@Boot_DEBUG: Launcher - FinishFirstBind",},
 };
+#define MAX_LENGTH_OF_SYSTEMSERVER_LOG 90
+struct systemserver_init_time_entry {
+	struct list_head next;
+	char buf[MAX_LENGTH_OF_SYSTEMSERVER_LOG];
+};
+
+static bool bootcompleted = false;
+
+LIST_HEAD(systemserver_init_time_list);
 
 void sec_bootstat_mct_start(u64 rate)
 {
@@ -108,6 +124,17 @@ void sec_bootstat_add(const char *c)
 	size_t i = 0;
 	unsigned long long t = 0;
 
+	if(!bootcompleted && !strncmp(c, "!@Boot_SystemServer: ", 21)){
+		struct systemserver_init_time_entry *entry;
+		entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+		if (!entry)
+			return;
+		strncpy(entry->buf,c+ 21, MAX_LENGTH_OF_SYSTEMSERVER_LOG);
+		entry->buf[MAX_LENGTH_OF_SYSTEMSERVER_LOG-1] = '\0';
+		list_add(&entry->next, &systemserver_init_time_list);
+		return;
+	}
+
 	for (i = 0; i < ARRAY_SIZE(boot_events); i++) {
 		if (!strcmp(c, boot_events[i].string)) {
 			if (boot_events[i].time == 0) {
@@ -120,6 +147,8 @@ void sec_bootstat_add(const char *c)
 				sec_bootstat_get_cpuinfo(boot_events[i].freq, &boot_events[i].online);
 				sec_bootstat_get_thermal(boot_events[i].temp);
 			}
+			// careful check bootcomplete message index 9
+			if(i == 9) bootcompleted = true;
 			break;
 		}
 	}
@@ -151,6 +180,7 @@ static int sec_boot_stat_proc_show(struct seq_file *m, void *v)
 {
 	size_t i = 0;
 	unsigned int last_time = 0;
+	struct systemserver_init_time_entry *systemserver_entry;
 
 	seq_puts(m, "boot event                                           time  ktime  delta f_c0 f_c1 online mask  B  L  G  I\n");
 	seq_puts(m, "---------------------------------------------------------------------------------------------------------\n");
@@ -179,6 +209,11 @@ static int sec_boot_stat_proc_show(struct seq_file *m, void *v)
 		else
 			break;
 	} while (i > 0 && i < ARRAY_SIZE(boot_events));
+
+	seq_puts(m, "---------------------------------------------------------------------------------------------------------\n");			
+	seq_puts(m, "SystemServer services that took long time\n\n");
+	list_for_each_entry (systemserver_entry, &systemserver_init_time_list, next)
+		seq_printf(m, "%s\n",systemserver_entry->buf);
 
 	return 0;
 }

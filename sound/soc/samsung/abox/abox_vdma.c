@@ -251,8 +251,6 @@ static int abox_vdma_trigger(struct snd_pcm_substream *substream, int cmd)
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		if (memblock_is_memory(substream->runtime->dma_addr))
-			abox_request_dram_on(pdev_abox, dev, true);
 		pcmtask_msg->param.trigger = 1;
 		ret = abox_vdma_request_ipc(&msg, 1, 0);
 		break;
@@ -261,8 +259,6 @@ static int abox_vdma_trigger(struct snd_pcm_substream *substream, int cmd)
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		pcmtask_msg->param.trigger = 0;
 		ret = abox_vdma_request_ipc(&msg, 1, 0);
-		if (memblock_is_memory(substream->runtime->dma_addr))
-			abox_request_dram_on(pdev_abox, dev, false);
 		break;
 	default:
 		dev_err(dev, "invalid command: %d\n", cmd);

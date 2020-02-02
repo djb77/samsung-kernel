@@ -46,7 +46,6 @@
 #include <linux/string.h>
 #include <linux/list.h>
 #include <linux/ratelimit.h>
-#include <linux/android_aid.h>
 #include "multiuser.h"
 
 /* the file system name */

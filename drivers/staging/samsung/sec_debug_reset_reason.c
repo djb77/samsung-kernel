@@ -92,6 +92,8 @@ static int set_debug_reset_reason_proc_show(struct seq_file *m, void *v)
 		seq_puts(m, "BPON\n");
 	else if (reset_reason == RR_T)
 		seq_puts(m, "TPON\n");
+	else if (reset_reason == RR_C)
+		seq_puts(m, "CPON\n");
 	else
 		seq_puts(m, "NPON\n");
 
@@ -147,28 +149,34 @@ static int sec_debug_reset_reason_pwrsrc_show(struct seq_file *m, void *v)
 {
 	ssize_t size = 0;
 	char buf[SZ_1K];
-	int i, x;
+	int i;
 
-	for (x = 0; x < 2; ++x) {
-		size += sprintf((char *)(buf + size), "%s:", (x == 0) ? "OFFSRC" : "ONSRC");
-		for (i = 0; i < 8; ++i) {
-			if (pwrxsrc[x] & (1 << i)) 
-				size += sprintf((char *)(buf + size), " %s", regs_bit[x][i]);
-		}
-		if (pwrxsrc[x] == 0)
-			size += sprintf((char *)(buf + size), " -");
+	size += scnprintf((char *)(buf + size), SZ_1K - size, "OFFSRC:");
+	if (!pwrxsrc[0])
+		size += scnprintf((char *)(buf + size), SZ_1K - size, " -");
+	else
+		for (i = 0; i < 8; i++)
+			if (pwrxsrc[0] & (1 << i))
+				size += scnprintf((char *)(buf + size), SZ_1K - size, " %s", regs_bit[0][i]);
 
-		size += sprintf((char *)(buf + size), " / ");
-	}
+	size += scnprintf((char *)(buf + size), SZ_1K - size, " /"); 
+	size += scnprintf((char *)(buf + size), SZ_1K - size, " ONSRC:");
+	if (!pwrxsrc[1])
+		size += scnprintf((char *)(buf + size), SZ_1K - size, " -");
+	else
+		for (i = 0; i < 8; i++)
+			if (pwrxsrc[1] & (1 << i))
+				size += scnprintf((char *)(buf + size), SZ_1K - size, " %s", regs_bit[1][i]);
 
-	size += sprintf((char *)(buf + size), "RSTSTAT:");
-	for (i = 0; i < 32; ++i) {
-		if (rst_stat & (1 << i)) {
-			size += sprintf((char *)(buf + size), " %s", dword_regs_bit[0][i]);
-		}
-	}
-	if (rst_stat == 0)
-		size += sprintf((char *)(buf + size), " -");
+	size += scnprintf((char *)(buf + size), SZ_1K - size, " /");
+
+	size += scnprintf((char *)(buf + size), SZ_1K - size, " RSTSTAT:");
+	if (!rst_stat)
+		size += scnprintf((char *)(buf + size), SZ_1K - size, " -");
+	else
+		for (i = 0; i < 32; i++)
+			if (rst_stat & (1 << i))
+				size += scnprintf((char *)(buf + size), SZ_1K - size, " %s", dword_regs_bit[0][i]);
 	
 	seq_printf(m, buf);
 
@@ -195,17 +203,16 @@ static int sec_debug_reset_reason_extra_show(struct seq_file *m, void *v)
 	if (!sec_debug_extra_info_backup)
 		return size;
 	
-	size += snprintf((char *)(buf + size), SZ_1K - size,
+	size += scnprintf((char *)(buf + size), SZ_1K - size,
 			"%s: %s  ",
 			sec_debug_extra_info_backup->item[INFO_PC].key,
 			sec_debug_extra_info_backup->item[INFO_PC].val);
 
-	size += snprintf((char *)(buf + size), SZ_1K - size,
+	size += scnprintf((char *)(buf + size), SZ_1K - size,
 			"%s: %s",
 			sec_debug_extra_info_backup->item[INFO_LR].key,
 			sec_debug_extra_info_backup->item[INFO_LR].val);
 	
-	size += sprintf((char *)(buf + size), "\n");
 	seq_printf(m, buf);
 
 	return 0;

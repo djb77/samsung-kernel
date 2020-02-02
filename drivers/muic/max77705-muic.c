@@ -1170,6 +1170,7 @@ static int max77705_muic_handle_detach(struct max77705_muic_data *muic_data, int
 	int ret = 0;
 #if defined(CONFIG_MUIC_NOTIFIER)
 	bool noti = true;
+	muic_attached_dev_t attached_dev = muic_data->attached_dev;
 #endif /* CONFIG_MUIC_NOTIFIER */
 
 #if defined(CONFIG_HV_MUIC_MAX77705_AFC)
@@ -1239,8 +1240,8 @@ static int max77705_muic_handle_detach(struct max77705_muic_data *muic_data, int
 
 #if defined(CONFIG_MUIC_NOTIFIER)
 	if (noti) {
-		muic_notifier_detach_attached_dev(muic_data->attached_dev);
 		muic_data->attached_dev = ATTACHED_DEV_NONE_MUIC;
+		muic_notifier_detach_attached_dev(attached_dev);
 	}
 #endif /* CONFIG_MUIC_NOTIFIER */
 

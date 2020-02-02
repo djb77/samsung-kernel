@@ -233,7 +233,7 @@ static void g2d_check_valid_fence(struct fence *fence, s32 fence_fd)
 	       fence, atomic_read(&fence->refcount.refcount),
 	       fence->lock, (unsigned long)fence->context);
 	pr_err(" timestamp %ld status %d magic_bit %#x\n",
-	       (long)fence->timestamp.tv64, fence->status, fence->magic_bit);
+	       (long)fence->timestamp.tv64, fence_get_status(fence), fence->magic_bit);
 
 	fput(file);
 }

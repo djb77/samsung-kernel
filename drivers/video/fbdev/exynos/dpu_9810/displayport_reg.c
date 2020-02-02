@@ -10,8 +10,12 @@
 */
 
 #include "displayport.h"
+#if defined(CONFIG_PHY_SAMSUNG_USB_CAL)
 #include "../../../drivers/phy/phy-samsung-usb-cal.h"
 #include "../../../drivers/phy/phy-exynos-usbdp.h"
+#include <linux/usb/otg-fsm.h>
+#include "../../../drivers/usb/dwc3/dwc3-exynos.h"
+#endif
 
 u32 phy_tune_parameters[4][4][3] = {
 	/* Swing Level_0 */ { {4, 0, 0}, {0, 7, 0}, {2,  9, 1}, {0, 13, 1} },
@@ -1302,6 +1306,9 @@ void displayport_reg_phy_aux_level_setting(void)
 
 void displayport_reg_phy_init(void)
 {
+#if defined(CONFIG_PHY_SAMSUNG_USB_CAL)
+	dwc3_exynos_phy_enable(1, 1);
+#endif
 	displayport_reg_phy_reset(1);
 	displayport_reg_phy_init_setting();
 	displayport_reg_phy_mode_setting();
@@ -1314,9 +1321,11 @@ void displayport_reg_phy_disable(void)
 {
 	displayport_reg_phy_reset(1);
 	displayport_phy_write(DP_REG_0, 0x00);
-
+#if defined(CONFIG_PHY_SAMSUNG_USB_CAL)
 	exynos_usbdrd_inform_dp_use(0, displayport_reg_get_lane_count());
 	exynos_usbdrd_request_phy_isol();
+	dwc3_exynos_phy_enable(1, 0);
+#endif
 }
 
 void displayport_reg_init(void)

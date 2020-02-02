@@ -1,4 +1,4 @@
-/* drivers/misc/uid_cputime.c
+/* drivers/misc/uid_sys_stats.c
  *
  * Copyright (C) 2014 - 2015 Google, Inc.
  *
@@ -14,6 +14,7 @@
  */
 
 #include <linux/atomic.h>
+#include <linux/cpufreq_times.h>
 #include <linux/err.h>
 #include <linux/hashtable.h>
 #include <linux/init.h>
@@ -132,7 +133,7 @@ static void get_full_task_comm(struct task_entry *task_entry,
 	struct mm_struct *mm = task->mm;
 
 	/* fill the first TASK_COMM_LEN bytes with thread name */
-	get_task_comm(task_entry->comm, task);
+	__get_task_comm(task_entry->comm, TASK_COMM_LEN, task);
 	i = strlen(task_entry->comm);
 	while (i < TASK_COMM_LEN)
 		task_entry->comm[i++] = ' ';
@@ -482,13 +483,13 @@ static int uid_cputime_open(struct inode *inode, struct file *file)
 	record_uid_idx = 0;
 #endif
 
-	read_lock(&tasklist_lock);
+	rcu_read_lock();
 	do_each_thread(temp, task) {
 		uid = from_kuid_munged(user_ns, task_uid(task));
 		if (!uid_entry || uid_entry->uid != uid)
 			uid_entry = find_or_register_uid_of_task(task);
 		if (!uid_entry) {
-			read_unlock(&tasklist_lock);
+			rcu_read_unlock();
 			rt_mutex_unlock(&uid_lock);
 			pr_err("%s: failed to find the uid_entry for uid %d\n",
 				__func__, uid);
@@ -498,7 +499,7 @@ static int uid_cputime_open(struct inode *inode, struct file *file)
 		uid_entry->active_utime += utime;
 		uid_entry->active_stime += stime;
 	} while_each_thread(temp, task);
-	read_unlock(&tasklist_lock);
+	rcu_read_unlock();
 
 	rt_mutex_unlock(&uid_lock);
 	return seq_open(file, &uid_seqops);
@@ -542,6 +543,10 @@ static ssize_t uid_remove_write(struct file *file,
 		kstrtol(end_uid, 10, &uid_end) != 0) {
 		return -EINVAL;
 	}
+
+	/* Also remove uids from /proc/uid_time_in_state */
+	cpufreq_task_times_remove_uids(uid_start, uid_end);
+
 	rt_mutex_lock(&uid_lock);
 
 	for (; uid_start <= uid_end; uid_start++) {

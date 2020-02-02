@@ -5550,6 +5550,7 @@ static void set_carrier(struct r8152 *tp)
 			netif_carrier_on(netdev);
 			rtl_start_rx(tp);
 			napi_enable(&tp->napi);
+			pr_info("r8152 carrier on\n");
 		}
 	} else {
 		if (netif_carrier_ok(netdev)) {
@@ -5557,6 +5558,7 @@ static void set_carrier(struct r8152 *tp)
 			napi_disable(&tp->napi);
 			tp->rtl_ops.disable(tp);
 			napi_enable(&tp->napi);
+			pr_info("r8152 carrier off\n");
 		}
 	}
 }

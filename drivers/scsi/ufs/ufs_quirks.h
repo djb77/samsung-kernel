@@ -31,16 +31,6 @@
 #define UFS_UN_20_DIGITS 20
 #define UFS_UN_MAX_DIGITS 21 //current max digit + 1
 
-/**
- * ufs_device_info - ufs device details
- * @wmanufacturerid: card details
- * @model: card model
- */
-struct ufs_device_info {
-	u16 wmanufacturerid;
-	u8 lifetime;
-	char model[MAX_MODEL_LEN + 1];
-};
 
 /**
  * ufs_dev_fix - ufs device quirk info
@@ -48,19 +38,18 @@ struct ufs_device_info {
  * @quirk: device quirk
  */
 struct ufs_dev_fix {
-	struct ufs_device_info card;
+	struct ufs_dev_desc card;
 	unsigned int quirk;
 };
 
 #define END_FIX { { 0 }, 0 }
 
 /* add specific device quirk */
-#define UFS_FIX(_vendor, _model, _quirk) \
-		{					  \
-			.card.wmanufacturerid = (_vendor),\
-			.card.model = (_model),		  \
-			.quirk = (_quirk),		  \
-		}
+#define UFS_FIX(_vendor, _model, _quirk) { \
+	.card.wmanufacturerid = (_vendor),\
+	.card.model = (_model),		   \
+	.quirk = (_quirk),		   \
+}
 
 /*
  * If UFS device is having issue in processing LCC (Line Control
@@ -141,7 +130,22 @@ struct ufs_dev_fix {
 #define UFS_DEVICE_QUIRK_SUPPORT_QUERY_FATAL_MODE	(1 << 9)
 
 struct ufs_hba;
-void ufs_advertise_fixup_device(struct ufs_hba *hba);
+/*
+ * Some UFS devices require host PA_TACTIVATE to be lower than device
+ * PA_TACTIVATE, enabling this quirk ensure this.
+ */
+#define UFS_DEVICE_QUIRK_HOST_PA_TACTIVATE	(1 << 7)
+
+
+/*
+ * The max. value PA_SaveConfigTime is 250 (10us) but this is not enough for
+ * some vendors.
+ * Gear switch from PWM to HS may fail even with this max. PA_SaveConfigTime.
+ * Gear switch can be issued by host controller as an error recovery and any
+ * software delay will not help on this case so we need to increase
+ * PA_SaveConfigTime to >32us as per vendor recommendation.
+ */
+#define UFS_DEVICE_QUIRK_HOST_PA_SAVECONFIGTIME	(1 << 8)
 void ufs_set_sec_unique_number(struct ufs_hba *hba, u8 *str_desc_buf, u8 *desc_buf);
 
 #endif /* UFS_QUIRKS_H_ */

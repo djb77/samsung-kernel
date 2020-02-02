@@ -573,8 +573,10 @@ int tsmux_ioctl_m2m_run(struct tsmux_context *ctx)
 			if (ctx->psi_info.pat_len < 0 || ctx->psi_info.pmt_len < 0 || ctx->psi_info.pcr_len < 0)
 				psi_validation = 0;
 			psi_len = ctx->psi_info.pat_len + ctx->psi_info.pmt_len + ctx->psi_info.pcr_len;
-			if (psi_len >= TSMUX_PSI_SIZE)
+			if (psi_len >= TSMUX_PSI_SIZE * sizeof(int))
 				psi_validation = 0;
+			print_tsmux(TSMUX_M2M, "pkt_ctrl.psi_en %d, psi_validation %d\n",
+				m2m_job->pkt_ctrl.psi_en, psi_validation);
 
 			if (m2m_job->pkt_ctrl.psi_en && psi_validation) {
 				/* PAT CC should be set by tsmux device driver */
@@ -870,11 +872,13 @@ int packetize(struct packetizing_param *param)
 	ctx->otf_psi_enabled[index] = ctx->otf_cmd_queue.config.pkt_ctrl.psi_en;
 
 	psi_validation = 1;
-	if (ctx->psi_info.pat_len < 0 || ctx->psi_info.pmt_len < 0 || ctx->psi_info.pcr_len)
+	if (ctx->psi_info.pat_len < 0 || ctx->psi_info.pmt_len < 0 || ctx->psi_info.pcr_len < 0)
 		psi_validation = 0;
 	psi_len = ctx->psi_info.pat_len + ctx->psi_info.pmt_len + ctx->psi_info.pcr_len;
-	if (psi_len >= TSMUX_PSI_SIZE)
+	if (psi_len >= TSMUX_PSI_SIZE * sizeof(int))
 		psi_validation = 0;
+	print_tsmux(TSMUX_OTF, "pkt_ctrl.psi_en %d, psi_validation %d\n",
+		ctx->otf_cmd_queue.config.pkt_ctrl.psi_en, psi_validation);
 
 	if (ctx->otf_cmd_queue.config.pkt_ctrl.psi_en == 1 && psi_validation) {
 		/* PAT CC should be set by tsmux device driver */
@@ -1253,7 +1257,7 @@ void add_null_ts_packet(uint8_t *ptr, int out_buf_size, struct tsmux_ts_hdr *ts_
 
 static bool tsmux_ioctl_otf_dq_buf(struct tsmux_context *ctx)
 {
-	unsigned long wait_time = 0;
+	long wait_time = 0;
 	struct tsmux_device *tsmux_dev = ctx->tsmux_dev;
 	unsigned long flags;
 	int index = -1;
@@ -1270,7 +1274,7 @@ static bool tsmux_ioctl_otf_dq_buf(struct tsmux_context *ctx)
 	while ((index = get_job_done_buf(ctx)) == -1) {
 		wait_time = wait_event_interruptible_timeout(ctx->otf_wait_queue,
 				is_otf_job_done(ctx), HZ / 10);
-		print_tsmux(TSMUX_OTF, "dq buf wait_time: %lu\n", wait_time);
+		print_tsmux(TSMUX_OTF, "dq buf wait_time: %ld\n", wait_time);
 		if (wait_time <= 0)
 			break;
 	}
@@ -1338,7 +1342,7 @@ static bool tsmux_ioctl_otf_dq_buf(struct tsmux_context *ctx)
 
 		spin_unlock_irqrestore(&tsmux_dev->device_spinlock, flags);
 	} else {
-		print_tsmux(TSMUX_ERR, "time out: wait_time: %lu\n", wait_time);
+		print_tsmux(TSMUX_ERR, "time out: wait_time: %ld\n", wait_time);
 		return false;
 	}
 

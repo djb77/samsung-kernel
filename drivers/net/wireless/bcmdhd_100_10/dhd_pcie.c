@@ -192,7 +192,7 @@ extern void dhd_prot_set_h2d_max_txpost(dhd_pub_t *dhd, uint16 max_txpost);
 static int dhdpcie_wrt_host_whitelist_region(struct dhd_bus *bus);
 
 #ifdef DHD_SSSR_DUMP
-static int dhdpcie_sssr_dump(dhd_pub_t *dhd);
+int dhdpcie_sssr_dump(dhd_pub_t *dhd);
 #endif /* DHD_SSSR_DUMP */
 
 /* IOVar table */
@@ -3329,9 +3329,7 @@ dhdpcie_checkdied(dhd_bus_t *bus, char *data, uint size)
 		/* save core dump or write to a file */
 		if (bus->dhd->memdump_enabled) {
 #ifdef DHD_SSSR_DUMP
-			if (bus->dhd->sssr_inited) {
-				dhdpcie_sssr_dump(bus->dhd);
-			}
+			bus->dhd->collect_sssr = TRUE;
 #endif /* DHD_SSSR_DUMP */
 			bus->dhd->memdump_type = DUMP_TYPE_DONGLE_TRAP;
 			dhdpcie_mem_dump(bus);
@@ -9913,7 +9911,7 @@ dhdpcie_sssr_dump_get_after_sr(dhd_pub_t *dhd)
 	return BCME_OK;
 }
 
-static int
+int
 dhdpcie_sssr_dump(dhd_pub_t *dhd)
 {
 	if (!dhd->sssr_inited) {
@@ -9951,16 +9949,11 @@ dhdpcie_sssr_dump(dhd_pub_t *dhd)
 		return BCME_ERROR;
 	}
 
-	dhd_schedule_sssr_dump(dhd);
+	dhd_write_sssr_dump(dhd);
 
 	return BCME_OK;
 }
 
-int
-dhd_bus_sssr_dump(dhd_pub_t *dhd)
-{
-	return dhdpcie_sssr_dump(dhd);
-}
 #endif /* DHD_SSSR_DUMP */
 
 #ifdef DHD_WAKE_STATUS

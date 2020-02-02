@@ -271,6 +271,7 @@ struct dsim_lcd_driver {
 	int (*poweroff)(struct dsim_device *dsim);
 	int (*sleepin)(struct dsim_device *dsim);
 	int (*sleepout)(struct dsim_device *dsim);
+	int (*reset)(struct dsim_device *dsim);
 #ifdef CONFIG_SUPPORT_DOZE
 	int (*doze)(struct dsim_device *dsim);
 	int (*doze_suspend)(struct dsim_device *dsim);

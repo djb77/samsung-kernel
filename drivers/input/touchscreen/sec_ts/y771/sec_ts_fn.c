@@ -6947,7 +6947,7 @@ static void set_pressure_user_level(void *device_data)
 
 	input_info(true, &ts->client->dev, "%s: set user level: %d\n", __func__, data[0]);
 
-	ts->pressure_user_level = data[0];
+	ts->pressure_user_level = sec->cmd_param[0];
 
 	addr[0] = SEC_TS_CMD_SPONGE_OFFSET_PRESSURE_THD_HIGH;
 	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SPONGE_READ_PARAM, addr, 2);
@@ -7021,7 +7021,7 @@ static void get_pressure_user_level(void *device_data)
 		goto out_get_user_level;
 
 	input_err(true, &ts->client->dev, "%s: set user level: %d\n", __func__, data[0]);
-	ts->pressure_user_level = data[0];
+	/* ts->pressure_user_level = data[0]; */
 
 	snprintf(buff, sizeof(buff), "%s", "OK");
 	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));

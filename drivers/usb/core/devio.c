@@ -134,42 +134,38 @@ enum snoop_when {
 #define USB_DEVICE_DEV		MKDEV(USB_DEVICE_MAJOR, 0)
 
 /* Limit on the total amount of memory we can allocate for transfers */
-static unsigned usbfs_memory_mb = 16;
+static u32 usbfs_memory_mb = 16;
 module_param(usbfs_memory_mb, uint, 0644);
 MODULE_PARM_DESC(usbfs_memory_mb,
 		"maximum MB allowed for usbfs buffers (0 = no limit)");
 
 /* Hard limit, necessary to avoid arithmetic overflow */
-#define USBFS_XFER_MAX		(UINT_MAX / 2 - 1000000)
+#define USBFS_XFER_MAX         (UINT_MAX / 2 - 1000000)
 
-static atomic_t usbfs_memory_usage;	/* Total memory currently allocated */
+static atomic64_t usbfs_memory_usage;	/* Total memory currently allocated */
 
 /* Check whether it's okay to allocate more memory for a transfer */
-static int usbfs_increase_memory_usage(unsigned amount)
+static int usbfs_increase_memory_usage(u64 amount)
 {
-	unsigned lim;
+	u64 lim;
 
-	/*
-	 * Convert usbfs_memory_mb to bytes, avoiding overflows.
-	 * 0 means use the hard limit (effectively unlimited).
-	 */
 	lim = ACCESS_ONCE(usbfs_memory_mb);
-	if (lim == 0 || lim > (USBFS_XFER_MAX >> 20))
-		lim = USBFS_XFER_MAX;
-	else
-		lim <<= 20;
+	lim <<= 20;
 
-	atomic_add(amount, &usbfs_memory_usage);
-	if (atomic_read(&usbfs_memory_usage) <= lim)
-		return 0;
-	atomic_sub(amount, &usbfs_memory_usage);
-	return -ENOMEM;
+	atomic64_add(amount, &usbfs_memory_usage);
+
+	if (lim > 0 && atomic64_read(&usbfs_memory_usage) > lim) {
+		atomic64_sub(amount, &usbfs_memory_usage);
+		return -ENOMEM;
+	}
+
+	return 0;
 }
 
 /* Memory for a transfer is being deallocated */
-static void usbfs_decrease_memory_usage(unsigned amount)
+static void usbfs_decrease_memory_usage(u64 amount)
 {
-	atomic_sub(amount, &usbfs_memory_usage);
+	atomic64_sub(amount, &usbfs_memory_usage);
 }
 
 static int connected(struct usb_dev_state *ps)
@@ -982,6 +978,10 @@ static struct usb_device *usbdev_lookup_by_devt(dev_t devt)
 	return to_usb_device(dev);
 }
 
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+static unsigned int prev_cmd = 0;
+static int prev_ret = 0;
+#endif
 /*
  * file operations
  */
@@ -1036,6 +1036,10 @@ static int usbdev_open(struct inode *inode, struct file *file)
 	usb_unlock_device(dev);
 	snoop(&dev->dev, "opened by process %d: %s\n", task_pid_nr(current),
 			current->comm);
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	prev_cmd = 0;
+	prev_ret = 0;
+#endif
 	return ret;
 
  out_unlock_device:
@@ -1191,7 +1195,7 @@ static int proc_bulk(struct usb_dev_state *ps, void __user *arg)
 	if (!usb_maxpacket(dev, pipe, !(bulk.ep & USB_DIR_IN)))
 		return -EINVAL;
 	len1 = bulk.len;
-	if (len1 >= USBFS_XFER_MAX)
+	if (len1 >= (INT_MAX - sizeof(struct urb)))
 		return -EINVAL;
 	ret = usbfs_increase_memory_usage(len1 + sizeof(struct urb));
 	if (ret)
@@ -1458,13 +1462,19 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 	int number_of_packets = 0;
 	unsigned int stream_id = 0;
 	void *buf;
-
-	if (uurb->flags & ~(USBDEVFS_URB_ISO_ASAP |
-				USBDEVFS_URB_SHORT_NOT_OK |
+	unsigned long mask =	USBDEVFS_URB_SHORT_NOT_OK |
 				USBDEVFS_URB_BULK_CONTINUATION |
 				USBDEVFS_URB_NO_FSBR |
 				USBDEVFS_URB_ZERO_PACKET |
-				USBDEVFS_URB_NO_INTERRUPT))
+				USBDEVFS_URB_NO_INTERRUPT;
+	/* USBDEVFS_URB_ISO_ASAP is a special case */
+	if (uurb->type == USBDEVFS_URB_TYPE_ISO)
+		mask |= USBDEVFS_URB_ISO_ASAP;
+
+	if (uurb->flags & ~mask)
+			return -EINVAL;
+
+	if ((unsigned int)uurb->buffer_length >= USBFS_XFER_MAX)
 		return -EINVAL;
 	if (uurb->buffer_length > 0 && !uurb->buffer)
 		return -EINVAL;
@@ -1584,10 +1594,6 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 		return -EINVAL;
 	}
 
-	if (uurb->buffer_length >= USBFS_XFER_MAX) {
-		ret = -EINVAL;
-		goto error;
-	}
 	if (uurb->buffer_length > 0 &&
 			!access_ok(is_in ? VERIFY_WRITE : VERIFY_READ,
 				uurb->buffer, uurb->buffer_length)) {
@@ -1838,6 +1844,18 @@ static int proc_unlinkurb(struct usb_dev_state *ps, void __user *arg)
 	return 0;
 }
 
+static void compute_isochronous_actual_length(struct urb *urb)
+{
+	unsigned int i;
+
+	if (urb->number_of_packets > 0) {
+		urb->actual_length = 0;
+		for (i = 0; i < urb->number_of_packets; i++)
+			urb->actual_length +=
+					urb->iso_frame_desc[i].actual_length;
+	}
+}
+
 static int processcompl(struct async *as, void __user * __user *arg)
 {
 	struct urb *urb = as->urb;
@@ -1845,6 +1863,7 @@ static int processcompl(struct async *as, void __user * __user *arg)
 	void __user *addr = as->userurb;
 	unsigned int i;
 
+	compute_isochronous_actual_length(urb);
 	if (as->userbuffer && urb->actual_length) {
 		if (copy_urb_data_to_user(as->userbuffer, urb))
 			goto err_out;
@@ -2019,6 +2038,7 @@ static int processcompl_compat(struct async *as, void __user * __user *arg)
 	void __user *addr = as->userurb;
 	unsigned int i;
 
+	compute_isochronous_actual_length(urb);
 	if (as->userbuffer && urb->actual_length) {
 		if (copy_urb_data_to_user(as->userbuffer, urb))
 			return -EFAULT;
@@ -2629,7 +2649,11 @@ static int usbdev_log(unsigned int cmd, int ret)
 		cmd_string = "DEFAULT";
 		break;
 	}
-	pr_err("%s: %s error ret=%d\n", __func__, cmd_string, ret);
+	if ((prev_cmd != cmd) || (prev_ret != ret)) {
+		printk(KERN_ERR "%s: %s error ret=%d\n", __func__, cmd_string, ret);
+		prev_cmd = cmd;
+		prev_ret = ret;
+	}
 	return 0;
 }
 #endif
@@ -2643,6 +2667,10 @@ static long usbdev_ioctl(struct file *file, unsigned int cmd,
 #ifdef CONFIG_USB_DEBUG_DETAILED_LOG
 	if (ret < 0)
 		usbdev_log(cmd, ret);
+	else {
+		prev_cmd = 0;
+		prev_ret = 0;
+	}
 #endif
 	return ret;
 }

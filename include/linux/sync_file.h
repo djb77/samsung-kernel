@@ -40,6 +40,7 @@ struct sync_file {
 #endif
 
 	wait_queue_head_t	wq;
+	unsigned long		flags;
 
 	struct fence		*fence;
 	struct fence_cb cb;

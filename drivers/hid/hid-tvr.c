@@ -75,6 +75,8 @@ static int tvr_report_event(struct hid_device *hid, u8 *data, int len);
 static int tvr_connect(struct hid_device *hid);
 static void tvr_disconnect(struct hid_device *hid);
 
+struct hidraw *tvrraw = NULL;
+
 #ifdef CONFIG_HID_OVR
 extern int ovr_connect(struct hid_device *hid, int mode);
 extern void ovr_disconnect(struct hid_device *hid);
@@ -402,12 +404,13 @@ unlock:
 
 static int tvr_report_event(struct hid_device *hid, u8 *data, int len)
 {
-	struct hidraw *dev;
+	struct hidraw *dev = hid->hidtvr;
 	struct hidraw_list *list;
 	int ret = 0;
 	unsigned long flags;
 
-	dev = tvr_hidraw_table[hid->minor];
+	if (!dev)
+		return -EPERM;
 
 	spin_lock_irqsave(&list_lock, flags);
 	list_for_each_entry(list, &dev->list, node) {
@@ -480,7 +483,6 @@ static int tvr_connect(struct hid_device *hid)
 
 	printk("TVR: connect <<<\n");
 
-	mutex_unlock(&minors_lock);
 	init_waitqueue_head(&dev->wait);
 	INIT_LIST_HEAD(&dev->list);
 
@@ -488,16 +490,17 @@ static int tvr_connect(struct hid_device *hid)
 	dev->minor = minor;
 
 	dev->exist = 1;
+	hid->hidtvr = dev;
+	tvrraw = dev;
 
+	mutex_unlock(&minors_lock);
 out:
 	return result;
 }
 
 static void tvr_disconnect(struct hid_device *hid)
 {
-	struct hidraw *hidraw;
-
-	hidraw = tvr_hidraw_table[hid->minor];
+	struct hidraw *hidraw = hid->hidtvr;
 
 	mutex_lock(&minors_lock);
 
@@ -774,14 +777,14 @@ static int tvr_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		retval = tvr_connect(hdev);
 		if (retval) {
 			hid_err(hdev, "TVR: Couldn't connect\n");
-			goto exit;
+			return -EFAULT;
 		}
 
 		retval = gearvr_connect(hdev, 1);
 		if (retval) {
 			hid_err(hdev, "TVR: Couldn't connect Gearvr\n");
 			tvr_disconnect(hdev);
-			goto exit;
+			return -EFAULT;
 		}
 
 		retval = tvr_init_keys(hdev);
@@ -789,10 +792,12 @@ static int tvr_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			hid_err(hdev, "TVR: Couldn't register keys\n");
 			gearvr_disconnect(hdev);
 			tvr_disconnect(hdev);
-			goto exit;
+			return -EFAULT;
 		}
 
 		isTvrConnected = TVR_CONNECTED;
+	} else if (ifproto == TVR_PROTOCOL_CONTROL) {
+		hdev->hidtvr = tvrraw;
 	}
 
 	retval = hid_parse(hdev);
@@ -912,6 +917,7 @@ static struct device_attribute *tvr_attrs[] = {
 
 static const struct hid_device_id tvr_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_TVR_1) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_TVR_2) },
 	{ }
 };
 

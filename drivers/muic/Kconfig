@@ -135,3 +135,10 @@ config MUIC_HV_SUPPORT_POGO_DOCK
 	help
 	  If you say yes here you will get support for the AFC pogo dock.
 
+config MUIC_SM5508
+	bool "SM5508 MUIC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for the SM5508 MUIC chip.
+	  

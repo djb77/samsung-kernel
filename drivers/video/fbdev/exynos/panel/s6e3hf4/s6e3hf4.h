@@ -126,6 +126,8 @@
 #define S6E3HF4_SCR_WB_OFS	(53)
 #define S6E3HF4_NIGHT_MODE_OFS	(S6E3HF4_SCR_CR_OFS)
 #define S6E3HF4_NIGHT_MODE_LEN	(24)
+#define S6E3HF4_COLOR_LENS_OFS	(S6E3HF4_SCR_CR_OFS)
+#define S6E3HF4_COLOR_LENS_LEN	(24)
 
 #define S6E3HF4_TRANS_MODE_OFS	(16)
 #define S6E3HF4_TRANS_MODE_LEN	(1)
@@ -335,6 +337,9 @@ int getidx_acl_opr_table(struct maptbl *);
 int getidx_dsc_table(struct maptbl *);
 int getidx_resolution_table(struct maptbl *);
 int getidx_lpm_table(struct maptbl *);
+#ifdef CONFIG_EXYNOS_DECON_MDNIE_LITE
+void copy_dummy_maptbl(struct maptbl *tbl, u8 *dst);
+#endif
 void copy_common_maptbl(struct maptbl *, u8 *);
 void copy_elvss_temp_maptbl(struct maptbl *, u8 *);
 void copy_tset_maptbl(struct maptbl *, u8 *);
@@ -356,6 +361,8 @@ int getidx_mdnie_hdr_maptbl(struct maptbl *tbl);
 int getidx_mdnie_trans_mode_maptbl(struct maptbl *tbl);
 int init_mdnie_night_mode_table(struct maptbl *tbl);
 int getidx_mdnie_night_mode_maptbl(struct maptbl *tbl);
+int init_mdnie_color_lens_table(struct maptbl *tbl);
+int getidx_color_lens_maptbl(struct maptbl *tbl);
 int init_color_coordinate_table(struct maptbl *);
 int init_sensor_rgb_table(struct maptbl *tbl);
 int getidx_adjust_ldu_maptbl(struct maptbl *tbl);

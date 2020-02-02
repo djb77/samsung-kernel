@@ -180,6 +180,11 @@ int noinline dsms_send_message(const char *feature_code,
 	void *address;
 	int ret;
 
+#ifdef DSMS_KERNEL_ENG /* skip dsms at eng binary */
+	printk(KERN_ALERT DSMS_TAG "It's ENG binary, skip...");
+	return DSMS_SUCCESS;
+#endif /* DSMS_KERNEL_ENG */
+
 	// check recovery mode on, dsms doesn't work in recovery mode
 	if (check_recovery_mode()) {
 		printk(KERN_ALERT DSMS_TAG "Recovery mode, DSMS is disabled.");

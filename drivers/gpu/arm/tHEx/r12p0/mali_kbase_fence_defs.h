@@ -51,7 +51,7 @@
 #define dma_fence_get_status(a) (fence_is_signaled(a) ? (a)->status ?: 1 : 0)
 #endif
 #else
-#define dma_fence_get_status(a) (fence_is_signaled(a) ? (a)->status ?: 1 : 0)
+#define dma_fence_get_status(a) (fence_is_signaled(a) ? (a)->error ?: 1 : 0)
 #endif
 
 #else

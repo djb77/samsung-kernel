@@ -17,8 +17,6 @@
 #include "fimc-is-device-ischain.h"
 #include "fimc-is-device-sensor.h"
 
-#define TAG_DATA_MAX		8
-
 #ifdef CONFIG_USE_SENSOR_GROUP
 #define GET_DEVICE_TYPE_BY_GRP(group_id)	\
 	({enum fimc_is_device_type type;	\
@@ -69,9 +67,8 @@ struct devicemgr_sensor_tag_data {
 struct fimc_is_devicemgr {
 	struct fimc_is_device_sensor		*sensor[FIMC_IS_STREAM_COUNT];
 	struct fimc_is_device_ischain		*ischain[FIMC_IS_STREAM_COUNT];
-	u32					tasklet_index[FIMC_IS_STREAM_COUNT];
-	struct tasklet_struct			tasklet_sensor_tag[FIMC_IS_STREAM_COUNT][TAG_DATA_MAX];
-	struct devicemgr_sensor_tag_data	sensor_tag_data[FIMC_IS_STREAM_COUNT][TAG_DATA_MAX];
+	struct tasklet_struct			tasklet_sensor_tag[FIMC_IS_STREAM_COUNT];
+	struct devicemgr_sensor_tag_data	sensor_tag_data[FIMC_IS_STREAM_COUNT];
 };
 
 struct fimc_is_group *get_ischain_leader_group(struct fimc_is_device_ischain *device);

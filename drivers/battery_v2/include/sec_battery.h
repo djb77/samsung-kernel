@@ -75,6 +75,19 @@
 #define SEC_BAT_CURRENT_EVENT_AICL			0x8000
 #define SEC_BAT_CURRENT_EVENT_HV_DISABLE		0x10000
 #define SEC_BAT_CURRENT_EVENT_SELECT_PDO		0x20000
+#define BATT_MISC_EVENT_BATTERY_HEALTH			0x000F0000
+
+#define BATTERY_HEALTH_SHIFT                16
+enum misc_battery_health {
+	BATTERY_HEALTH_UNKNOWN = 0,
+	BATTERY_HEALTH_GOOD,
+	BATTERY_HEALTH_NORMAL,
+	BATTERY_HEALTH_AGED,
+	BATTERY_HEALTH_MAX = BATTERY_HEALTH_AGED,
+
+	/* For event */
+	BATTERY_HEALTH_BAD = 0xF,
+};
 
 #if defined(CONFIG_SEC_FACTORY)             // SEC_FACTORY
 #define STORE_MODE_CHARGING_MAX 80
@@ -415,6 +428,7 @@ struct sec_battery_info {
 #if defined(CONFIG_BATTERY_AGE_FORECAST)
 	int batt_cycle;
 #endif
+	int batt_asoc;
 #if defined(CONFIG_STEP_CHARGING)
 	unsigned int step_charging_type;
 	unsigned int step_charging_charge_power;
@@ -475,12 +489,14 @@ extern int sec_bat_get_charger_type_adc(struct sec_battery_info *battery);
 extern bool sec_bat_get_value_by_adc(struct sec_battery_info *battery, enum sec_battery_adc_channel channel, union power_supply_propval *value);
 extern int sec_bat_get_adc_value(struct sec_battery_info *battery, int channel);
 extern bool sec_bat_check_vf_adc(struct sec_battery_info *battery);
-extern void sec_bat_set_misc_event(struct sec_battery_info *battery, const int misc_event_type, bool do_clear);
+extern void sec_bat_set_misc_event(struct sec_battery_info *battery, unsigned int misc_event_val, unsigned int misc_event_mask);
 extern void sec_bat_set_current_event(struct sec_battery_info *battery, unsigned int current_event_val, unsigned int current_event_mask);
 extern void sec_bat_get_battery_info(struct sec_battery_info *battery);
 extern int sec_bat_set_charge(struct sec_battery_info *battery, int chg_mode);
 extern int sec_bat_set_charging_current(struct sec_battery_info *battery);
 extern void sec_bat_aging_check(struct sec_battery_info *battery);
+
+extern void sec_bat_check_battery_health(struct sec_battery_info *battery);
 
 #if defined(CONFIG_WIRELESS_FIRMWARE_UPDATE)
 extern void sec_bat_fw_update_work(struct sec_battery_info *battery, int mode);

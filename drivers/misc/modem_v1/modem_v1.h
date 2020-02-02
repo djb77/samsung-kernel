@@ -157,6 +157,8 @@ enum sipc_ch_id {
 	SIPC_CH_ID_LOOPBACK1,	/*ID:30*/
 	SIPC_CH_ID_LOOPBACK2,	/*ID:31*/
 
+	SIPC_CH_ID_CASS = 35,
+
 	/* 32 ~ 214 are reserved */
 
 	SIPC5_CH_ID_BOOT_0 = 215,

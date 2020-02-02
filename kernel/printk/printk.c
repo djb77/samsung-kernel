@@ -571,6 +571,14 @@ void register_set_auto_comm_buf(void (*func)(int type, const char *buf, size_t s
 }
 #endif
 
+#ifdef CONFIG_SEC_DEBUG_INIT_LOG
+static void (*func_hook_init_log)(const char *buf, size_t size);
+void register_init_log_hook_func(void (*func)(const char *buf, size_t size))
+{
+	func_hook_init_log = func;
+}
+#endif
+
 #ifdef CONFIG_EXYNOS_SNAPSHOT
 static size_t hook_size;
 static char hook_text[LOG_LINE_MAX + PREFIX_MAX];
@@ -711,6 +719,12 @@ static int log_store(int facility, int level,
 #ifdef CONFIG_SEC_DEBUG_AUTO_SUMMARY
 		if (msg->for_auto_summary && func_hook_auto_comm)
 			func_hook_auto_comm(msg->type_auto_summary, hook_text, hook_size);
+#endif
+
+#ifdef CONFIG_SEC_DEBUG_INIT_LOG
+		if (task_pid_nr(current) == 1 && func_hook_init_log) {
+			func_hook_init_log(hook_text, hook_size);
+		}
 #endif
 	}
 #endif
@@ -2530,7 +2544,7 @@ void console_unlock(void)
 	}
 
 	/*
-	 * Console drivers are called under logbuf_lock, so
+	 * Console drivers are called with interrupts disabled, so
 	 * @console_may_schedule should be cleared before; however, we may
 	 * end up dumping a lot of lines, for example, if called from
 	 * console registration path, and should invoke cond_resched()
@@ -2538,11 +2552,15 @@ void console_unlock(void)
 	 * scheduling stall on a slow console leading to RCU stall and
 	 * softlockup warnings which exacerbate the issue with more
 	 * messages practically incapacitating the system.
+	 *
+	 * console_trylock() is not able to detect the preemptive
+	 * context reliably. Therefore the value must be stored before
+	 * and cleared after the the "again" goto label.
 	 */
 	do_cond_resched = console_may_schedule;
+again:
 	console_may_schedule = 0;
 
-again:
 	/*
 	 * We released the console_sem lock, so we need to recheck if
 	 * cpu is online and (if not) is there at least one CON_ANYTIME

@@ -26,6 +26,7 @@
 #include <linux/cpumask.h>
 #include <linux/interrupt.h>
 #include <linux/sec_argos.h>
+#include <linux/ologk.h>
 
 #ifdef CONFIG_SCHED_EHMP
 #include <linux/ehmp.h>
@@ -561,6 +562,9 @@ static int argos_pm_qos_notify(struct notifier_block *nfb,
 	prev_level = cnode->prev_level;
 
 	pr_debug("%s name:%s, speed:%ldMbps\n", __func__, cnode->desc, speed);
+	if(speed >= 300) {
+		perflog(PERFLOG_ARGOS, "name:%s, speed:%ldMbps", cnode->desc, speed);
+	}
 
 	argos_blocked = cnode->argos_block;
 

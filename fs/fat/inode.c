@@ -53,6 +53,7 @@ struct fat_bios_param_block {
 	u32	fat32_vol_id;
 };
 
+static struct kset *fat_kset;
 static int fat_default_codepage = CONFIG_FAT_DEFAULT_CODEPAGE;
 static char fat_default_iocharset[] = CONFIG_FAT_DEFAULT_IOCHARSET;
 
@@ -696,13 +697,21 @@ static void fat_set_state(struct super_block *sb,
 	brelse(bh);
 }
 
+static void fat_reset_iocharset(struct fat_mount_options *opts)
+{
+	if (opts->iocharset != fat_default_iocharset) {
+		/* Note: opts->iocharset can be NULL here */
+		kfree(opts->iocharset);
+		opts->iocharset = fat_default_iocharset;
+	}
+}
+
 static void delayed_free(struct rcu_head *p)
 {
 	struct msdos_sb_info *sbi = container_of(p, struct msdos_sb_info, rcu);
 	unload_nls(sbi->nls_disk);
 	unload_nls(sbi->nls_io);
-	if (sbi->options.iocharset != fat_default_iocharset)
-		kfree(sbi->options.iocharset);
+	fat_reset_iocharset(&sbi->options);
 	kfree(sbi);
 }
 
@@ -773,7 +782,7 @@ static int __init fat_init_inodecache(void)
 	return 0;
 }
 
-static void __exit fat_destroy_inodecache(void)
+static void fat_destroy_inodecache(void)
 {
 	/*
 	 * Make sure all delayed rcu free inodes are flushed before we
@@ -1123,7 +1132,7 @@ static int parse_options(struct super_block *sb, char *options, int is_vfat,
 	opts->fs_fmask = opts->fs_dmask = current_umask();
 	opts->allow_utime = -1;
 	opts->codepage = fat_default_codepage;
-	opts->iocharset = fat_default_iocharset;
+	fat_reset_iocharset(opts);
 	if (is_vfat) {
 		opts->shortname = VFAT_SFN_DISPLAY_WINNT|VFAT_SFN_CREATE_WIN95;
 		opts->rodir = 0;
@@ -1280,8 +1289,7 @@ static int parse_options(struct super_block *sb, char *options, int is_vfat,
 
 		/* vfat specific */
 		case Opt_charset:
-			if (opts->iocharset != fat_default_iocharset)
-				kfree(opts->iocharset);
+			fat_reset_iocharset(opts);
 			iocharset = match_strdup(&args[0]);
 			if (!iocharset)
 				return -ENOMEM;
@@ -1403,8 +1411,7 @@ static int fat_read_root(struct inode *inode)
 	MSDOS_I(inode)->mmu_private = inode->i_size;
 
 	fat_save_attrs(inode, ATTR_DIR);
-	inode->i_mtime.tv_sec = inode->i_atime.tv_sec = inode->i_ctime.tv_sec = 0;
-	inode->i_mtime.tv_nsec = inode->i_atime.tv_nsec = inode->i_ctime.tv_nsec = 0;
+	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
 	set_nlink(inode, fat_subdirs(inode)+2);
 
 	return 0;
@@ -1883,8 +1890,7 @@ out_fail:
 		iput(fat_inode);
 	unload_nls(sbi->nls_io);
 	unload_nls(sbi->nls_disk);
-	if (sbi->options.iocharset != fat_default_iocharset)
-		kfree(sbi->options.iocharset);
+	fat_reset_iocharset(&sbi->options);
 	sb->s_fs_info = NULL;
 	kfree(sbi);
 	return error;
@@ -1950,15 +1956,39 @@ static int __init init_fat_fs(void)
 	if (err)
 		goto failed;
 
+	fat_kset = kset_create_and_add("fat", NULL, fs_kobj);
+	if (!fat_kset) {
+		pr_err("FAT-fs failed to create fat kset\n");
+		err = -ENOMEM;
+		goto failed;
+	}
+
+	err = fat_uevent_init(fat_kset);
+	if (err)
+		goto failed;
+
 	return 0;
 
 failed:
+	fat_uevent_uninit();
+	if (fat_kset) {
+		kset_unregister(fat_kset);
+		fat_kset = NULL;
+	}
 	fat_cache_destroy();
+	fat_destroy_inodecache();
 	return err;
 }
 
 static void __exit exit_fat_fs(void)
 {
+	fat_uevent_uninit();
+
+	if (fat_kset) {
+		kset_unregister(fat_kset);
+		fat_kset = NULL;
+	}
+
 	fat_cache_destroy();
 	fat_destroy_inodecache();
 }

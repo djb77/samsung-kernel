@@ -193,7 +193,8 @@ check_name(struct dentry *direntry, struct cifs_tcon *tcon)
 	struct cifs_sb_info *cifs_sb = CIFS_SB(direntry->d_sb);
 	int i;
 
-	if (unlikely(direntry->d_name.len >
+	if (unlikely(tcon->fsAttrInfo.MaxPathNameComponentLength &&
+		     direntry->d_name.len >
 		     le32_to_cpu(tcon->fsAttrInfo.MaxPathNameComponentLength)))
 		return -ENAMETOOLONG;
 
@@ -509,7 +510,7 @@ cifs_atomic_open(struct inode *inode, struct dentry *direntry,
 
 	rc = check_name(direntry, tcon);
 	if (rc)
-		goto out_free_xid;
+		goto out;
 
 	server = tcon->ses->server;
 
@@ -672,6 +673,9 @@ int cifs_mknod(struct inode *inode, struct dentry *direntry, umode_t mode,
 		goto mknod_out;
 	}
 
+	if (!S_ISCHR(mode) && !S_ISBLK(mode))
+		goto mknod_out;
+
 	if (!(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_UNX_EMUL))
 		goto mknod_out;
 
@@ -680,10 +684,8 @@ int cifs_mknod(struct inode *inode, struct dentry *direntry, umode_t mode,
 
 	buf = kmalloc(sizeof(FILE_ALL_INFO), GFP_KERNEL);
 	if (buf == NULL) {
-		kfree(full_path);
 		rc = -ENOMEM;
-		free_xid(xid);
-		return rc;
+		goto mknod_out;
 	}
 
 	if (backup_cred(cifs_sb))
@@ -730,7 +732,7 @@ int cifs_mknod(struct inode *inode, struct dentry *direntry, umode_t mode,
 		pdev->minor = cpu_to_le64(MINOR(device_number));
 		rc = tcon->ses->server->ops->sync_write(xid, &fid, &io_parms,
 							&bytes_written, iov, 1);
-	} /* else if (S_ISFIFO) */
+	}
 	tcon->ses->server->ops->close(xid, tcon, &fid);
 	d_drop(direntry);
 

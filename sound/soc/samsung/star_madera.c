@@ -32,6 +32,8 @@
 
 #include "jack_madera_sysfs_cb.h"
 
+#define CHANGE_DEV_PRINT
+
 #define EXYNOS_PMU_PMU_DEBUG_OFFSET		(0x0A00)
 #define MADERA_DAI_OFFSET			(16)
 
@@ -123,9 +125,6 @@ static struct clk *xclkout;
 static int star_madera_panic_cb(struct notifier_block *nb,
 					unsigned long event, void *data)
 {
-/*
-	abox_debug_string_update();
-*/
 	return NOTIFY_OK;
 }
 
@@ -991,6 +990,24 @@ static int star_uaif2_init(struct snd_soc_pcm_runtime *rtd)
 	return 0;
 }
 
+static int star_uaif3_init(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_soc_component *cpu;
+	struct snd_soc_card *card = rtd->card;
+	struct madera_drvdata *drvdata = snd_soc_card_get_drvdata(card);
+	int ret = 0;
+
+	dev_info(drvdata->dev, "%s\n", __func__);
+
+	cpu = rtd->cpu_dai->component;
+
+	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX UAIF3 Playback");
+	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX UAIF3 Capture");
+	snd_soc_dapm_sync(snd_soc_component_get_dapm(cpu));
+
+	return ret;
+}
+
 static int star_late_probe(struct snd_soc_card *card)
 {
 	struct madera_drvdata *drvdata = card->drvdata;
@@ -1034,6 +1051,14 @@ static int star_late_probe(struct snd_soc_card *card)
 	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX WDMA2 Capture");
 	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX WDMA3 Capture");
 	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX WDMA4 Capture");
+	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX UAIF0 Playback");
+	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX UAIF0 Capture");
+	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX UAIF1 Playback");
+	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX UAIF1 Capture");
+	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX UAIF2 Playback");
+	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX UAIF2 Capture");
+	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX UAIF3 Playback");
+	snd_soc_dapm_ignore_suspend(snd_soc_component_get_dapm(cpu), "ABOX UAIF3 Capture");
 	snd_soc_dapm_sync(snd_soc_component_get_dapm(cpu));
 
 	wake_lock_init(&drvdata->wake_lock, WAKE_LOCK_SUSPEND,
@@ -1044,6 +1069,8 @@ static int star_late_probe(struct snd_soc_card *card)
 
 	atomic_notifier_chain_register(&panic_notifier_list,
 				&drvdata->panic_nb);
+
+	register_debug_mixer(card);
 
 	return 0;
 }
@@ -1317,6 +1344,7 @@ static struct snd_soc_dai_link star_dai[] = {
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
 		.be_hw_params_fixup = abox_hw_params_fixup_helper,
+		.init = star_uaif3_init,
 		.ops = &uaif_ops,
 		.dpcm_playback = 1,
 		.dpcm_capture = 1,
@@ -1649,7 +1677,6 @@ int abox_vss_state_put(struct snd_kcontrol *kcontrol,
 
 			return -EAGAIN;
 		} else {
-			abox_debug_string_update();
 #ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
 			return -EPERM;
 #else

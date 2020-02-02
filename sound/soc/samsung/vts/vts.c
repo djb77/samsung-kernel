@@ -406,7 +406,7 @@ static int vts_download_firmware(struct platform_device *pdev)
 	}
 
 	memcpy(data->sram_base, data->firmware->data, data->firmware->size);
-	dev_info(dev, "firmware is downloaded to %p (size=%zu)\n", data->sram_base, data->firmware->size);
+	dev_info(dev, "firmware is downloaded to %pK (size=%zu)\n", data->sram_base, data->firmware->size);
 
 	return 0;
 }
@@ -2206,7 +2206,7 @@ static void vts_complete_firmware_request(const struct firmware *fw, void *conte
 	pversion = (unsigned int*) (fw->data + DETLIB_VERSION_OFFSET);
 	data->vtsdetectlib_version = *pversion;
 
-	dev_info(dev, "Firmware loaded at %p (%zu)\n", fw->data, fw->size);
+	dev_info(dev, "Firmware loaded at %pK (%zu)\n", fw->data, fw->size);
 	dev_info(dev, "Firmware version: 0x%x Detection library version: 0x%x\n", data->vtsfw_version, data->vtsdetectlib_version);
 }
 
@@ -2237,7 +2237,7 @@ static void __iomem *samsung_vts_devm_request_and_map(struct platform_device *pd
 		return ERR_PTR(-EFAULT);
 	}
 
-	dev_info(&pdev->dev, "%s: %s(%p) is mapped on %p with size of %zu",
+	dev_info(&pdev->dev, "%s: %s(%pK) is mapped on %pK with size of %zu",
 			__func__, name, (void *)res->start, result, (size_t)resource_size(res));
 
 	return result;

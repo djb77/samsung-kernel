@@ -361,6 +361,7 @@ static int __seq_aod_self_move_en(struct aod_dev_info *aod, unsigned long arg)
 
 	if (panel->state.cur_state != PANEL_STATE_ALPM) {
 		panel_info("AOD:WARN:%s:self move on ignored\n", __func__);
+		ret = -EAGAIN;
 		goto move_on_exit;
 	}
 	if (props->first_clk_update) {
@@ -394,6 +395,7 @@ static int __seq_aod_self_move_off(struct aod_dev_info *aod)
 
 	if (panel->state.cur_state != PANEL_STATE_ALPM) {
 		panel_info("AOD:WARN:%s:self move off ignored\n", __func__);
+		ret = -EAGAIN;
 		goto move_on_exit;
 	}
 
@@ -595,6 +597,7 @@ static int __aod_ioctl_set_time(struct aod_dev_info *aod, unsigned long arg)
 
 	if (panel->state.cur_state != PANEL_STATE_ALPM) {
 		panel_info("AOD:WARN:%s:set time ignored\n", __func__);
+		ret = -EAGAIN;
 		goto exit_time_ioctl;
 	}
 
@@ -629,6 +632,7 @@ static int __aod_ioctl_set_analog_clk(struct aod_dev_info *aod, unsigned long ar
 
 	if (panel->state.cur_state != PANEL_STATE_ALPM) {
 		panel_info("AOD:WARN:%s:set time ignored\n", __func__);
+		ret = -EAGAIN;
 		goto exit_analog_ioctl;
 	}
 
@@ -636,14 +640,6 @@ static int __aod_ioctl_set_analog_clk(struct aod_dev_info *aod, unsigned long ar
 	if (ret) {
 		panel_info("AOD:ERR:%s:failed to seq analog clk\n", __func__);
 		goto exit_analog_ioctl;
-	}
-
-	if ((props->analog.en) && (props->self_mask_en)) {
-		ret = panel_do_aod_seqtbl_by_index(aod, SELF_MOVE_ON_SEQ);
-		if (ret) {
-			panel_info("AOD:ERR:%s:failed to seq_self_move on\n", __func__);
-			goto exit_analog_ioctl;
-		}
 	}
 
 exit_analog_ioctl:
@@ -676,6 +672,7 @@ static int __aod_ioctl_set_digital_clk(struct aod_dev_info *aod, unsigned long a
 
 	if (panel->state.cur_state != PANEL_STATE_ALPM) {
 		panel_info("AOD:WARN:%s:set time ignored\n", __func__);
+		ret = -EAGAIN;
 		goto exit_digital_ioctl;
 	}
 
@@ -683,14 +680,6 @@ static int __aod_ioctl_set_digital_clk(struct aod_dev_info *aod, unsigned long a
 	if (ret) {
 		panel_info("AOD:ERR:%s:failed to seq digital clk\n", __func__);
 		goto exit_digital_ioctl;
-	}
-
-	if ((props->digital.en) && (props->self_mask_en)) {
-		ret = panel_do_aod_seqtbl_by_index(aod, SELF_MOVE_ON_SEQ);
-		if (ret) {
-			panel_info("AOD:ERR:%s:failed to seq_self_move on\n", __func__);
-			goto exit_digital_ioctl;
-		}
 	}
 
 exit_digital_ioctl:

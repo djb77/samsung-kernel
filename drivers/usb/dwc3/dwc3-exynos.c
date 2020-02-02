@@ -60,6 +60,7 @@ struct dwc3_exynos {
 
 void dwc3_otg_run_sm(struct otg_fsm *fsm);
 void dwc3_otg_ldo_control(struct otg_fsm *fsm, int on);
+int dwc3_otg_phy_enable(struct otg_fsm *fsm, int owner, bool on);
 
 static const struct of_device_id exynos_dwc3_match[] = {
 	{
@@ -364,6 +365,58 @@ int dwc3_exynos_start_ldo(struct device *dev, bool on)
 }
 EXPORT_SYMBOL_GPL(dwc3_exynos_start_ldo);
 
+/**
+ * dwc3_exynos_phy_enable - received combo phy control.
+ */
+int dwc3_exynos_phy_enable(int owner, bool on)
+{
+	struct dwc3_exynos	*exynos;
+	struct dwc3_exynos_rsw	*rsw;
+	struct otg_fsm		*fsm;
+	struct device_node *np = NULL;
+	struct platform_device *pdev = NULL;
+	int ret = 0;
+
+	pr_info("%s owner=%d (usb:0 dp:1) on=%d +\n", __func__, owner, on);
+
+	np = of_find_compatible_node(NULL, NULL, "samsung,exynos-dwusb");
+	if (np) {
+		pdev = of_find_device_by_node(np);
+		if (!pdev) {
+			pr_err("%s we can't get platform device\n", __func__);
+			ret = -ENODEV;
+			goto err;
+		}
+		of_node_put(np);
+	} else {
+		pr_err("%s we can't get np\n", __func__);
+		ret = -ENODEV;
+		goto err;
+	}
+
+	exynos = platform_get_drvdata(pdev);
+	if (!exynos) {
+		pr_err("%s we can't get drvdata\n", __func__);
+		ret = -ENOENT;
+		goto err;
+	}
+
+	rsw = &exynos->rsw;
+
+	fsm = rsw->fsm;
+	if (!fsm) {
+		pr_err("%s we can't get fsm\n", __func__);
+		ret = -ENOENT;
+		goto err;
+	}
+
+	dwc3_otg_phy_enable(fsm, owner, on);
+err:
+	pr_info("%s -\n", __func__);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(dwc3_exynos_phy_enable);
+
 static int dwc3_exynos_register_phys(struct dwc3_exynos *exynos)
 {
 	struct usb_phy_generic_platform_data pdata;
@@ -433,7 +486,6 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 	struct dwc3_exynos	*exynos;
 	struct device		*dev = &pdev->dev;
 	struct device_node	*node = dev->of_node;
-
 	int			ret;
 
 	pr_info("%s: +++\n", __func__);

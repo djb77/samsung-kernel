@@ -340,9 +340,9 @@ static ssize_t proximity_cancel_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	iRet = proximity_store_canceallation(data, iCalCMD);
+	iRet = proximity_store_cancellation(data, iCalCMD);
 	if (iRet < 0) {
-		pr_err("[SSP]: - %s proximity_store_canceallation() failed\n",
+		pr_err("[SSP]: - %s proximity_store_cancellation() failed\n",
 			__func__);
 		return iRet;
 	}

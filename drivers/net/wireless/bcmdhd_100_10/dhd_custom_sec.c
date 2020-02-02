@@ -938,11 +938,11 @@ const char *softap_info_values[] = {
 const char *softap_info_values[] = {
 	"yes",
 #ifdef DHD_SOFTAP_DUAL_IF_INFO
-#if defined(CONFIG_WLAN_GRACE) || defined(CONFIG_SEC_KELLYLTE_PROJECT)
+#if defined(CONFIG_WLAN_GRACE) || defined(CONFIG_SEC_KELLYLTE_PROJECT) || defined(CONFIG_SEC_LYKANLTE_PROJECT)
 	"yes",
 #else
 	"no",
-#endif /* CONFIG_WLAN_GRACE || CONFIG_SEC_KELLYLTE_PROJECT */
+#endif /* CONFIG_WLAN_GRACE || CONFIG_SEC_KELLYLTE_PROJECT || CONFIG_SEC_LYKANLTE_PROJECT */
 #endif /* DHD_SOFTAP_DUAL_IF_INFO */
 	"yes", "10", "yes", "yes", "yes", NULL
 };

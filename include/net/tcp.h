@@ -251,7 +251,9 @@ void tcp_time_wait(struct sock *sk, int state, int timeo);
 #define FLAG_DSACKING_ACK       0x800 /* SACK blocks contained D-SACK info */
 #define FLAG_SACK_RENEGING      0x2000 /* snd_una advanced to a sacked seq */
 #define FLAG_UPDATE_TS_RECENT   0x4000 /* tcp_replace_ts_recent() */
-#define MPTCP_FLAG_DATA_ACKED	0x8000
+#define FLAG_NO_CHALLENGE_ACK	0x8000 /* do not call tcp_send_challenge_ack()	*/
+
+#define MPTCP_FLAG_DATA_ACKED	0x10000
 
 #define FLAG_ACKED              (FLAG_DATA_ACKED|FLAG_SYN_ACKED)
 #define FLAG_NOT_DUP            (FLAG_DATA|FLAG_WIN_UPDATE|FLAG_ACKED)
@@ -379,7 +381,6 @@ struct mptcp_options_received;
 
 void tcp_cleanup_rbuf(struct sock *sk, int copied);
 void tcp_cwnd_validate(struct sock *sk, bool is_cwnd_limited);
-void tcp_enter_quickack_mode(struct sock *sk);
 int tcp_close_state(struct sock *sk);
 void tcp_minshall_update(struct tcp_sock *tp, unsigned int mss_now,
 			 const struct sk_buff *skb);
@@ -491,6 +492,8 @@ void tcp_twsk_destructor(struct sock *sk);
 ssize_t tcp_splice_read(struct socket *sk, loff_t *ppos,
 			struct pipe_inode_info *pipe, size_t len,
 			unsigned int flags);
+
+void tcp_enter_quickack_mode(struct sock *sk, unsigned int max_quickacks);
 extern int tcp_use_userconfig_sysctl_handler(struct ctl_table *, int,
 				void __user *, size_t *, loff_t *);
 extern int tcp_proc_delayed_ack_control(struct ctl_table *table, int write,
@@ -706,6 +709,7 @@ void tcp_send_fin(struct sock *sk);
 void tcp_send_active_reset(struct sock *sk, gfp_t priority);
 int tcp_send_synack(struct sock *);
 void tcp_push_one(struct sock *, unsigned int mss_now);
+void __tcp_send_ack(struct sock *sk, u32 rcv_nxt);
 void tcp_send_ack(struct sock *sk);
 void tcp_send_delayed_ack(struct sock *sk);
 void tcp_send_loss_probe(struct sock *sk);
@@ -1177,7 +1181,7 @@ void tcp_rate_skb_sent(struct sock *sk, struct sk_buff *skb);
 void tcp_rate_skb_delivered(struct sock *sk, struct sk_buff *skb,
 			    struct rate_sample *rs);
 void tcp_rate_gen(struct sock *sk, u32 delivered, u32 lost,
-		  struct skb_mstamp *now, struct rate_sample *rs);
+		  bool is_sack_reneg, struct skb_mstamp *now, struct rate_sample *rs);
 void tcp_rate_check_app_limited(struct sock *sk);
 
 /* These functions determine how the current flow behaves in respect of SACK
@@ -1455,9 +1459,11 @@ static inline int tcp_space_from_win(int win)
 
 static inline int tcp_win_from_space(int space)
 {
-	return sysctl_tcp_adv_win_scale<=0 ?
-		(space>>(-sysctl_tcp_adv_win_scale)) :
-		space - (space>>sysctl_tcp_adv_win_scale);
+	int tcp_adv_win_scale = sysctl_tcp_adv_win_scale;
+
+	return tcp_adv_win_scale <= 0 ?
+		(space>>(-tcp_adv_win_scale)) :
+		space - (space>>tcp_adv_win_scale);
 }
 
 #ifdef CONFIG_MPTCP
@@ -1887,12 +1893,12 @@ static inline void tcp_highest_sack_reset(struct sock *sk)
 	tcp_sk(sk)->highest_sack = tcp_write_queue_head(sk);
 }
 
-/* Called when old skb is about to be deleted (to be combined with new skb) */
-static inline void tcp_highest_sack_combine(struct sock *sk,
+/* Called when old skb is about to be deleted and replaced by new skb */
+static inline void tcp_highest_sack_replace(struct sock *sk,
 					    struct sk_buff *old,
 					    struct sk_buff *new)
 {
-	if (tcp_sk(sk)->sacked_out && (old == tcp_sk(sk)->highest_sack))
+	if (old == tcp_highest_sack(sk))
 		tcp_sk(sk)->highest_sack = new;
 }
 

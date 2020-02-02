@@ -1078,6 +1078,7 @@ typedef struct dhd_pub {
 	bool sssr_d11_outofreset[MAX_NUM_D11CORES];
 	uint *sssr_dig_buf_before;
 	uint *sssr_dig_buf_after;
+	bool collect_sssr;		/* Flag to indicate SSSR dump is required */
 #endif /* DHD_SSSR_DUMP */
 	uint8 *soc_ram;
 	uint32 soc_ram_length;
@@ -1861,7 +1862,7 @@ extern int dhd_keep_alive_onoff(dhd_pub_t *dhd);
 void dhd_schedule_memdump(dhd_pub_t *dhdp, uint8 *buf, uint32 size);
 #endif /* DHD_FW_COREDUMP */
 
-void dhd_schedule_sssr_dump(dhd_pub_t *dhdp);
+void dhd_write_sssr_dump(dhd_pub_t *dhdp);
 
 #ifdef PKT_FILTER_SUPPORT
 #define DHD_UNICAST_FILTER_NUM		0
@@ -2829,6 +2830,8 @@ extern int dhd_sssr_mempool_init(dhd_pub_t *dhd);
 extern void dhd_sssr_mempool_deinit(dhd_pub_t *dhd);
 extern int dhd_sssr_dump_init(dhd_pub_t *dhd);
 extern void dhd_sssr_dump_deinit(dhd_pub_t *dhd);
+extern int dhdpcie_sssr_dump(dhd_pub_t *dhd);
+
 #define DHD_SSSR_MEMPOOL_INIT(dhdp)	dhd_sssr_mempool_init(dhdp)
 #define DHD_SSSR_MEMPOOL_DEINIT(dhdp) dhd_sssr_mempool_deinit(dhdp)
 #define DHD_SSSR_DUMP_INIT(dhdp)	dhd_sssr_dump_init(dhdp)

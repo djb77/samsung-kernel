@@ -54,6 +54,11 @@ struct exynos_ss_ops ess_ops = {
 	.pd_status = cal_pd_status,
 };
 
+const char *debug_level_val[] = {
+	"low",
+	"mid",
+};
+
 struct exynos_ss_item ess_items[] = {
 	{"header",		{0, 0, 0, false, false}, NULL ,NULL, 0},
 	{"log_kernel",		{0, 0, 0, false, false}, NULL ,NULL, 0},
@@ -72,6 +77,11 @@ static struct exynos_ss_interface ess_info __attribute__ ((used));
 struct exynos_ss_base ess_base;
 struct exynos_ss_log *ess_log = NULL;
 struct exynos_ss_desc ess_desc;
+
+int exynos_ss_get_debug_level(void)
+{
+	return ess_desc.debug_level;
+}
 
 int exynos_ss_set_enable(const char *name, int en)
 {
@@ -725,7 +735,12 @@ static int __init exynos_ss_init(void)
 		exynos_ss_init_dt();
 		exynos_ss_utils_init();
 
-		exynos_ss_scratch_reg(ESS_SIGN_SCRATCH);
+	        ess_desc.debug_level = exynos_ss_get_debug_level_reg();
+	        pr_info("ess-snapshot: debug_level [%s]\n",
+				debug_level_val[ess_desc.debug_level]);
+
+		if (ess_desc.debug_level != ESS_DEBUG_LEVEL_LOW)
+			exynos_ss_scratch_reg(ESS_SIGN_SCRATCH);
 		exynos_ss_set_enable("base", true);
 
 		register_hook_logbuf(exynos_ss_hook_logbuf);

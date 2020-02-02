@@ -150,7 +150,7 @@ static inline int kbase_fence_out_signal(struct kbase_jd_atom *katom,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
 	katom->dma_fence.fence->error = status;
 #else
-	katom->dma_fence.fence->status = status;
+	katom->dma_fence.fence->error = status;
 #endif
 	return dma_fence_signal(katom->dma_fence.fence);
 }

@@ -26,66 +26,6 @@ extern struct device *ccic_device;
 static int ccic_notifier_init_done;
 int ccic_notifier_init(void);
 
-char CCIC_NOTI_DEST_Print[CCIC_NOTI_DEST_NUM][10] = {
-    {"INITIAL"},
-    {"USB"},
-    {"BATTERY"},
-    {"PDIC"},
-    {"MUIC"},
-    {"CCIC"},
-    {"MANAGER"},
-    {"DP"},
-    {"DPUSB"},
-    {"ALL"},
-};
-
-char CCIC_NOTI_ID_Print[CCIC_NOTI_ID_NUM][20] = {
-    {"ID_INITIAL"},
-    {"ID_ATTACH"},
-    {"ID_RID"},
-    {"ID_USB"},
-    {"ID_POWER_STATUS"},
-    {"ID_WATER"},
-    {"ID_VCONN"},
-    {"ID_DP_CONNECT"},
-    {"ID_DP_HPD"},
-    {"ID_DP_LINK_CONF"},
-    {"ID_DP_USB"},
-    {"ID_ROLE_SWAP"},
-    {"ID_FAC"},
-    {"ID_PIN_STATUS"},
-};
-
-char CCIC_NOTI_RID_Print[CCIC_NOTI_RID_NUM][15] = {
-    {"RID_UNDEFINED"},
-    {"RID_000K"},
-    {"RID_001K"},
-    {"RID_255K"},
-    {"RID_301K"},
-    {"RID_523K"},
-    {"RID_619K"},
-    {"RID_OPEN"},
-};
-
-char CCIC_NOTI_USB_STATUS_Print[CCIC_NOTI_USB_STATUS_NUM][20] = {
-    {"USB_DETACH"},
-    {"USB_ATTACH_DFP"},
-    {"USB_ATTACH_UFP"},
-    {"USB_ATTACH_DRP"},
-    {"USB_ATTACH_NO_USB"},
-};
-
-char CCIC_NOTI_PIN_STATUS_Print[CCIC_NOTI_PIN_STATUS_NUM][20] = {
-    {"NO_DETERMINATION"},
-    {"CC1_ACTIVE"},
-    {"CC2_ACTIVE"},
-    {"AUDIO_ACCESSORY"},
-    {"DEBUG_ACCESSORY"},
-    {"CCIC_ERROR"},
-    {"DISABLED"},
-    {"RFU"},
-};
-
 int ccic_notifier_register(struct notifier_block *nb, notifier_fn_t notifier,
 			ccic_notifier_device_t listener)
 {

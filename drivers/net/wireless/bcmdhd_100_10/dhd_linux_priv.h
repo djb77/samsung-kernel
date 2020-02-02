@@ -357,8 +357,6 @@ typedef struct dhd_info {
 	struct mutex logdump_lock;
 	/* indicates mem_dump was scheduled as work queue or called directly */
 	bool scheduled_memdump;
-	/* indicates sssrdump is called directly instead of scheduling work queue */
-	bool no_wq_sssrdump;
 #ifdef DHD_PKTTS
 	bool latency; /* pktts enab flag */
 	pktts_flow_t config[PKTTS_CONFIG_MAX]; /* pktts user config */

@@ -105,7 +105,12 @@ void g2d_hw_timeout_handler(unsigned long arg)
 		dev_err(g2d_dev->dev,
 			"GLOBAL RESET: killed task not dead in %d msec.\n",
 			G2D_HW_TIMEOUT_MSEC);
-		goto out;
+
+		spin_unlock_irqrestore(&g2d_dev->lock_task, flags);
+
+		wake_up(&g2d_dev->freeze_wait);
+
+		return;
 	}
 
 	mod_timer(&task->hw_timer,

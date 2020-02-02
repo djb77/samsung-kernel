@@ -34,18 +34,26 @@ config CALC_TIME_TO_FULL
 	help
 	  Say Y to use calc time to full function.
 
-config SW_SELF_DISCHARGING
-	bool "enable sw_self_discharging"
-	default n
-	help
-	  Say Y to enable CONFIG_SW_SELF_DISCHARGING
-
 config BATTERY_AGE_FORECAST
 	tristate "battery age forecast"
 	default n
 	depends on BATTERY_SWELLING
 	help
-	Say Y to use calc time to full function.
+	Say Y to use battery age forecast
+
+config BATTERY_AGE_FORECAST_DETACHABLE
+	tristate "battery age forecast for detachable"
+	default n
+	select BATTERY_AGE_FORECAST
+	help
+	Say Y to use battery age forecast for detachable
+
+config BATTERY_AGE_FORECAST_B2B
+	tristate "battery age forecast for B2B"
+	default n
+	select BATTERY_AGE_FORECAST
+	help
+	Say Y to use battery age forecast for B2B
 
 config MULTI_CHARGING
 	bool "support for multi charger ICs"

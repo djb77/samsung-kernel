@@ -247,8 +247,7 @@ asmlinkage void secondary_start_kernel(void)
 	 * this CPU ticks all of those. If it doesn't, the CPU will
 	 * fail to come online.
 	 */
-	if ((read_cpuid_id() & MIDR_MODEL_MASK) != MIDR_MEERKAT)
-		check_local_cpu_capabilities();
+	check_local_cpu_capabilities();
 
 	if (cpu_ops[cpu]->cpu_postboot)
 		cpu_ops[cpu]->cpu_postboot();

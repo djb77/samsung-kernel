@@ -649,11 +649,13 @@ static int _decon_enable(struct decon_device *decon,
 
 	decon_to_psr_info(decon, &psr);
 
-	/*
-	 * After turned on LCD, previous update region must be set as FULL size.
-	 * DECON, DSIM and Panel are initialized as FULL size during UNBLANK
-	 */
-	DPU_FULL_RECT(&decon->win_up.prev_up_region, decon->lcd_info);
+	if (decon->dt.out_type == DECON_OUT_DSI && decon->state == DECON_STATE_OFF) {
+		/*
+		 * After turned on LCD, previous update region must be set as FULL size.
+		 * DECON, DSIM and Panel are initialized as FULL size during UNBLANK
+		 */
+		DPU_FULL_RECT(&decon->win_up.prev_up_region, decon->lcd_info);
+	}
 
 	if (!decon->id && !decon->eint_status) {
 		enable_irq(decon->res.irq);
@@ -679,6 +681,7 @@ static int decon_enable(struct decon_device *decon)
 				__func__, decon_state_names[decon->state]);
 		goto out;
 	}
+	kthread_flush_worker(&decon->up.worker);
 
 	DPU_EVENT_LOG(DPU_EVT_UNBLANK, &decon->sd, ktime_set(0, 0));
 	decon_info("decon-%d %s +\n", decon->id, __func__);
@@ -1113,6 +1116,7 @@ static int decon_blank(int blank_mode, struct fb_info *info)
 	}
 
 blank_exit:
+	decon_hiber_trig_reset(decon);
 	decon_hiber_unblock(decon);
 	decon_info("%s -\n", __func__);
 	return ret;
@@ -2297,7 +2301,7 @@ end:
 	decon->bts.ops->bts_update_bw(decon, regs, 1);
 
 	decon_dpp_stop(decon, false);
- 
+
 	return ret;
 }
 
@@ -2524,6 +2528,7 @@ static int decon_set_win_config(struct decon_device *decon,
 		decon_is_bypass(decon) ||
 #endif
 		decon->state == DECON_STATE_TUI) {
+#ifndef CONFIG_NO_LCD
 #if defined(CONFIG_EXYNOS_COMMON_PANEL)
 		decon_warn("decon-%d skip win_config(state:%s, bypass:%s)\n",
 				decon->id, decon_state_names[decon->state],
@@ -2532,7 +2537,7 @@ static int decon_set_win_config(struct decon_device *decon,
 		decon_warn("decon-%d skip win_config(state:%s)\n",
 				decon->id, decon_state_names[decon->state]);
 #endif
-
+#endif
 		win_data->retire_fence = decon_create_fence(decon, &sync_file);
 		if (win_data->retire_fence < 0)
 			goto err;
@@ -2722,13 +2727,17 @@ static int decon_ioctl(struct fb_info *info, unsigned int cmd,
 		ret = decon_set_vsync_int(info, active);
 		break;
 
+#ifdef CONFIG_SUPPORT_DSU
+	case S3CFB_WIN_CONFIG_OLD:
+		memset(&win_data, 0, sizeof(struct decon_win_config_data));
+#endif
 	case S3CFB_WIN_CONFIG:
 		argp = (struct decon_win_config_data __user *)arg;
 		DPU_EVENT_LOG(DPU_EVT_WIN_CONFIG, &decon->sd, ktime_set(0, 0));
 		decon_systrace(decon, 'C', "decon_win_config", 1);
 		if (copy_from_user(&win_data,
 				   (struct decon_win_config_data __user *)arg,
-				   sizeof(struct decon_win_config_data))) {
+				   _IOC_SIZE(cmd))) {
 			decon_err("DECON:ERR:%s:failed to copy win config data\n", __func__);
 			ret = -EFAULT;
 			break;
@@ -2950,7 +2959,9 @@ static int decon_ioctl(struct fb_info *info, unsigned int cmd,
 		}
 		break;
 	default:
-		decon_err("DECON:ERR:%s:invalied io command\n", __func__);
+		decon_err("DECON:ERR:%s:invalid cmd:0x%x(dir:%d, type:%c, nr:%d, sz:%d)\n",
+				__func__, cmd, _IOC_DIR(cmd), (char)_IOC_TYPE(cmd),
+				_IOC_NR(cmd), _IOC_SIZE(cmd));
 		ret = -ENOTTY;
 	}
 	decon_hiber_unblock(decon);

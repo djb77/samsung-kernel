@@ -118,7 +118,7 @@ static void tlc_wait_cmd_from_driver(void)
 	/* Wait for a command from secure driver */
 	ret = mc_wait_notification(&dr_session_handle, -1);
 	if (ret == MC_DRV_OK) {
-		pr_debug("tlc_wait_cmd_from_driver: Got a command\n");
+		pr_debug("%s: Got a command\n", __func__);
     } else {
         pr_info("%s session_id=%d, device_id=%d", __func__,
                 dr_session_handle.session_id, dr_session_handle.device_id);

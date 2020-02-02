@@ -40,6 +40,16 @@ config SECURITY
 
 	  If you are unsure how to answer this question, answer N.
 
+config PAGE_TABLE_ISOLATION
+	bool "Remove the kernel mapping in user mode"
+	default y
+	depends on X86_64 && SMP
+	help
+	  This enforces a strict kernel and user space isolation, in order
+	  to close hardware side channels on kernel address information.
+
+	  If you are unsure how to answer this question, answer Y.
+
 config SECURITYFS
 	bool "Enable the securityfs filesystem"
 	help
@@ -183,8 +193,10 @@ source security/mstdrv/Kconfig
 
 source security/integrity/Kconfig
 source security/tz_iccc/Kconfig
-source security/defex_lsm/Kconfig
-source security/dsms/Kconfig
+source security/samsung/five/Kconfig
+source security/samsung/defex_lsm/Kconfig
+source security/samsung/dsms/Kconfig
+source security/proca/Kconfig
 
 choice
 	prompt "Default security module"
@@ -222,6 +234,14 @@ config DEFAULT_SECURITY
 	default "tomoyo" if DEFAULT_SECURITY_TOMOYO
 	default "apparmor" if DEFAULT_SECURITY_APPARMOR
 	default "" if DEFAULT_SECURITY_DAC
+config SDP
+    bool "Enables SDP"
+    default n
+    help
+    Sensitive Data Protection
 
+config SDP_KEY_DUMP
+    bool "SDP KEY DUMP"
+    default n
 endmenu
 

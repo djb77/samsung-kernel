@@ -18,6 +18,7 @@
 #include <linux/debugfs.h>
 #include <linux/slab.h>
 #include <linux/kthread.h>
+#include <linux/firmware.h>
 #include <five_tee_interface.h>
 #include "tee_client_api.h"
 #include "five_ta_uuid.h"
@@ -31,6 +32,9 @@ static DEFINE_MUTEX(itee_driver_lock);
 static char is_initialized;
 static TEEC_Context *context;
 static TEEC_Session *session;
+static DEFINE_SPINLOCK(tee_msg_lock);
+static LIST_HEAD(tee_msg_queue);
+struct task_struct *tee_msg_task;
 
 #define MAX_HASH_LEN 64
 
@@ -49,51 +53,81 @@ struct tci_msg {
 
 static int load_trusted_app(void);
 static void unload_trusted_app(void);
+static int send_cmd(unsigned int cmd,
+		enum hash_algo algo,
+		const void *hash,
+		size_t hash_len,
+		const void *label,
+		size_t label_len,
+		void *signature,
+		size_t *signature_len);
+static int send_cmd_with_retry(unsigned int cmd,
+		enum hash_algo algo,
+		const void *hash,
+		size_t hash_len,
+		const void *label,
+		size_t label_len,
+		void *signature,
+		size_t *signature_len);
 
-static int thread_handler(void *arg)
-{
+struct tee_msg {
+	struct completion *comp;
+	unsigned int cmd;
+	enum hash_algo algo;
+	const void *hash;
+	size_t hash_len;
+	const void *label;
+	size_t label_len;
+	void *signature;
+	size_t *signature_len;
 	int rc;
-	struct completion *ta_loaded;
+	struct list_head queue;
+};
 
-	ta_loaded = (struct completion *)arg;
-	rc = load_trusted_app();
-	complete(ta_loaded);
-
-	/* Wait for kthread_stop */
-	set_current_state(TASK_INTERRUPTIBLE);
-	while (!kthread_should_stop()) {
-		schedule();
-		set_current_state(TASK_INTERRUPTIBLE);
-	}
-	set_current_state(TASK_RUNNING);
-
-	return rc;
-}
-
-static int initialize_trusted_app(void)
+static int tee_msg_thread(void *arg)
 {
-	int ret = 0;
-	struct task_struct *tsk;
-	struct completion ta_loaded;
+	for (;;) {
+		set_current_state(TASK_INTERRUPTIBLE);
+		if (kthread_should_stop()) {
+			set_current_state(TASK_RUNNING);
+			break;
+		}
+		if (list_empty(&tee_msg_queue))
+			schedule();
+		set_current_state(TASK_RUNNING);
 
-	if (is_initialized)
-		return ret;
+		spin_lock(&tee_msg_lock);
+		while (!list_empty(&tee_msg_queue)) {
+			struct tee_msg *send_cmd_args;
+			int rc;
 
-	init_completion(&ta_loaded);
+			send_cmd_args = list_entry(tee_msg_queue.next,
+					    struct tee_msg, queue);
+			list_del_init(&send_cmd_args->queue);
+			spin_unlock(&tee_msg_lock);
 
-	tsk = kthread_run(thread_handler, &ta_loaded, "five_load_trusted_app");
-	if (IS_ERR(tsk)) {
-		ret = PTR_ERR(tsk);
-		pr_err("FIVE: Can't create thread: %d\n", ret);
-		return ret;
+			rc = send_cmd_with_retry(send_cmd_args->cmd,
+					send_cmd_args->algo,
+					send_cmd_args->hash,
+					send_cmd_args->hash_len,
+					send_cmd_args->label,
+					send_cmd_args->label_len,
+					send_cmd_args->signature,
+					send_cmd_args->signature_len);
+			send_cmd_args->rc = rc;
+			// when processing tee_iovec comp is not NULL
+			// only for last cmd in array
+			if (send_cmd_args->comp)
+				complete(send_cmd_args->comp);
+			spin_lock(&tee_msg_lock);
+		}
+		spin_unlock(&tee_msg_lock);
 	}
+	mutex_lock(&itee_driver_lock);
+	unload_trusted_app();
+	mutex_unlock(&itee_driver_lock);
 
-	wait_for_completion(&ta_loaded);
-	ret = kthread_stop(tsk);
-	pr_info("FIVE: Initialized trusted app ret: %d initialized: %u\n",
-							ret, is_initialized);
-
-	return ret;
+	return 0;
 }
 
 static int send_cmd(unsigned int cmd,
@@ -145,9 +179,22 @@ static int send_cmd(unsigned int cmd,
 	if (cmd == CMD_VERIFY && sig_len != *signature_len)
 		return -EINVAL;
 
+	mutex_lock(&itee_driver_lock);
+	if (!is_initialized) {
+		rc = load_trusted_app();
+		pr_info("FIVE: Initialize trusted app, ret: %d\n", rc);
+		if (rc) {
+			mutex_unlock(&itee_driver_lock);
+			rc = -EIO;
+			goto out;
+		}
+	}
+
 	msg = kzalloc(msg_len, GFP_KERNEL);
-	if (!msg)
+	if (!msg) {
+		mutex_unlock(&itee_driver_lock);
 		return -ENOMEM;
+	}
 
 	msg->hash_algo = algo;
 	memcpy(msg->hash, hash, hash_len);
@@ -169,13 +216,6 @@ static int send_cmd(unsigned int cmd,
 
 	operation.params[0].tmpref.buffer = msg;
 	operation.params[0].tmpref.size = msg_len;
-
-	mutex_lock(&itee_driver_lock);
-	if (initialize_trusted_app()) {
-		mutex_unlock(&itee_driver_lock);
-		rc = -EIO;
-		goto out;
-	}
 
 	rc = TEEC_InvokeCommand(session, cmd, &operation, &origin);
 
@@ -202,6 +242,39 @@ out:
 	return rc;
 }
 
+static int send_cmd_kthread(unsigned int cmd,
+		enum hash_algo algo,
+		const void *hash,
+		size_t hash_len,
+		const void *label,
+		size_t label_len,
+		void *signature,
+		size_t *signature_len)
+{
+	struct completion cmd_sent;
+	struct tee_msg cmd_msg;
+
+	init_completion(&cmd_sent);
+
+	cmd_msg.comp = &cmd_sent;
+	cmd_msg.cmd = cmd;
+	cmd_msg.algo = algo;
+	cmd_msg.hash = hash;
+	cmd_msg.hash_len = hash_len;
+	cmd_msg.label = label;
+	cmd_msg.label_len = label_len;
+	cmd_msg.signature = signature;
+	cmd_msg.signature_len = signature_len;
+	cmd_msg.rc = -EBADMSG;
+
+	spin_lock(&tee_msg_lock);
+	list_add_tail(&cmd_msg.queue, &tee_msg_queue);
+	spin_unlock(&tee_msg_lock);
+	wake_up_process(tee_msg_task);
+	wait_for_completion(&cmd_sent);
+	return cmd_msg.rc;
+}
+
 static int send_cmd_with_retry(unsigned int cmd,
 				enum hash_algo algo,
 				const void *hash,
@@ -209,10 +282,10 @@ static int send_cmd_with_retry(unsigned int cmd,
 				const void *label,
 				size_t label_len,
 				void *signature,
-				size_t *signature_len,
-				unsigned int retry_num)
+				size_t *signature_len)
 {
 	int rc;
+	unsigned int retry_num = SEND_CMD_RETRY;
 
 	do {
 		bool need_retry = false;
@@ -224,42 +297,126 @@ static int send_cmd_with_retry(unsigned int cmd,
 		need_retry = (rc == TEEC_ERROR_COMMUNICATION ||
 						rc == TEEC_ERROR_TARGET_DEAD);
 		if (need_retry && retry_num) {
-			if (rc == TEEC_ERROR_ACCESS_DENIED) {
-				five_audit_tee_msg("send_cmd_with_retry",
-				"TA got TEEC_ERROR_ACCESS_DENIED", rc, 0);
-			} else {
-				pr_err("FIVE: TA got the fatal error rc=%d. Try again\n",
-									rc);
-				mutex_lock(&itee_driver_lock);
-				unload_trusted_app();
-				mutex_unlock(&itee_driver_lock);
-			}
+			pr_err("FIVE: TA got the fatal error rc=%d. Try again\n",
+								rc);
+			mutex_lock(&itee_driver_lock);
+			unload_trusted_app();
+			mutex_unlock(&itee_driver_lock);
 		} else {
 			break;
 		}
 	} while (retry_num--);
 
+	if (rc == TEEC_ERROR_ACCESS_DENIED) {
+		five_audit_tee_msg("send_cmd_with_retry",
+		"TA got TEEC_ERROR_ACCESS_DENIED", rc, 0);
+	}
+
 	return rc;
 }
 
-static int verify_hmac(enum hash_algo algo, const void *hash, size_t hash_len,
-			const void *label, size_t label_len,
-			const void *signature, size_t signature_len)
+static int send_cmd_kthread_vec(struct tee_msg *cmd_iovec, const size_t iovcnt)
 {
-	return send_cmd_with_retry(CMD_VERIFY, algo,
-					hash, hash_len, label, label_len,
-					(void *)signature, &signature_len,
-					SEND_CMD_RETRY);
+	int rc = 0;
+	struct completion cmd_sent;
+	size_t i;
+
+	init_completion(&cmd_sent);
+	cmd_iovec[iovcnt - 1].comp = &cmd_sent;
+
+	for (i = 0; i < iovcnt; ++i) {
+		spin_lock(&tee_msg_lock);
+		list_add_tail(&cmd_iovec[i].queue, &tee_msg_queue);
+		spin_unlock(&tee_msg_lock);
+	}
+
+	wake_up_process(tee_msg_task);
+	wait_for_completion(&cmd_sent);
+
+	return rc;
 }
 
-static int sign_hmac(enum hash_algo algo, const void *hash, size_t hash_len,
-			const void *label, size_t label_len,
-			void *signature, size_t *signature_len)
+static int verify_hmac(const struct tee_iovec *verify_args)
 {
-	return send_cmd_with_retry(CMD_SIGN, algo,
-					hash, hash_len, label, label_len,
-					signature, signature_len,
-					SEND_CMD_RETRY);
+	return send_cmd_kthread(CMD_VERIFY, verify_args->algo,
+				verify_args->hash, verify_args->hash_len,
+				verify_args->label, verify_args->label_len,
+				verify_args->signature,
+				(size_t *)&verify_args->signature_len);
+}
+
+static int verify_hmac_vec(struct tee_iovec *verify_iovec,
+			   const size_t verify_iovcnt)
+{
+	int rc = 0;
+	struct tee_msg *cmd_vec;
+	size_t i;
+
+	cmd_vec = kcalloc(verify_iovcnt, sizeof(*cmd_vec), GFP_KERNEL);
+	if (!cmd_vec)
+		return -ENOMEM;
+
+	for (i = 0; i < verify_iovcnt; ++i) {
+		cmd_vec[i].cmd = CMD_VERIFY;
+		cmd_vec[i].algo = verify_iovec[i].algo;
+		cmd_vec[i].hash = verify_iovec[i].hash;
+		cmd_vec[i].hash_len = verify_iovec[i].hash_len;
+		cmd_vec[i].label = verify_iovec[i].label;
+		cmd_vec[i].label_len = verify_iovec[i].label_len;
+		cmd_vec[i].signature = (void *)verify_iovec[i].signature;
+		cmd_vec[i].signature_len =
+				(size_t *)&verify_iovec[i].signature_len;
+		cmd_vec[i].rc = -EBADMSG;
+	}
+
+	rc = send_cmd_kthread_vec(cmd_vec, verify_iovcnt);
+
+	for (i = 0; i < verify_iovcnt; ++i)
+		verify_iovec[i].rc = cmd_vec[i].rc;
+
+	kfree(cmd_vec);
+	return rc;
+}
+
+static int sign_hmac(struct tee_iovec *sign_args)
+{
+	return send_cmd_kthread(CMD_SIGN, sign_args->algo,
+				sign_args->hash, sign_args->hash_len,
+				sign_args->label, sign_args->label_len,
+				sign_args->signature,
+				&sign_args->signature_len);
+}
+
+static int sign_hmac_vec(struct tee_iovec *sign_iovec,
+			 const size_t iovcnt)
+{
+	int rc = 0;
+	struct tee_msg *cmd_vec;
+	size_t i;
+
+	cmd_vec = kcalloc(iovcnt, sizeof(*cmd_vec), GFP_KERNEL);
+	if (!cmd_vec)
+		return -ENOMEM;
+
+	for (i = 0; i < iovcnt; ++i) {
+		cmd_vec[i].cmd = CMD_SIGN;
+		cmd_vec[i].algo = sign_iovec[i].algo;
+		cmd_vec[i].hash = sign_iovec[i].hash;
+		cmd_vec[i].hash_len = sign_iovec[i].hash_len;
+		cmd_vec[i].label = sign_iovec[i].label;
+		cmd_vec[i].label_len = sign_iovec[i].label_len;
+		cmd_vec[i].signature = sign_iovec[i].signature;
+		cmd_vec[i].signature_len = &sign_iovec[i].signature_len;
+		cmd_vec[i].rc = -EBADMSG;
+	}
+
+	rc = send_cmd_kthread_vec(cmd_vec, iovcnt);
+
+	for (i = 0; i < iovcnt; ++i)
+		sign_iovec[i].rc = cmd_vec[i].rc;
+
+	kfree(cmd_vec);
+	return rc;
 }
 
 static int load_trusted_app(void)
@@ -298,7 +455,6 @@ static int load_trusted_app(void)
 
 	return 0;
 error:
-	TEEC_CloseSession(session);
 	TEEC_FinalizeContext(context);
 	kfree(session);
 	kfree(context);
@@ -312,8 +468,11 @@ static int register_tee_driver(void)
 {
 	struct five_tee_driver_fns fn = {
 		.verify_hmac = verify_hmac,
+		.verify_hmac_vec = verify_hmac_vec,
 		.sign_hmac = sign_hmac,
+		.sign_hmac_vec = sign_hmac_vec,
 	};
+
 	return register_five_tee_driver(&fn);
 }
 
@@ -336,12 +495,97 @@ static void unload_trusted_app(void)
 }
 
 #ifdef CONFIG_TEE_DRIVER_DEBUG
+
+static int sign_hmac_vec_test(void)
+{
+	uint8_t hash[SHA1_DIGEST_SIZE][3];
+	uint8_t signature[SHA1_DIGEST_SIZE][3];
+	size_t signature_len[3] = {
+		SHA1_DIGEST_SIZE,
+		SHA1_DIGEST_SIZE,
+		SHA1_DIGEST_SIZE
+	};
+	struct tee_iovec sign_iovec[] = {
+		{
+			.algo = HASH_ALGO_SHA1,
+			.hash = hash[0],
+			.hash_len = SHA1_DIGEST_SIZE,
+			.signature = signature[0],
+			.signature_len = signature_len[0],
+			.label_len = sizeof("label 1"),
+			.label = "label 1",
+		},
+		{
+			.algo = HASH_ALGO_SHA1,
+			.hash = hash[1],
+			.hash_len = SHA1_DIGEST_SIZE,
+			.signature = signature[1],
+			.signature_len = signature_len[1],
+			.label_len = sizeof("label 2 xxxxx"),
+			.label = "label 2 xxxxx",
+		},
+		{
+			.algo = HASH_ALGO_SHA1,
+			.hash = hash[2],
+			.hash_len = SHA1_DIGEST_SIZE,
+			.signature = signature[2],
+			.signature_len = signature_len[2],
+			.label_len = sizeof("label 3 zxzxzzzz"),
+			.label = "label 3 zxzxzzzz",
+		},
+	};
+
+	return sign_hmac_vec(sign_iovec, ARRAY_SIZE(sign_iovec));
+}
+
+static int verify_hmac_vec_test(void)
+{
+	uint8_t hash[SHA1_DIGEST_SIZE][3];
+	uint8_t signature[SHA1_DIGEST_SIZE][3];
+	size_t signature_len[3] = {
+		SHA1_DIGEST_SIZE,
+		SHA1_DIGEST_SIZE,
+		SHA1_DIGEST_SIZE
+	};
+	struct tee_iovec verify_iovec[] = {
+		{
+			.algo = HASH_ALGO_SHA1,
+			.hash = hash[0],
+			.hash_len = SHA1_DIGEST_SIZE,
+			.signature = signature[0],
+			.signature_len = signature_len[0],
+			.label_len = sizeof("label 1"),
+			.label = "label 1",
+		},
+		{
+			.algo = HASH_ALGO_SHA1,
+			.hash = hash[1],
+			.hash_len = SHA1_DIGEST_SIZE,
+			.signature = signature[1],
+			.signature_len = signature_len[1],
+			.label_len = sizeof("label 2 xxxxx"),
+			.label = "label 2 xxxxx",
+		},
+		{
+			.algo = HASH_ALGO_SHA1,
+			.hash = hash[2],
+			.hash_len = SHA1_DIGEST_SIZE,
+			.signature = signature[2],
+			.signature_len = signature_len[2],
+			.label_len = sizeof("label 3 zxzxzzzz"),
+			.label = "label 3 zxzxzzzz",
+		},
+	};
+
+	return verify_hmac_vec(verify_iovec, ARRAY_SIZE(verify_iovec));
+}
+
 static ssize_t tee_driver_write(
 		struct file *file, const char __user *buf,
 		size_t count, loff_t *pos)
 {
 	uint8_t hash[SHA1_DIGEST_SIZE] = {};
-	uint8_t signature[SHA1_DIGEST_SIZE * 2] = {};
+	uint8_t signature[SHA1_DIGEST_SIZE] = {};
 	char command;
 	size_t signature_len = sizeof(signature);
 
@@ -352,22 +596,46 @@ static ssize_t tee_driver_write(
 	case '1':
 		pr_info("register_tee_driver: %d\n", register_tee_driver());
 		break;
-	case '2':
-		pr_info("sign_hmac: %d\n", sign_hmac(HASH_ALGO_SHA1, hash,
-					sizeof(hash), "label", sizeof("label"),
-					signature, &signature_len));
+	case '2': {
+		struct tee_iovec sign_args = {
+			.algo = HASH_ALGO_SHA1,
+			.hash = hash,
+			.hash_len = sizeof(hash),
+			.signature = signature,
+			.signature_len = signature_len,
+			.label_len = sizeof("label"),
+			.label = "label"
+		};
+
+		pr_info("sign_hmac: %d\n", sign_hmac(&sign_args));
 		break;
-	case '3':
-		pr_info("verify_hmac: %d\n", verify_hmac(HASH_ALGO_SHA1, hash,
-					sizeof(hash), "label", sizeof("label"),
-					signature, signature_len));
+	}
+	case '3': {
+		struct tee_iovec verify_args = {
+			.algo = HASH_ALGO_SHA1,
+			.hash = hash,
+			.hash_len = sizeof(hash),
+			.signature = signature,
+			.signature_len = signature_len,
+			.label_len = sizeof("label"),
+			.label = "label"
+		};
+
+		pr_info("verify_hmac: %d\n", verify_hmac(&verify_args));
 		break;
+	}
 	case '4':
 		pr_info("unregister_tee_driver\n");
 		unregister_tee_driver();
 		mutex_lock(&itee_driver_lock);
 		unload_trusted_app();
 		mutex_unlock(&itee_driver_lock);
+		break;
+	case '5':
+		pr_info("sign_hmac_vec: %d\n", sign_hmac_vec_test());
+		break;
+	case '6':
+		pr_info("verify_hmac_vec: %d\n", verify_hmac_vec_test());
 		break;
 	default:
 		pr_err("FIVE: %s: unknown cmd: %hhx\n", __func__, command);
@@ -419,6 +687,12 @@ static int __init tee_driver_init(void)
 	pr_info("FIVE: Initialize trusted app in early boot ret: %d\n", rc);
 #endif
 
+	tee_msg_task = kthread_run(tee_msg_thread, NULL, "five_tee_msg_thread");
+	if (IS_ERR(tee_msg_task)) {
+		rc = PTR_ERR(tee_msg_task);
+		pr_err("FIVE: Can't create tee_msg_task: %d\n", rc);
+		goto out;
+	}
 	rc = register_tee_driver();
 	if (rc) {
 		pr_err("FIVE: Can't register tee_driver\n");
@@ -437,6 +711,7 @@ out:
 static void __exit tee_driver_exit(void)
 {
 	unregister_tee_driver();
+	kthread_stop(tee_msg_task);
 }
 
 module_init(tee_driver_init);

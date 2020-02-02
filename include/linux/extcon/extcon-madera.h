@@ -114,6 +114,9 @@ struct madera_extcon {
 	struct madera_micd_bias micd_bias;
 #ifdef CONFIG_EXTCON_PTT
 	int ptt_state; /* PTT haedset state for Samsung */
+	int ptt_ear_int;
+	bool ptt_pressed;
+	struct delayed_work pttd_detect_work;
 #endif
 };
 

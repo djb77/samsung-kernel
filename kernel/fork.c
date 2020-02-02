@@ -58,6 +58,7 @@
 #include <linux/tsacct_kern.h>
 #include <linux/cn_proc.h>
 #include <linux/freezer.h>
+#include <linux/kaiser.h>
 #include <linux/delayacct.h>
 #include <linux/taskstats_kern.h>
 #include <linux/random.h>
@@ -76,6 +77,7 @@
 #include <linux/compiler.h>
 #include <linux/sysctl.h>
 #include <linux/kcov.h>
+#include <linux/cpufreq_times.h>
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -195,10 +197,10 @@ static unsigned long *alloc_thread_stack_node(struct task_struct *tsk, int node)
 	local_irq_enable();
 
 	stack = __vmalloc_node_range(THREAD_SIZE, THREAD_SIZE,
-				     VMALLOC_START, VMALLOC_END,
-				     THREADINFO_GFP | __GFP_HIGHMEM,
-				     PAGE_KERNEL,
-				     0, node, __builtin_return_address(0));
+			VMALLOC_START, VMALLOC_END,
+			THREADINFO_GFP | __GFP_HIGHMEM,
+			PAGE_KERNEL,
+			0, node, __builtin_return_address(0));
 
 	/*
 	 * We can't call find_vm_area() in interrupt context, and
@@ -210,7 +212,7 @@ static unsigned long *alloc_thread_stack_node(struct task_struct *tsk, int node)
 	return stack;
 #else
 	struct page *page = alloc_pages_node(node, THREADINFO_GFP,
-					     THREAD_SIZE_ORDER);
+			THREAD_SIZE_ORDER);
 
 	return page ? page_address(page) : NULL;
 #endif
@@ -218,6 +220,7 @@ static unsigned long *alloc_thread_stack_node(struct task_struct *tsk, int node)
 
 static inline void free_thread_stack(struct task_struct *tsk)
 {
+	kaiser_unmap_thread_stack(tsk->stack);
 #ifdef CONFIG_VMAP_STACK
 	if (task_stack_vm_area(tsk)) {
 		unsigned long flags;
@@ -245,7 +248,7 @@ static inline void free_thread_stack(struct task_struct *tsk)
 static struct kmem_cache *thread_stack_cache;
 
 static unsigned long *alloc_thread_stack_node(struct task_struct *tsk,
-						  int node)
+		int node)
 {
 	return kmem_cache_alloc_node(thread_stack_cache, THREADINFO_GFP, node);
 }
@@ -258,7 +261,7 @@ static void free_thread_stack(struct task_struct *tsk)
 void thread_stack_cache_init(void)
 {
 	thread_stack_cache = kmem_cache_create("thread_stack", THREAD_SIZE,
-					      THREAD_SIZE, 0, NULL);
+			THREAD_SIZE, 0, NULL);
 	BUG_ON(thread_stack_cache == NULL);
 }
 # endif
@@ -296,13 +299,13 @@ static void account_kernel_stack(struct task_struct *tsk, int account)
 
 		for (i = 0; i < THREAD_SIZE / PAGE_SIZE; i++) {
 			mod_zone_page_state(page_zone(vm->pages[i]),
-					    NR_KERNEL_STACK_KB,
-					    PAGE_SIZE / 1024 * account);
+					NR_KERNEL_STACK_KB,
+					PAGE_SIZE / 1024 * account);
 		}
 
 		/* All stack pages belong to the same memcg. */
 		memcg_kmem_update_page_stat(vm->pages[0], MEMCG_KERNEL_STACK_KB,
-					    account * (THREAD_SIZE / 1024));
+				account * (THREAD_SIZE / 1024));
 	} else {
 		/*
 		 * All stack pages are in the same zone and belong to the
@@ -311,10 +314,10 @@ static void account_kernel_stack(struct task_struct *tsk, int account)
 		struct page *first_page = virt_to_page(stack);
 
 		mod_zone_page_state(page_zone(first_page), NR_KERNEL_STACK_KB,
-				    THREAD_SIZE / 1024 * account);
+				THREAD_SIZE / 1024 * account);
 
 		memcg_kmem_update_page_stat(first_page, MEMCG_KERNEL_STACK_KB,
-					    account * (THREAD_SIZE / 1024));
+				account * (THREAD_SIZE / 1024));
 	}
 }
 
@@ -342,6 +345,8 @@ void put_task_stack(struct task_struct *tsk)
 
 void free_task(struct task_struct *tsk)
 {
+	cpufreq_task_times_exit(tsk);
+
 #ifndef CONFIG_THREAD_INFO_IN_TASK
 	/*
 	 * The task is finally done with both the stack and thread_info,
@@ -500,6 +505,10 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 	 * functions again.
 	 */
 	tsk->stack = stack;
+
+	err= kaiser_map_thread_stack(tsk->stack);
+	if (err)
+		goto free_stack;
 #ifdef CONFIG_VMAP_STACK
 	tsk->stack_vm_area = stack_vm_area;
 #endif
@@ -1589,6 +1598,8 @@ static __latent_entropy struct task_struct *copy_process(
 	if (!p)
 		goto fork_out;
 
+	cpufreq_task_times_init(p);
+
 	ftrace_graph_init_task(p);
 
 	rt_mutex_init_task(p);
@@ -2036,6 +2047,8 @@ long _do_fork(unsigned long clone_flags,
 	if (!IS_ERR(p)) {
 		struct completion vfork;
 		struct pid *pid;
+
+		cpufreq_task_times_alloc(p);
 
 		trace_sched_process_fork(current, p);
 

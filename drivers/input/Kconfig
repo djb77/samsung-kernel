@@ -94,7 +94,6 @@ comment "Userland interfaces"
 
 config INPUT_MOUSEDEV
 	tristate "Mouse interface"
-	default y
 	help
 	  Say Y here if you want your mouse to be accessible as char devices
 	  13:32+ - /dev/input/mouseX and 13:63 - /dev/input/mice as an
@@ -223,6 +222,17 @@ config HALL
 	  Say Y here if you want to enable Hall IC Feature
 	  and send a event when cover state is changed.
 	  Active gpio state is low and active event value is 0.
+
+	  If unsure, say N.
+
+config HALL_EVENT_REVERSE
+	tristate "Adjusting the status value of HALL IC"
+	default y
+	depends on HALL
+	depends on ANDROID_MAJOR_VERSION >= "q"
+	help
+	  Adjusting the status value of HALL IC.
+	  This was required from input FW.
 
 	  If unsure, say N.
 

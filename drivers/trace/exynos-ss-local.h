@@ -62,6 +62,7 @@ extern void exynos_ss_print_panic_report(void);
 /*  Specific Address Information */
 #define ESS_FIXED_VIRT_BASE		(VMALLOC_START + 0xF6000000)
 #define ESS_OFFSET_SCRATCH		(0x100)
+#define ESS_OFFSET_DEBUG_LEVEL		(0x180)
 #define ESS_OFFSET_LAST_LOGBUF		(0x200)
 #define ESS_OFFSET_EMERGENCY_REASON	(0x300)
 #define ESS_OFFSET_CORE_POWER_STAT	(0x400)
@@ -160,6 +161,7 @@ struct exynos_ss_desc {
 	int hardlockup_detected;
 	int allcorelockup_detected;
 	int no_wdt_dev;
+	int debug_level;
 
 	struct vm_struct vm;
 };

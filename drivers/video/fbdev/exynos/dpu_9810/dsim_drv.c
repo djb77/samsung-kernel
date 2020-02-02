@@ -707,6 +707,19 @@ err_exit:
 	return ret;
 }
 
+#ifdef CONFIG_OLD_DISP_TIMING
+static int dsim_reset_panel(struct dsim_device *dsim)
+{
+	int ret;
+
+	dsim_dbg("%s +\n", __func__);
+
+	ret = call_panel_ops(dsim, reset, dsim);
+
+	dsim_dbg("%s -\n", __func__);
+	return 0;
+}
+#endif
 static int dsim_set_panel_power(struct dsim_device *dsim, bool on)
 {
 	int ret;
@@ -806,11 +819,11 @@ static int _dsim_enable(struct dsim_device *dsim, enum dsim_state state)
 		dsim_info("dsim_%d already enabled", dsim->id);
 		ret = -EBUSY;
 	} else {
-#if !defined(CONFIG_EXYNOS_COMMON_PANEL)
+ #if !defined(CONFIG_EXYNOS_COMMON_PANEL) || defined(CONFIG_OLD_DISP_TIMING)
 		dsim_info("dsim_%d enabled", dsim->id);
 		/* Panel reset should be set after LP-11 */
 		dsim_reset_panel(dsim);
-#endif
+ #endif
 	}
 
 init_end:

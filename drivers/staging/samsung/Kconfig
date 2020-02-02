@@ -140,6 +140,14 @@ config SEC_DEBUG_LAST_KMSG
 	  This option enables /proc/last_kmsg support. This stores the previous
 	  kernel log into separate buffer. /proc/last_kmsg shows the stored log.
 
+config SEC_DEBUG_INIT_LOG
+	bool "support hooking of init task log"
+	depends on SEC_DEBUG
+	default y
+	help
+	  This option enables hooking of init task log. 
+	  It can be used for debugging purpose in case of booting failure or something else.
+	
 config SEC_DEBUG_PPMPU
 	bool "Print ppmpu inforamtion by smc call"
 	depends on SEC_DEBUG
@@ -165,6 +173,14 @@ config SEC_DEBUG_INDIRECT_BRANCH_VERIFIER
 	help
 	  This option enables the branch verifier to check branches including
 	  indirect branches like blr. It also needs a compiler modified.
+
+config SEC_DEBUG_SOFTDOG_PWDT
+	bool "Enable Soft Watchdog for Platform"
+	default n
+	depends on WATCHDOG
+	select SOFT_WATCHDOG
+	help
+	  This option enables soft watchdog device and soft_panic.
 
 config SEC_BOOTSTAT
 	bool "Enable TN Bootstat logging"
@@ -284,14 +300,3 @@ config SEC_VTS_TEST
 	default n
 	help
 	  This option notices this binary for VTS test.
-
-choice
-	prompt "Version of GAF structure"
-	depends on SEC_DEBUG
-	default SEC_DEBUG_GAF_V4
-
-	config SEC_DEBUG_GAF_V4
-		bool "Use GAF structure version 4"
-		help
-		  Default option for FIVE-enabled kernel
-endchoice

@@ -46,7 +46,6 @@
 #include <linux/string.h>
 #include <linux/list.h>
 #include <linux/ratelimit.h>
-#include <linux/android_aid.h>
 #include "multiuser.h"
 
 /* the file system name */
@@ -641,7 +640,7 @@ static inline int check_min_free_space(struct dentry *dentry, size_t size, int d
 
 	if (uid_eq(GLOBAL_ROOT_UID, current_fsuid()) ||
 			capable(CAP_SYS_RESOURCE) ||
-			in_group_p(AID_RESERVED_DISK))
+			in_group_p(AID_USE_ROOT_RESERVED))
 		return 1;
 
 	if (sbi->options.reserved_mb) {

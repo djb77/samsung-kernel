@@ -165,6 +165,7 @@ enum sec_debug_reset_reason_t {
 	RR_B = 8,
 	RR_N = 9,
 	RR_T = 10,
+	RR_C = 11,
 };
 
 extern unsigned reset_reason;
@@ -432,6 +433,10 @@ extern void register_set_auto_comm_lastfreq(void (*func)(int type, int old_freq,
 extern void print_ppmpu_protection(struct pt_regs *regs);
 #else
 static inline void print_ppmpu_protection(struct pt_regs *regs) {}
+#endif
+
+#ifdef CONFIG_SEC_DEBUG_INIT_LOG
+extern void register_init_log_hook_func(void (*func)(const char *buf, size_t size));
 #endif
 
 #ifdef CONFIG_SEC_DEBUG_BRANCH_VERIFIER

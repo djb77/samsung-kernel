@@ -1242,10 +1242,20 @@ static int max77705_sysfs_is_writeable(struct _ccic_data_t *pccic_data,
 	switch (prop) {
 	case CCIC_SYSFS_PROP_LPM_MODE:
 	case CCIC_SYSFS_PROP_CTRL_OPTION:
-	case CCIC_SYSFS_PROP_FW_UPDATE:
-	case CCIC_SYSFS_PROP_DEX_FAN_UVDM:
 	case CCIC_SYSFS_PROP_DEBUG_OPCODE:
 	case CCIC_SYSFS_PROP_CONTROL_GPIO:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+static int max77705_sysfs_is_writeonly(struct _ccic_data_t *pccic_data,
+				    enum ccic_sysfs_property prop)
+{
+	switch (prop) {
+	case CCIC_SYSFS_PROP_FW_UPDATE:
+	case CCIC_SYSFS_PROP_DEX_FAN_UVDM:
 		return 1;
 	default:
 		return 0;
@@ -2853,6 +2863,7 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	pccic_sysfs_prop->get_property = max77705_sysfs_get_local_prop;
 	pccic_sysfs_prop->set_property = max77705_sysfs_set_prop;
 	pccic_sysfs_prop->property_is_writeable = max77705_sysfs_is_writeable;
+	pccic_sysfs_prop->property_is_writeonly = max77705_sysfs_is_writeonly;
 	pccic_sysfs_prop->properties = max77705_sysfs_properties;
 	pccic_sysfs_prop->num_properties = ARRAY_SIZE(max77705_sysfs_properties);
 	pccic_data->ccic_syfs_prop = pccic_sysfs_prop;

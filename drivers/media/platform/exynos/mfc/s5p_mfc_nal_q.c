@@ -697,6 +697,7 @@ static int mfc_nal_q_run_in_buf_dec(struct s5p_mfc_ctx *ctx, DecoderInputStr *pI
 	pInStr->CpbBufferAddr = buf_addr;
 	pInStr->CpbBufferSize = cpb_buf_size;
 	pInStr->CpbBufferOffset = 0;
+	ctx->last_src_addr = buf_addr;
 
 	MFC_TRACE_CTX("Set src[%d] fd: %d, %#llx\n",
 			src_mb->vb.vb2_buf.index,
@@ -711,6 +712,7 @@ static int mfc_nal_q_run_in_buf_dec(struct s5p_mfc_ctx *ctx, DecoderInputStr *pI
 	for (i = 0; i < raw->num_planes; i++) {
 		pInStr->FrameSize[i] = raw->plane_size[i];
 		pInStr->FrameAddr[i] = dst_mb->planes.raw[i];
+		ctx->last_dst_addr[i] = dst_mb->planes.raw[i];
 		if (ctx->is_10bit)
 			pInStr->Frame2BitSize[i] = raw->plane_size_2bits[i];
 	}
@@ -1596,6 +1598,7 @@ int s5p_mfc_nal_q_enqueue_in_buf(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ct
 
 	if (input_diff == 0)
 		s5p_mfc_watchdog_start_tick(dev);
+	MFC_TRACE_LOG_DEV("N%d", input_diff);
 
 	spin_unlock_irqrestore(&nal_q_in_handle->nal_q_handle->lock, flags);
 

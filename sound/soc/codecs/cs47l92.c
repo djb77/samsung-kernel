@@ -2156,11 +2156,17 @@ static int cs47l92_probe(struct platform_device *pdev)
 	ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_cs47l92,
 				     cs47l92_dai, ARRAY_SIZE(cs47l92_dai));
 	if (ret < 0) {
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+		sec_audio_bootlog(3, &pdev->dev, "%s: Failed to register codec: %d\n", __func__, ret);
+#endif
 		dev_err(&pdev->dev, "Failed to register codec: %d\n", ret);
 		snd_soc_unregister_platform(&pdev->dev);
 		goto error;
 	}
 
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+	sec_audio_bootlog(6, &pdev->dev, "%s: done\n", __func__);
+#endif
 	return ret;
 
 error:

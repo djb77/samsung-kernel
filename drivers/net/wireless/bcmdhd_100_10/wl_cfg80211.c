@@ -13882,7 +13882,6 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 #ifdef DHD_LOSSLESS_ROAMING
 	sec = wl_read_prof(cfg, ndev, WL_PROF_SEC);
 #endif /* DHD_LOSSLESS_ROAMING */
-	
 	dhdp = (dhd_pub_t *)(cfg->pub);
 	BCM_REFERENCE(dhdp);
 

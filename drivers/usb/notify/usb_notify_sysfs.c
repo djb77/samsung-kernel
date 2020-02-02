@@ -190,6 +190,8 @@ static ssize_t disable_store(
 		goto error;
 	}
 
+	if (size < strlen(buf))
+		goto error;
 	disable = kzalloc(size+1, GFP_KERNEL);
 	if (!disable)
 		goto error;
@@ -594,6 +596,8 @@ static ssize_t whitelist_for_mdm_store(
 		goto error;
 	}
 
+	if (size < strlen(buf))
+		goto error;
 	disable = kzalloc(size+1, GFP_KERNEL);
 	if (!disable)
 		goto error;

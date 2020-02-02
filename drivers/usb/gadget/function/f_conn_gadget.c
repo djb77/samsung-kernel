@@ -31,9 +31,9 @@
  *      20140113 - change kmalloc to vmalloc for kfifo buffer
  *      20140211 - support multiple read URB.request
  *      20140221 - remove fifo_lock
- * 		- disable change transfer_size when online
+ *               - disable change transfer_size when online
  *      20140228 - add android_usb_function callback registration code.
- *		- conditional conn_gadget_shortname for `android` and `tizen`
+ *               - conditional conn_gadget_shortname for `android` and `tizen`
  *      20140311 - add ioctl to communicate to userland application
  *      20140318 - add flush to wakeup ioctl sleep before handle close
  */
@@ -98,6 +98,7 @@ struct conn_gadget_dev {
 	atomic_t read_excl;
 	atomic_t write_excl;
 	atomic_t open_excl;
+	atomic_t ep_out_excl;
 
 	struct list_head tx_idle;
 	struct list_head rx_idle;
@@ -105,6 +106,7 @@ struct conn_gadget_dev {
 
 	wait_queue_head_t read_wq;
 	wait_queue_head_t write_wq;
+	wait_queue_head_t unbind_wq;
 
 	struct kfifo rd_queue;
 	void  *rd_queue_buf;
@@ -131,7 +133,11 @@ static struct usb_interface_descriptor conn_gadget_interface_desc = {
 	.bNumEndpoints          = 2,
 	.bInterfaceClass        = 0xFF,
 	.bInterfaceSubClass     = 0x40,
-	.bInterfaceProtocol     = 1,
+#ifdef CONFIG_USB_F_CONN_GADGET_NDOP
+	.bInterfaceProtocol     = 3,
+#else
+	.bInterfaceProtocol     = 2,
+#endif
 };
 
 static struct usb_endpoint_descriptor conn_gadget_superspeed_in_desc = {
@@ -211,6 +217,11 @@ static struct usb_descriptor_header *ss_conn_gadget_descs[] = {
     NULL,
 };
 
+void conn_gadget_req_move(struct conn_gadget_dev *dev, struct list_head *from_head,
+		struct list_head *to_head, struct usb_request *req);
+
+struct usb_request *conn_gadget_req_get_ex(struct conn_gadget_dev *dev, struct list_head *head, int delete);
+struct usb_request* conn_gadget_req_get_from_rx_idle(struct conn_gadget_dev *dev);
 
 /* temporary variable used between conn_gadget_open() and conn_gadget_gadget_bind() */
 static struct conn_gadget_dev *_conn_gadget_dev;
@@ -280,6 +291,11 @@ void conn_gadget_req_put(struct conn_gadget_dev *dev, struct list_head *head,
 /* remove a request from the head of a list */
 struct usb_request *conn_gadget_req_get(struct conn_gadget_dev *dev, struct list_head *head)
 {
+	return conn_gadget_req_get_ex(dev, head, 1);
+}
+
+struct usb_request *conn_gadget_req_get_ex(struct conn_gadget_dev *dev, struct list_head *head, int delete)
+{
 	unsigned long flags;
 	struct usb_request *req;
 
@@ -288,10 +304,22 @@ struct usb_request *conn_gadget_req_get(struct conn_gadget_dev *dev, struct list
 		req = 0;
 	} else {
 		req = list_first_entry(head, struct usb_request, list);
-		list_del(&req->list);
+		if (delete) {
+			list_del(&req->list);
+		}
 	}
 	spin_unlock_irqrestore(&dev->lock, flags);
 	return req;
+}
+
+struct usb_request* conn_gadget_req_get_from_rx_idle(struct conn_gadget_dev *dev)
+{
+	if (kfifo_len(&dev->rd_queue) > dev->rd_queue_size / 2) {
+		CONN_GADGET_DBG("rd_queue has much buffer already\n");
+		return NULL;
+	}
+
+	return conn_gadget_req_get(dev, &dev->rx_idle);
 }
 
 static int conn_gadget_request_ep_out(struct conn_gadget_dev *dev)
@@ -299,19 +327,28 @@ static int conn_gadget_request_ep_out(struct conn_gadget_dev *dev)
 	struct usb_request *req;
 	int ret;
 
-		while ((req = conn_gadget_req_get(dev, &dev->rx_idle))) {
+	if (conn_gadget_lock(&dev->ep_out_excl)) {
+		CONN_GADGET_ERR("request ep_out failed, because it is currently being unbinded\n");
+		return 0;
+	}
+
+	while ((req = conn_gadget_req_get_from_rx_idle(dev))) {
 		req->length = dev->transfer_size;
+
+		conn_gadget_req_put(dev, &dev->rx_busy, req);
+		CONN_GADGET_DBG("rx %p queue\n", req);
+
 		ret = usb_ep_queue(dev->ep_out, req, GFP_ATOMIC);
 		if (ret < 0) {
 			CONN_GADGET_ERR("failed to queue req %p (%d)\n", req, ret);
-			conn_gadget_req_put(dev, &dev->rx_idle, req);
+			conn_gadget_req_move(dev, &dev->rx_busy, &dev->rx_idle, req);
 			break;
-		} else {
-			conn_gadget_req_put(dev, &dev->rx_busy, req);
-			CONN_GADGET_DBG("rx %p queue\n", req);
 		}
 	}
 
+	conn_gadget_unlock(&dev->ep_out_excl);
+	CONN_GADGET_DBG("unbind_wq wkup\n");
+	wake_up(&dev->unbind_wq);
 	return 0;
 }
 
@@ -368,8 +405,7 @@ static void conn_gadget_complete_in(struct usb_ep *ep, struct usb_request *req)
 static void conn_gadget_complete_out(struct usb_ep *ep, struct usb_request *req)
 {
 	struct conn_gadget_dev *dev = _conn_gadget_dev;
-	int high_water = (dev->rd_queue_size - (dev->transfer_size * (CONN_GADGET_RX_REQ_MAX+1)));
-	int ret;
+	int size = 0;
 
 	CONN_GADGET_DBG("enter\n");
 
@@ -380,30 +416,16 @@ static void conn_gadget_complete_out(struct usb_ep *ep, struct usb_request *req)
 		}
 
 		CONN_GADGET_ERR("req->status f %d\n", req->status);
-		conn_gadget_req_move(dev, &dev->rx_busy, &dev->rx_idle, req); //move req from rx_busy list to rx_idle
 		goto done;
 	} else {
-		kfifo_in(&dev->rd_queue, req->buf, req->actual);
-
-	}
-
-	//if queued buffer has overflow possibility, then exit function
-	if (kfifo_len(&dev->rd_queue) >= high_water) {
-		CONN_GADGET_DBG("kfifo_len is too high(%d)\n", high_water);
-		conn_gadget_req_move(dev, &dev->rx_busy, &dev->rx_idle, req);
-		goto done;
-	}
-
-	ret = usb_ep_queue(dev->ep_out, req, GFP_ATOMIC);
-	if (ret < 0) {
-		CONN_GADGET_ERR("failed to queue req %p (%d)\n", req, ret);
-		conn_gadget_req_move(dev, &dev->rx_busy, &dev->rx_idle, req);
-		goto done;
-	} else {
-		CONN_GADGET_DBG("rx %p queue\n", req);
+		size = kfifo_in(&dev->rd_queue, req->buf, req->actual);
+		if (size != req->actual) {
+			CONN_GADGET_ERR("!!! kfifo_in size(%d) is different with req->actual(%d) !!!\n", size, req->actual);
+		}
 	}
 
 done:
+	conn_gadget_req_move(dev, &dev->rx_busy, &dev->rx_idle, req); //move req from rx_busy list to rx_idle
 	CONN_GADGET_DBG("rd_wq wkup\n");
 	wake_up(&dev->read_wq);
 }
@@ -566,12 +588,6 @@ static ssize_t conn_gadget_read(struct file *fp, char __user *buf,
 		goto done;
 	}
 
-	//if queued buffer is less than half, then usb_ep_queue
-	if (kfifo_len(&dev->rd_queue) > dev->rd_queue_size / 2) {
-		CONN_GADGET_DBG("rd_queue has much buffer already\n");
-		goto done;
-	}
-
 req:
 	//if there is a rx_idle, then usb_ep_queue
 	CONN_GADGET_DBG("conn_gadget_request_ep_out\n");
@@ -727,21 +743,7 @@ static int conn_gadget_flush(struct file *fp, fl_owner_t id)
 
 static int conn_gadget_release(struct inode *ip, struct file *fp)
 {
-	struct usb_request *req, *n;
-	unsigned long flags;
-
 	printk(KERN_INFO "conn_gadget_release\n");
-
-	spin_lock_irqsave(&_conn_gadget_dev->lock, flags);
-	list_for_each_entry_safe(req, n, &_conn_gadget_dev->rx_busy, list) {
-		spin_unlock_irqrestore(&_conn_gadget_dev->lock, flags);
-
-		printk(KERN_INFO "list_for_each...\n");
-		usb_ep_dequeue(_conn_gadget_dev->ep_out, req);
-
-		spin_lock_irqsave(&_conn_gadget_dev->lock, flags);
-	}
-	spin_unlock_irqrestore(&_conn_gadget_dev->lock, flags);
 
 	atomic_set(&_conn_gadget_dev->flush, 0);
 
@@ -857,6 +859,9 @@ static const struct file_operations conn_gadget_fops = {
 	.write = conn_gadget_write,
 	.poll = conn_gadget_poll,
 	.unlocked_ioctl = conn_gadget_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = conn_gadget_ioctl,
+#endif
 	.open = conn_gadget_open,
 	.release = conn_gadget_release,
 	.flush = conn_gadget_flush,
@@ -922,6 +927,7 @@ conn_gadget_function_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct conn_gadget_dev	*dev = func_to_conn_gadget(f);
 	struct usb_request *req;
+	int ep_out_excl_locked = 0;
 
 	printk(KERN_ERR "conn_gadget_function_unbind\n");
 
@@ -936,6 +942,13 @@ conn_gadget_function_unbind(struct usb_configuration *c, struct usb_function *f)
 	CONN_GADGET_DBG("rd_wq wkup\n");
 	wake_up(&dev->read_wq);
 
+	if (conn_gadget_lock(&dev->ep_out_excl)) {
+		CONN_GADGET_ERR("waiting for request_ep_out to complete\n");
+		wait_event(dev->unbind_wq, (0 == atomic_read(&dev->ep_out_excl)));
+		CONN_GADGET_ERR("request_ep_out finished\n");
+	} else {
+		ep_out_excl_locked = 1;
+	}
 	while ((req = conn_gadget_req_get(dev, &dev->rx_idle)))
 		conn_gadget_request_free(req, dev->ep_out);
 
@@ -944,6 +957,9 @@ conn_gadget_function_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	while ((req = conn_gadget_req_get(dev, &dev->tx_idle)))
 		conn_gadget_request_free(req, dev->ep_in);
+	if (ep_out_excl_locked) {
+		conn_gadget_unlock(&dev->ep_out_excl);
+	}
 }
 
 static int conn_gadget_function_set_alt(struct usb_function *f,
@@ -1090,7 +1106,12 @@ static ssize_t conn_gadget_usb_buffer_size_store(struct device *dev,
 		return size;
 	}
 
-	sscanf(buf, "%d", &value);
+	if (sscanf(buf, "%d", &value) != 1)
+		return -EINVAL;
+
+	if (value <= 0 || value > 128)
+		return -EINVAL;
+
 	kfifo_size = (value * 1024) * CONN_GADGET_DEFAULT_Q_SIZE;
 
 	rd_queue_buf = vmalloc(kfifo_size);
@@ -1206,11 +1227,13 @@ static int conn_gadget_setup(struct conn_gadget_instance *fi_conn_gadget)
 	init_waitqueue_head(&dev->read_wq);
 	init_waitqueue_head(&dev->write_wq);
 	init_waitqueue_head(&dev->ioctl_wq);
+	init_waitqueue_head(&dev->unbind_wq);
 
 	atomic_set(&dev->open_excl, 0);
 	atomic_set(&dev->read_excl, 0);
 	atomic_set(&dev->write_excl, 0);
 	atomic_set(&dev->flush, 0);
+	atomic_set(&dev->ep_out_excl, 0);
 
 	INIT_LIST_HEAD(&dev->tx_idle);
 	INIT_LIST_HEAD(&dev->rx_idle);

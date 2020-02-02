@@ -118,12 +118,13 @@ static ssize_t ccic_sysfs_store_property(struct device *dev,
 }
 
 static umode_t ccic_sysfs_attr_is_visible(struct kobject *kobj,
-					 struct attribute *attr, int attrno)
+					struct attribute *attr, int attrno)
 {
 	struct device *dev = container_of(kobj, struct device, kobj);
 	pccic_data_t pccic_data = dev_get_drvdata(dev);
-	pccic_sysfs_property_t pccic_sysfs = (pccic_sysfs_property_t)pccic_data->ccic_syfs_prop;
-	umode_t mode = S_IRUSR | S_IRGRP | S_IROTH;
+	pccic_sysfs_property_t pccic_sysfs =
+			(pccic_sysfs_property_t)pccic_data->ccic_syfs_prop;
+	umode_t mode = 0444;
 	int i;
 
 	for (i = 0; i < pccic_sysfs->num_properties; i++) {
@@ -131,10 +132,13 @@ static umode_t ccic_sysfs_attr_is_visible(struct kobject *kobj,
 
 		if (property == attrno) {
 			if (pccic_sysfs->property_is_writeable &&
-			    pccic_sysfs->property_is_writeable(pccic_data, property)
+					pccic_sysfs->property_is_writeable(
+					pccic_data, property) > 0)
+				mode |= 0200;
+			if (pccic_sysfs->property_is_writeonly &&
+			    pccic_sysfs->property_is_writeonly(pccic_data, property)
 			    > 0)
-				mode |= S_IWUSR;
-
+				mode = 0200;
 			return mode;
 		}
 	}

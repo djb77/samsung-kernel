@@ -22,9 +22,7 @@
 #define __LINUX_USB_DWC3_OTG_H
 #include <linux/wakelock.h>
 #include <linux/usb/otg-fsm.h>
-
-extern int dp_use_informed, ldo_off_delayed;
-
+#include "dwc3-exynos.h"
 struct dwc3_ext_otg_ops {
 	int	(*setup)(struct device *dev, struct otg_fsm *fsm);
 	void	(*exit)(struct device *dev);
@@ -65,6 +63,8 @@ struct dwc3_otg {
 	struct regulator	*ldo14;
 
 	struct dwc3_ext_otg_ops *ext_otg_ops;
+	struct mutex lock;
+	u32 combo_phy_control;
 };
 
 static inline int dwc3_ext_otg_setup(struct dwc3_otg *dotg)

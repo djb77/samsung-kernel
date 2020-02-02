@@ -1134,7 +1134,9 @@ drm_atomic_set_crtc_for_plane(struct drm_plane_state *plane_state,
 {
 	struct drm_plane *plane = plane_state->plane;
 	struct drm_crtc_state *crtc_state;
-
+	/* Nothing to do for same crtc*/
+	if (plane_state->crtc == crtc)
+		return 0;
 	if (plane_state->crtc) {
 		crtc_state = drm_atomic_get_crtc_state(plane_state->state,
 						       plane_state->crtc);
@@ -1871,10 +1873,10 @@ int drm_mode_atomic_ioctl(struct drm_device *dev,
 	struct drm_atomic_state *state;
 	struct drm_modeset_acquire_ctx ctx;
 	struct drm_plane *plane;
-	struct drm_out_fence_state *fence_state = NULL;
+	struct drm_out_fence_state *fence_state;
 	unsigned plane_mask;
 	int ret = 0;
-	unsigned int i, j, num_fences = 0;
+	unsigned int i, j, num_fences;
 
 	/* disallow for drivers not supporting atomic: */
 	if (!drm_core_check_feature(dev, DRIVER_ATOMIC))
@@ -1915,6 +1917,8 @@ retry:
 	plane_mask = 0;
 	copied_objs = 0;
 	copied_props = 0;
+	fence_state = NULL;
+	num_fences = 0;
 
 	for (i = 0; i < arg->count_objs; i++) {
 		uint32_t obj_id, count_props;

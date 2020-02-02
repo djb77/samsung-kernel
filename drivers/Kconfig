@@ -228,6 +228,8 @@ source "drivers/bts/Kconfig"
 
 source "drivers/gud/Kconfig"
 
+source "drivers/tee/Kconfig"
+
 source "drivers/motor/Kconfig"
 
 source "drivers/fingerprint/Kconfig"
@@ -237,4 +239,7 @@ source "drivers/gator_5.27/Kconfig"
 source "drivers/five/Kconfig"
 
 source "drivers/mpsd/Kconfig"
+
+source "drivers/security/samsung/icdrv/Kconfig"
+
 endmenu

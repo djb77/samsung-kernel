@@ -524,7 +524,10 @@ int scsi_ioctl(struct scsi_device *sdev, int cmd, void __user *arg)
 	case SCSI_IOCTL_GET_PCI:
                 return scsi_ioctl_get_pci(sdev, arg);
 	case SG_SCSI_RESET:
-		return scsi_ioctl_reset(sdev, arg);
+		if(sdev->host->by_ufs) 
+			return -EINVAL; 
+		else 
+			return scsi_ioctl_reset(sdev, arg);
 	default:
 		if (sdev->host->hostt->ioctl)
 			return sdev->host->hostt->ioctl(sdev, cmd, arg);

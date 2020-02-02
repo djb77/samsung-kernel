@@ -236,9 +236,10 @@ static int displayport_full_link_training(void)
 		link_rate = g_displayport_debug_param.link_rate;
 		lane_cnt = g_displayport_debug_param.lane_cnt;
 	}
+
 	if (link_rate == LINK_RATE_5_4Gbps) {
 		if (pm_qos_request_active(&displayport->fsys0_qos)) {
-			pm_qos_update_request(&displayport->fsys0_qos, 0);
+			pm_qos_update_request(&displayport->fsys0_qos, 336 * 1000);
 			displayport_info("displayport->fsys0_qos 336000Mhz\n");
 		} else
 			displayport_err("displayport->fsys0_qos setting error\n");
@@ -900,9 +901,14 @@ static int displayport_link_status_read(void)
 	u8 val[DPCP_LINK_SINK_STATUS_FIELD_LENGTH] = {0, };
 	int count = 200;
 	int ret = 0;
+	int i;
 
 	/* for Link CTS : Branch Device Detection*/
 	ret = displayport_link_sink_status_read();
+	for (i = 0; ret != 0 && i < 4; i++) {
+		msleep(50);
+		ret = displayport_link_sink_status_read();
+	}
 	if (ret != 0) {
 		displayport_err("link_sink_status_read fail\n");
 		return -EINVAL;
@@ -2214,10 +2220,15 @@ static void displayport_hdcp22_run(struct work_struct *work)
 {
 #if defined(CONFIG_EXYNOS_HDCP2)
 	struct displayport_device *displayport = get_displayport_drvdata();
+	int ret = 0;
 #ifndef CONFIG_HDCP2_FUNC_TEST_MODE
 	int i;
 #endif
 	u8 val[2] = {0, };
+
+	if (displayport->hdcp_ver != HDCP_VERSION_2_2 ||
+			!displayport->hpd_current_state)
+		return;
 
 	mutex_lock(&displayport->hdcp2_lock);
 	if (displayport_get_hpd_state() == 0) {
@@ -2259,16 +2270,19 @@ static void displayport_hdcp22_run(struct work_struct *work)
 
 	hdcp_dplink_clear_all();
 	auth_done = HDCP_2_2_NOT_AUTH;
-	if (hdcp_dplink_authenticate() != 0) {
+	ret = hdcp_dplink_authenticate();
+	if (ret) {
 		displayport_reg_video_mute(1);
+		displayport_err("hdcp22 auth fail %d\n", ret);
 #ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
 		secdp_bigdata_inc_error_cnt(ERR_HDCP_AUTH);
 #endif
+		goto exit_hdcp;
 	}
-	else {
-		auth_done = HDCP_2_2_AUTH_DONE;
-		displayport_reg_video_mute(0);
-	}
+
+	auth_done = HDCP_2_2_AUTH_DONE;
+	displayport_reg_video_mute(0);
+	displayport_info("hdcp22 auth success\n");
 
 	displayport_dpcd_read_for_hdcp22(DPCD_HDCP22_RX_INFO, 2, val);
 	displayport_info("HDCP2.2 rx_info: 0:0x%X, 8:0x%X\n", val[1], val[0]);
@@ -2351,6 +2365,7 @@ static int displayport_enable(struct displayport_device *displayport)
 
 	if (!displayport->hpd_current_state) {
 		displayport_err("%s() hpd is low\n", __func__);
+		mutex_unlock(&displayport->cmd_lock);
 		return 0;
 	}
 
@@ -2410,6 +2425,14 @@ static int displayport_disable(struct displayport_device *displayport)
 	displayport_reg_set_video_bist_mode(0);
 	displayport_reg_deinit();
 	disable_irq(displayport->res.irq);
+
+	if (displayport_reg_get_link_bw() == LINK_RATE_5_4Gbps) {
+		if (pm_qos_request_active(&displayport->fsys0_qos)) {
+			pm_qos_update_request(&displayport->fsys0_qos, 0);
+			displayport_info("displayport->fsys0_qos release in disable\n");
+		} else
+			displayport_err("displayport->fsys0_qos release error\n");
+	}
 
 	displayport_reg_phy_disable();
 
@@ -2848,9 +2871,10 @@ static int displayport_aux_onoff(struct displayport_device *displayport, int
 
 	displayport_info("aux vdd onoff = %d\n", onoff);
 
-	if (onoff == 1)
+	if (onoff == 1) {
 		gpio_direction_output(displayport->gpio_sw_oe, 0);
-	else
+		msleep(100);
+	} else
 		gpio_direction_output(displayport->gpio_sw_oe, 1);
 
 	return rc;
@@ -2945,6 +2969,7 @@ static int usb_typec_displayport_notification(struct notifier_block *nb,
 			secdp_bigdata_save_item(BD_ADT_VID, displayport->ven_id);
 			secdp_bigdata_save_item(BD_ADT_PID, displayport->prod_id);
 #endif
+			displayport_aux_sel(displayport);
 			displayport_aux_onoff(displayport, 1);
 			break;
 		default:
@@ -4123,71 +4148,74 @@ static int displayport_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 	pm_qos_add_request(&displayport->fsys0_qos, PM_QOS_FSYS0_THROUGHPUT, 0);
-	dp_class = class_create(THIS_MODULE, "dp_sec");
-	if (IS_ERR(dp_class))
-		displayport_err("failed to creat dp_class\n");
-	else {
+
+	if (!displayport->dp_not_support) {
+		dp_class = class_create(THIS_MODULE, "dp_sec");
+		if (IS_ERR(dp_class))
+			displayport_err("failed to creat dp_class\n");
+		else {
 #ifdef DISPLAYPORT_TEST
-		ret = class_create_file(dp_class, &class_attr_link);
-		if (ret)
-			displayport_err("failed to create attr_link\n");
-		ret = class_create_file(dp_class, &class_attr_bpc);
-		if (ret)
-			displayport_err("failed to create attr_bpc\n");
-		ret = class_create_file(dp_class, &class_attr_range);
-		if (ret)
-			displayport_err("failed to create attr_range\n");
-		ret = class_create_file(dp_class, &class_attr_edid);
-		if (ret)
-			displayport_err("failed to create attr_edid\n");
-		ret = class_create_file(dp_class, &class_attr_bist);
-		if (ret)
-			displayport_err("failed to create attr_bist\n");
+			ret = class_create_file(dp_class, &class_attr_link);
+			if (ret)
+				displayport_err("failed to create attr_link\n");
+			ret = class_create_file(dp_class, &class_attr_bpc);
+			if (ret)
+				displayport_err("failed to create attr_bpc\n");
+			ret = class_create_file(dp_class, &class_attr_range);
+			if (ret)
+				displayport_err("failed to create attr_range\n");
+			ret = class_create_file(dp_class, &class_attr_edid);
+			if (ret)
+				displayport_err("failed to create attr_edid\n");
+			ret = class_create_file(dp_class, &class_attr_bist);
+			if (ret)
+				displayport_err("failed to create attr_bist\n");
 #endif
-		ret = class_create_file(dp_class, &class_attr_unit_test);
-		if (ret)
-			displayport_err("failed to create attr_unit_test\n");
+			ret = class_create_file(dp_class, &class_attr_unit_test);
+			if (ret)
+				displayport_err("failed to create attr_unit_test\n");
 #if defined(CONFIG_EXYNOS_HDCP2)
-		ret = class_create_file(dp_class, &class_attr_dp_drm);
-		if (ret)
-			displayport_err("failed to create attr_dp_drm\n");
+			ret = class_create_file(dp_class, &class_attr_dp_drm);
+			if (ret)
+				displayport_err("failed to create attr_dp_drm\n");
 #endif
-		ret = class_create_file(dp_class, &class_attr_phy_tune);
-		if (ret)
-			displayport_err("failed to create attr_phy_tune\n");
-		ret = class_create_file(dp_class, &class_attr_audio_test);
-		if (ret)
-			displayport_err("failed to create attr_audio_test\n");
-		ret = class_create_file(dp_class, &class_attr_edid_test);
-		if (ret)
-			displayport_err("failed to create attr_edid_test\n");
-		ret = class_create_file(dp_class, &class_attr_dp_test);
-		if (ret)
-			displayport_err("failed to create attr_dp_test\n");
-		ret = class_create_file(dp_class, &class_attr_forced_resolution);
-		if (ret)
-			displayport_err("failed to create attr_dp_forced_resolution\n");
-		ret = class_create_file(dp_class, &class_attr_reduced_resolution);
-		if (ret)
-			displayport_err("failed to create attr_dp_reduced_resolution\n");
-		ret = class_create_file(dp_class, &class_attr_dex);
-		if (ret)
-			displayport_err("failed to create attr_dp_dex\n");
-		ret = class_create_file(dp_class, &class_attr_dex_ver);
-		if (ret)
-			displayport_err("failed to create attr_dp_dex_ver\n");
-		ret = class_create_file(dp_class, &class_attr_monitor_info);
-		if (ret)
-			displayport_err("failed to create attr_dp_monitor_info\n");
-		ret = class_create_file(dp_class, &class_attr_dp_sbu_sw_sel);
-		if (ret)
-			displayport_err("failed to create class_attr_dp_sbu_sw_sel\n");
-		ret = class_create_file(dp_class, &class_attr_log_level);
-		if (ret)
-			displayport_err("failed to create class_attr_log_level\n");
+			ret = class_create_file(dp_class, &class_attr_phy_tune);
+			if (ret)
+				displayport_err("failed to create attr_phy_tune\n");
+			ret = class_create_file(dp_class, &class_attr_audio_test);
+			if (ret)
+				displayport_err("failed to create attr_audio_test\n");
+			ret = class_create_file(dp_class, &class_attr_edid_test);
+			if (ret)
+				displayport_err("failed to create attr_edid_test\n");
+			ret = class_create_file(dp_class, &class_attr_dp_test);
+			if (ret)
+				displayport_err("failed to create attr_dp_test\n");
+			ret = class_create_file(dp_class, &class_attr_forced_resolution);
+			if (ret)
+				displayport_err("failed to create attr_dp_forced_resolution\n");
+			ret = class_create_file(dp_class, &class_attr_reduced_resolution);
+			if (ret)
+				displayport_err("failed to create attr_dp_reduced_resolution\n");
+			ret = class_create_file(dp_class, &class_attr_dex);
+			if (ret)
+				displayport_err("failed to create attr_dp_dex\n");
+			ret = class_create_file(dp_class, &class_attr_dex_ver);
+			if (ret)
+				displayport_err("failed to create attr_dp_dex_ver\n");
+			ret = class_create_file(dp_class, &class_attr_monitor_info);
+			if (ret)
+				displayport_err("failed to create attr_dp_monitor_info\n");
+			ret = class_create_file(dp_class, &class_attr_dp_sbu_sw_sel);
+			if (ret)
+				displayport_err("failed to create class_attr_dp_sbu_sw_sel\n");
+			ret = class_create_file(dp_class, &class_attr_log_level);
+			if (ret)
+				displayport_err("failed to create class_attr_log_level\n");
 #ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
-		secdp_bigdata_init(dp_class);
+			secdp_bigdata_init(dp_class);
 #endif
+		}
 	}
 
 	g_displayport_debug_param.param_used = 0;

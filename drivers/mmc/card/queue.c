@@ -320,7 +320,7 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 #ifdef CONFIG_LARGE_DIRTY_BUFFER
 		/* apply more throttle on external sdcard */
 		mq->queue->backing_dev_info.capabilities |= BDI_CAP_STRICTLIMIT;
-		bdi_set_min_ratio(&mq->queue->backing_dev_info, 20);
+		bdi_set_min_ratio(&mq->queue->backing_dev_info, 30);
 		bdi_set_max_ratio(&mq->queue->backing_dev_info, 60);
 #endif
 		pr_info("Parameters for external-sdcard: min/max_ratio: %u/%u "

@@ -571,6 +571,19 @@ static int common_lcd_sleepout(struct dsim_device *dsim)
 	return 0;
 }
 
+static int common_lcd_reset(struct dsim_device *dsim)
+{
+	int ret;
+
+	ret = dsim_ioctl_panel(dsim, PANEL_IOC_PANEL_RESET, NULL);
+	if (ret) {
+		dsim_err("DSIM:ERR:%s:failed to sleep out\n", __func__);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int common_lcd_notify(struct dsim_device *dsim, void *data)
 {
 	int ret;
@@ -641,6 +654,7 @@ struct dsim_lcd_driver common_mipi_lcd_driver = {
 	.setarea	= common_lcd_setarea,
 	.poweron	= common_lcd_poweron,
 	.poweroff	= common_lcd_poweroff,
+	.reset		= common_lcd_reset,
 	.sleepin	= common_lcd_sleepin,
 	.sleepout	= common_lcd_sleepout,
 	.displayon	= common_lcd_displayon,

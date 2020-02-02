@@ -165,6 +165,14 @@ int ip6_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 			    !(IP6CB(skb)->flags & IP6SKB_REROUTED));
 }
 
+bool ip6_autoflowlabel(struct net *net, const struct ipv6_pinfo *np)
+{
+	if (!np->autoflowlabel_set)
+		return ip6_default_np_autolabel(net);
+	else
+		return np->autoflowlabel;
+}
+
 /*
  * xmit an sk_buff (used by TCP, SCTP and DCCP)
  * Note : socket lock is not held for SYNACK packets, but might be modified
@@ -228,7 +236,7 @@ int ip6_xmit(const struct sock *sk, struct sk_buff *skb, struct flowi6 *fl6,
 		hlimit = ip6_dst_hoplimit(dst);
 
 	ip6_flow_hdr(hdr, tclass, ip6_make_flowlabel(net, skb, fl6->flowlabel,
-						     np->autoflowlabel, fl6));
+				ip6_autoflowlabel(net, np), fl6));
 
 	hdr->payload_len = htons(seg_len);
 	hdr->nexthdr = proto;
@@ -357,6 +365,11 @@ static int ip6_forward_proxy_check(struct sk_buff *skb)
 static inline int ip6_forward_finish(struct net *net, struct sock *sk,
 				     struct sk_buff *skb)
 {
+	struct dst_entry *dst = skb_dst(skb);
+
+	__IP6_INC_STATS(net, ip6_dst_idev(dst), IPSTATS_MIB_OUTFORWDATAGRAMS);
+	__IP6_ADD_STATS(net, ip6_dst_idev(dst), IPSTATS_MIB_OUTOCTETS, skb->len);
+
 	return dst_output(net, sk, skb);
 }
 
@@ -483,7 +496,8 @@ int ip6_forward(struct sk_buff *skb)
 	   send redirects to source routed frames.
 	   We don't send redirects to frames decapsulated from IPsec.
 	 */
-	if (skb->dev == dst->dev && opt->srcrt == 0 && !skb_sec_path(skb)) {
+	if (IP6CB(skb)->iif == dst->dev->ifindex &&
+	    opt->srcrt == 0 && !skb_sec_path(skb)) {
 		struct in6_addr *target = NULL;
 		struct inet_peer *peer;
 		struct rt6_info *rt;
@@ -550,8 +564,6 @@ int ip6_forward(struct sk_buff *skb)
 
 	hdr->hop_limit--;
 
-	__IP6_INC_STATS(net, ip6_dst_idev(dst), IPSTATS_MIB_OUTFORWDATAGRAMS);
-	__IP6_ADD_STATS(net, ip6_dst_idev(dst), IPSTATS_MIB_OUTOCTETS, skb->len);
 	return NF_HOOK(NFPROTO_IPV6, NF_INET_FORWARD,
 		       net, NULL, skb, skb->dev, dst->dev,
 		       ip6_forward_finish);
@@ -572,6 +584,8 @@ static void ip6_copy_metadata(struct sk_buff *to, struct sk_buff *from)
 	skb_dst_set(to, dst_clone(skb_dst(from)));
 	to->dev = from->dev;
 	to->mark = from->mark;
+
+	skb_copy_hash(to, from);
 
 #ifdef CONFIG_NET_SCHED
 	to->tc_index = from->tc_index;
@@ -1223,11 +1237,11 @@ static int ip6_setup_cork(struct sock *sk, struct inet_cork_full *cork,
 		if (WARN_ON(v6_cork->opt))
 			return -EINVAL;
 
-		v6_cork->opt = kzalloc(opt->tot_len, sk->sk_allocation);
+		v6_cork->opt = kzalloc(sizeof(*opt), sk->sk_allocation);
 		if (unlikely(!v6_cork->opt))
 			return -ENOBUFS;
 
-		v6_cork->opt->tot_len = opt->tot_len;
+		v6_cork->opt->tot_len = sizeof(*opt);
 		v6_cork->opt->opt_flen = opt->opt_flen;
 		v6_cork->opt->opt_nflen = opt->opt_nflen;
 
@@ -1291,7 +1305,7 @@ static int __ip6_append_data(struct sock *sk,
 			     const struct sockcm_cookie *sockc)
 {
 	struct sk_buff *skb, *skb_prev = NULL;
-	unsigned int maxfraglen, fragheaderlen, mtu, orig_mtu;
+	unsigned int maxfraglen, fragheaderlen, mtu, orig_mtu, pmtu;
 	int exthdrlen = 0;
 	int dst_exthdrlen = 0;
 	int hh_len;
@@ -1327,6 +1341,12 @@ static int __ip6_append_data(struct sock *sk,
 		      sizeof(struct frag_hdr) : 0) +
 		     rt->rt6i_nfheader_len;
 
+	/* as per RFC 7112 section 5, the entire IPv6 Header Chain must fit
+	 * the first fragment
+	 */
+	if (headersize + transhdrlen > mtu)
+		goto emsgsize;
+
 	if (cork->length + length > mtu - headersize && ipc6->dontfrag &&
 	    (sk->sk_protocol == IPPROTO_UDP ||
 	     sk->sk_protocol == IPPROTO_RAW)) {
@@ -1342,9 +1362,8 @@ static int __ip6_append_data(struct sock *sk,
 
 	if (cork->length + length > maxnonfragsize - headersize) {
 emsgsize:
-		ipv6_local_error(sk, EMSGSIZE, fl6,
-				 mtu - headersize +
-				 sizeof(struct ipv6hdr));
+		pmtu = max_t(int, mtu - headersize + sizeof(struct ipv6hdr), 0);
+		ipv6_local_error(sk, EMSGSIZE, fl6, pmtu);
 		return -EMSGSIZE;
 	}
 
@@ -1537,7 +1556,8 @@ alloc_new_skb:
 		if (copy > length)
 			copy = length;
 
-		if (!(rt->dst.dev->features&NETIF_F_SG)) {
+		if (!(rt->dst.dev->features&NETIF_F_SG) &&
+		    skb_tailroom(skb) >= copy) {
 			unsigned int off;
 
 			off = skb->len;
@@ -1701,7 +1721,7 @@ struct sk_buff *__ip6_make_skb(struct sock *sk,
 
 	ip6_flow_hdr(hdr, v6_cork->tclass,
 		     ip6_make_flowlabel(net, skb, fl6->flowlabel,
-					np->autoflowlabel, fl6));
+					ip6_autoflowlabel(net, np), fl6));
 	hdr->hop_limit = v6_cork->hop_limit;
 	hdr->nexthdr = proto;
 	hdr->saddr = fl6->saddr;
@@ -1807,7 +1827,6 @@ struct sk_buff *ip6_make_skb(struct sock *sk,
 		ip6_cork_release(&cork, &v6_cork);
 		return ERR_PTR(err);
 	}
-
 	if (ipc6->dontfrag < 0)
 		ipc6->dontfrag = inet6_sk(sk)->dontfrag;
 

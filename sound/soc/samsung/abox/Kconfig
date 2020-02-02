@@ -2,6 +2,7 @@ config SND_SOC_SAMSUNG_ABOX
 	tristate "ASoC support for Samsung ABOX Audio"
 	select REGMAP_MMIO
 	select SND_SOC_COMPRESS
+	select SND_HWDEP
 	help
 	  Say Y or M if you want to add support for codecs attached to
 	  the Samsung SoC ABOX interface. You will also need to

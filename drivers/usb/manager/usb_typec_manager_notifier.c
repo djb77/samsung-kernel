@@ -18,12 +18,16 @@
 #endif
 #include <linux/usb_notify.h>
 #include <linux/delay.h>
+#if defined(CONFIG_CCIC_S2MM005)
 #include <linux/ccic/s2mm005_ext.h>
+#endif
 #include <linux/time.h>
 #include <linux/ktime.h>
 #include <linux/rtc.h>
+#if defined(CONFIG_CCIC_MAX77705)
 #include <linux/ccic/max77705_usbc.h>
 #include <linux/ccic/max77705_alternate.h>
+#endif
 #include <linux/of.h>
 
 /* dwc3 irq storm patch */
@@ -204,7 +208,9 @@ int get_waterchg_count(int is_lpm)
 {
     unsigned int ret = 0, islpcharge = 0;
 
+#if defined(CONFIG_BATTERY_SAMSUNG)
     islpcharge = lpcharge?1:0;
+#endif
     if (is_lpm != islpcharge)
         return 0;
     
@@ -237,7 +243,9 @@ unsigned long get_wvbus_duration(int is_lpm)
 	unsigned long ret = 0, islpcharge = 0;
 	struct timeval time;
 
+#if defined(CONFIG_BATTERY_SAMSUNG)
 	islpcharge = lpcharge?1:0;
+#endif
 	if (is_lpm != islpcharge)
 	    return 0;
 
@@ -557,6 +565,7 @@ static void muic_fake_event_work(struct work_struct *work)
 }
 #endif
 
+#if defined(CONFIG_CCIC_NOTIFIER)
 static int manager_handle_ccic_notification(struct notifier_block *nb,
 				unsigned long action, void *data)
 {
@@ -694,14 +703,17 @@ static int manager_handle_ccic_notification(struct notifier_block *nb,
 
 	return ret;
 }
+#endif
 
 static void manager_set_alternate_mode(int listener)
 {
-	pccic_data_t pccic_data;
+	pccic_data_t pccic_data = NULL;
 
 	pr_info("%s : listener %d\n", __func__, listener);
 
+#if defined(CONFIG_CCIC_NOTIFIER)
 	pccic_data = dev_get_drvdata(ccic_device);
+#endif
   	if (!pccic_data) {
 		pr_err("there is no set_enable_alternate_mode\n");
 		return;
@@ -729,6 +741,7 @@ static void manager_set_alternate_mode(int listener)
 	}
 }
 
+#if defined(CONFIG_MUIC_NOTIFIER)
 static int manager_handle_muic_notification(struct notifier_block *nb,
 				unsigned long action, void *data)
 {
@@ -843,6 +856,7 @@ static int manager_handle_muic_notification(struct notifier_block *nb,
 
 	return 0;
 }
+#endif
 
 #if defined(CONFIG_VBUS_NOTIFIER)
 static int manager_handle_vbus_notification(struct notifier_block *nb,
@@ -902,7 +916,9 @@ int manager_notifier_register(struct notifier_block *nb, notifier_fn_t notifier,
 	if(!manager_notifier_init_done)
 		manager_notifier_init();
 
+#if defined(CONFIG_CCIC_NOTIFIER)
 	ccic_notifier_init();
+#endif
 
 	/* Check if MANAGER Notifier is ready. */
 	if (!manager_device) {
@@ -1057,19 +1073,22 @@ static void delayed_manger_notifier_init(struct work_struct *work)
 			notifier_result |= (1 << VBUS_NOTIFIER);
 	}
 #endif
+#if defined(CONFIG_CCIC_NOTIFIER)
 	if(confirm_manager_notifier_register & (1 << CCIC_NOTIFIER))
 	{
 		ret = ccic_notifier_register(&typec_manager.ccic_nb, manager_handle_ccic_notification,CCIC_NOTIFY_DEV_MANAGER);
 		if(ret)
 			notifier_result |= (1 << CCIC_NOTIFIER);
 	}
-
+#endif
+#if defined(CONFIG_MUIC_NOTIFIER)
 	if(confirm_manager_notifier_register & (1 << MUIC_NOTIFIER))
 	{
 		ret = muic_notifier_register(&typec_manager.muic_nb, manager_handle_muic_notification,MUIC_NOTIFY_DEV_MANAGER);
 		if(ret)
 			notifier_result |= (1 << MUIC_NOTIFIER);
 	}
+#endif
 
 	confirm_manager_notifier_register = notifier_result;
 	pr_info("%s : result of register = %d!\n",__func__, confirm_manager_notifier_register);
@@ -1093,12 +1112,14 @@ static int manager_notifier_init(void)
 {
 	int ret = 0;
 	int notifier_result = 0;
-	pccic_data_t pccic_data;
+	pccic_data_t pccic_data = NULL;
 	struct device_node *np = NULL;
 
 	pr_info("usb: [M] %s\n", __func__);
+#if defined(CONFIG_CCIC_NOTIFIER)
 	ccic_notifier_init();
 	pccic_data = dev_get_drvdata(ccic_device);
+#endif
 
 	if(manager_notifier_init_done)
 	{
@@ -1145,7 +1166,7 @@ static int manager_notifier_init(void)
 	typec_manager.is_UFPS = 0;
 	typec_manager.ccic_rid_state = RID_UNDEFINED;
 	typec_manager.pd = NULL;
-#if defined(CONFIG_HICCUP_CHARGER)
+#if defined(CONFIG_HICCUP_CHARGER) && defined(CONFIG_BATTERY_SAMSUNG)
 	typec_manager.water_cable_type = lpcharge ?
 		ATTACHED_DEV_UNDEFINED_RANGE_MUIC :
 		ATTACHED_DEV_HICCUP_MUIC;
@@ -1168,10 +1189,8 @@ static int manager_notifier_init(void)
 	INIT_DELAYED_WORK(&typec_manager.rtctime_update_work,
 		water_det_rtc_time_update);
 
-#if defined(CONFIG_CCIC_ALTERNATE_MODE)
 	if (pccic_data && pccic_data->set_enable_alternate_mode)
 		pccic_data->set_enable_alternate_mode(ALTERNATE_MODE_NOT_READY);
-#endif
 #if defined(CONFIG_VBUS_NOTIFIER)
 	INIT_DELAYED_WORK(&typec_manager.vbus_noti_work,
 		muic_fake_event_work);
@@ -1183,12 +1202,16 @@ static int manager_notifier_init(void)
 	if(ret)
 		notifier_result |= (1 << VBUS_NOTIFIER);
 #endif
+#if defined(CONFIG_CCIC_NOTIFIER)
 	ret = ccic_notifier_register(&typec_manager.ccic_nb, manager_handle_ccic_notification,CCIC_NOTIFY_DEV_MANAGER);
 	if(ret)
 		notifier_result |= (1 << CCIC_NOTIFIER);
+#endif
+#if defined(CONFIG_MUIC_NOTIFIER)
 	ret = muic_notifier_register(&typec_manager.muic_nb, manager_handle_muic_notification,MUIC_NOTIFY_DEV_MANAGER);
 	if(ret)
 		notifier_result |= (1 << MUIC_NOTIFIER);
+#endif
 
 	confirm_manager_notifier_register = notifier_result;
 	pr_info("%s : result of register = %d!\n",__func__, confirm_manager_notifier_register);
@@ -1222,8 +1245,12 @@ static void __exit manager_notifier_exit(void)
 #if defined(CONFIG_VBUS_NOTIFIER)
 	vbus_notifier_unregister(&typec_manager.vbus_nb);
 #endif
+#if defined(CONFIG_CCIC_NOTIFIER)
 	ccic_notifier_unregister(&typec_manager.ccic_nb);
+#endif
+#if defined(CONFIG_MUIC_NOTIFIER)
 	muic_notifier_unregister(&typec_manager.muic_nb);
+#endif
 	usb_external_notify_unregister(&typec_manager.manager_external_notifier_nb);
 }
 

@@ -4204,9 +4204,8 @@
 		reg = <0x0 0x10840000 0x100>;
 		samsung,fifo-size = <256>;
 		interrupts = <0 INTREQ__UART_BT 0>;
-		pinctrl-names = "default", "rts";
+		pinctrl-names = "default";
 		pinctrl-0 = <&uart1_bus_single &uart1_rxd_pull>; /* or _bus_dual */
-		pinctrl-1 = <&uart1_bus_rts>;
 		samsung,usi-serial-v2;
 		clocks = <&clock GATE_UART_BT>, <&clock UART_BT>;
 		clock-names = "gate_pclk1", "gate_uart1";

@@ -21,6 +21,7 @@
 #include <linux/log2.h>
 #include <linux/pm_runtime.h>
 #include <linux/badblocks.h>
+#include <linux/ologk.h>
 
 #ifdef CONFIG_BLOCK_SUPPORT_STLOG
 #include <linux/fslog.h>
@@ -1089,6 +1090,7 @@ static ssize_t disk_discard_alignment_show(struct device *dev,
 	return sprintf(buf, "%d\n", queue_discard_alignment(disk->queue));
 }
 
+/* IOPP-bigdata-v1.0.4.4 */
 #undef DISCARD
 
 #define DISCARD	(WRITE + 1)
@@ -1153,6 +1155,93 @@ static ssize_t disk_ios_show(struct device *dev,
 }
 #undef DISCARD
 
+/* IOPP-iomon-v1.1.4.4 */
+#define SEC2MB(x) ((unsigned long)((x) / 2 / 1024))
+static ssize_t iomon_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	struct hd_struct *hd = dev_to_part(dev);
+	int cpu;
+	unsigned int nread, nwrite;
+	int ret;
+
+	cpu = part_stat_lock();
+	part_round_stats(cpu, hd);
+	part_stat_unlock();
+	nread = part_in_flight_read(hd);
+	nwrite = part_in_flight_write(hd);
+
+	ret = sprintf(buf, "rc %lu rmb %lu "
+			"wc %lu wmb %lu dc %lu dmb %lu "
+			"inp %u %u "
+			"iot %u %llu \n",
+			part_stat_read(hd, ios[READ]),
+			SEC2MB(part_stat_read(hd, sectors[READ])),
+
+			part_stat_read(hd, ios[WRITE]) -
+			part_stat_read(hd, discard_ios) - part_stat_read(hd, flush_ios),
+			SEC2MB(part_stat_read(hd, sectors[WRITE])) -
+			SEC2MB(part_stat_read(hd, discard_sectors)),
+			part_stat_read(hd, discard_ios),
+			SEC2MB(part_stat_read(hd, discard_sectors)),
+
+			nread,
+			nwrite,
+
+			jiffies_to_msecs(part_stat_read(hd, io_ticks)),
+			disk->queue->in_flight_time / USEC_PER_MSEC);
+
+	return ret;
+}
+
+static ssize_t iomon_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct gendisk *disk;
+	struct hd_struct *hd = dev_to_part(dev);
+	int cpu;
+	unsigned int nread, nwrite;
+	char action[2];
+	char name[80];
+
+	sscanf(buf, "%1s %79s ", action, name);
+
+	cpu = part_stat_lock();
+	part_round_stats(cpu, hd);
+	part_stat_unlock();
+	nread = part_in_flight_read(hd);
+	nwrite = part_in_flight_write(hd);
+
+	if(!strcmp(action, "c") || !strcmp(action, "s") || !strcmp(action, "e")) {
+		disk = dev_to_disk(dev);
+		ologk("rc %lu rmb %lu "
+				"wc %lu wmb %lu dc %lu dmb %lu "
+				"inp %u %u "
+				"iot %u %llu ",
+				part_stat_read(hd, ios[READ]),
+				SEC2MB(part_stat_read(hd, sectors[READ])),
+
+				part_stat_read(hd, ios[WRITE]) -
+				part_stat_read(hd, discard_ios) - part_stat_read(hd, flush_ios),
+				SEC2MB(part_stat_read(hd, sectors[WRITE])) -
+				SEC2MB(part_stat_read(hd, discard_sectors)),
+				part_stat_read(hd, discard_ios),
+				SEC2MB(part_stat_read(hd, discard_sectors)),
+
+				nread,
+				nwrite,
+
+				jiffies_to_msecs(part_stat_read(hd, io_ticks)),
+				disk->queue->in_flight_time / USEC_PER_MSEC);
+	}
+
+	return count;
+}
+
+
 static DEVICE_ATTR(range, S_IRUGO, disk_range_show, NULL);
 static DEVICE_ATTR(ext_range, S_IRUGO, disk_ext_range_show, NULL);
 static DEVICE_ATTR(removable, S_IRUGO, disk_removable_show, NULL);
@@ -1167,6 +1256,7 @@ static DEVICE_ATTR(inflight, S_IRUGO, part_inflight_show, NULL);
 static DEVICE_ATTR(badblocks, S_IRUGO | S_IWUSR, disk_badblocks_show,
 		disk_badblocks_store);
 static DEVICE_ATTR(diskios, 0600, disk_ios_show, NULL);
+static DEVICE_ATTR(iomon, 0660, iomon_show, iomon_store);
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 static struct device_attribute dev_attr_fail =
 	__ATTR(make-it-fail, S_IRUGO|S_IWUSR, part_fail_show, part_fail_store);
@@ -1190,6 +1280,7 @@ static struct attribute *disk_attrs[] = {
 	&dev_attr_inflight.attr,
 	&dev_attr_badblocks.attr,
 	&dev_attr_diskios.attr,
+	&dev_attr_iomon.attr,
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 	&dev_attr_fail.attr,
 #endif
@@ -1415,6 +1506,7 @@ static const struct file_operations proc_diskstats_operations = {
 	.release	= seq_release,
 };
 
+/* IOPP-iod-v1.0.4.4 */
 #define PG2KB(x) ((unsigned long)((x) << (PAGE_SHIFT - 10)))
 static int iostats_show(struct seq_file *seqf, void *v)
 {

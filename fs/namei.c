@@ -38,7 +38,9 @@
 #include <linux/bitops.h>
 #include <linux/init_task.h>
 #include <asm/uaccess.h>
-
+#ifdef CONFIG_FSCRYPT_SDP
+#include <linux/fscrypto_sdp_name.h>
+#endif
 #include "internal.h"
 #include "mount.h"
 
@@ -221,9 +223,10 @@ getname_kernel(const char * filename)
 	if (len <= EMBEDDED_NAME_MAX) {
 		result->name = (char *)result->iname;
 	} else if (len <= PATH_MAX) {
+		const size_t size = offsetof(struct filename, iname[1]);
 		struct filename *tmp;
 
-		tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
+		tmp = kmalloc(size, GFP_KERNEL);
 		if (unlikely(!tmp)) {
 			__putname(result);
 			return ERR_PTR(-ENOMEM);
@@ -593,9 +596,10 @@ static int __nd_alloc_stack(struct nameidata *nd)
 static bool path_connected(const struct path *path)
 {
 	struct vfsmount *mnt = path->mnt;
+	struct super_block *sb = mnt->mnt_sb;
 
-	/* Only bind mounts can have disconnected paths */
-	if (mnt->mnt_root == mnt->mnt_sb->s_root)
+	/* Bind mounts and multi-root filesystems can have disconnected paths */
+	if (!(sb->s_iflags & SB_I_MULTIROOT) && (mnt->mnt_root == sb->s_root))
 		return true;
 
 	return is_subdir(path->dentry, mnt->mnt_root);
@@ -1143,9 +1147,6 @@ static int follow_automount(struct path *path, struct nameidata *nd,
 			   LOOKUP_OPEN | LOOKUP_CREATE | LOOKUP_AUTOMOUNT)) &&
 	    path->dentry->d_inode)
 		return -EISDIR;
-
-	if (path->dentry->d_sb->s_user_ns != &init_user_ns)
-		return -EACCES;
 
 	nd->total_link_count++;
 	if (nd->total_link_count >= 40)
@@ -2179,6 +2180,9 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	int retval = 0;
 	const char *s = nd->name->name;
 
+	if (!*s)
+		flags &= ~LOOKUP_RCU;
+
 	nd->last_type = LAST_ROOT; /* if there are only slashes... */
 	nd->flags = flags | LOOKUP_JUMPED | LOOKUP_PARENT;
 	nd->depth = 0;
@@ -3028,9 +3032,15 @@ static inline int open_to_namei_flags(int flag)
 
 static int may_o_create(const struct path *dir, struct dentry *dentry, umode_t mode)
 {
+	struct user_namespace *s_user_ns;
 	int error = security_path_mknod(dir, dentry, mode, 0);
 	if (error)
 		return error;
+
+	s_user_ns = dir->dentry->d_sb->s_user_ns;
+	if (!kuid_has_mapping(s_user_ns, current_fsuid()) ||
+	    !kgid_has_mapping(s_user_ns, current_fsgid()))
+		return -EOVERFLOW;
 
 	error = inode_permission2(dir->mnt, dir->dentry->d_inode, MAY_WRITE | MAY_EXEC);
 	if (error)
@@ -3898,6 +3908,11 @@ int vfs_rmdir2(struct vfsmount *mnt, struct inode *dir, struct dentry *dentry)
 	error = security_inode_rmdir(dir, dentry);
 	if (error)
 		goto out;
+#ifdef CONFIG_FSCRYPT_SDP
+	error = fscrypt_sdp_check_rmdir(dentry);
+	if (error == -EIO)
+		goto out;
+#endif
 
 	shrink_dcache_parent(dentry);
 	error = dir->i_op->rmdir(dir, dentry);
@@ -4524,10 +4539,19 @@ int vfs_rename2(struct vfsmount *mnt,
 		if (error)
 			goto out;
 	}
+#ifdef CONFIG_FSCRYPT_SDP
+	error = fscrypt_sdp_check_rename_pre(old_dentry);
+	if (error == -EIO)
+		goto out;
+#endif
 	error = old_dir->i_op->rename(old_dir, old_dentry,
 				       new_dir, new_dentry, flags);
 	if (error)
 		goto out;
+#ifdef CONFIG_FSCRYPT_SDP
+	fscrypt_sdp_check_rename_post(old_dir, old_dentry,
+						new_dir, new_dentry);
+#endif
 
 	if (!(flags & RENAME_EXCHANGE) && target) {
 		if (is_dir)

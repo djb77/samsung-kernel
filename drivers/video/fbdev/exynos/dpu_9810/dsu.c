@@ -106,6 +106,9 @@ int set_dsu_config(struct decon_device *decon, struct decon_reg_data *regs)
 	if ((dsu->needupdate == 0) || (decon->dt.out_type != DECON_OUT_DSI))
 		goto exit_dsu_config;
 
+	if (dsu->mode == DSU_MODE_NONE)
+		goto exit_dsu_config;
+
 	if (decon->dsu.mode == dsu->mode) {
 		decon_info("DECON:INFO:%s:dsu mode : %d already set\n",
 			__func__, dsu->mode);
@@ -163,6 +166,9 @@ int set_dsu_win_config(struct decon_device *decon,
 		decon_err("DECON:ERR:%s:invalid param\n", __func__);
 		goto set_err;
 	}
+
+	if (new_dsu->mode == DSU_MODE_NONE)
+		return 0;
 
 	if (cur_dsu->mode == new_dsu->mode)
 		return 0;

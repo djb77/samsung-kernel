@@ -29,6 +29,7 @@
 #include <linux/of_address.h>
 #include <linux/ctype.h>
 #include <video/mipi_display.h>
+
 #ifdef CONFIG_DISP_PMIC_SSD
 #include <linux/regulator/consumer.h>
 #endif
@@ -151,9 +152,11 @@ int __set_panel_power(struct panel_device *panel, int power)
 				goto set_err;
 			}
 		}
+#ifndef CONFIG_OLD_DISP_TIMING
 		usleep_range(10000, 10000);
 		gpio_direction_output(pad->gpio_reset, 1);
 		usleep_range(5000, 5000);
+#endif
 	} else {
 		gpio_direction_output(pad->gpio_reset, 0);
 		for (i = REGULATOR_MAX - 1; i >= 0; i--) {
@@ -1628,6 +1631,17 @@ static int panel_ioctl_set_power(struct panel_device *panel, void *arg)
 	return ret;
 }
 
+static int panel_ioctl_set_reset(struct panel_device *panel)
+{
+	struct panel_pad *pad = &panel->pad;
+	usleep_range(10000, 10000);
+	gpio_direction_output(pad->gpio_reset, 1);
+	usleep_range(5000, 5000);
+	pr_info("%s reset panel (%s)\n", __func__, gpio_get_value(pad->gpio_reset) ? "high" : "low");
+
+	return 0;
+}
+
 static int panel_set_error_cb(struct v4l2_subdev *sd)
 {
 	struct panel_device *panel = container_of(sd, struct panel_device, sd);
@@ -1772,7 +1786,10 @@ static long panel_core_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg
 			panel_info("PANEL:INFO:%s:PANEL_IOC_SET_POWER\n", __func__);
 			ret = panel_ioctl_set_power(panel, arg);
 			break;
-
+		case PANEL_IOC_PANEL_RESET:
+			panel_info("PANEL:INFO:%s:PANEL_IOC_PANEL_RESET\n", __func__);
+			ret = panel_ioctl_set_reset(panel);
+			break;
 		case PANEL_IOC_PANEL_DUMP :
 			panel_info("PANEL:INFO:%s:PANEL_IOC_PANEL_DUMP\n", __func__);
 			ret = panel_debug_dump(panel);
@@ -1918,6 +1935,11 @@ static int panel_drv_set_gpios(struct panel_device *panel)
 	} else {
 		panel->state.init_at = PANEL_INIT_KERNEL;
 	}
+#ifdef CONFIG_NO_LCD
+	gpio_direction_output(pad->gpio_reset, 0);
+	panel->state.init_at = PANEL_INIT_BOOT;
+	panel->state.connect_panel = PANEL_DISCONNECT;
+#endif
 
 	panel_dbg("PANEL:INFO:%s: rst:%d, disp_det:%d (init_at:%s, state:%s)\n",
 		__func__, rst_val, det_val,
@@ -2014,8 +2036,9 @@ static int panel_parse_regulator(struct panel_device *panel)
 	struct device *dev = panel->dev;
 	struct panel_pad *pad = &panel->pad;
 	struct regulator *reg[REGULATOR_MAX];
+
 	char *reg_lists[REGULATOR_MAX] = {
-		REGULATOR_3p0_NAME, REGULATOR_1p8_NAME, REGULATOR_1p6_NAME,
+		REGULATOR_1_NAME, REGULATOR_2_NAME, REGULATOR_3_NAME,
 	};
 
 	for (i = 0; i < REGULATOR_MAX; i++) {

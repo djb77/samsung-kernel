@@ -20,7 +20,7 @@ ssize_t	uh_log_read(struct file *filep, char __user *buf, size_t size, loff_t *o
 
 	if (!*offset) {
 		log_buf_size = 0;
-		while(((char *)log_addr)[log_buf_size] != 0 && log_buf_size != UH_LOG_SIZE)
+		while(log_buf_size < UH_LOG_SIZE && ((char *)log_addr)[log_buf_size] != 0)
 			log_buf_size++;
 		pr_info("uh_log : robuffer state %x/%x\n", ro_alloc_n, (unsigned int)RO_PAGES);
 	}
