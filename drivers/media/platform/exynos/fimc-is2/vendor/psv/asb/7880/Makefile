@@ -1,0 +1,1 @@
+obj-$(CONFIG_SOC_EXYNOS7880) += fimc-is-asb-hardware.o

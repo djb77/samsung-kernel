@@ -1,0 +1,94 @@
+* EXYNOS - USI(Universal Serial Interface) version 2 devicetree making guide
+
+The USI can operate as UART, HSI2C and SPI.
+So the configuration for one specific function
+should be needed with SYSREG(System Registers).
+
+To configure USI port as one specific function,
+function string(ex, "spi" or "i2c" or "spi" or "uart")
+should be declared in "usi_mode" property in board devicetree file.
+
+Becuase USI configuration can differ from board schematic.
+
+* Required SoC Specific Properties:
+
+ - compatible: should be one of the following.
+   - samsung,exynos-usi-v2: for exynos7, exynos8 platforms.
+
+ - reg: physical base address of the SYSREG for specific USI port
+	and length of memory mapped region.
+
+* Required Board Specific Properties:
+ - usi_v2_mode: function string for one specific IP operation.
+             i2c: for HSI2C
+             spi: for SPI
+             uart: for UART
+
+* Compare to USI version 1, there are few differences.
+ - HW I2C has been changed
+	I2C hw logic has been developed by usi_v2 including timing parameter logic.
+	HSI2C driver must be upgraded from usi_v2.
+ - USI structure has been changed.
+	One USIv2 chanenl is composed of "USI + HSI2C" hw logic.
+
+* Exsamples:
+
+ - SoC Specific Portion
+
+	/* USI_00 */
+	usi_0: usi@10411004 {
+		compatible = "samsung,exynos-usi-v2";
+		reg = <0x0 0x10411004 0x4>;
+		/*	usi_mode_v2 = "i2c" or "spi" or "uart"	*/
+		status = "disabled";
+	};
+
+	/* USI_00_I2C */
+	usi_0_i2c: usi@10411008 {
+		compatible = "samsung,exynos-usi-v2";
+		reg = <0x0 0x10411008 0x4>;
+		/*	usi_mode_v2 = "i2c" */
+		status = "disabled";
+	};
+
+ - Board Specific Portion
+
+	/* USI_00 */
+	usi_0: usi@10411004 {
+		usi_v2_mode = "spi";
+		status = "okay";
+	};
+
+	/* USI_01 */
+	usi_1: usi@1041100c {
+		usi_v2_mode = "spi";
+		status = "okay";
+	};
+
+	/* USI_02 */
+	usi_2: usi@10411014 {
+		usi_v2_mode = "spi";
+		status = "okay";
+	};
+
+	/* USI_03 */
+	usi_3: usi@1041101C {
+		usi_v2_mode = "i2c";
+		status = "okay";
+	};
+
+If USI configuration was done successfully, the booting log will be shown as below.
+
+[    1.817710]  [7:      swapper/0:    1] usi_v2 10411004.usi: usi_v2_probe() mode:2
+[    1.820072]  [7:      swapper/0:    1] usi_v2 1041100c.usi: usi_v2_probe() mode:2
+[    1.822549]  [7:      swapper/0:    1] usi_v2 10411014.usi: usi_v2_probe() mode:2
+[    1.825060]  [7:      swapper/0:    1] usi_v2 1041101c.usi: usi_v2_probe() mode:4
+
+This means the usi_0, usi_1, usi_2 were set as "spi" and usi_3 was set "i2c"
+
+The mode values are as below.
+
+/* USI v2 mode */
+#define I2C_SW_CONF		(1<<2)
+#define SPI_SW_CONF		(1<<1)
+#define UART_SW_CONF		(1<<0)

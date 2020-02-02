@@ -1,0 +1,48 @@
+/*
+ *  Copyright (C) 2012, Samsung Electronics Co. Ltd. All Rights Reserved.
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ */
+#include "ssp.h"
+
+#if defined(CONFIG_SENSORS_SSP_STAR)
+#if ANDROID_VERSION < 90000
+#define SSP_FIRMWARE_REVISION_BCM	18053100  /*Android O*/
+#elif ANDROID_VERSION < 100000 
+#define SSP_FIRMWARE_REVISION_BCM	19062800  /*Android P*/
+#else 
+#define SSP_FIRMWARE_REVISION_BCM	19121700  /*Android Q*/
+#endif
+#elif defined(CONFIG_SENSORS_SSP_CROWN)
+#if ANDROID_VERSION < 90000
+#define SSP_FIRMWARE_REVISION_BCM	18090500  /*Android O*/
+#elif ANDROID_VERSION < 100000
+#define SSP_FIRMWARE_REVISION_BCM	19062800  /*Android P*/
+#else
+#define SSP_FIRMWARE_REVISION_BCM	19121600  /*Android Q*/
+#endif
+#elif defined(CONFIG_SENSORS_SSP_HAECHI)
+#if ANDROID_VERSION < 90000
+#define SSP_FIRMWARE_REVISION_BCM	19062000  /*Android O*/
+#elif ANDROID_VERSION < 100000
+#define SSP_FIRMWARE_REVISION_BCM	19062400  /*Android P*/
+#else
+#define SSP_FIRMWARE_REVISION_BCM	19062400  /*Android Q*/
+#endif
+#else
+#define SSP_FIRMWARE_REVISION_BCM	00000000
+#endif
+
+unsigned int get_module_rev(struct ssp_data *data)
+{
+	return SSP_FIRMWARE_REVISION_BCM;
+}
